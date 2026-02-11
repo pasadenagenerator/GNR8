@@ -51,3 +51,9 @@ When generating code:
 - avoid magic
 - avoid hidden side effects
 - make data flow obvious
+
+## Service Architecture
+
+- The platform follows a strict service-layer architecture.
+- All business capabilities must be exposed via domain services.
+- Repositories are internal to modules.
