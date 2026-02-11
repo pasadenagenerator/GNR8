@@ -1,3 +1,5 @@
+SYSTEM.md is the highest authority in this repository.
+
 # AI Engineering Rules
 
 You are building a long-term platform, not a prototype.
