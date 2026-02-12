@@ -1,6 +1,5 @@
 import { ConflictError, DomainError } from '@gnr8/core'
 import type {
-  MembershipRepository,
   Project,
   ProjectRepository,
   ProjectTransaction,
@@ -58,8 +57,7 @@ class PostgresProjectTransaction implements ProjectTransaction {
   }
 }
 
-export class PostgresProjectRepository
-  implements ProjectRepository, MembershipRepository
+export class PostgresProjectRepository implements ProjectRepository
 {
   constructor(private readonly pool: Pool = getPool()) {}
 

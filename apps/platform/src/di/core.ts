@@ -4,6 +4,7 @@ import {
   ProjectService,
 } from '@gnr8/core'
 import {
+  PostgresMembershipRepository,
   PostgresOrganizationRepository,
   PostgresProjectRepository,
 } from '@gnr8/data'
@@ -33,9 +34,11 @@ export function getAuthorizationService(): AuthorizationService {
 export function getProjectService(): ProjectService {
   if (!projectService) {
     const projectRepository = new PostgresProjectRepository()
+    const membershipRepository = new PostgresMembershipRepository()
+
     projectService = new ProjectService(
       projectRepository,
-      projectRepository,
+      membershipRepository,
       getAuthorizationService(),
     )
   }
