@@ -1,0 +1,11 @@
+{
+  "name": "@gnr8/platform",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "dependencies": {
+    "@gnr8/core": "workspace:*",
+    "@gnr8/data": "workspace:*",
+    "next": "^15.1.0"
+  }
+}
