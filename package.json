@@ -1,5 +1,13 @@
 {
   "name": "gnr8-platform",
   "private": true,
-  "packageManager": "pnpm@9"
+  "packageManager": "pnpm@10.28.2",
+  "devDependencies": {
+    "@types/node": "^25.2.3",
+    "@types/pg": "^8.16.0",
+    "typescript": "^5.9.3"
+  },
+  "dependencies": {
+    "@supabase/ssr": "^0.8.0"
+  }
 }

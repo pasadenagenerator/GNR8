@@ -53,7 +53,7 @@ class PostgresOrganizationCreationTx implements OrganizationCreationTx {
       [userId],
     )
 
-    return result.rowCount > 0
+    return (result.rowCount ?? 0) > 0
   }
 
   async createOrganization(input: {
@@ -70,11 +70,7 @@ class PostgresOrganizationCreationTx implements OrganizationCreationTx {
 
       return mapOrganization(result.rows[0])
     } catch (error) {
-      if (
-        isUniqueViolation(error) &&
-        (error.constraint === 'organizations_slug_key' ||
-          error.constraint === 'organizations_slug_idx')
-      ) {
+      if (isUniqueViolation(error)) {
         throw new ConflictError('Organization slug already exists')
       }
 
