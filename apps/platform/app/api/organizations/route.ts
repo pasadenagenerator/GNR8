@@ -4,8 +4,8 @@ import {
   NotFoundError,
 } from '@gnr8/core'
 import { NextResponse, type NextRequest } from 'next/server'
-import { getOrganizationService } from '../../../src/di/core'
-import { requireActorUserId } from '../../../src/auth/require-actor-user-id'
+import { getOrganizationService } from '@/src/di/core'
+import { requireActorUserId } from '@/src/auth/require-actor-user-id'
 
 type RequestBody = {
   name?: string

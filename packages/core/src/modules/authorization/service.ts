@@ -1,43 +1,30 @@
-import { AuthorizationError, DomainError } from '../../service-contract'
-import type {
-  AuthorizationContext,
-  AuthorizationDecision,
-  Permission,
-} from './types'
+import { AuthorizationError } from '../../service-contract'
+import type { Permission, Role } from './types'
 
-export interface AuthorizationPolicyRepository {
-  listActorPermissions(context: AuthorizationContext): Promise<Permission[]>
+const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
+  owner: [
+    'organization.read',
+    'organization.manage',
+    'membership.manage',
+    'project.create',
+    'billing.manage',
+  ],
+  admin: [
+    'organization.read',
+    'membership.manage',
+    'project.create',
+  ],
+  member: ['organization.read'],
 }
 
 export class AuthorizationService {
-  constructor(private readonly policyRepository: AuthorizationPolicyRepository) {}
-
-  async can(
-    permission: Permission,
-    context: AuthorizationContext,
-  ): Promise<AuthorizationDecision> {
-    if (!context.actor.userId) {
-      throw new DomainError('actor userId is required')
-    }
-
-    // Placeholder behavior: permission resolution will be backed by membership/entitlements later.
-    const permissions = await this.policyRepository.listActorPermissions(context)
-    const allowed = permissions.includes(permission)
-
-    return allowed
-      ? { allowed: true }
-      : { allowed: false, reason: `Missing permission: ${permission}` }
+  hasPermission(role: Role, permission: Permission): boolean {
+    return ROLE_PERMISSIONS[role].includes(permission)
   }
 
-  async assert(
-    permission: Permission,
-    context: AuthorizationContext,
-  ): Promise<void> {
-    const decision = await this.can(permission, context)
-    if (!decision.allowed) {
-      throw new AuthorizationError(
-        decision.reason ?? `Permission denied: ${permission}`,
-      )
+  assert(role: Role, permission: Permission): void {
+    if (!this.hasPermission(role, permission)) {
+      throw new AuthorizationError(`Permission denied: ${permission}`)
     }
   }
 }
