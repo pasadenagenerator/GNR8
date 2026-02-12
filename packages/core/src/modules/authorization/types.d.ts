@@ -1,15 +1,3 @@
-export declare const PERMISSIONS: readonly ["organization.manage", "organization.read", "membership.manage", "project.create", "billing.manage"];
-export type Permission = (typeof PERMISSIONS)[number];
-export type AuthorizationActor = {
-    userId: string;
-    orgId?: string;
-};
-export type AuthorizationContext = {
-    actor: AuthorizationActor;
-    targetOrgId?: string;
-};
-export type AuthorizationDecision = {
-    allowed: boolean;
-    reason?: string;
-};
+export type Permission = 'organization.read' | 'organization.manage' | 'membership.manage' | 'project.create' | 'billing.manage';
+export type Role = 'owner' | 'admin' | 'member';
 //# sourceMappingURL=types.d.ts.map

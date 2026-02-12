@@ -1,5 +1,4 @@
 export * from './service-contract';
 export * from './modules/organization';
-export * from './modules/authorization/types';
-export * from './modules/authorization/service';
+export * from './modules/authorization';
 //# sourceMappingURL=index.d.ts.map

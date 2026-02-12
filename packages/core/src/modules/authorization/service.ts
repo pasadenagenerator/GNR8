@@ -11,6 +11,7 @@ const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
   ],
   admin: [
     'organization.read',
+    'organization.manage',        // ← zdaj ima admin tudi org.manage
     'membership.manage',
     'project.create',
   ],
