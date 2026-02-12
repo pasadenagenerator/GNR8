@@ -49,11 +49,7 @@ class PostgresProjectTransaction implements ProjectTransaction {
 
       return mapProject(result.rows[0])
     } catch (error) {
-      if (
-        isUniqueViolation(error) &&
-        (error.constraint === 'projects_org_id_slug_key' ||
-          error.constraint === 'projects_org_slug_unique')
-      ) {
+      if (isUniqueViolation(error)) {
         throw new ConflictError('Project slug already exists in organization')
       }
 

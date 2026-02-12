@@ -5,8 +5,8 @@ import {
   NotFoundError,
 } from '@gnr8/core'
 import { NextResponse, type NextRequest } from 'next/server'
-import { requireActorUserId } from '../../../../../src/auth/require-actor-user-id'
-import { getProjectService } from '../../../../../src/di/core'
+import { requireActorUserId } from '@/src/auth/require-actor-user-id'
+import { getProjectService } from '@/src/di/core'
 
 type RouteContext = {
   params: {
