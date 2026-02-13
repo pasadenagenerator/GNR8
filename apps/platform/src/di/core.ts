@@ -1,9 +1,13 @@
 import {
   AuthorizationService,
+  BillingService,
+  EntitlementService,
   OrganizationService,
   ProjectService,
 } from '@gnr8/core'
 import {
+  PostgresBillingRepository,
+  PostgresEntitlementRepository,
   PostgresMembershipRepository,
   PostgresOrganizationRepository,
   PostgresProjectRepository,
@@ -12,6 +16,7 @@ import {
 let organizationService: OrganizationService | null = null
 let authorizationService: AuthorizationService | null = null
 let projectService: ProjectService | null = null
+let billingService: BillingService | null = null
 
 export function getOrganizationService(): OrganizationService {
   if (!organizationService) {
@@ -44,4 +49,16 @@ export function getProjectService(): ProjectService {
   }
 
   return projectService
+}
+
+export function getBillingService(): BillingService {
+  if (!billingService) {
+    const billingRepository = new PostgresBillingRepository()
+    const entitlementService = new EntitlementService(
+      new PostgresEntitlementRepository(),
+    )
+    billingService = new BillingService(billingRepository, entitlementService)
+  }
+
+  return billingService
 }
