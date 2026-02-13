@@ -7,13 +7,13 @@ import { PLAN_ENTITLEMENTS } from './plan-map'
 export class EntitlementService {
   constructor(private readonly entitlementRepository: EntitlementRepository) {}
 
-  // ✅ HARD GATE za paid features (ProjectService, future guards)
+  // HARD GATE za paid features (ProjectService, future guards)
+  // READ-ONLY → brez BillingTx
   async assert(
     orgId: string,
     entitlementKey: EntitlementKey,
-    tx: BillingTx,
   ): Promise<void> {
-    const has = await this.entitlementRepository.hasActiveEntitlement(tx, {
+    const has = await this.entitlementRepository.hasActiveEntitlement({
       orgId,
       entitlementKey,
     })

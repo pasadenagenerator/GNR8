@@ -5,9 +5,10 @@ export class EntitlementService {
     constructor(entitlementRepository) {
         this.entitlementRepository = entitlementRepository;
     }
-    // ✅ HARD GATE za paid features (ProjectService, future guards)
-    async assert(orgId, entitlementKey, tx) {
-        const has = await this.entitlementRepository.hasActiveEntitlement(tx, {
+    // HARD GATE za paid features (ProjectService, future guards)
+    // READ-ONLY → brez BillingTx
+    async assert(orgId, entitlementKey) {
+        const has = await this.entitlementRepository.hasActiveEntitlement({
             orgId,
             entitlementKey,
         });

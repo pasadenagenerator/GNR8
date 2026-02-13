@@ -4,7 +4,7 @@ import type { EntitlementKey, SyncSubscriptionInput } from './types';
 export declare class EntitlementService {
     private readonly entitlementRepository;
     constructor(entitlementRepository: EntitlementRepository);
-    assert(orgId: string, entitlementKey: EntitlementKey, tx: BillingTx): Promise<void>;
+    assert(orgId: string, entitlementKey: EntitlementKey): Promise<void>;
     syncFromPlan(orgId: string, subscription: SyncSubscriptionInput, tx: BillingTx): Promise<void>;
     deactivateForSubscription(orgId: string, stripeSubscriptionId: string, tx: BillingTx): Promise<void>;
 }

@@ -10,7 +10,7 @@ export interface EntitlementRepository {
         orgId: string;
         stripeSubscriptionId?: string;
     }): Promise<void>;
-    hasActiveEntitlement(tx: BillingTx, input: {
+    hasActiveEntitlement(input: {
         orgId: string;
         entitlementKey: EntitlementKey;
     }): Promise<boolean>;

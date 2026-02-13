@@ -54,8 +54,8 @@ export class ProjectService {
       // Role-based permission
       this.authorizationService.assert(role, 'project.create')
 
-      // Billing/plan-based entitlement
-      await this.entitlementService.assert(orgId, 'project.create', tx)
+      // Billing / plan-based entitlement (READ-ONLY, brez tx)
+      await this.entitlementService.assert(orgId, 'project.create')
 
       return tx.createProject({
         orgId,

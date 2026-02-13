@@ -4,9 +4,13 @@ import type {
   EntitlementKey,
   EntitlementRepository,
 } from '@gnr8/core'
+import type { Pool } from 'pg'
+import { getPool } from '../db/pool'
 import { PostgresBillingTx } from './postgres-billing-transaction'
 
 export class PostgresEntitlementRepository implements EntitlementRepository {
+  constructor(private readonly pool: Pool = getPool()) {}
+
   private asPostgresTx(tx: BillingTx): PostgresBillingTx {
     if (!(tx instanceof PostgresBillingTx)) {
       throw new DomainError('Unsupported billing transaction implementation')
@@ -47,13 +51,13 @@ export class PostgresEntitlementRepository implements EntitlementRepository {
            active,
            deleted_at
          )
-         values ($1, $2, null, true, null)
+         values ($1, $2, $3, true, null)
          on conflict (org_id, key)
          do update set
            active = true,
            deleted_at = null,
            updated_at = now()`,
-        [input.orgId, key],
+        [input.orgId, key, input.stripeSubscriptionId],
       )
     }
   }
@@ -64,21 +68,8 @@ export class PostgresEntitlementRepository implements EntitlementRepository {
   ): Promise<void> {
     const pgTx = this.asPostgresTx(tx)
 
-    if (input.stripeSubscriptionId) {
-      // NOTE: we do not have subscription_id linked to stripe id in this table.
-      // So for now, we deactivate all entitlements for the org on cancellation.
-      await pgTx.client.query(
-        `update public.entitlements
-         set active = false,
-             deleted_at = now()
-         where org_id = $1
-           and active = true
-           and deleted_at is null`,
-        [input.orgId],
-      )
-      return
-    }
-
+    // NOTE: entitlement rows are not strictly linked to stripe_subscription_id yet
+    // so we deactivate all active entitlements for the org
     await pgTx.client.query(
       `update public.entitlements
        set active = false,
@@ -90,23 +81,27 @@ export class PostgresEntitlementRepository implements EntitlementRepository {
     )
   }
 
-  async hasActiveEntitlement(
-    tx: BillingTx,
-    input: { orgId: string; entitlementKey: EntitlementKey },
-  ): Promise<boolean> {
-    const pgTx = this.asPostgresTx(tx)
+  // READ-ONLY entitlement guard (NO tx)
+  async hasActiveEntitlement(input: {
+    orgId: string
+    entitlementKey: EntitlementKey
+  }): Promise<boolean> {
+    const client = await this.pool.connect()
+    try {
+      const result = await client.query(
+        `select 1
+         from public.entitlements
+         where org_id = $1
+           and key = $2
+           and active = true
+           and deleted_at is null
+         limit 1`,
+        [input.orgId, input.entitlementKey],
+      )
 
-    const result = await pgTx.client.query(
-      `select 1
-       from public.entitlements
-       where org_id = $1
-         and key = $2
-         and active = true
-         and deleted_at is null
-       limit 1`,
-      [input.orgId, input.entitlementKey],
-    )
-
-    return (result.rowCount ?? 0) > 0
+      return (result.rowCount ?? 0) > 0
+    } finally {
+      client.release()
+    }
   }
 }
