@@ -10,5 +10,9 @@ export interface EntitlementRepository {
         orgId: string;
         stripeSubscriptionId?: string;
     }): Promise<void>;
+    hasActiveEntitlement(tx: BillingTx, input: {
+        orgId: string;
+        entitlementKey: EntitlementKey;
+    }): Promise<boolean>;
 }
 //# sourceMappingURL=repository.d.ts.map

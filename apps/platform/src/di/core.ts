@@ -15,6 +15,7 @@ import {
 
 let organizationService: OrganizationService | null = null
 let authorizationService: AuthorizationService | null = null
+let entitlementService: EntitlementService | null = null
 let projectService: ProjectService | null = null
 let billingService: BillingService | null = null
 
@@ -36,6 +37,16 @@ export function getAuthorizationService(): AuthorizationService {
   return authorizationService
 }
 
+export function getEntitlementService(): EntitlementService {
+  if (!entitlementService) {
+    entitlementService = new EntitlementService(
+      new PostgresEntitlementRepository(),
+    )
+  }
+
+  return entitlementService
+}
+
 export function getProjectService(): ProjectService {
   if (!projectService) {
     const projectRepository = new PostgresProjectRepository()
@@ -45,6 +56,7 @@ export function getProjectService(): ProjectService {
       projectRepository,
       membershipRepository,
       getAuthorizationService(),
+      getEntitlementService(), // dodano
     )
   }
 
@@ -54,10 +66,11 @@ export function getProjectService(): ProjectService {
 export function getBillingService(): BillingService {
   if (!billingService) {
     const billingRepository = new PostgresBillingRepository()
-    const entitlementService = new EntitlementService(
-      new PostgresEntitlementRepository(),
+
+    billingService = new BillingService(
+      billingRepository,
+      getEntitlementService(), // shared entitlement service
     )
-    billingService = new BillingService(billingRepository, entitlementService)
   }
 
   return billingService

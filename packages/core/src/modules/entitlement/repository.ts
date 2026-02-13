@@ -10,8 +10,18 @@ export interface EntitlementRepository {
       stripeSubscriptionId: string
     },
   ): Promise<void>
+
   deactivateEntitlements(
     tx: BillingTx,
     input: { orgId: string; stripeSubscriptionId?: string },
   ): Promise<void>
+
+  // DODANO — za entitlement guard (ProjectService, future gates)
+  hasActiveEntitlement(
+    tx: BillingTx,
+    input: {
+      orgId: string
+      entitlementKey: EntitlementKey
+    },
+  ): Promise<boolean>
 }

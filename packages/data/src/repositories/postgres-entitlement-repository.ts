@@ -1,5 +1,9 @@
 import { DomainError } from '@gnr8/core'
-import type { BillingTx, EntitlementKey, EntitlementRepository } from '@gnr8/core'
+import type {
+  BillingTx,
+  EntitlementKey,
+  EntitlementRepository,
+} from '@gnr8/core'
 import { PostgresBillingTx } from './postgres-billing-transaction'
 
 export class PostgresEntitlementRepository implements EntitlementRepository {
@@ -19,12 +23,14 @@ export class PostgresEntitlementRepository implements EntitlementRepository {
     },
   ): Promise<void> {
     const pgTx = this.asPostgresTx(tx)
+
     await pgTx.client.query(
       `update public.entitlements
        set active = false,
            deleted_at = now()
        where org_id = $1
-         and active = true`,
+         and active = true
+         and deleted_at is null`,
       [input.orgId],
     )
 
@@ -37,12 +43,17 @@ export class PostgresEntitlementRepository implements EntitlementRepository {
         `insert into public.entitlements (
            org_id,
            key,
-           granted_by_subscription_id,
+           subscription_id,
            active,
            deleted_at
          )
-         values ($1, $2, $3, true, null)`,
-        [input.orgId, key, input.stripeSubscriptionId],
+         values ($1, $2, null, true, null)
+         on conflict (org_id, key)
+         do update set
+           active = true,
+           deleted_at = null,
+           updated_at = now()`,
+        [input.orgId, key],
       )
     }
   }
@@ -54,14 +65,16 @@ export class PostgresEntitlementRepository implements EntitlementRepository {
     const pgTx = this.asPostgresTx(tx)
 
     if (input.stripeSubscriptionId) {
+      // NOTE: we do not have subscription_id linked to stripe id in this table.
+      // So for now, we deactivate all entitlements for the org on cancellation.
       await pgTx.client.query(
         `update public.entitlements
          set active = false,
              deleted_at = now()
          where org_id = $1
-           and granted_by_subscription_id = $2
-           and active = true`,
-        [input.orgId, input.stripeSubscriptionId],
+           and active = true
+           and deleted_at is null`,
+        [input.orgId],
       )
       return
     }
@@ -71,8 +84,29 @@ export class PostgresEntitlementRepository implements EntitlementRepository {
        set active = false,
            deleted_at = now()
        where org_id = $1
-         and active = true`,
+         and active = true
+         and deleted_at is null`,
       [input.orgId],
     )
+  }
+
+  async hasActiveEntitlement(
+    tx: BillingTx,
+    input: { orgId: string; entitlementKey: EntitlementKey },
+  ): Promise<boolean> {
+    const pgTx = this.asPostgresTx(tx)
+
+    const result = await pgTx.client.query(
+      `select 1
+       from public.entitlements
+       where org_id = $1
+         and key = $2
+         and active = true
+         and deleted_at is null
+       limit 1`,
+      [input.orgId, input.entitlementKey],
+    )
+
+    return (result.rowCount ?? 0) > 0
   }
 }

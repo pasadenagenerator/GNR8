@@ -1,11 +1,29 @@
 import { DomainError } from '../../service-contract'
 import type { BillingTx } from '../billing/repository'
 import type { EntitlementRepository } from './repository'
-import type { SyncSubscriptionInput } from './types'
+import type { EntitlementKey, SyncSubscriptionInput } from './types'
 import { PLAN_ENTITLEMENTS } from './plan-map'
 
 export class EntitlementService {
   constructor(private readonly entitlementRepository: EntitlementRepository) {}
+
+  // ✅ HARD GATE za paid features (ProjectService, future guards)
+  async assert(
+    orgId: string,
+    entitlementKey: EntitlementKey,
+    tx: BillingTx,
+  ): Promise<void> {
+    const has = await this.entitlementRepository.hasActiveEntitlement(tx, {
+      orgId,
+      entitlementKey,
+    })
+
+    if (!has) {
+      throw new DomainError(
+        `Missing required entitlement: ${entitlementKey}`,
+      )
+    }
+  }
 
   async syncFromPlan(
     orgId: string,

@@ -5,6 +5,16 @@ export class EntitlementService {
     constructor(entitlementRepository) {
         this.entitlementRepository = entitlementRepository;
     }
+    // ✅ HARD GATE za paid features (ProjectService, future guards)
+    async assert(orgId, entitlementKey, tx) {
+        const has = await this.entitlementRepository.hasActiveEntitlement(tx, {
+            orgId,
+            entitlementKey,
+        });
+        if (!has) {
+            throw new DomainError(`Missing required entitlement: ${entitlementKey}`);
+        }
+    }
     async syncFromPlan(orgId, subscription, tx) {
         const planKey = subscription.planKey.trim().toLowerCase();
         if (!planKey) {

@@ -3,10 +3,12 @@ export class ProjectService {
     projectRepository;
     membershipRepository;
     authorizationService;
-    constructor(projectRepository, membershipRepository, authorizationService) {
+    entitlementService;
+    constructor(projectRepository, membershipRepository, authorizationService, entitlementService) {
         this.projectRepository = projectRepository;
         this.membershipRepository = membershipRepository;
         this.authorizationService = authorizationService;
+        this.entitlementService = entitlementService;
     }
     async createProject(input) {
         const actorUserId = input.actorUserId.trim();
@@ -37,7 +39,10 @@ export class ProjectService {
             if (!role) {
                 throw new NotFoundError('Actor membership not found for organization');
             }
+            // Role-based permission
             this.authorizationService.assert(role, 'project.create');
+            // Billing/plan-based entitlement
+            await this.entitlementService.assert(orgId, 'project.create', tx);
             return tx.createProject({
                 orgId,
                 name,
