@@ -6,7 +6,7 @@ export type EntitlementKey =
   | 'membership.manage'
   | 'project.create'
   | 'billing.manage'
-  | 'projects.unlimited'
+  | 'project.unlimited'
   | 'agency.mode'
 
 export type PlanKey = 'starter' | 'pro' | 'agency'

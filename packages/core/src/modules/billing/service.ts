@@ -94,11 +94,17 @@ export class BillingService {
         event.type === 'customer.subscription.deleted' ||
         isCanceledStatus(subscriptionObject.status)
       ) {
+        await this.billingRepository.markSubscriptionCanceled(
+          tx,
+          subscriptionObject.id,
+        )
+
         await this.entitlementService.deactivateForSubscription(
           orgId,
           subscriptionObject.id,
           tx,
         )
+
         return
       }
 

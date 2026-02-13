@@ -1,5 +1,9 @@
 import { DomainError } from '@gnr8/core'
-import type { BillingRepository, BillingSubscription, BillingTx } from '@gnr8/core'
+import type {
+  BillingRepository,
+  BillingSubscription,
+  BillingTx,
+} from '@gnr8/core'
 import type { Pool } from 'pg'
 import { getPool } from '../db/pool'
 import { PostgresBillingTx } from './postgres-billing-transaction'
@@ -7,8 +11,10 @@ import { PostgresStripeEventsRepository } from './postgres-stripe-events-reposit
 import { PostgresSubscriptionsRepository } from './postgres-subscriptions-repository'
 
 export class PostgresBillingRepository implements BillingRepository {
-  private readonly subscriptionsRepository = new PostgresSubscriptionsRepository()
-  private readonly stripeEventsRepository = new PostgresStripeEventsRepository()
+  private readonly subscriptionsRepository =
+    new PostgresSubscriptionsRepository()
+  private readonly stripeEventsRepository =
+    new PostgresStripeEventsRepository()
 
   constructor(private readonly pool: Pool = getPool()) {}
 
@@ -62,6 +68,22 @@ export class PostgresBillingRepository implements BillingRepository {
     return this.subscriptionsRepository.findSubscriptionByStripeSubscriptionId(
       this.asPostgresTx(tx),
       stripeSubscriptionId,
+    )
+  }
+
+  // DODANO — required by BillingService
+  async markSubscriptionCanceled(
+    tx: BillingTx,
+    stripeSubscriptionId: string,
+  ): Promise<void> {
+    const pgTx = this.asPostgresTx(tx)
+
+    await pgTx.client.query(
+      `update public.subscriptions
+       set status = 'canceled',
+           updated_at = now()
+       where stripe_subscription_id = $1`,
+      [stripeSubscriptionId],
     )
   }
 }

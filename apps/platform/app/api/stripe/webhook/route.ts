@@ -7,6 +7,7 @@ export async function POST(request: NextRequest) {
   try {
     const stripeSecretKey = process.env.STRIPE_SECRET_KEY
     const stripeWebhookSecret = process.env.STRIPE_WEBHOOK_SECRET
+
     if (!stripeSecretKey || !stripeWebhookSecret) {
       return NextResponse.json(
         { error: 'Stripe webhook is not configured' },
@@ -15,6 +16,7 @@ export async function POST(request: NextRequest) {
     }
 
     const stripe = new Stripe(stripeSecretKey)
+
     const signature = request.headers.get('stripe-signature')
     if (!signature) {
       return NextResponse.json(
@@ -24,6 +26,7 @@ export async function POST(request: NextRequest) {
     }
 
     const payload = await request.text()
+
     const event = stripe.webhooks.constructEvent(
       payload,
       signature,
@@ -31,10 +34,12 @@ export async function POST(request: NextRequest) {
     )
 
     const billingService = getBillingService()
-    await billingService.handleStripeWebhook(event as unknown as StripeWebhookEvent)
+    await billingService.handleStripeWebhook(
+      event as unknown as StripeWebhookEvent,
+    )
 
     return NextResponse.json({ ok: true }, { status: 200 })
-  } catch (error) {
+  } catch (error: unknown) {
     if (error instanceof Stripe.errors.StripeSignatureVerificationError) {
       return NextResponse.json({ error: error.message }, { status: 400 })
     }
@@ -43,6 +48,9 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: error.message }, { status: 400 })
     }
 
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    const message =
+      error instanceof Error ? error.message : 'Internal server error'
+
+    return NextResponse.json({ error: message }, { status: 500 })
   }
 }

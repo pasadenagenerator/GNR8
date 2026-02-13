@@ -1,27 +1,8 @@
 import { DomainError } from '../../service-contract'
 import type { BillingTx } from '../billing/repository'
 import type { EntitlementRepository } from './repository'
-import type { EntitlementKey, SyncSubscriptionInput } from './types'
-
-const PLAN_ENTITLEMENTS: Record<string, EntitlementKey[]> = {
-  starter: ['organization.read', 'project.create'],
-  pro: [
-    'organization.read',
-    'organization.manage',
-    'membership.manage',
-    'project.create',
-    'projects.unlimited',
-  ],
-  agency: [
-    'organization.read',
-    'organization.manage',
-    'membership.manage',
-    'project.create',
-    'projects.unlimited',
-    'billing.manage',
-    'agency.mode',
-  ],
-}
+import type { SyncSubscriptionInput } from './types'
+import { PLAN_ENTITLEMENTS } from './plan-map'
 
 export class EntitlementService {
   constructor(private readonly entitlementRepository: EntitlementRepository) {}

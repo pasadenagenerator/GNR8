@@ -18,4 +18,8 @@ export interface BillingRepository {
     tx: BillingTx,
     stripeSubscriptionId: string,
   ): Promise<BillingSubscription | null>
+  markSubscriptionCanceled(
+    tx: BillingTx,
+    stripeSubscriptionId: string,
+  ): Promise<void>
 }

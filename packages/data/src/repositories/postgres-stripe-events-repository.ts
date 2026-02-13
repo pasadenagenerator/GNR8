@@ -13,6 +13,6 @@ export class PostgresStripeEventsRepository {
       [input.stripeEventId, input.eventType],
     )
 
-    return result.rowCount > 0
+    return (result.rowCount ?? 0) > 0
   }
 }
