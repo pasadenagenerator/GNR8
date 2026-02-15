@@ -8,27 +8,23 @@ import { NextResponse, type NextRequest } from 'next/server'
 import { requireActorUserId } from '@/src/auth/require-actor-user-id'
 import { getProjectService } from '@/src/di/core'
 
-type RouteContext = {
-  params: {
-    orgId: string
-  }
-}
-
 type RequestBody = {
   name?: string
   slug?: string
 }
 
-export async function POST(request: NextRequest, context: RouteContext) {
+export async function POST(
+  request: NextRequest,
+  { params }: { params: { orgId: string } },
+) {
   try {
-    const { orgId } = await Promise.resolve(context.params)
     const actorUserId = await requireActorUserId()
     const body = (await request.json()) as RequestBody
     const projectService = getProjectService()
 
     const project = await projectService.createProject({
       actorUserId,
-      orgId,
+      orgId: params.orgId,
       name: body.name ?? '',
       slug: body.slug ?? '',
     })
@@ -51,6 +47,9 @@ export async function POST(request: NextRequest, context: RouteContext) {
       return NextResponse.json({ error: error.message }, { status: 400 })
     }
 
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    return NextResponse.json(
+      { error: 'Internal server error' },
+      { status: 500 },
+    )
   }
 }
