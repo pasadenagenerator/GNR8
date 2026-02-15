@@ -1,7 +1,7 @@
 import { DomainError, type StripeWebhookEvent } from '@gnr8/core'
 import { NextResponse, type NextRequest } from 'next/server'
 import Stripe from 'stripe'
-import { getBillingService } from '../../../../src/di/core'
+import { getBillingService } from '@/src/di/core'
 
 export async function POST(request: NextRequest) {
   try {
@@ -15,42 +15,37 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const stripe = new Stripe(stripeSecretKey)
-
     const signature = request.headers.get('stripe-signature')
     if (!signature) {
-      return NextResponse.json(
-        { error: 'Missing Stripe signature' },
-        { status: 400 },
-      )
+      return NextResponse.json({ error: 'Missing Stripe signature' }, { status: 400 })
     }
 
-    const payload = await request.text()
+    const stripe = new Stripe(stripeSecretKey)
+
+    // ✅ Raw body as bytes (most reliable for signature verification)
+    const rawBody = Buffer.from(await request.arrayBuffer())
 
     const event = stripe.webhooks.constructEvent(
-      payload,
+      rawBody,
       signature,
       stripeWebhookSecret,
     )
 
     const billingService = getBillingService()
-    await billingService.handleStripeWebhook(
-      event as unknown as StripeWebhookEvent,
-    )
+    await billingService.handleStripeWebhook(event as unknown as StripeWebhookEvent)
 
     return NextResponse.json({ ok: true }, { status: 200 })
-  } catch (error: unknown) {
-    if (error instanceof Stripe.errors.StripeSignatureVerificationError) {
-      return NextResponse.json({ error: error.message }, { status: 400 })
+  } catch (err: unknown) {
+    // Stripe signature error
+    if (err instanceof Stripe.errors.StripeSignatureVerificationError) {
+      return NextResponse.json({ error: err.message }, { status: 400 })
     }
 
-    if (error instanceof DomainError) {
-      return NextResponse.json({ error: error.message }, { status: 400 })
+    if (err instanceof DomainError) {
+      return NextResponse.json({ error: err.message }, { status: 400 })
     }
 
-    const message =
-      error instanceof Error ? error.message : 'Internal server error'
-
+    const message = err instanceof Error ? err.message : 'Internal server error'
     return NextResponse.json({ error: message }, { status: 500 })
   }
 }
