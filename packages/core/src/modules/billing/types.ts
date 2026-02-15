@@ -1,3 +1,5 @@
+import type { PlanKey } from '../entitlement/types'
+
 export type SubscriptionStatus =
   | 'active'
   | 'trialing'
@@ -7,8 +9,6 @@ export type SubscriptionStatus =
   | 'incomplete'
   | 'incomplete_expired'
   | 'paused'
-
-export type PlanKey = 'starter' | 'pro' | 'agency'
 
 export type BillingSubscription = {
   orgId: string
