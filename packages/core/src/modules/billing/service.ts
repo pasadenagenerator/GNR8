@@ -13,44 +13,52 @@ const SUPPORTED_EVENTS: ReadonlySet<BillingEventType> = new Set([
   'customer.subscription.deleted',
 ])
 
+type PlanKey = 'starter' | 'pro' | 'agency'
+
 /**
- * Map Stripe price IDs (price_...) to internal plan keys (starter|pro|agency).
- * This avoids passing raw Stripe ids into EntitlementService (which expects plan keys).
+ * Optional fallback mapping Stripe price IDs (price_...) -> internal plan keys.
+ * Prefer using Stripe Price.lookup_key (starter|pro|agency) instead.
  */
-const PRICE_TO_PLAN_KEY: Record<string, 'starter' | 'pro' | 'agency'> = {
+const PRICE_TO_PLAN_KEY: Record<string, PlanKey> = {
   // starter (1€/month)
-  'price_1T15SdJhsQUpBM8AEGQUQ1pV': 'starter',
+  price_1T15SdJhsQUpBM8AEGQUQ1pV: 'starter',
 }
 
-function resolvePlanKey(event: StripeWebhookEvent): string {
-  // 1) Explicit override from Stripe metadata (if you ever set it)
-  const fromMetadata = event.data.object.metadata?.plan_key?.trim().toLowerCase()
-  if (fromMetadata) {
+function isPlanKey(value: string): value is PlanKey {
+  return value === 'starter' || value === 'pro' || value === 'agency'
+}
+
+function normalizeString(value?: string | null): string {
+  return (value ?? '').trim().toLowerCase()
+}
+
+function resolvePlanKey(event: StripeWebhookEvent): PlanKey {
+  const obj = event.data.object
+
+  // 1) Explicit override via subscription metadata (if you ever set it)
+  const fromMetadata = normalizeString(obj.metadata?.plan_key)
+  if (fromMetadata && isPlanKey(fromMetadata)) {
     return fromMetadata
   }
 
-  // 2) Prefer mapping from Stripe price.id -> internal plan key
-  const priceId = event.data.object.items?.data?.[0]?.price?.id ?? null
+  // 2) Preferred: Stripe Price.lookup_key (you set this to starter|pro|agency)
+  const lookupKey = normalizeString(obj.items?.data?.[0]?.price?.lookup_key)
+  if (lookupKey && isPlanKey(lookupKey)) {
+    return lookupKey
+  }
+
+  // 3) Fallback: map by Stripe price.id
+  const priceId = obj.items?.data?.[0]?.price?.id ?? null
   if (priceId && PRICE_TO_PLAN_KEY[priceId]) {
     return PRICE_TO_PLAN_KEY[priceId]
   }
 
-  // 3) If you use lookup_key in Stripe, allow it as internal plan key
-  const lookupKey =
-    event.data.object.items?.data?.[0]?.price?.lookup_key?.trim().toLowerCase() ??
-    null
-  if (lookupKey) {
-    return lookupKey
-  }
-
-  // 4) Safe fallback
+  // 4) Safe fallback (keeps system usable even if Stripe payload is missing fields)
   return 'starter'
 }
 
 function toIsoOrNull(epochSeconds?: number | null): string | null {
-  if (!epochSeconds) {
-    return null
-  }
+  if (!epochSeconds) return null
   return new Date(epochSeconds * 1000).toISOString()
 }
 
@@ -58,22 +66,20 @@ function toSubscription(
   event: StripeWebhookEvent,
   orgId: string,
 ): BillingSubscription {
+  const obj = event.data.object
+
   return {
     orgId,
-    stripeCustomerId: String(event.data.object.customer),
-    stripeSubscriptionId: event.data.object.id,
+    stripeCustomerId: String(obj.customer),
+    stripeSubscriptionId: obj.id,
     planKey: resolvePlanKey(event),
-    status: event.data.object.status as BillingSubscription['status'],
-    currentPeriodEnd: toIsoOrNull(event.data.object.current_period_end),
+    status: obj.status as BillingSubscription['status'],
+    currentPeriodEnd: toIsoOrNull(obj.current_period_end),
   }
 }
 
 function isCanceledStatus(status: string): boolean {
-  return (
-    status === 'canceled' ||
-    status === 'unpaid' ||
-    status === 'incomplete_expired'
-  )
+  return status === 'canceled' || status === 'unpaid' || status === 'incomplete_expired'
 }
 
 export class BillingService {
@@ -97,17 +103,17 @@ export class BillingService {
         { stripeEventId: event.id, eventType: event.type },
       )
 
-      if (!shouldProcess) {
-        return
-      }
+      if (!shouldProcess) return
 
       const subscriptionObject = event.data.object
       const explicitOrgId = subscriptionObject.metadata?.org_id?.trim()
+
       const existing =
         await this.billingRepository.findSubscriptionByStripeSubscriptionId(
           tx,
           subscriptionObject.id,
         )
+
       const orgId = explicitOrgId || existing?.orgId
 
       if (!orgId) {
@@ -116,6 +122,7 @@ export class BillingService {
         )
       }
 
+      // cancel / delete => deactivate entitlements
       if (
         event.type === 'customer.subscription.deleted' ||
         isCanceledStatus(subscriptionObject.status)
@@ -128,11 +135,13 @@ export class BillingService {
         return
       }
 
+      // upsert subscription
       const subscription = await this.billingRepository.upsertSubscription(
         tx,
         toSubscription(event, orgId),
       )
 
+      // sync entitlements from plan
       await this.entitlementService.syncFromPlan(orgId, subscription, tx)
     })
   }
