@@ -13,17 +13,38 @@ const SUPPORTED_EVENTS: ReadonlySet<BillingEventType> = new Set([
   'customer.subscription.deleted',
 ])
 
+/**
+ * Map Stripe price IDs (price_...) to internal plan keys (starter|pro|agency).
+ * This avoids passing raw Stripe ids into EntitlementService (which expects plan keys).
+ */
+const PRICE_TO_PLAN_KEY: Record<string, 'starter' | 'pro' | 'agency'> = {
+  // starter (1€/month)
+  'price_1T15SdJhsQUpBM8AEGQUQ1pV': 'starter',
+}
+
 function resolvePlanKey(event: StripeWebhookEvent): string {
-  const fromMetadata = event.data.object.metadata?.plan_key
+  // 1) Explicit override from Stripe metadata (if you ever set it)
+  const fromMetadata = event.data.object.metadata?.plan_key?.trim().toLowerCase()
   if (fromMetadata) {
     return fromMetadata
   }
 
-  return (
-    event.data.object.items?.data?.[0]?.price?.lookup_key ??
-    event.data.object.items?.data?.[0]?.price?.id ??
-    'starter'
-  )
+  // 2) Prefer mapping from Stripe price.id -> internal plan key
+  const priceId = event.data.object.items?.data?.[0]?.price?.id ?? null
+  if (priceId && PRICE_TO_PLAN_KEY[priceId]) {
+    return PRICE_TO_PLAN_KEY[priceId]
+  }
+
+  // 3) If you use lookup_key in Stripe, allow it as internal plan key
+  const lookupKey =
+    event.data.object.items?.data?.[0]?.price?.lookup_key?.trim().toLowerCase() ??
+    null
+  if (lookupKey) {
+    return lookupKey
+  }
+
+  // 4) Safe fallback
+  return 'starter'
 }
 
 function toIsoOrNull(epochSeconds?: number | null): string | null {
@@ -48,7 +69,11 @@ function toSubscription(
 }
 
 function isCanceledStatus(status: string): boolean {
-  return status === 'canceled' || status === 'unpaid' || status === 'incomplete_expired'
+  return (
+    status === 'canceled' ||
+    status === 'unpaid' ||
+    status === 'incomplete_expired'
+  )
 }
 
 export class BillingService {
@@ -78,10 +103,11 @@ export class BillingService {
 
       const subscriptionObject = event.data.object
       const explicitOrgId = subscriptionObject.metadata?.org_id?.trim()
-      const existing = await this.billingRepository.findSubscriptionByStripeSubscriptionId(
-        tx,
-        subscriptionObject.id,
-      )
+      const existing =
+        await this.billingRepository.findSubscriptionByStripeSubscriptionId(
+          tx,
+          subscriptionObject.id,
+        )
       const orgId = explicitOrgId || existing?.orgId
 
       if (!orgId) {
@@ -94,17 +120,11 @@ export class BillingService {
         event.type === 'customer.subscription.deleted' ||
         isCanceledStatus(subscriptionObject.status)
       ) {
-        await this.billingRepository.markSubscriptionCanceled(
-          tx,
-          subscriptionObject.id,
-        )
-
         await this.entitlementService.deactivateForSubscription(
           orgId,
           subscriptionObject.id,
           tx,
         )
-
         return
       }
 
@@ -112,6 +132,7 @@ export class BillingService {
         tx,
         toSubscription(event, orgId),
       )
+
       await this.entitlementService.syncFromPlan(orgId, subscription, tx)
     })
   }
