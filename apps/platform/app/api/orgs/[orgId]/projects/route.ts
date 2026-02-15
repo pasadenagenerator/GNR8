@@ -4,7 +4,7 @@ import {
   DomainError,
   NotFoundError,
 } from '@gnr8/core'
-import { NextResponse, type NextRequest } from 'next/server'
+import { NextResponse, NextRequest } from 'next/server'
 import { requireActorUserId } from '@/src/auth/require-actor-user-id'
 import { getProjectService } from '@/src/di/core'
 
@@ -15,16 +15,18 @@ type RequestBody = {
 
 export async function POST(
   request: NextRequest,
-  { params }: { params: { orgId: string } },
+  context: any,
 ) {
   try {
+    const orgId = context.params.orgId as string
+
     const actorUserId = await requireActorUserId()
     const body = (await request.json()) as RequestBody
     const projectService = getProjectService()
 
     const project = await projectService.createProject({
       actorUserId,
-      orgId: params.orgId,
+      orgId,
       name: body.name ?? '',
       slug: body.slug ?? '',
     })
