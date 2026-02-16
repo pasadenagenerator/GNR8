@@ -1,11 +1,5 @@
-// ⛔️ odstranimo import iz entitlement/types
-// import type { PlanKey } from '../entitlement/types'
-
-/**
- * Interni plan ključi, ki jih razume billing + entitlement sistem
- * (Stripe lookup_key mora imeti iste vrednosti)
- */
-export type PlanKey = 'starter' | 'pro' | 'agency'
+// PlanKey ima EN vir resnice → entitlement/types
+import type { PlanKey } from '../entitlement/types'
 
 export type SubscriptionStatus =
   | 'active'
