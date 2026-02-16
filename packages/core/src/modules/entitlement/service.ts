@@ -21,9 +21,9 @@ export class EntitlementService {
   }
 
   /**
-   * IMPORTANT:
-   * Entitlements naj bodo vezani na INTERNAL subscription id (subscriptions.id),
-   * ne na Stripe "sub_..." id. (Stripe id je text, internal je uuid/text uuid-like)
+   * IMPORTANT (Option B - recommended):
+   * Entitlements vežemo na Stripe subscription id (sub_...),
+   * ker je to stabilen lifecycle key v webhook eventih.
    */
   async syncFromPlan(
     orgId: string,
@@ -40,36 +40,38 @@ export class EntitlementService {
       throw new DomainError(`Unsupported plan for entitlements: ${planKey}`)
     }
 
-    // ⬇️ ključna sprememba: uporabljamo INTERNAL subscription id
-    const subscriptionId = (subscription as any).id?.trim?.() // če SyncSubscriptionInput še nima id
-    if (!subscriptionId) {
+    const stripeSubscriptionId = subscription.stripeSubscriptionId?.trim()
+    if (!stripeSubscriptionId) {
       throw new DomainError(
-        'subscription.id is required for entitlement sync (internal subscription id)',
+        'subscription.stripeSubscriptionId is required for entitlement sync',
       )
     }
 
     await this.entitlementRepository.replaceActiveEntitlements(tx, {
       orgId,
       entitlementKeys: mapped,
-      subscriptionId,
+      stripeSubscriptionId,
     })
   }
 
   /**
-   * Deaktivacija naj tudi cilja INTERNAL subscription id.
+   * Deaktivacija cilja Stripe subscription id (sub_...).
    */
   async deactivateForSubscription(
     orgId: string,
-    subscriptionId: string,
+    stripeSubscriptionId: string,
     tx: BillingTx,
   ): Promise<void> {
-    if (!subscriptionId?.trim()) {
-      throw new DomainError('subscriptionId is required for entitlement deactivation')
+    const id = stripeSubscriptionId?.trim()
+    if (!id) {
+      throw new DomainError(
+        'stripeSubscriptionId is required for entitlement deactivation',
+      )
     }
 
     await this.entitlementRepository.deactivateEntitlements(tx, {
       orgId,
-      subscriptionId,
+      stripeSubscriptionId: id,
     })
   }
 }
