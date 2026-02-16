@@ -7,32 +7,40 @@ export type EntitlementKey =
   | 'billing.manage'
   | 'agency.mode'
 
+/**
+ * Input iz BillingService → EntitlementService
+ * uporablja se takoj po upsertu subscriptiona
+ */
 export type SyncSubscriptionInput = {
   /**
-   * INTERNAL subscription id (public.subscriptions.id)
-   * -> to je tvoj "uuid/text uuid-like", NE Stripe "sub_..."
-   */
-  id: string
-
-  /**
    * Stripe subscription id (sub_...)
-   * še vedno ga lahko hranimo na subscription objektu,
-   * ampak entitlements naj se vežejo na internal id.
+   * → glavni vezni ključ za entitlements
    */
   stripeSubscriptionId: string
 
+  /**
+   * Internal plan key (starter | pro | agency)
+   */
   planKey: string
 }
 
 export type ReplaceActiveEntitlementsInput = {
   orgId: string
   entitlementKeys: EntitlementKey[]
-  subscriptionId: string // internal subscription id
+
+  /**
+   * Stripe subscription id (sub_...)
+   */
+  stripeSubscriptionId: string
 }
 
 export type DeactivateEntitlementsInput = {
   orgId: string
-  subscriptionId: string // internal subscription id
+
+  /**
+   * Stripe subscription id (sub_...)
+   */
+  stripeSubscriptionId: string
 }
 
 export type HasActiveEntitlementInput = {
