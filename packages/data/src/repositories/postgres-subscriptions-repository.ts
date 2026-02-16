@@ -1,10 +1,10 @@
 import type { BillingSubscription } from '@gnr8/core'
-import { PostgresBillingTx } from './postgres-billing-transaction'
+import type { PostgresBillingTx } from './postgres-billing-transaction'
 
 export class PostgresSubscriptionsRepository {
   async upsertSubscription(
     tx: PostgresBillingTx,
-    subscription: BillingSubscription,
+    subscription: Omit<BillingSubscription, 'id'>,
   ): Promise<BillingSubscription> {
     const result = await tx.client.query(
       `
@@ -12,48 +12,50 @@ export class PostgresSubscriptionsRepository {
         org_id,
         stripe_customer_id,
         stripe_subscription_id,
-        plan_key,
         status,
-        current_period_end
+        current_period_end,
+        plan_key,
+        updated_at
       )
-      values ($1, $2, $3, $4, $5, $6)
-      on conflict (stripe_subscription_id)
-      do update set
+      values ($1, $2, $3, $4, $5, $6, now())
+      on conflict (stripe_subscription_id) do update
+      set
         org_id = excluded.org_id,
         stripe_customer_id = excluded.stripe_customer_id,
-        plan_key = excluded.plan_key,
         status = excluded.status,
         current_period_end = excluded.current_period_end,
-        updated_at = now(),
-        deleted_at = null
+        plan_key = excluded.plan_key,
+        updated_at = now()
       returning
+        id,
         org_id,
         stripe_customer_id,
         stripe_subscription_id,
-        plan_key,
         status,
-        current_period_end
+        current_period_end,
+        plan_key
       `,
       [
-        subscription.orgId, // uuid (string)
-        subscription.stripeCustomerId, // text
-        subscription.stripeSubscriptionId, // text (sub_...)
-        subscription.planKey, // text
-        subscription.status, // text
-        subscription.currentPeriodEnd, // timestamptz or null
+        subscription.orgId,
+        subscription.stripeCustomerId,
+        subscription.stripeSubscriptionId,
+        subscription.status,
+        subscription.currentPeriodEnd,
+        subscription.planKey,
       ],
     )
 
     const row = result.rows[0]
     return {
+      id: row.id,
       orgId: row.org_id,
       stripeCustomerId: row.stripe_customer_id,
       stripeSubscriptionId: row.stripe_subscription_id,
-      planKey: row.plan_key,
       status: row.status,
       currentPeriodEnd: row.current_period_end
         ? new Date(row.current_period_end).toISOString()
         : null,
+      planKey: row.plan_key,
     }
   }
 
@@ -64,12 +66,13 @@ export class PostgresSubscriptionsRepository {
     const result = await tx.client.query(
       `
       select
+        id,
         org_id,
         stripe_customer_id,
         stripe_subscription_id,
-        plan_key,
         status,
-        current_period_end
+        current_period_end,
+        plan_key
       from public.subscriptions
       where stripe_subscription_id = $1
         and deleted_at is null
@@ -78,35 +81,19 @@ export class PostgresSubscriptionsRepository {
       [stripeSubscriptionId],
     )
 
-    if ((result.rowCount ?? 0) === 0) {
-      return null
-    }
-
     const row = result.rows[0]
+    if (!row) return null
+
     return {
+      id: row.id,
       orgId: row.org_id,
       stripeCustomerId: row.stripe_customer_id,
       stripeSubscriptionId: row.stripe_subscription_id,
-      planKey: row.plan_key,
       status: row.status,
       currentPeriodEnd: row.current_period_end
         ? new Date(row.current_period_end).toISOString()
         : null,
+      planKey: row.plan_key,
     }
-  }
-
-  async markSubscriptionCanceled(
-    tx: PostgresBillingTx,
-    stripeSubscriptionId: string,
-  ): Promise<void> {
-    await tx.client.query(
-      `
-      update public.subscriptions
-      set status = 'canceled',
-          updated_at = now()
-      where stripe_subscription_id = $1
-      `,
-      [stripeSubscriptionId],
-    )
   }
 }

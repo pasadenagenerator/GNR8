@@ -1,4 +1,11 @@
-import type { PlanKey } from '../entitlement/types'
+// ⛔️ odstranimo import iz entitlement/types
+// import type { PlanKey } from '../entitlement/types'
+
+/**
+ * Interni plan ključi, ki jih razume billing + entitlement sistem
+ * (Stripe lookup_key mora imeti iste vrednosti)
+ */
+export type PlanKey = 'starter' | 'pro' | 'agency'
 
 export type SubscriptionStatus =
   | 'active'
@@ -11,6 +18,12 @@ export type SubscriptionStatus =
   | 'paused'
 
 export type BillingSubscription = {
+  /**
+   * INTERNAL subscription id (public.subscriptions.id)
+   * → vedno prisoten PO upsertu
+   */
+  id?: string // namenoma optional na nivoju tipa
+
   orgId: string
   stripeCustomerId: string
   stripeSubscriptionId: string
@@ -35,6 +48,11 @@ export type StripeSubscriptionObject = {
   }
 }
 
+export type BillingEventType =
+  | 'customer.subscription.created'
+  | 'customer.subscription.updated'
+  | 'customer.subscription.deleted'
+
 export type StripeWebhookEvent = {
   id: string
   type: BillingEventType | string
@@ -42,8 +60,3 @@ export type StripeWebhookEvent = {
     object: StripeSubscriptionObject
   }
 }
-
-export type BillingEventType =
-  | 'customer.subscription.created'
-  | 'customer.subscription.updated'
-  | 'customer.subscription.deleted'

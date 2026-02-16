@@ -9,22 +9,22 @@ export class EntitlementService {
 
   // HARD GATE za paid features (ProjectService, future guards)
   // READ-ONLY → brez BillingTx
-  async assert(
-    orgId: string,
-    entitlementKey: EntitlementKey,
-  ): Promise<void> {
+  async assert(orgId: string, entitlementKey: EntitlementKey): Promise<void> {
     const has = await this.entitlementRepository.hasActiveEntitlement({
       orgId,
       entitlementKey,
     })
 
     if (!has) {
-      throw new DomainError(
-        `Missing required entitlement: ${entitlementKey}`,
-      )
+      throw new DomainError(`Missing required entitlement: ${entitlementKey}`)
     }
   }
 
+  /**
+   * IMPORTANT:
+   * Entitlements naj bodo vezani na INTERNAL subscription id (subscriptions.id),
+   * ne na Stripe "sub_..." id. (Stripe id je text, internal je uuid/text uuid-like)
+   */
   async syncFromPlan(
     orgId: string,
     subscription: SyncSubscriptionInput,
@@ -40,21 +40,36 @@ export class EntitlementService {
       throw new DomainError(`Unsupported plan for entitlements: ${planKey}`)
     }
 
+    // ⬇️ ključna sprememba: uporabljamo INTERNAL subscription id
+    const subscriptionId = (subscription as any).id?.trim?.() // če SyncSubscriptionInput še nima id
+    if (!subscriptionId) {
+      throw new DomainError(
+        'subscription.id is required for entitlement sync (internal subscription id)',
+      )
+    }
+
     await this.entitlementRepository.replaceActiveEntitlements(tx, {
       orgId,
       entitlementKeys: mapped,
-      stripeSubscriptionId: subscription.stripeSubscriptionId,
+      subscriptionId,
     })
   }
 
+  /**
+   * Deaktivacija naj tudi cilja INTERNAL subscription id.
+   */
   async deactivateForSubscription(
     orgId: string,
-    stripeSubscriptionId: string,
+    subscriptionId: string,
     tx: BillingTx,
   ): Promise<void> {
+    if (!subscriptionId?.trim()) {
+      throw new DomainError('subscriptionId is required for entitlement deactivation')
+    }
+
     await this.entitlementRepository.deactivateEntitlements(tx, {
       orgId,
-      stripeSubscriptionId,
+      subscriptionId,
     })
   }
 }

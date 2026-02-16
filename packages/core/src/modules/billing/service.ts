@@ -1,11 +1,7 @@
 import { DomainError } from '../../service-contract'
 import { EntitlementService } from '../entitlement/service'
 import type { BillingRepository } from './repository'
-import type {
-  BillingEventType,
-  BillingSubscription,
-  StripeWebhookEvent,
-} from './types'
+import type { BillingEventType, BillingSubscription, StripeWebhookEvent } from './types'
 
 const SUPPORTED_EVENTS: ReadonlySet<BillingEventType> = new Set([
   'customer.subscription.created',
@@ -62,13 +58,11 @@ function toIsoOrNull(epochSeconds?: number | null): string | null {
   return new Date(epochSeconds * 1000).toISOString()
 }
 
-function toSubscription(
-  event: StripeWebhookEvent,
-  orgId: string,
-): BillingSubscription {
+function toSubscription(event: StripeWebhookEvent, orgId: string): BillingSubscription {
   const obj = event.data.object
 
   return {
+    // NOTE: internal id is generated in DB on upsert, so it's intentionally NOT set here
     orgId,
     stripeCustomerId: String(obj.customer),
     stripeSubscriptionId: obj.id,
@@ -98,21 +92,20 @@ export class BillingService {
     }
 
     await this.billingRepository.withTransaction(async (tx) => {
-      const shouldProcess = await this.billingRepository.markStripeEventProcessed(
-        tx,
-        { stripeEventId: event.id, eventType: event.type },
-      )
+      const shouldProcess = await this.billingRepository.markStripeEventProcessed(tx, {
+        stripeEventId: event.id,
+        eventType: event.type,
+      })
 
       if (!shouldProcess) return
 
       const subscriptionObject = event.data.object
       const explicitOrgId = subscriptionObject.metadata?.org_id?.trim()
 
-      const existing =
-        await this.billingRepository.findSubscriptionByStripeSubscriptionId(
-          tx,
-          subscriptionObject.id,
-        )
+      const existing = await this.billingRepository.findSubscriptionByStripeSubscriptionId(
+        tx,
+        subscriptionObject.id,
+      )
 
       const orgId = explicitOrgId || existing?.orgId
 
@@ -141,8 +134,21 @@ export class BillingService {
         toSubscription(event, orgId),
       )
 
+      // IMPORTANT: entitlements must be tied to INTERNAL subscription id (uuid), not Stripe "sub_..."
+      if (!subscription.id) {
+        throw new DomainError('Subscription upsert did not return an internal id')
+      }
+
       // sync entitlements from plan
-      await this.entitlementService.syncFromPlan(orgId, subscription, tx)
+      await this.entitlementService.syncFromPlan(
+        orgId,
+        {
+          id: subscription.id,
+          stripeSubscriptionId: subscription.stripeSubscriptionId,
+          planKey: subscription.planKey,
+        },
+        tx,
+      )
     })
   }
 }
