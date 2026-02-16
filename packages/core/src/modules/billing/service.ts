@@ -1,7 +1,11 @@
 import { DomainError } from '../../service-contract'
 import { EntitlementService } from '../entitlement/service'
 import type { BillingRepository } from './repository'
-import type { BillingEventType, BillingSubscription, StripeWebhookEvent } from './types'
+import type {
+  BillingEventType,
+  BillingSubscription,
+  StripeWebhookEvent,
+} from './types'
 
 const SUPPORTED_EVENTS: ReadonlySet<BillingEventType> = new Set([
   'customer.subscription.created',
@@ -32,13 +36,13 @@ function resolvePlanKey(event: StripeWebhookEvent): PlanKey {
   const obj = event.data.object
 
   // 1) Explicit override via subscription metadata (if you ever set it)
-  const fromMetadata = normalizeString(obj.metadata?.plan_key)
+  const fromMetadata = normalizeString(obj.metadata?.plan_key as any)
   if (fromMetadata && isPlanKey(fromMetadata)) {
     return fromMetadata
   }
 
   // 2) Preferred: Stripe Price.lookup_key (you set this to starter|pro|agency)
-  const lookupKey = normalizeString(obj.items?.data?.[0]?.price?.lookup_key)
+  const lookupKey = normalizeString(obj.items?.data?.[0]?.price?.lookup_key ?? null)
   if (lookupKey && isPlanKey(lookupKey)) {
     return lookupKey
   }
@@ -49,7 +53,7 @@ function resolvePlanKey(event: StripeWebhookEvent): PlanKey {
     return PRICE_TO_PLAN_KEY[priceId]
   }
 
-  // 4) Safe fallback (keeps system usable even if Stripe payload is missing fields)
+  // 4) Safe fallback
   return 'starter'
 }
 
@@ -58,7 +62,10 @@ function toIsoOrNull(epochSeconds?: number | null): string | null {
   return new Date(epochSeconds * 1000).toISOString()
 }
 
-function toSubscription(event: StripeWebhookEvent, orgId: string): BillingSubscription {
+function toSubscription(
+  event: StripeWebhookEvent,
+  orgId: string,
+): BillingSubscription {
   const obj = event.data.object
 
   return {
@@ -73,7 +80,11 @@ function toSubscription(event: StripeWebhookEvent, orgId: string): BillingSubscr
 }
 
 function isCanceledStatus(status: string): boolean {
-  return status === 'canceled' || status === 'unpaid' || status === 'incomplete_expired'
+  return (
+    status === 'canceled' ||
+    status === 'unpaid' ||
+    status === 'incomplete_expired'
+  )
 }
 
 export class BillingService {
@@ -92,20 +103,22 @@ export class BillingService {
     }
 
     await this.billingRepository.withTransaction(async (tx) => {
-      const shouldProcess = await this.billingRepository.markStripeEventProcessed(tx, {
-        stripeEventId: event.id,
-        eventType: event.type,
-      })
+      const shouldProcess =
+        await this.billingRepository.markStripeEventProcessed(tx, {
+          stripeEventId: event.id,
+          eventType: event.type,
+        })
 
       if (!shouldProcess) return
 
       const subscriptionObject = event.data.object
       const explicitOrgId = subscriptionObject.metadata?.org_id?.trim()
 
-      const existing = await this.billingRepository.findSubscriptionByStripeSubscriptionId(
-        tx,
-        subscriptionObject.id,
-      )
+      const existing =
+        await this.billingRepository.findSubscriptionByStripeSubscriptionId(
+          tx,
+          subscriptionObject.id,
+        )
 
       const orgId = explicitOrgId || existing?.orgId
 
@@ -122,7 +135,7 @@ export class BillingService {
       ) {
         await this.entitlementService.deactivateForSubscription(
           orgId,
-          subscriptionObject.id,
+          subscriptionObject.id, // stripeSubscriptionId
           tx,
         )
         return
@@ -134,16 +147,10 @@ export class BillingService {
         toSubscription(event, orgId),
       )
 
-      // IMPORTANT: entitlements must be tied to INTERNAL subscription id (uuid), not Stripe "sub_..."
-      if (!subscription.id) {
-        throw new DomainError('Subscription upsert did not return an internal id')
-      }
-
-      // sync entitlements from plan
+      // sync entitlements from plan (keyed by stripeSubscriptionId)
       await this.entitlementService.syncFromPlan(
         orgId,
         {
-          id: subscription.id,
           stripeSubscriptionId: subscription.stripeSubscriptionId,
           planKey: subscription.planKey,
         },
