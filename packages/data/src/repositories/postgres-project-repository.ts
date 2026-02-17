@@ -3,6 +3,7 @@ import type {
   Project,
   ProjectRepository,
   ProjectTransaction,
+  MembershipRepository,
   Role,
 } from '@gnr8/core'
 import type { Pool, PoolClient, QueryResult } from 'pg'
@@ -53,16 +54,11 @@ class PostgresProjectTransaction implements ProjectTransaction {
       if (isUniqueViolation(error)) {
         throw new ConflictError('Project slug already exists in organization')
       }
-
       throw error
     }
   }
 
-  /**
-   * Število AKTIVNIH projektov v organizaciji
-   * (uporablja se za plan / entitlement limite)
-   */
-  async countProjectsByOrgId(input: { orgId: string }): Promise<number> {
+  async countActiveProjects(input: { orgId: string }): Promise<number> {
     const result: QueryResult<{ cnt: string }> = await this.client.query(
       `select count(*)::text as cnt
        from public.projects
@@ -71,16 +67,24 @@ class PostgresProjectTransaction implements ProjectTransaction {
       [input.orgId],
     )
 
-    return Number(result.rows[0]?.cnt ?? 0)
+    // count(*) vrne string v pg driverju (odvisno od config), zato varno parsamo
+    const raw = result.rows[0]?.cnt ?? '0'
+    const n = Number.parseInt(raw, 10)
+    return Number.isFinite(n) ? n : 0
   }
 }
 
-export class PostgresProjectRepository implements ProjectRepository {
+/**
+ * Opomba:
+ * Ta class lahko injiciraš kot ProjectRepository in kot MembershipRepository
+ * (ker implementira oba interface-a).
+ */
+export class PostgresProjectRepository
+  implements ProjectRepository, MembershipRepository
+{
   constructor(private readonly pool: Pool = getPool()) {}
 
-  async withTransaction<T>(
-    fn: (tx: ProjectTransaction) => Promise<T>,
-  ): Promise<T> {
+  async withTransaction<T>(fn: (tx: ProjectTransaction) => Promise<T>): Promise<T> {
     const client = await this.pool.connect()
     try {
       await client.query('begin')
@@ -96,9 +100,6 @@ export class PostgresProjectRepository implements ProjectRepository {
     }
   }
 
-  /**
-   * Membership lookup (uporablja ProjectService)
-   */
   async getActorRoleInOrg(input: {
     tx: ProjectTransaction
     actorUserId: string

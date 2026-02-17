@@ -4,8 +4,6 @@ import { EntitlementService } from '../entitlement/service'
 import type { MembershipRepository, ProjectRepository } from './repository'
 import type { CreateProjectInput, Project } from './types'
 
-const STARTER_PROJECT_LIMIT = 1
-
 export class ProjectService {
   constructor(
     private readonly projectRepository: ProjectRepository,
@@ -20,21 +18,10 @@ export class ProjectService {
     const name = input.name.trim()
     const slug = input.slug.trim().toLowerCase()
 
-    if (!actorUserId) {
-      throw new DomainError('actorUserId is required')
-    }
-
-    if (!orgId) {
-      throw new DomainError('orgId is required')
-    }
-
-    if (!name) {
-      throw new DomainError('Project name is required')
-    }
-
-    if (!slug) {
-      throw new DomainError('Project slug is required')
-    }
+    if (!actorUserId) throw new DomainError('actorUserId is required')
+    if (!orgId) throw new DomainError('orgId is required')
+    if (!name) throw new DomainError('Project name is required')
+    if (!slug) throw new DomainError('Project slug is required')
 
     if (!/^[a-z0-9-]+$/.test(slug)) {
       throw new DomainError(
@@ -59,13 +46,19 @@ export class ProjectService {
       // Billing / plan-based entitlement (READ-ONLY, brez tx)
       await this.entitlementService.assert(orgId, 'project.create')
 
-      // STARTER limit guard (če nima "project.unlimited")
-      const hasUnlimited = await this.hasUnlimitedProjects(orgId)
+      // LIMIT LOGIKA:
+      // Pro/Agency (oz. kdorkoli z entitlement "project.unlimited") → brez limita
+      const hasUnlimited = await this.entitlementService.has(
+        orgId,
+        'project.unlimited',
+      )
+
+      // Starter → max 1 aktiven projekt
       if (!hasUnlimited) {
-        const count = await tx.countProjectsByOrgId({ orgId })
-        if (count >= STARTER_PROJECT_LIMIT) {
+        const activeCount = await tx.countActiveProjects({ orgId })
+        if (activeCount >= 1) {
           throw new DomainError(
-            `Project limit reached for current plan (max ${STARTER_PROJECT_LIMIT}). Upgrade to Pro for unlimited projects.`,
+            'Project limit reached for current plan (max 1 project). Upgrade to Pro for unlimited projects.',
           )
         }
       }
@@ -76,15 +69,5 @@ export class ProjectService {
         slug,
       })
     })
-  }
-
-  private async hasUnlimitedProjects(orgId: string): Promise<boolean> {
-    try {
-      await this.entitlementService.assert(orgId, 'project.unlimited')
-      return true
-    } catch (e) {
-      // EntitlementService.assert vrže DomainError, ko entitlement manjka → to je expected
-      return false
-    }
   }
 }
