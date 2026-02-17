@@ -1,18 +1,8 @@
 import type { BillingTx } from '../billing/repository';
-import type { EntitlementKey } from './types';
+import type { DeactivateEntitlementsInput, HasActiveEntitlementInput, ReplaceActiveEntitlementsInput } from './types';
 export interface EntitlementRepository {
-    replaceActiveEntitlements(tx: BillingTx, input: {
-        orgId: string;
-        entitlementKeys: EntitlementKey[];
-        stripeSubscriptionId: string;
-    }): Promise<void>;
-    deactivateEntitlements(tx: BillingTx, input: {
-        orgId: string;
-        stripeSubscriptionId?: string;
-    }): Promise<void>;
-    hasActiveEntitlement(input: {
-        orgId: string;
-        entitlementKey: EntitlementKey;
-    }): Promise<boolean>;
+    hasActiveEntitlement(input: HasActiveEntitlementInput): Promise<boolean>;
+    replaceActiveEntitlements(tx: BillingTx, input: ReplaceActiveEntitlementsInput): Promise<void>;
+    deactivateEntitlements(tx: BillingTx, input: DeactivateEntitlementsInput): Promise<void>;
 }
 //# sourceMappingURL=repository.d.ts.map

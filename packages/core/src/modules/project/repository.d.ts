@@ -6,6 +6,9 @@ export interface ProjectTransaction {
         name: string;
         slug: string;
     }): Promise<Project>;
+    countProjectsByOrgId(input: {
+        orgId: string;
+    }): Promise<number>;
 }
 export interface ProjectRepository {
     withTransaction<T>(fn: (tx: ProjectTransaction) => Promise<T>): Promise<T>;

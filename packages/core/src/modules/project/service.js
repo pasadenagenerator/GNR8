@@ -1,4 +1,5 @@
 import { DomainError, NotFoundError } from '../../service-contract';
+const STARTER_PROJECT_LIMIT = 1;
 export class ProjectService {
     projectRepository;
     membershipRepository;
@@ -43,11 +44,29 @@ export class ProjectService {
             this.authorizationService.assert(role, 'project.create');
             // Billing / plan-based entitlement (READ-ONLY, brez tx)
             await this.entitlementService.assert(orgId, 'project.create');
+            // STARTER limit guard (če nima "project.unlimited")
+            const hasUnlimited = await this.hasUnlimitedProjects(orgId);
+            if (!hasUnlimited) {
+                const count = await tx.countProjectsByOrgId({ orgId });
+                if (count >= STARTER_PROJECT_LIMIT) {
+                    throw new DomainError(`Project limit reached for current plan (max ${STARTER_PROJECT_LIMIT}). Upgrade to Pro for unlimited projects.`);
+                }
+            }
             return tx.createProject({
                 orgId,
                 name,
                 slug,
             });
         });
+    }
+    async hasUnlimitedProjects(orgId) {
+        try {
+            await this.entitlementService.assert(orgId, 'project.unlimited');
+            return true;
+        }
+        catch (e) {
+            // EntitlementService.assert vrže DomainError, ko entitlement manjka → to je expected
+            return false;
+        }
     }
 }

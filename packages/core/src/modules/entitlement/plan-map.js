@@ -1,5 +1,9 @@
 export const PLAN_ENTITLEMENTS = {
-    starter: ['organization.read', 'project.create'],
+    // canonical keys (če boš kasneje dal lookup_key ali metadata.plan_key)
+    starter: [
+        'organization.read',
+        'project.create'
+    ],
     pro: [
         'organization.read',
         'organization.manage',
@@ -16,4 +20,6 @@ export const PLAN_ENTITLEMENTS = {
         'billing.manage',
         'agency.mode',
     ],
+    // fallback: Stripe price.id (ker resolvePlanKey pade na price.id in potem toLowerCase)
+    'price_1t15sdjhsqupbm8aegquq1pv': ['organization.read', 'project.create'],
 };

@@ -9,5 +9,6 @@ export declare class ProjectService {
     private readonly entitlementService;
     constructor(projectRepository: ProjectRepository, membershipRepository: MembershipRepository, authorizationService: AuthorizationService, entitlementService: EntitlementService);
     createProject(input: CreateProjectInput): Promise<Project>;
+    private hasUnlimitedProjects;
 }
 //# sourceMappingURL=service.d.ts.map
