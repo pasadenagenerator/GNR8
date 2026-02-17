@@ -1,11 +1,5 @@
-import { ConflictError, DomainError } from '@gnr8/core'
-import type {
-  Project,
-  ProjectRepository,
-  ProjectTransaction,
-  MembershipRepository,
-  Role,
-} from '@gnr8/core'
+import { ConflictError } from '@gnr8/core'
+import type { Project, ProjectRepository, ProjectTransaction } from '@gnr8/core'
 import type { Pool, PoolClient, QueryResult } from 'pg'
 import { getPool } from '../db/pool'
 
@@ -67,21 +61,11 @@ class PostgresProjectTransaction implements ProjectTransaction {
       [input.orgId],
     )
 
-    // count(*) vrne string v pg driverju (odvisno od config), zato varno parsamo
-    const raw = result.rows[0]?.cnt ?? '0'
-    const n = Number.parseInt(raw, 10)
-    return Number.isFinite(n) ? n : 0
+    return Number(result.rows[0]?.cnt ?? '0')
   }
 }
 
-/**
- * Opomba:
- * Ta class lahko injiciraš kot ProjectRepository in kot MembershipRepository
- * (ker implementira oba interface-a).
- */
-export class PostgresProjectRepository
-  implements ProjectRepository, MembershipRepository
-{
+export class PostgresProjectRepository implements ProjectRepository {
   constructor(private readonly pool: Pool = getPool()) {}
 
   async withTransaction<T>(fn: (tx: ProjectTransaction) => Promise<T>): Promise<T> {
@@ -98,27 +82,5 @@ export class PostgresProjectRepository
     } finally {
       client.release()
     }
-  }
-
-  async getActorRoleInOrg(input: {
-    tx: ProjectTransaction
-    actorUserId: string
-    orgId: string
-  }): Promise<Role | null> {
-    if (!(input.tx instanceof PostgresProjectTransaction)) {
-      throw new DomainError('Unsupported project transaction implementation')
-    }
-
-    const result: QueryResult<{ role: Role }> = await input.tx.client.query(
-      `select role
-       from public.memberships
-       where org_id = $1
-         and user_id = $2
-         and deleted_at is null
-       limit 1`,
-      [input.orgId, input.actorUserId],
-    )
-
-    return result.rows[0]?.role ?? null
   }
 }

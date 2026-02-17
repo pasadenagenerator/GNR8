@@ -18,10 +18,21 @@ export class ProjectService {
     const name = input.name.trim()
     const slug = input.slug.trim().toLowerCase()
 
-    if (!actorUserId) throw new DomainError('actorUserId is required')
-    if (!orgId) throw new DomainError('orgId is required')
-    if (!name) throw new DomainError('Project name is required')
-    if (!slug) throw new DomainError('Project slug is required')
+    if (!actorUserId) {
+      throw new DomainError('actorUserId is required')
+    }
+
+    if (!orgId) {
+      throw new DomainError('orgId is required')
+    }
+
+    if (!name) {
+      throw new DomainError('Project name is required')
+    }
+
+    if (!slug) {
+      throw new DomainError('Project slug is required')
+    }
 
     if (!/^[a-z0-9-]+$/.test(slug)) {
       throw new DomainError(
@@ -43,22 +54,21 @@ export class ProjectService {
       // Role-based permission
       this.authorizationService.assert(role, 'project.create')
 
-      // Billing / plan-based entitlement (READ-ONLY, brez tx)
+      // Plan-based entitlement: mora imeti pravico ustvarjat projekte
       await this.entitlementService.assert(orgId, 'project.create')
 
       // LIMIT LOGIKA:
-      // Pro/Agency (oz. kdorkoli z entitlement "project.unlimited") → brez limita
-      const hasUnlimited = await this.entitlementService.has(
+      // Če org nima 'project.unlimited', dovolimo samo 1 aktiven projekt
+      const isUnlimited = await this.entitlementService.has(
         orgId,
         'project.unlimited',
       )
 
-      // Starter → max 1 aktiven projekt
-      if (!hasUnlimited) {
+      if (!isUnlimited) {
         const activeCount = await tx.countActiveProjects({ orgId })
         if (activeCount >= 1) {
           throw new DomainError(
-            'Project limit reached for current plan (max 1 project). Upgrade to Pro for unlimited projects.',
+            'Project limit reached for your plan. Upgrade to Pro for unlimited projects.',
           )
         }
       }

@@ -7,8 +7,7 @@ import { PLAN_ENTITLEMENTS } from './plan-map'
 export class EntitlementService {
   constructor(private readonly entitlementRepository: EntitlementRepository) {}
 
-  // HARD GATE za paid features (ProjectService, future guards)
-  // READ-ONLY → brez BillingTx
+  // HARD GATE (READ-only)
   async assert(orgId: string, entitlementKey: EntitlementKey): Promise<void> {
     const has = await this.entitlementRepository.hasActiveEntitlement({
       orgId,
@@ -20,7 +19,9 @@ export class EntitlementService {
     }
   }
 
-  // READ-ONLY helper (no-throw): uporablja se za "optional" entitlements (npr. unlimited)
+  /**
+   * READ-only helper (boolean), za “soft checks” (npr. limits).
+   */
   async has(orgId: string, entitlementKey: EntitlementKey): Promise<boolean> {
     return this.entitlementRepository.hasActiveEntitlement({
       orgId,
@@ -28,6 +29,9 @@ export class EntitlementService {
     })
   }
 
+  /**
+   * Sync iz plana -> entitlements (tx)
+   */
   async syncFromPlan(
     orgId: string,
     subscription: SyncSubscriptionInput,

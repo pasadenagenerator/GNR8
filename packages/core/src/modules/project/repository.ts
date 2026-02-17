@@ -8,7 +8,9 @@ export interface ProjectTransaction {
     slug: string
   }): Promise<Project>
 
-  // NEW: za Starter limit (štejemo aktivne projekte)
+  /**
+   * Used for plan limits (Starter=1, Pro=∞)
+   */
   countActiveProjects(input: { orgId: string }): Promise<number>
 }
 
