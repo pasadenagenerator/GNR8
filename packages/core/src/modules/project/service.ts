@@ -4,6 +4,8 @@ import { EntitlementService } from '../entitlement/service'
 import type { MembershipRepository, ProjectRepository } from './repository'
 import type { CreateProjectInput, Project } from './types'
 
+const STARTER_PROJECT_LIMIT = 1
+
 export class ProjectService {
   constructor(
     private readonly projectRepository: ProjectRepository,
@@ -57,11 +59,32 @@ export class ProjectService {
       // Billing / plan-based entitlement (READ-ONLY, brez tx)
       await this.entitlementService.assert(orgId, 'project.create')
 
+      // STARTER limit guard (če nima "project.unlimited")
+      const hasUnlimited = await this.hasUnlimitedProjects(orgId)
+      if (!hasUnlimited) {
+        const count = await tx.countProjectsByOrgId({ orgId })
+        if (count >= STARTER_PROJECT_LIMIT) {
+          throw new DomainError(
+            `Project limit reached for current plan (max ${STARTER_PROJECT_LIMIT}). Upgrade to Pro for unlimited projects.`,
+          )
+        }
+      }
+
       return tx.createProject({
         orgId,
         name,
         slug,
       })
     })
+  }
+
+  private async hasUnlimitedProjects(orgId: string): Promise<boolean> {
+    try {
+      await this.entitlementService.assert(orgId, 'project.unlimited')
+      return true
+    } catch (e) {
+      // EntitlementService.assert vrže DomainError, ko entitlement manjka → to je expected
+      return false
+    }
   }
 }

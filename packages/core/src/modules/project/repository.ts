@@ -7,6 +7,11 @@ export interface ProjectTransaction {
     name: string
     slug: string
   }): Promise<Project>
+
+  // ✅ NOVO – za plan limite
+  countProjectsByOrgId(input: {
+    orgId: string
+  }): Promise<number>
 }
 
 export interface ProjectRepository {

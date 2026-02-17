@@ -21,7 +21,9 @@ function mapProject(row: DbRow): Project {
   }
 }
 
-function isUniqueViolation(error: unknown): error is { code: string; constraint?: string } {
+function isUniqueViolation(
+  error: unknown,
+): error is { code: string; constraint?: string } {
   return Boolean(
     error &&
       typeof error === 'object' &&
@@ -55,13 +57,30 @@ class PostgresProjectTransaction implements ProjectTransaction {
       throw error
     }
   }
+
+  /**
+   * Število AKTIVNIH projektov v organizaciji
+   * (uporablja se za plan / entitlement limite)
+   */
+  async countProjectsByOrgId(input: { orgId: string }): Promise<number> {
+    const result: QueryResult<{ cnt: string }> = await this.client.query(
+      `select count(*)::text as cnt
+       from public.projects
+       where org_id = $1
+         and deleted_at is null`,
+      [input.orgId],
+    )
+
+    return Number(result.rows[0]?.cnt ?? 0)
+  }
 }
 
-export class PostgresProjectRepository implements ProjectRepository
-{
+export class PostgresProjectRepository implements ProjectRepository {
   constructor(private readonly pool: Pool = getPool()) {}
 
-  async withTransaction<T>(fn: (tx: ProjectTransaction) => Promise<T>): Promise<T> {
+  async withTransaction<T>(
+    fn: (tx: ProjectTransaction) => Promise<T>,
+  ): Promise<T> {
     const client = await this.pool.connect()
     try {
       await client.query('begin')
@@ -77,6 +96,9 @@ export class PostgresProjectRepository implements ProjectRepository
     }
   }
 
+  /**
+   * Membership lookup (uporablja ProjectService)
+   */
   async getActorRoleInOrg(input: {
     tx: ProjectTransaction
     actorUserId: string
