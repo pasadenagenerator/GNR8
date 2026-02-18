@@ -8,10 +8,11 @@ export interface ProjectTransaction {
     slug: string
   }): Promise<Project>
 
-  /**
-   * Used for plan limits (Starter=1, Pro=∞)
-   */
   countActiveProjects(input: { orgId: string }): Promise<number>
+
+  findProjectById(input: { orgId: string; projectId: string }): Promise<Project | null>
+
+  softDeleteProject(input: { orgId: string; projectId: string }): Promise<Project>
 }
 
 export interface ProjectRepository {
