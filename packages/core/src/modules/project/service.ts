@@ -2,7 +2,7 @@ import { DomainError, NotFoundError } from '../../service-contract'
 import { AuthorizationService } from '../authorization'
 import { EntitlementService } from '../entitlement/service'
 import type { MembershipRepository, ProjectRepository } from './repository'
-import type { CreateProjectInput, DeleteProjectInput, Project } from './types'
+import type { CreateProjectInput, Project, DeleteProjectInput } from './types'
 
 export class ProjectService {
   constructor(
@@ -48,7 +48,10 @@ export class ProjectService {
 
       // LIMIT LOGIKA:
       // Če org nima 'project.unlimited', dovolimo samo 1 aktiven projekt
-      const isUnlimited = await this.entitlementService.has(orgId, 'project.unlimited')
+      const isUnlimited = await this.entitlementService.has(
+        orgId,
+        'project.unlimited',
+      )
 
       if (!isUnlimited) {
         const activeCount = await tx.countActiveProjects({ orgId })
@@ -59,10 +62,18 @@ export class ProjectService {
         }
       }
 
-      return tx.createProject({ orgId, name, slug })
+      return tx.createProject({
+        orgId,
+        name,
+        slug,
+      })
     })
   }
 
+  /**
+   * Soft delete projekta (deleted_at).
+   * Vrne project snapshot (kot je bil pred delete), z nastavljenim deletedAt.
+   */
   async deleteProject(input: DeleteProjectInput): Promise<Project> {
     const actorUserId = input.actorUserId.trim()
     const orgId = input.orgId.trim()
@@ -83,17 +94,24 @@ export class ProjectService {
         throw new NotFoundError('Actor membership not found for organization')
       }
 
-      // Minimalno: če lahko create, lahko tudi delete (tipično admin/owner).
-      // Če imaš/boš imel ločen permission 'project.delete', tukaj samo zamenjaš key.
+      // Role-based permission
+      // (če imaš kasneje specifičen permission 'project.delete', ga zamenjaj tukaj)
       this.authorizationService.assert(role, 'project.create')
 
+      // Najprej preverimo, da projekt obstaja (tudi če je že deleted)
       const existing = await tx.findProjectById({ orgId, projectId })
       if (!existing || existing.deletedAt) {
         throw new NotFoundError('Project not found')
       }
 
-      // IMPORTANT: delete NI gated z billing entitlementi (da lahko uporabnik vedno zmanjša št. projektov)
-      return tx.softDeleteProject({ orgId, projectId })
+      // Soft delete
+      await tx.softDeleteProject({ orgId, projectId })
+
+      // Vrni projekt snapshot (z updated deletedAt časom)
+      return {
+        ...existing,
+        deletedAt: new Date().toISOString(),
+      }
     })
   }
 }
