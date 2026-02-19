@@ -1,9 +1,8 @@
 import { createBrowserClient } from '@supabase/ssr'
-import type { SupabaseClient } from '@supabase/supabase-js'
 
-let client: SupabaseClient | null = null
+let client: ReturnType<typeof createBrowserClient> | null = null
 
-export function getSupabaseBrowserClient(): SupabaseClient {
+export function getSupabaseBrowserClient() {
   if (client) return client
 
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
