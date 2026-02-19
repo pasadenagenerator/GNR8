@@ -13,6 +13,17 @@ export interface ProjectTransaction {
    * Uporablja se za plan limit logiko (Starter = 1, Pro = unlimited).
    */
   countActiveProjects(input: { orgId: string }): Promise<number>
+
+  /**
+   * Najde projekt v okviru organizacije.
+   * Vrne tudi deletan projekt (deletedAt != null), če obstaja.
+   */
+  findProjectById(input: { orgId: string; projectId: string }): Promise<Project | null>
+
+  /**
+   * Soft delete (nastavi deleted_at). Ne brišemo fizično.
+   */
+  softDeleteProject(input: { orgId: string; projectId: string }): Promise<void>
 }
 
 export interface ProjectRepository {

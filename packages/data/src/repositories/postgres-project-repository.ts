@@ -1,4 +1,4 @@
-import { ConflictError, DomainError } from '@gnr8/core'
+import { ConflictError } from '@gnr8/core'
 import type { Project, ProjectRepository, ProjectTransaction } from '@gnr8/core'
 import type { Pool, PoolClient, QueryResult } from 'pg'
 import { getPool } from '../db/pool'
@@ -62,6 +62,37 @@ class PostgresProjectTransaction implements ProjectTransaction {
     )
 
     return Number(result.rows[0]?.cnt ?? 0)
+  }
+
+  async findProjectById(input: {
+    orgId: string
+    projectId: string
+  }): Promise<Project | null> {
+    const result: QueryResult<DbRow> = await this.client.query(
+      `select id, org_id, name, slug, created_at, deleted_at
+       from public.projects
+       where org_id = $1
+         and id = $2
+       limit 1`,
+      [input.orgId, input.projectId],
+    )
+
+    const row = result.rows[0]
+    return row ? mapProject(row) : null
+  }
+
+  async softDeleteProject(input: {
+    orgId: string
+    projectId: string
+  }): Promise<void> {
+    await this.client.query(
+      `update public.projects
+       set deleted_at = now()
+       where org_id = $1
+         and id = $2
+         and deleted_at is null`,
+      [input.orgId, input.projectId],
+    )
   }
 }
 
