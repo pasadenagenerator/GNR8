@@ -1,17 +1,12 @@
 import { redirect } from 'next/navigation'
 
-type SearchParams = Record<string, string | string[] | undefined>
-
-function first(value: string | string[] | undefined): string | undefined {
-  return Array.isArray(value) ? value[0] : value
+function first(value: unknown): string | undefined {
+  if (Array.isArray(value)) return typeof value[0] === 'string' ? value[0] : undefined
+  return typeof value === 'string' ? value : undefined
 }
 
-export default async function HomePage({
-  searchParams,
-}: {
-  searchParams: Promise<SearchParams>
-}) {
-  const sp = await searchParams
+export default async function HomePage(props: { searchParams: any }) {
+  const sp = await Promise.resolve(props.searchParams ?? {})
 
   const code = first(sp.code)
   const type = first(sp.type)
