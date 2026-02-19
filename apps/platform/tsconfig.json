@@ -12,7 +12,13 @@
     "strict": true,
     "skipLibCheck": true,
     "incremental": true,
-    "types": ["node"]
+    "types": ["node"],
+
+    // KLJUČNI POPRAVEK
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["./*"]
+    }
   },
   "include": [
     "next-env.d.ts",
