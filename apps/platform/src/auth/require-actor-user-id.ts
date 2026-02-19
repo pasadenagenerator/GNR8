@@ -1,14 +1,15 @@
-import { cookies } from "next/headers";
-import { createServerClient, type CookieOptions } from "@supabase/ssr";
+import { cookies } from 'next/headers'
+import { createServerClient, type CookieOptions } from '@supabase/ssr'
 
 type CookieToSet = {
-  name: string;
-  value: string;
-  options: CookieOptions;
-};
+  name: string
+  value: string
+  options: CookieOptions
+}
 
 export async function requireActorUserId(): Promise<string> {
-  const cookieStore = await cookies();
+  // pri tebi cookies() vrača Promise, zato mora biti await
+  const cookieStore = await cookies()
 
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -16,22 +17,22 @@ export async function requireActorUserId(): Promise<string> {
     {
       cookies: {
         getAll() {
-          return cookieStore.getAll();
+          return cookieStore.getAll()
         },
         setAll(cookiesToSet: CookieToSet[]) {
           cookiesToSet.forEach(({ name, value, options }) => {
-            cookieStore.set(name, value, options);
-          });
+            cookieStore.set(name, value, options)
+          })
         },
       },
-    }
-  );
+    },
+  )
 
-  const { data, error } = await supabase.auth.getUser();
+  const { data, error } = await supabase.auth.getUser()
 
   if (error || !data?.user?.id) {
-    throw new Error("Unauthorized");
+    throw new Error('Unauthorized')
   }
 
-  return data.user.id;
+  return data.user.id
 }
