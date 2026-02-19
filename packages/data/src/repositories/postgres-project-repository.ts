@@ -1,4 +1,4 @@
-import { ConflictError, DomainError, NotFoundError } from '@gnr8/core'
+import { ConflictError, DomainError } from '@gnr8/core'
 import type { Project, ProjectRepository, ProjectTransaction } from '@gnr8/core'
 import type { Pool, PoolClient, QueryResult } from 'pg'
 import { getPool } from '../db/pool'
@@ -63,51 +63,14 @@ class PostgresProjectTransaction implements ProjectTransaction {
 
     return Number(result.rows[0]?.cnt ?? 0)
   }
-
-  async findProjectById(input: {
-    orgId: string
-    projectId: string
-  }): Promise<Project | null> {
-    const result: QueryResult<DbRow> = await this.client.query(
-      `select id, org_id, name, slug, created_at, deleted_at
-       from public.projects
-       where org_id = $1
-         and id = $2
-       limit 1`,
-      [input.orgId, input.projectId],
-    )
-
-    const row = result.rows[0]
-    return row ? mapProject(row) : null
-  }
-
-  async softDeleteProject(input: {
-    orgId: string
-    projectId: string
-  }): Promise<Project> {
-    const result: QueryResult<DbRow> = await this.client.query(
-      `update public.projects
-       set deleted_at = now()
-       where org_id = $1
-         and id = $2
-         and deleted_at is null
-       returning id, org_id, name, slug, created_at, deleted_at`,
-      [input.orgId, input.projectId],
-    )
-
-    const row = result.rows[0]
-    if (!row) {
-      throw new NotFoundError('Project not found')
-    }
-
-    return mapProject(row)
-  }
 }
 
 export class PostgresProjectRepository implements ProjectRepository {
   constructor(private readonly pool: Pool = getPool()) {}
 
-  async withTransaction<T>(fn: (tx: ProjectTransaction) => Promise<T>): Promise<T> {
+  async withTransaction<T>(
+    fn: (tx: ProjectTransaction) => Promise<T>,
+  ): Promise<T> {
     const client = await this.pool.connect()
     try {
       await client.query('begin')

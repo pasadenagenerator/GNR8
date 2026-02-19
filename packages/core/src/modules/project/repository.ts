@@ -8,11 +8,11 @@ export interface ProjectTransaction {
     slug: string
   }): Promise<Project>
 
+  /**
+   * Vrne število aktivnih (ne-deletanih) projektov v organizaciji.
+   * Uporablja se za plan limit logiko (Starter = 1, Pro = unlimited).
+   */
   countActiveProjects(input: { orgId: string }): Promise<number>
-
-  findProjectById(input: { orgId: string; projectId: string }): Promise<Project | null>
-
-  softDeleteProject(input: { orgId: string; projectId: string }): Promise<Project>
 }
 
 export interface ProjectRepository {
