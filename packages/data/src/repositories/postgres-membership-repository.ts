@@ -18,7 +18,6 @@ export class PostgresMembershipRepository implements MembershipRepository {
        from public.memberships
        where org_id = $1
          and user_id = $2
-         and deleted_at is null
        limit 1`,
       [input.orgId, input.actorUserId],
     )
