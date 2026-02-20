@@ -2,7 +2,7 @@ import { DomainError, NotFoundError } from '../../service-contract'
 import { AuthorizationService } from '../authorization'
 import { EntitlementService } from '../entitlement/service'
 import type { MembershipRepository, ProjectRepository } from './repository'
-import type { CreateProjectInput, Project } from './types'
+import type { CreateProjectInput, DeleteProjectInput, Project } from './types'
 
 export class ProjectService {
   constructor(
@@ -18,21 +18,10 @@ export class ProjectService {
     const name = input.name.trim()
     const slug = input.slug.trim().toLowerCase()
 
-    if (!actorUserId) {
-      throw new DomainError('actorUserId is required')
-    }
-
-    if (!orgId) {
-      throw new DomainError('orgId is required')
-    }
-
-    if (!name) {
-      throw new DomainError('Project name is required')
-    }
-
-    if (!slug) {
-      throw new DomainError('Project slug is required')
-    }
+    if (!actorUserId) throw new DomainError('actorUserId is required')
+    if (!orgId) throw new DomainError('orgId is required')
+    if (!name) throw new DomainError('Project name is required')
+    if (!slug) throw new DomainError('Project slug is required')
 
     if (!/^[a-z0-9-]+$/.test(slug)) {
       throw new DomainError(
@@ -59,15 +48,12 @@ export class ProjectService {
 
       // LIMIT LOGIKA:
       // Če org nima 'project.unlimited', dovolimo samo 1 aktiven projekt.
-      // Namesto entitlementService.has() uporabljamo assert() + try/catch,
-      // ker has() trenutno ni del runtime EntitlementService.
+      // (Ne uporabljamo entitlementService.has(), ker je v runtime-u še ni.)
       let isUnlimited = false
       try {
         await this.entitlementService.assert(orgId, 'project.unlimited')
         isUnlimited = true
       } catch (e) {
-        // Če je DomainError, pomeni "nima entitlementa" -> ni unlimited.
-        // Če je kaj drugega, je sistemska napaka in jo želimo videt.
         if (e instanceof DomainError) {
           isUnlimited = false
         } else {
@@ -89,6 +75,48 @@ export class ProjectService {
         name,
         slug,
       })
+    })
+  }
+
+  async deleteProject(input: DeleteProjectInput): Promise<Project> {
+    const actorUserId = input.actorUserId.trim()
+    const orgId = input.orgId.trim()
+    const projectId = input.projectId.trim()
+
+    if (!actorUserId) throw new DomainError('actorUserId is required')
+    if (!orgId) throw new DomainError('orgId is required')
+    if (!projectId) throw new DomainError('projectId is required')
+
+    return this.projectRepository.withTransaction(async (tx) => {
+      const role = await this.membershipRepository.getActorRoleInOrg({
+        tx,
+        actorUserId,
+        orgId,
+      })
+
+      if (!role) {
+        throw new NotFoundError('Actor membership not found for organization')
+      }
+
+      // Role-based permission (zaenkrat uporabimo organization.manage ali project.create – odvisno od tvojega permission seta)
+      // Če imaš raje 'project.delete', lahko kasneje dodamo.
+      this.authorizationService.assert(role, 'organization.manage')
+
+      // Plan-based entitlement (če želiš omejit tudi brisanje, lahko uporabiš specifičen key)
+      await this.entitlementService.assert(orgId, 'organization.manage')
+
+      const existing = await tx.findProjectById({ orgId, projectId })
+      if (!existing || existing.deletedAt) {
+        throw new NotFoundError('Project not found')
+      }
+
+      await tx.softDeleteProject({ orgId, projectId })
+
+      // vrnemo objekt (stanje po soft-delete; deletedAt bo v DB nastavljen, ampak mi ga tu vrnemo kot "optimistic")
+      return {
+        ...existing,
+        deletedAt: new Date().toISOString(),
+      }
     })
   }
 }
