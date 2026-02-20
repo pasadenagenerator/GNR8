@@ -36,9 +36,12 @@ class PostgresProjectTransaction implements ProjectTransaction {
     slug: string
   }): Promise<Project> {
     try {
+      // IMPORTANT:
+      // projects.id je TEXT + NOT NULL brez default-a, zato ga generiramo v SQL
+      // gen_random_uuid() je v Supabase običajno na voljo (pgcrypto).
       const result: QueryResult<DbRow> = await this.client.query(
-        `insert into public.projects (org_id, name, slug)
-         values ($1, $2, $3)
+        `insert into public.projects (id, org_id, name, slug)
+         values (gen_random_uuid()::text, $1, $2, $3)
          returning id, org_id, name, slug, created_at, deleted_at`,
         [input.orgId, input.name, input.slug],
       )
