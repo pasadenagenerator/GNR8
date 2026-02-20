@@ -98,25 +98,26 @@ export class ProjectService {
         throw new NotFoundError('Actor membership not found for organization')
       }
 
-      // Role-based permission (zaenkrat uporabimo organization.manage ali project.create – odvisno od tvojega permission seta)
-      // Če imaš raje 'project.delete', lahko kasneje dodamo.
-      this.authorizationService.assert(role, 'organization.manage')
+      // Zaenkrat: isti permission kot create, da ne blokiramo razvoja.
+      // Kasneje: dodamo 'project.delete' in zamenjamo to vrstico.
+      this.authorizationService.assert(role, 'project.create')
 
-      // Plan-based entitlement (če želiš omejit tudi brisanje, lahko uporabiš specifičen key)
-      await this.entitlementService.assert(orgId, 'organization.manage')
+      // Brisanje ne vezemo na billing/plan (lahko kasneje, če želiš).
+      // Če hočeš zdaj: odkomentiraj spodaj in uporabi pravi key.
+      // await this.entitlementService.assert(orgId, 'project.delete')
 
       const existing = await tx.findProjectById({ orgId, projectId })
       if (!existing || existing.deletedAt) {
         throw new NotFoundError('Project not found')
       }
 
-      await tx.softDeleteProject({ orgId, projectId })
-
-      // vrnemo objekt (stanje po soft-delete; deletedAt bo v DB nastavljen, ampak mi ga tu vrnemo kot "optimistic")
-      return {
-        ...existing,
-        deletedAt: new Date().toISOString(),
+      const deleted = await tx.softDeleteProject({ orgId, projectId })
+      if (!deleted) {
+        // nekdo je medtem že izbrisal ali ni bilo matcha
+        throw new NotFoundError('Project not found')
       }
+
+      return deleted
     })
   }
 }

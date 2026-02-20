@@ -98,15 +98,19 @@ class PostgresProjectTransaction implements ProjectTransaction {
   async softDeleteProject(input: {
     orgId: string
     projectId: string
-  }): Promise<void> {
-    await this.client.query(
+  }): Promise<Project | null> {
+    const result: QueryResult<DbRow> = await this.client.query(
       `update public.projects
        set deleted_at = now()
        where org_id = $1
          and id = $2
-         and deleted_at is null`,
+         and deleted_at is null
+       returning id, org_id, name, slug, created_at, deleted_at`,
       [input.orgId, input.projectId],
     )
+
+    const row = result.rows[0]
+    return row ? mapProject(row) : null
   }
 }
 
