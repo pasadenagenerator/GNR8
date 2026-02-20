@@ -19,3 +19,8 @@ export type DeleteProjectInput = {
   orgId: string
   projectId: string
 }
+
+export type ListProjectsInput = {
+  actorUserId: string
+  orgId: string
+}

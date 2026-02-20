@@ -2,7 +2,12 @@ import { DomainError, NotFoundError } from '../../service-contract'
 import { AuthorizationService } from '../authorization'
 import { EntitlementService } from '../entitlement/service'
 import type { MembershipRepository, ProjectRepository } from './repository'
-import type { CreateProjectInput, DeleteProjectInput, Project } from './types'
+import type {
+  CreateProjectInput,
+  DeleteProjectInput,
+  ListProjectsInput,
+  Project,
+} from './types'
 
 export class ProjectService {
   constructor(
@@ -11,6 +16,34 @@ export class ProjectService {
     private readonly authorizationService: AuthorizationService,
     private readonly entitlementService: EntitlementService,
   ) {}
+
+  async listProjects(input: ListProjectsInput): Promise<Project[]> {
+    const actorUserId = input.actorUserId.trim()
+    const orgId = input.orgId.trim()
+
+    if (!actorUserId) throw new DomainError('actorUserId is required')
+    if (!orgId) throw new DomainError('orgId is required')
+
+    return this.projectRepository.withTransaction(async (tx) => {
+      const role = await this.membershipRepository.getActorRoleInOrg({
+        tx,
+        actorUserId,
+        orgId,
+      })
+
+      if (!role) {
+        throw new NotFoundError('Actor membership not found for organization')
+      }
+
+      // Role-based permission
+      this.authorizationService.assert(role, 'organization.read')
+
+      // Plan-based entitlement
+      await this.entitlementService.assert(orgId, 'organization.read')
+
+      return tx.listActiveProjects({ orgId })
+    })
+  }
 
   async createProject(input: CreateProjectInput): Promise<Project> {
     const actorUserId = input.actorUserId.trim()
@@ -43,12 +76,10 @@ export class ProjectService {
       // Role-based permission
       this.authorizationService.assert(role, 'project.create')
 
-      // Plan-based entitlement: mora imeti pravico ustvarjat projekte
+      // Plan-based entitlement
       await this.entitlementService.assert(orgId, 'project.create')
 
-      // LIMIT LOGIKA:
-      // Če org nima 'project.unlimited', dovolimo samo 1 aktiven projekt.
-      // (Ne uporabljamo entitlementService.has(), ker je v runtime-u še ni.)
+      // LIMIT LOGIKA: če ni unlimited, max 1 aktiven projekt
       let isUnlimited = false
       try {
         await this.entitlementService.assert(orgId, 'project.unlimited')
@@ -70,11 +101,7 @@ export class ProjectService {
         }
       }
 
-      return tx.createProject({
-        orgId,
-        name,
-        slug,
-      })
+      return tx.createProject({ orgId, name, slug })
     })
   }
 
@@ -99,20 +126,10 @@ export class ProjectService {
       }
 
       // Role-based permission
-      // (če želiš bolj granularno, kasneje dodamo 'project.delete')
       this.authorizationService.assert(role, 'organization.manage')
 
-      // IMPORTANT:
-      // Brisanje NE SME biti blokirano z billing entitlements,
-      // ker mora Starter uporabnik (1 projekt) imeti možnost brisanja,
-      // da se lahko vrne pod limit in ustvari novega.
-      //
-      // Zato tu namenoma ne kličemo:
-      // await this.entitlementService.assert(orgId, 'organization.manage')
-      //
-      // Če želiš vseeno nek minimalen gating, lahko uporabiš:
-      // await this.entitlementService.assert(orgId, 'organization.read')
-      // ampak priporočam brez.
+      // Entitlement: za brisanje zahtevamo manage (kot sva že poravnala)
+      await this.entitlementService.assert(orgId, 'organization.manage')
 
       const existing = await tx.findProjectById({ orgId, projectId })
       if (!existing || existing.deletedAt) {
@@ -121,7 +138,6 @@ export class ProjectService {
 
       await tx.softDeleteProject({ orgId, projectId })
 
-      // vrnemo objekt (optimistic deletedAt)
       return {
         ...existing,
         deletedAt: new Date().toISOString(),
