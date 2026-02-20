@@ -5,14 +5,25 @@ import { getPool } from '../db/pool'
 
 type DbRow = Record<string, unknown>
 
+function toIsoString(value: unknown): string {
+  if (value instanceof Date) return value.toISOString()
+  return String(value)
+}
+
+function toIsoStringOrNull(value: unknown): string | null {
+  if (value == null) return null
+  if (value instanceof Date) return value.toISOString()
+  return String(value)
+}
+
 function mapProject(row: DbRow): Project {
   return {
     id: String(row.id),
     orgId: String(row.org_id),
     name: String(row.name),
     slug: String(row.slug),
-    createdAt: String(row.created_at),
-    deletedAt: row.deleted_at ? String(row.deleted_at) : null,
+    createdAt: toIsoString(row.created_at),
+    deletedAt: toIsoStringOrNull(row.deleted_at),
   }
 }
 
