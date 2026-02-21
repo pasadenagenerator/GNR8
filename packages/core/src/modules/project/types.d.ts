@@ -1,26 +1,29 @@
-export type Project = {
-  id: string
-  orgId: string
-  name: string
-  slug: string
-  createdAt: string
-  deletedAt: string | null
-}
+import type { AuthorizationService } from '../authorization'
+import type { EntitlementService } from '../entitlement/service'
+import type { MembershipRepository, ProjectRepository } from './repository'
+import type {
+  CreateProjectInput,
+  DeleteProjectInput,
+  ListProjectsInput,
+  Project,
+} from './types'
 
-export type CreateProjectInput = {
-  actorUserId: string
-  orgId: string
-  name: string
-  slug: string
-}
+export declare class ProjectService {
+  private readonly projectRepository
+  private readonly membershipRepository
+  private readonly authorizationService
+  private readonly entitlementService
 
-export type DeleteProjectInput = {
-  actorUserId: string
-  orgId: string
-  projectId: string
-}
+  constructor(
+    projectRepository: ProjectRepository,
+    membershipRepository: MembershipRepository,
+    authorizationService: AuthorizationService,
+    entitlementService: EntitlementService,
+  )
 
-export type ListProjectsInput = {
-  actorUserId: string
-  orgId: string
+  listProjects(input: ListProjectsInput): Promise<Project[]>
+  listActiveProjects(input: ListProjectsInput): Promise<Project[]>
+
+  createProject(input: CreateProjectInput): Promise<Project>
+  deleteProject(input: DeleteProjectInput): Promise<Project>
 }

@@ -29,8 +29,12 @@ export class ProjectService {
       this.authorizationService.assert(role, 'organization.read')
       await this.entitlementService.assert(orgId, 'organization.read')
 
-      return tx.listActiveProjects({ orgId })
+      return tx.listProjectsByOrgId({ orgId })
     })
+  }
+
+  async listActiveProjects(input) {
+    return this.listProjects(input)
   }
 
   async createProject(input) {
@@ -69,11 +73,8 @@ export class ProjectService {
         await this.entitlementService.assert(orgId, 'project.unlimited')
         isUnlimited = true
       } catch (e) {
-        if (e instanceof DomainError) {
-          isUnlimited = false
-        } else {
-          throw e
-        }
+        if (e instanceof DomainError) isUnlimited = false
+        else throw e
       }
 
       if (!isUnlimited) {
@@ -110,7 +111,7 @@ export class ProjectService {
       }
 
       this.authorizationService.assert(role, 'organization.manage')
-      await this.entitlementService.assert(orgId, 'organization.manage')
+      await this.entitlementService.assert(orgId, 'project.create')
 
       const existing = await tx.findProjectById({ orgId, projectId })
       if (!existing || existing.deletedAt) {
@@ -119,10 +120,7 @@ export class ProjectService {
 
       await tx.softDeleteProject({ orgId, projectId })
 
-      return {
-        ...existing,
-        deletedAt: new Date().toISOString(),
-      }
+      return { ...existing, deletedAt: new Date().toISOString() }
     })
   }
 }

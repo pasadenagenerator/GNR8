@@ -17,6 +17,7 @@ export class ProjectService {
     private readonly entitlementService: EntitlementService,
   ) {}
 
+  // canonical
   async listProjects(input: ListProjectsInput): Promise<Project[]> {
     const actorUserId = input.actorUserId.trim()
     const orgId = input.orgId.trim()
@@ -35,14 +36,16 @@ export class ProjectService {
         throw new NotFoundError('Actor membership not found for organization')
       }
 
-      // RBAC: branje organizacije / projektov
       this.authorizationService.assert(role, 'organization.read')
-
-      // Plan entitlement: organization.read ti že obstaja (videl si ga v DB)
       await this.entitlementService.assert(orgId, 'organization.read')
 
       return tx.listProjectsByOrgId({ orgId })
     })
+  }
+
+  // backwards-compatible alias (stari route-i, stari testi…)
+  async listActiveProjects(input: ListProjectsInput): Promise<Project[]> {
+    return this.listProjects(input)
   }
 
   async createProject(input: CreateProjectInput): Promise<Project> {
@@ -73,24 +76,17 @@ export class ProjectService {
         throw new NotFoundError('Actor membership not found for organization')
       }
 
-      // Role-based permission
       this.authorizationService.assert(role, 'project.create')
-
-      // Plan-based entitlement
       await this.entitlementService.assert(orgId, 'project.create')
 
-      // LIMIT LOGIKA:
-      // Če org nima 'project.unlimited', dovolimo samo 1 aktiven projekt.
+      // Unlimited check brez .has()
       let isUnlimited = false
       try {
         await this.entitlementService.assert(orgId, 'project.unlimited')
         isUnlimited = true
       } catch (e) {
-        if (e instanceof DomainError) {
-          isUnlimited = false
-        } else {
-          throw e
-        }
+        if (e instanceof DomainError) isUnlimited = false
+        else throw e
       }
 
       if (!isUnlimited) {
@@ -102,11 +98,7 @@ export class ProjectService {
         }
       }
 
-      return tx.createProject({
-        orgId,
-        name,
-        slug,
-      })
+      return tx.createProject({ orgId, name, slug })
     })
   }
 
@@ -130,10 +122,10 @@ export class ProjectService {
         throw new NotFoundError('Actor membership not found for organization')
       }
 
-      // RBAC: kdo sme brisat
       this.authorizationService.assert(role, 'organization.manage')
 
-      // ENTITLEMENT: plan dovoljuje project funkcionalnost
+      // Ne zahtevaj organization.manage entitlement, ker ga (še) nimaš na planih.
+      // Dovolj je, da plan dopušča delo s projekti.
       await this.entitlementService.assert(orgId, 'project.create')
 
       const existing = await tx.findProjectById({ orgId, projectId })
@@ -143,10 +135,7 @@ export class ProjectService {
 
       await tx.softDeleteProject({ orgId, projectId })
 
-      return {
-        ...existing,
-        deletedAt: new Date().toISOString(),
-      }
+      return { ...existing, deletedAt: new Date().toISOString() }
     })
   }
 }
