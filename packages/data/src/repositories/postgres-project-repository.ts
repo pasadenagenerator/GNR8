@@ -65,19 +65,6 @@ class PostgresProjectTransaction implements ProjectTransaction {
     return Number(result.rows[0]?.cnt ?? 0)
   }
 
-  async listActiveProjects(input: { orgId: string }): Promise<Project[]> {
-    const result: QueryResult<DbRow> = await this.client.query(
-      `select id, org_id, name, slug, created_at, deleted_at
-       from public.projects
-       where org_id = $1
-         and deleted_at is null
-       order by created_at desc`,
-      [input.orgId],
-    )
-
-    return result.rows.map(mapProject)
-  }
-
   async findProjectById(input: {
     orgId: string
     projectId: string
@@ -95,7 +82,10 @@ class PostgresProjectTransaction implements ProjectTransaction {
     return row ? mapProject(row) : null
   }
 
-  async softDeleteProject(input: { orgId: string; projectId: string }): Promise<void> {
+  async softDeleteProject(input: {
+    orgId: string
+    projectId: string
+  }): Promise<void> {
     await this.client.query(
       `update public.projects
        set deleted_at = now()
@@ -105,12 +95,27 @@ class PostgresProjectTransaction implements ProjectTransaction {
       [input.orgId, input.projectId],
     )
   }
+
+  async listProjectsByOrgId(input: { orgId: string }): Promise<Project[]> {
+    const result: QueryResult<DbRow> = await this.client.query(
+      `select id, org_id, name, slug, created_at, deleted_at
+       from public.projects
+       where org_id = $1
+         and deleted_at is null
+       order by created_at desc`,
+      [input.orgId],
+    )
+
+    return result.rows.map(mapProject)
+  }
 }
 
 export class PostgresProjectRepository implements ProjectRepository {
   constructor(private readonly pool: Pool = getPool()) {}
 
-  async withTransaction<T>(fn: (tx: ProjectTransaction) => Promise<T>): Promise<T> {
+  async withTransaction<T>(
+    fn: (tx: ProjectTransaction) => Promise<T>,
+  ): Promise<T> {
     const client = await this.pool.connect()
     try {
       await client.query('begin')

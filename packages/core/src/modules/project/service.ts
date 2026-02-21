@@ -2,7 +2,12 @@ import { DomainError, NotFoundError } from '../../service-contract'
 import { AuthorizationService } from '../authorization'
 import { EntitlementService } from '../entitlement/service'
 import type { MembershipRepository, ProjectRepository } from './repository'
-import type { CreateProjectInput, DeleteProjectInput, Project } from './types'
+import type {
+  CreateProjectInput,
+  DeleteProjectInput,
+  ListProjectsInput,
+  Project,
+} from './types'
 
 export class ProjectService {
   constructor(
@@ -11,6 +16,34 @@ export class ProjectService {
     private readonly authorizationService: AuthorizationService,
     private readonly entitlementService: EntitlementService,
   ) {}
+
+  async listProjects(input: ListProjectsInput): Promise<Project[]> {
+    const actorUserId = input.actorUserId.trim()
+    const orgId = input.orgId.trim()
+
+    if (!actorUserId) throw new DomainError('actorUserId is required')
+    if (!orgId) throw new DomainError('orgId is required')
+
+    return this.projectRepository.withTransaction(async (tx) => {
+      const role = await this.membershipRepository.getActorRoleInOrg({
+        tx,
+        actorUserId,
+        orgId,
+      })
+
+      if (!role) {
+        throw new NotFoundError('Actor membership not found for organization')
+      }
+
+      // RBAC: branje organizacije / projektov
+      this.authorizationService.assert(role, 'organization.read')
+
+      // Plan entitlement: organization.read ti že obstaja (videl si ga v DB)
+      await this.entitlementService.assert(orgId, 'organization.read')
+
+      return tx.listProjectsByOrgId({ orgId })
+    })
+  }
 
   async createProject(input: CreateProjectInput): Promise<Project> {
     const actorUserId = input.actorUserId.trim()
@@ -97,11 +130,10 @@ export class ProjectService {
         throw new NotFoundError('Actor membership not found for organization')
       }
 
-      // RBAC: kdo sme brisat (tvoje pravilo)
+      // RBAC: kdo sme brisat
       this.authorizationService.assert(role, 'organization.manage')
 
-      // ENTITLEMENT: ali plan sploh dovoljuje project funkcionalnost
-      // (ne uporabljamo 'organization.manage', ker tega ključa v planih nimaš)
+      // ENTITLEMENT: plan dovoljuje project funkcionalnost
       await this.entitlementService.assert(orgId, 'project.create')
 
       const existing = await tx.findProjectById({ orgId, projectId })

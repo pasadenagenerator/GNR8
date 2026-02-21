@@ -10,11 +10,11 @@ export interface ProjectTransaction {
 
   countActiveProjects(input: { orgId: string }): Promise<number>
 
-  listActiveProjects(input: { orgId: string }): Promise<Project[]>
-
   findProjectById(input: { orgId: string; projectId: string }): Promise<Project | null>
 
   softDeleteProject(input: { orgId: string; projectId: string }): Promise<void>
+
+  listProjectsByOrgId(input: { orgId: string }): Promise<Project[]>
 }
 
 export interface ProjectRepository {
