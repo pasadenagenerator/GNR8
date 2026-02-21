@@ -2,12 +2,7 @@ import { DomainError, NotFoundError } from '../../service-contract'
 import { AuthorizationService } from '../authorization'
 import { EntitlementService } from '../entitlement/service'
 import type { MembershipRepository, ProjectRepository } from './repository'
-import type {
-  CreateProjectInput,
-  DeleteProjectInput,
-  ListProjectsInput,
-  Project,
-} from './types'
+import type { CreateProjectInput, DeleteProjectInput, Project } from './types'
 
 export class ProjectService {
   constructor(
@@ -16,34 +11,6 @@ export class ProjectService {
     private readonly authorizationService: AuthorizationService,
     private readonly entitlementService: EntitlementService,
   ) {}
-
-  async listProjects(input: ListProjectsInput): Promise<Project[]> {
-    const actorUserId = input.actorUserId.trim()
-    const orgId = input.orgId.trim()
-
-    if (!actorUserId) throw new DomainError('actorUserId is required')
-    if (!orgId) throw new DomainError('orgId is required')
-
-    return this.projectRepository.withTransaction(async (tx) => {
-      const role = await this.membershipRepository.getActorRoleInOrg({
-        tx,
-        actorUserId,
-        orgId,
-      })
-
-      if (!role) {
-        throw new NotFoundError('Actor membership not found for organization')
-      }
-
-      // Role-based permission
-      this.authorizationService.assert(role, 'organization.read')
-
-      // Plan-based entitlement
-      await this.entitlementService.assert(orgId, 'organization.read')
-
-      return tx.listActiveProjects({ orgId })
-    })
-  }
 
   async createProject(input: CreateProjectInput): Promise<Project> {
     const actorUserId = input.actorUserId.trim()
@@ -79,7 +46,8 @@ export class ProjectService {
       // Plan-based entitlement
       await this.entitlementService.assert(orgId, 'project.create')
 
-      // LIMIT LOGIKA: če ni unlimited, max 1 aktiven projekt
+      // LIMIT LOGIKA:
+      // Če org nima 'project.unlimited', dovolimo samo 1 aktiven projekt.
       let isUnlimited = false
       try {
         await this.entitlementService.assert(orgId, 'project.unlimited')
@@ -101,7 +69,11 @@ export class ProjectService {
         }
       }
 
-      return tx.createProject({ orgId, name, slug })
+      return tx.createProject({
+        orgId,
+        name,
+        slug,
+      })
     })
   }
 
@@ -125,11 +97,12 @@ export class ProjectService {
         throw new NotFoundError('Actor membership not found for organization')
       }
 
-      // Role-based permission
+      // RBAC: kdo sme brisat (tvoje pravilo)
       this.authorizationService.assert(role, 'organization.manage')
 
-      // Entitlement: za brisanje zahtevamo manage (kot sva že poravnala)
-      await this.entitlementService.assert(orgId, 'organization.manage')
+      // ENTITLEMENT: ali plan sploh dovoljuje project funkcionalnost
+      // (ne uporabljamo 'organization.manage', ker tega ključa v planih nimaš)
+      await this.entitlementService.assert(orgId, 'project.create')
 
       const existing = await tx.findProjectById({ orgId, projectId })
       if (!existing || existing.deletedAt) {
