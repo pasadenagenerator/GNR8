@@ -14,7 +14,7 @@ type Project = {
 }
 
 type ApiResult =
-  | { ok: true; project: any }
+  | { ok: true; project: Project }
   | { ok?: false; error: string }
   | null
 
@@ -23,13 +23,13 @@ type ProjectsResult =
   | { ok?: false; error: string }
   | null
 
-async function readJsonSafe(res: Response): Promise<any | null> {
+async function safeJson(res: Response): Promise<any> {
   const text = await res.text()
   if (!text) return null
   try {
     return JSON.parse(text)
   } catch {
-    return null
+    return { error: text }
   }
 }
 
@@ -51,6 +51,9 @@ export default function AdminPage() {
 
   const [projectsBusy, setProjectsBusy] = useState(false)
   const [projectsResult, setProjectsResult] = useState<ProjectsResult>(null)
+
+  const [deletedBusy, setDeletedBusy] = useState(false)
+  const [deletedResult, setDeletedResult] = useState<ProjectsResult>(null)
 
   useEffect(() => {
     ;(async () => {
@@ -79,20 +82,16 @@ export default function AdminPage() {
     setProjectsResult(null)
 
     try {
-      const res = await fetch(`/api/orgs/${effectiveOrgId}/projects`, {
-        method: 'GET',
-      })
-      const json = await readJsonSafe(res)
+      const res = await fetch(`/api/orgs/${effectiveOrgId}/projects`, { method: 'GET' })
+      const json = await safeJson(res)
 
       if (!res.ok) {
         setProjectsResult({
           ok: false,
-          error:
-            (json && typeof json.error === 'string' && json.error) ||
-            `Failed to load projects (HTTP ${res.status})`,
+          error: json?.error ?? `Failed to load projects (HTTP ${res.status})`,
         })
       } else {
-        setProjectsResult({ ok: true, projects: (json?.projects ?? []) as Project[] })
+        setProjectsResult({ ok: true, projects: json?.projects ?? [] })
       }
     } catch (e) {
       setProjectsResult({
@@ -104,11 +103,40 @@ export default function AdminPage() {
     }
   }
 
-  // auto-load projects when orgId changes
+  async function loadDeletedProjects(nextOrgId?: string) {
+    const effectiveOrgId = (nextOrgId ?? orgId).trim()
+    if (!effectiveOrgId) return
+
+    setDeletedBusy(true)
+    setDeletedResult(null)
+
+    try {
+      const res = await fetch(`/api/orgs/${effectiveOrgId}/projects/deleted`, { method: 'GET' })
+      const json = await safeJson(res)
+
+      if (!res.ok) {
+        setDeletedResult({
+          ok: false,
+          error: json?.error ?? `Failed to load deleted projects (HTTP ${res.status})`,
+        })
+      } else {
+        setDeletedResult({ ok: true, projects: json?.projects ?? [] })
+      }
+    } catch (e) {
+      setDeletedResult({
+        ok: false,
+        error: e instanceof Error ? e.message : 'Failed to load deleted projects',
+      })
+    } finally {
+      setDeletedBusy(false)
+    }
+  }
+
+  // auto-load both lists when orgId changes
   useEffect(() => {
-    setResult(null)
     const t = setTimeout(() => {
       void loadProjects(orgId)
+      void loadDeletedProjects(orgId)
     }, 250)
     return () => clearTimeout(t)
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -124,21 +152,20 @@ export default function AdminPage() {
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ name, slug }),
       })
-      const json = await readJsonSafe(res)
+      const json = await safeJson(res)
 
       if (!res.ok) {
         setResult({
           ok: false,
-          error:
-            (json && typeof json.error === 'string' && json.error) ||
-            `Request failed (HTTP ${res.status})`,
+          error: json?.error ?? `Create failed (HTTP ${res.status})`,
         })
       } else {
-        setResult({ ok: true, project: json?.project })
+        setResult({ ok: true, project: json.project as Project })
         await loadProjects()
+        await loadDeletedProjects()
       }
     } catch (e) {
-      setResult({ ok: false, error: e instanceof Error ? e.message : 'Failed' })
+      setResult({ ok: false, error: e instanceof Error ? e.message : 'Create failed' })
     } finally {
       setBusy(false)
     }
@@ -149,25 +176,22 @@ export default function AdminPage() {
     if (!confirmed) return
 
     setProjectsBusy(true)
+    setDeletedBusy(true)
     setResult(null)
 
     try {
-      const res = await fetch(`/api/orgs/${orgId}/projects/${projectId}`, {
-        method: 'DELETE',
-      })
-      const json = await readJsonSafe(res)
+      const res = await fetch(`/api/orgs/${orgId}/projects/${projectId}`, { method: 'DELETE' })
+      const json = await safeJson(res)
 
       if (!res.ok) {
         setResult({
           ok: false,
-          error:
-            (json && typeof json.error === 'string' && json.error) ||
-            `Delete failed (HTTP ${res.status})`,
+          error: json?.error ?? `Delete failed (HTTP ${res.status})`,
         })
       } else {
-        // tudi če je body prazen, je to OK – delete je uspešen
-        setResult({ ok: true, project: json?.project ?? { id: projectId } })
+        setResult({ ok: true, project: json.project as Project })
         await loadProjects()
+        await loadDeletedProjects()
       }
     } catch (e) {
       setResult({
@@ -176,17 +200,56 @@ export default function AdminPage() {
       })
     } finally {
       setProjectsBusy(false)
+      setDeletedBusy(false)
     }
   }
 
-  const projects =
-    projectsResult && 'ok' in projectsResult && projectsResult.ok
-      ? projectsResult.projects
-      : []
+  async function restoreProject(projectId: string) {
+    const confirmed = window.confirm('Restore this project?')
+    if (!confirmed) return
+
+    setProjectsBusy(true)
+    setDeletedBusy(true)
+    setResult(null)
+
+    try {
+      const res = await fetch(`/api/orgs/${orgId}/projects/${projectId}/restore`, {
+        method: 'POST',
+      })
+      const json = await safeJson(res)
+
+      if (!res.ok) {
+        setResult({
+          ok: false,
+          error: json?.error ?? `Restore failed (HTTP ${res.status})`,
+        })
+      } else {
+        setResult({ ok: true, project: json.project as Project })
+        await loadProjects()
+        await loadDeletedProjects()
+      }
+    } catch (e) {
+      setResult({
+        ok: false,
+        error: e instanceof Error ? e.message : 'Restore failed',
+      })
+    } finally {
+      setProjectsBusy(false)
+      setDeletedBusy(false)
+    }
+  }
+
+  const activeProjects =
+    projectsResult && 'ok' in projectsResult && projectsResult.ok ? projectsResult.projects : []
+
+  const deletedProjects =
+    deletedResult && 'ok' in deletedResult && deletedResult.ok ? deletedResult.projects : []
+
+  const anyLoading = busy || projectsBusy || deletedBusy
 
   return (
-    <main style={{ maxWidth: 760, margin: '48px auto', padding: 16 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+    <main style={{ maxWidth: 860, margin: '48px auto', padding: 16 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
         <h1 style={{ fontSize: 24, marginBottom: 16 }}>Admin (test)</h1>
         <button
           onClick={logout}
@@ -207,7 +270,7 @@ export default function AdminPage() {
         </div>
       </section>
 
-      <section style={{ display: 'grid', gap: 12, marginBottom: 20 }}>
+      <section style={{ display: 'grid', gap: 12, marginBottom: 24 }}>
         <label style={{ display: 'grid', gap: 6 }}>
           <span>Org ID</span>
           <input
@@ -217,27 +280,39 @@ export default function AdminPage() {
           />
         </label>
 
-        <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
           <button
-            disabled={projectsBusy}
-            onClick={() => loadProjects()}
+            disabled={projectsBusy || deletedBusy}
+            onClick={() => {
+              void loadProjects()
+              void loadDeletedProjects()
+            }}
             style={{
               padding: 10,
               borderRadius: 8,
               border: '1px solid #ddd',
-              cursor: projectsBusy ? 'not-allowed' : 'pointer',
+              cursor: projectsBusy || deletedBusy ? 'not-allowed' : 'pointer',
             }}
           >
-            {projectsBusy ? 'Loading…' : 'Reload projects'}
+            {projectsBusy || deletedBusy ? 'Loading…' : 'Reload lists'}
           </button>
+
           <span style={{ fontSize: 13, color: '#666' }}>
             {projectsBusy
-              ? 'Loading…'
+              ? 'Loading active…'
               : projectsResult && 'ok' in projectsResult && projectsResult.ok
-                ? `${projects.length} project(s)`
+                ? `${activeProjects.length} active`
+                : '—'}
+            {' · '}
+            {deletedBusy
+              ? 'Loading deleted…'
+              : deletedResult && 'ok' in deletedResult && deletedResult.ok
+                ? `${deletedProjects.length} deleted`
                 : '—'}
           </span>
         </div>
+
+        <div style={{ height: 1, background: '#eee', marginTop: 4 }} />
 
         <label style={{ display: 'grid', gap: 6 }}>
           <span>Project name</span>
@@ -258,13 +333,13 @@ export default function AdminPage() {
         </label>
 
         <button
-          disabled={busy || projectsBusy}
+          disabled={busy}
           onClick={createProject}
           style={{
             padding: 10,
             borderRadius: 8,
             border: '1px solid #ddd',
-            cursor: busy || projectsBusy ? 'not-allowed' : 'pointer',
+            cursor: busy ? 'not-allowed' : 'pointer',
           }}
         >
           {busy ? 'Creating…' : 'Create project'}
@@ -272,7 +347,7 @@ export default function AdminPage() {
       </section>
 
       <section style={{ marginBottom: 22 }}>
-        <h2 style={{ fontSize: 18, marginBottom: 10 }}>Projects</h2>
+        <h2 style={{ fontSize: 18, marginBottom: 10 }}>Active projects</h2>
 
         {projectsResult && 'ok' in projectsResult && !projectsResult.ok && (
           <div style={{ padding: 12, border: '1px solid #f2c', borderRadius: 8 }}>
@@ -280,11 +355,11 @@ export default function AdminPage() {
           </div>
         )}
 
-        {projects.length === 0 ? (
-          <div style={{ fontSize: 14, color: '#666' }}>No projects.</div>
+        {activeProjects.length === 0 ? (
+          <div style={{ fontSize: 14, color: '#666' }}>No active projects.</div>
         ) : (
           <div style={{ display: 'grid', gap: 10 }}>
-            {projects.map((p) => (
+            {activeProjects.map((p) => (
               <div
                 key={p.id}
                 style={{
@@ -314,16 +389,76 @@ export default function AdminPage() {
 
                 <button
                   onClick={() => deleteProject(p.id)}
-                  disabled={projectsBusy}
+                  disabled={anyLoading}
                   style={{
                     padding: 10,
                     borderRadius: 8,
                     border: '1px solid #ddd',
-                    cursor: projectsBusy ? 'not-allowed' : 'pointer',
+                    cursor: anyLoading ? 'not-allowed' : 'pointer',
                     whiteSpace: 'nowrap',
                   }}
                 >
                   Delete
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+
+      <section style={{ marginBottom: 22 }}>
+        <h2 style={{ fontSize: 18, marginBottom: 10 }}>Deleted projects</h2>
+
+        {deletedResult && 'ok' in deletedResult && !deletedResult.ok && (
+          <div style={{ padding: 12, border: '1px solid #f2c', borderRadius: 8 }}>
+            <strong>Error:</strong> {deletedResult.error}
+          </div>
+        )}
+
+        {deletedProjects.length === 0 ? (
+          <div style={{ fontSize: 14, color: '#666' }}>No deleted projects.</div>
+        ) : (
+          <div style={{ display: 'grid', gap: 10 }}>
+            {deletedProjects.map((p) => (
+              <div
+                key={p.id}
+                style={{
+                  border: '1px solid #eee',
+                  borderRadius: 10,
+                  padding: 12,
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  gap: 12,
+                  alignItems: 'center',
+                }}
+              >
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontWeight: 600 }}>{p.name}</div>
+                  <div style={{ fontSize: 13, color: '#666' }}>
+                    <div>
+                      <strong>slug:</strong> {p.slug}
+                    </div>
+                    <div style={{ wordBreak: 'break-all' }}>
+                      <strong>id:</strong> {p.id}
+                    </div>
+                    <div>
+                      <strong>deleted:</strong> {p.deletedAt ?? '—'}
+                    </div>
+                  </div>
+                </div>
+
+                <button
+                  onClick={() => restoreProject(p.id)}
+                  disabled={anyLoading}
+                  style={{
+                    padding: 10,
+                    borderRadius: 8,
+                    border: '1px solid #ddd',
+                    cursor: anyLoading ? 'not-allowed' : 'pointer',
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  Restore
                 </button>
               </div>
             ))}

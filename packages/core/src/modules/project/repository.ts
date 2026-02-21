@@ -14,7 +14,11 @@ export interface ProjectTransaction {
 
   softDeleteProject(input: { orgId: string; projectId: string }): Promise<void>
 
+  restoreProject(input: { orgId: string; projectId: string }): Promise<void>
+
   listProjectsByOrgId(input: { orgId: string }): Promise<Project[]>
+
+  listDeletedProjectsByOrgId(input: { orgId: string }): Promise<Project[]>
 }
 
 export interface ProjectRepository {
