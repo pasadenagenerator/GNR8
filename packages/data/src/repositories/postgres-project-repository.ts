@@ -36,14 +36,12 @@ class PostgresProjectTransaction implements ProjectTransaction {
     slug: string
   }): Promise<Project> {
     try {
-      // projects.id je TEXT + NOT NULL brez default-a, zato ga generiramo v SQL
       const result: QueryResult<DbRow> = await this.client.query(
         `insert into public.projects (id, org_id, name, slug)
          values (gen_random_uuid()::text, $1, $2, $3)
          returning id, org_id, name, slug, created_at, deleted_at`,
         [input.orgId, input.name, input.slug],
       )
-
       return mapProject(result.rows[0])
     } catch (error) {
       if (isUniqueViolation(error)) {
@@ -61,11 +59,13 @@ class PostgresProjectTransaction implements ProjectTransaction {
          and deleted_at is null`,
       [input.orgId],
     )
-
     return Number(result.rows[0]?.cnt ?? 0)
   }
 
-  async findProjectById(input: { orgId: string; projectId: string }): Promise<Project | null> {
+  async findProjectById(input: {
+    orgId: string
+    projectId: string
+  }): Promise<Project | null> {
     const result: QueryResult<DbRow> = await this.client.query(
       `select id, org_id, name, slug, created_at, deleted_at
        from public.projects
@@ -74,7 +74,6 @@ class PostgresProjectTransaction implements ProjectTransaction {
        limit 1`,
       [input.orgId, input.projectId],
     )
-
     const row = result.rows[0]
     return row ? mapProject(row) : null
   }
@@ -90,34 +89,6 @@ class PostgresProjectTransaction implements ProjectTransaction {
     )
   }
 
-  async listProjectsByOrgId(input: { orgId: string }): Promise<Project[]> {
-    const result: QueryResult<DbRow> = await this.client.query(
-      `select id, org_id, name, slug, created_at, deleted_at
-       from public.projects
-       where org_id = $1
-         and deleted_at is null
-       order by created_at desc`,
-      [input.orgId],
-    )
-
-    return result.rows.map(mapProject)
-  }
-
-  // NEW: list deleted
-  async listDeletedProjectsByOrgId(input: { orgId: string }): Promise<Project[]> {
-    const result: QueryResult<DbRow> = await this.client.query(
-      `select id, org_id, name, slug, created_at, deleted_at
-       from public.projects
-       where org_id = $1
-         and deleted_at is not null
-       order by deleted_at desc`,
-      [input.orgId],
-    )
-
-    return result.rows.map(mapProject)
-  }
-
-  // NEW: restore
   async restoreProject(input: { orgId: string; projectId: string }): Promise<void> {
     await this.client.query(
       `update public.projects
@@ -127,6 +98,30 @@ class PostgresProjectTransaction implements ProjectTransaction {
          and deleted_at is not null`,
       [input.orgId, input.projectId],
     )
+  }
+
+  async listProjectsByOrgId(input: { orgId: string }): Promise<Project[]> {
+    const result: QueryResult<DbRow> = await this.client.query(
+      `select id, org_id, name, slug, created_at, deleted_at
+       from public.projects
+       where org_id = $1
+         and deleted_at is null
+       order by created_at desc`,
+      [input.orgId],
+    )
+    return result.rows.map(mapProject)
+  }
+
+  async listDeletedProjectsByOrgId(input: { orgId: string }): Promise<Project[]> {
+    const result: QueryResult<DbRow> = await this.client.query(
+      `select id, org_id, name, slug, created_at, deleted_at
+       from public.projects
+       where org_id = $1
+         and deleted_at is not null
+       order by deleted_at desc`,
+      [input.orgId],
+    )
+    return result.rows.map(mapProject)
   }
 }
 
