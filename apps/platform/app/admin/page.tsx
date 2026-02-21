@@ -23,6 +23,16 @@ type ProjectsResult =
   | { ok?: false; error: string }
   | null
 
+async function readJsonSafe(res: Response): Promise<any | null> {
+  const text = await res.text()
+  if (!text) return null
+  try {
+    return JSON.parse(text)
+  } catch {
+    return null
+  }
+}
+
 export default function AdminPage() {
   const router = useRouter()
   const supabase = useMemo(() => getSupabaseBrowserClient(), [])
@@ -72,15 +82,17 @@ export default function AdminPage() {
       const res = await fetch(`/api/orgs/${effectiveOrgId}/projects`, {
         method: 'GET',
       })
-      const json = await res.json()
+      const json = await readJsonSafe(res)
 
       if (!res.ok) {
         setProjectsResult({
           ok: false,
-          error: json?.error ?? 'Failed to load projects',
+          error:
+            (json && typeof json.error === 'string' && json.error) ||
+            `Failed to load projects (HTTP ${res.status})`,
         })
       } else {
-        setProjectsResult({ ok: true, projects: json.projects ?? [] })
+        setProjectsResult({ ok: true, projects: (json?.projects ?? []) as Project[] })
       }
     } catch (e) {
       setProjectsResult({
@@ -92,8 +104,9 @@ export default function AdminPage() {
     }
   }
 
-  // auto-load projects when orgId changes (debounced-ish via timeout)
+  // auto-load projects when orgId changes
   useEffect(() => {
+    setResult(null)
     const t = setTimeout(() => {
       void loadProjects(orgId)
     }, 250)
@@ -111,12 +124,17 @@ export default function AdminPage() {
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ name, slug }),
       })
-      const json = await res.json()
+      const json = await readJsonSafe(res)
 
       if (!res.ok) {
-        setResult({ ok: false, error: json?.error ?? 'Request failed' })
+        setResult({
+          ok: false,
+          error:
+            (json && typeof json.error === 'string' && json.error) ||
+            `Request failed (HTTP ${res.status})`,
+        })
       } else {
-        setResult({ ok: true, project: json.project })
+        setResult({ ok: true, project: json?.project })
         await loadProjects()
       }
     } catch (e) {
@@ -137,12 +155,18 @@ export default function AdminPage() {
       const res = await fetch(`/api/orgs/${orgId}/projects/${projectId}`, {
         method: 'DELETE',
       })
-      const json = await res.json()
+      const json = await readJsonSafe(res)
 
       if (!res.ok) {
-        setResult({ ok: false, error: json?.error ?? 'Delete failed' })
+        setResult({
+          ok: false,
+          error:
+            (json && typeof json.error === 'string' && json.error) ||
+            `Delete failed (HTTP ${res.status})`,
+        })
       } else {
-        setResult({ ok: true, project: json.project })
+        // tudi če je body prazen, je to OK – delete je uspešen
+        setResult({ ok: true, project: json?.project ?? { id: projectId } })
         await loadProjects()
       }
     } catch (e) {
@@ -234,13 +258,13 @@ export default function AdminPage() {
         </label>
 
         <button
-          disabled={busy}
+          disabled={busy || projectsBusy}
           onClick={createProject}
           style={{
             padding: 10,
             borderRadius: 8,
             border: '1px solid #ddd',
-            cursor: busy ? 'not-allowed' : 'pointer',
+            cursor: busy || projectsBusy ? 'not-allowed' : 'pointer',
           }}
         >
           {busy ? 'Creating…' : 'Create project'}
