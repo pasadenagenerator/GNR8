@@ -36,8 +36,12 @@ export class ProjectService {
         throw new NotFoundError('Actor membership not found for organization')
       }
 
+      // Authorization: dovolj je, da sme brati org / projekte
       this.authorizationService.assert(role, 'organization.read')
-      await this.entitlementService.assert(orgId, 'organization.read')
+
+      // Entitlements: ne uporabljamo organization.read, ker še nimaš tega ent. na planih.
+      // Za zdaj je dovolj, da plan dopušča delo s projekti.
+      await this.entitlementService.assert(orgId, 'project.create')
 
       return tx.listProjectsByOrgId({ orgId })
     })
@@ -122,10 +126,11 @@ export class ProjectService {
         throw new NotFoundError('Actor membership not found for organization')
       }
 
+      // Permission: trenutno uporabljamo organization.manage
+      // (kasneje lahko zamenjaš v bolj granularno 'project.delete')
       this.authorizationService.assert(role, 'organization.manage')
 
-      // Ne zahtevaj organization.manage entitlement, ker ga (še) nimaš na planih.
-      // Dovolj je, da plan dopušča delo s projekti.
+      // Entitlement: ne zahtevamo organization.manage, ker ga (še) nimaš na planih.
       await this.entitlementService.assert(orgId, 'project.create')
 
       const existing = await tx.findProjectById({ orgId, projectId })

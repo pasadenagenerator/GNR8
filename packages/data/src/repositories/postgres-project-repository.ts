@@ -2,6 +2,7 @@ import { ConflictError } from '@gnr8/core'
 import type { Project, ProjectRepository, ProjectTransaction } from '@gnr8/core'
 import type { Pool, PoolClient, QueryResult } from 'pg'
 import { getPool } from '../db/pool'
+import { randomUUID } from 'crypto'
 
 type DbRow = Record<string, unknown>
 
@@ -36,12 +37,14 @@ class PostgresProjectTransaction implements ProjectTransaction {
     slug: string
   }): Promise<Project> {
     try {
-      // projects.id je TEXT + NOT NULL brez default-a, zato ga generiramo v SQL
+      // projects.id je TEXT + NOT NULL brez default-a, zato ga generiramo v Node-u
+      const id = randomUUID()
+
       const result: QueryResult<DbRow> = await this.client.query(
         `insert into public.projects (id, org_id, name, slug)
-         values (gen_random_uuid()::text, $1, $2, $3)
+         values ($1, $2, $3, $4)
          returning id, org_id, name, slug, created_at, deleted_at`,
-        [input.orgId, input.name, input.slug],
+        [id, input.orgId, input.name, input.slug],
       )
 
       return mapProject(result.rows[0])
