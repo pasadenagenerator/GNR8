@@ -20,13 +20,13 @@ export type DeleteProjectInput = {
   projectId: string
 }
 
+export type ListProjectsInput = {
+  actorUserId: string
+  orgId: string
+}
+
 export type RestoreProjectInput = {
   actorUserId: string
   orgId: string
   projectId: string
-}
-
-export type ListProjectsInput = {
-  actorUserId: string
-  orgId: string
 }

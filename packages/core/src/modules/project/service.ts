@@ -18,7 +18,7 @@ export class ProjectService {
     private readonly entitlementService: EntitlementService,
   ) {}
 
-  // ACTIVE projects
+  // canonical: ACTIVE projects only
   async listProjects(input: ListProjectsInput): Promise<Project[]> {
     const actorUserId = input.actorUserId.trim()
     const orgId = input.orgId.trim()
@@ -32,17 +32,22 @@ export class ProjectService {
         actorUserId,
         orgId,
       })
+
       if (!role) throw new NotFoundError('Actor membership not found for organization')
 
       this.authorizationService.assert(role, 'organization.read')
-      // zadržimo simple: če user lahko dela s projekti, mu pustimo brati org projekte
-      await this.entitlementService.assert(orgId, 'project.create')
+      await this.entitlementService.assert(orgId, 'organization.read')
 
       return tx.listProjectsByOrgId({ orgId })
     })
   }
 
-  // DELETED projects (admin UX)
+  // backwards-compatible alias
+  async listActiveProjects(input: ListProjectsInput): Promise<Project[]> {
+    return this.listProjects(input)
+  }
+
+  // NEW: DELETED projects only
   async listDeletedProjects(input: ListProjectsInput): Promise<Project[]> {
     const actorUserId = input.actorUserId.trim()
     const orgId = input.orgId.trim()
@@ -56,18 +61,14 @@ export class ProjectService {
         actorUserId,
         orgId,
       })
+
       if (!role) throw new NotFoundError('Actor membership not found for organization')
 
       this.authorizationService.assert(role, 'organization.read')
-      await this.entitlementService.assert(orgId, 'project.create')
+      await this.entitlementService.assert(orgId, 'organization.read')
 
       return tx.listDeletedProjectsByOrgId({ orgId })
     })
-  }
-
-  // backwards-compatible alias
-  async listActiveProjects(input: ListProjectsInput): Promise<Project[]> {
-    return this.listProjects(input)
   }
 
   async createProject(input: CreateProjectInput): Promise<Project> {
@@ -93,6 +94,7 @@ export class ProjectService {
         actorUserId,
         orgId,
       })
+
       if (!role) throw new NotFoundError('Actor membership not found for organization')
 
       this.authorizationService.assert(role, 'project.create')
@@ -136,20 +138,24 @@ export class ProjectService {
         actorUserId,
         orgId,
       })
+
       if (!role) throw new NotFoundError('Actor membership not found for organization')
 
       this.authorizationService.assert(role, 'organization.manage')
-      // Ne zahtevaj organization.manage entitlement, ker ga (še) nimaš na planih.
+
+      // Ne zahtevaj organization.manage entitlement (še ga nimaš na planih)
       await this.entitlementService.assert(orgId, 'project.create')
 
       const existing = await tx.findProjectById({ orgId, projectId })
       if (!existing || existing.deletedAt) throw new NotFoundError('Project not found')
 
       await tx.softDeleteProject({ orgId, projectId })
+
       return { ...existing, deletedAt: new Date().toISOString() }
     })
   }
 
+  // NEW: restore
   async restoreProject(input: RestoreProjectInput): Promise<Project> {
     const actorUserId = input.actorUserId.trim()
     const orgId = input.orgId.trim()
@@ -165,6 +171,7 @@ export class ProjectService {
         actorUserId,
         orgId,
       })
+
       if (!role) throw new NotFoundError('Actor membership not found for organization')
 
       this.authorizationService.assert(role, 'organization.manage')
@@ -172,9 +179,13 @@ export class ProjectService {
 
       const existing = await tx.findProjectById({ orgId, projectId })
       if (!existing) throw new NotFoundError('Project not found')
-      if (!existing.deletedAt) return existing // idempotent
+      if (!existing.deletedAt) {
+        // already active
+        return existing
+      }
 
       await tx.restoreProject({ orgId, projectId })
+
       return { ...existing, deletedAt: null }
     })
   }

@@ -1,7 +1,6 @@
 import { ConflictError } from '@gnr8/core'
 import type { Project, ProjectRepository, ProjectTransaction } from '@gnr8/core'
 import type { Pool, PoolClient, QueryResult } from 'pg'
-import { randomUUID } from 'crypto'
 import { getPool } from '../db/pool'
 
 type DbRow = Record<string, unknown>
@@ -37,14 +36,12 @@ class PostgresProjectTransaction implements ProjectTransaction {
     slug: string
   }): Promise<Project> {
     try {
-      // projects.id je TEXT + NOT NULL brez default-a, zato ga generiramo v app layerju
-      const id = randomUUID()
-
+      // projects.id je TEXT + NOT NULL brez default-a, zato ga generiramo v SQL
       const result: QueryResult<DbRow> = await this.client.query(
         `insert into public.projects (id, org_id, name, slug)
-         values ($1, $2, $3, $4)
+         values (gen_random_uuid()::text, $1, $2, $3)
          returning id, org_id, name, slug, created_at, deleted_at`,
-        [id, input.orgId, input.name, input.slug],
+        [input.orgId, input.name, input.slug],
       )
 
       return mapProject(result.rows[0])
@@ -68,10 +65,7 @@ class PostgresProjectTransaction implements ProjectTransaction {
     return Number(result.rows[0]?.cnt ?? 0)
   }
 
-  async findProjectById(input: {
-    orgId: string
-    projectId: string
-  }): Promise<Project | null> {
+  async findProjectById(input: { orgId: string; projectId: string }): Promise<Project | null> {
     const result: QueryResult<DbRow> = await this.client.query(
       `select id, org_id, name, slug, created_at, deleted_at
        from public.projects
@@ -85,27 +79,13 @@ class PostgresProjectTransaction implements ProjectTransaction {
     return row ? mapProject(row) : null
   }
 
-  async softDeleteProject(input: {
-    orgId: string
-    projectId: string
-  }): Promise<void> {
+  async softDeleteProject(input: { orgId: string; projectId: string }): Promise<void> {
     await this.client.query(
       `update public.projects
        set deleted_at = now()
        where org_id = $1
          and id = $2
          and deleted_at is null`,
-      [input.orgId, input.projectId],
-    )
-  }
-
-  async restoreProject(input: { orgId: string; projectId: string }): Promise<void> {
-    await this.client.query(
-      `update public.projects
-       set deleted_at = null
-       where org_id = $1
-         and id = $2
-         and deleted_at is not null`,
       [input.orgId, input.projectId],
     )
   }
@@ -123,6 +103,7 @@ class PostgresProjectTransaction implements ProjectTransaction {
     return result.rows.map(mapProject)
   }
 
+  // NEW: list deleted
   async listDeletedProjectsByOrgId(input: { orgId: string }): Promise<Project[]> {
     const result: QueryResult<DbRow> = await this.client.query(
       `select id, org_id, name, slug, created_at, deleted_at
@@ -134,6 +115,18 @@ class PostgresProjectTransaction implements ProjectTransaction {
     )
 
     return result.rows.map(mapProject)
+  }
+
+  // NEW: restore
+  async restoreProject(input: { orgId: string; projectId: string }): Promise<void> {
+    await this.client.query(
+      `update public.projects
+       set deleted_at = null
+       where org_id = $1
+         and id = $2
+         and deleted_at is not null`,
+      [input.orgId, input.projectId],
+    )
   }
 }
 

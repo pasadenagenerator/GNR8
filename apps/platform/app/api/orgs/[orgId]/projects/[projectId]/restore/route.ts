@@ -11,12 +11,7 @@ export async function POST(request: NextRequest, context: any) {
     const actorUserId = await requireActorUserId()
     const projectService = getProjectService()
 
-    const project = await projectService.restoreProject({
-      actorUserId,
-      orgId,
-      projectId,
-    })
-
+    const project = await projectService.restoreProject({ actorUserId, orgId, projectId })
     return NextResponse.json({ project }, { status: 200 })
   } catch (error) {
     if (error instanceof AuthorizationError) {
