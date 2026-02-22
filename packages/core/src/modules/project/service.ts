@@ -94,7 +94,6 @@ export class ProjectService {
       this.authorizationService.assert(role, 'project.create')
       await this.entitlementService.assert(orgId, 'project.create')
 
-      // Unlimited check brez .has()
       let isUnlimited = false
       try {
         await this.entitlementService.assert(orgId, 'project.unlimited')
@@ -141,11 +140,25 @@ export class ProjectService {
       if (!existing || existing.deletedAt) throw new NotFoundError('Project not found')
 
       await tx.softDeleteProject({ orgId, projectId })
+
+      // ✅ audit log (metadata je objekt)
+      await tx.writeAuditLog({
+        orgId,
+        actorUserId,
+        action: 'project.delete',
+        entityType: 'project',
+        entityId: projectId,
+        metadata: {
+          name: existing.name,
+          slug: existing.slug,
+          previousDeletedAt: existing.deletedAt,
+        },
+      })
+
       return { ...existing, deletedAt: new Date().toISOString() }
     })
   }
 
-  // NEW: restore soft-deleted project
   async restoreProject(input: RestoreProjectInput): Promise<Project> {
     const actorUserId = input.actorUserId.trim()
     const orgId = input.orgId.trim()
@@ -168,12 +181,8 @@ export class ProjectService {
 
       const existing = await tx.findProjectById({ orgId, projectId })
       if (!existing) throw new NotFoundError('Project not found')
-      if (!existing.deletedAt) {
-        // že aktiven
-        return existing
-      }
+      if (!existing.deletedAt) return existing
 
-      // preveri limit pred restore (če ni unlimited, dovolimo max 1 aktiven)
       let isUnlimited = false
       try {
         await this.entitlementService.assert(orgId, 'project.unlimited')
@@ -193,6 +202,20 @@ export class ProjectService {
       }
 
       await tx.restoreProject({ orgId, projectId })
+
+      // audit log
+      await tx.writeAuditLog({
+        orgId,
+        actorUserId,
+        action: 'project.restore',
+        entityType: 'project',
+        entityId: projectId,
+        metadata: {
+          name: existing.name,
+          slug: existing.slug,
+          previousDeletedAt: existing.deletedAt,
+        },
+      })
 
       return { ...existing, deletedAt: null }
     })

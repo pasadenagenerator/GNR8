@@ -30,11 +30,7 @@ function isUniqueViolation(
 class PostgresProjectTransaction implements ProjectTransaction {
   constructor(readonly client: PoolClient) {}
 
-  async createProject(input: {
-    orgId: string
-    name: string
-    slug: string
-  }): Promise<Project> {
+  async createProject(input: { orgId: string; name: string; slug: string }): Promise<Project> {
     try {
       const result: QueryResult<DbRow> = await this.client.query(
         `insert into public.projects (id, org_id, name, slug)
@@ -62,10 +58,7 @@ class PostgresProjectTransaction implements ProjectTransaction {
     return Number(result.rows[0]?.cnt ?? 0)
   }
 
-  async findProjectById(input: {
-    orgId: string
-    projectId: string
-  }): Promise<Project | null> {
+  async findProjectById(input: { orgId: string; projectId: string }): Promise<Project | null> {
     const result: QueryResult<DbRow> = await this.client.query(
       `select id, org_id, name, slug, created_at, deleted_at
        from public.projects
@@ -122,6 +115,47 @@ class PostgresProjectTransaction implements ProjectTransaction {
       [input.orgId],
     )
     return result.rows.map(mapProject)
+  }
+
+  // NEW: audit log
+  async writeAuditLog(input: {
+    orgId: string
+    actorUserId: string
+    action: string
+    entityType: string
+    entityId: string
+    metadata?: unknown
+  }): Promise<void> {
+    const metadataJson = JSON.stringify(input.metadata ?? {}) // as requested
+
+    await this.client.query(
+      `insert into public.audit_logs (
+         id,
+         org_id,
+         actor_user_id,
+         action,
+         entity_type,
+         entity_id,
+         metadata
+       )
+       values (
+         gen_random_uuid()::text,
+         $1,
+         $2,
+         $3,
+         $4,
+         $5,
+         $6::jsonb
+       )`,
+      [
+        input.orgId,
+        input.actorUserId,
+        input.action,
+        input.entityType,
+        input.entityId,
+        metadataJson,
+      ],
+    )
   }
 }
 

@@ -10,16 +10,34 @@ export interface ProjectTransaction {
 
   countActiveProjects(input: { orgId: string }): Promise<number>
 
-  findProjectById(input: { orgId: string; projectId: string }): Promise<Project | null>
+  findProjectById(input: {
+    orgId: string
+    projectId: string
+  }): Promise<Project | null>
 
-  softDeleteProject(input: { orgId: string; projectId: string }): Promise<void>
+  softDeleteProject(input: {
+    orgId: string
+    projectId: string
+  }): Promise<void>
 
-  // NEW: restore
-  restoreProject(input: { orgId: string; projectId: string }): Promise<void>
+  restoreProject(input: {
+    orgId: string
+    projectId: string
+  }): Promise<void>
 
   listProjectsByOrgId(input: { orgId: string }): Promise<Project[]>
 
   listDeletedProjectsByOrgId(input: { orgId: string }): Promise<Project[]>
+
+  // audit log zapis v isti transakciji
+  writeAuditLog(input: {
+    orgId: string
+    actorUserId: string
+    action: string
+    entityType: string
+    entityId: string
+    metadata?: unknown // FIX: unknown (ne Record<string, unknown>)
+  }): Promise<void>
 }
 
 export interface ProjectRepository {
