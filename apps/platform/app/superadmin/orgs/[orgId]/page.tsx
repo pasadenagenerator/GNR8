@@ -41,6 +41,14 @@ type Billing = {
   }
 }
 
+type OrgUser = {
+  userId: string
+  email: string | null
+  role: string
+  createdAt: string
+  userCreatedAt: string | null
+}
+
 type LoadState<T> =
   | { ok: true; data: T }
   | { ok?: false; error: string }
@@ -54,8 +62,12 @@ export default function SuperadminOrgPage() {
   const supabase = useMemo(() => getSupabaseBrowserClient(), [])
 
   const [busy, setBusy] = useState(false)
+
   const [detail, setDetail] = useState<LoadState<OrgDetail>>(null)
   const [billing, setBilling] = useState<LoadState<Billing>>(null)
+
+  const [usersBusy, setUsersBusy] = useState(false)
+  const [users, setUsers] = useState<LoadState<{ users: OrgUser[] }>>(null)
 
   const [result, setResult] = useState<any>(null)
 
@@ -68,6 +80,7 @@ export default function SuperadminOrgPage() {
         return
       }
       await loadAll()
+      await loadUsers()
     })()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [orgId])
@@ -103,6 +116,27 @@ export default function SuperadminOrgPage() {
       setBilling({ ok: false, error: msg })
     } finally {
       setBusy(false)
+    }
+  }
+
+  async function loadUsers() {
+    if (!orgId) return
+    setUsersBusy(true)
+    setUsers(null)
+
+    try {
+      const res = await fetch(`/api/superadmin/orgs/${orgId}/users`, { method: 'GET' })
+      const json = await res.json()
+
+      if (!res.ok) {
+        setUsers({ ok: false, error: json?.error ?? 'Failed to load users' })
+      } else {
+        setUsers({ ok: true, data: { users: json.users ?? [] } })
+      }
+    } catch (e) {
+      setUsers({ ok: false, error: e instanceof Error ? e.message : 'Failed to load users' })
+    } finally {
+      setUsersBusy(false)
     }
   }
 
@@ -150,6 +184,9 @@ export default function SuperadminOrgPage() {
   const deletedProjects =
     detail && 'ok' in detail && detail.ok ? detail.data.deletedProjects : []
 
+  const orgUsers =
+    users && 'ok' in users && users.ok ? users.data.users : []
+
   return (
     <main style={{ maxWidth: 980, margin: '48px auto', padding: 16 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
@@ -177,7 +214,10 @@ export default function SuperadminOrgPage() {
 
           <button
             disabled={busy}
-            onClick={loadAll}
+            onClick={async () => {
+              await loadAll()
+              await loadUsers()
+            }}
             style={{ padding: 10, borderRadius: 8, border: '1px solid #ddd' }}
           >
             {busy ? 'Loading…' : 'Reload'}
@@ -223,6 +263,60 @@ export default function SuperadminOrgPage() {
           </div>
         ) : (
           <div style={{ fontSize: 14, color: '#666' }}>{busy ? 'Loading…' : '—'}</div>
+        )}
+      </section>
+
+      <section style={{ marginTop: 18 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center' }}>
+          <h2 style={{ fontSize: 18, marginBottom: 10 }}>Users</h2>
+          <button
+            disabled={usersBusy}
+            onClick={loadUsers}
+            style={{ padding: 10, borderRadius: 8, border: '1px solid #ddd' }}
+          >
+            {usersBusy ? 'Loading…' : 'Reload users'}
+          </button>
+        </div>
+
+        {users && 'ok' in users && !users.ok && (
+          <div style={{ padding: 12, border: '1px solid #f2c', borderRadius: 8 }}>
+            <strong>Error:</strong> {users.error}
+          </div>
+        )}
+
+        {orgUsers.length === 0 ? (
+          <div style={{ fontSize: 14, color: '#666' }}>
+            {usersBusy ? 'Loading…' : 'No users in org.'}
+          </div>
+        ) : (
+          <div style={{ display: 'grid', gap: 10 }}>
+            {orgUsers.map((u) => (
+              <div
+                key={u.userId}
+                style={{
+                  border: '1px solid #eee',
+                  borderRadius: 10,
+                  padding: 12,
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  gap: 12,
+                  alignItems: 'center',
+                }}
+              >
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontWeight: 700 }}>{u.email ?? '— (email hidden/unavailable)'}</div>
+                  <div style={{ fontSize: 13, color: '#666' }}>
+                    <div><strong>role:</strong> {u.role}</div>
+                    <div style={{ wordBreak: 'break-all' }}><strong>userId:</strong> {u.userId}</div>
+                    <div><strong>membership created:</strong> {u.createdAt}</div>
+                    {u.userCreatedAt ? (
+                      <div><strong>user created:</strong> {u.userCreatedAt}</div>
+                    ) : null}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
         )}
       </section>
 
