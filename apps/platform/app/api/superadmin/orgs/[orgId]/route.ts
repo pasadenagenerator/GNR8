@@ -17,14 +17,18 @@ type ProjectRow = {
   deleted_at: string | null
 }
 
-export async function GET(
-  _request: NextRequest,
-  context: { params: { orgId: string } },
-) {
+// Next.js 15: params je Promise v RouteContext tipih
+type RouteContext = {
+  params: Promise<{ orgId: string }>
+}
+
+export async function GET(request: NextRequest, context: RouteContext) {
   try {
     await requireSuperadminUserId()
 
-    const orgId = String(context.params.orgId ?? '').trim()
+    const { orgId: rawOrgId } = await context.params
+    const orgId = String(rawOrgId ?? '').trim()
+
     if (!orgId) {
       return NextResponse.json({ error: 'orgId is required' }, { status: 400 })
     }
@@ -45,7 +49,7 @@ export async function GET(
     }
 
     const activeRes = await pool.query<ProjectRow>(
-      `select id, org_id, name, slug, created_at, deleted_at
+      `select id::text as id, org_id::text as org_id, name, slug, created_at, deleted_at
        from public.projects
        where org_id = $1 and deleted_at is null
        order by created_at desc`,
@@ -53,7 +57,7 @@ export async function GET(
     )
 
     const deletedRes = await pool.query<ProjectRow>(
-      `select id, org_id, name, slug, created_at, deleted_at
+      `select id::text as id, org_id::text as org_id, name, slug, created_at, deleted_at
        from public.projects
        where org_id = $1 and deleted_at is not null
        order by deleted_at desc`,
@@ -67,7 +71,7 @@ export async function GET(
           name: String(org.name),
           createdAt: String(org.created_at),
         },
-        projects: activeRes.rows.map((r) => ({
+        projects: activeRes.rows.map((r: ProjectRow) => ({
           id: String(r.id),
           orgId: String(r.org_id),
           name: String(r.name),
@@ -75,7 +79,7 @@ export async function GET(
           createdAt: String(r.created_at),
           deletedAt: r.deleted_at ? String(r.deleted_at) : null,
         })),
-        deletedProjects: deletedRes.rows.map((r) => ({
+        deletedProjects: deletedRes.rows.map((r: ProjectRow) => ({
           id: String(r.id),
           orgId: String(r.org_id),
           name: String(r.name),
