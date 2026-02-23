@@ -5,7 +5,7 @@ import { getPool } from '@gnr8/data'
 type UserRow = {
   user_id: string
   role: string
-  membership_created_at: string
+  membership_created_at: string | null
   email: string | null
   user_created_at: string | null
   last_sign_in_at: string | null
@@ -22,8 +22,7 @@ export async function GET(_request: NextRequest, context: any) {
 
     const pool = getPool()
 
-    // memberships (public) + auth.users (auth)
-    // LEFT JOIN: če auth.users ni dostopen / nimaš pravic, še vedno vrne člane (email bo null)
+    // memberships nima deleted_at (zaenkrat), zato brez soft-delete filtra
     const res = await pool.query<UserRow>(
       `
       select
@@ -36,8 +35,7 @@ export async function GET(_request: NextRequest, context: any) {
       from public.memberships m
       left join auth.users u on u.id = m.user_id
       where m.org_id = $1
-        and (m.deleted_at is null)
-      order by m.created_at desc
+      order by m.created_at desc nulls last
       `,
       [orgId],
     )
@@ -46,7 +44,9 @@ export async function GET(_request: NextRequest, context: any) {
       userId: String(r.user_id),
       email: r.email ? String(r.email) : null,
       role: String(r.role),
-      membershipCreatedAt: String(r.membership_created_at),
+      membershipCreatedAt: r.membership_created_at
+        ? String(r.membership_created_at)
+        : null,
       userCreatedAt: r.user_created_at ? String(r.user_created_at) : null,
       lastSignInAt: r.last_sign_in_at ? String(r.last_sign_in_at) : null,
     }))
