@@ -2,12 +2,6 @@ import { NextResponse, type NextRequest } from 'next/server'
 import { requireSuperadminUserId } from '@/src/superadmin/require-superadmin-user-id'
 import { getPool } from '@gnr8/data'
 
-type RouteContext = {
-  params: {
-    orgId?: string
-  }
-}
-
 type UserRow = {
   user_id: string
   email: string | null
@@ -15,9 +9,11 @@ type UserRow = {
   created_at: string
 }
 
-export async function GET(_request: NextRequest, context: RouteContext) {
+export async function GET(
+  _request: NextRequest,
+  context: { params: { orgId: string } },
+) {
   try {
-    // 🔐 superadmin guard
     await requireSuperadminUserId()
 
     const orgId = String(context.params.orgId ?? '').trim()
@@ -27,10 +23,6 @@ export async function GET(_request: NextRequest, context: RouteContext) {
 
     const pool = getPool()
 
-    /**
-     * memberships = povezava user ↔ org
-     * auth.users = Supabase auth tabela
-     */
     const res = await pool.query<UserRow>(
       `
       select

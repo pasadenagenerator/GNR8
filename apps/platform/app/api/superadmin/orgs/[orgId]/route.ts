@@ -17,24 +17,10 @@ type ProjectRow = {
   deleted_at: string | null
 }
 
-type RouteContext = {
-  params: {
-    orgId?: string
-  }
-}
-
-function mapProject(r: ProjectRow) {
-  return {
-    id: String(r.id),
-    orgId: String(r.org_id),
-    name: String(r.name),
-    slug: String(r.slug),
-    createdAt: String(r.created_at),
-    deletedAt: r.deleted_at ? String(r.deleted_at) : null,
-  }
-}
-
-export async function GET(_request: NextRequest, context: RouteContext) {
+export async function GET(
+  _request: NextRequest,
+  context: { params: { orgId: string } },
+) {
   try {
     await requireSuperadminUserId()
 
@@ -81,8 +67,22 @@ export async function GET(_request: NextRequest, context: RouteContext) {
           name: String(org.name),
           createdAt: String(org.created_at),
         },
-        projects: activeRes.rows.map(mapProject),
-        deletedProjects: deletedRes.rows.map(mapProject),
+        projects: activeRes.rows.map((r) => ({
+          id: String(r.id),
+          orgId: String(r.org_id),
+          name: String(r.name),
+          slug: String(r.slug),
+          createdAt: String(r.created_at),
+          deletedAt: r.deleted_at ? String(r.deleted_at) : null,
+        })),
+        deletedProjects: deletedRes.rows.map((r) => ({
+          id: String(r.id),
+          orgId: String(r.org_id),
+          name: String(r.name),
+          slug: String(r.slug),
+          createdAt: String(r.created_at),
+          deletedAt: r.deleted_at ? String(r.deleted_at) : null,
+        })),
       },
       { status: 200 },
     )
