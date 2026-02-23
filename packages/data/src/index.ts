@@ -1,3 +1,5 @@
+export * from './db/pool'
+
 export * from './repositories/postgres-billing-repository'
 export * from './repositories/postgres-entitlement-repository'
 export * from './repositories/postgres-organization-repository'

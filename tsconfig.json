@@ -1,7 +1,41 @@
 {
+  // Root tsconfig je samo "solution config"
+  // Ne kompilira kode, ampak povezuje projekte
   "files": [],
   "references": [
     { "path": "packages/core" },
-    { "path": "packages/data" }
-  ]
+    { "path": "packages/data" },
+    { "path": "apps/platform" }
+  ],
+
+  "compilerOptions": {
+    /* === Project references === */
+    "composite": true,
+
+    /* === Modern TS / ESM === */
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+
+    /* === Strictness (priporočeno za backend logiko) === */
+    "strict": true,
+    "noImplicitAny": true,
+    "noImplicitThis": true,
+    "useUnknownInCatchVariables": true,
+
+    /* === Interop === */
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+
+    /* === DX === */
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+
+    /* === Paths (ZA EDITOR, ne za runtime) === */
+    "baseUrl": ".",
+    "paths": {
+      "@gnr8/core": ["packages/core/src"],
+      "@gnr8/data": ["packages/data/src"]
+    }
+  }
 }
