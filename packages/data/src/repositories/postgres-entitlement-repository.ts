@@ -38,9 +38,7 @@ export class PostgresEntitlementRepository implements EntitlementRepository {
       [input.orgId],
     )
 
-    if (input.entitlementKeys.length === 0) {
-      return
-    }
+    if (input.entitlementKeys.length === 0) return
 
     for (const key of input.entitlementKeys) {
       await pgTx.client.query(
@@ -68,8 +66,6 @@ export class PostgresEntitlementRepository implements EntitlementRepository {
   ): Promise<void> {
     const pgTx = this.asPostgresTx(tx)
 
-    // NOTE: entitlement rows are not strictly linked to stripe_subscription_id yet
-    // so we deactivate all active entitlements for the org
     await pgTx.client.query(
       `update public.entitlements
        set active = false,
@@ -100,6 +96,41 @@ export class PostgresEntitlementRepository implements EntitlementRepository {
       )
 
       return (result.rowCount ?? 0) > 0
+    } finally {
+      client.release()
+    }
+  }
+
+  /**
+   * NEW: Trial window reader (NO tx)
+   */
+  async getOrgTrialWindow(input: {
+    orgId: string
+  }): Promise<{
+    trialStartedAt: string | null
+    trialEndsAt: string | null
+  } | null> {
+    const client = await this.pool.connect()
+    try {
+      const res = await client.query(
+        `select
+           trial_started_at,
+           trial_ends_at
+         from public.organizations
+         where id = $1
+         limit 1`,
+        [input.orgId],
+      )
+
+      const row = res.rows[0]
+      if (!row) return null
+
+      return {
+        trialStartedAt: row.trial_started_at
+          ? String(row.trial_started_at)
+          : null,
+        trialEndsAt: row.trial_ends_at ? String(row.trial_ends_at) : null,
+      }
     } finally {
       client.release()
     }

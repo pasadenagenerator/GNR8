@@ -7,26 +7,56 @@ import { PLAN_ENTITLEMENTS } from './plan-map'
 export class EntitlementService {
   constructor(private readonly entitlementRepository: EntitlementRepository) {}
 
+  /**
+   * Trial fallback entitlements (če ni aktivne subscription / paid entitlements).
+   * Namen: omogoči osnovno uporabo platforme med trialom.
+   *
+   * Opomba: limit (npr. max 1 projekt) že enforce-a ProjectService.
+   */
+  private readonly TRIAL_ENTITLEMENTS: ReadonlySet<EntitlementKey> = new Set([
+    'organization.read',
+    'project.create',
+    // keep minimal; po potrebi dodamo kasneje
+  ])
+
   // HARD GATE (READ-only)
   async assert(orgId: string, entitlementKey: EntitlementKey): Promise<void> {
-    const has = await this.entitlementRepository.hasActiveEntitlement({
-      orgId,
+    const cleanOrgId = String(orgId ?? '').trim()
+    if (!cleanOrgId) throw new DomainError('orgId is required')
+
+    // 1) Paid entitlements (canonical)
+    const hasPaid = await this.entitlementRepository.hasActiveEntitlement({
+      orgId: cleanOrgId,
       entitlementKey,
     })
+    if (hasPaid) return
 
-    if (!has) {
-      throw new DomainError(`Missing required entitlement: ${entitlementKey}`)
+    // 2) Trial fallback (če ni paid)
+    const isTrial = await this.isTrialActive(cleanOrgId)
+    if (isTrial && this.TRIAL_ENTITLEMENTS.has(entitlementKey)) {
+      return
     }
+
+    throw new DomainError(`Missing required entitlement: ${entitlementKey}`)
   }
 
   /**
    * READ-only helper (boolean), za “soft checks” (npr. limits).
    */
   async has(orgId: string, entitlementKey: EntitlementKey): Promise<boolean> {
-    return this.entitlementRepository.hasActiveEntitlement({
-      orgId,
+    const cleanOrgId = String(orgId ?? '').trim()
+    if (!cleanOrgId) return false
+
+    const hasPaid = await this.entitlementRepository.hasActiveEntitlement({
+      orgId: cleanOrgId,
       entitlementKey,
     })
+    if (hasPaid) return true
+
+    const isTrial = await this.isTrialActive(cleanOrgId)
+    if (!isTrial) return false
+
+    return this.TRIAL_ENTITLEMENTS.has(entitlementKey)
   }
 
   /**
@@ -63,5 +93,26 @@ export class EntitlementService {
       orgId,
       stripeSubscriptionId,
     })
+  }
+
+  /**
+   * Trial helper:
+   * - Trial je aktiven samo, če imamo trial_started_at in trial_ends_at
+   * - in je "now" znotraj [start, end]
+   */
+  private async isTrialActive(orgId: string): Promise<boolean> {
+    const window = await this.entitlementRepository.getOrgTrialWindow({ orgId })
+    if (!window) return false
+
+    const startedAt = window.trialStartedAt ?? null
+    const endsAt = window.trialEndsAt ?? null
+    if (!startedAt || !endsAt) return false
+
+    const startMs = new Date(String(startedAt)).getTime()
+    const endMs = new Date(String(endsAt)).getTime()
+    if (Number.isNaN(startMs) || Number.isNaN(endMs)) return false
+
+    const now = Date.now()
+    return now >= startMs && now <= endMs
   }
 }
