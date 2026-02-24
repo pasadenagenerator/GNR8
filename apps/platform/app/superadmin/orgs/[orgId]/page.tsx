@@ -19,7 +19,6 @@ type OrgDetail = {
     id: string
     name: string
     createdAt: string
-    // TRIAL (superadmin endpoint naj vrača te vrednosti; če jih ne, bo UI samo pokazal "—")
     trialStartedAt?: string | null
     trialEndsAt?: string | null
   }
@@ -61,6 +60,27 @@ type LoadState<T> =
   | { ok: true; data: T }
   | { ok?: false; error: string }
   | null
+
+function safeIsoToDate(input: string | null | undefined): Date | null {
+  if (!input) return null
+  const d = new Date(String(input))
+  return Number.isNaN(d.getTime()) ? null : d
+}
+
+function daysBetween(now: Date, future: Date): number {
+  const ms = future.getTime() - now.getTime()
+  return Math.ceil(ms / (1000 * 60 * 60 * 24))
+}
+
+async function safeReadJson(res: Response): Promise<any> {
+  const text = await res.text()
+  if (!text) return {}
+  try {
+    return JSON.parse(text)
+  } catch {
+    return { raw: text }
+  }
+}
 
 export default function SuperadminOrgPage() {
   const router = useRouter()
@@ -107,8 +127,8 @@ export default function SuperadminOrgPage() {
         fetch(`/api/superadmin/orgs/${orgId}/billing`, { method: 'GET' }),
       ])
 
-      const dJson = await dRes.json()
-      const bJson = await bRes.json()
+      const dJson = await safeReadJson(dRes)
+      const bJson = await safeReadJson(bRes)
 
       if (!dRes.ok) {
         setDetail({
@@ -145,7 +165,7 @@ export default function SuperadminOrgPage() {
       const res = await fetch(`/api/superadmin/orgs/${orgId}/users`, {
         method: 'GET',
       })
-      const json = await res.json()
+      const json = await safeReadJson(res)
 
       if (!res.ok) {
         setUsers({ ok: false, error: json?.error ?? 'Failed to load users' })
@@ -172,7 +192,7 @@ export default function SuperadminOrgPage() {
       const res = await fetch(`/api/orgs/${orgId}/projects/${projectId}`, {
         method: 'DELETE',
       })
-      const json = await res.json()
+      const json = await safeReadJson(res)
       if (!res.ok) setResult({ ok: false, error: json?.error ?? 'Delete failed' })
       else setResult({ ok: true, project: json.project })
       await loadAll()
@@ -193,7 +213,7 @@ export default function SuperadminOrgPage() {
       const res = await fetch(`/api/orgs/${orgId}/projects/${projectId}/restore`, {
         method: 'POST',
       })
-      const json = await res.json()
+      const json = await safeReadJson(res)
       if (!res.ok) setResult({ ok: false, error: json?.error ?? 'Restore failed' })
       else setResult({ ok: true, project: json.project })
       await loadAll()
@@ -211,14 +231,25 @@ export default function SuperadminOrgPage() {
    * Trial actions
    * Endpoint: PUT /api/superadmin/orgs/[orgId]/trial
    *
-   * Podpira dva stila body-ja:
-   *  - { action: "start" | "extend" | "end", days?: number }
-   *  - { trialEndsAt: "ISO string" }  (če si endpoint tako naredil)
-   *
-   * Ker ne vem 100% kako si implementiral, pošljemo "action" varianto (najbolj praktična).
+   * Body: { action: "start" | "extend" | "end", days?: number }
    */
   async function updateTrial(action: 'start' | 'extend' | 'end', days?: number) {
     if (!orgId) return
+
+    if (action === 'start') {
+      const ok = window.confirm(
+        `Start/reset trial to ${days ?? 14} days from now?\n\nThis overwrites trialStartedAt/trialEndsAt.`,
+      )
+      if (!ok) return
+    }
+
+    if (action === 'end') {
+      const ok = window.confirm(
+        'End trial immediately?\n\nThis sets trialEndsAt to now.',
+      )
+      if (!ok) return
+    }
+
     setTrialBusy(true)
     setResult(null)
 
@@ -229,9 +260,7 @@ export default function SuperadminOrgPage() {
         body: JSON.stringify({ action, days }),
       })
 
-      // včasih route lahko vrne prazen body pri errorju; safe parse:
-      const text = await res.text()
-      const json = text ? JSON.parse(text) : {}
+      const json = await safeReadJson(res)
 
       if (!res.ok) {
         setResult({
@@ -270,6 +299,21 @@ export default function SuperadminOrgPage() {
 
   const orgUsers = users && 'ok' in users && users.ok ? users.data.users : []
 
+  const now = new Date()
+  const endsDate = safeIsoToDate(trialEndsAt)
+  const startedDate = safeIsoToDate(trialStartedAt)
+
+  const trialStatus: 'ACTIVE' | 'ENDED' | 'NOT_STARTED' = (() => {
+    if (!startedDate && !endsDate) return 'NOT_STARTED'
+    if (endsDate && endsDate.getTime() >= now.getTime()) return 'ACTIVE'
+    return 'ENDED'
+  })()
+
+  const endsInDays =
+    trialStatus === 'ACTIVE' && endsDate ? daysBetween(now, endsDate) : null
+
+  const allBusy = busy || usersBusy || trialBusy
+
   return (
     <main style={{ maxWidth: 980, margin: '48px auto', padding: 16 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
@@ -294,14 +338,14 @@ export default function SuperadminOrgPage() {
           </Link>
 
           <button
-            disabled={busy || usersBusy || trialBusy}
+            disabled={allBusy}
             onClick={async () => {
               await loadAll()
               await loadUsers()
             }}
             style={{ padding: 10, borderRadius: 8, border: '1px solid #ddd' }}
           >
-            {busy || usersBusy ? 'Loading…' : 'Reload'}
+            {allBusy ? 'Loading…' : 'Reload'}
           </button>
         </div>
       </div>
@@ -316,9 +360,31 @@ export default function SuperadminOrgPage() {
             alignItems: 'center',
           }}
         >
-          <h2 style={{ fontSize: 18, marginBottom: 10 }}>Trial</h2>
-
           <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+            <h2 style={{ fontSize: 18, marginBottom: 10 }}>Trial</h2>
+
+            <span
+              style={{
+                fontSize: 12,
+                padding: '4px 8px',
+                borderRadius: 999,
+                border: '1px solid #ddd',
+                background: '#fafafa',
+              }}
+              title={
+                trialStatus === 'ACTIVE'
+                  ? 'Trial is currently active'
+                  : trialStatus === 'ENDED'
+                    ? 'Trial ended (trialEndsAt is in the past)'
+                    : 'Trial not started'
+              }
+            >
+              {trialStatus}
+              {endsInDays !== null ? ` • ends in ${endsInDays}d` : ''}
+            </span>
+          </div>
+
+          <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
             <button
               disabled={trialBusy}
               onClick={() => updateTrial('start', 14)}
@@ -330,7 +396,21 @@ export default function SuperadminOrgPage() {
               }}
               title="Start (or reset) trial to 14 days from now"
             >
-              {trialBusy ? 'Working…' : 'Start 14d trial'}
+              {trialBusy ? 'Working…' : 'Start 14d'}
+            </button>
+
+            <button
+              disabled={trialBusy}
+              onClick={() => updateTrial('extend', 7)}
+              style={{
+                padding: 10,
+                borderRadius: 8,
+                border: '1px solid #ddd',
+                cursor: trialBusy ? 'not-allowed' : 'pointer',
+              }}
+              title="Extend trial by 7 days"
+            >
+              {trialBusy ? 'Working…' : 'Extend +7d'}
             </button>
 
             <button
@@ -349,6 +429,20 @@ export default function SuperadminOrgPage() {
 
             <button
               disabled={trialBusy}
+              onClick={() => updateTrial('extend', 30)}
+              style={{
+                padding: 10,
+                borderRadius: 8,
+                border: '1px solid #ddd',
+                cursor: trialBusy ? 'not-allowed' : 'pointer',
+              }}
+              title="Extend trial by 30 days"
+            >
+              {trialBusy ? 'Working…' : 'Extend +30d'}
+            </button>
+
+            <button
+              disabled={trialBusy}
               onClick={() => updateTrial('end')}
               style={{
                 padding: 10,
@@ -358,7 +452,7 @@ export default function SuperadminOrgPage() {
               }}
               title="End trial immediately (set trial_ends_at to now)"
             >
-              {trialBusy ? 'Working…' : 'End trial now'}
+              {trialBusy ? 'Working…' : 'End now'}
             </button>
           </div>
         </div>
