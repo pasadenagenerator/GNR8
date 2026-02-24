@@ -31,7 +31,8 @@ export class ProjectService {
         actorUserId,
         orgId,
       })
-      if (!role) throw new NotFoundError('Actor membership not found for organization')
+      if (!role)
+        throw new NotFoundError('Actor membership not found for organization')
 
       this.authorizationService.assert(role, 'organization.read')
       await this.entitlementService.assert(orgId, 'organization.read')
@@ -57,7 +58,8 @@ export class ProjectService {
         actorUserId,
         orgId,
       })
-      if (!role) throw new NotFoundError('Actor membership not found for organization')
+      if (!role)
+        throw new NotFoundError('Actor membership not found for organization')
 
       this.authorizationService.assert(role, 'organization.read')
       await this.entitlementService.assert(orgId, 'organization.read')
@@ -89,7 +91,8 @@ export class ProjectService {
         actorUserId,
         orgId,
       })
-      if (!role) throw new NotFoundError('Actor membership not found for organization')
+      if (!role)
+        throw new NotFoundError('Actor membership not found for organization')
 
       this.authorizationService.assert(role, 'project.create')
       await this.entitlementService.assert(orgId, 'project.create')
@@ -112,7 +115,22 @@ export class ProjectService {
         }
       }
 
-      return tx.createProject({ orgId, name, slug })
+      const project = await tx.createProject({ orgId, name, slug })
+
+      // audit log (metadata je objekt)
+      await tx.writeAuditLog({
+        orgId,
+        actorUserId,
+        action: 'project.create',
+        entityType: 'project',
+        entityId: project.id,
+        metadata: {
+          name: project.name,
+          slug: project.slug,
+        },
+      })
+
+      return project
     })
   }
 
@@ -131,17 +149,19 @@ export class ProjectService {
         actorUserId,
         orgId,
       })
-      if (!role) throw new NotFoundError('Actor membership not found for organization')
+      if (!role)
+        throw new NotFoundError('Actor membership not found for organization')
 
       this.authorizationService.assert(role, 'organization.manage')
       await this.entitlementService.assert(orgId, 'project.create')
 
       const existing = await tx.findProjectById({ orgId, projectId })
-      if (!existing || existing.deletedAt) throw new NotFoundError('Project not found')
+      if (!existing || existing.deletedAt)
+        throw new NotFoundError('Project not found')
 
       await tx.softDeleteProject({ orgId, projectId })
 
-      // ✅ audit log (metadata je objekt)
+      // audit log (metadata je objekt)
       await tx.writeAuditLog({
         orgId,
         actorUserId,
@@ -174,7 +194,8 @@ export class ProjectService {
         actorUserId,
         orgId,
       })
-      if (!role) throw new NotFoundError('Actor membership not found for organization')
+      if (!role)
+        throw new NotFoundError('Actor membership not found for organization')
 
       this.authorizationService.assert(role, 'organization.manage')
       await this.entitlementService.assert(orgId, 'project.create')
