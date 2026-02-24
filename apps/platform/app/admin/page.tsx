@@ -14,7 +14,7 @@ type Project = {
 }
 
 type ApiResult =
-  | { ok: true; project: Project }
+  | { ok: true; project: any }
   | { ok?: false; error: string }
   | null
 
@@ -24,25 +24,11 @@ type ProjectsResult =
   | null
 
 type OrgStats = {
-  org: {
-    id: string
-    name: string
-    slug: string | null
-    createdAt?: string | null
-    updatedAt?: string | null
-  }
-  counts: {
-    users: number
-    projectsActive: number
-    projectsDeleted: number
-  }
-  billing: {
-    planKey: string | null
-    status: string | null
-    currentPeriodEnd: string | null
-    stripeCustomerId: string | null
-    stripeSubscriptionId: string | null
-  } | null
+  orgId: string
+  activeProjectsCount: number
+  deletedProjectsCount: number
+  membersCount: number
+  lastActivityAt: string | null
 }
 
 type OrgStatsResult =
@@ -50,10 +36,21 @@ type OrgStatsResult =
   | { ok?: false; error: string }
   | null
 
-type RequestBody = {
-  name?: string
-  slug?: string
+type ActivityEvent = {
+  id: string
+  at: string
+  actorUserId: string
+  actorEmail: string | null
+  action: string
+  entityType: string
+  entityId: string
+  metadata: unknown
 }
+
+type ActivityResult =
+  | { ok: true; events: ActivityEvent[] }
+  | { ok?: false; error: string }
+  | null
 
 export default function AdminPage() {
   const router = useRouter()
@@ -80,6 +77,9 @@ export default function AdminPage() {
   const [statsBusy, setStatsBusy] = useState(false)
   const [statsResult, setStatsResult] = useState<OrgStatsResult>(null)
 
+  const [activityBusy, setActivityBusy] = useState(false)
+  const [activityResult, setActivityResult] = useState<ActivityResult>(null)
+
   useEffect(() => {
     ;(async () => {
       const { data } = await supabase.auth.getUser()
@@ -99,17 +99,6 @@ export default function AdminPage() {
     router.refresh()
   }
 
-  async function safeJson(res: Response) {
-    // Včasih (proxy/edge) lahko vrne prazen body -> no "Unexpected end of JSON"
-    const text = await res.text()
-    if (!text) return null
-    try {
-      return JSON.parse(text)
-    } catch {
-      return null
-    }
-  }
-
   async function loadProjects(nextOrgId?: string) {
     const effectiveOrgId = (nextOrgId ?? orgId).trim()
     if (!effectiveOrgId) return
@@ -118,18 +107,16 @@ export default function AdminPage() {
     setProjectsResult(null)
 
     try {
-      const res = await fetch(`/api/orgs/${effectiveOrgId}/projects`, {
-        method: 'GET',
-      })
-      const json = await safeJson(res)
+      const res = await fetch(`/api/orgs/${effectiveOrgId}/projects`, { method: 'GET' })
+      const json = await res.json().catch(() => ({}))
 
       if (!res.ok) {
         setProjectsResult({
           ok: false,
-          error: (json as any)?.error ?? `Failed to load projects (HTTP ${res.status})`,
+          error: json?.error ?? 'Failed to load projects',
         })
       } else {
-        setProjectsResult({ ok: true, projects: (json as any)?.projects ?? [] })
+        setProjectsResult({ ok: true, projects: json.projects ?? [] })
       }
     } catch (e) {
       setProjectsResult({
@@ -149,19 +136,16 @@ export default function AdminPage() {
     setDeletedResult(null)
 
     try {
-      const res = await fetch(`/api/orgs/${effectiveOrgId}/projects/deleted`, {
-        method: 'GET',
-      })
-      const json = await safeJson(res)
+      const res = await fetch(`/api/orgs/${effectiveOrgId}/projects/deleted`, { method: 'GET' })
+      const json = await res.json().catch(() => ({}))
 
       if (!res.ok) {
         setDeletedResult({
           ok: false,
-          error:
-            (json as any)?.error ?? `Failed to load deleted projects (HTTP ${res.status})`,
+          error: json?.error ?? 'Failed to load deleted projects',
         })
       } else {
-        setDeletedResult({ ok: true, projects: (json as any)?.projects ?? [] })
+        setDeletedResult({ ok: true, projects: json.projects ?? [] })
       }
     } catch (e) {
       setDeletedResult({
@@ -181,35 +165,51 @@ export default function AdminPage() {
     setStatsResult(null)
 
     try {
-      const res = await fetch(`/api/orgs/${effectiveOrgId}/stats`, {
-        method: 'GET',
-      })
-      const json = await safeJson(res)
+      const res = await fetch(`/api/orgs/${effectiveOrgId}/stats`, { method: 'GET' })
+      const json = await res.json().catch(() => ({}))
 
       if (!res.ok) {
-        setStatsResult({
-          ok: false,
-          error: (json as any)?.error ?? `Failed to load stats (HTTP ${res.status})`,
-        })
+        setStatsResult({ ok: false, error: json?.error ?? 'Failed to load org stats' })
       } else {
-        setStatsResult({ ok: true, stats: (json as any) as OrgStats })
+        setStatsResult({ ok: true, stats: json.stats })
       }
     } catch (e) {
-      setStatsResult({
-        ok: false,
-        error: e instanceof Error ? e.message : 'Failed to load stats',
-      })
+      setStatsResult({ ok: false, error: e instanceof Error ? e.message : 'Failed to load org stats' })
     } finally {
       setStatsBusy(false)
     }
   }
 
-  // auto-load when orgId changes (debounced-ish)
+  async function loadActivity(nextOrgId?: string, limit = 50) {
+    const effectiveOrgId = (nextOrgId ?? orgId).trim()
+    if (!effectiveOrgId) return
+
+    setActivityBusy(true)
+    setActivityResult(null)
+
+    try {
+      const res = await fetch(`/api/orgs/${effectiveOrgId}/activity?limit=${limit}`, { method: 'GET' })
+      const json = await res.json().catch(() => ({}))
+
+      if (!res.ok) {
+        setActivityResult({ ok: false, error: json?.error ?? 'Failed to load activity' })
+      } else {
+        setActivityResult({ ok: true, events: json.events ?? [] })
+      }
+    } catch (e) {
+      setActivityResult({ ok: false, error: e instanceof Error ? e.message : 'Failed to load activity' })
+    } finally {
+      setActivityBusy(false)
+    }
+  }
+
+  // auto-load everything when orgId changes (debounced-ish)
   useEffect(() => {
     const t = setTimeout(() => {
       void loadProjects(orgId)
       void loadDeletedProjects(orgId)
       void loadStats(orgId)
+      void loadActivity(orgId, 50)
     }, 250)
     return () => clearTimeout(t)
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -220,26 +220,23 @@ export default function AdminPage() {
     setResult(null)
 
     try {
-      const body: RequestBody = { name, slug }
       const res = await fetch(`/api/orgs/${orgId}/projects`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify(body),
+        body: JSON.stringify({ name, slug }),
       })
-      const json = await safeJson(res)
+      const json = await res.json().catch(() => ({}))
 
       if (!res.ok) {
-        setResult({
-          ok: false,
-          error: (json as any)?.error ?? `Create failed (HTTP ${res.status})`,
-        })
+        setResult({ ok: false, error: json?.error ?? 'Request failed' })
       } else {
-        setResult({ ok: true, project: (json as any).project })
+        setResult({ ok: true, project: json.project })
         await loadProjects()
         await loadStats()
+        await loadActivity(undefined, 50)
       }
     } catch (e) {
-      setResult({ ok: false, error: e instanceof Error ? e.message : 'Create failed' })
+      setResult({ ok: false, error: e instanceof Error ? e.message : 'Failed' })
     } finally {
       setBusy(false)
     }
@@ -253,27 +250,20 @@ export default function AdminPage() {
     setResult(null)
 
     try {
-      const res = await fetch(`/api/orgs/${orgId}/projects/${projectId}`, {
-        method: 'DELETE',
-      })
-      const json = await safeJson(res)
+      const res = await fetch(`/api/orgs/${orgId}/projects/${projectId}`, { method: 'DELETE' })
+      const json = await res.json().catch(() => ({}))
 
       if (!res.ok) {
-        setResult({
-          ok: false,
-          error: (json as any)?.error ?? `Delete failed (HTTP ${res.status})`,
-        })
+        setResult({ ok: false, error: json?.error ?? `Delete failed (HTTP ${res.status})` })
       } else {
-        setResult({ ok: true, project: (json as any).project })
+        setResult({ ok: true, project: json.project })
         await loadProjects()
         await loadDeletedProjects()
         await loadStats()
+        await loadActivity(undefined, 50)
       }
     } catch (e) {
-      setResult({
-        ok: false,
-        error: e instanceof Error ? e.message : 'Delete failed',
-      })
+      setResult({ ok: false, error: e instanceof Error ? e.message : 'Delete failed' })
     } finally {
       setProjectsBusy(false)
     }
@@ -287,75 +277,58 @@ export default function AdminPage() {
     setResult(null)
 
     try {
-      const res = await fetch(`/api/orgs/${orgId}/projects/${projectId}/restore`, {
-        method: 'POST',
-      })
-      const json = await safeJson(res)
+      const res = await fetch(`/api/orgs/${orgId}/projects/${projectId}/restore`, { method: 'POST' })
+      const json = await res.json().catch(() => ({}))
 
       if (!res.ok) {
-        setResult({
-          ok: false,
-          error: (json as any)?.error ?? `Restore failed (HTTP ${res.status})`,
-        })
+        setResult({ ok: false, error: json?.error ?? `Restore failed (HTTP ${res.status})` })
       } else {
-        setResult({ ok: true, project: (json as any).project })
+        setResult({ ok: true, project: json.project })
         await loadProjects()
         await loadDeletedProjects()
         await loadStats()
+        await loadActivity(undefined, 50)
       }
     } catch (e) {
-      setResult({
-        ok: false,
-        error: e instanceof Error ? e.message : 'Restore failed',
-      })
+      setResult({ ok: false, error: e instanceof Error ? e.message : 'Restore failed' })
     } finally {
       setDeletedBusy(false)
     }
   }
 
   const activeProjects =
-    projectsResult && 'ok' in projectsResult && projectsResult.ok
-      ? projectsResult.projects
-      : []
+    projectsResult && 'ok' in projectsResult && projectsResult.ok ? projectsResult.projects : []
 
   const deletedProjects =
-    deletedResult && 'ok' in deletedResult && deletedResult.ok
-      ? deletedResult.projects
-      : []
+    deletedResult && 'ok' in deletedResult && deletedResult.ok ? deletedResult.projects : []
 
   const stats =
     statsResult && 'ok' in statsResult && statsResult.ok ? statsResult.stats : null
 
-  return (
-    <main style={{ maxWidth: 860, margin: '48px auto', padding: 16 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
-        <div>
-          <h1 style={{ fontSize: 24, marginBottom: 6 }}>Admin (test)</h1>
-          <div style={{ fontSize: 13, color: '#666' }}>
-            Active + Deleted projects + Org stats
-          </div>
-        </div>
+  const events =
+    activityResult && 'ok' in activityResult && activityResult.ok ? activityResult.events : []
 
-        <button
-          onClick={logout}
-          style={{ padding: 10, borderRadius: 8, border: '1px solid #ddd' }}
-        >
+  return (
+    <main style={{ maxWidth: 900, margin: '48px auto', padding: 16 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+        <h1 style={{ fontSize: 24, marginBottom: 16 }}>Admin (test)</h1>
+        <button onClick={logout} style={{ padding: 10, borderRadius: 8, border: '1px solid #ddd' }}>
           Logout
         </button>
       </div>
 
-      <section style={{ marginTop: 18, marginBottom: 18 }}>
+      <section style={{ marginBottom: 20 }}>
         <div style={{ fontSize: 14, color: '#444' }}>
           <div>
             <strong>User:</strong> {userEmail ?? '—'}
           </div>
-          <div style={{ wordBreak: 'break-all' }}>
+          <div>
             <strong>User ID:</strong> {userId ?? '—'}
           </div>
         </div>
       </section>
 
-      <section style={{ display: 'grid', gap: 12, marginBottom: 20 }}>
+      <section style={{ display: 'grid', gap: 12, marginBottom: 18 }}>
         <label style={{ display: 'grid', gap: 6 }}>
           <span>Org ID</span>
           <input
@@ -365,39 +338,78 @@ export default function AdminPage() {
           />
         </label>
 
-        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
           <button
-            disabled={projectsBusy || deletedBusy || statsBusy}
-            onClick={() => {
-              void loadProjects()
-              void loadDeletedProjects()
-              void loadStats()
-            }}
+            disabled={projectsBusy}
+            onClick={() => loadProjects()}
             style={{
               padding: 10,
               borderRadius: 8,
               border: '1px solid #ddd',
-              cursor: projectsBusy || deletedBusy || statsBusy ? 'not-allowed' : 'pointer',
+              cursor: projectsBusy ? 'not-allowed' : 'pointer',
             }}
           >
-            {projectsBusy || deletedBusy || statsBusy ? 'Loading…' : 'Reload all'}
+            {projectsBusy ? 'Loading…' : 'Reload active'}
           </button>
 
-          <span style={{ fontSize: 13, color: '#666', alignSelf: 'center' }}>
-            {projectsResult && 'ok' in projectsResult && projectsResult.ok
-              ? `${activeProjects.length} active`
-              : '—'}
+          <button
+            disabled={deletedBusy}
+            onClick={() => loadDeletedProjects()}
+            style={{
+              padding: 10,
+              borderRadius: 8,
+              border: '1px solid #ddd',
+              cursor: deletedBusy ? 'not-allowed' : 'pointer',
+            }}
+          >
+            {deletedBusy ? 'Loading…' : 'Reload deleted'}
+          </button>
+
+          <button
+            disabled={statsBusy}
+            onClick={() => loadStats()}
+            style={{
+              padding: 10,
+              borderRadius: 8,
+              border: '1px solid #ddd',
+              cursor: statsBusy ? 'not-allowed' : 'pointer',
+            }}
+          >
+            {statsBusy ? 'Loading…' : 'Reload stats'}
+          </button>
+
+          <button
+            disabled={activityBusy}
+            onClick={() => loadActivity(undefined, 50)}
+            style={{
+              padding: 10,
+              borderRadius: 8,
+              border: '1px solid #ddd',
+              cursor: activityBusy ? 'not-allowed' : 'pointer',
+            }}
+          >
+            {activityBusy ? 'Loading…' : 'Reload activity'}
+          </button>
+
+          <span style={{ fontSize: 13, color: '#666' }}>
+            {projectsBusy
+              ? 'Loading…'
+              : projectsResult && 'ok' in projectsResult && projectsResult.ok
+                ? `${activeProjects.length} active`
+                : '—'}
             {' · '}
-            {deletedResult && 'ok' in deletedResult && deletedResult.ok
-              ? `${deletedProjects.length} deleted`
-              : '—'}
+            {deletedBusy
+              ? 'Loading…'
+              : deletedResult && 'ok' in deletedResult && deletedResult.ok
+                ? `${deletedProjects.length} deleted`
+                : '—'}
           </span>
         </div>
       </section>
 
-      {/* ORG OVERVIEW */}
+      {/* Org stats */}
       <section style={{ marginBottom: 22 }}>
-        <h2 style={{ fontSize: 18, marginBottom: 10 }}>Org overview</h2>
+        <h2 style={{ fontSize: 18, marginBottom: 10 }}>Org stats</h2>
 
         {statsResult && 'ok' in statsResult && !statsResult.ok && (
           <div style={{ padding: 12, border: '1px solid #f2c', borderRadius: 8 }}>
@@ -405,81 +417,41 @@ export default function AdminPage() {
           </div>
         )}
 
-        {!stats && !statsBusy ? (
-          <div style={{ fontSize: 14, color: '#666' }}>No stats loaded.</div>
-        ) : stats ? (
+        {!stats ? (
+          <div style={{ fontSize: 14, color: '#666' }}>
+            {statsBusy ? 'Loading…' : 'No stats.'}
+          </div>
+        ) : (
           <div
             style={{
               border: '1px solid #eee',
               borderRadius: 10,
               padding: 12,
+              fontSize: 14,
               display: 'grid',
-              gap: 10,
+              gap: 6,
             }}
           >
-            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
-              <div style={{ minWidth: 0 }}>
-                <div style={{ fontWeight: 700 }}>{stats.org.name}</div>
-                <div style={{ fontSize: 13, color: '#666' }}>
-                  <div style={{ wordBreak: 'break-all' }}>
-                    <strong>orgId:</strong> {stats.org.id}
-                  </div>
-                  <div>
-                    <strong>slug:</strong> {stats.org.slug ?? '—'}
-                  </div>
-                </div>
-              </div>
-
-              <button
-                disabled={statsBusy}
-                onClick={() => loadStats()}
-                style={{
-                  padding: 10,
-                  borderRadius: 8,
-                  border: '1px solid #ddd',
-                  cursor: statsBusy ? 'not-allowed' : 'pointer',
-                  height: 'fit-content',
-                }}
-              >
-                {statsBusy ? 'Refreshing…' : 'Refresh'}
-              </button>
+            <div>
+              <strong>orgId:</strong> {stats.orgId}
             </div>
-
-            <div style={{ display: 'grid', gap: 6 }}>
-              <div style={{ fontSize: 13, color: '#444' }}>
-                <strong>Counts:</strong>{' '}
-                {stats.counts.users} users · {stats.counts.projectsActive} active projects ·{' '}
-                {stats.counts.projectsDeleted} deleted
-              </div>
-
-              <div style={{ fontSize: 13, color: '#444' }}>
-                <strong>Billing:</strong>{' '}
-                {stats.billing
-                  ? `${stats.billing.planKey ?? '—'} · ${stats.billing.status ?? '—'} · period end: ${
-                      stats.billing.currentPeriodEnd ?? '—'
-                    }`
-                  : '—'}
-              </div>
-
-              {stats.billing && (
-                <div style={{ fontSize: 12, color: '#666' }}>
-                  <div style={{ wordBreak: 'break-all' }}>
-                    <strong>stripeCustomerId:</strong> {stats.billing.stripeCustomerId ?? '—'}
-                  </div>
-                  <div style={{ wordBreak: 'break-all' }}>
-                    <strong>stripeSubscriptionId:</strong>{' '}
-                    {stats.billing.stripeSubscriptionId ?? '—'}
-                  </div>
-                </div>
-              )}
+            <div>
+              <strong>members:</strong> {stats.membersCount}
+            </div>
+            <div>
+              <strong>active projects:</strong> {stats.activeProjectsCount}
+            </div>
+            <div>
+              <strong>deleted projects:</strong> {stats.deletedProjectsCount}
+            </div>
+            <div>
+              <strong>last activity:</strong> {stats.lastActivityAt ?? '—'}
             </div>
           </div>
-        ) : (
-          <div style={{ fontSize: 14, color: '#666' }}>Loading…</div>
         )}
       </section>
 
-      {/* CREATE */}
+      {/* Create project */}
       <section style={{ display: 'grid', gap: 12, marginBottom: 22 }}>
         <h2 style={{ fontSize: 18, marginBottom: 0 }}>Create project</h2>
 
@@ -515,7 +487,7 @@ export default function AdminPage() {
         </button>
       </section>
 
-      {/* ACTIVE */}
+      {/* Active projects */}
       <section style={{ marginBottom: 22 }}>
         <h2 style={{ fontSize: 18, marginBottom: 10 }}>Active projects</h2>
 
@@ -559,12 +531,12 @@ export default function AdminPage() {
 
                 <button
                   onClick={() => deleteProject(p.id)}
-                  disabled={projectsBusy || deletedBusy}
+                  disabled={projectsBusy}
                   style={{
                     padding: 10,
                     borderRadius: 8,
                     border: '1px solid #ddd',
-                    cursor: projectsBusy || deletedBusy ? 'not-allowed' : 'pointer',
+                    cursor: projectsBusy ? 'not-allowed' : 'pointer',
                     whiteSpace: 'nowrap',
                   }}
                 >
@@ -576,7 +548,7 @@ export default function AdminPage() {
         )}
       </section>
 
-      {/* DELETED */}
+      {/* Deleted projects */}
       <section style={{ marginBottom: 22 }}>
         <h2 style={{ fontSize: 18, marginBottom: 10 }}>Deleted projects</h2>
 
@@ -613,19 +585,19 @@ export default function AdminPage() {
                       <strong>id:</strong> {p.id}
                     </div>
                     <div>
-                      <strong>deletedAt:</strong> {p.deletedAt ?? '—'}
+                      <strong>deleted:</strong> {p.deletedAt ?? '—'}
                     </div>
                   </div>
                 </div>
 
                 <button
                   onClick={() => restoreProject(p.id)}
-                  disabled={deletedBusy || projectsBusy}
+                  disabled={deletedBusy}
                   style={{
                     padding: 10,
                     borderRadius: 8,
                     border: '1px solid #ddd',
-                    cursor: deletedBusy || projectsBusy ? 'not-allowed' : 'pointer',
+                    cursor: deletedBusy ? 'not-allowed' : 'pointer',
                     whiteSpace: 'nowrap',
                   }}
                 >
@@ -637,7 +609,71 @@ export default function AdminPage() {
         )}
       </section>
 
-      {/* RESULT */}
+      {/* Org activity */}
+      <section style={{ marginBottom: 22 }}>
+        <h2 style={{ fontSize: 18, marginBottom: 10 }}>Org activity</h2>
+
+        {activityResult && 'ok' in activityResult && !activityResult.ok && (
+          <div style={{ padding: 12, border: '1px solid #f2c', borderRadius: 8 }}>
+            <strong>Error:</strong> {activityResult.error}
+          </div>
+        )}
+
+        {events.length === 0 ? (
+          <div style={{ fontSize: 14, color: '#666' }}>
+            {activityBusy ? 'Loading…' : 'No activity yet.'}
+          </div>
+        ) : (
+          <div style={{ display: 'grid', gap: 10 }}>
+            {events.map((ev) => (
+              <div
+                key={ev.id}
+                style={{
+                  border: '1px solid #eee',
+                  borderRadius: 10,
+                  padding: 12,
+                  display: 'grid',
+                  gap: 6,
+                  fontSize: 13,
+                }}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10 }}>
+                  <div style={{ fontWeight: 600 }}>
+                    {ev.action} · {ev.entityType}
+                  </div>
+                  <div style={{ color: '#666' }}>{ev.at}</div>
+                </div>
+
+                <div style={{ color: '#666' }}>
+                  <strong>actor:</strong> {ev.actorEmail ?? ev.actorUserId}
+                </div>
+
+                <div style={{ color: '#666', wordBreak: 'break-all' }}>
+                  <strong>entityId:</strong> {ev.entityId}
+                </div>
+
+                <details>
+                  <summary style={{ cursor: 'pointer' }}>metadata</summary>
+                  <pre
+                    style={{
+                      background: '#fafafa',
+                      border: '1px solid #eee',
+                      borderRadius: 8,
+                      padding: 10,
+                      overflow: 'auto',
+                      marginTop: 8,
+                    }}
+                  >
+                    {JSON.stringify(ev.metadata ?? {}, null, 2)}
+                  </pre>
+                </details>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+
+      {/* Result */}
       <section>
         <h2 style={{ fontSize: 18, marginBottom: 10 }}>Result</h2>
         <pre
