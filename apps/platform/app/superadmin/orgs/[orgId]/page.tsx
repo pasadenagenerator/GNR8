@@ -15,7 +15,14 @@ type Project = {
 }
 
 type OrgDetail = {
-  org: { id: string; name: string; createdAt: string }
+  org: {
+    id: string
+    name: string
+    createdAt: string
+    // TRIAL (superadmin endpoint naj vrača te vrednosti; če jih ne, bo UI samo pokazal "—")
+    trialStartedAt?: string | null
+    trialEndsAt?: string | null
+  }
   projects: Project[]
   deletedProjects: Project[]
 }
@@ -45,8 +52,9 @@ type OrgUser = {
   userId: string
   email: string | null
   role: string
-  createdAt: string
+  membershipCreatedAt: string
   userCreatedAt: string | null
+  lastSignInAt: string | null
 }
 
 type LoadState<T> =
@@ -70,6 +78,9 @@ export default function SuperadminOrgPage() {
   const [users, setUsers] = useState<LoadState<{ users: OrgUser[] }>>(null)
 
   const [result, setResult] = useState<any>(null)
+
+  // trial action busy state (da ne blokira celotnega UI po nepotrebnem)
+  const [trialBusy, setTrialBusy] = useState(false)
 
   useEffect(() => {
     ;(async () => {
@@ -100,13 +111,19 @@ export default function SuperadminOrgPage() {
       const bJson = await bRes.json()
 
       if (!dRes.ok) {
-        setDetail({ ok: false, error: dJson?.error ?? 'Failed to load org detail' })
+        setDetail({
+          ok: false,
+          error: dJson?.error ?? 'Failed to load org detail',
+        })
       } else {
         setDetail({ ok: true, data: dJson })
       }
 
       if (!bRes.ok) {
-        setBilling({ ok: false, error: bJson?.error ?? 'Failed to load billing' })
+        setBilling({
+          ok: false,
+          error: bJson?.error ?? 'Failed to load billing',
+        })
       } else {
         setBilling({ ok: true, data: bJson })
       }
@@ -125,7 +142,9 @@ export default function SuperadminOrgPage() {
     setUsers(null)
 
     try {
-      const res = await fetch(`/api/superadmin/orgs/${orgId}/users`, { method: 'GET' })
+      const res = await fetch(`/api/superadmin/orgs/${orgId}/users`, {
+        method: 'GET',
+      })
       const json = await res.json()
 
       if (!res.ok) {
@@ -134,7 +153,10 @@ export default function SuperadminOrgPage() {
         setUsers({ ok: true, data: { users: json.users ?? [] } })
       }
     } catch (e) {
-      setUsers({ ok: false, error: e instanceof Error ? e.message : 'Failed to load users' })
+      setUsers({
+        ok: false,
+        error: e instanceof Error ? e.message : 'Failed to load users',
+      })
     } finally {
       setUsersBusy(false)
     }
@@ -147,13 +169,18 @@ export default function SuperadminOrgPage() {
     setBusy(true)
     setResult(null)
     try {
-      const res = await fetch(`/api/orgs/${orgId}/projects/${projectId}`, { method: 'DELETE' })
+      const res = await fetch(`/api/orgs/${orgId}/projects/${projectId}`, {
+        method: 'DELETE',
+      })
       const json = await res.json()
       if (!res.ok) setResult({ ok: false, error: json?.error ?? 'Delete failed' })
       else setResult({ ok: true, project: json.project })
       await loadAll()
     } catch (e) {
-      setResult({ ok: false, error: e instanceof Error ? e.message : 'Delete failed' })
+      setResult({
+        ok: false,
+        error: e instanceof Error ? e.message : 'Delete failed',
+      })
     } finally {
       setBusy(false)
     }
@@ -163,37 +190,91 @@ export default function SuperadminOrgPage() {
     setBusy(true)
     setResult(null)
     try {
-      const res = await fetch(`/api/orgs/${orgId}/projects/${projectId}/restore`, { method: 'POST' })
+      const res = await fetch(`/api/orgs/${orgId}/projects/${projectId}/restore`, {
+        method: 'POST',
+      })
       const json = await res.json()
       if (!res.ok) setResult({ ok: false, error: json?.error ?? 'Restore failed' })
       else setResult({ ok: true, project: json.project })
       await loadAll()
     } catch (e) {
-      setResult({ ok: false, error: e instanceof Error ? e.message : 'Restore failed' })
+      setResult({
+        ok: false,
+        error: e instanceof Error ? e.message : 'Restore failed',
+      })
     } finally {
       setBusy(false)
     }
   }
 
-  const orgName =
-    detail && 'ok' in detail && detail.ok ? detail.data.org.name : '—'
+  /**
+   * Trial actions
+   * Endpoint: PUT /api/superadmin/orgs/[orgId]/trial
+   *
+   * Podpira dva stila body-ja:
+   *  - { action: "start" | "extend" | "end", days?: number }
+   *  - { trialEndsAt: "ISO string" }  (če si endpoint tako naredil)
+   *
+   * Ker ne vem 100% kako si implementiral, pošljemo "action" varianto (najbolj praktična).
+   */
+  async function updateTrial(action: 'start' | 'extend' | 'end', days?: number) {
+    if (!orgId) return
+    setTrialBusy(true)
+    setResult(null)
 
-  const activeProjects =
-    detail && 'ok' in detail && detail.ok ? detail.data.projects : []
+    try {
+      const res = await fetch(`/api/superadmin/orgs/${orgId}/trial`, {
+        method: 'PUT',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ action, days }),
+      })
+
+      // včasih route lahko vrne prazen body pri errorju; safe parse:
+      const text = await res.text()
+      const json = text ? JSON.parse(text) : {}
+
+      if (!res.ok) {
+        setResult({
+          ok: false,
+          error: json?.error ?? `Trial update failed (HTTP ${res.status})`,
+        })
+      } else {
+        setResult({ ok: true, trial: json })
+      }
+
+      await loadAll()
+    } catch (e) {
+      setResult({
+        ok: false,
+        error: e instanceof Error ? e.message : 'Trial update failed',
+      })
+    } finally {
+      setTrialBusy(false)
+    }
+  }
+
+  const orgName = detail && 'ok' in detail && detail.ok ? detail.data.org.name : '—'
+
+  const trialStartedAt =
+    detail && 'ok' in detail && detail.ok
+      ? (detail.data.org.trialStartedAt ?? null)
+      : null
+
+  const trialEndsAt =
+    detail && 'ok' in detail && detail.ok ? (detail.data.org.trialEndsAt ?? null) : null
+
+  const activeProjects = detail && 'ok' in detail && detail.ok ? detail.data.projects : []
 
   const deletedProjects =
     detail && 'ok' in detail && detail.ok ? detail.data.deletedProjects : []
 
-  const orgUsers =
-    users && 'ok' in users && users.ok ? users.data.users : []
+  const orgUsers = users && 'ok' in users && users.ok ? users.data.users : []
 
   return (
     <main style={{ maxWidth: 980, margin: '48px auto', padding: 16 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
         <div>
-          <h1 style={{ fontSize: 24, marginBottom: 6 }}>
-            Org: {orgName}
-          </h1>
+          <h1 style={{ fontSize: 24, marginBottom: 6 }}>Org: {orgName}</h1>
           <div style={{ fontSize: 13, color: '#666', wordBreak: 'break-all' }}>
             <strong>orgId:</strong> {orgId}
           </div>
@@ -213,18 +294,92 @@ export default function SuperadminOrgPage() {
           </Link>
 
           <button
-            disabled={busy}
+            disabled={busy || usersBusy || trialBusy}
             onClick={async () => {
               await loadAll()
               await loadUsers()
             }}
             style={{ padding: 10, borderRadius: 8, border: '1px solid #ddd' }}
           >
-            {busy ? 'Loading…' : 'Reload'}
+            {busy || usersBusy ? 'Loading…' : 'Reload'}
           </button>
         </div>
       </div>
 
+      {/* === TRIAL === */}
+      <section style={{ marginTop: 18 }}>
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            gap: 12,
+            alignItems: 'center',
+          }}
+        >
+          <h2 style={{ fontSize: 18, marginBottom: 10 }}>Trial</h2>
+
+          <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+            <button
+              disabled={trialBusy}
+              onClick={() => updateTrial('start', 14)}
+              style={{
+                padding: 10,
+                borderRadius: 8,
+                border: '1px solid #ddd',
+                cursor: trialBusy ? 'not-allowed' : 'pointer',
+              }}
+              title="Start (or reset) trial to 14 days from now"
+            >
+              {trialBusy ? 'Working…' : 'Start 14d trial'}
+            </button>
+
+            <button
+              disabled={trialBusy}
+              onClick={() => updateTrial('extend', 14)}
+              style={{
+                padding: 10,
+                borderRadius: 8,
+                border: '1px solid #ddd',
+                cursor: trialBusy ? 'not-allowed' : 'pointer',
+              }}
+              title="Extend trial by 14 days"
+            >
+              {trialBusy ? 'Working…' : 'Extend +14d'}
+            </button>
+
+            <button
+              disabled={trialBusy}
+              onClick={() => updateTrial('end')}
+              style={{
+                padding: 10,
+                borderRadius: 8,
+                border: '1px solid #ddd',
+                cursor: trialBusy ? 'not-allowed' : 'pointer',
+              }}
+              title="End trial immediately (set trial_ends_at to now)"
+            >
+              {trialBusy ? 'Working…' : 'End trial now'}
+            </button>
+          </div>
+        </div>
+
+        <div style={{ border: '1px solid #eee', borderRadius: 10, padding: 12 }}>
+          <div style={{ fontSize: 14 }}>
+            <div>
+              <strong>trialStartedAt:</strong> {trialStartedAt ?? '—'}
+            </div>
+            <div>
+              <strong>trialEndsAt:</strong> {trialEndsAt ?? '—'}
+            </div>
+          </div>
+          <div style={{ marginTop: 8, fontSize: 13, color: '#666' }}>
+            Trial je fallback entitlement (če ni plačljivih entitlements). Limits se še vedno
+            enforce-ajo (npr. 1 aktiven projekt, če ni unlimited).
+          </div>
+        </div>
+      </section>
+
+      {/* === BILLING === */}
       <section style={{ marginTop: 18 }}>
         <h2 style={{ fontSize: 18, marginBottom: 10 }}>Billing</h2>
 
@@ -237,27 +392,38 @@ export default function SuperadminOrgPage() {
         {billing && 'ok' in billing && billing.ok ? (
           <div style={{ border: '1px solid #eee', borderRadius: 10, padding: 12 }}>
             <div style={{ fontSize: 13, color: '#666' }}>
-              <div><strong>org slug:</strong> {billing.data.org.slug}</div>
-              <div><strong>updated:</strong> {billing.data.org.updatedAt ?? '—'}</div>
+              <div>
+                <strong>org slug:</strong> {billing.data.org.slug}
+              </div>
+              <div>
+                <strong>updated:</strong> {billing.data.org.updatedAt ?? '—'}
+              </div>
             </div>
 
             <div style={{ marginTop: 10 }}>
               {billing.data.subscription ? (
                 <div style={{ fontSize: 14 }}>
-                  <div><strong>status:</strong> {billing.data.subscription.status ?? '—'}</div>
-                  <div><strong>plan:</strong> {billing.data.subscription.planKey ?? '—'}</div>
-                  <div><strong>period end:</strong> {billing.data.subscription.currentPeriodEnd ?? '—'}</div>
-                  <div style={{ wordBreak: 'break-all' }}>
-                    <strong>stripe customer:</strong> {billing.data.subscription.stripeCustomerId ?? '—'}
+                  <div>
+                    <strong>status:</strong> {billing.data.subscription.status ?? '—'}
+                  </div>
+                  <div>
+                    <strong>plan:</strong> {billing.data.subscription.planKey ?? '—'}
+                  </div>
+                  <div>
+                    <strong>period end:</strong>{' '}
+                    {billing.data.subscription.currentPeriodEnd ?? '—'}
                   </div>
                   <div style={{ wordBreak: 'break-all' }}>
-                    <strong>stripe subscription:</strong> {billing.data.subscription.stripeSubscriptionId ?? '—'}
+                    <strong>stripe customer:</strong>{' '}
+                    {billing.data.subscription.stripeCustomerId ?? '—'}
+                  </div>
+                  <div style={{ wordBreak: 'break-all' }}>
+                    <strong>stripe subscription:</strong>{' '}
+                    {billing.data.subscription.stripeSubscriptionId ?? '—'}
                   </div>
                 </div>
               ) : (
-                <div style={{ fontSize: 14, color: '#666' }}>
-                  No active subscription row.
-                </div>
+                <div style={{ fontSize: 14, color: '#666' }}>No active subscription row.</div>
               )}
             </div>
           </div>
@@ -266,8 +432,16 @@ export default function SuperadminOrgPage() {
         )}
       </section>
 
+      {/* === USERS === */}
       <section style={{ marginTop: 18 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center' }}>
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            gap: 12,
+            alignItems: 'center',
+          }}
+        >
           <h2 style={{ fontSize: 18, marginBottom: 10 }}>Users</h2>
           <button
             disabled={usersBusy}
@@ -304,13 +478,28 @@ export default function SuperadminOrgPage() {
                 }}
               >
                 <div style={{ minWidth: 0 }}>
-                  <div style={{ fontWeight: 700 }}>{u.email ?? '— (email hidden/unavailable)'}</div>
+                  <div style={{ fontWeight: 700 }}>
+                    {u.email ?? '— (email hidden/unavailable)'}
+                  </div>
                   <div style={{ fontSize: 13, color: '#666' }}>
-                    <div><strong>role:</strong> {u.role}</div>
-                    <div style={{ wordBreak: 'break-all' }}><strong>userId:</strong> {u.userId}</div>
-                    <div><strong>membership created:</strong> {u.createdAt}</div>
+                    <div>
+                      <strong>role:</strong> {u.role}
+                    </div>
+                    <div style={{ wordBreak: 'break-all' }}>
+                      <strong>userId:</strong> {u.userId}
+                    </div>
+                    <div>
+                      <strong>membership created:</strong> {u.membershipCreatedAt}
+                    </div>
                     {u.userCreatedAt ? (
-                      <div><strong>user created:</strong> {u.userCreatedAt}</div>
+                      <div>
+                        <strong>user created:</strong> {u.userCreatedAt}
+                      </div>
+                    ) : null}
+                    {u.lastSignInAt ? (
+                      <div>
+                        <strong>last sign-in:</strong> {u.lastSignInAt}
+                      </div>
                     ) : null}
                   </div>
                 </div>
@@ -320,6 +509,7 @@ export default function SuperadminOrgPage() {
         )}
       </section>
 
+      {/* === ACTIVE PROJECTS === */}
       <section style={{ marginTop: 18 }}>
         <h2 style={{ fontSize: 18, marginBottom: 10 }}>Active projects</h2>
 
@@ -349,9 +539,15 @@ export default function SuperadminOrgPage() {
                 <div style={{ minWidth: 0 }}>
                   <div style={{ fontWeight: 700 }}>{p.name}</div>
                   <div style={{ fontSize: 13, color: '#666' }}>
-                    <div><strong>slug:</strong> {p.slug}</div>
-                    <div style={{ wordBreak: 'break-all' }}><strong>id:</strong> {p.id}</div>
-                    <div><strong>created:</strong> {p.createdAt}</div>
+                    <div>
+                      <strong>slug:</strong> {p.slug}
+                    </div>
+                    <div style={{ wordBreak: 'break-all' }}>
+                      <strong>id:</strong> {p.id}
+                    </div>
+                    <div>
+                      <strong>created:</strong> {p.createdAt}
+                    </div>
                   </div>
                 </div>
 
@@ -368,6 +564,7 @@ export default function SuperadminOrgPage() {
         )}
       </section>
 
+      {/* === DELETED PROJECTS === */}
       <section style={{ marginTop: 18 }}>
         <h2 style={{ fontSize: 18, marginBottom: 10 }}>Deleted projects</h2>
 
@@ -391,9 +588,15 @@ export default function SuperadminOrgPage() {
                 <div style={{ minWidth: 0 }}>
                   <div style={{ fontWeight: 700 }}>{p.name}</div>
                   <div style={{ fontSize: 13, color: '#666' }}>
-                    <div><strong>slug:</strong> {p.slug}</div>
-                    <div style={{ wordBreak: 'break-all' }}><strong>id:</strong> {p.id}</div>
-                    <div><strong>deleted:</strong> {p.deletedAt ?? '—'}</div>
+                    <div>
+                      <strong>slug:</strong> {p.slug}
+                    </div>
+                    <div style={{ wordBreak: 'break-all' }}>
+                      <strong>id:</strong> {p.id}
+                    </div>
+                    <div>
+                      <strong>deleted:</strong> {p.deletedAt ?? '—'}
+                    </div>
                   </div>
                 </div>
 
@@ -410,6 +613,7 @@ export default function SuperadminOrgPage() {
         )}
       </section>
 
+      {/* === RESULT === */}
       <section style={{ marginTop: 18 }}>
         <h2 style={{ fontSize: 18, marginBottom: 10 }}>Result</h2>
         <pre
