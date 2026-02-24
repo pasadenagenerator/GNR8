@@ -2,10 +2,6 @@ import { NextResponse, type NextRequest } from 'next/server'
 import { requireSuperadminUserId } from '@/src/superadmin/require-superadmin-user-id'
 import { getSuperadminPool } from '@/src/superadmin/db'
 
-/* ================================
- * Types
- * ================================ */
-
 type OrgRow = {
   id: string
   name: string
@@ -28,13 +24,8 @@ type CreatedOrgRow = {
   trial_ends_at: string | null
 }
 
-/* ================================
- * GET /api/superadmin/orgs
- * ================================ */
-
 export async function GET(_request: NextRequest) {
   try {
-    // superadmin guard
     await requireSuperadminUserId()
 
     const pool = getSuperadminPool()
@@ -70,13 +61,8 @@ export async function GET(_request: NextRequest) {
   }
 }
 
-/* ================================
- * POST /api/superadmin/orgs
- * ================================ */
-
 export async function POST(request: NextRequest) {
   try {
-    // superadmin guard
     await requireSuperadminUserId()
 
     const body = (await request.json()) as CreateOrgBody
@@ -85,13 +71,9 @@ export async function POST(request: NextRequest) {
     const rawSlug = String(body.slug ?? '').trim().toLowerCase()
 
     if (!name) {
-      return NextResponse.json(
-        { error: 'name is required' },
-        { status: 400 },
-      )
+      return NextResponse.json({ error: 'name is required' }, { status: 400 })
     }
 
-    // slug je optional – če ga ni, ga generiramo iz imena
     const slug =
       rawSlug ||
       name
@@ -102,10 +84,11 @@ export async function POST(request: NextRequest) {
 
     const pool = getSuperadminPool()
 
+    // IMPORTANT: organizations.id nima default-a -> generiramo v SQL
     const { rows } = await pool.query<CreatedOrgRow>(
       `
-      insert into public.organizations (name, slug)
-      values ($1, $2)
+      insert into public.organizations (id, name, slug)
+      values (gen_random_uuid(), $1, $2)
       returning
         id::text as id,
         name::text as name,
@@ -137,11 +120,8 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Internal server error'
     const lower = String(message).toLowerCase()
-
     const status =
-      lower.includes('forbidden') || lower.includes('unauthorized')
-        ? 403
-        : 500
+      lower.includes('forbidden') || lower.includes('unauthorized') ? 403 : 500
 
     return NextResponse.json({ error: message }, { status })
   }
