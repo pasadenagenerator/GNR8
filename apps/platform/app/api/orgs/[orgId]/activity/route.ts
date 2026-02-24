@@ -6,25 +6,21 @@ type RouteContext = {
   params: Promise<{ orgId: string }>
 }
 
-type MembershipRow = {
-  role: string
-}
-
-type AuditRow = {
+type AuditLogRow = {
   id: string
-  created_at: string
+  org_id: string
   actor_user_id: string
-  actor_email: string | null
   action: string
   entity_type: string
   entity_id: string
-  metadata: any
+  metadata: unknown
+  created_at: string
 }
 
-function clampLimit(raw: string | null) {
-  const n = Number(raw ?? '50')
-  if (!Number.isFinite(n)) return 50
-  return Math.min(Math.max(Math.floor(n), 1), 200)
+function clampInt(value: string | null, min: number, max: number, fallback: number) {
+  const n = Number(value)
+  if (!Number.isFinite(n)) return fallback
+  return Math.max(min, Math.min(max, Math.trunc(n)))
 }
 
 export async function GET(request: NextRequest, context: RouteContext) {
@@ -33,75 +29,94 @@ export async function GET(request: NextRequest, context: RouteContext) {
 
     const { orgId: rawOrgId } = await context.params
     const orgId = String(rawOrgId ?? '').trim()
-
     if (!orgId) {
       return NextResponse.json({ error: 'orgId is required' }, { status: 400 })
     }
 
+    const url = request.nextUrl
+    const action = url.searchParams.get('action')?.trim() || null
+    const entityType = url.searchParams.get('entityType')?.trim() || null
+    const entityId = url.searchParams.get('entityId')?.trim() || null
+    const cursor = url.searchParams.get('cursor')?.trim() || null
+    const limit = clampInt(url.searchParams.get('limit'), 1, 200, 50)
+
     const pool = getPool()
 
-    // 1) preveri membership (ker memberships (pri tebi) nimajo deleted_at)
-    const membership = await pool.query<MembershipRow>(
-      `
-      select role
-      from public.memberships
-      where org_id = $1
-        and user_id = $2
-      limit 1
-      `,
+    // Minimal authz: actor mora biti član orga
+    const memberRes = await pool.query<{ ok: number }>(
+      `select 1 as ok
+       from public.memberships
+       where org_id = $1
+         and user_id = $2
+       limit 1`,
       [orgId, actorUserId],
     )
 
-    if (membership.rowCount === 0) {
-      // namerno 404, da ne leakamo obstoja orga
-      return NextResponse.json(
-        { error: 'Actor membership not found for organization' },
-        { status: 404 },
-      )
+    if (!memberRes.rows[0]) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
-    // 2) fetch audit logov
-    const url = new URL(request.url)
-    const limit = clampLimit(url.searchParams.get('limit'))
+    const where: string[] = ['org_id = $1']
+    const params: any[] = [orgId]
+    let p = 2
 
-    const res = await pool.query<AuditRow>(
-      `
+    if (action) {
+      where.push(`action = $${p++}`)
+      params.push(action)
+    }
+    if (entityType) {
+      where.push(`entity_type = $${p++}`)
+      params.push(entityType)
+    }
+    if (entityId) {
+      where.push(`entity_id = $${p++}`)
+      params.push(entityId)
+    }
+    if (cursor) {
+      // cursor = ISO timestamp (created_at) zadnjega eventa prejšnje strani
+      where.push(`created_at < $${p++}::timestamptz`)
+      params.push(cursor)
+    }
+
+    // Preberemo limit+1 za nextCursor
+    const sql = `
       select
-        l.id::text as id,
-        l.created_at::text as created_at,
-        l.actor_user_id::text as actor_user_id,
-        u.email as actor_email,
-        l.action,
-        l.entity_type,
-        l.entity_id,
-        l.metadata
-      from public.audit_logs l
-      left join auth.users u on u.id = l.actor_user_id
-      where l.org_id = $1
-      order by l.created_at desc
-      limit $2
-      `,
-      [orgId, limit],
-    )
+        id::text as id,
+        org_id::text as org_id,
+        actor_user_id::text as actor_user_id,
+        action,
+        entity_type,
+        entity_id,
+        metadata,
+        created_at::text as created_at
+      from public.audit_logs
+      where ${where.join(' and ')}
+      order by created_at desc
+      limit ${limit + 1}
+    `
 
-    const events = res.rows.map((r) => ({
+    const res = await pool.query<AuditLogRow>(sql, params)
+
+    const rows = res.rows
+    const hasMore = rows.length > limit
+    const page = hasMore ? rows.slice(0, limit) : rows
+
+    const events = page.map((r) => ({
       id: String(r.id),
-      at: String(r.created_at),
+      orgId: String(r.org_id),
       actorUserId: String(r.actor_user_id),
-      actorEmail: r.actor_email ?? null,
       action: String(r.action),
       entityType: String(r.entity_type),
       entityId: String(r.entity_id),
-      // metadata je jsonb -> pride kot object
       metadata: r.metadata ?? {},
+      createdAt: String(r.created_at),
     }))
 
-    return NextResponse.json({ events }, { status: 200 })
+    const nextCursor = hasMore ? events[events.length - 1]?.createdAt ?? null : null
+
+    return NextResponse.json({ events, nextCursor }, { status: 200 })
   } catch (e) {
     const msg = e instanceof Error ? e.message : 'Internal server error'
-    const lower = String(msg).toLowerCase()
-    const status =
-      lower.includes('forbidden') || lower.includes('unauthorized') ? 403 : 500
-    return NextResponse.json({ error: msg }, { status })
+    return NextResponse.json({ error: msg }, { status: 500 })
   }
 }

@@ -25,10 +25,10 @@ type ProjectsResult =
 
 type OrgStats = {
   orgId: string
-  activeProjectsCount: number
-  deletedProjectsCount: number
-  membersCount: number
-  lastActivityAt: string | null
+  activeProjects: number
+  deletedProjects: number
+  // allow extra fields from your endpoint without typing fights
+  [k: string]: any
 }
 
 type OrgStatsResult =
@@ -36,19 +36,19 @@ type OrgStatsResult =
   | { ok?: false; error: string }
   | null
 
-type ActivityEvent = {
+type AuditEvent = {
   id: string
-  at: string
+  orgId: string
   actorUserId: string
-  actorEmail: string | null
   action: string
   entityType: string
   entityId: string
-  metadata: unknown
+  metadata: any
+  createdAt: string
 }
 
 type ActivityResult =
-  | { ok: true; events: ActivityEvent[] }
+  | { ok: true; events: AuditEvent[]; nextCursor: string | null }
   | { ok?: false; error: string }
   | null
 
@@ -68,17 +68,25 @@ export default function AdminPage() {
   const [busy, setBusy] = useState(false)
   const [result, setResult] = useState<ApiResult>(null)
 
+  // Active projects
   const [projectsBusy, setProjectsBusy] = useState(false)
   const [projectsResult, setProjectsResult] = useState<ProjectsResult>(null)
 
+  // Deleted projects
   const [deletedBusy, setDeletedBusy] = useState(false)
   const [deletedResult, setDeletedResult] = useState<ProjectsResult>(null)
 
+  // Org stats
   const [statsBusy, setStatsBusy] = useState(false)
   const [statsResult, setStatsResult] = useState<OrgStatsResult>(null)
 
+  // Activity (audit log)
   const [activityBusy, setActivityBusy] = useState(false)
   const [activityResult, setActivityResult] = useState<ActivityResult>(null)
+  const [activityAction, setActivityAction] = useState<string>('') // empty = all
+  const [activityEntityType, setActivityEntityType] = useState<string>('') // empty = all
+  const [activityEntityId, setActivityEntityId] = useState<string>('') // empty = all
+  const [activityLimit, setActivityLimit] = useState<number>(50)
 
   useEffect(() => {
     ;(async () => {
@@ -107,7 +115,9 @@ export default function AdminPage() {
     setProjectsResult(null)
 
     try {
-      const res = await fetch(`/api/orgs/${effectiveOrgId}/projects`, { method: 'GET' })
+      const res = await fetch(`/api/orgs/${effectiveOrgId}/projects`, {
+        method: 'GET',
+      })
       const json = await res.json().catch(() => ({}))
 
       if (!res.ok) {
@@ -136,7 +146,9 @@ export default function AdminPage() {
     setDeletedResult(null)
 
     try {
-      const res = await fetch(`/api/orgs/${effectiveOrgId}/projects/deleted`, { method: 'GET' })
+      const res = await fetch(`/api/orgs/${effectiveOrgId}/projects/deleted`, {
+        method: 'GET',
+      })
       const json = await res.json().catch(() => ({}))
 
       if (!res.ok) {
@@ -169,32 +181,53 @@ export default function AdminPage() {
       const json = await res.json().catch(() => ({}))
 
       if (!res.ok) {
-        setStatsResult({ ok: false, error: json?.error ?? 'Failed to load org stats' })
+        setStatsResult({ ok: false, error: json?.error ?? 'Failed to load stats' })
       } else {
         setStatsResult({ ok: true, stats: json.stats })
       }
     } catch (e) {
-      setStatsResult({ ok: false, error: e instanceof Error ? e.message : 'Failed to load org stats' })
+      setStatsResult({ ok: false, error: e instanceof Error ? e.message : 'Failed to load stats' })
     } finally {
       setStatsBusy(false)
     }
   }
 
-  async function loadActivity(nextOrgId?: string, limit = 50) {
-    const effectiveOrgId = (nextOrgId ?? orgId).trim()
+  async function loadActivity(opts?: { cursor?: string | null; append?: boolean; nextOrgId?: string }) {
+    const effectiveOrgId = (opts?.nextOrgId ?? orgId).trim()
     if (!effectiveOrgId) return
 
     setActivityBusy(true)
-    setActivityResult(null)
+    if (!opts?.append) setActivityResult(null)
 
     try {
-      const res = await fetch(`/api/orgs/${effectiveOrgId}/activity?limit=${limit}`, { method: 'GET' })
+      const qs = new URLSearchParams()
+      qs.set('limit', String(activityLimit))
+
+      if (activityAction.trim()) qs.set('action', activityAction.trim())
+      if (activityEntityType.trim()) qs.set('entityType', activityEntityType.trim())
+      if (activityEntityId.trim()) qs.set('entityId', activityEntityId.trim())
+      if (opts?.cursor) qs.set('cursor', opts.cursor)
+
+      const res = await fetch(`/api/orgs/${effectiveOrgId}/activity?${qs.toString()}`, {
+        method: 'GET',
+      })
       const json = await res.json().catch(() => ({}))
 
       if (!res.ok) {
         setActivityResult({ ok: false, error: json?.error ?? 'Failed to load activity' })
       } else {
-        setActivityResult({ ok: true, events: json.events ?? [] })
+        const incoming: AuditEvent[] = json.events ?? []
+        const nextCursor: string | null = json.nextCursor ?? null
+
+        if (opts?.append && activityResult && 'ok' in activityResult && activityResult.ok) {
+          setActivityResult({
+            ok: true,
+            events: [...activityResult.events, ...incoming],
+            nextCursor,
+          })
+        } else {
+          setActivityResult({ ok: true, events: incoming, nextCursor })
+        }
       }
     } catch (e) {
       setActivityResult({ ok: false, error: e instanceof Error ? e.message : 'Failed to load activity' })
@@ -203,13 +236,13 @@ export default function AdminPage() {
     }
   }
 
-  // auto-load everything when orgId changes (debounced-ish)
+  // Auto-load when orgId changes (debounced-ish)
   useEffect(() => {
     const t = setTimeout(() => {
       void loadProjects(orgId)
       void loadDeletedProjects(orgId)
       void loadStats(orgId)
-      void loadActivity(orgId, 50)
+      void loadActivity({ nextOrgId: orgId })
     }, 250)
     return () => clearTimeout(t)
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -233,7 +266,7 @@ export default function AdminPage() {
         setResult({ ok: true, project: json.project })
         await loadProjects()
         await loadStats()
-        await loadActivity(undefined, 50)
+        await loadActivity()
       }
     } catch (e) {
       setResult({ ok: false, error: e instanceof Error ? e.message : 'Failed' })
@@ -250,7 +283,9 @@ export default function AdminPage() {
     setResult(null)
 
     try {
-      const res = await fetch(`/api/orgs/${orgId}/projects/${projectId}`, { method: 'DELETE' })
+      const res = await fetch(`/api/orgs/${orgId}/projects/${projectId}`, {
+        method: 'DELETE',
+      })
       const json = await res.json().catch(() => ({}))
 
       if (!res.ok) {
@@ -260,7 +295,7 @@ export default function AdminPage() {
         await loadProjects()
         await loadDeletedProjects()
         await loadStats()
-        await loadActivity(undefined, 50)
+        await loadActivity()
       }
     } catch (e) {
       setResult({ ok: false, error: e instanceof Error ? e.message : 'Delete failed' })
@@ -277,7 +312,9 @@ export default function AdminPage() {
     setResult(null)
 
     try {
-      const res = await fetch(`/api/orgs/${orgId}/projects/${projectId}/restore`, { method: 'POST' })
+      const res = await fetch(`/api/orgs/${orgId}/projects/${projectId}/restore`, {
+        method: 'POST',
+      })
       const json = await res.json().catch(() => ({}))
 
       if (!res.ok) {
@@ -287,7 +324,7 @@ export default function AdminPage() {
         await loadProjects()
         await loadDeletedProjects()
         await loadStats()
-        await loadActivity(undefined, 50)
+        await loadActivity()
       }
     } catch (e) {
       setResult({ ok: false, error: e instanceof Error ? e.message : 'Restore failed' })
@@ -305,14 +342,17 @@ export default function AdminPage() {
   const stats =
     statsResult && 'ok' in statsResult && statsResult.ok ? statsResult.stats : null
 
-  const events =
-    activityResult && 'ok' in activityResult && activityResult.ok ? activityResult.events : []
+  const activity =
+    activityResult && 'ok' in activityResult && activityResult.ok ? activityResult : null
 
   return (
-    <main style={{ maxWidth: 900, margin: '48px auto', padding: 16 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-        <h1 style={{ fontSize: 24, marginBottom: 16 }}>Admin (test)</h1>
-        <button onClick={logout} style={{ padding: 10, borderRadius: 8, border: '1px solid #ddd' }}>
+    <main style={{ maxWidth: 980, margin: '48px auto', padding: 16 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center' }}>
+        <h1 style={{ fontSize: 24, marginBottom: 16 }}>Admin</h1>
+        <button
+          onClick={logout}
+          style={{ padding: 10, borderRadius: 8, border: '1px solid #ddd' }}
+        >
           Logout
         </button>
       </div>
@@ -328,7 +368,7 @@ export default function AdminPage() {
         </div>
       </section>
 
-      <section style={{ display: 'grid', gap: 12, marginBottom: 18 }}>
+      <section style={{ display: 'grid', gap: 12, marginBottom: 22 }}>
         <label style={{ display: 'grid', gap: 6 }}>
           <span>Org ID</span>
           <input
@@ -340,74 +380,31 @@ export default function AdminPage() {
 
         <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
           <button
-            disabled={projectsBusy}
-            onClick={() => loadProjects()}
+            disabled={projectsBusy || deletedBusy || statsBusy || activityBusy}
+            onClick={() => {
+              void loadProjects()
+              void loadDeletedProjects()
+              void loadStats()
+              void loadActivity()
+            }}
             style={{
               padding: 10,
               borderRadius: 8,
               border: '1px solid #ddd',
-              cursor: projectsBusy ? 'not-allowed' : 'pointer',
+              cursor: projectsBusy || deletedBusy || statsBusy || activityBusy ? 'not-allowed' : 'pointer',
             }}
           >
-            {projectsBusy ? 'Loading…' : 'Reload active'}
-          </button>
-
-          <button
-            disabled={deletedBusy}
-            onClick={() => loadDeletedProjects()}
-            style={{
-              padding: 10,
-              borderRadius: 8,
-              border: '1px solid #ddd',
-              cursor: deletedBusy ? 'not-allowed' : 'pointer',
-            }}
-          >
-            {deletedBusy ? 'Loading…' : 'Reload deleted'}
-          </button>
-
-          <button
-            disabled={statsBusy}
-            onClick={() => loadStats()}
-            style={{
-              padding: 10,
-              borderRadius: 8,
-              border: '1px solid #ddd',
-              cursor: statsBusy ? 'not-allowed' : 'pointer',
-            }}
-          >
-            {statsBusy ? 'Loading…' : 'Reload stats'}
-          </button>
-
-          <button
-            disabled={activityBusy}
-            onClick={() => loadActivity(undefined, 50)}
-            style={{
-              padding: 10,
-              borderRadius: 8,
-              border: '1px solid #ddd',
-              cursor: activityBusy ? 'not-allowed' : 'pointer',
-            }}
-          >
-            {activityBusy ? 'Loading…' : 'Reload activity'}
+            {projectsBusy || deletedBusy || statsBusy || activityBusy ? 'Loading…' : 'Reload all'}
           </button>
 
           <span style={{ fontSize: 13, color: '#666' }}>
-            {projectsBusy
-              ? 'Loading…'
-              : projectsResult && 'ok' in projectsResult && projectsResult.ok
-                ? `${activeProjects.length} active`
-                : '—'}
-            {' · '}
-            {deletedBusy
-              ? 'Loading…'
-              : deletedResult && 'ok' in deletedResult && deletedResult.ok
-                ? `${deletedProjects.length} deleted`
-                : '—'}
+            Active: {activeProjects.length} · Deleted: {deletedProjects.length}
+            {stats ? ` · Stats OK` : ''}
           </span>
         </div>
       </section>
 
-      {/* Org stats */}
+      {/* ORG STATS */}
       <section style={{ marginBottom: 22 }}>
         <h2 style={{ fontSize: 18, marginBottom: 10 }}>Org stats</h2>
 
@@ -417,41 +414,20 @@ export default function AdminPage() {
           </div>
         )}
 
-        {!stats ? (
-          <div style={{ fontSize: 14, color: '#666' }}>
-            {statsBusy ? 'Loading…' : 'No stats.'}
-          </div>
-        ) : (
-          <div
-            style={{
-              border: '1px solid #eee',
-              borderRadius: 10,
-              padding: 12,
-              fontSize: 14,
-              display: 'grid',
-              gap: 6,
-            }}
-          >
-            <div>
-              <strong>orgId:</strong> {stats.orgId}
-            </div>
-            <div>
-              <strong>members:</strong> {stats.membersCount}
-            </div>
-            <div>
-              <strong>active projects:</strong> {stats.activeProjectsCount}
-            </div>
-            <div>
-              <strong>deleted projects:</strong> {stats.deletedProjectsCount}
-            </div>
-            <div>
-              <strong>last activity:</strong> {stats.lastActivityAt ?? '—'}
-            </div>
-          </div>
-        )}
+        <pre
+          style={{
+            background: '#fafafa',
+            border: '1px solid #eee',
+            borderRadius: 8,
+            padding: 12,
+            overflow: 'auto',
+          }}
+        >
+          {stats ? JSON.stringify(stats, null, 2) : statsBusy ? 'Loading…' : '—'}
+        </pre>
       </section>
 
-      {/* Create project */}
+      {/* CREATE */}
       <section style={{ display: 'grid', gap: 12, marginBottom: 22 }}>
         <h2 style={{ fontSize: 18, marginBottom: 0 }}>Create project</h2>
 
@@ -487,7 +463,7 @@ export default function AdminPage() {
         </button>
       </section>
 
-      {/* Active projects */}
+      {/* ACTIVE PROJECTS */}
       <section style={{ marginBottom: 22 }}>
         <h2 style={{ fontSize: 18, marginBottom: 10 }}>Active projects</h2>
 
@@ -548,7 +524,7 @@ export default function AdminPage() {
         )}
       </section>
 
-      {/* Deleted projects */}
+      {/* DELETED PROJECTS */}
       <section style={{ marginBottom: 22 }}>
         <h2 style={{ fontSize: 18, marginBottom: 10 }}>Deleted projects</h2>
 
@@ -585,7 +561,7 @@ export default function AdminPage() {
                       <strong>id:</strong> {p.id}
                     </div>
                     <div>
-                      <strong>deleted:</strong> {p.deletedAt ?? '—'}
+                      <strong>deletedAt:</strong> {p.deletedAt ?? '—'}
                     </div>
                   </div>
                 </div>
@@ -609,9 +585,87 @@ export default function AdminPage() {
         )}
       </section>
 
-      {/* Org activity */}
+      {/* ACTIVITY */}
       <section style={{ marginBottom: 22 }}>
         <h2 style={{ fontSize: 18, marginBottom: 10 }}>Org activity</h2>
+
+        <div style={{ display: 'grid', gap: 10, marginBottom: 12 }}>
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+            <label style={{ display: 'grid', gap: 6 }}>
+              <span style={{ fontSize: 12, color: '#555' }}>Action</span>
+              <input
+                value={activityAction}
+                onChange={(e) => setActivityAction(e.target.value)}
+                placeholder="e.g. project.delete (empty = all)"
+                style={{ padding: 10, border: '1px solid #ddd', borderRadius: 8, width: 300 }}
+              />
+            </label>
+
+            <label style={{ display: 'grid', gap: 6 }}>
+              <span style={{ fontSize: 12, color: '#555' }}>Entity type</span>
+              <input
+                value={activityEntityType}
+                onChange={(e) => setActivityEntityType(e.target.value)}
+                placeholder="e.g. project (empty = all)"
+                style={{ padding: 10, border: '1px solid #ddd', borderRadius: 8, width: 220 }}
+              />
+            </label>
+
+            <label style={{ display: 'grid', gap: 6 }}>
+              <span style={{ fontSize: 12, color: '#555' }}>Entity ID</span>
+              <input
+                value={activityEntityId}
+                onChange={(e) => setActivityEntityId(e.target.value)}
+                placeholder="(optional)"
+                style={{ padding: 10, border: '1px solid #ddd', borderRadius: 8, width: 260 }}
+              />
+            </label>
+
+            <label style={{ display: 'grid', gap: 6 }}>
+              <span style={{ fontSize: 12, color: '#555' }}>Limit</span>
+              <input
+                value={String(activityLimit)}
+                onChange={(e) => setActivityLimit(Number(e.target.value || 50))}
+                style={{ padding: 10, border: '1px solid #ddd', borderRadius: 8, width: 100 }}
+              />
+            </label>
+
+            <button
+              disabled={activityBusy}
+              onClick={() => loadActivity()}
+              style={{
+                padding: 10,
+                borderRadius: 8,
+                border: '1px solid #ddd',
+                cursor: activityBusy ? 'not-allowed' : 'pointer',
+                height: 42,
+                marginTop: 18,
+              }}
+            >
+              {activityBusy ? 'Loading…' : 'Reload activity'}
+            </button>
+
+            <button
+              disabled={activityBusy}
+              onClick={() => {
+                setActivityAction('')
+                setActivityEntityType('')
+                setActivityEntityId('')
+                void loadActivity()
+              }}
+              style={{
+                padding: 10,
+                borderRadius: 8,
+                border: '1px solid #ddd',
+                cursor: activityBusy ? 'not-allowed' : 'pointer',
+                height: 42,
+                marginTop: 18,
+              }}
+            >
+              Clear filters
+            </button>
+          </div>
+        </div>
 
         {activityResult && 'ok' in activityResult && !activityResult.ok && (
           <div style={{ padding: 12, border: '1px solid #f2c', borderRadius: 8 }}>
@@ -619,61 +673,82 @@ export default function AdminPage() {
           </div>
         )}
 
-        {events.length === 0 ? (
+        {!activity ? (
           <div style={{ fontSize: 14, color: '#666' }}>
-            {activityBusy ? 'Loading…' : 'No activity yet.'}
+            {activityBusy ? 'Loading…' : '—'}
           </div>
+        ) : activity.events.length === 0 ? (
+          <div style={{ fontSize: 14, color: '#666' }}>No activity.</div>
         ) : (
-          <div style={{ display: 'grid', gap: 10 }}>
-            {events.map((ev) => (
-              <div
-                key={ev.id}
+          <>
+            <div style={{ display: 'grid', gap: 8 }}>
+              {activity.events.map((ev) => (
+                <div
+                  key={ev.id}
+                  style={{
+                    border: '1px solid #eee',
+                    borderRadius: 10,
+                    padding: 12,
+                    display: 'grid',
+                    gap: 6,
+                  }}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
+                    <div style={{ fontWeight: 600 }}>
+                      {ev.action}{' '}
+                      <span style={{ fontWeight: 400, color: '#666' }}>
+                        · {ev.entityType}:{ev.entityId}
+                      </span>
+                    </div>
+                    <div style={{ fontSize: 12, color: '#666' }}>{ev.createdAt}</div>
+                  </div>
+
+                  <div style={{ fontSize: 12, color: '#666' }}>
+                    <strong>actor:</strong> <span style={{ wordBreak: 'break-all' }}>{ev.actorUserId}</span>
+                  </div>
+
+                  <details>
+                    <summary style={{ cursor: 'pointer', fontSize: 13 }}>metadata</summary>
+                    <pre
+                      style={{
+                        marginTop: 8,
+                        background: '#fafafa',
+                        border: '1px solid #eee',
+                        borderRadius: 8,
+                        padding: 10,
+                        overflow: 'auto',
+                      }}
+                    >
+                      {JSON.stringify(ev.metadata ?? {}, null, 2)}
+                    </pre>
+                  </details>
+                </div>
+              ))}
+            </div>
+
+            <div style={{ marginTop: 12, display: 'flex', gap: 10, alignItems: 'center' }}>
+              <button
+                disabled={activityBusy || !activity.nextCursor}
+                onClick={() => loadActivity({ cursor: activity.nextCursor, append: true })}
                 style={{
-                  border: '1px solid #eee',
-                  borderRadius: 10,
-                  padding: 12,
-                  display: 'grid',
-                  gap: 6,
-                  fontSize: 13,
+                  padding: 10,
+                  borderRadius: 8,
+                  border: '1px solid #ddd',
+                  cursor: activityBusy || !activity.nextCursor ? 'not-allowed' : 'pointer',
                 }}
               >
-                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10 }}>
-                  <div style={{ fontWeight: 600 }}>
-                    {ev.action} · {ev.entityType}
-                  </div>
-                  <div style={{ color: '#666' }}>{ev.at}</div>
-                </div>
+                {activity.nextCursor ? (activityBusy ? 'Loading…' : 'Load more') : 'No more'}
+              </button>
 
-                <div style={{ color: '#666' }}>
-                  <strong>actor:</strong> {ev.actorEmail ?? ev.actorUserId}
-                </div>
-
-                <div style={{ color: '#666', wordBreak: 'break-all' }}>
-                  <strong>entityId:</strong> {ev.entityId}
-                </div>
-
-                <details>
-                  <summary style={{ cursor: 'pointer' }}>metadata</summary>
-                  <pre
-                    style={{
-                      background: '#fafafa',
-                      border: '1px solid #eee',
-                      borderRadius: 8,
-                      padding: 10,
-                      overflow: 'auto',
-                      marginTop: 8,
-                    }}
-                  >
-                    {JSON.stringify(ev.metadata ?? {}, null, 2)}
-                  </pre>
-                </details>
-              </div>
-            ))}
-          </div>
+              <span style={{ fontSize: 13, color: '#666' }}>
+                Showing {activity.events.length} event(s)
+              </span>
+            </div>
+          </>
         )}
       </section>
 
-      {/* Result */}
+      {/* RESULT */}
       <section>
         <h2 style={{ fontSize: 18, marginBottom: 10 }}>Result</h2>
         <pre
