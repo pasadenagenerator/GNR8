@@ -1,3 +1,5 @@
+// apps/platform/app/api/orgs/[orgId]/activity/route.ts
+
 import { NextResponse, type NextRequest } from 'next/server'
 import { requireActorUserId } from '@/src/auth/require-actor-user-id'
 import { getPool } from '@gnr8/data'
@@ -17,10 +19,20 @@ type AuditLogRow = {
   created_at: string
 }
 
-function clampInt(value: string | null, min: number, max: number, fallback: number) {
+function clampInt(
+  value: string | null,
+  min: number,
+  max: number,
+  fallback: number,
+) {
   const n = Number(value)
   if (!Number.isFinite(n)) return fallback
   return Math.max(min, Math.min(max, Math.trunc(n)))
+}
+
+function isAuthMessage(msg: string): boolean {
+  const m = String(msg || '').toLowerCase()
+  return m.includes('unauthorized') || m.includes('forbidden')
 }
 
 export async function GET(request: NextRequest, context: RouteContext) {
@@ -42,7 +54,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
 
     const pool = getPool()
 
-    // Minimal authz: actor mora biti član orga
+    // 1) Minimal authz: actor mora biti član orga
     const memberRes = await pool.query<{ ok: number }>(
       `select 1 as ok
        from public.memberships
@@ -56,8 +68,62 @@ export async function GET(request: NextRequest, context: RouteContext) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
+    // 2) Entitlement enforcement: organization.read
+    // Paid entitlement OR active trial window
+    const entRes = await pool.query<{ ok: number }>(
+      `select 1 as ok
+       from public.entitlements
+       where org_id = $1
+         and key = 'organization.read'
+         and active = true
+         and deleted_at is null
+       limit 1`,
+      [orgId],
+    )
+
+    let hasOrgRead = Boolean(entRes.rows[0])
+
+    if (!hasOrgRead) {
+      const trialRes = await pool.query<{
+        trial_started_at: string | null
+        trial_ends_at: string | null
+      }>(
+        `select
+           trial_started_at::text as trial_started_at,
+           trial_ends_at::text as trial_ends_at
+         from public.organizations
+         where id = $1
+         limit 1`,
+        [orgId],
+      )
+
+      const w = trialRes.rows[0]
+      const startedAt = w?.trial_started_at ?? null
+      const endsAt = w?.trial_ends_at ?? null
+
+      if (startedAt && endsAt) {
+        const startMs = new Date(String(startedAt)).getTime()
+        const endMs = new Date(String(endsAt)).getTime()
+        const now = Date.now()
+        if (!Number.isNaN(startMs) && !Number.isNaN(endMs)) {
+          const isTrialActive = now >= startMs && now <= endMs
+          if (isTrialActive) {
+            hasOrgRead = true
+          }
+        }
+      }
+    }
+
+    if (!hasOrgRead) {
+      return NextResponse.json(
+        { error: 'Missing required entitlement: organization.read' },
+        { status: 403 },
+      )
+    }
+
+    // Filters + pagination
     const where: string[] = ['org_id = $1']
-    const params: any[] = [orgId]
+    const params: Array<string> = [orgId]
     let p = 2
 
     if (action) {
@@ -78,7 +144,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
       params.push(cursor)
     }
 
-    // Preberemo limit+1 za nextCursor
+    // limit+1 for nextCursor
     const sql = `
       select
         id::text as id,
@@ -117,6 +183,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
     return NextResponse.json({ events, nextCursor }, { status: 200 })
   } catch (e) {
     const msg = e instanceof Error ? e.message : 'Internal server error'
-    return NextResponse.json({ error: msg }, { status: 500 })
+    const status = isAuthMessage(String(msg)) ? 403 : 500
+    return NextResponse.json({ error: msg }, { status })
   }
 }

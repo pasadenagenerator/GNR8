@@ -13,14 +13,23 @@ type RequestBody = {
   slug?: string
 }
 
-export async function GET(request: NextRequest, context: any) {
+function isEntitlementGateError(message: string): boolean {
+  const m = String(message || '').toLowerCase()
+  // EntitlementService.assert throws: "Missing required entitlement: <key>"
+  return m.includes('missing required entitlement:')
+}
+
+export async function GET(_request: NextRequest, context: any) {
   try {
-    const orgId = context.params.orgId as string
+    const orgId = String(context.params?.orgId ?? '').trim()
+    if (!orgId) {
+      return NextResponse.json({ error: 'orgId is required' }, { status: 400 })
+    }
+
     const actorUserId = await requireActorUserId()
     const projectService = getProjectService()
 
     const projects = await projectService.listProjects({ actorUserId, orgId })
-
     return NextResponse.json({ projects }, { status: 200 })
   } catch (error) {
     if (error instanceof AuthorizationError) {
@@ -30,7 +39,8 @@ export async function GET(request: NextRequest, context: any) {
       return NextResponse.json({ error: error.message }, { status: 404 })
     }
     if (error instanceof DomainError) {
-      return NextResponse.json({ error: error.message }, { status: 400 })
+      const status = isEntitlementGateError(error.message) ? 403 : 400
+      return NextResponse.json({ error: error.message }, { status })
     }
 
     const message = error instanceof Error ? error.message : 'Internal server error'
@@ -40,7 +50,10 @@ export async function GET(request: NextRequest, context: any) {
 
 export async function POST(request: NextRequest, context: any) {
   try {
-    const orgId = context.params.orgId as string
+    const orgId = String(context.params?.orgId ?? '').trim()
+    if (!orgId) {
+      return NextResponse.json({ error: 'orgId is required' }, { status: 400 })
+    }
 
     const actorUserId = await requireActorUserId()
     const body = (await request.json()) as RequestBody
@@ -58,17 +71,15 @@ export async function POST(request: NextRequest, context: any) {
     if (error instanceof AuthorizationError) {
       return NextResponse.json({ error: error.message }, { status: 403 })
     }
-
     if (error instanceof ConflictError) {
       return NextResponse.json({ error: error.message }, { status: 409 })
     }
-
     if (error instanceof NotFoundError) {
       return NextResponse.json({ error: error.message }, { status: 404 })
     }
-
     if (error instanceof DomainError) {
-      return NextResponse.json({ error: error.message }, { status: 400 })
+      const status = isEntitlementGateError(error.message) ? 403 : 400
+      return NextResponse.json({ error: error.message }, { status })
     }
 
     const message = error instanceof Error ? error.message : 'Internal server error'

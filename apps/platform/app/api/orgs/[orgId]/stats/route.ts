@@ -1,6 +1,10 @@
+// apps/platform/app/api/orgs/[orgId]/stats/route.ts
+
+import { DomainError, NotFoundError } from '@gnr8/core'
 import { NextResponse, type NextRequest } from 'next/server'
 import { requireActorUserId } from '@/src/auth/require-actor-user-id'
 import { getPool } from '@gnr8/data'
+import { getProjectService } from '@/src/di/core'
 
 type RouteContext = {
   params: Promise<{ orgId: string }>
@@ -12,6 +16,8 @@ type OrgRow = {
   slug: string | null
   created_at: string | null
   updated_at: string | null
+  trial_started_at: string | null
+  trial_ends_at: string | null
 }
 
 type CountRow = { cnt: string }
@@ -29,10 +35,36 @@ type SubscriptionRow = {
   deleted_at: string | null
 }
 
-export async function GET(request: NextRequest, context: RouteContext) {
+function computeTrial(window: {
+  startedAt: string | null
+  endsAt: string | null
+}): { isActive: boolean; isExpired: boolean } {
+  const startedAt = window.startedAt
+  const endsAt = window.endsAt
+  if (!startedAt || !endsAt) return { isActive: false, isExpired: false }
+
+  const startMs = new Date(String(startedAt)).getTime()
+  const endMs = new Date(String(endsAt)).getTime()
+  if (Number.isNaN(startMs) || Number.isNaN(endMs)) {
+    return { isActive: false, isExpired: false }
+  }
+
+  const now = Date.now()
+  return {
+    isActive: now >= startMs && now <= endMs,
+    isExpired: now > endMs,
+  }
+}
+
+function isEntitlementGateError(message: string): boolean {
+  const m = String(message || '').toLowerCase()
+  return m.includes('missing required entitlement:')
+}
+
+export async function GET(_request: NextRequest, context: RouteContext) {
   try {
     // AuthN
-    await requireActorUserId()
+    const actorUserId = await requireActorUserId()
 
     const { orgId: rawOrgId } = await context.params
     const orgId = String(rawOrgId ?? '').trim()
@@ -40,9 +72,14 @@ export async function GET(request: NextRequest, context: RouteContext) {
       return NextResponse.json({ error: 'orgId is required' }, { status: 400 })
     }
 
+    // AuthZ + Entitlement enforcement (canonical, preko core service-a)
+    // listProjects preveri: membership + permission organization.read + entitlement organization.read (trial fallback vključen)
+    const projectService = getProjectService()
+    await projectService.listProjects({ actorUserId, orgId })
+
     const pool = getPool()
 
-    // Org
+    // Org (+ trial columns)
     const orgRes = await pool.query<OrgRow>(
       `
       select
@@ -50,7 +87,9 @@ export async function GET(request: NextRequest, context: RouteContext) {
         name,
         slug,
         created_at::text as created_at,
-        updated_at::text as updated_at
+        updated_at::text as updated_at,
+        trial_started_at::text as trial_started_at,
+        trial_ends_at::text as trial_ends_at
       from public.organizations
       where id = $1
       limit 1
@@ -62,6 +101,10 @@ export async function GET(request: NextRequest, context: RouteContext) {
     if (!org) {
       return NextResponse.json({ error: 'Org not found' }, { status: 404 })
     }
+
+    const trialStartedAt = org.trial_started_at ? String(org.trial_started_at) : null
+    const trialEndsAt = org.trial_ends_at ? String(org.trial_ends_at) : null
+    const trialState = computeTrial({ startedAt: trialStartedAt, endsAt: trialEndsAt })
 
     // Counts (users in org)
     const usersRes = await pool.query<CountRow>(
@@ -129,6 +172,12 @@ export async function GET(request: NextRequest, context: RouteContext) {
           createdAt: org.created_at ? String(org.created_at) : null,
           updatedAt: org.updated_at ? String(org.updated_at) : null,
         },
+        trial: {
+          startedAt: trialStartedAt,
+          endsAt: trialEndsAt,
+          isActive: trialState.isActive,
+          isExpired: trialState.isExpired,
+        },
         counts: {
           users: Number(usersRes.rows[0]?.cnt ?? 0),
           projectsActive: Number(activeRes.rows[0]?.cnt ?? 0),
@@ -147,10 +196,18 @@ export async function GET(request: NextRequest, context: RouteContext) {
       { status: 200 },
     )
   } catch (e) {
+    if (e instanceof NotFoundError) {
+      return NextResponse.json({ error: e.message }, { status: 404 })
+    }
+    if (e instanceof DomainError) {
+      const status = isEntitlementGateError(e.message) ? 403 : 400
+      return NextResponse.json({ error: e.message }, { status })
+    }
+
     const msg = e instanceof Error ? e.message : 'Internal server error'
-    // requireActorUserId običajno vrže "Unauthorized" / "Forbidden"
     const lower = String(msg).toLowerCase()
-    const status = lower.includes('unauthorized') || lower.includes('forbidden') ? 403 : 500
+    const status =
+      lower.includes('unauthorized') || lower.includes('forbidden') ? 403 : 500
     return NextResponse.json({ error: msg }, { status })
   }
 }
