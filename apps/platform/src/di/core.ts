@@ -1,10 +1,5 @@
 import {
-  AuditLogService
-} from '@gnr8/core'
-import {
-  PostgresAuditLogRepository
-} from '@gnr8/data'
-import {
+  AuditLogService,
   AuthorizationService,
   BillingService,
   EntitlementService,
@@ -13,6 +8,7 @@ import {
   ProjectService,
 } from '@gnr8/core'
 import {
+  PostgresAuditLogRepository,
   PostgresBillingRepository,
   PostgresEntitlementRepository,
   PostgresMembershipRepository,
@@ -27,6 +23,7 @@ let entitlementService: EntitlementService | null = null
 let projectService: ProjectService | null = null
 let billingService: BillingService | null = null
 let orgStatsService: OrgStatsService | null = null
+let auditLogService: AuditLogService | null = null
 
 export function getOrganizationService(): OrganizationService {
   if (!organizationService) {
@@ -51,12 +48,9 @@ export function getEntitlementService(): EntitlementService {
 
 export function getProjectService(): ProjectService {
   if (!projectService) {
-    const projectRepository = new PostgresProjectRepository()
-    const membershipRepository = new PostgresMembershipRepository()
-
     projectService = new ProjectService(
-      projectRepository,
-      membershipRepository,
+      new PostgresProjectRepository(),
+      new PostgresMembershipRepository(),
       getAuthorizationService(),
       getEntitlementService(),
     )
@@ -66,21 +60,24 @@ export function getProjectService(): ProjectService {
 
 export function getBillingService(): BillingService {
   if (!billingService) {
-    const billingRepository = new PostgresBillingRepository()
-    billingService = new BillingService(billingRepository, getEntitlementService())
+    billingService = new BillingService(
+      new PostgresBillingRepository(),
+      getEntitlementService(),
+    )
   }
   return billingService
 }
 
 export function getOrgStatsService(): OrgStatsService {
   if (!orgStatsService) {
-    const repo = new PostgresOrgStatsRepository()
-    orgStatsService = new OrgStatsService(repo, getAuthorizationService(), getEntitlementService())
+    orgStatsService = new OrgStatsService(
+      new PostgresOrgStatsRepository(),
+      getAuthorizationService(),
+      getEntitlementService(),
+    )
   }
   return orgStatsService
 }
-
-let auditLogService: AuditLogService | null = null
 
 export function getAuditLogService(): AuditLogService {
   if (!auditLogService) {

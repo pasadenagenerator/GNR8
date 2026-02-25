@@ -1,6 +1,8 @@
 import type { OrgStatsRepository, OrgStatsRow, Role } from '@gnr8/core'
-import type { Pool, QueryResult } from 'pg'
+import type { Pool, QueryResult, QueryResultRow } from 'pg'
 import { getPool } from '../db/pool'
+
+type RoleRow = QueryResultRow & { role: Role }
 
 export class PostgresOrgStatsRepository implements OrgStatsRepository {
   constructor(private readonly pool: Pool = getPool()) {}
@@ -15,7 +17,7 @@ export class PostgresOrgStatsRepository implements OrgStatsRepository {
 
     const client = await this.pool.connect()
     try {
-      const res = await client.query<{ role: Role }>(
+      const res = await client.query<RoleRow>(
         `
         select role
         from public.memberships
@@ -26,7 +28,7 @@ export class PostgresOrgStatsRepository implements OrgStatsRepository {
         [orgId, actorUserId],
       )
 
-      return (res.rows[0]?.role as Role | undefined) ?? null
+      return res.rows[0]?.role ?? null
     } finally {
       client.release()
     }
