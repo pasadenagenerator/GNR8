@@ -1,4 +1,9 @@
-import { AuthorizationError, DomainError, NotFoundError } from '@gnr8/core'
+import {
+  AuthorizationError,
+  DomainError,
+  MissingEntitlementError,
+  NotFoundError,
+} from '@gnr8/core'
 import { NextResponse, type NextRequest } from 'next/server'
 import { requireActorUserId } from '@/src/auth/require-actor-user-id'
 import { getProjectService } from '@/src/di/core'
@@ -7,42 +12,48 @@ type RouteContext = {
   params: Promise<{ orgId: string; projectId: string }>
 }
 
-function isMissingEntitlementError(e: unknown): boolean {
-  const msg = e instanceof Error ? e.message : String(e)
-  return msg.trim().toLowerCase().includes('missing required entitlement')
+async function getIds(context: RouteContext): Promise<{ orgId: string; projectId: string }> {
+  const { orgId: rawOrgId, projectId: rawProjectId } = await context.params
+  return {
+    orgId: String(rawOrgId ?? '').trim(),
+    projectId: String(rawProjectId ?? '').trim(),
+  }
+}
+
+function mapError(e: unknown) {
+  if (e instanceof MissingEntitlementError) return { status: 403, message: e.message }
+  if (e instanceof AuthorizationError) return { status: 403, message: e.message }
+  if (e instanceof NotFoundError) return { status: 404, message: e.message }
+  if (e instanceof DomainError) return { status: 400, message: e.message }
+
+  const msg = e instanceof Error ? e.message : 'Internal server error'
+  return { status: 500, message: msg }
+}
+
+function requireParam(value: string, name: string) {
+  if (!value) {
+    return NextResponse.json({ error: `${name} is required` }, { status: 400 })
+  }
+  return null
 }
 
 export async function DELETE(_request: NextRequest, context: RouteContext) {
   try {
     const actorUserId = await requireActorUserId()
+    const { orgId, projectId } = await getIds(context)
 
-    const { orgId: rawOrgId, projectId: rawProjectId } = await context.params
-    const orgId = String(rawOrgId ?? '').trim()
-    const projectId = String(rawProjectId ?? '').trim()
+    const missingOrg = requireParam(orgId, 'orgId')
+    if (missingOrg) return missingOrg
 
-    if (!orgId) {
-      return NextResponse.json({ error: 'orgId is required' }, { status: 400 })
-    }
-    if (!projectId) {
-      return NextResponse.json({ error: 'projectId is required' }, { status: 400 })
-    }
+    const missingProject = requireParam(projectId, 'projectId')
+    if (missingProject) return missingProject
 
     const projectService = getProjectService()
     const project = await projectService.deleteProject({ actorUserId, orgId, projectId })
 
     return NextResponse.json({ project }, { status: 200 })
   } catch (e) {
-    if (e instanceof AuthorizationError) {
-      return NextResponse.json({ error: e.message }, { status: 403 })
-    }
-    if (e instanceof NotFoundError) {
-      return NextResponse.json({ error: e.message }, { status: 404 })
-    }
-    if (e instanceof DomainError) {
-      const status = isMissingEntitlementError(e) ? 403 : 400
-      return NextResponse.json({ error: e.message }, { status })
-    }
-    const msg = e instanceof Error ? e.message : 'Internal server error'
-    return NextResponse.json({ error: msg }, { status: 500 })
+    const out = mapError(e)
+    return NextResponse.json({ error: out.message }, { status: out.status })
   }
 }

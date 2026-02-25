@@ -4,6 +4,16 @@ import type { EntitlementRepository } from './repository'
 import type { EntitlementKey, SyncSubscriptionInput } from './types'
 import { PLAN_ENTITLEMENTS } from './plan-map'
 
+/**
+ * Explicit error type for entitlement enforcement.
+ * Route layer can reliably map this to HTTP 403 without string matching.
+ */
+export class MissingEntitlementError extends DomainError {
+  constructor(entitlementKey: EntitlementKey) {
+    super(`Missing required entitlement: ${entitlementKey}`)
+  }
+}
+
 export class EntitlementService {
   constructor(private readonly entitlementRepository: EntitlementRepository) {}
 
@@ -38,7 +48,8 @@ export class EntitlementService {
     const isTrial = await this.isTrialActive(cleanOrgId)
     if (isTrial && this.TRIAL_ENTITLEMENTS.has(entitlementKey)) return
 
-    throw new DomainError(`Missing required entitlement: ${entitlementKey}`)
+    // 3) Enforcement fail
+    throw new MissingEntitlementError(entitlementKey)
   }
 
   /**

@@ -2,6 +2,7 @@ import {
   AuthorizationError,
   ConflictError,
   DomainError,
+  MissingEntitlementError,
   NotFoundError,
 } from '@gnr8/core'
 import { NextResponse, type NextRequest } from 'next/server'
@@ -17,17 +18,31 @@ type RequestBody = {
   slug?: unknown
 }
 
-function isMissingEntitlementError(e: unknown): boolean {
-  const msg = e instanceof Error ? e.message : String(e)
-  return msg.trim().toLowerCase().includes('missing required entitlement')
+function toTrimmedString(v: unknown): string {
+  return v == null ? '' : String(v).trim()
+}
+
+async function getOrgId(context: RouteContext): Promise<string> {
+  const { orgId: rawOrgId } = await context.params
+  return String(rawOrgId ?? '').trim()
+}
+
+function mapError(e: unknown) {
+  if (e instanceof MissingEntitlementError) return { status: 403, message: e.message }
+  if (e instanceof AuthorizationError) return { status: 403, message: e.message }
+  if (e instanceof ConflictError) return { status: 409, message: e.message }
+  if (e instanceof NotFoundError) return { status: 404, message: e.message }
+  if (e instanceof DomainError) return { status: 400, message: e.message }
+
+  const msg = e instanceof Error ? e.message : 'Internal server error'
+  return { status: 500, message: msg }
 }
 
 export async function GET(_request: NextRequest, context: RouteContext) {
   try {
     const actorUserId = await requireActorUserId()
+    const orgId = await getOrgId(context)
 
-    const { orgId: rawOrgId } = await context.params
-    const orgId = String(rawOrgId ?? '').trim()
     if (!orgId) {
       return NextResponse.json({ error: 'orgId is required' }, { status: 400 })
     }
@@ -37,57 +52,35 @@ export async function GET(_request: NextRequest, context: RouteContext) {
 
     return NextResponse.json({ projects }, { status: 200 })
   } catch (e) {
-    if (e instanceof AuthorizationError) {
-      return NextResponse.json({ error: e.message }, { status: 403 })
-    }
-    if (e instanceof NotFoundError) {
-      return NextResponse.json({ error: e.message }, { status: 404 })
-    }
-    if (e instanceof DomainError) {
-      const status = isMissingEntitlementError(e) ? 403 : 400
-      return NextResponse.json({ error: e.message }, { status })
-    }
-    const msg = e instanceof Error ? e.message : 'Internal server error'
-    return NextResponse.json({ error: msg }, { status: 500 })
+    const out = mapError(e)
+    return NextResponse.json({ error: out.message }, { status: out.status })
   }
 }
 
 export async function POST(request: NextRequest, context: RouteContext) {
   try {
     const actorUserId = await requireActorUserId()
+    const orgId = await getOrgId(context)
 
-    const { orgId: rawOrgId } = await context.params
-    const orgId = String(rawOrgId ?? '').trim()
     if (!orgId) {
       return NextResponse.json({ error: 'orgId is required' }, { status: 400 })
     }
 
-    const body = (await request.json().catch(() => ({}))) as RequestBody
+    const body = ((await request.json().catch(() => null)) ?? {}) as RequestBody
+    const name = toTrimmedString(body.name)
+    const slug = toTrimmedString(body.slug).toLowerCase()
 
     const projectService = getProjectService()
     const project = await projectService.createProject({
       actorUserId,
       orgId,
-      name: body.name == null ? '' : String(body.name),
-      slug: body.slug == null ? '' : String(body.slug),
+      name,
+      slug,
     })
 
     return NextResponse.json({ project }, { status: 201 })
   } catch (e) {
-    if (e instanceof AuthorizationError) {
-      return NextResponse.json({ error: e.message }, { status: 403 })
-    }
-    if (e instanceof ConflictError) {
-      return NextResponse.json({ error: e.message }, { status: 409 })
-    }
-    if (e instanceof NotFoundError) {
-      return NextResponse.json({ error: e.message }, { status: 404 })
-    }
-    if (e instanceof DomainError) {
-      const status = isMissingEntitlementError(e) ? 403 : 400
-      return NextResponse.json({ error: e.message }, { status })
-    }
-    const msg = e instanceof Error ? e.message : 'Internal server error'
-    return NextResponse.json({ error: msg }, { status: 500 })
+    const out = mapError(e)
+    return NextResponse.json({ error: out.message }, { status: out.status })
   }
 }
