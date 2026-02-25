@@ -7,6 +7,11 @@ type RouteContext = {
   params: Promise<{ orgId: string }>
 }
 
+function isMissingEntitlementError(e: unknown): boolean {
+  const msg = e instanceof Error ? e.message : String(e)
+  return msg.trim().toLowerCase().includes('missing required entitlement')
+}
+
 export async function GET(_request: NextRequest, context: RouteContext) {
   try {
     const actorUserId = await requireActorUserId()
@@ -29,7 +34,8 @@ export async function GET(_request: NextRequest, context: RouteContext) {
       return NextResponse.json({ error: e.message }, { status: 404 })
     }
     if (e instanceof DomainError) {
-      return NextResponse.json({ error: e.message }, { status: 400 })
+      const status = isMissingEntitlementError(e) ? 403 : 400
+      return NextResponse.json({ error: e.message }, { status })
     }
     const msg = e instanceof Error ? e.message : 'Internal server error'
     return NextResponse.json({ error: msg }, { status: 500 })

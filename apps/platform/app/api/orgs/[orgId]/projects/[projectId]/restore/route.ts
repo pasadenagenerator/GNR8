@@ -7,6 +7,11 @@ type RouteContext = {
   params: Promise<{ orgId: string; projectId: string }>
 }
 
+function isMissingEntitlementError(e: unknown): boolean {
+  const msg = e instanceof Error ? e.message : String(e)
+  return String(msg).toLowerCase().includes('missing required entitlement')
+}
+
 export async function POST(_request: NextRequest, context: RouteContext) {
   try {
     const actorUserId = await requireActorUserId()
@@ -23,7 +28,11 @@ export async function POST(_request: NextRequest, context: RouteContext) {
     }
 
     const projectService = getProjectService()
-    const project = await projectService.restoreProject({ actorUserId, orgId, projectId })
+    const project = await projectService.restoreProject({
+      actorUserId,
+      orgId,
+      projectId,
+    })
 
     return NextResponse.json({ project }, { status: 200 })
   } catch (e) {
@@ -34,7 +43,8 @@ export async function POST(_request: NextRequest, context: RouteContext) {
       return NextResponse.json({ error: e.message }, { status: 404 })
     }
     if (e instanceof DomainError) {
-      return NextResponse.json({ error: e.message }, { status: 400 })
+      const status = isMissingEntitlementError(e) ? 403 : 400
+      return NextResponse.json({ error: e.message }, { status })
     }
     const msg = e instanceof Error ? e.message : 'Internal server error'
     return NextResponse.json({ error: msg }, { status: 500 })

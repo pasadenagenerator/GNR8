@@ -13,8 +13,13 @@ type RouteContext = {
 }
 
 type RequestBody = {
-  name?: string
-  slug?: string
+  name?: unknown
+  slug?: unknown
+}
+
+function isMissingEntitlementError(e: unknown): boolean {
+  const msg = e instanceof Error ? e.message : String(e)
+  return msg.trim().toLowerCase().includes('missing required entitlement')
 }
 
 export async function GET(_request: NextRequest, context: RouteContext) {
@@ -39,7 +44,8 @@ export async function GET(_request: NextRequest, context: RouteContext) {
       return NextResponse.json({ error: e.message }, { status: 404 })
     }
     if (e instanceof DomainError) {
-      return NextResponse.json({ error: e.message }, { status: 400 })
+      const status = isMissingEntitlementError(e) ? 403 : 400
+      return NextResponse.json({ error: e.message }, { status })
     }
     const msg = e instanceof Error ? e.message : 'Internal server error'
     return NextResponse.json({ error: msg }, { status: 500 })
@@ -62,8 +68,8 @@ export async function POST(request: NextRequest, context: RouteContext) {
     const project = await projectService.createProject({
       actorUserId,
       orgId,
-      name: body.name ?? '',
-      slug: body.slug ?? '',
+      name: body.name == null ? '' : String(body.name),
+      slug: body.slug == null ? '' : String(body.slug),
     })
 
     return NextResponse.json({ project }, { status: 201 })
@@ -78,7 +84,8 @@ export async function POST(request: NextRequest, context: RouteContext) {
       return NextResponse.json({ error: e.message }, { status: 404 })
     }
     if (e instanceof DomainError) {
-      return NextResponse.json({ error: e.message }, { status: 400 })
+      const status = isMissingEntitlementError(e) ? 403 : 400
+      return NextResponse.json({ error: e.message }, { status })
     }
     const msg = e instanceof Error ? e.message : 'Internal server error'
     return NextResponse.json({ error: msg }, { status: 500 })

@@ -7,10 +7,21 @@ type RouteContext = {
   params: Promise<{ orgId: string }>
 }
 
-function clampInt(value: string | null, min: number, max: number, fallback: number) {
+function clampInt(
+  value: string | null,
+  min: number,
+  max: number,
+  fallback: number,
+): number {
+  if (value == null) return fallback
   const n = Number(value)
   if (!Number.isFinite(n)) return fallback
   return Math.max(min, Math.min(max, Math.trunc(n)))
+}
+
+function isMissingEntitlementError(e: unknown): boolean {
+  const msg = e instanceof Error ? e.message : String(e)
+  return String(msg).toLowerCase().includes('missing required entitlement')
 }
 
 export async function GET(request: NextRequest, context: RouteContext) {
@@ -47,11 +58,12 @@ export async function GET(request: NextRequest, context: RouteContext) {
       return NextResponse.json({ error: e.message }, { status: 403 })
     }
     if (e instanceof NotFoundError) {
-      // membership missing ali org missing (če boš kasneje dodal)
       return NextResponse.json({ error: e.message }, { status: 404 })
     }
     if (e instanceof DomainError) {
-      return NextResponse.json({ error: e.message }, { status: 400 })
+      // entitlement enforcement naj bo 403 (ne 400)
+      const status = isMissingEntitlementError(e) ? 403 : 400
+      return NextResponse.json({ error: e.message }, { status })
     }
     const msg = e instanceof Error ? e.message : 'Internal server error'
     return NextResponse.json({ error: msg }, { status: 500 })
