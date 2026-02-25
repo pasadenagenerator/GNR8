@@ -3,40 +3,40 @@ import { NextResponse, type NextRequest } from 'next/server'
 import { requireActorUserId } from '@/src/auth/require-actor-user-id'
 import { getProjectService } from '@/src/di/core'
 
-function isMissingEntitlementError(e: unknown): boolean {
-  const msg = e instanceof Error ? e.message : String(e ?? '')
-  return msg.toLowerCase().includes('missing required entitlement')
+type RouteContext = {
+  params: Promise<{ orgId: string; projectId: string }>
 }
 
-export async function POST(request: NextRequest, context: any) {
+export async function POST(_request: NextRequest, context: RouteContext) {
   try {
-    const orgId = context.params.orgId as string
-    const projectId = context.params.projectId as string
-
     const actorUserId = await requireActorUserId()
-    const projectService = getProjectService()
 
-    const project = await projectService.restoreProject({
-      actorUserId,
-      orgId,
-      projectId,
-    })
+    const { orgId: rawOrgId, projectId: rawProjectId } = await context.params
+    const orgId = String(rawOrgId ?? '').trim()
+    const projectId = String(rawProjectId ?? '').trim()
+
+    if (!orgId) {
+      return NextResponse.json({ error: 'orgId is required' }, { status: 400 })
+    }
+    if (!projectId) {
+      return NextResponse.json({ error: 'projectId is required' }, { status: 400 })
+    }
+
+    const projectService = getProjectService()
+    const project = await projectService.restoreProject({ actorUserId, orgId, projectId })
 
     return NextResponse.json({ project }, { status: 200 })
-  } catch (error) {
-    if (error instanceof AuthorizationError) {
-      return NextResponse.json({ error: error.message }, { status: 403 })
+  } catch (e) {
+    if (e instanceof AuthorizationError) {
+      return NextResponse.json({ error: e.message }, { status: 403 })
     }
-    if (error instanceof NotFoundError) {
-      return NextResponse.json({ error: error.message }, { status: 404 })
+    if (e instanceof NotFoundError) {
+      return NextResponse.json({ error: e.message }, { status: 404 })
     }
-    if (error instanceof DomainError) {
-      const status = isMissingEntitlementError(error) ? 403 : 400
-      return NextResponse.json({ error: error.message }, { status })
+    if (e instanceof DomainError) {
+      return NextResponse.json({ error: e.message }, { status: 400 })
     }
-
-    const message =
-      error instanceof Error ? error.message : 'Internal server error'
-    return NextResponse.json({ error: message }, { status: 500 })
+    const msg = e instanceof Error ? e.message : 'Internal server error'
+    return NextResponse.json({ error: msg }, { status: 500 })
   }
 }

@@ -1,8 +1,10 @@
+// apps/platform/app/api/orgs/[orgId]/activity/route.ts
+
 import { NextResponse, type NextRequest } from 'next/server'
-import { DomainError } from '@gnr8/core'
+import { AuthorizationError, DomainError, NotFoundError } from '@gnr8/core'
 import { requireActorUserId } from '@/src/auth/require-actor-user-id'
 import { getPool } from '@gnr8/data'
-import { getEntitlementService } from '@/src/di/core'
+import { getAuthorizationService, getEntitlementService } from '@/src/di/core'
 
 type RouteContext = {
   params: Promise<{ orgId: string }>
@@ -19,10 +21,27 @@ type AuditLogRow = {
   created_at: string
 }
 
-function clampInt(value: string | null, min: number, max: number, fallback: number) {
+type MembershipRow = {
+  role: 'owner' | 'admin' | 'member'
+}
+
+function clampInt(
+  value: string | null,
+  min: number,
+  max: number,
+  fallback: number,
+) {
   const n = Number(value)
   if (!Number.isFinite(n)) return fallback
   return Math.max(min, Math.min(max, Math.trunc(n)))
+}
+
+function isMissingEntitlementError(e: unknown): boolean {
+  const msg = e instanceof Error ? e.message : ''
+  return (
+    e instanceof DomainError &&
+    msg.toLowerCase().includes('missing required entitlement')
+  )
 }
 
 export async function GET(request: NextRequest, context: RouteContext) {
@@ -44,9 +63,9 @@ export async function GET(request: NextRequest, context: RouteContext) {
 
     const pool = getPool()
 
-    // Minimal authz: actor mora biti član orga
-    const memberRes = await pool.query<{ ok: number }>(
-      `select 1 as ok
+    // 1) Membership + role
+    const membershipRes = await pool.query<MembershipRow>(
+      `select role
        from public.memberships
        where org_id = $1
          and user_id = $2
@@ -54,14 +73,21 @@ export async function GET(request: NextRequest, context: RouteContext) {
       [orgId, actorUserId],
     )
 
-    if (!memberRes.rows[0]) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    const membership = membershipRes.rows[0]
+    if (!membership) {
+      // skladno z ostalim: membership not found
+      throw new NotFoundError('Actor membership not found for organization')
     }
 
-    // Enforce entitlements (paid OR trial)
+    // 2) Permission gate
+    const authorizationService = getAuthorizationService()
+    authorizationService.assert(membership.role, 'organization.read')
+
+    // 3) Entitlement gate (paid OR trial)
     const entitlementService = getEntitlementService()
     await entitlementService.assert(orgId, 'organization.read')
 
+    // 4) Query logs (pagination + filters)
     const where: string[] = ['org_id = $1']
     const params: any[] = [orgId]
     let p = 2
@@ -120,12 +146,23 @@ export async function GET(request: NextRequest, context: RouteContext) {
 
     return NextResponse.json({ events, nextCursor }, { status: 200 })
   } catch (e) {
-    const msg = e instanceof Error ? e.message : 'Internal server error'
-
-    if (e instanceof DomainError && String(msg).toLowerCase().includes('missing required entitlement')) {
-      return NextResponse.json({ error: msg }, { status: 403 })
+    if (e instanceof AuthorizationError) {
+      return NextResponse.json({ error: e.message }, { status: 403 })
+    }
+    if (e instanceof NotFoundError) {
+      return NextResponse.json({ error: e.message }, { status: 404 })
+    }
+    if (isMissingEntitlementError(e)) {
+      return NextResponse.json(
+        { error: e instanceof Error ? e.message : 'Missing required entitlement' },
+        { status: 403 },
+      )
+    }
+    if (e instanceof DomainError) {
+      return NextResponse.json({ error: e.message }, { status: 400 })
     }
 
+    const msg = e instanceof Error ? e.message : 'Internal server error'
     return NextResponse.json({ error: msg }, { status: 500 })
   }
 }
