@@ -1,26 +1,17 @@
-// apps/platform/app/api/orgs/[orgId]/projects/[projectId]/route.ts
-
 import { AuthorizationError, DomainError, NotFoundError } from '@gnr8/core'
 import { NextResponse, type NextRequest } from 'next/server'
 import { requireActorUserId } from '@/src/auth/require-actor-user-id'
 import { getProjectService } from '@/src/di/core'
 
-function isEntitlementGateError(message: string): boolean {
-  const m = String(message || '').toLowerCase()
-  return m.includes('missing required entitlement:')
+function isMissingEntitlementError(e: unknown): boolean {
+  const msg = e instanceof Error ? e.message : String(e ?? '')
+  return msg.toLowerCase().includes('missing required entitlement')
 }
 
-export async function DELETE(_request: NextRequest, context: any) {
+export async function DELETE(request: NextRequest, context: any) {
   try {
-    const orgId = String(context.params?.orgId ?? '').trim()
-    const projectId = String(context.params?.projectId ?? '').trim()
-
-    if (!orgId) {
-      return NextResponse.json({ error: 'orgId is required' }, { status: 400 })
-    }
-    if (!projectId) {
-      return NextResponse.json({ error: 'projectId is required' }, { status: 400 })
-    }
+    const orgId = context.params.orgId as string
+    const projectId = context.params.projectId as string
 
     const actorUserId = await requireActorUserId()
     const projectService = getProjectService()
@@ -40,11 +31,12 @@ export async function DELETE(_request: NextRequest, context: any) {
       return NextResponse.json({ error: error.message }, { status: 404 })
     }
     if (error instanceof DomainError) {
-      const status = isEntitlementGateError(error.message) ? 403 : 400
+      const status = isMissingEntitlementError(error) ? 403 : 400
       return NextResponse.json({ error: error.message }, { status })
     }
 
-    const message = error instanceof Error ? error.message : 'Internal server error'
+    const message =
+      error instanceof Error ? error.message : 'Internal server error'
     return NextResponse.json({ error: message }, { status: 500 })
   }
 }
