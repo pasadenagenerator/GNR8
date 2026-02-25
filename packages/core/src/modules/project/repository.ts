@@ -29,14 +29,19 @@ export interface ProjectTransaction {
 
   listDeletedProjectsByOrgId(input: { orgId: string }): Promise<Project[]>
 
-  // audit log zapis v isti transakciji
+  /**
+   * Audit log zapis v isti transakciji (atomarno skupaj z delete/restore/create).
+   *
+   * Opomba: `metadata` je `unknown` (lahko je objekt, array, string, ...).
+   * V Postgres implementaciji to normaliziramo z `JSON.stringify(input.metadata ?? {})`.
+   */
   writeAuditLog(input: {
     orgId: string
     actorUserId: string
     action: string
     entityType: string
     entityId: string
-    metadata?: unknown // FIX: unknown (ne Record<string, unknown>)
+    metadata?: unknown
   }): Promise<void>
 }
 

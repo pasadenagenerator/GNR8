@@ -27,6 +27,22 @@ function isUniqueViolation(
   )
 }
 
+/**
+ * JSON.stringify lahko vrže (circular refs).
+ * Audit log naj nikoli ne “podre” glavnega poslovnega flow-a.
+ */
+function safeJsonStringify(value: unknown): string {
+  try {
+    return JSON.stringify(value ?? {})
+  } catch {
+    // fallback: vsaj neko informacijo o tipu (brez crash-a)
+    return JSON.stringify({
+      __stringifyError: true,
+      type: typeof value,
+    })
+  }
+}
+
 class PostgresProjectTransaction implements ProjectTransaction {
   constructor(readonly client: PoolClient) {}
 
@@ -117,7 +133,7 @@ class PostgresProjectTransaction implements ProjectTransaction {
     return result.rows.map(mapProject)
   }
 
-  // NEW: audit log
+  // audit log
   async writeAuditLog(input: {
     orgId: string
     actorUserId: string
@@ -126,7 +142,7 @@ class PostgresProjectTransaction implements ProjectTransaction {
     entityId: string
     metadata?: unknown
   }): Promise<void> {
-    const metadataJson = JSON.stringify(input.metadata ?? {}) // as requested
+    const metadataJson = safeJsonStringify(input.metadata)
 
     await this.client.query(
       `insert into public.audit_logs (

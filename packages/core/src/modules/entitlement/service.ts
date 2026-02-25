@@ -4,21 +4,6 @@ import type { EntitlementRepository } from './repository'
 import type { EntitlementKey, SyncSubscriptionInput } from './types'
 import { PLAN_ENTITLEMENTS } from './plan-map'
 
-type TrialWindow = {
-  trialStartedAt: string | null
-  trialEndsAt: string | null
-}
-
-export type OrgAccessState = {
-  orgId: string
-  trial: {
-    startedAt: string | null
-    endsAt: string | null
-    isActive: boolean
-    isExpired: boolean
-  }
-}
-
 export class EntitlementService {
   constructor(private readonly entitlementRepository: EntitlementRepository) {}
 
@@ -26,7 +11,7 @@ export class EntitlementService {
    * Trial fallback entitlements (če ni aktivne subscription / paid entitlements).
    * Namen: omogoči osnovno uporabo platforme med trialom.
    *
-   * Opomba: limit (npr. max 1 projekt) že enforce-a ProjectService.
+   * Opomba: limite (npr. max 1 projekt) enforce-a ProjectService.
    */
   private readonly TRIAL_ENTITLEMENTS: ReadonlySet<EntitlementKey> = new Set([
     'organization.read',
@@ -35,30 +20,9 @@ export class EntitlementService {
   ])
 
   /**
-   * Uporabno za UI (/admin stats, banner, disable akcij).
+   * HARD GATE (READ-only)
+   * Paid entitlements imajo prednost; trial je fallback.
    */
-  async getOrgAccessState(orgId: string): Promise<OrgAccessState> {
-    const cleanOrgId = String(orgId ?? '').trim()
-    if (!cleanOrgId) throw new DomainError('orgId is required')
-
-    const window = await this.entitlementRepository.getOrgTrialWindow({
-      orgId: cleanOrgId,
-    })
-
-    const trial = this.computeTrial(window)
-
-    return {
-      orgId: cleanOrgId,
-      trial: {
-        startedAt: window?.trialStartedAt ?? null,
-        endsAt: window?.trialEndsAt ?? null,
-        isActive: trial.isActive,
-        isExpired: trial.isExpired,
-      },
-    }
-  }
-
-  // HARD GATE (READ-only)
   async assert(orgId: string, entitlementKey: EntitlementKey): Promise<void> {
     const cleanOrgId = String(orgId ?? '').trim()
     if (!cleanOrgId) throw new DomainError('orgId is required')
@@ -71,20 +35,8 @@ export class EntitlementService {
     if (hasPaid) return
 
     // 2) Trial fallback (če ni paid)
-    const window = await this.entitlementRepository.getOrgTrialWindow({
-      orgId: cleanOrgId,
-    })
-    const trial = this.computeTrial(window)
-
-    if (trial.isActive && this.TRIAL_ENTITLEMENTS.has(entitlementKey)) {
-      return
-    }
-
-    // Če trial obstaja, ampak je potekel, vrnemo bolj jasen error.
-    // To je pomembno za “enforcement” UX (UI lahko pokaže banner, CTA, itd.).
-    if (trial.isExpired) {
-      throw new DomainError('Trial expired. Please upgrade to continue.')
-    }
+    const isTrial = await this.isTrialActive(cleanOrgId)
+    if (isTrial && this.TRIAL_ENTITLEMENTS.has(entitlementKey)) return
 
     throw new DomainError(`Missing required entitlement: ${entitlementKey}`)
   }
@@ -102,12 +54,9 @@ export class EntitlementService {
     })
     if (hasPaid) return true
 
-    const window = await this.entitlementRepository.getOrgTrialWindow({
-      orgId: cleanOrgId,
-    })
-    const trial = this.computeTrial(window)
+    const isTrial = await this.isTrialActive(cleanOrgId)
+    if (!isTrial) return false
 
-    if (!trial.isActive) return false
     return this.TRIAL_ENTITLEMENTS.has(entitlementKey)
   }
 
@@ -158,22 +107,19 @@ export class EntitlementService {
    * - Trial je aktiven samo, če imamo trial_started_at in trial_ends_at
    * - in je "now" znotraj [start, end]
    */
-  private computeTrial(window: TrialWindow | null): { isActive: boolean; isExpired: boolean } {
-    if (!window) return { isActive: false, isExpired: false }
+  private async isTrialActive(orgId: string): Promise<boolean> {
+    const window = await this.entitlementRepository.getOrgTrialWindow({ orgId })
+    if (!window) return false
 
     const startedAt = window.trialStartedAt ?? null
     const endsAt = window.trialEndsAt ?? null
-    if (!startedAt || !endsAt) return { isActive: false, isExpired: false }
+    if (!startedAt || !endsAt) return false
 
     const startMs = new Date(String(startedAt)).getTime()
     const endMs = new Date(String(endsAt)).getTime()
-    if (Number.isNaN(startMs) || Number.isNaN(endMs)) {
-      return { isActive: false, isExpired: false }
-    }
+    if (Number.isNaN(startMs) || Number.isNaN(endMs)) return false
 
     const now = Date.now()
-    const isActive = now >= startMs && now <= endMs
-    const isExpired = now > endMs
-    return { isActive, isExpired }
+    return now >= startMs && now <= endMs
   }
 }

@@ -1,10 +1,8 @@
-// apps/platform/app/api/orgs/[orgId]/stats/route.ts
-
-import { DomainError, NotFoundError } from '@gnr8/core'
 import { NextResponse, type NextRequest } from 'next/server'
+import { DomainError } from '@gnr8/core'
 import { requireActorUserId } from '@/src/auth/require-actor-user-id'
 import { getPool } from '@gnr8/data'
-import { getProjectService } from '@/src/di/core'
+import { getEntitlementService } from '@/src/di/core'
 
 type RouteContext = {
   params: Promise<{ orgId: string }>
@@ -56,14 +54,8 @@ function computeTrial(window: {
   }
 }
 
-function isEntitlementGateError(message: string): boolean {
-  const m = String(message || '').toLowerCase()
-  return m.includes('missing required entitlement:')
-}
-
 export async function GET(_request: NextRequest, context: RouteContext) {
   try {
-    // AuthN
     const actorUserId = await requireActorUserId()
 
     const { orgId: rawOrgId } = await context.params
@@ -72,12 +64,24 @@ export async function GET(_request: NextRequest, context: RouteContext) {
       return NextResponse.json({ error: 'orgId is required' }, { status: 400 })
     }
 
-    // AuthZ + Entitlement enforcement (canonical, preko core service-a)
-    // listProjects preveri: membership + permission organization.read + entitlement organization.read (trial fallback vključen)
-    const projectService = getProjectService()
-    await projectService.listProjects({ actorUserId, orgId })
-
     const pool = getPool()
+
+    // Minimal authz: actor mora biti član orga
+    const memberRes = await pool.query<{ ok: number }>(
+      `select 1 as ok
+       from public.memberships
+       where org_id = $1
+         and user_id = $2
+       limit 1`,
+      [orgId, actorUserId],
+    )
+    if (!memberRes.rows[0]) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    }
+
+    // Enforce entitlements (paid OR trial)
+    const entitlementService = getEntitlementService()
+    await entitlementService.assert(orgId, 'organization.read')
 
     // Org (+ trial columns)
     const orgRes = await pool.query<OrgRow>(
@@ -196,15 +200,13 @@ export async function GET(_request: NextRequest, context: RouteContext) {
       { status: 200 },
     )
   } catch (e) {
-    if (e instanceof NotFoundError) {
-      return NextResponse.json({ error: e.message }, { status: 404 })
-    }
-    if (e instanceof DomainError) {
-      const status = isEntitlementGateError(e.message) ? 403 : 400
-      return NextResponse.json({ error: e.message }, { status })
+    const msg = e instanceof Error ? e.message : 'Internal server error'
+
+    // Missing entitlement -> 403 (enforcement)
+    if (e instanceof DomainError && String(msg).toLowerCase().includes('missing required entitlement')) {
+      return NextResponse.json({ error: msg }, { status: 403 })
     }
 
-    const msg = e instanceof Error ? e.message : 'Internal server error'
     const lower = String(msg).toLowerCase()
     const status =
       lower.includes('unauthorized') || lower.includes('forbidden') ? 403 : 500
