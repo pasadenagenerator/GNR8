@@ -1,7 +1,9 @@
 import type { MembershipRepository, ProjectTransaction, Role } from '@gnr8/core'
-import type { QueryResult } from 'pg'
+import type { QueryResult, QueryResultRow } from 'pg'
 
-type RoleRow = { role: Role }
+type RoleRow = QueryResultRow & {
+  role: Role
+}
 
 export class PostgresMembershipRepository implements MembershipRepository {
   async getActorRoleInOrg(input: {
@@ -9,9 +11,11 @@ export class PostgresMembershipRepository implements MembershipRepository {
     actorUserId: string
     orgId: string
   }): Promise<Role | null> {
+    // ProjectTransaction je interface; v PostgresProjectTransaction imamo .client.
+    // Tu naredimo minimalen "escape hatch" z močno tipiziranim query podpisom.
     const txWithClient = input.tx as unknown as {
       client: {
-        query: <T extends Record<string, any>>(
+        query: <T extends QueryResultRow = QueryResultRow>(
           sql: string,
           params?: unknown[],
         ) => Promise<QueryResult<T>>
