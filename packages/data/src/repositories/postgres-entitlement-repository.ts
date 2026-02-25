@@ -1,12 +1,11 @@
 import { DomainError } from '@gnr8/core'
-import type {
-  BillingTx,
-  EntitlementKey,
-  EntitlementRepository,
-} from '@gnr8/core'
-import type { Pool } from 'pg'
+import type { BillingTx, EntitlementKey, EntitlementRepository } from '@gnr8/core'
+import type { Pool, QueryResult } from 'pg'
 import { getPool } from '../db/pool'
 import { PostgresBillingTx } from './postgres-billing-transaction'
+
+type HasEntRow = { ok: number }
+type TrialRow = { trial_started_at: string | null; trial_ends_at: string | null }
 
 export class PostgresEntitlementRepository implements EntitlementRepository {
   constructor(private readonly pool: Pool = getPool()) {}
@@ -27,6 +26,8 @@ export class PostgresEntitlementRepository implements EntitlementRepository {
     },
   ): Promise<void> {
     const pgTx = this.asPostgresTx(tx)
+    const orgId = String(input.orgId ?? '').trim()
+    if (!orgId) throw new DomainError('orgId is required')
 
     await pgTx.client.query(
       `update public.entitlements
@@ -35,7 +36,7 @@ export class PostgresEntitlementRepository implements EntitlementRepository {
        where org_id = $1
          and active = true
          and deleted_at is null`,
-      [input.orgId],
+      [orgId],
     )
 
     if (input.entitlementKeys.length === 0) return
@@ -54,8 +55,9 @@ export class PostgresEntitlementRepository implements EntitlementRepository {
          do update set
            active = true,
            deleted_at = null,
-           updated_at = now()`,
-        [input.orgId, key, input.stripeSubscriptionId],
+           updated_at = now(),
+           subscription_id = excluded.subscription_id`,
+        [orgId, key, input.stripeSubscriptionId],
       )
     }
   }
@@ -65,7 +67,10 @@ export class PostgresEntitlementRepository implements EntitlementRepository {
     input: { orgId: string; stripeSubscriptionId?: string },
   ): Promise<void> {
     const pgTx = this.asPostgresTx(tx)
+    const orgId = String(input.orgId ?? '').trim()
+    if (!orgId) throw new DomainError('orgId is required')
 
+    // NOTE: trenutno deaktiviramo vse active entitlements za org
     await pgTx.client.query(
       `update public.entitlements
        set active = false,
@@ -73,7 +78,7 @@ export class PostgresEntitlementRepository implements EntitlementRepository {
        where org_id = $1
          and active = true
          and deleted_at is null`,
-      [input.orgId],
+      [orgId],
     )
   }
 
@@ -82,17 +87,20 @@ export class PostgresEntitlementRepository implements EntitlementRepository {
     orgId: string
     entitlementKey: EntitlementKey
   }): Promise<boolean> {
+    const orgId = String(input.orgId ?? '').trim()
+    if (!orgId) return false
+
     const client = await this.pool.connect()
     try {
-      const result = await client.query(
-        `select 1
+      const result: QueryResult<HasEntRow> = await client.query(
+        `select 1 as ok
          from public.entitlements
          where org_id = $1
            and key = $2
            and active = true
            and deleted_at is null
          limit 1`,
-        [input.orgId, input.entitlementKey],
+        [orgId, input.entitlementKey],
       )
 
       return (result.rowCount ?? 0) > 0
@@ -102,7 +110,7 @@ export class PostgresEntitlementRepository implements EntitlementRepository {
   }
 
   /**
-   * NEW: Trial window reader (NO tx)
+   * Trial window reader (NO tx)
    */
   async getOrgTrialWindow(input: {
     orgId: string
@@ -110,25 +118,26 @@ export class PostgresEntitlementRepository implements EntitlementRepository {
     trialStartedAt: string | null
     trialEndsAt: string | null
   } | null> {
+    const orgId = String(input.orgId ?? '').trim()
+    if (!orgId) return null
+
     const client = await this.pool.connect()
     try {
-      const res = await client.query(
+      const res: QueryResult<TrialRow> = await client.query(
         `select
-           trial_started_at,
-           trial_ends_at
+           trial_started_at::text as trial_started_at,
+           trial_ends_at::text as trial_ends_at
          from public.organizations
          where id = $1
          limit 1`,
-        [input.orgId],
+        [orgId],
       )
 
       const row = res.rows[0]
       if (!row) return null
 
       return {
-        trialStartedAt: row.trial_started_at
-          ? String(row.trial_started_at)
-          : null,
+        trialStartedAt: row.trial_started_at ? String(row.trial_started_at) : null,
         trialEndsAt: row.trial_ends_at ? String(row.trial_ends_at) : null,
       }
     } finally {

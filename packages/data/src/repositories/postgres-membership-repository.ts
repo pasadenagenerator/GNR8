@@ -1,15 +1,13 @@
 import type { MembershipRepository, ProjectTransaction, Role } from '@gnr8/core'
-
-type RoleRow = {
-  role: Role
-}
+import type { QueryResult } from 'pg'
 
 type TxWithClient = {
   client: {
-    query: <T extends Record<string, unknown>>(
+    // pg supports generics: client.query<RowType>(...)
+    query: <T extends Record<string, any>>(
       sql: string,
       params?: unknown[],
-    ) => Promise<{ rows: T[] }>
+    ) => Promise<QueryResult<T>>
   }
 }
 
@@ -21,7 +19,7 @@ export class PostgresMembershipRepository implements MembershipRepository {
   }): Promise<Role | null> {
     const txWithClient = input.tx as unknown as TxWithClient
 
-    const result = await txWithClient.client.query<RoleRow>(
+    const result = await txWithClient.client.query<{ role: Role }>(
       `select role
        from public.memberships
        where org_id = $1
