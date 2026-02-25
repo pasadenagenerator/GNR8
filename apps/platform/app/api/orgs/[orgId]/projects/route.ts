@@ -1,59 +1,36 @@
-import {
-  AuthorizationError,
-  ConflictError,
-  DomainError,
-  NotFoundError,
-} from '@gnr8/core'
 import { NextResponse, type NextRequest } from 'next/server'
 import { requireActorUserId } from '@/src/auth/require-actor-user-id'
 import { getProjectService } from '@/src/di/core'
+import { mapDomainError } from '@/src/http/map-domain-error'
 
 type RequestBody = {
   name?: string
   slug?: string
 }
 
-function isMissingEntitlementError(e: unknown): boolean {
-  const msg = e instanceof Error ? e.message : String(e ?? '')
-  return msg.toLowerCase().includes('missing required entitlement')
-}
-
-export async function GET(request: NextRequest, context: any) {
+export async function GET(_req: NextRequest, context: any) {
   try {
     const orgId = context.params.orgId as string
     const actorUserId = await requireActorUserId()
-    const projectService = getProjectService()
 
-    const projects = await projectService.listProjects({ actorUserId, orgId })
+    const service = getProjectService()
+    const projects = await service.listProjects({ actorUserId, orgId })
 
     return NextResponse.json({ projects }, { status: 200 })
-  } catch (error) {
-    if (error instanceof AuthorizationError) {
-      return NextResponse.json({ error: error.message }, { status: 403 })
-    }
-    if (error instanceof NotFoundError) {
-      return NextResponse.json({ error: error.message }, { status: 404 })
-    }
-    if (error instanceof DomainError) {
-      const status = isMissingEntitlementError(error) ? 403 : 400
-      return NextResponse.json({ error: error.message }, { status })
-    }
-
-    const message =
-      error instanceof Error ? error.message : 'Internal server error'
-    return NextResponse.json({ error: message }, { status: 500 })
+  } catch (e) {
+    const { status, message } = mapDomainError(e)
+    return NextResponse.json({ error: message }, { status })
   }
 }
 
-export async function POST(request: NextRequest, context: any) {
+export async function POST(req: NextRequest, context: any) {
   try {
     const orgId = context.params.orgId as string
-
     const actorUserId = await requireActorUserId()
-    const body = (await request.json()) as RequestBody
-    const projectService = getProjectService()
+    const body = (await req.json()) as RequestBody
 
-    const project = await projectService.createProject({
+    const service = getProjectService()
+    const project = await service.createProject({
       actorUserId,
       orgId,
       name: body.name ?? '',
@@ -61,26 +38,8 @@ export async function POST(request: NextRequest, context: any) {
     })
 
     return NextResponse.json({ project }, { status: 201 })
-  } catch (error) {
-    if (error instanceof AuthorizationError) {
-      return NextResponse.json({ error: error.message }, { status: 403 })
-    }
-
-    if (error instanceof ConflictError) {
-      return NextResponse.json({ error: error.message }, { status: 409 })
-    }
-
-    if (error instanceof NotFoundError) {
-      return NextResponse.json({ error: error.message }, { status: 404 })
-    }
-
-    if (error instanceof DomainError) {
-      const status = isMissingEntitlementError(error) ? 403 : 400
-      return NextResponse.json({ error: error.message }, { status })
-    }
-
-    const message =
-      error instanceof Error ? error.message : 'Internal server error'
-    return NextResponse.json({ error: message }, { status: 500 })
+  } catch (e) {
+    const { status, message } = mapDomainError(e)
+    return NextResponse.json({ error: message }, { status })
   }
 }
