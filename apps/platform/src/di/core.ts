@@ -1,4 +1,10 @@
 import {
+  AuditLogService
+} from '@gnr8/core'
+import {
+  PostgresAuditLogRepository
+} from '@gnr8/data'
+import {
   AuthorizationService,
   BillingService,
   EntitlementService,
@@ -72,4 +78,17 @@ export function getOrgStatsService(): OrgStatsService {
     orgStatsService = new OrgStatsService(repo, getAuthorizationService(), getEntitlementService())
   }
   return orgStatsService
+}
+
+let auditLogService: AuditLogService | null = null
+
+export function getAuditLogService(): AuditLogService {
+  if (!auditLogService) {
+    auditLogService = new AuditLogService(
+      new PostgresAuditLogRepository(),
+      getAuthorizationService(),
+      getEntitlementService(),
+    )
+  }
+  return auditLogService
 }
