@@ -1,3 +1,5 @@
+import type { Role } from '../authorization'
+
 export type OrgStatsRow = {
   org_id: string
   org_name: string
@@ -19,6 +21,15 @@ export type OrgStatsRow = {
 }
 
 export interface OrgStatsRepository {
+  /**
+   * Read-only membership role lookup.
+   * Returns null if actor is not a member of org.
+   */
+  getActorRoleInOrg(input: {
+    actorUserId: string
+    orgId: string
+  }): Promise<Role | null>
+
   /**
    * Fetch org + counts + latest subscription snapshot in one go (read-only).
    * Returns null if org not found.

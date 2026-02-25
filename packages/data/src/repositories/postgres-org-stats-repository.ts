@@ -1,9 +1,36 @@
-import type { OrgStatsRepository, OrgStatsRow } from '@gnr8/core'
+import type { OrgStatsRepository, OrgStatsRow, Role } from '@gnr8/core'
 import type { Pool, QueryResult } from 'pg'
 import { getPool } from '../db/pool'
 
 export class PostgresOrgStatsRepository implements OrgStatsRepository {
   constructor(private readonly pool: Pool = getPool()) {}
+
+  async getActorRoleInOrg(input: {
+    actorUserId: string
+    orgId: string
+  }): Promise<Role | null> {
+    const actorUserId = String(input.actorUserId ?? '').trim()
+    const orgId = String(input.orgId ?? '').trim()
+    if (!actorUserId || !orgId) return null
+
+    const client = await this.pool.connect()
+    try {
+      const res = await client.query<{ role: Role }>(
+        `
+        select role
+        from public.memberships
+        where org_id = $1
+          and user_id = $2
+        limit 1
+        `,
+        [orgId, actorUserId],
+      )
+
+      return (res.rows[0]?.role as Role | undefined) ?? null
+    } finally {
+      client.release()
+    }
+  }
 
   async getOrgStatsRow(input: { orgId: string }): Promise<OrgStatsRow | null> {
     const orgId = String(input.orgId ?? '').trim()

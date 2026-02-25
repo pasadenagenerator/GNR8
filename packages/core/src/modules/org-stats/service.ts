@@ -1,7 +1,7 @@
 import { DomainError, NotFoundError } from '../../service-contract'
+import type { Role } from '../authorization'
 import { AuthorizationService } from '../authorization'
 import { EntitlementService } from '../entitlement/service'
-import type { MembershipRepository } from '../project/repository'
 import type { OrgStatsRepository } from './repository'
 import type { GetOrgStatsInput, OrgStats } from './types'
 
@@ -29,7 +29,6 @@ function computeTrial(window: {
 export class OrgStatsService {
   constructor(
     private readonly orgStatsRepository: OrgStatsRepository,
-    private readonly membershipRepository: MembershipRepository,
     private readonly authorizationService: AuthorizationService,
     private readonly entitlementService: EntitlementService,
   ) {}
@@ -41,26 +40,35 @@ export class OrgStatsService {
     if (!actorUserId) throw new DomainError('actorUserId is required')
     if (!orgId) throw new DomainError('orgId is required')
 
-    // AuthZ: mora biti član orga + org read permission + entitlement
-    // MembershipRepository dela prek tx-ja, ampak tu smo read-only.
-    // Rešitev: uporabimo fake "tx" z minimalnim client query wrapperjem ni OK,
-    // zato raje naredimo check prek orgStatsRepository query-ja? Ne.
-    //
-    // => Najbolj enostavno: naredimo membership check v DB v data repo skupaj s statsi.
-    // Ampak ker hočemo striktno route->service, bomo membership check naredili v posebni ruti prej.
-    //
-    // Pragmatično: uporabljamo membershipRepository samo v transakcijah,
-    // zato tu naredimo minimalen read-check prek entitlements (in kasneje zamenjamo).
-    //
-    // Ker želiš enforcement: vsaj entitlement gate:
+    // 1) Membership + role (read-only)
+    const role: Role | null = await this.orgStatsRepository.getActorRoleInOrg({
+      actorUserId,
+      orgId,
+    })
+    if (!role) {
+      throw new NotFoundError('Actor membership not found for organization')
+    }
+
+    // 2) AuthZ (permission)
+    this.authorizationService.assert(role, 'organization.read')
+
+    // 3) Entitlement gate (paid OR trial)
     await this.entitlementService.assert(orgId, 'organization.read')
 
+    // 4) Stats row
     const row = await this.orgStatsRepository.getOrgStatsRow({ orgId })
     if (!row) throw new NotFoundError('Org not found')
 
     const trialStartedAt = row.trial_started_at ? String(row.trial_started_at) : null
     const trialEndsAt = row.trial_ends_at ? String(row.trial_ends_at) : null
     const trialState = computeTrial({ startedAt: trialStartedAt, endsAt: trialEndsAt })
+
+    const hasBilling =
+      Boolean(row.sub_plan_key) ||
+      Boolean(row.sub_status) ||
+      Boolean(row.sub_current_period_end) ||
+      Boolean(row.sub_stripe_customer_id) ||
+      Boolean(row.sub_stripe_subscription_id)
 
     return {
       org: {
@@ -81,20 +89,15 @@ export class OrgStatsService {
         projectsActive: Number(row.projects_active_cnt ?? 0),
         projectsDeleted: Number(row.projects_deleted_cnt ?? 0),
       },
-      billing:
-        row.sub_plan_key ||
-        row.sub_status ||
-        row.sub_current_period_end ||
-        row.sub_stripe_customer_id ||
-        row.sub_stripe_subscription_id
-          ? {
-              planKey: row.sub_plan_key ?? null,
-              status: row.sub_status ?? null,
-              currentPeriodEnd: row.sub_current_period_end ?? null,
-              stripeCustomerId: row.sub_stripe_customer_id ?? null,
-              stripeSubscriptionId: row.sub_stripe_subscription_id ?? null,
-            }
-          : null,
+      billing: hasBilling
+        ? {
+            planKey: row.sub_plan_key ?? null,
+            status: row.sub_status ?? null,
+            currentPeriodEnd: row.sub_current_period_end ?? null,
+            stripeCustomerId: row.sub_stripe_customer_id ?? null,
+            stripeSubscriptionId: row.sub_stripe_subscription_id ?? null,
+          }
+        : null,
     }
   }
 }

@@ -3,16 +3,16 @@ import {
   BillingService,
   EntitlementService,
   OrganizationService,
-  ProjectService,
   OrgStatsService,
+  ProjectService,
 } from '@gnr8/core'
 import {
   PostgresBillingRepository,
   PostgresEntitlementRepository,
   PostgresMembershipRepository,
   PostgresOrganizationRepository,
-  PostgresProjectRepository,
   PostgresOrgStatsRepository,
+  PostgresProjectRepository,
 } from '@gnr8/data'
 
 let organizationService: OrganizationService | null = null
@@ -68,12 +68,8 @@ export function getBillingService(): BillingService {
 
 export function getOrgStatsService(): OrgStatsService {
   if (!orgStatsService) {
-    orgStatsService = new OrgStatsService(
-      new PostgresOrgStatsRepository(),
-      new PostgresMembershipRepository(),
-      getAuthorizationService(),
-      getEntitlementService(),
-    )
+    const repo = new PostgresOrgStatsRepository()
+    orgStatsService = new OrgStatsService(repo, getAuthorizationService(), getEntitlementService())
   }
   return orgStatsService
 }
