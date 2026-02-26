@@ -1,8 +1,4 @@
-import type {
-  AuditLogEvent,
-  AuditLogRepository,
-  Role,
-} from '@gnr8/core'
+import type { AuditLogEvent, AuditLogRepository, Role } from '@gnr8/core'
 import type { Pool, QueryResultRow } from 'pg'
 import { getPool } from '../db/pool'
 
@@ -22,7 +18,10 @@ type AuditLogRow = QueryResultRow & {
 export class PostgresAuditLogRepository implements AuditLogRepository {
   constructor(private readonly pool: Pool = getPool()) {}
 
-  async getActorRoleInOrg(input: { actorUserId: string; orgId: string }): Promise<Role | null> {
+  async getActorRoleInOrg(input: {
+    actorUserId: string
+    orgId: string
+  }): Promise<Role | null> {
     const orgId = String(input.orgId ?? '').trim()
     const actorUserId = String(input.actorUserId ?? '').trim()
     if (!orgId || !actorUserId) return null
@@ -45,20 +44,23 @@ export class PostgresAuditLogRepository implements AuditLogRepository {
 
   async listOrgActivity(input: {
     orgId: string
-    action?: string | null
-    entityType?: string | null
-    entityId?: string | null
-    cursor?: string | null
+    action: string | null
+    entityType: string | null
+    entityId: string | null
+    cursor: string | null
     limit: number
   }): Promise<{ events: AuditLogEvent[]; nextCursor: string | null }> {
     const orgId = String(input.orgId ?? '').trim()
-    if (!orgId) return { events: [], nextCursor: null }
+    
+    // repo predpostavlja validiran orgId (service enforce-a)
 
     const action = input.action ? String(input.action).trim() : null
     const entityType = input.entityType ? String(input.entityType).trim() : null
     const entityId = input.entityId ? String(input.entityId).trim() : null
     const cursor = input.cursor ? String(input.cursor).trim() : null
+
     const limit = Math.max(1, Math.min(200, Math.trunc(Number(input.limit ?? 50))))
+    const limitPlusOne = limit + 1
 
     const where: string[] = ['org_id = $1']
     const params: unknown[] = [orgId]
@@ -77,9 +79,14 @@ export class PostgresAuditLogRepository implements AuditLogRepository {
       params.push(entityId)
     }
     if (cursor) {
+      // cursor = ISO timestamp (created_at) zadnjega eventa prejšnje strani
       where.push(`created_at < $${p++}::timestamptz`)
       params.push(cursor)
     }
+
+    // LIMIT naj bo parametriziran (bolj "clean")
+    const limitParamIndex = p++
+    params.push(limitPlusOne)
 
     const sql = `
       select
@@ -94,7 +101,7 @@ export class PostgresAuditLogRepository implements AuditLogRepository {
       from public.audit_logs
       where ${where.join(' and ')}
       order by created_at desc
-      limit ${limit + 1}
+      limit $${limitParamIndex}
     `
 
     const client = await this.pool.connect()
