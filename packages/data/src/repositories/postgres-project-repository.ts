@@ -1,9 +1,9 @@
 import { ConflictError } from '@gnr8/core'
 import type { Project, ProjectRepository, ProjectTransaction } from '@gnr8/core'
-import type { Pool, PoolClient, QueryResult } from 'pg'
+import type { Pool, PoolClient, QueryResultRow } from 'pg'
 import { getPool } from '../db/pool'
 
-type DbRow = Record<string, unknown>
+type DbRow = QueryResultRow & Record<string, unknown>
 
 function mapProject(row: DbRow): Project {
   return {
@@ -29,13 +29,13 @@ function isUniqueViolation(
 
 /**
  * JSON.stringify lahko vrže (circular refs).
- * Audit log naj nikoli ne “podre” glavnega poslovnega flow-a.
+ * Audit log je del iste transakcije; če insert faila, bo rollback (atomarnost).
+ * Stringify pa naj ne bo razlog za crash.
  */
 function safeJsonStringify(value: unknown): string {
   try {
     return JSON.stringify(value ?? {})
   } catch {
-    // fallback: vsaj neko informacijo o tipu (brez crash-a)
     return JSON.stringify({
       __stringifyError: true,
       type: typeof value,
@@ -46,15 +46,21 @@ function safeJsonStringify(value: unknown): string {
 class PostgresProjectTransaction implements ProjectTransaction {
   constructor(readonly client: PoolClient) {}
 
-  async createProject(input: { orgId: string; name: string; slug: string }): Promise<Project> {
+  async createProject(input: {
+    orgId: string
+    name: string
+    slug: string
+  }): Promise<Project> {
     try {
-      const result: QueryResult<DbRow> = await this.client.query(
+      const result = await this.client.query<DbRow>(
         `insert into public.projects (id, org_id, name, slug)
          values (gen_random_uuid()::text, $1, $2, $3)
          returning id, org_id, name, slug, created_at, deleted_at`,
         [input.orgId, input.name, input.slug],
       )
-      return mapProject(result.rows[0])
+
+      const row = result.rows[0]
+      return mapProject(row)
     } catch (error) {
       if (isUniqueViolation(error)) {
         throw new ConflictError('Project slug already exists in organization')
@@ -64,7 +70,7 @@ class PostgresProjectTransaction implements ProjectTransaction {
   }
 
   async countActiveProjects(input: { orgId: string }): Promise<number> {
-    const result: QueryResult<{ cnt: string }> = await this.client.query(
+    const result = await this.client.query<{ cnt: string } & QueryResultRow>(
       `select count(*)::text as cnt
        from public.projects
        where org_id = $1
@@ -74,8 +80,11 @@ class PostgresProjectTransaction implements ProjectTransaction {
     return Number(result.rows[0]?.cnt ?? 0)
   }
 
-  async findProjectById(input: { orgId: string; projectId: string }): Promise<Project | null> {
-    const result: QueryResult<DbRow> = await this.client.query(
+  async findProjectById(input: {
+    orgId: string
+    projectId: string
+  }): Promise<Project | null> {
+    const result = await this.client.query<DbRow>(
       `select id, org_id, name, slug, created_at, deleted_at
        from public.projects
        where org_id = $1
@@ -83,6 +92,7 @@ class PostgresProjectTransaction implements ProjectTransaction {
        limit 1`,
       [input.orgId, input.projectId],
     )
+
     const row = result.rows[0]
     return row ? mapProject(row) : null
   }
@@ -110,7 +120,7 @@ class PostgresProjectTransaction implements ProjectTransaction {
   }
 
   async listProjectsByOrgId(input: { orgId: string }): Promise<Project[]> {
-    const result: QueryResult<DbRow> = await this.client.query(
+    const result = await this.client.query<DbRow>(
       `select id, org_id, name, slug, created_at, deleted_at
        from public.projects
        where org_id = $1
@@ -122,7 +132,7 @@ class PostgresProjectTransaction implements ProjectTransaction {
   }
 
   async listDeletedProjectsByOrgId(input: { orgId: string }): Promise<Project[]> {
-    const result: QueryResult<DbRow> = await this.client.query(
+    const result = await this.client.query<DbRow>(
       `select id, org_id, name, slug, created_at, deleted_at
        from public.projects
        where org_id = $1
@@ -133,7 +143,6 @@ class PostgresProjectTransaction implements ProjectTransaction {
     return result.rows.map(mapProject)
   }
 
-  // audit log
   async writeAuditLog(input: {
     orgId: string
     actorUserId: string

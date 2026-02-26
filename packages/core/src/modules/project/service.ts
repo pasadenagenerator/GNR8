@@ -1,7 +1,7 @@
 import { DomainError, NotFoundError } from '../../service-contract'
-import { AuthorizationService } from '../authorization'
+import { AuthorizationService, type Role } from '../authorization'
 import { EntitlementService } from '../entitlement/service'
-import type { MembershipRepository, ProjectRepository } from './repository'
+import type { MembershipRepository, ProjectRepository, ProjectTransaction } from './repository'
 import type {
   CreateProjectInput,
   DeleteProjectInput,
@@ -18,28 +18,37 @@ export class ProjectService {
     private readonly entitlementService: EntitlementService,
   ) {}
 
+  private cleanRequired(value: unknown, name: string): string {
+    const s = String(value ?? '').trim()
+    if (!s) throw new DomainError(`${name} is required`)
+    return s
+  }
+
+  private async getRoleOrThrow(input: {
+    tx: ProjectTransaction
+    actorUserId: string
+    orgId: string
+  }): Promise<Role> {
+    const role = await this.membershipRepository.getActorRoleInOrg(input)
+    if (!role) throw new NotFoundError('Actor membership not found for organization')
+    return role
+  }
+
+  /**
+   * Unlimited check.
+   * Opomba: entitlementService.has vključuje tudi trial fallback.
+   * Ker trenutno trial ne vključuje 'project.unlimited', je to OK.
+   */
   private async isUnlimited(orgId: string): Promise<boolean> {
-    // entitlementService.has vključuje tudi trial fallback (če bi kdaj dodali unlimited v trial,
-    // kar trenutno NE želimo), zato je to najbolj “čist” check.
     return this.entitlementService.has(orgId, 'project.unlimited')
   }
 
   async listProjects(input: ListProjectsInput): Promise<Project[]> {
-    const actorUserId = String(input.actorUserId ?? '').trim()
-    const orgId = String(input.orgId ?? '').trim()
-
-    if (!actorUserId) throw new DomainError('actorUserId is required')
-    if (!orgId) throw new DomainError('orgId is required')
+    const actorUserId = this.cleanRequired(input.actorUserId, 'actorUserId')
+    const orgId = this.cleanRequired(input.orgId, 'orgId')
 
     return this.projectRepository.withTransaction(async (tx) => {
-      const role = await this.membershipRepository.getActorRoleInOrg({
-        tx,
-        actorUserId,
-        orgId,
-      })
-      if (!role) {
-        throw new NotFoundError('Actor membership not found for organization')
-      }
+      const role = await this.getRoleOrThrow({ tx, actorUserId, orgId })
 
       this.authorizationService.assert(role, 'organization.read')
       await this.entitlementService.assert(orgId, 'organization.read')
@@ -53,21 +62,11 @@ export class ProjectService {
   }
 
   async listDeletedProjects(input: ListProjectsInput): Promise<Project[]> {
-    const actorUserId = String(input.actorUserId ?? '').trim()
-    const orgId = String(input.orgId ?? '').trim()
-
-    if (!actorUserId) throw new DomainError('actorUserId is required')
-    if (!orgId) throw new DomainError('orgId is required')
+    const actorUserId = this.cleanRequired(input.actorUserId, 'actorUserId')
+    const orgId = this.cleanRequired(input.orgId, 'orgId')
 
     return this.projectRepository.withTransaction(async (tx) => {
-      const role = await this.membershipRepository.getActorRoleInOrg({
-        tx,
-        actorUserId,
-        orgId,
-      })
-      if (!role) {
-        throw new NotFoundError('Actor membership not found for organization')
-      }
+      const role = await this.getRoleOrThrow({ tx, actorUserId, orgId })
 
       this.authorizationService.assert(role, 'organization.read')
       await this.entitlementService.assert(orgId, 'organization.read')
@@ -77,15 +76,11 @@ export class ProjectService {
   }
 
   async createProject(input: CreateProjectInput): Promise<Project> {
-    const actorUserId = String(input.actorUserId ?? '').trim()
-    const orgId = String(input.orgId ?? '').trim()
-    const name = String(input.name ?? '').trim()
-    const slug = String(input.slug ?? '').trim().toLowerCase()
+    const actorUserId = this.cleanRequired(input.actorUserId, 'actorUserId')
+    const orgId = this.cleanRequired(input.orgId, 'orgId')
 
-    if (!actorUserId) throw new DomainError('actorUserId is required')
-    if (!orgId) throw new DomainError('orgId is required')
-    if (!name) throw new DomainError('Project name is required')
-    if (!slug) throw new DomainError('Project slug is required')
+    const name = this.cleanRequired(input.name, 'Project name')
+    const slug = this.cleanRequired(input.slug, 'Project slug').toLowerCase()
 
     if (!/^[a-z0-9-]+$/.test(slug)) {
       throw new DomainError(
@@ -94,20 +89,12 @@ export class ProjectService {
     }
 
     return this.projectRepository.withTransaction(async (tx) => {
-      const role = await this.membershipRepository.getActorRoleInOrg({
-        tx,
-        actorUserId,
-        orgId,
-      })
-      if (!role) {
-        throw new NotFoundError('Actor membership not found for organization')
-      }
+      const role = await this.getRoleOrThrow({ tx, actorUserId, orgId })
 
       this.authorizationService.assert(role, 'project.create')
       await this.entitlementService.assert(orgId, 'project.create')
 
       const unlimited = await this.isUnlimited(orgId)
-
       if (!unlimited) {
         const activeCount = await tx.countActiveProjects({ orgId })
         if (activeCount >= 1) {
@@ -119,17 +106,13 @@ export class ProjectService {
 
       const project = await tx.createProject({ orgId, name, slug })
 
-      // audit log
       await tx.writeAuditLog({
         orgId,
         actorUserId,
         action: 'project.create',
         entityType: 'project',
         entityId: project.id,
-        metadata: {
-          name: project.name,
-          slug: project.slug,
-        },
+        metadata: { name: project.name, slug: project.slug },
       })
 
       return project
@@ -137,31 +120,22 @@ export class ProjectService {
   }
 
   async deleteProject(input: DeleteProjectInput): Promise<Project> {
-    const actorUserId = String(input.actorUserId ?? '').trim()
-    const orgId = String(input.orgId ?? '').trim()
-    const projectId = String(input.projectId ?? '').trim()
-
-    if (!actorUserId) throw new DomainError('actorUserId is required')
-    if (!orgId) throw new DomainError('orgId is required')
-    if (!projectId) throw new DomainError('projectId is required')
+    const actorUserId = this.cleanRequired(input.actorUserId, 'actorUserId')
+    const orgId = this.cleanRequired(input.orgId, 'orgId')
+    const projectId = this.cleanRequired(input.projectId, 'projectId')
 
     return this.projectRepository.withTransaction(async (tx) => {
-      const role = await this.membershipRepository.getActorRoleInOrg({
-        tx,
-        actorUserId,
-        orgId,
-      })
-      if (!role) {
-        throw new NotFoundError('Actor membership not found for organization')
-      }
+      const role = await this.getRoleOrThrow({ tx, actorUserId, orgId })
 
       this.authorizationService.assert(role, 'organization.manage')
+
+      // Entitlement gate:
+      // namenoma 'project.create', da trial uporabniki lahko tudi brišejo/restore-ajo projekte
+      // (ker trial omogoča "osnovno uporabo platforme").
       await this.entitlementService.assert(orgId, 'project.create')
 
       const existing = await tx.findProjectById({ orgId, projectId })
-      if (!existing || existing.deletedAt) {
-        throw new NotFoundError('Project not found')
-      }
+      if (!existing || existing.deletedAt) throw new NotFoundError('Project not found')
 
       await tx.softDeleteProject({ orgId, projectId })
 
@@ -183,25 +157,16 @@ export class ProjectService {
   }
 
   async restoreProject(input: RestoreProjectInput): Promise<Project> {
-    const actorUserId = String(input.actorUserId ?? '').trim()
-    const orgId = String(input.orgId ?? '').trim()
-    const projectId = String(input.projectId ?? '').trim()
-
-    if (!actorUserId) throw new DomainError('actorUserId is required')
-    if (!orgId) throw new DomainError('orgId is required')
-    if (!projectId) throw new DomainError('projectId is required')
+    const actorUserId = this.cleanRequired(input.actorUserId, 'actorUserId')
+    const orgId = this.cleanRequired(input.orgId, 'orgId')
+    const projectId = this.cleanRequired(input.projectId, 'projectId')
 
     return this.projectRepository.withTransaction(async (tx) => {
-      const role = await this.membershipRepository.getActorRoleInOrg({
-        tx,
-        actorUserId,
-        orgId,
-      })
-      if (!role) {
-        throw new NotFoundError('Actor membership not found for organization')
-      }
+      const role = await this.getRoleOrThrow({ tx, actorUserId, orgId })
 
       this.authorizationService.assert(role, 'organization.manage')
+
+      // Enako kot delete: trial naj omogoča osnovno upravljanje z lastnimi projekti.
       await this.entitlementService.assert(orgId, 'project.create')
 
       const existing = await tx.findProjectById({ orgId, projectId })
@@ -209,7 +174,6 @@ export class ProjectService {
       if (!existing.deletedAt) return existing
 
       const unlimited = await this.isUnlimited(orgId)
-
       if (!unlimited) {
         const activeCount = await tx.countActiveProjects({ orgId })
         if (activeCount >= 1) {

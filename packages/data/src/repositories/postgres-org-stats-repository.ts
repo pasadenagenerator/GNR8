@@ -1,5 +1,5 @@
 import type { OrgStatsRepository, OrgStatsRow, Role } from '@gnr8/core'
-import type { Pool, QueryResult, QueryResultRow } from 'pg'
+import type { Pool, QueryResultRow } from 'pg'
 import { getPool } from '../db/pool'
 
 type RoleRow = QueryResultRow & { role: Role }
@@ -40,7 +40,7 @@ export class PostgresOrgStatsRepository implements OrgStatsRepository {
 
     const client = await this.pool.connect()
     try {
-      const res: QueryResult<OrgStatsRow> = await client.query(
+      const res = await client.query<OrgStatsRow>(
         `
         select
           o.id::text as org_id,

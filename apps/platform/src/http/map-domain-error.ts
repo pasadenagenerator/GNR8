@@ -2,15 +2,11 @@ import {
   AuthorizationError,
   ConflictError,
   DomainError,
-  NotFoundError,
   MissingEntitlementError,
+  NotFoundError,
 } from '@gnr8/core'
 
-export function mapDomainError(e: unknown): {
-  status: number
-  message: string
-} {
-  // Explicit entitlement enforcement
+export function mapDomainError(e: unknown): { status: number; message: string } {
   if (e instanceof MissingEntitlementError) {
     return { status: 403, message: e.message }
   }
@@ -31,7 +27,6 @@ export function mapDomainError(e: unknown): {
     return { status: 400, message: e.message ?? 'Domain error' }
   }
 
-  // fallback (ne-domain error)
   const message = e instanceof Error ? e.message : 'Internal server error'
   return { status: 500, message }
 }

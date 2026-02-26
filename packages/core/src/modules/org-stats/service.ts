@@ -57,7 +57,7 @@ export class OrgStatsService {
 
     // 4) Stats row
     const row = await this.orgStatsRepository.getOrgStatsRow({ orgId })
-    if (!row) throw new NotFoundError('Org not found')
+    if (!row) throw new NotFoundError('Organization not found')
 
     const trialStartedAt = row.trial_started_at ? String(row.trial_started_at) : null
     const trialEndsAt = row.trial_ends_at ? String(row.trial_ends_at) : null
