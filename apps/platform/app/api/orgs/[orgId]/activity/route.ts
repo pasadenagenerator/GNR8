@@ -12,21 +12,29 @@ type RouteContext = {
   params: Promise<{ orgId: string }>
 }
 
-function clampInt(value: string | null, min: number, max: number, fallback: number): number {
+function clampInt(
+  value: string | null,
+  min: number,
+  max: number,
+  fallback: number,
+): number {
   if (value == null) return fallback
   const n = Number(value)
   if (!Number.isFinite(n)) return fallback
   return Math.max(min, Math.min(max, Math.trunc(n)))
 }
 
-function requireParam(value: string, name: string) {
-  if (!value) {
-    return NextResponse.json({ error: `${name} is required` }, { status: 400 })
-  }
-  return null
+function toTrimmedOrNull(v: string | null): string | null {
+  const s = (v ?? '').trim()
+  return s ? s : null
 }
 
-function mapError(e: unknown) {
+async function getOrgId(context: RouteContext): Promise<string> {
+  const { orgId: rawOrgId } = await context.params
+  return String(rawOrgId ?? '').trim()
+}
+
+function mapError(e: unknown): { status: number; message: string } {
   if (e instanceof MissingEntitlementError) return { status: 403, message: e.message }
   if (e instanceof AuthorizationError) return { status: 403, message: e.message }
   if (e instanceof NotFoundError) return { status: 404, message: e.message }
@@ -39,18 +47,17 @@ function mapError(e: unknown) {
 export async function GET(request: NextRequest, context: RouteContext) {
   try {
     const actorUserId = await requireActorUserId()
+    const orgId = await getOrgId(context)
 
-    const { orgId: rawOrgId } = await context.params
-    const orgId = String(rawOrgId ?? '').trim()
-
-    const missing = requireParam(orgId, 'orgId')
-    if (missing) return missing
+    if (!orgId) {
+      return NextResponse.json({ error: 'orgId is required' }, { status: 400 })
+    }
 
     const url = request.nextUrl
-    const action = url.searchParams.get('action')?.trim() || null
-    const entityType = url.searchParams.get('entityType')?.trim() || null
-    const entityId = url.searchParams.get('entityId')?.trim() || null
-    const cursor = url.searchParams.get('cursor')?.trim() || null
+    const action = toTrimmedOrNull(url.searchParams.get('action'))
+    const entityType = toTrimmedOrNull(url.searchParams.get('entityType'))
+    const entityId = toTrimmedOrNull(url.searchParams.get('entityId'))
+    const cursor = toTrimmedOrNull(url.searchParams.get('cursor'))
     const limit = clampInt(url.searchParams.get('limit'), 1, 200, 50)
 
     const service = getAuditLogService()

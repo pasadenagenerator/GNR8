@@ -40,3 +40,13 @@ export class DomainError extends Error {
 export class AuthorizationError extends DomainError {}
 export class NotFoundError extends DomainError {}
 export class ConflictError extends DomainError {}
+
+/**
+ * Explicit entitlement gate error.
+ * Routes can map this cleanly to 403 without string matching.
+ */
+export class MissingEntitlementError extends DomainError {
+  constructor(entitlementKey: string) {
+    super(`Missing required entitlement: ${entitlementKey}`)
+  }
+}
