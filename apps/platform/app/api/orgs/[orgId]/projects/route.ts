@@ -1,3 +1,4 @@
+import { NextResponse, type NextRequest } from 'next/server'
 import {
   AuthorizationError,
   ConflictError,
@@ -5,7 +6,6 @@ import {
   MissingEntitlementError,
   NotFoundError,
 } from '@gnr8/core'
-import { NextResponse, type NextRequest } from 'next/server'
 import { requireActorUserId } from '@/src/auth/require-actor-user-id'
 import { getProjectService } from '@/src/di/core'
 
@@ -22,19 +22,26 @@ function toTrimmedString(v: unknown): string {
   return v == null ? '' : String(v).trim()
 }
 
+function requireParam(value: string, name: string): NextResponse | null {
+  if (!value) {
+    return NextResponse.json({ error: `${name} is required` }, { status: 400 })
+  }
+  return null
+}
+
 async function getOrgId(context: RouteContext): Promise<string> {
   const { orgId: rawOrgId } = await context.params
   return String(rawOrgId ?? '').trim()
 }
 
-function mapError(e: unknown) {
+function mapError(e: unknown): { status: number; message: string } {
   if (e instanceof MissingEntitlementError) return { status: 403, message: e.message }
   if (e instanceof AuthorizationError) return { status: 403, message: e.message }
   if (e instanceof ConflictError) return { status: 409, message: e.message }
   if (e instanceof NotFoundError) return { status: 404, message: e.message }
   if (e instanceof DomainError) return { status: 400, message: e.message }
 
-  const msg = e instanceof Error ? e.message : 'Internal server error'
+  const msg = e instanceof Error ? e.message : String(e ?? 'Internal server error')
   return { status: 500, message: msg }
 }
 
@@ -43,9 +50,8 @@ export async function GET(_request: NextRequest, context: RouteContext) {
     const actorUserId = await requireActorUserId()
     const orgId = await getOrgId(context)
 
-    if (!orgId) {
-      return NextResponse.json({ error: 'orgId is required' }, { status: 400 })
-    }
+    const missing = requireParam(orgId, 'orgId')
+    if (missing) return missing
 
     const projectService = getProjectService()
     const projects = await projectService.listProjects({ actorUserId, orgId })
@@ -62,9 +68,8 @@ export async function POST(request: NextRequest, context: RouteContext) {
     const actorUserId = await requireActorUserId()
     const orgId = await getOrgId(context)
 
-    if (!orgId) {
-      return NextResponse.json({ error: 'orgId is required' }, { status: 400 })
-    }
+    const missing = requireParam(orgId, 'orgId')
+    if (missing) return missing
 
     const body = ((await request.json().catch(() => null)) ?? {}) as RequestBody
     const name = toTrimmedString(body.name)

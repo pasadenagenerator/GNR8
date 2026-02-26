@@ -12,20 +12,20 @@ type RouteContext = {
   params: Promise<{ orgId: string }>
 }
 
-function requireParam(value: string, name: string) {
+function requireParam(value: string, name: string): NextResponse | null {
   if (!value) {
     return NextResponse.json({ error: `${name} is required` }, { status: 400 })
   }
   return null
 }
 
-function mapError(e: unknown) {
+function mapError(e: unknown): { status: number; message: string } {
   if (e instanceof MissingEntitlementError) return { status: 403, message: e.message }
   if (e instanceof AuthorizationError) return { status: 403, message: e.message }
   if (e instanceof NotFoundError) return { status: 404, message: e.message }
   if (e instanceof DomainError) return { status: 400, message: e.message }
 
-  const msg = e instanceof Error ? e.message : 'Internal server error'
+  const msg = e instanceof Error ? e.message : String(e ?? 'Internal server error')
   return { status: 500, message: msg }
 }
 

@@ -1,10 +1,10 @@
+import { NextResponse, type NextRequest } from 'next/server'
 import {
   AuthorizationError,
   DomainError,
   MissingEntitlementError,
   NotFoundError,
 } from '@gnr8/core'
-import { NextResponse, type NextRequest } from 'next/server'
 import { requireActorUserId } from '@/src/auth/require-actor-user-id'
 import { getProjectService } from '@/src/di/core'
 
@@ -20,21 +20,21 @@ async function getIds(context: RouteContext): Promise<{ orgId: string; projectId
   }
 }
 
-function mapError(e: unknown) {
+function requireParam(value: string, name: string): NextResponse | null {
+  if (!value) {
+    return NextResponse.json({ error: `${name} is required` }, { status: 400 })
+  }
+  return null
+}
+
+function mapError(e: unknown): { status: number; message: string } {
   if (e instanceof MissingEntitlementError) return { status: 403, message: e.message }
   if (e instanceof AuthorizationError) return { status: 403, message: e.message }
   if (e instanceof NotFoundError) return { status: 404, message: e.message }
   if (e instanceof DomainError) return { status: 400, message: e.message }
 
-  const msg = e instanceof Error ? e.message : 'Internal server error'
+  const msg = e instanceof Error ? e.message : String(e ?? 'Internal server error')
   return { status: 500, message: msg }
-}
-
-function requireParam(value: string, name: string) {
-  if (!value) {
-    return NextResponse.json({ error: `${name} is required` }, { status: 400 })
-  }
-  return null
 }
 
 export async function DELETE(_request: NextRequest, context: RouteContext) {

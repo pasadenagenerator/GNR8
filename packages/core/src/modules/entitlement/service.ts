@@ -38,7 +38,7 @@ export class EntitlementService {
     const isTrial = await this.isTrialActive(cleanOrgId)
     if (isTrial && this.TRIAL_ENTITLEMENTS.has(entitlementKey)) return
 
-    // 3) Enforcement fail (canonical error)
+    // 3) Enforcement fail (explicit error => routes can map to 403 without string matching)
     throw new MissingEntitlementError(entitlementKey)
   }
 
@@ -72,7 +72,7 @@ export class EntitlementService {
     const cleanOrgId = String(orgId ?? '').trim()
     if (!cleanOrgId) throw new DomainError('orgId is required')
 
-    const planKey = subscription.planKey.trim().toLowerCase()
+    const planKey = String(subscription.planKey ?? '').trim().toLowerCase()
     if (!planKey) {
       throw new DomainError('subscription plan is required for entitlement sync')
     }
