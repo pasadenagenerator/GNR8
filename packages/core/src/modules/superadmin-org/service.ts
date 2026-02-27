@@ -5,7 +5,9 @@ import type { GetSuperadminOrgInput, SuperadminOrgDetails } from './types'
 export class SuperadminOrgService {
   constructor(private readonly repo: SuperadminOrgRepository) {}
 
-  async getOrgDetails(input: GetSuperadminOrgInput): Promise<SuperadminOrgDetails> {
+  async getOrgDetails(
+    input: GetSuperadminOrgInput,
+  ): Promise<SuperadminOrgDetails> {
     const orgId = String(input.orgId ?? '').trim()
     if (!orgId) throw new DomainError('orgId is required')
 
@@ -13,8 +15,8 @@ export class SuperadminOrgService {
     if (!org) throw new NotFoundError('Org not found')
 
     const [active, deleted] = await Promise.all([
-      this.repo.listProjectsByOrgId({ orgId, deleted: false }),
-      this.repo.listProjectsByOrgId({ orgId, deleted: true }),
+      this.repo.listProjectsByOrgId({ orgId, filter: 'active' }),
+      this.repo.listProjectsByOrgId({ orgId, filter: 'deleted' }),
     ])
 
     return {
@@ -22,7 +24,9 @@ export class SuperadminOrgService {
         id: String(org.id),
         name: String(org.name),
         createdAt: org.created_at ? String(org.created_at) : null,
-        trialStartedAt: org.trial_started_at ? String(org.trial_started_at) : null,
+        trialStartedAt: org.trial_started_at
+          ? String(org.trial_started_at)
+          : null,
         trialEndsAt: org.trial_ends_at ? String(org.trial_ends_at) : null,
       },
       projects: active.map((r) => ({

@@ -1,35 +1,3 @@
-import { 
-  SuperadminUsersService 
-} from '@gnr8/core'
-
-import { 
-  PostgresSuperadminUsersRepository 
-} from '@gnr8/data'
-
-import { 
-  SuperadminTrialService 
-} from '@gnr8/core'
-
-import { 
-  PostgresSuperadminTrialRepository 
-} from '@gnr8/data'
-
-import { 
-  SuperadminBillingService 
-} from '@gnr8/core'
-
-import { 
-  PostgresSuperadminBillingRepository 
-} from '@gnr8/data'
-
-import { 
-  SuperadminOrgService 
-} from '@gnr8/core'
-
-import { 
-  PostgresSuperadminOrgRepository 
-} from '@gnr8/data'
-
 import {
   AuditLogService,
   AuthorizationService,
@@ -38,6 +6,10 @@ import {
   OrganizationService,
   OrgStatsService,
   ProjectService,
+  SuperadminBillingService,
+  SuperadminOrgService,
+  SuperadminTrialService,
+  SuperadminUsersService,
 } from '@gnr8/core'
 
 import {
@@ -48,6 +20,10 @@ import {
   PostgresOrganizationRepository,
   PostgresOrgStatsRepository,
   PostgresProjectRepository,
+  PostgresSuperadminBillingRepository,
+  PostgresSuperadminOrgRepository,
+  PostgresSuperadminTrialRepository,
+  PostgresSuperadminUsersRepository,
 } from '@gnr8/data'
 
 let organizationService: OrganizationService | null = null
@@ -57,58 +33,14 @@ let projectService: ProjectService | null = null
 let billingService: BillingService | null = null
 let orgStatsService: OrgStatsService | null = null
 let auditLogService: AuditLogService | null = null
+
 let superadminOrgService: SuperadminOrgService | null = null
 let superadminBillingService: SuperadminBillingService | null = null
 let superadminTrialService: SuperadminTrialService | null = null
 let superadminUsersService: SuperadminUsersService | null = null
 
-export function getSuperadminUsersService(): SuperadminUsersService {
-  if (!superadminUsersService) {
-    superadminUsersService = new SuperadminUsersService(
-      new PostgresSuperadminUsersRepository(),
-    )
-  }
-  return superadminUsersService
-}
-
-export function getSuperadminTrialService(): SuperadminTrialService {
-  if (!superadminTrialService) {
-    superadminTrialService = new SuperadminTrialService(
-      new PostgresSuperadminTrialRepository(),
-    )
-  }
-  return superadminTrialService
-}
-
-export function getSuperadminBillingService(): SuperadminBillingService {
-  if (!superadminBillingService) {
-    superadminBillingService = new SuperadminBillingService(
-      new PostgresSuperadminBillingRepository(),
-    )
-  }
-  return superadminBillingService
-}
-
-export function getSuperadminOrgService(): SuperadminOrgService {
-  if (!superadminOrgService) {
-    superadminOrgService = new SuperadminOrgService(
-      new PostgresSuperadminOrgRepository(),
-    )
-  }
-  return superadminOrgService
-}
-
-export function getOrganizationService(): OrganizationService {
-  if (!organizationService) {
-    organizationService = new OrganizationService(new PostgresOrganizationRepository())
-  }
-  return organizationService
-}
-
 export function getAuthorizationService(): AuthorizationService {
-  if (!authorizationService) {
-    authorizationService = new AuthorizationService()
-  }
+  if (!authorizationService) authorizationService = new AuthorizationService()
   return authorizationService
 }
 
@@ -117,6 +49,13 @@ export function getEntitlementService(): EntitlementService {
     entitlementService = new EntitlementService(new PostgresEntitlementRepository())
   }
   return entitlementService
+}
+
+export function getOrganizationService(): OrganizationService {
+  if (!organizationService) {
+    organizationService = new OrganizationService(new PostgresOrganizationRepository())
+  }
+  return organizationService
 }
 
 export function getProjectService(): ProjectService {
@@ -161,4 +100,40 @@ export function getAuditLogService(): AuditLogService {
     )
   }
   return auditLogService
+}
+
+export function getSuperadminUsersService(): SuperadminUsersService {
+  if (!superadminUsersService) {
+    superadminUsersService = new SuperadminUsersService(
+      new PostgresSuperadminUsersRepository(),
+    )
+  }
+  return superadminUsersService
+}
+
+export function getSuperadminTrialService(): SuperadminTrialService {
+  if (!superadminTrialService) {
+    superadminTrialService = new SuperadminTrialService(
+      new PostgresSuperadminTrialRepository(),
+    )
+  }
+  return superadminTrialService
+}
+
+export function getSuperadminBillingService(): SuperadminBillingService {
+  if (!superadminBillingService) {
+    superadminBillingService = new SuperadminBillingService(
+      new PostgresSuperadminBillingRepository(),
+    )
+  }
+  return superadminBillingService
+}
+
+export function getSuperadminOrgService(): SuperadminOrgService {
+  if (!superadminOrgService) {
+    superadminOrgService = new SuperadminOrgService(
+      new PostgresSuperadminOrgRepository(),
+    )
+  }
+  return superadminOrgService
 }

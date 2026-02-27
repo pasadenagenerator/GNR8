@@ -35,16 +35,20 @@ export class PostgresSuperadminOrgRepository implements SuperadminOrgRepository 
 
   async listProjectsByOrgId(input: {
     orgId: string
-    deleted: boolean
+    filter: 'active' | 'deleted'
   }): Promise<SuperadminProjectRow[]> {
     const orgId = String(input.orgId ?? '').trim()
     if (!orgId) return []
 
+    const filter = input.filter
+
+    // filter je union type => kontroliran SQL fragment
+    const whereDeleted =
+      filter === 'deleted' ? 'deleted_at is not null' : 'deleted_at is null'
+    const orderBy = filter === 'deleted' ? 'deleted_at desc' : 'created_at desc'
+
     const client = await this.pool.connect()
     try {
-      const whereDeleted = input.deleted ? 'deleted_at is not null' : 'deleted_at is null'
-      const orderBy = input.deleted ? 'deleted_at desc' : 'created_at desc'
-
       const res = await client.query<SuperadminProjectRow>(
         `select
            id::text as id,

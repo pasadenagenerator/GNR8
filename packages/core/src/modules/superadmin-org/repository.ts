@@ -20,6 +20,6 @@ export interface SuperadminOrgRepository {
 
   listProjectsByOrgId(input: {
     orgId: string
-    deleted: boolean
+    filter: 'active' | 'deleted'
   }): Promise<SuperadminProjectRow[]>
 }
