@@ -1,4 +1,12 @@
 import { 
+  SuperadminBillingService 
+} from '@gnr8/core'
+
+import { 
+  PostgresSuperadminBillingRepository 
+} from '@gnr8/data'
+
+import { 
   SuperadminOrgService 
 } from '@gnr8/core'
 
@@ -34,6 +42,16 @@ let billingService: BillingService | null = null
 let orgStatsService: OrgStatsService | null = null
 let auditLogService: AuditLogService | null = null
 let superadminOrgService: SuperadminOrgService | null = null
+let superadminBillingService: SuperadminBillingService | null = null
+
+export function getSuperadminBillingService(): SuperadminBillingService {
+  if (!superadminBillingService) {
+    superadminBillingService = new SuperadminBillingService(
+      new PostgresSuperadminBillingRepository(),
+    )
+  }
+  return superadminBillingService
+}
 
 export function getSuperadminOrgService(): SuperadminOrgService {
   if (!superadminOrgService) {
