@@ -1,5 +1,6 @@
 import { cookies } from 'next/headers'
 import { createServerClient } from '@supabase/ssr'
+import { AuthorizationError, DomainError } from '@gnr8/core'
 
 export async function requireSuperadminUserId(): Promise<string> {
   const cookieStore = await cookies()
@@ -20,16 +21,17 @@ export async function requireSuperadminUserId(): Promise<string> {
   const user = data?.user
 
   if (error || !user) {
-    throw new Error('Not authenticated')
+    throw new AuthorizationError('Not authenticated')
   }
 
   const superadminEmail = process.env.SUPERADMIN_EMAIL
   if (!superadminEmail) {
-    throw new Error('SUPERADMIN_EMAIL env var is not set')
+    // to je konfiguracijska napaka -> 500
+    throw new DomainError('SUPERADMIN_EMAIL env var is not set')
   }
 
-  if (user.email !== superadminEmail) {
-    throw new Error('Not a superadmin')
+  if (!user.email || user.email !== superadminEmail) {
+    throw new AuthorizationError('Not a superadmin')
   }
 
   return user.id

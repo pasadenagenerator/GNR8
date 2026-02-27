@@ -1,4 +1,12 @@
 import { 
+  SuperadminUsersService 
+} from '@gnr8/core'
+
+import { 
+  PostgresSuperadminUsersRepository 
+} from '@gnr8/data'
+
+import { 
   SuperadminTrialService 
 } from '@gnr8/core'
 
@@ -52,6 +60,16 @@ let auditLogService: AuditLogService | null = null
 let superadminOrgService: SuperadminOrgService | null = null
 let superadminBillingService: SuperadminBillingService | null = null
 let superadminTrialService: SuperadminTrialService | null = null
+let superadminUsersService: SuperadminUsersService | null = null
+
+export function getSuperadminUsersService(): SuperadminUsersService {
+  if (!superadminUsersService) {
+    superadminUsersService = new SuperadminUsersService(
+      new PostgresSuperadminUsersRepository(),
+    )
+  }
+  return superadminUsersService
+}
 
 export function getSuperadminTrialService(): SuperadminTrialService {
   if (!superadminTrialService) {
