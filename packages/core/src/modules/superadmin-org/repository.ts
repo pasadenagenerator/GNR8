@@ -20,7 +20,7 @@ export type SuperadminOrgListRow = {
   id: string
   name: string
   created_at: string | null
-  projects_count: string | number | null
+  projects_count: string // comes from SQL: count(...)::text
 }
 
 /** NEW: created org row */

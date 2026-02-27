@@ -7,6 +7,16 @@ type RouteContext = {
   params: Promise<{ orgId: string }>
 }
 
+function mapError(e: unknown) {
+  if (e instanceof NotFoundError) return { status: 404, message: e.message }
+  if (e instanceof DomainError) return { status: 400, message: e.message }
+
+  const msg = e instanceof Error ? e.message : 'Internal server error'
+  const lower = String(msg).toLowerCase()
+  const status = lower.includes('forbidden') || lower.includes('unauthorized') ? 403 : 500
+  return { status, message: msg }
+}
+
 export async function PUT(request: NextRequest, context: RouteContext) {
   try {
     await requireSuperadminUserId()
@@ -24,20 +34,7 @@ export async function PUT(request: NextRequest, context: RouteContext) {
 
     return NextResponse.json(out, { status: 200 })
   } catch (e) {
-    // superadmin guard običajno -> 403
-    const msg = e instanceof Error ? e.message : 'Internal server error'
-    const lower = String(msg).toLowerCase()
-    if (lower.includes('forbidden') || lower.includes('unauthorized')) {
-      return NextResponse.json({ error: msg }, { status: 403 })
-    }
-
-    if (e instanceof NotFoundError) {
-      return NextResponse.json({ error: e.message }, { status: 404 })
-    }
-    if (e instanceof DomainError) {
-      return NextResponse.json({ error: e.message }, { status: 400 })
-    }
-
-    return NextResponse.json({ error: msg }, { status: 500 })
+    const out = mapError(e)
+    return NextResponse.json({ error: out.message }, { status: out.status })
   }
 }

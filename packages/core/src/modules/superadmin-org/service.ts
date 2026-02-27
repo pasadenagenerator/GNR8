@@ -1,4 +1,4 @@
-import { ConflictError, DomainError, NotFoundError } from '../../service-contract'
+import { DomainError, NotFoundError } from '../../service-contract'
 import type { SuperadminOrgRepository } from './repository'
 import type {
   CreateSuperadminOrgInput,
@@ -28,7 +28,7 @@ export class SuperadminOrgService {
   constructor(private readonly repo: SuperadminOrgRepository) {}
 
   async listOrgs(input: ListSuperadminOrgsInput): Promise<ListSuperadminOrgsOutput> {
-    const limit = clampInt(input.limit, 1, 500, 500)
+    const limit = clampInt(input?.limit, 1, 500, 500)
 
     const rows = await this.repo.listOrgs({ limit })
     const orgs = rows.map((r) => ({
@@ -42,8 +42,8 @@ export class SuperadminOrgService {
   }
 
   async createOrg(input: CreateSuperadminOrgInput): Promise<CreateSuperadminOrgOutput> {
-    const name = String(input.name ?? '').trim()
-    const rawSlug = input.slug == null ? '' : String(input.slug).trim().toLowerCase()
+    const name = String(input?.name ?? '').trim()
+    const rawSlug = input?.slug == null ? '' : String(input.slug).trim().toLowerCase()
 
     if (!name) throw new DomainError('name is required')
 
@@ -54,7 +54,8 @@ export class SuperadminOrgService {
       throw new DomainError('slug must contain only lowercase letters, numbers, and hyphens')
     }
 
-    const created = await this.repo.createOrg({ name, slug: slug || null })
+    // repo bo vrgel ConflictError (409) če je slug unique violation
+    const created = await this.repo.createOrg({ name, slug })
 
     return {
       org: {
@@ -70,7 +71,7 @@ export class SuperadminOrgService {
   }
 
   async getOrgDetails(input: GetSuperadminOrgInput): Promise<SuperadminOrgDetails> {
-    const orgId = String(input.orgId ?? '').trim()
+    const orgId = String(input?.orgId ?? '').trim()
     if (!orgId) throw new DomainError('orgId is required')
 
     const org = await this.repo.getOrgById({ orgId })

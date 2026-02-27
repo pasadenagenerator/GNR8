@@ -2,7 +2,12 @@ import type { SuperadminOrgUser } from './types'
 
 export interface SuperadminUsersRepository {
   /**
-   * Returns null if org not found.
+   * Explicit existence check (kept separate from listing).
    */
-  listOrgUsers(input: { orgId: string }): Promise<SuperadminOrgUser[] | null>
+  orgExists(input: { orgId: string }): Promise<boolean>
+
+  /**
+   * Returns an array (possibly empty). Never returns null.
+   */
+  listOrgUsers(input: { orgId: string }): Promise<SuperadminOrgUser[]>
 }

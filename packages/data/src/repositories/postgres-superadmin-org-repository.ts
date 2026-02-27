@@ -1,4 +1,4 @@
-import { ConflictError } from '@gnr8/core'
+import { ConflictError, DomainError } from '@gnr8/core'
 import type {
   SuperadminCreatedOrgRow,
   SuperadminOrgListRow,
@@ -9,7 +9,7 @@ import type {
 import type { Pool } from 'pg'
 import { getPool } from '../db/pool'
 
-function isUniqueViolation(error: unknown): error is { code: string } {
+function isUniqueViolation(error: unknown): error is { code: string; constraint?: string } {
   return Boolean(
     error &&
       typeof error === 'object' &&
@@ -37,7 +37,7 @@ export class PostgresSuperadminOrgRepository implements SuperadminOrgRepository 
         left join public.projects p
           on p.org_id = o.id
          and p.deleted_at is null
-        group by o.id
+        group by o.id, o.name, o.created_at
         order by o.created_at desc
         limit $1
         `,
@@ -52,7 +52,12 @@ export class PostgresSuperadminOrgRepository implements SuperadminOrgRepository 
 
   async createOrg(input: { name: string; slug: string | null }): Promise<SuperadminCreatedOrgRow> {
     const name = String(input.name ?? '').trim()
-    const slug = input.slug == null ? null : String(input.slug).trim()
+    const slug =
+      input.slug == null ? null : String(input.slug).trim().toLowerCase()
+
+    if (!name) {
+      throw new DomainError('name is required')
+    }
 
     const client = await this.pool.connect()
     try {
@@ -77,6 +82,7 @@ export class PostgresSuperadminOrgRepository implements SuperadminOrgRepository 
       return row
     } catch (e) {
       if (isUniqueViolation(e)) {
+        // najverjetneje unique constraint na organizations.slug
         throw new ConflictError('Organization slug already exists')
       }
       throw e
@@ -92,15 +98,17 @@ export class PostgresSuperadminOrgRepository implements SuperadminOrgRepository 
     const client = await this.pool.connect()
     try {
       const res = await client.query<SuperadminOrgRow>(
-        `select
-           id::text as id,
-           name::text as name,
-           created_at::text as created_at,
-           trial_started_at::text as trial_started_at,
-           trial_ends_at::text as trial_ends_at
-         from public.organizations
-         where id = $1
-         limit 1`,
+        `
+        select
+          id::text as id,
+          name::text as name,
+          created_at::text as created_at,
+          trial_started_at::text as trial_started_at,
+          trial_ends_at::text as trial_ends_at
+        from public.organizations
+        where id = $1
+        limit 1
+        `,
         [orgId],
       )
       return res.rows[0] ?? null
@@ -123,17 +131,19 @@ export class PostgresSuperadminOrgRepository implements SuperadminOrgRepository 
       const orderBy = isDeleted ? 'deleted_at desc' : 'created_at desc'
 
       const res = await client.query<SuperadminProjectRow>(
-        `select
-           id::text as id,
-           org_id::text as org_id,
-           name::text as name,
-           slug::text as slug,
-           created_at::text as created_at,
-           deleted_at::text as deleted_at
-         from public.projects
-         where org_id = $1
-           and ${whereDeleted}
-         order by ${orderBy}`,
+        `
+        select
+          id::text as id,
+          org_id::text as org_id,
+          name::text as name,
+          slug::text as slug,
+          created_at::text as created_at,
+          deleted_at::text as deleted_at
+        from public.projects
+        where org_id = $1
+          and ${whereDeleted}
+        order by ${orderBy}
+        `,
         [orgId],
       )
 

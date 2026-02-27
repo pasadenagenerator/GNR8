@@ -14,20 +14,28 @@ type UserRow = {
 export class PostgresSuperadminUsersRepository implements SuperadminUsersRepository {
   constructor(private readonly pool: Pool = getPool()) {}
 
-  async listOrgUsers(input: { orgId: string }): Promise<SuperadminOrgUser[] | null> {
+  async orgExists(input: { orgId: string }): Promise<boolean> {
     const orgId = String(input.orgId ?? '').trim()
-    if (!orgId) return null
+    if (!orgId) return false
 
     const client = await this.pool.connect()
     try {
-      // 1) org exists (da lahko vrnemo 404, ne samo prazen array)
-      const exists = await client.query<{ ok: number }>(
+      const res = await client.query<{ ok: number }>(
         `select 1 as ok from public.organizations where id = $1::uuid limit 1`,
         [orgId],
       )
-      if (!exists.rows[0]) return null
+      return Boolean(res.rows[0]?.ok)
+    } finally {
+      client.release()
+    }
+  }
 
-      // 2) users list
+  async listOrgUsers(input: { orgId: string }): Promise<SuperadminOrgUser[]> {
+    const orgId = String(input.orgId ?? '').trim()
+    if (!orgId) return []
+
+    const client = await this.pool.connect()
+    try {
       const res = await client.query<UserRow>(
         `
         select
@@ -49,7 +57,9 @@ export class PostgresSuperadminUsersRepository implements SuperadminUsersReposit
         userId: String(r.user_id),
         email: r.email ? String(r.email) : null,
         role: String(r.role),
-        membershipCreatedAt: r.membership_created_at ? String(r.membership_created_at) : null,
+        membershipCreatedAt: r.membership_created_at
+          ? String(r.membership_created_at)
+          : null,
         userCreatedAt: r.user_created_at ? String(r.user_created_at) : null,
         lastSignInAt: r.last_sign_in_at ? String(r.last_sign_in_at) : null,
       }))
