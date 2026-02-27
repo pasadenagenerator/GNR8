@@ -1,3 +1,5 @@
+// packages/core/src/modules/superadmin-billing/repository.ts
+
 export type SuperadminOrgBillingRow = {
   id: string
   name: string
@@ -22,7 +24,10 @@ export type SuperadminSubscriptionRow = {
 export interface SuperadminBillingRepository {
   getOrgSnapshot(input: { orgId: string }): Promise<SuperadminOrgBillingRow | null>
 
-  getLatestActiveSubscriptionSnapshot(input: {
-    orgId: string
-  }): Promise<SuperadminSubscriptionRow | null>
+  /**
+   * Latest non-deleted subscription row (if any).
+   * NOTE: "Active" here means "not deleted" (deleted_at is null),
+   * not "status === active".
+   */
+  getLatestActiveSubscriptionSnapshot(input: { orgId: string }): Promise<SuperadminSubscriptionRow | null>
 }

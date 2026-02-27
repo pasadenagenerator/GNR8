@@ -1,3 +1,5 @@
+// packages/core/src/modules/superadmin-billing/service.ts
+
 import { DomainError, NotFoundError } from '../../service-contract'
 import type { SuperadminBillingRepository } from './repository'
 import type { GetSuperadminBillingInput, SuperadminBillingOutput } from './types'
@@ -5,7 +7,9 @@ import type { GetSuperadminBillingInput, SuperadminBillingOutput } from './types
 export class SuperadminBillingService {
   constructor(private readonly repo: SuperadminBillingRepository) {}
 
-  async getBillingSnapshot(input: GetSuperadminBillingInput): Promise<SuperadminBillingOutput> {
+  async getBillingSnapshot(
+    input: GetSuperadminBillingInput,
+  ): Promise<SuperadminBillingOutput> {
     const orgId = String(input.orgId ?? '').trim()
     if (!orgId) throw new DomainError('orgId is required')
 
@@ -31,8 +35,8 @@ export class SuperadminBillingService {
             status: sub.status ?? null,
             planKey: sub.plan_key ?? null,
             currentPeriodEnd: sub.current_period_end ?? null,
-            createdAt: sub.created_at ?? null,
-            updatedAt: sub.updated_at ?? null,
+            createdAt: sub.created_at ? String(sub.created_at) : null,
+            updatedAt: sub.updated_at ? String(sub.updated_at) : null,
           }
         : null,
     }

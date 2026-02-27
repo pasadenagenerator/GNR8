@@ -1,3 +1,5 @@
+// packages/core/src/modules/superadmin-trial/repository.ts
+
 export type SuperadminTrialOrgRow = {
   id: string
   name: string

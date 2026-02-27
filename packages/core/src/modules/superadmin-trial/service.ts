@@ -1,3 +1,5 @@
+// packages/core/src/modules/superadmin-trial/service.ts
+
 import { DomainError, NotFoundError } from '../../service-contract'
 import type { SuperadminTrialRepository } from './repository'
 import type {
@@ -7,9 +9,11 @@ import type {
 } from './types'
 
 function parseIsoOrNull(value: unknown, field: string): string | null {
-  if (value === null) return null
-  if (value === undefined) return null
-  const s = String(value)
+  if (value === null || value === undefined) return null
+
+  const s = String(value).trim()
+  if (!s) return null
+
   const ms = new Date(s).getTime()
   if (Number.isNaN(ms)) {
     throw new DomainError(`${field} must be a valid ISO date string or null`)
@@ -26,6 +30,26 @@ function parsePositiveDays(value: unknown, fallback: number): number {
   return Math.trunc(n)
 }
 
+function mapOrg(row: {
+  id: string
+  name: string
+  slug: string | null
+  created_at: string | null
+  updated_at: string | null
+  trial_started_at: string | null
+  trial_ends_at: string | null
+}) {
+  return {
+    id: String(row.id),
+    name: String(row.name),
+    slug: row.slug ? String(row.slug) : null,
+    createdAt: row.created_at ? String(row.created_at) : null,
+    updatedAt: row.updated_at ? String(row.updated_at) : null,
+    trialStartedAt: row.trial_started_at ? String(row.trial_started_at) : null,
+    trialEndsAt: row.trial_ends_at ? String(row.trial_ends_at) : null,
+  }
+}
+
 export class SuperadminTrialService {
   constructor(private readonly repo: SuperadminTrialRepository) {}
 
@@ -33,14 +57,15 @@ export class SuperadminTrialService {
     const orgId = String(input.orgId ?? '').trim()
     if (!orgId) throw new DomainError('orgId is required')
 
-    const body: SuperadminTrialBody = (input.body ?? {}) as any
+    const body: SuperadminTrialBody = (input.body ?? {}) as SuperadminTrialBody
 
-    // Variant A: direct set (trialEndsAt present)
+    // Variant A: direct set ({ trialEndsAt, trialStartedAt? })
     if (body && typeof body === 'object' && 'trialEndsAt' in body) {
       const trialEndsAt = parseIsoOrNull((body as any).trialEndsAt, 'trialEndsAt')
-      const trialStartedAt = 'trialStartedAt' in body
-        ? parseIsoOrNull((body as any).trialStartedAt, 'trialStartedAt')
-        : null
+      const trialStartedAt =
+        'trialStartedAt' in body
+          ? parseIsoOrNull((body as any).trialStartedAt, 'trialStartedAt')
+          : null
 
       const row = await this.repo.setTrialWindow({ orgId, trialEndsAt, trialStartedAt })
       if (!row) throw new NotFoundError('Org not found')
@@ -48,7 +73,7 @@ export class SuperadminTrialService {
       return { org: mapOrg(row) }
     }
 
-    // Variant B: action
+    // Variant B: action ({ action: start|extend|end, days? })
     const action = (body as any)?.action ?? null
     if (action !== 'start' && action !== 'extend' && action !== 'end') {
       throw new DomainError('Missing action (start|extend|end) or trialEndsAt')
@@ -69,25 +94,5 @@ export class SuperadminTrialService {
 
     if (!row) throw new NotFoundError('Org not found')
     return { org: mapOrg(row) }
-  }
-}
-
-function mapOrg(row: {
-  id: string
-  name: string
-  slug: string | null
-  created_at: string | null
-  updated_at: string | null
-  trial_started_at: string | null
-  trial_ends_at: string | null
-}) {
-  return {
-    id: String(row.id),
-    name: String(row.name),
-    slug: row.slug ? String(row.slug) : null,
-    createdAt: row.created_at ? String(row.created_at) : null,
-    updatedAt: row.updated_at ? String(row.updated_at) : null,
-    trialStartedAt: row.trial_started_at ? String(row.trial_started_at) : null,
-    trialEndsAt: row.trial_ends_at ? String(row.trial_ends_at) : null,
   }
 }

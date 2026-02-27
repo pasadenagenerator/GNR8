@@ -1,11 +1,21 @@
-import type {
-  SuperadminTrialOrgRow,
-  SuperadminTrialRepository,
-} from '@gnr8/core'
+// packages/data/src/repositories/postgres-superadmin-trial-repository.ts
+
+import type { SuperadminTrialOrgRow, SuperadminTrialRepository } from '@gnr8/core'
 import type { Pool } from 'pg'
 import { getPool } from '../db/pool'
 
 type OrgRow = SuperadminTrialOrgRow
+
+function normalizeOrgId(input: unknown): string {
+  return String(input ?? '').trim()
+}
+
+function normalizeDays(input: unknown): number {
+  const n = Number(input)
+  // repo naj bo defensive: nikoli 0, nikoli NaN
+  if (!Number.isFinite(n)) return 14
+  return Math.max(1, Math.trunc(n))
+}
 
 export class PostgresSuperadminTrialRepository implements SuperadminTrialRepository {
   constructor(private readonly pool: Pool = getPool()) {}
@@ -15,7 +25,7 @@ export class PostgresSuperadminTrialRepository implements SuperadminTrialReposit
     trialEndsAt: string | null
     trialStartedAt: string | null
   }): Promise<OrgRow | null> {
-    const orgId = String(input.orgId ?? '').trim()
+    const orgId = normalizeOrgId(input.orgId)
     if (!orgId) return null
 
     const client = await this.pool.connect()
@@ -38,6 +48,7 @@ export class PostgresSuperadminTrialRepository implements SuperadminTrialReposit
         `,
         [orgId, input.trialStartedAt, input.trialEndsAt],
       )
+
       return res.rows[0] ?? null
     } finally {
       client.release()
@@ -45,10 +56,11 @@ export class PostgresSuperadminTrialRepository implements SuperadminTrialReposit
   }
 
   async startTrial(input: { orgId: string; days: number }): Promise<OrgRow | null> {
-    const orgId = String(input.orgId ?? '').trim()
+    const orgId = normalizeOrgId(input.orgId)
     if (!orgId) return null
 
-    const days = Math.trunc(Number(input.days))
+    const days = normalizeDays(input.days)
+
     const client = await this.pool.connect()
     try {
       const res = await client.query<OrgRow>(
@@ -69,6 +81,7 @@ export class PostgresSuperadminTrialRepository implements SuperadminTrialReposit
         `,
         [orgId, days],
       )
+
       return res.rows[0] ?? null
     } finally {
       client.release()
@@ -76,10 +89,11 @@ export class PostgresSuperadminTrialRepository implements SuperadminTrialReposit
   }
 
   async extendTrial(input: { orgId: string; days: number }): Promise<OrgRow | null> {
-    const orgId = String(input.orgId ?? '').trim()
+    const orgId = normalizeOrgId(input.orgId)
     if (!orgId) return null
 
-    const days = Math.trunc(Number(input.days))
+    const days = normalizeDays(input.days)
+
     const client = await this.pool.connect()
     try {
       const res = await client.query<OrgRow>(
@@ -104,6 +118,7 @@ export class PostgresSuperadminTrialRepository implements SuperadminTrialReposit
         `,
         [orgId, days],
       )
+
       return res.rows[0] ?? null
     } finally {
       client.release()
@@ -111,7 +126,7 @@ export class PostgresSuperadminTrialRepository implements SuperadminTrialReposit
   }
 
   async endTrial(input: { orgId: string }): Promise<OrgRow | null> {
-    const orgId = String(input.orgId ?? '').trim()
+    const orgId = normalizeOrgId(input.orgId)
     if (!orgId) return null
 
     const client = await this.pool.connect()
@@ -133,6 +148,7 @@ export class PostgresSuperadminTrialRepository implements SuperadminTrialReposit
         `,
         [orgId],
       )
+
       return res.rows[0] ?? null
     } finally {
       client.release()
