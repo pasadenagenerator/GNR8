@@ -1,63 +1,38 @@
 import { NextResponse, type NextRequest } from 'next/server'
+import { ConflictError, DomainError } from '@gnr8/core'
 import { requireSuperadminUserId } from '@/src/superadmin/require-superadmin-user-id'
-import { getSuperadminPool } from '@/src/superadmin/db'
-
-type OrgRow = {
-  id: string
-  name: string
-  created_at: string
-  projects_count: string | number
-}
+import { getSuperadminOrgService } from '@/src/di/core'
 
 type CreateOrgBody = {
-  name?: string
-  slug?: string
+  name?: unknown
+  slug?: unknown
 }
 
-type CreatedOrgRow = {
-  id: string
-  name: string
-  slug: string | null
-  created_at: string
-  updated_at: string
-  trial_started_at: string | null
-  trial_ends_at: string | null
+function toTrimmedString(v: unknown): string {
+  return v == null ? '' : String(v).trim()
+}
+
+function mapError(e: unknown) {
+  if (e instanceof ConflictError) return { status: 409, message: e.message }
+  if (e instanceof DomainError) return { status: 400, message: e.message }
+
+  const msg = e instanceof Error ? e.message : 'Internal server error'
+  const lower = String(msg).toLowerCase()
+  const status = lower.includes('forbidden') || lower.includes('unauthorized') ? 403 : 500
+  return { status, message: msg }
 }
 
 export async function GET(_request: NextRequest) {
   try {
     await requireSuperadminUserId()
 
-    const pool = getSuperadminPool()
+    const service = getSuperadminOrgService()
+    const out = await service.listOrgs({ limit: 500 })
 
-    const { rows } = await pool.query<OrgRow>(
-      `
-      select
-        o.id::text as id,
-        o.name::text as name,
-        o.created_at::text as created_at,
-        count(p.id)::text as projects_count
-      from public.organizations o
-      left join public.projects p
-        on p.org_id = o.id
-       and p.deleted_at is null
-      group by o.id
-      order by o.created_at desc
-      limit 500
-      `,
-    )
-
-    const orgs = rows.map((r) => ({
-      id: r.id,
-      name: r.name,
-      createdAt: r.created_at,
-      projectsCount: Number(r.projects_count ?? 0),
-    }))
-
-    return NextResponse.json({ orgs }, { status: 200 })
-  } catch (error) {
-    const message = error instanceof Error ? error.message : 'Internal server error'
-    return NextResponse.json({ error: message }, { status: 500 })
+    return NextResponse.json(out, { status: 200 })
+  } catch (e) {
+    const out = mapError(e)
+    return NextResponse.json({ error: out.message }, { status: out.status })
   }
 }
 
@@ -65,64 +40,16 @@ export async function POST(request: NextRequest) {
   try {
     await requireSuperadminUserId()
 
-    const body = (await request.json()) as CreateOrgBody
+    const body = ((await request.json().catch(() => null)) ?? {}) as CreateOrgBody
+    const name = toTrimmedString(body.name)
+    const slug = toTrimmedString(body.slug)
 
-    const name = String(body.name ?? '').trim()
-    const rawSlug = String(body.slug ?? '').trim().toLowerCase()
+    const service = getSuperadminOrgService()
+    const out = await service.createOrg({ name, slug: slug || null })
 
-    if (!name) {
-      return NextResponse.json({ error: 'name is required' }, { status: 400 })
-    }
-
-    const slug =
-      rawSlug ||
-      name
-        .toLowerCase()
-        .replace(/[^a-z0-9]+/g, '-')
-        .replace(/(^-|-$)/g, '')
-        .slice(0, 60)
-
-    const pool = getSuperadminPool()
-
-    // IMPORTANT: organizations.id nima default-a -> generiramo v SQL
-    const { rows } = await pool.query<CreatedOrgRow>(
-      `
-      insert into public.organizations (id, name, slug)
-      values (gen_random_uuid(), $1, $2)
-      returning
-        id::text as id,
-        name::text as name,
-        slug::text as slug,
-        created_at::text as created_at,
-        updated_at::text as updated_at,
-        trial_started_at::text as trial_started_at,
-        trial_ends_at::text as trial_ends_at
-      `,
-      [name, slug || null],
-    )
-
-    const org = rows[0]
-
-    return NextResponse.json(
-      {
-        org: {
-          id: org.id,
-          name: org.name,
-          slug: org.slug,
-          createdAt: org.created_at,
-          updatedAt: org.updated_at,
-          trialStartedAt: org.trial_started_at,
-          trialEndsAt: org.trial_ends_at,
-        },
-      },
-      { status: 201 },
-    )
-  } catch (error) {
-    const message = error instanceof Error ? error.message : 'Internal server error'
-    const lower = String(message).toLowerCase()
-    const status =
-      lower.includes('forbidden') || lower.includes('unauthorized') ? 403 : 500
-
-    return NextResponse.json({ error: message }, { status })
+    return NextResponse.json(out, { status: 201 })
+  } catch (e) {
+    const out = mapError(e)
+    return NextResponse.json({ error: out.message }, { status: out.status })
   }
 }

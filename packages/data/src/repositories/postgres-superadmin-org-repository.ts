@@ -1,4 +1,7 @@
+import { ConflictError } from '@gnr8/core'
 import type {
+  SuperadminCreatedOrgRow,
+  SuperadminOrgListRow,
   SuperadminOrgRepository,
   SuperadminOrgRow,
   SuperadminProjectRow,
@@ -6,8 +9,81 @@ import type {
 import type { Pool } from 'pg'
 import { getPool } from '../db/pool'
 
+function isUniqueViolation(error: unknown): error is { code: string } {
+  return Boolean(
+    error &&
+      typeof error === 'object' &&
+      'code' in error &&
+      (error as { code?: string }).code === '23505',
+  )
+}
+
 export class PostgresSuperadminOrgRepository implements SuperadminOrgRepository {
   constructor(private readonly pool: Pool = getPool()) {}
+
+  async listOrgs(input: { limit: number }): Promise<SuperadminOrgListRow[]> {
+    const limit = Math.max(1, Math.min(500, Math.trunc(Number(input.limit ?? 500))))
+
+    const client = await this.pool.connect()
+    try {
+      const res = await client.query<SuperadminOrgListRow>(
+        `
+        select
+          o.id::text as id,
+          o.name::text as name,
+          o.created_at::text as created_at,
+          count(p.id)::text as projects_count
+        from public.organizations o
+        left join public.projects p
+          on p.org_id = o.id
+         and p.deleted_at is null
+        group by o.id
+        order by o.created_at desc
+        limit $1
+        `,
+        [limit],
+      )
+
+      return res.rows
+    } finally {
+      client.release()
+    }
+  }
+
+  async createOrg(input: { name: string; slug: string | null }): Promise<SuperadminCreatedOrgRow> {
+    const name = String(input.name ?? '').trim()
+    const slug = input.slug == null ? null : String(input.slug).trim()
+
+    const client = await this.pool.connect()
+    try {
+      const res = await client.query<SuperadminCreatedOrgRow>(
+        `
+        insert into public.organizations (id, name, slug)
+        values (gen_random_uuid(), $1, $2)
+        returning
+          id::text as id,
+          name::text as name,
+          slug::text as slug,
+          created_at::text as created_at,
+          updated_at::text as updated_at,
+          trial_started_at::text as trial_started_at,
+          trial_ends_at::text as trial_ends_at
+        `,
+        [name, slug],
+      )
+
+      const row = res.rows[0]
+      if (!row) throw new Error('Failed to create org')
+      return row
+    } catch (e) {
+      if (isUniqueViolation(e)) {
+        throw new ConflictError('Organization slug already exists')
+      }
+      throw e
+    } finally {
+      client.release()
+    }
+  }
 
   async getOrgById(input: { orgId: string }): Promise<SuperadminOrgRow | null> {
     const orgId = String(input.orgId ?? '').trim()
@@ -40,15 +116,12 @@ export class PostgresSuperadminOrgRepository implements SuperadminOrgRepository 
     const orgId = String(input.orgId ?? '').trim()
     if (!orgId) return []
 
-    const filter = input.filter
-
-    // filter je union type => kontroliran SQL fragment
-    const whereDeleted =
-      filter === 'deleted' ? 'deleted_at is not null' : 'deleted_at is null'
-    const orderBy = filter === 'deleted' ? 'deleted_at desc' : 'created_at desc'
-
     const client = await this.pool.connect()
     try {
+      const isDeleted = input.filter === 'deleted'
+      const whereDeleted = isDeleted ? 'deleted_at is not null' : 'deleted_at is null'
+      const orderBy = isDeleted ? 'deleted_at desc' : 'created_at desc'
+
       const res = await client.query<SuperadminProjectRow>(
         `select
            id::text as id,

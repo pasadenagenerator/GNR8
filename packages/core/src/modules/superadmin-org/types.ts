@@ -24,3 +24,37 @@ export type SuperadminOrgDetails = {
   projects: SuperadminProject[]
   deletedProjects: SuperadminProject[]
 }
+
+/** NEW: list orgs */
+export type SuperadminOrgListItem = {
+  id: string
+  name: string
+  createdAt: string | null
+  projectsCount: number
+}
+
+export type ListSuperadminOrgsInput = {
+  limit?: number
+}
+
+export type ListSuperadminOrgsOutput = {
+  orgs: SuperadminOrgListItem[]
+}
+
+/** NEW: create org */
+export type CreateSuperadminOrgInput = {
+  name: string
+  slug?: string | null
+}
+
+export type CreateSuperadminOrgOutput = {
+  org: {
+    id: string
+    name: string
+    slug: string | null
+    createdAt: string | null
+    updatedAt: string | null
+    trialStartedAt: string | null
+    trialEndsAt: string | null
+  }
+}
