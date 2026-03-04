@@ -1,4 +1,6 @@
-import { cookies } from 'next/headers'
+// apps/platform/src/auth/require-superadmin-user-id.ts
+
+import { cookies, headers } from 'next/headers'
 import { createServerClient, type CookieOptions } from '@supabase/ssr'
 
 type CookieToSet = {
@@ -14,8 +16,37 @@ function parseAllowlist(value: string | undefined): string[] {
     .filter(Boolean)
 }
 
+async function getHost(): Promise<string> {
+  // pri tebi headers() vrača Promise, zato mora biti await
+  const h = await headers()
+  const xf = h.get('x-forwarded-host')
+  const host = (xf ?? h.get('host') ?? '').split(',')[0]?.trim() ?? ''
+  return host
+}
+
+function withSharedDomain(options: CookieOptions, host: string): CookieOptions {
+  const normalizedHost = (host.split(':')[0] ?? '').trim()
+
+  const isLocal =
+    normalizedHost === 'localhost' ||
+    normalizedHost === '127.0.0.1' ||
+    normalizedHost.endsWith('.localhost')
+
+  const isPasadena =
+    normalizedHost === 'pasadenagenerator.com' ||
+    normalizedHost.endsWith('.pasadenagenerator.com')
+
+  if (isLocal || !isPasadena) return options
+
+  return {
+    ...options,
+    domain: '.pasadenagenerator.com',
+  }
+}
+
 export async function requireSuperadminUserId(): Promise<string> {
   const cookieStore = await cookies()
+  const host = await getHost()
 
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -27,7 +58,7 @@ export async function requireSuperadminUserId(): Promise<string> {
         },
         setAll(cookiesToSet: CookieToSet[]) {
           cookiesToSet.forEach(({ name, value, options }) => {
-            cookieStore.set(name, value, options)
+            cookieStore.set(name, value, withSharedDomain(options, host))
           })
         },
       },

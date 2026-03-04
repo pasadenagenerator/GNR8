@@ -12,8 +12,16 @@ export function getSuperadminPool(): Pool {
 
   pool = new Pool({
     connectionString,
-    // opcijsko: Supabase pooler je pogosto TLS; če rabiš:
-    // ssl: { rejectUnauthorized: false },
+
+    // Supabase običajno zahteva TLS
+    ssl: {
+      rejectUnauthorized: false,
+    },
+
+    // Vercel serverless optimizacija
+    max: 5,
+    idleTimeoutMillis: 30000,
+    connectionTimeoutMillis: 5000,
   })
 
   return pool
