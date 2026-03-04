@@ -1,6 +1,5 @@
 import { cookies, headers } from 'next/headers'
 import { createServerClient, type CookieOptions } from '@supabase/ssr'
-import type { SupabaseClient } from '@supabase/supabase-js'
 
 type CookieToSet = {
   name: string
@@ -19,10 +18,6 @@ async function getHost(): Promise<string> {
   return host
 }
 
-/**
- * Če smo na *.pasadenagenerator.com, nastavimo cookie domain na ".pasadenagenerator.com"
- * da lahko delimo auth med subdomene (app., builder., ...)
- */
 function withSharedDomain(options: CookieOptions, host: string): CookieOptions {
   const normalizedHost = (host.split(':')[0] ?? '').trim()
 
@@ -36,11 +31,10 @@ function withSharedDomain(options: CookieOptions, host: string): CookieOptions {
     normalizedHost.endsWith('.pasadenagenerator.com')
 
   if (isLocal || !isPasadena) return options
-
   return { ...options, domain: '.pasadenagenerator.com' }
 }
 
-export async function getSupabaseServerClient(): Promise<SupabaseClient> {
+export async function getSupabaseServerClient() {
   const cookieStore = await cookies()
   const host = await getHost()
 
@@ -50,7 +44,7 @@ export async function getSupabaseServerClient(): Promise<SupabaseClient> {
   if (!supabaseUrl) throw new Error('NEXT_PUBLIC_SUPABASE_URL is not set')
   if (!supabaseAnon) throw new Error('NEXT_PUBLIC_SUPABASE_ANON_KEY is not set')
 
-  const supabase = createServerClient(supabaseUrl, supabaseAnon, {
+  return createServerClient(supabaseUrl, supabaseAnon, {
     cookies: {
       getAll() {
         return cookieStore.getAll()
@@ -62,6 +56,4 @@ export async function getSupabaseServerClient(): Promise<SupabaseClient> {
       },
     },
   })
-
-  return supabase
 }
