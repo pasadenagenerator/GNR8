@@ -34,6 +34,7 @@ export function middleware(req: NextRequest) {
     res.headers.set("Access-Control-Allow-Origin", origin);
     res.headers.set("Access-Control-Allow-Credentials", "true");
     res.headers.set("Vary", "Origin");
+    res.headers.set("Access-Control-Allow-Headers", "content-type, authorization, apikey")
   }
 
   return res;
