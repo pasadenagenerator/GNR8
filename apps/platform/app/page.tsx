@@ -1,39 +1,50 @@
-'use client'
+// apps/platform/app/page.tsx
+import { redirect } from "next/navigation";
+import { headers } from "next/headers";
 
-import { useEffect } from 'react'
-import { useRouter } from 'next/navigation'
+function isSupabaseAuthCallback(url: URL): boolean {
+  const hasCode = url.searchParams.has("code");
+  const type = url.searchParams.get("type");
 
-export default function HomePage() {
-  const router = useRouter()
+  const hash = url.hash?.startsWith("#") ? url.hash.slice(1) : "";
+  const hashParams = new URLSearchParams(hash);
 
-  useEffect(() => {
-    const url = new URL(window.location.href)
+  const hasAccessToken = hashParams.has("access_token");
+  const hashType = hashParams.get("type"); // "recovery" | "invite"
 
-    const hasCode = url.searchParams.has('code')
-    const hasType = url.searchParams.has('type')
+  return (
+    hasCode ||
+    type === "recovery" ||
+    hasAccessToken ||
+    hashType === "recovery" ||
+    hashType === "invite"
+  );
+}
 
-    const hash = url.hash?.startsWith('#') ? url.hash.slice(1) : ''
-    const hashParams = new URLSearchParams(hash)
+export const dynamic = "force-dynamic";
 
-    const hasAccessToken = hashParams.has('access_token')
-    const hashType = hashParams.get('type') // pogosto "recovery" ali "invite"
+export default async function HomePage() {
+  const h = await headers();
+  const proto = (h.get("x-forwarded-proto") ?? "https").split(",")[0]?.trim();
+  const host = (h.get("x-forwarded-host") ?? h.get("host") ?? "").split(",")[0]?.trim();
 
-    const isSupabaseAuthCallback =
-      hasCode ||
-      (hasType && url.searchParams.get('type') === 'recovery') ||
-      hasAccessToken ||
-      hashType === 'recovery' ||
-      hashType === 'invite'
+  // Auth callbacki pridejo pogosto z refererjem, ki vsebuje query/hash.
+  // Če refererja ni, naredimo best-effort URL brez hash (hash tako ali tako ne pride na server).
+  const ref = h.get("referer") ?? "";
+  const url = ref ? new URL(ref) : new URL(`${proto}://${host}/`);
 
-    if (isSupabaseAuthCallback) {
-      // POMEMBNO: ohranimo query + hash, ker reset-password page zna oboje prebrat
-      const nextUrl = `/reset-password${url.search}${url.hash}`
-      router.replace(nextUrl)
-      return
-    }
+  if (isSupabaseAuthCallback(url)) {
+    redirect(`/reset-password${url.search}${url.hash}`);
+  }
 
-    router.replace('/admin')
-  }, [router])
-
-  return null
+  // Zaenkrat minimalen public home (da potrdimo, da /admin redirecta ni več)
+  return (
+    <main style={{ padding: 24 }}>
+      <h1>Public Home OK</h1>
+      <p>Host: <code>{host}</code></p>
+      <p>
+        Zdaj lahko nadaljujeva z DB Pages renderjem (slug "/" iz platform.pages).
+      </p>
+    </main>
+  );
 }
