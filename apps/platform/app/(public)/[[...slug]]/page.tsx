@@ -1,7 +1,7 @@
 // apps/platform/app/(public)/[[...slug]]/page.tsx
 import { headers } from "next/headers";
 import { notFound } from "next/navigation";
-import { getPublicPageByOrgAndSlug } from "../../../src/pages/public-pages";
+import { getPublicPageByOrgAndSlug } from "../../../src/public-site/public-pages";
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
