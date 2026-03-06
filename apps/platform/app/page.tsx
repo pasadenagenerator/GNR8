@@ -1,6 +1,10 @@
 // apps/platform/app/page.tsx
 import { redirect } from "next/navigation";
 import { headers } from "next/headers";
+import { getPublicPageByOrgAndSlug } from "../src/public-site/public-pages";
+
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
 function isSupabaseAuthCallback(url: URL): boolean {
   const hasCode = url.searchParams.has("code");
@@ -21,15 +25,15 @@ function isSupabaseAuthCallback(url: URL): boolean {
   );
 }
 
-export const dynamic = "force-dynamic";
-
 export default async function HomePage() {
   const h = await headers();
   const proto = (h.get("x-forwarded-proto") ?? "https").split(",")[0]?.trim();
-  const host = (h.get("x-forwarded-host") ?? h.get("host") ?? "").split(",")[0]?.trim();
+  const host =
+    (h.get("x-forwarded-host") ?? h.get("host") ?? "")
+      .split(",")[0]
+      ?.trim() ?? "";
 
-  // Auth callbacki pridejo pogosto z refererjem, ki vsebuje query/hash.
-  // Če refererja ni, naredimo best-effort URL brez hash (hash tako ali tako ne pride na server).
+  // Auth callbacki pogosto pridejo prek refererja.
   const ref = h.get("referer") ?? "";
   const url = ref ? new URL(ref) : new URL(`${proto}://${host}/`);
 
@@ -37,14 +41,48 @@ export default async function HomePage() {
     redirect(`/reset-password${url.search}${url.hash}`);
   }
 
-  // Zaenkrat minimalen public home (da potrdimo, da /admin redirecta ni več)
+  const orgId = process.env.NEXT_PUBLIC_DEFAULT_ORG_ID?.trim();
+
+  if (!orgId) {
+    return (
+      <main style={{ padding: 24 }}>
+        <h1>Missing env</h1>
+        <p>
+          Set <code>NEXT_PUBLIC_DEFAULT_ORG_ID</code> in Vercel.
+        </p>
+      </main>
+    );
+  }
+
+  const page = await getPublicPageByOrgAndSlug({
+    orgId,
+    slug: "/",
+    host,
+  });
+
+  if (!page) {
+    return (
+      <main style={{ padding: 24 }}>
+        <h1>Home page not found</h1>
+        <p>
+          No page found for org <code>{orgId}</code> and slug <code>/</code>.
+        </p>
+      </main>
+    );
+  }
+
   return (
     <main style={{ padding: 24 }}>
-      <h1>Public Home OK</h1>
-      <p>Host: <code>{host}</code></p>
+      <h1>{page.title ?? "Untitled"}</h1>
       <p>
-        Zdaj lahko nadaljujeva z DB Pages renderjem (slug "/" iz platform.pages).
+        host: <code>{host}</code>
       </p>
+      <p>
+        slug: <code>{page.slug}</code>
+      </p>
+      <pre style={{ whiteSpace: "pre-wrap" }}>
+        {JSON.stringify(page.data ?? {}, null, 2)}
+      </pre>
     </main>
   );
 }
