@@ -1,0 +1,15 @@
+{
+  "name": "@gnr8/chai-renderer",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "main": "./index.ts",
+  "exports": {
+    ".": "./index.ts"
+  },
+  "peerDependencies": {
+    "@chaibuilder/next": "^4.0.0-beta.45",
+    "react": "^18 || ^19",
+    "react-dom": "^18 || ^19"
+  }
+}
