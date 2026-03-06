@@ -1,4 +1,6 @@
 // apps/platform/src/pages/public-pages.ts
+
+import 'server-only'
 import { getSuperadminPool } from "@/src/superadmin/db";
 
 type PublicPageRow = {

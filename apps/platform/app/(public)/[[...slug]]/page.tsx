@@ -1,9 +1,10 @@
 // apps/platform/app/(public)/[[...slug]]/page.tsx
 import { headers } from "next/headers";
 import { notFound } from "next/navigation";
-import { getPublicPageByOrgAndSlug } from "@/src/pages/public-pages";
+import { getPublicPageByOrgAndSlug } from "../../../src/pages/public-pages";
 
-export const dynamic = "force-dynamic";
+export const runtime = 'nodejs'
+export const dynamic = 'force-dynamic'
 
 export default async function PublicPage(props: {
   params: Promise<{ slug?: string[] }>;
