@@ -85,11 +85,9 @@ export default async function HomePage() {
   const pageData = page.data as any;
 
   const isRenderableChaiPage =
-  !!pageData &&
-  typeof pageData === "object" &&
-  Array.isArray(pageData.blocks) &&
-  typeof pageData.pageType === "string" &&
-  typeof pageData.lang === "string";
+    !!pageData &&
+    typeof pageData === "object" &&
+    Array.isArray(pageData.blocks);
 
   if (!isRenderableChaiPage) {
     return (
@@ -105,20 +103,27 @@ export default async function HomePage() {
     );
   }
 
+  const normalizedPage = {
+    ...pageData,
+    pageType: pageData.pageType ?? "page",
+    lang: pageData.lang ?? "en",
+    fallbackLang: pageData.fallbackLang ?? "en",
+  };
+
   const pageProps: ChaiPageProps = {
     slug: page.slug,
-    pageType: pageData.pageType ?? "page",
-    fallbackLang: pageData.fallbackLang ?? "en",
-    pageLang: pageData.lang ?? "en",
+    pageType: normalizedPage.pageType,
+    fallbackLang: normalizedPage.fallbackLang,
+    pageLang: normalizedPage.lang,
   };
 
   return (
-    <html lang={pageData.lang ?? "en"}>
+    <html lang={normalizedPage.lang}>
       <head>
-        <ChaiPageStyles page={pageData} />
+        <ChaiPageStyles page={normalizedPage} />
       </head>
       <body>
-        <RenderChaiBlocks page={pageData} pageProps={pageProps} />
+        <RenderChaiBlocks page={normalizedPage} pageProps={pageProps} />
       </body>
     </html>
   );
