@@ -117,14 +117,28 @@ export default async function HomePage() {
     pageLang: normalizedPage.lang,
   };
 
-  return (
-    <html lang={normalizedPage.lang}>
-      <head>
-        <ChaiPageStyles page={normalizedPage} />
-      </head>
-      <body>
-        <RenderChaiBlocks page={normalizedPage} pageProps={pageProps} />
-      </body>
-    </html>
-  );
+  try {
+    return (
+      <html lang={normalizedPage.lang}>
+        <head>
+          <ChaiPageStyles page={normalizedPage} />
+        </head>
+        <body>
+          <RenderChaiBlocks page={normalizedPage} pageProps={pageProps} />
+        </body>
+      </html>
+    );
+  } catch {
+    return (
+      <main style={{ padding: 24 }}>
+        <h1>{page.title ?? "Untitled"}</h1>
+        <p>
+          slug: <code>{page.slug}</code>
+        </p>
+        <pre style={{ whiteSpace: "pre-wrap" }}>
+          {JSON.stringify(page.data ?? {}, null, 2)}
+        </pre>
+      </main>
+    );
+  }
 }
