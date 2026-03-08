@@ -84,7 +84,14 @@ export default async function HomePage() {
 
   const pageData = page.data as any;
 
-  if (!pageData || typeof pageData !== "object" || !Array.isArray(pageData.blocks)) {
+  const isRenderableChaiPage =
+  !!pageData &&
+  typeof pageData === "object" &&
+  Array.isArray(pageData.blocks) &&
+  typeof pageData.pageType === "string" &&
+  typeof pageData.lang === "string";
+
+  if (!isRenderableChaiPage) {
     return (
       <main style={{ padding: 24 }}>
         <h1>{page.title ?? "Untitled"}</h1>
