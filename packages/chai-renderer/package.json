@@ -8,8 +8,16 @@
     ".": "./index.ts"
   },
   "peerDependencies": {
-    "@chaibuilder/next": "^4.0.0-beta.45",
+    "@chaibuilder/next": "^4.0.0-beta.46",
+    "next": "^15.5.12",
     "react": "^18 || ^19",
     "react-dom": "^18 || ^19"
+  },
+  "devDependencies": {
+    "next": "^15.5.12",
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "typescript": "^5.9.3"
   }
 }
