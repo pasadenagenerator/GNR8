@@ -1,10 +1,23 @@
-// apps/platform/app/page.tsx
+import {
+  registerCustomBlocks,
+  registerFonts,
+  registerPageTypes,
+} from "@gnr8/chai-renderer";
+import {
+  ChaiPageStyles,
+  RenderChaiBlocks,
+} from "@chaibuilder/next/render";
+import type { ChaiPageProps } from "@chaibuilder/next/types";
 import { redirect } from "next/navigation";
 import { headers } from "next/headers";
 import { getPublicPageByOrgAndSlug } from "../src/public-site/public-pages";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+
+registerCustomBlocks();
+registerFonts();
+registerPageTypes();
 
 function isSupabaseAuthCallback(url: URL): boolean {
   const hasCode = url.searchParams.has("code");
@@ -14,7 +27,7 @@ function isSupabaseAuthCallback(url: URL): boolean {
   const hashParams = new URLSearchParams(hash);
 
   const hasAccessToken = hashParams.has("access_token");
-  const hashType = hashParams.get("type"); // "recovery" | "invite"
+  const hashType = hashParams.get("type");
 
   return (
     hasCode ||
@@ -33,7 +46,6 @@ export default async function HomePage() {
       .split(",")[0]
       ?.trim() ?? "";
 
-  // Auth callbacki pogosto pridejo prek refererja.
   const ref = h.get("referer") ?? "";
   const url = ref ? new URL(ref) : new URL(`${proto}://${host}/`);
 
@@ -42,7 +54,6 @@ export default async function HomePage() {
   }
 
   const orgId = process.env.NEXT_PUBLIC_DEFAULT_ORG_ID?.trim();
-
   if (!orgId) {
     return (
       <main style={{ padding: 24 }}>
@@ -71,18 +82,37 @@ export default async function HomePage() {
     );
   }
 
+  const pageData = page.data as any;
+
+  if (!pageData || typeof pageData !== "object" || !Array.isArray(pageData.blocks)) {
+    return (
+      <main style={{ padding: 24 }}>
+        <h1>{page.title ?? "Untitled"}</h1>
+        <p>
+          slug: <code>{page.slug}</code>
+        </p>
+        <pre style={{ whiteSpace: "pre-wrap" }}>
+          {JSON.stringify(page.data ?? {}, null, 2)}
+        </pre>
+      </main>
+    );
+  }
+
+  const pageProps: ChaiPageProps = {
+    slug: page.slug,
+    pageType: pageData.pageType ?? "page",
+    fallbackLang: pageData.fallbackLang ?? "en",
+    pageLang: pageData.lang ?? "en",
+  };
+
   return (
-    <main style={{ padding: 24 }}>
-      <h1>{page.title ?? "Untitled"}</h1>
-      <p>
-        host: <code>{host}</code>
-      </p>
-      <p>
-        slug: <code>{page.slug}</code>
-      </p>
-      <pre style={{ whiteSpace: "pre-wrap" }}>
-        {JSON.stringify(page.data ?? {}, null, 2)}
-      </pre>
-    </main>
+    <html lang={pageData.lang ?? "en"}>
+      <head>
+        <ChaiPageStyles page={pageData} />
+      </head>
+      <body>
+        <RenderChaiBlocks page={pageData} pageProps={pageProps} />
+      </body>
+    </html>
   );
 }

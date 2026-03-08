@@ -1,10 +1,23 @@
-// apps/platform/app/(public)/[[...slug]]/page.tsx
+import {
+  registerCustomBlocks,
+  registerFonts,
+  registerPageTypes,
+} from "@gnr8/chai-renderer";
+import {
+  ChaiPageStyles,
+  RenderChaiBlocks,
+} from "@chaibuilder/next/render";
+import type { ChaiPageProps } from "@chaibuilder/next/types";
 import { headers } from "next/headers";
 import { notFound } from "next/navigation";
 import { getPublicPageByOrgAndSlug } from "../../../src/public-site/public-pages";
 
-export const runtime = 'nodejs'
-export const dynamic = 'force-dynamic'
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+
+registerCustomBlocks();
+registerFonts();
+registerPageTypes();
 
 export default async function PublicPage(props: {
   params: Promise<{ slug?: string[] }>;
@@ -38,18 +51,38 @@ export default async function PublicPage(props: {
 
   if (!page) return notFound();
 
+  const pageData = page.data as any;
+
+  // fallback, če data še ni pravi Chai page object
+  if (!pageData || typeof pageData !== "object" || !Array.isArray(pageData.blocks)) {
+    return (
+      <main style={{ padding: 24 }}>
+        <h1>{page.title ?? "Untitled"}</h1>
+        <p>
+          slug: <code>{page.slug}</code>
+        </p>
+        <pre style={{ whiteSpace: "pre-wrap" }}>
+          {JSON.stringify(page.data ?? {}, null, 2)}
+        </pre>
+      </main>
+    );
+  }
+
+  const pageProps: ChaiPageProps = {
+    slug: page.slug,
+    pageType: pageData.pageType ?? "page",
+    fallbackLang: pageData.fallbackLang ?? "en",
+    pageLang: pageData.lang ?? "en",
+  };
+
   return (
-    <main style={{ padding: 24 }}>
-      <h1>{page.title ?? "Untitled"}</h1>
-      <p>
-        host: <code>{host}</code>
-      </p>
-      <p>
-        slug: <code>{page.slug}</code>
-      </p>
-      <pre style={{ whiteSpace: "pre-wrap" }}>
-        {JSON.stringify(page.data ?? {}, null, 2)}
-      </pre>
-    </main>
+    <html lang={pageData.lang ?? "en"}>
+      <head>
+        <ChaiPageStyles page={pageData} />
+      </head>
+      <body>
+        <RenderChaiBlocks page={pageData} pageProps={pageProps} />
+      </body>
+    </html>
   );
 }

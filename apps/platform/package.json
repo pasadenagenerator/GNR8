@@ -4,6 +4,8 @@
   "version": "0.0.0",
   "type": "module",
   "dependencies": {
+    "@chaibuilder/next": "4.0.0-beta.46",
+    "@gnr8/chai-renderer": "workspace:*",
     "@gnr8/core": "workspace:*",
     "@gnr8/data": "workspace:*",
     "@supabase/ssr": "^0.5.2",
