@@ -3,6 +3,9 @@ import { getPageBySlug } from "@/gnr8/core/page-storage";
 import { PageRenderer } from "@/gnr8/renderer/PageRenderer";
 import type { Gnr8Page } from "@/gnr8/types/page";
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 export default async function Gnr8TestPage() {
   let page: Gnr8Page = examplePage;
 
