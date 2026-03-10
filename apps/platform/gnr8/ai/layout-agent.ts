@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
 import type { Gnr8Page } from "@/gnr8/types/page";
 import type { Gnr8Section } from "@/gnr8/types/section";
+import type { DuplicateDetail } from "@/gnr8/ai/migration-review-logic";
 import {
   DEFAULT_LANDING_SECTIONS,
   KEYWORD_RULES,
@@ -24,6 +25,101 @@ export type LayoutAgentResult = {
   page: Gnr8Page;
   plan: LayoutAgentPlan;
 };
+
+const CLEANUP_ELIGIBLE_SINGLETON_TYPES = new Set<string>([
+  "navbar.basic",
+  "hero.split",
+  "cta.simple",
+  "pricing.basic",
+  "faq.basic",
+  "footer.basic",
+]);
+
+const CLEANUP_TYPE_LABELS: Record<string, string> = {
+  "navbar.basic": "navbar",
+  "hero.split": "hero",
+  "cta.simple": "CTA",
+  "pricing.basic": "pricing",
+  "faq.basic": "FAQ",
+  "footer.basic": "footer",
+};
+
+export function buildExactDuplicateCleanupNotes(
+  page: Gnr8Page,
+  duplicateDetails: DuplicateDetail[] | undefined,
+): string[] {
+  if (!Array.isArray(duplicateDetails) || duplicateDetails.length === 0) return [];
+  const sections = Array.isArray(page.sections) ? page.sections : [];
+  if (sections.length === 0) return [];
+
+  const existingIds = new Set(sections.map((s) => s.id).filter(Boolean));
+  const removedCountsByType = new Map<string, number>();
+  const orderedTypes: string[] = [];
+
+  for (const dup of duplicateDetails) {
+    if (!dup || dup.similarity !== "exact-duplicate") continue;
+    if (!CLEANUP_ELIGIBLE_SINGLETON_TYPES.has(dup.type)) continue;
+
+    const ids = Array.isArray(dup.sectionIds) ? dup.sectionIds : [];
+    if (ids.length <= 1) continue;
+
+    let removableCount = 0;
+    for (const id of ids.slice(1)) {
+      if (typeof id === "string" && existingIds.has(id)) removableCount += 1;
+    }
+    if (removableCount <= 0) continue;
+
+    if (!removedCountsByType.has(dup.type)) orderedTypes.push(dup.type);
+    removedCountsByType.set(dup.type, (removedCountsByType.get(dup.type) ?? 0) + removableCount);
+  }
+
+  const notes: string[] = [];
+  for (const type of orderedTypes) {
+    const count = removedCountsByType.get(type) ?? 0;
+    if (count <= 0) continue;
+    const label = CLEANUP_TYPE_LABELS[type] ?? type;
+    if (count === 1) notes.push(`Removed exact duplicate ${label} section.`);
+    else notes.push(`Removed ${count} exact duplicate ${label} sections.`);
+  }
+
+  return notes;
+}
+
+export function cleanupExactDuplicateSections(
+  page: Gnr8Page,
+  duplicateDetails: DuplicateDetail[] | undefined,
+): Gnr8Page {
+  if (!Array.isArray(duplicateDetails) || duplicateDetails.length === 0) {
+    return page;
+  }
+
+  const sectionIdsToRemove = new Set<string>();
+
+  for (const dup of duplicateDetails) {
+    if (!dup || dup.similarity !== "exact-duplicate") continue;
+    if (!CLEANUP_ELIGIBLE_SINGLETON_TYPES.has(dup.type)) continue;
+
+    const ids = Array.isArray(dup.sectionIds) ? dup.sectionIds : [];
+    if (ids.length <= 1) continue;
+
+    for (const id of ids.slice(1)) {
+      if (typeof id === "string" && id) sectionIdsToRemove.add(id);
+    }
+  }
+
+  if (sectionIdsToRemove.size === 0) return page;
+
+  const cleanedSections = (Array.isArray(page.sections) ? page.sections : []).filter(
+    (section) => !sectionIdsToRemove.has(section.id),
+  );
+
+  if (cleanedSections.length === (page.sections?.length ?? 0)) return page;
+
+  return {
+    ...page,
+    sections: cleanedSections,
+  };
+}
 
 function normalizeWhitespace(value: string) {
   return value.replace(/\s+/g, " ").trim();

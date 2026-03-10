@@ -6,6 +6,7 @@ export type DuplicateDetail = {
   type: string;
   count: number;
   similarity: DuplicateSimilarity;
+  sectionIds: string[];
 };
 
 export type MigrationReviewSummary = {
@@ -315,10 +316,19 @@ export function buildMigrationReviewSummary(page: Gnr8Page): MigrationReviewSumm
     for (const type of duplicateTypes) {
       const matching = sections
         .filter((s) => s && typeof s.type === "string" && s.type === type)
-        .map((s) => ({ props: isRecord(s.props) ? s.props : undefined }));
+        .map((s) => ({ id: typeof s.id === "string" ? s.id : "", props: isRecord(s.props) ? s.props : undefined }));
 
-      const similarity = classifyDuplicateSimilarityForType(type, matching);
-      duplicateDetails.push({ type, count: countsByType[type] ?? matching.length, similarity });
+      const similarity = classifyDuplicateSimilarityForType(
+        type,
+        matching.map((m) => ({ props: m.props })),
+      );
+
+      duplicateDetails.push({
+        type,
+        count: countsByType[type] ?? matching.length,
+        similarity,
+        sectionIds: matching.map((m) => m.id).filter(Boolean),
+      });
     }
   }
 

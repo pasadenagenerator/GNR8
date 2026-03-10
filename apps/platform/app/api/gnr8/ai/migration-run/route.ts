@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 
-import { runLayoutAgent } from "@/gnr8/ai/layout-agent";
+import { buildExactDuplicateCleanupNotes, cleanupExactDuplicateSections, runLayoutAgent } from "@/gnr8/ai/layout-agent";
 import {
   buildMigrationReviewSummary,
   buildSuggestedActionsAndNotes,
@@ -79,12 +79,45 @@ export async function POST(req: NextRequest) {
       finalReview = review;
 
       if (actionableActions.length === 0) {
-        stoppedBecause = "no-actions";
-        notes.push(...reviewNotes);
-        if (suggestedActions.some(isDuplicateCleanupSuggestion)) {
-          notes.push("Duplicate cleanup suggestions are review-only (not applied by migration-run).");
+        const cleanupNotes = buildExactDuplicateCleanupNotes(page, review.duplicateDetails);
+        const cleanedPage = cleanupExactDuplicateSections(page, review.duplicateDetails);
+
+        if (cleanedPage === page) {
+          stoppedBecause = "no-actions";
+          notes.push(...reviewNotes);
+          break;
         }
-        break;
+
+        const signatureBefore = sectionTypeSignature(page);
+        await savePage(cleanedPage.slug, cleanedPage);
+        await publishPage(cleanedPage.slug);
+
+        const publishedPage = (await getPageBySlug(cleanedPage.slug)) ?? cleanedPage;
+        const signatureAfter = sectionTypeSignature(publishedPage);
+        const reviewAfter = buildMigrationReviewSummary(publishedPage);
+
+        stepsRun += 1;
+        actionsApplied.push(suggestedActions.find(isDuplicateCleanupSuggestion) ?? "Exact duplicate cleanup");
+        notes.push(...cleanupNotes);
+
+        finalPage = publishedPage;
+        finalReview = reviewAfter;
+
+        if (signatureAfter === signatureBefore) {
+          stoppedBecause = "no-progress";
+          notes.push("Stopping: section type signature did not change after applying an action.");
+          break;
+        }
+
+        previousAction = actionsApplied.at(-1) ?? null;
+        previousStepReview = review;
+
+        if (stepsRun >= maxSteps) {
+          stoppedBecause = "max-steps";
+          break;
+        }
+
+        continue;
       }
 
       const chosenAction = actionableActions[0]!;
@@ -102,15 +135,19 @@ export async function POST(req: NextRequest) {
         page,
       });
 
-      await savePage(result.page.slug, result.page);
-      await publishPage(result.page.slug);
+      const cleanupNotes = buildExactDuplicateCleanupNotes(result.page, review.duplicateDetails);
+      const cleanedPage = cleanupExactDuplicateSections(result.page, review.duplicateDetails);
 
-      const publishedPage = (await getPageBySlug(result.page.slug)) ?? result.page;
+      await savePage(cleanedPage.slug, cleanedPage);
+      await publishPage(cleanedPage.slug);
+
+      const publishedPage = (await getPageBySlug(cleanedPage.slug)) ?? cleanedPage;
       const signatureAfter = sectionTypeSignature(publishedPage);
       const reviewAfter = buildMigrationReviewSummary(publishedPage);
 
       stepsRun += 1;
       actionsApplied.push(chosenAction);
+      notes.push(...cleanupNotes);
 
       finalPage = publishedPage;
       finalReview = reviewAfter;

@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 
-import { runLayoutAgent, type LayoutAgentPlan } from "@/gnr8/ai/layout-agent";
+import {
+  buildExactDuplicateCleanupNotes,
+  cleanupExactDuplicateSections,
+  runLayoutAgent,
+  type LayoutAgentPlan,
+} from "@/gnr8/ai/layout-agent";
 import {
   buildMigrationReviewSummary,
   buildSuggestedActionsAndNotes,
@@ -39,59 +44,70 @@ export async function POST(req: NextRequest) {
     const review = buildMigrationReviewSummary(page);
     const { suggestedActions, notes: reviewNotes } = buildSuggestedActionsAndNotes(review);
 
-    const chosenAction = suggestedActions.find((action) => !isDuplicateCleanupSuggestion(action)) ?? null;
-    if (!chosenAction) {
-      const hasCleanupOnly = suggestedActions.some(isDuplicateCleanupSuggestion);
-      const response: {
-        success: true;
-        chosenAction: null;
-        page: Gnr8Page;
-        review: typeof review;
-        plan: null;
-        notes: string[];
-      } = {
-        success: true,
-        chosenAction: null,
-        page,
-        review,
-        plan: null,
-        notes: [
-          ...reviewNotes,
-          ...(hasCleanupOnly ? ["Duplicate cleanup suggestions are review-only (not applied by autofix)."] : []),
-          "No autofix action available.",
-        ],
-      };
+    const actionableActions = suggestedActions.filter((action) => !isDuplicateCleanupSuggestion(action));
 
-      return NextResponse.json(response, { status: 200 });
+    const cleanupOnlyAction = suggestedActions.find(isDuplicateCleanupSuggestion) ?? null;
+    const chosenAction = actionableActions[0] ?? cleanupOnlyAction;
+
+    if (!chosenAction) {
+      return NextResponse.json(
+        {
+          success: true,
+          chosenAction: null,
+          page,
+          review,
+          plan: null,
+          notes: [...reviewNotes, "No autofix action available."],
+        },
+        { status: 200 },
+      );
     }
 
-    const result = runLayoutAgent({
-      prompt: chosenAction,
-      page,
-    });
+    if (isDuplicateCleanupSuggestion(chosenAction)) {
+      const cleanupNotes = buildExactDuplicateCleanupNotes(page, review.duplicateDetails);
+      const cleanedPage = cleanupExactDuplicateSections(page, review.duplicateDetails);
 
-    await savePage(result.page.slug, result.page);
-    await publishPage(result.page.slug);
+      await savePage(cleanedPage.slug, cleanedPage);
+      await publishPage(cleanedPage.slug);
 
-    const publishedPage = (await getPageBySlug(result.page.slug)) ?? result.page;
+      const publishedPage = (await getPageBySlug(cleanedPage.slug)) ?? cleanedPage;
 
-    const response: {
-      success: true;
-      chosenAction: string;
-      page: Gnr8Page;
-      review: typeof review;
-      plan: (LayoutAgentPlan & { mode: "update" }) | null;
-      notes: string[];
-    } = {
-      success: true,
-      chosenAction,
-      page: publishedPage,
-      review,
-      plan: { ...result.plan, mode: "update" },
-      notes: [`Applied autofix action: ${chosenAction}.`, ...reviewNotes],
-    };
+      return NextResponse.json(
+        {
+          success: true,
+          chosenAction,
+          page: publishedPage,
+          review,
+          plan: { mode: "update", requestedSectionTypes: [], notes: cleanupNotes } satisfies LayoutAgentPlan & {
+            mode: "update";
+          },
+          notes: [`Applied autofix action: ${chosenAction}.`, ...reviewNotes, ...cleanupNotes],
+        },
+        { status: 200 },
+      );
+    }
 
-    return NextResponse.json(response, { status: 200 });
+    const result = runLayoutAgent({ prompt: chosenAction, page });
+
+    const cleanupNotes = buildExactDuplicateCleanupNotes(result.page, review.duplicateDetails);
+    const cleanedPage = cleanupExactDuplicateSections(result.page, review.duplicateDetails);
+
+    await savePage(cleanedPage.slug, cleanedPage);
+    await publishPage(cleanedPage.slug);
+
+    const publishedPage = (await getPageBySlug(cleanedPage.slug)) ?? cleanedPage;
+
+    return NextResponse.json(
+      {
+        success: true,
+        chosenAction,
+        page: publishedPage,
+        review,
+        plan: { ...result.plan, mode: "update", notes: [...(result.plan.notes ?? []), ...cleanupNotes] },
+        notes: [`Applied autofix action: ${chosenAction}.`, ...reviewNotes, ...cleanupNotes],
+      },
+      { status: 200 },
+    );
   } catch (error) {
     const message = error instanceof Error ? error.message : "Internal server error";
     return NextResponse.json({ error: message }, { status: 500 });
