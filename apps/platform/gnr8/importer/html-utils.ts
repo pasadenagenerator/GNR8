@@ -196,6 +196,55 @@ export function extractAllImgSrc(html: string): string[] {
   return out;
 }
 
+export type HtmlLink = {
+  label: string;
+  href: string;
+};
+
+function extractTagAttribute(rawTag: string, attrName: string): string | null {
+  const name = attrName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const re = new RegExp(`\\b${name}\\s*=\\s*(?:"([^"]*)"|'([^']*)'|([^\\s>]+))`, "i");
+  const m = re.exec(rawTag);
+  const v = (m?.[1] ?? m?.[2] ?? m?.[3] ?? "").trim();
+  return v ? v : null;
+}
+
+export function extractAllAnchorLinks(html: string, maxLinks = 50): HtmlLink[] {
+  const out: HtmlLink[] = [];
+  const re = /<a\b([^>]*)>([\s\S]*?)<\s*\/\s*a\s*>/gi;
+  let m: RegExpExecArray | null;
+
+  while ((m = re.exec(html))) {
+    const attrs = String(m[1] ?? "");
+    const inner = String(m[2] ?? "");
+    const href = extractTagAttribute(attrs, "href");
+    if (!href) continue;
+    if (/^\s*javascript:/i.test(href)) continue;
+
+    const aria = extractTagAttribute(attrs, "aria-label");
+    const label = normalizeWhitespace(aria ?? textFromHtml(inner));
+    if (!label) continue;
+
+    out.push({ label, href });
+    if (out.length >= maxLinks) break;
+  }
+
+  return out;
+}
+
+export function extractFirstButtonText(html: string): string | null {
+  const m = /<button\b[^>]*>([\s\S]*?)<\s*\/\s*button\s*>/i.exec(html);
+  if (!m) return null;
+  const t = textFromHtml(m[1] ?? "");
+  return t || null;
+}
+
+export function extractFirstImgAlt(html: string): string | null {
+  const m = /<img\b[^>]*\balt\s*=\s*["']([^"']+)["'][^>]*>/i.exec(html);
+  const alt = String(m?.[1] ?? "").trim();
+  return alt ? normalizeWhitespace(decodeHtmlEntities(alt)) : null;
+}
+
 export function extractFirstTagInnerText(html: string, tagName: string): string | null {
   const tag = tagName.toLowerCase();
   const re = new RegExp(`<${tag}\\b[^>]*>([\\s\\S]*?)<\\s*\\/\\s*${tag}\\s*>`, "i");
@@ -204,4 +253,3 @@ export function extractFirstTagInnerText(html: string, tagName: string): string 
   const t = textFromHtml(m[1] ?? "");
   return t || null;
 }
-
