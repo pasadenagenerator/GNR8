@@ -227,9 +227,23 @@ function wantsInsertAfterHero(promptLc: string) {
   return (
     promptLc.includes("below the hero") ||
     promptLc.includes("below hero") ||
+    promptLc.includes("under the hero") ||
+    promptLc.includes("under hero") ||
     promptLc.includes("after the hero") ||
     promptLc.includes("after hero")
   );
+}
+
+function promptExplicitlyRequestsHero(promptLc: string) {
+  if (promptLc.includes("hero section")) return true;
+  return /\b(add|create|insert|include|append|make|build)\s+(a|an|new|another)?\s*hero\b/.test(promptLc);
+}
+
+function stripHeroAnchorFromRequested(promptLc: string, requested: SupportedSectionType[]) {
+  if (!requested.includes("hero.split")) return requested;
+  if (!wantsInsertAfterHero(promptLc)) return requested;
+  if (promptExplicitlyRequestsHero(promptLc)) return requested;
+  return requested.filter((t) => t !== "hero.split");
 }
 
 function insertSectionsAfterFirstHero(page: Gnr8Page, sections: Gnr8Section[]) {
@@ -273,6 +287,8 @@ export function runLayoutAgent(input: LayoutAgentInput): LayoutAgentResult {
       plan: { mode: "create", requestedSectionTypes: requested, notes },
     };
   }
+
+  requested = stripHeroAnchorFromRequested(promptLc, requested);
 
   const page: Gnr8Page = {
     ...input.page,
