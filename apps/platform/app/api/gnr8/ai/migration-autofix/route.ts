@@ -14,6 +14,10 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === "object" && !Array.isArray(value);
 }
 
+function isDuplicateCleanupSuggestion(action: string): boolean {
+  return action.startsWith("Remove duplicate ");
+}
+
 export async function POST(req: NextRequest) {
   try {
     const body = (await req.json().catch(() => null)) as unknown;
@@ -35,8 +39,9 @@ export async function POST(req: NextRequest) {
     const review = buildMigrationReviewSummary(page);
     const { suggestedActions, notes: reviewNotes } = buildSuggestedActionsAndNotes(review);
 
-    const chosenAction = suggestedActions[0] ?? null;
+    const chosenAction = suggestedActions.find((action) => !isDuplicateCleanupSuggestion(action)) ?? null;
     if (!chosenAction) {
+      const hasCleanupOnly = suggestedActions.some(isDuplicateCleanupSuggestion);
       const response: {
         success: true;
         chosenAction: null;
@@ -50,7 +55,11 @@ export async function POST(req: NextRequest) {
         page,
         review,
         plan: null,
-        notes: [...reviewNotes, "No autofix action available."],
+        notes: [
+          ...reviewNotes,
+          ...(hasCleanupOnly ? ["Duplicate cleanup suggestions are review-only (not applied by autofix)."] : []),
+          "No autofix action available.",
+        ],
       };
 
       return NextResponse.json(response, { status: 200 });
@@ -88,4 +97,3 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
-

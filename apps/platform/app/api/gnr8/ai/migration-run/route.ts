@@ -21,6 +21,10 @@ function clampMaxSteps(value: unknown): number {
   return Math.max(1, Math.min(10, resolved));
 }
 
+function isDuplicateCleanupSuggestion(action: string): boolean {
+  return action.startsWith("Remove duplicate ");
+}
+
 function sectionTypeSignature(page: Gnr8Page): string {
   const sections = Array.isArray(page.sections) ? page.sections : [];
   return sections
@@ -69,17 +73,21 @@ export async function POST(req: NextRequest) {
 
       const review = buildMigrationReviewSummary(page);
       const { suggestedActions, notes: reviewNotes } = buildSuggestedActionsAndNotes(review);
+      const actionableActions = suggestedActions.filter((action) => !isDuplicateCleanupSuggestion(action));
 
       finalPage = page;
       finalReview = review;
 
-      if (suggestedActions.length === 0) {
+      if (actionableActions.length === 0) {
         stoppedBecause = "no-actions";
         notes.push(...reviewNotes);
+        if (suggestedActions.some(isDuplicateCleanupSuggestion)) {
+          notes.push("Duplicate cleanup suggestions are review-only (not applied by migration-run).");
+        }
         break;
       }
 
-      const chosenAction = suggestedActions[0]!;
+      const chosenAction = actionableActions[0]!;
 
       if (previousAction === chosenAction && previousStepReview && !isReviewBetter(review, previousStepReview)) {
         stoppedBecause = "no-progress";
@@ -114,7 +122,8 @@ export async function POST(req: NextRequest) {
       }
 
       const { suggestedActions: suggestedAfter } = buildSuggestedActionsAndNotes(reviewAfter);
-      if (!isReviewBetter(reviewAfter, review) && suggestedAfter[0] === chosenAction) {
+      const actionableAfter = suggestedAfter.filter((action) => !isDuplicateCleanupSuggestion(action));
+      if (!isReviewBetter(reviewAfter, review) && actionableAfter[0] === chosenAction) {
         stoppedBecause = "no-progress";
         notes.push("Stopping: structured/legacy counts did not improve and action would likely repeat.");
         break;

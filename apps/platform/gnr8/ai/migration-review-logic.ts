@@ -6,6 +6,7 @@ export type MigrationReviewSummary = {
   legacySections: number;
   sectionTypes: string[];
   countsByType: Record<string, number>;
+  duplicateTypes?: string[];
 };
 
 export function buildMigrationReviewSummary(page: Gnr8Page): MigrationReviewSummary {
@@ -31,12 +32,24 @@ export function buildMigrationReviewSummary(page: Gnr8Page): MigrationReviewSumm
     else structuredSections += 1;
   }
 
+  const singletonLikeTypes = [
+    "navbar.basic",
+    "hero.split",
+    "cta.simple",
+    "pricing.basic",
+    "faq.basic",
+    "footer.basic",
+  ] as const;
+
+  const duplicateTypes = singletonLikeTypes.filter((type) => (countsByType[type] ?? 0) > 1);
+
   return {
     totalSections: sections.length,
     structuredSections,
     legacySections,
     sectionTypes,
     countsByType,
+    duplicateTypes: duplicateTypes.length > 0 ? [...duplicateTypes] : undefined,
   };
 }
 
@@ -44,6 +57,7 @@ export function buildSuggestedActionsAndNotes(review: {
   structuredSections: number;
   legacySections: number;
   countsByType: Record<string, number>;
+  duplicateTypes?: string[];
 }): { suggestedActions: string[]; notes: string[] } {
   const suggestedActions: string[] = [];
   const notes: string[] = [];
@@ -89,6 +103,26 @@ export function buildSuggestedActionsAndNotes(review: {
     addNote("Page still relies heavily on legacy HTML.");
   }
 
+  const duplicateCleanupTypeToName: Record<string, string> = {
+    "pricing.basic": "pricing",
+    "faq.basic": "FAQ",
+    "cta.simple": "CTA",
+    "hero.split": "hero",
+    "footer.basic": "footer",
+    "navbar.basic": "navbar",
+  };
+
+  const duplicateTypes =
+    Array.isArray(review.duplicateTypes) && review.duplicateTypes.length > 0
+      ? review.duplicateTypes
+      : Object.keys(duplicateCleanupTypeToName).filter((type) => (review.countsByType[type] ?? 0) > 1);
+
+  for (const type of duplicateTypes) {
+    const name = duplicateCleanupTypeToName[type];
+    if (!name) continue;
+    addNote(`Page contains duplicate ${name} sections.`);
+    addAction(`Remove duplicate ${name} section`);
+  }
+
   return { suggestedActions, notes };
 }
-
