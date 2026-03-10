@@ -198,6 +198,49 @@ function looksLikeReplaceLegacy(promptLc: string) {
   );
 }
 
+function detectKeywordType(textLc: string, startIdx = 0): SupportedSectionType | null {
+  let bestType: SupportedSectionType | null = null;
+  let bestIndex = Number.POSITIVE_INFINITY;
+
+  for (const rule of KEYWORD_RULES) {
+    for (const kw of rule.keywords) {
+      const idx = textLc.indexOf(kw, startIdx);
+      if (idx !== -1 && idx < bestIndex) {
+        bestIndex = idx;
+        bestType = rule.type;
+      }
+    }
+  }
+
+  return bestType;
+}
+
+function detectLegacyReplacementIntent(prompt: string, requested: SupportedSectionType[]) {
+  const promptLc = prompt.toLowerCase();
+  if (!promptLc.includes("replace") || !promptLc.includes("legacy")) return null;
+
+  const match = promptLc.match(
+    /\breplace\b[\s\S]{0,160}?\blegacy(?:\.html)?(?:\s+html)?(?:\s+(section|block))?[\s,]*(?:with|to|into)\s+([\s\S]+)$/i,
+  );
+
+  const withClause = match?.[2]?.trim();
+  if (withClause) {
+    const target = detectKeywordType(withClause);
+    if (target) return { targetType: target as SupportedSectionType, source: "with-clause" as const };
+  }
+
+  const legacyIdx = promptLc.indexOf("legacy");
+  const withIdx = promptLc.indexOf(" with ", legacyIdx === -1 ? 0 : legacyIdx);
+  if (withIdx !== -1 && withIdx > legacyIdx) {
+    const rest = promptLc.slice(withIdx + " with ".length).trim();
+    const target = detectKeywordType(rest);
+    if (target) return { targetType: target as SupportedSectionType, source: "with-split" as const };
+  }
+
+  if (requested.length > 0) return { targetType: requested[0], source: "requested-fallback" as const };
+  return { targetType: "cta.simple" as const, source: "default-fallback" as const };
+}
+
 function inferReplacementType(prompt: string, requested: SupportedSectionType[]): SupportedSectionType | null {
   if (requested.length === 0) return null;
   const promptLc = prompt.toLowerCase();
@@ -209,18 +252,7 @@ function inferReplacementType(prompt: string, requested: SupportedSectionType[])
   const withIdx = promptLc.indexOf(" with ", Math.min(replaceIdx, legacyIdx));
   const afterIdx = withIdx !== -1 ? withIdx : Math.max(replaceIdx, legacyIdx);
 
-  let bestType: SupportedSectionType | null = null;
-  let bestIndex = Number.POSITIVE_INFINITY;
-  for (const rule of KEYWORD_RULES) {
-    for (const kw of rule.keywords) {
-      const idx = promptLc.indexOf(kw, afterIdx);
-      if (idx !== -1 && idx < bestIndex) {
-        bestIndex = idx;
-        bestType = rule.type;
-      }
-    }
-  }
-  return bestType ?? requested[0];
+  return detectKeywordType(promptLc, afterIdx) ?? requested[0];
 }
 
 function wantsInsertAfterHero(promptLc: string) {
@@ -297,9 +329,11 @@ export function runLayoutAgent(input: LayoutAgentInput): LayoutAgentResult {
     sections: [...(input.page.sections ?? [])],
   };
 
-  const replaceLegacy = looksLikeReplaceLegacy(promptLc);
+  const legacyReplaceIntent = detectLegacyReplacementIntent(prompt, requested);
+  const replaceLegacy = legacyReplaceIntent != null || looksLikeReplaceLegacy(promptLc);
   if (replaceLegacy) {
-    const replacementType = inferReplacementType(prompt, requested) ?? "cta.simple";
+    const replacementType =
+      legacyReplaceIntent?.targetType ?? inferReplacementType(prompt, requested) ?? "cta.simple";
     const idx = page.sections.findIndex((s) => s.type === "legacy.html");
     const newSection = createSection(replacementType);
     if (idx !== -1) {
@@ -310,27 +344,9 @@ export function runLayoutAgent(input: LayoutAgentInput): LayoutAgentResult {
       notes.push(`No legacy.html section found; appended ${replacementType} instead.`);
     }
 
-    const hasAddIntent =
-      promptLc.includes("add ") ||
-      promptLc.includes("append ") ||
-      promptLc.includes("include ") ||
-      promptLc.includes("insert ");
-
-    const extraTypes = requested.filter((t) => t !== replacementType);
-    if (hasAddIntent && extraTypes.length > 0) {
-      const extraSections = extraTypes.map((t) => createSection(t));
-      if (wantsInsertAfterHero(promptLc)) {
-        insertSectionsAfterFirstHero(page, extraSections);
-        notes.push(`Inserted ${extraTypes.join(", ")} after hero.`);
-      } else {
-        page.sections.push(...extraSections);
-        notes.push(`Appended ${extraTypes.join(", ")}.`);
-      }
-    }
-
     return {
       page,
-      plan: { mode: "update", requestedSectionTypes: requested, notes },
+      plan: { mode: "update", requestedSectionTypes: [replacementType], notes },
     };
   }
 

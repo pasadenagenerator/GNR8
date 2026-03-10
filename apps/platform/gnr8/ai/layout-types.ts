@@ -20,7 +20,7 @@ export const KEYWORD_RULES: KeywordRule[] = [
   { type: "navbar.basic", keywords: ["navbar", "navigation", "menu"] },
   { type: "hero.split", keywords: ["hero", "headline", "intro"] },
   { type: "feature.grid", keywords: ["features", "feature grid", "feature", "benefits"] },
-  { type: "logo.cloud", keywords: ["logos", "trusted by", "clients"] },
+  { type: "logo.cloud", keywords: ["logo cloud", "logos", "trusted by", "clients"] },
   {
     type: "cta.simple",
     keywords: ["cta", "call to action", "get started", "signup", "sign up"],
@@ -37,4 +37,3 @@ export const DEFAULT_LANDING_SECTIONS: SupportedSectionType[] = [
   "cta.simple",
   "footer.basic",
 ];
-
