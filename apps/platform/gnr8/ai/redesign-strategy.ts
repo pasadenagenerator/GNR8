@@ -31,6 +31,25 @@ function hasComplexDuplicates(details: DuplicateDetail[] | undefined): boolean {
   return (details ?? []).some((d) => d.similarity === "highly-similar" || d.similarity === "different-content");
 }
 
+function isIntentClear(review: MigrationReviewSummary): boolean {
+  const intent = review.intent ?? "unknown";
+  const intentConfidence = review.intentConfidence ?? 0;
+  return intent !== "unknown" && intentConfidence >= 70;
+}
+
+function isStructurallyHealthy(review: MigrationReviewSummary): boolean {
+  const layoutIssueCount = countLayoutIssues(review.layoutIssues);
+  const hasDupes = hasDuplicateDetails(review.duplicateDetails);
+
+  return (
+    review.confidenceScore >= 80 &&
+    review.legacySections === 0 &&
+    layoutIssueCount === 0 &&
+    !hasDupes &&
+    isIntentClear(review)
+  );
+}
+
 function goalsForIntent(intent: PageIntent): string[] {
   switch (intent) {
     case "saas_homepage":
@@ -49,11 +68,32 @@ function goalsForIntent(intent: PageIntent): string[] {
 
 function priorityForReview(review: MigrationReviewSummary): RedesignPriority {
   const layoutIssueCount = countLayoutIssues(review.layoutIssues);
-  const intentConfidence = review.intentConfidence ?? 0;
 
-  if (review.confidenceScore < 50 || review.legacySections > 0 || intentConfidence < 60) return "high";
-  if (review.confidenceScore >= 50 && review.confidenceScore <= 80) return "medium";
-  if (review.confidenceScore > 80 && layoutIssueCount === 0) return "low";
+  const intent = review.intent ?? "unknown";
+  const intentConfidence = review.intentConfidence ?? 0;
+  const hasDupes = hasDuplicateDetails(review.duplicateDetails);
+  const complexDupes = hasComplexDuplicates(review.duplicateDetails);
+
+  // Clean + high confidence + clear intent => low urgency (incremental tune-ups only).
+  if (isStructurallyHealthy(review)) return "low";
+
+  const severeByConfidence = review.confidenceScore < 50;
+  const severeByLegacy = review.legacySections >= 2 || review.legacySections > review.structuredSections;
+  const severeByLayout = layoutIssueCount >= 3;
+  const severeByDupes = complexDupes && (review.confidenceScore < 80 || layoutIssueCount > 0 || review.legacySections > 0);
+  const severeByIntent = intent === "unknown" && intentConfidence < 60;
+
+  if (severeByConfidence || severeByLegacy || severeByLayout || severeByDupes || severeByIntent) return "high";
+
+  const mediumByConfidence = review.confidenceScore < 80;
+  const mediumByLegacy = review.legacySections === 1;
+  const mediumByLayout = layoutIssueCount >= 1;
+  const mediumByDupes = hasDupes;
+  const mediumByIntent = intent === "unknown" || intentConfidence < 70;
+
+  if (mediumByConfidence || mediumByLegacy || mediumByLayout || mediumByDupes || mediumByIntent) return "medium";
+
+  // High migration confidence but with minor imperfections (e.g. one layout flag) should not be "high".
   return "medium";
 }
 
@@ -64,22 +104,30 @@ function strategyForReview(review: MigrationReviewSummary): RedesignStrategy {
   const hasDupes = hasDuplicateDetails(review.duplicateDetails);
 
   const fullRebuild =
-    review.confidenceScore < 40 ||
-    review.legacySections > review.structuredSections ||
-    intent === "unknown" ||
-    layoutIssueCount >= 3;
+    review.confidenceScore < 45 ||
+    (review.legacySections > review.structuredSections && review.legacySections >= 2) ||
+    layoutIssueCount >= 4 ||
+    (intent === "unknown" && review.confidenceScore < 70 && review.legacySections > 0);
 
   if (fullRebuild) return "full-rebuild";
 
   const incremental =
-    review.confidenceScore > 70 && layoutIssueCount <= 1 && review.legacySections === 0 && !hasDupes;
+    isStructurallyHealthy(review) ||
+    (review.confidenceScore >= 85 &&
+      review.legacySections === 0 &&
+      layoutIssueCount <= 1 &&
+      !hasDupes &&
+      intent !== "unknown" &&
+      intentConfidence >= 70);
 
   if (incremental) return "incremental";
 
   const structural =
-    (review.confidenceScore >= 40 && review.confidenceScore <= 70) ||
+    (review.confidenceScore >= 45 && review.confidenceScore < 85) ||
     hasComplexDuplicates(review.duplicateDetails) ||
-    intentConfidence < 60;
+    (intent === "unknown" && intentConfidence < 70) ||
+    (review.legacySections > 0 && review.legacySections <= review.structuredSections) ||
+    layoutIssueCount >= 1;
 
   if (structural) return "structural";
 
@@ -128,4 +176,3 @@ export function buildRedesignStrategy(review: MigrationReviewSummary): RedesignP
     structuralChanges: structuralChangesForStrategy(strategy),
   };
 }
-

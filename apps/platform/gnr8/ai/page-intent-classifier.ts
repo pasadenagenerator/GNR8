@@ -18,6 +18,21 @@ export type PageIntentResult = {
 
 type ScoreCard = Record<PageIntent, number>;
 type SignalsByIntent = Record<PageIntent, string[]>;
+type IntentSignalContext = {
+  totalSections: number;
+  navbarCount: number;
+  footerCount: number;
+  heroCount: number;
+  ctaCount: number;
+  featureGridCount: number;
+  logoCloudCount: number;
+  pricingCount: number;
+  faqCount: number;
+  legacyCount: number;
+  legacyRatio: number;
+  denseLegacyCount: number;
+  heroWeak: boolean;
+};
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === "object" && !Array.isArray(value);
@@ -62,6 +77,137 @@ function legacyHtmlIsDense(props: unknown): boolean {
   const content = getString(props.content);
   const body = html || content;
   return body.trim().length >= 2000;
+}
+
+function getCoreSignalStrength(intent: PageIntent, ctx: IntentSignalContext): { matched: number; max: number } {
+  const hasHero = ctx.heroCount > 0;
+  const hasNavbar = ctx.navbarCount > 0;
+  const hasFooter = ctx.footerCount > 0;
+  const hasCta = ctx.ctaCount > 0;
+  const hasFeature = ctx.featureGridCount > 0;
+  const hasLogos = ctx.logoCloudCount > 0;
+  const hasPricing = ctx.pricingCount > 0;
+  const hasFaq = ctx.faqCount > 0;
+  const hasLegacy = ctx.legacyCount > 0;
+  const hasDenseLegacy = ctx.denseLegacyCount > 0;
+
+  const any = (a: boolean, b: boolean) => a || b;
+  const count = (...flags: boolean[]) => flags.filter(Boolean).length;
+
+  switch (intent) {
+    case "saas_homepage": {
+      // Signature: hero + (feature|logos) + pricing + faq, usually wrapped with navbar/footer.
+      const max = 6;
+      const matched = count(
+        hasHero,
+        any(hasFeature, hasLogos),
+        hasPricing,
+        hasFaq,
+        hasNavbar,
+        hasFooter,
+      );
+      return { matched, max };
+    }
+    case "marketing_landing": {
+      // Signature: hero + CTA + (feature|logos), typically ends with footer; navbar is common but optional.
+      const max = 5;
+      const matched = count(hasHero, hasCta, any(hasFeature, hasLogos), hasFooter, hasNavbar);
+      return { matched, max };
+    }
+    case "product_page": {
+      // Signature: hero + CTA with supporting product content; footer optional.
+      const max = 4;
+      const matched = count(hasHero, hasCta, any(hasFeature, hasDenseLegacy), hasFooter);
+      return { matched, max };
+    }
+    case "ecommerce_listing": {
+      // Signature: feature grid with no/weak hero; other signals vary widely.
+      const max = 2;
+      const matched = count(hasFeature, !hasHero || ctx.heroWeak);
+      return { matched, max };
+    }
+    case "ecommerce_product": {
+      // Signature: hero + CTA with more than minimal structure; footer optional.
+      const max = 4;
+      const hasEnoughStructure = ctx.totalSections >= 3;
+      const matched = count(hasHero, hasCta, hasEnoughStructure, hasFooter);
+      return { matched, max };
+    }
+    case "documentation": {
+      // Signature: legacy-heavy, weak/no hero, typically no pricing/logos.
+      const max = 4;
+      const legacyHeavy = ctx.legacyRatio >= 0.6;
+      const matched = count(hasLegacy, legacyHeavy, !hasHero || ctx.heroWeak, !hasPricing && !hasLogos);
+      return { matched, max };
+    }
+    case "blog_article": {
+      // Signature: mostly legacy content with minimal structured marketing elements.
+      const max = 3;
+      const legacyDominates = ctx.legacyRatio >= 0.75;
+      const matched = count(hasLegacy, legacyDominates, !hasCta && !hasPricing && !hasFeature);
+      return { matched, max };
+    }
+    case "unknown":
+    default:
+      return { matched: 0, max: 1 };
+  }
+}
+
+function clamp(value: number, min: number, max: number): number {
+  if (Number.isNaN(value)) return min;
+  if (value < min) return min;
+  if (value > max) return max;
+  return value;
+}
+
+function calibrateIntentConfidence(input: {
+  intent: PageIntent;
+  bestScore: number;
+  secondBestScore: number;
+  ctx: IntentSignalContext;
+}): number {
+  const { intent, bestScore, secondBestScore, ctx } = input;
+  const gap = bestScore - secondBestScore;
+  const { matched, max } = getCoreSignalStrength(intent, ctx);
+  const strength = max > 0 ? matched / max : 0;
+
+  // Base confidence from absolute score strength (deterministic, monotonic).
+  let confidence =
+    bestScore >= 120 ? 95 :
+    bestScore >= 100 ? 92 :
+    bestScore >= 85 ? 88 :
+    bestScore >= 70 ? 82 :
+    bestScore >= 55 ? 75 :
+    bestScore >= 40 ? 65 :
+    bestScore >= 30 ? 58 :
+    52;
+
+  // Gap adjustment: larger separation increases certainty; very small gaps indicate ambiguity.
+  if (gap >= 30) confidence += 5;
+  else if (gap >= 20) confidence += 4;
+  else if (gap >= 14) confidence += 3;
+  else if (gap >= 10) confidence += 2;
+  else if (gap >= 6) confidence += 1;
+  else if (gap <= 2) confidence -= 10;
+  else if (gap <= 4) confidence -= 6;
+
+  // Signal clarity adjustment: many matching core signals should not produce artificially low confidence.
+  if (strength >= 0.9) confidence += 4;
+  else if (strength >= 0.75) confidence += 2;
+
+  // Floors for "obvious winner" pages (high score + clear signals).
+  if (bestScore >= 90 && gap >= 8 && strength >= 0.7) confidence = Math.max(confidence, 85);
+  if (bestScore >= 110 && strength >= 0.6) confidence = Math.max(confidence, 90);
+
+  // Caps for near-ties: keep determinism, but avoid overly-low results when the overall score is strong.
+  // Near-tie confidence should be at most "medium-high".
+  if (gap <= 1) confidence = Math.min(confidence, 75);
+  else if (gap <= 3) confidence = Math.min(confidence, 82);
+
+  // "unknown" should never report very high confidence.
+  if (intent === "unknown") confidence = Math.min(confidence, 60);
+
+  return clampInt(clamp(confidence, 0, 100), 0, 100);
 }
 
 export function classifyPageIntent(page: Gnr8Page): PageIntentResult {
@@ -368,19 +514,26 @@ export function classifyPageIntent(page: Gnr8Page): PageIntentResult {
 
   const gap = bestScore - (Number.isFinite(secondBestScore) ? secondBestScore : 0);
 
-  let confidence: number;
-  if (bestScore >= 85 && gap >= 18) confidence = 95;
-  else if (bestScore >= 70 && gap >= 14) confidence = 90;
-  else if (bestScore >= 55 && gap >= 10) confidence = 80;
-  else if (bestScore >= 40 && gap >= 7) confidence = 70;
-  else if (bestScore >= 30 && gap >= 5) confidence = 60;
-  else confidence = 50;
-
-  if (gap <= 3) confidence = Math.min(confidence, 60);
-  if (gap <= 1) confidence = Math.min(confidence, 55);
-
-  // If "unknown" wins above threshold (should be rare), cap confidence.
-  if (best === "unknown") confidence = Math.min(confidence, 60);
+  const confidence = calibrateIntentConfidence({
+    intent: best,
+    bestScore,
+    secondBestScore: Number.isFinite(secondBestScore) ? secondBestScore : 0,
+    ctx: {
+      totalSections,
+      navbarCount,
+      footerCount,
+      heroCount,
+      ctaCount,
+      featureGridCount,
+      logoCloudCount,
+      pricingCount,
+      faqCount,
+      legacyCount,
+      legacyRatio,
+      denseLegacyCount,
+      heroWeak,
+    },
+  });
 
   const winningSignals = uniqStable([...signalsByIntent[best], ...factSignals]);
 
