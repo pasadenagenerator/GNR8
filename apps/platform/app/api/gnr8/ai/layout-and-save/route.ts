@@ -1,6 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 
-import { runLayoutAgent, type LayoutAgentPlan } from "@/gnr8/ai/layout-agent";
+import {
+  buildExactDuplicateCleanupNotes,
+  cleanupExactDuplicateSections,
+  runLayoutAgent,
+  type LayoutAgentPlan,
+} from "@/gnr8/ai/layout-agent";
+import { normalizeSectionLayout } from "@/gnr8/ai/layout-normalizer";
+import { mergeSupportedDuplicateSections } from "@/gnr8/ai/section-merge";
+import { buildMigrationReviewSummary } from "@/gnr8/ai/migration-review-logic";
 import { getPageBySlug, publishPage, savePage } from "@/gnr8/core/page-storage";
 import type { Gnr8Page } from "@/gnr8/types/page";
 
@@ -54,15 +62,28 @@ export async function POST(req: NextRequest) {
 
     const result = runLayoutAgent({ prompt, slug, title, page });
 
-    await savePage(result.page.slug, result.page);
-    await publishPage(result.page.slug);
+    const reviewBefore = buildMigrationReviewSummary(result.page);
+    const exactNotes = buildExactDuplicateCleanupNotes(result.page, reviewBefore.duplicateDetails);
+    const afterExact = cleanupExactDuplicateSections(result.page, reviewBefore.duplicateDetails);
 
-    const publishedPage = (await getPageBySlug(result.page.slug)) ?? result.page;
+    const reviewAfterExact = buildMigrationReviewSummary(afterExact);
+    const mergeResult = mergeSupportedDuplicateSections(afterExact, reviewAfterExact.duplicateDetails);
+
+    const normalized = normalizeSectionLayout(mergeResult.page);
+    const finalPage = normalized.changed ? normalized.page : mergeResult.page;
+
+    const cleanupNotes = [...exactNotes, ...mergeResult.notes, ...normalized.notes];
+    const plan: LayoutAgentPlan = { ...result.plan, notes: [...(result.plan.notes ?? []), ...cleanupNotes] };
+
+    await savePage(finalPage.slug, finalPage);
+    await publishPage(finalPage.slug);
+
+    const publishedPage = (await getPageBySlug(finalPage.slug)) ?? finalPage;
 
     const response: { success: true; page: Gnr8Page; plan: LayoutAgentPlan } = {
       success: true,
       page: publishedPage,
-      plan: result.plan,
+      plan,
     };
 
     return NextResponse.json(response, { status: 200 });
@@ -71,4 +92,3 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
-

@@ -43,6 +43,13 @@ export async function POST(req: NextRequest) {
         legacySections: number;
         sectionTypes: string[];
         countsByType: Record<string, number>;
+        layoutIssues?: {
+          navbarNotFirst?: boolean;
+          footerNotLast?: boolean;
+          heroNotTop?: boolean;
+          ctaMisplaced?: boolean;
+          legacyMisplaced?: boolean;
+        };
       };
       suggestedActions: string[];
       notes: string[];

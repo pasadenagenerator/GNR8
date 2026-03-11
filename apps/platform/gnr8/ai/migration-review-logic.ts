@@ -19,6 +19,13 @@ export type MigrationReviewSummary = {
   countsByType: Record<string, number>;
   duplicateTypes?: string[];
   duplicateDetails?: DuplicateDetail[];
+  layoutIssues?: {
+    navbarNotFirst?: boolean;
+    footerNotLast?: boolean;
+    heroNotTop?: boolean;
+    ctaMisplaced?: boolean;
+    legacyMisplaced?: boolean;
+  };
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -37,6 +44,14 @@ function normalizeText(value: unknown): string {
 }
 
 function normalizeHref(value: unknown): string {
+  const raw = typeof value === "string" ? value : "";
+  const cleaned = raw.trim().toLowerCase();
+  if (!cleaned) return "";
+  if (cleaned === "/") return "/";
+  return cleaned.endsWith("/") ? cleaned.slice(0, -1) : cleaned;
+}
+
+function normalizeLogo(value: unknown): string {
   const raw = typeof value === "string" ? value : "";
   const cleaned = raw.trim().toLowerCase();
   if (!cleaned) return "";
@@ -79,12 +94,55 @@ function worstCaseSimilarity(similarities: DuplicateSimilarity[]): DuplicateSimi
   return "exact-duplicate";
 }
 
+function layoutBucketForType(type: string): "legacy" | "structured" | "footer" {
+  switch (type) {
+    case "legacy.html":
+      return "legacy";
+    case "footer.basic":
+      return "footer";
+    case "navbar.basic":
+    case "hero.split":
+    case "feature.grid":
+    case "logo.cloud":
+    case "pricing.basic":
+    case "faq.basic":
+    case "cta.simple":
+      return "structured";
+    default:
+      // Unknown section types are treated as legacy.html for structural checks.
+      return "legacy";
+  }
+}
+
+function firstIndexOfType(sections: Array<{ type?: unknown }>, type: string): number {
+  for (let i = 0; i < sections.length; i += 1) {
+    if (sections[i]?.type === type) return i;
+  }
+  return -1;
+}
+
+function lastIndexOfType(sections: Array<{ type?: unknown }>, type: string): number {
+  for (let i = sections.length - 1; i >= 0; i -= 1) {
+    if (sections[i]?.type === type) return i;
+  }
+  return -1;
+}
+
 function getArray(value: unknown): unknown[] {
   return Array.isArray(value) ? value : [];
 }
 
 function getString(value: unknown): string | undefined {
   return typeof value === "string" ? value : undefined;
+}
+
+function extractLogoKeys(props: unknown): Set<string> {
+  if (!isRecord(props)) return new Set();
+  const logos = getArray(props.logos)
+    .filter((l) => typeof l === "string")
+    .map((l) => normalizeLogo(l))
+    .filter(Boolean);
+  return new Set(logos);
 }
 
 function extractLinks(props: unknown): Array<{ label: string; href: string }> {
@@ -220,6 +278,26 @@ function classifyFeatureGrid(aProps: unknown, bProps: unknown): DuplicateSimilar
   return "different-content";
 }
 
+function classifyLogoCloud(aProps: unknown, bProps: unknown): DuplicateSimilarity {
+  const aSet = extractLogoKeys(aProps);
+  const bSet = extractLogoKeys(bProps);
+
+  if (aSet.size === 0 && bSet.size === 0) return "exact-duplicate";
+  if (aSet.size === 0 || bSet.size === 0) return "different-content";
+
+  if (aSet.size === bSet.size && setSimilarity(aSet, bSet) === 1) return "exact-duplicate";
+
+  let intersection = 0;
+  for (const v of aSet) if (bSet.has(v)) intersection += 1;
+  const minSize = Math.min(aSet.size, bSet.size);
+  const overlapRatio = minSize > 0 ? intersection / minSize : 0;
+  const jac = setSimilarity(aSet, bSet);
+
+  // Conservative: require at least 2 shared logos and strong overlap.
+  if (intersection >= 2 && minSize >= 2 && (overlapRatio >= 0.8 || jac >= 0.75)) return "highly-similar";
+  return "different-content";
+}
+
 function classifyCta(aProps: unknown, bProps: unknown): DuplicateSimilarity {
   if (!isRecord(aProps) || !isRecord(bProps)) return "different-content";
   const headSim = textSimilarity(aProps.headline, bProps.headline);
@@ -296,6 +374,9 @@ function classifyDuplicateSimilarityForType(
       case "cta.simple":
         results.push(classifyCta(first, next));
         break;
+      case "logo.cloud":
+        results.push(classifyLogoCloud(first, next));
+        break;
       case "hero.split":
         results.push(classifyHero(first, next));
         break;
@@ -341,6 +422,7 @@ export function buildMigrationReviewSummary(page: Gnr8Page): MigrationReviewSumm
     "navbar.basic",
     "hero.split",
     "cta.simple",
+    "logo.cloud",
     "pricing.basic",
     "faq.basic",
     "feature.grid",
@@ -362,7 +444,11 @@ export function buildMigrationReviewSummary(page: Gnr8Page): MigrationReviewSumm
       );
 
       const mergeEligible =
-        (type === "faq.basic" || type === "pricing.basic" || type === "feature.grid") &&
+        (type === "faq.basic" ||
+          type === "pricing.basic" ||
+          type === "feature.grid" ||
+          type === "logo.cloud" ||
+          type === "cta.simple") &&
         (similarity === "highly-similar" || similarity === "exact-duplicate");
       const mergeStrategy =
         mergeEligible && type === "faq.basic"
@@ -371,6 +457,10 @@ export function buildMigrationReviewSummary(page: Gnr8Page): MigrationReviewSumm
             ? "pricing-basic-merge"
             : mergeEligible && type === "feature.grid"
               ? "feature-grid-merge"
+              : mergeEligible && type === "logo.cloud"
+                ? "logo-cloud-merge"
+                : mergeEligible && type === "cta.simple"
+                  ? "cta-simple-merge"
             : undefined;
 
       duplicateDetails.push({
@@ -384,6 +474,64 @@ export function buildMigrationReviewSummary(page: Gnr8Page): MigrationReviewSumm
     }
   }
 
+  const layoutIssues: NonNullable<MigrationReviewSummary["layoutIssues"]> = {};
+
+  const firstNavbar = firstIndexOfType(sections, "navbar.basic");
+  if (firstNavbar > 0) layoutIssues.navbarNotFirst = true;
+
+  const lastFooter = lastIndexOfType(sections, "footer.basic");
+  if (lastFooter !== -1 && lastFooter !== sections.length - 1) layoutIssues.footerNotLast = true;
+
+  const firstHero = firstIndexOfType(sections, "hero.split");
+  if (firstHero !== -1) {
+    const firstNonNavbar = sections.findIndex((s) => s?.type !== "navbar.basic");
+    const expectedHeroIndex = firstNonNavbar === -1 ? 0 : firstNonNavbar;
+    if (firstHero !== expectedHeroIndex) layoutIssues.heroNotTop = true;
+  }
+
+  const ctaIndices: number[] = [];
+  const legacyIndices: number[] = [];
+  let lastPricingOrFaq = -1;
+  const firstFooter = firstIndexOfType(sections, "footer.basic");
+
+  for (let i = 0; i < sections.length; i += 1) {
+    const type = typeof sections[i]?.type === "string" ? sections[i].type : "unknown";
+    if (type === "cta.simple") ctaIndices.push(i);
+    if (type === "pricing.basic" || type === "faq.basic") lastPricingOrFaq = i;
+
+    const bucket = layoutBucketForType(type);
+    if (bucket === "legacy") legacyIndices.push(i);
+  }
+
+  if (ctaIndices.length > 0) {
+    const firstLegacy = legacyIndices.length > 0 ? legacyIndices[0]! : -1;
+
+    const beforePricingOrFaq = lastPricingOrFaq !== -1 && ctaIndices.some((idx) => idx <= lastPricingOrFaq);
+    const afterLegacy = firstLegacy !== -1 && ctaIndices.some((idx) => idx > firstLegacy);
+    const afterFooter = firstFooter !== -1 && ctaIndices.some((idx) => idx > firstFooter);
+
+    if (beforePricingOrFaq || afterLegacy || afterFooter) layoutIssues.ctaMisplaced = true;
+  }
+
+  if (legacyIndices.length > 0) {
+    const firstLegacy = legacyIndices[0]!;
+    const lastStructuredBeforeLegacy = (() => {
+      for (let i = sections.length - 1; i >= 0; i -= 1) {
+        const type = typeof sections[i]?.type === "string" ? sections[i].type : "unknown";
+        const bucket = layoutBucketForType(type);
+        if (bucket === "structured") return i;
+      }
+      return -1;
+    })();
+
+    const legacyAboveStructured = lastStructuredBeforeLegacy !== -1 && firstLegacy < lastStructuredBeforeLegacy;
+    const legacyAfterFooter = firstFooter !== -1 && legacyIndices.some((idx) => idx > firstFooter);
+
+    if (legacyAboveStructured || legacyAfterFooter) layoutIssues.legacyMisplaced = true;
+  }
+
+  const hasLayoutIssues = Object.values(layoutIssues).some(Boolean);
+
   return {
     totalSections: sections.length,
     structuredSections,
@@ -392,6 +540,7 @@ export function buildMigrationReviewSummary(page: Gnr8Page): MigrationReviewSumm
     countsByType,
     duplicateTypes: duplicateTypes.length > 0 ? [...duplicateTypes] : undefined,
     duplicateDetails: duplicateDetails.length > 0 ? duplicateDetails : undefined,
+    layoutIssues: hasLayoutIssues ? layoutIssues : undefined,
   };
 }
 
@@ -401,6 +550,7 @@ export function buildSuggestedActionsAndNotes(review: {
   countsByType: Record<string, number>;
   duplicateTypes?: string[];
   duplicateDetails?: DuplicateDetail[];
+  layoutIssues?: MigrationReviewSummary["layoutIssues"];
 }): { suggestedActions: string[]; notes: string[] } {
   const suggestedActions: string[] = [];
   const notes: string[] = [];
@@ -412,6 +562,16 @@ export function buildSuggestedActionsAndNotes(review: {
   const addNote = (note: string) => {
     if (!notes.includes(note)) notes.push(note);
   };
+
+  const layoutIssues = review.layoutIssues;
+  if (layoutIssues && Object.values(layoutIssues).some(Boolean)) {
+    addNote("Layout structure is non-standard.");
+    if (layoutIssues.heroNotTop && hasType("pricing.basic")) addNote("Hero appears below pricing.");
+    if (layoutIssues.footerNotLast) addNote("Footer is not last section.");
+    if (layoutIssues.navbarNotFirst) addNote("Navbar is not first section.");
+    if (layoutIssues.ctaMisplaced) addNote("CTA is not placed near the bottom.");
+    if (layoutIssues.legacyMisplaced) addNote("Legacy sections are out of place.");
+  }
 
   if (review.legacySections >= 1) {
     addAction("Replace legacy section with CTA");

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import { buildExactDuplicateCleanupNotes, cleanupExactDuplicateSections, runLayoutAgent } from "@/gnr8/ai/layout-agent";
+import { normalizeSectionLayout } from "@/gnr8/ai/layout-normalizer";
 import { mergeSupportedDuplicateSections } from "@/gnr8/ai/section-merge";
 import {
   buildMigrationReviewSummary,
@@ -34,7 +35,12 @@ function applyDuplicateCleanupPipeline(page: Gnr8Page): { page: Gnr8Page; notes:
   const reviewAfterExact = buildMigrationReviewSummary(afterExact);
   const mergeResult = mergeSupportedDuplicateSections(afterExact, reviewAfterExact.duplicateDetails);
 
-  return { page: mergeResult.page, notes: [...exactNotes, ...mergeResult.notes] };
+  const normalized = normalizeSectionLayout(mergeResult.page);
+
+  return {
+    page: normalized.changed ? normalized.page : mergeResult.page,
+    notes: [...exactNotes, ...mergeResult.notes, ...normalized.notes],
+  };
 }
 
 function sectionTypeSignature(page: Gnr8Page): string {

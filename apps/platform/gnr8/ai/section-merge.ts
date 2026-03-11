@@ -2,7 +2,7 @@ import type { DuplicateDetail, DuplicateSimilarity } from "@/gnr8/ai/migration-r
 import type { Gnr8Page } from "@/gnr8/types/page";
 import type { Gnr8Section } from "@/gnr8/types/section";
 
-type MergeSupportedType = "faq.basic" | "pricing.basic" | "feature.grid";
+type MergeSupportedType = "faq.basic" | "pricing.basic" | "feature.grid" | "logo.cloud" | "cta.simple";
 
 export type SectionMergeResult = {
   page: Gnr8Page;
@@ -31,6 +31,14 @@ function normalizeKeyText(value: unknown): string {
     .replace(/[^a-z0-9]+/g, " ")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+function normalizeLogoKey(value: unknown): string {
+  const raw = typeof value === "string" ? value : "";
+  const trimmed = raw.trim().toLowerCase();
+  if (!trimmed) return "";
+  if (trimmed === "/") return "/";
+  return trimmed.endsWith("/") ? trimmed.slice(0, -1) : trimmed;
 }
 
 function nonEmptyCount(values: Array<unknown>): number {
@@ -72,6 +80,78 @@ function mergeFaqProps(propsList: Array<unknown>): { items: Array<{ question: st
   }
 
   return { items: merged };
+}
+
+function mergeLogoCloudProps(propsList: Array<unknown>): { logos: string[] } | null {
+  const merged: string[] = [];
+  const seen = new Set<string>();
+
+  for (const props of propsList) {
+    if (!isRecord(props)) continue;
+    const logosRaw = getArray(props.logos);
+    for (const logoRaw of logosRaw) {
+      if (typeof logoRaw !== "string") continue;
+      const logo = logoRaw.trim();
+      const key = normalizeLogoKey(logo);
+      if (!key || seen.has(key)) continue;
+      seen.add(key);
+      merged.push(logo);
+    }
+  }
+
+  return { logos: merged };
+}
+
+type CtaSimpleProps = {
+  headline?: string;
+  subheadline?: string;
+  buttonLabel?: string;
+  buttonHref?: string;
+};
+
+function isClearlyMoreCompleteText(current: string, next: string): boolean {
+  const cur = current.trim();
+  const nxt = next.trim();
+  if (!cur || !nxt) return false;
+  // Conservative: only upgrade when later copy is materially longer.
+  return nxt.length >= cur.length + 12;
+}
+
+function mergeCtaSimpleProps(propsList: Array<unknown>): CtaSimpleProps | null {
+  const first = propsList[0];
+  if (!isRecord(first)) return { ...{} };
+
+  const merged: CtaSimpleProps = {
+    headline: getString(first.headline) || undefined,
+    subheadline: getString(first.subheadline) || undefined,
+    buttonLabel: getString(first.buttonLabel) || undefined,
+    buttonHref: getString(first.buttonHref) || undefined,
+  };
+
+  for (const props of propsList.slice(1)) {
+    if (!isRecord(props)) continue;
+    const nextHeadline = getString(props.headline);
+    const nextSubheadline = getString(props.subheadline);
+    const nextButtonLabel = getString(props.buttonLabel);
+    const nextButtonHref = getString(props.buttonHref);
+
+    if ((!merged.headline || !merged.headline.trim()) && nextHeadline?.trim()) merged.headline = nextHeadline;
+    else if (merged.headline && nextHeadline && isClearlyMoreCompleteText(merged.headline, nextHeadline)) merged.headline = nextHeadline;
+
+    if ((!merged.subheadline || !merged.subheadline.trim()) && nextSubheadline?.trim()) merged.subheadline = nextSubheadline;
+    else if (merged.subheadline && nextSubheadline && isClearlyMoreCompleteText(merged.subheadline, nextSubheadline))
+      merged.subheadline = nextSubheadline;
+
+    if ((!merged.buttonLabel || !merged.buttonLabel.trim()) && nextButtonLabel?.trim()) merged.buttonLabel = nextButtonLabel;
+    if ((!merged.buttonHref || !merged.buttonHref.trim()) && nextButtonHref?.trim()) merged.buttonHref = nextButtonHref;
+  }
+
+  const cleaned: CtaSimpleProps = {};
+  if (merged.headline?.trim()) cleaned.headline = merged.headline;
+  if (merged.subheadline?.trim()) cleaned.subheadline = merged.subheadline;
+  if (merged.buttonLabel?.trim()) cleaned.buttonLabel = merged.buttonLabel;
+  if (merged.buttonHref?.trim()) cleaned.buttonHref = merged.buttonHref;
+  return cleaned;
 }
 
 type PricingPlan = {
@@ -185,6 +265,10 @@ function mergeLabel(type: MergeSupportedType): string {
       return "pricing";
     case "feature.grid":
       return "feature grid";
+    case "logo.cloud":
+      return "logo cloud";
+    case "cta.simple":
+      return "CTA";
   }
 }
 
@@ -216,7 +300,9 @@ function mergeType(
   let mergedProps: Record<string, unknown> | null = null;
   if (type === "faq.basic") mergedProps = mergeFaqProps(propsList);
   else if (type === "pricing.basic") mergedProps = mergePricingProps(propsList);
-  else mergedProps = mergeFeatureGridProps(propsList);
+  else if (type === "feature.grid") mergedProps = mergeFeatureGridProps(propsList);
+  else if (type === "logo.cloud") mergedProps = mergeLogoCloudProps(propsList);
+  else mergedProps = mergeCtaSimpleProps(propsList);
 
   if (!mergedProps) return { page, mergedCount: 0 };
 
@@ -242,7 +328,14 @@ export function mergeSupportedDuplicateSections(page: Gnr8Page, duplicateDetails
 
   for (const dup of duplicateDetails) {
     const type = dup?.type;
-    if (type !== "faq.basic" && type !== "pricing.basic" && type !== "feature.grid") continue;
+    if (
+      type !== "faq.basic" &&
+      type !== "pricing.basic" &&
+      type !== "feature.grid" &&
+      type !== "logo.cloud" &&
+      type !== "cta.simple"
+    )
+      continue;
     if (!isMergeEligibleSimilarity(dup.similarity)) continue;
 
     const { page: mergedPage, mergedCount } = mergeType(nextPage, type, dup);
