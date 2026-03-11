@@ -43,6 +43,8 @@ export async function POST(req: NextRequest) {
         legacySections: number;
         sectionTypes: string[];
         countsByType: Record<string, number>;
+        confidenceScore: number;
+        confidenceLabel: "low" | "medium" | "high";
         layoutIssues?: {
           navbarNotFirst?: boolean;
           footerNotLast?: boolean;

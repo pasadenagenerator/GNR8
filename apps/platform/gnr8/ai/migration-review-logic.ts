@@ -11,6 +11,8 @@ export type DuplicateDetail = {
   mergeStrategy?: string;
 };
 
+export type MigrationConfidenceLabel = "low" | "medium" | "high";
+
 export type MigrationReviewSummary = {
   totalSections: number;
   structuredSections: number;
@@ -26,10 +28,60 @@ export type MigrationReviewSummary = {
     ctaMisplaced?: boolean;
     legacyMisplaced?: boolean;
   };
+  confidenceScore: number;
+  confidenceLabel: MigrationConfidenceLabel;
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === "object" && !Array.isArray(value);
+}
+
+export function getMigrationConfidenceLabel(score: number): MigrationConfidenceLabel {
+  if (score >= 80) return "high";
+  if (score >= 50) return "medium";
+  return "low";
+}
+
+export function calculateMigrationConfidence(input: {
+  totalSections: number;
+  structuredSections: number;
+  legacySections: number;
+  duplicateDetails?: DuplicateDetail[];
+  layoutIssues?: MigrationReviewSummary["layoutIssues"];
+  suggestedActions?: string[];
+}): number {
+  let score = 100;
+
+  score -= input.legacySections * 20;
+
+  for (const detail of input.duplicateDetails ?? []) {
+    if (!detail) continue;
+    if (detail.similarity === "exact-duplicate") score -= 8;
+    else if (detail.similarity === "highly-similar") score -= 5;
+    else score -= 3;
+  }
+
+  const layout = input.layoutIssues;
+  if (layout) {
+    const layoutFlags: Array<keyof NonNullable<MigrationReviewSummary["layoutIssues"]>> = [
+      "navbarNotFirst",
+      "footerNotLast",
+      "heroNotTop",
+      "ctaMisplaced",
+      "legacyMisplaced",
+    ];
+    for (const flag of layoutFlags) {
+      if (layout[flag]) score -= 5;
+    }
+  }
+
+  score -= (input.suggestedActions?.length ?? 0) * 4;
+
+  if (input.legacySections > input.structuredSections) score -= 10;
+
+  if (score < 0) return 0;
+  if (score > 100) return 100;
+  return score;
 }
 
 function normalizeText(value: unknown): string {
@@ -532,7 +584,7 @@ export function buildMigrationReviewSummary(page: Gnr8Page): MigrationReviewSumm
 
   const hasLayoutIssues = Object.values(layoutIssues).some(Boolean);
 
-  return {
+  const reviewCore = {
     totalSections: sections.length,
     structuredSections,
     legacySections,
@@ -541,6 +593,16 @@ export function buildMigrationReviewSummary(page: Gnr8Page): MigrationReviewSumm
     duplicateTypes: duplicateTypes.length > 0 ? [...duplicateTypes] : undefined,
     duplicateDetails: duplicateDetails.length > 0 ? duplicateDetails : undefined,
     layoutIssues: hasLayoutIssues ? layoutIssues : undefined,
+  };
+
+  const { suggestedActions } = buildSuggestedActionsAndNotes(reviewCore);
+  const confidenceScore = calculateMigrationConfidence({ ...reviewCore, suggestedActions });
+  const confidenceLabel = getMigrationConfidenceLabel(confidenceScore);
+
+  return {
+    ...reviewCore,
+    confidenceScore,
+    confidenceLabel,
   };
 }
 
