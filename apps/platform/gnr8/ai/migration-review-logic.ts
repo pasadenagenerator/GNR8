@@ -7,6 +7,8 @@ export type DuplicateDetail = {
   count: number;
   similarity: DuplicateSimilarity;
   sectionIds: string[];
+  mergeEligible?: boolean;
+  mergeStrategy?: string;
 };
 
 export type MigrationReviewSummary = {
@@ -323,11 +325,22 @@ export function buildMigrationReviewSummary(page: Gnr8Page): MigrationReviewSumm
         matching.map((m) => ({ props: m.props })),
       );
 
+      const mergeEligible =
+        (type === "faq.basic" || type === "pricing.basic") && (similarity === "highly-similar" || similarity === "exact-duplicate");
+      const mergeStrategy =
+        mergeEligible && type === "faq.basic"
+          ? "faq-basic-merge"
+          : mergeEligible && type === "pricing.basic"
+            ? "pricing-basic-merge"
+            : undefined;
+
       duplicateDetails.push({
         type,
         count: countsByType[type] ?? matching.length,
         similarity,
         sectionIds: matching.map((m) => m.id).filter(Boolean),
+        mergeEligible: mergeEligible || undefined,
+        mergeStrategy,
       });
     }
   }

@@ -6,6 +6,7 @@ import {
   runLayoutAgent,
   type LayoutAgentPlan,
 } from "@/gnr8/ai/layout-agent";
+import { mergeSupportedDuplicateSections } from "@/gnr8/ai/section-merge";
 import {
   buildMigrationReviewSummary,
   buildSuggestedActionsAndNotes,
@@ -21,6 +22,17 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function isDuplicateCleanupSuggestion(action: string): boolean {
   return action.startsWith("Remove duplicate ");
+}
+
+function applyDuplicateCleanupPipeline(page: Gnr8Page): { page: Gnr8Page; notes: string[] } {
+  const reviewBefore = buildMigrationReviewSummary(page);
+  const exactNotes = buildExactDuplicateCleanupNotes(page, reviewBefore.duplicateDetails);
+  const afterExact = cleanupExactDuplicateSections(page, reviewBefore.duplicateDetails);
+
+  const reviewAfterExact = buildMigrationReviewSummary(afterExact);
+  const mergeResult = mergeSupportedDuplicateSections(afterExact, reviewAfterExact.duplicateDetails);
+
+  return { page: mergeResult.page, notes: [...exactNotes, ...mergeResult.notes] };
 }
 
 export async function POST(req: NextRequest) {
@@ -50,6 +62,28 @@ export async function POST(req: NextRequest) {
     const chosenAction = actionableActions[0] ?? cleanupOnlyAction;
 
     if (!chosenAction) {
+      const { page: cleanedPage, notes: cleanupNotes } = applyDuplicateCleanupPipeline(page);
+      if (cleanedPage !== page) {
+        await savePage(cleanedPage.slug, cleanedPage);
+        await publishPage(cleanedPage.slug);
+
+        const publishedPage = (await getPageBySlug(cleanedPage.slug)) ?? cleanedPage;
+
+        return NextResponse.json(
+          {
+            success: true,
+            chosenAction: "Duplicate cleanup",
+            page: publishedPage,
+            review,
+            plan: { mode: "update", requestedSectionTypes: [], notes: cleanupNotes } satisfies LayoutAgentPlan & {
+              mode: "update";
+            },
+            notes: ["Applied autofix action: Duplicate cleanup.", ...reviewNotes, ...cleanupNotes],
+          },
+          { status: 200 },
+        );
+      }
+
       return NextResponse.json(
         {
           success: true,
@@ -64,8 +98,7 @@ export async function POST(req: NextRequest) {
     }
 
     if (isDuplicateCleanupSuggestion(chosenAction)) {
-      const cleanupNotes = buildExactDuplicateCleanupNotes(page, review.duplicateDetails);
-      const cleanedPage = cleanupExactDuplicateSections(page, review.duplicateDetails);
+      const { page: cleanedPage, notes: cleanupNotes } = applyDuplicateCleanupPipeline(page);
 
       await savePage(cleanedPage.slug, cleanedPage);
       await publishPage(cleanedPage.slug);
@@ -89,8 +122,7 @@ export async function POST(req: NextRequest) {
 
     const result = runLayoutAgent({ prompt: chosenAction, page });
 
-    const cleanupNotes = buildExactDuplicateCleanupNotes(result.page, review.duplicateDetails);
-    const cleanedPage = cleanupExactDuplicateSections(result.page, review.duplicateDetails);
+    const { page: cleanedPage, notes: cleanupNotes } = applyDuplicateCleanupPipeline(result.page);
 
     await savePage(cleanedPage.slug, cleanedPage);
     await publishPage(cleanedPage.slug);

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import { buildExactDuplicateCleanupNotes, cleanupExactDuplicateSections, runLayoutAgent } from "@/gnr8/ai/layout-agent";
+import { mergeSupportedDuplicateSections } from "@/gnr8/ai/section-merge";
 import {
   buildMigrationReviewSummary,
   buildSuggestedActionsAndNotes,
@@ -23,6 +24,17 @@ function clampMaxSteps(value: unknown): number {
 
 function isDuplicateCleanupSuggestion(action: string): boolean {
   return action.startsWith("Remove duplicate ");
+}
+
+function applyDuplicateCleanupPipeline(page: Gnr8Page): { page: Gnr8Page; notes: string[] } {
+  const reviewBefore = buildMigrationReviewSummary(page);
+  const exactNotes = buildExactDuplicateCleanupNotes(page, reviewBefore.duplicateDetails);
+  const afterExact = cleanupExactDuplicateSections(page, reviewBefore.duplicateDetails);
+
+  const reviewAfterExact = buildMigrationReviewSummary(afterExact);
+  const mergeResult = mergeSupportedDuplicateSections(afterExact, reviewAfterExact.duplicateDetails);
+
+  return { page: mergeResult.page, notes: [...exactNotes, ...mergeResult.notes] };
 }
 
 function sectionTypeSignature(page: Gnr8Page): string {
@@ -79,8 +91,7 @@ export async function POST(req: NextRequest) {
       finalReview = review;
 
       if (actionableActions.length === 0) {
-        const cleanupNotes = buildExactDuplicateCleanupNotes(page, review.duplicateDetails);
-        const cleanedPage = cleanupExactDuplicateSections(page, review.duplicateDetails);
+        const { page: cleanedPage, notes: cleanupNotes } = applyDuplicateCleanupPipeline(page);
 
         if (cleanedPage === page) {
           stoppedBecause = "no-actions";
@@ -97,7 +108,7 @@ export async function POST(req: NextRequest) {
         const reviewAfter = buildMigrationReviewSummary(publishedPage);
 
         stepsRun += 1;
-        actionsApplied.push(suggestedActions.find(isDuplicateCleanupSuggestion) ?? "Exact duplicate cleanup");
+        actionsApplied.push(suggestedActions.find(isDuplicateCleanupSuggestion) ?? "Duplicate cleanup");
         notes.push(...cleanupNotes);
 
         finalPage = publishedPage;
@@ -135,8 +146,7 @@ export async function POST(req: NextRequest) {
         page,
       });
 
-      const cleanupNotes = buildExactDuplicateCleanupNotes(result.page, review.duplicateDetails);
-      const cleanedPage = cleanupExactDuplicateSections(result.page, review.duplicateDetails);
+      const { page: cleanedPage, notes: cleanupNotes } = applyDuplicateCleanupPipeline(result.page);
 
       await savePage(cleanedPage.slug, cleanedPage);
       await publishPage(cleanedPage.slug);
