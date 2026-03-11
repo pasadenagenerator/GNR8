@@ -1,4 +1,5 @@
 import type { Gnr8Page } from "@/gnr8/types/page";
+import { classifyPageIntent, type PageIntent } from "./page-intent-classifier";
 
 export type DuplicateSimilarity = "exact-duplicate" | "highly-similar" | "different-content";
 
@@ -28,6 +29,9 @@ export type MigrationReviewSummary = {
     ctaMisplaced?: boolean;
     legacyMisplaced?: boolean;
   };
+  intent?: PageIntent;
+  intentConfidence?: number;
+  intentSignals?: string[];
   confidenceScore: number;
   confidenceLabel: MigrationConfidenceLabel;
 };
@@ -599,8 +603,13 @@ export function buildMigrationReviewSummary(page: Gnr8Page): MigrationReviewSumm
   const confidenceScore = calculateMigrationConfidence({ ...reviewCore, suggestedActions });
   const confidenceLabel = getMigrationConfidenceLabel(confidenceScore);
 
+  const intentResult = classifyPageIntent(page);
+
   return {
     ...reviewCore,
+    intent: intentResult.intent,
+    intentConfidence: intentResult.confidence,
+    intentSignals: intentResult.signals,
     confidenceScore,
     confidenceLabel,
   };
