@@ -297,7 +297,11 @@ export async function executeTransformationSteps(input: {
   page: Gnr8Page;
   review: MigrationReviewSummary;
   transformationPlan: TransformationPlan;
-  approvedStepIds: string[];
+  selectedStepIds: string[];
+  selection?: {
+    safeBatch?: boolean;
+    explicitlyApprovedStepIds?: string[];
+  };
 }): Promise<{
   page: Gnr8Page;
   appliedSteps: string[];
@@ -305,8 +309,14 @@ export async function executeTransformationSteps(input: {
   notes: string[];
 }> {
   void input.review;
-  const approved = Array.isArray(input.approvedStepIds) ? input.approvedStepIds.filter((id) => typeof id === "string") : [];
-  const approvedSet = new Set(approved.map((id) => id.trim()).filter(Boolean));
+  const selected = Array.isArray(input.selectedStepIds) ? input.selectedStepIds.filter((id) => typeof id === "string") : [];
+  const selectedSet = new Set(selected.map((id) => id.trim()).filter(Boolean));
+  const explicitlyApprovedSet = new Set(
+    (Array.isArray(input.selection?.explicitlyApprovedStepIds) ? input.selection?.explicitlyApprovedStepIds : [])
+      .filter((id) => typeof id === "string")
+      .map((id) => id.trim())
+      .filter(Boolean),
+  );
 
   const steps = Array.isArray(input.transformationPlan.steps) ? input.transformationPlan.steps : [];
   const stepsById = new Map<string, TransformationPlanStep>();
@@ -316,21 +326,21 @@ export async function executeTransformationSteps(input: {
   const skippedSteps: string[] = [];
   const notes: string[] = [];
 
-  for (const id of approvedSet) {
+  for (const id of selectedSet) {
     if (!stepsById.has(id)) {
       skippedSteps.push(id);
       notes.push(`Skipped step ${id} because it is not present in the current transformation plan.`);
     }
   }
 
-  if (approvedSet.size === 0) {
-    return { page: input.page, appliedSteps: [], skippedSteps: [], notes: ["No approved transformation steps provided."] };
+  if (selectedSet.size === 0) {
+    return { page: input.page, appliedSteps: [], skippedSteps: [], notes: ["No transformation steps were selected."] };
   }
 
   let workingPage: Gnr8Page = input.page;
 
   for (const step of steps) {
-    if (!approvedSet.has(step.id)) continue;
+    if (!selectedSet.has(step.id)) continue;
 
     const exec = isStepExecutableV1(step);
     if (!exec.ok) {
@@ -388,11 +398,35 @@ export async function executeTransformationSteps(input: {
     workingPage = published;
 
     appliedSteps.push(step.id);
-    notes.push(`Executed approved step ${step.id}: ${step.title || step.actionPrompt}`);
+    const label = step.safe === true ? "safe" : "approved";
+    notes.push(`Executed ${label} step ${step.id}: ${step.title || step.actionPrompt}`);
     if (stepNotes.length > 0) notes.push(...stepNotes);
   }
 
-  if (appliedSteps.length > 0) {
+  const safeBatch = input.selection?.safeBatch === true;
+  if (safeBatch) {
+    const appliedSafe = appliedSteps.filter((id) => stepsById.get(id)?.safe === true).length;
+    const appliedApprovedNonSafe = appliedSteps.filter((id) => {
+      const step = stepsById.get(id);
+      if (!step) return false;
+      if (step.safe === true) return false;
+      return explicitlyApprovedSet.has(id);
+    }).length;
+
+    if (appliedSafe > 0 && appliedApprovedNonSafe > 0) {
+      notes.unshift(
+        `Executed ${appliedApprovedNonSafe} approved step${appliedApprovedNonSafe === 1 ? "" : "s"} and ${appliedSafe} safe step${
+          appliedSafe === 1 ? "" : "s"
+        }.`,
+      );
+    } else if (appliedSafe > 0) {
+      notes.unshift(`Executed ${appliedSafe} safe transformation step${appliedSafe === 1 ? "" : "s"}.`);
+    } else if (appliedApprovedNonSafe > 0) {
+      notes.unshift(`Executed ${appliedApprovedNonSafe} approved transformation step${appliedApprovedNonSafe === 1 ? "" : "s"}.`);
+    } else {
+      notes.unshift("No selected transformation steps were executed.");
+    }
+  } else if (appliedSteps.length > 0) {
     notes.unshift(`Executed ${appliedSteps.length} approved transformation step${appliedSteps.length === 1 ? "" : "s"}.`);
   } else {
     notes.unshift("No approved transformation steps were executed.");

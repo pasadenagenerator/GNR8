@@ -10,6 +10,7 @@ export const runtime = "nodejs";
 type ExecuteBody = {
   slug?: unknown;
   approvedStepIds?: unknown;
+  safeBatch?: unknown;
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -48,13 +49,25 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "slug is required" }, { status: 400 });
     }
 
-    if (!("approvedStepIds" in parsed)) {
-      return NextResponse.json({ error: "approvedStepIds is required" }, { status: 400 });
+    const safeBatchRaw = "safeBatch" in parsed ? parsed.safeBatch : undefined;
+    const safeBatch = safeBatchRaw === undefined ? false : safeBatchRaw === true;
+    if (safeBatchRaw !== undefined && typeof safeBatchRaw !== "boolean") {
+      return NextResponse.json({ error: "safeBatch must be a boolean" }, { status: 400 });
     }
 
-    const approvedStepIds = parseStringArray(parsed.approvedStepIds);
-    if (!approvedStepIds) {
+    const approvedStepIdsRaw = "approvedStepIds" in parsed ? parsed.approvedStepIds : undefined;
+    const approvedStepIds =
+      approvedStepIdsRaw === undefined ? undefined : parseStringArray(approvedStepIdsRaw);
+    if (approvedStepIdsRaw !== undefined && !approvedStepIds) {
       return NextResponse.json({ error: "approvedStepIds must be an array of strings" }, { status: 400 });
+    }
+
+    const hasExplicitApproved = (approvedStepIds?.length ?? 0) > 0;
+    if (!hasExplicitApproved && safeBatch !== true) {
+      return NextResponse.json(
+        { error: "Either approvedStepIds (non-empty) or safeBatch=true is required" },
+        { status: 400 },
+      );
     }
 
     const page = await reloadPublishedPageOrNull(slug);
@@ -65,11 +78,44 @@ export async function POST(req: NextRequest) {
     const reviewBefore = buildMigrationReviewSummary(page);
     const transformationPlanBefore = buildTransformationPlan({ page, review: reviewBefore });
 
+    const steps = Array.isArray(transformationPlanBefore.steps) ? transformationPlanBefore.steps : [];
+    const safeStepIds = safeBatch ? steps.filter((s) => s?.safe === true).map((s) => s.id) : [];
+    const selectedStepIds = [
+      ...(approvedStepIds ?? []),
+      ...safeStepIds,
+    ];
+
+    if (selectedStepIds.length === 0) {
+      const finalPage = await reloadPublishedPageOrNull(page.slug);
+      if (!finalPage) {
+        return NextResponse.json({ error: "Failed to reload published page" }, { status: 500 });
+      }
+
+      return NextResponse.json(
+        {
+          success: true,
+          page: finalPage,
+          transformationPlanBefore,
+          transformationPlanAfter: transformationPlanBefore,
+          reviewBefore,
+          reviewAfter: reviewBefore,
+          appliedSteps: [],
+          skippedSteps: [],
+          notes: ["No safe transformation steps were available."],
+        },
+        { status: 200 },
+      );
+    }
+
     const execution = await executeTransformationSteps({
       page,
       review: reviewBefore,
       transformationPlan: transformationPlanBefore,
-      approvedStepIds,
+      selectedStepIds,
+      selection: {
+        safeBatch,
+        explicitlyApprovedStepIds: approvedStepIds ?? [],
+      },
     });
 
     const finalPage = await reloadPublishedPageOrNull(execution.page.slug);
@@ -99,4 +145,3 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
-
