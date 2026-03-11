@@ -22,6 +22,7 @@ export type MigrationReviewSummary = {
   legacySections: number;
   sectionTypes: string[];
   countsByType: Record<string, number>;
+  suggestedActions?: string[];
   duplicateTypes?: string[];
   duplicateDetails?: DuplicateDetail[];
   layoutIssues?: {
@@ -611,6 +612,7 @@ export function buildMigrationReviewSummary(page: Gnr8Page): MigrationReviewSumm
 
   const reviewWithIntent: MigrationReviewSummary = {
     ...reviewCore,
+    suggestedActions: suggestedActions.length > 0 ? suggestedActions : undefined,
     intent: intentResult.intent,
     intentConfidence: intentResult.confidence,
     intentSignals: intentResult.signals,
