@@ -188,6 +188,38 @@ function classifyPricing(aProps: unknown, bProps: unknown): DuplicateSimilarity 
   return "different-content";
 }
 
+function classifyFeatureGrid(aProps: unknown, bProps: unknown): DuplicateSimilarity {
+  if (!isRecord(aProps) || !isRecord(bProps)) return "different-content";
+  const aItems = getArray(aProps.items).filter((i) => isRecord(i)) as Array<Record<string, unknown>>;
+  const bItems = getArray(bProps.items).filter((i) => isRecord(i)) as Array<Record<string, unknown>>;
+  if (aItems.length < 2 || bItems.length < 2) return "different-content";
+
+  const aTitles = aItems.map((i) => normalizeText(i.title)).filter(Boolean);
+  const bTitles = bItems.map((i) => normalizeText(i.title)).filter(Boolean);
+  const titleSim = setSimilarity(aTitles, bTitles);
+
+  const aByTitle = new Map(aItems.map((i) => [normalizeText(i.title), i]));
+  const bByTitle = new Map(bItems.map((i) => [normalizeText(i.title), i]));
+  const sharedTitles = [...aByTitle.keys()].filter((t) => t && bByTitle.has(t));
+
+  let textSimSum = 0;
+  let textPairs = 0;
+  for (const t of sharedTitles) {
+    const ai = aByTitle.get(t);
+    const bi = bByTitle.get(t);
+    if (!ai || !bi) continue;
+    textSimSum += textSimilarity(ai.text, bi.text);
+    textPairs += 1;
+  }
+  const avgTextSim = textPairs > 0 ? textSimSum / textPairs : 0;
+
+  const isExactTitles = aTitles.length === bTitles.length && setSimilarity(aTitles, bTitles) === 1;
+  if (isExactTitles && avgTextSim >= 0.9) return "exact-duplicate";
+
+  if (titleSim >= 0.7 && sharedTitles.length >= 2) return "highly-similar";
+  return "different-content";
+}
+
 function classifyCta(aProps: unknown, bProps: unknown): DuplicateSimilarity {
   if (!isRecord(aProps) || !isRecord(bProps)) return "different-content";
   const headSim = textSimilarity(aProps.headline, bProps.headline);
@@ -258,6 +290,9 @@ function classifyDuplicateSimilarityForType(
       case "pricing.basic":
         results.push(classifyPricing(first, next));
         break;
+      case "feature.grid":
+        results.push(classifyFeatureGrid(first, next));
+        break;
       case "cta.simple":
         results.push(classifyCta(first, next));
         break;
@@ -308,6 +343,7 @@ export function buildMigrationReviewSummary(page: Gnr8Page): MigrationReviewSumm
     "cta.simple",
     "pricing.basic",
     "faq.basic",
+    "feature.grid",
     "footer.basic",
   ] as const;
 
@@ -326,12 +362,15 @@ export function buildMigrationReviewSummary(page: Gnr8Page): MigrationReviewSumm
       );
 
       const mergeEligible =
-        (type === "faq.basic" || type === "pricing.basic") && (similarity === "highly-similar" || similarity === "exact-duplicate");
+        (type === "faq.basic" || type === "pricing.basic" || type === "feature.grid") &&
+        (similarity === "highly-similar" || similarity === "exact-duplicate");
       const mergeStrategy =
         mergeEligible && type === "faq.basic"
           ? "faq-basic-merge"
           : mergeEligible && type === "pricing.basic"
             ? "pricing-basic-merge"
+            : mergeEligible && type === "feature.grid"
+              ? "feature-grid-merge"
             : undefined;
 
       duplicateDetails.push({

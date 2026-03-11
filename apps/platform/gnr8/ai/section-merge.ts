@@ -2,7 +2,7 @@ import type { DuplicateDetail, DuplicateSimilarity } from "@/gnr8/ai/migration-r
 import type { Gnr8Page } from "@/gnr8/types/page";
 import type { Gnr8Section } from "@/gnr8/types/section";
 
-type MergeSupportedType = "faq.basic" | "pricing.basic";
+type MergeSupportedType = "faq.basic" | "pricing.basic" | "feature.grid";
 
 export type SectionMergeResult = {
   page: Gnr8Page;
@@ -123,12 +123,68 @@ function mergePricingProps(propsList: Array<unknown>): { plans: PricingPlan[] } 
   return { plans: merged };
 }
 
+type FeatureGridItem = { title: string; text: string };
+
+function featureGridItemScore(item: FeatureGridItem): number {
+  const title = item.title.trim();
+  const text = item.text.trim();
+  // Prefer items with text, then longer text (more complete).
+  return nonEmptyCount([title, text]) * 1000 + text.length;
+}
+
+function mergeFeatureGridProps(propsList: Array<unknown>): { items: FeatureGridItem[] } | null {
+  const merged: FeatureGridItem[] = [];
+  const indexByTitle = new Map<string, number>();
+
+  for (const props of propsList) {
+    if (!isRecord(props)) continue;
+    const items = getArray(props.items).filter((i) => isRecord(i)) as Array<Record<string, unknown>>;
+
+    for (const itemRaw of items) {
+      const title = getString(itemRaw.title);
+      const text = getString(itemRaw.text);
+      const key = normalizeKeyText(title);
+      if (!key) continue;
+
+      const existingIndex = indexByTitle.get(key);
+      if (existingIndex == null) {
+        indexByTitle.set(key, merged.length);
+        merged.push({ title, text });
+        continue;
+      }
+
+      const existing = merged[existingIndex]!;
+      const existingTextEmpty = !existing.text || !existing.text.trim();
+      const nextTextNonEmpty = !!text.trim();
+
+      // Keep first item by default, but upgrade when later duplicate is more complete.
+      if (existingTextEmpty && nextTextNonEmpty) {
+        merged[existingIndex] = { ...existing, text };
+        continue;
+      }
+
+      const existingScore = featureGridItemScore(existing);
+      const nextScore = featureGridItemScore({ title: existing.title || title, text });
+      if (nextScore > existingScore) {
+        merged[existingIndex] = {
+          title: existing.title.trim() ? existing.title : title,
+          text,
+        };
+      }
+    }
+  }
+
+  return { items: merged };
+}
+
 function mergeLabel(type: MergeSupportedType): string {
   switch (type) {
     case "faq.basic":
       return "FAQ";
     case "pricing.basic":
       return "pricing";
+    case "feature.grid":
+      return "feature grid";
   }
 }
 
@@ -159,7 +215,8 @@ function mergeType(
 
   let mergedProps: Record<string, unknown> | null = null;
   if (type === "faq.basic") mergedProps = mergeFaqProps(propsList);
-  else mergedProps = mergePricingProps(propsList);
+  else if (type === "pricing.basic") mergedProps = mergePricingProps(propsList);
+  else mergedProps = mergeFeatureGridProps(propsList);
 
   if (!mergedProps) return { page, mergedCount: 0 };
 
@@ -185,7 +242,7 @@ export function mergeSupportedDuplicateSections(page: Gnr8Page, duplicateDetails
 
   for (const dup of duplicateDetails) {
     const type = dup?.type;
-    if (type !== "faq.basic" && type !== "pricing.basic") continue;
+    if (type !== "faq.basic" && type !== "pricing.basic" && type !== "feature.grid") continue;
     if (!isMergeEligibleSimilarity(dup.similarity)) continue;
 
     const { page: mergedPage, mergedCount } = mergeType(nextPage, type, dup);
@@ -204,4 +261,3 @@ export function mergeSupportedDuplicateSections(page: Gnr8Page, duplicateDetails
 
   return { page: nextPage, notes, mergedTypes };
 }
-
