@@ -45,6 +45,7 @@ export async function POST(req: NextRequest) {
         countsByType: Record<string, number>;
         confidenceScore: number;
         confidenceLabel: "low" | "medium" | "high";
+        optimizationSuggestions?: string[];
         layoutIssues?: {
           navbarNotFirst?: boolean;
           footerNotLast?: boolean;

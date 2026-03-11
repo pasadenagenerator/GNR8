@@ -1,5 +1,7 @@
 import type { Gnr8Page } from "@/gnr8/types/page";
 import { classifyPageIntent, type PageIntent } from "./page-intent-classifier";
+import { buildOptimizationSuggestions } from "./optimization-suggestions";
+import { buildRedesignStrategy, type RedesignPlan } from "./redesign-strategy";
 
 export type DuplicateSimilarity = "exact-duplicate" | "highly-similar" | "different-content";
 
@@ -34,6 +36,8 @@ export type MigrationReviewSummary = {
   intentSignals?: string[];
   confidenceScore: number;
   confidenceLabel: MigrationConfidenceLabel;
+  optimizationSuggestions?: string[];
+  redesignPlan?: RedesignPlan;
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -605,13 +609,21 @@ export function buildMigrationReviewSummary(page: Gnr8Page): MigrationReviewSumm
 
   const intentResult = classifyPageIntent(page);
 
-  return {
+  const reviewWithIntent: MigrationReviewSummary = {
     ...reviewCore,
     intent: intentResult.intent,
     intentConfidence: intentResult.confidence,
     intentSignals: intentResult.signals,
     confidenceScore,
     confidenceLabel,
+  };
+
+  const optimizationSuggestions = buildOptimizationSuggestions({ review: reviewWithIntent, suggestedActions });
+
+  return {
+    ...reviewWithIntent,
+    optimizationSuggestions: optimizationSuggestions.length > 0 ? optimizationSuggestions : undefined,
+    redesignPlan: buildRedesignStrategy(reviewWithIntent),
   };
 }
 
