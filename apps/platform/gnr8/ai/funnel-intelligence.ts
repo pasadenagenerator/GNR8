@@ -3,11 +3,14 @@ import { buildSiteMapIntelligence, type SiteRole } from "@/gnr8/ai/site-map-inte
 
 export type JourneyType = "commercial" | "informational" | "mixed" | "unclear";
 
+export type JourneyRelevance = "relevant" | "weak" | "not-relevant";
+
 export type FunnelJourney = {
   name: string;
   status: "complete" | "partial" | "missing";
   steps: string[];
   missing: string[];
+  relevance?: JourneyRelevance;
 };
 
 export type FunnelIntelligence = {
@@ -43,6 +46,7 @@ function clampInt(value: number, min: number, max: number): number {
 }
 
 type JourneyTemplate = {
+  id: "commercial-core" | "marketing-landing" | "product-detail" | "informational";
   name: string;
   relevance: "commercial" | "informational";
   steps: string[];
@@ -53,6 +57,7 @@ type JourneyTemplate = {
 function buildJourneyTemplates(): JourneyTemplate[] {
   return [
     {
+      id: "commercial-core",
       name: "SaaS / commercial core journey",
       relevance: "commercial",
       steps: ["homepage", "pricing", "faq", "contact"],
@@ -64,6 +69,7 @@ function buildJourneyTemplates(): JourneyTemplate[] {
       ],
     },
     {
+      id: "marketing-landing",
       name: "Marketing landing journey",
       relevance: "commercial",
       steps: ["landing OR homepage", "pricing OR product", "contact"],
@@ -74,6 +80,7 @@ function buildJourneyTemplates(): JourneyTemplate[] {
       ],
     },
     {
+      id: "product-detail",
       name: "Product detail / commercial product journey",
       relevance: "commercial",
       steps: ["product", "faq OR contact"],
@@ -83,6 +90,7 @@ function buildJourneyTemplates(): JourneyTemplate[] {
       ],
     },
     {
+      id: "informational",
       name: "Informational / content journey",
       relevance: "informational",
       steps: ["blog OR docs", "contact (optional)"],
@@ -92,34 +100,135 @@ function buildJourneyTemplates(): JourneyTemplate[] {
   ];
 }
 
+function buildHighConfidenceIntentDistribution(input: {
+  pageIntents: Array<{ intent: string; intentConfidence: number }>;
+  minIntentConfidence?: number;
+}): Record<string, number> {
+  const out: Record<string, number> = {};
+  const min = input.minIntentConfidence ?? 85;
+  for (const p of input.pageIntents) {
+    const intent = String(p.intent ?? "").trim();
+    if (!intent) continue;
+    if ((p.intentConfidence ?? 0) < min) continue;
+    out[intent] = (out[intent] ?? 0) + 1;
+  }
+  return out;
+}
+
+function intentSetFromDistribution(intentDistribution: Record<string, number>): Set<string> {
+  const out = new Set<string>();
+  for (const [k, v] of Object.entries(intentDistribution)) {
+    if (!k) continue;
+    if ((v ?? 0) <= 0) continue;
+    out.add(k);
+  }
+  return out;
+}
+
+function getJourneyRelevance(input: {
+  template: JourneyTemplate;
+  rolesPresent: Set<SiteRole>;
+  highConfidenceIntents: Set<string>;
+  slugsAndTitles: Array<{ slug: string; title?: string }>;
+}): JourneyRelevance {
+  const hasRole = (r: SiteRole) => input.rolesPresent.has(r);
+  const hasIntent = (intent: string) => input.highConfidenceIntents.has(intent);
+
+  const slugTitleMatchesAny = (pattern: RegExp) => {
+    for (const p of input.slugsAndTitles) {
+      const slug = normalizeSlug(p.slug).toLowerCase();
+      const title = String(p.title ?? "").trim().toLowerCase();
+      if (pattern.test(slug) || (title && pattern.test(title))) return true;
+    }
+    return false;
+  };
+
+  if (input.template.id === "commercial-core") {
+    const hasCoreRole = hasRole("homepage") || hasRole("pricing") || hasRole("faq") || hasRole("contact");
+    const hasCoreIntent = hasIntent("saas_homepage") || hasIntent("marketing_landing");
+    return hasCoreRole || hasCoreIntent ? "relevant" : "not-relevant";
+  }
+
+  if (input.template.id === "marketing-landing") {
+    if (hasRole("landing") || hasIntent("marketing_landing")) return "relevant";
+    const hasCommercialCore = hasRole("homepage") || hasRole("pricing") || hasRole("faq") || hasRole("contact") || hasIntent("saas_homepage");
+    if (hasCommercialCore && hasRole("homepage") && (hasRole("pricing") || hasRole("contact"))) return "weak";
+    return "not-relevant";
+  }
+
+  if (input.template.id === "product-detail") {
+    if (hasRole("product")) return "relevant";
+    if (hasIntent("product_page") || hasIntent("ecommerce_product")) return "relevant";
+    const hasStrongProductSlugOrTitle = slugTitleMatchesAny(/\/(product|products)(\/|$)|\bproduct\b/);
+    return hasStrongProductSlugOrTitle ? "relevant" : "not-relevant";
+  }
+
+  if (input.template.id === "informational") {
+    if (hasRole("blog") || hasRole("docs")) return "relevant";
+    if (hasIntent("blog_article") || hasIntent("documentation")) return "relevant";
+    const hasMultipleInformationalPages = (() => {
+      let count = 0;
+      for (const p of input.slugsAndTitles) {
+        const slug = normalizeSlug(p.slug).toLowerCase();
+        const title = String(p.title ?? "").trim().toLowerCase();
+        const looksInformational =
+          slug.includes("/blog") ||
+          slug.includes("/docs") ||
+          slug.includes("/documentation") ||
+          title.includes("docs") ||
+          title.includes("documentation") ||
+          title.includes("blog");
+        if (looksInformational) count += 1;
+        if (count >= 2) return true;
+      }
+      return false;
+    })();
+    return hasMultipleInformationalPages ? "relevant" : "not-relevant";
+  }
+
+  return "not-relevant";
+}
+
 function inferJourneyType(input: {
   resolvedPages: number;
   roleDistribution: Record<string, number>;
-  intentDistribution: Record<string, number>;
+  highConfidenceIntentDistribution: Record<string, number>;
+  journeyRelevanceByTemplateId: Partial<Record<JourneyTemplate["id"], JourneyRelevance>>;
 }): JourneyType {
   const resolved = Math.max(0, input.resolvedPages);
   if (resolved === 0) return "unclear";
 
   const getRole = (r: SiteRole) => input.roleDistribution[r] ?? 0;
-  const commercialCount = getRole("homepage") + getRole("pricing") + getRole("product") + getRole("landing") + getRole("contact");
+  const commercialCount =
+    getRole("homepage") + getRole("pricing") + getRole("faq") + getRole("contact") + getRole("product") + getRole("landing");
   const informationalCount = getRole("blog") + getRole("docs");
   const unknownCount = getRole("unknown");
   const unknownRatio = resolved > 0 ? unknownCount / resolved : 1;
 
-  const hasIntent = (intent: string) => (input.intentDistribution[intent] ?? 0) > 0;
-  const hasCommercialIntent =
-    hasIntent("saas_homepage") ||
-    hasIntent("marketing_landing") ||
-    hasIntent("product_page") ||
-    hasIntent("ecommerce_product") ||
-    hasIntent("ecommerce_listing");
-  const hasInformationalIntent = hasIntent("documentation") || hasIntent("blog_article");
+  const hasIntent = (intent: string) => (input.highConfidenceIntentDistribution[intent] ?? 0) > 0;
+  const commercialIntentPages =
+    (input.highConfidenceIntentDistribution.saas_homepage ?? 0) +
+    (input.highConfidenceIntentDistribution.marketing_landing ?? 0) +
+    (input.highConfidenceIntentDistribution.product_page ?? 0) +
+    (input.highConfidenceIntentDistribution.ecommerce_product ?? 0);
+  const informationalIntentPages =
+    (input.highConfidenceIntentDistribution.documentation ?? 0) + (input.highConfidenceIntentDistribution.blog_article ?? 0);
+  const hasCommercialIntent = commercialIntentPages > 0;
+  const hasInformationalIntent = informationalIntentPages > 0;
 
   if (resolved < 2 && unknownRatio >= 0.5 && !hasCommercialIntent && !hasInformationalIntent) return "unclear";
   if (unknownRatio > 0.6 && commercialCount + informationalCount < 2) return "unclear";
 
-  const commercialStrong = commercialCount >= 2 || hasCommercialIntent;
-  const informationalStrong = informationalCount >= 2 || hasInformationalIntent;
+  const commercialRelevant =
+    input.journeyRelevanceByTemplateId["commercial-core"] === "relevant" ||
+    input.journeyRelevanceByTemplateId["marketing-landing"] === "relevant" ||
+    input.journeyRelevanceByTemplateId["product-detail"] === "relevant";
+  const informationalRelevant = input.journeyRelevanceByTemplateId.informational === "relevant";
+
+  const commercialStrong = (commercialCount >= 2 || hasCommercialIntent) && commercialRelevant;
+  const informationalStrong =
+    informationalRelevant &&
+    (informationalCount >= 2 || (informationalCount >= 1 && hasInformationalIntent) || informationalIntentPages >= 2);
 
   if (commercialStrong && !informationalStrong) {
     if (informationalCount <= 1 && (commercialCount >= informationalCount * 2 || hasCommercialIntent)) return "commercial";
@@ -129,6 +238,17 @@ function inferJourneyType(input: {
   }
 
   if (commercialStrong && informationalStrong) return "mixed";
+
+  if (commercialRelevant && !informationalRelevant) return "commercial";
+  if (informationalRelevant && !commercialRelevant) return "informational";
+
+  if (commercialRelevant && informationalRelevant) {
+    const commercialWeak = commercialCount <= 1 && !hasCommercialIntent;
+    const informationalWeak = informationalCount <= 1 && !hasInformationalIntent;
+    if (!commercialWeak && !informationalWeak) return "mixed";
+    if (!commercialWeak) return "commercial";
+    if (!informationalWeak) return "informational";
+  }
 
   return "unclear";
 }
@@ -159,10 +279,10 @@ function evaluateJourney(template: JourneyTemplate, rolesPresent: Set<SiteRole>)
   };
 }
 
-function buildMissingJourneySteps(input: {
-  journeyType: JourneyType;
+function buildMissingJourneyStepsFromRelevantJourneys(input: {
   templates: JourneyTemplate[];
   journeys: FunnelJourney[];
+  relevanceByTemplateId: Partial<Record<JourneyTemplate["id"], JourneyRelevance>>;
 }): string[] {
   const out: string[] = [];
   const add = (role: string) => {
@@ -170,24 +290,13 @@ function buildMissingJourneySteps(input: {
     if (!out.includes(role)) out.push(role);
   };
 
-  const includeMissingJourney = (idx: number) => {
-    const relevance = input.templates[idx]?.relevance;
-    if (!relevance) return false;
-    if (input.journeyType === "mixed") return true;
-    if (input.journeyType === "commercial") return relevance === "commercial";
-    if (input.journeyType === "informational") return relevance === "informational";
-    return false;
-  };
-
   for (let i = 0; i < input.journeys.length; i += 1) {
     const j = input.journeys[i];
-    if (j.status === "partial") {
-      for (const m of j.missing) add(m);
-      continue;
-    }
-    if (j.status === "missing" && includeMissingJourney(i)) {
-      for (const m of j.missing) add(m);
-    }
+    const templateId = input.templates[i]?.id;
+    if (!templateId) continue;
+    const relevance = input.relevanceByTemplateId[templateId] ?? "not-relevant";
+    if (relevance !== "relevant") continue;
+    if (j.status === "partial" || j.status === "missing") for (const m of j.missing) add(m);
   }
 
   return out;
@@ -198,8 +307,9 @@ function calculateJourneyHealth(input: {
   resolvedPages: number;
   journeyType: JourneyType;
   roleDistribution: Record<string, number>;
-  intentDistribution: Record<string, number>;
+  highConfidenceIntents: Set<string>;
   journeys: FunnelJourney[];
+  relevanceByTemplateId: Partial<Record<JourneyTemplate["id"], JourneyRelevance>>;
 }): FunnelIntelligence["journeyHealth"] {
   const notes: string[] = [];
   const total = Math.max(0, input.totalPages);
@@ -215,7 +325,7 @@ function calculateJourneyHealth(input: {
 
   const getRole = (r: SiteRole) => input.roleDistribution[r] ?? 0;
   const hasRole = (r: SiteRole) => getRole(r) > 0;
-  const hasIntent = (intent: string) => (input.intentDistribution[intent] ?? 0) > 0;
+  const hasIntent = (intent: string) => input.highConfidenceIntents.has(intent);
 
   const hasHomepage = hasRole("homepage");
   const hasPricing = hasRole("pricing");
@@ -225,11 +335,13 @@ function calculateJourneyHealth(input: {
   const commercialLikely =
     input.journeyType === "commercial" ||
     input.journeyType === "mixed" ||
+    input.relevanceByTemplateId["commercial-core"] === "relevant" ||
+    input.relevanceByTemplateId["product-detail"] === "relevant" ||
+    input.relevanceByTemplateId["marketing-landing"] === "relevant" ||
     hasIntent("saas_homepage") ||
     hasIntent("marketing_landing") ||
     hasIntent("product_page") ||
-    hasIntent("ecommerce_product") ||
-    hasIntent("ecommerce_listing");
+    hasIntent("ecommerce_product");
 
   let score = 100;
 
@@ -275,7 +387,7 @@ function calculateJourneyHealth(input: {
     }
   }
 
-  const anyComplete = input.journeys.some((j) => j.status === "complete");
+  const anyComplete = input.journeys.some((j) => j.status === "complete" && j.relevance === "relevant");
   if (!anyComplete) {
     score -= 15;
     notes.push("No complete journey pattern detected (-15).");
@@ -301,6 +413,8 @@ function buildJourneyRecommendations(input: {
   resolvedPages: number;
   journeys: FunnelJourney[];
   journeyHealthLabel: "low" | "medium" | "high";
+  templates: JourneyTemplate[];
+  relevanceByTemplateId: Partial<Record<JourneyTemplate["id"], JourneyRelevance>>;
 }): string[] {
   const out: string[] = [];
   const add = (rec: string) => {
@@ -324,7 +438,12 @@ function buildJourneyRecommendations(input: {
   const unknownRatio = input.resolvedPages > 0 ? unknown / input.resolvedPages : 0;
   if (unknownRatio > 0.5) add("Clarify the role of unknown pages.");
 
-  const anyComplete = input.journeys.some((j) => j.status === "complete");
+  const anyComplete = input.journeys.some((j, i) => {
+    if (j.status !== "complete") return false;
+    const id = input.templates[i]?.id;
+    if (!id) return false;
+    return input.relevanceByTemplateId[id] === "relevant";
+  });
   if (!anyComplete) add("Improve site journey structure before automation.");
 
   if (input.journeyType === "unclear") add("Improve role clarity across key pages before funnel optimization.");
@@ -342,8 +461,15 @@ function buildSummary(input: {
   journeyHealthLabel: "low" | "medium" | "high";
   journeys: FunnelJourney[];
   missingJourneySteps: string[];
+  templates: JourneyTemplate[];
+  relevanceByTemplateId: Partial<Record<JourneyTemplate["id"], JourneyRelevance>>;
 }): string {
-  const anyComplete = input.journeys.some((j) => j.status === "complete");
+  const anyComplete = input.journeys.some((j, i) => {
+    if (j.status !== "complete") return false;
+    const id = input.templates[i]?.id;
+    if (!id) return false;
+    return input.relevanceByTemplateId[id] === "relevant";
+  });
   const hasMissing = input.missingJourneySteps.length > 0;
 
   if (input.journeyType === "unclear") return "Site journey is unclear and needs role clarification.";
@@ -357,7 +483,7 @@ function buildSummary(input: {
   if ((input.journeyType === "commercial" || input.journeyType === "mixed") && hasMissing) {
     return "Site has a partial commercial journey and is missing key conversion steps.";
   }
-  if (input.journeyType === "mixed") return "Site has mixed commercial and informational journey signals.";
+  if (input.journeyType === "mixed") return "Site mixes commercial and informational journeys and may need clearer role separation.";
 
   return "Site journey has mixed signals; consider filling missing steps for a clearer path.";
 }
@@ -369,6 +495,8 @@ function buildNotes(input: {
   journeyType: JourneyType;
   roleDistribution: Record<string, number>;
   resolvedPages: number;
+  templates: JourneyTemplate[];
+  relevanceByTemplateId: Partial<Record<JourneyTemplate["id"], JourneyRelevance>>;
 }): string[] {
   const notes: string[] = ["Journey intelligence only; no changes are applied."];
 
@@ -377,7 +505,13 @@ function buildNotes(input: {
     notes.push(`Some pages could not be resolved from storage (${input.unresolvedPages.length}/${total}).`);
   }
 
-  if (!input.journeys.some((j) => j.status === "complete")) {
+  const anyRelevantComplete = input.journeys.some((j, i) => {
+    if (j.status !== "complete") return false;
+    const id = input.templates[i]?.id;
+    if (!id) return false;
+    return input.relevanceByTemplateId[id] === "relevant";
+  });
+  if (!anyRelevantComplete) {
     notes.push("No complete journey pattern was detected.");
   }
 
@@ -421,27 +555,44 @@ export function buildFunnelIntelligence(input: {
 
   const siteMap = buildSiteMapIntelligence({ pages: input.pages, resolvedPages: resolvedInput });
   const roleDistribution = siteMap.roleDistribution;
-  const intentDistribution = siteMap.intentDistribution;
 
   const resolvedPages = siteMap.resolvedPages;
-  const journeyType = inferJourneyType({ resolvedPages, roleDistribution, intentDistribution });
 
   const rolesPresent = new Set<SiteRole>();
   for (const p of siteMap.pageIntents) rolesPresent.add(p.role);
   const detectedRoles = Array.from(rolesPresent);
 
   const templates = buildJourneyTemplates();
-  const journeys = templates.map((t) => evaluateJourney(t, rolesPresent));
+  const highConfidenceIntentDistribution = buildHighConfidenceIntentDistribution({ pageIntents: siteMap.pageIntents, minIntentConfidence: 85 });
+  const highConfidenceIntents = intentSetFromDistribution(highConfidenceIntentDistribution);
+  const slugsAndTitles = (input.pages ?? []).map((p) => ({ slug: p.slug, title: p.title }));
+  const relevanceByTemplateId: Partial<Record<JourneyTemplate["id"], JourneyRelevance>> = {};
+  for (const t of templates) {
+    relevanceByTemplateId[t.id] = getJourneyRelevance({ template: t, rolesPresent, highConfidenceIntents, slugsAndTitles });
+  }
 
-  const missingJourneySteps = buildMissingJourneySteps({ journeyType, templates, journeys });
+  const journeyType = inferJourneyType({
+    resolvedPages,
+    roleDistribution,
+    highConfidenceIntentDistribution,
+    journeyRelevanceByTemplateId: relevanceByTemplateId,
+  });
+
+  const journeys = templates.map((t) => {
+    const j = evaluateJourney(t, rolesPresent);
+    return { ...j, relevance: relevanceByTemplateId[t.id] };
+  });
+
+  const missingJourneySteps = buildMissingJourneyStepsFromRelevantJourneys({ templates, journeys, relevanceByTemplateId });
 
   const journeyHealth = calculateJourneyHealth({
     totalPages,
     resolvedPages,
     journeyType,
     roleDistribution,
-    intentDistribution,
+    highConfidenceIntents,
     journeys,
+    relevanceByTemplateId,
   });
 
   const recommendations = buildJourneyRecommendations({
@@ -452,6 +603,8 @@ export function buildFunnelIntelligence(input: {
     resolvedPages,
     journeys,
     journeyHealthLabel: journeyHealth.label,
+    templates,
+    relevanceByTemplateId,
   });
 
   const summary = buildSummary({
@@ -459,6 +612,8 @@ export function buildFunnelIntelligence(input: {
     journeyHealthLabel: journeyHealth.label,
     journeys,
     missingJourneySteps,
+    templates,
+    relevanceByTemplateId,
   });
 
   const notes = buildNotes({
@@ -468,6 +623,8 @@ export function buildFunnelIntelligence(input: {
     journeyType,
     roleDistribution,
     resolvedPages,
+    templates,
+    relevanceByTemplateId,
   });
 
   return {
