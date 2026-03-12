@@ -1,5 +1,7 @@
 import type { Gnr8Page } from "@/gnr8/types/page";
 import type { MigrationReviewSummary } from "./migration-review-logic";
+import { getExecutionCapabilityForPlanStep } from "./execution-capability-matrix";
+import { evaluateExecutionPolicy, type ExecutionPolicyDecision, type ExecutionPolicyReason } from "./execution-policy";
 
 export type TransformationPlanStepSource = "migration" | "optimization" | "redesign" | "layout" | "cleanup";
 
@@ -26,6 +28,11 @@ export type TransformationPlanStep = {
   priority: TransformationPlanStepPriority;
   kind: TransformationPlanStepKind;
   notes: string[];
+  policyDecision?: ExecutionPolicyDecision;
+  policyReason?: ExecutionPolicyReason;
+  policyExplanation?: string;
+  executableNow?: boolean;
+  executionEngine?: string | null;
 };
 
 export type TransformationPlanStrategy = "incremental" | "structural" | "full-rebuild";
@@ -40,6 +47,13 @@ export type TransformationPlan = {
   priority: TransformationPlanPriority;
   steps: TransformationPlanStep[];
   notes: string[];
+  policySummary?: {
+    autoAllowed: number;
+    approvalRequired: number;
+    blocked: number;
+    deferred: number;
+    executableNow: number;
+  };
 };
 
 function normalizeKey(value: string): string {
@@ -595,6 +609,18 @@ export function buildTransformationPlan(input: { page: Gnr8Page; review: Migrati
   ];
 
   const steps = pruneOverlappingSteps(dedupeTransformationSteps(ordered));
+  const policyAwareSteps: TransformationPlanStep[] = steps.map((step) => {
+    const executionCapability = getExecutionCapabilityForPlanStep(step);
+    const policy = evaluateExecutionPolicy(step, { review, executionCapability });
+    return {
+      ...step,
+      policyDecision: policy.decision,
+      policyReason: policy.reason,
+      policyExplanation: policy.explanation,
+      executableNow: executionCapability?.supported === true,
+      executionEngine: executionCapability ? executionCapability.engine : null,
+    };
+  });
 
   const strategy = planStrategyFromReview(review);
   const priority = planPriorityFromReview({ review, steps });
@@ -604,6 +630,24 @@ export function buildTransformationPlan(input: { page: Gnr8Page; review: Migrati
   if (review.confidenceLabel === "low") notes.push("Low migration confidence: consider full rebuild or staged structural cleanup.");
   if ((review.legacySections ?? 0) > 0) notes.push("Legacy HTML blocks detected: replacements likely require approval.");
 
+  const policySummary = (() => {
+    let autoAllowed = 0;
+    let approvalRequired = 0;
+    let blocked = 0;
+    let deferred = 0;
+    let executableNow = 0;
+
+    for (const step of policyAwareSteps) {
+      if (step.executableNow === true) executableNow += 1;
+      if (step.policyDecision === "auto-allowed") autoAllowed += 1;
+      if (step.policyDecision === "approval-required") approvalRequired += 1;
+      if (step.policyDecision === "blocked") blocked += 1;
+      if (step.policyDecision === "deferred") deferred += 1;
+    }
+
+    return { autoAllowed, approvalRequired, blocked, deferred, executableNow };
+  })();
+
   return {
     summary,
     intent: review.intent,
@@ -611,7 +655,8 @@ export function buildTransformationPlan(input: { page: Gnr8Page; review: Migrati
     confidenceScore: review.confidenceScore,
     strategy,
     priority,
-    steps,
+    steps: policyAwareSteps,
     notes: uniqStable(notes),
+    policySummary,
   };
 }

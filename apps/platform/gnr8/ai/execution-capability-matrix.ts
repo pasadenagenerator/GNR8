@@ -1,3 +1,5 @@
+import type { TransformationPlanStep } from "@/gnr8/ai/transformation-planner";
+
 export type ExecutionCapabilityKind =
   | "add-section"
   | "replace-section"
@@ -354,6 +356,13 @@ export function getExecutionCapability(prompt: string): ExecutionCapability | nu
   const normalized = normalizeExecutionPrompt(prompt);
   if (!normalized) return null;
   return EXECUTION_CAPABILITY_MATRIX.find((c) => c.normalizedPrompt === normalized) ?? null;
+}
+
+export function getExecutionCapabilityForPlanStep(step: Pick<TransformationPlanStep, "kind" | "actionPrompt">): ExecutionCapability | null {
+  if (step.kind === "cleanup") return getExecutionCapability("Remove exact duplicate sections");
+  if (step.kind === "merge") return getExecutionCapability("Merge highly similar sections");
+  if (step.kind === "normalize") return getExecutionCapability("Normalize section layout");
+  return getExecutionCapability(String(step.actionPrompt ?? ""));
 }
 
 export function isPromptSupported(prompt: string): boolean {
