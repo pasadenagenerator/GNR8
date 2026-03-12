@@ -1,4 +1,5 @@
 import type { Gnr8Page } from "@/gnr8/types/page";
+import type { Gnr8Section } from "@/gnr8/types/section";
 import type { MigrationReviewSummary } from "./migration-review-logic";
 import { getExecutionCapabilityForPlanStep } from "./execution-capability-matrix";
 import { evaluateExecutionPolicy, type ExecutionPolicyDecision, type ExecutionPolicyReason } from "./execution-policy";
@@ -193,6 +194,196 @@ function uniqStable(values: string[]): string[] {
     seen.add(value);
     out.push(value);
   }
+  return out;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === "object" && !Array.isArray(value);
+}
+
+function getFirstSectionByType(sections: Gnr8Section[], type: string): Gnr8Section | null {
+  for (const section of sections) if (section?.type === type) return section;
+  return null;
+}
+
+function normalizeComparableText(value: unknown): string {
+  return typeof value === "string" ? value.toLowerCase().trim().replace(/\s+/g, " ") : "";
+}
+
+function hasExcessWhitespace(value: string): boolean {
+  // Keep this deterministic and structural: flag obviously malformed whitespace.
+  return /\s{3,}/.test(value) || /\n\s*\n\s*\n/.test(value);
+}
+
+function isObviouslyIncompleteText(value: string): boolean {
+  const t = normalizeComparableText(value);
+  return t === "tbd" || t === "todo" || t === "lorem ipsum" || t === "coming soon";
+}
+
+function shouldAddImproveHeroClarityStep(page: Gnr8Page): boolean {
+  const section = getFirstSectionByType(page.sections ?? [], "hero.split");
+  if (!section) return false;
+  const props = isRecord(section.props) ? section.props : {};
+
+  const headline = normalizeComparableText(props.headline);
+  const subheadline = normalizeComparableText(props.subheadline);
+
+  const weakHeadlines = new Set(["hi", "hello", "welcome", "title", "headline"]);
+  const weakHeadline = !headline || headline.length < 4 || weakHeadlines.has(headline);
+  const missingSubheadline = !subheadline;
+
+  return weakHeadline || missingSubheadline;
+}
+
+function shouldAddImproveCtaClarityStep(page: Gnr8Page): boolean {
+  const section = getFirstSectionByType(page.sections ?? [], "cta.simple");
+  if (!section) return false;
+  const props = isRecord(section.props) ? section.props : {};
+
+  const headline = normalizeComparableText(props.headline);
+  const subheadline = normalizeComparableText(props.subheadline);
+  const buttonLabel = normalizeComparableText(props.buttonLabel);
+
+  const weakLabels = new Set(["click here", "submit", "learn more", "more", "go"]);
+  const weakButtonLabel = !buttonLabel || weakLabels.has(buttonLabel);
+
+  return !headline || !subheadline || weakButtonLabel;
+}
+
+function shouldAddNormalizeFaqContentStep(page: Gnr8Page): boolean {
+  const section = getFirstSectionByType(page.sections ?? [], "faq.basic");
+  if (!section) return false;
+  const props = isRecord(section.props) ? section.props : {};
+  const items = props.items;
+
+  if (!Array.isArray(items)) return true;
+
+  for (const raw of items) {
+    if (!isRecord(raw)) return true;
+
+    const qRaw = typeof raw.question === "string" ? raw.question : "";
+    const aRaw = typeof raw.answer === "string" ? raw.answer : "";
+    const question = qRaw.trim();
+    const answer = aRaw.trim();
+
+    if (!question && !answer) return true;
+    if (!question || !answer) return true;
+
+    if (hasExcessWhitespace(qRaw) || hasExcessWhitespace(aRaw)) return true;
+    if (isObviouslyIncompleteText(question) || isObviouslyIncompleteText(answer)) return true;
+  }
+
+  return false;
+}
+
+function shouldAddCompletePricingContentStep(page: Gnr8Page): boolean {
+  const section = getFirstSectionByType(page.sections ?? [], "pricing.basic");
+  if (!section) return false;
+  const props = isRecord(section.props) ? section.props : {};
+  const plans = props.plans;
+
+  if (!Array.isArray(plans)) return true;
+
+  for (const raw of plans) {
+    if (!isRecord(raw)) return true;
+    const description = normalizeComparableText(raw.description);
+    const ctaLabel = normalizeComparableText(raw.ctaLabel);
+    if (!description || !ctaLabel) return true;
+  }
+
+  return false;
+}
+
+function shouldAddCompleteFeatureGridContentStep(page: Gnr8Page): boolean {
+  const section = getFirstSectionByType(page.sections ?? [], "feature.grid");
+  if (!section) return false;
+  const props = isRecord(section.props) ? section.props : {};
+  const items = props.items;
+
+  if (!Array.isArray(items)) return true;
+
+  for (const raw of items) {
+    if (!isRecord(raw)) return true;
+    const titleRaw = typeof raw.title === "string" ? raw.title : "";
+    const textRaw = typeof raw.text === "string" ? raw.text : "";
+    const title = titleRaw.trim();
+    const text = textRaw.trim();
+
+    if (!title && !text) return true;
+    if (!title || !text) return true;
+    if (hasExcessWhitespace(titleRaw) || hasExcessWhitespace(textRaw)) return true;
+    if (isObviouslyIncompleteText(title) || isObviouslyIncompleteText(text)) return true;
+  }
+
+  return false;
+}
+
+function buildSemanticTransformationSteps(input: {
+  page: Gnr8Page;
+  existingSteps: TransformationPlanStep[];
+}): TransformationPlanStep[] {
+  const existingActionPromptKeys = new Set(
+    input.existingSteps.map((s) => normalizeKey(canonicalizeActionPrompt(s.actionPrompt))),
+  );
+
+  const out: TransformationPlanStep[] = [];
+  const tryAdd = (step: Omit<Parameters<typeof makeStep>[0], "source" | "priority" | "kind"> & { actionPrompt: string }) => {
+    const key = normalizeKey(canonicalizeActionPrompt(step.actionPrompt));
+    if (existingActionPromptKeys.has(key)) return;
+    existingActionPromptKeys.add(key);
+    out.push(
+      makeStep({
+        title: step.title,
+        description: step.description,
+        actionPrompt: step.actionPrompt,
+        source: "optimization",
+        priority: "medium",
+        kind: "content-improvement",
+        notes: ["semanticTransform=true"],
+      }),
+    );
+  };
+
+  if (shouldAddImproveHeroClarityStep(input.page)) {
+    tryAdd({
+      title: "Improve hero clarity",
+      description: "Improve hero.split headline/subheadline clarity when content is missing or weak.",
+      actionPrompt: "Improve hero clarity",
+    });
+  }
+
+  if (shouldAddImproveCtaClarityStep(input.page)) {
+    tryAdd({
+      title: "Improve CTA clarity",
+      description: "Improve cta.simple headline/subheadline/button label clarity when content is missing or weak.",
+      actionPrompt: "Improve CTA clarity",
+    });
+  }
+
+  if (shouldAddNormalizeFaqContentStep(input.page)) {
+    tryAdd({
+      title: "Normalize FAQ content",
+      description: "Normalize faq.basic items so each FAQ has a non-empty question and answer.",
+      actionPrompt: "Normalize FAQ content",
+    });
+  }
+
+  if (shouldAddCompletePricingContentStep(input.page)) {
+    tryAdd({
+      title: "Complete pricing content",
+      description: "Complete pricing.basic plan descriptions and CTA labels when missing.",
+      actionPrompt: "Complete pricing content",
+    });
+  }
+
+  if (shouldAddCompleteFeatureGridContentStep(input.page)) {
+    tryAdd({
+      title: "Complete feature grid content",
+      description: "Complete feature.grid item titles and text when missing.",
+      actionPrompt: "Complete feature grid content",
+    });
+  }
+
   return out;
 }
 
@@ -581,7 +772,6 @@ function buildPlanSummary(input: { intent?: string; strategy: TransformationPlan
 
 export function buildTransformationPlan(input: { page: Gnr8Page; review: MigrationReviewSummary }): TransformationPlan {
   const { page, review } = input;
-  void page;
 
   const cleanupSteps = buildCleanupSteps(review);
   const layoutSteps = buildLayoutSteps(review);
@@ -598,7 +788,7 @@ export function buildTransformationPlan(input: { page: Gnr8Page; review: Migrati
   const optimization = buildOptimizationSteps(review);
   const redesignSteps = buildRedesignSteps(review);
 
-  const ordered = [
+  const orderedWithoutSemantic = [
     ...cleanupSteps,
     ...layoutSteps,
     ...migrationAddOrReplaceSteps,
@@ -608,6 +798,18 @@ export function buildTransformationPlan(input: { page: Gnr8Page; review: Migrati
     ...optimization.polish,
   ];
 
+  const semanticSteps = buildSemanticTransformationSteps({ page, existingSteps: orderedWithoutSemantic });
+
+  // Ordering rule: structure first, semantic improvements second, vague redesign/polish last.
+  const structuralKinds = new Set<TransformationPlanStepKind>(["cleanup", "merge", "normalize", "reorder", "add-section", "replace-section"]);
+  const structuralSteps: TransformationPlanStep[] = [];
+  const nonStructuralSteps: TransformationPlanStep[] = [];
+  for (const step of orderedWithoutSemantic) {
+    if (structuralKinds.has(step.kind)) structuralSteps.push(step);
+    else nonStructuralSteps.push(step);
+  }
+
+  const ordered = [...structuralSteps, ...semanticSteps, ...nonStructuralSteps];
   const steps = pruneOverlappingSteps(dedupeTransformationSteps(ordered));
   const policyAwareSteps: TransformationPlanStep[] = steps.map((step) => {
     const executionCapability = getExecutionCapabilityForPlanStep(step);
