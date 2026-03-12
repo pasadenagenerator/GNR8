@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import { buildMigrationReviewSummary } from "@/gnr8/ai/migration-review-logic";
+import { buildTransformationDiffSummary } from "@/gnr8/ai/transformation-diff-summary";
 import { executeTransformationSteps } from "@/gnr8/ai/transformation-executor";
 import { buildTransformationPlan } from "@/gnr8/ai/transformation-planner";
 import { getPageBySlug } from "@/gnr8/core/page-storage";
@@ -102,6 +103,14 @@ export async function POST(req: NextRequest) {
           appliedSteps: [],
           skippedSteps: [],
           notes: ["No safe transformation steps were available."],
+          diffSummary: buildTransformationDiffSummary({
+            pageBefore: page,
+            pageAfter: finalPage,
+            reviewBefore,
+            reviewAfter: reviewBefore,
+            appliedSteps: [],
+            skippedSteps: [],
+          }),
         },
         { status: 200 },
       );
@@ -137,6 +146,14 @@ export async function POST(req: NextRequest) {
         appliedSteps: execution.appliedSteps,
         skippedSteps: execution.skippedSteps,
         notes: execution.notes,
+        diffSummary: buildTransformationDiffSummary({
+          pageBefore: page,
+          pageAfter: finalPage,
+          reviewBefore,
+          reviewAfter,
+          appliedSteps: execution.appliedSteps,
+          skippedSteps: execution.skippedSteps,
+        }),
       },
       { status: 200 },
     );
