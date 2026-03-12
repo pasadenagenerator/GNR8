@@ -1,4 +1,6 @@
 import type { MigrationReviewSummary } from "@/gnr8/ai/migration-review-logic";
+import { getExecutionCapability, type ExecutionCapability } from "@/gnr8/ai/execution-capability-matrix";
+import { evaluateExecutionPolicy } from "@/gnr8/ai/execution-policy";
 import { getTransformationStepExecutabilityV1 } from "@/gnr8/ai/transformation-executor";
 import type { TransformationPlan, TransformationPlanStep } from "@/gnr8/ai/transformation-planner";
 import type { Gnr8Page } from "@/gnr8/types/page";
@@ -6,6 +8,11 @@ import type { Gnr8Page } from "@/gnr8/types/page";
 export type ExecutionPreview = {
   ready: boolean;
   summary: string;
+  executionPolicySummary: {
+    autoAllowed: number;
+    approvalRequired: number;
+    blocked: number;
+  };
   counts: {
     totalSteps: number;
     safeSteps: number;
@@ -37,6 +44,13 @@ function uniqStable(values: string[]): string[] {
 
 function isExecutableNow(step: TransformationPlanStep): boolean {
   return getTransformationStepExecutabilityV1(step).ok;
+}
+
+function getExecutionCapabilityForPolicy(step: TransformationPlanStep): ExecutionCapability | null {
+  if (step.kind === "cleanup") return getExecutionCapability("Remove exact duplicate sections");
+  if (step.kind === "merge") return getExecutionCapability("Merge highly similar sections");
+  if (step.kind === "normalize") return getExecutionCapability("Normalize section layout");
+  return getExecutionCapability(String(step.actionPrompt ?? ""));
 }
 
 function buildExpectedChangeHints(steps: TransformationPlanStep[]): string[] {
@@ -132,8 +146,19 @@ export function buildExecutionPreview(input: {
   const executableNowStepIds: string[] = [];
   const unsupportedStepIds: string[] = [];
   const executableNowSteps: TransformationPlanStep[] = [];
+  let policyAutoAllowed = 0;
+  let policyApprovalRequired = 0;
+  let policyBlocked = 0;
 
   for (const step of steps) {
+    const policy = evaluateExecutionPolicy(step, {
+      review: input.review,
+      executionCapability: getExecutionCapabilityForPolicy(step),
+    });
+    if (policy.decision === "auto-allowed") policyAutoAllowed += 1;
+    if (policy.decision === "approval-required") policyApprovalRequired += 1;
+    if (policy.decision === "blocked") policyBlocked += 1;
+
     if (step.safe === true) safeStepIds.push(step.id);
     if (step.requiresApproval === true) approvalRequiredStepIds.push(step.id);
 
@@ -167,6 +192,11 @@ export function buildExecutionPreview(input: {
   return {
     ready,
     summary,
+    executionPolicySummary: {
+      autoAllowed: policyAutoAllowed,
+      approvalRequired: policyApprovalRequired,
+      blocked: policyBlocked,
+    },
     counts: {
       totalSteps,
       safeSteps,

@@ -7,7 +7,8 @@ import {
 import { normalizeSectionLayout } from "@/gnr8/ai/layout-normalizer";
 import { buildMigrationReviewSummary, type MigrationReviewSummary } from "@/gnr8/ai/migration-review-logic";
 import { mergeSupportedDuplicateSections } from "@/gnr8/ai/section-merge";
-import { getExecutionCapability } from "@/gnr8/ai/execution-capability-matrix";
+import { getExecutionCapability, type ExecutionCapability } from "@/gnr8/ai/execution-capability-matrix";
+import { evaluateExecutionPolicy } from "@/gnr8/ai/execution-policy";
 import type { TransformationPlan, TransformationPlanStep } from "@/gnr8/ai/transformation-planner";
 import { getPageBySlug, publishPage, savePage } from "@/gnr8/core/page-storage";
 import type { Gnr8Page } from "@/gnr8/types/page";
@@ -132,6 +133,13 @@ function parseStepNote(step: TransformationPlanStep, key: string): string | null
     return note.slice(`${key}=`.length).trim() || null;
   }
   return null;
+}
+
+function getExecutionCapabilityForPolicy(step: TransformationPlanStep): ExecutionCapability | null {
+  if (step.kind === "cleanup") return getExecutionCapability("Remove exact duplicate sections");
+  if (step.kind === "merge") return getExecutionCapability("Merge highly similar sections");
+  if (step.kind === "normalize") return getExecutionCapability("Normalize section layout");
+  return getExecutionCapability(String(step.actionPrompt ?? ""));
 }
 
 function isStepExecutableV1(step: TransformationPlanStep): { ok: true } | { ok: false; reason: string } {
@@ -301,6 +309,29 @@ export async function executeTransformationSteps(input: {
 
   for (const step of steps) {
     if (!selectedSet.has(step.id)) continue;
+
+    const policy = evaluateExecutionPolicy(step, {
+      review: input.review,
+      executionCapability: getExecutionCapabilityForPolicy(step),
+    });
+
+    if (policy.decision === "blocked") {
+      skippedSteps.push(step.id);
+      notes.push(`Skipped step ${step.id} because policy blocked it (${policy.reason}): ${policy.explanation}`);
+      continue;
+    }
+
+    if (policy.decision === "deferred") {
+      skippedSteps.push(step.id);
+      notes.push(`Skipped step ${step.id} because policy deferred it (${policy.reason}): ${policy.explanation}`);
+      continue;
+    }
+
+    if (policy.decision === "approval-required" && !explicitlyApprovedSet.has(step.id)) {
+      skippedSteps.push(step.id);
+      notes.push(`Skipped step ${step.id} because it requires explicit approval: ${policy.explanation}`);
+      continue;
+    }
 
     const exec = isStepExecutableV1(step);
     if (!exec.ok) {
