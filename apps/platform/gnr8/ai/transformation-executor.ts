@@ -7,6 +7,7 @@ import {
 import { normalizeSectionLayout } from "@/gnr8/ai/layout-normalizer";
 import { buildMigrationReviewSummary, type MigrationReviewSummary } from "@/gnr8/ai/migration-review-logic";
 import { mergeSupportedDuplicateSections } from "@/gnr8/ai/section-merge";
+import { getExecutionCapability } from "@/gnr8/ai/execution-capability-matrix";
 import type { TransformationPlan, TransformationPlanStep } from "@/gnr8/ai/transformation-planner";
 import { getPageBySlug, publishPage, savePage } from "@/gnr8/core/page-storage";
 import type { Gnr8Page } from "@/gnr8/types/page";
@@ -159,18 +160,28 @@ function isStepExecutableV1(step: TransformationPlanStep): { ok: true } | { ok: 
   }
 
   if (step.kind === "normalize" || step.kind === "reorder") {
-    const moveAttempt = applyMoveSuggestion({ id: "tmp", slug: "tmp", title: "tmp", sections: [] }, actionPrompt);
-    if (!moveAttempt.recognized) return { ok: false, reason: "Move/normalize actionPrompt is not supported in v1." };
+    const cap = getExecutionCapability(actionPrompt);
+    if (!cap || cap.supported !== true || cap.kind !== "move-section") {
+      return { ok: false, reason: "Move/normalize actionPrompt is not supported in v1." };
+    }
     return { ok: true };
   }
 
   if (step.kind === "replace-section") {
+    const cap = getExecutionCapability(actionPrompt);
+    if (!cap || cap.supported !== true || cap.kind !== "replace-section") {
+      return { ok: false, reason: "Replace-section actionPrompt is not supported in v1." };
+    }
     const support = getContentLayoutActionForPromptV1({ kind: "replace-section", actionPrompt });
     if (!support.ok) return { ok: false, reason: support.reason };
     return { ok: true };
   }
 
   if (step.kind === "add-section") {
+    const cap = getExecutionCapability(actionPrompt);
+    if (!cap || cap.supported !== true || cap.kind !== "add-section") {
+      return { ok: false, reason: "Add-section actionPrompt is not supported in v1." };
+    }
     const support = getContentLayoutActionForPromptV1({ kind: "add-section", actionPrompt });
     if (!support.ok) return { ok: false, reason: support.reason };
     return { ok: true };
