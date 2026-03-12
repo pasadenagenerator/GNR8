@@ -40,6 +40,14 @@ export function evaluateExecutionPolicy(
   }
 
   if (step.kind === "content-improvement") {
+    if (context.executionCapability?.supported === true && context.executionCapability.kind === "content-improvement") {
+      return {
+        decision: "approval-required",
+        reason: "content-risk",
+        explanation: "Semantic content changes require human approval.",
+      };
+    }
+
     return {
       decision: "blocked",
       reason: "content-risk",
@@ -109,4 +117,3 @@ export function evaluateExecutionPolicy(
     explanation: "Step requires human approval by default.",
   };
 }
-

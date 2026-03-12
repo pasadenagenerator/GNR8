@@ -4,6 +4,7 @@ export type ExecutionCapabilityKind =
   | "add-section"
   | "replace-section"
   | "move-section"
+  | "content-improvement"
   | "cleanup"
   | "merge"
   | "normalize"
@@ -242,6 +243,53 @@ export const EXECUTION_CAPABILITY_MATRIX: ExecutionCapability[] = [
     prompt: "Replace legacy section with hero",
     normalizedPrompt: normalizeExecutionPrompt("Replace legacy section with hero"),
     kind: "replace-section",
+    safe: false,
+    requiresApproval: true,
+    supported: true,
+    engine: "content-layout-transformer",
+  },
+
+  // content-improvement (approval required)
+  {
+    prompt: "Improve hero clarity",
+    normalizedPrompt: normalizeExecutionPrompt("Improve hero clarity"),
+    kind: "content-improvement",
+    safe: false,
+    requiresApproval: true,
+    supported: true,
+    engine: "content-layout-transformer",
+  },
+  {
+    prompt: "Improve CTA clarity",
+    normalizedPrompt: normalizeExecutionPrompt("Improve CTA clarity"),
+    kind: "content-improvement",
+    safe: false,
+    requiresApproval: true,
+    supported: true,
+    engine: "content-layout-transformer",
+  },
+  {
+    prompt: "Normalize FAQ content",
+    normalizedPrompt: normalizeExecutionPrompt("Normalize FAQ content"),
+    kind: "content-improvement",
+    safe: false,
+    requiresApproval: true,
+    supported: true,
+    engine: "content-layout-transformer",
+  },
+  {
+    prompt: "Complete pricing content",
+    normalizedPrompt: normalizeExecutionPrompt("Complete pricing content"),
+    kind: "content-improvement",
+    safe: false,
+    requiresApproval: true,
+    supported: true,
+    engine: "content-layout-transformer",
+  },
+  {
+    prompt: "Complete feature grid content",
+    normalizedPrompt: normalizeExecutionPrompt("Complete feature grid content"),
+    kind: "content-improvement",
     safe: false,
     requiresApproval: true,
     supported: true,

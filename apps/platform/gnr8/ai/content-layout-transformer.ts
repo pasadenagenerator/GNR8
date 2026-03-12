@@ -10,6 +10,14 @@ export type PageStructureSignature = {
   countsByType: Record<string, number>;
 };
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === "object" && !Array.isArray(value);
+}
+
+function getTrimmedString(value: unknown): string {
+  return typeof value === "string" ? value.trim() : "";
+}
+
 export function getPageStructureSignature(page: Gnr8Page): PageStructureSignature {
   const sections = Array.isArray(page.sections) ? page.sections : [];
   const types: string[] = [];
@@ -27,6 +35,75 @@ export function getPageStructureSignature(page: Gnr8Page): PageStructureSignatur
     legacySections: countsByType["legacy.html"] ?? 0,
     countsByType,
   };
+}
+
+export function getPageTransformationSignature(page: Gnr8Page): string {
+  const sections = Array.isArray(page.sections) ? page.sections : [];
+
+  const typeAndIdSequence = sections
+    .map((s) => {
+      const type = typeof s?.type === "string" ? s.type : "unknown";
+      const id = typeof s?.id === "string" ? s.id : "";
+      return id ? `${type}:${id}` : type;
+    })
+    .join("|");
+
+  const semanticSnapshots = sections.map((s) => {
+    const type = typeof s?.type === "string" ? s.type : "unknown";
+    const id = typeof s?.id === "string" ? s.id : "";
+    const props = isRecord(s?.props) ? s.props : {};
+
+    if (type === "hero.split") {
+      return { id, type, props: { headline: getTrimmedString(props.headline), subheadline: getTrimmedString(props.subheadline) } };
+    }
+
+    if (type === "cta.simple") {
+      return {
+        id,
+        type,
+        props: {
+          headline: getTrimmedString(props.headline),
+          subheadline: getTrimmedString(props.subheadline),
+          buttonLabel: getTrimmedString(props.buttonLabel),
+          buttonHref: getTrimmedString(props.buttonHref),
+        },
+      };
+    }
+
+    if (type === "faq.basic") {
+      const itemsRaw = Array.isArray(props.items) ? props.items : [];
+      const items = itemsRaw
+        .filter((i) => isRecord(i))
+        .map((i) => ({ question: getTrimmedString(i.question), answer: getTrimmedString(i.answer) }));
+      return { id, type, props: { items } };
+    }
+
+    if (type === "pricing.basic") {
+      const plansRaw = Array.isArray(props.plans) ? props.plans : [];
+      const plans = plansRaw
+        .filter((p) => isRecord(p))
+        .map((p) => ({
+          name: getTrimmedString(p.name),
+          price: getTrimmedString(p.price),
+          description: getTrimmedString(p.description),
+          ctaLabel: getTrimmedString(p.ctaLabel),
+          ctaHref: getTrimmedString(p.ctaHref),
+        }));
+      return { id, type, props: { plans } };
+    }
+
+    if (type === "feature.grid") {
+      const itemsRaw = Array.isArray(props.items) ? props.items : [];
+      const items = itemsRaw
+        .filter((i) => isRecord(i))
+        .map((i) => ({ title: getTrimmedString(i.title), text: getTrimmedString(i.text) }));
+      return { id, type, props: { items } };
+    }
+
+    return { id, type };
+  });
+
+  return JSON.stringify({ typeAndIdSequence, semanticSnapshots });
 }
 
 type AddPlacement = "after-hero" | "above-pricing" | "below-pricing" | "before-footer" | "bottom";

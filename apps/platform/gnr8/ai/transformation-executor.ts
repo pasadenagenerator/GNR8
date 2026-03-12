@@ -2,13 +2,14 @@ import { buildExactDuplicateCleanupNotes, cleanupExactDuplicateSections } from "
 import {
   applyContentLayoutActionV1,
   getContentLayoutActionForPromptV1,
-  getPageStructureSignature,
+  getPageTransformationSignature,
 } from "@/gnr8/ai/content-layout-transformer";
 import { normalizeSectionLayout } from "@/gnr8/ai/layout-normalizer";
 import { buildMigrationReviewSummary, type MigrationReviewSummary } from "@/gnr8/ai/migration-review-logic";
 import { mergeSupportedDuplicateSections } from "@/gnr8/ai/section-merge";
 import { getExecutionCapability, type ExecutionCapability } from "@/gnr8/ai/execution-capability-matrix";
 import { evaluateExecutionPolicy } from "@/gnr8/ai/execution-policy";
+import { transformSemanticContentV1 } from "@/gnr8/ai/semantic-content-transformer";
 import type { TransformationPlan, TransformationPlanStep } from "@/gnr8/ai/transformation-planner";
 import { getPageBySlug, publishPage, savePage } from "@/gnr8/core/page-storage";
 import type { Gnr8Page } from "@/gnr8/types/page";
@@ -17,8 +18,8 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === "object" && !Array.isArray(value);
 }
 
-function getTypeSequenceSignature(page: Gnr8Page): string {
-  return getPageStructureSignature(page).typeSequence;
+function getTransformationSignature(page: Gnr8Page): string {
+  return getPageTransformationSignature(page);
 }
 
 function applyMoveSuggestion(page: Gnr8Page, suggestion: string): { recognized: boolean; page: Gnr8Page; notes: string[] } {
@@ -43,7 +44,7 @@ function applyMoveSuggestion(page: Gnr8Page, suggestion: string): { recognized: 
       const withoutFooter = sections.filter((s) => s?.type !== "footer.basic");
       const footers = sections.filter((s) => s?.type === "footer.basic");
       const nextSections = footers.length > 0 ? [...withoutFooter, ...footers] : sections;
-      if (getTypeSequenceSignature({ ...page, sections: nextSections }) !== getTypeSequenceSignature(page)) {
+      if (getTransformationSignature({ ...page, sections: nextSections }) !== getTransformationSignature(page)) {
         notes.push("Moved footer to bottom.");
       }
       return { recognized: true, page: { ...page, sections: nextSections }, notes };
@@ -52,7 +53,7 @@ function applyMoveSuggestion(page: Gnr8Page, suggestion: string): { recognized: 
       const navbars = sections.filter((s) => s?.type === "navbar.basic");
       const without = sections.filter((s) => s?.type !== "navbar.basic");
       const nextSections = navbars.length > 0 ? [...navbars, ...without] : sections;
-      if (getTypeSequenceSignature({ ...page, sections: nextSections }) !== getTypeSequenceSignature(page)) {
+      if (getTransformationSignature({ ...page, sections: nextSections }) !== getTransformationSignature(page)) {
         notes.push("Moved navbar to top.");
       }
       return { recognized: true, page: { ...page, sections: nextSections }, notes };
@@ -60,7 +61,7 @@ function applyMoveSuggestion(page: Gnr8Page, suggestion: string): { recognized: 
     case "Move hero near top": {
       const navbarCount = sections.filter((s) => s?.type === "navbar.basic").length;
       const nextSections = moveSectionsByType("hero.split", navbarCount);
-      if (getTypeSequenceSignature({ ...page, sections: nextSections }) !== getTypeSequenceSignature(page)) {
+      if (getTransformationSignature({ ...page, sections: nextSections }) !== getTransformationSignature(page)) {
         notes.push("Moved hero near top.");
       }
       return { recognized: true, page: { ...page, sections: nextSections }, notes };
@@ -75,7 +76,7 @@ function applyMoveSuggestion(page: Gnr8Page, suggestion: string): { recognized: 
       })();
       if (lastFaqIdx === -1) return { recognized: true, page, notes: ["No FAQ section found; CTA move skipped."] };
       const nextSections = [...kept.slice(0, lastFaqIdx + 1), ...ctas, ...kept.slice(lastFaqIdx + 1)];
-      if (getTypeSequenceSignature({ ...page, sections: nextSections }) !== getTypeSequenceSignature(page)) {
+      if (getTransformationSignature({ ...page, sections: nextSections }) !== getTransformationSignature(page)) {
         notes.push("Moved CTA below FAQ.");
       }
       return { recognized: true, page: { ...page, sections: nextSections }, notes };
@@ -90,7 +91,7 @@ function applyMoveSuggestion(page: Gnr8Page, suggestion: string): { recognized: 
       })();
       if (lastPricingIdx === -1) return { recognized: true, page, notes: ["No pricing section found; CTA move skipped."] };
       const nextSections = [...kept.slice(0, lastPricingIdx + 1), ...ctas, ...kept.slice(lastPricingIdx + 1)];
-      if (getTypeSequenceSignature({ ...page, sections: nextSections }) !== getTypeSequenceSignature(page)) {
+      if (getTransformationSignature({ ...page, sections: nextSections }) !== getTransformationSignature(page)) {
         notes.push("Moved CTA below pricing.");
       }
       return { recognized: true, page: { ...page, sections: nextSections }, notes };
@@ -102,7 +103,7 @@ function applyMoveSuggestion(page: Gnr8Page, suggestion: string): { recognized: 
       const firstFooterIdx = kept.findIndex((s) => s?.type === "footer.basic");
       const insertAt = firstFooterIdx === -1 ? kept.length : firstFooterIdx;
       const nextSections = [...kept.slice(0, insertAt), ...ctas, ...kept.slice(insertAt)];
-      if (getTypeSequenceSignature({ ...page, sections: nextSections }) !== getTypeSequenceSignature(page)) {
+      if (getTransformationSignature({ ...page, sections: nextSections }) !== getTransformationSignature(page)) {
         notes.push("Moved CTA near bottom.");
       }
       return { recognized: true, page: { ...page, sections: nextSections }, notes };
@@ -115,7 +116,7 @@ function applyMoveSuggestion(page: Gnr8Page, suggestion: string): { recognized: 
       const firstFooterIdx = kept.findIndex((s) => s?.type === "footer.basic");
       const insertAt = firstFooterIdx === -1 ? kept.length : firstFooterIdx;
       const nextSections = [...kept.slice(0, insertAt), ...legacy, ...kept.slice(insertAt)];
-      if (getTypeSequenceSignature({ ...page, sections: nextSections }) !== getTypeSequenceSignature(page)) {
+      if (getTransformationSignature({ ...page, sections: nextSections }) !== getTransformationSignature(page)) {
         notes.push("Moved legacy blocks below structured sections.");
       }
       return { recognized: true, page: { ...page, sections: nextSections }, notes };
@@ -152,9 +153,18 @@ function isStepExecutableV1(step: TransformationPlanStep): { ok: true } | { ok: 
     case "reorder":
     case "add-section":
     case "replace-section":
+    case "content-improvement":
       break;
     default:
       return { ok: false, reason: `Step kind '${step.kind}' is not executable in v1.` };
+  }
+
+  if (step.kind === "content-improvement") {
+    const cap = getExecutionCapability(actionPrompt);
+    if (!cap || cap.supported !== true || cap.kind !== "content-improvement") {
+      return { ok: false, reason: "Content-improvement actionPrompt is not supported in v1." };
+    }
+    return { ok: true };
   }
 
   if (step.kind === "cleanup") {
@@ -343,11 +353,11 @@ export async function executeTransformationSteps(input: {
     const current = await reloadPublishedPageOrThrow(workingPage.slug);
     const reviewBefore = buildMigrationReviewSummary(current);
 
-    const signatureBefore = getTypeSequenceSignature(current);
+    const signatureBefore = getTransformationSignature(current);
 
     const pipeline = applyStructuralSafePipeline(current, reviewBefore);
     const basePage: Gnr8Page = pipeline.page;
-    const signatureAfterPipeline = getTypeSequenceSignature(basePage);
+    const signatureAfterPipeline = getTransformationSignature(basePage);
     let nextPage: Gnr8Page = basePage;
     const stepNotes: string[] = [...pipeline.notes];
     let stepApplied = false;
@@ -358,7 +368,7 @@ export async function executeTransformationSteps(input: {
         nextPage = moveAttempt.page;
         stepNotes.push(...moveAttempt.notes);
       }
-      const signatureAfterMove = getTypeSequenceSignature(nextPage);
+      const signatureAfterMove = getTransformationSignature(nextPage);
       stepApplied = signatureAfterMove !== signatureAfterPipeline || pipeline.meta.normalizedChanged;
     } else if (step.kind === "add-section" || step.kind === "replace-section") {
       const support = getContentLayoutActionForPromptV1({
@@ -393,14 +403,25 @@ export async function executeTransformationSteps(input: {
       } else {
         stepApplied = [...pipeline.meta.mergedTypes.values()].some((c) => c > 0);
       }
+    } else if (step.kind === "content-improvement") {
+      const semantic = transformSemanticContentV1({ page: nextPage, actionPrompt: step.actionPrompt });
+      if (!semantic) {
+        stepNotes.push("Unsupported in v1: semantic content prompt not recognized.");
+      } else if (!semantic.changed) {
+        stepNotes.push("Semantic content already satisfied; no changes applied.");
+      } else {
+        nextPage = semantic.page;
+        stepApplied = true;
+        stepNotes.push(semantic.explanation);
+      }
     }
 
-    const signatureAfter = getTypeSequenceSignature(nextPage);
-    const structuralChanged = signatureAfter !== signatureBefore;
+    const signatureAfter = getTransformationSignature(nextPage);
+    const pageChanged = signatureAfter !== signatureBefore;
 
-    if (!structuralChanged) {
+    if (!pageChanged) {
       skippedSteps.push(step.id);
-      notes.push(`Skipped step ${step.id} because it was already satisfied (no structural change detected).`);
+      notes.push(`Skipped step ${step.id} because it was already satisfied (no page change detected).`);
       if (stepNotes.length > 0) notes.push(...stepNotes);
       continue;
     }
