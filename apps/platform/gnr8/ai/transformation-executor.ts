@@ -248,6 +248,10 @@ function isStepExecutableV1(step: TransformationPlanStep): { ok: true } | { ok: 
   return { ok: false, reason: "Unsupported transformation step in v1." };
 }
 
+export function getTransformationStepExecutabilityV1(step: TransformationPlanStep): { ok: true } | { ok: false; reason: string } {
+  return isStepExecutableV1(step);
+}
+
 async function reloadPublishedPageOrThrow(slug: string): Promise<Gnr8Page> {
   for (let attempt = 0; attempt < 3; attempt += 1) {
     const reloaded = await getPageBySlug(slug);
