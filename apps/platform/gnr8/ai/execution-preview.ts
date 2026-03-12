@@ -5,6 +5,15 @@ import { getTransformationStepExecutabilityV1 } from "@/gnr8/ai/transformation-e
 import type { TransformationPlan, TransformationPlanStep } from "@/gnr8/ai/transformation-planner";
 import type { Gnr8Page } from "@/gnr8/types/page";
 
+export type ExecutionPreviewStepPolicy = {
+  stepId: string;
+  title: string;
+  actionPrompt: string;
+  policyDecision: "auto-allowed" | "approval-required" | "blocked" | "deferred";
+  policyReason: string;
+  policyExplanation: string;
+};
+
 export type ExecutionPreview = {
   ready: boolean;
   summary: string;
@@ -12,6 +21,7 @@ export type ExecutionPreview = {
     autoAllowed: number;
     approvalRequired: number;
     blocked: number;
+    deferred: number;
   };
   counts: {
     totalSteps: number;
@@ -24,6 +34,7 @@ export type ExecutionPreview = {
   approvalRequiredStepIds: string[];
   executableNowStepIds: string[];
   unsupportedStepIds: string[];
+  stepPolicies: ExecutionPreviewStepPolicy[];
   suggestedExecutionMode: "none" | "single-step" | "safe-batch" | "manual-approval";
   expectedChangeHints: string[];
   notes: string[];
@@ -76,29 +87,32 @@ function buildExpectedChangeHints(steps: TransformationPlanStep[]): string[] {
 
 function buildSuggestedExecutionMode(input: {
   totalSteps: number;
-  executableNowSteps: TransformationPlanStep[];
+  executableNowActionableStepPolicies: ExecutionPreviewStepPolicy[];
+  executableNowApprovalRequiredSteps: number;
 }): ExecutionPreview["suggestedExecutionMode"] {
   if (input.totalSteps === 0) return "none";
 
-  if (input.executableNowSteps.length === 0) return "manual-approval";
+  const actionableExecutableCount = input.executableNowActionableStepPolicies.length;
+  if (actionableExecutableCount === 0) return "manual-approval";
 
-  const hasApprovalRequiredExecutable = input.executableNowSteps.some((s) => s.requiresApproval === true);
-  if (hasApprovalRequiredExecutable) return "manual-approval";
+  if (input.executableNowApprovalRequiredSteps > 0) return "manual-approval";
 
-  const allExecutableSafe = input.executableNowSteps.every((s) => s.safe === true);
-  if (allExecutableSafe && input.executableNowSteps.length > 1) return "safe-batch";
+  const autoAllowedExecutable = input.executableNowActionableStepPolicies.filter((s) => s.policyDecision === "auto-allowed").length;
+  if (autoAllowedExecutable > 1 && autoAllowedExecutable === actionableExecutableCount) return "safe-batch";
 
   return "single-step";
 }
 
 function buildSummary(input: {
   totalSteps: number;
-  approvalRequiredSteps: number;
-  executableNowSteps: number;
+  hasAnyActionableExecutableStep: boolean;
+  policyAutoAllowed: number;
+  policyApprovalRequired: number;
 }): string {
   if (input.totalSteps === 0) return "No transformation steps are currently needed.";
-  if (input.executableNowSteps === 0) return "Transformation plan exists, but no steps are executable in v1.";
-  if (input.approvalRequiredSteps > 0) return "Page has transformation opportunities that require approval.";
+  if (!input.hasAnyActionableExecutableStep) return "Transformation plan exists, but no steps are currently executable under policy.";
+  if (input.policyApprovalRequired > 0) return "Page has transformation opportunities that require approval.";
+  if (input.policyAutoAllowed > 0) return "Page is ready for safe transformation execution.";
   return "Page is ready for safe transformation execution.";
 }
 
@@ -106,7 +120,10 @@ function buildNotes(input: {
   totalSteps: number;
   safeSteps: number;
   executableNowSteps: number;
-  approvalRequiredSteps: number;
+  executableNowActionableSteps: number;
+  policyBlocked: number;
+  policyDeferred: number;
+  policyApprovalRequired: number;
   unsupportedSteps: number;
   suggestedExecutionMode: ExecutionPreview["suggestedExecutionMode"];
 }): string[] {
@@ -116,12 +133,24 @@ function buildNotes(input: {
     notes.push("No planned steps are executable in v1 yet.");
   }
 
+  if (input.totalSteps > 0 && input.executableNowActionableSteps === 0) {
+    notes.push("No planned steps are currently executable under policy.");
+  }
+
   if (input.suggestedExecutionMode === "safe-batch") {
     notes.push("Safe steps can be executed in batch mode.");
   }
 
-  if (input.approvalRequiredSteps > 0) {
-    notes.push("Some steps require explicit approval.");
+  if (input.policyApprovalRequired > 0) {
+    notes.push("Some steps require explicit human approval.");
+  }
+
+  if (input.policyBlocked > 0) {
+    notes.push("Some steps are blocked by execution policy.");
+  }
+
+  if (input.policyDeferred > 0) {
+    notes.push("Some steps are deferred by execution policy.");
   }
 
   if (input.unsupportedSteps > 0) {
@@ -145,26 +174,44 @@ export function buildExecutionPreview(input: {
   const approvalRequiredStepIds: string[] = [];
   const executableNowStepIds: string[] = [];
   const unsupportedStepIds: string[] = [];
-  const executableNowSteps: TransformationPlanStep[] = [];
+  const stepPolicies: ExecutionPreviewStepPolicy[] = [];
+  const executableNowActionableStepPolicies: ExecutionPreviewStepPolicy[] = [];
+  let executableNowApprovalRequiredSteps = 0;
   let policyAutoAllowed = 0;
   let policyApprovalRequired = 0;
   let policyBlocked = 0;
+  let policyDeferred = 0;
 
   for (const step of steps) {
+    const executionCapability = getExecutionCapabilityForPolicy(step);
     const policy = evaluateExecutionPolicy(step, {
       review: input.review,
-      executionCapability: getExecutionCapabilityForPolicy(step),
+      executionCapability,
     });
     if (policy.decision === "auto-allowed") policyAutoAllowed += 1;
     if (policy.decision === "approval-required") policyApprovalRequired += 1;
     if (policy.decision === "blocked") policyBlocked += 1;
+    if (policy.decision === "deferred") policyDeferred += 1;
+
+    const stepPolicy: ExecutionPreviewStepPolicy = {
+      stepId: step.id,
+      title: step.title,
+      actionPrompt: step.actionPrompt,
+      policyDecision: policy.decision,
+      policyReason: policy.reason,
+      policyExplanation: policy.explanation,
+    };
+    stepPolicies.push(stepPolicy);
 
     if (step.safe === true) safeStepIds.push(step.id);
     if (step.requiresApproval === true) approvalRequiredStepIds.push(step.id);
 
     if (isExecutableNow(step)) {
       executableNowStepIds.push(step.id);
-      executableNowSteps.push(step);
+      if (policy.decision === "approval-required") executableNowApprovalRequiredSteps += 1;
+      if (policy.decision === "auto-allowed" || policy.decision === "approval-required") {
+        executableNowActionableStepPolicies.push(stepPolicy);
+      }
     } else {
       unsupportedStepIds.push(step.id);
     }
@@ -176,15 +223,28 @@ export function buildExecutionPreview(input: {
   const executableNowStepsCount = executableNowStepIds.length;
   const unsupportedSteps = unsupportedStepIds.length;
 
-  const ready = totalSteps > 0 && executableNowStepsCount > 0;
-  const suggestedExecutionMode = buildSuggestedExecutionMode({ totalSteps, executableNowSteps });
-  const summary = buildSummary({ totalSteps, approvalRequiredSteps, executableNowSteps: executableNowStepsCount });
+  const hasAnyActionableExecutableStep = executableNowActionableStepPolicies.length > 0;
+  const ready = totalSteps > 0 && executableNowStepsCount > 0 && hasAnyActionableExecutableStep;
+  const suggestedExecutionMode = buildSuggestedExecutionMode({
+    totalSteps,
+    executableNowActionableStepPolicies,
+    executableNowApprovalRequiredSteps,
+  });
+  const summary = buildSummary({
+    totalSteps,
+    hasAnyActionableExecutableStep,
+    policyAutoAllowed,
+    policyApprovalRequired,
+  });
   const expectedChangeHints = buildExpectedChangeHints(steps);
   const notes = buildNotes({
     totalSteps,
     safeSteps,
     executableNowSteps: executableNowStepsCount,
-    approvalRequiredSteps,
+    executableNowActionableSteps: executableNowActionableStepPolicies.length,
+    policyBlocked,
+    policyDeferred,
+    policyApprovalRequired,
     unsupportedSteps,
     suggestedExecutionMode,
   });
@@ -196,6 +256,7 @@ export function buildExecutionPreview(input: {
       autoAllowed: policyAutoAllowed,
       approvalRequired: policyApprovalRequired,
       blocked: policyBlocked,
+      deferred: policyDeferred,
     },
     counts: {
       totalSteps,
@@ -208,6 +269,7 @@ export function buildExecutionPreview(input: {
     approvalRequiredStepIds,
     executableNowStepIds,
     unsupportedStepIds,
+    stepPolicies,
     suggestedExecutionMode,
     expectedChangeHints,
     notes,
