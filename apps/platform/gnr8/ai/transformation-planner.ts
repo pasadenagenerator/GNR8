@@ -1,8 +1,8 @@
 import type { Gnr8Page } from "@/gnr8/types/page";
-import type { Gnr8Section } from "@/gnr8/types/section";
 import type { MigrationReviewSummary } from "./migration-review-logic";
 import { getExecutionCapabilityForPlanStep } from "./execution-capability-matrix";
 import { evaluateExecutionPolicy, type ExecutionPolicyDecision, type ExecutionPolicyReason } from "./execution-policy";
+import { buildSemanticOptimizationSuggestions } from "./semantic-optimization-suggestions";
 
 export type TransformationPlanStepSource = "migration" | "optimization" | "redesign" | "layout" | "cleanup";
 
@@ -197,125 +197,77 @@ function uniqStable(values: string[]): string[] {
   return out;
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return !!value && typeof value === "object" && !Array.isArray(value);
+const SUPPORTED_SEMANTIC_SUGGESTIONS = [
+  "Improve hero clarity",
+  "Improve CTA clarity",
+  "Normalize FAQ content",
+  "Complete pricing content",
+  "Complete feature grid content",
+] as const;
+
+type SupportedSemanticSuggestion = (typeof SUPPORTED_SEMANTIC_SUGGESTIONS)[number];
+
+const SUPPORTED_SEMANTIC_SUGGESTION_SET = new Set<string>(SUPPORTED_SEMANTIC_SUGGESTIONS);
+
+function isSupportedSemanticSuggestion(suggestion: string): suggestion is SupportedSemanticSuggestion {
+  return SUPPORTED_SEMANTIC_SUGGESTION_SET.has(suggestion);
 }
 
-function getFirstSectionByType(sections: Gnr8Section[], type: string): Gnr8Section | null {
-  for (const section of sections) if (section?.type === type) return section;
-  return null;
-}
-
-function normalizeComparableText(value: unknown): string {
-  return typeof value === "string" ? value.toLowerCase().trim().replace(/\s+/g, " ") : "";
-}
-
-function hasExcessWhitespace(value: string): boolean {
-  // Keep this deterministic and structural: flag obviously malformed whitespace.
-  return /\s{3,}/.test(value) || /\n\s*\n\s*\n/.test(value);
-}
-
-function isObviouslyIncompleteText(value: string): boolean {
-  const t = normalizeComparableText(value);
-  return t === "tbd" || t === "todo" || t === "lorem ipsum" || t === "coming soon";
-}
-
-function shouldAddImproveHeroClarityStep(page: Gnr8Page): boolean {
-  const section = getFirstSectionByType(page.sections ?? [], "hero.split");
-  if (!section) return false;
-  const props = isRecord(section.props) ? section.props : {};
-
-  const headline = normalizeComparableText(props.headline);
-  const subheadline = normalizeComparableText(props.subheadline);
-
-  const weakHeadlines = new Set(["hi", "hello", "welcome", "title", "headline"]);
-  const weakHeadline = !headline || headline.length < 4 || weakHeadlines.has(headline);
-  const missingSubheadline = !subheadline;
-
-  return weakHeadline || missingSubheadline;
-}
-
-function shouldAddImproveCtaClarityStep(page: Gnr8Page): boolean {
-  const section = getFirstSectionByType(page.sections ?? [], "cta.simple");
-  if (!section) return false;
-  const props = isRecord(section.props) ? section.props : {};
-
-  const headline = normalizeComparableText(props.headline);
-  const subheadline = normalizeComparableText(props.subheadline);
-  const buttonLabel = normalizeComparableText(props.buttonLabel);
-
-  const weakLabels = new Set(["click here", "submit", "learn more", "more", "go"]);
-  const weakButtonLabel = !buttonLabel || weakLabels.has(buttonLabel);
-
-  return !headline || !subheadline || weakButtonLabel;
-}
-
-function shouldAddNormalizeFaqContentStep(page: Gnr8Page): boolean {
-  const section = getFirstSectionByType(page.sections ?? [], "faq.basic");
-  if (!section) return false;
-  const props = isRecord(section.props) ? section.props : {};
-  const items = props.items;
-
-  if (!Array.isArray(items)) return true;
-
-  for (const raw of items) {
-    if (!isRecord(raw)) return true;
-
-    const qRaw = typeof raw.question === "string" ? raw.question : "";
-    const aRaw = typeof raw.answer === "string" ? raw.answer : "";
-    const question = qRaw.trim();
-    const answer = aRaw.trim();
-
-    if (!question && !answer) return true;
-    if (!question || !answer) return true;
-
-    if (hasExcessWhitespace(qRaw) || hasExcessWhitespace(aRaw)) return true;
-    if (isObviouslyIncompleteText(question) || isObviouslyIncompleteText(answer)) return true;
+function toSemanticTransformationStep(actionPrompt: SupportedSemanticSuggestion): TransformationPlanStep {
+  // Keep output stable: title/actionPrompt match the suggestion string exactly.
+  // Descriptions are preserved from the prior planner implementation.
+  switch (actionPrompt) {
+    case "Improve hero clarity":
+      return makeStep({
+        title: "Improve hero clarity",
+        description: "Improve hero.split headline/subheadline clarity when content is missing or weak.",
+        actionPrompt,
+        source: "optimization",
+        priority: "medium",
+        kind: "content-improvement",
+        notes: ["semanticTransform=true"],
+      });
+    case "Improve CTA clarity":
+      return makeStep({
+        title: "Improve CTA clarity",
+        description: "Improve cta.simple headline/subheadline/button label clarity when content is missing or weak.",
+        actionPrompt,
+        source: "optimization",
+        priority: "medium",
+        kind: "content-improvement",
+        notes: ["semanticTransform=true"],
+      });
+    case "Normalize FAQ content":
+      return makeStep({
+        title: "Normalize FAQ content",
+        description: "Normalize faq.basic items so each FAQ has a non-empty question and answer.",
+        actionPrompt,
+        source: "optimization",
+        priority: "medium",
+        kind: "content-improvement",
+        notes: ["semanticTransform=true"],
+      });
+    case "Complete pricing content":
+      return makeStep({
+        title: "Complete pricing content",
+        description: "Complete pricing.basic plan descriptions and CTA labels when missing.",
+        actionPrompt,
+        source: "optimization",
+        priority: "medium",
+        kind: "content-improvement",
+        notes: ["semanticTransform=true"],
+      });
+    case "Complete feature grid content":
+      return makeStep({
+        title: "Complete feature grid content",
+        description: "Complete feature.grid item titles and text when missing.",
+        actionPrompt,
+        source: "optimization",
+        priority: "medium",
+        kind: "content-improvement",
+        notes: ["semanticTransform=true"],
+      });
   }
-
-  return false;
-}
-
-function shouldAddCompletePricingContentStep(page: Gnr8Page): boolean {
-  const section = getFirstSectionByType(page.sections ?? [], "pricing.basic");
-  if (!section) return false;
-  const props = isRecord(section.props) ? section.props : {};
-  const plans = props.plans;
-
-  if (!Array.isArray(plans)) return true;
-
-  for (const raw of plans) {
-    if (!isRecord(raw)) return true;
-    const description = normalizeComparableText(raw.description);
-    const ctaLabel = normalizeComparableText(raw.ctaLabel);
-    if (!description || !ctaLabel) return true;
-  }
-
-  return false;
-}
-
-function shouldAddCompleteFeatureGridContentStep(page: Gnr8Page): boolean {
-  const section = getFirstSectionByType(page.sections ?? [], "feature.grid");
-  if (!section) return false;
-  const props = isRecord(section.props) ? section.props : {};
-  const items = props.items;
-
-  if (!Array.isArray(items)) return true;
-
-  for (const raw of items) {
-    if (!isRecord(raw)) return true;
-    const titleRaw = typeof raw.title === "string" ? raw.title : "";
-    const textRaw = typeof raw.text === "string" ? raw.text : "";
-    const title = titleRaw.trim();
-    const text = textRaw.trim();
-
-    if (!title && !text) return true;
-    if (!title || !text) return true;
-    if (hasExcessWhitespace(titleRaw) || hasExcessWhitespace(textRaw)) return true;
-    if (isObviouslyIncompleteText(title) || isObviouslyIncompleteText(text)) return true;
-  }
-
-  return false;
 }
 
 function buildSemanticTransformationSteps(input: {
@@ -327,62 +279,20 @@ function buildSemanticTransformationSteps(input: {
   );
 
   const out: TransformationPlanStep[] = [];
-  const tryAdd = (step: Omit<Parameters<typeof makeStep>[0], "source" | "priority" | "kind"> & { actionPrompt: string }) => {
-    const key = normalizeKey(canonicalizeActionPrompt(step.actionPrompt));
+  const seenSemanticActionPromptKeys = new Set<string>();
+  const tryAdd = (actionPromptRaw: string) => {
+    const actionPrompt = canonicalizeActionPrompt(actionPromptRaw);
+    if (!isSupportedSemanticSuggestion(actionPrompt)) return;
+    const key = normalizeKey(actionPrompt);
     if (existingActionPromptKeys.has(key)) return;
+    if (seenSemanticActionPromptKeys.has(key)) return;
     existingActionPromptKeys.add(key);
-    out.push(
-      makeStep({
-        title: step.title,
-        description: step.description,
-        actionPrompt: step.actionPrompt,
-        source: "optimization",
-        priority: "medium",
-        kind: "content-improvement",
-        notes: ["semanticTransform=true"],
-      }),
-    );
+    seenSemanticActionPromptKeys.add(key);
+    out.push(toSemanticTransformationStep(actionPrompt));
   };
 
-  if (shouldAddImproveHeroClarityStep(input.page)) {
-    tryAdd({
-      title: "Improve hero clarity",
-      description: "Improve hero.split headline/subheadline clarity when content is missing or weak.",
-      actionPrompt: "Improve hero clarity",
-    });
-  }
-
-  if (shouldAddImproveCtaClarityStep(input.page)) {
-    tryAdd({
-      title: "Improve CTA clarity",
-      description: "Improve cta.simple headline/subheadline/button label clarity when content is missing or weak.",
-      actionPrompt: "Improve CTA clarity",
-    });
-  }
-
-  if (shouldAddNormalizeFaqContentStep(input.page)) {
-    tryAdd({
-      title: "Normalize FAQ content",
-      description: "Normalize faq.basic items so each FAQ has a non-empty question and answer.",
-      actionPrompt: "Normalize FAQ content",
-    });
-  }
-
-  if (shouldAddCompletePricingContentStep(input.page)) {
-    tryAdd({
-      title: "Complete pricing content",
-      description: "Complete pricing.basic plan descriptions and CTA labels when missing.",
-      actionPrompt: "Complete pricing content",
-    });
-  }
-
-  if (shouldAddCompleteFeatureGridContentStep(input.page)) {
-    tryAdd({
-      title: "Complete feature grid content",
-      description: "Complete feature.grid item titles and text when missing.",
-      actionPrompt: "Complete feature grid content",
-    });
-  }
+  const semanticSuggestions = buildSemanticOptimizationSuggestions(input.page);
+  for (const suggestion of semanticSuggestions) tryAdd(suggestion);
 
   return out;
 }
