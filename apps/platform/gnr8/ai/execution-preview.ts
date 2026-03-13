@@ -14,6 +14,17 @@ export type ExecutionPreviewStepPolicy = {
   policyExplanation: string;
 };
 
+export type ExecutionPreviewSemanticStepPreview = {
+  stepId: string;
+  title: string;
+  actionPrompt: string;
+  previewHints: string[];
+  approvalRationaleHints: string[];
+  policyDecision: "auto-allowed" | "approval-required" | "blocked" | "deferred";
+  policyReason: string;
+  policyExplanation: string;
+};
+
 export type ExecutionPreview = {
   ready: boolean;
   summary: string;
@@ -35,12 +46,28 @@ export type ExecutionPreview = {
   executableNowStepIds: string[];
   unsupportedStepIds: string[];
   stepPolicies: ExecutionPreviewStepPolicy[];
+  semanticStepPreviews: ExecutionPreviewSemanticStepPreview[];
   semanticPreviewHints?: Array<{ stepId: string; hints: string[] }>;
   semanticApprovalRationaleHints?: Array<{ stepId: string; hints: string[] }>;
   suggestedExecutionMode: "none" | "single-step" | "safe-batch" | "manual-approval";
   expectedChangeHints: string[];
   notes: string[];
 };
+
+const SUPPORTED_SEMANTIC_TRANSFORMATION_PROMPTS = [
+  "Improve hero clarity",
+  "Improve CTA clarity",
+  "Normalize FAQ content",
+  "Complete pricing content",
+  "Complete feature grid content",
+] as const;
+
+const SUPPORTED_SEMANTIC_TRANSFORMATION_PROMPT_SET = new Set<string>(SUPPORTED_SEMANTIC_TRANSFORMATION_PROMPTS);
+
+function isSupportedSemanticTransformationPrompt(actionPrompt: unknown): boolean {
+  const prompt = typeof actionPrompt === "string" ? actionPrompt.trim() : "";
+  return SUPPORTED_SEMANTIC_TRANSFORMATION_PROMPT_SET.has(prompt);
+}
 
 function uniqStable(values: string[]): string[] {
   const out: string[] = [];
@@ -221,6 +248,7 @@ export function buildExecutionPreview(input: {
   const executableNowStepIds: string[] = [];
   const unsupportedStepIds: string[] = [];
   const stepPolicies: ExecutionPreviewStepPolicy[] = [];
+  const semanticStepPreviews: ExecutionPreviewSemanticStepPreview[] = [];
   const executableNowActionableStepPolicies: ExecutionPreviewStepPolicy[] = [];
   let executableNowActionableAutoAllowed = 0;
   let executableNowActionableApprovalRequired = 0;
@@ -243,6 +271,25 @@ export function buildExecutionPreview(input: {
       policyExplanation: policy.policyExplanation,
     };
     stepPolicies.push(stepPolicy);
+
+    if (isSupportedSemanticTransformationPrompt(step.actionPrompt)) {
+      const previewHints = Array.isArray(step.previewHints)
+        ? step.previewHints.filter((h) => typeof h === "string" && h.trim().length > 0)
+        : [];
+      const approvalRationaleHints = Array.isArray(step.approvalRationaleHints)
+        ? step.approvalRationaleHints.filter((h) => typeof h === "string" && h.trim().length > 0)
+        : [];
+      semanticStepPreviews.push({
+        stepId: step.id,
+        title: step.title,
+        actionPrompt: step.actionPrompt,
+        previewHints,
+        approvalRationaleHints,
+        policyDecision: stepPolicy.policyDecision,
+        policyReason: stepPolicy.policyReason,
+        policyExplanation: stepPolicy.policyExplanation,
+      });
+    }
 
     if (step.safe === true) safeStepIds.push(step.id);
     if (step.requiresApproval === true) approvalRequiredStepIds.push(step.id);
@@ -291,17 +338,20 @@ export function buildExecutionPreview(input: {
     policyApprovalRequired: planPolicySummary?.approvalRequired ?? policyApprovalRequired,
   });
   const expectedChangeHints = buildExpectedChangeHints(steps);
-  const notes = buildNotes({
-    totalSteps,
-    safeSteps,
-    executableNowSteps: executableNowStepsCount,
-    executableNowActionableSteps: executableNowActionableStepPolicies.length,
-    policyBlocked: planPolicySummary?.blocked ?? policyBlocked,
-    policyDeferred: planPolicySummary?.deferred ?? policyDeferred,
-    policyApprovalRequired: planPolicySummary?.approvalRequired ?? policyApprovalRequired,
-    unsupportedSteps,
-    suggestedExecutionMode,
-  });
+  const notes = uniqStable([
+    ...buildNotes({
+      totalSteps,
+      safeSteps,
+      executableNowSteps: executableNowStepsCount,
+      executableNowActionableSteps: executableNowActionableStepPolicies.length,
+      policyBlocked: planPolicySummary?.blocked ?? policyBlocked,
+      policyDeferred: planPolicySummary?.deferred ?? policyDeferred,
+      policyApprovalRequired: planPolicySummary?.approvalRequired ?? policyApprovalRequired,
+      unsupportedSteps,
+      suggestedExecutionMode,
+    }),
+    ...(semanticStepPreviews.length > 0 ? ["Semantic transformation steps include preview and approval rationale hints."] : []),
+  ]);
 
   return {
     ready,
@@ -324,6 +374,7 @@ export function buildExecutionPreview(input: {
     executableNowStepIds,
     unsupportedStepIds,
     stepPolicies,
+    semanticStepPreviews,
     ...(semanticPreviewHints.length > 0 ? { semanticPreviewHints } : {}),
     ...(semanticApprovalRationaleHints.length > 0 ? { semanticApprovalRationaleHints } : {}),
     suggestedExecutionMode,
