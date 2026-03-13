@@ -274,8 +274,165 @@ function toSemanticTransformationStep(actionPrompt: SupportedSemanticSuggestion)
   }
 }
 
+function hasStructuralAddOrReplace(existingSteps: TransformationPlanStep[], area: "hero" | "cta" | "faq" | "pricing" | "feature-grid"): boolean {
+  for (const step of existingSteps) {
+    if (step.kind !== "add-section" && step.kind !== "replace-section") continue;
+    const key = normalizeKey(canonicalizeActionPrompt(step.actionPrompt));
+
+    if (
+      area === "hero" &&
+      (key.startsWith("add hero") || key.includes(" hero section") || key.includes(" with hero") || key.endsWith(" hero"))
+    ) {
+      return true;
+    }
+    if (area === "cta" && (key.startsWith("add cta") || key.includes(" cta ") || key.endsWith(" cta"))) return true;
+    if (
+      area === "faq" &&
+      (key.startsWith("add faq") || key.includes(" faq ") || key.includes(" with faq") || key.endsWith(" faq"))
+    ) {
+      return true;
+    }
+    if (
+      area === "pricing" &&
+      (key.startsWith("add pricing") || key.includes(" pricing ") || key.includes(" with pricing") || key.endsWith(" pricing"))
+    ) {
+      return true;
+    }
+    if (
+      area === "feature-grid" &&
+      (key.startsWith("add feature grid") || key.includes(" feature grid") || key.includes(" with feature grid") || key.endsWith(" feature grid"))
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function getSemanticStepOrderKey(input: {
+  actionPrompt: SupportedSemanticSuggestion;
+  review: MigrationReviewSummary;
+  hasPricingStep: boolean;
+  hasFaqStep: boolean;
+}): number {
+  // Conservative, deterministic precedence within the semantic bucket.
+  // This keeps semantic work disciplined without introducing fuzzy scoring.
+  switch (input.actionPrompt) {
+    case "Improve hero clarity":
+      return 10;
+    case "Improve CTA clarity":
+      return 20;
+    case "Normalize FAQ content":
+      return 30;
+    case "Complete pricing content": {
+      // Allowed swap: pricing can precede FAQ only when FAQ is absent/not relevant.
+      // If both are present, keep FAQ before pricing.
+      const intent = input.review.intent ?? "unknown";
+      const isProductIntent = intent === "ecommerce_product" || intent === "product_page";
+      if (input.hasPricingStep && !input.hasFaqStep && isProductIntent) return 29;
+      return 40;
+    }
+    case "Complete feature grid content":
+      return 50;
+  }
+}
+
+function getSemanticStepPriority(input: {
+  actionPrompt: SupportedSemanticSuggestion;
+  review: MigrationReviewSummary;
+  existingSteps: TransformationPlanStep[];
+  semanticStepCount: number;
+}): TransformationPlanStepPriority {
+  const intent = input.review.intent ?? "unknown";
+  const isProductIntent = intent === "ecommerce_product" || intent === "product_page";
+
+  switch (input.actionPrompt) {
+    case "Improve hero clarity": {
+      // High when the hero is weak and there's no concurrent structural hero add/replace.
+      const structuralHero = hasStructuralAddOrReplace(input.existingSteps, "hero");
+      return structuralHero ? "medium" : "high";
+    }
+    case "Improve CTA clarity": {
+      // High when the CTA is weak and CTA exists (suggestion only fires when cta.simple exists).
+      const structuralCta = hasStructuralAddOrReplace(input.existingSteps, "cta");
+      return structuralCta ? "medium" : "high";
+    }
+    case "Normalize FAQ content":
+      return "medium";
+    case "Complete pricing content":
+      return "medium";
+    case "Complete feature grid content": {
+      // Lower-tier by default, but don't bury it when it's the main remaining semantic weakness.
+      if (isProductIntent) return "medium";
+      if (input.semanticStepCount <= 1) return "medium";
+      return "low";
+    }
+  }
+}
+
+function compareSemanticSteps(
+  a: TransformationPlanStep,
+  b: TransformationPlanStep,
+  context: { orderKeyByPrompt: Map<string, number>; originalIndexById: Map<string, number> },
+): number {
+  const aKey = context.orderKeyByPrompt.get(a.actionPrompt) ?? 999;
+  const bKey = context.orderKeyByPrompt.get(b.actionPrompt) ?? 999;
+  if (aKey !== bKey) return aKey - bKey;
+
+  // Deterministic tie-breakers.
+  if (a.priority !== b.priority) {
+    const rank = (p: TransformationPlanStepPriority) => (p === "high" ? 1 : p === "medium" ? 2 : 3);
+    return rank(a.priority) - rank(b.priority);
+  }
+
+  const aIdx = context.originalIndexById.get(a.id) ?? 0;
+  const bIdx = context.originalIndexById.get(b.id) ?? 0;
+  if (aIdx !== bIdx) return aIdx - bIdx;
+
+  return normalizeKey(a.actionPrompt).localeCompare(normalizeKey(b.actionPrompt));
+}
+
+function rebalanceSemanticTransformationSteps(input: {
+  steps: TransformationPlanStep[];
+  review: MigrationReviewSummary;
+  existingSteps: TransformationPlanStep[];
+}): TransformationPlanStep[] {
+  const semanticSteps = [...input.steps];
+  const semanticStepCount = semanticSteps.length;
+
+  const semanticPrompts = semanticSteps
+    .map((s) => canonicalizeActionPrompt(s.actionPrompt))
+    .filter((p): p is SupportedSemanticSuggestion => typeof p === "string" && isSupportedSemanticSuggestion(p));
+  const semanticPromptSet = new Set<SupportedSemanticSuggestion>(semanticPrompts);
+
+  const hasFaqStep = semanticPromptSet.has("Normalize FAQ content");
+  const hasPricingStep = semanticPromptSet.has("Complete pricing content");
+
+  const orderKeyByPrompt = new Map<string, number>();
+  for (const prompt of semanticPromptSet) {
+    orderKeyByPrompt.set(
+      prompt,
+      getSemanticStepOrderKey({ actionPrompt: prompt, review: input.review, hasFaqStep, hasPricingStep }),
+    );
+  }
+
+  const originalIndexById = new Map<string, number>();
+  for (let i = 0; i < semanticSteps.length; i += 1) originalIndexById.set(semanticSteps[i]?.id ?? String(i), i);
+
+  const rebalanced = semanticSteps.map((step) => {
+    const actionPrompt = canonicalizeActionPrompt(step.actionPrompt);
+    if (!isSupportedSemanticSuggestion(actionPrompt)) return step;
+    const priority = getSemanticStepPriority({ actionPrompt, review: input.review, existingSteps: input.existingSteps, semanticStepCount });
+    if (priority === step.priority) return step;
+    return { ...step, priority };
+  });
+
+  rebalanced.sort((a, b) => compareSemanticSteps(a, b, { orderKeyByPrompt, originalIndexById }));
+  return rebalanced;
+}
+
 function buildSemanticTransformationSteps(input: {
   page: Gnr8Page;
+  review: MigrationReviewSummary;
   existingSteps: TransformationPlanStep[];
 }): TransformationPlanStep[] {
   const existingActionPromptKeys = new Set(
@@ -307,7 +464,7 @@ function buildSemanticTransformationSteps(input: {
   const semanticSuggestions = buildSemanticOptimizationSuggestions(input.page);
   for (const suggestion of semanticSuggestions) tryAdd(suggestion);
 
-  return out;
+  return rebalanceSemanticTransformationSteps({ steps: out, review: input.review, existingSteps: input.existingSteps });
 }
 
 function dedupeTransformationSteps(steps: TransformationPlanStep[]): TransformationPlanStep[] {
@@ -721,7 +878,7 @@ export function buildTransformationPlan(input: { page: Gnr8Page; review: Migrati
     ...optimization.polish,
   ];
 
-  const semanticSteps = buildSemanticTransformationSteps({ page, existingSteps: orderedWithoutSemantic });
+  const semanticSteps = buildSemanticTransformationSteps({ page, review, existingSteps: orderedWithoutSemantic });
 
   // Ordering rule: structure first, semantic improvements second, vague redesign/polish last.
   const structuralKinds = new Set<TransformationPlanStepKind>(["cleanup", "merge", "normalize", "reorder", "add-section", "replace-section"]);
