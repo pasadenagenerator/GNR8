@@ -3,6 +3,7 @@ import type { MigrationReviewSummary } from "./migration-review-logic";
 import { getExecutionCapabilityForPlanStep } from "./execution-capability-matrix";
 import { evaluateExecutionPolicy, type ExecutionPolicyDecision, type ExecutionPolicyReason } from "./execution-policy";
 import { buildSemanticOptimizationSuggestions } from "./semantic-optimization-suggestions";
+import { buildSemanticPreviewHints } from "./semantic-preview-hints";
 
 export type TransformationPlanStepSource = "migration" | "optimization" | "redesign" | "layout" | "cleanup";
 
@@ -29,6 +30,7 @@ export type TransformationPlanStep = {
   priority: TransformationPlanStepPriority;
   kind: TransformationPlanStepKind;
   notes: string[];
+  previewHints?: string[];
   policyDecision?: ExecutionPolicyDecision;
   policyReason?: ExecutionPolicyReason;
   policyExplanation?: string;
@@ -288,7 +290,9 @@ function buildSemanticTransformationSteps(input: {
     if (seenSemanticActionPromptKeys.has(key)) return;
     existingActionPromptKeys.add(key);
     seenSemanticActionPromptKeys.add(key);
-    out.push(toSemanticTransformationStep(actionPrompt));
+    const base = toSemanticTransformationStep(actionPrompt);
+    const previewHints = buildSemanticPreviewHints(input.page, actionPrompt);
+    out.push(previewHints.length > 0 ? { ...base, previewHints } : base);
   };
 
   const semanticSuggestions = buildSemanticOptimizationSuggestions(input.page);
