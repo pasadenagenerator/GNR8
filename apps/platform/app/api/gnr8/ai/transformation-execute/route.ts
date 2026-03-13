@@ -5,6 +5,7 @@ import { buildSemanticDiffSummary } from "@/gnr8/ai/semantic-diff-summary";
 import { buildSemanticExecutionResultHints } from "@/gnr8/ai/semantic-execution-result-hints";
 import { buildSemanticFollowUpSuggestions } from "@/gnr8/ai/semantic-follow-up-suggestions";
 import { buildSemanticImpactSummary } from "@/gnr8/ai/semantic-impact-summary";
+import { calculateSemanticAutomationReadiness } from "@/gnr8/ai/semantic-automation-readiness";
 import { buildTransformationDiffSummary } from "@/gnr8/ai/transformation-diff-summary";
 import { executeTransformationSteps } from "@/gnr8/ai/transformation-executor";
 import { buildTransformationPlan } from "@/gnr8/ai/transformation-planner";
@@ -81,6 +82,13 @@ export async function POST(req: NextRequest) {
     }
 
     const reviewBefore = buildMigrationReviewSummary(page);
+    const semanticFollowUpSuggestionsBefore = buildSemanticFollowUpSuggestions(page);
+    const semanticAutomationReadinessBefore = calculateSemanticAutomationReadiness({
+      page,
+      semanticConfidence: reviewBefore.semanticConfidence,
+      semanticFollowUpSuggestions: semanticFollowUpSuggestionsBefore,
+    });
+    const reviewBeforeWithReadiness = { ...reviewBefore, semanticAutomationReadiness: semanticAutomationReadinessBefore };
     const transformationPlanBefore = buildTransformationPlan({ page, review: reviewBefore });
 
     const steps = Array.isArray(transformationPlanBefore.steps) ? transformationPlanBefore.steps : [];
@@ -96,22 +104,31 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: "Failed to reload published page" }, { status: 500 });
       }
 
+      const reviewAfter = buildMigrationReviewSummary(finalPage);
+      const semanticFollowUpSuggestionsAfter = buildSemanticFollowUpSuggestions(finalPage);
+      const semanticAutomationReadinessAfter = calculateSemanticAutomationReadiness({
+        page: finalPage,
+        semanticConfidence: reviewAfter.semanticConfidence,
+        semanticFollowUpSuggestions: semanticFollowUpSuggestionsAfter,
+      });
+      const reviewAfterWithReadiness = { ...reviewAfter, semanticAutomationReadiness: semanticAutomationReadinessAfter };
+
       return NextResponse.json(
         {
           success: true,
           page: finalPage,
           transformationPlanBefore,
           transformationPlanAfter: transformationPlanBefore,
-          reviewBefore,
-          reviewAfter: reviewBefore,
+          reviewBefore: reviewBeforeWithReadiness,
+          reviewAfter: reviewAfterWithReadiness,
           appliedSteps: [],
           skippedSteps: [],
           notes: ["No safe transformation steps were available."],
           diffSummary: buildTransformationDiffSummary({
             pageBefore: page,
             pageAfter: finalPage,
-            reviewBefore,
-            reviewAfter: reviewBefore,
+            reviewBefore: reviewBeforeWithReadiness,
+            reviewAfter: reviewAfterWithReadiness,
             appliedSteps: [],
             skippedSteps: [],
           }),
@@ -124,10 +141,10 @@ export async function POST(req: NextRequest) {
             pageAfter: finalPage,
           }),
           semanticImpactSummary: buildSemanticImpactSummary({
-            reviewBefore,
-            reviewAfter: reviewBefore,
+            reviewBefore: reviewBeforeWithReadiness,
+            reviewAfter: reviewAfterWithReadiness,
           }),
-          semanticFollowUpSuggestions: buildSemanticFollowUpSuggestions(finalPage),
+          semanticFollowUpSuggestions: semanticFollowUpSuggestionsAfter,
         },
         { status: 200 },
       );
@@ -150,6 +167,18 @@ export async function POST(req: NextRequest) {
     }
 
     const reviewAfter = buildMigrationReviewSummary(finalPage);
+    const semanticFollowUpSuggestionsAfter = buildSemanticFollowUpSuggestions(finalPage);
+    const semanticImpactSummary = buildSemanticImpactSummary({
+      reviewBefore,
+      reviewAfter,
+    });
+    const semanticAutomationReadinessAfter = calculateSemanticAutomationReadiness({
+      page: finalPage,
+      semanticConfidence: reviewAfter.semanticConfidence,
+      semanticFollowUpSuggestions: semanticFollowUpSuggestionsAfter,
+      semanticImpactSummary: execution.appliedSteps.length > 0 ? semanticImpactSummary : undefined,
+    });
+    const reviewAfterWithReadiness = { ...reviewAfter, semanticAutomationReadiness: semanticAutomationReadinessAfter };
     const transformationPlanAfter = buildTransformationPlan({ page: finalPage, review: reviewAfter });
 
     return NextResponse.json(
@@ -158,16 +187,16 @@ export async function POST(req: NextRequest) {
         page: finalPage,
         transformationPlanBefore,
         transformationPlanAfter,
-        reviewBefore,
-        reviewAfter,
+        reviewBefore: reviewBeforeWithReadiness,
+        reviewAfter: reviewAfterWithReadiness,
         appliedSteps: execution.appliedSteps,
         skippedSteps: execution.skippedSteps,
         notes: execution.notes,
         diffSummary: buildTransformationDiffSummary({
           pageBefore: page,
           pageAfter: finalPage,
-          reviewBefore,
-          reviewAfter,
+          reviewBefore: reviewBeforeWithReadiness,
+          reviewAfter: reviewAfterWithReadiness,
           appliedSteps: execution.appliedSteps,
           skippedSteps: execution.skippedSteps,
         }),
@@ -179,11 +208,8 @@ export async function POST(req: NextRequest) {
           pageBefore: page,
           pageAfter: finalPage,
         }),
-        semanticImpactSummary: buildSemanticImpactSummary({
-          reviewBefore,
-          reviewAfter,
-        }),
-        semanticFollowUpSuggestions: buildSemanticFollowUpSuggestions(finalPage),
+        semanticImpactSummary,
+        semanticFollowUpSuggestions: semanticFollowUpSuggestionsAfter,
       },
       { status: 200 },
     );

@@ -28,6 +28,7 @@ export type ExecutionPreviewSemanticStepPreview = {
 export type ExecutionPreview = {
   ready: boolean;
   summary: string;
+  semanticAutomationCandidate: boolean;
   executionPolicySummary: {
     autoAllowed: number;
     approvalRequired: number;
@@ -356,6 +357,7 @@ export function buildExecutionPreview(input: {
   return {
     ready,
     summary,
+    semanticAutomationCandidate: input.review.semanticAutomationReadiness.label === "automation-candidate",
     executionPolicySummary: {
       autoAllowed: planPolicySummary?.autoAllowed ?? policyAutoAllowed,
       approvalRequired: planPolicySummary?.approvalRequired ?? policyApprovalRequired,
