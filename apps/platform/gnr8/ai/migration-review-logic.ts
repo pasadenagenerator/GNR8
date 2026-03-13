@@ -3,6 +3,7 @@ import { classifyPageIntent, type PageIntent } from "./page-intent-classifier";
 import { buildOptimizationSuggestions } from "./optimization-suggestions";
 import { buildRedesignStrategy, type RedesignPlan } from "./redesign-strategy";
 import { calculateSemanticConfidence, type SemanticConfidenceResult } from "./semantic-confidence";
+import { buildSemanticOptimizationSuggestions } from "./semantic-optimization-suggestions";
 
 export type DuplicateSimilarity = "exact-duplicate" | "highly-similar" | "different-content";
 
@@ -39,6 +40,7 @@ export type MigrationReviewSummary = {
   confidenceScore: number;
   confidenceLabel: MigrationConfidenceLabel;
   semanticConfidence: SemanticConfidenceResult;
+  semanticOptimizationSuggestions: string[];
   optimizationSuggestions?: string[];
   redesignPlan?: RedesignPlan;
 };
@@ -612,6 +614,7 @@ export function buildMigrationReviewSummary(page: Gnr8Page): MigrationReviewSumm
 
   const intentResult = classifyPageIntent(page);
   const semanticConfidence = calculateSemanticConfidence(page);
+  const semanticOptimizationSuggestions = buildSemanticOptimizationSuggestions(page);
 
   const reviewWithIntent: MigrationReviewSummary = {
     ...reviewCore,
@@ -622,6 +625,7 @@ export function buildMigrationReviewSummary(page: Gnr8Page): MigrationReviewSumm
     confidenceScore,
     confidenceLabel,
     semanticConfidence,
+    semanticOptimizationSuggestions,
   };
 
   const optimizationSuggestions = buildOptimizationSuggestions({ review: reviewWithIntent, suggestedActions });
