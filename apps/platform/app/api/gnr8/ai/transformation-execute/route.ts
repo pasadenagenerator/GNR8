@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { buildMigrationReviewSummary } from "@/gnr8/ai/migration-review-logic";
 import { buildSemanticDiffSummary } from "@/gnr8/ai/semantic-diff-summary";
+import { buildSemanticExecutionResultHints } from "@/gnr8/ai/semantic-execution-result-hints";
 import { buildTransformationDiffSummary } from "@/gnr8/ai/transformation-diff-summary";
 import { executeTransformationSteps } from "@/gnr8/ai/transformation-executor";
 import { buildTransformationPlan } from "@/gnr8/ai/transformation-planner";
@@ -116,6 +117,10 @@ export async function POST(req: NextRequest) {
             pageBefore: page,
             pageAfter: finalPage,
           }),
+          semanticExecutionResultHints: buildSemanticExecutionResultHints({
+            pageBefore: page,
+            pageAfter: finalPage,
+          }),
         },
         { status: 200 },
       );
@@ -160,6 +165,10 @@ export async function POST(req: NextRequest) {
           skippedSteps: execution.skippedSteps,
         }),
         semanticDiffSummary: buildSemanticDiffSummary({
+          pageBefore: page,
+          pageAfter: finalPage,
+        }),
+        semanticExecutionResultHints: buildSemanticExecutionResultHints({
           pageBefore: page,
           pageAfter: finalPage,
         }),
