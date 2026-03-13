@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { buildMigrationReviewSummary } from "@/gnr8/ai/migration-review-logic";
 import { buildSemanticDiffSummary } from "@/gnr8/ai/semantic-diff-summary";
 import { buildSemanticExecutionResultHints } from "@/gnr8/ai/semantic-execution-result-hints";
+import { buildSemanticImpactSummary } from "@/gnr8/ai/semantic-impact-summary";
 import { buildTransformationDiffSummary } from "@/gnr8/ai/transformation-diff-summary";
 import { executeTransformationSteps } from "@/gnr8/ai/transformation-executor";
 import { buildTransformationPlan } from "@/gnr8/ai/transformation-planner";
@@ -121,6 +122,10 @@ export async function POST(req: NextRequest) {
             pageBefore: page,
             pageAfter: finalPage,
           }),
+          semanticImpactSummary: buildSemanticImpactSummary({
+            reviewBefore,
+            reviewAfter: reviewBefore,
+          }),
         },
         { status: 200 },
       );
@@ -171,6 +176,10 @@ export async function POST(req: NextRequest) {
         semanticExecutionResultHints: buildSemanticExecutionResultHints({
           pageBefore: page,
           pageAfter: finalPage,
+        }),
+        semanticImpactSummary: buildSemanticImpactSummary({
+          reviewBefore,
+          reviewAfter,
         }),
       },
       { status: 200 },
