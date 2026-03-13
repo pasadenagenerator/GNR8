@@ -36,6 +36,7 @@ export type ExecutionPreview = {
   unsupportedStepIds: string[];
   stepPolicies: ExecutionPreviewStepPolicy[];
   semanticPreviewHints?: Array<{ stepId: string; hints: string[] }>;
+  semanticApprovalRationaleHints?: Array<{ stepId: string; hints: string[] }>;
   suggestedExecutionMode: "none" | "single-step" | "safe-batch" | "manual-approval";
   expectedChangeHints: string[];
   notes: string[];
@@ -206,6 +207,15 @@ export function buildExecutionPreview(input: {
     })
     .filter((v): v is { stepId: string; hints: string[] } => v !== null);
 
+  const semanticApprovalRationaleHints = steps
+    .map((s) => {
+      const hints = Array.isArray(s.approvalRationaleHints)
+        ? s.approvalRationaleHints.filter((h) => typeof h === "string" && h.trim().length > 0)
+        : [];
+      return hints.length > 0 ? { stepId: s.id, hints } : null;
+    })
+    .filter((v): v is { stepId: string; hints: string[] } => v !== null);
+
   const safeStepIds: string[] = [];
   const approvalRequiredStepIds: string[] = [];
   const executableNowStepIds: string[] = [];
@@ -315,6 +325,7 @@ export function buildExecutionPreview(input: {
     unsupportedStepIds,
     stepPolicies,
     ...(semanticPreviewHints.length > 0 ? { semanticPreviewHints } : {}),
+    ...(semanticApprovalRationaleHints.length > 0 ? { semanticApprovalRationaleHints } : {}),
     suggestedExecutionMode,
     expectedChangeHints,
     notes,

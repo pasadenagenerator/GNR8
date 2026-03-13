@@ -3,6 +3,7 @@ import type { MigrationReviewSummary } from "./migration-review-logic";
 import { getExecutionCapabilityForPlanStep } from "./execution-capability-matrix";
 import { evaluateExecutionPolicy, type ExecutionPolicyDecision, type ExecutionPolicyReason } from "./execution-policy";
 import { buildSemanticOptimizationSuggestions } from "./semantic-optimization-suggestions";
+import { buildSemanticApprovalRationaleHints } from "./semantic-policy-hints";
 import { buildSemanticPreviewHints } from "./semantic-preview-hints";
 
 export type TransformationPlanStepSource = "migration" | "optimization" | "redesign" | "layout" | "cleanup";
@@ -31,6 +32,7 @@ export type TransformationPlanStep = {
   kind: TransformationPlanStepKind;
   notes: string[];
   previewHints?: string[];
+  approvalRationaleHints?: string[];
   policyDecision?: ExecutionPolicyDecision;
   policyReason?: ExecutionPolicyReason;
   policyExplanation?: string;
@@ -292,7 +294,14 @@ function buildSemanticTransformationSteps(input: {
     seenSemanticActionPromptKeys.add(key);
     const base = toSemanticTransformationStep(actionPrompt);
     const previewHints = buildSemanticPreviewHints(input.page, actionPrompt);
-    out.push(previewHints.length > 0 ? { ...base, previewHints } : base);
+    const approvalRationaleHints =
+      base.requiresApproval === true ? buildSemanticApprovalRationaleHints({ page: input.page, actionPrompt, semanticPreviewHints: previewHints }) : [];
+
+    out.push({
+      ...base,
+      ...(previewHints.length > 0 ? { previewHints } : {}),
+      ...(approvalRationaleHints.length > 0 ? { approvalRationaleHints } : {}),
+    });
   };
 
   const semanticSuggestions = buildSemanticOptimizationSuggestions(input.page);
