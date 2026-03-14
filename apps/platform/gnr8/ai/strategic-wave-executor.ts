@@ -11,6 +11,10 @@ import { buildStrategicSemanticReasoning } from "@/gnr8/ai/strategic-semantic-re
 import { buildSiteSemanticConsistency } from "@/gnr8/ai/site-semantic-consistency";
 import { buildSiteSemanticIntelligence } from "@/gnr8/ai/site-semantic-intelligence";
 import { transformSemanticContentV1 } from "@/gnr8/ai/semantic-content-transformer";
+import {
+  buildStrategicWaveExecutionPreviewSimulation,
+  type StrategicWaveExecutionPreviewSimulation,
+} from "@/gnr8/ai/strategic-wave-preview-simulation";
 import { getPageBySlug, publishPage, savePage } from "@/gnr8/core/page-storage";
 
 const SUPPORTED_SEMANTIC_PROMPTS = [
@@ -304,6 +308,7 @@ async function executeSemanticWaveOnPage(input: {
 
 export async function executeStrategicWaveExecutionV1(raw: StrategicWaveExecuteInput): Promise<{
   strategicWaveExecution: StrategicWaveExecutionResult;
+  strategicWaveExecutionPreview?: StrategicWaveExecutionPreviewSimulation;
 }> {
   const waveId = String(raw?.waveId ?? "").trim();
   const apply = raw?.apply === true;
@@ -534,6 +539,16 @@ export async function executeStrategicWaveExecutionV1(raw: StrategicWaveExecuteI
     skippedPagesCount: skippedPages.length,
   });
 
+  const strategicWaveExecutionPreview =
+    mode === "preview"
+      ? buildStrategicWaveExecutionPreviewSimulation({
+          waveId,
+          targetedPages,
+          targetedSuggestions,
+          pageBySlug,
+        })
+      : undefined;
+
   return {
     strategicWaveExecution: {
       waveId,
@@ -549,5 +564,6 @@ export async function executeStrategicWaveExecutionV1(raw: StrategicWaveExecuteI
       summary,
       notes,
     },
+    strategicWaveExecutionPreview,
   };
 }

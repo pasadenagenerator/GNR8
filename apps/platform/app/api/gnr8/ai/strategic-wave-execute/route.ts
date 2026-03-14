@@ -43,13 +43,18 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "apply must be a boolean" }, { status: 400 });
     }
 
-    const { strategicWaveExecution } = await executeStrategicWaveExecutionV1({
+    const { strategicWaveExecution, strategicWaveExecutionPreview } = await executeStrategicWaveExecutionV1({
       pages: pages as any,
       waveId,
       apply: applyRaw === true,
     });
 
-    return NextResponse.json({ success: true, strategicWaveExecution }, { status: 200 });
+    const response: Record<string, unknown> = { success: true, strategicWaveExecution };
+    if (strategicWaveExecution.mode === "preview" && strategicWaveExecutionPreview) {
+      response.strategicWaveExecutionPreview = strategicWaveExecutionPreview;
+    }
+
+    return NextResponse.json(response, { status: 200 });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Internal server error";
     return NextResponse.json({ error: message }, { status: 500 });
