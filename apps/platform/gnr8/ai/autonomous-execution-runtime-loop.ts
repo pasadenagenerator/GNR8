@@ -24,6 +24,7 @@ import {
   type AutonomousRuntimeOutcome,
   type RuntimeExecutionFingerprint,
 } from "@/gnr8/ai/autonomous-execution-runtime-guards";
+import { buildAutonomousExecutionRuntimeLedgerV1, type AutonomousExecutionRuntimeLedgerV1 } from "@/gnr8/ai/autonomous-execution-ledger";
 
 export type AutonomousExecutionRuntimeLoopInputV1 = {
   pages: Array<
@@ -91,6 +92,7 @@ export type AutonomousExecutionRuntime = {
 
 export type AutonomousExecutionRuntimeLoopOutputV1 = {
   autonomousExecutionRuntime: AutonomousExecutionRuntime;
+  runtimeLedger: AutonomousExecutionRuntimeLedgerV1;
   resolvedPages: number;
   unresolvedPages: string[];
   strategicExecutionRuntimeDecision: StrategicExecutionRuntimeDecision;
@@ -230,6 +232,7 @@ function buildBlockedRuntimeResult(input: {
 }
 
 export async function runAutonomousExecutionRuntimeLoopV1(raw: AutonomousExecutionRuntimeLoopInputV1): Promise<AutonomousExecutionRuntimeLoopOutputV1> {
+  const runtimeTimestamp = new Date().toISOString();
   const applyRequested = raw?.apply === true;
   const requestedWaveId = typeof raw?.waveId === "string" ? String(raw.waveId).trim() : "";
   const lastAttemptFingerprint = raw?.lastAttemptFingerprint;
@@ -395,8 +398,31 @@ export async function runAutonomousExecutionRuntimeLoopV1(raw: AutonomousExecuti
   };
 
   if (strategicExecutionRuntimeDecision.executionDecision === "blocked") {
+    const runtime = buildBlockedRuntimeResult({ strategicDecision: strategicExecutionRuntimeDecision, executionSnapshot });
+    const runtimeLedger = buildAutonomousExecutionRuntimeLedgerV1({
+      timestamp: runtimeTimestamp,
+      applyRequested,
+      waveId: null,
+      resolvedPages: resolvedPages.length,
+      unresolvedPages,
+      runtimeDecision: runtime.runtimeDecision,
+      selectedExecutor: runtime.selectedExecutor,
+      executionMode: runtime.executionMode,
+      guardsEligible: false,
+      guardsExecutionPath: "none",
+      guardReason: "Execution blocked by router decision.",
+      currentFingerprint: null,
+      previousFingerprint: lastAttemptFingerprint ?? null,
+      fingerprintMatched: false,
+      snapshot: runtime.executionSnapshot ?? { waveId: null, orchestrationMode: "unknown", autonomyStage: "unknown", executionScope: "none" },
+      attempt: runtime.executionAttempt,
+      outcomeMode: runtime.mode,
+      outcomeApplied: runtime.applied,
+      resultKind: runtime.result.kind,
+    });
     return {
-      autonomousExecutionRuntime: buildBlockedRuntimeResult({ strategicDecision: strategicExecutionRuntimeDecision, executionSnapshot }),
+      autonomousExecutionRuntime: runtime,
+      runtimeLedger,
       resolvedPages: resolvedPages.length,
       unresolvedPages,
       strategicExecutionRuntimeDecision,
@@ -481,8 +507,31 @@ export async function runAutonomousExecutionRuntimeLoopV1(raw: AutonomousExecuti
       }),
     };
 
+    const runtimeLedger = buildAutonomousExecutionRuntimeLedgerV1({
+      timestamp: runtimeTimestamp,
+      applyRequested,
+      waveId: inferredWaveId ?? null,
+      resolvedPages: resolvedPages.length,
+      unresolvedPages,
+      runtimeDecision,
+      selectedExecutor,
+      executionMode: strategicExecutionRuntimeDecision.executionMode,
+      guardsEligible: guards.eligibleForExecution,
+      guardsExecutionPath: guards.executionPath,
+      guardReason: guards.guardReason ?? null,
+      currentFingerprint: fingerprint ?? null,
+      previousFingerprint: lastAttemptFingerprint ?? null,
+      fingerprintMatched: idempotentSkip,
+      snapshot: executionSnapshot ?? { waveId: inferredWaveId ?? null, orchestrationMode: "unknown", autonomyStage: "unknown", executionScope: "none" },
+      attempt: executionAttempt,
+      outcomeMode: runtime.mode,
+      outcomeApplied: runtime.applied,
+      resultKind: runtime.result.kind,
+    });
+
     return {
       autonomousExecutionRuntime: runtime,
+      runtimeLedger,
       resolvedPages: resolvedPages.length,
       unresolvedPages,
       strategicExecutionRuntimeDecision,
@@ -527,8 +576,31 @@ export async function runAutonomousExecutionRuntimeLoopV1(raw: AutonomousExecuti
       }),
     };
 
+    const runtimeLedger = buildAutonomousExecutionRuntimeLedgerV1({
+      timestamp: runtimeTimestamp,
+      applyRequested,
+      waveId: inferredWaveId ?? null,
+      resolvedPages: resolvedPages.length,
+      unresolvedPages,
+      runtimeDecision,
+      selectedExecutor,
+      executionMode: strategicExecutionRuntimeDecision.executionMode,
+      guardsEligible: guards.eligibleForExecution,
+      guardsExecutionPath: guards.executionPath,
+      guardReason: guards.guardReason ?? null,
+      currentFingerprint: fingerprint ?? null,
+      previousFingerprint: lastAttemptFingerprint ?? null,
+      fingerprintMatched: false,
+      snapshot: executionSnapshot ?? { waveId: inferredWaveId ?? null, orchestrationMode: "unknown", autonomyStage: "unknown", executionScope: "none" },
+      attempt: executionAttempt,
+      outcomeMode: runtime.mode,
+      outcomeApplied: runtime.applied,
+      resultKind: runtime.result.kind,
+    });
+
     return {
       autonomousExecutionRuntime: runtime,
+      runtimeLedger,
       resolvedPages: resolvedPages.length,
       unresolvedPages,
       strategicExecutionRuntimeDecision,
@@ -573,8 +645,31 @@ export async function runAutonomousExecutionRuntimeLoopV1(raw: AutonomousExecuti
       }),
     };
 
+    const runtimeLedger = buildAutonomousExecutionRuntimeLedgerV1({
+      timestamp: runtimeTimestamp,
+      applyRequested,
+      waveId: inferredWaveId ?? null,
+      resolvedPages: resolvedPages.length,
+      unresolvedPages,
+      runtimeDecision,
+      selectedExecutor,
+      executionMode: strategicExecutionRuntimeDecision.executionMode,
+      guardsEligible: guards.eligibleForExecution,
+      guardsExecutionPath: guards.executionPath,
+      guardReason: guards.guardReason ?? null,
+      currentFingerprint: fingerprint ?? null,
+      previousFingerprint: lastAttemptFingerprint ?? null,
+      fingerprintMatched: false,
+      snapshot: executionSnapshot ?? { waveId: inferredWaveId ?? null, orchestrationMode: "unknown", autonomyStage: "unknown", executionScope: "none" },
+      attempt: executionAttempt,
+      outcomeMode: runtime.mode,
+      outcomeApplied: runtime.applied,
+      resultKind: runtime.result.kind,
+    });
+
     return {
       autonomousExecutionRuntime: runtime,
+      runtimeLedger,
       resolvedPages: resolvedPages.length,
       unresolvedPages,
       strategicExecutionRuntimeDecision,
@@ -618,8 +713,31 @@ export async function runAutonomousExecutionRuntimeLoopV1(raw: AutonomousExecuti
     }),
   };
 
+  const runtimeLedger = buildAutonomousExecutionRuntimeLedgerV1({
+    timestamp: runtimeTimestamp,
+    applyRequested,
+    waveId: inferredWaveId ?? null,
+    resolvedPages: resolvedPages.length,
+    unresolvedPages,
+    runtimeDecision,
+    selectedExecutor: "mixed-wave-executor",
+    executionMode: strategicExecutionRuntimeDecision.executionMode,
+    guardsEligible: guards.eligibleForExecution,
+    guardsExecutionPath: guards.executionPath,
+    guardReason: guards.guardReason ?? null,
+    currentFingerprint: fingerprint ?? null,
+    previousFingerprint: lastAttemptFingerprint ?? null,
+    fingerprintMatched: false,
+    snapshot: executionSnapshot ?? { waveId: inferredWaveId ?? null, orchestrationMode: "unknown", autonomyStage: "unknown", executionScope: "none" },
+    attempt: executionAttempt,
+    outcomeMode: runtime.mode,
+    outcomeApplied: runtime.applied,
+    resultKind: runtime.result.kind,
+  });
+
   return {
     autonomousExecutionRuntime: runtime,
+    runtimeLedger,
     resolvedPages: resolvedPages.length,
     unresolvedPages,
     strategicExecutionRuntimeDecision,
