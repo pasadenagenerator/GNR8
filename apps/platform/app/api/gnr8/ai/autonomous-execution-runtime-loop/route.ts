@@ -5,6 +5,12 @@ import { runAutonomousExecutionRuntimeLoopV1 } from "@/gnr8/ai/autonomous-execut
 
 export const runtime = "nodejs";
 
+type RuntimeExecutionFingerprint = {
+  executionPath: string;
+  waveId: string | null;
+  targetedPages: string[];
+};
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === "object" && !Array.isArray(value);
 }
@@ -22,6 +28,17 @@ function isGnr8Page(value: unknown): value is Gnr8Page {
   if (typeof value.slug !== "string" || !value.slug.trim()) return false;
   if (!Array.isArray(value.sections)) return false;
   if (typeof value.title !== "undefined" && typeof value.title !== "string") return false;
+  return true;
+}
+
+function isRuntimeExecutionFingerprint(value: unknown): value is RuntimeExecutionFingerprint {
+  if (!isRecord(value)) return false;
+  if (typeof (value as any).executionPath !== "string") return false;
+  const waveId = (value as any).waveId;
+  if (waveId !== null && typeof waveId !== "string") return false;
+  const targetedPages = (value as any).targetedPages;
+  if (!Array.isArray(targetedPages)) return false;
+  if (!targetedPages.every((p) => typeof p === "string")) return false;
   return true;
 }
 
@@ -68,10 +85,16 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "apply must be a boolean" }, { status: 400 });
     }
 
+    const lastAttemptFingerprintRaw = "lastAttemptFingerprint" in (body as any) ? (body as any).lastAttemptFingerprint : undefined;
+    if (lastAttemptFingerprintRaw !== undefined && lastAttemptFingerprintRaw !== null && !isRuntimeExecutionFingerprint(lastAttemptFingerprintRaw)) {
+      return NextResponse.json({ error: "lastAttemptFingerprint must be a fingerprint object" }, { status: 400 });
+    }
+
     const result = await runAutonomousExecutionRuntimeLoopV1({
       pages,
       waveId: waveIdRaw || undefined,
       apply: applyRaw === true,
+      lastAttemptFingerprint: isRuntimeExecutionFingerprint(lastAttemptFingerprintRaw) ? lastAttemptFingerprintRaw : undefined,
     });
 
     return NextResponse.json(result, { status: 200 });
@@ -80,4 +103,3 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
-

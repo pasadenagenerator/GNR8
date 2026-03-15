@@ -16,6 +16,14 @@ import { buildStrategicSemanticReasoning } from "@/gnr8/ai/strategic-semantic-re
 import { executeStrategicWaveExecutionV1 } from "@/gnr8/ai/strategic-wave-executor";
 import { buildStrategicWaveExecutionController } from "@/gnr8/ai/strategic-wave-execution-controller";
 import { executeStrategicStructuralWaveExecutionV1 } from "@/gnr8/ai/structural-wave-executor";
+import {
+  buildRuntimeExecutionFingerprint,
+  buildRuntimeExecutionGuards,
+  fingerprintsEqual,
+  resolveWaveTargetPages,
+  type AutonomousRuntimeOutcome,
+  type RuntimeExecutionFingerprint,
+} from "@/gnr8/ai/autonomous-execution-runtime-guards";
 
 export type AutonomousExecutionRuntimeLoopInputV1 = {
   pages: Array<
@@ -27,6 +35,7 @@ export type AutonomousExecutionRuntimeLoopInputV1 = {
   >;
   waveId?: string;
   apply?: boolean;
+  lastAttemptFingerprint?: RuntimeExecutionFingerprint;
 };
 
 export type AutonomousExecutionRuntimeResult = {
@@ -39,8 +48,23 @@ export type AutonomousExecutionRuntimeResult = {
   payload: unknown;
 };
 
+export type AutonomousExecutionAttemptState = {
+  attempted: boolean;
+  idempotentSkip: boolean;
+  eligible: boolean;
+  executionPath: string;
+  reasoning: string[];
+};
+
+export type AutonomousExecutionSnapshotState = {
+  waveId: string | null;
+  orchestrationMode: string;
+  autonomyStage: string;
+  executionScope: string;
+};
+
 export type AutonomousExecutionRuntime = {
-  mode: "blocked" | "preview" | "executed";
+  mode: AutonomousRuntimeOutcome;
   selectedExecutor: "semantic-wave-executor" | "structural-wave-executor" | "mixed-wave-executor" | null;
 
   waveId: string | null;
@@ -55,6 +79,9 @@ export type AutonomousExecutionRuntime = {
   executionMode: "none" | "preview" | "pilot" | "guided" | "full";
 
   applied: boolean;
+
+  executionAttempt: AutonomousExecutionAttemptState;
+  executionSnapshot: AutonomousExecutionSnapshotState;
 
   result: AutonomousExecutionRuntimeResult;
 
@@ -105,12 +132,13 @@ function inferWaveIdFromExistingOutputs(input: { orchestrationPreview: Orchestra
 }
 
 function summaryForRuntime(input: {
-  mode: AutonomousExecutionRuntime["mode"];
+  mode: AutonomousRuntimeOutcome;
   selectedExecutor: AutonomousExecutionRuntime["selectedExecutor"];
   applied: boolean;
 }): string {
   if (input.mode === "blocked") return "Autonomous runtime is blocked under the current execution decision.";
-  if (input.mode === "preview") return "Autonomous runtime returned a non-mutating preview result.";
+  if (input.mode === "preview-only") return "Autonomous runtime returned a non-mutating preview result.";
+  if (input.mode === "idempotent-skip") return "Autonomous runtime skipped execution due to deterministic idempotency protection.";
 
   if (input.applied && input.selectedExecutor === "semantic-wave-executor") return "Autonomous runtime executed the semantic wave path.";
   if (input.applied && input.selectedExecutor === "structural-wave-executor") return "Autonomous runtime executed the structural wave path.";
@@ -120,18 +148,22 @@ function summaryForRuntime(input: {
 }
 
 function notesForRuntime(input: {
-  mode: AutonomousExecutionRuntime["mode"];
+  mode: AutonomousRuntimeOutcome;
   runtimeDecision: AutonomousExecutionRuntime["runtimeDecision"];
   selectedExecutor: AutonomousExecutionRuntime["selectedExecutor"];
   applyRequested: boolean;
   waveId: string | null;
   waveIdWasInferred: boolean;
+  guardReason?: string;
+  idempotentSkip: boolean;
 }): string[] {
   const notes: string[] = [];
   notes.push("Autonomous execution runtime loop only; routing and existing executors were used without changing their logic.");
 
-  if (input.mode === "preview") notes.push("Execution remained in preview mode.");
+  if (input.mode === "preview-only") notes.push("Execution remained in preview-only mode.");
   if (input.mode === "blocked") notes.push("Router decision blocked execution.");
+  if (input.idempotentSkip) notes.push("Execution skipped due to deterministic idempotency fingerprint match.");
+  if (input.guardReason) notes.push(input.guardReason);
 
   if (input.applyRequested && input.mode !== "executed" && input.runtimeDecision !== "blocked") {
     if (!input.waveId) notes.push("No safe wave was available for execution.");
@@ -148,11 +180,28 @@ function notesForRuntime(input: {
   return notes.slice(0, 6);
 }
 
+function addUniqueLimited(out: string[], value: string, limit: number): void {
+  if (out.length >= limit) return;
+  const v = String(value ?? "").trim();
+  if (!v) return;
+  if (out.includes(v)) return;
+  out.push(v);
+}
+
 function buildBlockedRuntimeResult(input: {
   strategicDecision: StrategicExecutionRuntimeDecision;
+  executionSnapshot: AutonomousExecutionSnapshotState;
 }): AutonomousExecutionRuntime {
   const reasons = Array.isArray(input.strategicDecision?.reasons) ? input.strategicDecision.reasons : [];
   const payload = { reasons: reasons.length > 0 ? reasons : ["Execution blocked under the current execution decision."] };
+
+  const executionAttempt: AutonomousExecutionAttemptState = {
+    attempted: false,
+    idempotentSkip: false,
+    eligible: false,
+    executionPath: "none",
+    reasoning: ["Execution blocked by router decision."],
+  };
 
   const runtime: AutonomousExecutionRuntime = {
     mode: "blocked",
@@ -161,6 +210,8 @@ function buildBlockedRuntimeResult(input: {
     runtimeDecision: "blocked",
     executionMode: "none",
     applied: false,
+    executionAttempt,
+    executionSnapshot: input.executionSnapshot,
     result: { kind: "blocked", payload },
     summary: summaryForRuntime({ mode: "blocked", selectedExecutor: null, applied: false }),
     notes: notesForRuntime({
@@ -170,6 +221,8 @@ function buildBlockedRuntimeResult(input: {
       applyRequested: false,
       waveId: null,
       waveIdWasInferred: false,
+      guardReason: undefined,
+      idempotentSkip: false,
     }),
   };
 
@@ -179,6 +232,7 @@ function buildBlockedRuntimeResult(input: {
 export async function runAutonomousExecutionRuntimeLoopV1(raw: AutonomousExecutionRuntimeLoopInputV1): Promise<AutonomousExecutionRuntimeLoopOutputV1> {
   const applyRequested = raw?.apply === true;
   const requestedWaveId = typeof raw?.waveId === "string" ? String(raw.waveId).trim() : "";
+  const lastAttemptFingerprint = raw?.lastAttemptFingerprint;
 
   const pagesRaw = Array.isArray(raw?.pages) ? raw.pages : [];
   const normalizedInputPages: Array<{ slug: string; page?: Gnr8Page }> = [];
@@ -333,9 +387,16 @@ export async function runAutonomousExecutionRuntimeLoopV1(raw: AutonomousExecuti
     unresolvedRatio,
   });
 
+  const executionSnapshot: AutonomousExecutionSnapshotState = {
+    waveId: null,
+    orchestrationMode: String(strategicExecutionOrchestration?.orchestrationMode ?? "blocked"),
+    autonomyStage: String(autonomousExecutionPolicy?.autonomyStage ?? "manual-only"),
+    executionScope: String(semiStrategicExecutionController?.executionScope ?? "none"),
+  };
+
   if (strategicExecutionRuntimeDecision.executionDecision === "blocked") {
     return {
-      autonomousExecutionRuntime: buildBlockedRuntimeResult({ strategicDecision: strategicExecutionRuntimeDecision }),
+      autonomousExecutionRuntime: buildBlockedRuntimeResult({ strategicDecision: strategicExecutionRuntimeDecision, executionSnapshot }),
       resolvedPages: resolvedPages.length,
       unresolvedPages,
       strategicExecutionRuntimeDecision,
@@ -352,54 +413,71 @@ export async function runAutonomousExecutionRuntimeLoopV1(raw: AutonomousExecuti
       : null;
   const waveIdWasInferred = !requestedWaveId && !!inferredWaveId;
 
-  const shouldExecute =
-    applyRequested === true &&
-    runtimeDecision !== "preview-only" &&
-    !!selectedExecutor &&
-    !!inferredWaveId;
+  executionSnapshot.waveId = inferredWaveId ?? null;
 
-  if (!shouldExecute) {
-    const canPreviewWithExecutor = !!selectedExecutor && !!inferredWaveId;
+  const guards = buildRuntimeExecutionGuards(strategicExecutionRuntimeDecision);
+  const targetedPages = resolveWaveTargetPages({ orchestrationPreview, waveId: inferredWaveId ?? null });
 
-    let previewPayload: unknown = { orchestrationPreview, strategicExecutionRuntimeDecision };
-    if (canPreviewWithExecutor) {
-      if (selectedExecutor === "semantic-wave-executor") {
-        previewPayload = await executeStrategicWaveExecutionV1({
-          pages: normalizedInputPages,
-          waveId: inferredWaveId!,
-          apply: false,
-        });
-      } else if (selectedExecutor === "structural-wave-executor") {
-        previewPayload = await executeStrategicStructuralWaveExecutionV1({
-          pages: normalizedInputPages,
-          waveId: inferredWaveId!,
-          apply: false,
-        });
-      } else if (selectedExecutor === "mixed-wave-executor") {
-        previewPayload = await executeMixedWaveExecutionV1({
-          pages: normalizedInputPages,
-          waveId: inferredWaveId!,
-          apply: false,
-        });
-      }
+  const fingerprint = buildRuntimeExecutionFingerprint({
+    selectedExecutor,
+    waveId: inferredWaveId ?? null,
+    targetedPages,
+  });
+
+  const reasoning: string[] = [];
+  if (applyRequested !== true) addUniqueLimited(reasoning, "Execution prevented because apply was not requested.", 5);
+  if (!guards.eligibleForExecution) addUniqueLimited(reasoning, guards.guardReason ?? "Execution prevented by runtime guards.", 5);
+  if (runtimeDecision === "preview-only" || strategicExecutionRuntimeDecision.executionMode === "preview") {
+    addUniqueLimited(reasoning, "Execution blocked by preview-only posture.", 5);
+  }
+  if (!inferredWaveId) addUniqueLimited(reasoning, "Execution prevented due to missing waveId.", 5);
+
+  const idempotentSkip = fingerprintsEqual(fingerprint, lastAttemptFingerprint);
+  if (idempotentSkip) addUniqueLimited(reasoning, "Execution skipped due to idempotent fingerprint match.", 5);
+
+  const previewOnlyPosture = runtimeDecision === "preview-only" || strategicExecutionRuntimeDecision.executionMode === "preview";
+  const eligibleForExecution = guards.eligibleForExecution && !previewOnlyPosture && !!selectedExecutor && !!inferredWaveId;
+  const canExecute = applyRequested === true && eligibleForExecution && !idempotentSkip;
+
+  if (!canExecute) {
+    const outcome: AutonomousRuntimeOutcome = idempotentSkip ? "idempotent-skip" : "preview-only";
+    if (applyRequested === true && eligibleForExecution) {
+      addUniqueLimited(reasoning, `Execution allowed under ${strategicExecutionRuntimeDecision.executionMode} mode.`, 5);
     }
 
+    const executionAttempt: AutonomousExecutionAttemptState = {
+      attempted: false,
+      idempotentSkip,
+      eligible: eligibleForExecution,
+      executionPath: guards.executionPath,
+      reasoning: reasoning.slice(0, 5),
+    };
+
+    const previewPayload: unknown = {
+      orchestrationPreview,
+      strategicExecutionRuntimeDecision,
+    };
+
     const runtime: AutonomousExecutionRuntime = {
-      mode: "preview",
+      mode: outcome,
       selectedExecutor,
       waveId: inferredWaveId ?? null,
       runtimeDecision,
-      executionMode: "preview",
+      executionMode: strategicExecutionRuntimeDecision.executionMode,
       applied: false,
+      executionAttempt,
+      executionSnapshot,
       result: { kind: "preview", payload: previewPayload },
-      summary: summaryForRuntime({ mode: "preview", selectedExecutor, applied: false }),
+      summary: summaryForRuntime({ mode: outcome, selectedExecutor, applied: false }),
       notes: notesForRuntime({
-        mode: "preview",
+        mode: outcome,
         runtimeDecision,
         selectedExecutor,
         applyRequested,
         waveId: inferredWaveId ?? null,
         waveIdWasInferred,
+        guardReason: guards.guardReason,
+        idempotentSkip,
       }),
     };
 
@@ -412,6 +490,14 @@ export async function runAutonomousExecutionRuntimeLoopV1(raw: AutonomousExecuti
   }
 
   if (selectedExecutor === "semantic-wave-executor") {
+    const executionAttempt: AutonomousExecutionAttemptState = {
+      attempted: true,
+      idempotentSkip: false,
+      eligible: true,
+      executionPath: guards.executionPath,
+      reasoning: [`Execution allowed under ${strategicExecutionRuntimeDecision.executionMode} mode.`].slice(0, 5),
+    };
+
     const payload = await executeStrategicWaveExecutionV1({
       pages: normalizedInputPages,
       waveId: inferredWaveId!,
@@ -425,6 +511,8 @@ export async function runAutonomousExecutionRuntimeLoopV1(raw: AutonomousExecuti
       runtimeDecision,
       executionMode: strategicExecutionRuntimeDecision.executionMode,
       applied: true,
+      executionAttempt,
+      executionSnapshot,
       result: { kind: "semantic-wave-execution", payload },
       summary: summaryForRuntime({ mode: "executed", selectedExecutor, applied: true }),
       notes: notesForRuntime({
@@ -434,6 +522,8 @@ export async function runAutonomousExecutionRuntimeLoopV1(raw: AutonomousExecuti
         applyRequested,
         waveId: inferredWaveId ?? null,
         waveIdWasInferred,
+        guardReason: guards.guardReason,
+        idempotentSkip: false,
       }),
     };
 
@@ -446,6 +536,14 @@ export async function runAutonomousExecutionRuntimeLoopV1(raw: AutonomousExecuti
   }
 
   if (selectedExecutor === "structural-wave-executor") {
+    const executionAttempt: AutonomousExecutionAttemptState = {
+      attempted: true,
+      idempotentSkip: false,
+      eligible: true,
+      executionPath: guards.executionPath,
+      reasoning: [`Execution allowed under ${strategicExecutionRuntimeDecision.executionMode} mode.`].slice(0, 5),
+    };
+
     const payload = await executeStrategicStructuralWaveExecutionV1({
       pages: normalizedInputPages,
       waveId: inferredWaveId!,
@@ -459,6 +557,8 @@ export async function runAutonomousExecutionRuntimeLoopV1(raw: AutonomousExecuti
       runtimeDecision,
       executionMode: strategicExecutionRuntimeDecision.executionMode,
       applied: true,
+      executionAttempt,
+      executionSnapshot,
       result: { kind: "structural-wave-execution", payload },
       summary: summaryForRuntime({ mode: "executed", selectedExecutor, applied: true }),
       notes: notesForRuntime({
@@ -468,6 +568,8 @@ export async function runAutonomousExecutionRuntimeLoopV1(raw: AutonomousExecuti
         applyRequested,
         waveId: inferredWaveId ?? null,
         waveIdWasInferred,
+        guardReason: guards.guardReason,
+        idempotentSkip: false,
       }),
     };
 
@@ -478,6 +580,14 @@ export async function runAutonomousExecutionRuntimeLoopV1(raw: AutonomousExecuti
       strategicExecutionRuntimeDecision,
     };
   }
+
+  const executionAttempt: AutonomousExecutionAttemptState = {
+    attempted: true,
+    idempotentSkip: false,
+    eligible: true,
+    executionPath: guards.executionPath,
+    reasoning: [`Execution allowed under ${strategicExecutionRuntimeDecision.executionMode} mode.`].slice(0, 5),
+  };
 
   const payload = await executeMixedWaveExecutionV1({
     pages: normalizedInputPages,
@@ -492,6 +602,8 @@ export async function runAutonomousExecutionRuntimeLoopV1(raw: AutonomousExecuti
     runtimeDecision,
     executionMode: strategicExecutionRuntimeDecision.executionMode,
     applied: true,
+    executionAttempt,
+    executionSnapshot,
     result: { kind: "mixed-wave-execution", payload },
     summary: summaryForRuntime({ mode: "executed", selectedExecutor: "mixed-wave-executor", applied: true }),
     notes: notesForRuntime({
@@ -501,6 +613,8 @@ export async function runAutonomousExecutionRuntimeLoopV1(raw: AutonomousExecuti
       applyRequested,
       waveId: inferredWaveId ?? null,
       waveIdWasInferred,
+      guardReason: guards.guardReason,
+      idempotentSkip: false,
     }),
   };
 
