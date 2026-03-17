@@ -240,6 +240,42 @@ export type ImportedHtmlDocument = {
   };
 
   text: string;
+
+  /**
+   * Optional deterministic DOM snapshot derived from `text`.
+   * When present, this MUST be derived only from `text` using a server-safe HTML parser.
+   */
+  dom: ImportedDomSnapshot | null;
+};
+
+export type ImportedDomSnapshot = {
+  /**
+   * Deterministic serialization of the parsed DOM tree.
+   * This is a snapshot only; no semantic interpretation is implied.
+   */
+  serializedDom: string;
+
+  /**
+   * Total number of nodes in the parsed tree (including document/root nodes),
+   * counted deterministically by a single traversal.
+   */
+  nodeCount: number;
+
+  /**
+   * Parser warnings/errors when available. This MUST NOT include nondeterministic data.
+   */
+  parseWarnings: HtmlParseWarning[];
+};
+
+export type HtmlParseWarning = {
+  code: string;
+  message: string;
+  position:
+    | {
+        line: number;
+        column: number;
+      }
+    | null;
 };
 
 export type AssetRegistry = {
@@ -327,7 +363,9 @@ export type ImportDiagnosticCode =
   | "ASSETS_DIR_UNREADABLE"
   | "ASSET_FILE_UNREADABLE"
   | "HTML_DECODING_ERROR"
+  | "HTML_PARSE_ERROR"
   | "ASSET_REFERENCE_UNRESOLVED"
+  | "INVALID_ASSET_REFERENCE"
   | "UNSUPPORTED_STRUCTURE"
   | "INTERNAL_ERROR";
 
@@ -372,4 +410,3 @@ export type ImportDiagnosticLocation = {
  * Implementations MUST follow the deterministic failure model described above.
  */
 export type ImportStaticSite = (input: ImportInput) => Promise<ImportOutput>;
-
