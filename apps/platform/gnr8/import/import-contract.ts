@@ -89,7 +89,7 @@
  * No network, no clocks, no randomness.
  */
 
-export const IMPORT_CONTRACT_VERSION = "1.1.0" as const;
+export const IMPORT_CONTRACT_VERSION = "1.1.1" as const;
 
 /**
  * JSON-like value set for diagnostics/details payloads.
@@ -421,6 +421,9 @@ export type ImportDiagnosticCode =
   | "ASSETS_DIR_UNREADABLE"
   | "ASSET_FILE_UNREADABLE"
   | "HTML_DECODING_ERROR"
+  | "HTML_BOM_REMOVED"
+  | "HTML_NEWLINES_NORMALIZED"
+  | "HTML_EMPTY"
   | "HTML_PARSE_ERROR"
   | "ASSET_REFERENCE_UNRESOLVED"
   | "INVALID_ASSET_REFERENCE"

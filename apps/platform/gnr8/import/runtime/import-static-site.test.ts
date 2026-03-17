@@ -23,7 +23,7 @@ test("importStaticSite imports single entry HTML deterministically", async () =>
     },
   });
 
-  assert.equal(out.contractVersion, "1.1.0");
+  assert.equal(out.contractVersion, "1.1.1");
   assert.equal(out.status, "ok");
   assert.equal(out.documentMeta.execution.requestId, "req-123");
   assert.deepEqual(out.importDiagnostics.summary, {
@@ -111,7 +111,7 @@ test("importStaticSite returns fatal diagnostic when entry is missing", async ()
     },
   });
 
-  assert.equal(out.contractVersion, "1.1.0");
+  assert.equal(out.contractVersion, "1.1.1");
   assert.equal(out.status, "failed");
   assert.ok(out.importDiagnostics.issues.some((i) => i.code === "ENTRY_HTML_MISSING" && i.severity === "fatal"));
 });

@@ -19,6 +19,7 @@ import {
   stableStringify,
 } from "./diagnostics";
 import { extractAssetReferencesFromDom } from "./extract-assets";
+import { normalizeHtmlInput } from "./normalize-html";
 import { parseHtmlToDomSnapshot } from "./parse-html";
 
 function toPosixPath(p: string): string {
@@ -59,6 +60,10 @@ function decodeUtf8Deterministically(bytes: Uint8Array): {
     const forgivingDecoder = new TextDecoder("utf-8", { fatal: false });
     return { text: forgivingDecoder.decode(bytes), hadDecodingErrors: true };
   }
+}
+
+function hasUtf8Bom(bytes: Uint8Array): boolean {
+  return bytes.length >= 3 && bytes[0] === 0xef && bytes[1] === 0xbb && bytes[2] === 0xbf;
 }
 
 function mediaTypeFromExtension(p: string): string | null {
@@ -301,7 +306,10 @@ export async function importStaticSite(input: ImportInput): Promise<ImportOutput
       }
 
       const contentSha256 = sha256Hex(bytes);
-      const decoded = decodeUtf8Deterministically(bytes);
+
+      const hadUtf8BomBytes = hasUtf8Bom(bytes);
+      const bytesForDecoding = hadUtf8BomBytes ? bytes.subarray(3) : bytes;
+      const decoded = decodeUtf8Deterministically(bytesForDecoding);
       if (decoded.hadDecodingErrors) {
         issues.push(
           createDiagnosticIssue({
@@ -314,7 +322,43 @@ export async function importStaticSite(input: ImportInput): Promise<ImportOutput
         );
       }
 
-      const { document, snapshot } = parseHtmlToDomSnapshot(decoded.text);
+      const normalized = normalizeHtmlInput(decoded.text);
+      const hadBom = hadUtf8BomBytes || normalized.hadUtf8Bom;
+      if (hadBom) {
+        issues.push(
+          createDiagnosticIssue({
+            severity: "info",
+            code: "HTML_BOM_REMOVED",
+            message: "UTF-8 BOM was removed from HTML input",
+            location: { path: html.relPosixPath, position: null, selector: null },
+            details: null,
+          }),
+        );
+      }
+      if (normalized.normalizedNewlines) {
+        issues.push(
+          createDiagnosticIssue({
+            severity: "info",
+            code: "HTML_NEWLINES_NORMALIZED",
+            message: "HTML input newlines were normalized to LF",
+            location: { path: html.relPosixPath, position: null, selector: null },
+            details: null,
+          }),
+        );
+      }
+      if (normalized.isEffectivelyEmpty) {
+        issues.push(
+          createDiagnosticIssue({
+            severity: html.isEntry ? "error" : "warning",
+            code: "HTML_EMPTY",
+            message: "HTML input is empty or whitespace-only after normalization",
+            location: { path: html.relPosixPath, position: null, selector: null },
+            details: null,
+          }),
+        );
+      }
+
+      const { document, snapshot } = parseHtmlToDomSnapshot(normalized.normalizedText);
       if (snapshot.parseWarnings.length > 0) {
         issues.push(
           createDiagnosticIssue({
@@ -341,7 +385,7 @@ export async function importStaticSite(input: ImportInput): Promise<ImportOutput
         contentSha256,
         byteLength,
         decoding: { encoding: "utf-8", hadDecodingErrors: decoded.hadDecodingErrors },
-        text: decoded.text,
+        text: normalized.normalizedText,
         dom: snapshot,
       });
     }

@@ -26,7 +26,7 @@ test("importStaticSite validates local and non-local asset references determinis
     },
   });
 
-  assert.equal(out.contractVersion, "1.1.0");
+  assert.equal(out.contractVersion, "1.1.1");
   assert.equal(out.status, "ok");
   assert.deepEqual(out.importDiagnostics.summary, {
     infoCount: 0,
@@ -168,7 +168,7 @@ test("importStaticSite handles edge-case local path forms deterministically", as
     },
   });
 
-  assert.equal(out.contractVersion, "1.1.0");
+  assert.equal(out.contractVersion, "1.1.1");
   assert.equal(out.status, "ok");
   assert.ok(out.importDiagnostics.issues.some((i) => i.code === "invalid_asset_reference"));
 

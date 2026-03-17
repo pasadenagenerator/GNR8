@@ -42,6 +42,10 @@ function normalizeWarnings(warnings: HtmlParseWarning[]): HtmlParseWarning[] {
   });
 }
 
+function normalizeNewlinesToLf(text: string): string {
+  return text.replace(/\r\n|\r/g, "\n");
+}
+
 export function parseHtmlToDomSnapshot(html: string): {
   document: unknown;
   snapshot: ImportedDomSnapshot;
@@ -61,7 +65,7 @@ export function parseHtmlToDomSnapshot(html: string): {
     },
   } as unknown as Parameters<typeof parse>[1]);
 
-  const serializedDom = serialize(document as never);
+  const serializedDom = normalizeNewlinesToLf(serialize(document as never));
   const nodeCount = countNodes(document);
 
   return {
