@@ -6,6 +6,7 @@ import type {
   PipelineInput,
   PipelineStageId,
   PipelineStageStatus,
+  PreviewGenerationStageOutput,
   RenderPreparationStageOutput,
   StructurePreparationStageOutput,
 } from "../pipeline-contract";
@@ -16,6 +17,7 @@ import { createPipelineDiagnosticIssue, sortPipelineDiagnosticIssues } from "./d
 import { createPreparedSiteModel } from "../prepared-site-model";
 import { createLayoutPreparationModel } from "../layout-preparation-model";
 import { createRenderOutput } from "../render-output-model";
+import { createPreviewDocument } from "../preview-document-model";
 
 const STAGE_CONTRACTS: Record<
   PipelineStageId,
@@ -39,6 +41,10 @@ const STAGE_CONTRACTS: Record<
   render_preparation: {
     input: "LayoutPreparationStageOutput",
     output: "RenderPreparationStageOutput (ok|skipped) + RenderOutput",
+  },
+  preview_generation: {
+    input: "RenderPreparationStageOutput",
+    output: "PreviewGenerationStageOutput (ok|skipped) + PreviewDocument",
   },
 };
 
@@ -225,6 +231,43 @@ function runRenderPreparationStage(
   };
 }
 
+function runPreviewGenerationStage(
+  renderStage: LinearMigrationPipelineStageResult & { stageId: "render_preparation" },
+): LinearMigrationPipelineStageResult & { stageId: "preview_generation" } {
+  const shouldSkip = renderStage.status !== "success";
+  const status: PipelineStageStatus = shouldSkip ? "skipped" : "success";
+
+  const previewDocument = createPreviewDocument(renderStage.output.renderOutput);
+
+  const output: PreviewGenerationStageOutput = shouldSkip
+    ? {
+        kind: "preview_generation_skipped_v1",
+        skippedBecauseStageId: renderStage.stageId,
+        previewDocument,
+      }
+    : {
+        kind: "preview_generation_ok_v1",
+        render: renderStage.output,
+        previewDocument,
+      };
+
+  return {
+    stageId: "preview_generation",
+    status,
+    inputContract: STAGE_CONTRACTS.preview_generation.input,
+    outputContract: STAGE_CONTRACTS.preview_generation.output,
+    output,
+    diagnostics: [],
+    summary: stageSummary("preview_generation", status, [
+      ...(shouldSkip ? [`blockedBy=${renderStage.stageId}`] : []),
+      `previewStatus=${previewDocument.status}`,
+      `pages=${previewDocument.siteSummary.pageCount}`,
+      `previewablePages=${previewDocument.siteSummary.previewablePageCount}`,
+      `previewNodes=${previewDocument.siteSummary.previewNodeCount}`,
+    ]),
+  };
+}
+
 export function runLinearMigrationPipeline(input: PipelineInput): LinearMigrationPipelineResult {
   const stages: LinearMigrationPipelineStageResult[] = [];
 
@@ -239,6 +282,9 @@ export function runLinearMigrationPipeline(input: PipelineInput): LinearMigratio
 
   const s4 = runRenderPreparationStage(s3);
   stages.push(s4);
+
+  const s5 = runPreviewGenerationStage(s4);
+  stages.push(s5);
 
   const diagnostics = stages.flatMap((s) => s.diagnostics);
   const status: LinearMigrationPipelineResult["status"] = stages.some((s) => s.status === "failed") ? "failed" : "success";

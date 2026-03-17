@@ -6,6 +6,7 @@
 2. `structure_preparation`
 3. `layout_preparation`
 4. `render_preparation`
+5. `preview_generation`
 
 Stage order is defined by `LINEAR_MIGRATION_STAGE_ORDER` in `apps/platform/gnr8/migration/pipeline-contract.ts`.
 
@@ -32,6 +33,8 @@ Stage order is defined by `LINEAR_MIGRATION_STAGE_ORDER` in `apps/platform/gnr8/
   - Deterministically emits `LayoutPreparationModel` (`layout_preparation_model_v1`) derived from `PreparedSiteModel`.
 - `render_preparation`
   - Deterministically emits `RenderOutput` (`render_output_v1`) derived from `LayoutPreparationModel`.
+- `preview_generation`
+  - Deterministically emits `PreviewDocument` (`preview_document_v1`) derived from `RenderOutput`.
 
 ## Phase-1 LayoutPreparationModel (implementation note)
 
@@ -79,3 +82,31 @@ Render status computation rule:
 
 Pipeline stage emitting the model:
 - `render_preparation` now emits `RenderOutput` as `RenderPreparationStageOutput.renderOutput`.
+
+## Phase-1 PreviewDocument (implementation note)
+
+Preview document fields included (high-level):
+- `kind`, `modelVersion`, `mapping` (rule ids + wrapper tag)
+- `source` (render/layout/prepared/import version references + fingerprints)
+- `status` (`ready` | `ready_with_warnings` | `blocked`)
+- `siteSummary` (page eligibility + preview node counts)
+- `pages` (stable preview page records with traceability + preview payload)
+- `pageSummaries` (compact per-page summary)
+- `diagnostics.carried.import` (carried summary from import) + `diagnostics.preview.warnings.codes`
+
+Phase-1 preview generation rule (fixed, replayable):
+- Each rendered page becomes one preview page.
+- Page order is canonical by `sourcePath`, then `sourcePageId`, then `sourceDocumentId`, then `renderedPageId`.
+- A page is `previewable` iff `RenderedPageRecord.eligibility === "eligible"`.
+- Each rendered node becomes one `<section>` element in stable preview markup.
+- Section order is canonical by `ordinalIndex`, then `nodeId`, then `sourceBlockId`.
+- Each section includes stable `data-*` attributes to preserve traceability to rendered pages/nodes/blocks.
+- Unsupported node kinds still map to a generic `<section>` with `data-render-node-kind` preserved.
+
+Preview status computation rule:
+- `blocked` if `RenderOutput.status === "blocked"` OR there are no previewable pages.
+- `ready` if not blocked AND `RenderOutput.status === "ready"` AND there are no preview warnings.
+- `ready_with_warnings` otherwise.
+
+Pipeline stage emitting the model:
+- `preview_generation` now emits `PreviewDocument` as `PreviewGenerationStageOutput.previewDocument`.

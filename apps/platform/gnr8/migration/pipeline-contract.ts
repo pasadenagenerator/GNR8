@@ -4,6 +4,7 @@ import type { ImportOutput } from "../import/import-contract";
 import type { PreparedSiteModel } from "./prepared-site-model";
 import type { LayoutPreparationModel } from "./layout-preparation-model";
 import type { RenderOutput } from "./render-output-model";
+import type { PreviewDocument } from "./preview-document-model";
 
 export const LINEAR_MIGRATION_PIPELINE_VERSION = "1.0.0" as const;
 
@@ -16,13 +17,15 @@ export type PipelineStageId =
   | "import_intake"
   | "structure_preparation"
   | "layout_preparation"
-  | "render_preparation";
+  | "render_preparation"
+  | "preview_generation";
 
 export const LINEAR_MIGRATION_STAGE_ORDER: readonly PipelineStageId[] = [
   "import_intake",
   "structure_preparation",
   "layout_preparation",
   "render_preparation",
+  "preview_generation",
 ] as const;
 
 export type PipelineStageStatus = "success" | "failed" | "skipped";
@@ -124,10 +127,23 @@ export type RenderPreparationStageOutput =
       renderOutput: RenderOutput;
     };
 
+export type PreviewGenerationStageOutput =
+  | {
+      kind: "preview_generation_ok_v1";
+      render: RenderPreparationStageOutput;
+      previewDocument: PreviewDocument;
+    }
+  | {
+      kind: "preview_generation_skipped_v1";
+      skippedBecauseStageId: PipelineStageId;
+      previewDocument: PreviewDocument;
+    };
+
 export type LinearMigrationPipelineStageResult =
   | PipelineStageResult<"import_intake", ImportIntakeStageOutput>
   | PipelineStageResult<"structure_preparation", StructurePreparationStageOutput>
   | PipelineStageResult<"layout_preparation", LayoutPreparationStageOutput>
-  | PipelineStageResult<"render_preparation", RenderPreparationStageOutput>;
+  | PipelineStageResult<"render_preparation", RenderPreparationStageOutput>
+  | PipelineStageResult<"preview_generation", PreviewGenerationStageOutput>;
 
 export type LinearMigrationPipelineResult = PipelineResult<LinearMigrationPipelineStageResult>;

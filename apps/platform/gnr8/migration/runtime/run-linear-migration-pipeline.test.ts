@@ -27,9 +27,15 @@ test("linear migration pipeline runs stages in fixed order", async () => {
 
   assert.deepEqual(
     result.stages.map((s) => s.stageId),
-    ["import_intake", "structure_preparation", "layout_preparation", "render_preparation"],
+    ["import_intake", "structure_preparation", "layout_preparation", "render_preparation", "preview_generation"],
   );
-  assert.deepEqual(result.stageOrder, ["import_intake", "structure_preparation", "layout_preparation", "render_preparation"]);
+  assert.deepEqual(result.stageOrder, [
+    "import_intake",
+    "structure_preparation",
+    "layout_preparation",
+    "render_preparation",
+    "preview_generation",
+  ]);
 });
 
 test("linear migration pipeline returns structured result in success case", async () => {
@@ -48,8 +54,18 @@ test("linear migration pipeline returns structured result in success case", asyn
   assert.equal(result.stages[1].status, "success");
   assert.equal(result.stages[2].status, "success");
   assert.equal(result.stages[3].status, "success");
+  assert.equal(result.stages[4].status, "success");
   assert.ok(result.summary.includes("linear_migration_pipeline"));
-  assert.ok(result.diagnostics.every((d) => d.stageId === "import_intake" || d.stageId === "structure_preparation" || d.stageId === "layout_preparation" || d.stageId === "render_preparation"));
+  assert.ok(
+    result.diagnostics.every(
+      (d) =>
+        d.stageId === "import_intake" ||
+        d.stageId === "structure_preparation" ||
+        d.stageId === "layout_preparation" ||
+        d.stageId === "render_preparation" ||
+        d.stageId === "preview_generation",
+    ),
+  );
 });
 
 test("linear migration pipeline returns structured result in failure case (no throw)", async () => {
@@ -70,6 +86,7 @@ test("linear migration pipeline returns structured result in failure case (no th
   assert.equal(result.stages[1].status, "skipped");
   assert.equal(result.stages[2].status, "skipped");
   assert.equal(result.stages[3].status, "skipped");
+  assert.equal(result.stages[4].status, "skipped");
 
   const importDiags = result.diagnostics.filter((d) => d.source === "import");
   assert.ok(importDiags.length > 0);
@@ -98,4 +115,3 @@ test("linear migration pipeline stage results are deterministic across repeated 
 
   assert.equal(stableStringify(r1 as unknown as JsonValue), stableStringify(r2 as unknown as JsonValue));
 });
-
