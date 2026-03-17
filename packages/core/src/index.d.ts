@@ -4,4 +4,10 @@ export * from './modules/authorization';
 export * from './modules/project';
 export * from './modules/entitlement';
 export * from './modules/billing';
+export * from './modules/org-stats';
+export * from './modules/audit-log';
+export * from './modules/superadmin-org';
+export * from './modules/superadmin-billing';
+export * from './modules/superadmin-trial';
+export * from './modules/superadmin-users';
 //# sourceMappingURL=index.d.ts.map

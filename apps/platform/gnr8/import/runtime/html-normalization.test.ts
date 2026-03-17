@@ -4,6 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 
+import type { ImportDiagnosticCode } from "../import-contract";
 import { importStaticSite } from "./import-static-site";
 
 function withTempRoot<T>(fn: (rootDir: string) => Promise<T> | T): Promise<T> {
@@ -59,7 +60,7 @@ test("HTML normalization produces stable snapshots across BOM/newline variants",
         expectCodes: ["HTML_BOM_REMOVED", "HTML_NEWLINES_NORMALIZED"],
       },
       { label: "cr", text: base.replaceAll("\n", "\r"), expectCodes: ["HTML_NEWLINES_NORMALIZED"] },
-    ];
+    ] satisfies { label: string; text: string; expectCodes: ImportDiagnosticCode[] }[];
 
     for (const v of variants) {
       const out = await importSingleHtml(rootDir, v.text);
@@ -100,4 +101,3 @@ test("Fragment-like HTML input produces stable snapshots across equivalent varia
     assert.deepEqual(snap, baselineSnap);
   });
 });
-
