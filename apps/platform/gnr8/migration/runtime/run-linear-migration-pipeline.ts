@@ -14,6 +14,7 @@ import type { ImportDiagnosticIssue } from "../../import/import-contract";
 
 import { createPipelineDiagnosticIssue, sortPipelineDiagnosticIssues } from "./diagnostics";
 import { createPreparedSiteModel } from "../prepared-site-model";
+import { createLayoutPreparationModel } from "../layout-preparation-model";
 
 const STAGE_CONTRACTS: Record<
   PipelineStageId,
@@ -157,21 +158,18 @@ function runLayoutPreparationStage(
   const shouldSkip = structureStage.status !== "success";
   const status: PipelineStageStatus = shouldSkip ? "skipped" : "success";
 
-  const emptyLayoutModel = {
-    kind: "layout_model_v0" as const,
-    layouts: [] as [],
-  };
+  const layoutModel = createLayoutPreparationModel(structureStage.output.preparedSite);
 
   const output: LayoutPreparationStageOutput = shouldSkip
     ? {
         kind: "layout_preparation_skipped_v0",
         skippedBecauseStageId: structureStage.stageId,
-        layoutModel: emptyLayoutModel,
+        layoutModel,
       }
     : {
         kind: "layout_preparation_ok_v0",
         structure: structureStage.output,
-        layoutModel: emptyLayoutModel,
+        layoutModel,
       };
 
   return {
@@ -181,7 +179,12 @@ function runLayoutPreparationStage(
     outputContract: STAGE_CONTRACTS.layout_preparation.output,
     output,
     diagnostics: [],
-    summary: stageSummary("layout_preparation", status, shouldSkip ? [`blockedBy=${structureStage.stageId}`] : ["no-op"]),
+    summary: stageSummary("layout_preparation", status, [
+      ...(shouldSkip ? [`blockedBy=${structureStage.stageId}`] : []),
+      `pages=${layoutModel.siteSummary.pageCount}`,
+      `blocks=${layoutModel.siteSummary.totalBlockCount}`,
+      `layoutStatus=${layoutModel.status}`,
+    ]),
   };
 }
 

@@ -2,6 +2,7 @@ import type { JsonValue } from "../import/import-contract";
 import type { ImportManifest } from "../import/import-manifest";
 import type { ImportOutput } from "../import/import-contract";
 import type { PreparedSiteModel } from "./prepared-site-model";
+import type { LayoutPreparationModel } from "./layout-preparation-model";
 
 export const LINEAR_MIGRATION_PIPELINE_VERSION = "1.0.0" as const;
 
@@ -102,18 +103,12 @@ export type LayoutPreparationStageOutput =
   | {
       kind: "layout_preparation_ok_v0";
       structure: StructurePreparationStageOutput;
-      layoutModel: {
-        kind: "layout_model_v0";
-        layouts: [];
-      };
+      layoutModel: LayoutPreparationModel;
     }
   | {
       kind: "layout_preparation_skipped_v0";
       skippedBecauseStageId: PipelineStageId;
-      layoutModel: {
-        kind: "layout_model_v0";
-        layouts: [];
-      };
+      layoutModel: LayoutPreparationModel;
     };
 
 export type RenderPreparationStageOutput =

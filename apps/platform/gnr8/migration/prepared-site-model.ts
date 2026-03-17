@@ -1,6 +1,7 @@
 import type { AssetKind, AssetReferenceKind, AssetValidationStatus } from "../import/import-contract";
 import type { ImportManifest } from "../import/import-manifest";
 import type { ImportOutput } from "../import/import-contract";
+import { parse } from "parse5";
 import { sha256Hex } from "./runtime/diagnostics";
 
 export const PREPARED_SITE_MODEL_VERSION = "1.0.0" as const;
@@ -26,6 +27,14 @@ export type PreparedDocumentRecord = {
   byteLength: number;
 
   assetReferenceIds: string[];
+
+  /**
+   * Compact, deterministic structural outline of `<body>` suitable for phase-1 layout preparation.
+   * This avoids duplicating full DOM payloads while enabling stable block extraction later.
+   *
+   * `null` when no serialized DOM snapshot was available for this document.
+   */
+  domOutline: PreparedDocumentDomOutline | null;
 };
 
 export type PreparedSiteModel = {
@@ -84,6 +93,21 @@ export type PreparedSiteModel = {
   documents: PreparedDocumentRecord[];
 };
 
+export type PreparedDocumentDomOutline = {
+  kind: "prepared_document_dom_outline_v0";
+  bodyAvailable: boolean;
+  bodyChildElements: PreparedDomOutlineElement[];
+};
+
+export type PreparedDomOutlineElement = {
+  tagName: string;
+  domPath: string;
+  ordinalIndex: number;
+  nthOfType: number;
+  childElementCount: number;
+  textPresent: boolean;
+};
+
 function stringCmp(a: string, b: string): number {
   if (a === b) return 0;
   return a < b ? -1 : 1;
@@ -98,6 +122,89 @@ function computeStatus(importOutput: ImportOutput, importManifest: ImportManifes
 
 function documentIdForPath(path: string): string {
   return sha256Hex(`prepared_document_v1:${path}`);
+}
+
+function isElement(node: unknown): node is { tagName: string; childNodes?: unknown[] } {
+  return !!node && typeof node === "object" && typeof (node as { tagName?: unknown }).tagName === "string";
+}
+
+function walkDom(node: unknown, visit: (n: unknown) => void): void {
+  const stack: unknown[] = [node];
+  while (stack.length > 0) {
+    const current = stack.pop();
+    if (!current || typeof current !== "object") continue;
+    visit(current);
+    const childNodes = (current as { childNodes?: unknown[] }).childNodes;
+    if (Array.isArray(childNodes)) {
+      for (let i = childNodes.length - 1; i >= 0; i--) stack.push(childNodes[i]);
+    }
+    const content = (current as { content?: unknown }).content;
+    if (content && typeof content === "object") stack.push(content);
+  }
+}
+
+function findFirstElementByTagName(root: unknown, tagNameLower: string): unknown | null {
+  let found: unknown | null = null;
+  walkDom(root, (n) => {
+    if (found) return;
+    if (!isElement(n)) return;
+    if (n.tagName.toLowerCase() === tagNameLower) found = n;
+  });
+  return found;
+}
+
+function countDirectChildElements(el: unknown): number {
+  if (!el || typeof el !== "object") return 0;
+  const children = (el as { childNodes?: unknown[] }).childNodes;
+  if (!Array.isArray(children)) return 0;
+  let count = 0;
+  for (const c of children) if (isElement(c)) count++;
+  return count;
+}
+
+function subtreeHasNonWhitespaceText(node: unknown): boolean {
+  let has = false;
+  walkDom(node, (n) => {
+    if (has) return;
+    if (!n || typeof n !== "object") return;
+    const nodeName = String((n as { nodeName?: unknown }).nodeName ?? "");
+    if (nodeName !== "#text") return;
+    const raw = (n as { value?: unknown; data?: unknown }).value ?? (n as { data?: unknown }).data ?? "";
+    if (String(raw).trim().length > 0) has = true;
+  });
+  return has;
+}
+
+function createDomOutlineFromSerializedDom(serializedDom: string): PreparedDocumentDomOutline {
+  const document = parse(serializedDom);
+  const body = findFirstElementByTagName(document, "body");
+
+  if (!body || typeof body !== "object") {
+    return { kind: "prepared_document_dom_outline_v0", bodyAvailable: false, bodyChildElements: [] };
+  }
+
+  const childNodes = (body as { childNodes?: unknown[] }).childNodes ?? [];
+  const elementChildren = childNodes.filter(isElement);
+
+  const typeCounts = new Map<string, number>();
+  const bodyChildElements: PreparedDomOutlineElement[] = [];
+  for (let i = 0; i < elementChildren.length; i++) {
+    const el = elementChildren[i];
+    const tagName = el.tagName.toLowerCase();
+    const nthOfType = (typeCounts.get(tagName) ?? 0) + 1;
+    typeCounts.set(tagName, nthOfType);
+
+    bodyChildElements.push({
+      tagName,
+      domPath: `html>body>${tagName}:nth-of-type(${nthOfType})`,
+      ordinalIndex: i,
+      nthOfType,
+      childElementCount: countDirectChildElements(el),
+      textPresent: subtreeHasNonWhitespaceText(el),
+    });
+  }
+
+  return { kind: "prepared_document_dom_outline_v0", bodyAvailable: true, bodyChildElements };
 }
 
 function toCanonicalDocumentList(documents: ImportOutput["rawDomSnapshot"]["documents"]): ImportOutput["rawDomSnapshot"]["documents"] {
@@ -154,6 +261,7 @@ export function createPreparedSiteModel(input: {
     const decodingHadErrors = doc.decoding.hadDecodingErrors;
     const docEffectivelyEmpty = doc.text.trim().length === 0;
     const isEntry = entryPath !== null && doc.path === entryPath;
+    const domOutline = serializedDomAvailable ? createDomOutlineFromSerializedDom(doc.dom?.serializedDom ?? "") : null;
 
     if (normalizedHtmlAvailable) documentsWithNormalizedHtmlCount++;
     if (doc.dom) documentsWithDomCount++;
@@ -177,6 +285,7 @@ export function createPreparedSiteModel(input: {
       contentSha256: doc.contentSha256,
       byteLength: doc.byteLength,
       assetReferenceIds,
+      domOutline,
     });
   }
 
@@ -237,4 +346,3 @@ export function createPreparedSiteModel(input: {
     documents,
   };
 }
-
