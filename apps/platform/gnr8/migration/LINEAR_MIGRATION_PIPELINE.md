@@ -31,7 +31,7 @@ Stage order is defined by `LINEAR_MIGRATION_STAGE_ORDER` in `apps/platform/gnr8/
 - `layout_preparation`
   - Deterministically emits `LayoutPreparationModel` (`layout_preparation_model_v1`) derived from `PreparedSiteModel`.
 - `render_preparation`
-  - No-op placeholder that emits an empty `render_plan_v0` structure.
+  - Deterministically emits `RenderOutput` (`render_output_v1`) derived from `LayoutPreparationModel`.
 
 ## Phase-1 LayoutPreparationModel (implementation note)
 
@@ -54,3 +54,28 @@ Status computation rule:
 
 Pipeline stage emitting the model:
 - `layout_preparation` now emits `LayoutPreparationModel` as `LayoutPreparationStageOutput.layoutModel`.
+
+## Phase-1 RenderOutput (implementation note)
+
+Render output fields included (high-level):
+- `kind`, `modelVersion`, `mapping` (rule id + wrapper tag)
+- `source` (layout/prepared/import version references + fingerprints)
+- `status` (`ready` | `ready_with_warnings` | `blocked`)
+- `siteSummary` (page eligibility + rendered node counts)
+- `pages` (stable page render records with traceability + render nodes)
+- `pageSummaries` (compact per-page summary)
+- `diagnostics.carried.import` (carried summary from preparation) + `diagnostics.renderer.warnings.codes`
+
+Phase-1 render mapping rule (fixed, replayable):
+- Each layout block becomes one top-level render node.
+- Node order is canonical by `ordinalIndex` (0-based).
+- Every node uses a stable wrapper tag: `section`.
+- Original `sourceTagName` is preserved for traceability.
+
+Render status computation rule:
+- `blocked` if `LayoutPreparationModel.status === "blocked"` OR there are no eligible pages.
+- `ready` if not blocked AND `LayoutPreparationModel.status === "ready"` AND there are no ineligible pages.
+- `ready_with_warnings` otherwise.
+
+Pipeline stage emitting the model:
+- `render_preparation` now emits `RenderOutput` as `RenderPreparationStageOutput.renderOutput`.

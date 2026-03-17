@@ -15,6 +15,7 @@ import type { ImportDiagnosticIssue } from "../../import/import-contract";
 import { createPipelineDiagnosticIssue, sortPipelineDiagnosticIssues } from "./diagnostics";
 import { createPreparedSiteModel } from "../prepared-site-model";
 import { createLayoutPreparationModel } from "../layout-preparation-model";
+import { createRenderOutput } from "../render-output-model";
 
 const STAGE_CONTRACTS: Record<
   PipelineStageId,
@@ -37,7 +38,7 @@ const STAGE_CONTRACTS: Record<
   },
   render_preparation: {
     input: "LayoutPreparationStageOutput",
-    output: "RenderPreparationStageOutput (ok|skipped)",
+    output: "RenderPreparationStageOutput (ok|skipped) + RenderOutput",
   },
 };
 
@@ -194,24 +195,18 @@ function runRenderPreparationStage(
   const shouldSkip = layoutStage.status !== "success";
   const status: PipelineStageStatus = shouldSkip ? "skipped" : "success";
 
-  const emptyRenderPreparation = {
-    kind: "render_preparation_v0" as const,
-    renderPlan: {
-      kind: "render_plan_v0" as const,
-      nodes: [] as [],
-    },
-  };
+  const renderOutput = createRenderOutput(layoutStage.output.layoutModel);
 
   const output: RenderPreparationStageOutput = shouldSkip
     ? {
-        kind: "render_preparation_skipped_v0",
+        kind: "render_preparation_skipped_v1",
         skippedBecauseStageId: layoutStage.stageId,
-        renderPreparation: emptyRenderPreparation,
+        renderOutput,
       }
     : {
-        kind: "render_preparation_ok_v0",
+        kind: "render_preparation_ok_v1",
         layout: layoutStage.output,
-        renderPreparation: emptyRenderPreparation,
+        renderOutput,
       };
 
   return {
@@ -221,7 +216,12 @@ function runRenderPreparationStage(
     outputContract: STAGE_CONTRACTS.render_preparation.output,
     output,
     diagnostics: [],
-    summary: stageSummary("render_preparation", status, shouldSkip ? [`blockedBy=${layoutStage.stageId}`] : ["no-op"]),
+    summary: stageSummary("render_preparation", status, [
+      ...(shouldSkip ? [`blockedBy=${layoutStage.stageId}`] : []),
+      `renderStatus=${renderOutput.status}`,
+      `pages=${renderOutput.siteSummary.pageCount}`,
+      `renderedNodes=${renderOutput.siteSummary.renderedNodeCount}`,
+    ]),
   };
 }
 

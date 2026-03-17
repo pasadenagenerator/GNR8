@@ -3,6 +3,7 @@ import type { ImportManifest } from "../import/import-manifest";
 import type { ImportOutput } from "../import/import-contract";
 import type { PreparedSiteModel } from "./prepared-site-model";
 import type { LayoutPreparationModel } from "./layout-preparation-model";
+import type { RenderOutput } from "./render-output-model";
 
 export const LINEAR_MIGRATION_PIPELINE_VERSION = "1.0.0" as const;
 
@@ -113,26 +114,14 @@ export type LayoutPreparationStageOutput =
 
 export type RenderPreparationStageOutput =
   | {
-      kind: "render_preparation_ok_v0";
+      kind: "render_preparation_ok_v1";
       layout: LayoutPreparationStageOutput;
-      renderPreparation: {
-        kind: "render_preparation_v0";
-        renderPlan: {
-          kind: "render_plan_v0";
-          nodes: [];
-        };
-      };
+      renderOutput: RenderOutput;
     }
   | {
-      kind: "render_preparation_skipped_v0";
+      kind: "render_preparation_skipped_v1";
       skippedBecauseStageId: PipelineStageId;
-      renderPreparation: {
-        kind: "render_preparation_v0";
-        renderPlan: {
-          kind: "render_plan_v0";
-          nodes: [];
-        };
-      };
+      renderOutput: RenderOutput;
     };
 
 export type LinearMigrationPipelineStageResult =
