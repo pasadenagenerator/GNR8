@@ -3,11 +3,13 @@ import type { LinearMigrationPipelineResult } from "../pipeline-contract";
 import type { ApprovalPackage } from "../approval-package-model";
 import type { ExecutionPlan } from "../execution-plan-model";
 import type { ExecutionResult } from "../execution-result-model";
+import type { MigrationRunReport } from "../migration-run-report";
 
 import { runLinearMigrationPipeline } from "./run-linear-migration-pipeline";
 import { createApprovalPackage } from "../approval-package-model";
 import { createExecutionPlan } from "../execution-plan-model";
 import { executePhase1ApplySimulation } from "../execution-result-model";
+import { createMigrationRunReport } from "../migration-run-report";
 
 export type LinearMigrationPhase1ApproveExecuteResult = {
   kind: "linear_migration_phase1_approve_execute_result_v1";
@@ -15,6 +17,7 @@ export type LinearMigrationPhase1ApproveExecuteResult = {
   approvalPackage: ApprovalPackage;
   executionPlan: ExecutionPlan;
   executionResult: ExecutionResult;
+  report: MigrationRunReport;
   summary: string;
 };
 
@@ -31,6 +34,7 @@ export function runLinearMigrationPhase1ApproveExecute(input: PipelineInput): Li
   const approvalPackage = createApprovalPackage(pipeline);
   const executionPlan = createExecutionPlan({ pipeline, approvalPackage });
   const executionResult = executePhase1ApplySimulation({ approvalPackage, executionPlan });
+  const report = createMigrationRunReport({ pipeline, approvalPackage, executionPlan, executionResult });
 
   return {
     kind: "linear_migration_phase1_approve_execute_result_v1",
@@ -38,7 +42,7 @@ export function runLinearMigrationPhase1ApproveExecute(input: PipelineInput): Li
     approvalPackage,
     executionPlan,
     executionResult,
+    report,
     summary: `linear_migration_phase1_approve_execute: pipelineStatus=${pipeline.status}; approval=${approvalPackage.eligibility.status}; executionPlan=${executionPlan.eligibility.status}; execution=${executionResult.status}`,
   };
 }
-
