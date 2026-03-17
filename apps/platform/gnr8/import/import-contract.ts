@@ -89,7 +89,7 @@
  * No network, no clocks, no randomness.
  */
 
-export const IMPORT_CONTRACT_VERSION = "1.0.0" as const;
+export const IMPORT_CONTRACT_VERSION = "1.1.0" as const;
 
 /**
  * JSON-like value set for diagnostics/details payloads.
@@ -297,6 +297,25 @@ export type AssetRegistry = {
   references: AssetReference[];
 };
 
+export type AssetKind = "image" | "stylesheet" | "script" | "unknown";
+
+export type AssetReferenceKind =
+  | "relative_local"
+  | "root_relative"
+  | "absolute_url"
+  | "data_url"
+  | "empty_invalid";
+
+export type AssetExistenceStatus = "unknown" | "exists" | "missing";
+
+export type AssetValidationStatus =
+  | "ok"
+  | "invalid_asset_reference"
+  | "unsupported_remote_asset"
+  | "unsupported_data_url_asset"
+  | "path_traversal_blocked"
+  | "missing_local_asset";
+
 export type ImportedAssetFile = {
   /**
    * Normalized POSIX path relative to `rootDir`.
@@ -316,18 +335,57 @@ export type ImportedAssetFile = {
 
 export type AssetReference = {
   /**
+   * Stable identifier for this reference occurrence (sha256 hex).
+   */
+  id: string;
+
+  /**
    * Path of the HTML document that contains the reference (normalized, relative to root).
    */
   fromDocumentPath: string;
+
+  /**
+   * Lowercase tag name where the reference originated (e.g. "img", "link", "script").
+   */
+  tag: string;
+
+  /**
+   * Occurrence counter for this tag/attribute pair within the document (0-based).
+   */
+  occurrence: number;
+
   /**
    * The raw attribute value (e.g. src/href). No rewriting.
    */
   rawRef: string;
+
+  /**
+   * High-level asset classification based on tag context.
+   */
+  assetKind: AssetKind;
+
+  /**
+   * Kind of reference as found in HTML (local path vs URL/data/empty).
+   */
+  referenceKind: AssetReferenceKind;
+
   /**
    * Deterministically resolved target path (normalized, relative to root) when it refers to a local file.
    * Null when not resolvable (e.g. external URL, data: URL, invalid path).
    */
   resolvedPath: string | null;
+
+  /**
+   * Existence status for local resolved paths.
+   * - "unknown" for non-local references or unresolved paths.
+   */
+  existence: AssetExistenceStatus;
+
+  /**
+   * Validation status representing deterministic importer decisions for this reference.
+   */
+  validationStatus: AssetValidationStatus;
+
   /**
    * Attribute name holding the reference (e.g. "src", "href").
    */
@@ -367,6 +425,11 @@ export type ImportDiagnosticCode =
   | "ASSET_REFERENCE_UNRESOLVED"
   | "INVALID_ASSET_REFERENCE"
   | "UNSUPPORTED_STRUCTURE"
+  | "missing_local_asset"
+  | "invalid_asset_reference"
+  | "unsupported_remote_asset"
+  | "unsupported_data_url_asset"
+  | "path_traversal_blocked"
   | "INTERNAL_ERROR";
 
 export type ImportDiagnosticIssue = {

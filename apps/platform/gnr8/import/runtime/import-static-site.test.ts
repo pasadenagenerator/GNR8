@@ -3,7 +3,7 @@ import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
-import { importStaticSite } from "./import-static-site.ts";
+import { importStaticSite } from "./import-static-site";
 
 function fixtureDir(): string {
   const here = path.dirname(fileURLToPath(import.meta.url));
@@ -23,7 +23,7 @@ test("importStaticSite imports single entry HTML deterministically", async () =>
     },
   });
 
-  assert.equal(out.contractVersion, "1.0.0");
+  assert.equal(out.contractVersion, "1.1.0");
   assert.equal(out.status, "ok");
   assert.equal(out.documentMeta.execution.requestId, "req-123");
   assert.deepEqual(out.importDiagnostics.summary, {
@@ -54,11 +54,47 @@ test("importStaticSite imports single entry HTML deterministically", async () =>
 
   assert.equal(out.assetRegistry.references.length, 3);
   assert.deepEqual(
-    out.assetRegistry.references.map((r) => ({ attribute: r.attribute, rawRef: r.rawRef, resolvedPath: r.resolvedPath })),
+    out.assetRegistry.references.map((r) => ({
+      tag: r.tag,
+      attribute: r.attribute,
+      rawRef: r.rawRef,
+      assetKind: r.assetKind,
+      referenceKind: r.referenceKind,
+      resolvedPath: r.resolvedPath,
+      existence: r.existence,
+      validationStatus: r.validationStatus,
+    })),
     [
-      { attribute: "href", rawRef: "./assets/styles.css", resolvedPath: "assets/styles.css" },
-      { attribute: "src", rawRef: "./assets/app.js", resolvedPath: "assets/app.js" },
-      { attribute: "src", rawRef: "./assets/logo.svg", resolvedPath: "assets/logo.svg" },
+      {
+        tag: "img",
+        attribute: "src",
+        rawRef: "./assets/logo.svg",
+        assetKind: "image",
+        referenceKind: "relative_local",
+        resolvedPath: "assets/logo.svg",
+        existence: "exists",
+        validationStatus: "ok",
+      },
+      {
+        tag: "link",
+        attribute: "href",
+        rawRef: "./assets/styles.css",
+        assetKind: "stylesheet",
+        referenceKind: "relative_local",
+        resolvedPath: "assets/styles.css",
+        existence: "exists",
+        validationStatus: "ok",
+      },
+      {
+        tag: "script",
+        attribute: "src",
+        rawRef: "./assets/app.js",
+        assetKind: "script",
+        referenceKind: "relative_local",
+        resolvedPath: "assets/app.js",
+        existence: "exists",
+        validationStatus: "ok",
+      },
     ],
   );
 });
@@ -75,8 +111,7 @@ test("importStaticSite returns fatal diagnostic when entry is missing", async ()
     },
   });
 
-  assert.equal(out.contractVersion, "1.0.0");
+  assert.equal(out.contractVersion, "1.1.0");
   assert.equal(out.status, "failed");
   assert.ok(out.importDiagnostics.issues.some((i) => i.code === "ENTRY_HTML_MISSING" && i.severity === "fatal"));
 });
-

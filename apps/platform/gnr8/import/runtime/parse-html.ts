@@ -1,6 +1,6 @@
 import { parse, serialize } from "parse5";
 
-import type { HtmlParseWarning, ImportedDomSnapshot } from "../import-contract.ts";
+import type { HtmlParseWarning, ImportedDomSnapshot } from "../import-contract";
 
 type Parse5Error = {
   code?: string;

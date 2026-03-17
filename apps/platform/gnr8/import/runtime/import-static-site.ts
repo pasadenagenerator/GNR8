@@ -10,16 +10,16 @@ import {
   type ImportedAssetFile,
   type ImportedHtmlDocument,
   type JsonValue,
-} from "../import-contract.ts";
+} from "../import-contract";
 import {
   buildImportDiagnostics,
   createDiagnosticIssue,
   hasFatalIssues,
   sha256Hex,
   stableStringify,
-} from "./diagnostics.ts";
-import { extractAssetReferencesFromDom } from "./extract-assets.ts";
-import { parseHtmlToDomSnapshot } from "./parse-html.ts";
+} from "./diagnostics";
+import { extractAssetReferencesFromDom } from "./extract-assets";
+import { parseHtmlToDomSnapshot } from "./parse-html";
 
 function toPosixPath(p: string): string {
   return p.replaceAll(path.sep, "/");
@@ -276,6 +276,7 @@ export async function importStaticSite(input: ImportInput): Promise<ImportOutput
 
     const importedDocuments: ImportedHtmlDocument[] = [];
     const allAssetReferences: AssetRegistry["references"] = [];
+    const entryHtmlAbsPath = htmlPathsToRead.find((p) => p.isEntry)?.absPath ?? null;
 
     for (const html of htmlPathsToRead.sort((a, b) => a.relPosixPath.localeCompare(b.relPosixPath))) {
       let bytes: Uint8Array;
@@ -328,6 +329,7 @@ export async function importStaticSite(input: ImportInput): Promise<ImportOutput
 
       const extracted = extractAssetReferencesFromDom({
         rootDirAbs,
+        entryHtmlAbsPath,
         fromDocumentPath: html.relPosixPath,
         document,
       });
@@ -343,6 +345,33 @@ export async function importStaticSite(input: ImportInput): Promise<ImportOutput
         dom: snapshot,
       });
     }
+
+    // Validate local references without reading file contents (existence-only).
+    const validatedAssetReferences: AssetRegistry["references"] = allAssetReferences.map((ref) => {
+      if (ref.validationStatus !== "ok" || ref.resolvedPath === null) return ref;
+
+      const abs = path.resolve(rootDirAbs, ref.resolvedPath);
+      const exists = fs.existsSync(abs);
+      if (!exists) {
+        issues.push(
+          createDiagnosticIssue({
+            severity: "error",
+            code: "missing_local_asset",
+            message: "Missing local asset",
+            location: { path: ref.fromDocumentPath, position: null, selector: null },
+            details: {
+              assetId: ref.id,
+              tag: ref.tag,
+              attribute: ref.attribute,
+              rawRef: ref.rawRef,
+              resolvedPath: ref.resolvedPath,
+            },
+          }),
+        );
+        return { ...ref, existence: "missing", validationStatus: "missing_local_asset" };
+      }
+      return { ...ref, existence: "exists" };
+    });
 
     let importedAssetFiles: ImportedAssetFile[] = [];
     if (assetsDir) {
@@ -407,12 +436,16 @@ export async function importStaticSite(input: ImportInput): Promise<ImportOutput
     const assetRegistry: AssetRegistry = {
       assetsDirPath: assetsDir?.relPosixPath ?? null,
       files: importedAssetFiles,
-      references: allAssetReferences.sort((a, b) => {
+      references: validatedAssetReferences.sort((a, b) => {
         if (a.fromDocumentPath !== b.fromDocumentPath)
           return a.fromDocumentPath.localeCompare(b.fromDocumentPath);
+        if (a.tag !== b.tag) return a.tag.localeCompare(b.tag);
         if (a.attribute !== b.attribute) return a.attribute.localeCompare(b.attribute);
+        if (a.occurrence !== b.occurrence) return a.occurrence - b.occurrence;
         if (a.rawRef !== b.rawRef) return a.rawRef.localeCompare(b.rawRef);
-        return (a.resolvedPath ?? "").localeCompare(b.resolvedPath ?? "");
+        if ((a.resolvedPath ?? "") !== (b.resolvedPath ?? ""))
+          return (a.resolvedPath ?? "").localeCompare(b.resolvedPath ?? "");
+        return a.id.localeCompare(b.id);
       }),
     };
 

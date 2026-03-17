@@ -1,7 +1,7 @@
 import path from "node:path";
 
-import type { AssetReference, ImportDiagnosticIssue } from "../import-contract.ts";
-import { createDiagnosticIssue } from "./diagnostics.ts";
+import type { AssetReference, ImportDiagnosticIssue } from "../import-contract";
+import { createDiagnosticIssue, sha256Hex, stableStringify } from "./diagnostics";
 
 function toPosixPath(p: string): string {
   return p.replaceAll(path.sep, "/");
@@ -11,79 +11,134 @@ function normalizeRelPosix(rel: string): string {
   return path.posix.normalize(toPosixPath(rel));
 }
 
-function isExternalOrNonFileRef(rawRef: string): boolean {
-  const v = rawRef.trim().toLowerCase();
-  return (
-    v.startsWith("http://") ||
-    v.startsWith("https://") ||
-    v.startsWith("//") ||
-    v.startsWith("data:") ||
-    v.startsWith("mailto:") ||
-    v.startsWith("tel:") ||
-    v.startsWith("javascript:") ||
-    v.startsWith("#")
-  );
+function isAbsoluteUrlRef(rawRef: string): boolean {
+  const trimmed = rawRef.trim();
+  if (trimmed.startsWith("//")) return true;
+  if (/^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(trimmed)) return true;
+  return false;
+}
+
+function referenceKindFromRawRef(rawRef: string): AssetReference["referenceKind"] {
+  const trimmed = rawRef.trim();
+  if (rawRef.includes("\0") || trimmed === "" || trimmed.startsWith("#")) return "empty_invalid";
+  if (trimmed.toLowerCase().startsWith("data:")) return "data_url";
+  if (isAbsoluteUrlRef(trimmed)) return "absolute_url";
+  if (trimmed.startsWith("/")) return "root_relative";
+  return "relative_local";
+}
+
+function assetKindFromTag(input: { tag: string; relAttr: string | null }): AssetReference["assetKind"] {
+  switch (input.tag) {
+    case "img":
+      return "image";
+    case "script":
+      return "script";
+    case "link": {
+      const rel = (input.relAttr ?? "").toLowerCase();
+      const tokens = rel.split(/\s+/).filter(Boolean);
+      return tokens.includes("stylesheet") ? "stylesheet" : "unknown";
+    }
+    default:
+      return "unknown";
+  }
 }
 
 function resolveRefToRootRelativePosix(input: {
   rootDirAbs: string;
+  entryHtmlAbsPath: string | null;
   fromDocumentPath: string;
   rawRef: string;
-}): { resolvedPath: string | null; issues: ImportDiagnosticIssue[] } {
+  tag: string;
+  attribute: string;
+}): {
+  resolvedPath: string | null;
+  referenceKind: AssetReference["referenceKind"];
+  validationStatus: AssetReference["validationStatus"];
+  issues: ImportDiagnosticIssue[];
+} {
   const issues: ImportDiagnosticIssue[] = [];
   const rawRef = input.rawRef;
 
-  if (rawRef.includes("\0") || rawRef.trim() === "") {
+  const referenceKind = referenceKindFromRawRef(rawRef);
+
+  if (referenceKind === "empty_invalid") {
+    issues.push(
+      createDiagnosticIssue({
+        severity: "error",
+        code: "invalid_asset_reference",
+        message: "Invalid asset reference",
+        location: { path: input.fromDocumentPath, position: null, selector: null },
+        details: { rawRef, tag: input.tag, attribute: input.attribute },
+      }),
+    );
+    return { resolvedPath: null, referenceKind, validationStatus: "invalid_asset_reference", issues };
+  }
+
+  if (referenceKind === "absolute_url") {
     issues.push(
       createDiagnosticIssue({
         severity: "warning",
-        code: "INVALID_ASSET_REFERENCE",
-        message: "Invalid asset reference (empty or contains NUL)",
+        code: "unsupported_remote_asset",
+        message: "Unsupported remote asset reference",
         location: { path: input.fromDocumentPath, position: null, selector: null },
-        details: { rawRef },
+        details: { rawRef, tag: input.tag, attribute: input.attribute },
       }),
     );
-    return { resolvedPath: null, issues };
+    return { resolvedPath: null, referenceKind, validationStatus: "unsupported_remote_asset", issues };
   }
 
-  if (isExternalOrNonFileRef(rawRef)) return { resolvedPath: null, issues };
+  if (referenceKind === "data_url") {
+    issues.push(
+      createDiagnosticIssue({
+        severity: "warning",
+        code: "unsupported_data_url_asset",
+        message: "Unsupported data: URL asset reference",
+        location: { path: input.fromDocumentPath, position: null, selector: null },
+        details: { rawRef, tag: input.tag, attribute: input.attribute },
+      }),
+    );
+    return { resolvedPath: null, referenceKind, validationStatus: "unsupported_data_url_asset", issues };
+  }
 
   const trimmed = rawRef.trim();
   if (trimmed.includes("?") || trimmed.includes("#")) {
     issues.push(
       createDiagnosticIssue({
-        severity: "warning",
-        code: "ASSET_REFERENCE_UNRESOLVED",
-        message: "Asset reference contains query/hash; not resolved in this phase",
+        severity: "error",
+        code: "invalid_asset_reference",
+        message: "Invalid asset reference",
         location: { path: input.fromDocumentPath, position: null, selector: null },
-        details: { rawRef },
+        details: { rawRef, tag: input.tag, attribute: input.attribute },
       }),
     );
-    return { resolvedPath: null, issues };
+    return { resolvedPath: null, referenceKind, validationStatus: "invalid_asset_reference", issues };
   }
 
-  const fromAbs = path.resolve(input.rootDirAbs, input.fromDocumentPath);
-  const baseDirAbs = path.dirname(fromAbs);
+  const entryAbs =
+    input.entryHtmlAbsPath === null ? path.resolve(input.rootDirAbs, input.fromDocumentPath) : input.entryHtmlAbsPath;
+  const baseDirAbs = path.dirname(entryAbs);
 
-  const targetAbs = trimmed.startsWith("/")
-    ? path.resolve(input.rootDirAbs, trimmed.replace(/^\/+/, ""))
-    : path.resolve(baseDirAbs, trimmed);
+  const localPath = trimmed.replaceAll("\\", "/");
+  const targetAbs =
+    referenceKind === "root_relative"
+      ? path.resolve(input.rootDirAbs, localPath.replace(/^\/+/, ""))
+      : path.resolve(baseDirAbs, localPath);
 
   const rel = path.relative(input.rootDirAbs, targetAbs);
   if (rel === "" || rel.startsWith("..") || path.isAbsolute(rel)) {
     issues.push(
       createDiagnosticIssue({
-        severity: "warning",
-        code: "INVALID_ASSET_REFERENCE",
-        message: "Asset reference resolves outside rootDir",
+        severity: "error",
+        code: "path_traversal_blocked",
+        message: "Asset reference path traversal blocked",
         location: { path: input.fromDocumentPath, position: null, selector: null },
-        details: { rawRef },
+        details: { rawRef, tag: input.tag, attribute: input.attribute },
       }),
     );
-    return { resolvedPath: null, issues };
+    return { resolvedPath: null, referenceKind, validationStatus: "path_traversal_blocked", issues };
   }
 
-  return { resolvedPath: normalizeRelPosix(rel), issues };
+  return { resolvedPath: normalizeRelPosix(rel), referenceKind, validationStatus: "ok", issues };
 }
 
 function getAttr(node: unknown, attrName: string): string | null {
@@ -118,11 +173,20 @@ function walkDom(node: unknown, visit: (n: unknown) => void): void {
 
 export function extractAssetReferencesFromDom(input: {
   rootDirAbs: string;
+  entryHtmlAbsPath: string | null;
   fromDocumentPath: string;
   document: unknown;
 }): { references: AssetReference[]; issues: ImportDiagnosticIssue[] } {
   const references: AssetReference[] = [];
   const issues: ImportDiagnosticIssue[] = [];
+  const occurrenceByKey = new Map<string, number>();
+
+  function nextOccurrence(tag: string, attribute: string): number {
+    const k = `${tag}:${attribute}`;
+    const current = occurrenceByKey.get(k) ?? 0;
+    occurrenceByKey.set(k, current + 1);
+    return current;
+  }
 
   walkDom(input.document, (node) => {
     if (!isElement(node)) return;
@@ -132,13 +196,34 @@ export function extractAssetReferencesFromDom(input: {
       if (rawRef === null) return;
       const resolved = resolveRefToRootRelativePosix({
         rootDirAbs: input.rootDirAbs,
+        entryHtmlAbsPath: input.entryHtmlAbsPath,
         fromDocumentPath: input.fromDocumentPath,
         rawRef,
+        tag,
+        attribute: "src",
       });
+      const occurrence = nextOccurrence(tag, "src");
+      const assetKind = assetKindFromTag({ tag, relAttr: null });
+      const id = sha256Hex(
+        stableStringify({
+          fromDocumentPath: input.fromDocumentPath,
+          tag,
+          attribute: "src",
+          occurrence,
+          rawRef,
+        }),
+      );
       references.push({
+        id,
         fromDocumentPath: input.fromDocumentPath,
+        tag,
+        occurrence,
         rawRef,
+        assetKind,
+        referenceKind: resolved.referenceKind,
         resolvedPath: resolved.resolvedPath,
+        existence: "unknown",
+        validationStatus: resolved.validationStatus,
         attribute: "src",
       });
       issues.push(...resolved.issues);
@@ -147,15 +232,37 @@ export function extractAssetReferencesFromDom(input: {
     if (tag === "link") {
       const rawRef = getAttr(node, "href");
       if (rawRef === null) return;
+      const relAttr = getAttr(node, "rel");
       const resolved = resolveRefToRootRelativePosix({
         rootDirAbs: input.rootDirAbs,
+        entryHtmlAbsPath: input.entryHtmlAbsPath,
         fromDocumentPath: input.fromDocumentPath,
         rawRef,
+        tag,
+        attribute: "href",
       });
+      const occurrence = nextOccurrence(tag, "href");
+      const assetKind = assetKindFromTag({ tag, relAttr });
+      const id = sha256Hex(
+        stableStringify({
+          fromDocumentPath: input.fromDocumentPath,
+          tag,
+          attribute: "href",
+          occurrence,
+          rawRef,
+        }),
+      );
       references.push({
+        id,
         fromDocumentPath: input.fromDocumentPath,
+        tag,
+        occurrence,
         rawRef,
+        assetKind,
+        referenceKind: resolved.referenceKind,
         resolvedPath: resolved.resolvedPath,
+        existence: "unknown",
+        validationStatus: resolved.validationStatus,
         attribute: "href",
       });
       issues.push(...resolved.issues);
@@ -166,13 +273,34 @@ export function extractAssetReferencesFromDom(input: {
       if (rawRef === null) return;
       const resolved = resolveRefToRootRelativePosix({
         rootDirAbs: input.rootDirAbs,
+        entryHtmlAbsPath: input.entryHtmlAbsPath,
         fromDocumentPath: input.fromDocumentPath,
         rawRef,
+        tag,
+        attribute: "src",
       });
+      const occurrence = nextOccurrence(tag, "src");
+      const assetKind = assetKindFromTag({ tag, relAttr: null });
+      const id = sha256Hex(
+        stableStringify({
+          fromDocumentPath: input.fromDocumentPath,
+          tag,
+          attribute: "src",
+          occurrence,
+          rawRef,
+        }),
+      );
       references.push({
+        id,
         fromDocumentPath: input.fromDocumentPath,
+        tag,
+        occurrence,
         rawRef,
+        assetKind,
+        referenceKind: resolved.referenceKind,
         resolvedPath: resolved.resolvedPath,
+        existence: "unknown",
+        validationStatus: resolved.validationStatus,
         attribute: "src",
       });
       issues.push(...resolved.issues);
@@ -183,12 +311,14 @@ export function extractAssetReferencesFromDom(input: {
   const sortedReferences = [...references].sort((a, b) => {
     if (a.fromDocumentPath !== b.fromDocumentPath)
       return a.fromDocumentPath < b.fromDocumentPath ? -1 : 1;
+    if (a.tag !== b.tag) return a.tag < b.tag ? -1 : 1;
     if (a.attribute !== b.attribute) return a.attribute < b.attribute ? -1 : 1;
+    if (a.occurrence !== b.occurrence) return a.occurrence - b.occurrence;
     if (a.rawRef !== b.rawRef) return a.rawRef < b.rawRef ? -1 : 1;
     const aResolved = a.resolvedPath ?? "";
     const bResolved = b.resolvedPath ?? "";
     if (aResolved !== bResolved) return aResolved < bResolved ? -1 : 1;
-    return 0;
+    return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
   });
 
   return { references: sortedReferences, issues };

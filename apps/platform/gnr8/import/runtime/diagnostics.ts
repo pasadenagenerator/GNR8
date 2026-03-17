@@ -7,7 +7,7 @@ import type {
   ImportDiagnosticSeverity,
   ImportDiagnostics,
   JsonValue,
-} from "../import-contract.ts";
+} from "../import-contract";
 
 const SEVERITY_RANK: Record<ImportDiagnosticSeverity, number> = {
   fatal: 0,
