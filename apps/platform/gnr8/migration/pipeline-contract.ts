@@ -1,6 +1,7 @@
 import type { JsonValue } from "../import/import-contract";
 import type { ImportManifest } from "../import/import-manifest";
 import type { ImportOutput } from "../import/import-contract";
+import type { PreparedSiteModel } from "./prepared-site-model";
 
 export const LINEAR_MIGRATION_PIPELINE_VERSION = "1.0.0" as const;
 
@@ -87,22 +88,14 @@ export type ImportIntakeStageOutput =
 
 export type StructurePreparationStageOutput =
   | {
-      kind: "structure_preparation_ok_v0";
+      kind: "structure_preparation_ok_v1";
       intake: ImportIntakeStageOutput;
-      structureModel: {
-        kind: "structure_model_v0";
-        pages: [];
-        sections: [];
-      };
+      preparedSite: PreparedSiteModel;
     }
   | {
-      kind: "structure_preparation_skipped_v0";
+      kind: "structure_preparation_skipped_v1";
       skippedBecauseStageId: PipelineStageId;
-      structureModel: {
-        kind: "structure_model_v0";
-        pages: [];
-        sections: [];
-      };
+      preparedSite: PreparedSiteModel;
     };
 
 export type LayoutPreparationStageOutput =
@@ -154,4 +147,3 @@ export type LinearMigrationPipelineStageResult =
   | PipelineStageResult<"render_preparation", RenderPreparationStageOutput>;
 
 export type LinearMigrationPipelineResult = PipelineResult<LinearMigrationPipelineStageResult>;
-

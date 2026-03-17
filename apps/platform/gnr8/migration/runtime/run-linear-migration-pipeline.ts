@@ -13,6 +13,7 @@ import { LINEAR_MIGRATION_PIPELINE_VERSION, LINEAR_MIGRATION_STAGE_ORDER } from 
 import type { ImportDiagnosticIssue } from "../../import/import-contract";
 
 import { createPipelineDiagnosticIssue, sortPipelineDiagnosticIssues } from "./diagnostics";
+import { createPreparedSiteModel } from "../prepared-site-model";
 
 const STAGE_CONTRACTS: Record<
   PipelineStageId,
@@ -27,7 +28,7 @@ const STAGE_CONTRACTS: Record<
   },
   structure_preparation: {
     input: "ImportIntakeStageOutput",
-    output: "StructurePreparationStageOutput (ok|skipped)",
+    output: "StructurePreparationStageOutput (ok|skipped) + PreparedSiteModel",
   },
   layout_preparation: {
     input: "StructurePreparationStageOutput",
@@ -125,22 +126,18 @@ function runStructurePreparationStage(
   const shouldSkip = intakeStage.status !== "success";
   const status: PipelineStageStatus = shouldSkip ? "skipped" : "success";
 
-  const emptyStructureModel = {
-    kind: "structure_model_v0" as const,
-    pages: [] as [],
-    sections: [] as [],
-  };
+  const preparedSite = createPreparedSiteModel(intakeStage.output.pipelineInput);
 
   const output: StructurePreparationStageOutput = shouldSkip
     ? {
-        kind: "structure_preparation_skipped_v0",
+        kind: "structure_preparation_skipped_v1",
         skippedBecauseStageId: intakeStage.stageId,
-        structureModel: emptyStructureModel,
+        preparedSite,
       }
     : {
-        kind: "structure_preparation_ok_v0",
+        kind: "structure_preparation_ok_v1",
         intake: intakeStage.output,
-        structureModel: emptyStructureModel,
+        preparedSite,
       };
 
   return {
@@ -256,4 +253,3 @@ export function runLinearMigrationPipeline(input: PipelineInput): LinearMigratio
     summary: `linear_migration_pipeline: ${status}; stages=${stages.length}; success=${stageStatusCounts.success}; failed=${stageStatusCounts.failed}; skipped=${stageStatusCounts.skipped}`,
   };
 }
-
