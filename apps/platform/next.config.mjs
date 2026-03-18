@@ -15,6 +15,11 @@ const nextConfig = {
   // validation shell routes (/validation/real-site-01, /validation/real-site-02, /validation/real-site-03 and matching API routes) will fail
   // at runtime when it attempts to read fixture files from disk.
   outputFileTracingIncludes: {
+    '/validation': [
+      './gnr8/validation/fixtures/real-site-01/**',
+      './gnr8/validation/fixtures/real-site-02/**',
+      './gnr8/validation/fixtures/real-site-03/**',
+    ],
     '/validation/real-site-01': ['./gnr8/validation/fixtures/real-site-01/**'],
     '/validation/real-site-02': ['./gnr8/validation/fixtures/real-site-02/**'],
     '/validation/real-site-03': ['./gnr8/validation/fixtures/real-site-03/**'],
