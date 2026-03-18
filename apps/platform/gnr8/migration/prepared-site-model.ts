@@ -466,7 +466,7 @@ export function createPreparedSiteModel(input: {
     const docEffectivelyEmpty = doc.text.trim().length === 0;
     const isEntry = entryPath !== null && doc.path === entryPath;
     const domOutline = serializedDomAvailable ? createDomOutlineFromSerializedDom(doc.dom?.serializedDom ?? "") : null;
-    const fidelity = serializedDomAvailable
+    const fidelity: PreparedDocumentFidelityProjection = serializedDomAvailable
       ? createFidelityProjectionFromSerializedDom(doc.dom?.serializedDom ?? "")
       : {
           kind: "prepared_document_fidelity_projection_v1",
