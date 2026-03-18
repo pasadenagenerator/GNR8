@@ -230,3 +230,59 @@ test("snapshot writing is deterministic and stable for all fixtures", async () =
     assert.equal(reportJson.kind, "migration_run_report_v1");
   }
 });
+
+test("phase-1 status and diagnostic invariants are coherent across all real fixtures", async () => {
+  const fixtureIds = ["real-site-01", "real-site-02", "real-site-03"] as const;
+
+  for (const fixtureId of fixtureIds) {
+    const r = await runRealSiteValidation({ fixtureId, requestId: `req-audit-${fixtureId}` });
+
+    assert.equal(r.validationSummary.pipeline.status, r.pipelineResult.status);
+    assert.equal(r.validationSummary.approval.status, r.approvalPackage.eligibility.status);
+    assert.equal(r.validationSummary.execution.planEligibility, r.executionPlan.eligibility.status);
+    assert.equal(r.validationSummary.execution.status, r.executionResult.status);
+    assert.equal(r.validationSummary.report.overallStatus, r.migrationRunReport.overallStatus);
+
+    assert.equal(r.migrationRunReport.source.import.importOutputStatus, r.importOutput.status);
+    assert.equal(r.migrationRunReport.source.import.importManifestStatus, r.importManifest.status);
+    assert.equal(r.migrationRunReport.source.pipeline.pipelineStatus, r.pipelineResult.status);
+    assert.equal(r.migrationRunReport.source.approval.approvalStatus, r.approvalPackage.eligibility.status);
+    assert.equal(r.migrationRunReport.source.execution.executionPlanEligibility, r.executionPlan.eligibility.status);
+    assert.equal(r.migrationRunReport.source.execution.executionStatus, r.executionResult.status);
+
+    assert.equal(r.validationSummary.counts.previewPageCount, r.previewDocument.siteSummary.pageCount);
+    assert.equal(
+      r.validationSummary.counts.renderedPageCount,
+      r.pipelineResult.stages.find((s) => s.stageId === "render_preparation")!.output.renderOutput.siteSummary.pageCount,
+    );
+
+    const expectedKeyCodes = [...new Set([...r.importManifest.diagnostics.codes, ...r.pipelineResult.diagnostics.map((d) => d.code)])].sort(
+      (a, b) => a.localeCompare(b),
+    );
+    assert.deepEqual(r.validationSummary.diagnostics.keyCodes, expectedKeyCodes);
+
+    const reportBlocking = r.migrationRunReport.diagnostics.blocking.codes;
+    if (r.validationSummary.overallStatus === "blocked" || r.validationSummary.overallStatus === "failed") {
+      for (const code of reportBlocking) assert.ok(r.validationSummary.diagnostics.blockedReasonCodes.includes(code));
+    } else {
+      assert.deepEqual(r.validationSummary.diagnostics.blockedReasonCodes, []);
+      assert.deepEqual(reportBlocking, []);
+    }
+  }
+});
+
+test("determinism holds for validation summary, migration report, and preview document across all real fixtures", async () => {
+  const fixtureIds = ["real-site-01", "real-site-02", "real-site-03"] as const;
+
+  for (const fixtureId of fixtureIds) {
+    const a = await runRealSiteValidation({ fixtureId, requestId: `req-audit-determinism-${fixtureId}` });
+    const b = await runRealSiteValidation({ fixtureId, requestId: `req-audit-determinism-${fixtureId}` });
+
+    assert.equal(stableStringify(a.validationSummary as unknown as JsonValue), stableStringify(b.validationSummary as unknown as JsonValue));
+    assert.equal(
+      stableStringify(a.migrationRunReport as unknown as JsonValue),
+      stableStringify(b.migrationRunReport as unknown as JsonValue),
+    );
+    assert.equal(stableStringify(a.previewDocument as unknown as JsonValue), stableStringify(b.previewDocument as unknown as JsonValue));
+  }
+});

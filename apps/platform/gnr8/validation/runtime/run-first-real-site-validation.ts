@@ -4,9 +4,12 @@ import type { LinearMigrationPipelineStageResult, PipelineStageId, PipelineStage
 import type { RenderOutput } from "../../migration/render-output-model";
 import type { PreviewDocument } from "../../migration/preview-document-model";
 
+import type { ImportDiagnosticIssue } from "../../import/import-contract";
 import { createImportManifest } from "../../import/import-manifest";
+import { isStructuralBlockingImportIssue } from "../../import/import-severity-policy";
 import { importStaticSite } from "../../import/runtime/import-static-site";
 import { runLinearMigrationPhase1ApproveExecute } from "../../migration/runtime/run-linear-migration-phase1-approve-execute";
+import type { PipelineDiagnosticIssue } from "../../migration/pipeline-contract";
 
 import {
   REAL_SITE_VALIDATION_VERSION,
@@ -54,8 +57,8 @@ function computeValidationSummary(input: {
   executionPlanEligibility: ValidationRunResult["executionPlan"]["eligibility"]["status"];
   executionStatus: ValidationRunResult["executionResult"]["status"];
   reportStatus: ValidationRunResult["migrationRunReport"]["overallStatus"];
-  importDiagnosticCodes: string[];
-  pipelineDiagnosticCodes: string[];
+  importDiagnostics: ImportDiagnosticIssue[];
+  pipelineDiagnostics: PipelineDiagnosticIssue[];
   reportWarningCodes: string[];
   reportBlockingCodes: string[];
   previewDocument: PreviewDocument;
@@ -63,16 +66,24 @@ function computeValidationSummary(input: {
 }): ValidationSummary {
   const overallStatus = mapReportStatusToValidation(input.reportStatus);
 
+  const importDiagnosticCodes = uniqueSortedStrings(input.importDiagnostics.map((d) => d.code));
+  const pipelineDiagnosticCodes = uniqueSortedStrings(input.pipelineDiagnostics.map((d) => d.code));
+
   const keyCodes = uniqueSortedStrings([
-    ...input.importDiagnosticCodes,
-    ...input.pipelineDiagnosticCodes,
+    ...importDiagnosticCodes,
+    ...pipelineDiagnosticCodes,
     ...input.reportWarningCodes,
     ...input.reportBlockingCodes,
   ]);
 
+  const importBlockingCodes = uniqueSortedStrings(input.importDiagnostics.filter(isStructuralBlockingImportIssue).map((d) => d.code));
+  const pipelineBlockingCodes = uniqueSortedStrings(
+    input.pipelineDiagnostics.filter((d) => d.severity === "fatal" || d.severity === "error").map((d) => d.code),
+  );
+
   const blockedReasonCodes =
     overallStatus === "blocked" || overallStatus === "failed"
-      ? uniqueSortedStrings([...input.reportBlockingCodes, ...input.pipelineDiagnosticCodes, ...input.importDiagnosticCodes])
+      ? uniqueSortedStrings([...input.reportBlockingCodes, ...pipelineBlockingCodes, ...importBlockingCodes])
       : [];
 
   const previewPageCount = input.previewDocument.siteSummary.pageCount;
@@ -156,8 +167,8 @@ export async function runRealSiteValidation(options?: {
   }
   const renderOutput = findRenderOutput(phase1.pipeline.stages);
 
-  const importCodes = importManifest.diagnostics.codes;
-  const pipelineCodes = uniqueSortedStrings(phase1.pipeline.diagnostics.map((d) => d.code));
+  const importDiagnostics = importOutput.importDiagnostics.issues;
+  const pipelineDiagnostics = phase1.pipeline.diagnostics;
   const reportWarningCodes = phase1.report.diagnostics.warnings.codes;
   const reportBlockingCodes = phase1.report.diagnostics.blocking.codes;
 
@@ -169,8 +180,8 @@ export async function runRealSiteValidation(options?: {
     executionPlanEligibility: phase1.executionPlan.eligibility.status,
     executionStatus: phase1.executionResult.status,
     reportStatus: phase1.report.overallStatus,
-    importDiagnosticCodes: importCodes,
-    pipelineDiagnosticCodes: pipelineCodes,
+    importDiagnostics,
+    pipelineDiagnostics,
     reportWarningCodes,
     reportBlockingCodes,
     previewDocument,
