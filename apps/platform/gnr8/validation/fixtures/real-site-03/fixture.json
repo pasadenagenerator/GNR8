@@ -1,0 +1,6 @@
+{
+  "fixtureId": "real-site-03",
+  "kind": "static_marketing_site_v1",
+  "entryHtmlPath": "index.html",
+  "assetsDirPath": "assets"
+}

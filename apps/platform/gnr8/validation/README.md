@@ -7,6 +7,7 @@ This folder contains deterministic, file-based validation fixtures and runners f
 - Real site fixtures:
   - `apps/platform/gnr8/validation/fixtures/real-site-01/`
   - `apps/platform/gnr8/validation/fixtures/real-site-02/`
+  - `apps/platform/gnr8/validation/fixtures/real-site-03/`
 - Fixture spec file: `fixture.json`
   - `fixtureId` (fixed)
   - `entryHtmlPath` (root-relative)
@@ -19,6 +20,7 @@ The validation shell and runner read fixture files from disk at runtime. To keep
 - Source fixtures live at:
   - `apps/platform/gnr8/validation/fixtures/real-site-01/`
   - `apps/platform/gnr8/validation/fixtures/real-site-02/`
+  - `apps/platform/gnr8/validation/fixtures/real-site-03/`
 - Runtime resolver lives at: `apps/platform/gnr8/validation/runtime/fixture-spec.ts`
   - Prefers `process.cwd()`-relative lookup (dev + bundled standalone runtime)
   - Falls back to monorepo-root lookup (tests run from repo root)
@@ -27,8 +29,10 @@ The validation shell and runner read fixture files from disk at runtime. To keep
   - `apps/platform/next.config.mjs` uses `outputFileTracingIncludes` for:
     - `/validation/real-site-01`
     - `/validation/real-site-02`
+    - `/validation/real-site-03`
     - `/api/validation/real-site-01`
     - `/api/validation/real-site-02`
+    - `/api/validation/real-site-03`
 
 ## Runner
 
@@ -69,7 +73,7 @@ If `writeSnapshots: true` is provided without `snapshotOutDirAbs`, the default o
 ## Future temporary frontend shell integration
 
 The runner returns all phase-1 artifacts in one structured object (`ValidationRunResult`), so a future temporary frontend shell can:
-- invoke `runRealSiteValidation({ fixtureId: "real-site-01" | "real-site-02", ... })`
+- invoke `runRealSiteValidation({ fixtureId: "real-site-01" | "real-site-02" | "real-site-03", ... })`
 - render `PreviewDocument` pages
 - display the deterministic `ValidationSummary`
 - optionally surface snapshot output paths for inspection

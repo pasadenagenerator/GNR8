@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 
 import type { ValidationFixtureId } from "../validation-contract";
 
-export const SUPPORTED_VALIDATION_FIXTURE_IDS = ["real-site-01", "real-site-02"] as const satisfies readonly ValidationFixtureId[];
+export const SUPPORTED_VALIDATION_FIXTURE_IDS = ["real-site-01", "real-site-02", "real-site-03"] as const satisfies readonly ValidationFixtureId[];
 
 export type RealSiteFixtureSpec = {
   fixtureId: ValidationFixtureId;

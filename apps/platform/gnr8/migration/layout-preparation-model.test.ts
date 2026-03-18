@@ -16,7 +16,7 @@ function fixtureDir(name: string): string {
   return path.resolve(here, `../import/__fixtures__/${name}`);
 }
 
-function validationFixtureDir(name: "real-site-01" | "real-site-02"): string {
+function validationFixtureDir(name: "real-site-01" | "real-site-02" | "real-site-03"): string {
   const here = path.dirname(fileURLToPath(import.meta.url));
   return path.resolve(here, `../validation/fixtures/${name}`);
 }
@@ -158,4 +158,23 @@ test("createLayoutPreparationModel promotes transparent single-child wrapper cha
     page.blocks.map((b) => b.ordinalIndex),
     [0, 1, 2],
   );
+});
+
+test("createLayoutPreparationModel records direct-text wrapper stop metadata for real-site-03", async () => {
+  const rootDir = validationFixtureDir("real-site-03");
+  const importOutput = await importStaticSite({
+    rootDir,
+    requestId: "req-real-site-03",
+    source: { kind: "single-entry-html", entryHtmlPath: "index.html", assetsDirPath: "assets" },
+  });
+  const prepared = createPreparedSiteModel({ importOutput, importManifest: createImportManifest(importOutput) });
+  const layout = createLayoutPreparationModel(prepared);
+
+  assert.equal(layout.pages.length, 1);
+  const page = layout.pages[0]!;
+  assert.equal(page.blockExtraction.rule, "body_child_elements_with_single_child_wrapper_promotion_v2");
+  assert.equal(page.blockExtraction.promotionDepth, 1);
+  assert.equal(page.blockExtraction.extractionBoundaryDomPath, "html>body>div:nth-of-type(1)");
+  assert.equal(page.eligibility, "ineligible_blocked");
+  assert.equal(page.blocks.length, 0);
 });

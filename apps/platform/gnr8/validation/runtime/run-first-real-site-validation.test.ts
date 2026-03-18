@@ -9,14 +9,17 @@ import { stableStringify } from "../../migration/runtime/diagnostics";
 import { readValidationFixtureSpec } from "./fixture-spec";
 import { runFirstRealSiteValidation, runRealSiteValidation } from "./run-first-real-site-validation";
 
-test("validation fixture resolver supports both explicit fixture ids", () => {
+test("validation fixture resolver supports all explicit fixture ids", () => {
   const f1 = readValidationFixtureSpec("real-site-01");
   const f2 = readValidationFixtureSpec("real-site-02");
+  const f3 = readValidationFixtureSpec("real-site-03");
 
   assert.equal(f1.fixtureId, "real-site-01");
   assert.equal(f2.fixtureId, "real-site-02");
+  assert.equal(f3.fixtureId, "real-site-03");
   assert.equal(f1.kind, "static_marketing_site_v1");
   assert.equal(f2.kind, "static_marketing_site_v1");
+  assert.equal(f3.kind, "static_marketing_site_v1");
 });
 
 test("first real-site validation runner executes full phase-1 flow and returns core artifacts", async () => {
@@ -98,6 +101,49 @@ test("real-site-02 output is deterministic across repeated runs", async () => {
   assert.equal(stableStringify(r1 as unknown as JsonValue), stableStringify(r2 as unknown as JsonValue));
 });
 
+test("real-site-03 runs full flow with deterministic structured edge-case diagnostics", async () => {
+  const r = await runRealSiteValidation({ fixtureId: "real-site-03", requestId: "req-validation-real-site-03" });
+
+  assert.equal(r.kind, "validation_run_result_v1");
+  assert.equal(r.fixtureId, "real-site-03");
+  assert.equal(r.importOutput.status, "ok");
+  assert.equal(r.importManifest.status, "failed");
+  assert.equal(r.pipelineResult.status, "failed");
+  assert.equal(r.validationSummary.fixtureId, "real-site-03");
+  assert.equal(r.validationSummary.overallStatus, "failed");
+  assert.equal(r.validationSummary.comparison.fixtureId, "real-site-03");
+
+  assert.ok(r.importManifest.diagnostics.codes.includes("missing_local_asset"));
+  assert.ok(r.importManifest.diagnostics.codes.includes("unsupported_remote_asset"));
+  assert.ok(r.importManifest.diagnostics.codes.includes("unsupported_data_url_asset"));
+  assert.ok(r.validationSummary.diagnostics.keyCodes.includes("missing_local_asset"));
+  assert.ok(r.validationSummary.diagnostics.keyCodes.includes("unsupported_remote_asset"));
+  assert.ok(r.validationSummary.diagnostics.keyCodes.includes("unsupported_data_url_asset"));
+
+  const layoutStage = r.pipelineResult.stages.find((s) => s.stageId === "layout_preparation");
+  assert.ok(layoutStage);
+  const layoutPage = layoutStage.output.layoutModel.pages[0];
+  assert.ok(layoutPage);
+  assert.equal(layoutPage.blockExtraction.rule, "body_child_elements_with_single_child_wrapper_promotion_v2");
+  assert.equal(layoutPage.blockExtraction.promotionDepth, 1);
+  assert.equal(layoutPage.eligibility, "ineligible_blocked");
+  assert.equal(layoutPage.blocks.length, 0);
+
+  assert.equal(r.previewDocument.siteSummary.pageCount, 1);
+  assert.equal(r.previewDocument.siteSummary.previewablePageCount, 0);
+  const firstPreviewPage = r.previewDocument.pages[0];
+  assert.ok(firstPreviewPage);
+  assert.equal(firstPreviewPage.previewEligibility, "not_previewable");
+  assert.match(firstPreviewPage.preview.html, /data-preview-note=\"not_previewable\"/);
+});
+
+test("real-site-03 output is deterministic across repeated runs", async () => {
+  const r1 = await runRealSiteValidation({ fixtureId: "real-site-03", requestId: "req-validation-real-site-03" });
+  const r2 = await runRealSiteValidation({ fixtureId: "real-site-03", requestId: "req-validation-real-site-03" });
+
+  assert.equal(stableStringify(r1 as unknown as JsonValue), stableStringify(r2 as unknown as JsonValue));
+});
+
 test("validation summary reflects artifact state and pipeline stage statuses", async () => {
   const r = await runFirstRealSiteValidation({ requestId: "req-validation-real-site-01" });
 
@@ -120,8 +166,8 @@ test("validation summary reflects artifact state and pipeline stage statuses", a
   assert.equal(r.validationSummary.pipeline.stages.preview_generation, "success");
 });
 
-test("both fixtures can run through shared runner and expose comparison-capable summaries", async () => {
-  const fixtureIds = ["real-site-01", "real-site-02"] as const;
+test("all fixtures can run through shared runner and expose comparison-capable summaries", async () => {
+  const fixtureIds = ["real-site-01", "real-site-02", "real-site-03"] as const;
 
   const runs = await Promise.all(
     fixtureIds.map((fixtureId) => runRealSiteValidation({ fixtureId, requestId: `req-validation-${fixtureId}` })),
@@ -138,10 +184,10 @@ test("both fixtures can run through shared runner and expose comparison-capable 
   }
 });
 
-test("snapshot writing is deterministic and stable for both fixtures", async () => {
+test("snapshot writing is deterministic and stable for all fixtures", async () => {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "gnr8-validation-"));
   const outRoot = path.resolve(tmp, "out");
-  const fixtureIds = ["real-site-01", "real-site-02"] as const;
+  const fixtureIds = ["real-site-01", "real-site-02", "real-site-03"] as const;
 
   for (const fixtureId of fixtureIds) {
     const first = await runRealSiteValidation({

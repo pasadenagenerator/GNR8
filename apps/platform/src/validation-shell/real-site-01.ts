@@ -35,6 +35,10 @@ export async function runValidationShellRealSite02(options?: { requestId?: strin
   return runValidationShellForFixture("real-site-02", options);
 }
 
+export async function runValidationShellRealSite03(options?: { requestId?: string }): Promise<ValidationShellResponse> {
+  return runValidationShellForFixture("real-site-03", options);
+}
+
 export async function runValidationShellForFixture(
   fixtureId: ValidationFixtureId,
   options?: { requestId?: string },
