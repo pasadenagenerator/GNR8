@@ -25,7 +25,7 @@ import { sha256Hex, stableStringify } from "./runtime/diagnostics";
  * - `ready_with_warnings` otherwise.
  */
 
-export const RENDER_OUTPUT_MODEL_VERSION = "1.2.0" as const;
+export const RENDER_OUTPUT_MODEL_VERSION = "1.3.0" as const;
 
 export type RenderOutputStatus = "ready" | "ready_with_warnings" | "blocked";
 
@@ -46,6 +46,12 @@ export type RenderNodeRecord = {
    * - `null` when no non-whitespace text nodes were found.
    */
   textExcerpt: string | null;
+  /**
+   * Deterministic minimal source-markup fragment from source block subtree.
+   * - Fixed whitelist; no semantic inference.
+   * - `null` when no preservable markup exists.
+   */
+  preservedMarkupHtml: string | null;
   childElementCount: number;
   assetReferenceIds: string[];
 };
@@ -194,6 +200,7 @@ export function createRenderOutput(layoutPreparation: LayoutPreparationModel): R
           renderTagName: "section",
           textPresent: block.textPresent,
           textExcerpt: block.textExcerpt,
+          preservedMarkupHtml: block.preservedMarkupHtml,
           childElementCount: block.childElementCount,
           assetReferenceIds: [...block.assetReferenceIds].slice().sort(stringCmp),
         });

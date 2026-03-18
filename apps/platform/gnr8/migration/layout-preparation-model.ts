@@ -38,7 +38,7 @@ import { sha256Hex, stableStringify } from "./runtime/diagnostics";
  * - `ready_with_warnings` otherwise.
  */
 
-export const LAYOUT_PREPARATION_MODEL_VERSION = "1.3.0" as const;
+export const LAYOUT_PREPARATION_MODEL_VERSION = "1.4.0" as const;
 
 export type LayoutPreparationStatus = "ready" | "ready_with_warnings" | "blocked";
 
@@ -60,6 +60,12 @@ export type LayoutPreparationBlockRecord = {
    * - `null` when no non-whitespace text nodes were found.
    */
   textExcerpt: string | null;
+  /**
+   * Deterministic minimal source-markup fragment from the source block subtree.
+   * - Fixed whitelist; no semantic inference.
+   * - `null` when block has no preservable whitelist content.
+   */
+  preservedMarkupHtml: string | null;
   assetReferenceIds: string[];
 };
 
@@ -249,6 +255,7 @@ export function createLayoutPreparationModel(preparedSite: PreparedSiteModel): L
           childElementCount: child.childElementCount,
           textPresent: child.textPresent,
           textExcerpt: child.textExcerpt,
+          preservedMarkupHtml: child.preservedMarkupHtml,
           assetReferenceIds: [],
         };
         blocks.push(block);

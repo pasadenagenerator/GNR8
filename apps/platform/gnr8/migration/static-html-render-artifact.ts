@@ -23,14 +23,15 @@ import { sha256Hex, stableStringify } from "./runtime/diagnostics";
  * - Node mapping rule:
  *   - each render node maps to one `<section>` in canonical node order
  *   - node order is (`ordinalIndex`, `nodeId`, `sourceBlockId`)
- *   - if `textExcerpt` is present, it is rendered as visible `<p>` content
- *   - if `textExcerpt` is null, the section remains text-empty
+ *   - if `preservedMarkupHtml` is present, it is rendered as section inner markup
+ *   - otherwise fallback: if `textExcerpt` is present, it is rendered as visible `<p>` content
+ *   - otherwise section remains text-empty
  * - Traceability rule: only compact `data-*` attributes are written on document/body/main/section boundaries.
  * - Degraded page rule:
  *   - non-renderable pages remain explicit with structured metadata and `htmlDocument: null` (never thrown).
  */
 
-export const STATIC_HTML_RENDER_ARTIFACT_VERSION = "1.1.0" as const;
+export const STATIC_HTML_RENDER_ARTIFACT_VERSION = "1.2.0" as const;
 
 export type StaticHtmlRenderArtifactStatus = "ready" | "ready_with_warnings" | "blocked";
 
@@ -83,13 +84,14 @@ export type StaticHtmlRenderArtifact = {
   mapping: {
     rule: "render_output_to_static_html_v1";
     pageRule: "rendered_pages_to_static_html_pages_v1";
-    nodeRule: "render_nodes_to_section_elements_v1";
+    nodeRule: "render_nodes_to_section_elements_with_preserved_markup_v1";
     titleRule: "source_title_with_source_path_fallback_v1";
     headMetadataRule: "preserve_charset_viewport_description_v1";
     stylesheetLinkRule:
       | "preserve_head_stylesheet_links_in_source_order_v1";
     bodyAttributeRule: "preserve_body_id_and_class_v1";
     htmlLangRule: "preserve_html_lang_with_en_fallback_v1";
+    preservedMarkupRule: "deterministic_minimal_source_markup_whitelist_v1";
     outputPathRule: "source_path_to_html_output_path_v1";
     degradedPageRule: "non_renderable_page_structured_without_html_v1";
     wrapperTagName: "section";
@@ -260,7 +262,8 @@ function buildPageHtml(input: {
         node.assetReferenceIds.length,
       )}">`,
     );
-    if (node.textExcerpt !== null) lines.push(`<p>${escapeHtmlText(node.textExcerpt)}</p>`);
+    if (node.preservedMarkupHtml !== null && node.preservedMarkupHtml.trim().length > 0) lines.push(node.preservedMarkupHtml);
+    else if (node.textExcerpt !== null) lines.push(`<p>${escapeHtmlText(node.textExcerpt)}</p>`);
     lines.push("</section>");
   }
   lines.push("</main>");
@@ -374,12 +377,13 @@ export function createStaticHtmlRenderArtifact(renderOutput: RenderOutput): Stat
     mapping: {
       rule: "render_output_to_static_html_v1",
       pageRule: "rendered_pages_to_static_html_pages_v1",
-      nodeRule: "render_nodes_to_section_elements_v1",
+      nodeRule: "render_nodes_to_section_elements_with_preserved_markup_v1",
       titleRule: "source_title_with_source_path_fallback_v1",
       headMetadataRule: "preserve_charset_viewport_description_v1",
       stylesheetLinkRule: "preserve_head_stylesheet_links_in_source_order_v1",
       bodyAttributeRule: "preserve_body_id_and_class_v1",
       htmlLangRule: "preserve_html_lang_with_en_fallback_v1",
+      preservedMarkupRule: "deterministic_minimal_source_markup_whitelist_v1",
       outputPathRule: "source_path_to_html_output_path_v1",
       degradedPageRule: "non_renderable_page_structured_without_html_v1",
       wrapperTagName: "section",

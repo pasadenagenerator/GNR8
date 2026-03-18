@@ -135,7 +135,8 @@ test("createStaticHtmlRenderArtifact emits real HTML documents and deterministic
 
   const sectionCount = (html.match(/<section /g) ?? []).length;
   assert.equal(sectionCount, renderOutput.pages[0]!.nodes.length);
-  assert.ok(html.includes("<p>Hello GNR8</p>"));
+  assert.ok(html.includes("<h1>Hello GNR8</h1>"));
+  assert.ok(html.includes('<img src="./assets/logo.svg" alt="Logo">'));
 });
 
 test("createStaticHtmlRenderArtifact preserves minimal deterministic source metadata and body attributes", async () => {
@@ -204,6 +205,57 @@ test("createStaticHtmlRenderArtifact preserves body id/class when available", as
   assert.ok(html.includes('<body id="landing" class="page shell"'));
 });
 
+test("createStaticHtmlRenderArtifact preserves only deterministic markup/attribute whitelist", async () => {
+  const tmpRoot = await fs.mkdtemp(path.join(os.tmpdir(), "gnr8-static-html-markup-whitelist-"));
+  await fs.mkdir(path.join(tmpRoot, "assets"), { recursive: true });
+  await fs.writeFile(path.join(tmpRoot, "assets/styles.css"), "body { margin: 0; }\n", "utf-8");
+  await fs.writeFile(
+    path.join(tmpRoot, "index.html"),
+    [
+      "<!doctype html>",
+      "<html lang=\"en\">",
+      "<head>",
+      "  <meta charset=\"utf-8\">",
+      "  <title>Markup Whitelist Fixture</title>",
+      "  <link rel=\"stylesheet\" href=\"./assets/styles.css\">",
+      "</head>",
+      "<body>",
+      "  <section class=\"hero\" data-track=\"x\">",
+      "    <h2 class=\"title\" id=\"hero-title\" style=\"color:red\" onclick=\"alert(1)\">Hello</h2>",
+      "    <p><a href=\"/signup\" class=\"cta\" target=\"_blank\" rel=\"noopener\" data-x=\"1\">Sign up</a></p>",
+      "    <img src=\"./assets/logo.svg\" alt=\"Logo\" title=\"Hero Logo\" loading=\"lazy\" onerror=\"bad()\">",
+      "    <script src=\"./assets/app.js\"></script>",
+      "  </section>",
+      "</body>",
+      "</html>",
+      "",
+    ].join("\n"),
+    "utf-8",
+  );
+
+  const importOutput = await importStaticSite({
+    rootDir: tmpRoot,
+    requestId: "req-static-html-markup-whitelist",
+    source: { kind: "single-entry-html", entryHtmlPath: "index.html", assetsDirPath: "assets" },
+  });
+  const prepared = createPreparedSiteModel({ importOutput, importManifest: createImportManifest(importOutput) });
+  const layout = createLayoutPreparationModel(prepared);
+  const renderOutput = createRenderOutput(layout);
+  const artifact = createStaticHtmlRenderArtifact(renderOutput);
+
+  const html = artifact.pages[0]!.htmlDocument!.html;
+  assert.ok(html.includes('<h2 class="title" id="hero-title">Hello</h2>'));
+  assert.ok(html.includes('<a href="/signup" class="cta" target="_blank" rel="noopener">Sign up</a>'));
+  assert.ok(html.includes('<img src="./assets/logo.svg" alt="Logo" title="Hero Logo">'));
+  assert.ok(!html.includes("data-track="));
+  assert.ok(!html.includes("data-x="));
+  assert.ok(!html.includes("style="));
+  assert.ok(!html.includes("onclick="));
+  assert.ok(!html.includes("onerror="));
+  assert.ok(!html.includes("loading=\"lazy\""));
+  assert.ok(!html.includes("<script"));
+});
+
 test("createStaticHtmlRenderArtifact keeps degraded/minimal non-renderable states structured", async () => {
   const rootDir = fixtureDir("simple-site");
   const importOutput = await importStaticSite({
@@ -238,8 +290,46 @@ test("createStaticHtmlRenderArtifact keeps degraded/minimal non-renderable state
   assert.ok(minimalArtifact.diagnostics.staticHtml.warnings.codes.includes("NO_RENDERABLE_PAGES"));
 });
 
+test("createStaticHtmlRenderArtifact keeps excerpt fallback when a block has no preservable markup", async () => {
+  const tmpRoot = await fs.mkdtemp(path.join(os.tmpdir(), "gnr8-static-html-fallback-"));
+  await fs.mkdir(path.join(tmpRoot, "assets"), { recursive: true });
+  await fs.writeFile(path.join(tmpRoot, "assets/styles.css"), "body { margin: 0; }\n", "utf-8");
+  await fs.writeFile(
+    path.join(tmpRoot, "index.html"),
+    [
+      "<!doctype html>",
+      "<html lang=\"en\">",
+      "<head>",
+      "  <meta charset=\"utf-8\">",
+      "  <title>Fallback Fixture</title>",
+      "  <link rel=\"stylesheet\" href=\"./assets/styles.css\">",
+      "</head>",
+      "<body>",
+      "  <x-unknown-block>Deterministic fallback text</x-unknown-block>",
+      "</body>",
+      "</html>",
+      "",
+    ].join("\n"),
+    "utf-8",
+  );
+
+  const importOutput = await importStaticSite({
+    rootDir: tmpRoot,
+    requestId: "req-static-html-fallback",
+    source: { kind: "single-entry-html", entryHtmlPath: "index.html", assetsDirPath: "assets" },
+  });
+  const prepared = createPreparedSiteModel({ importOutput, importManifest: createImportManifest(importOutput) });
+  const layout = createLayoutPreparationModel(prepared);
+  const renderOutput = createRenderOutput(layout);
+  const artifact = createStaticHtmlRenderArtifact(renderOutput);
+
+  const html = artifact.pages[0]!.htmlDocument!.html;
+  assert.ok(html.includes("<p>Deterministic fallback text</p>"));
+  assert.ok(!html.includes("<x-unknown-block"));
+});
+
 test("all current validation fixtures render through static-html path and warning-mode fixture still emits HTML", async () => {
-  const fixtureIds = ["real-site-01", "real-site-02", "real-site-03"] as const;
+  const fixtureIds = ["real-site-01", "real-site-02", "real-site-03", "friend-site-01"] as const;
 
   for (const fixtureId of fixtureIds) {
     const fixture = readValidationFixtureSpec(fixtureId);
@@ -291,4 +381,32 @@ test("all current validation fixtures render through static-html path and warnin
   assert.equal(warningArtifact.status, "ready_with_warnings");
   assert.ok(warningArtifact.summary.generatedHtmlDocumentCount >= 1);
   assert.ok(warningArtifact.pages.some((p) => p.renderability.status === "renderable" && p.htmlDocument !== null));
+});
+
+test("friend-site-01 export preserves minimal source markup for CSS/link/image applicability", async () => {
+  const fixture = readValidationFixtureSpec("friend-site-01");
+  const importOutput = await importStaticSite({
+    rootDir: validationFixtureDirAbs("friend-site-01"),
+    requestId: "req-static-html-fixture-friend-site-01-fidelity",
+    source: {
+      kind: "single-entry-html",
+      entryHtmlPath: fixture.entryHtmlPath,
+      ...(fixture.assetsDirPath ? { assetsDirPath: fixture.assetsDirPath } : {}),
+    },
+  });
+  const prepared = createPreparedSiteModel({ importOutput, importManifest: createImportManifest(importOutput) });
+  const layout = createLayoutPreparationModel(prepared);
+  const renderOutput = createRenderOutput(layout);
+  const artifact = createStaticHtmlRenderArtifact(renderOutput);
+
+  const page = artifact.pages.find((p) => p.sourcePath === fixture.entryHtmlPath);
+  assert.ok(page);
+  const html = page!.htmlDocument!.html;
+
+  assert.ok(html.includes('<nav class="navbar navbar-light bg-light static-top">'));
+  assert.ok(html.includes('<header class="masthead">'));
+  assert.ok(html.includes('<h1 class="mb-5">Generate more leads with a professional landing page!</h1>'));
+  assert.ok(html.includes('<a class="btn btn-primary" href="#signup">Sign Up</a>'));
+  assert.ok(html.includes('<img class="img-fluid rounded-circle mb-3" src="assets/img/testimonials-1.jpg" alt="...">'));
+  assert.ok(!html.includes("<script"));
 });

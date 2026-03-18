@@ -3,8 +3,9 @@ import type { ImportManifest } from "../import/import-manifest";
 import type { ImportOutput } from "../import/import-contract";
 import { parse } from "parse5";
 import { sha256Hex } from "./runtime/diagnostics";
+import { extractDeterministicMinimalSourceMarkupHtml } from "./source-markup-preservation";
 
-export const PREPARED_SITE_MODEL_VERSION = "1.3.0" as const;
+export const PREPARED_SITE_MODEL_VERSION = "1.4.0" as const;
 
 export type PreparedSitePreparationStatus = "ready" | "ready_with_warnings" | "blocked";
 
@@ -131,6 +132,12 @@ export type PreparedDomOutlineElement = {
    * - Intended for phase-1 preview visibility only (not design fidelity).
    */
   textExcerpt: string | null;
+  /**
+   * Deterministic minimal source-markup fragment from this subtree.
+   * - Fixed element/attribute whitelist only.
+   * - `null` when nothing preservable exists for this subtree.
+   */
+  preservedMarkupHtml: string | null;
   childElements: PreparedDomOutlineElement[];
 };
 
@@ -382,6 +389,7 @@ function buildChildElements(parent: unknown, parentDomPath: string): PreparedDom
     const domPath = `${parentDomPath}>${tagName}:nth-of-type(${nthOfType})`;
     const childElements = buildChildElements(el, domPath);
     const textExcerpt = computeTextExcerptFromSubtree(el);
+    const preservedMarkupHtml = extractDeterministicMinimalSourceMarkupHtml(el);
 
     out.push({
       tagName,
@@ -392,6 +400,7 @@ function buildChildElements(parent: unknown, parentDomPath: string): PreparedDom
       directTextPresent: hasDirectNonWhitespaceTextChild(el),
       textPresent: textExcerpt !== null,
       textExcerpt,
+      preservedMarkupHtml,
       childElements,
     });
   }
