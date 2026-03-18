@@ -1,4 +1,4 @@
-# Task 20 Implementation Note: `real-site-03`
+# Task 21 Implementation Note: `real-site-03`
 
 ## Edge cases included
 - Deeper uneven wrappers with body-level single-child wrapper promotion.
@@ -19,11 +19,11 @@
 - Rule remains `body_child_elements_with_single_child_wrapper_promotion_v2`.
 - Promotion depth is `1` (`html>body > .page-root` is promoted).
 - Extraction stops at `.shell` because direct non-whitespace text is present.
-- Because import manifest is failed, page eligibility is `ineligible_blocked`; blocks are not materialized, but extraction metadata remains inspectable.
+- Import manifest is `success_with_warnings` under degraded-asset policy, so page eligibility remains `eligible` and blocks are materialized.
 
-## Preview fallback behavior
-- Preview generation remains deterministic with `not_previewable` page output.
-- Preview markup includes the stable fallback note section (`data-preview-note="not_previewable"`).
+## Preview behavior
+- Preview generation remains deterministic with a `previewable` page.
+- Warnings remain visible through diagnostics, approval, execution, and run report surfaces.
 
 ## Shell/API exposure
 - Shell page route: `/validation/real-site-03`

@@ -19,6 +19,11 @@ function fixtureDir(name: string): string {
   return path.resolve(here, `../../import/__fixtures__/${name}`);
 }
 
+function validationFixtureDir(name: "real-site-03"): string {
+  const here = path.dirname(fileURLToPath(import.meta.url));
+  return path.resolve(here, `../../validation/fixtures/${name}`);
+}
+
 test("migration run report is deterministic across repeated end-to-end runs", async () => {
   const rootDir = fixtureDir("simple-site");
   const out1 = await importStaticSite({
@@ -86,8 +91,8 @@ test("migration run report events are canonical, ordered, and stage-scoped", asy
   );
 });
 
-test("blocked/failed runs still produce a complete structured run report", async () => {
-  const rootDir = fixtureDir("asset-validation-site");
+test("non-structural asset failures produce success_with_warnings run reports with full traceability", async () => {
+  const rootDir = validationFixtureDir("real-site-03");
   const importOutput = await importStaticSite({
     rootDir,
     requestId: "req-1",
@@ -97,17 +102,18 @@ test("blocked/failed runs still produce a complete structured run report", async
   const result = runLinearMigrationPhase1ApproveExecute({ importOutput, importManifest });
   const report = result.report;
 
-  assert.equal(importManifest.status, "failed");
-  assert.equal(report.source.pipeline.pipelineStatus, "failed");
-  assert.equal(report.overallStatus, "failed");
+  assert.equal(importManifest.status, "success_with_warnings");
+  assert.equal(report.source.pipeline.pipelineStatus, "success");
+  assert.equal(report.overallStatus, "success_with_warnings");
 
   assert.ok(report.stageExecutionOrder.length > 0);
   assert.ok(report.stages.length > 0);
   assert.ok(report.events.length > 0);
 
-  assert.equal(report.approval.status, "blocked");
-  assert.equal(report.execution.plan.eligibility, "blocked");
-  assert.equal(report.execution.result.status, "blocked");
+  assert.equal(report.approval.status, "approvable_with_warnings");
+  assert.equal(report.execution.plan.eligibility, "eligible");
+  assert.equal(report.execution.result.status, "executed_with_warnings");
+  assert.ok(report.diagnostics.warnings.codes.includes("missing_local_asset"));
 
   // Artifact availability is always explicitly reported.
   const keys = report.artifacts.availability.map((a) => a.artifactKey).slice().sort();
@@ -122,6 +128,25 @@ test("blocked/failed runs still produce a complete structured run report", async
     "preview_document",
     "render_output",
   ]);
+});
+
+test("structural import failures still produce failed run reports", async () => {
+  const rootDir = fixtureDir("simple-site");
+  const importOutput = await importStaticSite({
+    rootDir,
+    requestId: "req-1",
+    source: { kind: "single-entry-html", entryHtmlPath: "missing.html", assetsDirPath: "assets" },
+  });
+  const importManifest = createImportManifest(importOutput);
+  const result = runLinearMigrationPhase1ApproveExecute({ importOutput, importManifest });
+  const report = result.report;
+
+  assert.equal(importManifest.status, "failed");
+  assert.equal(report.source.pipeline.pipelineStatus, "failed");
+  assert.equal(report.overallStatus, "failed");
+  assert.equal(report.approval.status, "blocked");
+  assert.equal(report.execution.plan.eligibility, "blocked");
+  assert.equal(report.execution.result.status, "blocked");
 });
 
 test("degraded but previewable inputs yield success_with_warnings report and preserve traceability", async () => {
@@ -156,4 +181,3 @@ test("degraded but previewable inputs yield success_with_warnings report and pre
   assert.equal(report.execution.trace.executionPlanId, executionPlan.executionPlanId);
   assert.equal(report.source.execution.executionResultId, executionResult.executionResultId);
 });
-

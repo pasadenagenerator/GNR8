@@ -26,7 +26,17 @@ Stage order is defined by `LINEAR_MIGRATION_STAGE_ORDER` in `apps/platform/gnr8/
 - `import_intake`
   - Passes through `PipelineInput` deterministically.
   - Imports diagnostics from `ImportOutput.importDiagnostics.issues` into the pipeline diagnostics stream (attributed to `import_intake` with `source: "import"`).
-  - Blocks the pipeline when `ImportManifest.status === "failed"` or `ImportOutput.status === "failed"`, emitting a deterministic `PIPELINE_BLOCKED_BY_IMPORT` diagnostic.
+  - Applies deterministic import severity policy:
+    - Structural blockers: fail intake and emit `PIPELINE_BLOCKED_BY_IMPORT`.
+    - Non-structural degraded asset issues: remain visible and continue in degraded mode.
+  - Non-structural degraded asset diagnostic codes:
+    - `missing_local_asset`
+    - `unsupported_remote_asset`
+    - `unsupported_data_url_asset`
+  - Structural blockers are defined as:
+    - any `fatal` import diagnostic
+    - any `error` import diagnostic not in the non-structural degraded asset code list
+    - no structurally usable DOM document (`documentCount === 0` or no parsed DOM snapshots)
 - `structure_preparation`
   - Deterministically emits `PreparedSiteModel` (`prepared_site_model_v1`) derived from `PipelineInput`.
 - `layout_preparation`

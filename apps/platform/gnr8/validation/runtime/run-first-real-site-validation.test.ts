@@ -107,11 +107,15 @@ test("real-site-03 runs full flow with deterministic structured edge-case diagno
   assert.equal(r.kind, "validation_run_result_v1");
   assert.equal(r.fixtureId, "real-site-03");
   assert.equal(r.importOutput.status, "ok");
-  assert.equal(r.importManifest.status, "failed");
-  assert.equal(r.pipelineResult.status, "failed");
+  assert.equal(r.importManifest.status, "success_with_warnings");
+  assert.equal(r.pipelineResult.status, "success");
   assert.equal(r.validationSummary.fixtureId, "real-site-03");
-  assert.equal(r.validationSummary.overallStatus, "failed");
+  assert.equal(r.validationSummary.overallStatus, "passed_with_warnings");
   assert.equal(r.validationSummary.comparison.fixtureId, "real-site-03");
+  assert.equal(r.approvalPackage.eligibility.status, "approvable_with_warnings");
+  assert.equal(r.executionPlan.eligibility.status, "eligible");
+  assert.equal(r.executionResult.status, "executed_with_warnings");
+  assert.equal(r.migrationRunReport.overallStatus, "success_with_warnings");
 
   assert.ok(r.importManifest.diagnostics.codes.includes("missing_local_asset"));
   assert.ok(r.importManifest.diagnostics.codes.includes("unsupported_remote_asset"));
@@ -126,15 +130,15 @@ test("real-site-03 runs full flow with deterministic structured edge-case diagno
   assert.ok(layoutPage);
   assert.equal(layoutPage.blockExtraction.rule, "body_child_elements_with_single_child_wrapper_promotion_v2");
   assert.equal(layoutPage.blockExtraction.promotionDepth, 1);
-  assert.equal(layoutPage.eligibility, "ineligible_blocked");
-  assert.equal(layoutPage.blocks.length, 0);
+  assert.equal(layoutPage.eligibility, "eligible");
+  assert.ok(layoutPage.blocks.length > 0);
 
   assert.equal(r.previewDocument.siteSummary.pageCount, 1);
-  assert.equal(r.previewDocument.siteSummary.previewablePageCount, 0);
+  assert.equal(r.previewDocument.siteSummary.previewablePageCount, 1);
   const firstPreviewPage = r.previewDocument.pages[0];
   assert.ok(firstPreviewPage);
-  assert.equal(firstPreviewPage.previewEligibility, "not_previewable");
-  assert.match(firstPreviewPage.preview.html, /data-preview-note=\"not_previewable\"/);
+  assert.equal(firstPreviewPage.previewEligibility, "previewable");
+  assert.match(firstPreviewPage.preview.html, /data-preview-section-id=/);
 });
 
 test("real-site-03 output is deterministic across repeated runs", async () => {

@@ -6,6 +6,7 @@ import type {
   ImportDiagnosticCode,
   ImportOutput,
 } from "./import-contract";
+import { hasStructuralImportBlockers } from "./import-severity-policy";
 
 export const IMPORT_MANIFEST_VERSION = "1.0.0" as const;
 
@@ -25,8 +26,10 @@ export type ImportManifest = {
   contractVersion: ImportOutput["contractVersion"];
 
   /**
-   * Deterministic status summary derived from `importDiagnostics.summary`.
-   * This is more operational than `ImportOutput.status` (which only gates on `fatal`).
+   * Deterministic status summary derived from explicit severity policy:
+   * - failed on structural blockers
+   * - success_with_warnings on non-structural degraded diagnostics
+   * - success when clean
    */
   status: ImportStatusSummary;
 
@@ -101,9 +104,9 @@ function emptyCountRecord<T extends string>(keys: readonly T[]): Record<T, numbe
   return out;
 }
 
-function computeStatusSummary(summary: ImportOutput["importDiagnostics"]["summary"]): ImportStatusSummary {
-  if (summary.fatalCount > 0 || summary.errorCount > 0) return "failed";
-  if (summary.warningCount > 0) return "success_with_warnings";
+function computeStatusSummary(output: ImportOutput): ImportStatusSummary {
+  if (hasStructuralImportBlockers(output)) return "failed";
+  if (output.importDiagnostics.issues.length > 0) return "success_with_warnings";
   return "success";
 }
 
@@ -172,7 +175,7 @@ export function createImportManifest(output: ImportOutput): ImportManifest {
     manifestVersion: IMPORT_MANIFEST_VERSION,
     contractVersion: output.contractVersion,
 
-    status: computeStatusSummary(diagSummary),
+    status: computeStatusSummary(output),
     outputStatus: output.status,
 
     rootDirPath: null,

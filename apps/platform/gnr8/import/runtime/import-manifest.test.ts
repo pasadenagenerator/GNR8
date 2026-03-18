@@ -13,6 +13,11 @@ function fixtureDir(name: string): string {
   return path.resolve(here, `../__fixtures__/${name}`);
 }
 
+function validationFixtureDir(name: "real-site-03"): string {
+  const here = path.dirname(fileURLToPath(import.meta.url));
+  return path.resolve(here, `../../validation/fixtures/${name}`);
+}
+
 test("createImportManifest is stable across repeated runs of the same input", async () => {
   const rootDir = fixtureDir("simple-site");
 
@@ -36,7 +41,7 @@ test("createImportManifest is stable across repeated runs of the same input", as
 });
 
 test("createImportManifest differences reflect real importer differences", async () => {
-  const rootDir = fixtureDir("asset-validation-site");
+  const rootDir = validationFixtureDir("real-site-03");
 
   const out = await importStaticSite({
     rootDir,
@@ -45,12 +50,26 @@ test("createImportManifest differences reflect real importer differences", async
   const m = createImportManifest(out);
 
   assert.equal(m.outputStatus, "ok"); // ImportOutput only fails on fatal
-  assert.equal(m.status, "failed"); // manifest fails on error/fatal
+  assert.equal(m.status, "success_with_warnings"); // non-structural asset errors degrade but do not fail
 
   assert.ok(m.diagnostics.codes.includes("missing_local_asset"));
   assert.ok(m.assets.missingLocalCount > 0);
   assert.ok(m.assets.referencesByValidationStatus.missing_local_asset > 0);
   assert.ok(m.assets.totalAssets > 0);
+});
+
+test("createImportManifest fails on structural blockers (missing entry html)", async () => {
+  const rootDir = fixtureDir("simple-site");
+
+  const out = await importStaticSite({
+    rootDir,
+    source: { kind: "single-entry-html", entryHtmlPath: "missing.html", assetsDirPath: "assets" },
+  });
+  const m = createImportManifest(out);
+
+  assert.equal(out.status, "failed");
+  assert.equal(m.status, "failed");
+  assert.ok(m.diagnostics.codes.includes("ENTRY_HTML_MISSING"));
 });
 
 test("equivalent normalized inputs produce equivalent manifest summaries", async () => {

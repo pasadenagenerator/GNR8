@@ -1,5 +1,6 @@
 import type { ImportManifest } from "../import/import-manifest";
 import type { ImportOutput } from "../import/import-contract";
+import { hasStructuralImportBlockers } from "../import/import-severity-policy";
 import type { ApprovalPackage } from "./approval-package-model";
 import type { ExecutionPlan } from "./execution-plan-model";
 import type { ExecutionResult } from "./execution-result-model";
@@ -238,7 +239,7 @@ function findPreviewDocument(pipeline: LinearMigrationPipelineResult): PreviewDo
 }
 
 function importStageStatus(input: { importOutput: ImportOutput; importManifest: ImportManifest }): MigrationRunStageStatus {
-  if (input.importOutput.status === "failed" || input.importManifest.status === "failed") return "failed";
+  if (input.importManifest.status === "failed" || hasStructuralImportBlockers(input.importOutput)) return "failed";
   if (input.importManifest.status === "success_with_warnings") return "success_with_warnings";
   return "success";
 }
@@ -808,4 +809,3 @@ export function createMigrationRunReport(input: Phase1MigrationRunArtifacts): Mi
     summary: `migration_run_report: ${overallStatus}; runId=${runId}; stages=${stageExecutionOrder.length}; events=${events.length}; warnings=${diagnostics.warnings.codes.length}; blocking=${diagnostics.blocking.codes.length}`,
   };
 }
-

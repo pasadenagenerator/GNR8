@@ -12,6 +12,7 @@ import type {
 } from "../pipeline-contract";
 import { LINEAR_MIGRATION_PIPELINE_VERSION, LINEAR_MIGRATION_STAGE_ORDER } from "../pipeline-contract";
 import type { ImportDiagnosticIssue } from "../../import/import-contract";
+import { hasStructuralImportBlockers, isNonStructuralDegradedImportCode } from "../../import/import-severity-policy";
 
 import { createPipelineDiagnosticIssue, sortPipelineDiagnosticIssues } from "./diagnostics";
 import { createPreparedSiteModel } from "../prepared-site-model";
@@ -58,10 +59,11 @@ function mapImportDiagnosticsToPipelineStage(
   importIssues: ImportDiagnosticIssue[],
 ) {
   return importIssues.map((issue) =>
+    // Non-structural asset issues stay visible but are carried as warnings in pipeline flow.
     createPipelineDiagnosticIssue({
       stageId,
       source: "import",
-      severity: issue.severity,
+      severity: issue.severity === "error" && isNonStructuralDegradedImportCode(issue.code) ? "warning" : issue.severity,
       code: issue.code,
       message: issue.message,
       location: issue.location,
@@ -74,7 +76,7 @@ function runImportIntakeStage(input: PipelineInput): LinearMigrationPipelineStag
   const importIssues = mapImportDiagnosticsToPipelineStage("import_intake", input.importOutput.importDiagnostics.issues);
   const stageIssues: ReturnType<typeof createPipelineDiagnosticIssue>[] = [];
 
-  const importBlocked = input.importManifest.status === "failed" || input.importOutput.status === "failed";
+  const importBlocked = input.importManifest.status === "failed" || hasStructuralImportBlockers(input.importOutput);
   const status: PipelineStageStatus = importBlocked ? "failed" : "success";
 
   if (importBlocked) {

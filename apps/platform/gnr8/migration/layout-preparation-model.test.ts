@@ -175,6 +175,6 @@ test("createLayoutPreparationModel records direct-text wrapper stop metadata for
   assert.equal(page.blockExtraction.rule, "body_child_elements_with_single_child_wrapper_promotion_v2");
   assert.equal(page.blockExtraction.promotionDepth, 1);
   assert.equal(page.blockExtraction.extractionBoundaryDomPath, "html>body>div:nth-of-type(1)");
-  assert.equal(page.eligibility, "ineligible_blocked");
-  assert.equal(page.blocks.length, 0);
+  assert.equal(page.eligibility, "eligible");
+  assert.ok(page.blocks.length > 0);
 });

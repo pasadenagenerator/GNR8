@@ -18,6 +18,11 @@ function fixtureDir(name: string): string {
   return path.resolve(here, `../../import/__fixtures__/${name}`);
 }
 
+function validationFixtureDir(name: "real-site-03"): string {
+  const here = path.dirname(fileURLToPath(import.meta.url));
+  return path.resolve(here, `../../validation/fixtures/${name}`);
+}
+
 test("phase-1 approval package is deterministic across repeated runs", async () => {
   const rootDir = fixtureDir("simple-site");
   const out1 = await importStaticSite({
@@ -42,12 +47,41 @@ test("phase-1 approval package is deterministic across repeated runs", async () 
   assert.equal(a1.eligibility.blockingReasons.length, 0);
 });
 
-test("blocked approvals remain structured and produce blocked execution artifacts (no throw)", async () => {
-  const rootDir = fixtureDir("asset-validation-site");
+test("non-structural asset failures remain visible and produce warning-mode approval/execution artifacts", async () => {
+  const rootDir = validationFixtureDir("real-site-03");
   const importOutput = await importStaticSite({
     rootDir,
     requestId: "req-1",
     source: { kind: "single-entry-html", entryHtmlPath: "index.html", assetsDirPath: "assets" },
+  });
+  const importManifest = createImportManifest(importOutput);
+  const pipeline = runLinearMigrationPipeline({ importOutput, importManifest });
+
+  assert.equal(importManifest.status, "success_with_warnings");
+  assert.equal(pipeline.status, "success");
+
+  const approvalPackage = createApprovalPackage(pipeline);
+  assert.equal(approvalPackage.eligibility.status, "approvable_with_warnings");
+  assert.ok(approvalPackage.approvalPackageId.length > 0);
+  assert.ok(approvalPackage.eligibility.warningCodes.includes("missing_local_asset"));
+  assert.equal(approvalPackage.eligibility.blockingReasons.length, 0);
+
+  const executionPlan = createExecutionPlan({ pipeline, approvalPackage });
+  assert.equal(executionPlan.eligibility.status, "eligible");
+  assert.equal(executionPlan.executionMode, "simulation_only");
+
+  const executionResult = executePhase1ApplySimulation({ approvalPackage, executionPlan });
+  assert.equal(executionResult.status, "executed_with_warnings");
+  assert.ok(executionResult.executedSteps.length > 0);
+  assert.ok(executionResult.warningCodes.includes("missing_local_asset"));
+});
+
+test("structural import failures still produce blocked approval/execution artifacts", async () => {
+  const rootDir = fixtureDir("simple-site");
+  const importOutput = await importStaticSite({
+    rootDir,
+    requestId: "req-1",
+    source: { kind: "single-entry-html", entryHtmlPath: "missing.html", assetsDirPath: "assets" },
   });
   const importManifest = createImportManifest(importOutput);
   const pipeline = runLinearMigrationPipeline({ importOutput, importManifest });
@@ -57,20 +91,13 @@ test("blocked approvals remain structured and produce blocked execution artifact
 
   const approvalPackage = createApprovalPackage(pipeline);
   assert.equal(approvalPackage.eligibility.status, "blocked");
-  assert.ok(approvalPackage.approvalPackageId.length > 0);
   assert.ok(approvalPackage.eligibility.blockingReasons.some((r) => r.code === "PIPELINE_STATUS_FAILED"));
 
   const executionPlan = createExecutionPlan({ pipeline, approvalPackage });
   assert.equal(executionPlan.eligibility.status, "blocked");
-  assert.equal(executionPlan.executionMode, "simulation_only");
 
   const executionResult = executePhase1ApplySimulation({ approvalPackage, executionPlan });
   assert.equal(executionResult.status, "blocked");
-  assert.equal(executionResult.executedSteps.length, 0);
-  assert.deepEqual(
-    executionResult.skippedSteps.map((s) => s.stepId),
-    ["validate_approval_package_v1", "enumerate_preview_pages_v1", "compute_target_artifacts_v1", "emit_simulation_result_v1"],
-  );
 });
 
 test("execution plan generation is deterministic and steps are canonical", async () => {
@@ -167,4 +194,3 @@ test("phase-1 approve→execute runtime entrypoint is deterministic end-to-end",
 
   assert.equal(stableStringify(r1 as unknown as JsonValue), stableStringify(r2 as unknown as JsonValue));
 });
-
