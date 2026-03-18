@@ -1,12 +1,3 @@
-import {
-  registerCustomBlocks,
-  registerFonts,
-  registerPageTypes,
-} from "@gnr8/chai-renderer";
-import {
-  ChaiPageStyles,
-  RenderChaiBlocks,
-} from "@chaibuilder/next/render";
 import type { ChaiPageProps } from "@chaibuilder/next/types";
 import { redirect } from "next/navigation";
 import { headers } from "next/headers";
@@ -15,9 +6,16 @@ import { getPublicPageByOrgAndSlug } from "../src/public-site/public-pages";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-registerCustomBlocks();
-registerFonts();
-registerPageTypes();
+let chaiRuntimeRegistered = false;
+
+async function ensureChaiRuntimeRegistered(): Promise<void> {
+  if (chaiRuntimeRegistered) return;
+  const chaiRenderer = await import("@gnr8/chai-renderer");
+  chaiRenderer.registerCustomBlocks();
+  chaiRenderer.registerFonts();
+  chaiRenderer.registerPageTypes();
+  chaiRuntimeRegistered = true;
+}
 
 function isSupabaseAuthCallback(url: URL): boolean {
   const hasCode = url.searchParams.has("code");
@@ -118,6 +116,8 @@ export default async function HomePage() {
   };
 
   try {
+    await ensureChaiRuntimeRegistered();
+    const { ChaiPageStyles, RenderChaiBlocks } = await import("@chaibuilder/next/render");
     return (
       <html lang={normalizedPage.lang}>
         <head>

@@ -163,6 +163,7 @@ test("materializeStaticOutputBundle preserves canonical page and asset paths", a
     assert.ok(stat.isFile());
   }
   for (const assetFile of bundle.assetFiles.filter((a) => a.writeStatus === "copied" && a.absoluteOutputPath !== null)) {
+    if (assetFile.absoluteOutputPath === null) continue;
     const stat = await fs.stat(assetFile.absoluteOutputPath);
     assert.ok(stat.isFile());
   }
