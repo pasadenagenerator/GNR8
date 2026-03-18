@@ -3,6 +3,7 @@ import path from "node:path";
 import type { LinearMigrationPipelineStageResult, PipelineStageId, PipelineStageStatus } from "../../migration/pipeline-contract";
 import type { RenderOutput } from "../../migration/render-output-model";
 import type { PreviewDocument } from "../../migration/preview-document-model";
+import type { ExecutionMode } from "../../migration/execution-plan-model";
 
 import type { ImportDiagnosticIssue } from "../../import/import-contract";
 import { createImportManifest } from "../../import/import-manifest";
@@ -143,6 +144,9 @@ export async function runRealSiteValidation(options?: {
   writeSnapshots?: boolean;
   snapshotOutDirAbs?: string;
   requestId?: string;
+  executionMode?: ExecutionMode;
+  outputRootDir?: string;
+  cleanOutputRoot?: boolean;
 }): Promise<ValidationRunResult> {
   const fixtureId = options?.fixtureId ?? "real-site-01";
   const fixture = readValidationFixtureSpec(fixtureId);
@@ -160,7 +164,20 @@ export async function runRealSiteValidation(options?: {
   });
   const importManifest = createImportManifest(importOutput);
 
-  const phase1 = await runLinearMigrationPhase1ApproveExecute({ importOutput, importManifest });
+  const executionMode = options?.executionMode ?? "simulation";
+  const phase1 = await runLinearMigrationPhase1ApproveExecute(
+    { importOutput, importManifest },
+    {
+      executionMode,
+      ...(executionMode === "materialize"
+        ? {
+            importRootDir: fixtureRootDirAbs,
+            outputRootDir: options?.outputRootDir,
+            cleanOutputRoot: options?.cleanOutputRoot,
+          }
+        : {}),
+    },
+  );
   const previewDocument = findPreviewDocument(phase1.pipeline.stages);
   if (!previewDocument) {
     throw new Error("internal_error: pipeline missing preview_generation previewDocument");
@@ -238,6 +255,9 @@ export async function runFirstRealSiteValidation(options?: {
   writeSnapshots?: boolean;
   snapshotOutDirAbs?: string;
   requestId?: string;
+  executionMode?: ExecutionMode;
+  outputRootDir?: string;
+  cleanOutputRoot?: boolean;
 }): Promise<ValidationRunResult> {
   return runRealSiteValidation({ ...options, fixtureId: "real-site-01" });
 }

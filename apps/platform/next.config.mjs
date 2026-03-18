@@ -23,6 +23,11 @@ const nextConfig = {
     '/validation/real-site-01': ['./gnr8/validation/fixtures/real-site-01/**'],
     '/validation/real-site-02': ['./gnr8/validation/fixtures/real-site-02/**'],
     '/validation/real-site-03': ['./gnr8/validation/fixtures/real-site-03/**'],
+    '/validation/beta-export-operator': [
+      './gnr8/validation/fixtures/real-site-01/**',
+      './gnr8/validation/fixtures/real-site-02/**',
+      './gnr8/validation/fixtures/real-site-03/**',
+    ],
     '/api/validation/real-site-01': ['./gnr8/validation/fixtures/real-site-01/**'],
     '/api/validation/real-site-02': ['./gnr8/validation/fixtures/real-site-02/**'],
     '/api/validation/real-site-03': ['./gnr8/validation/fixtures/real-site-03/**'],

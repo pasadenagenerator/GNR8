@@ -173,6 +173,12 @@ export default async function ValidationComparisonIndexPage() {
         </span>
         .
       </p>
+      <p style={{ margin: "8px 0 0 0", color: "#4b5563" }}>
+        Beta operator export flow:{" "}
+        <a href="/validation/beta-export-operator" style={{ color: "#1d4ed8" }}>
+          /validation/beta-export-operator
+        </a>
+      </p>
 
       <section style={{ border: "1px solid #dbe3ea", borderRadius: 10, padding: 14, marginTop: 12, background: "#ffffff" }}>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
