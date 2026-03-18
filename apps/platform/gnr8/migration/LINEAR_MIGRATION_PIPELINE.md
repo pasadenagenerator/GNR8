@@ -124,3 +124,39 @@ Preview status computation rule:
 
 Pipeline stage emitting the model:
 - `preview_generation` now emits `PreviewDocument` as `PreviewGenerationStageOutput.previewDocument`.
+
+## Phase-1 StaticHtmlRenderArtifact (implementation note)
+
+Artifact fields included (high-level):
+- `kind`, `artifactVersion`, `mapping` (rule ids + wrapper tag)
+- `source` (render/layout/prepared/import version references + fingerprints)
+- `status` (`ready` | `ready_with_warnings` | `blocked`)
+- `summary` (page/renderability counts + generated html document count)
+- `pages` (stable page artifacts with output path + html payload or explicit non-renderable state)
+- `pageSummaries` (compact per-page summary)
+- `diagnostics.carried.import` + `diagnostics.staticHtml.warnings.codes`
+
+Phase-1 static HTML rendering rule (fixed, replayable):
+- Each rendered page becomes one static page artifact in canonical order by `sourcePath`, `sourcePageId`, `sourceDocumentId`, `renderedPageId`.
+- A page is `renderable` iff `RenderedPageRecord.eligibility === "eligible"`.
+- Renderable pages emit full HTML documents with:
+  - `<!doctype html>`
+  - `<html><head><body><main>`
+  - deterministic title: exact `sourcePath`
+  - one `<section>` per render node in canonical node order (`ordinalIndex`, `nodeId`, `sourceBlockId`)
+  - visible `<p>` content only when `textExcerpt` is present
+- Minimal traceability uses compact `data-*` attributes on document/page/section boundaries only.
+- No semantic guessing, design inference, or additional parsing passes.
+
+Output path determination rule:
+- Start from canonical `sourcePath`.
+- Normalize separators to `/` and remove leading `/`.
+- If empty: `index.html`.
+- If path ends with `/`: append `index.html`.
+- If path lacks `.html`/`.htm` extension: append `.html`.
+- If path ends with `.htm`: normalize to `.html`.
+
+Non-renderable page representation:
+- Keep the page in the artifact with `renderability.status = "not_renderable"`.
+- Preserve source and output-path metadata.
+- Set `htmlDocument: null` and include a warning code; do not throw.
