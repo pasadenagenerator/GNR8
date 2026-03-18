@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Northstar Widgets — Simple Marketing Site</title>
+    <meta
+      name="description"
+      content="Northstar Widgets is a tiny marketing-site fixture for validating GNR8 phase-1 deterministic migration."
+    />
+    <link rel="icon" href="assets/logo.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="assets/styles.css" />
+  </head>
+
+  <body>
+    <header class="container header">
+      <a class="brand" href="#top">
+        <img class="brand__logo" src="assets/logo.svg" alt="Northstar logo" width="28" height="28" />
+        <span class="brand__name">Northstar Widgets</span>
+      </a>
+      <nav class="nav" aria-label="Primary">
+        <a href="#features">Features</a>
+        <a href="#pricing">Pricing</a>
+        <a href="#contact">Contact</a>
+      </nav>
+      <a class="button button--primary" href="#contact">Get a demo</a>
+    </header>
+
+    <section class="container hero" id="top">
+      <div class="hero__copy">
+        <h1>Launch a clean landing page in one afternoon.</h1>
+        <p>
+          This fixture is intentionally simple: one entry page, a few sections, a footer, and local assets. It exists to
+          validate GNR8 phase-1 deterministic migration end-to-end.
+        </p>
+        <div class="hero__actions">
+          <a class="button button--primary" href="#pricing">See pricing</a>
+          <a class="button button--ghost" href="#features">Explore features</a>
+        </div>
+        <ul class="hero__meta">
+          <li>Static HTML</li>
+          <li>Local SVG assets</li>
+          <li>No JavaScript</li>
+        </ul>
+      </div>
+      <div class="hero__visual" aria-hidden="true">
+        <img src="assets/hero.svg" alt="" width="520" height="320" />
+      </div>
+    </section>
+
+    <section class="container section" id="features">
+      <h2>What you get</h2>
+      <div class="grid">
+        <article class="card">
+          <h3>Deterministic inputs</h3>
+          <p>Stable file layout and canonical references make repeated runs comparable.</p>
+        </article>
+        <article class="card">
+          <h3>Inspectable artifacts</h3>
+          <p>Import, pipeline, preview document, approval package, execution plan, and report can be snapshotted.</p>
+        </article>
+        <article class="card">
+          <h3>Phase-1 scope</h3>
+          <p>Focus on the migration spine only: no UI, no crawling, no AI logic.</p>
+        </article>
+      </div>
+    </section>
+
+    <section class="container section" id="pricing">
+      <h2>Simple pricing</h2>
+      <div class="pricing">
+        <div class="card pricing__plan">
+          <h3>Starter</h3>
+          <p class="pricing__price">$0</p>
+          <p>Good for a smoke test run.</p>
+        </div>
+        <div class="card pricing__plan pricing__plan--featured">
+          <h3>Validation</h3>
+          <p class="pricing__price">$9</p>
+          <p>Recommended for deterministic snapshot comparisons.</p>
+        </div>
+        <div class="card pricing__plan">
+          <h3>Scale</h3>
+          <p class="pricing__price">$49</p>
+          <p>For future multi-fixture matrices (not in scope yet).</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="container section" id="contact">
+      <h2>Contact</h2>
+      <p class="muted">
+        This is a fixture only. The “contact” section is included to resemble real marketing layouts.
+      </p>
+      <div class="contact">
+        <div class="card">
+          <h3>Email</h3>
+          <p><a href="mailto:hello@example.com">hello@example.com</a></p>
+        </div>
+        <div class="card">
+          <h3>Address</h3>
+          <p>1 Deterministic Way<br />Pasadena, CA</p>
+        </div>
+      </div>
+    </section>
+
+    <footer class="container footer">
+      <div class="footer__left">
+        <img class="brand__logo" src="assets/logo.svg" alt="Northstar logo" width="24" height="24" />
+        <span class="muted">© 2026 Northstar Widgets</span>
+      </div>
+      <div class="footer__right muted">
+        Fixture: <code>real-site-01</code>
+      </div>
+    </footer>
+  </body>
+</html>
+

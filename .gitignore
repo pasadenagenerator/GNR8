@@ -6,6 +6,8 @@ node_modules/
 dist/
 .next/
 out/
+.out/
+apps/platform/gnr8/validation/.out/
 
 # env
 .env
