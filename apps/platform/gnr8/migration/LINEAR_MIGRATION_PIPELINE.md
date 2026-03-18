@@ -160,3 +160,35 @@ Non-renderable page representation:
 - Keep the page in the artifact with `renderability.status = "not_renderable"`.
 - Preserve source and output-path metadata.
 - Set `htmlDocument: null` and include a warning code; do not throw.
+
+## Phase-1.5 StaticOutputBundle (implementation note)
+
+Bundle fields included (high-level):
+- `kind`, `bundleVersion`, `rules` (structure/copy/rewrite/missing rules)
+- `source` (static-html + import version references + deterministic fingerprints)
+- `outputRootPath`, `status`
+- `summary` (page/asset counts + copied/skipped/missing/failed + warning/error counts)
+- `pageFiles` (written/skipped/failed page records with canonical output paths)
+- `assetFiles` (copied/missing/skipped/failed asset records with reason codes)
+- `rewrites` (asset reference rewrites applied in exported HTML)
+- `diagnostics.warnings.codes` and `diagnostics.errors.codes`
+
+Fixed phase-1.5 output structure:
+- `<outputRoot>/<page.outputPath>` for generated pages
+- `<outputRoot>/assets/<resolvedPath>` for copied local assets
+
+Asset copy strategy:
+- Copy only supported local references (`referenceKind` local + `validationStatus: ok`) to `assets/<resolvedPath>`.
+- Preserve canonical resolved local path under the exported assets root.
+- Keep deterministic ordering and deterministic destination paths.
+- Do not fetch network/data URL assets.
+
+Asset reference rewrite behavior:
+- Rewrite only supported local references that were copied into the bundle.
+- Rewrite target is page-relative path from the page output directory to `assets/<resolvedPath>`.
+- If no rewrite is required, HTML is written unchanged.
+
+Missing and unsupported asset handling:
+- Missing local assets are reported as structured `assetFiles` entries with `writeStatus: "missing"` and reason code.
+- Unsupported remote/data/invalid/path-traversal references are reported as `skipped` with explicit reason code.
+- Materialization continues in degraded-but-runnable mode when possible; missing/unsupported assets do not throw.
