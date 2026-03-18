@@ -1,0 +1,77 @@
+{
+  "kind": "beta_migration_dry_run_report_v1",
+  "reportVersion": "1.0.0",
+  "sourceUrl": "https://beta-client.example/landing",
+  "snapshotId": "imported-url-site-7c11f2c04aa93d10",
+  "executionMode": "phase1_url_import_simulation",
+  "validationSummary": {
+    "overallStatus": "passed_with_warnings",
+    "keyDiagnosticCodes": [
+      "missing_local_asset",
+      "unsupported_remote_asset"
+    ],
+    "blockedReasonCodes": []
+  },
+  "exportScore": {
+    "kind": "beta_export_score_v1",
+    "scoreVersion": "1.0.0",
+    "axes": {
+      "structuralFidelity": 4,
+      "visualCoherence": 4,
+      "assetIntegrity": 3,
+      "contentCompleteness": 4,
+      "layoutSemanticCorrectness": 4
+    },
+    "weightedOverall": 3.8,
+    "normalizedPercent": 76
+  },
+  "parityFindings": [
+    {
+      "check": "layout_structure_parity",
+      "status": "pass",
+      "detail": "All major sections preserved in source order."
+    },
+    {
+      "check": "typography_parity",
+      "status": "minor_diff",
+      "detail": "Fallback font differs from source brand font."
+    },
+    {
+      "check": "spacing_parity_coarse",
+      "status": "pass",
+      "detail": "Section spacing tiers remain visually consistent."
+    },
+    {
+      "check": "imagery_presence_parity",
+      "status": "minor_diff",
+      "detail": "One supporting illustration replaced by fallback."
+    },
+    {
+      "check": "cta_presence_parity",
+      "status": "pass",
+      "detail": "Primary and secondary CTA labels are present."
+    },
+    {
+      "check": "navigation_structure_parity",
+      "status": "pass",
+      "detail": "Main navigation item count and order retained."
+    },
+    {
+      "check": "responsive_sanity_check",
+      "status": "pass",
+      "detail": "Mobile and desktop render without catastrophic overlap."
+    }
+  ],
+  "degradationFindings": [
+    {
+      "issueCode": "FONT_MISMATCH",
+      "detail": "Remote webfont unavailable in exported static bundle.",
+      "classification": "DEGRADED_ACCEPTABLE"
+    }
+  ],
+  "classification": "DEGRADED_ACCEPTABLE",
+  "operatorDecision": "proceed_with_manual_polish",
+  "notes": [
+    "Phase-1 output is usable and ready for manual visual polish."
+  ]
+}
