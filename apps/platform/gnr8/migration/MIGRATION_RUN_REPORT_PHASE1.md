@@ -9,6 +9,15 @@ This note documents the deterministic run-level observability surface introduced
 - Runtime integration (approve → execute):
   - `apps/platform/gnr8/migration/runtime/run-linear-migration-phase1-approve-execute.ts`
 
+## Execution mode coverage
+
+Run reports now cover both execution modes:
+
+- `simulation` (no writes)
+- `materialize` (real static bundle write)
+
+Report source and execution sections carry `executionMode`, plus execution-result materialization status/output-root summary when materialize mode is requested.
+
 ## Overall run status rule (deterministic)
 
 `MigrationRunReport.overallStatus` is computed deterministically from existing artifacts:
@@ -49,4 +58,3 @@ The report includes explicit artifact availability summaries for:
 - `execution_result`
 
 Only compact references and summaries are included (no large payload embedding).
-

@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+import fs from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
@@ -18,7 +20,7 @@ function fixtureDir(name: string): string {
   return path.resolve(here, `../../import/__fixtures__/${name}`);
 }
 
-function validationFixtureDir(name: "real-site-03"): string {
+function validationFixtureDir(name: "real-site-02" | "real-site-03"): string {
   const here = path.dirname(fileURLToPath(import.meta.url));
   return path.resolve(here, `../../validation/fixtures/${name}`);
 }
@@ -68,7 +70,7 @@ test("non-structural asset failures remain visible and produce warning-mode appr
 
   const executionPlan = createExecutionPlan({ pipeline, approvalPackage });
   assert.equal(executionPlan.eligibility.status, "eligible");
-  assert.equal(executionPlan.executionMode, "simulation_only");
+  assert.equal(executionPlan.executionMode, "simulation");
 
   const executionResult = executePhase1ApplySimulation({ approvalPackage, executionPlan });
   assert.equal(executionResult.status, "executed_with_warnings");
@@ -118,7 +120,7 @@ test("execution plan generation is deterministic and steps are canonical", async
     "validate_approval_package_v1",
     "enumerate_preview_pages_v1",
     "compute_target_artifacts_v1",
-    "emit_simulation_result_v1",
+    "emit_execution_result_v1",
   ]);
 });
 
@@ -138,7 +140,7 @@ test("execution simulation returns stable structured results", async () => {
   const r2 = executePhase1ApplySimulation({ approvalPackage, executionPlan });
 
   assert.equal(stableStringify(r1 as unknown as JsonValue), stableStringify(r2 as unknown as JsonValue));
-  assert.ok(r1.summary.includes("phase1_apply_simulation"));
+  assert.ok(r1.summary.includes("phase1_apply"));
   assert.ok(r1.executionResultId.length > 0);
 });
 
@@ -189,8 +191,106 @@ test("phase-1 approve→execute runtime entrypoint is deterministic end-to-end",
     source: { kind: "single-entry-html", entryHtmlPath: "index.html", assetsDirPath: "assets" },
   });
 
-  const r1 = runLinearMigrationPhase1ApproveExecute({ importOutput: out1, importManifest: createImportManifest(out1) });
-  const r2 = runLinearMigrationPhase1ApproveExecute({ importOutput: out2, importManifest: createImportManifest(out2) });
+  const r1 = await runLinearMigrationPhase1ApproveExecute({ importOutput: out1, importManifest: createImportManifest(out1) });
+  const r2 = await runLinearMigrationPhase1ApproveExecute({ importOutput: out2, importManifest: createImportManifest(out2) });
 
   assert.equal(stableStringify(r1 as unknown as JsonValue), stableStringify(r2 as unknown as JsonValue));
+});
+
+test("materialize mode writes real output bundle and surfaces deterministic bundle summary", async () => {
+  const rootDir = fixtureDir("simple-site");
+  const importOutput = await importStaticSite({
+    rootDir,
+    requestId: "req-materialize-1",
+    source: { kind: "single-entry-html", entryHtmlPath: "index.html", assetsDirPath: "assets" },
+  });
+
+  const outBase = await fs.mkdtemp(path.join(os.tmpdir(), "gnr8-phase1-materialize-"));
+  const outputRootDir = path.join(outBase, "bundle");
+
+  const result = await runLinearMigrationPhase1ApproveExecute(
+    { importOutput, importManifest: createImportManifest(importOutput) },
+    { executionMode: "materialize", importRootDir: rootDir, outputRootDir },
+  );
+
+  assert.equal(result.executionPlan.executionMode, "materialize");
+  assert.equal(result.executionResult.executionMode, "materialize");
+  assert.ok(["executed", "executed_with_warnings"].includes(result.executionResult.status));
+  assert.equal(result.executionResult.materialization.outputRootPath, outputRootDir);
+  assert.ok(result.executionResult.materialization.summary.pageFileCount >= 1);
+  assert.ok(result.executionResult.materialization.summary.assetFileCount >= 1);
+
+  const writtenPage = result.executionResult.materialization.pageFiles.find((p) => p.writeStatus === "written");
+  assert.ok(writtenPage);
+  const pageStat = await fs.stat(writtenPage!.absoluteOutputPath);
+  assert.ok(pageStat.isFile());
+});
+
+test("blocked runs stay structured in materialize mode and do not write outputs", async () => {
+  const rootDir = fixtureDir("simple-site");
+  const importOutput = await importStaticSite({
+    rootDir,
+    requestId: "req-materialize-blocked",
+    source: { kind: "single-entry-html", entryHtmlPath: "missing.html", assetsDirPath: "assets" },
+  });
+  const outputRootDir = path.join(await fs.mkdtemp(path.join(os.tmpdir(), "gnr8-phase1-materialize-blocked-")), "bundle");
+
+  const result = await runLinearMigrationPhase1ApproveExecute(
+    { importOutput, importManifest: createImportManifest(importOutput) },
+    { executionMode: "materialize", importRootDir: rootDir, outputRootDir },
+  );
+
+  assert.equal(result.executionResult.status, "blocked");
+  assert.equal(result.executionResult.materialization.status, "blocked");
+  assert.ok(result.executionResult.blockingReasons.length > 0);
+  const exists = await fs
+    .stat(outputRootDir)
+    .then(() => true)
+    .catch(() => false);
+  assert.equal(exists, false);
+});
+
+test("warning-mode fixtures still export in materialize mode when structurally eligible", async () => {
+  const rootDir = validationFixtureDir("real-site-03");
+  const importOutput = await importStaticSite({
+    rootDir,
+    requestId: "req-materialize-warning-fixture",
+    source: { kind: "single-entry-html", entryHtmlPath: "index.html", assetsDirPath: "assets" },
+  });
+  const outputRootDir = path.join(await fs.mkdtemp(path.join(os.tmpdir(), "gnr8-phase1-materialize-warning-")), "bundle");
+
+  const result = await runLinearMigrationPhase1ApproveExecute(
+    { importOutput, importManifest: createImportManifest(importOutput) },
+    { executionMode: "materialize", importRootDir: rootDir, outputRootDir },
+  );
+
+  assert.equal(result.approvalPackage.eligibility.status, "approvable_with_warnings");
+  assert.equal(result.executionPlan.eligibility.status, "eligible");
+  assert.equal(result.executionResult.executionMode, "materialize");
+  assert.equal(result.executionResult.materialization.outputRootPath, outputRootDir);
+  assert.ok(result.executionResult.materialization.summary.writtenPageCount >= 1);
+  assert.ok(result.executionResult.materialization.summary.missingAssetCount >= 1);
+  assert.ok(result.executionResult.materialization.summary.skippedAssetCount >= 1);
+  assert.ok(result.executionResult.warningCodes.includes("MISSING_LOCAL_ASSET"));
+  assert.ok(result.executionResult.warningCodes.includes("UNSUPPORTED_REMOTE_ASSET"));
+});
+
+test("materialize mode uses deterministic default output root when caller does not provide one", async () => {
+  const rootDir = fixtureDir("simple-site");
+  const importOutput = await importStaticSite({
+    rootDir,
+    requestId: "req-materialize-default-output-root",
+    source: { kind: "single-entry-html", entryHtmlPath: "index.html", assetsDirPath: "assets" },
+  });
+
+  const result = await runLinearMigrationPhase1ApproveExecute(
+    { importOutput, importManifest: createImportManifest(importOutput) },
+    { executionMode: "materialize", importRootDir: rootDir },
+  );
+
+  const expectedPrefix = path.resolve(rootDir, ".gnr8-static-output");
+  const outputRoot = result.executionResult.materialization.outputRootPath;
+  assert.ok(outputRoot);
+  assert.ok(outputRoot!.startsWith(expectedPrefix));
+  assert.equal(result.executionResult.materialization.outputLocationRule, "deterministic_default_under_import_root_v1");
 });

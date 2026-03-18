@@ -4,11 +4,11 @@ import type { ApprovalPackage, ApprovalEligibilityStatus } from "./approval-pack
 import { sha256Hex, stableStringify } from "./runtime/diagnostics";
 
 /**
- * Phase-1 Execution Plan (deterministic; simulation-only)
- * ------------------------------------------------------
+ * Phase-1 Execution Plan (deterministic; mode-explicit)
+ * ----------------------------------------------------
  *
  * Purpose:
- * - Describe the exact deterministic intent of "phase-1 apply" (simulation only).
+ * - Describe the exact deterministic intent of "phase-1 apply".
  * - Provide an explicit, ordered, replayable execution plan derived from existing artifacts.
  *
  * Execution eligibility rule (normative; fixed & replayable):
@@ -21,7 +21,7 @@ import { sha256Hex, stableStringify } from "./runtime/diagnostics";
 
 export const EXECUTION_PLAN_VERSION = "1.0.0" as const;
 
-export type ExecutionMode = "simulation_only";
+export type ExecutionMode = "simulation" | "materialize";
 
 export type ExecutionEligibilityStatus = "eligible" | "blocked";
 
@@ -29,7 +29,8 @@ export type ExecutionStepId =
   | "validate_approval_package_v1"
   | "enumerate_preview_pages_v1"
   | "compute_target_artifacts_v1"
-  | "emit_simulation_result_v1";
+  | "materialize_static_output_bundle_v1"
+  | "emit_execution_result_v1";
 
 export type ExecutionStep = {
   stepId: ExecutionStepId;
@@ -49,7 +50,7 @@ export type Phase1TargetArtifact = {
    */
   targetRef: {
     kind: "placeholder";
-    namespace: "gnr8_phase1_apply_simulation";
+    namespace: "gnr8_phase1_apply_execution";
     key: string;
   };
   source: {
@@ -147,7 +148,7 @@ function buildPhase1TargetArtifacts(previewPages: PreviewPageSummary[]): Phase1T
       kind: "phase1_target_artifact_placeholder_v1",
       targetRef: {
         kind: "placeholder",
-        namespace: "gnr8_phase1_apply_simulation",
+        namespace: "gnr8_phase1_apply_execution",
         key: `preview_page/${page.sourcePath}`,
       },
       source: { previewPageId: page.previewPageId, sourcePath: page.sourcePath },
@@ -199,14 +200,7 @@ function executionPlanIdFor(payload: Omit<ExecutionPlan, "executionPlanId">): st
   return sha256Hex(stableStringify(payload as unknown as Parameters<typeof stableStringify>[0]));
 }
 
-const FIXED_STEP_SEQUENCE: readonly ExecutionStepId[] = [
-  "validate_approval_package_v1",
-  "enumerate_preview_pages_v1",
-  "compute_target_artifacts_v1",
-  "emit_simulation_result_v1",
-] as const;
-
-function buildSteps(previewPages: PreviewPageSummary[]): ExecutionStep[] {
+function buildSteps(previewPages: PreviewPageSummary[], executionMode: ExecutionMode): ExecutionStep[] {
   const previewableIds = previewPages.filter((p) => p.previewEligibility === "previewable").map((p) => p.previewPageId);
   const allIds = previewPages.map((p) => p.previewPageId);
 
@@ -214,17 +208,35 @@ function buildSteps(previewPages: PreviewPageSummary[]): ExecutionStep[] {
     validate_approval_package_v1: [],
     enumerate_preview_pages_v1: allIds,
     compute_target_artifacts_v1: previewableIds,
-    emit_simulation_result_v1: [],
+    materialize_static_output_bundle_v1: previewableIds,
+    emit_execution_result_v1: [],
   };
 
   const stepSummaries: Record<ExecutionStepId, string> = {
-    validate_approval_package_v1: "Validate approval package eligibility for phase-1 simulation.",
+    validate_approval_package_v1: "Validate approval package eligibility for phase-1 apply execution.",
     enumerate_preview_pages_v1: "Enumerate preview pages referenced by the preview artifact.",
-    compute_target_artifacts_v1: "Compute deterministic target artifact placeholders for previewable pages.",
-    emit_simulation_result_v1: "Emit deterministic structured execution result (simulation only).",
+    compute_target_artifacts_v1: "Compute deterministic target artifact placeholders for previewable pages (traceability only).",
+    materialize_static_output_bundle_v1: "Materialize deterministic static output bundle for previewable pages when execution mode is materialize.",
+    emit_execution_result_v1: "Emit deterministic structured execution result.",
   };
 
-  return FIXED_STEP_SEQUENCE.map((stepId) => ({
+  const orderedStepIds: ExecutionStepId[] =
+    executionMode === "materialize"
+      ? [
+          "validate_approval_package_v1",
+          "enumerate_preview_pages_v1",
+          "compute_target_artifacts_v1",
+          "materialize_static_output_bundle_v1",
+          "emit_execution_result_v1",
+        ]
+      : [
+          "validate_approval_package_v1",
+          "enumerate_preview_pages_v1",
+          "compute_target_artifacts_v1",
+          "emit_execution_result_v1",
+        ];
+
+  return orderedStepIds.map((stepId) => ({
     stepId,
     summary: stepSummaries[stepId],
     sourcePreviewPageIds: stepRefs[stepId],
@@ -235,7 +247,12 @@ function buildSteps(previewPages: PreviewPageSummary[]): ExecutionStep[] {
  * Deterministically derives ExecutionPlan from ApprovalPackage + existing pipeline outputs.
  * No writes. No timestamps. No random ids.
  */
-export function createExecutionPlan(input: { pipeline: LinearMigrationPipelineResult; approvalPackage: ApprovalPackage }): ExecutionPlan {
+export function createExecutionPlan(input: {
+  pipeline: LinearMigrationPipelineResult;
+  approvalPackage: ApprovalPackage;
+  executionMode?: ExecutionMode;
+}): ExecutionPlan {
+  const executionMode = input.executionMode ?? "simulation";
   const previewDocument = findPreviewDocument(input.pipeline);
   const previewPages = previewDocument ? canonicalPreviewPages(previewDocument) : [];
   const targetArtifacts = buildPhase1TargetArtifacts(previewPages);
@@ -244,7 +261,7 @@ export function createExecutionPlan(input: { pipeline: LinearMigrationPipelineRe
   const base: Omit<ExecutionPlan, "executionPlanId"> = {
     kind: "execution_plan_v1",
     planVersion: EXECUTION_PLAN_VERSION,
-    executionMode: "simulation_only",
+    executionMode,
     eligibility: {
       status: blockingReasons.length > 0 ? "blocked" : "eligible",
       blockingReasons,
@@ -260,7 +277,7 @@ export function createExecutionPlan(input: { pipeline: LinearMigrationPipelineRe
     },
     previewPages,
     targetArtifacts,
-    steps: buildSteps(previewPages),
+    steps: buildSteps(previewPages, executionMode),
   };
 
   return {
@@ -268,4 +285,3 @@ export function createExecutionPlan(input: { pipeline: LinearMigrationPipelineRe
     executionPlanId: executionPlanIdFor(base),
   };
 }
-

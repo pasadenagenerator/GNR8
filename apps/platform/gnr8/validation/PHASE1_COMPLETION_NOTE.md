@@ -45,7 +45,7 @@
 - Preview and render page-count alignment for current real fixtures.
 
 ## Intentional Phase-1 Limitations (Still Unresolved by Design)
-- Execution remains simulation-only (`simulation_only` mode; no real writes/publish flow).
+- Execution now supports deterministic `simulation` and `materialize` modes, but still stops at local filesystem export only (no publish/deploy flow).
 - No upload/deploy workflow.
 - No semantic intelligence or AI-driven correction logic.
 - No renderer/preview redesign beyond current deterministic phase-1 model.

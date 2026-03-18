@@ -160,7 +160,7 @@ export async function runRealSiteValidation(options?: {
   });
   const importManifest = createImportManifest(importOutput);
 
-  const phase1 = runLinearMigrationPhase1ApproveExecute({ importOutput, importManifest });
+  const phase1 = await runLinearMigrationPhase1ApproveExecute({ importOutput, importManifest });
   const previewDocument = findPreviewDocument(phase1.pipeline.stages);
   if (!previewDocument) {
     throw new Error("internal_error: pipeline missing preview_generation previewDocument");

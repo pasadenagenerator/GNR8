@@ -42,7 +42,7 @@ export type MigrationRunStageId =
   | PipelineStageId
   | "approval"
   | "execution_plan"
-  | "execution_simulation";
+  | "execution_apply";
 
 export type MigrationRunStageStatus = "success" | "success_with_warnings" | "blocked" | "failed" | "skipped";
 
@@ -117,6 +117,7 @@ export type MigrationRunReport = {
     };
     execution: {
       executionPlanId: string;
+      executionMode: ExecutionPlan["executionMode"];
       executionPlanEligibility: ExecutionPlan["eligibility"]["status"];
       executionResultId: string;
       executionStatus: ExecutionResult["status"];
@@ -163,12 +164,17 @@ export type MigrationRunReport = {
       targetArtifactCount: number;
     };
     result: {
+      executionMode: ExecutionResult["executionMode"];
       status: ExecutionResult["status"];
       executedStepCount: number;
       skippedStepCount: number;
       blockingReasonCodes: string[];
       warningCodes: string[];
       targetArtifactCount: number;
+      outputRootPath: string | null;
+      outputLocationRule: ExecutionResult["materialization"]["outputLocationRule"];
+      materializationStatus: ExecutionResult["materialization"]["status"];
+      materializationSummary: ExecutionResult["materialization"]["summary"];
       failureCode: string | null;
     };
     trace: ExecutionResult["trace"];
@@ -300,7 +306,7 @@ function runIdFor(input: {
 }
 
 function canonicalStageOrder(pipeline: LinearMigrationPipelineResult): MigrationRunStageId[] {
-  return ["run", "import", ...pipeline.stageOrder, "approval", "execution_plan", "execution_simulation"];
+  return ["run", "import", ...pipeline.stageOrder, "approval", "execution_plan", "execution_apply"];
 }
 
 function canonicalArtifactAvailability(input: {
@@ -433,7 +439,7 @@ function buildStageFacts(input: {
   stageStatusById.import = importStatus;
   stageStatusById.approval = approvalStatus;
   stageStatusById.execution_plan = executionPlanStatus;
-  stageStatusById.execution_simulation = executionStatus;
+  stageStatusById.execution_apply = executionStatus;
   for (const s of pipeline.stages) stageStatusById[s.stageId] = mapPipelineStageStatus(s.status);
 
   // run stage mirrors overall status and is filled by caller; placeholder here.
@@ -442,7 +448,7 @@ function buildStageFacts(input: {
   for (const stageId of stageOrder) {
     const status = stageStatusById[stageId] ?? "failed";
     const diagnosticCodes =
-      typeof stageId === "string" && (stageId === "run" || stageId === "import" || stageId === "approval" || stageId === "execution_plan" || stageId === "execution_simulation")
+      typeof stageId === "string" && (stageId === "run" || stageId === "import" || stageId === "approval" || stageId === "execution_plan" || stageId === "execution_apply")
         ? []
         : pipelineDiagnosticCodes(pipelineByStage.get(stageId as PipelineStageId) ?? []);
 
@@ -511,14 +517,17 @@ function buildStageFacts(input: {
       facts.warningCodes = input.executionPlan.eligibility.warningCodes.length;
       facts.steps = input.executionPlan.steps.length;
       facts.targetArtifacts = input.executionPlan.targetArtifacts.length;
-    } else if (stageId === "execution_simulation") {
+    } else if (stageId === "execution_apply") {
       artifactKeys.push("execution_result");
+      facts.executionMode = input.executionResult.executionMode;
       facts.executionStatus = input.executionResult.status;
       facts.executedSteps = input.executionResult.executedSteps.length;
       facts.skippedSteps = input.executionResult.skippedSteps.length;
       facts.warningCodes = input.executionResult.warningCodes.length;
       facts.blockingReasons = input.executionResult.blockingReasons.length;
       facts.targetArtifacts = input.executionResult.targetArtifacts.length;
+      facts.materializationStatus = input.executionResult.materialization.status;
+      facts.outputRootPresent = input.executionResult.materialization.outputRootPath !== null;
       facts.failure = input.executionResult.failure?.code ?? null;
     }
 
@@ -765,6 +774,7 @@ export function createMigrationRunReport(input: Phase1MigrationRunArtifacts): Mi
       },
       execution: {
         executionPlanId: input.executionPlan.executionPlanId,
+        executionMode: input.executionPlan.executionMode,
         executionPlanEligibility: input.executionPlan.eligibility.status,
         executionResultId: input.executionResult.executionResultId,
         executionStatus: input.executionResult.status,
@@ -795,12 +805,17 @@ export function createMigrationRunReport(input: Phase1MigrationRunArtifacts): Mi
         targetArtifactCount: input.executionPlan.targetArtifacts.length,
       },
       result: {
+        executionMode: input.executionResult.executionMode,
         status: input.executionResult.status,
         executedStepCount: input.executionResult.executedSteps.length,
         skippedStepCount: input.executionResult.skippedSteps.length,
         blockingReasonCodes: executionResultBlockingReasonCodes,
         warningCodes: [...input.executionResult.warningCodes],
         targetArtifactCount: input.executionResult.targetArtifacts.length,
+        outputRootPath: input.executionResult.materialization.outputRootPath,
+        outputLocationRule: input.executionResult.materialization.outputLocationRule,
+        materializationStatus: input.executionResult.materialization.status,
+        materializationSummary: { ...input.executionResult.materialization.summary },
         failureCode: input.executionResult.failure?.code ?? null,
       },
       trace: input.executionResult.trace,

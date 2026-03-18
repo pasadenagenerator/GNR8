@@ -37,8 +37,8 @@ test("migration run report is deterministic across repeated end-to-end runs", as
     source: { kind: "single-entry-html", entryHtmlPath: "index.html", assetsDirPath: "assets" },
   });
 
-  const r1 = runLinearMigrationPhase1ApproveExecute({ importOutput: out1, importManifest: createImportManifest(out1) });
-  const r2 = runLinearMigrationPhase1ApproveExecute({ importOutput: out2, importManifest: createImportManifest(out2) });
+  const r1 = await runLinearMigrationPhase1ApproveExecute({ importOutput: out1, importManifest: createImportManifest(out1) });
+  const r2 = await runLinearMigrationPhase1ApproveExecute({ importOutput: out2, importManifest: createImportManifest(out2) });
 
   assert.equal(stableStringify(r1.report as unknown as JsonValue), stableStringify(r2.report as unknown as JsonValue));
   assert.ok(r1.report.runId.length > 0);
@@ -64,7 +64,7 @@ test("migration run report events are canonical, ordered, and stage-scoped", asy
     ...pipeline.stageOrder,
     "approval",
     "execution_plan",
-    "execution_simulation",
+    "execution_apply",
   ]);
 
   // Ordinals are contiguous and eventId is derived only from ordinal+stage+kind.
@@ -99,7 +99,7 @@ test("non-structural asset failures produce success_with_warnings run reports wi
     source: { kind: "single-entry-html", entryHtmlPath: "index.html", assetsDirPath: "assets" },
   });
   const importManifest = createImportManifest(importOutput);
-  const result = runLinearMigrationPhase1ApproveExecute({ importOutput, importManifest });
+  const result = await runLinearMigrationPhase1ApproveExecute({ importOutput, importManifest });
   const report = result.report;
 
   assert.equal(importManifest.status, "success_with_warnings");
@@ -138,7 +138,7 @@ test("structural import failures still produce failed run reports", async () => 
     source: { kind: "single-entry-html", entryHtmlPath: "missing.html", assetsDirPath: "assets" },
   });
   const importManifest = createImportManifest(importOutput);
-  const result = runLinearMigrationPhase1ApproveExecute({ importOutput, importManifest });
+  const result = await runLinearMigrationPhase1ApproveExecute({ importOutput, importManifest });
   const report = result.report;
 
   assert.equal(importManifest.status, "failed");
