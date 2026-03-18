@@ -8,6 +8,7 @@ import {
   type StaticOutputBundle,
   type StaticOutputPageFileRecord,
 } from "./static-output-bundle";
+import { buildExecutionPreviewHosting, type ExecutionPreviewHosting } from "./temporary-preview-hosting";
 import { sha256Hex, stableStringify } from "./runtime/diagnostics";
 
 /**
@@ -109,6 +110,7 @@ export type ExecutionResult = {
   targetArtifacts: Phase1TargetArtifact[];
 
   materialization: ExecutionMaterialization;
+  previewHosting: ExecutionPreviewHosting;
 
   summary: string;
   failure: ExecutionFailure | null;
@@ -189,6 +191,10 @@ function buildBlockedResult(input: {
     warningCodes: input.warningCodes,
     targetArtifacts: [],
     materialization: input.materialization,
+    previewHosting: buildExecutionPreviewHosting({
+      executionMode: input.executionPlan.executionMode,
+      materialization: input.materialization,
+    }),
     summary: `phase1_apply: blocked; mode=${input.executionPlan.executionMode}; steps=${input.stepOrder.length}; blockingReasons=${input.blockingReasons.length}; warnings=${input.warningCodes.length}`,
     failure: null,
   };
@@ -366,6 +372,10 @@ export async function executePhase1Apply(input: {
       warningCodes: warningCodeList,
       targetArtifacts,
       materialization,
+      previewHosting: buildExecutionPreviewHosting({
+        executionMode: input.executionPlan.executionMode,
+        materialization,
+      }),
       summary: `phase1_apply: ${status}; mode=${input.executionPlan.executionMode}; executedSteps=${executedSteps.length}; skippedSteps=${skippedSteps.length}; targetArtifacts=${targetArtifacts.length}; warnings=${warningCodeList.length}`,
       failure,
     };
@@ -394,6 +404,13 @@ export async function executePhase1Apply(input: {
       materialization: emptyMaterialization({
         status: input.executionPlan.executionMode === "materialize" ? "materialization_failed" : "not_run",
         outputLocationRule: materializationRule,
+      }),
+      previewHosting: buildExecutionPreviewHosting({
+        executionMode: input.executionPlan.executionMode,
+        materialization: emptyMaterialization({
+          status: input.executionPlan.executionMode === "materialize" ? "materialization_failed" : "not_run",
+          outputLocationRule: materializationRule,
+        }),
       }),
       summary: `phase1_apply: failed; mode=${input.executionPlan.executionMode}; steps=${stepOrder.length}; warnings=${baseWarningCodes.length}`,
       failure: { code: "UNEXPECTED_ERROR", message },
@@ -479,6 +496,10 @@ export function executePhase1ApplySimulation(input: { approvalPackage: ApprovalP
     warningCodes,
     targetArtifacts: [...input.executionPlan.targetArtifacts],
     materialization: emptyMaterialization({ status: "not_run" }),
+    previewHosting: buildExecutionPreviewHosting({
+      executionMode: input.executionPlan.executionMode,
+      materialization: emptyMaterialization({ status: "not_run" }),
+    }),
     summary: `phase1_apply: ${status}; mode=simulation; executedSteps=${executedSteps.length}; skippedSteps=${skippedSteps.length}; targetArtifacts=${input.executionPlan.targetArtifacts.length}; warnings=${warningCodes.length}`,
     failure: null,
   };

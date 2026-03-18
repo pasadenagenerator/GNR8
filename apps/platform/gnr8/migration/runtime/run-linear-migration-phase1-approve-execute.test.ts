@@ -242,6 +242,8 @@ test("blocked runs stay structured in materialize mode and do not write outputs"
 
   assert.equal(result.executionResult.status, "blocked");
   assert.equal(result.executionResult.materialization.status, "blocked");
+  assert.equal(result.executionResult.previewHosting.available, false);
+  assert.equal(result.executionResult.previewHosting.status, "not_available_materialization_not_ready");
   assert.ok(result.executionResult.blockingReasons.length > 0);
   const exists = await fs
     .stat(outputRootDir)

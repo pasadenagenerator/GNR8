@@ -173,6 +173,7 @@ function ResultPanel(props: { response: BetaExportOperatorResponse }) {
   const result = props.response.result;
   const summary = props.response.summary;
   const materialization = result.executionResult.materialization;
+  const previewHosting = result.executionResult.previewHosting;
   const warningCodes = sortedUnique(summary.warningCodes);
   const blockingReasonCodes = sortedUnique(summary.blockingReasonCodes);
 
@@ -247,6 +248,15 @@ function ResultPanel(props: { response: BetaExportOperatorResponse }) {
             { k: "summary.failedAssetCount", v: materialization.summary.failedAssetCount },
             { k: "materialization.warningCodes", v: <CodeList codes={materialization.warningCodes} /> },
             { k: "materialization.errorCodes", v: <CodeList codes={materialization.errorCodes} /> },
+            { k: "previewHosting.status", v: <StatusPill value={previewHosting.status} /> },
+            { k: "previewHosting.available", v: String(previewHosting.available) },
+            { k: "previewHosting.routeRule", v: previewHosting.routeRule },
+            { k: "previewHosting.previewRootUrl", v: previewHosting.previewRootUrl ? <a href={previewHosting.previewRootUrl}>{previewHosting.previewRootUrl}</a> : "n/a" },
+            {
+              k: "previewHosting.previewEntryUrl",
+              v: previewHosting.previewEntryUrl ? <a href={previewHosting.previewEntryUrl}>{previewHosting.previewEntryUrl}</a> : "n/a",
+            },
+            { k: "previewHosting.reasonCode", v: previewHosting.reasonCode ?? "n/a" },
           ]}
         />
       </Section>
@@ -332,11 +342,24 @@ export default async function BetaExportOperatorPage(props: { searchParams: Prom
             Execution mode: explicit operator selection of <code>simulation</code> vs <code>materialize</code>, clearly labeled in result summary.
           </li>
           <li>
-            Output bundle location: surfaced via <code>executionResult.materialization.outputRootPath</code> and{" "}
-            <code>executionResult.materialization.outputLocationRule</code>.
+            Temporary preview route structure: <code>/validation/previews/by-output/&lt;previewKey&gt;/&lt;bundle-path&gt;</code> (entry:
+            <code>/validation/previews/by-output/&lt;previewKey&gt;/index.html</code>).
           </li>
           <li>
-            Current beta limitations: no arbitrary website upload, no ZIP export download, no public customer UX, no hosting/deployment integration.
+            Preview URL rule: deterministic <code>previewKey</code> derived from materialized <code>outputRootPath</code>. The same output root maps
+            to the same preview URL.
+          </li>
+          <li>
+            Safe bundle serving: preview handler decodes <code>previewKey</code>, resolves only under controlled <code>.gnr8-static-output</code> bundle
+            roots, blocks traversal, and returns structured 404 JSON for missing bundles/files.
+          </li>
+          <li>
+            Execution results now surface preview metadata in <code>executionResult.previewHosting</code>:
+            <code>status</code>, <code>available</code>, <code>previewRootUrl</code>, and <code>previewEntryUrl</code>.
+          </li>
+          <li>
+            Current temporary limitations: internal-only previewing, no long-term hosting guarantees, no ZIP export download, and no deployment/CDN
+            integration.
           </li>
         </ul>
       </Section>

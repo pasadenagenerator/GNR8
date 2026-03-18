@@ -29,6 +29,8 @@ test("beta export operator simulation run returns deterministic structured succe
 
   assert.equal(response.executionMode, "simulation");
   assert.equal(response.result.executionResult.executionMode, "simulation");
+  assert.equal(response.result.executionResult.previewHosting.available, false);
+  assert.equal(response.result.executionResult.previewHosting.status, "not_available_simulation_mode");
   assert.equal(response.fixtureId, "real-site-01");
   assert.equal(response.result.fixtureId, "real-site-01");
   assert.equal(typeof response.summary.warningCodes.length, "number");
@@ -56,6 +58,8 @@ test("beta export operator materialize run surfaces output root path", async () 
   assert.equal(response.result.executionResult.materialization.outputRootPath, outputRootDir);
   assert.ok(response.result.executionResult.materialization.status.startsWith("materialized"));
   assert.ok(response.result.executionResult.materialization.summary.pageFileCount >= 1);
+  assert.equal(response.result.executionResult.previewHosting.available, false);
+  assert.equal(response.result.executionResult.previewHosting.status, "not_available_unsupported_output_root");
 });
 
 test("beta export operator simulation output remains deterministic for identical input", async () => {
