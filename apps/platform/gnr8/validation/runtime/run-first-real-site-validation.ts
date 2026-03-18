@@ -9,13 +9,14 @@ import { importStaticSite } from "../../import/runtime/import-static-site";
 import { runLinearMigrationPhase1ApproveExecute } from "../../migration/runtime/run-linear-migration-phase1-approve-execute";
 
 import {
-  FIRST_REAL_SITE_VALIDATION_VERSION,
+  REAL_SITE_VALIDATION_VERSION,
+  type ValidationFixtureId,
   type ValidationOverallStatus,
   type ValidationRunResult,
   type ValidationSnapshotWriteSummary,
   type ValidationSummary,
 } from "../validation-contract";
-import { readFirstRealSiteFixtureSpec, firstRealSiteFixtureDirAbs } from "./fixture-spec";
+import { readValidationFixtureSpec, validationFixtureDirAbs } from "./fixture-spec";
 import { writeFirstRealSiteValidationSnapshots } from "./snapshot-writer";
 
 function stageStatusMap(stages: { stageId: PipelineStageId; status: PipelineStageStatus }[]): Record<PipelineStageId, PipelineStageStatus> {
@@ -74,9 +75,12 @@ function computeValidationSummary(input: {
       ? uniqueSortedStrings([...input.reportBlockingCodes, ...input.pipelineDiagnosticCodes, ...input.importDiagnosticCodes])
       : [];
 
+  const previewPageCount = input.previewDocument.siteSummary.pageCount;
+  const renderedPageCount = input.renderOutput?.siteSummary.pageCount ?? 0;
+
   return {
     kind: "validation_summary_v1",
-    validationVersion: FIRST_REAL_SITE_VALIDATION_VERSION,
+    validationVersion: REAL_SITE_VALIDATION_VERSION,
     fixtureId: input.fixtureId,
     overallStatus,
     artifacts: {
@@ -104,28 +108,39 @@ function computeValidationSummary(input: {
       overallStatus: input.reportStatus,
     },
     counts: {
-      previewPageCount: input.previewDocument.siteSummary.pageCount,
-      renderedPageCount: input.renderOutput?.siteSummary.pageCount ?? 0,
+      previewPageCount,
+      renderedPageCount,
     },
     diagnostics: {
       keyCodes,
       blockedReasonCodes,
     },
+    comparison: {
+      fixtureId: input.fixtureId,
+      overallValidationStatus: overallStatus,
+      pipelineStatus: input.pipelineStatus,
+      previewPageCount,
+      renderedPageCount,
+      keyDiagnosticCodes: keyCodes,
+      runReportOverallStatus: input.reportStatus,
+    },
   };
 }
 
-export async function runFirstRealSiteValidation(options?: {
+export async function runRealSiteValidation(options?: {
+  fixtureId?: ValidationFixtureId;
   writeSnapshots?: boolean;
   snapshotOutDirAbs?: string;
   requestId?: string;
 }): Promise<ValidationRunResult> {
-  const fixture = readFirstRealSiteFixtureSpec();
-  const fixtureRootDirAbs = firstRealSiteFixtureDirAbs();
+  const fixtureId = options?.fixtureId ?? "real-site-01";
+  const fixture = readValidationFixtureSpec(fixtureId);
+  const fixtureRootDirAbs = validationFixtureDirAbs(fixtureId);
   const defaultSnapshotOutDirAbs = path.resolve(fixtureRootDirAbs, "..", "..", ".out");
 
   const importOutput = await importStaticSite({
     rootDir: fixtureRootDirAbs,
-    requestId: options?.requestId ?? "validation-real-site-01",
+    requestId: options?.requestId ?? `validation-${fixtureId}`,
     source: {
       kind: "single-entry-html",
       entryHtmlPath: fixture.entryHtmlPath,
@@ -168,13 +183,12 @@ export async function runFirstRealSiteValidation(options?: {
     writtenFiles: [],
   };
 
-  const snapshotOutDirAbs =
-    options?.snapshotOutDirAbs ?? (options?.writeSnapshots ? defaultSnapshotOutDirAbs : null);
+  const snapshotOutDirAbs = options?.snapshotOutDirAbs ?? (options?.writeSnapshots ? defaultSnapshotOutDirAbs : null);
   if (snapshots.enabled && snapshotOutDirAbs) {
     // Write after summary is computed so snapshotting is not required for core runtime flow.
     const res: ValidationRunResult = {
       kind: "validation_run_result_v1",
-      validationVersion: FIRST_REAL_SITE_VALIDATION_VERSION,
+      validationVersion: REAL_SITE_VALIDATION_VERSION,
       fixtureId: fixture.fixtureId,
       importOutput,
       importManifest,
@@ -194,7 +208,7 @@ export async function runFirstRealSiteValidation(options?: {
 
   return {
     kind: "validation_run_result_v1",
-    validationVersion: FIRST_REAL_SITE_VALIDATION_VERSION,
+    validationVersion: REAL_SITE_VALIDATION_VERSION,
     fixtureId: fixture.fixtureId,
     importOutput,
     importManifest,
@@ -207,4 +221,12 @@ export async function runFirstRealSiteValidation(options?: {
     validationSummary,
     snapshots,
   };
+}
+
+export async function runFirstRealSiteValidation(options?: {
+  writeSnapshots?: boolean;
+  snapshotOutDirAbs?: string;
+  requestId?: string;
+}): Promise<ValidationRunResult> {
+  return runRealSiteValidation({ ...options, fixtureId: "real-site-01" });
 }

@@ -12,11 +12,13 @@ const nextConfig = {
 
   // Ensure the deterministic phase-1 validation fixture is bundled into the runtime output.
   // Without this, Vercel/standalone output tracing may omit non-imported files, and the
-  // validation shell (/validation/real-site-01 + /api/validation/real-site-01) will fail
+  // validation shell routes (/validation/real-site-01, /validation/real-site-02 and matching API routes) will fail
   // at runtime when it attempts to read fixture files from disk.
   outputFileTracingIncludes: {
     '/validation/real-site-01': ['./gnr8/validation/fixtures/real-site-01/**'],
+    '/validation/real-site-02': ['./gnr8/validation/fixtures/real-site-02/**'],
     '/api/validation/real-site-01': ['./gnr8/validation/fixtures/real-site-01/**'],
+    '/api/validation/real-site-02': ['./gnr8/validation/fixtures/real-site-02/**'],
   },
 }
 

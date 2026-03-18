@@ -8,10 +8,21 @@ import type { ExecutionResult } from "../migration/execution-result-model";
 import type { MigrationRunOverallStatus, MigrationRunReport } from "../migration/migration-run-report";
 
 export const FIRST_REAL_SITE_VALIDATION_VERSION = "1.0.0" as const;
+export const REAL_SITE_VALIDATION_VERSION = FIRST_REAL_SITE_VALIDATION_VERSION;
 
 export type ValidationOverallStatus = "passed" | "passed_with_warnings" | "blocked" | "failed";
 
-export type ValidationFixtureId = "real-site-01";
+export type ValidationFixtureId = "real-site-01" | "real-site-02";
+
+export type ValidationComparisonSlice = {
+  fixtureId: ValidationFixtureId;
+  overallValidationStatus: ValidationOverallStatus;
+  pipelineStatus: LinearMigrationPipelineResult["status"];
+  previewPageCount: number;
+  renderedPageCount: number;
+  keyDiagnosticCodes: string[];
+  runReportOverallStatus: MigrationRunOverallStatus;
+};
 
 export type ValidationArtifactAvailability = {
   importOutput: boolean;
@@ -59,6 +70,8 @@ export type ValidationSummary = {
     keyCodes: string[];
     blockedReasonCodes: string[];
   };
+
+  comparison: ValidationComparisonSlice;
 };
 
 export type ValidationSnapshotWriteSummary = {
@@ -84,4 +97,3 @@ export type ValidationRunResult = {
   validationSummary: ValidationSummary;
   snapshots: ValidationSnapshotWriteSummary;
 };
-

@@ -33,3 +33,9 @@ export function writeFirstRealSiteValidationSnapshots(input: {
   return { outDirAbs: baseDir, writtenFiles: outputs.map((o) => o.rel) };
 }
 
+export function writeValidationSnapshots(input: {
+  outDirAbs: string;
+  result: ValidationRunResult;
+}): { outDirAbs: string; writtenFiles: string[] } {
+  return writeFirstRealSiteValidationSnapshots(input);
+}

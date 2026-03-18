@@ -4,7 +4,7 @@ import type { JsonValue } from "@/gnr8/import/import-contract";
 import { stableStringify } from "@/gnr8/migration/runtime/diagnostics";
 import type { PipelineStageId } from "@/gnr8/migration/pipeline-contract";
 import type { ValidationRunResult } from "@/gnr8/validation/validation-contract";
-import { runValidationShellRealSite01 } from "@/src/validation-shell/real-site-01";
+import { runValidationShellRealSite02 } from "@/src/validation-shell/real-site-02";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -128,34 +128,34 @@ function stageRowsFromPipeline(result: ValidationRunResult) {
   });
 }
 
-export default async function ValidationRealSite01Page() {
-  const res = await runValidationShellRealSite01();
+export default async function ValidationRealSite02Page() {
+  const res = await runValidationShellRealSite02();
 
   return (
     <main style={{ padding: 18, fontFamily: "ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial" }}>
       <h1 style={{ margin: 0, fontSize: 18 }}>Temporary Phase-1 Validation Console</h1>
       <p style={{ margin: "6px 0 0 0", color: "#4b5563" }}>
         This route is a temporary debugging UI for the phase-1 migration spine. Fixture is fixed to{" "}
-        <span style={{ fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace" }}>real-site-01</span>.
+        <span style={{ fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace" }}>real-site-02</span>.
       </p>
       <p style={{ margin: "6px 0 0 0", color: "#4b5563" }}>
         Raw API:{" "}
-        <a href="/api/validation/real-site-01" style={{ color: "#2563eb" }}>
-          /api/validation/real-site-01
-        </a>
-        {" · "}
         <a href="/api/validation/real-site-02" style={{ color: "#2563eb" }}>
           /api/validation/real-site-02
+        </a>
+        {" · "}
+        <a href="/api/validation/real-site-01" style={{ color: "#2563eb" }}>
+          /api/validation/real-site-01
         </a>
       </p>
       <p style={{ margin: "6px 0 0 0", color: "#4b5563" }}>
         Fixture routes:{" "}
-        <a href="/validation/real-site-01" style={{ color: "#2563eb" }}>
-          /validation/real-site-01
-        </a>
-        {" · "}
         <a href="/validation/real-site-02" style={{ color: "#2563eb" }}>
           /validation/real-site-02
+        </a>
+        {" · "}
+        <a href="/validation/real-site-01" style={{ color: "#2563eb" }}>
+          /validation/real-site-01
         </a>
       </p>
 
