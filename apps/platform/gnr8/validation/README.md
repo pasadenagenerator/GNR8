@@ -10,6 +10,18 @@ This folder contains deterministic, file-based validation fixtures and runners f
   - `entryHtmlPath` (root-relative)
   - `assetsDirPath` (root-relative or null)
 
+## Runtime availability (Vercel-safe)
+
+The validation shell and runner read fixture files from disk at runtime. To keep this deterministic and deployment-safe:
+
+- Source fixture lives at: `apps/platform/gnr8/validation/fixtures/real-site-01/`
+- Runtime resolver lives at: `apps/platform/gnr8/validation/runtime/fixture-spec.ts`
+  - Prefers `process.cwd()`-relative lookup (dev + bundled standalone runtime)
+  - Falls back to monorepo-root lookup (tests run from repo root)
+  - Avoids relying on module-relative paths in production (Next server bundling can relocate modules)
+- Packaging into deployed runtime bundle:
+  - `apps/platform/next.config.mjs` uses `outputFileTracingIncludes` for `/validation/real-site-01` and `/api/validation/real-site-01`
+
 ## Runner
 
 - Entrypoint: `apps/platform/gnr8/validation/runtime/run-first-real-site-validation.ts`
@@ -51,4 +63,3 @@ The runner returns all phase-1 artifacts in one structured object (`ValidationRu
 - render `PreviewDocument` pages
 - display the deterministic `ValidationSummary`
 - optionally surface snapshot output paths for inspection
-

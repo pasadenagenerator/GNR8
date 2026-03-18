@@ -12,13 +12,47 @@ export type FirstRealSiteFixtureSpec = {
 };
 
 export function firstRealSiteFixtureDirAbs(): string {
-  const here = path.dirname(fileURLToPath(import.meta.url));
-  return path.resolve(here, "../fixtures/real-site-01");
+  /**
+   * Runtime-safe fixture resolution strategy (works locally + on Vercel):
+   *
+   * - Prefer resolving from `process.cwd()` (app root in dev, and bundle root in standalone runtime).
+   * - Fall back to monorepo-root relative path (common for running tests from repo root).
+   * - Fall back to module-relative path for local authoring, but do not depend on it in production,
+   *   since Next server bundling can relocate this module into chunk files.
+   *
+   * IMPORTANT: `apps/platform/next.config.mjs` includes the fixture directory via
+   * `outputFileTracingIncludes` so it is copied into the deployed runtime bundle.
+   */
+  const candidates = [
+    path.resolve(process.cwd(), "gnr8/validation/fixtures/real-site-01"),
+    path.resolve(process.cwd(), "apps/platform/gnr8/validation/fixtures/real-site-01"),
+    path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../fixtures/real-site-01"),
+  ];
+
+  for (const dir of candidates) {
+    try {
+      if (fs.existsSync(path.resolve(dir, "fixture.json"))) return dir;
+    } catch {
+      // ignore and continue
+    }
+  }
+
+  // Last-resort: keep deterministic error messaging downstream.
+  return candidates[0]!;
 }
 
 export function readFirstRealSiteFixtureSpec(): FirstRealSiteFixtureSpec {
   const root = firstRealSiteFixtureDirAbs();
   const jsonPath = path.resolve(root, "fixture.json");
+  if (!fs.existsSync(jsonPath)) {
+    throw new Error(
+      [
+        "validation_fixture_not_found: real-site-01",
+        `expected fixture.json at: ${jsonPath}`,
+        "ensure the fixture directory is present in the runtime bundle (see apps/platform/next.config.mjs outputFileTracingIncludes).",
+      ].join("\n"),
+    );
+  }
   const raw = fs.readFileSync(jsonPath, "utf8");
   const parsed = JSON.parse(raw) as unknown;
 
@@ -45,4 +79,3 @@ export function readFirstRealSiteFixtureSpec(): FirstRealSiteFixtureSpec {
     assetsDirPath,
   };
 }
-
