@@ -1,4 +1,9 @@
-import type { PreparedDocumentRecord, PreparedSiteModel, PreparedSitePreparationStatus } from "./prepared-site-model";
+import type {
+  PreparedDocumentFidelityProjection,
+  PreparedDocumentRecord,
+  PreparedSiteModel,
+  PreparedSitePreparationStatus,
+} from "./prepared-site-model";
 import { sha256Hex, stableStringify } from "./runtime/diagnostics";
 
 /**
@@ -33,7 +38,7 @@ import { sha256Hex, stableStringify } from "./runtime/diagnostics";
  * - `ready_with_warnings` otherwise.
  */
 
-export const LAYOUT_PREPARATION_MODEL_VERSION = "1.2.0" as const;
+export const LAYOUT_PREPARATION_MODEL_VERSION = "1.3.0" as const;
 
 export type LayoutPreparationStatus = "ready" | "ready_with_warnings" | "blocked";
 
@@ -80,6 +85,8 @@ export type LayoutPreparationPageRecord = {
     promotionDepth: number;
     usedBoundaryChildElementCount: number;
   };
+
+  fidelity: PreparedDocumentFidelityProjection;
 };
 
 export type LayoutPreparationPageSummary = {
@@ -269,6 +276,7 @@ export function createLayoutPreparationModel(preparedSite: PreparedSiteModel): L
         promotionDepth: bodyAvailable ? extracted.promotionDepth : 0,
         usedBoundaryChildElementCount: blocks.length,
       },
+      fidelity: doc.fidelity,
     };
 
     pages.push(page);

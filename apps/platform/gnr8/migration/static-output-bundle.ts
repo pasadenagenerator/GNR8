@@ -7,7 +7,7 @@ import type { ImportOutput, AssetReference, JsonValue } from "../import/import-c
 import type { StaticHtmlPageArtifact, StaticHtmlRenderArtifact } from "./static-html-render-artifact";
 import { sha256Hex, stableStringify } from "./runtime/diagnostics";
 
-export const STATIC_OUTPUT_BUNDLE_VERSION = "1.0.0" as const;
+export const STATIC_OUTPUT_BUNDLE_VERSION = "1.1.0" as const;
 
 export type StaticOutputBundleStatus = "ready" | "ready_with_warnings" | "failed";
 
@@ -63,6 +63,9 @@ export type StaticOutputBundle = {
     pageOutputPathRule: StaticHtmlRenderArtifact["mapping"]["outputPathRule"];
     assetCopyRule: "assets_root_preserve_resolved_path_v1";
     assetRewriteRule: "rewrite_supported_local_refs_only_when_needed_v1";
+    stylesheetRewriteRule: "rewrite_preserved_stylesheet_links_for_copied_local_assets_v1";
+    remoteAssetRule: "unsupported_remote_assets_preserved_when_present_and_reported_v1";
+    dataUrlAssetRule: "unsupported_data_url_assets_preserved_when_present_and_reported_v1";
     missingAssetRule: "missing_local_assets_reported_not_thrown_v1";
   };
 
@@ -213,14 +216,29 @@ function rewriteHtmlAssetReferences(input: {
   if (input.rewrittenRefValueByReferenceId.size === 0) return { html: input.html, rewrites: [], warningCodes: [] };
 
   const refsByOccurrenceKey = new Map<string, AssetReference>();
+  const refsByRawKey = new Map<string, AssetReference[]>();
   for (const ref of input.refsForPage) {
     refsByOccurrenceKey.set(`${ref.tag}|${ref.attribute}|${String(ref.occurrence)}`, ref);
+    const rawKey = `${ref.tag}|${ref.attribute}|${ref.rawRef}`;
+    const existing = refsByRawKey.get(rawKey);
+    if (existing) existing.push(ref);
+    else refsByRawKey.set(rawKey, [ref]);
+  }
+  for (const [key, refs] of refsByRawKey) {
+    refsByRawKey.set(
+      key,
+      [...refs].sort((a, b) => {
+        if (a.occurrence !== b.occurrence) return a.occurrence - b.occurrence;
+        return stringCmp(a.id, b.id);
+      }),
+    );
   }
 
   const doc = parse(input.html);
   const occurrenceByKey = new Map<string, number>();
   const rewrites: StaticOutputAssetReferenceRewriteRecord[] = [];
   const warningCodes = new Set<string>();
+  const consumedReferenceIds = new Set<string>();
 
   walkDom(doc, (node) => {
     if (!isElement(node)) return;
@@ -236,7 +254,17 @@ function rewriteHtmlAssetReferences(input: {
     const occurrence = occurrenceByKey.get(key) ?? 0;
     occurrenceByKey.set(key, occurrence + 1);
 
-    const ref = refsByOccurrenceKey.get(`${key}|${String(occurrence)}`);
+    let ref = refsByOccurrenceKey.get(`${key}|${String(occurrence)}`) ?? null;
+    if (ref && consumedReferenceIds.has(ref.id)) ref = null;
+
+    if (ref === null) {
+      const refsForRaw = refsByRawKey.get(`${key}|${attr.value ?? ""}`) ?? [];
+      for (const candidate of refsForRaw) {
+        if (consumedReferenceIds.has(candidate.id)) continue;
+        ref = candidate;
+        break;
+      }
+    }
     if (!ref) return;
 
     const nextRefValue = input.rewrittenRefValueByReferenceId.get(ref.id);
@@ -249,6 +277,7 @@ function rewriteHtmlAssetReferences(input: {
 
     const fromRawRef = attr.value ?? "";
     attr.value = nextRefValue;
+    consumedReferenceIds.add(ref.id);
     rewrites.push({
       referenceId: ref.id,
       sourcePath: input.sourcePath,
@@ -550,6 +579,9 @@ export async function materializeStaticOutputBundle(input: MaterializeStaticOutp
       pageOutputPathRule: input.staticHtmlArtifact.mapping.outputPathRule,
       assetCopyRule: "assets_root_preserve_resolved_path_v1",
       assetRewriteRule: "rewrite_supported_local_refs_only_when_needed_v1",
+      stylesheetRewriteRule: "rewrite_preserved_stylesheet_links_for_copied_local_assets_v1",
+      remoteAssetRule: "unsupported_remote_assets_preserved_when_present_and_reported_v1",
+      dataUrlAssetRule: "unsupported_data_url_assets_preserved_when_present_and_reported_v1",
       missingAssetRule: "missing_local_assets_reported_not_thrown_v1",
     },
     source: {

@@ -56,6 +56,28 @@ test("createPreparedSiteModel emits structured output for degraded imports", asy
   assert.equal(typeof prepared.diagnostics.import.totalCount, "number");
 });
 
+test("createPreparedSiteModel captures deterministic fidelity projection fields", async () => {
+  const rootDir = fixtureDir("simple-site");
+
+  const importOutput = await importStaticSite({
+    rootDir,
+    requestId: "req-fidelity-projection",
+    source: { kind: "single-entry-html", entryHtmlPath: "index.html", assetsDirPath: "assets" },
+  });
+  const prepared = createPreparedSiteModel({ importOutput, importManifest: createImportManifest(importOutput) });
+  const doc = prepared.documents.find((d) => d.path === "index.html");
+  assert.ok(doc);
+
+  assert.equal(doc!.fidelity.kind, "prepared_document_fidelity_projection_v1");
+  assert.equal(doc!.fidelity.htmlLang, "en");
+  assert.equal(doc!.fidelity.title, "Simple Site");
+  assert.equal(doc!.fidelity.metaCharset, "utf-8");
+  assert.equal(doc!.fidelity.metaViewport, "width=device-width, initial-scale=1");
+  assert.equal(doc!.fidelity.bodyClass, null);
+  assert.equal(doc!.fidelity.bodyId, null);
+  assert.deepEqual(doc!.fidelity.stylesheetLinks.map((l) => l.href), ["./assets/styles.css"]);
+});
+
 test("createPreparedSiteModel canonicalizes ordering independent of import collection order", async () => {
   const rootDir = fixtureDir("simple-site");
 
@@ -106,4 +128,3 @@ test("structure_preparation stage output contains PreparedSiteModel", async () =
   assert.equal(s2.output.preparedSite.kind, "prepared_site_model_v1");
   assert.ok(s2.output.preparedSite.documents.length >= 1);
 });
-

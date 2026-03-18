@@ -153,6 +153,11 @@ test("materializeStaticOutputBundle preserves canonical page and asset paths", a
     .sort();
   assert.deepEqual(copiedAssetOutputPaths, ["assets/assets/app.js", "assets/assets/logo.svg", "assets/assets/styles.css"]);
 
+  const pageRecord = bundle.pageFiles.find((p) => p.writeStatus === "written");
+  assert.ok(pageRecord);
+  const html = await fs.readFile(pageRecord!.absoluteOutputPath, "utf-8");
+  assert.ok(html.includes('<link rel="stylesheet" href="assets/assets/styles.css">'));
+
   for (const pageFile of bundle.pageFiles.filter((p) => p.writeStatus === "written")) {
     const stat = await fs.stat(pageFile.absoluteOutputPath);
     assert.ok(stat.isFile());
@@ -161,6 +166,49 @@ test("materializeStaticOutputBundle preserves canonical page and asset paths", a
     const stat = await fs.stat(assetFile.absoluteOutputPath);
     assert.ok(stat.isFile());
   }
+});
+
+test("materializeStaticOutputBundle rewrites root-relative stylesheet links to exported asset paths", async () => {
+  const tmpBase = await fs.mkdtemp(path.join(os.tmpdir(), "gnr8-static-bundle-root-relative-"));
+  const rootDir = path.join(tmpBase, "site");
+  await fs.mkdir(path.join(rootDir, "assets"), { recursive: true });
+  await fs.writeFile(path.join(rootDir, "assets/styles.css"), "body { background: #fff; }\n", "utf-8");
+  await fs.writeFile(
+    path.join(rootDir, "index.html"),
+    [
+      "<!doctype html>",
+      "<html lang=\"en\">",
+      "<head>",
+      "  <meta charset=\"utf-8\">",
+      "  <title>Root Relative Stylesheet Fixture</title>",
+      "  <link rel=\"stylesheet\" href=\"/assets/styles.css\">",
+      "</head>",
+      "<body><h1>Fixture</h1></body>",
+      "</html>",
+      "",
+    ].join("\n"),
+    "utf-8",
+  );
+
+  const built = await buildStaticHtmlForSite({
+    rootDir,
+    requestId: "req-static-bundle-root-relative-stylesheet",
+    entryHtmlPath: "index.html",
+    assetsDirPath: "assets",
+  });
+
+  const outputRootDir = path.join(tmpBase, "bundle");
+  const bundle = await materializeStaticOutputBundle({
+    staticHtmlArtifact: built.artifact,
+    importOutput: built.importOutput,
+    importRootDir: rootDir,
+    outputRootDir,
+  });
+
+  const pageRecord = bundle.pageFiles.find((p) => p.outputPath === "index.html" && p.writeStatus === "written");
+  assert.ok(pageRecord);
+  const html = await fs.readFile(pageRecord!.absoluteOutputPath, "utf-8");
+  assert.ok(html.includes('<link rel="stylesheet" href="assets/assets/styles.css">'));
 });
 
 test("all current validation fixtures materialize through static bundle path", async () => {
@@ -215,6 +263,84 @@ test("warning-mode fixture still materializes and reports missing/unsupported as
   assert.ok(bundle.diagnostics.warnings.codes.includes("UNSUPPORTED_REMOTE_ASSET"));
   assert.ok(bundle.diagnostics.warnings.codes.includes("UNSUPPORTED_DATA_URL_ASSET"));
   assert.ok(bundle.diagnostics.warnings.codes.includes("MISSING_LOCAL_ASSET"));
+});
+
+test("warning-mode real-site-02 and real-site-03 remain exportable with visible fidelity warnings", async () => {
+  const fixtureIds = ["real-site-02", "real-site-03"] as const;
+  const tmpBase = await fs.mkdtemp(path.join(os.tmpdir(), "gnr8-static-bundle-warning-fixtures-"));
+
+  for (const fixtureId of fixtureIds) {
+    const fixture = readValidationFixtureSpec(fixtureId);
+    const rootDir = validationFixtureDirAbs(fixtureId);
+    const built = await buildStaticHtmlForSite({
+      rootDir,
+      requestId: `req-static-bundle-warning-${fixtureId}`,
+      entryHtmlPath: fixture.entryHtmlPath,
+      ...(fixture.assetsDirPath ? { assetsDirPath: fixture.assetsDirPath } : {}),
+    });
+
+    const bundle = await materializeStaticOutputBundle({
+      staticHtmlArtifact: built.artifact,
+      importOutput: built.importOutput,
+      importRootDir: rootDir,
+      outputRootDir: path.join(tmpBase, fixtureId),
+    });
+
+    assert.equal(bundle.status, "ready_with_warnings");
+    assert.ok(bundle.summary.writtenPageCount >= 1);
+    assert.ok(bundle.diagnostics.warnings.codes.includes("UNSUPPORTED_REMOTE_ASSET"));
+  }
+});
+
+test("unsupported remote/data stylesheet references remain in exported HTML and diagnostics", async () => {
+  const tmpBase = await fs.mkdtemp(path.join(os.tmpdir(), "gnr8-static-bundle-remote-data-css-"));
+  const rootDir = path.join(tmpBase, "site");
+  await fs.mkdir(path.join(rootDir, "assets"), { recursive: true });
+  await fs.writeFile(
+    path.join(rootDir, "index.html"),
+    [
+      "<!doctype html>",
+      "<html lang=\"en\">",
+      "<head>",
+      "  <meta charset=\"utf-8\">",
+      "  <title>Remote Data Stylesheet Fixture</title>",
+      "  <link rel=\"stylesheet\" href=\"./assets/styles.css\">",
+      "  <link rel=\"stylesheet\" href=\"https://cdn.example.invalid/site.css\">",
+      "  <link rel=\"stylesheet\" href=\"data:text/css,body{color:red}\">",
+      "</head>",
+      "<body><h1>Fixture</h1></body>",
+      "</html>",
+      "",
+    ].join("\n"),
+    "utf-8",
+  );
+  await fs.writeFile(path.join(rootDir, "assets/styles.css"), "body { color: black; }\n", "utf-8");
+
+  const built = await buildStaticHtmlForSite({
+    rootDir,
+    requestId: "req-static-bundle-remote-data-css",
+    entryHtmlPath: "index.html",
+    assetsDirPath: "assets",
+  });
+
+  const outputRootDir = path.join(tmpBase, "bundle");
+  const bundle = await materializeStaticOutputBundle({
+    staticHtmlArtifact: built.artifact,
+    importOutput: built.importOutput,
+    importRootDir: rootDir,
+    outputRootDir,
+  });
+
+  assert.equal(bundle.status, "ready_with_warnings");
+  assert.ok(bundle.diagnostics.warnings.codes.includes("UNSUPPORTED_REMOTE_ASSET"));
+  assert.ok(bundle.diagnostics.warnings.codes.includes("UNSUPPORTED_DATA_URL_ASSET"));
+
+  const pageRecord = bundle.pageFiles.find((p) => p.outputPath === "index.html" && p.writeStatus === "written");
+  assert.ok(pageRecord);
+  const html = await fs.readFile(pageRecord!.absoluteOutputPath, "utf-8");
+  assert.ok(html.includes('<link rel="stylesheet" href="assets/assets/styles.css">'));
+  assert.ok(html.includes('<link rel="stylesheet" href="https://cdn.example.invalid/site.css">'));
+  assert.ok(html.includes('<link rel="stylesheet" href="data:text/css,body{color:red}">'));
 });
 
 test("non-renderable pages remain explicit in materialized bundle result", async () => {

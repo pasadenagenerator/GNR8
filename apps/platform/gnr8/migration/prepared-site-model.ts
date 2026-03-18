@@ -4,7 +4,7 @@ import type { ImportOutput } from "../import/import-contract";
 import { parse } from "parse5";
 import { sha256Hex } from "./runtime/diagnostics";
 
-export const PREPARED_SITE_MODEL_VERSION = "1.2.0" as const;
+export const PREPARED_SITE_MODEL_VERSION = "1.3.0" as const;
 
 export type PreparedSitePreparationStatus = "ready" | "ready_with_warnings" | "blocked";
 
@@ -35,6 +35,7 @@ export type PreparedDocumentRecord = {
    * `null` when no serialized DOM snapshot was available for this document.
    */
   domOutline: PreparedDocumentDomOutline | null;
+  fidelity: PreparedDocumentFidelityProjection;
 };
 
 export type PreparedSiteModel = {
@@ -91,6 +92,23 @@ export type PreparedSiteModel = {
   };
 
   documents: PreparedDocumentRecord[];
+};
+
+export type PreparedDocumentStylesheetLink = {
+  href: string;
+  attrs: Array<{ name: string; value: string }>;
+};
+
+export type PreparedDocumentFidelityProjection = {
+  kind: "prepared_document_fidelity_projection_v1";
+  htmlLang: string | null;
+  title: string | null;
+  metaCharset: string | null;
+  metaViewport: string | null;
+  metaDescription: string | null;
+  bodyClass: string | null;
+  bodyId: string | null;
+  stylesheetLinks: PreparedDocumentStylesheetLink[];
 };
 
 export type PreparedDocumentDomOutline = {
@@ -159,6 +177,132 @@ function findFirstElementByTagName(root: unknown, tagNameLower: string): unknown
     if (n.tagName.toLowerCase() === tagNameLower) found = n;
   });
   return found;
+}
+
+function getAttr(node: unknown, attrName: string): string | null {
+  if (!node || typeof node !== "object") return null;
+  const attrs = (node as { attrs?: { name?: string; value?: string }[] }).attrs;
+  if (!Array.isArray(attrs)) return null;
+  const lower = attrName.toLowerCase();
+  for (const a of attrs) {
+    if (String(a.name ?? "").toLowerCase() === lower) return String(a.value ?? "");
+  }
+  return null;
+}
+
+function getAttrsPreservingOrder(node: unknown): Array<{ name: string; value: string }> {
+  if (!node || typeof node !== "object") return [];
+  const attrs = (node as { attrs?: { name?: string; value?: string }[] }).attrs;
+  if (!Array.isArray(attrs)) return [];
+  const out: Array<{ name: string; value: string }> = [];
+  for (const attr of attrs) {
+    const name = String(attr.name ?? "").trim();
+    if (name.length === 0) continue;
+    out.push({ name, value: String(attr.value ?? "") });
+  }
+  return out;
+}
+
+function walkElementsInDocumentOrder(root: unknown, visit: (node: unknown) => void): void {
+  if (!root || typeof root !== "object") return;
+  const childNodes = (root as { childNodes?: unknown[] }).childNodes;
+  if (Array.isArray(childNodes)) {
+    for (const child of childNodes) {
+      if (!child || typeof child !== "object") continue;
+      if (isElement(child)) visit(child);
+      walkElementsInDocumentOrder(child, visit);
+    }
+  }
+  const content = (root as { content?: unknown }).content;
+  if (content && typeof content === "object") {
+    if (isElement(content)) visit(content);
+    walkElementsInDocumentOrder(content, visit);
+  }
+}
+
+function textFromSubtree(node: unknown): string {
+  let out = "";
+  walkDom(node, (n) => {
+    if (!n || typeof n !== "object") return;
+    const nodeName = String((n as { nodeName?: unknown }).nodeName ?? "");
+    if (nodeName !== "#text") return;
+    out += textValueFromNode(n);
+  });
+  return normalizeWhitespace(out);
+}
+
+function metaContentByName(head: unknown, targetName: string): string | null {
+  let value: string | null = null;
+  walkElementsInDocumentOrder(head, (node) => {
+    if (value !== null) return;
+    if (!isElement(node)) return;
+    if (node.tagName.toLowerCase() !== "meta") return;
+    const name = getAttr(node, "name");
+    if (name === null || name.toLowerCase() !== targetName.toLowerCase()) return;
+    const content = getAttr(node, "content");
+    if (content === null || content.trim().length === 0) return;
+    value = content;
+  });
+  return value;
+}
+
+function metaCharset(head: unknown): string | null {
+  let value: string | null = null;
+  walkElementsInDocumentOrder(head, (node) => {
+    if (value !== null) return;
+    if (!isElement(node)) return;
+    if (node.tagName.toLowerCase() !== "meta") return;
+    const charset = getAttr(node, "charset");
+    if (charset === null || charset.trim().length === 0) return;
+    value = charset;
+  });
+  return value;
+}
+
+function isStylesheetRel(rel: string | null): boolean {
+  if (rel === null) return false;
+  const tokens = rel
+    .toLowerCase()
+    .split(/\s+/)
+    .map((t) => t.trim())
+    .filter((t) => t.length > 0);
+  return tokens.includes("stylesheet");
+}
+
+function extractStylesheetLinks(head: unknown): PreparedDocumentStylesheetLink[] {
+  const links: PreparedDocumentStylesheetLink[] = [];
+  walkElementsInDocumentOrder(head, (node) => {
+    if (!isElement(node)) return;
+    if (node.tagName.toLowerCase() !== "link") return;
+    const href = getAttr(node, "href");
+    if (href === null || href.trim().length === 0) return;
+    if (!isStylesheetRel(getAttr(node, "rel"))) return;
+    links.push({
+      href,
+      attrs: getAttrsPreservingOrder(node),
+    });
+  });
+  return links;
+}
+
+function createFidelityProjectionFromSerializedDom(serializedDom: string): PreparedDocumentFidelityProjection {
+  const document = parse(serializedDom);
+  const html = findFirstElementByTagName(document, "html");
+  const head = findFirstElementByTagName(document, "head");
+  const body = findFirstElementByTagName(document, "body");
+  const titleNode = head ? findFirstElementByTagName(head, "title") : null;
+
+  return {
+    kind: "prepared_document_fidelity_projection_v1",
+    htmlLang: html ? getAttr(html, "lang") : null,
+    title: titleNode ? textFromSubtree(titleNode) || null : null,
+    metaCharset: head ? metaCharset(head) : null,
+    metaViewport: head ? metaContentByName(head, "viewport") : null,
+    metaDescription: head ? metaContentByName(head, "description") : null,
+    bodyClass: body ? getAttr(body, "class") : null,
+    bodyId: body ? getAttr(body, "id") : null,
+    stylesheetLinks: head ? extractStylesheetLinks(head) : [],
+  };
 }
 
 const DOM_OUTLINE_TEXT_EXCERPT_MAX_CHARS = 160;
@@ -322,6 +466,19 @@ export function createPreparedSiteModel(input: {
     const docEffectivelyEmpty = doc.text.trim().length === 0;
     const isEntry = entryPath !== null && doc.path === entryPath;
     const domOutline = serializedDomAvailable ? createDomOutlineFromSerializedDom(doc.dom?.serializedDom ?? "") : null;
+    const fidelity = serializedDomAvailable
+      ? createFidelityProjectionFromSerializedDom(doc.dom?.serializedDom ?? "")
+      : {
+          kind: "prepared_document_fidelity_projection_v1",
+          htmlLang: null,
+          title: null,
+          metaCharset: null,
+          metaViewport: null,
+          metaDescription: null,
+          bodyClass: null,
+          bodyId: null,
+          stylesheetLinks: [],
+        };
 
     if (normalizedHtmlAvailable) documentsWithNormalizedHtmlCount++;
     if (doc.dom) documentsWithDomCount++;
@@ -346,6 +503,7 @@ export function createPreparedSiteModel(input: {
       byteLength: doc.byteLength,
       assetReferenceIds,
       domOutline,
+      fidelity,
     });
   }
 

@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+import fs from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
@@ -126,11 +128,80 @@ test("createStaticHtmlRenderArtifact emits real HTML documents and deterministic
   assert.ok(html.includes("<head>"));
   assert.ok(html.includes("<body"));
   assert.ok(html.includes('<main data-gnr8-main="phase1-static-html">'));
-  assert.ok(html.includes("<title>index.html</title>"));
+  assert.ok(html.includes("<title>Simple Site</title>"));
+  assert.ok(html.includes('<meta charset="utf-8">'));
+  assert.ok(html.includes('<meta name="viewport" content="width=device-width, initial-scale=1">'));
+  assert.ok(html.includes('<link rel="stylesheet" href="./assets/styles.css">'));
 
   const sectionCount = (html.match(/<section /g) ?? []).length;
   assert.equal(sectionCount, renderOutput.pages[0]!.nodes.length);
   assert.ok(html.includes("<p>Hello GNR8</p>"));
+});
+
+test("createStaticHtmlRenderArtifact preserves minimal deterministic source metadata and body attributes", async () => {
+  const fixture = readValidationFixtureSpec("real-site-02");
+  const importOutput = await importStaticSite({
+    rootDir: validationFixtureDirAbs("real-site-02"),
+    requestId: "req-static-html-fidelity-real-site-02",
+    source: {
+      kind: "single-entry-html",
+      entryHtmlPath: fixture.entryHtmlPath,
+      ...(fixture.assetsDirPath ? { assetsDirPath: fixture.assetsDirPath } : {}),
+    },
+  });
+
+  const prepared = createPreparedSiteModel({ importOutput, importManifest: createImportManifest(importOutput) });
+  const layout = createLayoutPreparationModel(prepared);
+  const renderOutput = createRenderOutput(layout);
+  const artifact = createStaticHtmlRenderArtifact(renderOutput);
+
+  const page = artifact.pages.find((p) => p.sourcePath === fixture.entryHtmlPath);
+  assert.ok(page);
+  const html = page!.htmlDocument!.html;
+
+  assert.ok(html.includes('<html lang="en"'));
+  assert.ok(html.includes("<title>Ridgeline Labs - Migration Fixture Two</title>"));
+  assert.ok(html.includes('<meta name="description" content="Second deterministic real-site fixture with mildly messy but phase-1-compatible structure.">'));
+  assert.ok(html.includes('<link rel="stylesheet" href="./assets/styles.css">'));
+  assert.ok(html.includes("<body data-static-html-page-id="));
+});
+
+test("createStaticHtmlRenderArtifact preserves body id/class when available", async () => {
+  const tmpRoot = await fs.mkdtemp(path.join(os.tmpdir(), "gnr8-static-html-body-attrs-"));
+  await fs.mkdir(path.join(tmpRoot, "assets"), { recursive: true });
+  await fs.writeFile(path.join(tmpRoot, "assets/styles.css"), "body { margin: 0; }\n", "utf-8");
+  await fs.writeFile(
+    path.join(tmpRoot, "index.html"),
+    [
+      "<!doctype html>",
+      "<html lang=\"en\">",
+      "<head>",
+      "  <meta charset=\"utf-8\">",
+      "  <title>Body Attr Fixture</title>",
+      "  <link rel=\"stylesheet\" href=\"./assets/styles.css\">",
+      "</head>",
+      "<body id=\"landing\" class=\"page shell\">",
+      "  <h1>Hello</h1>",
+      "</body>",
+      "</html>",
+      "",
+    ].join("\n"),
+    "utf-8",
+  );
+
+  const importOutput = await importStaticSite({
+    rootDir: tmpRoot,
+    requestId: "req-static-html-body-attrs",
+    source: { kind: "single-entry-html", entryHtmlPath: "index.html", assetsDirPath: "assets" },
+  });
+
+  const prepared = createPreparedSiteModel({ importOutput, importManifest: createImportManifest(importOutput) });
+  const layout = createLayoutPreparationModel(prepared);
+  const renderOutput = createRenderOutput(layout);
+  const artifact = createStaticHtmlRenderArtifact(renderOutput);
+
+  const html = artifact.pages[0]!.htmlDocument!.html;
+  assert.ok(html.includes('<body id="landing" class="page shell"'));
 });
 
 test("createStaticHtmlRenderArtifact keeps degraded/minimal non-renderable states structured", async () => {

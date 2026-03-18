@@ -15,7 +15,11 @@ import { sha256Hex, stableStringify } from "./runtime/diagnostics";
  * - Page order is canonical by (`sourcePath`, `sourcePageId`, `sourceDocumentId`, `renderedPageId`).
  * - A page is `renderable` iff `RenderedPageRecord.eligibility === "eligible"`.
  * - Renderable pages emit one full HTML document (`<!doctype html>`, `<html>`, `<head>`, `<body>`, `<main>`).
- * - Title rule: `<title>` is exactly the canonical `sourcePath` for that page.
+ * - Title rule: preserve source `<title>` when available, else fallback to canonical `sourcePath`.
+ * - Head metadata rule: preserve source charset/viewport/description when available.
+ * - Stylesheet rule: preserve source `<link rel="stylesheet"...>` tags in source order.
+ * - Body attribute rule: preserve source `body.id` and `body.class` when available.
+ * - HTML lang rule: preserve source `<html lang>` when available, else `en`.
  * - Node mapping rule:
  *   - each render node maps to one `<section>` in canonical node order
  *   - node order is (`ordinalIndex`, `nodeId`, `sourceBlockId`)
@@ -26,7 +30,7 @@ import { sha256Hex, stableStringify } from "./runtime/diagnostics";
  *   - non-renderable pages remain explicit with structured metadata and `htmlDocument: null` (never thrown).
  */
 
-export const STATIC_HTML_RENDER_ARTIFACT_VERSION = "1.0.0" as const;
+export const STATIC_HTML_RENDER_ARTIFACT_VERSION = "1.1.0" as const;
 
 export type StaticHtmlRenderArtifactStatus = "ready" | "ready_with_warnings" | "blocked";
 
@@ -80,7 +84,12 @@ export type StaticHtmlRenderArtifact = {
     rule: "render_output_to_static_html_v1";
     pageRule: "rendered_pages_to_static_html_pages_v1";
     nodeRule: "render_nodes_to_section_elements_v1";
-    titleRule: "source_path_title_v1";
+    titleRule: "source_title_with_source_path_fallback_v1";
+    headMetadataRule: "preserve_charset_viewport_description_v1";
+    stylesheetLinkRule:
+      | "preserve_head_stylesheet_links_in_source_order_v1";
+    bodyAttributeRule: "preserve_body_id_and_class_v1";
+    htmlLangRule: "preserve_html_lang_with_en_fallback_v1";
     outputPathRule: "source_path_to_html_output_path_v1";
     degradedPageRule: "non_renderable_page_structured_without_html_v1";
     wrapperTagName: "section";
@@ -138,6 +147,22 @@ function escapeHtmlText(value: string): string {
   return value.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
 }
 
+function normalizeHtmlWhitespace(value: string): string {
+  return value.replaceAll(/\s+/g, " ").trim();
+}
+
+function renderStylesheetLink(attrs: Array<{ name: string; value: string }>, fallbackHref: string): string {
+  const attrsToRender = attrs.filter((a) => String(a.name ?? "").trim().length > 0);
+  const hasHref = attrsToRender.some((a) => String(a.name ?? "").toLowerCase() === "href");
+  const hasRel = attrsToRender.some((a) => String(a.name ?? "").toLowerCase() === "rel");
+
+  if (!hasRel) attrsToRender.unshift({ name: "rel", value: "stylesheet" });
+  if (!hasHref) attrsToRender.push({ name: "href", value: fallbackHref });
+
+  const renderedAttrs = attrsToRender.map((a) => `${a.name}="${escapeHtmlAttr(a.value)}"`).join(" ");
+  return `<link ${renderedAttrs}>`;
+}
+
 function staticHtmlPageIdFor(input: { sourceRenderedPageId: string; sourcePageId: string }): string {
   return sha256Hex(
     stableStringify({
@@ -190,16 +215,31 @@ function buildPageHtml(input: {
   });
 
   const sourceRenderedNodeIds = nodes.map((n) => n.nodeId);
+  const htmlLang = normalizeHtmlWhitespace(input.page.fidelity.htmlLang ?? "") || "en";
+  const title = normalizeHtmlWhitespace(input.page.fidelity.title ?? "") || input.page.sourcePath;
+  const metaCharset = normalizeHtmlWhitespace(input.page.fidelity.metaCharset ?? "") || "utf-8";
+  const metaViewport =
+    normalizeHtmlWhitespace(input.page.fidelity.metaViewport ?? "") || "width=device-width,initial-scale=1";
+  const metaDescription = normalizeHtmlWhitespace(input.page.fidelity.metaDescription ?? "") || null;
+  const bodyId = normalizeHtmlWhitespace(input.page.fidelity.bodyId ?? "") || null;
+  const bodyClass = normalizeHtmlWhitespace(input.page.fidelity.bodyClass ?? "") || null;
+
   const lines: string[] = [];
   lines.push("<!doctype html>");
-  lines.push(`<html lang="en" data-gnr8-static-html-version="${STATIC_HTML_RENDER_ARTIFACT_VERSION}">`);
+  lines.push(`<html lang="${escapeHtmlAttr(htmlLang)}" data-gnr8-static-html-version="${STATIC_HTML_RENDER_ARTIFACT_VERSION}">`);
   lines.push("<head>");
-  lines.push('<meta charset="utf-8">');
-  lines.push('<meta name="viewport" content="width=device-width,initial-scale=1">');
-  lines.push(`<title>${escapeHtmlText(input.page.sourcePath)}</title>`);
+  lines.push(`<meta charset="${escapeHtmlAttr(metaCharset)}">`);
+  lines.push(`<meta name="viewport" content="${escapeHtmlAttr(metaViewport)}">`);
+  if (metaDescription !== null) lines.push(`<meta name="description" content="${escapeHtmlAttr(metaDescription)}">`);
+  lines.push(`<title>${escapeHtmlText(title)}</title>`);
+  for (const stylesheetLink of input.page.fidelity.stylesheetLinks) {
+    lines.push(renderStylesheetLink(stylesheetLink.attrs, stylesheetLink.href));
+  }
   lines.push("</head>");
+  const bodyIdAttr = bodyId ? ` id="${escapeHtmlAttr(bodyId)}"` : "";
+  const bodyClassAttr = bodyClass ? ` class="${escapeHtmlAttr(bodyClass)}"` : "";
   lines.push(
-    `<body data-static-html-page-id="${input.staticHtmlPageId}" data-source-rendered-page-id="${escapeHtmlAttr(
+    `<body${bodyIdAttr}${bodyClassAttr} data-static-html-page-id="${input.staticHtmlPageId}" data-source-rendered-page-id="${escapeHtmlAttr(
       input.page.renderedPageId,
     )}" data-source-page-id="${escapeHtmlAttr(input.page.sourcePageId)}" data-source-document-id="${escapeHtmlAttr(
       input.page.sourceDocumentId,
@@ -335,7 +375,11 @@ export function createStaticHtmlRenderArtifact(renderOutput: RenderOutput): Stat
       rule: "render_output_to_static_html_v1",
       pageRule: "rendered_pages_to_static_html_pages_v1",
       nodeRule: "render_nodes_to_section_elements_v1",
-      titleRule: "source_path_title_v1",
+      titleRule: "source_title_with_source_path_fallback_v1",
+      headMetadataRule: "preserve_charset_viewport_description_v1",
+      stylesheetLinkRule: "preserve_head_stylesheet_links_in_source_order_v1",
+      bodyAttributeRule: "preserve_body_id_and_class_v1",
+      htmlLangRule: "preserve_html_lang_with_en_fallback_v1",
       outputPathRule: "source_path_to_html_output_path_v1",
       degradedPageRule: "non_renderable_page_structured_without_html_v1",
       wrapperTagName: "section",

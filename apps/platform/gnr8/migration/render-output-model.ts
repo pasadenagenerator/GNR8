@@ -25,7 +25,7 @@ import { sha256Hex, stableStringify } from "./runtime/diagnostics";
  * - `ready_with_warnings` otherwise.
  */
 
-export const RENDER_OUTPUT_MODEL_VERSION = "1.1.0" as const;
+export const RENDER_OUTPUT_MODEL_VERSION = "1.2.0" as const;
 
 export type RenderOutputStatus = "ready" | "ready_with_warnings" | "blocked";
 
@@ -61,6 +61,7 @@ export type RenderedPageRecord = {
   eligibility: RenderedPageEligibilityStatus;
   renderedNodeCount: number;
   nodes: RenderNodeRecord[];
+  fidelity: LayoutPreparationModel["pages"][number]["fidelity"];
 };
 
 export type RenderedPageSummary = {
@@ -210,6 +211,7 @@ export function createRenderOutput(layoutPreparation: LayoutPreparationModel): R
       eligibility: page.eligibility,
       renderedNodeCount: nodes.length,
       nodes,
+      fidelity: page.fidelity,
     };
 
     pages.push(renderedPage);
