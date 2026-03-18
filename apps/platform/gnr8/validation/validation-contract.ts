@@ -12,7 +12,7 @@ export const REAL_SITE_VALIDATION_VERSION = FIRST_REAL_SITE_VALIDATION_VERSION;
 
 export type ValidationOverallStatus = "passed" | "passed_with_warnings" | "blocked" | "failed";
 
-export type ValidationFixtureId = "real-site-01" | "real-site-02" | "real-site-03";
+export type ValidationFixtureId = "real-site-01" | "real-site-02" | "real-site-03" | "friend-site-01";
 
 export type ValidationComparisonSlice = {
   fixtureId: ValidationFixtureId;

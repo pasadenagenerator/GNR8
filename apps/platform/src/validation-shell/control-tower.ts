@@ -1,8 +1,9 @@
 import type { ValidationFixtureId } from "@/gnr8/validation/validation-contract";
+import { SUPPORTED_VALIDATION_FIXTURE_IDS } from "@/gnr8/validation/runtime/fixture-spec";
 
 import { runValidationShellForFixture, type ValidationShellResponse } from "@/src/validation-shell/real-site-01";
 
-export const PHASE1_VALIDATION_FIXTURE_ORDER: readonly ValidationFixtureId[] = ["real-site-01", "real-site-02", "real-site-03"] as const;
+export const PHASE1_VALIDATION_FIXTURE_ORDER: readonly ValidationFixtureId[] = [...SUPPORTED_VALIDATION_FIXTURE_IDS];
 
 export type ValidationControlTowerSuccessRow = {
   kind: "success";

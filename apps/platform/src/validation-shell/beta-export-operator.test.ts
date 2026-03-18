@@ -14,7 +14,7 @@ import {
 } from "./beta-export-operator";
 
 test("beta export operator supports explicit fixture and mode sets", () => {
-  assert.deepEqual(BETA_EXPORT_OPERATOR_FIXTURE_ORDER, ["real-site-01", "real-site-02", "real-site-03"]);
+  assert.deepEqual(BETA_EXPORT_OPERATOR_FIXTURE_ORDER, ["real-site-01", "real-site-02", "real-site-03", "friend-site-01"]);
   assert.deepEqual(BETA_EXPORT_OPERATOR_EXECUTION_MODES, ["simulation", "materialize"]);
 });
 

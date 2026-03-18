@@ -13,13 +13,16 @@ test("validation fixture resolver supports all explicit fixture ids", () => {
   const f1 = readValidationFixtureSpec("real-site-01");
   const f2 = readValidationFixtureSpec("real-site-02");
   const f3 = readValidationFixtureSpec("real-site-03");
+  const f4 = readValidationFixtureSpec("friend-site-01");
 
   assert.equal(f1.fixtureId, "real-site-01");
   assert.equal(f2.fixtureId, "real-site-02");
   assert.equal(f3.fixtureId, "real-site-03");
+  assert.equal(f4.fixtureId, "friend-site-01");
   assert.equal(f1.kind, "static_marketing_site_v1");
   assert.equal(f2.kind, "static_marketing_site_v1");
   assert.equal(f3.kind, "static_marketing_site_v1");
+  assert.equal(f4.kind, "static_marketing_site_v1");
 });
 
 test("first real-site validation runner executes full phase-1 flow and returns core artifacts", async () => {
@@ -148,6 +151,18 @@ test("real-site-03 output is deterministic across repeated runs", async () => {
   assert.equal(stableStringify(r1 as unknown as JsonValue), stableStringify(r2 as unknown as JsonValue));
 });
 
+test("friend-site-01 runs full flow and remains deterministic across repeated runs", async () => {
+  const a = await runRealSiteValidation({ fixtureId: "friend-site-01", requestId: "req-validation-friend-site-01" });
+  const b = await runRealSiteValidation({ fixtureId: "friend-site-01", requestId: "req-validation-friend-site-01" });
+
+  assert.equal(a.kind, "validation_run_result_v1");
+  assert.equal(a.fixtureId, "friend-site-01");
+  assert.equal(a.validationSummary.fixtureId, "friend-site-01");
+  assert.ok(a.validationSummary.counts.previewPageCount >= 1);
+  assert.ok(a.validationSummary.counts.renderedPageCount >= 1);
+  assert.equal(stableStringify(a as unknown as JsonValue), stableStringify(b as unknown as JsonValue));
+});
+
 test("validation summary reflects artifact state and pipeline stage statuses", async () => {
   const r = await runFirstRealSiteValidation({ requestId: "req-validation-real-site-01" });
 
@@ -171,7 +186,7 @@ test("validation summary reflects artifact state and pipeline stage statuses", a
 });
 
 test("all fixtures can run through shared runner and expose comparison-capable summaries", async () => {
-  const fixtureIds = ["real-site-01", "real-site-02", "real-site-03"] as const;
+  const fixtureIds = ["real-site-01", "real-site-02", "real-site-03", "friend-site-01"] as const;
 
   const runs = await Promise.all(
     fixtureIds.map((fixtureId) => runRealSiteValidation({ fixtureId, requestId: `req-validation-${fixtureId}` })),
@@ -191,7 +206,7 @@ test("all fixtures can run through shared runner and expose comparison-capable s
 test("snapshot writing is deterministic and stable for all fixtures", async () => {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "gnr8-validation-"));
   const outRoot = path.resolve(tmp, "out");
-  const fixtureIds = ["real-site-01", "real-site-02", "real-site-03"] as const;
+  const fixtureIds = ["real-site-01", "real-site-02", "real-site-03", "friend-site-01"] as const;
 
   for (const fixtureId of fixtureIds) {
     const first = await runRealSiteValidation({
@@ -232,7 +247,7 @@ test("snapshot writing is deterministic and stable for all fixtures", async () =
 });
 
 test("phase-1 status and diagnostic invariants are coherent across all real fixtures", async () => {
-  const fixtureIds = ["real-site-01", "real-site-02", "real-site-03"] as const;
+  const fixtureIds = ["real-site-01", "real-site-02", "real-site-03", "friend-site-01"] as const;
 
   for (const fixtureId of fixtureIds) {
     const r = await runRealSiteValidation({ fixtureId, requestId: `req-audit-${fixtureId}` });
@@ -272,7 +287,7 @@ test("phase-1 status and diagnostic invariants are coherent across all real fixt
 });
 
 test("determinism holds for validation summary, migration report, and preview document across all real fixtures", async () => {
-  const fixtureIds = ["real-site-01", "real-site-02", "real-site-03"] as const;
+  const fixtureIds = ["real-site-01", "real-site-02", "real-site-03", "friend-site-01"] as const;
 
   for (const fixtureId of fixtureIds) {
     const a = await runRealSiteValidation({ fixtureId, requestId: `req-audit-determinism-${fixtureId}` });
