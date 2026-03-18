@@ -4,7 +4,7 @@ import type { ImportOutput } from "../import/import-contract";
 import { parse } from "parse5";
 import { sha256Hex } from "./runtime/diagnostics";
 
-export const PREPARED_SITE_MODEL_VERSION = "1.1.0" as const;
+export const PREPARED_SITE_MODEL_VERSION = "1.2.0" as const;
 
 export type PreparedSitePreparationStatus = "ready" | "ready_with_warnings" | "blocked";
 
@@ -94,7 +94,7 @@ export type PreparedSiteModel = {
 };
 
 export type PreparedDocumentDomOutline = {
-  kind: "prepared_document_dom_outline_v0";
+  kind: "prepared_document_dom_outline_v1";
   bodyAvailable: boolean;
   bodyChildElements: PreparedDomOutlineElement[];
 };
@@ -105,6 +105,7 @@ export type PreparedDomOutlineElement = {
   ordinalIndex: number;
   nthOfType: number;
   childElementCount: number;
+  directTextPresent: boolean;
   textPresent: boolean;
   /**
    * Deterministic, compact text excerpt derived from the element subtree.
@@ -112,6 +113,7 @@ export type PreparedDomOutlineElement = {
    * - Intended for phase-1 preview visibility only (not design fidelity).
    */
   textExcerpt: string | null;
+  childElements: PreparedDomOutlineElement[];
 };
 
 function stringCmp(a: string, b: string): number {
@@ -159,15 +161,6 @@ function findFirstElementByTagName(root: unknown, tagNameLower: string): unknown
   return found;
 }
 
-function countDirectChildElements(el: unknown): number {
-  if (!el || typeof el !== "object") return 0;
-  const children = (el as { childNodes?: unknown[] }).childNodes;
-  if (!Array.isArray(children)) return 0;
-  let count = 0;
-  for (const c of children) if (isElement(c)) count++;
-  return count;
-}
-
 const DOM_OUTLINE_TEXT_EXCERPT_MAX_CHARS = 160;
 
 function normalizeWhitespace(input: string): string {
@@ -177,6 +170,25 @@ function normalizeWhitespace(input: string): string {
 
 function escapeTextForExcerpt(raw: unknown): string {
   return String(raw ?? "");
+}
+
+function textValueFromNode(node: unknown): string {
+  if (!node || typeof node !== "object") return "";
+  const raw = (node as { value?: unknown; data?: unknown }).value ?? (node as { data?: unknown }).data ?? "";
+  return escapeTextForExcerpt(raw);
+}
+
+function hasDirectNonWhitespaceTextChild(node: unknown): boolean {
+  if (!node || typeof node !== "object") return false;
+  const children = (node as { childNodes?: unknown[] }).childNodes;
+  if (!Array.isArray(children) || children.length === 0) return false;
+  for (const child of children) {
+    if (!child || typeof child !== "object") continue;
+    const nodeName = String((child as { nodeName?: unknown }).nodeName ?? "");
+    if (nodeName !== "#text") continue;
+    if (textValueFromNode(child).trim().length > 0) return true;
+  }
+  return false;
 }
 
 function computeTextExcerptFromSubtree(node: unknown): string | null {
@@ -210,38 +222,49 @@ function computeTextExcerptFromSubtree(node: unknown): string | null {
   return `${head}…`;
 }
 
+function buildChildElements(parent: unknown, parentDomPath: string): PreparedDomOutlineElement[] {
+  if (!parent || typeof parent !== "object") return [];
+  const childNodes = (parent as { childNodes?: unknown[] }).childNodes ?? [];
+  const elementChildren = childNodes.filter(isElement);
+  const typeCounts = new Map<string, number>();
+  const out: PreparedDomOutlineElement[] = [];
+
+  for (let i = 0; i < elementChildren.length; i++) {
+    const el = elementChildren[i]!;
+    const tagName = el.tagName.toLowerCase();
+    const nthOfType = (typeCounts.get(tagName) ?? 0) + 1;
+    typeCounts.set(tagName, nthOfType);
+
+    const domPath = `${parentDomPath}>${tagName}:nth-of-type(${nthOfType})`;
+    const childElements = buildChildElements(el, domPath);
+    const textExcerpt = computeTextExcerptFromSubtree(el);
+
+    out.push({
+      tagName,
+      domPath,
+      ordinalIndex: i,
+      nthOfType,
+      childElementCount: childElements.length,
+      directTextPresent: hasDirectNonWhitespaceTextChild(el),
+      textPresent: textExcerpt !== null,
+      textExcerpt,
+      childElements,
+    });
+  }
+
+  return out;
+}
+
 function createDomOutlineFromSerializedDom(serializedDom: string): PreparedDocumentDomOutline {
   const document = parse(serializedDom);
   const body = findFirstElementByTagName(document, "body");
 
   if (!body || typeof body !== "object") {
-    return { kind: "prepared_document_dom_outline_v0", bodyAvailable: false, bodyChildElements: [] };
+    return { kind: "prepared_document_dom_outline_v1", bodyAvailable: false, bodyChildElements: [] };
   }
 
-  const childNodes = (body as { childNodes?: unknown[] }).childNodes ?? [];
-  const elementChildren = childNodes.filter(isElement);
-
-  const typeCounts = new Map<string, number>();
-  const bodyChildElements: PreparedDomOutlineElement[] = [];
-  for (let i = 0; i < elementChildren.length; i++) {
-    const el = elementChildren[i];
-    const tagName = el.tagName.toLowerCase();
-    const nthOfType = (typeCounts.get(tagName) ?? 0) + 1;
-    typeCounts.set(tagName, nthOfType);
-
-    const textExcerpt = computeTextExcerptFromSubtree(el);
-    bodyChildElements.push({
-      tagName,
-      domPath: `html>body>${tagName}:nth-of-type(${nthOfType})`,
-      ordinalIndex: i,
-      nthOfType,
-      childElementCount: countDirectChildElements(el),
-      textPresent: textExcerpt !== null,
-      textExcerpt,
-    });
-  }
-
-  return { kind: "prepared_document_dom_outline_v0", bodyAvailable: true, bodyChildElements };
+  const bodyChildElements = buildChildElements(body, "html>body");
+  return { kind: "prepared_document_dom_outline_v1", bodyAvailable: true, bodyChildElements };
 }
 
 function toCanonicalDocumentList(documents: ImportOutput["rawDomSnapshot"]["documents"]): ImportOutput["rawDomSnapshot"]["documents"] {

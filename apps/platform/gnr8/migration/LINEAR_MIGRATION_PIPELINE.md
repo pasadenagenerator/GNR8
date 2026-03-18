@@ -47,7 +47,11 @@ Model fields included (high-level):
 - `diagnostics.carried.import` (references/summary from preparation)
 
 Block extraction rule (fixed, replayable):
-- Each direct child *element* of `<body>` becomes one block in document order.
+- Start from direct `<body>` child elements.
+- Promote through a transparent wrapper chain while the current boundary has exactly one element child and that child has exactly one element child with no direct non-whitespace text.
+- Stop promotion at the first non-transparent boundary.
+- Use that boundary's child elements as blocks in canonical order.
+- If the terminal boundary is a single leaf element (no child elements), that single element becomes the block.
 - If `<body>` is unavailable or has no child elements, `blocks: []` is produced.
 
 Status computation rule:

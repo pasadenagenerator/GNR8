@@ -15,8 +15,15 @@ import { sha256Hex, stableStringify } from "./runtime/diagnostics";
  *
  * Block extraction rule (normative; phase-1):
  * - For each prepared document:
- *   - If `domOutline.bodyAvailable === true`, each direct child element of `<body>` becomes a block.
- *   - Blocks preserve canonical order as they appear in `<body>` (ordinal index, 0-based).
+ *   - Start at `<body>` child elements in canonical DOM order.
+ *   - Promote through a transparent single-child wrapper chain while all conditions hold:
+ *     - boundary has exactly one element child
+ *     - that only child has exactly one element child
+ *     - that only child has no direct non-whitespace text nodes
+ *   - Stop promotion at the first non-transparent boundary.
+ *   - The final boundary child elements become blocks.
+ *   - If the final boundary has no child elements, its single boundary element becomes the block.
+ *   - Blocks preserve canonical order as they appear at the final extraction boundary (ordinal index, 0-based).
  *   - Non-element nodes (text/comments) at `<body>` top level are ignored for block creation.
  *   - If `<body>` is unavailable or there are no usable body child elements, `blocks: []` is emitted.
  *
@@ -26,7 +33,7 @@ import { sha256Hex, stableStringify } from "./runtime/diagnostics";
  * - `ready_with_warnings` otherwise.
  */
 
-export const LAYOUT_PREPARATION_MODEL_VERSION = "1.1.0" as const;
+export const LAYOUT_PREPARATION_MODEL_VERSION = "1.2.0" as const;
 
 export type LayoutPreparationStatus = "ready" | "ready_with_warnings" | "blocked";
 
@@ -66,9 +73,12 @@ export type LayoutPreparationPageRecord = {
   blocks: LayoutPreparationBlockRecord[];
 
   blockExtraction: {
-    rule: "body_child_elements_v1";
+    rule: "body_child_elements_with_single_child_wrapper_promotion_v2";
     bodyAvailable: boolean;
-    usedBodyChildElementCount: number;
+    bodyChildElementCount: number;
+    extractionBoundaryDomPath: string | null;
+    promotionDepth: number;
+    usedBoundaryChildElementCount: number;
   };
 };
 
@@ -154,6 +164,40 @@ function computeLayoutStatus(input: {
   return "ready_with_warnings";
 }
 
+function extractBlocksFromBodyWithWrapperPromotion(input: {
+  bodyChildElements: NonNullable<PreparedDocumentRecord["domOutline"]>["bodyChildElements"];
+}): {
+  boundaryChildren: NonNullable<PreparedDocumentRecord["domOutline"]>["bodyChildElements"];
+  extractionBoundaryDomPath: string | null;
+  promotionDepth: number;
+} {
+  let boundaryChildren = input.bodyChildElements;
+  let extractionBoundaryDomPath: string | null = "html>body";
+  let promotionDepth = 0;
+
+  while (boundaryChildren.length === 1) {
+    const only = boundaryChildren[0]!;
+    if (only.directTextPresent) break;
+    if (only.childElementCount === 1) {
+      extractionBoundaryDomPath = only.domPath;
+      boundaryChildren = only.childElements;
+      promotionDepth++;
+      continue;
+    }
+    if (only.childElementCount > 1) {
+      extractionBoundaryDomPath = only.domPath;
+      boundaryChildren = only.childElements;
+    }
+    break;
+  }
+
+  return {
+    boundaryChildren,
+    extractionBoundaryDomPath,
+    promotionDepth,
+  };
+}
+
 export function createLayoutPreparationModel(preparedSite: PreparedSiteModel): LayoutPreparationModel {
   const pagesInCanonicalOrder = [...preparedSite.documents].sort((a, b) => {
     if (a.path !== b.path) return stringCmp(a.path, b.path);
@@ -183,10 +227,13 @@ export function createLayoutPreparationModel(preparedSite: PreparedSiteModel): L
 
     const blocks: LayoutPreparationBlockRecord[] = [];
     const bodyAvailable = doc.domOutline?.bodyAvailable ?? false;
-    const children = doc.domOutline?.bodyChildElements ?? [];
+    const bodyChildElements = doc.domOutline?.bodyChildElements ?? [];
 
-    if (eligibility === "eligible" && bodyAvailable && children.length > 0) {
-      for (const child of children) {
+    const extracted = extractBlocksFromBodyWithWrapperPromotion({ bodyChildElements });
+    const extractionCandidates = extracted.boundaryChildren.length > 0 ? extracted.boundaryChildren : [];
+
+    if (eligibility === "eligible" && bodyAvailable && extractionCandidates.length > 0) {
+      for (const child of extractionCandidates) {
         const block: LayoutPreparationBlockRecord = {
           id: blockIdFor({ pageId, sourceDomPath: child.domPath, ordinalIndex: child.ordinalIndex }),
           sourceTagName: child.tagName,
@@ -215,9 +262,12 @@ export function createLayoutPreparationModel(preparedSite: PreparedSiteModel): L
       assetReferenceIds: [...doc.assetReferenceIds].slice().sort(stringCmp),
       blocks,
       blockExtraction: {
-        rule: "body_child_elements_v1",
+        rule: "body_child_elements_with_single_child_wrapper_promotion_v2",
         bodyAvailable,
-        usedBodyChildElementCount: blocks.length,
+        bodyChildElementCount: bodyChildElements.length,
+        extractionBoundaryDomPath: bodyAvailable ? extracted.extractionBoundaryDomPath : null,
+        promotionDepth: bodyAvailable ? extracted.promotionDepth : 0,
+        usedBoundaryChildElementCount: blocks.length,
       },
     };
 

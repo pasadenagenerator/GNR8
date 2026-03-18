@@ -16,6 +16,11 @@ function fixtureDir(name: string): string {
   return path.resolve(here, `../import/__fixtures__/${name}`);
 }
 
+function validationFixtureDir(name: "real-site-01" | "real-site-02"): string {
+  const here = path.dirname(fileURLToPath(import.meta.url));
+  return path.resolve(here, `../validation/fixtures/${name}`);
+}
+
 test("createLayoutPreparationModel is deterministic across repeated runs", async () => {
   const rootDir = fixtureDir("simple-site");
 
@@ -120,3 +125,37 @@ test("layout_preparation stage output contains LayoutPreparationModel", async ()
   assert.ok(s3.output.layoutModel.pages.length >= 1);
 });
 
+test("createLayoutPreparationModel promotes transparent single-child wrapper chains for nested marketing layouts", async () => {
+  const rootDir = validationFixtureDir("real-site-02");
+  const importOutput = await importStaticSite({
+    rootDir,
+    requestId: "req-real-site-02",
+    source: { kind: "single-entry-html", entryHtmlPath: "index.html", assetsDirPath: "assets" },
+  });
+  const prepared = createPreparedSiteModel({ importOutput, importManifest: createImportManifest(importOutput) });
+  const layout = createLayoutPreparationModel(prepared);
+
+  assert.equal(layout.pages.length, 1);
+  const page = layout.pages[0]!;
+  assert.equal(page.eligibility, "eligible");
+  assert.equal(page.blockExtraction.rule, "body_child_elements_with_single_child_wrapper_promotion_v2");
+  assert.equal(page.blockExtraction.promotionDepth, 1);
+  assert.equal(page.blockExtraction.extractionBoundaryDomPath, "html>body>div:nth-of-type(1)>div:nth-of-type(1)");
+
+  assert.deepEqual(
+    page.blocks.map((b) => b.sourceTagName),
+    ["header", "main", "footer"],
+  );
+  assert.deepEqual(
+    page.blocks.map((b) => b.sourceDomPath),
+    [
+      "html>body>div:nth-of-type(1)>div:nth-of-type(1)>header:nth-of-type(1)",
+      "html>body>div:nth-of-type(1)>div:nth-of-type(1)>main:nth-of-type(1)",
+      "html>body>div:nth-of-type(1)>div:nth-of-type(1)>footer:nth-of-type(1)",
+    ],
+  );
+  assert.deepEqual(
+    page.blocks.map((b) => b.ordinalIndex),
+    [0, 1, 2],
+  );
+});

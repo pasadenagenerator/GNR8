@@ -59,6 +59,23 @@ test("real-site-02 runs full phase-1 flow and emits structured summary", async (
   assert.equal(r.validationSummary.comparison.renderedPageCount, r.validationSummary.counts.renderedPageCount);
   assert.equal(r.validationSummary.comparison.runReportOverallStatus, r.validationSummary.report.overallStatus);
   assert.ok(Array.isArray(r.validationSummary.comparison.keyDiagnosticCodes));
+
+  const layoutStage = r.pipelineResult.stages.find((s) => s.stageId === "layout_preparation");
+  assert.ok(layoutStage);
+  const layoutPage = layoutStage.output.layoutModel.pages[0];
+  assert.ok(layoutPage);
+  assert.ok(layoutPage.blocks.length > 1);
+  assert.equal(layoutPage.blockExtraction.rule, "body_child_elements_with_single_child_wrapper_promotion_v2");
+  assert.deepEqual(
+    layoutPage.blocks.map((b) => b.ordinalIndex),
+    [...layoutPage.blocks].map((_, i) => i),
+  );
+
+  assert.ok(r.previewDocument.siteSummary.previewNodeCount > 1);
+  assert.equal(
+    r.previewDocument.siteSummary.previewNodeCount,
+    r.pipelineResult.stages.find((s) => s.stageId === "render_preparation")!.output.renderOutput.siteSummary.renderedNodeCount,
+  );
 });
 
 test("real-site-01 preview markup contains deterministic visible section content", async () => {
