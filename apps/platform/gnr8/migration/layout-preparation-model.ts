@@ -26,7 +26,7 @@ import { sha256Hex, stableStringify } from "./runtime/diagnostics";
  * - `ready_with_warnings` otherwise.
  */
 
-export const LAYOUT_PREPARATION_MODEL_VERSION = "1.0.0" as const;
+export const LAYOUT_PREPARATION_MODEL_VERSION = "1.1.0" as const;
 
 export type LayoutPreparationStatus = "ready" | "ready_with_warnings" | "blocked";
 
@@ -43,6 +43,11 @@ export type LayoutPreparationBlockRecord = {
   ordinalIndex: number;
   childElementCount: number;
   textPresent: boolean;
+  /**
+   * Deterministic excerpt from source subtree text (if any).
+   * - `null` when no non-whitespace text nodes were found.
+   */
+  textExcerpt: string | null;
   assetReferenceIds: string[];
 };
 
@@ -189,6 +194,7 @@ export function createLayoutPreparationModel(preparedSite: PreparedSiteModel): L
           ordinalIndex: child.ordinalIndex,
           childElementCount: child.childElementCount,
           textPresent: child.textPresent,
+          textExcerpt: child.textExcerpt,
           assetReferenceIds: [],
         };
         blocks.push(block);

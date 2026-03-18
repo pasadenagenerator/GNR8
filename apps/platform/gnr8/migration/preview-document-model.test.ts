@@ -80,6 +80,37 @@ test("createPreviewDocument canonicalizes ordering of pages and preview sections
   assert.ok(d1.pages[0]!.preview.html.includes('data-ordinal-index="2"'));
 });
 
+test("preview sections deterministically project visible content (excerpt + fallback)", async () => {
+  const rootDir = fixtureDir("simple-site");
+  const importOutput = await importStaticSite({
+    rootDir,
+    requestId: "req-1",
+    source: { kind: "single-entry-html", entryHtmlPath: "index.html", assetsDirPath: "assets" },
+  });
+
+  const prepared = createPreparedSiteModel({ importOutput, importManifest: createImportManifest(importOutput) });
+  const layout = createLayoutPreparationModel(prepared);
+  const renderOutput = createRenderOutput(layout);
+  const preview = createPreviewDocument(renderOutput);
+
+  assert.equal(preview.pages.length, 1);
+  assert.equal(preview.pages[0]!.previewEligibility, "previewable");
+
+  const html = preview.pages[0]!.preview.html;
+  const sectionCount = (html.match(/data-preview-section-id=/g) ?? []).length;
+  const visibleCount = (html.match(/data-preview-visible=\"true\"/g) ?? []).length;
+  assert.equal(sectionCount, 3);
+  assert.equal(visibleCount, sectionCount);
+
+  // Text-bearing block projects a stable excerpt.
+  assert.ok(html.includes("Hello GNR8"));
+  assert.ok(html.includes('data-preview-text-projection="excerpt"'));
+
+  // Textless blocks render deterministic fallback placeholders.
+  assert.ok(html.includes('data-preview-text-projection="fallback"'));
+  assert.ok(html.includes("[no text] tag=img"));
+});
+
 test("createPreviewDocument emits structured output for degraded/minimal inputs", async () => {
   const rootDir = fixtureDir("simple-site");
   const importOutput = await importStaticSite({

@@ -20,7 +20,22 @@ import { sha256Hex, stableStringify } from "./runtime/diagnostics";
  * - Each `RenderNodeRecord` becomes exactly one stable `<section>` element in the preview markup.
  * - Node/section order is canonical by (`ordinalIndex`, `nodeId`, `sourceBlockId`).
  * - Unsupported node kinds still map to a generic `<section>` container and preserve `data-render-node-kind`.
- * - Preview markup contains only stable skeleton structure + data attributes for traceability; no inferred styling.
+ * - Preview markup contains stable skeleton structure + data attributes for traceability.
+ *
+ * Phase-1 deterministic visible content projection (normative; fixed & replayable):
+ * - Each preview section contains a compact visible header + body to make the preview inspectable by humans.
+ * - Text projection rule:
+ *   - If `RenderNodeRecord.textExcerpt` is non-null, render it as the visible body text.
+ *   - The excerpt is deterministic and derived upstream from text nodes in the source subtree:
+ *     - traverse in document order, normalize whitespace (collapse to single spaces, trim)
+ *     - cap at 160 characters and append "…" when truncated.
+ * - Fallback rule (textless blocks):
+ *   - If `textExcerpt` is null, render a deterministic placeholder including structural facts:
+ *     `"[no text] tag=<sourceTagName> children=<childElementCount> assets=<assetReferenceCount>"`
+ * - Ordering rule:
+ *   - Visible header/body order is fixed (header first, then body) and follows the canonical section order.
+ * - Styling:
+ *   - Minimal inline CSS is embedded only to make sections visible and distinguishable; no semantic styling.
  *
  * Preview status computation rule (normative):
  * - `blocked` if `renderOutput.status === "blocked"` OR there are no previewable pages.
@@ -28,7 +43,7 @@ import { sha256Hex, stableStringify } from "./runtime/diagnostics";
  * - `ready_with_warnings` otherwise.
  */
 
-export const PREVIEW_DOCUMENT_MODEL_VERSION = "1.0.0" as const;
+export const PREVIEW_DOCUMENT_MODEL_VERSION = "1.1.0" as const;
 
 export type PreviewDocumentStatus = "ready" | "ready_with_warnings" | "blocked";
 
@@ -144,6 +159,15 @@ function escapeHtmlAttr(value: string): string {
   return value.replaceAll("&", "&amp;").replaceAll("\"", "&quot;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
 }
 
+function escapeHtmlText(value: string): string {
+  // Stable, minimal escaping for text-node contexts.
+  return value.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
+}
+
+function shortId(id: string): string {
+  return id.length <= 8 ? id : id.slice(0, 8);
+}
+
 function pageEligibilityToPreviewEligibility(eligibility: RenderedPageEligibilityStatus): PreviewPageEligibilityStatus {
   return eligibility === "eligible" ? "previewable" : "not_previewable";
 }
@@ -188,6 +212,21 @@ function buildPreviewMarkupForPage(input: {
   lines.push("<head>");
   lines.push('<meta charset="utf-8">');
   lines.push(`<title>${escapeHtmlAttr(input.page.sourcePath)}</title>`);
+  lines.push("<style>");
+  lines.push("  :root { color-scheme: light; }");
+  lines.push("  body { margin: 16px; font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; }");
+  lines.push("  main { max-width: 980px; margin: 0 auto; }");
+  lines.push(
+    "  section[data-preview-section-id] { border: 1px solid #d1d5db; background: #f9fafb; padding: 10px 12px; margin: 10px 0; }",
+  );
+  lines.push(
+    "  .gnr8-preview-header { font: 12px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; color: #111827; margin: 0 0 6px; }",
+  );
+  lines.push(
+    "  .gnr8-preview-meta { font: 11px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; color: #4b5563; margin: 0; }",
+  );
+  lines.push("  .gnr8-preview-text { font-size: 13px; color: #111827; margin: 8px 0 0; white-space: pre-wrap; }");
+  lines.push("</style>");
   lines.push("</head>");
   lines.push(
     `<body data-preview-page-id="${input.previewPageId}" data-source-rendered-page-id="${escapeHtmlAttr(
@@ -207,6 +246,22 @@ function buildPreviewMarkupForPage(input: {
   } else {
     for (const node of renderedNodesInCanonicalOrder) {
       const previewSectionId = previewSectionIdFor({ sourceRenderedNodeId: node.nodeId });
+      const assetReferenceCount = node.assetReferenceIds.length;
+      const visibleHeader = `#${node.ordinalIndex} <${node.sourceTagName}> (${node.kind})`;
+      const visibleMeta = `node=${shortId(node.nodeId)} block=${shortId(node.sourceBlockId)} children=${String(
+        node.childElementCount,
+      )} assets=${String(assetReferenceCount)} textPresent=${node.textPresent ? "true" : "false"}`;
+
+      const projectedText =
+        node.textExcerpt !== null
+          ? { kind: "excerpt" as const, text: node.textExcerpt }
+          : {
+              kind: "fallback" as const,
+              text: `[no text] tag=${node.sourceTagName} children=${String(node.childElementCount)} assets=${String(
+                assetReferenceCount,
+              )}`,
+            };
+
       // Stable attribute order is intentional for diff friendliness.
       lines.push(
         `<section data-preview-section-id="${previewSectionId}" data-render-node-id="${escapeHtmlAttr(
@@ -217,7 +272,13 @@ function buildPreviewMarkupForPage(input: {
           node.sourceTagName,
         )}" data-text-present="${node.textPresent ? "true" : "false"}" data-child-element-count="${String(
           node.childElementCount,
-        )}" data-asset-reference-count="${String(node.assetReferenceIds.length)}"></section>`,
+        )}" data-asset-reference-count="${String(assetReferenceCount)}">` +
+          `<div data-preview-visible="true" data-preview-text-projection="${projectedText.kind}">` +
+          `<div class="gnr8-preview-header">${escapeHtmlText(visibleHeader)}</div>` +
+          `<div class="gnr8-preview-meta">${escapeHtmlText(visibleMeta)}</div>` +
+          `<div class="gnr8-preview-text">${escapeHtmlText(projectedText.text)}</div>` +
+          `</div>` +
+          `</section>`,
       );
     }
   }
@@ -336,4 +397,3 @@ export function createPreviewDocument(renderOutput: RenderOutput): PreviewDocume
     pageSummaries,
   };
 }
-

@@ -63,3 +63,9 @@ The runner returns all phase-1 artifacts in one structured object (`ValidationRu
 - render `PreviewDocument` pages
 - display the deterministic `ValidationSummary`
 - optionally surface snapshot output paths for inspection
+
+### Preview visibility (phase-1)
+
+`PreviewDocument` preview markup is intentionally minimal, but it is not visually empty:
+- Each preview `<section>` includes a deterministic visible header plus either a compact text excerpt (when available) or a stable structural fallback placeholder.
+- No semantic inference or design reconstruction is performed; the projection is fixed and replayable.

@@ -25,7 +25,7 @@ import { sha256Hex, stableStringify } from "./runtime/diagnostics";
  * - `ready_with_warnings` otherwise.
  */
 
-export const RENDER_OUTPUT_MODEL_VERSION = "1.0.0" as const;
+export const RENDER_OUTPUT_MODEL_VERSION = "1.1.0" as const;
 
 export type RenderOutputStatus = "ready" | "ready_with_warnings" | "blocked";
 
@@ -41,6 +41,11 @@ export type RenderNodeRecord = {
   sourceTagName: string;
   renderTagName: RenderTagName;
   textPresent: boolean;
+  /**
+   * Deterministic excerpt from source subtree text (if any).
+   * - `null` when no non-whitespace text nodes were found.
+   */
+  textExcerpt: string | null;
   childElementCount: number;
   assetReferenceIds: string[];
 };
@@ -187,6 +192,7 @@ export function createRenderOutput(layoutPreparation: LayoutPreparationModel): R
           sourceTagName: block.sourceTagName,
           renderTagName: "section",
           textPresent: block.textPresent,
+          textExcerpt: block.textExcerpt,
           childElementCount: block.childElementCount,
           assetReferenceIds: [...block.assetReferenceIds].slice().sort(stringCmp),
         });
@@ -259,4 +265,3 @@ export function createRenderOutput(layoutPreparation: LayoutPreparationModel): R
     pageSummaries,
   };
 }
-

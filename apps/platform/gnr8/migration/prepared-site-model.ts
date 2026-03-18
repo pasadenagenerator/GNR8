@@ -4,7 +4,7 @@ import type { ImportOutput } from "../import/import-contract";
 import { parse } from "parse5";
 import { sha256Hex } from "./runtime/diagnostics";
 
-export const PREPARED_SITE_MODEL_VERSION = "1.0.0" as const;
+export const PREPARED_SITE_MODEL_VERSION = "1.1.0" as const;
 
 export type PreparedSitePreparationStatus = "ready" | "ready_with_warnings" | "blocked";
 
@@ -106,6 +106,12 @@ export type PreparedDomOutlineElement = {
   nthOfType: number;
   childElementCount: number;
   textPresent: boolean;
+  /**
+   * Deterministic, compact text excerpt derived from the element subtree.
+   * - `null` when no non-whitespace text nodes were found.
+   * - Intended for phase-1 preview visibility only (not design fidelity).
+   */
+  textExcerpt: string | null;
 };
 
 function stringCmp(a: string, b: string): number {
@@ -162,17 +168,46 @@ function countDirectChildElements(el: unknown): number {
   return count;
 }
 
-function subtreeHasNonWhitespaceText(node: unknown): boolean {
-  let has = false;
+const DOM_OUTLINE_TEXT_EXCERPT_MAX_CHARS = 160;
+
+function normalizeWhitespace(input: string): string {
+  // Stable: collapse all whitespace sequences to single spaces and trim ends.
+  return input.replaceAll(/\s+/g, " ").trim();
+}
+
+function escapeTextForExcerpt(raw: unknown): string {
+  return String(raw ?? "");
+}
+
+function computeTextExcerptFromSubtree(node: unknown): string | null {
+  // Deterministic: traverse text nodes in document order, normalize whitespace, cap length.
+  let sawNonWhitespace = false;
+  let collected = "";
+  let done = false;
+
   walkDom(node, (n) => {
-    if (has) return;
+    if (done) return;
     if (!n || typeof n !== "object") return;
     const nodeName = String((n as { nodeName?: unknown }).nodeName ?? "");
     if (nodeName !== "#text") return;
+
     const raw = (n as { value?: unknown; data?: unknown }).value ?? (n as { data?: unknown }).data ?? "";
-    if (String(raw).trim().length > 0) has = true;
+    const rawStr = escapeTextForExcerpt(raw);
+    if (rawStr.trim().length > 0) sawNonWhitespace = true;
+    collected += rawStr;
+
+    // Stop early to keep processing bounded; normalization/truncation happens after.
+    if (collected.length >= DOM_OUTLINE_TEXT_EXCERPT_MAX_CHARS * 2) done = true;
   });
-  return has;
+
+  if (!sawNonWhitespace) return null;
+
+  const normalized = normalizeWhitespace(collected);
+  if (normalized.length <= DOM_OUTLINE_TEXT_EXCERPT_MAX_CHARS) return normalized;
+
+  // Stable truncation marker; avoids embedding large DOM payloads.
+  const head = normalized.slice(0, Math.max(0, DOM_OUTLINE_TEXT_EXCERPT_MAX_CHARS - 1)).trimEnd();
+  return `${head}…`;
 }
 
 function createDomOutlineFromSerializedDom(serializedDom: string): PreparedDocumentDomOutline {
@@ -194,13 +229,15 @@ function createDomOutlineFromSerializedDom(serializedDom: string): PreparedDocum
     const nthOfType = (typeCounts.get(tagName) ?? 0) + 1;
     typeCounts.set(tagName, nthOfType);
 
+    const textExcerpt = computeTextExcerptFromSubtree(el);
     bodyChildElements.push({
       tagName,
       domPath: `html>body>${tagName}:nth-of-type(${nthOfType})`,
       ordinalIndex: i,
       nthOfType,
       childElementCount: countDirectChildElements(el),
-      textPresent: subtreeHasNonWhitespaceText(el),
+      textPresent: textExcerpt !== null,
+      textExcerpt,
     });
   }
 

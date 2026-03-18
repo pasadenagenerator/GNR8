@@ -28,6 +28,19 @@ test("first real-site validation runner executes full phase-1 flow and returns c
   assert.ok(r.validationSummary.counts.renderedPageCount >= 1);
 });
 
+test("real-site-01 preview markup contains deterministic visible section content", async () => {
+  const r = await runFirstRealSiteValidation({ requestId: "req-validation-real-site-01" });
+  const firstPreviewablePage = r.previewDocument.pages.find((p) => p.previewEligibility === "previewable") ?? null;
+  assert.ok(firstPreviewablePage);
+
+  const html = firstPreviewablePage.preview.html;
+  const sectionCount = (html.match(/data-preview-section-id=/g) ?? []).length;
+  const visibleCount = (html.match(/data-preview-visible=\"true\"/g) ?? []).length;
+
+  assert.ok(sectionCount > 0);
+  assert.equal(visibleCount, sectionCount);
+});
+
 test("first real-site validation runner output is deterministic across repeated runs (no snapshots)", async () => {
   const r1 = await runFirstRealSiteValidation({ requestId: "req-validation-real-site-01" });
   const r2 = await runFirstRealSiteValidation({ requestId: "req-validation-real-site-01" });
@@ -94,4 +107,3 @@ test("snapshot writing is deterministic and produces inspectable preview/report 
   assert.equal(previewJson.kind, "preview_document_v1");
   assert.equal(reportJson.kind, "migration_run_report_v1");
 });
-
