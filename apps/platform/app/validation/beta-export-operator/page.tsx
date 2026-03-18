@@ -292,6 +292,12 @@ export default async function BetaExportOperatorPage(props: { searchParams: Prom
         Internal deterministic operator console for controlled landing-page beta exports. Explicit fixtures only. No arbitrary upload, no ZIP,
         no deployment integration.
       </p>
+      <p style={{ margin: "8px 0 0 0", color: "#4b5563" }}>
+        URL import operator flow:{" "}
+        <a href="/validation/url-import-operator" style={{ color: "#1d4ed8" }}>
+          /validation/url-import-operator
+        </a>
+      </p>
 
       <Section title="Run Export">
         <form method="get" action="/validation/beta-export-operator" style={{ display: "flex", gap: 10, alignItems: "end", flexWrap: "wrap" }}>
