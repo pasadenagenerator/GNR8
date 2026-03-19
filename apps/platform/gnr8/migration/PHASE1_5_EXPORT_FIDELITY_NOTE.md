@@ -47,7 +47,8 @@
 - Duplicate stylesheet references are preserved as-is (no dedupe/inference).
 - Local stylesheet references (`relative_local`, `root_relative`, validation `ok` with resolved local path):
   - copied to `<resolvedPath>` (preserved canonical local path; no extra prefix)
-  - rewritten in exported HTML to page-relative bundle path.
+  - rewritten in exported HTML head to explicit page-relative bundle path.
+  - explicit same-directory rule: emit `./<path>` (not `/...`) so hosted preview route nesting remains browser-correct.
 - Root-relative stylesheet references follow the same copy/rewrite path as other local references.
 - Unsupported remote stylesheet references are preserved unchanged in HTML when present and remain visible in warnings.
 - Unsupported data URL stylesheet references are preserved unchanged in HTML when present and remain visible in warnings.
@@ -59,6 +60,7 @@
 - This allows correct local stylesheet rewriting even when non-stylesheet `<link>` elements are not emitted.
 - Anchor rewrite safety:
   - rewrite `<a href>` only when deterministically classified as a copied local image/gallery target
+  - additional residual guard: require deterministic gallery context (`gallery/lightbox/portfolio` path or class/id/rel tokens) and reject `header`/`nav` context anchors
   - preserve `tel:`, `mailto:`, `javascript:`, `#fragment`, ordinary internal navigation links, and ordinary external links unchanged.
 
 ## Degraded Fidelity Behavior

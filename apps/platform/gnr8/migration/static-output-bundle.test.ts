@@ -156,7 +156,7 @@ test("materializeStaticOutputBundle preserves canonical page and asset paths", a
   const pageRecord = bundle.pageFiles.find((p) => p.writeStatus === "written");
   assert.ok(pageRecord);
   const html = await fs.readFile(pageRecord!.absoluteOutputPath, "utf-8");
-  assert.ok(html.includes('<link rel="stylesheet" href="assets/styles.css">'));
+  assert.ok(html.includes('<link rel="stylesheet" href="./assets/styles.css">'));
 
   for (const pageFile of bundle.pageFiles.filter((p) => p.writeStatus === "written")) {
     const stat = await fs.stat(pageFile.absoluteOutputPath);
@@ -209,7 +209,7 @@ test("materializeStaticOutputBundle rewrites root-relative stylesheet links to e
   const pageRecord = bundle.pageFiles.find((p) => p.outputPath === "index.html" && p.writeStatus === "written");
   assert.ok(pageRecord);
   const html = await fs.readFile(pageRecord!.absoluteOutputPath, "utf-8");
-  assert.ok(html.includes('<link rel="stylesheet" href="assets/styles.css">'));
+  assert.ok(html.includes('<link rel="stylesheet" href="./assets/styles.css">'));
 });
 
 test("materializeStaticOutputBundle rewrites image-gallery anchor hrefs to exported copied assets", async () => {
@@ -263,8 +263,11 @@ test("materializeStaticOutputBundle only rewrites safe image/gallery anchors and
   const rootDir = path.join(tmpBase, "site");
   await fs.mkdir(path.join(rootDir, "assets/gallery"), { recursive: true });
   await fs.mkdir(path.join(rootDir, "assets/files"), { recursive: true });
+  await fs.mkdir(path.join(rootDir, "assets/brand"), { recursive: true });
   await fs.writeFile(path.join(rootDir, "assets/gallery/full.webp"), "RIFF", "utf-8");
   await fs.writeFile(path.join(rootDir, "assets/files/brochure.jpg"), "JPG", "utf-8");
+  await fs.writeFile(path.join(rootDir, "assets/brand/logo.svg"), "<svg></svg>", "utf-8");
+  await fs.writeFile(path.join(rootDir, "assets/brand/hero.jpg"), "JPG", "utf-8");
   await fs.writeFile(
     path.join(rootDir, "index.html"),
     [
@@ -277,6 +280,8 @@ test("materializeStaticOutputBundle only rewrites safe image/gallery anchors and
       "  <a href=\"#pricing\">Pricing</a>",
       "  <a href=\"/about\">About</a>",
       "  <a href=\"https://example.com/blog\">Blog</a>",
+      "  <header class=\"site-header\"><a class=\"logo-link\" href=\"/assets/brand/logo.svg\"><img src=\"/assets/brand/logo.svg\" alt=\"Brand\"></a></header>",
+      "  <div class=\"content-card\"><a href=\"/assets/brand/hero.jpg\"><img src=\"/assets/brand/hero.jpg\" alt=\"Hero\"></a></div>",
       "  <a href=\"/assets/files/brochure.jpg\">Brochure download</a>",
       "  <a class=\"gallery-item\" href=\"/assets/gallery/full.webp\"><img src=\"/assets/gallery/full.webp\" alt=\"Gallery\"></a>",
       "</body>",
@@ -310,8 +315,18 @@ test("materializeStaticOutputBundle only rewrites safe image/gallery anchors and
   assert.ok(html.includes('<a href="#pricing">Pricing</a>'));
   assert.ok(html.includes('<a href="/about">About</a>'));
   assert.ok(html.includes('<a href="https://example.com/blog">Blog</a>'));
+  assert.ok(
+    html.includes(
+      '<header class="site-header"><a class="logo-link" href="/assets/brand/logo.svg"><img src="assets/brand/logo.svg" alt="Brand"></a></header>',
+    ),
+  );
+  assert.ok(
+    html.includes('<div class="content-card"><a href="/assets/brand/hero.jpg"><img src="assets/brand/hero.jpg" alt="Hero"></a></div>'),
+  );
   assert.ok(html.includes('<a href="/assets/files/brochure.jpg">Brochure download</a>'));
-  assert.ok(html.includes('<a class="gallery-item" href="assets/gallery/full.webp"><img src="assets/gallery/full.webp" alt="Gallery"></a>'));
+  assert.ok(
+    html.includes('<a class="gallery-item" href="assets/gallery/full.webp"><img src="assets/gallery/full.webp" alt="Gallery"></a>'),
+  );
 
   assert.ok(bundle.rewrites.some((r) => r.fromRawRef === "/assets/gallery/full.webp" && r.toOutputRef === "assets/gallery/full.webp"));
   assert.ok(bundle.diagnostics.warnings.codes.includes("ASSET_REFERENCE_REWRITE_SKIPPED_UNSAFE_ANCHOR"));
@@ -444,7 +459,7 @@ test("unsupported remote/data stylesheet references remain in exported HTML and 
   const pageRecord = bundle.pageFiles.find((p) => p.outputPath === "index.html" && p.writeStatus === "written");
   assert.ok(pageRecord);
   const html = await fs.readFile(pageRecord!.absoluteOutputPath, "utf-8");
-  assert.ok(html.includes('<link rel="stylesheet" href="assets/styles.css">'));
+  assert.ok(html.includes('<link rel="stylesheet" href="./assets/styles.css">'));
   assert.ok(html.includes('<link rel="stylesheet" href="https://cdn.example.invalid/site.css">'));
   assert.ok(html.includes('<link rel="stylesheet" href="data:text/css,body{color:red}">'));
 });

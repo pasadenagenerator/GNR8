@@ -63,7 +63,7 @@ export type StaticOutputBundle = {
     pageOutputPathRule: StaticHtmlRenderArtifact["mapping"]["outputPathRule"];
     assetCopyRule: "preserve_resolved_path_without_extra_prefix_v2";
     assetRewriteRule: "rewrite_supported_local_refs_only_when_needed_v1";
-    stylesheetRewriteRule: "rewrite_preserved_stylesheet_links_for_copied_local_assets_v1";
+    stylesheetRewriteRule: "rewrite_preserved_stylesheet_links_for_copied_local_assets_as_explicit_page_relative_v2";
     remoteAssetRule: "unsupported_remote_assets_preserved_when_present_and_reported_v1";
     dataUrlAssetRule: "unsupported_data_url_assets_preserved_when_present_and_reported_v1";
     missingAssetRule: "missing_local_assets_reported_not_thrown_v1";
@@ -215,6 +215,81 @@ function hasDescendantTag(root: unknown, tagName: string): boolean {
   return found;
 }
 
+function hasSelfOrAncestorTag(root: unknown, tagName: string): boolean {
+  const lowerTagName = tagName.toLowerCase();
+  let current: unknown = root;
+  while (current && typeof current === "object") {
+    if (isElement(current) && current.tagName.toLowerCase() === lowerTagName) return true;
+    current = (current as { parentNode?: unknown }).parentNode;
+  }
+  return false;
+}
+
+function getAttrValue(node: HtmlElementNode, attrName: string): string | null {
+  const lower = attrName.toLowerCase();
+  const attrs = Array.isArray(node.attrs) ? node.attrs : [];
+  for (const attr of attrs) {
+    if (String(attr.name ?? "").toLowerCase() === lower) return String(attr.value ?? "");
+  }
+  return null;
+}
+
+const GALLERY_CONTEXT_TOKEN_SET = new Set<string>([
+  "fancybox",
+  "gallery",
+  "glightbox",
+  "lightbox",
+  "photoswipe",
+  "portfolio",
+  "thumb",
+  "thumbnail",
+  "zoom",
+]);
+
+function tokenizeLower(value: string): string[] {
+  return value
+    .toLowerCase()
+    .split(/[^a-z0-9]+/g)
+    .filter(Boolean);
+}
+
+function hasGalleryContextTokens(node: HtmlElementNode): boolean {
+  let current: unknown = node;
+  while (current && typeof current === "object") {
+    if (isElement(current)) {
+      const classAttr = getAttrValue(current, "class");
+      const idAttr = getAttrValue(current, "id");
+      const relAttr = getAttrValue(current, "rel");
+      const value = [classAttr, idAttr, relAttr].filter((v) => typeof v === "string" && v.trim().length > 0).join(" ");
+      if (value) {
+        const tokens = tokenizeLower(value);
+        for (const token of tokens) {
+          if (GALLERY_CONTEXT_TOKEN_SET.has(token)) return true;
+        }
+      }
+    }
+    current = (current as { parentNode?: unknown }).parentNode;
+  }
+  return false;
+}
+
+function hasGalleryLikeHrefPath(rawRef: string): boolean {
+  try {
+    const resolved = new URL(rawRef.trim(), "https://example.invalid");
+    const pathTokens = tokenizeLower(resolved.pathname);
+    return pathTokens.some((token) => token === "gallery" || token === "lightbox" || token === "portfolio");
+  } catch {
+    return false;
+  }
+}
+
+function toExplicitPageRelativeRef(rawRef: string): string {
+  const trimmed = rawRef.trim();
+  if (!trimmed) return trimmed;
+  if (trimmed.startsWith("./") || trimmed.startsWith("../") || trimmed.startsWith("/")) return trimmed;
+  return `./${trimmed}`;
+}
+
 const IMAGE_FILE_EXTENSION_SET = new Set<string>([
   ".apng",
   ".avif",
@@ -266,7 +341,11 @@ function isSafeAnchorReferenceRewriteTarget(input: {
   if (input.ref.validationStatus !== "ok" || input.ref.resolvedPath === null) return false;
   if (isExplicitlyPreservedHrefClass(input.rawHref)) return false;
   if (!isImageLikeHrefRef(input.rawHref)) return false;
-  return hasDescendantTag(input.node, "img") || hasDescendantTag(input.node, "picture");
+  if (!hasDescendantTag(input.node, "img") && !hasDescendantTag(input.node, "picture")) return false;
+  if (hasSelfOrAncestorTag(input.node, "header") || hasSelfOrAncestorTag(input.node, "nav")) return false;
+  if (hasGalleryContextTokens(input.node)) return true;
+  if (hasGalleryLikeHrefPath(input.rawHref)) return true;
+  return false;
 }
 
 function rewriteHtmlAssetReferences(input: {
@@ -330,12 +409,17 @@ function rewriteHtmlAssetReferences(input: {
     }
     if (!ref) return;
 
-    const nextRefValue = input.rewrittenRefValueByReferenceId.get(ref.id);
+    let nextRefValue = input.rewrittenRefValueByReferenceId.get(ref.id);
     if (!nextRefValue || attr.value === nextRefValue) return;
 
     if (attr.value !== ref.rawRef) {
       warningCodes.add("ASSET_REFERENCE_REWRITE_SKIPPED_RAW_MISMATCH");
       return;
+    }
+
+    if (ref.tag === "link" && ref.attribute === "href" && ref.assetKind === "stylesheet") {
+      nextRefValue = toExplicitPageRelativeRef(nextRefValue);
+      if (attr.value === nextRefValue) return;
     }
 
     if (ref.tag === "a" && ref.attribute === "href") {
@@ -655,7 +739,7 @@ export async function materializeStaticOutputBundle(input: MaterializeStaticOutp
       pageOutputPathRule: input.staticHtmlArtifact.mapping.outputPathRule,
       assetCopyRule: "preserve_resolved_path_without_extra_prefix_v2",
       assetRewriteRule: "rewrite_supported_local_refs_only_when_needed_v1",
-      stylesheetRewriteRule: "rewrite_preserved_stylesheet_links_for_copied_local_assets_v1",
+      stylesheetRewriteRule: "rewrite_preserved_stylesheet_links_for_copied_local_assets_as_explicit_page_relative_v2",
       remoteAssetRule: "unsupported_remote_assets_preserved_when_present_and_reported_v1",
       dataUrlAssetRule: "unsupported_data_url_assets_preserved_when_present_and_reported_v1",
       missingAssetRule: "missing_local_assets_reported_not_thrown_v1",

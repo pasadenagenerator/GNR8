@@ -292,6 +292,7 @@ test("url import hardens image/style assets and filters non-visual script/jsonld
   assert.ok(!exportedHtml.includes("Google Tag Manager (noscript)"));
   assert.ok(!exportedHtml.includes('src="/assets/'));
   assert.ok(!exportedHtml.includes('href="/assets/'));
+  assert.ok(exportedHtml.includes('href="./assets/stylesheet/'));
   assert.ok(exportedHtml.includes('src="assets/image/'));
 
   const exportedFiles = listFilesRecursively(outputRootDir).map((abs) => abs.replaceAll(path.sep, "/"));

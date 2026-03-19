@@ -186,7 +186,9 @@ Asset copy strategy:
 Asset reference rewrite behavior:
 - Rewrite only supported local references that were copied into the bundle.
 - Rewrite target is page-relative path from the page output directory to `<resolvedPath>`.
-- Anchor `<a href>` rewrites are guarded: rewrite only safe gallery/image anchors (image-like href + image/picture descendant + copied local target).
+- Head stylesheet rewrite rule: emit explicit page-relative hrefs (`./...` for same-directory targets; never root-relative `/...`).
+- Anchor `<a href>` rewrites are guarded: rewrite only safe gallery/image anchors (image-like href + image/picture descendant + copied local target + deterministic gallery context).
+- Header/nav/logo-wrapper style anchors without deterministic gallery context remain unchanged.
 - Preserve `tel:`, `mailto:`, `javascript:`, `#fragment`, and ordinary navigation/content links unchanged.
 - If no rewrite is required, HTML is written unchanged.
 

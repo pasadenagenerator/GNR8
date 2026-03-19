@@ -145,6 +145,8 @@ test("preview route serves exported html and copied assets from persistent stora
       assert.equal(htmlRes.status, 200);
       const html = await htmlRes.text();
       assert.ok(html.includes("<html"));
+      assert.ok(!html.includes('href="/assets/'));
+      assert.match(html, /href="(?:\.\/)?assets\//);
 
       const copiedAsset = result.materialization.assetFiles.find((asset) => asset.writeStatus === "copied" && asset.outputPath);
       assert.ok(copiedAsset?.outputPath);
