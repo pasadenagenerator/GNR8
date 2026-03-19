@@ -256,6 +256,52 @@ test("createStaticHtmlRenderArtifact preserves only deterministic markup/attribu
   assert.ok(!html.includes("<script"));
 });
 
+test("createStaticHtmlRenderArtifact excludes script/json-ld/analytics text from visible fallback excerpts", async () => {
+  const tmpRoot = await fs.mkdtemp(path.join(os.tmpdir(), "gnr8-static-html-noise-filter-"));
+  await fs.mkdir(path.join(tmpRoot, "assets"), { recursive: true });
+  await fs.writeFile(path.join(tmpRoot, "assets/styles.css"), "body { margin: 0; }\n", "utf-8");
+  await fs.writeFile(
+    path.join(tmpRoot, "index.html"),
+    [
+      "<!doctype html>",
+      "<html lang=\"en\">",
+      "<head>",
+      "  <meta charset=\"utf-8\">",
+      "  <title>Noise Filter Fixture</title>",
+      "  <link rel=\"stylesheet\" href=\"./assets/styles.css\">",
+      "</head>",
+      "<body>",
+      "  <div id=\"hero\">",
+      "    <script type=\"application/ld+json\">{\"@context\":\"https://schema.org\",\"name\":\"Leak\"}</script>",
+      "    <script>window.dataLayer = window.dataLayer || []; gtag('config', 'G-LEAK');</script>",
+      "    <noscript>Google Tag Manager (noscript)</noscript>",
+      "  </div>",
+      "  <div><p>Visible headline</p></div>",
+      "</body>",
+      "</html>",
+      "",
+    ].join("\n"),
+    "utf-8",
+  );
+
+  const importOutput = await importStaticSite({
+    rootDir: tmpRoot,
+    requestId: "req-static-html-noise-filter",
+    source: { kind: "single-entry-html", entryHtmlPath: "index.html", assetsDirPath: "assets" },
+  });
+  const prepared = createPreparedSiteModel({ importOutput, importManifest: createImportManifest(importOutput) });
+  const layout = createLayoutPreparationModel(prepared);
+  const renderOutput = createRenderOutput(layout);
+  const artifact = createStaticHtmlRenderArtifact(renderOutput);
+
+  const html = artifact.pages[0]!.htmlDocument!.html;
+  assert.ok(!html.includes("schema.org"));
+  assert.ok(!html.includes("window.dataLayer"));
+  assert.ok(!html.includes("gtag("));
+  assert.ok(!html.includes("Google Tag Manager (noscript)"));
+  assert.ok(html.includes("Visible headline"));
+});
+
 test("createStaticHtmlRenderArtifact keeps degraded/minimal non-renderable states structured", async () => {
   const rootDir = fixtureDir("simple-site");
   const importOutput = await importStaticSite({

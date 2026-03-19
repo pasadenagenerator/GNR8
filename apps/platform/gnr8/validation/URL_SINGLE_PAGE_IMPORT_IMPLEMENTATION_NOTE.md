@@ -26,9 +26,31 @@
     - direct `<link rel="stylesheet" href>`
     - direct `<img src>`
     - direct `<script src>` (static file references only)
+    - image candidate URLs from `<img|source srcset>` and `<img data-srcset>`
+    - lazy-image fallback attrs when `<img src>` is missing: `data-src`, `data-original`, `data-lazy-src`
+    - one-level stylesheet-linked local assets from CSS `url(...)` inside fetched direct stylesheets
   - No recursive crawling and no browser JS execution.
   - Resolved asset URLs are mapped to deterministic local paths under `assets/`.
   - Collision handling is deterministic: append `-2`, `-3`, ... on path conflicts.
+
+- Deterministic asset-fidelity hardening rule (v1.1):
+  - Standard image `src`:
+    - resolve against entry URL, fetch when `http(s)`, rewrite to `/<snapshot-local-asset-path>` when fetched.
+  - Root-relative + relative paths:
+    - both are resolved with URL semantics against the entry URL and treated equivalently for deterministic fetch/rewrite.
+  - Protocol-relative URLs (`//host/path`):
+    - resolved against entry URL scheme (for example `https:`), then fetched/re-written under the same deterministic rule.
+  - `srcset` policy:
+    - parse candidate URLs deterministically, fetch each candidate independently, rewrite each successfully fetched candidate URL in-place, preserve descriptors (`1x`, `2x`, `640w`, etc.).
+    - failed/unsupported candidates remain original and are diagnosed.
+  - Lazy-image attribute policy:
+    - supported fallback attrs are `data-src`, `data-original`, `data-lazy-src` when `src` is absent/empty.
+    - fetched fallback is rewritten and also promoted to `src` for static usability.
+  - Stylesheet-linked local assets:
+    - fetch one level of CSS `url(...)` references from fetched direct stylesheets when same-origin/local to entry URL.
+    - rewrite CSS `url(...)` to deterministic stylesheet-relative local paths; remote/off-origin CSS URLs are preserved and diagnosed as unsupported-reference info.
+  - Degraded handling:
+    - unresolved/failing assets remain non-fatal, stay visible via structured diagnostics and fetch-manifest statuses.
 
 - Operator trigger path:
   - API: `POST /api/validation/url-import`
@@ -43,5 +65,5 @@
   - Single page only (no multi-page crawl).
   - No JS rendering/browser automation.
   - No auth/session flows.
-  - No CSS `url(...)` recursive asset pulling.
+  - CSS asset pulling is intentionally one-level only (`url(...)` in direct stylesheets); no recursive crawler and no full CSS parser.
   - Non-fetchable assets are surfaced as structured diagnostics and can remain degraded-but-runnable.

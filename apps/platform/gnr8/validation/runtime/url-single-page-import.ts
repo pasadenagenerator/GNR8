@@ -8,10 +8,18 @@ import type { JsonValue } from "../../import/import-contract";
 import { stableStringify } from "../../migration/runtime/diagnostics";
 import { resolveUrlImportSnapshotRootDirAbs } from "./url-import-snapshot-root";
 
-export const URL_SINGLE_PAGE_IMPORT_VERSION = "1.0.0" as const;
+export const URL_SINGLE_PAGE_IMPORT_VERSION = "1.1.0" as const;
 
 export type UrlImportExecutionScope = {
-  includes: readonly ["entry_html", "direct_stylesheets", "direct_images", "direct_scripts"];
+  includes: readonly [
+    "entry_html",
+    "direct_stylesheets",
+    "direct_images",
+    "direct_scripts",
+    "image_srcset_candidates",
+    "lazy_image_fallback_attrs",
+    "stylesheet_linked_local_assets",
+  ];
   excludes: readonly ["multi_page_crawl", "browser_js_execution", "auth_fetch", "form_submission", "robots_bypass"];
 };
 
@@ -39,11 +47,22 @@ export type UrlImportDiagnostic = {
   details: JsonValue | null;
 };
 
-export type UrlImportAssetKind = "stylesheet" | "image" | "script";
+export type UrlImportAssetKind = "stylesheet" | "image" | "script" | "style_asset";
+
+export type UrlImportAssetTag = "link" | "img" | "script" | "source";
+
+export type UrlImportAssetAttribute =
+  | "href"
+  | "src"
+  | "srcset"
+  | "data-src"
+  | "data-srcset"
+  | "data-original"
+  | "data-lazy-src";
 
 export type UrlImportFetchManifestEntry = {
-  tag: "link" | "img" | "script";
-  attribute: "href" | "src";
+  tag: UrlImportAssetTag;
+  attribute: UrlImportAssetAttribute;
   occurrence: number;
   rawRef: string;
   resolvedUrl: string | null;
@@ -95,17 +114,24 @@ type FetchLike = (input: string | URL | Request, init?: RequestInit) => Promise<
 
 type ParsedAssetRef = {
   key: string;
-  tag: "link" | "img" | "script";
-  attribute: "href" | "src";
+  tag: UrlImportAssetTag;
+  attribute: UrlImportAssetAttribute;
   occurrence: number;
   rawRef: string;
   resolvedUrl: string | null;
   assetKind: UrlImportAssetKind;
-  urlHash12: string | null;
 };
 
 const FETCH_SCOPE: UrlImportExecutionScope = {
-  includes: ["entry_html", "direct_stylesheets", "direct_images", "direct_scripts"],
+  includes: [
+    "entry_html",
+    "direct_stylesheets",
+    "direct_images",
+    "direct_scripts",
+    "image_srcset_candidates",
+    "lazy_image_fallback_attrs",
+    "stylesheet_linked_local_assets",
+  ],
   excludes: ["multi_page_crawl", "browser_js_execution", "auth_fetch", "form_submission", "robots_bypass"],
 };
 
@@ -246,6 +272,7 @@ function isHtmlResponse(contentType: string | null): boolean {
 function defaultExtensionForAssetKind(assetKind: UrlImportAssetKind): string {
   if (assetKind === "stylesheet") return ".css";
   if (assetKind === "script") return ".js";
+  if (assetKind === "style_asset") return ".bin";
   return ".bin";
 }
 
@@ -307,6 +334,123 @@ function resolvePathCollisions(
   return assigned;
 }
 
+const LAZY_IMAGE_ATTR_PRIORITY: readonly UrlImportAssetAttribute[] = ["data-src", "data-original", "data-lazy-src"] as const;
+const SRCSET_ATTRS: readonly UrlImportAssetAttribute[] = ["srcset", "data-srcset"] as const;
+
+function isStylesheetKind(assetKind: UrlImportAssetKind): boolean {
+  return assetKind === "stylesheet";
+}
+
+function resolveAssetUrl(input: {
+  rawRef: string;
+  baseUrl: URL;
+  diagnostics: UrlImportDiagnostic[];
+  diagnosticContext: { tag: UrlImportAssetTag; attribute: UrlImportAssetAttribute; surface: string };
+}): string | null {
+  try {
+    const resolved = new URL(input.rawRef, input.baseUrl);
+    if (resolved.protocol !== "http:" && resolved.protocol !== "https:") {
+      input.diagnostics.push(
+        createDiagnostic({
+          severity: "warning",
+          code: "ASSET_FETCH_UNSUPPORTED_SCHEME",
+          message: "Asset reference uses unsupported URL scheme",
+          targetUrl: resolved.toString(),
+          details: {
+            tag: input.diagnosticContext.tag,
+            attribute: input.diagnosticContext.attribute,
+            rawRef: input.rawRef,
+            scheme: resolved.protocol,
+            surface: input.diagnosticContext.surface,
+          },
+        }),
+      );
+      return null;
+    }
+    resolved.hash = "";
+    return resolved.toString();
+  } catch {
+    input.diagnostics.push(
+      createDiagnostic({
+        severity: "warning",
+        code: "ASSET_URL_PARSE_FAILED",
+        message: "Unable to resolve asset reference URL",
+        targetUrl: null,
+        details: {
+          tag: input.diagnosticContext.tag,
+          attribute: input.diagnosticContext.attribute,
+          rawRef: input.rawRef,
+          surface: input.diagnosticContext.surface,
+        },
+      }),
+    );
+    return null;
+  }
+}
+
+function parseSrcsetTokens(rawValue: string): Array<{ url: string; descriptor: string }> {
+  const parts = rawValue
+    .split(",")
+    .map((p) => p.trim())
+    .filter(Boolean);
+  return parts.map((part) => {
+    const firstWs = part.search(/\s/);
+    if (firstWs === -1) return { url: part, descriptor: "" };
+    return { url: part.slice(0, firstWs).trim(), descriptor: part.slice(firstWs).trim() };
+  });
+}
+
+function buildSrcsetValue(tokens: Array<{ url: string; descriptor: string }>): string {
+  return tokens
+    .map((token) => (token.descriptor.length > 0 ? `${token.url} ${token.descriptor}` : token.url))
+    .join(", ");
+}
+
+function rewriteCssUrlFunctions(input: {
+  cssText: string;
+  stylesheetLocalPath: string;
+  baseUrl: URL;
+  localPathByUrl: Map<string, string>;
+  diagnostics: UrlImportDiagnostic[];
+}): string {
+  const regex = /url\(\s*(['"]?)([^'")]+)\1\s*\)/gi;
+  const replacements: Array<{ start: number; end: number; replacement: string }> = [];
+  let match: RegExpExecArray | null = null;
+
+  while ((match = regex.exec(input.cssText)) !== null) {
+    const full = match[0];
+    const quote = match[1] ?? "";
+    const rawUrl = (match[2] ?? "").trim();
+    if (!rawUrl || rawUrl.startsWith("data:") || rawUrl.startsWith("#")) continue;
+
+    const resolvedUrl = resolveAssetUrl({
+      rawRef: rawUrl,
+      baseUrl: input.baseUrl,
+      diagnostics: input.diagnostics,
+      diagnosticContext: { tag: "link", attribute: "href", surface: "stylesheet_url" },
+    });
+    if (!resolvedUrl) continue;
+    const targetLocalPath = input.localPathByUrl.get(resolvedUrl);
+    if (!targetLocalPath) continue;
+
+    const rel = path.posix.relative(path.posix.dirname(input.stylesheetLocalPath), targetLocalPath);
+    const rewrittenUrl = rel.length > 0 ? rel : path.posix.basename(targetLocalPath);
+    replacements.push({
+      start: match.index,
+      end: match.index + full.length,
+      replacement: `url(${quote}${rewrittenUrl}${quote})`,
+    });
+  }
+
+  if (replacements.length === 0) return input.cssText;
+  let out = input.cssText;
+  for (let i = replacements.length - 1; i >= 0; i--) {
+    const r = replacements[i]!;
+    out = `${out.slice(0, r.start)}${r.replacement}${out.slice(r.end)}`;
+  }
+  return out;
+}
+
 function getAttr(node: unknown, name: string): string | null {
   if (!node || typeof node !== "object") return null;
   const attrs = (node as { attrs?: { name?: string; value?: string }[] }).attrs;
@@ -358,12 +502,46 @@ function collectAssetRefs(input: {
   const refs: ParsedAssetRef[] = [];
   const occurrenceCounter = new Map<string, number>();
 
+  function nextOccurrence(tag: UrlImportAssetTag, attribute: UrlImportAssetAttribute): number {
+    const occurrenceKey = `${tag}:${attribute}`;
+    const occurrence = occurrenceCounter.get(occurrenceKey) ?? 0;
+    occurrenceCounter.set(occurrenceKey, occurrence + 1);
+    return occurrence;
+  }
+
+  function pushRef(args: {
+    tag: UrlImportAssetTag;
+    attribute: UrlImportAssetAttribute;
+    rawRef: string;
+    assetKind: UrlImportAssetKind;
+    surface: string;
+  }): void {
+    const trimmed = args.rawRef.trim();
+    if (!trimmed) return;
+    const occurrence = nextOccurrence(args.tag, args.attribute);
+    const resolvedUrl = resolveAssetUrl({
+      rawRef: trimmed,
+      baseUrl: input.entryUrl,
+      diagnostics: input.diagnostics,
+      diagnosticContext: { tag: args.tag, attribute: args.attribute, surface: args.surface },
+    });
+    refs.push({
+      key: `${args.tag}:${args.attribute}:${occurrence}`,
+      tag: args.tag,
+      attribute: args.attribute,
+      occurrence,
+      rawRef: trimmed,
+      resolvedUrl,
+      assetKind: args.assetKind,
+    });
+  }
+
   walkDom(input.document, (node) => {
     if (!isElement(node)) return;
-    const tag = node.tagName.toLowerCase();
+    const tag = node.tagName.toLowerCase() as UrlImportAssetTag | string;
     const rel = getAttr(node, "rel");
     const assetKind = assetKindFromNode({ tag, rel });
-    if (!assetKind) {
+    if (!assetKind && tag !== "source") {
       if (tag === "link") {
         const href = getAttr(node, "href");
         if (href && href.trim()) {
@@ -381,53 +559,54 @@ function collectAssetRefs(input: {
       return;
     }
 
-    const attribute = tag === "link" ? "href" : "src";
-    const rawRef = getAttr(node, attribute);
-    if (!rawRef || !rawRef.trim()) return;
-
-    const occurrenceKey = `${tag}:${attribute}`;
-    const occurrence = occurrenceCounter.get(occurrenceKey) ?? 0;
-    occurrenceCounter.set(occurrenceKey, occurrence + 1);
-
-    let resolvedUrl: string | null = null;
-    try {
-      const resolved = new URL(rawRef, input.entryUrl);
-      if (resolved.protocol !== "http:" && resolved.protocol !== "https:") {
-        input.diagnostics.push(
-          createDiagnostic({
-            severity: "warning",
-            code: "ASSET_FETCH_UNSUPPORTED_SCHEME",
-            message: "Asset reference uses unsupported URL scheme",
-            targetUrl: resolved.toString(),
-            details: { tag, attribute, rawRef, scheme: resolved.protocol },
-          }),
-        );
-      } else {
-        resolved.hash = "";
-        resolvedUrl = resolved.toString();
-      }
-    } catch {
-      input.diagnostics.push(
-        createDiagnostic({
-          severity: "warning",
-          code: "ASSET_URL_PARSE_FAILED",
-          message: "Unable to resolve asset reference URL",
-          targetUrl: null,
-          details: { tag, attribute, rawRef },
-        }),
-      );
+    if (tag === "link") {
+      const href = getAttr(node, "href");
+      if (!href || !href.trim()) return;
+      pushRef({ tag: "link", attribute: "href", rawRef: href, assetKind, surface: "direct" });
+      return;
     }
 
-    refs.push({
-      key: `${tag}:${attribute}:${occurrence}`,
-      tag: tag as "link" | "img" | "script",
-      attribute: attribute as "href" | "src",
-      occurrence,
-      rawRef,
-      resolvedUrl,
-      assetKind,
-      urlHash12: resolvedUrl ? sha256Hex(resolvedUrl).slice(0, 12) : null,
-    });
+    if (tag === "script") {
+      const src = getAttr(node, "src");
+      if (!src || !src.trim()) return;
+      pushRef({ tag: "script", attribute: "src", rawRef: src, assetKind, surface: "direct" });
+      return;
+    }
+
+    if (tag !== "img" && tag !== "source") return;
+    const primarySrc = getAttr(node, "src");
+    if (primarySrc && primarySrc.trim()) {
+      pushRef({ tag: tag as UrlImportAssetTag, attribute: "src", rawRef: primarySrc, assetKind: "image", surface: "direct" });
+    } else if (tag === "img") {
+      for (const lazyAttr of LAZY_IMAGE_ATTR_PRIORITY) {
+        const lazyRef = getAttr(node, lazyAttr);
+        if (!lazyRef || !lazyRef.trim()) continue;
+        pushRef({
+          tag: "img",
+          attribute: lazyAttr,
+          rawRef: lazyRef,
+          assetKind: "image",
+          surface: "lazy_fallback",
+        });
+        break;
+      }
+    }
+
+    for (const srcsetAttr of SRCSET_ATTRS) {
+      const rawSrcset = getAttr(node, srcsetAttr);
+      if (!rawSrcset || !rawSrcset.trim()) continue;
+      const tokens = parseSrcsetTokens(rawSrcset);
+      for (const token of tokens) {
+        if (!token.url) continue;
+        pushRef({
+          tag: tag as UrlImportAssetTag,
+          attribute: srcsetAttr,
+          rawRef: token.url,
+          assetKind: "image",
+          surface: "srcset_candidate",
+        });
+      }
+    }
   });
 
   return refs;
@@ -599,10 +778,11 @@ export async function importPublicSinglePageUrlToSnapshot(input: {
     const fetchOutcomeByUrl = new Map<string, FetchOutcome>();
     const uniqueUrls = [...localPathByUrl.keys()].sort((a, b) => a.localeCompare(b));
 
-    for (const resolvedUrl of uniqueUrls) {
-      const localPath = localPathByUrl.get(resolvedUrl);
-      if (!localPath) continue;
-
+    async function fetchAndStoreAsset(
+      resolvedUrl: string,
+      localPath: string,
+      messageLabel: "Direct asset fetch" | "Stylesheet-linked asset fetch",
+    ): Promise<FetchOutcome> {
       try {
         const response = await fetcher(resolvedUrl, {
           method: "GET",
@@ -619,18 +799,17 @@ export async function importPublicSinglePageUrlToSnapshot(input: {
             createDiagnostic({
               severity: "warning",
               code: "ASSET_FETCH_NON_OK",
-              message: "Direct asset fetch returned non-success status",
+              message: `${messageLabel} returned non-success status`,
               targetUrl: resolvedUrl,
               details: { status: response.status, statusText: response.statusText, localPath },
             }),
           );
-          fetchOutcomeByUrl.set(resolvedUrl, {
+          return {
             fetchStatus: "fetch_failed",
             httpStatus: response.status,
             contentType,
             byteLength: null,
-          });
-          continue;
+          };
         }
 
         const bytes = new Uint8Array(await response.arrayBuffer());
@@ -638,18 +817,18 @@ export async function importPublicSinglePageUrlToSnapshot(input: {
         fs.mkdirSync(path.dirname(absPath), { recursive: true });
         fs.writeFileSync(absPath, bytes);
 
-        fetchOutcomeByUrl.set(resolvedUrl, {
+        return {
           fetchStatus: "fetched",
           httpStatus: response.status,
           contentType,
           byteLength: bytes.byteLength,
-        });
+        };
       } catch (error) {
         diagnostics.push(
           createDiagnostic({
             severity: "warning",
             code: "ASSET_FETCH_FAILED",
-            message: "Direct asset fetch failed",
+            message: `${messageLabel} failed`,
             targetUrl: resolvedUrl,
             details: {
               error: String((error as Error)?.message ?? error),
@@ -657,51 +836,247 @@ export async function importPublicSinglePageUrlToSnapshot(input: {
             },
           }),
         );
-        fetchOutcomeByUrl.set(resolvedUrl, {
+        return {
           fetchStatus: "fetch_failed",
           httpStatus: null,
           contentType: null,
           byteLength: null,
-        });
+        };
       }
     }
+
+    for (const resolvedUrl of uniqueUrls) {
+      const localPath = localPathByUrl.get(resolvedUrl);
+      if (!localPath) continue;
+      const outcome = await fetchAndStoreAsset(resolvedUrl, localPath, "Direct asset fetch");
+      fetchOutcomeByUrl.set(resolvedUrl, outcome);
+    }
+
+    const stylesheetRefs = refs.filter((ref) => isStylesheetKind(ref.assetKind) && ref.resolvedUrl !== null);
+    const stylesheetLinkedRefs: ParsedAssetRef[] = [];
+
+    for (const stylesheetRef of stylesheetRefs.sort((a, b) => (a.resolvedUrl ?? "").localeCompare(b.resolvedUrl ?? ""))) {
+      const stylesheetUrl = stylesheetRef.resolvedUrl;
+      if (!stylesheetUrl) continue;
+      const stylesheetLocalPath = localPathByUrl.get(stylesheetUrl);
+      const stylesheetOutcome = fetchOutcomeByUrl.get(stylesheetUrl);
+      if (!stylesheetLocalPath || !stylesheetOutcome || stylesheetOutcome.fetchStatus !== "fetched") continue;
+
+      const stylesheetAbsPath = path.resolve(snapshotRootDirAbs, stylesheetLocalPath);
+      let cssText = "";
+      try {
+        cssText = fs.readFileSync(stylesheetAbsPath, "utf8");
+      } catch {
+        continue;
+      }
+
+      const regex = /url\(\s*(['"]?)([^'")]+)\1\s*\)/gi;
+      let match: RegExpExecArray | null = null;
+      let cssRefOccurrence = 0;
+      while ((match = regex.exec(cssText)) !== null) {
+        const rawCssRef = String(match[2] ?? "").trim();
+        if (!rawCssRef || rawCssRef.startsWith("data:") || rawCssRef.startsWith("#")) continue;
+        const resolvedCssUrl = resolveAssetUrl({
+          rawRef: rawCssRef,
+          baseUrl: new URL(stylesheetUrl),
+          diagnostics,
+          diagnosticContext: { tag: "link", attribute: "href", surface: "stylesheet_url" },
+        });
+        if (!resolvedCssUrl) continue;
+        if (new URL(resolvedCssUrl).origin !== normalizedUrl.origin) {
+          diagnostics.push(
+            createDiagnostic({
+              severity: "info",
+              code: "ASSET_REFERENCE_UNSUPPORTED",
+              message: "Skipped stylesheet-linked non-local asset reference",
+              targetUrl: resolvedCssUrl,
+              details: { stylesheetUrl, rawRef: rawCssRef },
+            }),
+          );
+          continue;
+        }
+        stylesheetLinkedRefs.push({
+          key: `link:href:${stylesheetRef.occurrence}:css-url:${cssRefOccurrence}`,
+          tag: "link",
+          attribute: "href",
+          occurrence: cssRefOccurrence,
+          rawRef: rawCssRef,
+          resolvedUrl: resolvedCssUrl,
+          assetKind: "style_asset",
+        });
+        cssRefOccurrence += 1;
+      }
+    }
+
+    const allRefs = [...refs, ...stylesheetLinkedRefs];
+    const usedPaths = new Map<string, string>();
+    for (const [url, localPath] of [...localPathByUrl.entries()].sort((a, b) => a[0].localeCompare(b[0]))) {
+      usedPaths.set(localPath, url);
+    }
+
+    const stylesheetLinkedUrls = [...new Set(stylesheetLinkedRefs.map((r) => r.resolvedUrl).filter((v): v is string => !!v))].sort((a, b) =>
+      a.localeCompare(b),
+    );
+    for (const resolvedUrl of stylesheetLinkedUrls) {
+      if (localPathByUrl.has(resolvedUrl)) continue;
+      const exemplar = stylesheetLinkedRefs.find((r) => r.resolvedUrl === resolvedUrl);
+      const assetKind = exemplar?.assetKind ?? "style_asset";
+      const baseCandidate = computeLocalPathCandidate({ resolvedUrl, assetKind });
+      let candidate = baseCandidate;
+      let suffix = 1;
+      while (usedPaths.has(candidate) && usedPaths.get(candidate) !== resolvedUrl) {
+        suffix += 1;
+        const ext = path.posix.extname(baseCandidate);
+        const stem = ext.length > 0 ? baseCandidate.slice(0, -ext.length) : baseCandidate;
+        candidate = `${stem}-${suffix}${ext}`;
+      }
+      if (candidate !== baseCandidate) {
+        diagnostics.push(
+          createDiagnostic({
+            severity: "warning",
+            code: "ASSET_COLLISION_RESOLVED",
+            message: "Deterministic asset path collision resolved with numeric suffix",
+            targetUrl: resolvedUrl,
+            details: {
+              baseCandidate,
+              assignedPath: candidate,
+            },
+          }),
+        );
+      }
+      localPathByUrl.set(resolvedUrl, candidate);
+      usedPaths.set(candidate, resolvedUrl);
+    }
+
+    for (const ref of stylesheetLinkedRefs) {
+      if (!ref.resolvedUrl) continue;
+      if (fetchOutcomeByUrl.has(ref.resolvedUrl)) continue;
+      const localPath = localPathByUrl.get(ref.resolvedUrl);
+      if (!localPath) continue;
+      const outcome = await fetchAndStoreAsset(ref.resolvedUrl, localPath, "Stylesheet-linked asset fetch");
+      fetchOutcomeByUrl.set(ref.resolvedUrl, outcome);
+    }
+
+    for (const stylesheetRef of stylesheetRefs.sort((a, b) => (a.resolvedUrl ?? "").localeCompare(b.resolvedUrl ?? ""))) {
+      const stylesheetUrl = stylesheetRef.resolvedUrl;
+      if (!stylesheetUrl) continue;
+      const stylesheetLocalPath = localPathByUrl.get(stylesheetUrl);
+      const stylesheetOutcome = fetchOutcomeByUrl.get(stylesheetUrl);
+      if (!stylesheetLocalPath || !stylesheetOutcome || stylesheetOutcome.fetchStatus !== "fetched") continue;
+
+      const stylesheetAbsPath = path.resolve(snapshotRootDirAbs, stylesheetLocalPath);
+      let cssText = "";
+      try {
+        cssText = fs.readFileSync(stylesheetAbsPath, "utf8");
+      } catch {
+        continue;
+      }
+      const rewrittenCss = rewriteCssUrlFunctions({
+        cssText,
+        stylesheetLocalPath,
+        baseUrl: new URL(stylesheetUrl),
+        localPathByUrl,
+        diagnostics,
+      });
+      if (rewrittenCss !== cssText) fs.writeFileSync(stylesheetAbsPath, rewrittenCss, "utf8");
+    }
+
+    const refsByKey = new Map<string, ParsedAssetRef>();
+    for (const ref of allRefs) refsByKey.set(ref.key, ref);
 
     const occurrenceCounter = new Map<string, number>();
     walkDom(document, (node) => {
       if (!isElement(node)) return;
       const tag = node.tagName.toLowerCase();
-      if (tag !== "link" && tag !== "img" && tag !== "script") return;
-      const attribute = tag === "link" ? "href" : "src";
+      if (tag !== "link" && tag !== "img" && tag !== "script" && tag !== "source") return;
+
       const rel = getAttr(node, "rel");
-      const assetKind = assetKindFromNode({ tag, rel });
-      if (!assetKind) return;
-      const rawRef = getAttr(node, attribute);
-      if (!rawRef || !rawRef.trim()) return;
+      const kind = tag === "source" ? "image" : assetKindFromNode({ tag, rel });
+      if (!kind && tag !== "img" && tag !== "source") return;
 
-      const keyRoot = `${tag}:${attribute}`;
-      const occurrence = occurrenceCounter.get(keyRoot) ?? 0;
-      occurrenceCounter.set(keyRoot, occurrence + 1);
-      const lookupKey = `${tag}:${attribute}:${occurrence}`;
-      const parsedRef = refs.find((ref) => ref.key === lookupKey);
+      const attrsToHandle: UrlImportAssetAttribute[] = [];
+      if (tag === "link") attrsToHandle.push("href");
+      else if (tag === "script") attrsToHandle.push("src");
+      else {
+        attrsToHandle.push("src");
+        for (const srcsetAttr of SRCSET_ATTRS) attrsToHandle.push(srcsetAttr);
+        for (const lazyAttr of LAZY_IMAGE_ATTR_PRIORITY) attrsToHandle.push(lazyAttr);
+      }
 
-      const resolvedUrl = parsedRef?.resolvedUrl ?? null;
-      const localPath = resolvedUrl ? localPathByUrl.get(resolvedUrl) ?? null : null;
-      if (localPath) setAttr(node, attribute, `/${toPosixPath(localPath)}`);
+      for (const attribute of attrsToHandle) {
+        const rawRef = getAttr(node, attribute);
+        if (!rawRef || !rawRef.trim()) continue;
 
-      const outcome = resolvedUrl ? fetchOutcomeByUrl.get(resolvedUrl) : null;
-      fetchManifest.push({
-        tag: tag as "link" | "img" | "script",
-        attribute: attribute as "href" | "src",
-        occurrence,
-        rawRef,
-        resolvedUrl,
-        localPath,
-        assetKind,
-        fetchStatus: outcome?.fetchStatus ?? (resolvedUrl ? "fetch_failed" : "unsupported"),
-        httpStatus: outcome?.httpStatus ?? null,
-        contentType: outcome?.contentType ?? null,
-        byteLength: outcome?.byteLength ?? null,
-      });
+        if (attribute === "srcset" || attribute === "data-srcset") {
+          const tokens = parseSrcsetTokens(rawRef);
+          const rewrittenTokens = tokens.map((token) => {
+            const resolvedUrl = resolveAssetUrl({
+              rawRef: token.url,
+              baseUrl: normalizedUrl,
+              diagnostics: [],
+              diagnosticContext: { tag: tag as UrlImportAssetTag, attribute, surface: "srcset_rewrite" },
+            });
+            const localPath = resolvedUrl ? localPathByUrl.get(resolvedUrl) : null;
+            if (localPath) return { url: `/${toPosixPath(localPath)}`, descriptor: token.descriptor };
+            return token;
+          });
+          const rewritten = buildSrcsetValue(rewrittenTokens);
+          if (rewritten.length > 0) setAttr(node, attribute, rewritten);
+
+          for (let i = 0; i < tokens.length; i++) {
+            const token = tokens[i]!;
+            const keyRoot = `${tag}:${attribute}`;
+            const occurrence = occurrenceCounter.get(keyRoot) ?? 0;
+            occurrenceCounter.set(keyRoot, occurrence + 1);
+            const parsedRef = refsByKey.get(`${tag}:${attribute}:${occurrence}`);
+            const resolvedUrl = parsedRef?.resolvedUrl ?? null;
+            const localPath = resolvedUrl ? localPathByUrl.get(resolvedUrl) ?? null : null;
+            const outcome = resolvedUrl ? fetchOutcomeByUrl.get(resolvedUrl) : null;
+            fetchManifest.push({
+              tag: tag as UrlImportAssetTag,
+              attribute,
+              occurrence,
+              rawRef: token.url,
+              resolvedUrl,
+              localPath,
+              assetKind: "image",
+              fetchStatus: outcome?.fetchStatus ?? (resolvedUrl ? "fetch_failed" : "unsupported"),
+              httpStatus: outcome?.httpStatus ?? null,
+              contentType: outcome?.contentType ?? null,
+              byteLength: outcome?.byteLength ?? null,
+            });
+          }
+          continue;
+        }
+
+        const keyRoot = `${tag}:${attribute}`;
+        const occurrence = occurrenceCounter.get(keyRoot) ?? 0;
+        occurrenceCounter.set(keyRoot, occurrence + 1);
+        const parsedRef = refsByKey.get(`${tag}:${attribute}:${occurrence}`);
+
+        const resolvedUrl = parsedRef?.resolvedUrl ?? null;
+        const localPath = resolvedUrl ? localPathByUrl.get(resolvedUrl) ?? null : null;
+        if (localPath) setAttr(node, attribute, `/${toPosixPath(localPath)}`);
+        if (tag === "img" && attribute !== "src" && localPath) {
+          const imgSrc = getAttr(node, "src");
+          if (!imgSrc || !imgSrc.trim()) setAttr(node, "src", `/${toPosixPath(localPath)}`);
+        }
+
+        const outcome = resolvedUrl ? fetchOutcomeByUrl.get(resolvedUrl) : null;
+        fetchManifest.push({
+          tag: tag as UrlImportAssetTag,
+          attribute,
+          occurrence,
+          rawRef,
+          resolvedUrl,
+          localPath,
+          assetKind: parsedRef?.assetKind ?? (tag === "script" ? "script" : tag === "link" ? "stylesheet" : "image"),
+          fetchStatus: outcome?.fetchStatus ?? (resolvedUrl ? "fetch_failed" : "unsupported"),
+          httpStatus: outcome?.httpStatus ?? null,
+          contentType: outcome?.contentType ?? null,
+          byteLength: outcome?.byteLength ?? null,
+        });
+      }
     });
 
     rewrittenHtml = serialize(document);

@@ -176,6 +176,33 @@ function walkDom(node: unknown, visit: (n: unknown) => void): void {
   }
 }
 
+const NON_VISUAL_TEXT_EXCERPT_DROP_SUBTREE_TAGS = new Set<string>([
+  "script",
+  "style",
+  "noscript",
+  "template",
+  "iframe",
+  "object",
+  "canvas",
+  "svg",
+]);
+
+function walkDomForVisibleText(node: unknown, visit: (n: unknown) => void): void {
+  const stack: unknown[] = [node];
+  while (stack.length > 0) {
+    const current = stack.pop();
+    if (!current || typeof current !== "object") continue;
+    visit(current);
+    if (isElement(current) && NON_VISUAL_TEXT_EXCERPT_DROP_SUBTREE_TAGS.has(current.tagName.toLowerCase())) continue;
+    const childNodes = (current as { childNodes?: unknown[] }).childNodes;
+    if (Array.isArray(childNodes)) {
+      for (let i = childNodes.length - 1; i >= 0; i--) stack.push(childNodes[i]);
+    }
+    const content = (current as { content?: unknown }).content;
+    if (content && typeof content === "object") stack.push(content);
+  }
+}
+
 function findFirstElementByTagName(root: unknown, tagNameLower: string): unknown | null {
   let found: unknown | null = null;
   walkDom(root, (n) => {
@@ -348,7 +375,7 @@ function computeTextExcerptFromSubtree(node: unknown): string | null {
   let collected = "";
   let done = false;
 
-  walkDom(node, (n) => {
+  walkDomForVisibleText(node, (n) => {
     if (done) return;
     if (!n || typeof n !== "object") return;
     const nodeName = String((n as { nodeName?: unknown }).nodeName ?? "");

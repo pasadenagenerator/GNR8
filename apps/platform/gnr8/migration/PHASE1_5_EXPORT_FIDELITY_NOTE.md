@@ -30,6 +30,11 @@
   - `<script>`, `<style>`, and other active/embed media containers
   - event handler attributes (`on*`)
   - non-whitelisted attributes (for example `style`, `data-*`, `loading`)
+- Non-visual noise filtering:
+  - `textExcerpt` generation now skips text from non-visual subtree tags:
+    - `script`, `style`, `noscript`, `template`, `iframe`, `object`, `canvas`, `svg`
+  - This prevents script/JSON-LD/analytics payload text from entering visible exported fallback `<p>` content.
+  - Rule is conservative and structural: only listed non-visual containers are excluded; unusual visible content outside those tags is retained.
 - Source order:
   - Preserved nodes remain in original document order within each source block.
 - Fallback behavior:

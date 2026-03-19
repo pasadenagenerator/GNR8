@@ -82,20 +82,30 @@ test("url import snapshot generation remains deterministic for identical URL + r
         "<html><head>",
         "<link rel=\"stylesheet\" href=\"/styles/site.css\">",
         "</head><body>",
-        "<img src=\"images/logo.png\">",
-        "<script src=\"https://cdn.example.net/app.js\"></script>",
+        "<img data-src=\"images/logo.png\" srcset=\"images/logo.png 1x, //example.com/images/logo@2x.png 2x\">",
+        "<script src=\"//cdn.example.net/app.js\"></script>",
         "</body></html>",
       ].join(""),
     },
     "https://example.com/styles/site.css": {
       status: 200,
       headers: { "content-type": "text/css" },
-      body: "body { color: #111; }",
+      body: "body { color: #111; background-image:url('../images/bg.jpg'); }",
     },
     "https://example.com/images/logo.png": {
       status: 200,
       headers: { "content-type": "image/png" },
       body: new Uint8Array([137, 80, 78, 71]),
+    },
+    "https://example.com/images/logo@2x.png": {
+      status: 200,
+      headers: { "content-type": "image/png" },
+      body: new Uint8Array([137, 80, 78, 71, 1]),
+    },
+    "https://example.com/images/bg.jpg": {
+      status: 200,
+      headers: { "content-type": "image/jpeg" },
+      body: new Uint8Array([255, 216, 255, 224]),
     },
     "https://cdn.example.net/app.js": {
       status: 200,
@@ -182,6 +192,91 @@ test("url import operator runs imported snapshot through pipeline and materializ
   assert.equal(response.result.executionResult.executionMode, "materialize");
   assert.equal(response.result.executionResult.materialization.outputRootPath, outputRootDir);
   assert.ok(response.result.executionResult.status === "executed" || response.result.executionResult.status === "executed_with_warnings");
+});
+
+test("url import hardens image/style assets and filters non-visual script/jsonld noise from exported markup", async () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "gnr8-url-import-fidelity-noise-"));
+  const outputRootDir = path.resolve(tmp, "bundle-out");
+
+  const response = await runUrlImportOperatorFlow(
+    {
+      sourceUrl: "https://fidelity.example.com/",
+      executionMode: "materialize",
+    },
+    {
+      snapshotRootDirAbs: path.resolve(tmp, "snapshots"),
+      outputRootDir,
+      fetchImpl: mockFetchFromTable({
+        "https://fidelity.example.com/": {
+          status: 200,
+          headers: { "content-type": "text/html" },
+          body: [
+            "<!doctype html>",
+            "<html><head>",
+            "<link rel=\"stylesheet\" href=\"/assets/site.css\">",
+            "</head><body>",
+            "<div id=\"hero\">",
+            "<script type=\"application/ld+json\">{\"@context\":\"https://schema.org\",\"name\":\"Leak\"}</script>",
+            "<script>window.dataLayer = window.dataLayer || []; gtag('config', 'G-LEAK');</script>",
+            "<noscript>Google Tag Manager (noscript)</noscript>",
+            "<img data-src=\"/assets/lazy-hero.jpg\" srcset=\"/assets/hero-1x.jpg 1x, //fidelity.example.com/assets/hero-2x.jpg 2x\" alt=\"Hero\">",
+            "</div>",
+            "</body></html>",
+          ].join(""),
+        },
+        "https://fidelity.example.com/assets/site.css": {
+          status: 200,
+          headers: { "content-type": "text/css" },
+          body: ".hero{background-image:url('../img/bg.jpg')}",
+        },
+        "https://fidelity.example.com/assets/lazy-hero.jpg": {
+          status: 200,
+          headers: { "content-type": "image/jpeg" },
+          body: new Uint8Array([255, 216, 255, 224, 0]),
+        },
+        "https://fidelity.example.com/assets/hero-1x.jpg": {
+          status: 200,
+          headers: { "content-type": "image/jpeg" },
+          body: new Uint8Array([255, 216, 255, 224, 1]),
+        },
+        "https://fidelity.example.com/assets/hero-2x.jpg": {
+          status: 200,
+          headers: { "content-type": "image/jpeg" },
+          body: new Uint8Array([255, 216, 255, 224, 2]),
+        },
+        "https://fidelity.example.com/assets/img/bg.jpg": {
+          status: 200,
+          headers: { "content-type": "image/jpeg" },
+          body: new Uint8Array([255, 216, 255, 224, 3]),
+        },
+      }),
+    },
+  );
+
+  assert.equal(response.ok, true);
+  if (!response.ok) return;
+
+  const snapshotHtml = fs.readFileSync(response.snapshot.entryHtmlPathAbs, "utf8");
+  assert.ok(snapshotHtml.includes('src="/assets/image/'));
+  assert.ok(snapshotHtml.includes('srcset="/assets/image/'));
+
+  const snapshotStylesheetAbs = listFilesRecursively(response.snapshot.snapshotRootDirAbs).find((abs) =>
+    abs.replaceAll(path.sep, "/").includes("/assets/stylesheet/"),
+  );
+  assert.ok(snapshotStylesheetAbs);
+  const snapshotStylesheet = fs.readFileSync(snapshotStylesheetAbs!, "utf8");
+  assert.ok(snapshotStylesheet.includes("../style_asset/"));
+
+  const fetchManifestAttributes = response.snapshot.fetchManifest.map((entry) => entry.attribute);
+  assert.ok(fetchManifestAttributes.includes("data-src"));
+  assert.ok(fetchManifestAttributes.includes("srcset"));
+
+  const exportedIndexAbs = path.resolve(outputRootDir, "index.html");
+  const exportedHtml = fs.readFileSync(exportedIndexAbs, "utf8");
+  assert.ok(!exportedHtml.includes("schema.org"));
+  assert.ok(!exportedHtml.includes("window.dataLayer"));
+  assert.ok(!exportedHtml.includes("gtag("));
+  assert.ok(!exportedHtml.includes("Google Tag Manager (noscript)"));
 });
 
 test("non-fatal asset fetch issues remain visible and do not unnecessarily block", async () => {
