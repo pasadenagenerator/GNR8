@@ -95,6 +95,12 @@ type SupabasePreviewStorageConfig = {
   bucket: string;
 };
 
+type StylesheetTargetMatcher = {
+  exactCanonicalToOutputPath: Map<string, string>;
+  aliasCanonicalToOutputPath: Map<string, string>;
+  ambiguousAliasCanonicalTargets: Set<string>;
+};
+
 function isMaterializationReady(status: ExecutionMaterializationStatus): boolean {
   return status === "materialized" || status === "materialized_with_warnings";
 }
@@ -266,7 +272,97 @@ function toExplicitPageRelativeRef(ref: string): string {
   return `./${ref}`;
 }
 
-function maybeNormalizePersistedHtml(input: { relativePath: string; bytes: Buffer; bundleRelativePaths: Set<string> }): Buffer {
+function decodePathSegments(rawPath: string): string {
+  return rawPath
+    .split("/")
+    .map((segment) => {
+      try {
+        return decodeURIComponent(segment);
+      } catch {
+        return segment;
+      }
+    })
+    .join("/");
+}
+
+function normalizeStylesheetTargetPath(rawPath: string): string | null {
+  const trimmed = rawPath.trim();
+  if (!trimmed) return null;
+
+  const decoded = decodePathSegments(trimmed).replaceAll("\\", "/");
+  const collapsed = decoded.replace(/\/{2,}/g, "/");
+  const normalized = path.posix.normalize(collapsed);
+  const withoutLeadingRelative = normalized.replace(/^(?:\.\/)+/, "");
+  const withoutLeadingSlash = withoutLeadingRelative.replace(/^\/+/, "");
+  if (!withoutLeadingSlash || withoutLeadingSlash === "." || withoutLeadingSlash === ".." || withoutLeadingSlash.startsWith("../")) return null;
+  return withoutLeadingSlash;
+}
+
+function registerStylesheetTargetAlias(input: {
+  canonicalToOutputPath: Map<string, string>;
+  ambiguousCanonicalTargets: Set<string>;
+  canonicalTarget: string;
+  outputPath: string;
+}): void {
+  const existing = input.canonicalToOutputPath.get(input.canonicalTarget);
+  if (!existing) {
+    input.canonicalToOutputPath.set(input.canonicalTarget, input.outputPath);
+    return;
+  }
+  if (existing !== input.outputPath) input.ambiguousCanonicalTargets.add(input.canonicalTarget);
+}
+
+function canonicalAliasCandidatesForCopiedStylesheetPath(outputPath: string): string[] {
+  const canonical = normalizeStylesheetTargetPath(outputPath);
+  if (!canonical) return [];
+
+  const aliases = new Set<string>();
+  const segments = canonical.split("/").filter(Boolean);
+
+  // Allow matching when one interior path segment differs between source and copied output.
+  for (let i = 1; i < segments.length - 1; i++) {
+    const collapsedSegments = [...segments.slice(0, i), ...segments.slice(i + 1)];
+    const alias = normalizeStylesheetTargetPath(collapsedSegments.join("/"));
+    if (alias) aliases.add(alias);
+  }
+
+  return [...aliases].sort((a, b) => a.localeCompare(b));
+}
+
+function buildStylesheetTargetMatcher(input: { bundleRelativePaths: Set<string>; materialization: ExecutionMaterialization }): StylesheetTargetMatcher {
+  const exactCanonicalToOutputPath = new Map<string, string>();
+  const aliasCanonicalToOutputPath = new Map<string, string>();
+  const ambiguousAliasCanonicalTargets = new Set<string>();
+
+  const copiedStylesheetCandidates = new Map<string, string>();
+  for (const asset of input.materialization.assetFiles) {
+    if (asset.writeStatus !== "copied") continue;
+    if (!asset.outputPath) continue;
+    if (path.posix.extname(asset.outputPath).toLowerCase() !== ".css") continue;
+    copiedStylesheetCandidates.set(asset.outputPath, asset.outputPath);
+  }
+  for (const relPath of input.bundleRelativePaths) {
+    if (path.posix.extname(relPath).toLowerCase() !== ".css") continue;
+    if (!copiedStylesheetCandidates.has(relPath)) copiedStylesheetCandidates.set(relPath, relPath);
+  }
+
+  for (const outputPath of [...copiedStylesheetCandidates.values()].sort((a, b) => a.localeCompare(b))) {
+    const canonicalOutputPath = normalizeStylesheetTargetPath(outputPath);
+    if (canonicalOutputPath) exactCanonicalToOutputPath.set(canonicalOutputPath, outputPath);
+    for (const alias of canonicalAliasCandidatesForCopiedStylesheetPath(outputPath)) {
+      registerStylesheetTargetAlias({
+        canonicalToOutputPath: aliasCanonicalToOutputPath,
+        ambiguousCanonicalTargets: ambiguousAliasCanonicalTargets,
+        canonicalTarget: alias,
+        outputPath,
+      });
+    }
+  }
+
+  return { exactCanonicalToOutputPath, aliasCanonicalToOutputPath, ambiguousAliasCanonicalTargets };
+}
+
+function maybeNormalizePersistedHtml(input: { relativePath: string; bytes: Buffer; stylesheetMatcher: StylesheetTargetMatcher }): Buffer {
   const lowerExt = path.posix.extname(input.relativePath.toLowerCase());
   if (lowerExt !== ".html" && lowerExt !== ".htm") return input.bytes;
 
@@ -293,12 +389,34 @@ function maybeNormalizePersistedHtml(input: { relativePath: string; bytes: Buffe
     if (trimmedHref.startsWith("//")) return;
 
     const [pathPart, suffix = ""] = trimmedHref.split(/([?#].*)/, 2);
-    const targetRel = pathPart.replace(/^\/+/, "");
-    if (!targetRel) return;
-    if (!input.bundleRelativePaths.has(targetRel)) return;
+    const normalizedTarget = normalizeStylesheetTargetPath(pathPart);
+    if (!normalizedTarget) return;
+    const exactOutputPath = input.stylesheetMatcher.exactCanonicalToOutputPath.get(normalizedTarget);
+    if (exactOutputPath) {
+      const relative = path.posix.relative(pageDir === "." ? "" : pageDir, exactOutputPath);
+      const rewritten = toExplicitPageRelativeRef(relative.length > 0 ? relative : path.posix.basename(exactOutputPath));
+      if (rewritten === trimmedHref) return;
+      setAttrValue(node, "href", `${rewritten}${suffix}`);
+      changed = true;
+      return;
+    }
 
-    const relative = path.posix.relative(pageDir === "." ? "" : pageDir, targetRel);
-    const rewritten = toExplicitPageRelativeRef(relative.length > 0 ? relative : path.posix.basename(targetRel));
+    if (input.stylesheetMatcher.ambiguousAliasCanonicalTargets.has(normalizedTarget)) {
+      console.warn(
+        `[preview.persisted_stylesheet_rewrite] skipped ambiguous stylesheet target; page=${input.relativePath}; href=${trimmedHref}; normalizedTarget=${normalizedTarget}`,
+      );
+      return;
+    }
+    const copiedStylesheetOutputPath = input.stylesheetMatcher.aliasCanonicalToOutputPath.get(normalizedTarget);
+    if (!copiedStylesheetOutputPath) {
+      console.warn(
+        `[preview.persisted_stylesheet_rewrite] unmatched stylesheet target; page=${input.relativePath}; href=${trimmedHref}; normalizedTarget=${normalizedTarget}`,
+      );
+      return;
+    }
+
+    const relative = path.posix.relative(pageDir === "." ? "" : pageDir, copiedStylesheetOutputPath);
+    const rewritten = toExplicitPageRelativeRef(relative.length > 0 ? relative : path.posix.basename(copiedStylesheetOutputPath));
     if (rewritten === trimmedHref) return;
     setAttrValue(node, "href", `${rewritten}${suffix}`);
     changed = true;
@@ -344,12 +462,20 @@ function getFilesystemPersistentRoot(): string | null {
   return path.resolve(root);
 }
 
-async function publishBundleToPersistentStorage(input: { outputRootPath: string; executionPlanId: string }): Promise<PersistentPublishResult> {
+async function publishBundleToPersistentStorage(input: {
+  outputRootPath: string;
+  executionPlanId: string;
+  materialization: ExecutionMaterialization;
+}): Promise<PersistentPublishResult> {
   const bundleFiles = await listBundleFilesRecursively(input.outputRootPath);
   if (bundleFiles.length === 0) {
     return { ok: false, reasonCode: "PERSISTENT_STORAGE_UPLOAD_FAILED" };
   }
   const bundleRelativePaths = new Set(bundleFiles.map((absPath) => path.relative(input.outputRootPath, absPath).replaceAll(path.sep, "/")));
+  const stylesheetMatcher = buildStylesheetTargetMatcher({
+    bundleRelativePaths,
+    materialization: input.materialization,
+  });
 
   const storageRootKey = previewRootKeyForExecutionPlan(input.executionPlanId);
   const supabaseConfig = getSupabasePreviewStorageConfig();
@@ -366,7 +492,7 @@ async function publishBundleToPersistentStorage(input: { outputRootPath: string;
         const bytes = maybeNormalizePersistedHtml({
           relativePath: rel,
           bytes: await fs.readFile(absPath),
-          bundleRelativePaths,
+          stylesheetMatcher,
         });
         const { error } = await bucket.upload(objectKey, bytes, {
           upsert: true,
@@ -397,7 +523,7 @@ async function publishBundleToPersistentStorage(input: { outputRootPath: string;
         const bytes = maybeNormalizePersistedHtml({
           relativePath: relPosix,
           bytes: await fs.readFile(absPath),
-          bundleRelativePaths,
+          stylesheetMatcher,
         });
         await fs.writeFile(destinationAbs, bytes);
       }
@@ -506,6 +632,7 @@ export async function buildExecutionPreviewHostingWithPersistence(input: {
   const publish = await publishBundleToPersistentStorage({
     outputRootPath: input.materialization.outputRootPath,
     executionPlanId: input.executionPlanId,
+    materialization: input.materialization,
   });
 
   if (publish.ok) {

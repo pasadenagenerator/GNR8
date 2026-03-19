@@ -362,6 +362,120 @@ test("persisted preview stylesheet normalization is attribute-order agnostic and
   await rmIfExists(persistentRoot);
 });
 
+test("persisted preview stylesheet normalization matches equivalent local path forms and warns for unmatched targets", async () => {
+  const persistentRoot = await fs.mkdtemp(path.join(os.tmpdir(), "gnr8-preview-persistent-stylesheet-canonical-match-"));
+  const tmp = await fs.mkdtemp(path.join(os.tmpdir(), "gnr8-preview-persistent-stylesheet-canonical-snapshot-"));
+
+  const sourceUrl = "https://persisted-style-canonical.example.com/";
+  const fetchTable = {
+    [sourceUrl]: {
+      status: 200,
+      headers: { "content-type": "text/html" },
+      body: [
+        "<!doctype html>",
+        "<html><head>",
+        '<link rel="stylesheet" href="/assets/main.css">',
+        '<link rel="stylesheet" href="/assets/./main.css?theme=dark">',
+        '<link rel="stylesheet" href="/assets//sub/../main.css#hash">',
+        '<link rel="stylesheet" href="/assets/%6Dain.css">',
+        '<link rel="stylesheet" href="/assets/missing.css">',
+        '</head><body><h1>Persisted</h1><a href="/assets/non-style.svg">not stylesheet</a></body></html>',
+      ].join(""),
+    },
+    "https://persisted-style-canonical.example.com/assets/main.css": {
+      status: 200,
+      headers: { "content-type": "text/css" },
+      body: "body{font-family:sans-serif}",
+    },
+    "https://persisted-style-canonical.example.com/assets/./main.css": {
+      status: 200,
+      headers: { "content-type": "text/css" },
+      body: "body{font-family:sans-serif}",
+    },
+    "https://persisted-style-canonical.example.com/assets//sub/../main.css": {
+      status: 200,
+      headers: { "content-type": "text/css" },
+      body: "body{font-family:sans-serif}",
+    },
+    "https://persisted-style-canonical.example.com/assets/%6Dain.css": {
+      status: 200,
+      headers: { "content-type": "text/css" },
+      body: "body{font-family:sans-serif}",
+    },
+  } satisfies Record<string, MockResponseDef>;
+
+  const capturedWarnings: string[] = [];
+  const originalWarn = console.warn;
+  console.warn = (...args: unknown[]) => {
+    capturedWarnings.push(args.map((x) => String(x)).join(" "));
+  };
+
+  try {
+    await withEnv(
+      {
+        GNR8_PREVIEW_PERSISTENT_FS_ROOT: persistentRoot,
+        SUPABASE_SERVICE_ROLE_KEY: undefined,
+        NEXT_PUBLIC_SUPABASE_URL: undefined,
+      },
+      async () => {
+        const response = await runUrlImportOperatorFlow(
+          {
+            sourceUrl,
+            executionMode: "materialize",
+          },
+          {
+            requestId: "task-40c-canonical-stylesheet-match",
+            snapshotRootDirAbs: path.resolve(tmp, "snapshots"),
+            fetchImpl: mockFetchFromTable(fetchTable),
+          },
+        );
+
+        assert.equal(response.ok, true);
+        if (!response.ok) return;
+
+        const preview = response.result.executionResult.previewHosting;
+        assert.equal(preview.previewStorageKind, "filesystem_object_storage");
+        assert.ok(preview.previewStorageKey);
+        assert.ok(preview.previewKey);
+        const copiedStylesheetOutputPaths = response.result.executionResult.materialization.assetFiles
+          .filter((asset) => asset.writeStatus === "copied" && typeof asset.outputPath === "string" && asset.outputPath.endsWith(".css"))
+          .map((asset) => asset.outputPath as string)
+          .sort((a, b) => a.localeCompare(b));
+
+        const persistedIndexAbs = path.resolve(persistentRoot, preview.previewStorageKey!, "index.html");
+        const persistedHtml = await fs.readFile(persistedIndexAbs, "utf8");
+
+        await rmIfExists(response.result.executionResult.materialization.outputRootPath);
+
+        const served = await getPreviewByOutput(new Request("http://localhost/preview"), {
+          params: Promise.resolve({ previewKey: preview.previewKey!, previewPath: undefined }),
+        });
+        assert.equal(served.status, 200);
+        const servedHtml = await served.text();
+
+        for (const html of [persistedHtml, servedHtml]) {
+          assert.ok(!html.includes('href="/assets/main.css"'));
+          assert.ok(!html.includes('href="/assets/./main.css?theme=dark"'));
+          assert.ok(!html.includes('href="/assets//sub/../main.css#hash"'));
+          assert.ok(!html.includes('href="/assets/%6Dain.css"'));
+          assert.match(html, /href="(?:\.\/)?assets\/stylesheet\//);
+          assert.match(html, /href="\.\/assets\/stylesheet\//);
+          for (const copiedStylesheetOutputPath of copiedStylesheetOutputPaths) {
+            assert.ok(!html.includes(`href="/${copiedStylesheetOutputPath}"`));
+          }
+          assert.ok(html.includes('<a href="/assets/non-style.svg">not stylesheet</a>'));
+        }
+      },
+    );
+  } finally {
+    console.warn = originalWarn;
+    await rmIfExists(tmp);
+    await rmIfExists(persistentRoot);
+  }
+
+  assert.ok(capturedWarnings.some((line) => line.includes("[preview.persisted_stylesheet_rewrite] unmatched stylesheet target")));
+});
+
 test("missing persistent preview bundles fail gracefully with structured not-found payload", async () => {
   const persistentRoot = await fs.mkdtemp(path.join(os.tmpdir(), "gnr8-preview-persistent-missing-root-"));
 
