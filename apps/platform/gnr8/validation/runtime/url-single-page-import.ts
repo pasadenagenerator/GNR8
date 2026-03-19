@@ -562,6 +562,7 @@ function collectAssetRefs(input: {
     if (tag === "link") {
       const href = getAttr(node, "href");
       if (!href || !href.trim()) return;
+      if (!assetKind) return;
       pushRef({ tag: "link", attribute: "href", rawRef: href, assetKind, surface: "direct" });
       return;
     }
@@ -569,6 +570,7 @@ function collectAssetRefs(input: {
     if (tag === "script") {
       const src = getAttr(node, "src");
       if (!src || !src.trim()) return;
+      if (!assetKind) return;
       pushRef({ tag: "script", attribute: "src", rawRef: src, assetKind, surface: "direct" });
       return;
     }
