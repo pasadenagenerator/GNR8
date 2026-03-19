@@ -276,7 +276,6 @@ function maybeNormalizePersistedHtml(input: { relativePath: string; bytes: Buffe
   } catch {
     return input.bytes;
   }
-  if (!html.includes('href="/')) return input.bytes;
 
   const doc = parse(html);
   const pageDir = path.posix.dirname(input.relativePath);

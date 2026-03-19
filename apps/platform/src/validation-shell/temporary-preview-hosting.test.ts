@@ -255,6 +255,113 @@ test("persisted preview storage normalizes root-relative stylesheet hrefs in upl
   await rmIfExists(persistentRoot);
 });
 
+test("persisted preview stylesheet normalization is attribute-order agnostic and deterministic across repeated runs", async () => {
+  const persistentRoot = await fs.mkdtemp(path.join(os.tmpdir(), "gnr8-preview-persistent-stylesheet-attr-order-"));
+  const tmp = await fs.mkdtemp(path.join(os.tmpdir(), "gnr8-preview-persistent-stylesheet-attr-snapshot-"));
+
+  const sourceUrl = "https://persisted-style-order.example.com/";
+  const fetchTable = {
+    [sourceUrl]: {
+      status: 200,
+      headers: { "content-type": "text/html" },
+      body: [
+        "<!doctype html>",
+        "<html><head>",
+        '<link rel="stylesheet" href="/assets/a.css">',
+        "<link href='/assets/b.css' rel='stylesheet'>",
+        "<link href=/assets/c.css rel=stylesheet media=all>",
+        '<link rel="icon" href="/assets/favicon.ico">',
+        "</head><body><h1>Persisted</h1></body></html>",
+      ].join(""),
+    },
+    "https://persisted-style-order.example.com/assets/a.css": {
+      status: 200,
+      headers: { "content-type": "text/css" },
+      body: "body{margin:0}",
+    },
+    "https://persisted-style-order.example.com/assets/b.css": {
+      status: 200,
+      headers: { "content-type": "text/css" },
+      body: "body{padding:0}",
+    },
+    "https://persisted-style-order.example.com/assets/c.css": {
+      status: 200,
+      headers: { "content-type": "text/css" },
+      body: "body{line-height:1.2}",
+    },
+    "https://persisted-style-order.example.com/assets/favicon.ico": {
+      status: 200,
+      headers: { "content-type": "image/x-icon" },
+      body: Uint8Array.from([0, 0, 1, 0]),
+    },
+  } satisfies Record<string, MockResponseDef>;
+
+  async function runAndRead(): Promise<{ persistedHtml: string; servedHtml: string; previewStorageKey: string }> {
+    const response = await runUrlImportOperatorFlow(
+      {
+        sourceUrl,
+        executionMode: "materialize",
+      },
+      {
+        requestId: "task-40b-attr-order",
+        snapshotRootDirAbs: path.resolve(tmp, "snapshots"),
+        fetchImpl: mockFetchFromTable(fetchTable),
+      },
+    );
+
+    assert.equal(response.ok, true);
+    if (!response.ok) throw new Error("unexpected_failure");
+
+    const preview = response.result.executionResult.previewHosting;
+    assert.equal(preview.previewStorageKind, "filesystem_object_storage");
+    assert.ok(preview.previewStorageKey);
+    assert.ok(preview.previewKey);
+
+    const persistedIndexAbs = path.resolve(persistentRoot, preview.previewStorageKey!, "index.html");
+    const persistedHtml = await fs.readFile(persistedIndexAbs, "utf8");
+
+    await rmIfExists(response.result.executionResult.materialization.outputRootPath);
+
+    const served = await getPreviewByOutput(new Request("http://localhost/preview"), {
+      params: Promise.resolve({ previewKey: preview.previewKey!, previewPath: undefined }),
+    });
+    assert.equal(served.status, 200);
+    const servedHtml = await served.text();
+
+    return {
+      persistedHtml,
+      servedHtml,
+      previewStorageKey: preview.previewStorageKey!,
+    };
+  }
+
+  await withEnv(
+    {
+      GNR8_PREVIEW_PERSISTENT_FS_ROOT: persistentRoot,
+      SUPABASE_SERVICE_ROLE_KEY: undefined,
+      NEXT_PUBLIC_SUPABASE_URL: undefined,
+    },
+    async () => {
+      const first = await runAndRead();
+      const second = await runAndRead();
+
+      for (const html of [first.persistedHtml, first.servedHtml, second.persistedHtml, second.servedHtml]) {
+        assert.ok(!html.includes('href="/assets/'));
+        assert.match(html, /href="(?:\.\/)?assets\/stylesheet\//);
+        const stylesheetLinks = html.match(/<link[^>]*rel="stylesheet"[^>]*>/g) ?? [];
+        assert.equal(stylesheetLinks.length, 3);
+      }
+
+      assert.equal(first.persistedHtml, second.persistedHtml);
+      assert.equal(first.servedHtml, second.servedHtml);
+      assert.equal(first.previewStorageKey, second.previewStorageKey);
+    },
+  );
+
+  await rmIfExists(tmp);
+  await rmIfExists(persistentRoot);
+});
+
 test("missing persistent preview bundles fail gracefully with structured not-found payload", async () => {
   const persistentRoot = await fs.mkdtemp(path.join(os.tmpdir(), "gnr8-preview-persistent-missing-root-"));
 
