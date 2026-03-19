@@ -30,6 +30,7 @@ function referenceKindFromRawRef(rawRef: string): AssetReference["referenceKind"
 function assetKindFromTag(input: { tag: string; relAttr: string | null }): AssetReference["assetKind"] {
   switch (input.tag) {
     case "img":
+    case "a":
       return "image";
     case "script":
       return "script";
@@ -40,6 +41,34 @@ function assetKindFromTag(input: { tag: string; relAttr: string | null }): Asset
     }
     default:
       return "unknown";
+  }
+}
+
+const IMAGE_FILE_EXTENSION_SET = new Set<string>([
+  ".apng",
+  ".avif",
+  ".bmp",
+  ".gif",
+  ".ico",
+  ".jpeg",
+  ".jpg",
+  ".png",
+  ".svg",
+  ".tif",
+  ".tiff",
+  ".webp",
+]);
+
+function isLikelyImageHref(rawRef: string): boolean {
+  const trimmed = rawRef.trim();
+  if (!trimmed) return false;
+  if (trimmed.toLowerCase().startsWith("data:image/")) return true;
+  try {
+    const resolved = new URL(trimmed, "https://example.invalid");
+    const ext = path.posix.extname(resolved.pathname.toLowerCase());
+    return IMAGE_FILE_EXTENSION_SET.has(ext);
+  } catch {
+    return false;
   }
 }
 
@@ -302,6 +331,45 @@ export function extractAssetReferencesFromDom(input: {
         existence: "unknown",
         validationStatus: resolved.validationStatus,
         attribute: "src",
+      });
+      issues.push(...resolved.issues);
+      return;
+    }
+    if (tag === "a") {
+      const rawRef = getAttr(node, "href");
+      if (rawRef === null) return;
+      if (!isLikelyImageHref(rawRef)) return;
+      const resolved = resolveRefToRootRelativePosix({
+        rootDirAbs: input.rootDirAbs,
+        entryHtmlAbsPath: input.entryHtmlAbsPath,
+        fromDocumentPath: input.fromDocumentPath,
+        rawRef,
+        tag,
+        attribute: "href",
+      });
+      const occurrence = nextOccurrence(tag, "href");
+      const assetKind = assetKindFromTag({ tag, relAttr: null });
+      const id = sha256Hex(
+        stableStringify({
+          fromDocumentPath: input.fromDocumentPath,
+          tag,
+          attribute: "href",
+          occurrence,
+          rawRef,
+        }),
+      );
+      references.push({
+        id,
+        fromDocumentPath: input.fromDocumentPath,
+        tag,
+        occurrence,
+        rawRef,
+        assetKind,
+        referenceKind: resolved.referenceKind,
+        resolvedPath: resolved.resolvedPath,
+        existence: "unknown",
+        validationStatus: resolved.validationStatus,
+        attribute: "href",
       });
       issues.push(...resolved.issues);
       return;

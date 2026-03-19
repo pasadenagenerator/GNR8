@@ -33,7 +33,7 @@
   - Resolved asset URLs are mapped to deterministic local paths under `assets/`.
   - Collision handling is deterministic: append `-2`, `-3`, ... on path conflicts.
 
-- Deterministic asset-fidelity hardening rule (v1.1):
+- Deterministic asset-fidelity hardening rule (v1.2):
   - Standard image `src`:
     - resolve against entry URL, fetch when `http(s)`, rewrite to `/<snapshot-local-asset-path>` when fetched.
   - Root-relative + relative paths:
@@ -43,6 +43,20 @@
   - `srcset` policy:
     - parse candidate URLs deterministically, fetch each candidate independently, rewrite each successfully fetched candidate URL in-place, preserve descriptors (`1x`, `2x`, `640w`, etc.).
     - failed/unsupported candidates remain original and are diagnosed.
+  - Visible image selection policy (deterministic precedence):
+    - For each `<img>`, choose the first fetched local candidate in this fixed order:
+      - non-placeholder `img[src]`
+      - best `picture > source[srcset|data-srcset]` candidate (highest `x`, then highest `w`, then lexical tiebreak)
+      - best `img[srcset]`
+      - best `img[data-srcset]`
+      - lazy fallback attrs in order: `data-src`, `data-original`, `data-lazy-src`
+      - nearest ancestor gallery-anchor `a[href]` (image-like href only) when `img[src]` is placeholder-like
+      - placeholder/fallback `img[src]` last
+    - Placeholder-like `img[src]` is detected conservatively (`data:` URLs, `about:blank`, known placeholder tokens).
+    - Selected candidate is promoted to concrete `img[src]` so downstream static import/materialize can copy and rewrite a browser-usable visible source.
+  - Gallery-anchor policy:
+    - `<a href>` references are fetched as image candidates only when the anchor wraps image/picture content and the href is image-like.
+    - fetched gallery hrefs are rewritten in snapshot HTML and remain visible in fetch-manifest diagnostics.
   - Lazy-image attribute policy:
     - supported fallback attrs are `data-src`, `data-original`, `data-lazy-src` when `src` is absent/empty.
     - fetched fallback is rewritten and also promoted to `src` for static usability.
@@ -67,3 +81,4 @@
   - No auth/session flows.
   - CSS asset pulling is intentionally one-level only (`url(...)` in direct stylesheets); no recursive crawler and no full CSS parser.
   - Non-fetchable assets are surfaced as structured diagnostics and can remain degraded-but-runnable.
+  - `srcset` is used for deterministic candidate discovery/promotion, but final downstream export fidelity still centers on concrete promoted `img[src]`.

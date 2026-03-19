@@ -7,7 +7,7 @@ import type { ImportOutput, AssetReference, JsonValue } from "../import/import-c
 import type { StaticHtmlPageArtifact, StaticHtmlRenderArtifact } from "./static-html-render-artifact";
 import { sha256Hex, stableStringify } from "./runtime/diagnostics";
 
-export const STATIC_OUTPUT_BUNDLE_VERSION = "1.1.0" as const;
+export const STATIC_OUTPUT_BUNDLE_VERSION = "1.2.0" as const;
 
 export type StaticOutputBundleStatus = "ready" | "ready_with_warnings" | "failed";
 
@@ -243,7 +243,7 @@ function rewriteHtmlAssetReferences(input: {
   walkDom(doc, (node) => {
     if (!isElement(node)) return;
     const tag = node.tagName.toLowerCase();
-    const attrName = tag === "link" ? "href" : tag === "img" || tag === "script" ? "src" : null;
+    const attrName = tag === "link" || tag === "a" ? "href" : tag === "img" || tag === "script" ? "src" : null;
     if (attrName === null) return;
 
     const attrs = node.attrs ?? [];

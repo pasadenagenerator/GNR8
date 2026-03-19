@@ -8,7 +8,7 @@ import type { JsonValue } from "../../import/import-contract";
 import { stableStringify } from "../../migration/runtime/diagnostics";
 import { resolveUrlImportSnapshotRootDirAbs } from "./url-import-snapshot-root";
 
-export const URL_SINGLE_PAGE_IMPORT_VERSION = "1.1.0" as const;
+export const URL_SINGLE_PAGE_IMPORT_VERSION = "1.2.0" as const;
 
 export type UrlImportExecutionScope = {
   includes: readonly [
@@ -18,6 +18,7 @@ export type UrlImportExecutionScope = {
     "direct_scripts",
     "image_srcset_candidates",
     "lazy_image_fallback_attrs",
+    "gallery_image_anchor_hrefs",
     "stylesheet_linked_local_assets",
   ];
   excludes: readonly ["multi_page_crawl", "browser_js_execution", "auth_fetch", "form_submission", "robots_bypass"];
@@ -49,7 +50,7 @@ export type UrlImportDiagnostic = {
 
 export type UrlImportAssetKind = "stylesheet" | "image" | "script" | "style_asset";
 
-export type UrlImportAssetTag = "link" | "img" | "script" | "source";
+export type UrlImportAssetTag = "link" | "img" | "script" | "source" | "a";
 
 export type UrlImportAssetAttribute =
   | "href"
@@ -130,6 +131,7 @@ const FETCH_SCOPE: UrlImportExecutionScope = {
     "direct_scripts",
     "image_srcset_candidates",
     "lazy_image_fallback_attrs",
+    "gallery_image_anchor_hrefs",
     "stylesheet_linked_local_assets",
   ],
   excludes: ["multi_page_crawl", "browser_js_execution", "auth_fetch", "form_submission", "robots_bypass"],
@@ -406,6 +408,82 @@ function buildSrcsetValue(tokens: Array<{ url: string; descriptor: string }>): s
     .join(", ");
 }
 
+const IMAGE_FILE_EXTENSION_SET = new Set<string>([
+  ".apng",
+  ".avif",
+  ".gif",
+  ".ico",
+  ".jpeg",
+  ".jpg",
+  ".png",
+  ".svg",
+  ".webp",
+  ".bmp",
+  ".tif",
+  ".tiff",
+]);
+
+const PLACEHOLDER_TOKEN_SET = ["placeholder", "spacer", "blank", "transparent", "loader", "loading"] as const;
+
+const NEAREST_GALLERY_ANCHOR_MAX_DEPTH = 5;
+
+function isImageLikeHrefRef(rawRef: string): boolean {
+  const trimmed = rawRef.trim();
+  if (!trimmed) return false;
+  if (trimmed.toLowerCase().startsWith("data:image/")) return true;
+  try {
+    const normalizedPath = new URL(trimmed, "https://example.invalid").pathname;
+    const ext = path.posix.extname(normalizedPath.toLowerCase());
+    return IMAGE_FILE_EXTENSION_SET.has(ext);
+  } catch {
+    return false;
+  }
+}
+
+function isLikelyPlaceholderImageRef(rawRef: string): boolean {
+  const trimmed = rawRef.trim().toLowerCase();
+  if (!trimmed) return true;
+  if (trimmed.startsWith("data:")) return true;
+  if (trimmed === "about:blank") return true;
+  for (const token of PLACEHOLDER_TOKEN_SET) {
+    if (trimmed.includes(token)) return true;
+  }
+  return false;
+}
+
+function srcsetDescriptorRank(descriptor: string): { rank: number; value: number } {
+  const normalized = descriptor.trim().toLowerCase();
+  if (!normalized) return { rank: 0, value: 0 };
+  const xMatch = normalized.match(/^([0-9]*\.?[0-9]+)x$/);
+  if (xMatch) return { rank: 2, value: Number(xMatch[1] ?? "0") };
+  const wMatch = normalized.match(/^([0-9]+)w$/);
+  if (wMatch) return { rank: 1, value: Number(wMatch[1] ?? "0") };
+  return { rank: 0, value: 0 };
+}
+
+function selectBestSrcsetToken(tokens: Array<{ url: string; descriptor: string }>): string | null {
+  let best: { url: string; descriptor: string } | null = null;
+  for (const token of tokens) {
+    if (!token.url.trim()) continue;
+    if (best === null) {
+      best = token;
+      continue;
+    }
+    const a = srcsetDescriptorRank(token.descriptor);
+    const b = srcsetDescriptorRank(best.descriptor);
+    if (a.rank !== b.rank) {
+      if (a.rank > b.rank) best = token;
+      continue;
+    }
+    if (a.value !== b.value) {
+      if (a.value > b.value) best = token;
+      continue;
+    }
+    if (token.url.localeCompare(best.url) > 0) best = token;
+  }
+  return best?.url ?? null;
+}
+
 function rewriteCssUrlFunctions(input: {
   cssText: string;
   stylesheetLocalPath: string;
@@ -473,6 +551,7 @@ function setAttr(node: unknown, name: string, value: string): void {
       return;
     }
   }
+  target.attrs.push({ name, value });
 }
 
 function isElement(node: unknown): node is { tagName: string } {
@@ -492,6 +571,54 @@ function walkDom(node: unknown, visit: (node: unknown) => void): void {
       for (let i = childNodes.length - 1; i >= 0; i--) stack.push(childNodes[i]);
     }
   }
+}
+
+function walkDomWithAncestors(
+  node: unknown,
+  visit: (node: unknown, ancestors: unknown[]) => void,
+): void {
+  const stack: Array<{ node: unknown; ancestors: unknown[] }> = [{ node, ancestors: [] }];
+  while (stack.length > 0) {
+    const current = stack.pop();
+    if (!current || !current.node || typeof current.node !== "object") continue;
+    visit(current.node, current.ancestors);
+    const nextAncestors = [...current.ancestors, current.node];
+    const content = (current.node as { content?: unknown }).content;
+    if (content && typeof content === "object") stack.push({ node: content, ancestors: nextAncestors });
+    const childNodes = (current.node as { childNodes?: unknown[] }).childNodes;
+    if (Array.isArray(childNodes)) {
+      for (let i = childNodes.length - 1; i >= 0; i--) {
+        stack.push({ node: childNodes[i], ancestors: nextAncestors });
+      }
+    }
+  }
+}
+
+function hasDescendantTag(root: unknown, tagName: string): boolean {
+  let found = false;
+  walkDom(root, (node) => {
+    if (found || !isElement(node)) return;
+    if (node.tagName.toLowerCase() === tagName) found = true;
+  });
+  return found;
+}
+
+function nearestAncestorHref(
+  ancestors: unknown[],
+  maxDepth: number,
+): string | null {
+  let depth = 0;
+  for (let i = ancestors.length - 1; i >= 0; i--) {
+    depth += 1;
+    if (depth > maxDepth) break;
+    const node = ancestors[i];
+    if (!isElement(node)) continue;
+    const tag = node.tagName.toLowerCase();
+    if (tag !== "a") continue;
+    const href = getAttr(node, "href");
+    if (href && href.trim()) return href;
+  }
+  return null;
 }
 
 function collectAssetRefs(input: {
@@ -536,12 +663,12 @@ function collectAssetRefs(input: {
     });
   }
 
-  walkDom(input.document, (node) => {
+  walkDomWithAncestors(input.document, (node) => {
     if (!isElement(node)) return;
     const tag = node.tagName.toLowerCase() as UrlImportAssetTag | string;
     const rel = getAttr(node, "rel");
     const assetKind = assetKindFromNode({ tag, rel });
-    if (!assetKind && tag !== "source") {
+    if (!assetKind && tag !== "source" && tag !== "a") {
       if (tag === "link") {
         const href = getAttr(node, "href");
         if (href && href.trim()) {
@@ -556,6 +683,22 @@ function collectAssetRefs(input: {
           );
         }
       }
+      return;
+    }
+
+    if (tag === "a") {
+      const href = getAttr(node, "href");
+      if (!href || !href.trim()) return;
+      const wrapsImage = hasDescendantTag(node, "img") || hasDescendantTag(node, "picture");
+      if (!wrapsImage) return;
+      if (!isImageLikeHrefRef(href)) return;
+      pushRef({
+        tag: "a",
+        attribute: "href",
+        rawRef: href,
+        assetKind: "image",
+        surface: "gallery_anchor",
+      });
       return;
     }
 
@@ -612,6 +755,105 @@ function collectAssetRefs(input: {
   });
 
   return refs;
+}
+
+function resolveFetchedLocalPathForRawRef(input: {
+  rawRef: string | null;
+  baseUrl: URL;
+  localPathByUrl: Map<string, string>;
+  fetchOutcomeByUrl: Map<
+    string,
+    { fetchStatus: "fetched" | "fetch_failed" | "unsupported"; httpStatus: number | null; contentType: string | null; byteLength: number | null }
+  >;
+}): string | null {
+  const rawRef = (input.rawRef ?? "").trim();
+  if (!rawRef) return null;
+  let resolvedUrl: string | null = null;
+  try {
+    const resolved = new URL(rawRef, input.baseUrl);
+    if (resolved.protocol !== "http:" && resolved.protocol !== "https:") return null;
+    resolved.hash = "";
+    resolvedUrl = resolved.toString();
+  } catch {
+    return null;
+  }
+  const outcome = resolvedUrl ? input.fetchOutcomeByUrl.get(resolvedUrl) : null;
+  if (!outcome || outcome.fetchStatus !== "fetched") return null;
+  return input.localPathByUrl.get(resolvedUrl) ?? null;
+}
+
+function choosePromotedImageLocalPath(input: {
+  imgNode: unknown;
+  ancestors: unknown[];
+  baseUrl: URL;
+  localPathByUrl: Map<string, string>;
+  fetchOutcomeByUrl: Map<
+    string,
+    { fetchStatus: "fetched" | "fetch_failed" | "unsupported"; httpStatus: number | null; contentType: string | null; byteLength: number | null }
+  >;
+}): string | null {
+  const primarySrc = (getAttr(input.imgNode, "src") ?? "").trim();
+  const srcsetFromPictureSources: string[] = [];
+  const parent = input.ancestors[input.ancestors.length - 1];
+  if (isElement(parent) && parent.tagName.toLowerCase() === "picture") {
+    const childNodes = (parent as { childNodes?: unknown[] }).childNodes ?? [];
+    for (const child of childNodes) {
+      if (!isElement(child) || child.tagName.toLowerCase() !== "source") continue;
+      for (const srcsetAttr of SRCSET_ATTRS) {
+        const rawSrcset = getAttr(child, srcsetAttr);
+        if (!rawSrcset || !rawSrcset.trim()) continue;
+        const best = selectBestSrcsetToken(parseSrcsetTokens(rawSrcset));
+        if (best) srcsetFromPictureSources.push(best);
+      }
+    }
+  }
+
+  const imgSrcsetCandidates: string[] = [];
+  for (const srcsetAttr of SRCSET_ATTRS) {
+    const rawSrcset = getAttr(input.imgNode, srcsetAttr);
+    if (!rawSrcset || !rawSrcset.trim()) continue;
+    const best = selectBestSrcsetToken(parseSrcsetTokens(rawSrcset));
+    if (best) imgSrcsetCandidates.push(best);
+  }
+
+  const lazyCandidates: string[] = [];
+  for (const lazyAttr of LAZY_IMAGE_ATTR_PRIORITY) {
+    const raw = getAttr(input.imgNode, lazyAttr);
+    if (!raw || !raw.trim()) continue;
+    lazyCandidates.push(raw);
+  }
+
+  const galleryHref = nearestAncestorHref(input.ancestors, NEAREST_GALLERY_ANCHOR_MAX_DEPTH);
+
+  const pickFirstFetched = (candidates: Array<string | null>): string | null => {
+    for (const rawRef of candidates) {
+      const localPath = resolveFetchedLocalPathForRawRef({
+        rawRef,
+        baseUrl: input.baseUrl,
+        localPathByUrl: input.localPathByUrl,
+        fetchOutcomeByUrl: input.fetchOutcomeByUrl,
+      });
+      if (localPath) return localPath;
+    }
+    return null;
+  };
+
+  const primaryIsPlaceholder = isLikelyPlaceholderImageRef(primarySrc);
+  if (!primaryIsPlaceholder) {
+    const localPrimary = pickFirstFetched([primarySrc]);
+    if (localPrimary) return localPrimary;
+  }
+
+  const promoted = pickFirstFetched([
+    ...srcsetFromPictureSources,
+    ...imgSrcsetCandidates,
+    ...lazyCandidates,
+    primaryIsPlaceholder ? galleryHref : null,
+    primaryIsPlaceholder ? primarySrc : null,
+  ]);
+  if (promoted) return promoted;
+
+  return pickFirstFetched([primarySrc]);
 }
 
 function writeJsonStable(absPath: string, value: JsonValue): void {
@@ -987,18 +1229,19 @@ export async function importPublicSinglePageUrlToSnapshot(input: {
     for (const ref of allRefs) refsByKey.set(ref.key, ref);
 
     const occurrenceCounter = new Map<string, number>();
-    walkDom(document, (node) => {
+    walkDomWithAncestors(document, (node, ancestors) => {
       if (!isElement(node)) return;
       const tag = node.tagName.toLowerCase();
-      if (tag !== "link" && tag !== "img" && tag !== "script" && tag !== "source") return;
+      if (tag !== "link" && tag !== "img" && tag !== "script" && tag !== "source" && tag !== "a") return;
 
       const rel = getAttr(node, "rel");
       const kind = tag === "source" ? "image" : assetKindFromNode({ tag, rel });
-      if (!kind && tag !== "img" && tag !== "source") return;
+      if (!kind && tag !== "img" && tag !== "source" && tag !== "a") return;
 
       const attrsToHandle: UrlImportAssetAttribute[] = [];
       if (tag === "link") attrsToHandle.push("href");
       else if (tag === "script") attrsToHandle.push("src");
+      else if (tag === "a") attrsToHandle.push("href");
       else {
         attrsToHandle.push("src");
         for (const srcsetAttr of SRCSET_ATTRS) attrsToHandle.push(srcsetAttr);
@@ -1078,6 +1321,17 @@ export async function importPublicSinglePageUrlToSnapshot(input: {
           contentType: outcome?.contentType ?? null,
           byteLength: outcome?.byteLength ?? null,
         });
+      }
+
+      if (tag === "img") {
+        const promotedLocalPath = choosePromotedImageLocalPath({
+          imgNode: node,
+          ancestors,
+          baseUrl: normalizedUrl,
+          localPathByUrl,
+          fetchOutcomeByUrl,
+        });
+        if (promotedLocalPath) setAttr(node, "src", `/${toPosixPath(promotedLocalPath)}`);
       }
     });
 

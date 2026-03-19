@@ -25,7 +25,7 @@ import { sha256Hex, stableStringify } from "./runtime/diagnostics";
  * - `ready_with_warnings` otherwise.
  */
 
-export const RENDER_OUTPUT_MODEL_VERSION = "1.3.0" as const;
+export const RENDER_OUTPUT_MODEL_VERSION = "1.4.0" as const;
 
 export type RenderOutputStatus = "ready" | "ready_with_warnings" | "blocked";
 
@@ -155,6 +155,10 @@ function computeRenderStatus(input: {
   return "ready_with_warnings";
 }
 
+function isEmpty(value: string | null): boolean {
+  return value === null || value.trim().length === 0;
+}
+
 /**
  * Deterministically derives RenderOutput from LayoutPreparationModel.
  */
@@ -191,6 +195,10 @@ export function createRenderOutput(layoutPreparation: LayoutPreparationModel): R
     const nodes: RenderNodeRecord[] = [];
     if (page.eligibility === "eligible") {
       for (const block of blocksInCanonicalOrder) {
+        if (block.nonVisualOnlySubtree && isEmpty(block.preservedMarkupHtml) && isEmpty(block.textExcerpt)) {
+          warningCodes.add("NON_VISUAL_EMPTY_BLOCK_SKIPPED");
+          continue;
+        }
         nodes.push({
           nodeId: renderNodeIdFor({ sourcePageId: page.pageId, sourceBlockId: block.id }),
           sourceBlockId: block.id,

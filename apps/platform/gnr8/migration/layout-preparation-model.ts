@@ -38,7 +38,7 @@ import { sha256Hex, stableStringify } from "./runtime/diagnostics";
  * - `ready_with_warnings` otherwise.
  */
 
-export const LAYOUT_PREPARATION_MODEL_VERSION = "1.4.0" as const;
+export const LAYOUT_PREPARATION_MODEL_VERSION = "1.5.0" as const;
 
 export type LayoutPreparationStatus = "ready" | "ready_with_warnings" | "blocked";
 
@@ -66,6 +66,7 @@ export type LayoutPreparationBlockRecord = {
    * - `null` when block has no preservable whitelist content.
    */
   preservedMarkupHtml: string | null;
+  nonVisualOnlySubtree: boolean;
   assetReferenceIds: string[];
 };
 
@@ -256,6 +257,7 @@ export function createLayoutPreparationModel(preparedSite: PreparedSiteModel): L
           textPresent: child.textPresent,
           textExcerpt: child.textExcerpt,
           preservedMarkupHtml: child.preservedMarkupHtml,
+          nonVisualOnlySubtree: child.nonVisualOnlySubtree,
           assetReferenceIds: [],
         };
         blocks.push(block);

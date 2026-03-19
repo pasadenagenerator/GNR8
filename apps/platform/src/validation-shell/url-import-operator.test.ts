@@ -220,6 +220,8 @@ test("url import hardens image/style assets and filters non-visual script/jsonld
             "<script>window.dataLayer = window.dataLayer || []; gtag('config', 'G-LEAK');</script>",
             "<noscript>Google Tag Manager (noscript)</noscript>",
             "<img data-src=\"/assets/lazy-hero.jpg\" srcset=\"/assets/hero-1x.jpg 1x, //fidelity.example.com/assets/hero-2x.jpg 2x\" alt=\"Hero\">",
+            "<a class=\"gallery-item\" href=\"/assets/gallery/full.webp\"><img src=\"data:image/gif;base64,R0lGODlhAQABAAAAACw=\" alt=\"Gallery\"></a>",
+            "<picture><source srcset=\"/assets/hero-2x.jpg 2x, /assets/hero-1x.jpg 1x\"><img src=\"/assets/placeholder.png\" alt=\"Picture Hero\"></picture>",
             "</div>",
             "</body></html>",
           ].join(""),
@@ -249,6 +251,16 @@ test("url import hardens image/style assets and filters non-visual script/jsonld
           headers: { "content-type": "image/jpeg" },
           body: new Uint8Array([255, 216, 255, 224, 3]),
         },
+        "https://fidelity.example.com/assets/gallery/full.webp": {
+          status: 200,
+          headers: { "content-type": "image/webp" },
+          body: new Uint8Array([82, 73, 70, 70, 1]),
+        },
+        "https://fidelity.example.com/assets/placeholder.png": {
+          status: 404,
+          headers: { "content-type": "text/plain" },
+          body: "missing placeholder",
+        },
       }),
     },
   );
@@ -259,6 +271,7 @@ test("url import hardens image/style assets and filters non-visual script/jsonld
   const snapshotHtml = fs.readFileSync(response.snapshot.entryHtmlPathAbs, "utf8");
   assert.ok(snapshotHtml.includes('src="/assets/image/'));
   assert.ok(snapshotHtml.includes('srcset="/assets/image/'));
+  assert.ok(snapshotHtml.includes('<a class="gallery-item" href="/assets/image/'));
 
   const snapshotStylesheetAbs = listFilesRecursively(response.snapshot.snapshotRootDirAbs).find((abs) =>
     abs.replaceAll(path.sep, "/").includes("/assets/stylesheet/"),
@@ -277,6 +290,15 @@ test("url import hardens image/style assets and filters non-visual script/jsonld
   assert.ok(!exportedHtml.includes("window.dataLayer"));
   assert.ok(!exportedHtml.includes("gtag("));
   assert.ok(!exportedHtml.includes("Google Tag Manager (noscript)"));
+  assert.ok(!exportedHtml.includes('src="/assets/'));
+  assert.ok(!exportedHtml.includes('href="/assets/'));
+  assert.ok(exportedHtml.includes('src="assets/assets/image/'));
+
+  const exportedFiles = listFilesRecursively(outputRootDir).map((abs) => abs.replaceAll(path.sep, "/"));
+  const exportedStylesheetAbs = exportedFiles.find((abs) => abs.includes("/assets/assets/stylesheet/"));
+  assert.ok(exportedStylesheetAbs);
+  const exportedStylesheet = fs.readFileSync(exportedStylesheetAbs!, "utf8");
+  assert.ok(exportedStylesheet.includes("../style_asset/"));
 });
 
 test("non-fatal asset fetch issues remain visible and do not unnecessarily block", async () => {

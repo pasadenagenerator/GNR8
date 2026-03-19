@@ -5,7 +5,7 @@ import { parse } from "parse5";
 import { sha256Hex } from "./runtime/diagnostics";
 import { extractDeterministicMinimalSourceMarkupHtml } from "./source-markup-preservation";
 
-export const PREPARED_SITE_MODEL_VERSION = "1.4.0" as const;
+export const PREPARED_SITE_MODEL_VERSION = "1.5.0" as const;
 
 export type PreparedSitePreparationStatus = "ready" | "ready_with_warnings" | "blocked";
 
@@ -138,6 +138,11 @@ export type PreparedDomOutlineElement = {
    * - `null` when nothing preservable exists for this subtree.
    */
   preservedMarkupHtml: string | null;
+  /**
+   * True when subtree contains only non-visual script/style/noscript/template structures
+   * (optionally wrapped by neutral containers) and has no visible text.
+   */
+  nonVisualOnlySubtree: boolean;
   childElements: PreparedDomOutlineElement[];
 };
 
@@ -185,6 +190,19 @@ const NON_VISUAL_TEXT_EXCERPT_DROP_SUBTREE_TAGS = new Set<string>([
   "object",
   "canvas",
   "svg",
+]);
+
+const NON_VISUAL_ONLY_CONTENT_TAGS = new Set<string>(["script", "style", "noscript", "template"]);
+const NON_VISUAL_ONLY_NEUTRAL_CONTAINER_TAGS = new Set<string>([
+  "article",
+  "body",
+  "div",
+  "footer",
+  "header",
+  "main",
+  "nav",
+  "section",
+  "span",
 ]);
 
 function walkDomForVisibleText(node: unknown, visit: (n: unknown) => void): void {
@@ -400,6 +418,34 @@ function computeTextExcerptFromSubtree(node: unknown): string | null {
   return `${head}…`;
 }
 
+function isNonVisualOnlySubtree(node: unknown): boolean {
+  let sawPotentialVisualContent = false;
+
+  function visit(current: unknown, insideNonVisual: boolean): void {
+    if (sawPotentialVisualContent || !current || typeof current !== "object") return;
+    const nodeName = String((current as { nodeName?: unknown }).nodeName ?? "");
+    if (nodeName === "#text") {
+      if (!insideNonVisual && textValueFromNode(current).trim().length > 0) sawPotentialVisualContent = true;
+      return;
+    }
+    if (!isElement(current)) return;
+
+    const tag = current.tagName.toLowerCase();
+    const nextInsideNonVisual = insideNonVisual || NON_VISUAL_ONLY_CONTENT_TAGS.has(tag);
+    if (!nextInsideNonVisual && !NON_VISUAL_ONLY_NEUTRAL_CONTAINER_TAGS.has(tag)) sawPotentialVisualContent = true;
+
+    const childNodes = (current as { childNodes?: unknown[] }).childNodes;
+    if (Array.isArray(childNodes)) {
+      for (const child of childNodes) visit(child, nextInsideNonVisual);
+    }
+    const content = (current as { content?: unknown }).content;
+    if (content && typeof content === "object") visit(content, nextInsideNonVisual);
+  }
+
+  visit(node, false);
+  return !sawPotentialVisualContent;
+}
+
 function buildChildElements(parent: unknown, parentDomPath: string): PreparedDomOutlineElement[] {
   if (!parent || typeof parent !== "object") return [];
   const childNodes = (parent as { childNodes?: unknown[] }).childNodes ?? [];
@@ -428,6 +474,7 @@ function buildChildElements(parent: unknown, parentDomPath: string): PreparedDom
       textPresent: textExcerpt !== null,
       textExcerpt,
       preservedMarkupHtml,
+      nonVisualOnlySubtree: isNonVisualOnlySubtree(el),
       childElements,
     });
   }

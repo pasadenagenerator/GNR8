@@ -300,6 +300,8 @@ test("createStaticHtmlRenderArtifact excludes script/json-ld/analytics text from
   assert.ok(!html.includes("gtag("));
   assert.ok(!html.includes("Google Tag Manager (noscript)"));
   assert.ok(html.includes("Visible headline"));
+  const sectionCount = (html.match(/<section /g) ?? []).length;
+  assert.equal(sectionCount, 1);
 });
 
 test("createStaticHtmlRenderArtifact keeps degraded/minimal non-renderable states structured", async () => {

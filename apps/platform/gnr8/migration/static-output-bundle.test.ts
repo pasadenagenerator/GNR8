@@ -212,6 +212,52 @@ test("materializeStaticOutputBundle rewrites root-relative stylesheet links to e
   assert.ok(html.includes('<link rel="stylesheet" href="assets/assets/styles.css">'));
 });
 
+test("materializeStaticOutputBundle rewrites image-gallery anchor hrefs to exported copied assets", async () => {
+  const tmpBase = await fs.mkdtemp(path.join(os.tmpdir(), "gnr8-static-bundle-gallery-anchor-"));
+  const rootDir = path.join(tmpBase, "site");
+  await fs.mkdir(path.join(rootDir, "assets/gallery"), { recursive: true });
+  await fs.writeFile(path.join(rootDir, "assets/gallery/full.webp"), "RIFF", "utf-8");
+  await fs.writeFile(
+    path.join(rootDir, "index.html"),
+    [
+      "<!doctype html>",
+      "<html lang=\"en\">",
+      "<head><meta charset=\"utf-8\"><title>Gallery Anchor Fixture</title></head>",
+      "<body>",
+      "  <div>",
+      "    <a href=\"/assets/gallery/full.webp\"><img src=\"/assets/gallery/full.webp\" alt=\"Gallery\"></a>",
+      "    <p>Gallery section</p>",
+      "  </div>",
+      "</body>",
+      "</html>",
+      "",
+    ].join("\n"),
+    "utf-8",
+  );
+
+  const built = await buildStaticHtmlForSite({
+    rootDir,
+    requestId: "req-static-bundle-gallery-anchor",
+    entryHtmlPath: "index.html",
+    assetsDirPath: "assets",
+  });
+
+  const outputRootDir = path.join(tmpBase, "bundle");
+  const bundle = await materializeStaticOutputBundle({
+    staticHtmlArtifact: built.artifact,
+    importOutput: built.importOutput,
+    importRootDir: rootDir,
+    outputRootDir,
+  });
+
+  const pageRecord = bundle.pageFiles.find((p) => p.outputPath === "index.html" && p.writeStatus === "written");
+  assert.ok(pageRecord);
+  const html = await fs.readFile(pageRecord!.absoluteOutputPath, "utf-8");
+  assert.ok(html.includes('<a href="assets/assets/gallery/full.webp">'));
+  assert.ok(html.includes('<img src="assets/assets/gallery/full.webp" alt="Gallery">'));
+  assert.ok(bundle.assetFiles.some((a) => a.writeStatus === "copied" && a.outputPath === "assets/assets/gallery/full.webp"));
+});
+
 test("all current validation fixtures materialize through static bundle path", async () => {
   const fixtureIds = ["real-site-01", "real-site-02", "real-site-03"] as const;
   const tmpBase = await fs.mkdtemp(path.join(os.tmpdir(), "gnr8-static-bundle-fixtures-"));

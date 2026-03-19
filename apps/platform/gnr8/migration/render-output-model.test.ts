@@ -65,10 +65,10 @@ test("createRenderOutput canonicalizes ordering of pages and nodes", async () =>
 
   assert.equal(r1.pages.length, 1);
   assert.equal(r1.pages[0]!.sourcePath, "index.html");
-  assert.equal(r1.pages[0]!.nodes.length, 3);
+  assert.equal(r1.pages[0]!.nodes.length, 2);
   assert.deepEqual(
     r1.pages[0]!.nodes.map((n) => n.ordinalIndex),
-    [0, 1, 2],
+    [0, 1],
   );
 });
 
@@ -115,4 +115,3 @@ test("render_preparation stage output contains RenderOutput", async () => {
   assert.equal(s4.output.renderOutput.kind, "render_output_v1");
   assert.ok(s4.output.renderOutput.pages.length >= 1);
 });
-
