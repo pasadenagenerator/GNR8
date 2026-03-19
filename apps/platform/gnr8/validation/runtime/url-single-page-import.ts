@@ -741,6 +741,15 @@ function hasImageWrapperContextTokens(input: { anchorNode: unknown; ancestors: u
   return false;
 }
 
+function isDeterministicImageWrapperContext(input: {
+  imgNode: unknown;
+  ancestors: unknown[];
+  anchorNode: unknown;
+}): boolean {
+  if (hasHeaderOrLogoContext({ imgNode: input.imgNode, ancestors: input.ancestors })) return true;
+  return hasImageWrapperContextTokens({ anchorNode: input.anchorNode, ancestors: input.ancestors });
+}
+
 function collectAssetRefs(input: {
   document: unknown;
   entryUrl: URL;
@@ -966,9 +975,8 @@ function choosePromotedImageLocalPath(input: {
 
   const nearestAnchor = nearestAncestorAnchor(input.ancestors, NEAREST_PROMOTION_ANCHOR_MAX_DEPTH);
   const primaryIsPlaceholder = isLikelyPlaceholderImageRef(primarySrc);
-  const hasHeaderLogoContext = hasHeaderOrLogoContext({ imgNode: input.imgNode, ancestors: input.ancestors });
   const wrapperAnchorHref =
-    primaryIsPlaceholder && hasHeaderLogoContext && nearestAnchor && hasImageWrapperContextTokens({ anchorNode: nearestAnchor.node, ancestors: input.ancestors })
+    nearestAnchor && isDeterministicImageWrapperContext({ imgNode: input.imgNode, ancestors: input.ancestors, anchorNode: nearestAnchor.node })
       ? nearestAnchor.href
       : null;
 
@@ -1023,6 +1031,8 @@ function isStylesheetLinkElement(node: unknown): boolean {
 function normalizeStylesheetHrefToLocalPath(rawHref: string | null): string | null {
   const href = (rawHref ?? "").trim();
   if (!href) return null;
+  if (/^(?:[a-z][a-z0-9+.-]*:)?\/\//i.test(href)) return null;
+  if (/^[a-z][a-z0-9+.-]*:/i.test(href)) return null;
   const [pathPart] = href.split(/[?#]/, 1);
   return normalizeSnapshotLocalTargetPath(pathPart ?? "");
 }
@@ -1055,6 +1065,13 @@ function preferPrimaryStylesheetInHead(input: { document: unknown; primaryStyles
   const firstStylesheet = stylesheetEntries[0]!;
   const primaryEntry = stylesheetEntries.find((entry) => entry.localPath === primaryLocalPath);
   if (!primaryEntry) return false;
+
+  // Narrowed regression-safe preference rule:
+  // - never reorder when first stylesheet is already local/exportable
+  // - only promote selected primary when first stylesheet is remote/data/non-local
+  if (firstStylesheet.localPath !== null) {
+    return firstStylesheet.localPath === primaryLocalPath;
+  }
 
   if (primaryEntry.childIndex !== firstStylesheet.childIndex) {
     const [primaryNode] = headChildren.splice(primaryEntry.childIndex, 1);

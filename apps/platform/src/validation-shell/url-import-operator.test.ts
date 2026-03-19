@@ -466,6 +466,88 @@ test("url import captures fetchable head stylesheets and promotes header/logo pl
   );
 });
 
+test("transporti-style regression guard: gallery placeholders remain visible and remote-first stylesheet does not displace copied local stylesheet", async () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "gnr8-url-import-transporti-regression-"));
+  const outputRootDir = path.resolve(tmp, "bundle-out");
+  const sourceUrl = "https://transporti-like.example.com/";
+
+  function fetchTable() {
+    return mockFetchFromTable({
+      "https://transporti-like.example.com/": {
+        status: 200,
+        headers: { "content-type": "text/html" },
+        body: [
+          "<!doctype html>",
+          "<html><head>",
+          '<link rel="stylesheet" href="https://cdn.example.net/reset.css">',
+          '<link rel="stylesheet" href="/assets/site-theme.css">',
+          "</head><body>",
+          '<section class="gallery-grid">',
+          '  <a class="gallery-item" href="/assets/gallery/full.webp">',
+          '    <img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAAB" alt="Gallery">',
+          "  </a>",
+          "</section>",
+          "</body></html>",
+        ].join(""),
+      },
+      "https://transporti-like.example.com/assets/site-theme.css": {
+        status: 200,
+        headers: { "content-type": "text/css" },
+        body: ".gallery-grid{display:grid}",
+      },
+      "https://transporti-like.example.com/assets/gallery/full.webp": {
+        status: 200,
+        headers: { "content-type": "image/webp" },
+        body: new Uint8Array([82, 73, 70, 70, 2]),
+      },
+      "https://cdn.example.net/reset.css": {
+        status: 200,
+        headers: { "content-type": "text/css" },
+        body: "html,body{margin:0}",
+      },
+    });
+  }
+
+  const first = await runUrlImportOperatorFlow(
+    { sourceUrl, executionMode: "materialize" },
+    {
+      snapshotRootDirAbs: path.resolve(tmp, "snapshots"),
+      outputRootDir,
+      fetchImpl: fetchTable(),
+    },
+  );
+
+  assert.equal(first.ok, true);
+  if (!first.ok) return;
+
+  const snapshotHtml = fs.readFileSync(first.snapshot.entryHtmlPathAbs, "utf8");
+  assert.match(snapshotHtml, /<a class="gallery-item" href="\/assets\/image\//);
+  assert.match(snapshotHtml, /<img src="\/assets\/image\//);
+  assert.ok(!snapshotHtml.includes('src="data:image/png;base64'));
+
+  const exportedIndexAbs = path.resolve(outputRootDir, "index.html");
+  const exportedHtml = fs.readFileSync(exportedIndexAbs, "utf8");
+  const stylesheetHrefs = [...exportedHtml.matchAll(/<link[^>]*rel="[^"]*stylesheet[^"]*"[^>]*href="([^"]+)"/g)].map((m) => m[1]);
+  assert.ok(stylesheetHrefs.length >= 2);
+  assert.match(stylesheetHrefs[0] ?? "", /^\.\/assets\/stylesheet\//);
+  assert.equal(stylesheetHrefs.some((href) => href === "https://cdn.example.net/reset.css"), true);
+  assert.match(exportedHtml, /<img src="assets\/image\//);
+
+  const second = await runUrlImportOperatorFlow(
+    { sourceUrl, executionMode: "materialize" },
+    {
+      snapshotRootDirAbs: path.resolve(tmp, "snapshots"),
+      outputRootDir,
+      fetchImpl: fetchTable(),
+    },
+  );
+
+  assert.equal(second.ok, true);
+  if (!second.ok) return;
+  const exportedHtmlSecond = fs.readFileSync(exportedIndexAbs, "utf8");
+  assert.equal(exportedHtmlSecond, exportedHtml);
+});
+
 test("non-fatal asset fetch issues remain visible and do not unnecessarily block", async () => {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "gnr8-url-import-warnings-"));
 

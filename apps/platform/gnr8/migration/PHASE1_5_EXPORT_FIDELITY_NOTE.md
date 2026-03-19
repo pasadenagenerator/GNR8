@@ -54,7 +54,8 @@
   - rewritten in exported HTML head to explicit page-relative bundle path.
   - explicit same-directory rule: emit `./<path>` (not `/...`) so hosted preview route nesting remains browser-correct.
 - URL-import primary/site stylesheet preference:
-  - when selected primary stylesheet is fetchable/copied, final HTML promotes it as the first head stylesheet link
+  - when selected primary stylesheet is fetchable/copied, final HTML may promote it as first head stylesheet link only if current first stylesheet is non-local/remote
+  - if current first stylesheet is already local/exportable, source-local order is preserved (no displacement)
   - if selected primary cannot be fetched/rewrite-eligible, source href is preserved and degraded warnings remain explicit
 - Root-relative stylesheet references follow the same copy/rewrite path as other local references.
 - Unsupported remote stylesheet references are preserved unchanged in HTML when present and remain visible in warnings.
@@ -71,8 +72,8 @@
   - preserve `tel:`, `mailto:`, `javascript:`, `#fragment`, ordinary internal navigation links, and ordinary external links unchanged.
 - Header/logo placeholder image promotion safety:
   - promotion requires placeholder/data URL `<img src>` and fetched local image target
-  - wrapper anchor-driven promotion is limited to deterministic header/logo contexts near the image (header/nav/logo tokens + image-wrapper evidence)
-  - ordinary content anchors are not promoted through this rule
+  - wrapper anchor-driven promotion requires deterministic wrapper evidence (header/logo context or image-wrapper/gallery/lightbox tokens)
+  - ordinary non-image/non-wrapper anchors are not promoted through this rule
 
 ## Degraded Fidelity Behavior
 - Missing local assets remain non-fatal for eligible exports and are reported with warnings.
