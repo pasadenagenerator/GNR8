@@ -175,17 +175,19 @@ Bundle fields included (high-level):
 
 Fixed phase-1.5 output structure:
 - `<outputRoot>/<page.outputPath>` for generated pages
-- `<outputRoot>/assets/<resolvedPath>` for copied local assets
+- `<outputRoot>/<resolvedPath>` for copied local assets
 
 Asset copy strategy:
-- Copy only supported local references (`referenceKind` local + `validationStatus: ok`) to `assets/<resolvedPath>`.
-- Preserve canonical resolved local path under the exported assets root.
+- Copy only supported local references (`referenceKind` local + `validationStatus: ok`) to `<resolvedPath>`.
+- Preserve canonical resolved local path exactly (no extra export prefix).
 - Keep deterministic ordering and deterministic destination paths.
 - Do not fetch network/data URL assets.
 
 Asset reference rewrite behavior:
 - Rewrite only supported local references that were copied into the bundle.
-- Rewrite target is page-relative path from the page output directory to `assets/<resolvedPath>`.
+- Rewrite target is page-relative path from the page output directory to `<resolvedPath>`.
+- Anchor `<a href>` rewrites are guarded: rewrite only safe gallery/image anchors (image-like href + image/picture descendant + copied local target).
+- Preserve `tel:`, `mailto:`, `javascript:`, `#fragment`, and ordinary navigation/content links unchanged.
 - If no rewrite is required, HTML is written unchanged.
 
 Missing and unsupported asset handling:

@@ -46,7 +46,7 @@
 - Preserve source stylesheet links (`<link rel="stylesheet" href="...">`) in static HTML head in source order.
 - Duplicate stylesheet references are preserved as-is (no dedupe/inference).
 - Local stylesheet references (`relative_local`, `root_relative`, validation `ok` with resolved local path):
-  - copied to `assets/<resolvedPath>`
+  - copied to `<resolvedPath>` (preserved canonical local path; no extra prefix)
   - rewritten in exported HTML to page-relative bundle path.
 - Root-relative stylesheet references follow the same copy/rewrite path as other local references.
 - Unsupported remote stylesheet references are preserved unchanged in HTML when present and remain visible in warnings.
@@ -57,6 +57,9 @@
   - primary matching by canonical occurrence (`tag + attr + occurrence`)
   - fallback matching by (`tag + attr + rawRef`) for preserved-subset HTML (e.g., stylesheet-only link projection).
 - This allows correct local stylesheet rewriting even when non-stylesheet `<link>` elements are not emitted.
+- Anchor rewrite safety:
+  - rewrite `<a href>` only when deterministically classified as a copied local image/gallery target
+  - preserve `tel:`, `mailto:`, `javascript:`, `#fragment`, ordinary internal navigation links, and ordinary external links unchanged.
 
 ## Degraded Fidelity Behavior
 - Missing local assets remain non-fatal for eligible exports and are reported with warnings.

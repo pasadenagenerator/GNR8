@@ -292,10 +292,10 @@ test("url import hardens image/style assets and filters non-visual script/jsonld
   assert.ok(!exportedHtml.includes("Google Tag Manager (noscript)"));
   assert.ok(!exportedHtml.includes('src="/assets/'));
   assert.ok(!exportedHtml.includes('href="/assets/'));
-  assert.ok(exportedHtml.includes('src="assets/assets/image/'));
+  assert.ok(exportedHtml.includes('src="assets/image/'));
 
   const exportedFiles = listFilesRecursively(outputRootDir).map((abs) => abs.replaceAll(path.sep, "/"));
-  const exportedStylesheetAbs = exportedFiles.find((abs) => abs.includes("/assets/assets/stylesheet/"));
+  const exportedStylesheetAbs = exportedFiles.find((abs) => abs.includes("/assets/stylesheet/"));
   assert.ok(exportedStylesheetAbs);
   const exportedStylesheet = fs.readFileSync(exportedStylesheetAbs!, "utf8");
   assert.ok(exportedStylesheet.includes("../style_asset/"));

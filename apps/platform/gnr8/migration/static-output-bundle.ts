@@ -61,7 +61,7 @@ export type StaticOutputBundle = {
   rules: {
     outputStructureRule: "phase_1_5_bundle_flat_pages_and_assets_root_v1";
     pageOutputPathRule: StaticHtmlRenderArtifact["mapping"]["outputPathRule"];
-    assetCopyRule: "assets_root_preserve_resolved_path_v1";
+    assetCopyRule: "preserve_resolved_path_without_extra_prefix_v2";
     assetRewriteRule: "rewrite_supported_local_refs_only_when_needed_v1";
     stylesheetRewriteRule: "rewrite_preserved_stylesheet_links_for_copied_local_assets_v1";
     remoteAssetRule: "unsupported_remote_assets_preserved_when_present_and_reported_v1";
@@ -138,7 +138,7 @@ function resolveToOutputRoot(input: { importRootDir: string; outputRootDir: stri
 
 function toOutputAssetPathFromResolvedPath(resolvedPath: string): string {
   const normalized = path.posix.normalize(resolvedPath.replaceAll("\\", "/")).replace(/^\/+/, "");
-  return `assets/${normalized}`;
+  return normalized;
 }
 
 function isLocalReferenceKind(kind: AssetReference["referenceKind"]): boolean {
@@ -204,6 +204,69 @@ function walkDom(node: unknown, visit: (n: unknown) => void): void {
     const content = (current as { content?: unknown }).content;
     if (content && typeof content === "object") stack.push(content);
   }
+}
+
+function hasDescendantTag(root: unknown, tagName: string): boolean {
+  let found = false;
+  walkDom(root, (node) => {
+    if (found || !isElement(node)) return;
+    if (node.tagName.toLowerCase() === tagName) found = true;
+  });
+  return found;
+}
+
+const IMAGE_FILE_EXTENSION_SET = new Set<string>([
+  ".apng",
+  ".avif",
+  ".bmp",
+  ".gif",
+  ".ico",
+  ".jpeg",
+  ".jpg",
+  ".png",
+  ".svg",
+  ".tif",
+  ".tiff",
+  ".webp",
+]);
+
+function isImageLikeHrefRef(rawRef: string): boolean {
+  const trimmed = rawRef.trim();
+  if (!trimmed) return false;
+  if (trimmed.toLowerCase().startsWith("data:image/")) return true;
+  try {
+    const resolved = new URL(trimmed, "https://example.invalid");
+    const ext = path.posix.extname(resolved.pathname.toLowerCase());
+    return IMAGE_FILE_EXTENSION_SET.has(ext);
+  } catch {
+    return false;
+  }
+}
+
+function isExplicitlyPreservedHrefClass(rawRef: string): boolean {
+  const trimmed = rawRef.trim();
+  if (!trimmed) return true;
+  if (trimmed.startsWith("#")) return true;
+  const lower = trimmed.toLowerCase();
+  return (
+    lower.startsWith("tel:") ||
+    lower.startsWith("mailto:") ||
+    lower.startsWith("javascript:")
+  );
+}
+
+function isSafeAnchorReferenceRewriteTarget(input: {
+  node: HtmlElementNode;
+  ref: AssetReference;
+  rawHref: string;
+}): boolean {
+  if (input.ref.tag !== "a" || input.ref.attribute !== "href") return false;
+  if (input.ref.assetKind !== "image") return false;
+  if (!isLocalReferenceKind(input.ref.referenceKind)) return false;
+  if (input.ref.validationStatus !== "ok" || input.ref.resolvedPath === null) return false;
+  if (isExplicitlyPreservedHrefClass(input.rawHref)) return false;
+  if (!isImageLikeHrefRef(input.rawHref)) return false;
+  return hasDescendantTag(input.node, "img") || hasDescendantTag(input.node, "picture");
 }
 
 function rewriteHtmlAssetReferences(input: {
@@ -275,6 +338,19 @@ function rewriteHtmlAssetReferences(input: {
       return;
     }
 
+    if (ref.tag === "a" && ref.attribute === "href") {
+      if (
+        !isSafeAnchorReferenceRewriteTarget({
+          node,
+          ref,
+          rawHref: attr.value ?? "",
+        })
+      ) {
+        warningCodes.add("ASSET_REFERENCE_REWRITE_SKIPPED_UNSAFE_ANCHOR");
+        return;
+      }
+    }
+
     const fromRawRef = attr.value ?? "";
     attr.value = nextRefValue;
     consumedReferenceIds.add(ref.id);
@@ -322,7 +398,7 @@ function computeBundleStatus(input: {
  *
  * Phase-1.5 output structure:
  * - `<outputRoot>/<page.outputPath>` for each renderable page
- * - `<outputRoot>/assets/<resolvedPath>` for copied local assets
+ * - `<outputRoot>/<resolvedPath>` for copied local assets
  */
 export async function materializeStaticOutputBundle(input: MaterializeStaticOutputBundleInput): Promise<StaticOutputBundle> {
   const importRootDirAbs = path.resolve(input.importRootDir);
@@ -577,7 +653,7 @@ export async function materializeStaticOutputBundle(input: MaterializeStaticOutp
     rules: {
       outputStructureRule: "phase_1_5_bundle_flat_pages_and_assets_root_v1",
       pageOutputPathRule: input.staticHtmlArtifact.mapping.outputPathRule,
-      assetCopyRule: "assets_root_preserve_resolved_path_v1",
+      assetCopyRule: "preserve_resolved_path_without_extra_prefix_v2",
       assetRewriteRule: "rewrite_supported_local_refs_only_when_needed_v1",
       stylesheetRewriteRule: "rewrite_preserved_stylesheet_links_for_copied_local_assets_v1",
       remoteAssetRule: "unsupported_remote_assets_preserved_when_present_and_reported_v1",

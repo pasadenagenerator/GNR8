@@ -151,12 +151,12 @@ test("materializeStaticOutputBundle preserves canonical page and asset paths", a
     .filter((a) => a.writeStatus === "copied")
     .map((a) => a.outputPath)
     .sort();
-  assert.deepEqual(copiedAssetOutputPaths, ["assets/assets/app.js", "assets/assets/logo.svg", "assets/assets/styles.css"]);
+  assert.deepEqual(copiedAssetOutputPaths, ["assets/app.js", "assets/logo.svg", "assets/styles.css"]);
 
   const pageRecord = bundle.pageFiles.find((p) => p.writeStatus === "written");
   assert.ok(pageRecord);
   const html = await fs.readFile(pageRecord!.absoluteOutputPath, "utf-8");
-  assert.ok(html.includes('<link rel="stylesheet" href="assets/assets/styles.css">'));
+  assert.ok(html.includes('<link rel="stylesheet" href="assets/styles.css">'));
 
   for (const pageFile of bundle.pageFiles.filter((p) => p.writeStatus === "written")) {
     const stat = await fs.stat(pageFile.absoluteOutputPath);
@@ -209,7 +209,7 @@ test("materializeStaticOutputBundle rewrites root-relative stylesheet links to e
   const pageRecord = bundle.pageFiles.find((p) => p.outputPath === "index.html" && p.writeStatus === "written");
   assert.ok(pageRecord);
   const html = await fs.readFile(pageRecord!.absoluteOutputPath, "utf-8");
-  assert.ok(html.includes('<link rel="stylesheet" href="assets/assets/styles.css">'));
+  assert.ok(html.includes('<link rel="stylesheet" href="assets/styles.css">'));
 });
 
 test("materializeStaticOutputBundle rewrites image-gallery anchor hrefs to exported copied assets", async () => {
@@ -253,9 +253,68 @@ test("materializeStaticOutputBundle rewrites image-gallery anchor hrefs to expor
   const pageRecord = bundle.pageFiles.find((p) => p.outputPath === "index.html" && p.writeStatus === "written");
   assert.ok(pageRecord);
   const html = await fs.readFile(pageRecord!.absoluteOutputPath, "utf-8");
-  assert.ok(html.includes('<a href="assets/assets/gallery/full.webp">'));
-  assert.ok(html.includes('<img src="assets/assets/gallery/full.webp" alt="Gallery">'));
-  assert.ok(bundle.assetFiles.some((a) => a.writeStatus === "copied" && a.outputPath === "assets/assets/gallery/full.webp"));
+  assert.ok(html.includes('<a href="assets/gallery/full.webp">'));
+  assert.ok(html.includes('<img src="assets/gallery/full.webp" alt="Gallery">'));
+  assert.ok(bundle.assetFiles.some((a) => a.writeStatus === "copied" && a.outputPath === "assets/gallery/full.webp"));
+});
+
+test("materializeStaticOutputBundle only rewrites safe image/gallery anchors and preserves non-image href classes", async () => {
+  const tmpBase = await fs.mkdtemp(path.join(os.tmpdir(), "gnr8-static-bundle-safe-anchor-rewrite-"));
+  const rootDir = path.join(tmpBase, "site");
+  await fs.mkdir(path.join(rootDir, "assets/gallery"), { recursive: true });
+  await fs.mkdir(path.join(rootDir, "assets/files"), { recursive: true });
+  await fs.writeFile(path.join(rootDir, "assets/gallery/full.webp"), "RIFF", "utf-8");
+  await fs.writeFile(path.join(rootDir, "assets/files/brochure.jpg"), "JPG", "utf-8");
+  await fs.writeFile(
+    path.join(rootDir, "index.html"),
+    [
+      "<!doctype html>",
+      "<html lang=\"en\">",
+      "<head><meta charset=\"utf-8\"><title>Safe Anchor Rewrite Fixture</title></head>",
+      "<body>",
+      "  <a href=\"tel:+38640111222\">Call us</a>",
+      "  <a href=\"mailto:hello@example.com\">Email us</a>",
+      "  <a href=\"#pricing\">Pricing</a>",
+      "  <a href=\"/about\">About</a>",
+      "  <a href=\"https://example.com/blog\">Blog</a>",
+      "  <a href=\"/assets/files/brochure.jpg\">Brochure download</a>",
+      "  <a class=\"gallery-item\" href=\"/assets/gallery/full.webp\"><img src=\"/assets/gallery/full.webp\" alt=\"Gallery\"></a>",
+      "</body>",
+      "</html>",
+      "",
+    ].join("\n"),
+    "utf-8",
+  );
+
+  const built = await buildStaticHtmlForSite({
+    rootDir,
+    requestId: "req-static-bundle-safe-anchor-rewrite",
+    entryHtmlPath: "index.html",
+    assetsDirPath: "assets",
+  });
+
+  const outputRootDir = path.join(tmpBase, "bundle");
+  const bundle = await materializeStaticOutputBundle({
+    staticHtmlArtifact: built.artifact,
+    importOutput: built.importOutput,
+    importRootDir: rootDir,
+    outputRootDir,
+  });
+
+  const pageRecord = bundle.pageFiles.find((p) => p.outputPath === "index.html" && p.writeStatus === "written");
+  assert.ok(pageRecord);
+  const html = await fs.readFile(pageRecord!.absoluteOutputPath, "utf-8");
+
+  assert.ok(html.includes('<a href="tel:+38640111222">Call us</a>'));
+  assert.ok(html.includes('<a href="mailto:hello@example.com">Email us</a>'));
+  assert.ok(html.includes('<a href="#pricing">Pricing</a>'));
+  assert.ok(html.includes('<a href="/about">About</a>'));
+  assert.ok(html.includes('<a href="https://example.com/blog">Blog</a>'));
+  assert.ok(html.includes('<a href="/assets/files/brochure.jpg">Brochure download</a>'));
+  assert.ok(html.includes('<a class="gallery-item" href="assets/gallery/full.webp"><img src="assets/gallery/full.webp" alt="Gallery"></a>'));
+
+  assert.ok(bundle.rewrites.some((r) => r.fromRawRef === "/assets/gallery/full.webp" && r.toOutputRef === "assets/gallery/full.webp"));
+  assert.ok(bundle.diagnostics.warnings.codes.includes("ASSET_REFERENCE_REWRITE_SKIPPED_UNSAFE_ANCHOR"));
 });
 
 test("all current validation fixtures materialize through static bundle path", async () => {
@@ -385,7 +444,7 @@ test("unsupported remote/data stylesheet references remain in exported HTML and 
   const pageRecord = bundle.pageFiles.find((p) => p.outputPath === "index.html" && p.writeStatus === "written");
   assert.ok(pageRecord);
   const html = await fs.readFile(pageRecord!.absoluteOutputPath, "utf-8");
-  assert.ok(html.includes('<link rel="stylesheet" href="assets/assets/styles.css">'));
+  assert.ok(html.includes('<link rel="stylesheet" href="assets/styles.css">'));
   assert.ok(html.includes('<link rel="stylesheet" href="https://cdn.example.invalid/site.css">'));
   assert.ok(html.includes('<link rel="stylesheet" href="data:text/css,body{color:red}">'));
 });
