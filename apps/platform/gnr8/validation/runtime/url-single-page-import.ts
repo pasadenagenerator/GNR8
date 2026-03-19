@@ -6,6 +6,7 @@ import { parse, serialize } from "parse5";
 
 import type { JsonValue } from "../../import/import-contract";
 import { stableStringify } from "../../migration/runtime/diagnostics";
+import { resolveUrlImportSnapshotRootDirAbs } from "./url-import-snapshot-root";
 
 export const URL_SINGLE_PAGE_IMPORT_VERSION = "1.0.0" as const;
 
@@ -444,6 +445,7 @@ export async function importPublicSinglePageUrlToSnapshot(input: {
 }): Promise<UrlSinglePageImportSnapshot> {
   const diagnostics: UrlImportDiagnostic[] = [];
   const fetchManifest: UrlImportFetchManifestEntry[] = [];
+  const snapshotBase = resolveUrlImportSnapshotRootDirAbs(input.snapshotRootDirAbs);
 
   const normalizedUrl = normalizeInputPublicUrl(input.sourceUrl);
   if (!normalizedUrl) {
@@ -464,7 +466,7 @@ export async function importPublicSinglePageUrlToSnapshot(input: {
       sourceUrl: input.sourceUrl,
       normalizedUrl: "",
       snapshotId: "imported-url-site-invalid",
-      snapshotRootDirAbs: path.resolve(input.snapshotRootDirAbs ?? path.resolve(process.cwd(), "gnr8/validation/.out/url-import-snapshots"), "imported-url-site-invalid"),
+      snapshotRootDirAbs: path.resolve(snapshotBase, "imported-url-site-invalid"),
       fixtureSpec: {
         fixtureId: "imported-url-site-invalid",
         kind: "static_marketing_site_v1",
@@ -490,7 +492,6 @@ export async function importPublicSinglePageUrlToSnapshot(input: {
 
   const normalizedHref = normalizedUrl.toString();
   const snapshotId = snapshotIdForNormalizedUrl(normalizedHref);
-  const snapshotBase = path.resolve(input.snapshotRootDirAbs ?? path.resolve(process.cwd(), "gnr8/validation/.out/url-import-snapshots"));
   const snapshotRootDirAbs = path.resolve(snapshotBase, snapshotId);
   const entryHtmlPathAbs = path.resolve(snapshotRootDirAbs, "index.html");
   const assetsDirAbs = path.resolve(snapshotRootDirAbs, "assets");

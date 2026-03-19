@@ -59,6 +59,16 @@ function listFilesRecursively(absRoot: string): string[] {
   return out.sort((a, b) => a.localeCompare(b));
 }
 
+function withEnv(input: { key: string; value?: string }, fn: () => Promise<void>): Promise<void> {
+  const previous = process.env[input.key];
+  if (typeof input.value === "string") process.env[input.key] = input.value;
+  else delete process.env[input.key];
+  return fn().finally(() => {
+    if (typeof previous === "string") process.env[input.key] = previous;
+    else delete process.env[input.key];
+  });
+}
+
 test("url import snapshot generation remains deterministic for identical URL + response set", async () => {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "gnr8-url-import-determinism-"));
 
@@ -256,4 +266,44 @@ test("existing fixture-based operator flow remains unchanged", async () => {
 
   assert.equal(typeof stable, "string");
   assert.ok(stable.length > 10);
+});
+
+test("url import operator defaults to tmp snapshot root on Vercel runtime and works in simulation/materialize", async () => {
+  await withEnv({ key: "VERCEL", value: "1" }, async () => {
+    const sourceUrl = "https://vercel-mode.example.com/";
+    const fetchImpl = mockFetchFromTable({
+      [sourceUrl]: {
+        status: 200,
+        headers: { "content-type": "text/html" },
+        body: "<!doctype html><html><body><h1>vercel mode</h1></body></html>",
+      },
+    });
+
+    const simulation = await runUrlImportOperatorFlow(
+      { sourceUrl, executionMode: "simulation" },
+      {
+        fetchImpl,
+      },
+    );
+    assert.equal(simulation.ok, true);
+    if (!simulation.ok) return;
+
+    const expectedTmpPrefix = path.resolve(os.tmpdir(), "gnr8", "validation", "url-import-snapshots");
+    assert.ok(simulation.snapshot.snapshotRootDirAbs.startsWith(expectedTmpPrefix));
+
+    const materialize = await runUrlImportOperatorFlow(
+      { sourceUrl, executionMode: "materialize" },
+      {
+        fetchImpl,
+      },
+    );
+    assert.equal(materialize.ok, true);
+    if (!materialize.ok) return;
+
+    assert.ok(materialize.snapshot.snapshotRootDirAbs.startsWith(expectedTmpPrefix));
+    assert.ok(
+      materialize.result.executionResult.status === "executed" ||
+        materialize.result.executionResult.status === "executed_with_warnings",
+    );
+  });
 });

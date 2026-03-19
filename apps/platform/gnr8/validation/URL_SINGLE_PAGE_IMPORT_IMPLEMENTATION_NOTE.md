@@ -1,12 +1,18 @@
 # URL Single-Page Import - Implementation Note
 
 - Snapshot structure:
-  - `apps/platform/gnr8/validation/.out/url-import-snapshots/imported-url-site-<hash16>/`
+  - `<snapshot_root>/imported-url-site-<hash16>/`
   - `fixture.json`
   - `index.html`
   - `assets/<kind>/<urlHash12>-<basename>[ -N ].<ext>`
   - `url-import-diagnostics.json`
   - `url-fetch-manifest.json`
+
+- Snapshot root selection (runtime-safe, deterministic rule):
+  - Explicit caller override: `snapshotRootDirAbs` (if provided).
+  - Else env override: `GNR8_URL_IMPORT_SNAPSHOT_ROOT_ABS` (absolute or resolvable path).
+  - Else deployed Vercel runtime (`VERCEL=1|true`): `${os.tmpdir()}/gnr8/validation/url-import-snapshots`.
+  - Else local/dev default: `apps/platform/gnr8/validation/.out/url-import-snapshots` (resolved from validation runtime module location, not `process.cwd()`).
 
 - URL normalization/key rule:
   - Accept only one `http(s)` URL input.
