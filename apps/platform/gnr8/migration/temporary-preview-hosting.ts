@@ -326,6 +326,18 @@ function canonicalAliasCandidatesForCopiedStylesheetPath(outputPath: string): st
     if (alias) aliases.add(alias);
   }
 
+  // URL-import copied stylesheets use: assets/stylesheet/<hash12>-<basename>.
+  // Preserve rewrite eligibility for root-style source targets like /assets/<basename>.
+  if (segments.length >= 3 && segments[0] === "assets" && segments[1] === "stylesheet") {
+    const copiedFileName = segments[segments.length - 1] ?? "";
+    const match = copiedFileName.match(/^[a-f0-9]{12}-(.+)$/i);
+    const originalBasename = match?.[1]?.trim() ?? "";
+    if (originalBasename) {
+      const originalLikeAlias = normalizeStylesheetTargetPath(`assets/${originalBasename}`);
+      if (originalLikeAlias) aliases.add(originalLikeAlias);
+    }
+  }
+
   return [...aliases].sort((a, b) => a.localeCompare(b));
 }
 

@@ -37,7 +37,10 @@ export type UrlImportDiagnosticCode =
   | "ASSET_FETCH_FAILED"
   | "ASSET_FETCH_NON_OK"
   | "ASSET_FETCH_UNSUPPORTED_SCHEME"
-  | "ASSET_COLLISION_RESOLVED";
+  | "ASSET_COLLISION_RESOLVED"
+  | "PRIMARY_STYLESHEET_CAPTURED"
+  | "PRIMARY_STYLESHEET_FETCH_FAILED"
+  | "PRIMARY_STYLESHEET_NOT_REWRITE_ELIGIBLE";
 
 export type UrlImportDiagnostic = {
   id: string;
@@ -121,6 +124,7 @@ type ParsedAssetRef = {
   rawRef: string;
   resolvedUrl: string | null;
   assetKind: UrlImportAssetKind;
+  sourceScope: "head_stylesheet" | "other";
 };
 
 const FETCH_SCOPE: UrlImportExecutionScope = {
@@ -150,6 +154,17 @@ function sha256Hex(input: string | Uint8Array): string {
 
 function toPosixPath(p: string): string {
   return p.replaceAll(path.sep, "/");
+}
+
+function normalizeSnapshotLocalTargetPath(rawPath: string): string | null {
+  const trimmed = rawPath.trim();
+  if (!trimmed) return null;
+  const normalized = path.posix
+    .normalize(trimmed.replaceAll("\\", "/").replace(/^https?:\/\/[^/]+/i, ""))
+    .replace(/^(?:\.\/)+/, "")
+    .replace(/^\/+/, "");
+  if (!normalized || normalized === "." || normalized === ".." || normalized.startsWith("../")) return null;
+  return normalized;
 }
 
 function normalizeBasename(value: string): string {
@@ -343,6 +358,14 @@ function isStylesheetKind(assetKind: UrlImportAssetKind): boolean {
   return assetKind === "stylesheet";
 }
 
+function isSameOriginUrl(resolvedUrl: string, origin: string): boolean {
+  try {
+    return new URL(resolvedUrl).origin === origin;
+  } catch {
+    return false;
+  }
+}
+
 function resolveAssetUrl(input: {
   rawRef: string;
   baseUrl: URL;
@@ -425,7 +448,29 @@ const IMAGE_FILE_EXTENSION_SET = new Set<string>([
 
 const PLACEHOLDER_TOKEN_SET = ["placeholder", "spacer", "blank", "transparent", "loader", "loading"] as const;
 
-const NEAREST_GALLERY_ANCHOR_MAX_DEPTH = 5;
+const NEAREST_PROMOTION_ANCHOR_MAX_DEPTH = 6;
+const HEADER_LOGO_CONTEXT_TOKEN_SET = new Set<string>([
+  "brand",
+  "header",
+  "logo",
+  "logotype",
+  "masthead",
+  "navbar",
+  "site-logo",
+]);
+const IMAGE_WRAPPER_CONTEXT_TOKEN_SET = new Set<string>([
+  "figure",
+  "gallery",
+  "hero",
+  "image",
+  "lightbox",
+  "logo",
+  "media",
+  "photo",
+  "picture",
+  "thumbnail",
+  "thumb",
+]);
 
 function isImageLikeHrefRef(rawRef: string): boolean {
   const trimmed = rawRef.trim();
@@ -603,22 +648,69 @@ function hasDescendantTag(root: unknown, tagName: string): boolean {
   return found;
 }
 
-function nearestAncestorHref(
+function tokenizeLower(value: string): string[] {
+  return value
+    .toLowerCase()
+    .split(/[^a-z0-9]+/g)
+    .filter(Boolean);
+}
+
+function attrContainsAnyToken(node: unknown, attrNames: readonly string[], tokenSet: Set<string>): boolean {
+  for (const attrName of attrNames) {
+    const value = getAttr(node, attrName);
+    if (!value || !value.trim()) continue;
+    const tokens = tokenizeLower(value);
+    for (const token of tokens) {
+      if (tokenSet.has(token)) return true;
+    }
+  }
+  return false;
+}
+
+function hasHeaderOrLogoContext(input: { imgNode: unknown; ancestors: unknown[] }): boolean {
+  if (attrContainsAnyToken(input.imgNode, ["alt", "class", "id"], HEADER_LOGO_CONTEXT_TOKEN_SET)) return true;
+
+  for (let i = input.ancestors.length - 1; i >= 0; i--) {
+    const ancestor = input.ancestors[i];
+    if (!isElement(ancestor)) continue;
+    const tag = ancestor.tagName.toLowerCase();
+    if (tag === "header" || tag === "nav") return true;
+    if (attrContainsAnyToken(ancestor, ["class", "id"], HEADER_LOGO_CONTEXT_TOKEN_SET)) return true;
+  }
+  return false;
+}
+
+function nearestAncestorAnchor(
   ancestors: unknown[],
   maxDepth: number,
-): string | null {
+): { node: unknown; href: string } | null {
   let depth = 0;
   for (let i = ancestors.length - 1; i >= 0; i--) {
     depth += 1;
     if (depth > maxDepth) break;
     const node = ancestors[i];
-    if (!isElement(node)) continue;
-    const tag = node.tagName.toLowerCase();
-    if (tag !== "a") continue;
-    const href = getAttr(node, "href");
-    if (href && href.trim()) return href;
+    if (!isElement(node) || node.tagName.toLowerCase() !== "a") continue;
+    const href = (getAttr(node, "href") ?? "").trim();
+    if (!href) continue;
+    return { node, href };
   }
   return null;
+}
+
+function isDeterministicImageWrapperContext(input: {
+  imgNode: unknown;
+  ancestors: unknown[];
+  anchorNode: unknown;
+}): boolean {
+  if (hasHeaderOrLogoContext({ imgNode: input.imgNode, ancestors: input.ancestors })) return true;
+  if (attrContainsAnyToken(input.anchorNode, ["class", "id", "rel"], IMAGE_WRAPPER_CONTEXT_TOKEN_SET)) return true;
+
+  for (let i = input.ancestors.length - 1; i >= 0; i--) {
+    const ancestor = input.ancestors[i];
+    if (!isElement(ancestor)) continue;
+    if (attrContainsAnyToken(ancestor, ["class", "id", "rel"], IMAGE_WRAPPER_CONTEXT_TOKEN_SET)) return true;
+  }
+  return false;
 }
 
 function collectAssetRefs(input: {
@@ -642,6 +734,7 @@ function collectAssetRefs(input: {
     rawRef: string;
     assetKind: UrlImportAssetKind;
     surface: string;
+    sourceScope?: "head_stylesheet" | "other";
   }): void {
     const trimmed = args.rawRef.trim();
     if (!trimmed) return;
@@ -660,10 +753,11 @@ function collectAssetRefs(input: {
       rawRef: trimmed,
       resolvedUrl,
       assetKind: args.assetKind,
+      sourceScope: args.sourceScope ?? "other",
     });
   }
 
-  walkDomWithAncestors(input.document, (node) => {
+  walkDomWithAncestors(input.document, (node, ancestors) => {
     if (!isElement(node)) return;
     const tag = node.tagName.toLowerCase() as UrlImportAssetTag | string;
     const rel = getAttr(node, "rel");
@@ -706,7 +800,15 @@ function collectAssetRefs(input: {
       const href = getAttr(node, "href");
       if (!href || !href.trim()) return;
       if (!assetKind) return;
-      pushRef({ tag: "link", attribute: "href", rawRef: href, assetKind, surface: "direct" });
+      const inHead = ancestors.some((ancestor) => isElement(ancestor) && ancestor.tagName.toLowerCase() === "head");
+      pushRef({
+        tag: "link",
+        attribute: "href",
+        rawRef: href,
+        assetKind,
+        surface: "direct",
+        sourceScope: inHead ? "head_stylesheet" : "other",
+      });
       return;
     }
 
@@ -768,6 +870,17 @@ function resolveFetchedLocalPathForRawRef(input: {
 }): string | null {
   const rawRef = (input.rawRef ?? "").trim();
   if (!rawRef) return null;
+
+  const [pathPart] = rawRef.split(/[?#]/, 1);
+  const normalizedRawLocalPath = normalizeSnapshotLocalTargetPath(pathPart ?? "");
+  if (normalizedRawLocalPath) {
+    for (const [resolvedUrl, localPath] of [...input.localPathByUrl.entries()].sort((a, b) => a[0].localeCompare(b[0]))) {
+      if (normalizeSnapshotLocalTargetPath(localPath) !== normalizedRawLocalPath) continue;
+      const outcome = input.fetchOutcomeByUrl.get(resolvedUrl);
+      if (outcome?.fetchStatus === "fetched") return localPath;
+    }
+  }
+
   let resolvedUrl: string | null = null;
   try {
     const resolved = new URL(rawRef, input.baseUrl);
@@ -823,7 +936,11 @@ function choosePromotedImageLocalPath(input: {
     lazyCandidates.push(raw);
   }
 
-  const galleryHref = nearestAncestorHref(input.ancestors, NEAREST_GALLERY_ANCHOR_MAX_DEPTH);
+  const nearestAnchor = nearestAncestorAnchor(input.ancestors, NEAREST_PROMOTION_ANCHOR_MAX_DEPTH);
+  const wrapperAnchorHref =
+    nearestAnchor && isDeterministicImageWrapperContext({ imgNode: input.imgNode, ancestors: input.ancestors, anchorNode: nearestAnchor.node })
+      ? nearestAnchor.href
+      : null;
 
   const pickFirstFetched = (candidates: Array<string | null>): string | null => {
     for (const rawRef of candidates) {
@@ -848,7 +965,7 @@ function choosePromotedImageLocalPath(input: {
     ...srcsetFromPictureSources,
     ...imgSrcsetCandidates,
     ...lazyCandidates,
-    primaryIsPlaceholder ? galleryHref : null,
+    primaryIsPlaceholder ? wrapperAnchorHref : null,
     primaryIsPlaceholder ? primarySrc : null,
   ]);
   if (promoted) return promoted;
@@ -1010,6 +1127,36 @@ export async function importPublicSinglePageUrlToSnapshot(input: {
       entryUrl: normalizedUrl,
       diagnostics,
     });
+    for (const ref of refs) {
+      if (ref.tag !== "link" || ref.assetKind !== "stylesheet" || !ref.resolvedUrl) continue;
+      if (isSameOriginUrl(ref.resolvedUrl, normalizedUrl.origin)) continue;
+      diagnostics.push(
+        createDiagnostic({
+          severity: "info",
+          code: "ASSET_REFERENCE_UNSUPPORTED",
+          message: "Skipped non-local stylesheet reference",
+          targetUrl: ref.resolvedUrl,
+          details: { tag: ref.tag, attribute: ref.attribute, rawRef: ref.rawRef, occurrence: ref.occurrence, surface: "head_stylesheet" },
+        }),
+      );
+      ref.resolvedUrl = null;
+    }
+    const primaryHeadStylesheetRefs = refs
+      .filter(
+        (ref) =>
+          ref.tag === "link" &&
+          ref.attribute === "href" &&
+          ref.assetKind === "stylesheet" &&
+          ref.sourceScope === "head_stylesheet" &&
+          typeof ref.resolvedUrl === "string" &&
+          isSameOriginUrl(ref.resolvedUrl, normalizedUrl.origin),
+      )
+      .sort((a, b) => {
+        const aUrl = a.resolvedUrl ?? "";
+        const bUrl = b.resolvedUrl ?? "";
+        if (aUrl !== bUrl) return aUrl.localeCompare(bUrl);
+        return a.occurrence - b.occurrence;
+      });
     const localPathByUrl = resolvePathCollisions(refs, diagnostics);
 
     type FetchOutcome = {
@@ -1096,6 +1243,48 @@ export async function importPublicSinglePageUrlToSnapshot(input: {
       fetchOutcomeByUrl.set(resolvedUrl, outcome);
     }
 
+    for (const stylesheetRef of primaryHeadStylesheetRefs) {
+      const stylesheetUrl = stylesheetRef.resolvedUrl;
+      if (!stylesheetUrl) continue;
+      const localPath = localPathByUrl.get(stylesheetUrl) ?? null;
+      const outcome = fetchOutcomeByUrl.get(stylesheetUrl) ?? null;
+      if (localPath && outcome?.fetchStatus === "fetched") {
+        diagnostics.push(
+          createDiagnostic({
+            severity: "info",
+            code: "PRIMARY_STYLESHEET_CAPTURED",
+            message: "Captured fetchable head stylesheet as copied local asset",
+            targetUrl: stylesheetUrl,
+            details: { localPath, occurrence: stylesheetRef.occurrence, tag: stylesheetRef.tag, attribute: stylesheetRef.attribute },
+          }),
+        );
+        continue;
+      }
+
+      if (outcome?.fetchStatus === "fetch_failed") {
+        diagnostics.push(
+          createDiagnostic({
+            severity: "warning",
+            code: "PRIMARY_STYLESHEET_FETCH_FAILED",
+            message: "Head stylesheet candidate fetch failed and remains non-local",
+            targetUrl: stylesheetUrl,
+            details: { localPath, occurrence: stylesheetRef.occurrence, tag: stylesheetRef.tag, attribute: stylesheetRef.attribute },
+          }),
+        );
+        continue;
+      }
+
+      diagnostics.push(
+        createDiagnostic({
+          severity: "warning",
+          code: "PRIMARY_STYLESHEET_NOT_REWRITE_ELIGIBLE",
+          message: "Head stylesheet candidate is present but not rewrite-eligible",
+          targetUrl: stylesheetUrl,
+          details: { localPath, outcome: outcome?.fetchStatus ?? "unsupported", occurrence: stylesheetRef.occurrence },
+        }),
+      );
+    }
+
     const stylesheetRefs = refs.filter((ref) => isStylesheetKind(ref.assetKind) && ref.resolvedUrl !== null);
     const stylesheetLinkedRefs: ParsedAssetRef[] = [];
 
@@ -1147,6 +1336,7 @@ export async function importPublicSinglePageUrlToSnapshot(input: {
           rawRef: rawCssRef,
           resolvedUrl: resolvedCssUrl,
           assetKind: "style_asset",
+          sourceScope: "other",
         });
         cssRefOccurrence += 1;
       }
@@ -1262,7 +1452,8 @@ export async function importPublicSinglePageUrlToSnapshot(input: {
               diagnosticContext: { tag: tag as UrlImportAssetTag, attribute, surface: "srcset_rewrite" },
             });
             const localPath = resolvedUrl ? localPathByUrl.get(resolvedUrl) : null;
-            if (localPath) return { url: `/${toPosixPath(localPath)}`, descriptor: token.descriptor };
+            const outcome = resolvedUrl ? fetchOutcomeByUrl.get(resolvedUrl) : null;
+            if (localPath && outcome?.fetchStatus === "fetched") return { url: `/${toPosixPath(localPath)}`, descriptor: token.descriptor };
             return token;
           });
           const rewritten = buildSrcsetValue(rewrittenTokens);
@@ -1301,13 +1492,16 @@ export async function importPublicSinglePageUrlToSnapshot(input: {
 
         const resolvedUrl = parsedRef?.resolvedUrl ?? null;
         const localPath = resolvedUrl ? localPathByUrl.get(resolvedUrl) ?? null : null;
-        if (localPath) setAttr(node, attribute, `/${toPosixPath(localPath)}`);
-        if (tag === "img" && attribute !== "src" && localPath) {
+        const outcome = resolvedUrl ? fetchOutcomeByUrl.get(resolvedUrl) : null;
+        const isStylesheetLink = tag === "link" && attribute === "href" && parsedRef?.assetKind === "stylesheet";
+        const rewriteEligibleLocalPath =
+          localPath && (outcome?.fetchStatus === "fetched" || isStylesheetLink) ? localPath : null;
+        if (rewriteEligibleLocalPath) setAttr(node, attribute, `/${toPosixPath(rewriteEligibleLocalPath)}`);
+        if (tag === "img" && attribute !== "src" && rewriteEligibleLocalPath) {
           const imgSrc = getAttr(node, "src");
-          if (!imgSrc || !imgSrc.trim()) setAttr(node, "src", `/${toPosixPath(localPath)}`);
+          if (!imgSrc || !imgSrc.trim()) setAttr(node, "src", `/${toPosixPath(rewriteEligibleLocalPath)}`);
         }
 
-        const outcome = resolvedUrl ? fetchOutcomeByUrl.get(resolvedUrl) : null;
         fetchManifest.push({
           tag: tag as UrlImportAssetTag,
           attribute,
