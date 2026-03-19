@@ -52,6 +52,8 @@ type UrlImportOperatorSuccessResponse = {
         available: boolean;
         previewRootUrl: string | null;
         previewEntryUrl: string | null;
+        previewStorageKind: string;
+        previewStorageKey: string | null;
         reasonCode: string | null;
       };
     };
@@ -373,6 +375,8 @@ function ResultPanel(props: { response: UrlImportOperatorResponse }) {
             { k: "preview.status", v: <StatusPill value={preview.status} /> },
             { k: "preview.entryUrl", v: preview.previewEntryUrl ? <a href={preview.previewEntryUrl}>{preview.previewEntryUrl}</a> : "n/a" },
             { k: "preview.rootUrl", v: preview.previewRootUrl ? <a href={preview.previewRootUrl}>{preview.previewRootUrl}</a> : "n/a" },
+            { k: "preview.storageKind", v: preview.previewStorageKind },
+            { k: "preview.storageKey", v: preview.previewStorageKey ?? "n/a" },
             { k: "preview.reasonCode", v: preview.reasonCode ?? "n/a" },
           ]}
         />

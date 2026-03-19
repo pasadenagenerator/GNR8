@@ -87,3 +87,34 @@ The runner returns all phase-1 artifacts in one structured object (`ValidationRu
 `PreviewDocument` preview markup is intentionally minimal, but it is not visually empty:
 - Each preview `<section>` includes a deterministic visible header plus either a compact text excerpt (when available) or a stable structural fallback placeholder.
 - No semantic inference or design reconstruction is performed; the projection is fixed and replayable.
+
+## Materialized Preview Persistence (Task 37)
+
+Materialize-mode preview hosting now supports persistent bundle storage so preview URLs can remain valid across requests and runtime instances.
+
+- Persistent backend preference:
+  - Supabase Storage (when `NEXT_PUBLIC_SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY` are configured)
+  - Optional deterministic local persistent object root for dev/tests: `GNR8_PREVIEW_PERSISTENT_FS_ROOT`
+- Deterministic storage root key:
+  - `phase1-materialized-previews/v1/<executionPlanId>`
+- Deterministic file mapping:
+  - Each materialized file at `<relPath>` is stored as:
+    - `phase1-materialized-previews/v1/<executionPlanId>/<relPath>`
+  - Entry file rule:
+    - `phase1-materialized-previews/v1/<executionPlanId>/index.html`
+
+### Serving behavior
+
+- Preview route key resolution supports:
+  - persistent storage-backed keys
+  - local filesystem keys (controlled `.gnr8-static-output` roots only)
+- Path traversal is blocked for both modes.
+- Missing bundle roots and missing files return structured not-found payloads.
+
+### Local fallback behavior
+
+- Materialized runs attempt persistent publish first.
+- If persistent publish is unavailable:
+  - local filesystem fallback remains available by default in non-hosted runtime
+  - hosted/prod can force persistent-only behavior by disabling fallback:
+    - `GNR8_PREVIEW_ALLOW_LOCAL_FALLBACK=0`

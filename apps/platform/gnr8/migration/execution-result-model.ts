@@ -8,7 +8,11 @@ import {
   type StaticOutputBundle,
   type StaticOutputPageFileRecord,
 } from "./static-output-bundle";
-import { buildExecutionPreviewHosting, type ExecutionPreviewHosting } from "./temporary-preview-hosting";
+import {
+  buildExecutionPreviewHosting,
+  buildExecutionPreviewHostingWithPersistence,
+  type ExecutionPreviewHosting,
+} from "./temporary-preview-hosting";
 import { sha256Hex, stableStringify } from "./runtime/diagnostics";
 
 /**
@@ -372,9 +376,10 @@ export async function executePhase1Apply(input: {
       warningCodes: warningCodeList,
       targetArtifacts,
       materialization,
-      previewHosting: buildExecutionPreviewHosting({
+      previewHosting: await buildExecutionPreviewHostingWithPersistence({
         executionMode: input.executionPlan.executionMode,
         materialization,
+        executionPlanId: input.executionPlan.executionPlanId,
       }),
       summary: `phase1_apply: ${status}; mode=${input.executionPlan.executionMode}; executedSteps=${executedSteps.length}; skippedSteps=${skippedSteps.length}; targetArtifacts=${targetArtifacts.length}; warnings=${warningCodeList.length}`,
       failure,

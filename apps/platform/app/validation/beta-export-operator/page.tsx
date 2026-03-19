@@ -256,6 +256,8 @@ function ResultPanel(props: { response: BetaExportOperatorResponse }) {
               k: "previewHosting.previewEntryUrl",
               v: previewHosting.previewEntryUrl ? <a href={previewHosting.previewEntryUrl}>{previewHosting.previewEntryUrl}</a> : "n/a",
             },
+            { k: "previewHosting.previewStorageKind", v: previewHosting.previewStorageKind },
+            { k: "previewHosting.previewStorageKey", v: previewHosting.previewStorageKey ?? "n/a" },
             { k: "previewHosting.reasonCode", v: previewHosting.reasonCode ?? "n/a" },
           ]}
         />
