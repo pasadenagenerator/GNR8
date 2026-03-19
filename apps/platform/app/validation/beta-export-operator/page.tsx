@@ -251,10 +251,13 @@ function ResultPanel(props: { response: BetaExportOperatorResponse }) {
             { k: "previewHosting.status", v: <StatusPill value={previewHosting.status} /> },
             { k: "previewHosting.available", v: String(previewHosting.available) },
             { k: "previewHosting.routeRule", v: previewHosting.routeRule },
-            { k: "previewHosting.previewRootUrl", v: previewHosting.previewRootUrl ? <a href={previewHosting.previewRootUrl}>{previewHosting.previewRootUrl}</a> : "n/a" },
             {
-              k: "previewHosting.previewEntryUrl",
+              k: "previewHosting.previewEntryUrl (primary)",
               v: previewHosting.previewEntryUrl ? <a href={previewHosting.previewEntryUrl}>{previewHosting.previewEntryUrl}</a> : "n/a",
+            },
+            {
+              k: "previewHosting.previewRootUrl (secondary/technical)",
+              v: previewHosting.previewRootUrl ? <a href={previewHosting.previewRootUrl}>{previewHosting.previewRootUrl}</a> : "n/a",
             },
             { k: "previewHosting.previewStorageKind", v: previewHosting.previewStorageKind },
             { k: "previewHosting.previewStorageKey", v: previewHosting.previewStorageKey ?? "n/a" },

@@ -9,6 +9,7 @@ import { importStaticSite } from "../../gnr8/import/runtime/import-static-site";
 import { runLinearMigrationPhase1ApproveExecute } from "../../gnr8/migration/runtime/run-linear-migration-phase1-approve-execute";
 import { GET as getPreviewByOutput } from "../../app/validation/previews/by-output/[previewKey]/[[...previewPath]]/route";
 import { runBetaExportOperatorFlow } from "./beta-export-operator";
+import { runUrlImportOperatorFlow } from "./url-import-operator";
 
 async function rmIfExists(absPath: string | null | undefined): Promise<void> {
   if (!absPath) return;
@@ -31,6 +32,24 @@ async function withEnv(entries: Record<string, string | undefined>, fn: () => Pr
       else delete process.env[k];
     }
   }
+}
+
+type MockResponseDef = {
+  status: number;
+  headers?: Record<string, string>;
+  body: string | Uint8Array;
+};
+
+function mockFetchFromTable(table: Record<string, MockResponseDef>): (input: string | URL | Request) => Promise<Response> {
+  return async (input) => {
+    const url =
+      typeof input === "string" ? input : input instanceof URL ? input.toString() : input instanceof Request ? input.url : String(input);
+    const hit = table[url];
+    if (!hit) throw new Error(`unexpected_fetch_url:${url}`);
+
+    const body: BodyInit = typeof hit.body === "string" ? hit.body : Buffer.from(hit.body);
+    return new Response(body, { status: hit.status, headers: hit.headers });
+  };
 }
 
 test("materialized runs surface structured preview URLs and storage metadata", async () => {
@@ -159,6 +178,80 @@ test("preview route serves exported html and copied assets from persistent stora
     },
   );
 
+  await rmIfExists(persistentRoot);
+});
+
+test("persisted preview storage normalizes root-relative stylesheet hrefs in uploaded entry html", async () => {
+  const persistentRoot = await fs.mkdtemp(path.join(os.tmpdir(), "gnr8-preview-persistent-stylesheet-normalize-"));
+  const tmp = await fs.mkdtemp(path.join(os.tmpdir(), "gnr8-preview-persistent-stylesheet-snapshot-"));
+
+  await withEnv(
+    {
+      GNR8_PREVIEW_PERSISTENT_FS_ROOT: persistentRoot,
+      SUPABASE_SERVICE_ROLE_KEY: undefined,
+      NEXT_PUBLIC_SUPABASE_URL: undefined,
+    },
+    async () => {
+      const response = await runUrlImportOperatorFlow(
+        {
+          sourceUrl: "https://persisted-style.example.com/",
+          executionMode: "materialize",
+        },
+        {
+          snapshotRootDirAbs: path.resolve(tmp, "snapshots"),
+          fetchImpl: mockFetchFromTable({
+            "https://persisted-style.example.com/": {
+              status: 200,
+              headers: { "content-type": "text/html" },
+              body: [
+                "<!doctype html>",
+                "<html><head>",
+                '<link rel="stylesheet" href="/assets/styles.css">',
+                "</head><body><h1>Persisted</h1><img src=\"/assets/logo.svg\"></body></html>",
+              ].join(""),
+            },
+            "https://persisted-style.example.com/assets/styles.css": {
+              status: 200,
+              headers: { "content-type": "text/css" },
+              body: "body{padding:10px}",
+            },
+            "https://persisted-style.example.com/assets/logo.svg": {
+              status: 200,
+              headers: { "content-type": "image/svg+xml" },
+              body: "<svg xmlns='http://www.w3.org/2000/svg'></svg>",
+            },
+          }),
+        },
+      );
+
+      assert.equal(response.ok, true);
+      if (!response.ok) return;
+
+      const preview = response.result.executionResult.previewHosting;
+      assert.equal(preview.previewStorageKind, "filesystem_object_storage");
+      assert.ok(preview.previewStorageKey);
+      assert.ok(preview.previewKey);
+      assert.ok(preview.previewEntryUrl?.endsWith("/index.html"));
+      assert.ok(preview.previewRootUrl?.endsWith("/"));
+
+      const persistedIndexAbs = path.resolve(persistentRoot, preview.previewStorageKey!, "index.html");
+      const persistedHtml = await fs.readFile(persistedIndexAbs, "utf8");
+      assert.ok(!persistedHtml.includes('href="/assets/'));
+      assert.match(persistedHtml, /href="(?:\.\/)?assets\//);
+
+      await rmIfExists(response.result.executionResult.materialization.outputRootPath);
+
+      const served = await getPreviewByOutput(new Request("http://localhost/preview"), {
+        params: Promise.resolve({ previewKey: preview.previewKey!, previewPath: undefined }),
+      });
+      assert.equal(served.status, 200);
+      const servedHtml = await served.text();
+      assert.ok(!servedHtml.includes('href="/assets/'));
+      assert.match(servedHtml, /href="(?:\.\/)?assets\//);
+    },
+  );
+
+  await rmIfExists(tmp);
   await rmIfExists(persistentRoot);
 });
 

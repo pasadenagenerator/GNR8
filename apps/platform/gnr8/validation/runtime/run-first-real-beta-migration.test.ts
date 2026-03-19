@@ -187,6 +187,10 @@ test("first-real-beta materialize run exposes preview hosting and materialized o
     const preview = result.materialize.result.executionResult.previewHosting;
     assert.equal(preview.available, true);
     assert.equal(typeof preview.previewEntryUrl, "string");
+    assert.equal(typeof preview.previewRootUrl, "string");
+    assert.ok(preview.previewEntryUrl!.endsWith("/index.html"));
+    assert.equal(preview.previewEntryUrl, `${preview.previewRootUrl}index.html`);
+    assert.equal(result.summary.previewEntryUrl, preview.previewEntryUrl);
 
     const outputRootPath = result.materialize.result.executionResult.materialization.outputRootPath;
     assert.ok(outputRootPath);

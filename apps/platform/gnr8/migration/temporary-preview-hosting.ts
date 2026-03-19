@@ -2,6 +2,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 
 import { createClient } from "@supabase/supabase-js";
+import { parse, serialize } from "parse5";
 
 import type { ExecutionMode } from "./execution-plan-model";
 import type { ExecutionMaterialization, ExecutionMaterializationStatus } from "./execution-result-model";
@@ -202,6 +203,112 @@ export function contentTypeForPreviewPath(relativePath: string): string {
   return contentTypeForExt(path.extname(relativePath).toLowerCase());
 }
 
+type HtmlElementNode = {
+  tagName: string;
+  attrs?: { name?: string; value?: string }[];
+  childNodes?: unknown[];
+  content?: unknown;
+};
+
+function isElement(node: unknown): node is HtmlElementNode {
+  return !!node && typeof node === "object" && typeof (node as { tagName?: unknown }).tagName === "string";
+}
+
+function walkDom(node: unknown, visit: (n: unknown) => void): void {
+  const stack: unknown[] = [node];
+  while (stack.length > 0) {
+    const current = stack.pop();
+    if (!current || typeof current !== "object") continue;
+    visit(current);
+    const childNodes = (current as { childNodes?: unknown[] }).childNodes;
+    if (Array.isArray(childNodes)) {
+      for (let i = childNodes.length - 1; i >= 0; i--) stack.push(childNodes[i]);
+    }
+    const content = (current as { content?: unknown }).content;
+    if (content && typeof content === "object") stack.push(content);
+  }
+}
+
+function getAttrValue(node: HtmlElementNode, attrName: string): string | null {
+  const attrs = Array.isArray(node.attrs) ? node.attrs : [];
+  const lower = attrName.toLowerCase();
+  for (const attr of attrs) {
+    if (String(attr.name ?? "").toLowerCase() === lower) return String(attr.value ?? "");
+  }
+  return null;
+}
+
+function setAttrValue(node: HtmlElementNode, attrName: string, value: string): void {
+  const lower = attrName.toLowerCase();
+  const attrs = Array.isArray(node.attrs) ? node.attrs : [];
+  for (const attr of attrs) {
+    if (String(attr.name ?? "").toLowerCase() === lower) {
+      attr.value = value;
+      return;
+    }
+  }
+  attrs.push({ name: attrName, value });
+  node.attrs = attrs;
+}
+
+function isStylesheetRel(relAttr: string | null): boolean {
+  if (!relAttr) return false;
+  const tokens = relAttr
+    .toLowerCase()
+    .split(/\s+/)
+    .map((token) => token.trim())
+    .filter(Boolean);
+  return tokens.includes("stylesheet");
+}
+
+function toExplicitPageRelativeRef(ref: string): string {
+  if (ref.startsWith("./") || ref.startsWith("../") || ref.startsWith("/")) return ref;
+  return `./${ref}`;
+}
+
+function maybeNormalizePersistedHtml(input: { relativePath: string; bytes: Buffer; bundleRelativePaths: Set<string> }): Buffer {
+  const lowerExt = path.posix.extname(input.relativePath.toLowerCase());
+  if (lowerExt !== ".html" && lowerExt !== ".htm") return input.bytes;
+
+  let html = "";
+  try {
+    html = input.bytes.toString("utf8");
+  } catch {
+    return input.bytes;
+  }
+  if (!html.includes('href="/')) return input.bytes;
+
+  const doc = parse(html);
+  const pageDir = path.posix.dirname(input.relativePath);
+  let changed = false;
+
+  walkDom(doc, (node) => {
+    if (!isElement(node)) return;
+    if (node.tagName.toLowerCase() !== "link") return;
+    if (!isStylesheetRel(getAttrValue(node, "rel"))) return;
+
+    const href = getAttrValue(node, "href");
+    if (!href) return;
+    const trimmedHref = href.trim();
+    if (!trimmedHref.startsWith("/")) return;
+    if (trimmedHref.startsWith("//")) return;
+
+    const [pathPart, suffix = ""] = trimmedHref.split(/([?#].*)/, 2);
+    const targetRel = pathPart.replace(/^\/+/, "");
+    if (!targetRel) return;
+    if (!input.bundleRelativePaths.has(targetRel)) return;
+
+    const relative = path.posix.relative(pageDir === "." ? "" : pageDir, targetRel);
+    const rewritten = toExplicitPageRelativeRef(relative.length > 0 ? relative : path.posix.basename(targetRel));
+    if (rewritten === trimmedHref) return;
+    setAttrValue(node, "href", `${rewritten}${suffix}`);
+    changed = true;
+  });
+
+  if (!changed) return input.bytes;
+  return Buffer.from(serialize(doc), "utf8");
+}
+
 async function listBundleFilesRecursively(outputRootPath: string): Promise<string[]> {
   const out: string[] = [];
   const stack = [outputRootPath];
@@ -243,6 +350,7 @@ async function publishBundleToPersistentStorage(input: { outputRootPath: string;
   if (bundleFiles.length === 0) {
     return { ok: false, reasonCode: "PERSISTENT_STORAGE_UPLOAD_FAILED" };
   }
+  const bundleRelativePaths = new Set(bundleFiles.map((absPath) => path.relative(input.outputRootPath, absPath).replaceAll(path.sep, "/")));
 
   const storageRootKey = previewRootKeyForExecutionPlan(input.executionPlanId);
   const supabaseConfig = getSupabasePreviewStorageConfig();
@@ -256,7 +364,11 @@ async function publishBundleToPersistentStorage(input: { outputRootPath: string;
       for (const absPath of bundleFiles) {
         const rel = path.relative(input.outputRootPath, absPath).replaceAll(path.sep, "/");
         const objectKey = `${storageRootKey}/${rel}`;
-        const bytes = await fs.readFile(absPath);
+        const bytes = maybeNormalizePersistedHtml({
+          relativePath: rel,
+          bytes: await fs.readFile(absPath),
+          bundleRelativePaths,
+        });
         const { error } = await bucket.upload(objectKey, bytes, {
           upsert: true,
           contentType: contentTypeForPreviewPath(rel),
@@ -282,7 +394,13 @@ async function publishBundleToPersistentStorage(input: { outputRootPath: string;
         const rel = path.relative(input.outputRootPath, absPath);
         const destinationAbs = path.resolve(filesystemPersistentRoot, storageRootKey, rel);
         await fs.mkdir(path.dirname(destinationAbs), { recursive: true });
-        await fs.copyFile(absPath, destinationAbs);
+        const relPosix = rel.replaceAll(path.sep, "/");
+        const bytes = maybeNormalizePersistedHtml({
+          relativePath: relPosix,
+          bytes: await fs.readFile(absPath),
+          bundleRelativePaths,
+        });
+        await fs.writeFile(destinationAbs, bytes);
       }
       return {
         ok: true,

@@ -373,8 +373,11 @@ function ResultPanel(props: { response: UrlImportOperatorResponse }) {
             { k: "materialization.summary.failedAssetCount", v: materialization.summary.failedAssetCount },
             { k: "preview.available", v: <StatusPill value={String(preview.available)} kind={preview.available ? "good" : "neutral"} /> },
             { k: "preview.status", v: <StatusPill value={preview.status} /> },
-            { k: "preview.entryUrl", v: preview.previewEntryUrl ? <a href={preview.previewEntryUrl}>{preview.previewEntryUrl}</a> : "n/a" },
-            { k: "preview.rootUrl", v: preview.previewRootUrl ? <a href={preview.previewRootUrl}>{preview.previewRootUrl}</a> : "n/a" },
+            { k: "preview.entryUrl (primary)", v: preview.previewEntryUrl ? <a href={preview.previewEntryUrl}>{preview.previewEntryUrl}</a> : "n/a" },
+            {
+              k: "preview.rootUrl (secondary/technical)",
+              v: preview.previewRootUrl ? <a href={preview.previewRootUrl}>{preview.previewRootUrl}</a> : "n/a",
+            },
             { k: "preview.storageKind", v: preview.previewStorageKind },
             { k: "preview.storageKey", v: preview.previewStorageKey ?? "n/a" },
             { k: "preview.reasonCode", v: preview.reasonCode ?? "n/a" },

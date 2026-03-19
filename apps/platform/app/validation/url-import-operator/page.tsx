@@ -48,8 +48,9 @@ export default function UrlImportOperatorPage() {
             materialized output.
           </li>
           <li>
-            Preview links: surfaced from <code>executionResult.previewHosting.previewEntryUrl</code> and{" "}
-            <code>executionResult.previewHosting.previewRootUrl</code> when <code>previewHosting.available=true</code>.
+            Preview links: <code>executionResult.previewHosting.previewEntryUrl</code> is the primary operator-facing link;{" "}
+            <code>executionResult.previewHosting.previewRootUrl</code> is secondary/technical when{" "}
+            <code>previewHosting.available=true</code>.
           </li>
           <li>
             Current limitations: single public page only, no recursive crawling, no browser JS rendering, no deploy button, and no
