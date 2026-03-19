@@ -45,10 +45,17 @@
 ## Deterministic Stylesheet Preservation/Copy Rules
 - Preserve source stylesheet links (`<link rel="stylesheet" href="...">`) in static HTML head in source order.
 - Duplicate stylesheet references are preserved as-is (no dedupe/inference).
+- URL-import primary/site stylesheet eligibility:
+  - candidate must be `<link rel~="stylesheet" href="...">` in source `<head>`
+  - candidate URL must resolve to same-origin `http(s)` URL
+  - select exactly one primary candidate deterministically: highest role score from URL/path tokens (`site/theme/main/style/global/app/brand`), tie-break by earliest source occurrence
 - Local stylesheet references (`relative_local`, `root_relative`, validation `ok` with resolved local path):
   - copied to `<resolvedPath>` (preserved canonical local path; no extra prefix)
   - rewritten in exported HTML head to explicit page-relative bundle path.
   - explicit same-directory rule: emit `./<path>` (not `/...`) so hosted preview route nesting remains browser-correct.
+- URL-import primary/site stylesheet preference:
+  - when selected primary stylesheet is fetchable/copied, final HTML promotes it as the first head stylesheet link
+  - if selected primary cannot be fetched/rewrite-eligible, source href is preserved and degraded warnings remain explicit
 - Root-relative stylesheet references follow the same copy/rewrite path as other local references.
 - Unsupported remote stylesheet references are preserved unchanged in HTML when present and remain visible in warnings.
 - Unsupported data URL stylesheet references are preserved unchanged in HTML when present and remain visible in warnings.
@@ -62,6 +69,10 @@
   - rewrite `<a href>` only when deterministically classified as a copied local image/gallery target
   - additional residual guard: require deterministic gallery context (`gallery/lightbox/portfolio` path or class/id/rel tokens) and reject `header`/`nav` context anchors
   - preserve `tel:`, `mailto:`, `javascript:`, `#fragment`, ordinary internal navigation links, and ordinary external links unchanged.
+- Header/logo placeholder image promotion safety:
+  - promotion requires placeholder/data URL `<img src>` and fetched local image target
+  - wrapper anchor-driven promotion is limited to deterministic header/logo contexts near the image (header/nav/logo tokens + image-wrapper evidence)
+  - ordinary content anchors are not promoted through this rule
 
 ## Degraded Fidelity Behavior
 - Missing local assets remain non-fatal for eligible exports and are reported with warnings.

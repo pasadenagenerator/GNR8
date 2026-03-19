@@ -38,9 +38,12 @@ export type UrlImportDiagnosticCode =
   | "ASSET_FETCH_NON_OK"
   | "ASSET_FETCH_UNSUPPORTED_SCHEME"
   | "ASSET_COLLISION_RESOLVED"
+  | "PRIMARY_STYLESHEET_DETECTED"
+  | "PRIMARY_STYLESHEET_SELECTED"
   | "PRIMARY_STYLESHEET_CAPTURED"
   | "PRIMARY_STYLESHEET_FETCH_FAILED"
-  | "PRIMARY_STYLESHEET_NOT_REWRITE_ELIGIBLE";
+  | "PRIMARY_STYLESHEET_NOT_REWRITE_ELIGIBLE"
+  | "PRIMARY_STYLESHEET_NOT_USED_IN_FINAL_HTML";
 
 export type UrlImportDiagnostic = {
   id: string;
@@ -471,6 +474,7 @@ const IMAGE_WRAPPER_CONTEXT_TOKEN_SET = new Set<string>([
   "thumbnail",
   "thumb",
 ]);
+const PRIMARY_STYLESHEET_ROLE_TOKEN_SET = new Set<string>(["app", "brand", "global", "main", "site", "style", "styles", "theme"]);
 
 function isImageLikeHrefRef(rawRef: string): boolean {
   const trimmed = rawRef.trim();
@@ -494,6 +498,36 @@ function isLikelyPlaceholderImageRef(rawRef: string): boolean {
     if (trimmed.includes(token)) return true;
   }
   return false;
+}
+
+function stylesheetRoleScore(ref: ParsedAssetRef): number {
+  const resolvedUrl = ref.resolvedUrl;
+  if (!resolvedUrl) return 0;
+  let score = 0;
+  try {
+    const parsed = new URL(resolvedUrl);
+    const pathTokens = tokenizeLower(parsed.pathname);
+    for (const token of pathTokens) {
+      if (PRIMARY_STYLESHEET_ROLE_TOKEN_SET.has(token)) score += 3;
+    }
+    if (pathTokens.includes("css") || pathTokens.includes("styles")) score += 2;
+    const baseName = path.posix.basename(parsed.pathname || "");
+    if (baseName.toLowerCase() === "style.css" || baseName.toLowerCase() === "styles.css") score += 1;
+  } catch {
+    // Ignore URL parse failures; caller only uses this for resolvable URLs.
+  }
+  return score;
+}
+
+function selectPrimarySiteStylesheetRef(headStylesheetRefs: ParsedAssetRef[]): ParsedAssetRef | null {
+  if (headStylesheetRefs.length === 0) return null;
+  const ranked = [...headStylesheetRefs].sort((a, b) => {
+    const scoreDelta = stylesheetRoleScore(b) - stylesheetRoleScore(a);
+    if (scoreDelta !== 0) return scoreDelta;
+    if (a.occurrence !== b.occurrence) return a.occurrence - b.occurrence;
+    return (a.resolvedUrl ?? "").localeCompare(b.resolvedUrl ?? "");
+  });
+  return ranked[0] ?? null;
 }
 
 function srcsetDescriptorRank(descriptor: string): { rank: number; value: number } {
@@ -697,14 +731,8 @@ function nearestAncestorAnchor(
   return null;
 }
 
-function isDeterministicImageWrapperContext(input: {
-  imgNode: unknown;
-  ancestors: unknown[];
-  anchorNode: unknown;
-}): boolean {
-  if (hasHeaderOrLogoContext({ imgNode: input.imgNode, ancestors: input.ancestors })) return true;
+function hasImageWrapperContextTokens(input: { anchorNode: unknown; ancestors: unknown[] }): boolean {
   if (attrContainsAnyToken(input.anchorNode, ["class", "id", "rel"], IMAGE_WRAPPER_CONTEXT_TOKEN_SET)) return true;
-
   for (let i = input.ancestors.length - 1; i >= 0; i--) {
     const ancestor = input.ancestors[i];
     if (!isElement(ancestor)) continue;
@@ -937,8 +965,10 @@ function choosePromotedImageLocalPath(input: {
   }
 
   const nearestAnchor = nearestAncestorAnchor(input.ancestors, NEAREST_PROMOTION_ANCHOR_MAX_DEPTH);
+  const primaryIsPlaceholder = isLikelyPlaceholderImageRef(primarySrc);
+  const hasHeaderLogoContext = hasHeaderOrLogoContext({ imgNode: input.imgNode, ancestors: input.ancestors });
   const wrapperAnchorHref =
-    nearestAnchor && isDeterministicImageWrapperContext({ imgNode: input.imgNode, ancestors: input.ancestors, anchorNode: nearestAnchor.node })
+    primaryIsPlaceholder && hasHeaderLogoContext && nearestAnchor && hasImageWrapperContextTokens({ anchorNode: nearestAnchor.node, ancestors: input.ancestors })
       ? nearestAnchor.href
       : null;
 
@@ -955,7 +985,6 @@ function choosePromotedImageLocalPath(input: {
     return null;
   };
 
-  const primaryIsPlaceholder = isLikelyPlaceholderImageRef(primarySrc);
   if (!primaryIsPlaceholder) {
     const localPrimary = pickFirstFetched([primarySrc]);
     if (localPrimary) return localPrimary;
@@ -971,6 +1000,74 @@ function choosePromotedImageLocalPath(input: {
   if (promoted) return promoted;
 
   return pickFirstFetched([primarySrc]);
+}
+
+type FetchOutcome = {
+  fetchStatus: "fetched" | "fetch_failed" | "unsupported";
+  httpStatus: number | null;
+  contentType: string | null;
+  byteLength: number | null;
+};
+
+function isStylesheetLinkElement(node: unknown): boolean {
+  if (!isElement(node) || node.tagName.toLowerCase() !== "link") return false;
+  const rel = getAttr(node, "rel");
+  if (!rel) return false;
+  const relTokens = rel
+    .toLowerCase()
+    .split(/\s+/)
+    .filter(Boolean);
+  return relTokens.includes("stylesheet");
+}
+
+function normalizeStylesheetHrefToLocalPath(rawHref: string | null): string | null {
+  const href = (rawHref ?? "").trim();
+  if (!href) return null;
+  const [pathPart] = href.split(/[?#]/, 1);
+  return normalizeSnapshotLocalTargetPath(pathPart ?? "");
+}
+
+function preferPrimaryStylesheetInHead(input: { document: unknown; primaryStylesheetLocalPath: string }): boolean {
+  let headNode: unknown = null;
+  walkDom(input.document, (node) => {
+    if (headNode || !isElement(node)) return;
+    if (node.tagName.toLowerCase() === "head") headNode = node;
+  });
+  if (!headNode || typeof headNode !== "object") return false;
+
+  const headChildren = (headNode as { childNodes?: unknown[] }).childNodes;
+  if (!Array.isArray(headChildren) || headChildren.length === 0) return false;
+
+  const stylesheetEntries: Array<{ childIndex: number; localPath: string | null }> = [];
+  for (let i = 0; i < headChildren.length; i++) {
+    const child = headChildren[i];
+    if (!isStylesheetLinkElement(child)) continue;
+    stylesheetEntries.push({
+      childIndex: i,
+      localPath: normalizeStylesheetHrefToLocalPath(getAttr(child, "href")),
+    });
+  }
+  if (stylesheetEntries.length === 0) return false;
+
+  const primaryLocalPath = normalizeSnapshotLocalTargetPath(input.primaryStylesheetLocalPath);
+  if (!primaryLocalPath) return false;
+
+  const firstStylesheet = stylesheetEntries[0]!;
+  const primaryEntry = stylesheetEntries.find((entry) => entry.localPath === primaryLocalPath);
+  if (!primaryEntry) return false;
+
+  if (primaryEntry.childIndex !== firstStylesheet.childIndex) {
+    const [primaryNode] = headChildren.splice(primaryEntry.childIndex, 1);
+    if (typeof primaryNode !== "undefined") headChildren.splice(firstStylesheet.childIndex, 0, primaryNode);
+  }
+
+  const updatedChildren = (headNode as { childNodes?: unknown[] }).childNodes;
+  if (!Array.isArray(updatedChildren)) return false;
+  for (const child of updatedChildren) {
+    if (!isStylesheetLinkElement(child)) continue;
+    return normalizeStylesheetHrefToLocalPath(getAttr(child, "href")) === primaryLocalPath;
+  }
+  return false;
 }
 
 function writeJsonStable(absPath: string, value: JsonValue): void {
@@ -1141,7 +1238,7 @@ export async function importPublicSinglePageUrlToSnapshot(input: {
       );
       ref.resolvedUrl = null;
     }
-    const primaryHeadStylesheetRefs = refs
+    const headStylesheetRefs = refs
       .filter(
         (ref) =>
           ref.tag === "link" &&
@@ -1151,20 +1248,24 @@ export async function importPublicSinglePageUrlToSnapshot(input: {
           typeof ref.resolvedUrl === "string" &&
           isSameOriginUrl(ref.resolvedUrl, normalizedUrl.origin),
       )
-      .sort((a, b) => {
-        const aUrl = a.resolvedUrl ?? "";
-        const bUrl = b.resolvedUrl ?? "";
-        if (aUrl !== bUrl) return aUrl.localeCompare(bUrl);
-        return a.occurrence - b.occurrence;
-      });
+      .sort((a, b) => a.occurrence - b.occurrence || (a.resolvedUrl ?? "").localeCompare(b.resolvedUrl ?? ""));
+    const selectedPrimaryHeadStylesheetRef = selectPrimarySiteStylesheetRef(headStylesheetRefs);
+    if (selectedPrimaryHeadStylesheetRef?.resolvedUrl) {
+      diagnostics.push(
+        createDiagnostic({
+          severity: "info",
+          code: "PRIMARY_STYLESHEET_DETECTED",
+          message: "Detected deterministic same-origin primary/site stylesheet candidate from head links",
+          targetUrl: selectedPrimaryHeadStylesheetRef.resolvedUrl,
+          details: {
+            occurrence: selectedPrimaryHeadStylesheetRef.occurrence,
+            roleScore: stylesheetRoleScore(selectedPrimaryHeadStylesheetRef),
+            rule: "same_origin_head_stylesheet_highest_role_score_then_earliest_occurrence_v1",
+          },
+        }),
+      );
+    }
     const localPathByUrl = resolvePathCollisions(refs, diagnostics);
-
-    type FetchOutcome = {
-      fetchStatus: "fetched" | "fetch_failed" | "unsupported";
-      httpStatus: number | null;
-      contentType: string | null;
-      byteLength: number | null;
-    };
 
     const fetchOutcomeByUrl = new Map<string, FetchOutcome>();
     const uniqueUrls = [...localPathByUrl.keys()].sort((a, b) => a.localeCompare(b));
@@ -1243,46 +1344,68 @@ export async function importPublicSinglePageUrlToSnapshot(input: {
       fetchOutcomeByUrl.set(resolvedUrl, outcome);
     }
 
-    for (const stylesheetRef of primaryHeadStylesheetRefs) {
-      const stylesheetUrl = stylesheetRef.resolvedUrl;
-      if (!stylesheetUrl) continue;
-      const localPath = localPathByUrl.get(stylesheetUrl) ?? null;
-      const outcome = fetchOutcomeByUrl.get(stylesheetUrl) ?? null;
+    const selectedPrimaryStylesheetUrl = selectedPrimaryHeadStylesheetRef?.resolvedUrl ?? null;
+    let selectedPrimaryStylesheetLocalPath: string | null = null;
+    if (selectedPrimaryStylesheetUrl) {
+      const localPath = localPathByUrl.get(selectedPrimaryStylesheetUrl) ?? null;
+      const outcome = fetchOutcomeByUrl.get(selectedPrimaryStylesheetUrl) ?? null;
       if (localPath && outcome?.fetchStatus === "fetched") {
+        selectedPrimaryStylesheetLocalPath = localPath;
+        diagnostics.push(
+          createDiagnostic({
+            severity: "info",
+            code: "PRIMARY_STYLESHEET_SELECTED",
+            message: "Primary/site stylesheet candidate selected and rewrite-eligible for final preview emission",
+            targetUrl: selectedPrimaryStylesheetUrl,
+            details: {
+              localPath,
+              occurrence: selectedPrimaryHeadStylesheetRef?.occurrence ?? null,
+              fetchStatus: outcome.fetchStatus,
+              rule: "same_origin_head_stylesheet_highest_role_score_then_earliest_occurrence_v1",
+            },
+          }),
+        );
         diagnostics.push(
           createDiagnostic({
             severity: "info",
             code: "PRIMARY_STYLESHEET_CAPTURED",
             message: "Captured fetchable head stylesheet as copied local asset",
-            targetUrl: stylesheetUrl,
-            details: { localPath, occurrence: stylesheetRef.occurrence, tag: stylesheetRef.tag, attribute: stylesheetRef.attribute },
+            targetUrl: selectedPrimaryStylesheetUrl,
+            details: {
+              localPath,
+              occurrence: selectedPrimaryHeadStylesheetRef?.occurrence ?? null,
+              tag: selectedPrimaryHeadStylesheetRef?.tag ?? null,
+              attribute: selectedPrimaryHeadStylesheetRef?.attribute ?? null,
+              rewriteEligible: true,
+            },
           }),
         );
-        continue;
-      }
-
-      if (outcome?.fetchStatus === "fetch_failed") {
+      } else if (outcome?.fetchStatus === "fetch_failed") {
         diagnostics.push(
           createDiagnostic({
             severity: "warning",
             code: "PRIMARY_STYLESHEET_FETCH_FAILED",
             message: "Head stylesheet candidate fetch failed and remains non-local",
-            targetUrl: stylesheetUrl,
-            details: { localPath, occurrence: stylesheetRef.occurrence, tag: stylesheetRef.tag, attribute: stylesheetRef.attribute },
+            targetUrl: selectedPrimaryStylesheetUrl,
+            details: {
+              localPath,
+              occurrence: selectedPrimaryHeadStylesheetRef?.occurrence ?? null,
+              tag: selectedPrimaryHeadStylesheetRef?.tag ?? null,
+              attribute: selectedPrimaryHeadStylesheetRef?.attribute ?? null,
+            },
           }),
         );
-        continue;
+      } else {
+        diagnostics.push(
+          createDiagnostic({
+            severity: "warning",
+            code: "PRIMARY_STYLESHEET_NOT_REWRITE_ELIGIBLE",
+            message: "Head stylesheet candidate is present but not rewrite-eligible",
+            targetUrl: selectedPrimaryStylesheetUrl,
+            details: { localPath, outcome: outcome?.fetchStatus ?? "unsupported", occurrence: selectedPrimaryHeadStylesheetRef?.occurrence ?? null },
+          }),
+        );
       }
-
-      diagnostics.push(
-        createDiagnostic({
-          severity: "warning",
-          code: "PRIMARY_STYLESHEET_NOT_REWRITE_ELIGIBLE",
-          message: "Head stylesheet candidate is present but not rewrite-eligible",
-          targetUrl: stylesheetUrl,
-          details: { localPath, outcome: outcome?.fetchStatus ?? "unsupported", occurrence: stylesheetRef.occurrence },
-        }),
-      );
     }
 
     const stylesheetRefs = refs.filter((ref) => isStylesheetKind(ref.assetKind) && ref.resolvedUrl !== null);
@@ -1493,9 +1616,7 @@ export async function importPublicSinglePageUrlToSnapshot(input: {
         const resolvedUrl = parsedRef?.resolvedUrl ?? null;
         const localPath = resolvedUrl ? localPathByUrl.get(resolvedUrl) ?? null : null;
         const outcome = resolvedUrl ? fetchOutcomeByUrl.get(resolvedUrl) : null;
-        const isStylesheetLink = tag === "link" && attribute === "href" && parsedRef?.assetKind === "stylesheet";
-        const rewriteEligibleLocalPath =
-          localPath && (outcome?.fetchStatus === "fetched" || isStylesheetLink) ? localPath : null;
+        const rewriteEligibleLocalPath = localPath && outcome?.fetchStatus === "fetched" ? localPath : null;
         if (rewriteEligibleLocalPath) setAttr(node, attribute, `/${toPosixPath(rewriteEligibleLocalPath)}`);
         if (tag === "img" && attribute !== "src" && rewriteEligibleLocalPath) {
           const imgSrc = getAttr(node, "src");
@@ -1528,6 +1649,27 @@ export async function importPublicSinglePageUrlToSnapshot(input: {
         if (promotedLocalPath) setAttr(node, "src", `/${toPosixPath(promotedLocalPath)}`);
       }
     });
+
+    if (selectedPrimaryStylesheetLocalPath) {
+      const wasPreferred = preferPrimaryStylesheetInHead({
+        document,
+        primaryStylesheetLocalPath: selectedPrimaryStylesheetLocalPath,
+      });
+      if (!wasPreferred) {
+        diagnostics.push(
+          createDiagnostic({
+            severity: "warning",
+            code: "PRIMARY_STYLESHEET_NOT_USED_IN_FINAL_HTML",
+            message: "Selected primary/site stylesheet was copied but not emitted as preferred head stylesheet in final HTML",
+            targetUrl: selectedPrimaryStylesheetUrl,
+            details: {
+              localPath: selectedPrimaryStylesheetLocalPath,
+              rule: "preferred_primary_site_stylesheet_first_in_head_when_rewrite_eligible_v1",
+            },
+          }),
+        );
+      }
+    }
 
     rewrittenHtml = serialize(document);
   }

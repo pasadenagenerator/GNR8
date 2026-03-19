@@ -369,7 +369,10 @@ test("url import captures fetchable head stylesheets and promotes header/logo pl
   if (!response.ok) return;
 
   const importCodes = response.snapshot.importDiagnostics.issues.map((issue) => issue.code);
+  assert.ok(importCodes.includes("PRIMARY_STYLESHEET_DETECTED"));
+  assert.ok(importCodes.includes("PRIMARY_STYLESHEET_SELECTED"));
   assert.ok(importCodes.includes("PRIMARY_STYLESHEET_CAPTURED"));
+  assert.ok(!importCodes.includes("PRIMARY_STYLESHEET_NOT_USED_IN_FINAL_HTML"));
 
   const capturedPrimaryStylesheets = response.snapshot.fetchManifest.filter(
     (entry) =>
@@ -388,9 +391,79 @@ test("url import captures fetchable head stylesheets and promotes header/logo pl
 
   const exportedIndexAbs = path.resolve(outputRootDir, "index.html");
   const exportedHtml = fs.readFileSync(exportedIndexAbs, "utf8");
-  assert.match(exportedHtml, /href="\.\/assets\/stylesheet\//);
+  const exportedStylesheetHrefs = [...exportedHtml.matchAll(/<link[^>]*rel="[^"]*stylesheet[^"]*"[^>]*href="([^"]+)"/g)].map((m) => m[1]);
+  assert.ok(exportedStylesheetHrefs.length >= 2);
+  assert.match(exportedStylesheetHrefs[0] ?? "", /^\.\/assets\/stylesheet\//);
   assert.match(exportedHtml, /<img class="brand-logo" src="assets\/image\//);
   assert.ok(exportedHtml.includes('href="https://cdn.example.net/remote.css"'));
+
+  const second = await runUrlImportOperatorFlow(
+    {
+      sourceUrl: "https://brand.example.com/",
+      executionMode: "materialize",
+    },
+    {
+      snapshotRootDirAbs: path.resolve(tmp, "snapshots"),
+      outputRootDir,
+      fetchImpl: mockFetchFromTable({
+        "https://brand.example.com/": {
+          status: 200,
+          headers: { "content-type": "text/html" },
+          body: [
+            "<!doctype html>",
+            "<html><head>",
+            '<link rel="stylesheet" href="/assets/main.css">',
+            '<link rel="stylesheet preload" href="/assets/theme.css?ver=3">',
+            '<link rel="stylesheet" href="https://cdn.example.net/remote.css">',
+            "</head><body>",
+            '<header class="site-header">',
+            '  <a class="logo-link" href="/assets/brand/logo.svg">',
+            '    <img class="brand-logo" src="data:image/gif;base64,R0lGODlhAQABAAAAACw=" alt="Company Logo">',
+            "  </a>",
+            "</header>",
+            '<section class="content-card">',
+            '  <a href="/assets/cards/photo.jpg"><img src="data:image/gif;base64,R0lGODlhAQABAAAAACw=" alt="Photo"></a>',
+            "</section>",
+            "</body></html>",
+          ].join(""),
+        },
+        "https://brand.example.com/assets/main.css": {
+          status: 200,
+          headers: { "content-type": "text/css" },
+          body: "body{margin:0}",
+        },
+        "https://brand.example.com/assets/theme.css?ver=3": {
+          status: 200,
+          headers: { "content-type": "text/css" },
+          body: ".theme{color:#111}",
+        },
+        "https://brand.example.com/assets/brand/logo.svg": {
+          status: 200,
+          headers: { "content-type": "image/svg+xml" },
+          body: "<svg xmlns='http://www.w3.org/2000/svg'></svg>",
+        },
+        "https://brand.example.com/assets/cards/photo.jpg": {
+          status: 200,
+          headers: { "content-type": "image/jpeg" },
+          body: new Uint8Array([255, 216, 255, 224, 9]),
+        },
+        "https://cdn.example.net/remote.css": {
+          status: 200,
+          headers: { "content-type": "text/css" },
+          body: "body{font-family:serif}",
+        },
+      }),
+    },
+  );
+  assert.equal(second.ok, true);
+  if (!second.ok) return;
+
+  const exportedHtmlSecond = fs.readFileSync(exportedIndexAbs, "utf8");
+  assert.equal(exportedHtmlSecond, exportedHtml);
+  assert.equal(
+    stableStringify(response.snapshot.importDiagnostics as unknown as JsonValue),
+    stableStringify(second.snapshot.importDiagnostics as unknown as JsonValue),
+  );
 });
 
 test("non-fatal asset fetch issues remain visible and do not unnecessarily block", async () => {
@@ -446,9 +519,13 @@ test("non-fatal asset fetch issues remain visible and do not unnecessarily block
   const snapshotWarningCodes = response.snapshot.importDiagnostics.issues.map((issue) => issue.code);
   assert.ok(snapshotWarningCodes.includes("ASSET_FETCH_NON_OK"));
   assert.ok(snapshotWarningCodes.includes("PRIMARY_STYLESHEET_FETCH_FAILED"));
+  assert.ok(!snapshotWarningCodes.includes("PRIMARY_STYLESHEET_CAPTURED"));
 
   const importIssueCodes = response.result.importOutput.importDiagnostics.issues.map((issue) => issue.code);
   assert.ok(importIssueCodes.includes("missing_local_asset"));
+
+  const snapshotHtml = fs.readFileSync(response.snapshot.entryHtmlPathAbs, "utf8");
+  assert.ok(snapshotHtml.includes('href="/missing-theme.css"'));
 });
 
 test("existing fixture-based operator flow remains unchanged", async () => {
