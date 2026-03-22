@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 
-import { savePage, publishPage, getPageBySlug } from "@/gnr8/core/page-storage";
 import { importHtmlToPage } from "@/gnr8/importer/html-to-page";
+import { migrateImportedPageToCanonicalDraft } from "@/gnr8/runtime/migration-factory";
 
 export const runtime = "nodejs";
 
@@ -27,15 +27,24 @@ export async function POST(req: Request) {
     if (!html.trim()) return NextResponse.json({ error: "html is required" }, { status: 400 });
 
     const page = importHtmlToPage({ slug, title, html });
-    await savePage(slug, page);
-    await publishPage(slug);
+    const migrated = await migrateImportedPageToCanonicalDraft({
+      sourceUrl: "inline-html://manual-import",
+      page,
+      actor: "migration:html-import",
+    });
 
-    const publishedPage = (await getPageBySlug(slug)) ?? page;
-
-    return NextResponse.json({ success: true, page: publishedPage }, { status: 200 });
+    return NextResponse.json(
+      {
+        success: true,
+        siteId: migrated.siteId,
+        siteVersionId: migrated.siteVersionId,
+        siteVersionNo: migrated.versionNo,
+        lifecycleState: "DRAFT",
+      },
+      { status: 200 },
+    );
   } catch (error) {
     const message = error instanceof Error ? error.message : "Internal server error";
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
-

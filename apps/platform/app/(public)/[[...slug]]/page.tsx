@@ -2,6 +2,7 @@ import type { ChaiPageProps } from "@chaibuilder/next/types";
 import { headers } from "next/headers";
 import { notFound } from "next/navigation";
 import { getPublicPageByOrgAndSlug } from "../../../src/public-site/public-pages";
+import { resolveActiveArtifactForHostAndPath } from "@/gnr8/runtime/runtime-store";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -23,6 +24,28 @@ export default async function PublicPage(props: {
   const { slug } = await props.params;
   const path = "/" + (slug?.join("/") ?? "");
 
+  const h = await headers();
+  const host =
+    (h.get("x-forwarded-host") ?? h.get("host") ?? "")
+      .split(",")[0]
+      ?.trim() ?? "";
+
+  const runtimeArtifact = await resolveActiveArtifactForHostAndPath({
+    host,
+    path,
+  });
+
+  if (runtimeArtifact) {
+    return (
+      <div
+        suppressHydrationWarning
+        dangerouslySetInnerHTML={{
+          __html: runtimeArtifact.html,
+        }}
+      />
+    );
+  }
+
   const orgId = process.env.NEXT_PUBLIC_DEFAULT_ORG_ID?.trim();
   if (!orgId) {
     return (
@@ -34,12 +57,6 @@ export default async function PublicPage(props: {
       </main>
     );
   }
-
-  const h = await headers();
-  const host =
-    (h.get("x-forwarded-host") ?? h.get("host") ?? "")
-      .split(",")[0]
-      ?.trim() ?? "";
 
   const page = await getPublicPageByOrgAndSlug({
     orgId,

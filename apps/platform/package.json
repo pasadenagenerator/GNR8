@@ -13,7 +13,9 @@
     "autoprefixer": "^10.4.27",
     "next": "^15.1.0",
     "parse5": "7.3.0",
+    "pg": "^8.18.0",
     "postcss": "^8.5.8",
+    "server-only": "^0.0.1",
     "stripe": "^18.3.0",
     "tailwindcss": "^4.2.1"
   }
