@@ -582,6 +582,50 @@ export async function resolveActiveArtifactForHostAndPath(input: {
   host?: string | null;
   path: string;
 }): Promise<{ artifact: RuntimeArtifact; html: string } | null> {
+  const resolved = await resolveActiveArtifactForHostAndPathWithDiagnostics(input);
+  if (resolved.outcome !== "artifact_hit") return null;
+  return {
+    artifact: resolved.artifact,
+    html: resolved.html,
+  };
+}
+
+export type PublicRuntimeArtifactMissReasonCode =
+  | "no_runtime_site"
+  | "no_active_pointer"
+  | "active_artifact_missing"
+  | "artifact_path_missing";
+
+export type PublicRuntimeArtifactResolution =
+  | {
+      outcome: "artifact_hit";
+      host: string;
+      path: string;
+      normalizedPath: string;
+      siteId: string;
+      siteResolution: "host_match" | "fallback_latest_site";
+      activeSiteVersionId: string;
+      artifactId: string;
+      artifact: RuntimeArtifact;
+      html: string;
+      resolvedPath: string;
+    }
+  | {
+      outcome: "artifact_miss";
+      host: string;
+      path: string;
+      normalizedPath: string;
+      siteId: string | null;
+      siteResolution: "host_match" | "fallback_latest_site" | "none";
+      activeSiteVersionId: string | null;
+      artifactId: string | null;
+      reasonCode: PublicRuntimeArtifactMissReasonCode;
+    };
+
+export async function resolveActiveArtifactForHostAndPathWithDiagnostics(input: {
+  host?: string | null;
+  path: string;
+}): Promise<PublicRuntimeArtifactResolution> {
   await ensureRuntimeTables();
   const client = await getSuperadminPool().connect();
   try {
@@ -589,40 +633,115 @@ export async function resolveActiveArtifactForHostAndPath(input: {
     const normalizedPath = normalizePagePath(input.path);
 
     const pointerRes = await client.query<{
-      artifact_id: string;
+      site_id: string;
+      site_resolution: "host_match" | "fallback_latest_site";
+      active_site_version_id: string | null;
+      artifact_id: string | null;
     }>(
       `
       with candidate_site as (
         select id from public.gnr8_runtime_sites
-        where ($1::text = '' and source_host is not null)
-           or (source_host is not null and lower(source_host) = $1::text)
+        where source_host is not null
+          and lower(source_host) = $1::text
         order by created_at desc
         limit 1
       ), fallback_site as (
         select id from public.gnr8_runtime_sites order by created_at desc limit 1
       ), resolved_site as (
-        select id from candidate_site
+        select id, 'host_match'::text as site_resolution from candidate_site
         union all
-        select id from fallback_site where not exists (select 1 from candidate_site)
+        select id, 'fallback_latest_site'::text as site_resolution
+        from fallback_site
+        where not exists (select 1 from candidate_site)
       )
-      select p.active_artifact_id::text as artifact_id
+      select
+        s.id::text as site_id,
+        s.site_resolution::text as site_resolution,
+        p.active_site_version_id::text as active_site_version_id,
+        p.active_artifact_id::text as artifact_id
       from resolved_site s
-      join public.gnr8_runtime_active_pointers p on p.site_id = s.id
+      left join public.gnr8_runtime_active_pointers p on p.site_id = s.id
       limit 1
       `,
       [host],
     );
 
-    const artifactId = pointerRes.rows[0]?.artifact_id;
-    if (!artifactId) return null;
+    const pointerRow = pointerRes.rows[0];
+    if (!pointerRow) {
+      return {
+        outcome: "artifact_miss",
+        host,
+        path: input.path,
+        normalizedPath,
+        siteId: null,
+        siteResolution: "none",
+        activeSiteVersionId: null,
+        artifactId: null,
+        reasonCode: "no_runtime_site",
+      };
+    }
+    const siteId = pointerRow.site_id;
+    const siteResolution = pointerRow.site_resolution;
+    const activeSiteVersionId = pointerRow.active_site_version_id;
+    const artifactId = pointerRow.artifact_id;
+    if (!artifactId || !activeSiteVersionId) {
+      return {
+        outcome: "artifact_miss",
+        host,
+        path: input.path,
+        normalizedPath,
+        siteId,
+        siteResolution,
+        activeSiteVersionId: activeSiteVersionId ?? null,
+        artifactId: artifactId ?? null,
+        reasonCode: "no_active_pointer",
+      };
+    }
 
     const artifact = await getArtifactById(artifactId);
-    if (!artifact) return null;
+    if (!artifact) {
+      return {
+        outcome: "artifact_miss",
+        host,
+        path: input.path,
+        normalizedPath,
+        siteId,
+        siteResolution,
+        activeSiteVersionId,
+        artifactId,
+        reasonCode: "active_artifact_missing",
+      };
+    }
 
-    const html = artifact.htmlByPath[normalizedPath] ?? artifact.htmlByPath["/"];
-    if (!html) return null;
+    const resolvedPath = artifact.htmlByPath[normalizedPath] ? normalizedPath : "/";
+    const html = artifact.htmlByPath[resolvedPath];
+    if (!html) {
+      return {
+        outcome: "artifact_miss",
+        host,
+        path: input.path,
+        normalizedPath,
+        siteId,
+        siteResolution,
+        activeSiteVersionId,
+        artifactId,
+        reasonCode: "artifact_path_missing",
+      };
+    }
 
-    return { artifact, html };
+    return {
+      outcome: "artifact_hit",
+      host,
+      path: input.path,
+      normalizedPath,
+      siteId,
+      siteResolution,
+      activeSiteVersionId,
+      artifactId,
+      artifact,
+      html,
+      resolvedPath,
+    };
   } finally {
     client.release();
   }
@@ -705,6 +824,32 @@ export async function getSiteVersionArtifactBinding(siteVersionId: string): Prom
     const row = res.rows[0];
     if (!row) return null;
     return { siteId: row.site_id, artifactId: row.artifact_id };
+  } finally {
+    client.release();
+  }
+}
+
+export async function getActivePointerForSite(siteId: string): Promise<{ siteVersionId: string; artifactId: string } | null> {
+  await ensureRuntimeTables();
+  const client = await getSuperadminPool().connect();
+  try {
+    const res = await client.query<{ active_site_version_id: string; active_artifact_id: string }>(
+      `
+      select
+        active_site_version_id::text as active_site_version_id,
+        active_artifact_id::text as active_artifact_id
+      from public.gnr8_runtime_active_pointers
+      where site_id = $1::text
+      limit 1
+      `,
+      [siteId],
+    );
+    const row = res.rows[0];
+    if (!row) return null;
+    return {
+      siteVersionId: row.active_site_version_id,
+      artifactId: row.active_artifact_id,
+    };
   } finally {
     client.release();
   }

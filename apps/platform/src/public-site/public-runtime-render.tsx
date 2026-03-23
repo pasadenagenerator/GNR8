@@ -2,7 +2,10 @@ import type { ChaiPageProps } from "@chaibuilder/next/types";
 import { notFound } from "next/navigation";
 import type { ReactElement } from "react";
 
-import { resolveActiveArtifactForHostAndPath } from "@/gnr8/runtime/runtime-store";
+import {
+  resolveActiveArtifactForHostAndPathWithDiagnostics,
+  type PublicRuntimeArtifactMissReasonCode,
+} from "@/gnr8/runtime/runtime-store";
 
 export type Gnr8PublicRuntimeMode = "artifact-only" | "artifact-with-builder-fallback";
 
@@ -16,6 +19,49 @@ type HeaderReader = {
 };
 
 let chaiRuntimeRegistered = false;
+
+type PublicRuntimeResolutionOutcome = "artifact_hit" | "artifact_miss" | "fallback_hit" | "fallback_miss" | "artifact_only_404";
+
+type BuilderFallbackResult =
+  | {
+      hit: true;
+      element: ReactElement;
+      reasonCode:
+        | "builder_page_rendered"
+        | "builder_data_fallback"
+        | "builder_chai_render_fallback"
+        | "builder_default_org_missing";
+    }
+  | {
+      hit: false;
+      reasonCode: "builder_page_not_found";
+    };
+
+function logPublicRuntimeResolution(input: {
+  outcome: PublicRuntimeResolutionOutcome;
+  mode: Gnr8PublicRuntimeMode;
+  host: string;
+  path: string;
+  siteId?: string | null;
+  siteVersionId?: string | null;
+  artifactId?: string | null;
+  reasonCode?: string | null;
+  resolvedPath?: string | null;
+}): void {
+  const payload = {
+    outcome: input.outcome,
+    mode: input.mode,
+    host: input.host,
+    path: input.path,
+    siteId: input.siteId ?? null,
+    siteVersionId: input.siteVersionId ?? null,
+    artifactId: input.artifactId ?? null,
+    reasonCode: input.reasonCode ?? null,
+    resolvedPath: input.resolvedPath ?? null,
+    ts: new Date().toISOString(),
+  };
+  console.info(`[gnr8.public-runtime.resolution] ${JSON.stringify(payload)}`);
+}
 
 export function resolveRequestHost(headers: HeaderReader): string {
   return (
@@ -63,17 +109,21 @@ function renderBuilderDataFallback(input: { slug: string; title: string | null; 
   );
 }
 
-async function renderBuilderFallback(input: { path: string; host: string }): Promise<ReactElement | null> {
+async function renderBuilderFallback(input: { path: string; host: string }): Promise<BuilderFallbackResult> {
   const orgId = process.env.NEXT_PUBLIC_DEFAULT_ORG_ID?.trim();
   if (!orgId) {
-    return (
-      <main style={{ padding: 24 }}>
-        <h1>Missing env</h1>
-        <p>
-          Set <code>NEXT_PUBLIC_DEFAULT_ORG_ID</code> in Vercel.
-        </p>
-      </main>
-    );
+    return {
+      hit: true,
+      reasonCode: "builder_default_org_missing",
+      element: (
+        <main style={{ padding: 24 }}>
+          <h1>Missing env</h1>
+          <p>
+            Set <code>NEXT_PUBLIC_DEFAULT_ORG_ID</code> in Vercel.
+          </p>
+        </main>
+      ),
+    };
   }
 
   const { getPublicPageByOrgAndSlug } = await import("@/src/public-site/public-pages");
@@ -83,17 +133,21 @@ async function renderBuilderFallback(input: { path: string; host: string }): Pro
     host: input.host,
   });
 
-  if (!page) return null;
+  if (!page) return { hit: false, reasonCode: "builder_page_not_found" };
 
   const pageData = page.data as any;
   const isRenderableChaiPage = !!pageData && typeof pageData === "object" && Array.isArray(pageData.blocks);
 
   if (!isRenderableChaiPage) {
-    return renderBuilderDataFallback({
-      slug: page.slug,
-      title: page.title ?? null,
-      data: page.data ?? {},
-    });
+    return {
+      hit: true,
+      reasonCode: "builder_data_fallback",
+      element: renderBuilderDataFallback({
+        slug: page.slug,
+        title: page.title ?? null,
+        data: page.data ?? {},
+      }),
+    };
   }
 
   const normalizedPage = {
@@ -113,22 +167,30 @@ async function renderBuilderFallback(input: { path: string; host: string }): Pro
   try {
     await ensureChaiRuntimeRegistered();
     const { ChaiPageStyles, RenderChaiBlocks } = await import("@chaibuilder/next/render");
-    return (
-      <html lang={normalizedPage.lang}>
-        <head>
-          <ChaiPageStyles page={normalizedPage} />
-        </head>
-        <body>
-          <RenderChaiBlocks page={normalizedPage} pageProps={pageProps} />
-        </body>
-      </html>
-    );
+    return {
+      hit: true,
+      reasonCode: "builder_page_rendered",
+      element: (
+        <html lang={normalizedPage.lang}>
+          <head>
+            <ChaiPageStyles page={normalizedPage} />
+          </head>
+          <body>
+            <RenderChaiBlocks page={normalizedPage} pageProps={pageProps} />
+          </body>
+        </html>
+      ),
+    };
   } catch {
-    return renderBuilderDataFallback({
-      slug: page.slug,
-      title: page.title ?? null,
-      data: page.data ?? {},
-    });
+    return {
+      hit: true,
+      reasonCode: "builder_chai_render_fallback",
+      element: renderBuilderDataFallback({
+        slug: page.slug,
+        title: page.title ?? null,
+        data: page.data ?? {},
+      }),
+    };
   }
 }
 
@@ -136,47 +198,90 @@ function failPublicRuntimeResolution(input: {
   mode: Gnr8PublicRuntimeMode;
   host: string;
   path: string;
-  reason: "artifact_missing" | "fallback_miss";
+  reasonCode: "fallback_miss" | "builder_page_not_found" | PublicRuntimeArtifactMissReasonCode;
 }): never {
-  console.warn(
-    `[gnr8.public-runtime.miss] ${JSON.stringify({
+  if (input.mode === "artifact-only") {
+    logPublicRuntimeResolution({
+      outcome: "artifact_only_404",
       mode: input.mode,
       host: input.host,
       path: input.path,
-      reason: input.reason,
-      ts: new Date().toISOString(),
-    })}`,
-  );
+      reasonCode: input.reasonCode,
+    });
+  } else {
+    logPublicRuntimeResolution({
+      outcome: "fallback_miss",
+      mode: input.mode,
+      host: input.host,
+      path: input.path,
+      reasonCode: input.reasonCode,
+    });
+  }
   notFound();
 }
 
 export async function renderPublicPath(input: { path: string; host: string }) {
   const mode = resolvePublicRuntimeMode();
 
-  const runtimeArtifact = await resolveActiveArtifactForHostAndPath({
+  const artifactResolution = await resolveActiveArtifactForHostAndPathWithDiagnostics({
     host: input.host,
     path: input.path,
   });
 
-  if (runtimeArtifact) {
+  if (artifactResolution.outcome === "artifact_hit") {
+    logPublicRuntimeResolution({
+      outcome: "artifact_hit",
+      mode,
+      host: input.host,
+      path: input.path,
+      siteId: artifactResolution.siteId,
+      siteVersionId: artifactResolution.activeSiteVersionId,
+      artifactId: artifactResolution.artifactId,
+      resolvedPath: artifactResolution.resolvedPath,
+      reasonCode:
+        artifactResolution.siteResolution === "fallback_latest_site" ? artifactResolution.siteResolution : null,
+    });
     return (
       <div
         suppressHydrationWarning
         dangerouslySetInnerHTML={{
-          __html: runtimeArtifact.html,
+          __html: artifactResolution.html,
         }}
       />
     );
   }
 
+  logPublicRuntimeResolution({
+    outcome: "artifact_miss",
+    mode,
+    host: input.host,
+    path: input.path,
+    siteId: artifactResolution.siteId,
+    siteVersionId: artifactResolution.activeSiteVersionId,
+    artifactId: artifactResolution.artifactId,
+    reasonCode: artifactResolution.reasonCode,
+  });
+
   if (mode === "artifact-with-builder-fallback") {
     const fallback = await renderBuilderFallback(input);
-    if (fallback) return fallback;
+    if (fallback.hit) {
+      logPublicRuntimeResolution({
+        outcome: "fallback_hit",
+        mode,
+        host: input.host,
+        path: input.path,
+        siteId: artifactResolution.siteId,
+        siteVersionId: artifactResolution.activeSiteVersionId,
+        artifactId: artifactResolution.artifactId,
+        reasonCode: fallback.reasonCode,
+      });
+      return fallback.element;
+    }
     return failPublicRuntimeResolution({
       mode,
       host: input.host,
       path: input.path,
-      reason: "fallback_miss",
+      reasonCode: fallback.reasonCode,
     });
   }
 
@@ -184,6 +289,6 @@ export async function renderPublicPath(input: { path: string; host: string }) {
     mode,
     host: input.host,
     path: input.path,
-    reason: "artifact_missing",
+    reasonCode: artifactResolution.reasonCode,
   });
 }

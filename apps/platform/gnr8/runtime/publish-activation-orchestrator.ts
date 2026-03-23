@@ -1,9 +1,12 @@
 import { buildDeterministicArtifactBundle } from "@/gnr8/runtime/artifact-builder";
+import { assertPublishSafety } from "@/gnr8/runtime/publish-safety-check";
 import { runRenderIntegrityGate } from "@/gnr8/runtime/render-integrity-gate";
 import {
   archivePublishedVersionsExcept,
   bindArtifactToVersion,
   createArtifact,
+  getActivePointerForSite,
+  getArtifactById,
   getSiteVersion,
   switchActivePointer,
 } from "@/gnr8/runtime/runtime-store";
@@ -49,6 +52,24 @@ export async function publishApprovedSiteVersion(input: { siteVersionId: string;
     rendererCompatibilityVersion: artifactBundle.rendererCompatibilityVersion,
   });
 
+  await switchActivePointer({
+    siteId: siteVersion.siteId,
+    siteVersionId: siteVersion.id,
+    artifactId: artifact.artifactId,
+  });
+
+  const storedArtifact = await getArtifactById(artifact.artifactId);
+  const activePointer = await getActivePointerForSite(siteVersion.siteId);
+
+  assertPublishSafety({
+    siteId: siteVersion.siteId,
+    siteVersionId: siteVersion.id,
+    artifactId: artifact.artifactId,
+    rendererCompatibilityVersion: artifactBundle.rendererCompatibilityVersion,
+    artifact: storedArtifact,
+    activePointer,
+  });
+
   await transitionSiteVersionState({
     siteVersionId: siteVersion.id,
     nextState: "PUBLISHED",
@@ -58,12 +79,6 @@ export async function publishApprovedSiteVersion(input: { siteVersionId: string;
       artifactId: artifact.artifactId,
       bundleSha256: artifactBundle.bundleSha256,
     },
-  });
-
-  await switchActivePointer({
-    siteId: siteVersion.siteId,
-    siteVersionId: siteVersion.id,
-    artifactId: artifact.artifactId,
   });
 
   await archivePublishedVersionsExcept({
