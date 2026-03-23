@@ -13,9 +13,9 @@ function isSupabaseAuthCallback(url: URL): boolean {
 
 export async function GET(
   req: NextRequest,
-  props: { params: { slug?: string[] } },
+  props: { params: Promise<{ slug?: string[] }> },
 ): Promise<Response> {
-  const { slug } = props.params;
+  const { slug } = await props.params;
   const path = "/" + (slug?.join("/") ?? "");
   const host = resolveRequestHost(req.headers);
 
