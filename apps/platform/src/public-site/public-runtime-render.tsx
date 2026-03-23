@@ -45,6 +45,9 @@ function logPublicRuntimeResolution(input: {
   siteId?: string | null;
   siteVersionId?: string | null;
   artifactId?: string | null;
+  hostBindingId?: string | null;
+  hostBindingKind?: string | null;
+  hostBindingStatus?: string | null;
   reasonCode?: string | null;
   resolvedPath?: string | null;
 }): void {
@@ -56,6 +59,9 @@ function logPublicRuntimeResolution(input: {
     siteId: input.siteId ?? null,
     siteVersionId: input.siteVersionId ?? null,
     artifactId: input.artifactId ?? null,
+    hostBindingId: input.hostBindingId ?? null,
+    hostBindingKind: input.hostBindingKind ?? null,
+    hostBindingStatus: input.hostBindingStatus ?? null,
     reasonCode: input.reasonCode ?? null,
     resolvedPath: input.resolvedPath ?? null,
     ts: new Date().toISOString(),
@@ -237,6 +243,9 @@ export async function renderPublicPath(input: { path: string; host: string }) {
       siteId: artifactResolution.siteId,
       siteVersionId: artifactResolution.activeSiteVersionId,
       artifactId: artifactResolution.artifactId,
+      hostBindingId: artifactResolution.hostBindingId,
+      hostBindingKind: artifactResolution.hostBindingKind,
+      hostBindingStatus: artifactResolution.hostBindingStatus,
       resolvedPath: artifactResolution.resolvedPath,
       reasonCode:
         artifactResolution.siteResolution === "fallback_latest_site" ? artifactResolution.siteResolution : null,
@@ -259,6 +268,9 @@ export async function renderPublicPath(input: { path: string; host: string }) {
     siteId: artifactResolution.siteId,
     siteVersionId: artifactResolution.activeSiteVersionId,
     artifactId: artifactResolution.artifactId,
+    hostBindingId: artifactResolution.hostBindingId,
+    hostBindingKind: artifactResolution.hostBindingKind,
+    hostBindingStatus: artifactResolution.hostBindingStatus,
     reasonCode: artifactResolution.reasonCode,
   });
 
@@ -273,6 +285,9 @@ export async function renderPublicPath(input: { path: string; host: string }) {
         siteId: artifactResolution.siteId,
         siteVersionId: artifactResolution.activeSiteVersionId,
         artifactId: artifactResolution.artifactId,
+        hostBindingId: artifactResolution.hostBindingId,
+        hostBindingKind: artifactResolution.hostBindingKind,
+        hostBindingStatus: artifactResolution.hostBindingStatus,
         reasonCode: fallback.reasonCode,
       });
       return fallback.element;

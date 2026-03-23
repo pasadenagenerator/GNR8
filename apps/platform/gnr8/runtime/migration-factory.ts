@@ -4,6 +4,7 @@ import { extractAllAnchorLinks, extractAllImgSrc, textFromHtml } from "@/gnr8/im
 import { deterministicId, normalizePagePath } from "@/gnr8/runtime/deterministic";
 import { validateMigrationOutputIntegrity } from "@/gnr8/runtime/migration-output-integrity";
 import { createSiteVersionFromMigration } from "@/gnr8/runtime/runtime-store";
+import type { CanonicalSiteMigrationInput } from "@/gnr8/runtime/types";
 import { RENDERER_COMPATIBILITY_VERSION } from "@/gnr8/runtime/types";
 
 function baselineStyleTokens(): Record<string, string> {
@@ -61,6 +62,15 @@ function sanitizeSectionProps(value: unknown): unknown {
   return out;
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function sanitizeSectionPropsObject(value: Record<string, unknown>): Record<string, unknown> {
+  const sanitized = sanitizeSectionProps(value);
+  return isRecord(sanitized) ? sanitized : {};
+}
+
 export function buildCanonicalMigrationInput(input: { sourceUrl: string; page: Gnr8Page; actor: string }) {
   const sourceUrl = String(input.sourceUrl ?? "").trim();
   const pagePath = normalizePagePath(input.page.slug || "/");
@@ -69,7 +79,19 @@ export function buildCanonicalMigrationInput(input: { sourceUrl: string; page: G
 
   const sections = Array.isArray(input.page.sections) ? input.page.sections : [];
 
-  const candidate = {
+  const sectionDescriptors = sections.map((section, index) => ({
+    id: String(section.id ?? `section-${index + 1}`),
+    type: String(section.type ?? "legacy.html"),
+    order: index,
+  }));
+
+  const sectionPropsEntries: Array<[string, Record<string, unknown>]> = sections.map((section, index) => {
+    const sectionKey = sectionDescriptors[index]?.id ?? String(section.id ?? `section-${index + 1}`);
+    const props = section.props ?? {};
+    return [sectionKey, sanitizeSectionPropsObject(props)];
+  });
+
+  const candidate: CanonicalSiteMigrationInput = {
     siteId,
     sourceUrl,
     actor: input.actor,
@@ -79,19 +101,10 @@ export function buildCanonicalMigrationInput(input: { sourceUrl: string; page: G
         path: pagePath,
         title: input.page.title ?? null,
         structureModel: {
-          sections: sections.map((section, index) => ({
-            id: String(section.id ?? `section-${index + 1}`),
-            type: String(section.type ?? "legacy.html"),
-            order: index,
-          })),
+          sections: sectionDescriptors,
         },
         contentModel: {
-          sectionProps: Object.fromEntries(
-            sections.map((section, index) => [
-              String(section.id ?? `section-${index + 1}`),
-              typeof section.props === "object" && section.props ? sanitizeSectionProps(section.props) : {},
-            ]),
-          ),
+          sectionProps: Object.fromEntries(sectionPropsEntries),
         },
         styleTokens: baselineStyleTokens(),
         assetGraph: [],

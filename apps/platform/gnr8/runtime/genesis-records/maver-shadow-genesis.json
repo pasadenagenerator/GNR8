@@ -38,7 +38,7 @@
   },
   "hostBinding": {
     "enforcedHost": "maver.gnr8.app",
-    "via": "source_host overwrite on runtime site",
+    "via": "gnr8_runtime_host_bindings (explicit ACTIVE shadow binding)",
     "resolution": {
       "outcome": "artifact_hit",
       "host": "maver.gnr8.app",

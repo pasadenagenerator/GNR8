@@ -7,6 +7,7 @@ import { POST as publishRoute } from "@/app/api/gnr8/runtime/versions/[siteVersi
 import type { HostCoverageReport } from "@/gnr8/runtime/artifact-coverage-audit";
 import { runArtifactCoverageAudit } from "@/gnr8/runtime/artifact-coverage-audit";
 import {
+  bindHostToSite,
   getActivePointerForSite,
   getArtifactById,
   getSiteVersion,
@@ -269,6 +270,13 @@ async function executeLifecycle(target: SeedTarget): Promise<{
     artifactId: string;
   };
 
+  await bindHostToSite({
+    siteId: publish.siteId,
+    host: target.host,
+    status: "ACTIVE",
+    bindingKind: "shadow",
+  });
+
   const seededVersion = await getSiteVersion(migrate.siteVersionId);
   assert.ok(seededVersion, `site version must exist for host=${target.host}`);
   assert.equal(seededVersion!.state, "PUBLISHED", `site version must be PUBLISHED for host=${target.host}`);
@@ -400,9 +408,9 @@ async function main(): Promise<void> {
         targetHostsAlreadyPresent,
       },
       implementation: {
-        seedingFlow: ["migrate/url", "ready", "approve", "publish", "active pointer", "artifact resolution"],
+        seedingFlow: ["migrate/url", "ready", "approve", "publish", "host binding", "active pointer", "artifact resolution"],
         routeServiceFlow:
-          "app/api/gnr8/runtime/migrate/url -> runtime migration-factory -> version lifecycle routes (ready/approve/publish) -> runtime-store active pointer/artifact resolution",
+          "app/api/gnr8/runtime/migrate/url -> runtime migration-factory -> version lifecycle routes (ready/approve/publish) -> runtime-store host binding + active pointer/artifact resolution",
         sharedRunnerAdded: true,
         blockersEncountered,
       },

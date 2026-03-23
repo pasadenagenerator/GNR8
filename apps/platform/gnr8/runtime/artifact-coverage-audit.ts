@@ -1,4 +1,5 @@
 import { normalizePagePath } from "@/gnr8/runtime/deterministic";
+import { ensureRuntimeTables } from "@/gnr8/runtime/runtime-store";
 import { Pool } from "pg";
 
 type FallbackDependenceRisk = "low" | "medium" | "high";
@@ -7,6 +8,9 @@ export type HostCoverageReport = {
   host: string;
   siteId: string | null;
   siteResolution: "host_match" | "fallback_latest_site" | "none";
+  hostBindingId: string | null;
+  hostBindingKind: string | null;
+  hostBindingStatus: "ACTIVE" | "INACTIVE" | null;
   activePointerExists: boolean;
   activeSiteVersionId: string | null;
   activeArtifactId: string | null;
@@ -71,6 +75,7 @@ function getRisk(input: {
 }
 
 export async function runArtifactCoverageAudit(input: { host?: string | null } = {}): Promise<ArtifactCoverageAuditReport> {
+  await ensureRuntimeTables();
   const pool = getAuditPool();
   const client = await pool.connect();
   try {
@@ -80,9 +85,9 @@ export async function runArtifactCoverageAudit(input: { host?: string | null } =
       : (
           await client.query<{ host: string }>(
             `
-            select distinct lower(source_host)::text as host
-            from public.gnr8_runtime_sites
-            where source_host is not null and length(trim(source_host)) > 0
+            select distinct lower(host)::text as host
+            from public.gnr8_runtime_host_bindings
+            where status = 'ACTIVE' and length(trim(host)) > 0
             order by host asc
             `,
           )
@@ -93,35 +98,56 @@ export async function runArtifactCoverageAudit(input: { host?: string | null } =
       const resolvedSite = await client.query<{
         site_id: string;
         site_resolution: "host_match" | "fallback_latest_site";
+        host_binding_id: string | null;
+        host_binding_kind: string | null;
+        host_binding_status: "ACTIVE" | "INACTIVE" | null;
         active_site_version_id: string | null;
         artifact_id: string | null;
       }>(
         `
         with candidate_site as (
-          select id
-          from public.gnr8_runtime_sites
-          where source_host is not null and lower(source_host) = $1::text
-          order by created_at desc
+          select
+            b.id::text as host_binding_id,
+            b.site_id::text as site_id,
+            b.binding_kind::text as host_binding_kind,
+            b.status::text as host_binding_status
+          from public.gnr8_runtime_host_bindings b
+          where lower(b.host) = $1::text and b.status = 'ACTIVE'
+          order by b.updated_at desc, b.created_at desc
           limit 1
         ), fallback_site as (
-          select id
+          select id::text as site_id
           from public.gnr8_runtime_sites
           order by created_at desc
           limit 1
         ), resolved_site as (
-          select id, 'host_match'::text as site_resolution from candidate_site
+          select
+            site_id,
+            'host_match'::text as site_resolution,
+            host_binding_id,
+            host_binding_kind,
+            host_binding_status
+          from candidate_site
           union all
-          select id, 'fallback_latest_site'::text as site_resolution
+          select
+            site_id,
+            'fallback_latest_site'::text as site_resolution,
+            null::text as host_binding_id,
+            null::text as host_binding_kind,
+            null::text as host_binding_status
           from fallback_site
           where not exists (select 1 from candidate_site)
         )
         select
-          s.id::text as site_id,
+          s.site_id::text as site_id,
           s.site_resolution::text as site_resolution,
+          s.host_binding_id::text as host_binding_id,
+          s.host_binding_kind::text as host_binding_kind,
+          s.host_binding_status::text as host_binding_status,
           p.active_site_version_id::text as active_site_version_id,
           p.active_artifact_id::text as artifact_id
         from resolved_site s
-        left join public.gnr8_runtime_active_pointers p on p.site_id = s.id
+        left join public.gnr8_runtime_active_pointers p on p.site_id = s.site_id
         limit 1
         `,
         [host],
@@ -133,6 +159,9 @@ export async function runArtifactCoverageAudit(input: { host?: string | null } =
           host,
           siteId: null,
           siteResolution: "none",
+          hostBindingId: null,
+          hostBindingKind: null,
+          hostBindingStatus: null,
           activePointerExists: false,
           activeSiteVersionId: null,
           activeArtifactId: null,
@@ -221,6 +250,9 @@ export async function runArtifactCoverageAudit(input: { host?: string | null } =
         host,
         siteId: resolved.site_id,
         siteResolution: resolved.site_resolution,
+        hostBindingId: resolved.host_binding_id,
+        hostBindingKind: resolved.host_binding_kind,
+        hostBindingStatus: resolved.host_binding_status,
         activePointerExists,
         activeSiteVersionId: resolved.active_site_version_id,
         activeArtifactId: resolved.artifact_id,

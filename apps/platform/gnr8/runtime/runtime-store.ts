@@ -33,6 +33,25 @@ export async function ensureRuntimeTables(): Promise<void> {
         `);
 
         await client.query(`
+          create table if not exists public.gnr8_runtime_host_bindings (
+            id uuid primary key default gen_random_uuid(),
+            site_id text not null references public.gnr8_runtime_sites(id) on delete cascade,
+            host text not null,
+            status text not null default 'ACTIVE' check (status in ('ACTIVE', 'INACTIVE')),
+            binding_kind text not null default 'shadow',
+            created_at timestamptz not null default now(),
+            updated_at timestamptz not null default now(),
+            unique (site_id, host)
+          )
+        `);
+
+        await client.query(`
+          create unique index if not exists gnr8_runtime_host_bindings_active_host_uq
+          on public.gnr8_runtime_host_bindings (lower(host))
+          where status = 'ACTIVE'
+        `);
+
+        await client.query(`
           create table if not exists public.gnr8_runtime_pages (
             id text primary key,
             site_id text not null references public.gnr8_runtime_sites(id) on delete cascade,
@@ -128,6 +147,29 @@ export async function ensureRuntimeTables(): Promise<void> {
             created_at timestamptz not null default now()
           )
         `);
+
+        await client.query(`
+          with ranked as (
+            select
+              s.id::text as site_id,
+              lower(trim(s.source_host))::text as host,
+              row_number() over (
+                partition by lower(trim(s.source_host))
+                order by s.created_at desc, s.id desc
+              ) as host_rank
+            from public.gnr8_runtime_sites s
+            where s.source_host is not null
+              and length(trim(s.source_host)) > 0
+          )
+          insert into public.gnr8_runtime_host_bindings (site_id, host, status, binding_kind)
+          select
+            ranked.site_id,
+            ranked.host,
+            case when ranked.host_rank = 1 then 'ACTIVE' else 'INACTIVE' end as status,
+            'legacy_source_host_backfill'::text as binding_kind
+          from ranked
+          on conflict (site_id, host) do nothing
+        `);
       } finally {
         client.release();
       }
@@ -165,6 +207,19 @@ type PageVersionRow = {
   created_at: string;
 };
 
+export type RuntimeHostBindingStatus = "ACTIVE" | "INACTIVE";
+export type RuntimeHostBindingKind = "shadow" | "canonical" | "legacy_source_host_backfill" | "manual";
+
+export type RuntimeHostBinding = {
+  id: string;
+  siteId: string;
+  host: string;
+  status: RuntimeHostBindingStatus;
+  bindingKind: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
 async function withTx<T>(fn: (client: PoolClient) => Promise<T>): Promise<T> {
   await ensureRuntimeTables();
   const client = await getSuperadminPool().connect();
@@ -187,6 +242,50 @@ async function getNextSiteVersionNo(client: PoolClient, siteId: string): Promise
     [siteId],
   );
   return row.rows[0]?.next ?? 1;
+}
+
+function normalizeRuntimeHost(host: string): string {
+  return String(host ?? "").trim().toLowerCase();
+}
+
+async function bindHostToSiteInTx(
+  client: PoolClient,
+  input: {
+    siteId: string;
+    host: string;
+    status?: RuntimeHostBindingStatus;
+    bindingKind?: RuntimeHostBindingKind | string;
+  },
+): Promise<void> {
+  const normalizedHost = normalizeRuntimeHost(input.host);
+  if (!normalizedHost) return;
+
+  const status = input.status ?? "ACTIVE";
+  const bindingKind = String(input.bindingKind ?? "shadow").trim() || "shadow";
+
+  if (status === "ACTIVE") {
+    await client.query(
+      `
+      update public.gnr8_runtime_host_bindings
+      set status = 'INACTIVE', updated_at = now()
+      where lower(host) = $1::text and status = 'ACTIVE' and site_id <> $2::text
+      `,
+      [normalizedHost, input.siteId],
+    );
+  }
+
+  await client.query(
+    `
+    insert into public.gnr8_runtime_host_bindings (site_id, host, status, binding_kind)
+    values ($1::text, $2::text, $3::text, $4::text)
+    on conflict (site_id, host)
+    do update set
+      status = excluded.status,
+      binding_kind = excluded.binding_kind,
+      updated_at = now()
+    `,
+    [input.siteId, normalizedHost, status, bindingKind],
+  );
 }
 
 function mapPageVersionRow(row: PageVersionRow): CanonicalPageVersionSnapshot {
@@ -228,6 +327,15 @@ export async function createSiteVersionFromMigration(
       `,
       [input.siteId, input.sourceUrl, sourceHost],
     );
+
+    if (sourceHost) {
+      await bindHostToSiteInTx(client, {
+        siteId: input.siteId,
+        host: sourceHost,
+        status: "ACTIVE",
+        bindingKind: "shadow",
+      });
+    }
 
     const versionNo = await getNextSiteVersionNo(client, input.siteId);
     const siteVersionInsert = await client.query<{ id: string }>(
@@ -303,6 +411,65 @@ export async function createSiteVersionFromMigration(
 
     return { siteId: input.siteId, siteVersionId, versionNo };
   });
+}
+
+export async function bindHostToSite(input: {
+  siteId: string;
+  host: string;
+  status?: RuntimeHostBindingStatus;
+  bindingKind?: RuntimeHostBindingKind | string;
+}): Promise<void> {
+  await withTx(async (client) => {
+    const siteRes = await client.query<{ id: string }>(
+      `select id::text as id from public.gnr8_runtime_sites where id = $1::text limit 1`,
+      [input.siteId],
+    );
+    if (!siteRes.rows[0]) throw new Error("Runtime site not found");
+    await bindHostToSiteInTx(client, input);
+  });
+}
+
+export async function listHostBindingsForSite(siteId: string): Promise<RuntimeHostBinding[]> {
+  await ensureRuntimeTables();
+  const client = await getSuperadminPool().connect();
+  try {
+    const res = await client.query<{
+      id: string;
+      site_id: string;
+      host: string;
+      status: RuntimeHostBindingStatus;
+      binding_kind: string;
+      created_at: string;
+      updated_at: string;
+    }>(
+      `
+      select
+        id::text as id,
+        site_id::text as site_id,
+        host::text as host,
+        status::text as status,
+        binding_kind::text as binding_kind,
+        created_at::text as created_at,
+        updated_at::text as updated_at
+      from public.gnr8_runtime_host_bindings
+      where site_id = $1::text
+      order by case when status = 'ACTIVE' then 0 else 1 end asc, host asc
+      `,
+      [siteId],
+    );
+
+    return res.rows.map((row) => ({
+      id: row.id,
+      siteId: row.site_id,
+      host: row.host,
+      status: row.status,
+      bindingKind: row.binding_kind,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+    }));
+  } finally {
+    client.release();
+  }
 }
 
 export async function getSiteVersion(siteVersionId: string): Promise<CanonicalSiteVersionSnapshot | null> {
@@ -604,6 +771,9 @@ export type PublicRuntimeArtifactResolution =
       normalizedPath: string;
       siteId: string;
       siteResolution: "host_match" | "fallback_latest_site";
+      hostBindingId: string | null;
+      hostBindingKind: string | null;
+      hostBindingStatus: RuntimeHostBindingStatus | null;
       activeSiteVersionId: string;
       artifactId: string;
       artifact: RuntimeArtifact;
@@ -617,6 +787,9 @@ export type PublicRuntimeArtifactResolution =
       normalizedPath: string;
       siteId: string | null;
       siteResolution: "host_match" | "fallback_latest_site" | "none";
+      hostBindingId: string | null;
+      hostBindingKind: string | null;
+      hostBindingStatus: RuntimeHostBindingStatus | null;
       activeSiteVersionId: string | null;
       artifactId: string | null;
       reasonCode: PublicRuntimeArtifactMissReasonCode;
@@ -629,38 +802,60 @@ export async function resolveActiveArtifactForHostAndPathWithDiagnostics(input: 
   await ensureRuntimeTables();
   const client = await getSuperadminPool().connect();
   try {
-    const host = String(input.host ?? "").trim().toLowerCase();
+    const host = normalizeRuntimeHost(String(input.host ?? ""));
     const normalizedPath = normalizePagePath(input.path);
 
     const pointerRes = await client.query<{
       site_id: string;
       site_resolution: "host_match" | "fallback_latest_site";
+      host_binding_id: string | null;
+      host_binding_kind: string | null;
+      host_binding_status: RuntimeHostBindingStatus | null;
       active_site_version_id: string | null;
       artifact_id: string | null;
     }>(
       `
       with candidate_site as (
-        select id from public.gnr8_runtime_sites
-        where source_host is not null
-          and lower(source_host) = $1::text
-        order by created_at desc
+        select
+          b.id::text as host_binding_id,
+          b.site_id::text as site_id,
+          b.binding_kind::text as host_binding_kind,
+          b.status::text as host_binding_status
+        from public.gnr8_runtime_host_bindings b
+        where lower(b.host) = $1::text
+          and b.status = 'ACTIVE'
+        order by b.updated_at desc, b.created_at desc
         limit 1
       ), fallback_site as (
-        select id from public.gnr8_runtime_sites order by created_at desc limit 1
+        select id::text as site_id from public.gnr8_runtime_sites order by created_at desc limit 1
       ), resolved_site as (
-        select id, 'host_match'::text as site_resolution from candidate_site
+        select
+          site_id,
+          'host_match'::text as site_resolution,
+          host_binding_id,
+          host_binding_kind,
+          host_binding_status
+        from candidate_site
         union all
-        select id, 'fallback_latest_site'::text as site_resolution
+        select
+          site_id,
+          'fallback_latest_site'::text as site_resolution,
+          null::text as host_binding_id,
+          null::text as host_binding_kind,
+          null::text as host_binding_status
         from fallback_site
         where not exists (select 1 from candidate_site)
       )
       select
-        s.id::text as site_id,
+        s.site_id::text as site_id,
         s.site_resolution::text as site_resolution,
+        s.host_binding_id::text as host_binding_id,
+        s.host_binding_kind::text as host_binding_kind,
+        s.host_binding_status::text as host_binding_status,
         p.active_site_version_id::text as active_site_version_id,
         p.active_artifact_id::text as artifact_id
       from resolved_site s
-      left join public.gnr8_runtime_active_pointers p on p.site_id = s.id
+      left join public.gnr8_runtime_active_pointers p on p.site_id = s.site_id
       limit 1
       `,
       [host],
@@ -675,6 +870,9 @@ export async function resolveActiveArtifactForHostAndPathWithDiagnostics(input: 
         normalizedPath,
         siteId: null,
         siteResolution: "none",
+        hostBindingId: null,
+        hostBindingKind: null,
+        hostBindingStatus: null,
         activeSiteVersionId: null,
         artifactId: null,
         reasonCode: "no_runtime_site",
@@ -682,6 +880,9 @@ export async function resolveActiveArtifactForHostAndPathWithDiagnostics(input: 
     }
     const siteId = pointerRow.site_id;
     const siteResolution = pointerRow.site_resolution;
+    const hostBindingId = pointerRow.host_binding_id;
+    const hostBindingKind = pointerRow.host_binding_kind;
+    const hostBindingStatus = pointerRow.host_binding_status;
     const activeSiteVersionId = pointerRow.active_site_version_id;
     const artifactId = pointerRow.artifact_id;
     if (!artifactId || !activeSiteVersionId) {
@@ -692,6 +893,9 @@ export async function resolveActiveArtifactForHostAndPathWithDiagnostics(input: 
         normalizedPath,
         siteId,
         siteResolution,
+        hostBindingId,
+        hostBindingKind,
+        hostBindingStatus,
         activeSiteVersionId: activeSiteVersionId ?? null,
         artifactId: artifactId ?? null,
         reasonCode: "no_active_pointer",
@@ -707,6 +911,9 @@ export async function resolveActiveArtifactForHostAndPathWithDiagnostics(input: 
         normalizedPath,
         siteId,
         siteResolution,
+        hostBindingId,
+        hostBindingKind,
+        hostBindingStatus,
         activeSiteVersionId,
         artifactId,
         reasonCode: "active_artifact_missing",
@@ -723,6 +930,9 @@ export async function resolveActiveArtifactForHostAndPathWithDiagnostics(input: 
         normalizedPath,
         siteId,
         siteResolution,
+        hostBindingId,
+        hostBindingKind,
+        hostBindingStatus,
         activeSiteVersionId,
         artifactId,
         reasonCode: "artifact_path_missing",
@@ -736,6 +946,9 @@ export async function resolveActiveArtifactForHostAndPathWithDiagnostics(input: 
       normalizedPath,
       siteId,
       siteResolution,
+      hostBindingId,
+      hostBindingKind,
+      hostBindingStatus,
       activeSiteVersionId,
       artifactId,
       artifact,
