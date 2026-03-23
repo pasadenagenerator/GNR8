@@ -695,54 +695,58 @@ export async function getArtifactById(artifactId: string): Promise<RuntimeArtifa
   await ensureRuntimeTables();
   const client = await getSuperadminPool().connect();
   try {
-    const res = await client.query<{
-      id: string;
-      site_id: string;
-      site_version_id: string;
-      renderer_compatibility_version: string;
-      html_by_path: Record<string, string>;
-      compiled_token_styles: string;
-      asset_fingerprint_map: Record<string, string>;
-      manifest: Record<string, unknown>;
-      bundle_sha256: string;
-      created_at: string;
-    }>(
-      `
-      select
-        id::text as id,
-        site_id::text,
-        site_version_id::text,
-        renderer_compatibility_version::text,
-        html_by_path,
-        compiled_token_styles,
-        asset_fingerprint_map,
-        manifest,
-        bundle_sha256::text,
-        created_at::text
-      from public.gnr8_runtime_artifacts
-      where id = $1::uuid
-      limit 1
-      `,
-      [artifactId],
-    );
-    const row = res.rows[0];
-    if (!row) return null;
-
-    return {
-      id: row.id,
-      siteId: row.site_id,
-      siteVersionId: row.site_version_id,
-      rendererCompatibilityVersion: row.renderer_compatibility_version,
-      htmlByPath: row.html_by_path,
-      compiledTokenStyles: row.compiled_token_styles,
-      assetFingerprintMap: row.asset_fingerprint_map,
-      manifest: row.manifest,
-      bundleSha256: row.bundle_sha256,
-      createdAt: row.created_at,
-    };
+    return getArtifactByIdWithClient(client, artifactId);
   } finally {
     client.release();
   }
+}
+
+async function getArtifactByIdWithClient(client: PoolClient, artifactId: string): Promise<RuntimeArtifact | null> {
+  const res = await client.query<{
+    id: string;
+    site_id: string;
+    site_version_id: string;
+    renderer_compatibility_version: string;
+    html_by_path: Record<string, string>;
+    compiled_token_styles: string;
+    asset_fingerprint_map: Record<string, string>;
+    manifest: Record<string, unknown>;
+    bundle_sha256: string;
+    created_at: string;
+  }>(
+    `
+    select
+      id::text as id,
+      site_id::text,
+      site_version_id::text,
+      renderer_compatibility_version::text,
+      html_by_path,
+      compiled_token_styles,
+      asset_fingerprint_map,
+      manifest,
+      bundle_sha256::text,
+      created_at::text
+    from public.gnr8_runtime_artifacts
+    where id = $1::uuid
+    limit 1
+    `,
+    [artifactId],
+  );
+  const row = res.rows[0];
+  if (!row) return null;
+
+  return {
+    id: row.id,
+    siteId: row.site_id,
+    siteVersionId: row.site_version_id,
+    rendererCompatibilityVersion: row.renderer_compatibility_version,
+    htmlByPath: row.html_by_path,
+    compiledTokenStyles: row.compiled_token_styles,
+    assetFingerprintMap: row.asset_fingerprint_map,
+    manifest: row.manifest,
+    bundleSha256: row.bundle_sha256,
+    createdAt: row.created_at,
+  };
 }
 
 export async function resolveActiveArtifactForHostAndPath(input: {
@@ -902,7 +906,7 @@ export async function resolveActiveArtifactForHostAndPathWithDiagnostics(input: 
       };
     }
 
-    const artifact = await getArtifactById(artifactId);
+    const artifact = await getArtifactByIdWithClient(client, artifactId);
     if (!artifact) {
       return {
         outcome: "artifact_miss",

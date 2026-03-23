@@ -56,7 +56,7 @@ test("artifact-builder preview mode marks noindex", () => {
   assert.ok(preview.htmlByPath["/"]?.includes("noindex"));
 });
 
-test("artifact-builder renders visible legacy summary text/images/links without storing raw html", () => {
+test("artifact-builder renders visible legacy summary v2 with grouped recognizability blocks", () => {
   const legacySiteVersion = {
     ...siteVersion,
     pages: [
@@ -69,9 +69,14 @@ test("artifact-builder renders visible legacy summary text/images/links without 
           sectionProps: {
             legacy: {
               htmlSummary: {
-                extractedText: "Transporti Maver - mednarodni prevozi po Evropi.",
-                extractedImageSrcs: ["/assets/image/hero.jpg"],
-                extractedLinks: [{ href: "/kontakt", label: "Kontakt" }],
+                extractedText:
+                  "TRANSPORTI MAVER D.O.O. Naše podjetje ima dolgo tradicijo prevozov po Evropi. Trenutno imamo na razpolago 15 avto transporterjev in pokrivamo Nemčijo, Italijo in Francijo. Kontakt: Tel: +386 (0)1 366 38 36 E-mail: transporti.maver@siol.net Dolenjska cesta 328, Lavrica 1291 Škofljica.",
+                extractedImageSrcs: ["/uploads/logo.png", "/assets/image/hero.jpg", "/assets/image/fleet.jpg"],
+                extractedLinks: [
+                  { href: "/kontakt", label: "Kontakt" },
+                  { href: "tel:+386(0)13663836", label: "+386 (0)1 366 38 36" },
+                  { href: "mailto:transporti.maver@siol.net", label: "transporti.maver@siol.net" },
+                ],
               },
             },
           },
@@ -82,10 +87,14 @@ test("artifact-builder renders visible legacy summary text/images/links without 
 
   const out = buildDeterministicArtifactBundle({ siteVersion: legacySiteVersion, renderMode: "PUBLISH" });
   const html = out.htmlByPath["/"] ?? "";
-  assert.match(html, /data-gnr8-legacy-summary="visible-v1"/);
-  assert.match(html, /Transporti Maver - mednarodni prevozi po Evropi\./);
+  assert.match(html, /data-gnr8-legacy-summary="visible-v2"/);
+  assert.match(html, /<h1[^>]*>TRANSPORTI MAVER D\.O\.O\.<\/h1>/);
+  assert.match(html, /<h2[^>]*>About<\/h2>/);
+  assert.match(html, /<h2[^>]*>Services<\/h2>/);
+  assert.match(html, /<h2[^>]*>Contact<\/h2>/);
   assert.match(html, /<img src="\/assets\/image\/hero\.jpg"/);
-  assert.match(html, /<a href="\/kontakt">Kontakt<\/a>/);
+  assert.doesNotMatch(html, /<img src="\/uploads\/logo\.png"/);
+  assert.match(html, /<a href="mailto:transporti\.maver@siol\.net">transporti\.maver@siol\.net<\/a>/);
   assert.match(html, /data-gnr8-section-props/);
   assert.doesNotMatch(html, /"html"\s*:/);
 });
@@ -116,6 +125,6 @@ test("artifact-builder skips visible legacy summary wrapper when summary is empt
 
   const out = buildDeterministicArtifactBundle({ siteVersion: legacySiteVersion, renderMode: "PUBLISH" });
   const html = out.htmlByPath["/"] ?? "";
-  assert.doesNotMatch(html, /data-gnr8-legacy-summary="visible-v1"/);
+  assert.doesNotMatch(html, /data-gnr8-legacy-summary="visible-v2"/);
   assert.match(html, /data-gnr8-section-props/);
 });
