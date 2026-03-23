@@ -55,3 +55,67 @@ test("artifact-builder preview mode marks noindex", () => {
   const preview = buildDeterministicArtifactBundle({ siteVersion, renderMode: "PREVIEW" });
   assert.ok(preview.htmlByPath["/"]?.includes("noindex"));
 });
+
+test("artifact-builder renders visible legacy summary text/images/links without storing raw html", () => {
+  const legacySiteVersion = {
+    ...siteVersion,
+    pages: [
+      {
+        ...siteVersion.pages[0],
+        structureModel: {
+          sections: [{ id: "legacy", type: "legacy.html", order: 0 }],
+        },
+        contentModel: {
+          sectionProps: {
+            legacy: {
+              htmlSummary: {
+                extractedText: "Transporti Maver - mednarodni prevozi po Evropi.",
+                extractedImageSrcs: ["/assets/image/hero.jpg"],
+                extractedLinks: [{ href: "/kontakt", label: "Kontakt" }],
+              },
+            },
+          },
+        },
+      },
+    ],
+  };
+
+  const out = buildDeterministicArtifactBundle({ siteVersion: legacySiteVersion, renderMode: "PUBLISH" });
+  const html = out.htmlByPath["/"] ?? "";
+  assert.match(html, /data-gnr8-legacy-summary="visible-v1"/);
+  assert.match(html, /Transporti Maver - mednarodni prevozi po Evropi\./);
+  assert.match(html, /<img src="\/assets\/image\/hero\.jpg"/);
+  assert.match(html, /<a href="\/kontakt">Kontakt<\/a>/);
+  assert.match(html, /data-gnr8-section-props/);
+  assert.doesNotMatch(html, /"html"\s*:/);
+});
+
+test("artifact-builder skips visible legacy summary wrapper when summary is empty", () => {
+  const legacySiteVersion = {
+    ...siteVersion,
+    pages: [
+      {
+        ...siteVersion.pages[0],
+        structureModel: {
+          sections: [{ id: "legacy", type: "legacy.html", order: 0 }],
+        },
+        contentModel: {
+          sectionProps: {
+            legacy: {
+              htmlSummary: {
+                extractedText: "",
+                extractedImageSrcs: [],
+                extractedLinks: [],
+              },
+            },
+          },
+        },
+      },
+    ],
+  };
+
+  const out = buildDeterministicArtifactBundle({ siteVersion: legacySiteVersion, renderMode: "PUBLISH" });
+  const html = out.htmlByPath["/"] ?? "";
+  assert.doesNotMatch(html, /data-gnr8-legacy-summary="visible-v1"/);
+  assert.match(html, /data-gnr8-section-props/);
+});

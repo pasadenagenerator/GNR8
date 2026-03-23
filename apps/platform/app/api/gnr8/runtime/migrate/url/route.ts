@@ -1,7 +1,9 @@
 import { NextResponse } from "next/server";
+import fs from "node:fs";
 
 import { importHtmlToPage } from "@/gnr8/importer/html-to-page";
 import { migrateImportedPageToCanonicalDraft } from "@/gnr8/runtime/migration-factory";
+import { importPublicSinglePageUrlToSnapshot } from "@/gnr8/validation/runtime/url-single-page-import";
 
 export const runtime = "nodejs";
 
@@ -36,19 +38,21 @@ export async function POST(req: Request) {
 
     if (!url) return NextResponse.json({ error: "url must be valid http(s)" }, { status: 400 });
 
-    const upstream = await fetch(url.toString(), {
-      method: "GET",
-      cache: "no-store",
-      headers: {
-        accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-      },
+    const snapshot = await importPublicSinglePageUrlToSnapshot({
+      sourceUrl: url.toString(),
+      requestId: `runtime-migrate-url-${Date.now()}`,
     });
-
-    if (!upstream.ok) {
-      return NextResponse.json({ error: `Upstream fetch failed (${upstream.status})` }, { status: 502 });
+    if (snapshot.importDiagnostics.summary.fatalCount > 0) {
+      return NextResponse.json(
+        {
+          error: "URL snapshot capture failed",
+          diagnostics: snapshot.importDiagnostics,
+        },
+        { status: 502 },
+      );
     }
 
-    const html = await upstream.text();
+    const html = fs.readFileSync(snapshot.entryHtmlPathAbs, "utf8");
     if (!html.trim()) return NextResponse.json({ error: "Upstream HTML empty" }, { status: 502 });
 
     const page = importHtmlToPage({ slug, title: body.title, html });

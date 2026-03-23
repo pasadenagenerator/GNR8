@@ -16,7 +16,7 @@ import type { Gnr8Section, Gnr8SectionProps } from "@/gnr8/types/section";
 import { randomUUID } from "crypto";
 
 const PRICE_TEXT_RE =
-  /(?:[$€£¥]\s*\d[\d,.\s]*|\b\d[\d,.\s]*(?:\/\s*mo(?:nth)?|\/\s*month|per\s+month|\/\s*yr|\/\s*year|per\s+year)\b|\b(?:usd|eur|gbp)\b)/i;
+  /(?:[$€£¥]\s*\d+(?:[.,]\d+)?|\b(?:usd|eur|gbp)\s*\d+(?:[.,]\d+)?|\b\d+(?:[.,]\d+)?\s*(?:usd|eur|gbp)\b|\b\d+(?:[.,]\d+)?\s*(?:\/\s*mo(?:nth)?|\/\s*month|per\s+month|\/\s*yr|\/\s*year|per\s+year)\b)/i;
 
 function countPriceMentions(text: string): number {
   const re = new RegExp(PRICE_TEXT_RE.source, "ig");
@@ -186,7 +186,13 @@ function extractFirstPriceText(html: string): string | undefined {
   const m = PRICE_TEXT_RE.exec(txt);
   if (!m) return undefined;
   const price = normalizeWhitespace(String(m[0] ?? ""));
-  return price || undefined;
+  if (!price) return undefined;
+  const hasCurrencySymbol = /[$€£¥]/.test(price);
+  const hasRecurringUnit = /\/\s*mo(?:nth)?|\/\s*month|per\s+month|\/\s*yr|\/\s*year|per\s+year/i.test(price);
+  const digitCount = (price.match(/\d/g) ?? []).length;
+  const strongNumericSignal = digitCount >= 2;
+  if (hasCurrencySymbol || hasRecurringUnit || strongNumericSignal) return price;
+  return undefined;
 }
 
 function detectPricingBasic(blockHtml: string): Gnr8Section | null {
@@ -308,6 +314,9 @@ function detectFeatureGrid(blockHtml: string): Gnr8Section | null {
 function detectLogoCloud(blockHtml: string): Gnr8Section | null {
   const logos = dedupeKeepOrder(extractAllImgSrc(blockHtml));
   if (logos.length < 3) return null;
+  const textLength = textFromHtml(blockHtml).length;
+  const paragraphCount = (blockHtml.match(/<p\b/gi) ?? []).length;
+  if (textLength > 220 || paragraphCount >= 2) return null;
   return makeSection("logo.cloud", { logos });
 }
 

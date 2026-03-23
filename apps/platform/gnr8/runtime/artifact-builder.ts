@@ -10,6 +10,92 @@ function escapeHtml(value: string): string {
     .replaceAll("'", "&#39;");
 }
 
+type LegacyHtmlSummary = {
+  extractedText?: unknown;
+  extractedImageSrcs?: unknown;
+  extractedLinks?: unknown;
+};
+
+function readLegacyHtmlSummary(sectionProps: Record<string, unknown>): LegacyHtmlSummary | null {
+  const raw = sectionProps.htmlSummary;
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  return raw as LegacyHtmlSummary;
+}
+
+function asNonEmptyString(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
+function readSummaryText(summary: LegacyHtmlSummary): string | null {
+  return asNonEmptyString(summary.extractedText);
+}
+
+function readSummaryImageSrcs(summary: LegacyHtmlSummary): string[] {
+  if (!Array.isArray(summary.extractedImageSrcs)) return [];
+  const deduped = new Set<string>();
+  for (const candidate of summary.extractedImageSrcs) {
+    const src = asNonEmptyString(candidate);
+    if (!src) continue;
+    deduped.add(src);
+    if (deduped.size >= 6) break;
+  }
+  return [...deduped];
+}
+
+function readSummaryLinks(summary: LegacyHtmlSummary): Array<{ href: string; label: string }> {
+  if (!Array.isArray(summary.extractedLinks)) return [];
+  const links: Array<{ href: string; label: string }> = [];
+  const seen = new Set<string>();
+  for (const entry of summary.extractedLinks) {
+    if (!entry || typeof entry !== "object" || Array.isArray(entry)) continue;
+    const href = asNonEmptyString((entry as { href?: unknown }).href);
+    const label = asNonEmptyString((entry as { label?: unknown }).label);
+    if (!href || !label) continue;
+    const key = `${href}::${label}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    links.push({ href, label });
+    if (links.length >= 10) break;
+  }
+  return links;
+}
+
+function renderLegacySummaryHtml(sectionProps: Record<string, unknown>): string {
+  const summary = readLegacyHtmlSummary(sectionProps);
+  if (!summary) return "";
+
+  const text = readSummaryText(summary);
+  const imageSrcs = readSummaryImageSrcs(summary);
+  const links = readSummaryLinks(summary);
+  if (!text && imageSrcs.length === 0 && links.length === 0) return "";
+
+  const lines: string[] = [];
+  lines.push('<div data-gnr8-legacy-summary="visible-v1" style="max-width: 1100px; margin: 0 auto; padding: 28px 16px;">');
+  if (text) {
+    lines.push(`  <p style="margin: 0 0 20px; font-size: 1rem; line-height: 1.7;">${escapeHtml(text)}</p>`);
+  }
+  if (imageSrcs.length > 0) {
+    lines.push('  <div style="display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); margin: 0 0 20px;">');
+    for (const src of imageSrcs) {
+      lines.push(
+        `    <img src="${escapeHtml(src)}" alt="" loading="lazy" decoding="async" style="width: 100%; height: auto; display: block; border-radius: 6px;" />`,
+      );
+    }
+    lines.push("  </div>");
+  }
+  if (links.length > 0) {
+    lines.push('  <ul style="margin: 0; padding-left: 18px;">');
+    for (const link of links) {
+      lines.push(`    <li><a href="${escapeHtml(link.href)}">${escapeHtml(link.label)}</a></li>`);
+    }
+    lines.push("  </ul>");
+  }
+  lines.push("</div>");
+  return lines.join("\n");
+}
+
 function cssVarName(key: string): string {
   return `--${key.replace(/[^a-zA-Z0-9_-]/g, "-")}`;
 }
@@ -36,7 +122,8 @@ function renderSectionHtml(input: {
   sectionProps: Record<string, unknown>;
 }): string {
   const payload = escapeHtml(stableStringify(input.sectionProps));
-  return `<section data-gnr8-section-id="${escapeHtml(input.sectionId)}" data-gnr8-section-type="${escapeHtml(input.sectionType)}"><script type="application/json" data-gnr8-section-props>${payload}</script></section>`;
+  const visibleFallback = input.sectionType === "legacy.html" ? renderLegacySummaryHtml(input.sectionProps) : "";
+  return `<section data-gnr8-section-id="${escapeHtml(input.sectionId)}" data-gnr8-section-type="${escapeHtml(input.sectionType)}">${visibleFallback}<script type="application/json" data-gnr8-section-props>${payload}</script></section>`;
 }
 
 function renderPageBody(page: CanonicalSiteVersionSnapshot["pages"][number]): string {
