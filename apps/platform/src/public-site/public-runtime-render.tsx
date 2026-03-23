@@ -1,7 +1,3 @@
-import type { ChaiPageProps } from "@chaibuilder/next/types";
-import { notFound } from "next/navigation";
-import type { ReactElement } from "react";
-
 import {
   resolveActiveArtifactForHostAndPathWithDiagnostics,
   type PublicRuntimeArtifactMissReasonCode,
@@ -18,18 +14,14 @@ type HeaderReader = {
   get(name: string): string | null;
 };
 
-let chaiRuntimeRegistered = false;
-
 type PublicRuntimeResolutionOutcome = "artifact_hit" | "artifact_miss" | "fallback_hit" | "fallback_miss" | "artifact_only_404";
 
 type BuilderFallbackResult =
   | {
       hit: true;
-      element: ReactElement;
+      html: string;
       reasonCode:
-        | "builder_page_rendered"
         | "builder_data_fallback"
-        | "builder_chai_render_fallback"
         | "builder_default_org_missing";
     }
   | {
@@ -94,24 +86,25 @@ export function resolvePublicRuntimeMode(): Gnr8PublicRuntimeMode {
   return "artifact-only";
 }
 
-async function ensureChaiRuntimeRegistered(): Promise<void> {
-  if (chaiRuntimeRegistered) return;
-  const chaiRenderer = await import("@gnr8/chai-renderer");
-  chaiRenderer.registerCustomBlocks();
-  chaiRenderer.registerFonts();
-  chaiRenderer.registerPageTypes();
-  chaiRuntimeRegistered = true;
+function escapeHtml(value: string): string {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
 }
 
-function renderBuilderDataFallback(input: { slug: string; title: string | null; data: unknown }) {
-  return (
-    <main style={{ padding: 24 }}>
-      <h1>{input.title ?? "Untitled"}</h1>
-      <p>
-        slug: <code>{input.slug}</code>
-      </p>
-      <pre style={{ whiteSpace: "pre-wrap" }}>{JSON.stringify(input.data ?? {}, null, 2)}</pre>
-    </main>
+function asHtmlDocument(body: string, title: string): string {
+  return `<!doctype html>\n<html lang="en">\n<head>\n<meta charset="utf-8" />\n<meta name="viewport" content="width=device-width, initial-scale=1" />\n<title>${escapeHtml(title)}</title>\n</head>\n<body>\n${body}\n</body>\n</html>`;
+}
+
+function renderBuilderDataFallbackHtml(input: { slug: string; title: string | null; data: unknown }): string {
+  const title = input.title ?? "Untitled";
+  const serialized = escapeHtml(JSON.stringify(input.data ?? {}, null, 2));
+  return asHtmlDocument(
+    `<main style="padding:24px"><h1>${escapeHtml(title)}</h1><p>slug: <code>${escapeHtml(input.slug)}</code></p><pre style="white-space:pre-wrap">${serialized}</pre></main>`,
+    title,
   );
 }
 
@@ -121,13 +114,9 @@ async function renderBuilderFallback(input: { path: string; host: string }): Pro
     return {
       hit: true,
       reasonCode: "builder_default_org_missing",
-      element: (
-        <main style={{ padding: 24 }}>
-          <h1>Missing env</h1>
-          <p>
-            Set <code>NEXT_PUBLIC_DEFAULT_ORG_ID</code> in Vercel.
-          </p>
-        </main>
+      html: asHtmlDocument(
+        "<main style=\"padding:24px\"><h1>Missing env</h1><p>Set <code>NEXT_PUBLIC_DEFAULT_ORG_ID</code> in Vercel.</p></main>",
+        "Missing env",
       ),
     };
   }
@@ -141,71 +130,23 @@ async function renderBuilderFallback(input: { path: string; host: string }): Pro
 
   if (!page) return { hit: false, reasonCode: "builder_page_not_found" };
 
-  const pageData = page.data as any;
-  const isRenderableChaiPage = !!pageData && typeof pageData === "object" && Array.isArray(pageData.blocks);
-
-  if (!isRenderableChaiPage) {
-    return {
-      hit: true,
-      reasonCode: "builder_data_fallback",
-      element: renderBuilderDataFallback({
-        slug: page.slug,
-        title: page.title ?? null,
-        data: page.data ?? {},
-      }),
-    };
-  }
-
-  const normalizedPage = {
-    ...pageData,
-    pageType: pageData.pageType ?? "page",
-    lang: pageData.lang ?? "en",
-    fallbackLang: pageData.fallbackLang ?? "en",
+  return {
+    hit: true,
+    reasonCode: "builder_data_fallback",
+    html: renderBuilderDataFallbackHtml({
+      slug: page.slug,
+      title: page.title ?? null,
+      data: page.data ?? {},
+    }),
   };
-
-  const pageProps: ChaiPageProps = {
-    slug: page.slug,
-    pageType: normalizedPage.pageType,
-    fallbackLang: normalizedPage.fallbackLang,
-    pageLang: normalizedPage.lang,
-  };
-
-  try {
-    await ensureChaiRuntimeRegistered();
-    const { ChaiPageStyles, RenderChaiBlocks } = await import("@chaibuilder/next/render");
-    return {
-      hit: true,
-      reasonCode: "builder_page_rendered",
-      element: (
-        <html lang={normalizedPage.lang}>
-          <head>
-            <ChaiPageStyles page={normalizedPage} />
-          </head>
-          <body>
-            <RenderChaiBlocks page={normalizedPage} pageProps={pageProps} />
-          </body>
-        </html>
-      ),
-    };
-  } catch {
-    return {
-      hit: true,
-      reasonCode: "builder_chai_render_fallback",
-      element: renderBuilderDataFallback({
-        slug: page.slug,
-        title: page.title ?? null,
-        data: page.data ?? {},
-      }),
-    };
-  }
 }
 
-function failPublicRuntimeResolution(input: {
+function logPublicRuntimeFailure(input: {
   mode: Gnr8PublicRuntimeMode;
   host: string;
   path: string;
   reasonCode: "fallback_miss" | "builder_page_not_found" | PublicRuntimeArtifactMissReasonCode;
-}): never {
+}): void {
   if (input.mode === "artifact-only") {
     logPublicRuntimeResolution({
       outcome: "artifact_only_404",
@@ -223,10 +164,26 @@ function failPublicRuntimeResolution(input: {
       reasonCode: input.reasonCode,
     });
   }
-  notFound();
 }
 
-export async function renderPublicPath(input: { path: string; host: string }) {
+function htmlResponse(input: { html: string; status?: number }): Response {
+  return new Response(input.html, {
+    status: input.status ?? 200,
+    headers: {
+      "content-type": "text/html; charset=utf-8",
+      "cache-control": "private, no-cache, no-store, max-age=0, must-revalidate",
+    },
+  });
+}
+
+function notFoundHtmlResponse(): Response {
+  return htmlResponse({
+    status: 404,
+    html: "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\" /><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" /><title>404: This page could not be found.</title></head><body><main><h1>404</h1><p>This page could not be found.</p></main></body></html>",
+  });
+}
+
+export async function renderPublicPathResponse(input: { path: string; host: string }): Promise<Response> {
   const mode = resolvePublicRuntimeMode();
 
   const artifactResolution = await resolveActiveArtifactForHostAndPathWithDiagnostics({
@@ -250,14 +207,7 @@ export async function renderPublicPath(input: { path: string; host: string }) {
       reasonCode:
         artifactResolution.siteResolution === "fallback_latest_site" ? artifactResolution.siteResolution : null,
     });
-    return (
-      <div
-        suppressHydrationWarning
-        dangerouslySetInnerHTML={{
-          __html: artifactResolution.html,
-        }}
-      />
-    );
+    return htmlResponse({ html: artifactResolution.html });
   }
 
   logPublicRuntimeResolution({
@@ -290,20 +240,24 @@ export async function renderPublicPath(input: { path: string; host: string }) {
         hostBindingStatus: artifactResolution.hostBindingStatus,
         reasonCode: fallback.reasonCode,
       });
-      return fallback.element;
+      return htmlResponse({
+        html: fallback.html,
+      });
     }
-    return failPublicRuntimeResolution({
+    logPublicRuntimeFailure({
       mode,
       host: input.host,
       path: input.path,
       reasonCode: fallback.reasonCode,
     });
+    return notFoundHtmlResponse();
   }
 
-  return failPublicRuntimeResolution({
+  logPublicRuntimeFailure({
     mode,
     host: input.host,
     path: input.path,
     reasonCode: artifactResolution.reasonCode,
   });
+  return notFoundHtmlResponse();
 }
