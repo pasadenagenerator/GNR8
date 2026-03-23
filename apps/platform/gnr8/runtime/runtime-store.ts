@@ -17,7 +17,7 @@ import type {
 
 let tablesReady: Promise<void> | null = null;
 
-async function ensureRuntimeTables(): Promise<void> {
+export async function ensureRuntimeTables(): Promise<void> {
   if (!tablesReady) {
     tablesReady = (async () => {
       const client = await getSuperadminPool().connect();

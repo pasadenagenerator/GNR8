@@ -9,7 +9,7 @@ import { POST as publishRoute } from "@/app/api/gnr8/runtime/versions/[siteVersi
 import { POST as readyRoute } from "@/app/api/gnr8/runtime/versions/[siteVersionId]/ready/route";
 import { POST as rollbackRoute } from "@/app/api/gnr8/runtime/versions/[siteVersionId]/rollback/route";
 import { deterministicId } from "@/gnr8/runtime/deterministic";
-import { getSiteVersion } from "@/gnr8/runtime/runtime-store";
+import { ensureRuntimeTables, getSiteVersion } from "@/gnr8/runtime/runtime-store";
 import { getSuperadminPool } from "@/src/superadmin/db";
 
 const TEST_SITE_ID_PREFIX = "test_runtime_e2e_site";
@@ -122,6 +122,7 @@ test("phase-5a runtime happy path lock: migrate -> ready -> approve -> preview -
   }) as typeof fetch;
 
   process.env.GNR8_RUNTIME_TEST_SITE_ID_PREFIX = TEST_SITE_ID_PREFIX;
+  await ensureRuntimeTables();
   await cleanRuntimeSite(siteId);
 
   try {
