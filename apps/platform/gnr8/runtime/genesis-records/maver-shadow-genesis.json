@@ -1,10 +1,10 @@
 {
   "milestone": "production-runtime-genesis-seed",
-  "generatedAt": "2026-03-23T10:29:48.435Z",
+  "generatedAt": "2026-03-23T15:33:24.434Z",
   "startedAt": "2026-03-23T10:29:44.014Z",
   "target": {
     "sourceUrl": "http://www.transportimaver.si/",
-    "runtimeHost": "maver.gnr8.app",
+    "runtimeHost": "maver.app.pasadenagenerator.com",
     "mode": "shadow"
   },
   "migration": {
@@ -37,11 +37,11 @@
     "deterministicMarkersPresentInRootHtml": true
   },
   "hostBinding": {
-    "enforcedHost": "maver.gnr8.app",
-    "via": "gnr8_runtime_host_bindings (explicit ACTIVE shadow binding)",
+    "enforcedHost": "maver.app.pasadenagenerator.com",
+    "via": "gnr8_runtime_host_bindings (explicit ACTIVE shadow binding; rebinding correction applied)",
     "resolution": {
       "outcome": "artifact_hit",
-      "host": "maver.gnr8.app",
+      "host": "maver.app.pasadenagenerator.com",
       "path": "/",
       "normalizedPath": "/",
       "siteId": "site_a978f53fa5aadbb51fdf",
@@ -73,12 +73,15 @@
         "createdAt": "2026-03-23 10:29:46.245359+00"
       },
       "html": "<!doctype html>\n<html lang=\"en\">\n<head>\n  <meta charset=\"utf-8\" />\n  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" />\n  <meta data-gnr8-render-mode=\"publish\" />\n  <title>Transporti Maver</title>\n  <style>\n:root {\n  --color-background: #ffffff;\n  --color-text: #111111;\n  --spacing-section: 48px;\n}\n  </style>\n</head>\n<body>\n<main data-gnr8-page-path=\"/\">\n<section data-gnr8-section-id=\"1d08ce57-45d4-4362-b40e-292bf3fa40fa\" data-gnr8-section-type=\"legacy.html\"><script type=\"application/json\" data-gnr8-section-props>{&quot;htmlSummary&quot;:{&quot;extractedImageSrcs&quot;:[],&quot;extractedLinks&quot;:[],&quot;extractedText&quot;:&quot;&quot;}}</script></section>\n</main>\n</body>\n</html>",
-      "resolvedPath": "/"
+      "resolvedPath": "/",
+      "hostBindingId": "437a7167-8823-4fda-a3f1-a5dd42b38c5c",
+      "hostBindingKind": "shadow",
+      "hostBindingStatus": "ACTIVE"
     }
   },
   "coverageAudit": {
-    "generatedAt": "2026-03-23T10:29:48.366Z",
-    "targetHost": "maver.gnr8.app",
+    "generatedAt": "2026-03-23T15:31:19.690Z",
+    "targetHost": "maver.app.pasadenagenerator.com",
     "totals": {
       "hosts": 1,
       "artifactOnlyReadyHosts": 1,
@@ -89,9 +92,12 @@
     },
     "hosts": [
       {
-        "host": "maver.gnr8.app",
+        "host": "maver.app.pasadenagenerator.com",
         "siteId": "site_a978f53fa5aadbb51fdf",
         "siteResolution": "host_match",
+        "hostBindingId": "437a7167-8823-4fda-a3f1-a5dd42b38c5c",
+        "hostBindingKind": "shadow",
+        "hostBindingStatus": "ACTIVE",
         "activePointerExists": true,
         "activeSiteVersionId": "e724bc0b-eeff-43ee-aa16-5e3044fd1c51",
         "activeArtifactId": "f9b876c7-c048-4014-9ab1-951efa1cc748",
@@ -112,7 +118,8 @@
     ]
   },
   "runtimeSmoke": {
-    "url": "https://maver.gnr8.app/",
+    "checkedAt": "2026-03-23T15:33:24.434Z",
+    "url": "https://maver.app.pasadenagenerator.com/",
     "status": 599,
     "ok": false,
     "hasRenderMarkers": false,
@@ -127,5 +134,34 @@
     "activePointerPresent": true,
     "siteResolution": "host_match",
     "resolveOutcome": "artifact_hit"
+  },
+  "rebinding": {
+    "executedAt": "2026-03-23T15:28:53.215064+00",
+    "method": "runtime-store bindHostToSite (first-class host binding)",
+    "oldHost": {
+      "host": "maver.gnr8.app",
+      "status": "INACTIVE",
+      "bindingKind": "shadow",
+      "bindingId": "d75d9a18-e36a-4f6e-878d-5c3e1bcc569c",
+      "resolutionAfterRebind": {
+        "siteResolution": "fallback_latest_site",
+        "hostBindingStatus": null
+      }
+    },
+    "newHost": {
+      "host": "maver.app.pasadenagenerator.com",
+      "status": "ACTIVE",
+      "bindingKind": "shadow",
+      "bindingId": "437a7167-8823-4fda-a3f1-a5dd42b38c5c",
+      "resolutionAfterRebind": {
+        "siteResolution": "host_match",
+        "hostBindingStatus": "ACTIVE"
+      }
+    },
+    "preserved": {
+      "siteId": "site_a978f53fa5aadbb51fdf",
+      "siteVersionId": "e724bc0b-eeff-43ee-aa16-5e3044fd1c51",
+      "artifactId": "f9b876c7-c048-4014-9ab1-951efa1cc748"
+    }
   }
 }

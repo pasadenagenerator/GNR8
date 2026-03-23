@@ -74,7 +74,7 @@ type SmokeReport = {
   cases: CaseResult[];
 };
 
-const DEFAULT_BOUND_HOST = "maver.gnr8.app";
+const DEFAULT_BOUND_HOST = "maver.app.pasadenagenerator.com";
 const DEFAULT_UNBOUND_HOST = "unbound-shadow-host.gnr8.app";
 const DEFAULT_PATH = "/";
 const DEFAULT_TIMEOUT_MS = 15_000;
