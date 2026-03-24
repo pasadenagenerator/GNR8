@@ -38,6 +38,10 @@ function asNonEmptyString(value: unknown): string | null {
   return trimmed.length > 0 ? trimmed : null;
 }
 
+function normalizeWhitespace(value: string): string {
+  return value.replace(/\s+/g, " ").trim();
+}
+
 function readSummaryText(summary: LegacyHtmlSummary): string | null {
   return asNonEmptyString(summary.extractedText);
 }
@@ -94,7 +98,7 @@ function uniqueByCaseFold(lines: string[]): string[] {
 
 function normalizeSentenceForDisplay(line: string): string {
   return line
-    .replace(/^(?:home|o nas|about us|about|kontakt|contact)\b[:\s-]*/i, "")
+    .replace(/^(?:home|o nas|about us|about|kontakt|contact|legal|pravno|privacy|terms)\b[:\s-]*/i, "")
     .replace(/\s+/g, " ")
     .trim();
 }
@@ -115,10 +119,56 @@ function inferMailtoHref(link: { href: string; label: string }): string {
   return normalizedHref;
 }
 
+function isLikelyFileAssetHref(href: string): boolean {
+  const hrefLc = sanitizeHref(href).toLowerCase();
+  if (hrefLc.includes("/assets/image/")) return true;
+  if (hrefLc.startsWith("data:")) return true;
+  return /\.(?:jpg|jpeg|png|gif|webp|svg|bmp|ico|pdf|doc|docx|xls|xlsx|zip|rar)(?:[?#].*)?$/i.test(hrefLc);
+}
+
+function normalizePhoneKey(value: string): string {
+  let digits = value.replace(/\D+/g, "");
+  if (digits.startsWith("00")) digits = digits.slice(2);
+  return digits;
+}
+
+function normalizeEmailKey(value: string): string {
+  return value.trim().toLowerCase();
+}
+
+function hasCompanySuffix(line: string): boolean {
+  return /\b(?:d\.o\.o\.|d\.d\.|s\.p\.|l\.l\.c\.|llc|ltd\.?|inc\.?|gmbh)\b/i.test(line);
+}
+
+function extractCompanyNameCandidate(line: string): string | null {
+  const normalized = normalizeWhitespace(line);
+  const stripNoisyPrefix = (value: string): string =>
+    normalizeWhitespace(value).replace(/^(?:legal|pravn[ae]|privacy|terms)\s+/i, "").trim();
+  const companyLikeUpper = normalized.match(
+    /\b([A-ZČŠŽ][A-ZČŠŽ0-9&'.\- ]{2,68}?\s+(?:D\.O\.O\.|D\.D\.|S\.P\.|L\.L\.C\.|LLC|LTD\.?|INC\.?|GMBH))\b/u,
+  )?.[1];
+  if (companyLikeUpper) return stripNoisyPrefix(companyLikeUpper) || null;
+
+  const titleCaseWithSuffix = normalized.match(
+    /\b([A-ZČŠŽ][A-Za-zČŠŽčšž0-9&'.\- ]{2,68}?\s+(?:d\.o\.o\.|d\.d\.|s\.p\.|l\.l\.c\.|llc|ltd\.?|inc\.?|gmbh))\b/u,
+  )?.[1];
+  if (titleCaseWithSuffix) return stripNoisyPrefix(titleCaseWithSuffix) || null;
+
+  return null;
+}
+
+function isLegalOrPolicyNoise(line: string): boolean {
+  return /\b(legal|pravn[ae]|privacy|terms|cookies?|gdpr|all rights reserved|copyright)\b/i.test(line);
+}
+
+function isUtilityFragment(line: string): boolean {
+  return /^(menu|home|kontakt|contact|about|o nas|galerija|gallery|informacije)$/i.test(line.trim());
+}
+
 function classifyLinkSemantic(link: { href: string; label: string }): {
   href: string;
   label: string;
-  kind: "tel" | "email" | "contact" | "services" | "internal" | "external";
+  kind: "tel" | "email" | "contact" | "map" | "services" | "internal" | "external" | "discard";
   score: number;
 } {
   const href = sanitizeHref(link.href);
@@ -126,11 +176,37 @@ function classifyLinkSemantic(link: { href: string; label: string }): {
   const hrefLc = href.toLowerCase();
   const labelLc = label.toLowerCase();
 
+  if (hrefLc.startsWith("#")) {
+    return { href, label, kind: "discard", score: -120 };
+  }
+  if (hrefLc.includes("oneclick") || hrefLc.includes("menu")) {
+    return { href, label, kind: "discard", score: -120 };
+  }
+  if (isLikelyFileAssetHref(hrefLc)) {
+    return { href, label, kind: "discard", score: -120 };
+  }
+  if (/(^|[^\w])(home|about|o nas|gallery|galerija|legal|pravn[ae] informacije|privacy|terms)([^\w]|$)/i.test(label)) {
+    return { href, label, kind: "discard", score: -100 };
+  }
+  if (/(^|\/)(legal|privacy|terms|cookies?)(\/|$)/i.test(hrefLc)) {
+    return { href, label, kind: "discard", score: -100 };
+  }
+
   if (hrefLc.startsWith("tel:")) {
     return { href, label, kind: "tel", score: 120 };
   }
   if (hrefLc.startsWith("mailto:") || /@/.test(label)) {
     return { href: inferMailtoHref({ href, label }), label, kind: "email", score: 115 };
+  }
+  if (
+    hrefLc.includes("maps.google.") ||
+    hrefLc.includes("/maps/") ||
+    hrefLc.includes("/dir/") ||
+    labelLc.includes("navodila") ||
+    labelLc.includes("directions") ||
+    labelLc.includes("map")
+  ) {
+    return { href, label, kind: "map", score: 100 };
   }
   if (
     hrefLc.includes("contact") ||
@@ -259,12 +335,21 @@ function pickHeroHeading(sentences: string[]): string | null {
     .filter((line) => !isContactHeavyLine(line))
     .filter((line) => line.length >= 6 && line.length <= 96)
     .map((line, index) => {
+      const companyCandidate = extractCompanyNameCandidate(line);
+      const candidateLine = (companyCandidate ?? line).replace(/^(?:legal|pravn[ae]|privacy|terms)\s+/i, "").trim();
       const upperRatio =
-        line.replace(/[^A-Z]/g, "").length /
-        Math.max(line.replace(/[^A-Za-z]/g, "").length, 1);
-      const keywordBoost = /transport|maver|logistics|prevoz|company|d\.o\.o\./i.test(line) ? 0.2 : 0;
-      const score = upperRatio + keywordBoost - index * 0.03;
-      return { line, score };
+        candidateLine.replace(/[^A-ZČŠŽ]/g, "").length /
+        Math.max(candidateLine.replace(/[^A-Za-zČŠŽčšž]/g, "").length, 1);
+      const wordCount = (candidateLine.match(/[A-Za-zČŠŽčšž0-9]+/g) ?? []).length;
+      const keywordBoost = /transport|logistics|prevoz|company|fleet|cargo|shipping/i.test(candidateLine) ? 0.45 : 0;
+      const companyBoost = hasCompanySuffix(candidateLine) ? 1.35 : 0;
+      const uppercaseBoost = upperRatio >= 0.65 && wordCount >= 2 ? 0.35 : 0;
+      const titleLenBoost = wordCount >= 2 && wordCount <= 7 ? 0.25 : -0.2;
+      const legalPenalty = isLegalOrPolicyNoise(line) ? 1.45 : 0;
+      const utilityPenalty = isUtilityFragment(candidateLine) ? 1.2 : 0;
+      const navPenalty = isLikelyNavigationNoise(line) ? 1.1 : 0;
+      const score = upperRatio * 0.85 + keywordBoost + companyBoost + uppercaseBoost + titleLenBoost - legalPenalty - utilityPenalty - navPenalty - index * 0.04;
+      return { line: candidateLine, score };
     })
     .sort((a, b) => b.score - a.score);
 
@@ -273,7 +358,11 @@ function pickHeroHeading(sentences: string[]): string | null {
 
 function pickAboutParagraph(sentences: string[]): string | null {
   const candidates = sentences.filter((line) => line.length >= 70 && !isLikelyNavigationNoise(line) && !isContactHeavyLine(line));
-  const fallback = sentences.slice(0, 2).join(" ").trim();
+  const fallback = sentences
+    .filter((line) => line.length >= 28 && !isLikelyNavigationNoise(line) && !isContactHeavyLine(line))
+    .slice(0, 2)
+    .join(" ")
+    .trim();
   return candidates[0] ?? (fallback || null);
 }
 
@@ -298,9 +387,11 @@ function pickServices(sentences: string[]): string[] {
 
 function isLikelyNavigationNoise(line: string): boolean {
   const lc = line.toLowerCase();
+  if (hasCompanySuffix(line)) return false;
   const navWordHits = (lc.match(/\b(home|o nas|about|galerija|gallery|kontakt|contact|legal|informacije|navodila)\b/g) ?? []).length;
   const short = line.length < 140;
   if (/\bhome\b/.test(lc) && navWordHits >= 2 && short) return true;
+  if (navWordHits >= 3 && line.length < 180) return true;
   return navWordHits >= 2 && line.length < 96;
 }
 
@@ -365,26 +456,66 @@ function extractContact(input: { text: string | null; links: Array<{ href: strin
   address: string | null;
 } {
   const source = input.text ?? "";
-  const phoneMatches = [...source.matchAll(/(?:\+?\d[\d()\-\s]{6,}\d)/g)].map((match) => match[0].trim());
-  const emailMatches = [...source.matchAll(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi)].map((match) => match[0].trim());
-  const addressMatch =
-    source.match(/([A-ZČŠŽ][^.!?]{8,120}\d{3,5}\s+[A-ZČŠŽa-zčšž][^.!?]{0,80})/u)?.[1]?.trim() ?? null;
+  const phoneMatches = [...source.matchAll(/(?:\+?\d[\d()\-\s]{6,}\d)/g)].map((match) => normalizeWhitespace(match[0] ?? ""));
+  const emailMatches = [...source.matchAll(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi)].map((match) => normalizeWhitespace(match[0] ?? ""));
 
-  const phones = [...new Set(phoneMatches)].slice(0, 3);
-  const emails = [...new Set(emailMatches)].slice(0, 3);
+  const phones: string[] = [];
+  const phoneKeys = new Set<string>();
+  for (const value of phoneMatches) {
+    const key = normalizePhoneKey(value);
+    if (!key || key.length < 7 || phoneKeys.has(key)) continue;
+    phoneKeys.add(key);
+    phones.push(value);
+    if (phones.length >= 4) break;
+  }
+
+  const emails: string[] = [];
+  const emailKeys = new Set<string>();
+  for (const value of emailMatches) {
+    const key = normalizeEmailKey(value);
+    if (!key || emailKeys.has(key)) continue;
+    emailKeys.add(key);
+    emails.push(value);
+    if (emails.length >= 4) break;
+  }
+
+  const addressCandidates = splitIntoSentences(source)
+    .map(normalizeSentenceForDisplay)
+    .map((line) => normalizeWhitespace(line))
+    .filter((line) => line.length >= 18 && line.length <= 140)
+    .filter((line) => !isLikelyNavigationNoise(line))
+    .filter((line) => !isContactHeavyLine(line))
+    .filter((line) => !/\b(about us|home|galerija|gallery|legal|pravno|privacy|terms)\b/i.test(line))
+    .filter(
+      (line) =>
+        (/\b(?:street|st\.|road|rd\.|avenue|ave\.|drive|dr\.|boulevard|blvd\.|ulica|cesta|trg)\b/i.test(line) &&
+          /\d{1,4}/.test(line)) ||
+        (/\d{4,5}\b/.test(line) && /[A-Za-zČŠŽčšž]{3,}/.test(line)),
+    );
+  const addressMatch = addressCandidates[0] ?? null;
 
   for (const link of input.links) {
     const semantic = classifyLinkSemantic(link);
-    if (semantic.kind === "tel" && phones.length < 3) phones.push(semantic.label);
-    if (semantic.kind === "email" && emails.length < 3) {
+    if (semantic.kind === "tel" && phones.length < 4) {
+      const key = normalizePhoneKey(semantic.label);
+      if (key && !phoneKeys.has(key)) {
+        phoneKeys.add(key);
+        phones.push(semantic.label);
+      }
+    }
+    if (semantic.kind === "email" && emails.length < 4) {
       const mail = semantic.href.replace(/^mailto:/i, "").trim();
-      if (mail) emails.push(mail);
+      const key = normalizeEmailKey(mail);
+      if (mail && key && !emailKeys.has(key)) {
+        emailKeys.add(key);
+        emails.push(mail);
+      }
     }
   }
 
   return {
-    phones: [...new Set(phones)],
-    emails: [...new Set(emails)],
+    phones: phones.slice(0, 3),
+    emails: emails.slice(0, 3),
     address: addressMatch,
   };
 }
@@ -420,6 +551,8 @@ function renderLegacySummaryHtml(input: {
 
   const rankedLinks = links
     .map(classifyLinkSemantic)
+    .filter((link) => link.kind !== "discard")
+    .filter((link) => link.kind === "tel" || link.kind === "email" || link.kind === "contact" || link.kind === "map")
     .sort((a, b) => b.score - a.score)
     .slice(0, 6);
 
@@ -489,19 +622,24 @@ function renderLegacySummaryHtml(input: {
     const contactItems = new Set<string>();
     lines.push("    <ul>");
     for (const phone of contact.phones) {
-      const folded = phone.toLowerCase();
+      const folded = `phone:${normalizePhoneKey(phone)}`;
       if (contactItems.has(folded)) continue;
       contactItems.add(folded);
       lines.push(`      <li>${escapeHtml(phone)}</li>`);
     }
     for (const email of contact.emails) {
-      const folded = email.toLowerCase();
+      const folded = `email:${normalizeEmailKey(email)}`;
       if (contactItems.has(folded)) continue;
       contactItems.add(folded);
       lines.push(`      <li>${escapeHtml(email)}</li>`);
     }
     for (const link of rankedLinks) {
-      const folded = `${link.href}::${link.label}`.toLowerCase();
+      const folded =
+        link.kind === "tel"
+          ? `phone:${normalizePhoneKey(link.label || link.href)}`
+          : link.kind === "email"
+            ? `email:${normalizeEmailKey(link.href.replace(/^mailto:/i, "") || link.label)}`
+            : `link:${link.href.toLowerCase()}::${link.label.toLowerCase()}`;
       if (contactItems.has(folded)) continue;
       contactItems.add(folded);
       lines.push(`      <li><a href="${escapeHtml(link.href)}">${escapeHtml(link.label)}</a></li>`);

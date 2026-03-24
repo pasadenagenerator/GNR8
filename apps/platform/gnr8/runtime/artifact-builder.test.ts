@@ -94,7 +94,7 @@ test("artifact-builder renders visible legacy summary v2 with grouped recognizab
   assert.match(html, /<h2[^>]*>Kontakt<\/h2>/);
   assert.match(html, /<img src="\/assets\/image\/hero\.jpg"/);
   assert.doesNotMatch(html, /<img src="\/uploads\/logo\.png"/);
-  assert.match(html, /<a href="mailto:transporti\.maver@siol\.net">transporti\.maver@siol\.net<\/a>/);
+  assert.match(html, /transporti\.maver@siol\.net/);
   assert.match(html, /data-gnr8-section-props/);
   assert.match(html, /class="gnr8-card"/);
   assert.match(html, /class="gnr8-grid"/);
@@ -242,4 +242,51 @@ test("artifact-builder skips visible legacy summary wrapper when summary is empt
   const html = out.htmlByPath["/"] ?? "";
   assert.doesNotMatch(html, /data-gnr8-legacy-summary="visible-v2"/);
   assert.match(html, /data-gnr8-section-props/);
+});
+
+test("artifact-builder demotes legal-prefixed hero noise and cleans contact duplicates/noisy links", () => {
+  const legacySiteVersion = {
+    ...siteVersion,
+    pages: [
+      {
+        ...siteVersion.pages[0],
+        structureModel: {
+          sections: [{ id: "legacy", type: "legacy.html", order: 0 }],
+        },
+        contentModel: {
+          sectionProps: {
+            legacy: {
+              htmlSummary: {
+                extractedText:
+                  "+386 (0)1 366 38 36 transporti.maver@siol.net Home O nas Galerija Kontakt Legal TRANSPORTI MAVER D.O.O. Naše podjetje ima dolgo tradicijo prevozov po Evropi. Dolenjska cesta 328, Lavrica, Škofljica 1291. Kontakt: Tel: +386 (0)1 366 38 36 E-mail: transporti.maver@siol.net.",
+                extractedImageSrcs: ["/uploads/hero.jpg"],
+                extractedLinks: [
+                  { href: "#oneclickcontact", label: "Kontakt" },
+                  { href: "/assets/image/f5980028633a-img-a81226fb846b379c1fc1888535e365f5-v_380.jpg", label: "+386 (0)1 366 38 36" },
+                  { href: "tel:+386(0)13663836", label: "+386 (0)1 366 38 36" },
+                  { href: "mailto:transporti.maver@siol.net", label: "transporti.maver@siol.net" },
+                  { href: "https://www.google.com/maps/dir//Dolenjska+cesta+328,Lavrica", label: "Pridobite navodila" },
+                ],
+              },
+            },
+          },
+        },
+      },
+    ],
+  };
+
+  const out = buildDeterministicArtifactBundle({ siteVersion: legacySiteVersion, renderMode: "PUBLISH" });
+  const html = out.htmlByPath["/"] ?? "";
+  const visibleBlock = html.split("<script type=\"application/json\" data-gnr8-section-props>")[0] ?? html;
+
+  assert.match(visibleBlock, /<h1[^>]*>TRANSPORTI MAVER D\.O\.O\.<\/h1>/);
+  assert.doesNotMatch(visibleBlock, /<h1[^>]*>Legal TRANSPORTI MAVER D\.O\.O\.<\/h1>/);
+  assert.doesNotMatch(visibleBlock, /href="#oneclickcontact"/);
+  assert.doesNotMatch(visibleBlock, /\/assets\/image\/f5980028633a-img-a81226fb846b379c1fc1888535e365f5-v_380\.jpg/);
+
+  const phoneOccurrences = (visibleBlock.match(/\+386 \(0\)1 366 38 36/g) ?? []).length;
+  const emailOccurrences = (visibleBlock.match(/transporti\.maver@siol\.net/g) ?? []).length;
+  assert.equal(phoneOccurrences, 1);
+  assert.equal(emailOccurrences, 1);
+  assert.match(visibleBlock, /Pridobite navodila/);
 });
