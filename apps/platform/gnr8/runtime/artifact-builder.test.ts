@@ -139,6 +139,81 @@ test("artifact-builder prefers reachable uploads variants over paired shadow ass
   assert.doesNotMatch(html, /<img src="\/assets\/image\/e228ccd461f1-img-afb691cd5a7fb7d96843132462218cfa-v\.jpg"/);
 });
 
+test("artifact-builder dedupes paired image variants with suffix drift and keeps only one canonical candidate", () => {
+  const legacySiteVersion = {
+    ...siteVersion,
+    pages: [
+      {
+        ...siteVersion.pages[0],
+        structureModel: {
+          sections: [{ id: "legacy", type: "legacy.html", order: 0 }],
+        },
+        contentModel: {
+          sectionProps: {
+            legacy: {
+              htmlSummary: {
+                extractedText: "Transporti Maver prevozi po Evropi od leta 1982.",
+                extractedImageSrcs: [
+                  "/assets/image/f5980028633a-img-a81226fb846b379c1fc1888535e365f5-v_380.jpg",
+                  "/uploads/zW6mwK78/359x359_262x262/IMG-a81226fb846b379c1fc1888535e365f5-V_380.jpg",
+                  "/uploads/MSU7H5mJ/359x359_262x262/IMG-5cacfc9f514f39ac71a52dce724e730a-V.jpg",
+                ],
+                extractedLinks: [],
+              },
+            },
+          },
+        },
+      },
+    ],
+  };
+
+  const out = buildDeterministicArtifactBundle({ siteVersion: legacySiteVersion, renderMode: "PUBLISH" });
+  const html = out.htmlByPath["/"] ?? "";
+  const renderedImages = [...html.matchAll(/<img src="([^"]+)"/g)].map((m) => m[1] ?? "");
+  const pairedImageCount = renderedImages.filter((src) => src.includes("a81226fb846b379c1fc1888535e365f5")).length;
+  assert.equal(pairedImageCount, 1);
+  assert.match(html, /<img src="\/uploads\/zW6mwK78\/359x359_262x262\/IMG-a81226fb846b379c1fc1888535e365f5-V_380\.jpg"/);
+  assert.doesNotMatch(html, /<img src="\/assets\/image\/f5980028633a-img-a81226fb846b379c1fc1888535e365f5-v_380\.jpg"/);
+});
+
+test("artifact-builder suppresses nav/contact noise in about and services blocks", () => {
+  const legacySiteVersion = {
+    ...siteVersion,
+    pages: [
+      {
+        ...siteVersion.pages[0],
+        structureModel: {
+          sections: [{ id: "legacy", type: "legacy.html", order: 0 }],
+        },
+        contentModel: {
+          sectionProps: {
+            legacy: {
+              htmlSummary: {
+                extractedText:
+                  "Home O nas Galerija Kontakt Legal TRANSPORTI MAVER D.O.O. Naše podjetje ima dolgo tradicijo saj se ukvarja s prevozi že od leta 1982. Trenutno imamo na razpolago 15 avto transporterjev in pokrivamo destinacije po vsej Evropi. Kontakt: Tel: +386 (0)1 366 38 36 E-mail: info@transportimaver.si.",
+                extractedImageSrcs: ["/uploads/hero.jpg"],
+                extractedLinks: [
+                  { href: "#oneclickaboutus", label: "O nas" },
+                  { href: "#oneclickgallery", label: "Galerija" },
+                  { href: "tel:+386(0)13663836", label: "+386 (0)1 366 38 36" },
+                ],
+              },
+            },
+          },
+        },
+      },
+    ],
+  };
+
+  const out = buildDeterministicArtifactBundle({ siteVersion: legacySiteVersion, renderMode: "PUBLISH" });
+  const html = out.htmlByPath["/"] ?? "";
+  const visibleBlock = html.split("<script type=\"application/json\" data-gnr8-section-props>")[0] ?? html;
+  assert.doesNotMatch(visibleBlock, /Home O nas Galerija Kontakt Legal/);
+  assert.doesNotMatch(visibleBlock, /<h1[^>]*>Kontakt Legal TRANSPORTI MAVER D\.O\.O\.<\/h1>/);
+  assert.match(html, /Naše podjetje ima dolgo tradicijo saj se ukvarja s prevozi že od leta 1982\./);
+  assert.match(html, /Trenutno imamo na razpolago 15 avto transporterjev/);
+});
+
 test("artifact-builder skips visible legacy summary wrapper when summary is empty", () => {
   const legacySiteVersion = {
     ...siteVersion,

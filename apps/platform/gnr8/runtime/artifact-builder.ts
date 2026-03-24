@@ -16,6 +16,16 @@ type LegacyHtmlSummary = {
   extractedLinks?: unknown;
 };
 
+type LegacySummaryTheme = {
+  bg: string;
+  text: string;
+  surface: string;
+  surfaceAlt: string;
+  border: string;
+  accent: string;
+  accentSoft: string;
+};
+
 function readLegacyHtmlSummary(sectionProps: Record<string, unknown>): LegacyHtmlSummary | null {
   const raw = sectionProps.htmlSummary;
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
@@ -65,9 +75,28 @@ function readSummaryLinks(summary: LegacyHtmlSummary): Array<{ href: string; lab
 function splitIntoSentences(text: string): string[] {
   return text
     .replace(/\s+/g, " ")
-    .split(/(?<=[.!?])\s+/)
+    .split(/(?<=[.!?])\s+|(?=\b(?:About us|O nas|Contact|Kontakt)\b:?\s*)/i)
     .map((part) => part.trim())
     .filter((part) => part.length > 0);
+}
+
+function uniqueByCaseFold(lines: string[]): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const line of lines) {
+    const folded = line.toLowerCase();
+    if (seen.has(folded)) continue;
+    seen.add(folded);
+    out.push(line);
+  }
+  return out;
+}
+
+function normalizeSentenceForDisplay(line: string): string {
+  return line
+    .replace(/^(?:home|o nas|about us|about|kontakt|contact)\b[:\s-]*/i, "")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 function sanitizeHref(rawHref: string): string {
@@ -144,14 +173,39 @@ function imageSemanticKey(src: string): string {
   const withoutQuery = src.split("?")[0]?.split("#")[0] ?? src;
   const basename = withoutQuery.split("/").pop() ?? withoutQuery;
   const withoutExt = basename.replace(/\.[a-z0-9]+$/i, "");
+  const longHexChunks = withoutExt.toLowerCase().match(/[a-f0-9]{20,}/g);
+  if (longHexChunks && longHexChunks.length > 0) {
+    return longHexChunks[0]!.slice(0, 80);
+  }
   return withoutExt
     .toLowerCase()
     .replace(/^[a-f0-9]{8,16}-/, "")
+    .replace(/^[-_]+/, "")
     .replace(/^img-/, "")
-    .replace(/[_-]v\d+$/, "")
+    .replace(/^image-/, "")
+    .replace(/^photo-/, "")
+    .replace(/[_-]v(?:er)?[_-]?\d+$/, "")
+    .replace(/[_-]v(?:er)?$/, "")
+    .replace(/[_-]\d{2,4}$/, "")
     .replace(/[_-]\d+x\d+$/, "")
     .replace(/[^a-z0-9]+/g, "")
     .slice(0, 80);
+}
+
+function scoreImageDimensions(src: string): number {
+  const matches = [...src.matchAll(/(\d{2,4})x(\d{2,4})/g)];
+  if (matches.length === 0) return 0;
+  let maxDim = 0;
+  for (const match of matches) {
+    const a = Number.parseInt(match[1] ?? "0", 10);
+    const b = Number.parseInt(match[2] ?? "0", 10);
+    maxDim = Math.max(maxDim, a, b);
+  }
+  if (maxDim >= 1400) return 16;
+  if (maxDim >= 900) return 12;
+  if (maxDim >= 500) return 8;
+  if (maxDim >= 260) return 4;
+  return 1;
 }
 
 function scoreImage(
@@ -168,6 +222,7 @@ function scoreImage(
   if (lc.includes("/uploads/")) score += 14;
   if (lc.includes("/uploads/") && input.keysWithAssetsImage.has(key)) score += 18;
   if (lc.includes("/assets/image/") && input.keysWithUploads.has(key)) score -= 30;
+  score += scoreImageDimensions(src);
   return score;
 }
 
@@ -200,6 +255,8 @@ function selectRankedImages(imageSrcs: string[]): string[] {
 
 function pickHeroHeading(sentences: string[]): string | null {
   const ranked = sentences
+    .filter((line) => !isLikelyNavigationNoise(line))
+    .filter((line) => !isContactHeavyLine(line))
     .filter((line) => line.length >= 6 && line.length <= 96)
     .map((line, index) => {
       const upperRatio =
@@ -215,24 +272,91 @@ function pickHeroHeading(sentences: string[]): string | null {
 }
 
 function pickAboutParagraph(sentences: string[]): string | null {
-  const candidates = sentences.filter((line) => line.length >= 70);
+  const candidates = sentences.filter((line) => line.length >= 70 && !isLikelyNavigationNoise(line) && !isContactHeavyLine(line));
   const fallback = sentences.slice(0, 2).join(" ").trim();
   return candidates[0] ?? (fallback || null);
 }
 
 function pickServices(sentences: string[]): string[] {
   const serviceHint = /(service|services|prevoz|transport|truck|kamion|evrop|logistics|delivery|destinations?)/i;
-  const serviceLike = sentences.filter((line) => serviceHint.test(line) && line.length >= 35);
-  if (serviceLike.length >= 2) return serviceLike.slice(0, 4);
+  const serviceLike = sentences.filter(
+    (line) => serviceHint.test(line) && line.length >= 35 && !isLikelyNavigationNoise(line) && !isContactHeavyLine(line),
+  );
+  if (serviceLike.length >= 2) return serviceLike.slice(0, 4).map(normalizeSentenceForDisplay);
 
-  const shortRuns = sentences.filter((line) => line.length >= 24 && line.length <= 110);
+  const shortRuns = sentences.filter(
+    (line) => line.length >= 24 && line.length <= 110 && !isLikelyNavigationNoise(line) && !isContactHeavyLine(line),
+  );
   const clusters: string[] = [];
   for (const sentence of shortRuns) {
     if (clusters.some((existing) => existing.toLowerCase() === sentence.toLowerCase())) continue;
     clusters.push(sentence);
     if (clusters.length >= 3) break;
   }
-  return clusters;
+  return clusters.map(normalizeSentenceForDisplay);
+}
+
+function isLikelyNavigationNoise(line: string): boolean {
+  const lc = line.toLowerCase();
+  const navWordHits = (lc.match(/\b(home|o nas|about|galerija|gallery|kontakt|contact|legal|informacije|navodila)\b/g) ?? []).length;
+  const short = line.length < 140;
+  if (/\bhome\b/.test(lc) && navWordHits >= 2 && short) return true;
+  return navWordHits >= 2 && line.length < 96;
+}
+
+function isContactHeavyLine(line: string): boolean {
+  const phones = (line.match(/(?:\+?\d[\d()\-\s]{6,}\d)/g) ?? []).length;
+  const emails = (line.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi) ?? []).length;
+  return phones + emails >= 2;
+}
+
+function pickTokenValue(styleTokens: Record<string, string>, candidates: string[]): string | null {
+  for (const key of candidates) {
+    const value = styleTokens[key];
+    if (typeof value !== "string") continue;
+    const trimmed = value.trim();
+    if (trimmed) return trimmed;
+  }
+  return null;
+}
+
+function isCssColorToken(value: string | null): value is string {
+  if (!value) return false;
+  return (
+    /^#(?:[0-9a-f]{3}|[0-9a-f]{6}|[0-9a-f]{8})$/i.test(value) ||
+    /^rgb(a)?\(/i.test(value) ||
+    /^hsl(a)?\(/i.test(value)
+  );
+}
+
+function resolveLegacySummaryTheme(input: {
+  styleTokens: Record<string, string>;
+  summaryText: string | null;
+}): LegacySummaryTheme {
+  const tokenText = pickTokenValue(input.styleTokens, ["color.text", "text.color", "typography.color.body"]);
+  const tokenBg = pickTokenValue(input.styleTokens, ["color.background", "surface.background", "page.background"]);
+  const tokenAccent = pickTokenValue(input.styleTokens, [
+    "color.primary",
+    "brand.primary",
+    "color.accent",
+    "link.color",
+    "button.primary.background",
+  ]);
+  const slovenianSignals = /(naše|prevozi|kontakt|o nas|galerija|kamion|podjetje)/i.test(input.summaryText ?? "");
+
+  const text = isCssColorToken(tokenText) ? tokenText : "#172027";
+  const bg = isCssColorToken(tokenBg) ? tokenBg : "#f2f6fa";
+  const accent = isCssColorToken(tokenAccent) ? tokenAccent : slovenianSignals ? "#1e577f" : "#245b74";
+
+  return {
+    bg,
+    text,
+    accent,
+    surface: "#ffffff",
+    surfaceAlt: "#f7fafc",
+    border: "#cfdae4",
+    accentSoft: "rgba(36, 91, 116, 0.10)",
+  };
 }
 
 function extractContact(input: { text: string | null; links: Array<{ href: string; label: string }> }): {
@@ -265,7 +389,11 @@ function extractContact(input: { text: string | null; links: Array<{ href: strin
   };
 }
 
-function renderLegacySummaryHtml(sectionProps: Record<string, unknown>): string {
+function renderLegacySummaryHtml(input: {
+  sectionProps: Record<string, unknown>;
+  styleTokens: Record<string, string>;
+}): string {
+  const { sectionProps, styleTokens } = input;
   const summary = readLegacyHtmlSummary(sectionProps);
   if (!summary) return "";
 
@@ -274,13 +402,17 @@ function renderLegacySummaryHtml(sectionProps: Record<string, unknown>): string 
   const links = readSummaryLinks(summary);
   if (!text && imageSrcs.length === 0 && links.length === 0) return "";
 
-  const sentences = splitIntoSentences(text ?? "");
+  const sentences = uniqueByCaseFold(splitIntoSentences(text ?? "").map(normalizeSentenceForDisplay).filter((line) => line.length > 0));
   const heroHeading = pickHeroHeading(sentences) ?? "Company Overview";
-  const intro = sentences.find((line) => line !== heroHeading && line.length >= 45) ?? null;
+  const intro =
+    sentences.find(
+      (line) => line !== heroHeading && line.length >= 45 && !isLikelyNavigationNoise(line) && !isContactHeavyLine(line),
+    ) ?? null;
   const about = pickAboutParagraph(sentences);
   const services = pickServices(sentences);
   const heroImages = selectRankedImages(imageSrcs);
   const contact = extractContact({ text, links });
+  const theme = resolveLegacySummaryTheme({ styleTokens, summaryText: text });
   const slovenianSignals = /(naše|prevozi|kontakt|o nas|galerija|kamion|podjetje)/i.test(text ?? "");
   const labels = slovenianSignals
     ? { about: "O Podjetju", services: "Storitve", contact: "Kontakt", overview: "Prevozi Po Evropi" }
@@ -292,18 +424,25 @@ function renderLegacySummaryHtml(sectionProps: Record<string, unknown>): string 
     .slice(0, 6);
 
   const lines: string[] = [];
-  lines.push('<section data-gnr8-legacy-summary="visible-v2" style="max-width: 1120px; margin: 0 auto; padding: 24px 16px 48px;">');
+  lines.push(
+    `<section data-gnr8-legacy-summary="visible-v2" style="max-width: 1120px; margin: 0 auto; padding: clamp(18px, 3vw, 32px) 16px 52px; color: ${escapeHtml(theme.text)};">`,
+  );
   lines.push("  <style>");
-  lines.push('    [data-gnr8-legacy-summary="visible-v2"] { font-family: "Trebuchet MS", "Segoe UI", sans-serif; color: #172027; line-height: 1.6; }');
-  lines.push('    [data-gnr8-legacy-summary="visible-v2"] .gnr8-card { background: linear-gradient(180deg, #ffffff 0%, #f6f9fc 100%); border: 1px solid #d9e3ea; border-radius: 14px; padding: 18px; box-shadow: 0 6px 20px rgba(14, 40, 63, 0.06); }');
-  lines.push('    [data-gnr8-legacy-summary="visible-v2"] .gnr8-title { margin: 0; font-size: clamp(1.7rem, 2.4vw, 2.25rem); line-height: 1.2; color: #0d2230; }');
-  lines.push('    [data-gnr8-legacy-summary="visible-v2"] .gnr8-eyebrow { margin: 0 0 8px; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.12em; color: #31556f; font-weight: 700; }');
-  lines.push('    [data-gnr8-legacy-summary="visible-v2"] .gnr8-grid { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); margin: 18px 0 6px; }');
-  lines.push('    [data-gnr8-legacy-summary="visible-v2"] .gnr8-grid img { width: 100%; aspect-ratio: 4 / 3; object-fit: cover; display: block; border-radius: 10px; border: 1px solid #d1dce4; background: #f0f4f7; }');
+  lines.push(
+    `    [data-gnr8-legacy-summary="visible-v2"] { --gnr8-bg: ${escapeHtml(theme.bg)}; --gnr8-surface: ${escapeHtml(theme.surface)}; --gnr8-surface-alt: ${escapeHtml(theme.surfaceAlt)}; --gnr8-border: ${escapeHtml(theme.border)}; --gnr8-accent: ${escapeHtml(theme.accent)}; --gnr8-accent-soft: ${escapeHtml(theme.accentSoft)}; font-family: "Trebuchet MS", "Segoe UI", sans-serif; color: inherit; line-height: 1.6; background: radial-gradient(circle at top right, var(--gnr8-accent-soft), transparent 45%), var(--gnr8-bg); border-radius: 18px; }`,
+  );
+  lines.push('    [data-gnr8-legacy-summary="visible-v2"] .gnr8-card { background: linear-gradient(180deg, var(--gnr8-surface) 0%, var(--gnr8-surface-alt) 100%); border: 1px solid var(--gnr8-border); border-radius: 16px; padding: clamp(16px, 2vw, 24px); box-shadow: 0 10px 28px rgba(12, 37, 56, 0.08); }');
+  lines.push('    [data-gnr8-legacy-summary="visible-v2"] .gnr8-title { margin: 0; font-size: clamp(1.8rem, 3.2vw, 2.65rem); line-height: 1.12; color: #0d2230; max-width: 28ch; }');
+  lines.push('    [data-gnr8-legacy-summary="visible-v2"] .gnr8-eyebrow { margin: 0 0 10px; font-size: 0.74rem; text-transform: uppercase; letter-spacing: 0.13em; color: var(--gnr8-accent); font-weight: 800; }');
+  lines.push('    [data-gnr8-legacy-summary="visible-v2"] .gnr8-grid { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); margin: 18px 0 2px; }');
+  lines.push('    [data-gnr8-legacy-summary="visible-v2"] .gnr8-grid img { width: 100%; aspect-ratio: 5 / 4; object-fit: cover; display: block; border-radius: 12px; border: 1px solid var(--gnr8-border); background: #eef4f8; box-shadow: 0 8px 20px rgba(15, 35, 52, 0.12); }');
   lines.push('    [data-gnr8-legacy-summary="visible-v2"] .gnr8-section { margin-top: 16px; }');
-  lines.push('    [data-gnr8-legacy-summary="visible-v2"] .gnr8-section h2 { margin: 0 0 8px; font-size: 1.08rem; text-transform: uppercase; letter-spacing: 0.04em; color: #243f52; }');
+  lines.push('    [data-gnr8-legacy-summary="visible-v2"] .gnr8-section h2 { margin: 0 0 8px; font-size: 1.05rem; text-transform: uppercase; letter-spacing: 0.07em; color: var(--gnr8-accent); }');
   lines.push('    [data-gnr8-legacy-summary="visible-v2"] ul { margin: 0; padding-left: 18px; }');
+  lines.push('    [data-gnr8-legacy-summary="visible-v2"] li { margin: 0 0 6px; }');
+  lines.push('    [data-gnr8-legacy-summary="visible-v2"] a { color: var(--gnr8-accent); text-underline-offset: 2px; }');
   lines.push('    [data-gnr8-legacy-summary="visible-v2"] .gnr8-columns { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); margin-top: 16px; }');
+  lines.push('    @media (max-width: 720px) { [data-gnr8-legacy-summary="visible-v2"] { padding-bottom: 34px; } [data-gnr8-legacy-summary="visible-v2"] .gnr8-title { max-width: none; } }');
   lines.push("  </style>");
   lines.push('  <article class="gnr8-card" aria-label="legacy-summary-hero">');
   lines.push(`    <p class="gnr8-eyebrow">${escapeHtml(labels.overview)}</p>`);
@@ -347,14 +486,24 @@ function renderLegacySummaryHtml(sectionProps: Record<string, unknown>): string 
     lines.push(`    <p style="margin: 0 0 10px;">${escapeHtml(contact.address)}</p>`);
   }
   if (contact.phones.length > 0 || contact.emails.length > 0 || rankedLinks.length > 0) {
+    const contactItems = new Set<string>();
     lines.push("    <ul>");
     for (const phone of contact.phones) {
+      const folded = phone.toLowerCase();
+      if (contactItems.has(folded)) continue;
+      contactItems.add(folded);
       lines.push(`      <li>${escapeHtml(phone)}</li>`);
     }
     for (const email of contact.emails) {
+      const folded = email.toLowerCase();
+      if (contactItems.has(folded)) continue;
+      contactItems.add(folded);
       lines.push(`      <li>${escapeHtml(email)}</li>`);
     }
     for (const link of rankedLinks) {
+      const folded = `${link.href}::${link.label}`.toLowerCase();
+      if (contactItems.has(folded)) continue;
+      contactItems.add(folded);
       lines.push(`      <li><a href="${escapeHtml(link.href)}">${escapeHtml(link.label)}</a></li>`);
     }
     lines.push("    </ul>");
@@ -389,9 +538,13 @@ function renderSectionHtml(input: {
   sectionId: string;
   sectionType: string;
   sectionProps: Record<string, unknown>;
+  styleTokens: Record<string, string>;
 }): string {
   const payload = escapeHtml(stableStringify(input.sectionProps));
-  const visibleFallback = input.sectionType === "legacy.html" ? renderLegacySummaryHtml(input.sectionProps) : "";
+  const visibleFallback =
+    input.sectionType === "legacy.html"
+      ? renderLegacySummaryHtml({ sectionProps: input.sectionProps, styleTokens: input.styleTokens })
+      : "";
   return `<section data-gnr8-section-id="${escapeHtml(input.sectionId)}" data-gnr8-section-type="${escapeHtml(input.sectionType)}">${visibleFallback}<script type="application/json" data-gnr8-section-props>${payload}</script></section>`;
 }
 
@@ -403,6 +556,7 @@ function renderPageBody(page: CanonicalSiteVersionSnapshot["pages"][number]): st
         sectionId: section.id,
         sectionType: section.type,
         sectionProps: page.contentModel.sectionProps[section.id] ?? {},
+        styleTokens: page.styleTokens,
       }),
     )
     .join("\n");
