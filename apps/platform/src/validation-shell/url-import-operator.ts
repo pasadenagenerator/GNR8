@@ -1,6 +1,11 @@
 import type { ExecutionMode } from "../../gnr8/migration/execution-plan-model";
 import { runLinearMigrationPhase1ApproveExecute } from "../../gnr8/migration/runtime/run-linear-migration-phase1-approve-execute";
 import { stableStringify } from "../../gnr8/migration/runtime/diagnostics";
+import { importHtmlToPage } from "../../gnr8/importer/html-to-page";
+import {
+  evaluateSiteMigrationGate,
+  type SiteMigrationGateResult,
+} from "../../gnr8/migration/quality-gates/site-quality-gate";
 import { createImportManifest } from "../../gnr8/import/import-manifest";
 import type { JsonValue } from "../../gnr8/import/import-contract";
 import { importStaticSite } from "../../gnr8/import/runtime/import-static-site";
@@ -44,6 +49,7 @@ export type UrlImportOperatorResponse =
         executionPlan: Awaited<ReturnType<typeof runLinearMigrationPhase1ApproveExecute>>["executionPlan"];
         executionResult: Awaited<ReturnType<typeof runLinearMigrationPhase1ApproveExecute>>["executionResult"];
         migrationRunReport: Awaited<ReturnType<typeof runLinearMigrationPhase1ApproveExecute>>["report"];
+        siteMigrationGate: SiteMigrationGateResult;
       };
       summary: {
         importStatus: ReturnType<typeof createImportManifest>["status"];
@@ -84,6 +90,37 @@ function uniqueSortedStrings(values: string[]): string[] {
 function findPreviewDocument(pipeline: Awaited<ReturnType<typeof runLinearMigrationPhase1ApproveExecute>>["pipeline"]) {
   const stage = pipeline.stages.find((s) => s.stageId === "preview_generation");
   return stage?.output.previewDocument ?? null;
+}
+
+function inferPageSlug(path: string): string {
+  const normalized = String(path ?? "").trim();
+  if (!normalized || normalized === "index.html") return "/";
+  const indexSuffix = "/index.html";
+  const withoutIndex = normalized.endsWith(indexSuffix) ? normalized.slice(0, normalized.length - indexSuffix.length) : normalized;
+  const trimmed = withoutIndex.replace(/^\/+/, "").replace(/\/+$/, "");
+  if (!trimmed) return "/";
+  return `/${trimmed}`;
+}
+
+function buildSiteMigrationGateFromImportOutput(importOutput: Awaited<ReturnType<typeof importStaticSite>>): SiteMigrationGateResult {
+  const pages = importOutput.rawDomSnapshot.documents
+    .map((doc) => {
+      const page = importHtmlToPage({
+        slug: inferPageSlug(doc.path),
+        html: doc.text,
+      });
+      const pageGate = page.migrationDiagnostics?.pageMigrationGate;
+      if (!pageGate) return null;
+      return {
+        pageId: page.id,
+        sourcePath: doc.path,
+        isRoot: doc.path === importOutput.documentMeta.source.entryHtmlPath,
+        gate: pageGate,
+      };
+    })
+    .filter((value): value is NonNullable<typeof value> => value !== null);
+
+  return evaluateSiteMigrationGate({ pageResults: pages });
 }
 
 export async function runUrlImportOperatorFlow(
@@ -155,6 +192,7 @@ export async function runUrlImportOperatorFlow(
       ...phase1.report.diagnostics.blocking.codes,
       ...phase1.pipeline.diagnostics.filter((d) => d.severity === "fatal" || d.severity === "error").map((d) => d.code),
     ]);
+    const siteMigrationGate = buildSiteMigrationGateFromImportOutput(importOutput);
 
     return {
       kind: "url_import_operator_response_v1",
@@ -180,6 +218,7 @@ export async function runUrlImportOperatorFlow(
         executionPlan: phase1.executionPlan,
         executionResult: phase1.executionResult,
         migrationRunReport: phase1.report,
+        siteMigrationGate,
       },
       summary: {
         importStatus: importManifest.status,

@@ -5,6 +5,7 @@ import { randomUUID } from "crypto";
 import { detectSectionFromHtmlBlock, tidyTitleFromHtml } from "@/gnr8/importer/html-section-detector";
 import { buildLayoutGraphFromSnapshotHtml } from "@/gnr8/migration/layout-graph/layout-graph-builder";
 import { computePageStructuralConfidence } from "@/gnr8/migration/layout-graph/page-confidence";
+import { evaluatePageMigrationGate, type PageGateIntent } from "@/gnr8/migration/quality-gates/page-quality-gate";
 import {
   buildLayoutToCanonicalBridge,
   type CanonicalLayoutBlockPlan,
@@ -48,6 +49,51 @@ function fallbackIntentFromBridge(bridgeBlockCount: number, groups: Array<{ inte
   return groups[0]?.intent ?? null;
 }
 
+function toPageGateIntent(value: unknown): PageGateIntent | null {
+  if (
+    value === "header_nav" ||
+    value === "hero" ||
+    value === "body" ||
+    value === "gallery_media" ||
+    value === "form_contact" ||
+    value === "footer_legal" ||
+    value === "unknown"
+  ) {
+    return value;
+  }
+  return null;
+}
+
+function deriveSectionIntentSignals(sections: Gnr8Section[]): {
+  sectionIntents: string[];
+  sectionIntentConfidence: Partial<Record<PageGateIntent, number>>;
+} {
+  const sectionIntents: string[] = [];
+  const confidenceBuckets = new Map<PageGateIntent, number[]>();
+
+  for (const section of sections) {
+    const raw = section.props?.layoutStructural;
+    if (!raw || typeof raw !== "object") continue;
+    const node = raw as Record<string, unknown>;
+    const intent = toPageGateIntent(node.intent);
+    if (!intent) continue;
+    sectionIntents.push(intent);
+    const confidence = typeof node.structuralConfidence === "number" ? node.structuralConfidence : null;
+    if (confidence === null || Number.isFinite(confidence) === false) continue;
+    const arr = confidenceBuckets.get(intent) ?? [];
+    arr.push(Math.min(1, Math.max(0, confidence)));
+    confidenceBuckets.set(intent, arr);
+  }
+
+  const sectionIntentConfidence: Partial<Record<PageGateIntent, number>> = {};
+  for (const [intent, values] of confidenceBuckets) {
+    const avg = values.reduce((acc, value) => acc + value, 0) / values.length;
+    sectionIntentConfidence[intent] = Number(avg.toFixed(3));
+  }
+
+  return { sectionIntents, sectionIntentConfidence };
+}
+
 export function importHtmlToPage(input: HtmlImportInput): Gnr8Page {
   const slug = String(input.slug ?? "").trim();
   const html = String(input.html ?? "");
@@ -80,6 +126,14 @@ export function importHtmlToPage(input: HtmlImportInput): Gnr8Page {
         ];
 
   const pageStructural = computePageStructuralConfidence(sections);
+  const intentSignals = deriveSectionIntentSignals(sections);
+  const pageMigrationGate = evaluatePageMigrationGate({
+    pageStructuralConfidence: pageStructural.score,
+    weakSectionIds: pageStructural.weakestSections,
+    structuralAnomalies: pageStructural.anomalySummary,
+    sectionIntents: intentSignals.sectionIntents,
+    sectionIntentConfidence: intentSignals.sectionIntentConfidence,
+  });
 
   return {
     id: randomUUID(),
@@ -90,6 +144,7 @@ export function importHtmlToPage(input: HtmlImportInput): Gnr8Page {
       pageStructuralConfidence: pageStructural.score,
       weakSectionIds: pageStructural.weakestSections,
       structuralAnomalies: pageStructural.anomalySummary,
+      pageMigrationGate,
     },
   };
 }
