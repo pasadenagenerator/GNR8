@@ -799,6 +799,106 @@ export type PublicRuntimeArtifactResolution =
       reasonCode: PublicRuntimeArtifactMissReasonCode;
     };
 
+export type RuntimeSiteResolutionForHost =
+  | {
+      outcome: "site_hit";
+      host: string;
+      siteId: string;
+      siteResolution: "host_match" | "fallback_latest_site";
+      hostBindingId: string | null;
+      hostBindingKind: string | null;
+      hostBindingStatus: RuntimeHostBindingStatus | null;
+      sourceUrl: string;
+      sourceHost: string | null;
+    }
+  | {
+      outcome: "site_miss";
+      host: string;
+      reasonCode: "no_runtime_site" | "missing_source_url";
+    };
+
+export async function resolveRuntimeSiteForHost(input: {
+  host?: string | null;
+}): Promise<RuntimeSiteResolutionForHost> {
+  await ensureRuntimeTables();
+  const client = await getSuperadminPool().connect();
+  try {
+    const host = normalizeRuntimeHost(String(input.host ?? ""));
+    const res = await client.query<{
+      site_id: string;
+      site_resolution: "host_match" | "fallback_latest_site";
+      host_binding_id: string | null;
+      host_binding_kind: string | null;
+      host_binding_status: RuntimeHostBindingStatus | null;
+      source_url: string | null;
+      source_host: string | null;
+    }>(
+      `
+      with candidate_site as (
+        select
+          b.id::text as host_binding_id,
+          b.site_id::text as site_id,
+          b.binding_kind::text as host_binding_kind,
+          b.status::text as host_binding_status
+        from public.gnr8_runtime_host_bindings b
+        where lower(b.host) = $1::text
+          and b.status = 'ACTIVE'
+        order by b.updated_at desc, b.created_at desc
+        limit 1
+      ), fallback_site as (
+        select id::text as site_id from public.gnr8_runtime_sites order by created_at desc limit 1
+      ), resolved_site as (
+        select
+          site_id,
+          'host_match'::text as site_resolution,
+          host_binding_id,
+          host_binding_kind,
+          host_binding_status
+        from candidate_site
+        union all
+        select
+          site_id,
+          'fallback_latest_site'::text as site_resolution,
+          null::text as host_binding_id,
+          null::text as host_binding_kind,
+          null::text as host_binding_status
+        from fallback_site
+        where not exists (select 1 from candidate_site)
+      )
+      select
+        s.site_id::text as site_id,
+        s.site_resolution::text as site_resolution,
+        s.host_binding_id::text as host_binding_id,
+        s.host_binding_kind::text as host_binding_kind,
+        s.host_binding_status::text as host_binding_status,
+        rs.source_url::text as source_url,
+        rs.source_host::text as source_host
+      from resolved_site s
+      join public.gnr8_runtime_sites rs on rs.id = s.site_id
+      limit 1
+      `,
+      [host],
+    );
+
+    const row = res.rows[0];
+    if (!row) return { outcome: "site_miss", host, reasonCode: "no_runtime_site" };
+    if (!row.source_url || !row.source_url.trim()) return { outcome: "site_miss", host, reasonCode: "missing_source_url" };
+    return {
+      outcome: "site_hit",
+      host,
+      siteId: row.site_id,
+      siteResolution: row.site_resolution,
+      hostBindingId: row.host_binding_id,
+      hostBindingKind: row.host_binding_kind,
+      hostBindingStatus: row.host_binding_status,
+      sourceUrl: row.source_url,
+      sourceHost: row.source_host,
+    };
+  } finally {
+    client.release();
+  }
+}
+
 export async function resolveActiveArtifactForHostAndPathWithDiagnostics(input: {
   host?: string | null;
   path: string;

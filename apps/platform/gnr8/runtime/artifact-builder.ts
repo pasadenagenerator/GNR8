@@ -140,19 +140,58 @@ function isLikelyLogoOrIcon(src: string): boolean {
   );
 }
 
-function scoreImage(src: string, index: number): number {
+function imageSemanticKey(src: string): string {
+  const withoutQuery = src.split("?")[0]?.split("#")[0] ?? src;
+  const basename = withoutQuery.split("/").pop() ?? withoutQuery;
+  const withoutExt = basename.replace(/\.[a-z0-9]+$/i, "");
+  return withoutExt
+    .toLowerCase()
+    .replace(/^[a-f0-9]{8,16}-/, "")
+    .replace(/^img-/, "")
+    .replace(/[_-]v\d+$/, "")
+    .replace(/[_-]\d+x\d+$/, "")
+    .replace(/[^a-z0-9]+/g, "")
+    .slice(0, 80);
+}
+
+function scoreImage(
+  src: string,
+  index: number,
+  input: { keysWithUploads: Set<string>; keysWithAssetsImage: Set<string> },
+): number {
   const lc = src.toLowerCase();
+  const key = imageSemanticKey(src);
   let score = 100 - index * 5;
   if (isLikelyLogoOrIcon(src)) score -= 65;
   if (lc.includes("hero") || lc.includes("banner") || lc.includes("header")) score += 24;
-  if (lc.includes("/assets/image/")) score += 14;
-  if (lc.includes("/uploads/")) score += 10;
+  if (lc.includes("/assets/image/")) score += 10;
+  if (lc.includes("/uploads/")) score += 14;
+  if (lc.includes("/uploads/") && input.keysWithAssetsImage.has(key)) score += 18;
+  if (lc.includes("/assets/image/") && input.keysWithUploads.has(key)) score -= 30;
   return score;
 }
 
 function selectRankedImages(imageSrcs: string[]): string[] {
-  return [...imageSrcs]
-    .map((src, index) => ({ src, score: scoreImage(src, index), iconLike: isLikelyLogoOrIcon(src) }))
+  const keysWithAssetsImage = new Set(
+    imageSrcs.filter((src) => src.toLowerCase().includes("/assets/image/")).map((src) => imageSemanticKey(src)),
+  );
+  const keysWithUploads = new Set(
+    imageSrcs.filter((src) => src.toLowerCase().includes("/uploads/")).map((src) => imageSemanticKey(src)),
+  );
+  const pickedByKey = new Map<string, { src: string; score: number; iconLike: boolean }>();
+  for (const [index, src] of imageSrcs.entries()) {
+    const key = imageSemanticKey(src);
+    if (!key) continue;
+    const next = {
+      src,
+      score: scoreImage(src, index, { keysWithUploads, keysWithAssetsImage }),
+      iconLike: isLikelyLogoOrIcon(src),
+    };
+    const current = pickedByKey.get(key);
+    if (!current || next.score > current.score) pickedByKey.set(key, next);
+  }
+
+  return [...pickedByKey.values()]
     .filter((entry) => entry.score > 20 && !entry.iconLike)
     .sort((a, b) => b.score - a.score)
     .slice(0, 3)
@@ -242,6 +281,10 @@ function renderLegacySummaryHtml(sectionProps: Record<string, unknown>): string 
   const services = pickServices(sentences);
   const heroImages = selectRankedImages(imageSrcs);
   const contact = extractContact({ text, links });
+  const slovenianSignals = /(naše|prevozi|kontakt|o nas|galerija|kamion|podjetje)/i.test(text ?? "");
+  const labels = slovenianSignals
+    ? { about: "O Podjetju", services: "Storitve", contact: "Kontakt", overview: "Prevozi Po Evropi" }
+    : { about: "About", services: "Services", contact: "Contact", overview: "Transport Across Europe" };
 
   const rankedLinks = links
     .map(classifyLinkSemantic)
@@ -249,48 +292,62 @@ function renderLegacySummaryHtml(sectionProps: Record<string, unknown>): string 
     .slice(0, 6);
 
   const lines: string[] = [];
-  lines.push('<section data-gnr8-legacy-summary="visible-v2" style="max-width: 1100px; margin: 0 auto; padding: 28px 16px;">');
-  lines.push('  <article aria-label="legacy-summary-hero">');
-  lines.push(`    <h1 style="margin: 0 0 12px; font-size: 2rem; line-height: 1.2;">${escapeHtml(heroHeading)}</h1>`);
+  lines.push('<section data-gnr8-legacy-summary="visible-v2" style="max-width: 1120px; margin: 0 auto; padding: 24px 16px 48px;">');
+  lines.push("  <style>");
+  lines.push('    [data-gnr8-legacy-summary="visible-v2"] { font-family: "Trebuchet MS", "Segoe UI", sans-serif; color: #172027; line-height: 1.6; }');
+  lines.push('    [data-gnr8-legacy-summary="visible-v2"] .gnr8-card { background: linear-gradient(180deg, #ffffff 0%, #f6f9fc 100%); border: 1px solid #d9e3ea; border-radius: 14px; padding: 18px; box-shadow: 0 6px 20px rgba(14, 40, 63, 0.06); }');
+  lines.push('    [data-gnr8-legacy-summary="visible-v2"] .gnr8-title { margin: 0; font-size: clamp(1.7rem, 2.4vw, 2.25rem); line-height: 1.2; color: #0d2230; }');
+  lines.push('    [data-gnr8-legacy-summary="visible-v2"] .gnr8-eyebrow { margin: 0 0 8px; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.12em; color: #31556f; font-weight: 700; }');
+  lines.push('    [data-gnr8-legacy-summary="visible-v2"] .gnr8-grid { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); margin: 18px 0 6px; }');
+  lines.push('    [data-gnr8-legacy-summary="visible-v2"] .gnr8-grid img { width: 100%; aspect-ratio: 4 / 3; object-fit: cover; display: block; border-radius: 10px; border: 1px solid #d1dce4; background: #f0f4f7; }');
+  lines.push('    [data-gnr8-legacy-summary="visible-v2"] .gnr8-section { margin-top: 16px; }');
+  lines.push('    [data-gnr8-legacy-summary="visible-v2"] .gnr8-section h2 { margin: 0 0 8px; font-size: 1.08rem; text-transform: uppercase; letter-spacing: 0.04em; color: #243f52; }');
+  lines.push('    [data-gnr8-legacy-summary="visible-v2"] ul { margin: 0; padding-left: 18px; }');
+  lines.push('    [data-gnr8-legacy-summary="visible-v2"] .gnr8-columns { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); margin-top: 16px; }');
+  lines.push("  </style>");
+  lines.push('  <article class="gnr8-card" aria-label="legacy-summary-hero">');
+  lines.push(`    <p class="gnr8-eyebrow">${escapeHtml(labels.overview)}</p>`);
+  lines.push(`    <h1 class="gnr8-title">${escapeHtml(heroHeading)}</h1>`);
   if (intro) {
-    lines.push(`    <p style="margin: 0 0 18px; font-size: 1.05rem; line-height: 1.7;">${escapeHtml(intro)}</p>`);
+    lines.push(`    <p style="margin: 10px 0 0; font-size: 1.03rem;">${escapeHtml(intro)}</p>`);
   }
   if (heroImages.length > 0) {
-    lines.push('    <div style="display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); margin: 0 0 22px;">');
+    lines.push('    <div class="gnr8-grid">');
     for (const src of heroImages) {
       lines.push(
-        `      <img src="${escapeHtml(src)}" alt="" loading="lazy" decoding="async" style="width: 100%; height: auto; display: block; border-radius: 8px;" />`,
+        `      <img src="${escapeHtml(src)}" alt="" loading="lazy" decoding="async" />`,
       );
     }
     lines.push("    </div>");
   }
   lines.push("  </article>");
-
+  lines.push('  <div class="gnr8-columns">');
   if (about) {
-    lines.push('  <article aria-label="legacy-summary-about" style="margin-bottom: 20px;">');
-    lines.push("    <h2 style=\"margin: 0 0 10px; font-size: 1.3rem;\">About</h2>");
-    lines.push(`    <p style="margin: 0; line-height: 1.7;">${escapeHtml(about)}</p>`);
-    lines.push("  </article>");
+    lines.push('    <article class="gnr8-card gnr8-section" aria-label="legacy-summary-about">');
+    lines.push(`      <h2>${escapeHtml(labels.about)}</h2>`);
+    lines.push(`      <p style="margin: 0;">${escapeHtml(about)}</p>`);
+    lines.push("    </article>");
   }
 
   if (services.length > 0) {
-    lines.push('  <article aria-label="legacy-summary-services" style="margin-bottom: 20px;">');
-    lines.push("    <h2 style=\"margin: 0 0 10px; font-size: 1.3rem;\">Services</h2>");
-    lines.push('    <ul style="margin: 0; padding-left: 18px; line-height: 1.6;">');
+    lines.push('    <article class="gnr8-card gnr8-section" aria-label="legacy-summary-services">');
+    lines.push(`      <h2>${escapeHtml(labels.services)}</h2>`);
+    lines.push("      <ul>");
     for (const item of services) {
-      lines.push(`      <li>${escapeHtml(item)}</li>`);
+      lines.push(`        <li>${escapeHtml(item)}</li>`);
     }
-    lines.push("    </ul>");
-    lines.push("  </article>");
+    lines.push("      </ul>");
+    lines.push("    </article>");
   }
+  lines.push("  </div>");
 
-  lines.push('  <article aria-label="legacy-summary-contact">');
-  lines.push("    <h2 style=\"margin: 0 0 10px; font-size: 1.3rem;\">Contact</h2>");
+  lines.push('  <article class="gnr8-card gnr8-section" aria-label="legacy-summary-contact">');
+  lines.push(`    <h2>${escapeHtml(labels.contact)}</h2>`);
   if (contact.address) {
-    lines.push(`    <p style="margin: 0 0 10px; line-height: 1.6;">${escapeHtml(contact.address)}</p>`);
+    lines.push(`    <p style="margin: 0 0 10px;">${escapeHtml(contact.address)}</p>`);
   }
   if (contact.phones.length > 0 || contact.emails.length > 0 || rankedLinks.length > 0) {
-    lines.push('    <ul style="margin: 0; padding-left: 18px; line-height: 1.6;">');
+    lines.push("    <ul>");
     for (const phone of contact.phones) {
       lines.push(`      <li>${escapeHtml(phone)}</li>`);
     }

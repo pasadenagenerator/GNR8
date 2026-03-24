@@ -89,14 +89,54 @@ test("artifact-builder renders visible legacy summary v2 with grouped recognizab
   const html = out.htmlByPath["/"] ?? "";
   assert.match(html, /data-gnr8-legacy-summary="visible-v2"/);
   assert.match(html, /<h1[^>]*>TRANSPORTI MAVER D\.O\.O\.<\/h1>/);
-  assert.match(html, /<h2[^>]*>About<\/h2>/);
-  assert.match(html, /<h2[^>]*>Services<\/h2>/);
-  assert.match(html, /<h2[^>]*>Contact<\/h2>/);
+  assert.match(html, /<h2[^>]*>O Podjetju<\/h2>/);
+  assert.match(html, /<h2[^>]*>Storitve<\/h2>/);
+  assert.match(html, /<h2[^>]*>Kontakt<\/h2>/);
   assert.match(html, /<img src="\/assets\/image\/hero\.jpg"/);
   assert.doesNotMatch(html, /<img src="\/uploads\/logo\.png"/);
   assert.match(html, /<a href="mailto:transporti\.maver@siol\.net">transporti\.maver@siol\.net<\/a>/);
   assert.match(html, /data-gnr8-section-props/);
+  assert.match(html, /class="gnr8-card"/);
+  assert.match(html, /class="gnr8-grid"/);
   assert.doesNotMatch(html, /"html"\s*:/);
+});
+
+test("artifact-builder prefers reachable uploads variants over paired shadow asset aliases", () => {
+  const legacySiteVersion = {
+    ...siteVersion,
+    pages: [
+      {
+        ...siteVersion.pages[0],
+        structureModel: {
+          sections: [{ id: "legacy", type: "legacy.html", order: 0 }],
+        },
+        contentModel: {
+          sectionProps: {
+            legacy: {
+              htmlSummary: {
+                extractedText:
+                  "TRANSPORTI MAVER D.O.O. Naše podjetje ima dolgo tradicijo prevozov po Evropi. Kontakt: Tel: +386 (0)1 366 38 36.",
+                extractedImageSrcs: [
+                  "/uploads/7xhKQCOl/359x359_262x262/IMG-bad76e2941b335a088af8711f800f90b-V1.jpg",
+                  "/assets/image/908ec33b5e4f-img-bad76e2941b335a088af8711f800f90b-v1.jpg",
+                  "/uploads/Qi761Jwt/359x359_262x262/IMG-afb691cd5a7fb7d96843132462218cfa-V.jpg",
+                  "/assets/image/e228ccd461f1-img-afb691cd5a7fb7d96843132462218cfa-v.jpg",
+                ],
+                extractedLinks: [],
+              },
+            },
+          },
+        },
+      },
+    ],
+  };
+
+  const out = buildDeterministicArtifactBundle({ siteVersion: legacySiteVersion, renderMode: "PUBLISH" });
+  const html = out.htmlByPath["/"] ?? "";
+  assert.match(html, /<img src="\/uploads\/7xhKQCOl\/359x359_262x262\/IMG-bad76e2941b335a088af8711f800f90b-V1\.jpg"/);
+  assert.match(html, /<img src="\/uploads\/Qi761Jwt\/359x359_262x262\/IMG-afb691cd5a7fb7d96843132462218cfa-V\.jpg"/);
+  assert.doesNotMatch(html, /<img src="\/assets\/image\/908ec33b5e4f-img-bad76e2941b335a088af8711f800f90b-v1\.jpg"/);
+  assert.doesNotMatch(html, /<img src="\/assets\/image\/e228ccd461f1-img-afb691cd5a7fb7d96843132462218cfa-v\.jpg"/);
 });
 
 test("artifact-builder skips visible legacy summary wrapper when summary is empty", () => {
