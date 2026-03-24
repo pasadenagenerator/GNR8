@@ -1,91 +1,49 @@
 import type { Gnr8Page } from "@/gnr8/types/page";
-import type { Gnr8Section } from "@/gnr8/types/section";
+import type { Gnr8Section, Gnr8SectionProps } from "@/gnr8/types/section";
 import { randomUUID } from "crypto";
-import { extractAllAnchorLinks, extractAllImgSrc, textFromHtml } from "@/gnr8/importer/html-utils";
-import type { LayoutNodeHint } from "@/gnr8/migration/layout-graph/layout-graph-types";
 
+import { detectSectionFromHtmlBlock, tidyTitleFromHtml } from "@/gnr8/importer/html-section-detector";
+import { buildLayoutGraphFromSnapshotHtml } from "@/gnr8/migration/layout-graph/layout-graph-builder";
 import {
-  buildLayoutGraphFromSnapshotHtml,
-  collectSemanticLayoutHints,
-  mapBlockOrdinalToLayoutHint,
-} from "@/gnr8/migration/layout-graph/layout-graph-builder";
-
-import {
-  detectSectionFromHtmlBlock,
-  splitHtmlIntoBlocks,
-  tidyTitleFromHtml,
-} from "@/gnr8/importer/html-section-detector";
-
-function blockCompatibilityScore(blockHtml: string, hint: LayoutNodeHint): number {
-  const lower = blockHtml.toLowerCase();
-  const textLen = textFromHtml(blockHtml).length;
-  const linkCount = extractAllAnchorLinks(blockHtml, 40).length;
-  const imageCount = extractAllImgSrc(blockHtml).length;
-
-  const hasFooterTag = /<footer\b/i.test(blockHtml);
-  const hasNavTag = /<nav\b/i.test(blockHtml);
-  const hasForm = /<form\b|<input\b|<textarea\b|<select\b/i.test(blockHtml);
-  const hasH1 = /<h1\b/i.test(blockHtml);
-  const hasLegalWords = /\b(legal|privacy|terms|gdpr|copyright|cookies?)\b/i.test(lower);
-  const hasHeroWords = /\b(hero|banner|intro|masthead)\b/i.test(lower);
-  const hasGalleryWords = /\b(gallery|portfolio|lightbox|slider|carousel)\b/i.test(lower);
-
-  switch (hint.type) {
-    case "nav":
-      return (hasNavTag ? 8 : 0) + (linkCount >= 2 ? 4 : 0) + (textLen <= 500 ? 2 : -2);
-    case "footer":
-      return (hasFooterTag ? 8 : 0) + (hasLegalWords ? 4 : 0) + (hint.domIndexStart >= 2 ? 1 : 0);
-    case "legal":
-      return (hasLegalWords ? 8 : 0) + (hasFooterTag ? 2 : 0);
-    case "hero":
-      return (hasH1 ? 6 : 0) + (hasHeroWords ? 3 : 0) + (imageCount >= 1 ? 2 : 0) + (linkCount <= 2 ? 1 : -1);
-    case "gallery":
-      return (hasGalleryWords ? 6 : 0) + (imageCount >= 3 ? 4 : imageCount >= 2 ? 1 : -2);
-    case "form":
-      return hasForm ? 8 : -3;
-    case "header":
-      return (hasNavTag ? 4 : 0) + (hasH1 ? 2 : 0);
-    case "section":
-      return textLen > 20 ? 2 : 0;
-    case "unknown":
-      return 0;
-    default:
-      return 0;
-  }
-}
-
-function resolveLayoutHintForBlock(input: {
-  blockHtml: string;
-  blockOrdinal: number;
-  hints: LayoutNodeHint[];
-  usedHintIds: Set<string>;
-}): LayoutNodeHint | null {
-  const topLevelHints = input.hints.filter((h) => h.depth === 1);
-  const availableTopLevel = topLevelHints.filter((h) => !input.usedHintIds.has(h.id));
-
-  const scored = availableTopLevel
-    .map((hint) => ({ hint, score: blockCompatibilityScore(input.blockHtml, hint) }))
-    .sort((a, b) => b.score - a.score || a.hint.domIndexStart - b.hint.domIndexStart);
-
-  const best = scored[0];
-  if (best && best.score >= 3) {
-    input.usedHintIds.add(best.hint.id);
-    return best.hint;
-  }
-
-  const ordinalFallback = mapBlockOrdinalToLayoutHint({
-    hints: input.hints,
-    blockOrdinal: input.blockOrdinal,
-  });
-  if (ordinalFallback) input.usedHintIds.add(ordinalFallback.id);
-  return ordinalFallback;
-}
+  buildLayoutToCanonicalBridge,
+  type CanonicalLayoutBlockPlan,
+  type CanonicalLayoutIntent,
+} from "@/gnr8/migration/layout-graph/layout-to-canonical";
 
 export type HtmlImportInput = {
   slug: string;
   title?: string;
   html: string;
 };
+
+function withLayoutStructuralMetadata(input: {
+  section: Gnr8Section;
+  plan: CanonicalLayoutBlockPlan;
+}): Gnr8Section {
+  const baseProps: Gnr8SectionProps = { ...(input.section.props ?? {}) };
+
+  baseProps.layoutStructural = {
+    intent: input.plan.group.intent,
+    structuralConfidence: input.plan.structuralConfidence,
+    groupId: input.plan.group.id,
+    groupOrder: input.plan.group.order,
+    domIndexStart: input.plan.group.domIndexStart,
+    domIndexEnd: input.plan.group.domIndexEnd,
+    sourceNodeTypes: input.plan.group.sourceNodeTypes,
+    layoutHintType: input.plan.layoutHint?.type ?? "unknown",
+    layoutHintDepth: input.plan.layoutHint?.depth ?? null,
+  };
+
+  return {
+    ...input.section,
+    props: baseProps,
+  };
+}
+
+function fallbackIntentFromBridge(bridgeBlockCount: number, groups: Array<{ intent: CanonicalLayoutIntent }>): CanonicalLayoutIntent | null {
+  if (bridgeBlockCount > 0) return null;
+  return groups[0]?.intent ?? null;
+}
 
 export function importHtmlToPage(input: HtmlImportInput): Gnr8Page {
   const slug = String(input.slug ?? "").trim();
@@ -96,30 +54,25 @@ export function importHtmlToPage(input: HtmlImportInput): Gnr8Page {
     html,
     pathSeed: slug || "snapshot:index.html",
   });
-  const layoutHints = collectSemanticLayoutHints(layoutGraph);
-  const usedHintIds = new Set<string>();
 
-  const blocks = splitHtmlIntoBlocks(html);
+  const bridge = buildLayoutToCanonicalBridge({
+    html,
+    layoutGraph,
+  });
+
   const sections: Gnr8Section[] =
-    blocks.length > 0
-      ? blocks.map((b, i) =>
-          detectSectionFromHtmlBlock(b, {
-            layoutHint: resolveLayoutHintForBlock({
-              blockHtml: b,
-              blockOrdinal: i,
-              hints: layoutHints,
-              usedHintIds,
-            }),
-          }),
-        )
+    bridge.blocks.length > 0
+      ? bridge.blocks.map((plan) => {
+          const section = detectSectionFromHtmlBlock(plan.blockHtml, {
+            layoutHint: plan.layoutHint,
+            canonicalIntent: plan.group.intent,
+          });
+
+          return withLayoutStructuralMetadata({ section, plan });
+        })
       : [
           detectSectionFromHtmlBlock(html, {
-            layoutHint: resolveLayoutHintForBlock({
-              blockHtml: html,
-              blockOrdinal: 0,
-              hints: layoutHints,
-              usedHintIds,
-            }),
+            canonicalIntent: fallbackIntentFromBridge(bridge.blocks.length, bridge.groups),
           }),
         ];
 

@@ -14,6 +14,7 @@ import {
 
 import type { Gnr8Section, Gnr8SectionProps } from "@/gnr8/types/section";
 import type { LayoutNodeHint } from "@/gnr8/migration/layout-graph/layout-graph-types";
+import type { CanonicalLayoutIntent } from "@/gnr8/migration/layout-graph/layout-to-canonical";
 import { randomUUID } from "crypto";
 
 const PRICE_TEXT_RE =
@@ -184,6 +185,7 @@ function detectHero(blockHtml: string): Gnr8Section | null {
 
 type DetectSectionFromHtmlBlockOptions = {
   layoutHint?: LayoutNodeHint | null;
+  canonicalIntent?: CanonicalLayoutIntent | null;
 };
 
 function extractFirstPriceText(html: string): string | undefined {
@@ -325,6 +327,15 @@ function detectLogoCloud(blockHtml: string): Gnr8Section | null {
   return makeSection("logo.cloud", { logos });
 }
 
+function detectLogoCloudWithThreshold(blockHtml: string, minLogos: number): Gnr8Section | null {
+  const logos = dedupeKeepOrder(extractAllImgSrc(blockHtml));
+  if (logos.length < Math.max(1, minLogos)) return null;
+  const textLength = textFromHtml(blockHtml).length;
+  const paragraphCount = (blockHtml.match(/<p\b/gi) ?? []).length;
+  if (textLength > 340 || paragraphCount >= 4) return null;
+  return makeSection("logo.cloud", { logos });
+}
+
 function detectCtaSimple(blockHtml: string): Gnr8Section | null {
   const htmlLower = blockHtml.toLowerCase();
   if (/<h1\b/i.test(blockHtml)) return null;
@@ -363,22 +374,26 @@ export function detectSectionFromHtmlBlock(blockHtml: string, options?: DetectSe
   if (!html) return makeSection("legacy.html", { html: "" });
 
   const hintType = options?.layoutHint?.type ?? null;
+  const canonicalIntent = options?.canonicalIntent ?? null;
 
   const navbar = detectNavbarBasic(html);
   if (navbar) return navbar;
-  if (hintType === "nav") {
+  if (hintType === "nav" || canonicalIntent === "header_nav") {
     const links = extractAllAnchorLinks(html, 30);
-    if (links.length >= 2) return makeSection("navbar.basic", { links });
+    if (links.length >= 1) return makeSection("navbar.basic", { links });
   }
 
   const footer = detectFooterBasic(html);
   if (footer) return footer;
-  if (hintType === "footer" || hintType === "legal") {
+  if (hintType === "footer" || hintType === "legal" || canonicalIntent === "footer_legal") {
     const links = extractAllAnchorLinks(html, 40);
-    if (links.length > 0) return makeSection("footer.basic", { links });
+    if (links.length > 0 || /\b(legal|privacy|terms|copyright|cookies?)\b/i.test(textFromHtml(html))) {
+      return makeSection("footer.basic", { links });
+    }
   }
 
-  const heroEligibleByLayoutHint = hintType === null || hintType === "hero" || hintType === "section" || hintType === "unknown";
+  const heroEligibleByLayoutHint =
+    canonicalIntent === "hero" || hintType === null || hintType === "hero" || hintType === "section" || hintType === "unknown";
   const hero = heroEligibleByLayoutHint ? detectHero(html) : null;
   if (hero) return hero;
 
@@ -393,6 +408,10 @@ export function detectSectionFromHtmlBlock(blockHtml: string, options?: DetectSe
 
   const logos = detectLogoCloud(html);
   if (logos) return logos;
+  if (canonicalIntent === "gallery_media" || hintType === "gallery") {
+    const relaxedLogoCloud = detectLogoCloudWithThreshold(html, 2);
+    if (relaxedLogoCloud) return relaxedLogoCloud;
+  }
 
   const cta = detectCtaSimple(html);
   if (cta) return cta;
