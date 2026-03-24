@@ -749,7 +749,7 @@ function buildAssetFingerprintMap(siteVersion: CanonicalSiteVersionSnapshot): Re
 export function buildDeterministicArtifactBundle(input: {
   siteVersion: CanonicalSiteVersionSnapshot;
   renderMode: RenderMode;
-}): Omit<RuntimeArtifact, "id" | "createdAt"> {
+}): Omit<RuntimeArtifact, "id" | "createdAt" | "publishStage" | "shadowRestricted" | "artifactGovernance"> {
   const compiledTokenStyles = buildCompiledTokenStyles(input.siteVersion);
 
   const htmlByPath: Record<string, string> = {};

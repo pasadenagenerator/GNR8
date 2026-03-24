@@ -1,4 +1,7 @@
 import type { Gnr8Page } from "@/gnr8/types/page";
+import type { PageEnforcementByStage } from "@/gnr8/migration/enforcement/page-enforcement";
+import type { PageMigrationGateResult } from "@/gnr8/migration/quality-gates/page-quality-gate";
+import type { PageRolloutPolicyResult } from "@/gnr8/migration/policy/page-rollout-policy";
 
 export const RENDERER_COMPATIBILITY_VERSION = "gnr8-renderer-v1" as const;
 
@@ -34,6 +37,17 @@ export type ContentModel = {
   sectionProps: Record<string, Record<string, unknown>>;
 };
 
+export type PublishStage = "shadow" | "canary" | "production";
+
+export type PageMigrationGovernanceSnapshot = {
+  pageStructuralConfidence: number;
+  weakSectionIds: string[];
+  structuralAnomalies: string[];
+  pageMigrationGate: PageMigrationGateResult;
+  pageRolloutPolicy: PageRolloutPolicyResult;
+  pageEnforcement: PageEnforcementByStage;
+};
+
 export type CanonicalPageVersionInput = {
   pageId: string;
   path: string;
@@ -43,6 +57,7 @@ export type CanonicalPageVersionInput = {
   styleTokens: StyleTokenRecord;
   assetGraph: AssetGraphItem[];
   semanticSignals: SemanticSignal[];
+  migrationGovernance?: PageMigrationGovernanceSnapshot | null;
   source: AuditSource;
   actor: string;
 };
@@ -82,6 +97,25 @@ export type RuntimeArtifact = {
   compiledTokenStyles: string;
   assetFingerprintMap: Record<string, string>;
   manifest: Record<string, unknown>;
+  publishStage: PublishStage;
+  shadowRestricted: boolean;
+  artifactGovernance: {
+    pageGateState: string[];
+    pageRolloutPolicyState: string[];
+    pageEnforcementState: {
+      shadow: string[];
+      canary: string[];
+      production: string[];
+    };
+    siteGateState: string;
+    siteRolloutPolicyState: string;
+    siteEnforcementState: {
+      shadow: string;
+      canary: string;
+      production: string;
+    };
+    publishStage: PublishStage;
+  };
   bundleSha256: string;
   createdAt: string;
 };

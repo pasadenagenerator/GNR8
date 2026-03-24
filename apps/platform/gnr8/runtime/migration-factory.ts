@@ -115,6 +115,16 @@ export function buildCanonicalMigrationInput(input: { sourceUrl: string; page: G
             source: "migration" as const,
           },
         ],
+        migrationGovernance: input.page.migrationDiagnostics
+          ? {
+              pageStructuralConfidence: input.page.migrationDiagnostics.pageStructuralConfidence,
+              weakSectionIds: input.page.migrationDiagnostics.weakSectionIds,
+              structuralAnomalies: input.page.migrationDiagnostics.structuralAnomalies,
+              pageMigrationGate: input.page.migrationDiagnostics.pageMigrationGate,
+              pageRolloutPolicy: input.page.migrationDiagnostics.pageRolloutPolicy,
+              pageEnforcement: input.page.migrationDiagnostics.pageEnforcement,
+            }
+          : null,
         source: "migration" as const,
         actor: input.actor,
       },

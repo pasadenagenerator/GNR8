@@ -22,6 +22,25 @@ function makeArtifact(): RuntimeArtifact {
       rendererCompatibilityVersion: "gnr8-renderer-v1",
       paths: ["/", "/about"],
     },
+    publishStage: "production",
+    shadowRestricted: false,
+    artifactGovernance: {
+      pageGateState: ["PRODUCTION_CANDIDATE"],
+      pageRolloutPolicyState: ["CANARY_ALLOWED"],
+      pageEnforcementState: {
+        shadow: ["ALLOW"],
+        canary: ["ALLOW"],
+        production: ["ALLOW"],
+      },
+      siteGateState: "SITE_PRODUCTION_READY",
+      siteRolloutPolicyState: "SITE_CANARY_ALLOWED",
+      siteEnforcementState: {
+        shadow: "ALLOW",
+        canary: "ALLOW",
+        production: "ALLOW",
+      },
+      publishStage: "production",
+    },
     bundleSha256: "abc123",
     createdAt: "2026-03-23T00:00:00.000Z",
   };

@@ -5,6 +5,7 @@ import type { PoolClient } from "pg";
 import { getSuperadminPool } from "@/src/superadmin/db";
 
 import { normalizePagePath } from "@/gnr8/runtime/deterministic";
+import { evaluateRuntimeArtifactServingEligibility } from "@/gnr8/runtime/publish-enforcement";
 import type {
   CanonicalPageVersionInput,
   CanonicalPageVersionSnapshot,
@@ -90,6 +91,7 @@ export async function ensureRuntimeTables(): Promise<void> {
             style_tokens jsonb not null,
             asset_graph jsonb not null,
             semantic_signals jsonb not null,
+            migration_governance jsonb,
             source text not null,
             actor text not null,
             created_at timestamptz not null default now(),
@@ -108,9 +110,32 @@ export async function ensureRuntimeTables(): Promise<void> {
             compiled_token_styles text not null,
             asset_fingerprint_map jsonb not null,
             manifest jsonb not null,
+            publish_stage text not null default 'production',
+            shadow_restricted boolean not null default false,
+            artifact_governance jsonb not null default '{}'::jsonb,
             created_at timestamptz not null default now(),
             unique (site_version_id)
           )
+        `);
+
+        await client.query(`
+          alter table public.gnr8_runtime_page_versions
+          add column if not exists migration_governance jsonb
+        `);
+
+        await client.query(`
+          alter table public.gnr8_runtime_artifacts
+          add column if not exists publish_stage text not null default 'production'
+        `);
+
+        await client.query(`
+          alter table public.gnr8_runtime_artifacts
+          add column if not exists shadow_restricted boolean not null default false
+        `);
+
+        await client.query(`
+          alter table public.gnr8_runtime_artifacts
+          add column if not exists artifact_governance jsonb not null default '{}'::jsonb
         `);
 
         await client.query(`
@@ -202,13 +227,14 @@ type PageVersionRow = {
   style_tokens: unknown;
   asset_graph: unknown;
   semantic_signals: unknown;
+  migration_governance: unknown | null;
   source: string;
   actor: string;
   created_at: string;
 };
 
 export type RuntimeHostBindingStatus = "ACTIVE" | "INACTIVE";
-export type RuntimeHostBindingKind = "shadow" | "canonical" | "legacy_source_host_backfill" | "manual";
+export type RuntimeHostBindingKind = "shadow" | "canary" | "canonical" | "legacy_source_host_backfill" | "manual";
 
 export type RuntimeHostBinding = {
   id: string;
@@ -246,6 +272,13 @@ async function getNextSiteVersionNo(client: PoolClient, siteId: string): Promise
 
 function normalizeRuntimeHost(host: string): string {
   return String(host ?? "").trim().toLowerCase();
+}
+
+function resolveServingStageFromBindingKind(bindingKind: string | null): "shadow" | "canary" | "production" {
+  const normalized = String(bindingKind ?? "").trim().toLowerCase();
+  if (normalized === "shadow") return "shadow";
+  if (normalized === "canary") return "canary";
+  return "production";
 }
 
 async function bindHostToSiteInTx(
@@ -300,6 +333,7 @@ function mapPageVersionRow(row: PageVersionRow): CanonicalPageVersionSnapshot {
     styleTokens: row.style_tokens as CanonicalPageVersionSnapshot["styleTokens"],
     assetGraph: row.asset_graph as CanonicalPageVersionSnapshot["assetGraph"],
     semanticSignals: row.semantic_signals as CanonicalPageVersionSnapshot["semanticSignals"],
+    migrationGovernance: (row.migration_governance ?? null) as CanonicalPageVersionSnapshot["migrationGovernance"],
     source: row.source as CanonicalPageVersionSnapshot["source"],
     actor: row.actor,
     createdAt: row.created_at,
@@ -380,10 +414,11 @@ export async function createSiteVersionFromMigration(
           style_tokens,
           asset_graph,
           semantic_signals,
+          migration_governance,
           source,
           actor
         )
-        values ($1::uuid, $2::text, $3::text, $4::text, $5::jsonb, $6::jsonb, $7::jsonb, $8::jsonb, $9::jsonb, $10::text, $11::text)
+        values ($1::uuid, $2::text, $3::text, $4::text, $5::jsonb, $6::jsonb, $7::jsonb, $8::jsonb, $9::jsonb, $10::jsonb, $11::text, $12::text)
         `,
         [
           siteVersionId,
@@ -395,6 +430,7 @@ export async function createSiteVersionFromMigration(
           JSON.stringify(page.styleTokens),
           JSON.stringify(page.assetGraph),
           JSON.stringify(page.semanticSignals),
+          page.migrationGovernance ? JSON.stringify(page.migrationGovernance) : null,
           page.source,
           page.actor,
         ],
@@ -510,6 +546,7 @@ export async function getSiteVersion(siteVersionId: string): Promise<CanonicalSi
         style_tokens,
         asset_graph,
         semantic_signals,
+        migration_governance,
         source::text,
         actor::text,
         created_at::text
@@ -591,6 +628,9 @@ export async function createArtifact(input: {
   compiledTokenStyles: string;
   assetFingerprintMap: Record<string, string>;
   manifest: Record<string, unknown>;
+  publishStage: RuntimeArtifact["publishStage"];
+  shadowRestricted: boolean;
+  artifactGovernance: RuntimeArtifact["artifactGovernance"];
 }): Promise<{ artifactId: string }> {
   return withTx(async (client) => {
     const existing = await client.query<{ id: string }>(
@@ -610,9 +650,12 @@ export async function createArtifact(input: {
         html_by_path,
         compiled_token_styles,
         asset_fingerprint_map,
-        manifest
+        manifest,
+        publish_stage,
+        shadow_restricted,
+        artifact_governance
       )
-      values ($1::text, $2::uuid, $3::text, $4::text, $5::jsonb, $6::text, $7::jsonb, $8::jsonb)
+      values ($1::text, $2::uuid, $3::text, $4::text, $5::jsonb, $6::text, $7::jsonb, $8::jsonb, $9::text, $10::boolean, $11::jsonb)
       returning id::text as id
       `,
       [
@@ -624,6 +667,9 @@ export async function createArtifact(input: {
         input.compiledTokenStyles,
         JSON.stringify(input.assetFingerprintMap),
         JSON.stringify(input.manifest),
+        input.publishStage,
+        input.shadowRestricted,
+        JSON.stringify(input.artifactGovernance),
       ],
     );
 
@@ -711,6 +757,9 @@ async function getArtifactByIdWithClient(client: PoolClient, artifactId: string)
     compiled_token_styles: string;
     asset_fingerprint_map: Record<string, string>;
     manifest: Record<string, unknown>;
+    publish_stage: RuntimeArtifact["publishStage"];
+    shadow_restricted: boolean;
+    artifact_governance: RuntimeArtifact["artifactGovernance"];
     bundle_sha256: string;
     created_at: string;
   }>(
@@ -724,6 +773,9 @@ async function getArtifactByIdWithClient(client: PoolClient, artifactId: string)
       compiled_token_styles,
       asset_fingerprint_map,
       manifest,
+      publish_stage::text as publish_stage,
+      shadow_restricted,
+      artifact_governance,
       bundle_sha256::text,
       created_at::text
     from public.gnr8_runtime_artifacts
@@ -744,6 +796,9 @@ async function getArtifactByIdWithClient(client: PoolClient, artifactId: string)
     compiledTokenStyles: row.compiled_token_styles,
     assetFingerprintMap: row.asset_fingerprint_map,
     manifest: row.manifest,
+    publishStage: row.publish_stage,
+    shadowRestricted: row.shadow_restricted,
+    artifactGovernance: row.artifact_governance,
     bundleSha256: row.bundle_sha256,
     createdAt: row.created_at,
   };
@@ -765,7 +820,8 @@ export type PublicRuntimeArtifactMissReasonCode =
   | "no_runtime_site"
   | "no_active_pointer"
   | "active_artifact_missing"
-  | "artifact_path_missing";
+  | "artifact_path_missing"
+  | "artifact_stage_denied";
 
 export type PublicRuntimeArtifactResolution =
   | {
@@ -1021,6 +1077,28 @@ export async function resolveActiveArtifactForHostAndPathWithDiagnostics(input: 
         activeSiteVersionId,
         artifactId,
         reasonCode: "active_artifact_missing",
+      };
+    }
+
+    const servingStage = resolveServingStageFromBindingKind(hostBindingKind);
+    const servingEligibility = evaluateRuntimeArtifactServingEligibility({
+      artifact,
+      servingStage,
+    });
+    if (!servingEligibility.allow) {
+      return {
+        outcome: "artifact_miss",
+        host,
+        path: input.path,
+        normalizedPath,
+        siteId,
+        siteResolution,
+        hostBindingId,
+        hostBindingKind,
+        hostBindingStatus,
+        activeSiteVersionId,
+        artifactId,
+        reasonCode: "artifact_stage_denied",
       };
     }
 

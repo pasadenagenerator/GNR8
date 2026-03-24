@@ -16,12 +16,14 @@ import {
   evaluateSiteRolloutEnforcementByStage,
   type SiteEnforcementByStage,
 } from "../../gnr8/migration/enforcement/site-enforcement";
+import { buildEnforcementAdapterDecision, type EnforcementAdapterDecision } from "../../gnr8/migration/enforcement/enforcement-adapter";
 import { createImportManifest } from "../../gnr8/import/import-manifest";
 import type { JsonValue } from "../../gnr8/import/import-contract";
 import { importStaticSite } from "../../gnr8/import/runtime/import-static-site";
 import type { PageMigrationGateResult } from "../../gnr8/migration/quality-gates/page-quality-gate";
 import type { PageRolloutPolicyResult } from "../../gnr8/migration/policy/page-rollout-policy";
 import type { PageEnforcementByStage } from "../../gnr8/migration/enforcement/page-enforcement";
+import type { PreviewDocument } from "../../gnr8/migration/preview-document-model";
 
 import {
   importPublicSinglePageUrlToSnapshot,
@@ -57,6 +59,38 @@ export type UrlImportOperatorPageReviewRecord = {
   }>;
 };
 
+type CompareRegionIntent = "header_nav" | "hero" | "body" | "gallery_media" | "form_contact" | "footer_legal";
+
+type ComparePageStructureSummary = {
+  detectedRegions: CompareRegionIntent[];
+  regionOrder: CompareRegionIntent[];
+  regionCounts: Partial<Record<CompareRegionIntent, number>>;
+  regionConfidence: Partial<Record<CompareRegionIntent, number>>;
+  sectionCount: number;
+};
+
+export type UrlImportOperatorCompareMismatchFlag =
+  | "HERO_MISMATCH"
+  | "SECTION_ORDER_DRIFT"
+  | "GALLERY_MISSING"
+  | "FORM_MISSING"
+  | "CONTACT_DEGRADED"
+  | "FOOTER_MISSING"
+  | "NAV_MERGED_INTO_CONTENT"
+  | "ENFORCEMENT_BLOCKING_STRUCTURAL_MISMATCH";
+
+export type UrlImportOperatorPrimaryPageCompareEvidence = {
+  pageId: string;
+  sourcePath: string;
+  isRoot: boolean;
+  sourceSnapshotHtml: string;
+  migratedPreviewHtml: string | null;
+  sourceStructure: ComparePageStructureSummary;
+  migratedStructure: ComparePageStructureSummary;
+  mismatchFlags: UrlImportOperatorCompareMismatchFlag[];
+  mismatchReasons: string[];
+};
+
 export type UrlImportOperatorResponse =
   | {
       kind: "url_import_operator_response_v1";
@@ -83,6 +117,19 @@ export type UrlImportOperatorResponse =
         executionResult: Awaited<ReturnType<typeof runLinearMigrationPhase1ApproveExecute>>["executionResult"];
         migrationRunReport: Awaited<ReturnType<typeof runLinearMigrationPhase1ApproveExecute>>["report"];
         pageReview: UrlImportOperatorPageReviewRecord[];
+        compareEvidence: {
+          primaryPage: UrlImportOperatorPrimaryPageCompareEvidence | null;
+        };
+        enforcementAdapterByStage: {
+          SHADOW: EnforcementAdapterDecision;
+          CANARY: EnforcementAdapterDecision;
+          PRODUCTION: EnforcementAdapterDecision;
+        };
+        publishStageEligibility: {
+          shadow: boolean;
+          canary: boolean;
+          production: boolean;
+        };
         siteMigrationGate: SiteMigrationGateResult;
         siteRolloutPolicy: SiteRolloutPolicyResult;
         siteEnforcement: SiteEnforcementByStage;
@@ -125,7 +172,9 @@ function uniqueSortedStrings(values: string[]): string[] {
 
 function findPreviewDocument(pipeline: Awaited<ReturnType<typeof runLinearMigrationPhase1ApproveExecute>>["pipeline"]) {
   const stage = pipeline.stages.find((s) => s.stageId === "preview_generation");
-  return stage?.output.previewDocument ?? null;
+  const value = stage?.output.previewDocument;
+  if (!value || typeof value !== "object") return null;
+  return value as PreviewDocument;
 }
 
 function inferPageSlug(path: string): string {
@@ -141,6 +190,262 @@ function inferPageSlug(path: string): string {
 function round3(value: number): number {
   if (!Number.isFinite(value)) return 0;
   return Number(Math.min(1, Math.max(0, value)).toFixed(3));
+}
+
+const COMPARE_REGION_INTENTS: readonly CompareRegionIntent[] = [
+  "header_nav",
+  "hero",
+  "body",
+  "gallery_media",
+  "form_contact",
+  "footer_legal",
+];
+
+function toCompareRegionIntent(value: unknown): CompareRegionIntent | null {
+  if (
+    value === "header_nav" ||
+    value === "hero" ||
+    value === "body" ||
+    value === "gallery_media" ||
+    value === "form_contact" ||
+    value === "footer_legal"
+  ) {
+    return value;
+  }
+  return null;
+}
+
+function emptyStructureSummary(): ComparePageStructureSummary {
+  return {
+    detectedRegions: [],
+    regionOrder: [],
+    regionCounts: {},
+    regionConfidence: {},
+    sectionCount: 0,
+  };
+}
+
+function summarizeStructureForCompare(page: ReturnType<typeof importHtmlToPage>): ComparePageStructureSummary {
+  const regionCounts: Partial<Record<CompareRegionIntent, number>> = {};
+  const confidenceBuckets = new Map<CompareRegionIntent, number[]>();
+  const regionOrder: CompareRegionIntent[] = [];
+  const seenInOrder = new Set<CompareRegionIntent>();
+
+  for (const section of page.sections) {
+    const raw = section.props?.layoutStructural;
+    if (!raw || typeof raw !== "object") continue;
+
+    const node = raw as Record<string, unknown>;
+    const intent = toCompareRegionIntent(node.intent);
+    if (!intent) continue;
+
+    regionCounts[intent] = (regionCounts[intent] ?? 0) + 1;
+    if (!seenInOrder.has(intent)) {
+      seenInOrder.add(intent);
+      regionOrder.push(intent);
+    }
+
+    if (typeof node.structuralConfidence === "number" && Number.isFinite(node.structuralConfidence)) {
+      const bucket = confidenceBuckets.get(intent) ?? [];
+      bucket.push(Math.max(0, Math.min(1, node.structuralConfidence)));
+      confidenceBuckets.set(intent, bucket);
+    }
+  }
+
+  const regionConfidence: Partial<Record<CompareRegionIntent, number>> = {};
+  for (const intent of COMPARE_REGION_INTENTS) {
+    const values = confidenceBuckets.get(intent);
+    if (!values || values.length === 0) continue;
+    const avg = values.reduce((acc, value) => acc + value, 0) / values.length;
+    regionConfidence[intent] = round3(avg);
+  }
+
+  return {
+    detectedRegions: [...regionOrder],
+    regionOrder,
+    regionCounts,
+    regionConfidence,
+    sectionCount: page.sections.length,
+  };
+}
+
+function hasRegion(summary: ComparePageStructureSummary, intent: CompareRegionIntent): boolean {
+  return (summary.regionCounts[intent] ?? 0) > 0;
+}
+
+function firstRegionIndex(summary: ComparePageStructureSummary, intent: CompareRegionIntent): number {
+  return summary.regionOrder.findIndex((value) => value === intent);
+}
+
+function hasSectionOrderDrift(source: ComparePageStructureSummary, migrated: ComparePageStructureSummary): boolean {
+  const shared = COMPARE_REGION_INTENTS.filter((intent) => hasRegion(source, intent) && hasRegion(migrated, intent));
+  if (shared.length < 2) return false;
+
+  for (let i = 0; i < shared.length; i++) {
+    for (let j = i + 1; j < shared.length; j++) {
+      const a = shared[i];
+      const b = shared[j];
+      const sourceOrder = firstRegionIndex(source, a) - firstRegionIndex(source, b);
+      const migratedOrder = firstRegionIndex(migrated, a) - firstRegionIndex(migrated, b);
+      if (sourceOrder === 0 || migratedOrder === 0) continue;
+      if ((sourceOrder < 0 && migratedOrder > 0) || (sourceOrder > 0 && migratedOrder < 0)) return true;
+    }
+  }
+  return false;
+}
+
+function deriveMismatchEvidence(input: {
+  sourceStructure: ComparePageStructureSummary;
+  migratedStructure: ComparePageStructureSummary;
+  structuralAnomalies: string[];
+}): {
+  mismatchFlags: UrlImportOperatorCompareMismatchFlag[];
+  mismatchReasons: string[];
+} {
+  const mismatchFlags = new Set<UrlImportOperatorCompareMismatchFlag>();
+  const mismatchReasons = new Set<string>();
+
+  if (hasSectionOrderDrift(input.sourceStructure, input.migratedStructure)) {
+    mismatchFlags.add("SECTION_ORDER_DRIFT");
+    mismatchReasons.add("section_order_drift_detected");
+  }
+
+  const sourceHasHero = hasRegion(input.sourceStructure, "hero");
+  const migratedHasHero = hasRegion(input.migratedStructure, "hero");
+  const sourceHeroConfidence = input.sourceStructure.regionConfidence.hero ?? null;
+  const migratedHeroConfidence = input.migratedStructure.regionConfidence.hero ?? null;
+  if (sourceHasHero !== migratedHasHero) {
+    mismatchFlags.add("HERO_MISMATCH");
+    mismatchReasons.add("hero_region_presence_mismatch");
+  } else if (
+    sourceHasHero &&
+    migratedHasHero &&
+    sourceHeroConfidence !== null &&
+    migratedHeroConfidence !== null &&
+    migratedHeroConfidence + 0.2 < sourceHeroConfidence
+  ) {
+    mismatchFlags.add("HERO_MISMATCH");
+    mismatchReasons.add("hero_confidence_drop_detected");
+  }
+
+  if (hasRegion(input.sourceStructure, "gallery_media") && !hasRegion(input.migratedStructure, "gallery_media")) {
+    mismatchFlags.add("GALLERY_MISSING");
+    mismatchReasons.add("source_gallery_media_missing_in_migrated");
+  }
+
+  const sourceHasFormContact = hasRegion(input.sourceStructure, "form_contact");
+  const migratedHasFormContact = hasRegion(input.migratedStructure, "form_contact");
+  if (sourceHasFormContact && !migratedHasFormContact) {
+    mismatchFlags.add("FORM_MISSING");
+    mismatchReasons.add("source_form_contact_missing_in_migrated");
+  }
+
+  const sourceFormConfidence = input.sourceStructure.regionConfidence.form_contact ?? null;
+  const migratedFormConfidence = input.migratedStructure.regionConfidence.form_contact ?? null;
+  if (
+    sourceHasFormContact &&
+    migratedHasFormContact &&
+    sourceFormConfidence !== null &&
+    migratedFormConfidence !== null &&
+    migratedFormConfidence + 0.2 < sourceFormConfidence
+  ) {
+    mismatchFlags.add("CONTACT_DEGRADED");
+    mismatchReasons.add("form_contact_confidence_drop_detected");
+  }
+
+  if (hasRegion(input.sourceStructure, "footer_legal") && !hasRegion(input.migratedStructure, "footer_legal")) {
+    mismatchFlags.add("FOOTER_MISSING");
+    mismatchReasons.add("source_footer_legal_missing_in_migrated");
+  }
+
+  if (
+    input.structuralAnomalies.includes("nav_merged_into_body") ||
+    (hasRegion(input.sourceStructure, "header_nav") && !hasRegion(input.migratedStructure, "header_nav") && hasRegion(input.migratedStructure, "body"))
+  ) {
+    mismatchFlags.add("NAV_MERGED_INTO_CONTENT");
+    mismatchReasons.add("nav_merged_into_body_signal");
+  }
+
+  return {
+    mismatchFlags: [...mismatchFlags].sort((a, b) => a.localeCompare(b)),
+    mismatchReasons: [...mismatchReasons].sort((a, b) => a.localeCompare(b)),
+  };
+}
+
+function buildPrimaryPageCompareEvidence(input: {
+  importOutput: Awaited<ReturnType<typeof importStaticSite>>;
+  previewDocument: PreviewDocument | null;
+  pageReview: UrlImportOperatorPageReviewRecord[];
+  enforcementAdapterByStage: {
+    SHADOW: EnforcementAdapterDecision;
+    CANARY: EnforcementAdapterDecision;
+    PRODUCTION: EnforcementAdapterDecision;
+  };
+}): UrlImportOperatorPrimaryPageCompareEvidence | null {
+  const rootPage =
+    input.pageReview.find((page) => page.isRoot) ??
+    input.pageReview.slice().sort((a, b) => a.sourcePath.localeCompare(b.sourcePath) || a.pageId.localeCompare(b.pageId))[0] ??
+    null;
+  if (!rootPage) return null;
+
+  const sourceDocument =
+    input.importOutput.rawDomSnapshot.documents.find((document) => document.path === rootPage.sourcePath) ??
+    input.importOutput.rawDomSnapshot.documents.find((document) => document.path === input.importOutput.documentMeta.source.entryHtmlPath) ??
+    input.importOutput.rawDomSnapshot.documents[0] ??
+    null;
+
+  const sourceSnapshotHtml = sourceDocument?.text ?? "";
+  const previewPage =
+    input.previewDocument?.pages.find((page) => page.sourcePath === rootPage.sourcePath) ??
+    input.previewDocument?.pages.find((page) => page.isEntry) ??
+    input.previewDocument?.pages[0] ??
+    null;
+  const migratedPreviewHtml = previewPage?.preview.html ?? null;
+
+  const sourceSummary = sourceSnapshotHtml
+    ? summarizeStructureForCompare(
+        importHtmlToPage({
+          slug: inferPageSlug(rootPage.sourcePath),
+          html: sourceSnapshotHtml,
+        }),
+      )
+    : emptyStructureSummary();
+
+  const migratedSummary = migratedPreviewHtml
+    ? summarizeStructureForCompare(
+        importHtmlToPage({
+          slug: `${inferPageSlug(rootPage.sourcePath)}-preview`,
+          html: migratedPreviewHtml,
+        }),
+      )
+    : emptyStructureSummary();
+
+  const mismatches = deriveMismatchEvidence({
+    sourceStructure: sourceSummary,
+    migratedStructure: migratedSummary,
+    structuralAnomalies: rootPage.structuralAnomalies,
+  });
+  const enforcementBlocksCanaryOrProduction =
+    input.enforcementAdapterByStage.CANARY.decision !== "ALLOW" || input.enforcementAdapterByStage.PRODUCTION.decision !== "ALLOW";
+  const hasStructuralMismatch = mismatches.mismatchFlags.length > 0;
+  if (enforcementBlocksCanaryOrProduction && hasStructuralMismatch) {
+    mismatches.mismatchFlags.push("ENFORCEMENT_BLOCKING_STRUCTURAL_MISMATCH");
+    mismatches.mismatchReasons.push("structural_mismatch_is_blocking_publish_enforcement");
+  }
+  mismatches.mismatchFlags = [...new Set(mismatches.mismatchFlags)].sort((a, b) => a.localeCompare(b));
+  mismatches.mismatchReasons = uniqueSortedStrings(mismatches.mismatchReasons);
+
+  return {
+    pageId: rootPage.pageId,
+    sourcePath: rootPage.sourcePath,
+    isRoot: rootPage.isRoot,
+    sourceSnapshotHtml,
+    migratedPreviewHtml,
+    sourceStructure: sourceSummary,
+    migratedStructure: migratedSummary,
+    mismatchFlags: mismatches.mismatchFlags,
+    mismatchReasons: mismatches.mismatchReasons,
+  };
 }
 
 function toWeakSectionDetails(page: ReturnType<typeof importHtmlToPage>): UrlImportOperatorPageReviewRecord["weakSectionDetails"] {
@@ -308,6 +613,7 @@ export async function runUrlImportOperatorFlow(
       ...phase1.pipeline.diagnostics.filter((d) => d.severity === "fatal" || d.severity === "error").map((d) => d.code),
     ]);
     const migrationPolicyInputs = buildMigrationPolicyInputsFromImportOutput({ importOutput });
+    const previewDocument = findPreviewDocument(phase1.pipeline);
     const siteMigrationGate = evaluateSiteMigrationGate({ pageResults: migrationPolicyInputs.pageGateResults });
     const siteRolloutPolicy = evaluateSiteRolloutPolicy({
       siteGateResult: siteMigrationGate,
@@ -317,6 +623,32 @@ export async function runUrlImportOperatorFlow(
       siteMigrationGate,
       siteRolloutPolicy,
     });
+    const enforcementAdapterByStage = {
+      SHADOW: buildEnforcementAdapterDecision({
+        stage: "shadow",
+        pageEnforcement: migrationPolicyInputs.pageReview.map((page) => ({
+          pageId: page.pageId,
+          enforcement: page.pageEnforcement,
+        })),
+        siteEnforcement,
+      }),
+      CANARY: buildEnforcementAdapterDecision({
+        stage: "canary",
+        pageEnforcement: migrationPolicyInputs.pageReview.map((page) => ({
+          pageId: page.pageId,
+          enforcement: page.pageEnforcement,
+        })),
+        siteEnforcement,
+      }),
+      PRODUCTION: buildEnforcementAdapterDecision({
+        stage: "production",
+        pageEnforcement: migrationPolicyInputs.pageReview.map((page) => ({
+          pageId: page.pageId,
+          enforcement: page.pageEnforcement,
+        })),
+        siteEnforcement,
+      }),
+    } as const;
 
     return {
       kind: "url_import_operator_response_v1",
@@ -337,12 +669,27 @@ export async function runUrlImportOperatorFlow(
         importOutput,
         importManifest,
         pipelineResult: phase1.pipeline,
-        previewDocument: findPreviewDocument(phase1.pipeline),
+        previewDocument,
         approvalPackage: phase1.approvalPackage,
         executionPlan: phase1.executionPlan,
         executionResult: phase1.executionResult,
         migrationRunReport: phase1.report,
         pageReview: migrationPolicyInputs.pageReview,
+        compareEvidence: {
+          primaryPage: buildPrimaryPageCompareEvidence({
+            importOutput,
+            previewDocument,
+            pageReview: migrationPolicyInputs.pageReview,
+            enforcementAdapterByStage,
+          }),
+        },
+        enforcementAdapterByStage,
+        publishStageEligibility: {
+          shadow:
+            enforcementAdapterByStage.SHADOW.decision === "ALLOW" || enforcementAdapterByStage.SHADOW.decision === "REVIEW_ONLY",
+          canary: enforcementAdapterByStage.CANARY.decision === "ALLOW",
+          production: enforcementAdapterByStage.PRODUCTION.decision === "ALLOW",
+        },
         siteMigrationGate,
         siteRolloutPolicy,
         siteEnforcement,

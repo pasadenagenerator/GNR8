@@ -46,6 +46,19 @@ type SiteRolloutPolicy = {
   recommendsAiRemediation: boolean;
 };
 
+type EnforcementAdapterDecision = {
+  stage: "shadow" | "canary" | "production";
+  decision: "ALLOW" | "REVIEW_ONLY" | "DENY";
+  reasons: string[];
+  blockingPages: string[];
+  requiresOperatorReview: boolean;
+  enforcementSource: {
+    gateState: { page: string[]; site: string };
+    rolloutPolicyState: { page: string[]; site: string };
+    enforcementState: { page: string[]; site: string };
+  };
+};
+
 type PageReviewRecord = {
   pageId: string;
   sourcePath: string;
@@ -56,6 +69,11 @@ type PageReviewRecord = {
   structuralAnomalies: string[];
   pageMigrationGate: PageMigrationGate;
   pageRolloutPolicy: PageRolloutPolicy;
+  pageEnforcement: {
+    SHADOW: { decision: string; recommendedNextStep: string; blockingReasons: string[] };
+    CANARY: { decision: string; recommendedNextStep: string; blockingReasons: string[] };
+    PRODUCTION: { decision: string; recommendedNextStep: string; blockingReasons: string[] };
+  };
   weakSectionDetails: Array<{
     sectionId: string;
     intent: string | null;
@@ -63,6 +81,26 @@ type PageReviewRecord = {
     confidenceComponents: Record<string, unknown> | null;
     anomalies: string[];
   }>;
+};
+
+type CompareStructureSummary = {
+  detectedRegions: string[];
+  regionOrder: string[];
+  regionCounts: Record<string, number>;
+  regionConfidence: Record<string, number>;
+  sectionCount: number;
+};
+
+type PrimaryPageCompareEvidence = {
+  pageId: string;
+  sourcePath: string;
+  isRoot: boolean;
+  sourceSnapshotHtml: string;
+  migratedPreviewHtml: string | null;
+  sourceStructure: CompareStructureSummary;
+  migratedStructure: CompareStructureSummary;
+  mismatchFlags: string[];
+  mismatchReasons: string[];
 };
 
 type UrlImportOperatorSuccessResponse = {
@@ -119,8 +157,26 @@ type UrlImportOperatorSuccessResponse = {
     };
     migrationRunReport: { overallStatus: string };
     pageReview: PageReviewRecord[];
+    compareEvidence: {
+      primaryPage: PrimaryPageCompareEvidence | null;
+    };
+    enforcementAdapterByStage: {
+      SHADOW: EnforcementAdapterDecision;
+      CANARY: EnforcementAdapterDecision;
+      PRODUCTION: EnforcementAdapterDecision;
+    };
+    publishStageEligibility: {
+      shadow: boolean;
+      canary: boolean;
+      production: boolean;
+    };
     siteMigrationGate: SiteMigrationGate;
     siteRolloutPolicy: SiteRolloutPolicy;
+    siteEnforcement: {
+      SHADOW: { decision: string; blockingReasons: string[] };
+      CANARY: { decision: string; blockingReasons: string[] };
+      PRODUCTION: { decision: string; blockingReasons: string[] };
+    };
   };
   summary: {
     importStatus: string;
@@ -217,6 +273,7 @@ function statusKindFromString(status: string): PillKind {
     upper === "SITE_SHADOW_READY" ||
     upper === "SITE_CANARY_READY" ||
     upper === "SITE_PRODUCTION_READY" ||
+    upper === "ALLOW" ||
     upper === "SHADOW_ALLOWED" ||
     upper === "SHADOW_RECOMMENDED" ||
     upper === "CANARY_ALLOWED" ||
@@ -231,13 +288,15 @@ function statusKindFromString(status: string): PillKind {
     status.includes("warning") ||
     status === "skipped" ||
     status === "not_run" ||
+    upper === "REVIEW_ONLY" ||
     upper === "LOW_CONFIDENCE" ||
     upper === "REVIEW_REQUIRED" ||
     upper === "SITE_REVIEW_REQUIRED"
   ) {
     return "warn";
   }
-  if (status === "blocked" || upper === "BROKEN" || upper === "SITE_BROKEN" || upper === "BLOCKED" || upper === "SITE_BLOCKED") return "bad";
+  if (status === "blocked" || upper === "BROKEN" || upper === "SITE_BROKEN" || upper === "BLOCKED" || upper === "SITE_BLOCKED" || upper === "DENY")
+    return "bad";
   if (
     status.includes("fail") ||
     status.includes("error") ||
@@ -344,6 +403,20 @@ function ReasonList(props: { reasons: string[] }) {
   );
 }
 
+function StructureSummaryTable(props: { summary: CompareStructureSummary }) {
+  return (
+    <KeyValueTable
+      rows={[
+        { k: "sectionCount", v: props.summary.sectionCount },
+        { k: "detectedRegions", v: <CodeList codes={props.summary.detectedRegions} /> },
+        { k: "regionOrder", v: <CodeList codes={props.summary.regionOrder} /> },
+        { k: "regionCounts", v: <code>{stableStringify(props.summary.regionCounts)}</code> },
+        { k: "regionConfidence", v: <code>{stableStringify(props.summary.regionConfidence)}</code> },
+      ]}
+    />
+  );
+}
+
 function formatScore(value: number): string {
   if (!Number.isFinite(value)) return "n/a";
   return value.toFixed(3);
@@ -430,8 +503,11 @@ function ResultPanel(props: { response: UrlImportOperatorResponse }) {
   const materialization = props.response.result.executionResult.materialization;
   const siteGate = props.response.result.siteMigrationGate;
   const sitePolicy = props.response.result.siteRolloutPolicy;
+  const enforcementAdapter = props.response.result.enforcementAdapterByStage;
+  const publishStageEligibility = props.response.result.publishStageEligibility;
   const pageReviews = props.response.result.pageReview ?? [];
   const primaryPage = primaryPageReview(pageReviews);
+  const primaryCompare = props.response.result.compareEvidence?.primaryPage ?? null;
   const isBlocked =
     props.response.summary.approvalStatus === "blocked" ||
     props.response.summary.executionPlanEligibility === "blocked" ||
@@ -527,6 +603,13 @@ function ResultPanel(props: { response: UrlImportOperatorResponse }) {
         <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
           <SummaryCard label="siteMigrationGate.state" value={<StatusPill value={siteGate.state} />} kind={statusKindFromString(siteGate.state)} />
           <SummaryCard label="siteRolloutPolicy.state" value={<StatusPill value={sitePolicy.state} />} kind={statusKindFromString(sitePolicy.state)} />
+          <SummaryCard label="adapter.shadow" value={<StatusPill value={enforcementAdapter.SHADOW.decision} />} kind={statusKindFromString(enforcementAdapter.SHADOW.decision)} />
+          <SummaryCard label="adapter.canary" value={<StatusPill value={enforcementAdapter.CANARY.decision} />} kind={statusKindFromString(enforcementAdapter.CANARY.decision)} />
+          <SummaryCard
+            label="adapter.production"
+            value={<StatusPill value={enforcementAdapter.PRODUCTION.decision} />}
+            kind={statusKindFromString(enforcementAdapter.PRODUCTION.decision)}
+          />
           <SummaryCard label="overall score" value={formatScore(siteGate.score)} kind={siteGate.score >= 0.72 ? "good" : siteGate.score >= 0.5 ? "warn" : "bad"} />
           <SummaryCard
             label="recommendedNextStep"
@@ -549,6 +632,15 @@ function ResultPanel(props: { response: UrlImportOperatorResponse }) {
             { k: "blockingPages", v: <CodeList codes={sitePolicy.blockingPages} /> },
             { k: "siteMigrationGate.summaryReasons", v: <ReasonList reasons={siteGate.summaryReasons} /> },
             { k: "siteRolloutPolicy.reasons", v: <ReasonList reasons={sitePolicy.reasons} /> },
+            { k: "enforcementAdapter.SHADOW.decision", v: <StatusPill value={enforcementAdapter.SHADOW.decision} /> },
+            { k: "enforcementAdapter.CANARY.decision", v: <StatusPill value={enforcementAdapter.CANARY.decision} /> },
+            { k: "enforcementAdapter.PRODUCTION.decision", v: <StatusPill value={enforcementAdapter.PRODUCTION.decision} /> },
+            { k: "publishStageEligibility.shadow", v: <BooleanPill value={publishStageEligibility.shadow} /> },
+            { k: "publishStageEligibility.canary", v: <BooleanPill value={publishStageEligibility.canary} /> },
+            { k: "publishStageEligibility.production", v: <BooleanPill value={publishStageEligibility.production} /> },
+            { k: "enforcementAdapter.SHADOW.reasons", v: <ReasonList reasons={enforcementAdapter.SHADOW.reasons} /> },
+            { k: "enforcementAdapter.CANARY.reasons", v: <ReasonList reasons={enforcementAdapter.CANARY.reasons} /> },
+            { k: "enforcementAdapter.PRODUCTION.reasons", v: <ReasonList reasons={enforcementAdapter.PRODUCTION.reasons} /> },
           ]}
         />
       </Section>
@@ -615,6 +707,114 @@ function ResultPanel(props: { response: UrlImportOperatorResponse }) {
           </>
         ) : (
           <p style={{ margin: 0, color: "#6b7280" }}>No page diagnostics available from this run.</p>
+        )}
+      </Section>
+
+      <Section
+        title="Source vs Migrated Compare (Primary Page)"
+        summary={
+          primaryCompare ? (
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <StatusPill value={primaryCompare.isRoot ? "root_page" : "non_root_page"} kind="neutral" />
+              <StatusPill value={primaryCompare.sourcePath} kind="neutral" />
+              <StatusPill value={`${primaryCompare.mismatchFlags.length}_flags`} kind={primaryCompare.mismatchFlags.length > 0 ? "warn" : "good"} />
+            </div>
+          ) : (
+            <span style={{ color: "#6b7280" }}>No compare evidence available</span>
+          )
+        }
+      >
+        {primaryCompare ? (
+          <>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+              <SummaryCard label="sourcePath" value={<code>{primaryCompare.sourcePath}</code>} />
+              <SummaryCard label="mismatch flags" value={primaryCompare.mismatchFlags.length} kind={primaryCompare.mismatchFlags.length > 0 ? "warn" : "good"} />
+              <SummaryCard label="source regions" value={primaryCompare.sourceStructure.detectedRegions.length} />
+              <SummaryCard label="migrated regions" value={primaryCompare.migratedStructure.detectedRegions.length} />
+              <SummaryCard
+                label="pageMigrationGate.state"
+                value={primaryPage ? <StatusPill value={primaryPage.pageMigrationGate.state} /> : "n/a"}
+                kind={primaryPage ? statusKindFromString(primaryPage.pageMigrationGate.state) : "neutral"}
+              />
+              <SummaryCard
+                label="pageRolloutPolicy.state"
+                value={primaryPage ? <StatusPill value={primaryPage.pageRolloutPolicy.state} /> : "n/a"}
+                kind={primaryPage ? statusKindFromString(primaryPage.pageRolloutPolicy.state) : "neutral"}
+              />
+            </div>
+
+            <KeyValueTable
+              rows={[
+                { k: "compare.pageId", v: primaryCompare.pageId },
+                { k: "compare.sourcePath", v: primaryCompare.sourcePath },
+                { k: "compare.isRoot", v: <BooleanPill value={primaryCompare.isRoot} /> },
+                { k: "mismatchFlags", v: <CodeList codes={primaryCompare.mismatchFlags} /> },
+                { k: "mismatchReasons", v: <CodeList codes={primaryCompare.mismatchReasons} /> },
+                { k: "pageStructuralConfidence", v: primaryPage ? formatScore(primaryPage.pageStructuralConfidence) : "n/a" },
+                { k: "weakSectionIds", v: primaryPage ? <CodeList codes={primaryPage.weakSectionIds} /> : "n/a" },
+                { k: "structuralAnomalies", v: primaryPage ? <CodeList codes={primaryPage.structuralAnomalies} /> : "n/a" },
+                { k: "pageMigrationGate.state", v: primaryPage ? <StatusPill value={primaryPage.pageMigrationGate.state} /> : "n/a" },
+                { k: "pageRolloutPolicy.state", v: primaryPage ? <StatusPill value={primaryPage.pageRolloutPolicy.state} /> : "n/a" },
+                { k: "pageEnforcement.SHADOW", v: primaryPage ? <StatusPill value={primaryPage.pageEnforcement.SHADOW.decision} /> : "n/a" },
+                { k: "pageEnforcement.CANARY", v: primaryPage ? <StatusPill value={primaryPage.pageEnforcement.CANARY.decision} /> : "n/a" },
+                { k: "pageEnforcement.PRODUCTION", v: primaryPage ? <StatusPill value={primaryPage.pageEnforcement.PRODUCTION.decision} /> : "n/a" },
+              ]}
+            />
+
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))",
+                gap: 12,
+                marginTop: 12,
+              }}
+            >
+              <article style={{ border: "1px solid #dbe3ea", borderRadius: 10, padding: 10, background: "#fcfcfd" }}>
+                <h3 style={{ margin: "0 0 8px 0", fontSize: 14 }}>Source Snapshot Preview</h3>
+                <div style={{ marginTop: 10, border: "1px solid #e5e7eb", borderRadius: 10, overflow: "hidden", background: "#ffffff" }}>
+                  <iframe title={`source:${primaryCompare.sourcePath}`} sandbox="" srcDoc={primaryCompare.sourceSnapshotHtml} style={{ width: "100%", height: 420, border: 0 }} />
+                </div>
+                <details style={{ marginTop: 10 }}>
+                  <summary style={{ cursor: "pointer" }}>Source structural summary</summary>
+                  <div style={{ marginTop: 8 }}>
+                    <StructureSummaryTable summary={primaryCompare.sourceStructure} />
+                  </div>
+                </details>
+              </article>
+
+              <article style={{ border: "1px solid #dbe3ea", borderRadius: 10, padding: 10, background: "#fcfcfd" }}>
+                <h3 style={{ margin: "0 0 8px 0", fontSize: 14 }}>Migrated Preview</h3>
+                <div style={{ marginTop: 10, border: "1px solid #e5e7eb", borderRadius: 10, overflow: "hidden", background: "#ffffff" }}>
+                  <iframe
+                    title={`migrated:${primaryCompare.sourcePath}`}
+                    sandbox=""
+                    srcDoc={primaryCompare.migratedPreviewHtml ?? "<html><body><p>No migrated preview HTML available.</p></body></html>"}
+                    style={{ width: "100%", height: 420, border: 0 }}
+                  />
+                </div>
+                <details style={{ marginTop: 10 }}>
+                  <summary style={{ cursor: "pointer" }}>Migrated structural summary</summary>
+                  <div style={{ marginTop: 8 }}>
+                    <StructureSummaryTable summary={primaryCompare.migratedStructure} />
+                  </div>
+                </details>
+              </article>
+            </div>
+
+            <details style={{ marginTop: 12 }}>
+              <summary style={{ cursor: "pointer" }}>Raw compare structural evidence (optional)</summary>
+              <pre style={{ marginTop: 10, padding: 10, background: "#f9fafb", borderRadius: 10, overflow: "auto", fontSize: 12, maxHeight: 320 }}>
+                {stableStringify({
+                  sourceStructure: primaryCompare.sourceStructure,
+                  migratedStructure: primaryCompare.migratedStructure,
+                  mismatchFlags: primaryCompare.mismatchFlags,
+                  mismatchReasons: primaryCompare.mismatchReasons,
+                })}
+              </pre>
+            </details>
+          </>
+        ) : (
+          <p style={{ margin: 0, color: "#6b7280" }}>No compare evidence was produced for this run.</p>
         )}
       </Section>
 
