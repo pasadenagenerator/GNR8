@@ -4,6 +4,7 @@ import { extractAllAnchorLinks, extractAllImgSrc } from "@/gnr8/importer/html-ut
 import { collectSemanticLayoutHints, mapBlockOrdinalToLayoutHint } from "@/gnr8/migration/layout-graph/layout-graph-builder";
 import type { LayoutGraph, LayoutNodeHint } from "@/gnr8/migration/layout-graph/layout-graph-types";
 import type { LayoutNodeType } from "@/gnr8/migration/layout-graph/layout-node-types";
+import { computeStructuralConfidence, type StructuralConfidenceComponents } from "@/gnr8/migration/layout-graph/structural-confidence";
 import { deterministicId } from "@/gnr8/runtime/deterministic";
 
 export type CanonicalLayoutIntent =
@@ -31,6 +32,8 @@ export type CanonicalLayoutBlockPlan = {
   group: CanonicalLayoutGroup;
   layoutHint: LayoutNodeHint | null;
   structuralConfidence: number;
+  confidenceComponents: StructuralConfidenceComponents;
+  anomalies: string[];
 };
 
 function round2(value: number): number {
@@ -308,6 +311,24 @@ function assignGroupForBlock(input: {
   };
 }
 
+function collectNeighborSignals(input: {
+  hints: LayoutNodeHint[];
+  layoutHint: LayoutNodeHint | null;
+}): LayoutNodeHint["signals"][] {
+  if (!input.layoutHint) return [];
+  const ordered = input.hints
+    .slice()
+    .sort((a, b) => a.domIndexStart - b.domIndexStart || a.depth - b.depth || a.id.localeCompare(b.id));
+  const currentIndex = ordered.findIndex((hint) => hint.id === input.layoutHint?.id);
+  if (currentIndex === -1) return [];
+  const out: LayoutNodeHint["signals"][] = [];
+  const prev = ordered[currentIndex - 1];
+  const next = ordered[currentIndex + 1];
+  if (prev) out.push(prev.signals);
+  if (next) out.push(next.signals);
+  return out;
+}
+
 export function buildLayoutToCanonicalBridge(input: {
   html: string;
   layoutGraph: LayoutGraph;
@@ -331,15 +352,27 @@ export function buildLayoutToCanonicalBridge(input: {
 
     const group = assignGroupForBlock({ groups, blockOrdinal });
 
-    const hintConfidence = layoutHint ? structuralConfidenceForHint(layoutHint) : 0.35;
-    const structuralConfidence = round2(clamp01(group.confidence * 0.6 + hintConfidence * 0.4));
+    const structural = computeStructuralConfidence(
+      {
+        blockHtml,
+        blockOrdinal,
+        group,
+        layoutHint: layoutHint ? { type: layoutHint.type, depth: layoutHint.depth } : null,
+      },
+      {
+        primary: layoutHint?.signals ?? null,
+        neighbors: collectNeighborSignals({ hints, layoutHint }),
+      },
+    );
 
     return {
       blockHtml,
       blockOrdinal,
       group,
       layoutHint,
-      structuralConfidence,
+      structuralConfidence: structural.score,
+      confidenceComponents: structural.components,
+      anomalies: structural.anomalies,
     } satisfies CanonicalLayoutBlockPlan;
   });
 

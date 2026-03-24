@@ -4,6 +4,7 @@ import { randomUUID } from "crypto";
 
 import { detectSectionFromHtmlBlock, tidyTitleFromHtml } from "@/gnr8/importer/html-section-detector";
 import { buildLayoutGraphFromSnapshotHtml } from "@/gnr8/migration/layout-graph/layout-graph-builder";
+import { computePageStructuralConfidence } from "@/gnr8/migration/layout-graph/page-confidence";
 import {
   buildLayoutToCanonicalBridge,
   type CanonicalLayoutBlockPlan,
@@ -25,6 +26,8 @@ function withLayoutStructuralMetadata(input: {
   baseProps.layoutStructural = {
     intent: input.plan.group.intent,
     structuralConfidence: input.plan.structuralConfidence,
+    confidenceComponents: input.plan.confidenceComponents,
+    anomalies: input.plan.anomalies,
     groupId: input.plan.group.id,
     groupOrder: input.plan.group.order,
     domIndexStart: input.plan.group.domIndexStart,
@@ -76,10 +79,17 @@ export function importHtmlToPage(input: HtmlImportInput): Gnr8Page {
           }),
         ];
 
+  const pageStructural = computePageStructuralConfidence(sections);
+
   return {
     id: randomUUID(),
     slug,
     ...(title ? { title } : {}),
     sections,
+    migrationDiagnostics: {
+      pageStructuralConfidence: pageStructural.score,
+      weakSectionIds: pageStructural.weakestSections,
+      structuralAnomalies: pageStructural.anomalySummary,
+    },
   };
 }

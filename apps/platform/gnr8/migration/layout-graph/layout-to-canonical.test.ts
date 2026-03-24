@@ -28,6 +28,12 @@ test("layout-to-canonical groups preserve canonical structural ordering", () => 
 
   for (const block of bridge.blocks) {
     assert.ok(block.structuralConfidence >= 0 && block.structuralConfidence <= 1, "confidence must be normalized");
+    assert.ok(block.confidenceComponents.domIntegrity >= 0 && block.confidenceComponents.domIntegrity <= 1);
+    assert.ok(block.confidenceComponents.signalStrength >= 0 && block.confidenceComponents.signalStrength <= 1);
+    assert.ok(block.confidenceComponents.semanticAgreement >= 0 && block.confidenceComponents.semanticAgreement <= 1);
+    assert.ok(block.confidenceComponents.boundaryClarity >= 0 && block.confidenceComponents.boundaryClarity <= 1);
+    assert.ok(block.confidenceComponents.densityCoherence >= 0 && block.confidenceComponents.densityCoherence <= 1);
+    assert.ok(Array.isArray(block.anomalies));
   }
 });
 
@@ -48,4 +54,38 @@ test("layout-to-canonical yields multi-region block plan for maver fixture", () 
   assert.ok(intents.has("gallery_media"), "gallery/media block intent should exist");
   assert.ok(intents.has("form_contact"), "form/contact block intent should exist");
   assert.ok(intents.has("footer_legal"), "footer/legal block intent should exist");
+});
+
+test("layout-to-canonical confidence ordering is deterministic and explainable", () => {
+  const graph = buildLayoutGraphFromSnapshotHtml({
+    html: fixtureSimpleLandingHtml,
+    pathSeed: "fixture-simple-landing.html",
+  });
+
+  const first = buildLayoutToCanonicalBridge({
+    html: fixtureSimpleLandingHtml,
+    layoutGraph: graph,
+  });
+  const second = buildLayoutToCanonicalBridge({
+    html: fixtureSimpleLandingHtml,
+    layoutGraph: graph,
+  });
+
+  assert.deepEqual(
+    first.blocks.map((block) => block.structuralConfidence),
+    second.blocks.map((block) => block.structuralConfidence),
+  );
+
+  assert.deepEqual(
+    first.blocks.map((block) => block.confidenceComponents),
+    second.blocks.map((block) => block.confidenceComponents),
+  );
+
+  for (const block of first.blocks) {
+    assert.ok(typeof block.confidenceComponents.domIntegrity === "number");
+    assert.ok(typeof block.confidenceComponents.signalStrength === "number");
+    assert.ok(typeof block.confidenceComponents.semanticAgreement === "number");
+    assert.ok(typeof block.confidenceComponents.boundaryClarity === "number");
+    assert.ok(typeof block.confidenceComponents.densityCoherence === "number");
+  }
 });
