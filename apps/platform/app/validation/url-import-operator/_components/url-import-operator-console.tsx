@@ -5,6 +5,66 @@ import { useMemo, useState, type CSSProperties, type FormEvent, type ReactNode }
 type ExecutionMode = "simulation" | "materialize";
 type PillKind = "neutral" | "good" | "warn" | "bad";
 
+type PageMigrationGate = {
+  state: string;
+  score: number;
+  reasons: string[];
+  weakSectionIds: string[];
+  anomalySummary: string[];
+  recommendedAction: string;
+};
+
+type PageRolloutPolicy = {
+  state: string;
+  reasons: string[];
+  recommendedNextStep: string;
+  requiresOperatorReview: boolean;
+  allowsShadow: boolean;
+  allowsCanary: boolean;
+  allowsProductionConsideration: boolean;
+  recommendsAiRemediation: boolean;
+};
+
+type SiteMigrationGate = {
+  state: string;
+  score: number;
+  pageStates: Array<{ pageId: string; sourcePath: string; isRoot: boolean; state: string; score: number }>;
+  blockingPages: string[];
+  summaryReasons: string[];
+  recommendedAction: string;
+};
+
+type SiteRolloutPolicy = {
+  state: string;
+  reasons: string[];
+  blockingPages: string[];
+  recommendedNextStep: string;
+  requiresOperatorReview: boolean;
+  allowsShadow: boolean;
+  allowsCanary: boolean;
+  allowsProductionConsideration: boolean;
+  recommendsAiRemediation: boolean;
+};
+
+type PageReviewRecord = {
+  pageId: string;
+  sourcePath: string;
+  isRoot: boolean;
+  title: string | null;
+  pageStructuralConfidence: number;
+  weakSectionIds: string[];
+  structuralAnomalies: string[];
+  pageMigrationGate: PageMigrationGate;
+  pageRolloutPolicy: PageRolloutPolicy;
+  weakSectionDetails: Array<{
+    sectionId: string;
+    intent: string | null;
+    structuralConfidence: number | null;
+    confidenceComponents: Record<string, unknown> | null;
+    anomalies: string[];
+  }>;
+};
+
 type UrlImportOperatorSuccessResponse = {
   kind: "url_import_operator_response_v1";
   ok: true;
@@ -58,6 +118,9 @@ type UrlImportOperatorSuccessResponse = {
       };
     };
     migrationRunReport: { overallStatus: string };
+    pageReview: PageReviewRecord[];
+    siteMigrationGate: SiteMigrationGate;
+    siteRolloutPolicy: SiteRolloutPolicy;
   };
   summary: {
     importStatus: string;
@@ -135,6 +198,7 @@ function pillStyle(kind: PillKind): CSSProperties {
 }
 
 function statusKindFromString(status: string): PillKind {
+  const upper = status.toUpperCase();
   if (
     status === "passed" ||
     status === "success" ||
@@ -146,14 +210,44 @@ function statusKindFromString(status: string): PillKind {
     status === "previewable" ||
     status === "available" ||
     status === "materialized" ||
-    status === "true"
+    status === "true" ||
+    upper === "SHADOW_READY" ||
+    upper === "CANARY_CANDIDATE" ||
+    upper === "PRODUCTION_CANDIDATE" ||
+    upper === "SITE_SHADOW_READY" ||
+    upper === "SITE_CANARY_READY" ||
+    upper === "SITE_PRODUCTION_READY" ||
+    upper === "SHADOW_ALLOWED" ||
+    upper === "SHADOW_RECOMMENDED" ||
+    upper === "CANARY_ALLOWED" ||
+    upper === "SITE_SHADOW_ALLOWED" ||
+    upper === "SITE_SHADOW_RECOMMENDED" ||
+    upper === "SITE_CANARY_ALLOWED"
   ) {
     return "good";
   }
 
-  if (status.includes("warning") || status === "skipped" || status === "not_run") return "warn";
-  if (status === "blocked") return "bad";
-  if (status.includes("fail") || status.includes("error") || status === "false" || status === "missing") return "bad";
+  if (
+    status.includes("warning") ||
+    status === "skipped" ||
+    status === "not_run" ||
+    upper === "LOW_CONFIDENCE" ||
+    upper === "REVIEW_REQUIRED" ||
+    upper === "SITE_REVIEW_REQUIRED"
+  ) {
+    return "warn";
+  }
+  if (status === "blocked" || upper === "BROKEN" || upper === "SITE_BROKEN" || upper === "BLOCKED" || upper === "SITE_BLOCKED") return "bad";
+  if (
+    status.includes("fail") ||
+    status.includes("error") ||
+    status === "false" ||
+    status === "missing" ||
+    upper === "PRODUCTION_DISALLOWED" ||
+    upper === "SITE_PRODUCTION_DISALLOWED"
+  ) {
+    return "bad";
+  }
 
   return "neutral";
 }
@@ -231,6 +325,37 @@ function CodeList(props: { codes: string[] }) {
   );
 }
 
+function BooleanPill(props: { value: boolean }) {
+  return <StatusPill value={String(props.value)} kind={props.value ? "good" : "neutral"} />;
+}
+
+function ReasonList(props: { reasons: string[] }) {
+  const reasons = sortedUnique(props.reasons);
+  if (reasons.length === 0) return <span style={{ color: "#6b7280" }}>none</span>;
+
+  return (
+    <ul style={{ margin: 0, paddingLeft: 18, display: "grid", gap: 4 }}>
+      {reasons.map((reason) => (
+        <li key={reason}>
+          <code>{reason}</code>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function formatScore(value: number): string {
+  if (!Number.isFinite(value)) return "n/a";
+  return value.toFixed(3);
+}
+
+function primaryPageReview(pages: PageReviewRecord[]): PageReviewRecord | null {
+  if (pages.length === 0) return null;
+  const root = pages.find((page) => page.isRoot);
+  if (root) return root;
+  return pages.slice().sort((a, b) => a.sourcePath.localeCompare(b.sourcePath) || a.pageId.localeCompare(b.pageId))[0] ?? null;
+}
+
 function ResultPanel(props: { response: UrlImportOperatorResponse }) {
   const modePillKind: PillKind = props.response.executionMode === "materialize" ? "warn" : "neutral";
 
@@ -303,12 +428,47 @@ function ResultPanel(props: { response: UrlImportOperatorResponse }) {
   const blockingReasonCodes = sortedUnique(props.response.summary.blockingReasonCodes);
   const preview = props.response.result.executionResult.previewHosting;
   const materialization = props.response.result.executionResult.materialization;
+  const siteGate = props.response.result.siteMigrationGate;
+  const sitePolicy = props.response.result.siteRolloutPolicy;
+  const pageReviews = props.response.result.pageReview ?? [];
+  const primaryPage = primaryPageReview(pageReviews);
   const isBlocked =
     props.response.summary.approvalStatus === "blocked" ||
     props.response.summary.executionPlanEligibility === "blocked" ||
     props.response.summary.executionStatus === "blocked" ||
     blockingReasonCodes.length > 0;
   const isWarningMode = !isBlocked && (warningCodes.length > 0 || props.response.summary.executionStatus.includes("warning"));
+  const explainabilityReasons = sortedUnique([
+    ...(primaryPage?.pageMigrationGate.reasons.map((reason) => `pageMigrationGate:${reason}`) ?? []),
+    ...(primaryPage?.pageRolloutPolicy.reasons.map((reason) => `pageRolloutPolicy:${reason}`) ?? []),
+    ...siteGate.summaryReasons.map((reason) => `siteMigrationGate:${reason}`),
+    ...sitePolicy.reasons.map((reason) => `siteRolloutPolicy:${reason}`),
+  ]);
+  const weakAndAnomalyRows = pageReviews.flatMap((page) => {
+    const weakRows = page.weakSectionDetails.map((weak) => ({
+      key: `weak:${page.pageId}:${weak.sectionId}`,
+      pagePath: page.sourcePath,
+      kind: "weak_section",
+      sectionId: weak.sectionId,
+      intent: weak.intent ?? "unknown",
+      structuralConfidence: weak.structuralConfidence === null ? "n/a" : formatScore(weak.structuralConfidence),
+      confidenceComponents: weak.confidenceComponents ? stableStringify(weak.confidenceComponents) : "n/a",
+      anomalies: weak.anomalies.length > 0 ? weak.anomalies.join(", ") : "none",
+    }));
+
+    const anomalyRows = page.structuralAnomalies.map((anomaly) => ({
+      key: `anomaly:${page.pageId}:${anomaly}`,
+      pagePath: page.sourcePath,
+      kind: "structural_anomaly",
+      sectionId: "n/a",
+      intent: "n/a",
+      structuralConfidence: "n/a",
+      confidenceComponents: "n/a",
+      anomalies: anomaly,
+    }));
+
+    return [...weakRows, ...anomalyRows];
+  });
 
   return (
     <>
@@ -350,6 +510,174 @@ function ResultPanel(props: { response: UrlImportOperatorResponse }) {
             { k: "executionStatus", v: <StatusPill value={props.response.summary.executionStatus} /> },
             { k: "warningCodes", v: <CodeList codes={warningCodes} /> },
             { k: "blockingReasonCodes", v: <CodeList codes={blockingReasonCodes} /> },
+          ]}
+        />
+      </Section>
+
+      <Section
+        title="Site-Level Quality + Policy"
+        summary={
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <StatusPill value={siteGate.state} />
+            <StatusPill value={sitePolicy.state} />
+            <StatusPill value={sitePolicy.recommendedNextStep} kind="warn" />
+          </div>
+        }
+      >
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+          <SummaryCard label="siteMigrationGate.state" value={<StatusPill value={siteGate.state} />} kind={statusKindFromString(siteGate.state)} />
+          <SummaryCard label="siteRolloutPolicy.state" value={<StatusPill value={sitePolicy.state} />} kind={statusKindFromString(sitePolicy.state)} />
+          <SummaryCard label="overall score" value={formatScore(siteGate.score)} kind={siteGate.score >= 0.72 ? "good" : siteGate.score >= 0.5 ? "warn" : "bad"} />
+          <SummaryCard
+            label="recommendedNextStep"
+            value={<StatusPill value={sitePolicy.recommendedNextStep} kind="warn" />}
+            kind={sitePolicy.recommendedNextStep === "CANARY_REVIEW" || sitePolicy.recommendedNextStep === "SHADOW_VALIDATE" ? "good" : "warn"}
+          />
+          <SummaryCard label="blockingPages" value={sitePolicy.blockingPages.length} kind={sitePolicy.blockingPages.length > 0 ? "bad" : "good"} />
+        </div>
+        <KeyValueTable
+          rows={[
+            { k: "siteMigrationGate.state", v: <StatusPill value={siteGate.state} /> },
+            { k: "siteRolloutPolicy.state", v: <StatusPill value={sitePolicy.state} /> },
+            { k: "siteMigrationGate.score", v: formatScore(siteGate.score) },
+            { k: "recommendedNextStep", v: <StatusPill value={sitePolicy.recommendedNextStep} kind="warn" /> },
+            { k: "allowsShadow", v: <BooleanPill value={sitePolicy.allowsShadow} /> },
+            { k: "allowsCanary", v: <BooleanPill value={sitePolicy.allowsCanary} /> },
+            { k: "allowsProductionConsideration", v: <BooleanPill value={sitePolicy.allowsProductionConsideration} /> },
+            { k: "requiresOperatorReview", v: <BooleanPill value={sitePolicy.requiresOperatorReview} /> },
+            { k: "blockingPages.count", v: sitePolicy.blockingPages.length },
+            { k: "blockingPages", v: <CodeList codes={sitePolicy.blockingPages} /> },
+            { k: "siteMigrationGate.summaryReasons", v: <ReasonList reasons={siteGate.summaryReasons} /> },
+            { k: "siteRolloutPolicy.reasons", v: <ReasonList reasons={sitePolicy.reasons} /> },
+          ]}
+        />
+      </Section>
+
+      <Section
+        title="Page-Level Quality + Policy"
+        summary={
+          primaryPage ? (
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <StatusPill value={primaryPage.pageMigrationGate.state} />
+              <StatusPill value={primaryPage.pageRolloutPolicy.state} />
+              <StatusPill value={primaryPage.pageRolloutPolicy.recommendedNextStep} kind="warn" />
+            </div>
+          ) : (
+            <span style={{ color: "#6b7280" }}>No page diagnostics available</span>
+          )
+        }
+      >
+        {primaryPage ? (
+          <>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+              <SummaryCard
+                label="pageStructuralConfidence"
+                value={formatScore(primaryPage.pageStructuralConfidence)}
+                kind={
+                  primaryPage.pageStructuralConfidence >= 0.72 ? "good" : primaryPage.pageStructuralConfidence >= 0.5 ? "warn" : "bad"
+                }
+              />
+              <SummaryCard
+                label="pageMigrationGate.state"
+                value={<StatusPill value={primaryPage.pageMigrationGate.state} />}
+                kind={statusKindFromString(primaryPage.pageMigrationGate.state)}
+              />
+              <SummaryCard
+                label="pageRolloutPolicy.state"
+                value={<StatusPill value={primaryPage.pageRolloutPolicy.state} />}
+                kind={statusKindFromString(primaryPage.pageRolloutPolicy.state)}
+              />
+              <SummaryCard
+                label="recommendedNextStep"
+                value={<StatusPill value={primaryPage.pageRolloutPolicy.recommendedNextStep} kind="warn" />}
+                kind={primaryPage.pageRolloutPolicy.recommendedNextStep === "CANARY_REVIEW" ? "good" : "warn"}
+              />
+            </div>
+            <KeyValueTable
+              rows={[
+                { k: "page.sourcePath", v: primaryPage.sourcePath },
+                { k: "page.title", v: primaryPage.title ?? "n/a" },
+                { k: "pageStructuralConfidence", v: formatScore(primaryPage.pageStructuralConfidence) },
+                { k: "pageMigrationGate.state", v: <StatusPill value={primaryPage.pageMigrationGate.state} /> },
+                { k: "pageMigrationGate.score", v: formatScore(primaryPage.pageMigrationGate.score) },
+                { k: "pageRolloutPolicy.state", v: <StatusPill value={primaryPage.pageRolloutPolicy.state} /> },
+                { k: "recommendedNextStep", v: <StatusPill value={primaryPage.pageRolloutPolicy.recommendedNextStep} kind="warn" /> },
+                { k: "requiresOperatorReview", v: <BooleanPill value={primaryPage.pageRolloutPolicy.requiresOperatorReview} /> },
+                { k: "allowsShadow", v: <BooleanPill value={primaryPage.pageRolloutPolicy.allowsShadow} /> },
+                { k: "allowsCanary", v: <BooleanPill value={primaryPage.pageRolloutPolicy.allowsCanary} /> },
+                { k: "allowsProductionConsideration", v: <BooleanPill value={primaryPage.pageRolloutPolicy.allowsProductionConsideration} /> },
+                { k: "weakSectionIds", v: <CodeList codes={primaryPage.weakSectionIds} /> },
+                { k: "structuralAnomalies", v: <CodeList codes={primaryPage.structuralAnomalies} /> },
+                { k: "pageMigrationGate.reasons", v: <ReasonList reasons={primaryPage.pageMigrationGate.reasons} /> },
+                { k: "pageRolloutPolicy.reasons", v: <ReasonList reasons={primaryPage.pageRolloutPolicy.reasons} /> },
+              ]}
+            />
+          </>
+        ) : (
+          <p style={{ margin: 0, color: "#6b7280" }}>No page diagnostics available from this run.</p>
+        )}
+      </Section>
+
+      <Section title="Weak Sections + Structural Anomalies">
+        {weakAndAnomalyRows.length === 0 ? (
+          <p style={{ margin: 0, color: "#6b7280" }}>No weak sections or structural anomalies were reported.</p>
+        ) : (
+          <div style={{ overflowX: "auto" }}>
+            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+              <thead>
+                <tr>
+                  <th style={{ textAlign: "left", padding: "6px 8px", borderBottom: "1px solid #e5e7eb" }}>kind</th>
+                  <th style={{ textAlign: "left", padding: "6px 8px", borderBottom: "1px solid #e5e7eb" }}>page</th>
+                  <th style={{ textAlign: "left", padding: "6px 8px", borderBottom: "1px solid #e5e7eb" }}>section</th>
+                  <th style={{ textAlign: "left", padding: "6px 8px", borderBottom: "1px solid #e5e7eb" }}>intent</th>
+                  <th style={{ textAlign: "left", padding: "6px 8px", borderBottom: "1px solid #e5e7eb" }}>confidence</th>
+                  <th style={{ textAlign: "left", padding: "6px 8px", borderBottom: "1px solid #e5e7eb" }}>confidence components</th>
+                  <th style={{ textAlign: "left", padding: "6px 8px", borderBottom: "1px solid #e5e7eb" }}>anomalies</th>
+                </tr>
+              </thead>
+              <tbody>
+                {weakAndAnomalyRows.map((row) => (
+                  <tr key={row.key}>
+                    <td style={{ padding: "6px 8px", borderTop: "1px solid #f3f4f6" }}>
+                      <StatusPill value={row.kind} kind={row.kind === "weak_section" ? "warn" : "bad"} />
+                    </td>
+                    <td style={{ padding: "6px 8px", borderTop: "1px solid #f3f4f6" }}>
+                      <code>{row.pagePath}</code>
+                    </td>
+                    <td style={{ padding: "6px 8px", borderTop: "1px solid #f3f4f6" }}>
+                      <code>{row.sectionId}</code>
+                    </td>
+                    <td style={{ padding: "6px 8px", borderTop: "1px solid #f3f4f6" }}>{row.intent}</td>
+                    <td style={{ padding: "6px 8px", borderTop: "1px solid #f3f4f6" }}>{row.structuralConfidence}</td>
+                    <td style={{ padding: "6px 8px", borderTop: "1px solid #f3f4f6", maxWidth: 360 }}>
+                      <code>{row.confidenceComponents}</code>
+                    </td>
+                    <td style={{ padding: "6px 8px", borderTop: "1px solid #f3f4f6" }}>{row.anomalies}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Section>
+
+      <Section
+        title="Explainability + Recommended Actions"
+        summary={<StatusPill value={sitePolicy.recommendedNextStep} kind={sitePolicy.recommendedNextStep.includes("NOT") ? "bad" : "warn"} />}
+      >
+        <KeyValueTable
+          rows={[
+            { k: "site.recommendedNextStep", v: <StatusPill value={sitePolicy.recommendedNextStep} kind="warn" /> },
+            {
+              k: "page.recommendedNextStep",
+              v: primaryPage ? <StatusPill value={primaryPage.pageRolloutPolicy.recommendedNextStep} kind="warn" /> : "n/a",
+            },
+            {
+              k: "pageMigrationGate.recommendedAction",
+              v: primaryPage ? <StatusPill value={primaryPage.pageMigrationGate.recommendedAction} kind="warn" /> : "n/a",
+            },
+            { k: "siteMigrationGate.recommendedAction", v: <StatusPill value={siteGate.recommendedAction} kind="warn" /> },
+            { k: "decisionReasons", v: <ReasonList reasons={explainabilityReasons} /> },
           ]}
         />
       </Section>

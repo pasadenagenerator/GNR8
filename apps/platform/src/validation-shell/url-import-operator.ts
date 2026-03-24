@@ -15,6 +15,8 @@ import {
 import { createImportManifest } from "../../gnr8/import/import-manifest";
 import type { JsonValue } from "../../gnr8/import/import-contract";
 import { importStaticSite } from "../../gnr8/import/runtime/import-static-site";
+import type { PageMigrationGateResult } from "../../gnr8/migration/quality-gates/page-quality-gate";
+import type { PageRolloutPolicyResult } from "../../gnr8/migration/policy/page-rollout-policy";
 
 import {
   importPublicSinglePageUrlToSnapshot,
@@ -28,6 +30,25 @@ export const URL_IMPORT_OPERATOR_EXECUTION_MODES: readonly ExecutionMode[] = ["s
 export type UrlImportOperatorError = {
   message: string;
   stack: string | null;
+};
+
+export type UrlImportOperatorPageReviewRecord = {
+  pageId: string;
+  sourcePath: string;
+  isRoot: boolean;
+  title: string | null;
+  pageStructuralConfidence: number;
+  weakSectionIds: string[];
+  structuralAnomalies: string[];
+  pageMigrationGate: PageMigrationGateResult;
+  pageRolloutPolicy: PageRolloutPolicyResult;
+  weakSectionDetails: Array<{
+    sectionId: string;
+    intent: string | null;
+    structuralConfidence: number | null;
+    confidenceComponents: Record<string, unknown> | null;
+    anomalies: string[];
+  }>;
 };
 
 export type UrlImportOperatorResponse =
@@ -55,6 +76,7 @@ export type UrlImportOperatorResponse =
         executionPlan: Awaited<ReturnType<typeof runLinearMigrationPhase1ApproveExecute>>["executionPlan"];
         executionResult: Awaited<ReturnType<typeof runLinearMigrationPhase1ApproveExecute>>["executionResult"];
         migrationRunReport: Awaited<ReturnType<typeof runLinearMigrationPhase1ApproveExecute>>["report"];
+        pageReview: UrlImportOperatorPageReviewRecord[];
         siteMigrationGate: SiteMigrationGateResult;
         siteRolloutPolicy: SiteRolloutPolicyResult;
       };
@@ -109,11 +131,45 @@ function inferPageSlug(path: string): string {
   return `/${trimmed}`;
 }
 
-function buildMigrationPolicyInputsFromImportOutput(input: {
-  importOutput: Awaited<ReturnType<typeof importStaticSite>>;
-}): {
+function round3(value: number): number {
+  if (!Number.isFinite(value)) return 0;
+  return Number(Math.min(1, Math.max(0, value)).toFixed(3));
+}
+
+function toWeakSectionDetails(page: ReturnType<typeof importHtmlToPage>): UrlImportOperatorPageReviewRecord["weakSectionDetails"] {
+  const weakIds = new Set((page.migrationDiagnostics?.weakSectionIds ?? []).filter((id): id is string => typeof id === "string" && id.trim().length > 0));
+  if (weakIds.size === 0) return [];
+
+  const output: UrlImportOperatorPageReviewRecord["weakSectionDetails"] = [];
+  for (const section of page.sections) {
+    if (!weakIds.has(section.id)) continue;
+
+    const raw = section.props?.layoutStructural;
+    const node = raw && typeof raw === "object" ? (raw as Record<string, unknown>) : null;
+    const intentRaw = typeof node?.intent === "string" ? node.intent.trim() : "";
+    const structuralConfidenceRaw = typeof node?.structuralConfidence === "number" ? node.structuralConfidence : null;
+    const confidenceComponentsRaw =
+      node?.confidenceComponents && typeof node.confidenceComponents === "object"
+        ? (node.confidenceComponents as Record<string, unknown>)
+        : null;
+    const anomaliesRaw = Array.isArray(node?.anomalies) ? node!.anomalies : [];
+
+    output.push({
+      sectionId: section.id,
+      intent: intentRaw.length > 0 ? intentRaw : null,
+      structuralConfidence: structuralConfidenceRaw === null ? null : round3(structuralConfidenceRaw),
+      confidenceComponents: confidenceComponentsRaw,
+      anomalies: [...new Set(anomaliesRaw.filter((value): value is string => typeof value === "string" && value.trim().length > 0))].sort(),
+    });
+  }
+
+  return output.sort((a, b) => a.sectionId.localeCompare(b.sectionId));
+}
+
+function buildMigrationPolicyInputsFromImportOutput(input: { importOutput: Awaited<ReturnType<typeof importStaticSite>> }): {
   pageGateResults: Parameters<typeof evaluateSiteMigrationGate>[0]["pageResults"];
   pagePolicyResults: SiteRolloutPolicyPageResult[];
+  pageReview: UrlImportOperatorPageReviewRecord[];
 } {
   const pageRecords = input.importOutput.rawDomSnapshot.documents
     .map((doc) => {
@@ -128,8 +184,14 @@ function buildMigrationPolicyInputsFromImportOutput(input: {
         pageId: page.id,
         sourcePath: doc.path,
         isRoot: doc.path === input.importOutput.documentMeta.source.entryHtmlPath,
+        title: page.title ?? null,
+        pageStructuralConfidence: round3(page.migrationDiagnostics?.pageStructuralConfidence ?? 0),
+        weakSectionIds: [...new Set((page.migrationDiagnostics?.weakSectionIds ?? []).filter((id): id is string => typeof id === "string"))].sort(),
+        structuralAnomalies: [...new Set((page.migrationDiagnostics?.structuralAnomalies ?? []).filter((v): v is string => typeof v === "string"))].sort(),
         gate: pageGate,
         score: pageGate.score,
+        pageRolloutPolicy: page.migrationDiagnostics!.pageRolloutPolicy,
+        weakSectionDetails: toWeakSectionDetails(page),
       };
     })
     .filter((value): value is NonNullable<typeof value> => value !== null);
@@ -150,6 +212,20 @@ function buildMigrationPolicyInputsFromImportOutput(input: {
         pageGateResult: record.gate,
       }),
     ),
+    pageReview: pageRecords
+      .map((record) => ({
+        pageId: record.pageId,
+        sourcePath: record.sourcePath,
+        isRoot: record.isRoot,
+        title: record.title,
+        pageStructuralConfidence: record.pageStructuralConfidence,
+        weakSectionIds: record.weakSectionIds,
+        structuralAnomalies: record.structuralAnomalies,
+        pageMigrationGate: record.gate,
+        pageRolloutPolicy: record.pageRolloutPolicy,
+        weakSectionDetails: record.weakSectionDetails,
+      }))
+      .sort((a, b) => a.sourcePath.localeCompare(b.sourcePath) || a.pageId.localeCompare(b.pageId)),
   };
 }
 
@@ -253,6 +329,7 @@ export async function runUrlImportOperatorFlow(
         executionPlan: phase1.executionPlan,
         executionResult: phase1.executionResult,
         migrationRunReport: phase1.report,
+        pageReview: migrationPolicyInputs.pageReview,
         siteMigrationGate,
         siteRolloutPolicy,
       },
