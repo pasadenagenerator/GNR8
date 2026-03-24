@@ -12,11 +12,16 @@ import {
   type SiteRolloutPolicyPageResult,
   type SiteRolloutPolicyResult,
 } from "../../gnr8/migration/policy/site-rollout-policy";
+import {
+  evaluateSiteRolloutEnforcementByStage,
+  type SiteEnforcementByStage,
+} from "../../gnr8/migration/enforcement/site-enforcement";
 import { createImportManifest } from "../../gnr8/import/import-manifest";
 import type { JsonValue } from "../../gnr8/import/import-contract";
 import { importStaticSite } from "../../gnr8/import/runtime/import-static-site";
 import type { PageMigrationGateResult } from "../../gnr8/migration/quality-gates/page-quality-gate";
 import type { PageRolloutPolicyResult } from "../../gnr8/migration/policy/page-rollout-policy";
+import type { PageEnforcementByStage } from "../../gnr8/migration/enforcement/page-enforcement";
 
 import {
   importPublicSinglePageUrlToSnapshot,
@@ -42,6 +47,7 @@ export type UrlImportOperatorPageReviewRecord = {
   structuralAnomalies: string[];
   pageMigrationGate: PageMigrationGateResult;
   pageRolloutPolicy: PageRolloutPolicyResult;
+  pageEnforcement: PageEnforcementByStage;
   weakSectionDetails: Array<{
     sectionId: string;
     intent: string | null;
@@ -79,6 +85,7 @@ export type UrlImportOperatorResponse =
         pageReview: UrlImportOperatorPageReviewRecord[];
         siteMigrationGate: SiteMigrationGateResult;
         siteRolloutPolicy: SiteRolloutPolicyResult;
+        siteEnforcement: SiteEnforcementByStage;
       };
       summary: {
         importStatus: ReturnType<typeof createImportManifest>["status"];
@@ -191,6 +198,7 @@ function buildMigrationPolicyInputsFromImportOutput(input: { importOutput: Await
         gate: pageGate,
         score: pageGate.score,
         pageRolloutPolicy: page.migrationDiagnostics!.pageRolloutPolicy,
+        pageEnforcement: page.migrationDiagnostics!.pageEnforcement,
         weakSectionDetails: toWeakSectionDetails(page),
       };
     })
@@ -223,6 +231,7 @@ function buildMigrationPolicyInputsFromImportOutput(input: { importOutput: Await
         structuralAnomalies: record.structuralAnomalies,
         pageMigrationGate: record.gate,
         pageRolloutPolicy: record.pageRolloutPolicy,
+        pageEnforcement: record.pageEnforcement,
         weakSectionDetails: record.weakSectionDetails,
       }))
       .sort((a, b) => a.sourcePath.localeCompare(b.sourcePath) || a.pageId.localeCompare(b.pageId)),
@@ -304,6 +313,10 @@ export async function runUrlImportOperatorFlow(
       siteGateResult: siteMigrationGate,
       pagePolicyResults: migrationPolicyInputs.pagePolicyResults,
     });
+    const siteEnforcement = evaluateSiteRolloutEnforcementByStage({
+      siteMigrationGate,
+      siteRolloutPolicy,
+    });
 
     return {
       kind: "url_import_operator_response_v1",
@@ -332,6 +345,7 @@ export async function runUrlImportOperatorFlow(
         pageReview: migrationPolicyInputs.pageReview,
         siteMigrationGate,
         siteRolloutPolicy,
+        siteEnforcement,
       },
       summary: {
         importStatus: importManifest.status,

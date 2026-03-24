@@ -7,6 +7,7 @@ import { buildLayoutGraphFromSnapshotHtml } from "@/gnr8/migration/layout-graph/
 import { computePageStructuralConfidence } from "@/gnr8/migration/layout-graph/page-confidence";
 import { evaluatePageMigrationGate, type PageGateIntent } from "@/gnr8/migration/quality-gates/page-quality-gate";
 import { evaluatePageRolloutPolicy } from "@/gnr8/migration/policy/page-rollout-policy";
+import { evaluatePageRolloutEnforcementByStage } from "@/gnr8/migration/enforcement/page-enforcement";
 import {
   buildLayoutToCanonicalBridge,
   type CanonicalLayoutBlockPlan,
@@ -136,6 +137,13 @@ export function importHtmlToPage(input: HtmlImportInput): Gnr8Page {
     sectionIntentConfidence: intentSignals.sectionIntentConfidence,
   });
   const pageRolloutPolicy = evaluatePageRolloutPolicy(pageMigrationGate);
+  const pageEnforcement = evaluatePageRolloutEnforcementByStage({
+    pageMigrationGate,
+    pageRolloutPolicy,
+    pageStructuralConfidence: pageStructural.score,
+    weakSectionIds: pageStructural.weakestSections,
+    structuralAnomalies: pageStructural.anomalySummary,
+  });
 
   return {
     id: randomUUID(),
@@ -148,6 +156,7 @@ export function importHtmlToPage(input: HtmlImportInput): Gnr8Page {
       structuralAnomalies: pageStructural.anomalySummary,
       pageMigrationGate,
       pageRolloutPolicy,
+      pageEnforcement,
     },
   };
 }
