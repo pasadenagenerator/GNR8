@@ -6,6 +6,12 @@ import {
   evaluateSiteMigrationGate,
   type SiteMigrationGateResult,
 } from "../../gnr8/migration/quality-gates/site-quality-gate";
+import {
+  evaluateSiteRolloutPolicy,
+  toSiteRolloutPolicyPageResult,
+  type SiteRolloutPolicyPageResult,
+  type SiteRolloutPolicyResult,
+} from "../../gnr8/migration/policy/site-rollout-policy";
 import { createImportManifest } from "../../gnr8/import/import-manifest";
 import type { JsonValue } from "../../gnr8/import/import-contract";
 import { importStaticSite } from "../../gnr8/import/runtime/import-static-site";
@@ -50,6 +56,7 @@ export type UrlImportOperatorResponse =
         executionResult: Awaited<ReturnType<typeof runLinearMigrationPhase1ApproveExecute>>["executionResult"];
         migrationRunReport: Awaited<ReturnType<typeof runLinearMigrationPhase1ApproveExecute>>["report"];
         siteMigrationGate: SiteMigrationGateResult;
+        siteRolloutPolicy: SiteRolloutPolicyResult;
       };
       summary: {
         importStatus: ReturnType<typeof createImportManifest>["status"];
@@ -102,8 +109,13 @@ function inferPageSlug(path: string): string {
   return `/${trimmed}`;
 }
 
-function buildSiteMigrationGateFromImportOutput(importOutput: Awaited<ReturnType<typeof importStaticSite>>): SiteMigrationGateResult {
-  const pages = importOutput.rawDomSnapshot.documents
+function buildMigrationPolicyInputsFromImportOutput(input: {
+  importOutput: Awaited<ReturnType<typeof importStaticSite>>;
+}): {
+  pageGateResults: Parameters<typeof evaluateSiteMigrationGate>[0]["pageResults"];
+  pagePolicyResults: SiteRolloutPolicyPageResult[];
+} {
+  const pageRecords = input.importOutput.rawDomSnapshot.documents
     .map((doc) => {
       const page = importHtmlToPage({
         slug: inferPageSlug(doc.path),
@@ -111,16 +123,34 @@ function buildSiteMigrationGateFromImportOutput(importOutput: Awaited<ReturnType
       });
       const pageGate = page.migrationDiagnostics?.pageMigrationGate;
       if (!pageGate) return null;
+
       return {
         pageId: page.id,
         sourcePath: doc.path,
-        isRoot: doc.path === importOutput.documentMeta.source.entryHtmlPath,
+        isRoot: doc.path === input.importOutput.documentMeta.source.entryHtmlPath,
         gate: pageGate,
+        score: pageGate.score,
       };
     })
     .filter((value): value is NonNullable<typeof value> => value !== null);
 
-  return evaluateSiteMigrationGate({ pageResults: pages });
+  return {
+    pageGateResults: pageRecords.map((record) => ({
+      pageId: record.pageId,
+      sourcePath: record.sourcePath,
+      isRoot: record.isRoot,
+      gate: record.gate,
+    })),
+    pagePolicyResults: pageRecords.map((record) =>
+      toSiteRolloutPolicyPageResult({
+        pageId: record.pageId,
+        sourcePath: record.sourcePath,
+        isRoot: record.isRoot,
+        score: record.score,
+        pageGateResult: record.gate,
+      }),
+    ),
+  };
 }
 
 export async function runUrlImportOperatorFlow(
@@ -192,7 +222,12 @@ export async function runUrlImportOperatorFlow(
       ...phase1.report.diagnostics.blocking.codes,
       ...phase1.pipeline.diagnostics.filter((d) => d.severity === "fatal" || d.severity === "error").map((d) => d.code),
     ]);
-    const siteMigrationGate = buildSiteMigrationGateFromImportOutput(importOutput);
+    const migrationPolicyInputs = buildMigrationPolicyInputsFromImportOutput({ importOutput });
+    const siteMigrationGate = evaluateSiteMigrationGate({ pageResults: migrationPolicyInputs.pageGateResults });
+    const siteRolloutPolicy = evaluateSiteRolloutPolicy({
+      siteGateResult: siteMigrationGate,
+      pagePolicyResults: migrationPolicyInputs.pagePolicyResults,
+    });
 
     return {
       kind: "url_import_operator_response_v1",
@@ -219,6 +254,7 @@ export async function runUrlImportOperatorFlow(
         executionResult: phase1.executionResult,
         migrationRunReport: phase1.report,
         siteMigrationGate,
+        siteRolloutPolicy,
       },
       summary: {
         importStatus: importManifest.status,

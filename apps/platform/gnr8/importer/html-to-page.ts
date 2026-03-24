@@ -6,6 +6,7 @@ import { detectSectionFromHtmlBlock, tidyTitleFromHtml } from "@/gnr8/importer/h
 import { buildLayoutGraphFromSnapshotHtml } from "@/gnr8/migration/layout-graph/layout-graph-builder";
 import { computePageStructuralConfidence } from "@/gnr8/migration/layout-graph/page-confidence";
 import { evaluatePageMigrationGate, type PageGateIntent } from "@/gnr8/migration/quality-gates/page-quality-gate";
+import { evaluatePageRolloutPolicy } from "@/gnr8/migration/policy/page-rollout-policy";
 import {
   buildLayoutToCanonicalBridge,
   type CanonicalLayoutBlockPlan,
@@ -134,6 +135,7 @@ export function importHtmlToPage(input: HtmlImportInput): Gnr8Page {
     sectionIntents: intentSignals.sectionIntents,
     sectionIntentConfidence: intentSignals.sectionIntentConfidence,
   });
+  const pageRolloutPolicy = evaluatePageRolloutPolicy(pageMigrationGate);
 
   return {
     id: randomUUID(),
@@ -145,6 +147,7 @@ export function importHtmlToPage(input: HtmlImportInput): Gnr8Page {
       weakSectionIds: pageStructural.weakestSections,
       structuralAnomalies: pageStructural.anomalySummary,
       pageMigrationGate,
+      pageRolloutPolicy,
     },
   };
 }
