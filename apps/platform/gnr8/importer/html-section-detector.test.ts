@@ -46,3 +46,34 @@ test("logo cloud detector skips text-heavy image galleries", () => {
   const section = detectSectionFromHtmlBlock(block);
   assert.notEqual(section.type, "logo.cloud");
 });
+
+test("layout hint prevents nav block from being classified as hero", () => {
+  const block = [
+    "<div class=\"menu\">",
+    "  <h1>Menu</h1>",
+    "  <a href=\"/\">Home</a>",
+    "  <a href=\"/about\">About</a>",
+    "  <a href=\"/contact\">Contact</a>",
+    "</div>",
+  ].join("\n");
+
+  const section = detectSectionFromHtmlBlock(block, {
+    layoutHint: {
+      id: "hint-nav",
+      type: "nav",
+      depth: 1,
+      domIndexStart: 0,
+      domIndexEnd: 2,
+      signals: {
+        textDensity: 12,
+        imageDensity: 0,
+        linkDensity: 0.5,
+        headingPresence: true,
+        sectionBreakConfidence: 0.88,
+        visualClusterConfidence: 0.1,
+      },
+    },
+  });
+
+  assert.equal(section.type, "navbar.basic");
+});

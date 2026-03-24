@@ -13,6 +13,7 @@ import {
 } from "@/gnr8/importer/html-utils";
 
 import type { Gnr8Section, Gnr8SectionProps } from "@/gnr8/types/section";
+import type { LayoutNodeHint } from "@/gnr8/migration/layout-graph/layout-graph-types";
 import { randomUUID } from "crypto";
 
 const PRICE_TEXT_RE =
@@ -180,6 +181,10 @@ function detectHero(blockHtml: string): Gnr8Section | null {
     ...(sub ? { subheadline: sub } : {}),
   });
 }
+
+type DetectSectionFromHtmlBlockOptions = {
+  layoutHint?: LayoutNodeHint | null;
+};
 
 function extractFirstPriceText(html: string): string | undefined {
   const txt = textFromHtml(html);
@@ -353,17 +358,28 @@ function detectCtaSimple(blockHtml: string): Gnr8Section | null {
   });
 }
 
-export function detectSectionFromHtmlBlock(blockHtml: string): Gnr8Section {
+export function detectSectionFromHtmlBlock(blockHtml: string, options?: DetectSectionFromHtmlBlockOptions): Gnr8Section {
   const html = blockHtml.trim();
   if (!html) return makeSection("legacy.html", { html: "" });
 
+  const hintType = options?.layoutHint?.type ?? null;
+
   const navbar = detectNavbarBasic(html);
   if (navbar) return navbar;
+  if (hintType === "nav") {
+    const links = extractAllAnchorLinks(html, 30);
+    if (links.length >= 2) return makeSection("navbar.basic", { links });
+  }
 
   const footer = detectFooterBasic(html);
   if (footer) return footer;
+  if (hintType === "footer" || hintType === "legal") {
+    const links = extractAllAnchorLinks(html, 40);
+    if (links.length > 0) return makeSection("footer.basic", { links });
+  }
 
-  const hero = detectHero(html);
+  const heroEligibleByLayoutHint = hintType === null || hintType === "hero" || hintType === "section" || hintType === "unknown";
+  const hero = heroEligibleByLayoutHint ? detectHero(html) : null;
   if (hero) return hero;
 
   const pricing = detectPricingBasic(html);
