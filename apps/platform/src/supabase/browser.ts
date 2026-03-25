@@ -1,27 +1,11 @@
 // apps/platform/src/supabase/browser.ts
 import { createBrowserClient } from '@supabase/ssr'
 import type { SupabaseClient } from '@supabase/supabase-js'
+import { getSharedCookieDomainForHost } from '@gnr8/builder-only/builder-origin'
 
 function getCookieDomainForCurrentHost(): string | undefined {
   if (typeof window === 'undefined') return undefined
-
-  const host = window.location.hostname
-
-  const isLocal =
-    host === 'localhost' ||
-    host === '127.0.0.1' ||
-    host.endsWith('.localhost')
-
-  const isPasadena =
-    host === 'pasadenagenerator.com' ||
-    host.endsWith('.pasadenagenerator.com')
-
-  // Lokalno: brez domain (host-only)
-  // Ne-pasadena host: brez domain
-  if (isLocal || !isPasadena) return undefined
-
-  // Prod: deli med app., builder., ...
-  return '.pasadenagenerator.com'
+  return getSharedCookieDomainForHost(window.location.hostname)
 }
 
 let _client: SupabaseClient | null = null

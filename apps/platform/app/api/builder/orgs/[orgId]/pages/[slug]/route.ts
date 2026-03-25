@@ -1,5 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
-import { Pool } from "pg";
+import {
+  getBuilderPool,
+  requireBuilderMembership,
+  requireInternalBuilderRequest,
+} from "@gnr8/builder-only/builder-api-helpers";
+
+export const BUILDER_API_ONLY = true;
 
 type PageRow = {
   id: string;
@@ -10,55 +16,6 @@ type PageRow = {
   created_at: string;
   updated_at: string;
 };
-
-let pool: Pool | null = null;
-
-function getPool(): Pool {
-  if (pool) return pool;
-
-  const cs = process.env.DATABASE_URL;
-  if (!cs) throw new Error("DATABASE_URL is not set");
-
-  pool = new Pool({
-    connectionString: cs,
-    ssl: { rejectUnauthorized: false },
-  });
-
-  return pool;
-}
-
-function requireInternal(req: NextRequest): { actorUserId: string } {
-  const key = req.headers.get("x-gnr8-internal-key") ?? "";
-  const expected = process.env.BUILDER_INTERNAL_API_KEY ?? "";
-
-  if (!expected) throw new Error("BUILDER_INTERNAL_API_KEY is not set");
-  if (!key || key !== expected) throw new Error("Not authenticated (invalid internal key)");
-
-  const actorUserId = (req.headers.get("x-actor-user-id") ?? "").trim();
-  if (!actorUserId) throw new Error("Missing x-actor-user-id");
-
-  return { actorUserId };
-}
-
-async function requireMembership(orgId: string, actorUserId: string) {
-  const client = await getPool().connect();
-  try {
-    const res = await client.query(
-      `
-      select 1
-      from public.memberships
-      where org_id = $1::uuid
-        and user_id = $2::uuid
-      limit 1
-      `,
-      [orgId, actorUserId],
-    );
-
-    return !!res.rows[0];
-  } finally {
-    client.release();
-  }
-}
 
 export async function GET(
   req: NextRequest,
@@ -73,13 +30,17 @@ export async function GET(
       return NextResponse.json({ error: "orgId is required" }, { status: 400 });
     }
 
-    const { actorUserId } = requireInternal(req);
-    const ok = await requireMembership(org, actorUserId);
+    const { actorUserId } = requireInternalBuilderRequest(req);
+    const ok = await requireBuilderMembership({
+      orgId: org,
+      actorUserId,
+      poolMode: "insecure_ssl",
+    });
     if (!ok) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    const client = await getPool().connect();
+    const client = await getBuilderPool("insecure_ssl").connect();
     try {
       const res = await client.query<PageRow>(
         `

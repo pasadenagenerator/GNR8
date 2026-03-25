@@ -1,6 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 
+import { assertBuilderOnlyContext } from "@/gnr8/builder-only/builder-boundary-guard";
 import { importHtmlToPage } from "@/gnr8/importer/html-to-page";
 import { buildDeterministicArtifactBundle } from "@/gnr8/runtime/artifact-builder";
 import { deterministicId } from "@/gnr8/runtime/deterministic";
@@ -27,6 +28,8 @@ import type { Gnr8Page } from "@/gnr8/types/page";
 import { importPublicSinglePageUrlToSnapshot, type UrlSinglePageImportSnapshot } from "@/gnr8/validation/runtime/url-single-page-import";
 
 import { MIGRATION_STAGES, type MigrationJob, type MigrationStage, type MigrationStageResult } from "@/gnr8/migration-factory/migration-job-types";
+
+assertBuilderOnlyContext();
 
 export type MigrationStageExecutorContext = {
   now: () => string;

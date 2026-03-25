@@ -1,7 +1,9 @@
-// apps/platform/src/pages/public-pages.ts
+import "server-only";
 
-import 'server-only'
 import { getSuperadminPool } from "@/src/superadmin/db";
+import { registerBuilderOnlyModule } from "@gnr8/builder-only/builder-boundary-guard";
+
+registerBuilderOnlyModule(import.meta.url);
 
 type PublicPageRow = {
   id: string;
@@ -30,12 +32,10 @@ export async function getPublicPageByOrgAndSlug(input: {
 }): Promise<PublicPage | null> {
   const orgId = String(input.orgId ?? "").trim();
   const slug = String(input.slug ?? "").trim() || "/";
-
   if (!orgId) return null;
 
   const pool = getSuperadminPool();
   const client = await pool.connect();
-
   try {
     const res = await client.query<PublicPageRow>(
       `
@@ -54,10 +54,8 @@ export async function getPublicPageByOrgAndSlug(input: {
       `,
       [orgId, slug],
     );
-
     const row = res.rows[0];
     if (!row) return null;
-
     return {
       id: row.id,
       orgId: row.org_id,

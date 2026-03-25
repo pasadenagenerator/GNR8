@@ -2,6 +2,7 @@
 
 import { cookies, headers } from 'next/headers'
 import { createServerClient, type CookieOptions } from '@supabase/ssr'
+import { getSharedCookieDomainForHost } from '@gnr8/builder-only/builder-origin'
 
 type CookieToSet = {
   name: string
@@ -20,25 +21,12 @@ async function getHost(): Promise<string> {
 }
 
 function withSharedDomain(options: CookieOptions, host: string): CookieOptions {
-  // Shared cookie domain samo na pravem apex domainu,
-  // da auth piškotki delijo app.* in builder.*
-  // Ne nastavljaj domain za localhost ali *.vercel.app
-  const normalizedHost = (host.split(':')[0] ?? '').trim()
-
-  const isLocal =
-    normalizedHost === 'localhost' ||
-    normalizedHost === '127.0.0.1' ||
-    normalizedHost.endsWith('.localhost')
-
-  const isPasadena =
-    normalizedHost === 'pasadenagenerator.com' ||
-    normalizedHost.endsWith('.pasadenagenerator.com')
-
-  if (isLocal || !isPasadena) return options
+  const domain = getSharedCookieDomainForHost(host)
+  if (!domain) return options
 
   return {
     ...options,
-    domain: '.pasadenagenerator.com',
+    domain,
   }
 }
 

@@ -17,7 +17,9 @@
     // KLJUČNI POPRAVEK
     "baseUrl": ".",
     "paths": {
-      "@/*": ["./*"]
+      "@/*": ["./*"],
+      "@gnr8/builder-only/*": ["gnr8/builder-only/*"],
+      "@gnr8/builder-only/": ["gnr8/builder-only/"]
     }
   },
   "include": [

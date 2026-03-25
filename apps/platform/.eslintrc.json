@@ -1,0 +1,22 @@
+{
+  "extends": ["next/core-web-vitals"],
+  "overrides": [
+    {
+      "files": [
+        "gnr8/runtime/**/*.{ts,tsx,js,jsx,mjs,cjs}",
+        "gnr8/migration-factory/**/*.{ts,tsx,js,jsx,mjs,cjs}",
+        "gnr8/migration/**/*.{ts,tsx,js,jsx,mjs,cjs}",
+        "gnr8/canonical/**/*.{ts,tsx,js,jsx,mjs,cjs}",
+        "gnr8/layout-graph/**/*.{ts,tsx,js,jsx,mjs,cjs}"
+      ],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": ["@gnr8/builder-only/*"]
+          }
+        ]
+      }
+    }
+  ]
+}
