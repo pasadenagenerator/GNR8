@@ -1,3 +1,10 @@
+⚠️ Founder Philosophy Document  
+This is NOT the authoritative runtime specification.
+
+Authoritative runtime architecture lives in:
+
+docs/architecture/
+
 GNR8 V1 Runtime Architecture Spec
 Founder-Level Core Specification
 

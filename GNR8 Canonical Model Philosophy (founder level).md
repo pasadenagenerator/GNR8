@@ -1,3 +1,12 @@
+⚠️ Founder Philosophy Document
+This is NOT the authoritative canonical/model specification.
+
+Authoritative canonical/model architecture lives in:
+
+docs/architecture/
+
+This document exists only as founder-level conceptual guidance.
+
 GNR8 Structured Site Model Spec (founder level)
 
 1. Purpose
