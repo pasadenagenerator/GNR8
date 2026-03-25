@@ -1,3 +1,4 @@
+import Link from "next/link";
 import type { CSSProperties, ReactNode } from "react";
 
 import {
@@ -136,9 +137,9 @@ function FixtureRow(props: { row: ValidationControlTowerRow }) {
         <Cell mono>{row.renderedPageCount ?? "n/a"}</Cell>
         <Cell>{row.kind === "failure" ? <span style={{ color: "#6b7280", fontSize: 12 }}>n/a</span> : <CodeList codes={row.keyDiagnosticCodes} />}</Cell>
         <Cell>
-          <a href={row.fixtureRoute} style={{ color: "#1d4ed8" }}>
+          <Link href={row.fixtureRoute} style={{ color: "#1d4ed8" }}>
             fixture page
-          </a>
+          </Link>
         </Cell>
         <Cell>
           <a href={row.fixtureApiRoute} style={{ color: "#1d4ed8" }}>
@@ -175,15 +176,15 @@ export default async function ValidationComparisonIndexPage() {
       </p>
       <p style={{ margin: "8px 0 0 0", color: "#4b5563" }}>
         Beta operator export flow:{" "}
-        <a href="/validation/beta-export-operator" style={{ color: "#1d4ed8" }}>
+        <Link href="/validation/beta-export-operator" style={{ color: "#1d4ed8" }}>
           /validation/beta-export-operator
-        </a>
+        </Link>
       </p>
       <p style={{ margin: "8px 0 0 0", color: "#4b5563" }}>
         URL import operator flow:{" "}
-        <a href="/validation/url-import-operator" style={{ color: "#1d4ed8" }}>
+        <Link href="/validation/url-import-operator" style={{ color: "#1d4ed8" }}>
           /validation/url-import-operator
-        </a>
+        </Link>
       </p>
 
       <section style={{ border: "1px solid #dbe3ea", borderRadius: 10, padding: 14, marginTop: 12, background: "#ffffff" }}>

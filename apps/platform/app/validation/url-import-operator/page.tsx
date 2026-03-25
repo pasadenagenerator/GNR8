@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 import { UrlImportOperatorConsole } from "@/app/validation/url-import-operator/_components/url-import-operator-console";
 
 export const runtime = "nodejs";
@@ -22,13 +24,13 @@ export default function UrlImportOperatorPage() {
       </p>
       <p style={{ margin: "8px 0 0 0", color: "#4b5563" }}>
         Validation control tower:{" "}
-        <a href="/validation" style={{ color: "#1d4ed8" }}>
+        <Link href="/validation" style={{ color: "#1d4ed8" }}>
           /validation
-        </a>{" "}
+        </Link>{" "}
         | Fixture operator flow:{" "}
-        <a href="/validation/beta-export-operator" style={{ color: "#1d4ed8" }}>
+        <Link href="/validation/beta-export-operator" style={{ color: "#1d4ed8" }}>
           /validation/beta-export-operator
-        </a>
+        </Link>
       </p>
 
       <UrlImportOperatorConsole />

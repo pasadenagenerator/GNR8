@@ -1,3 +1,4 @@
+import Link from "next/link";
 import type { CSSProperties, ReactNode } from "react";
 
 import type { ExecutionMode } from "@/gnr8/migration/execution-plan-model";
@@ -160,7 +161,7 @@ function ResultPanel(props: { response: BetaExportOperatorResponse }) {
           rows={[
             { k: "fixtureId", v: props.response.fixtureId },
             { k: "executionMode", v: props.response.executionMode },
-            { k: "fixtureRoute", v: <a href={props.response.fixtureRoute}>{props.response.fixtureRoute}</a> },
+            { k: "fixtureRoute", v: <Link href={props.response.fixtureRoute}>{props.response.fixtureRoute}</Link> },
             { k: "fixtureApiRoute", v: <a href={props.response.fixtureApiRoute}>{props.response.fixtureApiRoute}</a> },
             { k: "failure.message", v: props.response.error.message },
             { k: "failure.stack", v: props.response.error.stack ?? "n/a" },
@@ -212,7 +213,7 @@ function ResultPanel(props: { response: BetaExportOperatorResponse }) {
             { k: "execution.planEligibility", v: <StatusPill value={summary.executionPlanEligibility} /> },
             { k: "execution.status", v: <StatusPill value={summary.executionStatus} /> },
             { k: "fixture.sourceRootPath", v: props.response.fixtureRootDirAbs },
-            { k: "fixture.detailPage", v: <a href={props.response.fixtureRoute}>{props.response.fixtureRoute}</a> },
+            { k: "fixture.detailPage", v: <Link href={props.response.fixtureRoute}>{props.response.fixtureRoute}</Link> },
             { k: "fixture.validationApi", v: <a href={props.response.fixtureApiRoute}>{props.response.fixtureApiRoute}</a> },
             { k: "warningCodes", v: <CodeList codes={warningCodes} /> },
             { k: "blockingReasonCodes", v: <CodeList codes={blockingReasonCodes} /> },
@@ -299,9 +300,9 @@ export default async function BetaExportOperatorPage(props: { searchParams: Prom
       </p>
       <p style={{ margin: "8px 0 0 0", color: "#4b5563" }}>
         URL import operator flow:{" "}
-        <a href="/validation/url-import-operator" style={{ color: "#1d4ed8" }}>
+        <Link href="/validation/url-import-operator" style={{ color: "#1d4ed8" }}>
           /validation/url-import-operator
-        </a>
+        </Link>
       </p>
 
       <Section title="Run Export">
