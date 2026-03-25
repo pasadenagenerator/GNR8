@@ -8,22 +8,25 @@ import {
 
 export const MIGRATION_STAGE_ORDER: MigrationStage[] = [...MIGRATION_STAGES];
 
+function createInitialStageRecord(stage: MigrationStage): MigrationStageStatusRecord {
+  return {
+    stage,
+    state: "NOT_STARTED",
+    startedAt: null,
+    endedAt: null,
+    attempts: 0,
+    diagnostics: [],
+    outputRefs: {},
+    error: null,
+  };
+}
+
 export function createInitialStageStates(): Record<MigrationStage, MigrationStageStatusRecord> {
-  return Object.fromEntries(
-    MIGRATION_STAGE_ORDER.map((stage) => [
-      stage,
-      {
-        stage,
-        state: "NOT_STARTED",
-        startedAt: null,
-        endedAt: null,
-        attempts: 0,
-        diagnostics: [],
-        outputRefs: {},
-        error: null,
-      },
-    ]),
-  ) as Record<MigrationStage, MigrationStageStatusRecord>;
+  const states = {} as Record<MigrationStage, MigrationStageStatusRecord>;
+  for (const stage of MIGRATION_STAGE_ORDER) {
+    states[stage] = createInitialStageRecord(stage);
+  }
+  return states;
 }
 
 export function getStageIndex(stage: MigrationStage): number {
