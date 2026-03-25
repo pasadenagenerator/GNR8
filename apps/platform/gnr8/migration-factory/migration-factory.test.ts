@@ -34,8 +34,25 @@ function fixtureLandingHtml(): string {
   ].join("\n");
 }
 
-function createFetchFixture(options?: { failAll?: boolean }): (input: string | URL | Request, init?: RequestInit) => Promise<Response> {
-  const html = fixtureLandingHtml();
+function fixtureWeakLandingHtml(): string {
+  return [
+    "<!doctype html>",
+    "<html>",
+    "  <head><title>Weak Factory Snapshot</title></head>",
+    "  <body>",
+    "    <main>",
+    "      <section><h1>Only one section</h1><p>Weak structural fixture without header/nav/footer.</p></section>",
+    "    </main>",
+    "  </body>",
+    "</html>",
+  ].join("\n");
+}
+
+function createFetchFixture(options?: {
+  failAll?: boolean;
+  fixtureKind?: "strong" | "weak";
+}): (input: string | URL | Request, init?: RequestInit) => Promise<Response> {
+  const html = options?.fixtureKind === "weak" ? fixtureWeakLandingHtml() : fixtureLandingHtml();
   const imageBytes = Uint8Array.from([137, 80, 78, 71, 13, 10, 26, 10]);
 
   return async (input): Promise<Response> => {
@@ -111,6 +128,34 @@ test("migration factory happy path completes all stages", async () => {
   const layoutDiagnostics = persisted?.stageStates.LAYOUT_GRAPH.diagnostics ?? [];
   assert.equal(layoutDiagnostics[0]?.code, "LAYOUT_GRAPH_BUILT");
   assert.ok(typeof layoutDiagnostics[0]?.details?.rootNodeId === "string");
+
+  const canonicalRefs = persisted?.stageStates.CANONICAL.outputRefs ?? {};
+  assert.ok(canonicalRefs.canonicalRef);
+  assert.ok(canonicalRefs.canonicalPageRef);
+  assert.ok(canonicalRefs.canonicalPageId);
+  assert.ok(canonicalRefs.primaryPath);
+  assert.ok(Number(canonicalRefs.sectionCount) > 0);
+  assert.ok(Number(canonicalRefs.pageStructuralConfidence) >= 0);
+  assert.ok(canonicalRefs.migrationDiagnosticsRef);
+
+  const canonicalDiagnostics = persisted?.stageStates.CANONICAL.diagnostics ?? [];
+  assert.equal(canonicalDiagnostics[0]?.code, "CANONICAL_BUILT");
+  assert.ok(typeof canonicalDiagnostics[0]?.details?.sectionCount === "number");
+  assert.ok(typeof canonicalDiagnostics[0]?.details?.canonicalIntentSummary === "object");
+
+  const qualityGateRefs = persisted?.stageStates.QUALITY_GATE.outputRefs ?? {};
+  assert.ok(qualityGateRefs.qualityGateRef);
+  assert.ok(qualityGateRefs.governanceSummaryRef);
+  assert.ok(qualityGateRefs.pageMigrationGateState);
+  assert.ok(qualityGateRefs.siteMigrationGateState);
+  assert.ok(qualityGateRefs.pageRolloutPolicyState);
+  assert.ok(qualityGateRefs.pageEnforcementShadowDecision);
+  assert.notEqual(qualityGateRefs.pageMigrationGateState, "");
+
+  const qualityDiagnostics = persisted?.stageStates.QUALITY_GATE.diagnostics ?? [];
+  assert.equal(qualityDiagnostics[0]?.code, "QUALITY_GATE_EVALUATED");
+  assert.ok(typeof qualityDiagnostics[0]?.details?.pageStructuralConfidence === "number");
+  assert.ok(typeof qualityDiagnostics[0]?.details?.recommendedNextStep === "string");
 });
 
 test("migration factory failure path stops on failed stage", async () => {
@@ -256,6 +301,41 @@ test("deterministic execution order is fixed across runs", async () => {
     Object.keys(report1.outputs).sort((a, b) => a.localeCompare(b)),
     Object.keys(report2.outputs).sort((a, b) => a.localeCompare(b)),
   );
+  assert.ok(Object.keys(report1.outputs).includes("CANONICAL.canonicalPageRef"));
+  assert.ok(Object.keys(report1.outputs).includes("QUALITY_GATE.pageMigrationGateState"));
+  assert.ok(Object.keys(report1.outputs).includes("QUALITY_GATE.pageEnforcementShadowDecision"));
+});
+
+test("quality gate reflects degraded input instead of fake strong success", async () => {
+  const now = createDeterministicClock();
+  const store = new InMemoryMigrationJobStore({ now });
+  const snapshotRootDirAbs = path.resolve(os.tmpdir(), "gnr8-mf-tests", "quality-weak");
+  const stageRunner = new DefaultMigrationStageRunner({
+    snapshotImportOptions: {
+      snapshotRootDirAbs,
+      fetchImpl: createFetchFixture({ fixtureKind: "weak" }),
+    },
+  });
+
+  const factory = new MigrationFactory({ store, now, stageRunner });
+  const job = await factory.startMigrationJob({
+    jobId: "job-quality-weak",
+    siteId: "site-1",
+    sourceUrl: "https://example.com",
+  });
+  const report = await factory.runMigrationJob(job.jobId);
+  const persisted = await store.getJob(job.jobId);
+
+  assert.equal(report.finalState, "COMPLETED");
+  assert.ok(persisted);
+  assert.equal(persisted?.stageStates.QUALITY_GATE.state, "SUCCEEDED");
+  assert.notEqual(persisted?.stageStates.QUALITY_GATE.outputRefs.pageMigrationGateState, "SHADOW_READY");
+  assert.equal(persisted?.stageStates.QUALITY_GATE.outputRefs.pageMigrationGateState, "BROKEN");
+
+  const details = persisted?.stageStates.QUALITY_GATE.diagnostics[0]?.details ?? {};
+  assert.ok(typeof details.pageStructuralConfidence === "number");
+  assert.ok(typeof details.weakSectionCount === "number");
+  assert.ok(typeof details.anomalyCount === "number");
 });
 
 test("snapshot stage failure marks job failed and blocks later stages", async () => {
