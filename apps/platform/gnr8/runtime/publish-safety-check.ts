@@ -4,6 +4,7 @@ export type PublishSafetyIssueCode =
   | "ACTIVE_ARTIFACT_MISSING"
   | "ROOT_PATH_MISSING"
   | "MANIFEST_INCONSISTENT"
+  | "GOVERNANCE_MISSING"
   | "ACTIVE_POINTER_MISSING"
   | "ACTIVE_POINTER_MISMATCH";
 
@@ -32,6 +33,30 @@ function readManifestPaths(input: Record<string, unknown> | null | undefined): s
   const paths = input["paths"];
   if (!Array.isArray(paths)) return [];
   return paths.filter((value): value is string => typeof value === "string");
+}
+
+function hasNonEmptyStringArray(value: unknown): value is string[] {
+  return Array.isArray(value) && value.length > 0 && value.every((item) => typeof item === "string" && item.trim().length > 0);
+}
+
+function hasNonEmptyString(value: unknown): value is string {
+  return typeof value === "string" && value.trim().length > 0;
+}
+
+function hasRequiredGovernance(governance: RuntimeArtifact["artifactGovernance"] | null | undefined): boolean {
+  if (!governance) return false;
+  return (
+    hasNonEmptyStringArray(governance.pageGateState) &&
+    hasNonEmptyStringArray(governance.pageRolloutPolicyState) &&
+    hasNonEmptyStringArray(governance.pageEnforcementState.shadow) &&
+    hasNonEmptyStringArray(governance.pageEnforcementState.canary) &&
+    hasNonEmptyStringArray(governance.pageEnforcementState.production) &&
+    hasNonEmptyString(governance.siteGateState) &&
+    hasNonEmptyString(governance.siteRolloutPolicyState) &&
+    hasNonEmptyString(governance.siteEnforcementState.shadow) &&
+    hasNonEmptyString(governance.siteEnforcementState.canary) &&
+    hasNonEmptyString(governance.siteEnforcementState.production)
+  );
 }
 
 export function evaluatePublishSafety(input: {
@@ -78,6 +103,13 @@ export function evaluatePublishSafety(input: {
       issues.push({
         code: "MANIFEST_INCONSISTENT",
         message: "Artifact metadata/manifest is inconsistent with published site and version binding.",
+      });
+    }
+
+    if (!hasRequiredGovernance(artifact.artifactGovernance)) {
+      issues.push({
+        code: "GOVERNANCE_MISSING",
+        message: "Artifact governance metadata is missing/empty for publish lineage.",
       });
     }
   }

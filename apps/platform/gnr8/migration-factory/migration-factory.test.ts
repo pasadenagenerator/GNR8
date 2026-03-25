@@ -709,6 +709,100 @@ test("shadow bind ready fails explicitly when governance denies shadow eligibili
   assert.equal(persisted.stageStates.SHADOW_BIND_READY.error?.code, "SHADOW_BIND_READY_ENFORCEMENT_DENIED");
 });
 
+test("shadow bind ready fails explicitly when artifact governance is empty", async () => {
+  const now = createDeterministicClock();
+  const store = new InMemoryMigrationJobStore({ now });
+  const snapshotRootDirAbs = path.resolve(os.tmpdir(), "gnr8-mf-tests", "shadow-empty-governance");
+  const stageRunner = new DefaultMigrationStageRunner({
+    snapshotImportOptions: {
+      snapshotRootDirAbs,
+      fetchImpl: createFetchFixture(),
+    },
+    executors: {
+      ARTIFACT_BUILD: async (_job, stage, context) => {
+        const result = await createSnapshotStageRunner({ snapshotRootDirAbs }).runStage(_job, stage, context);
+        if (result.status !== "SUCCEEDED") return result;
+
+        const artifactRef = result.outputRefs.artifactRef;
+        assert.ok(artifactRef);
+        const raw = await fs.readFile(artifactRef, "utf8");
+        const artifact = JSON.parse(raw) as {
+          artifactGovernance?: Record<string, unknown>;
+        };
+        artifact.artifactGovernance = {
+          pageGateState: [],
+          pageRolloutPolicyState: [],
+          pageEnforcementState: { shadow: [], canary: [], production: [] },
+          siteGateState: "",
+          siteRolloutPolicyState: "",
+          siteEnforcementState: { shadow: "", canary: "", production: "" },
+          publishStage: "shadow",
+        };
+        await fs.writeFile(artifactRef, `${JSON.stringify(artifact, null, 2)}\n`, "utf8");
+        return result;
+      },
+    },
+  });
+
+  const factory = new MigrationFactory({ store, now, stageRunner });
+  const job = await factory.startMigrationJob({
+    jobId: "job-shadow-empty-governance",
+    siteId: "site-1",
+    sourceUrl: "https://example.com",
+  });
+  const report = await factory.runMigrationJob(job.jobId);
+  const persisted = await store.getJob(job.jobId);
+  assert.ok(persisted);
+
+  assert.equal(report.finalState, "FAILED");
+  assert.equal(report.failedStage, "SHADOW_BIND_READY");
+  assert.equal(persisted.stageStates.SHADOW_BIND_READY.error?.code, "PUBLISH_GOVERNANCE_MISSING");
+});
+
+test("shadow bind ready fails explicitly when artifact lineage mismatches siteVersion", async () => {
+  const now = createDeterministicClock();
+  const store = new InMemoryMigrationJobStore({ now });
+  const snapshotRootDirAbs = path.resolve(os.tmpdir(), "gnr8-mf-tests", "shadow-lineage-mismatch");
+  const stageRunner = new DefaultMigrationStageRunner({
+    snapshotImportOptions: {
+      snapshotRootDirAbs,
+      fetchImpl: createFetchFixture(),
+    },
+    executors: {
+      ARTIFACT_BUILD: async (_job, stage, context) => {
+        const result = await createSnapshotStageRunner({ snapshotRootDirAbs }).runStage(_job, stage, context);
+        if (result.status !== "SUCCEEDED") return result;
+
+        const artifactRef = result.outputRefs.artifactRef;
+        assert.ok(artifactRef);
+        const raw = await fs.readFile(artifactRef, "utf8");
+        const artifact = JSON.parse(raw) as {
+          siteVersionId?: string;
+          artifact?: { siteVersionId?: string };
+        };
+        artifact.siteVersionId = "sv-lineage-mismatch";
+        if (artifact.artifact) artifact.artifact.siteVersionId = "sv-lineage-mismatch";
+        await fs.writeFile(artifactRef, `${JSON.stringify(artifact, null, 2)}\n`, "utf8");
+        return result;
+      },
+    },
+  });
+
+  const factory = new MigrationFactory({ store, now, stageRunner });
+  const job = await factory.startMigrationJob({
+    jobId: "job-shadow-lineage-mismatch",
+    siteId: "site-1",
+    sourceUrl: "https://example.com",
+  });
+  const report = await factory.runMigrationJob(job.jobId);
+  const persisted = await store.getJob(job.jobId);
+  assert.ok(persisted);
+
+  assert.equal(report.finalState, "FAILED");
+  assert.equal(report.failedStage, "SHADOW_BIND_READY");
+  assert.equal(persisted.stageStates.SHADOW_BIND_READY.error?.code, "PUBLISH_LINEAGE_MISMATCH");
+});
+
 test("shadow bind ready fails explicitly when artifact build output is missing artifact ref", async () => {
   const now = createDeterministicClock();
   const store = new InMemoryMigrationJobStore({ now });

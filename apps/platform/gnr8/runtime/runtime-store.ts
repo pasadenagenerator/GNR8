@@ -698,8 +698,35 @@ export async function switchActivePointer(input: {
   siteId: string;
   siteVersionId: string;
   artifactId: string;
-}): Promise<void> {
-  await withTx(async (client) => {
+}): Promise<{
+  switched: boolean;
+  previousActivePointer: { siteVersionId: string; artifactId: string } | null;
+}> {
+  return withTx(async (client) => {
+    const previous = await client.query<{ active_site_version_id: string; active_artifact_id: string }>(
+      `
+      select active_site_version_id::text as active_site_version_id, active_artifact_id::text as active_artifact_id
+      from public.gnr8_runtime_active_pointers
+      where site_id = $1::text
+      limit 1
+      `,
+      [input.siteId],
+    );
+    const previousActivePointer = previous.rows[0]
+      ? {
+          siteVersionId: previous.rows[0].active_site_version_id,
+          artifactId: previous.rows[0].active_artifact_id,
+        }
+      : null;
+    const alreadyActive =
+      previousActivePointer?.siteVersionId === input.siteVersionId && previousActivePointer?.artifactId === input.artifactId;
+    if (alreadyActive) {
+      return {
+        switched: false,
+        previousActivePointer,
+      };
+    }
+
     await client.query(
       `
       insert into public.gnr8_runtime_active_pointers (site_id, active_site_version_id, active_artifact_id, updated_at)
@@ -712,6 +739,11 @@ export async function switchActivePointer(input: {
       `,
       [input.siteId, input.siteVersionId, input.artifactId],
     );
+
+    return {
+      switched: true,
+      previousActivePointer,
+    };
   });
 }
 

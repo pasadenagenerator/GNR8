@@ -4,6 +4,7 @@ import path from "node:path";
 import { importHtmlToPage } from "@/gnr8/importer/html-to-page";
 import { buildDeterministicArtifactBundle } from "@/gnr8/runtime/artifact-builder";
 import { deterministicId } from "@/gnr8/runtime/deterministic";
+import { evaluatePublishActivationCandidate } from "@/gnr8/runtime/publish-activation-guard";
 import { evaluatePageRolloutEnforcementByStage } from "@/gnr8/migration/enforcement/page-enforcement";
 import { evaluateSiteRolloutEnforcementByStage } from "@/gnr8/migration/enforcement/site-enforcement";
 import { buildLayoutGraphFromSnapshotHtml } from "@/gnr8/migration/layout-graph/layout-graph-builder";
@@ -1384,6 +1385,36 @@ function createDefaultStageExecutors(input?: {
         bundleSha256: artifactBundle.bundleSha256,
         createdAt: "deterministic",
       };
+      const publishCandidateValidation = evaluatePublishActivationCandidate({
+        candidateRef: artifactRef,
+        candidateState: "READY_FOR_SHADOW_BIND",
+        shadowEligibilityState: "ALLOWED",
+        artifactId,
+        siteVersionId,
+        expectedSiteId: artifactBundle.siteId,
+        expectedSiteVersionId: siteVersionId,
+        expectedArtifactId: artifactId,
+        expectedRendererCompatibilityVersion: artifactBundle.rendererCompatibilityVersion,
+        expectedPublishStage: publishStageCandidate,
+        artifact: runtimeArtifact,
+      });
+      if (!publishCandidateValidation.ok) {
+        const endedAt = context.now();
+        return createFailedStageResult({
+          stage,
+          startedAt,
+          endedAt,
+          code: publishCandidateValidation.code,
+          message: publishCandidateValidation.message,
+          details: {
+            artifactId,
+            siteVersionId,
+            publishStageCandidate,
+            ...(publishCandidateValidation.details ?? {}),
+          },
+        });
+      }
+
       const shadowEligibility = evaluateRuntimeArtifactServingEligibility({
         artifact: runtimeArtifact,
         servingStage: "shadow",

@@ -92,3 +92,25 @@ test("evaluatePublishSafety reports root path and manifest/pointer consistency i
   assert.equal(codes.has("MANIFEST_INCONSISTENT"), true);
   assert.equal(codes.has("ACTIVE_POINTER_MISMATCH"), true);
 });
+
+test("evaluatePublishSafety reports governance missing issues", () => {
+  const artifact = makeArtifact();
+  artifact.artifactGovernance.pageGateState = [];
+
+  const result = evaluatePublishSafety({
+    siteId: "site-1",
+    siteVersionId: "22222222-2222-4222-8222-222222222222",
+    artifactId: artifact.id,
+    rendererCompatibilityVersion: "gnr8-renderer-v1",
+    artifact,
+    activePointer: {
+      siteVersionId: "22222222-2222-4222-8222-222222222222",
+      artifactId: artifact.id,
+    },
+  });
+
+  assert.equal(result.ok, false);
+  if (result.ok) return;
+  const codes = new Set(result.issues.map((issue) => issue.code));
+  assert.equal(codes.has("GOVERNANCE_MISSING"), true);
+});

@@ -28,6 +28,19 @@ export async function POST(req: Request, ctx: { params: Promise<{ siteVersionId:
         { status: 409 },
       );
     }
+    if (message.startsWith("PUBLISH_")) {
+      const [code, payloadRaw] = message.split(":", 2);
+      const payload = payloadRaw ? (JSON.parse(payloadRaw) as { message?: string; details?: Record<string, unknown> }) : {};
+      return NextResponse.json(
+        {
+          ok: false,
+          error: code,
+          message: payload.message ?? "Publish activation denied",
+          details: payload.details ?? {},
+        },
+        { status: 409 },
+      );
+    }
     return NextResponse.json({ error: message }, { status: 400 });
   }
 }

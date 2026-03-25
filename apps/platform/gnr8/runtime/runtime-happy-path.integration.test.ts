@@ -160,9 +160,15 @@ test("phase-5a runtime happy path lock: migrate -> ready -> approve -> preview -
       params: Promise.resolve({ siteVersionId: migrateV1.siteVersionId }),
     });
     assertOkResponse(publishV1Res, "publish v1");
-    const publishV1 = (await publishV1Res.json()) as { artifactId: string; siteVersionId: string; pointerSwitch: string };
+    const publishV1 = (await publishV1Res.json()) as {
+      artifactId: string;
+      siteVersionId: string;
+      pointerSwitch: string;
+      previousActivePointer: { siteVersionId: string; artifactId: string } | null;
+    };
     assert.equal(publishV1.siteVersionId, migrateV1.siteVersionId);
     assert.equal(publishV1.pointerSwitch, "atomic_site_pointer_reassignment");
+    assert.equal(publishV1.previousActivePointer, null);
     assertUuid(publishV1.artifactId, "artifactId(v1)");
 
     const migrateV2Res = await migrateUrlRoute(
@@ -209,10 +215,37 @@ test("phase-5a runtime happy path lock: migrate -> ready -> approve -> preview -
       params: Promise.resolve({ siteVersionId: migrateV2.siteVersionId }),
     });
     assertOkResponse(publishV2Res, "publish v2");
-    const publishV2 = (await publishV2Res.json()) as { artifactId: string; siteVersionId: string; pointerSwitch: string };
+    const publishV2 = (await publishV2Res.json()) as {
+      artifactId: string;
+      siteVersionId: string;
+      pointerSwitch: string;
+      previousActivePointer: { siteVersionId: string; artifactId: string } | null;
+    };
     assert.equal(publishV2.siteVersionId, migrateV2.siteVersionId);
     assert.equal(publishV2.pointerSwitch, "atomic_site_pointer_reassignment");
+    assert.deepEqual(publishV2.previousActivePointer, {
+      siteVersionId: migrateV1.siteVersionId,
+      artifactId: publishV1.artifactId,
+    });
     assertUuid(publishV2.artifactId, "artifactId(v2)");
+
+    const publishV2RepeatRes = await publishRoute(new Request("http://localhost", { method: "POST" }), {
+      params: Promise.resolve({ siteVersionId: migrateV2.siteVersionId }),
+    });
+    assertOkResponse(publishV2RepeatRes, "publish v2 repeat");
+    const publishV2Repeat = (await publishV2RepeatRes.json()) as {
+      artifactId: string;
+      siteVersionId: string;
+      pointerSwitch: string;
+      previousActivePointer: { siteVersionId: string; artifactId: string } | null;
+    };
+    assert.equal(publishV2Repeat.siteVersionId, migrateV2.siteVersionId);
+    assert.equal(publishV2Repeat.artifactId, publishV2.artifactId);
+    assert.equal(publishV2Repeat.pointerSwitch, "PUBLISH_ALREADY_ACTIVE_SAFE_NOOP");
+    assert.deepEqual(publishV2Repeat.previousActivePointer, {
+      siteVersionId: migrateV2.siteVersionId,
+      artifactId: publishV2.artifactId,
+    });
 
     const v2Record = await getSiteVersion(migrateV2.siteVersionId);
     assert.ok(v2Record);

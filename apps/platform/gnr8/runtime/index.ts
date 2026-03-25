@@ -7,6 +7,7 @@ export * from "@/gnr8/runtime/artifact-builder";
 export * from "@/gnr8/runtime/render-integrity-gate";
 export * from "@/gnr8/runtime/unified-render-preview";
 export * from "@/gnr8/runtime/publish-activation-orchestrator";
+export * from "@/gnr8/runtime/publish-activation-guard";
 export * from "@/gnr8/runtime/publish-safety-check";
 export * from "@/gnr8/runtime/rollback-switch";
 export * from "@/gnr8/runtime/forms-runtime-bridge";
