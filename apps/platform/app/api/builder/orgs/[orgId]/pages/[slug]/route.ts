@@ -1,11 +1,13 @@
+/**
+ * BUILDER API ONLY
+ * This route must never be imported or used by runtime/public flows.
+ */
 import { NextRequest, NextResponse } from "next/server";
 import {
   getBuilderPool,
   requireBuilderMembership,
   requireInternalBuilderRequest,
 } from "@gnr8/builder-only/builder-api-helpers";
-
-export const BUILDER_API_ONLY = true;
 
 type PageRow = {
   id: string;
