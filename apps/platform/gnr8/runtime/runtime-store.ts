@@ -1282,6 +1282,195 @@ export async function getActivePointerForSite(siteId: string): Promise<{ siteVer
   }
 }
 
+export async function upsertMigrationActivationLineage(input: {
+  siteId: string;
+  sourceUrl: string;
+  siteVersionId: string;
+  artifact: RuntimeArtifact;
+  actor: string;
+}): Promise<void> {
+  await withTx(async (client) => {
+    const sourceHost = (() => {
+      try {
+        return new URL(input.sourceUrl).host;
+      } catch {
+        return null;
+      }
+    })();
+
+    await client.query(
+      `
+      insert into public.gnr8_runtime_sites (id, source_url, source_host)
+      values ($1::text, $2::text, $3::text)
+      on conflict (id)
+      do update set source_url = excluded.source_url, source_host = excluded.source_host, updated_at = now()
+      `,
+      [input.siteId, input.sourceUrl, sourceHost],
+    );
+
+    const existingSiteVersion = await client.query<{
+      id: string;
+      site_id: string;
+      renderer_compatibility_version: string;
+    }>(
+      `
+      select
+        id::text as id,
+        site_id::text as site_id,
+        renderer_compatibility_version::text as renderer_compatibility_version
+      from public.gnr8_runtime_site_versions
+      where id = $1::uuid
+      limit 1
+      `,
+      [input.siteVersionId],
+    );
+
+    if (!existingSiteVersion.rows[0]) {
+      const versionNo = await getNextSiteVersionNo(client, input.siteId);
+      await client.query(
+        `
+        insert into public.gnr8_runtime_site_versions (
+          id,
+          site_id,
+          version_no,
+          state,
+          source,
+          actor,
+          renderer_compatibility_version,
+          artifact_id
+        )
+        values ($1::uuid, $2::text, $3::int, 'APPROVED', 'migration', $4::text, $5::text, null)
+        `,
+        [input.siteVersionId, input.siteId, versionNo, input.actor, input.artifact.rendererCompatibilityVersion],
+      );
+      await client.query(
+        `
+        insert into public.gnr8_runtime_version_audit (site_version_id, from_state, to_state, actor, source, details)
+        values ($1::uuid, null, 'APPROVED', $2::text, 'migration', $3::jsonb)
+        `,
+        [
+          input.siteVersionId,
+          input.actor,
+          JSON.stringify({
+            seededByMigrationActivation: true,
+            artifactId: input.artifact.id,
+          }),
+        ],
+      );
+    } else {
+      if (existingSiteVersion.rows[0].site_id !== input.siteId) {
+        throw new Error("PUBLISH_LINEAGE_MISMATCH:siteVersion siteId mismatch");
+      }
+      if (existingSiteVersion.rows[0].renderer_compatibility_version !== input.artifact.rendererCompatibilityVersion) {
+        throw new Error("PUBLISH_LINEAGE_MISMATCH:renderer compatibility mismatch");
+      }
+    }
+
+    const existingForSiteVersion = await client.query<{ id: string }>(
+      `select id::text as id from public.gnr8_runtime_artifacts where site_version_id = $1::uuid limit 1`,
+      [input.siteVersionId],
+    );
+    if (existingForSiteVersion.rows[0] && existingForSiteVersion.rows[0].id !== input.artifact.id) {
+      throw new Error("PUBLISH_LINEAGE_MISMATCH:siteVersion artifact binding conflict");
+    }
+
+    const existingArtifact = await client.query<{
+      id: string;
+      site_id: string;
+      site_version_id: string;
+      renderer_compatibility_version: string;
+    }>(
+      `
+      select
+        id::text as id,
+        site_id::text as site_id,
+        site_version_id::text as site_version_id,
+        renderer_compatibility_version::text as renderer_compatibility_version
+      from public.gnr8_runtime_artifacts
+      where id = $1::uuid
+      limit 1
+      `,
+      [input.artifact.id],
+    );
+
+    if (!existingArtifact.rows[0]) {
+      await client.query(
+        `
+        insert into public.gnr8_runtime_artifacts (
+          id,
+          site_id,
+          site_version_id,
+          renderer_compatibility_version,
+          bundle_sha256,
+          html_by_path,
+          compiled_token_styles,
+          asset_fingerprint_map,
+          manifest,
+          publish_stage,
+          shadow_restricted,
+          artifact_governance
+        )
+        values ($1::uuid, $2::text, $3::uuid, $4::text, $5::text, $6::jsonb, $7::text, $8::jsonb, $9::jsonb, $10::text, $11::boolean, $12::jsonb)
+        `,
+        [
+          input.artifact.id,
+          input.siteId,
+          input.siteVersionId,
+          input.artifact.rendererCompatibilityVersion,
+          input.artifact.bundleSha256,
+          JSON.stringify(input.artifact.htmlByPath),
+          input.artifact.compiledTokenStyles,
+          JSON.stringify(input.artifact.assetFingerprintMap),
+          JSON.stringify(input.artifact.manifest),
+          input.artifact.publishStage,
+          input.artifact.shadowRestricted,
+          JSON.stringify(input.artifact.artifactGovernance),
+        ],
+      );
+    } else {
+      if (existingArtifact.rows[0].site_id !== input.siteId || existingArtifact.rows[0].site_version_id !== input.siteVersionId) {
+        throw new Error("PUBLISH_LINEAGE_MISMATCH:artifact lineage mismatch");
+      }
+      if (existingArtifact.rows[0].renderer_compatibility_version !== input.artifact.rendererCompatibilityVersion) {
+        throw new Error("PUBLISH_LINEAGE_MISMATCH:artifact renderer compatibility mismatch");
+      }
+    }
+
+    await client.query(
+      `
+      update public.gnr8_runtime_site_versions
+      set artifact_id = $2::uuid, renderer_compatibility_version = $3::text, updated_at = now()
+      where id = $1::uuid
+      `,
+      [input.siteVersionId, input.artifact.id, input.artifact.rendererCompatibilityVersion],
+    );
+  });
+}
+
+export async function recordPublishActivationAudit(input: {
+  siteVersionId: string;
+  actor: string;
+  source: "migration" | "ai" | "manual";
+  details: Record<string, unknown>;
+}): Promise<void> {
+  await withTx(async (client) => {
+    const stateRes = await client.query<{ state: SiteVersionState }>(
+      `select state::text as state from public.gnr8_runtime_site_versions where id = $1::uuid limit 1`,
+      [input.siteVersionId],
+    );
+    const current = stateRes.rows[0]?.state;
+    if (!current) throw new Error("SiteVersion not found");
+
+    await client.query(
+      `
+      insert into public.gnr8_runtime_version_audit (site_version_id, from_state, to_state, actor, source, details)
+      values ($1::uuid, $2::text, $2::text, $3::text, $4::text, $5::jsonb)
+      `,
+      [input.siteVersionId, current, input.actor, input.source, JSON.stringify(input.details)],
+    );
+  });
+}
+
 export async function saveFormSubmission(input: VersionScopedFormSubmission): Promise<{ submissionId: string; createdAt: string }> {
   return withTx(async (client) => {
     const versionRes = await client.query<{ id: string }>(

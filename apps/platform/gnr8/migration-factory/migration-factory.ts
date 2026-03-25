@@ -1,4 +1,5 @@
 import type {
+  MigrationActivationExecutionResult,
   MigrationExecutionReport,
   MigrationJob,
   MigrationStage,
@@ -6,12 +7,14 @@ import type {
 } from "@/gnr8/migration-factory/migration-job-types";
 import type { MigrationJobStore } from "@/gnr8/migration-factory/migration-job-store";
 import { canRunStage, computeJobStateFromStages, createInitialStageStates, getFirstNonSucceededStage, getStageIndex, MIGRATION_STAGE_ORDER } from "@/gnr8/migration-factory/migration-stage-machine";
+import { executeMigrationFactoryActivation } from "@/gnr8/migration-factory/migration-factory-activation";
 import { DefaultMigrationStageRunner, type MigrationStageRunner } from "@/gnr8/migration-factory/migration-stage-runner";
 
 type MigrationFactoryOptions = {
   store?: MigrationJobStore;
   stageRunner?: MigrationStageRunner;
   now?: () => string;
+  activationExecutor?: (input: { job: MigrationJob; now: () => string }) => Promise<MigrationActivationExecutionResult>;
 };
 
 export class MigrationFactory {
@@ -21,11 +24,14 @@ export class MigrationFactory {
 
   private readonly now: () => string;
 
+  private readonly activationExecutor: (input: { job: MigrationJob; now: () => string }) => Promise<MigrationActivationExecutionResult>;
+
   constructor(options: MigrationFactoryOptions) {
     if (!options.store) throw new Error("MigrationFactory requires a store");
     this.store = options.store;
     this.stageRunner = options.stageRunner ?? new DefaultMigrationStageRunner();
     this.now = options.now ?? (() => new Date().toISOString());
+    this.activationExecutor = options.activationExecutor ?? executeMigrationFactoryActivation;
   }
 
   async startMigrationJob(input: StartMigrationJobInput): Promise<MigrationJob> {
@@ -36,6 +42,8 @@ export class MigrationFactory {
       stageStates: createInitialStageStates(),
       lastError: null,
       lastExecutionReport: null,
+      lastActivationExecutionResult: null,
+      activationExecutionHistory: [],
     });
     await this.store.appendExecutionEvent(initialized.jobId, {
       type: "JOB_CREATED",
@@ -123,6 +131,62 @@ export class MigrationFactory {
       return this.runMigrationJob(existing.jobId);
     }
     return replayPrepared;
+  }
+
+  async executePublishActivation(jobId: string): Promise<MigrationActivationExecutionResult> {
+    const job = await this.requireJob(jobId);
+    if (job.overallState !== "COMPLETED") {
+      throw new Error(`Activation requires COMPLETED job state (current: ${job.overallState})`);
+    }
+    if (job.stageStates.SHADOW_BIND_READY.state !== "SUCCEEDED") {
+      throw new Error(`Activation requires SHADOW_BIND_READY stage success (current: ${job.stageStates.SHADOW_BIND_READY.state})`);
+    }
+
+    const candidateRef =
+      job.stageStates.SHADOW_BIND_READY.outputRefs.publishCandidateRef ??
+      job.stageStates.SHADOW_BIND_READY.outputRefs.shadowBindReadyRef ??
+      "missing-candidate-ref";
+    const artifactId = job.stageStates.SHADOW_BIND_READY.outputRefs.artifactId ?? "missing-artifact-id";
+    await this.store.appendExecutionEvent(job.jobId, {
+      type: "ACTIVATION_EXECUTION_STARTED",
+      timestamp: this.now(),
+      message: "Publish activation execution started",
+      details: {
+        jobId: job.jobId,
+        siteId: job.siteId,
+        artifactId,
+        candidateRef,
+      },
+    });
+
+    const result = await this.activationExecutor({ job, now: this.now });
+    const persisted = await this.requireJob(job.jobId);
+    await this.store.updateJob(job.jobId, {
+      lastActivationExecutionResult: result,
+      activationExecutionHistory: [...persisted.activationExecutionHistory, result],
+    });
+
+    const eventType =
+      result.activationOutcome === "FAILED"
+        ? "ACTIVATION_EXECUTION_FAILED"
+        : result.activationOutcome === "SAFE_NOOP"
+          ? "ACTIVATION_EXECUTION_NOOP"
+          : "ACTIVATION_EXECUTION_SUCCEEDED";
+
+    await this.store.appendExecutionEvent(job.jobId, {
+      type: eventType,
+      timestamp: this.now(),
+      message: `Publish activation execution ${result.activationOutcome.toLowerCase()}`,
+      details: {
+        jobId: job.jobId,
+        siteId: job.siteId,
+        artifactId: result.artifactId,
+        candidateRef: result.candidateRef,
+        failureCode: result.failureCode,
+      },
+    });
+
+    return result;
   }
 
   private async runFromStage(
@@ -342,4 +406,3 @@ export class MigrationFactory {
     return job;
   }
 }
-

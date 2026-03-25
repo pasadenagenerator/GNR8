@@ -13,6 +13,7 @@ import {
   createArtifact,
   getActivePointerForSite,
   getArtifactById,
+  recordPublishActivationAudit,
   getSiteVersion,
   switchActivePointer,
 } from "@/gnr8/runtime/runtime-store";
@@ -20,6 +21,119 @@ import { transitionSiteVersionState } from "@/gnr8/runtime/version-lifecycle-enf
 
 function throwPublishActivationFailure(code: PublishActivationFailureCode, message: string, details?: Record<string, unknown>): never {
   throw new Error(`${code}:${JSON.stringify({ message, details: details ?? {} })}`);
+}
+
+export async function executeMigrationPublishActivation(input: {
+  candidateRef: string;
+  candidateState: string;
+  shadowEligibilityState: string;
+  siteId: string;
+  siteVersionId: string;
+  artifactId: string;
+  expectedRendererCompatibilityVersion: string;
+  expectedPublishStage: "shadow" | "canary" | "production";
+  actor: string;
+}) {
+  const storedArtifact = await getArtifactById(input.artifactId);
+  const candidateValidation = evaluatePublishActivationCandidate({
+    candidateRef: input.candidateRef,
+    candidateState: input.candidateState,
+    shadowEligibilityState: input.shadowEligibilityState,
+    artifactId: input.artifactId,
+    siteVersionId: input.siteVersionId,
+    expectedSiteId: input.siteId,
+    expectedSiteVersionId: input.siteVersionId,
+    expectedArtifactId: input.artifactId,
+    expectedRendererCompatibilityVersion: input.expectedRendererCompatibilityVersion,
+    expectedPublishStage: input.expectedPublishStage,
+    artifact: storedArtifact,
+  });
+  if (!candidateValidation.ok) {
+    throwPublishActivationFailure(candidateValidation.code, candidateValidation.message, candidateValidation.details);
+  }
+  if (!storedArtifact) {
+    throwPublishActivationFailure("PUBLISH_ARTIFACT_READ_FAILED", "Publish artifact could not be loaded for activation.", {
+      artifactId: input.artifactId,
+      siteVersionId: input.siteVersionId,
+    });
+  }
+
+  const activePointer = await getActivePointerForSite(input.siteId);
+  const pointerReadiness = evaluatePointerSwitchReadiness({
+    targetSiteVersionId: input.siteVersionId,
+    targetArtifactId: input.artifactId,
+    activePointer,
+  });
+
+  if (pointerReadiness.ok && "code" in pointerReadiness) {
+    const noopPointer = activePointer;
+    await recordPublishActivationAudit({
+      siteVersionId: input.siteVersionId,
+      actor: input.actor,
+      source: "migration",
+      details: {
+        candidateRef: input.candidateRef,
+        artifactId: input.artifactId,
+        activationOutcome: "SAFE_NOOP",
+        switched: false,
+        previousActivePointer: noopPointer,
+        newActivePointer: noopPointer,
+      },
+    });
+    return {
+      switched: false,
+      previousActivePointer: noopPointer,
+      newActivePointer: noopPointer,
+      activationOutcome: "SAFE_NOOP" as const,
+    };
+  }
+
+  let pointerSwitchResult: { switched: boolean; previousActivePointer: { siteVersionId: string; artifactId: string } | null };
+  try {
+    pointerSwitchResult = await switchActivePointer({
+      siteId: input.siteId,
+      siteVersionId: input.siteVersionId,
+      artifactId: input.artifactId,
+    });
+  } catch (error) {
+    throwPublishActivationFailure("PUBLISH_POINTER_SWITCH_FAILED", "active pointer switch failed", {
+      siteId: input.siteId,
+      siteVersionId: input.siteVersionId,
+      artifactId: input.artifactId,
+      error: String((error as Error)?.message ?? error),
+    });
+  }
+
+  const activePointerAfterSwitch = await getActivePointerForSite(input.siteId);
+  assertPublishSafety({
+    siteId: input.siteId,
+    siteVersionId: input.siteVersionId,
+    artifactId: input.artifactId,
+    rendererCompatibilityVersion: input.expectedRendererCompatibilityVersion,
+    artifact: storedArtifact,
+    activePointer: activePointerAfterSwitch,
+  });
+
+  await recordPublishActivationAudit({
+    siteVersionId: input.siteVersionId,
+    actor: input.actor,
+    source: "migration",
+    details: {
+      candidateRef: input.candidateRef,
+      artifactId: input.artifactId,
+      activationOutcome: "ACTIVATED",
+      switched: pointerSwitchResult.switched,
+      previousActivePointer: pointerSwitchResult.previousActivePointer,
+      newActivePointer: activePointerAfterSwitch,
+    },
+  });
+
+  return {
+    switched: pointerSwitchResult.switched,
+    previousActivePointer: pointerSwitchResult.previousActivePointer,
+    newActivePointer: activePointerAfterSwitch,
+    activationOutcome: "ACTIVATED" as const,
+  };
 }
 
 export async function publishApprovedSiteVersion(input: { siteVersionId: string; actor: string; stage?: "shadow" | "canary" | "production" }) {

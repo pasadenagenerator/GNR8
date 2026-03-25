@@ -61,11 +61,30 @@ export type MigrationExecutionEvent = {
     | "JOB_COMPLETED"
     | "JOB_FAILED"
     | "JOB_RESUMED"
-    | "STAGE_REPLAY_REQUESTED";
+    | "STAGE_REPLAY_REQUESTED"
+    | "ACTIVATION_EXECUTION_STARTED"
+    | "ACTIVATION_EXECUTION_SUCCEEDED"
+    | "ACTIVATION_EXECUTION_FAILED"
+    | "ACTIVATION_EXECUTION_NOOP";
   timestamp: string;
   stage?: MigrationStage;
   message: string;
   details?: Record<string, unknown>;
+};
+
+export type MigrationActivationExecutionResult = {
+  executionId: string;
+  candidateRef: string;
+  artifactId: string;
+  siteVersionId: string;
+  activationOutcome: "ACTIVATED" | "SAFE_NOOP" | "FAILED";
+  switched: boolean;
+  previousActivePointer: { siteVersionId: string; artifactId: string } | null;
+  newActivePointer: { siteVersionId: string; artifactId: string } | null;
+  enforcementState: string;
+  publishStage: string;
+  failureCode?: string;
+  reasons: string[];
 };
 
 export type MigrationExecutionReport = {
@@ -96,6 +115,8 @@ export type MigrationJob = {
   updatedAt: string;
   lastError: MigrationStageError | null;
   lastExecutionReport: MigrationExecutionReport | null;
+  lastActivationExecutionResult: MigrationActivationExecutionResult | null;
+  activationExecutionHistory: MigrationActivationExecutionResult[];
   executionEvents: MigrationExecutionEvent[];
 };
 

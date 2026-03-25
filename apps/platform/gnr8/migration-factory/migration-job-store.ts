@@ -55,6 +55,8 @@ export class InMemoryMigrationJobStore implements MigrationJobStore {
       updatedAt: now,
       lastError: null,
       lastExecutionReport: null,
+      lastActivationExecutionResult: null,
+      activationExecutionHistory: [],
       executionEvents: [],
     };
 
