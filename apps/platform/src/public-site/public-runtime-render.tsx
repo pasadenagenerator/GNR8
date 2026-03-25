@@ -4,31 +4,15 @@ import {
   type PublicRuntimeArtifactMissReasonCode,
 } from "@/gnr8/runtime/runtime-store";
 
-export type Gnr8PublicRuntimeMode = "artifact-only" | "artifact-with-builder-fallback";
+export type Gnr8PublicRuntimeMode = "artifact-only";
 
-const VALID_RUNTIME_MODES = new Set<Gnr8PublicRuntimeMode>([
-  "artifact-only",
-  "artifact-with-builder-fallback",
-]);
+const VALID_RUNTIME_MODES = new Set<Gnr8PublicRuntimeMode>(["artifact-only"]);
 
 type HeaderReader = {
   get(name: string): string | null;
 };
 
-type PublicRuntimeResolutionOutcome = "artifact_hit" | "artifact_miss" | "fallback_hit" | "fallback_miss" | "artifact_only_404";
-
-type BuilderFallbackResult =
-  | {
-      hit: true;
-      html: string;
-      reasonCode:
-        | "builder_data_fallback"
-        | "builder_default_org_missing";
-    }
-  | {
-      hit: false;
-      reasonCode: "builder_page_not_found";
-    };
+type PublicRuntimeResolutionOutcome = "artifact_hit" | "artifact_only_404";
 
 function logPublicRuntimeResolution(input: {
   outcome: PublicRuntimeResolutionOutcome;
@@ -43,10 +27,18 @@ function logPublicRuntimeResolution(input: {
   hostBindingStatus?: string | null;
   reasonCode?: string | null;
   resolvedPath?: string | null;
+  statusCode?: number;
 }): void {
+  const artifactHit = input.outcome === "artifact_hit";
+  const artifactMiss = !artifactHit;
+  const governanceDenied = input.reasonCode === "artifact_stage_denied";
+  const governanceAllowed = artifactHit;
+  const pathResolved = artifactHit ? true : input.reasonCode === "artifact_path_missing" ? false : null;
+  const pathUnresolved = pathResolved === null ? null : !pathResolved;
   const payload = {
     outcome: input.outcome,
     mode: input.mode,
+    runtimeResolutionMode: "artifact_only",
     host: input.host,
     path: input.path,
     siteId: input.siteId ?? null,
@@ -57,6 +49,14 @@ function logPublicRuntimeResolution(input: {
     hostBindingStatus: input.hostBindingStatus ?? null,
     reasonCode: input.reasonCode ?? null,
     resolvedPath: input.resolvedPath ?? null,
+    statusCode: input.statusCode ?? null,
+    artifactHit,
+    artifactMiss,
+    pathResolved,
+    pathUnresolved,
+    governanceAllowed,
+    governanceDenied,
+    builderFallbackUsed: false,
     ts: new Date().toISOString(),
   };
   console.info(`[gnr8.public-runtime.resolution] ${JSON.stringify(payload)}`);
@@ -82,89 +82,7 @@ export function resolvePublicRuntimeMode(): Gnr8PublicRuntimeMode {
     );
   }
 
-  const vercelEnv = String(process.env.VERCEL_ENV ?? "").trim().toLowerCase();
-  if (vercelEnv === "production") return "artifact-with-builder-fallback";
   return "artifact-only";
-}
-
-function escapeHtml(value: string): string {
-  return value
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#39;");
-}
-
-function asHtmlDocument(body: string, title: string): string {
-  return `<!doctype html>\n<html lang="en">\n<head>\n<meta charset="utf-8" />\n<meta name="viewport" content="width=device-width, initial-scale=1" />\n<title>${escapeHtml(title)}</title>\n</head>\n<body>\n${body}\n</body>\n</html>`;
-}
-
-function renderBuilderDataFallbackHtml(input: { slug: string; title: string | null; data: unknown }): string {
-  const title = input.title ?? "Untitled";
-  const serialized = escapeHtml(JSON.stringify(input.data ?? {}, null, 2));
-  return asHtmlDocument(
-    `<main style="padding:24px"><h1>${escapeHtml(title)}</h1><p>slug: <code>${escapeHtml(input.slug)}</code></p><pre style="white-space:pre-wrap">${serialized}</pre></main>`,
-    title,
-  );
-}
-
-async function renderBuilderFallback(input: { path: string; host: string }): Promise<BuilderFallbackResult> {
-  const orgId = process.env.NEXT_PUBLIC_DEFAULT_ORG_ID?.trim();
-  if (!orgId) {
-    return {
-      hit: true,
-      reasonCode: "builder_default_org_missing",
-      html: asHtmlDocument(
-        "<main style=\"padding:24px\"><h1>Missing env</h1><p>Set <code>NEXT_PUBLIC_DEFAULT_ORG_ID</code> in Vercel.</p></main>",
-        "Missing env",
-      ),
-    };
-  }
-
-  const { getPublicPageByOrgAndSlug } = await import("@/src/public-site/public-pages");
-  const page = await getPublicPageByOrgAndSlug({
-    orgId,
-    slug: input.path,
-    host: input.host,
-  });
-
-  if (!page) return { hit: false, reasonCode: "builder_page_not_found" };
-
-  return {
-    hit: true,
-    reasonCode: "builder_data_fallback",
-    html: renderBuilderDataFallbackHtml({
-      slug: page.slug,
-      title: page.title ?? null,
-      data: page.data ?? {},
-    }),
-  };
-}
-
-function logPublicRuntimeFailure(input: {
-  mode: Gnr8PublicRuntimeMode;
-  host: string;
-  path: string;
-  reasonCode: "fallback_miss" | "builder_page_not_found" | PublicRuntimeArtifactMissReasonCode;
-}): void {
-  if (input.mode === "artifact-only") {
-    logPublicRuntimeResolution({
-      outcome: "artifact_only_404",
-      mode: input.mode,
-      host: input.host,
-      path: input.path,
-      reasonCode: input.reasonCode,
-    });
-  } else {
-    logPublicRuntimeResolution({
-      outcome: "fallback_miss",
-      mode: input.mode,
-      host: input.host,
-      path: input.path,
-      reasonCode: input.reasonCode,
-    });
-  }
 }
 
 function htmlResponse(input: { html: string; status?: number }): Response {
@@ -182,6 +100,31 @@ function notFoundHtmlResponse(): Response {
     status: 404,
     html: "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\" /><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" /><title>404: This page could not be found.</title></head><body><main><h1>404</h1><p>This page could not be found.</p></main></body></html>",
   });
+}
+
+function governanceDeniedHtmlResponse(): Response {
+  return htmlResponse({
+    status: 403,
+    html: "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\" /><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" /><title>403: Access denied.</title></head><body><main><h1>403</h1><p>This request is denied by runtime governance.</p></main></body></html>",
+  });
+}
+
+type RuntimeStoreDependencies = {
+  resolveActiveArtifactForHostAndPathWithDiagnostics: typeof resolveActiveArtifactForHostAndPathWithDiagnostics;
+  resolveRuntimeSiteForHost: typeof resolveRuntimeSiteForHost;
+};
+
+const runtimeStoreDependencies: RuntimeStoreDependencies = {
+  resolveActiveArtifactForHostAndPathWithDiagnostics,
+  resolveRuntimeSiteForHost,
+};
+
+export function __setPublicRuntimeRenderDependenciesForTest(overrides: Partial<RuntimeStoreDependencies>): () => void {
+  const previous = { ...runtimeStoreDependencies };
+  Object.assign(runtimeStoreDependencies, overrides);
+  return () => {
+    Object.assign(runtimeStoreDependencies, previous);
+  };
 }
 
 function isShadowAssetPath(path: string): boolean {
@@ -269,7 +212,7 @@ async function tryMappedAssetFallback(input: {
   const requestedKey = imageSemanticKey(input.requestedPath);
   if (!requestedKey) return null;
 
-  const artifactResolution = await resolveActiveArtifactForHostAndPathWithDiagnostics({
+  const artifactResolution = await runtimeStoreDependencies.resolveActiveArtifactForHostAndPathWithDiagnostics({
     host: input.host,
     path: "/",
   });
@@ -288,7 +231,7 @@ async function renderShadowAssetResponse(input: { host: string; path: string }):
   const normalizedPath = sanitizeShadowAssetPath(input.path);
   if (!normalizedPath) return null;
 
-  const site = await resolveRuntimeSiteForHost({ host: input.host });
+  const site = await runtimeStoreDependencies.resolveRuntimeSiteForHost({ host: input.host });
   if (site.outcome !== "site_hit") return null;
 
   const direct = await fetchShadowAssetFromSource({ sourceUrl: site.sourceUrl, sourcePath: normalizedPath });
@@ -317,7 +260,7 @@ export async function renderPublicPathResponse(input: { path: string; host: stri
 
   const mode = resolvePublicRuntimeMode();
 
-  const artifactResolution = await resolveActiveArtifactForHostAndPathWithDiagnostics({
+  const artifactResolution = await runtimeStoreDependencies.resolveActiveArtifactForHostAndPathWithDiagnostics({
     host: input.host,
     path: input.path,
   });
@@ -337,12 +280,14 @@ export async function renderPublicPathResponse(input: { path: string; host: stri
       resolvedPath: artifactResolution.resolvedPath,
       reasonCode:
         artifactResolution.siteResolution === "fallback_latest_site" ? artifactResolution.siteResolution : null,
+      statusCode: 200,
     });
     return htmlResponse({ html: artifactResolution.html });
   }
 
+  const statusCode = artifactResolution.reasonCode === "artifact_stage_denied" ? 403 : 404;
   logPublicRuntimeResolution({
-    outcome: "artifact_miss",
+    outcome: "artifact_only_404",
     mode,
     host: input.host,
     path: input.path,
@@ -352,43 +297,10 @@ export async function renderPublicPathResponse(input: { path: string; host: stri
     hostBindingId: artifactResolution.hostBindingId,
     hostBindingKind: artifactResolution.hostBindingKind,
     hostBindingStatus: artifactResolution.hostBindingStatus,
-    reasonCode: artifactResolution.reasonCode,
+    reasonCode: artifactResolution.reasonCode as PublicRuntimeArtifactMissReasonCode,
+    statusCode,
   });
-
-  if (mode === "artifact-with-builder-fallback") {
-    const fallback = await renderBuilderFallback(input);
-    if (fallback.hit) {
-      logPublicRuntimeResolution({
-        outcome: "fallback_hit",
-        mode,
-        host: input.host,
-        path: input.path,
-        siteId: artifactResolution.siteId,
-        siteVersionId: artifactResolution.activeSiteVersionId,
-        artifactId: artifactResolution.artifactId,
-        hostBindingId: artifactResolution.hostBindingId,
-        hostBindingKind: artifactResolution.hostBindingKind,
-        hostBindingStatus: artifactResolution.hostBindingStatus,
-        reasonCode: fallback.reasonCode,
-      });
-      return htmlResponse({
-        html: fallback.html,
-      });
-    }
-    logPublicRuntimeFailure({
-      mode,
-      host: input.host,
-      path: input.path,
-      reasonCode: fallback.reasonCode,
-    });
-    return notFoundHtmlResponse();
-  }
-
-  logPublicRuntimeFailure({
-    mode,
-    host: input.host,
-    path: input.path,
-    reasonCode: artifactResolution.reasonCode,
-  });
-  return notFoundHtmlResponse();
+  return artifactResolution.reasonCode === "artifact_stage_denied"
+    ? governanceDeniedHtmlResponse()
+    : notFoundHtmlResponse();
 }
