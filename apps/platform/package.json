@@ -18,5 +18,9 @@
     "server-only": "^0.0.1",
     "stripe": "^18.3.0",
     "tailwindcss": "^4.2.1"
+  },
+  "devDependencies": {
+    "eslint": "^9.39.4",
+    "eslint-config-next": "^15.5.14"
   }
 }
