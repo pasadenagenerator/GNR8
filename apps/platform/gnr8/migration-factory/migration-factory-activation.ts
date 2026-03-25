@@ -48,7 +48,9 @@ type ExecuteMigrationFactoryActivationInput = {
 const defaultDeps: MigrationFactoryActivationDeps = {
   readFile: (fileRef) => fs.readFile(fileRef, "utf8"),
   writeFile: (fileRef, content) => fs.writeFile(fileRef, content, "utf8"),
-  mkdir: (dirRef) => fs.mkdir(dirRef, { recursive: true }),
+  mkdir: async (dirRef) => {
+    await fs.mkdir(dirRef, { recursive: true });
+  },
   upsertLineage: upsertMigrationActivationLineage,
   executeActivation: executeMigrationPublishActivation,
 };
