@@ -13,9 +13,15 @@ import { evaluateSiteRolloutPolicy, toSiteRolloutPolicyPageResult } from "@/gnr8
 import { evaluatePageMigrationGate, type PageGateIntent } from "@/gnr8/migration/quality-gates/page-quality-gate";
 import { evaluateSiteMigrationGate } from "@/gnr8/migration/quality-gates/site-quality-gate";
 import { buildCanonicalMigrationInput } from "@/gnr8/runtime/migration-factory";
-import { evaluatePublishEnforcement } from "@/gnr8/runtime/publish-enforcement";
+import { evaluatePublishEnforcement, evaluateRuntimeArtifactServingEligibility } from "@/gnr8/runtime/publish-enforcement";
 import { runRenderIntegrityGate } from "@/gnr8/runtime/render-integrity-gate";
-import { RENDERER_COMPATIBILITY_VERSION, type CanonicalSiteMigrationInput, type CanonicalSiteVersionSnapshot, type PageMigrationGovernanceSnapshot } from "@/gnr8/runtime/types";
+import {
+  RENDERER_COMPATIBILITY_VERSION,
+  type CanonicalSiteMigrationInput,
+  type CanonicalSiteVersionSnapshot,
+  type PageMigrationGovernanceSnapshot,
+  type RuntimeArtifact,
+} from "@/gnr8/runtime/types";
 import type { Gnr8Page } from "@/gnr8/types/page";
 import { importPublicSinglePageUrlToSnapshot, type UrlSinglePageImportSnapshot } from "@/gnr8/validation/runtime/url-single-page-import";
 
@@ -236,6 +242,29 @@ type QualityGateGovernanceSummary = {
       CANARY?: { decision?: string };
       PRODUCTION?: { decision?: string };
     };
+  };
+};
+
+type ArtifactBuildStageArtifact = {
+  kind?: string;
+  artifactId?: string;
+  artifactRef?: string;
+  artifactBuildRef?: string;
+  siteVersionId?: string;
+  publishStageCandidate?: "shadow" | "canary" | "production";
+  publishEnforcementDecision?: string;
+  shadowRestricted?: boolean;
+  artifactGovernancePresent?: boolean;
+  artifactGovernance?: RuntimeArtifact["artifactGovernance"];
+  artifact?: {
+    siteId?: string;
+    siteVersionId?: string;
+    rendererCompatibilityVersion?: string;
+    htmlByPath?: Record<string, string>;
+    compiledTokenStyles?: string;
+    assetFingerprintMap?: Record<string, string>;
+    manifest?: Record<string, unknown>;
+    bundleSha256?: string;
   };
 };
 
@@ -1220,10 +1249,235 @@ function createDefaultStageExecutors(input?: {
     },
     SHADOW_BIND_READY: async (job, stage, context) => {
       const startedAt = context.now();
-      const endedAt = context.now();
-      return createSucceededResult(stage, startedAt, endedAt, {
-        shadowReadyRef: buildDeterministicRef(job.jobId, stage, "shadow_bind"),
+      const artifactBuildOutputs = job.stageStates.ARTIFACT_BUILD.outputRefs;
+      const qualityGateOutputs = job.stageStates.QUALITY_GATE.outputRefs;
+      const artifactRef = artifactBuildOutputs.artifactRef;
+      const governanceSummaryRef = qualityGateOutputs.governanceSummaryRef;
+
+      if (!artifactRef) {
+        const endedAt = context.now();
+        return createFailedStageResult({
+          stage,
+          startedAt,
+          endedAt,
+          code: "SHADOW_BIND_READY_ARTIFACT_REF_MISSING",
+          message: "ARTIFACT_BUILD output is missing artifactRef",
+        });
+      }
+
+      if (!governanceSummaryRef) {
+        const endedAt = context.now();
+        return createFailedStageResult({
+          stage,
+          startedAt,
+          endedAt,
+          code: "SHADOW_BIND_READY_GOVERNANCE_REF_MISSING",
+          message: "QUALITY_GATE output is missing governanceSummaryRef",
+        });
+      }
+
+      let artifactPayload: ArtifactBuildStageArtifact;
+      try {
+        const raw = await fs.readFile(artifactRef, "utf8");
+        artifactPayload = JSON.parse(raw) as ArtifactBuildStageArtifact;
+      } catch (error) {
+        const endedAt = context.now();
+        return createFailedStageResult({
+          stage,
+          startedAt,
+          endedAt,
+          code: "SHADOW_BIND_READY_ARTIFACT_READ_FAILED",
+          message: "failed to read artifact build payload",
+          details: {
+            artifactRef,
+            error: String((error as Error)?.message ?? error),
+          },
+        });
+      }
+
+      let governanceSummary: QualityGateGovernanceSummary;
+      try {
+        const raw = await fs.readFile(governanceSummaryRef, "utf8");
+        governanceSummary = JSON.parse(raw) as QualityGateGovernanceSummary;
+      } catch (error) {
+        const endedAt = context.now();
+        return createFailedStageResult({
+          stage,
+          startedAt,
+          endedAt,
+          code: "SHADOW_BIND_READY_GOVERNANCE_READ_FAILED",
+          message: "failed to read governance summary payload",
+          details: {
+            governanceSummaryRef,
+            error: String((error as Error)?.message ?? error),
+          },
+        });
+      }
+
+      const artifactId = artifactPayload.artifactId;
+      const siteVersionId = artifactPayload.siteVersionId;
+      const artifactGovernance = artifactPayload.artifactGovernance;
+      const artifactBundle = artifactPayload.artifact;
+      const enforcementShadowDecision = governanceSummary.site?.siteEnforcement?.SHADOW?.decision ?? null;
+      const publishStageCandidate = artifactPayload.publishStageCandidate ?? "shadow";
+
+      if (
+        !artifactId ||
+        !siteVersionId ||
+        !artifactBundle ||
+        !artifactBundle.siteId ||
+        !artifactBundle.siteVersionId ||
+        !artifactBundle.rendererCompatibilityVersion ||
+        !artifactBundle.bundleSha256 ||
+        !artifactBundle.manifest ||
+        !artifactBundle.assetFingerprintMap ||
+        !artifactBundle.htmlByPath ||
+        !artifactGovernance
+      ) {
+        const endedAt = context.now();
+        return createFailedStageResult({
+          stage,
+          startedAt,
+          endedAt,
+          code: "SHADOW_BIND_READY_ARTIFACT_PAYLOAD_INVALID",
+          message: "artifact build payload is missing required runtime artifact fields",
+          details: {
+            artifactRef,
+            artifactIdPresent: Boolean(artifactId),
+            siteVersionIdPresent: Boolean(siteVersionId),
+            artifactGovernancePresent: Boolean(artifactGovernance),
+          },
+        });
+      }
+
+      if (
+        !governanceSummary.page ||
+        !governanceSummary.site ||
+        !governanceSummary.page.pageEnforcement ||
+        !governanceSummary.site.siteEnforcement?.SHADOW?.decision
+      ) {
+        const endedAt = context.now();
+        return createFailedStageResult({
+          stage,
+          startedAt,
+          endedAt,
+          code: "SHADOW_BIND_READY_GOVERNANCE_PAYLOAD_INVALID",
+          message: "governance summary is missing shadow enforcement fields",
+          details: {
+            governanceSummaryRef,
+          },
+        });
+      }
+
+      const runtimeArtifact: RuntimeArtifact = {
+        id: artifactId,
+        siteId: artifactBundle.siteId,
+        siteVersionId: artifactBundle.siteVersionId,
+        rendererCompatibilityVersion: artifactBundle.rendererCompatibilityVersion,
+        htmlByPath: artifactBundle.htmlByPath,
+        compiledTokenStyles: artifactBundle.compiledTokenStyles ?? "",
+        assetFingerprintMap: artifactBundle.assetFingerprintMap,
+        manifest: artifactBundle.manifest,
+        publishStage: artifactGovernance.publishStage,
+        shadowRestricted: artifactPayload.shadowRestricted ?? false,
+        artifactGovernance,
+        bundleSha256: artifactBundle.bundleSha256,
+        createdAt: "deterministic",
+      };
+      const shadowEligibility = evaluateRuntimeArtifactServingEligibility({
+        artifact: runtimeArtifact,
+        servingStage: "shadow",
       });
+
+      if (!shadowEligibility.allow) {
+        const endedAt = context.now();
+        return createFailedStageResult({
+          stage,
+          startedAt,
+          endedAt,
+          code: "SHADOW_BIND_READY_ENFORCEMENT_DENIED",
+          message: "artifact is not eligible for shadow bind readiness",
+          details: {
+            artifactId,
+            siteVersionId,
+            shadowEligibilityState: "DENIED",
+            enforcementShadowDecision,
+            publishStageCandidate,
+            blockingReason: shadowEligibility.reason,
+          },
+        });
+      }
+
+      const shadowBindReadyRef = path.resolve(path.dirname(artifactRef), "shadow-bind-ready.json");
+      const publishCandidateRef = shadowBindReadyRef;
+      const readinessPayload = {
+        kind: "migration_factory_shadow_publish_candidate_v1",
+        candidateId: deterministicId("shadow_candidate", `${job.jobId}:${artifactId}:${siteVersionId}:shadow`),
+        artifactId,
+        siteVersionId,
+        artifactRef,
+        governanceSummaryRef,
+        publishStageCandidate,
+        shadowEligibilityState: "ALLOWED",
+        publishCandidateState: "READY_FOR_SHADOW_BIND",
+        enforcementShadowDecision,
+        enforcementDecision: artifactPayload.publishEnforcementDecision ?? "UNKNOWN",
+        candidateCreated: true,
+        readinessMode: "artifact_governance_validated_shadow_candidate",
+      };
+
+      try {
+        await fs.mkdir(path.dirname(shadowBindReadyRef), { recursive: true });
+        await fs.writeFile(shadowBindReadyRef, `${JSON.stringify(readinessPayload, null, 2)}\n`, "utf8");
+      } catch (error) {
+        const endedAt = context.now();
+        return createFailedStageResult({
+          stage,
+          startedAt,
+          endedAt,
+          code: "SHADOW_BIND_READY_PERSIST_FAILED",
+          message: "failed to persist shadow bind readiness payload",
+          details: {
+            shadowBindReadyRef,
+            error: String((error as Error)?.message ?? error),
+          },
+        });
+      }
+
+      const endedAt = context.now();
+      return createSucceededResult(
+        stage,
+        startedAt,
+        endedAt,
+        {
+          shadowBindReadyRef,
+          publishCandidateRef,
+          artifactId,
+          siteVersionId,
+          shadowEligibilityState: "ALLOWED",
+          publishCandidateState: "READY_FOR_SHADOW_BIND",
+          enforcementShadowDecision: enforcementShadowDecision ?? "UNKNOWN",
+          publishStageCandidate,
+          candidateCreated: "true",
+        },
+        [
+          {
+            code: "SHADOW_BIND_READY_REALIZED",
+            message: "shadow bind readiness candidate was validated and persisted from artifact/governance outputs",
+            level: "INFO",
+            details: {
+              artifactId,
+              siteVersionId,
+              shadowEligibilityState: "ALLOWED",
+              enforcementShadowDecision,
+              artifactGovernancePresent: true,
+              publishStageCandidate,
+              readinessMode: "artifact_governance_validated_shadow_candidate",
+              candidateCreated: true,
+            },
+          },
+        ],
+      );
     },
   };
 }

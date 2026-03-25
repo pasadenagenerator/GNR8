@@ -195,6 +195,34 @@ test("migration factory happy path completes all stages", async () => {
   assert.equal(persistedArtifact.artifactGovernancePresent, true);
   assert.ok(persistedArtifact.artifactGovernance);
   assert.ok(Object.keys(persistedArtifact.artifact?.htmlByPath ?? {}).length > 0);
+
+  const shadowRefs = persisted?.stageStates.SHADOW_BIND_READY.outputRefs ?? {};
+  assert.ok(shadowRefs.shadowBindReadyRef);
+  assert.ok(shadowRefs.publishCandidateRef);
+  assert.ok(shadowRefs.artifactId);
+  assert.ok(shadowRefs.siteVersionId);
+  assert.equal(shadowRefs.candidateCreated, "true");
+  assert.equal(shadowRefs.shadowEligibilityState, "ALLOWED");
+  assert.equal(shadowRefs.publishCandidateState, "READY_FOR_SHADOW_BIND");
+
+  const shadowDiagnostics = persisted?.stageStates.SHADOW_BIND_READY.diagnostics ?? [];
+  assert.equal(shadowDiagnostics[0]?.code, "SHADOW_BIND_READY_REALIZED");
+  assert.equal(shadowDiagnostics[0]?.details?.artifactGovernancePresent, true);
+  assert.equal(shadowDiagnostics[0]?.details?.candidateCreated, true);
+
+  const shadowCandidateRaw = await fs.readFile(shadowRefs.shadowBindReadyRef!, "utf8");
+  const shadowCandidate = JSON.parse(shadowCandidateRaw) as {
+    kind?: string;
+    shadowEligibilityState?: string;
+    publishCandidateState?: string;
+    candidateCreated?: boolean;
+    artifactId?: string;
+  };
+  assert.equal(shadowCandidate.kind, "migration_factory_shadow_publish_candidate_v1");
+  assert.equal(shadowCandidate.shadowEligibilityState, "ALLOWED");
+  assert.equal(shadowCandidate.publishCandidateState, "READY_FOR_SHADOW_BIND");
+  assert.equal(shadowCandidate.candidateCreated, true);
+  assert.ok(shadowCandidate.artifactId);
 });
 
 test("migration factory failure path stops on failed stage", async () => {
@@ -405,12 +433,19 @@ test("deterministic execution order is fixed across runs", async () => {
   assert.ok(Object.keys(report1.outputs).includes("ARTIFACT_BUILD.artifactBuildRef"));
   assert.ok(Object.keys(report1.outputs).includes("ARTIFACT_BUILD.pathCount"));
   assert.ok(Object.keys(report1.outputs).includes("ARTIFACT_BUILD.artifactGovernancePresent"));
+  assert.ok(Object.keys(report1.outputs).includes("SHADOW_BIND_READY.shadowBindReadyRef"));
+  assert.ok(Object.keys(report1.outputs).includes("SHADOW_BIND_READY.publishCandidateRef"));
+  assert.ok(Object.keys(report1.outputs).includes("SHADOW_BIND_READY.shadowEligibilityState"));
+  assert.ok(Object.keys(report1.outputs).includes("SHADOW_BIND_READY.candidateCreated"));
   assert.equal(report1.outputs["ARTIFACT_BUILD.artifactGovernancePresent"], "true");
   assert.equal(report2.outputs["ARTIFACT_BUILD.artifactGovernancePresent"], "true");
   assert.equal(report1.outputs["ARTIFACT_BUILD.pathCount"], report2.outputs["ARTIFACT_BUILD.pathCount"]);
+  assert.equal(report1.outputs["SHADOW_BIND_READY.shadowEligibilityState"], report2.outputs["SHADOW_BIND_READY.shadowEligibilityState"]);
+  assert.equal(report1.outputs["SHADOW_BIND_READY.candidateCreated"], "true");
+  assert.equal(report2.outputs["SHADOW_BIND_READY.candidateCreated"], "true");
 });
 
-test("quality gate reflects degraded input instead of fake strong success", async () => {
+test("quality gate degraded input propagates to explicit shadow readiness denial", async () => {
   const now = createDeterministicClock();
   const store = new InMemoryMigrationJobStore({ now });
   const snapshotRootDirAbs = path.resolve(os.tmpdir(), "gnr8-mf-tests", "quality-weak");
@@ -430,9 +465,11 @@ test("quality gate reflects degraded input instead of fake strong success", asyn
   const report = await factory.runMigrationJob(job.jobId);
   const persisted = await store.getJob(job.jobId);
 
-  assert.equal(report.finalState, "COMPLETED");
+  assert.equal(report.finalState, "FAILED");
+  assert.equal(report.failedStage, "SHADOW_BIND_READY");
   assert.ok(persisted);
   assert.equal(persisted?.stageStates.QUALITY_GATE.state, "SUCCEEDED");
+  assert.equal(persisted?.stageStates.SHADOW_BIND_READY.state, "FAILED");
   assert.notEqual(persisted?.stageStates.QUALITY_GATE.outputRefs.pageMigrationGateState, "SHADOW_READY");
   assert.equal(persisted?.stageStates.QUALITY_GATE.outputRefs.pageMigrationGateState, "BROKEN");
 
@@ -622,4 +659,178 @@ test("artifact build fails explicitly when governance summary ref is missing", a
   assert.equal(report.failedStage, "ARTIFACT_BUILD");
   assert.equal(persisted?.stageStates.ARTIFACT_BUILD.error?.code, "ARTIFACT_BUILD_GOVERNANCE_REF_MISSING");
   assert.equal(persisted?.stageStates.SHADOW_BIND_READY.state, "NOT_STARTED");
+});
+
+test("shadow bind ready fails explicitly when governance denies shadow eligibility", async () => {
+  const now = createDeterministicClock();
+  const store = new InMemoryMigrationJobStore({ now });
+  const snapshotRootDirAbs = path.resolve(os.tmpdir(), "gnr8-mf-tests", "shadow-deny");
+  const stageRunner = new DefaultMigrationStageRunner({
+    snapshotImportOptions: {
+      snapshotRootDirAbs,
+      fetchImpl: createFetchFixture(),
+    },
+    executors: {
+      ARTIFACT_BUILD: async (_job, stage, context) => {
+        const result = await createSnapshotStageRunner({ snapshotRootDirAbs }).runStage(_job, stage, context);
+        if (result.status !== "SUCCEEDED") return result;
+
+        const artifactRef = result.outputRefs.artifactRef;
+        assert.ok(artifactRef);
+        const raw = await fs.readFile(artifactRef, "utf8");
+        const artifact = JSON.parse(raw) as {
+          artifactGovernance?: {
+            siteEnforcementState?: {
+              shadow?: string;
+            };
+          };
+        };
+        if (!artifact.artifactGovernance?.siteEnforcementState) throw new Error("missing artifact governance in fixture");
+        artifact.artifactGovernance.siteEnforcementState.shadow = "DENY";
+        await fs.writeFile(artifactRef, `${JSON.stringify(artifact, null, 2)}\n`, "utf8");
+        return result;
+      },
+    },
+  });
+
+  const factory = new MigrationFactory({ store, now, stageRunner });
+  const job = await factory.startMigrationJob({
+    jobId: "job-shadow-deny",
+    siteId: "site-1",
+    sourceUrl: "https://example.com",
+  });
+  const report = await factory.runMigrationJob(job.jobId);
+  const persisted = await store.getJob(job.jobId);
+  assert.ok(persisted);
+
+  assert.equal(report.finalState, "FAILED");
+  assert.equal(report.failedStage, "SHADOW_BIND_READY");
+  assert.equal(persisted.stageStates.SHADOW_BIND_READY.state, "FAILED");
+  assert.equal(persisted.stageStates.SHADOW_BIND_READY.error?.code, "SHADOW_BIND_READY_ENFORCEMENT_DENIED");
+});
+
+test("shadow bind ready fails explicitly when artifact build output is missing artifact ref", async () => {
+  const now = createDeterministicClock();
+  const store = new InMemoryMigrationJobStore({ now });
+  const snapshotRootDirAbs = path.resolve(os.tmpdir(), "gnr8-mf-tests", "shadow-missing-artifact");
+  const stageRunner = new DefaultMigrationStageRunner({
+    snapshotImportOptions: {
+      snapshotRootDirAbs,
+      fetchImpl: createFetchFixture(),
+    },
+    executors: {
+      ARTIFACT_BUILD: async (_job, stage, context) =>
+        createSucceededStageResult(stage, context.now(), context.now(), {
+          artifactId: "artifact-without-ref",
+          publishStageCandidate: "shadow",
+          artifactGovernancePresent: "true",
+        }),
+    },
+  });
+
+  const factory = new MigrationFactory({ store, now, stageRunner });
+  const job = await factory.startMigrationJob({
+    jobId: "job-shadow-missing-artifact",
+    siteId: "site-1",
+    sourceUrl: "https://example.com",
+  });
+  const report = await factory.runMigrationJob(job.jobId);
+  const persisted = await store.getJob(job.jobId);
+  assert.ok(persisted);
+
+  assert.equal(report.finalState, "FAILED");
+  assert.equal(report.failedStage, "SHADOW_BIND_READY");
+  assert.equal(persisted.stageStates.SHADOW_BIND_READY.error?.code, "SHADOW_BIND_READY_ARTIFACT_REF_MISSING");
+});
+
+test("shadow bind ready fails explicitly when governance summary ref is missing", async () => {
+  const now = createDeterministicClock();
+  const store = new InMemoryMigrationJobStore({ now });
+  const snapshotRootDirAbs = path.resolve(os.tmpdir(), "gnr8-mf-tests", "shadow-missing-governance");
+  const stageRunner = new DefaultMigrationStageRunner({
+    snapshotImportOptions: {
+      snapshotRootDirAbs,
+      fetchImpl: createFetchFixture(),
+    },
+    executors: {
+      QUALITY_GATE: async (_job, stage, context) =>
+        createSucceededStageResult(stage, context.now(), context.now(), {
+          qualityGateRef: "forced-quality-gate-ref",
+          pageMigrationGateState: "SHADOW_READY",
+        }),
+      ARTIFACT_BUILD: async (_job, stage, context) =>
+        createSucceededStageResult(stage, context.now(), context.now(), {
+          artifactRef: path.resolve(snapshotRootDirAbs, "forced-artifact.json"),
+        }),
+    },
+  });
+
+  const factory = new MigrationFactory({ store, now, stageRunner });
+  const job = await factory.startMigrationJob({
+    jobId: "job-shadow-missing-governance",
+    siteId: "site-1",
+    sourceUrl: "https://example.com",
+  });
+  const report = await factory.runMigrationJob(job.jobId);
+  const persisted = await store.getJob(job.jobId);
+  assert.ok(persisted);
+
+  assert.equal(report.finalState, "FAILED");
+  assert.equal(report.failedStage, "SHADOW_BIND_READY");
+  assert.equal(persisted.stageStates.SHADOW_BIND_READY.error?.code, "SHADOW_BIND_READY_GOVERNANCE_REF_MISSING");
+});
+
+test("shadow bind ready resume retries only shadow stage after failure", async () => {
+  const now = createDeterministicClock();
+  const store = new InMemoryMigrationJobStore({ now });
+  const snapshotRootDirAbs = path.resolve(os.tmpdir(), "gnr8-mf-tests", "shadow-resume");
+  let failOnce = true;
+  const failingRunner = new DefaultMigrationStageRunner({
+    snapshotImportOptions: {
+      snapshotRootDirAbs,
+      fetchImpl: createFetchFixture(),
+    },
+    executors: {
+      SHADOW_BIND_READY: async (_job, stage, context) => {
+        if (failOnce) {
+          failOnce = false;
+          return createFailedStageResult({
+            stage,
+            startedAt: context.now(),
+            endedAt: context.now(),
+            code: "FORCED_SHADOW_BIND_READY_FAILURE",
+            message: "forced shadow bind ready failure once",
+          });
+        }
+        return createSnapshotStageRunner({ snapshotRootDirAbs }).runStage(_job, stage, context);
+      },
+    },
+  });
+  const factory = new MigrationFactory({ store, now, stageRunner: failingRunner });
+  const job = await factory.startMigrationJob({
+    jobId: "job-shadow-resume",
+    siteId: "site-1",
+    sourceUrl: "https://example.com",
+  });
+
+  const failed = await factory.runMigrationJob(job.jobId);
+  assert.equal(failed.finalState, "FAILED");
+  assert.equal(failed.failedStage, "SHADOW_BIND_READY");
+  const afterFail = await store.getJob(job.jobId);
+  assert.ok(afterFail);
+  assert.equal(afterFail.stageStates.ARTIFACT_BUILD.attempts, 1);
+  assert.equal(afterFail.stageStates.SHADOW_BIND_READY.attempts, 1);
+
+  const resumeFactory = new MigrationFactory({
+    store,
+    now,
+    stageRunner: createSnapshotStageRunner({ snapshotRootDirAbs }),
+  });
+  const resumed = await resumeFactory.resumeMigrationJob(job.jobId);
+  assert.equal(resumed.finalState, "COMPLETED");
+
+  const afterResume = await store.getJob(job.jobId);
+  assert.ok(afterResume);
+  assert.equal(afterResume.stageStates.ARTIFACT_BUILD.attempts, 1);
+  assert.equal(afterResume.stageStates.SHADOW_BIND_READY.attempts, 2);
 });
