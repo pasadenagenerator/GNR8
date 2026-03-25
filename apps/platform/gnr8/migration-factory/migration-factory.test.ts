@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -7,6 +8,7 @@ import { MigrationFactory } from "@/gnr8/migration-factory/migration-factory";
 import { InMemoryMigrationJobStore } from "@/gnr8/migration-factory/migration-job-store";
 import { canRunStage, createInitialStageStates, MIGRATION_STAGE_ORDER } from "@/gnr8/migration-factory/migration-stage-machine";
 import { createFailedStageResult, DefaultMigrationStageRunner } from "@/gnr8/migration-factory/migration-stage-runner";
+import type { MigrationStage, MigrationStageResult } from "@/gnr8/migration-factory/migration-job-types";
 
 function createDeterministicClock(): () => string {
   let tick = 0;
@@ -83,6 +85,17 @@ function createSnapshotStageRunner(input: { snapshotRootDirAbs: string; failFetc
   });
 }
 
+function createSucceededStageResult(stage: MigrationStage, startedAt: string, endedAt: string, outputRefs: Record<string, string>): MigrationStageResult {
+  return {
+    stage,
+    status: "SUCCEEDED",
+    startedAt,
+    endedAt,
+    diagnostics: [{ code: `${stage}_FORCED_SUCCESS`, message: `${stage} forced success for test`, level: "INFO" }],
+    outputRefs,
+  };
+}
+
 test("migration factory happy path completes all stages", async () => {
   const now = createDeterministicClock();
   const store = new InMemoryMigrationJobStore({ now });
@@ -156,6 +169,32 @@ test("migration factory happy path completes all stages", async () => {
   assert.equal(qualityDiagnostics[0]?.code, "QUALITY_GATE_EVALUATED");
   assert.ok(typeof qualityDiagnostics[0]?.details?.pageStructuralConfidence === "number");
   assert.ok(typeof qualityDiagnostics[0]?.details?.recommendedNextStep === "string");
+
+  const artifactRefs = persisted?.stageStates.ARTIFACT_BUILD.outputRefs ?? {};
+  assert.ok(artifactRefs.artifactId);
+  assert.ok(artifactRefs.artifactRef);
+  assert.ok(artifactRefs.artifactManifestRef);
+  assert.ok(artifactRefs.artifactBuildRef);
+  assert.ok(artifactRefs.primaryPath);
+  assert.ok(Number(artifactRefs.pathCount) > 0);
+  assert.equal(artifactRefs.artifactGovernancePresent, "true");
+  assert.ok(artifactRefs.publishStageCandidate);
+  assert.ok(artifactRefs.bundleSha256);
+
+  const artifactDiagnostics = persisted?.stageStates.ARTIFACT_BUILD.diagnostics ?? [];
+  assert.equal(artifactDiagnostics[0]?.code, "ARTIFACT_BUILD_REALIZED");
+  assert.equal(artifactDiagnostics[0]?.details?.artifactGovernancePresent, true);
+  assert.equal(artifactDiagnostics[0]?.details?.builderMarkersPresent, false);
+
+  const persistedArtifactRaw = await fs.readFile(artifactRefs.artifactRef!, "utf8");
+  const persistedArtifact = JSON.parse(persistedArtifactRaw) as {
+    artifactGovernancePresent?: boolean;
+    artifactGovernance?: Record<string, unknown>;
+    artifact?: { htmlByPath?: Record<string, string> };
+  };
+  assert.equal(persistedArtifact.artifactGovernancePresent, true);
+  assert.ok(persistedArtifact.artifactGovernance);
+  assert.ok(Object.keys(persistedArtifact.artifact?.htmlByPath ?? {}).length > 0);
 });
 
 test("migration factory failure path stops on failed stage", async () => {
@@ -255,6 +294,65 @@ test("migration factory resume continues from first non-succeeded stage", async 
   assert.equal(afterResume?.stageStates.SHADOW_BIND_READY.attempts, 1);
 });
 
+test("artifact build failure on first attempt resumes without rerunning canonical/quality", async () => {
+  const now = createDeterministicClock();
+  const store = new InMemoryMigrationJobStore({ now });
+  const snapshotRootDirAbs = path.resolve(os.tmpdir(), "gnr8-mf-tests", "artifact-resume");
+  let failOnce = true;
+  const failingRunner = new DefaultMigrationStageRunner({
+    snapshotImportOptions: {
+      snapshotRootDirAbs,
+      fetchImpl: createFetchFixture(),
+    },
+    executors: {
+      ARTIFACT_BUILD: async (_job, stage, context) => {
+        if (!failOnce) {
+          return createSnapshotStageRunner({ snapshotRootDirAbs }).runStage(_job, stage, context);
+        }
+        failOnce = false;
+        return createFailedStageResult({
+          stage,
+          startedAt: context.now(),
+          endedAt: context.now(),
+          code: "FORCED_ARTIFACT_BUILD_FAILURE",
+          message: "forced artifact build failure once",
+        });
+      },
+    },
+  });
+  const factory = new MigrationFactory({ store, now, stageRunner: failingRunner });
+  const job = await factory.startMigrationJob({
+    jobId: "job-artifact-resume",
+    siteId: "site-1",
+    sourceUrl: "https://example.com",
+  });
+
+  const firstRun = await factory.runMigrationJob(job.jobId);
+  assert.equal(firstRun.finalState, "FAILED");
+  assert.equal(firstRun.failedStage, "ARTIFACT_BUILD");
+  const afterFail = await store.getJob(job.jobId);
+  assert.ok(afterFail);
+  assert.equal(afterFail?.stageStates.CANONICAL.attempts, 1);
+  assert.equal(afterFail?.stageStates.QUALITY_GATE.attempts, 1);
+  assert.equal(afterFail?.stageStates.ARTIFACT_BUILD.attempts, 1);
+  assert.equal(afterFail?.stageStates.SHADOW_BIND_READY.attempts, 0);
+
+  const resumeFactory = new MigrationFactory({
+    store,
+    now,
+    stageRunner: createSnapshotStageRunner({ snapshotRootDirAbs }),
+  });
+  const resumed = await resumeFactory.resumeMigrationJob(job.jobId);
+  assert.equal(resumed.finalState, "COMPLETED");
+
+  const afterResume = await store.getJob(job.jobId);
+  assert.ok(afterResume);
+  assert.equal(afterResume?.stageStates.CANONICAL.attempts, 1);
+  assert.equal(afterResume?.stageStates.QUALITY_GATE.attempts, 1);
+  assert.equal(afterResume?.stageStates.ARTIFACT_BUILD.attempts, 2);
+  assert.equal(afterResume?.stageStates.SHADOW_BIND_READY.attempts, 1);
+});
+
 test("stage transition guard blocks CANONICAL before LAYOUT_GRAPH succeeds", () => {
   const stageStates = createInitialStageStates();
   stageStates.INTAKE.state = "SUCCEEDED";
@@ -304,6 +402,12 @@ test("deterministic execution order is fixed across runs", async () => {
   assert.ok(Object.keys(report1.outputs).includes("CANONICAL.canonicalPageRef"));
   assert.ok(Object.keys(report1.outputs).includes("QUALITY_GATE.pageMigrationGateState"));
   assert.ok(Object.keys(report1.outputs).includes("QUALITY_GATE.pageEnforcementShadowDecision"));
+  assert.ok(Object.keys(report1.outputs).includes("ARTIFACT_BUILD.artifactBuildRef"));
+  assert.ok(Object.keys(report1.outputs).includes("ARTIFACT_BUILD.pathCount"));
+  assert.ok(Object.keys(report1.outputs).includes("ARTIFACT_BUILD.artifactGovernancePresent"));
+  assert.equal(report1.outputs["ARTIFACT_BUILD.artifactGovernancePresent"], "true");
+  assert.equal(report2.outputs["ARTIFACT_BUILD.artifactGovernancePresent"], "true");
+  assert.equal(report1.outputs["ARTIFACT_BUILD.pathCount"], report2.outputs["ARTIFACT_BUILD.pathCount"]);
 });
 
 test("quality gate reflects degraded input instead of fake strong success", async () => {
@@ -420,4 +524,102 @@ test("resume from layout-graph failure does not rerun snapshot stage", async () 
   assert.ok(afterResume);
   assert.equal(afterResume?.stageStates.SNAPSHOT.attempts, 1);
   assert.equal(afterResume?.stageStates.LAYOUT_GRAPH.attempts, 2);
+});
+
+test("artifact build fails explicitly when canonical ref is missing", async () => {
+  const now = createDeterministicClock();
+  const store = new InMemoryMigrationJobStore({ now });
+  const snapshotRootDirAbs = path.resolve(os.tmpdir(), "gnr8-mf-tests", "artifact-missing-canonical");
+  const governanceSummaryRef = path.resolve(snapshotRootDirAbs, "governance-summary.json");
+  await fs.mkdir(snapshotRootDirAbs, { recursive: true });
+  await fs.writeFile(
+    governanceSummaryRef,
+    `${JSON.stringify({
+      page: {
+        canonicalPageId: "p1",
+        sourcePath: "/",
+        pageStructuralConfidence: 0.9,
+        weakSectionIds: [],
+        structuralAnomalies: [],
+        pageMigrationGate: { state: "SHADOW_READY", score: 0.9 },
+        pageRolloutPolicy: { state: "SHADOW_ONLY", recommendedNextStep: "shadow" },
+        pageEnforcement: {
+          SHADOW: { decision: "ALLOW" },
+          CANARY: { decision: "DENY" },
+          PRODUCTION: { decision: "DENY" },
+        },
+      },
+      site: {
+        siteEnforcement: {
+          SHADOW: { decision: "ALLOW" },
+          CANARY: { decision: "DENY" },
+          PRODUCTION: { decision: "DENY" },
+        },
+      },
+    })}\n`,
+    "utf8",
+  );
+
+  const stageRunner = new DefaultMigrationStageRunner({
+    snapshotImportOptions: {
+      snapshotRootDirAbs,
+      fetchImpl: createFetchFixture(),
+    },
+    executors: {
+      CANONICAL: async (_job, stage, context) =>
+        createSucceededStageResult(stage, context.now(), context.now(), {
+          canonicalRef: "forced-canonical-ref",
+        }),
+      QUALITY_GATE: async (_job, stage, context) =>
+        createSucceededStageResult(stage, context.now(), context.now(), {
+          governanceSummaryRef,
+          pageMigrationGateState: "SHADOW_READY",
+        }),
+    },
+  });
+  const factory = new MigrationFactory({ store, now, stageRunner });
+  const job = await factory.startMigrationJob({
+    jobId: "job-artifact-missing-canonical",
+    siteId: "site-1",
+    sourceUrl: "https://example.com",
+  });
+  const report = await factory.runMigrationJob(job.jobId);
+  const persisted = await store.getJob(job.jobId);
+
+  assert.equal(report.finalState, "FAILED");
+  assert.equal(report.failedStage, "ARTIFACT_BUILD");
+  assert.equal(persisted?.stageStates.ARTIFACT_BUILD.error?.code, "ARTIFACT_BUILD_CANONICAL_REF_MISSING");
+  assert.equal(persisted?.stageStates.SHADOW_BIND_READY.state, "NOT_STARTED");
+});
+
+test("artifact build fails explicitly when governance summary ref is missing", async () => {
+  const now = createDeterministicClock();
+  const store = new InMemoryMigrationJobStore({ now });
+  const snapshotRootDirAbs = path.resolve(os.tmpdir(), "gnr8-mf-tests", "artifact-missing-governance");
+  const stageRunner = new DefaultMigrationStageRunner({
+    snapshotImportOptions: {
+      snapshotRootDirAbs,
+      fetchImpl: createFetchFixture(),
+    },
+    executors: {
+      QUALITY_GATE: async (_job, stage, context) =>
+        createSucceededStageResult(stage, context.now(), context.now(), {
+          qualityGateRef: "forced-quality-gate-ref",
+          pageMigrationGateState: "SHADOW_READY",
+        }),
+    },
+  });
+  const factory = new MigrationFactory({ store, now, stageRunner });
+  const job = await factory.startMigrationJob({
+    jobId: "job-artifact-missing-governance",
+    siteId: "site-1",
+    sourceUrl: "https://example.com",
+  });
+  const report = await factory.runMigrationJob(job.jobId);
+  const persisted = await store.getJob(job.jobId);
+
+  assert.equal(report.finalState, "FAILED");
+  assert.equal(report.failedStage, "ARTIFACT_BUILD");
+  assert.equal(persisted?.stageStates.ARTIFACT_BUILD.error?.code, "ARTIFACT_BUILD_GOVERNANCE_REF_MISSING");
+  assert.equal(persisted?.stageStates.SHADOW_BIND_READY.state, "NOT_STARTED");
 });

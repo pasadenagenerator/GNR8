@@ -2,6 +2,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 
 import { importHtmlToPage } from "@/gnr8/importer/html-to-page";
+import { buildDeterministicArtifactBundle } from "@/gnr8/runtime/artifact-builder";
 import { deterministicId } from "@/gnr8/runtime/deterministic";
 import { evaluatePageRolloutEnforcementByStage } from "@/gnr8/migration/enforcement/page-enforcement";
 import { evaluateSiteRolloutEnforcementByStage } from "@/gnr8/migration/enforcement/site-enforcement";
@@ -12,6 +13,9 @@ import { evaluateSiteRolloutPolicy, toSiteRolloutPolicyPageResult } from "@/gnr8
 import { evaluatePageMigrationGate, type PageGateIntent } from "@/gnr8/migration/quality-gates/page-quality-gate";
 import { evaluateSiteMigrationGate } from "@/gnr8/migration/quality-gates/site-quality-gate";
 import { buildCanonicalMigrationInput } from "@/gnr8/runtime/migration-factory";
+import { evaluatePublishEnforcement } from "@/gnr8/runtime/publish-enforcement";
+import { runRenderIntegrityGate } from "@/gnr8/runtime/render-integrity-gate";
+import { RENDERER_COMPATIBILITY_VERSION, type CanonicalSiteMigrationInput, type CanonicalSiteVersionSnapshot, type PageMigrationGovernanceSnapshot } from "@/gnr8/runtime/types";
 import type { Gnr8Page } from "@/gnr8/types/page";
 import { importPublicSinglePageUrlToSnapshot, type UrlSinglePageImportSnapshot } from "@/gnr8/validation/runtime/url-single-page-import";
 
@@ -118,6 +122,23 @@ function resolvePrimaryPathFromSourceUrl(sourceUrl: string): string {
   }
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function resolvePublishStageCandidate(input: {
+  siteEnforcement: {
+    SHADOW: { decision: string };
+    CANARY: { decision: string };
+    PRODUCTION: { decision: string };
+  };
+}): "shadow" | "canary" | "production" | "none" {
+  if (input.siteEnforcement.PRODUCTION.decision === "ALLOW") return "production";
+  if (input.siteEnforcement.CANARY.decision === "ALLOW") return "canary";
+  if (input.siteEnforcement.SHADOW.decision === "ALLOW" || input.siteEnforcement.SHADOW.decision === "REVIEW_ONLY") return "shadow";
+  return "none";
+}
+
 function createSucceededResult(
   stage: MigrationStage,
   startedAt: string,
@@ -189,6 +210,34 @@ function countLayoutRegions(root: { type: string; children: unknown[] }): number
   }
   return count;
 }
+
+type CanonicalStageArtifact = {
+  canonicalInput?: CanonicalSiteMigrationInput;
+  canonical?: {
+    canonicalPageId?: string;
+    primaryPath?: string;
+  };
+};
+
+type QualityGateGovernanceSummary = {
+  page?: {
+    canonicalPageId?: string;
+    sourcePath?: string;
+    pageStructuralConfidence?: number;
+    weakSectionIds?: string[];
+    structuralAnomalies?: string[];
+    pageMigrationGate?: PageMigrationGovernanceSnapshot["pageMigrationGate"];
+    pageRolloutPolicy?: PageMigrationGovernanceSnapshot["pageRolloutPolicy"];
+    pageEnforcement?: PageMigrationGovernanceSnapshot["pageEnforcement"];
+  };
+  site?: {
+    siteEnforcement?: {
+      SHADOW?: { decision?: string };
+      CANARY?: { decision?: string };
+      PRODUCTION?: { decision?: string };
+    };
+  };
+};
 
 function createDefaultStageExecutors(input?: {
   snapshotImporter?: SnapshotImporter;
@@ -828,10 +877,346 @@ function createDefaultStageExecutors(input?: {
     },
     ARTIFACT_BUILD: async (job, stage, context) => {
       const startedAt = context.now();
-      const endedAt = context.now();
-      return createSucceededResult(stage, startedAt, endedAt, {
-        artifactRef: buildDeterministicRef(job.jobId, stage, "artifact"),
+      const canonicalOutputs = job.stageStates.CANONICAL.outputRefs;
+      const qualityGateOutputs = job.stageStates.QUALITY_GATE.outputRefs;
+      const canonicalPageRef = canonicalOutputs.canonicalPageRef;
+      const governanceSummaryRef = qualityGateOutputs.governanceSummaryRef;
+
+      if (!canonicalPageRef) {
+        const endedAt = context.now();
+        return createFailedStageResult({
+          stage,
+          startedAt,
+          endedAt,
+          code: "ARTIFACT_BUILD_CANONICAL_REF_MISSING",
+          message: "CANONICAL output is missing canonicalPageRef",
+        });
+      }
+
+      if (!governanceSummaryRef) {
+        const endedAt = context.now();
+        return createFailedStageResult({
+          stage,
+          startedAt,
+          endedAt,
+          code: "ARTIFACT_BUILD_GOVERNANCE_REF_MISSING",
+          message: "QUALITY_GATE output is missing governanceSummaryRef",
+        });
+      }
+
+      let canonicalArtifact: CanonicalStageArtifact;
+      try {
+        const raw = await fs.readFile(canonicalPageRef, "utf8");
+        canonicalArtifact = JSON.parse(raw) as CanonicalStageArtifact;
+      } catch (error) {
+        const endedAt = context.now();
+        return createFailedStageResult({
+          stage,
+          startedAt,
+          endedAt,
+          code: "ARTIFACT_BUILD_CANONICAL_READ_FAILED",
+          message: "failed to read canonical stage artifact",
+          details: {
+            canonicalPageRef,
+            error: String((error as Error)?.message ?? error),
+          },
+        });
+      }
+
+      let governanceSummary: QualityGateGovernanceSummary;
+      try {
+        const raw = await fs.readFile(governanceSummaryRef, "utf8");
+        governanceSummary = JSON.parse(raw) as QualityGateGovernanceSummary;
+      } catch (error) {
+        const endedAt = context.now();
+        return createFailedStageResult({
+          stage,
+          startedAt,
+          endedAt,
+          code: "ARTIFACT_BUILD_GOVERNANCE_READ_FAILED",
+          message: "failed to read quality gate governance summary artifact",
+          details: {
+            governanceSummaryRef,
+            error: String((error as Error)?.message ?? error),
+          },
+        });
+      }
+
+      const canonicalInput = canonicalArtifact.canonicalInput;
+      if (!canonicalInput || !Array.isArray(canonicalInput.pages) || canonicalInput.pages.length === 0) {
+        const endedAt = context.now();
+        return createFailedStageResult({
+          stage,
+          startedAt,
+          endedAt,
+          code: "ARTIFACT_BUILD_CANONICAL_PAYLOAD_INVALID",
+          message: "canonical artifact is missing canonicalInput.pages payload",
+          details: { canonicalPageRef },
+        });
+      }
+
+      const governancePage = governanceSummary.page;
+      const governanceSite = governanceSummary.site;
+      const canonicalPageId = governancePage?.canonicalPageId ?? canonicalArtifact.canonical?.canonicalPageId ?? canonicalOutputs.canonicalPageId ?? null;
+      const governancePayload: PageMigrationGovernanceSnapshot | null =
+        governancePage &&
+        typeof governancePage.pageStructuralConfidence === "number" &&
+        Array.isArray(governancePage.weakSectionIds) &&
+        Array.isArray(governancePage.structuralAnomalies) &&
+        isRecord(governancePage.pageMigrationGate) &&
+        isRecord(governancePage.pageRolloutPolicy) &&
+        isRecord(governancePage.pageEnforcement)
+          ? {
+              pageStructuralConfidence: governancePage.pageStructuralConfidence,
+              weakSectionIds: governancePage.weakSectionIds,
+              structuralAnomalies: governancePage.structuralAnomalies,
+              pageMigrationGate: governancePage.pageMigrationGate,
+              pageRolloutPolicy: governancePage.pageRolloutPolicy,
+              pageEnforcement: governancePage.pageEnforcement,
+            }
+          : null;
+
+      if (!canonicalPageId || !governancePayload) {
+        const endedAt = context.now();
+        return createFailedStageResult({
+          stage,
+          startedAt,
+          endedAt,
+          code: "ARTIFACT_BUILD_GOVERNANCE_PAYLOAD_INVALID",
+          message: "quality gate governance summary is missing required page governance fields",
+          details: {
+            governanceSummaryRef,
+            canonicalPageIdPresent: Boolean(canonicalPageId),
+            governancePayloadPresent: Boolean(governancePayload),
+          },
+        });
+      }
+
+      const pageIndex = canonicalInput.pages.findIndex((page) => page.pageId === canonicalPageId);
+      if (pageIndex < 0) {
+        const endedAt = context.now();
+        return createFailedStageResult({
+          stage,
+          startedAt,
+          endedAt,
+          code: "ARTIFACT_BUILD_CANONICAL_PAGE_NOT_FOUND",
+          message: "canonical pageId from governance summary was not found in canonical pages payload",
+          details: {
+            canonicalPageId,
+            pageCount: canonicalInput.pages.length,
+          },
+        });
+      }
+
+      const canonicalPages = canonicalInput.pages.map((page, index) =>
+        index === pageIndex
+          ? {
+              ...page,
+              migrationGovernance: governancePayload,
+            }
+          : page,
+      );
+      const pageSnapshot = canonicalPages[pageIndex]!;
+      const publishStageCandidate = resolvePublishStageCandidate({
+        siteEnforcement: {
+          SHADOW: { decision: governanceSite?.siteEnforcement?.SHADOW?.decision ?? "DENY" },
+          CANARY: { decision: governanceSite?.siteEnforcement?.CANARY?.decision ?? "DENY" },
+          PRODUCTION: { decision: governanceSite?.siteEnforcement?.PRODUCTION?.decision ?? "DENY" },
+        },
       });
+
+      const versionSeed = `${job.jobId}:${canonicalPageId}:${canonicalPageRef}:${governanceSummaryRef}`;
+      const siteVersion: CanonicalSiteVersionSnapshot = {
+        id: deterministicId("site_version", versionSeed),
+        siteId: canonicalInput.siteId,
+        versionNo: 1,
+        state: "DRAFT",
+        source: "migration",
+        actor: canonicalInput.actor,
+        createdAt: "deterministic",
+        rendererCompatibilityVersion: RENDERER_COMPATIBILITY_VERSION,
+        artifactId: null,
+        pages: [
+          {
+            id: deterministicId("page_version", versionSeed),
+            siteVersionId: deterministicId("site_version", versionSeed),
+            pageId: pageSnapshot.pageId,
+            path: pageSnapshot.path,
+            title: pageSnapshot.title,
+            structureModel: pageSnapshot.structureModel,
+            contentModel: pageSnapshot.contentModel,
+            styleTokens: pageSnapshot.styleTokens,
+            assetGraph: pageSnapshot.assetGraph,
+            semanticSignals: pageSnapshot.semanticSignals,
+            migrationGovernance: pageSnapshot.migrationGovernance,
+            source: pageSnapshot.source,
+            actor: pageSnapshot.actor,
+            createdAt: "deterministic",
+          },
+        ],
+      };
+
+      let artifactBundle;
+      let enforcement;
+      try {
+        enforcement = evaluatePublishEnforcement({
+          siteVersion,
+          stage: publishStageCandidate === "none" ? "shadow" : publishStageCandidate,
+        });
+        artifactBundle = buildDeterministicArtifactBundle({
+          siteVersion,
+          renderMode: "PUBLISH",
+        });
+      } catch (error) {
+        const endedAt = context.now();
+        return createFailedStageResult({
+          stage,
+          startedAt,
+          endedAt,
+          code: "ARTIFACT_BUILD_EXCEPTION",
+          message: "artifact build path threw an error",
+          details: {
+            error: String((error as Error)?.message ?? error),
+          },
+        });
+      }
+
+      const integrity = runRenderIntegrityGate({
+        siteVersion,
+        htmlByPath: artifactBundle.htmlByPath,
+        assetFingerprintMap: artifactBundle.assetFingerprintMap,
+      });
+      if (!integrity.ok) {
+        const endedAt = context.now();
+        return createFailedStageResult({
+          stage,
+          startedAt,
+          endedAt,
+          code: "ARTIFACT_BUILD_INTEGRITY_FAILED",
+          message: "artifact render integrity validation failed",
+          details: {
+            issueCount: integrity.issues.length,
+            issues: integrity.issues,
+          },
+        });
+      }
+
+      const pathCount = Object.keys(artifactBundle.htmlByPath).length;
+      const rootPathCovered = Object.prototype.hasOwnProperty.call(artifactBundle.htmlByPath, "/");
+      if (!artifactBundle.bundleSha256 || pathCount === 0 || (!rootPathCovered && pathCount < 1)) {
+        const endedAt = context.now();
+        return createFailedStageResult({
+          stage,
+          startedAt,
+          endedAt,
+          code: "ARTIFACT_BUILD_EMPTY_OUTPUT",
+          message: "artifact bundle did not produce required output coverage",
+          details: {
+            hasBundleSha: Boolean(artifactBundle.bundleSha256),
+            pathCount,
+            rootPathCovered,
+          },
+        });
+      }
+
+      const builderMarkersPresent = Object.values(artifactBundle.htmlByPath).some((html) => /chaibuilder/i.test(html));
+      const artifactId = deterministicId("artifact", artifactBundle.bundleSha256);
+      const artifactManifestRef = path.resolve(path.dirname(canonicalPageRef), "runtime-artifact-manifest.json");
+      const artifactRef = path.resolve(path.dirname(canonicalPageRef), "runtime-artifact.json");
+      const artifactBuildRef = path.resolve(path.dirname(canonicalPageRef), "artifact-build-summary.json");
+      const resolvedPublishStageCandidate = publishStageCandidate === "none" ? "shadow" : publishStageCandidate;
+      const artifactPayload = {
+        kind: "migration_factory_runtime_artifact_v1",
+        artifactId,
+        artifactRef,
+        artifactBuildRef,
+        siteVersionId: artifactBundle.siteVersionId,
+        pageId: pageSnapshot.pageId,
+        pageCount: siteVersion.pages.length,
+        primaryPath: pageSnapshot.path,
+        pathCount,
+        rootPathCovered,
+        publishStageCandidate: resolvedPublishStageCandidate,
+        artifactGovernancePresent: true,
+        buildMode: "runtime-deterministic-publish-bundle",
+        bundleSha256: artifactBundle.bundleSha256,
+        publishEnforcementDecision: enforcement.adapter.decision,
+        shadowRestricted: enforcement.shadowRestricted,
+        artifactGovernance: enforcement.artifactGovernance,
+        artifact: artifactBundle,
+      };
+      const artifactBuildSummary = {
+        kind: "migration_factory_artifact_build_summary_v1",
+        artifactId,
+        artifactRef,
+        artifactManifestRef,
+        primaryPath: pageSnapshot.path,
+        pathCount,
+        rootPathCovered,
+        pageCount: siteVersion.pages.length,
+        publishStageCandidate: resolvedPublishStageCandidate,
+        artifactGovernancePresent: true,
+        builderMarkersPresent,
+        buildMode: "runtime-deterministic-publish-bundle",
+        bundleSha256: artifactBundle.bundleSha256,
+      };
+
+      try {
+        await fs.mkdir(path.dirname(artifactRef), { recursive: true });
+        await fs.writeFile(artifactManifestRef, `${JSON.stringify(artifactBundle.manifest, null, 2)}\n`, "utf8");
+        await fs.writeFile(artifactRef, `${JSON.stringify(artifactPayload, null, 2)}\n`, "utf8");
+        await fs.writeFile(artifactBuildRef, `${JSON.stringify(artifactBuildSummary, null, 2)}\n`, "utf8");
+      } catch (error) {
+        const endedAt = context.now();
+        return createFailedStageResult({
+          stage,
+          startedAt,
+          endedAt,
+          code: "ARTIFACT_BUILD_PERSIST_FAILED",
+          message: "failed to persist artifact build outputs",
+          details: {
+            artifactRef,
+            artifactManifestRef,
+            artifactBuildRef,
+            error: String((error as Error)?.message ?? error),
+          },
+        });
+      }
+
+      const endedAt = context.now();
+      return createSucceededResult(
+        stage,
+        startedAt,
+        endedAt,
+        {
+          artifactId,
+          artifactRef,
+          artifactManifestRef,
+          artifactBuildRef,
+          primaryPath: pageSnapshot.path,
+          pathCount: String(pathCount),
+          publishStageCandidate: resolvedPublishStageCandidate,
+          artifactGovernancePresent: "true",
+          bundleSha256: artifactBundle.bundleSha256,
+        },
+        [
+          {
+            code: "ARTIFACT_BUILD_REALIZED",
+            message: "runtime-compatible artifact bundle built from canonical and governance outputs",
+            level: "INFO",
+            details: {
+              artifactId,
+              pathCount,
+              rootPathCovered,
+              artifactGovernancePresent: true,
+              pageCount: siteVersion.pages.length,
+              builderMarkersPresent,
+              artifactBuildMode: "runtime-deterministic-publish-bundle",
+              publishStageCandidate: resolvedPublishStageCandidate,
+            },
+          },
+        ],
+      );
     },
     SHADOW_BIND_READY: async (job, stage, context) => {
       const startedAt = context.now();
