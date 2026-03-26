@@ -1,7 +1,7 @@
 // apps/platform/src/supabase/browser.ts
 import { createBrowserClient } from '@supabase/ssr'
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { getSharedCookieDomainForHost } from '@gnr8/builder-only/builder-origin'
+import { getSharedCookieDomainForHost } from '@/src/auth/shared-cookie-domain'
 
 function getCookieDomainForCurrentHost(): string | undefined {
   if (typeof window === 'undefined') return undefined

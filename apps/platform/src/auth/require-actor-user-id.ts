@@ -2,7 +2,7 @@
 
 import { cookies, headers } from 'next/headers'
 import { createServerClient, type CookieOptions } from '@supabase/ssr'
-import { getSharedCookieDomainForHost } from '@gnr8/builder-only/builder-origin'
+import { getSharedCookieDomainForHost } from '@/src/auth/shared-cookie-domain'
 
 type CookieToSet = {
   name: string
