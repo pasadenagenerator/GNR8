@@ -12,3 +12,4 @@ export * from "@/gnr8/runtime/publish-safety-check";
 export * from "@/gnr8/runtime/rollback-switch";
 export * from "@/gnr8/runtime/forms-runtime-bridge";
 export * from "@/gnr8/runtime/artifact-coverage-audit";
+export * from "@/gnr8/runtime/ownership-backfill-activation";
