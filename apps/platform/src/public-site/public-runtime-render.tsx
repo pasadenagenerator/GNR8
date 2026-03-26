@@ -3,9 +3,6 @@ import {
   resolveRuntimeSiteForHost,
   type PublicRuntimeArtifactMissReasonCode,
 } from "@/gnr8/runtime/runtime-store";
-import { assertBuilderOnlyContext } from "@gnr8/builder-only/builder-boundary-guard";
-
-assertBuilderOnlyContext();
 
 export type Gnr8PublicRuntimeMode = "artifact-only";
 
