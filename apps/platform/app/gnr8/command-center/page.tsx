@@ -2,8 +2,8 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { listClientOrganizationsForCommandCenter } from "@/gnr8/command-center/command-center-assignment-service";
-import { getMarginDebugOverview, type SiteMarginResult } from "@/gnr8/billing/margin-service";
-import { compareSiteAcrossPlans, type SitePlanComparisonResult } from "@/gnr8/billing/pricing-simulation-service";
+import { mapSiteMargin, type SiteMarginResult } from "@/gnr8/billing/margin-service";
+import { compareSiteAcrossPlansFromSummary, type SitePlanComparisonResult } from "@/gnr8/billing/pricing-simulation-service";
 import { getUnifiedCostOverview, type UnifiedCostSiteSummary } from "@/gnr8/billing/unified-cost-view-service";
 import { requireSuperadminUserIdForPage } from "@/src/auth/require-superadmin-user-id";
 
@@ -61,6 +61,8 @@ type CommandCenterRow = {
   simulation: SitePlanComparisonResult | null;
 };
 
+const COMMAND_CENTER_SITE_LIMIT = 100;
+
 export default async function CommandCenterPage(props: { searchParams?: Promise<SearchParams> }) {
   try {
     await requireSuperadminUserIdForPage();
@@ -79,21 +81,18 @@ export default async function CommandCenterPage(props: { searchParams?: Promise<
   const selectedClientId = normalizeClientFilter(resolvedSearchParams?.clientId);
   const profitability = normalizeProfitability(resolvedSearchParams?.profitability);
 
-  const [overview, marginOverview, clients] = await Promise.all([
+  const [overview, clients] = await Promise.all([
     getUnifiedCostOverview({
       clientId: selectedClientId ?? undefined,
-      limit: 250,
-      topLimit: 250,
-    }),
-    getMarginDebugOverview({
-      clientId: selectedClientId ?? undefined,
-      limit: 250,
+      limit: COMMAND_CENTER_SITE_LIMIT,
+      topLimit: COMMAND_CENTER_SITE_LIMIT,
     }),
     listClientOrganizationsForCommandCenter(),
   ]);
 
   const siteMarginBySiteId = new Map<string, SiteMarginResult>();
-  for (const siteMargin of marginOverview.site_margins) {
+  for (const siteSummary of overview.site_summaries) {
+    const siteMargin = mapSiteMargin(siteSummary);
     siteMarginBySiteId.set(siteMargin.site_id, siteMargin);
   }
 
@@ -102,11 +101,14 @@ export default async function CommandCenterPage(props: { searchParams?: Promise<
     return profitabilityMatches(profitability, margin);
   });
 
-  const planComparisons = await Promise.all(filteredSummaries.map((summary) => compareSiteAcrossPlans(summary.site_id)));
+  let planSimulationErrorCount = 0;
   const simulationBySiteId = new Map<string, SitePlanComparisonResult>();
-  for (const simulation of planComparisons) {
-    if (simulation) {
+  for (const summary of filteredSummaries) {
+    try {
+      const simulation = compareSiteAcrossPlansFromSummary(summary);
       simulationBySiteId.set(simulation.site_id, simulation);
+    } catch {
+      planSimulationErrorCount += 1;
     }
   }
 
@@ -213,7 +215,16 @@ export default async function CommandCenterPage(props: { searchParams?: Promise<
           <span>
             <strong>Total in scope:</strong> {overview.site_summaries.length}
           </span>
+          <span>
+            <strong>Page cap:</strong> {COMMAND_CENTER_SITE_LIMIT}
+          </span>
         </div>
+        {planSimulationErrorCount > 0 ? (
+          <p style={{ marginTop: 8, marginBottom: 0, fontSize: 12, color: "#7c2d12" }}>
+            Pricing simulation is partially unavailable for {planSimulationErrorCount} site
+            {planSimulationErrorCount === 1 ? "" : "s"}, but core ownership and cost metrics are shown.
+          </p>
+        ) : null}
 
         <div style={{ marginTop: 12, overflowX: "auto" }}>
           <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 1800 }}>

@@ -293,6 +293,28 @@ export async function compareSiteAcrossPlans(
   };
 }
 
+export function compareSiteAcrossPlansFromSummary(
+  summary: UnifiedCostSiteSummary,
+  options?: {
+    sortBy?: PricingSimulationSortBy;
+  },
+): SitePlanComparisonResult {
+  const siteResults = PRICING_PLAN_NAMES.map((planName) => simulateFromSummary(summary, planName));
+  const sortBy: PricingSimulationSortBy = options?.sortBy ?? "margin";
+  const rankedPlans = [...siteResults].sort(sortSiteResultsBy(sortBy));
+
+  return {
+    site_id: summary.site_id,
+    sort_by: sortBy,
+    plan_results: {
+      STARTER: siteResults.find((result) => result.plan_name === "STARTER")!,
+      GROWTH: siteResults.find((result) => result.plan_name === "GROWTH")!,
+      MANAGED: siteResults.find((result) => result.plan_name === "MANAGED")!,
+    },
+    ranked_plans: rankedPlans,
+  };
+}
+
 function aggregateClientFlags(siteResults: SitePricingSimulationResult[], margin: number): PricingSimulationFlags {
   const overageHeavySites = siteResults.filter((site) => site.flags.is_overage_heavy).length;
   const lossMakingSites = siteResults.filter((site) => site.flags.is_plan_loss_making).length;

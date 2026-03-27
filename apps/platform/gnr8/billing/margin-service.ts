@@ -176,7 +176,7 @@ export function calculateMarginMetrics(input: {
   };
 }
 
-function mapSiteMargin(summary: UnifiedCostSiteSummary): SiteMarginResult {
+export function mapSiteMargin(summary: UnifiedCostSiteSummary): SiteMarginResult {
   const includedCostTotal = PRICING_MODEL.INCLUDED_AI_COST + PRICING_MODEL.INCLUDED_RUNTIME_COST;
   const metrics = calculateMarginMetrics({
     totalEstimatedCost: summary.total_estimated_cost,
