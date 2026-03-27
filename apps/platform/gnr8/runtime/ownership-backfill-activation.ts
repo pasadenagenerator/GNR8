@@ -188,11 +188,18 @@ async function loadRuntimeRollups(client: PoolClient): Promise<RuntimeSiteRollup
         sv.site_id::text as site_id,
         count(*)::int as versions_total,
         count(*) filter (where sv.ownership_site_id is null)::int as unbound_versions,
-        max(sv.ownership_site_id)::text as existing_ownership_site_id,
         bool_or(sv.state = 'PUBLISHED') as has_published_version,
         bool_or(sv.state in ('DRAFT', 'READY_FOR_REVIEW', 'APPROVED')) as has_migration_progress
       from public.gnr8_runtime_site_versions sv
       group by sv.site_id
+    ),
+    ownership_rollup as (
+      select distinct on (sv.site_id)
+        sv.site_id::text as site_id,
+        sv.ownership_site_id::text as existing_ownership_site_id
+      from public.gnr8_runtime_site_versions sv
+      where sv.ownership_site_id is not null
+      order by sv.site_id, sv.created_at desc, sv.id::text desc
     ),
     host_rollup as (
       select
@@ -229,7 +236,7 @@ async function loadRuntimeRollups(client: PoolClient): Promise<RuntimeSiteRollup
       v.site_id,
       v.versions_total,
       v.unbound_versions,
-      v.existing_ownership_site_id,
+      o.existing_ownership_site_id,
       v.has_published_version,
       v.has_migration_progress,
       coalesce(h.has_production_binding, false) as has_production_binding,
@@ -239,6 +246,7 @@ async function loadRuntimeRollups(client: PoolClient): Promise<RuntimeSiteRollup
       h.active_hosts,
       s.source_hosts
     from version_rollup v
+    left join ownership_rollup o on o.site_id = v.site_id
     left join host_rollup h on h.site_id = v.site_id
     left join artifact_rollup a on a.site_id = v.site_id
     left join source_rollup s on s.site_id = v.site_id
@@ -459,10 +467,12 @@ async function backfillMigrationJobs(input: {
         const count = await input.client.query<{ count: string }>(
           `
           with runtime_site_owner as (
-            select site_id::text as runtime_site_id, max(ownership_site_id)::uuid as ownership_site_id
+            select distinct on (site_id)
+              site_id::text as runtime_site_id,
+              ownership_site_id
             from public.gnr8_runtime_site_versions
             where ownership_site_id is not null
-            group by site_id
+            order by site_id, created_at desc, id::text desc
           )
           select count(*)::text as count
           from public.migration_jobs mj
@@ -476,10 +486,12 @@ async function backfillMigrationJobs(input: {
         const update = await input.client.query(
           `
           with runtime_site_owner as (
-            select site_id::text as runtime_site_id, max(ownership_site_id)::uuid as ownership_site_id
+            select distinct on (site_id)
+              site_id::text as runtime_site_id,
+              ownership_site_id
             from public.gnr8_runtime_site_versions
             where ownership_site_id is not null
-            group by site_id
+            order by site_id, created_at desc, id::text desc
           )
           update public.migration_jobs mj
           set site_id = rso.ownership_site_id
