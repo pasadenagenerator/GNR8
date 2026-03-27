@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { runLayoutAgent } from "@/gnr8/ai/layout-agent";
 import { wrapAIExecution } from "@/gnr8/billing/ai-usage-hook";
+import { AIUsageContextPolicyError } from "@/gnr8/billing/ai-usage-context-policy";
 import type { Gnr8Page } from "@/gnr8/types/page";
 
 export const runtime = "nodejs";
@@ -57,6 +58,7 @@ export async function POST(req: NextRequest) {
 
     const result = await wrapAIExecution(
       {
+        contextPolicy: "site_required",
         siteId,
         agencyId,
         siteVersionId,
@@ -87,6 +89,9 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json(response, { status: 200 });
   } catch (e) {
+    if (e instanceof AIUsageContextPolicyError) {
+      return NextResponse.json({ error: e.message, code: e.code }, { status: 400 });
+    }
     const msg = e instanceof Error ? e.message : "Internal server error";
     return NextResponse.json({ error: msg }, { status: 500 });
   }

@@ -5,6 +5,7 @@ import { normalizeSectionLayout } from "@/gnr8/ai/layout-normalizer";
 import { buildOptimizationActionPlans } from "@/gnr8/ai/optimization-action-engine";
 import { mergeSupportedDuplicateSections } from "@/gnr8/ai/section-merge";
 import { buildMigrationReviewSummary, type MigrationReviewSummary } from "@/gnr8/ai/migration-review-logic";
+import { AIUsageContextPolicyError } from "@/gnr8/billing/ai-usage-context-policy";
 import { wrapAIExecution } from "@/gnr8/billing/ai-usage-hook";
 import { getPageBySlug, publishPage, savePage } from "@/gnr8/core/page-storage";
 import type { Gnr8Page } from "@/gnr8/types/page";
@@ -229,6 +230,7 @@ export async function POST(req: NextRequest) {
       } else {
         const result = await wrapAIExecution(
           {
+            contextPolicy: "site_required",
             siteId,
             agencyId,
             siteVersionId,
@@ -276,6 +278,9 @@ export async function POST(req: NextRequest) {
       { status: 200 },
     );
   } catch (error) {
+    if (error instanceof AIUsageContextPolicyError) {
+      return NextResponse.json({ error: error.message, code: error.code }, { status: 400 });
+    }
     const message = error instanceof Error ? error.message : "Internal server error";
     return NextResponse.json({ error: message }, { status: 500 });
   }

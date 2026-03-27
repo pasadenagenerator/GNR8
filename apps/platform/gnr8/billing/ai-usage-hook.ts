@@ -2,6 +2,11 @@ import "server-only";
 
 import { logAIUsageEvent } from "@/gnr8/billing/cost-event-logging-service";
 import { resolveBillingContextForSite } from "@/gnr8/billing/billing-resolution-service";
+import {
+  AIUsageContextPolicyError,
+  type AIUsageContextPolicy,
+  validateAIUsageContext,
+} from "@/gnr8/billing/ai-usage-context-policy";
 
 export type AIUsageFeatureContext = "migration" | "content_generation" | "optimization" | "chat" | "unknown";
 
@@ -14,6 +19,7 @@ export type AIUsageTokenUsage = {
 };
 
 export type WrapAIExecutionContext = {
+  contextPolicy: AIUsageContextPolicy;
   siteId?: string | null;
   agencyId?: string | null;
   clientId?: string | null;
@@ -123,8 +129,13 @@ function warningMessage(error: unknown): string {
 }
 
 export async function wrapAIExecution<T>(context: WrapAIExecutionContext, fn: () => Promise<T> | T): Promise<T> {
-  const siteId = normalizeOptionalString(context.siteId);
-  const agencyId = normalizeOptionalString(context.agencyId);
+  const validatedContext = validateAIUsageContext({
+    policy: context.contextPolicy,
+    siteId: context.siteId,
+    agencyId: context.agencyId,
+  });
+  const siteId = validatedContext.siteId;
+  const agencyId = validatedContext.agencyId;
   const clientIdInput = normalizeOptionalString(context.clientId);
 
   let resolvedAgencyId = agencyId;
@@ -133,10 +144,16 @@ export async function wrapAIExecution<T>(context: WrapAIExecutionContext, fn: ()
   if (siteId) {
     const billingContext = await resolveBillingContextForSite(siteId);
     if (!billingContext) {
-      throw new Error("AI usage ownership validation failed: siteId does not resolve billing context");
+      throw new AIUsageContextPolicyError(
+        "AI_USAGE_CONTEXT_INVALID",
+        "siteId does not resolve ownership-aware billing context",
+      );
     }
     if (agencyId && agencyId !== billingContext.agencyId) {
-      throw new Error("AI usage ownership validation failed: provided agencyId does not match site ownership");
+      throw new AIUsageContextPolicyError(
+        "AI_USAGE_CONTEXT_INVALID",
+        "provided agencyId does not match site ownership context",
+      );
     }
     resolvedAgencyId = billingContext.agencyId;
     resolvedClientId = billingContext.clientId;
@@ -146,8 +163,9 @@ export async function wrapAIExecution<T>(context: WrapAIExecutionContext, fn: ()
   const result = await fn();
   const durationMs = Math.max(0, Date.now() - startedAt);
 
-  if (!siteId && !resolvedAgencyId) {
+  if (!validatedContext.canLogUsage) {
     console.warn("[ai-usage-hook] Skipping AI usage logging because neither siteId nor agencyId was provided", {
+      contextPolicy: context.contextPolicy,
       featureContext: context.featureContext,
       operationType: context.operationType,
       durationMs,
@@ -181,6 +199,7 @@ export async function wrapAIExecution<T>(context: WrapAIExecutionContext, fn: ()
     });
   } catch (error) {
     console.warn("[ai-usage-hook] Failed to log AI usage event", {
+      contextPolicy: context.contextPolicy,
       featureContext: context.featureContext,
       operationType: context.operationType,
       siteId,
