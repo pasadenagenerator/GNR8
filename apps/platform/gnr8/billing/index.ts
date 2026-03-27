@@ -6,3 +6,4 @@ export * from "@/gnr8/billing/cost-event-logging-service";
 export * from "@/gnr8/billing/ai-usage-hook";
 export * from "@/gnr8/billing/ai-usage-context-policy";
 export * from "@/gnr8/billing/ai-usage-debug-service";
+export * from "@/gnr8/billing/unified-cost-view-service";
