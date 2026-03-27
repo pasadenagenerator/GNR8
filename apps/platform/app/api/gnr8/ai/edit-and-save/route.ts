@@ -9,6 +9,7 @@ import {
 import { normalizeSectionLayout } from "@/gnr8/ai/layout-normalizer";
 import { mergeSupportedDuplicateSections } from "@/gnr8/ai/section-merge";
 import { buildMigrationReviewSummary } from "@/gnr8/ai/migration-review-logic";
+import { wrapAIExecution } from "@/gnr8/billing/ai-usage-hook";
 import { getPageBySlug, publishPage, savePage } from "@/gnr8/core/page-storage";
 import type { Gnr8Page } from "@/gnr8/types/page";
 
@@ -44,17 +45,39 @@ export async function POST(req: NextRequest) {
 
     const titleRaw = typeof body.title === "string" ? body.title : undefined;
     const title = titleRaw?.trim() ? titleRaw : undefined;
+    const siteId = typeof body.siteId === "string" ? body.siteId : undefined;
+    const agencyId = typeof body.agencyId === "string" ? body.agencyId : undefined;
+    const siteVersionId = typeof body.siteVersionId === "string" ? body.siteVersionId : undefined;
+    const artifactId = typeof body.artifactId === "string" ? body.artifactId : undefined;
+    const modelProvider = typeof body.modelProvider === "string" ? body.modelProvider : undefined;
+    const modelName = typeof body.modelName === "string" ? body.modelName : undefined;
+    const traceId = typeof body.traceId === "string" ? body.traceId : undefined;
 
     const existingPage = await getPageBySlug(slug);
     if (!existingPage) {
       return NextResponse.json({ error: "Page not found" }, { status: 404 });
     }
 
-    const result = runLayoutAgent({
-      prompt,
-      page: existingPage,
-      title,
-    });
+    const result = await wrapAIExecution(
+      {
+        siteId,
+        agencyId,
+        siteVersionId,
+        artifactId,
+        featureContext: "content_generation",
+        operationType: "llm_generate",
+        modelProvider,
+        modelName,
+        usage: body.usage,
+        traceId,
+      },
+      () =>
+        runLayoutAgent({
+          prompt,
+          page: existingPage,
+          title,
+        }),
+    );
 
     const reviewBefore = buildMigrationReviewSummary(result.page);
     const exactNotes = buildExactDuplicateCleanupNotes(result.page, reviewBefore.duplicateDetails);

@@ -8,6 +8,7 @@ import {
   buildSuggestedActionsAndNotes,
   type MigrationReviewSummary,
 } from "@/gnr8/ai/migration-review-logic";
+import { wrapAIExecution } from "@/gnr8/billing/ai-usage-hook";
 import { getPageBySlug, publishPage, savePage } from "@/gnr8/core/page-storage";
 import type { Gnr8Page } from "@/gnr8/types/page";
 
@@ -70,6 +71,13 @@ export async function POST(req: NextRequest) {
     }
 
     const maxSteps = clampMaxSteps(body.maxSteps);
+    const siteId = typeof body.siteId === "string" ? body.siteId : undefined;
+    const agencyId = typeof body.agencyId === "string" ? body.agencyId : undefined;
+    const siteVersionId = typeof body.siteVersionId === "string" ? body.siteVersionId : undefined;
+    const artifactId = typeof body.artifactId === "string" ? body.artifactId : undefined;
+    const modelProvider = typeof body.modelProvider === "string" ? body.modelProvider : undefined;
+    const modelName = typeof body.modelName === "string" ? body.modelName : undefined;
+    const traceId = typeof body.traceId === "string" ? body.traceId : undefined;
 
     const actionsApplied: string[] = [];
     const notes: string[] = [];
@@ -147,10 +155,25 @@ export async function POST(req: NextRequest) {
 
       const signatureBefore = sectionTypeSignature(page);
 
-      const result = runLayoutAgent({
-        prompt: chosenAction,
-        page,
-      });
+      const result = await wrapAIExecution(
+        {
+          siteId,
+          agencyId,
+          siteVersionId,
+          artifactId,
+          featureContext: "optimization",
+          operationType: "llm_transform",
+          modelProvider,
+          modelName,
+          usage: body.usage,
+          traceId,
+        },
+        () =>
+          runLayoutAgent({
+            prompt: chosenAction,
+            page,
+          }),
+      );
 
       const { page: cleanedPage, notes: cleanupNotes } = applyDuplicateCleanupPipeline(result.page);
 

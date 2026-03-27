@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { runLayoutAgent } from "@/gnr8/ai/layout-agent";
+import { wrapAIExecution } from "@/gnr8/billing/ai-usage-hook";
 import type { Gnr8Page } from "@/gnr8/types/page";
 
 export const runtime = "nodejs";
@@ -39,6 +40,13 @@ export async function POST(req: NextRequest) {
     const slug = typeof body.slug === "string" ? body.slug : undefined;
     const title = typeof body.title === "string" ? body.title : undefined;
     const page = body.page == null ? undefined : body.page;
+    const siteId = typeof body.siteId === "string" ? body.siteId : undefined;
+    const agencyId = typeof body.agencyId === "string" ? body.agencyId : undefined;
+    const siteVersionId = typeof body.siteVersionId === "string" ? body.siteVersionId : undefined;
+    const artifactId = typeof body.artifactId === "string" ? body.artifactId : undefined;
+    const modelProvider = typeof body.modelProvider === "string" ? body.modelProvider : undefined;
+    const modelName = typeof body.modelName === "string" ? body.modelName : undefined;
+    const traceId = typeof body.traceId === "string" ? body.traceId : undefined;
 
     if (!prompt.trim()) {
       return NextResponse.json({ error: "prompt is required" }, { status: 400 });
@@ -47,7 +55,21 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "page is invalid" }, { status: 400 });
     }
 
-    const result = runLayoutAgent({ prompt, slug, title, page });
+    const result = await wrapAIExecution(
+      {
+        siteId,
+        agencyId,
+        siteVersionId,
+        artifactId,
+        featureContext: "content_generation",
+        operationType: "llm_generate",
+        modelProvider,
+        modelName,
+        usage: body.usage,
+        traceId,
+      },
+      () => runLayoutAgent({ prompt, slug, title, page }),
+    );
 
     const response: {
       success: true;
@@ -69,4 +91,3 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: msg }, { status: 500 });
   }
 }
-
