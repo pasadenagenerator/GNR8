@@ -4,6 +4,7 @@ import test from "node:test";
 
 import {
   __setPublicRuntimeRenderDependenciesForTest,
+  __setPublicRuntimeUsageDependenciesForTest,
   renderPublicPathResponse,
   resolvePublicRuntimeMode,
 } from "@/src/public-site/public-runtime-render";
@@ -43,6 +44,19 @@ async function captureResolutionLog(run: () => Promise<Response>): Promise<{ res
 }
 
 test("public runtime artifact hit: serves artifact HTML with artifact-only diagnostics", async () => {
+  const usageCalls: Array<{
+    siteId: string;
+    requestCount?: number;
+    bandwidthBytes?: number;
+    computeMs?: number;
+    artifactId?: string | null;
+  }> = [];
+  const restoreUsageDeps = __setPublicRuntimeUsageDependenciesForTest({
+    ensureRuntimeUsageFlushLoopStarted: () => undefined,
+    incrementRuntimeUsage: (siteId, usage) => {
+      usageCalls.push({ siteId: String(siteId), ...usage });
+    },
+  });
   const restoreDeps = __setPublicRuntimeRenderDependenciesForTest({
     resolveActiveArtifactForHostAndPathWithDiagnostics: async () =>
       ({
@@ -78,8 +92,14 @@ test("public runtime artifact hit: serves artifact HTML with artifact-only diagn
     assert.equal(payload.governanceAllowed, true);
     assert.equal(payload.governanceDenied, false);
     assert.equal(payload.builderFallbackUsed, false);
+    assert.equal(usageCalls.length, 1);
+    assert.equal(usageCalls[0]?.siteId, "site_1");
+    assert.equal(usageCalls[0]?.requestCount, 1);
+    assert.equal(usageCalls[0]?.artifactId, "artifact_1");
+    assert.ok((usageCalls[0]?.bandwidthBytes ?? 0) > 0);
   } finally {
     restoreDeps();
+    restoreUsageDeps();
   }
 });
 

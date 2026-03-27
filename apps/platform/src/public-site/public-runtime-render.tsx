@@ -3,6 +3,8 @@ import {
   resolveRuntimeSiteForHost,
   type PublicRuntimeArtifactMissReasonCode,
 } from "@/gnr8/runtime/runtime-store";
+import { incrementRuntimeUsage } from "@/gnr8/runtime/runtime-usage-collector";
+import { ensureRuntimeUsageFlushLoopStarted } from "@/gnr8/runtime/runtime-usage-flusher";
 
 export type Gnr8PublicRuntimeMode = "artifact-only";
 
@@ -119,12 +121,60 @@ const runtimeStoreDependencies: RuntimeStoreDependencies = {
   resolveRuntimeSiteForHost,
 };
 
+type RuntimeUsageDependencies = {
+  incrementRuntimeUsage: typeof incrementRuntimeUsage;
+  ensureRuntimeUsageFlushLoopStarted: typeof ensureRuntimeUsageFlushLoopStarted;
+};
+
+const runtimeUsageDependencies: RuntimeUsageDependencies = {
+  incrementRuntimeUsage,
+  ensureRuntimeUsageFlushLoopStarted,
+};
+
 export function __setPublicRuntimeRenderDependenciesForTest(overrides: Partial<RuntimeStoreDependencies>): () => void {
   const previous = { ...runtimeStoreDependencies };
   Object.assign(runtimeStoreDependencies, overrides);
   return () => {
     Object.assign(runtimeStoreDependencies, previous);
   };
+}
+
+export function __setPublicRuntimeUsageDependenciesForTest(overrides: Partial<RuntimeUsageDependencies>): () => void {
+  const previous = { ...runtimeUsageDependencies };
+  Object.assign(runtimeUsageDependencies, overrides);
+  return () => {
+    Object.assign(runtimeUsageDependencies, previous);
+  };
+}
+
+function utf8ByteLength(value: string): number {
+  return new TextEncoder().encode(value).byteLength;
+}
+
+function recordRuntimeUsage(input: {
+  siteId?: string | null;
+  artifactId?: string | null;
+  requestCount: number;
+  bandwidthBytes: number;
+  computeMs: number;
+}): void {
+  const siteId = String(input.siteId ?? "").trim();
+  if (!siteId) return;
+  try {
+    runtimeUsageDependencies.ensureRuntimeUsageFlushLoopStarted();
+    runtimeUsageDependencies.incrementRuntimeUsage(siteId, {
+      artifactId: input.artifactId ?? null,
+      requestCount: input.requestCount,
+      bandwidthBytes: input.bandwidthBytes,
+      computeMs: input.computeMs,
+    });
+  } catch (error) {
+    console.warn("[gnr8.public-runtime.usage] failed to record runtime usage", {
+      siteId,
+      artifactId: input.artifactId ?? null,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
 }
 
 function isShadowAssetPath(path: string): boolean {
@@ -253,6 +303,8 @@ async function renderShadowAssetResponse(input: { host: string; path: string }):
 }
 
 export async function renderPublicPathResponse(input: { path: string; host: string }): Promise<Response> {
+  const requestStartedAt = Date.now();
+
   if (isShadowAssetPath(input.path)) {
     const assetResponse = await renderShadowAssetResponse(input);
     if (assetResponse) return assetResponse;
@@ -266,6 +318,16 @@ export async function renderPublicPathResponse(input: { path: string; host: stri
   });
 
   if (artifactResolution.outcome === "artifact_hit") {
+    const computeMs = Math.max(0, Date.now() - requestStartedAt);
+    const bandwidthBytes = utf8ByteLength(artifactResolution.html);
+    recordRuntimeUsage({
+      siteId: artifactResolution.siteId,
+      artifactId: artifactResolution.artifactId,
+      requestCount: 1,
+      bandwidthBytes,
+      computeMs,
+    });
+
     logPublicRuntimeResolution({
       outcome: "artifact_hit",
       mode,
@@ -286,6 +348,19 @@ export async function renderPublicPathResponse(input: { path: string; host: stri
   }
 
   const statusCode = artifactResolution.reasonCode === "artifact_stage_denied" ? 403 : 404;
+  const errorHtml =
+    artifactResolution.reasonCode === "artifact_stage_denied"
+      ? "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\" /><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" /><title>403: Access denied.</title></head><body><main><h1>403</h1><p>This request is denied by runtime governance.</p></main></body></html>"
+      : "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\" /><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" /><title>404: This page could not be found.</title></head><body><main><h1>404</h1><p>This page could not be found.</p></main></body></html>";
+  const computeMs = Math.max(0, Date.now() - requestStartedAt);
+  recordRuntimeUsage({
+    siteId: artifactResolution.siteId,
+    artifactId: artifactResolution.artifactId,
+    requestCount: 1,
+    bandwidthBytes: utf8ByteLength(errorHtml),
+    computeMs,
+  });
+
   logPublicRuntimeResolution({
     outcome: "artifact_only_404",
     mode,
