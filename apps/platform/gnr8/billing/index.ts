@@ -10,3 +10,4 @@ export * from "@/gnr8/billing/ai-usage-debug-service";
 export * from "@/gnr8/billing/unified-cost-view-service";
 export * from "@/gnr8/billing/pricing-model";
 export * from "@/gnr8/billing/margin-service";
+export * from "@/gnr8/billing/pricing-simulation-service";
