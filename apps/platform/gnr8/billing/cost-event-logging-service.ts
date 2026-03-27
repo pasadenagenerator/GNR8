@@ -4,6 +4,7 @@ import type { PoolClient } from "pg";
 
 import { resolveAgencyBillingAccount } from "@/gnr8/billing/billing-account-service";
 import { resolveBillingContextForSite } from "@/gnr8/billing/billing-resolution-service";
+import { calculateAIEstimatedCost, calculateRuntimeEstimatedCost } from "@/gnr8/billing/cost-model";
 import type {
   AIUsageEventInput,
   CostCenterHierarchy,
@@ -216,13 +217,16 @@ function normalizeRuntimeUsageInput(input: RuntimeUsageEventInput): NormalizedRu
     throw new CostEventLoggingError("periodEnd must be greater than or equal to periodStart");
   }
 
+  const requestCount = toNonNegativeInteger(input.requestCount, 0);
+  const bandwidthBytes = toNonNegativeInteger(input.bandwidthBytes, 0);
+
   return {
     siteId,
     artifactId: normalizeUuid(input.artifactId, "artifactId"),
-    requestCount: toNonNegativeInteger(input.requestCount, 0),
-    bandwidthBytes: toNonNegativeInteger(input.bandwidthBytes, 0),
+    requestCount,
+    bandwidthBytes,
     computeMs: toNonNegativeInteger(input.computeMs, 0),
-    estimatedCost: toNonNegativeNumber(input.estimatedCost, 0),
+    estimatedCost: calculateRuntimeEstimatedCost({ requestCount, bandwidthBytes }),
     periodStart,
     periodEnd,
   };
@@ -317,7 +321,10 @@ export async function logAIUsageEvent(input: AIUsageEventInput): Promise<LoggedC
     const promptTokens = toNonNegativeInteger(input.promptTokens, 0);
     const completionTokens = toNonNegativeInteger(input.completionTokens, 0);
     const totalTokens = toNonNegativeInteger(input.totalTokens, promptTokens + completionTokens);
-    const estimatedCost = toNonNegativeNumber(input.estimatedCost, 0);
+    const estimatedCost = calculateAIEstimatedCost({
+      promptTokens,
+      completionTokens,
+    });
 
     const insertRes = await client.query<InsertedEventRow>(
       `

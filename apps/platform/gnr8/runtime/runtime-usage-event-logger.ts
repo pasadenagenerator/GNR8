@@ -1,6 +1,7 @@
 import "server-only";
 
 import { resolveBillingContextForSite } from "@/gnr8/billing/billing-resolution-service";
+import { calculateRuntimeEstimatedCost } from "@/gnr8/billing/cost-model";
 import { logRuntimeUsageEventWithAttribution } from "@/gnr8/billing/cost-event-logging-service";
 
 type PersistRuntimeUsageEventInput = {
@@ -59,6 +60,11 @@ export async function persistRuntimeUsageEvent(
   }
 
   try {
+    const estimatedCost = calculateRuntimeEstimatedCost({
+      requestCount: input.requestCount,
+      bandwidthBytes: input.bandwidthBytes,
+    });
+
     await runtimeUsageEventLoggerDependencies.logRuntimeUsageEventWithAttribution(
       {
         siteId,
@@ -66,7 +72,7 @@ export async function persistRuntimeUsageEvent(
         requestCount: input.requestCount,
         bandwidthBytes: input.bandwidthBytes,
         computeMs: input.computeMs,
-        estimatedCost: 0,
+        estimatedCost,
         periodStart: input.periodStart,
         periodEnd: input.periodEnd,
       },

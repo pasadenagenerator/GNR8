@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
+import { calculateRuntimeEstimatedCost } from "@/gnr8/billing/cost-model";
 import { __resetRuntimeUsageCollectorForTest, getRuntimeUsageAggregateSnapshot, incrementRuntimeUsage } from "@/gnr8/runtime/runtime-usage-collector";
 import {
   __resetRuntimeUsageFlusherForTest,
@@ -67,6 +68,13 @@ test("runtime usage flusher writes aggregate when billing context resolves", asy
     assert.equal(result.failedCount, 0);
     assert.equal(writes.length, 1);
     assert.equal(warnings.length, 0);
+    assert.equal(
+      writes[0]?.estimatedCost,
+      calculateRuntimeEstimatedCost({
+        requestCount: 3,
+        bandwidthBytes: 420,
+      }),
+    );
     assert.equal(getRuntimeUsageAggregateSnapshot().length, 0);
   } finally {
     restoreDeps();

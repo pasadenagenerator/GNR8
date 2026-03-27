@@ -1,6 +1,7 @@
 import "server-only";
 
 import { resolveBillingContextForSite } from "@/gnr8/billing/billing-resolution-service";
+import { calculateRuntimeEstimatedCost } from "@/gnr8/billing/cost-model";
 import { logRuntimeUsageEvent } from "@/gnr8/billing/cost-event-logging-service";
 import {
   drainRuntimeUsageAggregates,
@@ -71,7 +72,10 @@ async function writeAggregate(aggregate: RuntimeUsageAggregate): Promise<"writte
     requestCount: aggregate.requestCount,
     bandwidthBytes: aggregate.bandwidthBytes,
     computeMs: aggregate.computeMs,
-    estimatedCost: 0,
+    estimatedCost: calculateRuntimeEstimatedCost({
+      requestCount: aggregate.requestCount,
+      bandwidthBytes: aggregate.bandwidthBytes,
+    }),
     periodStart: aggregate.periodStart,
     periodEnd: aggregate.periodEnd,
   });

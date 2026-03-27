@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
+import { calculateRuntimeEstimatedCost } from "@/gnr8/billing/cost-model";
 import { __setRuntimeUsageEventLoggerDependenciesForTest, persistRuntimeUsageEvent } from "@/gnr8/runtime/runtime-usage-event-logger";
 
 test("runtime usage event logger writes event when billing context resolves", async () => {
@@ -51,7 +52,13 @@ test("runtime usage event logger writes event when billing context resolves", as
 
     assert.deepEqual(result, { status: "written" });
     assert.equal(writes.length, 1);
-    assert.equal(writes[0]?.estimatedCost, 0);
+    assert.equal(
+      writes[0]?.estimatedCost,
+      calculateRuntimeEstimatedCost({
+        requestCount: 1,
+        bandwidthBytes: 512,
+      }),
+    );
     assert.equal(writes[0]?.requestCount, 1);
   } finally {
     restore();
