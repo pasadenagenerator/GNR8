@@ -1,10 +1,11 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 
 import { listClientOrganizationsForCommandCenter } from "@/gnr8/command-center/command-center-assignment-service";
 import { getMarginDebugOverview, type SiteMarginResult } from "@/gnr8/billing/margin-service";
 import { compareSiteAcrossPlans, type SitePlanComparisonResult } from "@/gnr8/billing/pricing-simulation-service";
 import { getUnifiedCostOverview, type UnifiedCostSiteSummary } from "@/gnr8/billing/unified-cost-view-service";
-import { requireSuperadminUserId } from "@/src/auth/require-superadmin-user-id";
+import { requireSuperadminUserIdForPage } from "@/src/auth/require-superadmin-user-id";
 
 import { SiteAssignmentControl } from "./_components/site-assignment-control";
 
@@ -61,7 +62,18 @@ type CommandCenterRow = {
 };
 
 export default async function CommandCenterPage(props: { searchParams?: Promise<SearchParams> }) {
-  await requireSuperadminUserId();
+  try {
+    await requireSuperadminUserIdForPage();
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Internal server error";
+    if (message === "Unauthorized") {
+      redirect("/login");
+    }
+    if (message.startsWith("Forbidden")) {
+      redirect("/superadmin");
+    }
+    throw error;
+  }
 
   const resolvedSearchParams = props.searchParams ? await props.searchParams : undefined;
   const selectedClientId = normalizeClientFilter(resolvedSearchParams?.clientId);
