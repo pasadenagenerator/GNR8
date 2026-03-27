@@ -30,6 +30,8 @@ type RuntimeUsageMutableAggregate = {
   lastUpdatedMs: number;
 };
 
+// Legacy process-local aggregation retained for test/backward compatibility.
+// Public runtime request logging now persists per request via runtime-usage-event-logger.ts.
 const usageBySiteId = new Map<string, RuntimeUsageMutableAggregate>();
 
 function normalizeSiteId(siteId: string | null | undefined): string {

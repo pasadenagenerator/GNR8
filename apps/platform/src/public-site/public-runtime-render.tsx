@@ -3,8 +3,7 @@ import {
   resolveRuntimeSiteForHost,
   type PublicRuntimeArtifactMissReasonCode,
 } from "@/gnr8/runtime/runtime-store";
-import { incrementRuntimeUsage } from "@/gnr8/runtime/runtime-usage-collector";
-import { ensureRuntimeUsageFlushLoopStarted } from "@/gnr8/runtime/runtime-usage-flusher";
+import { persistRuntimeUsageEvent } from "@/gnr8/runtime/runtime-usage-event-logger";
 
 export type Gnr8PublicRuntimeMode = "artifact-only";
 
@@ -22,6 +21,7 @@ function logPublicRuntimeResolution(input: {
   host: string;
   path: string;
   siteId?: string | null;
+  ownershipSiteId?: string | null;
   siteVersionId?: string | null;
   artifactId?: string | null;
   hostBindingId?: string | null;
@@ -44,6 +44,7 @@ function logPublicRuntimeResolution(input: {
     host: input.host,
     path: input.path,
     siteId: input.siteId ?? null,
+    ownershipSiteId: input.ownershipSiteId ?? null,
     siteVersionId: input.siteVersionId ?? null,
     artifactId: input.artifactId ?? null,
     hostBindingId: input.hostBindingId ?? null,
@@ -122,13 +123,11 @@ const runtimeStoreDependencies: RuntimeStoreDependencies = {
 };
 
 type RuntimeUsageDependencies = {
-  incrementRuntimeUsage: typeof incrementRuntimeUsage;
-  ensureRuntimeUsageFlushLoopStarted: typeof ensureRuntimeUsageFlushLoopStarted;
+  persistRuntimeUsageEvent: typeof persistRuntimeUsageEvent;
 };
 
 const runtimeUsageDependencies: RuntimeUsageDependencies = {
-  incrementRuntimeUsage,
-  ensureRuntimeUsageFlushLoopStarted,
+  persistRuntimeUsageEvent,
 };
 
 export function __setPublicRuntimeRenderDependenciesForTest(overrides: Partial<RuntimeStoreDependencies>): () => void {
@@ -151,22 +150,26 @@ function utf8ByteLength(value: string): number {
   return new TextEncoder().encode(value).byteLength;
 }
 
-function recordRuntimeUsage(input: {
+async function recordRuntimeUsage(input: {
   siteId?: string | null;
   artifactId?: string | null;
   requestCount: number;
   bandwidthBytes: number;
   computeMs: number;
-}): void {
+  periodStart: Date;
+  periodEnd: Date;
+}): Promise<void> {
   const siteId = String(input.siteId ?? "").trim();
   if (!siteId) return;
   try {
-    runtimeUsageDependencies.ensureRuntimeUsageFlushLoopStarted();
-    runtimeUsageDependencies.incrementRuntimeUsage(siteId, {
+    await runtimeUsageDependencies.persistRuntimeUsageEvent({
+      siteId,
       artifactId: input.artifactId ?? null,
       requestCount: input.requestCount,
       bandwidthBytes: input.bandwidthBytes,
       computeMs: input.computeMs,
+      periodStart: input.periodStart,
+      periodEnd: input.periodEnd,
     });
   } catch (error) {
     console.warn("[gnr8.public-runtime.usage] failed to record runtime usage", {
@@ -318,14 +321,17 @@ export async function renderPublicPathResponse(input: { path: string; host: stri
   });
 
   if (artifactResolution.outcome === "artifact_hit") {
-    const computeMs = Math.max(0, Date.now() - requestStartedAt);
+    const requestEndedAt = Date.now();
+    const computeMs = Math.max(0, requestEndedAt - requestStartedAt);
     const bandwidthBytes = utf8ByteLength(artifactResolution.html);
-    recordRuntimeUsage({
-      siteId: artifactResolution.siteId,
+    await recordRuntimeUsage({
+      siteId: artifactResolution.ownershipSiteId ?? artifactResolution.siteId,
       artifactId: artifactResolution.artifactId,
       requestCount: 1,
       bandwidthBytes,
       computeMs,
+      periodStart: new Date(requestStartedAt),
+      periodEnd: new Date(requestEndedAt),
     });
 
     logPublicRuntimeResolution({
@@ -334,6 +340,7 @@ export async function renderPublicPathResponse(input: { path: string; host: stri
       host: input.host,
       path: input.path,
       siteId: artifactResolution.siteId,
+      ownershipSiteId: artifactResolution.ownershipSiteId,
       siteVersionId: artifactResolution.activeSiteVersionId,
       artifactId: artifactResolution.artifactId,
       hostBindingId: artifactResolution.hostBindingId,
@@ -352,13 +359,16 @@ export async function renderPublicPathResponse(input: { path: string; host: stri
     artifactResolution.reasonCode === "artifact_stage_denied"
       ? "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\" /><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" /><title>403: Access denied.</title></head><body><main><h1>403</h1><p>This request is denied by runtime governance.</p></main></body></html>"
       : "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\" /><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" /><title>404: This page could not be found.</title></head><body><main><h1>404</h1><p>This page could not be found.</p></main></body></html>";
-  const computeMs = Math.max(0, Date.now() - requestStartedAt);
-  recordRuntimeUsage({
-    siteId: artifactResolution.siteId,
+  const requestEndedAt = Date.now();
+  const computeMs = Math.max(0, requestEndedAt - requestStartedAt);
+  await recordRuntimeUsage({
+    siteId: artifactResolution.ownershipSiteId ?? artifactResolution.siteId,
     artifactId: artifactResolution.artifactId,
     requestCount: 1,
     bandwidthBytes: utf8ByteLength(errorHtml),
     computeMs,
+    periodStart: new Date(requestStartedAt),
+    periodEnd: new Date(requestEndedAt),
   });
 
   logPublicRuntimeResolution({
@@ -367,6 +377,7 @@ export async function renderPublicPathResponse(input: { path: string; host: stri
     host: input.host,
     path: input.path,
     siteId: artifactResolution.siteId,
+    ownershipSiteId: artifactResolution.ownershipSiteId,
     siteVersionId: artifactResolution.activeSiteVersionId,
     artifactId: artifactResolution.artifactId,
     hostBindingId: artifactResolution.hostBindingId,

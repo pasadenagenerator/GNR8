@@ -862,6 +862,7 @@ export type PublicRuntimeArtifactResolution =
       path: string;
       normalizedPath: string;
       siteId: string;
+      ownershipSiteId?: string | null;
       siteResolution: "host_match" | "fallback_latest_site";
       hostBindingId: string | null;
       hostBindingKind: string | null;
@@ -878,6 +879,7 @@ export type PublicRuntimeArtifactResolution =
       path: string;
       normalizedPath: string;
       siteId: string | null;
+      ownershipSiteId?: string | null;
       siteResolution: "host_match" | "fallback_latest_site" | "none";
       hostBindingId: string | null;
       hostBindingKind: string | null;
@@ -999,6 +1001,7 @@ export async function resolveActiveArtifactForHostAndPathWithDiagnostics(input: 
 
     const pointerRes = await client.query<{
       site_id: string;
+      ownership_site_id: string | null;
       site_resolution: "host_match" | "fallback_latest_site";
       host_binding_id: string | null;
       host_binding_kind: string | null;
@@ -1044,10 +1047,12 @@ export async function resolveActiveArtifactForHostAndPathWithDiagnostics(input: 
         s.host_binding_id::text as host_binding_id,
         s.host_binding_kind::text as host_binding_kind,
         s.host_binding_status::text as host_binding_status,
+        sv.ownership_site_id::text as ownership_site_id,
         p.active_site_version_id::text as active_site_version_id,
         p.active_artifact_id::text as artifact_id
       from resolved_site s
       left join public.gnr8_runtime_active_pointers p on p.site_id = s.site_id
+      left join public.gnr8_runtime_site_versions sv on sv.id = p.active_site_version_id
       limit 1
       `,
       [host],
@@ -1061,6 +1066,7 @@ export async function resolveActiveArtifactForHostAndPathWithDiagnostics(input: 
         path: input.path,
         normalizedPath,
         siteId: null,
+        ownershipSiteId: null,
         siteResolution: "none",
         hostBindingId: null,
         hostBindingKind: null,
@@ -1071,6 +1077,7 @@ export async function resolveActiveArtifactForHostAndPathWithDiagnostics(input: 
       };
     }
     const siteId = pointerRow.site_id;
+    const ownershipSiteId = pointerRow.ownership_site_id;
     const siteResolution = pointerRow.site_resolution;
     const hostBindingId = pointerRow.host_binding_id;
     const hostBindingKind = pointerRow.host_binding_kind;
@@ -1084,6 +1091,7 @@ export async function resolveActiveArtifactForHostAndPathWithDiagnostics(input: 
         path: input.path,
         normalizedPath,
         siteId,
+        ownershipSiteId,
         siteResolution,
         hostBindingId,
         hostBindingKind,
@@ -1102,6 +1110,7 @@ export async function resolveActiveArtifactForHostAndPathWithDiagnostics(input: 
         path: input.path,
         normalizedPath,
         siteId,
+        ownershipSiteId,
         siteResolution,
         hostBindingId,
         hostBindingKind,
@@ -1124,6 +1133,7 @@ export async function resolveActiveArtifactForHostAndPathWithDiagnostics(input: 
         path: input.path,
         normalizedPath,
         siteId,
+        ownershipSiteId,
         siteResolution,
         hostBindingId,
         hostBindingKind,
@@ -1143,6 +1153,7 @@ export async function resolveActiveArtifactForHostAndPathWithDiagnostics(input: 
         path: input.path,
         normalizedPath,
         siteId,
+        ownershipSiteId,
         siteResolution,
         hostBindingId,
         hostBindingKind,
@@ -1159,6 +1170,7 @@ export async function resolveActiveArtifactForHostAndPathWithDiagnostics(input: 
       path: input.path,
       normalizedPath,
       siteId,
+      ownershipSiteId,
       siteResolution,
       hostBindingId,
       hostBindingKind,

@@ -22,6 +22,7 @@ const runtimeUsageFlusherDependencies: RuntimeUsageFlusherDependencies = {
   },
 };
 
+// Legacy periodic flush path retained for compatibility; public runtime no longer depends on this timer.
 const DEFAULT_FLUSH_INTERVAL_MS = 30_000;
 
 let flushTimer: ReturnType<typeof setInterval> | null = null;

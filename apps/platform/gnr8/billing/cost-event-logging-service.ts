@@ -197,6 +197,100 @@ function cloneCostCenters(costCenters: CostCenterHierarchy): CostCenterHierarchy
   };
 }
 
+type NormalizedRuntimeUsageInput = {
+  siteId: string;
+  artifactId: string | null;
+  requestCount: number;
+  bandwidthBytes: number;
+  computeMs: number;
+  estimatedCost: number;
+  periodStart: string;
+  periodEnd: string;
+};
+
+function normalizeRuntimeUsageInput(input: RuntimeUsageEventInput): NormalizedRuntimeUsageInput {
+  const siteId = requireNonEmpty(input.siteId, "siteId");
+  const periodStart = toIsoDate(input.periodStart, "periodStart");
+  const periodEnd = toIsoDate(input.periodEnd, "periodEnd");
+  if (new Date(periodEnd).getTime() < new Date(periodStart).getTime()) {
+    throw new CostEventLoggingError("periodEnd must be greater than or equal to periodStart");
+  }
+
+  return {
+    siteId,
+    artifactId: normalizeUuid(input.artifactId, "artifactId"),
+    requestCount: toNonNegativeInteger(input.requestCount, 0),
+    bandwidthBytes: toNonNegativeInteger(input.bandwidthBytes, 0),
+    computeMs: toNonNegativeInteger(input.computeMs, 0),
+    estimatedCost: toNonNegativeNumber(input.estimatedCost, 0),
+    periodStart,
+    periodEnd,
+  };
+}
+
+async function insertRuntimeUsageEvent(
+  client: PoolClient,
+  input: NormalizedRuntimeUsageInput,
+  attribution: ResolvedBillingAttribution,
+): Promise<LoggedCostEventResult> {
+  const insertRes = await client.query<InsertedEventRow>(
+    `
+      insert into public.runtime_usage_events (
+        billing_account_id,
+        agency_id,
+        client_id,
+        site_id,
+        artifact_id,
+        request_count,
+        bandwidth_bytes,
+        compute_ms,
+        estimated_cost,
+        period_start,
+        period_end
+      )
+      values (
+        $1::uuid,
+        $2::uuid,
+        $3::uuid,
+        $4::uuid,
+        $5::uuid,
+        $6::integer,
+        $7::bigint,
+        $8::bigint,
+        $9::numeric(12,6),
+        $10::timestamptz,
+        $11::timestamptz
+      )
+      returning id::text as id, created_at::text as created_at
+      `,
+    [
+      attribution.billingAccountId,
+      attribution.agencyId,
+      attribution.clientId,
+      attribution.siteId,
+      input.artifactId,
+      input.requestCount,
+      input.bandwidthBytes,
+      input.computeMs,
+      input.estimatedCost,
+      input.periodStart,
+      input.periodEnd,
+    ],
+  );
+
+  const row = insertRes.rows[0];
+  if (!row) throw new CostEventLoggingError("failed to persist runtime usage event");
+
+  return {
+    id: row.id,
+    createdAt: row.created_at,
+    attribution: {
+      ...attribution,
+      costCenterIds: cloneCostCenters(attribution.costCenterIds),
+    },
+  };
+}
+
 export async function logAIUsageEvent(input: AIUsageEventInput): Promise<LoggedCostEventResult> {
   const operationType = requireNonEmpty(input.operationType, "operationType");
   const featureContext = requireNonEmpty(input.featureContext, "featureContext");
@@ -299,82 +393,49 @@ export async function logAIUsageEvent(input: AIUsageEventInput): Promise<LoggedC
 }
 
 export async function logRuntimeUsageEvent(input: RuntimeUsageEventInput): Promise<LoggedCostEventResult> {
-  const siteId = requireNonEmpty(input.siteId, "siteId");
-  const periodStart = toIsoDate(input.periodStart, "periodStart");
-  const periodEnd = toIsoDate(input.periodEnd, "periodEnd");
-  if (new Date(periodEnd).getTime() < new Date(periodStart).getTime()) {
-    throw new CostEventLoggingError("periodEnd must be greater than or equal to periodStart");
-  }
-
-  const artifactId = normalizeUuid(input.artifactId, "artifactId");
+  const normalized = normalizeRuntimeUsageInput(input);
   const pool = getSuperadminPool();
   const client = await pool.connect();
 
   try {
     await requireTable(client, "public.runtime_usage_events", "logRuntimeUsageEvent");
+    const attribution = await resolveSiteAttribution(normalized.siteId);
+    return insertRuntimeUsageEvent(client, normalized, attribution);
+  } finally {
+    client.release();
+  }
+}
 
-    const attribution = await resolveSiteAttribution(siteId);
-    const requestCount = toNonNegativeInteger(input.requestCount, 0);
-    const bandwidthBytes = toNonNegativeInteger(input.bandwidthBytes, 0);
-    const computeMs = toNonNegativeInteger(input.computeMs, 0);
-    const estimatedCost = toNonNegativeNumber(input.estimatedCost, 0);
+export async function logRuntimeUsageEventWithAttribution(
+  input: RuntimeUsageEventInput,
+  attributionInput: ResolvedBillingAttribution,
+): Promise<LoggedCostEventResult> {
+  const normalized = normalizeRuntimeUsageInput(input);
+  const resolvedSiteId = String(attributionInput.siteId ?? "").trim();
+  if (!resolvedSiteId) {
+    throw new CostEventLoggingError("resolved attribution must include siteId for runtime usage events");
+  }
+  if (resolvedSiteId !== normalized.siteId) {
+    throw new CostEventLoggingError("siteId does not match resolved attribution siteId");
+  }
 
-    const insertRes = await client.query<InsertedEventRow>(
-      `
-      insert into public.runtime_usage_events (
-        billing_account_id,
-        agency_id,
-        client_id,
-        site_id,
-        artifact_id,
-        request_count,
-        bandwidth_bytes,
-        compute_ms,
-        estimated_cost,
-        period_start,
-        period_end
-      )
-      values (
-        $1::uuid,
-        $2::uuid,
-        $3::uuid,
-        $4::uuid,
-        $5::uuid,
-        $6::integer,
-        $7::bigint,
-        $8::bigint,
-        $9::numeric(12,6),
-        $10::timestamptz,
-        $11::timestamptz
-      )
-      returning id::text as id, created_at::text as created_at
-      `,
-      [
-        attribution.billingAccountId,
-        attribution.agencyId,
-        attribution.clientId,
-        attribution.siteId,
-        artifactId,
-        requestCount,
-        bandwidthBytes,
-        computeMs,
-        estimatedCost,
-        periodStart,
-        periodEnd,
-      ],
-    );
+  const pool = getSuperadminPool();
+  const client = await pool.connect();
+  const attribution: ResolvedBillingAttribution = {
+    billingAccountId: attributionInput.billingAccountId,
+    agencyId: requireNonEmpty(attributionInput.agencyId, "attribution.agencyId"),
+    clientId: attributionInput.clientId,
+    siteId: resolvedSiteId,
+    costCenterIds: {
+      agencyCostCenterId: attributionInput.costCenterIds.agencyCostCenterId,
+      clientCostCenterId: attributionInput.costCenterIds.clientCostCenterId,
+      siteCostCenterId: attributionInput.costCenterIds.siteCostCenterId,
+    },
+  };
 
-    const row = insertRes.rows[0];
-    if (!row) throw new CostEventLoggingError("failed to persist runtime usage event");
-
-    return {
-      id: row.id,
-      createdAt: row.created_at,
-      attribution: {
-        ...attribution,
-        costCenterIds: cloneCostCenters(attribution.costCenterIds),
-      },
-    };
+  try {
+    await requireTable(client, "public.runtime_usage_events", "logRuntimeUsageEventWithAttribution");
+    return insertRuntimeUsageEvent(client, normalized, attribution);
   } finally {
     client.release();
   }

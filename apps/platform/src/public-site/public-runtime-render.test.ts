@@ -52,9 +52,15 @@ test("public runtime artifact hit: serves artifact HTML with artifact-only diagn
     artifactId?: string | null;
   }> = [];
   const restoreUsageDeps = __setPublicRuntimeUsageDependenciesForTest({
-    ensureRuntimeUsageFlushLoopStarted: () => undefined,
-    incrementRuntimeUsage: (siteId, usage) => {
-      usageCalls.push({ siteId: String(siteId), ...usage });
+    persistRuntimeUsageEvent: async (usage) => {
+      usageCalls.push({
+        siteId: String(usage.siteId ?? ""),
+        requestCount: usage.requestCount,
+        bandwidthBytes: usage.bandwidthBytes,
+        computeMs: usage.computeMs,
+        artifactId: usage.artifactId ?? null,
+      });
+      return { status: "written" };
     },
   });
   const restoreDeps = __setPublicRuntimeRenderDependenciesForTest({
