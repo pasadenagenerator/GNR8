@@ -3,6 +3,8 @@
 import { useMemo, useState, type CSSProperties } from "react";
 import { useRouter } from "next/navigation";
 
+import type { BulkActionItemResult, BulkActionResult, BulkMigrationActionType } from "@/gnr8/command-center/bulk-action-types";
+import { runBulkMigrationActions } from "@/gnr8/command-center/bulk-migration-actions";
 import { SiteAssignmentControl } from "./site-assignment-control";
 
 type ClientOption = {
@@ -70,7 +72,6 @@ type CommandCenterRow = {
 
 type SortField = "total_cost" | "margin" | "margin_percentage";
 type SortDirection = "asc" | "desc";
-type BulkMigrationAction = "import" | "approve" | "publish";
 type RowAction = "import" | "generate_preview" | "approve" | "publish";
 
 type Props = {
@@ -177,10 +178,18 @@ function actionButtonStyle(enabled: boolean): CSSProperties {
   };
 }
 
-function statusMatchesBulkAction(status: MigrationStatus, action: BulkMigrationAction): boolean {
-  if (action === "import") return status === "NOT_STARTED" || status === "ERROR";
-  if (action === "approve") return status === "PREVIEW_READY";
-  return status === "APPROVED";
+function bulkOutcomeStyle(item: BulkActionItemResult): CSSProperties {
+  if (item.outcome === "succeeded") {
+    return badgeStyle({ textColor: "#065f46", background: "#dcfce7", border: "1px solid #86efac" });
+  }
+  if (item.outcome === "skipped") {
+    return badgeStyle({ textColor: "#92400e", background: "#fef3c7", border: "1px solid #fcd34d" });
+  }
+  return badgeStyle({ textColor: "#991b1b", background: "#fee2e2", border: "1px solid #fca5a5" });
+}
+
+function formatBulkResultSummary(result: BulkActionResult): string {
+  return `${result.total_succeeded} succeeded, ${result.total_failed} failed, ${result.total_skipped} skipped`;
 }
 
 function buildImportUrlFromDomain(domain: string | null): string | null {
@@ -215,6 +224,8 @@ export function CommandCenterOpsTable(props: Props) {
   const [bulkMigrationBusy, setBulkMigrationBusy] = useState(false);
   const [bulkMessage, setBulkMessage] = useState<string | null>(null);
   const [bulkError, setBulkError] = useState<string | null>(null);
+  const [bulkResult, setBulkResult] = useState<BulkActionResult | null>(null);
+  const [retrySelectionBySiteId, setRetrySelectionBySiteId] = useState<Record<string, boolean>>({});
   const [rowBusyBySiteId, setRowBusyBySiteId] = useState<Record<string, boolean>>({});
   const [rowErrorBySiteId, setRowErrorBySiteId] = useState<Record<string, string>>({});
 
@@ -283,10 +294,31 @@ export function CommandCenterOpsTable(props: Props) {
   const selectedCount = selectedSiteIds.length;
 
   const rowPadding = compactMode ? "6px 8px" : "10px";
+  const bulkRetryableFailed = useMemo(
+    () => bulkResult?.item_results.filter((item) => item.outcome === "failed" && item.retryable) ?? [],
+    [bulkResult],
+  );
+  const bulkRetryableSkipped = useMemo(
+    () => bulkResult?.item_results.filter((item) => item.outcome === "skipped" && item.retryable) ?? [],
+    [bulkResult],
+  );
 
   function resetFeedback() {
     setBulkMessage(null);
     setBulkError(null);
+  }
+
+  function resetBulkResult() {
+    setBulkResult(null);
+    setRetrySelectionBySiteId({});
+  }
+
+  function primeRetrySelection(result: BulkActionResult) {
+    const nextSelection: Record<string, boolean> = {};
+    for (const item of result.item_results) {
+      nextSelection[item.site_id] = item.outcome === "failed" && item.retryable;
+    }
+    setRetrySelectionBySiteId(nextSelection);
   }
 
   function clearRowError(siteId: string) {
@@ -470,62 +502,77 @@ export function CommandCenterOpsTable(props: Props) {
     }
   }
 
-  async function applyBulkMigrationAction(action: BulkMigrationAction) {
-    if (selectedSiteIds.length === 0 || bulkMigrationBusy || bulkBusy) return;
-
+  async function runBulkMigrationForSiteIds(action: BulkMigrationActionType, siteIds: string[]) {
     setBulkMigrationBusy(true);
     setBulkError(null);
     setBulkMessage(null);
-
-    let okCount = 0;
-    let failedCount = 0;
-    let skippedCount = 0;
+    resetBulkResult();
 
     try {
-      for (const siteId of selectedSiteIds) {
+      const inputRows = siteIds.map((siteId) => {
         const row = rowBySiteId.get(siteId);
         if (!row) {
-          failedCount += 1;
-          continue;
+          return {
+            site_id: siteId,
+            domain: null,
+            status: "UNKNOWN" as const,
+            latest_site_version_id: null,
+          };
         }
 
-        if (!statusMatchesBulkAction(row.migration.status, action)) {
-          skippedCount += 1;
-          continue;
-        }
+        return {
+          site_id: row.summary.site_id,
+          domain: row.summary.domain,
+          status: row.migration.status,
+          latest_site_version_id: row.migration.latest_site_version_id,
+        };
+      });
 
-        try {
-          if (action === "import") {
-            await runMigrationMutation(row, "import");
-          } else if (action === "approve") {
-            await runMigrationMutation(row, "approve");
-          } else {
-            await runMigrationMutation(row, "publish");
-          }
-          okCount += 1;
-        } catch {
-          failedCount += 1;
-        }
-      }
+      const result = await runBulkMigrationActions({
+        action,
+        items: inputRows,
+      });
 
-      if (okCount > 0) {
-        setSelectedSiteIds([]);
-        setBulkMessage(
-          `Bulk ${action} completed for ${okCount} site${okCount === 1 ? "" : "s"}.` +
-            (skippedCount > 0 ? ` ${skippedCount} skipped (not in eligible status).` : "") +
-            (failedCount > 0 ? ` ${failedCount} failed.` : ""),
-        );
+      setBulkResult(result);
+      primeRetrySelection(result);
+      setBulkMessage(`Bulk ${action}: ${formatBulkResultSummary(result)}.`);
+
+      if (result.total_succeeded > 0) {
         router.refresh();
-      } else if (failedCount > 0 || skippedCount > 0) {
-        setBulkError(
-          `Bulk ${action} completed with no successful updates.` +
-            (skippedCount > 0 ? ` ${skippedCount} skipped.` : "") +
-            (failedCount > 0 ? ` ${failedCount} failed.` : ""),
-        );
       }
+    } catch (error) {
+      setBulkError(error instanceof Error ? error.message : "Bulk migration action failed");
     } finally {
       setBulkMigrationBusy(false);
     }
+  }
+
+  async function applyBulkMigrationAction(action: BulkMigrationActionType) {
+    if (selectedSiteIds.length === 0 || bulkMigrationBusy || bulkBusy) return;
+    await runBulkMigrationForSiteIds(action, selectedSiteIds);
+  }
+
+  async function retryFailedBulkItems() {
+    if (!bulkResult || bulkMigrationBusy || bulkBusy) return;
+    const retryIds = bulkRetryableFailed.map((item) => item.site_id);
+    if (retryIds.length === 0) return;
+    await runBulkMigrationForSiteIds(bulkResult.action_type, retryIds);
+  }
+
+  async function retrySkippedBulkItems() {
+    if (!bulkResult || bulkMigrationBusy || bulkBusy) return;
+    const retryIds = bulkRetryableSkipped.map((item) => item.site_id);
+    if (retryIds.length === 0) return;
+    await runBulkMigrationForSiteIds(bulkResult.action_type, retryIds);
+  }
+
+  async function retrySelectedBulkItems() {
+    if (!bulkResult || bulkMigrationBusy || bulkBusy) return;
+    const retryIds = Object.entries(retrySelectionBySiteId)
+      .filter(([, selected]) => selected)
+      .map(([siteId]) => siteId);
+    if (retryIds.length === 0) return;
+    await runBulkMigrationForSiteIds(bulkResult.action_type, retryIds);
   }
 
   return (
@@ -663,6 +710,103 @@ export function CommandCenterOpsTable(props: Props) {
 
           {bulkMessage ? <span style={{ fontSize: 12, color: "#065f46" }}>{bulkMessage}</span> : null}
           {bulkError ? <span style={{ fontSize: 12, color: "#991b1b" }}>{bulkError}</span> : null}
+        </div>
+      ) : null}
+
+      {bulkResult ? (
+        <div
+          style={{
+            marginBottom: 10,
+            padding: "10px 12px",
+            border: "1px solid #d1d5db",
+            borderRadius: 10,
+            background: "#f8fafc",
+            display: "grid",
+            gap: 8,
+          }}
+        >
+          <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+            <span style={{ fontSize: 12, fontWeight: 700, color: "#111827" }}>
+              Bulk {bulkResult.action_type}: {formatBulkResultSummary(bulkResult)}
+            </span>
+            <span style={{ fontSize: 11, color: "#6b7280" }}>
+              attempted {bulkResult.total_attempted} of {bulkResult.total_requested}
+            </span>
+            <button
+              type="button"
+              disabled={bulkRetryableFailed.length === 0 || bulkMigrationBusy || bulkBusy}
+              onClick={retryFailedBulkItems}
+              style={actionButtonStyle(bulkRetryableFailed.length > 0 && !bulkMigrationBusy && !bulkBusy)}
+            >
+              Retry failed ({bulkRetryableFailed.length})
+            </button>
+            <button
+              type="button"
+              disabled={bulkRetryableSkipped.length === 0 || bulkMigrationBusy || bulkBusy}
+              onClick={retrySkippedBulkItems}
+              style={actionButtonStyle(bulkRetryableSkipped.length > 0 && !bulkMigrationBusy && !bulkBusy)}
+            >
+              Retry skipped ({bulkRetryableSkipped.length})
+            </button>
+            <button
+              type="button"
+              disabled={bulkMigrationBusy || bulkBusy}
+              onClick={retrySelectedBulkItems}
+              style={actionButtonStyle(!bulkMigrationBusy && !bulkBusy)}
+            >
+              Retry selected
+            </button>
+          </div>
+
+          {bulkMessage ? <span style={{ fontSize: 12, color: "#065f46" }}>{bulkMessage}</span> : null}
+          {bulkError ? <span style={{ fontSize: 12, color: "#991b1b" }}>{bulkError}</span> : null}
+
+          <div style={{ maxHeight: 240, overflowY: "auto", display: "grid", gap: 6 }}>
+            {bulkResult.item_results
+              .filter((item) => item.outcome !== "succeeded")
+              .map((item) => {
+                const canRetrySelect = item.retryable && (item.outcome === "failed" || item.outcome === "skipped");
+                return (
+                  <label
+                    key={`${bulkResult.action_type}-${item.site_id}-${item.reason_code}`}
+                    style={{
+                      display: "grid",
+                      gap: 4,
+                      border: "1px solid #e5e7eb",
+                      borderRadius: 8,
+                      padding: "7px 8px",
+                      background: "#ffffff",
+                    }}
+                  >
+                    <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                      <input
+                        type="checkbox"
+                        checked={!!retrySelectionBySiteId[item.site_id]}
+                        disabled={!canRetrySelect}
+                        onChange={(event) =>
+                          setRetrySelectionBySiteId((current) => ({
+                            ...current,
+                            [item.site_id]: event.target.checked,
+                          }))
+                        }
+                      />
+                      <span style={{ fontSize: 11, fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace" }}>
+                        {shortId(item.site_id)}
+                      </span>
+                      <span style={bulkOutcomeStyle(item)}>{item.outcome.toUpperCase()}</span>
+                      <span style={badgeStyle({ textColor: "#334155", background: "#e2e8f0", border: "1px solid #cbd5e1" })}>{item.reason_code}</span>
+                      <span style={{ fontSize: 11, color: item.retryable ? "#166534" : "#6b7280" }}>
+                        retryable: {item.retryable ? "yes" : "no"}
+                      </span>
+                    </div>
+                    <div style={{ fontSize: 12, color: "#374151" }}>
+                      {item.domain ? `${item.domain}: ` : ""}
+                      {item.reason_message}
+                    </div>
+                  </label>
+                );
+              })}
+          </div>
         </div>
       ) : null}
 
