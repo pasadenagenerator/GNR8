@@ -2,6 +2,10 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { listClientOrganizationsForCommandCenter } from "@/gnr8/command-center/command-center-assignment-service";
+import {
+  getRuntimeMigrationSnapshotsBySiteId,
+  type CommandCenterMigrationRuntimeSnapshot,
+} from "@/gnr8/command-center/command-center-migration-service";
 import { mapSiteMargin, type SiteMarginResult } from "@/gnr8/billing/margin-service";
 import { compareSiteAcrossPlansFromSummary, type SitePlanComparisonResult } from "@/gnr8/billing/pricing-simulation-service";
 import { getUnifiedCostOverview, type UnifiedCostSiteSummary } from "@/gnr8/billing/unified-cost-view-service";
@@ -40,9 +44,100 @@ type CommandCenterRow = {
   summary: UnifiedCostSiteSummary;
   margin: SiteMarginResult | null;
   simulation: SitePlanComparisonResult | null;
+  migration: {
+    status: "NOT_STARTED" | "IMPORTED" | "PREVIEW_READY" | "APPROVED" | "LIVE" | "ERROR";
+    latest_site_version_id: string | null;
+    preview_url: string | null;
+    live_url: string | null;
+    latest_runtime_state: string | null;
+  };
 };
 
 const COMMAND_CENTER_SITE_LIMIT = 100;
+
+function looksLikeErrorStatus(status: string | null | undefined): boolean {
+  const normalized = String(status ?? "").trim().toLowerCase();
+  if (!normalized) return false;
+  return normalized.includes("error") || normalized.includes("fail");
+}
+
+function toHttpsLiveUrl(domain: string | null | undefined): string | null {
+  const raw = String(domain ?? "").trim();
+  if (!raw) return null;
+
+  try {
+    const parsed = raw.includes("://") ? new URL(raw) : new URL(`https://${raw}`);
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return null;
+    return parsed.toString();
+  } catch {
+    return null;
+  }
+}
+
+function deriveMigrationStatus(input: {
+  summary: UnifiedCostSiteSummary;
+  runtimeSnapshot: CommandCenterMigrationRuntimeSnapshot | null;
+}): CommandCenterRow["migration"] {
+  const { summary, runtimeSnapshot } = input;
+  const liveUrl = toHttpsLiveUrl(summary.domain);
+  const siteVersionId = runtimeSnapshot?.latest_site_version_id ?? null;
+  const latestStateRaw = runtimeSnapshot?.latest_state ?? null;
+
+  if (runtimeSnapshot) {
+    const latestState = String(latestStateRaw ?? "").toUpperCase();
+    let status: CommandCenterRow["migration"]["status"];
+
+    if (latestState === "DRAFT") {
+      status = "IMPORTED";
+    } else if (latestState === "READY_FOR_REVIEW") {
+      status = "PREVIEW_READY";
+    } else if (latestState === "APPROVED") {
+      status = "APPROVED";
+    } else if (latestState === "PUBLISHED") {
+      status = "LIVE";
+    } else if (latestState === "ARCHIVED") {
+      status = runtimeSnapshot.has_published_version ? "LIVE" : "IMPORTED";
+    } else {
+      status = "ERROR";
+    }
+
+    return {
+      status,
+      latest_site_version_id: siteVersionId,
+      preview_url: siteVersionId ? `/api/gnr8/runtime/versions/${siteVersionId}/preview` : null,
+      live_url: liveUrl,
+      latest_runtime_state: latestStateRaw ? String(latestStateRaw) : null,
+    };
+  }
+
+  if (looksLikeErrorStatus(summary.site_status)) {
+    return {
+      status: "ERROR",
+      latest_site_version_id: null,
+      preview_url: null,
+      live_url: liveUrl,
+      latest_runtime_state: null,
+    };
+  }
+
+  if (summary.migration_event_count > 0) {
+    return {
+      status: "IMPORTED",
+      latest_site_version_id: null,
+      preview_url: null,
+      live_url: liveUrl,
+      latest_runtime_state: null,
+    };
+  }
+
+  return {
+    status: "NOT_STARTED",
+    latest_site_version_id: null,
+    preview_url: null,
+    live_url: liveUrl,
+    latest_runtime_state: null,
+  };
+}
 
 export default async function CommandCenterPage(props: { searchParams?: Promise<SearchParams> }) {
   try {
@@ -82,6 +177,8 @@ export default async function CommandCenterPage(props: { searchParams?: Promise<
     return profitabilityMatches(profitability, margin);
   });
 
+  const migrationSnapshotsBySiteId = await getRuntimeMigrationSnapshotsBySiteId(filteredSummaries.map((summary) => summary.site_id));
+
   let planSimulationErrorCount = 0;
   const simulationBySiteId = new Map<string, SitePlanComparisonResult>();
   for (const summary of filteredSummaries) {
@@ -104,7 +201,14 @@ export default async function CommandCenterPage(props: { searchParams?: Promise<
     summary,
     margin: siteMarginBySiteId.get(summary.site_id) ?? null,
     simulation: simulationBySiteId.get(summary.site_id) ?? null,
+    migration: deriveMigrationStatus({
+      summary,
+      runtimeSnapshot: migrationSnapshotsBySiteId.get(summary.site_id) ?? null,
+    }),
   }));
+
+  const liveCount = rows.filter((row) => row.migration.status === "LIVE").length;
+  const migrationProgressPercent = rows.length === 0 ? 0 : Math.round((liveCount / rows.length) * 100);
 
   return (
     <main
@@ -118,9 +222,9 @@ export default async function CommandCenterPage(props: { searchParams?: Promise<
       }}
     >
       <header style={{ display: "grid", gap: 8 }}>
-        <h1 style={{ margin: 0, fontSize: 30 }}>GNR8 Command Center</h1>
+        <h1 style={{ margin: 0, fontSize: 30 }}>GNR8 Migration Command Center</h1>
         <p style={{ margin: 0, color: "#4b5563" }}>
-          Ownership and profitability operations surface (agency → client → site) with plan simulation.
+          Site migration pipeline visibility and actions (import → preview → approve → publish), with ownership and profitability context.
         </p>
       </header>
 
@@ -199,6 +303,24 @@ export default async function CommandCenterPage(props: { searchParams?: Promise<
           <span>
             <strong>Page cap:</strong> {COMMAND_CENTER_SITE_LIMIT}
           </span>
+        </div>
+        <div style={{ marginTop: 12, display: "grid", gap: 6 }}>
+          <div style={{ fontSize: 13, color: "#111827" }}>
+            <strong>Migration Progress:</strong> {liveCount}/{rows.length} LIVE ({migrationProgressPercent}%)
+          </div>
+          <div
+            aria-label="Migration progress bar"
+            style={{ width: 320, maxWidth: "100%", height: 10, borderRadius: 999, overflow: "hidden", background: "#e5e7eb" }}
+          >
+            <div
+              style={{
+                width: `${migrationProgressPercent}%`,
+                height: "100%",
+                background: migrationProgressPercent >= 100 ? "#16a34a" : "#2563eb",
+                transition: "width 160ms ease-out",
+              }}
+            />
+          </div>
         </div>
         {planSimulationErrorCount > 0 ? (
           <p style={{ marginTop: 8, marginBottom: 0, fontSize: 12, color: "#7c2d12" }}>
