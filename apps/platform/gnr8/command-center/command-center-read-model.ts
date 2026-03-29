@@ -2,6 +2,7 @@ import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+import { resolveMigrationPipelineStatus, type MigrationPipelineStatus } from "@/gnr8/command-center/migration-state-automation";
 import { createServiceRoleSupabaseClient } from "@/src/supabase/service-role-server";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -55,6 +56,9 @@ export type CommandCenterSiteSummary = {
   latest_runtime_site_version_id: string | null;
   latest_runtime_state: string | null;
   has_published_runtime_version: boolean;
+  effective_status: MigrationPipelineStatus;
+  auto_advanced: boolean;
+  automation_reason: string | null;
 };
 
 export type CommandCenterClientOption = {
@@ -463,6 +467,15 @@ function mapSiteSummary(input: {
     maxIso(input.accumulator.ai_latest_event_at, input.accumulator.runtime_latest_event_at),
     input.accumulator.migration_latest_event_at,
   );
+  const migrationAutomation = resolveMigrationPipelineStatus({
+    evidence: {
+      site_status: String(input.site.status ?? ""),
+      migration_event_count: input.accumulator.migration_event_count,
+      latest_runtime_state: input.runtimeSnapshot?.latest_runtime_state ?? null,
+      latest_runtime_site_version_id: input.runtimeSnapshot?.latest_runtime_site_version_id ?? null,
+      has_published_runtime_version: input.runtimeSnapshot?.has_published_runtime_version ?? false,
+    },
+  });
 
   return {
     site_id: String(input.site.id ?? ""),
@@ -500,6 +513,9 @@ function mapSiteSummary(input: {
     latest_runtime_site_version_id: input.runtimeSnapshot?.latest_runtime_site_version_id ?? null,
     latest_runtime_state: input.runtimeSnapshot?.latest_runtime_state ?? null,
     has_published_runtime_version: input.runtimeSnapshot?.has_published_runtime_version ?? false,
+    effective_status: migrationAutomation.effective_status,
+    auto_advanced: migrationAutomation.auto_advanced,
+    automation_reason: migrationAutomation.automation_reason,
   };
 }
 

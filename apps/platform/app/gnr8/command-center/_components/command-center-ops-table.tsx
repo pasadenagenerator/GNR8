@@ -53,6 +53,8 @@ type MigrationStatus = "NOT_STARTED" | "IMPORTED" | "PREVIEW_READY" | "APPROVED"
 
 type MigrationRow = {
   status: MigrationStatus;
+  auto_advanced: boolean;
+  automation_reason: string | null;
   latest_site_version_id: string | null;
   preview_url: string | null;
   live_url: string | null;
@@ -844,9 +846,22 @@ export function CommandCenterOpsTable(props: Props) {
                   </td>
                   <td style={{ borderTop: "1px solid #f3f4f6", padding: rowPadding, fontSize: 12, verticalAlign: "top" }}>
                     <div style={{ display: "grid", gap: 5 }}>
-                      <span style={migrationBadge.style}>{migrationBadge.label}</span>
+                      <div style={{ display: "inline-flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                        <span style={migrationBadge.style}>{migrationBadge.label}</span>
+                        {row.migration.auto_advanced ? (
+                          <span
+                            title={row.migration.automation_reason ?? "Automatically advanced from deterministic migration evidence."}
+                            style={badgeStyle({ textColor: "#0f172a", background: "#e2e8f0", border: "1px solid #cbd5e1" })}
+                          >
+                            AUTO
+                          </span>
+                        ) : null}
+                      </div>
                       {row.migration.latest_runtime_state ? (
                         <span style={{ color: "#6b7280", fontSize: 11 }}>Runtime: {row.migration.latest_runtime_state}</span>
+                      ) : null}
+                      {row.migration.auto_advanced && row.migration.automation_reason ? (
+                        <span style={{ color: "#6b7280", fontSize: 11 }}>Reason: {row.migration.automation_reason}</span>
                       ) : null}
                     </div>
                   </td>

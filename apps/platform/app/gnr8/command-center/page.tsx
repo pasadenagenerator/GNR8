@@ -44,6 +44,8 @@ type CommandCenterRow = {
   simulation: SitePlanComparisonResult | null;
   migration: {
     status: "NOT_STARTED" | "IMPORTED" | "PREVIEW_READY" | "APPROVED" | "LIVE" | "ERROR";
+    auto_advanced: boolean;
+    automation_reason: string | null;
     latest_site_version_id: string | null;
     preview_url: string | null;
     live_url: string | null;
@@ -53,12 +55,6 @@ type CommandCenterRow = {
 
 const COMMAND_CENTER_SITE_LIMIT: number = 50;
 const COMMAND_CENTER_SIMULATION_LIMIT: number = 50;
-
-function looksLikeErrorStatus(status: string | null | undefined): boolean {
-  const normalized = String(status ?? "").trim().toLowerCase();
-  if (!normalized) return false;
-  return normalized.includes("error") || normalized.includes("fail");
-}
 
 function toHttpsLiveUrl(domain: string | null | undefined): string | null {
   const raw = String(domain ?? "").trim();
@@ -76,61 +72,15 @@ function toHttpsLiveUrl(domain: string | null | undefined): string | null {
 function deriveMigrationStatus(summary: CommandCenterSiteSummary): CommandCenterRow["migration"] {
   const liveUrl = toHttpsLiveUrl(summary.domain);
   const siteVersionId = summary.latest_runtime_site_version_id;
-  const latestStateRaw = summary.latest_runtime_state;
-
-  if (latestStateRaw) {
-    const latestState = String(latestStateRaw ?? "").toUpperCase();
-    let status: CommandCenterRow["migration"]["status"];
-
-    if (latestState === "DRAFT") {
-      status = "IMPORTED";
-    } else if (latestState === "READY_FOR_REVIEW") {
-      status = "PREVIEW_READY";
-    } else if (latestState === "APPROVED") {
-      status = "APPROVED";
-    } else if (latestState === "PUBLISHED") {
-      status = "LIVE";
-    } else if (latestState === "ARCHIVED") {
-      status = summary.has_published_runtime_version ? "LIVE" : "IMPORTED";
-    } else {
-      status = "ERROR";
-    }
-
-    return {
-      status,
-      latest_site_version_id: siteVersionId,
-      preview_url: siteVersionId ? `/api/gnr8/runtime/versions/${siteVersionId}/preview` : null,
-      live_url: liveUrl,
-      latest_runtime_state: latestStateRaw ? String(latestStateRaw) : null,
-    };
-  }
-
-  if (looksLikeErrorStatus(summary.site_status)) {
-    return {
-      status: "ERROR",
-      latest_site_version_id: null,
-      preview_url: null,
-      live_url: liveUrl,
-      latest_runtime_state: null,
-    };
-  }
-
-  if (summary.migration_event_count > 0) {
-    return {
-      status: "IMPORTED",
-      latest_site_version_id: null,
-      preview_url: null,
-      live_url: liveUrl,
-      latest_runtime_state: null,
-    };
-  }
 
   return {
-    status: "NOT_STARTED",
-    latest_site_version_id: null,
-    preview_url: null,
+    status: summary.effective_status,
+    auto_advanced: summary.auto_advanced,
+    automation_reason: summary.automation_reason,
+    latest_site_version_id: siteVersionId,
+    preview_url: siteVersionId ? `/api/gnr8/runtime/versions/${siteVersionId}/preview` : null,
     live_url: liveUrl,
-    latest_runtime_state: null,
+    latest_runtime_state: summary.latest_runtime_state ? String(summary.latest_runtime_state) : null,
   };
 }
 
