@@ -335,6 +335,10 @@ export default async function CommandCenterPage(props: { searchParams?: Promise<
         <p style={{ marginTop: 8, marginBottom: 0, fontSize: 12, color: "#374151" }}>
           Read model query count this render: {readModel.instrumentation.query_count}
         </p>
+        <p style={{ marginTop: 4, marginBottom: 0, fontSize: 12, color: "#374151" }}>
+          DB access mode: {readModel.instrumentation.db_access_mode} (
+          {readModel.instrumentation.stateless_read_path ? "stateless" : "session-bound"})
+        </p>
       </section>
 
       <CommandCenterOpsTable
