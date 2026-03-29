@@ -2,6 +2,7 @@ import "server-only";
 
 import type { PoolClient } from "pg";
 
+import { columnExistsCached, tableExistsCached } from "@/gnr8/db/schema-introspection-cache";
 import { getSuperadminPool } from "@/src/superadmin/db";
 
 type RuntimeLifecycleState = "DRAFT" | "READY_FOR_REVIEW" | "APPROVED" | "PUBLISHED" | "ARCHIVED";
@@ -13,45 +14,9 @@ export type CommandCenterMigrationRuntimeSnapshot = {
   has_published_version: boolean;
 };
 
-function tableNameToSchema(tableName: string): [string, string] | null {
-  const [schemaName, plainTableName] = tableName.split(".");
-  if (!schemaName || !plainTableName) return null;
-  return [schemaName, plainTableName];
-}
-
-async function tableExists(client: PoolClient, tableName: string): Promise<boolean> {
-  const res = await client.query<{ exists: boolean }>(
-    `
-      select to_regclass($1::text) is not null as exists
-    `,
-    [tableName],
-  );
-  return !!res.rows[0]?.exists;
-}
-
-async function columnExists(client: PoolClient, tableName: string, columnName: string): Promise<boolean> {
-  const parsed = tableNameToSchema(tableName);
-  if (!parsed) return false;
-  const [schemaName, plainTableName] = parsed;
-
-  const res = await client.query<{ exists: boolean }>(
-    `
-      select exists(
-        select 1
-        from information_schema.columns c
-        where c.table_schema = $1::text
-          and c.table_name = $2::text
-          and c.column_name = $3::text
-      ) as exists
-    `,
-    [schemaName, plainTableName, columnName],
-  );
-
-  return !!res.rows[0]?.exists;
-}
-
 export async function getRuntimeMigrationSnapshotsBySiteId(
   siteIds: string[],
+  options?: { dbClient?: PoolClient },
 ): Promise<Map<string, CommandCenterMigrationRuntimeSnapshot>> {
   const normalizedSiteIds = Array.from(
     new Set(
@@ -63,19 +28,20 @@ export async function getRuntimeMigrationSnapshotsBySiteId(
 
   if (normalizedSiteIds.length === 0) return new Map();
 
-  const pool = getSuperadminPool();
-  const client = await pool.connect();
+  const pool = options?.dbClient ? null : getSuperadminPool();
+  const client = options?.dbClient ?? (await pool!.connect());
+  const shouldReleaseClient = !options?.dbClient;
 
   try {
-    const hasRuntimeSiteVersions = await tableExists(client, "public.gnr8_runtime_site_versions");
+    const hasRuntimeSiteVersions = await tableExistsCached(client, "public.gnr8_runtime_site_versions");
     if (!hasRuntimeSiteVersions) return new Map();
 
     const [hasOwnershipSiteId, hasVersionNo, hasState, hasUpdatedAt, hasCreatedAt] = await Promise.all([
-      columnExists(client, "public.gnr8_runtime_site_versions", "ownership_site_id"),
-      columnExists(client, "public.gnr8_runtime_site_versions", "version_no"),
-      columnExists(client, "public.gnr8_runtime_site_versions", "state"),
-      columnExists(client, "public.gnr8_runtime_site_versions", "updated_at"),
-      columnExists(client, "public.gnr8_runtime_site_versions", "created_at"),
+      columnExistsCached(client, "public.gnr8_runtime_site_versions", "ownership_site_id"),
+      columnExistsCached(client, "public.gnr8_runtime_site_versions", "version_no"),
+      columnExistsCached(client, "public.gnr8_runtime_site_versions", "state"),
+      columnExistsCached(client, "public.gnr8_runtime_site_versions", "updated_at"),
+      columnExistsCached(client, "public.gnr8_runtime_site_versions", "created_at"),
     ]);
 
     if (!hasOwnershipSiteId || !hasVersionNo || !hasState || !hasUpdatedAt || !hasCreatedAt) return new Map();
@@ -124,6 +90,8 @@ export async function getRuntimeMigrationSnapshotsBySiteId(
     }
     return result;
   } finally {
-    client.release();
+    if (shouldReleaseClient) {
+      client.release();
+    }
   }
 }

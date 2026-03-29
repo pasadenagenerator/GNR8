@@ -2,6 +2,7 @@ import "server-only";
 
 import type { PoolClient } from "pg";
 
+import { columnExistsCached, tableExistsCached } from "@/gnr8/db/schema-introspection-cache";
 import { getSuperadminPool } from "@/src/superadmin/db";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -251,34 +252,6 @@ function classifyCompleteness(summary: {
   return "PARTIAL_SIGNAL";
 }
 
-async function tableExists(client: PoolClient, tableName: string): Promise<boolean> {
-  const res = await client.query<{ exists: boolean }>(
-    `
-    select to_regclass($1::text) is not null as exists
-    `,
-    [tableName],
-  );
-  return !!res.rows[0]?.exists;
-}
-
-async function columnExists(client: PoolClient, tableName: string, columnName: string): Promise<boolean> {
-  const [schemaName, plainTableName] = tableName.split(".");
-  if (!schemaName || !plainTableName) return false;
-  const res = await client.query<{ exists: boolean }>(
-    `
-    select exists(
-      select 1
-      from information_schema.columns c
-      where c.table_schema = $1::text
-        and c.table_name = $2::text
-        and c.column_name = $3::text
-    ) as exists
-    `,
-    [schemaName, plainTableName, columnName],
-  );
-  return !!res.rows[0]?.exists;
-}
-
 function buildOverviewFilters(
   normalized: NormalizedFilters,
 ): UnifiedCostOverviewResult["filters"] {
@@ -435,7 +408,7 @@ async function readOverviewRows(
   }
 
   const hasOrganizationName = availability.organizations
-    ? await columnExists(client, "public.organizations", "name")
+    ? await columnExistsCached(client, "public.organizations", "name")
     : false;
 
   const whereClauses: string[] = [];
@@ -637,18 +610,22 @@ left join migration on migration.site_id = ss.site_id
   return result.rows;
 }
 
-export async function getUnifiedCostOverview(filters: UnifiedCostOverviewFilters = {}): Promise<UnifiedCostOverviewResult> {
+export async function getUnifiedCostOverview(
+  filters: UnifiedCostOverviewFilters = {},
+  options?: { dbClient?: PoolClient },
+): Promise<UnifiedCostOverviewResult> {
   const normalized = normalizeFilters(filters);
-  const pool = getSuperadminPool();
-  const client = await pool.connect();
+  const pool = options?.dbClient ? null : getSuperadminPool();
+  const client = options?.dbClient ?? (await pool!.connect());
+  const shouldReleaseClient = !options?.dbClient;
 
   try {
     const availability: TableAvailability = {
-      sites: await tableExists(client, "public.sites"),
-      organizations: await tableExists(client, "public.organizations"),
-      ai_usage_events: await tableExists(client, "public.ai_usage_events"),
-      runtime_usage_events: await tableExists(client, "public.runtime_usage_events"),
-      migration_cost_events: await tableExists(client, "public.migration_cost_events"),
+      sites: await tableExistsCached(client, "public.sites"),
+      organizations: await tableExistsCached(client, "public.organizations"),
+      ai_usage_events: await tableExistsCached(client, "public.ai_usage_events"),
+      runtime_usage_events: await tableExistsCached(client, "public.runtime_usage_events"),
+      migration_cost_events: await tableExistsCached(client, "public.migration_cost_events"),
     };
 
     const rows = await readOverviewRows(client, normalized, availability);
@@ -663,7 +640,9 @@ export async function getUnifiedCostOverview(filters: UnifiedCostOverviewFilters
       top_cost_sites: summaries.slice(0, normalized.topLimit),
     };
   } finally {
-    client.release();
+    if (shouldReleaseClient) {
+      client.release();
+    }
   }
 }
 
@@ -687,4 +666,3 @@ export async function getUnifiedCostForSite(
 
   return overview.site_summaries[0] ?? null;
 }
-

@@ -2,6 +2,7 @@ import "server-only";
 
 import type { PoolClient } from "pg";
 
+import { columnExistsCached, tableExistsCached } from "@/gnr8/db/schema-introspection-cache";
 import { getSuperadminPool } from "@/src/superadmin/db";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -38,61 +39,27 @@ function normalizeUuid(value: string | null | undefined, fieldName: string): str
   return normalized;
 }
 
-function tableNameToSchema(tableName: string): [string, string] | null {
-  const [schemaName, plainTableName] = tableName.split(".");
-  if (!schemaName || !plainTableName) return null;
-  return [schemaName, plainTableName];
-}
-
-async function tableExists(client: PoolClient, tableName: string): Promise<boolean> {
-  const res = await client.query<{ exists: boolean }>(
-    `
-      select to_regclass($1::text) is not null as exists
-    `,
-    [tableName],
-  );
-  return !!res.rows[0]?.exists;
-}
-
-async function columnExists(client: PoolClient, tableName: string, columnName: string): Promise<boolean> {
-  const parsed = tableNameToSchema(tableName);
-  if (!parsed) return false;
-  const [schemaName, plainTableName] = parsed;
-
-  const res = await client.query<{ exists: boolean }>(
-    `
-      select exists(
-        select 1
-        from information_schema.columns c
-        where c.table_schema = $1::text
-          and c.table_name = $2::text
-          and c.column_name = $3::text
-      ) as exists
-    `,
-    [schemaName, plainTableName, columnName],
-  );
-
-  return !!res.rows[0]?.exists;
-}
-
-export async function listClientOrganizationsForCommandCenter(): Promise<CommandCenterClientOption[]> {
-  const pool = getSuperadminPool();
-  const client = await pool.connect();
+export async function listClientOrganizationsForCommandCenter(
+  options?: { dbClient?: PoolClient },
+): Promise<CommandCenterClientOption[]> {
+  const pool = options?.dbClient ? null : getSuperadminPool();
+  const client = options?.dbClient ?? (await pool!.connect());
+  const shouldReleaseClient = !options?.dbClient;
 
   try {
-    const hasOrganizations = await tableExists(client, "public.organizations");
+    const hasOrganizations = await tableExistsCached(client, "public.organizations");
     if (!hasOrganizations) return [];
 
     const [hasOrganizationType, hasAgencyId, hasName] = await Promise.all([
-      columnExists(client, "public.organizations", "organization_type"),
-      columnExists(client, "public.organizations", "agency_id"),
-      columnExists(client, "public.organizations", "name"),
+      columnExistsCached(client, "public.organizations", "organization_type"),
+      columnExistsCached(client, "public.organizations", "agency_id"),
+      columnExistsCached(client, "public.organizations", "name"),
     ]);
 
     if (!hasOrganizationType || !hasAgencyId) return [];
 
-    const hasAgencies = await tableExists(client, "public.agencies");
-    const hasAgencyName = hasAgencies ? await columnExists(client, "public.agencies", "name") : false;
+    const hasAgencies = await tableExistsCached(client, "public.agencies");
+    const hasAgencyName = hasAgencies ? await columnExistsCached(client, "public.agencies", "name") : false;
 
     const clientNameSql = hasName ? "o.name::text as client_name" : "null::text as client_name";
     const agencyJoinSql = hasAgencies ? "left join public.agencies a on a.id = o.agency_id" : "";
@@ -118,7 +85,9 @@ export async function listClientOrganizationsForCommandCenter(): Promise<Command
 
     return rows.rows;
   } finally {
-    client.release();
+    if (shouldReleaseClient) {
+      client.release();
+    }
   }
 }
 
@@ -130,17 +99,17 @@ export async function assignSiteToClient(input: { siteId: string; clientId: stri
 
   try {
     const [hasSites, hasOrganizations] = await Promise.all([
-      tableExists(client, "public.sites"),
-      tableExists(client, "public.organizations"),
+      tableExistsCached(client, "public.sites"),
+      tableExistsCached(client, "public.organizations"),
     ]);
 
     if (!hasSites) throw new CommandCenterAssignmentError("sites table does not exist in this environment");
     if (!hasOrganizations) throw new CommandCenterAssignmentError("organizations table does not exist in this environment");
 
     const [hasOrgType, hasOrgAgencyId, hasOrgName] = await Promise.all([
-      columnExists(client, "public.organizations", "organization_type"),
-      columnExists(client, "public.organizations", "agency_id"),
-      columnExists(client, "public.organizations", "name"),
+      columnExistsCached(client, "public.organizations", "organization_type"),
+      columnExistsCached(client, "public.organizations", "agency_id"),
+      columnExistsCached(client, "public.organizations", "name"),
     ]);
     if (!hasOrgType || !hasOrgAgencyId) {
       throw new CommandCenterAssignmentError("organizations table is missing required ownership columns");

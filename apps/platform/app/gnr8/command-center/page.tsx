@@ -10,6 +10,7 @@ import { mapSiteMargin, type SiteMarginResult } from "@/gnr8/billing/margin-serv
 import { compareSiteAcrossPlansFromSummary, type SitePlanComparisonResult } from "@/gnr8/billing/pricing-simulation-service";
 import { getUnifiedCostOverview, type UnifiedCostSiteSummary } from "@/gnr8/billing/unified-cost-view-service";
 import { requireSuperadminUserIdForPage } from "@/src/auth/require-superadmin-user-id";
+import { getSuperadminPool } from "@/src/superadmin/db";
 
 import { CommandCenterOpsTable } from "./_components/command-center-ops-table";
 
@@ -53,7 +54,9 @@ type CommandCenterRow = {
   };
 };
 
-const COMMAND_CENTER_SITE_LIMIT = 100;
+const COMMAND_CENTER_SITE_LIMIT: number = 50;
+const COMMAND_CENTER_MIGRATION_ENRICHMENT_LIMIT: number = 50;
+const COMMAND_CENTER_SIMULATION_LIMIT: number = 50;
 
 function looksLikeErrorStatus(status: string | null | undefined): boolean {
   const normalized = String(status ?? "").trim().toLowerCase();
@@ -157,31 +160,73 @@ export default async function CommandCenterPage(props: { searchParams?: Promise<
   const selectedClientId = normalizeClientFilter(resolvedSearchParams?.clientId);
   const profitability = normalizeProfitability(resolvedSearchParams?.profitability);
 
-  const [overview, clients] = await Promise.all([
-    getUnifiedCostOverview({
-      clientId: selectedClientId ?? undefined,
-      limit: COMMAND_CENTER_SITE_LIMIT,
-      topLimit: COMMAND_CENTER_SITE_LIMIT,
-    }),
-    listClientOrganizationsForCommandCenter(),
-  ]);
+  const pool = getSuperadminPool();
+  const sharedReadClient = await pool.connect();
 
+  let overview: Awaited<ReturnType<typeof getUnifiedCostOverview>> | null = null;
+  let clients: Awaited<ReturnType<typeof listClientOrganizationsForCommandCenter>> = [];
   const siteMarginBySiteId = new Map<string, SiteMarginResult>();
-  for (const siteSummary of overview.site_summaries) {
-    const siteMargin = mapSiteMargin(siteSummary);
-    siteMarginBySiteId.set(siteMargin.site_id, siteMargin);
+  let filteredSummaries: UnifiedCostSiteSummary[] = [];
+  let migrationSnapshotsBySiteId = new Map<string, CommandCenterMigrationRuntimeSnapshot>();
+  let clientsLoadFailed = false;
+  let migrationSnapshotLoadFailed = false;
+  let skippedMigrationSnapshotCount = 0;
+
+  try {
+    overview = await getUnifiedCostOverview(
+      {
+        clientId: selectedClientId ?? undefined,
+        limit: COMMAND_CENTER_SITE_LIMIT,
+        topLimit: COMMAND_CENTER_SITE_LIMIT,
+      },
+      { dbClient: sharedReadClient },
+    );
+
+    try {
+      clients = await listClientOrganizationsForCommandCenter({ dbClient: sharedReadClient });
+    } catch {
+      clientsLoadFailed = true;
+      clients = [];
+    }
+
+    for (const siteSummary of overview.site_summaries) {
+      const siteMargin = mapSiteMargin(siteSummary);
+      siteMarginBySiteId.set(siteMargin.site_id, siteMargin);
+    }
+
+    filteredSummaries = overview.site_summaries.filter((summary) => {
+      const margin = siteMarginBySiteId.get(summary.site_id) ?? null;
+      return profitabilityMatches(profitability, margin);
+    });
+
+    const migrationEnrichmentSiteIds = filteredSummaries
+      .slice(0, COMMAND_CENTER_MIGRATION_ENRICHMENT_LIMIT)
+      .map((summary) => summary.site_id);
+    skippedMigrationSnapshotCount = Math.max(0, filteredSummaries.length - migrationEnrichmentSiteIds.length);
+
+    if (migrationEnrichmentSiteIds.length > 0) {
+      try {
+        migrationSnapshotsBySiteId = await getRuntimeMigrationSnapshotsBySiteId(migrationEnrichmentSiteIds, {
+          dbClient: sharedReadClient,
+        });
+      } catch {
+        migrationSnapshotLoadFailed = true;
+        migrationSnapshotsBySiteId = new Map<string, CommandCenterMigrationRuntimeSnapshot>();
+      }
+    }
+  } finally {
+    sharedReadClient.release();
   }
 
-  const filteredSummaries = overview.site_summaries.filter((summary) => {
-    const margin = siteMarginBySiteId.get(summary.site_id) ?? null;
-    return profitabilityMatches(profitability, margin);
-  });
-
-  const migrationSnapshotsBySiteId = await getRuntimeMigrationSnapshotsBySiteId(filteredSummaries.map((summary) => summary.site_id));
+  if (!overview) {
+    throw new Error("Failed to load command center overview");
+  }
 
   let planSimulationErrorCount = 0;
+  const simulationInputSummaries = filteredSummaries.slice(0, COMMAND_CENTER_SIMULATION_LIMIT);
+  const skippedPlanSimulationCount = Math.max(0, filteredSummaries.length - simulationInputSummaries.length);
   const simulationBySiteId = new Map<string, SitePlanComparisonResult>();
-  for (const summary of filteredSummaries) {
+  for (const summary of simulationInputSummaries) {
     try {
       const simulation = compareSiteAcrossPlansFromSummary(summary);
       simulationBySiteId.set(simulation.site_id, simulation);
@@ -326,6 +371,28 @@ export default async function CommandCenterPage(props: { searchParams?: Promise<
           <p style={{ marginTop: 8, marginBottom: 0, fontSize: 12, color: "#7c2d12" }}>
             Pricing simulation is partially unavailable for {planSimulationErrorCount} site
             {planSimulationErrorCount === 1 ? "" : "s"}, but core ownership and cost metrics are shown.
+          </p>
+        ) : null}
+        {skippedPlanSimulationCount > 0 ? (
+          <p style={{ marginTop: 8, marginBottom: 0, fontSize: 12, color: "#1f2937" }}>
+            Pricing comparison is bounded to the first {COMMAND_CENTER_SIMULATION_LIMIT} site
+            {COMMAND_CENTER_SIMULATION_LIMIT === 1 ? "" : "s"} in this render to protect DB/session capacity.
+          </p>
+        ) : null}
+        {migrationSnapshotLoadFailed ? (
+          <p style={{ marginTop: 8, marginBottom: 0, fontSize: 12, color: "#7c2d12" }}>
+            Runtime migration snapshot enrichment is temporarily unavailable; fallback migration status is shown from core site data.
+          </p>
+        ) : null}
+        {skippedMigrationSnapshotCount > 0 ? (
+          <p style={{ marginTop: 8, marginBottom: 0, fontSize: 12, color: "#1f2937" }}>
+            Runtime migration snapshot enrichment is bounded to the first {COMMAND_CENTER_MIGRATION_ENRICHMENT_LIMIT} site
+            {COMMAND_CENTER_MIGRATION_ENRICHMENT_LIMIT === 1 ? "" : "s"} for this render.
+          </p>
+        ) : null}
+        {clientsLoadFailed ? (
+          <p style={{ marginTop: 8, marginBottom: 0, fontSize: 12, color: "#7c2d12" }}>
+            Client organization directory could not be loaded; ownership controls are temporarily limited but site ownership data remains visible.
           </p>
         ) : null}
       </section>
