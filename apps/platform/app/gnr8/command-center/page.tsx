@@ -7,7 +7,7 @@ import { compareSiteAcrossPlansFromSummary, type SitePlanComparisonResult } from
 import { getUnifiedCostOverview, type UnifiedCostSiteSummary } from "@/gnr8/billing/unified-cost-view-service";
 import { requireSuperadminUserIdForPage } from "@/src/auth/require-superadmin-user-id";
 
-import { SiteAssignmentControl } from "./_components/site-assignment-control";
+import { CommandCenterOpsTable } from "./_components/command-center-ops-table";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -27,25 +27,6 @@ function normalizeProfitability(value: string | undefined): "all" | "profitable"
   if (value === "profitable") return "profitable";
   if (value === "loss-making") return "loss-making";
   return "all";
-}
-
-function shortId(value: string): string {
-  if (value.length <= 8) return value;
-  return `${value.slice(0, 8)}...`;
-}
-
-function formatMoney(value: number): string {
-  return `$${value.toFixed(2)}`;
-}
-
-function formatPercent(ratio: number): string {
-  return `${(ratio * 100).toFixed(2)}%`;
-}
-
-function displayClientName(input: { client_name: string | null; client_id: string | null }): string {
-  if (input.client_name?.trim()) return input.client_name;
-  if (input.client_id?.trim()) return shortId(input.client_id);
-  return "Unassigned";
 }
 
 function profitabilityMatches(filter: "all" | "profitable" | "loss-making", margin: SiteMarginResult | null): boolean {
@@ -225,129 +206,13 @@ export default async function CommandCenterPage(props: { searchParams?: Promise<
             {planSimulationErrorCount === 1 ? "" : "s"}, but core ownership and cost metrics are shown.
           </p>
         ) : null}
-
-        <div style={{ marginTop: 12, overflowX: "auto" }}>
-          <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 1800 }}>
-            <thead>
-              <tr>
-                {[
-                  "Domain",
-                  "Site ID",
-                  "Client",
-                  "Agency",
-                  "AI",
-                  "Runtime",
-                  "Total Cost",
-                  "Margin",
-                  "Margin %",
-                  "Best Plan",
-                  "Plan Simulation (STARTER / GROWTH / MANAGED)",
-                  "Actions",
-                ].map((heading) => (
-                  <th
-                    key={heading}
-                    style={{
-                      textAlign: "left",
-                      fontSize: 12,
-                      color: "#4b5563",
-                      borderBottom: "1px solid #e5e7eb",
-                      padding: "8px 10px",
-                      whiteSpace: "nowrap",
-                    }}
-                  >
-                    {heading}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((row) => {
-                const bestPlan = row.simulation?.ranked_plans?.[0] ?? null;
-                const starter = row.simulation?.plan_results.STARTER ?? null;
-                const growth = row.simulation?.plan_results.GROWTH ?? null;
-                const managed = row.simulation?.plan_results.MANAGED ?? null;
-                const agencyDisplay = agencyNameByAgencyId.get(row.summary.agency_id) ?? shortId(row.summary.agency_id);
-
-                return (
-                  <tr key={row.summary.site_id}>
-                    <td style={{ borderTop: "1px solid #f3f4f6", padding: "10px", fontSize: 13 }}>
-                      {row.summary.domain ?? "—"}
-                    </td>
-                    <td
-                      style={{
-                        borderTop: "1px solid #f3f4f6",
-                        padding: "10px",
-                        fontSize: 12,
-                        fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
-                      }}
-                    >
-                      {shortId(row.summary.site_id)}
-                    </td>
-                    <td style={{ borderTop: "1px solid #f3f4f6", padding: "10px", fontSize: 13 }}>
-                      {displayClientName(row.summary)}
-                    </td>
-                    <td style={{ borderTop: "1px solid #f3f4f6", padding: "10px", fontSize: 13 }}>{agencyDisplay}</td>
-                    <td style={{ borderTop: "1px solid #f3f4f6", padding: "10px", fontSize: 13 }}>
-                      {formatMoney(row.summary.ai_estimated_cost_sum)}
-                    </td>
-                    <td style={{ borderTop: "1px solid #f3f4f6", padding: "10px", fontSize: 13 }}>
-                      {formatMoney(row.summary.runtime_estimated_cost_sum)}
-                    </td>
-                    <td style={{ borderTop: "1px solid #f3f4f6", padding: "10px", fontSize: 13 }}>
-                      {formatMoney(row.summary.total_estimated_cost)}
-                    </td>
-                    <td
-                      style={{
-                        borderTop: "1px solid #f3f4f6",
-                        padding: "10px",
-                        fontSize: 13,
-                        color: row.margin && row.margin.margin < 0 ? "#991b1b" : "#065f46",
-                        fontWeight: 600,
-                      }}
-                    >
-                      {row.margin ? formatMoney(row.margin.margin) : "—"}
-                    </td>
-                    <td
-                      style={{
-                        borderTop: "1px solid #f3f4f6",
-                        padding: "10px",
-                        fontSize: 13,
-                        color: row.margin && row.margin.margin_percentage < 0 ? "#991b1b" : "#065f46",
-                      }}
-                    >
-                      {row.margin ? formatPercent(row.margin.margin_percentage) : "—"}
-                    </td>
-                    <td
-                      style={{
-                        borderTop: "1px solid #f3f4f6",
-                        padding: "10px",
-                        fontSize: 13,
-                        fontWeight: 600,
-                      }}
-                    >
-                      {bestPlan ? `${bestPlan.plan_name} (${formatMoney(bestPlan.margin)})` : "—"}
-                    </td>
-                    <td style={{ borderTop: "1px solid #f3f4f6", padding: "10px", fontSize: 12, lineHeight: "18px" }}>
-                      <div style={{ fontWeight: bestPlan?.plan_name === "STARTER" ? 700 : 500 }}>
-                        STARTER: {starter ? formatMoney(starter.margin) : "—"}
-                      </div>
-                      <div style={{ fontWeight: bestPlan?.plan_name === "GROWTH" ? 700 : 500 }}>
-                        GROWTH: {growth ? formatMoney(growth.margin) : "—"}
-                      </div>
-                      <div style={{ fontWeight: bestPlan?.plan_name === "MANAGED" ? 700 : 500 }}>
-                        MANAGED: {managed ? formatMoney(managed.margin) : "—"}
-                      </div>
-                    </td>
-                    <td style={{ borderTop: "1px solid #f3f4f6", padding: "10px", verticalAlign: "top" }}>
-                      <SiteAssignmentControl siteId={row.summary.site_id} currentClientId={row.summary.client_id} clients={clients} />
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
       </section>
+
+      <CommandCenterOpsTable
+        rows={rows}
+        clients={clients}
+        agencyNameByAgencyId={Object.fromEntries(agencyNameByAgencyId.entries())}
+      />
     </main>
   );
 }
