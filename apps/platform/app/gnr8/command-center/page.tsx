@@ -1,16 +1,13 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
-import { listClientOrganizationsForCommandCenter } from "@/gnr8/command-center/command-center-assignment-service";
-import {
-  getRuntimeMigrationSnapshotsBySiteId,
-  type CommandCenterMigrationRuntimeSnapshot,
-} from "@/gnr8/command-center/command-center-migration-service";
 import { mapSiteMargin, type SiteMarginResult } from "@/gnr8/billing/margin-service";
 import { compareSiteAcrossPlansFromSummary, type SitePlanComparisonResult } from "@/gnr8/billing/pricing-simulation-service";
-import { getUnifiedCostOverview, type UnifiedCostSiteSummary } from "@/gnr8/billing/unified-cost-view-service";
+import {
+  getCommandCenterReadModel,
+  type CommandCenterSiteSummary,
+} from "@/gnr8/command-center/command-center-read-model";
 import { requireSuperadminUserIdForPage } from "@/src/auth/require-superadmin-user-id";
-import { getSuperadminPool } from "@/src/superadmin/db";
 
 import { CommandCenterOpsTable } from "./_components/command-center-ops-table";
 
@@ -42,7 +39,7 @@ function profitabilityMatches(filter: "all" | "profitable" | "loss-making", marg
 }
 
 type CommandCenterRow = {
-  summary: UnifiedCostSiteSummary;
+  summary: CommandCenterSiteSummary;
   margin: SiteMarginResult | null;
   simulation: SitePlanComparisonResult | null;
   migration: {
@@ -55,7 +52,6 @@ type CommandCenterRow = {
 };
 
 const COMMAND_CENTER_SITE_LIMIT: number = 50;
-const COMMAND_CENTER_MIGRATION_ENRICHMENT_LIMIT: number = 50;
 const COMMAND_CENTER_SIMULATION_LIMIT: number = 50;
 
 function looksLikeErrorStatus(status: string | null | undefined): boolean {
@@ -77,16 +73,12 @@ function toHttpsLiveUrl(domain: string | null | undefined): string | null {
   }
 }
 
-function deriveMigrationStatus(input: {
-  summary: UnifiedCostSiteSummary;
-  runtimeSnapshot: CommandCenterMigrationRuntimeSnapshot | null;
-}): CommandCenterRow["migration"] {
-  const { summary, runtimeSnapshot } = input;
+function deriveMigrationStatus(summary: CommandCenterSiteSummary): CommandCenterRow["migration"] {
   const liveUrl = toHttpsLiveUrl(summary.domain);
-  const siteVersionId = runtimeSnapshot?.latest_site_version_id ?? null;
-  const latestStateRaw = runtimeSnapshot?.latest_state ?? null;
+  const siteVersionId = summary.latest_runtime_site_version_id;
+  const latestStateRaw = summary.latest_runtime_state;
 
-  if (runtimeSnapshot) {
+  if (latestStateRaw) {
     const latestState = String(latestStateRaw ?? "").toUpperCase();
     let status: CommandCenterRow["migration"]["status"];
 
@@ -99,7 +91,7 @@ function deriveMigrationStatus(input: {
     } else if (latestState === "PUBLISHED") {
       status = "LIVE";
     } else if (latestState === "ARCHIVED") {
-      status = runtimeSnapshot.has_published_version ? "LIVE" : "IMPORTED";
+      status = summary.has_published_runtime_version ? "LIVE" : "IMPORTED";
     } else {
       status = "ERROR";
     }
@@ -160,67 +152,21 @@ export default async function CommandCenterPage(props: { searchParams?: Promise<
   const selectedClientId = normalizeClientFilter(resolvedSearchParams?.clientId);
   const profitability = normalizeProfitability(resolvedSearchParams?.profitability);
 
-  const pool = getSuperadminPool();
-  const sharedReadClient = await pool.connect();
+  const readModel = await getCommandCenterReadModel({
+    clientId: selectedClientId ?? undefined,
+    limit: COMMAND_CENTER_SITE_LIMIT,
+  });
 
-  let overview: Awaited<ReturnType<typeof getUnifiedCostOverview>> | null = null;
-  let clients: Awaited<ReturnType<typeof listClientOrganizationsForCommandCenter>> = [];
   const siteMarginBySiteId = new Map<string, SiteMarginResult>();
-  let filteredSummaries: UnifiedCostSiteSummary[] = [];
-  let migrationSnapshotsBySiteId = new Map<string, CommandCenterMigrationRuntimeSnapshot>();
-  let clientsLoadFailed = false;
-  let migrationSnapshotLoadFailed = false;
-  let skippedMigrationSnapshotCount = 0;
-
-  try {
-    overview = await getUnifiedCostOverview(
-      {
-        clientId: selectedClientId ?? undefined,
-        limit: COMMAND_CENTER_SITE_LIMIT,
-        topLimit: COMMAND_CENTER_SITE_LIMIT,
-      },
-      { dbClient: sharedReadClient },
-    );
-
-    try {
-      clients = await listClientOrganizationsForCommandCenter({ dbClient: sharedReadClient });
-    } catch {
-      clientsLoadFailed = true;
-      clients = [];
-    }
-
-    for (const siteSummary of overview.site_summaries) {
-      const siteMargin = mapSiteMargin(siteSummary);
-      siteMarginBySiteId.set(siteMargin.site_id, siteMargin);
-    }
-
-    filteredSummaries = overview.site_summaries.filter((summary) => {
-      const margin = siteMarginBySiteId.get(summary.site_id) ?? null;
-      return profitabilityMatches(profitability, margin);
-    });
-
-    const migrationEnrichmentSiteIds = filteredSummaries
-      .slice(0, COMMAND_CENTER_MIGRATION_ENRICHMENT_LIMIT)
-      .map((summary) => summary.site_id);
-    skippedMigrationSnapshotCount = Math.max(0, filteredSummaries.length - migrationEnrichmentSiteIds.length);
-
-    if (migrationEnrichmentSiteIds.length > 0) {
-      try {
-        migrationSnapshotsBySiteId = await getRuntimeMigrationSnapshotsBySiteId(migrationEnrichmentSiteIds, {
-          dbClient: sharedReadClient,
-        });
-      } catch {
-        migrationSnapshotLoadFailed = true;
-        migrationSnapshotsBySiteId = new Map<string, CommandCenterMigrationRuntimeSnapshot>();
-      }
-    }
-  } finally {
-    sharedReadClient.release();
+  for (const siteSummary of readModel.site_summaries) {
+    const siteMargin = mapSiteMargin(siteSummary);
+    siteMarginBySiteId.set(siteMargin.site_id, siteMargin);
   }
 
-  if (!overview) {
-    throw new Error("Failed to load command center overview");
-  }
+  const filteredSummaries = readModel.site_summaries.filter((summary) => {
+    const margin = siteMarginBySiteId.get(summary.site_id) ?? null;
+    return profitabilityMatches(profitability, margin);
+  });
 
   let planSimulationErrorCount = 0;
   const simulationInputSummaries = filteredSummaries.slice(0, COMMAND_CENTER_SIMULATION_LIMIT);
@@ -236,7 +182,7 @@ export default async function CommandCenterPage(props: { searchParams?: Promise<
   }
 
   const agencyNameByAgencyId = new Map<string, string>();
-  for (const client of clients) {
+  for (const client of readModel.clients) {
     if (client.agency_id && client.agency_name) {
       agencyNameByAgencyId.set(client.agency_id, client.agency_name);
     }
@@ -246,10 +192,7 @@ export default async function CommandCenterPage(props: { searchParams?: Promise<
     summary,
     margin: siteMarginBySiteId.get(summary.site_id) ?? null,
     simulation: simulationBySiteId.get(summary.site_id) ?? null,
-    migration: deriveMigrationStatus({
-      summary,
-      runtimeSnapshot: migrationSnapshotsBySiteId.get(summary.site_id) ?? null,
-    }),
+    migration: deriveMigrationStatus(summary),
   }));
 
   const liveCount = rows.filter((row) => row.migration.status === "LIVE").length;
@@ -283,7 +226,7 @@ export default async function CommandCenterPage(props: { searchParams?: Promise<
               style={{ padding: "8px 10px", border: "1px solid #d1d5db", borderRadius: 8, background: "#fff" }}
             >
               <option value="">All clients</option>
-              {clients.map((client) => (
+              {readModel.clients.map((client) => (
                 <option key={client.client_id} value={client.client_id}>
                   {client.client_name?.trim() || client.client_id}
                 </option>
@@ -343,7 +286,7 @@ export default async function CommandCenterPage(props: { searchParams?: Promise<
             <strong>Sites:</strong> {rows.length}
           </span>
           <span>
-            <strong>Total in scope:</strong> {overview.site_summaries.length}
+            <strong>Total in scope:</strong> {readModel.site_summaries.length}
           </span>
           <span>
             <strong>Page cap:</strong> {COMMAND_CENTER_SITE_LIMIT}
@@ -379,27 +322,24 @@ export default async function CommandCenterPage(props: { searchParams?: Promise<
             {COMMAND_CENTER_SIMULATION_LIMIT === 1 ? "" : "s"} in this render to protect DB/session capacity.
           </p>
         ) : null}
-        {migrationSnapshotLoadFailed ? (
+        {readModel.instrumentation.optional_enrichment_failed ? (
           <p style={{ marginTop: 8, marginBottom: 0, fontSize: 12, color: "#7c2d12" }}>
-            Runtime migration snapshot enrichment is temporarily unavailable; fallback migration status is shown from core site data.
+            Optional runtime/cost enrichment is partially unavailable; core ownership and migration visibility remain shown.
           </p>
         ) : null}
-        {skippedMigrationSnapshotCount > 0 ? (
-          <p style={{ marginTop: 8, marginBottom: 0, fontSize: 12, color: "#1f2937" }}>
-            Runtime migration snapshot enrichment is bounded to the first {COMMAND_CENTER_MIGRATION_ENRICHMENT_LIMIT} site
-            {COMMAND_CENTER_MIGRATION_ENRICHMENT_LIMIT === 1 ? "" : "s"} for this render.
-          </p>
-        ) : null}
-        {clientsLoadFailed ? (
+        {readModel.instrumentation.fallback_used ? (
           <p style={{ marginTop: 8, marginBottom: 0, fontSize: 12, color: "#7c2d12" }}>
-            Client organization directory could not be loaded; ownership controls are temporarily limited but site ownership data remains visible.
+            Command Center is running in fallback read mode ({readModel.instrumentation.fallback_reason ?? "unknown"}) to prevent page failure.
           </p>
         ) : null}
+        <p style={{ marginTop: 8, marginBottom: 0, fontSize: 12, color: "#374151" }}>
+          Read model query count this render: {readModel.instrumentation.query_count}
+        </p>
       </section>
 
       <CommandCenterOpsTable
         rows={rows}
-        clients={clients}
+        clients={readModel.clients}
         agencyNameByAgencyId={Object.fromEntries(agencyNameByAgencyId.entries())}
       />
     </main>
