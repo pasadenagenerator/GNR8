@@ -20,6 +20,8 @@ type SearchParams = {
   profitability?: string;
 };
 
+type MigrationStatus = "NOT_STARTED" | "IMPORTED" | "PREVIEW_READY" | "APPROVED" | "LIVE" | "ERROR";
+
 function normalizeClientFilter(value: string | undefined): string | null {
   const normalized = String(value ?? "").trim();
   return normalized || null;
@@ -43,7 +45,7 @@ type CommandCenterRow = {
   margin: SiteMarginResult | null;
   simulation: SitePlanComparisonResult | null;
   migration: {
-    status: "NOT_STARTED" | "IMPORTED" | "PREVIEW_READY" | "APPROVED" | "LIVE" | "ERROR";
+    status: MigrationStatus;
     auto_advanced: boolean;
     automation_reason: string | null;
     latest_site_version_id: string | null;
@@ -55,6 +57,7 @@ type CommandCenterRow = {
 
 const COMMAND_CENTER_SITE_LIMIT: number = 50;
 const COMMAND_CENTER_SIMULATION_LIMIT: number = 50;
+const MIGRATION_STATUS_ORDER: MigrationStatus[] = ["NOT_STARTED", "IMPORTED", "PREVIEW_READY", "APPROVED", "LIVE", "ERROR"];
 
 function toHttpsLiveUrl(domain: string | null | undefined): string | null {
   const raw = String(domain ?? "").trim();
@@ -81,6 +84,46 @@ function deriveMigrationStatus(summary: CommandCenterSiteSummary): CommandCenter
     preview_url: siteVersionId ? `/api/gnr8/runtime/versions/${siteVersionId}/preview` : null,
     live_url: liveUrl,
     latest_runtime_state: summary.latest_runtime_state ? String(summary.latest_runtime_state) : null,
+  };
+}
+
+function computePortfolioMetrics(rows: CommandCenterRow[]) {
+  const statusCounts: Record<MigrationStatus, number> = {
+    NOT_STARTED: 0,
+    IMPORTED: 0,
+    PREVIEW_READY: 0,
+    APPROVED: 0,
+    LIVE: 0,
+    ERROR: 0,
+  };
+
+  for (const row of rows) {
+    statusCounts[row.migration.status] += 1;
+  }
+
+  const totalSites = rows.length;
+  const liveSites = statusCounts.LIVE;
+  const notStartedSites = statusCounts.NOT_STARTED;
+  const previewReadySites = statusCounts.PREVIEW_READY;
+  const errorSites = statusCounts.ERROR;
+  const needsAttentionSites = errorSites + notStartedSites + previewReadySites;
+  const progressPercentage = totalSites === 0 ? 0 : Math.round((liveSites / totalSites) * 100);
+  const startedSites = totalSites - notStartedSites;
+  const successRate = startedSites === 0 ? 0 : Math.round((liveSites / startedSites) * 100);
+
+  return {
+    total_sites: totalSites,
+    live_sites: liveSites,
+    approved_sites: statusCounts.APPROVED,
+    preview_ready_sites: previewReadySites,
+    imported_sites: statusCounts.IMPORTED,
+    not_started_sites: notStartedSites,
+    error_sites: errorSites,
+    needs_attention_sites: needsAttentionSites,
+    started_sites: startedSites,
+    progress_percentage: progressPercentage,
+    success_rate: successRate,
+    status_distribution: statusCounts,
   };
 }
 
@@ -145,8 +188,7 @@ export default async function CommandCenterPage(props: { searchParams?: Promise<
     migration: deriveMigrationStatus(summary),
   }));
 
-  const liveCount = rows.filter((row) => row.migration.status === "LIVE").length;
-  const migrationProgressPercent = rows.length === 0 ? 0 : Math.round((liveCount / rows.length) * 100);
+  const portfolioMetrics = computePortfolioMetrics(rows);
 
   return (
     <main
@@ -242,24 +284,45 @@ export default async function CommandCenterPage(props: { searchParams?: Promise<
             <strong>Page cap:</strong> {COMMAND_CENTER_SITE_LIMIT}
           </span>
         </div>
-        <div style={{ marginTop: 12, display: "grid", gap: 6 }}>
-          <div style={{ fontSize: 13, color: "#111827" }}>
-            <strong>Migration Progress:</strong> {liveCount}/{rows.length} LIVE ({migrationProgressPercent}%)
+        {portfolioMetrics.total_sites === 0 ? (
+          <p style={{ marginTop: 10, marginBottom: 0, fontSize: 13, color: "#374151" }}>No sites available</p>
+        ) : (
+          <div style={{ marginTop: 12, display: "grid", gap: 10 }}>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <span style={{ border: "1px solid #d1d5db", borderRadius: 8, padding: "6px 10px", fontSize: 12, color: "#111827", background: "#f9fafb" }}>
+                <strong>Total:</strong> {portfolioMetrics.total_sites}
+              </span>
+              <span style={{ border: "1px solid #bbf7d0", borderRadius: 8, padding: "6px 10px", fontSize: 12, color: "#166534", background: "#f0fdf4" }}>
+                <strong>Live:</strong> {portfolioMetrics.live_sites}
+              </span>
+              <span style={{ border: "1px solid #d8b4fe", borderRadius: 8, padding: "6px 10px", fontSize: 12, color: "#6b21a8", background: "#faf5ff" }}>
+                <strong>Preview Ready:</strong> {portfolioMetrics.preview_ready_sites}
+              </span>
+              <span style={{ border: "1px solid #fecaca", borderRadius: 8, padding: "6px 10px", fontSize: 12, color: "#991b1b", background: "#fff1f2", fontWeight: 800 }}>
+                <strong>Needs Attention:</strong> {portfolioMetrics.needs_attention_sites}
+              </span>
+              <span style={{ border: "1px solid #fca5a5", borderRadius: 8, padding: "6px 10px", fontSize: 12, color: "#991b1b", background: "#fef2f2" }}>
+                <strong>Errors:</strong> {portfolioMetrics.error_sites}
+              </span>
+              <span style={{ border: "1px solid #bfdbfe", borderRadius: 8, padding: "6px 10px", fontSize: 12, color: "#1d4ed8", background: "#eff6ff" }}>
+                <strong>Progress:</strong> {portfolioMetrics.progress_percentage}%
+              </span>
+            </div>
+
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", fontSize: 12, color: "#374151" }}>
+              {MIGRATION_STATUS_ORDER.map((status) => (
+                <span key={status} style={{ border: "1px solid #e5e7eb", borderRadius: 999, padding: "4px 8px", background: "#ffffff" }}>
+                  <strong>{status}:</strong> {portfolioMetrics.status_distribution[status]}
+                </span>
+              ))}
+            </div>
+
+            <p style={{ margin: 0, fontSize: 12, color: "#4b5563" }}>
+              <strong>Success Rate:</strong> {portfolioMetrics.success_rate}% (
+              {portfolioMetrics.live_sites}/{portfolioMetrics.started_sites} started sites)
+            </p>
           </div>
-          <div
-            aria-label="Migration progress bar"
-            style={{ width: 320, maxWidth: "100%", height: 10, borderRadius: 999, overflow: "hidden", background: "#e5e7eb" }}
-          >
-            <div
-              style={{
-                width: `${migrationProgressPercent}%`,
-                height: "100%",
-                background: migrationProgressPercent >= 100 ? "#16a34a" : "#2563eb",
-                transition: "width 160ms ease-out",
-              }}
-            />
-          </div>
-        </div>
+        )}
         {planSimulationErrorCount > 0 ? (
           <p style={{ marginTop: 8, marginBottom: 0, fontSize: 12, color: "#7c2d12" }}>
             Pricing simulation is partially unavailable for {planSimulationErrorCount} site
