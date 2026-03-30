@@ -83,6 +83,7 @@ export type CommandCenterReadModel = {
 
 export type CommandCenterReadModelFilters = {
   clientId?: string;
+  agencyId?: string;
   limit?: number;
 };
 
@@ -318,7 +319,7 @@ function createZeroAccumulator(): SiteCostAccumulator {
 async function fetchSites(
   supabase: SupabaseClient,
   tracker: QueryTracker,
-  input: { clientId?: string; limit: number },
+  input: { clientId?: string; agencyId?: string; limit: number },
 ): Promise<SiteRow[]> {
   const orderAttempts: Array<{ column: "created_at" | "updated_at" | "id"; ascending: boolean }> = [
     { column: "created_at", ascending: false },
@@ -340,6 +341,9 @@ async function fetchSites(
 
     if (input.clientId) {
       query = query.eq("org_id", input.clientId);
+    }
+    if (input.agencyId) {
+      query = query.eq("agency_id", input.agencyId);
     }
 
     const { data, error } = await query;
@@ -524,6 +528,7 @@ export async function getCommandCenterReadModel(
 ): Promise<CommandCenterReadModel> {
   const tracker: QueryTracker = { query_count: 0 };
   const clientId = normalizeUuid(filters.clientId, "clientId");
+  const agencyId = normalizeUuid(filters.agencyId, "agencyId");
   const limit = normalizeLimit(filters.limit);
 
   const supabase = createServiceRoleSupabaseClient();
@@ -541,7 +546,7 @@ export async function getCommandCenterReadModel(
 
   let sites: SiteRow[] = [];
   try {
-    sites = await fetchSites(supabase, tracker, { clientId, limit });
+    sites = await fetchSites(supabase, tracker, { clientId, agencyId, limit });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     return createEmptyReadModel({
