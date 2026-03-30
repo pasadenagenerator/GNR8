@@ -369,6 +369,7 @@ async function fetchSites(
 async function fetchClientDirectory(
   supabase: SupabaseClient,
   tracker: QueryTracker,
+  input?: { agencyId?: string },
 ): Promise<{ clients: CommandCenterClientOption[]; clientsById: Map<string, CommandCenterClientOption> }> {
   const organizationsOrderAttempts: Array<"name" | "id"> = ["name", "id"];
   let organizationsData: OrganizationRow[] = [];
@@ -378,11 +379,17 @@ async function fetchClientDirectory(
     const orderColumn = organizationsOrderAttempts[index];
     tracker.query_count += 1;
 
-    const { data, error } = await supabase
+    let query = supabase
       .from("organizations")
       .select("id,name,agency_id,organization_type")
       .eq("organization_type", "client")
       .order(orderColumn, { ascending: true });
+
+    if (input?.agencyId) {
+      query = query.eq("agency_id", input.agencyId);
+    }
+
+    const { data, error } = await query;
 
     if (error == null) {
       organizationsData = Array.isArray(data) ? (data as OrganizationRow[]) : [];
@@ -462,6 +469,9 @@ function mapSiteSummary(input: {
   runtimeSnapshot: RuntimeSnapshotAccumulator | undefined;
 }): CommandCenterSiteSummary {
   const siteClient = input.site.org_id ? input.clientLookup.get(input.site.org_id) : undefined;
+  const siteAgencyId = toTextOrNull(input.site.agency_id);
+  const scopedClient =
+    siteClient && siteAgencyId && siteClient.agency_id && siteClient.agency_id === siteAgencyId ? siteClient : null;
   const totalEstimatedCost =
     input.accumulator.ai_estimated_cost_sum +
     input.accumulator.runtime_estimated_cost_sum +
@@ -485,8 +495,8 @@ function mapSiteSummary(input: {
     site_id: String(input.site.id ?? ""),
     domain: toTextOrNull(input.site.domain),
     site_status: String(input.site.status ?? "UNKNOWN"),
-    client_id: siteClient?.client_id ?? null,
-    client_name: siteClient?.client_name ?? null,
+    client_id: scopedClient?.client_id ?? null,
+    client_name: scopedClient?.client_name ?? null,
     agency_id: String(input.site.agency_id ?? ""),
     ai_event_count: input.accumulator.ai_event_count,
     ai_prompt_tokens: input.accumulator.ai_prompt_tokens,
@@ -559,7 +569,7 @@ export async function getCommandCenterReadModel(
   let clients: CommandCenterClientOption[] = [];
   let clientsById = new Map<string, CommandCenterClientOption>();
   try {
-    const clientDirectory = await fetchClientDirectory(supabase, tracker);
+    const clientDirectory = await fetchClientDirectory(supabase, tracker, { agencyId });
     clients = clientDirectory.clients;
     clientsById = clientDirectory.clientsById;
   } catch (error) {

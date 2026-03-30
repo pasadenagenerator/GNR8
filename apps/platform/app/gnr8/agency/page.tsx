@@ -3,7 +3,11 @@ import { redirect } from "next/navigation";
 import type { CSSProperties } from "react";
 
 import { getAgencyDashboardReadModel } from "@/gnr8/agency/agency-dashboard-read-model";
-import { resolveCurrentUserAgency, ResolveCurrentAgencyError } from "@/src/auth/resolve-current-agency";
+import {
+  listCurrentUserAgencyMemberships,
+  resolveCurrentUserAgency,
+  ResolveCurrentAgencyError,
+} from "@/src/auth/resolve-current-agency";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -11,6 +15,7 @@ export const revalidate = 0;
 
 type SearchParams = {
   needsAttention?: string;
+  agency?: string;
 };
 
 function normalizeNeedsAttention(value: string | undefined): boolean {
@@ -31,17 +36,34 @@ function shortId(value: string): string {
 }
 
 export default async function AgencyDashboardPage(props: { searchParams?: Promise<SearchParams> }) {
+  const resolvedSearchParams = props.searchParams ? await props.searchParams : undefined;
+  const requestedAgencyId = String(resolvedSearchParams?.agency ?? "").trim() || null;
+  const showNeedsAttentionOnly = normalizeNeedsAttention(resolvedSearchParams?.needsAttention);
+
   let currentUserAgency: Awaited<ReturnType<typeof resolveCurrentUserAgency>> | null = null;
   let agencyAccessErrorCode: ResolveCurrentAgencyError["code"] | null = null;
+  let availableAgencyMemberships: Awaited<ReturnType<typeof listCurrentUserAgencyMemberships>>["memberships"] = [];
 
   try {
-    currentUserAgency = await resolveCurrentUserAgency();
+    currentUserAgency = await resolveCurrentUserAgency({
+      activeAgencyId: requestedAgencyId,
+    });
+    const membershipContext = await listCurrentUserAgencyMemberships();
+    availableAgencyMemberships = membershipContext.memberships;
   } catch (error) {
     if (error instanceof ResolveCurrentAgencyError && error.code === "UNAUTHORIZED") {
       redirect("/login");
     }
     if (error instanceof ResolveCurrentAgencyError) {
       agencyAccessErrorCode = error.code;
+      try {
+        const membershipContext = await listCurrentUserAgencyMemberships();
+        availableAgencyMemberships = membershipContext.memberships;
+      } catch (membershipError) {
+        if (!(membershipError instanceof ResolveCurrentAgencyError && membershipError.code === "UNAUTHORIZED")) {
+          throw membershipError;
+        }
+      }
     } else {
       throw error;
     }
@@ -76,20 +98,46 @@ export default async function AgencyDashboardPage(props: { searchParams?: Promis
           }}
         >
           <h2 style={{ marginTop: 0, color: "#991b1b" }}>
-            {agencyAccessErrorCode === "NO_MEMBERSHIP" ? "No agency access" : "Agency access unavailable"}
+            {agencyAccessErrorCode === "NO_MEMBERSHIP"
+              ? "No agency access"
+              : agencyAccessErrorCode === "ACTIVE_AGENCY_REQUIRED"
+                ? "Select agency to continue"
+                : "Agency access unavailable"}
           </h2>
           <p style={{ marginBottom: 0, color: "#7f1d1d" }}>
             {agencyAccessErrorCode === "NO_MEMBERSHIP"
               ? "Your account is authenticated but has no agency membership yet."
+              : agencyAccessErrorCode === "ACTIVE_AGENCY_REQUIRED" || agencyAccessErrorCode === "ACTIVE_AGENCY_INVALID"
+                ? "Your account belongs to multiple agencies. Select one valid agency context to continue."
               : "Your membership is invalid or ambiguous. Access is blocked until this is resolved."}
           </p>
+          {availableAgencyMemberships.length > 0 ? (
+            <div style={{ marginTop: 12, display: "flex", flexWrap: "wrap", gap: 8 }}>
+              {availableAgencyMemberships.map((membership) => (
+                <Link
+                  key={membership.agency_id}
+                  href={`/gnr8/agency?agency=${encodeURIComponent(membership.agency_id)}`}
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    padding: "6px 10px",
+                    borderRadius: 999,
+                    border: "1px solid #fecaca",
+                    background: "#fff",
+                    color: "#991b1b",
+                    textDecoration: "none",
+                    fontSize: 12,
+                  }}
+                >
+                  {(membership.agency_name?.trim() || membership.agency_id).trim()}
+                </Link>
+              ))}
+            </div>
+          ) : null}
         </section>
       </main>
     );
   }
-
-  const resolvedSearchParams = props.searchParams ? await props.searchParams : undefined;
-  const showNeedsAttentionOnly = normalizeNeedsAttention(resolvedSearchParams?.needsAttention);
 
   const readModel = await getAgencyDashboardReadModel({
     agencyId: currentUserAgency.agency_id,
@@ -134,10 +182,37 @@ export default async function AgencyDashboardPage(props: { searchParams?: Promis
             <strong>Role:</strong> {currentUserAgency.role}
           </div>
         </div>
+        {availableAgencyMemberships.length > 1 ? (
+          <div style={{ marginTop: 10, display: "flex", gap: 8, flexWrap: "wrap" }}>
+            {availableAgencyMemberships.map((membership) => {
+              const isActive = membership.agency_id === currentUserAgency?.agency_id;
+              return (
+                <Link
+                  key={membership.agency_id}
+                  href={`/gnr8/agency?agency=${encodeURIComponent(membership.agency_id)}`}
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    padding: "6px 10px",
+                    borderRadius: 999,
+                    border: isActive ? "1px solid #1d4ed8" : "1px solid #cbd5e1",
+                    background: isActive ? "#eff6ff" : "#fff",
+                    color: isActive ? "#1e3a8a" : "#334155",
+                    textDecoration: "none",
+                    fontSize: 12,
+                  }}
+                >
+                  {membership.agency_name?.trim() || shortId(membership.agency_id)}
+                </Link>
+              );
+            })}
+          </div>
+        ) : null}
       </section>
 
       <section style={{ marginTop: 12, border: "1px solid #dbe6f1", borderRadius: 12, background: "#fff", padding: 14 }}>
         <form method="get" style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "end" }}>
+          {requestedAgencyId ? <input type="hidden" name="agency" value={requestedAgencyId} /> : null}
           <label style={{ display: "inline-flex", gap: 8, alignItems: "center", fontSize: 13, color: "#334155" }}>
             <input type="checkbox" name="needsAttention" value="1" defaultChecked={showNeedsAttentionOnly} />
             Needs attention only
@@ -158,7 +233,7 @@ export default async function AgencyDashboardPage(props: { searchParams?: Promis
           </button>
 
           <Link
-            href="/gnr8/agency"
+            href={requestedAgencyId ? `/gnr8/agency?agency=${encodeURIComponent(requestedAgencyId)}` : "/gnr8/agency"}
             style={{
               height: 38,
               padding: "8px 12px",

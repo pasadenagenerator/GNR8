@@ -72,6 +72,19 @@ export type AgencyDashboardReadModel = {
   };
 };
 
+export function assertAgencyScopedSiteSummaries(
+  siteSummaries: CommandCenterReadModel["site_summaries"],
+  agencyId: string,
+): void {
+  for (const summary of siteSummaries) {
+    if (summary.agency_id !== agencyId) {
+      throw new Error(
+        `agency scoping violation detected: expected ${agencyId} but found ${summary.agency_id} for site ${summary.site_id}`,
+      );
+    }
+  }
+}
+
 function normalizeUuid(value: string | null | undefined, fieldName: string): string {
   const normalized = String(value ?? "").trim();
   if (!normalized) {
@@ -215,6 +228,7 @@ export async function getAgencyDashboardReadModel(input: {
     agency_id: agencyId,
     agency_name: String(agencyRow?.name ?? "").trim() || null,
   };
+  assertAgencyScopedSiteSummaries(readModel.site_summaries, agencyId);
 
   const siteMarginBySiteId = new Map<string, SiteMarginResult>();
   for (const summary of readModel.site_summaries) {
