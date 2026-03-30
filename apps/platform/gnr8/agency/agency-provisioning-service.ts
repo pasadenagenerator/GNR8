@@ -3,6 +3,7 @@ import "server-only";
 import type { PoolClient } from "pg";
 
 import { getSuperadminPool } from "@/src/superadmin/db";
+import { getSupabaseServiceRoleClient } from "@/src/supabase/service-role-server";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const SLUG_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
@@ -46,15 +47,46 @@ export type ProvisionAgencyResult = {
   } | null;
 };
 
-class AgencyProvisioningError extends Error {
+export class AgencyProvisioningError extends Error {
   constructor(message: string) {
     super(message);
     this.name = "AgencyProvisioningError";
   }
 }
 
+export type CreateAgencyInput = {
+  name: string;
+  slug: string;
+  ownerEmail: string;
+  ownerName?: string | null;
+  defaultClientName?: string | null;
+};
+
+export type CreateAgencyResult = {
+  agency: ProvisionAgencyResult["agency"];
+  agencyOrganization: ProvisionAgencyResult["agencyOrganization"];
+  billingAccount: ProvisionAgencyResult["billingAccount"];
+  agencyCostCenter: ProvisionAgencyResult["agencyCostCenter"];
+  defaultClientOrganization: ProvisionAgencyResult["defaultClientOrganization"];
+  owner: {
+    user_id: string;
+    email: string;
+    role: "owner";
+    invite_status: "invited";
+  };
+};
+
 function normalizeText(value: string | null | undefined): string {
   return String(value ?? "").trim();
+}
+
+function normalizeEmail(value: string | null | undefined): string {
+  const normalized = normalizeText(value).toLowerCase();
+  if (!normalized) throw new AgencyProvisioningError("ownerEmail is required");
+  const hasAt = normalized.includes("@");
+  const hasDot = normalized.split("@")[1]?.includes(".") ?? false;
+  if (!hasAt || !hasDot) throw new AgencyProvisioningError("ownerEmail must be a valid email address");
+  return normalized;
 }
 
 function normalizeRole(value: string | null | undefined): "owner" | "admin" | "member" {
@@ -94,6 +126,94 @@ async function ensureAgencySlugAvailable(client: PoolClient, agencySlug: string)
 
   if (existing.rows[0]?.id) {
     throw new AgencyProvisioningError(`agency slug already exists: ${agencySlug}`);
+  }
+}
+
+async function ensureOwnerEmailAvailable(ownerEmail: string): Promise<void> {
+  const pool = getSuperadminPool();
+  const client = await pool.connect();
+  try {
+    const existing = await client.query<{ id: string }>(
+      `
+        select id::text as id
+        from auth.users
+        where lower(email) = lower($1::text)
+        limit 1
+      `,
+      [ownerEmail],
+    );
+    if (existing.rows[0]?.id) {
+      throw new AgencyProvisioningError(`owner email already exists: ${ownerEmail}`);
+    }
+  } finally {
+    client.release();
+  }
+}
+
+export async function createAgency(input: CreateAgencyInput): Promise<CreateAgencyResult> {
+  const agencyName = normalizeText(input.name);
+  if (!agencyName) throw new AgencyProvisioningError("name is required");
+
+  const agencySlug = normalizeSlug(input.slug);
+  const ownerEmail = normalizeEmail(input.ownerEmail);
+  const ownerName = normalizeText(input.ownerName ?? "");
+  const defaultClientName = normalizeText(input.defaultClientName ?? "") || null;
+
+  await ensureOwnerEmailAvailable(ownerEmail);
+
+  const supabase = getSupabaseServiceRoleClient();
+  if (!supabase) {
+    throw new AgencyProvisioningError("Supabase service role client is not configured");
+  }
+
+  const inviteResult = await supabase.auth.admin.inviteUserByEmail(ownerEmail, {
+    data: ownerName ? { full_name: ownerName } : undefined,
+  });
+
+  if (inviteResult.error) {
+    const message = String(inviteResult.error.message ?? "Failed to invite owner");
+    if (message.toLowerCase().includes("already")) {
+      throw new AgencyProvisioningError(`owner email already exists: ${ownerEmail}`);
+    }
+    throw new AgencyProvisioningError(`failed to invite owner: ${message}`);
+  }
+
+  const invitedUserId = normalizeText(inviteResult.data.user?.id);
+  if (!UUID_RE.test(invitedUserId)) {
+    throw new AgencyProvisioningError("failed to resolve invited owner user id");
+  }
+
+  try {
+    const provisioned = await provisionAgency({
+      agencyName,
+      agencySlug,
+      ownerUserId: invitedUserId,
+      ownerRole: "owner",
+      defaultClientName,
+    });
+
+    return {
+      agency: provisioned.agency,
+      agencyOrganization: provisioned.agencyOrganization,
+      billingAccount: provisioned.billingAccount,
+      agencyCostCenter: provisioned.agencyCostCenter,
+      defaultClientOrganization: provisioned.defaultClientOrganization,
+      owner: {
+        user_id: invitedUserId,
+        email: ownerEmail,
+        role: "owner",
+        invite_status: "invited",
+      },
+    };
+  } catch (error) {
+    const deleteResult = await supabase.auth.admin.deleteUser(invitedUserId);
+    const baseMessage = error instanceof Error ? error.message : String(error);
+    if (deleteResult.error) {
+      throw new AgencyProvisioningError(
+        `provisioning failed after invite; rollback failed for invited owner user ${invitedUserId}: ${baseMessage}`,
+      );
+    }
+    throw new AgencyProvisioningError(`provisioning failed after invite; invite rollback completed: ${baseMessage}`);
   }
 }
 
