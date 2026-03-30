@@ -90,6 +90,13 @@ type MembershipColumnCatalogRow = {
   column_name: string;
 };
 
+type MembershipRoleColumnCatalogRow = {
+  data_type: string;
+  udt_schema: string;
+  udt_name: string;
+  type_kind: string | null;
+};
+
 type ProvisioningColumnCatalogRow = {
   table_name: string;
   column_name: string;
@@ -98,6 +105,13 @@ type ProvisioningColumnCatalogRow = {
 export type MembershipSchemaColumns = {
   hasOrganizationId: boolean;
   hasOrgId: boolean;
+};
+
+export type MembershipRoleWriteStrategy = {
+  roleValueSql: string;
+  kind: "text" | "enum";
+  enumSchema: string | null;
+  enumTypeName: string | null;
 };
 
 type MembershipMutationPlan = {
@@ -116,6 +130,13 @@ const PROVISIONING_REQUIRED_COLUMNS: Record<string, readonly string[]> = {
 
 function normalizeText(value: string | null | undefined): string {
   return String(value ?? "").trim();
+}
+
+function quotePostgresIdentifier(identifier: string): string {
+  if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(identifier)) {
+    throw new AgencyProvisioningError(`invalid postgres identifier: ${identifier}`);
+  }
+  return `"${identifier}"`;
 }
 
 export function buildCreateAgencyRollbackMessage(input: {
@@ -224,8 +245,10 @@ export function buildMembershipMutationPlan(input: {
   organizationId: string;
   role: "owner" | "admin" | "member";
   schema: MembershipSchemaColumns;
+  roleWriteStrategy: MembershipRoleWriteStrategy;
 }): MembershipMutationPlan {
   const values: MembershipMutationPlan["values"] = [input.membershipId, input.userId, input.organizationId, input.role];
+  const roleValueSql = input.roleWriteStrategy.roleValueSql;
   if (input.schema.hasOrganizationId && input.schema.hasOrgId) {
     return {
       canonicalOrgColumn: "organization_id",
@@ -233,7 +256,7 @@ export function buildMembershipMutationPlan(input: {
       sql: `
         with updated as (
           update public.memberships
-             set role = $4::public.membership_role_enum,
+             set role = ${roleValueSql},
                  organization_id = $3::uuid,
                  org_id = $3::uuid
            where user_id = $2::uuid
@@ -241,7 +264,7 @@ export function buildMembershipMutationPlan(input: {
          returning id
         )
         insert into public.memberships (id, user_id, organization_id, org_id, role)
-        select $1::uuid, $2::uuid, $3::uuid, $3::uuid, $4::public.membership_role_enum
+        select $1::uuid, $2::uuid, $3::uuid, $3::uuid, ${roleValueSql}
         where not exists (select 1 from updated)
       `,
     };
@@ -253,14 +276,14 @@ export function buildMembershipMutationPlan(input: {
       sql: `
         with updated as (
           update public.memberships
-             set role = $4::public.membership_role_enum,
+             set role = ${roleValueSql},
                  organization_id = $3::uuid
            where user_id = $2::uuid
              and organization_id = $3::uuid
          returning id
         )
         insert into public.memberships (id, user_id, organization_id, role)
-        select $1::uuid, $2::uuid, $3::uuid, $4::public.membership_role_enum
+        select $1::uuid, $2::uuid, $3::uuid, ${roleValueSql}
         where not exists (select 1 from updated)
       `,
     };
@@ -272,14 +295,14 @@ export function buildMembershipMutationPlan(input: {
       sql: `
         with updated as (
           update public.memberships
-             set role = $4::public.membership_role_enum,
+             set role = ${roleValueSql},
                  org_id = $3::uuid
            where user_id = $2::uuid
              and org_id = $3::uuid
          returning id
         )
         insert into public.memberships (id, user_id, org_id, role)
-        select $1::uuid, $2::uuid, $3::uuid, $4::public.membership_role_enum
+        select $1::uuid, $2::uuid, $3::uuid, ${roleValueSql}
         where not exists (select 1 from updated)
       `,
     };
@@ -316,6 +339,56 @@ async function assertProvisioningSchemaCompatibility(client: PoolClient): Promis
   }
 }
 
+export function resolveMembershipRoleWriteStrategy(input: {
+  dataType: string;
+  udtSchema: string;
+  udtName: string;
+  typeKind: string | null;
+}): MembershipRoleWriteStrategy {
+  const dataType = normalizeText(input.dataType).toLowerCase();
+  const udtSchema = normalizeText(input.udtSchema);
+  const udtName = normalizeText(input.udtName);
+  const typeKind = normalizeText(input.typeKind).toLowerCase() || null;
+
+  const isTextual =
+    dataType === "text" ||
+    dataType === "character varying" ||
+    dataType === "character" ||
+    udtName === "text" ||
+    udtName === "varchar" ||
+    udtName === "bpchar";
+
+  if (isTextual) {
+    return {
+      kind: "text",
+      roleValueSql: "$4",
+      enumSchema: null,
+      enumTypeName: null,
+    };
+  }
+
+  const isEnum = dataType === "user-defined" && typeKind === "e";
+  if (isEnum) {
+    if (!udtSchema || !udtName) {
+      throw new AgencyProvisioningError(
+        "memberships.role schema mismatch: enum role type metadata is incomplete",
+      );
+    }
+    const enumSchema = quotePostgresIdentifier(udtSchema);
+    const enumTypeName = quotePostgresIdentifier(udtName);
+    return {
+      kind: "enum",
+      roleValueSql: `$4::${enumSchema}.${enumTypeName}`,
+      enumSchema: udtSchema,
+      enumTypeName: udtName,
+    };
+  }
+
+  throw new AgencyProvisioningError(
+    `memberships.role schema mismatch: unsupported role column type (data_type=${dataType || "unknown"}, udt_name=${udtName || "unknown"})`,
+  );
+}
+
 async function detectMembershipSchemaColumns(client: PoolClient): Promise<MembershipSchemaColumns> {
   const membershipColumns = await client.query<MembershipColumnCatalogRow>(
     `
@@ -327,6 +400,37 @@ async function detectMembershipSchemaColumns(client: PoolClient): Promise<Member
     `,
   );
   return resolveMembershipSchemaColumns(membershipColumns.rows.map((row) => row.column_name));
+}
+
+async function detectMembershipRoleWriteStrategy(client: PoolClient): Promise<MembershipRoleWriteStrategy> {
+  const roleColumn = await client.query<MembershipRoleColumnCatalogRow>(
+    `
+      select c.data_type::text as data_type,
+             c.udt_schema::text as udt_schema,
+             c.udt_name::text as udt_name,
+             t.typtype::text as type_kind
+      from information_schema.columns c
+      left join pg_catalog.pg_namespace n
+        on n.nspname = c.udt_schema
+      left join pg_catalog.pg_type t
+        on t.typnamespace = n.oid
+       and t.typname = c.udt_name
+      where c.table_schema = 'public'
+        and c.table_name = 'memberships'
+        and c.column_name = 'role'
+      limit 1
+    `,
+  );
+  const metadata = roleColumn.rows[0];
+  if (!metadata) {
+    throw new AgencyProvisioningError("memberships schema mismatch: missing role column");
+  }
+  return resolveMembershipRoleWriteStrategy({
+    dataType: metadata.data_type,
+    udtSchema: metadata.udt_schema,
+    udtName: metadata.udt_name,
+    typeKind: metadata.type_kind,
+  });
 }
 
 async function ensureAgencySlugAvailable(client: PoolClient, agencySlug: string): Promise<void> {
@@ -489,12 +593,14 @@ export async function provisionAgency(input: ProvisionAgencyInput): Promise<Prov
 
     const membershipId = createProvisioningId();
     const membershipSchema = await detectMembershipSchemaColumns(client);
+    const roleWriteStrategy = await detectMembershipRoleWriteStrategy(client);
     const membershipMutationPlan = buildMembershipMutationPlan({
       membershipId,
       userId: ownerUserId,
       organizationId: agencyOrganization.id,
       role: ownerRole,
       schema: membershipSchema,
+      roleWriteStrategy,
     });
     await client.query(membershipMutationPlan.sql, membershipMutationPlan.values);
 

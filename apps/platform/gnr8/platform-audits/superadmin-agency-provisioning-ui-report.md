@@ -106,3 +106,25 @@
 - Validation coverage extended:
   - tests now verify membership mutation SQL payload selection for legacy (`org_id`), modern (`organization_id`), and dual-column compatibility schemas.
   - tests include required-column mismatch detection for provisioning table set.
+
+## 10. Follow-Up Fix (2026-03-30): memberships.role Type Compatibility
+- Runtime failure observed after invite + rollback path:
+  - `type "public.membership_role_enum" does not exist`.
+- Root cause:
+  - provisioning membership mutation SQL hardcoded role casts to `public.membership_role_enum` regardless of actual `public.memberships.role` column type.
+- Compatibility fix applied in provisioning service:
+  - role column metadata is now introspected from `information_schema.columns` joined with `pg_type`:
+    - `data_type`
+    - `udt_schema`
+    - `udt_name`
+    - `typtype`
+  - role write strategy now resolves dynamically:
+    - text-compatible columns (`text` / `varchar` / `char`) use plain parameter `$4` without enum cast.
+    - enum columns use cast to the real enum type from catalog metadata (for example `public.membership_role_enum` or alternate enum names).
+  - unsupported role types fail closed with explicit schema mismatch messaging.
+- Canonical role semantics unchanged:
+  - `owner`
+  - `admin`
+  - `member`
+- Validation coverage added:
+  - role strategy tests for text, `membership_role_enum`, alternate enum type name, and unsupported type fail-closed behavior.

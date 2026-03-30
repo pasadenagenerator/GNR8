@@ -7,6 +7,7 @@ import {
   buildMembershipMutationPlan,
   buildOrganizationInsertPayload,
   findMissingProvisioningColumns,
+  resolveMembershipRoleWriteStrategy,
   resolveMembershipSchemaColumns,
 } from "@/gnr8/agency/agency-provisioning-service";
 
@@ -81,11 +82,18 @@ test("buildMembershipMutationPlan uses org_id-only payload when organization_id 
       hasOrganizationId: false,
       hasOrgId: true,
     },
+    roleWriteStrategy: {
+      kind: "text",
+      roleValueSql: "$4",
+      enumSchema: null,
+      enumTypeName: null,
+    },
   });
 
   assert.equal(plan.canonicalOrgColumn, "org_id");
   assert.match(plan.sql, /insert into public\.memberships \(id, user_id, org_id, role\)/);
   assert.doesNotMatch(plan.sql, /organization_id/);
+  assert.doesNotMatch(plan.sql, /membership_role_enum/);
 });
 
 test("buildMembershipMutationPlan uses dual-column payload when both org columns exist", () => {
@@ -98,11 +106,18 @@ test("buildMembershipMutationPlan uses dual-column payload when both org columns
       hasOrganizationId: true,
       hasOrgId: true,
     },
+    roleWriteStrategy: {
+      kind: "enum",
+      roleValueSql: '$4::"public"."membership_role_enum"',
+      enumSchema: "public",
+      enumTypeName: "membership_role_enum",
+    },
   });
 
   assert.equal(plan.canonicalOrgColumn, "organization_id");
   assert.match(plan.sql, /insert into public\.memberships \(id, user_id, organization_id, org_id, role\)/);
   assert.match(plan.sql, /organization_id = \$3::uuid,\s*org_id = \$3::uuid/);
+  assert.match(plan.sql, /\$4::"public"\."membership_role_enum"/);
 });
 
 test("buildMembershipMutationPlan fails closed when memberships has no organization reference column", () => {
@@ -117,11 +132,75 @@ test("buildMembershipMutationPlan fails closed when memberships has no organizat
           hasOrganizationId: false,
           hasOrgId: false,
         },
+        roleWriteStrategy: {
+          kind: "text",
+          roleValueSql: "$4",
+          enumSchema: null,
+          enumTypeName: null,
+        },
       });
     },
     (error) =>
       error instanceof AgencyProvisioningError &&
       error.message === "memberships schema mismatch: expected org_id and/or organization_id column for provisioning",
+  );
+});
+
+test("resolveMembershipRoleWriteStrategy uses plain parameter for text role columns", () => {
+  const strategy = resolveMembershipRoleWriteStrategy({
+    dataType: "text",
+    udtSchema: "pg_catalog",
+    udtName: "text",
+    typeKind: "b",
+  });
+
+  assert.equal(strategy.kind, "text");
+  assert.equal(strategy.roleValueSql, "$4");
+  assert.equal(strategy.enumSchema, null);
+  assert.equal(strategy.enumTypeName, null);
+});
+
+test("resolveMembershipRoleWriteStrategy casts to membership_role_enum when present", () => {
+  const strategy = resolveMembershipRoleWriteStrategy({
+    dataType: "USER-DEFINED",
+    udtSchema: "public",
+    udtName: "membership_role_enum",
+    typeKind: "e",
+  });
+
+  assert.equal(strategy.kind, "enum");
+  assert.equal(strategy.roleValueSql, '$4::"public"."membership_role_enum"');
+  assert.equal(strategy.enumSchema, "public");
+  assert.equal(strategy.enumTypeName, "membership_role_enum");
+});
+
+test("resolveMembershipRoleWriteStrategy supports alternate enum role type names", () => {
+  const strategy = resolveMembershipRoleWriteStrategy({
+    dataType: "USER-DEFINED",
+    udtSchema: "public",
+    udtName: "org_membership_role",
+    typeKind: "e",
+  });
+
+  assert.equal(strategy.kind, "enum");
+  assert.equal(strategy.roleValueSql, '$4::"public"."org_membership_role"');
+  assert.equal(strategy.enumSchema, "public");
+  assert.equal(strategy.enumTypeName, "org_membership_role");
+});
+
+test("resolveMembershipRoleWriteStrategy fails closed for unsupported non-text non-enum role columns", () => {
+  assert.throws(
+    () => {
+      resolveMembershipRoleWriteStrategy({
+        dataType: "integer",
+        udtSchema: "pg_catalog",
+        udtName: "int4",
+        typeKind: "b",
+      });
+    },
+    (error) =>
+      error instanceof AgencyProvisioningError &&
+      error.message.includes("memberships.role schema mismatch: unsupported role column type"),
   );
 });
 
