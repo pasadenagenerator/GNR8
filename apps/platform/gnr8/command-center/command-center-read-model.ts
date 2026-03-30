@@ -3,7 +3,7 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { resolveMigrationPipelineStatus, type MigrationPipelineStatus } from "@/gnr8/command-center/migration-state-automation";
-import { createServiceRoleSupabaseClient } from "@/src/supabase/service-role-server";
+import { getSupabaseServiceRoleClient } from "@/src/supabase/service-role-server";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const DEFAULT_LIMIT = 50;
@@ -541,7 +541,7 @@ export async function getCommandCenterReadModel(
   const agencyId = normalizeUuid(filters.agencyId, "agencyId");
   const limit = normalizeLimit(filters.limit);
 
-  const supabase = createServiceRoleSupabaseClient();
+  const supabase = getSupabaseServiceRoleClient();
   if (supabase == null) {
     return createEmptyReadModel({
       tracker,

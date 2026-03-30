@@ -7,7 +7,7 @@ import {
   type CommandCenterReadModel,
   type CommandCenterSiteSummary,
 } from "@/gnr8/command-center/command-center-read-model";
-import { createServiceRoleSupabaseClient } from "@/src/supabase/service-role-server";
+import { getSupabaseServiceRoleClient } from "@/src/supabase/service-role-server";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -127,7 +127,7 @@ function roundMoney(value: number): number {
 }
 
 async function getAgencyById(agencyId: string): Promise<AgencyRow | null> {
-  const supabase = createServiceRoleSupabaseClient();
+  const supabase = getSupabaseServiceRoleClient();
   if (supabase == null) {
     return null;
   }

@@ -44,6 +44,21 @@ Do not introduce new infrastructure without strong justification.
 
 ---
 
+## GNR8 SUPABASE ARCHITECTURE CONTRACT
+
+For any Next.js + Supabase work in platform app code, follow:
+
+- `/Users/gregorzigon/Documents/Codex/GNR8/apps/platform/gnr8-supabase-architecture.md`
+
+This document is authoritative for:
+
+- read-only vs mutating Supabase helper usage
+- render-path restrictions (no raw `pg` / pooled DB access)
+- read-model stateless access patterns
+- multi-tenant scoping expectations
+
+---
+
 ## DATA PHILOSOPHY
 
 Prioritize excellent schema design.

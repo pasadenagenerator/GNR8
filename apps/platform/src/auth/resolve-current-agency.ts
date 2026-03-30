@@ -2,7 +2,8 @@ import 'server-only'
 
 import type { SupabaseClient } from '@supabase/supabase-js'
 
-import { getSupabaseServerClient, getSupabaseServerClientReadOnly } from '@/src/auth/supabase-server'
+import { getSupabaseServerClientMutating } from '@/src/auth/supabase-server-mutating'
+import { getSupabaseServerClientReadOnly } from '@/src/auth/supabase-server-read-only'
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 
@@ -287,7 +288,7 @@ export async function listCurrentUserAgencyMemberships(): Promise<{
   user_id: string
   memberships: CurrentUserAgencyMembership[]
 }> {
-  const supabase = await getSupabaseServerClient()
+  const supabase = await getSupabaseServerClientMutating()
   const userId = await requireCurrentUserId(supabase)
   const memberships = await listAgencyMembershipCandidates(supabase, userId)
   return {
@@ -312,7 +313,7 @@ export async function listCurrentUserAgencyMembershipsForPage(): Promise<{
 export async function resolveCurrentUserAgency(input?: {
   activeAgencyId?: string | null
 }): Promise<ResolvedCurrentUserAgency> {
-  const supabase = await getSupabaseServerClient()
+  const supabase = await getSupabaseServerClientMutating()
   const userId = await requireCurrentUserId(supabase)
   const memberships = await listAgencyMembershipCandidates(supabase, userId)
   const selectedMembership = selectCurrentAgencyMembership({

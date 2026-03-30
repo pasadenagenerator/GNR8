@@ -2,6 +2,124 @@
   "extends": ["next/core-web-vitals"],
   "overrides": [
     {
+      "files": ["app/**/page.tsx", "app/**/layout.tsx"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "paths": [
+              {
+                "name": "pg",
+                "message": "Raw pg is forbidden in App Router page/layout render paths. Use read models + Supabase stateless reads."
+              },
+              {
+                "name": "@/src/superadmin/db",
+                "message": "Superadmin pooled DB access is forbidden in page/layout render paths."
+              },
+              {
+                "name": "@/src/auth/supabase-server-mutating",
+                "message": "Mutating Supabase helpers are forbidden in page/layout render paths. Use getSupabaseServerClientReadOnly()."
+              }
+            ]
+          }
+        ],
+        "no-restricted-properties": [
+          "error",
+          {
+            "object": "pool",
+            "property": "connect",
+            "message": "pool.connect() is forbidden in page/layout render paths."
+          }
+        ],
+        "no-restricted-syntax": [
+          "error",
+          {
+            "selector": "NewExpression[callee.name='Pool']",
+            "message": "new Pool(...) is forbidden in page/layout render paths."
+          }
+        ]
+      }
+    },
+    {
+      "files": ["gnr8/**/*read-model*.ts", "gnr8/**/*read-model*.tsx"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "paths": [
+              {
+                "name": "pg",
+                "message": "Read models in GNR8 stateless paths may not use raw pg."
+              },
+              {
+                "name": "@/src/superadmin/db",
+                "message": "Read models in GNR8 stateless paths may not use pooled DB helpers."
+              },
+              {
+                "name": "@/src/auth/supabase-server-read-only",
+                "message": "Read models should not depend on page auth helpers."
+              },
+              {
+                "name": "@/src/auth/supabase-server-mutating",
+                "message": "Read models must not use mutating Supabase helpers."
+              },
+              {
+                "name": "@/src/auth/resolve-current-agency",
+                "message": "Read models must stay decoupled from page auth resolution helpers."
+              }
+            ]
+          }
+        ],
+        "no-restricted-properties": [
+          "error",
+          {
+            "object": "pool",
+            "property": "connect",
+            "message": "pool.connect() is forbidden in read models intended to stay stateless."
+          }
+        ],
+        "no-restricted-syntax": [
+          "error",
+          {
+            "selector": "NewExpression[callee.name='Pool']",
+            "message": "new Pool(...) is forbidden in read models intended to stay stateless."
+          }
+        ]
+      }
+    },
+    {
+      "files": ["app/**/_components/**/*.{ts,tsx,js,jsx,mjs,cjs}"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "paths": [
+              {
+                "name": "pg",
+                "message": "UI/client-oriented components must not import raw pg."
+              },
+              {
+                "name": "@/src/superadmin/db",
+                "message": "UI/client-oriented components must not import server DB pool helpers."
+              },
+              {
+                "name": "@/src/auth/supabase-server-read-only",
+                "message": "UI/client-oriented components must not import server Supabase helpers directly."
+              },
+              {
+                "name": "@/src/auth/supabase-server-mutating",
+                "message": "UI/client-oriented components must not import server Supabase helpers directly."
+              },
+              {
+                "name": "@/src/supabase/service-role-server",
+                "message": "UI/client-oriented components must not import service-role server helpers."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
       "files": [
         "gnr8/runtime/**/*.{ts,tsx,js,jsx,mjs,cjs}",
         "gnr8/migration-factory/**/*.{ts,tsx,js,jsx,mjs,cjs}",
