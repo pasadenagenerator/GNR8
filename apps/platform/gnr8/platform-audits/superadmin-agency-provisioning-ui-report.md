@@ -82,3 +82,27 @@
 - Validation added:
   - new test file: `gnr8/agency/agency-provisioning-service.test.ts`
   - covers organization payload generation for both agency/client inserts and invalid input rejection.
+
+## 9. Follow-Up Fix (2026-03-30): memberships organization_id/org_id Schema Alignment
+- Runtime failure observed after invite succeeded and rollback worked:
+  - `column "organization_id" of relation "memberships" does not exist`.
+- Root cause:
+  - provisioning membership insert assumed `public.memberships.organization_id` existed in all environments.
+  - production-compatible environments can still expose legacy `memberships.org_id` without `organization_id`.
+- Safe schema-aligned fix:
+  - provisioning now inspects `information_schema.columns` for `public.memberships` and dynamically uses:
+    - dual write (`organization_id` + `org_id`) when both exist,
+    - `organization_id` write when only that column exists,
+    - `org_id` write when legacy schema is present.
+  - membership write was updated to an update-then-insert CTE so idempotent role reconciliation does not depend on a specific unique constraint shape.
+- Additional provisioning schema audit hardening in code:
+  - preflight validation now checks required columns across:
+    - `agencies`
+    - `organizations`
+    - `memberships`
+    - `billing_accounts`
+    - `cost_centers`
+  - missing columns fail closed with explicit mismatch messaging.
+- Validation coverage extended:
+  - tests now verify membership mutation SQL payload selection for legacy (`org_id`), modern (`organization_id`), and dual-column compatibility schemas.
+  - tests include required-column mismatch detection for provisioning table set.

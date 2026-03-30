@@ -86,8 +86,48 @@ export type OrganizationInsertPayload = {
   organization_type: OrganizationType;
 };
 
+type MembershipColumnCatalogRow = {
+  column_name: string;
+};
+
+type ProvisioningColumnCatalogRow = {
+  table_name: string;
+  column_name: string;
+};
+
+export type MembershipSchemaColumns = {
+  hasOrganizationId: boolean;
+  hasOrgId: boolean;
+};
+
+type MembershipMutationPlan = {
+  sql: string;
+  values: [string, string, string, "owner" | "admin" | "member"];
+  canonicalOrgColumn: "organization_id" | "org_id";
+};
+
+const PROVISIONING_REQUIRED_COLUMNS: Record<string, readonly string[]> = {
+  agencies: ["id", "name", "slug", "is_home_agency"],
+  organizations: ["id", "name", "agency_id", "organization_type"],
+  memberships: ["id", "user_id", "role"],
+  billing_accounts: ["id", "agency_id", "billing_mode", "status"],
+  cost_centers: ["id", "type", "entity_id", "parent_id"],
+};
+
 function normalizeText(value: string | null | undefined): string {
   return String(value ?? "").trim();
+}
+
+export function buildCreateAgencyRollbackMessage(input: {
+  rollbackSucceeded: boolean;
+  invitedUserId: string;
+  ownerEmail: string;
+  baseMessage: string;
+}): string {
+  if (input.rollbackSucceeded) {
+    return `provisioning failed after invite; auth rollback completed via deleteUser for invited owner user ${input.invitedUserId} (${input.ownerEmail}). verify the user is absent in auth.users before retrying: ${input.baseMessage}`;
+  }
+  return `provisioning failed after invite; auth rollback failed for invited owner user ${input.invitedUserId} (${input.ownerEmail}). manual cleanup required (check auth.users and related rows before retry): ${input.baseMessage}`;
 }
 
 function normalizeEmail(value: string | null | undefined): string {
@@ -145,6 +185,148 @@ export function buildOrganizationInsertPayload(input: {
     agency_id: agencyId,
     organization_type: input.organizationType,
   };
+}
+
+export function resolveMembershipSchemaColumns(columnNames: readonly string[]): MembershipSchemaColumns {
+  const normalized = new Set(
+    columnNames
+      .map((columnName) => normalizeText(columnName).toLowerCase())
+      .filter((columnName) => columnName.length > 0),
+  );
+  return {
+    hasOrganizationId: normalized.has("organization_id"),
+    hasOrgId: normalized.has("org_id"),
+  };
+}
+
+export function findMissingProvisioningColumns(
+  rows: ReadonlyArray<ProvisioningColumnCatalogRow>,
+  requiredByTable: Readonly<Record<string, readonly string[]>> = PROVISIONING_REQUIRED_COLUMNS,
+): string[] {
+  const available = new Set(
+    rows.map((row) => `${normalizeText(row.table_name).toLowerCase()}.${normalizeText(row.column_name).toLowerCase()}`),
+  );
+  const missing: string[] = [];
+  for (const [tableName, requiredColumns] of Object.entries(requiredByTable)) {
+    for (const columnName of requiredColumns) {
+      const key = `${tableName}.${columnName}`.toLowerCase();
+      if (!available.has(key)) {
+        missing.push(`${tableName}.${columnName}`);
+      }
+    }
+  }
+  return missing.sort();
+}
+
+export function buildMembershipMutationPlan(input: {
+  membershipId: string;
+  userId: string;
+  organizationId: string;
+  role: "owner" | "admin" | "member";
+  schema: MembershipSchemaColumns;
+}): MembershipMutationPlan {
+  const values: MembershipMutationPlan["values"] = [input.membershipId, input.userId, input.organizationId, input.role];
+  if (input.schema.hasOrganizationId && input.schema.hasOrgId) {
+    return {
+      canonicalOrgColumn: "organization_id",
+      values,
+      sql: `
+        with updated as (
+          update public.memberships
+             set role = $4::public.membership_role_enum,
+                 organization_id = $3::uuid,
+                 org_id = $3::uuid
+           where user_id = $2::uuid
+             and (organization_id = $3::uuid or org_id = $3::uuid)
+         returning id
+        )
+        insert into public.memberships (id, user_id, organization_id, org_id, role)
+        select $1::uuid, $2::uuid, $3::uuid, $3::uuid, $4::public.membership_role_enum
+        where not exists (select 1 from updated)
+      `,
+    };
+  }
+  if (input.schema.hasOrganizationId) {
+    return {
+      canonicalOrgColumn: "organization_id",
+      values,
+      sql: `
+        with updated as (
+          update public.memberships
+             set role = $4::public.membership_role_enum,
+                 organization_id = $3::uuid
+           where user_id = $2::uuid
+             and organization_id = $3::uuid
+         returning id
+        )
+        insert into public.memberships (id, user_id, organization_id, role)
+        select $1::uuid, $2::uuid, $3::uuid, $4::public.membership_role_enum
+        where not exists (select 1 from updated)
+      `,
+    };
+  }
+  if (input.schema.hasOrgId) {
+    return {
+      canonicalOrgColumn: "org_id",
+      values,
+      sql: `
+        with updated as (
+          update public.memberships
+             set role = $4::public.membership_role_enum,
+                 org_id = $3::uuid
+           where user_id = $2::uuid
+             and org_id = $3::uuid
+         returning id
+        )
+        insert into public.memberships (id, user_id, org_id, role)
+        select $1::uuid, $2::uuid, $3::uuid, $4::public.membership_role_enum
+        where not exists (select 1 from updated)
+      `,
+    };
+  }
+  throw new AgencyProvisioningError(
+    "memberships schema mismatch: expected org_id and/or organization_id column for provisioning",
+  );
+}
+
+async function assertProvisioningSchemaCompatibility(client: PoolClient): Promise<void> {
+  const tableNames = Object.keys(PROVISIONING_REQUIRED_COLUMNS);
+  const catalog = await client.query<ProvisioningColumnCatalogRow>(
+    `
+      select table_name::text as table_name, column_name::text as column_name
+      from information_schema.columns
+      where table_schema = 'public'
+        and table_name = any($1::text[])
+    `,
+    [tableNames],
+  );
+  const missingRequired = findMissingProvisioningColumns(catalog.rows);
+  const membershipSchema = resolveMembershipSchemaColumns(
+    catalog.rows
+      .filter((row) => row.table_name === "memberships")
+      .map((row) => row.column_name),
+  );
+  if (!membershipSchema.hasOrganizationId && !membershipSchema.hasOrgId) {
+    missingRequired.push("memberships.(organization_id|org_id)");
+  }
+  if (missingRequired.length > 0) {
+    throw new AgencyProvisioningError(
+      `provisioning schema mismatch: missing required columns: ${Array.from(new Set(missingRequired)).sort().join(", ")}`,
+    );
+  }
+}
+
+async function detectMembershipSchemaColumns(client: PoolClient): Promise<MembershipSchemaColumns> {
+  const membershipColumns = await client.query<MembershipColumnCatalogRow>(
+    `
+      select column_name::text as column_name
+      from information_schema.columns
+      where table_schema = 'public'
+        and table_name = 'memberships'
+        and column_name in ('organization_id', 'org_id')
+    `,
+  );
+  return resolveMembershipSchemaColumns(membershipColumns.rows.map((row) => row.column_name));
 }
 
 async function ensureAgencySlugAvailable(client: PoolClient, agencySlug: string): Promise<void> {
@@ -242,13 +424,13 @@ export async function createAgency(input: CreateAgencyInput): Promise<CreateAgen
   } catch (error) {
     const deleteResult = await supabase.auth.admin.deleteUser(invitedUserId);
     const baseMessage = error instanceof Error ? error.message : String(error);
-    if (deleteResult.error) {
-      throw new AgencyProvisioningError(
-        `provisioning failed after invite; auth rollback failed for invited owner user ${invitedUserId} (${ownerEmail}). manual cleanup required (check auth.users and related rows before retry): ${baseMessage}`,
-      );
-    }
     throw new AgencyProvisioningError(
-      `provisioning failed after invite; auth rollback completed via deleteUser for invited owner user ${invitedUserId} (${ownerEmail}). verify the user is absent in auth.users before retrying: ${baseMessage}`,
+      buildCreateAgencyRollbackMessage({
+        rollbackSucceeded: !deleteResult.error,
+        invitedUserId,
+        ownerEmail,
+        baseMessage,
+      }),
     );
   }
 }
@@ -268,6 +450,7 @@ export async function provisionAgency(input: ProvisionAgencyInput): Promise<Prov
 
   try {
     await client.query("begin");
+    await assertProvisioningSchemaCompatibility(client);
 
     await ensureAgencySlugAvailable(client, agencySlug);
 
@@ -305,17 +488,15 @@ export async function provisionAgency(input: ProvisionAgencyInput): Promise<Prov
     if (!agencyOrganization) throw new AgencyProvisioningError("failed to create agency organization");
 
     const membershipId = createProvisioningId();
-    await client.query(
-      `
-        insert into public.memberships (id, user_id, organization_id, org_id, role)
-        values ($1::uuid, $2::uuid, $3::uuid, $3::uuid, $4::public.membership_role_enum)
-        on conflict (organization_id, user_id)
-        do update set
-          role = excluded.role,
-          org_id = excluded.org_id
-      `,
-      [membershipId, ownerUserId, agencyOrganization.id, ownerRole],
-    );
+    const membershipSchema = await detectMembershipSchemaColumns(client);
+    const membershipMutationPlan = buildMembershipMutationPlan({
+      membershipId,
+      userId: ownerUserId,
+      organizationId: agencyOrganization.id,
+      role: ownerRole,
+      schema: membershipSchema,
+    });
+    await client.query(membershipMutationPlan.sql, membershipMutationPlan.values);
 
     const billingAccountId = createProvisioningId();
     const billingAccountInsert = await client.query<{ id: string; status: string; billing_mode: string }>(
