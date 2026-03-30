@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   AgencyProvisioningError,
+  buildAgencyOwnerInviteRedirectTo,
   buildCreateAgencyRollbackMessage,
   buildMembershipMutationPlan,
   buildOrganizationInsertPayload,
@@ -251,4 +252,14 @@ test("buildCreateAgencyRollbackMessage preserves rollback-failed operator guidan
   assert.match(message, /auth rollback failed/);
   assert.match(message, /manual cleanup required/);
   assert.match(message, /db insert failed/);
+});
+
+test("buildAgencyOwnerInviteRedirectTo uses callback path on provided app origin", () => {
+  const redirectTo = buildAgencyOwnerInviteRedirectTo("https://app.pasadenagenerator.com");
+  assert.equal(redirectTo, "https://app.pasadenagenerator.com/auth/callback");
+});
+
+test("buildAgencyOwnerInviteRedirectTo falls back to production app callback for invalid origin", () => {
+  const redirectTo = buildAgencyOwnerInviteRedirectTo("not-a-url");
+  assert.equal(redirectTo, "https://app.pasadenagenerator.com/auth/callback");
 });

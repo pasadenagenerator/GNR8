@@ -8,6 +8,8 @@ import { getSupabaseServiceRoleClient } from "@/src/supabase/service-role-server
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const SLUG_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+const DEFAULT_PLATFORM_APP_ORIGIN = "https://app.pasadenagenerator.com";
+const AUTH_CALLBACK_PATH = "/auth/callback";
 
 export type ProvisionAgencyInput = {
   agencyName: string;
@@ -149,6 +151,25 @@ export function buildCreateAgencyRollbackMessage(input: {
     return `provisioning failed after invite; auth rollback completed via deleteUser for invited owner user ${input.invitedUserId} (${input.ownerEmail}). verify the user is absent in auth.users before retrying: ${input.baseMessage}`;
   }
   return `provisioning failed after invite; auth rollback failed for invited owner user ${input.invitedUserId} (${input.ownerEmail}). manual cleanup required (check auth.users and related rows before retry): ${input.baseMessage}`;
+}
+
+export function buildAgencyOwnerInviteRedirectTo(candidateOrigin?: string | null): string {
+  const rawCandidate = normalizeText(candidateOrigin);
+  const fallbackUrl = new URL(AUTH_CALLBACK_PATH, DEFAULT_PLATFORM_APP_ORIGIN).toString();
+  if (!rawCandidate) return fallbackUrl;
+
+  let originUrl: URL;
+  try {
+    originUrl = new URL(rawCandidate);
+  } catch {
+    return fallbackUrl;
+  }
+
+  if (originUrl.protocol !== "https:" && originUrl.protocol !== "http:") {
+    return fallbackUrl;
+  }
+
+  return new URL(AUTH_CALLBACK_PATH, originUrl).toString();
 }
 
 function normalizeEmail(value: string | null | undefined): string {
@@ -487,6 +508,9 @@ export async function createAgency(input: CreateAgencyInput): Promise<CreateAgen
   }
 
   const inviteResult = await supabase.auth.admin.inviteUserByEmail(ownerEmail, {
+    redirectTo: buildAgencyOwnerInviteRedirectTo(
+      process.env.NEXT_PUBLIC_APP_URL ?? process.env.NEXT_PUBLIC_SITE_URL ?? process.env.GNR8_APP_URL ?? null,
+    ),
     data: ownerName ? { full_name: ownerName } : undefined,
   });
 

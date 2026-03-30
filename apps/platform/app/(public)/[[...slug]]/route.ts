@@ -6,9 +6,8 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 function isSupabaseAuthCallback(url: URL): boolean {
-  const hasCode = url.searchParams.has("code");
   const type = url.searchParams.get("type");
-  return hasCode || type === "recovery" || type === "invite";
+  return type === "recovery";
 }
 
 export async function GET(
