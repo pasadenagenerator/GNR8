@@ -22,11 +22,6 @@ type AgencyRow = {
   name: string | null;
 };
 
-export type AgencyScopeOption = {
-  agency_id: string;
-  agency_name: string | null;
-};
-
 export type AgencyClientOverviewRow = {
   client_id: string | null;
   client_name: string | null;
@@ -118,41 +113,24 @@ function roundMoney(value: number): number {
   return Number(value.toFixed(6));
 }
 
-export async function listAgencyScopeOptions(): Promise<AgencyScopeOption[]> {
+async function getAgencyById(agencyId: string): Promise<AgencyRow | null> {
   const supabase = createServiceRoleSupabaseClient();
   if (supabase == null) {
-    return [];
+    return null;
   }
 
-  const orderAttempts: Array<"name" | "id"> = ["name", "id"];
+  const result = await supabase
+    .from("agencies")
+    .select("id,name")
+    .eq("id", agencyId)
+    .limit(1)
+    .maybeSingle();
 
-  for (let index = 0; index < orderAttempts.length; index += 1) {
-    const orderColumn = orderAttempts[index];
-    const { data, error } = await supabase.from("agencies").select("id,name").order(orderColumn, { ascending: true });
-
-    if (error) {
-      const isLastAttempt = index === orderAttempts.length - 1;
-      if (isLastAttempt) {
-        return [];
-      }
-      continue;
-    }
-
-    const rows = Array.isArray(data) ? (data as AgencyRow[]) : [];
-    return rows
-      .map((row) => {
-        const agencyId = String(row.id ?? "").trim();
-        if (!agencyId) return null;
-        const agencyName = String(row.name ?? "").trim();
-        return {
-          agency_id: agencyId,
-          agency_name: agencyName || null,
-        };
-      })
-      .filter((row): row is AgencyScopeOption => row != null);
+  if (result.error) {
+    return null;
   }
 
-  return [];
+  return result.data ? (result.data as AgencyRow) : null;
 }
 
 function computeSummary(siteRows: AgencySiteDashboardRow[]): AgencyDashboardSummaryMetrics {
@@ -225,17 +203,17 @@ export async function getAgencyDashboardReadModel(input: {
   const limit = normalizeLimit(input.limit);
   const simulationLimit = Math.min(Math.max(1, Math.floor(input.simulationLimit ?? DEFAULT_PLAN_SIMULATION_LIMIT)), limit);
 
-  const [agencyOptions, readModel] = await Promise.all([
-    listAgencyScopeOptions(),
+  const [agencyRow, readModel] = await Promise.all([
+    getAgencyById(agencyId),
     getCommandCenterReadModel({
       agencyId,
       limit,
     }),
   ]);
 
-  const selectedAgency = agencyOptions.find((agency) => agency.agency_id === agencyId) ?? {
+  const selectedAgency = {
     agency_id: agencyId,
-    agency_name: null,
+    agency_name: String(agencyRow?.name ?? "").trim() || null,
   };
 
   const siteMarginBySiteId = new Map<string, SiteMarginResult>();

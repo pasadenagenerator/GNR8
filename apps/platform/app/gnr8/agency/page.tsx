@@ -2,22 +2,16 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import type { CSSProperties } from "react";
 
-import { getAgencyDashboardReadModel, listAgencyScopeOptions } from "@/gnr8/agency/agency-dashboard-read-model";
-import { requireSuperadminUserIdForPage } from "@/src/auth/require-superadmin-user-id";
+import { getAgencyDashboardReadModel } from "@/gnr8/agency/agency-dashboard-read-model";
+import { resolveCurrentUserAgency, ResolveCurrentAgencyError } from "@/src/auth/resolve-current-agency";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 type SearchParams = {
-  agencyId?: string;
   needsAttention?: string;
 };
-
-function normalizeAgencyId(value: string | undefined): string | null {
-  const normalized = String(value ?? "").trim();
-  return normalized || null;
-}
 
 function normalizeNeedsAttention(value: string | undefined): boolean {
   return value === "1" || value === "true";
@@ -37,38 +31,78 @@ function shortId(value: string): string {
 }
 
 export default async function AgencyDashboardPage(props: { searchParams?: Promise<SearchParams> }) {
+  let currentUserAgency: Awaited<ReturnType<typeof resolveCurrentUserAgency>> | null = null;
+  let agencyAccessErrorCode: ResolveCurrentAgencyError["code"] | null = null;
+
   try {
-    await requireSuperadminUserIdForPage();
+    currentUserAgency = await resolveCurrentUserAgency();
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Internal server error";
-    if (message === "Unauthorized") {
+    if (error instanceof ResolveCurrentAgencyError && error.code === "UNAUTHORIZED") {
       redirect("/login");
     }
-    if (message.startsWith("Forbidden")) {
-      redirect("/superadmin");
+    if (error instanceof ResolveCurrentAgencyError) {
+      agencyAccessErrorCode = error.code;
+    } else {
+      throw error;
     }
-    throw error;
+  }
+
+  if (currentUserAgency == null) {
+    return (
+      <main
+        style={{
+          maxWidth: 1200,
+          margin: "0 auto",
+          padding: 24,
+          background: "linear-gradient(180deg, #f4f8fc 0%, #ffffff 62%)",
+          fontFamily: "ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial",
+          minHeight: "100vh",
+        }}
+      >
+        <header style={{ display: "grid", gap: 10 }}>
+          <h1 style={{ margin: 0, fontSize: 32, color: "#0f172a" }}>Agency Dashboard</h1>
+          <p style={{ margin: 0, color: "#334155", maxWidth: 900 }}>
+            Agency-facing migration and economics view, scoped by authenticated membership.
+          </p>
+        </header>
+
+        <section
+          style={{
+            marginTop: 18,
+            border: "1px solid #fecaca",
+            borderRadius: 12,
+            background: "#fff5f5",
+            padding: 16,
+          }}
+        >
+          <h2 style={{ marginTop: 0, color: "#991b1b" }}>
+            {agencyAccessErrorCode === "NO_MEMBERSHIP" ? "No agency access" : "Agency access unavailable"}
+          </h2>
+          <p style={{ marginBottom: 0, color: "#7f1d1d" }}>
+            {agencyAccessErrorCode === "NO_MEMBERSHIP"
+              ? "Your account is authenticated but has no agency membership yet."
+              : "Your membership is invalid or ambiguous. Access is blocked until this is resolved."}
+          </p>
+        </section>
+      </main>
+    );
   }
 
   const resolvedSearchParams = props.searchParams ? await props.searchParams : undefined;
-  const selectedAgencyId = normalizeAgencyId(resolvedSearchParams?.agencyId);
   const showNeedsAttentionOnly = normalizeNeedsAttention(resolvedSearchParams?.needsAttention);
 
-  const agencyOptions = await listAgencyScopeOptions();
-  const selectedAgencyExists = selectedAgencyId
-    ? agencyOptions.some((agency) => agency.agency_id === selectedAgencyId)
-    : false;
+  const readModel = await getAgencyDashboardReadModel({
+    agencyId: currentUserAgency.agency_id,
+    limit: 120,
+    simulationLimit: 120,
+  });
 
-  const readModel = selectedAgencyId && selectedAgencyExists
-    ? await getAgencyDashboardReadModel({ agencyId: selectedAgencyId, limit: 120, simulationLimit: 120 })
-    : null;
-
-  const filteredSiteRows = showNeedsAttentionOnly && readModel
+  const filteredSiteRows = showNeedsAttentionOnly
     ? readModel.site_rows.filter((row) => row.needs_attention)
-    : readModel?.site_rows ?? [];
+    : readModel.site_rows;
 
-  const unassignedClientSites = readModel?.site_rows.filter((row) => row.client_id == null).length ?? 0;
-  const hasNoCostSignal = readModel?.site_rows.some((row) => row.cost_completeness_status === "NO_SIGNAL") ?? false;
+  const unassignedClientSites = readModel.site_rows.filter((row) => row.client_id == null).length;
+  const hasNoCostSignal = readModel.site_rows.some((row) => row.cost_completeness_status === "NO_SIGNAL");
 
   return (
     <main
@@ -84,41 +118,26 @@ export default async function AgencyDashboardPage(props: { searchParams?: Promis
       <header style={{ display: "grid", gap: 10 }}>
         <h1 style={{ margin: 0, fontSize: 32, color: "#0f172a" }}>Agency Dashboard</h1>
         <p style={{ margin: 0, color: "#334155", maxWidth: 900 }}>
-          Agency-facing migration and economics view. This is a scoped V1 surface that only loads one agency portfolio at a time.
+          Agency-facing migration and economics view. Scope is resolved from your authenticated agency membership.
         </p>
-        <div
-          style={{
-            border: "1px solid #f59e0b",
-            background: "#fffbeb",
-            color: "#92400e",
-            borderRadius: 10,
-            padding: "10px 12px",
-            fontSize: 13,
-            width: "fit-content",
-          }}
-        >
-          Internal-only temporary mode: superadmin selects one agency scope (impersonation-style view).
-        </div>
       </header>
 
       <section style={{ marginTop: 16, border: "1px solid #dbe6f1", borderRadius: 12, background: "#fff", padding: 14 }}>
-        <form method="get" style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "end" }}>
-          <label style={{ display: "grid", gap: 6, minWidth: 280 }}>
-            <span style={{ fontSize: 12, color: "#334155" }}>Agency scope</span>
-            <select
-              name="agencyId"
-              defaultValue={selectedAgencyId ?? ""}
-              style={{ padding: "8px 10px", borderRadius: 8, border: "1px solid #cbd5e1", background: "#fff" }}
-            >
-              <option value="">Select one agency...</option>
-              {agencyOptions.map((agency) => (
-                <option key={agency.agency_id} value={agency.agency_id}>
-                  {agency.agency_name?.trim() || agency.agency_id}
-                </option>
-              ))}
-            </select>
-          </label>
+        <div style={{ display: "grid", gap: 4, fontSize: 13, color: "#334155" }}>
+          <div>
+            <strong>Current Agency:</strong> {currentUserAgency.agency_name?.trim() || readModel.agency.agency_name?.trim() || "Unknown agency"}
+          </div>
+          <div>
+            <strong>Agency ID:</strong> {currentUserAgency.agency_id}
+          </div>
+          <div>
+            <strong>Role:</strong> {currentUserAgency.role}
+          </div>
+        </div>
+      </section>
 
+      <section style={{ marginTop: 12, border: "1px solid #dbe6f1", borderRadius: 12, background: "#fff", padding: 14 }}>
+        <form method="get" style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "end" }}>
           <label style={{ display: "inline-flex", gap: 8, alignItems: "center", fontSize: 13, color: "#334155" }}>
             <input type="checkbox" name="needsAttention" value="1" defaultChecked={showNeedsAttentionOnly} />
             Needs attention only
@@ -155,27 +174,8 @@ export default async function AgencyDashboardPage(props: { searchParams?: Promis
         </form>
       </section>
 
-      {!selectedAgencyId ? (
+      <>
         <section style={{ marginTop: 16, border: "1px solid #dbe6f1", borderRadius: 12, background: "#fff", padding: 16 }}>
-          <h2 style={{ marginTop: 0 }}>No agency in scope</h2>
-          <p style={{ marginBottom: 0, color: "#475569" }}>
-            Select an agency above to load portfolio metrics and site operations. This view fails closed until a single agency scope is chosen.
-          </p>
-        </section>
-      ) : null}
-
-      {selectedAgencyId && !selectedAgencyExists ? (
-        <section style={{ marginTop: 16, border: "1px solid #fecaca", borderRadius: 12, background: "#fff5f5", padding: 16 }}>
-          <h2 style={{ marginTop: 0, color: "#991b1b" }}>No agency found for selected scope</h2>
-          <p style={{ marginBottom: 0, color: "#7f1d1d" }}>
-            The selected agency id does not exist in the current environment: <code>{selectedAgencyId}</code>
-          </p>
-        </section>
-      ) : null}
-
-      {readModel ? (
-        <>
-          <section style={{ marginTop: 16, border: "1px solid #dbe6f1", borderRadius: 12, background: "#fff", padding: 16 }}>
             <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
               <h2 style={{ margin: 0, color: "#0f172a" }}>
                 {readModel.agency.agency_name?.trim() || `Agency ${shortId(readModel.agency.agency_id)}`}
@@ -219,9 +219,9 @@ export default async function AgencyDashboardPage(props: { searchParams?: Promis
             <p style={{ marginTop: 8, marginBottom: 0, fontSize: 12, color: "#334155" }}>
               Read model queries this render: {readModel.instrumentation.query_count}
             </p>
-          </section>
+        </section>
 
-          <section style={{ marginTop: 16, border: "1px solid #dbe6f1", borderRadius: 12, background: "#fff", padding: 16 }}>
+        <section style={{ marginTop: 16, border: "1px solid #dbe6f1", borderRadius: 12, background: "#fff", padding: 16 }}>
             <h2 style={{ marginTop: 0, color: "#0f172a" }}>Client Overview</h2>
 
             {readModel.client_overview.length === 0 ? (
@@ -260,9 +260,9 @@ export default async function AgencyDashboardPage(props: { searchParams?: Promis
                 {unassignedClientSites} site{unassignedClientSites === 1 ? "" : "s"} still need client assignment.
               </p>
             ) : null}
-          </section>
+        </section>
 
-          <section style={{ marginTop: 16, border: "1px solid #dbe6f1", borderRadius: 12, background: "#fff", padding: 16 }}>
+        <section style={{ marginTop: 16, border: "1px solid #dbe6f1", borderRadius: 12, background: "#fff", padding: 16 }}>
             <h2 style={{ marginTop: 0, color: "#0f172a" }}>Site Table</h2>
 
             {readModel.site_rows.length === 0 ? (
@@ -330,9 +330,8 @@ export default async function AgencyDashboardPage(props: { searchParams?: Promis
             <p style={{ marginTop: 10, marginBottom: 0, fontSize: 12, color: "#475569" }}>
               V1 action set is conservative by design: view live site and preview only.
             </p>
-          </section>
-        </>
-      ) : null}
+        </section>
+      </>
     </main>
   );
 }
