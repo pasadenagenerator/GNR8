@@ -4,8 +4,8 @@ import type { CSSProperties } from "react";
 
 import { getAgencyDashboardReadModel } from "@/gnr8/agency/agency-dashboard-read-model";
 import {
-  listCurrentUserAgencyMemberships,
-  resolveCurrentUserAgency,
+  listCurrentUserAgencyMembershipsForPage,
+  resolveCurrentUserAgencyForPage,
   ResolveCurrentAgencyError,
 } from "@/src/auth/resolve-current-agency";
 
@@ -40,15 +40,15 @@ export default async function AgencyDashboardPage(props: { searchParams?: Promis
   const requestedAgencyId = String(resolvedSearchParams?.agency ?? "").trim() || null;
   const showNeedsAttentionOnly = normalizeNeedsAttention(resolvedSearchParams?.needsAttention);
 
-  let currentUserAgency: Awaited<ReturnType<typeof resolveCurrentUserAgency>> | null = null;
+  let currentUserAgency: Awaited<ReturnType<typeof resolveCurrentUserAgencyForPage>> | null = null;
   let agencyAccessErrorCode: ResolveCurrentAgencyError["code"] | null = null;
-  let availableAgencyMemberships: Awaited<ReturnType<typeof listCurrentUserAgencyMemberships>>["memberships"] = [];
+  let availableAgencyMemberships: Awaited<ReturnType<typeof listCurrentUserAgencyMembershipsForPage>>["memberships"] = [];
 
   try {
-    currentUserAgency = await resolveCurrentUserAgency({
+    currentUserAgency = await resolveCurrentUserAgencyForPage({
       activeAgencyId: requestedAgencyId,
     });
-    const membershipContext = await listCurrentUserAgencyMemberships();
+    const membershipContext = await listCurrentUserAgencyMembershipsForPage();
     availableAgencyMemberships = membershipContext.memberships;
   } catch (error) {
     if (error instanceof ResolveCurrentAgencyError && error.code === "UNAUTHORIZED") {
@@ -57,7 +57,7 @@ export default async function AgencyDashboardPage(props: { searchParams?: Promis
     if (error instanceof ResolveCurrentAgencyError) {
       agencyAccessErrorCode = error.code;
       try {
-        const membershipContext = await listCurrentUserAgencyMemberships();
+        const membershipContext = await listCurrentUserAgencyMembershipsForPage();
         availableAgencyMemberships = membershipContext.memberships;
       } catch (membershipError) {
         if (!(membershipError instanceof ResolveCurrentAgencyError && membershipError.code === "UNAUTHORIZED")) {

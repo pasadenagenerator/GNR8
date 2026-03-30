@@ -2,7 +2,7 @@ import 'server-only'
 
 import type { SupabaseClient } from '@supabase/supabase-js'
 
-import { getSupabaseServerClient } from '@/src/auth/supabase-server'
+import { getSupabaseServerClient, getSupabaseServerClientReadOnly } from '@/src/auth/supabase-server'
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 
@@ -296,10 +296,42 @@ export async function listCurrentUserAgencyMemberships(): Promise<{
   }
 }
 
+export async function listCurrentUserAgencyMembershipsForPage(): Promise<{
+  user_id: string
+  memberships: CurrentUserAgencyMembership[]
+}> {
+  const supabase = await getSupabaseServerClientReadOnly()
+  const userId = await requireCurrentUserId(supabase)
+  const memberships = await listAgencyMembershipCandidates(supabase, userId)
+  return {
+    user_id: userId,
+    memberships,
+  }
+}
+
 export async function resolveCurrentUserAgency(input?: {
   activeAgencyId?: string | null
 }): Promise<ResolvedCurrentUserAgency> {
   const supabase = await getSupabaseServerClient()
+  const userId = await requireCurrentUserId(supabase)
+  const memberships = await listAgencyMembershipCandidates(supabase, userId)
+  const selectedMembership = selectCurrentAgencyMembership({
+    memberships,
+    activeAgencyId: input?.activeAgencyId ?? null,
+  })
+
+  return {
+    user_id: userId,
+    agency_id: selectedMembership.agency_id,
+    agency_name: selectedMembership.agency_name ?? null,
+    role: selectedMembership.role,
+  }
+}
+
+export async function resolveCurrentUserAgencyForPage(input?: {
+  activeAgencyId?: string | null
+}): Promise<ResolvedCurrentUserAgency> {
+  const supabase = await getSupabaseServerClientReadOnly()
   const userId = await requireCurrentUserId(supabase)
   const memberships = await listAgencyMembershipCandidates(supabase, userId)
   const selectedMembership = selectCurrentAgencyMembership({
