@@ -1,5 +1,6 @@
 import "server-only";
 
+import { randomUUID } from "node:crypto";
 import type { PoolClient } from "pg";
 
 import { getSuperadminPool } from "@/src/superadmin/db";
@@ -76,6 +77,15 @@ export type CreateAgencyResult = {
   };
 };
 
+type OrganizationType = "agency" | "client" | "internal";
+
+export type OrganizationInsertPayload = {
+  id: string;
+  name: string;
+  agency_id: string;
+  organization_type: OrganizationType;
+};
+
 function normalizeText(value: string | null | undefined): string {
   return String(value ?? "").trim();
 }
@@ -111,6 +121,30 @@ function normalizeSlug(value: string | null | undefined): string {
     throw new AgencyProvisioningError("agencySlug must contain lowercase letters, numbers, and single hyphen separators");
   }
   return normalized;
+}
+
+function createProvisioningId(): string {
+  const id = randomUUID();
+  if (!UUID_RE.test(id)) {
+    throw new AgencyProvisioningError("failed to generate valid provisioning id");
+  }
+  return id;
+}
+
+export function buildOrganizationInsertPayload(input: {
+  name: string;
+  agencyId: string;
+  organizationType: OrganizationType;
+}): OrganizationInsertPayload {
+  const name = normalizeText(input.name);
+  if (!name) throw new AgencyProvisioningError("organization name is required");
+  const agencyId = normalizeUuid(input.agencyId, "agencyId");
+  return {
+    id: createProvisioningId(),
+    name,
+    agency_id: agencyId,
+    organization_type: input.organizationType,
+  };
 }
 
 async function ensureAgencySlugAvailable(client: PoolClient, agencySlug: string): Promise<void> {
@@ -210,10 +244,12 @@ export async function createAgency(input: CreateAgencyInput): Promise<CreateAgen
     const baseMessage = error instanceof Error ? error.message : String(error);
     if (deleteResult.error) {
       throw new AgencyProvisioningError(
-        `provisioning failed after invite; rollback failed for invited owner user ${invitedUserId}: ${baseMessage}`,
+        `provisioning failed after invite; auth rollback failed for invited owner user ${invitedUserId} (${ownerEmail}). manual cleanup required (check auth.users and related rows before retry): ${baseMessage}`,
       );
     }
-    throw new AgencyProvisioningError(`provisioning failed after invite; invite rollback completed: ${baseMessage}`);
+    throw new AgencyProvisioningError(
+      `provisioning failed after invite; auth rollback completed via deleteUser for invited owner user ${invitedUserId} (${ownerEmail}). verify the user is absent in auth.users before retrying: ${baseMessage}`,
+    );
   }
 }
 
@@ -235,44 +271,57 @@ export async function provisionAgency(input: ProvisionAgencyInput): Promise<Prov
 
     await ensureAgencySlugAvailable(client, agencySlug);
 
+    const agencyId = createProvisioningId();
     const agencyInsert = await client.query<{ id: string; name: string; slug: string }>(
       `
-        insert into public.agencies (name, slug, is_home_agency)
-        values ($1::text, $2::text, false)
+        insert into public.agencies (id, name, slug, is_home_agency)
+        values ($1::uuid, $2::text, $3::text, false)
         returning id::text as id, name::text as name, slug::text as slug
       `,
-      [agencyName, agencySlug],
+      [agencyId, agencyName, agencySlug],
     );
     const agency = agencyInsert.rows[0];
     if (!agency) throw new AgencyProvisioningError("failed to create agency record");
 
+    const agencyOrganizationInsertPayload = buildOrganizationInsertPayload({
+      name: `${agencyName} Agency`,
+      agencyId: agency.id,
+      organizationType: "agency",
+    });
     const agencyOrganizationInsert = await client.query<{ id: string; name: string }>(
       `
-        insert into public.organizations (name, agency_id, organization_type)
-        values ($1::text, $2::uuid, 'agency'::public.organization_type_enum)
+        insert into public.organizations (id, name, agency_id, organization_type)
+        values ($1::uuid, $2::text, $3::uuid, $4::public.organization_type_enum)
         returning id::text as id, name::text as name
       `,
-      [`${agencyName} Agency`, agency.id],
+      [
+        agencyOrganizationInsertPayload.id,
+        agencyOrganizationInsertPayload.name,
+        agencyOrganizationInsertPayload.agency_id,
+        agencyOrganizationInsertPayload.organization_type,
+      ],
     );
     const agencyOrganization = agencyOrganizationInsert.rows[0];
     if (!agencyOrganization) throw new AgencyProvisioningError("failed to create agency organization");
 
+    const membershipId = createProvisioningId();
     await client.query(
       `
-        insert into public.memberships (user_id, organization_id, org_id, role)
-        values ($1::uuid, $2::uuid, $2::uuid, $3::public.membership_role_enum)
+        insert into public.memberships (id, user_id, organization_id, org_id, role)
+        values ($1::uuid, $2::uuid, $3::uuid, $3::uuid, $4::public.membership_role_enum)
         on conflict (organization_id, user_id)
         do update set
           role = excluded.role,
           org_id = excluded.org_id
       `,
-      [ownerUserId, agencyOrganization.id, ownerRole],
+      [membershipId, ownerUserId, agencyOrganization.id, ownerRole],
     );
 
+    const billingAccountId = createProvisioningId();
     const billingAccountInsert = await client.query<{ id: string; status: string; billing_mode: string }>(
       `
-        insert into public.billing_accounts (agency_id, billing_mode, status)
-        values ($1::uuid, 'agency_pays', 'active')
+        insert into public.billing_accounts (id, agency_id, billing_mode, status)
+        values ($1::uuid, $2::uuid, 'agency_pays', 'active')
         on conflict (agency_id)
         do update set
           billing_mode = excluded.billing_mode,
@@ -280,23 +329,24 @@ export async function provisionAgency(input: ProvisionAgencyInput): Promise<Prov
           updated_at = now()
         returning id::text as id, status::text as status, billing_mode::text as billing_mode
       `,
-      [agency.id],
+      [billingAccountId, agency.id],
     );
     const billingAccount = billingAccountInsert.rows[0];
     if (!billingAccount) throw new AgencyProvisioningError("failed to create billing account");
 
+    const agencyCostCenterId = createProvisioningId();
     const agencyCostCenterInsert = await client.query<{ id: string }>(
       `
-        insert into public.cost_centers (type, entity_id, parent_id)
-        values ('agency', $1::uuid, null)
+        insert into public.cost_centers (id, type, entity_id, parent_id)
+        values ($1::uuid, 'agency', $2::uuid, null)
         on conflict do nothing
         returning id::text as id
       `,
-      [agency.id],
+      [agencyCostCenterId, agency.id],
     );
 
-    let agencyCostCenterId = agencyCostCenterInsert.rows[0]?.id ?? null;
-    if (!agencyCostCenterId) {
+    let resolvedAgencyCostCenterId = agencyCostCenterInsert.rows[0]?.id ?? null;
+    if (!resolvedAgencyCostCenterId) {
       const existingCostCenter = await client.query<{ id: string }>(
         `
           select id::text as id
@@ -308,31 +358,42 @@ export async function provisionAgency(input: ProvisionAgencyInput): Promise<Prov
         `,
         [agency.id],
       );
-      agencyCostCenterId = existingCostCenter.rows[0]?.id ?? null;
+      resolvedAgencyCostCenterId = existingCostCenter.rows[0]?.id ?? null;
     }
-    if (!agencyCostCenterId) throw new AgencyProvisioningError("failed to create agency cost center");
+    if (!resolvedAgencyCostCenterId) throw new AgencyProvisioningError("failed to create agency cost center");
 
     let defaultClientOrganization: ProvisionAgencyResult["defaultClientOrganization"] = null;
     if (defaultClientName) {
+      const clientOrganizationInsertPayload = buildOrganizationInsertPayload({
+        name: defaultClientName,
+        agencyId: agency.id,
+        organizationType: "client",
+      });
       const clientOrgInsert = await client.query<{ id: string; name: string }>(
         `
-          insert into public.organizations (name, agency_id, organization_type)
-          values ($1::text, $2::uuid, 'client'::public.organization_type_enum)
+          insert into public.organizations (id, name, agency_id, organization_type)
+          values ($1::uuid, $2::text, $3::uuid, $4::public.organization_type_enum)
           returning id::text as id, name::text as name
         `,
-        [defaultClientName, agency.id],
+        [
+          clientOrganizationInsertPayload.id,
+          clientOrganizationInsertPayload.name,
+          clientOrganizationInsertPayload.agency_id,
+          clientOrganizationInsertPayload.organization_type,
+        ],
       );
       const createdClientOrg = clientOrgInsert.rows[0];
       if (!createdClientOrg) throw new AgencyProvisioningError("failed to create default client organization");
 
+      const clientCostCenterInsertId = createProvisioningId();
       const clientCostCenterInsert = await client.query<{ id: string }>(
         `
-          insert into public.cost_centers (type, entity_id, parent_id)
-          values ('client', $1::uuid, $2::uuid)
+          insert into public.cost_centers (id, type, entity_id, parent_id)
+          values ($1::uuid, 'client', $2::uuid, $3::uuid)
           on conflict do nothing
           returning id::text as id
         `,
-        [createdClientOrg.id, agencyCostCenterId],
+        [clientCostCenterInsertId, createdClientOrg.id, resolvedAgencyCostCenterId],
       );
 
       let clientCostCenterId = clientCostCenterInsert.rows[0]?.id ?? null;
@@ -385,7 +446,7 @@ export async function provisionAgency(input: ProvisionAgencyInput): Promise<Prov
         billing_mode: billingAccount.billing_mode,
       },
       agencyCostCenter: {
-        id: agencyCostCenterId,
+        id: resolvedAgencyCostCenterId,
       },
       defaultClientOrganization,
     };

@@ -58,3 +58,27 @@
 
 ## 7. Next Step
 - Add superadmin-side agency membership invite/resend/role tooling for owner/admin onboarding continuity.
+
+## 8. Follow-Up Fix (2026-03-30): organizations.id NULL Provisioning Failure
+- Root cause identified in `gnr8/agency/agency-provisioning-service.ts`:
+  - transactional `provisionAgency(...)` inserted into `public.organizations` without explicitly passing `id`.
+  - in environments where legacy `public.organizations.id` has no default generator, inserts failed with:
+    - `null value in column "id" of relation "organizations" violates not-null constraint`.
+- Minimal safe fix applied in provisioning service:
+  - explicit UUID generation in application code (`randomUUID()`) for all provisioning inserts that previously relied on DB defaults:
+    - `public.agencies`
+    - `public.organizations` (agency + default client)
+    - `public.memberships`
+    - `public.billing_accounts`
+    - `public.cost_centers` (agency + client)
+  - added `buildOrganizationInsertPayload(...)` helper with validation so organization insert shape always includes:
+    - `id`
+    - `name`
+    - `agency_id`
+    - `organization_type`
+- Partial-failure invite/provisioning handling clarity improved:
+  - if provisioning fails after invite and delete rollback fails, error now explicitly states manual cleanup is required and points operators to verify `auth.users` before retry.
+  - if rollback succeeds, error now explicitly states rollback was executed via `deleteUser(...)` and recommends verification before retry.
+- Validation added:
+  - new test file: `gnr8/agency/agency-provisioning-service.test.ts`
+  - covers organization payload generation for both agency/client inserts and invalid input rejection.
