@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 
 import { parseAgencyActionContextError, requireAgencyActionContext } from '@/app/api/gnr8/agency/_lib/agency-action-access'
+import { canPerformAction } from '@/src/auth/rbac'
 import { getSupabaseServerClientMutating } from '@/src/auth/supabase-server-mutating'
 
 type Body = {
@@ -73,8 +74,8 @@ export async function POST(request: Request) {
 
     const currentSlug = normalizeSlug(currentAgencyResult.data?.slug)
     const isSlugChange = slug !== currentSlug
-    if (isSlugChange && actionContext.role !== 'owner') {
-      return NextResponse.json({ error: 'Only agency owner can change agency slug.' }, { status: 403 })
+    if (isSlugChange && !canPerformAction(actionContext.role, 'edit_agency_slug')) {
+      return NextResponse.json({ error: 'Your role is not authorized to change agency slug.' }, { status: 403 })
     }
 
     const existingSlug = await supabase

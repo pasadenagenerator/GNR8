@@ -118,22 +118,40 @@ export default async function SuperadminAgencyProvisioningPage() {
                     </td>
                     <td style={{ padding: "10px 6px" }}>
                       {agency.id ? (
-                        <Link
-                          href={`/gnr8/admin/agencies/${encodeURIComponent(agency.id)}/dashboard`}
-                          style={{
-                            display: "inline-flex",
-                            alignItems: "center",
-                            padding: "6px 10px",
-                            borderRadius: 8,
-                            border: "1px solid #cbd5e1",
-                            background: "#fff",
-                            color: "#0f172a",
-                            textDecoration: "none",
-                            fontSize: 12,
-                          }}
-                        >
-                          Agency Dashboard
-                        </Link>
+                        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                          <Link
+                            href={`/gnr8/admin/agencies/${encodeURIComponent(agency.id)}/dashboard`}
+                            style={{
+                              display: "inline-flex",
+                              alignItems: "center",
+                              padding: "6px 10px",
+                              borderRadius: 8,
+                              border: "1px solid #cbd5e1",
+                              background: "#fff",
+                              color: "#0f172a",
+                              textDecoration: "none",
+                              fontSize: 12,
+                            }}
+                          >
+                            Agency Dashboard
+                          </Link>
+                          <Link
+                            href={`/gnr8/admin/agencies/${encodeURIComponent(agency.id)}/settings`}
+                            style={{
+                              display: "inline-flex",
+                              alignItems: "center",
+                              padding: "6px 10px",
+                              borderRadius: 8,
+                              border: "1px solid #cbd5e1",
+                              background: "#fff",
+                              color: "#0f172a",
+                              textDecoration: "none",
+                              fontSize: 12,
+                            }}
+                          >
+                            Agency Settings
+                          </Link>
+                        </div>
                       ) : (
                         <span style={{ color: "#94a3b8", fontSize: 12 }}>Unavailable</span>
                       )}

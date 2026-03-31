@@ -4,6 +4,8 @@ export type AgencyRole = AgencyMembershipRole | 'superadmin'
 export type AgencyAction =
   | 'view_dashboard'
   | 'edit_agency_settings'
+  | 'edit_agency_slug'
+  | 'edit_owner_profile'
   | 'change_password'
   | 'delete_agency'
   | 'run_migration'
@@ -34,6 +36,8 @@ const ACTION_MATRIX: Record<AgencyRole, Record<AgencyAction, boolean>> = {
   superadmin: {
     view_dashboard: true,
     edit_agency_settings: true,
+    edit_agency_slug: true,
+    edit_owner_profile: true,
     change_password: true,
     delete_agency: true,
     run_migration: true,
@@ -45,6 +49,8 @@ const ACTION_MATRIX: Record<AgencyRole, Record<AgencyAction, boolean>> = {
   owner: {
     view_dashboard: true,
     edit_agency_settings: true,
+    edit_agency_slug: true,
+    edit_owner_profile: true,
     change_password: true,
     delete_agency: true,
     run_migration: true,
@@ -56,6 +62,8 @@ const ACTION_MATRIX: Record<AgencyRole, Record<AgencyAction, boolean>> = {
   admin: {
     view_dashboard: true,
     edit_agency_settings: true,
+    edit_agency_slug: false,
+    edit_owner_profile: false,
     change_password: true,
     delete_agency: false,
     run_migration: true,
@@ -67,6 +75,8 @@ const ACTION_MATRIX: Record<AgencyRole, Record<AgencyAction, boolean>> = {
   member: {
     view_dashboard: true,
     edit_agency_settings: false,
+    edit_agency_slug: false,
+    edit_owner_profile: false,
     change_password: true,
     delete_agency: false,
     run_migration: false,

@@ -6,7 +6,7 @@ import { FormEvent, useMemo, useState } from 'react'
 type MembershipOption = {
   agency_id: string
   agency_name: string | null
-  role: 'owner' | 'admin' | 'member'
+  role: 'owner' | 'admin' | 'member' | 'superadmin'
 }
 
 type Props = {
@@ -15,12 +15,16 @@ type Props = {
   agencySlug: string
   requestedAgencyId: string | null
   memberships: MembershipOption[]
-  role: 'owner' | 'admin' | 'member'
+  role: 'owner' | 'admin' | 'member' | 'superadmin'
   canEditAgencySettings: boolean
+  canEditAgencySlug: boolean
+  canEditOwnerProfile: boolean
   canDeleteAgency: boolean
   canChangePassword: boolean
   ownerName: string
   ownerEmail: string
+  actorMode?: 'membership' | 'admin_view'
+  adminBackToPath?: string
 }
 
 type FormStatus = 'idle' | 'saving' | 'success' | 'error'
@@ -261,6 +265,11 @@ export default function AgencySettingsClient(props: Props) {
   const currentAgencyDashboardPath = props.requestedAgencyId
     ? `/gnr8/agency?agency=${encodeURIComponent(props.requestedAgencyId)}`
     : `/gnr8/agency?agency=${encodeURIComponent(props.agencyId)}`
+  const actorMode = props.actorMode ?? 'membership'
+  const isAdminView = actorMode === 'admin_view'
+  const backToPath = isAdminView
+    ? props.adminBackToPath || `/gnr8/admin/agencies/${encodeURIComponent(props.agencyId)}/dashboard`
+    : currentAgencyDashboardPath
 
   return (
     <main
@@ -278,9 +287,46 @@ export default function AgencySettingsClient(props: Props) {
         <p style={{ margin: 0, color: '#334155' }}>
           Manage agency profile, owner profile, security settings, and destructive delete controls.
         </p>
+        {isAdminView ? (
+          <section
+            style={{
+              border: '1px solid #7dd3fc',
+              borderRadius: 12,
+              background: '#f0f9ff',
+              padding: 12,
+              color: '#0c4a6e',
+            }}
+          >
+            <div
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                padding: '4px 10px',
+                borderRadius: 999,
+                border: '1px solid #7dd3fc',
+                background: '#e0f2fe',
+                fontSize: 12,
+                fontWeight: 700,
+              }}
+            >
+              Admin View
+            </div>
+            <div style={{ marginTop: 8, display: 'grid', gap: 4, fontSize: 13 }}>
+              <div>
+                <strong>Agency Name:</strong> {props.agencyName}
+              </div>
+              <div>
+                <strong>Agency ID:</strong> {props.agencyId}
+              </div>
+              <div>
+                <strong>Actor Mode:</strong> admin_view
+              </div>
+            </div>
+          </section>
+        ) : null}
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           <Link
-            href={currentAgencyDashboardPath}
+            href={backToPath}
             style={{
               display: 'inline-flex',
               alignItems: 'center',
@@ -294,10 +340,10 @@ export default function AgencySettingsClient(props: Props) {
               fontSize: 13,
             }}
           >
-            Back to Dashboard
+            {isAdminView ? 'Back to Admin Dashboard' : 'Back to Dashboard'}
           </Link>
 
-          {props.memberships.length > 1
+          {!isAdminView && props.memberships.length > 1
             ? props.memberships.map((membership) => {
                 const isActive = membership.agency_id === props.agencyId
                 return (
@@ -357,12 +403,14 @@ export default function AgencySettingsClient(props: Props) {
               value={agencySlug}
               onChange={(event) => setAgencySlug(event.target.value.toLowerCase())}
               style={fieldStyle()}
-              disabled={agencyStatus === 'saving' || props.role !== 'owner'}
+              disabled={agencyStatus === 'saving' || !props.canEditAgencySlug}
               maxLength={120}
               required
             />
-            {props.role !== 'owner' ? (
-              <span style={{ fontSize: 12, color: '#475569' }}>Slug changes are restricted to the agency owner.</span>
+            {!props.canEditAgencySlug ? (
+              <span style={{ fontSize: 12, color: '#475569' }}>
+                Slug changes are restricted by your role permissions.
+              </span>
             ) : null}
           </label>
 
@@ -380,7 +428,7 @@ export default function AgencySettingsClient(props: Props) {
         </form>
       </section>
 
-      {props.role === 'owner' ? (
+      {props.canEditOwnerProfile ? (
         <section style={{ ...sectionStyle(), marginTop: 16 }}>
           <h2 style={{ marginTop: 0, color: '#0f172a' }}>Owner Profile</h2>
           <form onSubmit={onOwnerSave} style={{ display: 'grid', gap: 12 }}>

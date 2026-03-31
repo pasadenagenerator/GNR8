@@ -182,6 +182,8 @@ export default async function AgencySettingsPage(props: { searchParams?: Promise
       memberships={availableAgencyMemberships}
       role={currentUserAgency.role}
       canEditAgencySettings={canPerformAction(currentUserAgency.role, 'edit_agency_settings')}
+      canEditAgencySlug={canPerformAction(currentUserAgency.role, 'edit_agency_slug')}
+      canEditOwnerProfile={canPerformAction(currentUserAgency.role, 'edit_owner_profile')}
       canDeleteAgency={canPerformAction(currentUserAgency.role, 'delete_agency')}
       canChangePassword={canPerformAction(currentUserAgency.role, 'change_password')}
       ownerName={ownerName}

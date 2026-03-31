@@ -28,13 +28,9 @@ export async function POST(request: Request) {
     }
 
     const actionContext = await requireAgencyActionContext({
-      action: 'edit_agency_settings',
+      action: 'edit_owner_profile',
       requestedAgencyId,
     })
-
-    if (actionContext.role !== 'owner') {
-      return NextResponse.json({ error: 'Only agency owner can update owner profile settings.' }, { status: 403 })
-    }
 
     if (actionContext.agencyId !== requestedAgencyId && requestedAgencyId.length > 0) {
       return NextResponse.json({ error: 'Agency scope mismatch for requested update.' }, { status: 403 })

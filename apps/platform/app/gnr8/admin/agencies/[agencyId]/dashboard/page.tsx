@@ -177,7 +177,7 @@ export default async function SuperadminAgencyDashboardPage(props: PageProps) {
             Back to Agencies
           </Link>
           <Link
-            href={`/gnr8/agency/settings?agency=${encodeURIComponent(agencyId)}`}
+            href={`/gnr8/admin/agencies/${encodeURIComponent(agencyId)}/settings`}
             style={{
               display: "inline-flex",
               alignItems: "center",
@@ -190,7 +190,7 @@ export default async function SuperadminAgencyDashboardPage(props: PageProps) {
               fontSize: 12,
             }}
           >
-            Open Agency Settings
+            Agency Settings
           </Link>
         </div>
       </section>

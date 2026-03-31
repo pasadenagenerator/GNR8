@@ -30,4 +30,11 @@ test('superadmin resolves in admin_view context regardless of membership', () =>
 
   assert.equal(role, 'superadmin')
   assert.equal(canPerformAction(role, 'publish'), true)
+  assert.equal(canPerformAction(role, 'edit_agency_slug'), true)
+  assert.equal(canPerformAction(role, 'edit_owner_profile'), true)
+})
+
+test('admin cannot edit agency slug or owner profile', () => {
+  assert.equal(canPerformAction('admin', 'edit_agency_slug'), false)
+  assert.equal(canPerformAction('admin', 'edit_owner_profile'), false)
 })
