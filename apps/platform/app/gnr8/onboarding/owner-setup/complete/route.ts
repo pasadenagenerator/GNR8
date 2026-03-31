@@ -118,6 +118,27 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: membershipUpdateResult.error.message }, { status: 400 })
     }
 
+    const ownerSetupAfterUpdate = await getOwnerSetupStatusForAgency({
+      userId: currentUserAgency.user_id,
+      agencyId: currentUserAgency.agency_id,
+    })
+
+    if (!ownerSetupAfterUpdate.hasOwnerMembership || !ownerSetupAfterUpdate.isCompleted) {
+      return NextResponse.json(
+        {
+          error: 'Owner setup completion could not be verified. Try again.',
+          diagnostics: {
+            user_id: currentUserAgency.user_id,
+            agency_id: currentUserAgency.agency_id,
+            membership_ids_before_update: ownerSetup.membershipIds,
+            membership_ids_after_update: ownerSetupAfterUpdate.membershipIds,
+            owner_setup_completed_after_update: ownerSetupAfterUpdate.isCompleted,
+          },
+        },
+        { status: 409 },
+      )
+    }
+
     return NextResponse.json(
       {
         ok: true,

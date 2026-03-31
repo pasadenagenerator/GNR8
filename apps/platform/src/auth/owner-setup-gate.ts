@@ -29,6 +29,12 @@ type OwnerMembershipContext = {
   owner_setup_completed: boolean
 }
 
+export type OwnerSetupStatusForAgency = {
+  hasOwnerMembership: boolean
+  isCompleted: boolean
+  membershipIds: string[]
+}
+
 function normalizeText(value: unknown): string {
   return String(value ?? '').trim()
 }
@@ -55,38 +61,46 @@ async function requireCurrentUserId(supabase: SupabaseClient): Promise<string> {
 }
 
 async function listMembershipRows(supabase: SupabaseClient, userId: string): Promise<MembershipRow[]> {
-  const preferred = await supabase
-    .from('memberships')
-    .select('id,role,organization_id,org_id,owner_setup_completed')
-    .eq('user_id', userId)
+  const attempts: Array<{
+    select: string
+    inferOwnerSetupCompletedAsFalse: boolean
+  }> = [
+    {
+      select: 'id,role,organization_id,org_id,owner_setup_completed',
+      inferOwnerSetupCompletedAsFalse: false,
+    },
+    {
+      select: 'id,role,org_id,owner_setup_completed',
+      inferOwnerSetupCompletedAsFalse: false,
+    },
+    {
+      select: 'id,role,organization_id,org_id',
+      inferOwnerSetupCompletedAsFalse: true,
+    },
+    {
+      select: 'id,role,org_id',
+      inferOwnerSetupCompletedAsFalse: true,
+    },
+  ]
 
-  if (preferred.error == null) {
-    return Array.isArray(preferred.data) ? (preferred.data as MembershipRow[]) : []
+  let lastError: Error | null = null
+
+  for (const attempt of attempts) {
+    const result = await supabase.from('memberships').select(attempt.select).eq('user_id', userId)
+    if (result.error) {
+      lastError = new Error(result.error.message)
+      continue
+    }
+
+    const rows = Array.isArray(result.data) ? (result.data as unknown as MembershipRow[]) : []
+    if (!attempt.inferOwnerSetupCompletedAsFalse) {
+      return rows
+    }
+
+    return rows.map((row) => ({ ...row, owner_setup_completed: false }))
   }
 
-  const fallback = await supabase
-    .from('memberships')
-    .select('id,role,organization_id,org_id')
-    .eq('user_id', userId)
-
-  if (fallback.error == null) {
-    return Array.isArray(fallback.data)
-      ? (fallback.data as MembershipRow[]).map((row) => ({ ...row, owner_setup_completed: false }))
-      : []
-  }
-
-  const legacyFallback = await supabase
-    .from('memberships')
-    .select('id,role,org_id')
-    .eq('user_id', userId)
-
-  if (legacyFallback.error) {
-    throw new Error(`Membership lookup failed: ${legacyFallback.error.message}`)
-  }
-
-  return Array.isArray(legacyFallback.data)
-    ? (legacyFallback.data as MembershipRow[]).map((row) => ({ ...row, owner_setup_completed: false }))
-    : []
+  throw new Error(`Membership lookup failed: ${lastError?.message ?? 'unknown error'}`)
 }
 
 async function listOwnerMembershipContexts(supabase: SupabaseClient, userId: string): Promise<OwnerMembershipContext[]> {
@@ -153,12 +167,13 @@ async function listOwnerMembershipContexts(supabase: SupabaseClient, userId: str
     .filter((row): row is OwnerMembershipContext => row != null)
 }
 
-async function getOwnerSetupStatusForAgencyWithClient(
-  supabase: SupabaseClient,
-  input: { userId: string; agencyId: string },
-): Promise<{ hasOwnerMembership: boolean; isCompleted: boolean; membershipIds: string[] }> {
-  const contexts = await listOwnerMembershipContexts(supabase, input.userId)
-  const ownerMembershipsForAgency = contexts.filter((context) => context.agency_id === input.agencyId)
+export function evaluateOwnerSetupStatusForAgency(input: {
+  contexts: OwnerMembershipContext[]
+  agencyId: string
+}): OwnerSetupStatusForAgency {
+  const contexts = input.contexts
+  const agencyId = input.agencyId
+  const ownerMembershipsForAgency = contexts.filter((context) => context.agency_id === agencyId)
 
   if (ownerMembershipsForAgency.length === 0) {
     return {
@@ -175,10 +190,21 @@ async function getOwnerSetupStatusForAgencyWithClient(
   }
 }
 
+async function getOwnerSetupStatusForAgencyWithClient(
+  supabase: SupabaseClient,
+  input: { userId: string; agencyId: string },
+): Promise<OwnerSetupStatusForAgency> {
+  const contexts = await listOwnerMembershipContexts(supabase, input.userId)
+  return evaluateOwnerSetupStatusForAgency({
+    contexts,
+    agencyId: input.agencyId,
+  })
+}
+
 export async function getOwnerSetupStatusForAgencyForPage(input: {
   userId: string
   agencyId: string
-}): Promise<{ hasOwnerMembership: boolean; isCompleted: boolean; membershipIds: string[] }> {
+}): Promise<OwnerSetupStatusForAgency> {
   const supabase = await getSupabaseServerClientReadOnly()
   return getOwnerSetupStatusForAgencyWithClient(supabase, input)
 }
@@ -186,7 +212,7 @@ export async function getOwnerSetupStatusForAgencyForPage(input: {
 export async function getOwnerSetupStatusForAgency(input: {
   userId: string
   agencyId: string
-}): Promise<{ hasOwnerMembership: boolean; isCompleted: boolean; membershipIds: string[] }> {
+}): Promise<OwnerSetupStatusForAgency> {
   const supabase = await getSupabaseServerClientMutating()
   return getOwnerSetupStatusForAgencyWithClient(supabase, input)
 }

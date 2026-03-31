@@ -56,3 +56,25 @@
   - owner setup completion route
   - `/gnr8/agency` onboarding bypass prevention
 - Add optional “active agency selector” continuity on onboarding route for multi-agency owners.
+
+## 7. Redirect Loop Root Cause (2026-03-31)
+- The owner setup gate used a compatibility fallback query chain for `memberships`.
+- In legacy-schema fallback paths (`org_id`-only select variants), the gate forced `owner_setup_completed=false` because the fallback omitted that column.
+- As a result, setup completion writes could succeed while subsequent gate reads still inferred incomplete status, causing:
+  - post-submit no unlock of `/gnr8/agency`
+  - direct `/gnr8/agency` access redirecting back to `/gnr8/onboarding/owner-setup?agency=<id>`
+
+## 8. Final Resolution Strategy (2026-03-31)
+- Kept onboarding gate and fail-closed behavior intact.
+- Updated membership query fallback strategy in `owner-setup-gate` to preserve `owner_setup_completed` whenever available, including legacy `org_id` paths.
+- Kept canonical membership targeting agency-scoped and membership-derived:
+  - status check and membership-id targeting are now driven by a shared evaluator (`evaluateOwnerSetupStatusForAgency`).
+  - completion write path still updates exactly the agency-scoped owner membership IDs returned by that resolver.
+- Added post-write verification in owner setup completion route:
+  - re-reads owner setup status for the same resolved `user_id + agency_id`
+  - fails closed (`409`) with diagnostics (`user_id`, `agency_id`, membership IDs before/after, completion state) when completion cannot be confirmed.
+- Added targeted tests around agency-scoped owner setup status evaluation:
+  - completion unlock for selected agency
+  - wrong-agency membership not unlocking
+  - multi-membership selected-agency ID targeting
+  - completion transition preventing redirect-loop state.
