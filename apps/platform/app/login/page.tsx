@@ -18,20 +18,49 @@ export default function LoginPage() {
     setBusy(true)
     setError(null)
 
-    const { error } = await supabase.auth.signInWithPassword({
-      email: email.trim(),
-      password,
-    })
+    try {
+      const { error } = await supabase.auth.signInWithPassword({
+        email: email.trim(),
+        password,
+      })
 
-    setBusy(false)
+      if (error) {
+        setBusy(false)
+        setError(error.message)
+        return
+      }
 
-    if (error) {
-      setError(error.message)
-      return
+      const nextPath = typeof window === 'undefined' ? '' : String(new URL(window.location.href).searchParams.get('next') ?? '').trim()
+      const resolver = await fetch(`/api/auth/post-login-home${nextPath ? `?next=${encodeURIComponent(nextPath)}` : ''}`, {
+        method: 'GET',
+        credentials: 'include',
+        headers: {
+          Accept: 'application/json',
+        },
+        cache: 'no-store',
+      })
+      const payload = (await resolver.json().catch(() => null)) as { target?: unknown; error?: unknown } | null
+
+      if (!resolver.ok) {
+        setBusy(false)
+        setError(String(payload?.error ?? 'Sign-in succeeded, but home routing could not be resolved.'))
+        return
+      }
+
+      const target = typeof payload?.target === 'string' && payload.target.startsWith('/') ? payload.target : null
+      if (!target) {
+        setBusy(false)
+        setError('Sign-in succeeded, but home routing returned an invalid target.')
+        return
+      }
+
+      setBusy(false)
+      router.replace(target)
+      router.refresh()
+    } catch (cause) {
+      setBusy(false)
+      setError(cause instanceof Error ? cause.message : 'Failed to complete sign-in.')
     }
-
-    router.push('/admin')
-    router.refresh()
   }
 
   return (
