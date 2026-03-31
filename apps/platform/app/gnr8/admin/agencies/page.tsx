@@ -85,13 +85,14 @@ export default async function SuperadminAgencyProvisioningPage() {
               <tr style={{ textAlign: "left", borderBottom: "1px solid #e5e7eb" }}>
                 <th style={{ padding: "8px 6px" }}>Name</th>
                 <th style={{ padding: "8px 6px" }}>Slug</th>
+                <th style={{ padding: "8px 6px" }}>Agency ID</th>
                 <th style={{ padding: "8px 6px" }}>Created At</th>
               </tr>
             </thead>
             <tbody>
               {agencies.length === 0 ? (
                 <tr>
-                  <td style={{ padding: "10px 6px", color: "#6b7280" }} colSpan={3}>
+                  <td style={{ padding: "10px 6px", color: "#6b7280" }} colSpan={4}>
                     No agencies available.
                   </td>
                 </tr>
@@ -100,6 +101,16 @@ export default async function SuperadminAgencyProvisioningPage() {
                   <tr key={`${agency.id ?? "agency"}-${index}`} style={{ borderBottom: "1px solid #f3f4f6" }}>
                     <td style={{ padding: "10px 6px" }}>{String(agency.name ?? "").trim() || "-"}</td>
                     <td style={{ padding: "10px 6px" }}>{String(agency.slug ?? "").trim() || "-"}</td>
+                    <td
+                      style={{
+                        padding: "10px 6px",
+                        fontFamily:
+                          "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, Liberation Mono, Courier New, monospace",
+                      }}
+                      title={String(agency.id ?? "").trim() || undefined}
+                    >
+                      {String(agency.id ?? "").trim() || "-"}
+                    </td>
                     <td style={{ padding: "10px 6px" }}>
                       {agency.created_at ? new Date(agency.created_at).toISOString() : "-"}
                     </td>
