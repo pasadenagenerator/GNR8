@@ -2,15 +2,20 @@
 
 import type { EmailOtpType } from '@supabase/supabase-js'
 import { useEffect, useMemo, useState } from 'react'
-import { useRouter } from 'next/navigation'
 import { getSupabaseBrowserClient } from '@/src/supabase/browser'
 
 type CallbackStatus = 'checking' | 'done' | 'error'
 
+const AUTH_CALLBACK_PATH = '/auth/callback'
+const DEFAULT_AUTH_SUCCESS_PATH = '/gnr8/agency'
+
 function normalizeNextPath(candidate: string | null): string {
   const value = String(candidate ?? '').trim()
-  if (!value.startsWith('/')) return '/admin'
-  if (value.startsWith('//')) return '/admin'
+  if (!value.startsWith('/')) return DEFAULT_AUTH_SUCCESS_PATH
+  if (value.startsWith('//')) return DEFAULT_AUTH_SUCCESS_PATH
+  if (value === AUTH_CALLBACK_PATH || value.startsWith(`${AUTH_CALLBACK_PATH}?`)) {
+    return DEFAULT_AUTH_SUCCESS_PATH
+  }
   return value
 }
 
@@ -31,7 +36,6 @@ function asEmailOtpType(rawType: string | null): EmailOtpType | null {
 }
 
 export default function AuthCallbackPage() {
-  const router = useRouter()
   const supabase = useMemo(() => getSupabaseBrowserClient(), [])
   const [status, setStatus] = useState<CallbackStatus>('checking')
   const [error, setError] = useState<string | null>(null)
@@ -88,16 +92,17 @@ export default function AuthCallbackPage() {
           throw new Error('Invite or auth link is invalid or expired. Please request a new invite.')
         }
 
-        window.history.replaceState({}, document.title, '/auth/callback')
+        window.history.replaceState({}, document.title, AUTH_CALLBACK_PATH)
         setStatus('done')
-        router.replace(nextPath)
-        router.refresh()
+        window.setTimeout(() => {
+          window.location.replace(nextPath)
+        }, 0)
       } catch (cause) {
         setStatus('error')
         setError(cause instanceof Error ? cause.message : 'Failed to complete auth callback.')
       }
     })()
-  }, [router, supabase])
+  }, [supabase])
 
   return (
     <main style={{ maxWidth: 640, margin: '48px auto', padding: 16 }}>

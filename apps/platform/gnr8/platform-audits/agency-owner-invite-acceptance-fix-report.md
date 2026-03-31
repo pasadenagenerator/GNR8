@@ -23,16 +23,25 @@
    - `setSession` for hash tokens (`access_token`, `refresh_token`)
    - `verifyOtp` for query `token_hash` + `type`
    - explicit query/hash auth errors rendered as user-facing auth error message
-3. On success, callback validates session and redirects to `/admin` (or safe `next` path when supplied).
+3. On success, callback validates session and performs deterministic client redirect with `window.location.replace(...)`:
+   - safe `next` query path when supplied
+   - explicit fallback to `/gnr8/agency`
+   - `/auth/callback` self-target `next` values are rejected and fall back to `/gnr8/agency`
 
-## 4. Governance Handling
+## 4. Redirect Hang Root Cause
+
+- Success state was reached and rendered (`Sign-in complete. Redirecting...`), but navigation relied on `router.replace(nextPath)` immediately followed by `router.refresh()`.
+- In this callback branch, that sequence could leave the callback page rendered without committing navigation, causing a visible success-state hang.
+- The flow therefore needed a hard, deterministic post-success redirect that does not depend on App Router transition timing.
+
+## 5. Governance Handling
 
 - Runtime governance behavior remains strict and unchanged globally.
 - The fix avoids routing invite acceptance through public runtime-governed root path by using dedicated app route `/auth/callback`.
 - The dedicated callback route is handled by Next app routing and is not served by the runtime artifact public resolver path that emits governance `403`.
 - No unrelated public paths were opened.
 
-## 5. Validation
+## 6. Validation
 
 - Static code validation completed for invite redirect wiring:
   - `inviteUserByEmail` now receives explicit `redirectTo` callback URL.
@@ -43,9 +52,10 @@
   - explicit auth errors with non-403 user-facing message.
 - Root auth auto-redirect behavior narrowed to password recovery (`type=recovery`) only.
 - Unit tests updated for callback redirect URL builder.
+- Callback success redirect path now uses deterministic client navigation (`window.location.replace`) with fallback route `/gnr8/agency`.
 - Remaining live validation step (manual): click fresh invite email link end-to-end in deployed env and confirm session and redirect behavior.
 
-## 6. Remaining Risks
+## 7. Remaining Risks
 
 - If environment app origin vars are not set, invite redirect falls back to `https://app.pasadenagenerator.com/auth/callback`; non-production environments may require setting `NEXT_PUBLIC_APP_URL` (or equivalent configured variable) to avoid mismatched host.
 - Truly expired/invalid invite links will still fail (expected), but now show auth callback error state rather than runtime governance `403`.
