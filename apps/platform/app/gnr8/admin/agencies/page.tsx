@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import Link from "next/link";
 
 import { requireSuperadminUserIdForPage } from "@/src/auth/require-superadmin-user-id";
 import { getSupabaseServiceRoleClient } from "@/src/supabase/service-role-server";
@@ -87,12 +88,13 @@ export default async function SuperadminAgencyProvisioningPage() {
                 <th style={{ padding: "8px 6px" }}>Slug</th>
                 <th style={{ padding: "8px 6px" }}>Agency ID</th>
                 <th style={{ padding: "8px 6px" }}>Created At</th>
+                <th style={{ padding: "8px 6px" }}>Actions</th>
               </tr>
             </thead>
             <tbody>
               {agencies.length === 0 ? (
                 <tr>
-                  <td style={{ padding: "10px 6px", color: "#6b7280" }} colSpan={4}>
+                  <td style={{ padding: "10px 6px", color: "#6b7280" }} colSpan={5}>
                     No agencies available.
                   </td>
                 </tr>
@@ -113,6 +115,28 @@ export default async function SuperadminAgencyProvisioningPage() {
                     </td>
                     <td style={{ padding: "10px 6px" }}>
                       {agency.created_at ? new Date(agency.created_at).toISOString() : "-"}
+                    </td>
+                    <td style={{ padding: "10px 6px" }}>
+                      {agency.id ? (
+                        <Link
+                          href={`/gnr8/admin/agencies/${encodeURIComponent(agency.id)}/dashboard`}
+                          style={{
+                            display: "inline-flex",
+                            alignItems: "center",
+                            padding: "6px 10px",
+                            borderRadius: 8,
+                            border: "1px solid #cbd5e1",
+                            background: "#fff",
+                            color: "#0f172a",
+                            textDecoration: "none",
+                            fontSize: 12,
+                          }}
+                        >
+                          Agency Dashboard
+                        </Link>
+                      ) : (
+                        <span style={{ color: "#94a3b8", fontSize: 12 }}>Unavailable</span>
+                      )}
                     </td>
                   </tr>
                 ))
