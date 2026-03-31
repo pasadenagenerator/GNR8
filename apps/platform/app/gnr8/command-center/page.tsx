@@ -358,6 +358,7 @@ export default async function CommandCenterPage(props: { searchParams?: Promise<
         rows={rows}
         clients={readModel.clients}
         agencyNameByAgencyId={Object.fromEntries(agencyNameByAgencyId.entries())}
+        actorRole="superadmin"
       />
     </main>
   );

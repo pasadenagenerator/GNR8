@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import fs from "node:fs";
 
+import { parseAgencyActionContextError, requireAgencyActionContext } from "@/app/api/gnr8/agency/_lib/agency-action-access";
 import { importHtmlToPage } from "@/gnr8/importer/html-to-page";
 import { migrateImportedPageToCanonicalDraft } from "@/gnr8/runtime/migration-factory";
 import { importPublicSinglePageUrlToSnapshot } from "@/gnr8/validation/runtime/url-single-page-import";
@@ -12,6 +13,7 @@ type Body = {
   slug?: string;
   actor?: string;
   title?: string;
+  agencyId?: string;
 };
 
 function parseHttpUrl(value: unknown): URL | null {
@@ -31,6 +33,11 @@ export async function POST(req: Request) {
   try {
     const body = (await req.json().catch(() => null)) as Body | null;
     if (!body) return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+
+    const actionContext = await requireAgencyActionContext({
+      action: "run_migration",
+      requestedAgencyId: body.agencyId,
+    });
 
     const url = parseHttpUrl(body.url);
     const slug = String(body.slug ?? "/").trim() || "/";
@@ -67,6 +74,7 @@ export async function POST(req: Request) {
       siteId: migrated.siteId,
       siteVersionId: migrated.siteVersionId,
       siteVersionNo: migrated.versionNo,
+      actor_mode: actionContext.actorMode,
       lifecycleState: "DRAFT",
       next: {
         readyForReview: `/api/gnr8/runtime/versions/${migrated.siteVersionId}/ready`,
@@ -74,6 +82,10 @@ export async function POST(req: Request) {
       },
     });
   } catch (error) {
+    const mapped = parseAgencyActionContextError(error);
+    if (mapped.status >= 400 && mapped.status < 500) {
+      return NextResponse.json({ error: mapped.message }, { status: mapped.status });
+    }
     const message = error instanceof Error ? error.message : "Internal server error";
     return NextResponse.json({ error: message }, { status: 500 });
   }

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 
 import type { BulkActionItemResult, BulkActionResult, BulkMigrationActionType } from "@/gnr8/command-center/bulk-action-types";
 import { runBulkMigrationActions } from "@/gnr8/command-center/bulk-migration-actions";
+import { canPerformAction, type AgencyRole } from "@/src/auth/rbac";
 import { SiteAssignmentControl } from "./site-assignment-control";
 
 type ClientOption = {
@@ -78,6 +79,7 @@ type Props = {
   rows: CommandCenterRow[];
   clients: ClientOption[];
   agencyNameByAgencyId: Record<string, string>;
+  actorRole: AgencyRole | null;
 };
 
 function shortId(value: string): string {
@@ -228,6 +230,11 @@ export function CommandCenterOpsTable(props: Props) {
   const [retrySelectionBySiteId, setRetrySelectionBySiteId] = useState<Record<string, boolean>>({});
   const [rowBusyBySiteId, setRowBusyBySiteId] = useState<Record<string, boolean>>({});
   const [rowErrorBySiteId, setRowErrorBySiteId] = useState<Record<string, string>>({});
+  const canRunMigration = canPerformAction(props.actorRole, "run_migration");
+  const canApproveMigration = canPerformAction(props.actorRole, "approve_migration");
+  const canPublish = canPerformAction(props.actorRole, "publish");
+  const canAssignClient = canPerformAction(props.actorRole, "assign_client");
+  const canRunBulkActions = canPerformAction(props.actorRole, "bulk_actions");
 
   const rowBySiteId = useMemo(() => {
     const next = new Map<string, CommandCenterRow>();
@@ -375,6 +382,18 @@ export function CommandCenterOpsTable(props: Props) {
   }
 
   async function runMigrationMutation(row: CommandCenterRow, action: RowAction): Promise<void> {
+    if (action === "import" || action === "generate_preview") {
+      if (!canRunMigration) {
+        throw new Error("Your role is not authorized to run migration actions.");
+      }
+    } else if (action === "approve") {
+      if (!canApproveMigration) {
+        throw new Error("Your role is not authorized to approve migrations.");
+      }
+    } else if (!canPublish) {
+      throw new Error("Your role is not authorized to publish migrations.");
+    }
+
     if (action === "import") {
       const importUrl = buildImportUrlFromDomain(row.summary.domain);
       if (!importUrl) {
@@ -388,6 +407,7 @@ export function CommandCenterOpsTable(props: Props) {
           url: importUrl,
           actor: "operator:command-center-import",
           slug: "/",
+          agencyId: row.summary.agency_id,
         }),
       });
 
@@ -454,6 +474,10 @@ export function CommandCenterOpsTable(props: Props) {
   }
 
   async function applyBulkAssignment() {
+    if (!canAssignClient) {
+      setBulkError("Your role is not authorized to assign clients.");
+      return;
+    }
     if (!bulkClientId || selectedSiteIds.length === 0 || bulkBusy || bulkMigrationBusy) return;
 
     setBulkBusy(true);
@@ -515,6 +539,7 @@ export function CommandCenterOpsTable(props: Props) {
           return {
             site_id: siteId,
             domain: null,
+            agency_id: null,
             status: "UNKNOWN" as const,
             latest_site_version_id: null,
           };
@@ -523,12 +548,14 @@ export function CommandCenterOpsTable(props: Props) {
         return {
           site_id: row.summary.site_id,
           domain: row.summary.domain,
+          agency_id: row.summary.agency_id,
           status: row.migration.status,
           latest_site_version_id: row.migration.latest_site_version_id,
         };
       });
 
       const result = await runBulkMigrationActions({
+        actorRole: props.actorRole,
         action,
         items: inputRows,
       });
@@ -548,6 +575,10 @@ export function CommandCenterOpsTable(props: Props) {
   }
 
   async function applyBulkMigrationAction(action: BulkMigrationActionType) {
+    if (!canRunBulkActions) {
+      setBulkError("Your role is not authorized for bulk migration actions.");
+      return;
+    }
     if (selectedSiteIds.length === 0 || bulkMigrationBusy || bulkBusy) return;
     await runBulkMigrationForSiteIds(action, selectedSiteIds);
   }
@@ -649,25 +680,28 @@ export function CommandCenterOpsTable(props: Props) {
             <span style={{ fontSize: 12, color: "#1f2937" }}>Bulk migration actions</span>
             <button
               type="button"
-              disabled={bulkMigrationBusy || bulkBusy}
+              title={canRunBulkActions ? undefined : "Not allowed for your role"}
+              disabled={bulkMigrationBusy || bulkBusy || !canRunBulkActions}
               onClick={() => applyBulkMigrationAction("import")}
-              style={actionButtonStyle(!bulkMigrationBusy && !bulkBusy)}
+              style={actionButtonStyle(!bulkMigrationBusy && !bulkBusy && canRunBulkActions)}
             >
               {bulkMigrationBusy ? "Running…" : "Import"}
             </button>
             <button
               type="button"
-              disabled={bulkMigrationBusy || bulkBusy}
+              title={canRunBulkActions ? undefined : "Not allowed for your role"}
+              disabled={bulkMigrationBusy || bulkBusy || !canRunBulkActions}
               onClick={() => applyBulkMigrationAction("approve")}
-              style={actionButtonStyle(!bulkMigrationBusy && !bulkBusy)}
+              style={actionButtonStyle(!bulkMigrationBusy && !bulkBusy && canRunBulkActions)}
             >
               {bulkMigrationBusy ? "Running…" : "Approve"}
             </button>
             <button
               type="button"
-              disabled={bulkMigrationBusy || bulkBusy}
+              title={canRunBulkActions ? undefined : "Not allowed for your role"}
+              disabled={bulkMigrationBusy || bulkBusy || !canRunBulkActions}
               onClick={() => applyBulkMigrationAction("publish")}
-              style={actionButtonStyle(!bulkMigrationBusy && !bulkBusy)}
+              style={actionButtonStyle(!bulkMigrationBusy && !bulkBusy && canRunBulkActions)}
             >
               {bulkMigrationBusy ? "Running…" : "Publish"}
             </button>
@@ -693,15 +727,16 @@ export function CommandCenterOpsTable(props: Props) {
             </select>
             <button
               type="button"
-              disabled={!bulkClientId || bulkBusy || bulkMigrationBusy}
+              title={canAssignClient ? undefined : "Not allowed for your role"}
+              disabled={!bulkClientId || bulkBusy || bulkMigrationBusy || !canAssignClient}
               onClick={applyBulkAssignment}
               style={{
                 padding: "6px 10px",
                 borderRadius: 8,
                 border: "1px solid #cbd5e1",
-                background: !bulkClientId || bulkBusy || bulkMigrationBusy ? "#f8fafc" : "#ffffff",
+                background: !bulkClientId || bulkBusy || bulkMigrationBusy || !canAssignClient ? "#f8fafc" : "#ffffff",
                 fontSize: 12,
-                cursor: !bulkClientId || bulkBusy || bulkMigrationBusy ? "not-allowed" : "pointer",
+                cursor: !bulkClientId || bulkBusy || bulkMigrationBusy || !canAssignClient ? "not-allowed" : "pointer",
               }}
             >
               {bulkBusy ? "Applying…" : "Apply"}
@@ -1015,9 +1050,10 @@ export function CommandCenterOpsTable(props: Props) {
                         {row.migration.status === "NOT_STARTED" ? (
                           <button
                             type="button"
-                            disabled={rowBusy}
+                            title={canRunMigration ? undefined : "Not allowed for your role"}
+                            disabled={rowBusy || !canRunMigration}
                             onClick={() => applyRowMigrationAction(row.summary.site_id, "import", "Import action started.")}
-                            style={actionButtonStyle(!rowBusy)}
+                            style={actionButtonStyle(!rowBusy && canRunMigration)}
                           >
                             {rowBusy ? "Running…" : "Import"}
                           </button>
@@ -1026,9 +1062,10 @@ export function CommandCenterOpsTable(props: Props) {
                         {row.migration.status === "IMPORTED" ? (
                           <button
                             type="button"
-                            disabled={rowBusy || !row.migration.latest_site_version_id}
+                            title={canRunMigration ? undefined : "Not allowed for your role"}
+                            disabled={rowBusy || !row.migration.latest_site_version_id || !canRunMigration}
                             onClick={() => applyRowMigrationAction(row.summary.site_id, "generate_preview", "Preview generation requested.")}
-                            style={actionButtonStyle(!rowBusy && !!row.migration.latest_site_version_id)}
+                            style={actionButtonStyle(!rowBusy && !!row.migration.latest_site_version_id && canRunMigration)}
                           >
                             {rowBusy ? "Running…" : "Generate Preview"}
                           </button>
@@ -1043,9 +1080,10 @@ export function CommandCenterOpsTable(props: Props) {
                             ) : null}
                             <button
                               type="button"
-                              disabled={rowBusy || !row.migration.latest_site_version_id}
+                              title={canApproveMigration ? undefined : "Not allowed for your role"}
+                              disabled={rowBusy || !row.migration.latest_site_version_id || !canApproveMigration}
                               onClick={() => applyRowMigrationAction(row.summary.site_id, "approve", "Approval action completed.")}
-                              style={actionButtonStyle(!rowBusy && !!row.migration.latest_site_version_id)}
+                              style={actionButtonStyle(!rowBusy && !!row.migration.latest_site_version_id && canApproveMigration)}
                             >
                               {rowBusy ? "Running…" : "Approve"}
                             </button>
@@ -1055,9 +1093,10 @@ export function CommandCenterOpsTable(props: Props) {
                         {row.migration.status === "APPROVED" ? (
                           <button
                             type="button"
-                            disabled={rowBusy || !row.migration.latest_site_version_id}
+                            title={canPublish ? undefined : "Not allowed for your role"}
+                            disabled={rowBusy || !row.migration.latest_site_version_id || !canPublish}
                             onClick={() => applyRowMigrationAction(row.summary.site_id, "publish", "Publish action completed.")}
-                            style={actionButtonStyle(!rowBusy && !!row.migration.latest_site_version_id)}
+                            style={actionButtonStyle(!rowBusy && !!row.migration.latest_site_version_id && canPublish)}
                           >
                             {rowBusy ? "Running…" : "Publish"}
                           </button>
@@ -1076,9 +1115,10 @@ export function CommandCenterOpsTable(props: Props) {
                         {row.migration.status === "ERROR" ? (
                           <button
                             type="button"
-                            disabled={rowBusy}
+                            title={canRunMigration ? undefined : "Not allowed for your role"}
+                            disabled={rowBusy || !canRunMigration}
                             onClick={() => applyRowMigrationAction(row.summary.site_id, "import", "Retry import requested.")}
-                            style={actionButtonStyle(!rowBusy)}
+                            style={actionButtonStyle(!rowBusy && canRunMigration)}
                           >
                             {rowBusy ? "Running…" : "Retry Import"}
                           </button>
@@ -1130,7 +1170,13 @@ export function CommandCenterOpsTable(props: Props) {
                     <div style={planLineStyle(bestPlan?.plan_name === "MANAGED")}>MANAGED: {managed ? formatMoney(managed.margin) : "—"}</div>
                   </td>
                   <td style={{ borderTop: "1px solid #f3f4f6", padding: rowPadding, verticalAlign: "top" }}>
-                    <SiteAssignmentControl siteId={row.summary.site_id} currentClientId={row.summary.client_id} clients={props.clients} />
+                    <SiteAssignmentControl
+                      siteId={row.summary.site_id}
+                      currentClientId={row.summary.client_id}
+                      clients={props.clients}
+                      disabled={!canAssignClient}
+                      disabledReason={!canAssignClient ? "Assignment restricted by role." : undefined}
+                    />
                   </td>
                 </tr>
               );

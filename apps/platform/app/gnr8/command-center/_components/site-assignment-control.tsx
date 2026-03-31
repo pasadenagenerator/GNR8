@@ -14,6 +14,8 @@ type Props = {
   siteId: string;
   currentClientId: string | null;
   clients: ClientOption[];
+  disabled?: boolean;
+  disabledReason?: string;
 };
 
 function displayClientName(client: ClientOption): string {
@@ -28,10 +30,11 @@ export function SiteAssignmentControl(props: Props) {
   const [done, setDone] = useState(false);
 
   const canAssign = useMemo(() => {
+    if (props.disabled) return false;
     if (!selectedClientId) return false;
     if (busy) return false;
     return selectedClientId !== (props.currentClientId ?? "");
-  }, [busy, props.currentClientId, selectedClientId]);
+  }, [busy, props.currentClientId, props.disabled, selectedClientId]);
 
   async function assign() {
     if (!canAssign) return;
@@ -73,6 +76,7 @@ export function SiteAssignmentControl(props: Props) {
           setDone(false);
           setError(null);
         }}
+        disabled={props.disabled}
         style={{
           padding: "6px 8px",
           border: "1px solid #d1d5db",
@@ -90,6 +94,7 @@ export function SiteAssignmentControl(props: Props) {
       </select>
       <button
         type="button"
+        title={props.disabled ? props.disabledReason : undefined}
         disabled={!canAssign}
         onClick={assign}
         style={{
@@ -105,8 +110,10 @@ export function SiteAssignmentControl(props: Props) {
         {busy ? "Assigning…" : "Assign"}
       </button>
       {error ? <div style={{ color: "#991b1b", fontSize: 12 }}>{error}</div> : null}
+      {!error && props.disabled && props.disabledReason ? (
+        <div style={{ color: "#94a3b8", fontSize: 11 }}>{props.disabledReason}</div>
+      ) : null}
       {!error && done ? <div style={{ color: "#065f46", fontSize: 12 }}>Assigned</div> : null}
     </div>
   );
 }
-

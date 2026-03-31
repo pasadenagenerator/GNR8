@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 
-import { parseOwnerContextError, requireOwnerAgencyContext } from '@/app/api/gnr8/agency/_lib/owner-access'
+import { parseAgencyActionContextError, requireAgencyActionContext } from '@/app/api/gnr8/agency/_lib/agency-action-access'
 import { AgencyDeprovisioningError, deprovisionAgency } from '@/gnr8/agency/agency-deprovisioning-service'
 import { getSupabaseServerClientMutating } from '@/src/auth/supabase-server-mutating'
 
@@ -55,11 +55,12 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Typed slug confirmation is required.' }, { status: 400 })
     }
 
-    const ownerContext = await requireOwnerAgencyContext({
+    const actionContext = await requireAgencyActionContext({
+      action: 'delete_agency',
       requestedAgencyId,
     })
 
-    if (ownerContext.agencyId !== requestedAgencyId) {
+    if (actionContext.agencyId !== requestedAgencyId) {
       return NextResponse.json({ error: 'Agency scope mismatch for delete request.' }, { status: 403 })
     }
 
@@ -67,7 +68,7 @@ export async function POST(request: Request) {
     const agencyResult = await supabase
       .from('agencies')
       .select('id,slug')
-      .eq('id', ownerContext.agencyId)
+      .eq('id', actionContext.agencyId)
       .limit(1)
       .maybeSingle()
 
@@ -91,8 +92,8 @@ export async function POST(request: Request) {
 
     try {
       result = await deprovisionAgency({
-        agencyId: ownerContext.agencyId,
-        actorUserId: ownerContext.userId,
+        agencyId: actionContext.agencyId,
+        actorUserId: actionContext.userId,
       })
     } catch (error) {
       if (error instanceof AgencyDeprovisioningError) {
@@ -116,7 +117,7 @@ export async function POST(request: Request) {
       },
     })
   } catch (error) {
-    const mapped = parseOwnerContextError(error)
+    const mapped = parseAgencyActionContextError(error)
     return NextResponse.json({ error: mapped.message }, { status: mapped.status })
   }
 }

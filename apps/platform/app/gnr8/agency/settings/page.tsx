@@ -7,6 +7,7 @@ import {
   resolveCurrentUserAgencyForPage,
   ResolveCurrentAgencyError,
 } from '@/src/auth/resolve-current-agency'
+import { canPerformAction } from '@/src/auth/rbac'
 import { getSupabaseServerClientReadOnly } from '@/src/auth/supabase-server-read-only'
 
 type SearchParams = {
@@ -179,7 +180,10 @@ export default async function AgencySettingsPage(props: { searchParams?: Promise
       agencySlug={normalizeText(agencyRow.slug)}
       requestedAgencyId={requestedAgencyId}
       memberships={availableAgencyMemberships}
-      isOwner={currentUserAgency.role === 'owner'}
+      role={currentUserAgency.role}
+      canEditAgencySettings={canPerformAction(currentUserAgency.role, 'edit_agency_settings')}
+      canDeleteAgency={canPerformAction(currentUserAgency.role, 'delete_agency')}
+      canChangePassword={canPerformAction(currentUserAgency.role, 'change_password')}
       ownerName={ownerName}
       ownerEmail={ownerEmail || 'unknown@example.com'}
     />

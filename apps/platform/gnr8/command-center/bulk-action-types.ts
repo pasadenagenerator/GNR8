@@ -11,6 +11,7 @@ export type BulkActionReasonCode =
   | "REQUEST_FAILED"
   | "INVALID_SITE_STATE"
   | "IMPORT_SOURCE_MISSING"
+  | "ROLE_FORBIDDEN"
   | "UNKNOWN_ERROR";
 
 export type BulkActionItemResult = {

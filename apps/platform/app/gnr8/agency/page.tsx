@@ -9,6 +9,7 @@ import {
   resolveCurrentUserAgencyForPage,
   ResolveCurrentAgencyError,
 } from "@/src/auth/resolve-current-agency";
+import { canPerformAction } from "@/src/auth/rbac";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -191,6 +192,8 @@ export default async function AgencyDashboardPage(props: { searchParams?: Promis
 
   const unassignedClientSites = readModel.site_rows.filter((row) => row.client_id == null).length;
   const hasNoCostSignal = readModel.site_rows.some((row) => row.cost_completeness_status === "NO_SIGNAL");
+  const canRunMigrations = canPerformAction(currentUserAgency.role, "run_migration");
+  const canRunBulkActions = canPerformAction(currentUserAgency.role, "bulk_actions");
 
   return (
     <main
@@ -240,6 +243,12 @@ export default async function AgencyDashboardPage(props: { searchParams?: Promis
             Open Settings
           </Link>
         </div>
+        <p style={{ marginTop: 10, marginBottom: 0, fontSize: 12, color: "#475569" }}>
+          {canRunMigrations
+            ? `Operational actions are enabled for ${currentUserAgency.role} role.`
+            : "Read-only role: migration, publish, assignment, and bulk mutation actions are blocked."}
+          {canRunBulkActions ? " Bulk actions are enabled by role policy." : " Bulk actions are disabled by role policy."}
+        </p>
         {availableAgencyMemberships.length > 1 ? (
           <div style={{ marginTop: 10, display: "flex", gap: 8, flexWrap: "wrap" }}>
             {availableAgencyMemberships.map((membership) => {

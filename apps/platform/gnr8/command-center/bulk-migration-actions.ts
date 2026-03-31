@@ -1,16 +1,19 @@
 import type { BulkActionItemResult, BulkActionReasonCode, BulkActionResult, BulkMigrationActionType } from "@/gnr8/command-center/bulk-action-types";
 import { summarizeBulkActionResult } from "@/gnr8/command-center/bulk-action-types";
+import { canPerformAction, type AgencyRole } from "@/src/auth/rbac";
 
 type MigrationStatus = "NOT_STARTED" | "IMPORTED" | "PREVIEW_READY" | "APPROVED" | "LIVE" | "ERROR" | "UNKNOWN";
 
 export type BulkMigrationActionItemInput = {
   site_id: string;
   domain: string | null;
+  agency_id: string | null;
   status: MigrationStatus;
   latest_site_version_id: string | null;
 };
 
 type RunBulkMigrationActionsInput = {
+  actorRole: AgencyRole | null;
   action: BulkMigrationActionType;
   items: BulkMigrationActionItemInput[];
 };
@@ -217,6 +220,7 @@ async function runImport(item: BulkMigrationActionItemInput): Promise<BulkAction
       url: importUrl,
       actor: "operator:command-center-import",
       slug: "/",
+      agencyId: item.agency_id,
     }),
   });
 
@@ -355,6 +359,30 @@ function classifyCaughtError(input: { item: BulkMigrationActionItemInput; error:
 }
 
 export async function runBulkMigrationActions(input: RunBulkMigrationActionsInput): Promise<BulkActionResult> {
+  const actionToPermission = {
+    import: "run_migration",
+    approve: "approve_migration",
+    publish: "publish",
+  } as const;
+  const requiredPermission = actionToPermission[input.action];
+
+  if (!canPerformAction(input.actorRole, requiredPermission)) {
+    const deniedResults: BulkActionItemResult[] = input.items.map((item) => ({
+      site_id: item.site_id,
+      domain: item.domain,
+      attempted: false,
+      outcome: "failed",
+      reason_code: "ROLE_FORBIDDEN",
+      reason_message: "Your role is not authorized for this bulk action.",
+      retryable: false,
+    }));
+    return summarizeBulkActionResult({
+      actionType: input.action,
+      totalRequested: input.items.length,
+      itemResults: deniedResults,
+    });
+  }
+
   const itemResults: BulkActionItemResult[] = [];
 
   for (const item of input.items) {

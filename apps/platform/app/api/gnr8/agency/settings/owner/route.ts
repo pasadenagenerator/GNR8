@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 
-import { parseOwnerContextError, requireOwnerAgencyContext } from '@/app/api/gnr8/agency/_lib/owner-access'
+import { parseAgencyActionContextError, requireAgencyActionContext } from '@/app/api/gnr8/agency/_lib/agency-action-access'
 import { getSupabaseServerClientMutating } from '@/src/auth/supabase-server-mutating'
 
 type Body = {
@@ -27,11 +27,16 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Owner name must be 120 characters or fewer.' }, { status: 400 })
     }
 
-    const ownerContext = await requireOwnerAgencyContext({
+    const actionContext = await requireAgencyActionContext({
+      action: 'edit_agency_settings',
       requestedAgencyId,
     })
 
-    if (ownerContext.agencyId !== requestedAgencyId && requestedAgencyId.length > 0) {
+    if (actionContext.role !== 'owner') {
+      return NextResponse.json({ error: 'Only agency owner can update owner profile settings.' }, { status: 403 })
+    }
+
+    if (actionContext.agencyId !== requestedAgencyId && requestedAgencyId.length > 0) {
       return NextResponse.json({ error: 'Agency scope mismatch for requested update.' }, { status: 403 })
     }
 
@@ -49,7 +54,7 @@ export async function POST(request: Request) {
     return NextResponse.json({
       ok: true,
       owner: {
-        id: ownerContext.userId,
+        id: actionContext.userId,
         full_name: fullName,
         email: authUpdateResult.data.user?.email ?? null,
       },
@@ -57,7 +62,7 @@ export async function POST(request: Request) {
       emailEditReason: 'Auth email update flow is intentionally not enabled in this V1.',
     })
   } catch (error) {
-    const mapped = parseOwnerContextError(error)
+    const mapped = parseAgencyActionContextError(error)
     return NextResponse.json({ error: mapped.message }, { status: mapped.status })
   }
 }

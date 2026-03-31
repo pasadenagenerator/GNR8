@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 
-import { parseOwnerContextError, requireOwnerAgencyContext } from '@/app/api/gnr8/agency/_lib/owner-access'
+import { parseAgencyActionContextError, requireAgencyActionContext } from '@/app/api/gnr8/agency/_lib/agency-action-access'
 import { getSupabaseServerClientMutating } from '@/src/auth/supabase-server-mutating'
 
 type Body = {
@@ -50,20 +50,37 @@ export async function POST(request: Request) {
       )
     }
 
-    const ownerContext = await requireOwnerAgencyContext({
+    const actionContext = await requireAgencyActionContext({
+      action: 'edit_agency_settings',
       requestedAgencyId,
     })
 
-    if (ownerContext.agencyId !== requestedAgencyId && requestedAgencyId.length > 0) {
+    if (actionContext.agencyId !== requestedAgencyId && requestedAgencyId.length > 0) {
       return NextResponse.json({ error: 'Agency scope mismatch for requested update.' }, { status: 403 })
     }
 
     const supabase = await getSupabaseServerClientMutating()
+    const currentAgencyResult = await supabase
+      .from('agencies')
+      .select('id,slug')
+      .eq('id', actionContext.agencyId)
+      .limit(1)
+      .maybeSingle()
+
+    if (currentAgencyResult.error) {
+      return NextResponse.json({ error: currentAgencyResult.error.message }, { status: 400 })
+    }
+
+    const currentSlug = normalizeSlug(currentAgencyResult.data?.slug)
+    const isSlugChange = slug !== currentSlug
+    if (isSlugChange && actionContext.role !== 'owner') {
+      return NextResponse.json({ error: 'Only agency owner can change agency slug.' }, { status: 403 })
+    }
 
     const existingSlug = await supabase
       .from('agencies')
       .select('id')
-      .neq('id', ownerContext.agencyId)
+      .neq('id', actionContext.agencyId)
       .eq('slug', slug)
       .limit(1)
       .maybeSingle()
@@ -80,10 +97,10 @@ export async function POST(request: Request) {
       .from('agencies')
       .update({
         name,
-        slug,
+        slug: isSlugChange ? slug : currentSlug,
         updated_at: new Date().toISOString(),
       })
-      .eq('id', ownerContext.agencyId)
+      .eq('id', actionContext.agencyId)
       .select('id,name,slug')
       .limit(1)
       .maybeSingle()
@@ -98,7 +115,7 @@ export async function POST(request: Request) {
       agency: updateResult.data,
     })
   } catch (error) {
-    const mapped = parseOwnerContextError(error)
+    const mapped = parseAgencyActionContextError(error)
     return NextResponse.json({ error: mapped.message }, { status: mapped.status })
   }
 }

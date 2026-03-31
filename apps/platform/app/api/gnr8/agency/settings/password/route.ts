@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 
-import { parseOwnerContextError, requireOwnerAgencyContext } from '@/app/api/gnr8/agency/_lib/owner-access'
+import { parseAgencyActionContextError, requireAgencyActionContext } from '@/app/api/gnr8/agency/_lib/agency-action-access'
 import { getSupabaseServerClientMutating } from '@/src/auth/supabase-server-mutating'
 
 type Body = {
@@ -29,11 +29,12 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Passwords do not match.' }, { status: 400 })
     }
 
-    const ownerContext = await requireOwnerAgencyContext({
+    const actionContext = await requireAgencyActionContext({
+      action: 'change_password',
       requestedAgencyId,
     })
 
-    if (ownerContext.agencyId !== requestedAgencyId && requestedAgencyId.length > 0) {
+    if (actionContext.agencyId !== requestedAgencyId && requestedAgencyId.length > 0) {
       return NextResponse.json({ error: 'Agency scope mismatch for requested password update.' }, { status: 403 })
     }
 
@@ -48,11 +49,11 @@ export async function POST(request: Request) {
 
     return NextResponse.json({
       ok: true,
-      updatedUserId: ownerContext.userId,
+      updatedUserId: actionContext.userId,
       message: 'Password updated.',
     })
   } catch (error) {
-    const mapped = parseOwnerContextError(error)
+    const mapped = parseAgencyActionContextError(error)
     return NextResponse.json({ error: mapped.message }, { status: mapped.status })
   }
 }

@@ -15,7 +15,10 @@ type Props = {
   agencySlug: string
   requestedAgencyId: string | null
   memberships: MembershipOption[]
-  isOwner: boolean
+  role: 'owner' | 'admin' | 'member'
+  canEditAgencySettings: boolean
+  canDeleteAgency: boolean
+  canChangePassword: boolean
   ownerName: string
   ownerEmail: string
 }
@@ -134,8 +137,8 @@ export default function AgencySettingsClient(props: Props) {
     setAgencyError(null)
     setAgencySuccess(null)
 
-    if (!props.isOwner) {
-      setAgencyError('Only the agency owner can update agency profile settings.')
+    if (!props.canEditAgencySettings) {
+      setAgencyError('Your role is read-only for agency settings.')
       return
     }
 
@@ -162,7 +165,7 @@ export default function AgencySettingsClient(props: Props) {
     setOwnerError(null)
     setOwnerSuccess(null)
 
-    if (!props.isOwner) {
+    if (props.role !== 'owner') {
       setOwnerError('Only the agency owner can update owner profile settings.')
       return
     }
@@ -189,8 +192,8 @@ export default function AgencySettingsClient(props: Props) {
     setPasswordError(null)
     setPasswordSuccess(null)
 
-    if (!props.isOwner) {
-      setPasswordError('Only the agency owner can update password.')
+    if (!props.canChangePassword) {
+      setPasswordError('Your role is not allowed to change password.')
       return
     }
 
@@ -228,7 +231,7 @@ export default function AgencySettingsClient(props: Props) {
     event.preventDefault()
     setDeleteError(null)
 
-    if (!props.isOwner) {
+    if (!props.canDeleteAgency) {
       setDeleteError('Only the agency owner can delete this agency.')
       return
     }
@@ -322,11 +325,11 @@ export default function AgencySettingsClient(props: Props) {
         </div>
       </header>
 
-      {!props.isOwner ? (
+      {props.role === 'member' ? (
         <section style={{ ...sectionStyle(), marginTop: 16, border: '1px solid #fed7aa', background: '#fff7ed' }}>
           <h2 style={{ marginTop: 0, color: '#9a3412' }}>Limited Access</h2>
           <p style={{ marginBottom: 0, color: '#9a3412' }}>
-            You can view agency settings, but only the agency owner can run mutation actions in this V1.
+            Member access is read-only in V1. Password update remains available for the currently authenticated user.
           </p>
         </section>
       ) : null}
@@ -341,7 +344,7 @@ export default function AgencySettingsClient(props: Props) {
               value={agencyName}
               onChange={(event) => setAgencyName(event.target.value)}
               style={fieldStyle()}
-              disabled={agencyStatus === 'saving' || !props.isOwner}
+              disabled={agencyStatus === 'saving' || !props.canEditAgencySettings}
               maxLength={160}
               required
             />
@@ -354,14 +357,17 @@ export default function AgencySettingsClient(props: Props) {
               value={agencySlug}
               onChange={(event) => setAgencySlug(event.target.value.toLowerCase())}
               style={fieldStyle()}
-              disabled={agencyStatus === 'saving' || !props.isOwner}
+              disabled={agencyStatus === 'saving' || props.role !== 'owner'}
               maxLength={120}
               required
             />
+            {props.role !== 'owner' ? (
+              <span style={{ fontSize: 12, color: '#475569' }}>Slug changes are restricted to the agency owner.</span>
+            ) : null}
           </label>
 
           <div>
-            <button type="submit" style={buttonStyle()} disabled={agencyStatus === 'saving' || !props.isOwner}>
+            <button type="submit" style={buttonStyle()} disabled={agencyStatus === 'saving' || !props.canEditAgencySettings}>
               {agencyStatus === 'saving' ? 'Saving...' : 'Save Changes'}
             </button>
           </div>
@@ -374,43 +380,45 @@ export default function AgencySettingsClient(props: Props) {
         </form>
       </section>
 
-      <section style={{ ...sectionStyle(), marginTop: 16 }}>
-        <h2 style={{ marginTop: 0, color: '#0f172a' }}>Owner Profile</h2>
-        <form onSubmit={onOwnerSave} style={{ display: 'grid', gap: 12 }}>
-          <label style={{ display: 'grid', gap: 6 }}>
-            <span style={{ fontSize: 13, color: '#334155' }}>Owner Name</span>
-            <input
-              type="text"
-              value={ownerName}
-              onChange={(event) => setOwnerName(event.target.value)}
-              style={fieldStyle()}
-              disabled={ownerStatus === 'saving' || !props.isOwner}
-              maxLength={120}
-              required
-            />
-          </label>
+      {props.role === 'owner' ? (
+        <section style={{ ...sectionStyle(), marginTop: 16 }}>
+          <h2 style={{ marginTop: 0, color: '#0f172a' }}>Owner Profile</h2>
+          <form onSubmit={onOwnerSave} style={{ display: 'grid', gap: 12 }}>
+            <label style={{ display: 'grid', gap: 6 }}>
+              <span style={{ fontSize: 13, color: '#334155' }}>Owner Name</span>
+              <input
+                type="text"
+                value={ownerName}
+                onChange={(event) => setOwnerName(event.target.value)}
+                style={fieldStyle()}
+                disabled={ownerStatus === 'saving'}
+                maxLength={120}
+                required
+              />
+            </label>
 
-          <label style={{ display: 'grid', gap: 6 }}>
-            <span style={{ fontSize: 13, color: '#334155' }}>Owner Email</span>
-            <input type="email" value={props.ownerEmail} style={fieldStyle()} disabled readOnly />
-            <span style={{ fontSize: 12, color: '#475569' }}>
-              Email is displayed from current authenticated owner account and is read-only in this V1 to avoid unsafe auth-email mutation.
-            </span>
-          </label>
+            <label style={{ display: 'grid', gap: 6 }}>
+              <span style={{ fontSize: 13, color: '#334155' }}>Owner Email</span>
+              <input type="email" value={props.ownerEmail} style={fieldStyle()} disabled readOnly />
+              <span style={{ fontSize: 12, color: '#475569' }}>
+                Email is displayed from current authenticated owner account and is read-only in this V1 to avoid unsafe auth-email mutation.
+              </span>
+            </label>
 
-          <div>
-            <button type="submit" style={buttonStyle()} disabled={ownerStatus === 'saving' || !props.isOwner}>
-              {ownerStatus === 'saving' ? 'Saving...' : 'Save Changes'}
-            </button>
-          </div>
+            <div>
+              <button type="submit" style={buttonStyle()} disabled={ownerStatus === 'saving'}>
+                {ownerStatus === 'saving' ? 'Saving...' : 'Save Changes'}
+              </button>
+            </div>
 
-          {statusMessage(ownerStatus, ownerError, ownerSuccess) ? (
-            <p style={{ margin: 0, color: ownerStatus === 'error' ? '#991b1b' : '#166534', fontSize: 13 }}>
-              {statusMessage(ownerStatus, ownerError, ownerSuccess)}
-            </p>
-          ) : null}
-        </form>
-      </section>
+            {statusMessage(ownerStatus, ownerError, ownerSuccess) ? (
+              <p style={{ margin: 0, color: ownerStatus === 'error' ? '#991b1b' : '#166534', fontSize: 13 }}>
+                {statusMessage(ownerStatus, ownerError, ownerSuccess)}
+              </p>
+            ) : null}
+          </form>
+        </section>
+      ) : null}
 
       <section style={{ ...sectionStyle(), marginTop: 16 }}>
         <h2 style={{ marginTop: 0, color: '#0f172a' }}>Security</h2>
@@ -422,7 +430,7 @@ export default function AgencySettingsClient(props: Props) {
               value={newPassword}
               onChange={(event) => setNewPassword(event.target.value)}
               style={fieldStyle()}
-              disabled={passwordStatus === 'saving' || !props.isOwner}
+              disabled={passwordStatus === 'saving' || !props.canChangePassword}
               autoComplete="new-password"
               required
             />
@@ -435,7 +443,7 @@ export default function AgencySettingsClient(props: Props) {
               value={confirmPassword}
               onChange={(event) => setConfirmPassword(event.target.value)}
               style={fieldStyle()}
-              disabled={passwordStatus === 'saving' || !props.isOwner}
+              disabled={passwordStatus === 'saving' || !props.canChangePassword}
               autoComplete="new-password"
               required
             />
@@ -444,7 +452,7 @@ export default function AgencySettingsClient(props: Props) {
           {passwordValidationMessage ? <p style={{ margin: 0, color: '#991b1b', fontSize: 13 }}>{passwordValidationMessage}</p> : null}
 
           <div>
-            <button type="submit" style={buttonStyle()} disabled={passwordStatus === 'saving' || !props.isOwner}>
+            <button type="submit" style={buttonStyle()} disabled={passwordStatus === 'saving' || !props.canChangePassword}>
               {passwordStatus === 'saving' ? 'Updating...' : 'Update Password'}
             </button>
           </div>
@@ -457,46 +465,44 @@ export default function AgencySettingsClient(props: Props) {
         </form>
       </section>
 
-      <section style={{ ...sectionStyle(), marginTop: 16, border: '1px solid #fecaca', background: '#fff5f5' }}>
-        <h2 style={{ marginTop: 0, color: '#991b1b' }}>Danger Zone</h2>
-        <p style={{ color: '#7f1d1d', fontSize: 13 }}>
-          Deleting this agency permanently removes agency data, organizations, memberships, sites, billing records, and agency-scoped runtime/migration records.
-        </p>
+      {props.canDeleteAgency ? (
+        <section style={{ ...sectionStyle(), marginTop: 16, border: '1px solid #fecaca', background: '#fff5f5' }}>
+          <h2 style={{ marginTop: 0, color: '#991b1b' }}>Danger Zone</h2>
+          <p style={{ color: '#7f1d1d', fontSize: 13 }}>
+            Deleting this agency permanently removes agency data, organizations, memberships, sites, billing records, and agency-scoped runtime/migration records.
+          </p>
 
-        <form onSubmit={onDeleteAgency} style={{ display: 'grid', gap: 12 }}>
-          <label style={{ display: 'grid', gap: 6 }}>
-            <span style={{ fontSize: 13, color: '#7f1d1d' }}>
-              Type agency slug <strong>{props.agencySlug}</strong> to confirm deletion
-            </span>
-            <input
-              type="text"
-              value={deleteConfirmation}
-              onChange={(event) => setDeleteConfirmation(event.target.value)}
-              style={{ ...fieldStyle(), border: '1px solid #fca5a5' }}
-              disabled={deleteStatus === 'saving' || !props.isOwner}
-              required
-            />
-          </label>
+          <form onSubmit={onDeleteAgency} style={{ display: 'grid', gap: 12 }}>
+            <label style={{ display: 'grid', gap: 6 }}>
+              <span style={{ fontSize: 13, color: '#7f1d1d' }}>
+                Type agency slug <strong>{props.agencySlug}</strong> to confirm deletion
+              </span>
+              <input
+                type="text"
+                value={deleteConfirmation}
+                onChange={(event) => setDeleteConfirmation(event.target.value)}
+                style={{ ...fieldStyle(), border: '1px solid #fca5a5' }}
+                disabled={deleteStatus === 'saving'}
+                required
+              />
+            </label>
 
-          <div>
-            <button
-              type="submit"
-              style={buttonStyle(true)}
-              disabled={deleteStatus === 'saving' || !props.isOwner || !isDeleteConfirmed}
-            >
-              {deleteStatus === 'saving' ? 'Deleting...' : 'Delete Agency'}
-            </button>
-          </div>
+            <div>
+              <button type="submit" style={buttonStyle(true)} disabled={deleteStatus === 'saving' || !isDeleteConfirmed}>
+                {deleteStatus === 'saving' ? 'Deleting...' : 'Delete Agency'}
+              </button>
+            </div>
 
-          {!isDeleteConfirmed ? (
-            <p style={{ margin: 0, color: '#7f1d1d', fontSize: 12 }}>
-              Delete button remains disabled until confirmation exactly matches the current slug.
-            </p>
-          ) : null}
+            {!isDeleteConfirmed ? (
+              <p style={{ margin: 0, color: '#7f1d1d', fontSize: 12 }}>
+                Delete button remains disabled until confirmation exactly matches the current slug.
+              </p>
+            ) : null}
 
-          {deleteError ? <p style={{ margin: 0, color: '#991b1b', fontSize: 13 }}>{deleteError}</p> : null}
-        </form>
-      </section>
+            {deleteError ? <p style={{ margin: 0, color: '#991b1b', fontSize: 13 }}>{deleteError}</p> : null}
+          </form>
+        </section>
+      ) : null}
     </main>
   )
 }
