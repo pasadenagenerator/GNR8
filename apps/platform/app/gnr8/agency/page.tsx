@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import type { CSSProperties } from "react";
 
 import { getAgencyDashboardReadModel } from "@/gnr8/agency/agency-dashboard-read-model";
+import { OWNER_SETUP_PATH, getOwnerSetupStatusForAgencyForPage } from "@/src/auth/owner-setup-gate";
 import {
   listCurrentUserAgencyMembershipsForPage,
   resolveCurrentUserAgencyForPage,
@@ -137,6 +138,45 @@ export default async function AgencyDashboardPage(props: { searchParams?: Promis
         </section>
       </main>
     );
+  }
+
+  if (currentUserAgency.role === "owner") {
+    const ownerSetupStatus = await getOwnerSetupStatusForAgencyForPage({
+      userId: currentUserAgency.user_id,
+      agencyId: currentUserAgency.agency_id,
+    });
+    if (!ownerSetupStatus.hasOwnerMembership) {
+      return (
+        <main
+          style={{
+            maxWidth: 1200,
+            margin: "0 auto",
+            padding: 24,
+            background: "linear-gradient(180deg, #f4f8fc 0%, #ffffff 62%)",
+            fontFamily: "ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial",
+            minHeight: "100vh",
+          }}
+        >
+          <section
+            style={{
+              marginTop: 18,
+              border: "1px solid #fecaca",
+              borderRadius: 12,
+              background: "#fff5f5",
+              padding: 16,
+            }}
+          >
+            <h2 style={{ marginTop: 0, color: "#991b1b" }}>Agency access unavailable</h2>
+            <p style={{ marginBottom: 0, color: "#7f1d1d" }}>
+              Owner membership context is invalid for this agency. Access is blocked until membership is corrected.
+            </p>
+          </section>
+        </main>
+      );
+    }
+    if (!ownerSetupStatus.isCompleted) {
+      redirect(`${OWNER_SETUP_PATH}?agency=${encodeURIComponent(currentUserAgency.agency_id)}`);
+    }
   }
 
   const readModel = await getAgencyDashboardReadModel({

@@ -39,6 +39,7 @@ create table public.memberships (
   -- Legacy compatibility with existing repository reads/writes.
   org_id uuid not null references public.organizations(id) on delete cascade,
   role public.membership_role_enum not null default 'member',
+  owner_setup_completed boolean not null default false,
   created_at timestamptz not null default now()
 );
 
@@ -46,6 +47,9 @@ create unique index memberships_organization_user_unique
   on public.memberships (organization_id, user_id);
 create index memberships_user_id_idx on public.memberships (user_id);
 create index memberships_organization_id_idx on public.memberships (organization_id);
+create index memberships_owner_setup_completed_owner_idx
+  on public.memberships (user_id, owner_setup_completed)
+  where lower(role::text) = 'owner';
 
 -- First-class sites
 create table public.sites (

@@ -8,6 +8,7 @@ type CallbackStatus = 'checking' | 'done' | 'error'
 
 const AUTH_CALLBACK_PATH = '/auth/callback'
 const DEFAULT_AUTH_SUCCESS_PATH = '/gnr8/agency'
+const DEFAULT_ONBOARDING_RESOLVER_PATH = '/api/auth/callback/next'
 
 function normalizeNextPath(candidate: string | null): string {
   const value = String(candidate ?? '').trim()
@@ -92,10 +93,31 @@ export default function AuthCallbackPage() {
           throw new Error('Invite or auth link is invalid or expired. Please request a new invite.')
         }
 
+        const resolverResponse = await fetch(
+          `${DEFAULT_ONBOARDING_RESOLVER_PATH}?next=${encodeURIComponent(nextPath)}`,
+          {
+            method: 'GET',
+            credentials: 'include',
+            headers: {
+              Accept: 'application/json',
+            },
+            cache: 'no-store',
+          },
+        )
+        const resolverPayload = (await resolverResponse.json().catch(() => null)) as
+          | { target?: unknown; error?: unknown }
+          | null
+        if (!resolverResponse.ok) {
+          throw new Error(String(resolverPayload?.error ?? 'Failed to resolve post-auth redirect path.'))
+        }
+        const resolvedTarget = normalizeNextPath(
+          typeof resolverPayload?.target === 'string' ? resolverPayload.target : null,
+        )
+
         window.history.replaceState({}, document.title, AUTH_CALLBACK_PATH)
         setStatus('done')
         window.setTimeout(() => {
-          window.location.replace(nextPath)
+          window.location.replace(resolvedTarget)
         }, 0)
       } catch (cause) {
         setStatus('error')
