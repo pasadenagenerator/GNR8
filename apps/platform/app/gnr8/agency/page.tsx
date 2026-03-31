@@ -222,6 +222,24 @@ export default async function AgencyDashboardPage(props: { searchParams?: Promis
             <strong>Role:</strong> {currentUserAgency.role}
           </div>
         </div>
+        <div style={{ marginTop: 10 }}>
+          <Link
+            href={`/gnr8/agency/settings?agency=${encodeURIComponent(currentUserAgency.agency_id)}`}
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              padding: "6px 10px",
+              borderRadius: 8,
+              border: "1px solid #cbd5e1",
+              background: "#fff",
+              color: "#0f172a",
+              textDecoration: "none",
+              fontSize: 12,
+            }}
+          >
+            Open Settings
+          </Link>
+        </div>
         {availableAgencyMemberships.length > 1 ? (
           <div style={{ marginTop: 10, display: "flex", gap: 8, flexWrap: "wrap" }}>
             {availableAgencyMemberships.map((membership) => {
