@@ -2,7 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 
 type SearchParams = {
-  type?: string;
+  [key: string]: string | string[] | undefined;
 };
 
 export const runtime = "nodejs";
@@ -10,10 +10,24 @@ export const dynamic = "force-dynamic";
 
 export default async function PublicEntryPage(props: { searchParams?: Promise<SearchParams> }) {
   const resolvedSearchParams = props.searchParams ? await props.searchParams : undefined;
-  const type = String(resolvedSearchParams?.type ?? "").trim().toLowerCase();
+  const typeValue = resolvedSearchParams?.type;
+  const type = String(Array.isArray(typeValue) ? typeValue[0] ?? "" : typeValue ?? "")
+    .trim()
+    .toLowerCase();
 
   if (type === "recovery") {
-    redirect(`/reset-password?type=recovery`);
+    const forwardedParams = new URLSearchParams();
+    for (const [key, rawValue] of Object.entries(resolvedSearchParams ?? {})) {
+      if (Array.isArray(rawValue)) {
+        for (const value of rawValue) {
+          if (value != null) forwardedParams.append(key, value);
+        }
+        continue;
+      }
+      if (rawValue != null) forwardedParams.set(key, rawValue);
+    }
+    const suffix = forwardedParams.toString();
+    redirect(suffix ? `/reset-password?${suffix}` : "/reset-password");
   }
 
   return (

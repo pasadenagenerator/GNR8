@@ -2,9 +2,32 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import type { EmailOtpType } from '@supabase/supabase-js'
 import { getSupabaseBrowserClient } from '@/src/supabase/browser'
 
-type Status = 'idle' | 'checking' | 'ready' | 'saving' | 'done' | 'error'
+type Status = 'checking' | 'ready' | 'saving' | 'done' | 'error'
+
+function asEmailOtpType(rawType: string | null): EmailOtpType | null {
+  const normalized = String(rawType ?? '').trim()
+  if (!normalized) return null
+  if (
+    normalized === 'signup' ||
+    normalized === 'invite' ||
+    normalized === 'magiclink' ||
+    normalized === 'recovery' ||
+    normalized === 'email_change' ||
+    normalized === 'email'
+  ) {
+    return normalized
+  }
+  return null
+}
+
+function toReadableAuthError(raw: string): string {
+  const value = raw.trim()
+  if (!value) return 'This recovery link is invalid or expired. Please request a new password reset email.'
+  return value
+}
 
 export default function ResetPasswordPage() {
   const router = useRouter()
@@ -15,7 +38,6 @@ export default function ResetPasswordPage() {
   const [password, setPassword] = useState('')
   const [password2, setPassword2] = useState('')
 
-  // izpeljano stanje (izven JSX blokov), da TS ne “preozko” sklepa
   const isSaving = status === 'saving'
 
   useEffect(() => {
@@ -24,36 +46,48 @@ export default function ResetPasswordPage() {
       setError(null)
 
       try {
-        // 1) Če Supabase pošlje PKCE "code" v query string
         const url = new URL(window.location.href)
-        const code = url.searchParams.get('code')
-        if (code) {
-          const { error } = await supabase.auth.exchangeCodeForSession(code)
-          if (error) throw error
-          setStatus('ready')
-          return
-        }
-
-        // 2) Če Supabase pošlje access_token v hash (#...)
-        const hash = window.location.hash.startsWith('#')
-          ? window.location.hash.slice(1)
-          : ''
+        const hash = window.location.hash.startsWith('#') ? window.location.hash.slice(1) : ''
         const hashParams = new URLSearchParams(hash)
 
-        const access_token = hashParams.get('access_token')
-        const refresh_token = hashParams.get('refresh_token')
-
-        if (access_token && refresh_token) {
-          const { error } = await supabase.auth.setSession({
-            access_token,
-            refresh_token,
-          })
-          if (error) throw error
-          setStatus('ready')
-          return
+        const explicitError =
+          url.searchParams.get('error_description') ??
+          hashParams.get('error_description') ??
+          url.searchParams.get('error') ??
+          hashParams.get('error')
+        if (explicitError) {
+          throw new Error(toReadableAuthError(explicitError))
         }
 
-        // 3) Fallback: preveri, ali že obstaja session
+        const code = url.searchParams.get('code')
+        if (code) {
+          const result = await supabase.auth.exchangeCodeForSession(code)
+          if (result.error) throw result.error
+        } else {
+          const accessToken = hashParams.get('access_token')
+          const refreshToken = hashParams.get('refresh_token')
+
+          if (accessToken && refreshToken) {
+            const result = await supabase.auth.setSession({
+              access_token: accessToken,
+              refresh_token: refreshToken,
+            })
+            if (result.error) throw result.error
+          } else {
+            const tokenHash = url.searchParams.get('token_hash')
+            const otpType = asEmailOtpType(
+              url.searchParams.get('type') ?? hashParams.get('type'),
+            )
+            if (tokenHash && otpType === 'recovery') {
+              const result = await supabase.auth.verifyOtp({
+                token_hash: tokenHash,
+                type: otpType,
+              })
+              if (result.error) throw result.error
+            }
+          }
+        }
+
         const { data, error } = await supabase.auth.getSession()
         if (error) throw error
         if (!data.session) {
@@ -64,15 +98,21 @@ export default function ResetPasswordPage() {
           return
         }
 
+        window.history.replaceState({}, document.title, '/reset-password')
         setStatus('ready')
       } catch (e) {
         setStatus('error')
-        setError(e instanceof Error ? e.message : 'Failed to verify recovery link')
+        setError(
+          e instanceof Error
+            ? toReadableAuthError(e.message)
+            : 'This recovery link could not be verified. Please request a new password reset email.',
+        )
       }
     })()
   }, [supabase])
 
-  async function submit() {
+  async function submit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault()
     setError(null)
 
     if (!password || password.length < 8) {
@@ -90,8 +130,10 @@ export default function ResetPasswordPage() {
       if (error) throw error
 
       setStatus('done')
-      router.push('/admin')
-      router.refresh()
+      window.setTimeout(() => {
+        router.replace('/login')
+        router.refresh()
+      }, 1000)
     } catch (e) {
       setStatus('error')
       setError(e instanceof Error ? e.message : 'Failed to set new password')
@@ -100,20 +142,26 @@ export default function ResetPasswordPage() {
 
   return (
     <main style={{ maxWidth: 520, margin: '48px auto', padding: 16 }}>
-      <h1 style={{ fontSize: 24, marginBottom: 16 }}>Set a new password</h1>
+      <h1 style={{ fontSize: 24, marginBottom: 8 }}>Reset your password</h1>
+      <p style={{ marginTop: 0, marginBottom: 16, color: '#475569' }}>
+        Enter a new password to finish account recovery.
+      </p>
 
       {status === 'checking' && <p>Checking recovery link…</p>}
 
       {status === 'error' && (
-        <div style={{ padding: 12, border: '1px solid #f2c', borderRadius: 8 }}>
+        <div style={{ padding: 12, border: '1px solid #fca5a5', borderRadius: 8 }}>
           <p style={{ margin: 0 }}>
             <strong>Error:</strong> {error ?? 'Unknown error'}
+          </p>
+          <p style={{ marginTop: 8, marginBottom: 0 }}>
+            Request a new reset email, then try again.
           </p>
         </div>
       )}
 
       {(status === 'ready' || status === 'saving') && (
-        <div style={{ display: 'grid', gap: 12 }}>
+        <form onSubmit={submit} style={{ display: 'grid', gap: 12 }}>
           <label style={{ display: 'grid', gap: 6 }}>
             <span>New password</span>
             <input
@@ -126,7 +174,7 @@ export default function ResetPasswordPage() {
           </label>
 
           <label style={{ display: 'grid', gap: 6 }}>
-            <span>Repeat password</span>
+            <span>Confirm new password</span>
             <input
               type="password"
               value={password2}
@@ -137,22 +185,22 @@ export default function ResetPasswordPage() {
           </label>
 
           <button
-            onClick={submit}
             disabled={isSaving}
+            type="submit"
             style={{ padding: 10, borderRadius: 8, border: '1px solid #ddd' }}
           >
-            {isSaving ? 'Saving…' : 'Save password'}
+            {isSaving ? 'Updating…' : 'Update password'}
           </button>
 
           {error && (
-            <div style={{ padding: 12, border: '1px solid #f2c', borderRadius: 8 }}>
+            <div style={{ padding: 12, border: '1px solid #fca5a5', borderRadius: 8 }}>
               <p style={{ margin: 0 }}>{error}</p>
             </div>
           )}
-        </div>
+        </form>
       )}
 
-      {status === 'done' && <p>Done. Redirecting…</p>}
+      {status === 'done' && <p>Password updated successfully. Redirecting to login…</p>}
     </main>
   )
 }

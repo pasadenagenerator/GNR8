@@ -11,12 +11,15 @@ export default function LoginPage() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [busy, setBusy] = useState(false)
+  const [recoveryBusy, setRecoveryBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [recoveryMessage, setRecoveryMessage] = useState<string | null>(null)
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault()
     setBusy(true)
     setError(null)
+    setRecoveryMessage(null)
 
     try {
       const { error } = await supabase.auth.signInWithPassword({
@@ -63,6 +66,36 @@ export default function LoginPage() {
     }
   }
 
+  async function sendRecoveryEmail() {
+    const normalizedEmail = email.trim()
+    if (!normalizedEmail) {
+      setRecoveryMessage('Enter your email first, then request a reset link.')
+      return
+    }
+
+    setRecoveryBusy(true)
+    setError(null)
+    setRecoveryMessage(null)
+
+    try {
+      const redirectTo = new URL('/reset-password', window.location.origin).toString()
+      const { error: resetError } = await supabase.auth.resetPasswordForEmail(normalizedEmail, {
+        redirectTo,
+      })
+      if (resetError) {
+        setRecoveryMessage(resetError.message)
+        setRecoveryBusy(false)
+        return
+      }
+
+      setRecoveryMessage('Recovery email sent. Use the link in your inbox to set a new password.')
+      setRecoveryBusy(false)
+    } catch (cause) {
+      setRecoveryMessage(cause instanceof Error ? cause.message : 'Failed to send recovery email.')
+      setRecoveryBusy(false)
+    }
+  }
+
   return (
     <main style={{ maxWidth: 420, margin: '48px auto', padding: 16 }}>
       <h1 style={{ fontSize: 24, marginBottom: 16 }}>Login</h1>
@@ -96,6 +129,12 @@ export default function LoginPage() {
           <div style={{ color: 'crimson', fontSize: 14 }}>{error}</div>
         ) : null}
 
+        {recoveryMessage ? (
+          <div style={{ color: recoveryMessage.startsWith('Recovery email sent') ? '#166534' : 'crimson', fontSize: 14 }}>
+            {recoveryMessage}
+          </div>
+        ) : null}
+
         <button
           disabled={busy}
           type="submit"
@@ -107,6 +146,21 @@ export default function LoginPage() {
           }}
         >
           {busy ? 'Signing in…' : 'Sign in'}
+        </button>
+
+        <button
+          disabled={recoveryBusy || busy}
+          onClick={sendRecoveryEmail}
+          type="button"
+          style={{
+            padding: 10,
+            borderRadius: 8,
+            border: '1px solid #ddd',
+            background: '#fff',
+            cursor: recoveryBusy || busy ? 'not-allowed' : 'pointer',
+          }}
+        >
+          {recoveryBusy ? 'Sending reset link…' : 'Forgot password? Send reset link'}
         </button>
       </form>
     </main>

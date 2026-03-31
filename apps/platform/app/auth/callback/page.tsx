@@ -7,6 +7,7 @@ import { getSupabaseBrowserClient } from '@/src/supabase/browser'
 type CallbackStatus = 'checking' | 'done' | 'error'
 
 const AUTH_CALLBACK_PATH = '/auth/callback'
+const RESET_PASSWORD_PATH = '/reset-password'
 const DEFAULT_AUTH_SUCCESS_PATH = '/gnr8/agency'
 const DEFAULT_ONBOARDING_RESOLVER_PATH = '/api/auth/callback/next'
 
@@ -51,6 +52,7 @@ export default function AuthCallbackPage() {
         const nextPath = normalizeNextPath(url.searchParams.get('next'))
         const hash = window.location.hash.startsWith('#') ? window.location.hash.slice(1) : ''
         const hashParams = new URLSearchParams(hash)
+        const callbackType = asEmailOtpType(url.searchParams.get('type') ?? hashParams.get('type'))
 
         const explicitError =
           url.searchParams.get('error_description') ??
@@ -76,7 +78,7 @@ export default function AuthCallbackPage() {
             if (result.error) throw result.error
           } else {
             const tokenHash = url.searchParams.get('token_hash')
-            const otpType = asEmailOtpType(url.searchParams.get('type'))
+            const otpType = callbackType
             if (tokenHash && otpType) {
               const result = await supabase.auth.verifyOtp({
                 token_hash: tokenHash,
@@ -91,6 +93,15 @@ export default function AuthCallbackPage() {
         if (sessionResult.error) throw sessionResult.error
         if (!sessionResult.data.session) {
           throw new Error('Invite or auth link is invalid or expired. Please request a new invite.')
+        }
+
+        if (callbackType === 'recovery') {
+          window.history.replaceState({}, document.title, AUTH_CALLBACK_PATH)
+          setStatus('done')
+          window.setTimeout(() => {
+            window.location.replace(RESET_PASSWORD_PATH)
+          }, 0)
+          return
         }
 
         const resolverResponse = await fetch(
