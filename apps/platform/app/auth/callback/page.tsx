@@ -3,12 +3,16 @@
 import type { EmailOtpType } from '@supabase/supabase-js'
 import { useEffect, useMemo, useState } from 'react'
 import { getSupabaseBrowserClient } from '@/src/supabase/browser'
+import {
+  AGENCY_HOME_PATH,
+  AUTH_CALLBACK_PATH,
+  RESET_PASSWORD_PATH,
+  isInviteOrOnboardingCallbackType,
+} from '@/src/auth/auth-flow-model'
 
 type CallbackStatus = 'checking' | 'done' | 'error'
 
-const AUTH_CALLBACK_PATH = '/auth/callback'
-const RESET_PASSWORD_PATH = '/reset-password'
-const DEFAULT_AUTH_SUCCESS_PATH = '/gnr8/agency'
+const DEFAULT_AUTH_SUCCESS_PATH = AGENCY_HOME_PATH
 const DEFAULT_ONBOARDING_RESOLVER_PATH = '/api/auth/callback/next'
 
 function normalizeNextPath(candidate: string | null): string {
@@ -63,6 +67,19 @@ export default function AuthCallbackPage() {
           throw new Error(explicitError)
         }
 
+        if (callbackType === 'recovery') {
+          window.history.replaceState({}, document.title, AUTH_CALLBACK_PATH)
+          setStatus('done')
+          window.setTimeout(() => {
+            window.location.replace(`${RESET_PASSWORD_PATH}${url.search}${window.location.hash}`)
+          }, 0)
+          return
+        }
+
+        if (!isInviteOrOnboardingCallbackType(callbackType)) {
+          throw new Error('Unsupported auth callback type for this route. Use login or password recovery flow.')
+        }
+
         const code = url.searchParams.get('code')
         if (code) {
           const result = await supabase.auth.exchangeCodeForSession(code)
@@ -93,15 +110,6 @@ export default function AuthCallbackPage() {
         if (sessionResult.error) throw sessionResult.error
         if (!sessionResult.data.session) {
           throw new Error('Invite or auth link is invalid or expired. Please request a new invite.')
-        }
-
-        if (callbackType === 'recovery') {
-          window.history.replaceState({}, document.title, AUTH_CALLBACK_PATH)
-          setStatus('done')
-          window.setTimeout(() => {
-            window.location.replace(RESET_PASSWORD_PATH)
-          }, 0)
-          return
         }
 
         const resolverResponse = await fetch(

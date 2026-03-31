@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import type { EmailOtpType } from '@supabase/supabase-js'
 import { getSupabaseBrowserClient } from '@/src/supabase/browser'
+import { LOGIN_PATH, RESET_PASSWORD_PATH } from '@/src/auth/auth-flow-model'
 
 type Status = 'checking' | 'ready' | 'saving' | 'done' | 'error'
 
@@ -29,6 +30,15 @@ function toReadableAuthError(raw: string): string {
   return value
 }
 
+function hasRecoveryTokens(url: URL, hashParams: URLSearchParams): boolean {
+  return Boolean(
+    url.searchParams.get('code') ||
+      hashParams.get('access_token') ||
+      hashParams.get('refresh_token') ||
+      url.searchParams.get('token_hash'),
+  )
+}
+
 export default function ResetPasswordPage() {
   const router = useRouter()
   const supabase = useMemo(() => getSupabaseBrowserClient(), [])
@@ -49,6 +59,19 @@ export default function ResetPasswordPage() {
         const url = new URL(window.location.href)
         const hash = window.location.hash.startsWith('#') ? window.location.hash.slice(1) : ''
         const hashParams = new URLSearchParams(hash)
+        const callbackType = asEmailOtpType(
+          url.searchParams.get('type') ?? hashParams.get('type'),
+        )
+
+        if (callbackType && callbackType !== 'recovery') {
+          throw new Error('This route only accepts password recovery links. Use the invite or login flow.')
+        }
+
+        if (callbackType !== 'recovery') {
+          if (!hasRecoveryTokens(url, hashParams)) {
+            throw new Error('Recovery link is missing required credentials. Request a new password reset email.')
+          }
+        }
 
         const explicitError =
           url.searchParams.get('error_description') ??
@@ -61,6 +84,9 @@ export default function ResetPasswordPage() {
 
         const code = url.searchParams.get('code')
         if (code) {
+          if (callbackType !== 'recovery') {
+            throw new Error('Recovery link type is invalid. Request a new password reset email.')
+          }
           const result = await supabase.auth.exchangeCodeForSession(code)
           if (result.error) throw result.error
         } else {
@@ -68,6 +94,9 @@ export default function ResetPasswordPage() {
           const refreshToken = hashParams.get('refresh_token')
 
           if (accessToken && refreshToken) {
+            if (callbackType !== 'recovery') {
+              throw new Error('Recovery session type is invalid. Request a new password reset email.')
+            }
             const result = await supabase.auth.setSession({
               access_token: accessToken,
               refresh_token: refreshToken,
@@ -75,9 +104,7 @@ export default function ResetPasswordPage() {
             if (result.error) throw result.error
           } else {
             const tokenHash = url.searchParams.get('token_hash')
-            const otpType = asEmailOtpType(
-              url.searchParams.get('type') ?? hashParams.get('type'),
-            )
+            const otpType = callbackType
             if (tokenHash && otpType === 'recovery') {
               const result = await supabase.auth.verifyOtp({
                 token_hash: tokenHash,
@@ -98,7 +125,7 @@ export default function ResetPasswordPage() {
           return
         }
 
-        window.history.replaceState({}, document.title, '/reset-password')
+        window.history.replaceState({}, document.title, RESET_PASSWORD_PATH)
         setStatus('ready')
       } catch (e) {
         setStatus('error')
@@ -131,7 +158,7 @@ export default function ResetPasswordPage() {
 
       setStatus('done')
       window.setTimeout(() => {
-        router.replace('/login')
+        router.replace(LOGIN_PATH)
         router.refresh()
       }, 1000)
     } catch (e) {

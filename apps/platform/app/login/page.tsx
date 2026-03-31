@@ -3,6 +3,7 @@
 import { useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { getSupabaseBrowserClient } from '@/src/supabase/browser'
+import { RESET_PASSWORD_PATH } from '@/src/auth/auth-flow-model'
 
 export default function LoginPage() {
   const router = useRouter()
@@ -78,7 +79,7 @@ export default function LoginPage() {
     setRecoveryMessage(null)
 
     try {
-      const redirectTo = new URL('/reset-password', window.location.origin).toString()
+      const redirectTo = new URL(RESET_PASSWORD_PATH, window.location.origin).toString()
       const { error: resetError } = await supabase.auth.resetPasswordForEmail(normalizedEmail, {
         redirectTo,
       })

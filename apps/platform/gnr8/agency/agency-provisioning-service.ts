@@ -5,11 +5,11 @@ import type { PoolClient } from "pg";
 
 import { getSuperadminPool } from "@/src/superadmin/db";
 import { getSupabaseServiceRoleClient } from "@/src/supabase/service-role-server";
+import { AUTH_CALLBACK_PATH } from "@/src/auth/auth-flow-model";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const SLUG_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const DEFAULT_PLATFORM_APP_ORIGIN = "https://app.pasadenagenerator.com";
-const AUTH_CALLBACK_PATH = "/auth/callback";
 
 export type ProvisionAgencyInput = {
   agencyName: string;

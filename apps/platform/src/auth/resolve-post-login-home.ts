@@ -1,15 +1,17 @@
 import "server-only";
 
-import { OWNER_SETUP_PATH, listIncompleteOwnerSetupAgencyIdsForCurrentUserForPage } from "@/src/auth/owner-setup-gate";
+import { listIncompleteOwnerSetupAgencyIdsForCurrentUserForPage } from "@/src/auth/owner-setup-gate";
 import { listCurrentUserAgencyMembershipsForPage, ResolveCurrentAgencyError } from "@/src/auth/resolve-current-agency";
 import { listCurrentUserClientMembershipsForPage, ResolveCurrentClientError } from "@/src/auth/resolve-current-client";
 import { requireSuperadminUserIdForPage } from "@/src/auth/require-superadmin-user-id";
-
-const AUTH_CALLBACK_PATH = "/auth/callback";
-const SUPERADMIN_HOME_PATH = "/gnr8/command-center";
-const AGENCY_HOME_PATH = "/gnr8/agency";
-const CLIENT_HOME_PATH = "/gnr8/client";
-const ACCESS_GUIDANCE_PATH = "/signup?access=missing";
+import {
+  AGENCY_HOME_PATH,
+  AUTH_CALLBACK_PATH,
+  CLIENT_HOME_PATH,
+  OWNER_SETUP_PATH,
+  SIGNUP_ACCESS_MISSING_PATH,
+  SUPERADMIN_HOME_PATH,
+} from "@/src/auth/auth-flow-model";
 
 type HomeKind = "superadmin" | "agency" | "client" | "agency_onboarding" | "no_access";
 
@@ -170,7 +172,7 @@ export async function resolvePostLoginHomeForPage(input?: {
   }
 
   return {
-    target: ACCESS_GUIDANCE_PATH,
+    target: SIGNUP_ACCESS_MISSING_PATH,
     kind: "no_access",
   };
 }
