@@ -62,6 +62,14 @@ export async function PATCH(request: Request, props: Params) {
       return NextResponse.json({ ok: false, error: 'Agency scope mismatch for role update.' }, { status: 403 })
     }
 
+    console.info('[gnr8.agency.members.role_update]', {
+      actor_user_id: actionContext.userId,
+      actor_mode: actionContext.actorMode,
+      target_agency_id: actionContext.agencyId,
+      target_membership_id: membershipId,
+      next_role: role,
+    })
+
     const updated = await updateAgencyMemberRole({
       agencyId: actionContext.agencyId,
       membershipId,
@@ -108,6 +116,13 @@ export async function DELETE(request: Request, props: Params) {
     if (actionContext.agencyId !== requestedAgencyId) {
       return NextResponse.json({ ok: false, error: 'Agency scope mismatch for member removal.' }, { status: 403 })
     }
+
+    console.info('[gnr8.agency.members.remove]', {
+      actor_user_id: actionContext.userId,
+      actor_mode: actionContext.actorMode,
+      target_agency_id: actionContext.agencyId,
+      target_membership_id: membershipId,
+    })
 
     await removeAgencyMember({
       agencyId: actionContext.agencyId,

@@ -86,6 +86,22 @@ export function ExistingAgenciesTable({ agencies }: ExistingAgenciesTableProps) 
                       >
                         Agency Settings
                       </Link>
+                      <Link
+                        href={`/gnr8/admin/agencies/${encodeURIComponent(agency.id)}/members`}
+                        style={{
+                          display: "inline-flex",
+                          alignItems: "center",
+                          padding: "6px 10px",
+                          borderRadius: 8,
+                          border: "1px solid #cbd5e1",
+                          background: "#fff",
+                          color: "#0f172a",
+                          textDecoration: "none",
+                          fontSize: 12,
+                        }}
+                      >
+                        Agency Team
+                      </Link>
                     </div>
                   </td>
                 </tr>

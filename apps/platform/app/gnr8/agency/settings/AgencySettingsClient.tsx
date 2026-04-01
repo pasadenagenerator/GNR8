@@ -25,6 +25,7 @@ type Props = {
   ownerEmail: string
   actorMode?: 'membership' | 'admin_view'
   adminBackToPath?: string
+  adminTeamPath?: string
 }
 
 type FormStatus = 'idle' | 'saving' | 'success' | 'error'
@@ -342,6 +343,25 @@ export default function AgencySettingsClient(props: Props) {
           >
             {isAdminView ? 'Back to Admin Dashboard' : 'Back to Dashboard'}
           </Link>
+          {isAdminView ? (
+            <Link
+              href={props.adminTeamPath || `/gnr8/admin/agencies/${encodeURIComponent(props.agencyId)}/members`}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                height: 34,
+                padding: '0 10px',
+                borderRadius: 8,
+                border: '1px solid #cbd5e1',
+                background: '#fff',
+                color: '#0f172a',
+                textDecoration: 'none',
+                fontSize: 13,
+              }}
+            >
+              Agency Team
+            </Link>
+          ) : null}
           {!isAdminView ? (
             <Link
               href="/gnr8/agency/members"

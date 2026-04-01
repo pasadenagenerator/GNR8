@@ -34,6 +34,10 @@ type Props = {
   canInviteUsers: boolean
   canEditMemberRole: boolean
   canRemoveMember: boolean
+  actorMode?: 'membership' | 'admin_view'
+  adminBackToPath?: string
+  adminSettingsPath?: string
+  hideMembershipSwitcher?: boolean
 }
 
 type FormStatus = 'idle' | 'saving' | 'success' | 'error'
@@ -111,6 +115,7 @@ function roleSortRank(role: AgencyMemberRole): number {
 
 export default function AgencyMembersClient(props: Props) {
   const [members, setMembers] = useState<AgencyMember[]>(props.initialMembers)
+  const isAdminView = props.actorMode === 'admin_view'
 
   const [inviteEmail, setInviteEmail] = useState('')
   const [inviteRole, setInviteRole] = useState<AgencyMemberRole>('member')
@@ -128,6 +133,9 @@ export default function AgencyMembersClient(props: Props) {
   const currentAgencySettingsPath = props.requestedAgencyId
     ? `/gnr8/agency/settings?agency=${encodeURIComponent(props.requestedAgencyId)}`
     : `/gnr8/agency/settings?agency=${encodeURIComponent(props.agencyId)}`
+
+  const backToPath = isAdminView ? props.adminBackToPath || currentAgencyDashboardPath : currentAgencyDashboardPath
+  const settingsPath = isAdminView ? props.adminSettingsPath || currentAgencySettingsPath : currentAgencySettingsPath
 
   const sortedMembers = useMemo(() => {
     return [...members].sort((a, b) => {
@@ -319,16 +327,35 @@ export default function AgencyMembersClient(props: Props) {
       }}
     >
       <header style={{ display: 'grid', gap: 8 }}>
-        <h1 style={{ margin: 0, fontSize: 30, color: '#0f172a' }}>Agency Members</h1>
+        <h1 style={{ margin: 0, fontSize: 30, color: '#0f172a' }}>{isAdminView ? 'Agency Team' : 'Agency Members'}</h1>
         <p style={{ margin: 0, color: '#334155' }}>
-          Invite agency users and manage basic team membership roles for the active agency scope.
+          {isAdminView
+            ? 'Superadmin support mode for team membership actions in explicit admin-view scope.'
+            : 'Invite agency users and manage basic team membership roles for the active agency scope.'}
         </p>
       </header>
 
       <section style={{ ...sectionStyle(), marginTop: 14 }}>
+        {isAdminView ? (
+          <div
+            style={{
+              display: 'inline-flex',
+              padding: '4px 10px',
+              borderRadius: 999,
+              fontSize: 12,
+              fontWeight: 700,
+              background: '#e0f2fe',
+              color: '#0c4a6e',
+              border: '1px solid #7dd3fc',
+              marginBottom: 8,
+            }}
+          >
+            Admin View
+          </div>
+        ) : null}
         <div style={{ display: 'grid', gap: 4, fontSize: 13, color: '#334155' }}>
           <div>
-            <strong>Current Agency:</strong> {props.agencyName}
+            <strong>{isAdminView ? 'Target Agency:' : 'Current Agency:'}</strong> {props.agencyName}
           </div>
           <div>
             <strong>Agency ID:</strong> {props.agencyId}
@@ -336,11 +363,16 @@ export default function AgencyMembersClient(props: Props) {
           <div>
             <strong>Your Role:</strong> {props.role}
           </div>
+          {isAdminView ? (
+            <div>
+              <strong>Actor Mode:</strong> admin_view
+            </div>
+          ) : null}
         </div>
 
         <div style={{ marginTop: 10, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           <Link
-            href={currentAgencyDashboardPath}
+            href={backToPath}
             style={{
               display: 'inline-flex',
               alignItems: 'center',
@@ -353,10 +385,10 @@ export default function AgencyMembersClient(props: Props) {
               fontSize: 12,
             }}
           >
-            Back to Dashboard
+            {isAdminView ? 'Back to Agency Dashboard' : 'Back to Dashboard'}
           </Link>
           <Link
-            href={currentAgencySettingsPath}
+            href={settingsPath}
             style={{
               display: 'inline-flex',
               alignItems: 'center',
@@ -369,11 +401,11 @@ export default function AgencyMembersClient(props: Props) {
               fontSize: 12,
             }}
           >
-            Open Settings
+            {isAdminView ? 'Agency Settings (Admin View)' : 'Open Settings'}
           </Link>
         </div>
 
-        {props.memberships.length > 1 ? (
+        {!props.hideMembershipSwitcher && props.memberships.length > 1 ? (
           <div style={{ marginTop: 10, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             {props.memberships.map((membership) => {
               const isActive = membership.agency_id === props.agencyId

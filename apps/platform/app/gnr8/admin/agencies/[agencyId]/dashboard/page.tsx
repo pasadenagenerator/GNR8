@@ -192,6 +192,22 @@ export default async function SuperadminAgencyDashboardPage(props: PageProps) {
           >
             Agency Settings
           </Link>
+          <Link
+            href={`/gnr8/admin/agencies/${encodeURIComponent(agencyId)}/members`}
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              padding: "6px 10px",
+              borderRadius: 8,
+              border: "1px solid #cbd5e1",
+              background: "#fff",
+              color: "#0f172a",
+              textDecoration: "none",
+              fontSize: 12,
+            }}
+          >
+            Agency Team
+          </Link>
         </div>
       </section>
 
@@ -295,6 +311,7 @@ export default async function SuperadminAgencyDashboardPage(props: PageProps) {
                     <th style={{ padding: "8px 10px" }}>Estimated Cost</th>
                     <th style={{ padding: "8px 10px" }}>Simulated Revenue</th>
                     <th style={{ padding: "8px 10px" }}>Margin</th>
+                    <th style={{ padding: "8px 10px" }}>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -306,6 +323,18 @@ export default async function SuperadminAgencyDashboardPage(props: PageProps) {
                       <td style={{ padding: "8px 10px" }}>{formatMoney(client.total_simulated_revenue)}</td>
                       <td style={{ padding: "8px 10px", color: client.total_margin >= 0 ? "#166534" : "#991b1b" }}>
                         {formatMoney(client.total_margin)}
+                      </td>
+                      <td style={{ padding: "8px 10px" }}>
+                        {client.client_id ? (
+                          <Link
+                            href={`/gnr8/admin/agencies/${encodeURIComponent(agencyId)}/clients/${encodeURIComponent(client.client_id)}/users`}
+                            style={actionLinkStyle()}
+                          >
+                            Client Users
+                          </Link>
+                        ) : (
+                          <span style={disabledActionStyle()}>Client Users</span>
+                        )}
                       </td>
                     </tr>
                   ))}

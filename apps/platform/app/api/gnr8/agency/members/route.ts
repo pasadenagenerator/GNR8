@@ -80,6 +80,14 @@ export async function POST(request: Request) {
       return NextResponse.json({ ok: false, error: 'Agency scope mismatch for invite.' }, { status: 403 })
     }
 
+    console.info('[gnr8.agency.members.invite]', {
+      actor_user_id: actionContext.userId,
+      actor_mode: actionContext.actorMode,
+      target_agency_id: actionContext.agencyId,
+      invite_email: email,
+      invite_role: role,
+    })
+
     const invitedMember = await inviteAgencyMember({
       agencyId: actionContext.agencyId,
       email,

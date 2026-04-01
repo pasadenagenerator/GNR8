@@ -33,6 +33,9 @@ type Props = {
   memberships: AgencyMembershipOption[]
   role: 'owner' | 'admin' | 'member' | 'superadmin'
   canInviteClientUsers: boolean
+  actorMode?: 'membership' | 'admin_view'
+  adminBackToPath?: string
+  hideMembershipSwitcher?: boolean
 }
 
 type FormStatus = 'idle' | 'saving' | 'success' | 'error'
@@ -95,6 +98,7 @@ function statusBadgeColor(status: ClientUserStatus): { background: string; color
 }
 
 export default function ClientUsersClient(props: Props) {
+  const isAdminView = props.actorMode === 'admin_view'
   const [users, setUsers] = useState<ClientUserRow[]>([])
   const [loadingUsers, setLoadingUsers] = useState(true)
   const [tableError, setTableError] = useState<string | null>(null)
@@ -108,6 +112,7 @@ export default function ClientUsersClient(props: Props) {
   const dashboardPath = props.requestedAgencyId
     ? `/gnr8/agency?agency=${encodeURIComponent(props.requestedAgencyId)}`
     : `/gnr8/agency?agency=${encodeURIComponent(props.agencyId)}`
+  const backToPath = isAdminView ? props.adminBackToPath || dashboardPath : dashboardPath
 
   const sortedUsers = useMemo(() => {
     return [...users].sort((a, b) => {
@@ -227,13 +232,32 @@ export default function ClientUsersClient(props: Props) {
       }}
     >
       <header style={{ display: 'grid', gap: 8 }}>
-        <h1 style={{ margin: 0, fontSize: 30, color: '#0f172a' }}>Client User Access</h1>
+        <h1 style={{ margin: 0, fontSize: 30, color: '#0f172a' }}>{isAdminView ? 'Client Users' : 'Client User Access'}</h1>
         <p style={{ margin: 0, color: '#334155' }}>
-          Invite and manage users for one client scope. Client users are separate from agency memberships.
+          {isAdminView
+            ? 'Superadmin support mode for client-user access in explicit admin-view scope.'
+            : 'Invite and manage users for one client scope. Client users are separate from agency memberships.'}
         </p>
       </header>
 
       <section style={{ ...sectionStyle(), marginTop: 14 }}>
+        {isAdminView ? (
+          <div
+            style={{
+              display: 'inline-flex',
+              padding: '4px 10px',
+              borderRadius: 999,
+              fontSize: 12,
+              fontWeight: 700,
+              background: '#e0f2fe',
+              color: '#0c4a6e',
+              border: '1px solid #7dd3fc',
+              marginBottom: 8,
+            }}
+          >
+            Admin View
+          </div>
+        ) : null}
         <div style={{ display: 'grid', gap: 4, fontSize: 13, color: '#334155' }}>
           <div>
             <strong>Client:</strong> {props.clientName}
@@ -242,16 +266,24 @@ export default function ClientUsersClient(props: Props) {
             <strong>Client ID:</strong> {props.clientId}
           </div>
           <div>
-            <strong>Parent Agency:</strong> {props.agencyName}
+            <strong>{isAdminView ? 'Target Agency:' : 'Parent Agency:'}</strong> {props.agencyName}
+          </div>
+          <div>
+            <strong>Agency ID:</strong> {props.agencyId}
           </div>
           <div>
             <strong>Your Role:</strong> {props.role}
           </div>
+          {isAdminView ? (
+            <div>
+              <strong>Actor Mode:</strong> admin_view
+            </div>
+          ) : null}
         </div>
 
         <div style={{ marginTop: 10, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           <Link
-            href={dashboardPath}
+            href={backToPath}
             style={{
               display: 'inline-flex',
               alignItems: 'center',
@@ -264,11 +296,11 @@ export default function ClientUsersClient(props: Props) {
               fontSize: 12,
             }}
           >
-            Back to Dashboard
+            {isAdminView ? 'Back to Agency Dashboard' : 'Back to Dashboard'}
           </Link>
         </div>
 
-        {props.memberships.length > 1 ? (
+        {!props.hideMembershipSwitcher && props.memberships.length > 1 ? (
           <div style={{ marginTop: 10, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             {props.memberships.map((membership) => {
               const isActive = membership.agency_id === props.agencyId
