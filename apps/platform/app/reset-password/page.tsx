@@ -32,9 +32,10 @@ function toReadableAuthError(raw: string): string {
 
 function hasRecoveryTokens(url: URL, hashParams: URLSearchParams): boolean {
   return Boolean(
-    url.searchParams.get('code') ||
+    (url.searchParams.get('access_token') && url.searchParams.get('refresh_token')) ||
       (hashParams.get('access_token') && hashParams.get('refresh_token')) ||
-      url.searchParams.get('token_hash'),
+      url.searchParams.get('token_hash') ||
+      hashParams.get('token_hash'),
   )
 }
 
@@ -84,32 +85,30 @@ export default function ResetPasswordPage() {
           throw new Error(toReadableAuthError(explicitError))
         }
 
-        const code = url.searchParams.get('code')
-        const accessToken = hashParams.get('access_token')
-        const refreshToken = hashParams.get('refresh_token')
-        const tokenHash = url.searchParams.get('token_hash')
+        const accessToken =
+          url.searchParams.get('access_token') ?? hashParams.get('access_token')
+        const refreshToken =
+          url.searchParams.get('refresh_token') ?? hashParams.get('refresh_token')
+        const tokenHash = url.searchParams.get('token_hash') ?? hashParams.get('token_hash')
 
-        if (code) {
-          const result = await supabase.auth.exchangeCodeForSession(code)
+        if (accessToken && refreshToken) {
+          const result = await supabase.auth.setSession({
+            access_token: accessToken,
+            refresh_token: refreshToken,
+          })
           if (result.error) throw result.error
         } else {
-          if (accessToken && refreshToken) {
-            const result = await supabase.auth.setSession({
-              access_token: accessToken,
-              refresh_token: refreshToken,
+          if (tokenHash && callbackType === 'recovery') {
+            const result = await supabase.auth.verifyOtp({
+              token_hash: tokenHash,
+              type: 'recovery',
             })
             if (result.error) throw result.error
           } else {
-            const otpType = callbackType
-            if (tokenHash && otpType === 'recovery') {
-              const result = await supabase.auth.verifyOtp({
-                token_hash: tokenHash,
-                type: otpType,
-              })
-              if (result.error) throw result.error
-            } else if (tokenHash && otpType !== 'recovery') {
+            if (tokenHash && callbackType !== 'recovery') {
               throw new Error('Recovery link type is invalid. Request a new password reset email.')
             }
+            throw new Error('Recovery link is invalid or expired. Request a new password reset email.')
           }
         }
 
