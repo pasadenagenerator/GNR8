@@ -71,3 +71,22 @@
 
 ## 7. Next-Step Recommendation
 - Add a persistent audit event sink for agency/client membership mutations that stores immutable actor + target fields (`actor_user_id`, `actor_mode`, `target_agency_id`, `target_client_id`, action, timestamp) per write operation.
+
+## 8. Follow-Up Fix (2026-04-01): memberships org-column compatibility in agency members read path
+- Symptom observed in production-compatible schema variants:
+  - `Failed to list agency members: column memberships.organization_id does not exist`
+- Root cause:
+  - agency members listing path used a hardcoded `memberships.organization_id` filter.
+  - legacy production schema can expose only `memberships.org_id`.
+- Fix applied:
+  - agency members service now introspects `information_schema.columns` for `public.memberships` and resolves one safe runtime expression:
+    - dual-column schema: `coalesce(m.organization_id, m.org_id)`
+    - modern-only schema: `m.organization_id`
+    - legacy-only schema: `m.org_id`
+  - list query is constructed dynamically from that expression to avoid parse-time failures when one column is absent.
+- Coverage:
+  - superadmin admin-view page (`/gnr8/admin/agencies/[agencyId]/members`)
+  - normal agency page (`/gnr8/agency/members`)
+  - agency members list API route (`GET /api/gnr8/agency/members`)
+- Added test:
+  - query-generation compatibility assertions for `org_id`-only and dual-column schemas in `apps/platform/gnr8/agency/agency-membership-service.test.ts`.

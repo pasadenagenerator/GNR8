@@ -1,8 +1,10 @@
 import 'server-only'
 
 import { randomUUID } from 'node:crypto'
+import type { PoolClient } from 'pg'
 
 import { buildAgencyOwnerInviteRedirectTo } from '@/gnr8/agency/agency-provisioning-service'
+import { getSuperadminPool } from '@/src/superadmin/db'
 import { getSupabaseServiceRoleClient } from '@/src/supabase/service-role-server'
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
@@ -37,6 +39,11 @@ type MembershipRow = {
   id: string | null
   user_id: string | null
   role: string | null
+}
+
+type MembershipOrgColumnSupport = {
+  hasOrganizationId: boolean
+  hasOrgId: boolean
 }
 
 type AuthAdminUser = {
@@ -125,6 +132,39 @@ function resolveMemberName(user: AuthAdminUser): string | null {
   return local || null
 }
 
+export function resolveMembershipOrgColumnExpression(columns: MembershipOrgColumnSupport): string {
+  if (columns.hasOrganizationId && columns.hasOrgId) return 'coalesce(m.organization_id, m.org_id)'
+  if (columns.hasOrganizationId) return 'm.organization_id'
+  if (columns.hasOrgId) return 'm.org_id'
+  throw new AgencyMembersError('memberships schema mismatch: expected organization_id and/or org_id')
+}
+
+async function resolveMembershipColumnSupport(client: PoolClient): Promise<MembershipOrgColumnSupport> {
+  const membershipColumns = await client.query<{ column_name: string }>(
+    `
+      select column_name::text as column_name
+      from information_schema.columns
+      where table_schema = 'public'
+        and table_name = 'memberships'
+        and column_name in ('organization_id', 'org_id')
+    `,
+  )
+
+  const names = new Set(membershipColumns.rows.map((row) => normalizeText(row.column_name).toLowerCase()))
+  return {
+    hasOrganizationId: names.has('organization_id'),
+    hasOrgId: names.has('org_id'),
+  }
+}
+
+export function buildListAgencyMembersSql(orgColumnExpression: string): string {
+  return `
+    select m.id::text as id, m.user_id::text as user_id, m.role::text as role
+    from public.memberships m
+    where ${orgColumnExpression} = $1::uuid
+  `
+}
+
 export async function listAgencyMembers(input: { agencyId: string }): Promise<AgencyMemberRow[]> {
   const agencyId = assertUuid(input.agencyId, 'agencyId')
   const organizationId = await requireAgencyOrganizationId(agencyId)
@@ -134,16 +174,22 @@ export async function listAgencyMembers(input: { agencyId: string }): Promise<Ag
     throw new AgencyMembersError('Supabase service role client is not configured')
   }
 
-  const membershipResult = await supabase
-    .from('memberships')
-    .select('id,user_id,role')
-    .eq('organization_id', organizationId)
-
-  if (membershipResult.error) {
-    throw new AgencyMembersError(`Failed to list agency members: ${membershipResult.error.message}`)
+  const pool = getSuperadminPool()
+  const client = await pool.connect()
+  let membershipRows: MembershipRow[] = []
+  try {
+    const membershipColumns = await resolveMembershipColumnSupport(client)
+    const orgColumnExpression = resolveMembershipOrgColumnExpression(membershipColumns)
+    const membershipResult = await client.query<MembershipRow>(buildListAgencyMembersSql(orgColumnExpression), [
+      organizationId,
+    ])
+    membershipRows = membershipResult.rows
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'unknown error'
+    throw new AgencyMembersError(`Failed to list agency members: ${message}`)
+  } finally {
+    client.release()
   }
-
-  const membershipRows = Array.isArray(membershipResult.data) ? (membershipResult.data as MembershipRow[]) : []
 
   const members = await Promise.all(
     membershipRows.map(async (membership): Promise<AgencyMemberRow | null> => {
