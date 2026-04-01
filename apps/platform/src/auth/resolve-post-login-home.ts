@@ -2,7 +2,7 @@ import "server-only";
 
 import { listIncompleteOwnerSetupAgencyIdsForCurrentUserForPage } from "@/src/auth/owner-setup-gate";
 import { listCurrentUserAgencyMembershipsForPage, ResolveCurrentAgencyError } from "@/src/auth/resolve-current-agency";
-import { listCurrentUserClientMembershipsForPage, ResolveCurrentClientError } from "@/src/auth/resolve-current-client";
+import { resolveCurrentUserClientForPage, ResolveCurrentClientError } from "@/src/auth/resolve-current-client";
 import { requireSuperadminUserIdForPage } from "@/src/auth/require-superadmin-user-id";
 import {
   AGENCY_HOME_PATH,
@@ -54,6 +54,10 @@ function tryExtractClientId(pathnameWithSearch: string): string | null {
 function onboardingPathForAgency(agencyId: string | null): string {
   if (!agencyId) return OWNER_SETUP_PATH;
   return `${OWNER_SETUP_PATH}?agency=${encodeURIComponent(agencyId)}`;
+}
+
+function scopedClientHomePath(clientId: string): string {
+  return `${CLIENT_HOME_PATH}?client=${encodeURIComponent(clientId)}`;
 }
 
 async function isSuperadminForPage(): Promise<boolean> {
@@ -133,46 +137,50 @@ export async function resolvePostLoginHomeForPage(input?: {
     };
   }
 
-  let clientMemberships: Awaited<ReturnType<typeof listCurrentUserClientMembershipsForPage>>["memberships"] = [];
+  const requestedClientId = normalizedNextPath ? tryExtractClientId(normalizedNextPath) : null;
+  const clientRouteRequested = normalizedNextPath
+    ? normalizedNextPath === CLIENT_HOME_PATH || requestedClientId != null
+    : false;
+  const activeClientCandidate = clientRouteRequested ? requestedClientId : null;
+
   try {
-    clientMemberships = (await listCurrentUserClientMembershipsForPage()).memberships;
-  } catch (error) {
-    if (error instanceof ResolveCurrentClientError && error.code === "UNAUTHORIZED") {
-      throw error;
-    }
-    throw error;
-  }
+    const resolvedClient = await resolveCurrentUserClientForPage({
+      activeClientId: activeClientCandidate,
+    });
 
-  if (clientMemberships.length > 0) {
-    if (normalizedNextPath) {
-      const requestedClientId = tryExtractClientId(normalizedNextPath);
-      if (
-        (normalizedNextPath === CLIENT_HOME_PATH && requestedClientId == null) ||
-        (requestedClientId != null && clientMemberships.some((membership) => membership.client_id === requestedClientId))
-      ) {
-        return {
-          target: normalizedNextPath,
-          kind: "client",
-        };
-      }
-    }
-
-    if (clientMemberships.length === 1) {
-      const membership = clientMemberships[0];
+    if (normalizedNextPath && requestedClientId && requestedClientId === resolvedClient.client_id) {
       return {
-        target: `${CLIENT_HOME_PATH}?client=${encodeURIComponent(membership.client_id)}`,
+        target: normalizedNextPath,
         kind: "client",
       };
     }
 
     return {
-      target: CLIENT_HOME_PATH,
+      target: scopedClientHomePath(resolvedClient.client_id),
       kind: "client",
     };
+  } catch (error) {
+    if (error instanceof ResolveCurrentClientError && error.code === "UNAUTHORIZED") {
+      throw error;
+    }
+    if (error instanceof ResolveCurrentClientError && error.code === "NO_MEMBERSHIP") {
+      return {
+        target: SIGNUP_ACCESS_MISSING_PATH,
+        kind: "no_access",
+      };
+    }
+    if (error instanceof ResolveCurrentClientError && error.code === "ACTIVE_CLIENT_REQUIRED") {
+      return {
+        target: CLIENT_HOME_PATH,
+        kind: "client",
+      };
+    }
+    if (error instanceof ResolveCurrentClientError && error.code === "ACTIVE_CLIENT_INVALID") {
+      return {
+        target: CLIENT_HOME_PATH,
+        kind: "client",
+      };
+    }
+    throw error;
   }
-
-  return {
-    target: SIGNUP_ACCESS_MISSING_PATH,
-    kind: "no_access",
-  };
 }

@@ -47,6 +47,12 @@ type RuntimeSnapshot = {
   has_published_runtime_version: boolean;
 };
 
+export type ClientOrganizationScope = {
+  id: string | null;
+  agency_id: string | null;
+  organization_type: string | null;
+};
+
 export type ClientDashboardSiteRow = {
   site_id: string;
   domain: string | null;
@@ -108,9 +114,52 @@ function toHttpsLiveUrl(domain: string | null | undefined): string | null {
   try {
     const parsed = raw.includes("://") ? new URL(raw) : new URL(`https://${raw}`);
     if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return null;
-    return parsed.toString();
+  return parsed.toString();
   } catch {
     return null;
+  }
+}
+
+export function assertClientScopedSiteRows(input: {
+  sites: SiteRow[];
+  expectedClientId: string;
+  expectedAgencyId: string;
+}): void {
+  const expectedClientId = normalizeUuid(input.expectedClientId, "expectedClientId");
+  const expectedAgencyId = normalizeUuid(input.expectedAgencyId, "expectedAgencyId");
+
+  for (const site of input.sites) {
+    const siteId = toTextOrNull(site.id);
+    const rowClientId = toTextOrNull(site.org_id);
+    const rowAgencyId = toTextOrNull(site.agency_id);
+
+    if (!siteId || !rowClientId || !rowAgencyId) {
+      throw new Error("client scoping violation: site row is missing required tenancy identifiers");
+    }
+    if (rowClientId !== expectedClientId || rowAgencyId !== expectedAgencyId) {
+      throw new Error("client scoping violation: cross-client or cross-agency site row detected");
+    }
+  }
+}
+
+export function assertClientOrganizationScope(input: {
+  clientOrg: ClientOrganizationScope | null;
+  expectedClientId: string;
+  expectedAgencyId: string;
+}): void {
+  const expectedClientId = normalizeUuid(input.expectedClientId, "expectedClientId");
+  const expectedAgencyId = normalizeUuid(input.expectedAgencyId, "expectedAgencyId");
+  const clientOrg = input.clientOrg;
+
+  const orgId = toTextOrNull(clientOrg?.id);
+  const orgType = toTextOrNull(clientOrg?.organization_type)?.toLowerCase();
+  const orgAgencyId = toTextOrNull(clientOrg?.agency_id);
+
+  if (!orgId || orgId !== expectedClientId || orgType !== "client" || !orgAgencyId) {
+    throw new Error("Client organization is unavailable or invalid for dashboard scope.");
+  }
+  if (orgAgencyId !== expectedAgencyId) {
+    throw new Error("Client organization does not belong to the resolved parent agency.");
   }
 }
 
@@ -190,14 +239,11 @@ export async function getClientDashboardReadModelForPage(input: {
     throw new Error(`Client organization lookup failed: ${clientOrgResult.error.message}`);
   }
   const clientOrg = (clientOrgResult.data as ClientOrganizationRow | null) ?? null;
-  const orgType = toTextOrNull(clientOrg?.organization_type)?.toLowerCase();
-  const orgAgencyId = toTextOrNull(clientOrg?.agency_id);
-  if (!clientOrg || orgType !== "client" || !orgAgencyId) {
-    throw new Error("Client organization is unavailable or invalid for dashboard scope.");
-  }
-  if (orgAgencyId !== agencyId) {
-    throw new Error("Client organization does not belong to the resolved parent agency.");
-  }
+  assertClientOrganizationScope({
+    clientOrg,
+    expectedClientId: clientId,
+    expectedAgencyId: agencyId,
+  });
 
   if (agencyResult.error) {
     throw new Error(`Agency lookup failed: ${agencyResult.error.message}`);
@@ -208,6 +254,11 @@ export async function getClientDashboardReadModelForPage(input: {
     clientId,
     agencyId,
     limit,
+  });
+  assertClientScopedSiteRows({
+    sites,
+    expectedClientId: clientId,
+    expectedAgencyId: agencyId,
   });
 
   const siteIds = sites.map((site) => toTextOrNull(site.id)).filter((value): value is string => value != null);
@@ -289,7 +340,7 @@ export async function getClientDashboardReadModelForPage(input: {
   return {
     client: {
       client_id: clientId,
-      client_name: toTextOrNull(clientOrg.name),
+      client_name: toTextOrNull(clientOrg?.name),
     },
     agency: {
       agency_id: agencyId,

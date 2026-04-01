@@ -7,7 +7,7 @@ import { getSupabaseServerClientReadOnly } from "@/src/auth/supabase-server-read
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
-export type ClientMembershipRole = "owner" | "admin" | "member";
+export type ClientMembershipRole = "owner" | "member";
 
 export type ResolvedCurrentUserClient = {
   user_id: string;
@@ -45,8 +45,8 @@ export class ResolveCurrentClientError extends Error {
 type MembershipRow = {
   user_id: string | null;
   role: string | null;
-  organization_id?: string | null;
-  org_id?: string | null;
+  client_organization_id: string | null;
+  agency_id: string | null;
 };
 
 type OrganizationRow = {
@@ -62,7 +62,6 @@ type AgencyRow = {
 };
 
 type ClientMembershipCandidate = {
-  organization_id: string;
   role: ClientMembershipRole;
   client_id: string;
   client_name: string | null;
@@ -79,40 +78,26 @@ function isUuid(value: string): boolean {
 }
 
 function normalizeMembershipRole(value: string): ClientMembershipRole | null {
-  if (value === "owner" || value === "admin" || value === "member") return value;
-  return null;
-}
-
-function normalizeOrganizationId(row: MembershipRow): string | null {
-  const organizationId = normalizeText(row.organization_id);
-  if (organizationId) return organizationId;
-  const legacyOrganizationId = normalizeText(row.org_id);
-  if (legacyOrganizationId) return legacyOrganizationId;
+  if (value === "owner" || value === "member") return value;
   return null;
 }
 
 async function listMembershipRows(supabase: SupabaseClient, userId: string): Promise<MembershipRow[]> {
-  const preferred = await supabase
-    .from("memberships")
-    .select("user_id,role,organization_id,org_id")
+  const result = await supabase
+    .from("client_memberships")
+    .select("user_id,role,client_organization_id,agency_id")
     .eq("user_id", userId);
 
-  if (preferred.error == null) {
-    return Array.isArray(preferred.data) ? (preferred.data as MembershipRow[]) : [];
+  if (result.error) {
+    throw new ResolveCurrentClientError("INVALID_MEMBERSHIP", `Client membership lookup failed: ${result.error.message}`);
   }
 
-  const fallback = await supabase.from("memberships").select("user_id,role,org_id").eq("user_id", userId);
-  if (fallback.error) {
-    throw new ResolveCurrentClientError("INVALID_MEMBERSHIP", `Membership lookup failed: ${fallback.error.message}`);
-  }
-
-  return Array.isArray(fallback.data) ? (fallback.data as MembershipRow[]) : [];
+  return Array.isArray(result.data) ? (result.data as MembershipRow[]) : [];
 }
 
 function dedupeMembershipCandidates(candidates: ClientMembershipCandidate[]): CurrentUserClientMembership[] {
   const roleRank: Record<ClientMembershipRole, number> = {
-    owner: 3,
-    admin: 2,
+    owner: 2,
     member: 1,
   };
   const byClientId = new Map<string, CurrentUserClientMembership>();
@@ -218,18 +203,20 @@ async function listClientMembershipCandidates(
   const normalizedMemberships = rawMemberships
     .map((row) => {
       const role = normalizeMembershipRole(normalizeText(row.role).toLowerCase());
-      const organizationId = normalizeOrganizationId(row);
-      if (role == null || organizationId == null || !isUuid(organizationId)) return null;
+      const clientId = normalizeText(row.client_organization_id);
+      const agencyId = normalizeText(row.agency_id);
+      if (role == null || !isUuid(clientId) || !isUuid(agencyId)) return null;
       return {
         role,
-        organization_id: organizationId,
+        client_id: clientId,
+        agency_id: agencyId,
       };
     })
-    .filter((row): row is { role: ClientMembershipRole; organization_id: string } => row != null);
+    .filter((row): row is { role: ClientMembershipRole; client_id: string; agency_id: string } => row != null);
 
   if (normalizedMemberships.length === 0) return [];
 
-  const uniqueOrganizationIds = Array.from(new Set(normalizedMemberships.map((membership) => membership.organization_id)));
+  const uniqueOrganizationIds = Array.from(new Set(normalizedMemberships.map((membership) => membership.client_id)));
   const organizationResult = await supabase
     .from("organizations")
     .select("id,name,agency_id,organization_type")
@@ -247,26 +234,30 @@ async function listClientMembershipCandidates(
     organizationsById.set(organizationId, organization);
   }
 
-  const validClientMemberships = normalizedMemberships
+  const validatedClientMemberships = normalizedMemberships
     .map((membership) => {
-      const organization = organizationsById.get(membership.organization_id);
+      const organization = organizationsById.get(membership.client_id);
       if (!organization) return null;
       const organizationType = normalizeText(organization.organization_type).toLowerCase();
-      const agencyId = normalizeText(organization.agency_id);
-      if (organizationType !== "client" || !isUuid(agencyId)) return null;
+      const organizationAgencyId = normalizeText(organization.agency_id);
+      if (organizationType !== "client" || !isUuid(organizationAgencyId)) return null;
+      if (organizationAgencyId !== membership.agency_id) {
+        throw new ResolveCurrentClientError(
+          "AMBIGUOUS_MEMBERSHIP",
+          "Client membership has conflicting agency linkage.",
+        );
+      }
       return {
-        organization_id: membership.organization_id,
         role: membership.role,
-        client_id: membership.organization_id,
+        client_id: membership.client_id,
         client_name: normalizeText(organization.name) || null,
-        agency_id: agencyId,
+        agency_id: organizationAgencyId,
       };
     })
     .filter(
       (
         membership,
       ): membership is {
-        organization_id: string;
         role: ClientMembershipRole;
         client_id: string;
         client_name: string | null;
@@ -274,9 +265,9 @@ async function listClientMembershipCandidates(
       } => membership != null,
     );
 
-  if (validClientMemberships.length === 0) return [];
+  if (validatedClientMemberships.length === 0) return [];
 
-  const uniqueAgencyIds = Array.from(new Set(validClientMemberships.map((membership) => membership.agency_id)));
+  const uniqueAgencyIds = Array.from(new Set(validatedClientMemberships.map((membership) => membership.agency_id)));
   const agencyResult = await supabase.from("agencies").select("id,name").in("id", uniqueAgencyIds);
   if (agencyResult.error) {
     throw new ResolveCurrentClientError("INVALID_MEMBERSHIP", `Agency lookup failed: ${agencyResult.error.message}`);
@@ -290,8 +281,7 @@ async function listClientMembershipCandidates(
     agencyNameById.set(agencyId, normalizeText(agency.name) || null);
   }
 
-  const candidates: ClientMembershipCandidate[] = validClientMemberships.map((membership) => ({
-    organization_id: membership.organization_id,
+  const candidates: ClientMembershipCandidate[] = validatedClientMemberships.map((membership) => ({
     role: membership.role,
     client_id: membership.client_id,
     client_name: membership.client_name,
