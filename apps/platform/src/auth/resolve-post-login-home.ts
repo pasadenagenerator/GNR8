@@ -1,6 +1,7 @@
 import "server-only";
 
 import { listIncompleteOwnerSetupAgencyIdsForCurrentUserForPage } from "@/src/auth/owner-setup-gate";
+import { reconcilePendingClientMembershipInvitesForCurrentUser } from "@/src/auth/reconcile-client-membership-invites";
 import { listCurrentUserAgencyMembershipsForPage, ResolveCurrentAgencyError } from "@/src/auth/resolve-current-agency";
 import { resolveCurrentUserClientForPage, ResolveCurrentClientError } from "@/src/auth/resolve-current-client";
 import { requireSuperadminUserIdForPage } from "@/src/auth/require-superadmin-user-id";
@@ -84,6 +85,8 @@ export async function resolvePostLoginHomeForPage(input?: {
       kind: "superadmin",
     };
   }
+
+  await reconcilePendingClientMembershipInvitesForCurrentUser();
 
   let agencyMemberships: Awaited<ReturnType<typeof listCurrentUserAgencyMembershipsForPage>>["memberships"] = [];
   try {

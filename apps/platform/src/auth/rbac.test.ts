@@ -57,3 +57,20 @@ test('admin and member are read-only for agency member mutations in v1', () => {
   assert.equal(canPerformAction('member', 'edit_member_role'), false)
   assert.equal(canPerformAction('member', 'remove_member'), false)
 })
+
+test('owner and admin can manage client users while member cannot', () => {
+  assert.equal(canPerformAction('owner', 'view_client_users'), true)
+  assert.equal(canPerformAction('owner', 'invite_client_user'), true)
+  assert.equal(canPerformAction('owner', 'edit_client_user'), true)
+  assert.equal(canPerformAction('owner', 'remove_client_user'), true)
+
+  assert.equal(canPerformAction('admin', 'view_client_users'), true)
+  assert.equal(canPerformAction('admin', 'invite_client_user'), true)
+  assert.equal(canPerformAction('admin', 'edit_client_user'), true)
+  assert.equal(canPerformAction('admin', 'remove_client_user'), true)
+
+  assert.equal(canPerformAction('member', 'view_client_users'), false)
+  assert.equal(canPerformAction('member', 'invite_client_user'), false)
+  assert.equal(canPerformAction('member', 'edit_client_user'), false)
+  assert.equal(canPerformAction('member', 'remove_client_user'), false)
+})

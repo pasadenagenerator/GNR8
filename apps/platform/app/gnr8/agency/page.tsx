@@ -194,6 +194,7 @@ export default async function AgencyDashboardPage(props: { searchParams?: Promis
   const hasNoCostSignal = readModel.site_rows.some((row) => row.cost_completeness_status === "NO_SIGNAL");
   const canRunMigrations = canPerformAction(currentUserAgency.role, "run_migration");
   const canRunBulkActions = canPerformAction(currentUserAgency.role, "bulk_actions");
+  const canViewClientUsers = canPerformAction(currentUserAgency.role, "view_client_users");
 
   return (
     <main
@@ -395,6 +396,7 @@ export default async function AgencyDashboardPage(props: { searchParams?: Promis
                       <th style={{ padding: "8px 10px" }}>Estimated Cost</th>
                       <th style={{ padding: "8px 10px" }}>Simulated Revenue</th>
                       <th style={{ padding: "8px 10px" }}>Margin</th>
+                      <th style={{ padding: "8px 10px" }}>Access</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -406,6 +408,20 @@ export default async function AgencyDashboardPage(props: { searchParams?: Promis
                         <td style={{ padding: "8px 10px" }}>{formatMoney(client.total_simulated_revenue)}</td>
                         <td style={{ padding: "8px 10px", color: client.total_margin >= 0 ? "#166534" : "#991b1b" }}>
                           {formatMoney(client.total_margin)}
+                        </td>
+                        <td style={{ padding: "8px 10px" }}>
+                          {client.client_id && canViewClientUsers ? (
+                            <Link
+                              href={`/gnr8/agency/clients/${encodeURIComponent(client.client_id)}/users?agency=${encodeURIComponent(currentUserAgency.agency_id)}`}
+                              style={actionLinkStyle()}
+                            >
+                              Client Users
+                            </Link>
+                          ) : client.client_id ? (
+                            <span style={disabledActionStyle()}>No Access</span>
+                          ) : (
+                            <span style={disabledActionStyle()}>Unassigned</span>
+                          )}
                         </td>
                       </tr>
                     ))}

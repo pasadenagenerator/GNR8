@@ -4,9 +4,13 @@ export type AgencyRole = AgencyMembershipRole | 'superadmin'
 export type AgencyAction =
   | 'view_dashboard'
   | 'view_members'
+  | 'view_client_users'
   | 'invite_user'
+  | 'invite_client_user'
   | 'edit_member_role'
+  | 'edit_client_user'
   | 'remove_member'
+  | 'remove_client_user'
   | 'edit_agency_settings'
   | 'edit_agency_slug'
   | 'edit_owner_profile'
@@ -40,9 +44,13 @@ const ACTION_MATRIX: Record<AgencyRole, Record<AgencyAction, boolean>> = {
   superadmin: {
     view_dashboard: true,
     view_members: true,
+    view_client_users: true,
     invite_user: true,
+    invite_client_user: true,
     edit_member_role: true,
+    edit_client_user: true,
     remove_member: true,
+    remove_client_user: true,
     edit_agency_settings: true,
     edit_agency_slug: true,
     edit_owner_profile: true,
@@ -57,9 +65,13 @@ const ACTION_MATRIX: Record<AgencyRole, Record<AgencyAction, boolean>> = {
   owner: {
     view_dashboard: true,
     view_members: true,
+    view_client_users: true,
     invite_user: true,
+    invite_client_user: true,
     edit_member_role: true,
+    edit_client_user: true,
     remove_member: true,
+    remove_client_user: true,
     edit_agency_settings: true,
     edit_agency_slug: true,
     edit_owner_profile: true,
@@ -74,9 +86,13 @@ const ACTION_MATRIX: Record<AgencyRole, Record<AgencyAction, boolean>> = {
   admin: {
     view_dashboard: true,
     view_members: true,
+    view_client_users: true,
     invite_user: false,
+    invite_client_user: true,
     edit_member_role: false,
+    edit_client_user: true,
     remove_member: false,
+    remove_client_user: true,
     edit_agency_settings: true,
     edit_agency_slug: false,
     edit_owner_profile: false,
@@ -91,9 +107,13 @@ const ACTION_MATRIX: Record<AgencyRole, Record<AgencyAction, boolean>> = {
   member: {
     view_dashboard: true,
     view_members: true,
+    view_client_users: false,
     invite_user: false,
+    invite_client_user: false,
     edit_member_role: false,
+    edit_client_user: false,
     remove_member: false,
+    remove_client_user: false,
     edit_agency_settings: false,
     edit_agency_slug: false,
     edit_owner_profile: false,
