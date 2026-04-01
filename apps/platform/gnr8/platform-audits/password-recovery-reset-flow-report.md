@@ -1,49 +1,53 @@
 # Password Recovery Reset Flow Report
 
-## 1. Previous Broken Behavior
-- Recovery links did not have a dedicated completion journey.
-- The `/reset-password` page redirected to `/admin` after password update instead of returning users to login.
-- Root public recovery forwarding only preserved `type=recovery`, which could drop query callback fields (for example `code`/`token_hash`) when present.
-- Login did not provide an explicit password recovery email trigger with `redirectTo` pointing at a dedicated reset path.
-- Recovery links containing OAuth-style `code` were incorrectly handled in-browser via `exchangeCodeForSession(code)`, which can fail in email recovery completion when PKCE verifier state is unavailable in browser storage (`PKCE code verifier not found in storage`).
+## 1. Root Cause Summary
+- `/login` sends password recovery email links using `supabase.auth.resetPasswordForEmail(email, { redirectTo: /reset-password })`.
+- Supabase can complete recovery callbacks with different credential variants, including PKCE `code`.
+- A previous change removed PKCE `code` handling from `/reset-password` and performed early credential rejection before attempting code exchange.
+- Result: valid recovery links that arrived as code-based callbacks were rejected with "Recovery link is missing required credentials."
 
-## 2. New Recovery Flow
-- Login now supports a minimal recovery action via `supabase.auth.resetPasswordForEmail(email, { redirectTo })`.
-- Recovery `redirectTo` is explicitly set to `${window.location.origin}/reset-password`.
-- Recovery callback completion now resolves on `/reset-password` where link verification and password update happen.
+## 2. Why PKCE Must Be Supported
+- For this app, recovery links are generated through Supabase and can resolve to code-based callback URLs.
+- Treating code links as invalid breaks a valid Supabase recovery mechanism.
+- Correct behavior is to attempt `exchangeCodeForSession(code)` in browser/client context and then validate whether a session exists.
 
-## 3. Reset-Password Route Behavior
-- Route: `app/reset-password/page.tsx` (client flow, recovery-specific).
-- Supported callback/session patterns:
-  - Token session flow via `access_token` + `refresh_token` + `setSession` (priority path).
-  - Token hash flow via `token_hash` + `type=recovery` + `verifyOtp` (strict fallback path).
-  - `code` is intentionally ignored for recovery on `/reset-password` to avoid PKCE verifier dependency.
-- `type` is validated when present:
-  - Unknown types are rejected.
-  - Non-recovery known types (for example invite/signup) are rejected to preserve flow separation.
-- Explicit Supabase error fields from query/hash are surfaced to users.
-- Final acceptance is based on established auth context (`getSession`), not solely query param presence.
-- If no valid session is established after callback handling, a clear invalid/expired recovery error state is shown.
-- Sensitive callback parameters are removed from the URL via history replacement after successful verification.
+## 3. Why The Previous Removal Was Incorrect
+- The prior removal assumed code recovery should not be used for password reset.
+- That assumption conflicted with actual callback URLs produced by the configured Supabase recovery flow.
+- The real issue was execution context/order, not the existence of PKCE itself:
+  - code exchange must run in the client page where browser storage is available.
+  - final acceptance must be based on successful session establishment, not parameter-shape checks alone.
 
-## 4. Success Redirect Behavior
-- After successful `supabase.auth.updateUser({ password })`, UI shows a short success message.
-- Deterministic redirect is performed to `/login` using `router.replace('/login')` with a short timeout.
+## 4. Current `/reset-password` Behavior
+- Route remains dedicated: `/reset-password` only.
+- Callback type handling:
+  - unknown `type` values are rejected.
+  - known non-recovery callback types are rejected to keep invite/onboarding flows separate.
+  - missing `type` is allowed if session establishment succeeds from a valid recovery credential path.
+- Recovery credential variants now supported:
+  - `code` -> `supabase.auth.exchangeCodeForSession(code)`
+  - `token_hash` + `type=recovery` -> `supabase.auth.verifyOtp({ token_hash, type: 'recovery' })`
+  - `access_token` + `refresh_token` -> `supabase.auth.setSession(...)`
+- Validation now prioritizes actual auth result:
+  - after attempts, `/reset-password` calls `getSession()`
+  - if session exists, recovery is accepted
+  - if no session exists, strict errors are shown (expired/invalid/missing context)
+- On success, callback parameters are removed from URL with `history.replaceState`.
 
-## 5. Error Handling
-- Invalid, expired, malformed, or missing-auth-context links show explicit recovery error UI on `/reset-password`.
-- Flow does not fall through into generic runtime-governed public routing.
-- Flow does not silently send users to login without explanation when recovery verification fails.
+## 5. Execution Context (Client vs Server)
+- PKCE code exchange is executed in `apps/platform/app/reset-password/page.tsx` (a `'use client'` page).
+- No PKCE exchange is performed in a server-only render path for password recovery.
+- This keeps recovery completion in the browser-safe context where Supabase client auth state/storage is available.
 
-## 6. Limitations
-- Browser-only/manual verification is still needed for a full end-to-end Supabase email click test.
-- Current UX is intentionally minimal and does not include advanced password strength UI beyond a minimum length check.
+## 6. UX/Failure Semantics
+- While auth context is being resolved, the page stays in a loading/checking state.
+- Reset form is shown only after a valid session is established.
+- Password update success redirects to `/login`.
+- Expired/malformed/wrong-type/missing-context links still fail with clear error messaging.
 
-## 7. Next-Step Recommendation
-- Add focused integration tests for recovery callback variants (session tokens and `token_hash`) and invalid-link error rendering to prevent regressions in future auth changes.
-
-## 8. PKCE Removal Rationale
-- `exchangeCodeForSession(code)` depends on a matching PKCE code verifier in browser storage for code exchange completion.
-- Email-driven password recovery links are not guaranteed to preserve that verifier state in the target browser context, which causes runtime failure (`PKCE code verifier not found in storage`).
-- `setSession({ access_token, refresh_token })` and `verifyOtp({ type: 'recovery', token_hash })` are Supabase-supported recovery mechanisms that do not rely on PKCE local verifier storage.
-- Enforcing recovery-only `type` validation and requiring one of those two auth contexts keeps invalid/expired links strict while making valid email recovery links reliable.
+## 7. Verification Scope
+- Reviewed:
+  - `apps/platform/app/login/page.tsx` recovery email trigger
+  - `apps/platform/src/supabase/browser.ts` browser client creation
+  - `apps/platform/app/reset-password/page.tsx` callback handling
+- Confirmed PKCE recovery support is restored on `/reset-password` while preserving strict invalid-link handling.

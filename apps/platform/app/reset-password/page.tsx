@@ -30,15 +30,6 @@ function toReadableAuthError(raw: string): string {
   return value
 }
 
-function hasRecoveryTokens(url: URL, hashParams: URLSearchParams): boolean {
-  return Boolean(
-    (url.searchParams.get('access_token') && url.searchParams.get('refresh_token')) ||
-      (hashParams.get('access_token') && hashParams.get('refresh_token')) ||
-      url.searchParams.get('token_hash') ||
-      hashParams.get('token_hash'),
-  )
-}
-
 export default function ResetPasswordPage() {
   const router = useRouter()
   const supabase = useMemo(() => getSupabaseBrowserClient(), [])
@@ -70,12 +61,6 @@ export default function ResetPasswordPage() {
           throw new Error('This route only accepts password recovery links. Use the invite or login flow.')
         }
 
-        if (callbackType !== 'recovery') {
-          if (!hasRecoveryTokens(url, hashParams)) {
-            throw new Error('Recovery link is missing required credentials. Request a new password reset email.')
-          }
-        }
-
         const explicitError =
           url.searchParams.get('error_description') ??
           hashParams.get('error_description') ??
@@ -90,36 +75,55 @@ export default function ResetPasswordPage() {
         const refreshToken =
           url.searchParams.get('refresh_token') ?? hashParams.get('refresh_token')
         const tokenHash = url.searchParams.get('token_hash') ?? hashParams.get('token_hash')
+        const code = url.searchParams.get('code') ?? hashParams.get('code')
+
+        let attemptedFlow = false
+        let lastFlowError: Error | null = null
 
         if (accessToken && refreshToken) {
+          attemptedFlow = true
           const result = await supabase.auth.setSession({
             access_token: accessToken,
             refresh_token: refreshToken,
           })
-          if (result.error) throw result.error
-        } else {
-          if (tokenHash && callbackType === 'recovery') {
+          if (result.error) {
+            lastFlowError = result.error
+          }
+        }
+
+        if (tokenHash) {
+          if (callbackType === 'recovery') {
+            attemptedFlow = true
             const result = await supabase.auth.verifyOtp({
               token_hash: tokenHash,
               type: 'recovery',
             })
-            if (result.error) throw result.error
-          } else {
-            if (tokenHash && callbackType !== 'recovery') {
-              throw new Error('Recovery link type is invalid. Request a new password reset email.')
+            if (result.error) {
+              lastFlowError = result.error
             }
-            throw new Error('Recovery link is invalid or expired. Request a new password reset email.')
+          } else {
+            throw new Error('Recovery link type is invalid. Request a new password reset email.')
+          }
+        }
+
+        if (code) {
+          attemptedFlow = true
+          const result = await supabase.auth.exchangeCodeForSession(code)
+          if (result.error) {
+            lastFlowError = result.error
           }
         }
 
         const { data, error } = await supabase.auth.getSession()
         if (error) throw error
         if (!data.session) {
-          setStatus('error')
-          setError(
-            'Recovery link is invalid or expired. Please request a new password reset.',
-          )
-          return
+          if (lastFlowError) {
+            throw lastFlowError
+          }
+          if (!attemptedFlow) {
+            throw new Error('Recovery link is missing required credentials. Request a new password reset email.')
+          }
+          throw new Error('Recovery link is invalid or expired. Please request a new password reset email.')
         }
 
         window.history.replaceState({}, document.title, RESET_PASSWORD_PATH)
