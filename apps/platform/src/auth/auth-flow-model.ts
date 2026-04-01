@@ -8,6 +8,7 @@ export const SUPERADMIN_HOME_PATH = '/gnr8/command-center'
 export const AGENCY_HOME_PATH = '/gnr8/agency'
 export const CLIENT_HOME_PATH = '/gnr8/client'
 export const OWNER_SETUP_PATH = '/gnr8/onboarding/owner-setup'
+export const CLIENT_SETUP_PATH = '/gnr8/onboarding/client-setup'
 
 export const AUTH_ROLE_PRECEDENCE = ['superadmin', 'agency', 'client'] as const
 
@@ -26,6 +27,7 @@ export const AUTH_FLOW_MODEL = {
   invite_callback_entry: AUTH_CALLBACK_PATH,
   invite_callback_resolution: '/api/auth/callback/next',
   owner_onboarding_entry: OWNER_SETUP_PATH,
+  client_onboarding_entry: CLIENT_SETUP_PATH,
   recovery_entry: RESET_PASSWORD_PATH,
   root_public_entry: '/',
   fail_closed_entry: SIGNUP_ACCESS_MISSING_PATH,

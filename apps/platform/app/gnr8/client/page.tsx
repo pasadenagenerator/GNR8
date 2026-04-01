@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { getClientDashboardReadModelForPage } from "@/gnr8/client/client-dashboard-read-model";
+import { CLIENT_SETUP_PATH, getClientSetupStatusForClientForPage } from "@/src/auth/client-setup-gate";
 import {
   listCurrentUserClientMembershipsForPage,
   resolveCurrentUserClientForPage,
@@ -19,6 +20,10 @@ type SearchParams = {
 function shortId(value: string): string {
   if (value.length <= 8) return value;
   return `${value.slice(0, 8)}...`;
+}
+
+function buildClientSetupPath(clientId: string): string {
+  return `${CLIENT_SETUP_PATH}?client=${encodeURIComponent(clientId)}`;
 }
 
 export default async function ClientDashboardPage(props: { searchParams?: Promise<SearchParams> }) {
@@ -126,6 +131,29 @@ export default async function ClientDashboardPage(props: { searchParams?: Promis
         </section>
       </main>
     );
+  }
+
+  const clientSetupStatus = await getClientSetupStatusForClientForPage({
+    userId: currentUserClient.user_id,
+    clientId: currentUserClient.client_id,
+    agencyId: currentUserClient.agency_id,
+  });
+
+  if (!clientSetupStatus.hasClientMembership) {
+    return (
+      <main style={{ maxWidth: 720, margin: "48px auto", padding: 16 }}>
+        <h1 style={{ fontSize: 24, marginBottom: 12 }}>Client access unavailable</h1>
+        <div style={{ border: "1px solid #fecaca", borderRadius: 10, background: "#fff5f5", padding: 14 }}>
+          <p style={{ margin: 0, color: "#7f1d1d" }}>
+            Access is blocked because your client membership context is invalid for this workspace.
+          </p>
+        </div>
+      </main>
+    );
+  }
+
+  if (!clientSetupStatus.isCompleted) {
+    redirect(buildClientSetupPath(currentUserClient.client_id));
   }
 
   const readModel = await getClientDashboardReadModelForPage({

@@ -1,5 +1,6 @@
 import "server-only";
 
+import { CLIENT_SETUP_PATH, listIncompleteClientSetupClientIdsForCurrentUserForPage } from "@/src/auth/client-setup-gate";
 import { listIncompleteOwnerSetupAgencyIdsForCurrentUserForPage } from "@/src/auth/owner-setup-gate";
 import { reconcilePendingClientMembershipInvitesForCurrentUser } from "@/src/auth/reconcile-client-membership-invites";
 import { listCurrentUserAgencyMembershipsForPage, ResolveCurrentAgencyError } from "@/src/auth/resolve-current-agency";
@@ -14,7 +15,7 @@ import {
   SUPERADMIN_HOME_PATH,
 } from "@/src/auth/auth-flow-model";
 
-type HomeKind = "superadmin" | "agency" | "client" | "agency_onboarding" | "no_access";
+type HomeKind = "superadmin" | "agency" | "client" | "agency_onboarding" | "client_onboarding" | "no_access";
 
 export type PostLoginHomeResolution = {
   target: string;
@@ -59,6 +60,11 @@ function onboardingPathForAgency(agencyId: string | null): string {
 
 function scopedClientHomePath(clientId: string): string {
   return `${CLIENT_HOME_PATH}?client=${encodeURIComponent(clientId)}`;
+}
+
+function onboardingPathForClient(clientId: string | null): string {
+  if (!clientId) return CLIENT_SETUP_PATH;
+  return `${CLIENT_SETUP_PATH}?client=${encodeURIComponent(clientId)}`;
 }
 
 async function isSuperadminForPage(): Promise<boolean> {
@@ -141,9 +147,22 @@ export async function resolvePostLoginHomeForPage(input?: {
   }
 
   const requestedClientId = normalizedNextPath ? tryExtractClientId(normalizedNextPath) : null;
-  const clientRouteRequested = normalizedNextPath
-    ? normalizedNextPath === CLIENT_HOME_PATH || requestedClientId != null
-    : false;
+  const incompleteClientIds = await listIncompleteClientSetupClientIdsForCurrentUserForPage();
+  if (incompleteClientIds.length > 0) {
+    if (requestedClientId && incompleteClientIds.includes(requestedClientId)) {
+      return {
+        target: onboardingPathForClient(requestedClientId),
+        kind: "client_onboarding",
+      };
+    }
+
+    return {
+      target: onboardingPathForClient(incompleteClientIds[0] ?? null),
+      kind: "client_onboarding",
+    };
+  }
+
+  const clientRouteRequested = normalizedNextPath ? normalizedNextPath === CLIENT_HOME_PATH || requestedClientId != null : false;
   const activeClientCandidate = clientRouteRequested ? requestedClientId : null;
 
   try {
