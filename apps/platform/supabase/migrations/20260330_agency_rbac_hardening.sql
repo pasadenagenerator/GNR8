@@ -229,31 +229,71 @@ for select
 using (auth.uid() = user_id);
 
 drop policy if exists organizations_select_member_scope on public.organizations;
-create policy organizations_select_member_scope
-on public.organizations
-for select
-using (
-  exists (
-    select 1
-      from public.memberships m
-     where m.user_id = auth.uid()
-       and coalesce(m.organization_id, m.org_id) = organizations.id
-  )
-);
-
 drop policy if exists sites_select_member_agency_scope on public.sites;
-create policy sites_select_member_agency_scope
-on public.sites
-for select
-using (
-  exists (
+do $$
+declare
+  has_org_id boolean := false;
+  has_organization_id boolean := false;
+  membership_org_expr text;
+begin
+  select exists (
     select 1
-      from public.memberships m
-      join public.organizations o
-        on o.id = coalesce(m.organization_id, m.org_id)
-     where m.user_id = auth.uid()
-       and o.agency_id = sites.agency_id
-  )
-);
+      from information_schema.columns
+     where table_schema = 'public'
+       and table_name = 'memberships'
+       and column_name = 'org_id'
+  ) into has_org_id;
+
+  select exists (
+    select 1
+      from information_schema.columns
+     where table_schema = 'public'
+       and table_name = 'memberships'
+       and column_name = 'organization_id'
+  ) into has_organization_id;
+
+  if has_organization_id and has_org_id then
+    membership_org_expr := 'coalesce(m.organization_id, m.org_id)';
+  elsif has_organization_id then
+    membership_org_expr := 'm.organization_id';
+  elsif has_org_id then
+    membership_org_expr := 'm.org_id';
+  else
+    raise exception 'memberships schema mismatch: expected organization_id and/or org_id';
+  end if;
+
+  execute format(
+    'create policy organizations_select_member_scope
+     on public.organizations
+     for select
+     using (
+       exists (
+         select 1
+           from public.memberships m
+          where m.user_id = auth.uid()
+            and %1$s = organizations.id
+       )
+     )',
+    membership_org_expr
+  );
+
+  execute format(
+    'create policy sites_select_member_agency_scope
+     on public.sites
+     for select
+     using (
+       exists (
+         select 1
+           from public.memberships m
+           join public.organizations o
+             on o.id = %1$s
+          where m.user_id = auth.uid()
+            and o.agency_id = sites.agency_id
+       )
+     )',
+    membership_org_expr
+  );
+end;
+$$;
 
 commit;

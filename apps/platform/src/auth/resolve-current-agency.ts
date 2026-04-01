@@ -2,6 +2,10 @@ import 'server-only'
 
 import type { SupabaseClient } from '@supabase/supabase-js'
 
+import {
+  buildMembershipSelectAttempts,
+  normalizeMembershipOrganizationId,
+} from '@/src/auth/membership-org-column-compat'
 import { getSupabaseServerClientMutating } from '@/src/auth/supabase-server-mutating'
 import { getSupabaseServerClientReadOnly } from '@/src/auth/supabase-server-read-only'
 
@@ -76,34 +80,20 @@ function normalizeMembershipRole(value: string): AgencyMembershipRole | null {
   return null
 }
 
-function normalizeOrganizationId(row: MembershipRow): string | null {
-  const organizationId = normalizeText(row.organization_id)
-  if (organizationId) return organizationId
-  const legacyOrganizationId = normalizeText(row.org_id)
-  if (legacyOrganizationId) return legacyOrganizationId
-  return null
-}
-
 async function listMembershipRows(supabase: SupabaseClient, userId: string): Promise<MembershipRow[]> {
-  const preferred = await supabase
-    .from('memberships')
-    .select('user_id,role,organization_id,org_id')
-    .eq('user_id', userId)
-
-  if (preferred.error == null) {
-    return Array.isArray(preferred.data) ? (preferred.data as MembershipRow[]) : []
+  const attempts = buildMembershipSelectAttempts({
+    baseColumns: ['user_id', 'role'],
+  })
+  let lastErrorMessage = 'unknown error'
+  for (const attempt of attempts) {
+    const result = await supabase.from('memberships').select(attempt.select).eq('user_id', userId)
+    if (result.error) {
+      lastErrorMessage = result.error.message
+      continue
+    }
+    return Array.isArray(result.data) ? (result.data as unknown as MembershipRow[]) : []
   }
-
-  const fallback = await supabase
-    .from('memberships')
-    .select('user_id,role,org_id')
-    .eq('user_id', userId)
-
-  if (fallback.error) {
-    throw new ResolveCurrentAgencyError('INVALID_MEMBERSHIP', `Membership lookup failed: ${fallback.error.message}`)
-  }
-
-  return Array.isArray(fallback.data) ? (fallback.data as MembershipRow[]) : []
+  throw new ResolveCurrentAgencyError('INVALID_MEMBERSHIP', `Membership lookup failed: ${lastErrorMessage}`)
 }
 
 function dedupeMembershipCandidates(candidates: AgencyMembershipCandidate[]): CurrentUserAgencyMembership[] {
@@ -202,7 +192,7 @@ async function listAgencyMembershipCandidates(
   const normalizedMemberships = rawMemberships
     .map((row) => {
       const role = normalizeMembershipRole(normalizeText(row.role).toLowerCase())
-      const organizationId = normalizeOrganizationId(row)
+      const organizationId = normalizeMembershipOrganizationId(row)
       if (role == null || organizationId == null || !isUuid(organizationId)) return null
       return {
         role,

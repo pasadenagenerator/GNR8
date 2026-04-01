@@ -4,6 +4,11 @@ import { randomUUID } from 'node:crypto'
 import type { PoolClient } from 'pg'
 
 import { buildAgencyOwnerInviteRedirectTo } from '@/gnr8/agency/agency-provisioning-service'
+import {
+  detectMembershipOrgColumnSupport,
+  resolveMembershipOrgColumnExpression as resolveSharedMembershipOrgColumnExpression,
+  type MembershipOrgColumnSupport,
+} from '@/src/auth/membership-org-column-compat'
 import { getSuperadminPool } from '@/src/superadmin/db'
 import { getSupabaseServiceRoleClient } from '@/src/supabase/service-role-server'
 
@@ -41,9 +46,10 @@ type MembershipRow = {
   role: string | null
 }
 
-type MembershipOrgColumnSupport = {
-  hasOrganizationId: boolean
-  hasOrgId: boolean
+type MembershipScopedRow = {
+  id: string | null
+  user_id: string | null
+  role: string | null
 }
 
 type AuthAdminUser = {
@@ -133,28 +139,18 @@ function resolveMemberName(user: AuthAdminUser): string | null {
 }
 
 export function resolveMembershipOrgColumnExpression(columns: MembershipOrgColumnSupport): string {
-  if (columns.hasOrganizationId && columns.hasOrgId) return 'coalesce(m.organization_id, m.org_id)'
-  if (columns.hasOrganizationId) return 'm.organization_id'
-  if (columns.hasOrgId) return 'm.org_id'
-  throw new AgencyMembersError('memberships schema mismatch: expected organization_id and/or org_id')
+  try {
+    return resolveSharedMembershipOrgColumnExpression({
+      columns,
+      tableAlias: 'm',
+    })
+  } catch {
+    throw new AgencyMembersError('memberships schema mismatch: expected organization_id and/or org_id')
+  }
 }
 
 async function resolveMembershipColumnSupport(client: PoolClient): Promise<MembershipOrgColumnSupport> {
-  const membershipColumns = await client.query<{ column_name: string }>(
-    `
-      select column_name::text as column_name
-      from information_schema.columns
-      where table_schema = 'public'
-        and table_name = 'memberships'
-        and column_name in ('organization_id', 'org_id')
-    `,
-  )
-
-  const names = new Set(membershipColumns.rows.map((row) => normalizeText(row.column_name).toLowerCase()))
-  return {
-    hasOrganizationId: names.has('organization_id'),
-    hasOrgId: names.has('org_id'),
-  }
+  return detectMembershipOrgColumnSupport(client)
 }
 
 export function buildListAgencyMembersSql(orgColumnExpression: string): string {
@@ -162,6 +158,112 @@ export function buildListAgencyMembersSql(orgColumnExpression: string): string {
     select m.id::text as id, m.user_id::text as user_id, m.role::text as role
     from public.memberships m
     where ${orgColumnExpression} = $1::uuid
+  `
+}
+
+export function buildAgencyMembershipUpsertSql(columns: MembershipOrgColumnSupport): string {
+  if (columns.hasOrganizationId && columns.hasOrgId) {
+    return `
+      with updated as (
+        update public.memberships m
+           set role = $4,
+               organization_id = $3::uuid,
+               org_id = $3::uuid
+         where m.user_id = $2::uuid
+           and coalesce(m.organization_id, m.org_id) = $3::uuid
+       returning m.id::text as id, m.user_id::text as user_id, m.role::text as role
+      ),
+      inserted as (
+        insert into public.memberships (id, user_id, organization_id, org_id, role)
+        select $1::uuid, $2::uuid, $3::uuid, $3::uuid, $4
+        where not exists (select 1 from updated)
+        returning id::text as id, user_id::text as user_id, role::text as role
+      )
+      select id, user_id, role from updated
+      union all
+      select id, user_id, role from inserted
+      limit 1
+    `
+  }
+
+  if (columns.hasOrganizationId) {
+    return `
+      with updated as (
+        update public.memberships m
+           set role = $4,
+               organization_id = $3::uuid
+         where m.user_id = $2::uuid
+           and m.organization_id = $3::uuid
+       returning m.id::text as id, m.user_id::text as user_id, m.role::text as role
+      ),
+      inserted as (
+        insert into public.memberships (id, user_id, organization_id, role)
+        select $1::uuid, $2::uuid, $3::uuid, $4
+        where not exists (select 1 from updated)
+        returning id::text as id, user_id::text as user_id, role::text as role
+      )
+      select id, user_id, role from updated
+      union all
+      select id, user_id, role from inserted
+      limit 1
+    `
+  }
+
+  if (columns.hasOrgId) {
+    return `
+      with updated as (
+        update public.memberships m
+           set role = $4,
+               org_id = $3::uuid
+         where m.user_id = $2::uuid
+           and m.org_id = $3::uuid
+       returning m.id::text as id, m.user_id::text as user_id, m.role::text as role
+      ),
+      inserted as (
+        insert into public.memberships (id, user_id, org_id, role)
+        select $1::uuid, $2::uuid, $3::uuid, $4
+        where not exists (select 1 from updated)
+        returning id::text as id, user_id::text as user_id, role::text as role
+      )
+      select id, user_id, role from updated
+      union all
+      select id, user_id, role from inserted
+      limit 1
+    `
+  }
+
+  throw new AgencyMembersError('memberships schema mismatch: expected organization_id and/or org_id')
+}
+
+export function buildScopedMembershipLookupSql(columns: MembershipOrgColumnSupport): string {
+  const orgColumnExpression = resolveMembershipOrgColumnExpression(columns)
+  return `
+    select m.id::text as id, m.role::text as role, m.user_id::text as user_id
+    from public.memberships m
+    where m.id = $1::uuid
+      and ${orgColumnExpression} = $2::uuid
+    limit 1
+  `
+}
+
+export function buildScopedMembershipRoleUpdateSql(columns: MembershipOrgColumnSupport): string {
+  const orgColumnExpression = resolveMembershipOrgColumnExpression(columns)
+  return `
+    update public.memberships m
+       set role = $3
+     where m.id = $1::uuid
+       and ${orgColumnExpression} = $2::uuid
+   returning m.id::text as id, m.role::text as role
+  `
+}
+
+export function buildScopedMembershipDeleteSql(columns: MembershipOrgColumnSupport): string {
+  const orgColumnExpression = resolveMembershipOrgColumnExpression(columns)
+  return `
+    delete from public.memberships m
+    where m.id = $1::uuid
+      and ${orgColumnExpression} = $2::uuid
+    returning m.id::text as id
   `
 }
 
@@ -298,28 +400,21 @@ export async function inviteAgencyMember(input: {
     throw new AgencyMembersError('Failed to resolve invited user id')
   }
 
-  const membershipPayload = {
-    id: randomUUID(),
-    user_id: userId,
-    organization_id: organizationId,
-    org_id: organizationId,
-    role,
+  const pool = getSuperadminPool()
+  const client = await pool.connect()
+  let membership: MembershipRow | null = null
+  try {
+    const columns = await resolveMembershipColumnSupport(client)
+    const sql = buildAgencyMembershipUpsertSql(columns)
+    const result = await client.query<MembershipRow>(sql, [randomUUID(), userId, organizationId, role])
+    membership = result.rows[0] ?? null
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'unknown error'
+    throw new AgencyMembersError(`Failed to assign agency membership: ${message}`)
+  } finally {
+    client.release()
   }
 
-  const membershipResult = await supabase
-    .from('memberships')
-    .upsert(membershipPayload, {
-      onConflict: 'organization_id,user_id',
-    })
-    .select('id,user_id,role')
-    .limit(1)
-    .maybeSingle()
-
-  if (membershipResult.error) {
-    throw new AgencyMembersError(`Failed to assign agency membership: ${membershipResult.error.message}`)
-  }
-
-  const membership = membershipResult.data as MembershipRow | null
   const membershipId = normalizeText(membership?.id)
   const normalizedRole = normalizeRole(membership?.role) ?? role
 
@@ -353,61 +448,49 @@ export async function updateAgencyMemberRole(input: {
   }
 
   const organizationId = await requireAgencyOrganizationId(agencyId)
-  const supabase = getSupabaseServiceRoleClient()
-  if (!supabase) {
-    throw new AgencyMembersError('Supabase service role client is not configured')
-  }
 
-  const membershipScopeResult = await supabase
-    .from('memberships')
-    .select('id,role,organization_id')
-    .eq('id', membershipId)
-    .eq('organization_id', organizationId)
-    .limit(1)
-    .maybeSingle()
+  const pool = getSuperadminPool()
+  const client = await pool.connect()
+  try {
+    const columns = await resolveMembershipColumnSupport(client)
 
-  if (membershipScopeResult.error) {
-    throw new AgencyMembersError(`Failed to resolve member scope: ${membershipScopeResult.error.message}`)
-  }
+    const lookupResult = await client.query<MembershipScopedRow>(buildScopedMembershipLookupSql(columns), [
+      membershipId,
+      organizationId,
+    ])
 
-  const currentMembership = membershipScopeResult.data as {
-    id: string | null
-    role: string | null
-    organization_id: string | null
-  } | null
+    const currentMembership = lookupResult.rows[0] ?? null
+    if (!currentMembership) {
+      throw new AgencyMembersError('Member not found in current agency scope.')
+    }
 
-  if (!currentMembership) {
-    throw new AgencyMembersError('Member not found in current agency scope.')
-  }
+    if (normalizeRole(currentMembership.role) === 'owner') {
+      throw new AgencyMembersError('Owner role transfer is intentionally blocked in V1.')
+    }
 
-  if (normalizeRole(currentMembership.role) === 'owner') {
-    throw new AgencyMembersError('Owner role transfer is intentionally blocked in V1.')
-  }
+    const updateResult = await client.query<{ id: string | null; role: string | null }>(
+      buildScopedMembershipRoleUpdateSql(columns),
+      [membershipId, organizationId, role],
+    )
 
-  const updateResult = await supabase
-    .from('memberships')
-    .update({ role })
-    .eq('id', membershipId)
-    .eq('organization_id', organizationId)
-    .select('id,role')
-    .limit(1)
-    .maybeSingle()
+    const updated = updateResult.rows[0] ?? null
+    const updatedId = normalizeText(updated?.id)
+    const updatedRole = normalizeRole(updated?.role)
 
-  if (updateResult.error) {
-    throw new AgencyMembersError(`Failed to update member role: ${updateResult.error.message}`)
-  }
+    if (!UUID_RE.test(updatedId) || (updatedRole !== 'admin' && updatedRole !== 'member')) {
+      throw new AgencyMembersError('Role update completed with invalid response payload.')
+    }
 
-  const updated = updateResult.data as { id: string | null; role: string | null } | null
-  const updatedId = normalizeText(updated?.id)
-  const updatedRole = normalizeRole(updated?.role)
-
-  if (!UUID_RE.test(updatedId) || (updatedRole !== 'admin' && updatedRole !== 'member')) {
-    throw new AgencyMembersError('Role update completed with invalid response payload.')
-  }
-
-  return {
-    membershipId: updatedId,
-    role: updatedRole,
+    return {
+      membershipId: updatedId,
+      role: updatedRole,
+    }
+  } catch (error) {
+    if (error instanceof AgencyMembersError) throw error
+    const message = error instanceof Error ? error.message : 'unknown error'
+    throw new AgencyMembersError(`Failed to update member role: ${message}`)
+  } finally {
+    client.release()
   }
 }
 
@@ -421,50 +504,37 @@ export async function removeAgencyMember(input: {
   const actorUserId = assertUuid(input.actorUserId, 'actorUserId')
 
   const organizationId = await requireAgencyOrganizationId(agencyId)
-  const supabase = getSupabaseServiceRoleClient()
-  if (!supabase) {
-    throw new AgencyMembersError('Supabase service role client is not configured')
-  }
 
-  const membershipScopeResult = await supabase
-    .from('memberships')
-    .select('id,role,user_id,organization_id')
-    .eq('id', membershipId)
-    .eq('organization_id', organizationId)
-    .limit(1)
-    .maybeSingle()
+  const pool = getSuperadminPool()
+  const client = await pool.connect()
+  try {
+    const columns = await resolveMembershipColumnSupport(client)
 
-  if (membershipScopeResult.error) {
-    throw new AgencyMembersError(`Failed to resolve member scope: ${membershipScopeResult.error.message}`)
-  }
+    const lookupResult = await client.query<MembershipScopedRow>(buildScopedMembershipLookupSql(columns), [
+      membershipId,
+      organizationId,
+    ])
 
-  const currentMembership = membershipScopeResult.data as {
-    id: string | null
-    role: string | null
-    user_id: string | null
-    organization_id: string | null
-  } | null
+    const currentMembership = lookupResult.rows[0] ?? null
+    if (!currentMembership) {
+      throw new AgencyMembersError('Member not found in current agency scope.')
+    }
 
-  if (!currentMembership) {
-    throw new AgencyMembersError('Member not found in current agency scope.')
-  }
+    const role = normalizeRole(currentMembership.role)
+    if (role === 'owner') {
+      throw new AgencyMembersError('Owner removal is intentionally blocked in V1.')
+    }
 
-  const role = normalizeRole(currentMembership.role)
-  if (role === 'owner') {
-    throw new AgencyMembersError('Owner removal is intentionally blocked in V1.')
-  }
+    if (normalizeText(currentMembership.user_id) === actorUserId) {
+      throw new AgencyMembersError('Self-removal is blocked in V1.')
+    }
 
-  if (normalizeText(currentMembership.user_id) === actorUserId) {
-    throw new AgencyMembersError('Self-removal is blocked in V1.')
-  }
-
-  const deleteResult = await supabase
-    .from('memberships')
-    .delete()
-    .eq('id', membershipId)
-    .eq('organization_id', organizationId)
-
-  if (deleteResult.error) {
-    throw new AgencyMembersError(`Failed to remove member: ${deleteResult.error.message}`)
+    await client.query<{ id: string | null }>(buildScopedMembershipDeleteSql(columns), [membershipId, organizationId])
+  } catch (error) {
+    if (error instanceof AgencyMembersError) throw error
+    const message = error instanceof Error ? error.message : 'unknown error'
+    throw new AgencyMembersError(`Failed to remove member: ${message}`)
+  } finally {
+    client.release()
   }
 }

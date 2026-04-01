@@ -3,6 +3,10 @@ import "server-only";
 import { randomUUID } from "node:crypto";
 import type { PoolClient } from "pg";
 
+import {
+  normalizeMembershipOrgColumnSupport,
+  type MembershipOrgColumnSupport as MembershipSchemaColumns,
+} from "@/src/auth/membership-org-column-compat";
 import { getSuperadminPool } from "@/src/superadmin/db";
 import { getSupabaseServiceRoleClient } from "@/src/supabase/service-role-server";
 import { AUTH_CALLBACK_PATH } from "@/src/auth/auth-flow-model";
@@ -102,11 +106,6 @@ type MembershipRoleColumnCatalogRow = {
 type ProvisioningColumnCatalogRow = {
   table_name: string;
   column_name: string;
-};
-
-export type MembershipSchemaColumns = {
-  hasOrganizationId: boolean;
-  hasOrgId: boolean;
 };
 
 export type MembershipRoleWriteStrategy = {
@@ -230,15 +229,7 @@ export function buildOrganizationInsertPayload(input: {
 }
 
 export function resolveMembershipSchemaColumns(columnNames: readonly string[]): MembershipSchemaColumns {
-  const normalized = new Set(
-    columnNames
-      .map((columnName) => normalizeText(columnName).toLowerCase())
-      .filter((columnName) => columnName.length > 0),
-  );
-  return {
-    hasOrganizationId: normalized.has("organization_id"),
-    hasOrgId: normalized.has("org_id"),
-  };
+  return normalizeMembershipOrgColumnSupport({ columnNames });
 }
 
 export function findMissingProvisioningColumns(

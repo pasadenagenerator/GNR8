@@ -3,6 +3,10 @@ import 'server-only'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { PoolClient } from 'pg'
 
+import {
+  detectMembershipOrgColumnSupport,
+  resolveMembershipOrgColumnExpression,
+} from '@/src/auth/membership-org-column-compat'
 import { getSuperadminPool } from '@/src/superadmin/db'
 import { getSupabaseServiceRoleClient } from '@/src/supabase/service-role-server'
 
@@ -59,11 +63,6 @@ export class AgencyDeprovisioningError extends Error {
 
 type QueryResultRowCount = { rowCount: number }
 
-type MembershipColumnSupport = {
-  hasOrganizationId: boolean
-  hasOrgId: boolean
-}
-
 function normalizeText(value: unknown): string {
   return String(value ?? '').trim()
 }
@@ -85,34 +84,6 @@ function quoteIdentifier(input: string): string {
     throw new AgencyDeprovisioningError('INVALID_INPUT', `invalid SQL identifier: ${input}`)
   }
   return `"${input}"`
-}
-
-async function resolveMembershipColumnSupport(client: PoolClient): Promise<MembershipColumnSupport> {
-  const result = await client.query<{ column_name: string }>(
-    `
-      select column_name::text as column_name
-      from information_schema.columns
-      where table_schema = 'public'
-        and table_name = 'memberships'
-        and column_name in ('organization_id', 'org_id')
-    `,
-  )
-
-  const names = new Set(result.rows.map((row) => normalizeText(row.column_name).toLowerCase()))
-  return {
-    hasOrganizationId: names.has('organization_id'),
-    hasOrgId: names.has('org_id'),
-  }
-}
-
-function membershipOrgExpression(columns: MembershipColumnSupport): string {
-  if (columns.hasOrganizationId && columns.hasOrgId) return 'coalesce(m.organization_id, m.org_id)'
-  if (columns.hasOrganizationId) return 'm.organization_id'
-  if (columns.hasOrgId) return 'm.org_id'
-  throw new AgencyDeprovisioningError(
-    'DEPENDENCY_BLOCK',
-    'memberships schema mismatch: expected organization_id and/or org_id',
-  )
 }
 
 async function tableExists(client: PoolClient, tableName: string): Promise<boolean> {
@@ -230,8 +201,18 @@ async function listAgencyScopeRows(client: PoolClient, agencyId: string): Promis
       .filter((siteId) => siteId.length > 0)
   }
 
-  const membershipColumns = await resolveMembershipColumnSupport(client)
-  const orgExpr = membershipOrgExpression(membershipColumns)
+  const membershipColumns = await detectMembershipOrgColumnSupport(client)
+  let orgExpr: string
+  try {
+    orgExpr = resolveMembershipOrgColumnExpression({
+      columns: membershipColumns,
+      tableAlias: 'm',
+      missingColumnMessage: 'memberships schema mismatch: expected organization_id and/or org_id',
+    })
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'memberships schema mismatch'
+    throw new AgencyDeprovisioningError('DEPENDENCY_BLOCK', message)
+  }
 
   let candidateUserIds: string[] = []
   let authDeleteEligibleUserIds: string[] = []
@@ -369,8 +350,18 @@ async function deleteAgencyDataInTx(
 
   counters.sites_deleted = await deleteByAgencyId(client, 'sites', input.agencyId)
 
-  const membershipColumns = await resolveMembershipColumnSupport(client)
-  const orgExpr = membershipOrgExpression(membershipColumns)
+  const membershipColumns = await detectMembershipOrgColumnSupport(client)
+  let orgExpr: string
+  try {
+    orgExpr = resolveMembershipOrgColumnExpression({
+      columns: membershipColumns,
+      tableAlias: 'm',
+      missingColumnMessage: 'memberships schema mismatch: expected organization_id and/or org_id',
+    })
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'memberships schema mismatch'
+    throw new AgencyDeprovisioningError('DEPENDENCY_BLOCK', message)
+  }
 
   if (input.organizationIds.length > 0 && (await tableExists(client, 'memberships'))) {
     const membershipDeleteResult = await client.query<QueryResultRowCount>(

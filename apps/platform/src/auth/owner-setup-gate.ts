@@ -2,6 +2,10 @@ import 'server-only'
 
 import type { SupabaseClient } from '@supabase/supabase-js'
 
+import {
+  buildMembershipSelectAttempts,
+  normalizeMembershipOrganizationId,
+} from '@/src/auth/membership-org-column-compat'
 import { getSupabaseServerClientMutating } from '@/src/auth/supabase-server-mutating'
 import { getSupabaseServerClientReadOnly } from '@/src/auth/supabase-server-read-only'
 
@@ -43,14 +47,6 @@ function isUuid(value: string): boolean {
   return UUID_RE.test(value)
 }
 
-function normalizeOrganizationId(row: MembershipRow): string | null {
-  const organizationId = normalizeText(row.organization_id)
-  if (organizationId) return organizationId
-  const legacyOrganizationId = normalizeText(row.org_id)
-  if (legacyOrganizationId) return legacyOrganizationId
-  return null
-}
-
 async function requireCurrentUserId(supabase: SupabaseClient): Promise<string> {
   const authResult = await supabase.auth.getUser()
   const userId = normalizeText(authResult.data.user?.id)
@@ -61,27 +57,10 @@ async function requireCurrentUserId(supabase: SupabaseClient): Promise<string> {
 }
 
 async function listMembershipRows(supabase: SupabaseClient, userId: string): Promise<MembershipRow[]> {
-  const attempts: Array<{
-    select: string
-    inferOwnerSetupCompletedAsFalse: boolean
-  }> = [
-    {
-      select: 'id,role,organization_id,org_id,owner_setup_completed',
-      inferOwnerSetupCompletedAsFalse: false,
-    },
-    {
-      select: 'id,role,org_id,owner_setup_completed',
-      inferOwnerSetupCompletedAsFalse: false,
-    },
-    {
-      select: 'id,role,organization_id,org_id',
-      inferOwnerSetupCompletedAsFalse: true,
-    },
-    {
-      select: 'id,role,org_id',
-      inferOwnerSetupCompletedAsFalse: true,
-    },
-  ]
+  const attempts = buildMembershipSelectAttempts({
+    baseColumns: ['id', 'role'],
+    includeOwnerSetupCompleted: true,
+  })
 
   let lastError: Error | null = null
 
@@ -110,7 +89,7 @@ async function listOwnerMembershipContexts(supabase: SupabaseClient, userId: str
     .map((row) => {
       const membershipId = normalizeText(row.id)
       const role = normalizeText(row.role).toLowerCase()
-      const organizationId = normalizeOrganizationId(row)
+      const organizationId = normalizeMembershipOrganizationId(row)
       if (!membershipId || !isUuid(membershipId)) return null
       if (role !== 'owner') return null
       if (!organizationId || !isUuid(organizationId)) return null

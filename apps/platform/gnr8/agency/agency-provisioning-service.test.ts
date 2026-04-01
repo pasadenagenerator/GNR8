@@ -121,6 +121,29 @@ test("buildMembershipMutationPlan uses dual-column payload when both org columns
   assert.match(plan.sql, /\$4::"public"\."membership_role_enum"/);
 });
 
+test("buildMembershipMutationPlan uses organization_id-only payload when org_id does not exist", () => {
+  const plan = buildMembershipMutationPlan({
+    membershipId: "22222222-2222-4222-8222-222222222222",
+    userId: "33333333-3333-4333-8333-333333333333",
+    organizationId: "44444444-4444-4444-8444-444444444444",
+    role: "owner",
+    schema: {
+      hasOrganizationId: true,
+      hasOrgId: false,
+    },
+    roleWriteStrategy: {
+      kind: "text",
+      roleValueSql: "$4",
+      enumSchema: null,
+      enumTypeName: null,
+    },
+  });
+
+  assert.equal(plan.canonicalOrgColumn, "organization_id");
+  assert.match(plan.sql, /insert into public\.memberships \(id, user_id, organization_id, role\)/);
+  assert.doesNotMatch(plan.sql, /org_id/);
+});
+
 test("buildMembershipMutationPlan fails closed when memberships has no organization reference column", () => {
   assert.throws(
     () => {
