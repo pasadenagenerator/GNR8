@@ -68,9 +68,17 @@ export type CommandCenterClientOption = {
   agency_name: string | null;
 };
 
+export type CommandCenterAgencySummary = {
+  id: string;
+  name: string | null;
+  slug: string | null;
+  created_at: string | null;
+};
+
 export type CommandCenterReadModel = {
   site_summaries: CommandCenterSiteSummary[];
   clients: CommandCenterClientOption[];
+  agencies: CommandCenterAgencySummary[];
   instrumentation: {
     query_count: number;
     fallback_used: boolean;
@@ -109,6 +117,8 @@ type OrganizationRow = {
 type AgencyRow = {
   id: string;
   name: string | null;
+  slug: string | null;
+  created_at: string | null;
 };
 
 type AiUsageEventRow = {
@@ -254,6 +264,7 @@ function createEmptyReadModel(input: {
   return {
     site_summaries: [],
     clients: [],
+    agencies: [],
     instrumentation: {
       query_count: input.tracker.query_count,
       fallback_used: true,
@@ -370,7 +381,11 @@ async function fetchClientDirectory(
   supabase: SupabaseClient,
   tracker: QueryTracker,
   input?: { agencyId?: string },
-): Promise<{ clients: CommandCenterClientOption[]; clientsById: Map<string, CommandCenterClientOption> }> {
+): Promise<{
+  clients: CommandCenterClientOption[];
+  clientsById: Map<string, CommandCenterClientOption>;
+  agencies: CommandCenterAgencySummary[];
+}> {
   const organizationsOrderAttempts: Array<"name" | "id"> = ["name", "id"];
   let organizationsData: OrganizationRow[] = [];
   let organizationsError: string | null = null;
@@ -409,15 +424,27 @@ async function fetchClientDirectory(
   }
 
   tracker.query_count += 1;
-  const agenciesRes = await supabase.from("agencies").select("id,name");
+  const agenciesRes = await supabase
+    .from("agencies")
+    .select("id,name,slug,created_at")
+    .order("created_at", { ascending: false })
+    .limit(100);
   const agencyRows = agenciesRes.error == null && Array.isArray(agenciesRes.data) ? (agenciesRes.data as AgencyRow[]) : [];
   const agencyNameById = new Map<string, string>();
+  const agencies: CommandCenterAgencySummary[] = [];
   for (const agencyRow of agencyRows) {
     const agencyId = toTextOrNull(agencyRow.id);
     if (agencyId == null) continue;
     const agencyName = toTextOrNull(agencyRow.name);
-    if (agencyName == null) continue;
-    agencyNameById.set(agencyId, agencyName);
+    if (agencyName != null) {
+      agencyNameById.set(agencyId, agencyName);
+    }
+    agencies.push({
+      id: agencyId,
+      name: agencyName,
+      slug: toTextOrNull(agencyRow.slug),
+      created_at: toIsoOrNull(agencyRow.created_at),
+    });
   }
 
   const clients: CommandCenterClientOption[] = [];
@@ -440,7 +467,7 @@ async function fetchClientDirectory(
     clientsById.set(client.client_id, client);
   }
 
-  return { clients, clientsById };
+  return { clients, clientsById, agencies };
 }
 
 function compareRuntimeVersions(a: RuntimeVersionRow, b: RuntimeSnapshotAccumulator): number {
@@ -568,10 +595,12 @@ export async function getCommandCenterReadModel(
 
   let clients: CommandCenterClientOption[] = [];
   let clientsById = new Map<string, CommandCenterClientOption>();
+  let agencies: CommandCenterAgencySummary[] = [];
   try {
     const clientDirectory = await fetchClientDirectory(supabase, tracker, { agencyId });
     clients = clientDirectory.clients;
     clientsById = clientDirectory.clientsById;
+    agencies = clientDirectory.agencies;
   } catch (error) {
     fallbackReason = "client_directory_unavailable";
   }
@@ -813,6 +842,7 @@ export async function getCommandCenterReadModel(
   return {
     site_summaries: siteSummaries,
     clients,
+    agencies,
     instrumentation: {
       query_count: tracker.query_count,
       fallback_used: fallbackReason != null,

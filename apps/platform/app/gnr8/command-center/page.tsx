@@ -8,6 +8,8 @@ import {
   type CommandCenterSiteSummary,
 } from "@/gnr8/command-center/command-center-read-model";
 import { requireSuperadminUserIdForPage } from "@/src/auth/require-superadmin-user-id";
+import { CreateAgencyForm } from "@/app/gnr8/admin/agencies/_components/create-agency-form";
+import { ExistingAgenciesTable } from "@/app/gnr8/admin/agencies/_components/existing-agencies-table";
 
 import { CommandCenterOpsTable } from "./_components/command-center-ops-table";
 
@@ -360,6 +362,24 @@ export default async function CommandCenterPage(props: { searchParams?: Promise<
         agencyNameByAgencyId={Object.fromEntries(agencyNameByAgencyId.entries())}
         actorRole="superadmin"
       />
+
+      <section
+        style={{
+          marginTop: 24,
+          borderTop: "2px solid #cbd5e1",
+          paddingTop: 20,
+        }}
+      >
+        <header style={{ marginBottom: 8 }}>
+          <h2 style={{ margin: 0, fontSize: 26 }}>Agencies</h2>
+          <p style={{ margin: "8px 0 0 0", color: "#475569", fontSize: 14 }}>
+            Create agencies and jump directly into agency dashboard/settings workflows.
+          </p>
+        </header>
+
+        <CreateAgencyForm endpoint="/api/gnr8/admin/create-agency" />
+        <ExistingAgenciesTable agencies={readModel.agencies} />
+      </section>
     </main>
   );
 }
