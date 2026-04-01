@@ -104,3 +104,20 @@ DB-level:
 ## 8. Next-Step Recommendation
 
 Build the client invitation acceptance/service path on top of `client_membership_invites` and `client_memberships` so invite acceptance creates only client-scoped access (never agency-wide membership).
+
+## 9. Legacy Memberships Schema Compatibility Fix (2026-04-01)
+
+Issue observed during migration apply:
+
+- `20260401_client_access_membership_hardening.sql` initially referenced `coalesce(m.organization_id, m.org_id)` directly in static SQL.
+- In legacy production variants where `public.memberships.organization_id` does not exist, PostgreSQL fails at parse time with:
+  - `ERROR: 42703: column m.organization_id does not exist`
+
+Applied fix:
+
+- Migration now introspects `information_schema.columns` for `public.memberships` and resolves one safe runtime expression:
+  - dual-column schema: `coalesce(m.organization_id, m.org_id)`
+  - modern-only schema: `m.organization_id`
+  - legacy-only schema: `m.org_id`
+- Backfill insert and RLS policy creation now run via `DO $$ ... $$` dynamic `EXECUTE format(...)` using that resolved expression.
+- Migration remains additive/idempotent and requires no manual pre-editing of membership columns.

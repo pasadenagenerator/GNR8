@@ -148,30 +148,131 @@ on public.client_membership_invites
 for each row
 execute function public.gnr8_validate_client_membership_invite_scope();
 
-insert into public.client_memberships (user_id, client_organization_id, agency_id, role)
-select
-  m.user_id,
-  o.id as client_organization_id,
-  o.agency_id,
-  case
-    when lower(coalesce(m.role::text, 'member')) = 'owner' then 'owner'::public.client_membership_role_enum
-    else 'member'::public.client_membership_role_enum
-  end as role
-from public.memberships m
-join public.organizations o
-  on o.id = coalesce(m.organization_id, m.org_id)
-where o.organization_type::text = 'client'
-on conflict (user_id, client_organization_id)
-do update
-set
-  role = case
-    when excluded.role = 'owner'::public.client_membership_role_enum
-      or public.client_memberships.role = 'owner'::public.client_membership_role_enum
-      then 'owner'::public.client_membership_role_enum
-    else 'member'::public.client_membership_role_enum
-  end,
-  agency_id = excluded.agency_id,
-  updated_at = now();
+do $$
+declare
+  has_org_id boolean := false;
+  has_organization_id boolean := false;
+  membership_org_expr text;
+begin
+  select exists (
+    select 1
+      from information_schema.columns
+     where table_schema = 'public'
+       and table_name = 'memberships'
+       and column_name = 'org_id'
+  ) into has_org_id;
+
+  select exists (
+    select 1
+      from information_schema.columns
+     where table_schema = 'public'
+       and table_name = 'memberships'
+       and column_name = 'organization_id'
+  ) into has_organization_id;
+
+  if has_organization_id and has_org_id then
+    membership_org_expr := 'coalesce(m.organization_id, m.org_id)';
+  elsif has_organization_id then
+    membership_org_expr := 'm.organization_id';
+  elsif has_org_id then
+    membership_org_expr := 'm.org_id';
+  else
+    raise exception 'memberships schema mismatch: expected organization_id and/or org_id';
+  end if;
+
+  execute format(
+    $sql$
+      insert into public.client_memberships (user_id, client_organization_id, agency_id, role)
+      select
+        m.user_id,
+        o.id as client_organization_id,
+        o.agency_id,
+        case
+          when lower(coalesce(m.role::text, 'member')) = 'owner' then 'owner'::public.client_membership_role_enum
+          else 'member'::public.client_membership_role_enum
+        end as role
+      from public.memberships m
+      join public.organizations o
+        on o.id = %1$s
+      where o.organization_type::text = 'client'
+      on conflict (user_id, client_organization_id)
+      do update
+      set
+        role = case
+          when excluded.role = 'owner'::public.client_membership_role_enum
+            or public.client_memberships.role = 'owner'::public.client_membership_role_enum
+            then 'owner'::public.client_membership_role_enum
+          else 'member'::public.client_membership_role_enum
+        end,
+        agency_id = excluded.agency_id,
+        updated_at = now()
+    $sql$,
+    membership_org_expr
+  );
+
+  execute 'drop policy if exists organizations_select_member_scope on public.organizations';
+  execute format(
+    $sql$
+      create policy organizations_select_member_scope
+      on public.organizations
+      for select
+      using (
+        exists (
+          select 1
+            from public.memberships m
+           where m.user_id = auth.uid()
+             and %1$s = organizations.id
+        )
+        or exists (
+          select 1
+            from public.memberships m
+            join public.organizations member_org
+              on member_org.id = %1$s
+           where m.user_id = auth.uid()
+             and member_org.organization_type::text = 'agency'
+             and member_org.agency_id = organizations.agency_id
+        )
+        or exists (
+          select 1
+            from public.client_memberships cm
+           where cm.user_id = auth.uid()
+             and cm.client_organization_id = organizations.id
+             and cm.agency_id = organizations.agency_id
+        )
+      )
+    $sql$,
+    membership_org_expr
+  );
+
+  execute 'drop policy if exists sites_select_member_agency_scope on public.sites';
+  execute format(
+    $sql$
+      create policy sites_select_member_agency_scope
+      on public.sites
+      for select
+      using (
+        exists (
+          select 1
+            from public.memberships m
+            join public.organizations member_org
+              on member_org.id = %1$s
+           where m.user_id = auth.uid()
+             and member_org.organization_type::text = 'agency'
+             and member_org.agency_id = sites.agency_id
+        )
+        or exists (
+          select 1
+            from public.client_memberships cm
+           where cm.user_id = auth.uid()
+             and cm.client_organization_id = sites.org_id
+             and cm.agency_id = sites.agency_id
+        )
+      )
+    $sql$,
+    membership_org_expr
+  );
+end;
+$$;
 
 alter table public.client_memberships enable row level security;
 alter table public.client_membership_invites enable row level security;
@@ -181,57 +282,5 @@ create policy client_memberships_select_own_rows
 on public.client_memberships
 for select
 using (auth.uid() = user_id);
-
-drop policy if exists organizations_select_member_scope on public.organizations;
-create policy organizations_select_member_scope
-on public.organizations
-for select
-using (
-  exists (
-    select 1
-      from public.memberships m
-     where m.user_id = auth.uid()
-       and coalesce(m.organization_id, m.org_id) = organizations.id
-  )
-  or exists (
-    select 1
-      from public.memberships m
-      join public.organizations member_org
-        on member_org.id = coalesce(m.organization_id, m.org_id)
-     where m.user_id = auth.uid()
-       and member_org.organization_type::text = 'agency'
-       and member_org.agency_id = organizations.agency_id
-  )
-  or exists (
-    select 1
-      from public.client_memberships cm
-     where cm.user_id = auth.uid()
-       and cm.client_organization_id = organizations.id
-       and cm.agency_id = organizations.agency_id
-  )
-);
-
-drop policy if exists sites_select_member_agency_scope on public.sites;
-create policy sites_select_member_agency_scope
-on public.sites
-for select
-using (
-  exists (
-    select 1
-      from public.memberships m
-      join public.organizations member_org
-        on member_org.id = coalesce(m.organization_id, m.org_id)
-     where m.user_id = auth.uid()
-       and member_org.organization_type::text = 'agency'
-       and member_org.agency_id = sites.agency_id
-  )
-  or exists (
-    select 1
-      from public.client_memberships cm
-     where cm.user_id = auth.uid()
-       and cm.client_organization_id = sites.org_id
-       and cm.agency_id = sites.agency_id
-  )
-);
 
 commit;
