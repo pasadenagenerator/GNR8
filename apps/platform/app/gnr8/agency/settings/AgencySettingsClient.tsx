@@ -344,7 +344,7 @@ export default function AgencySettingsClient(props: Props) {
           </Link>
           {!isAdminView ? (
             <Link
-              href={`/gnr8/agency/members?agency=${encodeURIComponent(props.agencyId)}`}
+              href="/gnr8/agency/members"
               style={{
                 display: 'inline-flex',
                 alignItems: 'center',
@@ -358,7 +358,7 @@ export default function AgencySettingsClient(props: Props) {
                 fontSize: 13,
               }}
             >
-              Open Members
+              Team
             </Link>
           ) : null}
 

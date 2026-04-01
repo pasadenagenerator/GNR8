@@ -161,7 +161,7 @@ export default async function SuperadminAgencyDashboardPage(props: PageProps) {
         </div>
         <div style={{ marginTop: 10, display: "flex", gap: 8, flexWrap: "wrap" }}>
           <Link
-            href="/gnr8/admin/agencies"
+            href="/gnr8/command-center"
             style={{
               display: "inline-flex",
               alignItems: "center",
@@ -174,7 +174,7 @@ export default async function SuperadminAgencyDashboardPage(props: PageProps) {
               fontSize: 12,
             }}
           >
-            Back to Agencies
+            Back to Command Center
           </Link>
           <Link
             href={`/gnr8/admin/agencies/${encodeURIComponent(agencyId)}/settings`}

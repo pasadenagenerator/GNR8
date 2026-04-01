@@ -244,7 +244,7 @@ export default async function AgencyDashboardPage(props: { searchParams?: Promis
             Open Settings
           </Link>
           <Link
-            href={`/gnr8/agency/members?agency=${encodeURIComponent(currentUserAgency.agency_id)}`}
+            href="/gnr8/agency/members"
             style={{
               display: "inline-flex",
               alignItems: "center",
@@ -258,7 +258,7 @@ export default async function AgencyDashboardPage(props: { searchParams?: Promis
               fontSize: 12,
             }}
           >
-            Open Members
+            Team
           </Link>
         </div>
         <p style={{ marginTop: 10, marginBottom: 0, fontSize: 12, color: "#475569" }}>
@@ -412,10 +412,10 @@ export default async function AgencyDashboardPage(props: { searchParams?: Promis
                         <td style={{ padding: "8px 10px" }}>
                           {client.client_id && canViewClientUsers ? (
                             <Link
-                              href={`/gnr8/agency/clients/${encodeURIComponent(client.client_id)}/users?agency=${encodeURIComponent(currentUserAgency.agency_id)}`}
+                              href={`/gnr8/agency/clients/${encodeURIComponent(client.client_id)}/users`}
                               style={actionLinkStyle()}
                             >
-                              Client Users
+                              Users
                             </Link>
                           ) : client.client_id ? (
                             <span style={disabledActionStyle()}>No Access</span>
