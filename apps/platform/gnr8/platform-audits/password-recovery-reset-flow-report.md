@@ -5,6 +5,7 @@
 - The `/reset-password` page redirected to `/admin` after password update instead of returning users to login.
 - Root public recovery forwarding only preserved `type=recovery`, which could drop query callback fields (for example `code`/`token_hash`) when present.
 - Login did not provide an explicit password recovery email trigger with `redirectTo` pointing at a dedicated reset path.
+- PKCE recovery links carrying a valid `code` but no `type` on the final app URL were incorrectly rejected with `Recovery link type is invalid`, even though `exchangeCodeForSession(code)` was the correct completion step.
 
 ## 2. New Recovery Flow
 - Login now supports a minimal recovery action via `supabase.auth.resetPasswordForEmail(email, { redirectTo })`.
@@ -14,10 +15,14 @@
 ## 3. Reset-Password Route Behavior
 - Route: `app/reset-password/page.tsx` (client flow, recovery-specific).
 - Supported callback/session patterns:
-  - PKCE query flow via `code` + `exchangeCodeForSession`.
-  - Hash token flow via `access_token` + `refresh_token` + `setSession`.
-  - Token hash flow via `token_hash` + `type=recovery` + `verifyOtp`.
+  - PKCE query flow via `code` + `exchangeCodeForSession` (with `type` optional).
+  - Hash token flow via `access_token` + `refresh_token` + `setSession` (with `type` optional).
+  - Token hash flow via `token_hash` + `type=recovery` + `verifyOtp` (still strict).
+- `type` is validated when present:
+  - Unknown types are rejected.
+  - Non-recovery known types (for example invite/signup) are rejected to preserve flow separation.
 - Explicit Supabase error fields from query/hash are surfaced to users.
+- Final acceptance is based on established auth context (`getSession`), not solely query param presence.
 - If no valid session is established after callback handling, a clear invalid/expired recovery error state is shown.
 - Sensitive callback parameters are removed from the URL via history replacement after successful verification.
 

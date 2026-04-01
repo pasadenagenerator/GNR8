@@ -33,8 +33,7 @@ function toReadableAuthError(raw: string): string {
 function hasRecoveryTokens(url: URL, hashParams: URLSearchParams): boolean {
   return Boolean(
     url.searchParams.get('code') ||
-      hashParams.get('access_token') ||
-      hashParams.get('refresh_token') ||
+      (hashParams.get('access_token') && hashParams.get('refresh_token')) ||
       url.searchParams.get('token_hash'),
   )
 }
@@ -59,9 +58,12 @@ export default function ResetPasswordPage() {
         const url = new URL(window.location.href)
         const hash = window.location.hash.startsWith('#') ? window.location.hash.slice(1) : ''
         const hashParams = new URLSearchParams(hash)
-        const callbackType = asEmailOtpType(
-          url.searchParams.get('type') ?? hashParams.get('type'),
-        )
+        const rawType = String(url.searchParams.get('type') ?? hashParams.get('type') ?? '').trim()
+        const callbackType = asEmailOtpType(rawType || null)
+
+        if (rawType && !callbackType) {
+          throw new Error('Recovery link type is invalid. Request a new password reset email.')
+        }
 
         if (callbackType && callbackType !== 'recovery') {
           throw new Error('This route only accepts password recovery links. Use the invite or login flow.')
@@ -83,27 +85,21 @@ export default function ResetPasswordPage() {
         }
 
         const code = url.searchParams.get('code')
+        const accessToken = hashParams.get('access_token')
+        const refreshToken = hashParams.get('refresh_token')
+        const tokenHash = url.searchParams.get('token_hash')
+
         if (code) {
-          if (callbackType !== 'recovery') {
-            throw new Error('Recovery link type is invalid. Request a new password reset email.')
-          }
           const result = await supabase.auth.exchangeCodeForSession(code)
           if (result.error) throw result.error
         } else {
-          const accessToken = hashParams.get('access_token')
-          const refreshToken = hashParams.get('refresh_token')
-
           if (accessToken && refreshToken) {
-            if (callbackType !== 'recovery') {
-              throw new Error('Recovery session type is invalid. Request a new password reset email.')
-            }
             const result = await supabase.auth.setSession({
               access_token: accessToken,
               refresh_token: refreshToken,
             })
             if (result.error) throw result.error
           } else {
-            const tokenHash = url.searchParams.get('token_hash')
             const otpType = callbackType
             if (tokenHash && otpType === 'recovery') {
               const result = await supabase.auth.verifyOtp({
@@ -111,6 +107,8 @@ export default function ResetPasswordPage() {
                 type: otpType,
               })
               if (result.error) throw result.error
+            } else if (tokenHash && otpType !== 'recovery') {
+              throw new Error('Recovery link type is invalid. Request a new password reset email.')
             }
           }
         }
