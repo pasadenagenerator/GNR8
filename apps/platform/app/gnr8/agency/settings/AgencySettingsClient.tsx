@@ -342,6 +342,25 @@ export default function AgencySettingsClient(props: Props) {
           >
             {isAdminView ? 'Back to Admin Dashboard' : 'Back to Dashboard'}
           </Link>
+          {!isAdminView ? (
+            <Link
+              href={`/gnr8/agency/members?agency=${encodeURIComponent(props.agencyId)}`}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                height: 34,
+                padding: '0 10px',
+                borderRadius: 8,
+                border: '1px solid #cbd5e1',
+                background: '#fff',
+                color: '#0f172a',
+                textDecoration: 'none',
+                fontSize: 13,
+              }}
+            >
+              Open Members
+            </Link>
+          ) : null}
 
           {!isAdminView && props.memberships.length > 1
             ? props.memberships.map((membership) => {

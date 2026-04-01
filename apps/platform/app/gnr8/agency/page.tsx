@@ -242,6 +242,23 @@ export default async function AgencyDashboardPage(props: { searchParams?: Promis
           >
             Open Settings
           </Link>
+          <Link
+            href={`/gnr8/agency/members?agency=${encodeURIComponent(currentUserAgency.agency_id)}`}
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              marginLeft: 8,
+              padding: "6px 10px",
+              borderRadius: 8,
+              border: "1px solid #cbd5e1",
+              background: "#fff",
+              color: "#0f172a",
+              textDecoration: "none",
+              fontSize: 12,
+            }}
+          >
+            Open Members
+          </Link>
         </div>
         <p style={{ marginTop: 10, marginBottom: 0, fontSize: 12, color: "#475569" }}>
           {canRunMigrations

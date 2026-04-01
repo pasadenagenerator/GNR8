@@ -3,6 +3,10 @@ export type AgencyRole = AgencyMembershipRole | 'superadmin'
 
 export type AgencyAction =
   | 'view_dashboard'
+  | 'view_members'
+  | 'invite_user'
+  | 'edit_member_role'
+  | 'remove_member'
   | 'edit_agency_settings'
   | 'edit_agency_slug'
   | 'edit_owner_profile'
@@ -35,6 +39,10 @@ const ROLE_RANK: Record<AgencyMembershipRole, number> = {
 const ACTION_MATRIX: Record<AgencyRole, Record<AgencyAction, boolean>> = {
   superadmin: {
     view_dashboard: true,
+    view_members: true,
+    invite_user: true,
+    edit_member_role: true,
+    remove_member: true,
     edit_agency_settings: true,
     edit_agency_slug: true,
     edit_owner_profile: true,
@@ -48,6 +56,10 @@ const ACTION_MATRIX: Record<AgencyRole, Record<AgencyAction, boolean>> = {
   },
   owner: {
     view_dashboard: true,
+    view_members: true,
+    invite_user: true,
+    edit_member_role: true,
+    remove_member: true,
     edit_agency_settings: true,
     edit_agency_slug: true,
     edit_owner_profile: true,
@@ -61,6 +73,10 @@ const ACTION_MATRIX: Record<AgencyRole, Record<AgencyAction, boolean>> = {
   },
   admin: {
     view_dashboard: true,
+    view_members: true,
+    invite_user: false,
+    edit_member_role: false,
+    remove_member: false,
     edit_agency_settings: true,
     edit_agency_slug: false,
     edit_owner_profile: false,
@@ -74,6 +90,10 @@ const ACTION_MATRIX: Record<AgencyRole, Record<AgencyAction, boolean>> = {
   },
   member: {
     view_dashboard: true,
+    view_members: true,
+    invite_user: false,
+    edit_member_role: false,
+    remove_member: false,
     edit_agency_settings: false,
     edit_agency_slug: false,
     edit_owner_profile: false,

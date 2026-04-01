@@ -38,3 +38,22 @@ test('admin cannot edit agency slug or owner profile', () => {
   assert.equal(canPerformAction('admin', 'edit_agency_slug'), false)
   assert.equal(canPerformAction('admin', 'edit_owner_profile'), false)
 })
+
+test('owner can manage agency members', () => {
+  assert.equal(canPerformAction('owner', 'view_members'), true)
+  assert.equal(canPerformAction('owner', 'invite_user'), true)
+  assert.equal(canPerformAction('owner', 'edit_member_role'), true)
+  assert.equal(canPerformAction('owner', 'remove_member'), true)
+})
+
+test('admin and member are read-only for agency member mutations in v1', () => {
+  assert.equal(canPerformAction('admin', 'view_members'), true)
+  assert.equal(canPerformAction('admin', 'invite_user'), false)
+  assert.equal(canPerformAction('admin', 'edit_member_role'), false)
+  assert.equal(canPerformAction('admin', 'remove_member'), false)
+
+  assert.equal(canPerformAction('member', 'view_members'), true)
+  assert.equal(canPerformAction('member', 'invite_user'), false)
+  assert.equal(canPerformAction('member', 'edit_member_role'), false)
+  assert.equal(canPerformAction('member', 'remove_member'), false)
+})
