@@ -16,8 +16,14 @@ type Props = {
   clientId: string
   initialName: string
   initialSlug: string
+  initialContactPersonName: string
+  initialContactEmail: string
+  initialContactPhone: string
   memberships: MembershipOption[]
+  role: 'owner' | 'admin' | 'member' | 'superadmin'
   canEditClientSettings: boolean
+  canViewDashboard: boolean
+  canViewClientUsers: boolean
 }
 
 type Status = 'idle' | 'saving' | 'success' | 'error'
@@ -30,16 +36,56 @@ function normalizeSlug(value: string): string {
     .replace(/^-+|-+$/g, '')
 }
 
+function sectionStyle(): React.CSSProperties {
+  return {
+    border: '1px solid #dbe6f1',
+    borderRadius: 12,
+    background: '#fff',
+    padding: 16,
+  }
+}
+
+function fieldStyle(): React.CSSProperties {
+  return {
+    width: '100%',
+    padding: '10px 12px',
+    border: '1px solid #cbd5e1',
+    borderRadius: 8,
+    fontSize: 14,
+  }
+}
+
+function actionButtonStyle(): React.CSSProperties {
+  return {
+    height: 38,
+    padding: '0 12px',
+    borderRadius: 8,
+    border: '1px solid #0f172a',
+    background: '#0f172a',
+    color: '#fff',
+    cursor: 'pointer',
+    fontSize: 13,
+    justifySelf: 'start',
+  }
+}
+
 export default function ClientSettingsClient(props: Props) {
   const [name, setName] = useState(props.initialName)
   const [slug, setSlug] = useState(props.initialSlug)
+  const [contactPersonName, setContactPersonName] = useState(props.initialContactPersonName)
+  const [contactEmail, setContactEmail] = useState(props.initialContactEmail)
+  const [contactPhone, setContactPhone] = useState(props.initialContactPhone)
   const [status, setStatus] = useState<Status>('idle')
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
+  const [linkCopied, setLinkCopied] = useState<string | null>(null)
 
-  const dashboardPath = props.requestedAgencyId
+  const activeAgencyId = props.requestedAgencyId || props.agencyId
+  const agencyDashboardPath = props.requestedAgencyId
     ? `/gnr8/agency?agency=${encodeURIComponent(props.requestedAgencyId)}`
     : `/gnr8/agency?agency=${encodeURIComponent(props.agencyId)}`
+  const clientDashboardPath = `/gnr8/agency/clients/${encodeURIComponent(props.clientId)}/dashboard?agency=${encodeURIComponent(activeAgencyId)}`
+  const clientUsersPath = `/gnr8/agency/clients/${encodeURIComponent(props.clientId)}/users?agency=${encodeURIComponent(activeAgencyId)}`
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -54,6 +100,9 @@ export default function ClientSettingsClient(props: Props) {
 
     const normalizedName = name.trim()
     const normalizedSlug = normalizeSlug(slug)
+    const normalizedContactPersonName = contactPersonName.trim()
+    const normalizedContactEmail = contactEmail.trim().toLowerCase()
+    const normalizedContactPhone = contactPhone.trim()
 
     if (!normalizedName) {
       setStatus('error')
@@ -81,6 +130,9 @@ export default function ClientSettingsClient(props: Props) {
           agencyId: props.agencyId,
           name: normalizedName,
           slug: normalizedSlug,
+          contactPersonName: normalizedContactPersonName,
+          contactEmail: normalizedContactEmail,
+          contactPhone: normalizedContactPhone,
         }),
       })
 
@@ -103,6 +155,18 @@ export default function ClientSettingsClient(props: Props) {
     }
   }
 
+  async function onCopyDashboardLink() {
+    if (typeof window === 'undefined') return
+    try {
+      await navigator.clipboard.writeText(window.location.origin + clientDashboardPath)
+      setLinkCopied('Client dashboard URL copied.')
+      setTimeout(() => setLinkCopied(null), 2000)
+    } catch {
+      setLinkCopied('Could not copy link in this browser context.')
+      setTimeout(() => setLinkCopied(null), 2500)
+    }
+  }
+
   return (
     <main
       style={{
@@ -117,11 +181,19 @@ export default function ClientSettingsClient(props: Props) {
       <header style={{ display: 'grid', gap: 8 }}>
         <h1 style={{ margin: 0, fontSize: 30, color: '#0f172a' }}>Client Settings</h1>
         <p style={{ margin: 0, color: '#334155' }}>
-          Manage client identity fields used by agency-side client operations.
+          Canonical client profile surface for identity, contact context, and access links.
+        </p>
+        <p style={{ margin: 0, fontSize: 13, color: '#475569' }}>
+          Current role: <strong>{props.role}</strong>
+          {props.canEditClientSettings ? ' (edit enabled)' : ' (read-only)'}
         </p>
       </header>
 
-      <section style={{ marginTop: 16, border: '1px solid #dbe6f1', borderRadius: 12, background: '#fff', padding: 16 }}>
+      <section style={{ ...sectionStyle(), marginTop: 16 }}>
+        <h2 style={{ marginTop: 0, marginBottom: 6, color: '#0f172a' }}>Client Identity</h2>
+        <p style={{ marginTop: 0, marginBottom: 12, color: '#475569', fontSize: 13 }}>
+          Core organization identity for this client inside the current agency scope.
+        </p>
         <form onSubmit={onSubmit} style={{ display: 'grid', gap: 12 }}>
           <label style={{ display: 'grid', gap: 6 }}>
             <span style={{ fontSize: 13, color: '#334155' }}>Client Name</span>
@@ -132,13 +204,7 @@ export default function ClientSettingsClient(props: Props) {
               disabled={status === 'saving' || !props.canEditClientSettings}
               maxLength={120}
               required
-              style={{
-                width: '100%',
-                padding: '10px 12px',
-                border: '1px solid #cbd5e1',
-                borderRadius: 8,
-                fontSize: 14,
-              }}
+              style={fieldStyle()}
             />
           </label>
 
@@ -151,30 +217,57 @@ export default function ClientSettingsClient(props: Props) {
               disabled={status === 'saving' || !props.canEditClientSettings}
               maxLength={120}
               required
-              style={{
-                width: '100%',
-                padding: '10px 12px',
-                border: '1px solid #cbd5e1',
-                borderRadius: 8,
-                fontSize: 14,
-              }}
+              style={fieldStyle()}
+            />
+          </label>
+
+          <h2 style={{ marginBottom: 6, color: '#0f172a' }}>Client Contact</h2>
+          <p style={{ marginTop: 0, marginBottom: 4, color: '#475569', fontSize: 13 }}>
+            Organization-level contact details. This does not modify authenticated client user accounts.
+          </p>
+          <label style={{ display: 'grid', gap: 6 }}>
+            <span style={{ fontSize: 13, color: '#334155' }}>Contact Person Name</span>
+            <input
+              type="text"
+              value={contactPersonName}
+              onChange={(event) => setContactPersonName(event.currentTarget.value)}
+              disabled={status === 'saving' || !props.canEditClientSettings}
+              maxLength={120}
+              placeholder="Optional"
+              style={fieldStyle()}
+            />
+          </label>
+
+          <label style={{ display: 'grid', gap: 6 }}>
+            <span style={{ fontSize: 13, color: '#334155' }}>Contact Email</span>
+            <input
+              type="email"
+              value={contactEmail}
+              onChange={(event) => setContactEmail(event.currentTarget.value)}
+              disabled={status === 'saving' || !props.canEditClientSettings}
+              maxLength={320}
+              placeholder="Optional"
+              style={fieldStyle()}
+            />
+          </label>
+
+          <label style={{ display: 'grid', gap: 6 }}>
+            <span style={{ fontSize: 13, color: '#334155' }}>Contact Phone</span>
+            <input
+              type="tel"
+              value={contactPhone}
+              onChange={(event) => setContactPhone(event.currentTarget.value)}
+              disabled={status === 'saving' || !props.canEditClientSettings}
+              maxLength={40}
+              placeholder="Optional"
+              style={fieldStyle()}
             />
           </label>
 
           <button
             type="submit"
             disabled={status === 'saving' || !props.canEditClientSettings}
-            style={{
-              height: 38,
-              padding: '0 12px',
-              borderRadius: 8,
-              border: '1px solid #0f172a',
-              background: '#0f172a',
-              color: '#fff',
-              cursor: 'pointer',
-              fontSize: 13,
-              justifySelf: 'start',
-            }}
+            style={actionButtonStyle()}
           >
             {status === 'saving' ? 'Saving...' : 'Save Settings'}
           </button>
@@ -193,7 +286,7 @@ export default function ClientSettingsClient(props: Props) {
       </section>
 
       {props.memberships.length > 1 ? (
-        <section style={{ marginTop: 12, border: '1px solid #dbe6f1', borderRadius: 12, background: '#fff', padding: 12 }}>
+        <section style={{ ...sectionStyle(), marginTop: 12, padding: 12 }}>
           <p style={{ marginTop: 0, marginBottom: 8, color: '#334155', fontSize: 13 }}>Switch agency context:</p>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             {props.memberships.map((membership) => (
@@ -219,9 +312,81 @@ export default function ClientSettingsClient(props: Props) {
         </section>
       ) : null}
 
+      <section style={{ ...sectionStyle(), marginTop: 12 }}>
+        <h2 style={{ marginTop: 0, marginBottom: 6, color: '#0f172a' }}>Client Access / Links</h2>
+        <p style={{ marginTop: 0, marginBottom: 12, color: '#475569', fontSize: 13 }}>
+          Quick entry points for agency-managed client surfaces.
+        </p>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <Link
+            href={clientDashboardPath}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              padding: '6px 10px',
+              borderRadius: 8,
+              border: '1px solid #cbd5e1',
+              background: '#fff',
+              color: '#0f172a',
+              textDecoration: 'none',
+              fontSize: 12,
+              opacity: props.canViewDashboard ? 1 : 0.6,
+            }}
+          >
+            Client Dashboard
+          </Link>
+          <Link
+            href={clientUsersPath}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              padding: '6px 10px',
+              borderRadius: 8,
+              border: '1px solid #cbd5e1',
+              background: '#fff',
+              color: '#0f172a',
+              textDecoration: 'none',
+              fontSize: 12,
+              opacity: props.canViewClientUsers ? 1 : 0.6,
+            }}
+          >
+            Client Team
+          </Link>
+          <button
+            type="button"
+            onClick={onCopyDashboardLink}
+            style={{
+              height: 32,
+              padding: '0 10px',
+              borderRadius: 8,
+              border: '1px solid #cbd5e1',
+              background: '#fff',
+              color: '#0f172a',
+              cursor: 'pointer',
+              fontSize: 12,
+            }}
+          >
+            Copy Dashboard URL
+          </button>
+        </div>
+        {!props.canViewClientUsers ? (
+          <p style={{ marginTop: 10, marginBottom: 0, color: '#92400e', fontSize: 12 }}>
+            Your role can open settings but cannot access client team management.
+          </p>
+        ) : null}
+        {linkCopied ? <p style={{ marginTop: 10, marginBottom: 0, color: '#166534', fontSize: 12 }}>{linkCopied}</p> : null}
+      </section>
+
+      <section style={{ ...sectionStyle(), marginTop: 12, border: '1px solid #fed7aa', background: '#fff7ed' }}>
+        <h2 style={{ marginTop: 0, marginBottom: 6, color: '#9a3412' }}>Danger Zone</h2>
+        <p style={{ margin: 0, color: '#9a3412', fontSize: 13 }}>
+          Client destructive actions are intentionally not enabled in this V2 scope.
+        </p>
+      </section>
+
       <div style={{ marginTop: 12, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
         <Link
-          href={dashboardPath}
+          href={agencyDashboardPath}
           style={{
             display: 'inline-flex',
             alignItems: 'center',
@@ -235,22 +400,6 @@ export default function ClientSettingsClient(props: Props) {
           }}
         >
           Back to Agency Dashboard
-        </Link>
-        <Link
-          href={`/gnr8/agency/clients/${encodeURIComponent(props.clientId)}/users?agency=${encodeURIComponent(props.agencyId)}`}
-          style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            padding: '6px 10px',
-            borderRadius: 8,
-            border: '1px solid #cbd5e1',
-            background: '#fff',
-            color: '#0f172a',
-            textDecoration: 'none',
-            fontSize: 12,
-          }}
-        >
-          Client Team
         </Link>
       </div>
     </main>

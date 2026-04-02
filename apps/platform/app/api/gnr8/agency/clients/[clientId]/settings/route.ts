@@ -13,9 +13,13 @@ type Body = {
   agencyId?: unknown
   name?: unknown
   slug?: unknown
+  contactPersonName?: unknown
+  contactEmail?: unknown
+  contactPhone?: unknown
 }
 
 const SLUG_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
 function normalizeText(value: unknown): string {
   return String(value ?? '').trim()
@@ -42,6 +46,9 @@ export async function POST(request: Request, props: Params) {
     const requestedAgencyId = normalizeText(body.agencyId)
     const name = normalizeText(body.name)
     const slug = normalizeSlug(body.slug)
+    const contactPersonName = normalizeText(body.contactPersonName)
+    const contactEmail = normalizeText(body.contactEmail).toLowerCase()
+    const contactPhone = normalizeText(body.contactPhone)
 
     if (!clientId) {
       return NextResponse.json({ ok: false, error: 'Client scope is required.' }, { status: 400 })
@@ -57,6 +64,18 @@ export async function POST(request: Request, props: Params) {
         { ok: false, error: 'Slug must use lowercase letters, numbers, and single hyphen separators.' },
         { status: 400 },
       )
+    }
+    if (contactEmail && !EMAIL_RE.test(contactEmail)) {
+      return NextResponse.json({ ok: false, error: 'Contact email format is invalid.' }, { status: 400 })
+    }
+    if (contactPersonName.length > 120) {
+      return NextResponse.json({ ok: false, error: 'Contact person name must be 120 characters or fewer.' }, { status: 400 })
+    }
+    if (contactEmail.length > 320) {
+      return NextResponse.json({ ok: false, error: 'Contact email must be 320 characters or fewer.' }, { status: 400 })
+    }
+    if (contactPhone.length > 40) {
+      return NextResponse.json({ ok: false, error: 'Contact phone must be 40 characters or fewer.' }, { status: 400 })
     }
 
     const actionContext = await requireAgencyActionContext({
@@ -111,11 +130,14 @@ export async function POST(request: Request, props: Params) {
       .update({
         name,
         slug,
+        contact_person_name: contactPersonName || null,
+        contact_email: contactEmail || null,
+        contact_phone: contactPhone || null,
       })
       .eq('id', clientId)
       .eq('agency_id', actionContext.agencyId)
       .eq('organization_type', 'client')
-      .select('id,name,slug,agency_id,organization_type')
+      .select('id,name,slug,contact_person_name,contact_email,contact_phone,agency_id,organization_type')
       .limit(1)
       .maybeSingle()
 
