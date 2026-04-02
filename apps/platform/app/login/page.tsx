@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { getSupabaseBrowserClient } from '@/src/supabase/browser'
 import { RESET_PASSWORD_PATH } from '@/src/auth/auth-flow-model'
@@ -15,9 +15,19 @@ export default function LoginPage() {
   const [recoveryBusy, setRecoveryBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [recoveryMessage, setRecoveryMessage] = useState<string | null>(null)
+  const submitInFlightRef = useRef(false)
+  const lastSubmitAtRef = useRef(0)
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault()
+
+    if (busy || submitInFlightRef.current) return
+
+    const now = Date.now()
+    if (now - lastSubmitAtRef.current < 500) return
+    lastSubmitAtRef.current = now
+
+    submitInFlightRef.current = true
     setBusy(true)
     setError(null)
     setRecoveryMessage(null)
@@ -29,7 +39,6 @@ export default function LoginPage() {
       })
 
       if (error) {
-        setBusy(false)
         setError(error.message)
         return
       }
@@ -46,24 +55,23 @@ export default function LoginPage() {
       const payload = (await resolver.json().catch(() => null)) as { target?: unknown; error?: unknown } | null
 
       if (!resolver.ok) {
-        setBusy(false)
         setError(String(payload?.error ?? 'Sign-in succeeded, but home routing could not be resolved.'))
         return
       }
 
       const target = typeof payload?.target === 'string' && payload.target.startsWith('/') ? payload.target : null
       if (!target) {
-        setBusy(false)
         setError('Sign-in succeeded, but home routing returned an invalid target.')
         return
       }
 
-      setBusy(false)
       router.replace(target)
       router.refresh()
     } catch (cause) {
-      setBusy(false)
       setError(cause instanceof Error ? cause.message : 'Failed to complete sign-in.')
+    } finally {
+      submitInFlightRef.current = false
+      setBusy(false)
     }
   }
 
@@ -109,6 +117,7 @@ export default function LoginPage() {
             onChange={(e) => setEmail(e.target.value)}
             type="email"
             autoComplete="email"
+            disabled={busy}
             required
             style={{ padding: 10, border: '1px solid #ddd', borderRadius: 8 }}
           />
@@ -121,6 +130,7 @@ export default function LoginPage() {
             onChange={(e) => setPassword(e.target.value)}
             type="password"
             autoComplete="current-password"
+            disabled={busy}
             required
             style={{ padding: 10, border: '1px solid #ddd', borderRadius: 8 }}
           />

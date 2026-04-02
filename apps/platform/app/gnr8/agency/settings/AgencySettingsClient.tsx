@@ -259,7 +259,11 @@ export default function AgencySettingsClient(props: Props) {
       return
     }
 
-    const redirectTo = result.redirectTo?.startsWith('/') ? result.redirectTo : '/login'
+    const redirectTo = isAdminView
+      ? '/gnr8/command-center'
+      : result.redirectTo?.startsWith('/')
+        ? result.redirectTo
+        : '/login'
     window.location.replace(redirectTo)
   }
 

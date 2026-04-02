@@ -94,6 +94,7 @@ export async function POST(request: Request) {
       result = await deprovisionAgency({
         agencyId: actionContext.agencyId,
         actorUserId: actionContext.userId,
+        actorMode: actionContext.actorMode,
       })
     } catch (error) {
       if (error instanceof AgencyDeprovisioningError) {
@@ -103,11 +104,9 @@ export async function POST(request: Request) {
       throw error
     }
 
-    await supabase.auth.signOut()
-
     return NextResponse.json({
       ok: true,
-      redirectTo: '/login',
+      redirectTo: actionContext.actorMode === 'admin_view' ? '/gnr8/command-center' : '/login',
       deletedAgencyId: result.agencyId,
       deletedAgencySlug: result.agencySlug,
       deletedCounts: result.deletedCounts,

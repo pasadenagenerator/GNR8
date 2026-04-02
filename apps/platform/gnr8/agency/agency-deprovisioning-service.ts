@@ -63,12 +63,23 @@ export class AgencyDeprovisioningError extends Error {
 
 type QueryResultRowCount = { rowCount: number }
 
+type AgencyActorMode = 'membership' | 'admin_view'
+
 function normalizeText(value: unknown): string {
   return String(value ?? '').trim()
 }
 
 function isUuid(value: string): boolean {
   return UUID_RE.test(value)
+}
+
+function parseEmailAllowlist(value: string | undefined): Set<string> {
+  return new Set(
+    String(value ?? '')
+      .split(',')
+      .map((entry) => entry.trim().toLowerCase())
+      .filter(Boolean),
+  )
 }
 
 function assertUuid(value: unknown, fieldName: string): string {
@@ -424,6 +435,11 @@ async function deleteAgencyDataInTx(
 async function deleteAuthUsers(
   supabase: SupabaseClient,
   userIds: string[],
+  options: {
+    actorUserId: string
+    actorMode: AgencyActorMode
+    superadminEmails: Set<string>
+  },
 ): Promise<DeprovisionAgencyResult['authUserCleanup']> {
   const attemptedDeleteUserIds: string[] = []
   const deletedUserIds: string[] = []
@@ -432,6 +448,29 @@ async function deleteAuthUsers(
 
   for (const userId of userIds) {
     if (!isUuid(userId)) {
+      skippedUserIds.push(userId)
+      continue
+    }
+
+    if (options.actorMode === 'admin_view' && userId === options.actorUserId) {
+      // Explicit admin_view safety guard: never delete the current actor auth identity.
+      skippedUserIds.push(userId)
+      continue
+    }
+
+    if (userId === options.actorUserId) {
+      skippedUserIds.push(userId)
+      continue
+    }
+
+    const userResult = await supabase.auth.admin.getUserById(userId)
+    if (userResult.error) {
+      failed.push({ userId, error: userResult.error.message })
+      continue
+    }
+
+    const normalizedEmail = normalizeText(userResult.data.user?.email).toLowerCase()
+    if (normalizedEmail && options.superadminEmails.has(normalizedEmail)) {
       skippedUserIds.push(userId)
       continue
     }
@@ -458,9 +497,10 @@ async function deleteAuthUsers(
 export async function deprovisionAgency(input: {
   agencyId: string
   actorUserId: string
+  actorMode: AgencyActorMode
 }): Promise<DeprovisionAgencyResult> {
   const agencyId = assertUuid(input.agencyId, 'agencyId')
-  assertUuid(input.actorUserId, 'actorUserId')
+  const actorUserId = assertUuid(input.actorUserId, 'actorUserId')
 
   const pool = getSuperadminPool()
   const client = await pool.connect()
@@ -502,7 +542,12 @@ export async function deprovisionAgency(input: {
     )
   }
 
-  const authUserCleanup = await deleteAuthUsers(supabaseServiceRole, scope.authDeleteEligibleUserIds)
+  const superadminEmails = parseEmailAllowlist(process.env.SUPERADMIN_EMAILS)
+  const authUserCleanup = await deleteAuthUsers(supabaseServiceRole, scope.authDeleteEligibleUserIds, {
+    actorUserId,
+    actorMode: input.actorMode,
+    superadminEmails,
+  })
 
   if (authUserCleanup.failed.length > 0) {
     const sample = authUserCleanup.failed
