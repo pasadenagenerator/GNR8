@@ -74,3 +74,14 @@ test('owner and admin can manage client users while member cannot', () => {
   assert.equal(canPerformAction('member', 'edit_client_user'), false)
   assert.equal(canPerformAction('member', 'remove_client_user'), false)
 })
+
+test('owner and admin can create clients and edit client settings while member cannot', () => {
+  assert.equal(canPerformAction('owner', 'create_client'), true)
+  assert.equal(canPerformAction('owner', 'edit_client_settings'), true)
+
+  assert.equal(canPerformAction('admin', 'create_client'), true)
+  assert.equal(canPerformAction('admin', 'edit_client_settings'), true)
+
+  assert.equal(canPerformAction('member', 'create_client'), false)
+  assert.equal(canPerformAction('member', 'edit_client_settings'), false)
+})

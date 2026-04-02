@@ -195,6 +195,8 @@ export default async function AgencyDashboardPage(props: { searchParams?: Promis
   const canRunMigrations = canPerformAction(currentUserAgency.role, "run_migration");
   const canRunBulkActions = canPerformAction(currentUserAgency.role, "bulk_actions");
   const canViewClientUsers = canPerformAction(currentUserAgency.role, "view_client_users");
+  const canCreateClient = canPerformAction(currentUserAgency.role, "create_client");
+  const canEditClientSettings = canPerformAction(currentUserAgency.role, "edit_client_settings");
 
   return (
     <main
@@ -382,7 +384,19 @@ export default async function AgencyDashboardPage(props: { searchParams?: Promis
         </section>
 
         <section style={{ marginTop: 16, border: "1px solid #dbe6f1", borderRadius: 12, background: "#fff", padding: 16 }}>
-            <h2 style={{ marginTop: 0, color: "#0f172a" }}>Client Overview</h2>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+              <h2 style={{ marginTop: 0, marginBottom: 0, color: "#0f172a" }}>Client Overview</h2>
+              {canCreateClient ? (
+                <Link
+                  href={`/gnr8/agency/clients/new?agency=${encodeURIComponent(currentUserAgency.agency_id)}`}
+                  style={actionLinkStyle()}
+                >
+                  Add Client
+                </Link>
+              ) : (
+                <span style={disabledActionStyle()}>Add Client</span>
+              )}
+            </div>
 
             {readModel.client_overview.length === 0 ? (
               <p style={{ marginBottom: 0, color: "#475569" }}>No client assignments found for this agency yet.</p>
@@ -396,7 +410,7 @@ export default async function AgencyDashboardPage(props: { searchParams?: Promis
                       <th style={{ padding: "8px 10px" }}>Estimated Cost</th>
                       <th style={{ padding: "8px 10px" }}>Simulated Revenue</th>
                       <th style={{ padding: "8px 10px" }}>Margin</th>
-                      <th style={{ padding: "8px 10px" }}>Access</th>
+                      <th style={{ padding: "8px 10px" }}>Actions</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -410,15 +424,35 @@ export default async function AgencyDashboardPage(props: { searchParams?: Promis
                           {formatMoney(client.total_margin)}
                         </td>
                         <td style={{ padding: "8px 10px" }}>
-                          {client.client_id && canViewClientUsers ? (
-                            <Link
-                              href={`/gnr8/agency/clients/${encodeURIComponent(client.client_id)}/users`}
-                              style={actionLinkStyle()}
-                            >
-                              Users
-                            </Link>
-                          ) : client.client_id ? (
-                            <span style={disabledActionStyle()}>No Access</span>
+                          {client.client_id ? (
+                            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                              <Link
+                                href={`/gnr8/agency/clients/${encodeURIComponent(client.client_id)}/dashboard?agency=${encodeURIComponent(currentUserAgency.agency_id)}`}
+                                style={actionLinkStyle()}
+                              >
+                                Client Dashboard
+                              </Link>
+                              {canEditClientSettings ? (
+                                <Link
+                                  href={`/gnr8/agency/clients/${encodeURIComponent(client.client_id)}/settings?agency=${encodeURIComponent(currentUserAgency.agency_id)}`}
+                                  style={actionLinkStyle()}
+                                >
+                                  Client Settings
+                                </Link>
+                              ) : (
+                                <span style={disabledActionStyle()}>Client Settings</span>
+                              )}
+                              {canViewClientUsers ? (
+                                <Link
+                                  href={`/gnr8/agency/clients/${encodeURIComponent(client.client_id)}/users?agency=${encodeURIComponent(currentUserAgency.agency_id)}`}
+                                  style={actionLinkStyle()}
+                                >
+                                  Client Team
+                                </Link>
+                              ) : (
+                                <span style={disabledActionStyle()}>Client Team</span>
+                              )}
+                            </div>
                           ) : (
                             <span style={disabledActionStyle()}>Unassigned</span>
                           )}

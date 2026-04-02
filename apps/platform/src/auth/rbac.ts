@@ -5,6 +5,8 @@ export type AgencyAction =
   | 'view_dashboard'
   | 'view_members'
   | 'view_client_users'
+  | 'create_client'
+  | 'edit_client_settings'
   | 'invite_user'
   | 'invite_client_user'
   | 'edit_member_role'
@@ -45,6 +47,8 @@ const ACTION_MATRIX: Record<AgencyRole, Record<AgencyAction, boolean>> = {
     view_dashboard: true,
     view_members: true,
     view_client_users: true,
+    create_client: true,
+    edit_client_settings: true,
     invite_user: true,
     invite_client_user: true,
     edit_member_role: true,
@@ -66,6 +70,8 @@ const ACTION_MATRIX: Record<AgencyRole, Record<AgencyAction, boolean>> = {
     view_dashboard: true,
     view_members: true,
     view_client_users: true,
+    create_client: true,
+    edit_client_settings: true,
     invite_user: true,
     invite_client_user: true,
     edit_member_role: true,
@@ -87,6 +93,8 @@ const ACTION_MATRIX: Record<AgencyRole, Record<AgencyAction, boolean>> = {
     view_dashboard: true,
     view_members: true,
     view_client_users: true,
+    create_client: true,
+    edit_client_settings: true,
     invite_user: false,
     invite_client_user: true,
     edit_member_role: false,
@@ -108,6 +116,8 @@ const ACTION_MATRIX: Record<AgencyRole, Record<AgencyAction, boolean>> = {
     view_dashboard: true,
     view_members: true,
     view_client_users: false,
+    create_client: false,
+    edit_client_settings: false,
     invite_user: false,
     invite_client_user: false,
     edit_member_role: false,
