@@ -196,9 +196,12 @@ export async function getOwnerSetupStatusForAgency(input: {
   return getOwnerSetupStatusForAgencyWithClient(supabase, input)
 }
 
-export async function listIncompleteOwnerSetupAgencyIdsForCurrentUserForPage(): Promise<string[]> {
+export async function listIncompleteOwnerSetupAgencyIdsForCurrentUserForPage(input?: {
+  userId?: string | null
+}): Promise<string[]> {
   const supabase = await getSupabaseServerClientReadOnly()
-  const userId = await requireCurrentUserId(supabase)
+  const providedUserId = normalizeText(input?.userId)
+  const userId = providedUserId && isUuid(providedUserId) ? providedUserId : await requireCurrentUserId(supabase)
   const contexts = await listOwnerMembershipContexts(supabase, userId)
   return Array.from(
     new Set(

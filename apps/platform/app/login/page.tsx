@@ -5,6 +5,17 @@ import { useRouter } from 'next/navigation'
 import { getSupabaseBrowserClient } from '@/src/supabase/browser'
 import { RESET_PASSWORD_PATH } from '@/src/auth/auth-flow-model'
 
+const AUTH_DEBUG_ENABLED = process.env.NODE_ENV !== 'production' || process.env.NEXT_PUBLIC_AUTH_DEBUG_LOGIN === '1'
+
+function createAuthRequestId(): string {
+  return `login_${Math.random().toString(36).slice(2, 8)}_${Date.now().toString(36)}`
+}
+
+function logAuthDebug(event: string, payload: Record<string, unknown>): void {
+  if (!AUTH_DEBUG_ENABLED) return
+  console.info(`[auth.login.${event}]`, payload)
+}
+
 export default function LoginPage() {
   const router = useRouter()
   const supabase = useMemo(() => getSupabaseBrowserClient(), [])
@@ -17,14 +28,30 @@ export default function LoginPage() {
   const [recoveryMessage, setRecoveryMessage] = useState<string | null>(null)
   const submitInFlightRef = useRef(false)
   const lastSubmitAtRef = useRef(0)
+  const signInCallCountRef = useRef(0)
+  const resolverCallCountRef = useRef(0)
+  const lastSuccessfulAttemptIdRef = useRef<string | null>(null)
+  const resolverInFlightRef = useRef(false)
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault()
 
-    if (busy || submitInFlightRef.current) return
+    const requestId = createAuthRequestId()
+    logAuthDebug('submit.received', { requestId, busy, submitInFlight: submitInFlightRef.current })
+
+    if (busy || submitInFlightRef.current) {
+      logAuthDebug('submit.blocked.busy_or_inflight', { requestId, busy, submitInFlight: submitInFlightRef.current })
+      return
+    }
 
     const now = Date.now()
-    if (now - lastSubmitAtRef.current < 500) return
+    if (now - lastSubmitAtRef.current < 500) {
+      logAuthDebug('submit.blocked.debounce', {
+        requestId,
+        msSinceLastSubmit: now - lastSubmitAtRef.current,
+      })
+      return
+    }
     lastSubmitAtRef.current = now
 
     submitInFlightRef.current = true
@@ -33,26 +60,63 @@ export default function LoginPage() {
     setRecoveryMessage(null)
 
     try {
+      signInCallCountRef.current += 1
+      logAuthDebug('sign_in.start', {
+        requestId,
+        signInCallCount: signInCallCountRef.current,
+        email: email.trim().toLowerCase(),
+      })
       const { error } = await supabase.auth.signInWithPassword({
         email: email.trim(),
         password,
       })
 
       if (error) {
+        logAuthDebug('sign_in.error', {
+          requestId,
+          signInCallCount: signInCallCountRef.current,
+          message: error.message,
+        })
         setError(error.message)
         return
       }
+      logAuthDebug('sign_in.success', { requestId, signInCallCount: signInCallCountRef.current })
 
       const nextPath = typeof window === 'undefined' ? '' : String(new URL(window.location.href).searchParams.get('next') ?? '').trim()
+      if (lastSuccessfulAttemptIdRef.current === requestId) {
+        logAuthDebug('resolver.blocked.duplicate_attempt', { requestId })
+        return
+      }
+      if (resolverInFlightRef.current) {
+        logAuthDebug('resolver.blocked.in_flight', { requestId })
+        return
+      }
+
+      resolverCallCountRef.current += 1
+      resolverInFlightRef.current = true
+      logAuthDebug('resolver.start', {
+        requestId,
+        resolverCallCount: resolverCallCountRef.current,
+        nextPath: nextPath || null,
+      })
       const resolver = await fetch(`/api/auth/post-login-home${nextPath ? `?next=${encodeURIComponent(nextPath)}` : ''}`, {
         method: 'GET',
         credentials: 'include',
         headers: {
           Accept: 'application/json',
+          'x-auth-request-id': requestId,
         },
         cache: 'no-store',
       })
       const payload = (await resolver.json().catch(() => null)) as { target?: unknown; error?: unknown } | null
+      logAuthDebug('resolver.done', {
+        requestId,
+        resolverCallCount: resolverCallCountRef.current,
+        status: resolver.status,
+        ok: resolver.ok,
+        payloadTarget: payload?.target,
+        payloadError: payload?.error,
+      })
 
       if (!resolver.ok) {
         setError(String(payload?.error ?? 'Sign-in succeeded, but home routing could not be resolved.'))
@@ -65,13 +129,25 @@ export default function LoginPage() {
         return
       }
 
+      lastSuccessfulAttemptIdRef.current = requestId
+      logAuthDebug('redirect.start', { requestId, target })
       router.replace(target)
       router.refresh()
     } catch (cause) {
+      logAuthDebug('submit.exception', {
+        requestId,
+        message: cause instanceof Error ? cause.message : 'unknown',
+      })
       setError(cause instanceof Error ? cause.message : 'Failed to complete sign-in.')
     } finally {
+      resolverInFlightRef.current = false
       submitInFlightRef.current = false
       setBusy(false)
+      logAuthDebug('submit.finalized', {
+        requestId,
+        signInCallCount: signInCallCountRef.current,
+        resolverCallCount: resolverCallCountRef.current,
+      })
     }
   }
 

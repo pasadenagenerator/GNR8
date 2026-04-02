@@ -1,11 +1,11 @@
 import "server-only";
 
+import { getSupabaseServerClientReadOnly } from "@/src/auth/supabase-server-read-only";
 import { CLIENT_SETUP_PATH, listIncompleteClientSetupClientIdsForCurrentUserForPage } from "@/src/auth/client-setup-gate";
 import { listIncompleteOwnerSetupAgencyIdsForCurrentUserForPage } from "@/src/auth/owner-setup-gate";
 import { reconcilePendingClientMembershipInvitesForCurrentUser } from "@/src/auth/reconcile-client-membership-invites";
 import { listCurrentUserAgencyMembershipsForPage, ResolveCurrentAgencyError } from "@/src/auth/resolve-current-agency";
 import { resolveCurrentUserClientForPage, ResolveCurrentClientError } from "@/src/auth/resolve-current-client";
-import { requireSuperadminUserIdForPage } from "@/src/auth/require-superadmin-user-id";
 import {
   AGENCY_HOME_PATH,
   AUTH_CALLBACK_PATH,
@@ -21,6 +21,51 @@ export type PostLoginHomeResolution = {
   target: string;
   kind: HomeKind;
 };
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const AUTH_DEBUG_ENABLED = process.env.NODE_ENV !== "production" || process.env.AUTH_DEBUG_LOGIN === "1";
+
+function logAuthDebug(event: string, payload: Record<string, unknown>): void {
+  if (!AUTH_DEBUG_ENABLED) return;
+  console.info(`[auth.post_login_resolver.${event}]`, payload);
+}
+
+function normalizeText(value: unknown): string {
+  return String(value ?? "").trim();
+}
+
+function parseAllowlist(value: string | undefined): string[] {
+  return (value ?? "")
+    .split(",")
+    .map((s) => s.trim().toLowerCase())
+    .filter(Boolean);
+}
+
+function isSuperadminEmail(email: string): boolean {
+  const allowlist = parseAllowlist(process.env.SUPERADMIN_EMAILS);
+  return allowlist.length > 0 && allowlist.includes(email.toLowerCase());
+}
+
+async function resolveAuthenticatedUserForPostLogin(input: {
+  requestId?: string | null;
+}): Promise<{ userId: string; email: string }> {
+  const supabase = await getSupabaseServerClientReadOnly();
+  logAuthDebug("auth_user.lookup.start", { requestId: input.requestId ?? null });
+  const authResult = await supabase.auth.getUser();
+  const userId = normalizeText(authResult.data.user?.id);
+  const email = normalizeText(authResult.data.user?.email).toLowerCase();
+  const authorized = !authResult.error && UUID_RE.test(userId) && !!email;
+  logAuthDebug("auth_user.lookup.done", {
+    requestId: input.requestId ?? null,
+    authorized,
+    hasError: Boolean(authResult.error),
+    userIdSuffix: userId ? userId.slice(-6) : null,
+  });
+  if (!authorized) {
+    throw new Error("Unauthorized");
+  }
+  return { userId, email };
+}
 
 function normalizeNextPath(candidate: string | null): string | null {
   const value = String(candidate ?? "").trim();
@@ -67,36 +112,37 @@ function onboardingPathForClient(clientId: string | null): string {
   return `${CLIENT_SETUP_PATH}?client=${encodeURIComponent(clientId)}`;
 }
 
-async function isSuperadminForPage(): Promise<boolean> {
-  try {
-    await requireSuperadminUserIdForPage();
-    return true;
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "Unknown error";
-    if (message === "Unauthorized" || message.startsWith("Forbidden")) {
-      return false;
-    }
-    throw error;
-  }
-}
-
 export async function resolvePostLoginHomeForPage(input?: {
   nextPath?: string | null;
+  requestId?: string | null;
 }): Promise<PostLoginHomeResolution> {
   const normalizedNextPath = normalizeNextPath(input?.nextPath ?? null);
+  const requestId = normalizeText(input?.requestId) || null;
+  logAuthDebug("resolution.start", {
+    requestId,
+    nextPath: normalizedNextPath,
+  });
+  const authUser = await resolveAuthenticatedUserForPostLogin({ requestId });
 
-  if (await isSuperadminForPage()) {
+  if (isSuperadminEmail(authUser.email)) {
+    logAuthDebug("resolution.superadmin", {
+      requestId,
+      userIdSuffix: authUser.userId.slice(-6),
+    });
     return {
       target: SUPERADMIN_HOME_PATH,
       kind: "superadmin",
     };
   }
 
-  await reconcilePendingClientMembershipInvitesForCurrentUser();
+  await reconcilePendingClientMembershipInvitesForCurrentUser({
+    userId: authUser.userId,
+    email: authUser.email,
+  });
 
   let agencyMemberships: Awaited<ReturnType<typeof listCurrentUserAgencyMembershipsForPage>>["memberships"] = [];
   try {
-    agencyMemberships = (await listCurrentUserAgencyMembershipsForPage()).memberships;
+    agencyMemberships = (await listCurrentUserAgencyMembershipsForPage({ userId: authUser.userId })).memberships;
   } catch (error) {
     if (error instanceof ResolveCurrentAgencyError && error.code === "UNAUTHORIZED") {
       throw error;
@@ -105,7 +151,9 @@ export async function resolvePostLoginHomeForPage(input?: {
   }
 
   if (agencyMemberships.length > 0) {
-    const incompleteAgencyIds = await listIncompleteOwnerSetupAgencyIdsForCurrentUserForPage();
+    const incompleteAgencyIds = await listIncompleteOwnerSetupAgencyIdsForCurrentUserForPage({
+      userId: authUser.userId,
+    });
     if (incompleteAgencyIds.length > 0) {
       const requestedAgencyId = normalizedNextPath ? tryExtractAgencyId(normalizedNextPath) : null;
       if (requestedAgencyId && incompleteAgencyIds.includes(requestedAgencyId)) {
@@ -147,7 +195,9 @@ export async function resolvePostLoginHomeForPage(input?: {
   }
 
   const requestedClientId = normalizedNextPath ? tryExtractClientId(normalizedNextPath) : null;
-  const incompleteClientIds = await listIncompleteClientSetupClientIdsForCurrentUserForPage();
+  const incompleteClientIds = await listIncompleteClientSetupClientIdsForCurrentUserForPage({
+    userId: authUser.userId,
+  });
   if (incompleteClientIds.length > 0) {
     if (requestedClientId && incompleteClientIds.includes(requestedClientId)) {
       return {
@@ -168,6 +218,7 @@ export async function resolvePostLoginHomeForPage(input?: {
   try {
     const resolvedClient = await resolveCurrentUserClientForPage({
       activeClientId: activeClientCandidate,
+      userId: authUser.userId,
     });
 
     if (normalizedNextPath && requestedClientId && requestedClientId === resolvedClient.client_id) {

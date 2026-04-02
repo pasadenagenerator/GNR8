@@ -154,9 +154,12 @@ export async function getClientSetupStatusForClient(input: {
   return getClientSetupStatusForClientWithSupabase(supabase, input)
 }
 
-export async function listIncompleteClientSetupClientIdsForCurrentUserForPage(): Promise<string[]> {
+export async function listIncompleteClientSetupClientIdsForCurrentUserForPage(input?: {
+  userId?: string | null
+}): Promise<string[]> {
   const supabase = await getSupabaseServerClientReadOnly()
-  const userId = await requireCurrentUserId(supabase)
+  const providedUserId = normalizeText(input?.userId)
+  const userId = providedUserId && isUuid(providedUserId) ? providedUserId : await requireCurrentUserId(supabase)
   const contexts = await listClientSetupContexts(supabase, userId)
 
   return Array.from(new Set(contexts.filter((context) => !context.client_setup_completed).map((context) => context.client_id)))

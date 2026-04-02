@@ -341,9 +341,11 @@ export async function resolveCurrentUserClient(input?: {
 
 export async function resolveCurrentUserClientForPage(input?: {
   activeClientId?: string | null;
+  userId?: string | null;
 }): Promise<ResolvedCurrentUserClient> {
   const supabase = await getSupabaseServerClientReadOnly();
-  const userId = await requireCurrentUserId(supabase);
+  const providedUserId = normalizeText(input?.userId);
+  const userId = providedUserId && isUuid(providedUserId) ? providedUserId : await requireCurrentUserId(supabase);
   const memberships = await listClientMembershipCandidates(supabase, userId);
   const selectedMembership = selectCurrentClientMembership({
     memberships,

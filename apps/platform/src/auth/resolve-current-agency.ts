@@ -287,12 +287,15 @@ export async function listCurrentUserAgencyMemberships(): Promise<{
   }
 }
 
-export async function listCurrentUserAgencyMembershipsForPage(): Promise<{
+export async function listCurrentUserAgencyMembershipsForPage(input?: {
+  userId?: string | null
+}): Promise<{
   user_id: string
   memberships: CurrentUserAgencyMembership[]
 }> {
   const supabase = await getSupabaseServerClientReadOnly()
-  const userId = await requireCurrentUserId(supabase)
+  const providedUserId = normalizeText(input?.userId)
+  const userId = providedUserId && isUuid(providedUserId) ? providedUserId : await requireCurrentUserId(supabase)
   const memberships = await listAgencyMembershipCandidates(supabase, userId)
   return {
     user_id: userId,

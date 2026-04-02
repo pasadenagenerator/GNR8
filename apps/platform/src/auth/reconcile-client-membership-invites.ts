@@ -33,16 +33,23 @@ function rankRole(role: 'owner' | 'member'): number {
   return 1
 }
 
-export async function reconcilePendingClientMembershipInvitesForCurrentUser(): Promise<{
+export async function reconcilePendingClientMembershipInvitesForCurrentUser(input?: {
+  userId?: string | null
+  email?: string | null
+}): Promise<{
   processedInvites: number
 }> {
   const sessionSupabase = await getSupabaseServerClientMutating()
-  const authUserResult = await sessionSupabase.auth.getUser()
+  let userId = normalizeText(input?.userId)
+  let email = normalizeText(input?.email).toLowerCase()
 
-  const userId = normalizeText(authUserResult.data.user?.id)
-  const email = normalizeText(authUserResult.data.user?.email).toLowerCase()
-  if (authUserResult.error || !UUID_RE.test(userId) || !email) {
-    return { processedInvites: 0 }
+  if (!UUID_RE.test(userId) || !email) {
+    const authUserResult = await sessionSupabase.auth.getUser()
+    userId = normalizeText(authUserResult.data.user?.id)
+    email = normalizeText(authUserResult.data.user?.email).toLowerCase()
+    if (authUserResult.error || !UUID_RE.test(userId) || !email) {
+      return { processedInvites: 0 }
+    }
   }
 
   const supabase = getSupabaseServiceRoleClient()

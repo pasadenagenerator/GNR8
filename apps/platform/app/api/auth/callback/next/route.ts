@@ -4,5 +4,6 @@ import { resolvePostLoginHomeRoute } from '@/src/auth/post-login-home-route'
 
 export async function GET(request: NextRequest) {
   const nextPath = request.nextUrl.searchParams.get('next')
-  return resolvePostLoginHomeRoute(nextPath)
+  const requestId = request.headers.get('x-auth-request-id')
+  return resolvePostLoginHomeRoute(nextPath, { requestId })
 }
