@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
 
+import ClientContextLayout from '../ClientContextLayout'
 import { getClientDashboardReadModelForPage } from '@/gnr8/client/client-dashboard-read-model'
 import {
   listCurrentUserAgencyMembershipsForPage,
@@ -183,24 +184,14 @@ export default async function AgencyClientDashboardEntryPage(props: {
   })
 
   return (
-    <main
-      style={{
-        maxWidth: 1280,
-        margin: '0 auto',
-        padding: 24,
-        background: 'linear-gradient(180deg, #f4f8fc 0%, #ffffff 62%)',
-        fontFamily: 'ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial',
-        minHeight: '100vh',
-      }}
+    <ClientContextLayout
+      agencyId={currentUserAgency.agency_id}
+      requestedAgencyId={requestedAgencyId}
+      clientId={clientId}
+      clientName={readModel.client.client_name?.trim() || shortId(clientId)}
+      activeTab='dashboard'
     >
-      <header style={{ display: 'grid', gap: 8 }}>
-        <h1 style={{ margin: 0, fontSize: 30, color: '#0f172a' }}>Client Dashboard</h1>
-        <p style={{ margin: 0, color: '#334155' }}>
-          Agency-managed client dashboard view with strict agency/client scope validation.
-        </p>
-      </header>
-
-      <section style={{ marginTop: 16, border: '1px solid #dbe6f1', borderRadius: 12, background: '#fff', padding: 14 }}>
+      <section style={{ border: '1px solid #dbe6f1', borderRadius: 12, background: '#fff', padding: 14 }}>
         <div style={{ display: 'grid', gap: 4, fontSize: 13, color: '#334155' }}>
           <div>
             <strong>Client:</strong> {readModel.client.client_name?.trim() || shortId(clientId)}
@@ -216,7 +207,7 @@ export default async function AgencyClientDashboardEntryPage(props: {
 
       <section
         style={{
-          marginTop: 16,
+          marginTop: 14,
           display: 'grid',
           gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
           gap: 10,
@@ -238,7 +229,7 @@ export default async function AgencyClientDashboardEntryPage(props: {
         </article>
       </section>
 
-      <section style={{ marginTop: 16, border: '1px solid #dbe6f1', borderRadius: 12, background: '#fff', overflow: 'hidden' }}>
+      <section style={{ marginTop: 14, border: '1px solid #dbe6f1', borderRadius: 12, background: '#fff', overflow: 'hidden' }}>
         <div style={{ padding: 12, borderBottom: '1px solid #e2e8f0', fontWeight: 600, color: '#0f172a' }}>Client Sites</div>
         <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 760 }}>
@@ -302,22 +293,6 @@ export default async function AgencyClientDashboardEntryPage(props: {
 
       <div style={{ marginTop: 12, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
         <Link
-          href={`/gnr8/agency?agency=${encodeURIComponent(currentUserAgency.agency_id)}`}
-          style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            padding: '6px 10px',
-            borderRadius: 8,
-            border: '1px solid #cbd5e1',
-            background: '#fff',
-            color: '#0f172a',
-            textDecoration: 'none',
-            fontSize: 12,
-          }}
-        >
-          Back to Agency Dashboard
-        </Link>
-        <Link
           href={`/gnr8/client?client=${encodeURIComponent(clientId)}`}
           style={{
             display: 'inline-flex',
@@ -334,6 +309,6 @@ export default async function AgencyClientDashboardEntryPage(props: {
           Open Client-Side Route
         </Link>
       </div>
-    </main>
+    </ClientContextLayout>
   )
 }

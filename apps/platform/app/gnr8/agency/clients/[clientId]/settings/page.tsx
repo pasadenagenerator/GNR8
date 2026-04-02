@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation'
 
 import ClientSettingsClient from './ClientSettingsClient'
+import ClientContextLayout from '../ClientContextLayout'
 import {
   listCurrentUserAgencyMembershipsForPage,
   resolveCurrentUserAgencyForPage,
@@ -139,20 +140,30 @@ export default async function AgencyClientSettingsPage(props: {
   }
 
   return (
-    <ClientSettingsClient
+    <ClientContextLayout
       agencyId={currentUserAgency.agency_id}
       requestedAgencyId={requestedAgencyId}
       clientId={clientId}
-      initialName={normalizeText(client.name) || 'Unnamed Client'}
-      initialSlug={normalizeText(client.slug)}
-      initialContactPersonName={normalizeText(client.contact_person_name)}
-      initialContactEmail={normalizeText(client.contact_email)}
-      initialContactPhone={normalizeText(client.contact_phone)}
-      memberships={availableAgencyMemberships}
-      canEditClientSettings={canPerformAction(currentUserAgency.role, 'edit_client_settings')}
-      canViewDashboard={canPerformAction(currentUserAgency.role, 'view_dashboard')}
-      canViewClientUsers={canPerformAction(currentUserAgency.role, 'view_client_users')}
-      role={currentUserAgency.role}
-    />
+      clientName={normalizeText(client.name) || 'Unnamed Client'}
+      clientSlug={normalizeText(client.slug)}
+      activeTab='settings'
+    >
+      <ClientSettingsClient
+        agencyId={currentUserAgency.agency_id}
+        requestedAgencyId={requestedAgencyId}
+        clientId={clientId}
+        initialName={normalizeText(client.name) || 'Unnamed Client'}
+        initialSlug={normalizeText(client.slug)}
+        initialContactPersonName={normalizeText(client.contact_person_name)}
+        initialContactEmail={normalizeText(client.contact_email)}
+        initialContactPhone={normalizeText(client.contact_phone)}
+        memberships={availableAgencyMemberships}
+        canEditClientSettings={canPerformAction(currentUserAgency.role, 'edit_client_settings')}
+        canViewDashboard={canPerformAction(currentUserAgency.role, 'view_dashboard')}
+        canViewClientUsers={canPerformAction(currentUserAgency.role, 'view_client_users')}
+        role={currentUserAgency.role}
+        embeddedInClientContext
+      />
+    </ClientContextLayout>
   )
 }

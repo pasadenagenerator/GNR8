@@ -442,7 +442,7 @@ export default async function AgencyDashboardPage(props: { searchParams?: Promis
                               href={`/gnr8/agency/clients/${encodeURIComponent(client.id)}/dashboard?agency=${encodeURIComponent(currentUserAgency.agency_id)}`}
                               style={actionLinkStyle()}
                             >
-                              Client Dashboard
+                              Enter Client Workspace
                             </Link>
                             {canEditClientSettings ? (
                               <Link

@@ -24,6 +24,7 @@ type Props = {
   canEditClientSettings: boolean
   canViewDashboard: boolean
   canViewClientUsers: boolean
+  embeddedInClientContext?: boolean
 }
 
 type Status = 'idle' | 'saving' | 'success' | 'error'
@@ -167,17 +168,19 @@ export default function ClientSettingsClient(props: Props) {
     }
   }
 
-  return (
-    <main
-      style={{
+  const containerStyle: React.CSSProperties = props.embeddedInClientContext
+    ? { display: 'grid', gap: 0 }
+    : {
         maxWidth: 900,
         margin: '0 auto',
         padding: 24,
         background: 'linear-gradient(180deg, #f4f8fc 0%, #ffffff 62%)',
         fontFamily: 'ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial',
         minHeight: '100vh',
-      }}
-    >
+      }
+
+  return (
+    <main style={containerStyle}>
       <header style={{ display: 'grid', gap: 8 }}>
         <h1 style={{ margin: 0, fontSize: 30, color: '#0f172a' }}>Client Settings</h1>
         <p style={{ margin: 0, color: '#334155' }}>
@@ -189,7 +192,7 @@ export default function ClientSettingsClient(props: Props) {
         </p>
       </header>
 
-      <section style={{ ...sectionStyle(), marginTop: 16 }}>
+      <section style={{ ...sectionStyle(), marginTop: props.embeddedInClientContext ? 14 : 16 }}>
         <h2 style={{ marginTop: 0, marginBottom: 6, color: '#0f172a' }}>Client Identity</h2>
         <p style={{ marginTop: 0, marginBottom: 12, color: '#475569', fontSize: 13 }}>
           Core organization identity for this client inside the current agency scope.
@@ -285,7 +288,7 @@ export default function ClientSettingsClient(props: Props) {
         ) : null}
       </section>
 
-      {props.memberships.length > 1 ? (
+      {!props.embeddedInClientContext && props.memberships.length > 1 ? (
         <section style={{ ...sectionStyle(), marginTop: 12, padding: 12 }}>
           <p style={{ marginTop: 0, marginBottom: 8, color: '#334155', fontSize: 13 }}>Switch agency context:</p>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
@@ -384,24 +387,26 @@ export default function ClientSettingsClient(props: Props) {
         </p>
       </section>
 
-      <div style={{ marginTop: 12, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-        <Link
-          href={agencyDashboardPath}
-          style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            padding: '6px 10px',
-            borderRadius: 8,
-            border: '1px solid #cbd5e1',
-            background: '#fff',
-            color: '#0f172a',
-            textDecoration: 'none',
-            fontSize: 12,
-          }}
-        >
-          Back to Agency Dashboard
-        </Link>
-      </div>
+      {!props.embeddedInClientContext ? (
+        <div style={{ marginTop: 12, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <Link
+            href={agencyDashboardPath}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              padding: '6px 10px',
+              borderRadius: 8,
+              border: '1px solid #cbd5e1',
+              background: '#fff',
+              color: '#0f172a',
+              textDecoration: 'none',
+              fontSize: 12,
+            }}
+          >
+            Back to Agency Dashboard
+          </Link>
+        </div>
+      ) : null}
     </main>
   )
 }

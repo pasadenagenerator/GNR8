@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { redirect } from 'next/navigation'
 
 import ClientUsersClient from './ClientUsersClient'
+import ClientContextLayout from '../ClientContextLayout'
 import {
   listCurrentUserAgencyMembershipsForPage,
   resolveCurrentUserAgencyForPage,
@@ -21,6 +22,7 @@ type Params = {
 type ClientOrganizationRow = {
   id: string | null
   name: string | null
+  slug: string | null
 }
 
 function normalizeText(value: unknown): string {
@@ -167,7 +169,7 @@ export default async function ClientUsersPage(props: {
   const supabase = await getSupabaseServerClientReadOnly()
   const clientResult = await supabase
     .from('organizations')
-    .select('id,name')
+    .select('id,name,slug')
     .eq('id', clientId)
     .eq('agency_id', currentUserAgency.agency_id)
     .eq('organization_type', 'client')
@@ -200,15 +202,25 @@ export default async function ClientUsersPage(props: {
   }
 
   return (
-    <ClientUsersClient
+    <ClientContextLayout
       agencyId={currentUserAgency.agency_id}
-      agencyName={currentUserAgency.agency_name?.trim() || 'Unnamed Agency'}
+      requestedAgencyId={requestedAgencyId}
       clientId={clientId}
       clientName={normalizeText(clientRow.name) || 'Unnamed Client'}
-      requestedAgencyId={requestedAgencyId}
-      memberships={availableAgencyMemberships}
-      role={currentUserAgency.role}
-      canInviteClientUsers={canPerformAction(currentUserAgency.role, 'invite_client_user')}
-    />
+      clientSlug={normalizeText(clientRow.slug)}
+      activeTab='users'
+    >
+      <ClientUsersClient
+        agencyId={currentUserAgency.agency_id}
+        agencyName={currentUserAgency.agency_name?.trim() || 'Unnamed Agency'}
+        clientId={clientId}
+        clientName={normalizeText(clientRow.name) || 'Unnamed Client'}
+        requestedAgencyId={requestedAgencyId}
+        memberships={availableAgencyMemberships}
+        role={currentUserAgency.role}
+        canInviteClientUsers={canPerformAction(currentUserAgency.role, 'invite_client_user')}
+        embeddedInClientContext
+      />
+    </ClientContextLayout>
   )
 }

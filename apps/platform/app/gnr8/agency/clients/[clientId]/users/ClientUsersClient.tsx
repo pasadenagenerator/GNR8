@@ -36,6 +36,7 @@ type Props = {
   actorMode?: 'membership' | 'admin_view'
   adminBackToPath?: string
   hideMembershipSwitcher?: boolean
+  embeddedInClientContext?: boolean
 }
 
 type FormStatus = 'idle' | 'saving' | 'success' | 'error'
@@ -220,17 +221,19 @@ export default function ClientUsersClient(props: Props) {
     await fetchUsers()
   }
 
-  return (
-    <main
-      style={{
+  const containerStyle: React.CSSProperties = props.embeddedInClientContext
+    ? { display: 'grid', gap: 0 }
+    : {
         maxWidth: 1040,
         margin: '0 auto',
         padding: 24,
         background: 'linear-gradient(180deg, #f4f8fc 0%, #ffffff 62%)',
         fontFamily: 'ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial',
         minHeight: '100vh',
-      }}
-    >
+      }
+
+  return (
+    <main style={containerStyle}>
       <header style={{ display: 'grid', gap: 8 }}>
         <h1 style={{ margin: 0, fontSize: 30, color: '#0f172a' }}>{isAdminView ? 'Client Users' : 'Client User Access'}</h1>
         <p style={{ margin: 0, color: '#334155' }}>
@@ -281,26 +284,28 @@ export default function ClientUsersClient(props: Props) {
           ) : null}
         </div>
 
-        <div style={{ marginTop: 10, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          <Link
-            href={backToPath}
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              padding: '6px 10px',
-              borderRadius: 8,
-              border: '1px solid #cbd5e1',
-              background: '#fff',
-              color: '#0f172a',
-              textDecoration: 'none',
-              fontSize: 12,
-            }}
-          >
-            {isAdminView ? 'Back to Agency Dashboard' : 'Back to Dashboard'}
-          </Link>
-        </div>
+        {!props.embeddedInClientContext || isAdminView ? (
+          <div style={{ marginTop: 10, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <Link
+              href={backToPath}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                padding: '6px 10px',
+                borderRadius: 8,
+                border: '1px solid #cbd5e1',
+                background: '#fff',
+                color: '#0f172a',
+                textDecoration: 'none',
+                fontSize: 12,
+              }}
+            >
+              {isAdminView ? 'Back to Agency Dashboard' : 'Back to Dashboard'}
+            </Link>
+          </div>
+        ) : null}
 
-        {!props.hideMembershipSwitcher && props.memberships.length > 1 ? (
+        {!props.embeddedInClientContext && !props.hideMembershipSwitcher && props.memberships.length > 1 ? (
           <div style={{ marginTop: 10, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             {props.memberships.map((membership) => {
               const isActive = membership.agency_id === props.agencyId
