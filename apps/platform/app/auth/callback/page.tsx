@@ -1,8 +1,8 @@
 'use client'
 
 import type { EmailOtpType } from '@supabase/supabase-js'
-import { useEffect, useMemo, useState } from 'react'
-import { getSupabaseBrowserClient } from '@/src/supabase/browser'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { getSupabaseBrowserClientForAuthCallback } from '@/src/supabase/browser'
 import {
   AGENCY_HOME_PATH,
   AUTH_CALLBACK_PATH,
@@ -14,6 +14,8 @@ type CallbackStatus = 'checking' | 'done' | 'error'
 
 const DEFAULT_AUTH_SUCCESS_PATH = AGENCY_HOME_PATH
 const DEFAULT_ONBOARDING_RESOLVER_PATH = '/api/auth/callback/next'
+const processedCallbackRunKeys = new Set<string>()
+let inFlightCallbackRunKey: string | null = null
 
 function normalizeNextPath(candidate: string | null): string {
   const value = String(candidate ?? '').trim()
@@ -42,11 +44,21 @@ function asEmailOtpType(rawType: string | null): EmailOtpType | null {
 }
 
 export default function AuthCallbackPage() {
-  const supabase = useMemo(() => getSupabaseBrowserClient(), [])
+  const supabase = useMemo(() => getSupabaseBrowserClientForAuthCallback(), [])
+  const startedRef = useRef(false)
   const [status, setStatus] = useState<CallbackStatus>('checking')
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
+    if (startedRef.current) return
+    startedRef.current = true
+
+    const callbackRunKey = `${window.location.pathname}${window.location.search}|${window.location.hash}`
+    if (processedCallbackRunKeys.has(callbackRunKey) || inFlightCallbackRunKey === callbackRunKey) {
+      return
+    }
+    inFlightCallbackRunKey = callbackRunKey
+
     ;(async () => {
       try {
         setStatus('checking')
@@ -80,13 +92,13 @@ export default function AuthCallbackPage() {
           throw new Error('Unsupported auth callback type for this route. Use login or password recovery flow.')
         }
 
-        const code = url.searchParams.get('code')
+        const code = url.searchParams.get('code') ?? hashParams.get('code')
         if (code) {
           const result = await supabase.auth.exchangeCodeForSession(code)
           if (result.error) throw result.error
         } else {
-          const accessToken = hashParams.get('access_token')
-          const refreshToken = hashParams.get('refresh_token')
+          const accessToken = url.searchParams.get('access_token') ?? hashParams.get('access_token')
+          const refreshToken = url.searchParams.get('refresh_token') ?? hashParams.get('refresh_token')
           if (accessToken && refreshToken) {
             const result = await supabase.auth.setSession({
               access_token: accessToken,
@@ -94,7 +106,7 @@ export default function AuthCallbackPage() {
             })
             if (result.error) throw result.error
           } else {
-            const tokenHash = url.searchParams.get('token_hash')
+            const tokenHash = url.searchParams.get('token_hash') ?? hashParams.get('token_hash')
             const otpType = callbackType
             if (tokenHash && otpType) {
               const result = await supabase.auth.verifyOtp({
@@ -105,6 +117,9 @@ export default function AuthCallbackPage() {
             }
           }
         }
+
+        // Credentials in URL/hash are single-use callback inputs; remove them once processed.
+        window.history.replaceState({}, document.title, AUTH_CALLBACK_PATH)
 
         const sessionResult = await supabase.auth.getSession()
         if (sessionResult.error) throw sessionResult.error
@@ -141,6 +156,11 @@ export default function AuthCallbackPage() {
       } catch (cause) {
         setStatus('error')
         setError(cause instanceof Error ? cause.message : 'Failed to complete auth callback.')
+      } finally {
+        processedCallbackRunKeys.add(callbackRunKey)
+        if (inFlightCallbackRunKey === callbackRunKey) {
+          inFlightCallbackRunKey = null
+        }
       }
     })()
   }, [supabase])

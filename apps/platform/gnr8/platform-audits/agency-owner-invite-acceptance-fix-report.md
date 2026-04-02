@@ -1,5 +1,21 @@
 # Agency Owner Invite Acceptance Fix Report
 
+## 0. Rate-Limit Addendum (2026-04-02)
+
+- **Observed failure:** valid invite callbacks on `/auth/callback` could fail with `Auth error: Request rate limit reached`.
+- **Primary duplicate-call source:** callback processing used the shared browser Supabase client with default URL auto-detection behavior while `/auth/callback` also manually executed callback completion (`exchangeCodeForSession` / `setSession` / `verifyOtp`).
+- **Secondary amplification source:** callback processing had no explicit run-once guard in the client effect, so duplicate mount/execution windows could re-attempt the same callback payload.
+
+### Final single-pass strategy
+
+1. `/auth/callback` now uses a callback-specific browser Supabase client configured with `auth.detectSessionInUrl = false`.
+2. Callback credentials are established exactly once in the page logic (manual callback completion remains explicit and deterministic).
+3. A duplicate-processing guard was added:
+   - in-flight key guard for the current callback URL payload
+   - processed-key memory guard to block re-processing of an already-attempted callback payload
+4. Callback credentials are cleared from the browser URL immediately after successful callback credential processing (`history.replaceState(..., '/auth/callback')`) so no second pass reuses the same hash/query callback state.
+5. Redirect target resolution and navigation remain single-pass: resolve once via `/api/auth/callback/next`, then `window.location.replace(...)` once.
+
 ## 1. Root Cause
 
 - Agency owner invite emails were sent without an explicit `redirectTo`, so Supabase used the project/site redirect default (`https://app.pasadenagenerator.com`).

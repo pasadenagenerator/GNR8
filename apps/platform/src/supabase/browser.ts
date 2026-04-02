@@ -9,10 +9,9 @@ function getCookieDomainForCurrentHost(): string | undefined {
 }
 
 let _client: SupabaseClient | null = null
+let _callbackClient: SupabaseClient | null = null
 
-export function getSupabaseBrowserClient(): SupabaseClient {
-  if (_client) return _client
-
+function createClientWithOptions(options?: { detectSessionInUrl?: boolean }): SupabaseClient {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
   const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 
@@ -21,7 +20,8 @@ export function getSupabaseBrowserClient(): SupabaseClient {
 
   const domain = getCookieDomainForCurrentHost()
 
-  _client = createBrowserClient(url, anon, {
+  return createBrowserClient(url, anon, {
+    auth: options?.detectSessionInUrl === undefined ? undefined : { detectSessionInUrl: options.detectSessionInUrl },
     cookieOptions: {
       // ključni del:
       domain,
@@ -30,6 +30,18 @@ export function getSupabaseBrowserClient(): SupabaseClient {
       secure: true, // na https nujno; lokalno (http) domain=undefined, secure true je OK
     },
   })
+}
 
+export function getSupabaseBrowserClient(): SupabaseClient {
+  if (_client) return _client
+
+  _client = createClientWithOptions()
   return _client
+}
+
+export function getSupabaseBrowserClientForAuthCallback(): SupabaseClient {
+  if (_callbackClient) return _callbackClient
+  // Callback page establishes session explicitly and should not double-process URL tokens.
+  _callbackClient = createClientWithOptions({ detectSessionInUrl: false })
+  return _callbackClient
 }
