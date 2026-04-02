@@ -22,6 +22,13 @@ type AgencyRow = {
   name: string | null;
 };
 
+type AgencyClientRow = {
+  id: string | null;
+  name: string | null;
+  slug: string | null;
+  created_at: string | null;
+};
+
 export type AgencyClientOverviewRow = {
   client_id: string | null;
   client_name: string | null;
@@ -29,6 +36,13 @@ export type AgencyClientOverviewRow = {
   total_estimated_cost: number;
   total_simulated_revenue: number;
   total_margin: number;
+};
+
+export type AgencyClientDirectoryRow = {
+  id: string;
+  name: string | null;
+  slug: string | null;
+  created_at: string | null;
 };
 
 export type AgencySiteDashboardRow = {
@@ -65,6 +79,7 @@ export type AgencyDashboardReadModel = {
   };
   summary: AgencyDashboardSummaryMetrics;
   client_overview: AgencyClientOverviewRow[];
+  client_directory: AgencyClientDirectoryRow[];
   site_rows: AgencySiteDashboardRow[];
   instrumentation: CommandCenterReadModel["instrumentation"] & {
     plan_simulation_error_count: number;
@@ -146,6 +161,38 @@ async function getAgencyById(agencyId: string): Promise<AgencyRow | null> {
   return result.data ? (result.data as AgencyRow) : null;
 }
 
+async function listAgencyClients(agencyId: string): Promise<AgencyClientDirectoryRow[]> {
+  const supabase = getSupabaseServiceRoleClient();
+  if (supabase == null) {
+    return [];
+  }
+
+  const result = await supabase
+    .from("organizations")
+    .select("id,name,slug,created_at")
+    .eq("organization_type", "client")
+    .eq("agency_id", agencyId)
+    .order("created_at", { ascending: false });
+
+  if (result.error) {
+    return [];
+  }
+
+  const rows = Array.isArray(result.data) ? (result.data as AgencyClientRow[]) : [];
+  return rows
+    .map((row) => {
+      const id = String(row.id ?? "").trim();
+      if (!id) return null;
+      return {
+        id,
+        name: String(row.name ?? "").trim() || null,
+        slug: String(row.slug ?? "").trim() || null,
+        created_at: String(row.created_at ?? "").trim() || null,
+      };
+    })
+    .filter((row): row is AgencyClientDirectoryRow => row != null);
+}
+
 function computeSummary(siteRows: AgencySiteDashboardRow[]): AgencyDashboardSummaryMetrics {
   const totalSites = siteRows.length;
   let liveSites = 0;
@@ -216,12 +263,13 @@ export async function getAgencyDashboardReadModel(input: {
   const limit = normalizeLimit(input.limit);
   const simulationLimit = Math.min(Math.max(1, Math.floor(input.simulationLimit ?? DEFAULT_PLAN_SIMULATION_LIMIT)), limit);
 
-  const [agencyRow, readModel] = await Promise.all([
+  const [agencyRow, readModel, clientDirectory] = await Promise.all([
     getAgencyById(agencyId),
     getCommandCenterReadModel({
       agencyId,
       limit,
     }),
+    listAgencyClients(agencyId),
   ]);
 
   const selectedAgency = {
@@ -284,6 +332,7 @@ export async function getAgencyDashboardReadModel(input: {
     },
     summary,
     client_overview: clientOverview,
+    client_directory: clientDirectory,
     site_rows: siteRows,
     instrumentation: {
       ...readModel.instrumentation,
