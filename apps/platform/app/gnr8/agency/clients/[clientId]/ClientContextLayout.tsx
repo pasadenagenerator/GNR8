@@ -38,6 +38,7 @@ export default function ClientContextLayout(props: Props) {
   const agencyParam = baseParams.toString()
 
   const activeClientSection = props.activeTab === 'settings' ? 'settings' : props.activeTab === 'users' ? 'users' : 'dashboard'
+  const persistedClientTab = props.activeTab === 'users' ? 'team' : props.activeTab
   const clientOptions: WorkspaceQuickSwitchOption[] = props.clientOptions.map((option) => ({
     value: option.clientId,
     label: option.label,
@@ -82,7 +83,7 @@ export default function ClientContextLayout(props: Props) {
               activeAgencyId,
               activeClientId: nextClientId,
               lastAgencyTab: 'clients',
-              lastClientTab: activeClientSection,
+              lastClientTab: persistedClientTab,
             })}
           />
         ) : undefined,
@@ -104,7 +105,7 @@ export default function ClientContextLayout(props: Props) {
         activeAgencyId={activeAgencyId}
         activeClientId={props.clientId}
         lastAgencyTab='clients'
-        lastClientTab={props.activeTab}
+        lastClientTab={persistedClientTab}
       />
       {props.children}
     </WorkspaceLayout>

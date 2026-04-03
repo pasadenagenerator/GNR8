@@ -3,7 +3,13 @@
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { useEffect } from 'react'
 
-import { getWorkspaceState, setWorkspaceState, syncFromUrl } from '@/src/workspace/workspace-state'
+import {
+  buildAgencyRestoreHref,
+  buildClientRestoreHref,
+  getWorkspaceState,
+  setWorkspaceState,
+  syncFromUrl,
+} from '@/src/workspace/workspace-state'
 
 type Props = {
   activeAgencyId?: string | null
@@ -50,20 +56,40 @@ export default function WorkspaceStateSync(props: Props) {
 
     const params = new URLSearchParams(searchParams.toString())
     const state = getWorkspaceState()
+    const agencyRestoreHref = buildAgencyRestoreHref({
+      pathname,
+      params,
+      state,
+    })
+    if (agencyRestoreHref) {
+      router.replace(agencyRestoreHref, { scroll: false })
+      return
+    }
+    const clientRestoreHref = buildClientRestoreHref({
+      pathname,
+      params,
+      state,
+    })
+    if (clientRestoreHref) {
+      router.replace(clientRestoreHref, { scroll: false })
+      return
+    }
+
+    const scopedParams = new URLSearchParams(params.toString())
     let changed = false
 
-    if (shouldRestoreAgency(pathname) && !normalizeText(params.get('agency')) && state.activeAgencyId) {
-      params.set('agency', state.activeAgencyId)
+    if (shouldRestoreAgency(pathname) && !normalizeText(scopedParams.get('agency')) && state.activeAgencyId) {
+      scopedParams.set('agency', state.activeAgencyId)
       changed = true
     }
 
-    if (shouldRestoreClient(pathname) && !normalizeText(params.get('client')) && state.activeClientId) {
-      params.set('client', state.activeClientId)
+    if (shouldRestoreClient(pathname) && !normalizeText(scopedParams.get('client')) && state.activeClientId) {
+      scopedParams.set('client', state.activeClientId)
       changed = true
     }
 
     if (!changed) return
-    const query = params.toString()
+    const query = scopedParams.toString()
     router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false })
   }, [pathname, router, searchParams])
 

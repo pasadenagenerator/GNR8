@@ -90,6 +90,7 @@ export default function AgencyContextLayout(props: Props) {
     { key: 'members', label: 'Team', href: membersHref },
     { key: 'settings', label: 'Settings', href: settingsHref },
   ]
+  const persistedAgencyTab = props.activeTab === 'members' ? 'team' : props.activeTab
   const { header, tabs } = buildWorkspaceViewModel({
     header: {
       breadcrumbs: buildAgencyBreadcrumbs({
@@ -161,7 +162,7 @@ export default function AgencyContextLayout(props: Props) {
         ) : null
       }
     >
-      <WorkspaceStateSync activeAgencyId={activeAgencyId} lastAgencyTab={props.activeTab} />
+      <WorkspaceStateSync activeAgencyId={activeAgencyId} lastAgencyTab={persistedAgencyTab} />
       {props.children}
     </WorkspaceLayout>
   )
