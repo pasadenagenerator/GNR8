@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 
 import WorkspaceLayout, { type WorkspaceBreadcrumbItem } from '../../../_components/workspace/WorkspaceLayout'
+import WorkspaceStateSync from '../../../_components/workspace/WorkspaceStateSync'
 import { buildWorkspaceViewModel, type WorkspaceTabInput } from '../../../_components/workspace/workspace-view-model'
 
 type ClientContextTab = 'dashboard' | 'settings' | 'users'
@@ -72,6 +73,12 @@ export default function ClientContextLayout(props: Props) {
       tabs={tabs}
       tabsAriaLabel='Client context navigation'
     >
+      <WorkspaceStateSync
+        activeAgencyId={activeAgencyId}
+        activeClientId={props.clientId}
+        lastAgencyTab='clients'
+        lastClientTab={props.activeTab}
+      />
       {props.children}
     </WorkspaceLayout>
   )

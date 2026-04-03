@@ -4,6 +4,7 @@ import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 
 import WorkspaceLayout, { type WorkspaceBreadcrumbItem } from "../_components/workspace/WorkspaceLayout";
+import WorkspaceStateSync from "../_components/workspace/WorkspaceStateSync";
 import { buildWorkspaceViewModel, type WorkspaceTabInput } from "../_components/workspace/workspace-view-model";
 
 type Props = {
@@ -82,6 +83,7 @@ export default function CommandCenterLayout(props: Props) {
       tabs={tabs}
       tabsAriaLabel="Command Center navigation"
     >
+      <WorkspaceStateSync />
       {props.children}
     </WorkspaceLayout>
   );

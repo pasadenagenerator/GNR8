@@ -2,6 +2,7 @@ import Link from 'next/link'
 import type { CSSProperties, ReactNode } from 'react'
 
 import WorkspaceLayout, { type WorkspaceBreadcrumbItem } from '../_components/workspace/WorkspaceLayout'
+import WorkspaceStateSync from '../_components/workspace/WorkspaceStateSync'
 import { buildWorkspaceViewModel, type WorkspaceTabInput } from '../_components/workspace/workspace-view-model'
 
 type MembershipOption = {
@@ -169,6 +170,7 @@ export default function AgencyContextLayout(props: Props) {
         ) : null
       }
     >
+      <WorkspaceStateSync activeAgencyId={activeAgencyId} lastAgencyTab={props.activeTab} />
       {props.children}
     </WorkspaceLayout>
   )
