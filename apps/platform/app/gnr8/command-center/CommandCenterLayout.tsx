@@ -3,7 +3,8 @@
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 
-import WorkspaceLayout, { type WorkspaceHeaderModel, type WorkspaceTab } from "../_components/workspace/WorkspaceLayout";
+import WorkspaceLayout from "../_components/workspace/WorkspaceLayout";
+import { buildWorkspaceViewModel, type WorkspaceTabInput } from "../_components/workspace/workspace-view-model";
 
 type Props = {
   children: ReactNode;
@@ -11,7 +12,7 @@ type Props = {
 
 type TabKey = "overview" | "sites" | "agencies";
 
-const TABS: Omit<WorkspaceTab, "active">[] = [
+const TABS: WorkspaceTabInput[] = [
   { key: "overview", href: "/gnr8/command-center", label: "Overview" },
   { key: "sites", href: "/gnr8/command-center/sites", label: "Sites" },
   { key: "agencies", href: "/gnr8/command-center/agencies", label: "Agencies" },
@@ -26,35 +27,39 @@ function resolveActiveTab(pathname: string): TabKey {
 export default function CommandCenterLayout(props: Props) {
   const pathname = usePathname() || "/gnr8/command-center";
   const activeTab = resolveActiveTab(pathname);
-  const tabs: WorkspaceTab[] = TABS.map((tab) => ({ ...tab, active: tab.key === activeTab }));
-  const header: WorkspaceHeaderModel = {
-    contextLabel: "Command Center",
-    title: "Superadmin Workspace",
-    subtitle: "Platform Operations",
-    titleFontSize: 30,
-    subtitleFontSize: 13,
-    meta: (
-      <>
-        <span
-          style={{
-            display: "inline-flex",
-            alignItems: "center",
-            borderRadius: 999,
-            padding: "4px 10px",
-            border: "1px solid #7dd3fc",
-            background: "#e0f2fe",
-            color: "#0c4a6e",
-            fontWeight: 700,
-          }}
-        >
-          Superadmin Context
-        </span>
-        <span>
-          <strong>Surface:</strong> /gnr8/command-center*
-        </span>
-      </>
-    ),
-  };
+  const { header, tabs } = buildWorkspaceViewModel({
+    header: {
+      contextLabel: "Command Center",
+      title: "Superadmin Workspace",
+      subtitle: "Platform Operations",
+      titleFontSize: 30,
+      subtitleFontSize: 13,
+      meta: (
+        <>
+          <span
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              borderRadius: 999,
+              padding: "4px 10px",
+              border: "1px solid #7dd3fc",
+              background: "#e0f2fe",
+              color: "#0c4a6e",
+              fontWeight: 700,
+            }}
+          >
+            Superadmin Context
+          </span>
+          <span>
+            <strong>Surface:</strong> /gnr8/command-center*
+          </span>
+        </>
+      ),
+    },
+    tabs: TABS,
+    activeKey: activeTab,
+    fallbackActiveKey: "overview",
+  });
 
   return (
     <WorkspaceLayout

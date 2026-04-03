@@ -1,7 +1,8 @@
 import Link from 'next/link'
 import type { CSSProperties, ReactNode } from 'react'
 
-import WorkspaceLayout, { type WorkspaceHeaderModel, type WorkspaceTab } from '../_components/workspace/WorkspaceLayout'
+import WorkspaceLayout from '../_components/workspace/WorkspaceLayout'
+import { buildWorkspaceViewModel, type WorkspaceTabInput } from '../_components/workspace/workspace-view-model'
 
 type MembershipOption = {
   agency_id: string
@@ -62,45 +63,54 @@ export default function AgencyContextLayout(props: Props) {
   const clientsHref = buildHref('/gnr8/agency/clients', queryParams)
   const membersHref = buildHref('/gnr8/agency/members', queryParams)
   const settingsHref = buildHref('/gnr8/agency/settings', queryParams)
-  const tabs: WorkspaceTab[] = [
-    { key: 'dashboard', label: 'Dashboard', href: dashboardHref, active: props.activeTab === 'dashboard' },
-    { key: 'clients', label: 'Clients', href: clientsHref, active: props.activeTab === 'clients' },
-    { key: 'members', label: 'Team', href: membersHref, active: props.activeTab === 'members' },
-    { key: 'settings', label: 'Settings', href: settingsHref, active: props.activeTab === 'settings' },
+  const tabsInput: WorkspaceTabInput[] = [
+    { key: 'dashboard', label: 'Dashboard', href: dashboardHref },
+    { key: 'clients', label: 'Clients', href: clientsHref },
+    { key: 'members', label: 'Team', href: membersHref },
+    { key: 'settings', label: 'Settings', href: settingsHref },
   ]
-  const header: WorkspaceHeaderModel = {
-    contextLabel: isAdminView ? 'Agency Context (Admin View)' : 'Agency Context',
-    title: `Agency: ${props.agencyName}`,
-    subtitle: props.agencySlug?.trim() ? `Slug: ${props.agencySlug.trim()}` : `ID: ${shortId(props.agencyId)}`,
-    backHref: isAdminView ? '/gnr8/command-center' : undefined,
-    backLabel: isAdminView ? '\u2190 Back to Command Center' : undefined,
-    meta: (
-      <>
-        {isAdminView ? (
-          <span
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              borderRadius: 999,
-              padding: '4px 10px',
-              border: '1px solid #7dd3fc',
-              background: '#e0f2fe',
-              color: '#0c4a6e',
-              fontWeight: 700,
-            }}
-          >
-            Admin View
+  const { header, tabs } = buildWorkspaceViewModel({
+    header: {
+      contextLabel: isAdminView ? 'Agency Context (Admin View)' : 'Agency Context',
+      title: `Agency: ${props.agencyName}`,
+      subtitle: props.agencySlug?.trim() ? `Slug: ${props.agencySlug.trim()}` : `ID: ${shortId(props.agencyId)}`,
+      backLink: isAdminView
+        ? {
+            href: '/gnr8/command-center',
+            label: '\u2190 Back to Command Center',
+          }
+        : undefined,
+      meta: (
+        <>
+          {isAdminView ? (
+            <span
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                borderRadius: 999,
+                padding: '4px 10px',
+                border: '1px solid #7dd3fc',
+                background: '#e0f2fe',
+                color: '#0c4a6e',
+                fontWeight: 700,
+              }}
+            >
+              Admin View
+            </span>
+          ) : null}
+          <span>
+            <strong>Role:</strong> {props.role}
           </span>
-        ) : null}
-        <span>
-          <strong>Role:</strong> {props.role}
-        </span>
-        <span>
-          <strong>Agency ID:</strong> {props.agencyId}
-        </span>
-      </>
-    ),
-  }
+          <span>
+            <strong>Agency ID:</strong> {props.agencyId}
+          </span>
+        </>
+      ),
+    },
+    tabs: tabsInput,
+    activeKey: props.activeTab,
+    fallbackActiveKey: 'dashboard',
+  })
 
   return (
     <WorkspaceLayout

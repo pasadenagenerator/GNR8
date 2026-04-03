@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 
-import WorkspaceLayout, { type WorkspaceHeaderModel, type WorkspaceTab } from '../../../_components/workspace/WorkspaceLayout'
+import WorkspaceLayout from '../../../_components/workspace/WorkspaceLayout'
+import { buildWorkspaceViewModel, type WorkspaceTabInput } from '../../../_components/workspace/workspace-view-model'
 
 type ClientContextTab = 'dashboard' | 'settings' | 'users'
 
@@ -27,20 +28,27 @@ export default function ClientContextLayout(props: Props) {
   const settingsHref = `/gnr8/agency/clients/${encodeURIComponent(props.clientId)}/settings?${agencyParam}`
   const usersHref = `/gnr8/agency/clients/${encodeURIComponent(props.clientId)}/users?${agencyParam}`
   const backToAgencyHref = `/gnr8/agency?${agencyParam}`
-  const tabs: WorkspaceTab[] = [
-    { key: 'dashboard', label: 'Dashboard', href: dashboardHref, active: props.activeTab === 'dashboard' },
-    { key: 'settings', label: 'Settings', href: settingsHref, active: props.activeTab === 'settings' },
-    { key: 'users', label: 'Team', href: usersHref, active: props.activeTab === 'users' },
+  const tabsInput: WorkspaceTabInput[] = [
+    { key: 'dashboard', label: 'Dashboard', href: dashboardHref },
+    { key: 'settings', label: 'Settings', href: settingsHref },
+    { key: 'users', label: 'Team', href: usersHref },
   ]
-  const header: WorkspaceHeaderModel = {
-    contextLabel: 'Client Context',
-    title: props.clientName,
-    subtitle: props.clientSlug?.trim() ? `Slug: ${props.clientSlug}` : `ID: ${shortId(props.clientId)}`,
-    backHref: backToAgencyHref,
-    backLabel: '\u2190 Back to Agency',
-    identityPlacement: 'right',
-    titleFontSize: 20,
-  }
+  const { header, tabs } = buildWorkspaceViewModel({
+    header: {
+      contextLabel: 'Client Context',
+      title: props.clientName,
+      subtitle: props.clientSlug?.trim() ? `Slug: ${props.clientSlug}` : `ID: ${shortId(props.clientId)}`,
+      backLink: {
+        href: backToAgencyHref,
+        label: '\u2190 Back to Agency',
+      },
+      identityPlacement: 'right',
+      titleFontSize: 20,
+    },
+    tabs: tabsInput,
+    activeKey: props.activeTab,
+    fallbackActiveKey: 'dashboard',
+  })
 
   return (
     <WorkspaceLayout
