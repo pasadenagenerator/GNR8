@@ -16,7 +16,8 @@ type Props = {
   label: string
   currentValue: string
   options: WorkspaceQuickSwitchOption[]
-  persistStateOnChange?: (nextValue: string) => Partial<WorkspaceState>
+  persistStateOnChange?: Partial<WorkspaceState>
+  persistStateValueKey?: keyof WorkspaceState
 }
 
 function labelStyle(): CSSProperties {
@@ -47,13 +48,23 @@ export default function WorkspaceQuickSwitcher(props: Props) {
   const router = useRouter()
   const selectId = useId()
 
+  function buildPersistedState(nextValue: string): Partial<WorkspaceState> | null {
+    const partial: Partial<WorkspaceState> = { ...(props.persistStateOnChange ?? {}) }
+    if (props.persistStateValueKey) {
+      partial[props.persistStateValueKey] = nextValue
+    }
+    if (!Object.keys(partial).length) return null
+    return partial
+  }
+
   function handleChange(nextValue: string): void {
     if (!nextValue || nextValue === props.currentValue) return
     const nextOption = props.options.find((option) => option.value === nextValue)
     if (!nextOption) return
 
-    if (props.persistStateOnChange) {
-      setWorkspaceState(props.persistStateOnChange(nextValue))
+    const persistedState = buildPersistedState(nextValue)
+    if (persistedState) {
+      setWorkspaceState(persistedState)
     }
 
     router.push(nextOption.href)

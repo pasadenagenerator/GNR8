@@ -219,9 +219,7 @@ export default async function AgencyContextLayout(props: Props) {
                 label='Switch Agency'
                 currentValue={activeAgencyId}
                 options={agencyOptions}
-                persistStateOnChange={(nextAgencyId) => ({
-                  activeAgencyId: nextAgencyId,
-                })}
+                persistStateValueKey='activeAgencyId'
               />
             </div>
           ) : null}

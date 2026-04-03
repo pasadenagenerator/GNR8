@@ -38,3 +38,11 @@
 
 ## 6) Next-step recommendation
 - Add server-readable mirror (cookie shadow of active workspace IDs) to enable pre-hydration context restoration while keeping URL as explicit override.
+
+## 7) 2026-04-03 boundary hardening note
+- Fixed a Next.js App Router boundary violation where server-rendered layouts passed a function prop (`persistStateOnChange`) into the client quick switcher.
+- Refactored quick-switch persistence to a serializable config-only contract in [`apps/platform/app/gnr8/_components/workspace/WorkspaceQuickSwitcher.tsx`](/Users/gregorzigon/Documents/Codex/GNR8/apps/platform/app/gnr8/_components/workspace/WorkspaceQuickSwitcher.tsx):
+  - `persistStateOnChange?: Partial<WorkspaceState>`
+  - `persistStateValueKey?: keyof WorkspaceState`
+- Updated agency/client context layouts to pass plain data and keep route navigation + workspace-state writes fully inside the client component.
+- Result: quick switching remains intact while removing server-to-client function transfer crashes on shared client-context surfaces (`dashboard`, `settings`, `users`).
