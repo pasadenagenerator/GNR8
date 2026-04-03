@@ -2,6 +2,7 @@ import Link from 'next/link'
 import type { ReactNode } from 'react'
 
 import WorkspaceLayout, { type WorkspaceBreadcrumbItem } from '../_components/workspace/WorkspaceLayout'
+import WorkspaceRecentItems from '../_components/workspace/WorkspaceRecentItems'
 import WorkspaceQuickSwitcher, { type WorkspaceQuickSwitchOption } from '../_components/workspace/WorkspaceQuickSwitcher'
 import WorkspaceStateSync from '../_components/workspace/WorkspaceStateSync'
 import { buildWorkspaceViewModel, type WorkspaceTabInput } from '../_components/workspace/workspace-view-model'
@@ -84,6 +85,7 @@ export default function AgencyContextLayout(props: Props) {
     label: membership.agency_name?.trim() || membership.agency_id,
     href: buildHref('/gnr8/agency', new URLSearchParams([['agency', membership.agency_id]])),
   }))
+  const scopedAgencyIds = props.memberships.map((membership) => membership.agency_id)
   const tabsInput: WorkspaceTabInput[] = [
     { key: 'dashboard', label: 'Dashboard', href: dashboardHref },
     { key: 'clients', label: 'Clients', href: clientsHref },
@@ -148,21 +150,33 @@ export default function AgencyContextLayout(props: Props) {
       tabs={tabs}
       tabsAriaLabel='Agency context navigation'
       afterTabs={
-        !isAdminView && props.memberships.length > 1 ? (
-          <div style={{ marginTop: 12 }}>
-            <WorkspaceQuickSwitcher
-              label='Switch Agency'
-              currentValue={activeAgencyId}
-              options={agencyOptions}
-              persistStateOnChange={(nextAgencyId) => ({
-                activeAgencyId: nextAgencyId,
-              })}
-            />
-          </div>
-        ) : null
+        <div style={{ marginTop: 12 }}>
+          {!isAdminView && props.memberships.length > 1 ? (
+            <div>
+              <WorkspaceQuickSwitcher
+                label='Switch Agency'
+                currentValue={activeAgencyId}
+                options={agencyOptions}
+                persistStateOnChange={(nextAgencyId) => ({
+                  activeAgencyId: nextAgencyId,
+                })}
+              />
+            </div>
+          ) : null}
+          <WorkspaceRecentItems
+            accessibleAgencyIds={scopedAgencyIds}
+            allowCommandCenter={isAdminView}
+            title='Recent Items'
+            maxVisible={6}
+          />
+        </div>
       }
     >
-      <WorkspaceStateSync activeAgencyId={activeAgencyId} lastAgencyTab={persistedAgencyTab} />
+      <WorkspaceStateSync
+        activeAgencyId={activeAgencyId}
+        activeAgencyName={props.agencyName}
+        lastAgencyTab={persistedAgencyTab}
+      />
       {props.children}
     </WorkspaceLayout>
   )

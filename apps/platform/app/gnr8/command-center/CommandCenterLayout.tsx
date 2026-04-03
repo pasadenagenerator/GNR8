@@ -4,6 +4,7 @@ import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 
 import WorkspaceLayout, { type WorkspaceBreadcrumbItem } from "../_components/workspace/WorkspaceLayout";
+import WorkspaceRecentItems from "../_components/workspace/WorkspaceRecentItems";
 import WorkspaceStateSync from "../_components/workspace/WorkspaceStateSync";
 import { buildWorkspaceViewModel, type WorkspaceTabInput } from "../_components/workspace/workspace-view-model";
 
@@ -82,6 +83,7 @@ export default function CommandCenterLayout(props: Props) {
       header={header}
       tabs={tabs}
       tabsAriaLabel="Command Center navigation"
+      afterTabs={<WorkspaceRecentItems allowCommandCenter={true} title="Recent Items" maxVisible={6} />}
     >
       <WorkspaceStateSync />
       {props.children}

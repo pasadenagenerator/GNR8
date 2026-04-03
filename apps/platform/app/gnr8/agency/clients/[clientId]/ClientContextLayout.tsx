@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 
 import WorkspaceLayout, { type WorkspaceBreadcrumbItem } from '../../../_components/workspace/WorkspaceLayout'
+import WorkspaceRecentItems from '../../../_components/workspace/WorkspaceRecentItems'
 import WorkspaceQuickSwitcher, {
   type WorkspaceQuickSwitchOption,
 } from '../../../_components/workspace/WorkspaceQuickSwitcher'
@@ -100,9 +101,18 @@ export default function ClientContextLayout(props: Props) {
       header={header}
       tabs={tabs}
       tabsAriaLabel='Client context navigation'
+      afterTabs={
+        <WorkspaceRecentItems
+          accessibleAgencyIds={[activeAgencyId]}
+          accessibleClientIds={props.clientOptions.map((option) => option.clientId)}
+          title='Recent Items'
+          maxVisible={6}
+        />
+      }
     >
       <WorkspaceStateSync
         activeAgencyId={activeAgencyId}
+        activeClientName={props.clientName}
         activeClientId={props.clientId}
         lastAgencyTab='clients'
         lastClientTab={persistedClientTab}
