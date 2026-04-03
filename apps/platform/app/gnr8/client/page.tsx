@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
+import ClientDashboardHome from "@/app/gnr8/_components/client-dashboard/ClientDashboardHome";
 import { getClientDashboardReadModelForPage } from "@/gnr8/client/client-dashboard-read-model";
 import { CLIENT_SETUP_PATH, getClientSetupStatusForClientForPage } from "@/src/auth/client-setup-gate";
 import {
@@ -180,19 +181,11 @@ export default async function ClientDashboardPage(props: { searchParams?: Promis
         </p>
       </header>
 
-      <section style={{ marginTop: 16, border: "1px solid #dbe6f1", borderRadius: 12, background: "#fff", padding: 14 }}>
-        <div style={{ display: "grid", gap: 4, fontSize: 13, color: "#334155" }}>
-          <div>
-            <strong>Client:</strong> {readModel.client.client_name?.trim() || shortId(readModel.client.client_id)}
-          </div>
-          <div>
-            <strong>Parent Agency:</strong> {readModel.agency.agency_name?.trim() || shortId(readModel.agency.agency_id)}
-          </div>
-          <div>
-            <strong>Role:</strong> {currentUserClient.role}
-          </div>
-        </div>
-        {availableClientMemberships.length > 1 ? (
+      <ClientDashboardHome readModel={readModel} roleLabel={currentUserClient.role} viewMode="client-self" />
+
+      {availableClientMemberships.length > 1 ? (
+        <section style={{ marginTop: 14, border: "1px solid #dbe6f1", borderRadius: 12, background: "#fff", padding: 12 }}>
+          <h2 style={{ margin: 0, fontSize: 15, color: "#0f172a" }}>Switch Client</h2>
           <div style={{ marginTop: 10, display: "flex", gap: 8, flexWrap: "wrap" }}>
             {availableClientMemberships.map((membership) => {
               const isActive = membership.client_id === currentUserClient.client_id;
@@ -217,111 +210,8 @@ export default async function ClientDashboardPage(props: { searchParams?: Promis
               );
             })}
           </div>
-        ) : null}
-      </section>
-
-      <section
-        style={{
-          marginTop: 16,
-          display: "grid",
-          gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
-          gap: 10,
-        }}
-      >
-        <article style={{ border: "1px solid #dbe6f1", borderRadius: 12, background: "#fff", padding: 12 }}>
-          <div style={{ fontSize: 12, color: "#64748b" }}>Total Sites</div>
-          <div style={{ marginTop: 6, fontSize: 24, fontWeight: 700, color: "#0f172a" }}>{readModel.summary.total_sites}</div>
-        </article>
-        <article style={{ border: "1px solid #dbe6f1", borderRadius: 12, background: "#fff", padding: 12 }}>
-          <div style={{ fontSize: 12, color: "#64748b" }}>Live</div>
-          <div style={{ marginTop: 6, fontSize: 24, fontWeight: 700, color: "#065f46" }}>{readModel.summary.live_sites}</div>
-        </article>
-        <article style={{ border: "1px solid #dbe6f1", borderRadius: 12, background: "#fff", padding: 12 }}>
-          <div style={{ fontSize: 12, color: "#64748b" }}>Needs Attention</div>
-          <div style={{ marginTop: 6, fontSize: 24, fontWeight: 700, color: "#9a3412" }}>
-            {readModel.summary.needs_attention_sites}
-          </div>
-        </article>
-      </section>
-
-      <section style={{ marginTop: 16, border: "1px solid #dbe6f1", borderRadius: 12, background: "#fff", overflow: "hidden" }}>
-        <div style={{ padding: 12, borderBottom: "1px solid #e2e8f0", fontWeight: 600, color: "#0f172a" }}>Client Sites</div>
-        <div style={{ overflowX: "auto" }}>
-          <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 760 }}>
-            <thead>
-              <tr style={{ textAlign: "left", background: "#f8fafc" }}>
-                <th style={{ padding: "10px 12px", borderBottom: "1px solid #e2e8f0", fontSize: 12, color: "#475569" }}>Domain</th>
-                <th style={{ padding: "10px 12px", borderBottom: "1px solid #e2e8f0", fontSize: 12, color: "#475569" }}>Site Status</th>
-                <th style={{ padding: "10px 12px", borderBottom: "1px solid #e2e8f0", fontSize: 12, color: "#475569" }}>
-                  Pipeline Status
-                </th>
-                <th style={{ padding: "10px 12px", borderBottom: "1px solid #e2e8f0", fontSize: 12, color: "#475569" }}>Runtime State</th>
-                <th style={{ padding: "10px 12px", borderBottom: "1px solid #e2e8f0", fontSize: 12, color: "#475569" }}>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {readModel.site_rows.length === 0 ? (
-                <tr>
-                  <td colSpan={5} style={{ padding: 16, color: "#64748b" }}>
-                    No client sites found for this membership scope.
-                  </td>
-                </tr>
-              ) : (
-                readModel.site_rows.map((site) => (
-                  <tr key={site.site_id} style={{ borderBottom: "1px solid #f1f5f9" }}>
-                    <td style={{ padding: "10px 12px", color: "#0f172a" }}>{site.domain?.trim() || shortId(site.site_id)}</td>
-                    <td style={{ padding: "10px 12px", color: "#334155" }}>{site.site_status}</td>
-                    <td style={{ padding: "10px 12px", color: "#334155" }}>{site.migration_status}</td>
-                    <td style={{ padding: "10px 12px", color: "#334155" }}>{site.latest_runtime_state ?? "-"}</td>
-                    <td style={{ padding: "10px 12px" }}>
-                      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                        {site.live_url ? (
-                          <a
-                            href={site.live_url}
-                            target="_blank"
-                            rel="noreferrer"
-                            style={{
-                              display: "inline-flex",
-                              alignItems: "center",
-                              padding: "4px 8px",
-                              border: "1px solid #cbd5e1",
-                              borderRadius: 8,
-                              textDecoration: "none",
-                              color: "#0f172a",
-                              fontSize: 12,
-                            }}
-                          >
-                            Open Live
-                          </a>
-                        ) : null}
-                        {site.preview_url ? (
-                          <a
-                            href={site.preview_url}
-                            target="_blank"
-                            rel="noreferrer"
-                            style={{
-                              display: "inline-flex",
-                              alignItems: "center",
-                              padding: "4px 8px",
-                              border: "1px solid #cbd5e1",
-                              borderRadius: 8,
-                              textDecoration: "none",
-                              color: "#0f172a",
-                              fontSize: 12,
-                            }}
-                          >
-                            Open Preview
-                          </a>
-                        ) : null}
-                      </div>
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-      </section>
+        </section>
+      ) : null}
     </main>
   );
 }
