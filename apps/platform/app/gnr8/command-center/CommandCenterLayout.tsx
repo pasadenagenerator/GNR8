@@ -3,7 +3,7 @@
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 
-import WorkspaceLayout from "../_components/workspace/WorkspaceLayout";
+import WorkspaceLayout, { type WorkspaceBreadcrumbItem } from "../_components/workspace/WorkspaceLayout";
 import { buildWorkspaceViewModel, type WorkspaceTabInput } from "../_components/workspace/workspace-view-model";
 
 type Props = {
@@ -24,11 +24,24 @@ function resolveActiveTab(pathname: string): TabKey {
   return "overview";
 }
 
+function buildCommandCenterBreadcrumbs(activeTab: TabKey): WorkspaceBreadcrumbItem[] {
+  if (activeTab === "sites") {
+    return [{ label: "Command Center", href: "/gnr8/command-center" }, { label: "Sites" }];
+  }
+
+  if (activeTab === "agencies") {
+    return [{ label: "Command Center", href: "/gnr8/command-center" }, { label: "Agencies" }];
+  }
+
+  return [{ label: "Command Center", href: "/gnr8/command-center" }, { label: "Overview" }];
+}
+
 export default function CommandCenterLayout(props: Props) {
   const pathname = usePathname() || "/gnr8/command-center";
   const activeTab = resolveActiveTab(pathname);
   const { header, tabs } = buildWorkspaceViewModel({
     header: {
+      breadcrumbs: buildCommandCenterBreadcrumbs(activeTab),
       contextLabel: "Command Center",
       title: "Superadmin Workspace",
       subtitle: "Platform Operations",

@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
 
-import WorkspaceLayout from '../../../_components/workspace/WorkspaceLayout'
+import WorkspaceLayout, { type WorkspaceBreadcrumbItem } from '../../../_components/workspace/WorkspaceLayout'
 import { buildWorkspaceViewModel, type WorkspaceTabInput } from '../../../_components/workspace/workspace-view-model'
 
 type ClientContextTab = 'dashboard' | 'settings' | 'users'
@@ -13,6 +13,12 @@ type Props = {
   clientSlug?: string | null
   activeTab: ClientContextTab
   children: ReactNode
+}
+
+const CLIENT_TAB_LABELS: Record<ClientContextTab, string> = {
+  dashboard: 'Dashboard',
+  settings: 'Settings',
+  users: 'Team',
 }
 
 function shortId(value: string): string {
@@ -28,6 +34,13 @@ export default function ClientContextLayout(props: Props) {
   const settingsHref = `/gnr8/agency/clients/${encodeURIComponent(props.clientId)}/settings?${agencyParam}`
   const usersHref = `/gnr8/agency/clients/${encodeURIComponent(props.clientId)}/users?${agencyParam}`
   const backToAgencyHref = `/gnr8/agency?${agencyParam}`
+  const agencyClientsHref = `/gnr8/agency/clients?${agencyParam}`
+  const breadcrumbs: WorkspaceBreadcrumbItem[] = [
+    { label: 'Agency', href: backToAgencyHref },
+    { label: 'Clients', href: agencyClientsHref },
+    { label: props.clientName, href: dashboardHref },
+    { label: CLIENT_TAB_LABELS[props.activeTab] },
+  ]
   const tabsInput: WorkspaceTabInput[] = [
     { key: 'dashboard', label: 'Dashboard', href: dashboardHref },
     { key: 'settings', label: 'Settings', href: settingsHref },
@@ -35,6 +48,7 @@ export default function ClientContextLayout(props: Props) {
   ]
   const { header, tabs } = buildWorkspaceViewModel({
     header: {
+      breadcrumbs,
       contextLabel: 'Client Context',
       title: props.clientName,
       subtitle: props.clientSlug?.trim() ? `Slug: ${props.clientSlug}` : `ID: ${shortId(props.clientId)}`,

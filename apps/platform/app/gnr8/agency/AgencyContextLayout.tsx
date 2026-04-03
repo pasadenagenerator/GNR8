@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import type { CSSProperties, ReactNode } from 'react'
 
-import WorkspaceLayout from '../_components/workspace/WorkspaceLayout'
+import WorkspaceLayout, { type WorkspaceBreadcrumbItem } from '../_components/workspace/WorkspaceLayout'
 import { buildWorkspaceViewModel, type WorkspaceTabInput } from '../_components/workspace/workspace-view-model'
 
 type MembershipOption = {
@@ -21,6 +21,13 @@ type Props = {
   activeTab: AgencyContextTab
   actorMode?: 'membership' | 'admin_view'
   children: ReactNode
+}
+
+const AGENCY_TAB_LABELS: Record<AgencyContextTab, string> = {
+  dashboard: 'Dashboard',
+  clients: 'Clients',
+  members: 'Team',
+  settings: 'Settings',
 }
 
 function shortId(value: string): string {
@@ -48,6 +55,27 @@ function buildHref(path: string, params: URLSearchParams): string {
   return `${path}?${query}`
 }
 
+function buildAgencyBreadcrumbs(input: {
+  isAdminView: boolean
+  activeTab: AgencyContextTab
+  agencyName: string
+  dashboardHref: string
+}): WorkspaceBreadcrumbItem[] {
+  const activeLabel = AGENCY_TAB_LABELS[input.activeTab]
+
+  if (input.isAdminView) {
+    const breadcrumbs: WorkspaceBreadcrumbItem[] = [
+      { label: 'Command Center', href: '/gnr8/command-center' },
+      { label: 'Agencies', href: '/gnr8/command-center/agencies' },
+      { label: input.agencyName, href: input.dashboardHref },
+      { label: activeLabel },
+    ]
+    return breadcrumbs
+  }
+
+  return [{ label: 'Agency', href: input.dashboardHref }, { label: activeLabel }]
+}
+
 export default function AgencyContextLayout(props: Props) {
   const actorMode = props.actorMode ?? 'membership'
   const isAdminView = actorMode === 'admin_view'
@@ -71,6 +99,12 @@ export default function AgencyContextLayout(props: Props) {
   ]
   const { header, tabs } = buildWorkspaceViewModel({
     header: {
+      breadcrumbs: buildAgencyBreadcrumbs({
+        isAdminView,
+        activeTab: props.activeTab,
+        agencyName: props.agencyName,
+        dashboardHref,
+      }),
       contextLabel: isAdminView ? 'Agency Context (Admin View)' : 'Agency Context',
       title: `Agency: ${props.agencyName}`,
       subtitle: props.agencySlug?.trim() ? `Slug: ${props.agencySlug.trim()}` : `ID: ${shortId(props.agencyId)}`,

@@ -8,10 +8,16 @@ export type WorkspaceTab = {
   active?: boolean
 }
 
+export type WorkspaceBreadcrumbItem = {
+  label: string
+  href?: string
+}
+
 export type WorkspaceHeaderModel = {
   title: string
   subtitle?: string
   contextLabel?: string
+  breadcrumbs?: WorkspaceBreadcrumbItem[]
   backHref?: string
   backLabel?: string
   meta?: ReactNode
@@ -78,9 +84,51 @@ function identityBlockStyle(align: 'left' | 'right'): CSSProperties {
   }
 }
 
+function breadcrumbsStyle(align: 'left' | 'right'): CSSProperties {
+  return {
+    display: 'flex',
+    gap: 8,
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    justifyContent: align === 'right' ? 'flex-end' : 'flex-start',
+    fontSize: 12,
+    color: '#64748b',
+  }
+}
+
+function breadcrumbLinkStyle(): CSSProperties {
+  return {
+    color: '#475569',
+    textDecoration: 'none',
+    fontSize: 12,
+  }
+}
+
+function BreadcrumbTrail(props: { items: WorkspaceBreadcrumbItem[]; align: 'left' | 'right' }) {
+  if (props.items.length === 0) return null
+
+  return (
+    <nav aria-label='Workspace breadcrumbs' style={breadcrumbsStyle(props.align)}>
+      {props.items.map((item, index) => (
+        <span key={`${item.label}-${index}`} style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+          {item.href ? (
+            <Link href={item.href} style={breadcrumbLinkStyle()}>
+              {item.label}
+            </Link>
+          ) : (
+            <span>{item.label}</span>
+          )}
+          {index < props.items.length - 1 ? <span aria-hidden='true'>/</span> : null}
+        </span>
+      ))}
+    </nav>
+  )
+}
+
 function renderIdentity(model: WorkspaceHeaderModel, align: 'left' | 'right') {
   return (
     <div style={identityBlockStyle(align)}>
+      {model.breadcrumbs?.length ? <BreadcrumbTrail items={model.breadcrumbs} align={align} /> : null}
       {model.contextLabel ? <div style={{ margin: 0, fontSize: 12, color: '#475569' }}>{model.contextLabel}</div> : null}
       <div style={{ margin: 0, fontSize: model.titleFontSize ?? 28, color: '#0f172a', fontWeight: 700 }}>{model.title}</div>
       {model.subtitle ? <div style={{ margin: 0, fontSize: model.subtitleFontSize ?? 12, color: '#64748b' }}>{model.subtitle}</div> : null}
