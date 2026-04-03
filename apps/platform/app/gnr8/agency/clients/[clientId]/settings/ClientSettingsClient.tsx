@@ -2,6 +2,7 @@
 
 import type { FormEvent } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { useState } from 'react'
 
 type MembershipOption = {
@@ -19,6 +20,7 @@ type Props = {
   initialContactPersonName: string
   initialContactEmail: string
   initialContactPhone: string
+  initialLogoUrl?: string | null
   memberships: MembershipOption[]
   role: 'owner' | 'admin' | 'member' | 'superadmin'
   canEditClientSettings: boolean
@@ -70,7 +72,36 @@ function actionButtonStyle(): React.CSSProperties {
   }
 }
 
+function normalizeLogoUrl(value: unknown): string | null {
+  const normalized = String(value ?? '').trim()
+  if (!normalized) return null
+  if (normalized.startsWith('/')) return normalized
+
+  try {
+    const parsed = new URL(normalized)
+    if (parsed.protocol === 'https:' || parsed.protocol === 'http:') return normalized
+  } catch {
+    return null
+  }
+
+  return null
+}
+
+function buildInitials(label: string): string {
+  const words = label
+    .split(/\s+/)
+    .map((part) => part.trim())
+    .filter(Boolean)
+  const initials = words
+    .map((word) => word[0]?.toUpperCase())
+    .filter(Boolean)
+    .slice(0, 2)
+    .join('')
+  return initials || 'C'
+}
+
 export default function ClientSettingsClient(props: Props) {
+  const router = useRouter()
   const [name, setName] = useState(props.initialName)
   const [slug, setSlug] = useState(props.initialSlug)
   const [contactPersonName, setContactPersonName] = useState(props.initialContactPersonName)
@@ -80,6 +111,12 @@ export default function ClientSettingsClient(props: Props) {
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
   const [linkCopied, setLinkCopied] = useState<string | null>(null)
+  const [logoUrl, setLogoUrl] = useState<string | null>(normalizeLogoUrl(props.initialLogoUrl))
+  const [logoFile, setLogoFile] = useState<File | null>(null)
+  const [logoInputKey, setLogoInputKey] = useState(0)
+  const [brandingStatus, setBrandingStatus] = useState<Status>('idle')
+  const [brandingError, setBrandingError] = useState<string | null>(null)
+  const [brandingSuccess, setBrandingSuccess] = useState<string | null>(null)
 
   const activeAgencyId = props.requestedAgencyId || props.agencyId
   const agencyDashboardPath = props.requestedAgencyId
@@ -87,6 +124,10 @@ export default function ClientSettingsClient(props: Props) {
     : `/gnr8/agency?agency=${encodeURIComponent(props.agencyId)}`
   const clientDashboardPath = `/gnr8/agency/clients/${encodeURIComponent(props.clientId)}/dashboard?agency=${encodeURIComponent(activeAgencyId)}`
   const clientUsersPath = `/gnr8/agency/clients/${encodeURIComponent(props.clientId)}/users?agency=${encodeURIComponent(activeAgencyId)}`
+  const canManageBranding = props.role === 'owner' || props.role === 'admin'
+  const brandingBusy = brandingStatus === 'saving'
+  const logoPreviewUrl = normalizeLogoUrl(logoUrl)
+  const logoInitials = buildInitials(name || props.initialName)
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -165,6 +206,104 @@ export default function ClientSettingsClient(props: Props) {
     } catch {
       setLinkCopied('Could not copy link in this browser context.')
       setTimeout(() => setLinkCopied(null), 2500)
+    }
+  }
+
+  async function onUploadLogo(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    setBrandingError(null)
+    setBrandingSuccess(null)
+
+    if (!canManageBranding) {
+      setBrandingStatus('error')
+      setBrandingError('Only agency owner/admin can update client branding logo.')
+      return
+    }
+    if (!logoFile) {
+      setBrandingStatus('error')
+      setBrandingError('Select a logo file before uploading.')
+      return
+    }
+
+    setBrandingStatus('saving')
+
+    try {
+      const formData = new FormData()
+      formData.set('agencyId', activeAgencyId)
+      formData.set('targetType', 'client')
+      formData.set('clientId', props.clientId)
+      formData.set('file', logoFile)
+
+      const response = await fetch('/api/gnr8/branding/upload', {
+        method: 'POST',
+        credentials: 'include',
+        cache: 'no-store',
+        body: formData,
+      })
+
+      const payload = (await response.json().catch(() => null)) as { ok?: unknown; logoUrl?: unknown; error?: unknown } | null
+      if (!response.ok) {
+        setBrandingStatus('error')
+        setBrandingError(String(payload?.error ?? 'Failed to upload client logo.'))
+        return
+      }
+
+      setLogoUrl(normalizeLogoUrl(payload?.logoUrl))
+      setLogoFile(null)
+      setLogoInputKey((value) => value + 1)
+      setBrandingStatus('success')
+      setBrandingSuccess('Client logo updated.')
+      router.refresh()
+    } catch (cause) {
+      setBrandingStatus('error')
+      setBrandingError(cause instanceof Error ? cause.message : 'Failed to upload client logo.')
+    }
+  }
+
+  async function onRemoveLogo() {
+    setBrandingError(null)
+    setBrandingSuccess(null)
+
+    if (!canManageBranding) {
+      setBrandingStatus('error')
+      setBrandingError('Only agency owner/admin can update client branding logo.')
+      return
+    }
+
+    setBrandingStatus('saving')
+
+    try {
+      const response = await fetch('/api/gnr8/branding/upload', {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+        },
+        credentials: 'include',
+        cache: 'no-store',
+        body: JSON.stringify({
+          agencyId: activeAgencyId,
+          targetType: 'client',
+          clientId: props.clientId,
+        }),
+      })
+
+      const payload = (await response.json().catch(() => null)) as { ok?: unknown; error?: unknown } | null
+      if (!response.ok) {
+        setBrandingStatus('error')
+        setBrandingError(String(payload?.error ?? 'Failed to remove client logo.'))
+        return
+      }
+
+      setLogoUrl(null)
+      setLogoFile(null)
+      setLogoInputKey((value) => value + 1)
+      setBrandingStatus('success')
+      setBrandingSuccess('Client logo removed. Initials fallback is now active.')
+      router.refresh()
+    } catch (cause) {
+      setBrandingStatus('error')
+      setBrandingError(cause instanceof Error ? cause.message : 'Failed to remove client logo.')
     }
   }
 
@@ -287,6 +426,86 @@ export default function ClientSettingsClient(props: Props) {
           </div>
         ) : null}
       </section>
+
+      {canManageBranding ? (
+        <section style={{ ...sectionStyle(), marginTop: 12 }}>
+          <h2 style={{ marginTop: 0, marginBottom: 6, color: '#0f172a' }}>Branding</h2>
+          <p style={{ marginTop: 0, marginBottom: 12, color: '#475569', fontSize: 13 }}>
+            Upload a logo used in global navigation for this client workspace.
+          </p>
+
+          <div
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              width: 80,
+              height: 80,
+              borderRadius: 12,
+              border: '1px solid #dbe6f1',
+              background: '#f8fafc',
+              overflow: 'hidden',
+              marginBottom: 12,
+            }}
+          >
+            {logoPreviewUrl ? (
+              <img src={logoPreviewUrl} alt='Client logo preview' style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+            ) : (
+              <span style={{ fontSize: 24, fontWeight: 700, color: '#334155' }}>{logoInitials}</span>
+            )}
+          </div>
+
+          <form onSubmit={onUploadLogo} style={{ display: 'grid', gap: 10 }}>
+            <label style={{ display: 'grid', gap: 6 }}>
+              <span style={{ fontSize: 13, color: '#334155' }}>Logo File</span>
+              <input
+                key={logoInputKey}
+                type='file'
+                accept='.png,.jpg,.jpeg,.svg,image/png,image/jpeg,image/svg+xml'
+                onChange={(event) => setLogoFile(event.currentTarget.files?.[0] ?? null)}
+                style={{ ...fieldStyle(), padding: 8 }}
+                disabled={brandingBusy}
+              />
+              <span style={{ fontSize: 12, color: '#475569' }}>Supported: PNG, JPG, SVG. Max size 2 MB.</span>
+            </label>
+
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              <button type='submit' style={actionButtonStyle()} disabled={brandingBusy || !logoFile}>
+                {brandingBusy ? 'Uploading...' : logoPreviewUrl ? 'Replace Logo' : 'Upload Logo'}
+              </button>
+              <button
+                type='button'
+                onClick={onRemoveLogo}
+                disabled={brandingBusy || !logoPreviewUrl}
+                style={{
+                  height: 38,
+                  padding: '0 12px',
+                  borderRadius: 8,
+                  border: '1px solid #cbd5e1',
+                  background: '#fff',
+                  color: '#334155',
+                  cursor: brandingBusy || !logoPreviewUrl ? 'not-allowed' : 'pointer',
+                  fontSize: 13,
+                  opacity: brandingBusy || !logoPreviewUrl ? 0.55 : 1,
+                }}
+              >
+                Remove Logo
+              </button>
+            </div>
+          </form>
+
+          {brandingError ? (
+            <div style={{ marginTop: 10, border: '1px solid #fecaca', borderRadius: 10, background: '#fff5f5', padding: 12 }}>
+              <p style={{ margin: 0, color: '#7f1d1d', fontSize: 13 }}>{brandingError}</p>
+            </div>
+          ) : null}
+          {brandingSuccess ? (
+            <div style={{ marginTop: 10, border: '1px solid #bbf7d0', borderRadius: 10, background: '#f0fdf4', padding: 12 }}>
+              <p style={{ margin: 0, color: '#166534', fontSize: 13 }}>{brandingSuccess}</p>
+            </div>
+          ) : null}
+        </section>
+      ) : null}
 
       {!props.embeddedInClientContext && props.memberships.length > 1 ? (
         <section style={{ ...sectionStyle(), marginTop: 12, padding: 12 }}>

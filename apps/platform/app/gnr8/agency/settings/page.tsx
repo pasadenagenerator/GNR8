@@ -22,6 +22,11 @@ type AgencyRow = {
   slug: string | null
 }
 
+type AgencyOrganizationBrandRow = {
+  id: string | null
+  brand_logo_url: string | null
+}
+
 function normalizeText(value: unknown): string {
   return String(value ?? '').trim()
 }
@@ -142,11 +147,18 @@ export default async function AgencySettingsPage(props: { searchParams?: Promise
 
   const supabase = await getSupabaseServerClientReadOnly()
 
-  const [agencyResult, authResult] = await Promise.all([
+  const [agencyResult, agencyOrganizationResult, authResult] = await Promise.all([
     supabase
       .from('agencies')
       .select('id,name,slug')
       .eq('id', currentUserAgency.agency_id)
+      .limit(1)
+      .maybeSingle(),
+    supabase
+      .from('organizations')
+      .select('id,brand_logo_url')
+      .eq('agency_id', currentUserAgency.agency_id)
+      .eq('organization_type', 'agency')
       .limit(1)
       .maybeSingle(),
     supabase.auth.getUser(),
@@ -190,6 +202,7 @@ export default async function AgencySettingsPage(props: { searchParams?: Promise
   }
 
   const authUser = authResult.data.user
+  const agencyOrganization = agencyOrganizationResult.data as AgencyOrganizationBrandRow | null
   const ownerEmail = normalizeText(authUser?.email)
   const ownerNameFromMetadata = normalizeText(authUser?.user_metadata?.full_name)
   const ownerName = ownerNameFromMetadata || normalizeText(authUser?.email?.split('@')[0]) || 'Agency Owner'
@@ -219,6 +232,7 @@ export default async function AgencySettingsPage(props: { searchParams?: Promise
         canChangePassword={canPerformAction(currentUserAgency.role, 'change_password')}
         ownerName={ownerName}
         ownerEmail={ownerEmail || 'unknown@example.com'}
+        initialLogoUrl={normalizeText(agencyOrganization?.brand_logo_url) || null}
         embeddedInAgencyContext
       />
     </AgencyContextLayout>

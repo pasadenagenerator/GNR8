@@ -26,6 +26,7 @@ type ClientOrganizationRow = {
   contact_person_name: string | null
   contact_email: string | null
   contact_phone: string | null
+  brand_logo_url: string | null
   agency_id: string | null
   organization_type: string | null
 }
@@ -111,7 +112,7 @@ export default async function AgencyClientSettingsPage(props: {
   const supabase = await getSupabaseServerClientReadOnly()
   const clientResult = await supabase
     .from('organizations')
-    .select('id,name,slug,contact_person_name,contact_email,contact_phone,agency_id,organization_type')
+    .select('id,name,slug,contact_person_name,contact_email,contact_phone,brand_logo_url,agency_id,organization_type')
     .eq('id', clientId)
     .eq('agency_id', currentUserAgency.agency_id)
     .eq('organization_type', 'client')
@@ -163,6 +164,7 @@ export default async function AgencyClientSettingsPage(props: {
         initialContactPersonName={normalizeText(client.contact_person_name)}
         initialContactEmail={normalizeText(client.contact_email)}
         initialContactPhone={normalizeText(client.contact_phone)}
+        initialLogoUrl={normalizeText(client.brand_logo_url) || null}
         memberships={availableAgencyMemberships}
         canEditClientSettings={canPerformAction(currentUserAgency.role, 'edit_client_settings')}
         canViewDashboard={canPerformAction(currentUserAgency.role, 'view_dashboard')}
