@@ -2,14 +2,18 @@
 
 import Link from 'next/link'
 import { usePathname, useSearchParams } from 'next/navigation'
-import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 
 import { getWorkspaceState, type WorkspaceState } from '@/src/workspace/workspace-state'
+
+type BrandVariant = 'command-center' | 'agency' | 'client'
 
 type Props = {
   showCommandCenter: boolean
   showAgency: boolean
   showClient: boolean
+  agencyBrands: { id: string; label: string; logoUrl?: string | null }[]
+  clientBrands: { id: string; label: string; logoUrl?: string | null }[]
 }
 
 type NavItem = {
@@ -20,13 +24,32 @@ type NavItem = {
 }
 
 type BrandModel = {
+  variant: BrandVariant
   label: string
-  logo?: ReactNode
+  subtitle?: string
+  logoUrl?: string
 }
 
 function normalizeText(value: unknown): string | undefined {
   const normalized = String(value ?? '').trim()
   return normalized ? normalized : undefined
+}
+
+function sanitizeLogoUrl(value: unknown): string | undefined {
+  const normalized = normalizeText(value)
+  if (!normalized) return undefined
+  if (normalized.startsWith('/')) return normalized
+
+  try {
+    const parsed = new URL(normalized)
+    if (parsed.protocol === 'https:' || parsed.protocol === 'http:') {
+      return normalized
+    }
+  } catch {
+    return undefined
+  }
+
+  return undefined
 }
 
 function toHref(pathname: string, params: URLSearchParams): string {
@@ -66,7 +89,31 @@ function getActiveNavKey(pathname: string): NavItem['key'] | null {
   return null
 }
 
+function buildInitials(label: string): string {
+  const words = label
+    .split(/\s+/)
+    .map((part) => part.trim())
+    .filter(Boolean)
+  const initials = words
+    .map((word) => word[0]?.toUpperCase())
+    .filter(Boolean)
+    .slice(0, 2)
+    .join('')
+  return initials || 'G'
+}
+
 function BrandSlot(props: { model: BrandModel }) {
+  const [logoFailed, setLogoFailed] = useState(false)
+
+  useEffect(() => {
+    setLogoFailed(false)
+  }, [props.model.logoUrl])
+
+  const hasRenderableLogo = Boolean(props.model.logoUrl) && !logoFailed
+  const initials = buildInitials(props.model.label)
+  const logoFrameBackground =
+    props.model.variant === 'command-center' ? '#eff6ff' : props.model.variant === 'client' ? '#f1f5f9' : '#f8fafc'
+
   return (
     <div
       aria-label='Workspace brand'
@@ -79,25 +126,53 @@ function BrandSlot(props: { model: BrandModel }) {
         borderRadius: 10,
         background: '#fff',
         minHeight: 36,
+        minWidth: 0,
       }}
     >
-      {props.model.logo ? (
+      <span
+        aria-hidden='true'
+        style={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          width: 26,
+          height: 20,
+          borderRadius: 6,
+          overflow: 'hidden',
+          background: logoFrameBackground,
+          border: '1px solid #dbe6f1',
+          flexShrink: 0,
+        }}
+      >
+        {hasRenderableLogo ? (
+          <img
+            src={props.model.logoUrl}
+            alt=''
+            style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+            onError={() => setLogoFailed(true)}
+          />
+        ) : (
+          <span style={{ fontSize: 10, fontWeight: 700, color: '#334155', lineHeight: 1 }}>{initials}</span>
+        )}
+      </span>
+      <span style={{ display: 'grid', gap: 1, minWidth: 0 }}>
         <span
-          aria-hidden='true'
           style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            width: 20,
-            height: 20,
-            borderRadius: 6,
+            fontSize: 13,
+            fontWeight: 700,
+            color: '#0f172a',
+            whiteSpace: 'nowrap',
             overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            maxWidth: 220,
           }}
         >
-          {props.model.logo}
+          {props.model.label}
         </span>
-      ) : null}
-      <span style={{ fontSize: 13, fontWeight: 700, color: '#0f172a', whiteSpace: 'nowrap' }}>{props.model.label}</span>
+        {props.model.subtitle ? (
+          <span style={{ fontSize: 10, lineHeight: 1.2, color: '#64748b', whiteSpace: 'nowrap' }}>{props.model.subtitle}</span>
+        ) : null}
+      </span>
     </div>
   )
 }
@@ -128,23 +203,62 @@ export default function GlobalNavigation(props: Props) {
     setWorkspaceState(getWorkspaceState())
   }, [pathname, searchParams])
 
-  const currentAgencyId = useMemo(
-    () => normalizeText(searchParams?.get('agency')) ?? workspaceState.activeAgencyId,
-    [searchParams, workspaceState.activeAgencyId],
-  )
-  const currentClientId = useMemo(
-    () => normalizeText(searchParams?.get('client')) ?? workspaceState.activeClientId,
-    [searchParams, workspaceState.activeClientId],
-  )
-  const currentAdminView = useMemo(() => normalizeText(searchParams?.get('admin_view')), [searchParams])
   const activeKey = getActiveNavKey(pathname)
-  const brandModel = useMemo<BrandModel>(
-    () => ({
+
+  const currentAgencyId = useMemo(() => {
+    const fromParams = normalizeText(searchParams?.get('agency'))
+    if (fromParams) return fromParams
+    if (workspaceState.activeAgencyId) return workspaceState.activeAgencyId
+    if (props.agencyBrands.length === 1) return props.agencyBrands[0].id
+    return undefined
+  }, [props.agencyBrands, searchParams, workspaceState.activeAgencyId])
+
+  const currentClientId = useMemo(() => {
+    const fromParams = normalizeText(searchParams?.get('client'))
+    if (fromParams) return fromParams
+    if (workspaceState.activeClientId) return workspaceState.activeClientId
+    if (props.clientBrands.length === 1) return props.clientBrands[0].id
+    return undefined
+  }, [props.clientBrands, searchParams, workspaceState.activeClientId])
+
+  const currentAdminView = useMemo(() => normalizeText(searchParams?.get('admin_view')), [searchParams])
+
+  const agencyBrandById = useMemo(() => {
+    return new Map(props.agencyBrands.map((brand) => [brand.id, brand]))
+  }, [props.agencyBrands])
+
+  const clientBrandById = useMemo(() => {
+    return new Map(props.clientBrands.map((brand) => [brand.id, brand]))
+  }, [props.clientBrands])
+
+  const brandModel = useMemo<BrandModel>(() => {
+    if (activeKey === 'agency') {
+      const agencyBrand = currentAgencyId ? agencyBrandById.get(currentAgencyId) : undefined
+      return {
+        variant: 'agency',
+        label: agencyBrand?.label || 'Agency',
+        subtitle: 'Agency Workspace',
+        logoUrl: sanitizeLogoUrl(agencyBrand?.logoUrl),
+      }
+    }
+
+    if (activeKey === 'client') {
+      const clientBrand = currentClientId ? clientBrandById.get(currentClientId) : undefined
+      return {
+        variant: 'client',
+        label: clientBrand?.label || 'Client',
+        subtitle: 'Client Workspace',
+        logoUrl: sanitizeLogoUrl(clientBrand?.logoUrl),
+      }
+    }
+
+    return {
+      variant: 'command-center',
       label: 'GNR8',
-      logo: undefined,
-    }),
-    [],
-  )
+      subtitle: 'Command Center',
+      logoUrl: undefined,
+    }
+  }, [activeKey, agencyBrandById, clientBrandById, currentAgencyId, currentClientId])
 
   const navItems = useMemo(() => {
     const items: NavItem[] = []

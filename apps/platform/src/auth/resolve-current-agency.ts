@@ -17,12 +17,14 @@ export type ResolvedCurrentUserAgency = {
   user_id: string
   agency_id: string
   agency_name: string | null
+  agency_logo_url: string | null
   role: AgencyMembershipRole
 }
 
 export type CurrentUserAgencyMembership = {
   agency_id: string
   agency_name: string | null
+  agency_logo_url: string | null
   role: AgencyMembershipRole
 }
 
@@ -53,6 +55,7 @@ type OrganizationRow = {
   id: string | null
   agency_id: string | null
   organization_type: string | null
+  brand_logo_url: string | null
 }
 
 type AgencyRow = {
@@ -65,6 +68,7 @@ type AgencyMembershipCandidate = {
   role: AgencyMembershipRole
   agency_id: string
   agency_name: string | null
+  agency_logo_url: string | null
 }
 
 function normalizeText(value: unknown): string {
@@ -110,6 +114,7 @@ function dedupeMembershipCandidates(candidates: AgencyMembershipCandidate[]): Cu
       byAgencyId.set(candidate.agency_id, {
         agency_id: candidate.agency_id,
         agency_name: candidate.agency_name,
+        agency_logo_url: candidate.agency_logo_url,
         role: candidate.role,
       })
       continue
@@ -119,6 +124,7 @@ function dedupeMembershipCandidates(candidates: AgencyMembershipCandidate[]): Cu
       byAgencyId.set(candidate.agency_id, {
         agency_id: candidate.agency_id,
         agency_name: candidate.agency_name ?? existing.agency_name,
+        agency_logo_url: candidate.agency_logo_url ?? existing.agency_logo_url,
         role: candidate.role,
       })
       continue
@@ -128,6 +134,14 @@ function dedupeMembershipCandidates(candidates: AgencyMembershipCandidate[]): Cu
       byAgencyId.set(candidate.agency_id, {
         ...existing,
         agency_name: candidate.agency_name,
+      })
+      continue
+    }
+
+    if (!existing.agency_logo_url && candidate.agency_logo_url) {
+      byAgencyId.set(candidate.agency_id, {
+        ...existing,
+        agency_logo_url: candidate.agency_logo_url,
       })
     }
   }
@@ -207,7 +221,7 @@ async function listAgencyMembershipCandidates(
 
   const organizationResult = await supabase
     .from('organizations')
-    .select('id,agency_id,organization_type')
+    .select('id,agency_id,organization_type,brand_logo_url')
     .in('id', uniqueOrganizationIds)
 
   if (organizationResult.error) {
@@ -235,10 +249,16 @@ async function listAgencyMembershipCandidates(
         organization_id: membership.organization_id,
         role: membership.role,
         agency_id: agencyId,
+        agency_logo_url: normalizeText(organization.brand_logo_url) || null,
       }
     })
     .filter(
-      (membership): membership is { organization_id: string; role: AgencyMembershipRole; agency_id: string } =>
+      (membership): membership is {
+        organization_id: string
+        role: AgencyMembershipRole
+        agency_id: string
+        agency_logo_url: string | null
+      } =>
         membership != null,
     )
 
@@ -269,6 +289,7 @@ async function listAgencyMembershipCandidates(
     role: membership.role,
     agency_id: membership.agency_id,
     agency_name: agencyNameById.get(membership.agency_id) ?? null,
+    agency_logo_url: membership.agency_logo_url,
   }))
 
   return dedupeMembershipCandidates(candidates)
@@ -318,6 +339,7 @@ export async function resolveCurrentUserAgency(input?: {
     user_id: userId,
     agency_id: selectedMembership.agency_id,
     agency_name: selectedMembership.agency_name ?? null,
+    agency_logo_url: selectedMembership.agency_logo_url ?? null,
     role: selectedMembership.role,
   }
 }
@@ -337,6 +359,7 @@ export async function resolveCurrentUserAgencyForPage(input?: {
     user_id: userId,
     agency_id: selectedMembership.agency_id,
     agency_name: selectedMembership.agency_name ?? null,
+    agency_logo_url: selectedMembership.agency_logo_url ?? null,
     role: selectedMembership.role,
   }
 }

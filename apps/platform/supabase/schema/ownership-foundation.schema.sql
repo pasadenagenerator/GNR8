@@ -26,7 +26,8 @@ create unique index agencies_single_home_uq on public.agencies (is_home_agency) 
 -- Organizations extension
 alter table public.organizations
   add column agency_id uuid not null references public.agencies(id) on delete restrict,
-  add column organization_type public.organization_type_enum not null default 'agency';
+  add column organization_type public.organization_type_enum not null default 'agency',
+  add column brand_logo_url text;
 
 alter table public.organizations
   alter column agency_id set default '00000000-0000-4000-8000-000000000001'::uuid;

@@ -13,6 +13,7 @@ export type ResolvedCurrentUserClient = {
   user_id: string;
   client_id: string;
   client_name: string | null;
+  client_logo_url: string | null;
   agency_id: string;
   agency_name: string | null;
   role: ClientMembershipRole;
@@ -21,6 +22,7 @@ export type ResolvedCurrentUserClient = {
 export type CurrentUserClientMembership = {
   client_id: string;
   client_name: string | null;
+  client_logo_url: string | null;
   agency_id: string;
   agency_name: string | null;
   role: ClientMembershipRole;
@@ -54,6 +56,7 @@ type OrganizationRow = {
   name: string | null;
   agency_id: string | null;
   organization_type: string | null;
+  brand_logo_url: string | null;
 };
 
 type AgencyRow = {
@@ -65,6 +68,7 @@ type ClientMembershipCandidate = {
   role: ClientMembershipRole;
   client_id: string;
   client_name: string | null;
+  client_logo_url: string | null;
   agency_id: string;
   agency_name: string | null;
 };
@@ -108,6 +112,7 @@ function dedupeMembershipCandidates(candidates: ClientMembershipCandidate[]): Cu
       byClientId.set(candidate.client_id, {
         client_id: candidate.client_id,
         client_name: candidate.client_name,
+        client_logo_url: candidate.client_logo_url,
         agency_id: candidate.agency_id,
         agency_name: candidate.agency_name,
         role: candidate.role,
@@ -134,6 +139,12 @@ function dedupeMembershipCandidates(candidates: ClientMembershipCandidate[]): Cu
       byClientId.set(candidate.client_id, {
         ...existing,
         client_name: candidate.client_name,
+      });
+    }
+    if (!existing.client_logo_url && candidate.client_logo_url) {
+      byClientId.set(candidate.client_id, {
+        ...existing,
+        client_logo_url: candidate.client_logo_url,
       });
     }
     if (!existing.agency_name && candidate.agency_name) {
@@ -219,7 +230,7 @@ async function listClientMembershipCandidates(
   const uniqueOrganizationIds = Array.from(new Set(normalizedMemberships.map((membership) => membership.client_id)));
   const organizationResult = await supabase
     .from("organizations")
-    .select("id,name,agency_id,organization_type")
+    .select("id,name,agency_id,organization_type,brand_logo_url")
     .in("id", uniqueOrganizationIds);
 
   if (organizationResult.error) {
@@ -251,6 +262,7 @@ async function listClientMembershipCandidates(
         role: membership.role,
         client_id: membership.client_id,
         client_name: normalizeText(organization.name) || null,
+        client_logo_url: normalizeText(organization.brand_logo_url) || null,
         agency_id: organizationAgencyId,
       };
     })
@@ -261,6 +273,7 @@ async function listClientMembershipCandidates(
         role: ClientMembershipRole;
         client_id: string;
         client_name: string | null;
+        client_logo_url: string | null;
         agency_id: string;
       } => membership != null,
     );
@@ -285,6 +298,7 @@ async function listClientMembershipCandidates(
     role: membership.role,
     client_id: membership.client_id,
     client_name: membership.client_name,
+    client_logo_url: membership.client_logo_url,
     agency_id: membership.agency_id,
     agency_name: agencyNameById.get(membership.agency_id) ?? null,
   }));
@@ -333,6 +347,7 @@ export async function resolveCurrentUserClient(input?: {
     user_id: userId,
     client_id: selectedMembership.client_id,
     client_name: selectedMembership.client_name,
+    client_logo_url: selectedMembership.client_logo_url,
     agency_id: selectedMembership.agency_id,
     agency_name: selectedMembership.agency_name,
     role: selectedMembership.role,
@@ -356,6 +371,7 @@ export async function resolveCurrentUserClientForPage(input?: {
     user_id: userId,
     client_id: selectedMembership.client_id,
     client_name: selectedMembership.client_name,
+    client_logo_url: selectedMembership.client_logo_url,
     agency_id: selectedMembership.agency_id,
     agency_name: selectedMembership.agency_name,
     role: selectedMembership.role,

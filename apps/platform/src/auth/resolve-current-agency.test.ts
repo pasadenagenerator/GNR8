@@ -10,12 +10,14 @@ import {
 const MEMBERSHIP_A: CurrentUserAgencyMembership = {
   agency_id: "00000000-0000-4000-8000-000000000011",
   agency_name: "Agency Alpha",
+  agency_logo_url: "https://example.com/agency-alpha.svg",
   role: "owner",
 };
 
 const MEMBERSHIP_B: CurrentUserAgencyMembership = {
   agency_id: "00000000-0000-4000-8000-000000000022",
   agency_name: "Agency Bravo",
+  agency_logo_url: null,
   role: "admin",
 };
 

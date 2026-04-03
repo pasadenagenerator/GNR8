@@ -10,6 +10,7 @@ import {
 const CLIENT_ACCESS_A: CurrentUserClientMembership = {
   client_id: "00000000-0000-4000-8000-000000000101",
   client_name: "Client Alpha",
+  client_logo_url: "https://example.com/client-alpha.svg",
   agency_id: "00000000-0000-4000-8000-000000000011",
   agency_name: "Agency Alpha",
   role: "owner",
@@ -18,6 +19,7 @@ const CLIENT_ACCESS_A: CurrentUserClientMembership = {
 const CLIENT_ACCESS_B: CurrentUserClientMembership = {
   client_id: "00000000-0000-4000-8000-000000000202",
   client_name: "Client Bravo",
+  client_logo_url: null,
   agency_id: "00000000-0000-4000-8000-000000000011",
   agency_name: "Agency Alpha",
   role: "member",
