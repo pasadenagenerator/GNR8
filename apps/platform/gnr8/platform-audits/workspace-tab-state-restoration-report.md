@@ -57,3 +57,15 @@ Implementation notes:
 
 ## 7. Next-step recommendation
 - Add per-client tab memory (for example keyed by `clientId`) so restoration follows each client’s own last-used section instead of a single global client tab.
+
+## 8. Dashboard tab bounce fix (April 3, 2026)
+- Root cause:
+  - The agency Dashboard tab pointed to the generic root route (`/gnr8/agency`) with no explicit tab signal.
+  - During client navigation from a specific tab route (for example `/gnr8/agency/settings`) to root, restoration logic still treated `/gnr8/agency` as a restore candidate and could apply persisted `lastAgencyTab` before Dashboard intent was reflected in effective state.
+- Why Dashboard specifically bounced:
+  - Dashboard is the only agency tab that maps to the generic root path.
+  - Other agency tabs (`/clients`, `/members`, `/settings`) are explicit sub-routes and are not eligible for root restoration overrides.
+- Final precedence rule after the fix:
+  1. Explicit path/query intent wins (including `agency_tab=dashboard` on Dashboard tab clicks).
+  2. Persisted tab restoration is only used when generic root entry has no explicit tab intent.
+  3. Safe dashboard default remains the fallback when neither explicit nor persisted tab applies.

@@ -75,8 +75,11 @@ export default async function AgencyContextLayout(props: Props) {
   if (isAdminView) {
     queryParams.set('admin_view', '1')
   }
+  const explicitDashboardTabParams = new URLSearchParams(queryParams.toString())
+  explicitDashboardTabParams.set('agency_tab', 'dashboard')
 
   const dashboardHref = buildHref('/gnr8/agency', queryParams)
+  const explicitDashboardTabHref = buildHref('/gnr8/agency', explicitDashboardTabParams)
   const clientsHref = buildHref('/gnr8/agency/clients', queryParams)
   const membersHref = buildHref('/gnr8/agency/members', queryParams)
   const settingsHref = buildHref('/gnr8/agency/settings', queryParams)
@@ -114,7 +117,7 @@ export default async function AgencyContextLayout(props: Props) {
       )
     : null
   const tabsInput: WorkspaceTabInput[] = [
-    { key: 'dashboard', label: 'Dashboard', href: dashboardHref },
+    { key: 'dashboard', label: 'Dashboard', href: explicitDashboardTabHref },
     { key: 'clients', label: 'Clients', href: clientsHref },
     { key: 'members', label: 'Team', href: membersHref },
     { key: 'settings', label: 'Settings', href: settingsHref },
