@@ -42,15 +42,27 @@
 - Global nav currently includes no dropdown or deep nav; this is intentional for V1 scope.
 
 ## 6) Visual/Branding Polish (Current Pass)
-- Updated global nav visual treatment to align with workspace UI primitives already used below the nav:
-  - solid workspace-toned shell (`#f8fafc`) with `#dbe6f1` divider
-  - card-like left brand treatment and tab-like nav chips (`#fff`, `#cbd5e1`, `#eff6ff`)
-  - tighter spacing and typography aligned with existing workspace header/tab patterns.
-- Removed left brand link behavior:
-  - `GNR8` is now a non-interactive brand/title surface (no navigation target).
-- Added a future-ready brand slot structure:
-  - extracted a `BrandSlot` model/render path with explicit `label` and optional `logo` slot support
-  - keeps V1 static while preparing the component for future workspace-specific logo rendering.
+- Refined global navigation typography to explicitly use the app sans-serif stack:
+  - `ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial`
+  - prevents browser serif fallback and keeps nav typography consistent with workspace content.
+- Simplified the navigation shell to a cleaner minimal treatment:
+  - white background (`#ffffff`)
+  - subtle bottom divider (`#dbe6f1`)
+  - very light separation shadow (`0 1px 2px rgba(15, 23, 42, 0.04)`).
+- Removed button/chip styling from nav entries:
+  - no nav item background fill
+  - no nav item borders
+  - no pill/button surfaces.
+- Moved to text-based nav states with compact rhythm:
+  - uppercase labels with restrained weight and letter spacing
+  - normal state uses neutral dimmed text
+  - hover state darkens text color only
+  - active state uses stronger text color plus slight weight increase
+  - no underlines, bars, or background highlights.
+- Final direction rationale:
+  - keeps top-level wayfinding obvious without visual weight
+  - aligns with GNR8’s product UI language
+  - improves perceived quality by reducing component noise while preserving all existing route/state behavior.
 
 ## 7) Next-Step Recommendation
 - Introduce `Multi-Agency / Multi-Client Context Switching v2` to make top-level switching smarter for users with many memberships while keeping this global nav minimal.

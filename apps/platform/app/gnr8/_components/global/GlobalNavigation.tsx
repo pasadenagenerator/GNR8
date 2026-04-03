@@ -106,13 +106,13 @@ function navItemStyle(isActive: boolean) {
   return {
     display: 'inline-flex',
     alignItems: 'center',
-    padding: '7px 12px',
-    borderRadius: 8,
-    border: isActive ? '1px solid #1d4ed8' : '1px solid #cbd5e1',
-    background: isActive ? '#eff6ff' : '#fff',
-    color: isActive ? '#1e3a8a' : '#334155',
+    padding: '4px 2px',
+    color: isActive ? '#0f172a' : '#64748b',
     textDecoration: 'none',
-    fontSize: 13,
+    fontSize: 12,
+    lineHeight: 1.25,
+    letterSpacing: '0.06em',
+    textTransform: 'uppercase' as const,
     fontWeight: isActive ? 600 : 500,
     whiteSpace: 'nowrap',
   } as const
@@ -122,6 +122,7 @@ export default function GlobalNavigation(props: Props) {
   const pathname = usePathname() || ''
   const searchParams = useSearchParams()
   const [workspaceState, setWorkspaceState] = useState<WorkspaceState>(() => getWorkspaceState())
+  const [hoveredItemKey, setHoveredItemKey] = useState<NavItem['key'] | null>(null)
 
   useEffect(() => {
     setWorkspaceState(getWorkspaceState())
@@ -195,21 +196,23 @@ export default function GlobalNavigation(props: Props) {
         top: 0,
         zIndex: 60,
         borderBottom: '1px solid #dbe6f1',
-        background: '#f8fafc',
+        background: '#ffffff',
+        boxShadow: '0 1px 2px rgba(15, 23, 42, 0.04)',
+        fontFamily: 'ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial',
       }}
     >
       <div
         style={{
           maxWidth: 1440,
           margin: '0 auto',
-          padding: '10px 20px',
+          padding: '8px 20px',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
-          gap: 12,
+          gap: 14,
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0, overflowX: 'auto', paddingBottom: 1 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0, overflowX: 'auto', paddingBottom: 1 }}>
           <BrandSlot model={brandModel} />
           <div aria-hidden='true' style={{ width: 1, alignSelf: 'stretch', background: '#dbe6f1' }} />
           {navItems.map((item) => (
@@ -217,7 +220,12 @@ export default function GlobalNavigation(props: Props) {
               key={item.key}
               href={item.href}
               aria-current={item.isActive ? 'page' : undefined}
-              style={navItemStyle(item.isActive)}
+              onMouseEnter={() => setHoveredItemKey(item.key)}
+              onMouseLeave={() => setHoveredItemKey((current) => (current === item.key ? null : current))}
+              style={{
+                ...navItemStyle(item.isActive),
+                color: item.isActive ? '#0f172a' : hoveredItemKey === item.key ? '#334155' : '#64748b',
+              }}
             >
               {item.label}
             </Link>
@@ -230,7 +238,11 @@ export default function GlobalNavigation(props: Props) {
             alignItems: 'center',
             padding: '0 4px',
             color: '#475569',
-            fontSize: 13,
+            fontSize: 12,
+            lineHeight: 1.25,
+            letterSpacing: '0.06em',
+            textTransform: 'uppercase',
+            fontWeight: 500,
             whiteSpace: 'nowrap',
           }}
         >
