@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
 
+import { listSwitchableAgencyClientsForPage } from '../../client-switcher-options'
 import ClientContextLayout from '../ClientContextLayout'
 import { getClientDashboardReadModelForPage } from '@/gnr8/client/client-dashboard-read-model'
 import {
@@ -63,13 +64,16 @@ export default async function AgencyClientDashboardEntryPage(props: {
   let currentUserAgency: Awaited<ReturnType<typeof resolveCurrentUserAgencyForPage>> | null = null
   let agencyAccessErrorCode: ResolveCurrentAgencyError['code'] | null = null
   let availableAgencyMemberships: Awaited<ReturnType<typeof listCurrentUserAgencyMembershipsForPage>>['memberships'] = []
+  let switchableClients: Awaited<ReturnType<typeof listSwitchableAgencyClientsForPage>> = []
 
   try {
-    currentUserAgency = await resolveCurrentUserAgencyForPage({
+    const resolvedAgency = await resolveCurrentUserAgencyForPage({
       activeAgencyId: requestedAgencyId,
     })
+    currentUserAgency = resolvedAgency
     const membershipContext = await listCurrentUserAgencyMembershipsForPage()
     availableAgencyMemberships = membershipContext.memberships
+    switchableClients = await listSwitchableAgencyClientsForPage({ agencyId: resolvedAgency.agency_id })
   } catch (error) {
     if (error instanceof ResolveCurrentAgencyError && error.code === 'UNAUTHORIZED') {
       redirect('/login')
@@ -189,6 +193,7 @@ export default async function AgencyClientDashboardEntryPage(props: {
       requestedAgencyId={requestedAgencyId}
       clientId={clientId}
       clientName={readModel.client.client_name?.trim() || shortId(clientId)}
+      clientOptions={switchableClients}
       activeTab='dashboard'
     >
       <section style={{ border: '1px solid #dbe6f1', borderRadius: 12, background: '#fff', padding: 14 }}>

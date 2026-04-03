@@ -1,7 +1,8 @@
 import Link from 'next/link'
-import type { CSSProperties, ReactNode } from 'react'
+import type { ReactNode } from 'react'
 
 import WorkspaceLayout, { type WorkspaceBreadcrumbItem } from '../_components/workspace/WorkspaceLayout'
+import WorkspaceQuickSwitcher, { type WorkspaceQuickSwitchOption } from '../_components/workspace/WorkspaceQuickSwitcher'
 import WorkspaceStateSync from '../_components/workspace/WorkspaceStateSync'
 import { buildWorkspaceViewModel, type WorkspaceTabInput } from '../_components/workspace/workspace-view-model'
 
@@ -34,20 +35,6 @@ const AGENCY_TAB_LABELS: Record<AgencyContextTab, string> = {
 function shortId(value: string): string {
   if (value.length <= 8) return value
   return `${value.slice(0, 8)}...`
-}
-
-function membershipSwitchStyle(active: boolean): CSSProperties {
-  return {
-    display: 'inline-flex',
-    alignItems: 'center',
-    padding: '6px 10px',
-    borderRadius: 999,
-    border: active ? '1px solid #1d4ed8' : '1px solid #cbd5e1',
-    background: active ? '#eff6ff' : '#fff',
-    color: active ? '#1e3a8a' : '#334155',
-    textDecoration: 'none',
-    fontSize: 12,
-  }
 }
 
 function buildHref(path: string, params: URLSearchParams): string {
@@ -92,6 +79,11 @@ export default function AgencyContextLayout(props: Props) {
   const clientsHref = buildHref('/gnr8/agency/clients', queryParams)
   const membersHref = buildHref('/gnr8/agency/members', queryParams)
   const settingsHref = buildHref('/gnr8/agency/settings', queryParams)
+  const agencyOptions: WorkspaceQuickSwitchOption[] = props.memberships.map((membership) => ({
+    value: membership.agency_id,
+    label: membership.agency_name?.trim() || membership.agency_id,
+    href: buildHref('/gnr8/agency', new URLSearchParams([['agency', membership.agency_id]])),
+  }))
   const tabsInput: WorkspaceTabInput[] = [
     { key: 'dashboard', label: 'Dashboard', href: dashboardHref },
     { key: 'clients', label: 'Clients', href: clientsHref },
@@ -156,16 +148,15 @@ export default function AgencyContextLayout(props: Props) {
       tabsAriaLabel='Agency context navigation'
       afterTabs={
         !isAdminView && props.memberships.length > 1 ? (
-          <div style={{ marginTop: 10, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            {props.memberships.map((membership) => (
-              <Link
-                key={membership.agency_id}
-                href={buildHref('/gnr8/agency', new URLSearchParams([['agency', membership.agency_id]]))}
-                style={membershipSwitchStyle(membership.agency_id === activeAgencyId)}
-              >
-                {membership.agency_name?.trim() || membership.agency_id}
-              </Link>
-            ))}
+          <div style={{ marginTop: 12 }}>
+            <WorkspaceQuickSwitcher
+              label='Switch Agency'
+              currentValue={activeAgencyId}
+              options={agencyOptions}
+              persistStateOnChange={(nextAgencyId) => ({
+                activeAgencyId: nextAgencyId,
+              })}
+            />
           </div>
         ) : null
       }

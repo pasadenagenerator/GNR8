@@ -1,6 +1,9 @@
 import type { ReactNode } from 'react'
 
 import WorkspaceLayout, { type WorkspaceBreadcrumbItem } from '../../../_components/workspace/WorkspaceLayout'
+import WorkspaceQuickSwitcher, {
+  type WorkspaceQuickSwitchOption,
+} from '../../../_components/workspace/WorkspaceQuickSwitcher'
 import WorkspaceStateSync from '../../../_components/workspace/WorkspaceStateSync'
 import { buildWorkspaceViewModel, type WorkspaceTabInput } from '../../../_components/workspace/workspace-view-model'
 
@@ -12,6 +15,7 @@ type Props = {
   clientId: string
   clientName: string
   clientSlug?: string | null
+  clientOptions: { clientId: string; label: string }[]
   activeTab: ClientContextTab
   children: ReactNode
 }
@@ -29,7 +33,16 @@ function shortId(value: string): string {
 
 export default function ClientContextLayout(props: Props) {
   const activeAgencyId = props.requestedAgencyId || props.agencyId
-  const agencyParam = `agency=${encodeURIComponent(activeAgencyId)}`
+  const baseParams = new URLSearchParams()
+  baseParams.set('agency', activeAgencyId)
+  const agencyParam = baseParams.toString()
+
+  const activeClientSection = props.activeTab === 'settings' ? 'settings' : props.activeTab === 'users' ? 'users' : 'dashboard'
+  const clientOptions: WorkspaceQuickSwitchOption[] = props.clientOptions.map((option) => ({
+    value: option.clientId,
+    label: option.label,
+    href: `/gnr8/agency/clients/${encodeURIComponent(option.clientId)}/${activeClientSection}?${agencyParam}`,
+  }))
 
   const dashboardHref = `/gnr8/agency/clients/${encodeURIComponent(props.clientId)}/dashboard?${agencyParam}`
   const settingsHref = `/gnr8/agency/clients/${encodeURIComponent(props.clientId)}/settings?${agencyParam}`
@@ -59,6 +72,20 @@ export default function ClientContextLayout(props: Props) {
       },
       identityPlacement: 'right',
       titleFontSize: 20,
+      meta:
+        clientOptions.length > 1 ? (
+          <WorkspaceQuickSwitcher
+            label='Switch Client'
+            currentValue={props.clientId}
+            options={clientOptions}
+            persistStateOnChange={(nextClientId) => ({
+              activeAgencyId,
+              activeClientId: nextClientId,
+              lastAgencyTab: 'clients',
+              lastClientTab: activeClientSection,
+            })}
+          />
+        ) : undefined,
     },
     tabs: tabsInput,
     activeKey: props.activeTab,

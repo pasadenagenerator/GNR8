@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation'
 
 import ClientSettingsClient from './ClientSettingsClient'
+import { listSwitchableAgencyClientsForPage } from '../../client-switcher-options'
 import ClientContextLayout from '../ClientContextLayout'
 import {
   listCurrentUserAgencyMembershipsForPage,
@@ -61,13 +62,16 @@ export default async function AgencyClientSettingsPage(props: {
   let currentUserAgency: Awaited<ReturnType<typeof resolveCurrentUserAgencyForPage>> | null = null
   let agencyAccessErrorCode: ResolveCurrentAgencyError['code'] | null = null
   let availableAgencyMemberships: Awaited<ReturnType<typeof listCurrentUserAgencyMembershipsForPage>>['memberships'] = []
+  let switchableClients: Awaited<ReturnType<typeof listSwitchableAgencyClientsForPage>> = []
 
   try {
-    currentUserAgency = await resolveCurrentUserAgencyForPage({
+    const resolvedAgency = await resolveCurrentUserAgencyForPage({
       activeAgencyId: requestedAgencyId,
     })
+    currentUserAgency = resolvedAgency
     const membershipContext = await listCurrentUserAgencyMembershipsForPage()
     availableAgencyMemberships = membershipContext.memberships
+    switchableClients = await listSwitchableAgencyClientsForPage({ agencyId: resolvedAgency.agency_id })
   } catch (error) {
     if (error instanceof ResolveCurrentAgencyError && error.code === 'UNAUTHORIZED') {
       redirect('/login')
@@ -146,6 +150,7 @@ export default async function AgencyClientSettingsPage(props: {
       clientId={clientId}
       clientName={normalizeText(client.name) || 'Unnamed Client'}
       clientSlug={normalizeText(client.slug)}
+      clientOptions={switchableClients}
       activeTab='settings'
     >
       <ClientSettingsClient
