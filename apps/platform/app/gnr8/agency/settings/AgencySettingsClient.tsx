@@ -26,6 +26,7 @@ type Props = {
   actorMode?: 'membership' | 'admin_view'
   adminBackToPath?: string
   adminTeamPath?: string
+  embeddedInAgencyContext?: boolean
 }
 
 type FormStatus = 'idle' | 'saving' | 'success' | 'error'
@@ -276,18 +277,8 @@ export default function AgencySettingsClient(props: Props) {
     ? props.adminBackToPath || `/gnr8/admin/agencies/${encodeURIComponent(props.agencyId)}/dashboard`
     : currentAgencyDashboardPath
 
-  return (
-    <main
-      style={{
-        maxWidth: 980,
-        margin: '0 auto',
-        padding: 24,
-        background: 'linear-gradient(180deg, #f4f8fc 0%, #ffffff 62%)',
-        fontFamily: 'ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial',
-        minHeight: '100vh',
-      }}
-    >
-      <header style={{ display: 'grid', gap: 8 }}>
+  const standaloneHeader = (
+    <header style={{ display: 'grid', gap: 8 }}>
         <h1 style={{ margin: 0, fontSize: 30, color: '#0f172a' }}>Agency Settings</h1>
         <p style={{ margin: 0, color: '#334155' }}>
           Manage agency profile, owner profile, security settings, and destructive delete controls.
@@ -413,7 +404,10 @@ export default function AgencySettingsClient(props: Props) {
             : null}
         </div>
       </header>
+  )
 
+  const content = (
+    <>
       {props.role === 'member' ? (
         <section style={{ ...sectionStyle(), marginTop: 16, border: '1px solid #fed7aa', background: '#fff7ed' }}>
           <h2 style={{ marginTop: 0, color: '#9a3412' }}>Limited Access</h2>
@@ -594,6 +588,26 @@ export default function AgencySettingsClient(props: Props) {
           </form>
         </section>
       ) : null}
+    </>
+  )
+
+  if (props.embeddedInAgencyContext) {
+    return content
+  }
+
+  return (
+    <main
+      style={{
+        maxWidth: 980,
+        margin: '0 auto',
+        padding: 24,
+        background: 'linear-gradient(180deg, #f4f8fc 0%, #ffffff 62%)',
+        fontFamily: 'ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial',
+        minHeight: '100vh',
+      }}
+    >
+      {standaloneHeader}
+      {content}
     </main>
   )
 }

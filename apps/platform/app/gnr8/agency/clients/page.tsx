@@ -1,42 +1,38 @@
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
 
+import AgencyClientsOverviewSection from '../AgencyClientsOverviewSection'
 import AgencyContextLayout from '../AgencyContextLayout'
-import AgencySettingsClient from './AgencySettingsClient'
+import { getAgencyDashboardReadModel } from '@/gnr8/agency/agency-dashboard-read-model'
+import { OWNER_SETUP_PATH, getOwnerSetupStatusForAgencyForPage } from '@/src/auth/owner-setup-gate'
 import {
   listCurrentUserAgencyMembershipsForPage,
   resolveCurrentUserAgencyForPage,
   ResolveCurrentAgencyError,
 } from '@/src/auth/resolve-current-agency'
 import { canPerformAction } from '@/src/auth/rbac'
-import { getSupabaseServerClientReadOnly } from '@/src/auth/supabase-server-read-only'
 
 type SearchParams = {
   agency?: string
   admin_view?: string
 }
 
-type AgencyRow = {
-  id: string | null
-  name: string | null
-  slug: string | null
-}
-
-function normalizeText(value: unknown): string {
-  return String(value ?? '').trim()
-}
-
 function normalizeAdminView(value: string | undefined): boolean {
   return value === '1' || value === 'true'
+}
+
+function shortId(value: string): string {
+  if (value.length <= 8) return value
+  return `${value.slice(0, 8)}...`
 }
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
 
-export default async function AgencySettingsPage(props: { searchParams?: Promise<SearchParams> }) {
+export default async function AgencyClientsPage(props: { searchParams?: Promise<SearchParams> }) {
   const resolvedSearchParams = props.searchParams ? await props.searchParams : undefined
-  const requestedAgencyId = normalizeText(resolvedSearchParams?.agency) || null
+  const requestedAgencyId = String(resolvedSearchParams?.agency ?? '').trim() || null
   const isAdminView = normalizeAdminView(resolvedSearchParams?.admin_view)
 
   let currentUserAgency: Awaited<ReturnType<typeof resolveCurrentUserAgencyForPage>> | null = null
@@ -53,7 +49,6 @@ export default async function AgencySettingsPage(props: { searchParams?: Promise
     if (error instanceof ResolveCurrentAgencyError && error.code === 'UNAUTHORIZED') {
       redirect('/login')
     }
-
     if (error instanceof ResolveCurrentAgencyError) {
       agencyAccessErrorCode = error.code
       try {
@@ -73,7 +68,7 @@ export default async function AgencySettingsPage(props: { searchParams?: Promise
     return (
       <main
         style={{
-          maxWidth: 980,
+          maxWidth: 1200,
           margin: '0 auto',
           padding: 24,
           background: 'linear-gradient(180deg, #f4f8fc 0%, #ffffff 62%)',
@@ -81,16 +76,16 @@ export default async function AgencySettingsPage(props: { searchParams?: Promise
           minHeight: '100vh',
         }}
       >
-        <header style={{ display: 'grid', gap: 8 }}>
-          <h1 style={{ margin: 0, fontSize: 30, color: '#0f172a' }}>Agency Settings</h1>
-          <p style={{ margin: 0, color: '#334155' }}>
-            Owner-scoped settings for agency profile, owner profile, security controls, and agency deletion.
+        <header style={{ display: 'grid', gap: 10 }}>
+          <h1 style={{ margin: 0, fontSize: 32, color: '#0f172a' }}>Agency Clients</h1>
+          <p style={{ margin: 0, color: '#334155', maxWidth: 900 }}>
+            Client management view scoped by authenticated agency membership.
           </p>
         </header>
 
         <section
           style={{
-            marginTop: 16,
+            marginTop: 18,
             border: '1px solid #fecaca',
             borderRadius: 12,
             background: '#fff5f5',
@@ -111,13 +106,12 @@ export default async function AgencySettingsPage(props: { searchParams?: Promise
                 ? 'Your account belongs to multiple agencies. Select one valid agency context to continue.'
                 : 'Your membership is invalid or ambiguous. Access is blocked until this is resolved.'}
           </p>
-
           {availableAgencyMemberships.length > 0 ? (
             <div style={{ marginTop: 12, display: 'flex', flexWrap: 'wrap', gap: 8 }}>
               {availableAgencyMemberships.map((membership) => (
                 <Link
                   key={membership.agency_id}
-                  href={`/gnr8/agency/settings?agency=${encodeURIComponent(membership.agency_id)}`}
+                  href={`/gnr8/agency/clients?agency=${encodeURIComponent(membership.agency_id)}`}
                   style={{
                     display: 'inline-flex',
                     alignItems: 'center',
@@ -140,86 +134,71 @@ export default async function AgencySettingsPage(props: { searchParams?: Promise
     )
   }
 
-  const supabase = await getSupabaseServerClientReadOnly()
-
-  const [agencyResult, authResult] = await Promise.all([
-    supabase
-      .from('agencies')
-      .select('id,name,slug')
-      .eq('id', currentUserAgency.agency_id)
-      .limit(1)
-      .maybeSingle(),
-    supabase.auth.getUser(),
-  ])
-
-  if (agencyResult.error) {
-    return (
-      <AgencyContextLayout
-        agencyId={currentUserAgency.agency_id}
-        agencyName={currentUserAgency.agency_name?.trim() || 'Unknown Agency'}
-        role={currentUserAgency.role}
-        requestedAgencyId={requestedAgencyId}
-        memberships={availableAgencyMemberships}
-        activeTab='settings'
-        actorMode={isAdminView ? 'admin_view' : 'membership'}
-      >
-        <section style={{ border: '1px solid #fecaca', borderRadius: 10, background: '#fff5f5', padding: 14 }}>
-          <p style={{ margin: 0, color: '#7f1d1d' }}>Failed to load agency context: {agencyResult.error.message}</p>
-        </section>
-      </AgencyContextLayout>
-    )
+  if (currentUserAgency.role === 'owner') {
+    const ownerSetupStatus = await getOwnerSetupStatusForAgencyForPage({
+      userId: currentUserAgency.user_id,
+      agencyId: currentUserAgency.agency_id,
+    })
+    if (!ownerSetupStatus.hasOwnerMembership) {
+      return (
+        <main
+          style={{
+            maxWidth: 1200,
+            margin: '0 auto',
+            padding: 24,
+            background: 'linear-gradient(180deg, #f4f8fc 0%, #ffffff 62%)',
+            fontFamily: 'ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial',
+            minHeight: '100vh',
+          }}
+        >
+          <section
+            style={{
+              marginTop: 18,
+              border: '1px solid #fecaca',
+              borderRadius: 12,
+              background: '#fff5f5',
+              padding: 16,
+            }}
+          >
+            <h2 style={{ marginTop: 0, color: '#991b1b' }}>Agency access unavailable</h2>
+            <p style={{ marginBottom: 0, color: '#7f1d1d' }}>
+              Owner membership context is invalid for this agency. Access is blocked until membership is corrected.
+            </p>
+          </section>
+        </main>
+      )
+    }
+    if (!ownerSetupStatus.isCompleted) {
+      redirect(`${OWNER_SETUP_PATH}?agency=${encodeURIComponent(currentUserAgency.agency_id)}`)
+    }
   }
 
-  const agencyRow = agencyResult.data as AgencyRow | null
-  if (!agencyRow) {
-    return (
-      <AgencyContextLayout
-        agencyId={currentUserAgency.agency_id}
-        agencyName={currentUserAgency.agency_name?.trim() || 'Unknown Agency'}
-        role={currentUserAgency.role}
-        requestedAgencyId={requestedAgencyId}
-        memberships={availableAgencyMemberships}
-        activeTab='settings'
-        actorMode={isAdminView ? 'admin_view' : 'membership'}
-      >
-        <section style={{ border: '1px solid #fecaca', borderRadius: 10, background: '#fff5f5', padding: 14 }}>
-          <p style={{ margin: 0, color: '#7f1d1d' }}>No resolved agency found for this settings view.</p>
-        </section>
-      </AgencyContextLayout>
-    )
-  }
+  const readModel = await getAgencyDashboardReadModel({
+    agencyId: currentUserAgency.agency_id,
+    limit: 120,
+    simulationLimit: 120,
+  })
 
-  const authUser = authResult.data.user
-  const ownerEmail = normalizeText(authUser?.email)
-  const ownerNameFromMetadata = normalizeText(authUser?.user_metadata?.full_name)
-  const ownerName = ownerNameFromMetadata || normalizeText(authUser?.email?.split('@')[0]) || 'Agency Owner'
+  const canCreateClient = canPerformAction(currentUserAgency.role, 'create_client')
+  const canViewClientUsers = canPerformAction(currentUserAgency.role, 'view_client_users')
+  const canEditClientSettings = canPerformAction(currentUserAgency.role, 'edit_client_settings')
 
   return (
     <AgencyContextLayout
       agencyId={currentUserAgency.agency_id}
-      agencyName={normalizeText(agencyRow.name) || 'Unnamed Agency'}
-      agencySlug={normalizeText(agencyRow.slug)}
+      agencyName={currentUserAgency.agency_name?.trim() || readModel.agency.agency_name?.trim() || `Agency ${shortId(currentUserAgency.agency_id)}`}
       role={currentUserAgency.role}
       requestedAgencyId={requestedAgencyId}
       memberships={availableAgencyMemberships}
-      activeTab='settings'
+      activeTab='clients'
       actorMode={isAdminView ? 'admin_view' : 'membership'}
     >
-      <AgencySettingsClient
+      <AgencyClientsOverviewSection
         agencyId={currentUserAgency.agency_id}
-        agencyName={normalizeText(agencyRow.name) || 'Unnamed Agency'}
-        agencySlug={normalizeText(agencyRow.slug)}
-        requestedAgencyId={requestedAgencyId}
-        memberships={availableAgencyMemberships}
-        role={currentUserAgency.role}
-        canEditAgencySettings={canPerformAction(currentUserAgency.role, 'edit_agency_settings')}
-        canEditAgencySlug={canPerformAction(currentUserAgency.role, 'edit_agency_slug')}
-        canEditOwnerProfile={canPerformAction(currentUserAgency.role, 'edit_owner_profile')}
-        canDeleteAgency={canPerformAction(currentUserAgency.role, 'delete_agency')}
-        canChangePassword={canPerformAction(currentUserAgency.role, 'change_password')}
-        ownerName={ownerName}
-        ownerEmail={ownerEmail || 'unknown@example.com'}
-        embeddedInAgencyContext
+        canCreateClient={canCreateClient}
+        canEditClientSettings={canEditClientSettings}
+        canViewClientUsers={canViewClientUsers}
+        clientDirectory={readModel.client_directory}
       />
     </AgencyContextLayout>
   )

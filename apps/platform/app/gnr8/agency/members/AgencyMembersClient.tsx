@@ -38,6 +38,7 @@ type Props = {
   adminBackToPath?: string
   adminSettingsPath?: string
   hideMembershipSwitcher?: boolean
+  embeddedInAgencyContext?: boolean
 }
 
 type FormStatus = 'idle' | 'saving' | 'success' | 'error'
@@ -315,17 +316,8 @@ export default function AgencyMembersClient(props: Props) {
     setMembers((current) => current.filter((currentMember) => currentMember.membership_id !== member.membership_id))
   }
 
-  return (
-    <main
-      style={{
-        maxWidth: 1040,
-        margin: '0 auto',
-        padding: 24,
-        background: 'linear-gradient(180deg, #f4f8fc 0%, #ffffff 62%)',
-        fontFamily: 'ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial',
-        minHeight: '100vh',
-      }}
-    >
+  const standaloneHeader = (
+    <>
       <header style={{ display: 'grid', gap: 8 }}>
         <h1 style={{ margin: 0, fontSize: 30, color: '#0f172a' }}>{isAdminView ? 'Agency Team' : 'Agency Members'}</h1>
         <p style={{ margin: 0, color: '#334155' }}>
@@ -432,8 +424,12 @@ export default function AgencyMembersClient(props: Props) {
           </div>
         ) : null}
       </section>
+    </>
+  )
 
-      <section style={{ ...sectionStyle(), marginTop: 14 }}>
+  const content = (
+    <>
+      <section style={{ ...sectionStyle(), marginTop: props.embeddedInAgencyContext ? 0 : 14 }}>
         <h2 style={{ marginTop: 0, color: '#0f172a' }}>Invite User</h2>
 
         {!props.canInviteUsers ? (
@@ -573,6 +569,26 @@ export default function AgencyMembersClient(props: Props) {
           </table>
         </div>
       </section>
+    </>
+  )
+
+  if (props.embeddedInAgencyContext) {
+    return content
+  }
+
+  return (
+    <main
+      style={{
+        maxWidth: 1040,
+        margin: '0 auto',
+        padding: 24,
+        background: 'linear-gradient(180deg, #f4f8fc 0%, #ffffff 62%)',
+        fontFamily: 'ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial',
+        minHeight: '100vh',
+      }}
+    >
+      {standaloneHeader}
+      {content}
     </main>
   )
 }

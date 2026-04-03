@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
 
+import AgencyContextLayout from '../AgencyContextLayout'
 import AgencyMembersClient from './AgencyMembersClient'
 import { listAgencyMembers } from '@/gnr8/agency/agency-membership-service'
 import {
@@ -13,15 +14,21 @@ import { getSupabaseServerClientReadOnly } from '@/src/auth/supabase-server-read
 
 type SearchParams = {
   agency?: string
+  admin_view?: string
 }
 
 type AgencyRow = {
   id: string | null
   name: string | null
+  slug: string | null
 }
 
 function normalizeText(value: unknown): string {
   return String(value ?? '').trim()
+}
+
+function normalizeAdminView(value: string | undefined): boolean {
+  return value === '1' || value === 'true'
 }
 
 export const runtime = 'nodejs'
@@ -31,6 +38,7 @@ export const revalidate = 0
 export default async function AgencyMembersPage(props: { searchParams?: Promise<SearchParams> }) {
   const resolvedSearchParams = props.searchParams ? await props.searchParams : undefined
   const requestedAgencyId = normalizeText(resolvedSearchParams?.agency) || null
+  const isAdminView = normalizeAdminView(resolvedSearchParams?.admin_view)
 
   let currentUserAgency: Awaited<ReturnType<typeof resolveCurrentUserAgencyForPage>> | null = null
   let agencyAccessErrorCode: ResolveCurrentAgencyError['code'] | null = null
@@ -135,14 +143,21 @@ export default async function AgencyMembersPage(props: { searchParams?: Promise<
 
   if (!canPerformAction(currentUserAgency.role, 'view_members')) {
     return (
-      <main style={{ maxWidth: 980, margin: '0 auto', padding: 24 }}>
-        <h1 style={{ marginBottom: 10 }}>Agency Members</h1>
-        <div style={{ border: '1px solid #fecaca', borderRadius: 10, background: '#fff5f5', padding: 14 }}>
+      <AgencyContextLayout
+        agencyId={currentUserAgency.agency_id}
+        agencyName={currentUserAgency.agency_name?.trim() || 'Unknown Agency'}
+        role={currentUserAgency.role}
+        requestedAgencyId={requestedAgencyId}
+        memberships={availableAgencyMemberships}
+        activeTab='members'
+        actorMode={isAdminView ? 'admin_view' : 'membership'}
+      >
+        <section style={{ border: '1px solid #fecaca', borderRadius: 10, background: '#fff5f5', padding: 14 }}>
           <p style={{ margin: 0, color: '#7f1d1d' }}>
             Your role is not authorized to view agency member management for this agency scope.
           </p>
-        </div>
-      </main>
+        </section>
+      </AgencyContextLayout>
     )
   }
 
@@ -155,45 +170,71 @@ export default async function AgencyMembersPage(props: { searchParams?: Promise<
 
   const agencyResult = await supabase
     .from('agencies')
-    .select('id,name')
+    .select('id,name,slug')
     .eq('id', currentUserAgency.agency_id)
     .limit(1)
     .maybeSingle()
 
   if (agencyResult.error) {
     return (
-      <main style={{ maxWidth: 980, margin: '0 auto', padding: 24 }}>
-        <h1 style={{ marginBottom: 10 }}>Agency Members</h1>
-        <div style={{ border: '1px solid #fecaca', borderRadius: 10, background: '#fff5f5', padding: 14 }}>
+      <AgencyContextLayout
+        agencyId={currentUserAgency.agency_id}
+        agencyName={currentUserAgency.agency_name?.trim() || 'Unknown Agency'}
+        role={currentUserAgency.role}
+        requestedAgencyId={requestedAgencyId}
+        memberships={availableAgencyMemberships}
+        activeTab='members'
+        actorMode={isAdminView ? 'admin_view' : 'membership'}
+      >
+        <section style={{ border: '1px solid #fecaca', borderRadius: 10, background: '#fff5f5', padding: 14 }}>
           <p style={{ margin: 0, color: '#7f1d1d' }}>Failed to load agency context: {agencyResult.error.message}</p>
-        </div>
-      </main>
+        </section>
+      </AgencyContextLayout>
     )
   }
 
   const agencyRow = agencyResult.data as AgencyRow | null
   if (!agencyRow) {
     return (
-      <main style={{ maxWidth: 980, margin: '0 auto', padding: 24 }}>
-        <h1 style={{ marginBottom: 10 }}>Agency Members</h1>
-        <div style={{ border: '1px solid #fecaca', borderRadius: 10, background: '#fff5f5', padding: 14 }}>
+      <AgencyContextLayout
+        agencyId={currentUserAgency.agency_id}
+        agencyName={currentUserAgency.agency_name?.trim() || 'Unknown Agency'}
+        role={currentUserAgency.role}
+        requestedAgencyId={requestedAgencyId}
+        memberships={availableAgencyMemberships}
+        activeTab='members'
+        actorMode={isAdminView ? 'admin_view' : 'membership'}
+      >
+        <section style={{ border: '1px solid #fecaca', borderRadius: 10, background: '#fff5f5', padding: 14 }}>
           <p style={{ margin: 0, color: '#7f1d1d' }}>No resolved agency found for this member management view.</p>
-        </div>
-      </main>
+        </section>
+      </AgencyContextLayout>
     )
   }
 
   return (
-    <AgencyMembersClient
+    <AgencyContextLayout
       agencyId={currentUserAgency.agency_id}
       agencyName={normalizeText(agencyRow.name) || 'Unnamed Agency'}
+      agencySlug={normalizeText(agencyRow.slug)}
+      role={currentUserAgency.role}
       requestedAgencyId={requestedAgencyId}
       memberships={availableAgencyMemberships}
-      role={currentUserAgency.role}
-      initialMembers={initialMembers}
-      canInviteUsers={canPerformAction(currentUserAgency.role, 'invite_user')}
-      canEditMemberRole={canPerformAction(currentUserAgency.role, 'edit_member_role')}
-      canRemoveMember={canPerformAction(currentUserAgency.role, 'remove_member')}
-    />
+      activeTab='members'
+      actorMode={isAdminView ? 'admin_view' : 'membership'}
+    >
+      <AgencyMembersClient
+        agencyId={currentUserAgency.agency_id}
+        agencyName={normalizeText(agencyRow.name) || 'Unnamed Agency'}
+        requestedAgencyId={requestedAgencyId}
+        memberships={availableAgencyMemberships}
+        role={currentUserAgency.role}
+        initialMembers={initialMembers}
+        canInviteUsers={canPerformAction(currentUserAgency.role, 'invite_user')}
+        canEditMemberRole={canPerformAction(currentUserAgency.role, 'edit_member_role')}
+        canRemoveMember={canPerformAction(currentUserAgency.role, 'remove_member')}
+        embeddedInAgencyContext
+      />
+    </AgencyContextLayout>
   )
 }
