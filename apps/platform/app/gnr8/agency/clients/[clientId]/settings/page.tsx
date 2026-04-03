@@ -147,6 +147,7 @@ export default async function AgencyClientSettingsPage(props: {
     <ClientContextLayout
       agencyId={currentUserAgency.agency_id}
       requestedAgencyId={requestedAgencyId}
+      memberships={availableAgencyMemberships}
       clientId={clientId}
       clientName={normalizeText(client.name) || 'Unnamed Client'}
       clientSlug={normalizeText(client.slug)}

@@ -83,6 +83,19 @@ export default function CommandCenterLayout(props: Props) {
       header={header}
       tabs={tabs}
       tabsAriaLabel="Command Center navigation"
+      commandPalette={{
+        routes: [
+          { id: "route-command-center", label: "Command Center", href: "/gnr8/command-center", sublabel: "Key route" },
+          { id: "route-command-center-sites", label: "Command Center Sites", href: "/gnr8/command-center/sites", sublabel: "Key route" },
+          {
+            id: "route-command-center-agencies",
+            label: "Command Center Agencies",
+            href: "/gnr8/command-center/agencies",
+            sublabel: "Key route",
+          },
+        ],
+        allowCommandCenter: true,
+      }}
       afterTabs={<WorkspaceRecentItems allowCommandCenter={true} title="Recent Items" maxVisible={6} />}
     >
       <WorkspaceStateSync />

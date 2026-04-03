@@ -1,6 +1,8 @@
 import Link from 'next/link'
 import type { CSSProperties, ReactNode } from 'react'
 
+import CommandPalette, { type CommandPaletteOption } from './CommandPalette'
+
 export type WorkspaceTab = {
   key: string
   label: string
@@ -43,6 +45,14 @@ type WorkspaceLayoutProps = {
   maxWidth?: number
   padding?: number
   afterTabs?: ReactNode
+  commandPalette?: {
+    agencies?: CommandPaletteOption[]
+    clients?: CommandPaletteOption[]
+    routes?: CommandPaletteOption[]
+    accessibleAgencyIds?: string[]
+    accessibleClientIds?: string[]
+    allowCommandCenter?: boolean
+  }
 }
 
 function tabStyle(active: boolean): CSSProperties {
@@ -188,30 +198,42 @@ export function WorkspaceTabs(props: WorkspaceTabsProps) {
 
 export default function WorkspaceLayout(props: WorkspaceLayoutProps) {
   return (
-    <main
-      style={{
-        maxWidth: props.maxWidth ?? 1440,
-        margin: '0 auto',
-        padding: props.padding ?? 24,
-        background: 'linear-gradient(180deg, #f4f8fc 0%, #ffffff 62%)',
-        fontFamily: 'ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial',
-        minHeight: '100vh',
-      }}
-    >
-      <section
+    <>
+      {props.commandPalette ? (
+        <CommandPalette
+          agencies={props.commandPalette.agencies}
+          clients={props.commandPalette.clients}
+          routes={props.commandPalette.routes}
+          accessibleAgencyIds={props.commandPalette.accessibleAgencyIds}
+          accessibleClientIds={props.commandPalette.accessibleClientIds}
+          allowCommandCenter={props.commandPalette.allowCommandCenter}
+        />
+      ) : null}
+      <main
         style={{
-          border: '1px solid #dbe6f1',
-          borderRadius: 12,
-          background: '#fff',
-          padding: 14,
+          maxWidth: props.maxWidth ?? 1440,
+          margin: '0 auto',
+          padding: props.padding ?? 24,
+          background: 'linear-gradient(180deg, #f4f8fc 0%, #ffffff 62%)',
+          fontFamily: 'ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial',
+          minHeight: '100vh',
         }}
       >
-        <WorkspaceHeader model={props.header} />
-        <WorkspaceTabs ariaLabel={props.tabsAriaLabel} tabs={props.tabs} />
-        {props.afterTabs}
-      </section>
+        <section
+          style={{
+            border: '1px solid #dbe6f1',
+            borderRadius: 12,
+            background: '#fff',
+            padding: 14,
+          }}
+        >
+          <WorkspaceHeader model={props.header} />
+          <WorkspaceTabs ariaLabel={props.tabsAriaLabel} tabs={props.tabs} />
+          {props.afterTabs}
+        </section>
 
-      <div style={{ marginTop: 14 }}>{props.children}</div>
-    </main>
+        <div style={{ marginTop: 14 }}>{props.children}</div>
+      </main>
+    </>
   )
 }

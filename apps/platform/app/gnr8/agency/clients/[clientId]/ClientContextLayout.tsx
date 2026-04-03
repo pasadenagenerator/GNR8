@@ -13,6 +13,7 @@ type ClientContextTab = 'dashboard' | 'settings' | 'users'
 type Props = {
   agencyId: string
   requestedAgencyId: string | null
+  memberships: { agency_id: string; agency_name: string | null }[]
   clientId: string
   clientName: string
   clientSlug?: string | null
@@ -101,6 +102,30 @@ export default function ClientContextLayout(props: Props) {
       header={header}
       tabs={tabs}
       tabsAriaLabel='Client context navigation'
+      commandPalette={{
+        agencies: props.memberships.map((membership) => ({
+          id: membership.agency_id,
+          label: membership.agency_name?.trim() || membership.agency_id,
+          sublabel: `Agency ID: ${membership.agency_id}`,
+          href: `/gnr8/agency?agency=${encodeURIComponent(membership.agency_id)}`,
+        })),
+        clients: props.clientOptions.map((client) => ({
+          id: client.clientId,
+          label: client.label,
+          sublabel: `Agency ID: ${activeAgencyId}`,
+          href: `/gnr8/agency/clients/${encodeURIComponent(client.clientId)}/dashboard?${agencyParam}`,
+        })),
+        routes: [
+          { id: 'route-agency-dashboard', label: 'Agency Dashboard', href: backToAgencyHref, sublabel: 'Key route' },
+          { id: 'route-agency-clients', label: 'Agency Clients', href: agencyClientsHref, sublabel: 'Key route' },
+          { id: 'route-agency-settings', label: 'Agency Settings', href: `/gnr8/agency/settings?${agencyParam}`, sublabel: 'Key route' },
+          { id: 'route-client-dashboard', label: 'Client Dashboard', href: dashboardHref, sublabel: 'Key route' },
+          { id: 'route-client-settings', label: 'Client Settings', href: settingsHref, sublabel: 'Key route' },
+          { id: 'route-client-team', label: 'Client Team', href: usersHref, sublabel: 'Key route' },
+        ],
+        accessibleAgencyIds: props.memberships.map((membership) => membership.agency_id),
+        accessibleClientIds: props.clientOptions.map((option) => option.clientId),
+      }}
       afterTabs={
         <WorkspaceRecentItems
           accessibleAgencyIds={[activeAgencyId]}

@@ -1,4 +1,3 @@
-import Link from 'next/link'
 import type { ReactNode } from 'react'
 
 import WorkspaceLayout, { type WorkspaceBreadcrumbItem } from '../_components/workspace/WorkspaceLayout'
@@ -6,6 +5,7 @@ import WorkspaceRecentItems from '../_components/workspace/WorkspaceRecentItems'
 import WorkspaceQuickSwitcher, { type WorkspaceQuickSwitchOption } from '../_components/workspace/WorkspaceQuickSwitcher'
 import WorkspaceStateSync from '../_components/workspace/WorkspaceStateSync'
 import { buildWorkspaceViewModel, type WorkspaceTabInput } from '../_components/workspace/workspace-view-model'
+import { listSwitchableAgencyClientsForPage } from './clients/client-switcher-options'
 
 type MembershipOption = {
   agency_id: string
@@ -65,7 +65,7 @@ function buildAgencyBreadcrumbs(input: {
   return [{ label: 'Agency', href: input.dashboardHref }, { label: activeLabel }]
 }
 
-export default function AgencyContextLayout(props: Props) {
+export default async function AgencyContextLayout(props: Props) {
   const actorMode = props.actorMode ?? 'membership'
   const isAdminView = actorMode === 'admin_view'
   const activeAgencyId = props.requestedAgencyId || props.agencyId
@@ -85,7 +85,34 @@ export default function AgencyContextLayout(props: Props) {
     label: membership.agency_name?.trim() || membership.agency_id,
     href: buildHref('/gnr8/agency', new URLSearchParams([['agency', membership.agency_id]])),
   }))
+  const switchableClients = await listSwitchableAgencyClientsForPage({ agencyId: activeAgencyId })
   const scopedAgencyIds = props.memberships.map((membership) => membership.agency_id)
+  const scopedClientIds = switchableClients.map((client) => client.clientId)
+  const clientDashboardHref = switchableClients[0]
+    ? buildHref(
+        `/gnr8/agency/clients/${encodeURIComponent(switchableClients[0].clientId)}/dashboard`,
+        new URLSearchParams(
+          isAdminView
+            ? [
+                ['agency', activeAgencyId],
+                ['admin_view', '1'],
+              ]
+            : [['agency', activeAgencyId]],
+        ),
+      )
+    : null
+  const clientSettingsHref = switchableClients[0]
+    ? buildHref(
+        `/gnr8/agency/clients/${encodeURIComponent(switchableClients[0].clientId)}/settings`,
+        new URLSearchParams([['agency', activeAgencyId]]),
+      )
+    : null
+  const clientTeamHref = switchableClients[0]
+    ? buildHref(
+        `/gnr8/agency/clients/${encodeURIComponent(switchableClients[0].clientId)}/users`,
+        new URLSearchParams([['agency', activeAgencyId]]),
+      )
+    : null
   const tabsInput: WorkspaceTabInput[] = [
     { key: 'dashboard', label: 'Dashboard', href: dashboardHref },
     { key: 'clients', label: 'Clients', href: clientsHref },
@@ -149,6 +176,38 @@ export default function AgencyContextLayout(props: Props) {
       header={header}
       tabs={tabs}
       tabsAriaLabel='Agency context navigation'
+      commandPalette={{
+        agencies: props.memberships.map((membership) => ({
+          id: membership.agency_id,
+          label: membership.agency_name?.trim() || membership.agency_id,
+          sublabel: `Agency ID: ${membership.agency_id}`,
+          href: buildHref('/gnr8/agency', new URLSearchParams([['agency', membership.agency_id]])),
+        })),
+        clients: switchableClients.map((client) => ({
+          id: client.clientId,
+          label: client.label,
+          sublabel: `Agency: ${props.agencyName}`,
+          href: `/gnr8/agency/clients/${encodeURIComponent(client.clientId)}/dashboard?agency=${encodeURIComponent(activeAgencyId)}`,
+        })),
+        routes: [
+          ...(isAdminView
+            ? [{ id: 'route-command-center', label: 'Command Center', href: '/gnr8/command-center', sublabel: 'Global route' }]
+            : []),
+          { id: 'route-agency-dashboard', label: 'Agency Dashboard', href: dashboardHref, sublabel: 'Key route' },
+          { id: 'route-agency-clients', label: 'Agency Clients', href: clientsHref, sublabel: 'Key route' },
+          { id: 'route-agency-settings', label: 'Agency Settings', href: settingsHref, sublabel: 'Key route' },
+          ...(clientDashboardHref
+            ? [{ id: 'route-client-dashboard', label: 'Client Dashboard', href: clientDashboardHref, sublabel: 'Key route' }]
+            : []),
+          ...(clientSettingsHref
+            ? [{ id: 'route-client-settings', label: 'Client Settings', href: clientSettingsHref, sublabel: 'Key route' }]
+            : []),
+          ...(clientTeamHref ? [{ id: 'route-client-team', label: 'Client Team', href: clientTeamHref, sublabel: 'Key route' }] : []),
+        ],
+        accessibleAgencyIds: scopedAgencyIds,
+        accessibleClientIds: scopedClientIds,
+        allowCommandCenter: isAdminView,
+      }}
       afterTabs={
         <div style={{ marginTop: 12 }}>
           {!isAdminView && props.memberships.length > 1 ? (
@@ -165,6 +224,7 @@ export default function AgencyContextLayout(props: Props) {
           ) : null}
           <WorkspaceRecentItems
             accessibleAgencyIds={scopedAgencyIds}
+            accessibleClientIds={scopedClientIds}
             allowCommandCenter={isAdminView}
             title='Recent Items'
             maxVisible={6}

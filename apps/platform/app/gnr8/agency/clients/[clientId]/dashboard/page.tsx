@@ -191,6 +191,7 @@ export default async function AgencyClientDashboardEntryPage(props: {
     <ClientContextLayout
       agencyId={currentUserAgency.agency_id}
       requestedAgencyId={requestedAgencyId}
+      memberships={availableAgencyMemberships}
       clientId={clientId}
       clientName={readModel.client.client_name?.trim() || shortId(clientId)}
       clientOptions={switchableClients}
