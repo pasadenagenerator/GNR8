@@ -3,6 +3,16 @@
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { useEffect, useMemo, useState } from 'react'
 
+import {
+  getSavedCommands,
+  normalizeSavedCommands,
+  pinCommand,
+  removeSavedCommand,
+  saveCommand,
+  unpinCommand,
+  type SavedCommandItem,
+  type SavedCommandType,
+} from '@/src/workspace/command-palette-saved'
 import { getRecentItems, type WorkspaceRecentItem } from '@/src/workspace/workspace-recents'
 
 export type CommandResultAction = {
@@ -18,8 +28,10 @@ export type CommandItem = {
   sublabel?: string
   aliases?: string[]
   href?: string
-  type: 'recent' | 'agency' | 'client' | 'route' | 'action'
+  type: 'pinned' | 'saved' | 'recent' | 'agency' | 'client' | 'route' | 'action'
   action?: () => void
+  sourceItemId?: string
+  sourceType?: SavedCommandType
   preview?: {
     title?: string
     lines?: string[]
@@ -50,6 +62,8 @@ type Props = {
 type GroupKey = CommandItem['type']
 
 const GROUP_LABELS: Record<GroupKey, string> = {
+  pinned: 'Pinned',
+  saved: 'Saved',
   action: 'Actions',
   recent: 'Recent',
   agency: 'Agencies',
@@ -57,7 +71,7 @@ const GROUP_LABELS: Record<GroupKey, string> = {
   route: 'Navigation',
 }
 
-const GROUP_ORDER: GroupKey[] = ['action', 'route', 'recent', 'agency', 'client']
+const GROUP_ORDER: GroupKey[] = ['pinned', 'saved', 'action', 'route', 'recent', 'agency', 'client']
 
 type WorkspaceScope = 'agency' | 'client' | 'command-center' | 'other'
 
@@ -97,6 +111,8 @@ function toQueryParams(href: string): URLSearchParams {
 }
 
 function itemTypeLabel(type: CommandItem['type']): string {
+  if (type === 'pinned') return 'Pinned'
+  if (type === 'saved') return 'Saved'
   if (type === 'agency') return 'Agency'
   if (type === 'client') return 'Client'
   if (type === 'route') return 'Route'
@@ -171,6 +187,51 @@ function inferAliases(label: string): string[] | undefined {
   if (normalized === 'agency settings' || normalized === 'client settings') aliases.push('config', 'preferences')
   if (normalized.includes('command center')) aliases.push('admin', 'superadmin')
   return uniqueAliases(aliases)
+}
+
+function prependMeta(meta: string[] | undefined, value: string): string[] {
+  const values = [value, ...(meta ?? [])]
+  return uniqueAliases(values) ?? [value]
+}
+
+function buildPersonalizedItem(item: CommandItem, type: 'pinned' | 'saved'): CommandItem {
+  return {
+    ...item,
+    id: `${type}:${item.id}`,
+    type,
+    sourceItemId: item.id,
+    sourceType: item.type === 'action' || item.type === 'route' || item.type === 'agency' || item.type === 'client' ? item.type : undefined,
+    preview: {
+      ...item.preview,
+      meta: prependMeta(item.preview?.meta, type === 'pinned' ? 'Pinned' : 'Saved'),
+    },
+  }
+}
+
+function resolvePersonalizationType(item: CommandItem): SavedCommandType | null {
+  if (item.type === 'action' || item.type === 'route' || item.type === 'agency' || item.type === 'client') return item.type
+  if (item.sourceType) return item.sourceType
+  return null
+}
+
+function resolvePersonalizationId(item: CommandItem): string | null {
+  const id = normalizeText(item.sourceItemId ?? item.id)
+  return id || null
+}
+
+function toSavedCommandInput(item: CommandItem): SavedCommandItem | null {
+  const id = resolvePersonalizationId(item)
+  const type = resolvePersonalizationType(item)
+  const label = normalizeText(item.label)
+  if (!id || !type || !label) return null
+
+  return {
+    id,
+    type,
+    label,
+    href: normalizeText(item.href),
+    timestamp: Date.now(),
+  }
 }
 
 function toStaticItems(
@@ -293,6 +354,8 @@ function scoreIndexedItem(
 
   let total = bestScore
   if (indexedItem.item.type === 'recent') total += indexedItem.item.recentRankBoost ?? 0
+  if (indexedItem.item.type === 'saved') total += 28
+  if (indexedItem.item.type === 'pinned') total += 42
   if (indexedItem.item.type === 'action') total += 16
   if (indexedItem.item.type === 'action' && indexedItem.item.contextScope === workspaceScope) total += 18
   if (indexedItem.item.type === 'action' && indexedItem.item.contextScope === 'global') total += 8
@@ -308,6 +371,7 @@ export default function CommandPalette(props: Props) {
   const [query, setQuery] = useState('')
   const [activeIndex, setActiveIndex] = useState(0)
   const [recentItems, setRecentItems] = useState<WorkspaceRecentItem[]>([])
+  const [savedCommands, setSavedCommands] = useState<SavedCommandItem[]>([])
   const [isCompactLayout, setIsCompactLayout] = useState(false)
 
   const allowedAgencyIds = useMemo(() => normalizeSet(props.accessibleAgencyIds), [props.accessibleAgencyIds])
@@ -324,6 +388,10 @@ export default function CommandPalette(props: Props) {
   useEffect(() => {
     setRecentItems(getRecentItems())
   }, [pathname, searchParams])
+
+  useEffect(() => {
+    setSavedCommands(getSavedCommands())
+  }, [pathname, searchParams, isOpen])
 
   useEffect(() => {
     function handleGlobalKeydown(event: KeyboardEvent): void {
@@ -635,7 +703,31 @@ export default function CommandPalette(props: Props) {
         ...item,
         secondaryActions: [{ id: `${item.id}:run`, label: 'Run', action: item.action }],
       }))
-    return [...visibleActions, ...recents, ...agencies, ...clients, ...routes]
+    const baseItems = [...visibleActions, ...recents, ...agencies, ...clients, ...routes]
+    const persistableById = new Map(
+      baseItems
+        .filter((item) => resolvePersonalizationType(item) != null)
+        .map((item) => [item.id, item]),
+    )
+    const savedState = normalizeSavedCommands(savedCommands)
+
+    const pinnedItems: CommandItem[] = []
+    const savedItems: CommandItem[] = []
+    const personalizedIds = new Set<string>()
+
+    for (const savedItem of savedState) {
+      const currentItem = persistableById.get(savedItem.id)
+      if (!currentItem || resolvePersonalizationType(currentItem) !== savedItem.type) continue
+      personalizedIds.add(currentItem.id)
+      if (savedItem.pinned) {
+        pinnedItems.push(buildPersonalizedItem(currentItem, 'pinned'))
+      } else {
+        savedItems.push(buildPersonalizedItem(currentItem, 'saved'))
+      }
+    }
+
+    const nonPersonalizedItems = baseItems.filter((item) => !personalizedIds.has(item.id))
+    return [...pinnedItems, ...savedItems, ...nonPersonalizedItems]
   }, [
     activeAgencyId,
     allowedAgencyIds,
@@ -647,6 +739,7 @@ export default function CommandPalette(props: Props) {
     props.clients,
     props.routes,
     recentItems,
+    savedCommands,
     router,
     workspaceScope,
   ])
@@ -715,7 +808,42 @@ export default function CommandPalette(props: Props) {
     return new Map(filteredItems.map((item, index) => [item.id, index]))
   }, [filteredItems])
 
+  const savedStateById = useMemo(() => {
+    const entries = normalizeSavedCommands(savedCommands)
+    return new Map(entries.map((entry) => [entry.id, entry]))
+  }, [savedCommands])
+
   const activeItem = filteredItems[activeIndex]
+
+  function isPersonalizable(item: CommandItem): boolean {
+    return toSavedCommandInput(item) != null
+  }
+
+  function isSaved(item: CommandItem): boolean {
+    const id = resolvePersonalizationId(item)
+    if (!id) return false
+    return savedStateById.has(id)
+  }
+
+  function isPinned(item: CommandItem): boolean {
+    const id = resolvePersonalizationId(item)
+    if (!id) return false
+    return savedStateById.get(id)?.pinned === true
+  }
+
+  function toggleSaved(item: CommandItem): void {
+    const commandInput = toSavedCommandInput(item)
+    if (!commandInput) return
+    const next = isSaved(item) ? removeSavedCommand(commandInput.id) : saveCommand(commandInput)
+    setSavedCommands(next)
+  }
+
+  function togglePinned(item: CommandItem): void {
+    const commandInput = toSavedCommandInput(item)
+    if (!commandInput) return
+    const next = isPinned(item) ? unpinCommand(commandInput.id) : pinCommand(commandInput)
+    setSavedCommands(next)
+  }
 
   function handleSelect(item: CommandItem): void {
     setIsOpen(false)
@@ -830,6 +958,9 @@ export default function CommandPalette(props: Props) {
                     const itemIndex = itemIndexById.get(item.id) ?? -1
                     const isActive = itemIndex >= 0 && itemIndex === activeIndex
                     const hasSecondaryActions = Boolean(item.secondaryActions && item.secondaryActions.length > 0)
+                    const itemIsPinned = isPinned(item)
+                    const itemIsSaved = isSaved(item)
+                    const canPersonalize = isPersonalizable(item)
 
                     return (
                       <div
@@ -858,20 +989,74 @@ export default function CommandPalette(props: Props) {
                         >
                           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
                             <div style={{ fontSize: 13, color: '#0f172a', fontWeight: 600 }}>{item.label}</div>
-                            <span
-                              style={{
-                                fontSize: 10,
-                                color: '#475569',
-                                border: '1px solid #cbd5e1',
-                                borderRadius: 999,
-                                padding: '2px 7px',
-                                background: '#f8fafc',
-                                textTransform: 'uppercase',
-                                letterSpacing: 0.3,
-                              }}
-                            >
-                              {itemTypeLabel(item.type)}
-                            </span>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                              {canPersonalize ? (
+                                <>
+                                  <button
+                                    type='button'
+                                    aria-label={itemIsPinned ? 'Unpin result' : 'Pin result'}
+                                    title={itemIsPinned ? 'Unpin' : 'Pin'}
+                                    onClick={(event) => {
+                                      event.preventDefault()
+                                      event.stopPropagation()
+                                      togglePinned(item)
+                                    }}
+                                    style={{
+                                      border: itemIsPinned ? '1px solid #93c5fd' : '1px solid #cbd5e1',
+                                      background: itemIsPinned ? '#eff6ff' : '#fff',
+                                      color: itemIsPinned ? '#1d4ed8' : '#475569',
+                                      borderRadius: 999,
+                                      padding: '2px 7px',
+                                      fontSize: 10,
+                                      fontWeight: 700,
+                                      cursor: 'pointer',
+                                      textTransform: 'uppercase',
+                                      letterSpacing: 0.2,
+                                    }}
+                                  >
+                                    {itemIsPinned ? 'Unpin' : 'Pin'}
+                                  </button>
+                                  <button
+                                    type='button'
+                                    aria-label={itemIsSaved ? 'Remove saved result' : 'Save result'}
+                                    title={itemIsSaved ? 'Remove saved' : 'Save'}
+                                    onClick={(event) => {
+                                      event.preventDefault()
+                                      event.stopPropagation()
+                                      toggleSaved(item)
+                                    }}
+                                    style={{
+                                      border: itemIsSaved ? '1px solid #a7f3d0' : '1px solid #cbd5e1',
+                                      background: itemIsSaved ? '#ecfdf5' : '#fff',
+                                      color: itemIsSaved ? '#047857' : '#475569',
+                                      borderRadius: 999,
+                                      padding: '2px 7px',
+                                      fontSize: 10,
+                                      fontWeight: 700,
+                                      cursor: 'pointer',
+                                      textTransform: 'uppercase',
+                                      letterSpacing: 0.2,
+                                    }}
+                                  >
+                                    {itemIsSaved ? 'Saved' : 'Save'}
+                                  </button>
+                                </>
+                              ) : null}
+                              <span
+                                style={{
+                                  fontSize: 10,
+                                  color: '#475569',
+                                  border: '1px solid #cbd5e1',
+                                  borderRadius: 999,
+                                  padding: '2px 7px',
+                                  background: '#f8fafc',
+                                  textTransform: 'uppercase',
+                                  letterSpacing: 0.3,
+                                }}
+                              >
+                                {itemTypeLabel(item.type)}
+                              </span>
+                            </div>
                           </div>
                           {item.sublabel ? <div style={{ marginTop: 2, fontSize: 12, color: '#64748b' }}>{item.sublabel}</div> : null}
                         </button>
@@ -928,6 +1113,48 @@ export default function CommandPalette(props: Props) {
                 <div style={{ marginTop: 8, fontSize: 16, color: '#0f172a', fontWeight: 700 }}>
                   {activeItem.preview?.title || activeItem.label}
                 </div>
+                {isPersonalizable(activeItem) ? (
+                  <div style={{ marginTop: 8, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                    <button
+                      type='button'
+                      onClick={(event) => {
+                        event.preventDefault()
+                        togglePinned(activeItem)
+                      }}
+                      style={{
+                        border: isPinned(activeItem) ? '1px solid #93c5fd' : '1px solid #cbd5e1',
+                        background: isPinned(activeItem) ? '#eff6ff' : '#fff',
+                        color: isPinned(activeItem) ? '#1d4ed8' : '#334155',
+                        borderRadius: 999,
+                        fontSize: 11,
+                        fontWeight: 700,
+                        padding: '4px 9px',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      {isPinned(activeItem) ? 'Unpin' : 'Pin'}
+                    </button>
+                    <button
+                      type='button'
+                      onClick={(event) => {
+                        event.preventDefault()
+                        toggleSaved(activeItem)
+                      }}
+                      style={{
+                        border: isSaved(activeItem) ? '1px solid #a7f3d0' : '1px solid #cbd5e1',
+                        background: isSaved(activeItem) ? '#ecfdf5' : '#fff',
+                        color: isSaved(activeItem) ? '#047857' : '#334155',
+                        borderRadius: 999,
+                        fontSize: 11,
+                        fontWeight: 700,
+                        padding: '4px 9px',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      {isSaved(activeItem) ? 'Saved' : 'Save'}
+                    </button>
+                  </div>
+                ) : null}
                 {(activeItem.preview?.lines ?? []).map((line, index) => (
                   <div key={`${activeItem.id}:line:${index}`} style={{ marginTop: 6, fontSize: 12, color: '#334155' }}>
                     {line}
