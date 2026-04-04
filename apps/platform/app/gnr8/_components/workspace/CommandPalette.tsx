@@ -9,8 +9,9 @@ export type CommandItem = {
   id: string
   label: string
   sublabel?: string
-  href: string
-  type: 'recent' | 'agency' | 'client' | 'route'
+  href?: string
+  type: 'recent' | 'agency' | 'client' | 'route' | 'action'
+  action?: () => void
 }
 
 export type CommandPaletteOption = {
@@ -32,13 +33,18 @@ type Props = {
 type GroupKey = CommandItem['type']
 
 const GROUP_LABELS: Record<GroupKey, string> = {
+  action: 'Actions',
   recent: 'Recent',
   agency: 'Agencies',
   client: 'Clients',
-  route: 'Routes',
+  route: 'Navigation',
 }
 
-const GROUP_ORDER: GroupKey[] = ['recent', 'agency', 'client', 'route']
+const GROUP_ORDER: GroupKey[] = ['action', 'route', 'recent', 'agency', 'client']
+
+type WorkspaceScope = 'agency' | 'client' | 'command-center' | 'other'
+
+type ScoreBucket = 0 | 1 | 2 | 3
 
 function normalizeText(value: unknown): string {
   return String(value ?? '').trim()
@@ -83,12 +89,15 @@ function isVisibleRecentItem(
 function scoreMatch(item: CommandItem, query: string): number {
   const label = item.label.toLowerCase()
   const sublabel = (item.sublabel ?? '').toLowerCase()
-  if (label === query || sublabel === query) return 0
-  if (label.startsWith(query) || sublabel.startsWith(query)) return 1
-  return 2
+  let bucket: ScoreBucket = 3
+  if (label === query || sublabel === query) bucket = 0
+  else if (label.startsWith(query) || sublabel.startsWith(query)) bucket = 1
+  else if (label.includes(query) || sublabel.includes(query)) bucket = 2
+  const actionBoost = item.type === 'action' ? -0.15 : 0
+  return bucket + actionBoost
 }
 
-function toStaticItems(type: Exclude<CommandItem['type'], 'recent'>, options: CommandPaletteOption[]): CommandItem[] {
+function toStaticItems(type: 'agency' | 'client' | 'route', options: CommandPaletteOption[]): CommandItem[] {
   const items: CommandItem[] = []
   for (const option of options) {
     const id = normalizeText(option.id)
@@ -119,6 +128,13 @@ export default function CommandPalette(props: Props) {
 
   const allowedAgencyIds = useMemo(() => normalizeSet(props.accessibleAgencyIds), [props.accessibleAgencyIds])
   const allowedClientIds = useMemo(() => normalizeSet(props.accessibleClientIds), [props.accessibleClientIds])
+  const activeAgencyId = useMemo(() => normalizeText(searchParams?.get('agency') ?? ''), [searchParams])
+  const workspaceScope = useMemo<WorkspaceScope>(() => {
+    if (pathname.startsWith('/gnr8/agency/clients/')) return 'client'
+    if (pathname.startsWith('/gnr8/agency')) return 'agency'
+    if (pathname.startsWith('/gnr8/command-center')) return 'command-center'
+    return 'other'
+  }, [pathname])
 
   useEffect(() => {
     setRecentItems(getRecentItems())
@@ -174,16 +190,123 @@ export default function CommandPalette(props: Props) {
       .map((item) => ({
         id: `recent:${item.href}`,
         label: item.label,
-        href: item.href,
+        href: normalizeText(item.href),
         type: 'recent' as const,
       }))
 
     const agencies = toStaticItems('agency', props.agencies ?? [])
     const clients = toStaticItems('client', props.clients ?? [])
     const routes = toStaticItems('route', props.routes ?? [])
+    const routeById = new Map(routes.map((route) => [route.id, route]))
+    const clientDashboardHref =
+      routeById.get('route-client-dashboard')?.href ??
+      clients[0]?.href ??
+      (workspaceScope === 'client' ? pathname : '')
+    const clientSettingsHref = routeById.get('route-client-settings')?.href
+    const clientTeamHref = routeById.get('route-client-team')?.href
+    const agencyDashboardHref = routeById.get('route-agency-dashboard')?.href ?? '/gnr8/agency'
+    const agencySettingsHref =
+      routeById.get('route-agency-settings')?.href ??
+      (activeAgencyId ? `/gnr8/agency/settings?agency=${encodeURIComponent(activeAgencyId)}` : '/gnr8/agency/settings')
+    const agencyMembersHref =
+      activeAgencyId ? `/gnr8/agency/members?agency=${encodeURIComponent(activeAgencyId)}` : '/gnr8/agency/members'
+    const createClientHref =
+      activeAgencyId ? `/gnr8/agency/clients/new?agency=${encodeURIComponent(activeAgencyId)}` : '/gnr8/agency/clients/new'
 
-    return [...recents, ...agencies, ...clients, ...routes]
-  }, [allowedAgencyIds, allowedClientIds, props.agencies, props.allowCommandCenter, props.clients, props.routes, recentItems])
+    const actions: CommandItem[] = [
+      {
+        id: 'action-go-command-center',
+        label: 'Go to Command Center',
+        sublabel: 'Navigation action',
+        type: 'action',
+        action: () => router.push('/gnr8/command-center'),
+      },
+      {
+        id: 'action-go-agency-dashboard',
+        label: 'Go to Agency Dashboard',
+        sublabel: 'Navigation action',
+        type: 'action',
+        action: () => router.push(agencyDashboardHref),
+      },
+      ...(clientDashboardHref
+        ? [
+            {
+              id: 'action-go-client-dashboard',
+              label: 'Go to Client Dashboard',
+              sublabel: 'Navigation action',
+              type: 'action' as const,
+              action: () => router.push(clientDashboardHref),
+            },
+          ]
+        : []),
+      ...(workspaceScope === 'agency'
+        ? [
+            {
+              id: 'action-create-client',
+              label: 'Create new client',
+              sublabel: 'Agency workspace action',
+              type: 'action' as const,
+              action: () => router.push(createClientHref),
+            },
+            {
+              id: 'action-invite-agency-member',
+              label: 'Invite team member',
+              sublabel: 'Agency workspace action',
+              type: 'action' as const,
+              action: () => router.push(agencyMembersHref),
+            },
+          ]
+        : []),
+      ...(workspaceScope === 'agency'
+        ? [
+            {
+              id: 'action-open-agency-settings',
+              label: 'Open Agency Settings',
+              sublabel: 'Settings action',
+              type: 'action' as const,
+              action: () => router.push(agencySettingsHref),
+            },
+          ]
+        : []),
+      ...(workspaceScope === 'client' && clientSettingsHref
+        ? [
+            {
+              id: 'action-open-client-settings',
+              label: 'Open Client Settings',
+              sublabel: 'Client workspace action',
+              type: 'action' as const,
+              action: () => router.push(clientSettingsHref),
+            },
+          ]
+        : []),
+      ...(workspaceScope === 'client' && clientTeamHref
+        ? [
+            {
+              id: 'action-open-client-team',
+              label: 'Open Client Team',
+              sublabel: 'Client workspace action',
+              type: 'action' as const,
+              action: () => router.push(clientTeamHref),
+            },
+          ]
+        : []),
+    ]
+
+    const visibleActions = actions.filter((item) => item.id !== 'action-go-command-center' || Boolean(props.allowCommandCenter))
+    return [...visibleActions, ...recents, ...agencies, ...clients, ...routes]
+  }, [
+    activeAgencyId,
+    allowedAgencyIds,
+    allowedClientIds,
+    pathname,
+    props.agencies,
+    props.allowCommandCenter,
+    props.clients,
+    props.routes,
+    recentItems,
+    router,
+    workspaceScope,
+  ])
 
   const filteredItems = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase()
@@ -195,7 +318,11 @@ export default function CommandPalette(props: Props) {
         const sublabel = (item.sublabel ?? '').toLowerCase()
         return label.includes(normalizedQuery) || sublabel.includes(normalizedQuery)
       })
-      .sort((left, right) => scoreMatch(left, normalizedQuery) - scoreMatch(right, normalizedQuery))
+      .sort((left, right) => {
+        const scoreDelta = scoreMatch(left, normalizedQuery) - scoreMatch(right, normalizedQuery)
+        if (scoreDelta !== 0) return scoreDelta
+        return left.label.localeCompare(right.label)
+      })
   }, [allItems, query])
 
   useEffect(() => {
@@ -224,7 +351,11 @@ export default function CommandPalette(props: Props) {
     setIsOpen(false)
     setQuery('')
     setActiveIndex(0)
-    router.push(item.href)
+    if (item.href) {
+      router.push(item.href)
+      return
+    }
+    item.action?.()
   }
 
   if (!isOpen) return null
@@ -282,6 +413,7 @@ export default function CommandPalette(props: Props) {
               color: '#0f172a',
             }}
           />
+          <div style={{ marginTop: 8, fontSize: 11, color: '#64748b', textAlign: 'right' }}>⌘K</div>
         </div>
 
         <div style={{ maxHeight: 'calc(76vh - 70px)', overflowY: 'auto', padding: 8 }}>
