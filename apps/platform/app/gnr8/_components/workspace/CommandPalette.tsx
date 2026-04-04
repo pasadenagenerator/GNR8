@@ -922,6 +922,7 @@ export default function CommandPalette(props: Props) {
   }
 
   if (!isOpen) return null
+  const commandPaletteFontFamily = 'ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial'
 
   return (
     <div
@@ -937,6 +938,7 @@ export default function CommandPalette(props: Props) {
         display: 'grid',
         placeItems: 'start center',
         padding: '10vh 16px 16px',
+        fontFamily: commandPaletteFontFamily,
       }}
     >
       <div
@@ -949,9 +951,10 @@ export default function CommandPalette(props: Props) {
           border: '1px solid #cbd5e1',
           background: '#fff',
           boxShadow: '0 22px 70px rgba(15, 23, 42, 0.22)',
+          fontFamily: commandPaletteFontFamily,
         }}
       >
-        <div style={{ borderBottom: '1px solid #e2e8f0', padding: 12 }}>
+        <div style={{ borderBottom: '1px solid #e2e8f0', padding: '14px 14px 12px', fontFamily: commandPaletteFontFamily }}>
           <input
             autoFocus
             value={query}
@@ -969,14 +972,18 @@ export default function CommandPalette(props: Props) {
             aria-label='Search commands'
             style={{
               width: '100%',
-              borderRadius: 8,
+              borderRadius: 10,
               border: '1px solid #cbd5e1',
-              padding: '9px 11px',
+              padding: '10px 12px',
               fontSize: 14,
               color: '#0f172a',
+              lineHeight: 1.4,
+              fontFamily: commandPaletteFontFamily,
             }}
           />
-          <div style={{ marginTop: 8, fontSize: 11, color: '#64748b', textAlign: 'right' }}>⌘K • Enter</div>
+          <div style={{ marginTop: 10, fontSize: 11, color: '#64748b', textAlign: 'right', fontFamily: commandPaletteFontFamily }}>
+            ⌘K • Enter
+          </div>
         </div>
 
         <div
@@ -984,26 +991,36 @@ export default function CommandPalette(props: Props) {
             display: 'grid',
             gridTemplateColumns: isCompactLayout ? 'minmax(0, 1fr)' : 'minmax(0, 1fr) minmax(260px, 320px)',
             gap: 0,
-            maxHeight: 'calc(76vh - 70px)',
+            maxHeight: 'calc(76vh - 84px)',
+            fontFamily: commandPaletteFontFamily,
           }}
         >
-          <div style={{ overflowY: 'auto', padding: 8 }}>
+          <div style={{ overflowY: 'auto', padding: '12px', fontFamily: commandPaletteFontFamily }}>
             {groupedItems.length === 0 ? (
-              <div style={{ padding: '10px 8px', fontSize: 13, color: '#64748b' }}>
-                <div>No results found.</div>
-                <div style={{ marginTop: 4 }}>Try searching for a client, settings, team, or create.</div>
+              <div style={{ padding: '16px 10px', fontSize: 13, color: '#64748b', lineHeight: 1.45, fontFamily: commandPaletteFontFamily }}>
+                <div style={{ fontSize: 14, color: '#334155', fontWeight: 600, fontFamily: commandPaletteFontFamily }}>No results found.</div>
+                <div style={{ marginTop: 6, fontFamily: commandPaletteFontFamily }}>Try searching for a client, settings, team, or create.</div>
               </div>
             ) : (
-              groupedItems.map((group) => (
-                <section key={group.key} aria-label={group.label} style={{ padding: 4 }}>
+              groupedItems.map((group, groupIndex) => (
+                <section
+                  key={group.key}
+                  aria-label={group.label}
+                  style={{
+                    padding: '0 2px',
+                    marginTop: groupIndex === 0 ? 0 : 10,
+                    fontFamily: commandPaletteFontFamily,
+                  }}
+                >
                   <div
                     style={{
-                      padding: '6px 8px',
+                      padding: '5px 8px 7px',
                       fontSize: 11,
                       fontWeight: 700,
-                      letterSpacing: 0.4,
+                      letterSpacing: 0.45,
                       textTransform: 'uppercase',
                       color: '#64748b',
+                      fontFamily: commandPaletteFontFamily,
                     }}
                   >
                     {group.label}
@@ -1021,11 +1038,13 @@ export default function CommandPalette(props: Props) {
                         key={item.id}
                         onMouseEnter={() => setActiveIndex(itemIndex)}
                         style={{
-                          border: isActive ? '1px solid #3b82f6' : '1px solid #e2e8f0',
-                          borderRadius: 8,
-                          background: isActive ? '#e9f2ff' : '#fff',
-                          marginBottom: 6,
-                          boxShadow: isActive ? '0 0 0 1px rgba(59, 130, 246, 0.2)' : undefined,
+                          border: isActive ? '1px solid #bfdbfe' : '1px solid #e2e8f0',
+                          borderRadius: 10,
+                          background: isActive ? '#f8fbff' : '#fff',
+                          marginBottom: 7,
+                          boxShadow: isActive ? '0 0 0 1px rgba(59, 130, 246, 0.08)' : undefined,
+                          transition: 'background-color 120ms ease, border-color 120ms ease, box-shadow 120ms ease',
+                          fontFamily: commandPaletteFontFamily,
                         }}
                       >
                         <button
@@ -1035,14 +1054,17 @@ export default function CommandPalette(props: Props) {
                             width: '100%',
                             textAlign: 'left',
                             border: 0,
-                            borderRadius: 8,
+                            borderRadius: 10,
                             background: 'transparent',
-                            padding: '9px 10px',
+                            padding: '10px 11px',
                             cursor: 'pointer',
+                            fontFamily: commandPaletteFontFamily,
                           }}
                         >
                           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
-                            <div style={{ fontSize: 13, color: '#0f172a', fontWeight: 600 }}>{item.label}</div>
+                            <div style={{ fontSize: 13, color: '#0f172a', fontWeight: 600, lineHeight: 1.35, fontFamily: commandPaletteFontFamily }}>
+                              {item.label}
+                            </div>
                             <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                               {canPersonalize ? (
                                 <>
@@ -1066,6 +1088,7 @@ export default function CommandPalette(props: Props) {
                                       cursor: 'pointer',
                                       textTransform: 'uppercase',
                                       letterSpacing: 0.2,
+                                      fontFamily: commandPaletteFontFamily,
                                     }}
                                   >
                                     {itemIsPinned ? 'Unpin' : 'Pin'}
@@ -1090,6 +1113,7 @@ export default function CommandPalette(props: Props) {
                                       cursor: 'pointer',
                                       textTransform: 'uppercase',
                                       letterSpacing: 0.2,
+                                      fontFamily: commandPaletteFontFamily,
                                     }}
                                   >
                                     {itemIsSaved ? 'Saved' : 'Save'}
@@ -1106,16 +1130,21 @@ export default function CommandPalette(props: Props) {
                                   background: '#f8fafc',
                                   textTransform: 'uppercase',
                                   letterSpacing: 0.3,
+                                  fontFamily: commandPaletteFontFamily,
                                 }}
                               >
                                 {itemTypeLabel(item.type)}
                               </span>
                             </div>
                           </div>
-                          {item.sublabel ? <div style={{ marginTop: 2, fontSize: 12, color: '#64748b' }}>{item.sublabel}</div> : null}
+                          {item.sublabel ? (
+                            <div style={{ marginTop: 4, fontSize: 12, color: '#64748b', lineHeight: 1.35, fontFamily: commandPaletteFontFamily }}>
+                              {item.sublabel}
+                            </div>
+                          ) : null}
                         </button>
                         {isActive && hasSecondaryActions ? (
-                          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', padding: '0 10px 10px' }}>
+                          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', padding: '0 11px 10px', fontFamily: commandPaletteFontFamily }}>
                             {item.secondaryActions?.map((secondaryAction) => (
                               <button
                                 key={secondaryAction.id}
@@ -1134,6 +1163,7 @@ export default function CommandPalette(props: Props) {
                                   fontWeight: 600,
                                   padding: '4px 9px',
                                   cursor: 'pointer',
+                                  fontFamily: commandPaletteFontFamily,
                                 }}
                               >
                                 {secondaryAction.label}
@@ -1154,21 +1184,31 @@ export default function CommandPalette(props: Props) {
             style={{
               borderTop: isCompactLayout ? '1px solid #e2e8f0' : undefined,
               borderLeft: isCompactLayout ? undefined : '1px solid #e2e8f0',
-              padding: 12,
-              background: '#f8fafc',
+              padding: isCompactLayout ? '12px 14px 14px' : '14px 16px 16px',
+              background: '#fcfdff',
               overflowY: 'auto',
+              fontFamily: commandPaletteFontFamily,
             }}
           >
             {activeItem ? (
               <>
-                <div style={{ fontSize: 11, color: '#64748b', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.4 }}>
+                <div
+                  style={{
+                    fontSize: 11,
+                    color: '#64748b',
+                    fontWeight: 700,
+                    textTransform: 'uppercase',
+                    letterSpacing: 0.4,
+                    fontFamily: commandPaletteFontFamily,
+                  }}
+                >
                   Preview
                 </div>
-                <div style={{ marginTop: 8, fontSize: 16, color: '#0f172a', fontWeight: 700 }}>
+                <div style={{ marginTop: 9, fontSize: 16, color: '#0f172a', fontWeight: 700, lineHeight: 1.3, fontFamily: commandPaletteFontFamily }}>
                   {activeItem.preview?.title || activeItem.label}
                 </div>
                 {isPersonalizable(activeItem) ? (
-                  <div style={{ marginTop: 8, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                  <div style={{ marginTop: 9, display: 'flex', gap: 6, flexWrap: 'wrap', fontFamily: commandPaletteFontFamily }}>
                     <button
                       type='button'
                       onClick={(event) => {
@@ -1184,6 +1224,7 @@ export default function CommandPalette(props: Props) {
                         fontWeight: 700,
                         padding: '4px 9px',
                         cursor: 'pointer',
+                        fontFamily: commandPaletteFontFamily,
                       }}
                     >
                       {isPinned(activeItem) ? 'Unpin' : 'Pin'}
@@ -1203,6 +1244,7 @@ export default function CommandPalette(props: Props) {
                         fontWeight: 700,
                         padding: '4px 9px',
                         cursor: 'pointer',
+                        fontFamily: commandPaletteFontFamily,
                       }}
                     >
                       {isSaved(activeItem) ? 'Saved' : 'Save'}
@@ -1210,12 +1252,15 @@ export default function CommandPalette(props: Props) {
                   </div>
                 ) : null}
                 {(activeItem.preview?.lines ?? []).map((line, index) => (
-                  <div key={`${activeItem.id}:line:${index}`} style={{ marginTop: 6, fontSize: 12, color: '#334155' }}>
+                  <div
+                    key={`${activeItem.id}:line:${index}`}
+                    style={{ marginTop: 7, fontSize: 12, color: '#334155', lineHeight: 1.42, fontFamily: commandPaletteFontFamily }}
+                  >
                     {line}
                   </div>
                 ))}
                 {activeItem.preview?.meta?.length ? (
-                  <div style={{ marginTop: 10, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                  <div style={{ marginTop: 12, display: 'flex', gap: 6, flexWrap: 'wrap', fontFamily: commandPaletteFontFamily }}>
                     {activeItem.preview.meta.map((meta, index) => (
                       <span
                         key={`${activeItem.id}:meta:${index}`}
@@ -1226,6 +1271,7 @@ export default function CommandPalette(props: Props) {
                           borderRadius: 999,
                           padding: '3px 8px',
                           background: '#fff',
+                          fontFamily: commandPaletteFontFamily,
                         }}
                       >
                         {meta}
@@ -1235,7 +1281,9 @@ export default function CommandPalette(props: Props) {
                 ) : null}
               </>
             ) : (
-              <div style={{ fontSize: 12, color: '#64748b' }}>Select a result to view details.</div>
+              <div style={{ fontSize: 12, color: '#64748b', fontFamily: commandPaletteFontFamily }}>
+                Select a result to view details.
+              </div>
             )}
           </aside>
         </div>
