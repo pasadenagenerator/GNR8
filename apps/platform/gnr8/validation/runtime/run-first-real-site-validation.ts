@@ -4,6 +4,7 @@ import type { LinearMigrationPipelineStageResult, PipelineStageId, PipelineStage
 import type { RenderOutput } from "../../migration/render-output-model";
 import type { PreviewDocument } from "../../migration/preview-document-model";
 import type { ExecutionMode } from "../../migration/execution-plan-model";
+import type { DesignModel } from "../../design-intelligence/design-model";
 
 import type { ImportDiagnosticIssue } from "../../import/import-contract";
 import { createImportManifest } from "../../import/import-manifest";
@@ -39,6 +40,11 @@ function findPreviewDocument(pipelineStages: LinearMigrationPipelineStageResult[
   return stage?.output.previewDocument ?? null;
 }
 
+function findDesignModel(pipelineStages: LinearMigrationPipelineStageResult[]): DesignModel | null {
+  const stage = pipelineStages.find((s) => s.stageId === "design_intelligence");
+  return stage?.output.designModel ?? null;
+}
+
 function mapReportStatusToValidation(status: "success" | "success_with_warnings" | "blocked" | "failed"): ValidationOverallStatus {
   if (status === "success") return "passed";
   if (status === "success_with_warnings") return "passed_with_warnings";
@@ -62,6 +68,7 @@ function computeValidationSummary(input: {
   pipelineDiagnostics: PipelineDiagnosticIssue[];
   reportWarningCodes: string[];
   reportBlockingCodes: string[];
+  designModel: DesignModel | null;
   previewDocument: PreviewDocument;
   renderOutput: RenderOutput | null;
 }): ValidationSummary {
@@ -99,6 +106,7 @@ function computeValidationSummary(input: {
       importOutput: true,
       importManifest: true,
       pipelineResult: true,
+      designModel: input.designModel !== null,
       previewDocument: true,
       approvalPackage: true,
       executionPlan: true,
@@ -108,6 +116,14 @@ function computeValidationSummary(input: {
     pipeline: {
       status: input.pipelineStatus,
       stages: stageStatusMap(input.pipelineStages),
+    },
+    design: {
+      status: input.designModel ? "available" : "missing",
+      layoutStrategy: input.designModel?.layoutStrategy ?? null,
+      pageType: input.designModel?.pageType ?? null,
+      sectionDecisionCount: input.designModel?.sectionDecisions.length ?? 0,
+      rationaleSummary: (input.designModel?.rationale ?? []).map((r) => r.summary),
+      diagnosticCodes: input.designModel?.diagnostics.codes ?? [],
     },
     approval: {
       status: input.approvalStatus,
@@ -183,6 +199,7 @@ export async function runRealSiteValidation(options?: {
     throw new Error("internal_error: pipeline missing preview_generation previewDocument");
   }
   const renderOutput = findRenderOutput(phase1.pipeline.stages);
+  const designModel = findDesignModel(phase1.pipeline.stages);
 
   const importDiagnostics = importOutput.importDiagnostics.issues;
   const pipelineDiagnostics = phase1.pipeline.diagnostics;
@@ -201,6 +218,7 @@ export async function runRealSiteValidation(options?: {
     pipelineDiagnostics,
     reportWarningCodes,
     reportBlockingCodes,
+    designModel,
     previewDocument,
     renderOutput,
   });

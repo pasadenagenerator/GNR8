@@ -8,6 +8,7 @@ import { fileURLToPath } from "node:url";
 import type { JsonValue } from "../import/import-contract";
 import { createImportManifest } from "../import/import-manifest";
 import { importStaticSite } from "../import/runtime/import-static-site";
+import { createDesignModel } from "../design-intelligence/design-intelligence-service";
 import { readValidationFixtureSpec, validationFixtureDirAbs } from "../validation/runtime/fixture-spec";
 import { createLayoutPreparationModel } from "./layout-preparation-model";
 import { createPreparedSiteModel } from "./prepared-site-model";
@@ -36,8 +37,8 @@ test("createStaticHtmlRenderArtifact is deterministic across repeated runs", asy
 
   const p1 = createPreparedSiteModel({ importOutput: out1, importManifest: createImportManifest(out1) });
   const p2 = createPreparedSiteModel({ importOutput: out2, importManifest: createImportManifest(out2) });
-  const l1 = createLayoutPreparationModel(p1);
-  const l2 = createLayoutPreparationModel(p2);
+  const l1 = createLayoutPreparationModel(p1, createDesignModel(p1));
+  const l2 = createLayoutPreparationModel(p2, createDesignModel(p2));
   const r1 = createRenderOutput(l1);
   const r2 = createRenderOutput(l2);
 
@@ -55,7 +56,7 @@ test("createStaticHtmlRenderArtifact canonicalizes page/node ordering and output
     source: { kind: "single-entry-html", entryHtmlPath: "index.html", assetsDirPath: "assets" },
   });
   const prepared = createPreparedSiteModel({ importOutput, importManifest: createImportManifest(importOutput) });
-  const layout = createLayoutPreparationModel(prepared);
+  const layout = createLayoutPreparationModel(prepared, createDesignModel(prepared));
   const renderOutput = createRenderOutput(layout);
 
   const pageA = renderOutput.pages[0]!;
@@ -114,7 +115,7 @@ test("createStaticHtmlRenderArtifact emits real HTML documents and deterministic
     source: { kind: "single-entry-html", entryHtmlPath: "index.html", assetsDirPath: "assets" },
   });
   const prepared = createPreparedSiteModel({ importOutput, importManifest: createImportManifest(importOutput) });
-  const layout = createLayoutPreparationModel(prepared);
+  const layout = createLayoutPreparationModel(prepared, createDesignModel(prepared));
   const renderOutput = createRenderOutput(layout);
   const artifact = createStaticHtmlRenderArtifact(renderOutput);
 
@@ -152,7 +153,7 @@ test("createStaticHtmlRenderArtifact preserves minimal deterministic source meta
   });
 
   const prepared = createPreparedSiteModel({ importOutput, importManifest: createImportManifest(importOutput) });
-  const layout = createLayoutPreparationModel(prepared);
+  const layout = createLayoutPreparationModel(prepared, createDesignModel(prepared));
   const renderOutput = createRenderOutput(layout);
   const artifact = createStaticHtmlRenderArtifact(renderOutput);
 
@@ -197,7 +198,7 @@ test("createStaticHtmlRenderArtifact preserves body id/class when available", as
   });
 
   const prepared = createPreparedSiteModel({ importOutput, importManifest: createImportManifest(importOutput) });
-  const layout = createLayoutPreparationModel(prepared);
+  const layout = createLayoutPreparationModel(prepared, createDesignModel(prepared));
   const renderOutput = createRenderOutput(layout);
   const artifact = createStaticHtmlRenderArtifact(renderOutput);
 
@@ -239,7 +240,7 @@ test("createStaticHtmlRenderArtifact preserves only deterministic markup/attribu
     source: { kind: "single-entry-html", entryHtmlPath: "index.html", assetsDirPath: "assets" },
   });
   const prepared = createPreparedSiteModel({ importOutput, importManifest: createImportManifest(importOutput) });
-  const layout = createLayoutPreparationModel(prepared);
+  const layout = createLayoutPreparationModel(prepared, createDesignModel(prepared));
   const renderOutput = createRenderOutput(layout);
   const artifact = createStaticHtmlRenderArtifact(renderOutput);
 
@@ -290,7 +291,7 @@ test("createStaticHtmlRenderArtifact excludes script/json-ld/analytics text from
     source: { kind: "single-entry-html", entryHtmlPath: "index.html", assetsDirPath: "assets" },
   });
   const prepared = createPreparedSiteModel({ importOutput, importManifest: createImportManifest(importOutput) });
-  const layout = createLayoutPreparationModel(prepared);
+  const layout = createLayoutPreparationModel(prepared, createDesignModel(prepared));
   const renderOutput = createRenderOutput(layout);
   const artifact = createStaticHtmlRenderArtifact(renderOutput);
 
@@ -317,7 +318,7 @@ test("createStaticHtmlRenderArtifact keeps degraded/minimal non-renderable state
     ...prepared,
     documents: prepared.documents.map((d) => ({ ...d, domOutline: null })),
   };
-  const degradedLayout = createLayoutPreparationModel(degradedPrepared);
+  const degradedLayout = createLayoutPreparationModel(degradedPrepared, createDesignModel(degradedPrepared));
   const degradedRender = createRenderOutput(degradedLayout);
   const degradedArtifact = createStaticHtmlRenderArtifact(degradedRender);
 
@@ -329,7 +330,7 @@ test("createStaticHtmlRenderArtifact keeps degraded/minimal non-renderable state
   assert.ok(degradedArtifact.diagnostics.staticHtml.warnings.codes.includes("NO_RENDERABLE_PAGES"));
 
   const minimalPrepared = { ...prepared, documents: [] };
-  const minimalLayout = createLayoutPreparationModel(minimalPrepared);
+  const minimalLayout = createLayoutPreparationModel(minimalPrepared, createDesignModel(minimalPrepared));
   const minimalRender = createRenderOutput(minimalLayout);
   const minimalArtifact = createStaticHtmlRenderArtifact(minimalRender);
 
@@ -367,7 +368,7 @@ test("createStaticHtmlRenderArtifact keeps excerpt fallback when a block has no 
     source: { kind: "single-entry-html", entryHtmlPath: "index.html", assetsDirPath: "assets" },
   });
   const prepared = createPreparedSiteModel({ importOutput, importManifest: createImportManifest(importOutput) });
-  const layout = createLayoutPreparationModel(prepared);
+  const layout = createLayoutPreparationModel(prepared, createDesignModel(prepared));
   const renderOutput = createRenderOutput(layout);
   const artifact = createStaticHtmlRenderArtifact(renderOutput);
 
@@ -392,7 +393,7 @@ test("all current validation fixtures render through static-html path and warnin
     });
 
     const prepared = createPreparedSiteModel({ importOutput, importManifest: createImportManifest(importOutput) });
-    const layout = createLayoutPreparationModel(prepared);
+    const layout = createLayoutPreparationModel(prepared, createDesignModel(prepared));
     const renderOutput = createRenderOutput(layout);
     const artifact = createStaticHtmlRenderArtifact(renderOutput);
 
@@ -422,7 +423,7 @@ test("all current validation fixtures render through static-html path and warnin
     importOutput: warningImport,
     importManifest: createImportManifest(warningImport),
   });
-  const warningLayout = createLayoutPreparationModel(warningPrepared);
+  const warningLayout = createLayoutPreparationModel(warningPrepared, createDesignModel(warningPrepared));
   const warningRender = createRenderOutput(warningLayout);
   const warningArtifact = createStaticHtmlRenderArtifact(warningRender);
 
@@ -443,7 +444,7 @@ test("friend-site-01 export preserves minimal source markup for CSS/link/image a
     },
   });
   const prepared = createPreparedSiteModel({ importOutput, importManifest: createImportManifest(importOutput) });
-  const layout = createLayoutPreparationModel(prepared);
+  const layout = createLayoutPreparationModel(prepared, createDesignModel(prepared));
   const renderOutput = createRenderOutput(layout);
   const artifact = createStaticHtmlRenderArtifact(renderOutput);
 

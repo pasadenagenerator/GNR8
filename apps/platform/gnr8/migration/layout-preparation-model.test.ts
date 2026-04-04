@@ -4,6 +4,7 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 
 import type { JsonValue } from "../import/import-contract";
+import { createDesignModel } from "../design-intelligence/design-intelligence-service";
 import { createImportManifest } from "../import/import-manifest";
 import { importStaticSite } from "../import/runtime/import-static-site";
 import { createLayoutPreparationModel } from "./layout-preparation-model";
@@ -41,8 +42,8 @@ test("createLayoutPreparationModel is deterministic across repeated runs", async
   const p1 = createPreparedSiteModel({ importOutput: out1, importManifest: m1 });
   const p2 = createPreparedSiteModel({ importOutput: out2, importManifest: m2 });
 
-  const l1 = createLayoutPreparationModel(p1);
-  const l2 = createLayoutPreparationModel(p2);
+  const l1 = createLayoutPreparationModel(p1, createDesignModel(p1));
+  const l2 = createLayoutPreparationModel(p2, createDesignModel(p2));
 
   assert.equal(stableStringify(l1 as unknown as JsonValue), stableStringify(l2 as unknown as JsonValue));
 });
@@ -58,8 +59,8 @@ test("createLayoutPreparationModel canonicalizes ordering of pages and blocks", 
 
   const shuffledPrepared = { ...prepared, documents: [...prepared.documents].slice().reverse() };
 
-  const layout1 = createLayoutPreparationModel(prepared);
-  const layout2 = createLayoutPreparationModel(shuffledPrepared);
+  const layout1 = createLayoutPreparationModel(prepared, createDesignModel(prepared));
+  const layout2 = createLayoutPreparationModel(shuffledPrepared, createDesignModel(shuffledPrepared));
 
   assert.equal(stableStringify(layout1 as unknown as JsonValue), stableStringify(layout2 as unknown as JsonValue));
 
@@ -97,14 +98,14 @@ test("createLayoutPreparationModel emits structured output for degraded/minimal 
     documents: prepared.documents.map((d) => ({ ...d, domOutline: null })),
   };
 
-  const layout = createLayoutPreparationModel(degradedPrepared);
+  const layout = createLayoutPreparationModel(degradedPrepared, createDesignModel(degradedPrepared));
   assert.equal(layout.pages.length, degradedPrepared.documents.length);
   assert.equal(layout.pages[0]!.blocks.length, 0);
   assert.equal(layout.pages[0]!.eligibility, "ineligible_missing_dom_outline");
   assert.ok(layout.status === "ready_with_warnings" || layout.status === "blocked");
 
   const minimalPrepared = { ...prepared, documents: [] };
-  const minimalLayout = createLayoutPreparationModel(minimalPrepared);
+  const minimalLayout = createLayoutPreparationModel(minimalPrepared, createDesignModel(minimalPrepared));
   assert.equal(minimalLayout.pages.length, 0);
   assert.equal(minimalLayout.status, "blocked");
 });
@@ -133,7 +134,7 @@ test("createLayoutPreparationModel promotes transparent single-child wrapper cha
     source: { kind: "single-entry-html", entryHtmlPath: "index.html", assetsDirPath: "assets" },
   });
   const prepared = createPreparedSiteModel({ importOutput, importManifest: createImportManifest(importOutput) });
-  const layout = createLayoutPreparationModel(prepared);
+  const layout = createLayoutPreparationModel(prepared, createDesignModel(prepared));
 
   assert.equal(layout.pages.length, 1);
   const page = layout.pages[0]!;
@@ -168,7 +169,7 @@ test("createLayoutPreparationModel records direct-text wrapper stop metadata for
     source: { kind: "single-entry-html", entryHtmlPath: "index.html", assetsDirPath: "assets" },
   });
   const prepared = createPreparedSiteModel({ importOutput, importManifest: createImportManifest(importOutput) });
-  const layout = createLayoutPreparationModel(prepared);
+  const layout = createLayoutPreparationModel(prepared, createDesignModel(prepared));
 
   assert.equal(layout.pages.length, 1);
   const page = layout.pages[0]!;

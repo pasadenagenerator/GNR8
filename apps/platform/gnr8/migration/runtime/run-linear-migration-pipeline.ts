@@ -1,4 +1,5 @@
 import type {
+  DesignIntelligenceStageOutput,
   ImportIntakeStageOutput,
   LayoutPreparationStageOutput,
   LinearMigrationPipelineResult,
@@ -16,6 +17,7 @@ import { hasStructuralImportBlockers, isNonStructuralDegradedImportCode } from "
 
 import { createPipelineDiagnosticIssue, sortPipelineDiagnosticIssues } from "./diagnostics";
 import { createPreparedSiteModel } from "../prepared-site-model";
+import { createDesignModel } from "../../design-intelligence/design-intelligence-service";
 import { createLayoutPreparationModel } from "../layout-preparation-model";
 import { createRenderOutput } from "../render-output-model";
 import { createPreviewDocument } from "../preview-document-model";
@@ -35,8 +37,12 @@ const STAGE_CONTRACTS: Record<
     input: "ImportIntakeStageOutput",
     output: "StructurePreparationStageOutput (ok|skipped) + PreparedSiteModel",
   },
+  design_intelligence: {
+    input: "StructurePreparationStageOutput + PreparedSiteModel semantic context",
+    output: "DesignIntelligenceStageOutput (ok|skipped) + DesignModel",
+  },
   layout_preparation: {
-    input: "StructurePreparationStageOutput",
+    input: "DesignIntelligenceStageOutput + DesignModel",
     output: "LayoutPreparationStageOutput (ok|skipped)",
   },
   render_preparation: {
@@ -162,22 +168,22 @@ function runStructurePreparationStage(
 }
 
 function runLayoutPreparationStage(
-  structureStage: LinearMigrationPipelineStageResult & { stageId: "structure_preparation" },
+  designStage: LinearMigrationPipelineStageResult & { stageId: "design_intelligence" },
 ): LinearMigrationPipelineStageResult & { stageId: "layout_preparation" } {
-  const shouldSkip = structureStage.status !== "success";
+  const shouldSkip = designStage.status !== "success";
   const status: PipelineStageStatus = shouldSkip ? "skipped" : "success";
 
-  const layoutModel = createLayoutPreparationModel(structureStage.output.preparedSite);
+  const layoutModel = createLayoutPreparationModel(designStage.output.structure.preparedSite, designStage.output.designModel);
 
   const output: LayoutPreparationStageOutput = shouldSkip
     ? {
         kind: "layout_preparation_skipped_v0",
-        skippedBecauseStageId: structureStage.stageId,
+        skippedBecauseStageId: designStage.stageId,
         layoutModel,
       }
     : {
         kind: "layout_preparation_ok_v0",
-        structure: structureStage.output,
+        designIntelligence: designStage.output,
         layoutModel,
       };
 
@@ -189,7 +195,7 @@ function runLayoutPreparationStage(
     output,
     diagnostics: [],
     summary: stageSummary("layout_preparation", status, [
-      ...(shouldSkip ? [`blockedBy=${structureStage.stageId}`] : []),
+      ...(shouldSkip ? [`blockedBy=${designStage.stageId}`] : []),
       `pages=${layoutModel.siteSummary.pageCount}`,
       `blocks=${layoutModel.siteSummary.totalBlockCount}`,
       `layoutStatus=${layoutModel.status}`,
@@ -270,6 +276,57 @@ function runPreviewGenerationStage(
   };
 }
 
+function runDesignIntelligenceStage(
+  structureStage: LinearMigrationPipelineStageResult & { stageId: "structure_preparation" },
+): LinearMigrationPipelineStageResult & { stageId: "design_intelligence" } {
+  const shouldSkip = structureStage.status !== "success";
+  const status: PipelineStageStatus = shouldSkip ? "skipped" : "success";
+
+  const designModel = createDesignModel(structureStage.output.preparedSite);
+  const stageIssues = designModel.diagnostics.issues.map((issue) =>
+    createPipelineDiagnosticIssue({
+      stageId: "design_intelligence",
+      source: "pipeline",
+      severity: issue.severity,
+      code: issue.code,
+      message: issue.message,
+      location: null,
+      details: {
+        pageId: issue.pageId,
+      },
+    }),
+  );
+
+  const output: DesignIntelligenceStageOutput = shouldSkip
+    ? {
+        kind: "design_intelligence_skipped_v1",
+        skippedBecauseStageId: structureStage.stageId,
+        structure: structureStage.output,
+        designModel,
+      }
+    : {
+        kind: "design_intelligence_ok_v1",
+        structure: structureStage.output,
+        designModel,
+      };
+
+  return {
+    stageId: "design_intelligence",
+    status,
+    inputContract: STAGE_CONTRACTS.design_intelligence.input,
+    outputContract: STAGE_CONTRACTS.design_intelligence.output,
+    output,
+    diagnostics: sortPipelineDiagnosticIssues(stageIssues),
+    summary: stageSummary("design_intelligence", status, [
+      ...(shouldSkip ? [`blockedBy=${structureStage.stageId}`] : []),
+      `strategy=${designModel.layoutStrategy}`,
+      `pageType=${designModel.pageType}`,
+      `sectionDecisions=${designModel.sectionDecisions.length}`,
+      `diagnostics=${designModel.diagnostics.codes.length}`,
+    ]),
+  };
+}
+
 export function runLinearMigrationPipeline(input: PipelineInput): LinearMigrationPipelineResult {
   const stages: LinearMigrationPipelineStageResult[] = [];
 
@@ -279,14 +336,17 @@ export function runLinearMigrationPipeline(input: PipelineInput): LinearMigratio
   const s2 = runStructurePreparationStage(s1);
   stages.push(s2);
 
-  const s3 = runLayoutPreparationStage(s2);
+  const s3 = runDesignIntelligenceStage(s2);
   stages.push(s3);
 
-  const s4 = runRenderPreparationStage(s3);
+  const s4 = runLayoutPreparationStage(s3);
   stages.push(s4);
 
-  const s5 = runPreviewGenerationStage(s4);
+  const s5 = runRenderPreparationStage(s4);
   stages.push(s5);
+
+  const s6 = runPreviewGenerationStage(s5);
+  stages.push(s6);
 
   const diagnostics = stages.flatMap((s) => s.diagnostics);
   const status: LinearMigrationPipelineResult["status"] = stages.some((s) => s.status === "failed") ? "failed" : "success";

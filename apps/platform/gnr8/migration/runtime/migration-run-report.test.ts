@@ -119,6 +119,7 @@ test("non-structural asset failures produce success_with_warnings run reports wi
   const keys = report.artifacts.availability.map((a) => a.artifactKey).slice().sort();
   assert.deepEqual(keys, [
     "approval_package",
+    "design_model",
     "execution_plan",
     "execution_result",
     "import_manifest",

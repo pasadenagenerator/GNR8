@@ -149,6 +149,7 @@ function artifactRows(r: ValidationRunResult["validationSummary"]["artifacts"]) 
     { k: "importOutput", v: r.importOutput },
     { k: "importManifest", v: r.importManifest },
     { k: "pipelineResult", v: r.pipelineResult },
+    { k: "designModel", v: r.designModel },
     { k: "previewDocument", v: r.previewDocument },
     { k: "approvalPackage", v: r.approvalPackage },
     { k: "executionPlan", v: r.executionPlan },
@@ -245,6 +246,12 @@ function SuccessView(props: { result: ValidationRunResult }) {
           <SummaryCard label="overall" value={<StatusPill value={validationSummary.overallStatus} />} kind={statusKindFromString(validationSummary.overallStatus)} />
           <SummaryCard label="preview pages" value={validationSummary.counts.previewPageCount} />
           <SummaryCard label="rendered pages" value={validationSummary.counts.renderedPageCount} />
+          <SummaryCard
+            label="design strategy"
+            value={validationSummary.design.layoutStrategy ?? "n/a"}
+            kind={validationSummary.design.status === "available" ? "good" : "warn"}
+          />
+          <SummaryCard label="section decisions" value={validationSummary.design.sectionDecisionCount} />
           <SummaryCard label="key diagnostics" value={validationSummary.diagnostics.keyCodes.length} kind={validationSummary.diagnostics.keyCodes.length > 0 ? "warn" : "good"} />
           <SummaryCard label="blocked reasons" value={validationSummary.diagnostics.blockedReasonCodes.length} kind={validationSummary.diagnostics.blockedReasonCodes.length > 0 ? "bad" : "good"} />
         </div>
@@ -255,6 +262,12 @@ function SuccessView(props: { result: ValidationRunResult }) {
             { k: "overallStatus", v: <StatusPill value={validationSummary.overallStatus} /> },
             { k: "importOutput.status", v: <StatusPill value={result.importOutput.status} /> },
             { k: "importManifest.status", v: <StatusPill value={result.importManifest.status} /> },
+            { k: "design.status", v: validationSummary.design.status },
+            { k: "design.layoutStrategy", v: validationSummary.design.layoutStrategy ?? "n/a" },
+            { k: "design.pageType", v: validationSummary.design.pageType ?? "n/a" },
+            { k: "design.sectionDecisionCount", v: validationSummary.design.sectionDecisionCount },
+            { k: "design.rationaleSummary", v: <CodeList codes={validationSummary.design.rationaleSummary} /> },
+            { k: "design.diagnosticCodes", v: <CodeList codes={validationSummary.design.diagnosticCodes} /> },
             { k: "previewPageCount", v: validationSummary.counts.previewPageCount },
             { k: "renderedPageCount", v: validationSummary.counts.renderedPageCount },
             { k: "keyDiagnosticCodes", v: <CodeList codes={validationSummary.diagnostics.keyCodes} /> },

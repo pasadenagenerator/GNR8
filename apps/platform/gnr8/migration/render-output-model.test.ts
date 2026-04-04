@@ -4,6 +4,7 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 
 import type { JsonValue } from "../import/import-contract";
+import { createDesignModel } from "../design-intelligence/design-intelligence-service";
 import { createImportManifest } from "../import/import-manifest";
 import { importStaticSite } from "../import/runtime/import-static-site";
 import { createLayoutPreparationModel } from "./layout-preparation-model";
@@ -34,8 +35,8 @@ test("createRenderOutput is deterministic across repeated runs", async () => {
   const p1 = createPreparedSiteModel({ importOutput: out1, importManifest: createImportManifest(out1) });
   const p2 = createPreparedSiteModel({ importOutput: out2, importManifest: createImportManifest(out2) });
 
-  const l1 = createLayoutPreparationModel(p1);
-  const l2 = createLayoutPreparationModel(p2);
+  const l1 = createLayoutPreparationModel(p1, createDesignModel(p1));
+  const l2 = createLayoutPreparationModel(p2, createDesignModel(p2));
 
   const r1 = createRenderOutput(l1);
   const r2 = createRenderOutput(l2);
@@ -51,7 +52,7 @@ test("createRenderOutput canonicalizes ordering of pages and nodes", async () =>
     source: { kind: "single-entry-html", entryHtmlPath: "index.html", assetsDirPath: "assets" },
   });
   const prepared = createPreparedSiteModel({ importOutput, importManifest: createImportManifest(importOutput) });
-  const layout = createLayoutPreparationModel(prepared);
+  const layout = createLayoutPreparationModel(prepared, createDesignModel(prepared));
 
   const shuffledLayout = {
     ...layout,
@@ -86,7 +87,7 @@ test("createRenderOutput emits structured output for degraded/minimal inputs", a
     ...prepared,
     documents: prepared.documents.map((d) => ({ ...d, domOutline: null })),
   };
-  const degradedLayout = createLayoutPreparationModel(degradedPrepared);
+  const degradedLayout = createLayoutPreparationModel(degradedPrepared, createDesignModel(degradedPrepared));
   const degradedRender = createRenderOutput(degradedLayout);
   assert.equal(degradedRender.pages.length, degradedPrepared.documents.length);
   assert.equal(degradedRender.pages[0]!.nodes.length, 0);
@@ -94,7 +95,7 @@ test("createRenderOutput emits structured output for degraded/minimal inputs", a
   assert.equal(degradedRender.status, "blocked");
 
   const minimalPrepared = { ...prepared, documents: [] };
-  const minimalLayout = createLayoutPreparationModel(minimalPrepared);
+  const minimalLayout = createLayoutPreparationModel(minimalPrepared, createDesignModel(minimalPrepared));
   const minimalRender = createRenderOutput(minimalLayout);
   assert.equal(minimalRender.pages.length, 0);
   assert.equal(minimalRender.status, "blocked");

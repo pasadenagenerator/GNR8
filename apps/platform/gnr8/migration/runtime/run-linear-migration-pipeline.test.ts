@@ -32,11 +32,12 @@ test("linear migration pipeline runs stages in fixed order", async () => {
 
   assert.deepEqual(
     result.stages.map((s) => s.stageId),
-    ["import_intake", "structure_preparation", "layout_preparation", "render_preparation", "preview_generation"],
+    ["import_intake", "structure_preparation", "design_intelligence", "layout_preparation", "render_preparation", "preview_generation"],
   );
   assert.deepEqual(result.stageOrder, [
     "import_intake",
     "structure_preparation",
+    "design_intelligence",
     "layout_preparation",
     "render_preparation",
     "preview_generation",
@@ -60,12 +61,14 @@ test("linear migration pipeline returns structured result in success case", asyn
   assert.equal(result.stages[2].status, "success");
   assert.equal(result.stages[3].status, "success");
   assert.equal(result.stages[4].status, "success");
+  assert.equal(result.stages[5].status, "success");
   assert.ok(result.summary.includes("linear_migration_pipeline"));
   assert.ok(
     result.diagnostics.every(
       (d) =>
         d.stageId === "import_intake" ||
         d.stageId === "structure_preparation" ||
+        d.stageId === "design_intelligence" ||
         d.stageId === "layout_preparation" ||
         d.stageId === "render_preparation" ||
         d.stageId === "preview_generation",
@@ -92,6 +95,7 @@ test("linear migration pipeline continues in degraded mode for non-structural as
   assert.equal(result.stages[2].status, "success");
   assert.equal(result.stages[3].status, "success");
   assert.equal(result.stages[4].status, "success");
+  assert.equal(result.stages[5].status, "success");
 
   const importDiags = result.diagnostics.filter((d) => d.source === "import");
   assert.ok(importDiags.length > 0);
@@ -123,6 +127,7 @@ test("linear migration pipeline still blocks on structural import failures", asy
   assert.equal(result.stages[2].status, "skipped");
   assert.equal(result.stages[3].status, "skipped");
   assert.equal(result.stages[4].status, "skipped");
+  assert.equal(result.stages[5].status, "skipped");
   assert.ok(result.diagnostics.some((d) => d.code === "PIPELINE_BLOCKED_BY_IMPORT"));
 });
 
@@ -144,4 +149,21 @@ test("linear migration pipeline stage results are deterministic across repeated 
   const r2 = runLinearMigrationPipeline({ importOutput: out2, importManifest: createImportManifest(out2) });
 
   assert.equal(stableStringify(r1 as unknown as JsonValue), stableStringify(r2 as unknown as JsonValue));
+});
+
+test("linear migration pipeline includes design_intelligence output with DesignModel", async () => {
+  const rootDir = fixtureDir("simple-site");
+  const importOutput = await importStaticSite({
+    rootDir,
+    requestId: "req-design-intelligence-stage",
+    source: { kind: "single-entry-html", entryHtmlPath: "index.html", assetsDirPath: "assets" },
+  });
+  const importManifest = createImportManifest(importOutput);
+  const result = runLinearMigrationPipeline({ importOutput, importManifest });
+
+  const stage = result.stages.find((s) => s.stageId === "design_intelligence");
+  assert.ok(stage);
+  assert.equal(stage.output.designModel.kind, "design_model_v1");
+  assert.equal(typeof stage.output.designModel.layoutStrategy, "string");
+  assert.ok(stage.output.designModel.sectionDecisions.length >= 1);
 });

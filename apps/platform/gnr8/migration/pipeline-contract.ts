@@ -2,11 +2,12 @@ import type { JsonValue } from "../import/import-contract";
 import type { ImportManifest } from "../import/import-manifest";
 import type { ImportOutput } from "../import/import-contract";
 import type { PreparedSiteModel } from "./prepared-site-model";
+import type { DesignModel } from "../design-intelligence/design-model";
 import type { LayoutPreparationModel } from "./layout-preparation-model";
 import type { RenderOutput } from "./render-output-model";
 import type { PreviewDocument } from "./preview-document-model";
 
-export const LINEAR_MIGRATION_PIPELINE_VERSION = "1.0.0" as const;
+export const LINEAR_MIGRATION_PIPELINE_VERSION = "1.1.0" as const;
 
 export type PipelineInput = {
   importOutput: ImportOutput;
@@ -16,6 +17,7 @@ export type PipelineInput = {
 export type PipelineStageId =
   | "import_intake"
   | "structure_preparation"
+  | "design_intelligence"
   | "layout_preparation"
   | "render_preparation"
   | "preview_generation";
@@ -23,6 +25,7 @@ export type PipelineStageId =
 export const LINEAR_MIGRATION_STAGE_ORDER: readonly PipelineStageId[] = [
   "import_intake",
   "structure_preparation",
+  "design_intelligence",
   "layout_preparation",
   "render_preparation",
   "preview_generation",
@@ -106,7 +109,7 @@ export type StructurePreparationStageOutput =
 export type LayoutPreparationStageOutput =
   | {
       kind: "layout_preparation_ok_v0";
-      structure: StructurePreparationStageOutput;
+      designIntelligence: DesignIntelligenceStageOutput;
       layoutModel: LayoutPreparationModel;
     }
   | {
@@ -127,6 +130,19 @@ export type RenderPreparationStageOutput =
       renderOutput: RenderOutput;
     };
 
+export type DesignIntelligenceStageOutput =
+  | {
+      kind: "design_intelligence_ok_v1";
+      structure: StructurePreparationStageOutput;
+      designModel: DesignModel;
+    }
+  | {
+      kind: "design_intelligence_skipped_v1";
+      skippedBecauseStageId: PipelineStageId;
+      structure: StructurePreparationStageOutput;
+      designModel: DesignModel;
+    };
+
 export type PreviewGenerationStageOutput =
   | {
       kind: "preview_generation_ok_v1";
@@ -142,6 +158,7 @@ export type PreviewGenerationStageOutput =
 export type LinearMigrationPipelineStageResult =
   | PipelineStageResult<"import_intake", ImportIntakeStageOutput>
   | PipelineStageResult<"structure_preparation", StructurePreparationStageOutput>
+  | PipelineStageResult<"design_intelligence", DesignIntelligenceStageOutput>
   | PipelineStageResult<"layout_preparation", LayoutPreparationStageOutput>
   | PipelineStageResult<"render_preparation", RenderPreparationStageOutput>
   | PipelineStageResult<"preview_generation", PreviewGenerationStageOutput>;

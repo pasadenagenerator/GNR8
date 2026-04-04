@@ -4,6 +4,7 @@ import type {
   PreparedSiteModel,
   PreparedSitePreparationStatus,
 } from "./prepared-site-model";
+import type { DesignModel } from "../design-intelligence/design-model";
 import { sha256Hex, stableStringify } from "./runtime/diagnostics";
 
 /**
@@ -38,7 +39,7 @@ import { sha256Hex, stableStringify } from "./runtime/diagnostics";
  * - `ready_with_warnings` otherwise.
  */
 
-export const LAYOUT_PREPARATION_MODEL_VERSION = "1.5.0" as const;
+export const LAYOUT_PREPARATION_MODEL_VERSION = "1.6.0" as const;
 
 export type LayoutPreparationStatus = "ready" | "ready_with_warnings" | "blocked";
 
@@ -68,6 +69,13 @@ export type LayoutPreparationBlockRecord = {
   preservedMarkupHtml: string | null;
   nonVisualOnlySubtree: boolean;
   assetReferenceIds: string[];
+  designIntent:
+    | {
+        semanticType: string;
+        visualTreatment: string;
+        emphasis: "primary" | "secondary" | "neutral";
+      }
+    | null;
 };
 
 export type LayoutPreparationPageRecord = {
@@ -94,6 +102,7 @@ export type LayoutPreparationPageRecord = {
   };
 
   fidelity: PreparedDocumentFidelityProjection;
+  appliedLayoutStrategy: DesignModel["layoutStrategy"];
 };
 
 export type LayoutPreparationPageSummary = {
@@ -111,6 +120,8 @@ export type LayoutPreparationModel = {
   source: {
     preparedSiteKind: PreparedSiteModel["kind"];
     preparedSiteModelVersion: PreparedSiteModel["modelVersion"];
+    designModelKind: DesignModel["kind"];
+    designModelVersion: DesignModel["version"];
     importContractVersion: PreparedSiteModel["source"]["importContractVersion"];
     importManifestVersion: PreparedSiteModel["source"]["importManifestVersion"];
     fingerprints: PreparedSiteModel["source"]["fingerprints"];
@@ -129,6 +140,9 @@ export type LayoutPreparationModel = {
   diagnostics: {
     carried: {
       import: PreparedSiteModel["diagnostics"]["import"];
+      designIntelligence: {
+        codes: string[];
+      };
     };
   };
 
@@ -212,7 +226,7 @@ function extractBlocksFromBodyWithWrapperPromotion(input: {
   };
 }
 
-export function createLayoutPreparationModel(preparedSite: PreparedSiteModel): LayoutPreparationModel {
+export function createLayoutPreparationModel(preparedSite: PreparedSiteModel, designModel: DesignModel): LayoutPreparationModel {
   const pagesInCanonicalOrder = [...preparedSite.documents].sort((a, b) => {
     if (a.path !== b.path) return stringCmp(a.path, b.path);
     if (a.id !== b.id) return stringCmp(a.id, b.id);
@@ -225,6 +239,12 @@ export function createLayoutPreparationModel(preparedSite: PreparedSiteModel): L
   let eligiblePageCount = 0;
   let totalBlockCount = 0;
   let effectivelyEmptyPageCount = 0;
+  const sectionDecisionByRef = new Map<string, DesignModel["sectionDecisions"][number]>();
+  for (const decision of designModel.sectionDecisions) {
+    sectionDecisionByRef.set(`${decision.pageId}::${decision.sourceDomPath}`, decision);
+  }
+  const pageStrategyByPageId = new Map<string, DesignModel["pageStrategies"][number]>();
+  for (const pageStrategy of designModel.pageStrategies) pageStrategyByPageId.set(pageStrategy.pageId, pageStrategy);
 
   for (const doc of pagesInCanonicalOrder) {
     const pageId = pageIdForDocument(doc);
@@ -259,6 +279,15 @@ export function createLayoutPreparationModel(preparedSite: PreparedSiteModel): L
           preservedMarkupHtml: child.preservedMarkupHtml,
           nonVisualOnlySubtree: child.nonVisualOnlySubtree,
           assetReferenceIds: [],
+          designIntent: (() => {
+            const decision = sectionDecisionByRef.get(`${pageId}::${child.domPath}`) ?? null;
+            if (!decision) return null;
+            return {
+              semanticType: decision.semanticType,
+              visualTreatment: decision.visualTreatment,
+              emphasis: decision.emphasis,
+            };
+          })(),
         };
         blocks.push(block);
       }
@@ -286,6 +315,7 @@ export function createLayoutPreparationModel(preparedSite: PreparedSiteModel): L
         usedBoundaryChildElementCount: blocks.length,
       },
       fidelity: doc.fidelity,
+      appliedLayoutStrategy: pageStrategyByPageId.get(pageId)?.layoutStrategy ?? designModel.layoutStrategy,
     };
 
     pages.push(page);
@@ -310,6 +340,8 @@ export function createLayoutPreparationModel(preparedSite: PreparedSiteModel): L
     source: {
       preparedSiteKind: preparedSite.kind,
       preparedSiteModelVersion: preparedSite.modelVersion,
+      designModelKind: designModel.kind,
+      designModelVersion: designModel.version,
       importContractVersion: preparedSite.source.importContractVersion,
       importManifestVersion: preparedSite.source.importManifestVersion,
       fingerprints: preparedSite.source.fingerprints,
@@ -325,6 +357,9 @@ export function createLayoutPreparationModel(preparedSite: PreparedSiteModel): L
     diagnostics: {
       carried: {
         import: preparedSite.diagnostics.import,
+        designIntelligence: {
+          codes: designModel.diagnostics.codes,
+        },
       },
     },
     pages,

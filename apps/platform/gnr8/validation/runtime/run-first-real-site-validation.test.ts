@@ -41,6 +41,9 @@ test("first real-site validation runner executes full phase-1 flow and returns c
 
   assert.equal(r.validationSummary.fixtureId, "real-site-01");
   assert.equal(r.validationSummary.overallStatus, "passed");
+  assert.equal(r.validationSummary.design.status, "available");
+  assert.equal(typeof r.validationSummary.design.layoutStrategy, "string");
+  assert.ok(r.validationSummary.design.sectionDecisionCount >= 1);
   assert.ok(r.validationSummary.counts.previewPageCount >= 1);
   assert.ok(r.validationSummary.counts.renderedPageCount >= 1);
 });
@@ -170,6 +173,7 @@ test("validation summary reflects artifact state and pipeline stage statuses", a
     importOutput: true,
     importManifest: true,
     pipelineResult: true,
+    designModel: true,
     previewDocument: true,
     approvalPackage: true,
     executionPlan: true,
@@ -180,6 +184,7 @@ test("validation summary reflects artifact state and pipeline stage statuses", a
   assert.equal(r.validationSummary.pipeline.status, r.pipelineResult.status);
   assert.equal(r.validationSummary.pipeline.stages.import_intake, "success");
   assert.equal(r.validationSummary.pipeline.stages.structure_preparation, "success");
+  assert.equal(r.validationSummary.pipeline.stages.design_intelligence, "success");
   assert.equal(r.validationSummary.pipeline.stages.layout_preparation, "success");
   assert.equal(r.validationSummary.pipeline.stages.render_preparation, "success");
   assert.equal(r.validationSummary.pipeline.stages.preview_generation, "success");
@@ -271,9 +276,14 @@ test("phase-1 status and diagnostic invariants are coherent across all real fixt
       r.pipelineResult.stages.find((s) => s.stageId === "render_preparation")!.output.renderOutput.siteSummary.pageCount,
     );
 
-    const expectedKeyCodes = [...new Set([...r.importManifest.diagnostics.codes, ...r.pipelineResult.diagnostics.map((d) => d.code)])].sort(
-      (a, b) => a.localeCompare(b),
-    );
+    const expectedKeyCodes = [
+      ...new Set([
+        ...r.importManifest.diagnostics.codes,
+        ...r.pipelineResult.diagnostics.map((d) => d.code),
+        ...r.migrationRunReport.diagnostics.warnings.codes,
+        ...r.migrationRunReport.diagnostics.blocking.codes,
+      ]),
+    ].sort((a, b) => a.localeCompare(b));
     assert.deepEqual(r.validationSummary.diagnostics.keyCodes, expectedKeyCodes);
 
     const reportBlocking = r.migrationRunReport.diagnostics.blocking.codes;

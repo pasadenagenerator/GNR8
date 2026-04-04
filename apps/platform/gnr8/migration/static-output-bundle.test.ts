@@ -7,6 +7,7 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 
 import type { JsonValue } from "../import/import-contract";
+import { createDesignModel } from "../design-intelligence/design-intelligence-service";
 import { createImportManifest } from "../import/import-manifest";
 import { importStaticSite } from "../import/runtime/import-static-site";
 import { readValidationFixtureSpec, validationFixtureDirAbs } from "../validation/runtime/fixture-spec";
@@ -39,7 +40,7 @@ async function buildStaticHtmlForSite(input: {
   });
 
   const prepared = createPreparedSiteModel({ importOutput, importManifest: createImportManifest(importOutput) });
-  const layout = createLayoutPreparationModel(prepared);
+  const layout = createLayoutPreparationModel(prepared, createDesignModel(prepared));
   const renderOutput = createRenderOutput(layout);
   const artifact = createStaticHtmlRenderArtifact(renderOutput);
 

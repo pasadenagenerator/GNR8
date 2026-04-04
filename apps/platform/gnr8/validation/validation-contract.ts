@@ -28,6 +28,7 @@ export type ValidationArtifactAvailability = {
   importOutput: boolean;
   importManifest: boolean;
   pipelineResult: boolean;
+  designModel: boolean;
   previewDocument: boolean;
   approvalPackage: boolean;
   executionPlan: boolean;
@@ -46,6 +47,14 @@ export type ValidationSummary = {
   pipeline: {
     status: LinearMigrationPipelineResult["status"];
     stages: Record<PipelineStageId, PipelineStageStatus>;
+  };
+  design: {
+    status: "available" | "missing";
+    layoutStrategy: string | null;
+    pageType: string | null;
+    sectionDecisionCount: number;
+    rationaleSummary: string[];
+    diagnosticCodes: string[];
   };
 
   approval: {

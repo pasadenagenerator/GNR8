@@ -6,6 +6,7 @@ import type { ExecutionPlan } from "./execution-plan-model";
 import type { ExecutionResult } from "./execution-result-model";
 import type { LinearMigrationPipelineResult, PipelineDiagnosticIssue, PipelineDiagnosticSeverity, PipelineStageId } from "./pipeline-contract";
 import type { PreparedSiteModel } from "./prepared-site-model";
+import type { DesignModel } from "../design-intelligence/design-model";
 import type { LayoutPreparationModel } from "./layout-preparation-model";
 import type { RenderOutput } from "./render-output-model";
 import type { PreviewDocument } from "./preview-document-model";
@@ -29,6 +30,7 @@ export type MigrationRunArtifactKey =
   | "import_output"
   | "import_manifest"
   | "prepared_site_model"
+  | "design_model"
   | "layout_preparation_model"
   | "render_output"
   | "preview_document"
@@ -229,6 +231,11 @@ function findPreparedSite(pipeline: LinearMigrationPipelineResult): PreparedSite
   return stage ? stage.output.preparedSite : null;
 }
 
+function findDesignModel(pipeline: LinearMigrationPipelineResult): DesignModel | null {
+  const stage = pipeline.stages.find((s) => s.stageId === "design_intelligence");
+  return stage ? stage.output.designModel : null;
+}
+
 function findLayoutModel(pipeline: LinearMigrationPipelineResult): LayoutPreparationModel | null {
   const stage = pipeline.stages.find((s) => s.stageId === "layout_preparation");
   return stage ? stage.output.layoutModel : null;
@@ -313,6 +320,7 @@ function canonicalArtifactAvailability(input: {
   importOutput: ImportOutput;
   importManifest: ImportManifest;
   preparedSite: PreparedSiteModel | null;
+  designModel: DesignModel | null;
   layoutModel: LayoutPreparationModel | null;
   renderOutput: RenderOutput | null;
   previewDocument: PreviewDocument | null;
@@ -344,6 +352,18 @@ function canonicalArtifactAvailability(input: {
         input.preparedSite === null
           ? "preparedSiteModel: missing"
           : `preparedSiteModel: ${input.preparedSite.status}; version=${input.preparedSite.modelVersion}`,
+    },
+    {
+      artifactKey: "design_model",
+      present: input.designModel !== null,
+      ref:
+        input.designModel === null
+          ? null
+          : { kind: input.designModel.kind, version: input.designModel.version, status: input.designModel.status },
+      summary:
+        input.designModel === null
+          ? "designModel: missing"
+          : `designModel: ${input.designModel.layoutStrategy}; version=${input.designModel.version}`,
     },
     {
       artifactKey: "layout_preparation_model",
@@ -415,6 +435,7 @@ function buildStageFacts(input: {
   const importManifest = pipeline.input.importManifest;
 
   const preparedSite = findPreparedSite(pipeline);
+  const designModel = findDesignModel(pipeline);
   const layoutModel = findLayoutModel(pipeline);
   const renderOutput = findRenderOutput(pipeline);
   const previewDocument = findPreviewDocument(pipeline);
@@ -483,6 +504,13 @@ function buildStageFacts(input: {
       facts.documentsWithDom = preparedSite?.siteSummary.documentsWithDomCount ?? null;
       facts.totalNodeCount = preparedSite?.siteSummary.totalNodeCount ?? null;
       facts.importDiagnosticCodes = preparedSite?.diagnostics.import.codes.length ?? null;
+    } else if (stageId === "design_intelligence") {
+      artifactKeys.push("design_model");
+      facts.designStatus = designModel?.status ?? null;
+      facts.layoutStrategy = designModel?.layoutStrategy ?? null;
+      facts.pageType = designModel?.pageType ?? null;
+      facts.sectionDecisions = designModel?.sectionDecisions.length ?? null;
+      facts.designDiagnosticCodes = designModel?.diagnostics.codes.length ?? null;
     } else if (stageId === "layout_preparation") {
       artifactKeys.push("layout_preparation_model");
       facts.layoutStatus = layoutModel?.status ?? null;
@@ -693,6 +721,7 @@ export function createMigrationRunReport(input: Phase1MigrationRunArtifacts): Mi
   const importManifest = pipeline.input.importManifest;
 
   const preparedSite = findPreparedSite(pipeline);
+  const designModel = findDesignModel(pipeline);
   const layoutModel = findLayoutModel(pipeline);
   const renderOutput = findRenderOutput(pipeline);
   const previewDocument = findPreviewDocument(pipeline);
@@ -735,6 +764,7 @@ export function createMigrationRunReport(input: Phase1MigrationRunArtifacts): Mi
     importOutput,
     importManifest,
     preparedSite,
+    designModel,
     layoutModel,
     renderOutput,
     previewDocument,

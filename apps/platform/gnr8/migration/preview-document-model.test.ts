@@ -4,6 +4,7 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 
 import type { JsonValue } from "../import/import-contract";
+import { createDesignModel } from "../design-intelligence/design-intelligence-service";
 import { createImportManifest } from "../import/import-manifest";
 import { importStaticSite } from "../import/runtime/import-static-site";
 import { createLayoutPreparationModel } from "./layout-preparation-model";
@@ -35,8 +36,8 @@ test("createPreviewDocument is deterministic across repeated runs", async () => 
   const p1 = createPreparedSiteModel({ importOutput: out1, importManifest: createImportManifest(out1) });
   const p2 = createPreparedSiteModel({ importOutput: out2, importManifest: createImportManifest(out2) });
 
-  const l1 = createLayoutPreparationModel(p1);
-  const l2 = createLayoutPreparationModel(p2);
+  const l1 = createLayoutPreparationModel(p1, createDesignModel(p1));
+  const l2 = createLayoutPreparationModel(p2, createDesignModel(p2));
 
   const r1 = createRenderOutput(l1);
   const r2 = createRenderOutput(l2);
@@ -56,7 +57,7 @@ test("createPreviewDocument canonicalizes ordering of pages and preview sections
   });
 
   const prepared = createPreparedSiteModel({ importOutput, importManifest: createImportManifest(importOutput) });
-  const layout = createLayoutPreparationModel(prepared);
+  const layout = createLayoutPreparationModel(prepared, createDesignModel(prepared));
   const renderOutput = createRenderOutput(layout);
 
   const shuffledRenderOutput = {
@@ -89,7 +90,7 @@ test("preview sections deterministically project visible content (excerpt + fall
   });
 
   const prepared = createPreparedSiteModel({ importOutput, importManifest: createImportManifest(importOutput) });
-  const layout = createLayoutPreparationModel(prepared);
+  const layout = createLayoutPreparationModel(prepared, createDesignModel(prepared));
   const renderOutput = createRenderOutput(layout);
   const preview = createPreviewDocument(renderOutput);
 
@@ -125,7 +126,7 @@ test("createPreviewDocument emits structured output for degraded/minimal inputs"
     ...prepared,
     documents: prepared.documents.map((d) => ({ ...d, domOutline: null })),
   };
-  const degradedLayout = createLayoutPreparationModel(degradedPrepared);
+  const degradedLayout = createLayoutPreparationModel(degradedPrepared, createDesignModel(degradedPrepared));
   const degradedRender = createRenderOutput(degradedLayout);
   const degradedPreview = createPreviewDocument(degradedRender);
 
@@ -136,7 +137,7 @@ test("createPreviewDocument emits structured output for degraded/minimal inputs"
   assert.ok(degradedPreview.pages[0]!.preview.html.includes('data-preview-note="not_previewable"'));
 
   const minimalPrepared = { ...prepared, documents: [] };
-  const minimalLayout = createLayoutPreparationModel(minimalPrepared);
+  const minimalLayout = createLayoutPreparationModel(minimalPrepared, createDesignModel(minimalPrepared));
   const minimalRender = createRenderOutput(minimalLayout);
   const minimalPreview = createPreviewDocument(minimalRender);
 
