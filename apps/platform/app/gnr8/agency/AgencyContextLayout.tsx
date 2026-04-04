@@ -238,7 +238,6 @@ export default async function AgencyContextLayout(props: Props) {
                 options={agencyOptions}
                 persistStateOnChange={{
                   activeClientId: undefined,
-                  lastAgencyTab: persistedAgencyTab,
                 }}
                 persistStateValueKey='activeAgencyId'
               />

@@ -90,8 +90,6 @@ export default function ClientContextLayout(props: Props) {
             options={clientOptions}
             persistStateOnChange={{
               activeAgencyId,
-              lastAgencyTab: 'clients',
-              lastClientTab: persistedClientTab,
             }}
             persistStateValueKey='activeClientId'
           />

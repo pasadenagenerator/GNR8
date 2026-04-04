@@ -7,6 +7,10 @@ import {
   buildAgencyRestoreHref,
   buildClientRestoreHref,
   getWorkspaceState,
+  normalizeAgencyTab,
+  normalizeClientTab,
+  setAgencyContextState,
+  setClientContextState,
   setWorkspaceState,
   syncFromUrl,
 } from '@/src/workspace/workspace-state'
@@ -116,15 +120,27 @@ export default function WorkspaceStateSync(props: Props) {
   useEffect(() => {
     syncFromUrl(searchParams ? new URLSearchParams(searchParams.toString()) : undefined)
 
-    const partial = {
-      activeAgencyId: normalizeText(props.activeAgencyId),
-      activeClientId: normalizeText(props.activeClientId),
-      lastAgencyTab: normalizeText(props.lastAgencyTab),
-      lastClientTab: normalizeText(props.lastClientTab),
+    const activeAgencyId = normalizeText(props.activeAgencyId)
+    const activeClientId = normalizeText(props.activeClientId)
+    const lastAgencyTab = normalizeAgencyTab(props.lastAgencyTab)
+    const lastClientTab = normalizeClientTab(props.lastClientTab)
+
+    if (activeAgencyId || activeClientId) {
+      setWorkspaceState({
+        activeAgencyId,
+        activeClientId,
+      })
     }
 
-    if (partial.activeAgencyId || partial.activeClientId || partial.lastAgencyTab || partial.lastClientTab) {
-      setWorkspaceState(partial)
+    if (activeAgencyId && lastAgencyTab) {
+      setAgencyContextState(activeAgencyId, { lastTab: lastAgencyTab })
+    }
+
+    if (activeClientId && (lastClientTab || activeAgencyId)) {
+      setClientContextState(activeClientId, {
+        lastTab: lastClientTab,
+        agencyId: activeAgencyId,
+      })
     }
   }, [props.activeAgencyId, props.activeClientId, props.lastAgencyTab, props.lastClientTab, searchParams])
 

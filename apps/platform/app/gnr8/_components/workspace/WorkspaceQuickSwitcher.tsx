@@ -17,7 +17,7 @@ type Props = {
   currentValue: string
   options: WorkspaceQuickSwitchOption[]
   persistStateOnChange?: Partial<WorkspaceState>
-  persistStateValueKey?: keyof WorkspaceState
+  persistStateValueKey?: 'activeAgencyId' | 'activeClientId'
 }
 
 function labelStyle(): CSSProperties {
