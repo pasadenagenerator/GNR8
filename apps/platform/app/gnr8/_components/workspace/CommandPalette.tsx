@@ -9,9 +9,12 @@ export type CommandItem = {
   id: string
   label: string
   sublabel?: string
+  aliases?: string[]
   href?: string
   type: 'recent' | 'agency' | 'client' | 'route' | 'action'
   action?: () => void
+  recentRankBoost?: number
+  contextScope?: WorkspaceScope | 'global'
 }
 
 export type CommandPaletteOption = {
@@ -19,6 +22,7 @@ export type CommandPaletteOption = {
   label: string
   href: string
   sublabel?: string
+  aliases?: string[]
 }
 
 type Props = {
@@ -44,10 +48,26 @@ const GROUP_ORDER: GroupKey[] = ['action', 'route', 'recent', 'agency', 'client'
 
 type WorkspaceScope = 'agency' | 'client' | 'command-center' | 'other'
 
-type ScoreBucket = 0 | 1 | 2 | 3
+type IndexedCommandItem = {
+  item: CommandItem
+  fields: string[]
+  compactFields: string[]
+}
 
 function normalizeText(value: unknown): string {
   return String(value ?? '').trim()
+}
+
+function normalizeSearchText(value: unknown): string {
+  return normalizeText(value).toLowerCase().replace(/\s+/g, ' ')
+}
+
+function normalizeCompactText(value: string): string {
+  return value.replace(/[\s/_-]+/g, '')
+}
+
+function tokenizeSearchText(value: string): string[] {
+  return value.split(' ').map((token) => token.trim()).filter(Boolean)
 }
 
 function normalizeSet(values?: string[]): Set<string> | null {
@@ -86,34 +106,153 @@ function isVisibleRecentItem(
   return true
 }
 
-function scoreMatch(item: CommandItem, query: string): number {
-  const label = item.label.toLowerCase()
-  const sublabel = (item.sublabel ?? '').toLowerCase()
-  let bucket: ScoreBucket = 3
-  if (label === query || sublabel === query) bucket = 0
-  else if (label.startsWith(query) || sublabel.startsWith(query)) bucket = 1
-  else if (label.includes(query) || sublabel.includes(query)) bucket = 2
-  const actionBoost = item.type === 'action' ? -0.15 : 0
-  return bucket + actionBoost
+function uniqueAliases(values: string[]): string[] | undefined {
+  const seen = new Set<string>()
+  const aliases: string[] = []
+  for (const value of values) {
+    const normalized = normalizeSearchText(value)
+    if (!normalized || seen.has(normalized)) continue
+    seen.add(normalized)
+    aliases.push(normalizeText(value))
+  }
+  return aliases.length > 0 ? aliases : undefined
 }
 
-function toStaticItems(type: 'agency' | 'client' | 'route', options: CommandPaletteOption[]): CommandItem[] {
+function inferAliases(label: string): string[] | undefined {
+  const normalized = normalizeSearchText(label)
+  if (!normalized) return undefined
+
+  const aliases: string[] = []
+  if (normalized === 'client team') aliases.push('users', 'members')
+  if (normalized === 'agency settings' || normalized === 'client settings') aliases.push('config', 'preferences')
+  if (normalized.includes('command center')) aliases.push('admin', 'superadmin')
+  return uniqueAliases(aliases)
+}
+
+function toStaticItems(
+  type: 'agency' | 'client' | 'route',
+  options: CommandPaletteOption[],
+  allowedIds?: Set<string> | null,
+): CommandItem[] {
   const items: CommandItem[] = []
   for (const option of options) {
     const id = normalizeText(option.id)
     const label = normalizeText(option.label)
     const href = normalizeText(option.href)
     if (!id || !label || !href) continue
+    if (allowedIds && (type === 'agency' || type === 'client') && !allowedIds.has(id)) continue
 
     items.push({
       id: `${type}:${id}`,
       label,
       href,
       sublabel: normalizeText(option.sublabel) || undefined,
+      aliases: uniqueAliases([...(option.aliases ?? []), ...(inferAliases(label) ?? [])]),
       type,
     })
   }
   return items
+}
+
+function fuzzySubsequenceScore(needle: string, haystack: string): number {
+  if (!needle || !haystack) return -1
+
+  let previousIndex = -1
+  let firstMatch = -1
+  let totalGap = 0
+  let contiguousStreak = 0
+  let contiguousBonus = 0
+
+  for (const char of needle) {
+    const nextIndex = haystack.indexOf(char, previousIndex + 1)
+    if (nextIndex === -1) return -1
+
+    if (firstMatch === -1) firstMatch = nextIndex
+    if (previousIndex >= 0) {
+      const gap = nextIndex - previousIndex - 1
+      totalGap += gap
+      if (gap === 0) {
+        contiguousStreak += 1
+        contiguousBonus += 10 + Math.min(contiguousStreak, 4)
+      } else {
+        contiguousStreak = 0
+      }
+    }
+    previousIndex = nextIndex
+  }
+
+  const spread = previousIndex - firstMatch + 1
+  const spreadPenalty = Math.max(0, spread - needle.length) * 4
+  const startPenalty = Math.max(0, firstMatch) * 2
+  return Math.max(0, 420 - totalGap * 8 - spreadPenalty - startPenalty + contiguousBonus)
+}
+
+function includesWordBoundary(text: string, token: string): boolean {
+  const escapedToken = token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  return new RegExp(`(^|[\\s/_-])${escapedToken}`).test(text)
+}
+
+function scoreField(field: string, compactField: string, normalizedQuery: string, queryTokens: string[], compactQuery: string): number {
+  if (!field) return -1
+
+  let best = -1
+  if (field === normalizedQuery) best = 1300
+
+  if (field.startsWith(normalizedQuery)) {
+    best = Math.max(best, 1100 - Math.min(field.length - normalizedQuery.length, 120))
+  }
+
+  const includesIndex = field.indexOf(normalizedQuery)
+  if (includesIndex >= 0) {
+    best = Math.max(best, 900 - Math.min(includesIndex * 4, 220))
+  }
+
+  if (queryTokens.length > 0) {
+    const tokenIncludesCount = queryTokens.reduce((count, token) => (field.includes(token) ? count + 1 : count), 0)
+    const tokenBoundaryCount = queryTokens.reduce(
+      (count, token) => (includesWordBoundary(field, token) ? count + 1 : count),
+      0,
+    )
+
+    if (tokenBoundaryCount === queryTokens.length) {
+      best = Math.max(best, 960 + tokenBoundaryCount * 16)
+    } else if (tokenIncludesCount === queryTokens.length) {
+      best = Math.max(best, 820 + tokenIncludesCount * 10)
+    } else if (tokenIncludesCount > 0) {
+      best = Math.max(best, 620 + tokenIncludesCount * 8)
+    }
+  }
+
+  if (compactQuery.length > 0) {
+    const fuzzy = fuzzySubsequenceScore(compactQuery, compactField)
+    if (fuzzy >= 0) best = Math.max(best, 520 + Math.round(fuzzy / 2))
+  }
+
+  return best
+}
+
+function scoreIndexedItem(
+  indexedItem: IndexedCommandItem,
+  normalizedQuery: string,
+  queryTokens: string[],
+  workspaceScope: WorkspaceScope,
+): number {
+  if (!normalizedQuery) return 0
+
+  const compactQuery = normalizeCompactText(normalizedQuery)
+  let bestScore = -1
+  for (let index = 0; index < indexedItem.fields.length; index += 1) {
+    const score = scoreField(indexedItem.fields[index], indexedItem.compactFields[index], normalizedQuery, queryTokens, compactQuery)
+    if (score > bestScore) bestScore = score
+  }
+  if (bestScore < 0) return -1
+
+  let total = bestScore
+  if (indexedItem.item.type === 'recent') total += indexedItem.item.recentRankBoost ?? 0
+  if (indexedItem.item.type === 'action') total += 16
+  if (indexedItem.item.type === 'action' && indexedItem.item.contextScope === workspaceScope) total += 18
+  if (indexedItem.item.type === 'action' && indexedItem.item.contextScope === 'global') total += 8
+  return total
 }
 
 export default function CommandPalette(props: Props) {
@@ -187,15 +326,17 @@ export default function CommandPalette(props: Props) {
           allowCommandCenter: props.allowCommandCenter ?? false,
         }),
       )
-      .map((item) => ({
+      .map((item, index) => ({
         id: `recent:${item.href}`,
         label: item.label,
         href: normalizeText(item.href),
         type: 'recent' as const,
+        recentRankBoost: Math.max(0, 14 - index),
+        aliases: inferAliases(item.label),
       }))
 
-    const agencies = toStaticItems('agency', props.agencies ?? [])
-    const clients = toStaticItems('client', props.clients ?? [])
+    const agencies = toStaticItems('agency', props.agencies ?? [], allowedAgencyIds)
+    const clients = toStaticItems('client', props.clients ?? [], allowedClientIds)
     const routes = toStaticItems('route', props.routes ?? [])
     const routeById = new Map(routes.map((route) => [route.id, route]))
     const clientDashboardHref =
@@ -219,6 +360,8 @@ export default function CommandPalette(props: Props) {
         label: 'Go to Command Center',
         sublabel: 'Navigation action',
         type: 'action',
+        aliases: ['admin', 'superadmin'],
+        contextScope: 'global',
         action: () => router.push('/gnr8/command-center'),
       },
       {
@@ -226,6 +369,7 @@ export default function CommandPalette(props: Props) {
         label: 'Go to Agency Dashboard',
         sublabel: 'Navigation action',
         type: 'action',
+        contextScope: 'agency',
         action: () => router.push(agencyDashboardHref),
       },
       ...(clientDashboardHref
@@ -235,6 +379,7 @@ export default function CommandPalette(props: Props) {
               label: 'Go to Client Dashboard',
               sublabel: 'Navigation action',
               type: 'action' as const,
+              contextScope: 'client' as const,
               action: () => router.push(clientDashboardHref),
             },
           ]
@@ -246,6 +391,8 @@ export default function CommandPalette(props: Props) {
               label: 'Create new client',
               sublabel: 'Agency workspace action',
               type: 'action' as const,
+              aliases: ['new client', 'add client'],
+              contextScope: 'agency' as const,
               action: () => router.push(createClientHref),
             },
             {
@@ -253,6 +400,8 @@ export default function CommandPalette(props: Props) {
               label: 'Invite team member',
               sublabel: 'Agency workspace action',
               type: 'action' as const,
+              aliases: ['invite user', 'members'],
+              contextScope: 'agency' as const,
               action: () => router.push(agencyMembersHref),
             },
           ]
@@ -264,6 +413,8 @@ export default function CommandPalette(props: Props) {
               label: 'Open Agency Settings',
               sublabel: 'Settings action',
               type: 'action' as const,
+              aliases: ['config', 'preferences'],
+              contextScope: 'agency' as const,
               action: () => router.push(agencySettingsHref),
             },
           ]
@@ -275,6 +426,8 @@ export default function CommandPalette(props: Props) {
               label: 'Open Client Settings',
               sublabel: 'Client workspace action',
               type: 'action' as const,
+              aliases: ['config', 'preferences'],
+              contextScope: 'client' as const,
               action: () => router.push(clientSettingsHref),
             },
           ]
@@ -286,6 +439,8 @@ export default function CommandPalette(props: Props) {
               label: 'Open Client Team',
               sublabel: 'Client workspace action',
               type: 'action' as const,
+              aliases: ['users', 'members'],
+              contextScope: 'client' as const,
               action: () => router.push(clientTeamHref),
             },
           ]
@@ -308,22 +463,43 @@ export default function CommandPalette(props: Props) {
     workspaceScope,
   ])
 
+  const indexedItems = useMemo<IndexedCommandItem[]>(() => {
+    return allItems.map((item) => {
+      const fields = [item.label, item.sublabel ?? '', ...(item.aliases ?? [])]
+        .map((value) => normalizeSearchText(value))
+        .filter(Boolean)
+      const compactFields = fields.map((field) => normalizeCompactText(field))
+      return {
+        item,
+        fields,
+        compactFields,
+      }
+    })
+  }, [allItems])
+
   const filteredItems = useMemo(() => {
-    const normalizedQuery = query.trim().toLowerCase()
+    const normalizedQuery = normalizeSearchText(query)
     if (!normalizedQuery) return allItems
 
-    return allItems
-      .filter((item) => {
-        const label = item.label.toLowerCase()
-        const sublabel = (item.sublabel ?? '').toLowerCase()
-        return label.includes(normalizedQuery) || sublabel.includes(normalizedQuery)
-      })
+    const queryTokens = tokenizeSearchText(normalizedQuery)
+    return indexedItems
+      .map((indexedItem) => ({
+        item: indexedItem.item,
+        score: scoreIndexedItem(indexedItem, normalizedQuery, queryTokens, workspaceScope),
+      }))
+      .filter((candidate) => candidate.score >= 0)
       .sort((left, right) => {
-        const scoreDelta = scoreMatch(left, normalizedQuery) - scoreMatch(right, normalizedQuery)
+        const scoreDelta = right.score - left.score
         if (scoreDelta !== 0) return scoreDelta
-        return left.label.localeCompare(right.label)
+        const leftGroupRank = GROUP_ORDER.indexOf(left.item.type)
+        const rightGroupRank = GROUP_ORDER.indexOf(right.item.type)
+        if (leftGroupRank !== rightGroupRank) return leftGroupRank - rightGroupRank
+        const labelDelta = left.item.label.localeCompare(right.item.label)
+        if (labelDelta !== 0) return labelDelta
+        return left.item.id.localeCompare(right.item.id)
       })
-  }, [allItems, query])
+      .map((candidate) => candidate.item)
+  }, [allItems, indexedItems, query, workspaceScope])
 
   useEffect(() => {
     if (filteredItems.length === 0) {
@@ -345,6 +521,10 @@ export default function CommandPalette(props: Props) {
       label: GROUP_LABELS[group],
       items: filteredItems.filter((item) => item.type === group),
     })).filter((group) => group.items.length > 0)
+  }, [filteredItems])
+
+  const itemIndexById = useMemo(() => {
+    return new Map(filteredItems.map((item, index) => [item.id, index]))
   }, [filteredItems])
 
   function handleSelect(item: CommandItem): void {
@@ -418,7 +598,10 @@ export default function CommandPalette(props: Props) {
 
         <div style={{ maxHeight: 'calc(76vh - 70px)', overflowY: 'auto', padding: 8 }}>
           {groupedItems.length === 0 ? (
-            <div style={{ padding: '10px 8px', fontSize: 13, color: '#64748b' }}>No results</div>
+            <div style={{ padding: '10px 8px', fontSize: 13, color: '#64748b' }}>
+              <div>No results found.</div>
+              <div style={{ marginTop: 4 }}>Try searching for a client, settings, team, or create.</div>
+            </div>
           ) : (
             groupedItems.map((group) => (
               <section key={group.key} aria-label={group.label} style={{ padding: 4 }}>
@@ -435,8 +618,8 @@ export default function CommandPalette(props: Props) {
                   {group.label}
                 </div>
                 {group.items.map((item) => {
-                  const itemIndex = filteredItems.findIndex((candidate) => candidate.id === item.id)
-                  const isActive = itemIndex === activeIndex
+                  const itemIndex = itemIndexById.get(item.id) ?? -1
+                  const isActive = itemIndex >= 0 && itemIndex === activeIndex
 
                   return (
                     <button
@@ -447,12 +630,13 @@ export default function CommandPalette(props: Props) {
                       style={{
                         width: '100%',
                         textAlign: 'left',
-                        border: '1px solid #e2e8f0',
+                        border: isActive ? '1px solid #3b82f6' : '1px solid #e2e8f0',
                         borderRadius: 8,
-                        background: isActive ? '#eff6ff' : '#fff',
+                        background: isActive ? '#e9f2ff' : '#fff',
                         padding: '9px 10px',
                         marginBottom: 6,
                         cursor: 'pointer',
+                        boxShadow: isActive ? '0 0 0 1px rgba(59, 130, 246, 0.2)' : undefined,
                       }}
                     >
                       <div style={{ fontSize: 13, color: '#0f172a', fontWeight: 600 }}>{item.label}</div>
