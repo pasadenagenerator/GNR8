@@ -1029,245 +1029,247 @@ export default function CommandPalette(props: Props) {
           fontFamily: commandPaletteFontFamily,
         }}
       >
-        <div style={{ borderBottom: '1px solid #e2e8f0', padding: '14px 14px 12px', fontFamily: commandPaletteFontFamily }}>
-          <input
-            ref={searchInputRef}
-            value={query}
-            onChange={(event) => {
-              setQuery(event.currentTarget.value)
-              setActiveIndex(0)
-            }}
-            onKeyDown={(event) => {
-              if (event.key !== 'Enter') return
-              event.preventDefault()
-              const selected = filteredItems[activeIndex]
-              if (selected) handleSelect(selected)
-            }}
-            placeholder='Type a command or destination'
-            aria-label='Search commands'
-            style={{
-              width: '100%',
-              borderRadius: 10,
-              border: '1px solid #cbd5e1',
-              padding: '10px 12px',
-              fontSize: 14,
-              color: '#0f172a',
-              lineHeight: 1.4,
-              fontFamily: commandPaletteFontFamily,
-            }}
-          />
-          <div style={{ marginTop: 10, fontSize: 11, color: '#64748b', textAlign: 'right', fontFamily: commandPaletteFontFamily }}>
-            ⌘K • Enter
-          </div>
-        </div>
-
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns: isCompactLayout ? 'minmax(0, 1fr)' : 'minmax(0, 1fr) minmax(260px, 320px)',
-            gap: 0,
-            maxHeight: 'calc(76vh - 84px)',
-            minHeight: 0,
-            fontFamily: commandPaletteFontFamily,
-          }}
-        >
-          <div style={{ overflowY: 'auto', overscrollBehavior: 'contain', minHeight: 0, padding: '12px', fontFamily: commandPaletteFontFamily }}>
-            {groupedItems.length === 0 ? (
-              <div style={{ padding: '16px 10px', fontSize: 13, color: '#64748b', lineHeight: 1.45, fontFamily: commandPaletteFontFamily }}>
-                <div style={{ fontSize: 14, color: '#334155', fontWeight: 600, fontFamily: commandPaletteFontFamily }}>No results found.</div>
-                <div style={{ marginTop: 6, fontFamily: commandPaletteFontFamily }}>Try searching for a client, settings, team, or create.</div>
-              </div>
-            ) : (
-              groupedItems.map((group, groupIndex) => (
-                <section
-                  key={group.key}
-                  aria-label={group.label}
-                  style={{
-                    padding: '0 2px',
-                    marginTop: groupIndex === 0 ? 0 : 10,
-                    fontFamily: commandPaletteFontFamily,
-                  }}
-                >
-                  <div
-                    style={{
-                      padding: '5px 8px 7px',
-                      fontSize: 11,
-                      fontWeight: 700,
-                      letterSpacing: 0.45,
-                      textTransform: 'uppercase',
-                      color: '#64748b',
-                      fontFamily: commandPaletteFontFamily,
-                    }}
-                  >
-                    {group.label}
-                  </div>
-                  {group.items.map((item) => {
-                    const itemIndex = itemIndexById.get(item.id) ?? -1
-                    const isActive = itemIndex >= 0 && itemIndex === activeIndex
-                    const hasSecondaryActions = Boolean(item.secondaryActions && item.secondaryActions.length > 0)
-                    const itemIsPinned = isPinned(item)
-                    const itemIsSaved = isSaved(item)
-                    const canPersonalize = isPersonalizable(item)
-
-                    return (
-                      <div
-                        key={item.id}
-                        onMouseEnter={() => setActiveIndex(itemIndex)}
-                        style={{
-                          border: isActive ? '1px solid #bfdbfe' : '1px solid #e2e8f0',
-                          borderRadius: 10,
-                          background: isActive ? '#f8fbff' : '#fff',
-                          marginBottom: 7,
-                          boxShadow: isActive ? '0 0 0 1px rgba(59, 130, 246, 0.08)' : undefined,
-                          transition: 'background-color 120ms ease, border-color 120ms ease, box-shadow 120ms ease',
-                          fontFamily: commandPaletteFontFamily,
-                        }}
-                      >
-                        <button
-                          type='button'
-                          onClick={() => handleSelect(item)}
-                          style={{
-                            width: '100%',
-                            textAlign: 'left',
-                            border: 0,
-                            borderRadius: 10,
-                            background: 'transparent',
-                            padding: '10px 11px',
-                            cursor: 'pointer',
-                            fontFamily: commandPaletteFontFamily,
-                          }}
-                        >
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
-                            <div style={{ fontSize: 13, color: '#0f172a', fontWeight: 600, lineHeight: 1.35, fontFamily: commandPaletteFontFamily }}>
-                              {item.label}
-                            </div>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                              {canPersonalize ? (
-                                <>
-                                  <button
-                                    type='button'
-                                    aria-label={itemIsPinned ? 'Unpin result' : 'Pin result'}
-                                    title={itemIsPinned ? 'Unpin' : 'Pin'}
-                                    onClick={(event) => {
-                                      event.preventDefault()
-                                      event.stopPropagation()
-                                      togglePinned(item)
-                                    }}
-                                    style={{
-                                      border: itemIsPinned ? '1px solid #93c5fd' : '1px solid #cbd5e1',
-                                      background: itemIsPinned ? '#eff6ff' : '#fff',
-                                      color: itemIsPinned ? '#1d4ed8' : '#475569',
-                                      borderRadius: 999,
-                                      padding: '2px 7px',
-                                      fontSize: 10,
-                                      fontWeight: 700,
-                                      cursor: 'pointer',
-                                      textTransform: 'uppercase',
-                                      letterSpacing: 0.2,
-                                      fontFamily: commandPaletteFontFamily,
-                                    }}
-                                  >
-                                    {itemIsPinned ? 'Unpin' : 'Pin'}
-                                  </button>
-                                  <button
-                                    type='button'
-                                    aria-label={itemIsSaved ? 'Remove saved result' : 'Save result'}
-                                    title={itemIsSaved ? 'Remove saved' : 'Save'}
-                                    onClick={(event) => {
-                                      event.preventDefault()
-                                      event.stopPropagation()
-                                      toggleSaved(item)
-                                    }}
-                                    style={{
-                                      border: itemIsSaved ? '1px solid #a7f3d0' : '1px solid #cbd5e1',
-                                      background: itemIsSaved ? '#ecfdf5' : '#fff',
-                                      color: itemIsSaved ? '#047857' : '#475569',
-                                      borderRadius: 999,
-                                      padding: '2px 7px',
-                                      fontSize: 10,
-                                      fontWeight: 700,
-                                      cursor: 'pointer',
-                                      textTransform: 'uppercase',
-                                      letterSpacing: 0.2,
-                                      fontFamily: commandPaletteFontFamily,
-                                    }}
-                                  >
-                                    {itemIsSaved ? 'Saved' : 'Save'}
-                                  </button>
-                                </>
-                              ) : null}
-                              <span
-                                style={{
-                                  fontSize: 10,
-                                  color: '#475569',
-                                  border: '1px solid #cbd5e1',
-                                  borderRadius: 999,
-                                  padding: '2px 7px',
-                                  background: '#f8fafc',
-                                  textTransform: 'uppercase',
-                                  letterSpacing: 0.3,
-                                  fontFamily: commandPaletteFontFamily,
-                                }}
-                              >
-                                {itemTypeLabel(item.type)}
-                              </span>
-                            </div>
-                          </div>
-                          {item.sublabel ? (
-                            <div style={{ marginTop: 4, fontSize: 12, color: '#64748b', lineHeight: 1.35, fontFamily: commandPaletteFontFamily }}>
-                              {item.sublabel}
-                            </div>
-                          ) : null}
-                        </button>
-                        {isActive && hasSecondaryActions ? (
-                          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', padding: '0 11px 10px', fontFamily: commandPaletteFontFamily }}>
-                            {item.secondaryActions?.map((secondaryAction) => (
-                              <button
-                                key={secondaryAction.id}
-                                type='button'
-                                onClick={(event) => {
-                                  event.preventDefault()
-                                  event.stopPropagation()
-                                  handleAction(secondaryAction, item)
-                                }}
-                                style={{
-                                  border: '1px solid #bfdbfe',
-                                  background: '#eff6ff',
-                                  color: '#1e40af',
-                                  borderRadius: 999,
-                                  fontSize: 11,
-                                  fontWeight: 600,
-                                  padding: '4px 9px',
-                                  cursor: 'pointer',
-                                  fontFamily: commandPaletteFontFamily,
-                                }}
-                              >
-                                {secondaryAction.label}
-                              </button>
-                            ))}
-                          </div>
-                        ) : null}
-                      </div>
-                    )
-                  })}
-                </section>
-              ))
-            )}
+        <div style={{ paddingLeft: 20, paddingRight: 20, paddingTop: 12, paddingBottom: 12, minWidth: 0, fontFamily: commandPaletteFontFamily }}>
+          <div style={{ borderBottom: '1px solid #e2e8f0', padding: '14px 0 12px', fontFamily: commandPaletteFontFamily }}>
+            <input
+              ref={searchInputRef}
+              value={query}
+              onChange={(event) => {
+                setQuery(event.currentTarget.value)
+                setActiveIndex(0)
+              }}
+              onKeyDown={(event) => {
+                if (event.key !== 'Enter') return
+                event.preventDefault()
+                const selected = filteredItems[activeIndex]
+                if (selected) handleSelect(selected)
+              }}
+              placeholder='Type a command or destination'
+              aria-label='Search commands'
+              style={{
+                width: '100%',
+                borderRadius: 10,
+                border: '1px solid #cbd5e1',
+                padding: '10px 12px',
+                fontSize: 14,
+                color: '#0f172a',
+                lineHeight: 1.4,
+                fontFamily: commandPaletteFontFamily,
+              }}
+            />
+            <div style={{ marginTop: 10, fontSize: 11, color: '#64748b', textAlign: 'right', fontFamily: commandPaletteFontFamily }}>
+              ⌘K • Enter
+            </div>
           </div>
 
-          <aside
-            aria-label='Result preview'
+          <div
             style={{
-              borderTop: isCompactLayout ? '1px solid #e2e8f0' : undefined,
-              borderLeft: isCompactLayout ? undefined : '1px solid #e2e8f0',
-              padding: isCompactLayout ? '12px 14px 14px' : '14px 16px 16px',
-              background: '#fcfdff',
-              overflowY: 'auto',
-              overscrollBehavior: 'contain',
+              display: 'grid',
+              gridTemplateColumns: isCompactLayout ? 'minmax(0, 1fr)' : 'minmax(0, 1fr) minmax(260px, 320px)',
+              gap: 0,
+              maxHeight: 'calc(76vh - 84px)',
               minHeight: 0,
+              minWidth: 0,
               fontFamily: commandPaletteFontFamily,
             }}
           >
+            <div style={{ overflowY: 'auto', overscrollBehavior: 'contain', minHeight: 0, minWidth: 0, padding: '12px 0', fontFamily: commandPaletteFontFamily }}>
+              {groupedItems.length === 0 ? (
+                <div style={{ padding: '16px 0', fontSize: 13, color: '#64748b', lineHeight: 1.45, fontFamily: commandPaletteFontFamily }}>
+                  <div style={{ fontSize: 14, color: '#334155', fontWeight: 600, fontFamily: commandPaletteFontFamily }}>No results found.</div>
+                  <div style={{ marginTop: 6, fontFamily: commandPaletteFontFamily }}>Try searching for a client, settings, team, or create.</div>
+                </div>
+              ) : (
+                groupedItems.map((group, groupIndex) => (
+                  <section
+                    key={group.key}
+                    aria-label={group.label}
+                    style={{
+                      marginTop: groupIndex === 0 ? 0 : 10,
+                      fontFamily: commandPaletteFontFamily,
+                    }}
+                  >
+                    <div
+                      style={{
+                        padding: '5px 8px 7px',
+                        fontSize: 11,
+                        fontWeight: 700,
+                        letterSpacing: 0.45,
+                        textTransform: 'uppercase',
+                        color: '#64748b',
+                        fontFamily: commandPaletteFontFamily,
+                      }}
+                    >
+                      {group.label}
+                    </div>
+                    {group.items.map((item) => {
+                      const itemIndex = itemIndexById.get(item.id) ?? -1
+                      const isActive = itemIndex >= 0 && itemIndex === activeIndex
+                      const hasSecondaryActions = Boolean(item.secondaryActions && item.secondaryActions.length > 0)
+                      const itemIsPinned = isPinned(item)
+                      const itemIsSaved = isSaved(item)
+                      const canPersonalize = isPersonalizable(item)
+
+                      return (
+                        <div
+                          key={item.id}
+                          onMouseEnter={() => setActiveIndex(itemIndex)}
+                          style={{
+                            border: isActive ? '1px solid #bfdbfe' : '1px solid #e2e8f0',
+                            borderRadius: 10,
+                            background: isActive ? '#f8fbff' : '#fff',
+                            marginBottom: 7,
+                            boxShadow: isActive ? '0 0 0 1px rgba(59, 130, 246, 0.08)' : undefined,
+                            transition: 'background-color 120ms ease, border-color 120ms ease, box-shadow 120ms ease',
+                            fontFamily: commandPaletteFontFamily,
+                          }}
+                        >
+                          <button
+                            type='button'
+                            onClick={() => handleSelect(item)}
+                            style={{
+                              width: '100%',
+                              textAlign: 'left',
+                              border: 0,
+                              borderRadius: 10,
+                              background: 'transparent',
+                              padding: '10px 11px',
+                              cursor: 'pointer',
+                              fontFamily: commandPaletteFontFamily,
+                            }}
+                          >
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+                              <div style={{ fontSize: 13, color: '#0f172a', fontWeight: 600, lineHeight: 1.35, fontFamily: commandPaletteFontFamily }}>
+                                {item.label}
+                              </div>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                {canPersonalize ? (
+                                  <>
+                                    <button
+                                      type='button'
+                                      aria-label={itemIsPinned ? 'Unpin result' : 'Pin result'}
+                                      title={itemIsPinned ? 'Unpin' : 'Pin'}
+                                      onClick={(event) => {
+                                        event.preventDefault()
+                                        event.stopPropagation()
+                                        togglePinned(item)
+                                      }}
+                                      style={{
+                                        border: itemIsPinned ? '1px solid #93c5fd' : '1px solid #cbd5e1',
+                                        background: itemIsPinned ? '#eff6ff' : '#fff',
+                                        color: itemIsPinned ? '#1d4ed8' : '#475569',
+                                        borderRadius: 999,
+                                        padding: '2px 7px',
+                                        fontSize: 10,
+                                        fontWeight: 700,
+                                        cursor: 'pointer',
+                                        textTransform: 'uppercase',
+                                        letterSpacing: 0.2,
+                                        fontFamily: commandPaletteFontFamily,
+                                      }}
+                                    >
+                                      {itemIsPinned ? 'Unpin' : 'Pin'}
+                                    </button>
+                                    <button
+                                      type='button'
+                                      aria-label={itemIsSaved ? 'Remove saved result' : 'Save result'}
+                                      title={itemIsSaved ? 'Remove saved' : 'Save'}
+                                      onClick={(event) => {
+                                        event.preventDefault()
+                                        event.stopPropagation()
+                                        toggleSaved(item)
+                                      }}
+                                      style={{
+                                        border: itemIsSaved ? '1px solid #a7f3d0' : '1px solid #cbd5e1',
+                                        background: itemIsSaved ? '#ecfdf5' : '#fff',
+                                        color: itemIsSaved ? '#047857' : '#475569',
+                                        borderRadius: 999,
+                                        padding: '2px 7px',
+                                        fontSize: 10,
+                                        fontWeight: 700,
+                                        cursor: 'pointer',
+                                        textTransform: 'uppercase',
+                                        letterSpacing: 0.2,
+                                        fontFamily: commandPaletteFontFamily,
+                                      }}
+                                    >
+                                      {itemIsSaved ? 'Saved' : 'Save'}
+                                    </button>
+                                  </>
+                                ) : null}
+                                <span
+                                  style={{
+                                    fontSize: 10,
+                                    color: '#475569',
+                                    border: '1px solid #cbd5e1',
+                                    borderRadius: 999,
+                                    padding: '2px 7px',
+                                    background: '#f8fafc',
+                                    textTransform: 'uppercase',
+                                    letterSpacing: 0.3,
+                                    fontFamily: commandPaletteFontFamily,
+                                  }}
+                                >
+                                  {itemTypeLabel(item.type)}
+                                </span>
+                              </div>
+                            </div>
+                            {item.sublabel ? (
+                              <div style={{ marginTop: 4, fontSize: 12, color: '#64748b', lineHeight: 1.35, fontFamily: commandPaletteFontFamily }}>
+                                {item.sublabel}
+                              </div>
+                            ) : null}
+                          </button>
+                          {isActive && hasSecondaryActions ? (
+                            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', padding: '0 11px 10px', fontFamily: commandPaletteFontFamily }}>
+                              {item.secondaryActions?.map((secondaryAction) => (
+                                <button
+                                  key={secondaryAction.id}
+                                  type='button'
+                                  onClick={(event) => {
+                                    event.preventDefault()
+                                    event.stopPropagation()
+                                    handleAction(secondaryAction, item)
+                                  }}
+                                  style={{
+                                    border: '1px solid #bfdbfe',
+                                    background: '#eff6ff',
+                                    color: '#1e40af',
+                                    borderRadius: 999,
+                                    fontSize: 11,
+                                    fontWeight: 600,
+                                    padding: '4px 9px',
+                                    cursor: 'pointer',
+                                    fontFamily: commandPaletteFontFamily,
+                                  }}
+                                >
+                                  {secondaryAction.label}
+                                </button>
+                              ))}
+                            </div>
+                          ) : null}
+                        </div>
+                      )
+                    })}
+                  </section>
+                ))
+              )}
+            </div>
+
+            <aside
+              aria-label='Result preview'
+              style={{
+                borderTop: isCompactLayout ? '1px solid #e2e8f0' : undefined,
+                borderLeft: isCompactLayout ? undefined : '1px solid #e2e8f0',
+                padding: isCompactLayout ? '12px 0 14px' : '14px 0 16px 16px',
+                background: '#fcfdff',
+                overflowY: 'auto',
+                overscrollBehavior: 'contain',
+                minHeight: 0,
+                minWidth: 0,
+                fontFamily: commandPaletteFontFamily,
+              }}
+            >
             {activeItem ? (
               <>
                 <div
@@ -1363,7 +1365,8 @@ export default function CommandPalette(props: Props) {
                 Select a result to view details.
               </div>
             )}
-          </aside>
+            </aside>
+          </div>
         </div>
       </div>
     </div>
