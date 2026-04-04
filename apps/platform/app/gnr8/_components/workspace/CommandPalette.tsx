@@ -13,6 +13,7 @@ import {
   type SavedCommandItem,
   type SavedCommandType,
 } from '@/src/workspace/command-palette-saved'
+import { getCommandUsage, recordCommandUsage, type CommandUsageEntry } from '@/src/workspace/command-palette-usage'
 import { getRecentItems, type WorkspaceRecentItem } from '@/src/workspace/workspace-recents'
 
 export type CommandResultAction = {
@@ -77,6 +78,7 @@ type WorkspaceScope = 'agency' | 'client' | 'command-center' | 'other'
 
 type IndexedCommandItem = {
   item: CommandItem
+  usageId: string
   fields: string[]
   compactFields: string[]
 }
@@ -108,6 +110,12 @@ function toQueryParams(href: string): URLSearchParams {
   if (!normalized) return new URLSearchParams()
   const queryIndex = normalized.indexOf('?')
   return queryIndex >= 0 ? new URLSearchParams(normalized.slice(queryIndex + 1)) : new URLSearchParams()
+}
+
+function resolveUsageId(item: Pick<CommandItem, 'id' | 'sourceItemId' | 'type'>): string {
+  const sourceId = normalizeText(item.sourceItemId)
+  if ((item.type === 'pinned' || item.type === 'saved') && sourceId) return sourceId
+  return normalizeText(item.id)
 }
 
 function itemTypeLabel(type: CommandItem['type']): string {
@@ -336,11 +344,30 @@ function scoreField(field: string, compactField: string, normalizedQuery: string
   return best
 }
 
+function scoreUsageFrequencyBoost(entry: CommandUsageEntry | undefined): number {
+  if (!entry) return 0
+  if (entry.count <= 1) return 6
+  return Math.min(28, Math.round(Math.log2(entry.count + 1) * 8))
+}
+
+function scoreUsageRecencyBoost(entry: CommandUsageEntry | undefined, now: number): number {
+  if (!entry) return 0
+  const ageMs = Math.max(0, now - entry.lastUsedAt)
+  const ageHours = ageMs / (1000 * 60 * 60)
+  if (ageHours <= 1) return 10
+  if (ageHours <= 24) return 8
+  if (ageHours <= 24 * 7) return 5
+  if (ageHours <= 24 * 30) return 2
+  return 0
+}
+
 function scoreIndexedItem(
   indexedItem: IndexedCommandItem,
   normalizedQuery: string,
   queryTokens: string[],
   workspaceScope: WorkspaceScope,
+  usageById: Map<string, CommandUsageEntry>,
+  now: number,
 ): number {
   if (!normalizedQuery) return 0
 
@@ -352,11 +379,18 @@ function scoreIndexedItem(
   }
   if (bestScore < 0) return -1
 
+  const usageEntry = usageById.get(indexedItem.usageId)
+
+  // Additive and deterministic score components, highest-priority boosts first.
+  // Order of influence:
+  // pinned > saved > text match quality > usage frequency > usage recency > context relevance.
   let total = bestScore
   if (indexedItem.item.type === 'recent') total += indexedItem.item.recentRankBoost ?? 0
   if (indexedItem.item.type === 'saved') total += 28
   if (indexedItem.item.type === 'pinned') total += 42
   if (indexedItem.item.type === 'action') total += 16
+  total += scoreUsageFrequencyBoost(usageEntry)
+  total += scoreUsageRecencyBoost(usageEntry, now)
   if (indexedItem.item.type === 'action' && indexedItem.item.contextScope === workspaceScope) total += 18
   if (indexedItem.item.type === 'action' && indexedItem.item.contextScope === 'global') total += 8
   return total
@@ -372,6 +406,7 @@ export default function CommandPalette(props: Props) {
   const [activeIndex, setActiveIndex] = useState(0)
   const [recentItems, setRecentItems] = useState<WorkspaceRecentItem[]>([])
   const [savedCommands, setSavedCommands] = useState<SavedCommandItem[]>([])
+  const [commandUsage, setCommandUsage] = useState<CommandUsageEntry[]>([])
   const [isCompactLayout, setIsCompactLayout] = useState(false)
 
   const allowedAgencyIds = useMemo(() => normalizeSet(props.accessibleAgencyIds), [props.accessibleAgencyIds])
@@ -752,21 +787,30 @@ export default function CommandPalette(props: Props) {
       const compactFields = fields.map((field) => normalizeCompactText(field))
       return {
         item,
+        usageId: resolveUsageId(item),
         fields,
         compactFields,
       }
     })
   }, [allItems])
 
+  useEffect(() => {
+    if (!isOpen) return
+    const validIds = new Set(allItems.map((item) => resolveUsageId(item)).filter(Boolean))
+    setCommandUsage(getCommandUsage({ validIds }))
+  }, [allItems, isOpen])
+
   const filteredItems = useMemo(() => {
     const normalizedQuery = normalizeSearchText(query)
     if (!normalizedQuery) return allItems
 
     const queryTokens = tokenizeSearchText(normalizedQuery)
+    const usageById = new Map(commandUsage.map((entry) => [entry.id, entry]))
+    const now = Date.now()
     return indexedItems
       .map((indexedItem) => ({
         item: indexedItem.item,
-        score: scoreIndexedItem(indexedItem, normalizedQuery, queryTokens, workspaceScope),
+        score: scoreIndexedItem(indexedItem, normalizedQuery, queryTokens, workspaceScope, usageById, now),
       }))
       .filter((candidate) => candidate.score >= 0)
       .sort((left, right) => {
@@ -780,7 +824,7 @@ export default function CommandPalette(props: Props) {
         return left.item.id.localeCompare(right.item.id)
       })
       .map((candidate) => candidate.item)
-  }, [allItems, indexedItems, query, workspaceScope])
+  }, [allItems, commandUsage, indexedItems, query, workspaceScope])
 
   useEffect(() => {
     if (filteredItems.length === 0) {
@@ -849,22 +893,32 @@ export default function CommandPalette(props: Props) {
     setIsOpen(false)
     setQuery('')
     setActiveIndex(0)
+    const usageId = resolveUsageId(item)
     if (item.href) {
       router.push(item.href)
+      setCommandUsage(recordCommandUsage(usageId))
       return
     }
-    item.action?.()
+    if (item.action) {
+      item.action()
+      setCommandUsage(recordCommandUsage(usageId))
+    }
   }
 
-  function handleAction(action: CommandResultAction): void {
+  function handleAction(action: CommandResultAction, parentItem: CommandItem): void {
     setIsOpen(false)
     setQuery('')
     setActiveIndex(0)
+    const usageId = resolveUsageId(parentItem)
     if (action.href) {
       router.push(action.href)
+      setCommandUsage(recordCommandUsage(usageId))
       return
     }
-    action.action?.()
+    if (action.action) {
+      action.action()
+      setCommandUsage(recordCommandUsage(usageId))
+    }
   }
 
   if (!isOpen) return null
@@ -1069,7 +1123,7 @@ export default function CommandPalette(props: Props) {
                                 onClick={(event) => {
                                   event.preventDefault()
                                   event.stopPropagation()
-                                  handleAction(secondaryAction)
+                                  handleAction(secondaryAction, item)
                                 }}
                                 style={{
                                   border: '1px solid #bfdbfe',
