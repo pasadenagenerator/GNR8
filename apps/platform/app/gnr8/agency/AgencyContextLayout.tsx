@@ -3,10 +3,12 @@ import type { ReactNode } from 'react'
 import WorkspaceLayout, { type WorkspaceBreadcrumbItem } from '../_components/workspace/WorkspaceLayout'
 import WorkspaceRecentItems from '../_components/workspace/WorkspaceRecentItems'
 import WorkspaceQuickSwitcher, { type WorkspaceQuickSwitchOption } from '../_components/workspace/WorkspaceQuickSwitcher'
+import WorkspaceShortcuts, { type WorkspaceShortcut } from '../_components/workspace/WorkspaceShortcuts'
 import WorkspaceStateSync from '../_components/workspace/WorkspaceStateSync'
 import { buildWorkspaceViewModel, type WorkspaceTabInput } from '../_components/workspace/workspace-view-model'
 import { listSwitchableAgencyClientsForPage } from './clients/client-switcher-options'
 import { buildAgencySwitchHref } from '@/src/workspace/context-switching'
+import { canPerformAction } from '@/src/auth/rbac'
 
 type MembershipOption = {
   agency_id: string
@@ -135,6 +137,40 @@ export default async function AgencyContextLayout(props: Props) {
     { key: 'members', label: 'Team', href: membersHref },
     { key: 'settings', label: 'Settings', href: settingsHref },
   ]
+  const agencyShortcuts: WorkspaceShortcut[] = [
+    ...(canPerformAction(props.role, 'create_client') && !isAdminView
+      ? [
+          {
+            id: 'add-client',
+            label: 'Add Client',
+            href: buildHref('/gnr8/agency/clients/new', queryParams),
+            description: 'Start client provisioning in current scope',
+            icon: '+',
+          },
+        ]
+      : []),
+    {
+      id: 'open-clients',
+      label: 'Open Clients',
+      href: clientsHref,
+      description: 'Go to current agency client list',
+      icon: 'C',
+    },
+    {
+      id: 'open-team',
+      label: 'Open Team',
+      href: membersHref,
+      description: 'Open agency membership workspace',
+      icon: 'T',
+    },
+    {
+      id: 'open-settings',
+      label: 'Open Settings',
+      href: settingsHref,
+      description: 'Open agency settings and profile',
+      icon: 'S',
+    },
+  ]
   const persistedAgencyTab = props.activeTab === 'members' ? 'team' : props.activeTab
   const { header, tabs } = buildWorkspaceViewModel({
     header: {
@@ -230,6 +266,11 @@ export default async function AgencyContextLayout(props: Props) {
       }}
       afterTabs={
         <div style={{ marginTop: 12 }}>
+          <WorkspaceShortcuts
+            title='Productivity Shortcuts'
+            helperText='Fast routes for common agency workspace actions.'
+            shortcuts={agencyShortcuts}
+          />
           {!isAdminView && props.memberships.length > 1 ? (
             <div>
               <WorkspaceQuickSwitcher

@@ -5,6 +5,7 @@ import type { ReactNode } from "react";
 
 import WorkspaceLayout, { type WorkspaceBreadcrumbItem } from "../_components/workspace/WorkspaceLayout";
 import WorkspaceRecentItems from "../_components/workspace/WorkspaceRecentItems";
+import WorkspaceShortcuts, { type WorkspaceShortcut } from "../_components/workspace/WorkspaceShortcuts";
 import WorkspaceStateSync from "../_components/workspace/WorkspaceStateSync";
 import { buildWorkspaceViewModel, type WorkspaceTabInput } from "../_components/workspace/workspace-view-model";
 
@@ -18,6 +19,30 @@ const TABS: WorkspaceTabInput[] = [
   { key: "overview", href: "/gnr8/command-center", label: "Overview" },
   { key: "sites", href: "/gnr8/command-center/sites", label: "Sites" },
   { key: "agencies", href: "/gnr8/command-center/agencies", label: "Agencies" },
+];
+
+const COMMAND_CENTER_SHORTCUTS: WorkspaceShortcut[] = [
+  {
+    id: "create-agency",
+    label: "Create Agency",
+    href: "/gnr8/command-center/agencies",
+    description: "Open agency provisioning flow",
+    icon: "+",
+  },
+  {
+    id: "open-agencies",
+    label: "Open Agencies",
+    href: "/gnr8/command-center/agencies",
+    description: "Manage agency admin-view entry points",
+    icon: "A",
+  },
+  {
+    id: "open-sites",
+    label: "Open Sites",
+    href: "/gnr8/command-center/sites",
+    description: "Review migration and operations status",
+    icon: "S",
+  },
 ];
 
 function resolveActiveTab(pathname: string): TabKey {
@@ -96,7 +121,16 @@ export default function CommandCenterLayout(props: Props) {
         ],
         allowCommandCenter: true,
       }}
-      afterTabs={<WorkspaceRecentItems allowCommandCenter={true} title="Recent Items" maxVisible={6} />}
+      afterTabs={
+        <div style={{ marginTop: 12 }}>
+          <WorkspaceShortcuts
+            title="Productivity Shortcuts"
+            helperText="Fast access to high-frequency command-center actions."
+            shortcuts={COMMAND_CENTER_SHORTCUTS}
+          />
+          <WorkspaceRecentItems allowCommandCenter={true} title="Recent Items" maxVisible={6} />
+        </div>
+      }
     >
       <WorkspaceStateSync />
       {props.children}

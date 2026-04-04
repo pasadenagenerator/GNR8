@@ -5,6 +5,7 @@ import WorkspaceRecentItems from '../../../_components/workspace/WorkspaceRecent
 import WorkspaceQuickSwitcher, {
   type WorkspaceQuickSwitchOption,
 } from '../../../_components/workspace/WorkspaceQuickSwitcher'
+import WorkspaceShortcuts, { type WorkspaceShortcut } from '../../../_components/workspace/WorkspaceShortcuts'
 import WorkspaceStateSync from '../../../_components/workspace/WorkspaceStateSync'
 import { buildWorkspaceViewModel, type WorkspaceTabInput } from '../../../_components/workspace/workspace-view-model'
 import { buildClientSwitchHref } from '@/src/workspace/context-switching'
@@ -69,6 +70,36 @@ export default function ClientContextLayout(props: Props) {
     { key: 'dashboard', label: 'Dashboard', href: dashboardHref },
     { key: 'settings', label: 'Settings', href: settingsHref },
     { key: 'users', label: 'Team', href: usersHref },
+  ]
+  const clientShortcuts: WorkspaceShortcut[] = [
+    {
+      id: 'view-sites',
+      label: 'View Sites',
+      href: dashboardHref,
+      description: 'Open client dashboard and sites overview',
+      icon: 'S',
+    },
+    {
+      id: 'open-settings',
+      label: 'Open Settings',
+      href: settingsHref,
+      description: 'Open client settings',
+      icon: 'G',
+    },
+    {
+      id: 'open-team',
+      label: 'Open Team',
+      href: usersHref,
+      description: 'Open client user access',
+      icon: 'T',
+    },
+    {
+      id: 'back-to-agency',
+      label: 'Back to Agency',
+      href: backToAgencyHref,
+      description: 'Return to parent agency workspace',
+      icon: 'A',
+    },
   ]
   const { header, tabs } = buildWorkspaceViewModel({
     header: {
@@ -137,12 +168,21 @@ export default function ClientContextLayout(props: Props) {
         accessibleClientIds: props.clientOptions.map((option) => option.clientId),
       }}
       afterTabs={
-        <WorkspaceRecentItems
-          accessibleAgencyIds={[activeAgencyId]}
-          accessibleClientIds={props.clientOptions.map((option) => option.clientId)}
-          title='Recent Items'
-          maxVisible={6}
-        />
+        <div style={{ marginTop: 12 }}>
+          {props.activeTab !== 'dashboard' ? (
+            <WorkspaceShortcuts
+              title='Productivity Shortcuts'
+              helperText='Fast actions for current client workspace scope.'
+              shortcuts={clientShortcuts}
+            />
+          ) : null}
+          <WorkspaceRecentItems
+            accessibleAgencyIds={[activeAgencyId]}
+            accessibleClientIds={props.clientOptions.map((option) => option.clientId)}
+            title='Recent Items'
+            maxVisible={6}
+          />
+        </div>
       }
     >
       <WorkspaceStateSync

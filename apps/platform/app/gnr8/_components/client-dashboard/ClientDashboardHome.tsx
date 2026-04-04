@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import WorkspaceShortcuts, { type WorkspaceShortcut } from "@/app/gnr8/_components/workspace/WorkspaceShortcuts";
 import type { ClientDashboardReadModel } from "@/gnr8/client/client-dashboard-read-model";
 
 type Props = {
@@ -103,6 +104,20 @@ function ActionLink(props: { href: string; label: string; external?: boolean }) 
 export default function ClientDashboardHome(props: Props) {
   const hasSites = props.readModel.site_rows.length > 0;
   const hasManagementActions = Boolean(props.settingsHref || props.teamHref);
+  const latestSiteHref = props.readModel.site_rows[0]?.live_url ?? props.readModel.site_rows[0]?.preview_url ?? null;
+  const workspaceShortcuts: WorkspaceShortcut[] = [
+    { id: "view-sites", label: "View Sites", href: "#client-sites", description: "Jump to sites overview", icon: "S" },
+    ...(latestSiteHref
+      ? [{ id: "open-latest-site", label: "Open Latest Site", href: latestSiteHref, description: "Open most recent connected site", icon: "L", external: true }]
+      : []),
+    ...(props.settingsHref
+      ? [{ id: "open-settings", label: "Open Settings", href: props.settingsHref, description: "Open client settings", icon: "G" }]
+      : []),
+    ...(props.teamHref ? [{ id: "open-team", label: "Open Team", href: props.teamHref, description: "Open client team", icon: "T" }] : []),
+    ...(props.backToAgencyHref
+      ? [{ id: "back-to-agency", label: "Back to Agency", href: props.backToAgencyHref, description: "Return to agency workspace", icon: "A" }]
+      : []),
+  ];
   const statusSummary =
     props.readModel.summary.needs_attention_sites > 0
       ? `${props.readModel.summary.needs_attention_sites} site${props.readModel.summary.needs_attention_sites === 1 ? "" : "s"} need attention.`
@@ -164,16 +179,15 @@ export default function ClientDashboardHome(props: Props) {
         </article>
       </section>
 
-      <section style={{ marginTop: 14, border: "1px solid #dbe6f1", borderRadius: 12, background: "#fff", padding: 12 }}>
-        <h3 style={{ margin: 0, fontSize: 15, color: "#0f172a" }}>Quick Actions</h3>
-        <div style={{ marginTop: 10, display: "flex", gap: 8, flexWrap: "wrap" }}>
-          <ActionLink href="#client-sites" label="View Sites" />
-          {props.settingsHref ? <ActionLink href={props.settingsHref} label="Open Settings" /> : null}
-          {props.teamHref ? <ActionLink href={props.teamHref} label="Open Team" /> : null}
-          {props.backToAgencyHref ? <ActionLink href={props.backToAgencyHref} label="Back to Agency" /> : null}
-          {props.clientSelfHref ? <ActionLink href={props.clientSelfHref} label="Open Client-Side Route" /> : null}
-        </div>
-      </section>
+      <WorkspaceShortcuts
+        title="Productivity Shortcuts"
+        helperText={
+          props.viewMode === "agency-managed"
+            ? "Fast actions for this agency-managed client workspace."
+            : "Fast actions for your current client workspace."
+        }
+        shortcuts={workspaceShortcuts}
+      />
 
       <section
         id="client-sites"
