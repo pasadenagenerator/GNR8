@@ -6,6 +6,7 @@ import WorkspaceQuickSwitcher, { type WorkspaceQuickSwitchOption } from '../_com
 import WorkspaceStateSync from '../_components/workspace/WorkspaceStateSync'
 import { buildWorkspaceViewModel, type WorkspaceTabInput } from '../_components/workspace/workspace-view-model'
 import { listSwitchableAgencyClientsForPage } from './clients/client-switcher-options'
+import { buildAgencySwitchHref } from '@/src/workspace/context-switching'
 
 type MembershipOption = {
   agency_id: string
@@ -65,6 +66,13 @@ function buildAgencyBreadcrumbs(input: {
   return [{ label: 'Agency', href: input.dashboardHref }, { label: activeLabel }]
 }
 
+function agencyPathForTab(tab: AgencyContextTab): string {
+  if (tab === 'clients') return '/gnr8/agency/clients'
+  if (tab === 'members') return '/gnr8/agency/members'
+  if (tab === 'settings') return '/gnr8/agency/settings'
+  return '/gnr8/agency'
+}
+
 export default async function AgencyContextLayout(props: Props) {
   const actorMode = props.actorMode ?? 'membership'
   const isAdminView = actorMode === 'admin_view'
@@ -83,10 +91,15 @@ export default async function AgencyContextLayout(props: Props) {
   const clientsHref = buildHref('/gnr8/agency/clients', queryParams)
   const membersHref = buildHref('/gnr8/agency/members', queryParams)
   const settingsHref = buildHref('/gnr8/agency/settings', queryParams)
+  const activeAgencyPath = agencyPathForTab(props.activeTab)
   const agencyOptions: WorkspaceQuickSwitchOption[] = props.memberships.map((membership) => ({
     value: membership.agency_id,
     label: membership.agency_name?.trim() || membership.agency_id,
-    href: buildHref('/gnr8/agency', new URLSearchParams([['agency', membership.agency_id]])),
+    href: buildAgencySwitchHref({
+      pathname: activeAgencyPath,
+      params: queryParams,
+      targetAgencyId: membership.agency_id,
+    }),
   }))
   const switchableClients = await listSwitchableAgencyClientsForPage({ agencyId: activeAgencyId })
   const scopedAgencyIds = props.memberships.map((membership) => membership.agency_id)
@@ -184,7 +197,11 @@ export default async function AgencyContextLayout(props: Props) {
           id: membership.agency_id,
           label: membership.agency_name?.trim() || membership.agency_id,
           sublabel: `Agency ID: ${membership.agency_id}`,
-          href: buildHref('/gnr8/agency', new URLSearchParams([['agency', membership.agency_id]])),
+          href: buildAgencySwitchHref({
+            pathname: activeAgencyPath,
+            params: queryParams,
+            targetAgencyId: membership.agency_id,
+          }),
         })),
         clients: switchableClients.map((client) => ({
           id: client.clientId,
@@ -219,6 +236,10 @@ export default async function AgencyContextLayout(props: Props) {
                 label='Switch Agency'
                 currentValue={activeAgencyId}
                 options={agencyOptions}
+                persistStateOnChange={{
+                  activeClientId: undefined,
+                  lastAgencyTab: persistedAgencyTab,
+                }}
                 persistStateValueKey='activeAgencyId'
               />
             </div>

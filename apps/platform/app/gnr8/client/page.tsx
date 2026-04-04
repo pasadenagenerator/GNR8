@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import ClientDashboardHome from "@/app/gnr8/_components/client-dashboard/ClientDashboardHome";
+import WorkspaceStateSync from "@/app/gnr8/_components/workspace/WorkspaceStateSync";
 import { getClientDashboardReadModelForPage } from "@/gnr8/client/client-dashboard-read-model";
 import { CLIENT_SETUP_PATH, getClientSetupStatusForClientForPage } from "@/src/auth/client-setup-gate";
 import {
@@ -9,6 +10,7 @@ import {
   resolveCurrentUserClientForPage,
   ResolveCurrentClientError,
 } from "@/src/auth/resolve-current-client";
+import { buildClientSwitchHref } from "@/src/workspace/context-switching";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -16,6 +18,10 @@ export const revalidate = 0;
 
 type SearchParams = {
   client?: string;
+  agency?: string;
+  admin_view?: string;
+  tab?: string;
+  client_tab?: string;
 };
 
 function shortId(value: string): string {
@@ -25,6 +31,20 @@ function shortId(value: string): string {
 
 function buildClientSetupPath(clientId: string): string {
   return `${CLIENT_SETUP_PATH}?client=${encodeURIComponent(clientId)}`;
+}
+
+function buildClientSelfSwitchTarget(searchParams: SearchParams | undefined, targetClientId: string): string {
+  const params = new URLSearchParams();
+  if (searchParams?.agency) params.set("agency", String(searchParams.agency));
+  if (searchParams?.admin_view) params.set("admin_view", String(searchParams.admin_view));
+  if (searchParams?.tab) params.set("tab", String(searchParams.tab));
+  if (searchParams?.client_tab) params.set("client_tab", String(searchParams.client_tab));
+  return buildClientSwitchHref({
+    pathname: "/gnr8/client",
+    params,
+    targetClientId,
+    preferClientSelf: true,
+  });
 }
 
 export default async function ClientDashboardPage(props: { searchParams?: Promise<SearchParams> }) {
@@ -107,7 +127,7 @@ export default async function ClientDashboardPage(props: { searchParams?: Promis
               {availableClientMemberships.map((membership) => (
                 <Link
                   key={membership.client_id}
-                  href={`/gnr8/client?client=${encodeURIComponent(membership.client_id)}`}
+                  href={buildClientSelfSwitchTarget(resolvedSearchParams, membership.client_id)}
                   style={{
                     display: "inline-flex",
                     alignItems: "center",
@@ -182,6 +202,12 @@ export default async function ClientDashboardPage(props: { searchParams?: Promis
       </header>
 
       <ClientDashboardHome readModel={readModel} roleLabel={currentUserClient.role} viewMode="client-self" />
+      <WorkspaceStateSync
+        activeAgencyId={currentUserClient.agency_id}
+        activeClientId={currentUserClient.client_id}
+        activeClientName={currentUserClient.client_name}
+        lastClientTab="dashboard"
+      />
 
       {availableClientMemberships.length > 1 ? (
         <section style={{ marginTop: 14, border: "1px solid #dbe6f1", borderRadius: 12, background: "#fff", padding: 12 }}>
@@ -192,7 +218,7 @@ export default async function ClientDashboardPage(props: { searchParams?: Promis
               return (
                 <Link
                   key={membership.client_id}
-                  href={`/gnr8/client?client=${encodeURIComponent(membership.client_id)}`}
+                  href={buildClientSelfSwitchTarget(resolvedSearchParams, membership.client_id)}
                   style={{
                     display: "inline-flex",
                     alignItems: "center",

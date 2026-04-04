@@ -7,6 +7,7 @@ import WorkspaceQuickSwitcher, {
 } from '../../../_components/workspace/WorkspaceQuickSwitcher'
 import WorkspaceStateSync from '../../../_components/workspace/WorkspaceStateSync'
 import { buildWorkspaceViewModel, type WorkspaceTabInput } from '../../../_components/workspace/workspace-view-model'
+import { buildClientSwitchHref } from '@/src/workspace/context-switching'
 
 type ClientContextTab = 'dashboard' | 'settings' | 'users'
 
@@ -41,10 +42,16 @@ export default function ClientContextLayout(props: Props) {
 
   const activeClientSection = props.activeTab === 'settings' ? 'settings' : props.activeTab === 'users' ? 'users' : 'dashboard'
   const persistedClientTab = props.activeTab === 'users' ? 'team' : props.activeTab
+  const activeClientPathname = `/gnr8/agency/clients/${encodeURIComponent(props.clientId)}/${activeClientSection}`
   const clientOptions: WorkspaceQuickSwitchOption[] = props.clientOptions.map((option) => ({
     value: option.clientId,
     label: option.label,
-    href: `/gnr8/agency/clients/${encodeURIComponent(option.clientId)}/${activeClientSection}?${agencyParam}`,
+    href: buildClientSwitchHref({
+      pathname: activeClientPathname,
+      params: baseParams,
+      targetClientId: option.clientId,
+      targetAgencyId: activeAgencyId,
+    }),
   }))
 
   const dashboardHref = `/gnr8/agency/clients/${encodeURIComponent(props.clientId)}/dashboard?${agencyParam}`
@@ -113,7 +120,12 @@ export default function ClientContextLayout(props: Props) {
           id: client.clientId,
           label: client.label,
           sublabel: `Agency ID: ${activeAgencyId}`,
-          href: `/gnr8/agency/clients/${encodeURIComponent(client.clientId)}/dashboard?${agencyParam}`,
+          href: buildClientSwitchHref({
+            pathname: activeClientPathname,
+            params: baseParams,
+            targetClientId: client.clientId,
+            targetAgencyId: activeAgencyId,
+          }),
         })),
         routes: [
           { id: 'route-agency-dashboard', label: 'Agency Dashboard', href: backToAgencyHref, sublabel: 'Key route' },
