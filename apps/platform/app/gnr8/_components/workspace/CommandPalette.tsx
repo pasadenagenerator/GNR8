@@ -406,6 +406,7 @@ export default function CommandPalette(props: Props) {
   const modalRef = useRef<HTMLDivElement | null>(null)
   const searchInputRef = useRef<HTMLInputElement | null>(null)
   const previousFocusedElementRef = useRef<HTMLElement | null>(null)
+  const itemRowRefs = useRef(new Map<string, HTMLDivElement>())
 
   const [isOpen, setIsOpen] = useState(false)
   const [query, setQuery] = useState('')
@@ -876,6 +877,15 @@ export default function CommandPalette(props: Props) {
     }
   }, [activeIndex, filteredItems])
 
+  useEffect(() => {
+    if (!isOpen) return
+    const activeItem = filteredItems[activeIndex]
+    if (!activeItem) return
+    const activeRow = itemRowRefs.current.get(activeItem.id)
+    if (!activeRow) return
+    activeRow.scrollIntoView({ block: 'nearest' })
+  }, [activeIndex, filteredItems, isOpen])
+
   const groupedItems = useMemo(() => {
     return GROUP_ORDER.map((group) => ({
       key: group,
@@ -1021,6 +1031,8 @@ export default function CommandPalette(props: Props) {
           width: 'min(980px, 100%)',
           maxHeight: '76vh',
           overflow: 'hidden',
+          display: 'flex',
+          flexDirection: 'column',
           borderRadius: 12,
           border: '1px solid #cbd5e1',
           background: '#fff',
@@ -1029,8 +1041,19 @@ export default function CommandPalette(props: Props) {
           fontFamily: commandPaletteFontFamily,
         }}
       >
-        <div style={{ paddingLeft: 20, paddingRight: 20, paddingTop: 12, paddingBottom: 12, minWidth: 0, fontFamily: commandPaletteFontFamily }}>
-          <div style={{ borderBottom: '1px solid #e2e8f0', padding: '14px 0 12px', fontFamily: commandPaletteFontFamily }}>
+        <div
+          style={{
+            paddingTop: 12,
+            paddingBottom: 12,
+            minWidth: 0,
+            minHeight: 0,
+            display: 'flex',
+            flexDirection: 'column',
+            flex: 1,
+            fontFamily: commandPaletteFontFamily,
+          }}
+        >
+          <div style={{ borderBottom: '1px solid #e2e8f0', padding: '14px 20px 12px', fontFamily: commandPaletteFontFamily }}>
             <input
               ref={searchInputRef}
               value={query}
@@ -1066,14 +1089,25 @@ export default function CommandPalette(props: Props) {
             style={{
               display: 'grid',
               gridTemplateColumns: isCompactLayout ? 'minmax(0, 1fr)' : 'minmax(0, 1fr) minmax(260px, 320px)',
-              gap: 0,
-              maxHeight: 'calc(76vh - 84px)',
+              columnGap: isCompactLayout ? 0 : 18,
+              rowGap: isCompactLayout ? 12 : 0,
+              flex: 1,
               minHeight: 0,
               minWidth: 0,
+              padding: '0 20px',
               fontFamily: commandPaletteFontFamily,
             }}
           >
-            <div style={{ overflowY: 'auto', overscrollBehavior: 'contain', minHeight: 0, minWidth: 0, padding: '12px 0', fontFamily: commandPaletteFontFamily }}>
+            <div
+              style={{
+                overflowY: 'auto',
+                overscrollBehavior: 'contain',
+                minHeight: 0,
+                minWidth: 0,
+                padding: '12px 0',
+                fontFamily: commandPaletteFontFamily,
+              }}
+            >
               {groupedItems.length === 0 ? (
                 <div style={{ padding: '16px 0', fontSize: 13, color: '#64748b', lineHeight: 1.45, fontFamily: commandPaletteFontFamily }}>
                   <div style={{ fontSize: 14, color: '#334155', fontWeight: 600, fontFamily: commandPaletteFontFamily }}>No results found.</div>
@@ -1113,6 +1147,13 @@ export default function CommandPalette(props: Props) {
                       return (
                         <div
                           key={item.id}
+                          ref={(node) => {
+                            if (node) {
+                              itemRowRefs.current.set(item.id, node)
+                              return
+                            }
+                            itemRowRefs.current.delete(item.id)
+                          }}
                           onMouseEnter={() => setActiveIndex(itemIndex)}
                           style={{
                             border: isActive ? '1px solid #bfdbfe' : '1px solid #e2e8f0',
@@ -1261,10 +1302,8 @@ export default function CommandPalette(props: Props) {
               style={{
                 borderTop: isCompactLayout ? '1px solid #e2e8f0' : undefined,
                 borderLeft: isCompactLayout ? undefined : '1px solid #e2e8f0',
-                padding: isCompactLayout ? '12px 0 14px' : '14px 0 16px 16px',
+                padding: isCompactLayout ? '12px 0 14px' : '14px 0 16px 12px',
                 background: '#fcfdff',
-                overflowY: 'auto',
-                overscrollBehavior: 'contain',
                 minHeight: 0,
                 minWidth: 0,
                 fontFamily: commandPaletteFontFamily,
