@@ -5,6 +5,13 @@ import { useEffect, useMemo, useState } from 'react'
 
 import { getRecentItems, type WorkspaceRecentItem } from '@/src/workspace/workspace-recents'
 
+export type CommandResultAction = {
+  id: string
+  label: string
+  href?: string
+  action?: () => void
+}
+
 export type CommandItem = {
   id: string
   label: string
@@ -13,6 +20,12 @@ export type CommandItem = {
   href?: string
   type: 'recent' | 'agency' | 'client' | 'route' | 'action'
   action?: () => void
+  preview?: {
+    title?: string
+    lines?: string[]
+    meta?: string[]
+  }
+  secondaryActions?: CommandResultAction[]
   recentRankBoost?: number
   contextScope?: WorkspaceScope | 'global'
 }
@@ -68,6 +81,37 @@ function normalizeCompactText(value: string): string {
 
 function tokenizeSearchText(value: string): string[] {
   return value.split(' ').map((token) => token.trim()).filter(Boolean)
+}
+
+function buildHref(path: string, params: URLSearchParams): string {
+  const query = params.toString()
+  if (!query) return path
+  return `${path}?${query}`
+}
+
+function toQueryParams(href: string): URLSearchParams {
+  const normalized = normalizeText(href)
+  if (!normalized) return new URLSearchParams()
+  const queryIndex = normalized.indexOf('?')
+  return queryIndex >= 0 ? new URLSearchParams(normalized.slice(queryIndex + 1)) : new URLSearchParams()
+}
+
+function itemTypeLabel(type: CommandItem['type']): string {
+  if (type === 'agency') return 'Agency'
+  if (type === 'client') return 'Client'
+  if (type === 'route') return 'Route'
+  if (type === 'action') return 'Action'
+  return 'Recent'
+}
+
+function buildRoutePreviewLine(label: string): string {
+  const normalized = normalizeSearchText(label)
+  if (normalized.includes('dashboard')) return 'Opens the workspace dashboard view.'
+  if (normalized.includes('settings')) return 'Opens workspace configuration settings.'
+  if (normalized.includes('team') || normalized.includes('members') || normalized.includes('users')) return 'Opens workspace team and member management.'
+  if (normalized.includes('clients')) return 'Opens the client list and management area.'
+  if (normalized.includes('command center')) return 'Opens the platform-level operations workspace.'
+  return 'Navigates to this destination.'
 }
 
 function normalizeSet(values?: string[]): Set<string> | null {
@@ -264,10 +308,12 @@ export default function CommandPalette(props: Props) {
   const [query, setQuery] = useState('')
   const [activeIndex, setActiveIndex] = useState(0)
   const [recentItems, setRecentItems] = useState<WorkspaceRecentItem[]>([])
+  const [isCompactLayout, setIsCompactLayout] = useState(false)
 
   const allowedAgencyIds = useMemo(() => normalizeSet(props.accessibleAgencyIds), [props.accessibleAgencyIds])
   const allowedClientIds = useMemo(() => normalizeSet(props.accessibleClientIds), [props.accessibleClientIds])
   const activeAgencyId = useMemo(() => normalizeText(searchParams?.get('agency') ?? ''), [searchParams])
+  const isAdminView = useMemo(() => normalizeText(searchParams?.get('admin_view') ?? '') === '1', [searchParams])
   const workspaceScope = useMemo<WorkspaceScope>(() => {
     if (pathname.startsWith('/gnr8/agency/clients/')) return 'client'
     if (pathname.startsWith('/gnr8/agency')) return 'agency'
@@ -289,6 +335,23 @@ export default function CommandPalette(props: Props) {
 
     window.addEventListener('keydown', handleGlobalKeydown)
     return () => window.removeEventListener('keydown', handleGlobalKeydown)
+  }, [])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const mediaQuery = window.matchMedia('(max-width: 900px)')
+    const syncLayout = (): void => {
+      setIsCompactLayout(mediaQuery.matches)
+    }
+    syncLayout()
+
+    if (typeof mediaQuery.addEventListener === 'function') {
+      mediaQuery.addEventListener('change', syncLayout)
+      return () => mediaQuery.removeEventListener('change', syncLayout)
+    }
+
+    mediaQuery.addListener(syncLayout)
+    return () => mediaQuery.removeListener(syncLayout)
   }, [])
 
   useEffect(() => {
@@ -318,6 +381,11 @@ export default function CommandPalette(props: Props) {
   }, [isOpen])
 
   const allItems = useMemo(() => {
+    const buildPrimaryHrefAction = (id: string, label: string, href?: string): CommandResultAction | null => {
+      if (!href) return null
+      return { id, label, href }
+    }
+
     const recents: CommandItem[] = recentItems
       .filter((item) =>
         isVisibleRecentItem(item, {
@@ -326,18 +394,92 @@ export default function CommandPalette(props: Props) {
           allowCommandCenter: props.allowCommandCenter ?? false,
         }),
       )
-      .map((item, index) => ({
-        id: `recent:${item.href}`,
-        label: item.label,
-        href: normalizeText(item.href),
-        type: 'recent' as const,
-        recentRankBoost: Math.max(0, 14 - index),
-        aliases: inferAliases(item.label),
-      }))
+      .map((item, index) => {
+        const href = normalizeText(item.href)
+        const typeLabel = item.type === 'agency' ? 'Agency' : item.type === 'client' ? 'Client' : 'Command Center'
+        return {
+          id: `recent:${item.href}`,
+          label: item.label,
+          href,
+          type: 'recent' as const,
+          recentRankBoost: Math.max(0, 14 - index),
+          aliases: inferAliases(item.label),
+          preview: {
+            title: item.label,
+            lines: ['Recently visited', `${typeLabel} destination`],
+            meta: ['Recent item'],
+          },
+          secondaryActions: buildPrimaryHrefAction(`recent-open:${item.href}`, 'Open', href)
+            ? [{ id: `recent-open:${item.href}`, label: 'Open', href }]
+            : undefined,
+        }
+      })
 
-    const agencies = toStaticItems('agency', props.agencies ?? [], allowedAgencyIds)
-    const clients = toStaticItems('client', props.clients ?? [], allowedClientIds)
-    const routes = toStaticItems('route', props.routes ?? [])
+    const agencies = toStaticItems('agency', props.agencies ?? [], allowedAgencyIds).map((item) => {
+      const agencyId = item.id.replace(/^agency:/, '')
+      const params = new URLSearchParams()
+      params.set('agency', agencyId)
+      if (isAdminView) params.set('admin_view', '1')
+
+      const dashboardHref = buildHref('/gnr8/agency', params)
+      const settingsHref = buildHref('/gnr8/agency/settings', params)
+      const teamHref = buildHref('/gnr8/agency/members', params)
+
+      return {
+        ...item,
+        preview: {
+          title: item.label,
+          lines: ['Agency workspace', 'Clients, team, and settings available'],
+          meta: item.sublabel ? [item.sublabel] : undefined,
+        },
+        secondaryActions: [
+          { id: `${item.id}:open-dashboard`, label: 'Open Dashboard', href: dashboardHref },
+          { id: `${item.id}:open-settings`, label: 'Open Settings', href: settingsHref },
+          { id: `${item.id}:open-team`, label: 'Open Team', href: teamHref },
+        ],
+      }
+    })
+
+    const clients = toStaticItems('client', props.clients ?? [], allowedClientIds).map((item) => {
+      const clientId = item.id.replace(/^client:/, '')
+      const queryParams = toQueryParams(item.href ?? '')
+      const scopedAgencyId = normalizeText(queryParams.get('agency') ?? activeAgencyId)
+      const scopedAgencyLabel = item.sublabel?.trim()
+      const secondaryActions: CommandResultAction[] = []
+      if (item.href) secondaryActions.push({ id: `${item.id}:open-dashboard`, label: 'Open Dashboard', href: item.href })
+      if (clientId && scopedAgencyId) {
+        secondaryActions.push({
+          id: `${item.id}:open-settings`,
+          label: 'Open Settings',
+          href: `/gnr8/agency/clients/${encodeURIComponent(clientId)}/settings?agency=${encodeURIComponent(scopedAgencyId)}`,
+        })
+        secondaryActions.push({
+          id: `${item.id}:open-team`,
+          label: 'Open Team',
+          href: `/gnr8/agency/clients/${encodeURIComponent(clientId)}/users?agency=${encodeURIComponent(scopedAgencyId)}`,
+        })
+      }
+
+      return {
+        ...item,
+        preview: {
+          title: item.label,
+          lines: ['Client dashboard', 'Settings and team available'],
+          meta: scopedAgencyLabel ? [scopedAgencyLabel] : undefined,
+        },
+        secondaryActions: secondaryActions.length > 0 ? secondaryActions : undefined,
+      }
+    })
+
+    const routes = toStaticItems('route', props.routes ?? []).map((item) => ({
+      ...item,
+      preview: {
+        title: item.label,
+        lines: [buildRoutePreviewLine(item.label)],
+        meta: item.sublabel ? [item.sublabel] : undefined,
+      },
+      secondaryActions: item.href ? [{ id: `${item.id}:open`, label: 'Open', href: item.href }] : undefined,
+    }))
     const routeById = new Map(routes.map((route) => [route.id, route]))
     const clientDashboardHref =
       routeById.get('route-client-dashboard')?.href ??
@@ -363,6 +505,11 @@ export default function CommandPalette(props: Props) {
         aliases: ['admin', 'superadmin'],
         contextScope: 'global',
         action: () => router.push('/gnr8/command-center'),
+        preview: {
+          title: 'Go to Command Center',
+          lines: ['Opens platform-level operations workspace.'],
+          meta: ['Action'],
+        },
       },
       {
         id: 'action-go-agency-dashboard',
@@ -371,6 +518,11 @@ export default function CommandPalette(props: Props) {
         type: 'action',
         contextScope: 'agency',
         action: () => router.push(agencyDashboardHref),
+        preview: {
+          title: 'Go to Agency Dashboard',
+          lines: ['Navigates to the current agency dashboard.'],
+          meta: ['Action'],
+        },
       },
       ...(clientDashboardHref
         ? [
@@ -381,6 +533,11 @@ export default function CommandPalette(props: Props) {
               type: 'action' as const,
               contextScope: 'client' as const,
               action: () => router.push(clientDashboardHref),
+              preview: {
+                title: 'Go to Client Dashboard',
+                lines: ['Navigates to the active client dashboard.'],
+                meta: ['Action'],
+              },
             },
           ]
         : []),
@@ -394,6 +551,11 @@ export default function CommandPalette(props: Props) {
               aliases: ['new client', 'add client'],
               contextScope: 'agency' as const,
               action: () => router.push(createClientHref),
+              preview: {
+                title: 'Create new client',
+                lines: ['Starts client creation in the current agency.'],
+                meta: ['Action'],
+              },
             },
             {
               id: 'action-invite-agency-member',
@@ -403,6 +565,11 @@ export default function CommandPalette(props: Props) {
               aliases: ['invite user', 'members'],
               contextScope: 'agency' as const,
               action: () => router.push(agencyMembersHref),
+              preview: {
+                title: 'Invite team member',
+                lines: ['Opens agency team area to invite or manage members.'],
+                meta: ['Action'],
+              },
             },
           ]
         : []),
@@ -416,6 +583,11 @@ export default function CommandPalette(props: Props) {
               aliases: ['config', 'preferences'],
               contextScope: 'agency' as const,
               action: () => router.push(agencySettingsHref),
+              preview: {
+                title: 'Open Agency Settings',
+                lines: ['Navigates to agency configuration.'],
+                meta: ['Action'],
+              },
             },
           ]
         : []),
@@ -429,6 +601,11 @@ export default function CommandPalette(props: Props) {
               aliases: ['config', 'preferences'],
               contextScope: 'client' as const,
               action: () => router.push(clientSettingsHref),
+              preview: {
+                title: 'Open Client Settings',
+                lines: ['Navigates to the active client settings view.'],
+                meta: ['Action'],
+              },
             },
           ]
         : []),
@@ -442,17 +619,28 @@ export default function CommandPalette(props: Props) {
               aliases: ['users', 'members'],
               contextScope: 'client' as const,
               action: () => router.push(clientTeamHref),
+              preview: {
+                title: 'Open Client Team',
+                lines: ['Navigates to the active client team management view.'],
+                meta: ['Action'],
+              },
             },
           ]
         : []),
     ]
 
-    const visibleActions = actions.filter((item) => item.id !== 'action-go-command-center' || Boolean(props.allowCommandCenter))
+    const visibleActions = actions
+      .filter((item) => item.id !== 'action-go-command-center' || Boolean(props.allowCommandCenter))
+      .map((item) => ({
+        ...item,
+        secondaryActions: [{ id: `${item.id}:run`, label: 'Run', action: item.action }],
+      }))
     return [...visibleActions, ...recents, ...agencies, ...clients, ...routes]
   }, [
     activeAgencyId,
     allowedAgencyIds,
     allowedClientIds,
+    isAdminView,
     pathname,
     props.agencies,
     props.allowCommandCenter,
@@ -527,6 +715,8 @@ export default function CommandPalette(props: Props) {
     return new Map(filteredItems.map((item, index) => [item.id, index]))
   }, [filteredItems])
 
+  const activeItem = filteredItems[activeIndex]
+
   function handleSelect(item: CommandItem): void {
     setIsOpen(false)
     setQuery('')
@@ -536,6 +726,17 @@ export default function CommandPalette(props: Props) {
       return
     }
     item.action?.()
+  }
+
+  function handleAction(action: CommandResultAction): void {
+    setIsOpen(false)
+    setQuery('')
+    setActiveIndex(0)
+    if (action.href) {
+      router.push(action.href)
+      return
+    }
+    action.action?.()
   }
 
   if (!isOpen) return null
@@ -559,7 +760,7 @@ export default function CommandPalette(props: Props) {
       <div
         onClick={(event) => event.stopPropagation()}
         style={{
-          width: 'min(760px, 100%)',
+          width: 'min(980px, 100%)',
           maxHeight: '76vh',
           overflow: 'hidden',
           borderRadius: 12,
@@ -593,60 +794,169 @@ export default function CommandPalette(props: Props) {
               color: '#0f172a',
             }}
           />
-          <div style={{ marginTop: 8, fontSize: 11, color: '#64748b', textAlign: 'right' }}>⌘K</div>
+          <div style={{ marginTop: 8, fontSize: 11, color: '#64748b', textAlign: 'right' }}>⌘K • Enter</div>
         </div>
 
-        <div style={{ maxHeight: 'calc(76vh - 70px)', overflowY: 'auto', padding: 8 }}>
-          {groupedItems.length === 0 ? (
-            <div style={{ padding: '10px 8px', fontSize: 13, color: '#64748b' }}>
-              <div>No results found.</div>
-              <div style={{ marginTop: 4 }}>Try searching for a client, settings, team, or create.</div>
-            </div>
-          ) : (
-            groupedItems.map((group) => (
-              <section key={group.key} aria-label={group.label} style={{ padding: 4 }}>
-                <div
-                  style={{
-                    padding: '6px 8px',
-                    fontSize: 11,
-                    fontWeight: 700,
-                    letterSpacing: 0.4,
-                    textTransform: 'uppercase',
-                    color: '#64748b',
-                  }}
-                >
-                  {group.label}
-                </div>
-                {group.items.map((item) => {
-                  const itemIndex = itemIndexById.get(item.id) ?? -1
-                  const isActive = itemIndex >= 0 && itemIndex === activeIndex
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: isCompactLayout ? 'minmax(0, 1fr)' : 'minmax(0, 1fr) minmax(260px, 320px)',
+            gap: 0,
+            maxHeight: 'calc(76vh - 70px)',
+          }}
+        >
+          <div style={{ overflowY: 'auto', padding: 8 }}>
+            {groupedItems.length === 0 ? (
+              <div style={{ padding: '10px 8px', fontSize: 13, color: '#64748b' }}>
+                <div>No results found.</div>
+                <div style={{ marginTop: 4 }}>Try searching for a client, settings, team, or create.</div>
+              </div>
+            ) : (
+              groupedItems.map((group) => (
+                <section key={group.key} aria-label={group.label} style={{ padding: 4 }}>
+                  <div
+                    style={{
+                      padding: '6px 8px',
+                      fontSize: 11,
+                      fontWeight: 700,
+                      letterSpacing: 0.4,
+                      textTransform: 'uppercase',
+                      color: '#64748b',
+                    }}
+                  >
+                    {group.label}
+                  </div>
+                  {group.items.map((item) => {
+                    const itemIndex = itemIndexById.get(item.id) ?? -1
+                    const isActive = itemIndex >= 0 && itemIndex === activeIndex
+                    const hasSecondaryActions = Boolean(item.secondaryActions && item.secondaryActions.length > 0)
 
-                  return (
-                    <button
-                      key={item.id}
-                      type='button'
-                      onClick={() => handleSelect(item)}
-                      onMouseEnter={() => setActiveIndex(itemIndex)}
-                      style={{
-                        width: '100%',
-                        textAlign: 'left',
-                        border: isActive ? '1px solid #3b82f6' : '1px solid #e2e8f0',
-                        borderRadius: 8,
-                        background: isActive ? '#e9f2ff' : '#fff',
-                        padding: '9px 10px',
-                        marginBottom: 6,
-                        cursor: 'pointer',
-                        boxShadow: isActive ? '0 0 0 1px rgba(59, 130, 246, 0.2)' : undefined,
-                      }}
-                    >
-                      <div style={{ fontSize: 13, color: '#0f172a', fontWeight: 600 }}>{item.label}</div>
-                      {item.sublabel ? <div style={{ marginTop: 2, fontSize: 12, color: '#64748b' }}>{item.sublabel}</div> : null}
-                    </button>
-                  )
-                })}
-              </section>
-            ))
-          )}
+                    return (
+                      <div
+                        key={item.id}
+                        onMouseEnter={() => setActiveIndex(itemIndex)}
+                        style={{
+                          border: isActive ? '1px solid #3b82f6' : '1px solid #e2e8f0',
+                          borderRadius: 8,
+                          background: isActive ? '#e9f2ff' : '#fff',
+                          marginBottom: 6,
+                          boxShadow: isActive ? '0 0 0 1px rgba(59, 130, 246, 0.2)' : undefined,
+                        }}
+                      >
+                        <button
+                          type='button'
+                          onClick={() => handleSelect(item)}
+                          style={{
+                            width: '100%',
+                            textAlign: 'left',
+                            border: 0,
+                            borderRadius: 8,
+                            background: 'transparent',
+                            padding: '9px 10px',
+                            cursor: 'pointer',
+                          }}
+                        >
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+                            <div style={{ fontSize: 13, color: '#0f172a', fontWeight: 600 }}>{item.label}</div>
+                            <span
+                              style={{
+                                fontSize: 10,
+                                color: '#475569',
+                                border: '1px solid #cbd5e1',
+                                borderRadius: 999,
+                                padding: '2px 7px',
+                                background: '#f8fafc',
+                                textTransform: 'uppercase',
+                                letterSpacing: 0.3,
+                              }}
+                            >
+                              {itemTypeLabel(item.type)}
+                            </span>
+                          </div>
+                          {item.sublabel ? <div style={{ marginTop: 2, fontSize: 12, color: '#64748b' }}>{item.sublabel}</div> : null}
+                        </button>
+                        {isActive && hasSecondaryActions ? (
+                          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', padding: '0 10px 10px' }}>
+                            {item.secondaryActions?.map((secondaryAction) => (
+                              <button
+                                key={secondaryAction.id}
+                                type='button'
+                                onClick={(event) => {
+                                  event.preventDefault()
+                                  event.stopPropagation()
+                                  handleAction(secondaryAction)
+                                }}
+                                style={{
+                                  border: '1px solid #bfdbfe',
+                                  background: '#eff6ff',
+                                  color: '#1e40af',
+                                  borderRadius: 999,
+                                  fontSize: 11,
+                                  fontWeight: 600,
+                                  padding: '4px 9px',
+                                  cursor: 'pointer',
+                                }}
+                              >
+                                {secondaryAction.label}
+                              </button>
+                            ))}
+                          </div>
+                        ) : null}
+                      </div>
+                    )
+                  })}
+                </section>
+              ))
+            )}
+          </div>
+
+          <aside
+            aria-label='Result preview'
+            style={{
+              borderTop: isCompactLayout ? '1px solid #e2e8f0' : undefined,
+              borderLeft: isCompactLayout ? undefined : '1px solid #e2e8f0',
+              padding: 12,
+              background: '#f8fafc',
+              overflowY: 'auto',
+            }}
+          >
+            {activeItem ? (
+              <>
+                <div style={{ fontSize: 11, color: '#64748b', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.4 }}>
+                  Preview
+                </div>
+                <div style={{ marginTop: 8, fontSize: 16, color: '#0f172a', fontWeight: 700 }}>
+                  {activeItem.preview?.title || activeItem.label}
+                </div>
+                {(activeItem.preview?.lines ?? []).map((line, index) => (
+                  <div key={`${activeItem.id}:line:${index}`} style={{ marginTop: 6, fontSize: 12, color: '#334155' }}>
+                    {line}
+                  </div>
+                ))}
+                {activeItem.preview?.meta?.length ? (
+                  <div style={{ marginTop: 10, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                    {activeItem.preview.meta.map((meta, index) => (
+                      <span
+                        key={`${activeItem.id}:meta:${index}`}
+                        style={{
+                          fontSize: 11,
+                          color: '#475569',
+                          border: '1px solid #cbd5e1',
+                          borderRadius: 999,
+                          padding: '3px 8px',
+                          background: '#fff',
+                        }}
+                      >
+                        {meta}
+                      </span>
+                    ))}
+                  </div>
+                ) : null}
+              </>
+            ) : (
+              <div style={{ fontSize: 12, color: '#64748b' }}>Select a result to view details.</div>
+            )}
+          </aside>
         </div>
       </div>
     </div>
