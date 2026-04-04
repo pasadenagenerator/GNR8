@@ -1,7 +1,7 @@
 'use client'
 
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 
 import {
   getSavedCommands,
@@ -82,6 +82,9 @@ type IndexedCommandItem = {
   fields: string[]
   compactFields: string[]
 }
+
+const FOCUSABLE_SELECTOR =
+  'a[href], area[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), iframe, object, embed, [tabindex]:not([tabindex="-1"]), [contenteditable="true"]'
 
 function normalizeText(value: unknown): string {
   return String(value ?? '').trim()
@@ -400,6 +403,9 @@ export default function CommandPalette(props: Props) {
   const router = useRouter()
   const pathname = usePathname() || ''
   const searchParams = useSearchParams()
+  const modalRef = useRef<HTMLDivElement | null>(null)
+  const searchInputRef = useRef<HTMLInputElement | null>(null)
+  const previousFocusedElementRef = useRef<HTMLElement | null>(null)
 
   const [isOpen, setIsOpen] = useState(false)
   const [query, setQuery] = useState('')
@@ -481,6 +487,36 @@ export default function CommandPalette(props: Props) {
 
     window.addEventListener('keydown', handleOpenKeydown)
     return () => window.removeEventListener('keydown', handleOpenKeydown)
+  }, [isOpen])
+
+  useEffect(() => {
+    if (!isOpen) return
+    const body = document.body
+    const previousOverflow = body.style.overflow
+    const previousPaddingRight = body.style.paddingRight
+    const scrollbarWidth = window.innerWidth - document.documentElement.clientWidth
+    body.style.overflow = 'hidden'
+    if (scrollbarWidth > 0) body.style.paddingRight = `${scrollbarWidth}px`
+    return () => {
+      body.style.overflow = previousOverflow
+      body.style.paddingRight = previousPaddingRight
+    }
+  }, [isOpen])
+
+  useEffect(() => {
+    if (isOpen) {
+      previousFocusedElementRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
+      const focusFrame = window.requestAnimationFrame(() => {
+        searchInputRef.current?.focus()
+      })
+      return () => window.cancelAnimationFrame(focusFrame)
+    }
+
+    const previousFocusedElement = previousFocusedElementRef.current
+    if (previousFocusedElement && document.contains(previousFocusedElement)) {
+      previousFocusedElement.focus()
+    }
+    previousFocusedElementRef.current = null
   }, [isOpen])
 
   const allItems = useMemo(() => {
@@ -859,6 +895,14 @@ export default function CommandPalette(props: Props) {
 
   const activeItem = filteredItems[activeIndex]
 
+  function getFocusableElements(): HTMLElement[] {
+    if (!modalRef.current) return []
+    return Array.from(modalRef.current.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)).filter((element) => {
+      if (element.hasAttribute('disabled') || element.getAttribute('aria-hidden') === 'true') return false
+      return element.getClientRects().length > 0
+    })
+  }
+
   function isPersonalizable(item: CommandItem): boolean {
     return toSavedCommandInput(item) != null
   }
@@ -938,11 +982,41 @@ export default function CommandPalette(props: Props) {
         display: 'grid',
         placeItems: 'start center',
         padding: '10vh 16px 16px',
+        overscrollBehavior: 'contain',
         fontFamily: commandPaletteFontFamily,
       }}
     >
       <div
+        ref={modalRef}
+        tabIndex={-1}
         onClick={(event) => event.stopPropagation()}
+        onKeyDown={(event) => {
+          if (event.key !== 'Tab') return
+          const focusableElements = getFocusableElements()
+          if (focusableElements.length === 0) {
+            event.preventDefault()
+            modalRef.current?.focus()
+            return
+          }
+
+          const currentFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null
+          const currentIndex = currentFocus ? focusableElements.indexOf(currentFocus) : -1
+          const firstElement = focusableElements[0]
+          const lastElement = focusableElements[focusableElements.length - 1]
+
+          if (event.shiftKey) {
+            if (currentIndex <= 0) {
+              event.preventDefault()
+              lastElement.focus()
+            }
+            return
+          }
+
+          if (currentIndex === focusableElements.length - 1 || currentIndex === -1) {
+            event.preventDefault()
+            firstElement.focus()
+          }
+        }}
         style={{
           width: 'min(980px, 100%)',
           maxHeight: '76vh',
@@ -951,12 +1025,13 @@ export default function CommandPalette(props: Props) {
           border: '1px solid #cbd5e1',
           background: '#fff',
           boxShadow: '0 22px 70px rgba(15, 23, 42, 0.22)',
+          overscrollBehavior: 'contain',
           fontFamily: commandPaletteFontFamily,
         }}
       >
         <div style={{ borderBottom: '1px solid #e2e8f0', padding: '14px 14px 12px', fontFamily: commandPaletteFontFamily }}>
           <input
-            autoFocus
+            ref={searchInputRef}
             value={query}
             onChange={(event) => {
               setQuery(event.currentTarget.value)
@@ -992,10 +1067,11 @@ export default function CommandPalette(props: Props) {
             gridTemplateColumns: isCompactLayout ? 'minmax(0, 1fr)' : 'minmax(0, 1fr) minmax(260px, 320px)',
             gap: 0,
             maxHeight: 'calc(76vh - 84px)',
+            minHeight: 0,
             fontFamily: commandPaletteFontFamily,
           }}
         >
-          <div style={{ overflowY: 'auto', padding: '12px', fontFamily: commandPaletteFontFamily }}>
+          <div style={{ overflowY: 'auto', overscrollBehavior: 'contain', minHeight: 0, padding: '12px', fontFamily: commandPaletteFontFamily }}>
             {groupedItems.length === 0 ? (
               <div style={{ padding: '16px 10px', fontSize: 13, color: '#64748b', lineHeight: 1.45, fontFamily: commandPaletteFontFamily }}>
                 <div style={{ fontSize: 14, color: '#334155', fontWeight: 600, fontFamily: commandPaletteFontFamily }}>No results found.</div>
@@ -1187,6 +1263,8 @@ export default function CommandPalette(props: Props) {
               padding: isCompactLayout ? '12px 14px 14px' : '14px 16px 16px',
               background: '#fcfdff',
               overflowY: 'auto',
+              overscrollBehavior: 'contain',
+              minHeight: 0,
               fontFamily: commandPaletteFontFamily,
             }}
           >
