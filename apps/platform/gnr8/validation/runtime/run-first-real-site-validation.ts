@@ -139,6 +139,28 @@ function computeValidationSummary(input: {
       aiIgnoredCount: input.designAiMerge?.ignoredCount ?? 0,
       rationaleSummary: (input.designModel?.rationale ?? []).map((r) => r.summary),
       diagnosticCodes: input.designModel?.diagnostics.codes ?? [],
+      semanticSummary: {
+        keySectionClassifications: (input.designModel?.sectionDecisions ?? []).slice(0, 8).map((decision) => ({
+          sectionId: decision.sectionId,
+          semanticType: decision.semanticType,
+          confidence: decision.confidence,
+        })),
+        hasHero: Boolean((input.designModel?.sectionDecisions ?? []).some((d) => d.semanticType === "hero")),
+        hasNavigationOrHeader: Boolean((input.designModel?.sectionDecisions ?? []).some((d) => d.semanticType === "header")),
+        hasFooter: Boolean((input.designModel?.sectionDecisions ?? []).some((d) => d.semanticType === "footer")),
+        hasPrimaryCta: Boolean((input.designModel?.sectionDecisions ?? []).some((d) => d.semanticType === "cta" && d.emphasis === "primary")),
+        brandSignalSummary: {
+          primaryColorHint: input.designModel?.colorSystem.primaryHint ?? null,
+          secondaryColorHint: input.designModel?.colorSystem.secondaryHint ?? null,
+          typographyHint: input.designModel?.typographyScale.profile ?? null,
+          visualTone: input.designModel?.colorSystem.tone ?? null,
+        },
+        confidenceSummary: {
+          high: (input.designModel?.sectionDecisions ?? []).filter((d) => d.confidence >= 0.8).length,
+          medium: (input.designModel?.sectionDecisions ?? []).filter((d) => d.confidence >= 0.55 && d.confidence < 0.8).length,
+          low: (input.designModel?.sectionDecisions ?? []).filter((d) => d.confidence < 0.55).length,
+        },
+      },
     },
     approval: {
       status: input.approvalStatus,

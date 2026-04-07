@@ -60,6 +60,24 @@ export type ValidationSummary = {
     aiIgnoredCount: number;
     rationaleSummary: string[];
     diagnosticCodes: string[];
+    semanticSummary: {
+      keySectionClassifications: Array<{ sectionId: string; semanticType: string; confidence: number }>;
+      hasHero: boolean;
+      hasNavigationOrHeader: boolean;
+      hasFooter: boolean;
+      hasPrimaryCta: boolean;
+      brandSignalSummary: {
+        primaryColorHint: string | null;
+        secondaryColorHint: string | null;
+        typographyHint: string | null;
+        visualTone: string | null;
+      };
+      confidenceSummary: {
+        high: number;
+        medium: number;
+        low: number;
+      };
+    };
   };
 
   approval: {

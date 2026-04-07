@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+import fs from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
@@ -13,6 +15,11 @@ import { runLinearMigrationPipeline } from "./runtime/run-linear-migration-pipel
 function fixtureDir(name: string): string {
   const here = path.dirname(fileURLToPath(import.meta.url));
   return path.resolve(here, `../import/__fixtures__/${name}`);
+}
+
+function validationFixtureDir(name: string): string {
+  const here = path.dirname(fileURLToPath(import.meta.url));
+  return path.resolve(here, `../validation/fixtures/${name}`);
 }
 
 test("createPreparedSiteModel is deterministic across repeated runs", async () => {
@@ -127,4 +134,99 @@ test("structure_preparation stage output contains PreparedSiteModel", async () =
   assert.ok(s2);
   assert.equal(s2.output.preparedSite.kind, "prepared_site_model_v1");
   assert.ok(s2.output.preparedSite.documents.length >= 1);
+});
+
+test("prepared-site semantic model classifies header/navigation/footer/hero on real-site-03", async () => {
+  const rootDir = validationFixtureDir("real-site-03");
+  const importOutput = await importStaticSite({
+    rootDir,
+    requestId: "req-semantic-classification-real-site-03",
+    source: { kind: "single-entry-html", entryHtmlPath: "index.html", assetsDirPath: "assets" },
+  });
+  const prepared = createPreparedSiteModel({ importOutput, importManifest: createImportManifest(importOutput) });
+  const doc = prepared.documents.find((d) => d.path === "index.html");
+  assert.ok(doc?.semantic);
+
+  const sectionTypes = new Set(doc!.semantic!.sections.map((s) => s.inferredType));
+  assert.ok(sectionTypes.has("footer"));
+  assert.ok(
+    sectionTypes.has("navigation") || sectionTypes.has("header") || doc!.semantic!.diagnostics.some((d) => d.code === "NAVIGATION_SECTION_UNCLEAR"),
+    "navigation/header should be detected or explicitly diagnosed as unclear",
+  );
+  assert.ok(
+    sectionTypes.has("hero") || doc!.semantic!.diagnostics.some((d) => d.code === "HERO_SECTION_UNCLEAR"),
+    "hero should be detected or explicitly diagnosed as unclear",
+  );
+});
+
+test("prepared-site semantic model classifies hero section on deterministic synthetic fixture", async () => {
+  const tmpRoot = await fs.mkdtemp(path.join(os.tmpdir(), "gnr8-semantic-hero-"));
+  const html = [
+    "<!doctype html>",
+    "<html><head><meta charset=\"utf-8\"><title>Hero Fixture</title></head>",
+    "<body>",
+    "<header><nav><a href=\"#\">Home</a><a href=\"#\">Services</a></nav></header>",
+    "<section class=\"hero\"><h1>Build faster with deterministic migration</h1><p>Short supporting copy.</p><a href=\"#contact\">Book demo</a><img src=\"/hero.jpg\" alt=\"hero\" /></section>",
+    "<footer><p>Copyright 2026</p></footer>",
+    "</body></html>",
+  ].join("");
+  await fs.writeFile(path.join(tmpRoot, "index.html"), html, "utf-8");
+
+  const importOutput = await importStaticSite({
+    rootDir: tmpRoot,
+    requestId: "req-semantic-hero-synthetic",
+    source: { kind: "single-entry-html", entryHtmlPath: "index.html" },
+  });
+  const prepared = createPreparedSiteModel({ importOutput, importManifest: createImportManifest(importOutput) });
+  const doc = prepared.documents.find((d) => d.path === "index.html");
+  assert.ok(doc?.semantic);
+  assert.ok(doc!.semantic!.sections.some((s) => s.inferredType === "hero"), "expected explicit hero classification");
+});
+
+test("prepared-site semantic model detects CTA, gallery/media, and contact sections", async () => {
+  const rootDir = validationFixtureDir("real-site-03");
+  const importOutput = await importStaticSite({
+    rootDir,
+    requestId: "req-semantic-cta-gallery-contact-real-site-03",
+    source: { kind: "single-entry-html", entryHtmlPath: "index.html", assetsDirPath: "assets" },
+  });
+  const prepared = createPreparedSiteModel({ importOutput, importManifest: createImportManifest(importOutput) });
+  const doc = prepared.documents.find((d) => d.path === "index.html");
+  assert.ok(doc?.semantic);
+
+  const sections = doc!.semantic!.sections;
+  assert.ok(sections.some((s) => s.inferredType === "cta" || s.ctaCandidates.length > 0));
+  assert.ok(sections.some((s) => s.inferredType === "gallery" || s.mediaDensity >= 0.3));
+  assert.ok(sections.some((s) => s.inferredType === "contact"));
+});
+
+test("prepared-site semantic model infers page type and brand signals deterministically", async () => {
+  const rootDir = validationFixtureDir("real-site-03");
+  const importOutput = await importStaticSite({
+    rootDir,
+    requestId: "req-semantic-page-type-brand-real-site-03",
+    source: { kind: "single-entry-html", entryHtmlPath: "index.html", assetsDirPath: "assets" },
+  });
+  const prepared = createPreparedSiteModel({ importOutput, importManifest: createImportManifest(importOutput) });
+  const doc = prepared.documents.find((d) => d.path === "index.html");
+  assert.ok(doc?.semantic);
+
+  assert.notEqual(doc!.semantic!.page.pageType, "unknown");
+  assert.equal(typeof doc!.semantic!.brandSignals.visualTone, "string");
+  assert.ok(Array.isArray(doc!.semantic!.brandSignals.rationale));
+});
+
+test("prepared-site semantic model emits uncertainty diagnostics for weak pages", async () => {
+  const rootDir = fixtureDir("simple-site");
+  const importOutput = await importStaticSite({
+    rootDir,
+    requestId: "req-semantic-weak-page-simple-site",
+    source: { kind: "single-entry-html", entryHtmlPath: "index.html", assetsDirPath: "assets" },
+  });
+  const prepared = createPreparedSiteModel({ importOutput, importManifest: createImportManifest(importOutput) });
+  const doc = prepared.documents.find((d) => d.path === "index.html");
+  assert.ok(doc?.semantic);
+
+  assert.ok(doc!.semantic!.diagnostics.some((d) => d.code === "BRAND_SIGNAL_WEAK"));
+  assert.ok(doc!.semantic!.diagnostics.some((d) => d.code === "CTA_PRIMARY_UNCLEAR"));
 });

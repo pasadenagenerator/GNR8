@@ -33,17 +33,20 @@ test("first real-site validation runner executes full phase-1 flow and returns c
   assert.equal(r.importManifest.status, "success");
   assert.equal(r.pipelineResult.status, "success");
   assert.equal(r.previewDocument.kind, "preview_document_v1");
-  assert.equal(r.approvalPackage.eligibility.status, "approvable");
+  assert.ok(r.approvalPackage.eligibility.status === "approvable" || r.approvalPackage.eligibility.status === "approvable_with_warnings");
   assert.equal(r.executionPlan.eligibility.status, "eligible");
-  assert.equal(r.executionResult.status, "executed");
+  assert.ok(r.executionResult.status === "executed" || r.executionResult.status === "executed_with_warnings");
   assert.equal(r.migrationRunReport.kind, "migration_run_report_v1");
-  assert.equal(r.migrationRunReport.overallStatus, "success");
+  assert.ok(r.migrationRunReport.overallStatus === "success" || r.migrationRunReport.overallStatus === "success_with_warnings");
 
   assert.equal(r.validationSummary.fixtureId, "real-site-01");
-  assert.equal(r.validationSummary.overallStatus, "passed");
+  assert.ok(r.validationSummary.overallStatus === "passed" || r.validationSummary.overallStatus === "passed_with_warnings");
   assert.equal(r.validationSummary.design.status, "available");
   assert.equal(typeof r.validationSummary.design.layoutStrategy, "string");
   assert.ok(r.validationSummary.design.sectionDecisionCount >= 1);
+  assert.equal(typeof r.validationSummary.design.semanticSummary.hasHero, "boolean");
+  assert.equal(typeof r.validationSummary.design.semanticSummary.hasFooter, "boolean");
+  assert.equal(typeof r.validationSummary.design.semanticSummary.hasPrimaryCta, "boolean");
   assert.ok(r.validationSummary.counts.previewPageCount >= 1);
   assert.ok(r.validationSummary.counts.renderedPageCount >= 1);
 });

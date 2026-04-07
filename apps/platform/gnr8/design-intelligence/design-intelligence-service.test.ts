@@ -19,6 +19,13 @@ function section(overrides: Partial<DesignSemanticSectionInput>): DesignSemantic
     mediaCount: overrides.mediaCount ?? 0,
     ctaCandidateCount: overrides.ctaCandidateCount ?? 0,
     hasHeadingSignal: overrides.hasHeadingSignal ?? false,
+    inferredType: overrides.inferredType ?? "unknown",
+    semanticConfidence: overrides.semanticConfidence ?? "low",
+    semanticRationale: overrides.semanticRationale ?? [],
+    heroComposition: overrides.heroComposition ?? null,
+    mediaDensity: overrides.mediaDensity ?? 0,
+    galleryLikeConfidence: overrides.galleryLikeConfidence ?? "low",
+    readabilityTendency: overrides.readabilityTendency ?? "balanced",
   };
 }
 
@@ -26,7 +33,7 @@ function baseInput(sections: DesignSemanticSectionInput[]): DesignIntelligenceIn
   return {
     preparedSite: {
       preparedSiteKind: "prepared_site_model_v1",
-      preparedSiteModelVersion: "1.5.0",
+      preparedSiteModelVersion: "1.6.0",
       importContractVersion: "1.0.0",
       importManifestVersion: "1.0.0",
       fingerprints: {
@@ -45,10 +52,20 @@ function baseInput(sections: DesignSemanticSectionInput[]): DesignIntelligenceIn
         contentDensity: 0.4,
         visualDensity: 0.2,
         ctaCandidateCount: sections.reduce((sum, s) => sum + s.ctaCandidateCount, 0),
+        primaryCtaLabel: null,
+        semanticDiagnostics: [],
         brandSignals: {
           primaryColorHint: "#0d9488",
           secondaryColorHint: "#0f766e",
           typographyHint: "system",
+          dominantColors: ["#0d9488"],
+          accentColors: ["#0f766e"],
+          neutralPaletteHints: ["light-neutral"],
+          fontFamilyHints: ["system-ui"],
+          fontCategoryHints: ["sans"],
+          visualTone: "neutral",
+          confidence: "high",
+          rationale: ["fixture_brand_signals"],
         },
       },
     ],

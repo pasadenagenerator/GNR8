@@ -173,16 +173,39 @@ function toSectionInput(pageId: string, element: PreparedDomOutlineElement): Des
     mediaCount,
     ctaCandidateCount,
     hasHeadingSignal: hasHeadingSignal({ sourceTagName: element.tagName, textExcerpt, ordinalIndex: element.ordinalIndex }),
+    inferredType: "unknown",
+    semanticConfidence: "low",
+    semanticRationale: ["fallback_outline_section_input"],
+    heroComposition: null,
+    mediaDensity: mediaCount > 0 ? 0.6 : 0,
+    galleryLikeConfidence: mediaCount > 0 ? "medium" : "low",
+    readabilityTendency: textDensity >= 0.62 ? "readable" : textDensity >= 0.35 ? "balanced" : "compact",
   };
 }
 
 function inferPageType(page: DesignPageInput): { pageType: PageType; confidence: number } {
   const bag = `${page.sourcePath} ${page.title ?? ""}`.toLowerCase();
-  if (/about|team|company|mission/.test(bag)) return { pageType: "about", confidence: 0.86 };
-  if (/service|consult|agency|solutions/.test(bag)) return { pageType: "services", confidence: 0.82 };
-  if (/pricing|product|shop|feature|plan/.test(bag)) return { pageType: "product", confidence: 0.8 };
+  const sectionTypeCounts = page.sections.reduce(
+    (acc, section) => {
+      acc[section.inferredType] = (acc[section.inferredType] ?? 0) + 1;
+      return acc;
+    },
+    {} as Record<DesignSemanticSectionInput["inferredType"], number>,
+  );
+
+  if (/about|team|company|mission/.test(bag) || (sectionTypeCounts.about ?? 0) >= 1) return { pageType: "about", confidence: 0.88 };
+  if (/service|consult|agency|solutions/.test(bag) || (sectionTypeCounts.services ?? 0) + (sectionTypeCounts.features ?? 0) >= 2)
+    return { pageType: "services", confidence: 0.84 };
+  if (/contact|support/.test(bag) || (sectionTypeCounts.contact ?? 0) >= 1) return { pageType: "landing", confidence: 0.72 };
+  if (/pricing|product|shop|feature|plan/.test(bag)) return { pageType: "product", confidence: 0.82 };
+  if (/gallery|portfolio|project/.test(bag) || (sectionTypeCounts.gallery ?? 0) >= 1) return { pageType: "landing", confidence: 0.74 };
   if (/landing|campaign/.test(bag)) return { pageType: "landing", confidence: 0.78 };
-  if (page.isEntry || page.sourcePath === "index.html") return { pageType: "home", confidence: 0.7 };
+  if (page.isEntry || page.sourcePath === "index.html") {
+    const hasHero = page.sections.some((s) => s.inferredType === "hero");
+    const hasNav = page.sections.some((s) => s.inferredType === "navigation" || s.inferredType === "header");
+    const hasFooter = page.sections.some((s) => s.inferredType === "footer");
+    return { pageType: "home", confidence: hasHero && hasNav && hasFooter ? 0.84 : 0.7 };
+  }
   return { pageType: "unknown", confidence: 0.48 };
 }
 
@@ -255,6 +278,14 @@ function pickStrategy(input: {
 }
 
 function inferSemanticType(section: DesignSemanticSectionInput): SectionSemanticType {
+  if (section.inferredType === "navigation" || section.inferredType === "header") return "header";
+  if (section.inferredType === "hero") return "hero";
+  if (section.inferredType === "cta" || section.inferredType === "contact") return "cta";
+  if (section.inferredType === "gallery") return "gallery";
+  if (section.inferredType === "footer") return "footer";
+  if (section.inferredType === "about" || section.inferredType === "services" || section.inferredType === "features" || section.inferredType === "testimonials")
+    return "content";
+
   const tag = section.sourceTagName.toLowerCase();
   const pathLower = section.sourceDomPath.toLowerCase();
 
@@ -282,19 +313,19 @@ function pickSectionTreatment(input: {
   const r: DesignRationale[] = [];
 
   if (input.semanticType === "hero") {
-    if (input.section.hasHeadingSignal && input.section.mediaCount > 0) {
+    if (input.section.heroComposition === "split_media" || (input.section.hasHeadingSignal && input.section.mediaCount > 0)) {
       r.push({
         code: "HERO_SPLIT_HEADING_WITH_MEDIA",
         summary: "Hero uses split layout because heading and media are both present.",
-        basedOn: ["hasHeadingSignal=true", "mediaCount>0"],
+        basedOn: ["hasHeadingSignal=true", "mediaCount>0", `heroComposition=${String(input.section.heroComposition)}`],
       });
-      return { visualTreatment: "hero_split", emphasis: "primary", confidence: 0.9, rationale: r };
+      return { visualTreatment: "hero_split", emphasis: "primary", confidence: input.section.semanticConfidence === "high" ? 0.92 : 0.86, rationale: r };
     }
-    if (input.section.mediaCount > 0) {
+    if (input.section.heroComposition === "image_first" || input.section.mediaCount > 0 || input.section.mediaDensity >= 0.55) {
       r.push({
         code: "HERO_IMAGE_FIRST",
         summary: "Hero uses image-first treatment because media is present without a strong heading signal.",
-        basedOn: ["hasHeadingSignal=false", "mediaCount>0"],
+        basedOn: ["hasHeadingSignal=false", "mediaCount>0", `mediaDensity=${input.section.mediaDensity.toFixed(2)}`],
       });
       return { visualTreatment: "hero_image_first", emphasis: "primary", confidence: 0.78, rationale: r };
     }
@@ -439,7 +470,15 @@ function spacingFromStrategy(strategy: LayoutStrategy, pageType: PageType): Desi
 function colorSystemFromPage(page: DesignPageInput): DesignModel["colorSystem"] {
   const primary = page.brandSignals.primaryColorHint;
   const secondary = page.brandSignals.secondaryColorHint;
-  const tone = page.ctaCandidateCount >= 3 ? "energetic" : page.contentDensity >= 0.6 ? "calm" : "neutral";
+  const tone = page.brandSignals.visualTone === "playful"
+    ? "energetic"
+    : page.brandSignals.visualTone === "formal"
+    ? "calm"
+    : page.ctaCandidateCount >= 3
+    ? "energetic"
+    : page.contentDensity >= 0.6
+    ? "calm"
+    : "neutral";
 
   return {
     mode: primary || secondary ? "source_derived" : "neutral_fallback",
@@ -563,6 +602,15 @@ function toDeterministicModel(input: DesignIntelligenceInput): DesignModel {
   const sectionDecisions: SectionDecision[] = [];
 
   for (const page of input.pages) {
+    for (const semanticDiagnostic of page.semanticDiagnostics) {
+      diagnostics.push({
+        code: "DESIGN_INTELLIGENCE_LOW_CONFIDENCE",
+        severity: semanticDiagnostic.severity === "warning" ? "warning" : "info",
+        message: `Semantic diagnostic (${semanticDiagnostic.code}): ${semanticDiagnostic.message}`,
+        pageId: page.pageId,
+      });
+    }
+
     const inferredPageType = inferPageType(page);
     const strategy = pickStrategy({ page, pageType: inferredPageType.pageType });
 
@@ -1240,9 +1288,49 @@ export function createDesignIntelligenceInputFromPreparedSite(preparedSite: Prep
   });
 
   for (const doc of docs) {
-    const bodyChildren = doc.domOutline?.bodyChildElements ?? [];
-    const extracted = extractBlocksFromBodyWithWrapperPromotion({ bodyChildElements: bodyChildren });
-    const sections = extracted.boundaryChildren.map((child) => toSectionInput(doc.id, child)).sort((a, b) => {
+    let sections: DesignSemanticSectionInput[];
+
+    if (doc.semantic && doc.semantic.sections.length > 0) {
+      sections = doc.semantic.sections.map((section) => {
+        const source = doc.domOutline?.bodyChildElements.find((candidate) => candidate.domPath === section.sourceDomPath) ?? null;
+        const textExcerpt = source?.textExcerpt ?? null;
+        const sectionHasHeadingSignal = source
+          ? hasHeadingSignal({
+              sourceTagName: source.tagName,
+              textExcerpt: source.textExcerpt,
+              ordinalIndex: source.ordinalIndex,
+            })
+          : section.inferredType === "hero";
+
+        return {
+          sectionId: section.sectionId,
+          pageId: doc.id,
+          sourceDomPath: section.sourceDomPath,
+          sourceTagName: source?.tagName ?? "section",
+          ordinalIndex: section.ordinalIndex,
+          childElementCount: source?.childElementCount ?? 0,
+          textExcerpt,
+          directTextPresent: source?.directTextPresent ?? false,
+          textDensity: section.density.textDensity,
+          mediaCount: Math.max(0, Math.round(section.mediaDensity * 4)),
+          ctaCandidateCount: section.ctaCandidates.length,
+          hasHeadingSignal: sectionHasHeadingSignal,
+          inferredType: section.inferredType,
+          semanticConfidence: section.confidence,
+          semanticRationale: section.rationale,
+          heroComposition: section.heroComposition,
+          mediaDensity: section.mediaDensity,
+          galleryLikeConfidence: section.galleryLikeConfidence,
+          readabilityTendency: section.density.readabilityTendency,
+        };
+      });
+    } else {
+      const bodyChildren = doc.domOutline?.bodyChildElements ?? [];
+      const extracted = extractBlocksFromBodyWithWrapperPromotion({ bodyChildElements: bodyChildren });
+      sections = extracted.boundaryChildren.map((child) => toSectionInput(doc.id, child));
+    }
+
+    sections = sections.sort((a, b) => {
       if (a.ordinalIndex !== b.ordinalIndex) return a.ordinalIndex - b.ordinalIndex;
       if (a.sourceDomPath !== b.sourceDomPath) return stringCmp(a.sourceDomPath, b.sourceDomPath);
       return stringCmp(a.sectionId, b.sectionId);
@@ -1262,10 +1350,25 @@ export function createDesignIntelligenceInputFromPreparedSite(preparedSite: Prep
       contentDensity: Number(textDensityAvg.toFixed(3)),
       visualDensity: Number(visualDensity.toFixed(3)),
       ctaCandidateCount,
+      primaryCtaLabel: doc.semantic?.primaryCta?.label ?? null,
+      semanticDiagnostics: (doc.semantic?.diagnostics ?? []).map((diagnostic) => ({
+        code: diagnostic.code,
+        severity: diagnostic.severity,
+        message: diagnostic.message,
+        sectionId: diagnostic.sectionId,
+      })),
       brandSignals: {
-        primaryColorHint: null,
-        secondaryColorHint: null,
+        primaryColorHint: doc.semantic?.brandSignals.dominantColors[0] ?? null,
+        secondaryColorHint: doc.semantic?.brandSignals.accentColors[0] ?? null,
         typographyHint: doc.fidelity.bodyClass,
+        dominantColors: doc.semantic?.brandSignals.dominantColors ?? [],
+        accentColors: doc.semantic?.brandSignals.accentColors ?? [],
+        neutralPaletteHints: doc.semantic?.brandSignals.neutralPaletteHints ?? [],
+        fontFamilyHints: doc.semantic?.brandSignals.fontFamilyHints ?? [],
+        fontCategoryHints: doc.semantic?.brandSignals.fontCategoryHints ?? [],
+        visualTone: doc.semantic?.brandSignals.visualTone ?? "neutral",
+        confidence: doc.semantic?.brandSignals.confidence ?? "low",
+        rationale: doc.semantic?.brandSignals.rationale ?? ["brand_signal_fallback"],
       },
     });
   }

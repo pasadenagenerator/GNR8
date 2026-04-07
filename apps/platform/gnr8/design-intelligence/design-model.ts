@@ -157,6 +157,25 @@ export type DesignSemanticSectionInput = {
   mediaCount: number;
   ctaCandidateCount: number;
   hasHeadingSignal: boolean;
+  inferredType:
+    | "header"
+    | "navigation"
+    | "hero"
+    | "cta"
+    | "about"
+    | "services"
+    | "features"
+    | "gallery"
+    | "testimonials"
+    | "contact"
+    | "footer"
+    | "unknown";
+  semanticConfidence: "low" | "medium" | "high";
+  semanticRationale: string[];
+  heroComposition: "text_only" | "split_media" | "centered_cta" | "image_first" | "unknown" | null;
+  mediaDensity: number;
+  galleryLikeConfidence: "low" | "medium" | "high";
+  readabilityTendency: "compact" | "balanced" | "readable";
 };
 
 export type DesignPageInput = {
@@ -168,10 +187,25 @@ export type DesignPageInput = {
   contentDensity: number;
   visualDensity: number;
   ctaCandidateCount: number;
+  primaryCtaLabel: string | null;
+  semanticDiagnostics: Array<{
+    code: string;
+    severity: "info" | "warning";
+    message: string;
+    sectionId: string | null;
+  }>;
   brandSignals: {
     primaryColorHint: string | null;
     secondaryColorHint: string | null;
     typographyHint: string | null;
+    dominantColors: string[];
+    accentColors: string[];
+    neutralPaletteHints: string[];
+    fontFamilyHints: string[];
+    fontCategoryHints: Array<"sans" | "serif" | "display" | "monospace">;
+    visualTone: "formal" | "playful" | "neutral";
+    confidence: "low" | "medium" | "high";
+    rationale: string[];
   };
 };
 
