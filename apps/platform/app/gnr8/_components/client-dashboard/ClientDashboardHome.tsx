@@ -11,6 +11,7 @@ type Props = {
   settingsHref?: string;
   teamHref?: string;
   clientSelfHref?: string;
+  siteWorkspaceHrefBuilder?: (siteId: string) => string | null;
 };
 
 function shortId(value: string): string {
@@ -209,6 +210,9 @@ export default function ClientDashboardHome(props: Props) {
                     <StatusChip label="Runtime" value={site.latest_runtime_state} />
                   </div>
                   <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                    {props.siteWorkspaceHrefBuilder?.(site.site_id) ? (
+                      <ActionLink href={props.siteWorkspaceHrefBuilder(site.site_id)!} label="Open Workspace" />
+                    ) : null}
                     {site.live_url ? <ActionLink href={site.live_url} label="Open Live" external /> : null}
                     {site.preview_url ? <ActionLink href={site.preview_url} label="Open Preview" external /> : null}
                   </div>

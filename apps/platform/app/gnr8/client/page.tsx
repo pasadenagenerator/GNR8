@@ -183,6 +183,11 @@ export default async function ClientDashboardPage(props: { searchParams?: Promis
     limit: 120,
   });
 
+  const siteWorkspaceAgencyQuery = new URLSearchParams();
+  siteWorkspaceAgencyQuery.set("agency", currentUserClient.agency_id);
+  if (resolvedSearchParams?.admin_view) siteWorkspaceAgencyQuery.set("admin_view", String(resolvedSearchParams.admin_view));
+  const siteWorkspaceAgencyQueryString = siteWorkspaceAgencyQuery.toString();
+
   return (
     <main
       style={{
@@ -201,7 +206,14 @@ export default async function ClientDashboardPage(props: { searchParams?: Promis
         </p>
       </header>
 
-      <ClientDashboardHome readModel={readModel} roleLabel={currentUserClient.role} viewMode="client-self" />
+      <ClientDashboardHome
+        readModel={readModel}
+        roleLabel={currentUserClient.role}
+        viewMode="client-self"
+        siteWorkspaceHrefBuilder={(siteId) =>
+          `/gnr8/agency/clients/${encodeURIComponent(currentUserClient.client_id)}/sites/${encodeURIComponent(siteId)}/overview?${siteWorkspaceAgencyQueryString}`
+        }
+      />
       <WorkspaceStateSync
         activeAgencyId={currentUserClient.agency_id}
         activeClientId={currentUserClient.client_id}

@@ -15,6 +15,7 @@ import { getSupabaseServerClientReadOnly } from '@/src/auth/supabase-server-read
 
 type SearchParams = {
   agency?: string
+  admin_view?: string
 }
 
 type Params = {
@@ -50,6 +51,7 @@ export default async function AgencyClientDashboardEntryPage(props: {
 
   const clientId = normalizeText(resolvedParams.clientId)
   const requestedAgencyId = normalizeText(resolvedSearchParams?.agency) || null
+  const adminView = normalizeText(resolvedSearchParams?.admin_view) === '1'
 
   if (!clientId) {
     return (
@@ -187,7 +189,7 @@ export default async function AgencyClientDashboardEntryPage(props: {
     agencyId: currentUserAgency.agency_id,
     limit: 120,
   })
-  const agencyParam = `agency=${encodeURIComponent(currentUserAgency.agency_id)}`
+  const agencyParam = `agency=${encodeURIComponent(currentUserAgency.agency_id)}${adminView ? '&admin_view=1' : ''}`
   const settingsHref = `/gnr8/agency/clients/${encodeURIComponent(clientId)}/settings?${agencyParam}`
   const teamHref = `/gnr8/agency/clients/${encodeURIComponent(clientId)}/users?${agencyParam}`
   const backToAgencyHref = `/gnr8/agency?${agencyParam}`
@@ -198,9 +200,14 @@ export default async function AgencyClientDashboardEntryPage(props: {
       agencyId={currentUserAgency.agency_id}
       requestedAgencyId={requestedAgencyId}
       memberships={availableAgencyMemberships}
+      adminView={adminView}
       clientId={clientId}
       clientName={readModel.client.client_name?.trim() || shortId(clientId)}
       clientOptions={switchableClients}
+      siteOptions={readModel.site_rows.map((site) => ({
+        siteId: site.site_id,
+        label: site.domain?.trim() || shortId(site.site_id),
+      }))}
       activeTab='dashboard'
     >
       <ClientDashboardHome
@@ -211,6 +218,9 @@ export default async function AgencyClientDashboardEntryPage(props: {
         settingsHref={settingsHref}
         teamHref={teamHref}
         clientSelfHref={clientSelfHref}
+        siteWorkspaceHrefBuilder={(siteId) =>
+          `/gnr8/agency/clients/${encodeURIComponent(clientId)}/sites/${encodeURIComponent(siteId)}/overview?${agencyParam}`
+        }
       />
     </ClientContextLayout>
   )

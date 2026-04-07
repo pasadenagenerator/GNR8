@@ -21,6 +21,8 @@ type Props = {
   activeAgencyName?: string | null
   activeClientId?: string | null
   activeClientName?: string | null
+  activeSiteId?: string | null
+  activeSiteName?: string | null
   lastAgencyTab?: string
   lastClientTab?: string
   trackRecents?: boolean
@@ -44,6 +46,7 @@ type RecentRouteContext = {
   section: string
   agencyId?: string
   clientId?: string
+  siteId?: string
 }
 
 function normalizePathSegment(segment: string | undefined): string | undefined {
@@ -58,6 +61,33 @@ function normalizePathSegment(segment: string | undefined): string | undefined {
 }
 
 function resolveRecentRouteContext(pathname: string, searchParams: URLSearchParams): RecentRouteContext | null {
+  if (pathname.startsWith('/gnr8/agency/clients/')) {
+    const siteMatch = pathname.match(/^\/gnr8\/agency\/clients\/([^/]+)\/sites\/([^/]+)\/([^/?#]+)/)
+    if (siteMatch) {
+      const clientId = normalizePathSegment(siteMatch[1])
+      const siteId = normalizePathSegment(siteMatch[2])
+      const rawSection = normalizePathSegment(siteMatch[3])?.toLowerCase()
+      if (!clientId || !siteId) return null
+      const section =
+        rawSection === 'structure'
+          ? 'Structure'
+          : rawSection === 'design'
+            ? 'Design'
+            : rawSection === 'preview'
+              ? 'Preview'
+              : rawSection === 'settings'
+                ? 'Settings'
+                : 'Overview'
+      return {
+        type: 'client',
+        section,
+        agencyId: normalizeText(searchParams.get('agency')),
+        clientId,
+        siteId,
+      }
+    }
+  }
+
   if (pathname.startsWith('/gnr8/agency/clients/')) {
     const match = pathname.match(/^\/gnr8\/agency\/clients\/([^/]+)\/([^/?#]+)/)
     if (!match) return null
@@ -106,9 +136,11 @@ function buildRecentLabel(input: {
   section: string
   agencyName?: string
   clientName?: string
+  siteName?: string
 }): string {
   if (input.type === 'command-center') return `Command Center / ${input.section}`
   if (input.type === 'agency') return `${input.agencyName || 'My Agency'} / ${input.section}`
+  if (input.siteName) return `${input.clientName || 'Client'} / ${input.siteName} / ${input.section}`
   return `${input.clientName || 'Client'} / ${input.section}`
 }
 
@@ -206,6 +238,10 @@ export default function WorkspaceStateSync(props: Props) {
         section: context.section,
         agencyName: normalizeText(props.activeAgencyName),
         clientName: normalizeText(props.activeClientName),
+        siteName:
+          context.siteId && normalizeText(props.activeSiteId) === context.siteId
+            ? normalizeText(props.activeSiteName) || context.siteId
+            : undefined,
       }),
       timestamp: Date.now(),
     })
@@ -217,6 +253,8 @@ export default function WorkspaceStateSync(props: Props) {
     props.activeAgencyName,
     props.activeClientId,
     props.activeClientName,
+    props.activeSiteId,
+    props.activeSiteName,
     props.trackRecents,
     searchParams,
   ])

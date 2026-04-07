@@ -16,10 +16,12 @@ type Props = {
   agencyId: string
   requestedAgencyId: string | null
   memberships: { agency_id: string; agency_name: string | null }[]
+  adminView?: boolean
   clientId: string
   clientName: string
   clientSlug?: string | null
   clientOptions: { clientId: string; label: string }[]
+  siteOptions?: { siteId: string; label: string }[]
   activeTab: ClientContextTab
   children: ReactNode
 }
@@ -39,6 +41,7 @@ export default function ClientContextLayout(props: Props) {
   const activeAgencyId = props.requestedAgencyId || props.agencyId
   const baseParams = new URLSearchParams()
   baseParams.set('agency', activeAgencyId)
+  if (props.adminView) baseParams.set('admin_view', '1')
   const agencyParam = baseParams.toString()
 
   const activeClientSection = props.activeTab === 'settings' ? 'settings' : props.activeTab === 'users' ? 'users' : 'dashboard'
@@ -71,6 +74,32 @@ export default function ClientContextLayout(props: Props) {
     { key: 'settings', label: 'Settings', href: settingsHref },
     { key: 'users', label: 'Team', href: usersHref },
   ]
+  const siteRouteEntries =
+    props.siteOptions?.flatMap((site) => {
+      const siteLabel = site.label.trim() || shortId(site.siteId)
+      const siteOverviewHref = `/gnr8/agency/clients/${encodeURIComponent(props.clientId)}/sites/${encodeURIComponent(site.siteId)}/overview?${agencyParam}`
+      return [
+        { id: `route-site-${site.siteId}-overview`, label: `Open Site: ${siteLabel}`, href: siteOverviewHref, sublabel: 'Site route' },
+        {
+          id: `route-site-${site.siteId}-preview`,
+          label: `Open Site Preview: ${siteLabel}`,
+          href: `/gnr8/agency/clients/${encodeURIComponent(props.clientId)}/sites/${encodeURIComponent(site.siteId)}/preview?${agencyParam}`,
+          sublabel: 'Site route',
+        },
+        {
+          id: `route-site-${site.siteId}-design`,
+          label: `Open Site Design: ${siteLabel}`,
+          href: `/gnr8/agency/clients/${encodeURIComponent(props.clientId)}/sites/${encodeURIComponent(site.siteId)}/design?${agencyParam}`,
+          sublabel: 'Site route',
+        },
+        {
+          id: `route-site-${site.siteId}-structure`,
+          label: `Open Site Structure: ${siteLabel}`,
+          href: `/gnr8/agency/clients/${encodeURIComponent(props.clientId)}/sites/${encodeURIComponent(site.siteId)}/structure?${agencyParam}`,
+          sublabel: 'Site route',
+        },
+      ]
+    }) ?? []
   const clientShortcuts: WorkspaceShortcut[] = [
     {
       id: 'view-sites',
@@ -143,7 +172,7 @@ export default function ClientContextLayout(props: Props) {
           id: membership.agency_id,
           label: membership.agency_name?.trim() || membership.agency_id,
           sublabel: `Agency ID: ${membership.agency_id}`,
-          href: `/gnr8/agency?agency=${encodeURIComponent(membership.agency_id)}`,
+          href: `/gnr8/agency?agency=${encodeURIComponent(membership.agency_id)}${props.adminView ? '&admin_view=1' : ''}`,
         })),
         clients: props.clientOptions.map((client) => ({
           id: client.clientId,
@@ -163,6 +192,7 @@ export default function ClientContextLayout(props: Props) {
           { id: 'route-client-dashboard', label: 'Client Dashboard', href: dashboardHref, sublabel: 'Key route' },
           { id: 'route-client-settings', label: 'Client Settings', href: settingsHref, sublabel: 'Key route' },
           { id: 'route-client-team', label: 'Client Team', href: usersHref, sublabel: 'Key route' },
+          ...siteRouteEntries,
         ],
         accessibleAgencyIds: props.memberships.map((membership) => membership.agency_id),
         accessibleClientIds: props.clientOptions.map((option) => option.clientId),
