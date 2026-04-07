@@ -164,6 +164,8 @@ test("linear migration pipeline includes design_intelligence output with DesignM
   const stage = result.stages.find((s) => s.stageId === "design_intelligence");
   assert.ok(stage);
   assert.equal(stage.output.designModel.kind, "design_model_v1");
+  assert.equal(stage.output.deterministicDesignModel.kind, "design_model_v1");
+  assert.ok(stage.output.aiSuggestionMerge.status.length > 0);
   assert.equal(typeof stage.output.designModel.layoutStrategy, "string");
   assert.ok(stage.output.designModel.sectionDecisions.length >= 1);
 });

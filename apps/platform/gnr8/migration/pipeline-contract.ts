@@ -3,11 +3,12 @@ import type { ImportManifest } from "../import/import-manifest";
 import type { ImportOutput } from "../import/import-contract";
 import type { PreparedSiteModel } from "./prepared-site-model";
 import type { DesignModel } from "../design-intelligence/design-model";
+import type { AiDesignSuggestionInput, AiSuggestionMergeResult } from "../design-intelligence/ai-suggestion-model";
 import type { LayoutPreparationModel } from "./layout-preparation-model";
 import type { RenderOutput } from "./render-output-model";
 import type { PreviewDocument } from "./preview-document-model";
 
-export const LINEAR_MIGRATION_PIPELINE_VERSION = "1.1.0" as const;
+export const LINEAR_MIGRATION_PIPELINE_VERSION = "1.2.0" as const;
 
 export type PipelineInput = {
   importOutput: ImportOutput;
@@ -132,14 +133,20 @@ export type RenderPreparationStageOutput =
 
 export type DesignIntelligenceStageOutput =
   | {
-      kind: "design_intelligence_ok_v1";
+      kind: "design_intelligence_ok_v2";
       structure: StructurePreparationStageOutput;
+      deterministicDesignModel: DesignModel;
+      aiSuggestionInput: AiDesignSuggestionInput | null;
+      aiSuggestionMerge: AiSuggestionMergeResult;
       designModel: DesignModel;
     }
   | {
-      kind: "design_intelligence_skipped_v1";
+      kind: "design_intelligence_skipped_v2";
       skippedBecauseStageId: PipelineStageId;
       structure: StructurePreparationStageOutput;
+      deterministicDesignModel: DesignModel;
+      aiSuggestionInput: AiDesignSuggestionInput | null;
+      aiSuggestionMerge: AiSuggestionMergeResult;
       designModel: DesignModel;
     };
 

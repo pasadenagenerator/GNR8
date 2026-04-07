@@ -1,4 +1,5 @@
 import type { PreparedSiteModel } from "../migration/prepared-site-model";
+import type { AiSuggestionMergeResult } from "./ai-suggestion-model";
 
 export const DESIGN_MODEL_VERSION = "1.0.0" as const;
 
@@ -82,10 +83,27 @@ export type SectionDecision = {
 };
 
 export type DesignIntelligenceDiagnostic = {
-  code: "DESIGN_INTELLIGENCE_DEFAULTED" | "DESIGN_INTELLIGENCE_LOW_CONFIDENCE";
+  code:
+    | "DESIGN_INTELLIGENCE_DEFAULTED"
+    | "DESIGN_INTELLIGENCE_LOW_CONFIDENCE"
+    | "AI_DESIGN_SUGGESTION_UNAVAILABLE"
+    | "AI_DESIGN_SUGGESTION_ACCEPTED"
+    | "AI_DESIGN_SUGGESTION_REJECTED"
+    | "AI_DESIGN_SUGGESTION_LOW_CONFIDENCE"
+    | "AI_DESIGN_SUGGESTION_MALFORMED";
   severity: "warning" | "info";
   message: string;
   pageId: string | null;
+};
+
+export type DesignAiAssistanceSummary = {
+  enabled: boolean;
+  status: AiSuggestionMergeResult["status"];
+  acceptedCount: number;
+  rejectedCount: number;
+  ignoredCount: number;
+  mergeDecisions: AiSuggestionMergeResult["decisions"];
+  rationale: string[];
 };
 
 export type DesignModel = {
@@ -118,6 +136,7 @@ export type DesignModel = {
   colorSystem: ColorSystem;
   componentVariants: ComponentVariantMap;
   rationale: DesignRationale[];
+  aiAssistance: DesignAiAssistanceSummary;
 
   diagnostics: {
     codes: string[];
@@ -163,6 +182,5 @@ export type DesignIntelligenceInput = {
 
 export type DesignIntelligenceAiHook = {
   name: string;
-  classifyPageType?: (input: DesignPageInput) => Promise<PageType | null>;
-  suggestLayoutStrategy?: (input: { page: DesignPageInput; inferredPageType: PageType }) => Promise<LayoutStrategy | null>;
+  requestAiDesignSuggestions?: (input: import("./ai-suggestion-model").AiDesignSuggestionInput) => import("./ai-suggestion-model").AiDesignSuggestion | null;
 };

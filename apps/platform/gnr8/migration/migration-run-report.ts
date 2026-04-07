@@ -506,10 +506,14 @@ function buildStageFacts(input: {
       facts.importDiagnosticCodes = preparedSite?.diagnostics.import.codes.length ?? null;
     } else if (stageId === "design_intelligence") {
       artifactKeys.push("design_model");
+      const designStage = pipeline.stages.find((s) => s.stageId === "design_intelligence");
       facts.designStatus = designModel?.status ?? null;
       facts.layoutStrategy = designModel?.layoutStrategy ?? null;
       facts.pageType = designModel?.pageType ?? null;
       facts.sectionDecisions = designModel?.sectionDecisions.length ?? null;
+      facts.aiSuggestionStatus = designStage?.output.aiSuggestionMerge.status ?? null;
+      facts.aiAccepted = designStage?.output.aiSuggestionMerge.acceptedCount ?? null;
+      facts.aiRejected = designStage?.output.aiSuggestionMerge.rejectedCount ?? null;
       facts.designDiagnosticCodes = designModel?.diagnostics.codes.length ?? null;
     } else if (stageId === "layout_preparation") {
       artifactKeys.push("layout_preparation_model");

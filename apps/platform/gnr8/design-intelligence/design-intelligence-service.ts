@@ -1,5 +1,14 @@
 import type { PreparedDocumentRecord, PreparedDomOutlineElement, PreparedSiteModel } from "../migration/prepared-site-model";
 import { sha256Hex, stableStringify } from "../migration/runtime/diagnostics";
+import type {
+  AiDesignSuggestion,
+  AiDesignSuggestionInput,
+  AiSectionSuggestion,
+  AiSuggestionConfidence,
+  AiSuggestionMergeDecision,
+  AiSuggestionMergeResult,
+} from "./ai-suggestion-model";
+import type { DesignIntelligenceAiSuggestionService } from "./design-intelligence-ai-hook";
 import {
   DESIGN_MODEL_VERSION,
   type ComponentVariantMap,
@@ -18,10 +27,81 @@ import {
 
 const MEDIA_TAGS = new Set(["img", "picture", "figure", "video", "svg", "canvas"]);
 const CTA_PATTERN = /\b(get started|start now|book|contact|call|buy|shop|demo|learn more|sign up|join|quote|request)\b/gi;
+const ALLOWED_LAYOUT_STRATEGIES: readonly LayoutStrategy[] = [
+  "corporate_balanced",
+  "cta_focused",
+  "editorial_readable",
+  "visual_gallery",
+  "service_split_layout",
+] as const;
+const ALLOWED_SEMANTIC_TYPES: readonly SectionSemanticType[] = ["header", "hero", "content", "cta", "gallery", "footer", "unknown"] as const;
+const ALLOWED_VISUAL_TREATMENTS: readonly SectionVisualTreatment[] = [
+  "hero_centered",
+  "hero_split",
+  "hero_image_first",
+  "readable_single_column",
+  "content_two_column",
+  "cta_emphasized",
+  "cta_secondary",
+  "cta_inline",
+  "gallery_grid",
+  "gallery_featured_grid",
+  "header_compact",
+  "footer_compact",
+  "footer_multi_column",
+  "generic_balanced",
+] as const;
+const ALLOWED_EMPHASIS: readonly SectionDecision["emphasis"][] = ["primary", "secondary", "neutral"] as const;
+
+const ALLOWED_TREATMENTS_BY_SEMANTIC: Record<SectionSemanticType, readonly SectionVisualTreatment[]> = {
+  header: ["header_compact", "generic_balanced"],
+  hero: ["hero_centered", "hero_split", "hero_image_first", "generic_balanced"],
+  content: ["readable_single_column", "content_two_column", "generic_balanced"],
+  cta: ["cta_emphasized", "cta_secondary", "cta_inline", "generic_balanced"],
+  gallery: ["gallery_grid", "gallery_featured_grid", "generic_balanced"],
+  footer: ["footer_compact", "footer_multi_column", "generic_balanced"],
+  unknown: ["generic_balanced"],
+};
+
+const CONFIDENCE_RANK: Record<AiSuggestionConfidence, number> = {
+  low: 1,
+  medium: 2,
+  high: 3,
+};
+
+type BuildDesignModelOptions = {
+  aiSuggestionService?: DesignIntelligenceAiSuggestionService | null;
+  enableAiSuggestions?: boolean;
+};
+
+export type DesignIntelligenceBuildResult = {
+  deterministicDesignModel: DesignModel;
+  aiSuggestionInput: AiDesignSuggestionInput | null;
+  aiSuggestionMerge: AiSuggestionMergeResult;
+  designModel: DesignModel;
+};
+
+type AttemptedAiSuggestion = {
+  status: "unavailable" | "no_suggestion" | "suggested" | "malformed";
+  suggestion: AiDesignSuggestion | null;
+  reason: string;
+};
 
 function stringCmp(a: string, b: string): number {
   if (a === b) return 0;
   return a < b ? -1 : 1;
+}
+
+function uniqueSortedStrings(values: string[]): string[] {
+  return [...new Set(values)].sort(stringCmp);
+}
+
+function isAllowedValue<T extends string>(value: unknown, allowed: readonly T[]): value is T {
+  return typeof value === "string" && allowed.includes(value as T);
+}
+
+function isAiSuggestionConfidence(value: unknown): value is AiSuggestionConfidence {
+  return value === "low" || value === "medium" || value === "high";
 }
 
 function countPattern(text: string, pattern: RegExp): number {
@@ -369,6 +449,32 @@ function colorSystemFromPage(page: DesignPageInput): DesignModel["colorSystem"] 
   };
 }
 
+function emptyAiMergeResult(status: AiSuggestionMergeResult["status"], reason: string): AiSuggestionMergeResult {
+  return {
+    status,
+    suggestion: null,
+    acceptedCount: 0,
+    rejectedCount: 0,
+    ignoredCount: 1,
+    decisions: [
+      {
+        target: "page_strategy",
+        sectionId: null,
+        status: "ignored",
+        reasonCode: status === "unavailable" ? "AI_SUGGESTION_UNAVAILABLE" : "AI_SUGGESTION_NOT_APPLICABLE",
+        message: reason,
+      },
+    ],
+    rationale: [
+      {
+        code: status === "unavailable" ? "AI_DESIGN_ASSIST_UNAVAILABLE" : "AI_DESIGN_ASSIST_NOT_APPLIED",
+        summary: reason,
+        basedOn: ["deterministic_fallback=true"],
+      },
+    ],
+  };
+}
+
 function safeDefaultModel(input: DesignIntelligenceInput, message: string): DesignModel {
   const entryPage = input.pages.find((p) => p.isEntry) ?? input.pages[0] ?? null;
 
@@ -409,8 +515,25 @@ function safeDefaultModel(input: DesignIntelligenceInput, message: string): Desi
         basedOn: [message],
       },
     ],
+    aiAssistance: {
+      enabled: false,
+      status: "unavailable",
+      acceptedCount: 0,
+      rejectedCount: 0,
+      ignoredCount: 1,
+      mergeDecisions: [
+        {
+          target: "page_strategy",
+          sectionId: null,
+          status: "ignored",
+          reasonCode: "AI_SUGGESTION_UNAVAILABLE",
+          message: "AI suggestion layer was not run because deterministic fallback was triggered.",
+        },
+      ],
+      rationale: ["AI suggestion layer unavailable; deterministic fallback retained."],
+    },
     diagnostics: {
-      codes: ["DESIGN_INTELLIGENCE_DEFAULTED"],
+      codes: ["DESIGN_INTELLIGENCE_DEFAULTED", "AI_DESIGN_SUGGESTION_UNAVAILABLE"],
       issues: [
         {
           code: "DESIGN_INTELLIGENCE_DEFAULTED",
@@ -418,64 +541,18 @@ function safeDefaultModel(input: DesignIntelligenceInput, message: string): Desi
           message,
           pageId: entryPage?.pageId ?? null,
         },
+        {
+          code: "AI_DESIGN_SUGGESTION_UNAVAILABLE",
+          severity: "info",
+          message: "AI suggestion layer skipped because deterministic fallback was used.",
+          pageId: entryPage?.pageId ?? null,
+        },
       ],
     },
   };
 }
 
-export function createDesignIntelligenceInputFromPreparedSite(preparedSite: PreparedSiteModel): DesignIntelligenceInput {
-  const pages: DesignPageInput[] = [];
-
-  const docs = [...preparedSite.documents].sort((a, b) => {
-    if (a.path !== b.path) return stringCmp(a.path, b.path);
-    if (a.id !== b.id) return stringCmp(a.id, b.id);
-    return 0;
-  });
-
-  for (const doc of docs) {
-    const bodyChildren = doc.domOutline?.bodyChildElements ?? [];
-    const extracted = extractBlocksFromBodyWithWrapperPromotion({ bodyChildElements: bodyChildren });
-    const sections = extracted.boundaryChildren.map((child) => toSectionInput(doc.id, child)).sort((a, b) => {
-      if (a.ordinalIndex !== b.ordinalIndex) return a.ordinalIndex - b.ordinalIndex;
-      if (a.sourceDomPath !== b.sourceDomPath) return stringCmp(a.sourceDomPath, b.sourceDomPath);
-      return stringCmp(a.sectionId, b.sectionId);
-    });
-
-    const textDensityAvg = sections.length > 0 ? sections.reduce((sum, s) => sum + s.textDensity, 0) / sections.length : 0;
-    const mediaCount = sections.reduce((sum, s) => sum + s.mediaCount, 0);
-    const visualDensity = sections.length > 0 ? Math.min(1, mediaCount / Math.max(1, sections.length)) : 0;
-    const ctaCandidateCount = sections.reduce((sum, s) => sum + s.ctaCandidateCount, 0);
-
-    pages.push({
-      pageId: doc.id,
-      sourcePath: doc.path,
-      isEntry: doc.isEntry,
-      title: doc.fidelity.title,
-      sections,
-      contentDensity: Number(textDensityAvg.toFixed(3)),
-      visualDensity: Number(visualDensity.toFixed(3)),
-      ctaCandidateCount,
-      brandSignals: {
-        primaryColorHint: null,
-        secondaryColorHint: null,
-        typographyHint: doc.fidelity.bodyClass,
-      },
-    });
-  }
-
-  return {
-    preparedSite: {
-      preparedSiteKind: preparedSite.kind,
-      preparedSiteModelVersion: preparedSite.modelVersion,
-      importContractVersion: preparedSite.source.importContractVersion,
-      importManifestVersion: preparedSite.source.importManifestVersion,
-      fingerprints: preparedSite.source.fingerprints,
-    },
-    pages,
-  };
-}
-
-export function createDesignModelFromInput(input: DesignIntelligenceInput): DesignModel {
+function toDeterministicModel(input: DesignIntelligenceInput): DesignModel {
   if (input.pages.length === 0) {
     return safeDefaultModel(input, "No pages available for design classification.");
   }
@@ -575,8 +652,8 @@ export function createDesignModelFromInput(input: DesignIntelligenceInput): Desi
     });
   }
 
-  const diagnosticCodes = [...new Set(diagnostics.map((d) => d.code))].sort(stringCmp);
-  const status: DesignModel["status"] = diagnostics.length > 0 ? "ready_with_warnings" : "ready";
+  const diagnosticCodes = uniqueSortedStrings(diagnostics.map((d) => d.code));
+  const status: DesignModel["status"] = diagnostics.some((d) => d.severity === "warning") ? "ready_with_warnings" : "ready";
 
   return {
     kind: "design_model_v1",
@@ -592,6 +669,23 @@ export function createDesignModelFromInput(input: DesignIntelligenceInput): Desi
     colorSystem: colorSystemFromPage(primaryPageInput),
     componentVariants: componentVariantsFromDecisions(orderedSectionDecisions),
     rationale: modelRationale,
+    aiAssistance: {
+      enabled: false,
+      status: "unavailable",
+      acceptedCount: 0,
+      rejectedCount: 0,
+      ignoredCount: 1,
+      mergeDecisions: [
+        {
+          target: "page_strategy",
+          sectionId: null,
+          status: "ignored",
+          reasonCode: "AI_SUGGESTION_UNAVAILABLE",
+          message: "AI suggestion layer not enabled for this run.",
+        },
+      ],
+      rationale: ["AI suggestion layer disabled; deterministic model retained."],
+    },
     diagnostics: {
       codes: diagnosticCodes,
       issues: diagnostics,
@@ -599,13 +693,643 @@ export function createDesignModelFromInput(input: DesignIntelligenceInput): Desi
   };
 }
 
-export function createDesignModel(preparedSite: PreparedSiteModel): DesignModel {
+function buildAiSuggestionInput(input: DesignIntelligenceInput, deterministic: DesignModel): AiDesignSuggestionInput {
+  const primaryHints = uniqueSortedStrings(
+    input.pages.map((p) => p.brandSignals.primaryColorHint).filter((v): v is string => Boolean(v && v.trim().length > 0)),
+  );
+  const secondaryHints = uniqueSortedStrings(
+    input.pages.map((p) => p.brandSignals.secondaryColorHint).filter((v): v is string => Boolean(v && v.trim().length > 0)),
+  );
+  const typographyHints = uniqueSortedStrings(
+    input.pages.map((p) => p.brandSignals.typographyHint).filter((v): v is string => Boolean(v && v.trim().length > 0)),
+  );
+
+  const sectionDecisionById = new Map(deterministic.sectionDecisions.map((d) => [d.sectionId, d]));
+
+  return {
+    kind: "ai_design_suggestion_input_v1",
+    preparedSiteFingerprint: sha256Hex(stableStringify(input.preparedSite.fingerprints)),
+    pages: input.pages.map((page) => {
+      const pageTypeGuess = inferPageType(page).pageType;
+      const deterministicStrategy = deterministic.pageStrategies.find((p) => p.pageId === page.pageId)?.layoutStrategy ?? null;
+
+      return {
+        pageId: page.pageId,
+        sourcePath: page.sourcePath,
+        isEntry: page.isEntry,
+        pageTypeGuess,
+        contentDensity: page.contentDensity,
+        visualDensity: page.visualDensity,
+        ctaCandidateCount: page.ctaCandidateCount,
+        deterministicStrategy,
+        sectionSummaries: page.sections.map((section) => {
+          const deterministicDecision = sectionDecisionById.get(section.sectionId) ?? null;
+          return {
+            sectionId: section.sectionId,
+            pageId: section.pageId,
+            sourceDomPath: section.sourceDomPath,
+            ordinalIndex: section.ordinalIndex,
+            semanticGuess: inferSemanticType(section),
+            textDensity: section.textDensity,
+            mediaDensity: section.mediaCount > 0 ? 1 : 0,
+            ctaCandidates: section.ctaCandidateCount,
+            deterministicDecision:
+              deterministicDecision === null
+                ? null
+                : {
+                    semanticType: deterministicDecision.semanticType,
+                    visualTreatment: deterministicDecision.visualTreatment,
+                    emphasis: deterministicDecision.emphasis,
+                    confidence: deterministicDecision.confidence,
+                  },
+          };
+        }),
+      };
+    }),
+    brandSignalSummary: {
+      primaryColorHints: primaryHints,
+      secondaryColorHints: secondaryHints,
+      typographyHints,
+    },
+    deterministicBaseline: {
+      pageType: deterministic.pageType,
+      layoutStrategy: deterministic.layoutStrategy,
+      sectionDecisionCount: deterministic.sectionDecisions.length,
+    },
+  };
+}
+
+function normalizeAiSuggestion(raw: AiDesignSuggestion | null): AttemptedAiSuggestion {
+  if (raw === null) {
+    return {
+      status: "no_suggestion",
+      suggestion: null,
+      reason: "AI provider returned no suggestion payload.",
+    };
+  }
+
+  const asUnknown = raw as unknown as {
+    kind?: unknown;
+    version?: unknown;
+    sectionSuggestions?: unknown;
+    confidence?: { overall?: unknown };
+  };
+
+  if (
+    asUnknown.kind !== "ai_design_suggestion_v1" ||
+    typeof asUnknown.version !== "string" ||
+    !Array.isArray(asUnknown.sectionSuggestions) ||
+    !isAiSuggestionConfidence(asUnknown.confidence?.overall)
+  ) {
+    return {
+      status: "malformed",
+      suggestion: null,
+      reason: "AI provider returned malformed suggestion payload; deterministic baseline retained.",
+    };
+  }
+
+  return {
+    status: "suggested",
+    suggestion: raw,
+    reason: "AI suggestion payload accepted for merge validation.",
+  };
+}
+
+function attemptAiSuggestion(input: {
+  enabled: boolean;
+  service: DesignIntelligenceAiSuggestionService | null;
+  suggestionInput: AiDesignSuggestionInput;
+}): AttemptedAiSuggestion {
+  if (!input.enabled || !input.service) {
+    return {
+      status: "unavailable",
+      suggestion: null,
+      reason: "AI suggestion service unavailable; deterministic baseline retained.",
+    };
+  }
+
+  try {
+    return normalizeAiSuggestion(input.service.requestAiDesignSuggestions(input.suggestionInput));
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : "unknown_ai_suggestion_error";
+    return {
+      status: "unavailable",
+      suggestion: null,
+      reason: `AI suggestion request failed (${msg}); deterministic baseline retained.`,
+    };
+  }
+}
+
+function makeDecision(input: {
+  target: AiSuggestionMergeDecision["target"];
+  sectionId: string | null;
+  status: AiSuggestionMergeDecision["status"];
+  reasonCode: AiSuggestionMergeDecision["reasonCode"];
+  message: string;
+}): AiSuggestionMergeDecision {
+  return {
+    target: input.target,
+    sectionId: input.sectionId,
+    status: input.status,
+    reasonCode: input.reasonCode,
+    message: input.message,
+  };
+}
+
+function appendDecisionRationale(decisions: AiSuggestionMergeDecision[]): DesignRationale[] {
+  return decisions.map((decision, idx) => ({
+    code: `AI_MERGE_${String(idx + 1).padStart(2, "0")}_${decision.reasonCode}`,
+    summary: decision.message,
+    basedOn: [
+      `target=${decision.target}`,
+      `sectionId=${decision.sectionId ?? "page"}`,
+      `status=${decision.status}`,
+      `reasonCode=${decision.reasonCode}`,
+    ],
+  }));
+}
+
+function shouldAllowSectionSuggestion(input: {
+  suggestion: AiSectionSuggestion;
+  baseline: SectionDecision;
+}): { allowed: boolean; reason: string } {
+  const confidenceRank = CONFIDENCE_RANK[input.suggestion.confidence];
+  if (confidenceRank <= CONFIDENCE_RANK.low) return { allowed: false, reason: "AI section suggestion confidence is low." };
+  if (input.suggestion.confidence === "medium" && input.baseline.confidence > 0.72) {
+    return {
+      allowed: false,
+      reason: "AI section suggestion confidence is medium and deterministic baseline confidence is already high.",
+    };
+  }
+  return { allowed: true, reason: "AI confidence is eligible for deterministic merge." };
+}
+
+function mergeAiSuggestion(input: {
+  deterministic: DesignModel;
+  attempted: AttemptedAiSuggestion;
+}): {
+  merge: AiSuggestionMergeResult;
+  finalModel: DesignModel;
+  additionalDiagnostics: DesignIntelligenceDiagnostic[];
+} {
+  const baseline = input.deterministic;
+
+  if (input.attempted.status === "unavailable") {
+    const merge = emptyAiMergeResult("unavailable", input.attempted.reason);
+    return {
+      merge,
+      finalModel: {
+        ...baseline,
+        aiAssistance: {
+          enabled: false,
+          status: merge.status,
+          acceptedCount: merge.acceptedCount,
+          rejectedCount: merge.rejectedCount,
+          ignoredCount: merge.ignoredCount,
+          mergeDecisions: merge.decisions,
+          rationale: merge.rationale.map((r) => r.summary),
+        },
+      },
+      additionalDiagnostics: [
+        {
+          code: "AI_DESIGN_SUGGESTION_UNAVAILABLE",
+          severity: "warning",
+          message: input.attempted.reason,
+          pageId: null,
+        },
+      ],
+    };
+  }
+
+  if (input.attempted.status === "malformed") {
+    const merge = {
+      ...emptyAiMergeResult("rejected", input.attempted.reason),
+      decisions: [
+        makeDecision({
+          target: "page_strategy",
+          sectionId: null,
+          status: "rejected",
+          reasonCode: "AI_SUGGESTION_MALFORMED",
+          message: input.attempted.reason,
+        }),
+      ],
+      rejectedCount: 1,
+      ignoredCount: 0,
+    } satisfies AiSuggestionMergeResult;
+
+    return {
+      merge: { ...merge, rationale: appendDecisionRationale(merge.decisions) },
+      finalModel: {
+        ...baseline,
+        aiAssistance: {
+          enabled: true,
+          status: merge.status,
+          acceptedCount: merge.acceptedCount,
+          rejectedCount: merge.rejectedCount,
+          ignoredCount: merge.ignoredCount,
+          mergeDecisions: merge.decisions,
+          rationale: appendDecisionRationale(merge.decisions).map((r) => r.summary),
+        },
+      },
+      additionalDiagnostics: [
+        {
+          code: "AI_DESIGN_SUGGESTION_MALFORMED",
+          severity: "warning",
+          message: input.attempted.reason,
+          pageId: null,
+        },
+      ],
+    };
+  }
+
+  if (input.attempted.status === "no_suggestion") {
+    const merge = emptyAiMergeResult("no_suggestion", input.attempted.reason);
+    return {
+      merge,
+      finalModel: {
+        ...baseline,
+        aiAssistance: {
+          enabled: true,
+          status: merge.status,
+          acceptedCount: merge.acceptedCount,
+          rejectedCount: merge.rejectedCount,
+          ignoredCount: merge.ignoredCount,
+          mergeDecisions: merge.decisions,
+          rationale: merge.rationale.map((r) => r.summary),
+        },
+      },
+      additionalDiagnostics: [],
+    };
+  }
+
+  const suggestion = input.attempted.suggestion!;
+  const decisions: AiSuggestionMergeDecision[] = [];
+  let acceptedCount = 0;
+  let rejectedCount = 0;
+  let ignoredCount = 0;
+
+  let mergedLayoutStrategy = baseline.layoutStrategy;
+  const mergedPageStrategies = baseline.pageStrategies.map((p) => ({ ...p }));
+  const mergedSectionDecisions = baseline.sectionDecisions.map((s) => ({ ...s, rationale: [...s.rationale] }));
+  const sectionById = new Map(mergedSectionDecisions.map((s) => [s.sectionId, s]));
+
+  const overallConfidence = suggestion.confidence.overall;
+  if (!isAllowedValue(suggestion.pageStrategySuggestion, ALLOWED_LAYOUT_STRATEGIES)) {
+    if (typeof suggestion.pageStrategySuggestion === "string") {
+      decisions.push(
+        makeDecision({
+          target: "page_strategy",
+          sectionId: null,
+          status: "rejected",
+          reasonCode: "AI_SUGGESTION_UNKNOWN_VALUE",
+          message: `AI page strategy '${suggestion.pageStrategySuggestion}' is not recognized and was rejected.`,
+        }),
+      );
+      rejectedCount++;
+    }
+  } else if (overallConfidence === "high") {
+    mergedLayoutStrategy = suggestion.pageStrategySuggestion;
+    const primary = mergedPageStrategies.find((p) => p.layoutStrategy === baseline.layoutStrategy) ?? mergedPageStrategies[0] ?? null;
+    if (primary) primary.layoutStrategy = suggestion.pageStrategySuggestion;
+    decisions.push(
+      makeDecision({
+        target: "page_strategy",
+        sectionId: null,
+        status: "accepted",
+        reasonCode: "AI_SUGGESTION_ACCEPTED",
+        message: `Accepted AI page strategy '${suggestion.pageStrategySuggestion}' with high confidence.`,
+      }),
+    );
+    acceptedCount++;
+  } else {
+    decisions.push(
+      makeDecision({
+        target: "page_strategy",
+        sectionId: null,
+        status: "ignored",
+        reasonCode: "AI_SUGGESTION_LOW_CONFIDENCE",
+        message: "Ignored AI page strategy suggestion because overall confidence is not high.",
+      }),
+    );
+    ignoredCount++;
+  }
+
+  for (const sectionSuggestion of suggestion.sectionSuggestions) {
+    const target = sectionById.get(sectionSuggestion.sectionId);
+    if (!target) {
+      decisions.push(
+        makeDecision({
+          target: "section",
+          sectionId: sectionSuggestion.sectionId,
+          status: "rejected",
+          reasonCode: "AI_SUGGESTION_UNKNOWN_SECTION",
+          message: `AI suggested section '${sectionSuggestion.sectionId}', which does not exist in deterministic section decisions.`,
+        }),
+      );
+      rejectedCount++;
+      continue;
+    }
+
+    const allow = shouldAllowSectionSuggestion({ suggestion: sectionSuggestion, baseline: target });
+    if (!allow.allowed) {
+      decisions.push(
+        makeDecision({
+          target: "section",
+          sectionId: sectionSuggestion.sectionId,
+          status: "ignored",
+          reasonCode: "AI_SUGGESTION_LOW_CONFIDENCE",
+          message: allow.reason,
+        }),
+      );
+      ignoredCount++;
+      continue;
+    }
+
+    let semanticType = target.semanticType;
+    if (sectionSuggestion.semanticTypeSuggestion !== undefined) {
+      if (!isAllowedValue(sectionSuggestion.semanticTypeSuggestion, ALLOWED_SEMANTIC_TYPES)) {
+        decisions.push(
+          makeDecision({
+            target: "section",
+            sectionId: sectionSuggestion.sectionId,
+            status: "rejected",
+            reasonCode: "AI_SUGGESTION_UNKNOWN_VALUE",
+            message: `AI semantic suggestion '${String(sectionSuggestion.semanticTypeSuggestion)}' is not recognized.`,
+          }),
+        );
+        rejectedCount++;
+        continue;
+      }
+      if (target.semanticType !== "unknown" && target.semanticType !== sectionSuggestion.semanticTypeSuggestion) {
+        decisions.push(
+          makeDecision({
+            target: "section",
+            sectionId: sectionSuggestion.sectionId,
+            status: "rejected",
+            reasonCode: "AI_SUGGESTION_CONFLICT_WITH_STRUCTURE",
+            message: "AI semantic suggestion conflicts with deterministic structural classification.",
+          }),
+        );
+        rejectedCount++;
+        continue;
+      }
+      semanticType = sectionSuggestion.semanticTypeSuggestion;
+    }
+
+    if (sectionSuggestion.visualTreatmentSuggestion !== undefined) {
+      if (!isAllowedValue(sectionSuggestion.visualTreatmentSuggestion, ALLOWED_VISUAL_TREATMENTS)) {
+        decisions.push(
+          makeDecision({
+            target: "section",
+            sectionId: sectionSuggestion.sectionId,
+            status: "rejected",
+            reasonCode: "AI_SUGGESTION_UNKNOWN_VALUE",
+            message: `AI visual treatment '${String(sectionSuggestion.visualTreatmentSuggestion)}' is not recognized.`,
+          }),
+        );
+        rejectedCount++;
+        continue;
+      }
+      const allowedTreatments = ALLOWED_TREATMENTS_BY_SEMANTIC[semanticType];
+      if (!allowedTreatments.includes(sectionSuggestion.visualTreatmentSuggestion)) {
+        decisions.push(
+          makeDecision({
+            target: "section",
+            sectionId: sectionSuggestion.sectionId,
+            status: "rejected",
+            reasonCode: "AI_SUGGESTION_CONFLICT_WITH_STRUCTURE",
+            message: `AI visual treatment '${sectionSuggestion.visualTreatmentSuggestion}' is not valid for semantic type '${semanticType}'.`,
+          }),
+        );
+        rejectedCount++;
+        continue;
+      }
+      target.visualTreatment = sectionSuggestion.visualTreatmentSuggestion;
+    }
+
+    if (sectionSuggestion.emphasisSuggestion !== undefined) {
+      if (!isAllowedValue(sectionSuggestion.emphasisSuggestion, ALLOWED_EMPHASIS)) {
+        decisions.push(
+          makeDecision({
+            target: "section",
+            sectionId: sectionSuggestion.sectionId,
+            status: "rejected",
+            reasonCode: "AI_SUGGESTION_UNKNOWN_VALUE",
+            message: `AI emphasis '${String(sectionSuggestion.emphasisSuggestion)}' is not recognized.`,
+          }),
+        );
+        rejectedCount++;
+        continue;
+      }
+      target.emphasis = sectionSuggestion.emphasisSuggestion;
+    }
+
+    target.semanticType = semanticType;
+    target.rationale = [
+      ...target.rationale,
+      {
+        code: "AI_SECTION_SUGGESTION_ACCEPTED",
+        summary: "Applied AI section suggestion after deterministic merge validation.",
+        basedOn: [
+          `confidence=${sectionSuggestion.confidence}`,
+          `rationale=${sectionSuggestion.rationale.join(" | ") || "none"}`,
+        ],
+      },
+    ];
+
+    decisions.push(
+      makeDecision({
+        target: "section",
+        sectionId: sectionSuggestion.sectionId,
+        status: "accepted",
+        reasonCode: "AI_SUGGESTION_ACCEPTED",
+        message: `Accepted AI suggestion for section '${sectionSuggestion.sectionId}'.`,
+      }),
+    );
+    acceptedCount++;
+  }
+
+  const mergeRationale = appendDecisionRationale(decisions);
+  const mergeStatus: AiSuggestionMergeResult["status"] =
+    acceptedCount > 0 ? "merged" : rejectedCount > 0 ? "rejected" : "suggested";
+
+  const merge: AiSuggestionMergeResult = {
+    status: mergeStatus,
+    suggestion,
+    acceptedCount,
+    rejectedCount,
+    ignoredCount,
+    decisions,
+    rationale: mergeRationale,
+  };
+
+  const finalModel: DesignModel = {
+    ...baseline,
+    layoutStrategy: mergedLayoutStrategy,
+    pageStrategies: mergedPageStrategies,
+    sectionDecisions: mergedSectionDecisions,
+    typographyScale: typographyFromStrategy(mergedLayoutStrategy),
+    spacingScale: spacingFromStrategy(mergedLayoutStrategy, baseline.pageType),
+    componentVariants: componentVariantsFromDecisions(mergedSectionDecisions),
+    rationale: [...baseline.rationale, ...mergeRationale],
+    aiAssistance: {
+      enabled: true,
+      status: merge.status,
+      acceptedCount,
+      rejectedCount,
+      ignoredCount,
+      mergeDecisions: decisions,
+      rationale: mergeRationale.map((r) => r.summary),
+    },
+  };
+
+  const additionalDiagnostics: DesignIntelligenceDiagnostic[] = [];
+  if (acceptedCount > 0) {
+    additionalDiagnostics.push({
+      code: "AI_DESIGN_SUGGESTION_ACCEPTED",
+      severity: "info",
+      message: `Accepted ${acceptedCount} AI design suggestion(s).`,
+      pageId: null,
+    });
+  }
+  if (rejectedCount > 0) {
+    additionalDiagnostics.push({
+      code: "AI_DESIGN_SUGGESTION_REJECTED",
+      severity: "info",
+      message: `Rejected ${rejectedCount} AI design suggestion(s).`,
+      pageId: null,
+    });
+  }
+  if (ignoredCount > 0) {
+    additionalDiagnostics.push({
+      code: "AI_DESIGN_SUGGESTION_LOW_CONFIDENCE",
+      severity: "info",
+      message: `Ignored ${ignoredCount} AI design suggestion(s) due to confidence policy or non-applicability.`,
+      pageId: null,
+    });
+  }
+
+  return {
+    merge,
+    finalModel,
+    additionalDiagnostics,
+  };
+}
+
+function finalizeWithDiagnostics(model: DesignModel, addedDiagnostics: DesignIntelligenceDiagnostic[]): DesignModel {
+  const issues = [...model.diagnostics.issues, ...addedDiagnostics];
+  const codes = uniqueSortedStrings(issues.map((d) => d.code));
+  const hasWarning = issues.some((d) => d.severity === "warning");
+  return {
+    ...model,
+    status: hasWarning ? "ready_with_warnings" : "ready",
+    diagnostics: {
+      codes,
+      issues,
+    },
+  };
+}
+
+export function createDesignIntelligenceInputFromPreparedSite(preparedSite: PreparedSiteModel): DesignIntelligenceInput {
+  const pages: DesignPageInput[] = [];
+
+  const docs = [...preparedSite.documents].sort((a, b) => {
+    if (a.path !== b.path) return stringCmp(a.path, b.path);
+    if (a.id !== b.id) return stringCmp(a.id, b.id);
+    return 0;
+  });
+
+  for (const doc of docs) {
+    const bodyChildren = doc.domOutline?.bodyChildElements ?? [];
+    const extracted = extractBlocksFromBodyWithWrapperPromotion({ bodyChildElements: bodyChildren });
+    const sections = extracted.boundaryChildren.map((child) => toSectionInput(doc.id, child)).sort((a, b) => {
+      if (a.ordinalIndex !== b.ordinalIndex) return a.ordinalIndex - b.ordinalIndex;
+      if (a.sourceDomPath !== b.sourceDomPath) return stringCmp(a.sourceDomPath, b.sourceDomPath);
+      return stringCmp(a.sectionId, b.sectionId);
+    });
+
+    const textDensityAvg = sections.length > 0 ? sections.reduce((sum, s) => sum + s.textDensity, 0) / sections.length : 0;
+    const mediaCount = sections.reduce((sum, s) => sum + s.mediaCount, 0);
+    const visualDensity = sections.length > 0 ? Math.min(1, mediaCount / Math.max(1, sections.length)) : 0;
+    const ctaCandidateCount = sections.reduce((sum, s) => sum + s.ctaCandidateCount, 0);
+
+    pages.push({
+      pageId: doc.id,
+      sourcePath: doc.path,
+      isEntry: doc.isEntry,
+      title: doc.fidelity.title,
+      sections,
+      contentDensity: Number(textDensityAvg.toFixed(3)),
+      visualDensity: Number(visualDensity.toFixed(3)),
+      ctaCandidateCount,
+      brandSignals: {
+        primaryColorHint: null,
+        secondaryColorHint: null,
+        typographyHint: doc.fidelity.bodyClass,
+      },
+    });
+  }
+
+  return {
+    preparedSite: {
+      preparedSiteKind: preparedSite.kind,
+      preparedSiteModelVersion: preparedSite.modelVersion,
+      importContractVersion: preparedSite.source.importContractVersion,
+      importManifestVersion: preparedSite.source.importManifestVersion,
+      fingerprints: preparedSite.source.fingerprints,
+    },
+    pages,
+  };
+}
+
+export function createDesignModelFromInput(input: DesignIntelligenceInput): DesignModel {
+  return toDeterministicModel(input);
+}
+
+export function createDesignIntelligenceResultFromInput(
+  input: DesignIntelligenceInput,
+  options?: BuildDesignModelOptions,
+): DesignIntelligenceBuildResult {
+  const deterministicDesignModel = toDeterministicModel(input);
+  const suggestionInput = buildAiSuggestionInput(input, deterministicDesignModel);
+  const attempted = attemptAiSuggestion({
+    enabled: options?.enableAiSuggestions ?? Boolean(options?.aiSuggestionService),
+    service: options?.aiSuggestionService ?? null,
+    suggestionInput,
+  });
+
+  const merged = mergeAiSuggestion({ deterministic: deterministicDesignModel, attempted });
+  const designModel = finalizeWithDiagnostics(merged.finalModel, merged.additionalDiagnostics);
+
+  return {
+    deterministicDesignModel,
+    aiSuggestionInput: suggestionInput,
+    aiSuggestionMerge: merged.merge,
+    designModel,
+  };
+}
+
+export function createDesignIntelligenceResult(
+  preparedSite: PreparedSiteModel,
+  options?: BuildDesignModelOptions,
+): DesignIntelligenceBuildResult {
   try {
     const input = createDesignIntelligenceInputFromPreparedSite(preparedSite);
-    return createDesignModelFromInput(input);
+    return createDesignIntelligenceResultFromInput(input, options);
   } catch (error) {
     const input = createDesignIntelligenceInputFromPreparedSite(preparedSite);
     const message = error instanceof Error ? error.message : "unknown_design_intelligence_error";
-    return safeDefaultModel(input, `Design Intelligence fallback activated: ${message}`);
+    const fallback = safeDefaultModel(input, `Design Intelligence fallback activated: ${message}`);
+    const merge = emptyAiMergeResult("unavailable", "AI suggestion layer was not run because deterministic fallback was activated.");
+    return {
+      deterministicDesignModel: fallback,
+      aiSuggestionInput: buildAiSuggestionInput(input, fallback),
+      aiSuggestionMerge: merge,
+      designModel: fallback,
+    };
   }
+}
+
+export function createDesignModel(preparedSite: PreparedSiteModel): DesignModel {
+  return createDesignIntelligenceResult(preparedSite).designModel;
 }

@@ -5,6 +5,7 @@ import type { RenderOutput } from "../../migration/render-output-model";
 import type { PreviewDocument } from "../../migration/preview-document-model";
 import type { ExecutionMode } from "../../migration/execution-plan-model";
 import type { DesignModel } from "../../design-intelligence/design-model";
+import type { AiSuggestionMergeResult } from "../../design-intelligence/ai-suggestion-model";
 
 import type { ImportDiagnosticIssue } from "../../import/import-contract";
 import { createImportManifest } from "../../import/import-manifest";
@@ -45,6 +46,14 @@ function findDesignModel(pipelineStages: LinearMigrationPipelineStageResult[]): 
   return stage?.output.designModel ?? null;
 }
 
+function findDesignAiMerge(
+  pipelineStages: LinearMigrationPipelineStageResult[],
+): AiSuggestionMergeResult | null {
+  const stage = pipelineStages.find((s) => s.stageId === "design_intelligence");
+  if (!stage || !("aiSuggestionMerge" in stage.output)) return null;
+  return stage.output.aiSuggestionMerge;
+}
+
 function mapReportStatusToValidation(status: "success" | "success_with_warnings" | "blocked" | "failed"): ValidationOverallStatus {
   if (status === "success") return "passed";
   if (status === "success_with_warnings") return "passed_with_warnings";
@@ -69,6 +78,7 @@ function computeValidationSummary(input: {
   reportWarningCodes: string[];
   reportBlockingCodes: string[];
   designModel: DesignModel | null;
+  designAiMerge: AiSuggestionMergeResult | null;
   previewDocument: PreviewDocument;
   renderOutput: RenderOutput | null;
 }): ValidationSummary {
@@ -120,8 +130,13 @@ function computeValidationSummary(input: {
     design: {
       status: input.designModel ? "available" : "missing",
       layoutStrategy: input.designModel?.layoutStrategy ?? null,
+      mergedLayoutStrategy: input.designModel?.layoutStrategy ?? null,
       pageType: input.designModel?.pageType ?? null,
       sectionDecisionCount: input.designModel?.sectionDecisions.length ?? 0,
+      aiSuggestionStatus: input.designAiMerge?.status ?? null,
+      aiAcceptedCount: input.designAiMerge?.acceptedCount ?? 0,
+      aiRejectedCount: input.designAiMerge?.rejectedCount ?? 0,
+      aiIgnoredCount: input.designAiMerge?.ignoredCount ?? 0,
       rationaleSummary: (input.designModel?.rationale ?? []).map((r) => r.summary),
       diagnosticCodes: input.designModel?.diagnostics.codes ?? [],
     },
@@ -200,6 +215,7 @@ export async function runRealSiteValidation(options?: {
   }
   const renderOutput = findRenderOutput(phase1.pipeline.stages);
   const designModel = findDesignModel(phase1.pipeline.stages);
+  const designAiMerge = findDesignAiMerge(phase1.pipeline.stages);
 
   const importDiagnostics = importOutput.importDiagnostics.issues;
   const pipelineDiagnostics = phase1.pipeline.diagnostics;
@@ -219,6 +235,7 @@ export async function runRealSiteValidation(options?: {
     reportWarningCodes,
     reportBlockingCodes,
     designModel,
+    designAiMerge,
     previewDocument,
     renderOutput,
   });

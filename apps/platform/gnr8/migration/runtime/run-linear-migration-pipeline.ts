@@ -17,7 +17,7 @@ import { hasStructuralImportBlockers, isNonStructuralDegradedImportCode } from "
 
 import { createPipelineDiagnosticIssue, sortPipelineDiagnosticIssues } from "./diagnostics";
 import { createPreparedSiteModel } from "../prepared-site-model";
-import { createDesignModel } from "../../design-intelligence/design-intelligence-service";
+import { createDesignIntelligenceResult } from "../../design-intelligence/design-intelligence-service";
 import { createLayoutPreparationModel } from "../layout-preparation-model";
 import { createRenderOutput } from "../render-output-model";
 import { createPreviewDocument } from "../preview-document-model";
@@ -39,7 +39,7 @@ const STAGE_CONTRACTS: Record<
   },
   design_intelligence: {
     input: "StructurePreparationStageOutput + PreparedSiteModel semantic context",
-    output: "DesignIntelligenceStageOutput (ok|skipped) + DesignModel",
+    output: "DesignIntelligenceStageOutput (ok|skipped) + DeterministicDesignModel + AiSuggestionMerge + DesignModel",
   },
   layout_preparation: {
     input: "DesignIntelligenceStageOutput + DesignModel",
@@ -282,7 +282,8 @@ function runDesignIntelligenceStage(
   const shouldSkip = structureStage.status !== "success";
   const status: PipelineStageStatus = shouldSkip ? "skipped" : "success";
 
-  const designModel = createDesignModel(structureStage.output.preparedSite);
+  const designResult = createDesignIntelligenceResult(structureStage.output.preparedSite);
+  const designModel = designResult.designModel;
   const stageIssues = designModel.diagnostics.issues.map((issue) =>
     createPipelineDiagnosticIssue({
       stageId: "design_intelligence",
@@ -299,14 +300,20 @@ function runDesignIntelligenceStage(
 
   const output: DesignIntelligenceStageOutput = shouldSkip
     ? {
-        kind: "design_intelligence_skipped_v1",
+        kind: "design_intelligence_skipped_v2",
         skippedBecauseStageId: structureStage.stageId,
         structure: structureStage.output,
+        deterministicDesignModel: designResult.deterministicDesignModel,
+        aiSuggestionInput: designResult.aiSuggestionInput,
+        aiSuggestionMerge: designResult.aiSuggestionMerge,
         designModel,
       }
     : {
-        kind: "design_intelligence_ok_v1",
+        kind: "design_intelligence_ok_v2",
         structure: structureStage.output,
+        deterministicDesignModel: designResult.deterministicDesignModel,
+        aiSuggestionInput: designResult.aiSuggestionInput,
+        aiSuggestionMerge: designResult.aiSuggestionMerge,
         designModel,
       };
 
@@ -322,6 +329,9 @@ function runDesignIntelligenceStage(
       `strategy=${designModel.layoutStrategy}`,
       `pageType=${designModel.pageType}`,
       `sectionDecisions=${designModel.sectionDecisions.length}`,
+      `aiStatus=${designResult.aiSuggestionMerge.status}`,
+      `aiAccepted=${designResult.aiSuggestionMerge.acceptedCount}`,
+      `aiRejected=${designResult.aiSuggestionMerge.rejectedCount}`,
       `diagnostics=${designModel.diagnostics.codes.length}`,
     ]),
   };

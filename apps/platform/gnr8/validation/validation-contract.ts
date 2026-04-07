@@ -51,8 +51,13 @@ export type ValidationSummary = {
   design: {
     status: "available" | "missing";
     layoutStrategy: string | null;
+    mergedLayoutStrategy: string | null;
     pageType: string | null;
     sectionDecisionCount: number;
+    aiSuggestionStatus: "unavailable" | "no_suggestion" | "suggested" | "merged" | "rejected" | null;
+    aiAcceptedCount: number;
+    aiRejectedCount: number;
+    aiIgnoredCount: number;
     rationaleSummary: string[];
     diagnosticCodes: string[];
   };

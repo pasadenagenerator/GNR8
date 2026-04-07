@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { createDesignModelFromInput } from "./design-intelligence-service";
+import { createDesignIntelligenceResultFromInput, createDesignModelFromInput } from "./design-intelligence-service";
+import type { DesignIntelligenceAiSuggestionService } from "./design-intelligence-ai-hook";
 import type { DesignIntelligenceInput, DesignSemanticSectionInput } from "./design-model";
 
 function section(overrides: Partial<DesignSemanticSectionInput>): DesignSemanticSectionInput {
@@ -121,4 +122,119 @@ test("safe default fallback is emitted for weak structure", () => {
   assert.equal(model.sectionDecisions.length, 0);
   assert.equal(model.status, "ready_with_warnings");
   assert.ok(model.diagnostics.codes.includes("DESIGN_INTELLIGENCE_DEFAULTED"));
+});
+
+test("AI suggestion layer falls back safely when unavailable", () => {
+  const result = createDesignIntelligenceResultFromInput(baseInput([section({ sectionId: "hero", ordinalIndex: 0, hasHeadingSignal: true })]));
+  assert.equal(result.designModel.layoutStrategy, result.deterministicDesignModel.layoutStrategy);
+  assert.equal(result.aiSuggestionMerge.status, "unavailable");
+  assert.ok(result.designModel.diagnostics.codes.includes("AI_DESIGN_SUGGESTION_UNAVAILABLE"));
+});
+
+test("valid high-confidence AI suggestion is accepted and merged", () => {
+  const service: DesignIntelligenceAiSuggestionService = {
+    name: "mock",
+    requestAiDesignSuggestions: () => ({
+      kind: "ai_design_suggestion_v1",
+      version: "1.0.0",
+      source: { provider: "mock", model: "fixture-v1" },
+      pageStrategySuggestion: "cta_focused",
+      sectionSuggestions: [
+        {
+          sectionId: "hero",
+          pageId: "p-1",
+          visualTreatmentSuggestion: "hero_split",
+          confidence: "high",
+          rationale: ["Hero has enough heading and media support."],
+        },
+      ],
+      rationale: ["Use stronger CTA-first hierarchy."],
+      confidence: { overall: "high", bySection: { hero: "high" } },
+    }),
+  };
+
+  const result = createDesignIntelligenceResultFromInput(
+    baseInput([section({ sectionId: "hero", ordinalIndex: 0, hasHeadingSignal: false, mediaCount: 0 })]),
+    { aiSuggestionService: service, enableAiSuggestions: true },
+  );
+
+  assert.equal(result.aiSuggestionMerge.status, "merged");
+  assert.equal(result.aiSuggestionMerge.acceptedCount > 0, true);
+  assert.equal(result.designModel.layoutStrategy, "cta_focused");
+  assert.ok(result.designModel.diagnostics.codes.includes("AI_DESIGN_SUGGESTION_ACCEPTED"));
+});
+
+test("unknown AI suggestion values are rejected", () => {
+  const service: DesignIntelligenceAiSuggestionService = {
+    name: "mock",
+    requestAiDesignSuggestions: () =>
+      ({
+        kind: "ai_design_suggestion_v1",
+        version: "1.0.0",
+        source: { provider: "mock", model: "fixture-v1" },
+        pageStrategySuggestion: "unknown_strategy_v9",
+        sectionSuggestions: [],
+        rationale: ["Test unknown strategy."],
+        confidence: { overall: "high" },
+      }) as never,
+  };
+
+  const result = createDesignIntelligenceResultFromInput(baseInput([section({ sectionId: "hero", ordinalIndex: 0 })]), {
+    aiSuggestionService: service,
+    enableAiSuggestions: true,
+  });
+
+  assert.equal(result.aiSuggestionMerge.rejectedCount > 0, true);
+  assert.ok(result.designModel.diagnostics.codes.includes("AI_DESIGN_SUGGESTION_REJECTED"));
+  assert.equal(result.designModel.layoutStrategy, result.deterministicDesignModel.layoutStrategy);
+});
+
+test("low confidence AI suggestion is ignored", () => {
+  const service: DesignIntelligenceAiSuggestionService = {
+    name: "mock",
+    requestAiDesignSuggestions: () => ({
+      kind: "ai_design_suggestion_v1",
+      version: "1.0.0",
+      source: { provider: "mock", model: "fixture-v1" },
+      pageStrategySuggestion: "visual_gallery",
+      sectionSuggestions: [
+        {
+          sectionId: "hero",
+          pageId: "p-1",
+          visualTreatmentSuggestion: "hero_image_first",
+          confidence: "low",
+          rationale: ["Uncertain section-level support."],
+        },
+      ],
+      rationale: ["Uncertain strategy swap."],
+      confidence: { overall: "low", bySection: { hero: "low" } },
+    }),
+  };
+
+  const result = createDesignIntelligenceResultFromInput(baseInput([section({ sectionId: "hero", ordinalIndex: 0 })]), {
+    aiSuggestionService: service,
+    enableAiSuggestions: true,
+  });
+
+  assert.equal(result.aiSuggestionMerge.acceptedCount, 0);
+  assert.equal(result.aiSuggestionMerge.ignoredCount > 0, true);
+  assert.ok(result.designModel.diagnostics.codes.includes("AI_DESIGN_SUGGESTION_LOW_CONFIDENCE"));
+});
+
+test("AI errors do not break pipeline and merge rationale is recorded", () => {
+  const service: DesignIntelligenceAiSuggestionService = {
+    name: "mock-failing",
+    requestAiDesignSuggestions: () => {
+      throw new Error("provider_timeout");
+    },
+  };
+
+  const result = createDesignIntelligenceResultFromInput(baseInput([section({ sectionId: "hero", ordinalIndex: 0 })]), {
+    aiSuggestionService: service,
+    enableAiSuggestions: true,
+  });
+
+  assert.equal(result.designModel.kind, "design_model_v1");
+  assert.equal(result.aiSuggestionMerge.status, "unavailable");
+  assert.ok(result.designModel.aiAssistance.rationale.length > 0);
 });
