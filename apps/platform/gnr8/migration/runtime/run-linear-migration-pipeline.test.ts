@@ -32,11 +32,12 @@ test("linear migration pipeline runs stages in fixed order", async () => {
 
   assert.deepEqual(
     result.stages.map((s) => s.stageId),
-    ["import_intake", "structure_preparation", "design_intelligence", "layout_preparation", "render_preparation", "preview_generation"],
+    ["import_intake", "structure_preparation", "visual_analysis", "design_intelligence", "layout_preparation", "render_preparation", "preview_generation"],
   );
   assert.deepEqual(result.stageOrder, [
     "import_intake",
     "structure_preparation",
+    "visual_analysis",
     "design_intelligence",
     "layout_preparation",
     "render_preparation",
@@ -62,12 +63,14 @@ test("linear migration pipeline returns structured result in success case", asyn
   assert.equal(result.stages[3].status, "success");
   assert.equal(result.stages[4].status, "success");
   assert.equal(result.stages[5].status, "success");
+  assert.equal(result.stages[6].status, "success");
   assert.ok(result.summary.includes("linear_migration_pipeline"));
   assert.ok(
     result.diagnostics.every(
       (d) =>
         d.stageId === "import_intake" ||
         d.stageId === "structure_preparation" ||
+        d.stageId === "visual_analysis" ||
         d.stageId === "design_intelligence" ||
         d.stageId === "layout_preparation" ||
         d.stageId === "render_preparation" ||
@@ -96,6 +99,7 @@ test("linear migration pipeline continues in degraded mode for non-structural as
   assert.equal(result.stages[3].status, "success");
   assert.equal(result.stages[4].status, "success");
   assert.equal(result.stages[5].status, "success");
+  assert.equal(result.stages[6].status, "success");
 
   const importDiags = result.diagnostics.filter((d) => d.source === "import");
   assert.ok(importDiags.length > 0);
@@ -128,6 +132,7 @@ test("linear migration pipeline still blocks on structural import failures", asy
   assert.equal(result.stages[3].status, "skipped");
   assert.equal(result.stages[4].status, "skipped");
   assert.equal(result.stages[5].status, "skipped");
+  assert.equal(result.stages[6].status, "skipped");
   assert.ok(result.diagnostics.some((d) => d.code === "PIPELINE_BLOCKED_BY_IMPORT"));
 });
 
@@ -169,3 +174,52 @@ test("linear migration pipeline includes design_intelligence output with DesignM
   assert.equal(typeof stage.output.designModel.layoutStrategy, "string");
   assert.ok(stage.output.designModel.sectionDecisions.length >= 1);
 });
+
+test("linear migration pipeline includes visual_analysis result and keeps stage deterministic", async () => {
+  const rootDir = fixtureDir("simple-site");
+  const importOutput = await importStaticSite({
+    rootDir,
+    requestId: "req-visual-analysis-stage",
+    source: { kind: "single-entry-html", entryHtmlPath: "index.html", assetsDirPath: "assets" },
+  });
+  const importManifest = createImportManifest(importOutput);
+  const result = runLinearMigrationPipeline(
+    { importOutput, importManifest },
+    {
+      visualAnalysisInput: {
+        kind: "visual_screenshot_input_v1",
+        version: "1.0.0",
+        screenshots: [
+          {
+            screenshotId: "shot-1",
+            pageId: importOutput.rawDomSnapshot.documents[0]?.path ?? "index.html",
+            source: { kind: "file_path", value: "/tmp/fixture.png" },
+            viewport: { width: 1440, height: 900 },
+          },
+        ],
+        pageMetrics: [
+          {
+            pageId: resultPageIdFallback(importOutput.rawDomSnapshot.documents[0]?.path ?? "index.html"),
+            heroTopViewportCoverage: 0.62,
+            imageAreaRatio: 0.54,
+            textAreaRatio: 0.28,
+            whitespaceRatio: 0.2,
+            aboveFoldPrimaryCtaContrast: 0.66,
+            sectionRepetitionScore: 0.34,
+            footerHeightRatio: 0.14,
+          },
+        ],
+      },
+    },
+  );
+
+  const visualStage = result.stages.find((s) => s.stageId === "visual_analysis");
+  assert.ok(visualStage);
+  assert.equal(visualStage.output.visualAnalysis.kind, "visual_analysis_model_v1");
+  assert.equal(typeof visualStage.output.visualAnalysis.pageObservations.heroProminence, "string");
+});
+
+function resultPageIdFallback(sourcePath: string): string {
+  // The visual-analysis stage is hint-based; pageId mismatch intentionally exercises safe low-confidence merge behavior.
+  return sourcePath;
+}

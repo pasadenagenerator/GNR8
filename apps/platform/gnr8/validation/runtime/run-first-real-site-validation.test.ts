@@ -42,6 +42,7 @@ test("first real-site validation runner executes full phase-1 flow and returns c
   assert.equal(r.validationSummary.fixtureId, "real-site-01");
   assert.ok(r.validationSummary.overallStatus === "passed" || r.validationSummary.overallStatus === "passed_with_warnings");
   assert.equal(r.validationSummary.design.status, "available");
+  assert.equal(typeof r.validationSummary.visual.status, "string");
   assert.equal(typeof r.validationSummary.design.layoutStrategy, "string");
   assert.ok(r.validationSummary.design.sectionDecisionCount >= 1);
   assert.equal(typeof r.validationSummary.design.semanticSummary.hasHero, "boolean");
@@ -176,6 +177,7 @@ test("validation summary reflects artifact state and pipeline stage statuses", a
     importOutput: true,
     importManifest: true,
     pipelineResult: true,
+    visualAnalysis: true,
     designModel: true,
     previewDocument: true,
     approvalPackage: true,
@@ -187,6 +189,7 @@ test("validation summary reflects artifact state and pipeline stage statuses", a
   assert.equal(r.validationSummary.pipeline.status, r.pipelineResult.status);
   assert.equal(r.validationSummary.pipeline.stages.import_intake, "success");
   assert.equal(r.validationSummary.pipeline.stages.structure_preparation, "success");
+  assert.equal(r.validationSummary.pipeline.stages.visual_analysis, "success");
   assert.equal(r.validationSummary.pipeline.stages.design_intelligence, "success");
   assert.equal(r.validationSummary.pipeline.stages.layout_preparation, "success");
   assert.equal(r.validationSummary.pipeline.stages.render_preparation, "success");

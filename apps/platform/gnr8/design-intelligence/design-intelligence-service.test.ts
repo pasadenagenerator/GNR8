@@ -34,12 +34,11 @@ function baseInput(sections: DesignSemanticSectionInput[]): DesignIntelligenceIn
     preparedSite: {
       preparedSiteKind: "prepared_site_model_v1",
       preparedSiteModelVersion: "1.6.0",
-      importContractVersion: "1.0.0",
+      importContractVersion: "1.1.1",
       importManifestVersion: "1.0.0",
       fingerprints: {
-        normalizedDomFingerprint: "a",
-        normalizedTextFingerprint: "b",
-        assetGraphFingerprint: "c",
+        inputSpecSha256: "a",
+        inputContentSha256: "b",
       },
     },
     pages: [
@@ -254,4 +253,49 @@ test("AI errors do not break pipeline and merge rationale is recorded", () => {
   assert.equal(result.designModel.kind, "design_model_v1");
   assert.equal(result.aiSuggestionMerge.status, "unavailable");
   assert.ok(result.designModel.aiAssistance.rationale.length > 0);
+});
+
+test("design intelligence consumes high-confidence visual signals safely", () => {
+  const visualInput = {
+    kind: "visual_analysis_model_v1" as const,
+    version: "1.0.0" as const,
+    status: "available" as const,
+    source: { inputKind: "visual_screenshot_input_v1" as const, screenshotCount: 1, hasSectionHints: true, hasAlignmentHints: true },
+    pageObservations: {
+      dominantVisualStyleFamily: "cta_focused" as const,
+      heroProminence: "high" as const,
+      visualDensity: "high" as const,
+      spacingRhythm: "tight" as const,
+      readabilityTendency: "dense" as const,
+      imageTextBalance: "balanced" as const,
+      ctaProminence: "low" as const,
+    },
+    pageObservationsByPage: [
+      {
+        pageId: "p-1",
+        dominantVisualStyleFamily: "cta_focused" as const,
+        heroProminence: "high" as const,
+        visualDensity: "high" as const,
+        spacingRhythm: "tight" as const,
+        readabilityTendency: "dense" as const,
+        imageTextBalance: "balanced" as const,
+        ctaProminence: "low" as const,
+        confidence: "high" as const,
+        rationale: ["fixture"],
+      },
+    ],
+    sectionObservations: [],
+    confidence: "high" as const,
+    rationale: ["fixture"],
+    diagnostics: [],
+  };
+
+  const result = createDesignIntelligenceResultFromInput(
+    baseInput([section({ sectionId: "hero", ordinalIndex: 0, hasHeadingSignal: true, mediaCount: 1, ctaCandidateCount: 2 })]),
+    { visualAnalysis: visualInput },
+  );
+
+  assert.equal(result.designModel.visualAnalysis.status, "available");
+  assert.equal(result.designModel.layoutStrategy, "cta_focused");
+  assert.equal(result.designModel.spacingScale.sectionGap, "lg");
 });

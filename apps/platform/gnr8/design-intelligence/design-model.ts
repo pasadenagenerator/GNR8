@@ -1,5 +1,6 @@
 import type { PreparedSiteModel } from "../migration/prepared-site-model";
 import type { AiSuggestionMergeResult } from "./ai-suggestion-model";
+import type { VisualAnalysisModel } from "../visual-analysis/visual-analysis-model";
 
 export const DESIGN_MODEL_VERSION = "1.0.0" as const;
 
@@ -90,7 +91,12 @@ export type DesignIntelligenceDiagnostic = {
     | "AI_DESIGN_SUGGESTION_ACCEPTED"
     | "AI_DESIGN_SUGGESTION_REJECTED"
     | "AI_DESIGN_SUGGESTION_LOW_CONFIDENCE"
-    | "AI_DESIGN_SUGGESTION_MALFORMED";
+    | "AI_DESIGN_SUGGESTION_MALFORMED"
+    | "VISUAL_ANALYSIS_UNAVAILABLE"
+    | "VISUAL_ANALYSIS_LOW_CONFIDENCE"
+    | "VISUAL_ANALYSIS_SECTION_ALIGNMENT_WEAK"
+    | "VISUAL_ANALYSIS_SCREENSHOT_MISSING"
+    | "VISUAL_ANALYSIS_PAGE_METRICS_MISSING";
   severity: "warning" | "info";
   message: string;
   pageId: string | null;
@@ -137,6 +143,18 @@ export type DesignModel = {
   componentVariants: ComponentVariantMap;
   rationale: DesignRationale[];
   aiAssistance: DesignAiAssistanceSummary;
+  visualAnalysis: {
+    status: "available" | "unavailable";
+    confidence: "low" | "medium" | "high";
+    dominantVisualStyleFamily: "corporate_balanced" | "editorial_readable" | "visual_gallery" | "cta_focused" | "service_split_layout" | "unknown";
+    heroProminence: "low" | "medium" | "high";
+    visualDensity: "low" | "medium" | "high";
+    spacingRhythm: "tight" | "balanced" | "airy";
+    readabilityTendency: "calm" | "balanced" | "dense";
+    imageTextBalance: "image_dominant" | "balanced" | "text_dominant";
+    ctaProminence: "low" | "medium" | "high";
+    diagnostics: string[];
+  };
 
   diagnostics: {
     codes: string[];
@@ -212,6 +230,7 @@ export type DesignPageInput = {
 export type DesignIntelligenceInput = {
   preparedSite: DesignModel["source"];
   pages: DesignPageInput[];
+  visualAnalysis?: VisualAnalysisModel | null;
 };
 
 export type DesignIntelligenceAiHook = {

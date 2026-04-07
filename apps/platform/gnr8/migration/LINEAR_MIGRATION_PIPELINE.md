@@ -4,9 +4,11 @@
 
 1. `import_intake`
 2. `structure_preparation`
-3. `layout_preparation`
-4. `render_preparation`
-5. `preview_generation`
+3. `visual_analysis`
+4. `design_intelligence`
+5. `layout_preparation`
+6. `render_preparation`
+7. `preview_generation`
 
 Stage order is defined by `LINEAR_MIGRATION_STAGE_ORDER` in `apps/platform/gnr8/migration/pipeline-contract.ts`.
 
@@ -41,6 +43,12 @@ Stage order is defined by `LINEAR_MIGRATION_STAGE_ORDER` in `apps/platform/gnr8/
   - Deterministically emits `PreparedSiteModel` (`prepared_site_model_v1`) derived from `PipelineInput`.
 - `layout_preparation`
   - Deterministically emits `LayoutPreparationModel` (`layout_preparation_model_v1`) derived from `PreparedSiteModel`.
+- `visual_analysis`
+  - Deterministically emits `VisualAnalysisModel` (`visual_analysis_model_v1`) from structured screenshot input hints when available.
+  - Falls back safely to unavailable/low-confidence signals when screenshot input is missing.
+- `design_intelligence`
+  - Consumes deterministic structure plus optional visual-analysis hints.
+  - Visual signals are confidence-gated enrichments and cannot replace deterministic structure authority.
 - `render_preparation`
   - Deterministically emits `RenderOutput` (`render_output_v1`) derived from `LayoutPreparationModel`.
 - `preview_generation`

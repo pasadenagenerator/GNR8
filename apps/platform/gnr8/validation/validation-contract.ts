@@ -28,6 +28,7 @@ export type ValidationArtifactAvailability = {
   importOutput: boolean;
   importManifest: boolean;
   pipelineResult: boolean;
+  visualAnalysis: boolean;
   designModel: boolean;
   previewDocument: boolean;
   approvalPackage: boolean;
@@ -78,6 +79,17 @@ export type ValidationSummary = {
         low: number;
       };
     };
+  };
+  visual: {
+    status: "available" | "unavailable";
+    confidence: "low" | "medium" | "high" | null;
+    dominantVisualStyleFamily: string | null;
+    heroProminence: "low" | "medium" | "high" | null;
+    visualDensity: "low" | "medium" | "high" | null;
+    spacingRhythm: "tight" | "balanced" | "airy" | null;
+    readabilityTendency: "calm" | "balanced" | "dense" | null;
+    ctaProminence: "low" | "medium" | "high" | null;
+    diagnostics: string[];
   };
 
   approval: {

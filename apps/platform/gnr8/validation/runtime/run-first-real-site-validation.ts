@@ -6,6 +6,7 @@ import type { PreviewDocument } from "../../migration/preview-document-model";
 import type { ExecutionMode } from "../../migration/execution-plan-model";
 import type { DesignModel } from "../../design-intelligence/design-model";
 import type { AiSuggestionMergeResult } from "../../design-intelligence/ai-suggestion-model";
+import type { VisualAnalysisModel } from "../../visual-analysis/visual-analysis-model";
 
 import type { ImportDiagnosticIssue } from "../../import/import-contract";
 import { createImportManifest } from "../../import/import-manifest";
@@ -54,6 +55,11 @@ function findDesignAiMerge(
   return stage.output.aiSuggestionMerge;
 }
 
+function findVisualAnalysis(pipelineStages: LinearMigrationPipelineStageResult[]): VisualAnalysisModel | null {
+  const stage = pipelineStages.find((s) => s.stageId === "visual_analysis");
+  return stage?.output.visualAnalysis ?? null;
+}
+
 function mapReportStatusToValidation(status: "success" | "success_with_warnings" | "blocked" | "failed"): ValidationOverallStatus {
   if (status === "success") return "passed";
   if (status === "success_with_warnings") return "passed_with_warnings";
@@ -79,6 +85,7 @@ function computeValidationSummary(input: {
   reportBlockingCodes: string[];
   designModel: DesignModel | null;
   designAiMerge: AiSuggestionMergeResult | null;
+  visualAnalysis: VisualAnalysisModel | null;
   previewDocument: PreviewDocument;
   renderOutput: RenderOutput | null;
 }): ValidationSummary {
@@ -116,6 +123,7 @@ function computeValidationSummary(input: {
       importOutput: true,
       importManifest: true,
       pipelineResult: true,
+      visualAnalysis: input.visualAnalysis !== null,
       designModel: input.designModel !== null,
       previewDocument: true,
       approvalPackage: true,
@@ -161,6 +169,17 @@ function computeValidationSummary(input: {
           low: (input.designModel?.sectionDecisions ?? []).filter((d) => d.confidence < 0.55).length,
         },
       },
+    },
+    visual: {
+      status: input.visualAnalysis?.status ?? "unavailable",
+      confidence: input.visualAnalysis?.confidence ?? null,
+      dominantVisualStyleFamily: input.visualAnalysis?.pageObservations.dominantVisualStyleFamily ?? null,
+      heroProminence: input.visualAnalysis?.pageObservations.heroProminence ?? null,
+      visualDensity: input.visualAnalysis?.pageObservations.visualDensity ?? null,
+      spacingRhythm: input.visualAnalysis?.pageObservations.spacingRhythm ?? null,
+      readabilityTendency: input.visualAnalysis?.pageObservations.readabilityTendency ?? null,
+      ctaProminence: input.visualAnalysis?.pageObservations.ctaProminence ?? null,
+      diagnostics: uniqueSortedStrings((input.visualAnalysis?.diagnostics ?? []).map((d) => d.code)),
     },
     approval: {
       status: input.approvalStatus,
@@ -238,6 +257,7 @@ export async function runRealSiteValidation(options?: {
   const renderOutput = findRenderOutput(phase1.pipeline.stages);
   const designModel = findDesignModel(phase1.pipeline.stages);
   const designAiMerge = findDesignAiMerge(phase1.pipeline.stages);
+  const visualAnalysis = findVisualAnalysis(phase1.pipeline.stages);
 
   const importDiagnostics = importOutput.importDiagnostics.issues;
   const pipelineDiagnostics = phase1.pipeline.diagnostics;
@@ -258,6 +278,7 @@ export async function runRealSiteValidation(options?: {
     reportBlockingCodes,
     designModel,
     designAiMerge,
+    visualAnalysis,
     previewDocument,
     renderOutput,
   });
