@@ -39,6 +39,18 @@ function isVisibleItem(
     return options.allowedAgencyIds.has(item.agencyId)
   }
 
+  if (item.type === 'action') {
+    if (options.allowedClientIds) {
+      if (!item.clientId) return false
+      return options.allowedClientIds.has(item.clientId)
+    }
+    if (options.allowedAgencyIds) {
+      if (!item.agencyId) return false
+      return options.allowedAgencyIds.has(item.agencyId)
+    }
+    return true
+  }
+
   if (options.allowedClientIds) {
     if (!item.clientId) return false
     return options.allowedClientIds.has(item.clientId)

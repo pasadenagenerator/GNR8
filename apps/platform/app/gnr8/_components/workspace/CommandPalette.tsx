@@ -14,7 +14,7 @@ import {
   type SavedCommandType,
 } from '@/src/workspace/command-palette-saved'
 import { getCommandUsage, recordCommandUsage, type CommandUsageEntry } from '@/src/workspace/command-palette-usage'
-import { getRecentItems, type WorkspaceRecentItem } from '@/src/workspace/workspace-recents'
+import { addRecentItem, getRecentItems, type WorkspaceRecentItem } from '@/src/workspace/workspace-recents'
 
 export type CommandResultAction = {
   id: string
@@ -156,6 +156,18 @@ function isVisibleRecentItem(
     allowCommandCenter: boolean
   },
 ): boolean {
+  if (item.type === 'action') {
+    if (options.allowedClientIds) {
+      if (!item.clientId) return false
+      return options.allowedClientIds.has(item.clientId)
+    }
+    if (options.allowedAgencyIds) {
+      if (!item.agencyId) return false
+      return options.allowedAgencyIds.has(item.agencyId)
+    }
+    return true
+  }
+
   if (item.type === 'command-center') return options.allowCommandCenter
 
   if (item.type === 'agency') {
@@ -426,6 +438,17 @@ export default function CommandPalette(props: Props) {
     if (pathname.startsWith('/gnr8/command-center')) return 'command-center'
     return 'other'
   }, [pathname])
+  const siteWorkspaceContext = useMemo(() => {
+    const match = pathname.match(/^\/gnr8\/agency\/clients\/([^/]+)\/sites\/([^/]+)\/([^/?#]+)/)
+    if (!match) return null
+    const clientId = normalizeText(match[1])
+    const siteId = normalizeText(match[2])
+    if (!clientId || !siteId) return null
+    return {
+      clientId,
+      siteId,
+    }
+  }, [pathname])
 
   useEffect(() => {
     setRecentItems(getRecentItems())
@@ -536,7 +559,8 @@ export default function CommandPalette(props: Props) {
       )
       .map((item, index) => {
         const href = normalizeText(item.href)
-        const typeLabel = item.type === 'agency' ? 'Agency' : item.type === 'client' ? 'Client' : 'Command Center'
+        const typeLabel =
+          item.type === 'agency' ? 'Agency' : item.type === 'client' ? 'Client' : item.type === 'action' ? 'Action' : 'Command Center'
         return {
           id: `recent:${item.href}`,
           label: item.label,
@@ -635,6 +659,57 @@ export default function CommandPalette(props: Props) {
       activeAgencyId ? `/gnr8/agency/members?agency=${encodeURIComponent(activeAgencyId)}` : '/gnr8/agency/members'
     const createClientHref =
       activeAgencyId ? `/gnr8/agency/clients/new?agency=${encodeURIComponent(activeAgencyId)}` : '/gnr8/agency/clients/new'
+
+    const runSiteActionFromPalette = (actionType: 'rerun_transformation' | 'generate_redesign' | 'publish_site', strategy?: string) => {
+      if (!siteWorkspaceContext?.siteId || !activeAgencyId) return
+      void (async () => {
+        try {
+          const response = await fetch('/api/gnr8/site-actions', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({
+              siteId: siteWorkspaceContext.siteId,
+              actionType,
+              strategy,
+              agencyId: activeAgencyId,
+            }),
+          })
+          const json = (await response.json().catch(() => null)) as
+            | {
+                ok?: boolean
+                result?: {
+                  ok?: boolean
+                  variant?: { id?: string }
+                }
+                error?: string
+              }
+            | null
+          if (!response.ok || !json?.ok || json.result?.ok !== true) {
+            window.alert(json?.error || `Action failed (HTTP ${response.status})`)
+            return
+          }
+
+          const params = new URLSearchParams(searchParams?.toString() ?? '')
+          if (json.result?.variant?.id) {
+            params.set('variant', json.result.variant.id)
+          }
+          const query = params.toString()
+          const href = query ? `${pathname}?${query}` : pathname
+          addRecentItem({
+            type: 'action',
+            label: `${siteWorkspaceContext.siteId} / ${actionType}`,
+            href,
+            agencyId: activeAgencyId,
+            clientId: siteWorkspaceContext.clientId,
+            timestamp: Date.now(),
+          })
+          router.replace(href)
+          router.refresh()
+        } catch (error) {
+          window.alert(error instanceof Error ? error.message : 'Action failed')
+        }
+      })()
+    }
 
     const actions: CommandItem[] = [
       {
@@ -767,6 +842,52 @@ export default function CommandPalette(props: Props) {
             },
           ]
         : []),
+      ...(siteWorkspaceContext
+        ? [
+            {
+              id: 'action-site-rerun-transformation',
+              label: 'Re-run Site Transformation',
+              sublabel: 'Site workspace action',
+              type: 'action' as const,
+              aliases: ['rerun', 'run pipeline', 'transform'],
+              contextScope: 'client' as const,
+              action: () => runSiteActionFromPalette('rerun_transformation'),
+              preview: {
+                title: 'Re-run Site Transformation',
+                lines: ['Executes deterministic site transformation against the active site.'],
+                meta: ['Action'],
+              },
+            },
+            {
+              id: 'action-site-generate-redesign',
+              label: 'Generate Redesign Variant',
+              sublabel: 'Site workspace action',
+              type: 'action' as const,
+              aliases: ['variant', 'redesign', 'design strategy'],
+              contextScope: 'client' as const,
+              action: () => runSiteActionFromPalette('generate_redesign', 'More visual'),
+              preview: {
+                title: 'Generate Redesign Variant',
+                lines: ['Creates a deterministic redesign variant for the active site.'],
+                meta: ['Action'],
+              },
+            },
+            {
+              id: 'action-site-publish',
+              label: 'Publish Site',
+              sublabel: 'Site workspace action',
+              type: 'action' as const,
+              aliases: ['publish', 'release'],
+              contextScope: 'client' as const,
+              action: () => runSiteActionFromPalette('publish_site'),
+              preview: {
+                title: 'Publish Site',
+                lines: ['Runs V1 simulated publish and records metadata.'],
+                meta: ['Action'],
+              },
+            },
+          ]
+        : []),
     ]
 
     const visibleActions = actions
@@ -813,6 +934,8 @@ export default function CommandPalette(props: Props) {
     recentItems,
     savedCommands,
     router,
+    searchParams,
+    siteWorkspaceContext,
     workspaceScope,
   ])
 

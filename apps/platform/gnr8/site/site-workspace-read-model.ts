@@ -32,6 +32,28 @@ type RuntimePageVersionRow = {
   migration_governance: unknown
 }
 
+type SiteActionRow = {
+  id: string | null
+  site_id: string | null
+  type: string | null
+  status: string | null
+  strategy: string | null
+  result_summary: string | null
+  diagnostics: unknown
+  variant_id: string | null
+  created_at: string | null
+  completed_at: string | null
+}
+
+type SiteVariantRow = {
+  id: string | null
+  site_id: string | null
+  label: string | null
+  strategy: string | null
+  site_version_id: string | null
+  created_at: string | null
+}
+
 type RuntimeSnapshot = {
   latestRuntimeSiteVersionId: string | null
   latestRuntimeState: string | null
@@ -72,10 +94,36 @@ export type SiteWorkspaceReadModel = {
     latestRunAt: string | null
     latestRuntimeSiteVersionId: string | null
     latestRuntimeState: string | null
+    lastActionType: 'rerun_transformation' | 'generate_redesign' | 'publish_site' | null
+    lastActionStatus: 'idle' | 'running' | 'completed' | 'failed' | null
+    lastActionAt: string | null
     semanticModelStatus: 'available' | 'unavailable'
     visualAnalysisStatus: 'available' | 'unavailable'
     designModelStatus: 'available' | 'unavailable'
     diagnosticsSummary: string[]
+  }
+  actions: {
+    currentStatus: 'idle' | 'running' | 'completed' | 'failed'
+    lastAction: {
+      actionId: string | null
+      type: 'rerun_transformation' | 'generate_redesign' | 'publish_site' | null
+      status: 'idle' | 'running' | 'completed' | 'failed'
+      resultSummary: string | null
+      diagnostics: string[]
+      createdAt: string | null
+      completedAt: string | null
+    }
+  }
+  variants: {
+    selectedVariantId: string | null
+    selectedSiteVersionId: string | null
+    rows: Array<{
+      id: string
+      label: string
+      strategy: string
+      siteVersionId: string | null
+      createdAt: string
+    }>
   }
   overview: {
     sectionsDetected: number
@@ -101,6 +149,7 @@ export type SiteWorkspaceReadModel = {
   preview: {
     previewUrl: string | null
     liveUrl: string | null
+    selectedVariantLabel: string | null
   }
   settings: {
     name: string
@@ -325,14 +374,16 @@ export async function getSiteWorkspaceReadModelForPage(input: {
   agencyId: string
   clientId: string
   siteId: string
+  selectedVariantId?: string | null
 }): Promise<SiteWorkspaceReadModel | null> {
   const agencyId = normalizeUuid(input.agencyId, 'agencyId')
   const clientId = normalizeUuid(input.clientId, 'clientId')
   const siteId = normalizeUuid(input.siteId, 'siteId')
+  const selectedVariantId = toTextOrNull(input.selectedVariantId)
 
   const supabase = await getSupabaseServerClientReadOnly()
 
-  const [clientOrgResult, siteResult, siteOptionsResult] = await Promise.all([
+  const [clientOrgResult, siteResult, siteOptionsResult, siteActionsResult, siteVariantsResult] = await Promise.all([
     supabase.from('organizations').select('id,name,agency_id,organization_type').eq('id', clientId).limit(1).maybeSingle(),
     supabase.from('sites').select('id,org_id,agency_id,status,domain,created_at,updated_at').eq('id', siteId).limit(1).maybeSingle(),
     supabase
@@ -342,6 +393,18 @@ export async function getSiteWorkspaceReadModelForPage(input: {
       .eq('agency_id', agencyId)
       .order('created_at', { ascending: false })
       .limit(120),
+    supabase
+      .from('gnr8_site_actions')
+      .select('id,site_id,type,status,strategy,result_summary,diagnostics,variant_id,created_at,completed_at')
+      .eq('site_id', siteId)
+      .order('created_at', { ascending: false })
+      .limit(24),
+    supabase
+      .from('gnr8_site_variants')
+      .select('id,site_id,label,strategy,site_version_id,created_at')
+      .eq('site_id', siteId)
+      .order('created_at', { ascending: false })
+      .limit(40),
   ])
 
   if (clientOrgResult.error) {
@@ -375,6 +438,49 @@ export async function getSiteWorkspaceReadModelForPage(input: {
       siteId: entity.id,
       label: entity.label,
     }))
+
+  const rawSiteActions = !siteActionsResult.error && Array.isArray(siteActionsResult.data)
+    ? (siteActionsResult.data as SiteActionRow[])
+    : []
+  const normalizedSiteActions = rawSiteActions
+    .map((row) => ({
+      actionId: toTextOrNull(row.id),
+      type: (() => {
+        const value = normalizeText(row.type)
+        if (value === 'rerun_transformation' || value === 'generate_redesign' || value === 'publish_site') return value
+        return null
+      })(),
+      status: (() => {
+        const value = normalizeText(row.status)
+        if (value === 'idle' || value === 'running' || value === 'completed' || value === 'failed') return value
+        return null
+      })(),
+      strategy: toTextOrNull(row.strategy),
+      resultSummary: toTextOrNull(row.result_summary),
+      diagnostics: Array.isArray(row.diagnostics) ? row.diagnostics.map((value) => normalizeText(value)).filter(Boolean) : [],
+      variantId: toTextOrNull(row.variant_id),
+      createdAt: toIsoOrNull(row.created_at),
+      completedAt: toIsoOrNull(row.completed_at),
+    }))
+    .filter((row) => row.actionId && row.type && row.status)
+
+  const rawSiteVariants = !siteVariantsResult.error && Array.isArray(siteVariantsResult.data)
+    ? (siteVariantsResult.data as SiteVariantRow[])
+    : []
+  const normalizedVariants = rawSiteVariants
+    .map((row) => ({
+      id: toTextOrNull(row.id),
+      label: toTextOrNull(row.label),
+      strategy: toTextOrNull(row.strategy),
+      siteVersionId: toTextOrNull(row.site_version_id),
+      createdAt: toIsoOrNull(row.created_at),
+    }))
+    .filter((row) => row.id && row.label && row.strategy && row.createdAt)
+
+  const selectedVariant =
+    (selectedVariantId ? normalizedVariants.find((variant) => variant.id === selectedVariantId) : null) ??
+    normalizedVariants[0] ??
+    null
 
   const runtimeResult = await supabase
     .from('gnr8_runtime_site_versions')
@@ -413,13 +519,16 @@ export async function getSiteWorkspaceReadModelForPage(input: {
   }
 
   const latestRuntimeSiteVersionId = runtimeSnapshot?.latestRuntimeSiteVersionId ?? null
+  const selectedRuntimeSiteVersionId = selectedVariant?.siteVersionId ?? latestRuntimeSiteVersionId
+  const selectedRuntimeRow = runtimeRows.find((row) => toTextOrNull(row.id) === selectedRuntimeSiteVersionId) ?? null
+  const selectedRuntimeState = toTextOrNull(selectedRuntimeRow?.state) ?? runtimeSnapshot?.latestRuntimeState ?? null
   let pageRows: RuntimePageVersionRow[] = []
 
-  if (latestRuntimeSiteVersionId) {
+  if (selectedRuntimeSiteVersionId) {
     const pageResult = await supabase
       .from('gnr8_runtime_page_versions')
       .select('id,site_version_id,page_id,path,title,structure_model,semantic_signals,migration_governance')
-      .eq('site_version_id', latestRuntimeSiteVersionId)
+      .eq('site_version_id', selectedRuntimeSiteVersionId)
       .order('path', { ascending: true })
 
     if (!pageResult.error && Array.isArray(pageResult.data)) {
@@ -456,8 +565,15 @@ export async function getSiteWorkspaceReadModelForPage(input: {
     ],
   }))
 
-  const diagnosticsSummary = Array.from(new Set(structureRows.flatMap((row) => row.keyDiagnostics))).slice(0, 8)
-  const previewUrl = latestRuntimeSiteVersionId ? `/api/gnr8/runtime/versions/${latestRuntimeSiteVersionId}/preview` : null
+  const lastAction = normalizedSiteActions[0] ?? null
+  const diagnosticsSummary = Array.from(
+    new Set([
+      ...structureRows.flatMap((row) => row.keyDiagnostics),
+      ...(lastAction?.diagnostics ?? []),
+      ...(selectedVariant ? [`variant:${selectedVariant.label}`] : []),
+    ]),
+  ).slice(0, 8)
+  const previewUrl = selectedRuntimeSiteVersionId ? `/api/gnr8/runtime/versions/${selectedRuntimeSiteVersionId}/preview` : null
 
   return {
     site,
@@ -470,14 +586,40 @@ export async function getSiteWorkspaceReadModelForPage(input: {
     },
     pipeline: {
       latestRunAt: runtimeSnapshot?.latestRuntimeUpdatedAt ?? runtimeSnapshot?.latestRuntimeCreatedAt ?? site.updatedAt,
-      latestRuntimeSiteVersionId,
-      latestRuntimeState: runtimeSnapshot?.latestRuntimeState ?? null,
+      latestRuntimeSiteVersionId: selectedRuntimeSiteVersionId,
+      latestRuntimeState: selectedRuntimeState,
+      lastActionType: lastAction?.type ?? null,
+      lastActionStatus: lastAction?.status ?? null,
+      lastActionAt: lastAction?.completedAt ?? lastAction?.createdAt ?? null,
       semanticModelStatus: pageRows.some((row) => Array.isArray(row.semantic_signals) && row.semantic_signals.length > 0)
         ? 'available'
         : 'unavailable',
       visualAnalysisStatus: diagnosticsSummary.length > 0 ? 'available' : 'unavailable',
       designModelStatus: sectionsDetected > 0 ? 'available' : 'unavailable',
       diagnosticsSummary,
+    },
+    actions: {
+      currentStatus: normalizedSiteActions.find((action) => action.status === 'running')?.status ?? (lastAction?.status ?? 'idle'),
+      lastAction: {
+        actionId: lastAction?.actionId ?? null,
+        type: lastAction?.type ?? null,
+        status: lastAction?.status ?? 'idle',
+        resultSummary: lastAction?.resultSummary ?? null,
+        diagnostics: lastAction?.diagnostics ?? [],
+        createdAt: lastAction?.createdAt ?? null,
+        completedAt: lastAction?.completedAt ?? null,
+      },
+    },
+    variants: {
+      selectedVariantId: selectedVariant?.id ?? null,
+      selectedSiteVersionId: selectedVariant?.siteVersionId ?? selectedRuntimeSiteVersionId,
+      rows: normalizedVariants.map((variant) => ({
+        id: variant.id!,
+        label: variant.label!,
+        strategy: variant.strategy!,
+        siteVersionId: variant.siteVersionId,
+        createdAt: variant.createdAt!,
+      })),
     },
     overview: {
       sectionsDetected,
@@ -486,7 +628,7 @@ export async function getSiteWorkspaceReadModelForPage(input: {
       designStrategy,
       statusLabel: toStatusLabel({
         siteStatus: site.status,
-        latestRuntimeState: runtimeSnapshot?.latestRuntimeState ?? null,
+        latestRuntimeState: selectedRuntimeState,
         hasPreview: Boolean(previewUrl),
       }),
     },
@@ -511,6 +653,7 @@ export async function getSiteWorkspaceReadModelForPage(input: {
     preview: {
       previewUrl,
       liveUrl: toHttpsUrlOrNull(site.domain),
+      selectedVariantLabel: selectedVariant?.label ?? null,
     },
     settings: {
       name: site.label || `Site ${shortId(site.id)}`,

@@ -21,11 +21,13 @@ export function siteWorkspaceHref(input: {
   tab: SiteWorkspaceTab
   agencyId: string
   adminView?: boolean
+  variantId?: string | null
 }): string {
   const base = `/gnr8/agency/clients/${encodeURIComponent(input.clientId)}/sites/${encodeURIComponent(input.siteId)}`
   const path = input.tab === 'overview' ? `${base}/overview` : `${base}/${input.tab}`
   const params = new URLSearchParams()
   params.set('agency', input.agencyId)
   if (input.adminView) params.set('admin_view', '1')
+  if (input.variantId) params.set('variant', input.variantId)
   return `${path}?${params.toString()}`
 }

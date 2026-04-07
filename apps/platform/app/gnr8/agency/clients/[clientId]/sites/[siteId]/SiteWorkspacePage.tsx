@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation'
 import type { CSSProperties, ReactNode } from 'react'
 
 import SiteContextLayout from './SiteContextLayout'
+import SiteActionsPanel from './SiteActionsPanel'
 import { listSwitchableAgencyClientsForPage } from '../../../client-switcher-options'
 import { getSiteWorkspaceReadModelForPage } from '@/gnr8/site/site-workspace-read-model'
 import { type SiteWorkspaceTab } from '@/gnr8/site/site-workspace-navigation'
@@ -16,6 +17,7 @@ import { canPerformAction } from '@/src/auth/rbac'
 type SearchParams = {
   agency?: string
   admin_view?: string
+  variant?: string
 }
 
 type Params = {
@@ -81,9 +83,6 @@ function renderOverviewContent(props: {
           <Link href={props.previewHref} style={quickActionStyle()}>
             Open Preview
           </Link>
-          <a id='rerun-transformation' href='#' style={quickActionStyle()}>
-            Re-run Transformation
-          </a>
           <Link href={props.structureHref} style={quickActionStyle()}>
             View Structure
           </Link>
@@ -206,6 +205,11 @@ function renderPreviewContent(readModel: Awaited<ReturnType<typeof getSiteWorksp
       <p style={{ margin: '8px 0 0', color: '#475569', fontSize: 13 }}>
         Preview output from the latest site runtime version.
       </p>
+      {readModel.preview.selectedVariantLabel ? (
+        <p style={{ margin: '6px 0 0', color: '#334155', fontSize: 12 }}>
+          Active variant: <strong>{readModel.preview.selectedVariantLabel}</strong>
+        </p>
+      ) : null}
       {readModel.preview.previewUrl ? (
         <div style={{ marginTop: 10, display: 'grid', gap: 10 }}>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
@@ -299,6 +303,7 @@ export default async function SiteWorkspacePage(props: Props) {
   const siteId = normalizeText(resolvedParams.siteId)
   const requestedAgencyId = normalizeText(resolvedSearchParams?.agency) || null
   const adminView = normalizeText(resolvedSearchParams?.admin_view) === '1'
+  const selectedVariantId = normalizeText(resolvedSearchParams?.variant) || null
 
   if (!clientId || !siteId) {
     return renderAccessError({
@@ -364,6 +369,7 @@ export default async function SiteWorkspacePage(props: Props) {
     agencyId: currentUserAgency.agency_id,
     clientId,
     siteId,
+    selectedVariantId,
   })
 
   if (!readModel) {
@@ -379,9 +385,12 @@ export default async function SiteWorkspacePage(props: Props) {
     })
   }
 
-  const structureHref = `/gnr8/agency/clients/${encodeURIComponent(clientId)}/sites/${encodeURIComponent(siteId)}/structure?agency=${encodeURIComponent(currentUserAgency.agency_id)}${adminView ? '&admin_view=1' : ''}`
-  const designHref = `/gnr8/agency/clients/${encodeURIComponent(clientId)}/sites/${encodeURIComponent(siteId)}/design?agency=${encodeURIComponent(currentUserAgency.agency_id)}${adminView ? '&admin_view=1' : ''}`
-  const previewHref = `/gnr8/agency/clients/${encodeURIComponent(clientId)}/sites/${encodeURIComponent(siteId)}/preview?agency=${encodeURIComponent(currentUserAgency.agency_id)}${adminView ? '&admin_view=1' : ''}`
+  const selectedVariantQuery = readModel.variants.selectedVariantId ? `&variant=${encodeURIComponent(readModel.variants.selectedVariantId)}` : ''
+  const structureHref = `/gnr8/agency/clients/${encodeURIComponent(clientId)}/sites/${encodeURIComponent(siteId)}/structure?agency=${encodeURIComponent(currentUserAgency.agency_id)}${adminView ? '&admin_view=1' : ''}${selectedVariantQuery}`
+  const designHref = `/gnr8/agency/clients/${encodeURIComponent(clientId)}/sites/${encodeURIComponent(siteId)}/design?agency=${encodeURIComponent(currentUserAgency.agency_id)}${adminView ? '&admin_view=1' : ''}${selectedVariantQuery}`
+  const previewHref = `/gnr8/agency/clients/${encodeURIComponent(clientId)}/sites/${encodeURIComponent(siteId)}/preview?agency=${encodeURIComponent(currentUserAgency.agency_id)}${adminView ? '&admin_view=1' : ''}${selectedVariantQuery}`
+  const canRunTransformation = canPerformAction(currentUserAgency.role, 'run_migration')
+  const canPublish = canPerformAction(currentUserAgency.role, 'publish')
 
   return (
     <SiteContextLayout
@@ -392,19 +401,36 @@ export default async function SiteWorkspacePage(props: Props) {
       adminView={adminView}
       memberships={availableAgencyMemberships}
       clientOptions={switchableClients}
+      selectedVariantId={readModel.variants.selectedVariantId}
     >
-      {props.activeTab === 'overview'
-        ? renderOverviewContent({
-            readModel,
-            structureHref,
-            designHref,
-            previewHref,
-          })
-        : null}
-      {props.activeTab === 'structure' ? renderStructureContent(readModel) : null}
-      {props.activeTab === 'design' ? renderDesignContent(readModel) : null}
-      {props.activeTab === 'preview' ? renderPreviewContent(readModel) : null}
-      {props.activeTab === 'settings' ? renderSettingsContent(readModel) : null}
+      <div style={{ display: 'grid', gap: 12 }}>
+        <SiteActionsPanel
+          siteId={readModel.site.id}
+          agencyId={currentUserAgency.agency_id}
+          clientId={readModel.client.clientId}
+          siteName={readModel.site.label}
+          activeTab={props.activeTab}
+          canRunTransformation={canRunTransformation}
+          canPublish={canPublish}
+          lastRunAt={readModel.pipeline.latestRunAt}
+          currentStatus={readModel.actions.currentStatus}
+          lastAction={readModel.actions.lastAction}
+          variants={readModel.variants}
+        />
+
+        {props.activeTab === 'overview'
+          ? renderOverviewContent({
+              readModel,
+              structureHref,
+              designHref,
+              previewHref,
+            })
+          : null}
+        {props.activeTab === 'structure' ? renderStructureContent(readModel) : null}
+        {props.activeTab === 'design' ? renderDesignContent(readModel) : null}
+        {props.activeTab === 'preview' ? renderPreviewContent(readModel) : null}
+        {props.activeTab === 'settings' ? renderSettingsContent(readModel) : null}
+      </div>
     </SiteContextLayout>
   )
 }

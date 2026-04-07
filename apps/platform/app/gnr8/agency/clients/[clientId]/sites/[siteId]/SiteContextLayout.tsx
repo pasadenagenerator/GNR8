@@ -16,6 +16,7 @@ type Props = {
   adminView: boolean
   memberships: { agency_id: string; agency_name: string | null }[]
   clientOptions: { clientId: string; label: string }[]
+  selectedVariantId: string | null
   children: ReactNode
 }
 
@@ -46,6 +47,7 @@ export default function SiteContextLayout(props: Props) {
     tab: 'overview',
     agencyId: activeAgencyId,
     adminView: props.adminView,
+    variantId: props.selectedVariantId,
   })
   const structureHref = siteWorkspaceHref({
     clientId: props.readModel.client.clientId,
@@ -53,6 +55,7 @@ export default function SiteContextLayout(props: Props) {
     tab: 'structure',
     agencyId: activeAgencyId,
     adminView: props.adminView,
+    variantId: props.selectedVariantId,
   })
   const designHref = siteWorkspaceHref({
     clientId: props.readModel.client.clientId,
@@ -60,6 +63,7 @@ export default function SiteContextLayout(props: Props) {
     tab: 'design',
     agencyId: activeAgencyId,
     adminView: props.adminView,
+    variantId: props.selectedVariantId,
   })
   const previewHref = siteWorkspaceHref({
     clientId: props.readModel.client.clientId,
@@ -67,6 +71,7 @@ export default function SiteContextLayout(props: Props) {
     tab: 'preview',
     agencyId: activeAgencyId,
     adminView: props.adminView,
+    variantId: props.selectedVariantId,
   })
   const settingsHref = siteWorkspaceHref({
     clientId: props.readModel.client.clientId,
@@ -74,6 +79,7 @@ export default function SiteContextLayout(props: Props) {
     tab: 'settings',
     agencyId: activeAgencyId,
     adminView: props.adminView,
+    variantId: props.selectedVariantId,
   })
 
   const backToClientHref = `/gnr8/agency/clients/${encodeURIComponent(props.readModel.client.clientId)}/dashboard?${agencyQuery}`
@@ -115,8 +121,8 @@ export default function SiteContextLayout(props: Props) {
     {
       id: 'site-rerun',
       label: 'Re-run Transformation',
-      href: `${overviewHref}#rerun-transformation`,
-      description: 'Placeholder action for re-run wiring',
+      href: overviewHref,
+      description: 'Execute re-run from the Site Actions panel',
       icon: 'R',
     },
     {
@@ -174,6 +180,7 @@ export default function SiteContextLayout(props: Props) {
           tab: 'overview',
           agencyId: activeAgencyId,
           adminView: props.adminView,
+          variantId: props.selectedVariantId,
         }),
         sublabel: 'Site route',
       },
@@ -186,6 +193,7 @@ export default function SiteContextLayout(props: Props) {
           tab: 'preview',
           agencyId: activeAgencyId,
           adminView: props.adminView,
+          variantId: props.selectedVariantId,
         }),
         sublabel: 'Site route',
       },
@@ -198,6 +206,7 @@ export default function SiteContextLayout(props: Props) {
           tab: 'design',
           agencyId: activeAgencyId,
           adminView: props.adminView,
+          variantId: props.selectedVariantId,
         }),
         sublabel: 'Site route',
       },
@@ -210,6 +219,7 @@ export default function SiteContextLayout(props: Props) {
           tab: 'structure',
           agencyId: activeAgencyId,
           adminView: props.adminView,
+          variantId: props.selectedVariantId,
         }),
         sublabel: 'Site route',
       },

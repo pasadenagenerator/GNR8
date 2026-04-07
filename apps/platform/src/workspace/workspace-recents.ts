@@ -1,5 +1,5 @@
 export type WorkspaceRecentItem = {
-  type: 'agency' | 'client' | 'command-center'
+  type: 'agency' | 'client' | 'command-center' | 'action'
   label: string
   href: string
   agencyId?: string
@@ -20,7 +20,7 @@ function normalizeText(value: unknown): string | undefined {
 }
 
 function sanitizeType(value: unknown): WorkspaceRecentItem['type'] | undefined {
-  if (value === 'agency' || value === 'client' || value === 'command-center') return value
+  if (value === 'agency' || value === 'client' || value === 'command-center' || value === 'action') return value
   return undefined
 }
 
