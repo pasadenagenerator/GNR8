@@ -81,6 +81,10 @@ type DesignDecisionRow = {
   rationale: string[]
 }
 
+type SiteActionType = 'rerun_transformation' | 'generate_redesign' | 'publish_site'
+
+type SiteActionStatus = 'idle' | 'running' | 'completed' | 'failed'
+
 export type SiteWorkspaceReadModel = {
   site: SiteEntity
   client: {
@@ -177,6 +181,29 @@ function normalizeUuid(value: string | null | undefined, fieldName: string): str
 function toTextOrNull(value: unknown): string | null {
   const normalized = normalizeText(value)
   return normalized || null
+}
+
+function normalizeSiteActionType(value: string | null | undefined): SiteActionType | null {
+  switch (value) {
+    case 'rerun_transformation':
+    case 'generate_redesign':
+    case 'publish_site':
+      return value
+    default:
+      return null
+  }
+}
+
+function normalizeSiteActionStatus(value: string | null | undefined): SiteActionStatus | null {
+  switch (value) {
+    case 'idle':
+    case 'running':
+    case 'completed':
+    case 'failed':
+      return value
+    default:
+      return null
+  }
 }
 
 function toIsoOrNull(value: unknown): string | null {
@@ -445,16 +472,8 @@ export async function getSiteWorkspaceReadModelForPage(input: {
   const normalizedSiteActions = rawSiteActions
     .map((row) => ({
       actionId: toTextOrNull(row.id),
-      type: (() => {
-        const value = normalizeText(row.type)
-        if (value === 'rerun_transformation' || value === 'generate_redesign' || value === 'publish_site') return value
-        return null
-      })(),
-      status: (() => {
-        const value = normalizeText(row.status)
-        if (value === 'idle' || value === 'running' || value === 'completed' || value === 'failed') return value
-        return null
-      })(),
+      type: normalizeSiteActionType(toTextOrNull(row.type)),
+      status: normalizeSiteActionStatus(toTextOrNull(row.status)),
       strategy: toTextOrNull(row.strategy),
       resultSummary: toTextOrNull(row.result_summary),
       diagnostics: Array.isArray(row.diagnostics) ? row.diagnostics.map((value) => normalizeText(value)).filter(Boolean) : [],
@@ -588,8 +607,8 @@ export async function getSiteWorkspaceReadModelForPage(input: {
       latestRunAt: runtimeSnapshot?.latestRuntimeUpdatedAt ?? runtimeSnapshot?.latestRuntimeCreatedAt ?? site.updatedAt,
       latestRuntimeSiteVersionId: selectedRuntimeSiteVersionId,
       latestRuntimeState: selectedRuntimeState,
-      lastActionType: lastAction?.type ?? null,
-      lastActionStatus: lastAction?.status ?? null,
+      lastActionType: normalizeSiteActionType(lastAction?.type),
+      lastActionStatus: normalizeSiteActionStatus(lastAction?.status),
       lastActionAt: lastAction?.completedAt ?? lastAction?.createdAt ?? null,
       semanticModelStatus: pageRows.some((row) => Array.isArray(row.semantic_signals) && row.semantic_signals.length > 0)
         ? 'available'
