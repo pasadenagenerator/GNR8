@@ -4,6 +4,7 @@ import fs from "node:fs";
 import { parseAgencyActionContextError, requireAgencyActionContext } from "@/app/api/gnr8/agency/_lib/agency-action-access";
 import { importHtmlToPage } from "@/gnr8/importer/html-to-page";
 import { migrateImportedPageToCanonicalDraft } from "@/gnr8/runtime/migration-factory";
+import { SCOPED_SITE_IMPORT_CANONICAL_PATH } from "@/gnr8/site/site-import-contract";
 import { importPublicSinglePageUrlToSnapshot } from "@/gnr8/validation/runtime/url-single-page-import";
 
 export const runtime = "nodejs";
@@ -71,6 +72,8 @@ export async function POST(req: Request) {
 
     return NextResponse.json({
       ok: true,
+      importPathClassification: "legacy_non_canonical",
+      canonicalScopedImportPath: SCOPED_SITE_IMPORT_CANONICAL_PATH,
       siteId: migrated.siteId,
       siteVersionId: migrated.siteVersionId,
       siteVersionNo: migrated.versionNo,

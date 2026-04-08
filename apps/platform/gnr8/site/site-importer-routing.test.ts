@@ -5,6 +5,8 @@ import {
   agencyClientSiteImportHref,
   canAccessClientScopedImporter,
   importerSuccessRedirectHref,
+  getScopedSiteImportCanonicalPath,
+  listNonCanonicalScopedImportPaths,
 } from '@/gnr8/site/site-importer-routing'
 
 test('agency owner/admin can access client-scoped importer', () => {
@@ -40,4 +42,13 @@ test('import success redirect targets scoped site workspace', () => {
   })
 
   assert.equal(href, '/gnr8/agency/clients/client_1/sites/site_1/overview?agency=agency_1&admin_view=1')
+})
+
+test('scoped import path exposes canonical flow marker and legacy paths separately', () => {
+  assert.equal(getScopedSiteImportCanonicalPath(), 'scoped_snapshot_import_v1')
+  assert.deepEqual(listNonCanonicalScopedImportPaths(), [
+    '/api/gnr8/import/url-and-save',
+    '/api/gnr8/import/html-and-save',
+    '/api/gnr8/runtime/migrate/url',
+  ])
 })

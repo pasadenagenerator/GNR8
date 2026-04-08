@@ -5,6 +5,7 @@ import { NextResponse } from 'next/server'
 import { parseAgencyActionContextError, requireAgencyActionContext } from '@/app/api/gnr8/agency/_lib/agency-action-access'
 import { importHtmlToPage } from '@/gnr8/importer/html-to-page'
 import { migrateImportedPageToCanonicalDraft } from '@/gnr8/runtime/migration-factory'
+import { SCOPED_SITE_IMPORT_CANONICAL_PATH } from '@/gnr8/site/site-import-contract'
 import { importerSuccessRedirectHref } from '@/gnr8/site/site-importer-routing'
 import { importPublicSinglePageUrlToSnapshot } from '@/gnr8/validation/runtime/url-single-page-import'
 import { getSuperadminPool } from '@/src/superadmin/db'
@@ -263,11 +264,19 @@ export async function POST(req: Request, ctx: { params: Promise<Params> }) {
     return NextResponse.json(
       {
         ok: true,
+        importPathClassification: 'canonical_scoped',
+        canonicalImportPath: SCOPED_SITE_IMPORT_CANONICAL_PATH,
         siteId: ownershipSiteId,
         runtimeSiteId: migrated.siteId,
         siteVersionId: migrated.siteVersionId,
         siteVersionNo: migrated.versionNo,
         actor_mode: actionContext.actorMode,
+        previewArtifacts: {
+          rawImportCaptured: true,
+          transformedPreviewGenerated: false,
+          debugPreviewAvailable: true,
+          runtimePreviewLinked: true,
+        },
         redirectTo,
       },
       { status: 200 },

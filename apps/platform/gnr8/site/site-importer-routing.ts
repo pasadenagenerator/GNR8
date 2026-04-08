@@ -1,5 +1,6 @@
 import { canPerformAction, type AgencyRole } from '@/src/auth/rbac'
 
+import { NON_CANONICAL_SCOPED_IMPORT_PATHS, SCOPED_SITE_IMPORT_CANONICAL_PATH } from '@/gnr8/site/site-import-contract'
 import { siteWorkspaceHref } from '@/gnr8/site/site-workspace-navigation'
 
 function normalizeText(value: unknown): string {
@@ -20,6 +21,14 @@ function scopedAgencyQuery(agencyId: string, adminView?: boolean): string {
 
 export function canAccessClientScopedImporter(role: AgencyRole | null | undefined): boolean {
   return canPerformAction(role ?? null, 'run_migration')
+}
+
+export function getScopedSiteImportCanonicalPath(): string {
+  return SCOPED_SITE_IMPORT_CANONICAL_PATH
+}
+
+export function listNonCanonicalScopedImportPaths(): readonly string[] {
+  return NON_CANONICAL_SCOPED_IMPORT_PATHS
 }
 
 export function agencyClientSiteImportHref(input: { clientId: string; agencyId: string; adminView?: boolean }): string {

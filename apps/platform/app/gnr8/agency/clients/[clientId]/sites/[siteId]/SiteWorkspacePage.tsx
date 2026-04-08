@@ -198,12 +198,23 @@ function renderDesignContent(readModel: Awaited<ReturnType<typeof getSiteWorkspa
 
 function renderPreviewContent(readModel: Awaited<ReturnType<typeof getSiteWorkspaceReadModelForPage>>): ReactNode {
   if (!readModel) return null
+  const readinessLabel =
+    readModel.preview.readiness === 'preview_available'
+      ? 'Preview available'
+      : readModel.preview.readiness === 'debug_only_artifact_available'
+        ? 'Debug-only artifact available'
+        : readModel.preview.readiness === 'import_captured_not_transformed'
+          ? 'Import captured, transformed preview pending'
+          : 'Preview unavailable'
 
   return (
     <section style={sectionCardStyle()}>
       <h2 style={{ margin: 0, fontSize: 18, color: '#0f172a' }}>Preview View</h2>
       <p style={{ margin: '8px 0 0', color: '#475569', fontSize: 13 }}>
-        Preview output from the latest site runtime version.
+        Transformed preview is the primary user-facing preview. Debug/inspect preview remains available as an operator surface.
+      </p>
+      <p style={{ margin: '6px 0 0', color: '#334155', fontSize: 12 }}>
+        Status: <strong>{readinessLabel}</strong>
       </p>
       {readModel.preview.selectedVariantLabel ? (
         <p style={{ margin: '6px 0 0', color: '#334155', fontSize: 12 }}>
@@ -214,8 +225,13 @@ function renderPreviewContent(readModel: Awaited<ReturnType<typeof getSiteWorksp
         <div style={{ marginTop: 10, display: 'grid', gap: 10 }}>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             <a href={readModel.preview.previewUrl} target='_blank' rel='noreferrer' style={quickActionStyle()}>
-              Open in New Tab
+              Open Transformed Preview
             </a>
+            {readModel.preview.debugPreviewUrl ? (
+              <a href={readModel.preview.debugPreviewUrl} target='_blank' rel='noreferrer' style={quickActionStyle()}>
+                Open Debug Preview
+              </a>
+            ) : null}
             {readModel.preview.liveUrl ? (
               <a href={readModel.preview.liveUrl} target='_blank' rel='noreferrer' style={quickActionStyle()}>
                 Open Live Domain
@@ -229,9 +245,25 @@ function renderPreviewContent(readModel: Awaited<ReturnType<typeof getSiteWorksp
           />
         </div>
       ) : (
-        <p style={{ marginTop: 10, color: '#475569', fontSize: 13 }}>
-          No preview is available yet for this site.
-        </p>
+        <div style={{ marginTop: 10, display: 'grid', gap: 8 }}>
+          <p style={{ margin: 0, color: '#475569', fontSize: 13 }}>
+            {readModel.preview.readiness === 'debug_only_artifact_available'
+              ? 'Transformed preview is not ready yet. Use debug preview for structural/operator inspection.'
+              : readModel.preview.readiness === 'import_captured_not_transformed'
+                ? 'Import was captured, but transformed preview output is not available yet.'
+                : 'No preview artifact is available for this site yet.'}
+          </p>
+          {readModel.preview.debugPreviewUrl ? (
+            <a href={readModel.preview.debugPreviewUrl} target='_blank' rel='noreferrer' style={quickActionStyle()}>
+              Open Debug Preview
+            </a>
+          ) : null}
+          {readModel.preview.diagnostics.length > 0 ? (
+            <p style={{ margin: 0, color: '#7f1d1d', fontSize: 12 }}>
+              Diagnostics: {readModel.preview.diagnostics.join(' · ')}
+            </p>
+          ) : null}
+        </div>
       )}
     </section>
   )

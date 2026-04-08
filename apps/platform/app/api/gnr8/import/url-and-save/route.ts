@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import { importHtmlToPage } from "@/gnr8/importer/html-to-page";
 import { migrateImportedPageToCanonicalDraft } from "@/gnr8/runtime/migration-factory";
+import { SCOPED_SITE_IMPORT_CANONICAL_PATH } from "@/gnr8/site/site-import-contract";
 
 export const runtime = "nodejs";
 
@@ -101,6 +102,8 @@ export async function POST(req: Request) {
     return NextResponse.json(
       {
         success: true,
+        importPathClassification: "legacy_non_canonical",
+        canonicalScopedImportPath: SCOPED_SITE_IMPORT_CANONICAL_PATH,
         sourceUrl: url.toString(),
         siteId: migrated.siteId,
         siteVersionId: migrated.siteVersionId,

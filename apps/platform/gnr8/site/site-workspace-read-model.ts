@@ -1,6 +1,7 @@
 import 'server-only'
 
 import { toSiteEntity, type RawSiteRow, type SiteEntity } from '@/gnr8/site/site-entity'
+import { resolveSiteWorkspacePreview, type SitePreviewType, type SiteWorkspacePreviewReadiness } from '@/gnr8/site/site-preview-contract'
 import { getSupabaseServerClientReadOnly } from '@/src/auth/supabase-server-read-only'
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
@@ -30,6 +31,12 @@ type RuntimePageVersionRow = {
   structure_model: unknown
   semantic_signals: unknown
   migration_governance: unknown
+}
+
+type RuntimeArtifactRow = {
+  id: string | null
+  site_version_id: string | null
+  html_by_path: unknown
 }
 
 type SiteActionRow = {
@@ -151,9 +158,14 @@ export type SiteWorkspaceReadModel = {
     rationale: string[]
   }
   preview: {
+    readiness: SiteWorkspacePreviewReadiness
+    sourceType: SitePreviewType | null
     previewUrl: string | null
+    transformedPreviewUrl: string | null
+    debugPreviewUrl: string | null
     liveUrl: string | null
     selectedVariantLabel: string | null
+    diagnostics: string[]
   }
   settings: {
     name: string
@@ -585,14 +597,40 @@ export async function getSiteWorkspaceReadModelForPage(input: {
   }))
 
   const lastAction = normalizedSiteActions[0] ?? null
+  let transformedPreviewAvailable = false
+  if (selectedRuntimeSiteVersionId) {
+    const artifactResult = await supabase
+      .from('gnr8_runtime_artifacts')
+      .select('id,site_version_id,html_by_path')
+      .eq('site_version_id', selectedRuntimeSiteVersionId)
+      .order('created_at', { ascending: false })
+      .limit(1)
+
+    if (!artifactResult.error && Array.isArray(artifactResult.data) && artifactResult.data.length > 0) {
+      const artifactRow = artifactResult.data[0] as RuntimeArtifactRow
+      if (toTextOrNull(artifactRow.id)) {
+        const htmlByPath = isRecord(artifactRow.html_by_path) ? artifactRow.html_by_path : null
+        transformedPreviewAvailable = htmlByPath != null && Object.keys(htmlByPath).length > 0
+      }
+    }
+  }
+
+  const debugPreviewAvailable = Boolean(selectedRuntimeSiteVersionId) && pageRows.length > 0
+  const resolvedPreview = resolveSiteWorkspacePreview({
+    siteVersionId: selectedRuntimeSiteVersionId,
+    transformedPreviewAvailable,
+    debugPreviewAvailable,
+    importCaptured: Boolean(selectedRuntimeSiteVersionId),
+  })
   const diagnosticsSummary = Array.from(
     new Set([
       ...structureRows.flatMap((row) => row.keyDiagnostics),
       ...(lastAction?.diagnostics ?? []),
       ...(selectedVariant ? [`variant:${selectedVariant.label}`] : []),
+      ...resolvedPreview.diagnostics,
     ]),
   ).slice(0, 8)
-  const previewUrl = selectedRuntimeSiteVersionId ? `/api/gnr8/runtime/versions/${selectedRuntimeSiteVersionId}/preview` : null
+  const previewUrl = resolvedPreview.mainPreviewUrl
 
   return {
     site,
@@ -670,9 +708,14 @@ export async function getSiteWorkspaceReadModelForPage(input: {
       ],
     },
     preview: {
+      readiness: resolvedPreview.status,
+      sourceType: resolvedPreview.sourceType,
       previewUrl,
+      transformedPreviewUrl: resolvedPreview.transformedPreviewUrl,
+      debugPreviewUrl: resolvedPreview.debugPreviewUrl,
       liveUrl: toHttpsUrlOrNull(site.domain),
       selectedVariantLabel: selectedVariant?.label ?? null,
+      diagnostics: resolvedPreview.diagnostics,
     },
     settings: {
       name: site.label || `Site ${shortId(site.id)}`,
