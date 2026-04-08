@@ -4,15 +4,20 @@ import path from "node:path";
 
 import { parse, serialize } from "parse5";
 
+import type { RenderedCaptureExecutor, RenderedCaptureResult } from "../../import-rendered-capture";
+import { runRenderedCapture } from "../../import-rendered-capture";
 import type { JsonValue } from "../../import/import-contract";
 import { stableStringify } from "../../migration/runtime/diagnostics";
 import { resolveUrlImportSnapshotRootDirAbs } from "./url-import-snapshot-root";
 
-export const URL_SINGLE_PAGE_IMPORT_VERSION = "1.2.0" as const;
+export const URL_SINGLE_PAGE_IMPORT_VERSION = "1.3.0" as const;
 
 export type UrlImportExecutionScope = {
   includes: readonly [
     "entry_html",
+    "rendered_dom_capture",
+    "screenshot_capture",
+    "computed_style_sampling",
     "direct_stylesheets",
     "direct_images",
     "direct_scripts",
@@ -21,7 +26,7 @@ export type UrlImportExecutionScope = {
     "gallery_image_anchor_hrefs",
     "stylesheet_linked_local_assets",
   ];
-  excludes: readonly ["multi_page_crawl", "browser_js_execution", "auth_fetch", "form_submission", "robots_bypass"];
+  excludes: readonly ["multi_page_crawl", "auth_fetch", "form_submission", "robots_bypass"];
 };
 
 export type UrlImportDiagnosticSeverity = "info" | "warning" | "error" | "fatal";
@@ -43,7 +48,13 @@ export type UrlImportDiagnosticCode =
   | "PRIMARY_STYLESHEET_CAPTURED"
   | "PRIMARY_STYLESHEET_FETCH_FAILED"
   | "PRIMARY_STYLESHEET_NOT_REWRITE_ELIGIBLE"
-  | "PRIMARY_STYLESHEET_NOT_USED_IN_FINAL_HTML";
+  | "PRIMARY_STYLESHEET_NOT_USED_IN_FINAL_HTML"
+  | "RENDERED_CAPTURE_UNAVAILABLE"
+  | "RENDERED_CAPTURE_TIMEOUT"
+  | "RENDERED_CAPTURE_PARTIAL"
+  | "RENDERED_CAPTURE_FAILED"
+  | "SCREENSHOT_CAPTURE_FAILED"
+  | "COMPUTED_STYLE_SAMPLE_WEAK";
 
 export type UrlImportDiagnostic = {
   id: string;
@@ -103,8 +114,11 @@ export type UrlSinglePageImportSnapshot = {
   snapshotId: string;
   snapshotRootDirAbs: string;
   fixtureSpec: UrlSnapshotFixtureSpec;
+  sourceMode: "raw_html" | "rendered_dom";
+  responseHtmlPathAbs: string;
   entryHtmlPathAbs: string;
   assetsDirAbs: string;
+  renderedCapture: RenderedCaptureResult;
   importDiagnostics: {
     summary: {
       infoCount: number;
@@ -133,6 +147,9 @@ type ParsedAssetRef = {
 const FETCH_SCOPE: UrlImportExecutionScope = {
   includes: [
     "entry_html",
+    "rendered_dom_capture",
+    "screenshot_capture",
+    "computed_style_sampling",
     "direct_stylesheets",
     "direct_images",
     "direct_scripts",
@@ -141,7 +158,7 @@ const FETCH_SCOPE: UrlImportExecutionScope = {
     "gallery_image_anchor_hrefs",
     "stylesheet_linked_local_assets",
   ],
-  excludes: ["multi_page_crawl", "browser_js_execution", "auth_fetch", "form_submission", "robots_bypass"],
+  excludes: ["multi_page_crawl", "auth_fetch", "form_submission", "robots_bypass"],
 };
 
 const DIAGNOSTIC_SEVERITY_RANK: Record<UrlImportDiagnosticSeverity, number> = {
@@ -243,6 +260,23 @@ function createDiagnostic(input: {
     targetUrl: input.targetUrl,
     details: input.details,
   };
+}
+
+function appendRenderedCaptureDiagnostics(input: {
+  diagnostics: UrlImportDiagnostic[];
+  renderedCapture: RenderedCaptureResult;
+}): void {
+  for (const item of input.renderedCapture.diagnostics) {
+    input.diagnostics.push(
+      createDiagnostic({
+        severity: item.severity === "error" ? "error" : item.severity,
+        code: item.code,
+        message: item.message,
+        targetUrl: null,
+        details: (item.details ?? null) as JsonValue | null,
+      }),
+    );
+  }
 }
 
 function sortDiagnostics(issues: UrlImportDiagnostic[]): UrlImportDiagnostic[] {
@@ -1096,6 +1130,7 @@ export async function importPublicSinglePageUrlToSnapshot(input: {
   snapshotRootDirAbs?: string;
   requestId?: string;
   fetchImpl?: FetchLike;
+  renderedCaptureExecutor?: RenderedCaptureExecutor;
 }): Promise<UrlSinglePageImportSnapshot> {
   const diagnostics: UrlImportDiagnostic[] = [];
   const fetchManifest: UrlImportFetchManifestEntry[] = [];
@@ -1114,6 +1149,17 @@ export async function importPublicSinglePageUrlToSnapshot(input: {
     );
 
     const emptyIssues = sortDiagnostics(diagnostics);
+    const renderedCapture: RenderedCaptureResult = {
+      kind: "rendered_capture_result_v1",
+      version: "1.0.0",
+      status: "unavailable",
+      sourceMode: "raw_html",
+      documents: [],
+      screenshots: [],
+      computedStyleSamples: [],
+      renderedObservedAssetUrls: [],
+      diagnostics: [],
+    };
     return {
       kind: "url_single_page_import_snapshot_v1",
       snapshotVersion: URL_SINGLE_PAGE_IMPORT_VERSION,
@@ -1134,8 +1180,11 @@ export async function importPublicSinglePageUrlToSnapshot(input: {
         assetPathRule: "assets/<kind>/<urlHash12>-<basename>; collisions append -N",
         fetchScope: FETCH_SCOPE,
       },
+      sourceMode: "raw_html",
+      responseHtmlPathAbs: "",
       entryHtmlPathAbs: "",
       assetsDirAbs: "",
+      renderedCapture,
       importDiagnostics: {
         summary: summarizeDiagnostics(emptyIssues),
         issues: emptyIssues,
@@ -1147,8 +1196,10 @@ export async function importPublicSinglePageUrlToSnapshot(input: {
   const normalizedHref = normalizedUrl.toString();
   const snapshotId = snapshotIdForNormalizedUrl(normalizedHref);
   const snapshotRootDirAbs = path.resolve(snapshotBase, snapshotId);
+  const responseHtmlPathAbs = path.resolve(snapshotRootDirAbs, "response-html.raw.html");
   const entryHtmlPathAbs = path.resolve(snapshotRootDirAbs, "index.html");
   const assetsDirAbs = path.resolve(snapshotRootDirAbs, "assets");
+  const renderedCaptureManifestPathAbs = path.resolve(snapshotRootDirAbs, "rendered-capture.json");
 
   const fixtureSpec: UrlSnapshotFixtureSpec = {
     fixtureId: snapshotId,
@@ -1168,6 +1219,17 @@ export async function importPublicSinglePageUrlToSnapshot(input: {
   fs.mkdirSync(assetsDirAbs, { recursive: true });
 
   const fetcher = input.fetchImpl ?? fetch;
+  let renderedCapture: RenderedCaptureResult = {
+    kind: "rendered_capture_result_v1",
+    version: "1.0.0",
+    status: "unavailable",
+    sourceMode: "raw_html",
+    documents: [],
+    screenshots: [],
+    computedStyleSamples: [],
+    renderedObservedAssetUrls: [],
+    diagnostics: [],
+  };
 
   let entryResponse: Response | null = null;
   try {
@@ -1232,7 +1294,26 @@ export async function importPublicSinglePageUrlToSnapshot(input: {
     }
   }
 
-  let rewrittenHtml = entryHtml;
+  fs.writeFileSync(responseHtmlPathAbs, entryHtml, "utf8");
+
+  if (!hasFatal(diagnostics) && entryHtml) {
+    renderedCapture = await runRenderedCapture({
+      sourceUrl: normalizedHref,
+      snapshotRootDirAbs,
+      executor: input.renderedCaptureExecutor,
+    });
+    writeJsonStable(renderedCaptureManifestPathAbs, renderedCapture as unknown as JsonValue);
+    appendRenderedCaptureDiagnostics({
+      diagnostics,
+      renderedCapture,
+    });
+  } else {
+    writeJsonStable(renderedCaptureManifestPathAbs, renderedCapture as unknown as JsonValue);
+  }
+
+  let rewrittenHtml = renderedCapture.documents[0]?.htmlPathAbs
+    ? fs.readFileSync(renderedCapture.documents[0].htmlPathAbs, "utf8")
+    : entryHtml;
 
   if (!hasFatal(diagnostics) && entryHtml) {
     const document = parse(entryHtml);
@@ -1721,8 +1802,11 @@ export async function importPublicSinglePageUrlToSnapshot(input: {
     snapshotId,
     snapshotRootDirAbs,
     fixtureSpec,
+    sourceMode: renderedCapture.sourceMode,
+    responseHtmlPathAbs,
     entryHtmlPathAbs,
     assetsDirAbs,
+    renderedCapture,
     importDiagnostics: {
       summary: summarizeDiagnostics(sortedDiagnostics),
       issues: sortedDiagnostics,

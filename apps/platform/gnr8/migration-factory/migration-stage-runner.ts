@@ -373,6 +373,8 @@ function createDefaultStageExecutors(input?: {
       }
 
       const fetchedUrlCount = 1 + new Set(snapshot.fetchManifest.map((entry) => entry.resolvedUrl).filter((url): url is string => typeof url === "string")).size;
+      const renderedDomRef = snapshot.renderedCapture.documents[0]?.htmlPathAbs ?? "";
+      const primaryDocumentRef = snapshot.sourceMode === "rendered_dom" && renderedDomRef.length > 0 ? renderedDomRef : snapshot.entryHtmlPathAbs;
       const endedAt = context.now();
       return createSucceededResult(
         stage,
@@ -382,7 +384,13 @@ function createDefaultStageExecutors(input?: {
           snapshotId: snapshot.snapshotId,
           snapshotRef: buildDeterministicRef(job.jobId, stage, `snapshot:${snapshot.snapshotId}`),
           snapshotRootDirAbs: snapshot.snapshotRootDirAbs,
-          primaryDocumentRef: snapshot.entryHtmlPathAbs,
+          responseHtmlRef: snapshot.responseHtmlPathAbs,
+          renderedDomRef,
+          sourceMode: snapshot.sourceMode,
+          renderedCaptureStatus: snapshot.renderedCapture.status,
+          screenshotCount: String(snapshot.renderedCapture.screenshots.length),
+          computedStyleSampleCount: String(snapshot.renderedCapture.computedStyleSamples.length),
+          primaryDocumentRef,
           snapshotUrlCount: String(fetchedUrlCount),
           pageCount: "1",
         },
@@ -396,6 +404,10 @@ function createDefaultStageExecutors(input?: {
               primaryUrl: snapshot.normalizedUrl || job.sourceUrl,
               captureMode: snapshot.kind,
               snapshotId: snapshot.snapshotId,
+              sourceMode: snapshot.sourceMode,
+              renderedCaptureStatus: snapshot.renderedCapture.status,
+              screenshotCount: snapshot.renderedCapture.screenshots.length,
+              computedStyleSampleCount: snapshot.renderedCapture.computedStyleSamples.length,
             },
           },
         ],
@@ -467,6 +479,7 @@ function createDefaultStageExecutors(input?: {
           source: {
             snapshotId: snapshotOutputs.snapshotId ?? null,
             primaryDocumentRef,
+            sourceMode: snapshotOutputs.sourceMode ?? "raw_html",
           },
           graph: {
             root: graph.root,
@@ -519,6 +532,7 @@ function createDefaultStageExecutors(input?: {
               regionCount,
               anomalyCount,
               nodeCount,
+              sourceMode: snapshotOutputs.sourceMode ?? "raw_html",
             },
           },
         ],
@@ -650,6 +664,7 @@ function createDefaultStageExecutors(input?: {
         source: {
           sourceUrl: job.sourceUrl,
           primaryDocumentRef,
+          sourceMode: snapshotOutputs.sourceMode ?? "raw_html",
           snapshotId: snapshotOutputs.snapshotId ?? null,
           layoutGraphRef,
           layoutGraphId: layoutOutputs.layoutGraphId ?? null,
@@ -700,6 +715,7 @@ function createDefaultStageExecutors(input?: {
           canonicalPageRef,
           canonicalPageId,
           primaryPath: canonicalInput.pages[0]?.path ?? resolvePrimaryPathFromSourceUrl(job.sourceUrl),
+          sourceMode: snapshotOutputs.sourceMode ?? "raw_html",
           sectionCount: String(sectionCount),
           pageStructuralConfidence: pageStructuralConfidence.toFixed(3),
           weakSectionCount: String(weakSectionCount),
@@ -718,6 +734,7 @@ function createDefaultStageExecutors(input?: {
               weakSectionCount,
               anomalyCount,
               canonicalIntentSummary,
+              sourceMode: snapshotOutputs.sourceMode ?? "raw_html",
             },
           },
         ],

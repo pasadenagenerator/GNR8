@@ -113,8 +113,16 @@ type UrlImportOperatorSuccessResponse = {
   snapshot: {
     snapshotId: string;
     snapshotRootDirAbs: string;
+    sourceMode: "raw_html" | "rendered_dom";
+    responseHtmlPathAbs: string;
     entryHtmlPathAbs: string;
     assetsDirAbs: string;
+    renderedCapture: {
+      status: "available" | "unavailable" | "failed";
+      documents: Array<{ htmlPathAbs: string }>;
+      screenshots: Array<{ filePathAbs: string; captureType: string }>;
+      computedStyleSamples: Array<{ sampleId: string; target: string }>;
+    };
     importDiagnostics: {
       summary: { infoCount: number; warningCount: number; errorCount: number; fatalCount: number };
       issues: Array<{ code: string; severity: string; message: string }>;
@@ -185,6 +193,11 @@ type UrlImportOperatorSuccessResponse = {
     executionPlanEligibility: string;
     executionStatus: string;
     reportStatus: string;
+    renderedCaptureStatus: "available" | "unavailable" | "failed";
+    renderedDomCaptured: boolean;
+    screenshotCount: number;
+    computedStyleSampleCount: number;
+    structureSourceMode: "raw_html" | "rendered_dom";
     warningCodes: string[];
     blockingReasonCodes: string[];
   };
@@ -201,8 +214,16 @@ type UrlImportOperatorFailureResponse = {
   snapshot: {
     snapshotId: string | null;
     snapshotRootDirAbs: string | null;
+    sourceMode: "raw_html" | "rendered_dom" | null;
+    responseHtmlPathAbs: string | null;
     entryHtmlPathAbs: string | null;
     assetsDirAbs: string | null;
+    renderedCapture: {
+      status: "available" | "unavailable" | "failed";
+      documents: Array<{ htmlPathAbs: string }>;
+      screenshots: Array<{ filePathAbs: string; captureType: string }>;
+      computedStyleSamples: Array<{ sampleId: string; target: string }>;
+    } | null;
     importDiagnostics: {
       summary: { infoCount: number; warningCount: number; errorCount: number; fatalCount: number };
       issues: Array<{ code: string; severity: string; message: string }>;
@@ -484,8 +505,14 @@ function ResultPanel(props: { response: UrlImportOperatorResponse }) {
             rows={[
               { k: "snapshot.snapshotId", v: props.response.snapshot.snapshotId ?? "n/a" },
               { k: "snapshot.snapshotRootDirAbs", v: props.response.snapshot.snapshotRootDirAbs ?? "n/a" },
+              { k: "snapshot.sourceMode", v: props.response.snapshot.sourceMode ?? "n/a" },
+              { k: "snapshot.responseHtmlPathAbs", v: props.response.snapshot.responseHtmlPathAbs ?? "n/a" },
               { k: "snapshot.entryHtmlPathAbs", v: props.response.snapshot.entryHtmlPathAbs ?? "n/a" },
               { k: "snapshot.assetsDirAbs", v: props.response.snapshot.assetsDirAbs ?? "n/a" },
+              { k: "snapshot.renderedCaptureStatus", v: props.response.snapshot.renderedCapture?.status ?? "n/a" },
+              { k: "snapshot.renderedDocumentCount", v: props.response.snapshot.renderedCapture?.documents.length ?? "n/a" },
+              { k: "snapshot.screenshotCount", v: props.response.snapshot.renderedCapture?.screenshots.length ?? "n/a" },
+              { k: "snapshot.computedStyleSampleCount", v: props.response.snapshot.renderedCapture?.computedStyleSamples.length ?? "n/a" },
               { k: "snapshot.fetchManifestCount", v: props.response.snapshot.fetchManifest.length },
               { k: "snapshot.importDiagnostics.warningCount", v: props.response.snapshot.importDiagnostics?.summary.warningCount ?? "n/a" },
               { k: "snapshot.importDiagnostics.errorCount", v: props.response.snapshot.importDiagnostics?.summary.errorCount ?? "n/a" },
@@ -568,6 +595,10 @@ function ResultPanel(props: { response: UrlImportOperatorResponse }) {
           <SummaryCard label="pipeline" value={<StatusPill value={props.response.summary.pipelineStatus} />} kind={statusKindFromString(props.response.summary.pipelineStatus)} />
           <SummaryCard label="approval" value={<StatusPill value={props.response.summary.approvalStatus} />} kind={statusKindFromString(props.response.summary.approvalStatus)} />
           <SummaryCard label="execution" value={<StatusPill value={props.response.summary.executionStatus} />} kind={statusKindFromString(props.response.summary.executionStatus)} />
+          <SummaryCard label="capture source" value={<StatusPill value={props.response.summary.structureSourceMode} />} kind={props.response.summary.structureSourceMode === "rendered_dom" ? "good" : "warn"} />
+          <SummaryCard label="capture status" value={<StatusPill value={props.response.summary.renderedCaptureStatus} />} kind={statusKindFromString(props.response.summary.renderedCaptureStatus)} />
+          <SummaryCard label="screenshots" value={props.response.summary.screenshotCount} kind={props.response.summary.screenshotCount > 0 ? "good" : "warn"} />
+          <SummaryCard label="style samples" value={props.response.summary.computedStyleSampleCount} kind={props.response.summary.computedStyleSampleCount > 0 ? "good" : "warn"} />
           <SummaryCard label="warnings" value={warningCodes.length} kind={warningCodes.length > 0 ? "warn" : "good"} />
           <SummaryCard label="blocking reasons" value={blockingReasonCodes.length} kind={blockingReasonCodes.length > 0 ? "bad" : "good"} />
         </div>
@@ -584,6 +615,11 @@ function ResultPanel(props: { response: UrlImportOperatorResponse }) {
             { k: "previewStatus", v: <StatusPill value={preview.status} /> },
             { k: "approvalStatus", v: <StatusPill value={props.response.summary.approvalStatus} /> },
             { k: "executionStatus", v: <StatusPill value={props.response.summary.executionStatus} /> },
+            { k: "renderedCapture.status", v: <StatusPill value={props.response.summary.renderedCaptureStatus} /> },
+            { k: "structureSourceMode", v: <StatusPill value={props.response.summary.structureSourceMode} /> },
+            { k: "renderedDomCaptured", v: <BooleanPill value={props.response.summary.renderedDomCaptured} /> },
+            { k: "screenshotCount", v: props.response.summary.screenshotCount },
+            { k: "computedStyleSampleCount", v: props.response.summary.computedStyleSampleCount },
             { k: "warningCodes", v: <CodeList codes={warningCodes} /> },
             { k: "blockingReasonCodes", v: <CodeList codes={blockingReasonCodes} /> },
           ]}
@@ -918,8 +954,14 @@ function ResultPanel(props: { response: UrlImportOperatorResponse }) {
           rows={[
             { k: "snapshot.snapshotId", v: props.response.snapshot.snapshotId },
             { k: "snapshot.snapshotRootDirAbs", v: props.response.snapshot.snapshotRootDirAbs },
+            { k: "snapshot.sourceMode", v: props.response.snapshot.sourceMode },
+            { k: "snapshot.responseHtmlPathAbs", v: props.response.snapshot.responseHtmlPathAbs },
             { k: "snapshot.entryHtmlPathAbs", v: props.response.snapshot.entryHtmlPathAbs },
             { k: "snapshot.assetsDirAbs", v: props.response.snapshot.assetsDirAbs },
+            { k: "snapshot.renderedCaptureStatus", v: props.response.snapshot.renderedCapture.status },
+            { k: "snapshot.renderedDocumentCount", v: props.response.snapshot.renderedCapture.documents.length },
+            { k: "snapshot.screenshotCount", v: props.response.snapshot.renderedCapture.screenshots.length },
+            { k: "snapshot.computedStyleSampleCount", v: props.response.snapshot.renderedCapture.computedStyleSamples.length },
             { k: "snapshot.fetchManifestCount", v: props.response.snapshot.fetchManifest.length },
             { k: "snapshot.importDiagnostics.infoCount", v: props.response.snapshot.importDiagnostics.summary.infoCount },
             { k: "snapshot.importDiagnostics.warningCount", v: props.response.snapshot.importDiagnostics.summary.warningCount },

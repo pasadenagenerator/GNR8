@@ -9,6 +9,7 @@ import { InMemoryMigrationJobStore } from "@/gnr8/migration-factory/migration-jo
 import { canRunStage, createInitialStageStates, MIGRATION_STAGE_ORDER } from "@/gnr8/migration-factory/migration-stage-machine";
 import { createFailedStageResult, DefaultMigrationStageRunner } from "@/gnr8/migration-factory/migration-stage-runner";
 import type { MigrationStage, MigrationStageResult } from "@/gnr8/migration-factory/migration-job-types";
+import type { UrlSinglePageImportSnapshot } from "@/gnr8/validation/runtime/url-single-page-import";
 
 function createDeterministicClock(): () => string {
   let tick = 0;
@@ -83,6 +84,90 @@ function createSnapshotStageRunner(input: { snapshotRootDirAbs: string; failFetc
       fetchImpl: createFetchFixture({ failAll: input.failFetch }),
     },
   });
+}
+
+function createMockSnapshotImporter(input: {
+  snapshotRootDirAbs: string;
+  sourceMode: "raw_html" | "rendered_dom";
+}): (args: { sourceUrl: string }) => Promise<UrlSinglePageImportSnapshot> {
+  return async ({ sourceUrl }) => {
+    const snapshotRootDirAbs = input.snapshotRootDirAbs;
+    const entryHtmlPathAbs = path.resolve(snapshotRootDirAbs, "index.html");
+    const responseHtmlPathAbs = path.resolve(snapshotRootDirAbs, "response-html.raw.html");
+    const renderedDomPathAbs = path.resolve(snapshotRootDirAbs, "rendered-capture", "rendered-dom.html");
+    await fs.mkdir(path.dirname(renderedDomPathAbs), { recursive: true });
+    await fs.writeFile(responseHtmlPathAbs, "<!doctype html><html><body><h1>Raw</h1></body></html>", "utf8");
+    await fs.writeFile(entryHtmlPathAbs, "<!doctype html><html><body><h1>Entry</h1></body></html>", "utf8");
+    await fs.writeFile(renderedDomPathAbs, "<!doctype html><html><body><h1>Rendered</h1></body></html>", "utf8");
+
+    return {
+      kind: "url_single_page_import_snapshot_v1",
+      snapshotVersion: "1.3.0",
+      sourceUrl,
+      normalizedUrl: sourceUrl,
+      snapshotId: "mock-snapshot",
+      snapshotRootDirAbs,
+      fixtureSpec: {
+        fixtureId: "mock-snapshot",
+        kind: "static_marketing_site_v1",
+        entryHtmlPath: "index.html",
+        assetsDirPath: "assets",
+        sourceUrl,
+        normalizedUrl: sourceUrl,
+        snapshotVersion: "1.3.0",
+        urlKeyRule: "sha256(normalized_url_without_fragment)_prefix16",
+        entryRule: "index.html",
+        assetPathRule: "assets/<kind>/<urlHash12>-<basename>; collisions append -N",
+        fetchScope: {
+          includes: [
+            "entry_html",
+            "rendered_dom_capture",
+            "screenshot_capture",
+            "computed_style_sampling",
+            "direct_stylesheets",
+            "direct_images",
+            "direct_scripts",
+            "image_srcset_candidates",
+            "lazy_image_fallback_attrs",
+            "gallery_image_anchor_hrefs",
+            "stylesheet_linked_local_assets",
+          ] as const,
+          excludes: ["multi_page_crawl", "auth_fetch", "form_submission", "robots_bypass"] as const,
+        },
+      },
+      sourceMode: input.sourceMode,
+      responseHtmlPathAbs,
+      entryHtmlPathAbs,
+      assetsDirAbs: path.resolve(snapshotRootDirAbs, "assets"),
+      renderedCapture: {
+        kind: "rendered_capture_result_v1",
+        version: "1.0.0",
+        status: input.sourceMode === "rendered_dom" ? "available" : "unavailable",
+        sourceMode: input.sourceMode,
+        documents:
+          input.sourceMode === "rendered_dom"
+            ? [
+                {
+                  kind: "rendered_document_snapshot_v1",
+                  sourceUrl,
+                  htmlPathAbs: renderedDomPathAbs,
+                  htmlSha256: "mock",
+                  readinessState: "dom_stable",
+                },
+              ]
+            : [],
+        screenshots: [],
+        computedStyleSamples: [],
+        renderedObservedAssetUrls: [],
+        diagnostics: [],
+      },
+      importDiagnostics: {
+        summary: { infoCount: 0, warningCount: 0, errorCount: 0, fatalCount: 0 },
+        issues: [],
+      },
+      fetchManifest: [],
+    } as UrlSinglePageImportSnapshot;
+  };
 }
 
 function createSucceededStageResult(stage: MigrationStage, startedAt: string, endedAt: string, outputRefs: Record<string, string>): MigrationStageResult {
@@ -223,6 +308,59 @@ test("migration factory happy path completes all stages", async () => {
   assert.equal(shadowCandidate.publishCandidateState, "READY_FOR_SHADOW_BIND");
   assert.equal(shadowCandidate.candidateCreated, true);
   assert.ok(shadowCandidate.artifactId);
+});
+
+test("snapshot rendered_dom source mode is propagated and preferred by downstream stages", async () => {
+  const now = createDeterministicClock();
+  const store = new InMemoryMigrationJobStore({ now });
+  const snapshotRootDirAbs = path.resolve(os.tmpdir(), "gnr8-mf-tests", "rendered-source-mode");
+  const stageRunner = new DefaultMigrationStageRunner({
+    snapshotImporter: createMockSnapshotImporter({
+      snapshotRootDirAbs,
+      sourceMode: "rendered_dom",
+    }),
+  });
+
+  const factory = new MigrationFactory({ store, now, stageRunner });
+  const job = await factory.startMigrationJob({
+    jobId: "job-rendered-source-mode",
+    siteId: "site-1",
+    sourceUrl: "https://example.com",
+  });
+
+  const report = await factory.runMigrationJob(job.jobId);
+  const persisted = await store.getJob(job.jobId);
+  assert.equal(report.finalState, "COMPLETED");
+  assert.ok(persisted);
+  assert.equal(persisted?.stageStates.SNAPSHOT.outputRefs.sourceMode, "rendered_dom");
+  assert.equal(path.basename(persisted?.stageStates.SNAPSHOT.outputRefs.primaryDocumentRef ?? ""), "rendered-dom.html");
+  assert.equal(persisted?.stageStates.CANONICAL.outputRefs.sourceMode, "rendered_dom");
+});
+
+test("snapshot raw_html source mode remains valid when rendered capture is unavailable", async () => {
+  const now = createDeterministicClock();
+  const store = new InMemoryMigrationJobStore({ now });
+  const snapshotRootDirAbs = path.resolve(os.tmpdir(), "gnr8-mf-tests", "raw-source-mode");
+  const stageRunner = new DefaultMigrationStageRunner({
+    snapshotImporter: createMockSnapshotImporter({
+      snapshotRootDirAbs,
+      sourceMode: "raw_html",
+    }),
+  });
+
+  const factory = new MigrationFactory({ store, now, stageRunner });
+  const job = await factory.startMigrationJob({
+    jobId: "job-raw-source-mode",
+    siteId: "site-1",
+    sourceUrl: "https://example.com",
+  });
+
+  const report = await factory.runMigrationJob(job.jobId);
+  const persisted = await store.getJob(job.jobId);
+  assert.equal(report.finalState, "COMPLETED");
+  assert.ok(persisted);
+  assert.equal(persisted?.stageStates.SNAPSHOT.outputRefs.sourceMode, "raw_html");
+  assert.equal(path.basename(persisted?.stageStates.SNAPSHOT.outputRefs.primaryDocumentRef ?? ""), "index.html");
 });
 
 test("migration factory failure path stops on failed stage", async () => {

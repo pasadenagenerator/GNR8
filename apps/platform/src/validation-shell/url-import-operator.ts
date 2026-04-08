@@ -24,6 +24,7 @@ import type { PageMigrationGateResult } from "../../gnr8/migration/quality-gates
 import type { PageRolloutPolicyResult } from "../../gnr8/migration/policy/page-rollout-policy";
 import type { PageEnforcementByStage } from "../../gnr8/migration/enforcement/page-enforcement";
 import type { PreviewDocument } from "../../gnr8/migration/preview-document-model";
+import type { RenderedCaptureExecutor } from "../../gnr8/import-rendered-capture";
 
 import {
   importPublicSinglePageUrlToSnapshot,
@@ -102,8 +103,11 @@ export type UrlImportOperatorResponse =
       snapshot: {
         snapshotId: string;
         snapshotRootDirAbs: string;
+        sourceMode: UrlSinglePageImportSnapshot["sourceMode"];
+        responseHtmlPathAbs: string;
         entryHtmlPathAbs: string;
         assetsDirAbs: string;
+        renderedCapture: UrlSinglePageImportSnapshot["renderedCapture"];
         importDiagnostics: UrlSinglePageImportSnapshot["importDiagnostics"];
         fetchManifest: UrlImportFetchManifestEntry[];
       };
@@ -141,6 +145,11 @@ export type UrlImportOperatorResponse =
         executionPlanEligibility: Awaited<ReturnType<typeof runLinearMigrationPhase1ApproveExecute>>["executionPlan"]["eligibility"]["status"];
         executionStatus: Awaited<ReturnType<typeof runLinearMigrationPhase1ApproveExecute>>["executionResult"]["status"];
         reportStatus: Awaited<ReturnType<typeof runLinearMigrationPhase1ApproveExecute>>["report"]["overallStatus"];
+        renderedCaptureStatus: UrlSinglePageImportSnapshot["renderedCapture"]["status"];
+        renderedDomCaptured: boolean;
+        screenshotCount: number;
+        computedStyleSampleCount: number;
+        structureSourceMode: UrlSinglePageImportSnapshot["sourceMode"];
         warningCodes: string[];
         blockingReasonCodes: string[];
       };
@@ -156,8 +165,11 @@ export type UrlImportOperatorResponse =
       snapshot: {
         snapshotId: string | null;
         snapshotRootDirAbs: string | null;
+        sourceMode: UrlSinglePageImportSnapshot["sourceMode"] | null;
+        responseHtmlPathAbs: string | null;
         entryHtmlPathAbs: string | null;
         assetsDirAbs: string | null;
+        renderedCapture: UrlSinglePageImportSnapshot["renderedCapture"] | null;
         importDiagnostics: { summary: { infoCount: number; warningCount: number; errorCount: number; fatalCount: number }; issues: UrlImportDiagnostic[] } | null;
         fetchManifest: UrlImportFetchManifestEntry[];
       };
@@ -554,6 +566,7 @@ export async function runUrlImportOperatorFlow(
     cleanOutputRoot?: boolean;
     snapshotRootDirAbs?: string;
     fetchImpl?: (input: string | URL | Request, init?: RequestInit) => Promise<Response>;
+    renderedCaptureExecutor?: RenderedCaptureExecutor;
   },
 ): Promise<UrlImportOperatorResponse> {
   let snapshot: UrlSinglePageImportSnapshot | null = null;
@@ -564,6 +577,7 @@ export async function runUrlImportOperatorFlow(
       requestId: options?.requestId,
       snapshotRootDirAbs: options?.snapshotRootDirAbs,
       fetchImpl: options?.fetchImpl,
+      renderedCaptureExecutor: options?.renderedCaptureExecutor,
     });
 
     if (snapshot.importDiagnostics.summary.fatalCount > 0) {
@@ -660,8 +674,11 @@ export async function runUrlImportOperatorFlow(
       snapshot: {
         snapshotId: snapshot.snapshotId,
         snapshotRootDirAbs: snapshot.snapshotRootDirAbs,
+        sourceMode: snapshot.sourceMode,
+        responseHtmlPathAbs: snapshot.responseHtmlPathAbs,
         entryHtmlPathAbs: snapshot.entryHtmlPathAbs,
         assetsDirAbs: snapshot.assetsDirAbs,
+        renderedCapture: snapshot.renderedCapture,
         importDiagnostics: snapshot.importDiagnostics,
         fetchManifest: snapshot.fetchManifest,
       },
@@ -701,6 +718,11 @@ export async function runUrlImportOperatorFlow(
         executionPlanEligibility: phase1.executionPlan.eligibility.status,
         executionStatus: phase1.executionResult.status,
         reportStatus: phase1.report.overallStatus,
+        renderedCaptureStatus: snapshot.renderedCapture.status,
+        renderedDomCaptured: snapshot.renderedCapture.documents.length > 0,
+        screenshotCount: snapshot.renderedCapture.screenshots.length,
+        computedStyleSampleCount: snapshot.renderedCapture.computedStyleSamples.length,
+        structureSourceMode: snapshot.sourceMode,
         warningCodes,
         blockingReasonCodes,
       },
@@ -720,8 +742,11 @@ export async function runUrlImportOperatorFlow(
       snapshot: {
         snapshotId: snapshot?.snapshotId ?? null,
         snapshotRootDirAbs: snapshot?.snapshotRootDirAbs ?? null,
+        sourceMode: snapshot?.sourceMode ?? null,
+        responseHtmlPathAbs: snapshot?.responseHtmlPathAbs ?? null,
         entryHtmlPathAbs: snapshot?.entryHtmlPathAbs ?? null,
         assetsDirAbs: snapshot?.assetsDirAbs ?? null,
+        renderedCapture: snapshot?.renderedCapture ?? null,
         importDiagnostics: snapshot?.importDiagnostics ?? null,
         fetchManifest: snapshot?.fetchManifest ?? [],
       },

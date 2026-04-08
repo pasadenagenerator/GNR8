@@ -5,6 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 
+import type { RenderedCaptureExecutorResult } from "../../gnr8/import-rendered-capture";
 import type { JsonValue } from "../../gnr8/import/import-contract";
 import { stableStringify } from "../../gnr8/migration/runtime/diagnostics";
 import { importPublicSinglePageUrlToSnapshot } from "../../gnr8/validation/runtime/url-single-page-import";
@@ -67,6 +68,10 @@ function withEnv(input: { key: string; value?: string }, fn: () => Promise<void>
     if (typeof previous === "string") process.env[input.key] = previous;
     else delete process.env[input.key];
   });
+}
+
+function mockRenderedCaptureExecutor(result: RenderedCaptureExecutorResult) {
+  return async (): Promise<RenderedCaptureExecutorResult> => result;
 }
 
 test("url import snapshot generation remains deterministic for identical URL + response set", async () => {
@@ -142,6 +147,162 @@ test("url import snapshot generation remains deterministic for identical URL + r
   assert.equal(stableStringify(a.importDiagnostics as unknown as JsonValue), stableStringify(b.importDiagnostics as unknown as JsonValue));
 });
 
+test("rendered capture unavailable falls back to raw_html and preserves raw response html", async () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "gnr8-url-import-rendered-fallback-"));
+  const sourceUrl = "https://fallback-rendered.example.com/";
+
+  const snapshot = await importPublicSinglePageUrlToSnapshot({
+    sourceUrl,
+    snapshotRootDirAbs: tmp,
+    fetchImpl: mockFetchFromTable({
+      [sourceUrl]: {
+        status: 200,
+        headers: { "content-type": "text/html; charset=utf-8" },
+        body: "<!doctype html><html><body><h1>Raw Fallback</h1></body></html>",
+      },
+    }),
+    renderedCaptureExecutor: mockRenderedCaptureExecutor({
+      status: "unavailable",
+      document: null,
+      screenshots: [],
+      computedStyleSamples: [],
+      renderedObservedAssetUrls: [],
+      diagnostics: [
+        {
+          code: "RENDERED_CAPTURE_UNAVAILABLE",
+          severity: "warning",
+          message: "mock unavailable",
+        },
+      ],
+    }),
+  });
+
+  assert.equal(snapshot.sourceMode, "raw_html");
+  assert.equal(snapshot.renderedCapture.status, "unavailable");
+  assert.ok(snapshot.importDiagnostics.issues.some((issue) => issue.code === "RENDERED_CAPTURE_UNAVAILABLE"));
+  assert.equal(fs.existsSync(snapshot.responseHtmlPathAbs), true);
+  assert.equal(fs.existsSync(snapshot.entryHtmlPathAbs), true);
+  assert.equal(fs.readFileSync(snapshot.responseHtmlPathAbs, "utf8").includes("Raw Fallback"), true);
+  assert.equal(fs.readFileSync(snapshot.entryHtmlPathAbs, "utf8").includes("Raw Fallback"), true);
+});
+
+test("rendered capture contract is persisted and rendered_dom becomes primary snapshot source", async () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "gnr8-url-import-rendered-primary-"));
+  const sourceUrl = "https://rendered-primary.example.com/";
+  const screenshotBytes = new Uint8Array([137, 80, 78, 71, 1, 2, 3]);
+
+  const snapshot = await importPublicSinglePageUrlToSnapshot({
+    sourceUrl,
+    snapshotRootDirAbs: tmp,
+    fetchImpl: mockFetchFromTable({
+      [sourceUrl]: {
+        status: 200,
+        headers: { "content-type": "text/html; charset=utf-8" },
+        body: "<!doctype html><html><body><h1>Raw Source</h1></body></html>",
+      },
+      "https://rendered-primary.example.com/app.css": {
+        status: 200,
+        headers: { "content-type": "text/css" },
+        body: "body{font-family:system-ui}",
+      },
+    }),
+    renderedCaptureExecutor: mockRenderedCaptureExecutor({
+      status: "available",
+      document: {
+        html: "<!doctype html><html><body><h1>Rendered Source</h1><a class='cta'>Start</a></body></html>",
+        readinessState: "dom_stable",
+      },
+      screenshots: [
+        {
+          captureType: "desktop_viewport",
+          bytes: screenshotBytes,
+          width: 1366,
+          height: 768,
+          fullPage: false,
+        },
+      ],
+      computedStyleSamples: [
+        {
+          kind: "computed_style_sample_v1",
+          sampleId: "sample-root",
+          target: "root",
+          selector: "body",
+          tagName: "body",
+          className: null,
+          styles: {
+            fontFamily: "Inter",
+            fontSize: "16px",
+            fontWeight: "400",
+            lineHeight: "24px",
+            color: "rgb(0,0,0)",
+            backgroundColor: "rgb(255,255,255)",
+            borderRadius: "0px",
+            paddingTop: "0px",
+            paddingRight: "0px",
+            paddingBottom: "0px",
+            paddingLeft: "0px",
+          },
+        },
+      ],
+      renderedObservedAssetUrls: ["https://rendered-primary.example.com/app.css"],
+      diagnostics: [
+        {
+          code: "RENDERED_CAPTURE_TIMEOUT",
+          severity: "warning",
+          message: "mock timeout partial",
+        },
+      ],
+    }),
+  });
+
+  assert.equal(snapshot.sourceMode, "rendered_dom");
+  assert.equal(snapshot.renderedCapture.status, "available");
+  assert.equal(snapshot.renderedCapture.documents.length, 1);
+  assert.equal(snapshot.renderedCapture.screenshots.length, 1);
+  assert.equal(snapshot.renderedCapture.computedStyleSamples.length, 1);
+  assert.ok(snapshot.importDiagnostics.issues.some((issue) => issue.code === "RENDERED_CAPTURE_TIMEOUT"));
+  assert.ok(fs.readFileSync(snapshot.entryHtmlPathAbs, "utf8").includes("Rendered Source"));
+
+  const screenshotPath = snapshot.renderedCapture.screenshots[0]?.filePathAbs;
+  assert.ok(typeof screenshotPath === "string" && fs.existsSync(screenshotPath));
+});
+
+test("rendered capture failure emits diagnostics and still returns snapshot output", async () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "gnr8-url-import-rendered-failed-"));
+  const sourceUrl = "https://rendered-failed.example.com/";
+
+  const snapshot = await importPublicSinglePageUrlToSnapshot({
+    sourceUrl,
+    snapshotRootDirAbs: tmp,
+    fetchImpl: mockFetchFromTable({
+      [sourceUrl]: {
+        status: 200,
+        headers: { "content-type": "text/html; charset=utf-8" },
+        body: "<!doctype html><html><body><h1>Fallback on failure</h1></body></html>",
+      },
+    }),
+    renderedCaptureExecutor: mockRenderedCaptureExecutor({
+      status: "failed",
+      document: null,
+      screenshots: [],
+      computedStyleSamples: [],
+      renderedObservedAssetUrls: [],
+      diagnostics: [
+        {
+          code: "RENDERED_CAPTURE_FAILED",
+          severity: "error",
+          message: "mock rendered capture failed",
+        },
+      ],
+    }),
+  });
+
+  assert.equal(snapshot.sourceMode, "raw_html");
+  assert.equal(snapshot.renderedCapture.status, "failed");
+  assert.ok(snapshot.importDiagnostics.issues.some((issue) => issue.code === "RENDERED_CAPTURE_FAILED"));
+  assert.equal(fs.existsSync(snapshot.entryHtmlPathAbs), true);
+});
+
 test("url import operator runs imported snapshot through pipeline and materialize mode", async () => {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "gnr8-url-import-materialize-"));
   const outputRootDir = path.resolve(tmp, "bundle-out");
@@ -192,6 +353,52 @@ test("url import operator runs imported snapshot through pipeline and materializ
   assert.equal(response.result.executionResult.executionMode, "materialize");
   assert.equal(response.result.executionResult.materialization.outputRootPath, outputRootDir);
   assert.ok(response.result.executionResult.status === "executed" || response.result.executionResult.status === "executed_with_warnings");
+});
+
+test("pipeline succeeds when rendered capture is unavailable and reports raw_html source mode", async () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "gnr8-url-import-no-rendered-"));
+  const outputRootDir = path.resolve(tmp, "bundle-out");
+
+  const response = await runUrlImportOperatorFlow(
+    {
+      sourceUrl: "https://no-rendered.example.com/",
+      executionMode: "materialize",
+    },
+    {
+      snapshotRootDirAbs: path.resolve(tmp, "snapshots"),
+      outputRootDir,
+      fetchImpl: mockFetchFromTable({
+        "https://no-rendered.example.com/": {
+          status: 200,
+          headers: { "content-type": "text/html" },
+          body: "<!doctype html><html><body><h1>No rendered</h1></body></html>",
+        },
+      }),
+      renderedCaptureExecutor: mockRenderedCaptureExecutor({
+        status: "unavailable",
+        document: null,
+        screenshots: [],
+        computedStyleSamples: [],
+        renderedObservedAssetUrls: [],
+        diagnostics: [
+          {
+            code: "RENDERED_CAPTURE_UNAVAILABLE",
+            severity: "warning",
+            message: "mock unavailable",
+          },
+        ],
+      }),
+    },
+  );
+
+  assert.equal(response.ok, true);
+  if (!response.ok) return;
+  assert.equal(response.summary.structureSourceMode, "raw_html");
+  assert.equal(response.summary.renderedCaptureStatus, "unavailable");
+  assert.equal(response.summary.renderedDomCaptured, false);
+  assert.equal(response.summary.screenshotCount, 0);
+  assert.equal(response.summary.computedStyleSampleCount, 0);
+  assert.equal(response.result.pipelineResult.status, "success");
 });
 
 test("url import hardens image/style assets and filters non-visual script/jsonld noise from exported markup", async () => {
