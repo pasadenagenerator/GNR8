@@ -36,10 +36,20 @@ function dedupeKeepOrder(values: string[]): string[] {
   return out;
 }
 
+function countRegex(text: string, pattern: RegExp): number {
+  return (text.match(pattern) ?? []).length;
+}
+
 function estimateBlockScore(html: string): number {
   const txt = textFromHtml(html);
   const imgCount = extractAllImgSrc(html).length;
   return txt.length + imgCount * 20;
+}
+
+function wordCount(text: string): number {
+  const normalized = normalizeWhitespace(text);
+  if (!normalized) return 0;
+  return normalized.split(/\s+/).length;
 }
 
 function filterLikelyMeaningfulBlocks(blocks: string[]): string[] {
@@ -95,13 +105,25 @@ function isLikelyNavbar(blockHtml: string): boolean {
   const hasNav = /<nav\b/i.test(blockHtml) || /<header\b/i.test(blockHtml);
   const links = extractAllAnchorLinks(blockHtml, 30);
   const linkCount = links.length;
-  if (linkCount < 2 || linkCount > 12) return false;
+  if (linkCount < 3 || linkCount > 14) return false;
 
-  const txtLen = textFromHtml(blockHtml).length;
+  const text = textFromHtml(blockHtml);
+  const txtLen = text.length;
+  const words = wordCount(text);
   const pCount = (blockHtml.match(/<p\b/gi) ?? []).length;
+  const headingCount = (blockHtml.match(/<h[1-6]\b/gi) ?? []).length;
+  const longParagraphCount = [...blockHtml.matchAll(/<p\b[^>]*>([\s\S]*?)<\/p>/gi)]
+    .map((match) => normalizeWhitespace(textFromHtml(match[1] ?? "")))
+    .filter((paragraph) => paragraph.length >= 120).length;
+  const questionLikeCount = countRegex(text, /\?/gi);
+  const serviceNarrativeHits = countRegex(text.toLowerCase(), /\b(service|services|feature|features|about|mission|story)\b/gi);
+  const linkDensity = linkCount / Math.max(1, words);
+  const denseNarrative = words >= 70 || longParagraphCount > 0 || serviceNarrativeHits >= 2;
+  if (denseNarrative) return false;
+  if (questionLikeCount >= 3) return false;
 
-  if (hasNav) return txtLen <= 600 && pCount <= 1;
-  return txtLen <= 300 && pCount === 0;
+  if (hasNav) return txtLen <= 460 && pCount <= 1 && headingCount <= 1 && linkDensity >= 0.06;
+  return txtLen <= 240 && pCount === 0 && headingCount <= 1 && linkDensity >= 0.1;
 }
 
 function detectNavbarBasic(blockHtml: string): Gnr8Section | null {
@@ -253,6 +275,7 @@ function detectPricingBasic(blockHtml: string): Gnr8Section | null {
 function detectFaqBasic(blockHtml: string): Gnr8Section | null {
   const htmlLower = blockHtml.toLowerCase();
   const hasFaqWord = /\bfaq\b/i.test(htmlLower);
+  const hasFaqHeading = /<h[1-4][^>]*>\s*(?:frequently asked questions|faq|questions)\s*<\/h[1-4]>/i.test(blockHtml);
   const hasDetails = /<details\b/i.test(blockHtml) && /<summary\b/i.test(blockHtml);
 
   const items: Array<{ question: string; answer: string }> = [];
@@ -290,7 +313,18 @@ function detectFaqBasic(blockHtml: string): Gnr8Section | null {
   if (cleaned.length < 2) return null;
 
   const questionyCount = cleaned.filter((i) => i.question.endsWith("?") || /^(what|how|why|can|do|does|is|are)\b/i.test(i.question)).length;
-  if (!hasFaqWord && !hasDetails && questionyCount < 1) return null;
+  const avgAnswerWords = cleaned.length > 0 ? Math.round(cleaned.reduce((sum, item) => sum + wordCount(item.answer), 0) / cleaned.length) : 0;
+  const repeatedQaPattern = questionyCount >= Math.ceil(cleaned.length * 0.6);
+  const links = extractAllAnchorLinks(blockHtml, 40);
+  const text = textFromHtml(blockHtml);
+  const denseNarrative = wordCount(text) >= 180;
+
+  if (cleaned.length < 3 && !hasDetails && !hasFaqWord && !hasFaqHeading) return null;
+  if (!hasDetails && !hasFaqWord && !hasFaqHeading && (!repeatedQaPattern || cleaned.length < 4)) return null;
+  if (!hasDetails && avgAnswerWords < 8) return null;
+  if (!hasFaqWord && !hasFaqHeading && links.length >= 10) return null;
+  if (denseNarrative && cleaned.length < 4) return null;
+  if (!hasFaqWord && !hasFaqHeading && questionyCount < 2) return null;
 
   return makeSection("faq.basic", { items: cleaned.slice(0, 12) });
 }

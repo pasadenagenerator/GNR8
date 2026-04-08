@@ -97,6 +97,7 @@ test('import fidelity signals are parsed from semantic signal labels', () => {
       path: '/',
       title: 'Home',
       structure_model: null,
+      content_model: null,
       migration_governance: null,
       semantic_signals: [
         { label: 'import.source_mode:rendered_dom' },

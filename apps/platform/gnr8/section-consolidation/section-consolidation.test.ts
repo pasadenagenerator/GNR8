@@ -25,6 +25,7 @@ function block(input: Partial<RawBlock> & { id: string; domPath: string; ordinal
     hasHeading: input.hasHeading ?? false,
     hasImages: input.hasImages ?? false,
     hasCTA: input.hasCTA ?? false,
+    anchorCount: input.anchorCount ?? 0,
     hasFooterHint: input.hasFooterHint ?? false,
     hasNavHint: input.hasNavHint ?? false,
     hasLegalHint: input.hasLegalHint ?? false,
@@ -108,6 +109,36 @@ test("fallback path keeps sections separate when merge boundary is strong", () =
 
   assert.equal(result.outputSectionCount, 2);
   assert.ok(result.diagnostics.some((d) => d.code === "SECTION_MERGE_MINIMAL"));
+});
+
+test("nav cluster does not over-merge into nearby narrative hero/content", () => {
+  const result = consolidateSections({
+    blocks: [
+      block({
+        id: "nav",
+        domPath: "html>body>header:nth-of-type(1)>nav:nth-of-type(1)",
+        ordinalIndex: 0,
+        tagName: "nav",
+        hasNavHint: true,
+        textWordCount: 20,
+        textDensity: 0.12,
+        anchorCount: 7,
+      }),
+      block({
+        id: "hero-content",
+        domPath: "html>body>main:nth-of-type(1)>section:nth-of-type(1)",
+        ordinalIndex: 1,
+        hasHeading: true,
+        hasCTA: true,
+        textWordCount: 96,
+        textDensity: 0.52,
+        anchorCount: 1,
+      }),
+    ],
+  });
+
+  assert.equal(result.outputSectionCount, 2, "navigation should stay separate from narrative hero/content");
+  assert.ok(result.diagnostics.some((d) => d.code === "NAVBAR_BOUNDARY_PROTECTED"));
 });
 
 test("consolidation is deterministic for identical input", () => {

@@ -55,7 +55,12 @@ export type SemanticDiagnosticCode =
   | "SECTION_MERGE_HEAVY"
   | "SECTION_MERGE_MINIMAL"
   | "SECTION_BOUNDARY_UNCERTAIN"
-  | "FOOTER_FALSE_POSITIVE_PREVENTED";
+  | "FOOTER_FALSE_POSITIVE_PREVENTED"
+  | "NAVBAR_BOUNDARY_PROTECTED"
+  | "FAQ_FALSE_POSITIVE_RISK"
+  | "NAVBAR_FALSE_POSITIVE_RISK"
+  | "HERO_RECONSTRUCTION_APPLIED"
+  | "SERVICES_PATTERN_DETECTED";
 
 export type SemanticDiagnostic = {
   code: SemanticDiagnosticCode;
@@ -116,7 +121,12 @@ export type SectionSemanticModel = {
     ctaCandidate: number;
     contentCandidate: number;
     footerCandidate: number;
+    servicesCandidate: number;
+    galleryCandidate: number;
+    dominantCandidate: SectionSemanticType;
   };
+  dominantRationale: string;
+  classificationDiagnostics: SemanticDiagnosticCode[];
   heroComposition: HeroCompositionHint | null;
   mediaDensity: number;
   galleryLikeConfidence: SemanticConfidence;
@@ -785,6 +795,7 @@ function toRawSemanticBlock(section: PreparedDomOutlineElement, ordinalIndex: nu
   const headingCount = flat.reduce((sum, el) => sum + (/^h[1-6]$/.test(el.tagName) ? 1 : 0), 0);
   const mediaCount = flat.reduce((sum, el) => sum + (["img", "picture", "figure", "video", "canvas", "svg"].includes(el.tagName) ? 1 : 0), 0);
   const buttonLikeCount = countRegex(lowerText, CTA_PATTERN);
+  const anchorCount = countRegex(markup, /<a\b/gi);
   const footerHints = normalizeToken(`${section.domPath} ${section.className ?? ""} ${section.id ?? ""}`);
   const repetitionHint = Math.min(
     1,
@@ -810,6 +821,7 @@ function toRawSemanticBlock(section: PreparedDomOutlineElement, ordinalIndex: nu
     hasHeading: headingCount > 0,
     hasImages: mediaCount > 0,
     hasCTA: buttonLikeCount > 0 || /<a\b|<button\b/i.test(markup),
+    anchorCount,
     hasFooterHint: section.tagName === "footer" || footerHints.includes("footer"),
     hasNavHint:
       section.tagName === "header" ||
@@ -837,11 +849,21 @@ function classifyConsolidatedSection(input: {
   likelyPrimaryCta: CtaCandidate | null;
   density: SectionDensitySignal;
   candidateSignals: SectionSemanticModel["candidateSignals"];
+  dominantRationale: string;
+  diagnostics: Array<{ code: SemanticDiagnosticCode; severity: "info" | "warning"; message: string }>;
+  classificationDiagnostics: SemanticDiagnosticCode[];
 } {
   const signals = input.section.signals;
   const candidates = input.section.candidates;
   const topWindow = input.ordinalIndex <= 1;
   const bottomWindow = input.ordinalIndex >= Math.max(0, input.sectionCount - 2);
+  const diagnostics: Array<{ code: SemanticDiagnosticCode; severity: "info" | "warning"; message: string }> = [];
+  const linkDensity = signals.anchorCount / Math.max(1, signals.textWordCount);
+  const navLikely = topWindow && signals.navHintCount > 0 && signals.anchorCount >= 3;
+  const navMixedNarrative = navLikely && (signals.textWordCount >= 70 || linkDensity < 0.05 || signals.headingCount >= 2);
+  const footerNarrativeRisk = signals.textWordCount >= 72 && signals.headingCount > 0 && !bottomWindow;
+  const heroCluster = topWindow && signals.hasHeading && (signals.hasCTA || signals.hasImages || signals.textWordCount <= 140);
+  const servicesPattern = signals.repetitionScore >= 0.24 && (signals.headingCount >= 1 || signals.imageCount >= 2);
 
   const scores: Record<SectionSemanticType, number> = {
     header: 0,
@@ -858,26 +880,73 @@ function classifyConsolidatedSection(input: {
     unknown: 0.24,
   };
 
-  if (topWindow && signals.navHintCount > 0) {
-    scores.navigation += 0.82;
-    scores.header += 0.6;
+  if (navLikely) {
+    scores.navigation += 0.62;
+    scores.header += 0.45;
+    if (linkDensity >= 0.07 && signals.textWordCount <= 84) {
+      scores.navigation += 0.36;
+      scores.header += 0.16;
+    }
   }
-  if (topWindow && signals.hasHeading && (signals.hasImages || signals.hasCTA)) scores.hero += 0.24;
+  if (heroCluster) scores.hero += 0.28;
+  if (heroCluster && input.section.blockIds.length >= 2) {
+    scores.hero += 0.14;
+    diagnostics.push({
+      code: "HERO_RECONSTRUCTION_APPLIED",
+      severity: "info",
+      message: "Top-of-page fragmented hero signals were consolidated into a hero candidate.",
+    });
+  }
   if (signals.hasCTA && signals.textWordCount <= 120) scores.cta += 0.18;
   if (signals.repetitionScore >= 0.35 && signals.hasImages) scores.gallery += 0.14;
-  if (signals.repetitionScore >= 0.35 && signals.textWordCount >= 24) {
-    scores.services += 0.14;
+  if (signals.repetitionScore >= 0.24 && signals.textWordCount >= 24) {
+    scores.services += 0.12;
     scores.features += 0.1;
+  }
+  if (servicesPattern && signals.textWordCount >= 24) {
+    scores.services += 0.2;
+    scores.features += 0.16;
+    diagnostics.push({
+      code: "SERVICES_PATTERN_DETECTED",
+      severity: "info",
+      message: "Repeated structured service/feature pattern detected in consolidated section.",
+    });
   }
   if (bottomWindow && (signals.footerHintCount > 0 || signals.legalHintCount > 0)) scores.footer += 0.24;
   if (signals.footerHintCount > 0 && signals.hasCTA && signals.hasHeading && signals.textWordCount > 20) {
     scores.footer = Math.max(0, scores.footer - 0.2);
+  }
+  if (footerNarrativeRisk) {
+    scores.footer = Math.max(0, scores.footer - 0.24);
   }
   if (signals.textWordCount >= 40 && scores.hero < 0.55 && scores.footer < 0.55) {
     scores.about += 0.36;
     scores.features += 0.22;
   }
   if (signals.contactHintCount > 0 && signals.hasCTA) scores.contact += 0.12;
+  if (navMixedNarrative) {
+    scores.navigation = Math.max(0, scores.navigation - 0.44);
+    scores.header = Math.max(0, scores.header - 0.28);
+    diagnostics.push({
+      code: "NAVBAR_FALSE_POSITIVE_RISK",
+      severity: "warning",
+      message: "Navigation candidate downweighted because narrative/content signals dominate the section.",
+    });
+  }
+  if (signals.headingCount >= 2 && signals.textWordCount >= 80 && signals.repetitionScore < 0.24) {
+    diagnostics.push({
+      code: "FAQ_FALSE_POSITIVE_RISK",
+      severity: "info",
+      message: "Question-like heading density present without strong FAQ pattern; content-oriented types prioritized.",
+    });
+  }
+  if (candidates.servicesCandidate >= 0.34 && !diagnostics.some((entry) => entry.code === "SERVICES_PATTERN_DETECTED")) {
+    diagnostics.push({
+      code: "SERVICES_PATTERN_DETECTED",
+      severity: "info",
+      message: "Services/features candidate remained strong after consolidation scoring.",
+    });
+  }
 
   const ranked = (Object.keys(scores) as SectionSemanticType[])
     .map((k) => ({ type: k, score: scores[k] }))
@@ -915,15 +984,32 @@ function classifyConsolidatedSection(input: {
   const headingDensity = Math.min(1, signals.headingCount / Math.max(1, input.section.blockIds.length));
   const ctaDensity = Math.min(1, signals.ctaCount / Math.max(1, signals.textWordCount / 30));
   const repetitionDensity = Math.min(1, signals.repetitionScore);
+  const acceptanceThreshold: Record<SectionSemanticType, number> = {
+    header: 0.7,
+    navigation: 0.78,
+    hero: 0.54,
+    cta: 0.56,
+    about: 0.53,
+    services: 0.56,
+    features: 0.56,
+    gallery: 0.55,
+    testimonials: 0.56,
+    contact: 0.58,
+    footer: 0.74,
+    unknown: 0,
+  };
+  const inferredType = best.score < acceptanceThreshold[best.type] ? "unknown" : best.type;
+  const dominantRationale = `dominant_candidate=${best.type}:${best.score.toFixed(2)} runner_up=${second.type}:${second.score.toFixed(2)}`;
 
   return {
-    inferredType: best.score < 0.5 ? "unknown" : best.type,
+    inferredType,
     confidence,
     rationale: uniqueSortedStrings([
       ...input.section.rationale,
       `semantic_score=${best.score.toFixed(2)}`,
       `semantic_runner_up=${second.type}:${second.score.toFixed(2)}`,
       `semantic_confidence=${rawConfidence.toFixed(2)}`,
+      dominantRationale,
     ]),
     heroComposition,
     mediaDensity: Number(mediaDensity.toFixed(3)),
@@ -944,7 +1030,13 @@ function classifyConsolidatedSection(input: {
       ctaCandidate: Number(candidates.ctaCandidate.toFixed(3)),
       contentCandidate: Number(candidates.contentCandidate.toFixed(3)),
       footerCandidate: Number(candidates.footerCandidate.toFixed(3)),
+      servicesCandidate: Number(candidates.servicesCandidate.toFixed(3)),
+      galleryCandidate: Number(candidates.galleryCandidate.toFixed(3)),
+      dominantCandidate: best.type,
     },
+    dominantRationale,
+    diagnostics,
+    classificationDiagnostics: diagnostics.map((entry) => entry.code),
   };
 }
 
@@ -1254,6 +1346,12 @@ function buildPageSemanticModel(input: {
   const blockByDomPath = new Map(boundaryChildren.map((section) => [section.domPath, section]));
   const consolidation = consolidateSections({ blocks: rawBlocks });
   const sectionCount = consolidation.sections.length;
+  const sectionClassificationDiagnostics: Array<{
+    sectionId: string;
+    code: SemanticDiagnosticCode;
+    severity: "info" | "warning";
+    message: string;
+  }> = [];
   const sections = consolidation.sections.map((consolidated, idx) => {
     const classified = classifyConsolidatedSection({
       section: consolidated,
@@ -1262,6 +1360,15 @@ function buildPageSemanticModel(input: {
     });
     const sourceDomPath = consolidated.sourceDomPaths[0] ?? `consolidated:${String(idx)}`;
     const sectionId = sectionSemanticId({ pageId: input.pageId, sourceDomPath, ordinalIndex: idx });
+    for (const entry of classified.diagnostics) {
+      sectionClassificationDiagnostics.push({
+        sectionId,
+        code: entry.code,
+        severity: entry.severity,
+        message: entry.message,
+      });
+    }
+    const { diagnostics: _omitDiagnostics, ...classifiedModel } = classified;
     const sourceBlock = blockByDomPath.get(sourceDomPath);
     return {
       sectionId,
@@ -1275,7 +1382,7 @@ function buildPageSemanticModel(input: {
       consolidationRationale: consolidated.rationale,
       consolidationMergeDecisions: consolidated.mergeDecisions,
       ordinalIndex: idx,
-      ...classified,
+      ...classifiedModel,
       density: {
         ...classified.density,
         textDensity:
@@ -1309,6 +1416,15 @@ function buildPageSemanticModel(input: {
       message: consolidationDiagnostic.message,
       pageId: input.pageId,
       sectionId: null,
+    });
+  }
+  for (const sectionDiagnostic of sectionClassificationDiagnostics) {
+    diagnostics.push({
+      code: sectionDiagnostic.code,
+      severity: sectionDiagnostic.severity,
+      message: sectionDiagnostic.message,
+      pageId: input.pageId,
+      sectionId: sectionDiagnostic.sectionId,
     });
   }
   if (page.pageType === "unknown") {

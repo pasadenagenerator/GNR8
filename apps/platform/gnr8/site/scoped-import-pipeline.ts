@@ -132,8 +132,12 @@ function mapSectionsFromSemantic(input: {
         semanticType: section.inferredType,
         confidence: section.confidence,
         rationale: section.rationale,
+        dominantRationale: section.dominantRationale,
+        classificationDiagnostics: section.classificationDiagnostics,
         sourceDomPaths: section.sourceDomPaths,
         blockIds: section.blockIds,
+        mergedBlockCount: section.consolidatedBlockCount,
+        candidateSignals: section.candidateSignals,
         layoutStructural: {
           intent: SECTION_INTENT_BY_SEMANTIC_TYPE[section.inferredType] ?? 'body',
           structuralConfidence: confidenceToScore(section.confidence),

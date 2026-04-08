@@ -77,3 +77,32 @@ test("layout hint prevents nav block from being classified as hero", () => {
 
   assert.equal(section.type, "navbar.basic");
 });
+
+test("navbar detector avoids mixed narrative blocks with incidental links", () => {
+  const block = [
+    "<section>",
+    "  <h2>What we do</h2>",
+    "  <p>We provide deterministic migrations, implementation support, and long-term optimization for growth teams.</p>",
+    "  <p><a href=\"/services\">Services</a> <a href=\"/about\">About</a> <a href=\"/contact\">Contact</a></p>",
+    "</section>",
+  ].join("\n");
+
+  const section = detectSectionFromHtmlBlock(block);
+  assert.notEqual(section.type, "navbar.basic");
+});
+
+test("faq detector avoids classifying mixed content as faq without repeated qa pattern", () => {
+  const block = [
+    "<section>",
+    "  <h2>How we work</h2>",
+    "  <p>We start with a structural audit and then tune section boundaries and confidence signals.</p>",
+    "  <h3>Implementation</h3>",
+    "  <p>Each migration is deterministic and reviewed in structure, design, and preview views.</p>",
+    "  <h3>Support</h3>",
+    "  <p>Contact us for rollout support and optimization.</p>",
+    "</section>",
+  ].join("\n");
+
+  const section = detectSectionFromHtmlBlock(block);
+  assert.notEqual(section.type, "faq.basic");
+});

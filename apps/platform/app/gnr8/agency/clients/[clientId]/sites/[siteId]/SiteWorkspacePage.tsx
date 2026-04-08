@@ -142,6 +142,12 @@ function renderStructureContent(readModel: Awaited<ReturnType<typeof getSiteWork
                   Confidence: {row.confidenceLabel} ({row.confidenceScore.toFixed(2)})
                 </div>
                 <div>
+                  Merged blocks: {row.mergedBlockCount ?? 'n/a'} · Dominant candidate: {row.dominantCandidate ?? 'n/a'}
+                </div>
+                <div>
+                  Top rationale: {row.dominantRationale ?? 'n/a'}
+                </div>
+                <div>
                   Diagnostics:{' '}
                   {row.keyDiagnostics.length > 0 ? row.keyDiagnostics.join(', ') : 'none'}
                 </div>

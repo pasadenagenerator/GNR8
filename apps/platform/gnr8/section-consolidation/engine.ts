@@ -54,6 +54,10 @@ function groupHasCTA(group: SectionGroup, index: Map<string, RawBlock>): boolean
   return groupSourceBlocks(group, index).some((block) => block.hasCTA);
 }
 
+function groupAnchorCount(group: SectionGroup, index: Map<string, RawBlock>): number {
+  return groupSourceBlocks(group, index).reduce((sum, block) => sum + block.anchorCount, 0);
+}
+
 function groupHasFooter(group: SectionGroup, index: Map<string, RawBlock>): boolean {
   return groupSourceBlocks(group, index).some((block) => block.hasFooterHint || block.hasLegalHint || block.tagName === "footer");
 }
@@ -94,6 +98,12 @@ function shouldMerge(input: {
   const rightIsNav = groupHasNav(input.right, input.index);
   const leftIsFooter = groupHasFooter(input.left, input.index);
   const rightIsFooter = groupHasFooter(input.right, input.index);
+  const leftWords = leftBlocks.reduce((sum, block) => sum + block.textWordCount, 0);
+  const rightWords = rightBlocks.reduce((sum, block) => sum + block.textWordCount, 0);
+  const leftAnchors = leftBlocks.reduce((sum, block) => sum + block.anchorCount, 0);
+  const rightAnchors = rightBlocks.reduce((sum, block) => sum + block.anchorCount, 0);
+  const leftNarrative = leftWords >= 42 && leftWords >= Math.max(20, leftAnchors * 4);
+  const rightNarrative = rightWords >= 42 && rightWords >= Math.max(20, rightAnchors * 4);
   if ((leftIsNav && rightIsFooter) || (leftIsFooter && rightIsNav)) {
     return {
       merge: false,
@@ -106,6 +116,27 @@ function shouldMerge(input: {
       merge: false,
       rationale: ["hard_boundary_footer_transition"],
       decision: "hold:hard_boundary_footer_transition",
+    };
+  }
+  if (leftIsNav !== rightIsNav && (leftNarrative || rightNarrative)) {
+    return {
+      merge: false,
+      rationale: ["hard_boundary_nav_content_transition"],
+      decision: "hold:hard_boundary_nav_content_transition",
+    };
+  }
+  if (rightIsFooter && leftWords >= 64 && !leftIsFooter) {
+    return {
+      merge: false,
+      rationale: ["hard_boundary_content_footer_transition"],
+      decision: "hold:hard_boundary_content_footer_transition",
+    };
+  }
+  if (leftIsFooter && rightWords >= 64 && !rightIsFooter) {
+    return {
+      merge: false,
+      rationale: ["hard_boundary_footer_content_transition"],
+      decision: "hold:hard_boundary_footer_content_transition",
     };
   }
 
@@ -156,6 +187,12 @@ function shouldMerge(input: {
   if (groupHasHeading(input.left, input.index) && groupHasHeading(input.right, input.index)) {
     score -= 0.18;
     reasons.push("dual_heading_boundary");
+  }
+
+  const combinedAnchors = groupAnchorCount(input.left, input.index) + groupAnchorCount(input.right, input.index);
+  if (combinedAnchors >= 12 && (leftNarrative || rightNarrative)) {
+    score -= 0.3;
+    reasons.push("mixed_nav_narrative_boundary");
   }
 
   const topWindow = Math.max(1, Math.floor(input.maxOrdinal * 0.32));
@@ -209,6 +246,7 @@ function mergeAdjacentGroups(input: {
   const maxOrdinal = input.groups.reduce((max, group) => Math.max(max, group.domIndexEnd), 0);
   let current = input.groups.slice();
   let pass = 0;
+  let protectedNavBoundaryCount = 0;
 
   while (pass < 4) {
     pass += 1;
@@ -232,6 +270,9 @@ function mergeAdjacentGroups(input: {
       });
 
       if (!decision.merge) {
+        if (decision.rationale.includes("hard_boundary_nav_content_transition")) {
+          protectedNavBoundaryCount += 1;
+        }
         next.push(left);
         continue;
       }
@@ -263,6 +304,14 @@ function mergeAdjacentGroups(input: {
         details: { uncertainBoundaries },
       });
     }
+    if (protectedNavBoundaryCount > 0) {
+      input.diagnostics.push({
+        code: "NAVBAR_BOUNDARY_PROTECTED",
+        severity: "info",
+        message: "Navigation-like boundary was preserved to avoid over-merging into narrative content.",
+        details: { protectedNavBoundaries: protectedNavBoundaryCount },
+      });
+    }
   }
 
   return current;
@@ -278,6 +327,7 @@ function groupToConsolidatedSection(group: SectionGroup, index: Map<string, RawB
   const headingCount = blocks.filter((block) => block.hasHeading).length;
   const imageCount = blocks.filter((block) => block.hasImages).length;
   const ctaCount = blocks.filter((block) => block.hasCTA).length;
+  const anchorCount = blocks.reduce((sum, block) => sum + block.anchorCount, 0);
   const footerHintCount = blocks.filter((block) => block.hasFooterHint).length;
   const navHintCount = blocks.filter((block) => block.hasNavHint).length;
   const legalHintCount = blocks.filter((block) => block.hasLegalHint).length;
@@ -300,6 +350,7 @@ function groupToConsolidatedSection(group: SectionGroup, index: Map<string, RawB
   if (imageCount > 0) heroCandidate += 0.16;
   if (ctaCount > 0) heroCandidate += 0.15;
   if (textWordCount >= 10 && textWordCount <= 180) heroCandidate += 0.12;
+  if (nearTop && headingCount > 0 && (ctaCount > 0 || imageCount > 0) && group.blockIds.length >= 2) heroCandidate += 0.18;
 
   if (ctaCount > 0) ctaCandidate += 0.35;
   if (textWordCount >= 8 && textWordCount <= 120) ctaCandidate += 0.2;
@@ -310,17 +361,23 @@ function groupToConsolidatedSection(group: SectionGroup, index: Map<string, RawB
   contentCandidate += headingCount > 0 ? 0.12 : 0;
   contentCandidate += textWordCount >= 40 ? 0.24 : textWordCount >= 16 ? 0.12 : 0;
   contentCandidate += nearTop ? 0.04 : 0.1;
+  if (navHintCount > 0 && anchorCount >= 8 && textWordCount <= 50) contentCandidate = Math.max(0, contentCandidate - 0.2);
 
   if (nearBottom) footerCandidate += 0.24;
   if (footerHintCount > 0) footerCandidate += 0.36;
   if (legalHintCount > 0) footerCandidate += 0.3;
   if (contactHintCount > 0) footerCandidate += 0.18;
   if (ctaCount > 0 && headingCount > 0 && textWordCount > 18) footerCandidate -= 0.2;
+  if (textWordCount >= 84 && headingCount > 0 && !nearBottom) footerCandidate -= 0.22;
 
   if (repetitionScore >= 0.35) servicesCandidate += 0.35;
+  else if (repetitionScore >= 0.24) servicesCandidate += 0.24;
+  else if (repetitionScore >= 0.14) servicesCandidate += 0.12;
   if (headingCount > 0) servicesCandidate += 0.14;
   if (textWordCount >= 20) servicesCandidate += 0.18;
   if (imageCount >= 2) servicesCandidate += 0.08;
+  if (repetitionScore >= 0.45 && group.blockIds.length >= 2) servicesCandidate += 0.12;
+  if (anchorCount >= 10 && textWordCount <= 70) servicesCandidate = Math.max(0, servicesCandidate - 0.14);
 
   if (imageCount >= 2) galleryCandidate += 0.34;
   if (repetitionScore >= 0.35) galleryCandidate += 0.17;
@@ -354,6 +411,7 @@ function groupToConsolidatedSection(group: SectionGroup, index: Map<string, RawB
       headingCount,
       imageCount,
       ctaCount,
+      anchorCount,
       footerHintCount,
       navHintCount,
       legalHintCount,

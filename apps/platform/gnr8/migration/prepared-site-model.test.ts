@@ -290,8 +290,47 @@ test("section consolidation reconstructs hero from split nodes and prevents foot
   assert.ok(doc?.semantic);
 
   assert.ok(doc!.semantic!.sections.some((section) => section.inferredType === "hero" && section.consolidatedBlockCount >= 2));
+  assert.ok(doc!.semantic!.diagnostics.some((d) => d.code === "HERO_RECONSTRUCTION_APPLIED"));
   const footerSections = doc!.semantic!.sections.filter((section) => section.inferredType === "footer");
   assert.ok(footerSections.length <= 1, "footer should not dominate all sections");
+});
+
+test("semantic tuning favors services/features patterns and mitigates nav false positives on mixed sections", async () => {
+  const tmpRoot = await fs.mkdtemp(path.join(os.tmpdir(), "gnr8-semantic-services-pattern-"));
+  const html = [
+    "<!doctype html>",
+    "<html><head><meta charset=\"utf-8\"><title>Services Pattern Fixture</title></head>",
+    "<body><main>",
+    "<header class=\"site-nav\"><h2>Navigation</h2><p>Home About Services Contact</p><p>We build and operate deterministic migration systems with rollout safety and post-launch optimization support.</p></header>",
+    "<section class=\"hero\"><h1>Scale safely with deterministic migration</h1><p>Top-level intro copy with clear value proposition.</p><a href=\"#contact\">Book a demo</a><img src=\"/hero.jpg\" alt=\"Hero\" /></section>",
+    "<div class=\"services-heading\"><h2>Services</h2></div>",
+    "<div class=\"service-card\"><h3>Migration planning</h3><p>Roadmap and sequencing.</p></div>",
+    "<div class=\"service-card\"><h3>Implementation</h3><p>Deterministic rollout.</p></div>",
+    "<div class=\"service-card\"><h3>Optimization</h3><p>Continuous refinement.</p></div>",
+    "<footer><p>Copyright 2026</p><a href=\"#privacy\">Privacy</a><a href=\"#terms\">Terms</a></footer>",
+    "</main></body></html>",
+  ].join("");
+  await fs.writeFile(path.join(tmpRoot, "index.html"), html, "utf-8");
+
+  const importOutput = await importStaticSite({
+    rootDir: tmpRoot,
+    requestId: "req-semantic-services-pattern",
+    source: { kind: "single-entry-html", entryHtmlPath: "index.html" },
+  });
+  const prepared = createPreparedSiteModel({ importOutput, importManifest: createImportManifest(importOutput) });
+  const doc = prepared.documents.find((d) => d.path === "index.html");
+  assert.ok(doc?.semantic);
+
+  assert.ok(
+    doc!.semantic!.sections.some(
+      (section) =>
+        section.inferredType === "services" ||
+        section.inferredType === "features" ||
+        section.candidateSignals.servicesCandidate >= 0.4,
+    ),
+    "services/features candidate should remain strong for repeated card-like blocks",
+  );
+  assert.ok(doc!.semantic!.diagnostics.some((d) => d.code === "SERVICES_PATTERN_DETECTED"));
 });
 
 test("section consolidation remains deterministic across repeated prepared model creation", async () => {

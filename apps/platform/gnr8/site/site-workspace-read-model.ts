@@ -29,6 +29,7 @@ type RuntimePageVersionRow = {
   path: string | null
   title: string | null
   structure_model: unknown
+  content_model: unknown
   semantic_signals: unknown
   migration_governance: unknown
 }
@@ -78,6 +79,9 @@ type StructureSectionRow = {
   ordinalIndex: number
   confidenceLabel: 'low' | 'medium' | 'high'
   confidenceScore: number
+  mergedBlockCount: number | null
+  dominantCandidate: string | null
+  dominantRationale: string | null
   keyDiagnostics: string[]
 }
 
@@ -339,6 +343,8 @@ function parseStructureRows(pageRows: RuntimePageVersionRow[]): StructureSection
       : []
 
     const structureModel = isRecord(page.structure_model) ? page.structure_model : null
+    const contentModel = isRecord(page.content_model) ? page.content_model : null
+    const sectionPropsById = isRecord(contentModel?.sectionProps) ? (contentModel.sectionProps as Record<string, unknown>) : {}
     const sections = Array.isArray(structureModel?.sections) ? structureModel.sections : []
 
     for (let index = 0; index < sections.length; index += 1) {
@@ -347,6 +353,16 @@ function parseStructureRows(pageRows: RuntimePageVersionRow[]): StructureSection
       const sectionId = normalizeText(sectionRecord.id) || `${pageId}-section-${index + 1}`
       const sectionType = normalizeText(sectionRecord.type) || 'unknown'
       const ordinalIndex = Number.isFinite(Number(sectionRecord.order)) ? Number(sectionRecord.order) : index
+      const sectionPropsRaw = sectionPropsById[sectionId]
+      const sectionProps = isRecord(sectionPropsRaw) ? sectionPropsRaw : null
+      const mergedBlockCountRaw = Number(sectionProps?.mergedBlockCount)
+      const mergedBlockCount = Number.isFinite(mergedBlockCountRaw) && mergedBlockCountRaw > 0 ? Math.floor(mergedBlockCountRaw) : null
+      const candidateSignals = isRecord(sectionProps?.candidateSignals) ? sectionProps.candidateSignals : null
+      const dominantCandidate = normalizeText(candidateSignals?.dominantCandidate) || null
+      const dominantRationale = normalizeText(sectionProps?.dominantRationale) || null
+      const classificationDiagnostics = Array.isArray(sectionProps?.classificationDiagnostics)
+        ? sectionProps.classificationDiagnostics.map((value) => normalizeText(value)).filter(Boolean)
+        : []
 
       const score = weakSectionIds.has(sectionId) ? Math.max(0.25, confidenceBase - 0.35) : confidenceBase
       const confidenceLabel: StructureSectionRow['confidenceLabel'] =
@@ -360,7 +376,10 @@ function parseStructureRows(pageRows: RuntimePageVersionRow[]): StructureSection
         ordinalIndex,
         confidenceLabel,
         confidenceScore: Number(score.toFixed(3)),
-        keyDiagnostics: anomalies.slice(0, 2),
+        mergedBlockCount,
+        dominantCandidate,
+        dominantRationale,
+        keyDiagnostics: [...new Set([...anomalies, ...classificationDiagnostics])].slice(0, 4),
       })
     }
   }
@@ -679,7 +698,7 @@ export async function getSiteWorkspaceReadModelForPage(input: {
   if (selectedRuntimeSiteVersionId) {
     const pageResult = await supabase
       .from('gnr8_runtime_page_versions')
-      .select('id,site_version_id,page_id,path,title,structure_model,semantic_signals,migration_governance')
+      .select('id,site_version_id,page_id,path,title,structure_model,content_model,semantic_signals,migration_governance')
       .eq('site_version_id', selectedRuntimeSiteVersionId)
       .order('path', { ascending: true })
 

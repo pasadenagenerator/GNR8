@@ -3,7 +3,8 @@ export type ConsolidationDiagnosticCode =
   | "SECTION_MERGE_HEAVY"
   | "SECTION_MERGE_MINIMAL"
   | "SECTION_BOUNDARY_UNCERTAIN"
-  | "FOOTER_FALSE_POSITIVE_PREVENTED";
+  | "FOOTER_FALSE_POSITIVE_PREVENTED"
+  | "NAVBAR_BOUNDARY_PROTECTED";
 
 export type ConsolidationDiagnostic = {
   code: ConsolidationDiagnosticCode;
@@ -32,6 +33,7 @@ export type RawBlock = {
   hasHeading: boolean;
   hasImages: boolean;
   hasCTA: boolean;
+  anchorCount: number;
   hasFooterHint: boolean;
   hasNavHint: boolean;
   hasLegalHint: boolean;
@@ -64,6 +66,7 @@ export type ConsolidatedSection = {
     headingCount: number;
     imageCount: number;
     ctaCount: number;
+    anchorCount: number;
     footerHintCount: number;
     navHintCount: number;
     legalHintCount: number;
