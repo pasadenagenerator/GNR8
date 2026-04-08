@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import ClientDashboardHome from "@/app/gnr8/_components/client-dashboard/ClientDashboardHome";
 import WorkspaceStateSync from "@/app/gnr8/_components/workspace/WorkspaceStateSync";
 import { getClientDashboardReadModelForPage } from "@/gnr8/client/client-dashboard-read-model";
+import { agencyClientSiteImportHref } from "@/gnr8/site/site-importer-routing";
 import { CLIENT_SETUP_PATH, getClientSetupStatusForClientForPage } from "@/src/auth/client-setup-gate";
 import {
   listCurrentUserClientMembershipsForPage,
@@ -187,7 +188,11 @@ export default async function ClientDashboardPage(props: { searchParams?: Promis
   siteWorkspaceAgencyQuery.set("agency", currentUserClient.agency_id);
   if (resolvedSearchParams?.admin_view) siteWorkspaceAgencyQuery.set("admin_view", String(resolvedSearchParams.admin_view));
   const siteWorkspaceAgencyQueryString = siteWorkspaceAgencyQuery.toString();
-  const importSiteHref = `/gnr8/command-center/sites?clientId=${encodeURIComponent(currentUserClient.client_id)}`;
+  const importSiteHref = agencyClientSiteImportHref({
+    clientId: currentUserClient.client_id,
+    agencyId: currentUserClient.agency_id,
+    adminView: resolvedSearchParams?.admin_view === "1",
+  });
 
   return (
     <main

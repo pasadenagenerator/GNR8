@@ -8,6 +8,7 @@ import WorkspaceQuickSwitcher, {
 import WorkspaceShortcuts, { type WorkspaceShortcut } from '../../../_components/workspace/WorkspaceShortcuts'
 import WorkspaceStateSync from '../../../_components/workspace/WorkspaceStateSync'
 import { buildWorkspaceViewModel, type WorkspaceTabInput } from '../../../_components/workspace/workspace-view-model'
+import { agencyClientSiteImportHref } from '@/gnr8/site/site-importer-routing'
 import { buildClientSwitchHref } from '@/src/workspace/context-switching'
 
 type ClientContextTab = 'dashboard' | 'settings' | 'users'
@@ -65,6 +66,11 @@ export default function ClientContextLayout(props: Props) {
   const explicitDashboardHref = `/gnr8/agency/clients/${encodeURIComponent(props.clientId)}/dashboard?${explicitDashboardParam}`
   const settingsHref = `/gnr8/agency/clients/${encodeURIComponent(props.clientId)}/settings?${agencyParam}`
   const usersHref = `/gnr8/agency/clients/${encodeURIComponent(props.clientId)}/users?${agencyParam}`
+  const importHref = agencyClientSiteImportHref({
+    clientId: props.clientId,
+    agencyId: activeAgencyId,
+    adminView: props.adminView,
+  })
   const backToAgencyHref = `/gnr8/agency?${agencyParam}`
   const agencyClientsHref = `/gnr8/agency/clients?${agencyParam}`
   const breadcrumbs: WorkspaceBreadcrumbItem[] = [
@@ -111,6 +117,13 @@ export default function ClientContextLayout(props: Props) {
       href: explicitDashboardHref,
       description: 'Open client dashboard and sites overview',
       icon: 'S',
+    },
+    {
+      id: 'import-site',
+      label: 'Import Site',
+      href: importHref,
+      description: 'Import a website into this client workspace',
+      icon: 'I',
     },
     {
       id: 'open-settings',
@@ -194,6 +207,7 @@ export default function ClientContextLayout(props: Props) {
           { id: 'route-agency-clients', label: 'Agency Clients', href: agencyClientsHref, sublabel: 'Key route' },
           { id: 'route-agency-settings', label: 'Agency Settings', href: `/gnr8/agency/settings?${agencyParam}`, sublabel: 'Key route' },
           { id: 'route-client-dashboard', label: 'Client Dashboard', href: explicitDashboardHref, sublabel: 'Key route' },
+          { id: 'route-client-import', label: 'Import Site', href: importHref, sublabel: 'Key route' },
           { id: 'route-client-settings', label: 'Client Settings', href: settingsHref, sublabel: 'Key route' },
           { id: 'route-client-team', label: 'Client Team', href: usersHref, sublabel: 'Key route' },
           ...siteRouteEntries,
