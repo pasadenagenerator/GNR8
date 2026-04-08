@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import { assertSiteWorkspaceScope } from '@/gnr8/site/site-workspace-read-model'
+import { assertSiteWorkspaceScope, resolveSelectedRuntimeVersionIdForWorkspace } from '@/gnr8/site/site-workspace-read-model'
 
 const AGENCY_ID = '00000000-0000-4000-8000-000000000011'
 const CLIENT_ID = '00000000-0000-4000-8000-000000000101'
@@ -54,4 +54,32 @@ test('assertSiteWorkspaceScope fails closed when site leaks across client scope'
     },
     /fail-closed policy/i,
   )
+})
+
+test('runtime version selection defaults to latest runtime when no variant is explicitly selected', () => {
+  const selected = resolveSelectedRuntimeVersionIdForWorkspace({
+    latestRuntimeSiteVersionId: 'latest-runtime-version-id',
+    normalizedVariants: [
+      { id: 'variant-a', siteVersionId: 'older-variant-version' },
+      { id: 'variant-b', siteVersionId: 'other-variant-version' },
+    ],
+    selectedVariantId: null,
+  })
+
+  assert.equal(selected.selectedRuntimeSiteVersionId, 'latest-runtime-version-id')
+  assert.equal(selected.selectedVariant, null)
+})
+
+test('runtime version selection honors variant site version only when variant is explicitly selected', () => {
+  const selected = resolveSelectedRuntimeVersionIdForWorkspace({
+    latestRuntimeSiteVersionId: 'latest-runtime-version-id',
+    normalizedVariants: [
+      { id: 'variant-a', siteVersionId: 'older-variant-version' },
+      { id: 'variant-b', siteVersionId: 'explicit-variant-version' },
+    ],
+    selectedVariantId: 'variant-b',
+  })
+
+  assert.equal(selected.selectedRuntimeSiteVersionId, 'explicit-variant-version')
+  assert.equal(selected.selectedVariant?.id, 'variant-b')
 })

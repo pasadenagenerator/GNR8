@@ -409,6 +409,31 @@ function inferAiSuggestionStatus(pageRows: RuntimePageVersionRow[]): SiteWorkspa
   return 'rejected'
 }
 
+export function resolveSelectedRuntimeVersionIdForWorkspace(input: {
+  latestRuntimeSiteVersionId: string | null
+  normalizedVariants: Array<{
+    id: string
+    siteVersionId: string | null
+  }>
+  selectedVariantId?: string | null
+}): {
+  selectedRuntimeSiteVersionId: string | null
+  selectedVariant: {
+    id: string
+    siteVersionId: string | null
+  } | null
+} {
+  const selectedVariantId = toTextOrNull(input.selectedVariantId)
+  const selectedVariant = selectedVariantId
+    ? input.normalizedVariants.find((variant) => variant.id === selectedVariantId) ?? null
+    : null
+
+  return {
+    selectedRuntimeSiteVersionId: selectedVariant?.siteVersionId ?? input.latestRuntimeSiteVersionId ?? null,
+    selectedVariant,
+  }
+}
+
 export async function getSiteWorkspaceReadModelForPage(input: {
   agencyId: string
   clientId: string
@@ -508,10 +533,10 @@ export async function getSiteWorkspaceReadModelForPage(input: {
     }))
     .filter((row) => row.id && row.label && row.strategy && row.createdAt)
 
-  const selectedVariant =
-    (selectedVariantId ? normalizedVariants.find((variant) => variant.id === selectedVariantId) : null) ??
-    normalizedVariants[0] ??
-    null
+  const normalizedVariantsForSelection = normalizedVariants.map((variant) => ({
+    id: variant.id!,
+    siteVersionId: variant.siteVersionId,
+  }))
 
   const runtimeResult = await supabase
     .from('gnr8_runtime_site_versions')
@@ -550,7 +575,16 @@ export async function getSiteWorkspaceReadModelForPage(input: {
   }
 
   const latestRuntimeSiteVersionId = runtimeSnapshot?.latestRuntimeSiteVersionId ?? null
-  const selectedRuntimeSiteVersionId = selectedVariant?.siteVersionId ?? latestRuntimeSiteVersionId
+  const selectedResolution = resolveSelectedRuntimeVersionIdForWorkspace({
+    latestRuntimeSiteVersionId,
+    normalizedVariants: normalizedVariantsForSelection,
+    selectedVariantId,
+  })
+  const selectedRuntimeSiteVersionId = selectedResolution.selectedRuntimeSiteVersionId
+  const selectedVariant =
+    selectedResolution.selectedVariant == null
+      ? null
+      : normalizedVariants.find((variant) => variant.id === selectedResolution.selectedVariant?.id) ?? null
   const selectedRuntimeRow = runtimeRows.find((row) => toTextOrNull(row.id) === selectedRuntimeSiteVersionId) ?? null
   const selectedRuntimeState = toTextOrNull(selectedRuntimeRow?.state) ?? runtimeSnapshot?.latestRuntimeState ?? null
   let pageRows: RuntimePageVersionRow[] = []

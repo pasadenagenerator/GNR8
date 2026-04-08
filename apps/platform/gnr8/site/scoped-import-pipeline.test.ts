@@ -1,0 +1,374 @@
+import assert from 'node:assert/strict'
+import fs from 'node:fs'
+import os from 'node:os'
+import path from 'node:path'
+import test from 'node:test'
+
+import { runScopedImportPipeline } from '@/gnr8/site/scoped-import-pipeline'
+
+function createSuccessPipelineFixture() {
+  const preparedSite = {
+    kind: 'prepared_site_model_v1',
+    modelVersion: '1.7.0',
+    status: 'ready',
+    source: {
+      importContractVersion: '1.1.1',
+      importManifestVersion: '1.0.0',
+      fingerprints: {
+        inputContentSha256: 'a',
+        inputSpecSha256: 'b',
+      },
+      sourceKind: 'single-entry-html',
+      entryHtmlPath: 'index.html',
+      htmlFilePaths: ['index.html'],
+      assetsDirPath: 'assets',
+    },
+    siteSummary: {
+      documentCount: 1,
+      entryDocumentId: 'doc-home',
+      documentsWithNormalizedHtmlCount: 1,
+      documentsWithDomCount: 1,
+      totalNodeCount: 10,
+      totalParseWarningCount: 0,
+      effectivelyEmpty: false,
+    },
+    preparedAssets: {
+      assetFiles: { totalCount: 0 },
+      references: {
+        totalCount: 0,
+        referencesByAssetKind: { image: 0, stylesheet: 0, script: 0, unknown: 0 },
+        referencesByReferenceKind: {
+          absolute_url: 0,
+          data_url: 0,
+          empty_invalid: 0,
+          relative_local: 0,
+          root_relative: 0,
+        },
+        referencesByValidationStatus: {
+          invalid_asset_reference: 0,
+          missing_local_asset: 0,
+          ok: 0,
+          path_traversal_blocked: 0,
+          unsupported_data_url_asset: 0,
+          unsupported_remote_asset: 0,
+        },
+        existingLocalCount: 0,
+        missingLocalCount: 0,
+      },
+    },
+    diagnostics: {
+      import: {
+        totalCount: 0,
+        infoCount: 0,
+        warningCount: 0,
+        errorCount: 0,
+        fatalCount: 0,
+        codes: [],
+        issueIds: [],
+      },
+    },
+    documents: [
+      {
+        id: 'doc-home',
+        path: 'index.html',
+        isEntry: true,
+        originalKind: 'entry_html',
+        normalizedHtmlAvailable: true,
+        serializedDomAvailable: true,
+        nodeCount: 10,
+        parseWarningCount: 0,
+        decodingHadErrors: false,
+        effectivelyEmpty: false,
+        contentSha256: 'doc-sha',
+        byteLength: 256,
+        assetReferenceIds: [],
+        domOutline: null,
+        fidelity: {
+          kind: 'prepared_document_fidelity_projection_v1',
+          htmlLang: 'en',
+          title: 'Home',
+          metaCharset: 'utf-8',
+          metaViewport: 'width=device-width,initial-scale=1',
+          metaDescription: 'Imported home page',
+          bodyClass: null,
+          bodyId: null,
+          stylesheetLinks: [],
+        },
+        semantic: {
+          kind: 'prepared_page_semantic_model_v1',
+          consolidation: {
+            mode: 'merged',
+            deepFragmentationDetected: false,
+            inputBlockCount: 3,
+            outputSectionCount: 2,
+          },
+          page: {
+            pageType: 'home',
+            confidence: 'high',
+            rationale: ['home'],
+            styleFamily: 'corporate',
+          },
+          sections: [
+            {
+              sectionId: 'sec-hero',
+              sourceDomPath: 'html>body>main>section:nth-of-type(1)',
+              sourceDomPaths: ['html>body>main>section:nth-of-type(1)'],
+              blockIds: ['block-hero'],
+              domIndexStart: 0,
+              domIndexEnd: 1,
+              consolidatedBlockCount: 1,
+              consolidationConfidence: 0.9,
+              consolidationRationale: ['merged blocks'],
+              consolidationMergeDecisions: ['merge:hero'],
+              ordinalIndex: 0,
+              inferredType: 'hero',
+              confidence: 'high',
+              rationale: ['hero'],
+              candidateSignals: { heroCandidate: 1, ctaCandidate: 0, contentCandidate: 0, footerCandidate: 0 },
+              heroComposition: 'split_media',
+              mediaDensity: 0.6,
+              galleryLikeConfidence: 'low',
+              ctaCandidates: [],
+              likelyPrimaryCta: null,
+              density: {
+                textDensity: 0.6,
+                imageDensity: 0.5,
+                headingDensity: 0.4,
+                ctaDensity: 0.2,
+                repetitionDensity: 0.1,
+                readabilityTendency: 'balanced',
+              },
+            },
+            {
+              sectionId: 'sec-footer',
+              sourceDomPath: 'html>body>footer',
+              sourceDomPaths: ['html>body>footer'],
+              blockIds: ['block-footer'],
+              domIndexStart: 2,
+              domIndexEnd: 3,
+              consolidatedBlockCount: 1,
+              consolidationConfidence: 0.8,
+              consolidationRationale: ['footer'],
+              consolidationMergeDecisions: ['keep:footer'],
+              ordinalIndex: 1,
+              inferredType: 'footer',
+              confidence: 'medium',
+              rationale: ['footer'],
+              candidateSignals: { heroCandidate: 0, ctaCandidate: 0, contentCandidate: 0.4, footerCandidate: 1 },
+              heroComposition: null,
+              mediaDensity: 0,
+              galleryLikeConfidence: 'low',
+              ctaCandidates: [],
+              likelyPrimaryCta: null,
+              density: {
+                textDensity: 0.4,
+                imageDensity: 0,
+                headingDensity: 0.2,
+                ctaDensity: 0,
+                repetitionDensity: 0.2,
+                readabilityTendency: 'readable',
+              },
+            },
+          ],
+          ctaCandidates: [],
+          primaryCta: null,
+          brandSignals: {
+            dominantColors: [],
+            accentColors: [],
+            neutralPaletteHints: [],
+            fontFamilyHints: [],
+            fontCategoryHints: ['sans'],
+            visualTone: 'neutral',
+            confidence: 'medium',
+            rationale: [],
+          },
+          diagnostics: [],
+        },
+      },
+    ],
+  }
+
+  const layoutModel = {
+    pages: [
+      {
+        sourceDocumentId: 'doc-home',
+        blocks: [
+          {
+            id: 'block-hero',
+            ordinalIndex: 0,
+            textExcerpt: 'Hero headline',
+            preservedMarkupHtml: '<section><h1>Hero headline</h1></section>',
+          },
+          {
+            id: 'block-footer',
+            ordinalIndex: 1,
+            textExcerpt: 'Footer text',
+            preservedMarkupHtml: '<footer><p>Footer text</p></footer>',
+          },
+        ],
+      },
+    ],
+  }
+
+  return {
+    status: 'success',
+    summary: 'ok',
+    diagnostics: [],
+    input: {
+      importOutput: {
+        documentMeta: {
+          source: { kind: 'single-entry-html' },
+        },
+      },
+    },
+    stages: [
+      { stageId: 'structure_preparation', output: { preparedSite }, summary: 'structure ok' },
+      { stageId: 'layout_preparation', output: { layoutModel }, summary: 'layout ok' },
+      { stageId: 'render_preparation', output: { renderOutput: { kind: 'render_output_v1' } }, summary: 'render ok' },
+      { stageId: 'preview_generation', output: { previewDocument: { kind: 'preview_document_v1' } }, summary: 'preview ok' },
+    ],
+  } as any
+}
+
+test('scoped pipeline import uses pipeline path, maps consolidated sections, and links artifact', async () => {
+  const pipeline = createSuccessPipelineFixture()
+  let createInput: any = null
+  let legacyImportCalls = 0
+  let legacyMigrateCalls = 0
+  let bindCalls = 0
+
+  const outcome = await runScopedImportPipeline({
+    snapshot: {
+      snapshotRootDirAbs: '/tmp/snapshot',
+      entryHtmlPathAbs: '/tmp/snapshot/index.html',
+      assetsDirAbs: '/tmp/snapshot/assets',
+    } as any,
+    sourceUrl: 'https://example.com/',
+    actor: 'test:scoped-import',
+    deps: {
+      importStaticSite: async () => ({ status: 'ok', documentMeta: { source: { kind: 'single-entry-html' } } }) as any,
+      createImportManifest: () => ({ status: 'success' }) as any,
+      runLinearMigrationPipeline: () => pipeline as any,
+      createSiteVersionFromMigration: async (input) => {
+        createInput = input
+        return { siteId: 'runtime-site', siteVersionId: 'site-version-1', versionNo: 7 }
+      },
+      getSiteVersion: async () =>
+        ({
+          id: 'site-version-1',
+          siteId: 'runtime-site',
+          versionNo: 7,
+          state: 'DRAFT',
+          source: 'migration',
+          actor: 'test',
+          createdAt: new Date().toISOString(),
+          rendererCompatibilityVersion: 'gnr8-renderer-v1',
+          artifactId: null,
+          pages: [
+            {
+              id: 'page-version-1',
+              siteVersionId: 'site-version-1',
+              pageId: 'page-1',
+              path: '/',
+              title: 'Home',
+              structureModel: { sections: [{ id: 'sec-hero', type: 'hero', order: 0 }, { id: 'sec-footer', type: 'footer', order: 1 }] },
+              contentModel: { sectionProps: {} },
+              styleTokens: {},
+              assetGraph: [],
+              semanticSignals: [],
+              source: 'migration',
+              actor: 'test',
+              createdAt: new Date().toISOString(),
+            },
+          ],
+        }) as any,
+      buildDeterministicArtifactBundle: () =>
+        ({
+          siteId: 'runtime-site',
+          siteVersionId: 'site-version-1',
+          rendererCompatibilityVersion: 'gnr8-renderer-v1',
+          bundleSha256: 'bundle-sha',
+          htmlByPath: { '/': '<!doctype html><html><body>preview</body></html>' },
+          compiledTokenStyles: ':root{}',
+          assetFingerprintMap: {},
+          manifest: {},
+        }) as any,
+      createArtifact: async () => ({ artifactId: 'artifact-1' }),
+      bindArtifactToVersion: async () => {
+        bindCalls += 1
+      },
+      importHtmlToPage: () => {
+        legacyImportCalls += 1
+        return {} as any
+      },
+      migrateImportedPageToCanonicalDraft: async () => {
+        legacyMigrateCalls += 1
+        return { siteId: 'legacy-site', siteVersionId: 'legacy-version', versionNo: 1 }
+      },
+    },
+  })
+
+  assert.equal(outcome.mode, 'pipeline')
+  assert.equal(outcome.artifactId, 'artifact-1')
+  assert.equal(outcome.reporting.artifactGenerated, true)
+  assert.equal(outcome.reporting.consolidationApplied, true)
+  assert.equal(bindCalls, 1)
+  assert.equal(legacyImportCalls, 0)
+  assert.equal(legacyMigrateCalls, 0)
+  assert.ok(createInput)
+  assert.ok(createInput.pages[0].structureModel.sections.length > 1, 'expected consolidated sections to persist into runtime structure model')
+})
+
+test('scoped pipeline import falls back to legacy when pipeline fails', async () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'scoped-pipeline-fallback-'))
+  const entryHtmlPath = path.join(tmp, 'index.html')
+  fs.writeFileSync(entryHtmlPath, '<!doctype html><html><body><h1>Fallback</h1></body></html>', 'utf8')
+  fs.mkdirSync(path.join(tmp, 'assets'))
+
+  let legacyImportCalls = 0
+  let legacyMigrateCalls = 0
+
+  const outcome = await runScopedImportPipeline({
+    snapshot: {
+      snapshotRootDirAbs: tmp,
+      entryHtmlPathAbs: entryHtmlPath,
+      assetsDirAbs: path.join(tmp, 'assets'),
+    } as any,
+    sourceUrl: 'https://fallback.example/',
+    actor: 'test:fallback',
+    deps: {
+      importStaticSite: async () => ({ status: 'ok', documentMeta: { source: { kind: 'single-entry-html' } } }) as any,
+      createImportManifest: () => ({ status: 'success' }) as any,
+      runLinearMigrationPipeline: () =>
+        ({
+          status: 'failed',
+          summary: 'pipeline failed',
+          diagnostics: [{ code: 'PIPELINE_BLOCKED_BY_IMPORT' }],
+          stages: [{ stageId: 'import_intake', summary: 'import failed' }],
+          input: { importOutput: { documentMeta: { source: { kind: 'single-entry-html' } } } },
+        }) as any,
+      createSiteVersionFromMigration: async () => {
+        throw new Error('should not be called')
+      },
+      getSiteVersion: async () => null,
+      buildDeterministicArtifactBundle: () => ({}) as any,
+      createArtifact: async () => ({ artifactId: 'artifact-unused' }),
+      bindArtifactToVersion: async () => undefined,
+      importHtmlToPage: () => {
+        legacyImportCalls += 1
+        return {} as any
+      },
+      migrateImportedPageToCanonicalDraft: async () => {
+        legacyMigrateCalls += 1
+        return { siteId: 'legacy-site', siteVersionId: 'legacy-version', versionNo: 2 }
+      },
+    },
+  })
+
+  assert.equal(outcome.mode, 'legacy_fallback')
+  assert.equal(outcome.siteVersionId, 'legacy-version')
+  assert.equal(outcome.fallbackReason, 'pipeline_failed')
+  assert.ok(outcome.diagnostics.pipelineDiagnosticCodes.includes('PIPELINE_BLOCKED_BY_IMPORT'))
+  assert.equal(legacyImportCalls, 1)
+  assert.equal(legacyMigrateCalls, 1)
+})

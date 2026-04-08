@@ -1,0 +1,524 @@
+import fs from 'node:fs'
+import path from 'node:path'
+
+import { createImportManifest } from '@/gnr8/import/import-manifest'
+import { importStaticSite } from '@/gnr8/import/runtime/import-static-site'
+import { runLinearMigrationPipeline } from '@/gnr8/migration/runtime/run-linear-migration-pipeline'
+import type { LinearMigrationPipelineResult } from '@/gnr8/migration/pipeline-contract'
+import type { LayoutPreparationModel } from '@/gnr8/migration/layout-preparation-model'
+import type { PreparedSiteModel, SectionSemanticModel } from '@/gnr8/migration/prepared-site-model'
+import type { RenderOutput } from '@/gnr8/migration/render-output-model'
+import type { PreviewDocument } from '@/gnr8/migration/preview-document-model'
+import { importHtmlToPage } from '@/gnr8/importer/html-to-page'
+import { migrateImportedPageToCanonicalDraft } from '@/gnr8/runtime/migration-factory'
+import { buildDeterministicArtifactBundle } from '@/gnr8/runtime/artifact-builder'
+import { deterministicId, normalizePagePath } from '@/gnr8/runtime/deterministic'
+import {
+  bindArtifactToVersion,
+  createArtifact,
+  createSiteVersionFromMigration,
+  getSiteVersion,
+} from '@/gnr8/runtime/runtime-store'
+import { RENDERER_COMPATIBILITY_VERSION, type CanonicalPageVersionInput, type CanonicalSiteMigrationInput } from '@/gnr8/runtime/types'
+import type { UrlSinglePageImportSnapshot } from '@/gnr8/validation/runtime/url-single-page-import'
+
+const SECTION_INTENT_BY_SEMANTIC_TYPE: Record<string, string> = {
+  header: 'header_nav',
+  navigation: 'header_nav',
+  hero: 'hero',
+  cta: 'form_contact',
+  contact: 'form_contact',
+  gallery: 'gallery_media',
+}
+
+function normalizeText(value: unknown): string {
+  return String(value ?? '').trim()
+}
+
+function uniqueSorted(values: string[]): string[] {
+  return [...new Set(values.filter(Boolean))].sort((a, b) => a.localeCompare(b))
+}
+
+function inferPagePathFromSourcePath(sourcePath: string): string {
+  const normalized = normalizeText(sourcePath).replaceAll('\\\\', '/').replace(/^\/+/, '')
+  if (!normalized || normalized === 'index.html') return '/'
+  if (normalized.endsWith('/index.html')) {
+    const withoutIndex = normalized.slice(0, -'/index.html'.length)
+    return normalizePagePath(`/${withoutIndex}`)
+  }
+  if (normalized.endsWith('.html') || normalized.endsWith('.htm')) {
+    return normalizePagePath(`/${normalized.replace(/\.html?$/i, '')}`)
+  }
+  return normalizePagePath(`/${normalized}`)
+}
+
+function resolveSiteId(sourceUrl: string, entryPath: string): string {
+  const testPrefix = String(process.env.GNR8_RUNTIME_TEST_SITE_ID_PREFIX ?? '').trim()
+  const seed = `${sourceUrl}|${entryPath}`
+  if (testPrefix) return deterministicId(testPrefix, seed)
+  return deterministicId('site', seed)
+}
+
+function confidenceToScore(confidence: string): number {
+  if (confidence === 'high') return 0.9
+  if (confidence === 'medium') return 0.7
+  return 0.45
+}
+
+function pickTitleFromSemantic(pageType: string | null, sourcePath: string): string {
+  if (pageType && pageType !== 'unknown') return pageType.replaceAll('_', ' ')
+  return inferPagePathFromSourcePath(sourcePath) === '/' ? 'Home' : path.basename(sourcePath, path.extname(sourcePath)) || 'Page'
+}
+
+function extractImageSrcsFromMarkup(markup: string | null): string[] {
+  if (!markup) return []
+  const out: string[] = []
+  const re = /<img[^>]*\ssrc=["']([^"']+)["']/gi
+  let match: RegExpExecArray | null
+  while ((match = re.exec(markup)) !== null) {
+    const src = normalizeText(match[1])
+    if (!src) continue
+    out.push(src)
+    if (out.length >= 20) break
+  }
+  return uniqueSorted(out)
+}
+
+function extractLinksFromMarkup(markup: string | null): Array<{ href: string; label: string }> {
+  if (!markup) return []
+  const out: Array<{ href: string; label: string }> = []
+  const seen = new Set<string>()
+  const re = /<a[^>]*\shref=["']([^"']+)["'][^>]*>(.*?)<\/a>/gis
+  let match: RegExpExecArray | null
+  while ((match = re.exec(markup)) !== null) {
+    const href = normalizeText(match[1])
+    const label = normalizeText(String(match[2] ?? '').replace(/<[^>]+>/g, ' '))
+    if (!href || !label) continue
+    const key = `${href}::${label}`
+    if (seen.has(key)) continue
+    seen.add(key)
+    out.push({ href, label })
+    if (out.length >= 20) break
+  }
+  return out
+}
+
+function findPipelineStage<T>(pipeline: LinearMigrationPipelineResult, stageId: string): T | null {
+  const stage = pipeline.stages.find((entry) => entry.stageId === stageId)
+  if (!stage) return null
+  return (stage.output as T) ?? null
+}
+
+function mapSectionsFromSemantic(input: {
+  semanticSections: SectionSemanticModel[]
+  blockById: Map<string, { textExcerpt: string | null; preservedMarkupHtml: string | null }>
+}): Array<{ id: string; type: string; order: number; props: Record<string, unknown> }> {
+  const ordered = [...input.semanticSections].sort((a, b) => a.ordinalIndex - b.ordinalIndex)
+  return ordered.map((section, index) => {
+    const blocks = section.blockIds.map((blockId) => input.blockById.get(blockId)).filter(Boolean)
+    const textExcerpt = normalizeText(
+      blocks
+        .map((block) => normalizeText(block?.textExcerpt))
+        .filter(Boolean)
+        .join(' '),
+    )
+    const preservedMarkupHtml = blocks.find((block) => normalizeText(block?.preservedMarkupHtml))?.preservedMarkupHtml ?? null
+
+    return {
+      id: section.sectionId,
+      type: section.inferredType === 'unknown' ? 'content' : section.inferredType,
+      order: Number.isFinite(section.ordinalIndex) ? section.ordinalIndex : index,
+      props: {
+        semanticType: section.inferredType,
+        confidence: section.confidence,
+        rationale: section.rationale,
+        sourceDomPaths: section.sourceDomPaths,
+        blockIds: section.blockIds,
+        layoutStructural: {
+          intent: SECTION_INTENT_BY_SEMANTIC_TYPE[section.inferredType] ?? 'body',
+          structuralConfidence: confidenceToScore(section.confidence),
+        },
+        htmlSummary: {
+          extractedText: textExcerpt,
+          extractedImageSrcs: extractImageSrcsFromMarkup(preservedMarkupHtml),
+          extractedLinks: extractLinksFromMarkup(preservedMarkupHtml),
+        },
+        preservedMarkupHtml,
+      },
+    }
+  })
+}
+
+function baselineStyleTokens(): Record<string, string> {
+  return {
+    'color.background': '#ffffff',
+    'color.text': '#111111',
+    'spacing.section': '48px',
+  }
+}
+
+function buildCanonicalMigrationInputFromPipeline(input: {
+  sourceUrl: string
+  actor: string
+  preparedSite: PreparedSiteModel
+  layoutModel: LayoutPreparationModel | null
+}): CanonicalSiteMigrationInput {
+  const entrySourcePath = input.preparedSite.source.entryHtmlPath ?? input.preparedSite.documents[0]?.path ?? '/'
+  const entryPagePath = inferPagePathFromSourcePath(entrySourcePath)
+  const siteId = resolveSiteId(input.sourceUrl, entryPagePath)
+
+  const layoutByDocumentId = new Map(input.layoutModel?.pages.map((page) => [page.sourceDocumentId, page]) ?? [])
+
+  const pages: CanonicalPageVersionInput[] = input.preparedSite.documents
+    .slice()
+    .sort((a, b) => a.path.localeCompare(b.path))
+    .map((doc) => {
+      const pagePath = inferPagePathFromSourcePath(doc.path)
+      const pageId = deterministicId('page', `${siteId}:${pagePath}`)
+      const layoutPage = layoutByDocumentId.get(doc.id) ?? null
+      const blockById = new Map(
+        (layoutPage?.blocks ?? []).map((block) => [
+          block.id,
+          {
+            textExcerpt: block.textExcerpt,
+            preservedMarkupHtml: block.preservedMarkupHtml,
+          },
+        ]),
+      )
+
+      const semanticSections = doc.semantic?.sections ?? []
+      const mappedSections = semanticSections.length
+        ? mapSectionsFromSemantic({ semanticSections, blockById })
+        : (layoutPage?.blocks ?? []).map((block, index) => ({
+            id: block.id,
+            type: 'content',
+            order: Number.isFinite(block.ordinalIndex) ? block.ordinalIndex : index,
+            props: {
+              semanticType: 'unknown',
+              layoutStructural: {
+                intent: 'body',
+                structuralConfidence: 0.5,
+              },
+              htmlSummary: {
+                extractedText: normalizeText(block.textExcerpt),
+                extractedImageSrcs: extractImageSrcsFromMarkup(block.preservedMarkupHtml),
+                extractedLinks: extractLinksFromMarkup(block.preservedMarkupHtml),
+              },
+              preservedMarkupHtml: block.preservedMarkupHtml,
+            },
+          }))
+
+      const sections = mappedSections.length
+        ? mappedSections
+        : [
+            {
+              id: `${pageId}-fallback-section`,
+              type: 'content',
+              order: 0,
+              props: {
+                semanticType: 'unknown',
+                layoutStructural: {
+                  intent: 'body',
+                  structuralConfidence: 0.35,
+                },
+                htmlSummary: {
+                  extractedText: normalizeText(doc.fidelity.metaDescription) || `Imported ${doc.path}`,
+                  extractedImageSrcs: [],
+                  extractedLinks: [],
+                },
+              },
+            },
+          ]
+
+      return {
+        pageId,
+        path: pagePath,
+        title: pickTitleFromSemantic(doc.semantic?.page.pageType ?? null, doc.path),
+        structureModel: {
+          sections: sections.map((section, index) => ({
+            id: section.id,
+            type: section.type,
+            order: Number.isFinite(section.order) ? section.order : index,
+          })),
+        },
+        contentModel: {
+          sectionProps: Object.fromEntries(sections.map((section) => [section.id, section.props])),
+        },
+        styleTokens: baselineStyleTokens(),
+        assetGraph: [],
+        semanticSignals: [
+          {
+            label: 'pipeline.prepared_site_model',
+            confidence: 0.95,
+            source: 'migration',
+          },
+          {
+            label: `pipeline.section_consolidation:${doc.semantic?.consolidation.mode ?? 'none'}`,
+            confidence: 0.85,
+            source: 'migration',
+          },
+        ],
+        source: 'migration',
+        actor: input.actor,
+      }
+    })
+
+  return {
+    siteId,
+    sourceUrl: input.sourceUrl,
+    actor: input.actor,
+    pages,
+  }
+}
+
+function extractPipelineArtifacts(pipeline: LinearMigrationPipelineResult): {
+  preparedSite: PreparedSiteModel | null
+  layoutModel: LayoutPreparationModel | null
+  renderOutput: RenderOutput | null
+  previewDocument: PreviewDocument | null
+} {
+  const preparedSite = findPipelineStage<{ preparedSite: PreparedSiteModel }>(pipeline, 'structure_preparation')?.preparedSite ?? null
+  const layoutModel = findPipelineStage<{ layoutModel: LayoutPreparationModel }>(pipeline, 'layout_preparation')?.layoutModel ?? null
+  const renderOutput = findPipelineStage<{ renderOutput: RenderOutput }>(pipeline, 'render_preparation')?.renderOutput ?? null
+  const previewDocument = findPipelineStage<{ previewDocument: PreviewDocument }>(pipeline, 'preview_generation')?.previewDocument ?? null
+  return { preparedSite, layoutModel, renderOutput, previewDocument }
+}
+
+function computePipelineReporting(input: {
+  pipelineResult: LinearMigrationPipelineResult
+  preparedSite: PreparedSiteModel | null
+}): {
+  executionStatus: 'success' | 'failed'
+  consolidationApplied: boolean
+  renderedCaptureUsed: boolean
+} {
+  const consolidationApplied = Boolean(
+    input.preparedSite?.documents.some((doc) => {
+      const mode = normalizeText(doc.semantic?.consolidation.mode)
+      return mode === 'merged' || mode === 'consolidated'
+    }),
+  )
+
+  const renderedCaptureUsed = normalizeText(input.pipelineResult.input.importOutput.documentMeta.source.kind) === 'single-entry-html'
+
+  return {
+    executionStatus: input.pipelineResult.status,
+    consolidationApplied,
+    renderedCaptureUsed,
+  }
+}
+
+export type ScopedImportPipelineSuccess = {
+  mode: 'pipeline'
+  siteId: string
+  siteVersionId: string
+  versionNo: number
+  artifactId: string
+  pipelineResult: LinearMigrationPipelineResult
+  preparedSite: PreparedSiteModel
+  layoutModel: LayoutPreparationModel | null
+  renderOutput: RenderOutput | null
+  previewDocument: PreviewDocument | null
+  reporting: {
+    executionStatus: 'success' | 'failed'
+    consolidationApplied: boolean
+    renderedCaptureUsed: boolean
+    artifactGenerated: boolean
+  }
+}
+
+export type ScopedImportPipelineFallback = {
+  mode: 'legacy_fallback'
+  siteId: string
+  siteVersionId: string
+  versionNo: number
+  fallbackReason: string
+  diagnostics: {
+    pipelineStatus: 'success' | 'failed'
+    stageSummaries: string[]
+    pipelineDiagnosticCodes: string[]
+  }
+}
+
+export type ScopedImportPipelineOutcome = ScopedImportPipelineSuccess | ScopedImportPipelineFallback
+
+export type ScopedImportPipelineDependencies = {
+  importStaticSite: typeof importStaticSite
+  createImportManifest: typeof createImportManifest
+  runLinearMigrationPipeline: typeof runLinearMigrationPipeline
+  createSiteVersionFromMigration: typeof createSiteVersionFromMigration
+  getSiteVersion: typeof getSiteVersion
+  buildDeterministicArtifactBundle: typeof buildDeterministicArtifactBundle
+  createArtifact: typeof createArtifact
+  bindArtifactToVersion: typeof bindArtifactToVersion
+  importHtmlToPage: typeof importHtmlToPage
+  migrateImportedPageToCanonicalDraft: typeof migrateImportedPageToCanonicalDraft
+}
+
+function defaultDependencies(): ScopedImportPipelineDependencies {
+  return {
+    importStaticSite,
+    createImportManifest,
+    runLinearMigrationPipeline,
+    createSiteVersionFromMigration,
+    getSiteVersion,
+    buildDeterministicArtifactBundle,
+    createArtifact,
+    bindArtifactToVersion,
+    importHtmlToPage,
+    migrateImportedPageToCanonicalDraft,
+  }
+}
+
+export async function runScopedImportPipeline(input: {
+  snapshot: UrlSinglePageImportSnapshot
+  sourceUrl: string
+  actor: string
+  fallbackToLegacyOnPipelineFailure?: boolean
+  legacySlug?: string
+  legacyTitle?: string
+  deps?: Partial<ScopedImportPipelineDependencies>
+}): Promise<ScopedImportPipelineOutcome> {
+  const deps = { ...defaultDependencies(), ...(input.deps ?? {}) }
+  const fallbackToLegacy = input.fallbackToLegacyOnPipelineFailure ?? true
+
+  const importOutput = await deps.importStaticSite({
+    rootDir: input.snapshot.snapshotRootDirAbs,
+    requestId: `scoped-import-${Date.now()}`,
+    source: {
+      kind: 'single-entry-html',
+      entryHtmlPath: path.basename(input.snapshot.entryHtmlPathAbs),
+      assetsDirPath: path.basename(input.snapshot.assetsDirAbs),
+    },
+  })
+  const importManifest = deps.createImportManifest(importOutput)
+
+  const pipelineResult = deps.runLinearMigrationPipeline({ importOutput, importManifest })
+  const { preparedSite, layoutModel, renderOutput, previewDocument } = extractPipelineArtifacts(pipelineResult)
+
+  if (pipelineResult.status === 'success' && preparedSite) {
+    const canonicalInput = buildCanonicalMigrationInputFromPipeline({
+      sourceUrl: input.sourceUrl,
+      actor: input.actor,
+      preparedSite,
+      layoutModel,
+    })
+
+    const migrated = await deps.createSiteVersionFromMigration({
+      ...canonicalInput,
+      rendererCompatibilityVersion: RENDERER_COMPATIBILITY_VERSION,
+    })
+
+    const siteVersion = await deps.getSiteVersion(migrated.siteVersionId)
+    if (!siteVersion) {
+      throw new Error('Pipeline succeeded but created site version could not be loaded for artifact generation.')
+    }
+
+    const artifactBundle = deps.buildDeterministicArtifactBundle({
+      siteVersion,
+      renderMode: 'PREVIEW',
+    })
+
+    const artifactGovernance = {
+      pageGateState: ['SCOPED_IMPORT_READY'],
+      pageRolloutPolicyState: ['SCOPED_IMPORT_READY'],
+      pageEnforcementState: {
+        shadow: ['ALLOW'],
+        canary: ['REVIEW'],
+        production: ['REVIEW'],
+      },
+      siteGateState: 'SCOPED_IMPORT_READY',
+      siteRolloutPolicyState: 'SCOPED_IMPORT_READY',
+      siteEnforcementState: {
+        shadow: 'ALLOW',
+        canary: 'REVIEW',
+        production: 'REVIEW',
+      },
+      publishStage: 'shadow' as const,
+    }
+
+    const artifact = await deps.createArtifact({
+      siteId: artifactBundle.siteId,
+      siteVersionId: artifactBundle.siteVersionId,
+      rendererCompatibilityVersion: artifactBundle.rendererCompatibilityVersion,
+      bundleSha256: artifactBundle.bundleSha256,
+      htmlByPath: artifactBundle.htmlByPath,
+      compiledTokenStyles: artifactBundle.compiledTokenStyles,
+      assetFingerprintMap: artifactBundle.assetFingerprintMap,
+      manifest: {
+        ...artifactBundle.manifest,
+        sourceKind: 'scoped_pipeline_import',
+      },
+      publishStage: 'shadow',
+      shadowRestricted: false,
+      artifactGovernance,
+    })
+
+    await deps.bindArtifactToVersion({
+      siteVersionId: migrated.siteVersionId,
+      artifactId: artifact.artifactId,
+      rendererCompatibilityVersion: artifactBundle.rendererCompatibilityVersion,
+    })
+
+    const reporting = computePipelineReporting({
+      pipelineResult,
+      preparedSite,
+    })
+
+    return {
+      mode: 'pipeline',
+      siteId: migrated.siteId,
+      siteVersionId: migrated.siteVersionId,
+      versionNo: migrated.versionNo,
+      artifactId: artifact.artifactId,
+      pipelineResult,
+      preparedSite,
+      layoutModel,
+      renderOutput,
+      previewDocument,
+      reporting: {
+        ...reporting,
+        artifactGenerated: true,
+      },
+    }
+  }
+
+  if (!fallbackToLegacy) {
+    throw new Error(`Scoped pipeline import failed without fallback: ${pipelineResult.summary}`)
+  }
+
+  const html = fs.readFileSync(input.snapshot.entryHtmlPathAbs, 'utf8')
+  if (!html.trim()) {
+    throw new Error('Pipeline failed and legacy fallback cannot run because snapshot entry HTML is empty.')
+  }
+
+  const legacyPage = deps.importHtmlToPage({
+    slug: input.legacySlug ?? '/',
+    title: input.legacyTitle,
+    html,
+  })
+
+  const legacyMigrated = await deps.migrateImportedPageToCanonicalDraft({
+    sourceUrl: input.sourceUrl,
+    page: legacyPage,
+    actor: `${input.actor}:fallback`,
+  })
+
+  return {
+    mode: 'legacy_fallback',
+    siteId: legacyMigrated.siteId,
+    siteVersionId: legacyMigrated.siteVersionId,
+    versionNo: legacyMigrated.versionNo,
+    fallbackReason: 'pipeline_failed',
+    diagnostics: {
+      pipelineStatus: pipelineResult.status,
+      stageSummaries: pipelineResult.stages.map((stage) => stage.summary),
+      pipelineDiagnosticCodes: uniqueSorted(pipelineResult.diagnostics.map((issue) => issue.code)),
+    },
+  }
+}
+
+export const __scopedImportPipelineTestUtils = {
+  buildCanonicalMigrationInputFromPipeline,
+  inferPagePathFromSourcePath,
+}

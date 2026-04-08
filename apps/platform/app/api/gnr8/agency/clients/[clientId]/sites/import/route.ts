@@ -1,12 +1,9 @@
-import fs from 'node:fs'
-
 import { NextResponse } from 'next/server'
 
 import { parseAgencyActionContextError, requireAgencyActionContext } from '@/app/api/gnr8/agency/_lib/agency-action-access'
-import { importHtmlToPage } from '@/gnr8/importer/html-to-page'
-import { migrateImportedPageToCanonicalDraft } from '@/gnr8/runtime/migration-factory'
 import { SCOPED_SITE_IMPORT_CANONICAL_PATH } from '@/gnr8/site/site-import-contract'
 import { importerSuccessRedirectHref } from '@/gnr8/site/site-importer-routing'
+import { runScopedImportPipeline } from '@/gnr8/site/scoped-import-pipeline'
 import { importPublicSinglePageUrlToSnapshot } from '@/gnr8/validation/runtime/url-single-page-import'
 import { getSuperadminPool } from '@/src/superadmin/db'
 
@@ -234,21 +231,16 @@ export async function POST(req: Request, ctx: { params: Promise<Params> }) {
       )
     }
 
-    const html = fs.readFileSync(snapshot.entryHtmlPathAbs, 'utf8')
-    if (!html.trim()) {
-      return NextResponse.json({ ok: false, error: 'Upstream HTML empty.' }, { status: 502 })
-    }
-
-    const page = importHtmlToPage({ slug: '/', html })
-    const migrated = await migrateImportedPageToCanonicalDraft({
+    const imported = await runScopedImportPipeline({
+      snapshot,
       sourceUrl: importUrl.toString(),
-      page,
       actor: `agency:client-scoped-import:${actionContext.actorMode}`,
+      fallbackToLegacyOnPipelineFailure: true,
     })
 
     const ownershipSiteId = await resolveOrCreateOwnershipSiteId({
-      runtimeSiteId: migrated.siteId,
-      siteVersionId: migrated.siteVersionId,
+      runtimeSiteId: imported.siteId,
+      siteVersionId: imported.siteVersionId,
       clientId,
       agencyId: actionContext.agencyId,
       domainHost: normalizeText(importUrl.host) || null,
@@ -267,15 +259,35 @@ export async function POST(req: Request, ctx: { params: Promise<Params> }) {
         importPathClassification: 'canonical_scoped',
         canonicalImportPath: SCOPED_SITE_IMPORT_CANONICAL_PATH,
         siteId: ownershipSiteId,
-        runtimeSiteId: migrated.siteId,
-        siteVersionId: migrated.siteVersionId,
-        siteVersionNo: migrated.versionNo,
+        runtimeSiteId: imported.siteId,
+        siteVersionId: imported.siteVersionId,
+        siteVersionNo: imported.versionNo,
         actor_mode: actionContext.actorMode,
+        fallbackUsed: imported.mode === 'legacy_fallback',
         previewArtifacts: {
           rawImportCaptured: true,
-          transformedPreviewGenerated: false,
+          transformedPreviewGenerated: imported.mode === 'pipeline',
           debugPreviewAvailable: true,
           runtimePreviewLinked: true,
+        },
+        pipeline: {
+          executionStatus: imported.mode === 'pipeline' ? imported.reporting.executionStatus : imported.diagnostics.pipelineStatus,
+          consolidationApplied: imported.mode === 'pipeline' ? imported.reporting.consolidationApplied : false,
+          renderedCaptureUsed: imported.mode === 'pipeline' ? imported.reporting.renderedCaptureUsed : true,
+          artifactGenerated: imported.mode === 'pipeline' ? imported.reporting.artifactGenerated : false,
+          fallbackReason: imported.mode === 'legacy_fallback' ? imported.fallbackReason : null,
+          diagnostics:
+            imported.mode === 'legacy_fallback'
+              ? {
+                  stageSummaries: imported.diagnostics.stageSummaries,
+                  pipelineDiagnosticCodes: imported.diagnostics.pipelineDiagnosticCodes,
+                }
+              : {
+                  stageSummaries: imported.pipelineResult.stages.map((stage) => stage.summary),
+                  pipelineDiagnosticCodes: [...new Set(imported.pipelineResult.diagnostics.map((issue) => issue.code))].sort((a, b) =>
+                    a.localeCompare(b),
+                  ),
+                },
         },
         redirectTo,
       },
