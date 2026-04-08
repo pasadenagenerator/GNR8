@@ -88,21 +88,23 @@ function createSnapshotStageRunner(input: { snapshotRootDirAbs: string; failFetc
 
 function createMockSnapshotImporter(input: {
   snapshotRootDirAbs: string;
-  sourceMode: "raw_html" | "rendered_dom";
+  sourceMode: "raw_html_fallback" | "rendered_dom";
 }): (args: { sourceUrl: string }) => Promise<UrlSinglePageImportSnapshot> {
   return async ({ sourceUrl }) => {
     const snapshotRootDirAbs = input.snapshotRootDirAbs;
     const entryHtmlPathAbs = path.resolve(snapshotRootDirAbs, "index.html");
     const responseHtmlPathAbs = path.resolve(snapshotRootDirAbs, "response-html.raw.html");
     const renderedDomPathAbs = path.resolve(snapshotRootDirAbs, "rendered-capture", "rendered-dom.html");
+    const strongHtml = fixtureLandingHtml();
     await fs.mkdir(path.dirname(renderedDomPathAbs), { recursive: true });
-    await fs.writeFile(responseHtmlPathAbs, "<!doctype html><html><body><h1>Raw</h1></body></html>", "utf8");
-    await fs.writeFile(entryHtmlPathAbs, "<!doctype html><html><body><h1>Entry</h1></body></html>", "utf8");
-    await fs.writeFile(renderedDomPathAbs, "<!doctype html><html><body><h1>Rendered</h1></body></html>", "utf8");
+    await fs.mkdir(path.resolve(snapshotRootDirAbs, "assets"), { recursive: true });
+    await fs.writeFile(responseHtmlPathAbs, strongHtml, "utf8");
+    await fs.writeFile(entryHtmlPathAbs, strongHtml, "utf8");
+    await fs.writeFile(renderedDomPathAbs, strongHtml, "utf8");
 
     return {
       kind: "url_single_page_import_snapshot_v1",
-      snapshotVersion: "1.3.0",
+      snapshotVersion: "1.4.0",
       sourceUrl,
       normalizedUrl: sourceUrl,
       snapshotId: "mock-snapshot",
@@ -114,7 +116,7 @@ function createMockSnapshotImporter(input: {
         assetsDirPath: "assets",
         sourceUrl,
         normalizedUrl: sourceUrl,
-        snapshotVersion: "1.3.0",
+        snapshotVersion: "1.4.0",
         urlKeyRule: "sha256(normalized_url_without_fragment)_prefix16",
         entryRule: "index.html",
         assetPathRule: "assets/<kind>/<urlHash12>-<basename>; collisions append -N",
@@ -136,6 +138,20 @@ function createMockSnapshotImporter(input: {
         },
       },
       sourceMode: input.sourceMode,
+      sourceSelection: {
+        sourceMode: input.sourceMode,
+        fidelityStatus: input.sourceMode === "rendered_dom" ? "high_fidelity_import" : "degraded_import",
+        selectedSourceHtmlPathAbs: input.sourceMode === "rendered_dom" ? renderedDomPathAbs : responseHtmlPathAbs,
+        renderedDomQuality: {
+          quality: input.sourceMode === "rendered_dom" ? "strong" : "unusable",
+          bodyTextLength: input.sourceMode === "rendered_dom" ? 100 : 0,
+          meaningfulNodeCount: input.sourceMode === "rendered_dom" ? 20 : 0,
+          sectionCandidateCount: input.sourceMode === "rendered_dom" ? 2 : 0,
+          hasHeading: input.sourceMode === "rendered_dom",
+          reason: input.sourceMode === "rendered_dom" ? "test_rendered" : "test_fallback",
+        },
+        degraded: input.sourceMode !== "rendered_dom",
+      },
       responseHtmlPathAbs,
       entryHtmlPathAbs,
       assetsDirAbs: path.resolve(snapshotRootDirAbs, "assets"),
@@ -143,7 +159,7 @@ function createMockSnapshotImporter(input: {
         kind: "rendered_capture_result_v1",
         version: "1.0.0",
         status: input.sourceMode === "rendered_dom" ? "available" : "unavailable",
-        sourceMode: input.sourceMode,
+        sourceMode: input.sourceMode === "raw_html_fallback" ? "raw_html" : input.sourceMode,
         documents:
           input.sourceMode === "rendered_dom"
             ? [
@@ -337,14 +353,14 @@ test("snapshot rendered_dom source mode is propagated and preferred by downstrea
   assert.equal(persisted?.stageStates.CANONICAL.outputRefs.sourceMode, "rendered_dom");
 });
 
-test("snapshot raw_html source mode remains valid when rendered capture is unavailable", async () => {
+test("snapshot raw_html_fallback source mode remains valid when rendered capture is unavailable", async () => {
   const now = createDeterministicClock();
   const store = new InMemoryMigrationJobStore({ now });
   const snapshotRootDirAbs = path.resolve(os.tmpdir(), "gnr8-mf-tests", "raw-source-mode");
   const stageRunner = new DefaultMigrationStageRunner({
     snapshotImporter: createMockSnapshotImporter({
       snapshotRootDirAbs,
-      sourceMode: "raw_html",
+      sourceMode: "raw_html_fallback",
     }),
   });
 
@@ -359,7 +375,7 @@ test("snapshot raw_html source mode remains valid when rendered capture is unava
   const persisted = await store.getJob(job.jobId);
   assert.equal(report.finalState, "COMPLETED");
   assert.ok(persisted);
-  assert.equal(persisted?.stageStates.SNAPSHOT.outputRefs.sourceMode, "raw_html");
+  assert.equal(persisted?.stageStates.SNAPSHOT.outputRefs.sourceMode, "raw_html_fallback");
   assert.equal(path.basename(persisted?.stageStates.SNAPSHOT.outputRefs.primaryDocumentRef ?? ""), "index.html");
 });
 

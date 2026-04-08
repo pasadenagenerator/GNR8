@@ -273,8 +273,17 @@ export async function POST(req: Request, ctx: { params: Promise<Params> }) {
         pipeline: {
           executionStatus: imported.mode === 'pipeline' ? imported.reporting.executionStatus : imported.diagnostics.pipelineStatus,
           consolidationApplied: imported.mode === 'pipeline' ? imported.reporting.consolidationApplied : false,
-          renderedCaptureUsed: imported.mode === 'pipeline' ? imported.reporting.renderedCaptureUsed : true,
+          renderedCaptureUsed: imported.mode === 'pipeline' ? imported.reporting.renderedCaptureUsed : imported.diagnostics.sourceMode === 'rendered_dom',
           artifactGenerated: imported.mode === 'pipeline' ? imported.reporting.artifactGenerated : false,
+          sourceMode: imported.mode === 'pipeline' ? imported.reporting.sourceMode : imported.diagnostics.sourceMode,
+          fidelityStatus: imported.mode === 'pipeline' ? imported.reporting.fidelityStatus : imported.diagnostics.fidelityStatus,
+          fidelityDegraded: imported.mode === 'pipeline' ? imported.reporting.fidelityDegraded : imported.diagnostics.fidelityDegraded,
+          renderedCaptureStatus: imported.mode === 'pipeline' ? imported.reporting.renderedCaptureStatus : imported.diagnostics.renderedCaptureStatus,
+          renderedDomQuality: imported.mode === 'pipeline' ? imported.reporting.renderedDomQuality : imported.diagnostics.renderedDomQuality,
+          screenshotCount: imported.mode === 'pipeline' ? imported.reporting.screenshotCount : imported.diagnostics.screenshotCount,
+          computedStyleSampleCount:
+            imported.mode === 'pipeline' ? imported.reporting.computedStyleSampleCount : imported.diagnostics.computedStyleSampleCount,
+          importDiagnosticCodes: imported.mode === 'pipeline' ? imported.reporting.importDiagnosticCodes : imported.diagnostics.importDiagnosticCodes,
           fallbackReason: imported.mode === 'legacy_fallback' ? imported.fallbackReason : null,
           diagnostics:
             imported.mode === 'legacy_fallback'

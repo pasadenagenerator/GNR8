@@ -111,6 +111,13 @@ export type SiteWorkspaceReadModel = {
     semanticModelStatus: 'available' | 'unavailable'
     visualAnalysisStatus: 'available' | 'unavailable'
     designModelStatus: 'available' | 'unavailable'
+    sourceMode: 'rendered_dom' | 'raw_html_fallback' | 'unknown'
+    importFidelityStatus: 'high_fidelity_import' | 'degraded_import' | 'capture_failed' | 'unknown'
+    importFidelityDegraded: boolean
+    renderedCaptureStatus: 'available' | 'unavailable' | 'failed' | 'unknown'
+    renderedDomQuality: 'strong' | 'weak' | 'unusable' | 'unknown'
+    screenshotCount: number
+    computedStyleSampleCount: number
     diagnosticsSummary: string[]
   }
   actions: {
@@ -142,6 +149,8 @@ export type SiteWorkspaceReadModel = {
     ctaDetected: boolean
     designStrategy: 'cta_focused' | 'corporate_balanced' | 'editorial_readable' | 'visual_gallery'
     statusLabel: 'imported' | 'processed' | 'preview_ready' | 'published' | 'unknown'
+    sourceMode: 'rendered_dom' | 'raw_html_fallback' | 'unknown'
+    importFidelityStatus: 'high_fidelity_import' | 'degraded_import' | 'capture_failed' | 'unknown'
   }
   structure: {
     rows: StructureSectionRow[]
@@ -409,6 +418,84 @@ function inferAiSuggestionStatus(pageRows: RuntimePageVersionRow[]): SiteWorkspa
   return 'rejected'
 }
 
+function parseImportFidelitySignals(pageRows: RuntimePageVersionRow[]): {
+  sourceMode: SiteWorkspaceReadModel['pipeline']['sourceMode']
+  importFidelityStatus: SiteWorkspaceReadModel['pipeline']['importFidelityStatus']
+  renderedCaptureStatus: SiteWorkspaceReadModel['pipeline']['renderedCaptureStatus']
+  renderedDomQuality: SiteWorkspaceReadModel['pipeline']['renderedDomQuality']
+  screenshotCount: number
+  computedStyleSampleCount: number
+  importDiagnosticCodes: string[]
+} {
+  let sourceMode: SiteWorkspaceReadModel['pipeline']['sourceMode'] = 'unknown'
+  let importFidelityStatus: SiteWorkspaceReadModel['pipeline']['importFidelityStatus'] = 'unknown'
+  let renderedCaptureStatus: SiteWorkspaceReadModel['pipeline']['renderedCaptureStatus'] = 'unknown'
+  let renderedDomQuality: SiteWorkspaceReadModel['pipeline']['renderedDomQuality'] = 'unknown'
+  let screenshotCount = 0
+  let computedStyleSampleCount = 0
+  const importDiagnosticCodes = new Set<string>()
+
+  for (const page of pageRows) {
+    const semanticSignals = Array.isArray(page.semantic_signals) ? page.semantic_signals : []
+    for (const signal of semanticSignals) {
+      if (!isRecord(signal)) continue
+      const label = normalizeText(signal.label)
+      if (!label) continue
+
+      if (label.startsWith('import.source_mode:')) {
+        const value = label.slice('import.source_mode:'.length).trim()
+        if (value === 'rendered_dom' || value === 'raw_html_fallback') sourceMode = value
+        continue
+      }
+
+      if (label.startsWith('import.fidelity_status:')) {
+        const value = label.slice('import.fidelity_status:'.length).trim()
+        if (value === 'high_fidelity_import' || value === 'degraded_import' || value === 'capture_failed') importFidelityStatus = value
+        continue
+      }
+
+      if (label.startsWith('import.rendered_capture_status:')) {
+        const value = label.slice('import.rendered_capture_status:'.length).trim()
+        if (value === 'available' || value === 'unavailable' || value === 'failed') renderedCaptureStatus = value
+        continue
+      }
+
+      if (label.startsWith('import.rendered_dom_quality:')) {
+        const value = label.slice('import.rendered_dom_quality:'.length).trim()
+        if (value === 'strong' || value === 'weak' || value === 'unusable') renderedDomQuality = value
+        continue
+      }
+
+      if (label.startsWith('import.screenshot_count:')) {
+        const value = Number(label.slice('import.screenshot_count:'.length).trim())
+        if (Number.isFinite(value)) screenshotCount = Math.max(0, Math.floor(value))
+        continue
+      }
+
+      if (label.startsWith('import.computed_style_sample_count:')) {
+        const value = Number(label.slice('import.computed_style_sample_count:'.length).trim())
+        if (Number.isFinite(value)) computedStyleSampleCount = Math.max(0, Math.floor(value))
+        continue
+      }
+
+      if (label.startsWith('import.diagnostic:')) {
+        const value = label.slice('import.diagnostic:'.length).trim()
+        if (value) importDiagnosticCodes.add(value)
+      }
+    }
+  }
+
+  return {
+    sourceMode,
+    importFidelityStatus,
+    renderedCaptureStatus,
+    renderedDomQuality,
+    screenshotCount,
+    computedStyleSampleCount,
+    importDiagnosticCodes: [...importDiagnosticCodes].sort((a, b) => a.localeCompare(b)),
+  }
+}
+
 export function resolveSelectedRuntimeVersionIdForWorkspace(input: {
   latestRuntimeSiteVersionId: string | null
   normalizedVariants: Array<{
@@ -629,6 +716,8 @@ export async function getSiteWorkspaceReadModelForPage(input: {
       `Structural confidence is '${row.confidenceLabel}' (${row.confidenceScore.toFixed(2)}).`,
     ],
   }))
+  const importFidelity = parseImportFidelitySignals(pageRows)
+  const importFidelityDegraded = importFidelity.importFidelityStatus === 'degraded_import' || importFidelity.importFidelityStatus === 'capture_failed'
 
   const lastAction = normalizedSiteActions[0] ?? null
   let transformedPreviewAvailable = false
@@ -660,6 +749,7 @@ export async function getSiteWorkspaceReadModelForPage(input: {
     new Set([
       ...structureRows.flatMap((row) => row.keyDiagnostics),
       ...(lastAction?.diagnostics ?? []),
+      ...importFidelity.importDiagnosticCodes,
       ...(selectedVariant ? [`variant:${selectedVariant.label}`] : []),
       ...resolvedPreview.diagnostics,
     ]),
@@ -687,6 +777,13 @@ export async function getSiteWorkspaceReadModelForPage(input: {
         : 'unavailable',
       visualAnalysisStatus: diagnosticsSummary.length > 0 ? 'available' : 'unavailable',
       designModelStatus: sectionsDetected > 0 ? 'available' : 'unavailable',
+      sourceMode: importFidelity.sourceMode,
+      importFidelityStatus: importFidelity.importFidelityStatus,
+      importFidelityDegraded,
+      renderedCaptureStatus: importFidelity.renderedCaptureStatus,
+      renderedDomQuality: importFidelity.renderedDomQuality,
+      screenshotCount: importFidelity.screenshotCount,
+      computedStyleSampleCount: importFidelity.computedStyleSampleCount,
       diagnosticsSummary,
     },
     actions: {
@@ -722,6 +819,8 @@ export async function getSiteWorkspaceReadModelForPage(input: {
         latestRuntimeState: selectedRuntimeState,
         hasPreview: Boolean(previewUrl),
       }),
+      sourceMode: importFidelity.sourceMode,
+      importFidelityStatus: importFidelity.importFidelityStatus,
     },
     structure: {
       rows: structureRows,
@@ -757,4 +856,8 @@ export async function getSiteWorkspaceReadModelForPage(input: {
     },
     siteOptions,
   }
+}
+
+export const __siteWorkspaceReadModelTestUtils = {
+  parseImportFidelitySignals,
 }

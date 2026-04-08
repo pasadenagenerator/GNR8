@@ -74,6 +74,13 @@ function renderOverviewContent(props: {
           <div>Hero detected: {readModel.overview.heroDetected ? 'yes' : 'no'}</div>
           <div>CTA detected: {readModel.overview.ctaDetected ? 'yes' : 'no'}</div>
           <div>Design strategy: {readModel.overview.designStrategy}</div>
+          <div>Import source mode: {readModel.pipeline.sourceMode}</div>
+          <div>Import fidelity status: {readModel.pipeline.importFidelityStatus}</div>
+          <div>Rendered capture status: {readModel.pipeline.renderedCaptureStatus}</div>
+          <div>Rendered DOM quality: {readModel.pipeline.renderedDomQuality}</div>
+          <div>Screenshots captured: {readModel.pipeline.screenshotCount}</div>
+          <div>Computed style samples: {readModel.pipeline.computedStyleSampleCount}</div>
+          {readModel.pipeline.importFidelityDegraded ? <div>Fidelity warning: degraded import (review before redesign)</div> : null}
         </div>
       </section>
 

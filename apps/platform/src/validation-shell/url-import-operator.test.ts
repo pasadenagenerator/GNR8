@@ -177,9 +177,13 @@ test("rendered capture unavailable falls back to raw_html and preserves raw resp
     }),
   });
 
-  assert.equal(snapshot.sourceMode, "raw_html");
+  assert.equal(snapshot.sourceMode, "raw_html_fallback");
+  assert.equal(snapshot.sourceSelection.sourceMode, "raw_html_fallback");
+  assert.equal(snapshot.sourceSelection.fidelityStatus, "degraded_import");
   assert.equal(snapshot.renderedCapture.status, "unavailable");
   assert.ok(snapshot.importDiagnostics.issues.some((issue) => issue.code === "RENDERED_CAPTURE_UNAVAILABLE"));
+  assert.ok(snapshot.importDiagnostics.issues.some((issue) => issue.code === "RAW_HTML_FALLBACK_USED"));
+  assert.ok(snapshot.importDiagnostics.issues.some((issue) => issue.code === "IMPORT_FIDELITY_DEGRADED"));
   assert.equal(fs.existsSync(snapshot.responseHtmlPathAbs), true);
   assert.equal(fs.existsSync(snapshot.entryHtmlPathAbs), true);
   assert.equal(fs.readFileSync(snapshot.responseHtmlPathAbs, "utf8").includes("Raw Fallback"), true);
@@ -256,6 +260,8 @@ test("rendered capture contract is persisted and rendered_dom becomes primary sn
   });
 
   assert.equal(snapshot.sourceMode, "rendered_dom");
+  assert.equal(snapshot.sourceSelection.sourceMode, "rendered_dom");
+  assert.equal(snapshot.sourceSelection.fidelityStatus, "high_fidelity_import");
   assert.equal(snapshot.renderedCapture.status, "available");
   assert.equal(snapshot.renderedCapture.documents.length, 1);
   assert.equal(snapshot.renderedCapture.screenshots.length, 1);
@@ -297,10 +303,48 @@ test("rendered capture failure emits diagnostics and still returns snapshot outp
     }),
   });
 
-  assert.equal(snapshot.sourceMode, "raw_html");
+  assert.equal(snapshot.sourceMode, "raw_html_fallback");
+  assert.equal(snapshot.sourceSelection.fidelityStatus, "capture_failed");
   assert.equal(snapshot.renderedCapture.status, "failed");
   assert.ok(snapshot.importDiagnostics.issues.some((issue) => issue.code === "RENDERED_CAPTURE_FAILED"));
+  assert.ok(snapshot.importDiagnostics.issues.some((issue) => issue.code === "RENDERED_DOM_REQUIRED_BUT_UNAVAILABLE"));
+  assert.ok(snapshot.importDiagnostics.issues.some((issue) => issue.code === "RAW_HTML_FALLBACK_USED"));
   assert.equal(fs.existsSync(snapshot.entryHtmlPathAbs), true);
+});
+
+test("weak rendered DOM snapshot degrades to explicit raw_html_fallback mode", async () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "gnr8-url-import-rendered-weak-"));
+  const sourceUrl = "https://rendered-weak.example.com/";
+
+  const snapshot = await importPublicSinglePageUrlToSnapshot({
+    sourceUrl,
+    snapshotRootDirAbs: tmp,
+    fetchImpl: mockFetchFromTable({
+      [sourceUrl]: {
+        status: 200,
+        headers: { "content-type": "text/html; charset=utf-8" },
+        body: "<!doctype html><html><body><main><h1>Raw Backup</h1><p>Use me</p></main></body></html>",
+      },
+    }),
+    renderedCaptureExecutor: mockRenderedCaptureExecutor({
+      status: "available",
+      document: {
+        html: "<!doctype html><html><body><main id='app-shell'></main></body></html>",
+        readinessState: "dom_stable",
+      },
+      screenshots: [],
+      computedStyleSamples: [],
+      renderedObservedAssetUrls: [],
+      diagnostics: [],
+    }),
+  });
+
+  assert.equal(snapshot.sourceMode, "raw_html_fallback");
+  assert.equal(snapshot.sourceSelection.fidelityStatus, "degraded_import");
+  assert.equal(snapshot.sourceSelection.renderedDomQuality.quality, "weak");
+  assert.ok(snapshot.importDiagnostics.issues.some((issue) => issue.code === "RENDERED_DOM_EMPTY_OR_WEAK"));
+  assert.ok(snapshot.importDiagnostics.issues.some((issue) => issue.code === "RAW_HTML_FALLBACK_USED"));
+  assert.ok(snapshot.importDiagnostics.issues.some((issue) => issue.code === "IMPORT_FIDELITY_DEGRADED"));
 });
 
 test("url import operator runs imported snapshot through pipeline and materialize mode", async () => {
@@ -393,7 +437,9 @@ test("pipeline succeeds when rendered capture is unavailable and reports raw_htm
 
   assert.equal(response.ok, true);
   if (!response.ok) return;
-  assert.equal(response.summary.structureSourceMode, "raw_html");
+  assert.equal(response.summary.structureSourceMode, "raw_html_fallback");
+  assert.equal(response.summary.fidelityStatus, "degraded_import");
+  assert.equal(response.summary.fidelityDegraded, true);
   assert.equal(response.summary.renderedCaptureStatus, "unavailable");
   assert.equal(response.summary.renderedDomCaptured, false);
   assert.equal(response.summary.screenshotCount, 0);

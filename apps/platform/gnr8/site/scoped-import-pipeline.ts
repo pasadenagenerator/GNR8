@@ -157,17 +157,43 @@ function baselineStyleTokens(): Record<string, string> {
   }
 }
 
+function buildImportFidelitySignals(snapshot: UrlSinglePageImportSnapshot): Array<{ label: string; confidence: number; source: 'migration' }> {
+  const diagnostics = [...new Set(snapshot.importDiagnostics.issues.map((issue) => normalizeText(issue.code)).filter(Boolean))]
+    .sort((a, b) => a.localeCompare(b))
+    .slice(0, 16)
+
+  return [
+    { label: `import.source_mode:${snapshot.sourceSelection.sourceMode}`, confidence: 1, source: 'migration' },
+    { label: `import.fidelity_status:${snapshot.sourceSelection.fidelityStatus}`, confidence: 1, source: 'migration' },
+    { label: `import.rendered_capture_status:${snapshot.renderedCapture.status}`, confidence: 0.95, source: 'migration' },
+    { label: `import.rendered_dom_quality:${snapshot.sourceSelection.renderedDomQuality.quality}`, confidence: 0.9, source: 'migration' },
+    { label: `import.screenshot_count:${snapshot.renderedCapture.screenshots.length}`, confidence: 1, source: 'migration' },
+    {
+      label: `import.computed_style_sample_count:${snapshot.renderedCapture.computedStyleSamples.length}`,
+      confidence: 1,
+      source: 'migration',
+    },
+    ...diagnostics.map((code) => ({
+      label: `import.diagnostic:${code}`,
+      confidence: 0.8,
+      source: 'migration' as const,
+    })),
+  ]
+}
+
 function buildCanonicalMigrationInputFromPipeline(input: {
   sourceUrl: string
   actor: string
   preparedSite: PreparedSiteModel
   layoutModel: LayoutPreparationModel | null
+  snapshot: UrlSinglePageImportSnapshot
 }): CanonicalSiteMigrationInput {
   const entrySourcePath = input.preparedSite.source.entryHtmlPath ?? input.preparedSite.documents[0]?.path ?? '/'
   const entryPagePath = inferPagePathFromSourcePath(entrySourcePath)
   const siteId = resolveSiteId(input.sourceUrl, entryPagePath)
 
   const layoutByDocumentId = new Map(input.layoutModel?.pages.map((page) => [page.sourceDocumentId, page]) ?? [])
+  const importFidelitySignals = buildImportFidelitySignals(input.snapshot)
 
   const pages: CanonicalPageVersionInput[] = input.preparedSite.documents
     .slice()
@@ -257,6 +283,7 @@ function buildCanonicalMigrationInputFromPipeline(input: {
             confidence: 0.85,
             source: 'migration',
           },
+          ...importFidelitySignals,
         ],
         source: 'migration',
         actor: input.actor,
@@ -287,10 +314,19 @@ function extractPipelineArtifacts(pipeline: LinearMigrationPipelineResult): {
 function computePipelineReporting(input: {
   pipelineResult: LinearMigrationPipelineResult
   preparedSite: PreparedSiteModel | null
+  snapshot: UrlSinglePageImportSnapshot
 }): {
   executionStatus: 'success' | 'failed'
   consolidationApplied: boolean
   renderedCaptureUsed: boolean
+  sourceMode: UrlSinglePageImportSnapshot['sourceMode']
+  fidelityStatus: UrlSinglePageImportSnapshot['sourceSelection']['fidelityStatus']
+  fidelityDegraded: boolean
+  renderedCaptureStatus: UrlSinglePageImportSnapshot['renderedCapture']['status']
+  renderedDomQuality: UrlSinglePageImportSnapshot['sourceSelection']['renderedDomQuality']['quality']
+  screenshotCount: number
+  computedStyleSampleCount: number
+  importDiagnosticCodes: string[]
 } {
   const consolidationApplied = Boolean(
     input.preparedSite?.documents.some((doc) => {
@@ -299,12 +335,20 @@ function computePipelineReporting(input: {
     }),
   )
 
-  const renderedCaptureUsed = normalizeText(input.pipelineResult.input.importOutput.documentMeta.source.kind) === 'single-entry-html'
+  const renderedCaptureUsed = input.snapshot.sourceSelection.sourceMode === 'rendered_dom'
 
   return {
     executionStatus: input.pipelineResult.status,
     consolidationApplied,
     renderedCaptureUsed,
+    sourceMode: input.snapshot.sourceSelection.sourceMode,
+    fidelityStatus: input.snapshot.sourceSelection.fidelityStatus,
+    fidelityDegraded: input.snapshot.sourceSelection.degraded,
+    renderedCaptureStatus: input.snapshot.renderedCapture.status,
+    renderedDomQuality: input.snapshot.sourceSelection.renderedDomQuality.quality,
+    screenshotCount: input.snapshot.renderedCapture.screenshots.length,
+    computedStyleSampleCount: input.snapshot.renderedCapture.computedStyleSamples.length,
+    importDiagnosticCodes: uniqueSorted(input.snapshot.importDiagnostics.issues.map((issue) => normalizeText(issue.code)).filter(Boolean)),
   }
 }
 
@@ -323,6 +367,14 @@ export type ScopedImportPipelineSuccess = {
     executionStatus: 'success' | 'failed'
     consolidationApplied: boolean
     renderedCaptureUsed: boolean
+    sourceMode: UrlSinglePageImportSnapshot['sourceMode']
+    fidelityStatus: UrlSinglePageImportSnapshot['sourceSelection']['fidelityStatus']
+    fidelityDegraded: boolean
+    renderedCaptureStatus: UrlSinglePageImportSnapshot['renderedCapture']['status']
+    renderedDomQuality: UrlSinglePageImportSnapshot['sourceSelection']['renderedDomQuality']['quality']
+    screenshotCount: number
+    computedStyleSampleCount: number
+    importDiagnosticCodes: string[]
     artifactGenerated: boolean
   }
 }
@@ -337,6 +389,14 @@ export type ScopedImportPipelineFallback = {
     pipelineStatus: 'success' | 'failed'
     stageSummaries: string[]
     pipelineDiagnosticCodes: string[]
+    sourceMode: UrlSinglePageImportSnapshot['sourceMode']
+    fidelityStatus: UrlSinglePageImportSnapshot['sourceSelection']['fidelityStatus']
+    fidelityDegraded: boolean
+    renderedCaptureStatus: UrlSinglePageImportSnapshot['renderedCapture']['status']
+    renderedDomQuality: UrlSinglePageImportSnapshot['sourceSelection']['renderedDomQuality']['quality']
+    screenshotCount: number
+    computedStyleSampleCount: number
+    importDiagnosticCodes: string[]
   }
 }
 
@@ -402,6 +462,7 @@ export async function runScopedImportPipeline(input: {
       actor: input.actor,
       preparedSite,
       layoutModel,
+      snapshot: input.snapshot,
     })
 
     const migrated = await deps.createSiteVersionFromMigration({
@@ -463,6 +524,7 @@ export async function runScopedImportPipeline(input: {
     const reporting = computePipelineReporting({
       pipelineResult,
       preparedSite,
+      snapshot: input.snapshot,
     })
 
     return {
@@ -514,6 +576,14 @@ export async function runScopedImportPipeline(input: {
       pipelineStatus: pipelineResult.status,
       stageSummaries: pipelineResult.stages.map((stage) => stage.summary),
       pipelineDiagnosticCodes: uniqueSorted(pipelineResult.diagnostics.map((issue) => issue.code)),
+      sourceMode: input.snapshot.sourceSelection.sourceMode,
+      fidelityStatus: input.snapshot.sourceSelection.fidelityStatus,
+      fidelityDegraded: input.snapshot.sourceSelection.degraded,
+      renderedCaptureStatus: input.snapshot.renderedCapture.status,
+      renderedDomQuality: input.snapshot.sourceSelection.renderedDomQuality.quality,
+      screenshotCount: input.snapshot.renderedCapture.screenshots.length,
+      computedStyleSampleCount: input.snapshot.renderedCapture.computedStyleSamples.length,
+      importDiagnosticCodes: uniqueSorted(input.snapshot.importDiagnostics.issues.map((issue) => normalizeText(issue.code)).filter(Boolean)),
     },
   }
 }

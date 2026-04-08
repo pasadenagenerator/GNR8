@@ -242,6 +242,29 @@ test('scoped pipeline import uses pipeline path, maps consolidated sections, and
       snapshotRootDirAbs: '/tmp/snapshot',
       entryHtmlPathAbs: '/tmp/snapshot/index.html',
       assetsDirAbs: '/tmp/snapshot/assets',
+      sourceMode: 'rendered_dom',
+      sourceSelection: {
+        sourceMode: 'rendered_dom',
+        fidelityStatus: 'high_fidelity_import',
+        selectedSourceHtmlPathAbs: '/tmp/snapshot/rendered-capture/rendered-dom.html',
+        renderedDomQuality: {
+          quality: 'strong',
+          bodyTextLength: 280,
+          meaningfulNodeCount: 40,
+          sectionCandidateCount: 3,
+          hasHeading: true,
+          reason: 'test_fixture',
+        },
+        degraded: false,
+      },
+      renderedCapture: {
+        status: 'available',
+        screenshots: [{}, {}],
+        computedStyleSamples: [{}, {}, {}],
+      },
+      importDiagnostics: {
+        issues: [],
+      },
     } as any,
     sourceUrl: 'https://example.com/',
     actor: 'test:scoped-import',
@@ -312,6 +335,12 @@ test('scoped pipeline import uses pipeline path, maps consolidated sections, and
   assert.equal(outcome.artifactId, 'artifact-1')
   assert.equal(outcome.reporting.artifactGenerated, true)
   assert.equal(outcome.reporting.consolidationApplied, true)
+  assert.equal(outcome.reporting.sourceMode, 'rendered_dom')
+  assert.equal(outcome.reporting.fidelityStatus, 'high_fidelity_import')
+  assert.equal(outcome.reporting.fidelityDegraded, false)
+  assert.equal(outcome.reporting.renderedDomQuality, 'strong')
+  assert.equal(outcome.reporting.screenshotCount, 2)
+  assert.equal(outcome.reporting.computedStyleSampleCount, 3)
   assert.equal(bindCalls, 1)
   assert.equal(legacyImportCalls, 0)
   assert.equal(legacyMigrateCalls, 0)
@@ -333,6 +362,29 @@ test('scoped pipeline import falls back to legacy when pipeline fails', async ()
       snapshotRootDirAbs: tmp,
       entryHtmlPathAbs: entryHtmlPath,
       assetsDirAbs: path.join(tmp, 'assets'),
+      sourceMode: 'raw_html_fallback',
+      sourceSelection: {
+        sourceMode: 'raw_html_fallback',
+        fidelityStatus: 'degraded_import',
+        selectedSourceHtmlPathAbs: path.join(tmp, 'response-html.raw.html'),
+        renderedDomQuality: {
+          quality: 'weak',
+          bodyTextLength: 32,
+          meaningfulNodeCount: 7,
+          sectionCandidateCount: 1,
+          hasHeading: false,
+          reason: 'test_fixture',
+        },
+        degraded: true,
+      },
+      renderedCapture: {
+        status: 'unavailable',
+        screenshots: [],
+        computedStyleSamples: [],
+      },
+      importDiagnostics: {
+        issues: [{ code: 'RAW_HTML_FALLBACK_USED' }],
+      },
     } as any,
     sourceUrl: 'https://fallback.example/',
     actor: 'test:fallback',
@@ -369,6 +421,9 @@ test('scoped pipeline import falls back to legacy when pipeline fails', async ()
   assert.equal(outcome.siteVersionId, 'legacy-version')
   assert.equal(outcome.fallbackReason, 'pipeline_failed')
   assert.ok(outcome.diagnostics.pipelineDiagnosticCodes.includes('PIPELINE_BLOCKED_BY_IMPORT'))
+  assert.equal(outcome.diagnostics.sourceMode, 'raw_html_fallback')
+  assert.equal(outcome.diagnostics.fidelityStatus, 'degraded_import')
+  assert.equal(outcome.diagnostics.fidelityDegraded, true)
   assert.equal(legacyImportCalls, 1)
   assert.equal(legacyMigrateCalls, 1)
 })

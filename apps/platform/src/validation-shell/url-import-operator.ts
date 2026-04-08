@@ -104,6 +104,7 @@ export type UrlImportOperatorResponse =
         snapshotId: string;
         snapshotRootDirAbs: string;
         sourceMode: UrlSinglePageImportSnapshot["sourceMode"];
+        sourceSelection: UrlSinglePageImportSnapshot["sourceSelection"];
         responseHtmlPathAbs: string;
         entryHtmlPathAbs: string;
         assetsDirAbs: string;
@@ -150,6 +151,9 @@ export type UrlImportOperatorResponse =
         screenshotCount: number;
         computedStyleSampleCount: number;
         structureSourceMode: UrlSinglePageImportSnapshot["sourceMode"];
+        fidelityStatus: UrlSinglePageImportSnapshot["sourceSelection"]["fidelityStatus"];
+        fidelityDegraded: boolean;
+        renderedDomQuality: UrlSinglePageImportSnapshot["sourceSelection"]["renderedDomQuality"]["quality"];
         warningCodes: string[];
         blockingReasonCodes: string[];
       };
@@ -166,6 +170,7 @@ export type UrlImportOperatorResponse =
         snapshotId: string | null;
         snapshotRootDirAbs: string | null;
         sourceMode: UrlSinglePageImportSnapshot["sourceMode"] | null;
+        sourceSelection: UrlSinglePageImportSnapshot["sourceSelection"] | null;
         responseHtmlPathAbs: string | null;
         entryHtmlPathAbs: string | null;
         assetsDirAbs: string | null;
@@ -675,6 +680,7 @@ export async function runUrlImportOperatorFlow(
         snapshotId: snapshot.snapshotId,
         snapshotRootDirAbs: snapshot.snapshotRootDirAbs,
         sourceMode: snapshot.sourceMode,
+        sourceSelection: snapshot.sourceSelection,
         responseHtmlPathAbs: snapshot.responseHtmlPathAbs,
         entryHtmlPathAbs: snapshot.entryHtmlPathAbs,
         assetsDirAbs: snapshot.assetsDirAbs,
@@ -723,6 +729,9 @@ export async function runUrlImportOperatorFlow(
         screenshotCount: snapshot.renderedCapture.screenshots.length,
         computedStyleSampleCount: snapshot.renderedCapture.computedStyleSamples.length,
         structureSourceMode: snapshot.sourceMode,
+        fidelityStatus: snapshot.sourceSelection.fidelityStatus,
+        fidelityDegraded: snapshot.sourceSelection.degraded,
+        renderedDomQuality: snapshot.sourceSelection.renderedDomQuality.quality,
         warningCodes,
         blockingReasonCodes,
       },
@@ -743,6 +752,7 @@ export async function runUrlImportOperatorFlow(
         snapshotId: snapshot?.snapshotId ?? null,
         snapshotRootDirAbs: snapshot?.snapshotRootDirAbs ?? null,
         sourceMode: snapshot?.sourceMode ?? null,
+        sourceSelection: snapshot?.sourceSelection ?? null,
         responseHtmlPathAbs: snapshot?.responseHtmlPathAbs ?? null,
         entryHtmlPathAbs: snapshot?.entryHtmlPathAbs ?? null,
         assetsDirAbs: snapshot?.assetsDirAbs ?? null,

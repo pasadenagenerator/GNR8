@@ -10,7 +10,7 @@ import type { JsonValue } from "../../import/import-contract";
 import { stableStringify } from "../../migration/runtime/diagnostics";
 import { resolveUrlImportSnapshotRootDirAbs } from "./url-import-snapshot-root";
 
-export const URL_SINGLE_PAGE_IMPORT_VERSION = "1.3.0" as const;
+export const URL_SINGLE_PAGE_IMPORT_VERSION = "1.4.0" as const;
 
 export type UrlImportExecutionScope = {
   includes: readonly [
@@ -54,7 +54,25 @@ export type UrlImportDiagnosticCode =
   | "RENDERED_CAPTURE_PARTIAL"
   | "RENDERED_CAPTURE_FAILED"
   | "SCREENSHOT_CAPTURE_FAILED"
-  | "COMPUTED_STYLE_SAMPLE_WEAK";
+  | "COMPUTED_STYLE_SAMPLE_WEAK"
+  | "RENDERED_DOM_REQUIRED_BUT_UNAVAILABLE"
+  | "RAW_HTML_FALLBACK_USED"
+  | "IMPORT_FIDELITY_DEGRADED"
+  | "RENDERED_DOM_EMPTY_OR_WEAK"
+  | "NO_USABLE_IMPORT_SOURCE";
+
+export type UrlImportSourceMode = "rendered_dom" | "raw_html_fallback";
+
+export type UrlImportFidelityStatus = "high_fidelity_import" | "degraded_import" | "capture_failed";
+
+export type RenderedDomQuality = {
+  quality: "strong" | "weak" | "unusable";
+  bodyTextLength: number;
+  meaningfulNodeCount: number;
+  sectionCandidateCount: number;
+  hasHeading: boolean;
+  reason: string;
+};
 
 export type UrlImportDiagnostic = {
   id: string;
@@ -114,7 +132,14 @@ export type UrlSinglePageImportSnapshot = {
   snapshotId: string;
   snapshotRootDirAbs: string;
   fixtureSpec: UrlSnapshotFixtureSpec;
-  sourceMode: "raw_html" | "rendered_dom";
+  sourceMode: UrlImportSourceMode;
+  sourceSelection: {
+    sourceMode: UrlImportSourceMode;
+    fidelityStatus: UrlImportFidelityStatus;
+    selectedSourceHtmlPathAbs: string;
+    renderedDomQuality: RenderedDomQuality;
+    degraded: boolean;
+  };
   responseHtmlPathAbs: string;
   entryHtmlPathAbs: string;
   assetsDirAbs: string;
@@ -707,6 +732,119 @@ function walkDomWithAncestors(
   }
 }
 
+function findFirstNodeByTag(root: unknown, tagName: string): unknown | null {
+  let found: unknown | null = null;
+  walkDom(root, (node) => {
+    if (found !== null || !isElement(node)) return;
+    if (node.tagName.toLowerCase() === tagName) found = node;
+  });
+  return found;
+}
+
+function evaluateRenderedDomQuality(html: string): RenderedDomQuality {
+  const trimmed = html.trim();
+  if (!trimmed) {
+    return {
+      quality: "unusable",
+      bodyTextLength: 0,
+      meaningfulNodeCount: 0,
+      sectionCandidateCount: 0,
+      hasHeading: false,
+      reason: "empty_html",
+    };
+  }
+
+  let document: unknown;
+  try {
+    document = parse(trimmed);
+  } catch {
+    return {
+      quality: "unusable",
+      bodyTextLength: 0,
+      meaningfulNodeCount: 0,
+      sectionCandidateCount: 0,
+      hasHeading: false,
+      reason: "parse_failed",
+    };
+  }
+
+  const bodyNode = findFirstNodeByTag(document, "body");
+  if (!bodyNode) {
+    return {
+      quality: "unusable",
+      bodyTextLength: 0,
+      meaningfulNodeCount: 0,
+      sectionCandidateCount: 0,
+      hasHeading: false,
+      reason: "missing_body",
+    };
+  }
+
+  const NON_MEANINGFUL_TAGS = new Set(["script", "style", "meta", "link", "noscript", "template"]);
+  const SECTION_CANDIDATE_TAGS = new Set(["section", "main", "header", "footer", "article", "nav", "aside"]);
+  const HEADING_TAGS = new Set(["h1", "h2", "h3"]);
+
+  let meaningfulNodeCount = 0;
+  let sectionCandidateCount = 0;
+  let hasHeading = false;
+  const textParts: string[] = [];
+
+  walkDom(bodyNode, (node) => {
+    if (isElement(node)) {
+      const tag = node.tagName.toLowerCase();
+      if (!NON_MEANINGFUL_TAGS.has(tag)) meaningfulNodeCount += 1;
+      if (SECTION_CANDIDATE_TAGS.has(tag)) sectionCandidateCount += 1;
+      if (HEADING_TAGS.has(tag)) hasHeading = true;
+      return;
+    }
+
+    if (
+      node &&
+      typeof node === "object" &&
+      String((node as { nodeName?: string }).nodeName ?? "").toLowerCase() === "#text" &&
+      typeof (node as { value?: unknown }).value === "string"
+    ) {
+      const text = String((node as { value?: string }).value ?? "").replace(/\s+/g, " ").trim();
+      if (text) textParts.push(text);
+    }
+  });
+
+  const bodyTextLength = textParts.join(" ").trim().length;
+  const strong = bodyTextLength >= 140 || meaningfulNodeCount >= 18 || sectionCandidateCount >= 2 || hasHeading;
+  const weak = bodyTextLength >= 40 || meaningfulNodeCount >= 8 || sectionCandidateCount >= 1;
+
+  if (strong) {
+    return {
+      quality: "strong",
+      bodyTextLength,
+      meaningfulNodeCount,
+      sectionCandidateCount,
+      hasHeading,
+      reason: "rendered_dom_has_meaningful_content",
+    };
+  }
+
+  if (weak) {
+    return {
+      quality: "weak",
+      bodyTextLength,
+      meaningfulNodeCount,
+      sectionCandidateCount,
+      hasHeading,
+      reason: "rendered_dom_is_shell_like",
+    };
+  }
+
+  return {
+    quality: "unusable",
+    bodyTextLength,
+    meaningfulNodeCount,
+    sectionCandidateCount,
+    hasHeading,
+    reason: "rendered_dom_has_insufficient_content",
+  };
+}
+
 function hasDescendantTag(root: unknown, tagName: string): boolean {
   let found = false;
   walkDom(root, (node) => {
@@ -1125,6 +1263,131 @@ function writeJsonStable(absPath: string, value: JsonValue): void {
   fs.writeFileSync(absPath, `${stableStringify(value)}\n`, "utf8");
 }
 
+function resolveSourceSelection(input: {
+  diagnostics: UrlImportDiagnostic[];
+  entryHtml: string;
+  responseHtmlPathAbs: string;
+  renderedCapture: RenderedCaptureResult;
+}): {
+  sourceMode: UrlImportSourceMode;
+  fidelityStatus: UrlImportFidelityStatus;
+  selectedSourceHtmlPathAbs: string;
+  selectedHtml: string;
+  renderedDomQuality: RenderedDomQuality;
+  degraded: boolean;
+} {
+  const rawHtml = input.entryHtml;
+  const renderedDomPathAbs = input.renderedCapture.documents[0]?.htmlPathAbs ?? "";
+
+  const renderedHtml = (() => {
+    if (!renderedDomPathAbs) return "";
+    try {
+      return fs.readFileSync(renderedDomPathAbs, "utf8");
+    } catch {
+      return "";
+    }
+  })();
+  const renderedDomQuality = evaluateRenderedDomQuality(renderedHtml);
+
+  if (renderedDomQuality.quality === "strong" && renderedDomPathAbs.length > 0) {
+    return {
+      sourceMode: "rendered_dom",
+      fidelityStatus: "high_fidelity_import",
+      selectedSourceHtmlPathAbs: renderedDomPathAbs,
+      selectedHtml: renderedHtml,
+      renderedDomQuality,
+      degraded: false,
+    };
+  }
+
+  input.diagnostics.push(
+    createDiagnostic({
+      severity: "warning",
+      code: "RENDERED_DOM_REQUIRED_BUT_UNAVAILABLE",
+      message: "Rendered DOM could not be used as authoritative source; raw HTML fallback policy engaged.",
+      targetUrl: null,
+      details: {
+        renderedCaptureStatus: input.renderedCapture.status,
+        renderedDocumentCount: input.renderedCapture.documents.length,
+        renderedDomQuality: renderedDomQuality.quality,
+      },
+    }),
+  );
+
+  if (renderedHtml.trim().length > 0 && renderedDomQuality.quality !== "strong") {
+    input.diagnostics.push(
+      createDiagnostic({
+        severity: "warning",
+        code: "RENDERED_DOM_EMPTY_OR_WEAK",
+        message: "Rendered DOM artifact exists but appears shell-like or weak; not used as primary import source.",
+        targetUrl: null,
+        details: {
+          renderedDomQuality,
+        },
+      }),
+    );
+  }
+
+  if (rawHtml.trim().length > 0) {
+    input.diagnostics.push(
+      createDiagnostic({
+        severity: "warning",
+        code: "RAW_HTML_FALLBACK_USED",
+        message: "Import continued in degraded mode using raw HTML fallback.",
+        targetUrl: null,
+        details: {
+          renderedCaptureStatus: input.renderedCapture.status,
+          renderedDomQuality: renderedDomQuality.quality,
+        },
+      }),
+    );
+    input.diagnostics.push(
+      createDiagnostic({
+        severity: "warning",
+        code: "IMPORT_FIDELITY_DEGRADED",
+        message: "Import fidelity degraded because rendered DOM authority was unavailable or weak.",
+        targetUrl: null,
+        details: {
+          sourceMode: "raw_html_fallback",
+          renderedCaptureStatus: input.renderedCapture.status,
+          renderedDomQuality: renderedDomQuality.quality,
+        },
+      }),
+    );
+
+    return {
+      sourceMode: "raw_html_fallback",
+      fidelityStatus: input.renderedCapture.status === "failed" ? "capture_failed" : "degraded_import",
+      selectedSourceHtmlPathAbs: input.responseHtmlPathAbs,
+      selectedHtml: rawHtml,
+      renderedDomQuality,
+      degraded: true,
+    };
+  }
+
+  input.diagnostics.push(
+    createDiagnostic({
+      severity: "fatal",
+      code: "NO_USABLE_IMPORT_SOURCE",
+      message: "Import failed because neither rendered DOM nor raw HTML provided usable page content.",
+      targetUrl: null,
+      details: {
+        renderedCaptureStatus: input.renderedCapture.status,
+        renderedDomQuality: renderedDomQuality.quality,
+      },
+    }),
+  );
+
+  return {
+    sourceMode: "raw_html_fallback",
+    fidelityStatus: "capture_failed",
+    selectedSourceHtmlPathAbs: input.responseHtmlPathAbs,
+    selectedHtml: "",
+    renderedDomQuality,
+    degraded: true,
+  };
+}
+
 export async function importPublicSinglePageUrlToSnapshot(input: {
   sourceUrl: string;
   snapshotRootDirAbs?: string;
@@ -1180,7 +1443,21 @@ export async function importPublicSinglePageUrlToSnapshot(input: {
         assetPathRule: "assets/<kind>/<urlHash12>-<basename>; collisions append -N",
         fetchScope: FETCH_SCOPE,
       },
-      sourceMode: "raw_html",
+      sourceMode: "raw_html_fallback",
+      sourceSelection: {
+        sourceMode: "raw_html_fallback",
+        fidelityStatus: "capture_failed",
+        selectedSourceHtmlPathAbs: "",
+        renderedDomQuality: {
+          quality: "unusable",
+          bodyTextLength: 0,
+          meaningfulNodeCount: 0,
+          sectionCandidateCount: 0,
+          hasHeading: false,
+          reason: "invalid_input_url",
+        },
+        degraded: true,
+      },
       responseHtmlPathAbs: "",
       entryHtmlPathAbs: "",
       assetsDirAbs: "",
@@ -1311,12 +1588,16 @@ export async function importPublicSinglePageUrlToSnapshot(input: {
     writeJsonStable(renderedCaptureManifestPathAbs, renderedCapture as unknown as JsonValue);
   }
 
-  let rewrittenHtml = renderedCapture.documents[0]?.htmlPathAbs
-    ? fs.readFileSync(renderedCapture.documents[0].htmlPathAbs, "utf8")
-    : entryHtml;
+  const sourceSelection = resolveSourceSelection({
+    diagnostics,
+    entryHtml,
+    responseHtmlPathAbs,
+    renderedCapture,
+  });
+  let rewrittenHtml = sourceSelection.selectedHtml;
 
-  if (!hasFatal(diagnostics) && entryHtml) {
-    const document = parse(entryHtml);
+  if (!hasFatal(diagnostics) && rewrittenHtml.trim().length > 0) {
+    const document = parse(rewrittenHtml);
     const refs = collectAssetRefs({
       document,
       entryUrl: normalizedUrl,
@@ -1802,7 +2083,14 @@ export async function importPublicSinglePageUrlToSnapshot(input: {
     snapshotId,
     snapshotRootDirAbs,
     fixtureSpec,
-    sourceMode: renderedCapture.sourceMode,
+    sourceMode: sourceSelection.sourceMode,
+    sourceSelection: {
+      sourceMode: sourceSelection.sourceMode,
+      fidelityStatus: sourceSelection.fidelityStatus,
+      selectedSourceHtmlPathAbs: sourceSelection.selectedSourceHtmlPathAbs,
+      renderedDomQuality: sourceSelection.renderedDomQuality,
+      degraded: sourceSelection.degraded,
+    },
     responseHtmlPathAbs,
     entryHtmlPathAbs,
     assetsDirAbs,
