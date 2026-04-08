@@ -154,6 +154,18 @@ function extractBlocksFromBodyWithWrapperPromotion(input: {
   return { boundaryChildren };
 }
 
+function flattenOutlineElements(elements: PreparedDomOutlineElement[]): PreparedDomOutlineElement[] {
+  const out: PreparedDomOutlineElement[] = [];
+  const stack = [...elements].reverse();
+  while (stack.length > 0) {
+    const current = stack.pop();
+    if (!current) continue;
+    out.push(current);
+    for (let i = current.childElements.length - 1; i >= 0; i -= 1) stack.push(current.childElements[i]!);
+  }
+  return out;
+}
+
 function toSectionInput(pageId: string, element: PreparedDomOutlineElement): DesignSemanticSectionInput {
   const textExcerpt = element.textExcerpt;
   const textLen = String(textExcerpt ?? "").trim().length;
@@ -1377,9 +1389,20 @@ export function createDesignIntelligenceInputFromPreparedSite(preparedSite: Prep
     let sections: DesignSemanticSectionInput[];
 
     if (doc.semantic && doc.semantic.sections.length > 0) {
+      const outlineIndex = new Map(
+        flattenOutlineElements(doc.domOutline?.bodyChildElements ?? []).map((candidate) => [candidate.domPath, candidate]),
+      );
       sections = doc.semantic.sections.map((section) => {
-        const source = doc.domOutline?.bodyChildElements.find((candidate) => candidate.domPath === section.sourceDomPath) ?? null;
-        const textExcerpt = source?.textExcerpt ?? null;
+        const sourceDomPaths = section.sourceDomPaths.length > 0 ? section.sourceDomPaths : [section.sourceDomPath];
+        const source = sourceDomPaths.map((path) => outlineIndex.get(path) ?? null).find((value) => value !== null) ?? null;
+        const mergedTextExcerpt = sourceDomPaths
+          .map((path) => outlineIndex.get(path)?.textExcerpt ?? "")
+          .filter((value) => value.trim().length > 0)
+          .join(" ")
+          .trim();
+        const textExcerpt =
+          source?.textExcerpt ??
+          (mergedTextExcerpt.length > 0 ? mergedTextExcerpt : null);
         const sectionHasHeadingSignal = source
           ? hasHeadingSignal({
               sourceTagName: source.tagName,
@@ -1403,7 +1426,7 @@ export function createDesignIntelligenceInputFromPreparedSite(preparedSite: Prep
           hasHeadingSignal: sectionHasHeadingSignal,
           inferredType: section.inferredType,
           semanticConfidence: section.confidence,
-          semanticRationale: section.rationale,
+          semanticRationale: [...section.rationale, ...section.consolidationRationale],
           heroComposition: section.heroComposition,
           mediaDensity: section.mediaDensity,
           galleryLikeConfidence: section.galleryLikeConfidence,

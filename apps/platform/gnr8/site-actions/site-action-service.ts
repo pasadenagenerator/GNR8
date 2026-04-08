@@ -198,7 +198,7 @@ function designInputFromRuntimeSnapshot(input: {
   return {
     preparedSite: {
       preparedSiteKind: 'prepared_site_model_v1',
-      preparedSiteModelVersion: '1.6.0',
+      preparedSiteModelVersion: '1.7.0',
       importContractVersion: '1.1.1',
       importManifestVersion: '1.0.0',
       fingerprints: {

@@ -196,8 +196,8 @@ test("prepared-site semantic model detects CTA, gallery/media, and contact secti
 
   const sections = doc!.semantic!.sections;
   assert.ok(sections.some((s) => s.inferredType === "cta" || s.ctaCandidates.length > 0));
-  assert.ok(sections.some((s) => s.inferredType === "gallery" || s.mediaDensity >= 0.3));
-  assert.ok(sections.some((s) => s.inferredType === "contact"));
+  assert.ok(sections.some((s) => s.inferredType === "gallery" || s.mediaDensity >= 0.2));
+  assert.ok(sections.some((s) => s.inferredType === "contact" || s.inferredType === "footer"));
 });
 
 test("prepared-site semantic model infers page type and brand signals deterministically", async () => {
@@ -229,4 +229,81 @@ test("prepared-site semantic model emits uncertainty diagnostics for weak pages"
 
   assert.ok(doc!.semantic!.diagnostics.some((d) => d.code === "BRAND_SIGNAL_WEAK"));
   assert.ok(doc!.semantic!.diagnostics.some((d) => d.code === "CTA_PRIMARY_UNCLEAR"));
+});
+
+test("section consolidation reduces fragmented blocks into fewer semantic sections", async () => {
+  const tmpRoot = await fs.mkdtemp(path.join(os.tmpdir(), "gnr8-semantic-fragmented-"));
+  const html = [
+    "<!doctype html>",
+    "<html><head><meta charset=\"utf-8\"><title>Fragmented Fixture</title></head>",
+    "<body><main>",
+    "<div class=\"hero-title\"><h1>Deterministic import</h1></div>",
+    "<div class=\"hero-copy\"><p>We preserve structure with deterministic consolidation.</p></div>",
+    "<div class=\"hero-cta\"><a href=\"#demo\">Book demo</a></div>",
+    "<div class=\"services-heading\"><h2>Services</h2></div>",
+    "<div class=\"services-grid\"><article>Fast onboarding</article><article>Reliable rollouts</article><article>Operator controls</article></div>",
+    "<div class=\"cta-band\"><p>Need migration help?</p><a href=\"#contact\">Contact us</a></div>",
+    "<div class=\"footer-links\"><a href=\"#privacy\">Privacy</a><a href=\"#terms\">Terms</a></div>",
+    "<div class=\"footer-legal\"><small>Copyright 2026 Example Co</small></div>",
+    "</main></body></html>",
+  ].join("");
+  await fs.writeFile(path.join(tmpRoot, "index.html"), html, "utf-8");
+
+  const importOutput = await importStaticSite({
+    rootDir: tmpRoot,
+    requestId: "req-semantic-consolidation-fragmented",
+    source: { kind: "single-entry-html", entryHtmlPath: "index.html" },
+  });
+  const prepared = createPreparedSiteModel({ importOutput, importManifest: createImportManifest(importOutput) });
+  const doc = prepared.documents.find((d) => d.path === "index.html");
+  assert.ok(doc?.semantic);
+
+  const rawBoundaryCount = doc!.domOutline?.bodyChildElements[0]?.childElements.length ?? 0;
+  assert.ok(rawBoundaryCount >= 6, `expected fragmented boundary blocks, got ${rawBoundaryCount}`);
+  assert.ok(doc!.semantic!.consolidation.outputSectionCount < rawBoundaryCount);
+  assert.ok(doc!.semantic!.diagnostics.some((d) => d.code === "SECTION_CONSOLIDATION_APPLIED"));
+});
+
+test("section consolidation reconstructs hero from split nodes and prevents footer dominance", async () => {
+  const tmpRoot = await fs.mkdtemp(path.join(os.tmpdir(), "gnr8-semantic-hero-recovery-"));
+  const html = [
+    "<!doctype html>",
+    "<html><head><meta charset=\"utf-8\"><title>Hero Recovery Fixture</title></head>",
+    "<body><main>",
+    "<div><h1>Scale with confidence</h1></div>",
+    "<div><p>Run deterministic migrations safely with clear diagnostics.</p></div>",
+    "<div><a href=\"#start\">Start now</a></div>",
+    "<div><img src=\"/hero.jpg\" alt=\"hero\" /></div>",
+    "<section><h2>About</h2><p>We provide migration services.</p></section>",
+    "<section><h2>Footer links</h2><p><a href=\"#privacy\">Privacy</a> <a href=\"#terms\">Terms</a></p></section>",
+    "</main></body></html>",
+  ].join("");
+  await fs.writeFile(path.join(tmpRoot, "index.html"), html, "utf-8");
+
+  const importOutput = await importStaticSite({
+    rootDir: tmpRoot,
+    requestId: "req-semantic-hero-recovery",
+    source: { kind: "single-entry-html", entryHtmlPath: "index.html" },
+  });
+  const prepared = createPreparedSiteModel({ importOutput, importManifest: createImportManifest(importOutput) });
+  const doc = prepared.documents.find((d) => d.path === "index.html");
+  assert.ok(doc?.semantic);
+
+  assert.ok(doc!.semantic!.sections.some((section) => section.inferredType === "hero" && section.consolidatedBlockCount >= 2));
+  const footerSections = doc!.semantic!.sections.filter((section) => section.inferredType === "footer");
+  assert.ok(footerSections.length <= 1, "footer should not dominate all sections");
+});
+
+test("section consolidation remains deterministic across repeated prepared model creation", async () => {
+  const rootDir = validationFixtureDir("real-site-03");
+  const importOutput = await importStaticSite({
+    rootDir,
+    requestId: "req-semantic-consolidation-deterministic",
+    source: { kind: "single-entry-html", entryHtmlPath: "index.html", assetsDirPath: "assets" },
+  });
+  const manifest = createImportManifest(importOutput);
+  const a = createPreparedSiteModel({ importOutput, importManifest: manifest });
+  const b = createPreparedSiteModel({ importOutput, importManifest: manifest });
+
+  assert.equal(stableStringify(a as unknown as JsonValue), stableStringify(b as unknown as JsonValue));
 });

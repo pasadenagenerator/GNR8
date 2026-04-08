@@ -192,7 +192,17 @@ function runStructurePreparationStage(
     outputContract: STAGE_CONTRACTS.structure_preparation.output,
     output,
     diagnostics: [],
-    summary: stageSummary("structure_preparation", status, shouldSkip ? [`blockedBy=${intakeStage.stageId}`] : ["no-op"]),
+    summary: stageSummary(
+      "structure_preparation",
+      status,
+      shouldSkip
+        ? [`blockedBy=${intakeStage.stageId}`]
+        : [
+            `docs=${preparedSite.documents.length}`,
+            `semanticDocs=${preparedSite.documents.filter((doc) => doc.semantic !== null).length}`,
+            `consolidatedSections=${preparedSite.documents.reduce((sum, doc) => sum + (doc.semantic?.consolidation.outputSectionCount ?? 0), 0)}`,
+          ],
+    ),
   };
 }
 

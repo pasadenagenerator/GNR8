@@ -4,8 +4,9 @@ import type { ImportOutput } from "../import/import-contract";
 import { parse } from "parse5";
 import { sha256Hex, stableStringify } from "./runtime/diagnostics";
 import { extractDeterministicMinimalSourceMarkupHtml } from "./source-markup-preservation";
+import { consolidateSections, type RawBlock, type SectionConsolidationResult } from "../section-consolidation";
 
-export const PREPARED_SITE_MODEL_VERSION = "1.6.0" as const;
+export const PREPARED_SITE_MODEL_VERSION = "1.7.0" as const;
 
 export type PreparedSitePreparationStatus = "ready" | "ready_with_warnings" | "blocked";
 
@@ -49,7 +50,12 @@ export type SemanticDiagnosticCode =
   | "CTA_PRIMARY_UNCLEAR"
   | "HERO_SECTION_UNCLEAR"
   | "NAVIGATION_SECTION_UNCLEAR"
-  | "FOOTER_SECTION_UNCLEAR";
+  | "FOOTER_SECTION_UNCLEAR"
+  | "SECTION_CONSOLIDATION_APPLIED"
+  | "SECTION_MERGE_HEAVY"
+  | "SECTION_MERGE_MINIMAL"
+  | "SECTION_BOUNDARY_UNCERTAIN"
+  | "FOOTER_FALSE_POSITIVE_PREVENTED";
 
 export type SemanticDiagnostic = {
   code: SemanticDiagnosticCode;
@@ -93,10 +99,24 @@ export type CtaCandidate = {
 export type SectionSemanticModel = {
   sectionId: string;
   sourceDomPath: string;
+  sourceDomPaths: string[];
+  blockIds: string[];
+  domIndexStart: number;
+  domIndexEnd: number;
+  consolidatedBlockCount: number;
+  consolidationConfidence: number;
+  consolidationRationale: string[];
+  consolidationMergeDecisions: string[];
   ordinalIndex: number;
   inferredType: SectionSemanticType;
   confidence: SemanticConfidence;
   rationale: string[];
+  candidateSignals: {
+    heroCandidate: number;
+    ctaCandidate: number;
+    contentCandidate: number;
+    footerCandidate: number;
+  };
   heroComposition: HeroCompositionHint | null;
   mediaDensity: number;
   galleryLikeConfidence: SemanticConfidence;
@@ -134,6 +154,12 @@ export type PageSemanticModel = {
 
 export type PreparedPageSemanticModel = {
   kind: "prepared_page_semantic_model_v1";
+  consolidation: {
+    mode: SectionConsolidationResult["mode"];
+    deepFragmentationDetected: boolean;
+    inputBlockCount: number;
+    outputSectionCount: number;
+  };
   page: PageSemanticModel;
   sections: SectionSemanticModel[];
   ctaCandidates: CtaCandidate[];
@@ -739,6 +765,189 @@ function pickVisualToneFromSignals(input: {
   return "neutral";
 }
 
+function parentDomPathFromPath(domPath: string): string {
+  const idx = domPath.lastIndexOf(">");
+  if (idx <= 0) return "";
+  return domPath.slice(0, idx);
+}
+
+function domDepthFromPath(domPath: string): number {
+  if (!domPath) return 0;
+  return domPath.split(">").length;
+}
+
+function toRawSemanticBlock(section: PreparedDomOutlineElement, ordinalIndex: number): RawBlock {
+  const flat = flattenElementsInOrder([section]);
+  const markup = section.preservedMarkupHtml ?? "";
+  const normalizedText = normalizeWhitespace(`${stripHtml(markup)} ${section.textExcerpt ?? ""}`);
+  const words = normalizedText.length > 0 ? normalizedText.split(/\s+/).length : 0;
+  const lowerText = normalizedText.toLowerCase();
+  const headingCount = flat.reduce((sum, el) => sum + (/^h[1-6]$/.test(el.tagName) ? 1 : 0), 0);
+  const mediaCount = flat.reduce((sum, el) => sum + (["img", "picture", "figure", "video", "canvas", "svg"].includes(el.tagName) ? 1 : 0), 0);
+  const buttonLikeCount = countRegex(lowerText, CTA_PATTERN);
+  const footerHints = normalizeToken(`${section.domPath} ${section.className ?? ""} ${section.id ?? ""}`);
+  const repetitionHint = Math.min(
+    1,
+    countRegex(footerHints, /\b(card|grid|feature|service|item|tile|gallery|portfolio)\b/gi) / 4,
+  );
+  return {
+    id: `raw-block:${section.domPath}:${String(ordinalIndex)}`,
+    domPath: section.domPath,
+    tagName: section.tagName,
+    ordinalIndex,
+    parentDomPath: parentDomPathFromPath(section.domPath),
+    domDepth: domDepthFromPath(section.domPath),
+    className: section.className,
+    role: section.role,
+    ariaLabel: section.ariaLabel,
+    textExcerpt: section.textExcerpt,
+    preservedMarkupHtml: section.preservedMarkupHtml,
+    childElementCount: section.childElementCount,
+    textWordCount: words,
+    textDensity: Math.min(1, words / 180),
+    nodeComplexity: flat.length,
+    layoutHintDepth: domDepthFromPath(section.domPath),
+    hasHeading: headingCount > 0,
+    hasImages: mediaCount > 0,
+    hasCTA: buttonLikeCount > 0 || /<a\b|<button\b/i.test(markup),
+    hasFooterHint: section.tagName === "footer" || footerHints.includes("footer"),
+    hasNavHint:
+      section.tagName === "header" ||
+      section.tagName === "nav" ||
+      footerHints.includes("header") ||
+      footerHints.includes("nav"),
+    hasLegalHint: countRegex(lowerText, LEGAL_PATTERN) > 0,
+    hasContactHint: countRegex(lowerText, CONTACT_PATTERN) > 0 || countRegex(markup.toLowerCase(), /mailto:|tel:/gi) > 0,
+    repetitionHint,
+  };
+}
+
+function classifyConsolidatedSection(input: {
+  section: SectionConsolidationResult["sections"][number];
+  ordinalIndex: number;
+  sectionCount: number;
+}): {
+  inferredType: SectionSemanticType;
+  confidence: SemanticConfidence;
+  rationale: string[];
+  heroComposition: HeroCompositionHint | null;
+  mediaDensity: number;
+  galleryLikeConfidence: SemanticConfidence;
+  ctaCandidates: CtaCandidate[];
+  likelyPrimaryCta: CtaCandidate | null;
+  density: SectionDensitySignal;
+  candidateSignals: SectionSemanticModel["candidateSignals"];
+} {
+  const signals = input.section.signals;
+  const candidates = input.section.candidates;
+  const topWindow = input.ordinalIndex <= 1;
+  const bottomWindow = input.ordinalIndex >= Math.max(0, input.sectionCount - 2);
+
+  const scores: Record<SectionSemanticType, number> = {
+    header: 0,
+    navigation: 0,
+    hero: candidates.heroCandidate,
+    cta: candidates.ctaCandidate,
+    about: 0,
+    services: candidates.servicesCandidate,
+    features: candidates.servicesCandidate * 0.85,
+    gallery: candidates.galleryCandidate,
+    testimonials: 0,
+    contact: signals.contactHintCount > 0 ? 0.68 : 0,
+    footer: candidates.footerCandidate,
+    unknown: 0.24,
+  };
+
+  if (topWindow && signals.navHintCount > 0) {
+    scores.navigation += 0.82;
+    scores.header += 0.6;
+  }
+  if (topWindow && signals.hasHeading && (signals.hasImages || signals.hasCTA)) scores.hero += 0.24;
+  if (signals.hasCTA && signals.textWordCount <= 120) scores.cta += 0.18;
+  if (signals.repetitionScore >= 0.35 && signals.hasImages) scores.gallery += 0.14;
+  if (signals.repetitionScore >= 0.35 && signals.textWordCount >= 24) {
+    scores.services += 0.14;
+    scores.features += 0.1;
+  }
+  if (bottomWindow && (signals.footerHintCount > 0 || signals.legalHintCount > 0)) scores.footer += 0.24;
+  if (signals.footerHintCount > 0 && signals.hasCTA && signals.hasHeading && signals.textWordCount > 20) {
+    scores.footer = Math.max(0, scores.footer - 0.2);
+  }
+  if (signals.textWordCount >= 40 && scores.hero < 0.55 && scores.footer < 0.55) {
+    scores.about += 0.36;
+    scores.features += 0.22;
+  }
+  if (signals.contactHintCount > 0 && signals.hasCTA) scores.contact += 0.12;
+
+  const ranked = (Object.keys(scores) as SectionSemanticType[])
+    .map((k) => ({ type: k, score: scores[k] }))
+    .sort((a, b) => (b.score !== a.score ? b.score - a.score : stringCmp(a.type, b.type)));
+
+  const best = ranked[0]!;
+  const second = ranked[1]!;
+  const rawConfidence = Math.max(0, Math.min(1, best.score + Math.min(0.2, (best.score - second.score) * 0.35)));
+  const confidence = confidenceFromScore(rawConfidence);
+
+  let heroComposition: HeroCompositionHint | null = null;
+  if (best.type === "hero") {
+    if (signals.hasHeading && signals.hasImages) heroComposition = "split_media";
+    else if (signals.hasHeading && signals.hasCTA) heroComposition = "centered_cta";
+    else if (signals.hasImages) heroComposition = "image_first";
+    else if (signals.hasHeading) heroComposition = "text_only";
+    else heroComposition = "unknown";
+  }
+
+  const ctaCandidates: CtaCandidate[] = signals.hasCTA
+    ? [
+        {
+          label: "Primary action",
+          confidence: candidates.ctaCandidate >= 0.72 ? "high" : "medium",
+          rationale: [
+            `section_cta_candidate=${candidates.ctaCandidate.toFixed(2)}`,
+            `section_cta_count=${String(signals.ctaCount)}`,
+          ],
+        },
+      ]
+    : [];
+
+  const textDensity = signals.textDensity;
+  const mediaDensity = Math.min(1, signals.imageCount / Math.max(1, input.section.blockIds.length * 1.2));
+  const headingDensity = Math.min(1, signals.headingCount / Math.max(1, input.section.blockIds.length));
+  const ctaDensity = Math.min(1, signals.ctaCount / Math.max(1, signals.textWordCount / 30));
+  const repetitionDensity = Math.min(1, signals.repetitionScore);
+
+  return {
+    inferredType: best.score < 0.5 ? "unknown" : best.type,
+    confidence,
+    rationale: uniqueSortedStrings([
+      ...input.section.rationale,
+      `semantic_score=${best.score.toFixed(2)}`,
+      `semantic_runner_up=${second.type}:${second.score.toFixed(2)}`,
+      `semantic_confidence=${rawConfidence.toFixed(2)}`,
+    ]),
+    heroComposition,
+    mediaDensity: Number(mediaDensity.toFixed(3)),
+    galleryLikeConfidence: confidenceFromScore(Math.min(1, candidates.galleryCandidate)),
+    ctaCandidates,
+    likelyPrimaryCta: ctaCandidates[0] ?? null,
+    density: {
+      textDensity: Number(textDensity.toFixed(3)),
+      imageDensity: Number(mediaDensity.toFixed(3)),
+      headingDensity: Number(headingDensity.toFixed(3)),
+      ctaDensity: Number(ctaDensity.toFixed(3)),
+      repetitionDensity: Number(repetitionDensity.toFixed(3)),
+      readabilityTendency:
+        textDensity >= 0.66 ? "readable" : textDensity >= 0.35 ? "balanced" : "compact",
+    },
+    candidateSignals: {
+      heroCandidate: Number(candidates.heroCandidate.toFixed(3)),
+      ctaCandidate: Number(candidates.ctaCandidate.toFixed(3)),
+      contentCandidate: Number(candidates.contentCandidate.toFixed(3)),
+      footerCandidate: Number(candidates.footerCandidate.toFixed(3)),
+    },
+  };
+}
+
 function classifySection(input: {
   section: PreparedDomOutlineElement;
   ordinalIndex: number;
@@ -1041,15 +1250,39 @@ function buildPageSemanticModel(input: {
   bodyChildElements: PreparedDomOutlineElement[];
 }): PreparedPageSemanticModel {
   const boundaryChildren = extractSemanticBoundaryChildren(input.bodyChildElements);
-  const sectionCount = boundaryChildren.length;
-  const sections = boundaryChildren.map((section, idx) => {
-    const classified = classifySection({ section, ordinalIndex: idx, sectionCount });
-    const sectionId = sectionSemanticId({ pageId: input.pageId, sourceDomPath: section.domPath, ordinalIndex: section.ordinalIndex });
+  const rawBlocks = boundaryChildren.map((section, idx) => toRawSemanticBlock(section, idx));
+  const blockByDomPath = new Map(boundaryChildren.map((section) => [section.domPath, section]));
+  const consolidation = consolidateSections({ blocks: rawBlocks });
+  const sectionCount = consolidation.sections.length;
+  const sections = consolidation.sections.map((consolidated, idx) => {
+    const classified = classifyConsolidatedSection({
+      section: consolidated,
+      ordinalIndex: idx,
+      sectionCount,
+    });
+    const sourceDomPath = consolidated.sourceDomPaths[0] ?? `consolidated:${String(idx)}`;
+    const sectionId = sectionSemanticId({ pageId: input.pageId, sourceDomPath, ordinalIndex: idx });
+    const sourceBlock = blockByDomPath.get(sourceDomPath);
     return {
       sectionId,
-      sourceDomPath: section.domPath,
-      ordinalIndex: section.ordinalIndex,
+      sourceDomPath,
+      sourceDomPaths: consolidated.sourceDomPaths,
+      blockIds: consolidated.blockIds,
+      domIndexStart: consolidated.domIndexStart,
+      domIndexEnd: consolidated.domIndexEnd,
+      consolidatedBlockCount: consolidated.blockIds.length,
+      consolidationConfidence: consolidated.confidence,
+      consolidationRationale: consolidated.rationale,
+      consolidationMergeDecisions: consolidated.mergeDecisions,
+      ordinalIndex: idx,
       ...classified,
+      density: {
+        ...classified.density,
+        textDensity:
+          sourceBlock && classified.density.textDensity === 0
+            ? Number(Math.min(1, (sourceBlock.textExcerpt?.split(/\s+/).length ?? 0) / 180).toFixed(3))
+            : classified.density.textDensity,
+      },
     } satisfies SectionSemanticModel;
   });
 
@@ -1069,6 +1302,15 @@ function buildPageSemanticModel(input: {
   });
 
   const diagnostics: SemanticDiagnostic[] = [];
+  for (const consolidationDiagnostic of consolidation.diagnostics) {
+    diagnostics.push({
+      code: consolidationDiagnostic.code,
+      severity: consolidationDiagnostic.severity,
+      message: consolidationDiagnostic.message,
+      pageId: input.pageId,
+      sectionId: null,
+    });
+  }
   if (page.pageType === "unknown") {
     diagnostics.push({
       code: "SEMANTIC_PAGE_TYPE_UNKNOWN",
@@ -1137,6 +1379,12 @@ function buildPageSemanticModel(input: {
 
   return {
     kind: "prepared_page_semantic_model_v1",
+    consolidation: {
+      mode: consolidation.mode,
+      deepFragmentationDetected: consolidation.deepFragmentationDetected,
+      inputBlockCount: consolidation.inputBlockCount,
+      outputSectionCount: consolidation.outputSectionCount,
+    },
     page,
     sections,
     ctaCandidates: allCtas,
