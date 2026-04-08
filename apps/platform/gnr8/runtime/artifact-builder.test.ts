@@ -56,6 +56,127 @@ test("artifact-builder preview mode marks noindex", () => {
   assert.ok(preview.htmlByPath["/"]?.includes("noindex"));
 });
 
+test("artifact-builder renders visible faq.basic fallback plus section payload script", () => {
+  const faqSiteVersion = {
+    ...siteVersion,
+    pages: [
+      {
+        ...siteVersion.pages[0],
+        structureModel: {
+          sections: [{ id: "faq", type: "faq.basic", order: 0 }],
+        },
+        contentModel: {
+          sectionProps: {
+            faq: {
+              title: "Frequently Asked Questions",
+              items: [
+                { question: "How fast is setup?", answer: "Most setups are completed in one business day." },
+                { question: "Do you support imports?", answer: "Yes, imported content is supported in preview fallback." },
+              ],
+            },
+          },
+        },
+      },
+    ],
+  };
+
+  const out = buildDeterministicArtifactBundle({ siteVersion: faqSiteVersion, renderMode: "PREVIEW" });
+  const html = out.htmlByPath["/"] ?? "";
+  assert.match(html, /data-gnr8-fallback-section-type="faq\.basic"/);
+  assert.match(html, /Frequently Asked Questions/);
+  assert.match(html, /How fast is setup\?/);
+  assert.match(html, /Most setups are completed in one business day\./);
+  assert.match(html, /data-gnr8-section-props/);
+});
+
+test("artifact-builder renders visible navbar.basic links fallback", () => {
+  const navbarSiteVersion = {
+    ...siteVersion,
+    pages: [
+      {
+        ...siteVersion.pages[0],
+        structureModel: {
+          sections: [{ id: "nav", type: "navbar.basic", order: 0 }],
+        },
+        contentModel: {
+          sectionProps: {
+            nav: {
+              title: "Main Navigation",
+              links: [
+                { href: "/about", label: "About" },
+                { href: "/contact", label: "Contact" },
+              ],
+            },
+          },
+        },
+      },
+    ],
+  };
+
+  const out = buildDeterministicArtifactBundle({ siteVersion: navbarSiteVersion, renderMode: "PREVIEW" });
+  const html = out.htmlByPath["/"] ?? "";
+  assert.match(html, /data-gnr8-fallback-section-type="navbar\.basic"/);
+  assert.match(html, /fallback-navbar/);
+  assert.match(html, /href="\/about"/);
+  assert.match(html, /href="\/contact"/);
+});
+
+test("artifact-builder renders non-empty generic fallback for unknown section types", () => {
+  const unknownSiteVersion = {
+    ...siteVersion,
+    pages: [
+      {
+        ...siteVersion.pages[0],
+        structureModel: {
+          sections: [{ id: "unknown", type: "promo.experimental", order: 0 }],
+        },
+        contentModel: {
+          sectionProps: {
+            unknown: {
+              title: "Experimental Promo",
+              summary: "This section has no dedicated renderer yet.",
+              action: { href: "/try", label: "Try now" },
+            },
+          },
+        },
+      },
+    ],
+  };
+
+  const out = buildDeterministicArtifactBundle({ siteVersion: unknownSiteVersion, renderMode: "PREVIEW" });
+  const html = out.htmlByPath["/"] ?? "";
+  assert.match(html, /data-gnr8-fallback-section-type="promo\.experimental"/);
+  assert.match(html, /Experimental Promo/);
+  assert.match(html, /This section has no dedicated renderer yet\./);
+  assert.match(html, /href="\/try"/);
+});
+
+test("artifact-builder renders placeholder fallback for weak/empty section props", () => {
+  const emptySiteVersion = {
+    ...siteVersion,
+    pages: [
+      {
+        ...siteVersion.pages[0],
+        structureModel: {
+          sections: [{ id: "empty", type: "content.basic", order: 0 }],
+        },
+        contentModel: {
+          sectionProps: {
+            empty: {},
+          },
+        },
+      },
+    ],
+  };
+
+  const out = buildDeterministicArtifactBundle({ siteVersion: emptySiteVersion, renderMode: "PREVIEW" });
+  const html = out.htmlByPath["/"] ?? "";
+  assert.match(html, /data-gnr8-fallback-section-type="content\.basic"/);
+  assert.match(html, /No text paragraphs extracted for this section\./);
+  assert.match(html, /Diagnostics:/);
+  assert.match(html, /data-gnr8-section-props/);
+});
+
 test("artifact-builder renders visible legacy summary v2 with grouped recognizability blocks", () => {
   const legacySiteVersion = {
     ...siteVersion,

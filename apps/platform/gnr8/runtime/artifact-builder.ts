@@ -1,4 +1,5 @@
 import { normalizePagePath, sha256Hex, stableStringify } from "@/gnr8/runtime/deterministic";
+import { renderPreviewFallbackSectionHtml } from "@/gnr8/runtime/preview-fallback-renderer";
 import type { CanonicalSiteVersionSnapshot, RenderMode, RuntimeArtifact } from "@/gnr8/runtime/types";
 
 function escapeHtml(value: string): string {
@@ -679,10 +680,14 @@ function renderSectionHtml(input: {
   styleTokens: Record<string, string>;
 }): string {
   const payload = escapeHtml(stableStringify(input.sectionProps));
-  const visibleFallback =
+  const legacyVisibleFallback =
     input.sectionType === "legacy.html"
       ? renderLegacySummaryHtml({ sectionProps: input.sectionProps, styleTokens: input.styleTokens })
       : "";
+  const visibleFallback = legacyVisibleFallback || renderPreviewFallbackSectionHtml({
+    sectionType: input.sectionType,
+    sectionProps: input.sectionProps,
+  });
   return `<section data-gnr8-section-id="${escapeHtml(input.sectionId)}" data-gnr8-section-type="${escapeHtml(input.sectionType)}">${visibleFallback}<script type="application/json" data-gnr8-section-props>${payload}</script></section>`;
 }
 
