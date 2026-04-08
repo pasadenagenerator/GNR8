@@ -43,6 +43,9 @@ export default function ClientContextLayout(props: Props) {
   baseParams.set('agency', activeAgencyId)
   if (props.adminView) baseParams.set('admin_view', '1')
   const agencyParam = baseParams.toString()
+  const explicitDashboardParams = new URLSearchParams(baseParams.toString())
+  explicitDashboardParams.set('client_tab', 'dashboard')
+  const explicitDashboardParam = explicitDashboardParams.toString()
 
   const activeClientSection = props.activeTab === 'settings' ? 'settings' : props.activeTab === 'users' ? 'users' : 'dashboard'
   const persistedClientTab = props.activeTab === 'users' ? 'team' : props.activeTab
@@ -59,6 +62,7 @@ export default function ClientContextLayout(props: Props) {
   }))
 
   const dashboardHref = `/gnr8/agency/clients/${encodeURIComponent(props.clientId)}/dashboard?${agencyParam}`
+  const explicitDashboardHref = `/gnr8/agency/clients/${encodeURIComponent(props.clientId)}/dashboard?${explicitDashboardParam}`
   const settingsHref = `/gnr8/agency/clients/${encodeURIComponent(props.clientId)}/settings?${agencyParam}`
   const usersHref = `/gnr8/agency/clients/${encodeURIComponent(props.clientId)}/users?${agencyParam}`
   const backToAgencyHref = `/gnr8/agency?${agencyParam}`
@@ -66,11 +70,11 @@ export default function ClientContextLayout(props: Props) {
   const breadcrumbs: WorkspaceBreadcrumbItem[] = [
     { label: 'Agency', href: backToAgencyHref },
     { label: 'Clients', href: agencyClientsHref },
-    { label: props.clientName, href: dashboardHref },
+    { label: props.clientName, href: explicitDashboardHref },
     { label: CLIENT_TAB_LABELS[props.activeTab] },
   ]
   const tabsInput: WorkspaceTabInput[] = [
-    { key: 'dashboard', label: 'Dashboard', href: dashboardHref },
+    { key: 'dashboard', label: 'Dashboard', href: explicitDashboardHref },
     { key: 'settings', label: 'Settings', href: settingsHref },
     { key: 'users', label: 'Team', href: usersHref },
   ]
@@ -104,7 +108,7 @@ export default function ClientContextLayout(props: Props) {
     {
       id: 'view-sites',
       label: 'View Sites',
-      href: dashboardHref,
+      href: explicitDashboardHref,
       description: 'Open client dashboard and sites overview',
       icon: 'S',
     },
@@ -189,7 +193,7 @@ export default function ClientContextLayout(props: Props) {
           { id: 'route-agency-dashboard', label: 'Agency Dashboard', href: backToAgencyHref, sublabel: 'Key route' },
           { id: 'route-agency-clients', label: 'Agency Clients', href: agencyClientsHref, sublabel: 'Key route' },
           { id: 'route-agency-settings', label: 'Agency Settings', href: `/gnr8/agency/settings?${agencyParam}`, sublabel: 'Key route' },
-          { id: 'route-client-dashboard', label: 'Client Dashboard', href: dashboardHref, sublabel: 'Key route' },
+          { id: 'route-client-dashboard', label: 'Client Dashboard', href: explicitDashboardHref, sublabel: 'Key route' },
           { id: 'route-client-settings', label: 'Client Settings', href: settingsHref, sublabel: 'Key route' },
           { id: 'route-client-team', label: 'Client Team', href: usersHref, sublabel: 'Key route' },
           ...siteRouteEntries,

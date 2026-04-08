@@ -98,7 +98,7 @@ export default function AgencyClientsOverviewSection(props: Props) {
                   <td style={{ padding: '8px 10px' }}>
                     <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                       <Link
-                        href={`/gnr8/agency/clients/${encodeURIComponent(client.id)}/dashboard?agency=${encodeURIComponent(props.agencyId)}`}
+                        href={`/gnr8/agency/clients/${encodeURIComponent(client.id)}/dashboard?agency=${encodeURIComponent(props.agencyId)}&client_tab=dashboard`}
                         style={actionLinkStyle()}
                       >
                         Enter Client Workspace

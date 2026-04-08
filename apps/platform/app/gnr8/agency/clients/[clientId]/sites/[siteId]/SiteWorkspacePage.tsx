@@ -352,7 +352,7 @@ export default async function SiteWorkspacePage(props: Props) {
             ? 'Select an agency before opening a site workspace.'
             : 'Agency scope is unavailable for this site view.',
       links: availableAgencyMemberships.map((membership) => ({
-        href: `/gnr8/agency/clients/${encodeURIComponent(clientId)}/dashboard?agency=${encodeURIComponent(membership.agency_id)}${adminView ? '&admin_view=1' : ''}`,
+        href: `/gnr8/agency/clients/${encodeURIComponent(clientId)}/dashboard?agency=${encodeURIComponent(membership.agency_id)}${adminView ? '&admin_view=1' : ''}&client_tab=dashboard`,
         label: (membership.agency_name?.trim() || membership.agency_id).trim(),
       })),
     })
@@ -378,7 +378,7 @@ export default async function SiteWorkspacePage(props: Props) {
       message: 'Site was not found in the resolved client/agency scope. Access is blocked by fail-closed policy.',
       links: [
         {
-          href: `/gnr8/agency/clients/${encodeURIComponent(clientId)}/dashboard?agency=${encodeURIComponent(currentUserAgency.agency_id)}${adminView ? '&admin_view=1' : ''}`,
+          href: `/gnr8/agency/clients/${encodeURIComponent(clientId)}/dashboard?agency=${encodeURIComponent(currentUserAgency.agency_id)}${adminView ? '&admin_view=1' : ''}&client_tab=dashboard`,
           label: 'Back to Client Dashboard',
         },
       ],

@@ -73,6 +73,7 @@ function buildClientHref(input: { activeAgencyId?: string; activeClientId?: stri
   if (input.activeClientId) {
     params.set('client', input.activeClientId)
   }
+  params.set('client_tab', 'dashboard')
   if (input.activeAgencyId) {
     params.set('agency', input.activeAgencyId)
   }

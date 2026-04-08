@@ -114,8 +114,12 @@ export default async function AgencyContextLayout(props: Props) {
             ? [
                 ['agency', activeAgencyId],
                 ['admin_view', '1'],
+                ['client_tab', 'dashboard'],
               ]
-            : [['agency', activeAgencyId]],
+            : [
+                ['agency', activeAgencyId],
+                ['client_tab', 'dashboard'],
+              ],
         ),
       )
     : null
@@ -243,7 +247,7 @@ export default async function AgencyContextLayout(props: Props) {
           id: client.clientId,
           label: client.label,
           sublabel: `Agency: ${props.agencyName}`,
-          href: `/gnr8/agency/clients/${encodeURIComponent(client.clientId)}/dashboard?agency=${encodeURIComponent(activeAgencyId)}`,
+          href: `/gnr8/agency/clients/${encodeURIComponent(client.clientId)}/dashboard?agency=${encodeURIComponent(activeAgencyId)}&client_tab=dashboard`,
         })),
         routes: [
           ...(isAdminView

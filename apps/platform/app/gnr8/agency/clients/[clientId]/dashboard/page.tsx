@@ -113,7 +113,7 @@ export default async function AgencyClientDashboardEntryPage(props: {
               {availableAgencyMemberships.map((membership) => (
                 <Link
                   key={membership.agency_id}
-                  href={`/gnr8/agency/clients/${encodeURIComponent(clientId)}/dashboard?agency=${encodeURIComponent(membership.agency_id)}`}
+                  href={`/gnr8/agency/clients/${encodeURIComponent(clientId)}/dashboard?agency=${encodeURIComponent(membership.agency_id)}&client_tab=dashboard`}
                   style={{
                     display: 'inline-flex',
                     alignItems: 'center',
@@ -193,7 +193,8 @@ export default async function AgencyClientDashboardEntryPage(props: {
   const settingsHref = `/gnr8/agency/clients/${encodeURIComponent(clientId)}/settings?${agencyParam}`
   const teamHref = `/gnr8/agency/clients/${encodeURIComponent(clientId)}/users?${agencyParam}`
   const backToAgencyHref = `/gnr8/agency?${agencyParam}`
-  const clientSelfHref = `/gnr8/client?client=${encodeURIComponent(clientId)}`
+  const clientSelfHref = `/gnr8/client?client=${encodeURIComponent(clientId)}&client_tab=dashboard`
+  const importSiteHref = `/gnr8/command-center/sites?clientId=${encodeURIComponent(clientId)}`
 
   return (
     <ClientContextLayout
@@ -218,6 +219,7 @@ export default async function AgencyClientDashboardEntryPage(props: {
         settingsHref={settingsHref}
         teamHref={teamHref}
         clientSelfHref={clientSelfHref}
+        importSiteHref={importSiteHref}
         siteWorkspaceHrefBuilder={(siteId) =>
           `/gnr8/agency/clients/${encodeURIComponent(clientId)}/sites/${encodeURIComponent(siteId)}/overview?${agencyParam}`
         }

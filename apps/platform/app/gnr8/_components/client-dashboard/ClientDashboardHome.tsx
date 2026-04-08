@@ -11,6 +11,7 @@ type Props = {
   settingsHref?: string;
   teamHref?: string;
   clientSelfHref?: string;
+  importSiteHref?: string;
   siteWorkspaceHrefBuilder?: (siteId: string) => string | null;
 };
 
@@ -104,6 +105,7 @@ function ActionLink(props: { href: string; label: string; external?: boolean }) 
 
 export default function ClientDashboardHome(props: Props) {
   const hasSites = props.readModel.site_rows.length > 0;
+  const hasImportAction = Boolean(props.importSiteHref);
   const hasManagementActions = Boolean(props.settingsHref || props.teamHref);
   const latestSiteHref = props.readModel.site_rows[0]?.live_url ?? props.readModel.site_rows[0]?.preview_url ?? null;
   const workspaceShortcuts: WorkspaceShortcut[] = [
@@ -194,7 +196,10 @@ export default function ClientDashboardHome(props: Props) {
         id="client-sites"
         style={{ marginTop: 14, border: "1px solid #dbe6f1", borderRadius: 12, background: "#fff", padding: 12 }}
       >
-        <h3 style={{ margin: 0, fontSize: 15, color: "#0f172a" }}>Sites Overview</h3>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
+          <h3 style={{ margin: 0, fontSize: 15, color: "#0f172a" }}>Sites Overview</h3>
+          {hasSites && hasImportAction ? <ActionLink href={props.importSiteHref!} label="Import Site" /> : null}
+        </div>
         {hasSites ? (
           <div style={{ marginTop: 12, display: "grid", gap: 10 }}>
             {props.readModel.site_rows.map((site) => (
@@ -239,6 +244,25 @@ export default function ClientDashboardHome(props: Props) {
                 : "This client does not have any connected sites in the current scoped workspace yet. Contact your agency manager if you need help connecting the first site."}
             </p>
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              {hasImportAction ? (
+                <Link
+                  href={props.importSiteHref!}
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    padding: "7px 12px",
+                    borderRadius: 8,
+                    border: "1px solid #0f172a",
+                    background: "#0f172a",
+                    color: "#fff",
+                    textDecoration: "none",
+                    fontSize: 12,
+                    fontWeight: 700,
+                  }}
+                >
+                  Import Existing Website
+                </Link>
+              ) : null}
               {props.settingsHref ? <ActionLink href={props.settingsHref} label="Open Settings" /> : null}
               {props.teamHref ? <ActionLink href={props.teamHref} label="Open Team" /> : null}
               {props.backToAgencyHref ? <ActionLink href={props.backToAgencyHref} label="Back to Agency" /> : null}

@@ -95,6 +95,7 @@ export function buildClientSwitchHref(input: {
 
     const selfParams = new URLSearchParams()
     selfParams.set('client', targetClientId)
+    selfParams.set('client_tab', mappedSection)
     if (agencyId) selfParams.set('agency', agencyId)
     if (adminView) selfParams.set('admin_view', adminView)
     return buildHref('/gnr8/client', selfParams)

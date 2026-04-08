@@ -187,6 +187,7 @@ export default async function ClientDashboardPage(props: { searchParams?: Promis
   siteWorkspaceAgencyQuery.set("agency", currentUserClient.agency_id);
   if (resolvedSearchParams?.admin_view) siteWorkspaceAgencyQuery.set("admin_view", String(resolvedSearchParams.admin_view));
   const siteWorkspaceAgencyQueryString = siteWorkspaceAgencyQuery.toString();
+  const importSiteHref = `/gnr8/command-center/sites?clientId=${encodeURIComponent(currentUserClient.client_id)}`;
 
   return (
     <main
@@ -210,6 +211,7 @@ export default async function ClientDashboardPage(props: { searchParams?: Promis
         readModel={readModel}
         roleLabel={currentUserClient.role}
         viewMode="client-self"
+        importSiteHref={importSiteHref}
         siteWorkspaceHrefBuilder={(siteId) =>
           `/gnr8/agency/clients/${encodeURIComponent(currentUserClient.client_id)}/sites/${encodeURIComponent(siteId)}/overview?${siteWorkspaceAgencyQueryString}`
         }

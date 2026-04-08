@@ -122,7 +122,7 @@ export default function ClientSettingsClient(props: Props) {
   const agencyDashboardPath = props.requestedAgencyId
     ? `/gnr8/agency?agency=${encodeURIComponent(props.requestedAgencyId)}`
     : `/gnr8/agency?agency=${encodeURIComponent(props.agencyId)}`
-  const clientDashboardPath = `/gnr8/agency/clients/${encodeURIComponent(props.clientId)}/dashboard?agency=${encodeURIComponent(activeAgencyId)}`
+  const clientDashboardPath = `/gnr8/agency/clients/${encodeURIComponent(props.clientId)}/dashboard?agency=${encodeURIComponent(activeAgencyId)}&client_tab=dashboard`
   const clientUsersPath = `/gnr8/agency/clients/${encodeURIComponent(props.clientId)}/users?agency=${encodeURIComponent(activeAgencyId)}`
   const canManageBranding = props.role === 'owner' || props.role === 'admin'
   const brandingBusy = brandingStatus === 'saving'

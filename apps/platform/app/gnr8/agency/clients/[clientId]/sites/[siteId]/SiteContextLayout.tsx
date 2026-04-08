@@ -82,7 +82,7 @@ export default function SiteContextLayout(props: Props) {
     variantId: props.selectedVariantId,
   })
 
-  const backToClientHref = `/gnr8/agency/clients/${encodeURIComponent(props.readModel.client.clientId)}/dashboard?${agencyQuery}`
+  const backToClientHref = `/gnr8/agency/clients/${encodeURIComponent(props.readModel.client.clientId)}/dashboard?${agencyQuery}&client_tab=dashboard`
   const agencyClientsHref = `/gnr8/agency/clients?${agencyQuery}`
   const agencyHomeHref = `/gnr8/agency?${agencyQuery}`
   const commandCenterHref = props.adminView ? '/gnr8/command-center?admin_view=1' : '/gnr8/command-center'
@@ -244,7 +244,7 @@ export default function SiteContextLayout(props: Props) {
           id: client.clientId,
           label: client.label,
           sublabel: `Agency ID: ${activeAgencyId}`,
-          href: `/gnr8/agency/clients/${encodeURIComponent(client.clientId)}/dashboard?agency=${encodeURIComponent(activeAgencyId)}${props.adminView ? '&admin_view=1' : ''}`,
+          href: `/gnr8/agency/clients/${encodeURIComponent(client.clientId)}/dashboard?agency=${encodeURIComponent(activeAgencyId)}${props.adminView ? '&admin_view=1' : ''}&client_tab=dashboard`,
         })),
         routes: [
           { id: 'route-command-center', label: 'Command Center', href: commandCenterHref, sublabel: 'Key route' },
