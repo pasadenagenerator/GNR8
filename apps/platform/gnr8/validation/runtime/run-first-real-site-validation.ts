@@ -163,6 +163,18 @@ function computeValidationSummary(input: {
           typographyHint: input.designModel?.typographyScale.profile ?? null,
           visualTone: input.designModel?.colorSystem.tone ?? null,
         },
+        styleSignalSummary: {
+          sourceMode: input.designModel?.styleSignals.sourceMode ?? null,
+          backgroundTone: input.designModel?.styleSignals.colors.backgroundTone ?? null,
+          primaryAccent: input.designModel?.styleSignals.colors.primaryAccent ?? null,
+          headingCategory: input.designModel?.styleSignals.typography.headingCategory ?? null,
+          bodyCategory: input.designModel?.styleSignals.typography.bodyCategory ?? null,
+          spacingRhythm: input.designModel?.styleSignals.spacing.rhythm ?? null,
+          layoutDensity: input.designModel?.styleSignals.spacing.layoutDensity ?? null,
+          ctaStyle: input.designModel?.styleSignals.cta.styleHint ?? null,
+          ctaProminence: input.designModel?.styleSignals.cta.prominence ?? null,
+          diagnostics: input.designModel?.styleSignals.diagnostics.map((diag) => diag.code) ?? [],
+        },
         confidenceSummary: {
           high: (input.designModel?.sectionDecisions ?? []).filter((d) => d.confidence >= 0.8).length,
           medium: (input.designModel?.sectionDecisions ?? []).filter((d) => d.confidence >= 0.55 && d.confidence < 0.8).length,

@@ -80,6 +80,20 @@ function renderOverviewContent(props: {
           <div>Rendered DOM quality: {readModel.pipeline.renderedDomQuality}</div>
           <div>Screenshots captured: {readModel.pipeline.screenshotCount}</div>
           <div>Computed style samples: {readModel.pipeline.computedStyleSampleCount}</div>
+          <div>Style source mode: {readModel.pipeline.styleSignals?.sourceMode ?? 'unknown'}</div>
+          <div>
+            Style summary:{' '}
+            tone={readModel.pipeline.styleSignals?.colors.backgroundTone ?? 'unknown'} · accent={readModel.pipeline.styleSignals?.colors.primaryAccent ?? 'none'} ·
+            type={readModel.pipeline.styleSignals ? `${readModel.pipeline.styleSignals.typography.headingCategory}/${readModel.pipeline.styleSignals.typography.bodyCategory}` : 'unknown'} ·
+            spacing={readModel.pipeline.styleSignals ? `${readModel.pipeline.styleSignals.spacing.rhythm}/${readModel.pipeline.styleSignals.spacing.layoutDensity}` : 'unknown'} ·
+            cta={readModel.pipeline.styleSignals ? `${readModel.pipeline.styleSignals.cta.styleHint}/${readModel.pipeline.styleSignals.cta.prominence}` : 'unknown'}
+          </div>
+          <div>
+            Style diagnostics:{' '}
+            {readModel.pipeline.styleSignals && readModel.pipeline.styleSignals.diagnostics.length > 0
+              ? readModel.pipeline.styleSignals.diagnostics.map((diag) => diag.code).join(' · ')
+              : 'none'}
+          </div>
           <div>Import diagnostics: {readModel.pipeline.importDiagnosticCodes.length > 0 ? readModel.pipeline.importDiagnosticCodes.join(' · ') : 'none'}</div>
           <div>Capture evidence refs: {readModel.pipeline.captureEvidenceRefs.length > 0 ? readModel.pipeline.captureEvidenceRefs.join(' · ') : 'none'}</div>
           <div>Acquisition diagnostics: {readModel.pipeline.diagnosticsSummary.length > 0 ? readModel.pipeline.diagnosticsSummary.join(' · ') : 'none'}</div>
@@ -188,6 +202,14 @@ function renderDesignContent(readModel: Awaited<ReturnType<typeof getSiteWorkspa
           <div>AI suggestion status: {readModel.design.aiSuggestionStatus}</div>
           <div>
             Visual signals: hero={readModel.design.visualSignals.heroProminence}, density={readModel.design.visualSignals.visualDensity}, cta={readModel.design.visualSignals.ctaProminence}
+          </div>
+          <div>
+            Style signals: source={readModel.design.styleSignals.sourceMode}, tone={readModel.design.styleSignals.backgroundTone}, accent={readModel.design.styleSignals.primaryAccent ?? 'none'},
+            type={readModel.design.styleSignals.headingCategory}/{readModel.design.styleSignals.bodyCategory}, spacing={readModel.design.styleSignals.spacingRhythm}/{readModel.design.styleSignals.layoutDensity},
+            cta={readModel.design.styleSignals.ctaStyle}/{readModel.design.styleSignals.ctaProminence}
+          </div>
+          <div>
+            Style diagnostics: {readModel.design.styleSignals.diagnostics.length > 0 ? readModel.design.styleSignals.diagnostics.join(' · ') : 'none'}
           </div>
         </div>
       </section>

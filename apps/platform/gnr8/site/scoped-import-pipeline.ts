@@ -27,6 +27,13 @@ import {
   type RuntimeImportProvenanceSummary,
 } from '@/gnr8/runtime/types'
 import type { UrlSinglePageImportSnapshot } from '@/gnr8/validation/runtime/url-single-page-import'
+import type { VisualAnalysisModel } from '@/gnr8/visual-analysis/visual-analysis-model'
+import {
+  extractStyleSignalModel,
+  styleSignalsToSemanticLabels,
+  styleSignalsToStyleTokens,
+  type StyleSignalModel,
+} from '@/gnr8/style-signals'
 
 const SECTION_INTENT_BY_SEMANTIC_TYPE: Record<string, string> = {
   header: 'header_nav',
@@ -167,6 +174,12 @@ function baselineStyleTokens(): Record<string, string> {
   }
 }
 
+function toStyleSignalConfidence(label: string): number {
+  if (label.startsWith('style.diagnostic:STYLE_SIGNAL_WEAK')) return 0.45
+  if (label.startsWith('style.diagnostic:')) return 0.62
+  return 0.82
+}
+
 function buildImportFidelitySignals(snapshot: UrlSinglePageImportSnapshot): Array<{ label: string; confidence: number; source: 'migration' }> {
   const diagnostics = [...new Set(snapshot.importDiagnostics.issues.map((issue) => normalizeText(issue.code)).filter(Boolean))]
     .sort((a, b) => a.localeCompare(b))
@@ -197,7 +210,7 @@ function resolveEvidencePathIfExists(pathAbs: string): string | null {
   return fs.existsSync(normalized) ? normalized : null
 }
 
-function buildImportProvenanceSummary(snapshot: UrlSinglePageImportSnapshot): RuntimeImportProvenanceSummary {
+function buildImportProvenanceSummary(snapshot: UrlSinglePageImportSnapshot, styleSignals: StyleSignalModel): RuntimeImportProvenanceSummary {
   const captureDiagnostics = (Array.isArray(snapshot.renderedCapture.diagnostics) ? snapshot.renderedCapture.diagnostics : [])
     .map((diag) => normalizeText(diag.code))
     .filter(Boolean)
@@ -220,6 +233,7 @@ function buildImportProvenanceSummary(snapshot: UrlSinglePageImportSnapshot): Ru
       acquisitionEvidencePath: resolveEvidencePathIfExists(path.resolve(snapshot.snapshotRootDirAbs, 'acquisition-evidence.json')),
       screenshotPaths: uniqueSorted(snapshot.renderedCapture.screenshots.map((shot) => resolveEvidencePathIfExists(shot.filePathAbs) ?? '').filter(Boolean)),
     },
+    styleSignals,
   }
 }
 
@@ -229,6 +243,7 @@ function buildCanonicalMigrationInputFromPipeline(input: {
   preparedSite: PreparedSiteModel
   layoutModel: LayoutPreparationModel | null
   snapshot: UrlSinglePageImportSnapshot
+  styleSignals: StyleSignalModel
 }): CanonicalSiteMigrationInput {
   const entrySourcePath = input.preparedSite.source.entryHtmlPath ?? input.preparedSite.documents[0]?.path ?? '/'
   const entryPagePath = inferPagePathFromSourcePath(entrySourcePath)
@@ -236,6 +251,15 @@ function buildCanonicalMigrationInputFromPipeline(input: {
 
   const layoutByDocumentId = new Map(input.layoutModel?.pages.map((page) => [page.sourceDocumentId, page]) ?? [])
   const importFidelitySignals = buildImportFidelitySignals(input.snapshot)
+  const styleSignals = styleSignalsToSemanticLabels(input.styleSignals).map((label) => ({
+    label,
+    confidence: toStyleSignalConfidence(label),
+    source: 'migration' as const,
+  }))
+  const styleTokens = {
+    ...baselineStyleTokens(),
+    ...styleSignalsToStyleTokens(input.styleSignals),
+  }
 
   const pages: CanonicalPageVersionInput[] = input.preparedSite.documents
     .slice()
@@ -312,7 +336,7 @@ function buildCanonicalMigrationInputFromPipeline(input: {
         contentModel: {
           sectionProps: Object.fromEntries(sections.map((section) => [section.id, section.props])),
         },
-        styleTokens: baselineStyleTokens(),
+        styleTokens,
         assetGraph: [],
         semanticSignals: [
           {
@@ -326,6 +350,7 @@ function buildCanonicalMigrationInputFromPipeline(input: {
             source: 'migration',
           },
           ...importFidelitySignals,
+          ...styleSignals,
         ],
         source: 'migration',
         actor: input.actor,
@@ -357,6 +382,7 @@ function computePipelineReporting(input: {
   pipelineResult: LinearMigrationPipelineResult
   preparedSite: PreparedSiteModel | null
   snapshot: UrlSinglePageImportSnapshot
+  styleSignals: StyleSignalModel
 }): {
   executionStatus: 'success' | 'failed'
   consolidationApplied: boolean
@@ -369,6 +395,13 @@ function computePipelineReporting(input: {
   screenshotCount: number
   computedStyleSampleCount: number
   importDiagnosticCodes: string[]
+  styleSourceMode: StyleSignalModel['sourceMode']
+  stylePrimaryAccent: string | null
+  styleBackgroundTone: StyleSignalModel['colors']['backgroundTone']
+  styleTypography: string
+  styleSpacingDensity: string
+  styleCta: string
+  styleDiagnostics: string[]
 } {
   const consolidationApplied = Boolean(
     input.preparedSite?.documents.some((doc) => {
@@ -391,6 +424,13 @@ function computePipelineReporting(input: {
     screenshotCount: input.snapshot.renderedCapture.screenshots.length,
     computedStyleSampleCount: input.snapshot.renderedCapture.computedStyleSamples.length,
     importDiagnosticCodes: uniqueSorted(input.snapshot.importDiagnostics.issues.map((issue) => normalizeText(issue.code)).filter(Boolean)),
+    styleSourceMode: input.styleSignals.sourceMode,
+    stylePrimaryAccent: input.styleSignals.colors.primaryAccent,
+    styleBackgroundTone: input.styleSignals.colors.backgroundTone,
+    styleTypography: `${input.styleSignals.typography.headingCategory}/${input.styleSignals.typography.bodyCategory}`,
+    styleSpacingDensity: `${input.styleSignals.spacing.rhythm}/${input.styleSignals.spacing.layoutDensity}`,
+    styleCta: `${input.styleSignals.cta.styleHint}/${input.styleSignals.cta.prominence}`,
+    styleDiagnostics: input.styleSignals.diagnostics.map((diag) => diag.code),
   }
 }
 
@@ -417,6 +457,13 @@ export type ScopedImportPipelineSuccess = {
     screenshotCount: number
     computedStyleSampleCount: number
     importDiagnosticCodes: string[]
+    styleSourceMode: StyleSignalModel['sourceMode']
+    stylePrimaryAccent: string | null
+    styleBackgroundTone: StyleSignalModel['colors']['backgroundTone']
+    styleTypography: string
+    styleSpacingDensity: string
+    styleCta: string
+    styleDiagnostics: string[]
     artifactGenerated: boolean
   }
 }
@@ -439,6 +486,13 @@ export type ScopedImportPipelineFallback = {
     screenshotCount: number
     computedStyleSampleCount: number
     importDiagnosticCodes: string[]
+    styleSourceMode: StyleSignalModel['sourceMode']
+    stylePrimaryAccent: string | null
+    styleBackgroundTone: StyleSignalModel['colors']['backgroundTone']
+    styleTypography: string
+    styleSpacingDensity: string
+    styleCta: string
+    styleDiagnostics: string[]
   }
 }
 
@@ -496,10 +550,26 @@ export async function runScopedImportPipeline(input: {
     },
   })
   const importManifest = deps.createImportManifest(importOutput)
+  const computedOnlyStyleSignals = input.snapshot.renderedCapture.computedStyleSamples.length > 0
+    ? extractStyleSignalModel({
+        computedStyleSamples: input.snapshot.renderedCapture.computedStyleSamples,
+      })
+    : null
 
-  const pipelineResult = deps.runLinearMigrationPipeline({ importOutput, importManifest })
+  const pipelineResult = deps.runLinearMigrationPipeline(
+    { importOutput, importManifest },
+    {
+      styleSignals: computedOnlyStyleSignals,
+    },
+  )
   const { preparedSite, layoutModel, renderOutput, previewDocument } = extractPipelineArtifacts(pipelineResult)
-  const importProvenanceSummary = buildImportProvenanceSummary(input.snapshot)
+  const visualAnalysis = findPipelineStage<{ visualAnalysis: VisualAnalysisModel }>(pipelineResult, 'visual_analysis')?.visualAnalysis ?? null
+  const styleSignals = extractStyleSignalModel({
+    computedStyleSamples: input.snapshot.renderedCapture.computedStyleSamples,
+    preparedSite,
+    visualAnalysis,
+  })
+  const importProvenanceSummary = buildImportProvenanceSummary(input.snapshot, styleSignals)
 
   if (pipelineResult.status === 'success' && preparedSite) {
     const canonicalInput = buildCanonicalMigrationInputFromPipeline({
@@ -508,6 +578,7 @@ export async function runScopedImportPipeline(input: {
       preparedSite,
       layoutModel,
       snapshot: input.snapshot,
+      styleSignals,
     })
 
     const migrated = await deps.createSiteVersionFromMigration({
@@ -576,6 +647,7 @@ export async function runScopedImportPipeline(input: {
       pipelineResult,
       preparedSite,
       snapshot: input.snapshot,
+      styleSignals,
     })
 
     return {
@@ -628,7 +700,7 @@ export async function runScopedImportPipeline(input: {
     siteVersionId: legacyMigrated.siteVersionId,
     versionNo: legacyMigrated.versionNo,
     fallbackReason: 'pipeline_failed',
-    diagnostics: {
+      diagnostics: {
       pipelineStatus: pipelineResult.status,
       stageSummaries: pipelineResult.stages.map((stage) => stage.summary),
       pipelineDiagnosticCodes: uniqueSorted(pipelineResult.diagnostics.map((issue) => issue.code)),
@@ -638,11 +710,18 @@ export async function runScopedImportPipeline(input: {
       renderedCaptureStatus: input.snapshot.renderedCapture.status,
       renderedDomQuality: input.snapshot.sourceSelection.renderedDomQuality.quality,
       screenshotCount: input.snapshot.renderedCapture.screenshots.length,
-      computedStyleSampleCount: input.snapshot.renderedCapture.computedStyleSamples.length,
-      importDiagnosticCodes: uniqueSorted(input.snapshot.importDiagnostics.issues.map((issue) => normalizeText(issue.code)).filter(Boolean)),
-    },
+        computedStyleSampleCount: input.snapshot.renderedCapture.computedStyleSamples.length,
+        importDiagnosticCodes: uniqueSorted(input.snapshot.importDiagnostics.issues.map((issue) => normalizeText(issue.code)).filter(Boolean)),
+        styleSourceMode: styleSignals.sourceMode,
+        stylePrimaryAccent: styleSignals.colors.primaryAccent,
+        styleBackgroundTone: styleSignals.colors.backgroundTone,
+        styleTypography: `${styleSignals.typography.headingCategory}/${styleSignals.typography.bodyCategory}`,
+        styleSpacingDensity: `${styleSignals.spacing.rhythm}/${styleSignals.spacing.layoutDensity}`,
+        styleCta: `${styleSignals.cta.styleHint}/${styleSignals.cta.prominence}`,
+        styleDiagnostics: styleSignals.diagnostics.map((diag) => diag.code),
+      },
+    }
   }
-}
 
 export const __scopedImportPipelineTestUtils = {
   buildCanonicalMigrationInputFromPipeline,

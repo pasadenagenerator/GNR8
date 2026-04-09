@@ -73,6 +73,18 @@ export type ValidationSummary = {
         typographyHint: string | null;
         visualTone: string | null;
       };
+      styleSignalSummary: {
+        sourceMode: string | null;
+        backgroundTone: string | null;
+        primaryAccent: string | null;
+        headingCategory: string | null;
+        bodyCategory: string | null;
+        spacingRhythm: string | null;
+        layoutDensity: string | null;
+        ctaStyle: string | null;
+        ctaProminence: string | null;
+        diagnostics: string[];
+      };
       confidenceSummary: {
         high: number;
         medium: number;

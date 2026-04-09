@@ -3,6 +3,7 @@ import 'server-only'
 import { toSiteEntity, type RawSiteRow, type SiteEntity } from '@/gnr8/site/site-entity'
 import { resolveSiteWorkspacePreview, type SitePreviewType, type SiteWorkspacePreviewReadiness } from '@/gnr8/site/site-preview-contract'
 import type { RuntimeImportProvenanceSummary } from '@/gnr8/runtime/types'
+import type { StyleSignalModel } from '@/gnr8/style-signals'
 import { getSupabaseServerClientReadOnly } from '@/src/auth/supabase-server-read-only'
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
@@ -127,6 +128,7 @@ export type SiteWorkspaceReadModel = {
     importDiagnosticCodes: string[]
     captureEvidenceRefs: string[]
     diagnosticsSummary: string[]
+    styleSignals: StyleSignalModel | null
   }
   actions: {
     currentStatus: 'idle' | 'running' | 'completed' | 'failed'
@@ -170,6 +172,18 @@ export type SiteWorkspaceReadModel = {
       heroProminence: 'low' | 'medium' | 'high'
       visualDensity: 'low' | 'medium' | 'high'
       ctaProminence: 'low' | 'medium' | 'high'
+    }
+    styleSignals: {
+      sourceMode: StyleSignalModel['sourceMode'] | 'unknown'
+      backgroundTone: StyleSignalModel['colors']['backgroundTone']
+      primaryAccent: string | null
+      headingCategory: StyleSignalModel['typography']['headingCategory']
+      bodyCategory: StyleSignalModel['typography']['bodyCategory']
+      spacingRhythm: StyleSignalModel['spacing']['rhythm']
+      layoutDensity: StyleSignalModel['spacing']['layoutDensity']
+      ctaStyle: StyleSignalModel['cta']['styleHint']
+      ctaProminence: StyleSignalModel['cta']['prominence']
+      diagnostics: string[]
     }
     sectionDecisions: DesignDecisionRow[]
     rationale: string[]
@@ -519,6 +533,115 @@ function parseImportFidelitySignals(pageRows: RuntimePageVersionRow[]): {
   }
 }
 
+function parseStyleSignalsFromSemanticLabels(pageRows: RuntimePageVersionRow[]): StyleSignalModel | null {
+  const labels = new Set<string>()
+  for (const page of pageRows) {
+    const semanticSignals = Array.isArray(page.semantic_signals) ? page.semantic_signals : []
+    for (const signal of semanticSignals) {
+      if (!isRecord(signal)) continue
+      const label = normalizeText(signal.label)
+      if (label.startsWith('style.')) labels.add(label)
+    }
+  }
+
+  if (labels.size === 0) return null
+  const values = [...labels]
+
+  const pick = (prefix: string): string | null => {
+    const found = values.find((entry) => entry.startsWith(prefix))
+    return found ? normalizeText(found.slice(prefix.length)) || null : null
+  }
+
+  const diagnostics = values
+    .filter((entry) => entry.startsWith('style.diagnostic:'))
+    .map((entry) => normalizeText(entry.slice('style.diagnostic:'.length)))
+    .filter(Boolean)
+    .sort((a, b) => a.localeCompare(b))
+    .map((code) => ({
+      code: code as StyleSignalModel['diagnostics'][number]['code'],
+      severity: 'info' as const,
+      message: `Recovered from semantic label: ${code}`,
+    }))
+
+  const sourceMode = pick('style.source_mode:')
+  const backgroundTone = pick('style.background_tone:')
+  const headingCategory = pick('style.typography.heading_category:')
+  const bodyCategory = pick('style.typography.body_category:')
+  const spacingRhythm = pick('style.spacing.rhythm:')
+  const spacingDensity = pick('style.spacing.density:')
+  const ctaStyle = pick('style.cta.style:')
+  const ctaProminence = pick('style.cta.prominence:')
+  const radiusHint = pick('style.surfaces.radius:')
+  const shadowHint = pick('style.surfaces.shadow:')
+  const visualTone = pick('style.visual_tone:')
+
+  return {
+    kind: 'style_signal_model_v2',
+    version: '2.0.0',
+    sourceMode: sourceMode === 'computed_style' || sourceMode === 'mixed' || sourceMode === 'html_css_inference' ? sourceMode : 'html_css_inference',
+    colors: {
+      backgroundTone:
+        backgroundTone === 'light' || backgroundTone === 'dark' || backgroundTone === 'mixed' || backgroundTone === 'unknown'
+          ? backgroundTone
+          : 'unknown',
+      primaryAccent: (() => {
+        const value = pick('style.primary_accent:')
+        return value && value !== 'none' ? value : null
+      })(),
+      secondaryAccent: (() => {
+        const value = pick('style.secondary_accent:')
+        return value && value !== 'none' ? value : null
+      })(),
+      neutralPalette: [],
+      ctaColorHint: null,
+    },
+    typography: {
+      headingFontFamily: null,
+      bodyFontFamily: null,
+      headingCategory:
+        headingCategory === 'sans' || headingCategory === 'serif' || headingCategory === 'display' || headingCategory === 'mono' || headingCategory === 'unknown'
+          ? headingCategory
+          : 'unknown',
+      bodyCategory:
+        bodyCategory === 'sans' || bodyCategory === 'serif' || bodyCategory === 'display' || bodyCategory === 'mono' || bodyCategory === 'unknown'
+          ? bodyCategory
+          : 'unknown',
+      scaleHint: 'unknown',
+      weightContrastHint: 'unknown',
+    },
+    spacing: {
+      rhythm: spacingRhythm === 'tight' || spacingRhythm === 'balanced' || spacingRhythm === 'airy' || spacingRhythm === 'unknown' ? spacingRhythm : 'unknown',
+      sectionSpacingHint: 'unknown',
+      layoutDensity:
+        spacingDensity === 'dense' || spacingDensity === 'balanced' || spacingDensity === 'airy' || spacingDensity === 'unknown'
+          ? spacingDensity
+          : 'unknown',
+    },
+    surfaces: {
+      radiusHint: radiusHint === 'sharp' || radiusHint === 'rounded' || radiusHint === 'mixed' || radiusHint === 'unknown' ? radiusHint : 'unknown',
+      shadowHint:
+        shadowHint === 'flat' || shadowHint === 'soft' || shadowHint === 'elevated' || shadowHint === 'mixed' || shadowHint === 'unknown'
+          ? shadowHint
+          : 'unknown',
+    },
+    cta: {
+      prominence:
+        ctaProminence === 'low' || ctaProminence === 'medium' || ctaProminence === 'high' || ctaProminence === 'unknown'
+          ? ctaProminence
+          : 'unknown',
+      styleHint:
+        ctaStyle === 'text_link' || ctaStyle === 'outline_button' || ctaStyle === 'solid_button' || ctaStyle === 'mixed' || ctaStyle === 'unknown'
+          ? ctaStyle
+          : 'unknown',
+    },
+    visualToneHint:
+      visualTone === 'minimal' || visualTone === 'editorial' || visualTone === 'corporate' || visualTone === 'playful' || visualTone === 'premium' || visualTone === 'unknown'
+        ? visualTone
+        : 'unknown',
+    diagnostics,
+  }
+}
+
 function parseImportProvenanceSummary(value: unknown): RuntimeImportProvenanceSummary | null {
   if (!isRecord(value)) return null
   if (normalizeText(value.kind) !== 'runtime_import_provenance_summary_v1') return null
@@ -543,6 +666,7 @@ function parseImportProvenanceSummary(value: unknown): RuntimeImportProvenanceSu
   const screenshotPaths = Array.isArray(captureEvidence?.screenshotPaths)
     ? captureEvidence.screenshotPaths.map((entry) => normalizeText(entry)).filter(Boolean)
     : []
+  const styleSignals = isRecord(value.styleSignals) ? (value.styleSignals as StyleSignalModel) : null
 
   return {
     kind: 'runtime_import_provenance_summary_v1',
@@ -561,6 +685,7 @@ function parseImportProvenanceSummary(value: unknown): RuntimeImportProvenanceSu
       acquisitionEvidencePath: toTextOrNull(captureEvidence?.acquisitionEvidencePath),
       screenshotPaths: [...new Set(screenshotPaths)].sort((a, b) => a.localeCompare(b)),
     },
+    styleSignals,
   }
 }
 
@@ -576,6 +701,7 @@ function parseImportFidelity(input: {
   computedStyleSampleCount: number
   importDiagnosticCodes: string[]
   captureEvidenceRefs: string[]
+  styleSignals: StyleSignalModel | null
 } {
   const parsedFromSignals = parseImportFidelitySignals(input.pageRows)
   const parsedSummary = parseImportProvenanceSummary(input.runtimeVersion?.import_provenance_summary ?? null)
@@ -584,6 +710,7 @@ function parseImportFidelity(input: {
     return {
       ...parsedFromSignals,
       captureEvidenceRefs: [],
+      styleSignals: parseStyleSignalsFromSemanticLabels(input.pageRows),
     }
   }
 
@@ -610,6 +737,7 @@ function parseImportFidelity(input: {
     computedStyleSampleCount: parsedSummary.computedStyleSampleCount,
     importDiagnosticCodes,
     captureEvidenceRefs,
+    styleSignals: parsedSummary.styleSignals ?? parseStyleSignalsFromSemanticLabels(input.pageRows),
   }
 }
 
@@ -907,6 +1035,7 @@ export async function getSiteWorkspaceReadModelForPage(input: {
       importDiagnosticCodes: importFidelity.importDiagnosticCodes,
       captureEvidenceRefs: importFidelity.captureEvidenceRefs,
       diagnosticsSummary,
+      styleSignals: importFidelity.styleSignals,
     },
     actions: {
       currentStatus: normalizedSiteActions.find((action) => action.status === 'running')?.status ?? (lastAction?.status ?? 'idle'),
@@ -955,11 +1084,24 @@ export async function getSiteWorkspaceReadModelForPage(input: {
         visualDensity,
         ctaProminence,
       },
+      styleSignals: {
+        sourceMode: importFidelity.styleSignals?.sourceMode ?? 'unknown',
+        backgroundTone: importFidelity.styleSignals?.colors.backgroundTone ?? 'unknown',
+        primaryAccent: importFidelity.styleSignals?.colors.primaryAccent ?? null,
+        headingCategory: importFidelity.styleSignals?.typography.headingCategory ?? 'unknown',
+        bodyCategory: importFidelity.styleSignals?.typography.bodyCategory ?? 'unknown',
+        spacingRhythm: importFidelity.styleSignals?.spacing.rhythm ?? 'unknown',
+        layoutDensity: importFidelity.styleSignals?.spacing.layoutDensity ?? 'unknown',
+        ctaStyle: importFidelity.styleSignals?.cta.styleHint ?? 'unknown',
+        ctaProminence: importFidelity.styleSignals?.cta.prominence ?? 'unknown',
+        diagnostics: (importFidelity.styleSignals?.diagnostics ?? []).map((diag) => diag.code),
+      },
       sectionDecisions,
       rationale: [
         `Design strategy '${designStrategy}' is inferred from section composition (hero=${heroDetected ? 'yes' : 'no'}, cta=${ctaDetected ? 'yes' : 'no'}).`,
         `Site has ${sectionsDetected} detected section${sectionsDetected === 1 ? '' : 's'} across the latest runtime snapshot.`,
         `AI suggestion status is '${aiSuggestionStatus}'.`,
+        `Style source=${importFidelity.styleSignals?.sourceMode ?? 'unknown'}; accent=${importFidelity.styleSignals?.colors.primaryAccent ?? 'none'}; rhythm=${importFidelity.styleSignals?.spacing.rhythm ?? 'unknown'}.`,
       ],
     },
     preview: {

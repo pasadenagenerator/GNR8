@@ -147,6 +147,7 @@ test('import provenance summary is parsed when persisted on runtime site version
   assert.equal(parsed?.screenshotCount, 0)
   assert.equal(parsed?.computedStyleSampleCount, 0)
   assert.deepEqual(parsed?.importDiagnosticCodes, ['IMPORT_FIDELITY_DEGRADED', 'RAW_HTML_FALLBACK_USED'])
+  assert.equal(parsed?.styleSignals, null)
 })
 
 test('import fidelity prefers persisted summary over semantic signal labels', () => {
@@ -173,6 +174,41 @@ test('import fidelity prefers persisted summary over semantic signal labels', ()
           acquisitionEvidencePath: '/tmp/snapshot/acquisition-evidence.json',
           screenshotPaths: ['/tmp/snapshot/rendered-capture/desktop-fullpage.png'],
         },
+        styleSignals: {
+          kind: 'style_signal_model_v2',
+          version: '2.0.0',
+          sourceMode: 'computed_style',
+          colors: {
+            backgroundTone: 'dark',
+            primaryAccent: '#2563eb',
+            secondaryAccent: '#14b8a6',
+            neutralPalette: ['#0f172a'],
+            ctaColorHint: '#2563eb',
+          },
+          typography: {
+            headingFontFamily: 'Inter',
+            bodyFontFamily: 'Inter',
+            headingCategory: 'sans',
+            bodyCategory: 'sans',
+            scaleHint: 'large',
+            weightContrastHint: 'high',
+          },
+          spacing: {
+            rhythm: 'airy',
+            sectionSpacingHint: 'airy',
+            layoutDensity: 'airy',
+          },
+          surfaces: {
+            radiusHint: 'rounded',
+            shadowHint: 'soft',
+          },
+          cta: {
+            prominence: 'high',
+            styleHint: 'solid_button',
+          },
+          visualToneHint: 'premium',
+          diagnostics: [],
+        },
       },
       updated_at: new Date().toISOString(),
       created_at: new Date().toISOString(),
@@ -198,6 +234,7 @@ test('import fidelity prefers persisted summary over semantic signal labels', ()
   assert.equal(parsed.renderedDomQuality, 'strong')
   assert.equal(parsed.screenshotCount, 2)
   assert.equal(parsed.computedStyleSampleCount, 6)
+  assert.equal(parsed.styleSignals?.sourceMode, 'computed_style')
   assert.ok(parsed.captureEvidenceRefs.some((entry) => entry.includes('rendered-capture.json')))
   assert.deepEqual(parsed.importDiagnosticCodes, ['RENDERED_CAPTURE_RECOVERED_ON_RETRY'])
 })

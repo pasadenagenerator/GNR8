@@ -2,6 +2,7 @@ import type { Gnr8Page } from "@/gnr8/types/page";
 import type { PageEnforcementByStage } from "@/gnr8/migration/enforcement/page-enforcement";
 import type { PageMigrationGateResult } from "@/gnr8/migration/quality-gates/page-quality-gate";
 import type { PageRolloutPolicyResult } from "@/gnr8/migration/policy/page-rollout-policy";
+import type { StyleSignalModel } from "@/gnr8/style-signals";
 
 export const RENDERER_COMPATIBILITY_VERSION = "gnr8-renderer-v1" as const;
 
@@ -32,6 +33,7 @@ export type RuntimeImportProvenanceSummary = {
     acquisitionEvidencePath: string | null;
     screenshotPaths: string[];
   };
+  styleSignals: StyleSignalModel | null;
 };
 
 export type StyleTokenRecord = Record<string, string>;

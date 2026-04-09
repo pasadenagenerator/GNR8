@@ -299,3 +299,51 @@ test("design intelligence consumes high-confidence visual signals safely", () =>
   assert.equal(result.designModel.layoutStrategy, "cta_focused");
   assert.equal(result.designModel.spacingScale.sectionGap, "lg");
 });
+
+test("design intelligence consumes style signals without breaking determinism", () => {
+  const result = createDesignIntelligenceResultFromInput(
+    baseInput([section({ sectionId: "hero", ordinalIndex: 0, hasHeadingSignal: true, mediaCount: 1, ctaCandidateCount: 2 })]),
+    {
+      styleSignals: {
+        kind: "style_signal_model_v2",
+        version: "2.0.0",
+        sourceMode: "computed_style",
+        colors: {
+          backgroundTone: "dark",
+          primaryAccent: "#2563eb",
+          secondaryAccent: "#14b8a6",
+          neutralPalette: ["#0f172a"],
+          ctaColorHint: "#2563eb",
+        },
+        typography: {
+          headingFontFamily: "Inter",
+          bodyFontFamily: "Inter",
+          headingCategory: "sans",
+          bodyCategory: "sans",
+          scaleHint: "large",
+          weightContrastHint: "high",
+        },
+        spacing: {
+          rhythm: "airy",
+          sectionSpacingHint: "airy",
+          layoutDensity: "airy",
+        },
+        surfaces: {
+          radiusHint: "rounded",
+          shadowHint: "soft",
+        },
+        cta: {
+          prominence: "high",
+          styleHint: "solid_button",
+        },
+        visualToneHint: "premium",
+        diagnostics: [],
+      },
+    },
+  );
+
+  assert.equal(result.designModel.styleSignals.sourceMode, "computed_style");
+  assert.equal(result.designModel.layoutStrategy, "cta_focused");
+  assert.equal(result.designModel.colorSystem.primaryHint, "#2563eb");
+  assert.equal(result.designModel.spacingScale.rhythm, "airy");
+});

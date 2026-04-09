@@ -10,6 +10,7 @@ import type {
 } from "./ai-suggestion-model";
 import type { DesignIntelligenceAiSuggestionService } from "./design-intelligence-ai-hook";
 import type { VisualAnalysisModel, VisualPageObservation } from "../visual-analysis/visual-analysis-model";
+import { extractStyleSignalModel, type StyleSignalModel } from "../style-signals";
 import {
   DESIGN_MODEL_VERSION,
   type ComponentVariantMap,
@@ -74,6 +75,7 @@ type BuildDesignModelOptions = {
   aiSuggestionService?: DesignIntelligenceAiSuggestionService | null;
   enableAiSuggestions?: boolean;
   visualAnalysis?: VisualAnalysisModel | null;
+  styleSignals?: StyleSignalModel | null;
 };
 
 export type DesignIntelligenceBuildResult = {
@@ -227,9 +229,43 @@ function pickStrategy(input: {
   page: DesignPageInput;
   pageType: PageType;
   visualObservation?: VisualPageObservation | null;
+  styleSignals: StyleSignalModel;
 }): { strategy: LayoutStrategy; confidence: number; rationale: DesignRationale } {
   const heroCandidate = input.page.sections.find((s) => s.ordinalIndex === 0) ?? null;
   const visual = input.visualObservation ?? null;
+  const style = input.styleSignals;
+
+  if (style.sourceMode !== "html_css_inference" && style.cta.prominence === "high") {
+    return {
+      strategy: "cta_focused",
+      confidence: 0.81,
+      rationale: {
+        code: "STRATEGY_STYLE_CTA_PROMINENCE",
+        summary: "Selected cta_focused from strong style CTA prominence signals.",
+        basedOn: [
+          `styleSource=${style.sourceMode}`,
+          `ctaProminence=${style.cta.prominence}`,
+          `ctaStyle=${style.cta.styleHint}`,
+        ],
+      },
+    };
+  }
+
+  if (style.sourceMode !== "html_css_inference" && style.colors.backgroundTone === "dark" && style.colors.primaryAccent) {
+    return {
+      strategy: "visual_gallery",
+      confidence: 0.77,
+      rationale: {
+        code: "STRATEGY_STYLE_DARK_ACCENT",
+        summary: "Selected visual_gallery due to dark background and strong accent style profile.",
+        basedOn: [
+          `styleSource=${style.sourceMode}`,
+          `backgroundTone=${style.colors.backgroundTone}`,
+          `primaryAccent=${style.colors.primaryAccent}`,
+        ],
+      },
+    };
+  }
 
   if (visual && visual.confidence === "high" && visual.dominantVisualStyleFamily !== "unknown") {
     return {
@@ -505,7 +541,21 @@ function typographyFromStrategy(strategy: LayoutStrategy): DesignModel["typograp
   return { profile: "balanced", headingScale: "regular", bodyScale: "regular" };
 }
 
-function spacingFromStrategy(strategy: LayoutStrategy, pageType: PageType, visualObservation?: VisualPageObservation | null): DesignModel["spacingScale"] {
+function spacingFromStrategy(
+  strategy: LayoutStrategy,
+  pageType: PageType,
+  visualObservation: VisualPageObservation | null | undefined,
+  styleSignals: StyleSignalModel,
+): DesignModel["spacingScale"] {
+  if (styleSignals.spacing.rhythm !== "unknown" || styleSignals.spacing.sectionSpacingHint !== "unknown") {
+    if (styleSignals.spacing.rhythm === "tight" || styleSignals.spacing.layoutDensity === "dense") {
+      return { rhythm: "dense", sectionGap: "sm", contentGap: "sm" };
+    }
+    if (styleSignals.spacing.rhythm === "airy" || styleSignals.spacing.layoutDensity === "airy") {
+      return { rhythm: "airy", sectionGap: "lg", contentGap: "md" };
+    }
+  }
+
   if (visualObservation && visualObservation.confidence !== "low") {
     if (visualObservation.spacingRhythm === "tight" || visualObservation.readabilityTendency === "dense") {
       return { rhythm: "calm", sectionGap: "lg", contentGap: "lg" };
@@ -521,12 +571,12 @@ function spacingFromStrategy(strategy: LayoutStrategy, pageType: PageType, visua
   return { rhythm: "balanced", sectionGap: "md", contentGap: "md" };
 }
 
-function colorSystemFromPage(page: DesignPageInput): DesignModel["colorSystem"] {
-  const primary = page.brandSignals.primaryColorHint;
-  const secondary = page.brandSignals.secondaryColorHint;
-  const tone = page.brandSignals.visualTone === "playful"
+function colorSystemFromPage(page: DesignPageInput, styleSignals: StyleSignalModel): DesignModel["colorSystem"] {
+  const primary = styleSignals.colors.primaryAccent ?? page.brandSignals.primaryColorHint;
+  const secondary = styleSignals.colors.secondaryAccent ?? page.brandSignals.secondaryColorHint;
+  const tone = styleSignals.visualToneHint === "playful" || page.brandSignals.visualTone === "playful"
     ? "energetic"
-    : page.brandSignals.visualTone === "formal"
+    : styleSignals.visualToneHint === "premium" || styleSignals.visualToneHint === "editorial" || page.brandSignals.visualTone === "formal"
     ? "calm"
     : page.ctaCandidateCount >= 3
     ? "energetic"
@@ -600,6 +650,7 @@ function visualSummaryFromInput(visual: VisualAnalysisModel | null | undefined):
 
 function safeDefaultModel(input: DesignIntelligenceInput, message: string): DesignModel {
   const entryPage = input.pages.find((p) => p.isEntry) ?? input.pages[0] ?? null;
+  const styleSignals = input.styleSignals ?? extractStyleSignalModel({});
 
   return {
     kind: "design_model_v1",
@@ -656,6 +707,7 @@ function safeDefaultModel(input: DesignIntelligenceInput, message: string): Desi
       rationale: ["AI suggestion layer unavailable; deterministic fallback retained."],
     },
     visualAnalysis: visualSummaryFromInput(input.visualAnalysis ?? null),
+    styleSignals,
     diagnostics: {
       codes: ["DESIGN_INTELLIGENCE_DEFAULTED", "AI_DESIGN_SUGGESTION_UNAVAILABLE"],
       issues: [
@@ -682,6 +734,7 @@ function toDeterministicModel(input: DesignIntelligenceInput): DesignModel {
   }
 
   const diagnostics: DesignIntelligenceDiagnostic[] = [];
+  const styleSignals = input.styleSignals ?? extractStyleSignalModel({});
   const modelRationale: DesignRationale[] = [];
   const pageStrategies: DesignModel["pageStrategies"] = [];
   const sectionDecisions: SectionDecision[] = [];
@@ -699,7 +752,7 @@ function toDeterministicModel(input: DesignIntelligenceInput): DesignModel {
 
     const inferredPageType = inferPageType(page);
     const visualObservation = visualByPageId.get(page.pageId) ?? null;
-    const strategy = pickStrategy({ page, pageType: inferredPageType.pageType, visualObservation });
+    const strategy = pickStrategy({ page, pageType: inferredPageType.pageType, visualObservation, styleSignals });
 
     pageStrategies.push({
       pageId: page.pageId,
@@ -810,8 +863,8 @@ function toDeterministicModel(input: DesignIntelligenceInput): DesignModel {
     pageStrategies: orderedPageStrategies,
     sectionDecisions: orderedSectionDecisions,
     typographyScale: typographyFromStrategy(globalStrategy),
-    spacingScale: spacingFromStrategy(globalStrategy, globalPageType, primaryPageVisual),
-    colorSystem: colorSystemFromPage(primaryPageInput),
+    spacingScale: spacingFromStrategy(globalStrategy, globalPageType, primaryPageVisual, styleSignals),
+    colorSystem: colorSystemFromPage(primaryPageInput, styleSignals),
     componentVariants: componentVariantsFromDecisions(orderedSectionDecisions),
     rationale: modelRationale,
     aiAssistance: {
@@ -832,6 +885,7 @@ function toDeterministicModel(input: DesignIntelligenceInput): DesignModel {
       rationale: ["AI suggestion layer disabled; deterministic model retained."],
     },
     visualAnalysis: visualSummaryFromInput(input.visualAnalysis ?? null),
+    styleSignals,
     diagnostics: {
       codes: diagnosticCodes,
       issues: diagnostics,
@@ -1315,7 +1369,7 @@ function mergeAiSuggestion(input: {
     pageStrategies: mergedPageStrategies,
     sectionDecisions: mergedSectionDecisions,
     typographyScale: typographyFromStrategy(mergedLayoutStrategy),
-    spacingScale: spacingFromStrategy(mergedLayoutStrategy, baseline.pageType, null),
+    spacingScale: spacingFromStrategy(mergedLayoutStrategy, baseline.pageType, null, baseline.styleSignals),
     componentVariants: componentVariantsFromDecisions(mergedSectionDecisions),
     rationale: [...baseline.rationale, ...mergeRationale],
     aiAssistance: {
@@ -1492,6 +1546,9 @@ export function createDesignIntelligenceInputFromPreparedSite(preparedSite: Prep
     },
     pages,
     visualAnalysis: null,
+    styleSignals: extractStyleSignalModel({
+      preparedSite,
+    }),
   };
 }
 
@@ -1506,6 +1563,7 @@ export function createDesignIntelligenceResultFromInput(
   const enrichedInput: DesignIntelligenceInput = {
     ...input,
     visualAnalysis: options?.visualAnalysis ?? input.visualAnalysis ?? null,
+    styleSignals: options?.styleSignals ?? input.styleSignals ?? null,
   };
   const deterministicDesignModel = toDeterministicModel(enrichedInput);
   const suggestionInput = buildAiSuggestionInput(enrichedInput, deterministicDesignModel);
@@ -1531,12 +1589,16 @@ export function createDesignIntelligenceResult(
   options?: BuildDesignModelOptions,
 ): DesignIntelligenceBuildResult {
   try {
-    const input = createDesignIntelligenceInputFromPreparedSite(preparedSite);
+    const input = {
+      ...createDesignIntelligenceInputFromPreparedSite(preparedSite),
+      styleSignals: options?.styleSignals ?? undefined,
+    };
     return createDesignIntelligenceResultFromInput(input, options);
   } catch (error) {
     const input = {
       ...createDesignIntelligenceInputFromPreparedSite(preparedSite),
       visualAnalysis: options?.visualAnalysis ?? null,
+      styleSignals: options?.styleSignals ?? undefined,
     };
     const message = error instanceof Error ? error.message : "unknown_design_intelligence_error";
     const fallback = safeDefaultModel(input, `Design Intelligence fallback activated: ${message}`);

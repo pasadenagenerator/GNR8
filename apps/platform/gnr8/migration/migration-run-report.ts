@@ -536,6 +536,19 @@ function buildStageFacts(input: {
       facts.aiAccepted = designStage?.output.aiSuggestionMerge.acceptedCount ?? null;
       facts.aiRejected = designStage?.output.aiSuggestionMerge.rejectedCount ?? null;
       facts.designDiagnosticCodes = designModel?.diagnostics.codes.length ?? null;
+      facts.styleSourceMode = designModel?.styleSignals.sourceMode ?? null;
+      facts.stylePrimaryAccent = designModel?.styleSignals.colors.primaryAccent ?? null;
+      facts.styleBackgroundTone = designModel?.styleSignals.colors.backgroundTone ?? null;
+      facts.styleTypography = designModel
+        ? `${designModel.styleSignals.typography.headingCategory}/${designModel.styleSignals.typography.bodyCategory}`
+        : null;
+      facts.styleSpacing = designModel
+        ? `${designModel.styleSignals.spacing.rhythm}/${designModel.styleSignals.spacing.layoutDensity}`
+        : null;
+      facts.styleCta = designModel
+        ? `${designModel.styleSignals.cta.styleHint}/${designModel.styleSignals.cta.prominence}`
+        : null;
+      facts.styleDiagnostics = designModel?.styleSignals.diagnostics.length ?? null;
     } else if (stageId === "visual_analysis") {
       artifactKeys.push("visual_analysis_model");
       facts.visualStatus = visualAnalysis?.status ?? null;

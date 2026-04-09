@@ -25,11 +25,13 @@ import { createPreviewDocument } from "../preview-document-model";
 import type { VisualAnalysisDiagnostic, VisualScreenshotInput } from "../../visual-analysis/visual-analysis-model";
 import type { VisualAnalysisInterpreterProvider } from "../../visual-analysis/visual-analysis-ai-hook";
 import { createVisualAnalysisModel } from "../../visual-analysis/visual-analysis-service";
+import type { StyleSignalModel } from "../../style-signals";
 
 export type RunLinearMigrationPipelineOptions = {
   visualAnalysisInput?: VisualScreenshotInput | null;
   resolveVisualAnalysisInput?: (input: { structure: StructurePreparationStageOutput }) => VisualScreenshotInput | null | undefined;
   visualInterpreterProvider?: VisualAnalysisInterpreterProvider | null;
+  styleSignals?: StyleSignalModel | null;
 };
 
 const STAGE_CONTRACTS: Record<
@@ -368,12 +370,14 @@ function runPreviewGenerationStage(
 
 function runDesignIntelligenceStage(
   visualStage: LinearMigrationPipelineStageResult & { stageId: "visual_analysis" },
+  options?: RunLinearMigrationPipelineOptions,
 ): LinearMigrationPipelineStageResult & { stageId: "design_intelligence" } {
   const shouldSkip = visualStage.status !== "success";
   const status: PipelineStageStatus = shouldSkip ? "skipped" : "success";
 
   const designResult = createDesignIntelligenceResult(visualStage.output.structure.preparedSite, {
     visualAnalysis: visualStage.output.visualAnalysis,
+    styleSignals: options?.styleSignals ?? null,
   });
   const designModel = designResult.designModel;
   const stageIssues = designModel.diagnostics.issues.map((issue) =>
@@ -443,7 +447,7 @@ export function runLinearMigrationPipeline(input: PipelineInput, options?: RunLi
   const s3 = runVisualAnalysisStage(s2, options);
   stages.push(s3);
 
-  const s4 = runDesignIntelligenceStage(s3);
+  const s4 = runDesignIntelligenceStage(s3, options);
   stages.push(s4);
 
   const s5 = runLayoutPreparationStage(s4);

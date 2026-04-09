@@ -1,6 +1,7 @@
 import type { PreparedSiteModel } from "../migration/prepared-site-model";
 import type { AiSuggestionMergeResult } from "./ai-suggestion-model";
 import type { VisualAnalysisModel } from "../visual-analysis/visual-analysis-model";
+import type { StyleSignalModel } from "../style-signals";
 
 export const DESIGN_MODEL_VERSION = "1.0.0" as const;
 
@@ -156,6 +157,8 @@ export type DesignModel = {
     diagnostics: string[];
   };
 
+  styleSignals: StyleSignalModel;
+
   diagnostics: {
     codes: string[];
     issues: DesignIntelligenceDiagnostic[];
@@ -231,6 +234,7 @@ export type DesignIntelligenceInput = {
   preparedSite: DesignModel["source"];
   pages: DesignPageInput[];
   visualAnalysis?: VisualAnalysisModel | null;
+  styleSignals?: StyleSignalModel | null;
 };
 
 export type DesignIntelligenceAiHook = {
