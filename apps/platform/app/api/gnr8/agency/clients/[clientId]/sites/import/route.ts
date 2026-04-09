@@ -268,7 +268,7 @@ export async function POST(req: Request, ctx: { params: Promise<Params> }) {
           rawImportCaptured: true,
           transformedPreviewGenerated: imported.mode === 'pipeline',
           debugPreviewAvailable: true,
-          runtimePreviewLinked: imported.mode === 'pipeline' && imported.reporting.writePath.artifactLinked,
+          runtimePreviewLinked: imported.mode === 'pipeline' && imported.reporting.writePath.artifactBindSucceeded,
         },
         pipeline: {
           executionStatus: imported.mode === 'pipeline' ? imported.reporting.executionStatus : imported.diagnostics.pipelineStatus,

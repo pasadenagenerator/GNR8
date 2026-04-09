@@ -511,12 +511,14 @@ export type ScopedImportPipelineSuccess = {
     styleDiagnostics: string[]
     artifactGenerated: boolean
     writePath: {
-      versionCreatedId: string
-      versionSelectedId: string
-      provenanceSummaryWritten: boolean
-      artifactCreatedId: string
-      artifactLinked: boolean
-      artifactLinkedVersionId: string
+      createdVersionId: string
+      provenanceWriteAttempted: boolean
+      provenanceWriteSucceeded: boolean
+      artifactCreateAttempted: boolean
+      artifactCreatedId: string | null
+      artifactBindAttempted: boolean
+      artifactBindSucceeded: boolean
+      verifiedVersionIdAfterWrite: string | null
     }
   }
 }
@@ -547,12 +549,14 @@ export type ScopedImportPipelineFallback = {
     styleCta: string
     styleDiagnostics: string[]
     writePath: {
-      versionCreatedId: string
-      versionSelectedId: string
-      provenanceSummaryWritten: boolean
+      createdVersionId: string
+      provenanceWriteAttempted: boolean
+      provenanceWriteSucceeded: boolean
+      artifactCreateAttempted: boolean
       artifactCreatedId: null
-      artifactLinked: false
-      artifactLinkedVersionId: null
+      artifactBindAttempted: false
+      artifactBindSucceeded: false
+      verifiedVersionIdAfterWrite: string | null
     }
   }
 }
@@ -641,6 +645,17 @@ export async function runScopedImportPipeline(input: {
   const importProvenanceSummary = buildImportProvenanceSummary(input.snapshot, styleSignals)
 
   if (pipelineResult.status === 'success' && preparedSite) {
+    const writePathDiagnostics: ScopedImportPipelineSuccess['reporting']['writePath'] = {
+      createdVersionId: '',
+      provenanceWriteAttempted: false,
+      provenanceWriteSucceeded: false,
+      artifactCreateAttempted: false,
+      artifactCreatedId: null,
+      artifactBindAttempted: false,
+      artifactBindSucceeded: false,
+      verifiedVersionIdAfterWrite: null,
+    }
+
     const canonicalInput = buildCanonicalMigrationInputFromPipeline({
       sourceUrl: input.sourceUrl,
       actor: input.actor,
@@ -655,11 +670,14 @@ export async function runScopedImportPipeline(input: {
       rendererCompatibilityVersion: RENDERER_COMPATIBILITY_VERSION,
       importProvenanceSummary,
     })
+    writePathDiagnostics.createdVersionId = migrated.siteVersionId
 
+    writePathDiagnostics.provenanceWriteAttempted = true
     await deps.setSiteVersionImportProvenanceSummary({
       siteVersionId: migrated.siteVersionId,
       importProvenanceSummary,
     })
+    writePathDiagnostics.provenanceWriteSucceeded = true
 
     const siteVersion = await deps.getSiteVersion(migrated.siteVersionId)
     if (!siteVersion) {
@@ -670,6 +688,11 @@ export async function runScopedImportPipeline(input: {
       siteVersion,
       renderMode: 'PREVIEW',
     })
+    if (artifactBundle.siteVersionId !== migrated.siteVersionId) {
+      throw new Error(
+        `Artifact build version mismatch: createdVersionId=${migrated.siteVersionId} artifactBundleSiteVersionId=${artifactBundle.siteVersionId}`,
+      )
+    }
 
     const artifactGovernance = {
       pageGateState: ['SCOPED_IMPORT_READY'],
@@ -689,6 +712,7 @@ export async function runScopedImportPipeline(input: {
       publishStage: 'shadow' as const,
     }
 
+    writePathDiagnostics.artifactCreateAttempted = true
     const artifact = await deps.createArtifact({
       siteId: artifactBundle.siteId,
       siteVersionId: artifactBundle.siteVersionId,
@@ -705,16 +729,28 @@ export async function runScopedImportPipeline(input: {
       shadowRestricted: false,
       artifactGovernance,
     })
+    if (!normalizeText(artifact.artifactId)) {
+      throw new Error(`Artifact creation returned an empty artifact id for site version ${migrated.siteVersionId}.`)
+    }
+    writePathDiagnostics.artifactCreatedId = artifact.artifactId
 
+    writePathDiagnostics.artifactBindAttempted = true
     await deps.bindArtifactToVersion({
       siteVersionId: migrated.siteVersionId,
       artifactId: artifact.artifactId,
       rendererCompatibilityVersion: artifactBundle.rendererCompatibilityVersion,
     })
+    writePathDiagnostics.artifactBindSucceeded = true
 
     const boundSiteVersion = await deps.getSiteVersion(migrated.siteVersionId)
     if (!boundSiteVersion) {
       throw new Error('Artifact bind completed but site version could not be reloaded for verification.')
+    }
+    writePathDiagnostics.verifiedVersionIdAfterWrite = boundSiteVersion.id
+    if (boundSiteVersion.id !== migrated.siteVersionId) {
+      throw new Error(
+        `Write-path verification failed: createdVersionId=${migrated.siteVersionId} verifiedVersionIdAfterWrite=${boundSiteVersion.id}`,
+      )
     }
     if (boundSiteVersion.artifactId !== artifact.artifactId) {
       throw new Error(
@@ -723,6 +759,9 @@ export async function runScopedImportPipeline(input: {
     }
     if (!boundSiteVersion.importProvenanceSummary) {
       throw new Error(`Import provenance summary missing after write on site version ${migrated.siteVersionId}.`)
+    }
+    if (!Object.keys(boundSiteVersion.importProvenanceSummary).length) {
+      throw new Error(`Import provenance summary is empty after write on site version ${migrated.siteVersionId}.`)
     }
 
     const reporting = computePipelineReporting({
@@ -746,14 +785,7 @@ export async function runScopedImportPipeline(input: {
       reporting: {
         ...reporting,
         artifactGenerated: true,
-        writePath: {
-          versionCreatedId: migrated.siteVersionId,
-          versionSelectedId: boundSiteVersion.id,
-          provenanceSummaryWritten: true,
-          artifactCreatedId: artifact.artifactId,
-          artifactLinked: true,
-          artifactLinkedVersionId: migrated.siteVersionId,
-        },
+        writePath: writePathDiagnostics,
       },
     }
   }
@@ -779,10 +811,36 @@ export async function runScopedImportPipeline(input: {
     actor: `${input.actor}:fallback`,
   })
 
+  const fallbackWritePath: ScopedImportPipelineFallback['diagnostics']['writePath'] = {
+    createdVersionId: legacyMigrated.siteVersionId,
+    provenanceWriteAttempted: true,
+    provenanceWriteSucceeded: false,
+    artifactCreateAttempted: false,
+    artifactCreatedId: null,
+    artifactBindAttempted: false,
+    artifactBindSucceeded: false,
+    verifiedVersionIdAfterWrite: null,
+  }
+
   await deps.setSiteVersionImportProvenanceSummary({
     siteVersionId: legacyMigrated.siteVersionId,
     importProvenanceSummary,
   })
+  fallbackWritePath.provenanceWriteSucceeded = true
+
+  const fallbackVersion = await deps.getSiteVersion(legacyMigrated.siteVersionId)
+  if (!fallbackVersion) {
+    throw new Error(`Legacy fallback write-path verification failed: site version ${legacyMigrated.siteVersionId} not found.`)
+  }
+  fallbackWritePath.verifiedVersionIdAfterWrite = fallbackVersion.id
+  if (fallbackVersion.id !== legacyMigrated.siteVersionId) {
+    throw new Error(
+      `Legacy fallback write-path verification failed: createdVersionId=${legacyMigrated.siteVersionId} verifiedVersionIdAfterWrite=${fallbackVersion.id}`,
+    )
+  }
+  if (!fallbackVersion.importProvenanceSummary || !Object.keys(fallbackVersion.importProvenanceSummary).length) {
+    throw new Error(`Legacy fallback write-path verification failed: import provenance summary missing for ${legacyMigrated.siteVersionId}.`)
+  }
 
   return {
     mode: 'legacy_fallback',
@@ -809,14 +867,7 @@ export async function runScopedImportPipeline(input: {
       styleSpacingDensity: `${styleSignals.spacing.rhythm}/${styleSignals.spacing.layoutDensity}`,
       styleCta: `${styleSignals.cta.styleHint}/${styleSignals.cta.prominence}`,
       styleDiagnostics: styleSignals.diagnostics.map((diag) => diag.code),
-      writePath: {
-        versionCreatedId: legacyMigrated.siteVersionId,
-        versionSelectedId: legacyMigrated.siteVersionId,
-        provenanceSummaryWritten: true,
-        artifactCreatedId: null,
-        artifactLinked: false,
-        artifactLinkedVersionId: null,
-      },
+      writePath: fallbackWritePath,
       },
     }
   }
