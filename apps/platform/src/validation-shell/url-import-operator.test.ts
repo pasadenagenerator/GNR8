@@ -188,8 +188,8 @@ test("rendered capture unavailable falls back to raw_html and preserves raw resp
   assert.equal(fs.existsSync(snapshot.entryHtmlPathAbs), true);
   assert.equal(fs.existsSync(path.resolve(snapshot.snapshotRootDirAbs, "rendered", "rendered-dom.html")), true);
   assert.equal(fs.existsSync(path.resolve(snapshot.snapshotRootDirAbs, "rendered", "computed-styles.json")), true);
-  assert.equal(fs.existsSync(path.resolve(snapshot.snapshotRootDirAbs, "rendered", "screenshots", "viewport.png")), true);
-  assert.equal(fs.existsSync(path.resolve(snapshot.snapshotRootDirAbs, "rendered", "screenshots", "fullpage.png")), true);
+  assert.equal(fs.existsSync(path.resolve(snapshot.snapshotRootDirAbs, "rendered", "screenshots", "viewport.png")), false);
+  assert.equal(fs.existsSync(path.resolve(snapshot.snapshotRootDirAbs, "rendered", "screenshots", "fullpage.png")), false);
   assert.equal(fs.readFileSync(snapshot.responseHtmlPathAbs, "utf8").includes("Raw Fallback"), true);
   assert.equal(fs.readFileSync(snapshot.entryHtmlPathAbs, "utf8").includes("Raw Fallback"), true);
 });
@@ -278,7 +278,7 @@ test("rendered capture contract is persisted and rendered_dom becomes primary sn
   assert.ok(fs.existsSync(path.resolve(snapshot.snapshotRootDirAbs, "rendered", "rendered-dom.html")));
   assert.ok(fs.existsSync(path.resolve(snapshot.snapshotRootDirAbs, "rendered", "computed-styles.json")));
   assert.ok(fs.existsSync(path.resolve(snapshot.snapshotRootDirAbs, "rendered", "screenshots", "viewport.png")));
-  assert.ok(fs.existsSync(path.resolve(snapshot.snapshotRootDirAbs, "rendered", "screenshots", "fullpage.png")));
+  assert.equal(fs.existsSync(path.resolve(snapshot.snapshotRootDirAbs, "rendered", "screenshots", "fullpage.png")), false);
 
   const renderedCaptureManifest = JSON.parse(fs.readFileSync(path.resolve(snapshot.snapshotRootDirAbs, "rendered-capture.json"), "utf8"));
   assert.equal(renderedCaptureManifest.status, "partial");
@@ -286,6 +286,9 @@ test("rendered capture contract is persisted and rendered_dom becomes primary sn
   assert.equal(renderedCaptureManifest.styleSampleSummary.validSamples, 1);
   assert.equal(renderedCaptureManifest.screenshotSummary.viewportCaptured, true);
   assert.equal(renderedCaptureManifest.screenshotSummary.fullPageCaptured, false);
+  assert.equal(renderedCaptureManifest.screenshotSummary.count, 1);
+  assert.equal(Array.isArray(renderedCaptureManifest.screenshotSummary.paths), true);
+  assert.equal(renderedCaptureManifest.screenshotSummary.paths.length, 1);
 });
 
 test("rendered capture failure emits diagnostics and still returns snapshot output", async () => {
@@ -509,6 +512,103 @@ test("rendered capture hard failure surfaces explicit navigation diagnostics", a
   assert.equal(snapshot.sourceSelection.fidelityStatus, "capture_failed");
   assert.ok(snapshot.importDiagnostics.issues.some((issue) => issue.code === "BROWSER_NAVIGATION_FAILED"));
   assert.ok(snapshot.importDiagnostics.issues.some((issue) => issue.code === "RENDERED_CAPTURE_BROWSER_START_FAILED"));
+});
+
+test("screenshot-only rendered capture is persisted as partial with coherent screenshot summary", async () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "gnr8-url-import-screenshot-only-"));
+  const sourceUrl = "https://rendered-screenshot-only.example/";
+  const screenshotBytes = new Uint8Array([137, 80, 78, 71, 55]);
+
+  const snapshot = await importPublicSinglePageUrlToSnapshot({
+    sourceUrl,
+    snapshotRootDirAbs: tmp,
+    fetchImpl: mockFetchFromTable({
+      [sourceUrl]: {
+        status: 200,
+        headers: { "content-type": "text/html; charset=utf-8" },
+        body: "<!doctype html><html><body><h1>Fallback when screenshot-only</h1></body></html>",
+      },
+    }),
+    renderedCaptureExecutor: mockRenderedCaptureExecutor({
+      status: "partial",
+      document: null,
+      screenshots: [
+        {
+          captureType: "desktop_viewport",
+          bytes: screenshotBytes,
+          width: 1366,
+          height: 768,
+          fullPage: false,
+        },
+      ],
+      computedStyleSamples: [],
+      renderedObservedAssetUrls: [],
+      diagnostics: [{ code: "RENDERED_CAPTURE_SCREENSHOT_ONLY", severity: "warning", message: "screenshot only" }],
+    }),
+  });
+
+  assert.equal(snapshot.renderedCapture.status, "partial");
+  assert.equal(snapshot.sourceMode, "raw_html_fallback");
+  assert.ok(snapshot.importDiagnostics.issues.some((issue) => issue.code === "RENDERED_CAPTURE_SCREENSHOT_ONLY"));
+  assert.equal(fs.existsSync(path.resolve(snapshot.snapshotRootDirAbs, "rendered", "screenshots", "viewport.png")), true);
+  assert.equal(fs.existsSync(path.resolve(snapshot.snapshotRootDirAbs, "rendered", "screenshots", "fullpage.png")), false);
+
+  const renderedCaptureManifest = JSON.parse(fs.readFileSync(path.resolve(snapshot.snapshotRootDirAbs, "rendered-capture.json"), "utf8"));
+  assert.equal(renderedCaptureManifest.status, "partial");
+  assert.equal(renderedCaptureManifest.screenshotSummary.count, 1);
+  assert.equal(renderedCaptureManifest.screenshotSummary.viewportCaptured, true);
+  assert.equal(renderedCaptureManifest.screenshotSummary.fullPageCaptured, false);
+  assert.equal(renderedCaptureManifest.styleSampleSummary.validSamples, 0);
+
+  const acquisitionEvidence = JSON.parse(fs.readFileSync(path.resolve(snapshot.snapshotRootDirAbs, "acquisition-evidence.json"), "utf8"));
+  assert.equal(acquisitionEvidence.renderedCapture.screenshotCount, 1);
+  assert.equal(typeof acquisitionEvidence.renderedCapture.screenshotPaths.viewport, "string");
+  assert.equal(acquisitionEvidence.renderedCapture.screenshotPaths.fullPage, null);
+});
+
+test("style sampling failure is diagnosed explicitly and capture remains partial", async () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "gnr8-url-import-style-failure-"));
+  const sourceUrl = "https://rendered-style-failure.example/";
+  const screenshotBytes = new Uint8Array([137, 80, 78, 71, 2, 2, 2]);
+
+  const snapshot = await importPublicSinglePageUrlToSnapshot({
+    sourceUrl,
+    snapshotRootDirAbs: tmp,
+    fetchImpl: mockFetchFromTable({
+      [sourceUrl]: {
+        status: 200,
+        headers: { "content-type": "text/html; charset=utf-8" },
+        body: "<!doctype html><html><body><h1>Raw fallback</h1></body></html>",
+      },
+    }),
+    renderedCaptureExecutor: mockRenderedCaptureExecutor({
+      status: "available",
+      document: {
+        html: "<!doctype html><html><body><main><h1>Rendered</h1><p>Loaded content for source selection.</p></main></body></html>",
+        readinessState: "dom_stable",
+      },
+      screenshots: [
+        {
+          captureType: "desktop_viewport",
+          bytes: screenshotBytes,
+          width: 1366,
+          height: 768,
+          fullPage: false,
+        },
+      ],
+      computedStyleSamples: [],
+      renderedObservedAssetUrls: [],
+      diagnostics: [{ code: "RENDERED_CAPTURE_STYLE_SAMPLING_FAILED", severity: "warning", message: "style extraction failed" }],
+    }),
+  });
+
+  assert.equal(snapshot.renderedCapture.status, "partial");
+  assert.ok(snapshot.importDiagnostics.issues.some((issue) => issue.code === "RENDERED_CAPTURE_STYLE_SAMPLING_FAILED"));
+  assert.equal(snapshot.sourceSelection.sourceMode, "rendered_dom");
+
+  const renderedCaptureManifest = JSON.parse(fs.readFileSync(path.resolve(snapshot.snapshotRootDirAbs, "rendered-capture.json"), "utf8"));
+  assert.equal(renderedCaptureManifest.status, "partial");
+  assert.equal(renderedCaptureManifest.styleSampleSummary.validSamples, 0);
 });
 
 test("no-usable-source hard fails when rendered and raw HTML are both unusable", async () => {

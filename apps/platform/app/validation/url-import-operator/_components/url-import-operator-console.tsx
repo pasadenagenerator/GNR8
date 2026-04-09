@@ -193,7 +193,7 @@ type UrlImportOperatorSuccessResponse = {
     executionPlanEligibility: string;
     executionStatus: string;
     reportStatus: string;
-    renderedCaptureStatus: "available" | "unavailable" | "failed";
+    renderedCaptureStatus: "available" | "partial" | "unavailable" | "failed";
     renderedDomCaptured: boolean;
     screenshotCount: number;
     computedStyleSampleCount: number;
@@ -219,7 +219,7 @@ type UrlImportOperatorFailureResponse = {
     entryHtmlPathAbs: string | null;
     assetsDirAbs: string | null;
     renderedCapture: {
-      status: "available" | "unavailable" | "failed";
+      status: "available" | "partial" | "unavailable" | "failed";
       documents: Array<{ htmlPathAbs: string }>;
       screenshots: Array<{ filePathAbs: string; captureType: string }>;
       computedStyleSamples: Array<{ sampleId: string; target: string }>;
@@ -307,6 +307,7 @@ function statusKindFromString(status: string): PillKind {
 
   if (
     status.includes("warning") ||
+    status === "partial" ||
     status === "skipped" ||
     status === "not_run" ||
     upper === "REVIEW_ONLY" ||

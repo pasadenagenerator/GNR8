@@ -243,6 +243,14 @@ function buildImportProvenanceSummary(snapshot: UrlSinglePageImportSnapshot, sty
   const computedStylesPath = path.resolve(snapshot.snapshotRootDirAbs, 'rendered', 'computed-styles.json')
   const viewportScreenshotPath = path.resolve(snapshot.snapshotRootDirAbs, 'rendered', 'screenshots', 'viewport.png')
   const fullpageScreenshotPath = path.resolve(snapshot.snapshotRootDirAbs, 'rendered', 'screenshots', 'fullpage.png')
+  const screenshotPathsResolved = uniqueSorted(
+    snapshot.renderedCapture.screenshots.map((shot) => resolveEvidencePathIfExists(shot.filePathAbs) ?? '').filter(Boolean),
+  )
+  const screenshotPathsDeclared = uniqueSorted(snapshot.renderedCapture.screenshots.map((shot) => normalizeText(shot.filePathAbs)).filter(Boolean))
+  const screenshotPaths = screenshotPathsResolved.length > 0 ? screenshotPathsResolved : screenshotPathsDeclared
+  const renderedViewportScreenshotPath = resolveEvidencePathIfExists(viewportScreenshotPath)
+  const renderedFullpageScreenshotPath = resolveEvidencePathIfExists(fullpageScreenshotPath)
+  const screenshotCount = Math.max(screenshotPaths.length, snapshot.renderedCapture.screenshots.length)
 
   return {
     kind: 'runtime_import_provenance_summary_v1',
@@ -250,7 +258,7 @@ function buildImportProvenanceSummary(snapshot: UrlSinglePageImportSnapshot, sty
     importFidelityStatus: snapshot.sourceSelection.fidelityStatus,
     renderedCaptureStatus,
     renderedDomQuality: snapshot.sourceSelection.renderedDomQuality.quality,
-    screenshotCount: snapshot.renderedCapture.screenshots.length,
+    screenshotCount,
     computedStyleSampleCount: snapshot.renderedCapture.computedStyleSamples.length,
     renderedCapture: {
       used: snapshot.sourceSelection.sourceMode === 'rendered_dom',
@@ -261,8 +269,8 @@ function buildImportProvenanceSummary(snapshot: UrlSinglePageImportSnapshot, sty
       styleSampleCount,
       styleCoverage,
       screenshots: {
-        viewport: Boolean(resolveEvidencePathIfExists(viewportScreenshotPath)),
-        fullPage: Boolean(resolveEvidencePathIfExists(fullpageScreenshotPath)),
+        viewport: Boolean(renderedViewportScreenshotPath) || snapshot.renderedCapture.screenshots.some((shot) => shot.captureType === 'desktop_viewport'),
+        fullPage: Boolean(renderedFullpageScreenshotPath) || snapshot.renderedCapture.screenshots.some((shot) => shot.captureType === 'desktop_fullpage'),
       },
     },
     importDiagnosticCodes: uniqueSorted([...captureDiagnostics, ...importDiagnostics]),
@@ -274,9 +282,9 @@ function buildImportProvenanceSummary(snapshot: UrlSinglePageImportSnapshot, sty
       acquisitionEvidencePath: resolveEvidencePathIfExists(path.resolve(snapshot.snapshotRootDirAbs, 'acquisition-evidence.json')),
       renderedDomPath: resolveEvidencePathIfExists(renderedDomPath),
       computedStylesPath: resolveEvidencePathIfExists(computedStylesPath),
-      renderedViewportScreenshotPath: resolveEvidencePathIfExists(viewportScreenshotPath),
-      renderedFullpageScreenshotPath: resolveEvidencePathIfExists(fullpageScreenshotPath),
-      screenshotPaths: uniqueSorted(snapshot.renderedCapture.screenshots.map((shot) => resolveEvidencePathIfExists(shot.filePathAbs) ?? '').filter(Boolean)),
+      renderedViewportScreenshotPath: renderedViewportScreenshotPath,
+      renderedFullpageScreenshotPath: renderedFullpageScreenshotPath,
+      screenshotPaths,
     },
     styleSignals,
   }
@@ -469,6 +477,10 @@ function computePipelineReporting(input: {
   )
 
   const renderedCaptureUsed = input.snapshot.sourceSelection.sourceMode === 'rendered_dom'
+  const screenshotCountResolved = uniqueSorted(
+    input.snapshot.renderedCapture.screenshots.map((shot) => resolveEvidencePathIfExists(shot.filePathAbs) ?? '').filter(Boolean),
+  ).length
+  const screenshotCount = Math.max(screenshotCountResolved, input.snapshot.renderedCapture.screenshots.length)
 
   return {
     executionStatus: input.pipelineResult.status,
@@ -479,7 +491,7 @@ function computePipelineReporting(input: {
     fidelityDegraded: input.snapshot.sourceSelection.degraded,
     renderedCaptureStatus: resolveRenderedCaptureStatus(input.snapshot),
     renderedDomQuality: input.snapshot.sourceSelection.renderedDomQuality.quality,
-    screenshotCount: input.snapshot.renderedCapture.screenshots.length,
+    screenshotCount,
     computedStyleSampleCount: input.snapshot.renderedCapture.computedStyleSamples.length,
     importDiagnosticCodes: uniqueSorted(input.snapshot.importDiagnostics.issues.map((issue) => normalizeText(issue.code)).filter(Boolean)),
     styleSourceMode: input.styleSignals.sourceMode,
@@ -964,7 +976,12 @@ export async function runScopedImportPipeline(input: {
       fidelityDegraded: input.snapshot.sourceSelection.degraded,
       renderedCaptureStatus: resolveRenderedCaptureStatus(input.snapshot),
       renderedDomQuality: input.snapshot.sourceSelection.renderedDomQuality.quality,
-      screenshotCount: input.snapshot.renderedCapture.screenshots.length,
+      screenshotCount: (() => {
+        const resolvedCount = uniqueSorted(
+        input.snapshot.renderedCapture.screenshots.map((shot) => resolveEvidencePathIfExists(shot.filePathAbs) ?? '').filter(Boolean),
+        ).length
+        return Math.max(resolvedCount, input.snapshot.renderedCapture.screenshots.length)
+      })(),
         computedStyleSampleCount: input.snapshot.renderedCapture.computedStyleSamples.length,
         importDiagnosticCodes: uniqueSorted(input.snapshot.importDiagnostics.issues.map((issue) => normalizeText(issue.code)).filter(Boolean)),
         styleSourceMode: styleSignals.sourceMode,

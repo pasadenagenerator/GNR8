@@ -57,6 +57,10 @@ export type UrlImportDiagnosticCode =
   | "BROWSER_NAVIGATION_FAILED"
   | "RENDERED_CAPTURE_TIMEOUT"
   | "RENDERED_CAPTURE_PARTIAL"
+  | "RENDERED_CAPTURE_SCREENSHOT_ONLY"
+  | "RENDERED_CAPTURE_DOM_SERIALIZATION_FAILED"
+  | "RENDERED_CAPTURE_DOM_EMPTY_AFTER_NAVIGATION"
+  | "RENDERED_CAPTURE_STYLE_SAMPLING_FAILED"
   | "RENDERED_CAPTURE_DOM_STILL_SHELL"
   | "RENDERED_CAPTURE_RECOVERED_ON_RETRY"
   | "RENDERED_CAPTURE_FAILED"
@@ -919,6 +923,7 @@ function computeRenderedCaptureVisibilityStatus(input: {
   renderedDomQuality: RenderedDomQuality;
 }): RenderedCaptureVisibilityStatus {
   if (input.renderedCapture.status === "failed" || input.renderedCapture.status === "unavailable") return "failed";
+  if (input.renderedCapture.status === "partial") return "partial";
   const hasDoc = input.renderedCapture.documents.length > 0;
   const hasViewport = input.renderedCapture.screenshots.some((shot) => shot.captureType === "desktop_viewport");
   const hasFullPage = input.renderedCapture.screenshots.some((shot) => shot.captureType === "desktop_fullpage");
@@ -1009,8 +1014,8 @@ function ensureRenderedCaptureArtifacts(input: {
 }): {
   renderedDomPathAbs: string;
   computedStylesPathAbs: string;
-  viewportScreenshotPathAbs: string;
-  fullpageScreenshotPathAbs: string;
+  viewportScreenshotPathAbs: string | null;
+  fullpageScreenshotPathAbs: string | null;
 } {
   const renderedDirAbs = path.resolve(input.snapshotRootDirAbs, "rendered");
   const screenshotDirAbs = path.resolve(renderedDirAbs, "screenshots");
@@ -1042,10 +1047,19 @@ function ensureRenderedCaptureArtifacts(input: {
 
   const viewportShot = input.renderedCapture.screenshots.find((shot) => shot.captureType === "desktop_viewport");
   const fullpageShot = input.renderedCapture.screenshots.find((shot) => shot.captureType === "desktop_fullpage");
-  if (viewportShot?.filePathAbs && fs.existsSync(viewportShot.filePathAbs)) fs.copyFileSync(viewportShot.filePathAbs, viewportScreenshotPathAbs);
-  else fs.writeFileSync(viewportScreenshotPathAbs, new Uint8Array());
-  if (fullpageShot?.filePathAbs && fs.existsSync(fullpageShot.filePathAbs)) fs.copyFileSync(fullpageShot.filePathAbs, fullpageScreenshotPathAbs);
-  else fs.writeFileSync(fullpageScreenshotPathAbs, new Uint8Array());
+  const viewportCaptured = Boolean(viewportShot?.filePathAbs && fs.existsSync(viewportShot.filePathAbs) && fs.statSync(viewportShot.filePathAbs).size > 0);
+  const fullPageCaptured = Boolean(fullpageShot?.filePathAbs && fs.existsSync(fullpageShot.filePathAbs) && fs.statSync(fullpageShot.filePathAbs).size > 0);
+
+  if (viewportCaptured && viewportShot?.filePathAbs) {
+    fs.copyFileSync(viewportShot.filePathAbs, viewportScreenshotPathAbs);
+  } else if (fs.existsSync(viewportScreenshotPathAbs)) {
+    fs.unlinkSync(viewportScreenshotPathAbs);
+  }
+  if (fullPageCaptured && fullpageShot?.filePathAbs) {
+    fs.copyFileSync(fullpageShot.filePathAbs, fullpageScreenshotPathAbs);
+  } else if (fs.existsSync(fullpageScreenshotPathAbs)) {
+    fs.unlinkSync(fullpageScreenshotPathAbs);
+  }
 
   if (!renderedHtml && input.renderedCapture.status !== "available") {
     input.diagnostics.push(
@@ -1067,8 +1081,8 @@ function ensureRenderedCaptureArtifacts(input: {
   return {
     renderedDomPathAbs,
     computedStylesPathAbs,
-    viewportScreenshotPathAbs,
-    fullpageScreenshotPathAbs,
+    viewportScreenshotPathAbs: viewportCaptured ? viewportScreenshotPathAbs : null,
+    fullpageScreenshotPathAbs: fullPageCaptured ? fullpageScreenshotPathAbs : null,
   };
 }
 
@@ -1078,6 +1092,8 @@ function buildRenderedCaptureManifest(input: {
   renderedDomHtml: string;
   viewportCaptured: boolean;
   fullPageCaptured: boolean;
+  screenshotCount: number;
+  screenshotPaths: string[];
 }): JsonValue {
   const qualityBreakdown = buildRenderedQualityBreakdown(input.renderedDomHtml);
   const status = computeRenderedCaptureVisibilityStatus({
@@ -1099,6 +1115,8 @@ function buildRenderedCaptureManifest(input: {
     screenshotSummary: {
       viewportCaptured: input.viewportCaptured,
       fullPageCaptured: input.fullPageCaptured,
+      count: input.screenshotCount,
+      paths: input.screenshotPaths,
     },
   } as unknown as JsonValue;
 }
@@ -2039,12 +2057,10 @@ export async function importPublicSinglePageUrlToSnapshot(input: {
         }
       })()
     : "";
-  const viewportCaptured = Boolean(
-    viewportScreenshotPathAbs && fs.existsSync(viewportScreenshotPathAbs) && fs.statSync(viewportScreenshotPathAbs).size > 0,
-  );
-  const fullPageCaptured = Boolean(
-    fullpageScreenshotPathAbs && fs.existsSync(fullpageScreenshotPathAbs) && fs.statSync(fullpageScreenshotPathAbs).size > 0,
-  );
+  const viewportCaptured = Boolean(viewportScreenshotPathAbs);
+  const fullPageCaptured = Boolean(fullpageScreenshotPathAbs);
+  const screenshotPaths = [viewportScreenshotPathAbs, fullpageScreenshotPathAbs].filter((entry): entry is string => typeof entry === "string");
+  const screenshotCount = screenshotPaths.length;
   writeJsonStable(
     renderedCaptureManifestPathAbs,
     buildRenderedCaptureManifest({
@@ -2053,6 +2069,8 @@ export async function importPublicSinglePageUrlToSnapshot(input: {
       renderedDomHtml,
       viewportCaptured,
       fullPageCaptured,
+      screenshotCount,
+      screenshotPaths,
     }),
   );
 
@@ -2553,7 +2571,7 @@ export async function importPublicSinglePageUrlToSnapshot(input: {
       }),
       durationMs: renderedCaptureDurationMs,
       documentCount: renderedCapture.documents.length,
-      screenshotCount: renderedCapture.screenshots.length,
+      screenshotCount,
       screenshotPaths: {
         viewport: viewportScreenshotPathAbs,
         fullPage: fullpageScreenshotPathAbs,

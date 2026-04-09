@@ -2,7 +2,7 @@ export const RENDERED_CAPTURE_FOUNDATION_VERSION = "1.0.0" as const;
 
 export type CaptureSourceMode = "raw_html" | "rendered_dom";
 
-export type RenderedCaptureStatus = "available" | "unavailable" | "failed";
+export type RenderedCaptureStatus = "available" | "partial" | "unavailable" | "failed";
 
 export type RenderedCaptureDiagnosticCode =
   | "RENDERED_CAPTURE_UNAVAILABLE"
@@ -10,6 +10,10 @@ export type RenderedCaptureDiagnosticCode =
   | "BROWSER_NAVIGATION_FAILED"
   | "RENDERED_CAPTURE_TIMEOUT"
   | "RENDERED_CAPTURE_PARTIAL"
+  | "RENDERED_CAPTURE_SCREENSHOT_ONLY"
+  | "RENDERED_CAPTURE_DOM_SERIALIZATION_FAILED"
+  | "RENDERED_CAPTURE_DOM_EMPTY_AFTER_NAVIGATION"
+  | "RENDERED_CAPTURE_STYLE_SAMPLING_FAILED"
   | "RENDERED_CAPTURE_DOM_STILL_SHELL"
   | "RENDERED_CAPTURE_RECOVERED_ON_RETRY"
   | "RENDERED_CAPTURE_FAILED"

@@ -80,6 +80,10 @@ type CapturePassResult = {
   computedStyleSamples: ComputedStyleSample[];
   observedAssetUrls: string[];
   quality: RenderedQualityMetrics;
+  styleSamplingFailed: boolean;
+  styleSamplingError: string | null;
+  domSerializationFailed: boolean;
+  domSerializationError: string | null;
 };
 
 function resolveReadinessNumber(value: number | undefined, fallback: number): number {
@@ -100,91 +104,138 @@ function hasExceededCaptureBudget(input: { startedAt: number; readiness: Rendere
   return Date.now() - input.startedAt > input.readiness.maxTotalCaptureMs;
 }
 
+function inferQualityMetricsFromHtml(html: string): RenderedQualityMetrics {
+  const bodyMatch = html.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
+  const bodyHtml = bodyMatch ? bodyMatch[1] : html;
+  const text = bodyHtml.replace(/<script[\s\S]*?<\/script>/gi, " ").replace(/<style[\s\S]*?<\/style>/gi, " ").replace(/<[^>]+>/g, " ");
+  const normalizedText = text.replace(/\s+/g, " ").trim();
+  const headingCount = (bodyHtml.match(/<h[1-3][\s>]/gi) ?? []).length;
+  const sectionCount = (bodyHtml.match(/<(section|main|article|nav|aside)[\s>]/gi) ?? []).length;
+  const meaningfulNodeCount = (bodyHtml.match(/<(main|section|article|nav|aside|h1|h2|h3|p|li|a)\b/gi) ?? []).length;
+  return {
+    bodyTextLength: normalizedText.length,
+    headingCount,
+    sectionCount,
+    meaningfulNodeCount,
+  };
+}
+
 async function capturePageState(page: any): Promise<CapturePassResult> {
-  const html = await page.content();
+  let html = "";
+  let domSerializationFailed = false;
+  let domSerializationError: string | null = null;
+  try {
+    html = await page.content();
+  } catch (error) {
+    domSerializationFailed = true;
+    domSerializationError = toErrorString(error);
+  }
 
-  const styleSamplesRaw = await page.evaluate((probes: BrowserStyleProbe[]) => {
-    function sampleFor(selector: string) {
-      const el = document.querySelector(selector) as HTMLElement | null;
-      if (!el) return null;
-      const style = window.getComputedStyle(el);
-      return {
-        tagName: el.tagName.toLowerCase(),
-        className: el.className || null,
-        styles: {
-          fontFamily: style.fontFamily || null,
-          fontSize: style.fontSize || null,
-          fontWeight: style.fontWeight || null,
-          lineHeight: style.lineHeight || null,
-          color: style.color || null,
-          backgroundColor: style.backgroundColor || null,
-          borderRadius: style.borderRadius || null,
-          paddingTop: style.paddingTop || null,
-          paddingRight: style.paddingRight || null,
-          paddingBottom: style.paddingBottom || null,
-          paddingLeft: style.paddingLeft || null,
-        },
-      };
-    }
-
-    const styleOut: Array<{
+  let styleSamplesRaw: {
+    samples: Array<{
       target: string;
       selector: string;
       tagName: string | null;
       className: string | null;
-      styles: {
-        fontFamily: string | null;
-        fontSize: string | null;
-        fontWeight: string | null;
-        lineHeight: string | null;
-        color: string | null;
-        backgroundColor: string | null;
-        borderRadius: string | null;
-        paddingTop: string | null;
-        paddingRight: string | null;
-        paddingBottom: string | null;
-        paddingLeft: string | null;
+      styles: ComputedStyleSample["styles"];
+    }>;
+    observedAssetUrls: string[];
+    quality: RenderedQualityMetrics;
+  } = {
+    samples: [],
+    observedAssetUrls: [],
+    quality: inferQualityMetricsFromHtml(html),
+  };
+  let styleSamplingFailed = false;
+  let styleSamplingError: string | null = null;
+
+  try {
+    styleSamplesRaw = await page.evaluate((probes: BrowserStyleProbe[]) => {
+      function sampleFor(selector: string) {
+        const el = document.querySelector(selector) as HTMLElement | null;
+        if (!el) return null;
+        const style = window.getComputedStyle(el);
+        return {
+          tagName: el.tagName.toLowerCase(),
+          className: el.className || null,
+          styles: {
+            fontFamily: style.fontFamily || null,
+            fontSize: style.fontSize || null,
+            fontWeight: style.fontWeight || null,
+            lineHeight: style.lineHeight || null,
+            color: style.color || null,
+            backgroundColor: style.backgroundColor || null,
+            borderRadius: style.borderRadius || null,
+            paddingTop: style.paddingTop || null,
+            paddingRight: style.paddingRight || null,
+            paddingBottom: style.paddingBottom || null,
+            paddingLeft: style.paddingLeft || null,
+          },
+        };
+      }
+
+      const styleOut: Array<{
+        target: string;
+        selector: string;
+        tagName: string | null;
+        className: string | null;
+        styles: {
+          fontFamily: string | null;
+          fontSize: string | null;
+          fontWeight: string | null;
+          lineHeight: string | null;
+          color: string | null;
+          backgroundColor: string | null;
+          borderRadius: string | null;
+          paddingTop: string | null;
+          paddingRight: string | null;
+          paddingBottom: string | null;
+          paddingLeft: string | null;
+        };
+      }> = [];
+
+      for (const probe of probes) {
+        const sampled = sampleFor(probe.selector);
+        if (!sampled) continue;
+        styleOut.push({
+          target: probe.target,
+          selector: probe.selector,
+          tagName: sampled.tagName,
+          className: sampled.className,
+          styles: sampled.styles,
+        });
+      }
+
+      const bodyTextLength = (document.body?.innerText ?? "").replace(/\s+/g, " ").trim().length;
+      const headingCount = document.querySelectorAll("h1, h2, h3").length;
+      const sectionCount = document.querySelectorAll("section, main, article, nav, aside").length;
+      const meaningfulNodeCount = document.querySelectorAll("main *, section *, article *, nav *, h1, h2, h3, p, li, a").length;
+
+      const observedAssetUrls = Array.from(
+        new Set(
+          [
+            ...Array.from(document.querySelectorAll("img[src]")).map((n) => (n as HTMLImageElement).src),
+            ...Array.from(document.querySelectorAll("script[src]")).map((n) => (n as HTMLScriptElement).src),
+            ...Array.from(document.querySelectorAll("link[href]")).map((n) => (n as HTMLLinkElement).href),
+          ].filter((v): v is string => typeof v === "string" && v.length > 0),
+        ),
+      ).sort((a, b) => a.localeCompare(b));
+
+      return {
+        samples: styleOut,
+        observedAssetUrls,
+        quality: {
+          bodyTextLength,
+          headingCount,
+          sectionCount,
+          meaningfulNodeCount,
+        },
       };
-    }> = [];
-
-    for (const probe of probes) {
-      const sampled = sampleFor(probe.selector);
-      if (!sampled) continue;
-      styleOut.push({
-        target: probe.target,
-        selector: probe.selector,
-        tagName: sampled.tagName,
-        className: sampled.className,
-        styles: sampled.styles,
-      });
-    }
-
-    const bodyTextLength = (document.body?.innerText ?? "").replace(/\s+/g, " ").trim().length;
-    const headingCount = document.querySelectorAll("h1, h2, h3").length;
-    const sectionCount = document.querySelectorAll("section, main, article, nav, aside").length;
-    const meaningfulNodeCount = document.querySelectorAll("main *, section *, article *, nav *, h1, h2, h3, p, li, a").length;
-
-    const observedAssetUrls = Array.from(
-      new Set(
-        [
-          ...Array.from(document.querySelectorAll("img[src]")).map((n) => (n as HTMLImageElement).src),
-          ...Array.from(document.querySelectorAll("script[src]")).map((n) => (n as HTMLScriptElement).src),
-          ...Array.from(document.querySelectorAll("link[href]")).map((n) => (n as HTMLLinkElement).href),
-        ].filter((v): v is string => typeof v === "string" && v.length > 0),
-      ),
-    ).sort((a, b) => a.localeCompare(b));
-
-    return {
-      samples: styleOut,
-      observedAssetUrls,
-      quality: {
-        bodyTextLength,
-        headingCount,
-        sectionCount,
-        meaningfulNodeCount,
-      },
-    };
-  }, [...STYLE_PROBES]);
+    }, [...STYLE_PROBES]);
+  } catch (error) {
+    styleSamplingFailed = true;
+    styleSamplingError = toErrorString(error);
+  }
 
   const computedStyleSamples: ComputedStyleSample[] = styleSamplesRaw.samples.map((sample: {
     target: string;
@@ -212,6 +263,10 @@ async function capturePageState(page: any): Promise<CapturePassResult> {
       sectionCount: Number(styleSamplesRaw.quality.sectionCount ?? 0),
       meaningfulNodeCount: Number(styleSamplesRaw.quality.meaningfulNodeCount ?? 0),
     },
+    styleSamplingFailed,
+    styleSamplingError,
+    domSerializationFailed,
+    domSerializationError,
   };
 }
 
@@ -282,6 +337,25 @@ async function waitForReadinessPass(input: {
   }
 
   return readinessState;
+}
+
+function resolveCaptureStatus(input: {
+  requestedStatus: RenderedCaptureExecutorResult["status"];
+  html: string;
+  screenshots: RenderedCaptureExecutorResult["screenshots"];
+  computedStyleSamples: ComputedStyleSample[];
+}): RenderedCaptureExecutorResult["status"] {
+  if (input.requestedStatus === "failed" || input.requestedStatus === "unavailable") return input.requestedStatus;
+  const hasDom = input.html.trim().length > 0;
+  const hasScreenshots = input.screenshots.length > 0;
+  const hasStyles = input.computedStyleSamples.length > 0;
+  if (hasDom && hasScreenshots && hasStyles) return "available";
+  if (hasDom || hasScreenshots || hasStyles) return "partial";
+  return "failed";
+}
+
+function scoreCapturePass(pass: CapturePassResult): number {
+  return pass.quality.bodyTextLength + pass.quality.meaningfulNodeCount * 12 + pass.computedStyleSamples.length * 30;
 }
 
 async function defaultRenderedCaptureExecutor(input: RenderedCaptureExecutorInput): Promise<RenderedCaptureExecutorResult> {
@@ -512,6 +586,73 @@ async function defaultRenderedCaptureExecutor(input: RenderedCaptureExecutorInpu
       });
     }
 
+    const needsSecondPass =
+      selectedCapture.html.trim().length === 0 ||
+      isShellLikeContent({ quality: selectedCapture.quality, minLength: shellContentMinLength }) ||
+      selectedCapture.computedStyleSamples.length === 0;
+    if (needsSecondPass && !hasExceededCaptureBudget({ startedAt, readiness: input.readiness })) {
+      await sleep(Math.min(750, Math.max(150, input.readiness.domStabilizationPollMs * 2)));
+      const postScreenshotCapture = await capturePageState(page);
+      if (scoreCapturePass(postScreenshotCapture) > scoreCapturePass(selectedCapture)) {
+        selectedCapture = postScreenshotCapture;
+        diagnostics.push({
+          code: "RENDERED_CAPTURE_RECOVERED_ON_RETRY",
+          severity: "info",
+          message: "Rendered capture improved after post-screenshot stabilization pass",
+          details: {
+            strategy: "post_screenshot_stabilization",
+            bodyTextLength: selectedCapture.quality.bodyTextLength,
+            sampleCount: selectedCapture.computedStyleSamples.length,
+          },
+        });
+      }
+    }
+
+    const domHtml = selectedCapture.html.trim();
+    const hasScreenshots = screenshots.length > 0;
+
+    if (selectedCapture.domSerializationFailed) {
+      diagnostics.push({
+        code: "RENDERED_CAPTURE_DOM_SERIALIZATION_FAILED",
+        severity: "warning",
+        message: "Rendered capture could not serialize DOM HTML from browser context",
+        details: { error: selectedCapture.domSerializationError ?? "unknown" },
+      });
+    }
+
+    if (!domHtml) {
+      diagnostics.push({
+        code: "RENDERED_CAPTURE_DOM_EMPTY_AFTER_NAVIGATION",
+        severity: hasScreenshots ? "warning" : "error",
+        message: "Rendered capture produced empty DOM HTML after navigation/readiness",
+      });
+    }
+
+    if (!domHtml && hasScreenshots) {
+      diagnostics.push({
+        code: "RENDERED_CAPTURE_SCREENSHOT_ONLY",
+        severity: "warning",
+        message: "Rendered capture produced screenshots without usable DOM HTML",
+      });
+    }
+
+    if (selectedCapture.styleSamplingFailed) {
+      diagnostics.push({
+        code: "RENDERED_CAPTURE_STYLE_SAMPLING_FAILED",
+        severity: "warning",
+        message: "Computed style sampling failed during rendered capture",
+        details: { error: selectedCapture.styleSamplingError ?? "unknown" },
+      });
+    }
+
+    if (selectedCapture.computedStyleSamples.length === 0 && hasScreenshots && domHtml.length > 0) {
+      diagnostics.push({
+        code: "RENDERED_CAPTURE_STYLE_SAMPLING_FAILED",
+        severity: "warning",
+        message: "Rendered page was visible but computed style sampling yielded no samples",
+      });
+    }
+
     if (selectedCapture.computedStyleSamples.length < 3) {
       diagnostics.push({
         code: "COMPUTED_STYLE_SAMPLE_WEAK",
@@ -529,12 +670,33 @@ async function defaultRenderedCaptureExecutor(input: RenderedCaptureExecutorInpu
       });
     }
 
+    const status = resolveCaptureStatus({
+      requestedStatus: selectedReadinessState === "timeout_partial" ? "partial" : "available",
+      html: domHtml,
+      screenshots,
+      computedStyleSamples: selectedCapture.computedStyleSamples,
+    });
+    if (status === "partial") {
+      diagnostics.push({
+        code: "RENDERED_CAPTURE_PARTIAL",
+        severity: "warning",
+        message: "Rendered capture produced partial evidence",
+      });
+    }
+
+    const hasDomEvidence = domHtml.length > 0;
+    const hasAnyEvidence = hasDomEvidence || hasScreenshots || selectedCapture.computedStyleSamples.length > 0;
+    const document =
+      hasDomEvidence
+        ? {
+            html: selectedCapture.html,
+            readinessState: selectedReadinessState,
+          }
+        : null;
+
     return {
-      status: "available",
-      document: {
-        html: selectedCapture.html,
-        readinessState: selectedReadinessState,
-      },
+      status: hasAnyEvidence ? status : "failed",
+      document,
       screenshots,
       computedStyleSamples: selectedCapture.computedStyleSamples,
       renderedObservedAssetUrls: selectedCapture.observedAssetUrls,
@@ -612,7 +774,7 @@ export async function runRenderedCapture(input: {
   }
 
   const documents: RenderedCaptureResult["documents"] = [];
-  if (result.document?.html) {
+  if (result.document?.html && result.document.html.trim().length > 0) {
     const renderedHtmlPathAbs = path.resolve(input.snapshotRootDirAbs, "rendered-capture", "rendered-dom.html");
     fs.mkdirSync(path.dirname(renderedHtmlPathAbs), { recursive: true });
     fs.writeFileSync(renderedHtmlPathAbs, result.document.html, "utf8");
@@ -625,16 +787,23 @@ export async function runRenderedCapture(input: {
     });
   }
 
-  const resolvedSourceMode = documents.length > 0 && result.status === "available" ? "rendered_dom" : "raw_html";
+  const computedStyleSamples = [...result.computedStyleSamples];
+  const resolvedStatus = resolveCaptureStatus({
+    requestedStatus: result.status,
+    html: result.document?.html ?? "",
+    screenshots: result.screenshots,
+    computedStyleSamples,
+  });
+  const resolvedSourceMode = documents.length > 0 && (resolvedStatus === "available" || resolvedStatus === "partial") ? "rendered_dom" : "raw_html";
 
   return {
     kind: "rendered_capture_result_v1",
     version: RENDERED_CAPTURE_FOUNDATION_VERSION,
-    status: result.status,
+    status: resolvedStatus,
     sourceMode: resolvedSourceMode,
     documents,
     screenshots,
-    computedStyleSamples: result.computedStyleSamples,
+    computedStyleSamples,
     renderedObservedAssetUrls: uniqueSortedStrings(result.renderedObservedAssetUrls),
     diagnostics: [...result.diagnostics],
   };
