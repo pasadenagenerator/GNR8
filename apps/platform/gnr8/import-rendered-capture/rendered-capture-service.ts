@@ -83,8 +83,8 @@ type CapturePassResult = {
 };
 
 function resolveReadinessNumber(value: number | undefined, fallback: number): number {
-  if (!Number.isFinite(value)) return fallback;
-  return Math.max(0, Math.floor(value));
+  const normalized = typeof value === "number" && Number.isFinite(value) ? value : fallback;
+  return Math.max(0, Math.floor(normalized));
 }
 
 function isShellLikeContent(input: { quality: RenderedQualityMetrics; minLength: number }): boolean {
