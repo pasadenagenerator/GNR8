@@ -17,10 +17,12 @@ type ClientOrganizationRow = {
 
 type RuntimeVersionRow = {
   id: string | null
+  site_id: string | null
   ownership_site_id: string | null
   state: string | null
   version_no: number | null
   import_provenance_summary: unknown
+  artifact_id: string | null
   updated_at: string | null
   created_at: string | null
 }
@@ -769,6 +771,8 @@ function parseImportFidelity(input: {
 } {
   const parsedFromSignals = parseImportFidelitySignals(input.pageRows)
   const parsedSummary = parseImportProvenanceSummary(input.runtimeVersion?.import_provenance_summary ?? null)
+  const fallbackUsedFromFidelity = (fidelity: SiteWorkspaceReadModel['pipeline']['importFidelityStatus']): boolean =>
+    fidelity === 'degraded_import' || fidelity === 'capture_failed'
 
   if (!parsedSummary) {
     const inferredStyleSignals = parseStyleSignalsFromSemanticLabels(input.pageRows)
@@ -776,7 +780,7 @@ function parseImportFidelity(input: {
       ...parsedFromSignals,
       renderedCapture: null,
       styleSignalCoverage: inferredStyleSignals?.provenance.computedStyle.coverage ?? 0,
-      styleSignalFallbackUsed: inferredStyleSignals?.provenance.fallbackUsed ?? true,
+      styleSignalFallbackUsed: inferredStyleSignals?.provenance.fallbackUsed ?? fallbackUsedFromFidelity(parsedFromSignals.importFidelityStatus),
       styleSignalSourceMode: inferredStyleSignals?.sourceMode ?? 'unknown',
       evidencePaths: {
         renderedDomPath: null,
@@ -821,7 +825,7 @@ function parseImportFidelity(input: {
     computedStyleSampleCount: parsedSummary.computedStyleSampleCount,
     renderedCapture: parsedSummary.renderedCapture,
     styleSignalCoverage: styleSignals?.provenance.computedStyle.coverage ?? parsedSummary.renderedCapture.styleCoverage ?? 0,
-    styleSignalFallbackUsed: styleSignals?.provenance.fallbackUsed ?? true,
+    styleSignalFallbackUsed: styleSignals?.provenance.fallbackUsed ?? fallbackUsedFromFidelity(parsedSummary.importFidelityStatus),
     styleSignalSourceMode: styleSignals?.sourceMode ?? 'unknown',
     evidencePaths: {
       renderedDomPath: parsedSummary.captureEvidence.renderedDomPath,
@@ -840,6 +844,7 @@ function parseImportFidelity(input: {
 
 export function resolveSelectedRuntimeVersionIdForWorkspace(input: {
   latestRuntimeSiteVersionId: string | null
+  availableRuntimeSiteVersionIds?: string[] | null
   normalizedVariants: Array<{
     id: string
     siteVersionId: string | null
@@ -856,9 +861,20 @@ export function resolveSelectedRuntimeVersionIdForWorkspace(input: {
   const selectedVariant = selectedVariantId
     ? input.normalizedVariants.find((variant) => variant.id === selectedVariantId) ?? null
     : null
+  const availableRuntimeSiteVersionIds = new Set(
+    (input.availableRuntimeSiteVersionIds ?? [])
+      .map((value) => toTextOrNull(value))
+      .filter((value): value is string => Boolean(value)),
+  )
+  const selectedVariantSiteVersionId = selectedVariant?.siteVersionId ?? null
+  const selectedVariantVersionIsAvailable =
+    selectedVariantSiteVersionId != null &&
+    (availableRuntimeSiteVersionIds.size === 0 || availableRuntimeSiteVersionIds.has(selectedVariantSiteVersionId))
 
   return {
-    selectedRuntimeSiteVersionId: selectedVariant?.siteVersionId ?? input.latestRuntimeSiteVersionId ?? null,
+    selectedRuntimeSiteVersionId: selectedVariantVersionIsAvailable
+      ? selectedVariantSiteVersionId
+      : (input.latestRuntimeSiteVersionId ?? null),
     selectedVariant,
   }
 }
@@ -969,7 +985,7 @@ export async function getSiteWorkspaceReadModelForPage(input: {
 
   const runtimeResult = await supabase
     .from('gnr8_runtime_site_versions')
-    .select('id,ownership_site_id,state,version_no,import_provenance_summary,updated_at,created_at')
+    .select('id,site_id,ownership_site_id,state,version_no,import_provenance_summary,artifact_id,updated_at,created_at')
     .eq('ownership_site_id', siteId)
 
   const runtimeRows = !runtimeResult.error && Array.isArray(runtimeResult.data)
@@ -1004,8 +1020,12 @@ export async function getSiteWorkspaceReadModelForPage(input: {
   }
 
   const latestRuntimeSiteVersionId = runtimeSnapshot?.latestRuntimeSiteVersionId ?? null
+  const availableRuntimeSiteVersionIds = runtimeRows
+    .map((row) => toTextOrNull(row.id))
+    .filter((value): value is string => Boolean(value))
   const selectedResolution = resolveSelectedRuntimeVersionIdForWorkspace({
     latestRuntimeSiteVersionId,
+    availableRuntimeSiteVersionIds,
     normalizedVariants: normalizedVariantsForSelection,
     selectedVariantId,
   })
@@ -1065,7 +1085,8 @@ export async function getSiteWorkspaceReadModelForPage(input: {
   const importFidelityDegraded = importFidelity.importFidelityStatus === 'degraded_import' || importFidelity.importFidelityStatus === 'capture_failed'
 
   const lastAction = normalizedSiteActions[0] ?? null
-  let transformedPreviewAvailable = false
+  const selectedRuntimeArtifactId = toTextOrNull(selectedRuntimeRow?.artifact_id)
+  let transformedPreviewAvailable = Boolean(selectedRuntimeArtifactId)
   if (selectedRuntimeSiteVersionId) {
     const artifactResult = await supabase
       .from('gnr8_runtime_artifacts')
@@ -1078,7 +1099,7 @@ export async function getSiteWorkspaceReadModelForPage(input: {
       const artifactRow = artifactResult.data[0] as RuntimeArtifactRow
       if (toTextOrNull(artifactRow.id)) {
         const htmlByPath = isRecord(artifactRow.html_by_path) ? artifactRow.html_by_path : null
-        transformedPreviewAvailable = htmlByPath != null && Object.keys(htmlByPath).length > 0
+        if (htmlByPath != null && Object.keys(htmlByPath).length > 0) transformedPreviewAvailable = true
       }
     }
   }

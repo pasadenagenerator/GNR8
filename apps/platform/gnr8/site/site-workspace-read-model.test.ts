@@ -77,6 +77,7 @@ test('runtime version selection defaults to latest runtime when no variant is ex
 test('runtime version selection honors variant site version only when variant is explicitly selected', () => {
   const selected = resolveSelectedRuntimeVersionIdForWorkspace({
     latestRuntimeSiteVersionId: 'latest-runtime-version-id',
+    availableRuntimeSiteVersionIds: ['latest-runtime-version-id', 'explicit-variant-version'],
     normalizedVariants: [
       { id: 'variant-a', siteVersionId: 'older-variant-version' },
       { id: 'variant-b', siteVersionId: 'explicit-variant-version' },
@@ -86,6 +87,20 @@ test('runtime version selection honors variant site version only when variant is
 
   assert.equal(selected.selectedRuntimeSiteVersionId, 'explicit-variant-version')
   assert.equal(selected.selectedVariant?.id, 'variant-b')
+})
+
+test('runtime version selection falls back to latest runtime when selected variant site version is unavailable', () => {
+  const selected = resolveSelectedRuntimeVersionIdForWorkspace({
+    latestRuntimeSiteVersionId: 'latest-runtime-version-id',
+    availableRuntimeSiteVersionIds: ['latest-runtime-version-id'],
+    normalizedVariants: [
+      { id: 'variant-a', siteVersionId: 'stale-variant-version' },
+    ],
+    selectedVariantId: 'variant-a',
+  })
+
+  assert.equal(selected.selectedRuntimeSiteVersionId, 'latest-runtime-version-id')
+  assert.equal(selected.selectedVariant?.id, 'variant-a')
 })
 
 test('import fidelity signals are parsed from semantic signal labels', () => {
@@ -316,6 +331,32 @@ test('import fidelity falls back to semantic signals and only returns unknown wh
   assert.equal(parsed.renderedDomQuality, 'unknown')
   assert.equal(parsed.screenshotCount, 0)
   assert.equal(parsed.computedStyleSampleCount, 0)
+  assert.equal(parsed.styleSignalFallbackUsed, true)
   assert.deepEqual(parsed.importDiagnosticCodes, [])
   assert.deepEqual(parsed.captureEvidenceRefs, [])
+})
+
+test('import fidelity fallback flag remains false for high-fidelity imports when style provenance is absent', () => {
+  const parsed = __siteWorkspaceReadModelTestUtils.parseImportFidelity({
+    runtimeVersion: null,
+    pageRows: [
+      {
+        id: 'page-row',
+        site_version_id: 'sv-2',
+        page_id: 'page-1',
+        path: '/',
+        title: 'Home',
+        structure_model: null,
+        content_model: null,
+        migration_governance: null,
+        semantic_signals: [
+          { label: 'import.source_mode:rendered_dom' },
+          { label: 'import.fidelity_status:high_fidelity_import' },
+        ],
+      } as any,
+    ],
+  })
+
+  assert.equal(parsed.importFidelityStatus, 'high_fidelity_import')
+  assert.equal(parsed.styleSignalFallbackUsed, false)
 })
