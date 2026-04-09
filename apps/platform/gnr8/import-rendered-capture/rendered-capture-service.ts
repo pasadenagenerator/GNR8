@@ -25,6 +25,9 @@ export const DEFAULT_RENDERED_CAPTURE_READINESS_POLICY: RenderedCaptureReadiness
   domStabilizationWindowMs: 2_500,
   domStabilizationPollMs: 250,
   maxTotalCaptureMs: 30_000,
+  shellContentMinLength: 120,
+  shellDetectionRetryCount: 1,
+  shellDetectionRetryDelayMs: 1_500,
 };
 
 function sha256Hex(value: string | Uint8Array): string {
@@ -64,6 +67,222 @@ const STYLE_PROBES: readonly BrowserStyleProbe[] = [
   { target: "card", selector: "[class*='card'], .grid > *, .cards > *" },
   { target: "footer", selector: "footer" },
 ] as const;
+
+type RenderedQualityMetrics = {
+  bodyTextLength: number;
+  headingCount: number;
+  sectionCount: number;
+  meaningfulNodeCount: number;
+};
+
+type CapturePassResult = {
+  html: string;
+  computedStyleSamples: ComputedStyleSample[];
+  observedAssetUrls: string[];
+  quality: RenderedQualityMetrics;
+};
+
+function resolveReadinessNumber(value: number | undefined, fallback: number): number {
+  if (!Number.isFinite(value)) return fallback;
+  return Math.max(0, Math.floor(value));
+}
+
+function isShellLikeContent(input: { quality: RenderedQualityMetrics; minLength: number }): boolean {
+  return (
+    input.quality.bodyTextLength < input.minLength &&
+    input.quality.headingCount < 1 &&
+    input.quality.sectionCount < 1 &&
+    input.quality.meaningfulNodeCount < 8
+  );
+}
+
+function hasExceededCaptureBudget(input: { startedAt: number; readiness: RenderedCaptureReadinessPolicy }): boolean {
+  return Date.now() - input.startedAt > input.readiness.maxTotalCaptureMs;
+}
+
+async function capturePageState(page: any): Promise<CapturePassResult> {
+  const html = await page.content();
+
+  const styleSamplesRaw = await page.evaluate((probes: BrowserStyleProbe[]) => {
+    function sampleFor(selector: string) {
+      const el = document.querySelector(selector) as HTMLElement | null;
+      if (!el) return null;
+      const style = window.getComputedStyle(el);
+      return {
+        tagName: el.tagName.toLowerCase(),
+        className: el.className || null,
+        styles: {
+          fontFamily: style.fontFamily || null,
+          fontSize: style.fontSize || null,
+          fontWeight: style.fontWeight || null,
+          lineHeight: style.lineHeight || null,
+          color: style.color || null,
+          backgroundColor: style.backgroundColor || null,
+          borderRadius: style.borderRadius || null,
+          paddingTop: style.paddingTop || null,
+          paddingRight: style.paddingRight || null,
+          paddingBottom: style.paddingBottom || null,
+          paddingLeft: style.paddingLeft || null,
+        },
+      };
+    }
+
+    const styleOut: Array<{
+      target: string;
+      selector: string;
+      tagName: string | null;
+      className: string | null;
+      styles: {
+        fontFamily: string | null;
+        fontSize: string | null;
+        fontWeight: string | null;
+        lineHeight: string | null;
+        color: string | null;
+        backgroundColor: string | null;
+        borderRadius: string | null;
+        paddingTop: string | null;
+        paddingRight: string | null;
+        paddingBottom: string | null;
+        paddingLeft: string | null;
+      };
+    }> = [];
+
+    for (const probe of probes) {
+      const sampled = sampleFor(probe.selector);
+      if (!sampled) continue;
+      styleOut.push({
+        target: probe.target,
+        selector: probe.selector,
+        tagName: sampled.tagName,
+        className: sampled.className,
+        styles: sampled.styles,
+      });
+    }
+
+    const bodyTextLength = (document.body?.innerText ?? "").replace(/\s+/g, " ").trim().length;
+    const headingCount = document.querySelectorAll("h1, h2, h3").length;
+    const sectionCount = document.querySelectorAll("section, main, article, nav, aside").length;
+    const meaningfulNodeCount = document.querySelectorAll("main *, section *, article *, nav *, h1, h2, h3, p, li, a").length;
+
+    const observedAssetUrls = Array.from(
+      new Set(
+        [
+          ...Array.from(document.querySelectorAll("img[src]")).map((n) => (n as HTMLImageElement).src),
+          ...Array.from(document.querySelectorAll("script[src]")).map((n) => (n as HTMLScriptElement).src),
+          ...Array.from(document.querySelectorAll("link[href]")).map((n) => (n as HTMLLinkElement).href),
+        ].filter((v): v is string => typeof v === "string" && v.length > 0),
+      ),
+    ).sort((a, b) => a.localeCompare(b));
+
+    return {
+      samples: styleOut,
+      observedAssetUrls,
+      quality: {
+        bodyTextLength,
+        headingCount,
+        sectionCount,
+        meaningfulNodeCount,
+      },
+    };
+  }, [...STYLE_PROBES]);
+
+  const computedStyleSamples: ComputedStyleSample[] = styleSamplesRaw.samples.map((sample: {
+    target: string;
+    selector: string;
+    tagName: string | null;
+    className: string | null;
+    styles: ComputedStyleSample["styles"];
+  }) => ({
+    kind: "computed_style_sample_v1",
+    sampleId: sha256Hex(`${sample.target}:${sample.selector}:${sample.tagName ?? ""}`).slice(0, 16),
+    target: sample.target as ComputedStyleSample["target"],
+    selector: sample.selector,
+    tagName: sample.tagName,
+    className: sample.className,
+    styles: sample.styles,
+  }));
+
+  return {
+    html,
+    computedStyleSamples,
+    observedAssetUrls: uniqueSortedStrings(styleSamplesRaw.observedAssetUrls),
+    quality: {
+      bodyTextLength: Number(styleSamplesRaw.quality.bodyTextLength ?? 0),
+      headingCount: Number(styleSamplesRaw.quality.headingCount ?? 0),
+      sectionCount: Number(styleSamplesRaw.quality.sectionCount ?? 0),
+      meaningfulNodeCount: Number(styleSamplesRaw.quality.meaningfulNodeCount ?? 0),
+    },
+  };
+}
+
+async function waitForReadinessPass(input: {
+  page: any;
+  diagnostics: RenderedCaptureDiagnostic[];
+  readiness: RenderedCaptureReadinessPolicy;
+  startedAt: number;
+  attempt: number;
+}): Promise<"network_quiet" | "dom_stable" | "timeout_partial"> {
+  let readinessState: "network_quiet" | "dom_stable" | "timeout_partial" = "dom_stable";
+
+  const attemptScale = input.attempt > 0 ? 1.5 : 1;
+  const networkQuietTimeoutMs = Math.floor(input.readiness.networkQuietTimeoutMs * attemptScale);
+  const domStabilizationWindowMs = Math.floor(input.readiness.domStabilizationWindowMs * attemptScale);
+
+  try {
+    await input.page.waitForLoadState("networkidle", { timeout: networkQuietTimeoutMs });
+    readinessState = "network_quiet";
+  } catch {
+    input.diagnostics.push({
+      code: "RENDERED_CAPTURE_TIMEOUT",
+      severity: "warning",
+      message: "Network quiet timeout reached; continuing with DOM stabilization fallback",
+      details: { networkQuietTimeoutMs, attempt: input.attempt + 1 },
+    });
+    readinessState = "timeout_partial";
+  }
+
+  const stabilizationDeadline = Date.now() + domStabilizationWindowMs;
+  let previousHash = "";
+  let stableTicks = 0;
+
+  while (Date.now() < stabilizationDeadline) {
+    if (hasExceededCaptureBudget({ startedAt: input.startedAt, readiness: input.readiness })) {
+      input.diagnostics.push({
+        code: "RENDERED_CAPTURE_TIMEOUT",
+        severity: "warning",
+        message: "Rendered capture reached bounded max timeout during readiness stabilization",
+        details: { maxTotalCaptureMs: input.readiness.maxTotalCaptureMs, attempt: input.attempt + 1 },
+      });
+      return "timeout_partial";
+    }
+
+    const html = await input.page.content();
+    const hash = sha256Hex(html);
+    if (hash === previousHash) {
+      stableTicks += 1;
+      if (stableTicks >= 2) {
+        if (readinessState !== "network_quiet") readinessState = "dom_stable";
+        break;
+      }
+    } else {
+      previousHash = hash;
+      stableTicks = 0;
+    }
+    await sleep(input.readiness.domStabilizationPollMs);
+  }
+
+  if (hasExceededCaptureBudget({ startedAt: input.startedAt, readiness: input.readiness })) {
+    input.diagnostics.push({
+      code: "RENDERED_CAPTURE_TIMEOUT",
+      severity: "warning",
+      message: "Rendered capture reached bounded max timeout; returning partial evidence",
+      details: { maxTotalCaptureMs: input.readiness.maxTotalCaptureMs, attempt: input.attempt + 1 },
+    });
+    return "timeout_partial";
+  }
+
+  return readinessState;
+}
 
 async function defaultRenderedCaptureExecutor(input: RenderedCaptureExecutorInput): Promise<RenderedCaptureExecutorResult> {
   const diagnostics: RenderedCaptureDiagnostic[] = [];
@@ -114,64 +333,147 @@ async function defaultRenderedCaptureExecutor(input: RenderedCaptureExecutorInpu
   let page: any = null;
 
   try {
-    browser = await chromium.launch({ headless: true });
-    context = await browser.newContext({
-      viewport: {
-        width: input.viewport.width,
-        height: input.viewport.height,
-      },
-    });
-
-    page = await context.newPage();
-    await page.goto(input.sourceUrl, {
-      waitUntil: "domcontentloaded",
-      timeout: input.readiness.navigationTimeoutMs,
-    });
-
-    let readinessState: "network_quiet" | "dom_stable" | "timeout_partial" = "dom_stable";
     try {
-      await page.waitForLoadState("networkidle", { timeout: input.readiness.networkQuietTimeoutMs });
-      readinessState = "network_quiet";
-    } catch {
+      browser = await chromium.launch({ headless: true });
+    } catch (error) {
       diagnostics.push({
-        code: "RENDERED_CAPTURE_TIMEOUT",
-        severity: "warning",
-        message: "Network quiet timeout reached; continuing with DOM stabilization fallback",
-        details: { networkQuietTimeoutMs: input.readiness.networkQuietTimeoutMs },
+        code: "RENDERED_CAPTURE_BROWSER_START_FAILED",
+        severity: "error",
+        message: "Rendered capture browser failed to start",
+        details: { error: toErrorString(error) },
       });
-      readinessState = "timeout_partial";
+      return {
+        status: "failed",
+        document: null,
+        screenshots: [],
+        computedStyleSamples: [],
+        renderedObservedAssetUrls: [],
+        diagnostics,
+      };
     }
 
-    const stabilizationDeadline = Date.now() + input.readiness.domStabilizationWindowMs;
-    let previousHash = "";
-    let stableTicks = 0;
-    while (Date.now() < stabilizationDeadline) {
-      const html = await page.content();
-      const hash = sha256Hex(html);
-      if (hash === previousHash) {
-        stableTicks += 1;
-        if (stableTicks >= 2) {
-          if (readinessState !== "network_quiet") readinessState = "dom_stable";
-          break;
+    try {
+      context = await browser.newContext({
+        viewport: {
+          width: input.viewport.width,
+          height: input.viewport.height,
+        },
+      });
+      page = await context.newPage();
+    } catch (error) {
+      diagnostics.push({
+        code: "RENDERED_CAPTURE_BROWSER_START_FAILED",
+        severity: "error",
+        message: "Rendered capture context/page initialization failed",
+        details: { error: toErrorString(error) },
+      });
+      return {
+        status: "failed",
+        document: null,
+        screenshots: [],
+        computedStyleSamples: [],
+        renderedObservedAssetUrls: [],
+        diagnostics,
+      };
+    }
+
+    try {
+      await page.goto(input.sourceUrl, {
+        waitUntil: "domcontentloaded",
+        timeout: input.readiness.navigationTimeoutMs,
+      });
+    } catch (error) {
+      diagnostics.push({
+        code: "BROWSER_NAVIGATION_FAILED",
+        severity: "error",
+        message: "Browser navigation failed before rendered capture could complete",
+        details: {
+          error: toErrorString(error),
+          sourceUrl: input.sourceUrl,
+          navigationTimeoutMs: input.readiness.navigationTimeoutMs,
+        },
+      });
+      return {
+        status: "failed",
+        document: null,
+        screenshots: [],
+        computedStyleSamples: [],
+        renderedObservedAssetUrls: [],
+        diagnostics,
+      };
+    }
+
+    const shellContentMinLength = resolveReadinessNumber(input.readiness.shellContentMinLength, 120);
+    const retryCount = resolveReadinessNumber(input.readiness.shellDetectionRetryCount, 1);
+    const retryDelayMs = resolveReadinessNumber(input.readiness.shellDetectionRetryDelayMs, 1_500);
+
+    let selectedReadinessState: "network_quiet" | "dom_stable" | "timeout_partial" = "dom_stable";
+    let selectedCapture: CapturePassResult | null = null;
+
+    for (let attempt = 0; attempt <= retryCount; attempt++) {
+      const readinessState = await waitForReadinessPass({
+        page,
+        diagnostics,
+        readiness: input.readiness,
+        startedAt,
+        attempt,
+      });
+
+      const capturePass = await capturePageState(page);
+      const isShellLike = isShellLikeContent({ quality: capturePass.quality, minLength: shellContentMinLength });
+
+      selectedReadinessState = readinessState;
+      selectedCapture = capturePass;
+
+      if (!isShellLike) {
+        if (attempt > 0) {
+          diagnostics.push({
+            code: "RENDERED_CAPTURE_RECOVERED_ON_RETRY",
+            severity: "info",
+            message: "Rendered capture recovered from shell-like output on retry",
+            details: {
+              retriesUsed: attempt,
+              bodyTextLength: capturePass.quality.bodyTextLength,
+            },
+          });
         }
-      } else {
-        previousHash = hash;
-        stableTicks = 0;
+        break;
       }
-      await sleep(input.readiness.domStabilizationPollMs);
-    }
 
-    if (Date.now() - startedAt > input.readiness.maxTotalCaptureMs) {
       diagnostics.push({
-        code: "RENDERED_CAPTURE_TIMEOUT",
-        severity: "warning",
-        message: "Rendered capture reached bounded max timeout; returning partial evidence",
-        details: { maxTotalCaptureMs: input.readiness.maxTotalCaptureMs },
+        code: "RENDERED_CAPTURE_DOM_STILL_SHELL",
+        severity: attempt < retryCount ? "warning" : "error",
+        message:
+          attempt < retryCount
+            ? "Rendered DOM still appears shell-like; performing bounded retry"
+            : "Rendered DOM remained shell-like after bounded retries",
+        details: {
+          attempt: attempt + 1,
+          maxAttempts: retryCount + 1,
+          quality: capturePass.quality,
+          shellContentMinLength,
+        },
       });
-      readinessState = "timeout_partial";
+
+      if (attempt >= retryCount) break;
+      await sleep(retryDelayMs);
     }
 
-    const renderedHtml = await page.content();
+    if (!selectedCapture) {
+      diagnostics.push({
+        code: "RENDERED_CAPTURE_FAILED",
+        severity: "error",
+        message: "Rendered capture failed to collect any capture pass",
+      });
+      return {
+        status: "failed",
+        document: null,
+        screenshots: [],
+        computedStyleSamples: [],
+        renderedObservedAssetUrls: [],
+        diagnostics,
+      };
+    }
 
     const screenshots: RenderedCaptureExecutorResult["screenshots"] = [];
     try {
@@ -210,101 +512,16 @@ async function defaultRenderedCaptureExecutor(input: RenderedCaptureExecutorInpu
       });
     }
 
-    const styleSamplesRaw = await page.evaluate((probes: BrowserStyleProbe[]) => {
-      function sampleFor(selector: string) {
-        const el = document.querySelector(selector) as HTMLElement | null;
-        if (!el) return null;
-        const style = window.getComputedStyle(el);
-        return {
-          tagName: el.tagName.toLowerCase(),
-          className: el.className || null,
-          styles: {
-            fontFamily: style.fontFamily || null,
-            fontSize: style.fontSize || null,
-            fontWeight: style.fontWeight || null,
-            lineHeight: style.lineHeight || null,
-            color: style.color || null,
-            backgroundColor: style.backgroundColor || null,
-            borderRadius: style.borderRadius || null,
-            paddingTop: style.paddingTop || null,
-            paddingRight: style.paddingRight || null,
-            paddingBottom: style.paddingBottom || null,
-            paddingLeft: style.paddingLeft || null,
-          },
-        };
-      }
-
-      const out: Array<{
-        target: string;
-        selector: string;
-        tagName: string | null;
-        className: string | null;
-        styles: {
-          fontFamily: string | null;
-          fontSize: string | null;
-          fontWeight: string | null;
-          lineHeight: string | null;
-          color: string | null;
-          backgroundColor: string | null;
-          borderRadius: string | null;
-          paddingTop: string | null;
-          paddingRight: string | null;
-          paddingBottom: string | null;
-          paddingLeft: string | null;
-        };
-      }> = [];
-
-      for (const probe of probes) {
-        const sampled = sampleFor(probe.selector);
-        if (!sampled) continue;
-        out.push({
-          target: probe.target,
-          selector: probe.selector,
-          tagName: sampled.tagName,
-          className: sampled.className,
-          styles: sampled.styles,
-        });
-      }
-
-      const observedAssetUrls = Array.from(
-        new Set(
-          [
-            ...Array.from(document.querySelectorAll("img[src]")).map((n) => (n as HTMLImageElement).src),
-            ...Array.from(document.querySelectorAll("script[src]")).map((n) => (n as HTMLScriptElement).src),
-            ...Array.from(document.querySelectorAll("link[href]")).map((n) => (n as HTMLLinkElement).href),
-          ].filter((v): v is string => typeof v === "string" && v.length > 0),
-        ),
-      ).sort((a, b) => a.localeCompare(b));
-
-      return { samples: out, observedAssetUrls };
-    }, [...STYLE_PROBES]);
-
-    const computedStyleSamples: ComputedStyleSample[] = styleSamplesRaw.samples.map((sample: {
-      target: string;
-      selector: string;
-      tagName: string | null;
-      className: string | null;
-      styles: ComputedStyleSample["styles"];
-    }) => ({
-      kind: "computed_style_sample_v1",
-      sampleId: sha256Hex(`${sample.target}:${sample.selector}:${sample.tagName ?? ""}`).slice(0, 16),
-      target: sample.target as ComputedStyleSample["target"],
-      selector: sample.selector,
-      tagName: sample.tagName,
-      className: sample.className,
-      styles: sample.styles,
-    }));
-
-    if (computedStyleSamples.length < 3) {
+    if (selectedCapture.computedStyleSamples.length < 3) {
       diagnostics.push({
         code: "COMPUTED_STYLE_SAMPLE_WEAK",
         severity: "warning",
         message: "Computed style sampling captured fewer than three targets",
-        details: { sampleCount: computedStyleSamples.length },
+        details: { sampleCount: selectedCapture.computedStyleSamples.length },
       });
     }
 
-    if (readinessState === "timeout_partial") {
+    if (selectedReadinessState === "timeout_partial") {
       diagnostics.push({
         code: "RENDERED_CAPTURE_PARTIAL",
         severity: "warning",
@@ -315,12 +532,12 @@ async function defaultRenderedCaptureExecutor(input: RenderedCaptureExecutorInpu
     return {
       status: "available",
       document: {
-        html: renderedHtml,
-        readinessState,
+        html: selectedCapture.html,
+        readinessState: selectedReadinessState,
       },
       screenshots,
-      computedStyleSamples,
-      renderedObservedAssetUrls: uniqueSortedStrings(styleSamplesRaw.observedAssetUrls),
+      computedStyleSamples: selectedCapture.computedStyleSamples,
+      renderedObservedAssetUrls: selectedCapture.observedAssetUrls,
       diagnostics,
     };
   } catch (error) {

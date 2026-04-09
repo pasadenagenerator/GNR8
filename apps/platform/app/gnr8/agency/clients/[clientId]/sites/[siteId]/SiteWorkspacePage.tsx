@@ -80,6 +80,7 @@ function renderOverviewContent(props: {
           <div>Rendered DOM quality: {readModel.pipeline.renderedDomQuality}</div>
           <div>Screenshots captured: {readModel.pipeline.screenshotCount}</div>
           <div>Computed style samples: {readModel.pipeline.computedStyleSampleCount}</div>
+          <div>Acquisition diagnostics: {readModel.pipeline.diagnosticsSummary.length > 0 ? readModel.pipeline.diagnosticsSummary.join(' · ') : 'none'}</div>
           {readModel.pipeline.importFidelityDegraded ? <div>Fidelity warning: degraded import (review before redesign)</div> : null}
         </div>
       </section>

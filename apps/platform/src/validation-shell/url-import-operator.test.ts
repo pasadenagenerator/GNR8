@@ -347,6 +347,183 @@ test("weak rendered DOM snapshot degrades to explicit raw_html_fallback mode", a
   assert.ok(snapshot.importDiagnostics.issues.some((issue) => issue.code === "IMPORT_FIDELITY_DEGRADED"));
 });
 
+test("entry fetch recovers via normalized URL candidate (www/non-www fallback)", async () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "gnr8-url-import-entry-normalization-"));
+  const sourceUrl = "https://www.normalize-target.example/";
+
+  const snapshot = await importPublicSinglePageUrlToSnapshot({
+    sourceUrl,
+    snapshotRootDirAbs: tmp,
+    fetchImpl: mockFetchFromTable({
+      "https://normalize-target.example/": {
+        status: 200,
+        headers: { "content-type": "text/html; charset=utf-8" },
+        body: "<!doctype html><html><body><h1>Normalized Host Capture</h1></body></html>",
+      },
+    }),
+    renderedCaptureExecutor: mockRenderedCaptureExecutor({
+      status: "unavailable",
+      document: null,
+      screenshots: [],
+      computedStyleSamples: [],
+      renderedObservedAssetUrls: [],
+      diagnostics: [{ code: "RENDERED_CAPTURE_UNAVAILABLE", severity: "warning", message: "mock unavailable" }],
+    }),
+  });
+
+  assert.equal(snapshot.importDiagnostics.summary.fatalCount, 0);
+  assert.equal(snapshot.sourceSelection.sourceMode, "raw_html_fallback");
+  assert.ok(snapshot.importDiagnostics.issues.every((issue) => issue.code !== "ENTRY_FETCH_FAILED" || issue.severity !== "fatal"));
+  assert.ok(fs.readFileSync(snapshot.entryHtmlPathAbs, "utf8").includes("Normalized Host Capture"));
+});
+
+test("entry fetch timeout is classified and succeeds on bounded retry", async () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "gnr8-url-import-entry-timeout-"));
+  const sourceUrl = "https://timeout-then-success.example/";
+  let calls = 0;
+
+  const snapshot = await importPublicSinglePageUrlToSnapshot({
+    sourceUrl,
+    snapshotRootDirAbs: tmp,
+    fetchImpl: async (_input, init) => {
+      calls += 1;
+      if (calls === 1) {
+        return await new Promise<Response>((_resolve, reject) => {
+          const signal = init?.signal as AbortSignal | undefined;
+          signal?.addEventListener("abort", () => reject(new Error("aborted by timeout")), { once: true });
+        });
+      }
+      return new Response("<!doctype html><html><body><h1>Recovered after timeout</h1></body></html>", {
+        status: 200,
+        headers: { "content-type": "text/html; charset=utf-8" },
+      });
+    },
+    renderedCaptureExecutor: mockRenderedCaptureExecutor({
+      status: "unavailable",
+      document: null,
+      screenshots: [],
+      computedStyleSamples: [],
+      renderedObservedAssetUrls: [],
+      diagnostics: [{ code: "RENDERED_CAPTURE_UNAVAILABLE", severity: "warning", message: "mock unavailable" }],
+    }),
+  });
+
+  assert.ok(snapshot.importDiagnostics.issues.some((issue) => issue.code === "ENTRY_FETCH_TIMEOUT"));
+  assert.equal(snapshot.importDiagnostics.summary.fatalCount, 0);
+  assert.ok(calls >= 2);
+});
+
+test("rendered capture weak-then-recovered path is preserved in diagnostics", async () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "gnr8-url-import-rendered-recovered-"));
+  const sourceUrl = "https://rendered-recovered.example/";
+
+  const snapshot = await importPublicSinglePageUrlToSnapshot({
+    sourceUrl,
+    snapshotRootDirAbs: tmp,
+    fetchImpl: mockFetchFromTable({
+      [sourceUrl]: {
+        status: 200,
+        headers: { "content-type": "text/html; charset=utf-8" },
+        body: "<!doctype html><html><body><h1>Raw backup</h1></body></html>",
+      },
+    }),
+    renderedCaptureExecutor: mockRenderedCaptureExecutor({
+      status: "available",
+      document: {
+        html: "<!doctype html><html><body><main><h1>Hydrated Title</h1><p>Loaded content loaded content loaded content loaded content</p></main></body></html>",
+        readinessState: "dom_stable",
+      },
+      screenshots: [],
+      computedStyleSamples: [],
+      renderedObservedAssetUrls: [],
+      diagnostics: [
+        {
+          code: "RENDERED_CAPTURE_DOM_STILL_SHELL",
+          severity: "warning",
+          message: "shell first pass",
+        },
+        {
+          code: "RENDERED_CAPTURE_RECOVERED_ON_RETRY",
+          severity: "info",
+          message: "recovered",
+        },
+      ],
+    }),
+  });
+
+  assert.equal(snapshot.sourceSelection.sourceMode, "rendered_dom");
+  assert.ok(snapshot.importDiagnostics.issues.some((issue) => issue.code === "RENDERED_CAPTURE_DOM_STILL_SHELL"));
+  assert.ok(snapshot.importDiagnostics.issues.some((issue) => issue.code === "RENDERED_CAPTURE_RECOVERED_ON_RETRY"));
+});
+
+test("rendered capture hard failure surfaces explicit navigation diagnostics", async () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "gnr8-url-import-rendered-hard-fail-"));
+  const sourceUrl = "https://rendered-hard-fail.example/";
+
+  const snapshot = await importPublicSinglePageUrlToSnapshot({
+    sourceUrl,
+    snapshotRootDirAbs: tmp,
+    fetchImpl: mockFetchFromTable({
+      [sourceUrl]: {
+        status: 200,
+        headers: { "content-type": "text/html; charset=utf-8" },
+        body: "<!doctype html><html><body><h1>Raw fallback path</h1></body></html>",
+      },
+    }),
+    renderedCaptureExecutor: mockRenderedCaptureExecutor({
+      status: "failed",
+      document: null,
+      screenshots: [],
+      computedStyleSamples: [],
+      renderedObservedAssetUrls: [],
+      diagnostics: [
+        {
+          code: "BROWSER_NAVIGATION_FAILED",
+          severity: "error",
+          message: "navigation failed",
+        },
+        {
+          code: "RENDERED_CAPTURE_BROWSER_START_FAILED",
+          severity: "error",
+          message: "browser failed",
+        },
+      ],
+    }),
+  });
+
+  assert.equal(snapshot.sourceSelection.fidelityStatus, "capture_failed");
+  assert.ok(snapshot.importDiagnostics.issues.some((issue) => issue.code === "BROWSER_NAVIGATION_FAILED"));
+  assert.ok(snapshot.importDiagnostics.issues.some((issue) => issue.code === "RENDERED_CAPTURE_BROWSER_START_FAILED"));
+});
+
+test("no-usable-source hard fails when rendered and raw HTML are both unusable", async () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "gnr8-url-import-no-usable-source-"));
+  const sourceUrl = "https://no-usable-source.example/";
+
+  const snapshot = await importPublicSinglePageUrlToSnapshot({
+    sourceUrl,
+    snapshotRootDirAbs: tmp,
+    fetchImpl: mockFetchFromTable({
+      [sourceUrl]: {
+        status: 200,
+        headers: { "content-type": "text/html; charset=utf-8" },
+        body: "<!doctype html><html><body></body></html>",
+      },
+    }),
+    renderedCaptureExecutor: mockRenderedCaptureExecutor({
+      status: "unavailable",
+      document: null,
+      screenshots: [],
+      computedStyleSamples: [],
+      renderedObservedAssetUrls: [],
+      diagnostics: [{ code: "RENDERED_CAPTURE_UNAVAILABLE", severity: "warning", message: "mock unavailable" }],
+    }),
+  });
+
+  assert.ok(snapshot.importDiagnostics.issues.some((issue) => issue.code === "NO_USABLE_IMPORT_SOURCE"));
+  assert.equal(snapshot.importDiagnostics.summary.fatalCount > 0, true);
+});
+
 test("url import operator runs imported snapshot through pipeline and materialize mode", async () => {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "gnr8-url-import-materialize-"));
   const outputRootDir = path.resolve(tmp, "bundle-out");

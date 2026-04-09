@@ -283,7 +283,7 @@ test('scoped pipeline import uses pipeline path, maps consolidated sections, and
         computedStyleSamples: [{}, {}, {}],
       },
       importDiagnostics: {
-        issues: [],
+        issues: [{ code: 'RENDERED_CAPTURE_RECOVERED_ON_RETRY' }],
       },
     } as any,
     sourceUrl: 'https://example.com/',
@@ -361,6 +361,7 @@ test('scoped pipeline import uses pipeline path, maps consolidated sections, and
   assert.equal(outcome.reporting.renderedDomQuality, 'strong')
   assert.equal(outcome.reporting.screenshotCount, 2)
   assert.equal(outcome.reporting.computedStyleSampleCount, 3)
+  assert.ok(outcome.reporting.importDiagnosticCodes.includes('RENDERED_CAPTURE_RECOVERED_ON_RETRY'))
   assert.equal(bindCalls, 1)
   assert.equal(legacyImportCalls, 0)
   assert.equal(legacyMigrateCalls, 0)

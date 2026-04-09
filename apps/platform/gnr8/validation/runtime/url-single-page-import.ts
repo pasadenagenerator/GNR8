@@ -10,7 +10,7 @@ import type { JsonValue } from "../../import/import-contract";
 import { stableStringify } from "../../migration/runtime/diagnostics";
 import { resolveUrlImportSnapshotRootDirAbs } from "./url-import-snapshot-root";
 
-export const URL_SINGLE_PAGE_IMPORT_VERSION = "1.4.0" as const;
+export const URL_SINGLE_PAGE_IMPORT_VERSION = "1.5.0" as const;
 
 export type UrlImportExecutionScope = {
   includes: readonly [
@@ -34,7 +34,10 @@ export type UrlImportDiagnosticSeverity = "info" | "warning" | "error" | "fatal"
 export type UrlImportDiagnosticCode =
   | "INVALID_INPUT_URL"
   | "ENTRY_FETCH_FAILED"
+  | "ENTRY_FETCH_TIMEOUT"
+  | "ENTRY_FETCH_REDIRECT_LOOP"
   | "ENTRY_FETCH_NON_OK"
+  | "ENTRY_FETCH_UNSUPPORTED_CONTENT_TYPE"
   | "ENTRY_NON_HTML_RESPONSE"
   | "ENTRY_EMPTY_RESPONSE"
   | "ASSET_REFERENCE_UNSUPPORTED"
@@ -50,13 +53,18 @@ export type UrlImportDiagnosticCode =
   | "PRIMARY_STYLESHEET_NOT_REWRITE_ELIGIBLE"
   | "PRIMARY_STYLESHEET_NOT_USED_IN_FINAL_HTML"
   | "RENDERED_CAPTURE_UNAVAILABLE"
+  | "RENDERED_CAPTURE_BROWSER_START_FAILED"
+  | "BROWSER_NAVIGATION_FAILED"
   | "RENDERED_CAPTURE_TIMEOUT"
   | "RENDERED_CAPTURE_PARTIAL"
+  | "RENDERED_CAPTURE_DOM_STILL_SHELL"
+  | "RENDERED_CAPTURE_RECOVERED_ON_RETRY"
   | "RENDERED_CAPTURE_FAILED"
   | "SCREENSHOT_CAPTURE_FAILED"
   | "COMPUTED_STYLE_SAMPLE_WEAK"
   | "RENDERED_DOM_REQUIRED_BUT_UNAVAILABLE"
   | "RAW_HTML_FALLBACK_USED"
+  | "RAW_HTML_WEAK_BUT_USABLE"
   | "IMPORT_FIDELITY_DEGRADED"
   | "RENDERED_DOM_EMPTY_OR_WEAK"
   | "NO_USABLE_IMPORT_SOURCE";
@@ -138,6 +146,7 @@ export type UrlSinglePageImportSnapshot = {
     fidelityStatus: UrlImportFidelityStatus;
     selectedSourceHtmlPathAbs: string;
     renderedDomQuality: RenderedDomQuality;
+    rawHtmlQuality: RenderedDomQuality;
     degraded: boolean;
   };
   responseHtmlPathAbs: string;
@@ -258,6 +267,64 @@ function normalizeInputPublicUrl(input: string): URL | null {
 
 function snapshotIdForNormalizedUrl(normalizedUrl: string): string {
   return `imported-url-site-${sha256Hex(normalizedUrl).slice(0, 16)}`;
+}
+
+const ENTRY_FETCH_MAX_ATTEMPTS = 2;
+const ENTRY_FETCH_TIMEOUT_MS = 12_000;
+const ENTRY_FETCH_USER_AGENT = "GNR8-Operator-URL-Import/1.1 (+single-page-reliability)";
+
+function createEntryFetchCandidateUrls(normalizedUrl: URL): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+
+  const push = (url: URL) => {
+    const value = url.toString();
+    if (seen.has(value)) return;
+    seen.add(value);
+    out.push(value);
+  };
+
+  push(new URL(normalizedUrl.toString()));
+
+  const host = normalizedUrl.hostname.toLowerCase();
+  if (host.startsWith("www.")) {
+    const noWww = new URL(normalizedUrl.toString());
+    noWww.hostname = host.slice(4);
+    push(noWww);
+  } else {
+    const withWww = new URL(normalizedUrl.toString());
+    withWww.hostname = `www.${host}`;
+    push(withWww);
+  }
+
+  const trailingSlashVariant = new URL(normalizedUrl.toString());
+  if (trailingSlashVariant.pathname.endsWith("/") && trailingSlashVariant.pathname !== "/") {
+    trailingSlashVariant.pathname = trailingSlashVariant.pathname.replace(/\/+$/, "");
+  } else if (!trailingSlashVariant.pathname.endsWith("/")) {
+    trailingSlashVariant.pathname = `${trailingSlashVariant.pathname}/`;
+  }
+  push(trailingSlashVariant);
+
+  return out;
+}
+
+function classifyEntryFetchError(error: unknown): "timeout" | "redirect_loop" | "network" {
+  const message = String((error as Error)?.message ?? error).toLowerCase();
+  if (message.includes("abort") || message.includes("timeout")) return "timeout";
+  if (message.includes("redirect")) return "redirect_loop";
+  return "network";
+}
+
+function toContentSnippet(value: string, maxChars = 500): string {
+  return value
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, maxChars);
+}
+
+function looksLikeHtmlPayload(html: string): boolean {
+  const snippet = toContentSnippet(html, 600).toLowerCase();
+  return snippet.includes("<html") || snippet.includes("<body") || snippet.includes("<!doctype html") || snippet.includes("<head");
 }
 
 function createDiagnostic(input: {
@@ -1274,9 +1341,11 @@ function resolveSourceSelection(input: {
   selectedSourceHtmlPathAbs: string;
   selectedHtml: string;
   renderedDomQuality: RenderedDomQuality;
+  rawHtmlQuality: RenderedDomQuality;
   degraded: boolean;
 } {
   const rawHtml = input.entryHtml;
+  const rawHtmlQuality = evaluateRenderedDomQuality(rawHtml);
   const renderedDomPathAbs = input.renderedCapture.documents[0]?.htmlPathAbs ?? "";
 
   const renderedHtml = (() => {
@@ -1296,6 +1365,7 @@ function resolveSourceSelection(input: {
       selectedSourceHtmlPathAbs: renderedDomPathAbs,
       selectedHtml: renderedHtml,
       renderedDomQuality,
+      rawHtmlQuality,
       degraded: false,
     };
   }
@@ -1328,7 +1398,7 @@ function resolveSourceSelection(input: {
     );
   }
 
-  if (rawHtml.trim().length > 0) {
+  if (rawHtml.trim().length > 0 && rawHtmlQuality.quality !== "unusable") {
     input.diagnostics.push(
       createDiagnostic({
         severity: "warning",
@@ -1338,6 +1408,7 @@ function resolveSourceSelection(input: {
         details: {
           renderedCaptureStatus: input.renderedCapture.status,
           renderedDomQuality: renderedDomQuality.quality,
+          rawHtmlQuality: rawHtmlQuality.quality,
         },
       }),
     );
@@ -1351,9 +1422,23 @@ function resolveSourceSelection(input: {
           sourceMode: "raw_html_fallback",
           renderedCaptureStatus: input.renderedCapture.status,
           renderedDomQuality: renderedDomQuality.quality,
+          rawHtmlQuality: rawHtmlQuality.quality,
         },
       }),
     );
+    if (rawHtmlQuality.quality === "weak") {
+      input.diagnostics.push(
+        createDiagnostic({
+          severity: "warning",
+          code: "RAW_HTML_WEAK_BUT_USABLE",
+          message: "Raw HTML appears shell-like but remains minimally usable as degraded fallback source.",
+          targetUrl: null,
+          details: {
+            rawHtmlQuality,
+          },
+        }),
+      );
+    }
 
     return {
       sourceMode: "raw_html_fallback",
@@ -1361,6 +1446,7 @@ function resolveSourceSelection(input: {
       selectedSourceHtmlPathAbs: input.responseHtmlPathAbs,
       selectedHtml: rawHtml,
       renderedDomQuality,
+      rawHtmlQuality,
       degraded: true,
     };
   }
@@ -1374,6 +1460,7 @@ function resolveSourceSelection(input: {
       details: {
         renderedCaptureStatus: input.renderedCapture.status,
         renderedDomQuality: renderedDomQuality.quality,
+        rawHtmlQuality: rawHtmlQuality.quality,
       },
     }),
   );
@@ -1384,6 +1471,7 @@ function resolveSourceSelection(input: {
     selectedSourceHtmlPathAbs: input.responseHtmlPathAbs,
     selectedHtml: "",
     renderedDomQuality,
+    rawHtmlQuality,
     degraded: true,
   };
 }
@@ -1456,6 +1544,14 @@ export async function importPublicSinglePageUrlToSnapshot(input: {
           hasHeading: false,
           reason: "invalid_input_url",
         },
+        rawHtmlQuality: {
+          quality: "unusable",
+          bodyTextLength: 0,
+          meaningfulNodeCount: 0,
+          sectionCandidateCount: 0,
+          hasHeading: false,
+          reason: "invalid_input_url",
+        },
         degraded: true,
       },
       responseHtmlPathAbs: "",
@@ -1477,6 +1573,8 @@ export async function importPublicSinglePageUrlToSnapshot(input: {
   const entryHtmlPathAbs = path.resolve(snapshotRootDirAbs, "index.html");
   const assetsDirAbs = path.resolve(snapshotRootDirAbs, "assets");
   const renderedCaptureManifestPathAbs = path.resolve(snapshotRootDirAbs, "rendered-capture.json");
+  const entryResponseSnippetPathAbs = path.resolve(snapshotRootDirAbs, "entry-response-snippet.txt");
+  const acquisitionEvidencePathAbs = path.resolve(snapshotRootDirAbs, "acquisition-evidence.json");
 
   const fixtureSpec: UrlSnapshotFixtureSpec = {
     fixtureId: snapshotId,
@@ -1507,78 +1605,210 @@ export async function importPublicSinglePageUrlToSnapshot(input: {
     renderedObservedAssetUrls: [],
     diagnostics: [],
   };
+  let renderedCaptureDurationMs = 0;
 
-  let entryResponse: Response | null = null;
-  try {
-    entryResponse = await fetcher(normalizedHref, {
-      method: "GET",
-      cache: "no-store",
-      headers: {
-        accept: "text/html,application/xhtml+xml;q=0.9,*/*;q=0.8",
-        "user-agent": "GNR8-Operator-URL-Import/1.0 (+single-page)",
-      },
-    });
-  } catch (error) {
-    diagnostics.push(
-      createDiagnostic({
-        severity: "fatal",
-        code: "ENTRY_FETCH_FAILED",
-        message: "Failed to fetch entry URL",
-        targetUrl: normalizedHref,
-        details: { error: String((error as Error)?.message ?? error) },
-      }),
-    );
-  }
+  const entryFetchCandidates = createEntryFetchCandidateUrls(normalizedUrl);
+  const entryFetchAttemptDetails: Array<{
+    url: string;
+    attempt: number;
+    status: number | null;
+    contentType: string | null;
+    outcome: "success" | "non_ok" | "timeout" | "redirect_loop" | "network_error" | "empty_body" | "unsupported_content_type";
+    durationMs: number;
+    error: string | null;
+  }> = [];
 
   let entryHtml = "";
-  if (entryResponse) {
-    if (!entryResponse.ok) {
-      diagnostics.push(
-        createDiagnostic({
-          severity: "fatal",
-          code: "ENTRY_FETCH_NON_OK",
-          message: "Entry URL returned non-success status",
-          targetUrl: normalizedHref,
-          details: { status: entryResponse.status, statusText: entryResponse.statusText },
-        }),
-      );
-    } else {
-      const contentType = safeContentType(entryResponse.headers.get("content-type"));
-      if (!isHtmlResponse(contentType)) {
-        diagnostics.push(
-          createDiagnostic({
-            severity: "fatal",
-            code: "ENTRY_NON_HTML_RESPONSE",
-            message: "Entry URL did not return an HTML response",
-            targetUrl: normalizedHref,
-            details: { contentType },
-          }),
-        );
-      }
+  let entryFetchUrlUsed: string | null = null;
+  let lastSuccessfulResponseContentType: string | null = null;
 
-      entryHtml = await entryResponse.text();
-      if (!entryHtml.trim()) {
-        diagnostics.push(
-          createDiagnostic({
-            severity: "fatal",
-            code: "ENTRY_EMPTY_RESPONSE",
-            message: "Entry HTML response body is empty",
-            targetUrl: normalizedHref,
-            details: null,
-          }),
-        );
+  outer: for (const candidateUrl of entryFetchCandidates) {
+    for (let attempt = 1; attempt <= ENTRY_FETCH_MAX_ATTEMPTS; attempt++) {
+      const startedAt = Date.now();
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), ENTRY_FETCH_TIMEOUT_MS);
+
+      try {
+        const response = await fetcher(candidateUrl, {
+          method: "GET",
+          cache: "no-store",
+          redirect: "follow",
+          signal: controller.signal,
+          headers: {
+            accept: "text/html,application/xhtml+xml;q=0.9,*/*;q=0.8",
+            "user-agent": ENTRY_FETCH_USER_AGENT,
+          },
+        });
+        clearTimeout(timer);
+
+        const contentType = safeContentType(response.headers.get("content-type"));
+        if (!response.ok) {
+          entryFetchAttemptDetails.push({
+            url: candidateUrl,
+            attempt,
+            status: response.status,
+            contentType,
+            outcome: "non_ok",
+            durationMs: Date.now() - startedAt,
+            error: null,
+          });
+          diagnostics.push(
+            createDiagnostic({
+              severity: "warning",
+              code: "ENTRY_FETCH_NON_OK",
+              message: "Entry URL attempt returned non-success status",
+              targetUrl: candidateUrl,
+              details: { attempt, status: response.status, statusText: response.statusText },
+            }),
+          );
+          continue;
+        }
+
+        const body = await response.text();
+        const htmlLikeByType = isHtmlResponse(contentType);
+        const htmlLikeByBody = looksLikeHtmlPayload(body);
+        if (!htmlLikeByType && !htmlLikeByBody) {
+          entryFetchAttemptDetails.push({
+            url: candidateUrl,
+            attempt,
+            status: response.status,
+            contentType,
+            outcome: "unsupported_content_type",
+            durationMs: Date.now() - startedAt,
+            error: null,
+          });
+          diagnostics.push(
+            createDiagnostic({
+              severity: "warning",
+              code: "ENTRY_FETCH_UNSUPPORTED_CONTENT_TYPE",
+              message: "Entry fetch returned unsupported content-type and non-HTML body",
+              targetUrl: candidateUrl,
+              details: { attempt, contentType, snippet: toContentSnippet(body) },
+            }),
+          );
+          continue;
+        }
+
+        if (!htmlLikeByType && htmlLikeByBody) {
+          diagnostics.push(
+            createDiagnostic({
+              severity: "warning",
+              code: "ENTRY_FETCH_UNSUPPORTED_CONTENT_TYPE",
+              message: "Entry fetch content-type is non-HTML but body appears HTML-like; accepting with degraded confidence.",
+              targetUrl: candidateUrl,
+              details: { attempt, contentType },
+            }),
+          );
+        }
+
+        if (!body.trim()) {
+          entryFetchAttemptDetails.push({
+            url: candidateUrl,
+            attempt,
+            status: response.status,
+            contentType,
+            outcome: "empty_body",
+            durationMs: Date.now() - startedAt,
+            error: null,
+          });
+          diagnostics.push(
+            createDiagnostic({
+              severity: "warning",
+              code: "ENTRY_EMPTY_RESPONSE",
+              message: "Entry HTML response body is empty",
+              targetUrl: candidateUrl,
+              details: { attempt },
+            }),
+          );
+          continue;
+        }
+
+        entryFetchAttemptDetails.push({
+          url: candidateUrl,
+          attempt,
+          status: response.status,
+          contentType,
+          outcome: "success",
+          durationMs: Date.now() - startedAt,
+          error: null,
+        });
+        entryHtml = body;
+        entryFetchUrlUsed = candidateUrl;
+        lastSuccessfulResponseContentType = contentType;
+        break outer;
+      } catch (error) {
+        clearTimeout(timer);
+        const classification = classifyEntryFetchError(error);
+        entryFetchAttemptDetails.push({
+          url: candidateUrl,
+          attempt,
+          status: null,
+          contentType: null,
+          outcome: classification === "timeout" ? "timeout" : classification === "redirect_loop" ? "redirect_loop" : "network_error",
+          durationMs: Date.now() - startedAt,
+          error: String((error as Error)?.message ?? error),
+        });
+        if (classification === "timeout") {
+          diagnostics.push(
+            createDiagnostic({
+              severity: "warning",
+              code: "ENTRY_FETCH_TIMEOUT",
+              message: "Entry fetch attempt timed out",
+              targetUrl: candidateUrl,
+              details: { attempt, timeoutMs: ENTRY_FETCH_TIMEOUT_MS, error: String((error as Error)?.message ?? error) },
+            }),
+          );
+        } else if (classification === "redirect_loop") {
+          diagnostics.push(
+            createDiagnostic({
+              severity: "warning",
+              code: "ENTRY_FETCH_REDIRECT_LOOP",
+              message: "Entry fetch encountered redirect loop or redirect failure",
+              targetUrl: candidateUrl,
+              details: { attempt, error: String((error as Error)?.message ?? error) },
+            }),
+          );
+        } else {
+          diagnostics.push(
+            createDiagnostic({
+              severity: "warning",
+              code: "ENTRY_FETCH_FAILED",
+              message: "Entry fetch attempt failed due to network/TLS/runtime error",
+              targetUrl: candidateUrl,
+              details: { attempt, error: String((error as Error)?.message ?? error) },
+            }),
+          );
+        }
       }
     }
   }
 
+  if (!entryHtml.trim()) {
+    diagnostics.push(
+      createDiagnostic({
+        severity: "fatal",
+        code: "ENTRY_FETCH_FAILED",
+        message: "Failed to fetch usable entry HTML after bounded retries and URL normalization candidates.",
+        targetUrl: normalizedHref,
+        details: {
+          candidatesTried: entryFetchCandidates,
+          attempts: entryFetchAttemptDetails,
+        },
+      }),
+    );
+  }
+
   fs.writeFileSync(responseHtmlPathAbs, entryHtml, "utf8");
+  fs.writeFileSync(entryResponseSnippetPathAbs, `${toContentSnippet(entryHtml, 2000)}\n`, "utf8");
 
   if (!hasFatal(diagnostics) && entryHtml) {
+    const captureStartedAt = Date.now();
     renderedCapture = await runRenderedCapture({
-      sourceUrl: normalizedHref,
+      sourceUrl: entryFetchUrlUsed ?? normalizedHref,
       snapshotRootDirAbs,
       executor: input.renderedCaptureExecutor,
     });
+    renderedCaptureDurationMs = Date.now() - captureStartedAt;
     writeJsonStable(renderedCaptureManifestPathAbs, renderedCapture as unknown as JsonValue);
     appendRenderedCaptureDiagnostics({
       diagnostics,
@@ -2074,6 +2304,30 @@ export async function importPublicSinglePageUrlToSnapshot(input: {
   } as unknown as JsonValue);
 
   writeJsonStable(path.resolve(snapshotRootDirAbs, "url-fetch-manifest.json"), sortedManifest as unknown as JsonValue);
+  writeJsonStable(acquisitionEvidencePathAbs, {
+    kind: "import_acquisition_evidence_v1",
+    entryFetch: {
+      chosenUrl: entryFetchUrlUsed ?? null,
+      finalContentType: lastSuccessfulResponseContentType,
+      attempts: entryFetchAttemptDetails,
+      responseSnippetPathAbs: entryResponseSnippetPathAbs,
+    },
+    renderedCapture: {
+      status: renderedCapture.status,
+      durationMs: renderedCaptureDurationMs,
+      documentCount: renderedCapture.documents.length,
+      screenshotCount: renderedCapture.screenshots.length,
+      readinessStates: renderedCapture.documents.map((doc) => doc.readinessState),
+      diagnostics: renderedCapture.diagnostics.map((entry) => entry.code),
+    },
+    selectedSource: {
+      mode: sourceSelection.sourceMode,
+      fidelityStatus: sourceSelection.fidelityStatus,
+      renderedDomQuality: sourceSelection.renderedDomQuality,
+      rawHtmlQuality: sourceSelection.rawHtmlQuality,
+      degraded: sourceSelection.degraded,
+    },
+  } as unknown as JsonValue);
 
   return {
     kind: "url_single_page_import_snapshot_v1",
@@ -2089,6 +2343,7 @@ export async function importPublicSinglePageUrlToSnapshot(input: {
       fidelityStatus: sourceSelection.fidelityStatus,
       selectedSourceHtmlPathAbs: sourceSelection.selectedSourceHtmlPathAbs,
       renderedDomQuality: sourceSelection.renderedDomQuality,
+      rawHtmlQuality: sourceSelection.rawHtmlQuality,
       degraded: sourceSelection.degraded,
     },
     responseHtmlPathAbs,

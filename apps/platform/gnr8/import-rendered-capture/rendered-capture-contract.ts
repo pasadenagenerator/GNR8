@@ -6,8 +6,12 @@ export type RenderedCaptureStatus = "available" | "unavailable" | "failed";
 
 export type RenderedCaptureDiagnosticCode =
   | "RENDERED_CAPTURE_UNAVAILABLE"
+  | "RENDERED_CAPTURE_BROWSER_START_FAILED"
+  | "BROWSER_NAVIGATION_FAILED"
   | "RENDERED_CAPTURE_TIMEOUT"
   | "RENDERED_CAPTURE_PARTIAL"
+  | "RENDERED_CAPTURE_DOM_STILL_SHELL"
+  | "RENDERED_CAPTURE_RECOVERED_ON_RETRY"
   | "RENDERED_CAPTURE_FAILED"
   | "SCREENSHOT_CAPTURE_FAILED"
   | "COMPUTED_STYLE_SAMPLE_WEAK";
@@ -77,6 +81,9 @@ export type RenderedCaptureReadinessPolicy = {
   domStabilizationWindowMs: number;
   domStabilizationPollMs: number;
   maxTotalCaptureMs: number;
+  shellContentMinLength?: number;
+  shellDetectionRetryCount?: number;
+  shellDetectionRetryDelayMs?: number;
 };
 
 export type RenderedCaptureViewport = {
