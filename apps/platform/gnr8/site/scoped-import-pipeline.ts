@@ -58,6 +58,90 @@ function toCoverage(input: { sampleCount: number; expectedCount?: number }): num
   return Number((sampleCount / expectedCount).toFixed(3))
 }
 
+function buildRenderedCaptureExecutionFromSnapshot(snapshot: UrlSinglePageImportSnapshot): RuntimeImportProvenanceSummary['renderedCapture']['execution'] {
+  const renderedDiagnostics = Array.isArray(snapshot.renderedCapture.diagnostics) ? snapshot.renderedCapture.diagnostics : []
+  const renderedDocuments = Array.isArray(snapshot.renderedCapture.documents) ? snapshot.renderedCapture.documents : []
+  const renderedScreenshots = Array.isArray(snapshot.renderedCapture.screenshots) ? snapshot.renderedCapture.screenshots : []
+  const renderedStyleSamples = Array.isArray(snapshot.renderedCapture.computedStyleSamples) ? snapshot.renderedCapture.computedStyleSamples : []
+  const codes = new Set(
+    renderedDiagnostics
+      .map((entry) => normalizeText(entry?.code))
+      .filter(Boolean),
+  )
+  const hasCode = (code: string): boolean => codes.has(code)
+  const firstCode = (candidates: string[]): string | null => candidates.find((code) => hasCode(code)) ?? null
+
+  const environmentStatus: RuntimeImportProvenanceSummary['renderedCapture']['execution']['environmentStatus'] =
+    hasCode('ENVIRONMENT_UNSUPPORTED') || hasCode('RENDERED_CAPTURE_UNAVAILABLE')
+      ? 'unsupported'
+      : hasCode('BROWSER_LAUNCH_SUCCEEDED') || hasCode('NAVIGATION_SUCCEEDED')
+        ? 'supported'
+        : 'unknown'
+  const browserLaunch: RuntimeImportProvenanceSummary['renderedCapture']['execution']['browserLaunch'] = hasCode('BROWSER_LAUNCH_FAILED')
+    ? 'failed'
+    : hasCode('BROWSER_LAUNCH_SUCCEEDED')
+      ? 'succeeded'
+      : 'not_attempted'
+  const navigation: RuntimeImportProvenanceSummary['renderedCapture']['execution']['navigation'] = hasCode('NAVIGATION_FAILED')
+    ? 'failed'
+    : hasCode('NAVIGATION_SUCCEEDED')
+      ? 'succeeded'
+      : 'not_attempted'
+  const dom: RuntimeImportProvenanceSummary['renderedCapture']['execution']['dom'] =
+    renderedDocuments.length > 0
+      ? 'captured'
+      : hasCode('DOM_EMPTY_AFTER_RENDER') || hasCode('RENDERED_CAPTURE_DOM_EMPTY_AFTER_NAVIGATION') || hasCode('NAVIGATION_SUCCEEDED')
+        ? 'empty_or_failed'
+        : 'not_attempted'
+  const screenshot: RuntimeImportProvenanceSummary['renderedCapture']['execution']['screenshot'] =
+    renderedScreenshots.length > 0 ? 'captured' : 'none'
+  const styleSampling: RuntimeImportProvenanceSummary['renderedCapture']['execution']['styleSampling'] =
+    renderedStyleSamples.length > 0
+      ? 'captured'
+      : hasCode('STYLE_SAMPLING_FAILED') || hasCode('RENDERED_CAPTURE_STYLE_SAMPLING_FAILED') || hasCode('STYLE_SAMPLING_STARTED')
+        ? 'failed_or_empty'
+        : 'not_attempted'
+
+  if (environmentStatus === 'unsupported') {
+    return {
+      environmentStatus,
+      failureCategory: 'environment',
+      failureCode: firstCode(['ENVIRONMENT_UNSUPPORTED', 'RENDERED_CAPTURE_UNAVAILABLE']),
+      browserLaunch,
+      navigation,
+      dom,
+      screenshot,
+      styleSampling,
+    }
+  }
+
+  const pageFailureCode = firstCode([
+    'BROWSER_LAUNCH_FAILED',
+    'RENDERED_CAPTURE_BROWSER_START_FAILED',
+    'NAVIGATION_FAILED',
+    'BROWSER_NAVIGATION_FAILED',
+    'DOM_EMPTY_AFTER_RENDER',
+    'RENDERED_CAPTURE_DOM_EMPTY_AFTER_NAVIGATION',
+    'STYLE_SAMPLING_FAILED',
+    'RENDERED_CAPTURE_STYLE_SAMPLING_FAILED',
+    'SCREENSHOT_FAILED',
+    'SCREENSHOT_CAPTURE_FAILED',
+  ])
+  const failureCategory: RuntimeImportProvenanceSummary['renderedCapture']['execution']['failureCategory'] =
+    pageFailureCode || snapshot.renderedCapture.status === 'failed' ? 'page' : 'none'
+
+  return {
+    environmentStatus,
+    failureCategory,
+    failureCode: failureCategory === 'none' ? null : pageFailureCode,
+    browserLaunch,
+    navigation,
+    dom,
+    screenshot,
+    styleSampling,
+  }
+}
+
 function resolveRenderedCaptureStatus(snapshot: UrlSinglePageImportSnapshot): 'available' | 'partial' | 'failed' {
   if (snapshot.renderedCapture.status === 'failed' || snapshot.renderedCapture.status === 'unavailable') return 'failed'
   const documents = Array.isArray(snapshot.renderedCapture.documents) ? snapshot.renderedCapture.documents : []
@@ -272,6 +356,7 @@ function buildImportProvenanceSummary(snapshot: UrlSinglePageImportSnapshot, sty
         viewport: Boolean(renderedViewportScreenshotPath) || snapshot.renderedCapture.screenshots.some((shot) => shot.captureType === 'desktop_viewport'),
         fullPage: Boolean(renderedFullpageScreenshotPath) || snapshot.renderedCapture.screenshots.some((shot) => shot.captureType === 'desktop_fullpage'),
       },
+      execution: buildRenderedCaptureExecutionFromSnapshot(snapshot),
     },
     importDiagnosticCodes: uniqueSorted([...captureDiagnostics, ...importDiagnostics]),
     captureEvidence: {

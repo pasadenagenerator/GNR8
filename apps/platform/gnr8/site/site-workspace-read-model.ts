@@ -737,6 +737,68 @@ function parseImportProvenanceSummary(value: unknown): RuntimeImportProvenanceSu
       viewport: Boolean(renderedCapture?.screenshots && isRecord(renderedCapture.screenshots) && renderedCapture.screenshots.viewport),
       fullPage: Boolean(renderedCapture?.screenshots && isRecord(renderedCapture.screenshots) && renderedCapture.screenshots.fullPage),
     },
+    execution: {
+      environmentStatus:
+        normalizeText(renderedCapture?.execution && isRecord(renderedCapture.execution) ? renderedCapture.execution.environmentStatus : '') === 'supported' ||
+        normalizeText(renderedCapture?.execution && isRecord(renderedCapture.execution) ? renderedCapture.execution.environmentStatus : '') === 'unsupported' ||
+        normalizeText(renderedCapture?.execution && isRecord(renderedCapture.execution) ? renderedCapture.execution.environmentStatus : '') === 'unknown'
+          ? (normalizeText(
+              renderedCapture?.execution && isRecord(renderedCapture.execution) ? renderedCapture.execution.environmentStatus : '',
+            ) as RuntimeImportProvenanceSummary['renderedCapture']['execution']['environmentStatus'])
+          : 'unknown',
+      failureCategory:
+        normalizeText(renderedCapture?.execution && isRecord(renderedCapture.execution) ? renderedCapture.execution.failureCategory : '') === 'environment' ||
+        normalizeText(renderedCapture?.execution && isRecord(renderedCapture.execution) ? renderedCapture.execution.failureCategory : '') === 'page' ||
+        normalizeText(renderedCapture?.execution && isRecord(renderedCapture.execution) ? renderedCapture.execution.failureCategory : '') === 'none'
+          ? (normalizeText(
+              renderedCapture?.execution && isRecord(renderedCapture.execution) ? renderedCapture.execution.failureCategory : '',
+            ) as RuntimeImportProvenanceSummary['renderedCapture']['execution']['failureCategory'])
+          : 'none',
+      failureCode: toTextOrNull(renderedCapture?.execution && isRecord(renderedCapture.execution) ? renderedCapture.execution.failureCode : null),
+      browserLaunch:
+        normalizeText(renderedCapture?.execution && isRecord(renderedCapture.execution) ? renderedCapture.execution.browserLaunch : '') === 'not_attempted' ||
+        normalizeText(renderedCapture?.execution && isRecord(renderedCapture.execution) ? renderedCapture.execution.browserLaunch : '') === 'succeeded' ||
+        normalizeText(renderedCapture?.execution && isRecord(renderedCapture.execution) ? renderedCapture.execution.browserLaunch : '') === 'failed'
+          ? (normalizeText(
+              renderedCapture?.execution && isRecord(renderedCapture.execution) ? renderedCapture.execution.browserLaunch : '',
+            ) as RuntimeImportProvenanceSummary['renderedCapture']['execution']['browserLaunch'])
+          : 'not_attempted',
+      navigation:
+        normalizeText(renderedCapture?.execution && isRecord(renderedCapture.execution) ? renderedCapture.execution.navigation : '') === 'not_attempted' ||
+        normalizeText(renderedCapture?.execution && isRecord(renderedCapture.execution) ? renderedCapture.execution.navigation : '') === 'succeeded' ||
+        normalizeText(renderedCapture?.execution && isRecord(renderedCapture.execution) ? renderedCapture.execution.navigation : '') === 'failed'
+          ? (normalizeText(
+              renderedCapture?.execution && isRecord(renderedCapture.execution) ? renderedCapture.execution.navigation : '',
+            ) as RuntimeImportProvenanceSummary['renderedCapture']['execution']['navigation'])
+          : 'not_attempted',
+      dom:
+        normalizeText(renderedCapture?.execution && isRecord(renderedCapture.execution) ? renderedCapture.execution.dom : '') === 'not_attempted' ||
+        normalizeText(renderedCapture?.execution && isRecord(renderedCapture.execution) ? renderedCapture.execution.dom : '') === 'captured' ||
+        normalizeText(renderedCapture?.execution && isRecord(renderedCapture.execution) ? renderedCapture.execution.dom : '') === 'empty_or_failed'
+          ? (normalizeText(
+              renderedCapture?.execution && isRecord(renderedCapture.execution) ? renderedCapture.execution.dom : '',
+            ) as RuntimeImportProvenanceSummary['renderedCapture']['execution']['dom'])
+          : 'not_attempted',
+      screenshot:
+        normalizeText(renderedCapture?.execution && isRecord(renderedCapture.execution) ? renderedCapture.execution.screenshot : '') === 'none' ||
+        normalizeText(renderedCapture?.execution && isRecord(renderedCapture.execution) ? renderedCapture.execution.screenshot : '') === 'captured'
+          ? (normalizeText(
+              renderedCapture?.execution && isRecord(renderedCapture.execution) ? renderedCapture.execution.screenshot : '',
+            ) as RuntimeImportProvenanceSummary['renderedCapture']['execution']['screenshot'])
+          : Boolean(renderedCapture?.screenshots && isRecord(renderedCapture.screenshots) && (renderedCapture.screenshots.viewport || renderedCapture.screenshots.fullPage))
+            ? 'captured'
+            : 'none',
+      styleSampling:
+        normalizeText(renderedCapture?.execution && isRecord(renderedCapture.execution) ? renderedCapture.execution.styleSampling : '') === 'not_attempted' ||
+        normalizeText(renderedCapture?.execution && isRecord(renderedCapture.execution) ? renderedCapture.execution.styleSampling : '') === 'captured' ||
+        normalizeText(renderedCapture?.execution && isRecord(renderedCapture.execution) ? renderedCapture.execution.styleSampling : '') === 'failed_or_empty'
+          ? (normalizeText(
+              renderedCapture?.execution && isRecord(renderedCapture.execution) ? renderedCapture.execution.styleSampling : '',
+            ) as RuntimeImportProvenanceSummary['renderedCapture']['execution']['styleSampling'])
+          : Number.isFinite(Number(renderedCapture?.styleSampleCount)) && Number(renderedCapture?.styleSampleCount) > 0
+            ? 'captured'
+            : 'not_attempted',
+    },
   }
 
   return {
@@ -828,7 +890,15 @@ function parseImportFidelity(input: {
   const styleSignals = parsedSummary.styleSignals ?? parseStyleSignalsFromSemanticLabels(input.pageRows)
   const evidenceDiagnostics = [...new Set([
     ...importDiagnosticCodes.filter((code) => code.startsWith('ENTRY_FETCH_')),
-    ...importDiagnosticCodes.filter((code) => code.startsWith('RENDERED_CAPTURE_')),
+    ...importDiagnosticCodes.filter(
+      (code) =>
+        code.startsWith('RENDERED_CAPTURE_') ||
+        code === 'ENVIRONMENT_UNSUPPORTED' ||
+        code.endsWith('_FAILED') ||
+        code.endsWith('_SUCCEEDED') ||
+        code.endsWith('_STARTED') ||
+        code.endsWith('_COMPLETED'),
+    ),
     ...(styleSignals?.diagnostics ?? []).map((diag) => diag.code).filter((code) => code.startsWith('STYLE_SIGNAL_') || code === 'STYLE_SAMPLE_LOW_COVERAGE'),
   ])].sort((a, b) => a.localeCompare(b))
 

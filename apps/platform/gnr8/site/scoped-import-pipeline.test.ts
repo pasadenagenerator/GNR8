@@ -389,6 +389,8 @@ test('scoped pipeline import uses pipeline path, maps consolidated sections, and
   assert.equal(createInput.importProvenanceSummary.renderedCapture.used, true)
   assert.equal(createInput.importProvenanceSummary.renderedCapture.status, 'partial')
   assert.equal(createInput.importProvenanceSummary.renderedCapture.styleCoverage, 0.3)
+  assert.equal(createInput.importProvenanceSummary.renderedCapture.execution.environmentStatus, 'unknown')
+  assert.equal(createInput.importProvenanceSummary.renderedCapture.execution.failureCategory, 'none')
   assert.ok(createInput.importProvenanceSummary.styleSignals != null)
   assert.equal(createInput.importProvenanceSummary.styleSignals.kind, 'style_signal_model_v2')
   assert.equal(persistedImportSummary.siteVersionId, 'site-version-1')
@@ -525,6 +527,96 @@ test('scoped pipeline import falls back to legacy when pipeline fails', async ()
   assert.equal(outcome.diagnostics.writePath.verificationRead.hasImportProvenanceSummary, true)
   assert.equal(legacyImportCalls, 1)
   assert.equal(legacyMigrateCalls, 1)
+})
+
+test('scoped pipeline persists environment-level rendered capture failure truth', async () => {
+  const pipeline = createSuccessPipelineFixture()
+  let createInput: any = null
+  let linkedArtifactId: string | null = null
+
+  const outcome = await runScopedImportPipeline({
+    snapshot: {
+      snapshotRootDirAbs: '/tmp/snapshot',
+      entryHtmlPathAbs: '/tmp/snapshot/index.html',
+      assetsDirAbs: '/tmp/snapshot/assets',
+      sourceMode: 'raw_html_fallback',
+      sourceSelection: {
+        sourceMode: 'raw_html_fallback',
+        fidelityStatus: 'degraded_import',
+        selectedSourceHtmlPathAbs: '/tmp/snapshot/response-html.raw.html',
+        renderedDomQuality: {
+          quality: 'unusable',
+          bodyTextLength: 0,
+          meaningfulNodeCount: 0,
+          sectionCandidateCount: 0,
+          hasHeading: false,
+          reason: 'env_unsupported',
+        },
+        degraded: true,
+      },
+      renderedCapture: {
+        status: 'unavailable',
+        documents: [],
+        screenshots: [],
+        computedStyleSamples: [],
+        diagnostics: [{ code: 'ENVIRONMENT_UNSUPPORTED' }, { code: 'RENDERED_CAPTURE_UNAVAILABLE' }],
+      },
+      importDiagnostics: {
+        issues: [{ code: 'ENVIRONMENT_UNSUPPORTED' }, { code: 'RAW_HTML_FALLBACK_USED' }],
+      },
+    } as any,
+    sourceUrl: 'https://env-unsupported.example/',
+    actor: 'test:env-failure',
+    deps: {
+      importStaticSite: async () => ({ status: 'ok', documentMeta: { source: { kind: 'single-entry-html' } } }) as any,
+      createImportManifest: () => ({ status: 'success' }) as any,
+      runLinearMigrationPipeline: () => pipeline as any,
+      createSiteVersionFromMigration: async (input) => {
+        createInput = input
+        return { siteId: 'runtime-site', siteVersionId: 'site-version-1', versionNo: 8 }
+      },
+      setSiteVersionImportProvenanceSummary: async () => ({ affectedRows: 1 }),
+      getSiteVersion: async () =>
+        ({
+          id: 'site-version-1',
+          siteId: 'runtime-site',
+          versionNo: 8,
+          state: 'DRAFT',
+          source: 'migration',
+          actor: 'test',
+          createdAt: new Date().toISOString(),
+          rendererCompatibilityVersion: 'gnr8-renderer-v1',
+          artifactId: linkedArtifactId,
+          importProvenanceSummary: createInput?.importProvenanceSummary ?? null,
+          pages: [],
+        }) as any,
+      buildDeterministicArtifactBundle: () =>
+        ({
+          siteId: 'runtime-site',
+          siteVersionId: 'site-version-1',
+          rendererCompatibilityVersion: 'gnr8-renderer-v1',
+          bundleSha256: 'bundle-sha',
+          htmlByPath: { '/': '<!doctype html><html><body>preview</body></html>' },
+          compiledTokenStyles: ':root{}',
+          assetFingerprintMap: {},
+          manifest: {},
+        }) as any,
+      createArtifact: async () => ({ artifactId: 'artifact-1' }),
+      bindArtifactToVersion: async (input) => {
+        linkedArtifactId = input.artifactId
+        return { affectedRows: 1 }
+      },
+      importHtmlToPage: () => ({}) as any,
+      migrateImportedPageToCanonicalDraft: async () => ({ siteId: 'legacy-site', siteVersionId: 'legacy-version', versionNo: 1 }),
+    },
+  })
+
+  assert.equal(outcome.mode, 'pipeline')
+  assert.equal(createInput.importProvenanceSummary.renderedCapture.execution.environmentStatus, 'unsupported')
+  assert.equal(createInput.importProvenanceSummary.renderedCapture.execution.failureCategory, 'environment')
+  assert.equal(createInput.importProvenanceSummary.renderedCapture.execution.failureCode, 'ENVIRONMENT_UNSUPPORTED')
+  assert.equal(createInput.importProvenanceSummary.renderedCapture.execution.browserLaunch, 'not_attempted')
+  assert.equal(createInput.importProvenanceSummary.renderedCapture.execution.navigation, 'not_attempted')
 })
 
 test('scoped pipeline import fails hard when artifact bind does not persist on created version row', async () => {

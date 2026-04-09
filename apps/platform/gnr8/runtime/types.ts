@@ -36,6 +36,16 @@ export type RuntimeImportProvenanceSummary = {
       viewport: boolean;
       fullPage: boolean;
     };
+    execution: {
+      environmentStatus: "supported" | "unsupported" | "unknown";
+      failureCategory: "environment" | "page" | "none";
+      failureCode: string | null;
+      browserLaunch: "not_attempted" | "succeeded" | "failed";
+      navigation: "not_attempted" | "succeeded" | "failed";
+      dom: "not_attempted" | "captured" | "empty_or_failed";
+      screenshot: "none" | "captured";
+      styleSampling: "not_attempted" | "captured" | "failed_or_empty";
+    };
   };
   importDiagnosticCodes: string[];
   captureEvidence: {

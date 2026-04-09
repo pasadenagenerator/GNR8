@@ -52,6 +52,29 @@ export type UrlImportDiagnosticCode =
   | "PRIMARY_STYLESHEET_FETCH_FAILED"
   | "PRIMARY_STYLESHEET_NOT_REWRITE_ELIGIBLE"
   | "PRIMARY_STYLESHEET_NOT_USED_IN_FINAL_HTML"
+  | "RENDERED_CAPTURE_RUNTIME_ENVIRONMENT"
+  | "ENVIRONMENT_UNSUPPORTED"
+  | "BROWSER_LAUNCH_STARTED"
+  | "BROWSER_LAUNCH_SUCCEEDED"
+  | "BROWSER_LAUNCH_FAILED"
+  | "PAGE_CREATION_STARTED"
+  | "PAGE_CREATION_SUCCEEDED"
+  | "NAVIGATION_STARTED"
+  | "NAVIGATION_SUCCEEDED"
+  | "NAVIGATION_FAILED"
+  | "READINESS_WAIT_STARTED"
+  | "READINESS_WAIT_COMPLETED"
+  | "SCREENSHOT_CAPTURE_STARTED"
+  | "SCREENSHOT_CAPTURE_SUCCEEDED"
+  | "SCREENSHOT_FAILED"
+  | "DOM_SERIALIZATION_STARTED"
+  | "DOM_SERIALIZATION_SUCCEEDED"
+  | "DOM_EMPTY_AFTER_RENDER"
+  | "STYLE_SAMPLING_STARTED"
+  | "STYLE_SAMPLING_SUCCEEDED"
+  | "STYLE_SAMPLING_FAILED"
+  | "CLEANUP_STARTED"
+  | "CLEANUP_COMPLETED"
   | "RENDERED_CAPTURE_UNAVAILABLE"
   | "RENDERED_CAPTURE_BROWSER_START_FAILED"
   | "BROWSER_NAVIGATION_FAILED"
@@ -932,6 +955,93 @@ function computeRenderedCaptureVisibilityStatus(input: {
   return "partial";
 }
 
+function buildRenderedCaptureExecutionTruth(input: {
+  renderedCapture: RenderedCaptureResult;
+  renderedDomQuality: RenderedDomQuality;
+}): {
+  environmentStatus: "supported" | "unsupported" | "unknown";
+  failureCategory: "environment" | "page" | "none";
+  failureCode: string | null;
+  browserLaunch: "not_attempted" | "succeeded" | "failed";
+  navigation: "not_attempted" | "succeeded" | "failed";
+  dom: "not_attempted" | "captured" | "empty_or_failed";
+  screenshot: "none" | "captured";
+  styleSampling: "not_attempted" | "captured" | "failed_or_empty";
+} {
+  const codes = new Set(input.renderedCapture.diagnostics.map((entry) => String(entry.code ?? "").trim()).filter(Boolean));
+  const hasCode = (code: string): boolean => codes.has(code);
+  const firstCode = (candidates: string[]): string | null => candidates.find((code) => hasCode(code)) ?? null;
+
+  const environmentStatus: "supported" | "unsupported" | "unknown" =
+    hasCode("ENVIRONMENT_UNSUPPORTED") || hasCode("RENDERED_CAPTURE_UNAVAILABLE")
+      ? "unsupported"
+      : hasCode("BROWSER_LAUNCH_SUCCEEDED") || hasCode("NAVIGATION_SUCCEEDED")
+        ? "supported"
+        : "unknown";
+  const browserLaunch: "not_attempted" | "succeeded" | "failed" = hasCode("BROWSER_LAUNCH_FAILED")
+    ? "failed"
+    : hasCode("BROWSER_LAUNCH_SUCCEEDED")
+      ? "succeeded"
+      : "not_attempted";
+  const navigation: "not_attempted" | "succeeded" | "failed" = hasCode("NAVIGATION_FAILED")
+    ? "failed"
+    : hasCode("NAVIGATION_SUCCEEDED")
+      ? "succeeded"
+      : "not_attempted";
+  const screenshot: "none" | "captured" = input.renderedCapture.screenshots.length > 0 ? "captured" : "none";
+  const dom: "not_attempted" | "captured" | "empty_or_failed" =
+    input.renderedCapture.documents.length > 0
+      ? "captured"
+      : hasCode("DOM_EMPTY_AFTER_RENDER") || hasCode("RENDERED_CAPTURE_DOM_EMPTY_AFTER_NAVIGATION") || hasCode("NAVIGATION_SUCCEEDED")
+        ? "empty_or_failed"
+        : "not_attempted";
+  const styleSampling: "not_attempted" | "captured" | "failed_or_empty" =
+    input.renderedCapture.computedStyleSamples.length > 0
+      ? "captured"
+      : hasCode("STYLE_SAMPLING_FAILED") || hasCode("RENDERED_CAPTURE_STYLE_SAMPLING_FAILED") || hasCode("STYLE_SAMPLING_STARTED")
+        ? "failed_or_empty"
+        : "not_attempted";
+
+  if (environmentStatus === "unsupported") {
+    return {
+      environmentStatus,
+      failureCategory: "environment",
+      failureCode: firstCode(["ENVIRONMENT_UNSUPPORTED", "RENDERED_CAPTURE_UNAVAILABLE"]),
+      browserLaunch,
+      navigation,
+      dom,
+      screenshot,
+      styleSampling,
+    };
+  }
+
+  const pageFailureCode = firstCode([
+    "BROWSER_LAUNCH_FAILED",
+    "RENDERED_CAPTURE_BROWSER_START_FAILED",
+    "NAVIGATION_FAILED",
+    "BROWSER_NAVIGATION_FAILED",
+    "DOM_EMPTY_AFTER_RENDER",
+    "RENDERED_CAPTURE_DOM_EMPTY_AFTER_NAVIGATION",
+    "STYLE_SAMPLING_FAILED",
+    "RENDERED_CAPTURE_STYLE_SAMPLING_FAILED",
+    "SCREENSHOT_FAILED",
+    "SCREENSHOT_CAPTURE_FAILED",
+  ]);
+  const statusIsFailure = input.renderedCapture.status === "failed";
+  const failureCategory: "environment" | "page" | "none" = pageFailureCode || statusIsFailure ? "page" : "none";
+
+  return {
+    environmentStatus,
+    failureCategory,
+    failureCode: failureCategory === "none" ? null : pageFailureCode,
+    browserLaunch,
+    navigation,
+    dom,
+    screenshot,
+    styleSampling,
+  };
+}
+
 function buildRenderedQualityBreakdown(html: string): {
   domLength: number;
   textDensity: number;
@@ -1100,6 +1210,10 @@ function buildRenderedCaptureManifest(input: {
     renderedCapture: input.renderedCapture,
     renderedDomQuality: input.renderedDomQuality,
   });
+  const executionTruth = buildRenderedCaptureExecutionTruth({
+    renderedCapture: input.renderedCapture,
+    renderedDomQuality: input.renderedDomQuality,
+  });
 
   return {
     ...input.renderedCapture,
@@ -1118,6 +1232,7 @@ function buildRenderedCaptureManifest(input: {
       count: input.screenshotCount,
       paths: input.screenshotPaths,
     },
+    executionTruth,
   } as unknown as JsonValue;
 }
 
@@ -2566,6 +2681,10 @@ export async function importPublicSinglePageUrlToSnapshot(input: {
       attempted: renderedCaptureAttempted,
       status: renderedCapture.status,
       visibilityStatus: computeRenderedCaptureVisibilityStatus({
+        renderedCapture,
+        renderedDomQuality: sourceSelection.renderedDomQuality,
+      }),
+      executionTruth: buildRenderedCaptureExecutionTruth({
         renderedCapture,
         renderedDomQuality: sourceSelection.renderedDomQuality,
       }),

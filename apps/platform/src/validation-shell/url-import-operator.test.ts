@@ -192,6 +192,52 @@ test("rendered capture unavailable falls back to raw_html and preserves raw resp
   assert.equal(fs.existsSync(path.resolve(snapshot.snapshotRootDirAbs, "rendered", "screenshots", "fullpage.png")), false);
   assert.equal(fs.readFileSync(snapshot.responseHtmlPathAbs, "utf8").includes("Raw Fallback"), true);
   assert.equal(fs.readFileSync(snapshot.entryHtmlPathAbs, "utf8").includes("Raw Fallback"), true);
+
+  const acquisitionEvidence = JSON.parse(fs.readFileSync(path.resolve(snapshot.snapshotRootDirAbs, "acquisition-evidence.json"), "utf8"));
+  assert.equal(acquisitionEvidence.renderedCapture.executionTruth.environmentStatus, "unsupported");
+  assert.equal(acquisitionEvidence.renderedCapture.executionTruth.failureCategory, "environment");
+  assert.ok(
+    acquisitionEvidence.renderedCapture.executionTruth.failureCode === "ENVIRONMENT_UNSUPPORTED" ||
+      acquisitionEvidence.renderedCapture.executionTruth.failureCode === "RENDERED_CAPTURE_UNAVAILABLE",
+  );
+});
+
+test("environment-not-supported diagnostic path remains explicit and fallback stays safe", async () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "gnr8-url-import-env-unsupported-"));
+  const sourceUrl = "https://env-unsupported.example.com/";
+
+  const snapshot = await importPublicSinglePageUrlToSnapshot({
+    sourceUrl,
+    snapshotRootDirAbs: tmp,
+    fetchImpl: mockFetchFromTable({
+      [sourceUrl]: {
+        status: 200,
+        headers: { "content-type": "text/html; charset=utf-8" },
+        body: "<!doctype html><html><body><h1>Fallback Source</h1></body></html>",
+      },
+    }),
+    renderedCaptureExecutor: mockRenderedCaptureExecutor({
+      status: "unavailable",
+      document: null,
+      screenshots: [],
+      computedStyleSamples: [],
+      renderedObservedAssetUrls: [],
+      diagnostics: [
+        {
+          code: "ENVIRONMENT_UNSUPPORTED",
+          severity: "error",
+          message: "Playwright unavailable in runtime",
+          details: { reason: "PLAYWRIGHT_MODULE_MISSING" },
+        },
+      ],
+    }),
+  });
+
+  assert.equal(snapshot.sourceSelection.sourceMode, "raw_html_fallback");
+  assert.equal(snapshot.sourceSelection.fidelityStatus, "degraded_import");
+  assert.ok(snapshot.importDiagnostics.issues.some((issue) => issue.code === "ENVIRONMENT_UNSUPPORTED"));
+  assert.ok(snapshot.importDiagnostics.issues.some((issue) => issue.code === "RAW_HTML_FALLBACK_USED"));
+  assert.ok(fs.existsSync(snapshot.entryHtmlPathAbs));
 });
 
 test("rendered capture contract is persisted and rendered_dom becomes primary snapshot source", async () => {
@@ -512,6 +558,14 @@ test("rendered capture hard failure surfaces explicit navigation diagnostics", a
   assert.equal(snapshot.sourceSelection.fidelityStatus, "capture_failed");
   assert.ok(snapshot.importDiagnostics.issues.some((issue) => issue.code === "BROWSER_NAVIGATION_FAILED"));
   assert.ok(snapshot.importDiagnostics.issues.some((issue) => issue.code === "RENDERED_CAPTURE_BROWSER_START_FAILED"));
+  assert.ok(
+    snapshot.importDiagnostics.issues.some((issue) => issue.code === "NAVIGATION_FAILED") ||
+      snapshot.importDiagnostics.issues.some((issue) => issue.code === "BROWSER_NAVIGATION_FAILED"),
+  );
+  assert.ok(
+    snapshot.importDiagnostics.issues.some((issue) => issue.code === "BROWSER_LAUNCH_FAILED") ||
+      snapshot.importDiagnostics.issues.some((issue) => issue.code === "RENDERED_CAPTURE_BROWSER_START_FAILED"),
+  );
 });
 
 test("screenshot-only rendered capture is persisted as partial with coherent screenshot summary", async () => {
@@ -564,6 +618,10 @@ test("screenshot-only rendered capture is persisted as partial with coherent scr
   assert.equal(acquisitionEvidence.renderedCapture.screenshotCount, 1);
   assert.equal(typeof acquisitionEvidence.renderedCapture.screenshotPaths.viewport, "string");
   assert.equal(acquisitionEvidence.renderedCapture.screenshotPaths.fullPage, null);
+  assert.equal(acquisitionEvidence.renderedCapture.executionTruth.environmentStatus, "unknown");
+  assert.equal(acquisitionEvidence.renderedCapture.executionTruth.failureCategory, "none");
+  assert.equal(acquisitionEvidence.renderedCapture.executionTruth.screenshot, "captured");
+  assert.equal(acquisitionEvidence.renderedCapture.executionTruth.dom, "not_attempted");
 });
 
 test("style sampling failure is diagnosed explicitly and capture remains partial", async () => {
@@ -609,6 +667,7 @@ test("style sampling failure is diagnosed explicitly and capture remains partial
   const renderedCaptureManifest = JSON.parse(fs.readFileSync(path.resolve(snapshot.snapshotRootDirAbs, "rendered-capture.json"), "utf8"));
   assert.equal(renderedCaptureManifest.status, "partial");
   assert.equal(renderedCaptureManifest.styleSampleSummary.validSamples, 0);
+  assert.equal(renderedCaptureManifest.executionTruth.styleSampling, "failed_or_empty");
 });
 
 test("no-usable-source hard fails when rendered and raw HTML are both unusable", async () => {

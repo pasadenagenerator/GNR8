@@ -1,5 +1,6 @@
 import crypto from "node:crypto";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 
 import {
@@ -48,6 +49,78 @@ function resolveDynamicImport(): (specifier: string) => Promise<unknown> {
 
 function toErrorString(error: unknown): string {
   return String((error as Error)?.message ?? error);
+}
+
+function pushDiagnostic(
+  diagnostics: RenderedCaptureDiagnostic[],
+  input: {
+    code: RenderedCaptureDiagnostic["code"];
+    message: string;
+    severity?: RenderedCaptureDiagnostic["severity"];
+    details?: Record<string, unknown>;
+  },
+): void {
+  diagnostics.push({
+    code: input.code,
+    message: input.message,
+    severity: input.severity ?? "info",
+    details: input.details,
+  });
+}
+
+function detectEnvironmentUnsupportedReason(error: unknown): string | null {
+  const message = toErrorString(error).toLowerCase();
+  if (message.includes("cannot find module")) return "PLAYWRIGHT_MODULE_MISSING";
+  if (message.includes("playwright")) return "PLAYWRIGHT_RUNTIME_UNAVAILABLE";
+  if (message.includes("browser") && message.includes("executable")) return "BROWSER_BINARY_MISSING";
+  if (message.includes("sandbox")) return "BROWSER_SANDBOX_RESTRICTED";
+  return null;
+}
+
+function probeRuntimeEnvironment(snapshotRootDirAbs: string): {
+  runtime: string;
+  nodeVersion: string;
+  platform: string;
+  arch: string;
+  tmpDir: string;
+  tmpWritable: boolean;
+  snapshotDirWritable: boolean;
+  errors: string[];
+} {
+  const errors: string[] = [];
+  const tmpDir = os.tmpdir();
+  let tmpWritable = false;
+  let snapshotDirWritable = false;
+
+  try {
+    const probeFile = path.resolve(tmpDir, `gnr8-rendered-capture-probe-${process.pid}-${Date.now()}.tmp`);
+    fs.writeFileSync(probeFile, "ok", "utf8");
+    fs.unlinkSync(probeFile);
+    tmpWritable = true;
+  } catch (error) {
+    errors.push(`TMP_DIR_NOT_WRITABLE:${toErrorString(error)}`);
+  }
+
+  try {
+    fs.mkdirSync(snapshotRootDirAbs, { recursive: true });
+    const probeFile = path.resolve(snapshotRootDirAbs, `.capture-probe-${process.pid}-${Date.now()}.tmp`);
+    fs.writeFileSync(probeFile, "ok", "utf8");
+    fs.unlinkSync(probeFile);
+    snapshotDirWritable = true;
+  } catch (error) {
+    errors.push(`SNAPSHOT_DIR_NOT_WRITABLE:${toErrorString(error)}`);
+  }
+
+  return {
+    runtime: typeof process.env.NEXT_RUNTIME === "string" ? process.env.NEXT_RUNTIME : "nodejs",
+    nodeVersion: process.version,
+    platform: process.platform,
+    arch: process.arch,
+    tmpDir,
+    tmpWritable,
+    snapshotDirWritable,
+    errors,
+  };
 }
 
 type BrowserStyleProbe = {
@@ -360,19 +433,58 @@ function scoreCapturePass(pass: CapturePassResult): number {
 
 async function defaultRenderedCaptureExecutor(input: RenderedCaptureExecutorInput): Promise<RenderedCaptureExecutorResult> {
   const diagnostics: RenderedCaptureDiagnostic[] = [];
+  const environment = probeRuntimeEnvironment(input.snapshotRootDirAbs);
+  pushDiagnostic(diagnostics, {
+    code: "RENDERED_CAPTURE_RUNTIME_ENVIRONMENT",
+    message: "Rendered capture runtime environment probe completed",
+    details: environment,
+  });
+
+  if (!environment.tmpWritable || !environment.snapshotDirWritable) {
+    pushDiagnostic(diagnostics, {
+      code: "ENVIRONMENT_UNSUPPORTED",
+      severity: "error",
+      message: "Rendered capture environment is not writable for required temp/output paths",
+      details: {
+        tmpWritable: environment.tmpWritable,
+        snapshotDirWritable: environment.snapshotDirWritable,
+        errors: environment.errors,
+      },
+    });
+    pushDiagnostic(diagnostics, {
+      code: "RENDERED_CAPTURE_UNAVAILABLE",
+      severity: "warning",
+      message: "Rendered capture unavailable due to unsupported runtime environment",
+      details: { reason: "ENVIRONMENT_IO_UNSUPPORTED" },
+    });
+    return {
+      status: "unavailable",
+      document: null,
+      screenshots: [],
+      computedStyleSamples: [],
+      renderedObservedAssetUrls: [],
+      diagnostics,
+    };
+  }
 
   let playwright: any = null;
   try {
     const importDynamic = resolveDynamicImport();
     playwright = await importDynamic("playwright");
   } catch (error) {
-    diagnostics.push({
+    const reason = detectEnvironmentUnsupportedReason(error) ?? "PLAYWRIGHT_IMPORT_FAILED";
+    pushDiagnostic(diagnostics, {
+      code: "ENVIRONMENT_UNSUPPORTED",
+      severity: "error",
+      message: "Rendered capture environment does not provide a usable Playwright runtime",
+      details: { reason, error: toErrorString(error) },
+    });
+    pushDiagnostic(diagnostics, {
       code: "RENDERED_CAPTURE_UNAVAILABLE",
       severity: "warning",
       message: "Playwright runtime unavailable; rendered capture skipped",
       details: { error: toErrorString(error) },
     });
-
     return {
       status: "unavailable",
       document: null,
@@ -385,12 +497,17 @@ async function defaultRenderedCaptureExecutor(input: RenderedCaptureExecutorInpu
 
   const chromium = playwright?.chromium;
   if (!chromium) {
-    diagnostics.push({
+    pushDiagnostic(diagnostics, {
+      code: "ENVIRONMENT_UNSUPPORTED",
+      severity: "error",
+      message: "Rendered capture environment does not provide Playwright chromium",
+      details: { reason: "CHROMIUM_UNAVAILABLE" },
+    });
+    pushDiagnostic(diagnostics, {
       code: "RENDERED_CAPTURE_UNAVAILABLE",
       severity: "warning",
       message: "Playwright chromium runtime unavailable; rendered capture skipped",
     });
-
     return {
       status: "unavailable",
       document: null,
@@ -408,9 +525,26 @@ async function defaultRenderedCaptureExecutor(input: RenderedCaptureExecutorInpu
 
   try {
     try {
+      pushDiagnostic(diagnostics, { code: "BROWSER_LAUNCH_STARTED", message: "Starting browser launch for rendered capture" });
       browser = await chromium.launch({ headless: true });
+      pushDiagnostic(diagnostics, { code: "BROWSER_LAUNCH_SUCCEEDED", message: "Browser launch succeeded for rendered capture" });
     } catch (error) {
-      diagnostics.push({
+      const reason = detectEnvironmentUnsupportedReason(error);
+      if (reason) {
+        pushDiagnostic(diagnostics, {
+          code: "ENVIRONMENT_UNSUPPORTED",
+          severity: "error",
+          message: "Rendered capture browser launch failed due to runtime environment incompatibility",
+          details: { reason, error: toErrorString(error) },
+        });
+      }
+      pushDiagnostic(diagnostics, {
+        code: "BROWSER_LAUNCH_FAILED",
+        severity: "error",
+        message: "Rendered capture browser failed to start",
+        details: { error: toErrorString(error) },
+      });
+      pushDiagnostic(diagnostics, {
         code: "RENDERED_CAPTURE_BROWSER_START_FAILED",
         severity: "error",
         message: "Rendered capture browser failed to start",
@@ -427,6 +561,7 @@ async function defaultRenderedCaptureExecutor(input: RenderedCaptureExecutorInpu
     }
 
     try {
+      pushDiagnostic(diagnostics, { code: "PAGE_CREATION_STARTED", message: "Starting browser context/page initialization" });
       context = await browser.newContext({
         viewport: {
           width: input.viewport.width,
@@ -434,8 +569,15 @@ async function defaultRenderedCaptureExecutor(input: RenderedCaptureExecutorInpu
         },
       });
       page = await context.newPage();
+      pushDiagnostic(diagnostics, { code: "PAGE_CREATION_SUCCEEDED", message: "Browser context/page initialization succeeded" });
     } catch (error) {
-      diagnostics.push({
+      pushDiagnostic(diagnostics, {
+        code: "BROWSER_LAUNCH_FAILED",
+        severity: "error",
+        message: "Rendered capture context/page initialization failed",
+        details: { error: toErrorString(error) },
+      });
+      pushDiagnostic(diagnostics, {
         code: "RENDERED_CAPTURE_BROWSER_START_FAILED",
         severity: "error",
         message: "Rendered capture context/page initialization failed",
@@ -452,12 +594,32 @@ async function defaultRenderedCaptureExecutor(input: RenderedCaptureExecutorInpu
     }
 
     try {
+      pushDiagnostic(diagnostics, {
+        code: "NAVIGATION_STARTED",
+        message: "Starting browser navigation for rendered capture",
+        details: { sourceUrl: input.sourceUrl, timeoutMs: input.readiness.navigationTimeoutMs },
+      });
       await page.goto(input.sourceUrl, {
         waitUntil: "domcontentloaded",
         timeout: input.readiness.navigationTimeoutMs,
       });
+      pushDiagnostic(diagnostics, {
+        code: "NAVIGATION_SUCCEEDED",
+        message: "Browser navigation completed for rendered capture",
+        details: { finalUrl: typeof page.url === "function" ? page.url() : input.sourceUrl },
+      });
     } catch (error) {
-      diagnostics.push({
+      pushDiagnostic(diagnostics, {
+        code: "NAVIGATION_FAILED",
+        severity: "error",
+        message: "Rendered capture navigation failed",
+        details: {
+          error: toErrorString(error),
+          sourceUrl: input.sourceUrl,
+          navigationTimeoutMs: input.readiness.navigationTimeoutMs,
+        },
+      });
+      pushDiagnostic(diagnostics, {
         code: "BROWSER_NAVIGATION_FAILED",
         severity: "error",
         message: "Browser navigation failed before rendered capture could complete",
@@ -485,6 +647,11 @@ async function defaultRenderedCaptureExecutor(input: RenderedCaptureExecutorInpu
     let selectedCapture: CapturePassResult | null = null;
 
     for (let attempt = 0; attempt <= retryCount; attempt++) {
+      pushDiagnostic(diagnostics, {
+        code: "READINESS_WAIT_STARTED",
+        message: "Starting rendered capture readiness wait",
+        details: { attempt: attempt + 1, maxAttempts: retryCount + 1 },
+      });
       const readinessState = await waitForReadinessPass({
         page,
         diagnostics,
@@ -492,8 +659,37 @@ async function defaultRenderedCaptureExecutor(input: RenderedCaptureExecutorInpu
         startedAt,
         attempt,
       });
+      pushDiagnostic(diagnostics, {
+        code: "READINESS_WAIT_COMPLETED",
+        message: "Rendered capture readiness wait completed",
+        details: { attempt: attempt + 1, readinessState },
+      });
 
+      pushDiagnostic(diagnostics, {
+        code: "DOM_SERIALIZATION_STARTED",
+        message: "Starting DOM serialization for rendered capture",
+        details: { attempt: attempt + 1 },
+      });
+      pushDiagnostic(diagnostics, {
+        code: "STYLE_SAMPLING_STARTED",
+        message: "Starting computed style sampling for rendered capture",
+        details: { attempt: attempt + 1 },
+      });
       const capturePass = await capturePageState(page);
+      if (!capturePass.domSerializationFailed) {
+        pushDiagnostic(diagnostics, {
+          code: "DOM_SERIALIZATION_SUCCEEDED",
+          message: "Rendered capture DOM serialization succeeded",
+          details: { attempt: attempt + 1, domLength: capturePass.html.trim().length },
+        });
+      }
+      if (!capturePass.styleSamplingFailed) {
+        pushDiagnostic(diagnostics, {
+          code: "STYLE_SAMPLING_SUCCEEDED",
+          message: "Computed style sampling completed",
+          details: { attempt: attempt + 1, sampleCount: capturePass.computedStyleSamples.length },
+        });
+      }
       const isShellLike = isShellLikeContent({ quality: capturePass.quality, minLength: shellContentMinLength });
 
       selectedReadinessState = readinessState;
@@ -501,9 +697,8 @@ async function defaultRenderedCaptureExecutor(input: RenderedCaptureExecutorInpu
 
       if (!isShellLike) {
         if (attempt > 0) {
-          diagnostics.push({
+          pushDiagnostic(diagnostics, {
             code: "RENDERED_CAPTURE_RECOVERED_ON_RETRY",
-            severity: "info",
             message: "Rendered capture recovered from shell-like output on retry",
             details: {
               retriesUsed: attempt,
@@ -514,7 +709,7 @@ async function defaultRenderedCaptureExecutor(input: RenderedCaptureExecutorInpu
         break;
       }
 
-      diagnostics.push({
+      pushDiagnostic(diagnostics, {
         code: "RENDERED_CAPTURE_DOM_STILL_SHELL",
         severity: attempt < retryCount ? "warning" : "error",
         message:
@@ -534,7 +729,7 @@ async function defaultRenderedCaptureExecutor(input: RenderedCaptureExecutorInpu
     }
 
     if (!selectedCapture) {
-      diagnostics.push({
+      pushDiagnostic(diagnostics, {
         code: "RENDERED_CAPTURE_FAILED",
         severity: "error",
         message: "Rendered capture failed to collect any capture pass",
@@ -551,6 +746,11 @@ async function defaultRenderedCaptureExecutor(input: RenderedCaptureExecutorInpu
 
     const screenshots: RenderedCaptureExecutorResult["screenshots"] = [];
     try {
+      pushDiagnostic(diagnostics, {
+        code: "SCREENSHOT_CAPTURE_STARTED",
+        message: "Starting viewport screenshot capture",
+        details: { captureType: "desktop_viewport" },
+      });
       const viewportBytes = new Uint8Array(await page.screenshot({ type: "png", fullPage: false }));
       screenshots.push({
         captureType: "desktop_viewport",
@@ -559,8 +759,19 @@ async function defaultRenderedCaptureExecutor(input: RenderedCaptureExecutorInpu
         height: input.viewport.height,
         fullPage: false,
       });
+      pushDiagnostic(diagnostics, {
+        code: "SCREENSHOT_CAPTURE_SUCCEEDED",
+        message: "Viewport screenshot capture succeeded",
+        details: { captureType: "desktop_viewport", byteLength: viewportBytes.length },
+      });
     } catch (error) {
-      diagnostics.push({
+      pushDiagnostic(diagnostics, {
+        code: "SCREENSHOT_FAILED",
+        severity: "warning",
+        message: "Viewport screenshot capture failed",
+        details: { error: toErrorString(error), captureType: "desktop_viewport" },
+      });
+      pushDiagnostic(diagnostics, {
         code: "SCREENSHOT_CAPTURE_FAILED",
         severity: "warning",
         message: "Failed to capture desktop viewport screenshot",
@@ -569,6 +780,11 @@ async function defaultRenderedCaptureExecutor(input: RenderedCaptureExecutorInpu
     }
 
     try {
+      pushDiagnostic(diagnostics, {
+        code: "SCREENSHOT_CAPTURE_STARTED",
+        message: "Starting full-page screenshot capture",
+        details: { captureType: "desktop_fullpage" },
+      });
       const fullPageBytes = new Uint8Array(await page.screenshot({ type: "png", fullPage: true }));
       screenshots.push({
         captureType: "desktop_fullpage",
@@ -577,8 +793,19 @@ async function defaultRenderedCaptureExecutor(input: RenderedCaptureExecutorInpu
         height: input.viewport.height,
         fullPage: true,
       });
+      pushDiagnostic(diagnostics, {
+        code: "SCREENSHOT_CAPTURE_SUCCEEDED",
+        message: "Full-page screenshot capture succeeded",
+        details: { captureType: "desktop_fullpage", byteLength: fullPageBytes.length },
+      });
     } catch (error) {
-      diagnostics.push({
+      pushDiagnostic(diagnostics, {
+        code: "SCREENSHOT_FAILED",
+        severity: "warning",
+        message: "Full-page screenshot capture failed",
+        details: { error: toErrorString(error), captureType: "desktop_fullpage" },
+      });
+      pushDiagnostic(diagnostics, {
         code: "SCREENSHOT_CAPTURE_FAILED",
         severity: "warning",
         message: "Failed to capture desktop full-page screenshot",
@@ -592,12 +819,35 @@ async function defaultRenderedCaptureExecutor(input: RenderedCaptureExecutorInpu
       selectedCapture.computedStyleSamples.length === 0;
     if (needsSecondPass && !hasExceededCaptureBudget({ startedAt, readiness: input.readiness })) {
       await sleep(Math.min(750, Math.max(150, input.readiness.domStabilizationPollMs * 2)));
+      pushDiagnostic(diagnostics, {
+        code: "DOM_SERIALIZATION_STARTED",
+        message: "Starting post-screenshot DOM serialization pass",
+        details: { strategy: "post_screenshot_stabilization" },
+      });
+      pushDiagnostic(diagnostics, {
+        code: "STYLE_SAMPLING_STARTED",
+        message: "Starting post-screenshot style sampling pass",
+        details: { strategy: "post_screenshot_stabilization" },
+      });
       const postScreenshotCapture = await capturePageState(page);
+      if (!postScreenshotCapture.domSerializationFailed) {
+        pushDiagnostic(diagnostics, {
+          code: "DOM_SERIALIZATION_SUCCEEDED",
+          message: "Post-screenshot DOM serialization pass succeeded",
+          details: { domLength: postScreenshotCapture.html.trim().length },
+        });
+      }
+      if (!postScreenshotCapture.styleSamplingFailed) {
+        pushDiagnostic(diagnostics, {
+          code: "STYLE_SAMPLING_SUCCEEDED",
+          message: "Post-screenshot style sampling pass succeeded",
+          details: { sampleCount: postScreenshotCapture.computedStyleSamples.length },
+        });
+      }
       if (scoreCapturePass(postScreenshotCapture) > scoreCapturePass(selectedCapture)) {
         selectedCapture = postScreenshotCapture;
-        diagnostics.push({
+        pushDiagnostic(diagnostics, {
           code: "RENDERED_CAPTURE_RECOVERED_ON_RETRY",
-          severity: "info",
           message: "Rendered capture improved after post-screenshot stabilization pass",
           details: {
             strategy: "post_screenshot_stabilization",
@@ -612,7 +862,13 @@ async function defaultRenderedCaptureExecutor(input: RenderedCaptureExecutorInpu
     const hasScreenshots = screenshots.length > 0;
 
     if (selectedCapture.domSerializationFailed) {
-      diagnostics.push({
+      pushDiagnostic(diagnostics, {
+        code: "DOM_EMPTY_AFTER_RENDER",
+        severity: "warning",
+        message: "Rendered capture could not serialize DOM HTML from browser context",
+        details: { error: selectedCapture.domSerializationError ?? "unknown" },
+      });
+      pushDiagnostic(diagnostics, {
         code: "RENDERED_CAPTURE_DOM_SERIALIZATION_FAILED",
         severity: "warning",
         message: "Rendered capture could not serialize DOM HTML from browser context",
@@ -621,7 +877,12 @@ async function defaultRenderedCaptureExecutor(input: RenderedCaptureExecutorInpu
     }
 
     if (!domHtml) {
-      diagnostics.push({
+      pushDiagnostic(diagnostics, {
+        code: "DOM_EMPTY_AFTER_RENDER",
+        severity: hasScreenshots ? "warning" : "error",
+        message: "Rendered capture produced empty DOM HTML after navigation/readiness",
+      });
+      pushDiagnostic(diagnostics, {
         code: "RENDERED_CAPTURE_DOM_EMPTY_AFTER_NAVIGATION",
         severity: hasScreenshots ? "warning" : "error",
         message: "Rendered capture produced empty DOM HTML after navigation/readiness",
@@ -629,7 +890,7 @@ async function defaultRenderedCaptureExecutor(input: RenderedCaptureExecutorInpu
     }
 
     if (!domHtml && hasScreenshots) {
-      diagnostics.push({
+      pushDiagnostic(diagnostics, {
         code: "RENDERED_CAPTURE_SCREENSHOT_ONLY",
         severity: "warning",
         message: "Rendered capture produced screenshots without usable DOM HTML",
@@ -637,7 +898,13 @@ async function defaultRenderedCaptureExecutor(input: RenderedCaptureExecutorInpu
     }
 
     if (selectedCapture.styleSamplingFailed) {
-      diagnostics.push({
+      pushDiagnostic(diagnostics, {
+        code: "STYLE_SAMPLING_FAILED",
+        severity: "warning",
+        message: "Computed style sampling failed during rendered capture",
+        details: { error: selectedCapture.styleSamplingError ?? "unknown" },
+      });
+      pushDiagnostic(diagnostics, {
         code: "RENDERED_CAPTURE_STYLE_SAMPLING_FAILED",
         severity: "warning",
         message: "Computed style sampling failed during rendered capture",
@@ -646,7 +913,12 @@ async function defaultRenderedCaptureExecutor(input: RenderedCaptureExecutorInpu
     }
 
     if (selectedCapture.computedStyleSamples.length === 0 && hasScreenshots && domHtml.length > 0) {
-      diagnostics.push({
+      pushDiagnostic(diagnostics, {
+        code: "STYLE_SAMPLING_FAILED",
+        severity: "warning",
+        message: "Rendered page was visible but computed style sampling yielded no samples",
+      });
+      pushDiagnostic(diagnostics, {
         code: "RENDERED_CAPTURE_STYLE_SAMPLING_FAILED",
         severity: "warning",
         message: "Rendered page was visible but computed style sampling yielded no samples",
@@ -654,7 +926,7 @@ async function defaultRenderedCaptureExecutor(input: RenderedCaptureExecutorInpu
     }
 
     if (selectedCapture.computedStyleSamples.length < 3) {
-      diagnostics.push({
+      pushDiagnostic(diagnostics, {
         code: "COMPUTED_STYLE_SAMPLE_WEAK",
         severity: "warning",
         message: "Computed style sampling captured fewer than three targets",
@@ -663,7 +935,7 @@ async function defaultRenderedCaptureExecutor(input: RenderedCaptureExecutorInpu
     }
 
     if (selectedReadinessState === "timeout_partial") {
-      diagnostics.push({
+      pushDiagnostic(diagnostics, {
         code: "RENDERED_CAPTURE_PARTIAL",
         severity: "warning",
         message: "Rendered capture completed with partial confidence",
@@ -677,7 +949,7 @@ async function defaultRenderedCaptureExecutor(input: RenderedCaptureExecutorInpu
       computedStyleSamples: selectedCapture.computedStyleSamples,
     });
     if (status === "partial") {
-      diagnostics.push({
+      pushDiagnostic(diagnostics, {
         code: "RENDERED_CAPTURE_PARTIAL",
         severity: "warning",
         message: "Rendered capture produced partial evidence",
@@ -703,7 +975,7 @@ async function defaultRenderedCaptureExecutor(input: RenderedCaptureExecutorInpu
       diagnostics,
     };
   } catch (error) {
-    diagnostics.push({
+    pushDiagnostic(diagnostics, {
       code: "RENDERED_CAPTURE_FAILED",
       severity: "error",
       message: "Rendered capture execution failed",
@@ -718,6 +990,10 @@ async function defaultRenderedCaptureExecutor(input: RenderedCaptureExecutorInpu
       diagnostics,
     };
   } finally {
+    pushDiagnostic(diagnostics, {
+      code: "CLEANUP_STARTED",
+      message: "Rendered capture cleanup started",
+    });
     try {
       await page?.close?.();
     } catch {
@@ -733,6 +1009,10 @@ async function defaultRenderedCaptureExecutor(input: RenderedCaptureExecutorInpu
     } catch {
       // no-op
     }
+    pushDiagnostic(diagnostics, {
+      code: "CLEANUP_COMPLETED",
+      message: "Rendered capture cleanup completed",
+    });
   }
 }
 
