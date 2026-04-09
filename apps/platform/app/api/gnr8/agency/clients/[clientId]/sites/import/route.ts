@@ -235,7 +235,7 @@ export async function POST(req: Request, ctx: { params: Promise<Params> }) {
       snapshot,
       sourceUrl: importUrl.toString(),
       actor: `agency:client-scoped-import:${actionContext.actorMode}`,
-      fallbackToLegacyOnPipelineFailure: true,
+      fallbackToLegacyOnPipelineFailure: false,
     })
 
     const ownershipSiteId = await resolveOrCreateOwnershipSiteId({

@@ -282,6 +282,19 @@ function buildImportProvenanceSummary(snapshot: UrlSinglePageImportSnapshot, sty
   }
 }
 
+function summarizeProvenancePayload(summary: RuntimeImportProvenanceSummary): Record<string, unknown> {
+  return {
+    kind: summary.kind,
+    sourceMode: summary.sourceMode,
+    importFidelityStatus: summary.importFidelityStatus,
+    renderedCaptureStatus: summary.renderedCaptureStatus,
+    renderedDomQuality: summary.renderedDomQuality,
+    screenshotCount: summary.screenshotCount,
+    computedStyleSampleCount: summary.computedStyleSampleCount,
+    importDiagnosticCodeCount: Array.isArray(summary.importDiagnosticCodes) ? summary.importDiagnosticCodes.length : 0,
+  }
+}
+
 function buildCanonicalMigrationInputFromPipeline(input: {
   sourceUrl: string
   actor: string
@@ -512,13 +525,21 @@ export type ScopedImportPipelineSuccess = {
     artifactGenerated: boolean
     writePath: {
       createdVersionId: string
+      provenancePayloadBeforeWrite: Record<string, unknown> | null
       provenanceWriteAttempted: boolean
       provenanceWriteSucceeded: boolean
+      provenanceWriteAffectedRows: number
       artifactCreateAttempted: boolean
       artifactCreatedId: string | null
       artifactBindAttempted: boolean
       artifactBindSucceeded: boolean
+      artifactBindAffectedRows: number
       verifiedVersionIdAfterWrite: string | null
+      verificationRead: {
+        versionId: string | null
+        artifactId: string | null
+        hasImportProvenanceSummary: boolean
+      }
     }
   }
 }
@@ -550,13 +571,21 @@ export type ScopedImportPipelineFallback = {
     styleDiagnostics: string[]
     writePath: {
       createdVersionId: string
+      provenancePayloadBeforeWrite: Record<string, unknown> | null
       provenanceWriteAttempted: boolean
       provenanceWriteSucceeded: boolean
+      provenanceWriteAffectedRows: number
       artifactCreateAttempted: boolean
       artifactCreatedId: null
       artifactBindAttempted: false
       artifactBindSucceeded: false
+      artifactBindAffectedRows: 0
       verifiedVersionIdAfterWrite: string | null
+      verificationRead: {
+        versionId: string | null
+        artifactId: null
+        hasImportProvenanceSummary: boolean
+      }
     }
   }
 }
@@ -647,13 +676,21 @@ export async function runScopedImportPipeline(input: {
   if (pipelineResult.status === 'success' && preparedSite) {
     const writePathDiagnostics: ScopedImportPipelineSuccess['reporting']['writePath'] = {
       createdVersionId: '',
+      provenancePayloadBeforeWrite: null,
       provenanceWriteAttempted: false,
       provenanceWriteSucceeded: false,
+      provenanceWriteAffectedRows: 0,
       artifactCreateAttempted: false,
       artifactCreatedId: null,
       artifactBindAttempted: false,
       artifactBindSucceeded: false,
+      artifactBindAffectedRows: 0,
       verifiedVersionIdAfterWrite: null,
+      verificationRead: {
+        versionId: null,
+        artifactId: null,
+        hasImportProvenanceSummary: false,
+      },
     }
 
     const canonicalInput = buildCanonicalMigrationInputFromPipeline({
@@ -671,12 +708,28 @@ export async function runScopedImportPipeline(input: {
       importProvenanceSummary,
     })
     writePathDiagnostics.createdVersionId = migrated.siteVersionId
+    writePathDiagnostics.provenancePayloadBeforeWrite = summarizeProvenancePayload(importProvenanceSummary)
+    console.info('[scoped-import] write-path:create-version', {
+      createdVersionId: migrated.siteVersionId,
+    })
 
     writePathDiagnostics.provenanceWriteAttempted = true
-    await deps.setSiteVersionImportProvenanceSummary({
+    const provenanceWrite = await deps.setSiteVersionImportProvenanceSummary({
       siteVersionId: migrated.siteVersionId,
       importProvenanceSummary,
     })
+    writePathDiagnostics.provenanceWriteAffectedRows = provenanceWrite.affectedRows
+    console.info('[scoped-import] write-path:provenance-before-write', {
+      createdVersionId: migrated.siteVersionId,
+      provenancePayload: writePathDiagnostics.provenancePayloadBeforeWrite,
+    })
+    console.info('[scoped-import] write-path:provenance-write-result', {
+      createdVersionId: migrated.siteVersionId,
+      affectedRows: provenanceWrite.affectedRows,
+    })
+    if (provenanceWrite.affectedRows <= 0) {
+      throw new Error(`Provenance write affected 0 rows for site version ${migrated.siteVersionId}.`)
+    }
     writePathDiagnostics.provenanceWriteSucceeded = true
 
     const siteVersion = await deps.getSiteVersion(migrated.siteVersionId)
@@ -733,13 +786,26 @@ export async function runScopedImportPipeline(input: {
       throw new Error(`Artifact creation returned an empty artifact id for site version ${migrated.siteVersionId}.`)
     }
     writePathDiagnostics.artifactCreatedId = artifact.artifactId
+    console.info('[scoped-import] write-path:artifact-create-result', {
+      createdVersionId: migrated.siteVersionId,
+      artifactId: artifact.artifactId,
+    })
 
     writePathDiagnostics.artifactBindAttempted = true
-    await deps.bindArtifactToVersion({
+    const bindWrite = await deps.bindArtifactToVersion({
       siteVersionId: migrated.siteVersionId,
       artifactId: artifact.artifactId,
       rendererCompatibilityVersion: artifactBundle.rendererCompatibilityVersion,
     })
+    writePathDiagnostics.artifactBindAffectedRows = bindWrite.affectedRows
+    console.info('[scoped-import] write-path:artifact-bind-result', {
+      createdVersionId: migrated.siteVersionId,
+      artifactId: artifact.artifactId,
+      affectedRows: bindWrite.affectedRows,
+    })
+    if (bindWrite.affectedRows <= 0) {
+      throw new Error(`Artifact bind affected 0 rows for site version ${migrated.siteVersionId}.`)
+    }
     writePathDiagnostics.artifactBindSucceeded = true
 
     const boundSiteVersion = await deps.getSiteVersion(migrated.siteVersionId)
@@ -747,6 +813,15 @@ export async function runScopedImportPipeline(input: {
       throw new Error('Artifact bind completed but site version could not be reloaded for verification.')
     }
     writePathDiagnostics.verifiedVersionIdAfterWrite = boundSiteVersion.id
+    writePathDiagnostics.verificationRead = {
+      versionId: boundSiteVersion.id,
+      artifactId: boundSiteVersion.artifactId ?? null,
+      hasImportProvenanceSummary: boundSiteVersion.importProvenanceSummary != null,
+    }
+    console.info('[scoped-import] write-path:verification-read', {
+      createdVersionId: migrated.siteVersionId,
+      verificationRead: writePathDiagnostics.verificationRead,
+    })
     if (boundSiteVersion.id !== migrated.siteVersionId) {
       throw new Error(
         `Write-path verification failed: createdVersionId=${migrated.siteVersionId} verifiedVersionIdAfterWrite=${boundSiteVersion.id}`,
@@ -813,19 +888,42 @@ export async function runScopedImportPipeline(input: {
 
   const fallbackWritePath: ScopedImportPipelineFallback['diagnostics']['writePath'] = {
     createdVersionId: legacyMigrated.siteVersionId,
+    provenancePayloadBeforeWrite: summarizeProvenancePayload(importProvenanceSummary),
     provenanceWriteAttempted: true,
     provenanceWriteSucceeded: false,
+    provenanceWriteAffectedRows: 0,
     artifactCreateAttempted: false,
     artifactCreatedId: null,
     artifactBindAttempted: false,
     artifactBindSucceeded: false,
+    artifactBindAffectedRows: 0,
     verifiedVersionIdAfterWrite: null,
+    verificationRead: {
+      versionId: null,
+      artifactId: null,
+      hasImportProvenanceSummary: false,
+    },
   }
 
-  await deps.setSiteVersionImportProvenanceSummary({
+  console.info('[scoped-import] write-path:create-version-fallback', {
+    createdVersionId: legacyMigrated.siteVersionId,
+  })
+  console.info('[scoped-import] write-path:provenance-before-write', {
+    createdVersionId: legacyMigrated.siteVersionId,
+    provenancePayload: fallbackWritePath.provenancePayloadBeforeWrite,
+  })
+  const fallbackProvenanceWrite = await deps.setSiteVersionImportProvenanceSummary({
     siteVersionId: legacyMigrated.siteVersionId,
     importProvenanceSummary,
   })
+  fallbackWritePath.provenanceWriteAffectedRows = fallbackProvenanceWrite.affectedRows
+  console.info('[scoped-import] write-path:provenance-write-result', {
+    createdVersionId: legacyMigrated.siteVersionId,
+    affectedRows: fallbackProvenanceWrite.affectedRows,
+  })
+  if (fallbackProvenanceWrite.affectedRows <= 0) {
+    throw new Error(`Legacy fallback provenance write affected 0 rows for site version ${legacyMigrated.siteVersionId}.`)
+  }
   fallbackWritePath.provenanceWriteSucceeded = true
 
   const fallbackVersion = await deps.getSiteVersion(legacyMigrated.siteVersionId)
@@ -833,6 +931,15 @@ export async function runScopedImportPipeline(input: {
     throw new Error(`Legacy fallback write-path verification failed: site version ${legacyMigrated.siteVersionId} not found.`)
   }
   fallbackWritePath.verifiedVersionIdAfterWrite = fallbackVersion.id
+  fallbackWritePath.verificationRead = {
+    versionId: fallbackVersion.id,
+    artifactId: null,
+    hasImportProvenanceSummary: fallbackVersion.importProvenanceSummary != null,
+  }
+  console.info('[scoped-import] write-path:verification-read', {
+    createdVersionId: legacyMigrated.siteVersionId,
+    verificationRead: fallbackWritePath.verificationRead,
+  })
   if (fallbackVersion.id !== legacyMigrated.siteVersionId) {
     throw new Error(
       `Legacy fallback write-path verification failed: createdVersionId=${legacyMigrated.siteVersionId} verifiedVersionIdAfterWrite=${fallbackVersion.id}`,

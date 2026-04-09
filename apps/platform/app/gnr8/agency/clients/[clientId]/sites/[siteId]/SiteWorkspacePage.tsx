@@ -4,6 +4,7 @@ import type { CSSProperties, ReactNode } from 'react'
 
 import SiteContextLayout from './SiteContextLayout'
 import SiteActionsPanel from './SiteActionsPanel'
+import SiteDeletePanel from './SiteDeletePanel'
 import { listSwitchableAgencyClientsForPage } from '../../../client-switcher-options'
 import { getSiteWorkspaceReadModelForPage } from '@/gnr8/site/site-workspace-read-model'
 import { type SiteWorkspaceTab } from '@/gnr8/site/site-workspace-navigation'
@@ -327,7 +328,15 @@ function renderPreviewContent(readModel: Awaited<ReturnType<typeof getSiteWorksp
   )
 }
 
-function renderSettingsContent(readModel: Awaited<ReturnType<typeof getSiteWorkspaceReadModelForPage>>): ReactNode {
+function renderSettingsContent(input: {
+  readModel: Awaited<ReturnType<typeof getSiteWorkspaceReadModelForPage>>
+  canDeleteSite: boolean
+  clientId: string
+  siteId: string
+  agencyId: string
+  adminView: boolean
+}): ReactNode {
+  const readModel = input.readModel
   if (!readModel) return null
 
   return (
@@ -347,6 +356,14 @@ function renderSettingsContent(readModel: Awaited<ReturnType<typeof getSiteWorks
           <strong>Future placeholders:</strong> publish settings, branding overrides, environment
         </div>
       </div>
+      <SiteDeletePanel
+        clientId={input.clientId}
+        siteId={input.siteId}
+        agencyId={input.agencyId}
+        adminView={input.adminView}
+        siteName={readModel.settings.name || readModel.site.label || input.siteId}
+        canDeleteSite={input.canDeleteSite}
+      />
     </section>
   )
 }
@@ -481,6 +498,7 @@ export default async function SiteWorkspacePage(props: Props) {
   const previewHref = `/gnr8/agency/clients/${encodeURIComponent(clientId)}/sites/${encodeURIComponent(siteId)}/preview?agency=${encodeURIComponent(currentUserAgency.agency_id)}${adminView ? '&admin_view=1' : ''}${selectedVariantQuery}`
   const canRunTransformation = canPerformAction(currentUserAgency.role, 'run_migration')
   const canPublish = canPerformAction(currentUserAgency.role, 'publish')
+  const canDeleteSite = canPerformAction(currentUserAgency.role, 'delete_site')
 
   return (
     <SiteContextLayout
@@ -519,7 +537,16 @@ export default async function SiteWorkspacePage(props: Props) {
         {props.activeTab === 'structure' ? renderStructureContent(readModel) : null}
         {props.activeTab === 'design' ? renderDesignContent(readModel) : null}
         {props.activeTab === 'preview' ? renderPreviewContent(readModel) : null}
-        {props.activeTab === 'settings' ? renderSettingsContent(readModel) : null}
+        {props.activeTab === 'settings'
+          ? renderSettingsContent({
+              readModel,
+              canDeleteSite,
+              clientId,
+              siteId,
+              agencyId: currentUserAgency.agency_id,
+              adminView,
+            })
+          : null}
       </div>
     </SiteContextLayout>
   )

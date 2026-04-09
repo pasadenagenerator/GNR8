@@ -594,8 +594,8 @@ export async function getSiteVersion(siteVersionId: string): Promise<CanonicalSi
 export async function setSiteVersionImportProvenanceSummary(input: {
   siteVersionId: string;
   importProvenanceSummary: RuntimeImportProvenanceSummary;
-}): Promise<void> {
-  await withTx(async (client) => {
+}): Promise<{ affectedRows: number }> {
+  return withTx(async (client) => {
     const updated = await client.query<{ id: string }>(
       `
       update public.gnr8_runtime_site_versions
@@ -608,6 +608,7 @@ export async function setSiteVersionImportProvenanceSummary(input: {
     if (!updated.rows[0]) {
       throw new Error(`Runtime site version not found for provenance write: ${input.siteVersionId}`);
     }
+    return { affectedRows: updated.rowCount ?? 0 };
   });
 }
 
@@ -718,8 +719,8 @@ export async function bindArtifactToVersion(input: {
   siteVersionId: string;
   artifactId: string;
   rendererCompatibilityVersion: string;
-}): Promise<void> {
-  await withTx(async (client) => {
+}): Promise<{ affectedRows: number }> {
+  return withTx(async (client) => {
     const updated = await client.query<{ id: string }>(
       `
       update public.gnr8_runtime_site_versions
@@ -732,6 +733,7 @@ export async function bindArtifactToVersion(input: {
     if (!updated.rows[0]) {
       throw new Error(`Runtime site version not found for artifact bind: ${input.siteVersionId}`);
     }
+    return { affectedRows: updated.rowCount ?? 0 };
   });
 }
 

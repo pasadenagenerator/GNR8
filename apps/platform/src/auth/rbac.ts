@@ -18,6 +18,7 @@ export type AgencyAction =
   | 'edit_owner_profile'
   | 'change_password'
   | 'delete_agency'
+  | 'delete_site'
   | 'run_migration'
   | 'approve_migration'
   | 'publish'
@@ -60,6 +61,7 @@ const ACTION_MATRIX: Record<AgencyRole, Record<AgencyAction, boolean>> = {
     edit_owner_profile: true,
     change_password: true,
     delete_agency: true,
+    delete_site: true,
     run_migration: true,
     approve_migration: true,
     publish: true,
@@ -83,6 +85,7 @@ const ACTION_MATRIX: Record<AgencyRole, Record<AgencyAction, boolean>> = {
     edit_owner_profile: true,
     change_password: true,
     delete_agency: true,
+    delete_site: true,
     run_migration: true,
     approve_migration: true,
     publish: true,
@@ -106,6 +109,7 @@ const ACTION_MATRIX: Record<AgencyRole, Record<AgencyAction, boolean>> = {
     edit_owner_profile: false,
     change_password: true,
     delete_agency: false,
+    delete_site: true,
     run_migration: true,
     approve_migration: true,
     publish: true,
@@ -129,6 +133,7 @@ const ACTION_MATRIX: Record<AgencyRole, Record<AgencyAction, boolean>> = {
     edit_owner_profile: false,
     change_password: true,
     delete_agency: false,
+    delete_site: false,
     run_migration: false,
     approve_migration: false,
     publish: false,

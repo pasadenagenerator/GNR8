@@ -301,6 +301,7 @@ test('scoped pipeline import uses pipeline path, maps consolidated sections, and
       },
       setSiteVersionImportProvenanceSummary: async (input) => {
         persistedImportSummary = input
+        return { affectedRows: 1 }
       },
       getSiteVersion: async () =>
         ({
@@ -348,6 +349,7 @@ test('scoped pipeline import uses pipeline path, maps consolidated sections, and
         bindCalls += 1
         bindInput = input
         linkedArtifactId = input.artifactId
+        return { affectedRows: 1 }
       },
       importHtmlToPage: () => {
         legacyImportCalls += 1
@@ -392,13 +394,19 @@ test('scoped pipeline import uses pipeline path, maps consolidated sections, and
   assert.equal(persistedImportSummary.siteVersionId, 'site-version-1')
   assert.equal(persistedImportSummary.importProvenanceSummary.renderedCaptureStatus, 'partial')
   assert.equal(outcome.reporting.writePath.createdVersionId, 'site-version-1')
+  assert.ok(outcome.reporting.writePath.provenancePayloadBeforeWrite)
   assert.equal(outcome.reporting.writePath.provenanceWriteAttempted, true)
   assert.equal(outcome.reporting.writePath.provenanceWriteSucceeded, true)
+  assert.equal(outcome.reporting.writePath.provenanceWriteAffectedRows, 1)
   assert.equal(outcome.reporting.writePath.artifactCreateAttempted, true)
   assert.equal(outcome.reporting.writePath.artifactCreatedId, 'artifact-1')
   assert.equal(outcome.reporting.writePath.artifactBindAttempted, true)
   assert.equal(outcome.reporting.writePath.artifactBindSucceeded, true)
+  assert.equal(outcome.reporting.writePath.artifactBindAffectedRows, 1)
   assert.equal(outcome.reporting.writePath.verifiedVersionIdAfterWrite, 'site-version-1')
+  assert.equal(outcome.reporting.writePath.verificationRead.versionId, 'site-version-1')
+  assert.equal(outcome.reporting.writePath.verificationRead.artifactId, 'artifact-1')
+  assert.equal(outcome.reporting.writePath.verificationRead.hasImportProvenanceSummary, true)
   assert.ok(createInput.pages[0].structureModel.sections.length > 1, 'expected consolidated sections to persist into runtime structure model')
 })
 
@@ -459,6 +467,7 @@ test('scoped pipeline import falls back to legacy when pipeline fails', async ()
       },
       setSiteVersionImportProvenanceSummary: async (input) => {
         persistedImportSummary = input
+        return { affectedRows: 1 }
       },
       getSiteVersion: async () =>
         ({
@@ -476,7 +485,7 @@ test('scoped pipeline import falls back to legacy when pipeline fails', async ()
         }) as any,
       buildDeterministicArtifactBundle: () => ({}) as any,
       createArtifact: async () => ({ artifactId: 'artifact-unused' }),
-      bindArtifactToVersion: async () => undefined,
+      bindArtifactToVersion: async () => ({ affectedRows: 1 }),
       importHtmlToPage: () => {
         legacyImportCalls += 1
         return {} as any
@@ -501,13 +510,19 @@ test('scoped pipeline import falls back to legacy when pipeline fails', async ()
   assert.equal(persistedImportSummary.importProvenanceSummary.screenshotCount, 0)
   assert.equal(persistedImportSummary.importProvenanceSummary.computedStyleSampleCount, 0)
   assert.equal(outcome.diagnostics.writePath.createdVersionId, 'legacy-version')
+  assert.ok(outcome.diagnostics.writePath.provenancePayloadBeforeWrite)
   assert.equal(outcome.diagnostics.writePath.provenanceWriteAttempted, true)
   assert.equal(outcome.diagnostics.writePath.provenanceWriteSucceeded, true)
+  assert.equal(outcome.diagnostics.writePath.provenanceWriteAffectedRows, 1)
   assert.equal(outcome.diagnostics.writePath.artifactCreateAttempted, false)
   assert.equal(outcome.diagnostics.writePath.artifactCreatedId, null)
   assert.equal(outcome.diagnostics.writePath.artifactBindAttempted, false)
   assert.equal(outcome.diagnostics.writePath.artifactBindSucceeded, false)
+  assert.equal(outcome.diagnostics.writePath.artifactBindAffectedRows, 0)
   assert.equal(outcome.diagnostics.writePath.verifiedVersionIdAfterWrite, 'legacy-version')
+  assert.equal(outcome.diagnostics.writePath.verificationRead.versionId, 'legacy-version')
+  assert.equal(outcome.diagnostics.writePath.verificationRead.artifactId, null)
+  assert.equal(outcome.diagnostics.writePath.verificationRead.hasImportProvenanceSummary, true)
   assert.equal(legacyImportCalls, 1)
   assert.equal(legacyMigrateCalls, 1)
 })
@@ -554,7 +569,7 @@ test('scoped pipeline import fails hard when artifact bind does not persist on c
           createImportManifest: () => ({ status: 'success' }) as any,
           runLinearMigrationPipeline: () => pipeline as any,
           createSiteVersionFromMigration: async () => ({ siteId: 'runtime-site', siteVersionId: 'site-version-1', versionNo: 7 }),
-          setSiteVersionImportProvenanceSummary: async () => undefined,
+          setSiteVersionImportProvenanceSummary: async () => ({ affectedRows: 1 }),
           getSiteVersion: async () => {
             getSiteVersionCalls += 1
             return {
@@ -583,12 +598,143 @@ test('scoped pipeline import fails hard when artifact bind does not persist on c
               manifest: {},
             }) as any,
           createArtifact: async () => ({ artifactId: 'artifact-1' }),
-          bindArtifactToVersion: async () => undefined,
+          bindArtifactToVersion: async () => ({ affectedRows: 1 }),
           importHtmlToPage: () => ({} as any),
           migrateImportedPageToCanonicalDraft: async () => ({ siteId: 'legacy-site', siteVersionId: 'legacy-version', versionNo: 1 }),
         },
       }),
     /Artifact bind verification failed/,
+  )
+})
+
+test('scoped pipeline import fails hard when provenance write affects zero rows', async () => {
+  const pipeline = createSuccessPipelineFixture()
+
+  await assert.rejects(
+    () =>
+      runScopedImportPipeline({
+        snapshot: {
+          snapshotRootDirAbs: '/tmp/snapshot',
+          entryHtmlPathAbs: '/tmp/snapshot/index.html',
+          assetsDirAbs: '/tmp/snapshot/assets',
+          sourceMode: 'rendered_dom',
+          sourceSelection: {
+            sourceMode: 'rendered_dom',
+            fidelityStatus: 'high_fidelity_import',
+            selectedSourceHtmlPathAbs: '/tmp/snapshot/rendered-capture/rendered-dom.html',
+            renderedDomQuality: {
+              quality: 'strong',
+              bodyTextLength: 280,
+              meaningfulNodeCount: 40,
+              sectionCandidateCount: 3,
+              hasHeading: true,
+              reason: 'test_fixture',
+            },
+            degraded: false,
+          },
+          renderedCapture: {
+            status: 'available',
+            screenshots: [{}, {}],
+            computedStyleSamples: [{}, {}, {}],
+          },
+          importDiagnostics: {
+            issues: [],
+          },
+        } as any,
+        sourceUrl: 'https://example.com/',
+        actor: 'test:scoped-import',
+        deps: {
+          importStaticSite: async () => ({ status: 'ok', documentMeta: { source: { kind: 'single-entry-html' } } }) as any,
+          createImportManifest: () => ({ status: 'success' }) as any,
+          runLinearMigrationPipeline: () => pipeline as any,
+          createSiteVersionFromMigration: async () => ({ siteId: 'runtime-site', siteVersionId: 'site-version-1', versionNo: 7 }),
+          setSiteVersionImportProvenanceSummary: async () => ({ affectedRows: 0 }),
+          getSiteVersion: async () => null as any,
+          buildDeterministicArtifactBundle: () => ({} as any),
+          createArtifact: async () => ({ artifactId: 'artifact-1' }),
+          bindArtifactToVersion: async () => ({ affectedRows: 1 }),
+          importHtmlToPage: () => ({} as any),
+          migrateImportedPageToCanonicalDraft: async () => ({ siteId: 'legacy-site', siteVersionId: 'legacy-version', versionNo: 1 }),
+        },
+      }),
+    /Provenance write affected 0 rows/,
+  )
+})
+
+test('scoped pipeline import fails hard when artifact bind affects zero rows', async () => {
+  const pipeline = createSuccessPipelineFixture()
+
+  await assert.rejects(
+    () =>
+      runScopedImportPipeline({
+        snapshot: {
+          snapshotRootDirAbs: '/tmp/snapshot',
+          entryHtmlPathAbs: '/tmp/snapshot/index.html',
+          assetsDirAbs: '/tmp/snapshot/assets',
+          sourceMode: 'rendered_dom',
+          sourceSelection: {
+            sourceMode: 'rendered_dom',
+            fidelityStatus: 'high_fidelity_import',
+            selectedSourceHtmlPathAbs: '/tmp/snapshot/rendered-capture/rendered-dom.html',
+            renderedDomQuality: {
+              quality: 'strong',
+              bodyTextLength: 280,
+              meaningfulNodeCount: 40,
+              sectionCandidateCount: 3,
+              hasHeading: true,
+              reason: 'test_fixture',
+            },
+            degraded: false,
+          },
+          renderedCapture: {
+            status: 'available',
+            screenshots: [{}, {}],
+            computedStyleSamples: [{}, {}, {}],
+          },
+          importDiagnostics: {
+            issues: [],
+          },
+        } as any,
+        sourceUrl: 'https://example.com/',
+        actor: 'test:scoped-import',
+        deps: {
+          importStaticSite: async () => ({ status: 'ok', documentMeta: { source: { kind: 'single-entry-html' } } }) as any,
+          createImportManifest: () => ({ status: 'success' }) as any,
+          runLinearMigrationPipeline: () => pipeline as any,
+          createSiteVersionFromMigration: async () => ({ siteId: 'runtime-site', siteVersionId: 'site-version-1', versionNo: 7 }),
+          setSiteVersionImportProvenanceSummary: async () => ({ affectedRows: 1 }),
+          getSiteVersion: async () =>
+            ({
+              id: 'site-version-1',
+              siteId: 'runtime-site',
+              versionNo: 7,
+              state: 'DRAFT',
+              source: 'migration',
+              actor: 'test',
+              createdAt: new Date().toISOString(),
+              rendererCompatibilityVersion: 'gnr8-renderer-v1',
+              artifactId: null,
+              importProvenanceSummary: { kind: 'runtime_import_provenance_summary_v1' },
+              pages: [],
+            }) as any,
+          buildDeterministicArtifactBundle: () =>
+            ({
+              siteId: 'runtime-site',
+              siteVersionId: 'site-version-1',
+              rendererCompatibilityVersion: 'gnr8-renderer-v1',
+              bundleSha256: 'bundle-sha',
+              htmlByPath: { '/': '<!doctype html><html><body>preview</body></html>' },
+              compiledTokenStyles: ':root{}',
+              assetFingerprintMap: {},
+              manifest: {},
+            }) as any,
+          createArtifact: async () => ({ artifactId: 'artifact-1' }),
+          bindArtifactToVersion: async () => ({ affectedRows: 0 }),
+          importHtmlToPage: () => ({} as any),
+          migrateImportedPageToCanonicalDraft: async () => ({ siteId: 'legacy-site', siteVersionId: 'legacy-version', versionNo: 1 }),
+        },
+      }),
+    /Artifact bind affected 0 rows/,
   )
 })
 
@@ -634,7 +780,7 @@ test('scoped pipeline import fails hard when provenance summary is missing after
           createImportManifest: () => ({ status: 'success' }) as any,
           runLinearMigrationPipeline: () => pipeline as any,
           createSiteVersionFromMigration: async () => ({ siteId: 'runtime-site', siteVersionId: 'site-version-1', versionNo: 7 }),
-          setSiteVersionImportProvenanceSummary: async () => undefined,
+          setSiteVersionImportProvenanceSummary: async () => ({ affectedRows: 1 }),
           getSiteVersion: async () => {
             getSiteVersionCalls += 1
             return {
@@ -663,7 +809,7 @@ test('scoped pipeline import fails hard when provenance summary is missing after
               manifest: {},
             }) as any,
           createArtifact: async () => ({ artifactId: 'artifact-1' }),
-          bindArtifactToVersion: async () => undefined,
+          bindArtifactToVersion: async () => ({ affectedRows: 1 }),
           importHtmlToPage: () => ({} as any),
           migrateImportedPageToCanonicalDraft: async () => ({ siteId: 'legacy-site', siteVersionId: 'legacy-version', versionNo: 1 }),
         },
