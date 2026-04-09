@@ -37,6 +37,10 @@ export type RuntimeImportProvenanceSummary = {
       fullPage: boolean;
     };
     execution: {
+      runtimeKind: "nodejs" | "edge" | "unknown";
+      environmentSupported: boolean;
+      browserPackageAvailable: boolean;
+      browserBinaryAvailable: boolean;
       environmentStatus: "supported" | "unsupported" | "unknown";
       failureCategory: "environment" | "page" | "none";
       failureCode: string | null;

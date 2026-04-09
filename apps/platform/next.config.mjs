@@ -5,7 +5,7 @@ const nextConfig = {
 
   // Next.js 15+: namesto experimental.serverComponentsExternalPackages
   // (stabilnejše pri server bundlingu, ko uporabljaš native deps kot "pg")
-  serverExternalPackages: ['pg'],
+  serverExternalPackages: ['pg', 'playwright', 'playwright-core'],
 
   // Dobrodošlo pri API-heavy appih (ni obvezno, ampak stabilno)
   output: 'standalone',
@@ -36,6 +36,21 @@ const nextConfig = {
     '/api/validation/real-site-02': ['./gnr8/validation/fixtures/real-site-02/**'],
     '/api/validation/real-site-03': ['./gnr8/validation/fixtures/real-site-03/**'],
     '/api/validation/friend-site-01': ['./gnr8/validation/fixtures/friend-site-01/**'],
+    '/api/validation/url-import': [
+      './node_modules/playwright/.local-browsers/**',
+      './node_modules/playwright-core/.local-browsers/**',
+      './node_modules/playwright-core/lib/server/registry/**',
+    ],
+    '/api/gnr8/runtime/migrate/url': [
+      './node_modules/playwright/.local-browsers/**',
+      './node_modules/playwright-core/.local-browsers/**',
+      './node_modules/playwright-core/lib/server/registry/**',
+    ],
+    '/api/gnr8/agency/clients/[clientId]/sites/import': [
+      './node_modules/playwright/.local-browsers/**',
+      './node_modules/playwright-core/.local-browsers/**',
+      './node_modules/playwright-core/lib/server/registry/**',
+    ],
   },
 }
 

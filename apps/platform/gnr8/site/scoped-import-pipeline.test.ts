@@ -389,6 +389,10 @@ test('scoped pipeline import uses pipeline path, maps consolidated sections, and
   assert.equal(createInput.importProvenanceSummary.renderedCapture.used, true)
   assert.equal(createInput.importProvenanceSummary.renderedCapture.status, 'partial')
   assert.equal(createInput.importProvenanceSummary.renderedCapture.styleCoverage, 0.3)
+  assert.equal(createInput.importProvenanceSummary.renderedCapture.execution.runtimeKind, 'unknown')
+  assert.equal(createInput.importProvenanceSummary.renderedCapture.execution.environmentSupported, false)
+  assert.equal(createInput.importProvenanceSummary.renderedCapture.execution.browserPackageAvailable, true)
+  assert.equal(createInput.importProvenanceSummary.renderedCapture.execution.browserBinaryAvailable, false)
   assert.equal(createInput.importProvenanceSummary.renderedCapture.execution.environmentStatus, 'unknown')
   assert.equal(createInput.importProvenanceSummary.renderedCapture.execution.failureCategory, 'none')
   assert.ok(createInput.importProvenanceSummary.styleSignals != null)
@@ -559,7 +563,22 @@ test('scoped pipeline persists environment-level rendered capture failure truth'
         documents: [],
         screenshots: [],
         computedStyleSamples: [],
-        diagnostics: [{ code: 'ENVIRONMENT_UNSUPPORTED' }, { code: 'RENDERED_CAPTURE_UNAVAILABLE' }],
+        diagnostics: [
+          { code: 'RENDERED_CAPTURE_RUNTIME_ENVIRONMENT', details: { runtimeKind: 'edge' } },
+          { code: 'PLAYWRIGHT_PACKAGE_CHECK', details: { available: false } },
+          { code: 'PLAYWRIGHT_BINARY_CHECK', details: { available: false } },
+          {
+            code: 'RENDERED_CAPTURE_SUPPORT_DECISION',
+            details: {
+              supported: false,
+              runtimeKind: 'edge',
+              browserPackageAvailable: false,
+              browserBinaryAvailable: false,
+            },
+          },
+          { code: 'ENVIRONMENT_UNSUPPORTED' },
+          { code: 'RENDERED_CAPTURE_UNAVAILABLE' },
+        ],
       },
       importDiagnostics: {
         issues: [{ code: 'ENVIRONMENT_UNSUPPORTED' }, { code: 'RAW_HTML_FALLBACK_USED' }],
@@ -615,6 +634,10 @@ test('scoped pipeline persists environment-level rendered capture failure truth'
   assert.equal(createInput.importProvenanceSummary.renderedCapture.execution.environmentStatus, 'unsupported')
   assert.equal(createInput.importProvenanceSummary.renderedCapture.execution.failureCategory, 'environment')
   assert.equal(createInput.importProvenanceSummary.renderedCapture.execution.failureCode, 'ENVIRONMENT_UNSUPPORTED')
+  assert.equal(createInput.importProvenanceSummary.renderedCapture.execution.runtimeKind, 'edge')
+  assert.equal(createInput.importProvenanceSummary.renderedCapture.execution.environmentSupported, false)
+  assert.equal(createInput.importProvenanceSummary.renderedCapture.execution.browserPackageAvailable, false)
+  assert.equal(createInput.importProvenanceSummary.renderedCapture.execution.browserBinaryAvailable, false)
   assert.equal(createInput.importProvenanceSummary.renderedCapture.execution.browserLaunch, 'not_attempted')
   assert.equal(createInput.importProvenanceSummary.renderedCapture.execution.navigation, 'not_attempted')
 })

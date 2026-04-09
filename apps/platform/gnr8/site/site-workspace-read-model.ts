@@ -738,6 +738,26 @@ function parseImportProvenanceSummary(value: unknown): RuntimeImportProvenanceSu
       fullPage: Boolean(renderedCapture?.screenshots && isRecord(renderedCapture.screenshots) && renderedCapture.screenshots.fullPage),
     },
     execution: {
+      runtimeKind:
+        normalizeText(renderedCapture?.execution && isRecord(renderedCapture.execution) ? renderedCapture.execution.runtimeKind : '') === 'nodejs' ||
+        normalizeText(renderedCapture?.execution && isRecord(renderedCapture.execution) ? renderedCapture.execution.runtimeKind : '') === 'edge' ||
+        normalizeText(renderedCapture?.execution && isRecord(renderedCapture.execution) ? renderedCapture.execution.runtimeKind : '') === 'unknown'
+          ? (normalizeText(
+              renderedCapture?.execution && isRecord(renderedCapture.execution) ? renderedCapture.execution.runtimeKind : '',
+            ) as RuntimeImportProvenanceSummary['renderedCapture']['execution']['runtimeKind'])
+          : 'unknown',
+      environmentSupported:
+        typeof (renderedCapture?.execution && isRecord(renderedCapture.execution) ? renderedCapture.execution.environmentSupported : null) === 'boolean'
+          ? Boolean(renderedCapture?.execution && isRecord(renderedCapture.execution) ? renderedCapture.execution.environmentSupported : false)
+          : normalizeText(renderedCapture?.execution && isRecord(renderedCapture.execution) ? renderedCapture.execution.environmentStatus : '') === 'supported',
+      browserPackageAvailable:
+        typeof (renderedCapture?.execution && isRecord(renderedCapture.execution) ? renderedCapture.execution.browserPackageAvailable : null) === 'boolean'
+          ? Boolean(renderedCapture?.execution && isRecord(renderedCapture.execution) ? renderedCapture.execution.browserPackageAvailable : false)
+          : normalizeText(renderedCapture?.execution && isRecord(renderedCapture.execution) ? renderedCapture.execution.environmentStatus : '') === 'supported',
+      browserBinaryAvailable:
+        typeof (renderedCapture?.execution && isRecord(renderedCapture.execution) ? renderedCapture.execution.browserBinaryAvailable : null) === 'boolean'
+          ? Boolean(renderedCapture?.execution && isRecord(renderedCapture.execution) ? renderedCapture.execution.browserBinaryAvailable : false)
+          : normalizeText(renderedCapture?.execution && isRecord(renderedCapture.execution) ? renderedCapture.execution.environmentStatus : '') === 'supported',
       environmentStatus:
         normalizeText(renderedCapture?.execution && isRecord(renderedCapture.execution) ? renderedCapture.execution.environmentStatus : '') === 'supported' ||
         normalizeText(renderedCapture?.execution && isRecord(renderedCapture.execution) ? renderedCapture.execution.environmentStatus : '') === 'unsupported' ||

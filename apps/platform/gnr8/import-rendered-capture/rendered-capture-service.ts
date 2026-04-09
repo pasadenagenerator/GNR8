@@ -43,10 +43,6 @@ function uniqueSortedStrings(values: string[]): string[] {
   return [...new Set(values.filter((v) => typeof v === "string" && v.trim().length > 0))].sort((a, b) => a.localeCompare(b));
 }
 
-function resolveDynamicImport(): (specifier: string) => Promise<unknown> {
-  return new Function("specifier", "return import(specifier);") as (specifier: string) => Promise<unknown>;
-}
-
 function toErrorString(error: unknown): string {
   return String((error as Error)?.message ?? error);
 }
@@ -77,8 +73,20 @@ function detectEnvironmentUnsupportedReason(error: unknown): string | null {
   return null;
 }
 
+type RuntimeKind = "nodejs" | "edge" | "unknown";
+
+function resolveRuntimeKind(): RuntimeKind {
+  const runtime = String(process.env.NEXT_RUNTIME ?? "").trim().toLowerCase();
+  if (runtime === "nodejs") return "nodejs";
+  if (runtime === "edge") return "edge";
+  if (typeof process !== "undefined" && typeof process.versions?.node === "string" && process.versions.node.length > 0) return "nodejs";
+  return "unknown";
+}
+
 function probeRuntimeEnvironment(snapshotRootDirAbs: string): {
   runtime: string;
+  runtimeKind: RuntimeKind;
+  runtimeCompatible: boolean;
   nodeVersion: string;
   platform: string;
   arch: string;
@@ -111,8 +119,13 @@ function probeRuntimeEnvironment(snapshotRootDirAbs: string): {
     errors.push(`SNAPSHOT_DIR_NOT_WRITABLE:${toErrorString(error)}`);
   }
 
+  const runtimeKind = resolveRuntimeKind();
+  const runtimeCompatible = runtimeKind === "nodejs";
+
   return {
     runtime: typeof process.env.NEXT_RUNTIME === "string" ? process.env.NEXT_RUNTIME : "nodejs",
+    runtimeKind,
+    runtimeCompatible,
     nodeVersion: process.version,
     platform: process.platform,
     arch: process.arch,
@@ -434,11 +447,61 @@ function scoreCapturePass(pass: CapturePassResult): number {
 async function defaultRenderedCaptureExecutor(input: RenderedCaptureExecutorInput): Promise<RenderedCaptureExecutorResult> {
   const diagnostics: RenderedCaptureDiagnostic[] = [];
   const environment = probeRuntimeEnvironment(input.snapshotRootDirAbs);
+  let browserPackageAvailable = false;
+  let browserBinaryAvailable = false;
+
   pushDiagnostic(diagnostics, {
     code: "RENDERED_CAPTURE_RUNTIME_ENVIRONMENT",
     message: "Rendered capture runtime environment probe completed",
     details: environment,
   });
+  pushDiagnostic(diagnostics, {
+    code: "PLAYWRIGHT_PACKAGE_CHECK",
+    message: "Playwright package availability check pending",
+    details: { available: false, state: "pending" },
+  });
+  pushDiagnostic(diagnostics, {
+    code: "PLAYWRIGHT_BINARY_CHECK",
+    message: "Playwright browser binary availability check pending",
+    details: { available: false, state: "pending" },
+  });
+
+  if (!environment.runtimeCompatible) {
+    pushDiagnostic(diagnostics, {
+      code: "ENVIRONMENT_UNSUPPORTED",
+      severity: "error",
+      message: "Rendered capture requires Node.js runtime and is unsupported in current runtime kind",
+      details: {
+        runtimeKind: environment.runtimeKind,
+        reason: "RUNTIME_INCOMPATIBLE",
+      },
+    });
+    pushDiagnostic(diagnostics, {
+      code: "RENDERED_CAPTURE_UNAVAILABLE",
+      severity: "warning",
+      message: "Rendered capture unavailable because runtime does not support browser execution",
+      details: { reason: "RUNTIME_INCOMPATIBLE" },
+    });
+    pushDiagnostic(diagnostics, {
+      code: "RENDERED_CAPTURE_SUPPORT_DECISION",
+      message: "Rendered capture support decision finalized",
+      details: {
+        supported: false,
+        reason: "RUNTIME_INCOMPATIBLE",
+        runtimeKind: environment.runtimeKind,
+        browserPackageAvailable,
+        browserBinaryAvailable,
+      },
+    });
+    return {
+      status: "unavailable",
+      document: null,
+      screenshots: [],
+      computedStyleSamples: [],
+      renderedObservedAssetUrls: [],
+      diagnostics,
+    };
+  }
 
   if (!environment.tmpWritable || !environment.snapshotDirWritable) {
     pushDiagnostic(diagnostics, {
@@ -457,6 +520,17 @@ async function defaultRenderedCaptureExecutor(input: RenderedCaptureExecutorInpu
       message: "Rendered capture unavailable due to unsupported runtime environment",
       details: { reason: "ENVIRONMENT_IO_UNSUPPORTED" },
     });
+    pushDiagnostic(diagnostics, {
+      code: "RENDERED_CAPTURE_SUPPORT_DECISION",
+      message: "Rendered capture support decision finalized",
+      details: {
+        supported: false,
+        reason: "ENVIRONMENT_IO_UNSUPPORTED",
+        runtimeKind: environment.runtimeKind,
+        browserPackageAvailable,
+        browserBinaryAvailable,
+      },
+    });
     return {
       status: "unavailable",
       document: null,
@@ -469,10 +543,21 @@ async function defaultRenderedCaptureExecutor(input: RenderedCaptureExecutorInpu
 
   let playwright: any = null;
   try {
-    const importDynamic = resolveDynamicImport();
-    playwright = await importDynamic("playwright");
+    playwright = await import("playwright");
+    browserPackageAvailable = true;
+    pushDiagnostic(diagnostics, {
+      code: "PLAYWRIGHT_PACKAGE_CHECK",
+      message: "Playwright package availability check completed",
+      details: { available: true },
+    });
   } catch (error) {
     const reason = detectEnvironmentUnsupportedReason(error) ?? "PLAYWRIGHT_IMPORT_FAILED";
+    pushDiagnostic(diagnostics, {
+      code: "PLAYWRIGHT_PACKAGE_CHECK",
+      message: "Playwright package availability check completed",
+      severity: "error",
+      details: { available: false, reason, error: toErrorString(error) },
+    });
     pushDiagnostic(diagnostics, {
       code: "ENVIRONMENT_UNSUPPORTED",
       severity: "error",
@@ -484,6 +569,17 @@ async function defaultRenderedCaptureExecutor(input: RenderedCaptureExecutorInpu
       severity: "warning",
       message: "Playwright runtime unavailable; rendered capture skipped",
       details: { error: toErrorString(error) },
+    });
+    pushDiagnostic(diagnostics, {
+      code: "RENDERED_CAPTURE_SUPPORT_DECISION",
+      message: "Rendered capture support decision finalized",
+      details: {
+        supported: false,
+        reason,
+        runtimeKind: environment.runtimeKind,
+        browserPackageAvailable,
+        browserBinaryAvailable,
+      },
     });
     return {
       status: "unavailable",
@@ -498,6 +594,12 @@ async function defaultRenderedCaptureExecutor(input: RenderedCaptureExecutorInpu
   const chromium = playwright?.chromium;
   if (!chromium) {
     pushDiagnostic(diagnostics, {
+      code: "PLAYWRIGHT_BINARY_CHECK",
+      message: "Playwright browser binary availability check completed",
+      severity: "error",
+      details: { available: false, reason: "CHROMIUM_UNAVAILABLE" },
+    });
+    pushDiagnostic(diagnostics, {
       code: "ENVIRONMENT_UNSUPPORTED",
       severity: "error",
       message: "Rendered capture environment does not provide Playwright chromium",
@@ -508,6 +610,17 @@ async function defaultRenderedCaptureExecutor(input: RenderedCaptureExecutorInpu
       severity: "warning",
       message: "Playwright chromium runtime unavailable; rendered capture skipped",
     });
+    pushDiagnostic(diagnostics, {
+      code: "RENDERED_CAPTURE_SUPPORT_DECISION",
+      message: "Rendered capture support decision finalized",
+      details: {
+        supported: false,
+        reason: "CHROMIUM_UNAVAILABLE",
+        runtimeKind: environment.runtimeKind,
+        browserPackageAvailable,
+        browserBinaryAvailable,
+      },
+    });
     return {
       status: "unavailable",
       document: null,
@@ -517,6 +630,87 @@ async function defaultRenderedCaptureExecutor(input: RenderedCaptureExecutorInpu
       diagnostics,
     };
   }
+
+  let chromiumExecutablePath: string | null = null;
+  try {
+    chromiumExecutablePath = typeof chromium.executablePath === "function" ? String(chromium.executablePath() ?? "").trim() : null;
+    browserBinaryAvailable = Boolean(chromiumExecutablePath && fs.existsSync(chromiumExecutablePath));
+    pushDiagnostic(diagnostics, {
+      code: "PLAYWRIGHT_BINARY_CHECK",
+      message: "Playwright browser binary availability check completed",
+      severity: browserBinaryAvailable ? "info" : "error",
+      details: {
+        available: browserBinaryAvailable,
+        executablePath: chromiumExecutablePath,
+      },
+    });
+  } catch (error) {
+    browserBinaryAvailable = false;
+    pushDiagnostic(diagnostics, {
+      code: "PLAYWRIGHT_BINARY_CHECK",
+      message: "Playwright browser binary availability check failed",
+      severity: "error",
+      details: {
+        available: false,
+        reason: "BINARY_PATH_RESOLUTION_FAILED",
+        error: toErrorString(error),
+      },
+    });
+  }
+
+  if (!browserBinaryAvailable) {
+    pushDiagnostic(diagnostics, {
+      code: "ENVIRONMENT_UNSUPPORTED",
+      severity: "error",
+      message: "Rendered capture environment does not provide Playwright browser binaries",
+      details: {
+        reason: "BROWSER_BINARY_MISSING",
+        executablePath: chromiumExecutablePath,
+      },
+    });
+    pushDiagnostic(diagnostics, {
+      code: "RENDERED_CAPTURE_UNAVAILABLE",
+      severity: "warning",
+      message: "Playwright browser binary unavailable; rendered capture skipped",
+      details: {
+        reason: "BROWSER_BINARY_MISSING",
+        executablePath: chromiumExecutablePath,
+      },
+    });
+    pushDiagnostic(diagnostics, {
+      code: "RENDERED_CAPTURE_SUPPORT_DECISION",
+      message: "Rendered capture support decision finalized",
+      details: {
+        supported: false,
+        reason: "BROWSER_BINARY_MISSING",
+        runtimeKind: environment.runtimeKind,
+        browserPackageAvailable,
+        browserBinaryAvailable,
+        executablePath: chromiumExecutablePath,
+      },
+    });
+    return {
+      status: "unavailable",
+      document: null,
+      screenshots: [],
+      computedStyleSamples: [],
+      renderedObservedAssetUrls: [],
+      diagnostics,
+    };
+  }
+
+  pushDiagnostic(diagnostics, {
+    code: "RENDERED_CAPTURE_SUPPORT_DECISION",
+    message: "Rendered capture support decision finalized",
+    details: {
+      supported: true,
+      reason: "RUNTIME_AND_BROWSER_AVAILABLE",
+      runtimeKind: environment.runtimeKind,
+      browserPackageAvailable,
+      browserBinaryAvailable,
+      executablePath: chromiumExecutablePath,
+    },
+  });
 
   const startedAt = Date.now();
   let browser: any = null;
@@ -532,9 +726,15 @@ async function defaultRenderedCaptureExecutor(input: RenderedCaptureExecutorInpu
       const reason = detectEnvironmentUnsupportedReason(error);
       if (reason) {
         pushDiagnostic(diagnostics, {
-          code: "ENVIRONMENT_UNSUPPORTED",
-          severity: "error",
-          message: "Rendered capture browser launch failed due to runtime environment incompatibility",
+            code: "ENVIRONMENT_UNSUPPORTED",
+            severity: "error",
+            message: "Rendered capture browser launch failed due to runtime environment incompatibility",
+            details: { reason, error: toErrorString(error) },
+          });
+        pushDiagnostic(diagnostics, {
+          code: "RENDERED_CAPTURE_UNAVAILABLE",
+          severity: "warning",
+          message: "Rendered capture unavailable due to browser launch incompatibility",
           details: { reason, error: toErrorString(error) },
         });
       }
@@ -551,7 +751,7 @@ async function defaultRenderedCaptureExecutor(input: RenderedCaptureExecutorInpu
         details: { error: toErrorString(error) },
       });
       return {
-        status: "failed",
+        status: reason ? "unavailable" : "failed",
         document: null,
         screenshots: [],
         computedStyleSamples: [],

@@ -186,6 +186,20 @@ test('import provenance summary is parsed when persisted on runtime site version
         viewport: false,
         fullPage: false,
       },
+      execution: {
+        runtimeKind: 'edge',
+        environmentSupported: false,
+        browserPackageAvailable: false,
+        browserBinaryAvailable: false,
+        environmentStatus: 'unsupported',
+        failureCategory: 'environment',
+        failureCode: 'ENVIRONMENT_UNSUPPORTED',
+        browserLaunch: 'not_attempted',
+        navigation: 'not_attempted',
+        dom: 'not_attempted',
+        screenshot: 'none',
+        styleSampling: 'not_attempted',
+      },
     },
     importDiagnosticCodes: ['RAW_HTML_FALLBACK_USED', 'IMPORT_FIDELITY_DEGRADED'],
     captureEvidence: {
@@ -209,6 +223,10 @@ test('import provenance summary is parsed when persisted on runtime site version
   assert.equal(parsed?.screenshotCount, 0)
   assert.equal(parsed?.computedStyleSampleCount, 0)
   assert.equal(parsed?.renderedCapture.status, 'failed')
+  assert.equal(parsed?.renderedCapture.execution.runtimeKind, 'edge')
+  assert.equal(parsed?.renderedCapture.execution.environmentSupported, false)
+  assert.equal(parsed?.renderedCapture.execution.browserPackageAvailable, false)
+  assert.equal(parsed?.renderedCapture.execution.browserBinaryAvailable, false)
   assert.deepEqual(parsed?.importDiagnosticCodes, ['IMPORT_FIDELITY_DEGRADED', 'RAW_HTML_FALLBACK_USED'])
   assert.equal(parsed?.styleSignals, null)
 })

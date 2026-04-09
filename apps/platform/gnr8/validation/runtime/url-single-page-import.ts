@@ -53,6 +53,9 @@ export type UrlImportDiagnosticCode =
   | "PRIMARY_STYLESHEET_NOT_REWRITE_ELIGIBLE"
   | "PRIMARY_STYLESHEET_NOT_USED_IN_FINAL_HTML"
   | "RENDERED_CAPTURE_RUNTIME_ENVIRONMENT"
+  | "PLAYWRIGHT_PACKAGE_CHECK"
+  | "PLAYWRIGHT_BINARY_CHECK"
+  | "RENDERED_CAPTURE_SUPPORT_DECISION"
   | "ENVIRONMENT_UNSUPPORTED"
   | "BROWSER_LAUNCH_STARTED"
   | "BROWSER_LAUNCH_SUCCEEDED"
@@ -349,6 +352,10 @@ function toContentSnippet(value: string, maxChars = 500): string {
     .replace(/\s+/g, " ")
     .trim()
     .slice(0, maxChars);
+}
+
+function normalizeText(value: unknown): string {
+  return String(value ?? "").trim().toLowerCase();
 }
 
 function looksLikeHtmlPayload(html: string): boolean {
@@ -959,6 +966,10 @@ function buildRenderedCaptureExecutionTruth(input: {
   renderedCapture: RenderedCaptureResult;
   renderedDomQuality: RenderedDomQuality;
 }): {
+  runtimeKind: "nodejs" | "edge" | "unknown";
+  environmentSupported: boolean;
+  browserPackageAvailable: boolean;
+  browserBinaryAvailable: boolean;
   environmentStatus: "supported" | "unsupported" | "unknown";
   failureCategory: "environment" | "page" | "none";
   failureCode: string | null;
@@ -968,9 +979,34 @@ function buildRenderedCaptureExecutionTruth(input: {
   screenshot: "none" | "captured";
   styleSampling: "not_attempted" | "captured" | "failed_or_empty";
 } {
-  const codes = new Set(input.renderedCapture.diagnostics.map((entry) => String(entry.code ?? "").trim()).filter(Boolean));
+  const diagnostics = Array.isArray(input.renderedCapture.diagnostics) ? input.renderedCapture.diagnostics : [];
+  const codes = new Set(diagnostics.map((entry) => String(entry.code ?? "").trim()).filter(Boolean));
   const hasCode = (code: string): boolean => codes.has(code);
   const firstCode = (candidates: string[]): string | null => candidates.find((code) => hasCode(code)) ?? null;
+  const firstDetails = (code: string): Record<string, unknown> | null => {
+    for (const entry of diagnostics) {
+      if (entry.code === code && entry.details && typeof entry.details === "object" && !Array.isArray(entry.details)) {
+        return entry.details as Record<string, unknown>;
+      }
+    }
+    return null;
+  };
+  const runtimeProbeDetails = firstDetails("RENDERED_CAPTURE_RUNTIME_ENVIRONMENT");
+  const supportDecisionDetails = firstDetails("RENDERED_CAPTURE_SUPPORT_DECISION");
+  const packageCheckDetails = firstDetails("PLAYWRIGHT_PACKAGE_CHECK");
+  const binaryCheckDetails = firstDetails("PLAYWRIGHT_BINARY_CHECK");
+  const runtimeKindRaw =
+    normalizeText(supportDecisionDetails?.runtimeKind) || normalizeText(runtimeProbeDetails?.runtimeKind) || normalizeText(runtimeProbeDetails?.runtime);
+  const runtimeKind: "nodejs" | "edge" | "unknown" = runtimeKindRaw === "nodejs" || runtimeKindRaw === "edge" ? runtimeKindRaw : "unknown";
+  const boolOrNull = (value: unknown): boolean | null => (typeof value === "boolean" ? value : null);
+  const browserPackageAvailable =
+    boolOrNull(packageCheckDetails?.available) ??
+    boolOrNull(supportDecisionDetails?.browserPackageAvailable) ??
+    !hasCode("ENVIRONMENT_UNSUPPORTED");
+  const browserBinaryAvailable =
+    boolOrNull(binaryCheckDetails?.available) ??
+    boolOrNull(supportDecisionDetails?.browserBinaryAvailable) ??
+    false;
 
   const environmentStatus: "supported" | "unsupported" | "unknown" =
     hasCode("ENVIRONMENT_UNSUPPORTED") || hasCode("RENDERED_CAPTURE_UNAVAILABLE")
@@ -978,6 +1014,9 @@ function buildRenderedCaptureExecutionTruth(input: {
       : hasCode("BROWSER_LAUNCH_SUCCEEDED") || hasCode("NAVIGATION_SUCCEEDED")
         ? "supported"
         : "unknown";
+  const environmentSupported =
+    boolOrNull(supportDecisionDetails?.supported) ??
+    (environmentStatus === "supported" ? true : environmentStatus === "unsupported" ? false : false);
   const browserLaunch: "not_attempted" | "succeeded" | "failed" = hasCode("BROWSER_LAUNCH_FAILED")
     ? "failed"
     : hasCode("BROWSER_LAUNCH_SUCCEEDED")
@@ -1004,6 +1043,10 @@ function buildRenderedCaptureExecutionTruth(input: {
 
   if (environmentStatus === "unsupported") {
     return {
+      runtimeKind,
+      environmentSupported,
+      browserPackageAvailable,
+      browserBinaryAvailable,
       environmentStatus,
       failureCategory: "environment",
       failureCode: firstCode(["ENVIRONMENT_UNSUPPORTED", "RENDERED_CAPTURE_UNAVAILABLE"]),
@@ -1031,6 +1074,10 @@ function buildRenderedCaptureExecutionTruth(input: {
   const failureCategory: "environment" | "page" | "none" = pageFailureCode || statusIsFailure ? "page" : "none";
 
   return {
+    runtimeKind,
+    environmentSupported,
+    browserPackageAvailable,
+    browserBinaryAvailable,
     environmentStatus,
     failureCategory,
     failureCode: failureCategory === "none" ? null : pageFailureCode,

@@ -6,6 +6,9 @@ export type RenderedCaptureStatus = "available" | "partial" | "unavailable" | "f
 
 export type RenderedCaptureDiagnosticCode =
   | "RENDERED_CAPTURE_RUNTIME_ENVIRONMENT"
+  | "PLAYWRIGHT_PACKAGE_CHECK"
+  | "PLAYWRIGHT_BINARY_CHECK"
+  | "RENDERED_CAPTURE_SUPPORT_DECISION"
   | "ENVIRONMENT_UNSUPPORTED"
   | "BROWSER_LAUNCH_STARTED"
   | "BROWSER_LAUNCH_SUCCEEDED"

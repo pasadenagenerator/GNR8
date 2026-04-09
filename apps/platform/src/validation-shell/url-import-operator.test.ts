@@ -224,6 +224,36 @@ test("environment-not-supported diagnostic path remains explicit and fallback st
       renderedObservedAssetUrls: [],
       diagnostics: [
         {
+          code: "RENDERED_CAPTURE_RUNTIME_ENVIRONMENT",
+          severity: "info",
+          message: "runtime probe",
+          details: { runtimeKind: "edge", runtimeCompatible: false },
+        },
+        {
+          code: "PLAYWRIGHT_PACKAGE_CHECK",
+          severity: "error",
+          message: "package unavailable",
+          details: { available: false, reason: "PLAYWRIGHT_MODULE_MISSING" },
+        },
+        {
+          code: "PLAYWRIGHT_BINARY_CHECK",
+          severity: "error",
+          message: "binary unavailable",
+          details: { available: false, reason: "BROWSER_BINARY_MISSING" },
+        },
+        {
+          code: "RENDERED_CAPTURE_SUPPORT_DECISION",
+          severity: "info",
+          message: "support decision",
+          details: {
+            supported: false,
+            reason: "RUNTIME_INCOMPATIBLE",
+            runtimeKind: "edge",
+            browserPackageAvailable: false,
+            browserBinaryAvailable: false,
+          },
+        },
+        {
           code: "ENVIRONMENT_UNSUPPORTED",
           severity: "error",
           message: "Playwright unavailable in runtime",
@@ -238,6 +268,12 @@ test("environment-not-supported diagnostic path remains explicit and fallback st
   assert.ok(snapshot.importDiagnostics.issues.some((issue) => issue.code === "ENVIRONMENT_UNSUPPORTED"));
   assert.ok(snapshot.importDiagnostics.issues.some((issue) => issue.code === "RAW_HTML_FALLBACK_USED"));
   assert.ok(fs.existsSync(snapshot.entryHtmlPathAbs));
+
+  const acquisitionEvidence = JSON.parse(fs.readFileSync(path.resolve(snapshot.snapshotRootDirAbs, "acquisition-evidence.json"), "utf8"));
+  assert.equal(acquisitionEvidence.renderedCapture.executionTruth.runtimeKind, "edge");
+  assert.equal(acquisitionEvidence.renderedCapture.executionTruth.environmentSupported, false);
+  assert.equal(acquisitionEvidence.renderedCapture.executionTruth.browserPackageAvailable, false);
+  assert.equal(acquisitionEvidence.renderedCapture.executionTruth.browserBinaryAvailable, false);
 });
 
 test("rendered capture contract is persisted and rendered_dom becomes primary snapshot source", async () => {
@@ -301,6 +337,36 @@ test("rendered capture contract is persisted and rendered_dom becomes primary sn
       renderedObservedAssetUrls: ["https://rendered-primary.example.com/app.css"],
       diagnostics: [
         {
+          code: "RENDERED_CAPTURE_RUNTIME_ENVIRONMENT",
+          severity: "info",
+          message: "runtime probe",
+          details: { runtimeKind: "nodejs", runtimeCompatible: true },
+        },
+        {
+          code: "PLAYWRIGHT_PACKAGE_CHECK",
+          severity: "info",
+          message: "package available",
+          details: { available: true },
+        },
+        {
+          code: "PLAYWRIGHT_BINARY_CHECK",
+          severity: "info",
+          message: "binary available",
+          details: { available: true },
+        },
+        {
+          code: "RENDERED_CAPTURE_SUPPORT_DECISION",
+          severity: "info",
+          message: "support decision",
+          details: {
+            supported: true,
+            reason: "RUNTIME_AND_BROWSER_AVAILABLE",
+            runtimeKind: "nodejs",
+            browserPackageAvailable: true,
+            browserBinaryAvailable: true,
+          },
+        },
+        {
           code: "RENDERED_CAPTURE_TIMEOUT",
           severity: "warning",
           message: "mock timeout partial",
@@ -335,6 +401,10 @@ test("rendered capture contract is persisted and rendered_dom becomes primary sn
   assert.equal(renderedCaptureManifest.screenshotSummary.count, 1);
   assert.equal(Array.isArray(renderedCaptureManifest.screenshotSummary.paths), true);
   assert.equal(renderedCaptureManifest.screenshotSummary.paths.length, 1);
+  assert.equal(renderedCaptureManifest.executionTruth.runtimeKind, "nodejs");
+  assert.equal(renderedCaptureManifest.executionTruth.environmentSupported, true);
+  assert.equal(renderedCaptureManifest.executionTruth.browserPackageAvailable, true);
+  assert.equal(renderedCaptureManifest.executionTruth.browserBinaryAvailable, true);
 });
 
 test("rendered capture failure emits diagnostics and still returns snapshot output", async () => {

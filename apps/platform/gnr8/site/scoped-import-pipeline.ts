@@ -70,6 +70,23 @@ function buildRenderedCaptureExecutionFromSnapshot(snapshot: UrlSinglePageImport
   )
   const hasCode = (code: string): boolean => codes.has(code)
   const firstCode = (candidates: string[]): string | null => candidates.find((code) => hasCode(code)) ?? null
+  const firstDetails = (code: string): Record<string, unknown> | null => {
+    for (const entry of renderedDiagnostics) {
+      if (normalizeText(entry?.code) !== code) continue
+      if (!entry?.details || typeof entry.details !== 'object' || Array.isArray(entry.details)) continue
+      return entry.details as Record<string, unknown>
+    }
+    return null
+  }
+  const runtimeProbeDetails = firstDetails('RENDERED_CAPTURE_RUNTIME_ENVIRONMENT')
+  const supportDecisionDetails = firstDetails('RENDERED_CAPTURE_SUPPORT_DECISION')
+  const packageCheckDetails = firstDetails('PLAYWRIGHT_PACKAGE_CHECK')
+  const binaryCheckDetails = firstDetails('PLAYWRIGHT_BINARY_CHECK')
+  const runtimeKindRaw =
+    normalizeText(supportDecisionDetails?.runtimeKind) || normalizeText(runtimeProbeDetails?.runtimeKind) || normalizeText(runtimeProbeDetails?.runtime)
+  const runtimeKind: RuntimeImportProvenanceSummary['renderedCapture']['execution']['runtimeKind'] =
+    runtimeKindRaw === 'nodejs' || runtimeKindRaw === 'edge' ? runtimeKindRaw : 'unknown'
+  const boolOrNull = (value: unknown): boolean | null => (typeof value === 'boolean' ? value : null)
 
   const environmentStatus: RuntimeImportProvenanceSummary['renderedCapture']['execution']['environmentStatus'] =
     hasCode('ENVIRONMENT_UNSUPPORTED') || hasCode('RENDERED_CAPTURE_UNAVAILABLE')
@@ -77,6 +94,11 @@ function buildRenderedCaptureExecutionFromSnapshot(snapshot: UrlSinglePageImport
       : hasCode('BROWSER_LAUNCH_SUCCEEDED') || hasCode('NAVIGATION_SUCCEEDED')
         ? 'supported'
         : 'unknown'
+  const environmentSupported =
+    boolOrNull(supportDecisionDetails?.supported) ?? (environmentStatus === 'supported' ? true : environmentStatus === 'unsupported' ? false : false)
+  const browserPackageAvailable =
+    boolOrNull(packageCheckDetails?.available) ?? boolOrNull(supportDecisionDetails?.browserPackageAvailable) ?? !hasCode('ENVIRONMENT_UNSUPPORTED')
+  const browserBinaryAvailable = boolOrNull(binaryCheckDetails?.available) ?? boolOrNull(supportDecisionDetails?.browserBinaryAvailable) ?? false
   const browserLaunch: RuntimeImportProvenanceSummary['renderedCapture']['execution']['browserLaunch'] = hasCode('BROWSER_LAUNCH_FAILED')
     ? 'failed'
     : hasCode('BROWSER_LAUNCH_SUCCEEDED')
@@ -104,6 +126,10 @@ function buildRenderedCaptureExecutionFromSnapshot(snapshot: UrlSinglePageImport
 
   if (environmentStatus === 'unsupported') {
     return {
+      runtimeKind,
+      environmentSupported,
+      browserPackageAvailable,
+      browserBinaryAvailable,
       environmentStatus,
       failureCategory: 'environment',
       failureCode: firstCode(['ENVIRONMENT_UNSUPPORTED', 'RENDERED_CAPTURE_UNAVAILABLE']),
@@ -131,6 +157,10 @@ function buildRenderedCaptureExecutionFromSnapshot(snapshot: UrlSinglePageImport
     pageFailureCode || snapshot.renderedCapture.status === 'failed' ? 'page' : 'none'
 
   return {
+    runtimeKind,
+    environmentSupported,
+    browserPackageAvailable,
+    browserBinaryAvailable,
     environmentStatus,
     failureCategory,
     failureCode: failureCategory === 'none' ? null : pageFailureCode,
