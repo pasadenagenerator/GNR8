@@ -411,3 +411,93 @@ test("artifact-builder demotes legal-prefixed hero noise and cleans contact dupl
   assert.equal(emailOccurrences, 1);
   assert.match(visibleBlock, /Pridobite navodila/);
 });
+
+test("artifact-builder activates content recovery mode with deterministic diagnostics when import is degraded", () => {
+  const degradedSiteVersion = {
+    ...siteVersion,
+    importProvenanceSummary: {
+      kind: "runtime_import_provenance_summary_v1",
+      sourceMode: "raw_html_fallback",
+      importFidelityStatus: "degraded_import",
+      renderedCaptureStatus: "failed",
+      renderedDomQuality: "weak",
+      screenshotCount: 0,
+      computedStyleSampleCount: 0,
+      renderedCapture: {
+        used: false,
+        status: "failed",
+        quality: "weak",
+        domLength: 0,
+        nodeCount: 0,
+        styleSampleCount: 0,
+        styleCoverage: 0,
+        screenshots: {
+          viewport: false,
+          fullPage: false,
+        },
+        execution: {
+          runtimeKind: "edge",
+          environmentSupported: false,
+          browserPackageAvailable: false,
+          browserBinaryAvailable: false,
+          environmentStatus: "unsupported",
+          failureCategory: "environment",
+          failureCode: "ENVIRONMENT_UNSUPPORTED",
+          browserLaunch: "not_attempted",
+          navigation: "not_attempted",
+          dom: "not_attempted",
+          screenshot: "none",
+          styleSampling: "not_attempted",
+        },
+      },
+      importDiagnosticCodes: [],
+      captureEvidence: {
+        selectedSourceHtmlPath: "/tmp/snapshot/response-html.raw.html",
+        responseHtmlPath: "/tmp/snapshot/response-html.raw.html",
+        entryHtmlPath: "/tmp/snapshot/index.html",
+        renderedCaptureManifestPath: null,
+        acquisitionEvidencePath: "/tmp/snapshot/acquisition-evidence.json",
+        renderedDomPath: null,
+        computedStylesPath: null,
+        renderedViewportScreenshotPath: null,
+        renderedFullpageScreenshotPath: null,
+        screenshotPaths: [],
+      },
+      styleSignals: null,
+    },
+    pages: [
+      {
+        ...siteVersion.pages[0],
+        structureModel: {
+          sections: [{ id: "legacy", type: "legacy.html", order: 0 }],
+        },
+        contentModel: {
+          sectionProps: {
+            legacy: {
+              htmlSummary: {
+                extractedText: "Recovered Transport Company with fast delivery in Europe.",
+                extractedLinks: [{ href: "/contact", label: "Contact" }],
+                extractedImageSrcs: ["/uploads/recovered-hero.jpg"],
+              },
+            },
+          },
+        },
+      },
+    ],
+  };
+
+  const out = buildDeterministicArtifactBundle({ siteVersion: degradedSiteVersion, renderMode: "PREVIEW" });
+  const html = out.htmlByPath["/"] ?? "";
+  assert.match(html, /data-gnr8-render-mode="content-recovery"/);
+  assert.match(html, /data-gnr8-recovery-block="hero"/);
+  assert.match(html, /data-gnr8-section-props/);
+
+  const manifest = out.manifest as {
+    pageRenderModes?: Record<string, string>;
+    recoveryDiagnostics?: string[];
+    provenanceSummaryFlags?: { contentRecoveryModeActive?: boolean };
+  };
+  assert.equal(manifest.pageRenderModes?.["/"], "content_recovery");
+  assert.ok(manifest.recoveryDiagnostics?.includes("CONTENT_RECOVERY_MODE_ACTIVE"));
+  assert.equal(manifest.provenanceSummaryFlags?.contentRecoveryModeActive, true);
+});

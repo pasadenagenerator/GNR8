@@ -22,7 +22,7 @@ async function cleanRuntimeSite(siteId: string): Promise<void> {
   await getSuperadminPool().query(`delete from public.gnr8_runtime_sites where id = $1::text`, [siteId]);
 }
 
-test("runtime artifact response: public route serves stable artifact HTML with visible legacy summary marker", async (t) => {
+test("runtime artifact response: public route serves stable artifact HTML with content recovery marker when import is degraded", async (t) => {
   if (!process.env.DATABASE_URL) {
     t.skip("DATABASE_URL is required for runtime integration coverage");
     return;
@@ -103,7 +103,8 @@ test("runtime artifact response: public route serves stable artifact HTML with v
     assert.match(contentType, /text\/html/i);
     const html = await publicResponse.text();
     assert.match(html, /data-gnr8-render-mode="publish"/);
-    assert.match(html, /data-gnr8-legacy-summary="visible-v2"/);
+    assert.match(html, /data-gnr8-render-mode="content-recovery"/);
+    assert.match(html, /data-gnr8-recovery-block="hero"/);
     assert.match(html, /data-gnr8-section-props/);
   } finally {
     globalThis.fetch = originalFetch;

@@ -254,6 +254,22 @@ function renderDesignContent(readModel: Awaited<ReturnType<typeof getSiteWorkspa
 
 function renderPreviewContent(readModel: Awaited<ReturnType<typeof getSiteWorkspaceReadModelForPage>>): ReactNode {
   if (!readModel) return null
+  const sectionRows = readModel.structure.rows
+  const lowConfidenceCount = sectionRows.filter((row) => row.confidenceScore < 0.5).length
+  const weakStructureMajority = sectionRows.length > 0 && lowConfidenceCount > sectionRows.length / 2
+  const sectionsDetectedLow = readModel.overview.sectionsDetected <= 2
+  const missingRenderedCapture = readModel.pipeline.renderedCaptureStatus !== 'available'
+  const degradedImport = readModel.pipeline.importFidelityStatus !== 'high_fidelity_import'
+  const weakDomQuality =
+    (readModel.pipeline.renderedCapture?.nodeCount ?? 0) === 0 || readModel.pipeline.renderedDomQuality !== 'strong'
+
+  const contentRecoveryReasons: string[] = []
+  if (degradedImport) contentRecoveryReasons.push('degraded import')
+  if (missingRenderedCapture) contentRecoveryReasons.push('missing rendered capture')
+  if (weakStructureMajority || sectionsDetectedLow) contentRecoveryReasons.push('weak structure')
+  if (weakDomQuality) contentRecoveryReasons.push('weak dom quality')
+  const contentRecoveryModeActive = contentRecoveryReasons.length > 0
+
   const readinessLabel =
     readModel.preview.readiness === 'preview_available'
       ? 'Preview available'
@@ -275,6 +291,19 @@ function renderPreviewContent(readModel: Awaited<ReturnType<typeof getSiteWorksp
       <p style={{ margin: '6px 0 0', color: '#334155', fontSize: 12 }}>
         Import provenance: {readModel.pipeline.sourceMode} · {readModel.pipeline.importFidelityStatus} · capture={readModel.pipeline.renderedCaptureStatus}
       </p>
+      <p style={{ margin: '6px 0 0', color: '#334155', fontSize: 12 }}>
+        Preview mode: <strong>{contentRecoveryModeActive ? 'content recovery' : 'canonical'}</strong>
+      </p>
+      {contentRecoveryModeActive ? (
+        <div style={{ margin: '6px 0 0', color: '#334155', fontSize: 12 }}>
+          <div style={{ fontWeight: 600 }}>Reason:</div>
+          <ul style={{ margin: '4px 0 0', paddingLeft: 18 }}>
+            {contentRecoveryReasons.map((reason) => (
+              <li key={reason}>{reason}</li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
       {readModel.preview.selectedVariantLabel ? (
         <p style={{ margin: '6px 0 0', color: '#334155', fontSize: 12 }}>
           Active variant: <strong>{readModel.preview.selectedVariantLabel}</strong>

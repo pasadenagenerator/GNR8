@@ -1,4 +1,11 @@
 import { normalizePagePath, sha256Hex, stableStringify } from "@/gnr8/runtime/deterministic";
+import {
+  renderContentRecoveryPreview,
+  resolveContentRecoveryDecision,
+  type ArtifactPageRenderMode,
+  type ContentRecoveryDiagnosticCode,
+  type ContentRecoveryReasonCode,
+} from "@/gnr8/runtime/preview-content-recovery-renderer";
 import { renderPreviewFallbackSectionHtml } from "@/gnr8/runtime/preview-fallback-renderer";
 import type { CanonicalSiteVersionSnapshot, RenderMode, RuntimeArtifact } from "@/gnr8/runtime/types";
 
@@ -691,8 +698,8 @@ function renderSectionHtml(input: {
   return `<section data-gnr8-section-id="${escapeHtml(input.sectionId)}" data-gnr8-section-type="${escapeHtml(input.sectionType)}">${visibleFallback}<script type="application/json" data-gnr8-section-props>${payload}</script></section>`;
 }
 
-function renderPageBody(page: CanonicalSiteVersionSnapshot["pages"][number]): string {
-  const sections = [...(page.structureModel.sections ?? [])]
+function renderCanonicalSections(page: CanonicalSiteVersionSnapshot["pages"][number]): string {
+  return [...(page.structureModel.sections ?? [])]
     .sort((a, b) => a.order - b.order)
     .map((section) =>
       renderSectionHtml({
@@ -703,17 +710,47 @@ function renderPageBody(page: CanonicalSiteVersionSnapshot["pages"][number]): st
       }),
     )
     .join("\n");
+}
 
-  return `<main data-gnr8-page-path="${escapeHtml(page.path)}">\n${sections}\n</main>`;
+function renderPageBody(input: {
+  page: CanonicalSiteVersionSnapshot["pages"][number];
+  pageRenderMode: ArtifactPageRenderMode;
+  selectedSourceHtmlPath?: string | null;
+}): {
+  html: string;
+  diagnostics: ContentRecoveryDiagnosticCode[];
+} {
+  const sections = renderCanonicalSections(input.page);
+  if (input.pageRenderMode !== "content_recovery") {
+    return {
+      html: `<main data-gnr8-page-path="${escapeHtml(input.page.path)}">\n${sections}\n</main>`,
+      diagnostics: [],
+    };
+  }
+
+  const recovery = renderContentRecoveryPreview({
+    page: input.page,
+    sectionEntries: [...(input.page.structureModel.sections ?? [])]
+      .sort((a, b) => a.order - b.order)
+      .map((section) => ({
+        sectionId: section.id,
+        sectionType: section.type,
+        sectionProps: input.page.contentModel.sectionProps[section.id] ?? {},
+      })),
+    selectedSourceHtmlPath: input.selectedSourceHtmlPath ?? null,
+  });
+  return {
+    html: recovery.html,
+    diagnostics: recovery.diagnostics,
+  };
 }
 
 function renderPageDocument(input: {
   page: CanonicalSiteVersionSnapshot["pages"][number];
+  pageHtml: string;
   compiledTokenStyles: string;
   renderMode: RenderMode;
 }): string {
-  const pageHtml = renderPageBody(input.page);
-
   const previewMeta =
     input.renderMode === "PREVIEW"
       ? '<meta name="robots" content="noindex, nofollow" data-gnr8-render-mode="preview" />'
@@ -732,7 +769,7 @@ function renderPageDocument(input: {
     "  </style>",
     "</head>",
     "<body>",
-    pageHtml,
+    input.pageHtml,
     "</body>",
     "</html>",
   ].join("\n");
@@ -758,9 +795,29 @@ export function buildDeterministicArtifactBundle(input: {
   const compiledTokenStyles = buildCompiledTokenStyles(input.siteVersion);
 
   const htmlByPath: Record<string, string> = {};
+  const pageRenderModes: Record<string, ArtifactPageRenderMode> = {};
+  const pageRecoveryReasons: Record<string, ContentRecoveryReasonCode[]> = {};
+  const recoveryDiagnosticCodes = new Set<ContentRecoveryDiagnosticCode>();
+  const selectedSourceHtmlPath = input.siteVersion.importProvenanceSummary?.captureEvidence.selectedSourceHtmlPath ?? null;
+
   for (const page of [...input.siteVersion.pages].sort((a, b) => a.path.localeCompare(b.path))) {
-    htmlByPath[normalizePagePath(page.path)] = renderPageDocument({
+    const normalizedPath = normalizePagePath(page.path);
+    const decision = resolveContentRecoveryDecision({
       page,
+      importProvenanceSummary: input.siteVersion.importProvenanceSummary ?? null,
+    });
+    const rendered = renderPageBody({
+      page,
+      pageRenderMode: decision.pageRenderMode,
+      selectedSourceHtmlPath,
+    });
+    for (const code of rendered.diagnostics) recoveryDiagnosticCodes.add(code);
+    pageRenderModes[normalizedPath] = decision.pageRenderMode;
+    if (decision.reasons.length > 0) pageRecoveryReasons[normalizedPath] = decision.reasons;
+
+    htmlByPath[normalizedPath] = renderPageDocument({
+      page,
+      pageHtml: rendered.html,
       compiledTokenStyles,
       renderMode: input.renderMode,
     });
@@ -773,6 +830,12 @@ export function buildDeterministicArtifactBundle(input: {
     siteVersionId: input.siteVersion.id,
     rendererCompatibilityVersion: input.siteVersion.rendererCompatibilityVersion,
     renderMode: input.renderMode,
+    pageRenderModes: Object.fromEntries(Object.entries(pageRenderModes).sort((a, b) => a[0].localeCompare(b[0]))),
+    pageRecoveryReasons: Object.fromEntries(Object.entries(pageRecoveryReasons).sort((a, b) => a[0].localeCompare(b[0]))),
+    recoveryDiagnostics: [...recoveryDiagnosticCodes].sort((a, b) => a.localeCompare(b)),
+    provenanceSummaryFlags: {
+      contentRecoveryModeActive: [...Object.values(pageRenderModes)].some((mode) => mode === "content_recovery"),
+    },
     generatedAt: "deterministic",
     paths: Object.keys(htmlByPath).sort(),
     assetFingerprints: assetFingerprintMap,
