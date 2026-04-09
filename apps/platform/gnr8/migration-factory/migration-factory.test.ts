@@ -104,7 +104,7 @@ function createMockSnapshotImporter(input: {
 
     return {
       kind: "url_single_page_import_snapshot_v1",
-      snapshotVersion: "1.4.0",
+      snapshotVersion: "1.5.0",
       sourceUrl,
       normalizedUrl: sourceUrl,
       snapshotId: "mock-snapshot",
@@ -116,7 +116,7 @@ function createMockSnapshotImporter(input: {
         assetsDirPath: "assets",
         sourceUrl,
         normalizedUrl: sourceUrl,
-        snapshotVersion: "1.4.0",
+        snapshotVersion: "1.5.0",
         urlKeyRule: "sha256(normalized_url_without_fragment)_prefix16",
         entryRule: "index.html",
         assetPathRule: "assets/<kind>/<urlHash12>-<basename>; collisions append -N",

@@ -15,6 +15,25 @@ export type SemanticSignal = {
   source: AuditSource;
 };
 
+export type RuntimeImportProvenanceSummary = {
+  kind: "runtime_import_provenance_summary_v1";
+  sourceMode: "rendered_dom" | "raw_html_fallback";
+  importFidelityStatus: "high_fidelity_import" | "degraded_import" | "capture_failed";
+  renderedCaptureStatus: "available" | "unavailable" | "failed";
+  renderedDomQuality: "strong" | "weak" | "unusable";
+  screenshotCount: number;
+  computedStyleSampleCount: number;
+  importDiagnosticCodes: string[];
+  captureEvidence: {
+    selectedSourceHtmlPath: string | null;
+    responseHtmlPath: string | null;
+    entryHtmlPath: string | null;
+    renderedCaptureManifestPath: string | null;
+    acquisitionEvidencePath: string | null;
+    screenshotPaths: string[];
+  };
+};
+
 export type StyleTokenRecord = Record<string, string>;
 
 export type AssetGraphItem = {
@@ -67,6 +86,7 @@ export type CanonicalSiteMigrationInput = {
   sourceUrl: string;
   actor: string;
   pages: CanonicalPageVersionInput[];
+  importProvenanceSummary?: RuntimeImportProvenanceSummary | null;
 };
 
 export type CanonicalPageVersionSnapshot = CanonicalPageVersionInput & {
@@ -85,6 +105,7 @@ export type CanonicalSiteVersionSnapshot = {
   createdAt: string;
   rendererCompatibilityVersion: string;
   artifactId: string | null;
+  importProvenanceSummary?: RuntimeImportProvenanceSummary | null;
   pages: CanonicalPageVersionSnapshot[];
 };
 

@@ -18,8 +18,14 @@ import {
   createArtifact,
   createSiteVersionFromMigration,
   getSiteVersion,
+  setSiteVersionImportProvenanceSummary,
 } from '@/gnr8/runtime/runtime-store'
-import { RENDERER_COMPATIBILITY_VERSION, type CanonicalPageVersionInput, type CanonicalSiteMigrationInput } from '@/gnr8/runtime/types'
+import {
+  RENDERER_COMPATIBILITY_VERSION,
+  type CanonicalPageVersionInput,
+  type CanonicalSiteMigrationInput,
+  type RuntimeImportProvenanceSummary,
+} from '@/gnr8/runtime/types'
 import type { UrlSinglePageImportSnapshot } from '@/gnr8/validation/runtime/url-single-page-import'
 
 const SECTION_INTENT_BY_SEMANTIC_TYPE: Record<string, string> = {
@@ -183,6 +189,38 @@ function buildImportFidelitySignals(snapshot: UrlSinglePageImportSnapshot): Arra
       source: 'migration' as const,
     })),
   ]
+}
+
+function resolveEvidencePathIfExists(pathAbs: string): string | null {
+  const normalized = normalizeText(pathAbs)
+  if (!normalized) return null
+  return fs.existsSync(normalized) ? normalized : null
+}
+
+function buildImportProvenanceSummary(snapshot: UrlSinglePageImportSnapshot): RuntimeImportProvenanceSummary {
+  const captureDiagnostics = (Array.isArray(snapshot.renderedCapture.diagnostics) ? snapshot.renderedCapture.diagnostics : [])
+    .map((diag) => normalizeText(diag.code))
+    .filter(Boolean)
+  const importDiagnostics = snapshot.importDiagnostics.issues.map((issue) => normalizeText(issue.code)).filter(Boolean)
+
+  return {
+    kind: 'runtime_import_provenance_summary_v1',
+    sourceMode: snapshot.sourceSelection.sourceMode,
+    importFidelityStatus: snapshot.sourceSelection.fidelityStatus,
+    renderedCaptureStatus: snapshot.renderedCapture.status,
+    renderedDomQuality: snapshot.sourceSelection.renderedDomQuality.quality,
+    screenshotCount: snapshot.renderedCapture.screenshots.length,
+    computedStyleSampleCount: snapshot.renderedCapture.computedStyleSamples.length,
+    importDiagnosticCodes: uniqueSorted([...captureDiagnostics, ...importDiagnostics]),
+    captureEvidence: {
+      selectedSourceHtmlPath: resolveEvidencePathIfExists(snapshot.sourceSelection.selectedSourceHtmlPathAbs),
+      responseHtmlPath: resolveEvidencePathIfExists(snapshot.responseHtmlPathAbs),
+      entryHtmlPath: resolveEvidencePathIfExists(snapshot.entryHtmlPathAbs),
+      renderedCaptureManifestPath: resolveEvidencePathIfExists(path.resolve(snapshot.snapshotRootDirAbs, 'rendered-capture.json')),
+      acquisitionEvidencePath: resolveEvidencePathIfExists(path.resolve(snapshot.snapshotRootDirAbs, 'acquisition-evidence.json')),
+      screenshotPaths: uniqueSorted(snapshot.renderedCapture.screenshots.map((shot) => resolveEvidencePathIfExists(shot.filePathAbs) ?? '').filter(Boolean)),
+    },
+  }
 }
 
 function buildCanonicalMigrationInputFromPipeline(input: {
@@ -411,6 +449,7 @@ export type ScopedImportPipelineDependencies = {
   createImportManifest: typeof createImportManifest
   runLinearMigrationPipeline: typeof runLinearMigrationPipeline
   createSiteVersionFromMigration: typeof createSiteVersionFromMigration
+  setSiteVersionImportProvenanceSummary: typeof setSiteVersionImportProvenanceSummary
   getSiteVersion: typeof getSiteVersion
   buildDeterministicArtifactBundle: typeof buildDeterministicArtifactBundle
   createArtifact: typeof createArtifact
@@ -425,6 +464,7 @@ function defaultDependencies(): ScopedImportPipelineDependencies {
     createImportManifest,
     runLinearMigrationPipeline,
     createSiteVersionFromMigration,
+    setSiteVersionImportProvenanceSummary,
     getSiteVersion,
     buildDeterministicArtifactBundle,
     createArtifact,
@@ -459,6 +499,7 @@ export async function runScopedImportPipeline(input: {
 
   const pipelineResult = deps.runLinearMigrationPipeline({ importOutput, importManifest })
   const { preparedSite, layoutModel, renderOutput, previewDocument } = extractPipelineArtifacts(pipelineResult)
+  const importProvenanceSummary = buildImportProvenanceSummary(input.snapshot)
 
   if (pipelineResult.status === 'success' && preparedSite) {
     const canonicalInput = buildCanonicalMigrationInputFromPipeline({
@@ -472,6 +513,12 @@ export async function runScopedImportPipeline(input: {
     const migrated = await deps.createSiteVersionFromMigration({
       ...canonicalInput,
       rendererCompatibilityVersion: RENDERER_COMPATIBILITY_VERSION,
+      importProvenanceSummary,
+    })
+
+    await deps.setSiteVersionImportProvenanceSummary({
+      siteVersionId: migrated.siteVersionId,
+      importProvenanceSummary,
     })
 
     const siteVersion = await deps.getSiteVersion(migrated.siteVersionId)
@@ -568,6 +615,11 @@ export async function runScopedImportPipeline(input: {
     sourceUrl: input.sourceUrl,
     page: legacyPage,
     actor: `${input.actor}:fallback`,
+  })
+
+  await deps.setSiteVersionImportProvenanceSummary({
+    siteVersionId: legacyMigrated.siteVersionId,
+    importProvenanceSummary,
   })
 
   return {

@@ -119,3 +119,117 @@ test('import fidelity signals are parsed from semantic signal labels', () => {
   assert.equal(parsed.computedStyleSampleCount, 6)
   assert.deepEqual(parsed.importDiagnosticCodes, ['RENDERED_CAPTURE_PARTIAL'])
 })
+
+test('import provenance summary is parsed when persisted on runtime site version', () => {
+  const parsed = __siteWorkspaceReadModelTestUtils.parseImportProvenanceSummary({
+    kind: 'runtime_import_provenance_summary_v1',
+    sourceMode: 'raw_html_fallback',
+    importFidelityStatus: 'degraded_import',
+    renderedCaptureStatus: 'unavailable',
+    renderedDomQuality: 'weak',
+    screenshotCount: 0,
+    computedStyleSampleCount: 0,
+    importDiagnosticCodes: ['RAW_HTML_FALLBACK_USED', 'IMPORT_FIDELITY_DEGRADED'],
+    captureEvidence: {
+      selectedSourceHtmlPath: '/tmp/snapshot/response-html.raw.html',
+      responseHtmlPath: '/tmp/snapshot/response-html.raw.html',
+      entryHtmlPath: '/tmp/snapshot/index.html',
+      renderedCaptureManifestPath: null,
+      acquisitionEvidencePath: '/tmp/snapshot/acquisition-evidence.json',
+      screenshotPaths: [],
+    },
+  })
+
+  assert.equal(parsed?.sourceMode, 'raw_html_fallback')
+  assert.equal(parsed?.importFidelityStatus, 'degraded_import')
+  assert.equal(parsed?.renderedCaptureStatus, 'unavailable')
+  assert.equal(parsed?.renderedDomQuality, 'weak')
+  assert.equal(parsed?.screenshotCount, 0)
+  assert.equal(parsed?.computedStyleSampleCount, 0)
+  assert.deepEqual(parsed?.importDiagnosticCodes, ['IMPORT_FIDELITY_DEGRADED', 'RAW_HTML_FALLBACK_USED'])
+})
+
+test('import fidelity prefers persisted summary over semantic signal labels', () => {
+  const parsed = __siteWorkspaceReadModelTestUtils.parseImportFidelity({
+    runtimeVersion: {
+      id: 'sv-1',
+      ownership_site_id: SITE_ID,
+      state: 'DRAFT',
+      version_no: 1,
+      import_provenance_summary: {
+        kind: 'runtime_import_provenance_summary_v1',
+        sourceMode: 'rendered_dom',
+        importFidelityStatus: 'high_fidelity_import',
+        renderedCaptureStatus: 'available',
+        renderedDomQuality: 'strong',
+        screenshotCount: 2,
+        computedStyleSampleCount: 6,
+        importDiagnosticCodes: ['RENDERED_CAPTURE_RECOVERED_ON_RETRY'],
+        captureEvidence: {
+          selectedSourceHtmlPath: '/tmp/snapshot/rendered-capture/rendered-dom.html',
+          responseHtmlPath: '/tmp/snapshot/response-html.raw.html',
+          entryHtmlPath: '/tmp/snapshot/index.html',
+          renderedCaptureManifestPath: '/tmp/snapshot/rendered-capture.json',
+          acquisitionEvidencePath: '/tmp/snapshot/acquisition-evidence.json',
+          screenshotPaths: ['/tmp/snapshot/rendered-capture/desktop-fullpage.png'],
+        },
+      },
+      updated_at: new Date().toISOString(),
+      created_at: new Date().toISOString(),
+    } as any,
+    pageRows: [
+      {
+        id: 'page-row',
+        site_version_id: 'sv-1',
+        page_id: 'page-1',
+        path: '/',
+        title: 'Home',
+        structure_model: null,
+        content_model: null,
+        migration_governance: null,
+        semantic_signals: [{ label: 'import.source_mode:raw_html_fallback' }],
+      } as any,
+    ],
+  })
+
+  assert.equal(parsed.sourceMode, 'rendered_dom')
+  assert.equal(parsed.importFidelityStatus, 'high_fidelity_import')
+  assert.equal(parsed.renderedCaptureStatus, 'available')
+  assert.equal(parsed.renderedDomQuality, 'strong')
+  assert.equal(parsed.screenshotCount, 2)
+  assert.equal(parsed.computedStyleSampleCount, 6)
+  assert.ok(parsed.captureEvidenceRefs.some((entry) => entry.includes('rendered-capture.json')))
+  assert.deepEqual(parsed.importDiagnosticCodes, ['RENDERED_CAPTURE_RECOVERED_ON_RETRY'])
+})
+
+test('import fidelity falls back to semantic signals and only returns unknown when absent', () => {
+  const parsed = __siteWorkspaceReadModelTestUtils.parseImportFidelity({
+    runtimeVersion: null,
+    pageRows: [
+      {
+        id: 'page-row',
+        site_version_id: 'sv-1',
+        page_id: 'page-1',
+        path: '/',
+        title: 'Home',
+        structure_model: null,
+        content_model: null,
+        migration_governance: null,
+        semantic_signals: [
+          { label: 'import.fidelity_status:capture_failed' },
+          { label: 'import.screenshot_count:0' },
+          { label: 'import.computed_style_sample_count:0' },
+        ],
+      } as any,
+    ],
+  })
+
+  assert.equal(parsed.sourceMode, 'unknown')
+  assert.equal(parsed.importFidelityStatus, 'capture_failed')
+  assert.equal(parsed.renderedCaptureStatus, 'unknown')
+  assert.equal(parsed.renderedDomQuality, 'unknown')
+  assert.equal(parsed.screenshotCount, 0)
+  assert.equal(parsed.computedStyleSampleCount, 0)
+  assert.deepEqual(parsed.importDiagnosticCodes, [])
+  assert.deepEqual(parsed.captureEvidenceRefs, [])
+})

@@ -2,6 +2,7 @@ import 'server-only'
 
 import { toSiteEntity, type RawSiteRow, type SiteEntity } from '@/gnr8/site/site-entity'
 import { resolveSiteWorkspacePreview, type SitePreviewType, type SiteWorkspacePreviewReadiness } from '@/gnr8/site/site-preview-contract'
+import type { RuntimeImportProvenanceSummary } from '@/gnr8/runtime/types'
 import { getSupabaseServerClientReadOnly } from '@/src/auth/supabase-server-read-only'
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
@@ -18,6 +19,7 @@ type RuntimeVersionRow = {
   ownership_site_id: string | null
   state: string | null
   version_no: number | null
+  import_provenance_summary: unknown
   updated_at: string | null
   created_at: string | null
 }
@@ -122,6 +124,8 @@ export type SiteWorkspaceReadModel = {
     renderedDomQuality: 'strong' | 'weak' | 'unusable' | 'unknown'
     screenshotCount: number
     computedStyleSampleCount: number
+    importDiagnosticCodes: string[]
+    captureEvidenceRefs: string[]
     diagnosticsSummary: string[]
   }
   actions: {
@@ -515,6 +519,100 @@ function parseImportFidelitySignals(pageRows: RuntimePageVersionRow[]): {
   }
 }
 
+function parseImportProvenanceSummary(value: unknown): RuntimeImportProvenanceSummary | null {
+  if (!isRecord(value)) return null
+  if (normalizeText(value.kind) !== 'runtime_import_provenance_summary_v1') return null
+
+  const sourceModeRaw = normalizeText(value.sourceMode)
+  const fidelityStatusRaw = normalizeText(value.importFidelityStatus)
+  const captureStatusRaw = normalizeText(value.renderedCaptureStatus)
+  const domQualityRaw = normalizeText(value.renderedDomQuality)
+  const screenshotCountRaw = Number(value.screenshotCount)
+  const computedStyleSampleCountRaw = Number(value.computedStyleSampleCount)
+
+  if (sourceModeRaw !== 'rendered_dom' && sourceModeRaw !== 'raw_html_fallback') return null
+  if (fidelityStatusRaw !== 'high_fidelity_import' && fidelityStatusRaw !== 'degraded_import' && fidelityStatusRaw !== 'capture_failed') return null
+  if (captureStatusRaw !== 'available' && captureStatusRaw !== 'unavailable' && captureStatusRaw !== 'failed') return null
+  if (domQualityRaw !== 'strong' && domQualityRaw !== 'weak' && domQualityRaw !== 'unusable') return null
+  if (!Number.isFinite(screenshotCountRaw) || !Number.isFinite(computedStyleSampleCountRaw)) return null
+
+  const importDiagnosticCodes = Array.isArray(value.importDiagnosticCodes)
+    ? value.importDiagnosticCodes.map((entry) => normalizeText(entry)).filter(Boolean)
+    : []
+  const captureEvidence = isRecord(value.captureEvidence) ? value.captureEvidence : null
+  const screenshotPaths = Array.isArray(captureEvidence?.screenshotPaths)
+    ? captureEvidence.screenshotPaths.map((entry) => normalizeText(entry)).filter(Boolean)
+    : []
+
+  return {
+    kind: 'runtime_import_provenance_summary_v1',
+    sourceMode: sourceModeRaw,
+    importFidelityStatus: fidelityStatusRaw,
+    renderedCaptureStatus: captureStatusRaw,
+    renderedDomQuality: domQualityRaw,
+    screenshotCount: Math.max(0, Math.floor(screenshotCountRaw)),
+    computedStyleSampleCount: Math.max(0, Math.floor(computedStyleSampleCountRaw)),
+    importDiagnosticCodes: [...new Set(importDiagnosticCodes)].sort((a, b) => a.localeCompare(b)),
+    captureEvidence: {
+      selectedSourceHtmlPath: toTextOrNull(captureEvidence?.selectedSourceHtmlPath),
+      responseHtmlPath: toTextOrNull(captureEvidence?.responseHtmlPath),
+      entryHtmlPath: toTextOrNull(captureEvidence?.entryHtmlPath),
+      renderedCaptureManifestPath: toTextOrNull(captureEvidence?.renderedCaptureManifestPath),
+      acquisitionEvidencePath: toTextOrNull(captureEvidence?.acquisitionEvidencePath),
+      screenshotPaths: [...new Set(screenshotPaths)].sort((a, b) => a.localeCompare(b)),
+    },
+  }
+}
+
+function parseImportFidelity(input: {
+  pageRows: RuntimePageVersionRow[]
+  runtimeVersion: RuntimeVersionRow | null
+}): {
+  sourceMode: SiteWorkspaceReadModel['pipeline']['sourceMode']
+  importFidelityStatus: SiteWorkspaceReadModel['pipeline']['importFidelityStatus']
+  renderedCaptureStatus: SiteWorkspaceReadModel['pipeline']['renderedCaptureStatus']
+  renderedDomQuality: SiteWorkspaceReadModel['pipeline']['renderedDomQuality']
+  screenshotCount: number
+  computedStyleSampleCount: number
+  importDiagnosticCodes: string[]
+  captureEvidenceRefs: string[]
+} {
+  const parsedFromSignals = parseImportFidelitySignals(input.pageRows)
+  const parsedSummary = parseImportProvenanceSummary(input.runtimeVersion?.import_provenance_summary ?? null)
+
+  if (!parsedSummary) {
+    return {
+      ...parsedFromSignals,
+      captureEvidenceRefs: [],
+    }
+  }
+
+  const importDiagnosticCodes = [...new Set([...parsedFromSignals.importDiagnosticCodes, ...parsedSummary.importDiagnosticCodes])]
+    .sort((a, b) => a.localeCompare(b))
+
+  const captureEvidenceRefs = [
+    parsedSummary.captureEvidence.selectedSourceHtmlPath,
+    parsedSummary.captureEvidence.responseHtmlPath,
+    parsedSummary.captureEvidence.entryHtmlPath,
+    parsedSummary.captureEvidence.renderedCaptureManifestPath,
+    parsedSummary.captureEvidence.acquisitionEvidencePath,
+    ...parsedSummary.captureEvidence.screenshotPaths,
+  ]
+    .filter((value): value is string => Boolean(value))
+    .slice(0, 10)
+
+  return {
+    sourceMode: parsedSummary.sourceMode,
+    importFidelityStatus: parsedSummary.importFidelityStatus,
+    renderedCaptureStatus: parsedSummary.renderedCaptureStatus,
+    renderedDomQuality: parsedSummary.renderedDomQuality,
+    screenshotCount: parsedSummary.screenshotCount,
+    computedStyleSampleCount: parsedSummary.computedStyleSampleCount,
+    importDiagnosticCodes,
+    captureEvidenceRefs,
+  }
+}
+
 export function resolveSelectedRuntimeVersionIdForWorkspace(input: {
   latestRuntimeSiteVersionId: string | null
   normalizedVariants: Array<{
@@ -646,7 +744,7 @@ export async function getSiteWorkspaceReadModelForPage(input: {
 
   const runtimeResult = await supabase
     .from('gnr8_runtime_site_versions')
-    .select('id,ownership_site_id,state,version_no,updated_at,created_at')
+    .select('id,ownership_site_id,state,version_no,import_provenance_summary,updated_at,created_at')
     .eq('ownership_site_id', siteId)
 
   const runtimeRows = !runtimeResult.error && Array.isArray(runtimeResult.data)
@@ -735,7 +833,10 @@ export async function getSiteWorkspaceReadModelForPage(input: {
       `Structural confidence is '${row.confidenceLabel}' (${row.confidenceScore.toFixed(2)}).`,
     ],
   }))
-  const importFidelity = parseImportFidelitySignals(pageRows)
+  const importFidelity = parseImportFidelity({
+    pageRows,
+    runtimeVersion: selectedRuntimeRow,
+  })
   const importFidelityDegraded = importFidelity.importFidelityStatus === 'degraded_import' || importFidelity.importFidelityStatus === 'capture_failed'
 
   const lastAction = normalizedSiteActions[0] ?? null
@@ -803,6 +904,8 @@ export async function getSiteWorkspaceReadModelForPage(input: {
       renderedDomQuality: importFidelity.renderedDomQuality,
       screenshotCount: importFidelity.screenshotCount,
       computedStyleSampleCount: importFidelity.computedStyleSampleCount,
+      importDiagnosticCodes: importFidelity.importDiagnosticCodes,
+      captureEvidenceRefs: importFidelity.captureEvidenceRefs,
       diagnosticsSummary,
     },
     actions: {
@@ -879,4 +982,6 @@ export async function getSiteWorkspaceReadModelForPage(input: {
 
 export const __siteWorkspaceReadModelTestUtils = {
   parseImportFidelitySignals,
+  parseImportProvenanceSummary,
+  parseImportFidelity,
 }

@@ -253,6 +253,7 @@ function createSuccessPipelineFixture() {
 test('scoped pipeline import uses pipeline path, maps consolidated sections, and links artifact', async () => {
   const pipeline = createSuccessPipelineFixture()
   let createInput: any = null
+  let persistedImportSummary: any = null
   let legacyImportCalls = 0
   let legacyMigrateCalls = 0
   let bindCalls = 0
@@ -295,6 +296,9 @@ test('scoped pipeline import uses pipeline path, maps consolidated sections, and
       createSiteVersionFromMigration: async (input) => {
         createInput = input
         return { siteId: 'runtime-site', siteVersionId: 'site-version-1', versionNo: 7 }
+      },
+      setSiteVersionImportProvenanceSummary: async (input) => {
+        persistedImportSummary = input
       },
       getSiteVersion: async () =>
         ({
@@ -366,6 +370,12 @@ test('scoped pipeline import uses pipeline path, maps consolidated sections, and
   assert.equal(legacyImportCalls, 0)
   assert.equal(legacyMigrateCalls, 0)
   assert.ok(createInput)
+  assert.equal(createInput.importProvenanceSummary.sourceMode, 'rendered_dom')
+  assert.equal(createInput.importProvenanceSummary.importFidelityStatus, 'high_fidelity_import')
+  assert.equal(createInput.importProvenanceSummary.screenshotCount, 2)
+  assert.equal(createInput.importProvenanceSummary.computedStyleSampleCount, 3)
+  assert.equal(persistedImportSummary.siteVersionId, 'site-version-1')
+  assert.equal(persistedImportSummary.importProvenanceSummary.renderedCaptureStatus, 'available')
   assert.ok(createInput.pages[0].structureModel.sections.length > 1, 'expected consolidated sections to persist into runtime structure model')
 })
 
@@ -377,6 +387,7 @@ test('scoped pipeline import falls back to legacy when pipeline fails', async ()
 
   let legacyImportCalls = 0
   let legacyMigrateCalls = 0
+  let persistedImportSummary: any = null
 
   const outcome = await runScopedImportPipeline({
     snapshot: {
@@ -423,6 +434,9 @@ test('scoped pipeline import falls back to legacy when pipeline fails', async ()
       createSiteVersionFromMigration: async () => {
         throw new Error('should not be called')
       },
+      setSiteVersionImportProvenanceSummary: async (input) => {
+        persistedImportSummary = input
+      },
       getSiteVersion: async () => null,
       buildDeterministicArtifactBundle: () => ({}) as any,
       createArtifact: async () => ({ artifactId: 'artifact-unused' }),
@@ -445,6 +459,11 @@ test('scoped pipeline import falls back to legacy when pipeline fails', async ()
   assert.equal(outcome.diagnostics.sourceMode, 'raw_html_fallback')
   assert.equal(outcome.diagnostics.fidelityStatus, 'degraded_import')
   assert.equal(outcome.diagnostics.fidelityDegraded, true)
+  assert.equal(persistedImportSummary.siteVersionId, 'legacy-version')
+  assert.equal(persistedImportSummary.importProvenanceSummary.sourceMode, 'raw_html_fallback')
+  assert.equal(persistedImportSummary.importProvenanceSummary.renderedCaptureStatus, 'unavailable')
+  assert.equal(persistedImportSummary.importProvenanceSummary.screenshotCount, 0)
+  assert.equal(persistedImportSummary.importProvenanceSummary.computedStyleSampleCount, 0)
   assert.equal(legacyImportCalls, 1)
   assert.equal(legacyMigrateCalls, 1)
 })

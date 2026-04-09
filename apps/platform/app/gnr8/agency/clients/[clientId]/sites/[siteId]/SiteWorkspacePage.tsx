@@ -80,6 +80,8 @@ function renderOverviewContent(props: {
           <div>Rendered DOM quality: {readModel.pipeline.renderedDomQuality}</div>
           <div>Screenshots captured: {readModel.pipeline.screenshotCount}</div>
           <div>Computed style samples: {readModel.pipeline.computedStyleSampleCount}</div>
+          <div>Import diagnostics: {readModel.pipeline.importDiagnosticCodes.length > 0 ? readModel.pipeline.importDiagnosticCodes.join(' · ') : 'none'}</div>
+          <div>Capture evidence refs: {readModel.pipeline.captureEvidenceRefs.length > 0 ? readModel.pipeline.captureEvidenceRefs.join(' · ') : 'none'}</div>
           <div>Acquisition diagnostics: {readModel.pipeline.diagnosticsSummary.length > 0 ? readModel.pipeline.diagnosticsSummary.join(' · ') : 'none'}</div>
           {readModel.pipeline.importFidelityDegraded ? <div>Fidelity warning: degraded import (review before redesign)</div> : null}
         </div>
@@ -126,6 +128,9 @@ function renderStructureContent(readModel: Awaited<ReturnType<typeof getSiteWork
       <h2 style={{ margin: 0, fontSize: 18, color: '#0f172a' }}>Structure View</h2>
       <p style={{ margin: '8px 0 0', color: '#475569', fontSize: 13 }}>
         Operator/debug surface for detected sections, section types, confidence, and key diagnostics.
+      </p>
+      <p style={{ margin: '6px 0 0', color: '#334155', fontSize: 12 }}>
+        Import provenance: {readModel.pipeline.sourceMode} · {readModel.pipeline.importFidelityStatus} · capture={readModel.pipeline.renderedCaptureStatus}
       </p>
 
       {readModel.structure.rows.length > 0 ? (
@@ -174,6 +179,9 @@ function renderDesignContent(readModel: Awaited<ReturnType<typeof getSiteWorkspa
         <h2 style={{ margin: 0, fontSize: 18, color: '#0f172a' }}>Design View</h2>
         <p style={{ margin: '8px 0 0', color: '#475569', fontSize: 13 }}>
           Why GNR8 selected this strategy and section-level design behavior.
+        </p>
+        <p style={{ margin: '6px 0 0', color: '#334155', fontSize: 12 }}>
+          Import provenance: {readModel.pipeline.sourceMode} · quality={readModel.pipeline.renderedDomQuality}
         </p>
         <div style={{ marginTop: 10, display: 'grid', gap: 4, fontSize: 13, color: '#334155' }}>
           <div>Selected page strategy: {readModel.design.selectedPageStrategy}</div>
@@ -229,6 +237,9 @@ function renderPreviewContent(readModel: Awaited<ReturnType<typeof getSiteWorksp
       </p>
       <p style={{ margin: '6px 0 0', color: '#334155', fontSize: 12 }}>
         Status: <strong>{readinessLabel}</strong>
+      </p>
+      <p style={{ margin: '6px 0 0', color: '#334155', fontSize: 12 }}>
+        Import provenance: {readModel.pipeline.sourceMode} · {readModel.pipeline.importFidelityStatus} · capture={readModel.pipeline.renderedCaptureStatus}
       </p>
       {readModel.preview.selectedVariantLabel ? (
         <p style={{ margin: '6px 0 0', color: '#334155', fontSize: 12 }}>

@@ -9,6 +9,7 @@ import { evaluateRuntimeArtifactServingEligibility } from "@/gnr8/runtime/publis
 import type {
   CanonicalPageVersionInput,
   CanonicalPageVersionSnapshot,
+  RuntimeImportProvenanceSummary,
   CanonicalSiteMigrationInput,
   CanonicalSiteVersionSnapshot,
   RuntimeArtifact,
@@ -72,6 +73,7 @@ export async function ensureRuntimeTables(): Promise<void> {
             source text not null,
             actor text not null,
             renderer_compatibility_version text not null,
+            import_provenance_summary jsonb,
             artifact_id uuid,
             created_at timestamptz not null default now(),
             updated_at timestamptz not null default now(),
@@ -116,6 +118,11 @@ export async function ensureRuntimeTables(): Promise<void> {
             created_at timestamptz not null default now(),
             unique (site_version_id)
           )
+        `);
+
+        await client.query(`
+          alter table public.gnr8_runtime_site_versions
+          add column if not exists import_provenance_summary jsonb
         `);
 
         await client.query(`
@@ -212,6 +219,7 @@ type SiteVersionRow = {
   source: string;
   actor: string;
   renderer_compatibility_version: string;
+  import_provenance_summary: unknown | null;
   artifact_id: string | null;
   created_at: string;
 };
@@ -380,12 +388,19 @@ export async function createSiteVersionFromMigration(
         state,
         source,
         actor,
-        renderer_compatibility_version
+        renderer_compatibility_version,
+        import_provenance_summary
       )
-      values ($1::text, $2::int, 'DRAFT', 'migration', $3::text, $4::text)
+      values ($1::text, $2::int, 'DRAFT', 'migration', $3::text, $4::text, $5::jsonb)
       returning id::text as id
       `,
-      [input.siteId, versionNo, input.actor, input.rendererCompatibilityVersion],
+      [
+        input.siteId,
+        versionNo,
+        input.actor,
+        input.rendererCompatibilityVersion,
+        input.importProvenanceSummary ? JSON.stringify(input.importProvenanceSummary) : null,
+      ],
     );
 
     const siteVersionId = siteVersionInsert.rows[0]!.id;
@@ -522,6 +537,7 @@ export async function getSiteVersion(siteVersionId: string): Promise<CanonicalSi
         source::text as source,
         actor::text as actor,
         renderer_compatibility_version::text,
+        import_provenance_summary,
         artifact_id::text,
         created_at::text
       from public.gnr8_runtime_site_versions
@@ -566,12 +582,29 @@ export async function getSiteVersion(siteVersionId: string): Promise<CanonicalSi
       actor: row.actor,
       createdAt: row.created_at,
       rendererCompatibilityVersion: row.renderer_compatibility_version,
+      importProvenanceSummary: (row.import_provenance_summary ?? null) as RuntimeImportProvenanceSummary | null,
       artifactId: row.artifact_id,
       pages: pages.rows.map(mapPageVersionRow),
     };
   } finally {
     client.release();
   }
+}
+
+export async function setSiteVersionImportProvenanceSummary(input: {
+  siteVersionId: string;
+  importProvenanceSummary: RuntimeImportProvenanceSummary;
+}): Promise<void> {
+  await withTx(async (client) => {
+    await client.query(
+      `
+      update public.gnr8_runtime_site_versions
+      set import_provenance_summary = $2::jsonb, updated_at = now()
+      where id = $1::uuid
+      `,
+      [input.siteVersionId, JSON.stringify(input.importProvenanceSummary)],
+    );
+  });
 }
 
 export async function setSiteVersionState(input: {
