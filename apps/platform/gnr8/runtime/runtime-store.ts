@@ -596,14 +596,18 @@ export async function setSiteVersionImportProvenanceSummary(input: {
   importProvenanceSummary: RuntimeImportProvenanceSummary;
 }): Promise<void> {
   await withTx(async (client) => {
-    await client.query(
+    const updated = await client.query<{ id: string }>(
       `
       update public.gnr8_runtime_site_versions
       set import_provenance_summary = $2::jsonb, updated_at = now()
       where id = $1::uuid
+      returning id::text as id
       `,
       [input.siteVersionId, JSON.stringify(input.importProvenanceSummary)],
     );
+    if (!updated.rows[0]) {
+      throw new Error(`Runtime site version not found for provenance write: ${input.siteVersionId}`);
+    }
   });
 }
 
@@ -716,14 +720,18 @@ export async function bindArtifactToVersion(input: {
   rendererCompatibilityVersion: string;
 }): Promise<void> {
   await withTx(async (client) => {
-    await client.query(
+    const updated = await client.query<{ id: string }>(
       `
       update public.gnr8_runtime_site_versions
       set artifact_id = $2::uuid, renderer_compatibility_version = $3::text, updated_at = now()
       where id = $1::uuid
+      returning id::text as id
       `,
       [input.siteVersionId, input.artifactId, input.rendererCompatibilityVersion],
     );
+    if (!updated.rows[0]) {
+      throw new Error(`Runtime site version not found for artifact bind: ${input.siteVersionId}`);
+    }
   });
 }
 

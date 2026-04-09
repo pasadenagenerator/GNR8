@@ -103,6 +103,36 @@ test('runtime version selection falls back to latest runtime when selected varia
   assert.equal(selected.selectedVariant?.id, 'variant-a')
 })
 
+test('latest runtime row selection is timestamp-first across mixed runtime site ids', () => {
+  const latest = __siteWorkspaceReadModelTestUtils.resolveLatestRuntimeVersionRow([
+    {
+      id: 'older-higher-version',
+      site_id: 'runtime-site-a',
+      ownership_site_id: SITE_ID,
+      state: 'DRAFT',
+      version_no: 9,
+      import_provenance_summary: null,
+      artifact_id: null,
+      updated_at: '2026-04-01T00:00:00.000Z',
+      created_at: '2026-04-01T00:00:00.000Z',
+    } as any,
+    {
+      id: 'fresh-import-version',
+      site_id: 'runtime-site-b',
+      ownership_site_id: SITE_ID,
+      state: 'DRAFT',
+      version_no: 1,
+      import_provenance_summary: { kind: 'runtime_import_provenance_summary_v1' },
+      artifact_id: 'artifact-fresh',
+      updated_at: '2026-04-09T09:00:00.000Z',
+      created_at: '2026-04-09T09:00:00.000Z',
+    } as any,
+  ])
+
+  assert.equal(latest?.id, 'fresh-import-version')
+  assert.equal(latest?.site_id, 'runtime-site-b')
+})
+
 test('import fidelity signals are parsed from semantic signal labels', () => {
   const parsed = __siteWorkspaceReadModelTestUtils.parseImportFidelitySignals([
     {

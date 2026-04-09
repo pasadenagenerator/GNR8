@@ -257,6 +257,8 @@ test('scoped pipeline import uses pipeline path, maps consolidated sections, and
   let legacyImportCalls = 0
   let legacyMigrateCalls = 0
   let bindCalls = 0
+  let bindInput: any = null
+  let linkedArtifactId: string | null = null
 
   const outcome = await runScopedImportPipeline({
     snapshot: {
@@ -310,7 +312,8 @@ test('scoped pipeline import uses pipeline path, maps consolidated sections, and
           actor: 'test',
           createdAt: new Date().toISOString(),
           rendererCompatibilityVersion: 'gnr8-renderer-v1',
-          artifactId: null,
+          artifactId: linkedArtifactId,
+          importProvenanceSummary: createInput?.importProvenanceSummary ?? null,
           pages: [
             {
               id: 'page-version-1',
@@ -341,8 +344,10 @@ test('scoped pipeline import uses pipeline path, maps consolidated sections, and
           manifest: {},
         }) as any,
       createArtifact: async () => ({ artifactId: 'artifact-1' }),
-      bindArtifactToVersion: async () => {
+      bindArtifactToVersion: async (input) => {
         bindCalls += 1
+        bindInput = input
+        linkedArtifactId = input.artifactId
       },
       importHtmlToPage: () => {
         legacyImportCalls += 1
@@ -370,6 +375,8 @@ test('scoped pipeline import uses pipeline path, maps consolidated sections, and
   assert.equal(typeof outcome.reporting.styleCta, 'string')
   assert.ok(outcome.reporting.importDiagnosticCodes.includes('RENDERED_CAPTURE_RECOVERED_ON_RETRY'))
   assert.equal(bindCalls, 1)
+  assert.equal(bindInput.siteVersionId, 'site-version-1')
+  assert.equal(bindInput.artifactId, 'artifact-1')
   assert.equal(legacyImportCalls, 0)
   assert.equal(legacyMigrateCalls, 0)
   assert.ok(createInput)
@@ -384,6 +391,12 @@ test('scoped pipeline import uses pipeline path, maps consolidated sections, and
   assert.equal(createInput.importProvenanceSummary.styleSignals.kind, 'style_signal_model_v2')
   assert.equal(persistedImportSummary.siteVersionId, 'site-version-1')
   assert.equal(persistedImportSummary.importProvenanceSummary.renderedCaptureStatus, 'partial')
+  assert.equal(outcome.reporting.writePath.versionCreatedId, 'site-version-1')
+  assert.equal(outcome.reporting.writePath.versionSelectedId, 'site-version-1')
+  assert.equal(outcome.reporting.writePath.provenanceSummaryWritten, true)
+  assert.equal(outcome.reporting.writePath.artifactCreatedId, 'artifact-1')
+  assert.equal(outcome.reporting.writePath.artifactLinked, true)
+  assert.equal(outcome.reporting.writePath.artifactLinkedVersionId, 'site-version-1')
   assert.ok(createInput.pages[0].structureModel.sections.length > 1, 'expected consolidated sections to persist into runtime structure model')
 })
 
@@ -472,6 +485,12 @@ test('scoped pipeline import falls back to legacy when pipeline fails', async ()
   assert.equal(persistedImportSummary.importProvenanceSummary.renderedCaptureStatus, 'failed')
   assert.equal(persistedImportSummary.importProvenanceSummary.screenshotCount, 0)
   assert.equal(persistedImportSummary.importProvenanceSummary.computedStyleSampleCount, 0)
+  assert.equal(outcome.diagnostics.writePath.versionCreatedId, 'legacy-version')
+  assert.equal(outcome.diagnostics.writePath.versionSelectedId, 'legacy-version')
+  assert.equal(outcome.diagnostics.writePath.provenanceSummaryWritten, true)
+  assert.equal(outcome.diagnostics.writePath.artifactCreatedId, null)
+  assert.equal(outcome.diagnostics.writePath.artifactLinked, false)
+  assert.equal(outcome.diagnostics.writePath.artifactLinkedVersionId, null)
   assert.equal(legacyImportCalls, 1)
   assert.equal(legacyMigrateCalls, 1)
 })

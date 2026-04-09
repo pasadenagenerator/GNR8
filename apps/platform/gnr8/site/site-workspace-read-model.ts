@@ -144,6 +144,13 @@ export type SiteWorkspaceReadModel = {
     captureEvidenceRefs: string[]
     diagnosticsSummary: string[]
     styleSignals: StyleSignalModel | null
+    runtimeSelection: {
+      selectedVersionId: string | null
+      selectedSiteId: string | null
+      selectedVersionNo: number | null
+      selectedHasImportProvenanceSummary: boolean
+      selectedHasArtifactId: boolean
+    }
   }
   actions: {
     currentStatus: 'idle' | 'running' | 'completed' | 'failed'
@@ -284,21 +291,30 @@ function toHttpsUrlOrNull(value: string | null | undefined): string | null {
   }
 }
 
-function compareRuntimeVersions(a: RuntimeVersionRow, b: RuntimeSnapshot): number {
+function toEpoch(value: unknown): number {
+  const iso = toIsoOrNull(value)
+  if (!iso) return 0
+  const ms = Date.parse(iso)
+  return Number.isFinite(ms) ? ms : 0
+}
+
+function compareRuntimeVersionRows(a: RuntimeVersionRow, b: RuntimeVersionRow): number {
+  const updatedDelta = toEpoch(a.updated_at) - toEpoch(b.updated_at)
+  if (updatedDelta !== 0) return updatedDelta
+
+  const createdDelta = toEpoch(a.created_at) - toEpoch(b.created_at)
+  if (createdDelta !== 0) return createdDelta
+
   const aVersion = Number(a.version_no ?? 0)
-  if (aVersion !== b.latestRuntimeVersionNo) return aVersion - b.latestRuntimeVersionNo
+  const bVersion = Number(b.version_no ?? 0)
+  if (aVersion !== bVersion) return aVersion - bVersion
 
-  const aUpdatedAt = toIsoOrNull(a.updated_at)
-  if (aUpdatedAt !== b.latestRuntimeUpdatedAt) {
-    return String(aUpdatedAt ?? '').localeCompare(String(b.latestRuntimeUpdatedAt ?? ''))
-  }
+  return String(a.id ?? '').localeCompare(String(b.id ?? ''))
+}
 
-  const aCreatedAt = toIsoOrNull(a.created_at)
-  if (aCreatedAt !== b.latestRuntimeCreatedAt) {
-    return String(aCreatedAt ?? '').localeCompare(String(b.latestRuntimeCreatedAt ?? ''))
-  }
-
-  return String(a.id ?? '').localeCompare(String(b.latestRuntimeSiteVersionId ?? ''))
+function resolveLatestRuntimeVersionRow(runtimeRows: RuntimeVersionRow[]): RuntimeVersionRow | null {
+  if (runtimeRows.length === 0) return null
+  return runtimeRows.slice().sort((left, right) => compareRuntimeVersionRows(right, left))[0] ?? null
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -992,32 +1008,17 @@ export async function getSiteWorkspaceReadModelForPage(input: {
     ? (runtimeResult.data as RuntimeVersionRow[])
     : []
 
-  let runtimeSnapshot: RuntimeSnapshot | null = null
-  for (const row of runtimeRows) {
-    if (!runtimeSnapshot) {
-      runtimeSnapshot = {
-        latestRuntimeSiteVersionId: toTextOrNull(row.id),
-        latestRuntimeState: toTextOrNull(row.state),
-        latestRuntimeVersionNo: Number(row.version_no ?? 0),
-        latestRuntimeUpdatedAt: toIsoOrNull(row.updated_at),
-        latestRuntimeCreatedAt: toIsoOrNull(row.created_at),
-        hasPublishedRuntimeVersion: normalizeText(row.state).toUpperCase() === 'PUBLISHED',
+  const latestRuntimeRow = resolveLatestRuntimeVersionRow(runtimeRows)
+  const runtimeSnapshot: RuntimeSnapshot | null = latestRuntimeRow
+    ? {
+        latestRuntimeSiteVersionId: toTextOrNull(latestRuntimeRow.id),
+        latestRuntimeState: toTextOrNull(latestRuntimeRow.state),
+        latestRuntimeVersionNo: Number(latestRuntimeRow.version_no ?? 0),
+        latestRuntimeUpdatedAt: toIsoOrNull(latestRuntimeRow.updated_at),
+        latestRuntimeCreatedAt: toIsoOrNull(latestRuntimeRow.created_at),
+        hasPublishedRuntimeVersion: runtimeRows.some((row) => normalizeText(row.state).toUpperCase() === 'PUBLISHED'),
       }
-      continue
-    }
-
-    if (compareRuntimeVersions(row, runtimeSnapshot) > 0) {
-      runtimeSnapshot.latestRuntimeSiteVersionId = toTextOrNull(row.id)
-      runtimeSnapshot.latestRuntimeState = toTextOrNull(row.state)
-      runtimeSnapshot.latestRuntimeVersionNo = Number(row.version_no ?? 0)
-      runtimeSnapshot.latestRuntimeUpdatedAt = toIsoOrNull(row.updated_at)
-      runtimeSnapshot.latestRuntimeCreatedAt = toIsoOrNull(row.created_at)
-    }
-
-    if (normalizeText(row.state).toUpperCase() === 'PUBLISHED') {
-      runtimeSnapshot.hasPublishedRuntimeVersion = true
-    }
-  }
+    : null
 
   const latestRuntimeSiteVersionId = runtimeSnapshot?.latestRuntimeSiteVersionId ?? null
   const availableRuntimeSiteVersionIds = runtimeRows
@@ -1160,6 +1161,13 @@ export async function getSiteWorkspaceReadModelForPage(input: {
       captureEvidenceRefs: importFidelity.captureEvidenceRefs,
       diagnosticsSummary,
       styleSignals: importFidelity.styleSignals,
+      runtimeSelection: {
+        selectedVersionId: selectedRuntimeSiteVersionId,
+        selectedSiteId: toTextOrNull(selectedRuntimeRow?.site_id),
+        selectedVersionNo: selectedRuntimeRow?.version_no ?? null,
+        selectedHasImportProvenanceSummary: parseImportProvenanceSummary(selectedRuntimeRow?.import_provenance_summary ?? null) != null,
+        selectedHasArtifactId: Boolean(selectedRuntimeArtifactId),
+      },
     },
     actions: {
       currentStatus: normalizedSiteActions.find((action) => action.status === 'running')?.status ?? (lastAction?.status ?? 'idle'),
@@ -1250,4 +1258,6 @@ export const __siteWorkspaceReadModelTestUtils = {
   parseImportFidelitySignals,
   parseImportProvenanceSummary,
   parseImportFidelity,
+  compareRuntimeVersionRows,
+  resolveLatestRuntimeVersionRow,
 }

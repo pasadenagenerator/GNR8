@@ -268,7 +268,7 @@ export async function POST(req: Request, ctx: { params: Promise<Params> }) {
           rawImportCaptured: true,
           transformedPreviewGenerated: imported.mode === 'pipeline',
           debugPreviewAvailable: true,
-          runtimePreviewLinked: true,
+          runtimePreviewLinked: imported.mode === 'pipeline' && imported.reporting.writePath.artifactLinked,
         },
         pipeline: {
           executionStatus: imported.mode === 'pipeline' ? imported.reporting.executionStatus : imported.diagnostics.pipelineStatus,
@@ -290,12 +290,14 @@ export async function POST(req: Request, ctx: { params: Promise<Params> }) {
               ? {
                   stageSummaries: imported.diagnostics.stageSummaries,
                   pipelineDiagnosticCodes: imported.diagnostics.pipelineDiagnosticCodes,
+                  writePath: imported.diagnostics.writePath,
                 }
               : {
                   stageSummaries: imported.pipelineResult.stages.map((stage) => stage.summary),
                   pipelineDiagnosticCodes: [...new Set(imported.pipelineResult.diagnostics.map((issue) => issue.code))].sort((a, b) =>
                     a.localeCompare(b),
                   ),
+                  writePath: imported.reporting.writePath,
                 },
         },
         redirectTo,

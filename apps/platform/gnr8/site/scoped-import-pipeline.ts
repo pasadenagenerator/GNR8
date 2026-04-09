@@ -510,6 +510,14 @@ export type ScopedImportPipelineSuccess = {
     styleCta: string
     styleDiagnostics: string[]
     artifactGenerated: boolean
+    writePath: {
+      versionCreatedId: string
+      versionSelectedId: string
+      provenanceSummaryWritten: boolean
+      artifactCreatedId: string
+      artifactLinked: boolean
+      artifactLinkedVersionId: string
+    }
   }
 }
 
@@ -538,6 +546,14 @@ export type ScopedImportPipelineFallback = {
     styleSpacingDensity: string
     styleCta: string
     styleDiagnostics: string[]
+    writePath: {
+      versionCreatedId: string
+      versionSelectedId: string
+      provenanceSummaryWritten: boolean
+      artifactCreatedId: null
+      artifactLinked: false
+      artifactLinkedVersionId: null
+    }
   }
 }
 
@@ -696,6 +712,19 @@ export async function runScopedImportPipeline(input: {
       rendererCompatibilityVersion: artifactBundle.rendererCompatibilityVersion,
     })
 
+    const boundSiteVersion = await deps.getSiteVersion(migrated.siteVersionId)
+    if (!boundSiteVersion) {
+      throw new Error('Artifact bind completed but site version could not be reloaded for verification.')
+    }
+    if (boundSiteVersion.artifactId !== artifact.artifactId) {
+      throw new Error(
+        `Artifact bind verification failed for site version ${migrated.siteVersionId}: expected=${artifact.artifactId} actual=${boundSiteVersion.artifactId ?? 'null'}`,
+      )
+    }
+    if (!boundSiteVersion.importProvenanceSummary) {
+      throw new Error(`Import provenance summary missing after write on site version ${migrated.siteVersionId}.`)
+    }
+
     const reporting = computePipelineReporting({
       pipelineResult,
       preparedSite,
@@ -717,6 +746,14 @@ export async function runScopedImportPipeline(input: {
       reporting: {
         ...reporting,
         artifactGenerated: true,
+        writePath: {
+          versionCreatedId: migrated.siteVersionId,
+          versionSelectedId: boundSiteVersion.id,
+          provenanceSummaryWritten: true,
+          artifactCreatedId: artifact.artifactId,
+          artifactLinked: true,
+          artifactLinkedVersionId: migrated.siteVersionId,
+        },
       },
     }
   }
@@ -768,10 +805,18 @@ export async function runScopedImportPipeline(input: {
         styleSourceMode: styleSignals.sourceMode,
         stylePrimaryAccent: styleSignals.colors.primaryAccent,
         styleBackgroundTone: styleSignals.colors.backgroundTone,
-        styleTypography: `${styleSignals.typography.headingCategory}/${styleSignals.typography.bodyCategory}`,
-        styleSpacingDensity: `${styleSignals.spacing.rhythm}/${styleSignals.spacing.layoutDensity}`,
-        styleCta: `${styleSignals.cta.styleHint}/${styleSignals.cta.prominence}`,
-        styleDiagnostics: styleSignals.diagnostics.map((diag) => diag.code),
+      styleTypography: `${styleSignals.typography.headingCategory}/${styleSignals.typography.bodyCategory}`,
+      styleSpacingDensity: `${styleSignals.spacing.rhythm}/${styleSignals.spacing.layoutDensity}`,
+      styleCta: `${styleSignals.cta.styleHint}/${styleSignals.cta.prominence}`,
+      styleDiagnostics: styleSignals.diagnostics.map((diag) => diag.code),
+      writePath: {
+        versionCreatedId: legacyMigrated.siteVersionId,
+        versionSelectedId: legacyMigrated.siteVersionId,
+        provenanceSummaryWritten: true,
+        artifactCreatedId: null,
+        artifactLinked: false,
+        artifactLinkedVersionId: null,
+      },
       },
     }
   }
