@@ -5,6 +5,12 @@ export type CaptureSourceMode = "raw_html" | "rendered_dom";
 export type RenderedCaptureStatus = "available" | "partial" | "unavailable" | "failed";
 
 export type RenderedCaptureDiagnosticCode =
+  | "CAPTURE_WORKER_REQUEST_STARTED"
+  | "CAPTURE_WORKER_REQUEST_FAILED"
+  | "CAPTURE_WORKER_UNAVAILABLE"
+  | "CAPTURE_WORKER_RESPONSE_INVALID"
+  | "CAPTURE_WORKER_RENDERED_DOM_USED"
+  | "CAPTURE_WORKER_FALLBACK_TO_RAW_HTML"
   | "RENDERED_CAPTURE_RUNTIME_ENVIRONMENT"
   | "PLAYWRIGHT_PACKAGE_CHECK"
   | "PLAYWRIGHT_BINARY_CHECK"

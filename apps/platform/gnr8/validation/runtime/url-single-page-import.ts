@@ -5,7 +5,17 @@ import path from "node:path";
 import { parse, serialize } from "parse5";
 
 import type { RenderedCaptureExecutor, RenderedCaptureResult } from "../../import-rendered-capture";
-import { runRenderedCapture } from "../../import-rendered-capture";
+import {
+  DEFAULT_RENDERED_CAPTURE_READINESS_POLICY,
+  DEFAULT_RENDERED_CAPTURE_VIEWPORT,
+  runRenderedCapture,
+} from "../../import-rendered-capture";
+import {
+  createRenderedCaptureWorkerClientFromEnv,
+  createRenderedCaptureWorkerRequest,
+  mapWorkerResponseToRenderedCaptureResult,
+  type RenderedCaptureWorkerClient,
+} from "../../import-rendered-capture-worker";
 import type { JsonValue } from "../../import/import-contract";
 import { stableStringify } from "../../migration/runtime/diagnostics";
 import { resolveUrlImportSnapshotRootDirAbs } from "./url-import-snapshot-root";
@@ -32,6 +42,12 @@ export type UrlImportExecutionScope = {
 export type UrlImportDiagnosticSeverity = "info" | "warning" | "error" | "fatal";
 
 export type UrlImportDiagnosticCode =
+  | "CAPTURE_WORKER_REQUEST_STARTED"
+  | "CAPTURE_WORKER_REQUEST_FAILED"
+  | "CAPTURE_WORKER_UNAVAILABLE"
+  | "CAPTURE_WORKER_RESPONSE_INVALID"
+  | "CAPTURE_WORKER_RENDERED_DOM_USED"
+  | "CAPTURE_WORKER_FALLBACK_TO_RAW_HTML"
   | "INVALID_INPUT_URL"
   | "ENTRY_FETCH_FAILED"
   | "ENTRY_FETCH_TIMEOUT"
@@ -1853,6 +1869,7 @@ export async function importPublicSinglePageUrlToSnapshot(input: {
   requestId?: string;
   fetchImpl?: FetchLike;
   renderedCaptureExecutor?: RenderedCaptureExecutor;
+  renderedCaptureWorkerClient?: RenderedCaptureWorkerClient;
 }): Promise<UrlSinglePageImportSnapshot> {
   const diagnostics: UrlImportDiagnostic[] = [];
   const fetchManifest: UrlImportFetchManifestEntry[] = [];
@@ -1978,6 +1995,7 @@ export async function importPublicSinglePageUrlToSnapshot(input: {
   };
   let renderedCaptureDurationMs = 0;
   let renderedCaptureAttempted = false;
+  let renderedCaptureViaWorker = false;
   let renderedDomPathAbs: string | null = null;
   let computedStylesPathAbs: string | null = null;
   let viewportScreenshotPathAbs: string | null = null;
@@ -2180,11 +2198,30 @@ export async function importPublicSinglePageUrlToSnapshot(input: {
   if (!hasFatal(diagnostics) && entryHtml) {
     renderedCaptureAttempted = true;
     const captureStartedAt = Date.now();
-    renderedCapture = await runRenderedCapture({
-      sourceUrl: entryFetchUrlUsed ?? normalizedHref,
-      snapshotRootDirAbs,
-      executor: input.renderedCaptureExecutor,
-    });
+    if (input.renderedCaptureExecutor) {
+      renderedCapture = await runRenderedCapture({
+        sourceUrl: entryFetchUrlUsed ?? normalizedHref,
+        snapshotRootDirAbs,
+        executor: input.renderedCaptureExecutor,
+      });
+    } else {
+      renderedCaptureViaWorker = true;
+      const workerClient = input.renderedCaptureWorkerClient ?? createRenderedCaptureWorkerClientFromEnv();
+      const workerRequest = createRenderedCaptureWorkerRequest({
+        requestId: input.requestId ?? `capture-worker-${snapshotId}`,
+        importId: snapshotId,
+        sourceUrl: entryFetchUrlUsed ?? normalizedHref,
+        viewport: DEFAULT_RENDERED_CAPTURE_VIEWPORT,
+        readinessPolicy: DEFAULT_RENDERED_CAPTURE_READINESS_POLICY,
+        timeoutBudgetMs: DEFAULT_RENDERED_CAPTURE_READINESS_POLICY.maxTotalCaptureMs,
+      });
+      const workerResponse = await workerClient.execute(workerRequest);
+      renderedCapture = mapWorkerResponseToRenderedCaptureResult({
+        response: workerResponse,
+        snapshotRootDirAbs,
+        sourceUrl: entryFetchUrlUsed ?? normalizedHref,
+      });
+    }
     renderedCaptureDurationMs = Date.now() - captureStartedAt;
     appendRenderedCaptureDiagnostics({
       diagnostics,
@@ -2210,6 +2247,35 @@ export async function importPublicSinglePageUrlToSnapshot(input: {
     responseHtmlPathAbs,
     renderedCapture,
   });
+  if (renderedCaptureViaWorker && sourceSelection.sourceMode === "rendered_dom") {
+    diagnostics.push(
+      createDiagnostic({
+        severity: "info",
+        code: "CAPTURE_WORKER_RENDERED_DOM_USED",
+        message: "Rendered capture worker artifacts selected as import source.",
+        targetUrl: null,
+        details: {
+          snapshotId,
+          renderedCaptureStatus: renderedCapture.status,
+        },
+      }),
+    );
+  }
+  if (renderedCaptureViaWorker && sourceSelection.sourceMode === "raw_html_fallback") {
+    diagnostics.push(
+      createDiagnostic({
+        severity: "warning",
+        code: "CAPTURE_WORKER_FALLBACK_TO_RAW_HTML",
+        message: "Rendered capture worker output was unusable; import degraded to raw HTML fallback.",
+        targetUrl: null,
+        details: {
+          snapshotId,
+          renderedCaptureStatus: renderedCapture.status,
+          renderedDocumentCount: renderedCapture.documents.length,
+        },
+      }),
+    );
+  }
   const renderedDomHtml = renderedDomPathAbs
     ? (() => {
         try {
@@ -2726,6 +2792,7 @@ export async function importPublicSinglePageUrlToSnapshot(input: {
     },
     renderedCapture: {
       attempted: renderedCaptureAttempted,
+      workerPathUsed: renderedCaptureViaWorker,
       status: renderedCapture.status,
       visibilityStatus: computeRenderedCaptureVisibilityStatus({
         renderedCapture,

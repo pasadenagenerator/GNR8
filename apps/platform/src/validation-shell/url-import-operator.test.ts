@@ -6,6 +6,12 @@ import path from "node:path";
 import test from "node:test";
 
 import type { RenderedCaptureExecutorResult } from "../../gnr8/import-rendered-capture";
+import type {
+  RenderedCaptureWorkerClient,
+  RenderedCaptureWorkerRequest,
+  RenderedCaptureWorkerResponse,
+} from "../../gnr8/import-rendered-capture-worker";
+import { RENDERED_CAPTURE_WORKER_CONTRACT_VERSION } from "../../gnr8/import-rendered-capture-worker";
 import type { JsonValue } from "../../gnr8/import/import-contract";
 import { stableStringify } from "../../gnr8/migration/runtime/diagnostics";
 import { importPublicSinglePageUrlToSnapshot } from "../../gnr8/validation/runtime/url-single-page-import";
@@ -72,6 +78,14 @@ function withEnv(input: { key: string; value?: string }, fn: () => Promise<void>
 
 function mockRenderedCaptureExecutor(result: RenderedCaptureExecutorResult) {
   return async (): Promise<RenderedCaptureExecutorResult> => result;
+}
+
+function mockRenderedCaptureWorkerClient(result: RenderedCaptureWorkerResponse): RenderedCaptureWorkerClient {
+  return {
+    async execute(_request: RenderedCaptureWorkerRequest): Promise<RenderedCaptureWorkerResponse> {
+      return result;
+    },
+  };
 }
 
 test("url import snapshot generation remains deterministic for identical URL + response set", async () => {
@@ -200,6 +214,192 @@ test("rendered capture unavailable falls back to raw_html and preserves raw resp
     acquisitionEvidence.renderedCapture.executionTruth.failureCode === "ENVIRONMENT_UNSUPPORTED" ||
       acquisitionEvidence.renderedCapture.executionTruth.failureCode === "RENDERED_CAPTURE_UNAVAILABLE",
   );
+});
+
+test("worker-backed rendered capture success selects rendered_dom and materializes artifacts", async () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "gnr8-url-import-worker-success-"));
+  const sourceUrl = "https://worker-success.example.com/";
+  const renderedHtml = "<!doctype html><html><body><main><h1>Worker DOM</h1><p>Captured</p></main></body></html>";
+  const viewportPng = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10, 1, 2, 3, 4]);
+  const fullpagePng = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10, 5, 6, 7, 8]);
+
+  const snapshot = await importPublicSinglePageUrlToSnapshot({
+    sourceUrl,
+    snapshotRootDirAbs: tmp,
+    fetchImpl: mockFetchFromTable({
+      [sourceUrl]: {
+        status: 200,
+        headers: { "content-type": "text/html; charset=utf-8" },
+        body: "<!doctype html><html><body><h1>Raw Source</h1></body></html>",
+      },
+    }),
+    renderedCaptureWorkerClient: mockRenderedCaptureWorkerClient({
+      kind: "rendered_capture_worker_response_v1",
+      contractVersion: RENDERED_CAPTURE_WORKER_CONTRACT_VERSION,
+      requestId: "worker-req-1",
+      status: "available",
+      environment: {
+        runtimeKind: "nodejs",
+        environmentSupported: true,
+        browserPackageAvailable: true,
+        browserBinaryAvailable: true,
+        supportDecision: "supported",
+      },
+      artifacts: [
+        {
+          artifactType: "rendered_dom_html",
+          captureType: null,
+          storage: "inline",
+          uri: `data:text/html;base64,${Buffer.from(renderedHtml, "utf8").toString("base64")}`,
+          mediaType: "text/html",
+          sha256: crypto.createHash("sha256").update(renderedHtml).digest("hex"),
+          byteLength: Buffer.byteLength(renderedHtml),
+        },
+        {
+          artifactType: "screenshot_png",
+          captureType: "desktop_viewport",
+          storage: "inline",
+          uri: `data:image/png;base64,${viewportPng.toString("base64")}`,
+          mediaType: "image/png",
+          sha256: crypto.createHash("sha256").update(viewportPng).digest("hex"),
+          byteLength: viewportPng.byteLength,
+        },
+        {
+          artifactType: "screenshot_png",
+          captureType: "desktop_fullpage",
+          storage: "inline",
+          uri: `data:image/png;base64,${fullpagePng.toString("base64")}`,
+          mediaType: "image/png",
+          sha256: crypto.createHash("sha256").update(fullpagePng).digest("hex"),
+          byteLength: fullpagePng.byteLength,
+        },
+      ],
+      computedStyleSamples: [
+        {
+          kind: "computed_style_sample_v1",
+          sampleId: "style-1",
+          target: "root",
+          selector: "body",
+          tagName: "body",
+          className: null,
+          styles: {
+            fontFamily: "Inter",
+            fontSize: "16px",
+            fontWeight: "400",
+            lineHeight: "24px",
+            color: "rgb(17,17,17)",
+            backgroundColor: "rgb(255,255,255)",
+            borderRadius: "0px",
+            paddingTop: "0px",
+            paddingRight: "0px",
+            paddingBottom: "0px",
+            paddingLeft: "0px",
+          },
+        },
+      ],
+      diagnostics: [
+        {
+          code: "CAPTURE_WORKER_REQUEST_STARTED",
+          severity: "info",
+          message: "worker started",
+        },
+        {
+          code: "CAPTURE_WORKER_RENDERED_DOM_USED",
+          severity: "info",
+          message: "worker rendered dom used",
+        },
+      ],
+      qualitySummary: {
+        renderedDomQuality: "strong",
+        domLength: renderedHtml.length,
+        meaningfulNodeCount: 8,
+        screenshotCount: 2,
+        computedStyleSampleCount: 1,
+      },
+      failure: null,
+      timings: {
+        queueLatencyMs: null,
+        executionMs: 1200,
+        totalMs: 1200,
+      },
+    }),
+  });
+
+  assert.equal(snapshot.sourceMode, "rendered_dom");
+  assert.equal(snapshot.sourceSelection.sourceMode, "rendered_dom");
+  assert.equal(snapshot.renderedCapture.status, "available");
+  assert.ok(snapshot.importDiagnostics.issues.some((issue) => issue.code === "CAPTURE_WORKER_RENDERED_DOM_USED"));
+  assert.ok(fs.existsSync(path.resolve(snapshot.snapshotRootDirAbs, "rendered", "rendered-dom.html")));
+  assert.ok(fs.existsSync(path.resolve(snapshot.snapshotRootDirAbs, "rendered", "screenshots", "viewport.png")));
+  assert.ok(fs.existsSync(path.resolve(snapshot.snapshotRootDirAbs, "rendered", "screenshots", "fullpage.png")));
+});
+
+test("worker-backed failure degrades explicitly to raw_html_fallback", async () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "gnr8-url-import-worker-fallback-"));
+  const sourceUrl = "https://worker-fallback.example.com/";
+
+  const snapshot = await importPublicSinglePageUrlToSnapshot({
+    sourceUrl,
+    snapshotRootDirAbs: tmp,
+    fetchImpl: mockFetchFromTable({
+      [sourceUrl]: {
+        status: 200,
+        headers: { "content-type": "text/html; charset=utf-8" },
+        body: "<!doctype html><html><body><h1>Raw Fallback Source</h1></body></html>",
+      },
+    }),
+    renderedCaptureWorkerClient: mockRenderedCaptureWorkerClient({
+      kind: "rendered_capture_worker_response_v1",
+      contractVersion: RENDERED_CAPTURE_WORKER_CONTRACT_VERSION,
+      requestId: "worker-req-2",
+      status: "unsupported",
+      environment: {
+        runtimeKind: "unknown",
+        environmentSupported: false,
+        browserPackageAvailable: false,
+        browserBinaryAvailable: false,
+        supportDecision: "unknown",
+      },
+      artifacts: [],
+      computedStyleSamples: [],
+      diagnostics: [
+        {
+          code: "CAPTURE_WORKER_UNAVAILABLE",
+          severity: "warning",
+          message: "worker unavailable",
+        },
+        {
+          code: "RENDERED_CAPTURE_UNAVAILABLE",
+          severity: "warning",
+          message: "rendered capture unavailable",
+        },
+      ],
+      qualitySummary: {
+        renderedDomQuality: "unusable",
+        domLength: 0,
+        meaningfulNodeCount: 0,
+        screenshotCount: 0,
+        computedStyleSampleCount: 0,
+      },
+      failure: {
+        failureClass: "environment_unsupported",
+        failureCode: "WORKER_UNAVAILABLE",
+        retryable: true,
+        message: "worker unavailable",
+      },
+      timings: {
+        queueLatencyMs: null,
+        executionMs: null,
+        totalMs: null,
+      },
+    }),
+  });
+
+  assert.equal(snapshot.sourceMode, "raw_html_fallback");
+  assert.equal(snapshot.sourceSelection.sourceMode, "raw_html_fallback");
+  assert.equal(snapshot.renderedCapture.status, "unavailable");
+  assert.ok(snapshot.importDiagnostics.issues.some((issue) => issue.code === "CAPTURE_WORKER_FALLBACK_TO_RAW_HTML"));
+  assert.ok(snapshot.importDiagnostics.issues.some((issue) => issue.code === "RAW_HTML_FALLBACK_USED"));
 });
 
 test("environment-not-supported diagnostic path remains explicit and fallback stays safe", async () => {
