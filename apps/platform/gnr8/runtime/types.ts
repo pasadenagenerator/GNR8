@@ -20,10 +20,23 @@ export type RuntimeImportProvenanceSummary = {
   kind: "runtime_import_provenance_summary_v1";
   sourceMode: "rendered_dom" | "raw_html_fallback";
   importFidelityStatus: "high_fidelity_import" | "degraded_import" | "capture_failed";
-  renderedCaptureStatus: "available" | "unavailable" | "failed";
+  renderedCaptureStatus: "available" | "partial" | "failed";
   renderedDomQuality: "strong" | "weak" | "unusable";
   screenshotCount: number;
   computedStyleSampleCount: number;
+  renderedCapture: {
+    used: boolean;
+    status: "available" | "partial" | "failed";
+    quality: "strong" | "weak" | "unusable";
+    domLength: number;
+    nodeCount: number;
+    styleSampleCount: number;
+    styleCoverage: number;
+    screenshots: {
+      viewport: boolean;
+      fullPage: boolean;
+    };
+  };
   importDiagnosticCodes: string[];
   captureEvidence: {
     selectedSourceHtmlPath: string | null;
@@ -31,6 +44,10 @@ export type RuntimeImportProvenanceSummary = {
     entryHtmlPath: string | null;
     renderedCaptureManifestPath: string | null;
     acquisitionEvidencePath: string | null;
+    renderedDomPath: string | null;
+    computedStylesPath: string | null;
+    renderedViewportScreenshotPath: string | null;
+    renderedFullpageScreenshotPath: string | null;
     screenshotPaths: string[];
   };
   styleSignals: StyleSignalModel | null;

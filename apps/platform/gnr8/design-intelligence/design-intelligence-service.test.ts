@@ -308,6 +308,16 @@ test("design intelligence consumes style signals without breaking determinism", 
         kind: "style_signal_model_v2",
         version: "2.0.0",
         sourceMode: "computed_style",
+        provenance: {
+          sourceMode: "computed_style",
+          computedStyle: {
+            used: true,
+            sampleCount: 6,
+            coverage: 0.6,
+          },
+          fallbackUsed: false,
+          diagnostics: [],
+        },
         colors: {
           backgroundTone: "dark",
           primaryAccent: "#2563eb",

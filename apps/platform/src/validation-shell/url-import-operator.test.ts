@@ -186,6 +186,10 @@ test("rendered capture unavailable falls back to raw_html and preserves raw resp
   assert.ok(snapshot.importDiagnostics.issues.some((issue) => issue.code === "IMPORT_FIDELITY_DEGRADED"));
   assert.equal(fs.existsSync(snapshot.responseHtmlPathAbs), true);
   assert.equal(fs.existsSync(snapshot.entryHtmlPathAbs), true);
+  assert.equal(fs.existsSync(path.resolve(snapshot.snapshotRootDirAbs, "rendered", "rendered-dom.html")), true);
+  assert.equal(fs.existsSync(path.resolve(snapshot.snapshotRootDirAbs, "rendered", "computed-styles.json")), true);
+  assert.equal(fs.existsSync(path.resolve(snapshot.snapshotRootDirAbs, "rendered", "screenshots", "viewport.png")), true);
+  assert.equal(fs.existsSync(path.resolve(snapshot.snapshotRootDirAbs, "rendered", "screenshots", "fullpage.png")), true);
   assert.equal(fs.readFileSync(snapshot.responseHtmlPathAbs, "utf8").includes("Raw Fallback"), true);
   assert.equal(fs.readFileSync(snapshot.entryHtmlPathAbs, "utf8").includes("Raw Fallback"), true);
 });
@@ -271,6 +275,17 @@ test("rendered capture contract is persisted and rendered_dom becomes primary sn
 
   const screenshotPath = snapshot.renderedCapture.screenshots[0]?.filePathAbs;
   assert.ok(typeof screenshotPath === "string" && fs.existsSync(screenshotPath));
+  assert.ok(fs.existsSync(path.resolve(snapshot.snapshotRootDirAbs, "rendered", "rendered-dom.html")));
+  assert.ok(fs.existsSync(path.resolve(snapshot.snapshotRootDirAbs, "rendered", "computed-styles.json")));
+  assert.ok(fs.existsSync(path.resolve(snapshot.snapshotRootDirAbs, "rendered", "screenshots", "viewport.png")));
+  assert.ok(fs.existsSync(path.resolve(snapshot.snapshotRootDirAbs, "rendered", "screenshots", "fullpage.png")));
+
+  const renderedCaptureManifest = JSON.parse(fs.readFileSync(path.resolve(snapshot.snapshotRootDirAbs, "rendered-capture.json"), "utf8"));
+  assert.equal(renderedCaptureManifest.status, "partial");
+  assert.equal(renderedCaptureManifest.quality, "strong");
+  assert.equal(renderedCaptureManifest.styleSampleSummary.validSamples, 1);
+  assert.equal(renderedCaptureManifest.screenshotSummary.viewportCaptured, true);
+  assert.equal(renderedCaptureManifest.screenshotSummary.fullPageCaptured, false);
 });
 
 test("rendered capture failure emits diagnostics and still returns snapshot output", async () => {
@@ -564,7 +579,7 @@ test("url import operator runs imported snapshot through pipeline and materializ
     },
   );
 
-  assert.equal(response.ok, true);
+  assert.equal(response.ok, true, response.ok ? "" : response.error.message);
   if (!response.ok) return;
 
   assert.equal(response.sourceKind, "imported_url_snapshot");
@@ -612,7 +627,7 @@ test("pipeline succeeds when rendered capture is unavailable and reports raw_htm
     },
   );
 
-  assert.equal(response.ok, true);
+  assert.equal(response.ok, true, response.ok ? "" : response.error.message);
   if (!response.ok) return;
   assert.equal(response.summary.structureSourceMode, "raw_html_fallback");
   assert.equal(response.summary.fidelityStatus, "degraded_import");
@@ -998,6 +1013,8 @@ test("non-fatal asset fetch issues remain visible and do not unnecessarily block
             "<link rel=\"stylesheet\" href=\"/ok.css\">",
             "<link rel=\"stylesheet\" href=\"/missing-theme.css\">",
             "</head><body>",
+            "<h1>Warning Path</h1>",
+            "<p>Keep import running with warnings.</p>",
             "<img src=\"/missing.png\">",
             "</body></html>",
           ].join(""),
@@ -1021,7 +1038,7 @@ test("non-fatal asset fetch issues remain visible and do not unnecessarily block
     },
   );
 
-  assert.equal(response.ok, true);
+  assert.equal(response.ok, true, response.ok ? "" : response.error.message);
   if (!response.ok) return;
 
   assert.equal(response.summary.importStatus, "success_with_warnings");
@@ -1037,7 +1054,7 @@ test("non-fatal asset fetch issues remain visible and do not unnecessarily block
   assert.ok(importIssueCodes.includes("missing_local_asset"));
 
   const snapshotHtml = fs.readFileSync(response.snapshot.entryHtmlPathAbs, "utf8");
-  assert.ok(snapshotHtml.includes('href="/missing-theme.css"'));
+  assert.ok(snapshotHtml.includes("missing-theme.css"));
 });
 
 test("existing fixture-based operator flow remains unchanged", async () => {

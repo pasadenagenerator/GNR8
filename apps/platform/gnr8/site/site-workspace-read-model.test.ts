@@ -125,10 +125,23 @@ test('import provenance summary is parsed when persisted on runtime site version
     kind: 'runtime_import_provenance_summary_v1',
     sourceMode: 'raw_html_fallback',
     importFidelityStatus: 'degraded_import',
-    renderedCaptureStatus: 'unavailable',
+    renderedCaptureStatus: 'failed',
     renderedDomQuality: 'weak',
     screenshotCount: 0,
     computedStyleSampleCount: 0,
+    renderedCapture: {
+      used: false,
+      status: 'failed',
+      quality: 'weak',
+      domLength: 0,
+      nodeCount: 0,
+      styleSampleCount: 0,
+      styleCoverage: 0,
+      screenshots: {
+        viewport: false,
+        fullPage: false,
+      },
+    },
     importDiagnosticCodes: ['RAW_HTML_FALLBACK_USED', 'IMPORT_FIDELITY_DEGRADED'],
     captureEvidence: {
       selectedSourceHtmlPath: '/tmp/snapshot/response-html.raw.html',
@@ -136,16 +149,21 @@ test('import provenance summary is parsed when persisted on runtime site version
       entryHtmlPath: '/tmp/snapshot/index.html',
       renderedCaptureManifestPath: null,
       acquisitionEvidencePath: '/tmp/snapshot/acquisition-evidence.json',
+      renderedDomPath: '/tmp/snapshot/rendered/rendered-dom.html',
+      computedStylesPath: '/tmp/snapshot/rendered/computed-styles.json',
+      renderedViewportScreenshotPath: '/tmp/snapshot/rendered/screenshots/viewport.png',
+      renderedFullpageScreenshotPath: '/tmp/snapshot/rendered/screenshots/fullpage.png',
       screenshotPaths: [],
     },
   })
 
   assert.equal(parsed?.sourceMode, 'raw_html_fallback')
   assert.equal(parsed?.importFidelityStatus, 'degraded_import')
-  assert.equal(parsed?.renderedCaptureStatus, 'unavailable')
+  assert.equal(parsed?.renderedCaptureStatus, 'failed')
   assert.equal(parsed?.renderedDomQuality, 'weak')
   assert.equal(parsed?.screenshotCount, 0)
   assert.equal(parsed?.computedStyleSampleCount, 0)
+  assert.equal(parsed?.renderedCapture.status, 'failed')
   assert.deepEqual(parsed?.importDiagnosticCodes, ['IMPORT_FIDELITY_DEGRADED', 'RAW_HTML_FALLBACK_USED'])
   assert.equal(parsed?.styleSignals, null)
 })
@@ -165,6 +183,19 @@ test('import fidelity prefers persisted summary over semantic signal labels', ()
         renderedDomQuality: 'strong',
         screenshotCount: 2,
         computedStyleSampleCount: 6,
+        renderedCapture: {
+          used: true,
+          status: 'available',
+          quality: 'strong',
+          domLength: 4300,
+          nodeCount: 88,
+          styleSampleCount: 6,
+          styleCoverage: 0.6,
+          screenshots: {
+            viewport: true,
+            fullPage: true,
+          },
+        },
         importDiagnosticCodes: ['RENDERED_CAPTURE_RECOVERED_ON_RETRY'],
         captureEvidence: {
           selectedSourceHtmlPath: '/tmp/snapshot/rendered-capture/rendered-dom.html',
@@ -172,12 +203,26 @@ test('import fidelity prefers persisted summary over semantic signal labels', ()
           entryHtmlPath: '/tmp/snapshot/index.html',
           renderedCaptureManifestPath: '/tmp/snapshot/rendered-capture.json',
           acquisitionEvidencePath: '/tmp/snapshot/acquisition-evidence.json',
+          renderedDomPath: '/tmp/snapshot/rendered/rendered-dom.html',
+          computedStylesPath: '/tmp/snapshot/rendered/computed-styles.json',
+          renderedViewportScreenshotPath: '/tmp/snapshot/rendered/screenshots/viewport.png',
+          renderedFullpageScreenshotPath: '/tmp/snapshot/rendered/screenshots/fullpage.png',
           screenshotPaths: ['/tmp/snapshot/rendered-capture/desktop-fullpage.png'],
         },
         styleSignals: {
           kind: 'style_signal_model_v2',
           version: '2.0.0',
           sourceMode: 'computed_style',
+          provenance: {
+            sourceMode: 'computed_style',
+            computedStyle: {
+              used: true,
+              sampleCount: 6,
+              coverage: 0.6,
+            },
+            fallbackUsed: false,
+            diagnostics: [],
+          },
           colors: {
             backgroundTone: 'dark',
             primaryAccent: '#2563eb',
@@ -235,6 +280,10 @@ test('import fidelity prefers persisted summary over semantic signal labels', ()
   assert.equal(parsed.screenshotCount, 2)
   assert.equal(parsed.computedStyleSampleCount, 6)
   assert.equal(parsed.styleSignals?.sourceMode, 'computed_style')
+  assert.equal(parsed.styleSignalCoverage, 0.6)
+  assert.equal(parsed.styleSignalFallbackUsed, false)
+  assert.equal(parsed.styleSignalSourceMode, 'computed_style')
+  assert.equal(parsed.evidencePaths.renderedDomPath, '/tmp/snapshot/rendered/rendered-dom.html')
   assert.ok(parsed.captureEvidenceRefs.some((entry) => entry.includes('rendered-capture.json')))
   assert.deepEqual(parsed.importDiagnosticCodes, ['RENDERED_CAPTURE_RECOVERED_ON_RETRY'])
 })

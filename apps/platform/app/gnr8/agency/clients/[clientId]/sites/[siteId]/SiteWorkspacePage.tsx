@@ -74,26 +74,37 @@ function renderOverviewContent(props: {
           <div>Hero detected: {readModel.overview.heroDetected ? 'yes' : 'no'}</div>
           <div>CTA detected: {readModel.overview.ctaDetected ? 'yes' : 'no'}</div>
           <div>Design strategy: {readModel.overview.designStrategy}</div>
-          <div>Import source mode: {readModel.pipeline.sourceMode}</div>
-          <div>Import fidelity status: {readModel.pipeline.importFidelityStatus}</div>
+
+          <div style={{ marginTop: 8, fontWeight: 700, color: '#0f172a' }}>Import Evidence</div>
+          <div>Source mode: {readModel.pipeline.sourceMode === 'rendered_dom' ? 'rendered_dom' : readModel.pipeline.sourceMode === 'raw_html_fallback' ? 'raw_html' : 'unknown'}</div>
+          <div>Fidelity: {readModel.pipeline.importFidelityDegraded ? 'degraded' : 'high'}</div>
           <div>Rendered capture status: {readModel.pipeline.renderedCaptureStatus}</div>
-          <div>Rendered DOM quality: {readModel.pipeline.renderedDomQuality}</div>
-          <div>Screenshots captured: {readModel.pipeline.screenshotCount}</div>
-          <div>Computed style samples: {readModel.pipeline.computedStyleSampleCount}</div>
-          <div>Style source mode: {readModel.pipeline.styleSignals?.sourceMode ?? 'unknown'}</div>
+          <div>Rendered capture quality: {readModel.pipeline.renderedCapture?.quality ?? readModel.pipeline.renderedDomQuality}</div>
+          <div>DOM size: {readModel.pipeline.renderedCapture?.nodeCount ?? 0} nodes</div>
           <div>
-            Style summary:{' '}
-            tone={readModel.pipeline.styleSignals?.colors.backgroundTone ?? 'unknown'} · accent={readModel.pipeline.styleSignals?.colors.primaryAccent ?? 'none'} ·
-            type={readModel.pipeline.styleSignals ? `${readModel.pipeline.styleSignals.typography.headingCategory}/${readModel.pipeline.styleSignals.typography.bodyCategory}` : 'unknown'} ·
-            spacing={readModel.pipeline.styleSignals ? `${readModel.pipeline.styleSignals.spacing.rhythm}/${readModel.pipeline.styleSignals.spacing.layoutDensity}` : 'unknown'} ·
-            cta={readModel.pipeline.styleSignals ? `${readModel.pipeline.styleSignals.cta.styleHint}/${readModel.pipeline.styleSignals.cta.prominence}` : 'unknown'}
+            Style samples: {readModel.pipeline.renderedCapture?.styleSampleCount ?? readModel.pipeline.computedStyleSampleCount} (coverage{' '}
+            {Math.round((readModel.pipeline.renderedCapture?.styleCoverage ?? readModel.pipeline.styleSignalCoverage ?? 0) * 100)}%)
           </div>
           <div>
-            Style diagnostics:{' '}
-            {readModel.pipeline.styleSignals && readModel.pipeline.styleSignals.diagnostics.length > 0
-              ? readModel.pipeline.styleSignals.diagnostics.map((diag) => diag.code).join(' · ')
-              : 'none'}
+            Screenshots: viewport {readModel.pipeline.renderedCapture?.screenshots.viewport ? 'yes' : 'no'} / full {readModel.pipeline.renderedCapture?.screenshots.fullPage ? 'yes' : 'no'}
           </div>
+          <div>Style source: {readModel.pipeline.styleSignalSourceMode}</div>
+          <div>Style coverage: {Math.round(readModel.pipeline.styleSignalCoverage * 100)}%</div>
+          <div>Fallback used: {readModel.pipeline.styleSignalFallbackUsed ? 'yes' : 'no'}</div>
+
+          <details style={{ marginTop: 6 }}>
+            <summary style={{ cursor: 'pointer', color: '#0f172a', fontWeight: 600 }}>Show Import Evidence Details</summary>
+            <div style={{ marginTop: 8, display: 'grid', gap: 4, fontSize: 12 }}>
+              <div>rendered-dom.html: {readModel.pipeline.evidencePaths.renderedDomPath ?? 'missing'}</div>
+              <div>computed-styles.json: {readModel.pipeline.evidencePaths.computedStylesPath ?? 'missing'}</div>
+              <div>acquisition-evidence.json: {readModel.pipeline.evidencePaths.acquisitionEvidencePath ?? 'missing'}</div>
+              <div>
+                Diagnostics:{' '}
+                {readModel.pipeline.evidenceDiagnostics.length > 0 ? readModel.pipeline.evidenceDiagnostics.join(' · ') : 'none'}
+              </div>
+            </div>
+          </details>
+
           <div>Import diagnostics: {readModel.pipeline.importDiagnosticCodes.length > 0 ? readModel.pipeline.importDiagnosticCodes.join(' · ') : 'none'}</div>
           <div>Capture evidence refs: {readModel.pipeline.captureEvidenceRefs.length > 0 ? readModel.pipeline.captureEvidenceRefs.join(' · ') : 'none'}</div>
           <div>Acquisition diagnostics: {readModel.pipeline.diagnosticsSummary.length > 0 ? readModel.pipeline.diagnosticsSummary.join(' · ') : 'none'}</div>

@@ -52,6 +52,26 @@ function uniqueSorted(values: string[]): string[] {
   return [...new Set(values.filter(Boolean))].sort((a, b) => a.localeCompare(b))
 }
 
+function toCoverage(input: { sampleCount: number; expectedCount?: number }): number {
+  const expectedCount = Math.max(1, Math.floor(input.expectedCount ?? 10))
+  const sampleCount = Math.max(0, Math.floor(input.sampleCount))
+  return Number((sampleCount / expectedCount).toFixed(3))
+}
+
+function resolveRenderedCaptureStatus(snapshot: UrlSinglePageImportSnapshot): 'available' | 'partial' | 'failed' {
+  if (snapshot.renderedCapture.status === 'failed' || snapshot.renderedCapture.status === 'unavailable') return 'failed'
+  const documents = Array.isArray(snapshot.renderedCapture.documents) ? snapshot.renderedCapture.documents : []
+  const screenshots = Array.isArray(snapshot.renderedCapture.screenshots) ? snapshot.renderedCapture.screenshots : []
+  const computedStyleSamples = Array.isArray(snapshot.renderedCapture.computedStyleSamples) ? snapshot.renderedCapture.computedStyleSamples : []
+  const hasDoc = documents.length > 0
+  const hasViewport = screenshots.some((shot) => shot.captureType === 'desktop_viewport')
+  const hasFull = screenshots.some((shot) => shot.captureType === 'desktop_fullpage')
+  const styleCoverage = toCoverage({ sampleCount: computedStyleSamples.length })
+  const strongQuality = snapshot.sourceSelection.renderedDomQuality.quality === 'strong'
+  if (hasDoc && hasViewport && hasFull && strongQuality && styleCoverage >= 0.2) return 'available'
+  return 'partial'
+}
+
 function inferPagePathFromSourcePath(sourcePath: string): string {
   const normalized = normalizeText(sourcePath).replaceAll('\\\\', '/').replace(/^\/+/, '')
   if (!normalized || normalized === 'index.html') return '/'
@@ -188,7 +208,7 @@ function buildImportFidelitySignals(snapshot: UrlSinglePageImportSnapshot): Arra
   return [
     { label: `import.source_mode:${snapshot.sourceSelection.sourceMode}`, confidence: 1, source: 'migration' },
     { label: `import.fidelity_status:${snapshot.sourceSelection.fidelityStatus}`, confidence: 1, source: 'migration' },
-    { label: `import.rendered_capture_status:${snapshot.renderedCapture.status}`, confidence: 0.95, source: 'migration' },
+    { label: `import.rendered_capture_status:${resolveRenderedCaptureStatus(snapshot)}`, confidence: 0.95, source: 'migration' },
     { label: `import.rendered_dom_quality:${snapshot.sourceSelection.renderedDomQuality.quality}`, confidence: 0.9, source: 'migration' },
     { label: `import.screenshot_count:${snapshot.renderedCapture.screenshots.length}`, confidence: 1, source: 'migration' },
     {
@@ -216,14 +236,35 @@ function buildImportProvenanceSummary(snapshot: UrlSinglePageImportSnapshot, sty
     .filter(Boolean)
   const importDiagnostics = snapshot.importDiagnostics.issues.map((issue) => normalizeText(issue.code)).filter(Boolean)
 
+  const renderedCaptureStatus = resolveRenderedCaptureStatus(snapshot)
+  const styleSampleCount = snapshot.renderedCapture.computedStyleSamples.length
+  const styleCoverage = toCoverage({ sampleCount: styleSampleCount })
+  const renderedDomPath = path.resolve(snapshot.snapshotRootDirAbs, 'rendered', 'rendered-dom.html')
+  const computedStylesPath = path.resolve(snapshot.snapshotRootDirAbs, 'rendered', 'computed-styles.json')
+  const viewportScreenshotPath = path.resolve(snapshot.snapshotRootDirAbs, 'rendered', 'screenshots', 'viewport.png')
+  const fullpageScreenshotPath = path.resolve(snapshot.snapshotRootDirAbs, 'rendered', 'screenshots', 'fullpage.png')
+
   return {
     kind: 'runtime_import_provenance_summary_v1',
     sourceMode: snapshot.sourceSelection.sourceMode,
     importFidelityStatus: snapshot.sourceSelection.fidelityStatus,
-    renderedCaptureStatus: snapshot.renderedCapture.status,
+    renderedCaptureStatus,
     renderedDomQuality: snapshot.sourceSelection.renderedDomQuality.quality,
     screenshotCount: snapshot.renderedCapture.screenshots.length,
     computedStyleSampleCount: snapshot.renderedCapture.computedStyleSamples.length,
+    renderedCapture: {
+      used: snapshot.sourceSelection.sourceMode === 'rendered_dom',
+      status: renderedCaptureStatus,
+      quality: snapshot.sourceSelection.renderedDomQuality.quality,
+      domLength: snapshot.sourceSelection.renderedDomQuality.bodyTextLength,
+      nodeCount: snapshot.sourceSelection.renderedDomQuality.meaningfulNodeCount,
+      styleSampleCount,
+      styleCoverage,
+      screenshots: {
+        viewport: Boolean(resolveEvidencePathIfExists(viewportScreenshotPath)),
+        fullPage: Boolean(resolveEvidencePathIfExists(fullpageScreenshotPath)),
+      },
+    },
     importDiagnosticCodes: uniqueSorted([...captureDiagnostics, ...importDiagnostics]),
     captureEvidence: {
       selectedSourceHtmlPath: resolveEvidencePathIfExists(snapshot.sourceSelection.selectedSourceHtmlPathAbs),
@@ -231,6 +272,10 @@ function buildImportProvenanceSummary(snapshot: UrlSinglePageImportSnapshot, sty
       entryHtmlPath: resolveEvidencePathIfExists(snapshot.entryHtmlPathAbs),
       renderedCaptureManifestPath: resolveEvidencePathIfExists(path.resolve(snapshot.snapshotRootDirAbs, 'rendered-capture.json')),
       acquisitionEvidencePath: resolveEvidencePathIfExists(path.resolve(snapshot.snapshotRootDirAbs, 'acquisition-evidence.json')),
+      renderedDomPath: resolveEvidencePathIfExists(renderedDomPath),
+      computedStylesPath: resolveEvidencePathIfExists(computedStylesPath),
+      renderedViewportScreenshotPath: resolveEvidencePathIfExists(viewportScreenshotPath),
+      renderedFullpageScreenshotPath: resolveEvidencePathIfExists(fullpageScreenshotPath),
       screenshotPaths: uniqueSorted(snapshot.renderedCapture.screenshots.map((shot) => resolveEvidencePathIfExists(shot.filePathAbs) ?? '').filter(Boolean)),
     },
     styleSignals,
@@ -390,7 +435,7 @@ function computePipelineReporting(input: {
   sourceMode: UrlSinglePageImportSnapshot['sourceMode']
   fidelityStatus: UrlSinglePageImportSnapshot['sourceSelection']['fidelityStatus']
   fidelityDegraded: boolean
-  renderedCaptureStatus: UrlSinglePageImportSnapshot['renderedCapture']['status']
+  renderedCaptureStatus: 'available' | 'partial' | 'failed'
   renderedDomQuality: UrlSinglePageImportSnapshot['sourceSelection']['renderedDomQuality']['quality']
   screenshotCount: number
   computedStyleSampleCount: number
@@ -419,7 +464,7 @@ function computePipelineReporting(input: {
     sourceMode: input.snapshot.sourceSelection.sourceMode,
     fidelityStatus: input.snapshot.sourceSelection.fidelityStatus,
     fidelityDegraded: input.snapshot.sourceSelection.degraded,
-    renderedCaptureStatus: input.snapshot.renderedCapture.status,
+    renderedCaptureStatus: resolveRenderedCaptureStatus(input.snapshot),
     renderedDomQuality: input.snapshot.sourceSelection.renderedDomQuality.quality,
     screenshotCount: input.snapshot.renderedCapture.screenshots.length,
     computedStyleSampleCount: input.snapshot.renderedCapture.computedStyleSamples.length,
@@ -452,7 +497,7 @@ export type ScopedImportPipelineSuccess = {
     sourceMode: UrlSinglePageImportSnapshot['sourceMode']
     fidelityStatus: UrlSinglePageImportSnapshot['sourceSelection']['fidelityStatus']
     fidelityDegraded: boolean
-    renderedCaptureStatus: UrlSinglePageImportSnapshot['renderedCapture']['status']
+    renderedCaptureStatus: 'available' | 'partial' | 'failed'
     renderedDomQuality: UrlSinglePageImportSnapshot['sourceSelection']['renderedDomQuality']['quality']
     screenshotCount: number
     computedStyleSampleCount: number
@@ -481,7 +526,7 @@ export type ScopedImportPipelineFallback = {
     sourceMode: UrlSinglePageImportSnapshot['sourceMode']
     fidelityStatus: UrlSinglePageImportSnapshot['sourceSelection']['fidelityStatus']
     fidelityDegraded: boolean
-    renderedCaptureStatus: UrlSinglePageImportSnapshot['renderedCapture']['status']
+    renderedCaptureStatus: 'available' | 'partial' | 'failed'
     renderedDomQuality: UrlSinglePageImportSnapshot['sourceSelection']['renderedDomQuality']['quality']
     screenshotCount: number
     computedStyleSampleCount: number
@@ -553,6 +598,10 @@ export async function runScopedImportPipeline(input: {
   const computedOnlyStyleSignals = input.snapshot.renderedCapture.computedStyleSamples.length > 0
     ? extractStyleSignalModel({
         computedStyleSamples: input.snapshot.renderedCapture.computedStyleSamples,
+        renderedCaptureContext: {
+          status: resolveRenderedCaptureStatus(input.snapshot),
+          quality: input.snapshot.sourceSelection.renderedDomQuality.quality,
+        },
       })
     : null
 
@@ -568,6 +617,10 @@ export async function runScopedImportPipeline(input: {
     computedStyleSamples: input.snapshot.renderedCapture.computedStyleSamples,
     preparedSite,
     visualAnalysis,
+    renderedCaptureContext: {
+      status: resolveRenderedCaptureStatus(input.snapshot),
+      quality: input.snapshot.sourceSelection.renderedDomQuality.quality,
+    },
   })
   const importProvenanceSummary = buildImportProvenanceSummary(input.snapshot, styleSignals)
 
@@ -707,7 +760,7 @@ export async function runScopedImportPipeline(input: {
       sourceMode: input.snapshot.sourceSelection.sourceMode,
       fidelityStatus: input.snapshot.sourceSelection.fidelityStatus,
       fidelityDegraded: input.snapshot.sourceSelection.degraded,
-      renderedCaptureStatus: input.snapshot.renderedCapture.status,
+      renderedCaptureStatus: resolveRenderedCaptureStatus(input.snapshot),
       renderedDomQuality: input.snapshot.sourceSelection.renderedDomQuality.quality,
       screenshotCount: input.snapshot.renderedCapture.screenshots.length,
         computedStyleSampleCount: input.snapshot.renderedCapture.computedStyleSamples.length,

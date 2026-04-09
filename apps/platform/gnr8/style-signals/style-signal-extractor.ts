@@ -483,8 +483,14 @@ export function extractStyleSignalModel(input: {
   computedStyleSamples?: ComputedStyleSample[] | null
   preparedSite?: PreparedSiteModel | null
   visualAnalysis?: VisualAnalysisModel | null
+  renderedCaptureContext?: {
+    status?: 'available' | 'partial' | 'failed' | null
+    quality?: 'strong' | 'weak' | 'unusable' | null
+  } | null
 }): StyleSignalModel {
   const computedStyleSamples = (input.computedStyleSamples ?? []).filter((sample) => sample?.kind === 'computed_style_sample_v1')
+  const totalSampleTargets = 10
+  const computedCoverage = Number((computedStyleSamples.length / totalSampleTargets).toFixed(3))
   const hasComputed = computedStyleSamples.length >= 3
   const computedSignals = inferSignalsFromComputed(computedStyleSamples)
   const fallbackSignals = inferFallbackFromPreparedSite(input.preparedSite)
@@ -582,6 +588,26 @@ export function extractStyleSignalModel(input: {
     })
   }
 
+  if (computedStyleSamples.length > 0 && computedCoverage < 0.2) {
+    diagnostics.push({
+      code: 'STYLE_SAMPLE_LOW_COVERAGE',
+      severity: 'warning',
+      message: 'Computed style sample coverage is below deterministic minimum threshold.',
+    })
+  }
+
+  if (
+    input.renderedCaptureContext?.status === 'available' &&
+    input.renderedCaptureContext?.quality === 'strong' &&
+    sourceMode === 'html_css_inference'
+  ) {
+    diagnostics.push({
+      code: 'STYLE_SIGNAL_COMPUTED_STYLE_NOT_USED',
+      severity: 'warning',
+      message: 'Strong rendered capture was available, but computed style evidence was not selected for style signals.',
+    })
+  }
+
   if (colors.primaryAccent == null && colors.secondaryAccent == null) {
     diagnostics.push({
       code: 'STYLE_COLOR_SIGNAL_WEAK',
@@ -664,6 +690,16 @@ export function extractStyleSignalModel(input: {
     kind: 'style_signal_model_v2',
     version: STYLE_SIGNAL_MODEL_VERSION,
     sourceMode,
+    provenance: {
+      sourceMode,
+      computedStyle: {
+        used: hasComputed,
+        sampleCount: computedStyleSamples.length,
+        coverage: computedCoverage,
+      },
+      fallbackUsed: !hasComputed || sourceMode === 'mixed',
+      diagnostics: normalizeDiagnostics(diagnostics).map((diag) => diag.code),
+    },
     colors,
     typography,
     spacing,

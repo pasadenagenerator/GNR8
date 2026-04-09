@@ -73,6 +73,9 @@ test('computed-style extraction derives color, typography, spacing and CTA signa
   })
 
   assert.equal(model.sourceMode, 'computed_style')
+  assert.equal(model.provenance.computedStyle.used, true)
+  assert.equal(model.provenance.computedStyle.sampleCount, 3)
+  assert.equal(model.provenance.fallbackUsed, false)
   assert.equal(model.colors.backgroundTone, 'dark')
   assert.equal(model.colors.primaryAccent, '#2563eb')
   assert.equal(model.typography.headingCategory, 'sans')
@@ -110,6 +113,8 @@ test('fallback extraction derives signals when computed samples are missing', ()
   })
 
   assert.equal(model.sourceMode, 'html_css_inference')
+  assert.equal(model.provenance.computedStyle.used, false)
+  assert.equal(model.provenance.fallbackUsed, true)
   assert.equal(model.colors.primaryAccent, '#0ea5e9')
   assert.equal(model.typography.headingCategory, 'serif')
   assert.equal(model.spacing.layoutDensity, 'airy')
@@ -129,4 +134,49 @@ test('weak signal diagnostics remain explicit instead of pretending certainty', 
   assert.equal(model.cta.styleHint, 'unknown')
   assert.ok(model.diagnostics.some((diag) => diag.code === 'STYLE_SIGNAL_WEAK'))
   assert.ok(model.diagnostics.some((diag) => diag.code === 'STYLE_COLOR_SIGNAL_WEAK'))
+})
+
+test('strong rendered capture with html inference emits explicit computed-style-not-used diagnostic', () => {
+  const model = extractStyleSignalModel({
+    computedStyleSamples: [],
+    preparedSite: { documents: [] } as any,
+    renderedCaptureContext: {
+      status: 'available',
+      quality: 'strong',
+    },
+  })
+
+  assert.equal(model.sourceMode, 'html_css_inference')
+  assert.ok(model.diagnostics.some((diag) => diag.code === 'STYLE_SIGNAL_COMPUTED_STYLE_NOT_USED'))
+})
+
+test('low computed style coverage emits explicit low-coverage diagnostic', () => {
+  const model = extractStyleSignalModel({
+    computedStyleSamples: [
+      {
+        kind: 'computed_style_sample_v1',
+        sampleId: 'root',
+        target: 'root',
+        selector: 'body',
+        tagName: 'body',
+        className: null,
+        styles: {
+          fontFamily: 'Inter',
+          fontSize: '16px',
+          fontWeight: '400',
+          lineHeight: '24px',
+          color: '#111111',
+          backgroundColor: '#ffffff',
+          borderRadius: '0px',
+          paddingTop: '0px',
+          paddingRight: '0px',
+          paddingBottom: '0px',
+          paddingLeft: '0px',
+        },
+      },
+    ] as any,
+  })
+
+  assert.equal(model.provenance.computedStyle.coverage, 0.1)
+  assert.ok(model.diagnostics.some((diag) => diag.code === 'STYLE_SAMPLE_LOW_COVERAGE'))
 })

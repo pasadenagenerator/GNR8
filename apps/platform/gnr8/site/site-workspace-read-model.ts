@@ -121,10 +121,23 @@ export type SiteWorkspaceReadModel = {
     sourceMode: 'rendered_dom' | 'raw_html_fallback' | 'unknown'
     importFidelityStatus: 'high_fidelity_import' | 'degraded_import' | 'capture_failed' | 'unknown'
     importFidelityDegraded: boolean
-    renderedCaptureStatus: 'available' | 'unavailable' | 'failed' | 'unknown'
+    renderedCaptureStatus: 'available' | 'partial' | 'failed' | 'unknown'
     renderedDomQuality: 'strong' | 'weak' | 'unusable' | 'unknown'
     screenshotCount: number
     computedStyleSampleCount: number
+    renderedCapture: RuntimeImportProvenanceSummary['renderedCapture'] | null
+    styleSignalCoverage: number
+    styleSignalFallbackUsed: boolean
+    styleSignalSourceMode: StyleSignalModel['sourceMode'] | 'unknown'
+    evidencePaths: {
+      renderedDomPath: string | null
+      computedStylesPath: string | null
+      acquisitionEvidencePath: string | null
+      renderedCaptureManifestPath: string | null
+      renderedViewportScreenshotPath: string | null
+      renderedFullpageScreenshotPath: string | null
+    }
+    evidenceDiagnostics: string[]
     importDiagnosticCodes: string[]
     captureEvidenceRefs: string[]
     diagnosticsSummary: string[]
@@ -493,7 +506,8 @@ function parseImportFidelitySignals(pageRows: RuntimePageVersionRow[]): {
 
       if (label.startsWith('import.rendered_capture_status:')) {
         const value = label.slice('import.rendered_capture_status:'.length).trim()
-        if (value === 'available' || value === 'unavailable' || value === 'failed') renderedCaptureStatus = value
+        if (value === 'available' || value === 'partial' || value === 'failed') renderedCaptureStatus = value
+        if (value === 'unavailable') renderedCaptureStatus = 'failed'
         continue
       }
 
@@ -579,6 +593,16 @@ function parseStyleSignalsFromSemanticLabels(pageRows: RuntimePageVersionRow[]):
     kind: 'style_signal_model_v2',
     version: '2.0.0',
     sourceMode: sourceMode === 'computed_style' || sourceMode === 'mixed' || sourceMode === 'html_css_inference' ? sourceMode : 'html_css_inference',
+    provenance: {
+      sourceMode: sourceMode === 'computed_style' || sourceMode === 'mixed' || sourceMode === 'html_css_inference' ? sourceMode : 'html_css_inference',
+      computedStyle: {
+        used: sourceMode === 'computed_style' || sourceMode === 'mixed',
+        sampleCount: 0,
+        coverage: 0,
+      },
+      fallbackUsed: sourceMode !== 'computed_style',
+      diagnostics: diagnostics.map((diag) => diag.code),
+    },
     colors: {
       backgroundTone:
         backgroundTone === 'light' || backgroundTone === 'dark' || backgroundTone === 'mixed' || backgroundTone === 'unknown'
@@ -655,27 +679,57 @@ function parseImportProvenanceSummary(value: unknown): RuntimeImportProvenanceSu
 
   if (sourceModeRaw !== 'rendered_dom' && sourceModeRaw !== 'raw_html_fallback') return null
   if (fidelityStatusRaw !== 'high_fidelity_import' && fidelityStatusRaw !== 'degraded_import' && fidelityStatusRaw !== 'capture_failed') return null
-  if (captureStatusRaw !== 'available' && captureStatusRaw !== 'unavailable' && captureStatusRaw !== 'failed') return null
+  if (captureStatusRaw !== 'available' && captureStatusRaw !== 'partial' && captureStatusRaw !== 'failed' && captureStatusRaw !== 'unavailable') return null
   if (domQualityRaw !== 'strong' && domQualityRaw !== 'weak' && domQualityRaw !== 'unusable') return null
   if (!Number.isFinite(screenshotCountRaw) || !Number.isFinite(computedStyleSampleCountRaw)) return null
 
   const importDiagnosticCodes = Array.isArray(value.importDiagnosticCodes)
     ? value.importDiagnosticCodes.map((entry) => normalizeText(entry)).filter(Boolean)
     : []
+  const renderedCapture = isRecord(value.renderedCapture) ? value.renderedCapture : null
   const captureEvidence = isRecord(value.captureEvidence) ? value.captureEvidence : null
   const screenshotPaths = Array.isArray(captureEvidence?.screenshotPaths)
     ? captureEvidence.screenshotPaths.map((entry) => normalizeText(entry)).filter(Boolean)
     : []
   const styleSignals = isRecord(value.styleSignals) ? (value.styleSignals as StyleSignalModel) : null
 
+  const renderedCaptureStatusNormalized: RuntimeImportProvenanceSummary['renderedCaptureStatus'] =
+    captureStatusRaw === 'unavailable' ? 'failed' : (captureStatusRaw as RuntimeImportProvenanceSummary['renderedCaptureStatus'])
+  const renderedCaptureSummary: RuntimeImportProvenanceSummary['renderedCapture'] = {
+    used: Boolean(renderedCapture?.used),
+    status:
+      normalizeText(renderedCapture?.status) === 'available' ||
+      normalizeText(renderedCapture?.status) === 'partial' ||
+      normalizeText(renderedCapture?.status) === 'failed'
+        ? (normalizeText(renderedCapture?.status) as RuntimeImportProvenanceSummary['renderedCapture']['status'])
+        : renderedCaptureStatusNormalized,
+    quality:
+      normalizeText(renderedCapture?.quality) === 'strong' ||
+      normalizeText(renderedCapture?.quality) === 'weak' ||
+      normalizeText(renderedCapture?.quality) === 'unusable'
+        ? (normalizeText(renderedCapture?.quality) as RuntimeImportProvenanceSummary['renderedCapture']['quality'])
+        : (domQualityRaw as RuntimeImportProvenanceSummary['renderedCapture']['quality']),
+    domLength: Number.isFinite(Number(renderedCapture?.domLength)) ? Math.max(0, Math.floor(Number(renderedCapture?.domLength))) : 0,
+    nodeCount: Number.isFinite(Number(renderedCapture?.nodeCount)) ? Math.max(0, Math.floor(Number(renderedCapture?.nodeCount))) : 0,
+    styleSampleCount: Number.isFinite(Number(renderedCapture?.styleSampleCount))
+      ? Math.max(0, Math.floor(Number(renderedCapture?.styleSampleCount)))
+      : Math.max(0, Math.floor(computedStyleSampleCountRaw)),
+    styleCoverage: Number.isFinite(Number(renderedCapture?.styleCoverage)) ? Math.max(0, Number(renderedCapture?.styleCoverage)) : 0,
+    screenshots: {
+      viewport: Boolean(renderedCapture?.screenshots && isRecord(renderedCapture.screenshots) && renderedCapture.screenshots.viewport),
+      fullPage: Boolean(renderedCapture?.screenshots && isRecord(renderedCapture.screenshots) && renderedCapture.screenshots.fullPage),
+    },
+  }
+
   return {
     kind: 'runtime_import_provenance_summary_v1',
     sourceMode: sourceModeRaw,
     importFidelityStatus: fidelityStatusRaw,
-    renderedCaptureStatus: captureStatusRaw,
+    renderedCaptureStatus: renderedCaptureStatusNormalized,
     renderedDomQuality: domQualityRaw,
     screenshotCount: Math.max(0, Math.floor(screenshotCountRaw)),
     computedStyleSampleCount: Math.max(0, Math.floor(computedStyleSampleCountRaw)),
+    renderedCapture: renderedCaptureSummary,
     importDiagnosticCodes: [...new Set(importDiagnosticCodes)].sort((a, b) => a.localeCompare(b)),
     captureEvidence: {
       selectedSourceHtmlPath: toTextOrNull(captureEvidence?.selectedSourceHtmlPath),
@@ -683,6 +737,10 @@ function parseImportProvenanceSummary(value: unknown): RuntimeImportProvenanceSu
       entryHtmlPath: toTextOrNull(captureEvidence?.entryHtmlPath),
       renderedCaptureManifestPath: toTextOrNull(captureEvidence?.renderedCaptureManifestPath),
       acquisitionEvidencePath: toTextOrNull(captureEvidence?.acquisitionEvidencePath),
+      renderedDomPath: toTextOrNull(captureEvidence?.renderedDomPath),
+      computedStylesPath: toTextOrNull(captureEvidence?.computedStylesPath),
+      renderedViewportScreenshotPath: toTextOrNull(captureEvidence?.renderedViewportScreenshotPath),
+      renderedFullpageScreenshotPath: toTextOrNull(captureEvidence?.renderedFullpageScreenshotPath),
       screenshotPaths: [...new Set(screenshotPaths)].sort((a, b) => a.localeCompare(b)),
     },
     styleSignals,
@@ -699,6 +757,12 @@ function parseImportFidelity(input: {
   renderedDomQuality: SiteWorkspaceReadModel['pipeline']['renderedDomQuality']
   screenshotCount: number
   computedStyleSampleCount: number
+  renderedCapture: RuntimeImportProvenanceSummary['renderedCapture'] | null
+  styleSignalCoverage: number
+  styleSignalFallbackUsed: boolean
+  styleSignalSourceMode: StyleSignalModel['sourceMode'] | 'unknown'
+  evidencePaths: SiteWorkspaceReadModel['pipeline']['evidencePaths']
+  evidenceDiagnostics: string[]
   importDiagnosticCodes: string[]
   captureEvidenceRefs: string[]
   styleSignals: StyleSignalModel | null
@@ -707,10 +771,24 @@ function parseImportFidelity(input: {
   const parsedSummary = parseImportProvenanceSummary(input.runtimeVersion?.import_provenance_summary ?? null)
 
   if (!parsedSummary) {
+    const inferredStyleSignals = parseStyleSignalsFromSemanticLabels(input.pageRows)
     return {
       ...parsedFromSignals,
+      renderedCapture: null,
+      styleSignalCoverage: inferredStyleSignals?.provenance.computedStyle.coverage ?? 0,
+      styleSignalFallbackUsed: inferredStyleSignals?.provenance.fallbackUsed ?? true,
+      styleSignalSourceMode: inferredStyleSignals?.sourceMode ?? 'unknown',
+      evidencePaths: {
+        renderedDomPath: null,
+        computedStylesPath: null,
+        acquisitionEvidencePath: null,
+        renderedCaptureManifestPath: null,
+        renderedViewportScreenshotPath: null,
+        renderedFullpageScreenshotPath: null,
+      },
+      evidenceDiagnostics: [],
       captureEvidenceRefs: [],
-      styleSignals: parseStyleSignalsFromSemanticLabels(input.pageRows),
+      styleSignals: inferredStyleSignals,
     }
   }
 
@@ -727,6 +805,12 @@ function parseImportFidelity(input: {
   ]
     .filter((value): value is string => Boolean(value))
     .slice(0, 10)
+  const styleSignals = parsedSummary.styleSignals ?? parseStyleSignalsFromSemanticLabels(input.pageRows)
+  const evidenceDiagnostics = [...new Set([
+    ...importDiagnosticCodes.filter((code) => code.startsWith('ENTRY_FETCH_')),
+    ...importDiagnosticCodes.filter((code) => code.startsWith('RENDERED_CAPTURE_')),
+    ...(styleSignals?.diagnostics ?? []).map((diag) => diag.code).filter((code) => code.startsWith('STYLE_SIGNAL_') || code === 'STYLE_SAMPLE_LOW_COVERAGE'),
+  ])].sort((a, b) => a.localeCompare(b))
 
   return {
     sourceMode: parsedSummary.sourceMode,
@@ -735,9 +819,22 @@ function parseImportFidelity(input: {
     renderedDomQuality: parsedSummary.renderedDomQuality,
     screenshotCount: parsedSummary.screenshotCount,
     computedStyleSampleCount: parsedSummary.computedStyleSampleCount,
+    renderedCapture: parsedSummary.renderedCapture,
+    styleSignalCoverage: styleSignals?.provenance.computedStyle.coverage ?? parsedSummary.renderedCapture.styleCoverage ?? 0,
+    styleSignalFallbackUsed: styleSignals?.provenance.fallbackUsed ?? true,
+    styleSignalSourceMode: styleSignals?.sourceMode ?? 'unknown',
+    evidencePaths: {
+      renderedDomPath: parsedSummary.captureEvidence.renderedDomPath,
+      computedStylesPath: parsedSummary.captureEvidence.computedStylesPath,
+      acquisitionEvidencePath: parsedSummary.captureEvidence.acquisitionEvidencePath,
+      renderedCaptureManifestPath: parsedSummary.captureEvidence.renderedCaptureManifestPath,
+      renderedViewportScreenshotPath: parsedSummary.captureEvidence.renderedViewportScreenshotPath,
+      renderedFullpageScreenshotPath: parsedSummary.captureEvidence.renderedFullpageScreenshotPath,
+    },
+    evidenceDiagnostics,
     importDiagnosticCodes,
     captureEvidenceRefs,
-    styleSignals: parsedSummary.styleSignals ?? parseStyleSignalsFromSemanticLabels(input.pageRows),
+    styleSignals,
   }
 }
 
@@ -1032,6 +1129,12 @@ export async function getSiteWorkspaceReadModelForPage(input: {
       renderedDomQuality: importFidelity.renderedDomQuality,
       screenshotCount: importFidelity.screenshotCount,
       computedStyleSampleCount: importFidelity.computedStyleSampleCount,
+      renderedCapture: importFidelity.renderedCapture,
+      styleSignalCoverage: importFidelity.styleSignalCoverage,
+      styleSignalFallbackUsed: importFidelity.styleSignalFallbackUsed,
+      styleSignalSourceMode: importFidelity.styleSignalSourceMode,
+      evidencePaths: importFidelity.evidencePaths,
+      evidenceDiagnostics: importFidelity.evidenceDiagnostics,
       importDiagnosticCodes: importFidelity.importDiagnosticCodes,
       captureEvidenceRefs: importFidelity.captureEvidenceRefs,
       diagnosticsSummary,

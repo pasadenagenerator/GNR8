@@ -82,6 +82,8 @@ export type RenderedDomQuality = {
   reason: string;
 };
 
+type RenderedCaptureVisibilityStatus = "available" | "partial" | "failed";
+
 export type UrlImportDiagnostic = {
   id: string;
   severity: UrlImportDiagnosticSeverity;
@@ -912,6 +914,195 @@ function evaluateRenderedDomQuality(html: string): RenderedDomQuality {
   };
 }
 
+function computeRenderedCaptureVisibilityStatus(input: {
+  renderedCapture: RenderedCaptureResult;
+  renderedDomQuality: RenderedDomQuality;
+}): RenderedCaptureVisibilityStatus {
+  if (input.renderedCapture.status === "failed" || input.renderedCapture.status === "unavailable") return "failed";
+  const hasDoc = input.renderedCapture.documents.length > 0;
+  const hasViewport = input.renderedCapture.screenshots.some((shot) => shot.captureType === "desktop_viewport");
+  const hasFullPage = input.renderedCapture.screenshots.some((shot) => shot.captureType === "desktop_fullpage");
+  const styleCoverage = input.renderedCapture.computedStyleSamples.length / 10;
+  if (hasDoc && hasViewport && hasFullPage && input.renderedDomQuality.quality === "strong" && styleCoverage >= 0.2) return "available";
+  return "partial";
+}
+
+function buildRenderedQualityBreakdown(html: string): {
+  domLength: number;
+  textDensity: number;
+  nodeCount: number;
+  meaningfulNodeRatio: number;
+  shellDetected: boolean;
+} {
+  const trimmed = html.trim();
+  if (!trimmed) {
+    return {
+      domLength: 0,
+      textDensity: 0,
+      nodeCount: 0,
+      meaningfulNodeRatio: 0,
+      shellDetected: true,
+    };
+  }
+
+  let document: unknown;
+  try {
+    document = parse(trimmed);
+  } catch {
+    return {
+      domLength: trimmed.length,
+      textDensity: 0,
+      nodeCount: 0,
+      meaningfulNodeRatio: 0,
+      shellDetected: true,
+    };
+  }
+
+  const bodyNode = findFirstNodeByTag(document, "body");
+  if (!bodyNode) {
+    return {
+      domLength: trimmed.length,
+      textDensity: 0,
+      nodeCount: 0,
+      meaningfulNodeRatio: 0,
+      shellDetected: true,
+    };
+  }
+
+  const NON_MEANINGFUL_TAGS = new Set(["script", "style", "meta", "link", "noscript", "template"]);
+  let nodeCount = 0;
+  let meaningfulNodeCount = 0;
+  const textParts: string[] = [];
+  walkDom(bodyNode, (node) => {
+    if (isElement(node)) {
+      nodeCount += 1;
+      if (!NON_MEANINGFUL_TAGS.has(node.tagName.toLowerCase())) meaningfulNodeCount += 1;
+      return;
+    }
+    if (
+      node &&
+      typeof node === "object" &&
+      String((node as { nodeName?: string }).nodeName ?? "").toLowerCase() === "#text" &&
+      typeof (node as { value?: unknown }).value === "string"
+    ) {
+      const text = String((node as { value?: string }).value ?? "").replace(/\s+/g, " ").trim();
+      if (text) textParts.push(text);
+    }
+  });
+  const textLength = textParts.join(" ").length;
+  const textDensity = Number((textLength / Math.max(1, trimmed.length)).toFixed(3));
+  const meaningfulNodeRatio = Number((meaningfulNodeCount / Math.max(1, nodeCount)).toFixed(3));
+
+  return {
+    domLength: trimmed.length,
+    textDensity,
+    nodeCount,
+    meaningfulNodeRatio,
+    shellDetected: textLength < 120 && meaningfulNodeCount < 8,
+  };
+}
+
+function ensureRenderedCaptureArtifacts(input: {
+  snapshotRootDirAbs: string;
+  renderedCapture: RenderedCaptureResult;
+  diagnostics: UrlImportDiagnostic[];
+}): {
+  renderedDomPathAbs: string;
+  computedStylesPathAbs: string;
+  viewportScreenshotPathAbs: string;
+  fullpageScreenshotPathAbs: string;
+} {
+  const renderedDirAbs = path.resolve(input.snapshotRootDirAbs, "rendered");
+  const screenshotDirAbs = path.resolve(renderedDirAbs, "screenshots");
+  fs.mkdirSync(screenshotDirAbs, { recursive: true });
+
+  const renderedDomPathAbs = path.resolve(renderedDirAbs, "rendered-dom.html");
+  const computedStylesPathAbs = path.resolve(renderedDirAbs, "computed-styles.json");
+  const viewportScreenshotPathAbs = path.resolve(screenshotDirAbs, "viewport.png");
+  const fullpageScreenshotPathAbs = path.resolve(screenshotDirAbs, "fullpage.png");
+
+  const renderedHtml = input.renderedCapture.documents[0]?.htmlPathAbs
+    ? (() => {
+        try {
+          return fs.readFileSync(input.renderedCapture.documents[0].htmlPathAbs, "utf8");
+        } catch {
+          return "";
+        }
+      })()
+    : "";
+  fs.writeFileSync(renderedDomPathAbs, renderedHtml, "utf8");
+
+  writeJsonStable(computedStylesPathAbs, {
+    kind: "computed_style_sample_collection_v1",
+    sampleCount: input.renderedCapture.computedStyleSamples.length,
+    coverage: Number((input.renderedCapture.computedStyleSamples.length / 10).toFixed(3)),
+    samples: input.renderedCapture.computedStyleSamples,
+    diagnostics: input.renderedCapture.diagnostics.map((diag) => diag.code),
+  } as unknown as JsonValue);
+
+  const viewportShot = input.renderedCapture.screenshots.find((shot) => shot.captureType === "desktop_viewport");
+  const fullpageShot = input.renderedCapture.screenshots.find((shot) => shot.captureType === "desktop_fullpage");
+  if (viewportShot?.filePathAbs && fs.existsSync(viewportShot.filePathAbs)) fs.copyFileSync(viewportShot.filePathAbs, viewportScreenshotPathAbs);
+  else fs.writeFileSync(viewportScreenshotPathAbs, new Uint8Array());
+  if (fullpageShot?.filePathAbs && fs.existsSync(fullpageShot.filePathAbs)) fs.copyFileSync(fullpageShot.filePathAbs, fullpageScreenshotPathAbs);
+  else fs.writeFileSync(fullpageScreenshotPathAbs, new Uint8Array());
+
+  if (!renderedHtml && input.renderedCapture.status !== "available") {
+    input.diagnostics.push(
+      createDiagnostic({
+        severity: "warning",
+        code: "RENDERED_CAPTURE_FAILED",
+        message: "Rendered capture artifacts were materialized with diagnostic-only payloads.",
+        targetUrl: null,
+        details: {
+          renderedDomPathAbs,
+          computedStylesPathAbs,
+          viewportScreenshotPathAbs,
+          fullpageScreenshotPathAbs,
+        },
+      }),
+    );
+  }
+
+  return {
+    renderedDomPathAbs,
+    computedStylesPathAbs,
+    viewportScreenshotPathAbs,
+    fullpageScreenshotPathAbs,
+  };
+}
+
+function buildRenderedCaptureManifest(input: {
+  renderedCapture: RenderedCaptureResult;
+  renderedDomQuality: RenderedDomQuality;
+  renderedDomHtml: string;
+  viewportCaptured: boolean;
+  fullPageCaptured: boolean;
+}): JsonValue {
+  const qualityBreakdown = buildRenderedQualityBreakdown(input.renderedDomHtml);
+  const status = computeRenderedCaptureVisibilityStatus({
+    renderedCapture: input.renderedCapture,
+    renderedDomQuality: input.renderedDomQuality,
+  });
+
+  return {
+    ...input.renderedCapture,
+    legacyStatus: input.renderedCapture.status,
+    status,
+    quality: input.renderedDomQuality.quality,
+    qualityBreakdown,
+    styleSampleSummary: {
+      totalSamples: 10,
+      validSamples: input.renderedCapture.computedStyleSamples.length,
+      coverage: Number((input.renderedCapture.computedStyleSamples.length / 10).toFixed(3)),
+    },
+    screenshotSummary: {
+      viewportCaptured: input.viewportCaptured,
+      fullPageCaptured: input.fullPageCaptured,
+    },
+  } as unknown as JsonValue;
+}
+
 function hasDescendantTag(root: unknown, tagName: string): boolean {
   let found = false;
   walkDom(root, (node) => {
@@ -1606,6 +1797,11 @@ export async function importPublicSinglePageUrlToSnapshot(input: {
     diagnostics: [],
   };
   let renderedCaptureDurationMs = 0;
+  let renderedCaptureAttempted = false;
+  let renderedDomPathAbs: string | null = null;
+  let computedStylesPathAbs: string | null = null;
+  let viewportScreenshotPathAbs: string | null = null;
+  let fullpageScreenshotPathAbs: string | null = null;
 
   const entryFetchCandidates = createEntryFetchCandidateUrls(normalizedUrl);
   const entryFetchAttemptDetails: Array<{
@@ -1802,6 +1998,7 @@ export async function importPublicSinglePageUrlToSnapshot(input: {
   fs.writeFileSync(entryResponseSnippetPathAbs, `${toContentSnippet(entryHtml, 2000)}\n`, "utf8");
 
   if (!hasFatal(diagnostics) && entryHtml) {
+    renderedCaptureAttempted = true;
     const captureStartedAt = Date.now();
     renderedCapture = await runRenderedCapture({
       sourceUrl: entryFetchUrlUsed ?? normalizedHref,
@@ -1809,13 +2006,22 @@ export async function importPublicSinglePageUrlToSnapshot(input: {
       executor: input.renderedCaptureExecutor,
     });
     renderedCaptureDurationMs = Date.now() - captureStartedAt;
-    writeJsonStable(renderedCaptureManifestPathAbs, renderedCapture as unknown as JsonValue);
     appendRenderedCaptureDiagnostics({
       diagnostics,
       renderedCapture,
     });
-  } else {
-    writeJsonStable(renderedCaptureManifestPathAbs, renderedCapture as unknown as JsonValue);
+  }
+
+  if (renderedCaptureAttempted) {
+    const ensured = ensureRenderedCaptureArtifacts({
+      snapshotRootDirAbs,
+      renderedCapture,
+      diagnostics,
+    });
+    renderedDomPathAbs = ensured.renderedDomPathAbs;
+    computedStylesPathAbs = ensured.computedStylesPathAbs;
+    viewportScreenshotPathAbs = ensured.viewportScreenshotPathAbs;
+    fullpageScreenshotPathAbs = ensured.fullpageScreenshotPathAbs;
   }
 
   const sourceSelection = resolveSourceSelection({
@@ -1824,6 +2030,32 @@ export async function importPublicSinglePageUrlToSnapshot(input: {
     responseHtmlPathAbs,
     renderedCapture,
   });
+  const renderedDomHtml = renderedDomPathAbs
+    ? (() => {
+        try {
+          return fs.readFileSync(renderedDomPathAbs, "utf8");
+        } catch {
+          return "";
+        }
+      })()
+    : "";
+  const viewportCaptured = Boolean(
+    viewportScreenshotPathAbs && fs.existsSync(viewportScreenshotPathAbs) && fs.statSync(viewportScreenshotPathAbs).size > 0,
+  );
+  const fullPageCaptured = Boolean(
+    fullpageScreenshotPathAbs && fs.existsSync(fullpageScreenshotPathAbs) && fs.statSync(fullpageScreenshotPathAbs).size > 0,
+  );
+  writeJsonStable(
+    renderedCaptureManifestPathAbs,
+    buildRenderedCaptureManifest({
+      renderedCapture,
+      renderedDomQuality: sourceSelection.renderedDomQuality,
+      renderedDomHtml,
+      viewportCaptured,
+      fullPageCaptured,
+    }),
+  );
+
   let rewrittenHtml = sourceSelection.selectedHtml;
 
   if (!hasFatal(diagnostics) && rewrittenHtml.trim().length > 0) {
@@ -2313,10 +2545,24 @@ export async function importPublicSinglePageUrlToSnapshot(input: {
       responseSnippetPathAbs: entryResponseSnippetPathAbs,
     },
     renderedCapture: {
+      attempted: renderedCaptureAttempted,
       status: renderedCapture.status,
+      visibilityStatus: computeRenderedCaptureVisibilityStatus({
+        renderedCapture,
+        renderedDomQuality: sourceSelection.renderedDomQuality,
+      }),
       durationMs: renderedCaptureDurationMs,
       documentCount: renderedCapture.documents.length,
       screenshotCount: renderedCapture.screenshots.length,
+      screenshotPaths: {
+        viewport: viewportScreenshotPathAbs,
+        fullPage: fullpageScreenshotPathAbs,
+      },
+      renderedArtifacts: {
+        renderedDomPathAbs,
+        computedStylesPathAbs,
+      },
+      styleSampleCoverage: Number((renderedCapture.computedStyleSamples.length / 10).toFixed(3)),
       readinessStates: renderedCapture.documents.map((doc) => doc.readinessState),
       diagnostics: renderedCapture.diagnostics.map((entry) => entry.code),
     },

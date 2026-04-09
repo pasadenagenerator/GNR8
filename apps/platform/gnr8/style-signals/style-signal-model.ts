@@ -8,6 +8,8 @@ export type StyleSignalDiagnosticCode =
   | 'STYLE_SIGNAL_WEAK'
   | 'STYLE_SIGNAL_PARTIAL'
   | 'STYLE_SIGNAL_COMPUTED_SAMPLE_MISSING'
+  | 'STYLE_SIGNAL_COMPUTED_STYLE_NOT_USED'
+  | 'STYLE_SAMPLE_LOW_COVERAGE'
   | 'STYLE_SIGNAL_USING_HTML_FALLBACK'
   | 'STYLE_COLOR_SIGNAL_WEAK'
   | 'STYLE_COLOR_SIGNAL_MIXED'
@@ -60,6 +62,16 @@ export type StyleSignalModel = {
   kind: 'style_signal_model_v2'
   version: typeof STYLE_SIGNAL_MODEL_VERSION
   sourceMode: StyleSignalSourceMode
+  provenance: {
+    sourceMode: StyleSignalSourceMode
+    computedStyle: {
+      used: boolean
+      sampleCount: number
+      coverage: number
+    }
+    fallbackUsed: boolean
+    diagnostics: string[]
+  }
   colors: ColorSignalModel
   typography: TypographySignalModel
   spacing: SpacingSignalModel
