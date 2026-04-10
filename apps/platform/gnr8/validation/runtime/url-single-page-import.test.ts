@@ -1,0 +1,180 @@
+import assert from "node:assert/strict";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import test from "node:test";
+
+import type { RenderedCaptureWorkerClient } from "@/gnr8/import-rendered-capture-worker";
+import { importPublicSinglePageUrlToSnapshot } from "@/gnr8/validation/runtime/url-single-page-import";
+
+function makeHtmlResponse(html: string): Response {
+  return new Response(html, {
+    status: 200,
+    headers: {
+      "content-type": "text/html; charset=utf-8",
+    },
+  });
+}
+
+test("url import retries transient worker-unavailable response and completes with rendered DOM", async () => {
+  const tmpRoot = await fs.promises.mkdtemp(path.join(os.tmpdir(), "gnr8-url-import-reliability-"));
+  const entryHtml = "<!doctype html><html><body><main><h1>Raw entry</h1><p>raw fallback text</p></main></body></html>";
+  const renderedHtml =
+    "<!doctype html><html><body><main><h1>Rendered capture headline</h1><section><p>This rendered page includes enough deterministic content to be strongly selected as authoritative import source in reliability tests.</p></section></main></body></html>";
+
+  let workerCallCount = 0;
+  const workerClient: RenderedCaptureWorkerClient = {
+    async execute(request) {
+      workerCallCount += 1;
+      if (workerCallCount === 1) {
+        return {
+          kind: "rendered_capture_worker_response_v1",
+          contractVersion: "1.0.0",
+          requestId: request.requestId,
+          status: "unsupported",
+          environment: {
+            runtimeKind: "unknown",
+            environmentSupported: false,
+            browserPackageAvailable: false,
+            browserBinaryAvailable: false,
+            supportDecision: "unknown",
+          },
+          artifacts: [],
+          computedStyleSamples: [],
+          diagnostics: [{ code: "CAPTURE_WORKER_TIMEOUT", severity: "warning", message: "timeout" }],
+          qualitySummary: {
+            renderedDomQuality: "unusable",
+            domLength: 0,
+            meaningfulNodeCount: 0,
+            screenshotCount: 0,
+            computedStyleSampleCount: 0,
+          },
+          failure: {
+            failureClass: "environment_unsupported",
+            failureCode: "WORKER_TIMEOUT",
+            retryable: true,
+            message: "transient timeout",
+          },
+          timings: {
+            queueLatencyMs: null,
+            executionMs: 10,
+            totalMs: 10,
+          },
+        };
+      }
+
+      return {
+        kind: "rendered_capture_worker_response_v1",
+        contractVersion: "1.0.0",
+        requestId: request.requestId,
+        status: "available",
+        environment: {
+          runtimeKind: "nodejs",
+          environmentSupported: true,
+          browserPackageAvailable: true,
+          browserBinaryAvailable: true,
+          supportDecision: "supported",
+        },
+        artifacts: [
+          {
+            artifactType: "rendered_dom_html",
+            captureType: null,
+            storage: "inline",
+            uri: `data:text/html;base64,${Buffer.from(renderedHtml, "utf8").toString("base64")}`,
+            mediaType: "text/html",
+            sha256: "rendered-sha",
+            byteLength: Buffer.byteLength(renderedHtml),
+          },
+        ],
+        computedStyleSamples: [],
+        diagnostics: [],
+        qualitySummary: {
+          renderedDomQuality: "strong",
+          domLength: renderedHtml.length,
+          meaningfulNodeCount: 12,
+          screenshotCount: 0,
+          computedStyleSampleCount: 0,
+        },
+        failure: null,
+        timings: {
+          queueLatencyMs: null,
+          executionMs: 12,
+          totalMs: 12,
+        },
+      };
+    },
+  };
+
+  const snapshot = await importPublicSinglePageUrlToSnapshot({
+    sourceUrl: "https://example.com/",
+    snapshotRootDirAbs: tmpRoot,
+    requestId: "req-url-import-retryable-worker",
+    fetchImpl: async () => makeHtmlResponse(entryHtml),
+    renderedCaptureWorkerClient: workerClient,
+  });
+
+  assert.equal(workerCallCount, 2);
+  assert.equal(snapshot.sourceMode, "rendered_dom");
+  assert.equal(snapshot.renderedCaptureReliability.job?.status, "completed");
+  assert.equal(snapshot.renderedCaptureReliability.job?.attemptCount, 2);
+  assert.ok(snapshot.importDiagnostics.issues.some((issue) => issue.code === "CAPTURE_JOB_RETRIED"));
+});
+
+test("url import surfaces terminal fallback reason when worker capture fails terminally", async () => {
+  const tmpRoot = await fs.promises.mkdtemp(path.join(os.tmpdir(), "gnr8-url-import-terminal-fallback-"));
+  const entryHtml =
+    "<!doctype html><html><body><main><h1>Fallback page</h1><p>Raw HTML remains usable for degraded import when worker capture fails terminally.</p></main></body></html>";
+
+  const workerClient: RenderedCaptureWorkerClient = {
+    async execute(request) {
+      return {
+        kind: "rendered_capture_worker_response_v1",
+        contractVersion: "1.0.0",
+        requestId: request.requestId,
+        status: "unsupported",
+        environment: {
+          runtimeKind: "edge",
+          environmentSupported: false,
+          browserPackageAvailable: false,
+          browserBinaryAvailable: false,
+          supportDecision: "runtime_incompatible",
+        },
+        artifacts: [],
+        computedStyleSamples: [],
+        diagnostics: [{ code: "ENVIRONMENT_UNSUPPORTED", severity: "warning", message: "unsupported runtime" }],
+        qualitySummary: {
+          renderedDomQuality: "unusable",
+          domLength: 0,
+          meaningfulNodeCount: 0,
+          screenshotCount: 0,
+          computedStyleSampleCount: 0,
+        },
+        failure: {
+          failureClass: "environment_unsupported",
+          failureCode: "ENVIRONMENT_UNSUPPORTED",
+          retryable: false,
+          message: "unsupported runtime",
+        },
+        timings: {
+          queueLatencyMs: null,
+          executionMs: 8,
+          totalMs: 8,
+        },
+      };
+    },
+  };
+
+  const snapshot = await importPublicSinglePageUrlToSnapshot({
+    sourceUrl: "https://example.com/",
+    snapshotRootDirAbs: tmpRoot,
+    requestId: "req-url-import-terminal-fallback",
+    fetchImpl: async () => makeHtmlResponse(entryHtml),
+    renderedCaptureWorkerClient: workerClient,
+  });
+
+  assert.equal(snapshot.sourceMode, "raw_html_fallback");
+  assert.equal(snapshot.renderedCaptureReliability.job?.status, "failed_terminal");
+  const fallbackDiagnostic = snapshot.importDiagnostics.issues.find((issue) => issue.code === "CAPTURE_WORKER_FALLBACK_TO_RAW_HTML");
+  assert.ok(fallbackDiagnostic);
+  assert.equal((fallbackDiagnostic?.details as { fallbackReason?: string } | null)?.fallbackReason, "capture_failed_terminal");
+});

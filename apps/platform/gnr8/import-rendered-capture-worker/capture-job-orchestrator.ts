@@ -167,12 +167,14 @@ function classifyJobStatusFromWorkerResponse(response: RenderedCaptureWorkerResp
   if (response.status === "available") return { status: "completed", failureClass: "none" };
   if (response.status === "partial") return { status: "completed_partial", failureClass: "none" };
 
+  if (response.failure?.retryable) {
+    return { status: "failed_transient", failureClass: "transient" };
+  }
+
   const failureClass = response.failure?.failureClass;
   if (response.status === "unsupported" || failureClass === "environment_unsupported") {
     return { status: "failed_terminal", failureClass: "unsupported_environment" };
   }
-
-  if (response.failure?.retryable) return { status: "failed_transient", failureClass: "transient" };
 
   return { status: "failed_terminal", failureClass: "terminal" };
 }
@@ -413,6 +415,7 @@ export class FileBackedRenderedCaptureJobOrchestrator {
     jobId: string;
     workerClient: RenderedCaptureWorkerClient;
     waitBudgetMs: number;
+    workerEnabled?: boolean;
   }): Promise<RenderedCaptureJobRunResult> {
     const job = this.readJob(input.jobId);
     if (!job) {
@@ -437,6 +440,7 @@ export class FileBackedRenderedCaptureJobOrchestrator {
 
         const health = {
           ...this.readHealth(),
+          enabled: typeof input.workerEnabled === "boolean" ? input.workerEnabled : this.readHealth().enabled,
           reachable: false,
           queueHealthy: true,
           lastFailureAt: nowIso(this.nowFn),
@@ -516,6 +520,7 @@ export class FileBackedRenderedCaptureJobOrchestrator {
 
           const health = {
             ...this.readHealth(),
+            enabled: typeof input.workerEnabled === "boolean" ? input.workerEnabled : this.readHealth().enabled,
             reachable: false,
             queueHealthy: true,
             lastFailureAt: nowIso(this.nowFn),
@@ -545,6 +550,7 @@ export class FileBackedRenderedCaptureJobOrchestrator {
 
         const health = {
           ...this.readHealth(),
+          enabled: typeof input.workerEnabled === "boolean" ? input.workerEnabled : this.readHealth().enabled,
           reachable: false,
           queueHealthy: true,
           lastFailureAt: nowIso(this.nowFn),
@@ -603,6 +609,7 @@ export class FileBackedRenderedCaptureJobOrchestrator {
 
         const health = {
           ...this.readHealth(),
+          enabled: typeof input.workerEnabled === "boolean" ? input.workerEnabled : this.readHealth().enabled,
           reachable: true,
           browserAvailable: Boolean(response.environment.browserPackageAvailable && response.environment.browserBinaryAvailable),
           queueHealthy: true,
@@ -677,6 +684,7 @@ export class FileBackedRenderedCaptureJobOrchestrator {
 
         const health = {
           ...this.readHealth(),
+          enabled: typeof input.workerEnabled === "boolean" ? input.workerEnabled : this.readHealth().enabled,
           reachable: false,
           browserAvailable: Boolean(response.environment.browserPackageAvailable && response.environment.browserBinaryAvailable),
           queueHealthy: true,
@@ -736,6 +744,7 @@ export class FileBackedRenderedCaptureJobOrchestrator {
 
       const health = {
         ...this.readHealth(),
+        enabled: typeof input.workerEnabled === "boolean" ? input.workerEnabled : this.readHealth().enabled,
         reachable: response.status !== "unsupported",
         browserAvailable: Boolean(response.environment.browserPackageAvailable && response.environment.browserBinaryAvailable),
         queueHealthy: true,
@@ -795,6 +804,7 @@ export class FileBackedRenderedCaptureJobOrchestrator {
 
     const health = {
       ...this.readHealth(),
+      enabled: typeof input.workerEnabled === "boolean" ? input.workerEnabled : this.readHealth().enabled,
       reachable: false,
       queueHealthy: true,
       lastFailureAt: nowIso(this.nowFn),

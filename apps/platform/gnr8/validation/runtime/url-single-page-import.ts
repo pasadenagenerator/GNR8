@@ -15,6 +15,7 @@ import {
   createRenderedCaptureWorkerClientFromEnv,
   createRenderedCaptureWorkerRequest,
   mapWorkerResponseToRenderedCaptureResult,
+  resolveRenderedCaptureWorkerClientConfigFromEnv,
   type RenderedCaptureJobRecord,
   type RenderedCaptureWorkerClient,
   type RenderedCaptureWorkerHealthTruth,
@@ -1701,6 +1702,23 @@ type FetchOutcome = {
   byteLength: number | null;
 };
 
+function resolveWorkerFallbackReason(input: {
+  job: RenderedCaptureJobRecord | null;
+  workerHealth: RenderedCaptureWorkerHealthTruth | null;
+}): string {
+  if (input.workerHealth && input.workerHealth.enabled === false) return "worker_disabled";
+  if (input.job?.status === "timed_out") return "capture_timed_out";
+  if (input.job?.status === "failed_terminal") return "capture_failed_terminal";
+  if (input.job?.status === "failed_transient") return "capture_failed_transient";
+  if (input.job?.status === "queued" || input.job?.status === "running" || input.job?.status === "cancelled") {
+    return "capture_pending_or_not_completed";
+  }
+  if (input.workerHealth && (!input.workerHealth.reachable || !input.workerHealth.queueHealthy || !input.workerHealth.browserAvailable)) {
+    return "worker_unhealthy";
+  }
+  return "rendered_capture_unusable";
+}
+
 function isStylesheetLinkElement(node: unknown): boolean {
   if (!isElement(node) || node.tagName.toLowerCase() !== "link") return false;
   const rel = getAttr(node, "rel");
@@ -2060,6 +2078,7 @@ export async function importPublicSinglePageUrlToSnapshot(input: {
   let renderedCaptureViaWorker = false;
   let renderedCaptureJob: RenderedCaptureJobRecord | null = null;
   let renderedCaptureWorkerHealth: RenderedCaptureWorkerHealthTruth | null = null;
+  let workerEnabled = true;
   let renderedDomPathAbs: string | null = null;
   let computedStylesPathAbs: string | null = null;
   let viewportScreenshotPathAbs: string | null = null;
@@ -2270,7 +2289,13 @@ export async function importPublicSinglePageUrlToSnapshot(input: {
       });
     } else {
       renderedCaptureViaWorker = true;
-      const workerClient = input.renderedCaptureWorkerClient ?? createRenderedCaptureWorkerClientFromEnv();
+      const workerClient =
+        input.renderedCaptureWorkerClient ??
+        (() => {
+          const config = resolveRenderedCaptureWorkerClientConfigFromEnv();
+          workerEnabled = config.enabled;
+          return createRenderedCaptureWorkerClientFromEnv();
+        })();
       const workerRequest = createRenderedCaptureWorkerRequest({
         requestId: input.requestId ?? `capture-worker-${snapshotId}`,
         importId: snapshotId,
@@ -2314,6 +2339,7 @@ export async function importPublicSinglePageUrlToSnapshot(input: {
         jobId: submittedJob.jobId,
         workerClient,
         waitBudgetMs: CAPTURE_JOB_WAIT_BUDGET_MS,
+        workerEnabled,
       });
       renderedCaptureJob = runResult.job;
       renderedCaptureWorkerHealth = runResult.health;
@@ -2384,6 +2410,10 @@ export async function importPublicSinglePageUrlToSnapshot(input: {
     );
   }
   if (renderedCaptureViaWorker && sourceSelection.sourceMode === "raw_html_fallback") {
+    const fallbackReason = resolveWorkerFallbackReason({
+      job: renderedCaptureJob,
+      workerHealth: renderedCaptureWorkerHealth,
+    });
     diagnostics.push(
       createDiagnostic({
         severity: "warning",
@@ -2398,6 +2428,8 @@ export async function importPublicSinglePageUrlToSnapshot(input: {
           captureJobStatus: renderedCaptureJob?.status ?? null,
           captureJobFailureClass: renderedCaptureJob?.failureClass ?? null,
           captureJobFailureCode: renderedCaptureJob?.failureCode ?? null,
+          fallbackReason,
+          workerEnabled: renderedCaptureWorkerHealth?.enabled ?? workerEnabled,
         },
       }),
     );
@@ -2921,6 +2953,13 @@ export async function importPublicSinglePageUrlToSnapshot(input: {
       workerPathUsed: renderedCaptureViaWorker,
       job: summarizeCaptureJob(renderedCaptureJob),
       workerHealth: renderedCaptureWorkerHealth,
+      fallbackReason:
+        renderedCaptureViaWorker && sourceSelection.sourceMode === "raw_html_fallback"
+          ? resolveWorkerFallbackReason({
+              job: renderedCaptureJob,
+              workerHealth: renderedCaptureWorkerHealth,
+            })
+          : null,
       status: renderedCapture.status,
       visibilityStatus: computeRenderedCaptureVisibilityStatus({
         renderedCapture,

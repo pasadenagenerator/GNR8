@@ -294,3 +294,80 @@ test("capture job classifies unsupported environment as terminal", async () => {
   assert.equal(health.browserAvailable, false);
   assert.equal(health.lastFailureCode, "ENVIRONMENT_UNSUPPORTED");
 });
+
+test("capture job retries retryable unsupported worker failures and preserves enabled=false health truth", async () => {
+  const tmpDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), "gnr8-capture-job-"));
+  const orchestrator = new FileBackedRenderedCaptureJobOrchestrator({
+    rootDirAbs: tmpDir,
+  });
+
+  orchestrator.submitJob({
+    jobId: "job-retryable-unsupported",
+    request: makeRequest("req-retryable-unsupported"),
+    timeoutBudgetMs: 10_000,
+    maxAttempts: 2,
+    correlation: {
+      importId: "import-1",
+      siteId: "site-1",
+      snapshotId: "snapshot-1",
+      sourceUrl: "https://example.com/",
+    },
+  });
+
+  let callCount = 0;
+  const workerClient: RenderedCaptureWorkerClient = {
+    async execute(request) {
+      callCount += 1;
+      if (callCount === 1) {
+        return {
+          kind: "rendered_capture_worker_response_v1",
+          contractVersion: "1.0.0",
+          requestId: request.requestId,
+          status: "unsupported",
+          environment: {
+            runtimeKind: "unknown",
+            environmentSupported: false,
+            browserPackageAvailable: false,
+            browserBinaryAvailable: false,
+            supportDecision: "unknown",
+          },
+          artifacts: [],
+          computedStyleSamples: [],
+          diagnostics: [],
+          qualitySummary: {
+            renderedDomQuality: "unusable",
+            domLength: 0,
+            meaningfulNodeCount: 0,
+            screenshotCount: 0,
+            computedStyleSampleCount: 0,
+          },
+          failure: {
+            failureClass: "environment_unsupported",
+            failureCode: "WORKER_UNREACHABLE",
+            retryable: true,
+            message: "transient outage",
+          },
+          timings: {
+            queueLatencyMs: null,
+            executionMs: 5,
+            totalMs: 5,
+          },
+        };
+      }
+      return availableWorkerClient().execute(request);
+    },
+  };
+
+  const result = await orchestrator.runJob({
+    jobId: "job-retryable-unsupported",
+    workerClient,
+    waitBudgetMs: 10_000,
+    workerEnabled: false,
+  });
+
+  assert.equal(callCount, 2);
+  assert.equal(result.job.status, "completed");
+  assert.equal(result.job.attemptCount, 2);
+  assert.equal(result.health.enabled, false);
+  assert.ok(result.workerResponse.diagnostics.some((entry) => entry.code === "CAPTURE_JOB_RETRIED"));
+});
