@@ -11,16 +11,19 @@ import {
   runRenderedCapture,
 } from "../../import-rendered-capture";
 import {
+  FileBackedRenderedCaptureJobOrchestrator,
   createRenderedCaptureWorkerClientFromEnv,
   createRenderedCaptureWorkerRequest,
   mapWorkerResponseToRenderedCaptureResult,
+  type RenderedCaptureJobRecord,
   type RenderedCaptureWorkerClient,
+  type RenderedCaptureWorkerHealthTruth,
 } from "../../import-rendered-capture-worker";
 import type { JsonValue } from "../../import/import-contract";
 import { stableStringify } from "../../migration/runtime/diagnostics";
 import { resolveUrlImportSnapshotRootDirAbs } from "./url-import-snapshot-root";
 
-export const URL_SINGLE_PAGE_IMPORT_VERSION = "1.5.0" as const;
+export const URL_SINGLE_PAGE_IMPORT_VERSION = "1.6.0" as const;
 
 export type UrlImportExecutionScope = {
   includes: readonly [
@@ -42,6 +45,15 @@ export type UrlImportExecutionScope = {
 export type UrlImportDiagnosticSeverity = "info" | "warning" | "error" | "fatal";
 
 export type UrlImportDiagnosticCode =
+  | "CAPTURE_JOB_QUEUED"
+  | "CAPTURE_JOB_STARTED"
+  | "CAPTURE_JOB_RETRIED"
+  | "CAPTURE_JOB_TIMED_OUT"
+  | "CAPTURE_JOB_FAILED_TRANSIENT"
+  | "CAPTURE_JOB_FAILED_TERMINAL"
+  | "CAPTURE_JOB_COMPLETED_PARTIAL"
+  | "CAPTURE_JOB_COMPLETED"
+  | "CAPTURE_WORKER_HEALTH_UNAVAILABLE"
   | "CAPTURE_WORKER_CLIENT_CONFIG_RESOLVED"
   | "CAPTURE_WORKER_REQUEST_BUILT"
   | "CAPTURE_WORKER_HTTP_REQUEST_SENT"
@@ -211,6 +223,23 @@ export type UrlSinglePageImportSnapshot = {
   entryHtmlPathAbs: string;
   assetsDirAbs: string;
   renderedCapture: RenderedCaptureResult;
+  renderedCaptureReliability: {
+    job: Pick<
+      RenderedCaptureJobRecord,
+      | "jobId"
+      | "status"
+      | "attemptCount"
+      | "maxAttempts"
+      | "failureClass"
+      | "failureCode"
+      | "createdAt"
+      | "startedAt"
+      | "completedAt"
+      | "timeoutBudgetMs"
+      | "resultSummary"
+    > | null;
+    workerHealth: RenderedCaptureWorkerHealthTruth | null;
+  };
   importDiagnostics: {
     summary: {
       infoCount: number;
@@ -330,6 +359,25 @@ function snapshotIdForNormalizedUrl(normalizedUrl: string): string {
 const ENTRY_FETCH_MAX_ATTEMPTS = 2;
 const ENTRY_FETCH_TIMEOUT_MS = 12_000;
 const ENTRY_FETCH_USER_AGENT = "GNR8-Operator-URL-Import/1.1 (+single-page-reliability)";
+const CAPTURE_JOB_MAX_ATTEMPTS = 2;
+const CAPTURE_JOB_WAIT_BUDGET_MS = 40_000;
+
+function summarizeCaptureJob(job: RenderedCaptureJobRecord | null): UrlSinglePageImportSnapshot["renderedCaptureReliability"]["job"] {
+  if (!job) return null;
+  return {
+    jobId: job.jobId,
+    status: job.status,
+    attemptCount: job.attemptCount,
+    maxAttempts: job.maxAttempts,
+    failureClass: job.failureClass,
+    failureCode: job.failureCode,
+    createdAt: job.createdAt,
+    startedAt: job.startedAt,
+    completedAt: job.completedAt,
+    timeoutBudgetMs: job.timeoutBudgetMs,
+    resultSummary: job.resultSummary,
+  };
+}
 
 function createEntryFetchCandidateUrls(normalizedUrl: URL): string[] {
   const out: string[] = [];
@@ -1956,6 +2004,10 @@ export async function importPublicSinglePageUrlToSnapshot(input: {
       entryHtmlPathAbs: "",
       assetsDirAbs: "",
       renderedCapture,
+      renderedCaptureReliability: {
+        job: null,
+        workerHealth: null,
+      },
       importDiagnostics: {
         summary: summarizeDiagnostics(emptyIssues),
         issues: emptyIssues,
@@ -2006,6 +2058,8 @@ export async function importPublicSinglePageUrlToSnapshot(input: {
   let renderedCaptureDurationMs = 0;
   let renderedCaptureAttempted = false;
   let renderedCaptureViaWorker = false;
+  let renderedCaptureJob: RenderedCaptureJobRecord | null = null;
+  let renderedCaptureWorkerHealth: RenderedCaptureWorkerHealthTruth | null = null;
   let renderedDomPathAbs: string | null = null;
   let computedStylesPathAbs: string | null = null;
   let viewportScreenshotPathAbs: string | null = null;
@@ -2239,7 +2293,48 @@ export async function importPublicSinglePageUrlToSnapshot(input: {
           },
         }),
       );
-      const workerResponse = await workerClient.execute(workerRequest);
+      const orchestrator = new FileBackedRenderedCaptureJobOrchestrator({
+        rootDirAbs: path.resolve(snapshotRootDirAbs, "rendered-capture-jobs"),
+      });
+      const submittedJob = orchestrator.submitJob({
+        jobId: `${workerRequest.requestId}-job`,
+        request: workerRequest,
+        timeoutBudgetMs: workerRequest.capture.timeoutBudgetMs,
+        maxAttempts: CAPTURE_JOB_MAX_ATTEMPTS,
+        correlation: {
+          importId: snapshotId,
+          siteId: null,
+          snapshotId,
+          sourceUrl: workerRequest.sourceUrl,
+        },
+      });
+      renderedCaptureJob = submittedJob;
+
+      const runResult = await orchestrator.runJob({
+        jobId: submittedJob.jobId,
+        workerClient,
+        waitBudgetMs: CAPTURE_JOB_WAIT_BUDGET_MS,
+      });
+      renderedCaptureJob = runResult.job;
+      renderedCaptureWorkerHealth = runResult.health;
+      if (!runResult.health.reachable || !runResult.health.browserAvailable) {
+        diagnostics.push(
+          createDiagnostic({
+            severity: "warning",
+            code: "CAPTURE_WORKER_HEALTH_UNAVAILABLE",
+            message: "Rendered capture worker health indicates degraded availability.",
+            targetUrl: null,
+            details: {
+              reachable: runResult.health.reachable,
+              browserAvailable: runResult.health.browserAvailable,
+              queueHealthy: runResult.health.queueHealthy,
+              lastFailureClass: runResult.health.lastFailureClass,
+              lastFailureCode: runResult.health.lastFailureCode,
+            },
+          }),
+        );
+      }
+      const workerResponse = runResult.workerResponse;
       renderedCapture = mapWorkerResponseToRenderedCaptureResult({
         response: workerResponse,
         snapshotRootDirAbs,
@@ -2281,6 +2376,9 @@ export async function importPublicSinglePageUrlToSnapshot(input: {
         details: {
           snapshotId,
           renderedCaptureStatus: renderedCapture.status,
+          captureJobId: renderedCaptureJob?.jobId ?? null,
+          captureJobStatus: renderedCaptureJob?.status ?? null,
+          captureJobAttemptCount: renderedCaptureJob?.attemptCount ?? null,
         },
       }),
     );
@@ -2296,6 +2394,10 @@ export async function importPublicSinglePageUrlToSnapshot(input: {
           snapshotId,
           renderedCaptureStatus: renderedCapture.status,
           renderedDocumentCount: renderedCapture.documents.length,
+          captureJobId: renderedCaptureJob?.jobId ?? null,
+          captureJobStatus: renderedCaptureJob?.status ?? null,
+          captureJobFailureClass: renderedCaptureJob?.failureClass ?? null,
+          captureJobFailureCode: renderedCaptureJob?.failureCode ?? null,
         },
       }),
     );
@@ -2817,6 +2919,8 @@ export async function importPublicSinglePageUrlToSnapshot(input: {
     renderedCapture: {
       attempted: renderedCaptureAttempted,
       workerPathUsed: renderedCaptureViaWorker,
+      job: summarizeCaptureJob(renderedCaptureJob),
+      workerHealth: renderedCaptureWorkerHealth,
       status: renderedCapture.status,
       visibilityStatus: computeRenderedCaptureVisibilityStatus({
         renderedCapture,
@@ -2871,6 +2975,10 @@ export async function importPublicSinglePageUrlToSnapshot(input: {
     entryHtmlPathAbs,
     assetsDirAbs,
     renderedCapture,
+    renderedCaptureReliability: {
+      job: summarizeCaptureJob(renderedCaptureJob),
+      workerHealth: renderedCaptureWorkerHealth,
+    },
     importDiagnostics: {
       summary: summarizeDiagnostics(sortedDiagnostics),
       issues: sortedDiagnostics,

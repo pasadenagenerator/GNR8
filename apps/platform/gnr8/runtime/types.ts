@@ -64,6 +64,37 @@ export type RuntimeImportProvenanceSummary = {
     renderedFullpageScreenshotPath: string | null;
     screenshotPaths: string[];
   };
+  captureJob?: {
+    jobId: string | null;
+    status:
+      | "queued"
+      | "running"
+      | "completed"
+      | "completed_partial"
+      | "failed_transient"
+      | "failed_terminal"
+      | "timed_out"
+      | "cancelled"
+      | null;
+    attemptCount: number;
+    maxAttempts: number;
+    failureClass: "transient" | "terminal" | "unsupported_environment" | "timeout" | "none" | null;
+    failureCode: string | null;
+    timeoutBudgetMs: number | null;
+    createdAt: string | null;
+    startedAt: string | null;
+    completedAt: string | null;
+  } | null;
+  workerHealth?: {
+    enabled: boolean;
+    reachable: boolean;
+    browserAvailable: boolean;
+    queueHealthy: boolean;
+    lastSuccessAt: string | null;
+    lastFailureAt: string | null;
+    lastFailureClass: string | null;
+    lastFailureCode: string | null;
+  } | null;
   styleSignals: StyleSignalModel | null;
 };
 

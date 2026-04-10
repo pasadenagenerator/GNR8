@@ -486,7 +486,7 @@ test("artifact-builder activates content recovery mode with deterministic diagno
     ],
   };
 
-  const out = buildDeterministicArtifactBundle({ siteVersion: degradedSiteVersion, renderMode: "PREVIEW" });
+  const out = buildDeterministicArtifactBundle({ siteVersion: degradedSiteVersion as any, renderMode: "PREVIEW" });
   const html = out.htmlByPath["/"] ?? "";
   assert.match(html, /data-gnr8-render-mode="content-recovery"/);
   assert.match(html, /data-gnr8-recovery-block="hero"/);

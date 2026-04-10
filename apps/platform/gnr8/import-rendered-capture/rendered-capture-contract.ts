@@ -5,6 +5,15 @@ export type CaptureSourceMode = "raw_html" | "rendered_dom";
 export type RenderedCaptureStatus = "available" | "partial" | "unavailable" | "failed";
 
 export type RenderedCaptureDiagnosticCode =
+  | "CAPTURE_JOB_QUEUED"
+  | "CAPTURE_JOB_STARTED"
+  | "CAPTURE_JOB_RETRIED"
+  | "CAPTURE_JOB_TIMED_OUT"
+  | "CAPTURE_JOB_FAILED_TRANSIENT"
+  | "CAPTURE_JOB_FAILED_TERMINAL"
+  | "CAPTURE_JOB_COMPLETED_PARTIAL"
+  | "CAPTURE_JOB_COMPLETED"
+  | "CAPTURE_WORKER_HEALTH_UNAVAILABLE"
   | "CAPTURE_WORKER_CLIENT_CONFIG_RESOLVED"
   | "CAPTURE_WORKER_REQUEST_BUILT"
   | "CAPTURE_WORKER_HTTP_REQUEST_SENT"

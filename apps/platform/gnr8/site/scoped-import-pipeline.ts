@@ -365,6 +365,8 @@ function buildImportProvenanceSummary(snapshot: UrlSinglePageImportSnapshot, sty
   const renderedViewportScreenshotPath = resolveEvidencePathIfExists(viewportScreenshotPath)
   const renderedFullpageScreenshotPath = resolveEvidencePathIfExists(fullpageScreenshotPath)
   const screenshotCount = Math.max(screenshotPaths.length, snapshot.renderedCapture.screenshots.length)
+  const captureJob = snapshot.renderedCaptureReliability?.job ?? null
+  const workerHealth = snapshot.renderedCaptureReliability?.workerHealth ?? null
 
   return {
     kind: 'runtime_import_provenance_summary_v1',
@@ -401,6 +403,32 @@ function buildImportProvenanceSummary(snapshot: UrlSinglePageImportSnapshot, sty
       renderedFullpageScreenshotPath: renderedFullpageScreenshotPath,
       screenshotPaths,
     },
+    captureJob: captureJob
+      ? {
+          jobId: captureJob.jobId,
+          status: captureJob.status,
+          attemptCount: captureJob.attemptCount,
+          maxAttempts: captureJob.maxAttempts,
+          failureClass: captureJob.failureClass,
+          failureCode: captureJob.failureCode,
+          timeoutBudgetMs: captureJob.timeoutBudgetMs,
+          createdAt: captureJob.createdAt,
+          startedAt: captureJob.startedAt,
+          completedAt: captureJob.completedAt,
+        }
+      : null,
+    workerHealth: workerHealth
+      ? {
+          enabled: workerHealth.enabled,
+          reachable: workerHealth.reachable,
+          browserAvailable: workerHealth.browserAvailable,
+          queueHealthy: workerHealth.queueHealthy,
+          lastSuccessAt: workerHealth.lastSuccessAt,
+          lastFailureAt: workerHealth.lastFailureAt,
+          lastFailureClass: workerHealth.lastFailureClass,
+          lastFailureCode: workerHealth.lastFailureCode,
+        }
+      : null,
     styleSignals,
   }
 }

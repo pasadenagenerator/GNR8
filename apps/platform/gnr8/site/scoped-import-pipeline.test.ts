@@ -285,6 +285,36 @@ test('scoped pipeline import uses pipeline path, maps consolidated sections, and
         screenshots: [{}, {}],
         computedStyleSamples: [{}, {}, {}],
       },
+      renderedCaptureReliability: {
+        job: {
+          jobId: 'capture-job-1',
+          status: 'completed',
+          attemptCount: 2,
+          maxAttempts: 2,
+          failureClass: 'none',
+          failureCode: null,
+          timeoutBudgetMs: 30_000,
+          createdAt: '2026-04-10T08:00:00.000Z',
+          startedAt: '2026-04-10T08:00:01.000Z',
+          completedAt: '2026-04-10T08:00:05.000Z',
+          resultSummary: {
+            workerStatus: 'available',
+            renderedDomArtifactAvailable: true,
+            screenshotArtifactCount: 2,
+            computedStyleSampleCount: 3,
+          },
+        },
+        workerHealth: {
+          enabled: true,
+          reachable: true,
+          browserAvailable: true,
+          queueHealthy: true,
+          lastSuccessAt: '2026-04-10T08:00:05.000Z',
+          lastFailureAt: null,
+          lastFailureClass: 'none',
+          lastFailureCode: null,
+        },
+      },
       importDiagnostics: {
         issues: [{ code: 'RENDERED_CAPTURE_RECOVERED_ON_RETRY' }],
       },
@@ -395,6 +425,10 @@ test('scoped pipeline import uses pipeline path, maps consolidated sections, and
   assert.equal(createInput.importProvenanceSummary.renderedCapture.execution.browserBinaryAvailable, false)
   assert.equal(createInput.importProvenanceSummary.renderedCapture.execution.environmentStatus, 'unknown')
   assert.equal(createInput.importProvenanceSummary.renderedCapture.execution.failureCategory, 'none')
+  assert.equal(createInput.importProvenanceSummary.captureJob?.jobId, 'capture-job-1')
+  assert.equal(createInput.importProvenanceSummary.captureJob?.status, 'completed')
+  assert.equal(createInput.importProvenanceSummary.captureJob?.attemptCount, 2)
+  assert.equal(createInput.importProvenanceSummary.workerHealth?.reachable, true)
   assert.ok(createInput.importProvenanceSummary.styleSignals != null)
   assert.equal(createInput.importProvenanceSummary.styleSignals.kind, 'style_signal_model_v2')
   assert.equal(persistedImportSummary.siteVersionId, 'site-version-1')
