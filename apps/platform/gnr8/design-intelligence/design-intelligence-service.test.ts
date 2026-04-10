@@ -476,3 +476,147 @@ test("weak style signals remain conservative and do not force aggressive strateg
 
   assert.equal(result.designModel.layoutStrategy, "corporate_balanced");
 });
+
+test("capture-driven strong hero+cta cues can lift strategy selection", () => {
+  const result = createDesignIntelligenceResultFromInput(
+    baseInput([
+      section({
+        sectionId: "hero-strong",
+        ordinalIndex: 0,
+        inferredType: "hero",
+        hasHeadingSignal: true,
+        ctaCandidateCount: 2,
+        mediaCount: 1,
+        semanticRationale: ["capture_lift_strength=strong"],
+      }),
+      section({
+        sectionId: "content",
+        ordinalIndex: 1,
+        inferredType: "features",
+        textDensity: 0.35,
+        semanticRationale: ["capture_lift_strength=partial"],
+      }),
+    ]),
+    {
+      styleSignals: {
+        kind: "style_signal_model_v2",
+        version: "2.0.0",
+        sourceMode: "mixed",
+        provenance: {
+          sourceMode: "mixed",
+          computedStyle: {
+            used: true,
+            sampleCount: 4,
+            coverage: 0.35,
+          },
+          fallbackUsed: false,
+          diagnostics: [],
+        },
+        colors: {
+          backgroundTone: "light",
+          primaryAccent: "#0ea5e9",
+          secondaryAccent: "#0284c7",
+          neutralPalette: ["#ffffff"],
+          ctaColorHint: "#0ea5e9",
+        },
+        typography: {
+          headingFontFamily: "Inter",
+          bodyFontFamily: "Inter",
+          headingCategory: "sans",
+          bodyCategory: "sans",
+          scaleHint: "balanced",
+          weightContrastHint: "medium",
+        },
+        spacing: {
+          rhythm: "balanced",
+          sectionSpacingHint: "balanced",
+          layoutDensity: "balanced",
+        },
+        surfaces: {
+          radiusHint: "rounded",
+          shadowHint: "soft",
+        },
+        cta: {
+          prominence: "medium",
+          styleHint: "outline_button",
+        },
+        visualToneHint: "corporate",
+        diagnostics: [],
+      },
+    },
+  );
+
+  assert.equal(result.designModel.layoutStrategy, "cta_focused");
+});
+
+test("capture-driven weak cues remain conservative for strategy inference", () => {
+  const result = createDesignIntelligenceResultFromInput(
+    baseInput([
+      section({
+        sectionId: "content-a",
+        ordinalIndex: 0,
+        inferredType: "unknown",
+        textDensity: 0.5,
+        ctaCandidateCount: 0,
+        semanticRationale: ["capture_lift_strength=weak"],
+      }),
+      section({
+        sectionId: "content-b",
+        ordinalIndex: 1,
+        inferredType: "unknown",
+        textDensity: 0.45,
+        ctaCandidateCount: 0,
+        semanticRationale: ["capture_lift_strength=weak"],
+      }),
+    ]),
+    {
+      styleSignals: {
+        kind: "style_signal_model_v2",
+        version: "2.0.0",
+        sourceMode: "html_css_inference",
+        provenance: {
+          sourceMode: "html_css_inference",
+          computedStyle: {
+            used: false,
+            sampleCount: 0,
+            coverage: 0,
+          },
+          fallbackUsed: true,
+          diagnostics: ["STYLE_SIGNAL_WEAK"],
+        },
+        colors: {
+          backgroundTone: "unknown",
+          primaryAccent: null,
+          secondaryAccent: null,
+          neutralPalette: [],
+          ctaColorHint: null,
+        },
+        typography: {
+          headingFontFamily: null,
+          bodyFontFamily: null,
+          headingCategory: "unknown",
+          bodyCategory: "unknown",
+          scaleHint: "unknown",
+          weightContrastHint: "unknown",
+        },
+        spacing: {
+          rhythm: "unknown",
+          sectionSpacingHint: "unknown",
+          layoutDensity: "unknown",
+        },
+        surfaces: {
+          radiusHint: "unknown",
+          shadowHint: "unknown",
+        },
+        cta: {
+          prominence: "low",
+          styleHint: "text_link",
+        },
+        visualToneHint: "unknown",
+        diagnostics: [{ code: "STYLE_SIGNAL_WEAK", severity: "warning", message: "weak style" }],
+      },
+    },
+  );
+
+  assert.equal(result.designModel.layoutStrategy, "corporate_balanced");
+});

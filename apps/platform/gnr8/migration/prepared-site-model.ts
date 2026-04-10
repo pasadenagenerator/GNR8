@@ -60,7 +60,11 @@ export type SemanticDiagnosticCode =
   | "FAQ_FALSE_POSITIVE_RISK"
   | "NAVBAR_FALSE_POSITIVE_RISK"
   | "HERO_RECONSTRUCTION_APPLIED"
-  | "SERVICES_PATTERN_DETECTED";
+  | "SERVICES_PATTERN_DETECTED"
+  | "CAPTURE_DRIVEN_HERO_LIFT_APPLIED"
+  | "CAPTURE_DRIVEN_CTA_LIFT_APPLIED"
+  | "CAPTURE_DRIVEN_SECTION_GROUPING_LIFT"
+  | "CAPTURE_DRIVEN_MEDIA_PROMINENCE_USED";
 
 export type SemanticDiagnostic = {
   code: SemanticDiagnosticCode;
@@ -864,6 +868,23 @@ function classifyConsolidatedSection(input: {
   const footerNarrativeRisk = signals.textWordCount >= 72 && signals.headingCount > 0 && !bottomWindow;
   const heroCluster = topWindow && signals.hasHeading && (signals.hasCTA || signals.hasImages || signals.textWordCount <= 140);
   const servicesPattern = signals.repetitionScore >= 0.24 && (signals.headingCount >= 1 || signals.imageCount >= 2);
+  const strongHeroCaptureEvidence = topWindow && signals.hasHeading && (signals.hasCTA || signals.hasImages) && signals.textWordCount <= 220;
+  const partialHeroCaptureEvidence = topWindow && signals.hasHeading && (signals.textWordCount <= 180 || signals.hasImages || signals.hasCTA);
+  const strongCtaCaptureEvidence = signals.ctaCount >= 2 && (topWindow || signals.textWordCount <= 140);
+  const partialCtaCaptureEvidence = signals.hasCTA && signals.textWordCount <= 220;
+  const strongMediaCaptureEvidence = signals.imageCount >= 2 && signals.textDensity <= 0.42;
+  const partialMediaCaptureEvidence = signals.hasImages;
+  const strongGroupingCaptureEvidence =
+    input.section.blockIds.length >= 2 &&
+    (signals.hasHeading || signals.hasCTA || signals.hasImages) &&
+    input.section.domIndexEnd - input.section.domIndexStart <= 4;
+  const partialGroupingCaptureEvidence = input.section.blockIds.length >= 2;
+  const captureLiftStrength: "weak" | "partial" | "strong" =
+    strongHeroCaptureEvidence || strongCtaCaptureEvidence || strongMediaCaptureEvidence || strongGroupingCaptureEvidence
+      ? "strong"
+      : partialHeroCaptureEvidence || partialCtaCaptureEvidence || partialMediaCaptureEvidence || partialGroupingCaptureEvidence
+      ? "partial"
+      : "weak";
 
   const scores: Record<SectionSemanticType, number> = {
     header: 0,
@@ -948,6 +969,79 @@ function classifyConsolidatedSection(input: {
     });
   }
 
+  if (captureLiftStrength !== "weak") {
+    if (strongGroupingCaptureEvidence) {
+      scores.hero += 0.1;
+      scores.services += 0.06;
+      scores.features += 0.06;
+      diagnostics.push({
+        code: "CAPTURE_DRIVEN_SECTION_GROUPING_LIFT",
+        severity: "info",
+        message: "Rendered grouping evidence strengthened section-boundary interpretation confidence.",
+      });
+    } else if (partialGroupingCaptureEvidence) {
+      scores.hero += 0.04;
+      scores.services += 0.03;
+      scores.features += 0.03;
+      diagnostics.push({
+        code: "CAPTURE_DRIVEN_SECTION_GROUPING_LIFT",
+        severity: "info",
+        message: "Partial rendered grouping evidence lightly nudged section-boundary interpretation.",
+      });
+    }
+
+    if (strongHeroCaptureEvidence) {
+      scores.hero += 0.22;
+      scores.unknown = Math.max(0, scores.unknown - 0.06);
+      diagnostics.push({
+        code: "CAPTURE_DRIVEN_HERO_LIFT_APPLIED",
+        severity: "info",
+        message: "Rendered top-of-page hierarchy and prominence signals strongly reinforced hero reconstruction.",
+      });
+    } else if (partialHeroCaptureEvidence) {
+      scores.hero += 0.08;
+      diagnostics.push({
+        code: "CAPTURE_DRIVEN_HERO_LIFT_APPLIED",
+        severity: "info",
+        message: "Partial rendered hierarchy signals nudged hero reconstruction while preserving conservative thresholds.",
+      });
+    }
+
+    if (strongCtaCaptureEvidence) {
+      scores.cta += 0.2;
+      scores.contact += 0.08;
+      diagnostics.push({
+        code: "CAPTURE_DRIVEN_CTA_LIFT_APPLIED",
+        severity: "info",
+        message: "Rendered CTA/button prominence signals strongly reinforced CTA classification.",
+      });
+    } else if (partialCtaCaptureEvidence) {
+      scores.cta += 0.08;
+      diagnostics.push({
+        code: "CAPTURE_DRIVEN_CTA_LIFT_APPLIED",
+        severity: "info",
+        message: "Partial rendered CTA evidence nudged CTA classification confidence.",
+      });
+    }
+
+    if (strongMediaCaptureEvidence) {
+      scores.gallery += 0.2;
+      scores.hero += topWindow ? 0.08 : 0;
+      diagnostics.push({
+        code: "CAPTURE_DRIVEN_MEDIA_PROMINENCE_USED",
+        severity: "info",
+        message: "Rendered media prominence evidence strengthened gallery/hero interpretation.",
+      });
+    } else if (partialMediaCaptureEvidence) {
+      scores.gallery += 0.07;
+      diagnostics.push({
+        code: "CAPTURE_DRIVEN_MEDIA_PROMINENCE_USED",
+        severity: "info",
+        message: "Partial rendered media evidence nudged media-aware section interpretation.",
+      });
+    }
+  }
+
   const ranked = (Object.keys(scores) as SectionSemanticType[])
     .map((k) => ({ type: k, score: scores[k] }))
     .sort((a, b) => (b.score !== a.score ? b.score - a.score : stringCmp(a.type, b.type)));
@@ -966,18 +1060,16 @@ function classifyConsolidatedSection(input: {
     else heroComposition = "unknown";
   }
 
-  const ctaCandidates: CtaCandidate[] = signals.hasCTA
-    ? [
-        {
-          label: "Primary action",
-          confidence: candidates.ctaCandidate >= 0.72 ? "high" : "medium",
-          rationale: [
-            `section_cta_candidate=${candidates.ctaCandidate.toFixed(2)}`,
-            `section_cta_count=${String(signals.ctaCount)}`,
-          ],
-        },
-      ]
-    : [];
+  const ctaCandidateCount = signals.hasCTA ? Math.max(1, Math.min(3, signals.ctaCount)) : 0;
+  const ctaCandidates: CtaCandidate[] = Array.from({ length: ctaCandidateCount }).map((_, idx) => ({
+    label: idx === 0 ? "Primary action" : `Secondary action ${idx}`,
+    confidence: idx === 0 && (candidates.ctaCandidate >= 0.72 || strongCtaCaptureEvidence) ? "high" : candidates.ctaCandidate >= 0.58 ? "medium" : "low",
+    rationale: [
+      `section_cta_candidate=${candidates.ctaCandidate.toFixed(2)}`,
+      `section_cta_count=${String(signals.ctaCount)}`,
+      `capture_lift_strength=${captureLiftStrength}`,
+    ],
+  }));
 
   const textDensity = signals.textDensity;
   const mediaDensity = Math.min(1, signals.imageCount / Math.max(1, input.section.blockIds.length * 1.2));
@@ -1009,6 +1101,7 @@ function classifyConsolidatedSection(input: {
       `semantic_score=${best.score.toFixed(2)}`,
       `semantic_runner_up=${second.type}:${second.score.toFixed(2)}`,
       `semantic_confidence=${rawConfidence.toFixed(2)}`,
+      `capture_lift_strength=${captureLiftStrength}`,
       dominantRationale,
     ]),
     heroComposition,
@@ -1399,8 +1492,22 @@ function buildPageSemanticModel(input: {
     isEntry: input.isEntry,
     sections,
   });
-  const allCtas = sections.flatMap((section) => section.ctaCandidates);
-  const primaryCta = allCtas[0] ?? null;
+  const rankedSectionCtas = sections
+    .filter((section) => section.ctaCandidates.length > 0)
+    .map((section) => ({
+      section,
+      score:
+        section.candidateSignals.ctaCandidate +
+        (section.inferredType === "hero" ? 0.18 : 0) +
+        (section.inferredType === "cta" || section.inferredType === "contact" ? 0.14 : 0) +
+        (section.ordinalIndex <= 1 ? 0.1 : 0),
+    }))
+    .sort((a, b) => {
+      if (a.score !== b.score) return b.score - a.score;
+      return a.section.ordinalIndex - b.section.ordinalIndex;
+    });
+  const allCtas = rankedSectionCtas.flatMap((entry) => entry.section.ctaCandidates);
+  const primaryCta = rankedSectionCtas[0]?.section.ctaCandidates[0] ?? null;
   const brandSignals = extractBrandSignals({
     htmlText: input.htmlText,
     stylesheetHrefs: input.stylesheetHrefs,

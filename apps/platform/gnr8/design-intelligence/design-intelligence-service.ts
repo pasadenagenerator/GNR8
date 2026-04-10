@@ -235,6 +235,53 @@ function styleEvidenceStrength(style: StyleSignalModel): "weak" | "medium" | "st
   return "weak";
 }
 
+function captureLiftStrengthForSection(section: DesignSemanticSectionInput): "weak" | "partial" | "strong" {
+  const rationale = section.semanticRationale.map((entry) => String(entry).toLowerCase());
+  if (rationale.some((entry) => entry.includes("capture_lift_strength=strong"))) return "strong";
+  if (rationale.some((entry) => entry.includes("capture_lift_strength=partial"))) return "partial";
+  return "weak";
+}
+
+function summarizeCaptureLayoutCues(page: DesignPageInput): {
+  strongHeroSections: number;
+  strongCtaSections: number;
+  mediaForwardSections: number;
+  strongCaptureSectionCount: number;
+  strongCaptureShare: number;
+  hasStrongTopHeroWithCta: boolean;
+} {
+  let strongHeroSections = 0;
+  let strongCtaSections = 0;
+  let mediaForwardSections = 0;
+  let strongCaptureSectionCount = 0;
+
+  for (const section of page.sections) {
+    const strength = captureLiftStrengthForSection(section);
+    if (strength === "strong") strongCaptureSectionCount += 1;
+    if (section.inferredType === "hero" && strength !== "weak") strongHeroSections += 1;
+    if ((section.inferredType === "cta" || section.ctaCandidateCount > 0) && strength !== "weak") strongCtaSections += 1;
+    if (section.mediaDensity >= 0.45 || (section.mediaCount > 0 && section.textDensity <= 0.4)) mediaForwardSections += 1;
+  }
+
+  const strongCaptureShare = page.sections.length > 0 ? strongCaptureSectionCount / page.sections.length : 0;
+  const hasStrongTopHeroWithCta = page.sections.some(
+    (section) =>
+      section.ordinalIndex <= 1 &&
+      section.inferredType === "hero" &&
+      captureLiftStrengthForSection(section) === "strong" &&
+      section.ctaCandidateCount > 0,
+  );
+
+  return {
+    strongHeroSections,
+    strongCtaSections,
+    mediaForwardSections,
+    strongCaptureSectionCount,
+    strongCaptureShare: Number(strongCaptureShare.toFixed(3)),
+    hasStrongTopHeroWithCta,
+  };
+}
+
 function pickStrategy(input: {
   page: DesignPageInput;
   pageType: PageType;
@@ -245,6 +292,39 @@ function pickStrategy(input: {
   const visual = input.visualObservation ?? null;
   const style = input.styleSignals;
   const styleStrength = styleEvidenceStrength(style);
+  const captureCues = summarizeCaptureLayoutCues(input.page);
+
+  if (styleStrength !== "weak" && captureCues.hasStrongTopHeroWithCta) {
+    return {
+      strategy: "cta_focused",
+      confidence: styleStrength === "strong" ? 0.9 : 0.84,
+      rationale: {
+        code: "STRATEGY_CAPTURE_HERO_CTA",
+        summary: "Selected cta_focused from strong top-of-page capture-driven hero+CTA evidence.",
+        basedOn: [
+          `styleStrength=${styleStrength}`,
+          `strongCaptureShare=${captureCues.strongCaptureShare.toFixed(2)}`,
+          `strongHeroSections=${captureCues.strongHeroSections}`,
+          `strongCtaSections=${captureCues.strongCtaSections}`,
+        ],
+      },
+    };
+  }
+
+  if (captureCues.mediaForwardSections >= 2 && captureCues.strongCaptureShare >= 0.34) {
+    return {
+      strategy: "visual_gallery",
+      confidence: captureCues.strongCaptureShare >= 0.5 ? 0.88 : 0.8,
+      rationale: {
+        code: "STRATEGY_CAPTURE_MEDIA_FORWARD",
+        summary: "Selected visual_gallery from capture-informed media-forward section distribution.",
+        basedOn: [
+          `mediaForwardSections=${captureCues.mediaForwardSections}`,
+          `strongCaptureShare=${captureCues.strongCaptureShare.toFixed(2)}`,
+        ],
+      },
+    };
+  }
 
   if (styleStrength !== "weak" && style.cta.prominence === "high" && style.cta.styleHint !== "text_link") {
     return {
@@ -407,8 +487,11 @@ function inferSemanticType(section: DesignSemanticSectionInput): SectionSemantic
   if (tag === "footer" || pathLower.includes("footer")) return "footer";
   if (section.ordinalIndex === 0 && (section.hasHeadingSignal || section.mediaCount > 0 || pathLower.includes("hero"))) return "hero";
   if (pathLower.includes("hero") || pathLower.includes("banner")) return "hero";
+  if (section.ordinalIndex <= 1 && captureLiftStrengthForSection(section) === "strong" && section.hasHeadingSignal && section.ctaCandidateCount > 0)
+    return "hero";
   if (section.mediaCount > 0 || pathLower.includes("gallery") || pathLower.includes("portfolio")) return "gallery";
   if (section.ctaCandidateCount > 1 || pathLower.includes("cta") || pathLower.includes("contact")) return "cta";
+  if (captureLiftStrengthForSection(section) !== "weak" && section.ctaCandidateCount > 0) return "cta";
   if (section.textDensity >= 0.25) return "content";
   return "unknown";
 }
@@ -842,6 +925,19 @@ function toDeterministicModel(input: DesignIntelligenceInput): DesignModel {
     const ctaPrimary = ctaSections
       .slice()
       .sort((a, b) => {
+        const aCaptureStrength = captureLiftStrengthForSection(a);
+        const bCaptureStrength = captureLiftStrengthForSection(b);
+        const aScore =
+          a.ctaCandidateCount +
+          (a.ordinalIndex <= 1 ? 0.6 : 0) +
+          (a.inferredType === "hero" ? 0.45 : 0) +
+          (aCaptureStrength === "strong" ? 0.4 : aCaptureStrength === "partial" ? 0.2 : 0);
+        const bScore =
+          b.ctaCandidateCount +
+          (b.ordinalIndex <= 1 ? 0.6 : 0) +
+          (b.inferredType === "hero" ? 0.45 : 0) +
+          (bCaptureStrength === "strong" ? 0.4 : bCaptureStrength === "partial" ? 0.2 : 0);
+        if (aScore !== bScore) return bScore - aScore;
         if (a.ctaCandidateCount !== b.ctaCandidateCount) return b.ctaCandidateCount - a.ctaCandidateCount;
         return a.ordinalIndex - b.ordinalIndex;
       })[0] ?? null;

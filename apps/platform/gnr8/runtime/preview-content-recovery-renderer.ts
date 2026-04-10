@@ -15,7 +15,9 @@ export type ContentRecoveryDiagnosticCode =
   | "CONTENT_RECOVERY_HERO_SYNTHESIZED"
   | "CONTENT_RECOVERY_TEXT_SURFACED"
   | "CONTENT_RECOVERY_LINKS_SURFACED"
-  | "CONTENT_RECOVERY_IMAGES_SURFACED";
+  | "CONTENT_RECOVERY_IMAGES_SURFACED"
+  | "CONTENT_RECOVERY_CAPTURE_LAYOUT_ORDERED"
+  | "CONTENT_RECOVERY_CTA_PLACED";
 
 export type ContentRecoveryDecision = {
   pageRenderMode: ArtifactPageRenderMode;
@@ -35,6 +37,14 @@ type RecoverySectionEntry = {
 
 type RecoveryLink = { href: string; label: string };
 type RecoveryImage = { src: string; alt: string };
+type RecoverySectionRole = "hero" | "content" | "cta" | "media" | "footer";
+type RecoverySectionSummary = {
+  role: RecoverySectionRole;
+  heading: string | null;
+  paragraph: string | null;
+  links: RecoveryLink[];
+  images: RecoveryImage[];
+};
 
 function escapeHtml(value: string): string {
   return value
@@ -179,6 +189,15 @@ function collectSnapshotHtmlCandidate(sectionEntries: RecoverySectionEntry[]): s
   return null;
 }
 
+function sectionRoleFromType(sectionType: string): RecoverySectionRole {
+  const normalized = sectionType.toLowerCase();
+  if (normalized.includes("hero")) return "hero";
+  if (normalized.includes("cta") || normalized.includes("contact")) return "cta";
+  if (normalized.includes("gallery") || normalized.includes("media") || normalized.includes("logo")) return "media";
+  if (normalized.includes("footer")) return "footer";
+  return "content";
+}
+
 function collectSectionText(sectionEntries: RecoverySectionEntry[]): {
   headings: string[];
   paragraphs: string[];
@@ -309,6 +328,85 @@ function collectSectionText(sectionEntries: RecoverySectionEntry[]): {
   };
 }
 
+function pickStringCandidate(source: Record<string, unknown>, keys: string[]): string | null {
+  for (const key of keys) {
+    const value = asNonEmptyString(source[key]);
+    if (value) return value;
+  }
+  return null;
+}
+
+function collectLinksFromSectionProps(sectionProps: Record<string, unknown>): RecoveryLink[] {
+  const links: RecoveryLink[] = [];
+  const push = (hrefValue: unknown, labelValue: unknown) => {
+    const hrefRaw = asNonEmptyString(hrefValue);
+    if (!hrefRaw) return;
+    const href = sanitizeHref(hrefRaw);
+    if (!href) return;
+    const label = asNonEmptyString(labelValue) ?? href;
+    links.push({ href, label });
+  };
+
+  push(sectionProps.buttonHref, sectionProps.buttonLabel);
+  push(sectionProps.ctaHref, sectionProps.ctaLabel);
+  push(sectionProps.href, sectionProps.label ?? sectionProps.title ?? sectionProps.text);
+  push(sectionProps.url, sectionProps.label ?? sectionProps.title ?? sectionProps.text);
+
+  const htmlSummary = isRecord(sectionProps.htmlSummary) ? sectionProps.htmlSummary : null;
+  if (htmlSummary && Array.isArray(htmlSummary.extractedLinks)) {
+    for (const entry of htmlSummary.extractedLinks) {
+      if (!isRecord(entry)) continue;
+      push(entry.href, entry.label ?? entry.text ?? entry.title);
+    }
+  }
+
+  return links;
+}
+
+function collectImagesFromSectionProps(sectionProps: Record<string, unknown>): RecoveryImage[] {
+  const images: RecoveryImage[] = [];
+  const push = (srcValue: unknown, altValue: unknown) => {
+    const srcRaw = asNonEmptyString(srcValue);
+    if (!srcRaw) return;
+    const src = sanitizeHref(srcRaw);
+    if (!src) return;
+    images.push({ src, alt: asNonEmptyString(altValue) ?? "Recovered image" });
+  };
+
+  push(sectionProps.src, sectionProps.alt);
+  push(sectionProps.image, sectionProps.caption ?? sectionProps.alt);
+  push(sectionProps.imageSrc, sectionProps.caption ?? sectionProps.alt);
+
+  const htmlSummary = isRecord(sectionProps.htmlSummary) ? sectionProps.htmlSummary : null;
+  if (htmlSummary && Array.isArray(htmlSummary.extractedImageSrcs)) {
+    for (const src of htmlSummary.extractedImageSrcs) push(src, "Recovered image");
+  }
+
+  return images;
+}
+
+function summarizeSectionEvidence(sectionEntries: RecoverySectionEntry[]): RecoverySectionSummary[] {
+  const out: RecoverySectionSummary[] = [];
+
+  for (const entry of sectionEntries) {
+    const props = isRecord(entry.sectionProps) ? entry.sectionProps : {};
+    const role = sectionRoleFromType(entry.sectionType);
+    const heading =
+      pickStringCandidate(props, ["headline", "heading", "title", "h1", "h2"]) ??
+      asNonEmptyString((isRecord(props.htmlSummary) ? props.htmlSummary.extractedText : null) ?? null);
+    const paragraph = pickStringCandidate(props, ["subheadline", "summary", "description", "text", "body", "paragraph"]);
+    out.push({
+      role,
+      heading,
+      paragraph,
+      links: collectLinksFromSectionProps(props),
+      images: collectImagesFromSectionProps(props),
+    });
+  }
+
+  return out;
+}
+
 function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
 }
@@ -380,6 +478,7 @@ export function renderContentRecoveryPreview(input: {
   const diagnostics: ContentRecoveryDiagnosticCode[] = ["CONTENT_RECOVERY_MODE_ACTIVE", "CONTENT_RECOVERY_HERO_SYNTHESIZED"];
 
   const snapshotHtml = input.snapshotHtml ?? collectSnapshotHtmlCandidate(input.sectionEntries) ?? "";
+  const sectionEvidence = summarizeSectionEvidence(input.sectionEntries);
   const extracted = collectSectionText(input.sectionEntries);
 
   const title = extractFirstMatch(/<title\b[^>]*>([\s\S]*?)<\/title>/i, snapshotHtml) ?? input.page.title ?? "Recovered page";
@@ -402,18 +501,38 @@ export function renderContentRecoveryPreview(input: {
   const dedupedParagraphs = [...new Set(paragraphs.map((value) => value.trim()).filter(Boolean))].slice(0, 16);
   const dedupedLinks = [...new Map(links.map((entry) => [`${entry.href.toLowerCase()}::${entry.label.toLowerCase()}`, entry])).values()].slice(0, 12);
   const dedupedImages = [...new Map(images.map((entry) => [`${entry.src.toLowerCase()}::${entry.alt.toLowerCase()}`, entry])).values()].slice(0, 12);
+  const roleOrder: Record<RecoverySectionRole, number> = { hero: 0, content: 1, cta: 2, media: 3, footer: 4 };
+  const orderedSectionEvidence = sectionEvidence.slice().sort((a, b) => roleOrder[a.role] - roleOrder[b.role]);
+  const heroSection = orderedSectionEvidence.find((section) => section.role === "hero") ?? null;
+  const ctaSections = orderedSectionEvidence.filter((section) => section.role === "cta");
+  const ctaLinksFromSections = ctaSections.flatMap((section) => section.links);
+  const contentSectionEvidence = orderedSectionEvidence.filter((section) => section.role === "content" || section.role === "hero");
+  const orderedHeadings = [...contentSectionEvidence.map((section) => section.heading).filter((value): value is string => Boolean(value)), ...dedupedHeadings];
+  const orderedParagraphs = [
+    ...contentSectionEvidence.map((section) => section.paragraph).filter((value): value is string => Boolean(value)),
+    ...dedupedParagraphs,
+  ];
+  const mergedLinks = [...ctaLinksFromSections, ...dedupedLinks];
+  const mergedImages = [...orderedSectionEvidence.flatMap((section) => section.images), ...dedupedImages];
+  const dedupedOrderedHeadings = [...new Set(orderedHeadings.map((value) => value.trim()).filter(Boolean))].slice(0, 10);
+  const dedupedOrderedParagraphs = [...new Set(orderedParagraphs.map((value) => value.trim()).filter(Boolean))].slice(0, 16);
+  const dedupedMergedLinks = [...new Map(mergedLinks.map((entry) => [`${entry.href.toLowerCase()}::${entry.label.toLowerCase()}`, entry])).values()].slice(0, 12);
+  const dedupedMergedImages = [...new Map(mergedImages.map((entry) => [`${entry.src.toLowerCase()}::${entry.alt.toLowerCase()}`, entry])).values()].slice(0, 12);
 
-  const heroHeadline = firstH1 ?? dedupedHeadings[0] ?? title;
-  const heroSupporting = metaDescription ?? dedupedParagraphs[0] ?? "Imported content recovered for preview.";
+  const heroHeadline = heroSection?.heading ?? firstH1 ?? dedupedOrderedHeadings[0] ?? title;
+  const heroSupporting = heroSection?.paragraph ?? metaDescription ?? dedupedOrderedParagraphs[0] ?? "Imported content recovered for preview.";
 
-  if (dedupedParagraphs.length > 0 || dedupedHeadings.length > 0) {
+  if (dedupedOrderedParagraphs.length > 0 || dedupedOrderedHeadings.length > 0) {
     diagnostics.push("CONTENT_RECOVERY_TEXT_SURFACED");
   }
-  if (dedupedLinks.length > 0) {
+  if (dedupedMergedLinks.length > 0) {
     diagnostics.push("CONTENT_RECOVERY_LINKS_SURFACED");
   }
-  if (dedupedImages.length > 0) {
+  if (dedupedMergedImages.length > 0) {
     diagnostics.push("CONTENT_RECOVERY_IMAGES_SURFACED");
+  }
+  if (orderedSectionEvidence.length > 0) {
+    diagnostics.push("CONTENT_RECOVERY_CAPTURE_LAYOUT_ORDERED");
   }
 
   const lines: string[] = [];
@@ -426,31 +545,40 @@ export function renderContentRecoveryPreview(input: {
   }
   lines.push('  </section>');
 
-  const textBlocks = Math.max(2, Math.min(6, Math.max(dedupedHeadings.length, dedupedParagraphs.length)));
+  const textBlocks = Math.max(2, Math.min(6, Math.max(dedupedOrderedHeadings.length, dedupedOrderedParagraphs.length)));
   for (let i = 0; i < textBlocks; i += 1) {
-    const heading = dedupedHeadings[i] ?? `Recovered Section ${i + 1}`;
-    const paragraph = dedupedParagraphs[i] ?? dedupedParagraphs[0] ?? "Imported text content is available in embedded section payloads.";
+    const heading = dedupedOrderedHeadings[i] ?? `Recovered Section ${i + 1}`;
+    const paragraph = dedupedOrderedParagraphs[i] ?? dedupedOrderedParagraphs[0] ?? "Imported text content is available in embedded section payloads.";
     lines.push('  <section data-gnr8-recovery-block="text">');
     lines.push(`    <h2>${escapeHtml(heading)}</h2>`);
     lines.push(`    <p>${escapeHtml(paragraph)}</p>`);
     lines.push('  </section>');
   }
 
-  if (dedupedLinks.length > 0) {
+  if (dedupedMergedLinks.length > 0 && ctaSections.length > 0) {
+    const primaryCta = dedupedMergedLinks[0]!;
+    lines.push('  <section data-gnr8-recovery-block="cta">');
+    lines.push("    <h3>Primary Action</h3>");
+    lines.push(`    <p><a href="${escapeHtml(primaryCta.href)}">${escapeHtml(primaryCta.label)}</a></p>`);
+    lines.push("  </section>");
+    diagnostics.push("CONTENT_RECOVERY_CTA_PLACED");
+  }
+
+  if (dedupedMergedLinks.length > 0) {
     lines.push('  <section data-gnr8-recovery-block="links">');
     lines.push('    <h3>Links</h3>');
     lines.push('    <ul>');
-    for (const link of dedupedLinks) {
+    for (const link of dedupedMergedLinks) {
       lines.push(`      <li><a href="${escapeHtml(link.href)}">${escapeHtml(link.label)}</a></li>`);
     }
     lines.push('    </ul>');
     lines.push('  </section>');
   }
 
-  if (dedupedImages.length > 0) {
+  if (dedupedMergedImages.length > 0) {
     lines.push('  <section data-gnr8-recovery-block="images">');
     lines.push('    <h3>Images</h3>');
-    for (const image of dedupedImages) {
+    for (const image of dedupedMergedImages) {
       if (isSafeInlineImage(image.src)) {
         lines.push(`    <img src="${escapeHtml(image.src)}" alt="${escapeHtml(image.alt)}" loading="lazy" decoding="async" />`);
       } else {

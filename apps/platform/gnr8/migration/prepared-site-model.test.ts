@@ -346,3 +346,88 @@ test("section consolidation remains deterministic across repeated prepared model
 
   assert.equal(stableStringify(a as unknown as JsonValue), stableStringify(b as unknown as JsonValue));
 });
+
+test("capture-driven lifts reinforce hero and CTA when rendered evidence is strong", async () => {
+  const tmpRoot = await fs.mkdtemp(path.join(os.tmpdir(), "gnr8-capture-lift-hero-cta-"));
+  const html = [
+    "<!doctype html>",
+    "<html><head><meta charset=\"utf-8\"><title>Capture Lift Fixture</title></head>",
+    "<body><main>",
+    "<div class=\"hero-heading\"><h1>Design faster with confidence</h1></div>",
+    "<div class=\"hero-copy\"><p>Rendered hierarchy should preserve hero prominence and CTA interpretation.</p></div>",
+    "<div class=\"hero-cta\"><a href=\"#start\">Get started</a></div>",
+    "<div class=\"hero-media\"><img src=\"/hero.jpg\" alt=\"Hero image\" /></div>",
+    "<section><h2>Features</h2><p>Deterministic import quality and preview correctness.</p></section>",
+    "<footer><a href=\"#privacy\">Privacy</a><a href=\"#terms\">Terms</a></footer>",
+    "</main></body></html>",
+  ].join("");
+  await fs.writeFile(path.join(tmpRoot, "index.html"), html, "utf-8");
+
+  const importOutput = await importStaticSite({
+    rootDir: tmpRoot,
+    requestId: "req-capture-lift-hero-cta",
+    source: { kind: "single-entry-html", entryHtmlPath: "index.html" },
+  });
+  const prepared = createPreparedSiteModel({ importOutput, importManifest: createImportManifest(importOutput) });
+  const doc = prepared.documents.find((d) => d.path === "index.html");
+  assert.ok(doc?.semantic);
+
+  assert.ok(doc!.semantic!.sections.some((section) => section.inferredType === "hero"));
+  assert.ok(doc!.semantic!.sections.some((section) => section.ctaCandidates.length > 0));
+  assert.ok(doc!.semantic!.diagnostics.some((d) => d.code === "CAPTURE_DRIVEN_HERO_LIFT_APPLIED"));
+  assert.ok(doc!.semantic!.diagnostics.some((d) => d.code === "CAPTURE_DRIVEN_CTA_LIFT_APPLIED"));
+  assert.ok(doc!.semantic!.diagnostics.some((d) => d.code === "CAPTURE_DRIVEN_SECTION_GROUPING_LIFT"));
+});
+
+test("capture-driven media prominence lift improves media-forward interpretation", async () => {
+  const tmpRoot = await fs.mkdtemp(path.join(os.tmpdir(), "gnr8-capture-lift-media-"));
+  const html = [
+    "<!doctype html>",
+    "<html><head><meta charset=\"utf-8\"><title>Media Forward Fixture</title></head>",
+    "<body><main>",
+    "<section class=\"hero\"><h1>Portfolio</h1><p>Selected projects.</p><img src=\"/hero.jpg\" alt=\"Hero\" /></section>",
+    "<section class=\"gallery-grid\">",
+    "<img src=\"/a.jpg\" alt=\"A\" /><img src=\"/b.jpg\" alt=\"B\" /><img src=\"/c.jpg\" alt=\"C\" /><img src=\"/d.jpg\" alt=\"D\" />",
+    "</section>",
+    "<footer><p>Copyright 2026</p></footer>",
+    "</main></body></html>",
+  ].join("");
+  await fs.writeFile(path.join(tmpRoot, "index.html"), html, "utf-8");
+
+  const importOutput = await importStaticSite({
+    rootDir: tmpRoot,
+    requestId: "req-capture-lift-media",
+    source: { kind: "single-entry-html", entryHtmlPath: "index.html" },
+  });
+  const prepared = createPreparedSiteModel({ importOutput, importManifest: createImportManifest(importOutput) });
+  const doc = prepared.documents.find((d) => d.path === "index.html");
+  assert.ok(doc?.semantic);
+
+  assert.ok(doc!.semantic!.sections.some((section) => section.inferredType === "gallery" || section.mediaDensity >= 0.45));
+  assert.ok(doc!.semantic!.diagnostics.some((d) => d.code === "CAPTURE_DRIVEN_MEDIA_PROMINENCE_USED"));
+});
+
+test("weak capture evidence remains conservative and avoids aggressive lifts", async () => {
+  const tmpRoot = await fs.mkdtemp(path.join(os.tmpdir(), "gnr8-capture-lift-weak-"));
+  const html = [
+    "<!doctype html>",
+    "<html><head><meta charset=\"utf-8\"><title>Weak Capture Fixture</title></head>",
+    "<body><main>",
+    "<div><p>Welcome to our site.</p></div>",
+    "<div><p>We provide quality service.</p></div>",
+    "<div><a href=\"#more\">Learn more</a></div>",
+    "</main></body></html>",
+  ].join("");
+  await fs.writeFile(path.join(tmpRoot, "index.html"), html, "utf-8");
+
+  const importOutput = await importStaticSite({
+    rootDir: tmpRoot,
+    requestId: "req-capture-lift-weak",
+    source: { kind: "single-entry-html", entryHtmlPath: "index.html" },
+  });
+  const prepared = createPreparedSiteModel({ importOutput, importManifest: createImportManifest(importOutput) });
+  const doc = prepared.documents.find((d) => d.path === "index.html");
+  assert.ok(doc?.semantic);
+
+  assert.equal(doc!.semantic!.diagnostics.some((d) => d.code === "CAPTURE_DRIVEN_HERO_LIFT_APPLIED"), false);
+});

@@ -179,6 +179,8 @@ export type SiteWorkspaceReadModel = {
     sectionsDetected: number
     heroDetected: boolean
     ctaDetected: boolean
+    captureDrivenLiftApplied: boolean
+    captureSignalSummary: string[]
     designStrategy: 'cta_focused' | 'corporate_balanced' | 'editorial_readable' | 'visual_gallery'
     statusLabel: 'imported' | 'processed' | 'preview_ready' | 'published' | 'unknown'
     sourceMode: 'rendered_dom' | 'raw_html_fallback' | 'unknown'
@@ -1147,6 +1149,14 @@ export async function getSiteWorkspaceReadModelForPage(input: {
   const ctaDetected = structureRows.some(
     (row) => row.sectionType.toLowerCase().includes('cta') || row.sectionType.toLowerCase().includes('contact'),
   )
+  const captureLiftDiagnostics = Array.from(
+    new Set(
+      structureRows
+        .flatMap((row) => row.keyDiagnostics)
+        .filter((code) => code.startsWith('CAPTURE_DRIVEN_')),
+    ),
+  ).sort((a, b) => a.localeCompare(b))
+  const captureDrivenLiftApplied = captureLiftDiagnostics.length > 0
   const designStrategy = inferDesignStrategy(structureRows)
 
   const aiSuggestionStatus = inferAiSuggestionStatus(pageRows)
@@ -1286,6 +1296,8 @@ export async function getSiteWorkspaceReadModelForPage(input: {
       sectionsDetected,
       heroDetected,
       ctaDetected,
+      captureDrivenLiftApplied,
+      captureSignalSummary: captureLiftDiagnostics.slice(0, 4),
       designStrategy,
       statusLabel: toStatusLabel({
         siteStatus: site.status,

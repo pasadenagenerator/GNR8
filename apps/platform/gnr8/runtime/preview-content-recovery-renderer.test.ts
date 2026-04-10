@@ -146,6 +146,39 @@ test("content recovery renderer extracts links and images from htmlSummary", () 
   assert.ok(rendered.diagnostics.includes("CONTENT_RECOVERY_IMAGES_SURFACED"));
 });
 
+test("content recovery renderer uses section hierarchy evidence for hero and CTA placement", () => {
+  const page = buildPage({
+    sections: [
+      { id: "hero", type: "hero.split", order: 0 },
+      { id: "cta", type: "cta.simple", order: 1 },
+    ],
+    sectionProps: {
+      hero: {
+        headline: "Capture-first hero",
+        subheadline: "Recovered from rendered hierarchy evidence.",
+      },
+      cta: {
+        buttonLabel: "Start now",
+        buttonHref: "/start",
+      },
+    },
+  });
+
+  const rendered = renderContentRecoveryPreview({
+    page,
+    sectionEntries: [
+      { sectionId: "hero", sectionType: "hero.split", sectionProps: page.contentModel.sectionProps.hero ?? {} },
+      { sectionId: "cta", sectionType: "cta.simple", sectionProps: page.contentModel.sectionProps.cta ?? {} },
+    ],
+  });
+
+  assert.match(rendered.html, /Capture-first hero/);
+  assert.match(rendered.html, /data-gnr8-recovery-block="cta"/);
+  assert.match(rendered.html, /href="\/start"/);
+  assert.ok(rendered.diagnostics.includes("CONTENT_RECOVERY_CAPTURE_LAYOUT_ORDERED"));
+  assert.ok(rendered.diagnostics.includes("CONTENT_RECOVERY_CTA_PLACED"));
+});
+
 test("content recovery renderer always embeds original section props payload", () => {
   const page = buildPage({
     sections: [{ id: "intro", type: "content.basic", order: 0 }],
