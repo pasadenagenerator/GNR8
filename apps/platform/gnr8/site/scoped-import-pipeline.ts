@@ -423,6 +423,8 @@ function buildImportProvenanceSummary(snapshot: UrlSinglePageImportSnapshot, sty
           reachable: workerHealth.reachable,
           browserAvailable: workerHealth.browserAvailable,
           queueHealthy: workerHealth.queueHealthy,
+          status: workerHealth.status,
+          reason: workerHealth.reason,
           lastSuccessAt: workerHealth.lastSuccessAt,
           lastFailureAt: workerHealth.lastFailureAt,
           lastFailureClass: workerHealth.lastFailureClass,

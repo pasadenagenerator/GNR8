@@ -309,6 +309,8 @@ test('scoped pipeline import uses pipeline path, maps consolidated sections, and
           reachable: true,
           browserAvailable: true,
           queueHealthy: true,
+          status: 'healthy',
+          reason: null,
           lastSuccessAt: '2026-04-10T08:00:05.000Z',
           lastFailureAt: null,
           lastFailureClass: 'none',
@@ -429,6 +431,8 @@ test('scoped pipeline import uses pipeline path, maps consolidated sections, and
   assert.equal(createInput.importProvenanceSummary.captureJob?.status, 'completed')
   assert.equal(createInput.importProvenanceSummary.captureJob?.attemptCount, 2)
   assert.equal(createInput.importProvenanceSummary.workerHealth?.reachable, true)
+  assert.equal(createInput.importProvenanceSummary.workerHealth?.status, 'healthy')
+  assert.equal(createInput.importProvenanceSummary.workerHealth?.reason, null)
   assert.ok(createInput.importProvenanceSummary.styleSignals != null)
   assert.equal(createInput.importProvenanceSummary.styleSignals.kind, 'style_signal_model_v2')
   assert.equal(persistedImportSummary.siteVersionId, 'site-version-1')

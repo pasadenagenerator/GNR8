@@ -33,6 +33,8 @@ export type RenderedCaptureWorkerHealthTruth = {
   reachable: boolean;
   browserAvailable: boolean;
   queueHealthy: boolean;
+  status: "healthy" | "disabled" | "misconfigured" | "unreachable" | "unauthorized" | "execution_failed" | "timed_out" | "unknown";
+  reason: string | null;
   lastSuccessAt: string | null;
   lastFailureAt: string | null;
   lastFailureClass: RenderedCaptureWorkerFailureClass | "none";
@@ -157,6 +159,78 @@ function toDiagnostic(input: {
     message: input.message,
     severity: input.severity ?? "info",
     details: input.details,
+  };
+}
+
+function hasDiagnosticCode(response: RenderedCaptureWorkerResponse, code: string): boolean {
+  return Array.isArray(response.diagnostics) && response.diagnostics.some((entry) => normalizeText(entry.code) === code);
+}
+
+function deriveHealthFromResponse(input: {
+  response: RenderedCaptureWorkerResponse;
+  enabled: boolean;
+}): Pick<RenderedCaptureWorkerHealthTruth, "reachable" | "browserAvailable" | "status" | "reason"> {
+  if (!input.enabled || hasDiagnosticCode(input.response, "CAPTURE_WORKER_DISABLED")) {
+    return {
+      reachable: false,
+      browserAvailable: false,
+      status: "disabled",
+      reason: "worker_disabled",
+    };
+  }
+  if (hasDiagnosticCode(input.response, "CAPTURE_WORKER_NOT_CONFIGURED")) {
+    return {
+      reachable: false,
+      browserAvailable: false,
+      status: "misconfigured",
+      reason: "worker_not_configured",
+    };
+  }
+  if (hasDiagnosticCode(input.response, "CAPTURE_WORKER_UNAUTHORIZED")) {
+    return {
+      reachable: true,
+      browserAvailable: false,
+      status: "unauthorized",
+      reason: "worker_unauthorized",
+    };
+  }
+  if (hasDiagnosticCode(input.response, "CAPTURE_WORKER_TIMEOUT")) {
+    return {
+      reachable: false,
+      browserAvailable: false,
+      status: "timed_out",
+      reason: "worker_timeout",
+    };
+  }
+  if (hasDiagnosticCode(input.response, "CAPTURE_WORKER_HTTP_ERROR")) {
+    return {
+      reachable: hasDiagnosticCode(input.response, "CAPTURE_WORKER_HTTP_RESPONSE_RECEIVED"),
+      browserAvailable: false,
+      status: "unreachable",
+      reason: "worker_http_error",
+    };
+  }
+  if (input.response.status === "available" || input.response.status === "partial") {
+    return {
+      reachable: true,
+      browserAvailable: Boolean(input.response.environment.browserPackageAvailable && input.response.environment.browserBinaryAvailable),
+      status: "healthy",
+      reason: null,
+    };
+  }
+  if (input.response.status === "failed") {
+    return {
+      reachable: true,
+      browserAvailable: Boolean(input.response.environment.browserPackageAvailable && input.response.environment.browserBinaryAvailable),
+      status: "execution_failed",
+      reason: input.response.failure?.failureCode ?? input.response.failure?.failureClass ?? "worker_failed",
+    };
+  }
+  return {
+    reachable: false,
+    browserAvailable: Boolean(input.response.environment.browserPackageAvailable && input.response.environment.browserBinaryAvailable),
+    status: "unknown",
+    reason: input.response.failure?.failureCode ?? input.response.failure?.failureClass ?? "worker_unavailable",
   };
 }
 
@@ -320,6 +394,8 @@ function defaultHealth(): RenderedCaptureWorkerHealthTruth {
     reachable: true,
     browserAvailable: false,
     queueHealthy: true,
+    status: "unknown",
+    reason: null,
     lastSuccessAt: null,
     lastFailureAt: null,
     lastFailureClass: "none",
@@ -442,7 +518,10 @@ export class FileBackedRenderedCaptureJobOrchestrator {
           ...this.readHealth(),
           enabled: typeof input.workerEnabled === "boolean" ? input.workerEnabled : this.readHealth().enabled,
           reachable: false,
+          browserAvailable: false,
           queueHealthy: true,
+          status: "timed_out" as const,
+          reason: "capture_job_timed_out",
           lastFailureAt: nowIso(this.nowFn),
           lastFailureClass: "timed_out" as const,
           lastFailureCode: "CAPTURE_JOB_TIMED_OUT",
@@ -522,7 +601,10 @@ export class FileBackedRenderedCaptureJobOrchestrator {
             ...this.readHealth(),
             enabled: typeof input.workerEnabled === "boolean" ? input.workerEnabled : this.readHealth().enabled,
             reachable: false,
+            browserAvailable: false,
             queueHealthy: true,
+            status: "timed_out" as const,
+            reason: "capture_job_timed_out",
             lastFailureAt: nowIso(this.nowFn),
             lastFailureClass: "timed_out" as const,
             lastFailureCode: "CAPTURE_JOB_TIMED_OUT",
@@ -552,7 +634,10 @@ export class FileBackedRenderedCaptureJobOrchestrator {
           ...this.readHealth(),
           enabled: typeof input.workerEnabled === "boolean" ? input.workerEnabled : this.readHealth().enabled,
           reachable: false,
+          browserAvailable: false,
           queueHealthy: true,
+          status: "unreachable" as const,
+          reason: "capture_job_worker_execute_throw",
           lastFailureAt: nowIso(this.nowFn),
           lastFailureClass: "internal_error" as const,
           lastFailureCode: "CAPTURE_JOB_WORKER_EXECUTE_THROW",
@@ -607,12 +692,16 @@ export class FileBackedRenderedCaptureJobOrchestrator {
         }));
         this.writeJob(job);
 
+        const enabled = typeof input.workerEnabled === "boolean" ? input.workerEnabled : this.readHealth().enabled;
+        const derived = deriveHealthFromResponse({ response, enabled });
         const health = {
           ...this.readHealth(),
-          enabled: typeof input.workerEnabled === "boolean" ? input.workerEnabled : this.readHealth().enabled,
-          reachable: true,
-          browserAvailable: Boolean(response.environment.browserPackageAvailable && response.environment.browserBinaryAvailable),
+          enabled,
+          reachable: derived.reachable,
+          browserAvailable: derived.browserAvailable,
           queueHealthy: true,
+          status: derived.status,
+          reason: derived.reason,
           lastSuccessAt: nowIso(this.nowFn),
           lastFailureAt: null,
           lastFailureClass: "none" as const,
@@ -682,12 +771,16 @@ export class FileBackedRenderedCaptureJobOrchestrator {
         job.completedAt = nowIso(this.nowFn);
         this.writeJob(job);
 
+        const enabled = typeof input.workerEnabled === "boolean" ? input.workerEnabled : this.readHealth().enabled;
+        const derived = deriveHealthFromResponse({ response, enabled });
         const health = {
           ...this.readHealth(),
-          enabled: typeof input.workerEnabled === "boolean" ? input.workerEnabled : this.readHealth().enabled,
-          reachable: false,
-          browserAvailable: Boolean(response.environment.browserPackageAvailable && response.environment.browserBinaryAvailable),
+          enabled,
+          reachable: derived.reachable,
+          browserAvailable: derived.browserAvailable,
           queueHealthy: true,
+          status: derived.status,
+          reason: derived.reason,
           lastFailureAt: nowIso(this.nowFn),
           lastFailureClass: response.failure?.failureClass ?? "internal_error",
           lastFailureCode: response.failure?.failureCode ?? "CAPTURE_JOB_FAILED_TRANSIENT",
@@ -742,12 +835,16 @@ export class FileBackedRenderedCaptureJobOrchestrator {
       job.completedAt = nowIso(this.nowFn);
       this.writeJob(job);
 
+      const enabled = typeof input.workerEnabled === "boolean" ? input.workerEnabled : this.readHealth().enabled;
+      const derived = deriveHealthFromResponse({ response, enabled });
       const health = {
         ...this.readHealth(),
-        enabled: typeof input.workerEnabled === "boolean" ? input.workerEnabled : this.readHealth().enabled,
-        reachable: response.status !== "unsupported",
-        browserAvailable: Boolean(response.environment.browserPackageAvailable && response.environment.browserBinaryAvailable),
+        enabled,
+        reachable: derived.reachable,
+        browserAvailable: derived.browserAvailable,
         queueHealthy: true,
+        status: derived.status,
+        reason: derived.reason,
         lastFailureAt: nowIso(this.nowFn),
         lastFailureClass: response.failure?.failureClass ?? "environment_unsupported",
         lastFailureCode: response.failure?.failureCode ?? "CAPTURE_JOB_FAILED_TERMINAL",
@@ -806,7 +903,10 @@ export class FileBackedRenderedCaptureJobOrchestrator {
       ...this.readHealth(),
       enabled: typeof input.workerEnabled === "boolean" ? input.workerEnabled : this.readHealth().enabled,
       reachable: false,
+      browserAvailable: false,
       queueHealthy: true,
+      status: "unreachable" as const,
+      reason: "capture_job_failed_after_retries",
       lastFailureAt: nowIso(this.nowFn),
       lastFailureClass: "internal_error" as const,
       lastFailureCode: lastTransientFailureCode ?? "CAPTURE_JOB_FAILED_TRANSIENT",

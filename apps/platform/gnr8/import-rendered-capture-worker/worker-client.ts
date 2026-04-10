@@ -55,7 +55,13 @@ function reasonToSpecificDiagnostic(reason: WorkerUnavailableReason): {
   code: RenderedCaptureDiagnosticCode;
   message: string;
 } {
-  if (reason === "worker_not_configured" || reason === "worker_disabled" || reason === "worker_auth_not_configured") {
+  if (reason === "worker_disabled") {
+    return {
+      code: "CAPTURE_WORKER_DISABLED",
+      message: "Rendered capture worker is disabled for this runtime",
+    };
+  }
+  if (reason === "worker_not_configured" || reason === "worker_auth_not_configured") {
     return {
       code: "CAPTURE_WORKER_NOT_CONFIGURED",
       message: "Rendered capture worker is not configured for this runtime",
@@ -483,15 +489,38 @@ export function createRenderedCaptureWorkerClientFromEnv(input?: {
   env?: NodeJS.ProcessEnv;
 }): RenderedCaptureWorkerClient {
   const config = resolveRenderedCaptureWorkerClientConfigFromEnv(input?.env);
+  const endpointConfigured = Boolean(config.endpointUrl);
+  const sharedTokenConfigured = Boolean(config.sharedToken);
   const configuredDiagnostic = createDiagnostic({
     code: "CAPTURE_WORKER_CLIENT_CONFIG_RESOLVED",
     message: "Rendered capture worker client configuration resolved",
     details: {
       enabled: config.enabled,
-      endpointConfigured: Boolean(config.endpointUrl),
-      sharedTokenConfigured: Boolean(config.sharedToken),
+      endpointConfigured,
+      sharedTokenConfigured,
       endpointUrl: config.endpointUrl,
+      endpointPath: config.endpointPath,
+      resolvedBaseUrl: config.resolvedBaseUrl,
+      resolvedBaseUrlSource: config.resolvedBaseUrlSource,
+      configStatus: config.configStatus,
       timeoutMs: config.timeoutMs,
+    },
+  });
+  const urlResolvedDiagnostic = createDiagnostic({
+    code: "CAPTURE_WORKER_URL_RESOLVED",
+    severity: endpointConfigured ? "info" : "warning",
+    message: endpointConfigured
+      ? "Rendered capture worker endpoint URL resolved"
+      : "Rendered capture worker endpoint URL could not be resolved",
+    details: {
+      endpointConfigured,
+      endpointUrl: config.endpointUrl,
+      endpointPath: config.endpointPath,
+      resolvedBaseUrl: config.resolvedBaseUrl,
+      resolvedBaseUrlSource: config.resolvedBaseUrlSource,
+      configStatus: config.configStatus,
+      sharedTokenConfigured,
+      authHeaderConfigured: sharedTokenConfigured,
     },
   });
 
@@ -503,7 +532,7 @@ export function createRenderedCaptureWorkerClientFromEnv(input?: {
   return {
     async execute(request: RenderedCaptureWorkerRequest): Promise<RenderedCaptureWorkerResponse> {
       const response = await client.execute(request);
-      response.diagnostics = [configuredDiagnostic, ...(Array.isArray(response.diagnostics) ? response.diagnostics : [])];
+      response.diagnostics = [configuredDiagnostic, urlResolvedDiagnostic, ...(Array.isArray(response.diagnostics) ? response.diagnostics : [])];
       return response;
     },
   };

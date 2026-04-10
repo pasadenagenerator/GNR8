@@ -90,6 +90,8 @@ export type RuntimeImportProvenanceSummary = {
     reachable: boolean;
     browserAvailable: boolean;
     queueHealthy: boolean;
+    status: "healthy" | "disabled" | "misconfigured" | "unreachable" | "unauthorized" | "execution_failed" | "timed_out" | "unknown";
+    reason: string | null;
     lastSuccessAt: string | null;
     lastFailureAt: string | null;
     lastFailureClass: string | null;

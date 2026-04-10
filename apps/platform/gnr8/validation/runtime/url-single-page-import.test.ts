@@ -178,3 +178,60 @@ test("url import surfaces terminal fallback reason when worker capture fails ter
   assert.ok(fallbackDiagnostic);
   assert.equal((fallbackDiagnostic?.details as { fallbackReason?: string } | null)?.fallbackReason, "capture_failed_terminal");
 });
+
+test("url import persists misconfigured worker health truth without collapsing to generic health unavailable", async () => {
+  const tmpRoot = await fs.promises.mkdtemp(path.join(os.tmpdir(), "gnr8-url-import-worker-misconfigured-"));
+  const entryHtml = "<!doctype html><html><body><main><h1>Entry</h1><p>content</p></main></body></html>";
+
+  const workerClient: RenderedCaptureWorkerClient = {
+    async execute(request) {
+      return {
+        kind: "rendered_capture_worker_response_v1",
+        contractVersion: "1.0.0",
+        requestId: request.requestId,
+        status: "unsupported",
+        environment: {
+          runtimeKind: "unknown",
+          environmentSupported: false,
+          browserPackageAvailable: false,
+          browserBinaryAvailable: false,
+          supportDecision: "unknown",
+        },
+        artifacts: [],
+        computedStyleSamples: [],
+        diagnostics: [{ code: "CAPTURE_WORKER_NOT_CONFIGURED", severity: "warning", message: "missing config" }],
+        qualitySummary: {
+          renderedDomQuality: "unusable",
+          domLength: 0,
+          meaningfulNodeCount: 0,
+          screenshotCount: 0,
+          computedStyleSampleCount: 0,
+        },
+        failure: {
+          failureClass: "environment_unsupported",
+          failureCode: "WORKER_UNAVAILABLE",
+          retryable: false,
+          message: "not configured",
+        },
+        timings: {
+          queueLatencyMs: null,
+          executionMs: 5,
+          totalMs: 5,
+        },
+      };
+    },
+  };
+
+  const snapshot = await importPublicSinglePageUrlToSnapshot({
+    sourceUrl: "https://example.com/",
+    snapshotRootDirAbs: tmpRoot,
+    requestId: "req-url-import-worker-misconfigured",
+    fetchImpl: async () => makeHtmlResponse(entryHtml),
+    renderedCaptureWorkerClient: workerClient,
+  });
+
+  assert.ok(snapshot.importDiagnostics.issues.some((issue) => issue.code === "CAPTURE_WORKER_NOT_CONFIGURED"));
+  assert.equal(snapshot.importDiagnostics.issues.some((issue) => issue.code === "CAPTURE_WORKER_HEALTH_UNAVAILABLE"), false);
+  assert.equal(snapshot.renderedCaptureReliability.workerHealth?.status, "misconfigured");
+  assert.equal(snapshot.renderedCaptureReliability.workerHealth?.reason, "worker_not_configured");
+});

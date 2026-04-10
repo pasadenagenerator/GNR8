@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   createHttpRenderedCaptureWorkerClient,
   createRenderedCaptureWorkerClientFromConfig,
+  createRenderedCaptureWorkerClientFromEnv,
   createUnavailableRenderedCaptureWorkerClient,
 } from "@/gnr8/import-rendered-capture-worker/worker-client";
 import { createRenderedCaptureWorkerRequest } from "@/gnr8/import-rendered-capture-worker/worker-contract";
@@ -49,11 +50,34 @@ test("config without endpoint emits CAPTURE_WORKER_NOT_CONFIGURED", async () => 
       endpointUrl: null,
       sharedToken: "token",
       timeoutMs: 10_000,
+      endpointPath: "/api/internal/gnr8/rendered-capture-worker",
+      resolvedBaseUrl: null,
+      resolvedBaseUrlSource: null,
+      configStatus: "missing_base_url",
     },
   });
 
   const response = await client.execute(makeRequest("req-not-configured"));
   assert.ok(response.diagnostics.some((entry) => entry.code === "CAPTURE_WORKER_NOT_CONFIGURED"));
+  assert.ok(response.diagnostics.some((entry) => entry.code === "CAPTURE_WORKER_UNAVAILABLE"));
+});
+
+test("disabled worker config emits CAPTURE_WORKER_DISABLED", async () => {
+  const client = createRenderedCaptureWorkerClientFromConfig({
+    config: {
+      enabled: false,
+      endpointUrl: "https://worker.example.com/capture",
+      sharedToken: "token",
+      timeoutMs: 10_000,
+      endpointPath: "/capture",
+      resolvedBaseUrl: "https://worker.example.com",
+      resolvedBaseUrlSource: "worker_base_url",
+      configStatus: "disabled",
+    },
+  });
+
+  const response = await client.execute(makeRequest("req-disabled"));
+  assert.ok(response.diagnostics.some((entry) => entry.code === "CAPTURE_WORKER_DISABLED"));
   assert.ok(response.diagnostics.some((entry) => entry.code === "CAPTURE_WORKER_UNAVAILABLE"));
 });
 
@@ -111,12 +135,16 @@ test("http worker client maps invalid response contract to deterministic unsuppo
 
 test("http worker client preserves successful contract and adds call-path diagnostics", async () => {
   const request = makeRequest("req-success");
+  let capturedUrl: string | null = null;
+  let capturedHeaders: HeadersInit | undefined;
   const client = createHttpRenderedCaptureWorkerClient({
     endpointUrl: "https://worker.example.com/capture",
     sharedToken: "token-1",
     timeoutMs: 10_000,
-    fetchImpl: async () =>
-      new Response(
+    fetchImpl: async (input, init) => {
+      capturedUrl = String(input);
+      capturedHeaders = init?.headers;
+      return new Response(
         JSON.stringify({
           kind: "rendered_capture_worker_response_v1",
           contractVersion: "1.0.0",
@@ -150,11 +178,15 @@ test("http worker client preserves successful contract and adds call-path diagno
           status: 200,
           headers: { "content-type": "application/json" },
         },
-      ),
+      );
+    },
   });
 
   const response = await client.execute(request);
   assert.equal(response.status, "available");
+  assert.equal(capturedUrl, "https://worker.example.com/capture");
+  const headers = new Headers(capturedHeaders);
+  assert.equal(headers.get("x-gnr8-rendered-capture-worker-token"), "token-1");
   assert.ok(response.diagnostics.some((entry) => entry.code === "CAPTURE_WORKER_HTTP_REQUEST_SENT"));
   assert.ok(response.diagnostics.some((entry) => entry.code === "CAPTURE_WORKER_HTTP_RESPONSE_RECEIVED"));
   assert.ok(response.diagnostics.some((entry) => entry.code === "CAPTURE_WORKER_RESPONSE_PARSED"));
@@ -213,4 +245,25 @@ test("http worker client distinguishes execution-failed worker response", async 
   assert.equal(response.status, "failed");
   assert.ok(response.diagnostics.some((entry) => entry.code === "CAPTURE_WORKER_EXECUTION_FAILED"));
   assert.equal(response.diagnostics.some((entry) => entry.code === "CAPTURE_WORKER_UNAVAILABLE"), false);
+});
+
+test("env client emits URL resolution diagnostics for missing endpoint/token configuration", async () => {
+  const client = createRenderedCaptureWorkerClientFromEnv({
+    env: {
+      NODE_ENV: "development",
+    } as unknown as NodeJS.ProcessEnv,
+  });
+
+  const response = await client.execute(makeRequest("req-env-config-missing"));
+  const resolved = response.diagnostics.find((entry) => entry.code === "CAPTURE_WORKER_URL_RESOLVED");
+  assert.ok(resolved);
+  assert.equal(resolved?.severity, "warning");
+  assert.equal(
+    (resolved?.details as { endpointConfigured?: boolean; sharedTokenConfigured?: boolean } | undefined)?.endpointConfigured,
+    false,
+  );
+  assert.equal(
+    (resolved?.details as { endpointConfigured?: boolean; sharedTokenConfigured?: boolean } | undefined)?.sharedTokenConfigured,
+    false,
+  );
 });

@@ -56,12 +56,14 @@ export type UrlImportDiagnosticCode =
   | "CAPTURE_JOB_COMPLETED"
   | "CAPTURE_WORKER_HEALTH_UNAVAILABLE"
   | "CAPTURE_WORKER_CLIENT_CONFIG_RESOLVED"
+  | "CAPTURE_WORKER_URL_RESOLVED"
   | "CAPTURE_WORKER_REQUEST_BUILT"
   | "CAPTURE_WORKER_HTTP_REQUEST_SENT"
   | "CAPTURE_WORKER_HTTP_RESPONSE_RECEIVED"
   | "CAPTURE_WORKER_RESPONSE_PARSED"
   | "CAPTURE_WORKER_REQUEST_STARTED"
   | "CAPTURE_WORKER_REQUEST_FAILED"
+  | "CAPTURE_WORKER_DISABLED"
   | "CAPTURE_WORKER_NOT_CONFIGURED"
   | "CAPTURE_WORKER_HTTP_ERROR"
   | "CAPTURE_WORKER_TIMEOUT"
@@ -1707,6 +1709,11 @@ function resolveWorkerFallbackReason(input: {
   workerHealth: RenderedCaptureWorkerHealthTruth | null;
 }): string {
   if (input.workerHealth && input.workerHealth.enabled === false) return "worker_disabled";
+  if (input.workerHealth?.status === "misconfigured") return "worker_not_configured";
+  if (input.workerHealth?.status === "unauthorized") return "worker_unauthorized";
+  if (input.workerHealth?.status === "timed_out") return "worker_timeout";
+  if (input.workerHealth?.status === "unreachable") return "worker_unreachable";
+  if (input.workerHealth?.status === "execution_failed") return "worker_execution_failed";
   if (input.job?.status === "timed_out") return "capture_timed_out";
   if (input.job?.status === "failed_terminal") return "capture_failed_terminal";
   if (input.job?.status === "failed_transient") return "capture_failed_transient";
@@ -2343,14 +2350,37 @@ export async function importPublicSinglePageUrlToSnapshot(input: {
       });
       renderedCaptureJob = runResult.job;
       renderedCaptureWorkerHealth = runResult.health;
-      if (!runResult.health.reachable || !runResult.health.browserAvailable) {
+      if (runResult.health.status !== "healthy") {
+        const healthCode: UrlImportDiagnosticCode =
+          runResult.health.status === "disabled"
+            ? "CAPTURE_WORKER_DISABLED"
+            : runResult.health.status === "misconfigured"
+              ? "CAPTURE_WORKER_NOT_CONFIGURED"
+              : runResult.health.status === "unauthorized"
+                ? "CAPTURE_WORKER_UNAUTHORIZED"
+                : runResult.health.status === "timed_out"
+                  ? "CAPTURE_WORKER_TIMEOUT"
+                  : "CAPTURE_WORKER_HEALTH_UNAVAILABLE";
+        const healthMessage =
+          runResult.health.status === "disabled"
+            ? "Rendered capture worker is disabled for this runtime."
+            : runResult.health.status === "misconfigured"
+              ? "Rendered capture worker is misconfigured for this runtime."
+              : runResult.health.status === "unauthorized"
+                ? "Rendered capture worker authorization failed."
+                : runResult.health.status === "timed_out"
+                  ? "Rendered capture worker request timed out."
+                  : "Rendered capture worker health indicates degraded availability.";
         diagnostics.push(
           createDiagnostic({
             severity: "warning",
-            code: "CAPTURE_WORKER_HEALTH_UNAVAILABLE",
-            message: "Rendered capture worker health indicates degraded availability.",
+            code: healthCode,
+            message: healthMessage,
             targetUrl: null,
             details: {
+              status: runResult.health.status,
+              reason: runResult.health.reason,
+              enabled: runResult.health.enabled,
               reachable: runResult.health.reachable,
               browserAvailable: runResult.health.browserAvailable,
               queueHealthy: runResult.health.queueHealthy,
