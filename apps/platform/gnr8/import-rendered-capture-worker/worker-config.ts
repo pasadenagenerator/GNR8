@@ -36,10 +36,33 @@ function normalizeBaseUrl(raw: string): string | null {
   }
 }
 
+function resolveFallbackBaseUrl(env: NodeJS.ProcessEnv): string | null {
+  const explicitAppOrigins = [
+    normalizeText(env.NEXT_PUBLIC_APP_URL),
+    normalizeText(env.NEXT_PUBLIC_SITE_URL),
+    normalizeText(env.GNR8_APP_URL),
+  ];
+  for (const candidate of explicitAppOrigins) {
+    const normalized = normalizeBaseUrl(candidate);
+    if (normalized) return normalized;
+  }
+
+  const vercelUrl = normalizeText(env.VERCEL_URL);
+  if (vercelUrl) {
+    const withProtocol = vercelUrl.startsWith("http://") || vercelUrl.startsWith("https://") ? vercelUrl : `https://${vercelUrl}`;
+    const normalized = normalizeBaseUrl(withProtocol);
+    if (normalized) return normalized;
+  }
+
+  return null;
+}
+
 export function resolveRenderedCaptureWorkerClientConfigFromEnv(env: NodeJS.ProcessEnv = process.env): RenderedCaptureWorkerClientConfig {
   const enabledRaw = normalizeText(env.GNR8_RENDERED_CAPTURE_WORKER_ENABLED);
   const enabled = enabledRaw ? normalizeBoolean(enabledRaw) : true;
-  const baseUrl = normalizeBaseUrl(normalizeText(env.GNR8_RENDERED_CAPTURE_WORKER_BASE_URL));
+  const baseUrl =
+    normalizeBaseUrl(normalizeText(env.GNR8_RENDERED_CAPTURE_WORKER_BASE_URL)) ??
+    resolveFallbackBaseUrl(env);
   const path = normalizeText(env.GNR8_RENDERED_CAPTURE_WORKER_PATH) || "/api/internal/gnr8/rendered-capture-worker";
   const endpointUrl = baseUrl ? new URL(path, `${baseUrl}/`).toString() : null;
   const sharedToken = normalizeText(env.GNR8_RENDERED_CAPTURE_WORKER_SHARED_TOKEN) || null;

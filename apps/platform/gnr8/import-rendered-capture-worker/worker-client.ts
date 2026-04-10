@@ -18,6 +18,17 @@ export type RenderedCaptureWorkerClient = {
 
 type FetchLike = (input: string | URL | Request, init?: RequestInit) => Promise<Response>;
 
+type WorkerUnavailableReason =
+  | "worker_not_configured"
+  | "worker_unreachable"
+  | "worker_timeout"
+  | "worker_disabled"
+  | "worker_auth_not_configured"
+  | "worker_response_invalid"
+  | "worker_http_error"
+  | "worker_unauthorized"
+  | "worker_execution_failed";
+
 function normalizeText(value: unknown): string {
   return String(value ?? "").trim();
 }
@@ -40,15 +51,49 @@ function createDiagnostic(input: {
   };
 }
 
+function reasonToSpecificDiagnostic(reason: WorkerUnavailableReason): {
+  code: RenderedCaptureDiagnosticCode;
+  message: string;
+} {
+  if (reason === "worker_not_configured" || reason === "worker_disabled" || reason === "worker_auth_not_configured") {
+    return {
+      code: "CAPTURE_WORKER_NOT_CONFIGURED",
+      message: "Rendered capture worker is not configured for this runtime",
+    };
+  }
+  if (reason === "worker_timeout") {
+    return {
+      code: "CAPTURE_WORKER_TIMEOUT",
+      message: "Rendered capture worker request timed out",
+    };
+  }
+  if (reason === "worker_unauthorized") {
+    return {
+      code: "CAPTURE_WORKER_UNAUTHORIZED",
+      message: "Rendered capture worker authorization failed",
+    };
+  }
+  if (reason === "worker_response_invalid") {
+    return {
+      code: "CAPTURE_WORKER_RESPONSE_INVALID",
+      message: "Rendered capture worker returned invalid response contract",
+    };
+  }
+  if (reason === "worker_execution_failed") {
+    return {
+      code: "CAPTURE_WORKER_EXECUTION_FAILED",
+      message: "Rendered capture worker executed but capture failed",
+    };
+  }
+  return {
+    code: "CAPTURE_WORKER_HTTP_ERROR",
+    message: "Rendered capture worker transport request failed",
+  };
+}
+
 function createWorkerUnavailableResponse(input: {
   request: RenderedCaptureWorkerRequest;
-  reason:
-    | "worker_not_configured"
-    | "worker_unreachable"
-    | "worker_timeout"
-    | "worker_disabled"
-    | "worker_auth_not_configured"
-    | "worker_response_invalid";
+  reason: WorkerUnavailableReason;
   diagnostics?: RenderedCaptureDiagnostic[];
 }): RenderedCaptureWorkerResponse {
   const diagnostics = input.diagnostics ?? [];
@@ -77,7 +122,10 @@ function createWorkerUnavailableResponse(input: {
     failure: {
       failureClass: "environment_unsupported",
       failureCode: "WORKER_UNAVAILABLE",
-      retryable: input.reason === "worker_unreachable" || input.reason === "worker_timeout",
+      retryable:
+        input.reason === "worker_unreachable" ||
+        input.reason === "worker_timeout" ||
+        input.reason === "worker_http_error",
       message: "Rendered capture worker unavailable",
     },
     timings: {
@@ -108,22 +156,23 @@ function isWorkerResponseShape(value: unknown): value is RenderedCaptureWorkerRe
 }
 
 export function createUnavailableRenderedCaptureWorkerClient(input?: {
-  reason?:
-    | "worker_not_configured"
-    | "worker_unreachable"
-    | "worker_timeout"
-    | "worker_disabled"
-    | "worker_auth_not_configured"
-    | "worker_response_invalid";
+  reason?: WorkerUnavailableReason;
 }): RenderedCaptureWorkerClient {
   const reason = input?.reason ?? "worker_not_configured";
 
   return {
     async execute(request: RenderedCaptureWorkerRequest): Promise<RenderedCaptureWorkerResponse> {
+      const specific = reasonToSpecificDiagnostic(reason);
       return createWorkerUnavailableResponse({
         request,
         reason,
         diagnostics: [
+          createDiagnostic({
+            code: specific.code,
+            severity: "warning",
+            message: specific.message,
+            details: { reason },
+          }),
           createDiagnostic({
             code: "CAPTURE_WORKER_UNAVAILABLE",
             severity: "warning",
@@ -167,8 +216,19 @@ export function createHttpRenderedCaptureWorkerClient(input: {
         },
       });
 
+      const requestBuiltDiagnostic = createDiagnostic({
+        code: "CAPTURE_WORKER_REQUEST_BUILT",
+        message: "Rendered capture worker request payload built",
+        details: {
+          endpointUrl,
+          requestId: request.requestId,
+          timeoutMs,
+        },
+      });
+
       try {
         const signal = AbortSignal.timeout(timeoutMs);
+        const requestSentAt = Date.now();
         const response = await fetchImpl(endpointUrl, {
           method: "POST",
           headers: {
@@ -180,12 +240,47 @@ export function createHttpRenderedCaptureWorkerClient(input: {
           cache: "no-store",
         });
 
+        const responseReceivedDiagnostic = createDiagnostic({
+          code: "CAPTURE_WORKER_HTTP_RESPONSE_RECEIVED",
+          message: "Rendered capture worker HTTP response received",
+          details: {
+            endpointUrl,
+            status: response.status,
+            statusText: response.statusText,
+            requestLatencyMs: Date.now() - requestSentAt,
+          },
+        });
+
         if (!response.ok) {
+          const unauthorized = response.status === 401 || response.status === 403;
+          const reason: WorkerUnavailableReason = unauthorized ? "worker_unauthorized" : "worker_http_error";
+          const specific = reasonToSpecificDiagnostic(reason);
+
           return createWorkerUnavailableResponse({
             request,
-            reason: "worker_unreachable",
+            reason,
             diagnostics: [
               startedDiagnostic,
+              requestBuiltDiagnostic,
+              createDiagnostic({
+                code: "CAPTURE_WORKER_HTTP_REQUEST_SENT",
+                message: "Rendered capture worker HTTP request sent",
+                details: {
+                  endpointUrl,
+                },
+              }),
+              responseReceivedDiagnostic,
+              createDiagnostic({
+                code: specific.code,
+                severity: "warning",
+                message: specific.message,
+                details: {
+                  status: response.status,
+                  statusText: response.statusText,
+                  endpointUrl,
+                  elapsedMs: Date.now() - startedAt,
+                },
+              }),
               createDiagnostic({
                 code: "CAPTURE_WORKER_REQUEST_FAILED",
                 severity: "warning",
@@ -204,6 +299,16 @@ export function createHttpRenderedCaptureWorkerClient(input: {
                 details: {
                   status: response.status,
                   statusText: response.statusText,
+                  reason,
+                },
+              }),
+              createDiagnostic({
+                code: "CAPTURE_WORKER_UNAVAILABLE",
+                severity: "warning",
+                message: "Rendered capture worker unavailable; importer should use fallback path",
+                details: {
+                  reason,
+                  status: response.status,
                 },
               }),
             ],
@@ -212,11 +317,21 @@ export function createHttpRenderedCaptureWorkerClient(input: {
 
         const payload = (await response.json().catch(() => null)) as unknown;
         if (!isWorkerResponseShape(payload)) {
+          const reason: WorkerUnavailableReason = "worker_response_invalid";
           return createWorkerUnavailableResponse({
             request,
-            reason: "worker_response_invalid",
+            reason,
             diagnostics: [
               startedDiagnostic,
+              requestBuiltDiagnostic,
+              createDiagnostic({
+                code: "CAPTURE_WORKER_HTTP_REQUEST_SENT",
+                message: "Rendered capture worker HTTP request sent",
+                details: {
+                  endpointUrl,
+                },
+              }),
+              responseReceivedDiagnostic,
               createDiagnostic({
                 code: "CAPTURE_WORKER_RESPONSE_INVALID",
                 severity: "warning",
@@ -229,21 +344,84 @@ export function createHttpRenderedCaptureWorkerClient(input: {
                 message: "Rendered capture worker returned invalid response contract",
                 details: { reason: "worker_response_invalid" },
               }),
+              createDiagnostic({
+                code: "CAPTURE_WORKER_UNAVAILABLE",
+                severity: "warning",
+                message: "Rendered capture worker unavailable; importer should use fallback path",
+                details: { reason },
+              }),
             ],
           });
         }
 
         const responseDiagnostics = Array.isArray(payload.diagnostics) ? payload.diagnostics : [];
-        payload.diagnostics = [startedDiagnostic, ...responseDiagnostics];
+        const diagnosticsPrefix: RenderedCaptureDiagnostic[] = [
+          startedDiagnostic,
+          requestBuiltDiagnostic,
+          createDiagnostic({
+            code: "CAPTURE_WORKER_HTTP_REQUEST_SENT",
+            message: "Rendered capture worker HTTP request sent",
+            details: {
+              endpointUrl,
+            },
+          }),
+          responseReceivedDiagnostic,
+          createDiagnostic({
+            code: "CAPTURE_WORKER_RESPONSE_PARSED",
+            message: "Rendered capture worker response parsed and validated",
+            details: {
+              endpointUrl,
+              status: payload.status,
+            },
+          }),
+        ];
+
+        if (payload.status === "failed") {
+          diagnosticsPrefix.push(
+            createDiagnostic({
+              code: "CAPTURE_WORKER_EXECUTION_FAILED",
+              severity: "warning",
+              message: "Rendered capture worker executed but capture failed",
+              details: {
+                endpointUrl,
+                failureClass: payload.failure?.failureClass ?? null,
+                failureCode: payload.failure?.failureCode ?? null,
+                retryable: payload.failure?.retryable ?? null,
+              },
+            }),
+          );
+        }
+
+        payload.diagnostics = [...diagnosticsPrefix, ...responseDiagnostics];
         return payload;
       } catch (error) {
         const aborted = normalizeText((error as { name?: unknown })?.name) === "AbortError";
-        const reason = aborted ? "worker_timeout" : "worker_unreachable";
+        const reason: WorkerUnavailableReason = aborted ? "worker_timeout" : "worker_unreachable";
+        const specific = reasonToSpecificDiagnostic(reason);
         return createWorkerUnavailableResponse({
           request,
           reason,
           diagnostics: [
             startedDiagnostic,
+            requestBuiltDiagnostic,
+            createDiagnostic({
+              code: "CAPTURE_WORKER_HTTP_REQUEST_SENT",
+              message: "Rendered capture worker HTTP request sent",
+              details: {
+                endpointUrl,
+              },
+            }),
+            createDiagnostic({
+              code: specific.code,
+              severity: "warning",
+              message: specific.message,
+              details: {
+                endpointUrl,
+                elapsedMs: Date.now() - startedAt,
+                timeoutMs,
+                error: toErrorString(error),
+              },
+            }),
             createDiagnostic({
               code: "CAPTURE_WORKER_REQUEST_FAILED",
               severity: "warning",
@@ -263,6 +441,12 @@ export function createHttpRenderedCaptureWorkerClient(input: {
                 reason,
                 error: toErrorString(error),
               },
+            }),
+            createDiagnostic({
+              code: "CAPTURE_WORKER_UNAVAILABLE",
+              severity: "warning",
+              message: "Rendered capture worker unavailable; importer should use fallback path",
+              details: { reason, error: toErrorString(error) },
             }),
           ],
         });
@@ -299,8 +483,28 @@ export function createRenderedCaptureWorkerClientFromEnv(input?: {
   env?: NodeJS.ProcessEnv;
 }): RenderedCaptureWorkerClient {
   const config = resolveRenderedCaptureWorkerClientConfigFromEnv(input?.env);
-  return createRenderedCaptureWorkerClientFromConfig({
+  const configuredDiagnostic = createDiagnostic({
+    code: "CAPTURE_WORKER_CLIENT_CONFIG_RESOLVED",
+    message: "Rendered capture worker client configuration resolved",
+    details: {
+      enabled: config.enabled,
+      endpointConfigured: Boolean(config.endpointUrl),
+      sharedTokenConfigured: Boolean(config.sharedToken),
+      endpointUrl: config.endpointUrl,
+      timeoutMs: config.timeoutMs,
+    },
+  });
+
+  const client = createRenderedCaptureWorkerClientFromConfig({
     config,
     fetchImpl: input?.fetchImpl,
   });
+
+  return {
+    async execute(request: RenderedCaptureWorkerRequest): Promise<RenderedCaptureWorkerResponse> {
+      const response = await client.execute(request);
+      response.diagnostics = [configuredDiagnostic, ...(Array.isArray(response.diagnostics) ? response.diagnostics : [])];
+      return response;
+    },
+  };
 }

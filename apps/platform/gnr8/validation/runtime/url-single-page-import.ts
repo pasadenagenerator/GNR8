@@ -42,8 +42,18 @@ export type UrlImportExecutionScope = {
 export type UrlImportDiagnosticSeverity = "info" | "warning" | "error" | "fatal";
 
 export type UrlImportDiagnosticCode =
+  | "CAPTURE_WORKER_CLIENT_CONFIG_RESOLVED"
+  | "CAPTURE_WORKER_REQUEST_BUILT"
+  | "CAPTURE_WORKER_HTTP_REQUEST_SENT"
+  | "CAPTURE_WORKER_HTTP_RESPONSE_RECEIVED"
+  | "CAPTURE_WORKER_RESPONSE_PARSED"
   | "CAPTURE_WORKER_REQUEST_STARTED"
   | "CAPTURE_WORKER_REQUEST_FAILED"
+  | "CAPTURE_WORKER_NOT_CONFIGURED"
+  | "CAPTURE_WORKER_HTTP_ERROR"
+  | "CAPTURE_WORKER_TIMEOUT"
+  | "CAPTURE_WORKER_UNAUTHORIZED"
+  | "CAPTURE_WORKER_EXECUTION_FAILED"
   | "CAPTURE_WORKER_UNAVAILABLE"
   | "CAPTURE_WORKER_RESPONSE_INVALID"
   | "CAPTURE_WORKER_RENDERED_DOM_USED"
@@ -2215,6 +2225,20 @@ export async function importPublicSinglePageUrlToSnapshot(input: {
         readinessPolicy: DEFAULT_RENDERED_CAPTURE_READINESS_POLICY,
         timeoutBudgetMs: DEFAULT_RENDERED_CAPTURE_READINESS_POLICY.maxTotalCaptureMs,
       });
+      diagnostics.push(
+        createDiagnostic({
+          severity: "info",
+          code: "CAPTURE_WORKER_REQUEST_BUILT",
+          message: "Rendered capture worker request built for scoped import execution.",
+          targetUrl: null,
+          details: {
+            snapshotId,
+            requestId: workerRequest.requestId,
+            importId: workerRequest.importId,
+            sourceUrl: workerRequest.sourceUrl,
+          },
+        }),
+      );
       const workerResponse = await workerClient.execute(workerRequest);
       renderedCapture = mapWorkerResponseToRenderedCaptureResult({
         response: workerResponse,

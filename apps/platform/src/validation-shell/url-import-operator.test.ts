@@ -402,6 +402,76 @@ test("worker-backed failure degrades explicitly to raw_html_fallback", async () 
   assert.ok(snapshot.importDiagnostics.issues.some((issue) => issue.code === "RAW_HTML_FALLBACK_USED"));
 });
 
+test("worker execution failure is distinguished from worker-unavailable transport failure in provenance", async () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "gnr8-url-import-worker-execution-failed-"));
+  const sourceUrl = "https://worker-execution-failed.example.com/";
+
+  const snapshot = await importPublicSinglePageUrlToSnapshot({
+    sourceUrl,
+    snapshotRootDirAbs: tmp,
+    fetchImpl: mockFetchFromTable({
+      [sourceUrl]: {
+        status: 200,
+        headers: { "content-type": "text/html; charset=utf-8" },
+        body: "<!doctype html><html><body><h1>Raw Fallback Source</h1></body></html>",
+      },
+    }),
+    renderedCaptureWorkerClient: mockRenderedCaptureWorkerClient({
+      kind: "rendered_capture_worker_response_v1",
+      contractVersion: RENDERED_CAPTURE_WORKER_CONTRACT_VERSION,
+      requestId: "worker-req-3",
+      status: "failed",
+      environment: {
+        runtimeKind: "nodejs",
+        environmentSupported: true,
+        browserPackageAvailable: true,
+        browserBinaryAvailable: true,
+        supportDecision: "supported",
+      },
+      artifacts: [],
+      computedStyleSamples: [],
+      diagnostics: [
+        {
+          code: "CAPTURE_WORKER_EXECUTION_FAILED",
+          severity: "warning",
+          message: "worker executed but navigation failed",
+          details: { failureCode: "NAVIGATION_FAILED" },
+        },
+        {
+          code: "NAVIGATION_FAILED",
+          severity: "error",
+          message: "navigation failed",
+        },
+      ],
+      qualitySummary: {
+        renderedDomQuality: "unusable",
+        domLength: 0,
+        meaningfulNodeCount: 0,
+        screenshotCount: 0,
+        computedStyleSampleCount: 0,
+      },
+      failure: {
+        failureClass: "navigation_failed",
+        failureCode: "NAVIGATION_FAILED",
+        retryable: true,
+        message: "navigation failed",
+      },
+      timings: {
+        queueLatencyMs: null,
+        executionMs: 500,
+        totalMs: 500,
+      },
+    }),
+  });
+
+  assert.equal(snapshot.sourceMode, "raw_html_fallback");
+  assert.ok(snapshot.importDiagnostics.issues.some((issue) => issue.code === "CAPTURE_WORKER_EXECUTION_FAILED"));
+  assert.equal(snapshot.importDiagnostics.issues.some((issue) => issue.code === "CAPTURE_WORKER_UNAVAILABLE"), false);
+  const acquisitionEvidence = JSON.parse(fs.readFileSync(path.resolve(snapshot.snapshotRootDirAbs, "acquisition-evidence.json"), "utf8"));
+  assert.equal(acquisitionEvidence.renderedCapture.executionTruth.failureCategory, "page");
+  assert.equal(acquisitionEvidence.renderedCapture.executionTruth.failureCode, "NAVIGATION_FAILED");
+});
+
 test("environment-not-supported diagnostic path remains explicit and fallback stays safe", async () => {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "gnr8-url-import-env-unsupported-"));
   const sourceUrl = "https://env-unsupported.example.com/";
