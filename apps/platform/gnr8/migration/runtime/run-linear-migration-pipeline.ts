@@ -25,13 +25,19 @@ import { createPreviewDocument } from "../preview-document-model";
 import type { VisualAnalysisDiagnostic, VisualScreenshotInput } from "../../visual-analysis/visual-analysis-model";
 import type { VisualAnalysisInterpreterProvider } from "../../visual-analysis/visual-analysis-ai-hook";
 import { createVisualAnalysisModel } from "../../visual-analysis/visual-analysis-service";
-import type { StyleSignalModel } from "../../style-signals";
+import { extractStyleSignalModel, type StyleSignalModel } from "../../style-signals";
+import type { ComputedStyleSample } from "../../import-rendered-capture";
 
 export type RunLinearMigrationPipelineOptions = {
   visualAnalysisInput?: VisualScreenshotInput | null;
   resolveVisualAnalysisInput?: (input: { structure: StructurePreparationStageOutput }) => VisualScreenshotInput | null | undefined;
   visualInterpreterProvider?: VisualAnalysisInterpreterProvider | null;
   styleSignals?: StyleSignalModel | null;
+  computedStyleSamples?: ComputedStyleSample[] | null;
+  renderedCaptureContext?: {
+    status?: "available" | "partial" | "failed" | null;
+    quality?: "strong" | "weak" | "unusable" | null;
+  } | null;
 };
 
 const STAGE_CONTRACTS: Record<
@@ -375,9 +381,19 @@ function runDesignIntelligenceStage(
   const shouldSkip = visualStage.status !== "success";
   const status: PipelineStageStatus = shouldSkip ? "skipped" : "success";
 
+  const resolvedStyleSignals =
+    options?.computedStyleSamples && options.computedStyleSamples.length > 0
+      ? extractStyleSignalModel({
+          computedStyleSamples: options.computedStyleSamples,
+          preparedSite: visualStage.output.structure.preparedSite,
+          visualAnalysis: visualStage.output.visualAnalysis,
+          renderedCaptureContext: options.renderedCaptureContext ?? null,
+        })
+      : options?.styleSignals ?? null;
+
   const designResult = createDesignIntelligenceResult(visualStage.output.structure.preparedSite, {
     visualAnalysis: visualStage.output.visualAnalysis,
-    styleSignals: options?.styleSignals ?? null,
+    styleSignals: resolvedStyleSignals,
   });
   const designModel = designResult.designModel;
   const stageIssues = designModel.diagnostics.issues.map((issue) =>

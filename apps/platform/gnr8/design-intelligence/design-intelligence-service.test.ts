@@ -357,3 +357,122 @@ test("design intelligence consumes style signals without breaking determinism", 
   assert.equal(result.designModel.colorSystem.primaryHint, "#2563eb");
   assert.equal(result.designModel.spacingScale.rhythm, "airy");
 });
+
+test("strong premium style signals can select non-default editorial direction", () => {
+  const result = createDesignIntelligenceResultFromInput(
+    baseInput([
+      section({ sectionId: "hero", ordinalIndex: 0, hasHeadingSignal: true, mediaCount: 0, textDensity: 0.3 }),
+      section({ sectionId: "content", ordinalIndex: 1, textDensity: 0.45, mediaCount: 0 }),
+    ]),
+    {
+      styleSignals: {
+        kind: "style_signal_model_v2",
+        version: "2.0.0",
+        sourceMode: "computed_style",
+        provenance: {
+          sourceMode: "computed_style",
+          computedStyle: {
+            used: true,
+            sampleCount: 6,
+            coverage: 0.6,
+          },
+          fallbackUsed: false,
+          diagnostics: [],
+        },
+        colors: {
+          backgroundTone: "light",
+          primaryAccent: "#7c3aed",
+          secondaryAccent: "#a855f7",
+          neutralPalette: ["#faf5ff"],
+          ctaColorHint: "#7c3aed",
+        },
+        typography: {
+          headingFontFamily: "Merriweather",
+          bodyFontFamily: "Inter",
+          headingCategory: "serif",
+          bodyCategory: "sans",
+          scaleHint: "balanced",
+          weightContrastHint: "medium",
+        },
+        spacing: {
+          rhythm: "airy",
+          sectionSpacingHint: "airy",
+          layoutDensity: "airy",
+        },
+        surfaces: {
+          radiusHint: "rounded",
+          shadowHint: "soft",
+        },
+        cta: {
+          prominence: "medium",
+          styleHint: "outline_button",
+        },
+        visualToneHint: "premium",
+        diagnostics: [],
+      },
+    },
+  );
+
+  assert.equal(result.designModel.layoutStrategy, "editorial_readable");
+  assert.equal(result.designModel.typographyScale.profile, "readable");
+});
+
+test("weak style signals remain conservative and do not force aggressive strategy shifts", () => {
+  const result = createDesignIntelligenceResultFromInput(
+    baseInput([
+      section({ sectionId: "hero", ordinalIndex: 0, hasHeadingSignal: true, mediaCount: 0, textDensity: 0.3 }),
+      section({ sectionId: "content", ordinalIndex: 1, textDensity: 0.4, mediaCount: 0 }),
+    ]),
+    {
+      styleSignals: {
+        kind: "style_signal_model_v2",
+        version: "2.0.0",
+        sourceMode: "html_css_inference",
+        provenance: {
+          sourceMode: "html_css_inference",
+          computedStyle: {
+            used: false,
+            sampleCount: 0,
+            coverage: 0,
+          },
+          fallbackUsed: true,
+          diagnostics: ["STYLE_SIGNAL_WEAK"],
+        },
+        colors: {
+          backgroundTone: "unknown",
+          primaryAccent: null,
+          secondaryAccent: null,
+          neutralPalette: [],
+          ctaColorHint: null,
+        },
+        typography: {
+          headingFontFamily: null,
+          bodyFontFamily: null,
+          headingCategory: "unknown",
+          bodyCategory: "unknown",
+          scaleHint: "unknown",
+          weightContrastHint: "unknown",
+        },
+        spacing: {
+          rhythm: "unknown",
+          sectionSpacingHint: "unknown",
+          layoutDensity: "unknown",
+        },
+        surfaces: {
+          radiusHint: "unknown",
+          shadowHint: "unknown",
+        },
+        cta: {
+          prominence: "low",
+          styleHint: "text_link",
+        },
+        visualToneHint: "unknown",
+        diagnostics: [
+          { code: "STYLE_SIGNAL_WEAK", severity: "warning", message: "weak style" },
+        ],
+      },
+    },
+  );
+
+  assert.equal(result.designModel.layoutStrategy, "corporate_balanced");
+});

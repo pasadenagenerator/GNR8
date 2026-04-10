@@ -143,14 +143,14 @@ type BrowserStyleProbe = {
 
 const STYLE_PROBES: readonly BrowserStyleProbe[] = [
   { target: "root", selector: "body" },
-  { target: "header_nav", selector: "header, nav" },
-  { target: "hero", selector: "section.hero, [class*='hero'], [id*='hero'], main section" },
+  { target: "header_nav", selector: "header, nav, [role='banner'], [class*='header'], [class*='nav']" },
+  { target: "hero", selector: "section.hero, [class*='hero'], [id*='hero'], [class*='banner'], main > section, section:first-of-type" },
   { target: "h1", selector: "h1" },
   { target: "h2", selector: "h2" },
   { target: "h3", selector: "h3" },
-  { target: "body_text", selector: "p, article p, main p" },
-  { target: "primary_cta", selector: "a.button, button, [role='button'], a[class*='btn'], a[class*='cta']" },
-  { target: "card", selector: "[class*='card'], .grid > *, .cards > *" },
+  { target: "body_text", selector: "main p, article p, section p, p" },
+  { target: "primary_cta", selector: "button, [role='button'], a[class*='btn'], a[class*='cta'], a.button, main a" },
+  { target: "card", selector: "[class*='card'], [class*='feature'], [class*='service'], [class*='plan'], .grid > *, .cards > *, section" },
   { target: "footer", selector: "footer" },
 ] as const;
 
@@ -237,8 +237,71 @@ async function capturePageState(page: any): Promise<CapturePassResult> {
 
   try {
     styleSamplesRaw = await page.evaluate((probes: BrowserStyleProbe[]) => {
-      function sampleFor(selector: string) {
-        const el = document.querySelector(selector) as HTMLElement | null;
+      function isVisible(el: HTMLElement): boolean {
+        const style = window.getComputedStyle(el);
+        if (style.display === "none" || style.visibility === "hidden" || Number(style.opacity || "1") <= 0.02) return false;
+        const rect = el.getBoundingClientRect();
+        return rect.width >= 4 && rect.height >= 4;
+      }
+
+      function candidateScore(target: string, el: HTMLElement): number {
+        const rect = el.getBoundingClientRect();
+        const top = Math.max(0, rect.top);
+        const textLen = (el.textContent ?? "").replace(/\s+/g, " ").trim().length;
+        const className = String(el.className ?? "").toLowerCase();
+        const tag = el.tagName.toLowerCase();
+        let score = 0;
+        score += Math.min(rect.width * rect.height, 160_000) / 40_000;
+        score += Math.min(textLen, 240) / 160;
+
+        if (target === "header_nav") {
+          if (tag === "header" || tag === "nav") score += 1.6;
+          if (top <= 220) score += 1.2;
+        } else if (target === "hero") {
+          if (top <= 520) score += 1.2;
+          if (className.includes("hero") || className.includes("banner") || className.includes("masthead")) score += 1.4;
+          if (el.querySelector("h1,h2")) score += 1.2;
+        } else if (target === "body_text") {
+          if (tag === "p") score += 0.6;
+          score += Math.min(textLen, 420) / 80;
+          if (top <= 1400) score += 0.4;
+        } else if (target === "primary_cta") {
+          const text = (el.textContent ?? "").toLowerCase();
+          if (/\b(get started|start|book|contact|call|buy|shop|demo|learn more|sign up|join|quote|request)\b/.test(text)) score += 2.2;
+          if (tag === "button") score += 1.2;
+          if (className.includes("btn") || className.includes("cta") || className.includes("button")) score += 1.4;
+          if (top <= 980) score += 0.6;
+        } else if (target === "card") {
+          if (className.includes("card") || className.includes("feature") || className.includes("service") || className.includes("plan")) score += 1.6;
+          if (tag === "section" || tag === "article") score += 0.7;
+          score += Math.min((el.children?.length ?? 0), 8) / 6;
+        } else if (target === "footer") {
+          const docHeight = Math.max(document.documentElement?.scrollHeight ?? 0, document.body?.scrollHeight ?? 0, 1);
+          const nearBottom = rect.top + rect.height >= docHeight * 0.65;
+          if (tag === "footer") score += 2;
+          if (nearBottom) score += 1.2;
+        } else if (target === "h1" || target === "h2" || target === "h3") {
+          if (tag === target) score += 1.6;
+          if (top <= 980) score += 0.8;
+          score += Math.min(textLen, 160) / 120;
+        } else if (target === "root") {
+          if (tag === "body") score += 2;
+        }
+        score -= top / 8000;
+        return score;
+      }
+
+      function pickElement(target: string, selector: string): HTMLElement | null {
+        const candidates = Array.from(document.querySelectorAll(selector)).slice(0, 28).filter((node): node is HTMLElement => node instanceof HTMLElement);
+        const visible = candidates.filter((node) => isVisible(node));
+        if (visible.length === 0) return null;
+        return visible
+          .map((el) => ({ el, score: candidateScore(target, el) }))
+          .sort((a, b) => (b.score !== a.score ? b.score - a.score : a.el.tagName.localeCompare(b.el.tagName)))[0]?.el ?? null;
+      }
+
+      function sampleFor(target: string, selector: string) {
+        const el = pickElement(target, selector);
         if (!el) return null;
         const style = window.getComputedStyle(el);
         return {
@@ -281,7 +344,7 @@ async function capturePageState(page: any): Promise<CapturePassResult> {
       }> = [];
 
       for (const probe of probes) {
-        const sampled = sampleFor(probe.selector);
+        const sampled = sampleFor(probe.target, probe.selector);
         if (!sampled) continue;
         styleOut.push({
           target: probe.target,

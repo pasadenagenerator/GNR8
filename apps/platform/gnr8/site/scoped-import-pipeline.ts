@@ -771,20 +771,14 @@ export async function runScopedImportPipeline(input: {
     },
   })
   const importManifest = deps.createImportManifest(importOutput)
-  const computedOnlyStyleSignals = input.snapshot.renderedCapture.computedStyleSamples.length > 0
-    ? extractStyleSignalModel({
-        computedStyleSamples: input.snapshot.renderedCapture.computedStyleSamples,
-        renderedCaptureContext: {
-          status: resolveRenderedCaptureStatus(input.snapshot),
-          quality: input.snapshot.sourceSelection.renderedDomQuality.quality,
-        },
-      })
-    : null
-
   const pipelineResult = deps.runLinearMigrationPipeline(
     { importOutput, importManifest },
     {
-      styleSignals: computedOnlyStyleSignals,
+      computedStyleSamples: input.snapshot.renderedCapture.computedStyleSamples,
+      renderedCaptureContext: {
+        status: resolveRenderedCaptureStatus(input.snapshot),
+        quality: input.snapshot.sourceSelection.renderedDomQuality.quality,
+      },
     },
   )
   const { preparedSite, layoutModel, renderOutput, previewDocument } = extractPipelineArtifacts(pipelineResult)

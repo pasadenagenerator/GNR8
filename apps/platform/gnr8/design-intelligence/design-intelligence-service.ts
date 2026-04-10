@@ -225,6 +225,16 @@ function inferPageType(page: DesignPageInput): { pageType: PageType; confidence:
   return { pageType: "unknown", confidence: 0.48 };
 }
 
+function styleEvidenceStrength(style: StyleSignalModel): "weak" | "medium" | "strong" {
+  const coverage = style.provenance.computedStyle.coverage;
+  const sampleCount = style.provenance.computedStyle.sampleCount;
+  const hasWeakDiag = style.diagnostics.some((diag) => diag.code === "STYLE_SIGNAL_WEAK");
+  if (hasWeakDiag) return "weak";
+  if (sampleCount >= 5 || coverage >= 0.45) return "strong";
+  if (sampleCount >= 3 || coverage >= 0.2 || style.sourceMode === "mixed") return "medium";
+  return "weak";
+}
+
 function pickStrategy(input: {
   page: DesignPageInput;
   pageType: PageType;
@@ -234,16 +244,18 @@ function pickStrategy(input: {
   const heroCandidate = input.page.sections.find((s) => s.ordinalIndex === 0) ?? null;
   const visual = input.visualObservation ?? null;
   const style = input.styleSignals;
+  const styleStrength = styleEvidenceStrength(style);
 
-  if (style.sourceMode !== "html_css_inference" && style.cta.prominence === "high") {
+  if (styleStrength !== "weak" && style.cta.prominence === "high" && style.cta.styleHint !== "text_link") {
     return {
       strategy: "cta_focused",
-      confidence: 0.81,
+      confidence: styleStrength === "strong" ? 0.86 : 0.8,
       rationale: {
         code: "STRATEGY_STYLE_CTA_PROMINENCE",
         summary: "Selected cta_focused from strong style CTA prominence signals.",
         basedOn: [
           `styleSource=${style.sourceMode}`,
+          `styleStrength=${styleStrength}`,
           `ctaProminence=${style.cta.prominence}`,
           `ctaStyle=${style.cta.styleHint}`,
         ],
@@ -251,17 +263,37 @@ function pickStrategy(input: {
     };
   }
 
-  if (style.sourceMode !== "html_css_inference" && style.colors.backgroundTone === "dark" && style.colors.primaryAccent) {
+  if (styleStrength !== "weak" && style.colors.backgroundTone === "dark" && style.colors.primaryAccent) {
     return {
       strategy: "visual_gallery",
-      confidence: 0.77,
+      confidence: styleStrength === "strong" ? 0.81 : 0.75,
       rationale: {
         code: "STRATEGY_STYLE_DARK_ACCENT",
         summary: "Selected visual_gallery due to dark background and strong accent style profile.",
         basedOn: [
           `styleSource=${style.sourceMode}`,
+          `styleStrength=${styleStrength}`,
           `backgroundTone=${style.colors.backgroundTone}`,
           `primaryAccent=${style.colors.primaryAccent}`,
+        ],
+      },
+    };
+  }
+
+  if (
+    styleStrength === "strong" &&
+    (style.visualToneHint === "premium" || style.visualToneHint === "editorial" || style.typography.headingCategory === "serif")
+  ) {
+    return {
+      strategy: "editorial_readable",
+      confidence: 0.8,
+      rationale: {
+        code: "STRATEGY_STYLE_EDITORIAL_PREMIUM",
+        summary: "Selected editorial_readable due to premium/editorial typography and spacing profile.",
+        basedOn: [
+          `styleVisualTone=${style.visualToneHint}`,
+          `headingCategory=${style.typography.headingCategory}`,
+          `spacingRhythm=${style.spacing.rhythm}`,
         ],
       },
     };
@@ -386,6 +418,7 @@ function pickSectionTreatment(input: {
   section: DesignSemanticSectionInput;
   strategy: LayoutStrategy;
   ctaPrimarySectionId: string | null;
+  styleSignals: StyleSignalModel;
 }): {
   visualTreatment: SectionVisualTreatment;
   emphasis: SectionDecision["emphasis"];
@@ -438,6 +471,11 @@ function pickSectionTreatment(input: {
 
   if (input.semanticType === "cta") {
     const isPrimary = input.ctaPrimarySectionId === input.section.sectionId;
+    const styleIndicatesStrongCta =
+      input.styleSignals.cta.prominence === "high" &&
+      (input.styleSignals.cta.styleHint === "solid_button" || input.styleSignals.cta.styleHint === "outline_button");
+    const styleIndicatesInlineCta =
+      input.styleSignals.cta.styleHint === "text_link" || input.styleSignals.cta.prominence === "low";
     if (isPrimary) {
       r.push({
         code: "CTA_EMPHASIZED_PRIMARY",
@@ -448,9 +486,17 @@ function pickSectionTreatment(input: {
           `isPrimary=${String(isPrimary)}`,
         ],
       });
-      return { visualTreatment: "cta_emphasized", emphasis: "primary", confidence: 0.87, rationale: r };
+      return { visualTreatment: styleIndicatesInlineCta ? "cta_secondary" : "cta_emphasized", emphasis: "primary", confidence: 0.87, rationale: r };
     }
-    if (input.section.ctaCandidateCount > 0) {
+    if (styleIndicatesStrongCta && input.section.ctaCandidateCount > 0) {
+      r.push({
+        code: "CTA_SECONDARY_STYLE_STRONG",
+        summary: "Secondary CTA treatment selected because style indicates strong button affordance.",
+        basedOn: [`styleHint=${input.styleSignals.cta.styleHint}`, `styleProminence=${input.styleSignals.cta.prominence}`],
+      });
+      return { visualTreatment: "cta_secondary", emphasis: "secondary", confidence: 0.78, rationale: r };
+    }
+    if (input.section.ctaCandidateCount > 0 && !styleIndicatesInlineCta) {
       r.push({
         code: "CTA_SECONDARY",
         summary: "Secondary CTA treatment selected because another section is primary CTA.",
@@ -535,7 +581,17 @@ function componentVariantsFromDecisions(decisions: SectionDecision[]): Component
   };
 }
 
-function typographyFromStrategy(strategy: LayoutStrategy): DesignModel["typographyScale"] {
+function typographyFromStrategy(strategy: LayoutStrategy, styleSignals: StyleSignalModel): DesignModel["typographyScale"] {
+  if (styleSignals.typography.scaleHint === "large" || styleSignals.cta.prominence === "high") {
+    return { profile: "marketing", headingScale: "large", bodyScale: "regular" };
+  }
+  if (
+    styleSignals.typography.headingCategory === "serif" ||
+    styleSignals.visualToneHint === "premium" ||
+    styleSignals.visualToneHint === "editorial"
+  ) {
+    return { profile: "readable", headingScale: "regular", bodyScale: "relaxed" };
+  }
   if (strategy === "editorial_readable") return { profile: "readable", headingScale: "regular", bodyScale: "relaxed" };
   if (strategy === "cta_focused") return { profile: "marketing", headingScale: "large", bodyScale: "regular" };
   return { profile: "balanced", headingScale: "regular", bodyScale: "regular" };
@@ -797,6 +853,7 @@ function toDeterministicModel(input: DesignIntelligenceInput): DesignModel {
         section,
         strategy: strategy.strategy,
         ctaPrimarySectionId: ctaPrimary?.sectionId ?? null,
+        styleSignals,
       });
 
       sectionDecisions.push({
@@ -862,7 +919,7 @@ function toDeterministicModel(input: DesignIntelligenceInput): DesignModel {
     layoutStrategy: globalStrategy,
     pageStrategies: orderedPageStrategies,
     sectionDecisions: orderedSectionDecisions,
-    typographyScale: typographyFromStrategy(globalStrategy),
+    typographyScale: typographyFromStrategy(globalStrategy, styleSignals),
     spacingScale: spacingFromStrategy(globalStrategy, globalPageType, primaryPageVisual, styleSignals),
     colorSystem: colorSystemFromPage(primaryPageInput, styleSignals),
     componentVariants: componentVariantsFromDecisions(orderedSectionDecisions),
@@ -1368,7 +1425,7 @@ function mergeAiSuggestion(input: {
     layoutStrategy: mergedLayoutStrategy,
     pageStrategies: mergedPageStrategies,
     sectionDecisions: mergedSectionDecisions,
-    typographyScale: typographyFromStrategy(mergedLayoutStrategy),
+    typographyScale: typographyFromStrategy(mergedLayoutStrategy, baseline.styleSignals),
     spacingScale: spacingFromStrategy(mergedLayoutStrategy, baseline.pageType, null, baseline.styleSignals),
     componentVariants: componentVariantsFromDecisions(mergedSectionDecisions),
     rationale: [...baseline.rationale, ...mergeRationale],

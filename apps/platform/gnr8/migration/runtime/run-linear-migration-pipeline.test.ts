@@ -219,6 +219,95 @@ test("linear migration pipeline includes visual_analysis result and keeps stage 
   assert.equal(typeof visualStage.output.visualAnalysis.pageObservations.heroProminence, "string");
 });
 
+test("linear migration pipeline design stage merges computed style samples with structure context", async () => {
+  const rootDir = fixtureDir("simple-site");
+  const importOutput = await importStaticSite({
+    rootDir,
+    requestId: "req-style-merge",
+    source: { kind: "single-entry-html", entryHtmlPath: "index.html", assetsDirPath: "assets" },
+  });
+  const importManifest = createImportManifest(importOutput);
+  const result = runLinearMigrationPipeline(
+    { importOutput, importManifest },
+    {
+      computedStyleSamples: [
+        {
+          kind: "computed_style_sample_v1",
+          sampleId: "root",
+          target: "root",
+          selector: "body",
+          tagName: "body",
+          className: "page",
+          styles: {
+            fontFamily: "Inter",
+            fontSize: "16px",
+            fontWeight: "400",
+            lineHeight: "24px",
+            color: "#111111",
+            backgroundColor: "#0f172a",
+            borderRadius: "0px",
+            paddingTop: "16px",
+            paddingRight: "16px",
+            paddingBottom: "16px",
+            paddingLeft: "16px",
+          },
+        },
+        {
+          kind: "computed_style_sample_v1",
+          sampleId: "h1",
+          target: "h1",
+          selector: "h1",
+          tagName: "h1",
+          className: "hero",
+          styles: {
+            fontFamily: "Inter",
+            fontSize: "42px",
+            fontWeight: "700",
+            lineHeight: "46px",
+            color: "#e2e8f0",
+            backgroundColor: "transparent",
+            borderRadius: "0px",
+            paddingTop: "0px",
+            paddingRight: "0px",
+            paddingBottom: "0px",
+            paddingLeft: "0px",
+          },
+        },
+        {
+          kind: "computed_style_sample_v1",
+          sampleId: "cta",
+          target: "primary_cta",
+          selector: "button",
+          tagName: "button",
+          className: "btn cta",
+          styles: {
+            fontFamily: "Inter",
+            fontSize: "16px",
+            fontWeight: "600",
+            lineHeight: "20px",
+            color: "#ffffff",
+            backgroundColor: "#2563eb",
+            borderRadius: "10px",
+            paddingTop: "10px",
+            paddingRight: "16px",
+            paddingBottom: "10px",
+            paddingLeft: "16px",
+          },
+        },
+      ],
+      renderedCaptureContext: {
+        status: "available",
+        quality: "strong",
+      },
+    },
+  );
+
+  const designStage = result.stages.find((stage) => stage.stageId === "design_intelligence");
+  assert.ok(designStage);
+  assert.ok(designStage.output.designModel.styleSignals.sourceMode === "mixed" || designStage.output.designModel.styleSignals.sourceMode === "computed_style");
+  assert.equal(designStage.output.designModel.layoutStrategy, "cta_focused");
+});
+
 function resultPageIdFallback(sourcePath: string): string {
   // The visual-analysis stage is hint-based; pageId mismatch intentionally exercises safe low-confidence merge behavior.
   return sourcePath;

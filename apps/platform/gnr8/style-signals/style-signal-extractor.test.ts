@@ -180,3 +180,245 @@ test('low computed style coverage emits explicit low-coverage diagnostic', () =>
   assert.equal(model.provenance.computedStyle.coverage, 0.1)
   assert.ok(model.diagnostics.some((diag) => diag.code === 'STYLE_SAMPLE_LOW_COVERAGE'))
 })
+
+test('computed style evidence dominates conflicting fallback color inference when coherent', () => {
+  const model = extractStyleSignalModel({
+    computedStyleSamples: [
+      {
+        kind: 'computed_style_sample_v1',
+        sampleId: 'root',
+        target: 'root',
+        selector: 'body',
+        tagName: 'body',
+        className: null,
+        styles: {
+          fontFamily: 'Inter',
+          fontSize: '16px',
+          fontWeight: '400',
+          lineHeight: '24px',
+          color: '#111111',
+          backgroundColor: '#0b1220',
+          borderRadius: '0px',
+          paddingTop: '16px',
+          paddingRight: '16px',
+          paddingBottom: '16px',
+          paddingLeft: '16px',
+        },
+      },
+      {
+        kind: 'computed_style_sample_v1',
+        sampleId: 'cta',
+        target: 'primary_cta',
+        selector: 'button',
+        tagName: 'button',
+        className: 'cta btn',
+        styles: {
+          fontFamily: 'Inter',
+          fontSize: '16px',
+          fontWeight: '600',
+          lineHeight: '20px',
+          color: '#ffffff',
+          backgroundColor: '#ef4444',
+          borderRadius: '10px',
+          paddingTop: '10px',
+          paddingRight: '18px',
+          paddingBottom: '10px',
+          paddingLeft: '18px',
+        },
+      },
+      {
+        kind: 'computed_style_sample_v1',
+        sampleId: 'h1',
+        target: 'h1',
+        selector: 'h1',
+        tagName: 'h1',
+        className: 'hero-title',
+        styles: {
+          fontFamily: 'Inter',
+          fontSize: '40px',
+          fontWeight: '700',
+          lineHeight: '44px',
+          color: '#f8fafc',
+          backgroundColor: 'transparent',
+          borderRadius: '0px',
+          paddingTop: '0px',
+          paddingRight: '0px',
+          paddingBottom: '0px',
+          paddingLeft: '0px',
+        },
+      },
+    ] as any,
+    preparedSite: {
+      documents: [
+        {
+          isEntry: true,
+          fidelity: { bodyClass: 'landing' },
+          semantic: {
+            sections: [{ density: { textDensity: 0.75 } }],
+            ctaCandidates: [],
+            primaryCta: null,
+            brandSignals: {
+              dominantColors: ['#0f172a'],
+              accentColors: ['#22c55e'],
+              neutralPaletteHints: ['light-neutral'],
+              fontFamilyHints: ['Georgia'],
+              fontCategoryHints: ['serif'],
+              visualTone: 'formal',
+            },
+          },
+        },
+      ],
+    } as any,
+  })
+
+  assert.equal(model.colors.primaryAccent, '#ef4444')
+  assert.equal(model.cta.styleHint, 'solid_button')
+  assert.ok(model.diagnostics.some((diag) => diag.code === 'STYLE_SIGNAL_RENDERED_DOM_USED'))
+})
+
+test('CTA style classification distinguishes text-link CTAs from strong button CTAs', () => {
+  const textLinkModel = extractStyleSignalModel({
+    computedStyleSamples: [
+      {
+        kind: 'computed_style_sample_v1',
+        sampleId: 'cta-link',
+        target: 'primary_cta',
+        selector: 'a.cta',
+        tagName: 'a',
+        className: 'cta',
+        styles: {
+          fontFamily: 'Inter',
+          fontSize: '16px',
+          fontWeight: '500',
+          lineHeight: '20px',
+          color: '#2563eb',
+          backgroundColor: 'transparent',
+          borderRadius: '0px',
+          paddingTop: '0px',
+          paddingRight: '0px',
+          paddingBottom: '0px',
+          paddingLeft: '0px',
+        },
+      },
+      {
+        kind: 'computed_style_sample_v1',
+        sampleId: 'root',
+        target: 'root',
+        selector: 'body',
+        tagName: 'body',
+        className: null,
+        styles: {
+          fontFamily: 'Inter',
+          fontSize: '16px',
+          fontWeight: '400',
+          lineHeight: '24px',
+          color: '#111111',
+          backgroundColor: '#ffffff',
+          borderRadius: '0px',
+          paddingTop: '12px',
+          paddingRight: '12px',
+          paddingBottom: '12px',
+          paddingLeft: '12px',
+        },
+      },
+      {
+        kind: 'computed_style_sample_v1',
+        sampleId: 'h1',
+        target: 'h1',
+        selector: 'h1',
+        tagName: 'h1',
+        className: null,
+        styles: {
+          fontFamily: 'Inter',
+          fontSize: '36px',
+          fontWeight: '700',
+          lineHeight: '40px',
+          color: '#0f172a',
+          backgroundColor: 'transparent',
+          borderRadius: '0px',
+          paddingTop: '0px',
+          paddingRight: '0px',
+          paddingBottom: '0px',
+          paddingLeft: '0px',
+        },
+      },
+    ] as any,
+  })
+
+  assert.equal(textLinkModel.cta.styleHint, 'text_link')
+  assert.equal(textLinkModel.cta.prominence, 'low')
+})
+
+test('style signal extraction remains deterministic across repeated runs', () => {
+  const input = {
+    computedStyleSamples: [
+      {
+        kind: 'computed_style_sample_v1',
+        sampleId: 'root',
+        target: 'root',
+        selector: 'body',
+        tagName: 'body',
+        className: null,
+        styles: {
+          fontFamily: 'Inter',
+          fontSize: '16px',
+          fontWeight: '400',
+          lineHeight: '24px',
+          color: '#111111',
+          backgroundColor: '#ffffff',
+          borderRadius: '0px',
+          paddingTop: '10px',
+          paddingRight: '10px',
+          paddingBottom: '10px',
+          paddingLeft: '10px',
+        },
+      },
+      {
+        kind: 'computed_style_sample_v1',
+        sampleId: 'cta',
+        target: 'primary_cta',
+        selector: 'button',
+        tagName: 'button',
+        className: 'btn cta',
+        styles: {
+          fontFamily: 'Inter',
+          fontSize: '15px',
+          fontWeight: '600',
+          lineHeight: '20px',
+          color: '#ffffff',
+          backgroundColor: '#2563eb',
+          borderRadius: '8px',
+          paddingTop: '10px',
+          paddingRight: '16px',
+          paddingBottom: '10px',
+          paddingLeft: '16px',
+        },
+      },
+      {
+        kind: 'computed_style_sample_v1',
+        sampleId: 'h1',
+        target: 'h1',
+        selector: 'h1',
+        tagName: 'h1',
+        className: null,
+        styles: {
+          fontFamily: 'Inter',
+          fontSize: '34px',
+          fontWeight: '700',
+          lineHeight: '38px',
+          color: '#0f172a',
+          backgroundColor: 'transparent',
+          borderRadius: '0px',
+          paddingTop: '0px',
+          paddingRight: '0px',
+          paddingBottom: '0px',
+          paddingLeft: '0px',
+        },
+      },
+    ] as any,
+  }
+
+  const a = extractStyleSignalModel(input)
+  const b = extractStyleSignalModel(input)
+  assert.equal(JSON.stringify(a), JSON.stringify(b))
+})

@@ -92,6 +92,22 @@ function renderOverviewContent(props: {
           <div>Style source: {readModel.pipeline.styleSignalSourceMode}</div>
           <div>Style coverage: {Math.round(readModel.pipeline.styleSignalCoverage * 100)}%</div>
           <div>Fallback used: {readModel.pipeline.styleSignalFallbackUsed ? 'yes' : 'no'}</div>
+          {readModel.pipeline.styleSignals ? (
+            <>
+              <div>
+                Style summary: background {readModel.pipeline.styleSignals.colors.backgroundTone}, accent {readModel.pipeline.styleSignals.colors.primaryAccent ?? 'none'}, cta{' '}
+                {readModel.pipeline.styleSignals.cta.styleHint}/{readModel.pipeline.styleSignals.cta.prominence}
+              </div>
+              <div>
+                Typography/spacing: {readModel.pipeline.styleSignals.typography.headingCategory}/{readModel.pipeline.styleSignals.typography.bodyCategory} ·{' '}
+                {readModel.pipeline.styleSignals.spacing.rhythm}/{readModel.pipeline.styleSignals.spacing.layoutDensity}
+              </div>
+              <div>
+                Style confidence: {Math.round(readModel.pipeline.styleSignalCoverage * 100)}% coverage · {readModel.pipeline.styleSignals.diagnostics.length} diagnostic
+                {readModel.pipeline.styleSignals.diagnostics.length === 1 ? '' : 's'}
+              </div>
+            </>
+          ) : null}
 
           <details style={{ marginTop: 6 }}>
             <summary style={{ cursor: 'pointer', color: '#0f172a', fontWeight: 600 }}>Show Import Evidence Details</summary>
@@ -222,6 +238,9 @@ function renderDesignContent(readModel: Awaited<ReturnType<typeof getSiteWorkspa
           </div>
           <div>
             Style diagnostics: {readModel.design.styleSignals.diagnostics.length > 0 ? readModel.design.styleSignals.diagnostics.join(' · ') : 'none'}
+          </div>
+          <div>
+            Style confidence snapshot: coverage={Math.round(readModel.pipeline.styleSignalCoverage * 100)}% · fallback={readModel.pipeline.styleSignalFallbackUsed ? 'yes' : 'no'}
           </div>
         </div>
       </section>

@@ -154,6 +154,7 @@ function scoreByTarget(target: ComputedStyleSample['target']): number {
     case 'root':
       return 2
     case 'header_nav':
+      return 2
     case 'footer':
     case 'card':
       return 1.5
@@ -169,17 +170,21 @@ function pickFromWeightedMap(map: Map<string, number>, exclude?: Set<string>): s
   return sorted[0]?.[0] ?? null
 }
 
-function inferToneFromBackgrounds(backgrounds: RgbColor[]): StyleSignalModel['colors']['backgroundTone'] {
+function inferToneFromBackgrounds(backgrounds: Array<{ color: RgbColor; weight: number }>): StyleSignalModel['colors']['backgroundTone'] {
   if (backgrounds.length === 0) return 'unknown'
   let dark = 0
   let light = 0
+  let total = 0
   for (const bg of backgrounds) {
-    const lum = luminance(bg)
-    if (lum <= 0.24) dark += 1
-    else if (lum >= 0.72) light += 1
+    const lum = luminance(bg.color)
+    const w = Math.max(0.2, bg.weight)
+    total += w
+    if (lum <= 0.24) dark += w
+    else if (lum >= 0.72) light += w
   }
+  if (total <= 0) return 'unknown'
   if (dark === 0 && light === 0) return 'mixed'
-  const darkRatio = dark / backgrounds.length
+  const darkRatio = dark / total
   if (darkRatio >= 0.65) return 'dark'
   if (darkRatio <= 0.35) return 'light'
   return 'mixed'
@@ -189,7 +194,7 @@ function inferSignalsFromComputed(samples: ComputedStyleSample[]): InternalSigna
   const accentWeights = new Map<string, number>()
   const neutralWeights = new Map<string, number>()
   const ctaWeights = new Map<string, number>()
-  const bgColors: RgbColor[] = []
+  const bgColors: Array<{ color: RgbColor; weight: number }> = []
   const headingFonts = new Map<string, number>()
   const bodyFonts = new Map<string, number>()
   const headingSizes: number[] = []
@@ -203,13 +208,19 @@ function inferSignalsFromComputed(samples: ComputedStyleSample[]): InternalSigna
   let ctaStyleHint: StyleSignalModel['cta']['styleHint'] = 'unknown'
   let ctaProminence: StyleSignalModel['cta']['prominence'] = 'unknown'
   let shadowHint: StyleSignalModel['surfaces']['shadowHint'] = 'unknown'
+  let ctaProminenceScore = 0
 
   for (const sample of samples) {
     const weight = scoreByTarget(sample.target)
 
     const bg = parseColor(sample.styles.backgroundColor)
     if (bg && bg.a > 0.05) {
-      bgColors.push(bg)
+      const backgroundWeight =
+        sample.target === 'root' ? weight * 1.8
+        : sample.target === 'hero' ? weight * 1.35
+        : sample.target === 'primary_cta' ? weight * 0.45
+        : weight
+      bgColors.push({ color: bg, weight: backgroundWeight })
       const bgHex = colorToHex(bg)
       if (isNearNeutral(bg)) {
         neutralWeights.set(bgHex, (neutralWeights.get(bgHex) ?? 0) + weight)
@@ -270,6 +281,8 @@ function inferSignalsFromComputed(samples: ComputedStyleSample[]): InternalSigna
       const ctaFg = parseColor(sample.styles.color)
       const hasPadding = paddings.some((value) => value >= 6)
       const hasRadius = radius != null && radius >= 4
+      const ctaText = normalizeClassToken(sample.className)
+      const looksInteractive = ctaText.includes('button') || ctaText.includes('btn') || ctaText.includes('cta')
       if (ctaBg && ctaBg.a > 0.1) {
         ctaStyleHint = ctaStyleHint === 'unknown' ? 'solid_button' : ctaStyleHint === 'text_link' ? 'mixed' : ctaStyleHint
       } else if (hasPadding || hasRadius) {
@@ -280,10 +293,14 @@ function inferSignalsFromComputed(samples: ComputedStyleSample[]): InternalSigna
 
       if (ctaBg && ctaFg) {
         const contrast = (Math.max(luminance(ctaBg), luminance(ctaFg)) + 0.05) / (Math.min(luminance(ctaBg), luminance(ctaFg)) + 0.05)
-        ctaProminence = contrast >= 4.5 ? 'high' : contrast >= 2.7 ? 'medium' : 'low'
+        ctaProminenceScore += contrast >= 4.5 ? 0.58 : contrast >= 2.7 ? 0.38 : 0.18
       } else {
-        ctaProminence = hasPadding || hasRadius ? 'medium' : 'low'
+        ctaProminenceScore += hasPadding || hasRadius ? 0.35 : 0.15
       }
+      if (hasPadding) ctaProminenceScore += 0.14
+      if (hasRadius) ctaProminenceScore += 0.08
+      if (looksInteractive) ctaProminenceScore += 0.06
+      ctaProminence = ctaProminenceScore >= 0.65 ? 'high' : ctaProminenceScore >= 0.34 ? 'medium' : 'low'
     }
 
     const classToken = normalizeClassToken(sample.className)
@@ -479,6 +496,13 @@ function deriveVisualTone(input: {
   return 'unknown'
 }
 
+function computedEvidenceTier(input: { sampleCount: number; coverage: number }): 'none' | 'weak' | 'medium' | 'strong' {
+  if (input.sampleCount <= 0 || input.coverage <= 0) return 'none'
+  if (input.sampleCount >= 5 || input.coverage >= 0.45) return 'strong'
+  if (input.sampleCount >= 3 || input.coverage >= 0.2) return 'medium'
+  return 'weak'
+}
+
 export function extractStyleSignalModel(input: {
   computedStyleSamples?: ComputedStyleSample[] | null
   preparedSite?: PreparedSiteModel | null
@@ -491,13 +515,17 @@ export function extractStyleSignalModel(input: {
   const computedStyleSamples = (input.computedStyleSamples ?? []).filter((sample) => sample?.kind === 'computed_style_sample_v1')
   const totalSampleTargets = 10
   const computedCoverage = Number((computedStyleSamples.length / totalSampleTargets).toFixed(3))
-  const hasComputed = computedStyleSamples.length >= 3
+  const evidenceTier = computedEvidenceTier({ sampleCount: computedStyleSamples.length, coverage: computedCoverage })
+  const hasComputed = evidenceTier !== 'none'
+  const hasCoherentComputed = evidenceTier === 'medium' || evidenceTier === 'strong'
   const computedSignals = inferSignalsFromComputed(computedStyleSamples)
   const fallbackSignals = inferFallbackFromPreparedSite(input.preparedSite)
 
   const sourceMode: StyleSignalSourceMode =
-    hasComputed
+    hasCoherentComputed
       ? (input.preparedSite ? 'mixed' : 'computed_style')
+      : hasComputed
+      ? 'mixed'
       : 'html_css_inference'
 
   const colors: StyleSignalModel['colors'] = {
@@ -567,8 +595,36 @@ export function extractStyleSignalModel(input: {
     styleHint: mergePreferred(computedSignals.computedCtaStyleHint, fallbackSignals.cta.styleHint, (value) => value === 'unknown'),
     prominence: mergePreferred(computedSignals.computedCtaProminence, fallbackSignals.cta.prominence, (value) => value === 'unknown'),
   }
+  const visualCtaProminence: StyleSignalModel['cta']['prominence'] =
+    input.visualAnalysis?.pageObservations.ctaProminence === 'high'
+      ? 'high'
+      : input.visualAnalysis?.pageObservations.ctaProminence === 'medium'
+      ? 'medium'
+      : input.visualAnalysis?.pageObservations.ctaProminence === 'low'
+      ? 'low'
+      : 'unknown'
+  if (cta.prominence === 'unknown' && visualCtaProminence !== 'unknown') {
+    cta.prominence = visualCtaProminence
+  }
+  if (colors.ctaColorHint == null && colors.primaryAccent && (cta.prominence === 'high' || cta.styleHint === 'solid_button')) {
+    colors.ctaColorHint = colors.primaryAccent
+  }
 
   const diagnostics: StyleSignalDiagnostic[] = []
+  if (hasComputed) {
+    diagnostics.push({
+      code: 'STYLE_SIGNAL_RENDERED_DOM_USED',
+      severity: 'info',
+      message: 'Rendered/computed style evidence was used in style signal extraction.',
+    })
+  }
+  if (evidenceTier === 'strong') {
+    diagnostics.push({
+      code: 'STYLE_SIGNAL_COMPUTED_DOMINANT',
+      severity: 'info',
+      message: 'Computed style evidence is strong and dominates style signal decisions.',
+    })
+  }
   if (!hasComputed) {
     diagnostics.push({
       code: 'STYLE_SIGNAL_COMPUTED_SAMPLE_MISSING',
@@ -622,6 +678,13 @@ export function extractStyleSignalModel(input: {
       message: 'Background tone appears mixed rather than strongly light or dark.',
     })
   }
+  if (evidenceTier === 'medium' && colors.primaryAccent != null) {
+    diagnostics.push({
+      code: 'STYLE_SIGNAL_COLOR_CONFIDENCE_MEDIUM',
+      severity: 'info',
+      message: 'Color signal confidence is medium from partial computed coverage.',
+    })
+  }
 
   if (isNullishOrUnknown(typography.headingFontFamily) && isNullishOrUnknown(typography.bodyFontFamily)) {
     diagnostics.push({
@@ -637,6 +700,13 @@ export function extractStyleSignalModel(input: {
       message: 'Typography hints were inferred via fallback signals.',
     })
   }
+  if (evidenceTier === 'medium' && (!isNullishOrUnknown(typography.headingFontFamily) || !isNullishOrUnknown(typography.bodyFontFamily))) {
+    diagnostics.push({
+      code: 'STYLE_SIGNAL_TYPOGRAPHY_CONFIDENCE_MEDIUM',
+      severity: 'info',
+      message: 'Typography signal confidence is medium from partial computed coverage.',
+    })
+  }
 
   if (spacing.rhythm === 'unknown' && spacing.layoutDensity === 'unknown') {
     diagnostics.push({
@@ -645,12 +715,26 @@ export function extractStyleSignalModel(input: {
       message: 'Spacing rhythm and density hints are weak.',
     })
   }
+  if (evidenceTier === 'medium' && (spacing.rhythm !== 'unknown' || spacing.layoutDensity !== 'unknown')) {
+    diagnostics.push({
+      code: 'STYLE_SIGNAL_SPACING_CONFIDENCE_MEDIUM',
+      severity: 'info',
+      message: 'Spacing signal confidence is medium from partial computed coverage.',
+    })
+  }
 
   if (cta.styleHint === 'unknown' && cta.prominence === 'unknown') {
     diagnostics.push({
       code: 'STYLE_CTA_SIGNAL_WEAK',
       severity: 'warning',
       message: 'CTA style and prominence could not be confidently inferred.',
+    })
+  }
+  if (cta.prominence === 'low' && (hasComputed || input.visualAnalysis?.pageObservations.ctaProminence === 'high')) {
+    diagnostics.push({
+      code: 'STYLE_SIGNAL_CTA_CONFIDENCE_LOW',
+      severity: 'warning',
+      message: 'CTA signal confidence is low despite available visual/style evidence.',
     })
   }
 
@@ -697,7 +781,7 @@ export function extractStyleSignalModel(input: {
         sampleCount: computedStyleSamples.length,
         coverage: computedCoverage,
       },
-      fallbackUsed: !hasComputed || sourceMode === 'mixed',
+      fallbackUsed: sourceMode === 'html_css_inference' || sourceMode === 'mixed' || evidenceTier === 'weak',
       diagnostics: normalizeDiagnostics(diagnostics).map((diag) => diag.code),
     },
     colors,
