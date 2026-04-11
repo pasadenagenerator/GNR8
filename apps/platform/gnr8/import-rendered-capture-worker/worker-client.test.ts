@@ -115,6 +115,27 @@ test("http worker client maps timeout to CAPTURE_WORKER_TIMEOUT", async () => {
   assert.ok(response.diagnostics.some((entry) => entry.code === "CAPTURE_WORKER_TIMEOUT"));
 });
 
+test("env-backed worker client uses external base URL and degrades safely when unreachable", async () => {
+  let capturedUrl: string | null = null;
+  const client = createRenderedCaptureWorkerClientFromEnv({
+    env: {
+      GNR8_RENDERED_CAPTURE_WORKER_BASE_URL: "https://railway-worker.example",
+      GNR8_RENDERED_CAPTURE_WORKER_SHARED_TOKEN: "token-1",
+    } as unknown as NodeJS.ProcessEnv,
+    fetchImpl: async (input) => {
+      capturedUrl = String(input);
+      throw new Error("network down");
+    },
+  });
+
+  const response = await client.execute(makeRequest("req-env-unreachable"));
+  assert.equal(capturedUrl, "https://railway-worker.example/api/internal/gnr8/rendered-capture-worker");
+  assert.equal(response.status, "unsupported");
+  assert.ok(response.diagnostics.some((entry) => entry.code === "CAPTURE_WORKER_HTTP_ERROR"));
+  assert.ok(response.diagnostics.some((entry) => entry.code === "CAPTURE_WORKER_UNAVAILABLE"));
+  assert.ok(response.diagnostics.some((entry) => entry.code === "RENDERED_CAPTURE_UNAVAILABLE"));
+});
+
 test("http worker client maps invalid response contract to deterministic unsupported response", async () => {
   const client = createHttpRenderedCaptureWorkerClient({
     endpointUrl: "https://worker.example.com/capture",

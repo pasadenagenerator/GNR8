@@ -16,6 +16,19 @@ test("worker config resolves endpoint from explicit base URL", () => {
   assert.equal(config.configStatus, "ready");
 });
 
+test("worker config prefers explicit worker base URL over app origin fallbacks", () => {
+  const config = resolveRenderedCaptureWorkerClientConfigFromEnv({
+    GNR8_RENDERED_CAPTURE_WORKER_BASE_URL: "https://railway-worker.example",
+    NEXT_PUBLIC_APP_URL: "https://app.example.com",
+    VERCEL_URL: "app.vercel.app",
+    GNR8_RENDERED_CAPTURE_WORKER_SHARED_TOKEN: "token",
+  } as unknown as NodeJS.ProcessEnv);
+
+  assert.equal(config.endpointUrl, "https://railway-worker.example/api/internal/gnr8/rendered-capture-worker");
+  assert.equal(config.resolvedBaseUrlSource, "worker_base_url");
+  assert.equal(config.configStatus, "ready");
+});
+
 test("worker config falls back to VERCEL_URL when explicit base URL is missing", () => {
   const config = resolveRenderedCaptureWorkerClientConfigFromEnv({
     VERCEL_URL: "my-app.vercel.app",

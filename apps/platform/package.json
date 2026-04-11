@@ -3,6 +3,9 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
+  "scripts": {
+    "rendered-capture-worker:start": "NODE_OPTIONS='--conditions=react-server' pnpm exec tsx gnr8/rendered-capture-worker-server/index.ts"
+  },
   "dependencies": {
     "@gnr8/core": "workspace:*",
     "@gnr8/data": "workspace:*",
