@@ -89,7 +89,14 @@ function buildRenderedCaptureExecutionFromSnapshot(snapshot: UrlSinglePageImport
   const boolOrNull = (value: unknown): boolean | null => (typeof value === 'boolean' ? value : null)
 
   const environmentStatus: RuntimeImportProvenanceSummary['renderedCapture']['execution']['environmentStatus'] =
-    hasCode('ENVIRONMENT_UNSUPPORTED') || hasCode('RENDERED_CAPTURE_UNAVAILABLE')
+    hasCode('PLAYWRIGHT_IMPORT_FAILED') ||
+    hasCode('PLAYWRIGHT_BROWSER_LAUNCH_FAILED') ||
+    hasCode('PLAYWRIGHT_BROWSER_CONTEXT_FAILED') ||
+    hasCode('PLAYWRIGHT_LAUNCH_TIMEOUT') ||
+    hasCode('PLAYWRIGHT_EXECUTABLE_MISSING') ||
+    hasCode('PLAYWRIGHT_RUNTIME_SANDBOX_BLOCKED') ||
+    hasCode('ENVIRONMENT_UNSUPPORTED') ||
+    hasCode('RENDERED_CAPTURE_UNAVAILABLE')
       ? 'unsupported'
       : hasCode('BROWSER_LAUNCH_SUCCEEDED') || hasCode('NAVIGATION_SUCCEEDED')
         ? 'supported'
@@ -132,7 +139,16 @@ function buildRenderedCaptureExecutionFromSnapshot(snapshot: UrlSinglePageImport
       browserBinaryAvailable,
       environmentStatus,
       failureCategory: 'environment',
-      failureCode: firstCode(['ENVIRONMENT_UNSUPPORTED', 'RENDERED_CAPTURE_UNAVAILABLE']),
+      failureCode: firstCode([
+        'PLAYWRIGHT_IMPORT_FAILED',
+        'PLAYWRIGHT_BROWSER_LAUNCH_FAILED',
+        'PLAYWRIGHT_BROWSER_CONTEXT_FAILED',
+        'PLAYWRIGHT_LAUNCH_TIMEOUT',
+        'PLAYWRIGHT_EXECUTABLE_MISSING',
+        'PLAYWRIGHT_RUNTIME_SANDBOX_BLOCKED',
+        'ENVIRONMENT_UNSUPPORTED',
+        'RENDERED_CAPTURE_UNAVAILABLE',
+      ]),
       browserLaunch,
       navigation,
       dom,

@@ -235,3 +235,64 @@ test("url import persists misconfigured worker health truth without collapsing t
   assert.equal(snapshot.renderedCaptureReliability.workerHealth?.status, "misconfigured");
   assert.equal(snapshot.renderedCaptureReliability.workerHealth?.reason, "worker_not_configured");
 });
+
+test("url import persists launch-probe failure code without collapsing to generic environment code", async () => {
+  const tmpRoot = await fs.promises.mkdtemp(path.join(os.tmpdir(), "gnr8-url-import-launch-probe-failure-"));
+  const entryHtml = "<!doctype html><html><body><main><h1>Entry</h1><p>content</p></main></body></html>";
+
+  const workerClient: RenderedCaptureWorkerClient = {
+    async execute(request) {
+      return {
+        kind: "rendered_capture_worker_response_v1",
+        contractVersion: "1.0.0",
+        requestId: request.requestId,
+        status: "unsupported",
+        environment: {
+          runtimeKind: "nodejs",
+          environmentSupported: false,
+          browserPackageAvailable: true,
+          browserBinaryAvailable: false,
+          supportDecision: "launch_incompatible",
+        },
+        artifacts: [],
+        computedStyleSamples: [],
+        diagnostics: [
+          { code: "PLAYWRIGHT_RUNTIME_SANDBOX_BLOCKED", severity: "error", message: "sandbox blocked" },
+          { code: "ENVIRONMENT_UNSUPPORTED", severity: "error", message: "launch probe failed" },
+        ],
+        qualitySummary: {
+          renderedDomQuality: "unusable",
+          domLength: 0,
+          meaningfulNodeCount: 0,
+          screenshotCount: 0,
+          computedStyleSampleCount: 0,
+        },
+        failure: {
+          failureClass: "browser_launch_failed",
+          failureCode: "PLAYWRIGHT_RUNTIME_SANDBOX_BLOCKED",
+          retryable: false,
+          message: "sandbox blocked",
+        },
+        timings: {
+          queueLatencyMs: null,
+          executionMs: 6,
+          totalMs: 6,
+        },
+      };
+    },
+  };
+
+  const snapshot = await importPublicSinglePageUrlToSnapshot({
+    sourceUrl: "https://example.com/",
+    snapshotRootDirAbs: tmpRoot,
+    requestId: "req-url-import-launch-probe-failure",
+    fetchImpl: async () => makeHtmlResponse(entryHtml),
+    renderedCaptureWorkerClient: workerClient,
+  });
+
+  assert.equal(snapshot.sourceMode, "raw_html_fallback");
+  assert.ok(snapshot.importDiagnostics.issues.some((issue) => issue.code === "PLAYWRIGHT_RUNTIME_SANDBOX_BLOCKED"));
+  const acquisitionEvidence = JSON.parse(fs.readFileSync(path.resolve(snapshot.snapshotRootDirAbs, "acquisition-evidence.json"), "utf8"));
+  assert.equal(acquisitionEvidence.renderedCapture.executionTruth.failureCategory, "environment");
+  assert.equal(acquisitionEvidence.renderedCapture.executionTruth.failureCode, "PLAYWRIGHT_RUNTIME_SANDBOX_BLOCKED");
+});

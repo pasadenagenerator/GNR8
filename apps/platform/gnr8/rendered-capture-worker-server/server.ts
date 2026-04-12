@@ -1,4 +1,3 @@
-import fs from "node:fs";
 import http from "node:http";
 
 import {
@@ -9,6 +8,11 @@ import type {
   RenderedCaptureWorkerRequest,
   RenderedCaptureWorkerResponse,
 } from "@/gnr8/import-rendered-capture-worker/worker-contract";
+import {
+  runChromiumLaunchProbe,
+  DEFAULT_PLAYWRIGHT_CONTEXT_TIMEOUT_MS,
+  DEFAULT_PLAYWRIGHT_LAUNCH_TIMEOUT_MS,
+} from "@/gnr8/import-rendered-capture/playwright-launch-probe";
 
 export const RENDERED_CAPTURE_WORKER_PATH = "/internal/gnr8/rendered-capture-worker" as const;
 export const LEGACY_RENDERED_CAPTURE_WORKER_PATH = "/api/internal/gnr8/rendered-capture-worker" as const;
@@ -23,6 +27,16 @@ type WorkerHealthSummary = {
   browserPackageAvailable: boolean;
   browserBinaryAvailable: boolean;
   captureServiceAvailable: boolean;
+  launchProbe: {
+    supported: boolean;
+    failureCode: string | null;
+    timeoutMs: number;
+    contextTimeoutMs: number;
+    executablePath: string | null;
+    executablePathExists: boolean | null;
+    launchArgs: string[];
+    error: string | null;
+  };
 };
 
 function normalizeText(value: unknown): string {
@@ -131,22 +145,62 @@ async function probeWorkerEnvironment(): Promise<WorkerHealthSummary> {
     browserPackageAvailable: false,
     browserBinaryAvailable: false,
     captureServiceAvailable: false,
+    launchProbe: {
+      supported: false,
+      failureCode: null,
+      timeoutMs: DEFAULT_PLAYWRIGHT_LAUNCH_TIMEOUT_MS,
+      contextTimeoutMs: DEFAULT_PLAYWRIGHT_CONTEXT_TIMEOUT_MS,
+      executablePath: null,
+      executablePathExists: null,
+      launchArgs: [],
+      error: null,
+    },
   };
 
+  if (summary.runtimeKind !== "nodejs") {
+    summary.launchProbe.failureCode = "RUNTIME_INCOMPATIBLE";
+    return summary;
+  }
+
   try {
-    const playwright = (await import("playwright")).chromium;
+    const playwright = await import("playwright");
     summary.browserPackageAvailable = true;
-    const executablePath = normalizeText(playwright.executablePath());
-    if (executablePath && fs.existsSync(executablePath)) {
-      summary.browserBinaryAvailable = true;
-    }
-  } catch {
+    const probe = await runChromiumLaunchProbe({
+      chromium: playwright.chromium,
+      launchTimeoutMs: DEFAULT_PLAYWRIGHT_LAUNCH_TIMEOUT_MS,
+      contextTimeoutMs: DEFAULT_PLAYWRIGHT_CONTEXT_TIMEOUT_MS,
+    });
+    summary.browserBinaryAvailable = probe.browserBinaryAvailable;
+    summary.launchProbe = {
+      supported: probe.launchable,
+      failureCode: probe.failureCode,
+      timeoutMs: DEFAULT_PLAYWRIGHT_LAUNCH_TIMEOUT_MS,
+      contextTimeoutMs: DEFAULT_PLAYWRIGHT_CONTEXT_TIMEOUT_MS,
+      executablePath: probe.executablePath,
+      executablePathExists: probe.executablePathExists,
+      launchArgs: probe.launchOptions.args,
+      error: probe.error,
+    };
+  } catch (error) {
     summary.browserPackageAvailable = false;
     summary.browserBinaryAvailable = false;
+    summary.launchProbe = {
+      supported: false,
+      failureCode: "PLAYWRIGHT_IMPORT_FAILED",
+      timeoutMs: DEFAULT_PLAYWRIGHT_LAUNCH_TIMEOUT_MS,
+      contextTimeoutMs: DEFAULT_PLAYWRIGHT_CONTEXT_TIMEOUT_MS,
+      executablePath: null,
+      executablePathExists: null,
+      launchArgs: [],
+      error: toErrorString(error),
+    };
   }
 
   summary.captureServiceAvailable =
-    summary.runtimeKind === "nodejs" && summary.browserPackageAvailable && summary.browserBinaryAvailable;
+    summary.runtimeKind === "nodejs" &&
+    summary.browserPackageAvailable &&
+    summary.browserBinaryAvailable &&
+    summary.launchProbe.supported;
   return summary;
 }
 

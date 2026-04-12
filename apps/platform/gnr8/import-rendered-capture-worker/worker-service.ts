@@ -72,6 +72,23 @@ function pickFailure(diagnostics: RenderedCaptureDiagnostic[]): {
     return null;
   };
 
+  const probeFailureCode = firstCode([
+    "PLAYWRIGHT_IMPORT_FAILED",
+    "PLAYWRIGHT_BROWSER_LAUNCH_FAILED",
+    "PLAYWRIGHT_BROWSER_CONTEXT_FAILED",
+    "PLAYWRIGHT_LAUNCH_TIMEOUT",
+    "PLAYWRIGHT_EXECUTABLE_MISSING",
+    "PLAYWRIGHT_RUNTIME_SANDBOX_BLOCKED",
+  ]);
+  if (probeFailureCode) {
+    return {
+      failureClass: "browser_launch_failed",
+      failureCode: probeFailureCode,
+      retryable: probeFailureCode === "PLAYWRIGHT_LAUNCH_TIMEOUT",
+      message: "Playwright launch probe failed",
+    };
+  }
+
   const environmentCode = firstCode(["ENVIRONMENT_UNSUPPORTED", "RENDERED_CAPTURE_UNAVAILABLE"]);
   if (environmentCode) {
     return {
@@ -203,7 +220,7 @@ function resolveEnvironmentTruth(result: RenderedCaptureResult): RenderedCapture
         ? "package_missing"
         : rawReason.includes("binary")
           ? "binary_missing"
-          : rawReason.includes("launch")
+          : rawReason.includes("launch") || rawReason.includes("context")
             ? "launch_incompatible"
             : environmentSupported
               ? "supported"

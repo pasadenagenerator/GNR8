@@ -16,6 +16,16 @@ type HealthProbe = {
   browserPackageAvailable: boolean;
   browserBinaryAvailable: boolean;
   captureServiceAvailable: boolean;
+  launchProbe: {
+    supported: boolean;
+    failureCode: string | null;
+    timeoutMs: number;
+    contextTimeoutMs: number;
+    executablePath: string | null;
+    executablePathExists: boolean | null;
+    launchArgs: string[];
+    error: string | null;
+  };
 };
 
 async function startServer(input?: {
@@ -59,6 +69,16 @@ async function startServer(input?: {
         browserPackageAvailable: true,
         browserBinaryAvailable: true,
         captureServiceAvailable: true,
+        launchProbe: {
+          supported: true,
+          failureCode: null,
+          timeoutMs: 8_000,
+          contextTimeoutMs: 4_000,
+          executablePath: "/usr/bin/chromium",
+          executablePathExists: true,
+          launchArgs: ["--no-sandbox"],
+          error: null,
+        },
       },
   });
 
@@ -179,6 +199,16 @@ test("health endpoint returns explicit auth/availability truth", async () => {
       browserPackageAvailable: true,
       browserBinaryAvailable: false,
       captureServiceAvailable: false,
+      launchProbe: {
+        supported: false,
+        failureCode: "PLAYWRIGHT_RUNTIME_SANDBOX_BLOCKED",
+        timeoutMs: 8_000,
+        contextTimeoutMs: 4_000,
+        executablePath: "/ms-playwright/chromium/chrome-linux/chrome",
+        executablePathExists: true,
+        launchArgs: ["--no-sandbox", "--disable-setuid-sandbox"],
+        error: "sandbox restriction",
+      },
     },
   });
 
@@ -190,11 +220,18 @@ test("health endpoint returns explicit auth/availability truth", async () => {
     });
     assert.equal(healthyWithToken.status, 200);
     const healthyPayload = (await healthyWithToken.json()) as {
-      health?: { authenticated?: boolean; browserBinaryAvailable?: boolean; captureServiceAvailable?: boolean };
+      health?: {
+        authenticated?: boolean;
+        browserBinaryAvailable?: boolean;
+        captureServiceAvailable?: boolean;
+        launchProbe?: { supported?: boolean; failureCode?: string | null };
+      };
     };
     assert.equal(healthyPayload.health?.authenticated, true);
     assert.equal(healthyPayload.health?.browserBinaryAvailable, false);
     assert.equal(healthyPayload.health?.captureServiceAvailable, false);
+    assert.equal(healthyPayload.health?.launchProbe?.supported, false);
+    assert.equal(healthyPayload.health?.launchProbe?.failureCode, "PLAYWRIGHT_RUNTIME_SANDBOX_BLOCKED");
 
     const unauthorized = await fetch(`${fixture.baseUrl}${RENDERED_CAPTURE_WORKER_HEALTH_PATH}`, {
       headers: {

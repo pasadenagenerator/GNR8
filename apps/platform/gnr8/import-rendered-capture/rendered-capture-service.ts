@@ -14,6 +14,12 @@ import {
   type RenderedCaptureResult,
   type RenderedCaptureViewport,
 } from "./rendered-capture-contract";
+import {
+  classifyPlaywrightLaunchFailure,
+  DEFAULT_PLAYWRIGHT_LAUNCH_TIMEOUT_MS,
+  resolveChromiumLaunchOptions,
+  type PlaywrightLaunchFailureCode,
+} from "./playwright-launch-probe";
 
 export const DEFAULT_RENDERED_CAPTURE_VIEWPORT: RenderedCaptureViewport = {
   width: 1366,
@@ -64,13 +70,29 @@ function pushDiagnostic(
   });
 }
 
-function detectEnvironmentUnsupportedReason(error: unknown): string | null {
+function detectPlaywrightImportFailureReason(error: unknown): PlaywrightLaunchFailureCode {
   const message = toErrorString(error).toLowerCase();
-  if (message.includes("cannot find module")) return "PLAYWRIGHT_MODULE_MISSING";
-  if (message.includes("playwright")) return "PLAYWRIGHT_RUNTIME_UNAVAILABLE";
-  if (message.includes("browser") && message.includes("executable")) return "BROWSER_BINARY_MISSING";
-  if (message.includes("sandbox")) return "BROWSER_SANDBOX_RESTRICTED";
-  return null;
+  if (message.includes("cannot find module")) return "PLAYWRIGHT_IMPORT_FAILED";
+  if (message.includes("playwright")) return "PLAYWRIGHT_IMPORT_FAILED";
+  return "PLAYWRIGHT_IMPORT_FAILED";
+}
+
+async function withTimeout<T>(input: { operation: Promise<T>; timeoutMs: number; timeoutMessage: string }): Promise<{ value: T; timedOut: boolean }> {
+  let timer: NodeJS.Timeout | null = null;
+  try {
+    const timeout = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => reject(new Error(input.timeoutMessage)), input.timeoutMs);
+    });
+    const value = await Promise.race([input.operation, timeout]);
+    return { value: value as T, timedOut: false };
+  } catch (error) {
+    if (toErrorString(error) === input.timeoutMessage) {
+      return { value: null as T, timedOut: true };
+    }
+    throw error;
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
 }
 
 type RuntimeKind = "nodejs" | "edge" | "unknown";
@@ -614,7 +636,7 @@ async function defaultRenderedCaptureExecutor(input: RenderedCaptureExecutorInpu
       details: { available: true },
     });
   } catch (error) {
-    const reason = detectEnvironmentUnsupportedReason(error) ?? "PLAYWRIGHT_IMPORT_FAILED";
+    const reason = detectPlaywrightImportFailureReason(error);
     pushDiagnostic(diagnostics, {
       code: "PLAYWRIGHT_PACKAGE_CHECK",
       message: "Playwright package availability check completed",
@@ -622,23 +644,23 @@ async function defaultRenderedCaptureExecutor(input: RenderedCaptureExecutorInpu
       details: { available: false, reason, error: toErrorString(error) },
     });
     pushDiagnostic(diagnostics, {
-      code: "ENVIRONMENT_UNSUPPORTED",
+      code: reason,
       severity: "error",
-      message: "Rendered capture environment does not provide a usable Playwright runtime",
-      details: { reason, error: toErrorString(error) },
+      message: "Playwright package import failed",
+      details: { error: toErrorString(error) },
     });
     pushDiagnostic(diagnostics, {
       code: "RENDERED_CAPTURE_UNAVAILABLE",
       severity: "warning",
       message: "Playwright runtime unavailable; rendered capture skipped",
-      details: { error: toErrorString(error) },
+      details: { reason, error: toErrorString(error) },
     });
     pushDiagnostic(diagnostics, {
       code: "RENDERED_CAPTURE_SUPPORT_DECISION",
       message: "Rendered capture support decision finalized",
       details: {
         supported: false,
-        reason,
+        reason: "PACKAGE_IMPORT_FAILED",
         runtimeKind: environment.runtimeKind,
         browserPackageAvailable,
         browserBinaryAvailable,
@@ -663,15 +685,16 @@ async function defaultRenderedCaptureExecutor(input: RenderedCaptureExecutorInpu
       details: { available: false, reason: "CHROMIUM_UNAVAILABLE" },
     });
     pushDiagnostic(diagnostics, {
-      code: "ENVIRONMENT_UNSUPPORTED",
+      code: "PLAYWRIGHT_BROWSER_LAUNCH_FAILED",
       severity: "error",
-      message: "Rendered capture environment does not provide Playwright chromium",
+      message: "Playwright chromium launcher is unavailable",
       details: { reason: "CHROMIUM_UNAVAILABLE" },
     });
     pushDiagnostic(diagnostics, {
       code: "RENDERED_CAPTURE_UNAVAILABLE",
       severity: "warning",
       message: "Playwright chromium runtime unavailable; rendered capture skipped",
+      details: { reason: "CHROMIUM_UNAVAILABLE" },
     });
     pushDiagnostic(diagnostics, {
       code: "RENDERED_CAPTURE_SUPPORT_DECISION",
@@ -694,127 +717,182 @@ async function defaultRenderedCaptureExecutor(input: RenderedCaptureExecutorInpu
     };
   }
 
-  let chromiumExecutablePath: string | null = null;
-  try {
-    chromiumExecutablePath = typeof chromium.executablePath === "function" ? String(chromium.executablePath() ?? "").trim() : null;
-    browserBinaryAvailable = Boolean(chromiumExecutablePath && fs.existsSync(chromiumExecutablePath));
-    pushDiagnostic(diagnostics, {
-      code: "PLAYWRIGHT_BINARY_CHECK",
-      message: "Playwright browser binary availability check completed",
-      severity: browserBinaryAvailable ? "info" : "error",
-      details: {
-        available: browserBinaryAvailable,
-        executablePath: chromiumExecutablePath,
-      },
-    });
-  } catch (error) {
-    browserBinaryAvailable = false;
-    pushDiagnostic(diagnostics, {
-      code: "PLAYWRIGHT_BINARY_CHECK",
-      message: "Playwright browser binary availability check failed",
-      severity: "error",
-      details: {
-        available: false,
-        reason: "BINARY_PATH_RESOLUTION_FAILED",
-        error: toErrorString(error),
-      },
-    });
-  }
-
-  if (!browserBinaryAvailable) {
-    pushDiagnostic(diagnostics, {
-      code: "ENVIRONMENT_UNSUPPORTED",
-      severity: "error",
-      message: "Rendered capture environment does not provide Playwright browser binaries",
-      details: {
-        reason: "BROWSER_BINARY_MISSING",
-        executablePath: chromiumExecutablePath,
-      },
-    });
-    pushDiagnostic(diagnostics, {
-      code: "RENDERED_CAPTURE_UNAVAILABLE",
-      severity: "warning",
-      message: "Playwright browser binary unavailable; rendered capture skipped",
-      details: {
-        reason: "BROWSER_BINARY_MISSING",
-        executablePath: chromiumExecutablePath,
-      },
-    });
-    pushDiagnostic(diagnostics, {
-      code: "RENDERED_CAPTURE_SUPPORT_DECISION",
-      message: "Rendered capture support decision finalized",
-      details: {
-        supported: false,
-        reason: "BROWSER_BINARY_MISSING",
-        runtimeKind: environment.runtimeKind,
-        browserPackageAvailable,
-        browserBinaryAvailable,
-        executablePath: chromiumExecutablePath,
-      },
-    });
-    return {
-      status: "unavailable",
-      document: null,
-      screenshots: [],
-      computedStyleSamples: [],
-      renderedObservedAssetUrls: [],
-      diagnostics,
-    };
-  }
-
-  pushDiagnostic(diagnostics, {
-    code: "RENDERED_CAPTURE_SUPPORT_DECISION",
-    message: "Rendered capture support decision finalized",
-    details: {
-      supported: true,
-      reason: "RUNTIME_AND_BROWSER_AVAILABLE",
-      runtimeKind: environment.runtimeKind,
-      browserPackageAvailable,
-      browserBinaryAvailable,
-      executablePath: chromiumExecutablePath,
-    },
-  });
-
   const startedAt = Date.now();
   let browser: any = null;
   let context: any = null;
   let page: any = null;
+  let chromiumExecutablePath: string | null = null;
+  try {
+    chromiumExecutablePath =
+      typeof chromium.executablePath === "function" ? String(chromium.executablePath() ?? "").trim() || null : null;
+  } catch {
+    chromiumExecutablePath = null;
+  }
+  const launchOptions = resolveChromiumLaunchOptions(DEFAULT_PLAYWRIGHT_LAUNCH_TIMEOUT_MS);
 
   try {
     try {
-      pushDiagnostic(diagnostics, { code: "BROWSER_LAUNCH_STARTED", message: "Starting browser launch for rendered capture" });
-      browser = await chromium.launch({ headless: true });
-      pushDiagnostic(diagnostics, { code: "BROWSER_LAUNCH_SUCCEEDED", message: "Browser launch succeeded for rendered capture" });
-    } catch (error) {
-      const reason = detectEnvironmentUnsupportedReason(error);
-      if (reason) {
+      pushDiagnostic(diagnostics, {
+        code: "BROWSER_LAUNCH_STARTED",
+        message: "Starting browser launch for rendered capture",
+        details: {
+          timeoutMs: launchOptions.timeout,
+          launchArgs: launchOptions.args,
+          executablePath: chromiumExecutablePath,
+        },
+      });
+      const launchResult = await withTimeout({
+        operation: chromium.launch(launchOptions),
+        timeoutMs: launchOptions.timeout,
+        timeoutMessage: `PLAYWRIGHT_LAUNCH_TIMEOUT:${launchOptions.timeout}`,
+      });
+      if (launchResult.timedOut) {
         pushDiagnostic(diagnostics, {
-            code: "ENVIRONMENT_UNSUPPORTED",
-            severity: "error",
-            message: "Rendered capture browser launch failed due to runtime environment incompatibility",
-            details: { reason, error: toErrorString(error) },
-          });
+          code: "PLAYWRIGHT_LAUNCH_TIMEOUT",
+          severity: "error",
+          message: "Playwright launch probe timed out before browser became ready",
+          details: {
+            timeoutMs: launchOptions.timeout,
+            launchArgs: launchOptions.args,
+            executablePath: chromiumExecutablePath,
+          },
+        });
+        pushDiagnostic(diagnostics, {
+          code: "PLAYWRIGHT_BINARY_CHECK",
+          message: "Playwright browser binary availability check completed via launch probe",
+          severity: "error",
+          details: {
+            available: false,
+            reason: "PLAYWRIGHT_LAUNCH_TIMEOUT",
+            launchProbe: "failed",
+            timeoutMs: launchOptions.timeout,
+            launchArgs: launchOptions.args,
+            executablePath: chromiumExecutablePath,
+          },
+        });
+        pushDiagnostic(diagnostics, {
+          code: "ENVIRONMENT_UNSUPPORTED",
+          severity: "error",
+          message: "Rendered capture launch probe failed; chromium is not launchable in this runtime",
+          details: {
+            reason: "PLAYWRIGHT_LAUNCH_TIMEOUT",
+            timeoutMs: launchOptions.timeout,
+            launchArgs: launchOptions.args,
+            executablePath: chromiumExecutablePath,
+          },
+        });
         pushDiagnostic(diagnostics, {
           code: "RENDERED_CAPTURE_UNAVAILABLE",
           severity: "warning",
-          message: "Rendered capture unavailable due to browser launch incompatibility",
-          details: { reason, error: toErrorString(error) },
+          message: "Rendered capture unavailable because launch probe timed out",
+          details: {
+            reason: "PLAYWRIGHT_LAUNCH_TIMEOUT",
+            timeoutMs: launchOptions.timeout,
+          },
         });
+        pushDiagnostic(diagnostics, {
+          code: "RENDERED_CAPTURE_SUPPORT_DECISION",
+          message: "Rendered capture support decision finalized",
+          details: {
+            supported: false,
+            reason: "LAUNCH_PROBE_FAILED",
+            runtimeKind: environment.runtimeKind,
+            browserPackageAvailable,
+            browserBinaryAvailable: false,
+            executablePath: chromiumExecutablePath,
+            launchFailureCode: "PLAYWRIGHT_LAUNCH_TIMEOUT",
+          },
+        });
+        return {
+          status: "unavailable",
+          document: null,
+          screenshots: [],
+          computedStyleSamples: [],
+          renderedObservedAssetUrls: [],
+          diagnostics,
+        };
       }
+      browser = launchResult.value;
+      browserBinaryAvailable = true;
+      pushDiagnostic(diagnostics, {
+        code: "PLAYWRIGHT_BINARY_CHECK",
+        message: "Playwright browser binary availability check completed via launch probe",
+        details: {
+          available: true,
+          launchProbe: "passed",
+          launchArgs: launchOptions.args,
+          executablePath: chromiumExecutablePath,
+        },
+      });
+      pushDiagnostic(diagnostics, { code: "BROWSER_LAUNCH_SUCCEEDED", message: "Browser launch succeeded for rendered capture" });
+    } catch (error) {
+      const reason = classifyPlaywrightLaunchFailure({
+        error,
+        timedOut: false,
+        executablePathExists: chromiumExecutablePath ? fs.existsSync(chromiumExecutablePath) : null,
+      });
+      pushDiagnostic(diagnostics, {
+        code: reason,
+        severity: "error",
+        message: "Playwright launch probe failed",
+        details: {
+          error: toErrorString(error),
+          launchArgs: launchOptions.args,
+          executablePath: chromiumExecutablePath,
+        },
+      });
+      pushDiagnostic(diagnostics, {
+        code: "PLAYWRIGHT_BINARY_CHECK",
+        message: "Playwright browser binary availability check completed via launch probe",
+        severity: "error",
+        details: {
+          available: false,
+          reason,
+          launchProbe: "failed",
+          error: toErrorString(error),
+          launchArgs: launchOptions.args,
+          executablePath: chromiumExecutablePath,
+        },
+      });
+      pushDiagnostic(diagnostics, {
+        code: "ENVIRONMENT_UNSUPPORTED",
+        severity: "error",
+        message: "Rendered capture launch probe failed; chromium is not launchable in this runtime",
+        details: { reason, error: toErrorString(error) },
+      });
+      pushDiagnostic(diagnostics, {
+        code: "RENDERED_CAPTURE_UNAVAILABLE",
+        severity: "warning",
+        message: "Rendered capture unavailable due to browser launch incompatibility",
+        details: { reason, error: toErrorString(error) },
+      });
       pushDiagnostic(diagnostics, {
         code: "BROWSER_LAUNCH_FAILED",
         severity: "error",
         message: "Rendered capture browser failed to start",
-        details: { error: toErrorString(error) },
+        details: { error: toErrorString(error), launchFailureCode: reason },
       });
       pushDiagnostic(diagnostics, {
         code: "RENDERED_CAPTURE_BROWSER_START_FAILED",
         severity: "error",
         message: "Rendered capture browser failed to start",
-        details: { error: toErrorString(error) },
+        details: { error: toErrorString(error), launchFailureCode: reason },
+      });
+      pushDiagnostic(diagnostics, {
+        code: "RENDERED_CAPTURE_SUPPORT_DECISION",
+        message: "Rendered capture support decision finalized",
+        details: {
+          supported: false,
+          reason: "LAUNCH_PROBE_FAILED",
+          runtimeKind: environment.runtimeKind,
+          browserPackageAvailable,
+          browserBinaryAvailable: false,
+          executablePath: chromiumExecutablePath,
+          launchFailureCode: reason,
+        },
       });
       return {
-        status: reason ? "unavailable" : "failed",
+        status: "unavailable",
         document: null,
         screenshots: [],
         computedStyleSamples: [],
@@ -825,15 +903,83 @@ async function defaultRenderedCaptureExecutor(input: RenderedCaptureExecutorInpu
 
     try {
       pushDiagnostic(diagnostics, { code: "PAGE_CREATION_STARTED", message: "Starting browser context/page initialization" });
-      context = await browser.newContext({
-        viewport: {
-          width: input.viewport.width,
-          height: input.viewport.height,
-        },
+      const contextResult = await withTimeout({
+        operation: browser.newContext({
+          viewport: {
+            width: input.viewport.width,
+            height: input.viewport.height,
+          },
+        }),
+        timeoutMs: Math.min(6_000, launchOptions.timeout),
+        timeoutMessage: "PLAYWRIGHT_CONTEXT_TIMEOUT",
       });
+      if (contextResult.timedOut) {
+        browserBinaryAvailable = false;
+        pushDiagnostic(diagnostics, {
+          code: "PLAYWRIGHT_BINARY_CHECK",
+          message: "Playwright browser binary availability check completed via launch probe",
+          severity: "error",
+          details: {
+            available: false,
+            reason: "PLAYWRIGHT_BROWSER_CONTEXT_FAILED",
+            launchProbe: "failed",
+            timeoutMs: Math.min(6_000, launchOptions.timeout),
+            launchArgs: launchOptions.args,
+            executablePath: chromiumExecutablePath,
+          },
+        });
+        pushDiagnostic(diagnostics, {
+          code: "PLAYWRIGHT_BROWSER_CONTEXT_FAILED",
+          severity: "error",
+          message: "Playwright browser context creation timed out",
+          details: { timeoutMs: Math.min(6_000, launchOptions.timeout) },
+        });
+        pushDiagnostic(diagnostics, {
+          code: "RENDERED_CAPTURE_SUPPORT_DECISION",
+          message: "Rendered capture support decision finalized",
+          details: {
+            supported: false,
+            reason: "CONTEXT_PROBE_FAILED",
+            runtimeKind: environment.runtimeKind,
+            browserPackageAvailable,
+            browserBinaryAvailable: false,
+            executablePath: chromiumExecutablePath,
+            launchFailureCode: "PLAYWRIGHT_BROWSER_CONTEXT_FAILED",
+          },
+        });
+        return {
+          status: "unavailable",
+          document: null,
+          screenshots: [],
+          computedStyleSamples: [],
+          renderedObservedAssetUrls: [],
+          diagnostics,
+        };
+      }
+      context = contextResult.value;
       page = await context.newPage();
       pushDiagnostic(diagnostics, { code: "PAGE_CREATION_SUCCEEDED", message: "Browser context/page initialization succeeded" });
     } catch (error) {
+      browserBinaryAvailable = false;
+      pushDiagnostic(diagnostics, {
+        code: "PLAYWRIGHT_BINARY_CHECK",
+        message: "Playwright browser binary availability check completed via launch probe",
+        severity: "error",
+        details: {
+          available: false,
+          reason: "PLAYWRIGHT_BROWSER_CONTEXT_FAILED",
+          launchProbe: "failed",
+          error: toErrorString(error),
+          launchArgs: launchOptions.args,
+          executablePath: chromiumExecutablePath,
+        },
+      });
+      pushDiagnostic(diagnostics, {
+        code: "PLAYWRIGHT_BROWSER_CONTEXT_FAILED",
+        severity: "error",
+        message: "Playwright browser context/page probe failed",
+        details: { error: toErrorString(error) },
+      });
       pushDiagnostic(diagnostics, {
         code: "BROWSER_LAUNCH_FAILED",
         severity: "error",
@@ -846,8 +992,21 @@ async function defaultRenderedCaptureExecutor(input: RenderedCaptureExecutorInpu
         message: "Rendered capture context/page initialization failed",
         details: { error: toErrorString(error) },
       });
+      pushDiagnostic(diagnostics, {
+        code: "RENDERED_CAPTURE_SUPPORT_DECISION",
+        message: "Rendered capture support decision finalized",
+        details: {
+          supported: false,
+          reason: "CONTEXT_PROBE_FAILED",
+          runtimeKind: environment.runtimeKind,
+          browserPackageAvailable,
+          browserBinaryAvailable: false,
+          executablePath: chromiumExecutablePath,
+          launchFailureCode: "PLAYWRIGHT_BROWSER_CONTEXT_FAILED",
+        },
+      });
       return {
-        status: "failed",
+        status: "unavailable",
         document: null,
         screenshots: [],
         computedStyleSamples: [],
@@ -855,6 +1014,20 @@ async function defaultRenderedCaptureExecutor(input: RenderedCaptureExecutorInpu
         diagnostics,
       };
     }
+
+    pushDiagnostic(diagnostics, {
+      code: "RENDERED_CAPTURE_SUPPORT_DECISION",
+      message: "Rendered capture support decision finalized",
+      details: {
+        supported: true,
+        reason: "LAUNCH_PROBE_PASSED",
+        runtimeKind: environment.runtimeKind,
+        browserPackageAvailable,
+        browserBinaryAvailable,
+        executablePath: chromiumExecutablePath,
+        launchArgs: launchOptions.args,
+      },
+    });
 
     try {
       pushDiagnostic(diagnostics, {

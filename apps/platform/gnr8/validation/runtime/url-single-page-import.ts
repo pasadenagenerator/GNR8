@@ -96,6 +96,12 @@ export type UrlImportDiagnosticCode =
   | "RENDERED_CAPTURE_RUNTIME_ENVIRONMENT"
   | "PLAYWRIGHT_PACKAGE_CHECK"
   | "PLAYWRIGHT_BINARY_CHECK"
+  | "PLAYWRIGHT_IMPORT_FAILED"
+  | "PLAYWRIGHT_BROWSER_LAUNCH_FAILED"
+  | "PLAYWRIGHT_BROWSER_CONTEXT_FAILED"
+  | "PLAYWRIGHT_LAUNCH_TIMEOUT"
+  | "PLAYWRIGHT_EXECUTABLE_MISSING"
+  | "PLAYWRIGHT_RUNTIME_SANDBOX_BLOCKED"
   | "RENDERED_CAPTURE_SUPPORT_DECISION"
   | "ENVIRONMENT_UNSUPPORTED"
   | "BROWSER_LAUNCH_STARTED"
@@ -1084,9 +1090,17 @@ function buildRenderedCaptureExecutionTruth(input: {
     boolOrNull(binaryCheckDetails?.available) ??
     boolOrNull(supportDecisionDetails?.browserBinaryAvailable) ??
     false;
+  const launchProbeFailureCode = firstCode([
+    "PLAYWRIGHT_IMPORT_FAILED",
+    "PLAYWRIGHT_BROWSER_LAUNCH_FAILED",
+    "PLAYWRIGHT_BROWSER_CONTEXT_FAILED",
+    "PLAYWRIGHT_LAUNCH_TIMEOUT",
+    "PLAYWRIGHT_EXECUTABLE_MISSING",
+    "PLAYWRIGHT_RUNTIME_SANDBOX_BLOCKED",
+  ]);
 
   const environmentStatus: "supported" | "unsupported" | "unknown" =
-    hasCode("ENVIRONMENT_UNSUPPORTED") || hasCode("RENDERED_CAPTURE_UNAVAILABLE")
+    Boolean(launchProbeFailureCode) || hasCode("ENVIRONMENT_UNSUPPORTED") || hasCode("RENDERED_CAPTURE_UNAVAILABLE")
       ? "unsupported"
       : hasCode("BROWSER_LAUNCH_SUCCEEDED") || hasCode("NAVIGATION_SUCCEEDED")
         ? "supported"
@@ -1126,7 +1140,12 @@ function buildRenderedCaptureExecutionTruth(input: {
       browserBinaryAvailable,
       environmentStatus,
       failureCategory: "environment",
-      failureCode: firstCode(["ENVIRONMENT_UNSUPPORTED", "RENDERED_CAPTURE_UNAVAILABLE"]),
+      failureCode:
+        launchProbeFailureCode ??
+        firstCode([
+          "ENVIRONMENT_UNSUPPORTED",
+          "RENDERED_CAPTURE_UNAVAILABLE",
+        ]),
       browserLaunch,
       navigation,
       dom,
