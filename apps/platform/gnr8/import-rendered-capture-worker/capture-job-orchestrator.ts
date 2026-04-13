@@ -170,6 +170,12 @@ function deriveHealthFromResponse(input: {
   response: RenderedCaptureWorkerResponse;
   enabled: boolean;
 }): Pick<RenderedCaptureWorkerHealthTruth, "reachable" | "browserAvailable" | "status" | "reason"> {
+  const browserAvailable = Boolean(input.response.environment.browserPackageAvailable && input.response.environment.browserBinaryAvailable);
+  const executionTimedOut =
+    input.response.failure?.failureClass === "timed_out" ||
+    hasDiagnosticCode(input.response, "RENDERED_CAPTURE_TIMEOUT") ||
+    hasDiagnosticCode(input.response, "CAPTURE_JOB_TIMED_OUT");
+
   if (!input.enabled || hasDiagnosticCode(input.response, "CAPTURE_WORKER_DISABLED")) {
     return {
       reachable: false,
@@ -213,22 +219,30 @@ function deriveHealthFromResponse(input: {
   if (input.response.status === "available" || input.response.status === "partial") {
     return {
       reachable: true,
-      browserAvailable: Boolean(input.response.environment.browserPackageAvailable && input.response.environment.browserBinaryAvailable),
+      browserAvailable,
       status: "healthy",
       reason: null,
+    };
+  }
+  if (executionTimedOut) {
+    return {
+      reachable: true,
+      browserAvailable,
+      status: "timed_out",
+      reason: input.response.failure?.failureCode ?? "RENDERED_CAPTURE_TIMEOUT",
     };
   }
   if (input.response.status === "failed") {
     return {
       reachable: true,
-      browserAvailable: Boolean(input.response.environment.browserPackageAvailable && input.response.environment.browserBinaryAvailable),
+      browserAvailable,
       status: "execution_failed",
       reason: input.response.failure?.failureCode ?? input.response.failure?.failureClass ?? "worker_failed",
     };
   }
   return {
     reachable: false,
-    browserAvailable: Boolean(input.response.environment.browserPackageAvailable && input.response.environment.browserBinaryAvailable),
+    browserAvailable,
     status: "unknown",
     reason: input.response.failure?.failureCode ?? input.response.failure?.failureClass ?? "worker_unavailable",
   };
@@ -240,6 +254,14 @@ function classifyJobStatusFromWorkerResponse(response: RenderedCaptureWorkerResp
 } {
   if (response.status === "available") return { status: "completed", failureClass: "none" };
   if (response.status === "partial") return { status: "completed_partial", failureClass: "none" };
+
+  const executionTimedOut =
+    response.failure?.failureClass === "timed_out" ||
+    hasDiagnosticCode(response, "RENDERED_CAPTURE_TIMEOUT") ||
+    hasDiagnosticCode(response, "CAPTURE_JOB_TIMED_OUT");
+  if (executionTimedOut) {
+    return { status: "timed_out", failureClass: "timeout" };
+  }
 
   if (response.failure?.retryable) {
     return { status: "failed_transient", failureClass: "transient" };
@@ -740,6 +762,85 @@ export class FileBackedRenderedCaptureJobOrchestrator {
                   jobId: job.jobId,
                   attemptNo,
                   attemptCount: job.attemptCount,
+                },
+              }),
+              ...(response.diagnostics ?? []),
+            ],
+          },
+          health,
+        };
+      }
+
+      if (classified.status === "timed_out") {
+        attempt.status = "timed_out";
+        lastTransientFailureCode = response.failure?.failureCode ?? "RENDERED_CAPTURE_TIMEOUT";
+        if (attemptNo < job.maxAttempts && response.failure?.retryable !== false) {
+          job.status = "timed_out";
+          job.failureClass = "timeout";
+          job.failureCode = lastTransientFailureCode;
+          job.workerDiagnostics.push({
+            code: "CAPTURE_JOB_RETRIED",
+            severity: "warning",
+            message: `Capture job retry scheduled after timeout on attempt ${attemptNo}`,
+          });
+          this.writeJob(job);
+          continue;
+        }
+
+        job.status = "timed_out";
+        job.failureClass = "timeout";
+        job.failureCode = lastTransientFailureCode;
+        job.completedAt = nowIso(this.nowFn);
+        this.writeJob(job);
+
+        const enabled = typeof input.workerEnabled === "boolean" ? input.workerEnabled : this.readHealth().enabled;
+        const derived = deriveHealthFromResponse({ response, enabled });
+        const health = {
+          ...this.readHealth(),
+          enabled,
+          reachable: derived.reachable,
+          browserAvailable: derived.browserAvailable,
+          queueHealthy: true,
+          status: "timed_out" as const,
+          reason: derived.reason ?? "RENDERED_CAPTURE_TIMEOUT",
+          lastFailureAt: nowIso(this.nowFn),
+          lastFailureClass: "timed_out" as const,
+          lastFailureCode: lastTransientFailureCode,
+        };
+        this.writeHealth(health);
+
+        return {
+          job,
+          workerResponse: {
+            ...response,
+            diagnostics: [
+              toDiagnostic({
+                code: "CAPTURE_JOB_QUEUED",
+                message: "Capture job queued",
+                details: { jobId: job.jobId },
+              }),
+              toDiagnostic({
+                code: "CAPTURE_JOB_STARTED",
+                message: "Capture job started",
+                details: { jobId: job.jobId, attemptNo },
+              }),
+              ...(attemptNo > 1
+                ? [
+                    toDiagnostic({
+                      code: "CAPTURE_JOB_RETRIED",
+                      message: "Capture job retried after timeout",
+                      details: { jobId: job.jobId, attemptNo, attemptCount: job.attemptCount },
+                    }),
+                  ]
+                : []),
+              toDiagnostic({
+                code: "CAPTURE_JOB_TIMED_OUT",
+                severity: "warning",
+                message: "Capture job timed out",
+                details: {
+                  jobId: job.jobId,
+                  attemptNo,
+                  failureCode: lastTransientFailureCode,
                 },
               }),
               ...(response.diagnostics ?? []),

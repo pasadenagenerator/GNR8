@@ -180,6 +180,68 @@ test("url import surfaces terminal fallback reason when worker capture fails ter
   assert.equal((fallbackDiagnostic?.details as { fallbackReason?: string } | null)?.fallbackReason, "capture_failed_terminal");
 });
 
+test("url import preserves timeout fallback reason for HTTP 200 worker execution timeouts", async () => {
+  const tmpRoot = await fs.promises.mkdtemp(path.join(os.tmpdir(), "gnr8-url-import-timeout-fallback-"));
+  const entryHtml =
+    "<!doctype html><html><body><main><h1>Fallback page</h1><p>Worker timeout should preserve timeout truth in diagnostics and evidence.</p></main></body></html>";
+
+  const workerClient: RenderedCaptureWorkerClient = {
+    async execute(request) {
+      return {
+        kind: "rendered_capture_worker_response_v1",
+        contractVersion: "1.0.0",
+        requestId: request.requestId,
+        status: "failed",
+        environment: {
+          runtimeKind: "nodejs",
+          environmentSupported: true,
+          browserPackageAvailable: true,
+          browserBinaryAvailable: true,
+          supportDecision: "supported",
+        },
+        artifacts: [],
+        computedStyleSamples: [],
+        diagnostics: [{ code: "RENDERED_CAPTURE_TIMEOUT", severity: "warning", message: "capture timed out" }],
+        qualitySummary: {
+          renderedDomQuality: "unusable",
+          domLength: 0,
+          meaningfulNodeCount: 0,
+          screenshotCount: 0,
+          computedStyleSampleCount: 0,
+        },
+        failure: {
+          failureClass: "timed_out",
+          failureCode: "RENDERED_CAPTURE_TIMEOUT",
+          retryable: false,
+          message: "timed out",
+        },
+        timings: {
+          queueLatencyMs: null,
+          executionMs: 8,
+          totalMs: 8,
+        },
+      };
+    },
+  };
+
+  const snapshot = await importPublicSinglePageUrlToSnapshot({
+    sourceUrl: "https://example.com/",
+    snapshotRootDirAbs: tmpRoot,
+    requestId: "req-url-import-timeout-fallback",
+    fetchImpl: async () => makeHtmlResponse(entryHtml),
+    renderedCaptureWorkerClient: workerClient,
+  });
+
+  assert.equal(snapshot.sourceMode, "raw_html_fallback");
+  assert.equal(snapshot.renderedCaptureReliability.job?.status, "timed_out");
+  assert.equal(snapshot.renderedCaptureReliability.workerHealth?.status, "timed_out");
+  assert.equal(snapshot.importDiagnostics.issues.some((issue) => issue.code === "CAPTURE_WORKER_HTTP_ERROR"), false);
+  assert.equal(snapshot.importDiagnostics.issues.some((issue) => issue.code === "CAPTURE_WORKER_UNAVAILABLE"), false);
+  const fallbackDiagnostic = snapshot.importDiagnostics.issues.find((issue) => issue.code === "CAPTURE_WORKER_FALLBACK_TO_RAW_HTML");
+  assert.ok(fallbackDiagnostic);
+  assert.equal((fallbackDiagnostic?.details as { fallbackReason?: string } | null)?.fallbackReason, "capture_timed_out");
+});
+
 test("url import persists misconfigured worker health truth without collapsing to generic health unavailable", async () => {
   const tmpRoot = await fs.promises.mkdtemp(path.join(os.tmpdir(), "gnr8-url-import-worker-misconfigured-"));
   const entryHtml = "<!doctype html><html><body><main><h1>Entry</h1><p>content</p></main></body></html>";

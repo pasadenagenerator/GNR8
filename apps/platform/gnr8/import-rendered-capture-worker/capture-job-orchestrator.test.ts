@@ -221,6 +221,77 @@ test("capture job classifies timeout deterministically", async () => {
   assert.ok(result.workerResponse.diagnostics.some((entry) => entry.code === "CAPTURE_JOB_TIMED_OUT"));
 });
 
+test("capture job preserves execution-timeout truth from successful transport response", async () => {
+  const tmpDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), "gnr8-capture-job-worker-timeout-"));
+  const orchestrator = new FileBackedRenderedCaptureJobOrchestrator({
+    rootDirAbs: tmpDir,
+  });
+
+  orchestrator.submitJob({
+    jobId: "job-worker-timeout",
+    request: makeRequest("req-worker-timeout"),
+    timeoutBudgetMs: 10_000,
+    maxAttempts: 1,
+    correlation: {
+      importId: "import-1",
+      siteId: "site-1",
+      snapshotId: "snapshot-1",
+      sourceUrl: "https://example.com/",
+    },
+  });
+
+  const workerClient: RenderedCaptureWorkerClient = {
+    async execute(request) {
+      return {
+        kind: "rendered_capture_worker_response_v1",
+        contractVersion: "1.0.0",
+        requestId: request.requestId,
+        status: "failed",
+        environment: {
+          runtimeKind: "nodejs",
+          environmentSupported: true,
+          browserPackageAvailable: true,
+          browserBinaryAvailable: true,
+          supportDecision: "supported",
+        },
+        artifacts: [],
+        computedStyleSamples: [],
+        diagnostics: [{ code: "RENDERED_CAPTURE_TIMEOUT", severity: "warning", message: "timed out" }],
+        qualitySummary: {
+          renderedDomQuality: "unusable",
+          domLength: 0,
+          meaningfulNodeCount: 0,
+          screenshotCount: 0,
+          computedStyleSampleCount: 0,
+        },
+        failure: {
+          failureClass: "timed_out",
+          failureCode: "RENDERED_CAPTURE_TIMEOUT",
+          retryable: true,
+          message: "timeout",
+        },
+        timings: {
+          queueLatencyMs: null,
+          executionMs: 100,
+          totalMs: 100,
+        },
+      };
+    },
+  };
+
+  const result = await orchestrator.runJob({
+    jobId: "job-worker-timeout",
+    workerClient,
+    waitBudgetMs: 10_000,
+  });
+
+  assert.equal(result.job.status, "timed_out");
+  assert.equal(result.job.failureClass, "timeout");
+  assert.equal(result.health.status, "timed_out");
+  assert.equal(result.health.reachable, true);
+  assert.equal(result.workerResponse.diagnostics.some((entry) => entry.code === "CAPTURE_JOB_TIMED_OUT"), true);
+});
+
 test("capture job classifies unsupported environment as terminal", async () => {
   const tmpDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), "gnr8-capture-job-"));
   const orchestrator = new FileBackedRenderedCaptureJobOrchestrator({

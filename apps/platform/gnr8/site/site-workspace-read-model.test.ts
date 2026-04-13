@@ -231,6 +231,87 @@ test('import provenance summary is parsed when persisted on runtime site version
   assert.equal(parsed?.styleSignals, null)
 })
 
+test('import provenance parser preserves capture job + worker health timeout truth', () => {
+  const parsed = __siteWorkspaceReadModelTestUtils.parseImportProvenanceSummary({
+    kind: 'runtime_import_provenance_summary_v1',
+    sourceMode: 'raw_html_fallback',
+    importFidelityStatus: 'capture_failed',
+    renderedCaptureStatus: 'failed',
+    renderedDomQuality: 'unusable',
+    screenshotCount: 0,
+    computedStyleSampleCount: 0,
+    renderedCapture: {
+      used: false,
+      status: 'failed',
+      quality: 'unusable',
+      domLength: 0,
+      nodeCount: 0,
+      styleSampleCount: 0,
+      styleCoverage: 0,
+      screenshots: {
+        viewport: false,
+        fullPage: false,
+      },
+      execution: {
+        runtimeKind: 'nodejs',
+        environmentSupported: true,
+        browserPackageAvailable: true,
+        browserBinaryAvailable: true,
+        environmentStatus: 'supported',
+        failureCategory: 'page',
+        failureCode: 'RENDERED_CAPTURE_TIMEOUT',
+        browserLaunch: 'succeeded',
+        navigation: 'succeeded',
+        dom: 'empty_or_failed',
+        screenshot: 'none',
+        styleSampling: 'failed_or_empty',
+      },
+    },
+    importDiagnosticCodes: ['CAPTURE_JOB_TIMED_OUT', 'RENDERED_CAPTURE_TIMEOUT', 'CAPTURE_WORKER_FALLBACK_TO_RAW_HTML'],
+    captureEvidence: {
+      selectedSourceHtmlPath: '/tmp/snapshot/index.html',
+      responseHtmlPath: '/tmp/snapshot/response-html.raw.html',
+      entryHtmlPath: '/tmp/snapshot/index.html',
+      renderedCaptureManifestPath: '/tmp/snapshot/rendered-capture.json',
+      acquisitionEvidencePath: '/tmp/snapshot/acquisition-evidence.json',
+      renderedDomPath: null,
+      computedStylesPath: null,
+      renderedViewportScreenshotPath: null,
+      renderedFullpageScreenshotPath: null,
+      screenshotPaths: [],
+    },
+    captureJob: {
+      jobId: 'capture-job-1',
+      status: 'timed_out',
+      attemptCount: 2,
+      maxAttempts: 2,
+      failureClass: 'timeout',
+      failureCode: 'RENDERED_CAPTURE_TIMEOUT',
+      timeoutBudgetMs: 30000,
+      createdAt: '2026-04-12T10:00:00.000Z',
+      startedAt: '2026-04-12T10:00:01.000Z',
+      completedAt: '2026-04-12T10:00:31.000Z',
+    },
+    workerHealth: {
+      enabled: true,
+      reachable: true,
+      browserAvailable: true,
+      queueHealthy: true,
+      status: 'timed_out',
+      reason: 'RENDERED_CAPTURE_TIMEOUT',
+      lastSuccessAt: null,
+      lastFailureAt: '2026-04-12T10:00:31.000Z',
+      lastFailureClass: 'timed_out',
+      lastFailureCode: 'RENDERED_CAPTURE_TIMEOUT',
+    },
+  })
+
+  assert.equal(parsed?.captureJob?.status, 'timed_out')
+  assert.equal(parsed?.captureJob?.failureClass, 'timeout')
+  assert.equal(parsed?.workerHealth?.status, 'timed_out')
+  assert.equal(parsed?.workerHealth?.reachable, true)
+})
+
 test('import fidelity prefers persisted summary over semantic signal labels', () => {
   const parsed = __siteWorkspaceReadModelTestUtils.parseImportFidelity({
     runtimeVersion: {
@@ -349,6 +430,81 @@ test('import fidelity prefers persisted summary over semantic signal labels', ()
   assert.equal(parsed.evidencePaths.renderedDomPath, '/tmp/snapshot/rendered/rendered-dom.html')
   assert.ok(parsed.captureEvidenceRefs.some((entry) => entry.includes('rendered-capture.json')))
   assert.deepEqual(parsed.importDiagnosticCodes, ['RENDERED_CAPTURE_RECOVERED_ON_RETRY'])
+})
+
+test('import fidelity derives capture_timed_out fallback reason from persisted capture job truth', () => {
+  const parsed = __siteWorkspaceReadModelTestUtils.parseImportFidelity({
+    runtimeVersion: {
+      id: 'sv-timeout',
+      ownership_site_id: SITE_ID,
+      state: 'DRAFT',
+      version_no: 1,
+      import_provenance_summary: {
+        kind: 'runtime_import_provenance_summary_v1',
+        sourceMode: 'raw_html_fallback',
+        importFidelityStatus: 'capture_failed',
+        renderedCaptureStatus: 'failed',
+        renderedDomQuality: 'unusable',
+        screenshotCount: 0,
+        computedStyleSampleCount: 0,
+        renderedCapture: {
+          used: false,
+          status: 'failed',
+          quality: 'unusable',
+          domLength: 0,
+          nodeCount: 0,
+          styleSampleCount: 0,
+          styleCoverage: 0,
+          screenshots: { viewport: false, fullPage: false },
+        },
+        importDiagnosticCodes: ['RENDERED_CAPTURE_TIMEOUT', 'CAPTURE_JOB_TIMED_OUT'],
+        captureEvidence: {
+          selectedSourceHtmlPath: '/tmp/snapshot/index.html',
+          responseHtmlPath: '/tmp/snapshot/response-html.raw.html',
+          entryHtmlPath: '/tmp/snapshot/index.html',
+          renderedCaptureManifestPath: '/tmp/snapshot/rendered-capture.json',
+          acquisitionEvidencePath: '/tmp/snapshot/acquisition-evidence.json',
+          renderedDomPath: null,
+          computedStylesPath: null,
+          renderedViewportScreenshotPath: null,
+          renderedFullpageScreenshotPath: null,
+          screenshotPaths: [],
+        },
+        captureJob: {
+          jobId: 'capture-job-timeout',
+          status: 'timed_out',
+          attemptCount: 2,
+          maxAttempts: 2,
+          failureClass: 'timeout',
+          failureCode: 'RENDERED_CAPTURE_TIMEOUT',
+          timeoutBudgetMs: 30000,
+          createdAt: null,
+          startedAt: null,
+          completedAt: null,
+        },
+        workerHealth: {
+          enabled: true,
+          reachable: true,
+          browserAvailable: true,
+          queueHealthy: true,
+          status: 'timed_out',
+          reason: 'RENDERED_CAPTURE_TIMEOUT',
+          lastSuccessAt: null,
+          lastFailureAt: null,
+          lastFailureClass: 'timed_out',
+          lastFailureCode: 'RENDERED_CAPTURE_TIMEOUT',
+        },
+      },
+      updated_at: new Date().toISOString(),
+      created_at: new Date().toISOString(),
+    } as any,
+    pageRows: [],
+  })
+
+  assert.equal(parsed.captureFallbackReason, 'capture_timed_out')
+  assert.equal(parsed.captureJob?.status, 'timed_out')
+  assert.equal(parsed.workerHealth?.status, 'timed_out')
+  assert.ok(parsed.evidenceDiagnostics.includes('CAPTURE_JOB_TIMED_OUT'))
 })
 
 test('import fidelity falls back to semantic signals and only returns unknown when absent', () => {

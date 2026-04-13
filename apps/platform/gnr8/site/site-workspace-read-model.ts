@@ -142,6 +142,9 @@ export type SiteWorkspaceReadModel = {
     evidenceDiagnostics: string[]
     importDiagnosticCodes: string[]
     captureEvidenceRefs: string[]
+    captureJob: RuntimeImportProvenanceSummary['captureJob'] | null
+    workerHealth: RuntimeImportProvenanceSummary['workerHealth'] | null
+    captureFallbackReason: string | null
     diagnosticsSummary: string[]
     styleSignals: StyleSignalModel | null
     runtimeSelection: {
@@ -822,6 +825,68 @@ function parseImportProvenanceSummary(value: unknown): RuntimeImportProvenanceSu
             : 'not_attempted',
     },
   }
+  const captureJobRaw = isRecord(value.captureJob) ? value.captureJob : null
+  const captureJobStatusRaw = normalizeText(captureJobRaw?.status)
+  const captureJobFailureClassRaw = normalizeText(captureJobRaw?.failureClass)
+  const captureJob: RuntimeImportProvenanceSummary['captureJob'] =
+    captureJobRaw == null
+      ? null
+      : {
+          jobId: toTextOrNull(captureJobRaw.jobId),
+          status:
+            captureJobStatusRaw === 'queued' ||
+            captureJobStatusRaw === 'running' ||
+            captureJobStatusRaw === 'completed' ||
+            captureJobStatusRaw === 'completed_partial' ||
+            captureJobStatusRaw === 'failed_transient' ||
+            captureJobStatusRaw === 'failed_terminal' ||
+            captureJobStatusRaw === 'timed_out' ||
+            captureJobStatusRaw === 'cancelled'
+              ? (captureJobStatusRaw as NonNullable<RuntimeImportProvenanceSummary['captureJob']>['status'])
+              : null,
+          attemptCount: Number.isFinite(Number(captureJobRaw.attemptCount)) ? Math.max(0, Math.floor(Number(captureJobRaw.attemptCount))) : 0,
+          maxAttempts: Number.isFinite(Number(captureJobRaw.maxAttempts)) ? Math.max(0, Math.floor(Number(captureJobRaw.maxAttempts))) : 0,
+          failureClass:
+            captureJobFailureClassRaw === 'transient' ||
+            captureJobFailureClassRaw === 'terminal' ||
+            captureJobFailureClassRaw === 'unsupported_environment' ||
+            captureJobFailureClassRaw === 'timeout' ||
+            captureJobFailureClassRaw === 'none'
+              ? (captureJobFailureClassRaw as NonNullable<RuntimeImportProvenanceSummary['captureJob']>['failureClass'])
+              : null,
+          failureCode: toTextOrNull(captureJobRaw.failureCode),
+          timeoutBudgetMs: Number.isFinite(Number(captureJobRaw.timeoutBudgetMs)) ? Math.max(0, Math.floor(Number(captureJobRaw.timeoutBudgetMs))) : null,
+          createdAt: toTextOrNull(captureJobRaw.createdAt),
+          startedAt: toTextOrNull(captureJobRaw.startedAt),
+          completedAt: toTextOrNull(captureJobRaw.completedAt),
+        }
+  const workerHealthRaw = isRecord(value.workerHealth) ? value.workerHealth : null
+  const workerHealthStatusRaw = normalizeText(workerHealthRaw?.status)
+  const workerHealth: RuntimeImportProvenanceSummary['workerHealth'] =
+    workerHealthRaw == null
+      ? null
+      : {
+          enabled: Boolean(workerHealthRaw.enabled),
+          reachable: Boolean(workerHealthRaw.reachable),
+          browserAvailable: Boolean(workerHealthRaw.browserAvailable),
+          queueHealthy: Boolean(workerHealthRaw.queueHealthy),
+          status:
+            workerHealthStatusRaw === 'healthy' ||
+            workerHealthStatusRaw === 'disabled' ||
+            workerHealthStatusRaw === 'misconfigured' ||
+            workerHealthStatusRaw === 'unreachable' ||
+            workerHealthStatusRaw === 'unauthorized' ||
+            workerHealthStatusRaw === 'execution_failed' ||
+            workerHealthStatusRaw === 'timed_out' ||
+            workerHealthStatusRaw === 'unknown'
+              ? (workerHealthStatusRaw as NonNullable<RuntimeImportProvenanceSummary['workerHealth']>['status'])
+              : 'unknown',
+          reason: toTextOrNull(workerHealthRaw.reason),
+          lastSuccessAt: toTextOrNull(workerHealthRaw.lastSuccessAt),
+          lastFailureAt: toTextOrNull(workerHealthRaw.lastFailureAt),
+          lastFailureClass: toTextOrNull(workerHealthRaw.lastFailureClass),
+          lastFailureCode: toTextOrNull(workerHealthRaw.lastFailureCode),
+        }
 
   return {
     kind: 'runtime_import_provenance_summary_v1',
@@ -845,6 +910,8 @@ function parseImportProvenanceSummary(value: unknown): RuntimeImportProvenanceSu
       renderedFullpageScreenshotPath: toTextOrNull(captureEvidence?.renderedFullpageScreenshotPath),
       screenshotPaths: [...new Set(screenshotPaths)].sort((a, b) => a.localeCompare(b)),
     },
+    captureJob,
+    workerHealth,
     styleSignals,
   }
 }
@@ -867,6 +934,9 @@ function parseImportFidelity(input: {
   evidenceDiagnostics: string[]
   importDiagnosticCodes: string[]
   captureEvidenceRefs: string[]
+  captureJob: RuntimeImportProvenanceSummary['captureJob'] | null
+  workerHealth: RuntimeImportProvenanceSummary['workerHealth'] | null
+  captureFallbackReason: string | null
   styleSignals: StyleSignalModel | null
 } {
   const parsedFromSignals = parseImportFidelitySignals(input.pageRows)
@@ -892,6 +962,9 @@ function parseImportFidelity(input: {
       },
       evidenceDiagnostics: [],
       captureEvidenceRefs: [],
+      captureJob: null,
+      workerHealth: null,
+      captureFallbackReason: null,
       styleSignals: inferredStyleSignals,
     }
   }
@@ -910,10 +983,44 @@ function parseImportFidelity(input: {
     .filter((value): value is string => Boolean(value))
     .slice(0, 10)
   const styleSignals = parsedSummary.styleSignals ?? parseStyleSignalsFromSemanticLabels(input.pageRows)
+  const resolveCaptureFallbackReason = (): string | null => {
+    if (parsedSummary.sourceMode !== 'raw_html_fallback') return null
+
+    const job = parsedSummary.captureJob
+    const workerHealth = parsedSummary.workerHealth
+    const failureCode = normalizeText(job?.failureCode).toUpperCase()
+    const executionTimedOut =
+      failureCode === 'RENDERED_CAPTURE_TIMEOUT' ||
+      (job?.status === 'timed_out' && workerHealth?.status === 'timed_out' && workerHealth.reachable)
+    const transportTimedOut =
+      failureCode === 'CAPTURE_JOB_TIMED_OUT' ||
+      (job?.status === 'timed_out' && workerHealth?.status === 'timed_out' && !workerHealth.reachable)
+    if (
+      executionTimedOut ||
+      (job?.failureClass === 'timeout' && workerHealth?.reachable === true) ||
+      importDiagnosticCodes.includes('RENDERED_CAPTURE_TIMEOUT') ||
+      (importDiagnosticCodes.includes('CAPTURE_JOB_TIMED_OUT') && workerHealth?.reachable === true)
+    ) {
+      return 'capture_timed_out'
+    }
+    if (transportTimedOut) return 'worker_timeout'
+    if (job?.status === 'failed_terminal') return 'capture_failed_terminal'
+    if (job?.status === 'failed_transient') return 'capture_failed_transient'
+    if (workerHealth?.enabled === false) return 'worker_disabled'
+    if (workerHealth?.status === 'misconfigured') return 'worker_not_configured'
+    if (workerHealth?.status === 'unauthorized') return 'worker_unauthorized'
+    if (workerHealth?.status === 'timed_out') return 'worker_timeout'
+    if (workerHealth?.status === 'unreachable') return 'worker_unreachable'
+    if (workerHealth?.status === 'execution_failed') return 'worker_execution_failed'
+    return 'rendered_capture_unusable'
+  }
+
   const evidenceDiagnostics = [...new Set([
     ...importDiagnosticCodes.filter((code) => code.startsWith('ENTRY_FETCH_')),
     ...importDiagnosticCodes.filter(
       (code) =>
+        code.startsWith('CAPTURE_JOB_') ||
+        code.startsWith('CAPTURE_WORKER_') ||
         code.startsWith('RENDERED_CAPTURE_') ||
         code === 'ENVIRONMENT_UNSUPPORTED' ||
         code.endsWith('_FAILED') ||
@@ -946,6 +1053,9 @@ function parseImportFidelity(input: {
     evidenceDiagnostics,
     importDiagnosticCodes,
     captureEvidenceRefs,
+    captureJob: parsedSummary.captureJob ?? null,
+    workerHealth: parsedSummary.workerHealth ?? null,
+    captureFallbackReason: resolveCaptureFallbackReason(),
     styleSignals,
   }
 }
@@ -1259,6 +1369,9 @@ export async function getSiteWorkspaceReadModelForPage(input: {
       evidenceDiagnostics: importFidelity.evidenceDiagnostics,
       importDiagnosticCodes: importFidelity.importDiagnosticCodes,
       captureEvidenceRefs: importFidelity.captureEvidenceRefs,
+      captureJob: importFidelity.captureJob,
+      workerHealth: importFidelity.workerHealth,
+      captureFallbackReason: importFidelity.captureFallbackReason,
       diagnosticsSummary,
       styleSignals: importFidelity.styleSignals,
       runtimeSelection: {

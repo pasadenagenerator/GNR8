@@ -446,11 +446,28 @@ export function createHttpRenderedCaptureWorkerClient(input: {
         ];
 
         if (payload.status === "failed") {
+          const timeoutFailure = payload.failure?.failureClass === "timed_out";
+          if (timeoutFailure && !responseDiagnostics.some((entry) => entry.code === "RENDERED_CAPTURE_TIMEOUT")) {
+            diagnosticsPrefix.push(
+              createDiagnostic({
+                code: "RENDERED_CAPTURE_TIMEOUT",
+                severity: "warning",
+                message: "Rendered capture worker execution timed out",
+                details: {
+                  endpointUrl,
+                  failureCode: payload.failure?.failureCode ?? null,
+                  retryable: payload.failure?.retryable ?? null,
+                },
+              }),
+            );
+          }
           diagnosticsPrefix.push(
             createDiagnostic({
               code: "CAPTURE_WORKER_EXECUTION_FAILED",
               severity: "warning",
-              message: "Rendered capture worker executed but capture failed",
+              message: timeoutFailure
+                ? "Rendered capture worker executed but capture timed out"
+                : "Rendered capture worker executed but capture failed",
               details: {
                 endpointUrl,
                 failureClass: payload.failure?.failureClass ?? null,

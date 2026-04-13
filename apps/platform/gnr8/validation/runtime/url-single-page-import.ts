@@ -1155,6 +1155,8 @@ function buildRenderedCaptureExecutionTruth(input: {
   }
 
   const pageFailureCode = firstCode([
+    "CAPTURE_JOB_TIMED_OUT",
+    "RENDERED_CAPTURE_TIMEOUT",
     "BROWSER_LAUNCH_FAILED",
     "RENDERED_CAPTURE_BROWSER_START_FAILED",
     "NAVIGATION_FAILED",
@@ -1727,18 +1729,32 @@ function resolveWorkerFallbackReason(input: {
   job: RenderedCaptureJobRecord | null;
   workerHealth: RenderedCaptureWorkerHealthTruth | null;
 }): string {
+  const jobFailureCode = String(input.job?.failureCode ?? "").toUpperCase();
+  const executionTimedOut =
+    jobFailureCode === "RENDERED_CAPTURE_TIMEOUT" ||
+    (input.job?.status === "timed_out" && input.workerHealth?.status === "timed_out" && input.workerHealth.reachable);
+  const transportTimedOut =
+    jobFailureCode === "CAPTURE_JOB_TIMED_OUT" ||
+    (input.job?.status === "timed_out" && input.workerHealth?.status === "timed_out" && !input.workerHealth.reachable);
+  if (
+    executionTimedOut ||
+    (input.job?.failureClass === "timeout" && input.workerHealth?.reachable === true)
+  ) {
+    return "capture_timed_out";
+  }
+  if (transportTimedOut) return "worker_timeout";
+  if (input.job?.status === "failed_terminal") return "capture_failed_terminal";
+  if (input.job?.status === "failed_transient") return "capture_failed_transient";
+  if (input.job?.status === "queued" || input.job?.status === "running" || input.job?.status === "cancelled") {
+    return "capture_pending_or_not_completed";
+  }
+
   if (input.workerHealth && input.workerHealth.enabled === false) return "worker_disabled";
   if (input.workerHealth?.status === "misconfigured") return "worker_not_configured";
   if (input.workerHealth?.status === "unauthorized") return "worker_unauthorized";
   if (input.workerHealth?.status === "timed_out") return "worker_timeout";
   if (input.workerHealth?.status === "unreachable") return "worker_unreachable";
   if (input.workerHealth?.status === "execution_failed") return "worker_execution_failed";
-  if (input.job?.status === "timed_out") return "capture_timed_out";
-  if (input.job?.status === "failed_terminal") return "capture_failed_terminal";
-  if (input.job?.status === "failed_transient") return "capture_failed_transient";
-  if (input.job?.status === "queued" || input.job?.status === "running" || input.job?.status === "cancelled") {
-    return "capture_pending_or_not_completed";
-  }
   if (input.workerHealth && (!input.workerHealth.reachable || !input.workerHealth.queueHealthy || !input.workerHealth.browserAvailable)) {
     return "worker_unhealthy";
   }
