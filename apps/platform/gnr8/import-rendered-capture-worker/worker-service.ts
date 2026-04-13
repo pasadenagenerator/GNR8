@@ -7,19 +7,19 @@ import {
   DEFAULT_RENDERED_CAPTURE_READINESS_POLICY,
   DEFAULT_RENDERED_CAPTURE_VIEWPORT,
   runRenderedCapture,
-} from "@/gnr8/import-rendered-capture";
+} from "../import-rendered-capture";
 import type {
   RenderedCaptureDiagnostic,
   RenderedCaptureReadinessPolicy,
   RenderedCaptureResult,
-} from "@/gnr8/import-rendered-capture/rendered-capture-contract";
+} from "../import-rendered-capture/rendered-capture-contract";
 import {
   RENDERED_CAPTURE_WORKER_CONTRACT_VERSION,
   type RenderedCaptureWorkerArtifactRef,
   type RenderedCaptureWorkerFailureClass,
   type RenderedCaptureWorkerRequest,
   type RenderedCaptureWorkerResponse,
-} from "@/gnr8/import-rendered-capture-worker/worker-contract";
+} from "./worker-contract";
 
 function sha256Hex(value: string | Uint8Array): string {
   return crypto.createHash("sha256").update(value).digest("hex");

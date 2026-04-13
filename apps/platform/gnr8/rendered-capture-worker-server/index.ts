@@ -1,4 +1,4 @@
-import { createRenderedCaptureWorkerServer } from "@/gnr8/rendered-capture-worker-server/server";
+import { createRenderedCaptureWorkerServer } from "./server";
 
 function normalizePort(raw: string | undefined): number {
   const value = Number(raw);

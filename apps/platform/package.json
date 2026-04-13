@@ -4,7 +4,9 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "rendered-capture-worker:start": "NODE_OPTIONS='--conditions=react-server' pnpm exec tsx gnr8/rendered-capture-worker-server/index.ts"
+    "build:rendered-capture-worker": "pnpm exec tsc -p gnr8/rendered-capture-worker-server/tsconfig.build.json && node gnr8/rendered-capture-worker-server/write-dist-package-json.mjs",
+    "start:rendered-capture-worker": "node dist-rendered-capture-worker/gnr8/rendered-capture-worker-server/index.js",
+    "rendered-capture-worker:start": "pnpm run start:rendered-capture-worker"
   },
   "dependencies": {
     "@gnr8/core": "workspace:*",

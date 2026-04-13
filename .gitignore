@@ -4,6 +4,7 @@ node_modules/
 
 # build output
 dist/
+apps/platform/dist-rendered-capture-worker/
 .next/
 out/
 .out/

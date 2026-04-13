@@ -1,6 +1,7 @@
 # Dedicated Rendered Capture Worker Server
 
 This service hosts the rendered capture worker in a standalone Node runtime suitable for Railway Docker deployment.
+Production runtime is compiled JavaScript only (no `tsx` runtime transpilation).
 
 ## Endpoints
 
@@ -19,7 +20,14 @@ This service hosts the rendered capture worker in a standalone Node runtime suit
 From `apps/platform`:
 
 ```bash
-pnpm run rendered-capture-worker:start
+pnpm run build:rendered-capture-worker
+pnpm run start:rendered-capture-worker
+```
+
+Compiled entrypoint:
+
+```bash
+dist-rendered-capture-worker/gnr8/rendered-capture-worker-server/index.js
 ```
 
 ## Docker Build
@@ -28,4 +36,10 @@ Build from repo root:
 
 ```bash
 docker build -f apps/platform/gnr8/rendered-capture-worker-server/Dockerfile -t gnr8-rendered-capture-worker .
+```
+
+Container runtime command:
+
+```bash
+node apps/platform/dist-rendered-capture-worker/gnr8/rendered-capture-worker-server/index.js
 ```

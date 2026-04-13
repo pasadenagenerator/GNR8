@@ -3,16 +3,16 @@ import http from "node:http";
 import {
   executeRenderedCaptureWorkerRequest,
   parseRenderedCaptureWorkerRequest,
-} from "@/gnr8/import-rendered-capture-worker/worker-service";
+} from "../import-rendered-capture-worker/worker-service";
 import type {
   RenderedCaptureWorkerRequest,
   RenderedCaptureWorkerResponse,
-} from "@/gnr8/import-rendered-capture-worker/worker-contract";
+} from "../import-rendered-capture-worker/worker-contract";
 import {
   runChromiumLaunchProbe,
   DEFAULT_PLAYWRIGHT_CONTEXT_TIMEOUT_MS,
   DEFAULT_PLAYWRIGHT_LAUNCH_TIMEOUT_MS,
-} from "@/gnr8/import-rendered-capture/playwright-launch-probe";
+} from "../import-rendered-capture/playwright-launch-probe";
 
 export const RENDERED_CAPTURE_WORKER_PATH = "/internal/gnr8/rendered-capture-worker" as const;
 export const LEGACY_RENDERED_CAPTURE_WORKER_PATH = "/api/internal/gnr8/rendered-capture-worker" as const;

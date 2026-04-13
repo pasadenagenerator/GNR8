@@ -19,10 +19,12 @@ COPY packages/core packages/core
 COPY packages/data packages/data
 COPY tsconfig.json tsconfig.json
 
+RUN pnpm --filter @gnr8/platform run build:rendered-capture-worker
+
 ENV NODE_ENV="production"
 ENV HOST="0.0.0.0"
 ENV PORT="3001"
 
 EXPOSE 3001
 
-CMD ["/bin/bash", "-lc", "cd /app/apps/platform && NODE_OPTIONS='--conditions=react-server' pnpm exec tsx gnr8/rendered-capture-worker-server/index.ts"]
+CMD ["node", "apps/platform/dist-rendered-capture-worker/gnr8/rendered-capture-worker-server/index.js"]

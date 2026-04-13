@@ -3,7 +3,7 @@ import type {
   RenderedCaptureDiagnostic,
   RenderedCaptureReadinessPolicy,
   RenderedCaptureViewport,
-} from "@/gnr8/import-rendered-capture/rendered-capture-contract";
+} from "../import-rendered-capture/rendered-capture-contract";
 
 export const RENDERED_CAPTURE_WORKER_CONTRACT_VERSION = "1.0.0" as const;
 
@@ -171,4 +171,3 @@ export function createRenderedCaptureWorkerRequest(input: {
     },
   };
 }
-
