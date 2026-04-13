@@ -100,6 +100,15 @@ test("http worker client maps unauthorized response to CAPTURE_WORKER_UNAUTHORIZ
   assert.equal(response.status, "unsupported");
   assert.ok(response.diagnostics.some((entry) => entry.code === "CAPTURE_WORKER_UNAUTHORIZED"));
   assert.ok(response.diagnostics.some((entry) => entry.code === "CAPTURE_WORKER_HTTP_RESPONSE_RECEIVED"));
+  const unauthorized = response.diagnostics.find((entry) => entry.code === "CAPTURE_WORKER_UNAUTHORIZED");
+  assert.equal(
+    (unauthorized?.details as { statusCode?: number; responseParsed?: boolean } | undefined)?.statusCode,
+    401,
+  );
+  assert.equal(
+    (unauthorized?.details as { statusCode?: number; responseParsed?: boolean } | undefined)?.responseParsed,
+    true,
+  );
 });
 
 test("http worker client maps timeout to CAPTURE_WORKER_TIMEOUT", async () => {
@@ -213,6 +222,8 @@ test("http worker client preserves successful contract and adds call-path diagno
   assert.equal(capturedUrl, "https://worker.example.com/capture");
   const headers = new Headers(capturedHeaders);
   assert.equal(headers.get("x-gnr8-rendered-capture-worker-token"), "token-1");
+  assert.equal(headers.get("x-gnr8-request-id"), "req-success");
+  assert.equal(headers.get("x-gnr8-correlation-id"), "req-success");
   assert.ok(capturedBody);
   const serializedPayload = JSON.parse(capturedBody ?? "{}");
   const canonicalJsonPayload = JSON.parse(JSON.stringify(canonicalizeRenderedCaptureWorkerRequest(request)));
@@ -220,6 +231,46 @@ test("http worker client preserves successful contract and adds call-path diagno
   assert.ok(response.diagnostics.some((entry) => entry.code === "CAPTURE_WORKER_HTTP_REQUEST_SENT"));
   assert.ok(response.diagnostics.some((entry) => entry.code === "CAPTURE_WORKER_HTTP_RESPONSE_RECEIVED"));
   assert.ok(response.diagnostics.some((entry) => entry.code === "CAPTURE_WORKER_RESPONSE_PARSED"));
+});
+
+test("http worker client enriches CAPTURE_WORKER_HTTP_ERROR with status code and worker error details", async () => {
+  const client = createHttpRenderedCaptureWorkerClient({
+    endpointUrl: "https://worker.example.com/capture",
+    sharedToken: "token-1",
+    timeoutMs: 10_000,
+    fetchImpl: async () =>
+      new Response(
+        JSON.stringify({
+          ok: false,
+          error: {
+            code: "INVALID_WORKER_REQUEST",
+            message: "request invalid",
+          },
+        }),
+        {
+          status: 400,
+          headers: { "content-type": "application/json" },
+        },
+      ),
+  });
+
+  const response = await client.execute(makeRequest("req-http-400"));
+  const httpError = response.diagnostics.find((entry) => entry.code === "CAPTURE_WORKER_HTTP_ERROR");
+  assert.ok(httpError);
+  assert.equal(
+    (httpError?.details as { statusCode?: number; workerErrorCode?: string; responseParsed?: boolean } | undefined)?.statusCode,
+    400,
+  );
+  assert.equal(
+    (httpError?.details as { statusCode?: number; workerErrorCode?: string; responseParsed?: boolean } | undefined)
+      ?.workerErrorCode,
+    "INVALID_WORKER_REQUEST",
+  );
+  assert.equal(
+    (httpError?.details as { statusCode?: number; workerErrorCode?: string; responseParsed?: boolean } | undefined)
+      ?.responseParsed,
+    true,
+  );
 });
 
 test("http worker client distinguishes execution-failed worker response", async () => {

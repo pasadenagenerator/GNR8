@@ -1,4 +1,5 @@
 import http from "node:http";
+import crypto from "node:crypto";
 
 import {
   executeRenderedCaptureWorkerRequest,
@@ -21,6 +22,7 @@ export const RENDERED_CAPTURE_WORKER_HEALTH_PATH = "/health" as const;
 const DEFAULT_MAX_BODY_BYTES = 1_000_000;
 
 type ExecuteRequest = (input: { request: RenderedCaptureWorkerRequest }) => Promise<RenderedCaptureWorkerResponse>;
+type WorkerServerLogger = (event: { event: string; [key: string]: unknown }) => void;
 
 type WorkerHealthSummary = {
   runtimeKind: "nodejs" | "edge" | "unknown";
@@ -45,6 +47,11 @@ function normalizeText(value: unknown): string {
 
 function toErrorString(error: unknown): string {
   return String((error as Error)?.message ?? error);
+}
+
+function firstHeaderValue(value: string | string[] | undefined): string {
+  if (Array.isArray(value)) return normalizeText(value[0]);
+  return normalizeText(value);
 }
 
 function runtimeKind(): WorkerHealthSummary["runtimeKind"] {
@@ -209,15 +216,58 @@ export function createRenderedCaptureWorkerServer(input?: {
   sharedToken?: string;
   maxBodyBytes?: number;
   probeEnvironment?: () => Promise<WorkerHealthSummary>;
+  logger?: WorkerServerLogger;
 }): http.Server {
   const executeRequest = input?.executeRequest ?? executeRenderedCaptureWorkerRequest;
   const maxBodyBytes = Math.max(10_000, Math.floor(input?.maxBodyBytes ?? DEFAULT_MAX_BODY_BYTES));
   const resolveExpectedToken = () => normalizeText(input?.sharedToken ?? process.env.GNR8_RENDERED_CAPTURE_WORKER_SHARED_TOKEN);
   const probeEnvironment = input?.probeEnvironment ?? probeWorkerEnvironment;
+  const logger: WorkerServerLogger =
+    input?.logger ??
+    ((event) => {
+      process.stdout.write(`[worker] ${JSON.stringify(event)}\n`);
+    });
 
   return http.createServer(async (req, res) => {
     const method = normalizeText(req.method).toUpperCase();
     const url = new URL(req.url ?? "/", "http://localhost");
+    const authHeader = firstHeaderValue(req.headers["x-gnr8-rendered-capture-worker-token"]);
+    const requestContentType = firstHeaderValue(req.headers["content-type"]);
+    const requestContentLength = firstHeaderValue(req.headers["content-length"]);
+    const inboundRequestId = firstHeaderValue(req.headers["x-gnr8-request-id"] ?? req.headers["x-request-id"]);
+    const inboundCorrelationId = firstHeaderValue(req.headers["x-gnr8-correlation-id"]);
+    let requestId = inboundRequestId || null;
+    let correlationId = inboundCorrelationId || inboundRequestId || `worker-${crypto.randomUUID()}`;
+    res.setHeader("x-gnr8-correlation-id", correlationId);
+    if (requestId) {
+      res.setHeader("x-gnr8-request-id", requestId);
+    }
+
+    const log = (event: string, fields?: Record<string, unknown>) => {
+      logger({
+        event,
+        correlationId,
+        requestId,
+        method,
+        path: url.pathname,
+        ...fields,
+      });
+    };
+
+    const writeJsonWithStatusLog = (
+      status: number,
+      payload: unknown,
+      meta: { result: "ok" | "error"; errorCode?: string | null; workerStatus?: string | null; stage: string },
+    ): void => {
+      log("response_sent", {
+        stage: meta.stage,
+        status,
+        result: meta.result,
+        errorCode: meta.errorCode ?? null,
+        workerStatus: meta.workerStatus ?? null,
+      });
+      writeJson(res, status, payload);
+    };
 
     if (method === "GET" && pathMatches(url.pathname, RENDERED_CAPTURE_WORKER_HEALTH_PATH)) {
       const expectedToken = resolveExpectedToken();
@@ -225,7 +275,9 @@ export function createRenderedCaptureWorkerServer(input?: {
       const environment = await probeEnvironment();
 
       if (expectedToken && auth.reason === "mismatch") {
-        writeJson(res, 401, {
+        writeJsonWithStatusLog(
+          401,
+          {
           ok: false,
           error: {
             code: "UNAUTHORIZED_WORKER_REQUEST",
@@ -236,35 +288,74 @@ export function createRenderedCaptureWorkerServer(input?: {
             authReason: "token_mismatch",
             ...environment,
           },
-        });
+          },
+          {
+            result: "error",
+            errorCode: "UNAUTHORIZED_WORKER_REQUEST",
+            stage: "health",
+          },
+        );
         return;
       }
 
-      writeJson(res, 200, {
+      writeJsonWithStatusLog(
+        200,
+        {
         ok: true,
         health: {
           authenticated: auth.authorized,
           authReason:
             auth.reason === "ok"
               ? "ok"
-              : auth.reason === "missing_expected"
-                ? "worker_token_not_configured"
-                : "worker_token_missing",
+            : auth.reason === "missing_expected"
+              ? "worker_token_not_configured"
+              : "worker_token_missing",
           ...environment,
         },
-      });
+        },
+        {
+          result: "ok",
+          stage: "health",
+        },
+      );
       return;
     }
 
     const isWorkerPath =
       pathMatches(url.pathname, RENDERED_CAPTURE_WORKER_PATH) || pathMatches(url.pathname, LEGACY_RENDERED_CAPTURE_WORKER_PATH);
     if (method === "POST" && isWorkerPath) {
+      log("request_received", {
+        hasAuthHeader: authHeader.length > 0,
+        contentType: requestContentType || null,
+        contentLength: requestContentLength || null,
+      });
+
       const auth = resolveTokenAuth({
         headers: req.headers,
         expectedToken: resolveExpectedToken(),
       });
+      log("auth_checked", {
+        hasToken: authHeader.length > 0,
+        result: auth.authorized ? "accepted" : "rejected",
+        reason:
+          auth.reason === "missing_provided"
+            ? "missing_token"
+            : auth.reason === "mismatch"
+              ? "token_mismatch"
+              : auth.reason,
+      });
       if (!auth.authorized) {
-        writeJson(res, 401, {
+        log("auth_failed", {
+          reason:
+            auth.reason === "missing_provided"
+              ? "missing_token"
+              : auth.reason === "mismatch"
+                ? "token_mismatch"
+                : auth.reason,
+        });
+        writeJsonWithStatusLog(
+          401,
+          {
           ok: false,
           error: {
             code: "UNAUTHORIZED_WORKER_REQUEST",
@@ -273,9 +364,17 @@ export function createRenderedCaptureWorkerServer(input?: {
               authReason: auth.reason,
             },
           },
-        });
+          },
+          {
+            result: "error",
+            errorCode: "UNAUTHORIZED_WORKER_REQUEST",
+            stage: "auth",
+          },
+        );
         return;
       }
+      log("auth_passed", { reason: "token_accepted" });
+      log("request_validation_started");
 
       let body: unknown;
       try {
@@ -283,39 +382,140 @@ export function createRenderedCaptureWorkerServer(input?: {
       } catch (error) {
         const code = normalizeText((error as Error).message);
         if (code === "REQUEST_BODY_TOO_LARGE") {
-          writeJson(res, 413, {
+          log("request_validation_failed", {
+            reason: "body_too_large",
+            errorCode: code,
+          });
+          writeJsonWithStatusLog(
+            413,
+            {
             ok: false,
             error: {
               code,
               message: "Rendered capture worker request body too large.",
             },
-          });
+            },
+            {
+              result: "error",
+              errorCode: code,
+              stage: "validation",
+            },
+          );
           return;
         }
-        writeJson(res, 400, {
+        log("request_validation_failed", {
+          reason: "invalid_json",
+          errorCode: code || "REQUEST_BODY_INVALID",
+        });
+        writeJsonWithStatusLog(
+          400,
+          {
           ok: false,
           error: {
             code: code || "REQUEST_BODY_INVALID",
             message: "Rendered capture worker request body is invalid.",
           },
-        });
+          },
+          {
+            result: "error",
+            errorCode: code || "REQUEST_BODY_INVALID",
+            stage: "validation",
+          },
+        );
         return;
       }
 
       const parsed = parseRenderedCaptureWorkerRequestDetailed(body);
       if (!parsed.request) {
-        writeJson(res, 400, {
+        log("request_validation_failed", {
+          reason: "contract_invalid",
+          missingFields: parsed.error?.details.missingFields ?? [],
+          invalidFields: (parsed.error?.details.invalidFields ?? []).map((field) => field.path),
+          invalidFieldCount: parsed.error?.details.invalidFields?.length ?? 0,
+        });
+        writeJsonWithStatusLog(
+          400,
+          {
           ok: false,
           error: parsed.error,
-        });
+          },
+          {
+            result: "error",
+            errorCode: parsed.error?.code ?? "INVALID_WORKER_REQUEST",
+            stage: "validation",
+          },
+        );
         return;
       }
+      requestId = normalizeText(parsed.request.requestId) || requestId;
+      if (requestId) {
+        res.setHeader("x-gnr8-request-id", requestId);
+      }
+      if (!inboundCorrelationId && requestId) {
+        correlationId = requestId;
+        res.setHeader("x-gnr8-correlation-id", correlationId);
+      }
+      log("request_validation_passed", {
+        importId: parsed.request.importId,
+      });
+      log("execution_started", {
+        importId: parsed.request.importId,
+      });
+      log("capture_service_entered");
 
       try {
         const response = await executeRequest({ request: parsed.request });
-        writeJson(res, 200, response);
+        const diagnostics = Array.isArray(response.diagnostics) ? response.diagnostics : [];
+        if (diagnostics.some((entry) => entry.code === "NAVIGATION_STARTED")) {
+          log("navigation_started");
+        }
+        if (diagnostics.some((entry) => entry.code === "NAVIGATION_SUCCEEDED")) {
+          log("navigation_succeeded");
+        }
+        if (diagnostics.some((entry) => entry.code === "NAVIGATION_FAILED" || entry.code === "BROWSER_NAVIGATION_FAILED")) {
+          log("navigation_failed");
+        }
+        const launchProbeFailure = diagnostics.find((entry) =>
+          ["PLAYWRIGHT_IMPORT_FAILED", "PLAYWRIGHT_BROWSER_LAUNCH_FAILED", "PLAYWRIGHT_BROWSER_CONTEXT_FAILED", "PLAYWRIGHT_LAUNCH_TIMEOUT", "PLAYWRIGHT_EXECUTABLE_MISSING", "PLAYWRIGHT_RUNTIME_SANDBOX_BLOCKED"].includes(entry.code),
+        );
+        if (launchProbeFailure) {
+          log("launch_probe_status", {
+            status: "failed",
+            code: launchProbeFailure.code,
+          });
+        } else if (diagnostics.some((entry) => entry.code === "BROWSER_LAUNCH_SUCCEEDED")) {
+          log("launch_probe_status", {
+            status: "passed",
+          });
+        }
+        if (response.status === "failed" || response.status === "unsupported") {
+          log("execution_failed", {
+            code: response.failure?.failureCode ?? null,
+            failureClass: response.failure?.failureClass ?? null,
+          });
+        } else {
+          log("execution_succeeded", {
+            workerStatus: response.status,
+          });
+        }
+        writeJsonWithStatusLog(
+          200,
+          response,
+          {
+            result: "ok",
+            workerStatus: response.status,
+            errorCode: response.failure?.failureCode ?? null,
+            stage: "execution",
+          },
+        );
       } catch (error) {
-        writeJson(res, 500, {
+        log("execution_failed", {
+          code: "WORKER_EXECUTION_FAILED",
+          error: toErrorString(error),
+        });
+        writeJsonWithStatusLog(
+          500,
+          {
           ok: false,
           error: {
             code: "WORKER_EXECUTION_FAILED",
@@ -324,17 +524,31 @@ export function createRenderedCaptureWorkerServer(input?: {
               error: toErrorString(error),
             },
           },
-        });
+          },
+          {
+            result: "error",
+            errorCode: "WORKER_EXECUTION_FAILED",
+            stage: "execution",
+          },
+        );
       }
       return;
     }
 
-    writeJson(res, 404, {
+    writeJsonWithStatusLog(
+      404,
+      {
       ok: false,
       error: {
         code: "NOT_FOUND",
         message: "Rendered capture worker endpoint not found.",
       },
-    });
+      },
+      {
+        result: "error",
+        errorCode: "NOT_FOUND",
+        stage: "routing",
+      },
+    );
   });
 }

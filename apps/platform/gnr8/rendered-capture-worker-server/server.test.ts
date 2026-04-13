@@ -4,6 +4,8 @@ import test from "node:test";
 import {
   createRenderedCaptureWorkerRequest,
   RENDERED_CAPTURE_WORKER_CONTRACT_VERSION,
+  type RenderedCaptureWorkerRequest,
+  type RenderedCaptureWorkerResponse,
 } from "@/gnr8/import-rendered-capture-worker/worker-contract";
 import {
   createRenderedCaptureWorkerServer,
@@ -31,10 +33,12 @@ type HealthProbe = {
 async function startServer(input?: {
   sharedToken?: string;
   health?: HealthProbe;
+  executeRequest?: (input: { request: RenderedCaptureWorkerRequest }) => Promise<RenderedCaptureWorkerResponse>;
+  logger?: (event: { event: string; [key: string]: unknown }) => void;
 }) {
   const server = createRenderedCaptureWorkerServer({
     sharedToken: input?.sharedToken ?? "token-123",
-    executeRequest: async ({ request }) => ({
+    executeRequest: input?.executeRequest ?? (async ({ request }) => ({
       kind: "rendered_capture_worker_response_v1",
       contractVersion: RENDERED_CAPTURE_WORKER_CONTRACT_VERSION,
       requestId: request.requestId,
@@ -62,7 +66,8 @@ async function startServer(input?: {
         executionMs: 20,
         totalMs: 20,
       },
-    }),
+    })),
+    logger: input?.logger,
     probeEnvironment: async () =>
       input?.health ?? {
         runtimeKind: "nodejs",
@@ -144,6 +149,31 @@ test("worker server rejects unauthorized capture request", async () => {
   }
 });
 
+test("worker server logs request/auth/response lifecycle for auth failure", async () => {
+  const events: Array<{ event: string; [key: string]: unknown }> = [];
+  const fixture = await startServer({
+    logger: (entry) => {
+      events.push(entry);
+    },
+  });
+  try {
+    const response = await fetch(`${fixture.baseUrl}${RENDERED_CAPTURE_WORKER_PATH}`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+      },
+      body: JSON.stringify(makeRequest()),
+    });
+    assert.equal(response.status, 401);
+    assert.ok(events.some((entry) => entry.event === "request_received"));
+    assert.ok(events.some((entry) => entry.event === "auth_checked"));
+    assert.ok(events.some((entry) => entry.event === "auth_failed" && entry.reason === "missing_token"));
+    assert.ok(events.some((entry) => entry.event === "response_sent" && entry.status === 401));
+  } finally {
+    await fixture.close();
+  }
+});
+
 test("worker server validates worker request contract", async () => {
   const fixture = await startServer();
   try {
@@ -176,6 +206,31 @@ test("worker server validates worker request contract", async () => {
   }
 });
 
+test("worker server logs validation failure details", async () => {
+  const events: Array<{ event: string; [key: string]: unknown }> = [];
+  const fixture = await startServer({
+    logger: (entry) => {
+      events.push(entry);
+    },
+  });
+  try {
+    const response = await fetch(`${fixture.baseUrl}${RENDERED_CAPTURE_WORKER_PATH}`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-gnr8-rendered-capture-worker-token": "token-123",
+      },
+      body: JSON.stringify({ kind: "invalid" }),
+    });
+    assert.equal(response.status, 400);
+    assert.ok(events.some((entry) => entry.event === "request_validation_started"));
+    assert.ok(events.some((entry) => entry.event === "request_validation_failed" && entry.reason === "contract_invalid"));
+    assert.ok(events.some((entry) => entry.event === "response_sent" && entry.status === 400));
+  } finally {
+    await fixture.close();
+  }
+});
+
 test("worker server returns contract response for authorized valid request", async () => {
   const fixture = await startServer();
   try {
@@ -199,6 +254,39 @@ test("worker server returns contract response for authorized valid request", asy
     assert.equal(payload.contractVersion, RENDERED_CAPTURE_WORKER_CONTRACT_VERSION);
     assert.equal(payload.status, "available");
     assert.equal(payload.requestId, "req-1");
+  } finally {
+    await fixture.close();
+  }
+});
+
+test("worker server logs execution failure and 500 response", async () => {
+  const events: Array<{ event: string; [key: string]: unknown }> = [];
+  const fixture = await startServer({
+    logger: (entry) => {
+      events.push(entry);
+    },
+    executeRequest: async () => {
+      throw new Error("simulated_execution_error");
+    },
+  });
+  try {
+    const response = await fetch(`${fixture.baseUrl}${RENDERED_CAPTURE_WORKER_PATH}`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-gnr8-rendered-capture-worker-token": "token-123",
+        "x-gnr8-correlation-id": "corr-abc",
+        "x-gnr8-request-id": "req-exec-fail",
+      },
+      body: JSON.stringify(makeRequest()),
+    });
+    assert.equal(response.status, 500);
+    assert.equal(response.headers.get("x-gnr8-correlation-id"), "corr-abc");
+    assert.equal(response.headers.get("x-gnr8-request-id"), "req-1");
+    assert.ok(events.some((entry) => entry.event === "execution_started"));
+    assert.ok(events.some((entry) => entry.event === "capture_service_entered"));
+    assert.ok(events.some((entry) => entry.event === "execution_failed" && entry.code === "WORKER_EXECUTION_FAILED"));
+    assert.ok(events.some((entry) => entry.event === "response_sent" && entry.status === 500));
   } finally {
     await fixture.close();
   }

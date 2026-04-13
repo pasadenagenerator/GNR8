@@ -38,6 +38,27 @@ function toErrorString(error: unknown): string {
   return String((error as Error)?.message ?? error);
 }
 
+async function parseWorkerErrorResponse(
+  response: Response,
+): Promise<{ parsed: boolean; errorCode: string | null; errorMessage: string | null }> {
+  const contentType = normalizeText(response.headers.get("content-type")).toLowerCase();
+  if (!contentType.includes("application/json")) {
+    return { parsed: false, errorCode: null, errorMessage: null };
+  }
+
+  const parsed = (await response.json().catch(() => null)) as unknown;
+  if (!isObjectRecord(parsed)) {
+    return { parsed: false, errorCode: null, errorMessage: null };
+  }
+
+  const error = isObjectRecord(parsed.error) ? parsed.error : null;
+  return {
+    parsed: true,
+    errorCode: error ? normalizeText(error.code) || null : null,
+    errorMessage: error ? normalizeText(error.message) || null : null,
+  };
+}
+
 function createDiagnostic(input: {
   code: RenderedCaptureDiagnosticCode;
   message: string;
@@ -214,6 +235,7 @@ export function createHttpRenderedCaptureWorkerClient(input: {
       const canonicalRequest = canonicalizeRenderedCaptureWorkerRequest(request);
       const requestBody = JSON.stringify(canonicalRequest);
       const startedAt = Date.now();
+      const correlationId = canonicalRequest.requestId || canonicalRequest.importId;
       const startedDiagnostic = createDiagnostic({
         code: "CAPTURE_WORKER_REQUEST_STARTED",
         message: "Rendered capture worker request started",
@@ -221,6 +243,7 @@ export function createHttpRenderedCaptureWorkerClient(input: {
           endpointUrl,
           requestId: canonicalRequest.requestId,
           importId: canonicalRequest.importId,
+          correlationId,
           timeoutMs,
         },
       });
@@ -245,6 +268,8 @@ export function createHttpRenderedCaptureWorkerClient(input: {
           headers: {
             "content-type": "application/json",
             "x-gnr8-rendered-capture-worker-token": sharedToken,
+            "x-gnr8-request-id": canonicalRequest.requestId,
+            "x-gnr8-correlation-id": correlationId,
           },
           body: requestBody,
           signal,
@@ -257,8 +282,10 @@ export function createHttpRenderedCaptureWorkerClient(input: {
           details: {
             endpointUrl,
             status: response.status,
+            statusCode: response.status,
             statusText: response.statusText,
             requestLatencyMs: Date.now() - requestSentAt,
+            correlationId,
           },
         });
 
@@ -266,6 +293,7 @@ export function createHttpRenderedCaptureWorkerClient(input: {
           const unauthorized = response.status === 401 || response.status === 403;
           const reason: WorkerUnavailableReason = unauthorized ? "worker_unauthorized" : "worker_http_error";
           const specific = reasonToSpecificDiagnostic(reason);
+          const workerError = await parseWorkerErrorResponse(response);
 
           return createWorkerUnavailableResponse({
             request: canonicalRequest,
@@ -278,6 +306,7 @@ export function createHttpRenderedCaptureWorkerClient(input: {
                 message: "Rendered capture worker HTTP request sent",
                 details: {
                   endpointUrl,
+                  correlationId,
                 },
               }),
               responseReceivedDiagnostic,
@@ -287,10 +316,16 @@ export function createHttpRenderedCaptureWorkerClient(input: {
                 message: specific.message,
                 details: {
                   status: response.status,
+                  statusCode: response.status,
                   statusText: response.statusText,
                   endpointUrl,
                   elapsedMs: Date.now() - startedAt,
                   requestId: canonicalRequest.requestId,
+                  stage: "http_response",
+                  workerErrorCode: workerError.errorCode,
+                  workerErrorMessage: workerError.errorMessage,
+                  responseParsed: workerError.parsed,
+                  correlationId,
                 },
               }),
               createDiagnostic({
@@ -299,10 +334,16 @@ export function createHttpRenderedCaptureWorkerClient(input: {
                 message: "Rendered capture worker request failed",
                 details: {
                   status: response.status,
+                  statusCode: response.status,
                   statusText: response.statusText,
                   endpointUrl,
                   elapsedMs: Date.now() - startedAt,
                   requestId: canonicalRequest.requestId,
+                  stage: "http_response",
+                  workerErrorCode: workerError.errorCode,
+                  workerErrorMessage: workerError.errorMessage,
+                  responseParsed: workerError.parsed,
+                  correlationId,
                 },
               }),
               createDiagnostic({
@@ -310,10 +351,15 @@ export function createHttpRenderedCaptureWorkerClient(input: {
                 severity: "warning",
                 message: "Rendered capture worker request failed",
                 details: {
+                  statusCode: response.status,
                   status: response.status,
                   statusText: response.statusText,
                   reason,
                   requestId: canonicalRequest.requestId,
+                  workerErrorCode: workerError.errorCode,
+                  workerErrorMessage: workerError.errorMessage,
+                  responseParsed: workerError.parsed,
+                  correlationId,
                 },
               }),
               createDiagnostic({
@@ -322,8 +368,14 @@ export function createHttpRenderedCaptureWorkerClient(input: {
                 message: "Rendered capture worker unavailable; importer should use fallback path",
                 details: {
                   reason,
+                  statusCode: response.status,
                   status: response.status,
                   requestId: canonicalRequest.requestId,
+                  stage: "http_response",
+                  workerErrorCode: workerError.errorCode,
+                  workerErrorMessage: workerError.errorMessage,
+                  responseParsed: workerError.parsed,
+                  correlationId,
                 },
               }),
             ],
@@ -344,6 +396,7 @@ export function createHttpRenderedCaptureWorkerClient(input: {
                 message: "Rendered capture worker HTTP request sent",
                 details: {
                   endpointUrl,
+                  correlationId,
                 },
               }),
               responseReceivedDiagnostic,
@@ -351,7 +404,7 @@ export function createHttpRenderedCaptureWorkerClient(input: {
                 code: "CAPTURE_WORKER_RESPONSE_INVALID",
                 severity: "warning",
                 message: "Rendered capture worker returned invalid response contract",
-                details: { endpointUrl, elapsedMs: Date.now() - startedAt },
+                details: { endpointUrl, elapsedMs: Date.now() - startedAt, correlationId },
               }),
               createDiagnostic({
                 code: "RENDERED_CAPTURE_UNAVAILABLE",
@@ -378,6 +431,7 @@ export function createHttpRenderedCaptureWorkerClient(input: {
             message: "Rendered capture worker HTTP request sent",
             details: {
               endpointUrl,
+              correlationId,
             },
           }),
           responseReceivedDiagnostic,
@@ -435,6 +489,7 @@ export function createHttpRenderedCaptureWorkerClient(input: {
                 elapsedMs: Date.now() - startedAt,
                 timeoutMs,
                 error: toErrorString(error),
+                correlationId,
               },
             }),
             createDiagnostic({
@@ -446,6 +501,7 @@ export function createHttpRenderedCaptureWorkerClient(input: {
                 elapsedMs: Date.now() - startedAt,
                 timeoutMs,
                 error: toErrorString(error),
+                correlationId,
               },
             }),
             createDiagnostic({
@@ -455,13 +511,14 @@ export function createHttpRenderedCaptureWorkerClient(input: {
               details: {
                 reason,
                 error: toErrorString(error),
+                correlationId,
               },
             }),
             createDiagnostic({
               code: "CAPTURE_WORKER_UNAVAILABLE",
               severity: "warning",
               message: "Rendered capture worker unavailable; importer should use fallback path",
-              details: { reason, error: toErrorString(error) },
+              details: { reason, error: toErrorString(error), correlationId },
             }),
           ],
         });
