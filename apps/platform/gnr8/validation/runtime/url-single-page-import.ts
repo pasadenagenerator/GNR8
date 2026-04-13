@@ -72,6 +72,9 @@ export type UrlImportDiagnosticCode =
   | "CAPTURE_WORKER_UNAVAILABLE"
   | "CAPTURE_WORKER_RESPONSE_INVALID"
   | "CAPTURE_WORKER_RENDERED_DOM_USED"
+  | "CAPTURE_WORKER_RESULT_ACCEPTED"
+  | "CAPTURE_WORKER_RESULT_PARTIAL_ACCEPTED"
+  | "CAPTURE_WORKER_RESULT_OVERRIDDEN_BY_FALLBACK"
   | "CAPTURE_WORKER_FALLBACK_TO_RAW_HTML"
   | "INVALID_INPUT_URL"
   | "ENTRY_FETCH_FAILED"
@@ -1890,16 +1893,55 @@ function resolveSourceSelection(input: {
     }
   })();
   const renderedDomQuality = evaluateRenderedDomQuality(renderedHtml);
+  const workerStatusSuccessful = input.renderedCapture.status === "available" || input.renderedCapture.status === "partial";
+  const hasRenderedDomArtifact = renderedDomPathAbs.length > 0 && renderedHtml.trim().length > 0;
+  const hasScreenshotEvidence = input.renderedCapture.screenshots.length > 0;
+  const hasStyleEvidence = input.renderedCapture.computedStyleSamples.length > 0;
+  const renderedDomUsableForSource =
+    hasRenderedDomArtifact && (renderedDomQuality.quality !== "unusable" || hasScreenshotEvidence || hasStyleEvidence);
 
-  if (renderedDomQuality.quality === "strong" && renderedDomPathAbs.length > 0) {
+  if (workerStatusSuccessful && renderedDomUsableForSource) {
+    const highFidelity = renderedDomQuality.quality === "strong" && input.renderedCapture.status === "available";
+    if (!highFidelity) {
+      input.diagnostics.push(
+        createDiagnostic({
+          severity: "warning",
+          code: "IMPORT_FIDELITY_DEGRADED",
+          message: "Rendered capture was accepted as source, but import fidelity remains degraded.",
+          targetUrl: null,
+          details: {
+            sourceMode: "rendered_dom",
+            renderedCaptureStatus: input.renderedCapture.status,
+            renderedDomQuality: renderedDomQuality.quality,
+            screenshotCount: input.renderedCapture.screenshots.length,
+            computedStyleSampleCount: input.renderedCapture.computedStyleSamples.length,
+          },
+        }),
+      );
+      if (renderedDomQuality.quality !== "strong") {
+        input.diagnostics.push(
+          createDiagnostic({
+            severity: "warning",
+            code: "RENDERED_DOM_EMPTY_OR_WEAK",
+            message: "Rendered DOM was accepted in degraded mode because stronger fidelity signals were not available.",
+            targetUrl: null,
+            details: {
+              renderedDomQuality,
+              screenshotCount: input.renderedCapture.screenshots.length,
+              computedStyleSampleCount: input.renderedCapture.computedStyleSamples.length,
+            },
+          }),
+        );
+      }
+    }
     return {
       sourceMode: "rendered_dom",
-      fidelityStatus: "high_fidelity_import",
+      fidelityStatus: highFidelity ? "high_fidelity_import" : "degraded_import",
       selectedSourceHtmlPathAbs: renderedDomPathAbs,
       selectedHtml: renderedHtml,
       renderedDomQuality,
       rawHtmlQuality,
-      degraded: false,
+      degraded: !highFidelity,
     };
   }
 
@@ -2488,6 +2530,26 @@ export async function importPublicSinglePageUrlToSnapshot(input: {
   if (renderedCaptureViaWorker && sourceSelection.sourceMode === "rendered_dom") {
     diagnostics.push(
       createDiagnostic({
+        severity: renderedCapture.status === "partial" ? "warning" : "info",
+        code: renderedCapture.status === "partial" ? "CAPTURE_WORKER_RESULT_PARTIAL_ACCEPTED" : "CAPTURE_WORKER_RESULT_ACCEPTED",
+        message:
+          renderedCapture.status === "partial"
+            ? "Rendered capture worker partial result accepted as best available source."
+            : "Rendered capture worker result accepted as source of truth.",
+        targetUrl: null,
+        details: {
+          snapshotId,
+          renderedCaptureStatus: renderedCapture.status,
+          renderedDocumentCount: renderedCapture.documents.length,
+          screenshotCount: renderedCapture.screenshots.length,
+          computedStyleSampleCount: renderedCapture.computedStyleSamples.length,
+          captureJobId: renderedCaptureJob?.jobId ?? null,
+          captureJobStatus: renderedCaptureJob?.status ?? null,
+        },
+      }),
+    );
+    diagnostics.push(
+      createDiagnostic({
         severity: "info",
         code: "CAPTURE_WORKER_RENDERED_DOM_USED",
         message: "Rendered capture worker artifacts selected as import source.",
@@ -2507,6 +2569,28 @@ export async function importPublicSinglePageUrlToSnapshot(input: {
       job: renderedCaptureJob,
       workerHealth: renderedCaptureWorkerHealth,
     });
+    const workerProducedMeaningfulEvidence =
+      renderedCapture.documents.length > 0 ||
+      renderedCapture.screenshots.length > 0 ||
+      renderedCapture.computedStyleSamples.length > 0;
+    if (workerProducedMeaningfulEvidence) {
+      diagnostics.push(
+        createDiagnostic({
+          severity: "warning",
+          code: "CAPTURE_WORKER_RESULT_OVERRIDDEN_BY_FALLBACK",
+          message: "Worker produced capture evidence but fallback source was selected.",
+          targetUrl: null,
+          details: {
+            snapshotId,
+            renderedCaptureStatus: renderedCapture.status,
+            renderedDocumentCount: renderedCapture.documents.length,
+            screenshotCount: renderedCapture.screenshots.length,
+            computedStyleSampleCount: renderedCapture.computedStyleSamples.length,
+            fallbackReason,
+          },
+        }),
+      );
+    }
     diagnostics.push(
       createDiagnostic({
         severity: "warning",

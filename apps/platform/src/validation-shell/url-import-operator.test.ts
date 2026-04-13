@@ -716,7 +716,7 @@ test("rendered capture failure emits diagnostics and still returns snapshot outp
   assert.equal(fs.existsSync(snapshot.entryHtmlPathAbs), true);
 });
 
-test("weak rendered DOM snapshot degrades to explicit raw_html_fallback mode", async () => {
+test("weak rendered DOM snapshot remains rendered_dom source with degraded fidelity", async () => {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "gnr8-url-import-rendered-weak-"));
   const sourceUrl = "https://rendered-weak.example.com/";
 
@@ -743,12 +743,12 @@ test("weak rendered DOM snapshot degrades to explicit raw_html_fallback mode", a
     }),
   });
 
-  assert.equal(snapshot.sourceMode, "raw_html_fallback");
+  assert.equal(snapshot.sourceMode, "rendered_dom");
   assert.equal(snapshot.sourceSelection.fidelityStatus, "degraded_import");
   assert.equal(snapshot.sourceSelection.renderedDomQuality.quality, "weak");
   assert.ok(snapshot.importDiagnostics.issues.some((issue) => issue.code === "RENDERED_DOM_EMPTY_OR_WEAK"));
-  assert.ok(snapshot.importDiagnostics.issues.some((issue) => issue.code === "RAW_HTML_FALLBACK_USED"));
   assert.ok(snapshot.importDiagnostics.issues.some((issue) => issue.code === "IMPORT_FIDELITY_DEGRADED"));
+  assert.equal(snapshot.importDiagnostics.issues.some((issue) => issue.code === "RAW_HTML_FALLBACK_USED"), false);
 });
 
 test("entry fetch recovers via normalized URL candidate (www/non-www fallback)", async () => {

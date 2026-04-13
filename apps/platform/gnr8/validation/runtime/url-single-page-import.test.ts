@@ -242,6 +242,87 @@ test("url import preserves timeout fallback reason for HTTP 200 worker execution
   assert.equal((fallbackDiagnostic?.details as { fallbackReason?: string } | null)?.fallbackReason, "capture_timed_out");
 });
 
+test("url import accepts worker success truth even when timeout diagnostic is present", async () => {
+  const tmpRoot = await fs.promises.mkdtemp(path.join(os.tmpdir(), "gnr8-url-import-timeout-stale-success-"));
+  const entryHtml = "<!doctype html><html><body><main><h1>Entry</h1><p>backup content</p></main></body></html>";
+  const renderedHtml =
+    "<!doctype html><html><body><main><h1>Rendered title</h1><section><p>Rendered content that should remain selected despite stale timeout diagnostics.</p></section></main></body></html>";
+  const viewportPng = Buffer.from([137, 80, 78, 71, 1, 2, 3, 4]);
+
+  const workerClient: RenderedCaptureWorkerClient = {
+    async execute(request) {
+      return {
+        kind: "rendered_capture_worker_response_v1",
+        contractVersion: "1.0.0",
+        requestId: request.requestId,
+        status: "available",
+        environment: {
+          runtimeKind: "nodejs",
+          environmentSupported: true,
+          browserPackageAvailable: true,
+          browserBinaryAvailable: true,
+          supportDecision: "supported",
+        },
+        artifacts: [
+          {
+            artifactType: "rendered_dom_html",
+            captureType: null,
+            storage: "inline",
+            uri: `data:text/html;base64,${Buffer.from(renderedHtml, "utf8").toString("base64")}`,
+            mediaType: "text/html",
+            sha256: "rendered-dom",
+            byteLength: Buffer.byteLength(renderedHtml),
+          },
+          {
+            artifactType: "screenshot_png",
+            captureType: "desktop_viewport",
+            storage: "inline",
+            uri: `data:image/png;base64,${viewportPng.toString("base64")}`,
+            mediaType: "image/png",
+            sha256: "viewport-shot",
+            byteLength: viewportPng.byteLength,
+          },
+        ],
+        computedStyleSamples: [],
+        diagnostics: [{ code: "RENDERED_CAPTURE_TIMEOUT", severity: "warning", message: "stale timeout diagnostic" }],
+        qualitySummary: {
+          renderedDomQuality: "strong",
+          domLength: renderedHtml.length,
+          meaningfulNodeCount: 16,
+          screenshotCount: 1,
+          computedStyleSampleCount: 0,
+        },
+        failure: {
+          failureClass: "timed_out",
+          failureCode: "RENDERED_CAPTURE_TIMEOUT",
+          retryable: false,
+          message: "stale timeout",
+        },
+        timings: {
+          queueLatencyMs: null,
+          executionMs: 15,
+          totalMs: 15,
+        },
+      };
+    },
+  };
+
+  const snapshot = await importPublicSinglePageUrlToSnapshot({
+    sourceUrl: "https://example.com/",
+    snapshotRootDirAbs: tmpRoot,
+    requestId: "req-url-import-timeout-stale-success",
+    fetchImpl: async () => makeHtmlResponse(entryHtml),
+    renderedCaptureWorkerClient: workerClient,
+  });
+
+  assert.equal(snapshot.sourceMode, "rendered_dom");
+  assert.equal(snapshot.sourceSelection.sourceMode, "rendered_dom");
+  assert.equal(snapshot.sourceSelection.fidelityStatus, "high_fidelity_import");
+  assert.equal(snapshot.importDiagnostics.issues.some((issue) => issue.code === "CAPTURE_WORKER_RESULT_ACCEPTED"), true);
+  assert.equal(snapshot.importDiagnostics.issues.some((issue) => issue.code === "CAPTURE_WORKER_FALLBACK_TO_RAW_HTML"), false);
+  assert.equal(snapshot.renderedCaptureReliability.job?.status, "completed");
+});
+
 test("url import persists misconfigured worker health truth without collapsing to generic health unavailable", async () => {
   const tmpRoot = await fs.promises.mkdtemp(path.join(os.tmpdir(), "gnr8-url-import-worker-misconfigured-"));
   const entryHtml = "<!doctype html><html><body><main><h1>Entry</h1><p>content</p></main></body></html>";

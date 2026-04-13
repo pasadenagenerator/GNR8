@@ -58,12 +58,20 @@ function toDataUri(mediaType: string, bytes: Buffer): string {
   return `data:${mediaType};base64,${bytes.toString("base64")}`;
 }
 
-function pickFailure(diagnostics: RenderedCaptureDiagnostic[]): {
+function pickFailure(input: {
+  diagnostics: RenderedCaptureDiagnostic[];
+  status: RenderedCaptureWorkerResponse["status"];
+  hasEvidence: boolean;
+}): {
   failureClass: RenderedCaptureWorkerFailureClass;
   failureCode: string | null;
   retryable: boolean;
   message: string | null;
 } | null {
+  if (input.status === "available") return null;
+  if (input.status === "partial" && input.hasEvidence) return null;
+
+  const diagnostics = input.diagnostics;
   const firstCode = (codes: string[]): string | null => {
     for (const diagnostic of diagnostics) {
       const code = normalizeText(diagnostic.code);
@@ -366,8 +374,15 @@ export async function executeRenderedCaptureWorkerRequest(input: {
 
     const status = responseStatusFromCapture(result);
     const mergedDiagnostics = [...diagnostics, ...result.diagnostics];
-    const failure = pickFailure(mergedDiagnostics);
     const artifacts = collectArtifacts({ result });
+    const hasEvidence =
+      artifacts.some((artifact) => artifact.artifactType === "rendered_dom_html" || artifact.artifactType === "screenshot_png") ||
+      result.computedStyleSamples.length > 0;
+    const failure = pickFailure({
+      diagnostics: mergedDiagnostics,
+      status,
+      hasEvidence,
+    });
     const domArtifact = artifacts.find((artifact) => artifact.artifactType === "rendered_dom_html");
     const domLength = domArtifact?.byteLength ?? 0;
     const domHtml = domArtifact?.uri ? Buffer.from(domArtifact.uri.split(",")[1] ?? "", "base64").toString("utf8") : "";
