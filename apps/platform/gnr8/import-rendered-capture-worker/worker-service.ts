@@ -454,13 +454,315 @@ function isObjectRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
+type WorkerRequestInvalidField = {
+  path: string;
+  expected: string;
+  actual: string;
+};
+
+export type RenderedCaptureWorkerRequestValidationError = {
+  code: "INVALID_WORKER_REQUEST";
+  message: string;
+  details: {
+    expectedKind: RenderedCaptureWorkerRequest["kind"];
+    expectedContractVersion: typeof RENDERED_CAPTURE_WORKER_CONTRACT_VERSION;
+    missingFields: string[];
+    invalidFields: WorkerRequestInvalidField[];
+  };
+};
+
+function describeType(value: unknown): string {
+  if (value === null) return "null";
+  if (Array.isArray(value)) return "array";
+  return typeof value;
+}
+
+function hasOwnField(value: Record<string, unknown>, key: string): boolean {
+  return Object.prototype.hasOwnProperty.call(value, key);
+}
+
+function validateRequestPayloadShape(payload: unknown): {
+  request: RenderedCaptureWorkerRequest | null;
+  error: RenderedCaptureWorkerRequestValidationError | null;
+} {
+  const missingFields: string[] = [];
+  const invalidFields: WorkerRequestInvalidField[] = [];
+
+  const payloadRecord = isObjectRecord(payload) ? payload : null;
+  const wrappedRequest = payloadRecord && isObjectRecord(payloadRecord.request) ? payloadRecord.request : null;
+  const root =
+    wrappedRequest && payloadRecord !== null && !hasOwnField(payloadRecord, "kind")
+      ? wrappedRequest
+      : payloadRecord ?? null;
+  if (!root) {
+    return {
+      request: null,
+      error: {
+        code: "INVALID_WORKER_REQUEST",
+        message: "Rendered capture worker request contract is invalid.",
+        details: {
+          expectedKind: "rendered_capture_worker_request_v1",
+          expectedContractVersion: RENDERED_CAPTURE_WORKER_CONTRACT_VERSION,
+          missingFields: [],
+          invalidFields: [
+            {
+              path: "$",
+              expected: "object",
+              actual: describeType(payload),
+            },
+          ],
+        },
+      },
+    };
+  }
+
+  const requireString = (path: string, value: unknown): void => {
+    if (typeof value !== "string") {
+      invalidFields.push({
+        path,
+        expected: "string",
+        actual: describeType(value),
+      });
+      return;
+    }
+    if (!normalizeText(value)) {
+      invalidFields.push({
+        path,
+        expected: "non-empty string",
+        actual: "empty_string",
+      });
+    }
+  };
+
+  const requireBoolean = (path: string, value: unknown): void => {
+    if (typeof value !== "boolean") {
+      invalidFields.push({
+        path,
+        expected: "boolean",
+        actual: describeType(value),
+      });
+    }
+  };
+
+  const requireFiniteNumber = (path: string, value: unknown): void => {
+    if (typeof value !== "number" || !Number.isFinite(value)) {
+      invalidFields.push({
+        path,
+        expected: "finite number",
+        actual: describeType(value),
+      });
+    }
+  };
+
+  const requiredRootFields = ["kind", "contractVersion", "requestId", "importId", "sourceUrl", "trace", "capture"];
+  for (const field of requiredRootFields) {
+    if (!hasOwnField(root, field)) missingFields.push(field);
+  }
+
+  if (hasOwnField(root, "kind") && root.kind !== "rendered_capture_worker_request_v1") {
+    invalidFields.push({
+      path: "kind",
+      expected: "rendered_capture_worker_request_v1",
+      actual: typeof root.kind === "string" ? root.kind : describeType(root.kind),
+    });
+  }
+  if (hasOwnField(root, "contractVersion") && root.contractVersion !== RENDERED_CAPTURE_WORKER_CONTRACT_VERSION) {
+    invalidFields.push({
+      path: "contractVersion",
+      expected: RENDERED_CAPTURE_WORKER_CONTRACT_VERSION,
+      actual: typeof root.contractVersion === "string" ? root.contractVersion : describeType(root.contractVersion),
+    });
+  }
+
+  if (hasOwnField(root, "requestId")) requireString("requestId", root.requestId);
+  if (hasOwnField(root, "importId")) requireString("importId", root.importId);
+  if (hasOwnField(root, "sourceUrl")) requireString("sourceUrl", root.sourceUrl);
+
+  if (hasOwnField(root, "trace")) {
+    if (!isObjectRecord(root.trace)) {
+      invalidFields.push({
+        path: "trace",
+        expected: "object",
+        actual: describeType(root.trace),
+      });
+    } else {
+      const traceRequired = ["agencyId", "clientId", "siteId"];
+      for (const field of traceRequired) {
+        if (!hasOwnField(root.trace, field)) missingFields.push(`trace.${field}`);
+      }
+      const traceEntries: Array<{ key: keyof typeof root.trace; path: string }> = [
+        { key: "agencyId", path: "trace.agencyId" },
+        { key: "clientId", path: "trace.clientId" },
+        { key: "siteId", path: "trace.siteId" },
+      ];
+      for (const entry of traceEntries) {
+        const value = root.trace[entry.key];
+        if (value !== null && typeof value !== "string") {
+          invalidFields.push({
+            path: entry.path,
+            expected: "string|null",
+            actual: describeType(value),
+          });
+        }
+      }
+    }
+  }
+
+  if (hasOwnField(root, "capture")) {
+    if (!isObjectRecord(root.capture)) {
+      invalidFields.push({
+        path: "capture",
+        expected: "object",
+        actual: describeType(root.capture),
+      });
+    } else {
+      const captureRequired = [
+        "viewport",
+        "readinessPolicy",
+        "captureScreenshots",
+        "captureComputedStyles",
+        "captureRenderedDom",
+        "timeoutBudgetMs",
+      ];
+      for (const field of captureRequired) {
+        if (!hasOwnField(root.capture, field)) missingFields.push(`capture.${field}`);
+      }
+
+      if (hasOwnField(root.capture, "viewport")) {
+        if (!isObjectRecord(root.capture.viewport)) {
+          invalidFields.push({
+            path: "capture.viewport",
+            expected: "object",
+            actual: describeType(root.capture.viewport),
+          });
+        } else {
+          if (!hasOwnField(root.capture.viewport, "width")) missingFields.push("capture.viewport.width");
+          if (!hasOwnField(root.capture.viewport, "height")) missingFields.push("capture.viewport.height");
+          if (hasOwnField(root.capture.viewport, "width")) requireFiniteNumber("capture.viewport.width", root.capture.viewport.width);
+          if (hasOwnField(root.capture.viewport, "height")) requireFiniteNumber("capture.viewport.height", root.capture.viewport.height);
+        }
+      }
+
+      if (hasOwnField(root.capture, "readinessPolicy")) {
+        if (!isObjectRecord(root.capture.readinessPolicy)) {
+          invalidFields.push({
+            path: "capture.readinessPolicy",
+            expected: "object",
+            actual: describeType(root.capture.readinessPolicy),
+          });
+        } else {
+          const readinessRequired = [
+            "navigationTimeoutMs",
+            "networkQuietTimeoutMs",
+            "domStabilizationWindowMs",
+            "domStabilizationPollMs",
+            "maxTotalCaptureMs",
+          ];
+          for (const field of readinessRequired) {
+            if (!hasOwnField(root.capture.readinessPolicy, field)) missingFields.push(`capture.readinessPolicy.${field}`);
+          }
+
+          if (hasOwnField(root.capture.readinessPolicy, "navigationTimeoutMs")) {
+            requireFiniteNumber(
+              "capture.readinessPolicy.navigationTimeoutMs",
+              root.capture.readinessPolicy.navigationTimeoutMs,
+            );
+          }
+          if (hasOwnField(root.capture.readinessPolicy, "networkQuietTimeoutMs")) {
+            requireFiniteNumber(
+              "capture.readinessPolicy.networkQuietTimeoutMs",
+              root.capture.readinessPolicy.networkQuietTimeoutMs,
+            );
+          }
+          if (hasOwnField(root.capture.readinessPolicy, "domStabilizationWindowMs")) {
+            requireFiniteNumber(
+              "capture.readinessPolicy.domStabilizationWindowMs",
+              root.capture.readinessPolicy.domStabilizationWindowMs,
+            );
+          }
+          if (hasOwnField(root.capture.readinessPolicy, "domStabilizationPollMs")) {
+            requireFiniteNumber(
+              "capture.readinessPolicy.domStabilizationPollMs",
+              root.capture.readinessPolicy.domStabilizationPollMs,
+            );
+          }
+          if (hasOwnField(root.capture.readinessPolicy, "maxTotalCaptureMs")) {
+            requireFiniteNumber("capture.readinessPolicy.maxTotalCaptureMs", root.capture.readinessPolicy.maxTotalCaptureMs);
+          }
+          if (
+            hasOwnField(root.capture.readinessPolicy, "shellContentMinLength") &&
+            root.capture.readinessPolicy.shellContentMinLength !== undefined
+          ) {
+            requireFiniteNumber(
+              "capture.readinessPolicy.shellContentMinLength",
+              root.capture.readinessPolicy.shellContentMinLength,
+            );
+          }
+          if (
+            hasOwnField(root.capture.readinessPolicy, "shellDetectionRetryCount") &&
+            root.capture.readinessPolicy.shellDetectionRetryCount !== undefined
+          ) {
+            requireFiniteNumber(
+              "capture.readinessPolicy.shellDetectionRetryCount",
+              root.capture.readinessPolicy.shellDetectionRetryCount,
+            );
+          }
+          if (
+            hasOwnField(root.capture.readinessPolicy, "shellDetectionRetryDelayMs") &&
+            root.capture.readinessPolicy.shellDetectionRetryDelayMs !== undefined
+          ) {
+            requireFiniteNumber(
+              "capture.readinessPolicy.shellDetectionRetryDelayMs",
+              root.capture.readinessPolicy.shellDetectionRetryDelayMs,
+            );
+          }
+        }
+      }
+
+      if (hasOwnField(root.capture, "captureScreenshots")) {
+        requireBoolean("capture.captureScreenshots", root.capture.captureScreenshots);
+      }
+      if (hasOwnField(root.capture, "captureComputedStyles")) {
+        requireBoolean("capture.captureComputedStyles", root.capture.captureComputedStyles);
+      }
+      if (hasOwnField(root.capture, "captureRenderedDom")) {
+        requireBoolean("capture.captureRenderedDom", root.capture.captureRenderedDom);
+      }
+      if (hasOwnField(root.capture, "timeoutBudgetMs")) {
+        requireFiniteNumber("capture.timeoutBudgetMs", root.capture.timeoutBudgetMs);
+      }
+    }
+  }
+
+  if (missingFields.length > 0 || invalidFields.length > 0) {
+    return {
+      request: null,
+      error: {
+        code: "INVALID_WORKER_REQUEST",
+        message: "Rendered capture worker request contract is invalid.",
+        details: {
+          expectedKind: "rendered_capture_worker_request_v1",
+          expectedContractVersion: RENDERED_CAPTURE_WORKER_CONTRACT_VERSION,
+          missingFields: [...new Set(missingFields)].sort((a, b) => a.localeCompare(b)),
+          invalidFields,
+        },
+      },
+    };
+  }
+
+  return {
+    request: root as RenderedCaptureWorkerRequest,
+    error: null,
+  };
+}
+
+export function parseRenderedCaptureWorkerRequestDetailed(payload: unknown): {
+  request: RenderedCaptureWorkerRequest | null;
+  error: RenderedCaptureWorkerRequestValidationError | null;
+} {
+  return validateRequestPayloadShape(payload);
+}
+
 export function parseRenderedCaptureWorkerRequest(payload: unknown): RenderedCaptureWorkerRequest | null {
-  if (!isObjectRecord(payload)) return null;
-  if (payload.kind !== "rendered_capture_worker_request_v1") return null;
-  if (payload.contractVersion !== RENDERED_CAPTURE_WORKER_CONTRACT_VERSION) return null;
-  if (!isObjectRecord(payload.capture)) return null;
-  if (!isObjectRecord(payload.capture.viewport)) return null;
-  if (!isObjectRecord(payload.capture.readinessPolicy)) return null;
-  if (typeof payload.requestId !== "string" || typeof payload.importId !== "string" || typeof payload.sourceUrl !== "string") return null;
-  return payload as RenderedCaptureWorkerRequest;
+  return validateRequestPayloadShape(payload).request;
 }

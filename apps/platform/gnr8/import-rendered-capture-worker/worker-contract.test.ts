@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   RENDERED_CAPTURE_WORKER_CONTRACT_VERSION,
+  canonicalizeRenderedCaptureWorkerRequest,
   createRenderedCaptureWorkerRequest,
 } from "@/gnr8/import-rendered-capture-worker/worker-contract";
 
@@ -49,3 +50,27 @@ test("createRenderedCaptureWorkerRequest normalizes bounds and defaults determin
   assert.equal(request.trace.siteId, null);
 });
 
+test("canonicalizeRenderedCaptureWorkerRequest yields stable contract-complete payload", () => {
+  const canonical = canonicalizeRenderedCaptureWorkerRequest({
+    requestId: "req-stable",
+    importId: "import-stable",
+    sourceUrl: "https://example.com/stable",
+    capture: {
+      viewport: { width: 1366, height: 768 },
+      readinessPolicy: {
+        navigationTimeoutMs: 20_000,
+        networkQuietTimeoutMs: 4_000,
+        domStabilizationWindowMs: 2_500,
+        domStabilizationPollMs: 250,
+        maxTotalCaptureMs: 30_000,
+      },
+      timeoutBudgetMs: 30_000,
+    },
+  });
+
+  const serialized = JSON.stringify(canonical);
+  assert.equal(
+    serialized,
+    '{"kind":"rendered_capture_worker_request_v1","contractVersion":"1.0.0","requestId":"req-stable","importId":"import-stable","sourceUrl":"https://example.com/stable","trace":{"agencyId":null,"clientId":null,"siteId":null},"capture":{"viewport":{"width":1366,"height":768},"readinessPolicy":{"navigationTimeoutMs":20000,"networkQuietTimeoutMs":4000,"domStabilizationWindowMs":2500,"domStabilizationPollMs":250,"maxTotalCaptureMs":30000},"captureScreenshots":true,"captureComputedStyles":true,"captureRenderedDom":true,"timeoutBudgetMs":30000}}',
+  );
+});

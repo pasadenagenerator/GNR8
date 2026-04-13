@@ -3,6 +3,7 @@ import type {
   RenderedCaptureDiagnosticCode,
 } from "@/gnr8/import-rendered-capture/rendered-capture-contract";
 import {
+  canonicalizeRenderedCaptureWorkerRequest,
   type RenderedCaptureWorkerRequest,
   type RenderedCaptureWorkerResponse,
   RENDERED_CAPTURE_WORKER_CONTRACT_VERSION,
@@ -210,14 +211,16 @@ export function createHttpRenderedCaptureWorkerClient(input: {
 
   return {
     async execute(request: RenderedCaptureWorkerRequest): Promise<RenderedCaptureWorkerResponse> {
+      const canonicalRequest = canonicalizeRenderedCaptureWorkerRequest(request);
+      const requestBody = JSON.stringify(canonicalRequest);
       const startedAt = Date.now();
       const startedDiagnostic = createDiagnostic({
         code: "CAPTURE_WORKER_REQUEST_STARTED",
         message: "Rendered capture worker request started",
         details: {
           endpointUrl,
-          requestId: request.requestId,
-          importId: request.importId,
+          requestId: canonicalRequest.requestId,
+          importId: canonicalRequest.importId,
           timeoutMs,
         },
       });
@@ -227,7 +230,9 @@ export function createHttpRenderedCaptureWorkerClient(input: {
         message: "Rendered capture worker request payload built",
         details: {
           endpointUrl,
-          requestId: request.requestId,
+          requestId: canonicalRequest.requestId,
+          contractVersion: canonicalRequest.contractVersion,
+          kind: canonicalRequest.kind,
           timeoutMs,
         },
       });
@@ -241,7 +246,7 @@ export function createHttpRenderedCaptureWorkerClient(input: {
             "content-type": "application/json",
             "x-gnr8-rendered-capture-worker-token": sharedToken,
           },
-          body: JSON.stringify(request),
+          body: requestBody,
           signal,
           cache: "no-store",
         });
@@ -263,7 +268,7 @@ export function createHttpRenderedCaptureWorkerClient(input: {
           const specific = reasonToSpecificDiagnostic(reason);
 
           return createWorkerUnavailableResponse({
-            request,
+            request: canonicalRequest,
             reason,
             diagnostics: [
               startedDiagnostic,
@@ -285,6 +290,7 @@ export function createHttpRenderedCaptureWorkerClient(input: {
                   statusText: response.statusText,
                   endpointUrl,
                   elapsedMs: Date.now() - startedAt,
+                  requestId: canonicalRequest.requestId,
                 },
               }),
               createDiagnostic({
@@ -296,6 +302,7 @@ export function createHttpRenderedCaptureWorkerClient(input: {
                   statusText: response.statusText,
                   endpointUrl,
                   elapsedMs: Date.now() - startedAt,
+                  requestId: canonicalRequest.requestId,
                 },
               }),
               createDiagnostic({
@@ -306,6 +313,7 @@ export function createHttpRenderedCaptureWorkerClient(input: {
                   status: response.status,
                   statusText: response.statusText,
                   reason,
+                  requestId: canonicalRequest.requestId,
                 },
               }),
               createDiagnostic({
@@ -315,6 +323,7 @@ export function createHttpRenderedCaptureWorkerClient(input: {
                 details: {
                   reason,
                   status: response.status,
+                  requestId: canonicalRequest.requestId,
                 },
               }),
             ],
@@ -325,7 +334,7 @@ export function createHttpRenderedCaptureWorkerClient(input: {
         if (!isWorkerResponseShape(payload)) {
           const reason: WorkerUnavailableReason = "worker_response_invalid";
           return createWorkerUnavailableResponse({
-            request,
+            request: canonicalRequest,
             reason,
             diagnostics: [
               startedDiagnostic,
@@ -405,7 +414,7 @@ export function createHttpRenderedCaptureWorkerClient(input: {
         const reason: WorkerUnavailableReason = aborted ? "worker_timeout" : "worker_unreachable";
         const specific = reasonToSpecificDiagnostic(reason);
         return createWorkerUnavailableResponse({
-          request,
+          request: canonicalRequest,
           reason,
           diagnostics: [
             startedDiagnostic,

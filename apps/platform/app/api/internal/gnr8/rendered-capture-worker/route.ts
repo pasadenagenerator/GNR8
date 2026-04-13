@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 
 import {
   executeRenderedCaptureWorkerRequest,
-  parseRenderedCaptureWorkerRequest,
+  parseRenderedCaptureWorkerRequestDetailed,
 } from "@/gnr8/import-rendered-capture-worker/worker-service";
 
 export const runtime = "nodejs";
@@ -35,20 +35,17 @@ export async function POST(req: Request) {
   }
 
   const body = (await req.json().catch(() => null)) as unknown;
-  const parsed = parseRenderedCaptureWorkerRequest(body);
-  if (!parsed) {
+  const parsed = parseRenderedCaptureWorkerRequestDetailed(body);
+  if (!parsed.request) {
     return NextResponse.json(
       {
         ok: false,
-        error: {
-          code: "INVALID_WORKER_REQUEST",
-          message: "Rendered capture worker request contract is invalid.",
-        },
+        error: parsed.error,
       },
       { status: 400 },
     );
   }
 
-  const response = await executeRenderedCaptureWorkerRequest({ request: parsed });
+  const response = await executeRenderedCaptureWorkerRequest({ request: parsed.request });
   return NextResponse.json(response, { status: 200 });
 }

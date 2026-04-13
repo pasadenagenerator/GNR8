@@ -5,6 +5,7 @@ import path from "node:path";
 import test from "node:test";
 
 import type { RenderedCaptureWorkerClient } from "@/gnr8/import-rendered-capture-worker";
+import { parseRenderedCaptureWorkerRequestDetailed } from "@/gnr8/import-rendered-capture-worker/worker-service";
 import { importPublicSinglePageUrlToSnapshot } from "@/gnr8/validation/runtime/url-single-page-import";
 
 function makeHtmlResponse(html: string): Response {
@@ -295,4 +296,62 @@ test("url import persists launch-probe failure code without collapsing to generi
   const acquisitionEvidence = JSON.parse(fs.readFileSync(path.resolve(snapshot.snapshotRootDirAbs, "acquisition-evidence.json"), "utf8"));
   assert.equal(acquisitionEvidence.renderedCapture.executionTruth.failureCategory, "environment");
   assert.equal(acquisitionEvidence.renderedCapture.executionTruth.failureCode, "PLAYWRIGHT_RUNTIME_SANDBOX_BLOCKED");
+});
+
+test("url import sends worker payload that passes contract validation and continues execution", async () => {
+  const tmpRoot = await fs.promises.mkdtemp(path.join(os.tmpdir(), "gnr8-url-import-request-contract-pass-"));
+  const entryHtml = "<!doctype html><html><body><main><h1>Entry</h1><p>content</p></main></body></html>";
+  let parsePassed = false;
+
+  const workerClient: RenderedCaptureWorkerClient = {
+    async execute(request) {
+      const parsed = parseRenderedCaptureWorkerRequestDetailed(request);
+      parsePassed = Boolean(parsed.request) && !parsed.error;
+      return {
+        kind: "rendered_capture_worker_response_v1",
+        contractVersion: "1.0.0",
+        requestId: request.requestId,
+        status: "failed",
+        environment: {
+          runtimeKind: "nodejs",
+          environmentSupported: true,
+          browserPackageAvailable: true,
+          browserBinaryAvailable: true,
+          supportDecision: "supported",
+        },
+        artifacts: [],
+        computedStyleSamples: [],
+        diagnostics: [{ code: "NAVIGATION_FAILED", severity: "warning", message: "simulated execution failure" }],
+        qualitySummary: {
+          renderedDomQuality: "unusable",
+          domLength: 0,
+          meaningfulNodeCount: 0,
+          screenshotCount: 0,
+          computedStyleSampleCount: 0,
+        },
+        failure: {
+          failureClass: "navigation_failed",
+          failureCode: "NAVIGATION_FAILED",
+          retryable: true,
+          message: "simulated execution failure",
+        },
+        timings: {
+          queueLatencyMs: null,
+          executionMs: 4,
+          totalMs: 4,
+        },
+      };
+    },
+  };
+
+  const snapshot = await importPublicSinglePageUrlToSnapshot({
+    sourceUrl: "https://example.com/",
+    snapshotRootDirAbs: tmpRoot,
+    requestId: "req-url-import-contract-pass",
+    fetchImpl: async () => makeHtmlResponse(entryHtml),
+    renderedCaptureWorkerClient: workerClient,
+  });
+
+  assert.equal(parsePassed, true);
+  assert.equal(snapshot.importDiagnostics.issues.some((issue) => String(issue.code) === "INVALID_WORKER_REQUEST"), false);
 });

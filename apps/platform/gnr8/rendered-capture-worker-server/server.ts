@@ -2,7 +2,7 @@ import http from "node:http";
 
 import {
   executeRenderedCaptureWorkerRequest,
-  parseRenderedCaptureWorkerRequest,
+  parseRenderedCaptureWorkerRequestDetailed,
 } from "../import-rendered-capture-worker/worker-service";
 import type {
   RenderedCaptureWorkerRequest,
@@ -302,20 +302,17 @@ export function createRenderedCaptureWorkerServer(input?: {
         return;
       }
 
-      const parsed = parseRenderedCaptureWorkerRequest(body);
-      if (!parsed) {
+      const parsed = parseRenderedCaptureWorkerRequestDetailed(body);
+      if (!parsed.request) {
         writeJson(res, 400, {
           ok: false,
-          error: {
-            code: "INVALID_WORKER_REQUEST",
-            message: "Rendered capture worker request contract is invalid.",
-          },
+          error: parsed.error,
         });
         return;
       }
 
       try {
-        const response = await executeRequest({ request: parsed });
+        const response = await executeRequest({ request: parsed.request });
         writeJson(res, 200, response);
       } catch (error) {
         writeJson(res, 500, {

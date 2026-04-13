@@ -56,6 +56,25 @@ export type RenderedCaptureWorkerRequest = {
   };
 };
 
+export type RenderedCaptureWorkerRequestLike = {
+  requestId: string;
+  importId: string;
+  sourceUrl: string;
+  trace?: {
+    agencyId?: string | null;
+    clientId?: string | null;
+    siteId?: string | null;
+  } | null;
+  capture: {
+    viewport: RenderedCaptureViewport;
+    readinessPolicy: RenderedCaptureReadinessPolicy;
+    captureScreenshots?: boolean;
+    captureComputedStyles?: boolean;
+    captureRenderedDom?: boolean;
+    timeoutBudgetMs: number;
+  };
+};
+
 export type RenderedCaptureWorkerEnvironmentTruth = {
   runtimeKind: RenderedCaptureWorkerRuntimeKind;
   environmentSupported: boolean;
@@ -170,4 +189,21 @@ export function createRenderedCaptureWorkerRequest(input: {
       timeoutBudgetMs: clampInt(input.timeoutBudgetMs, 1_000, 180_000),
     },
   };
+}
+
+export function canonicalizeRenderedCaptureWorkerRequest(
+  request: RenderedCaptureWorkerRequestLike,
+): RenderedCaptureWorkerRequest {
+  return createRenderedCaptureWorkerRequest({
+    requestId: request.requestId,
+    importId: request.importId,
+    sourceUrl: request.sourceUrl,
+    viewport: request.capture.viewport,
+    readinessPolicy: request.capture.readinessPolicy,
+    timeoutBudgetMs: request.capture.timeoutBudgetMs,
+    trace: request.trace ?? undefined,
+    captureScreenshots: request.capture.captureScreenshots,
+    captureComputedStyles: request.capture.captureComputedStyles,
+    captureRenderedDom: request.capture.captureRenderedDom,
+  });
 }

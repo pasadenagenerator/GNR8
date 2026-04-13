@@ -7,7 +7,10 @@ import {
   createRenderedCaptureWorkerClientFromEnv,
   createUnavailableRenderedCaptureWorkerClient,
 } from "@/gnr8/import-rendered-capture-worker/worker-client";
-import { createRenderedCaptureWorkerRequest } from "@/gnr8/import-rendered-capture-worker/worker-contract";
+import {
+  canonicalizeRenderedCaptureWorkerRequest,
+  createRenderedCaptureWorkerRequest,
+} from "@/gnr8/import-rendered-capture-worker/worker-contract";
 
 function makeRequest(requestId = "req-1") {
   return createRenderedCaptureWorkerRequest({
@@ -158,6 +161,7 @@ test("http worker client preserves successful contract and adds call-path diagno
   const request = makeRequest("req-success");
   let capturedUrl: string | null = null;
   let capturedHeaders: HeadersInit | undefined;
+  let capturedBody: string | null = null;
   const client = createHttpRenderedCaptureWorkerClient({
     endpointUrl: "https://worker.example.com/capture",
     sharedToken: "token-1",
@@ -165,6 +169,7 @@ test("http worker client preserves successful contract and adds call-path diagno
     fetchImpl: async (input, init) => {
       capturedUrl = String(input);
       capturedHeaders = init?.headers;
+      capturedBody = typeof init?.body === "string" ? init.body : null;
       return new Response(
         JSON.stringify({
           kind: "rendered_capture_worker_response_v1",
@@ -208,6 +213,10 @@ test("http worker client preserves successful contract and adds call-path diagno
   assert.equal(capturedUrl, "https://worker.example.com/capture");
   const headers = new Headers(capturedHeaders);
   assert.equal(headers.get("x-gnr8-rendered-capture-worker-token"), "token-1");
+  assert.ok(capturedBody);
+  const serializedPayload = JSON.parse(capturedBody ?? "{}");
+  const canonicalJsonPayload = JSON.parse(JSON.stringify(canonicalizeRenderedCaptureWorkerRequest(request)));
+  assert.deepEqual(serializedPayload, canonicalJsonPayload);
   assert.ok(response.diagnostics.some((entry) => entry.code === "CAPTURE_WORKER_HTTP_REQUEST_SENT"));
   assert.ok(response.diagnostics.some((entry) => entry.code === "CAPTURE_WORKER_HTTP_RESPONSE_RECEIVED"));
   assert.ok(response.diagnostics.some((entry) => entry.code === "CAPTURE_WORKER_RESPONSE_PARSED"));

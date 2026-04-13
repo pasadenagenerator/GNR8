@@ -157,8 +157,20 @@ test("worker server validates worker request contract", async () => {
     });
 
     assert.equal(response.status, 400);
-    const payload = (await response.json()) as { error?: { code?: string } };
+    const payload = (await response.json()) as {
+      error?: {
+        code?: string;
+        details?: {
+          expectedKind?: string;
+          missingFields?: string[];
+          invalidFields?: Array<{ path?: string }>;
+        };
+      };
+    };
     assert.equal(payload.error?.code, "INVALID_WORKER_REQUEST");
+    assert.equal(payload.error?.details?.expectedKind, "rendered_capture_worker_request_v1");
+    assert.ok(payload.error?.details?.missingFields?.includes("requestId"));
+    assert.ok(payload.error?.details?.invalidFields?.some((entry) => entry.path === "kind"));
   } finally {
     await fixture.close();
   }

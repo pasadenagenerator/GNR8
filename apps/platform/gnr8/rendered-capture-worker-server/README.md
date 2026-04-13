@@ -9,6 +9,43 @@ Production runtime is compiled JavaScript only (no `tsx` runtime transpilation).
 - `POST /api/internal/gnr8/rendered-capture-worker` (legacy compatibility alias)
 - `GET /health`
 
+## Minimal Manual Debug POST
+
+```bash
+curl -sS -X POST 'http://127.0.0.1:3001/internal/gnr8/rendered-capture-worker' \
+  -H 'content-type: application/json' \
+  -H 'x-gnr8-rendered-capture-worker-token: <shared-token>' \
+  --data '{
+    "kind": "rendered_capture_worker_request_v1",
+    "contractVersion": "1.0.0",
+    "requestId": "manual-debug-req-1",
+    "importId": "manual-debug-import-1",
+    "sourceUrl": "https://example.com/",
+    "trace": {
+      "agencyId": null,
+      "clientId": null,
+      "siteId": null
+    },
+    "capture": {
+      "viewport": { "width": 1366, "height": 768 },
+      "readinessPolicy": {
+        "navigationTimeoutMs": 20000,
+        "networkQuietTimeoutMs": 4000,
+        "domStabilizationWindowMs": 2500,
+        "domStabilizationPollMs": 250,
+        "maxTotalCaptureMs": 30000,
+        "shellContentMinLength": 120,
+        "shellDetectionRetryCount": 1,
+        "shellDetectionRetryDelayMs": 1500
+      },
+      "captureScreenshots": true,
+      "captureComputedStyles": true,
+      "captureRenderedDom": true,
+      "timeoutBudgetMs": 30000
+    }
+  }'
+```
+
 ## Required Environment Variables
 
 - `GNR8_RENDERED_CAPTURE_WORKER_SHARED_TOKEN` (required)
