@@ -343,3 +343,141 @@ test("health endpoint returns explicit auth/availability truth", async () => {
     await fixture.close();
   }
 });
+
+test("worker server emits post-navigation phase diagnostics in logs", async () => {
+  const events: Array<{ event: string; [key: string]: unknown }> = [];
+  const fixture = await startServer({
+    logger: (entry) => {
+      events.push(entry);
+    },
+    executeRequest: async ({ request }) => ({
+      kind: "rendered_capture_worker_response_v1",
+      contractVersion: RENDERED_CAPTURE_WORKER_CONTRACT_VERSION,
+      requestId: request.requestId,
+      status: "partial",
+      environment: {
+        runtimeKind: "nodejs",
+        environmentSupported: true,
+        browserPackageAvailable: true,
+        browserBinaryAvailable: true,
+        supportDecision: "supported",
+      },
+      artifacts: [],
+      computedStyleSamples: [],
+      diagnostics: [
+        {
+          code: "CAPTURE_PHASE_DOM_SERIALIZATION_COMPLETED",
+          severity: "info",
+          message: "phase complete",
+          details: { durationMs: 120, timeoutBudgetMs: 4500 },
+        },
+        {
+          code: "CAPTURE_PHASE_STYLE_SAMPLING_TIMED_OUT",
+          severity: "warning",
+          message: "phase timeout",
+          details: { durationMs: 5400, timeoutBudgetMs: 5500 },
+        },
+      ],
+      qualitySummary: {
+        renderedDomQuality: "weak",
+        domLength: 1200,
+        meaningfulNodeCount: 22,
+        screenshotCount: 1,
+        computedStyleSampleCount: 0,
+      },
+      failure: {
+        failureClass: "timed_out",
+        failureCode: "CAPTURE_PHASE_STYLE_SAMPLING_TIMED_OUT",
+        retryable: true,
+        message: "timed out",
+      },
+      timings: {
+        queueLatencyMs: null,
+        executionMs: 1500,
+        totalMs: 1500,
+      },
+    }),
+  });
+
+  try {
+    const response = await fetch(`${fixture.baseUrl}${RENDERED_CAPTURE_WORKER_PATH}`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-gnr8-rendered-capture-worker-token": "token-123",
+      },
+      body: JSON.stringify(makeRequest()),
+    });
+    assert.equal(response.status, 200);
+    assert.ok(events.some((entry) => entry.event === "post_navigation_phase" && entry.phase === "dom_serialization"));
+    assert.ok(events.some((entry) => entry.event === "post_navigation_phase" && entry.phase === "style_sampling"));
+    assert.ok(events.some((entry) => entry.event === "post_navigation_timeout_phase" && entry.phase === "style_sampling"));
+  } finally {
+    await fixture.close();
+  }
+});
+
+test("worker server dedupes concurrent duplicate request ids to one execution", async () => {
+  const events: Array<{ event: string; [key: string]: unknown }> = [];
+  let executeCalls = 0;
+  const fixture = await startServer({
+    logger: (entry) => {
+      events.push(entry);
+    },
+    executeRequest: async ({ request }) => {
+      executeCalls += 1;
+      await new Promise((resolve) => setTimeout(resolve, 60));
+      return {
+        kind: "rendered_capture_worker_response_v1",
+        contractVersion: RENDERED_CAPTURE_WORKER_CONTRACT_VERSION,
+        requestId: request.requestId,
+        status: "available",
+        environment: {
+          runtimeKind: "nodejs",
+          environmentSupported: true,
+          browserPackageAvailable: true,
+          browserBinaryAvailable: true,
+          supportDecision: "supported",
+        },
+        artifacts: [],
+        computedStyleSamples: [],
+        diagnostics: [],
+        qualitySummary: {
+          renderedDomQuality: "strong",
+          domLength: 100,
+          meaningfulNodeCount: 3,
+          screenshotCount: 0,
+          computedStyleSampleCount: 0,
+        },
+        failure: null,
+        timings: {
+          queueLatencyMs: null,
+          executionMs: 80,
+          totalMs: 80,
+        },
+      };
+    },
+  });
+
+  try {
+    const payload = JSON.stringify(makeRequest());
+    const requestInit = {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-gnr8-rendered-capture-worker-token": "token-123",
+      },
+      body: payload,
+    } as const;
+    const [first, second] = await Promise.all([
+      fetch(`${fixture.baseUrl}${RENDERED_CAPTURE_WORKER_PATH}`, requestInit),
+      fetch(`${fixture.baseUrl}${RENDERED_CAPTURE_WORKER_PATH}`, requestInit),
+    ]);
+    assert.equal(first.status, 200);
+    assert.equal(second.status, 200);
+    assert.equal(executeCalls, 1);
+    assert.ok(events.some((entry) => entry.event === "duplicate_request_detected"));
+  } finally {
+    await fixture.close();
+  }
+});

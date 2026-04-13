@@ -183,15 +183,99 @@ type RenderedQualityMetrics = {
   meaningfulNodeCount: number;
 };
 
-type CapturePassResult = {
+type DomCaptureResult = {
   html: string;
+  quality: RenderedQualityMetrics;
+  domSerializationFailed: boolean;
+  domSerializationError: string | null;
+};
+
+type StyleSamplingResult = {
   computedStyleSamples: ComputedStyleSample[];
   observedAssetUrls: string[];
   quality: RenderedQualityMetrics;
   styleSamplingFailed: boolean;
   styleSamplingError: string | null;
-  domSerializationFailed: boolean;
-  domSerializationError: string | null;
+};
+
+type PostNavigationPhaseName =
+  | "stabilization"
+  | "dom_serialization"
+  | "screenshot_viewport"
+  | "style_sampling"
+  | "screenshot_fullpage"
+  | "asset_manifest_finalization"
+  | "response_assembly";
+
+type PhaseDiagnosticCodeSet = {
+  started: RenderedCaptureDiagnostic["code"];
+  completed: RenderedCaptureDiagnostic["code"];
+  timedOut: RenderedCaptureDiagnostic["code"];
+  failed: RenderedCaptureDiagnostic["code"];
+};
+
+const PHASE_DIAGNOSTIC_CODES: Record<PostNavigationPhaseName, PhaseDiagnosticCodeSet> = {
+  stabilization: {
+    started: "CAPTURE_PHASE_STABILIZATION_STARTED",
+    completed: "CAPTURE_PHASE_STABILIZATION_COMPLETED",
+    timedOut: "CAPTURE_PHASE_STABILIZATION_TIMED_OUT",
+    failed: "CAPTURE_PHASE_STABILIZATION_FAILED",
+  },
+  dom_serialization: {
+    started: "CAPTURE_PHASE_DOM_SERIALIZATION_STARTED",
+    completed: "CAPTURE_PHASE_DOM_SERIALIZATION_COMPLETED",
+    timedOut: "CAPTURE_PHASE_DOM_SERIALIZATION_TIMED_OUT",
+    failed: "CAPTURE_PHASE_DOM_SERIALIZATION_FAILED",
+  },
+  screenshot_viewport: {
+    started: "CAPTURE_PHASE_SCREENSHOT_VIEWPORT_STARTED",
+    completed: "CAPTURE_PHASE_SCREENSHOT_VIEWPORT_COMPLETED",
+    timedOut: "CAPTURE_PHASE_SCREENSHOT_VIEWPORT_TIMED_OUT",
+    failed: "CAPTURE_PHASE_SCREENSHOT_VIEWPORT_FAILED",
+  },
+  style_sampling: {
+    started: "CAPTURE_PHASE_STYLE_SAMPLING_STARTED",
+    completed: "CAPTURE_PHASE_STYLE_SAMPLING_COMPLETED",
+    timedOut: "CAPTURE_PHASE_STYLE_SAMPLING_TIMED_OUT",
+    failed: "CAPTURE_PHASE_STYLE_SAMPLING_FAILED",
+  },
+  screenshot_fullpage: {
+    started: "CAPTURE_PHASE_SCREENSHOT_FULLPAGE_STARTED",
+    completed: "CAPTURE_PHASE_SCREENSHOT_FULLPAGE_COMPLETED",
+    timedOut: "CAPTURE_PHASE_SCREENSHOT_FULLPAGE_TIMED_OUT",
+    failed: "CAPTURE_PHASE_SCREENSHOT_FULLPAGE_FAILED",
+  },
+  asset_manifest_finalization: {
+    started: "CAPTURE_PHASE_ASSET_MANIFEST_FINALIZATION_STARTED",
+    completed: "CAPTURE_PHASE_ASSET_MANIFEST_FINALIZATION_COMPLETED",
+    timedOut: "CAPTURE_PHASE_ASSET_MANIFEST_FINALIZATION_TIMED_OUT",
+    failed: "CAPTURE_PHASE_ASSET_MANIFEST_FINALIZATION_FAILED",
+  },
+  response_assembly: {
+    started: "CAPTURE_PHASE_RESPONSE_ASSEMBLY_STARTED",
+    completed: "CAPTURE_PHASE_RESPONSE_ASSEMBLY_COMPLETED",
+    timedOut: "CAPTURE_PHASE_RESPONSE_ASSEMBLY_TIMED_OUT",
+    failed: "CAPTURE_PHASE_RESPONSE_ASSEMBLY_FAILED",
+  },
+};
+
+const POST_NAVIGATION_PHASE_PRIORITY: readonly PostNavigationPhaseName[] = [
+  "dom_serialization",
+  "screenshot_viewport",
+  "style_sampling",
+  "screenshot_fullpage",
+  "asset_manifest_finalization",
+  "response_assembly",
+] as const;
+
+const PHASE_BUDGET_CAP_MS: Record<PostNavigationPhaseName, number> = {
+  stabilization: 8_000,
+  dom_serialization: 4_500,
+  screenshot_viewport: 4_000,
+  style_sampling: 5_500,
+  screenshot_fullpage: 4_500,
+  asset_manifest_finalization: 1_500,
+  response_assembly: 1_000,
 };
 
 function resolveReadinessNumber(value: number | undefined, fallback: number): number {
@@ -228,7 +312,158 @@ function inferQualityMetricsFromHtml(html: string): RenderedQualityMetrics {
   };
 }
 
-async function capturePageState(page: any): Promise<CapturePassResult> {
+function remainingCaptureBudgetMs(input: {
+  startedAt: number;
+  readiness: RenderedCaptureReadinessPolicy;
+}): number {
+  return Math.max(0, input.readiness.maxTotalCaptureMs - (Date.now() - input.startedAt));
+}
+
+export function getPostNavigationPhaseOrderForTesting(): readonly PostNavigationPhaseName[] {
+  return [...POST_NAVIGATION_PHASE_PRIORITY];
+}
+
+export async function runCapturePhaseForTesting(input: {
+  phase: PostNavigationPhaseName;
+  readiness: RenderedCaptureReadinessPolicy;
+  startedAt?: number;
+  operation: () => Promise<unknown>;
+}): Promise<{
+  result: { value: unknown | null; timedOut: boolean; failed: boolean; timeoutBudgetMs: number; durationMs: number };
+  diagnostics: RenderedCaptureDiagnostic[];
+}> {
+  const diagnostics: RenderedCaptureDiagnostic[] = [];
+  const result = await executeBoundedCapturePhase({
+    phase: input.phase,
+    diagnostics,
+    startedAt: input.startedAt ?? Date.now(),
+    readiness: input.readiness,
+    operation: input.operation,
+  });
+  return { result, diagnostics };
+}
+
+async function executeBoundedCapturePhase<T>(input: {
+  phase: PostNavigationPhaseName;
+  diagnostics: RenderedCaptureDiagnostic[];
+  startedAt: number;
+  readiness: RenderedCaptureReadinessPolicy;
+  maxPhaseMs?: number;
+  details?: Record<string, unknown>;
+  operation: () => Promise<T>;
+}): Promise<{ value: T | null; timedOut: boolean; failed: boolean; timeoutBudgetMs: number; durationMs: number }> {
+  const phaseCodes = PHASE_DIAGNOSTIC_CODES[input.phase];
+  const phaseStartedAt = Date.now();
+  const remainingBudgetMs = remainingCaptureBudgetMs({
+    startedAt: input.startedAt,
+    readiness: input.readiness,
+  });
+  const timeoutBudgetMs = Math.max(
+    1,
+    Math.min(
+      remainingBudgetMs,
+      Math.max(1, Math.floor(input.maxPhaseMs ?? PHASE_BUDGET_CAP_MS[input.phase])),
+    ),
+  );
+
+  pushDiagnostic(input.diagnostics, {
+    code: phaseCodes.started,
+    message: `Post-navigation phase started: ${input.phase}`,
+    details: {
+      phase: input.phase,
+      timeoutBudgetMs,
+      remainingBudgetMs,
+      ...input.details,
+    },
+  });
+
+  if (remainingBudgetMs <= 0) {
+    const durationMs = Date.now() - phaseStartedAt;
+    pushDiagnostic(input.diagnostics, {
+      code: phaseCodes.timedOut,
+      severity: "warning",
+      message: `Post-navigation phase timed out before execution: ${input.phase}`,
+      details: {
+        phase: input.phase,
+        durationMs,
+        timeoutBudgetMs: 0,
+        remainingBudgetMs,
+      },
+    });
+    pushDiagnostic(input.diagnostics, {
+      code: "RENDERED_CAPTURE_TIMEOUT",
+      severity: "warning",
+      message: "Rendered capture reached max timeout budget before completing post-navigation phase",
+      details: {
+        phase: input.phase,
+        durationMs,
+        timeoutBudgetMs: 0,
+        maxTotalCaptureMs: input.readiness.maxTotalCaptureMs,
+      },
+    });
+    return { value: null, timedOut: true, failed: false, timeoutBudgetMs: 0, durationMs };
+  }
+
+  try {
+    const phaseResult = await withTimeout({
+      operation: input.operation(),
+      timeoutMs: timeoutBudgetMs,
+      timeoutMessage: `CAPTURE_PHASE_TIMEOUT:${input.phase}:${timeoutBudgetMs}`,
+    });
+    const durationMs = Date.now() - phaseStartedAt;
+    if (phaseResult.timedOut) {
+      pushDiagnostic(input.diagnostics, {
+        code: phaseCodes.timedOut,
+        severity: "warning",
+        message: `Post-navigation phase timed out: ${input.phase}`,
+        details: {
+          phase: input.phase,
+          durationMs,
+          timeoutBudgetMs,
+        },
+      });
+      pushDiagnostic(input.diagnostics, {
+        code: "RENDERED_CAPTURE_TIMEOUT",
+        severity: "warning",
+        message: "Rendered capture timed out during post-navigation phase",
+        details: {
+          phase: input.phase,
+          durationMs,
+          timeoutBudgetMs,
+          maxTotalCaptureMs: input.readiness.maxTotalCaptureMs,
+        },
+      });
+      return { value: null, timedOut: true, failed: false, timeoutBudgetMs, durationMs };
+    }
+
+    pushDiagnostic(input.diagnostics, {
+      code: phaseCodes.completed,
+      message: `Post-navigation phase completed: ${input.phase}`,
+      details: {
+        phase: input.phase,
+        durationMs,
+        timeoutBudgetMs,
+      },
+    });
+    return { value: phaseResult.value, timedOut: false, failed: false, timeoutBudgetMs, durationMs };
+  } catch (error) {
+    const durationMs = Date.now() - phaseStartedAt;
+    pushDiagnostic(input.diagnostics, {
+      code: phaseCodes.failed,
+      severity: "warning",
+      message: `Post-navigation phase failed: ${input.phase}`,
+      details: {
+        phase: input.phase,
+        durationMs,
+        timeoutBudgetMs,
+        error: toErrorString(error),
+      },
+    });
+    return { value: null, timedOut: false, failed: true, timeoutBudgetMs, durationMs };
+  }
+}
+
+async function captureDomState(page: any): Promise<DomCaptureResult> {
   let html = "";
   let domSerializationFailed = false;
   let domSerializationError: string | null = null;
@@ -239,6 +474,15 @@ async function capturePageState(page: any): Promise<CapturePassResult> {
     domSerializationError = toErrorString(error);
   }
 
+  return {
+    html,
+    quality: inferQualityMetricsFromHtml(html),
+    domSerializationFailed,
+    domSerializationError,
+  };
+}
+
+async function captureComputedStyles(page: any): Promise<StyleSamplingResult> {
   let styleSamplesRaw: {
     samples: Array<{
       target: string;
@@ -252,7 +496,12 @@ async function capturePageState(page: any): Promise<CapturePassResult> {
   } = {
     samples: [],
     observedAssetUrls: [],
-    quality: inferQualityMetricsFromHtml(html),
+    quality: {
+      bodyTextLength: 0,
+      headingCount: 0,
+      sectionCount: 0,
+      meaningfulNodeCount: 0,
+    },
   };
   let styleSamplingFailed = false;
   let styleSamplingError: string | null = null;
@@ -425,7 +674,6 @@ async function capturePageState(page: any): Promise<CapturePassResult> {
   }));
 
   return {
-    html,
     computedStyleSamples,
     observedAssetUrls: uniqueSortedStrings(styleSamplesRaw.observedAssetUrls),
     quality: {
@@ -436,8 +684,6 @@ async function capturePageState(page: any): Promise<CapturePassResult> {
     },
     styleSamplingFailed,
     styleSamplingError,
-    domSerializationFailed,
-    domSerializationError,
   };
 }
 
@@ -523,10 +769,6 @@ function resolveCaptureStatus(input: {
   if (hasDom && hasScreenshots && hasStyles) return "available";
   if (hasDom || hasScreenshots || hasStyles) return "partial";
   return "failed";
-}
-
-function scoreCapturePass(pass: CapturePassResult): number {
-  return pass.quality.bodyTextLength + pass.quality.meaningfulNodeCount * 12 + pass.computedStyleSamples.length * 30;
 }
 
 async function defaultRenderedCaptureExecutor(input: RenderedCaptureExecutorInput): Promise<RenderedCaptureExecutorResult> {
@@ -1080,7 +1322,7 @@ async function defaultRenderedCaptureExecutor(input: RenderedCaptureExecutorInpu
     const retryDelayMs = resolveReadinessNumber(input.readiness.shellDetectionRetryDelayMs, 1_500);
 
     let selectedReadinessState: "network_quiet" | "dom_stable" | "timeout_partial" = "dom_stable";
-    let selectedCapture: CapturePassResult | null = null;
+    let selectedDomCapture: DomCaptureResult | null = null;
 
     for (let attempt = 0; attempt <= retryCount; attempt++) {
       pushDiagnostic(diagnostics, {
@@ -1088,17 +1330,32 @@ async function defaultRenderedCaptureExecutor(input: RenderedCaptureExecutorInpu
         message: "Starting rendered capture readiness wait",
         details: { attempt: attempt + 1, maxAttempts: retryCount + 1 },
       });
-      const readinessState = await waitForReadinessPass({
-        page,
+      const readinessPhase = await executeBoundedCapturePhase({
+        phase: "stabilization",
         diagnostics,
-        readiness: input.readiness,
         startedAt,
-        attempt,
+        readiness: input.readiness,
+        maxPhaseMs: Math.max(input.readiness.networkQuietTimeoutMs, input.readiness.domStabilizationWindowMs) + 750,
+        details: { attempt: attempt + 1, maxAttempts: retryCount + 1 },
+        operation: async () =>
+          waitForReadinessPass({
+            page,
+            diagnostics,
+            readiness: input.readiness,
+            startedAt,
+            attempt,
+          }),
       });
+      const readinessState = readinessPhase.value ?? "timeout_partial";
+      if (readinessPhase.timedOut) {
+        selectedReadinessState = "timeout_partial";
+      } else {
+        selectedReadinessState = readinessState;
+      }
       pushDiagnostic(diagnostics, {
         code: "READINESS_WAIT_COMPLETED",
         message: "Rendered capture readiness wait completed",
-        details: { attempt: attempt + 1, readinessState },
+        details: { attempt: attempt + 1, readinessState: selectedReadinessState },
       });
 
       pushDiagnostic(diagnostics, {
@@ -1106,31 +1363,29 @@ async function defaultRenderedCaptureExecutor(input: RenderedCaptureExecutorInpu
         message: "Starting DOM serialization for rendered capture",
         details: { attempt: attempt + 1 },
       });
-      pushDiagnostic(diagnostics, {
-        code: "STYLE_SAMPLING_STARTED",
-        message: "Starting computed style sampling for rendered capture",
+      const domPhase = await executeBoundedCapturePhase({
+        phase: "dom_serialization",
+        diagnostics,
+        startedAt,
+        readiness: input.readiness,
         details: { attempt: attempt + 1 },
+        operation: async () => captureDomState(page),
       });
-      const capturePass = await capturePageState(page);
-      if (!capturePass.domSerializationFailed) {
+      if (domPhase.timedOut) {
+        selectedReadinessState = "timeout_partial";
+      }
+      if (!domPhase.value) break;
+      const domCapture = domPhase.value;
+      selectedDomCapture = domCapture;
+      if (!domCapture.domSerializationFailed) {
         pushDiagnostic(diagnostics, {
           code: "DOM_SERIALIZATION_SUCCEEDED",
           message: "Rendered capture DOM serialization succeeded",
-          details: { attempt: attempt + 1, domLength: capturePass.html.trim().length },
+          details: { attempt: attempt + 1, domLength: domCapture.html.trim().length },
         });
       }
-      if (!capturePass.styleSamplingFailed) {
-        pushDiagnostic(diagnostics, {
-          code: "STYLE_SAMPLING_SUCCEEDED",
-          message: "Computed style sampling completed",
-          details: { attempt: attempt + 1, sampleCount: capturePass.computedStyleSamples.length },
-        });
-      }
-      const isShellLike = isShellLikeContent({ quality: capturePass.quality, minLength: shellContentMinLength });
 
-      selectedReadinessState = readinessState;
-      selectedCapture = capturePass;
-
+      const isShellLike = isShellLikeContent({ quality: domCapture.quality, minLength: shellContentMinLength });
       if (!isShellLike) {
         if (attempt > 0) {
           pushDiagnostic(diagnostics, {
@@ -1138,7 +1393,7 @@ async function defaultRenderedCaptureExecutor(input: RenderedCaptureExecutorInpu
             message: "Rendered capture recovered from shell-like output on retry",
             details: {
               retriesUsed: attempt,
-              bodyTextLength: capturePass.quality.bodyTextLength,
+              bodyTextLength: domCapture.quality.bodyTextLength,
             },
           });
         }
@@ -1155,42 +1410,51 @@ async function defaultRenderedCaptureExecutor(input: RenderedCaptureExecutorInpu
         details: {
           attempt: attempt + 1,
           maxAttempts: retryCount + 1,
-          quality: capturePass.quality,
+          quality: domCapture.quality,
           shellContentMinLength,
         },
       });
 
       if (attempt >= retryCount) break;
+      if (hasExceededCaptureBudget({ startedAt, readiness: input.readiness })) {
+        selectedReadinessState = "timeout_partial";
+        break;
+      }
       await sleep(retryDelayMs);
     }
 
-    if (!selectedCapture) {
-      pushDiagnostic(diagnostics, {
-        code: "RENDERED_CAPTURE_FAILED",
-        severity: "error",
-        message: "Rendered capture failed to collect any capture pass",
-      });
-      return {
-        status: "failed",
-        document: null,
-        screenshots: [],
-        computedStyleSamples: [],
-        renderedObservedAssetUrls: [],
-        diagnostics,
-      };
-    }
-
     const screenshots: RenderedCaptureExecutorResult["screenshots"] = [];
-    try {
+    pushDiagnostic(diagnostics, {
+      code: "SCREENSHOT_CAPTURE_STARTED",
+      message: "Starting viewport screenshot capture",
+      details: { captureType: "desktop_viewport" },
+    });
+    const viewportScreenshotPhase = await executeBoundedCapturePhase({
+      phase: "screenshot_viewport",
+      diagnostics,
+      startedAt,
+      readiness: input.readiness,
+      details: { captureType: "desktop_viewport" },
+      operation: async () => new Uint8Array(await page.screenshot({ type: "png", fullPage: false })),
+    });
+    if (viewportScreenshotPhase.timedOut) {
+      selectedReadinessState = "timeout_partial";
       pushDiagnostic(diagnostics, {
-        code: "SCREENSHOT_CAPTURE_STARTED",
-        message: "Starting viewport screenshot capture",
+        code: "SCREENSHOT_FAILED",
+        severity: "warning",
+        message: "Viewport screenshot capture timed out",
         details: { captureType: "desktop_viewport" },
       });
-      const viewportBytes = new Uint8Array(await page.screenshot({ type: "png", fullPage: false }));
+      pushDiagnostic(diagnostics, {
+        code: "SCREENSHOT_CAPTURE_FAILED",
+        severity: "warning",
+        message: "Failed to capture desktop viewport screenshot",
+        details: { captureType: "desktop_viewport", reason: "phase_timeout" },
+      });
+    } else if (viewportScreenshotPhase.value) {
       screenshots.push({
         captureType: "desktop_viewport",
-        bytes: viewportBytes,
+        bytes: viewportScreenshotPhase.value,
         width: input.viewport.width,
         height: input.viewport.height,
         fullPage: false,
@@ -1198,33 +1462,90 @@ async function defaultRenderedCaptureExecutor(input: RenderedCaptureExecutorInpu
       pushDiagnostic(diagnostics, {
         code: "SCREENSHOT_CAPTURE_SUCCEEDED",
         message: "Viewport screenshot capture succeeded",
-        details: { captureType: "desktop_viewport", byteLength: viewportBytes.length },
+        details: { captureType: "desktop_viewport", byteLength: viewportScreenshotPhase.value.length },
       });
-    } catch (error) {
+    } else {
       pushDiagnostic(diagnostics, {
         code: "SCREENSHOT_FAILED",
         severity: "warning",
         message: "Viewport screenshot capture failed",
-        details: { error: toErrorString(error), captureType: "desktop_viewport" },
+        details: { captureType: "desktop_viewport", reason: "phase_failed" },
       });
       pushDiagnostic(diagnostics, {
         code: "SCREENSHOT_CAPTURE_FAILED",
         severity: "warning",
         message: "Failed to capture desktop viewport screenshot",
-        details: { error: toErrorString(error), captureType: "desktop_viewport" },
+        details: { captureType: "desktop_viewport", reason: "phase_failed" },
       });
     }
 
-    try {
+    pushDiagnostic(diagnostics, {
+      code: "STYLE_SAMPLING_STARTED",
+      message: "Starting computed style sampling for rendered capture",
+    });
+    const stylePhase = await executeBoundedCapturePhase({
+      phase: "style_sampling",
+      diagnostics,
+      startedAt,
+      readiness: input.readiness,
+      operation: async () => captureComputedStyles(page),
+    });
+    let computedStyleSamples: ComputedStyleSample[] = [];
+    let styleSamplingFailed = false;
+    let styleSamplingError: string | null = null;
+    let observedAssetUrls: string[] = [];
+    if (stylePhase.timedOut) {
+      selectedReadinessState = "timeout_partial";
+      styleSamplingFailed = true;
+      styleSamplingError = "phase_timeout";
+    } else if (stylePhase.value) {
+      computedStyleSamples = stylePhase.value.computedStyleSamples;
+      styleSamplingFailed = stylePhase.value.styleSamplingFailed;
+      styleSamplingError = stylePhase.value.styleSamplingError;
+      observedAssetUrls = stylePhase.value.observedAssetUrls;
+      if (!styleSamplingFailed) {
+        pushDiagnostic(diagnostics, {
+          code: "STYLE_SAMPLING_SUCCEEDED",
+          message: "Computed style sampling completed",
+          details: { sampleCount: computedStyleSamples.length },
+        });
+      }
+    } else {
+      styleSamplingFailed = true;
+      styleSamplingError = "phase_failed";
+    }
+
+    pushDiagnostic(diagnostics, {
+      code: "SCREENSHOT_CAPTURE_STARTED",
+      message: "Starting full-page screenshot capture",
+      details: { captureType: "desktop_fullpage" },
+    });
+    const fullPageScreenshotPhase = await executeBoundedCapturePhase({
+      phase: "screenshot_fullpage",
+      diagnostics,
+      startedAt,
+      readiness: input.readiness,
+      details: { captureType: "desktop_fullpage" },
+      operation: async () => new Uint8Array(await page.screenshot({ type: "png", fullPage: true })),
+    });
+    if (fullPageScreenshotPhase.timedOut) {
+      selectedReadinessState = "timeout_partial";
       pushDiagnostic(diagnostics, {
-        code: "SCREENSHOT_CAPTURE_STARTED",
-        message: "Starting full-page screenshot capture",
+        code: "SCREENSHOT_FAILED",
+        severity: "warning",
+        message: "Full-page screenshot capture timed out",
         details: { captureType: "desktop_fullpage" },
       });
-      const fullPageBytes = new Uint8Array(await page.screenshot({ type: "png", fullPage: true }));
+      pushDiagnostic(diagnostics, {
+        code: "SCREENSHOT_CAPTURE_FAILED",
+        severity: "warning",
+        message: "Failed to capture desktop full-page screenshot",
+        details: { captureType: "desktop_fullpage", reason: "phase_timeout" },
+      });
+    } else if (fullPageScreenshotPhase.value) {
       screenshots.push({
         captureType: "desktop_fullpage",
-        bytes: fullPageBytes,
+        bytes: fullPageScreenshotPhase.value,
         width: input.viewport.width,
         height: input.viewport.height,
         fullPage: true,
@@ -1232,83 +1553,51 @@ async function defaultRenderedCaptureExecutor(input: RenderedCaptureExecutorInpu
       pushDiagnostic(diagnostics, {
         code: "SCREENSHOT_CAPTURE_SUCCEEDED",
         message: "Full-page screenshot capture succeeded",
-        details: { captureType: "desktop_fullpage", byteLength: fullPageBytes.length },
+        details: { captureType: "desktop_fullpage", byteLength: fullPageScreenshotPhase.value.length },
       });
-    } catch (error) {
+    } else {
       pushDiagnostic(diagnostics, {
         code: "SCREENSHOT_FAILED",
         severity: "warning",
         message: "Full-page screenshot capture failed",
-        details: { error: toErrorString(error), captureType: "desktop_fullpage" },
+        details: { captureType: "desktop_fullpage", reason: "phase_failed" },
       });
       pushDiagnostic(diagnostics, {
         code: "SCREENSHOT_CAPTURE_FAILED",
         severity: "warning",
         message: "Failed to capture desktop full-page screenshot",
-        details: { error: toErrorString(error), captureType: "desktop_fullpage" },
+        details: { captureType: "desktop_fullpage", reason: "phase_failed" },
       });
     }
 
-    const needsSecondPass =
-      selectedCapture.html.trim().length === 0 ||
-      isShellLikeContent({ quality: selectedCapture.quality, minLength: shellContentMinLength }) ||
-      selectedCapture.computedStyleSamples.length === 0;
-    if (needsSecondPass && !hasExceededCaptureBudget({ startedAt, readiness: input.readiness })) {
-      await sleep(Math.min(750, Math.max(150, input.readiness.domStabilizationPollMs * 2)));
-      pushDiagnostic(diagnostics, {
-        code: "DOM_SERIALIZATION_STARTED",
-        message: "Starting post-screenshot DOM serialization pass",
-        details: { strategy: "post_screenshot_stabilization" },
-      });
-      pushDiagnostic(diagnostics, {
-        code: "STYLE_SAMPLING_STARTED",
-        message: "Starting post-screenshot style sampling pass",
-        details: { strategy: "post_screenshot_stabilization" },
-      });
-      const postScreenshotCapture = await capturePageState(page);
-      if (!postScreenshotCapture.domSerializationFailed) {
-        pushDiagnostic(diagnostics, {
-          code: "DOM_SERIALIZATION_SUCCEEDED",
-          message: "Post-screenshot DOM serialization pass succeeded",
-          details: { domLength: postScreenshotCapture.html.trim().length },
-        });
-      }
-      if (!postScreenshotCapture.styleSamplingFailed) {
-        pushDiagnostic(diagnostics, {
-          code: "STYLE_SAMPLING_SUCCEEDED",
-          message: "Post-screenshot style sampling pass succeeded",
-          details: { sampleCount: postScreenshotCapture.computedStyleSamples.length },
-        });
-      }
-      if (scoreCapturePass(postScreenshotCapture) > scoreCapturePass(selectedCapture)) {
-        selectedCapture = postScreenshotCapture;
-        pushDiagnostic(diagnostics, {
-          code: "RENDERED_CAPTURE_RECOVERED_ON_RETRY",
-          message: "Rendered capture improved after post-screenshot stabilization pass",
-          details: {
-            strategy: "post_screenshot_stabilization",
-            bodyTextLength: selectedCapture.quality.bodyTextLength,
-            sampleCount: selectedCapture.computedStyleSamples.length,
-          },
-        });
-      }
+    const assetManifestPhase = await executeBoundedCapturePhase({
+      phase: "asset_manifest_finalization",
+      diagnostics,
+      startedAt,
+      readiness: input.readiness,
+      operation: async () => uniqueSortedStrings(observedAssetUrls),
+    });
+    if (assetManifestPhase.timedOut) {
+      selectedReadinessState = "timeout_partial";
     }
+    const finalizedObservedAssets = assetManifestPhase.value ?? [];
 
-    const domHtml = selectedCapture.html.trim();
+    const selectedDom = selectedDomCapture;
+    const domHtml = selectedDom?.html.trim() ?? "";
     const hasScreenshots = screenshots.length > 0;
 
-    if (selectedCapture.domSerializationFailed) {
+    if (selectedDom?.domSerializationFailed) {
       pushDiagnostic(diagnostics, {
         code: "DOM_EMPTY_AFTER_RENDER",
         severity: "warning",
         message: "Rendered capture could not serialize DOM HTML from browser context",
-        details: { error: selectedCapture.domSerializationError ?? "unknown" },
+        details: { error: selectedDom.domSerializationError ?? "unknown" },
       });
       pushDiagnostic(diagnostics, {
         code: "RENDERED_CAPTURE_DOM_SERIALIZATION_FAILED",
         severity: "warning",
         message: "Rendered capture could not serialize DOM HTML from browser context",
-        details: { error: selectedCapture.domSerializationError ?? "unknown" },
+        details: { error: selectedDom.domSerializationError ?? "unknown" },
       });
     }
 
@@ -1333,22 +1622,22 @@ async function defaultRenderedCaptureExecutor(input: RenderedCaptureExecutorInpu
       });
     }
 
-    if (selectedCapture.styleSamplingFailed) {
+    if (styleSamplingFailed) {
       pushDiagnostic(diagnostics, {
         code: "STYLE_SAMPLING_FAILED",
         severity: "warning",
         message: "Computed style sampling failed during rendered capture",
-        details: { error: selectedCapture.styleSamplingError ?? "unknown" },
+        details: { error: styleSamplingError ?? "unknown" },
       });
       pushDiagnostic(diagnostics, {
         code: "RENDERED_CAPTURE_STYLE_SAMPLING_FAILED",
         severity: "warning",
         message: "Computed style sampling failed during rendered capture",
-        details: { error: selectedCapture.styleSamplingError ?? "unknown" },
+        details: { error: styleSamplingError ?? "unknown" },
       });
     }
 
-    if (selectedCapture.computedStyleSamples.length === 0 && hasScreenshots && domHtml.length > 0) {
+    if (computedStyleSamples.length === 0 && hasScreenshots && domHtml.length > 0) {
       pushDiagnostic(diagnostics, {
         code: "STYLE_SAMPLING_FAILED",
         severity: "warning",
@@ -1361,12 +1650,12 @@ async function defaultRenderedCaptureExecutor(input: RenderedCaptureExecutorInpu
       });
     }
 
-    if (selectedCapture.computedStyleSamples.length < 3) {
+    if (computedStyleSamples.length < 3) {
       pushDiagnostic(diagnostics, {
         code: "COMPUTED_STYLE_SAMPLE_WEAK",
         severity: "warning",
         message: "Computed style sampling captured fewer than three targets",
-        details: { sampleCount: selectedCapture.computedStyleSamples.length },
+        details: { sampleCount: computedStyleSamples.length },
       });
     }
 
@@ -1378,36 +1667,63 @@ async function defaultRenderedCaptureExecutor(input: RenderedCaptureExecutorInpu
       });
     }
 
-    const status = resolveCaptureStatus({
-      requestedStatus: selectedReadinessState === "timeout_partial" ? "partial" : "available",
-      html: domHtml,
-      screenshots,
-      computedStyleSamples: selectedCapture.computedStyleSamples,
+    const responseAssemblyPhase = await executeBoundedCapturePhase({
+      phase: "response_assembly",
+      diagnostics,
+      startedAt,
+      readiness: input.readiness,
+      operation: async () => {
+        const status = resolveCaptureStatus({
+          requestedStatus: selectedReadinessState === "timeout_partial" ? "partial" : "available",
+          html: domHtml,
+          screenshots,
+          computedStyleSamples,
+        });
+        if (status === "partial") {
+          pushDiagnostic(diagnostics, {
+            code: "RENDERED_CAPTURE_PARTIAL",
+            severity: "warning",
+            message: "Rendered capture produced partial evidence",
+          });
+        }
+
+        const hasDomEvidence = domHtml.length > 0;
+        const hasAnyEvidence = hasDomEvidence || hasScreenshots || computedStyleSamples.length > 0;
+        const document =
+          hasDomEvidence
+            ? {
+                html: selectedDom?.html ?? "",
+                readinessState: selectedReadinessState,
+              }
+            : null;
+
+        return {
+          status: hasAnyEvidence ? status : "failed",
+          document,
+          screenshots,
+          computedStyleSamples,
+          renderedObservedAssetUrls: finalizedObservedAssets,
+        };
+      },
     });
-    if (status === "partial") {
+    if (responseAssemblyPhase.timedOut || !responseAssemblyPhase.value) {
       pushDiagnostic(diagnostics, {
-        code: "RENDERED_CAPTURE_PARTIAL",
-        severity: "warning",
-        message: "Rendered capture produced partial evidence",
+        code: "RENDERED_CAPTURE_FAILED",
+        severity: "error",
+        message: "Rendered capture timed out while assembling response",
       });
+      return {
+        status: "failed",
+        document: null,
+        screenshots,
+        computedStyleSamples,
+        renderedObservedAssetUrls: finalizedObservedAssets,
+        diagnostics,
+      };
     }
 
-    const hasDomEvidence = domHtml.length > 0;
-    const hasAnyEvidence = hasDomEvidence || hasScreenshots || selectedCapture.computedStyleSamples.length > 0;
-    const document =
-      hasDomEvidence
-        ? {
-            html: selectedCapture.html,
-            readinessState: selectedReadinessState,
-          }
-        : null;
-
     return {
-      status: hasAnyEvidence ? status : "failed",
-      document,
-      screenshots,
-      computedStyleSamples: selectedCapture.computedStyleSamples,
-      renderedObservedAssetUrls: selectedCapture.observedAssetUrls,
+      ...responseAssemblyPhase.value,
       diagnostics,
     };
   } catch (error) {

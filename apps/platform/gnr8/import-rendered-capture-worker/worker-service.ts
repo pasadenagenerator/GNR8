@@ -150,6 +150,23 @@ function pickFailure(diagnostics: RenderedCaptureDiagnostic[]): {
   }
 
   const timeoutCode = firstCode(["RENDERED_CAPTURE_TIMEOUT"]);
+  const phaseTimeoutCode = firstCode([
+    "CAPTURE_PHASE_STABILIZATION_TIMED_OUT",
+    "CAPTURE_PHASE_DOM_SERIALIZATION_TIMED_OUT",
+    "CAPTURE_PHASE_SCREENSHOT_VIEWPORT_TIMED_OUT",
+    "CAPTURE_PHASE_STYLE_SAMPLING_TIMED_OUT",
+    "CAPTURE_PHASE_SCREENSHOT_FULLPAGE_TIMED_OUT",
+    "CAPTURE_PHASE_ASSET_MANIFEST_FINALIZATION_TIMED_OUT",
+    "CAPTURE_PHASE_RESPONSE_ASSEMBLY_TIMED_OUT",
+  ]);
+  if (phaseTimeoutCode) {
+    return {
+      failureClass: "timed_out",
+      failureCode: phaseTimeoutCode,
+      retryable: true,
+      message: "Capture timed out during post-navigation phase",
+    };
+  }
   if (timeoutCode) {
     return {
       failureClass: "timed_out",

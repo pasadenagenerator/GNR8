@@ -41,6 +41,22 @@ type WorkerHealthSummary = {
   };
 };
 
+type PostNavigationPhaseStatus = "completed" | "timed_out" | "failed";
+
+type PostNavigationPhaseEvent = {
+  phase:
+    | "stabilization"
+    | "dom_serialization"
+    | "screenshot_viewport"
+    | "style_sampling"
+    | "screenshot_fullpage"
+    | "asset_manifest_finalization"
+    | "response_assembly";
+  status: PostNavigationPhaseStatus;
+  durationMs: number | null;
+  timeoutBudgetMs: number | null;
+};
+
 function normalizeText(value: unknown): string {
   return String(value ?? "").trim();
 }
@@ -68,6 +84,43 @@ function pathMatches(inputPath: string, expectedPath: string): boolean {
     return withoutTrailing.length > 0 ? withoutTrailing : "/";
   };
   return normalizePath(inputPath) === normalizePath(expectedPath);
+}
+
+function phaseNameFromDiagnosticCode(code: string): PostNavigationPhaseEvent["phase"] | null {
+  const normalized = normalizeText(code);
+  if (normalized.includes("STABILIZATION")) return "stabilization";
+  if (normalized.includes("DOM_SERIALIZATION")) return "dom_serialization";
+  if (normalized.includes("SCREENSHOT_VIEWPORT")) return "screenshot_viewport";
+  if (normalized.includes("STYLE_SAMPLING")) return "style_sampling";
+  if (normalized.includes("SCREENSHOT_FULLPAGE")) return "screenshot_fullpage";
+  if (normalized.includes("ASSET_MANIFEST_FINALIZATION")) return "asset_manifest_finalization";
+  if (normalized.includes("RESPONSE_ASSEMBLY")) return "response_assembly";
+  return null;
+}
+
+function collectPostNavigationPhaseEvents(diagnostics: Array<{ code: string; details?: Record<string, unknown> }>): PostNavigationPhaseEvent[] {
+  const byPhase = new Map<PostNavigationPhaseEvent["phase"], PostNavigationPhaseEvent>();
+  for (const diagnostic of diagnostics) {
+    const code = normalizeText(diagnostic.code);
+    if (!code.startsWith("CAPTURE_PHASE_")) continue;
+    if (!(code.endsWith("_COMPLETED") || code.endsWith("_TIMED_OUT") || code.endsWith("_FAILED"))) continue;
+    const phase = phaseNameFromDiagnosticCode(code);
+    if (!phase) continue;
+    const status: PostNavigationPhaseStatus = code.endsWith("_COMPLETED")
+      ? "completed"
+      : code.endsWith("_TIMED_OUT")
+        ? "timed_out"
+        : "failed";
+    const durationRaw = Number(diagnostic.details?.durationMs);
+    const timeoutBudgetRaw = Number(diagnostic.details?.timeoutBudgetMs);
+    byPhase.set(phase, {
+      phase,
+      status,
+      durationMs: Number.isFinite(durationRaw) ? durationRaw : null,
+      timeoutBudgetMs: Number.isFinite(timeoutBudgetRaw) ? timeoutBudgetRaw : null,
+    });
+  }
+  return [...byPhase.values()];
 }
 
 function readJsonBody(req: http.IncomingMessage, maxBodyBytes: number): Promise<unknown> {
@@ -227,6 +280,7 @@ export function createRenderedCaptureWorkerServer(input?: {
     ((event) => {
       process.stdout.write(`[worker] ${JSON.stringify(event)}\n`);
     });
+  const inFlightRequests = new Map<string, Promise<RenderedCaptureWorkerResponse>>();
 
   return http.createServer(async (req, res) => {
     const method = normalizeText(req.method).toUpperCase();
@@ -464,7 +518,24 @@ export function createRenderedCaptureWorkerServer(input?: {
       log("capture_service_entered");
 
       try {
-        const response = await executeRequest({ request: parsed.request });
+        const executionKey = normalizeText(parsed.request.requestId) || normalizeText(parsed.request.importId);
+        let executionPromise: Promise<RenderedCaptureWorkerResponse>;
+        if (executionKey && inFlightRequests.has(executionKey)) {
+          log("duplicate_request_detected", {
+            executionKey,
+            dedupe: "join_inflight",
+          });
+          executionPromise = inFlightRequests.get(executionKey) as Promise<RenderedCaptureWorkerResponse>;
+        } else {
+          executionPromise = executeRequest({ request: parsed.request });
+          if (executionKey) {
+            inFlightRequests.set(executionKey, executionPromise);
+          }
+        }
+        const response = await executionPromise;
+        if (executionKey) {
+          inFlightRequests.delete(executionKey);
+        }
         const diagnostics = Array.isArray(response.diagnostics) ? response.diagnostics : [];
         if (diagnostics.some((entry) => entry.code === "NAVIGATION_STARTED")) {
           log("navigation_started");
@@ -474,6 +545,28 @@ export function createRenderedCaptureWorkerServer(input?: {
         }
         if (diagnostics.some((entry) => entry.code === "NAVIGATION_FAILED" || entry.code === "BROWSER_NAVIGATION_FAILED")) {
           log("navigation_failed");
+        }
+        const phaseEvents = collectPostNavigationPhaseEvents(
+          diagnostics.map((entry) => ({
+            code: normalizeText(entry.code),
+            details: (entry.details as Record<string, unknown> | undefined) ?? undefined,
+          })),
+        );
+        for (const phaseEvent of phaseEvents) {
+          log("post_navigation_phase", {
+            phase: phaseEvent.phase,
+            status: phaseEvent.status,
+            durationMs: phaseEvent.durationMs,
+            timeoutBudgetMs: phaseEvent.timeoutBudgetMs,
+          });
+        }
+        const timedOutPhase = phaseEvents.find((entry) => entry.status === "timed_out");
+        if (timedOutPhase) {
+          log("post_navigation_timeout_phase", {
+            phase: timedOutPhase.phase,
+            durationMs: timedOutPhase.durationMs,
+            timeoutBudgetMs: timedOutPhase.timeoutBudgetMs,
+          });
         }
         const launchProbeFailure = diagnostics.find((entry) =>
           ["PLAYWRIGHT_IMPORT_FAILED", "PLAYWRIGHT_BROWSER_LAUNCH_FAILED", "PLAYWRIGHT_BROWSER_CONTEXT_FAILED", "PLAYWRIGHT_LAUNCH_TIMEOUT", "PLAYWRIGHT_EXECUTABLE_MISSING", "PLAYWRIGHT_RUNTIME_SANDBOX_BLOCKED"].includes(entry.code),
@@ -509,6 +602,8 @@ export function createRenderedCaptureWorkerServer(input?: {
           },
         );
       } catch (error) {
+        const executionKey = normalizeText(parsed.request.requestId) || normalizeText(parsed.request.importId);
+        if (executionKey) inFlightRequests.delete(executionKey);
         log("execution_failed", {
           code: "WORKER_EXECUTION_FAILED",
           error: toErrorString(error),

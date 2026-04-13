@@ -385,6 +385,74 @@ test("http worker client classifies HTTP 200 timeout payload as execution timeou
   assert.equal(response.diagnostics.some((entry) => entry.code === "CAPTURE_WORKER_UNAVAILABLE"), false);
 });
 
+test("http worker client keeps worker-phase timeout truth without transport misclassification", async () => {
+  const request = makeRequest("req-phase-timeout-payload");
+  const client = createHttpRenderedCaptureWorkerClient({
+    endpointUrl: "https://worker.example.com/capture",
+    sharedToken: "token-1",
+    timeoutMs: 10_000,
+    fetchImpl: async () =>
+      new Response(
+        JSON.stringify({
+          kind: "rendered_capture_worker_response_v1",
+          contractVersion: "1.0.0",
+          requestId: request.requestId,
+          status: "failed",
+          environment: {
+            runtimeKind: "nodejs",
+            environmentSupported: true,
+            browserPackageAvailable: true,
+            browserBinaryAvailable: true,
+            supportDecision: "supported",
+          },
+          artifacts: [],
+          computedStyleSamples: [],
+          diagnostics: [
+            {
+              code: "CAPTURE_PHASE_STYLE_SAMPLING_TIMED_OUT",
+              severity: "warning",
+              message: "style phase timeout",
+            },
+            {
+              code: "RENDERED_CAPTURE_TIMEOUT",
+              severity: "warning",
+              message: "timeout",
+            },
+          ],
+          qualitySummary: {
+            renderedDomQuality: "unusable",
+            domLength: 0,
+            meaningfulNodeCount: 0,
+            screenshotCount: 0,
+            computedStyleSampleCount: 0,
+          },
+          failure: {
+            failureClass: "timed_out",
+            failureCode: "CAPTURE_PHASE_STYLE_SAMPLING_TIMED_OUT",
+            retryable: true,
+            message: "style timeout",
+          },
+          timings: {
+            queueLatencyMs: null,
+            executionMs: 120,
+            totalMs: 120,
+          },
+        }),
+        {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        },
+      ),
+  });
+
+  const response = await client.execute(request);
+  assert.equal(response.status, "failed");
+  assert.ok(response.diagnostics.some((entry) => entry.code === "CAPTURE_PHASE_STYLE_SAMPLING_TIMED_OUT"));
+  assert.ok(response.diagnostics.some((entry) => entry.code === "RENDERED_CAPTURE_TIMEOUT"));
+  assert.equal(response.diagnostics.some((entry) => entry.code === "CAPTURE_WORKER_HTTP_ERROR"), false);
+  assert.equal(response.diagnostics.some((entry) => entry.code === "CAPTURE_WORKER_UNAVAILABLE"), false);
+});
+
 test("env client emits URL resolution diagnostics for missing endpoint/token configuration", async () => {
   const client = createRenderedCaptureWorkerClientFromEnv({
     env: {
