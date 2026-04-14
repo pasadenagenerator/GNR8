@@ -383,6 +383,20 @@ function buildImportProvenanceSummary(snapshot: UrlSinglePageImportSnapshot, sty
   const screenshotCount = Math.max(screenshotPaths.length, snapshot.renderedCapture.screenshots.length)
   const captureJob = snapshot.renderedCaptureReliability?.job ?? null
   const workerHealth = snapshot.renderedCaptureReliability?.workerHealth ?? null
+  const workerResultSuccessful = snapshot.renderedCapture.status === 'available' || snapshot.renderedCapture.status === 'partial'
+  const workerCapturedEvidence =
+    (Array.isArray(snapshot.renderedCapture.documents) && snapshot.renderedCapture.documents.length > 0) ||
+    (Array.isArray(snapshot.renderedCapture.screenshots) && snapshot.renderedCapture.screenshots.length > 0) ||
+    styleSampleCount > 0
+  const importDiagnosticCodes = uniqueSorted([
+    ...captureDiagnostics,
+    ...importDiagnostics,
+    'RENDERED_CAPTURE_SUMMARY_PERSISTED',
+    ...(snapshot.sourceSelection.sourceMode === 'rendered_dom' && workerResultSuccessful ? ['CAPTURE_WORKER_RESULT_PERSISTED'] : []),
+    ...(snapshot.sourceSelection.sourceMode === 'raw_html_fallback' && (workerResultSuccessful || workerCapturedEvidence)
+      ? ['CAPTURE_WORKER_RESULT_SUPERSEDED_BY_FALLBACK']
+      : []),
+  ])
 
   return {
     kind: 'runtime_import_provenance_summary_v1',
@@ -406,7 +420,7 @@ function buildImportProvenanceSummary(snapshot: UrlSinglePageImportSnapshot, sty
       },
       execution: buildRenderedCaptureExecutionFromSnapshot(snapshot),
     },
-    importDiagnosticCodes: uniqueSorted([...captureDiagnostics, ...importDiagnostics]),
+    importDiagnosticCodes,
     captureEvidence: {
       selectedSourceHtmlPath: resolveEvidencePathIfExists(snapshot.sourceSelection.selectedSourceHtmlPathAbs),
       responseHtmlPath: resolveEvidencePathIfExists(snapshot.responseHtmlPathAbs),

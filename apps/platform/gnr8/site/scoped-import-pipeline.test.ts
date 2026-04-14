@@ -435,6 +435,9 @@ test('scoped pipeline import uses pipeline path, maps consolidated sections, and
   assert.equal(createInput.importProvenanceSummary.workerHealth?.reason, null)
   assert.ok(createInput.importProvenanceSummary.styleSignals != null)
   assert.equal(createInput.importProvenanceSummary.styleSignals.kind, 'style_signal_model_v2')
+  assert.ok(createInput.importProvenanceSummary.importDiagnosticCodes.includes('CAPTURE_WORKER_RESULT_PERSISTED'))
+  assert.ok(createInput.importProvenanceSummary.importDiagnosticCodes.includes('RENDERED_CAPTURE_SUMMARY_PERSISTED'))
+  assert.equal(createInput.importProvenanceSummary.importDiagnosticCodes.includes('CAPTURE_WORKER_RESULT_SUPERSEDED_BY_FALLBACK'), false)
   assert.equal(persistedImportSummary.siteVersionId, 'site-version-1')
   assert.equal(persistedImportSummary.importProvenanceSummary.renderedCaptureStatus, 'partial')
   assert.equal(outcome.reporting.writePath.createdVersionId, 'site-version-1')
@@ -553,6 +556,11 @@ test('scoped pipeline import falls back to legacy when pipeline fails', async ()
   assert.equal(persistedImportSummary.importProvenanceSummary.renderedCaptureStatus, 'failed')
   assert.equal(persistedImportSummary.importProvenanceSummary.screenshotCount, 0)
   assert.equal(persistedImportSummary.importProvenanceSummary.computedStyleSampleCount, 0)
+  assert.ok(persistedImportSummary.importProvenanceSummary.importDiagnosticCodes.includes('RENDERED_CAPTURE_SUMMARY_PERSISTED'))
+  assert.equal(
+    persistedImportSummary.importProvenanceSummary.importDiagnosticCodes.includes('CAPTURE_WORKER_RESULT_SUPERSEDED_BY_FALLBACK'),
+    false,
+  )
   assert.equal(outcome.diagnostics.writePath.createdVersionId, 'legacy-version')
   assert.ok(outcome.diagnostics.writePath.provenancePayloadBeforeWrite)
   assert.equal(outcome.diagnostics.writePath.provenanceWriteAttempted, true)
@@ -678,6 +686,94 @@ test('scoped pipeline persists environment-level rendered capture failure truth'
   assert.equal(createInput.importProvenanceSummary.renderedCapture.execution.browserBinaryAvailable, false)
   assert.equal(createInput.importProvenanceSummary.renderedCapture.execution.browserLaunch, 'not_attempted')
   assert.equal(createInput.importProvenanceSummary.renderedCapture.execution.navigation, 'not_attempted')
+})
+
+test('scoped pipeline marks worker result superseded when fallback source is selected despite worker evidence', async () => {
+  const pipeline = createSuccessPipelineFixture()
+  let createInput: any = null
+  let linkedArtifactId: string | null = null
+
+  const outcome = await runScopedImportPipeline({
+    snapshot: {
+      snapshotRootDirAbs: '/tmp/snapshot',
+      entryHtmlPathAbs: '/tmp/snapshot/index.html',
+      assetsDirAbs: '/tmp/snapshot/assets',
+      sourceMode: 'raw_html_fallback',
+      sourceSelection: {
+        sourceMode: 'raw_html_fallback',
+        fidelityStatus: 'degraded_import',
+        selectedSourceHtmlPathAbs: '/tmp/snapshot/response-html.raw.html',
+        renderedDomQuality: {
+          quality: 'weak',
+          bodyTextLength: 22,
+          meaningfulNodeCount: 8,
+          sectionCandidateCount: 1,
+          hasHeading: true,
+          reason: 'worker_dom_weak',
+        },
+        degraded: true,
+      },
+      renderedCapture: {
+        status: 'partial',
+        documents: [{ htmlPathAbs: '/tmp/snapshot/rendered-capture/rendered-dom.html' }],
+        screenshots: [{ captureType: 'desktop_viewport' }],
+        computedStyleSamples: [{ selector: 'body' }],
+        diagnostics: [{ code: 'CAPTURE_WORKER_RESULT_OVERRIDDEN_BY_FALLBACK' }],
+      },
+      importDiagnostics: {
+        issues: [{ code: 'CAPTURE_WORKER_RESULT_OVERRIDDEN_BY_FALLBACK' }],
+      },
+    } as any,
+    sourceUrl: 'https://worker-fallback.example/',
+    actor: 'test:worker-fallback',
+    deps: {
+      importStaticSite: async () => ({ status: 'ok', documentMeta: { source: { kind: 'single-entry-html' } } }) as any,
+      createImportManifest: () => ({ status: 'success' }) as any,
+      runLinearMigrationPipeline: () => pipeline as any,
+      createSiteVersionFromMigration: async (input) => {
+        createInput = input
+        return { siteId: 'runtime-site', siteVersionId: 'site-version-1', versionNo: 9 }
+      },
+      setSiteVersionImportProvenanceSummary: async () => ({ affectedRows: 1 }),
+      getSiteVersion: async () =>
+        ({
+          id: 'site-version-1',
+          siteId: 'runtime-site',
+          versionNo: 9,
+          state: 'DRAFT',
+          source: 'migration',
+          actor: 'test',
+          createdAt: new Date().toISOString(),
+          rendererCompatibilityVersion: 'gnr8-renderer-v1',
+          artifactId: linkedArtifactId,
+          importProvenanceSummary: createInput?.importProvenanceSummary ?? null,
+          pages: [],
+        }) as any,
+      buildDeterministicArtifactBundle: () =>
+        ({
+          siteId: 'runtime-site',
+          siteVersionId: 'site-version-1',
+          rendererCompatibilityVersion: 'gnr8-renderer-v1',
+          bundleSha256: 'bundle-sha',
+          htmlByPath: { '/': '<!doctype html><html><body>preview</body></html>' },
+          compiledTokenStyles: ':root{}',
+          assetFingerprintMap: {},
+          manifest: {},
+        }) as any,
+      createArtifact: async () => ({ artifactId: 'artifact-1' }),
+      bindArtifactToVersion: async (input) => {
+        linkedArtifactId = input.artifactId
+        return { affectedRows: 1 }
+      },
+      importHtmlToPage: () => ({}) as any,
+      migrateImportedPageToCanonicalDraft: async () => ({ siteId: 'legacy-site', siteVersionId: 'legacy-version', versionNo: 1 }),
+    },
+  })
+
+  assert.equal(outcome.mode, 'pipeline')
+  assert.equal(createInput.importProvenanceSummary.sourceMode, 'raw_html_fallback')
+  assert.ok(createInput.importProvenanceSummary.importDiagnosticCodes.includes('CAPTURE_WORKER_RESULT_SUPERSEDED_BY_FALLBACK'))
+  assert.ok(createInput.importProvenanceSummary.importDiagnosticCodes.includes('RENDERED_CAPTURE_SUMMARY_PERSISTED'))
 })
 
 test('scoped pipeline import fails hard when artifact bind does not persist on created version row', async () => {

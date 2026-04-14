@@ -304,15 +304,15 @@ function toEpoch(value: unknown): number {
 }
 
 function compareRuntimeVersionRows(a: RuntimeVersionRow, b: RuntimeVersionRow): number {
+  const aVersion = Number(a.version_no ?? 0)
+  const bVersion = Number(b.version_no ?? 0)
+  if (aVersion !== bVersion) return aVersion - bVersion
+
   const updatedDelta = toEpoch(a.updated_at) - toEpoch(b.updated_at)
   if (updatedDelta !== 0) return updatedDelta
 
   const createdDelta = toEpoch(a.created_at) - toEpoch(b.created_at)
   if (createdDelta !== 0) return createdDelta
-
-  const aVersion = Number(a.version_no ?? 0)
-  const bVersion = Number(b.version_no ?? 0)
-  if (aVersion !== bVersion) return aVersion - bVersion
 
   return String(a.id ?? '').localeCompare(String(b.id ?? ''))
 }
@@ -1029,6 +1029,12 @@ function parseImportFidelity(input: {
         code.endsWith('_COMPLETED'),
     ),
     ...(styleSignals?.diagnostics ?? []).map((diag) => diag.code).filter((code) => code.startsWith('STYLE_SIGNAL_') || code === 'STYLE_SAMPLE_LOW_COVERAGE'),
+    ...(parsedSummary.sourceMode === 'rendered_dom' ? ['CAPTURE_WORKER_RESULT_SELECTED', 'READMODEL_SELECTED_RENDERED_CAPTURE'] : []),
+    ...(parsedSummary.sourceMode === 'raw_html_fallback' &&
+    (importDiagnosticCodes.includes('CAPTURE_WORKER_RESULT_OVERRIDDEN_BY_FALLBACK') ||
+      importDiagnosticCodes.includes('CAPTURE_WORKER_RESULT_SUPERSEDED_BY_FALLBACK'))
+      ? ['CAPTURE_WORKER_RESULT_SUPERSEDED_BY_FALLBACK']
+      : []),
   ])].sort((a, b) => a.localeCompare(b))
 
   return {

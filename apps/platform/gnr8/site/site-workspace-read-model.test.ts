@@ -103,7 +103,7 @@ test('runtime version selection falls back to latest runtime when selected varia
   assert.equal(selected.selectedVariant?.id, 'variant-a')
 })
 
-test('latest runtime row selection is timestamp-first across mixed runtime site ids', () => {
+test('latest runtime row selection is version-first to avoid stale timestamp overrides', () => {
   const latest = __siteWorkspaceReadModelTestUtils.resolveLatestRuntimeVersionRow([
     {
       id: 'older-higher-version',
@@ -129,8 +129,8 @@ test('latest runtime row selection is timestamp-first across mixed runtime site 
     } as any,
   ])
 
-  assert.equal(latest?.id, 'fresh-import-version')
-  assert.equal(latest?.site_id, 'runtime-site-b')
+  assert.equal(latest?.id, 'older-higher-version')
+  assert.equal(latest?.site_id, 'runtime-site-a')
 })
 
 test('import fidelity signals are parsed from semantic signal labels', () => {
@@ -429,7 +429,65 @@ test('import fidelity prefers persisted summary over semantic signal labels', ()
   assert.equal(parsed.styleSignalSourceMode, 'computed_style')
   assert.equal(parsed.evidencePaths.renderedDomPath, '/tmp/snapshot/rendered/rendered-dom.html')
   assert.ok(parsed.captureEvidenceRefs.some((entry) => entry.includes('rendered-capture.json')))
+  assert.equal(parsed.renderedCapture?.domLength, 4300)
+  assert.equal(parsed.renderedCapture?.nodeCount, 88)
+  assert.equal(parsed.renderedCapture?.screenshots.viewport, true)
+  assert.equal(parsed.renderedCapture?.screenshots.fullPage, true)
+  assert.ok(parsed.evidenceDiagnostics.includes('CAPTURE_WORKER_RESULT_SELECTED'))
+  assert.ok(parsed.evidenceDiagnostics.includes('READMODEL_SELECTED_RENDERED_CAPTURE'))
   assert.deepEqual(parsed.importDiagnosticCodes, ['RENDERED_CAPTURE_RECOVERED_ON_RETRY'])
+})
+
+test('import fidelity surfaces worker superseded diagnostic when raw fallback selected after worker evidence', () => {
+  const parsed = __siteWorkspaceReadModelTestUtils.parseImportFidelity({
+    runtimeVersion: {
+      id: 'sv-fallback',
+      ownership_site_id: SITE_ID,
+      state: 'DRAFT',
+      version_no: 5,
+      import_provenance_summary: {
+        kind: 'runtime_import_provenance_summary_v1',
+        sourceMode: 'raw_html_fallback',
+        importFidelityStatus: 'degraded_import',
+        renderedCaptureStatus: 'partial',
+        renderedDomQuality: 'weak',
+        screenshotCount: 1,
+        computedStyleSampleCount: 2,
+        renderedCapture: {
+          used: false,
+          status: 'partial',
+          quality: 'weak',
+          domLength: 120,
+          nodeCount: 18,
+          styleSampleCount: 2,
+          styleCoverage: 0.2,
+          screenshots: { viewport: true, fullPage: false },
+        },
+        importDiagnosticCodes: ['CAPTURE_WORKER_RESULT_OVERRIDDEN_BY_FALLBACK'],
+        captureEvidence: {
+          selectedSourceHtmlPath: '/tmp/snapshot/response-html.raw.html',
+          responseHtmlPath: '/tmp/snapshot/response-html.raw.html',
+          entryHtmlPath: '/tmp/snapshot/index.html',
+          renderedCaptureManifestPath: '/tmp/snapshot/rendered-capture.json',
+          acquisitionEvidencePath: '/tmp/snapshot/acquisition-evidence.json',
+          renderedDomPath: '/tmp/snapshot/rendered/rendered-dom.html',
+          computedStylesPath: '/tmp/snapshot/rendered/computed-styles.json',
+          renderedViewportScreenshotPath: '/tmp/snapshot/rendered/screenshots/viewport.png',
+          renderedFullpageScreenshotPath: null,
+          screenshotPaths: ['/tmp/snapshot/rendered/screenshots/viewport.png'],
+        },
+      },
+      updated_at: new Date().toISOString(),
+      created_at: new Date().toISOString(),
+    } as any,
+    pageRows: [],
+  })
+
+  assert.equal(parsed.sourceMode, 'raw_html_fallback')
+  assert.equal(parsed.renderedCaptureStatus, 'partial')
+  assert.equal(parsed.screenshotCount, 1)
+  assert.equal(parsed.computedStyleSampleCount, 2)
+  assert.ok(parsed.evidenceDiagnostics.includes('CAPTURE_WORKER_RESULT_SUPERSEDED_BY_FALLBACK'))
 })
 
 test('import fidelity derives capture_timed_out fallback reason from persisted capture job truth', () => {
