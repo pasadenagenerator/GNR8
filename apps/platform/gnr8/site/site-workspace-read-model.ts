@@ -780,6 +780,46 @@ function parseImportProvenanceSummary(value: unknown): RuntimeImportProvenanceSu
           sharedRegionCount: Number.isFinite(Number(multipageSummaryRaw.sharedRegionCount))
             ? Math.max(0, Math.floor(Number(multipageSummaryRaw.sharedRegionCount)))
             : 0,
+          templateFamilyExtraction: (() => {
+            const extractionRaw =
+              multipageSummaryRaw && isRecord((multipageSummaryRaw as Record<string, unknown>).templateFamilyExtraction)
+                ? ((multipageSummaryRaw as Record<string, unknown>).templateFamilyExtraction as Record<string, unknown>)
+                : null
+            if (!extractionRaw) {
+              return {
+                enabled: false,
+                familyCount: 0,
+                assignedRouteCount: 0,
+                singletonFamilyCount: 0,
+                mixedFamilyCount: 0,
+                listingDetailRelationshipCount: 0,
+                highConfidenceFamilyCount: 0,
+                diagnostics: [],
+              }
+            }
+            return {
+              enabled: Boolean(extractionRaw.enabled),
+              familyCount: Number.isFinite(Number(extractionRaw.familyCount)) ? Math.max(0, Math.floor(Number(extractionRaw.familyCount))) : 0,
+              assignedRouteCount: Number.isFinite(Number(extractionRaw.assignedRouteCount))
+                ? Math.max(0, Math.floor(Number(extractionRaw.assignedRouteCount)))
+                : 0,
+              singletonFamilyCount: Number.isFinite(Number(extractionRaw.singletonFamilyCount))
+                ? Math.max(0, Math.floor(Number(extractionRaw.singletonFamilyCount)))
+                : 0,
+              mixedFamilyCount: Number.isFinite(Number(extractionRaw.mixedFamilyCount))
+                ? Math.max(0, Math.floor(Number(extractionRaw.mixedFamilyCount)))
+                : 0,
+              listingDetailRelationshipCount: Number.isFinite(Number(extractionRaw.listingDetailRelationshipCount))
+                ? Math.max(0, Math.floor(Number(extractionRaw.listingDetailRelationshipCount)))
+                : 0,
+              highConfidenceFamilyCount: Number.isFinite(Number(extractionRaw.highConfidenceFamilyCount))
+                ? Math.max(0, Math.floor(Number(extractionRaw.highConfidenceFamilyCount)))
+                : 0,
+              diagnostics: Array.isArray(extractionRaw.diagnostics)
+                ? [...new Set(extractionRaw.diagnostics.map((entry) => normalizeText(entry)).filter(Boolean))].sort((a, b) => a.localeCompare(b))
+                : [],
+            }
+          })(),
           depthLimitHit: Boolean(multipageSummaryRaw.depthLimitHit),
           routeLimitHit: Boolean(multipageSummaryRaw.routeLimitHit),
           diagnostics: Array.isArray(multipageSummaryRaw.diagnostics)

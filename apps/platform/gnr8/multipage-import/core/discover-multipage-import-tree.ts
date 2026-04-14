@@ -1,6 +1,7 @@
 import crypto from 'node:crypto'
 
 import { parse } from 'parse5'
+import { summarizeTemplateFamilyExtraction } from '@/gnr8/template-families'
 
 import { classifyNavigationVisibility, classifyPageRole } from '../classification/page-classification'
 import { diagnosticEntry, sortDiagnostics } from '../diagnostics/multipage-diagnostics'
@@ -8,6 +9,7 @@ import { buildNavigationTrees } from '../navigation/navigation-tree'
 import { normalizeInternalHref, normalizeSeedUrl, parentPath } from '../normalization/route-normalization'
 import { inferSharedRegions, type PageRegionSignals } from '../shared-regions/shared-region-detection'
 import { inferRouteFamilies } from './template-families'
+import type { RouteTemplateSignals } from '@/gnr8/template-families'
 import type {
   DiscoverySource,
   MultipageDiscoveryDependencies,
@@ -40,6 +42,10 @@ type DiscoveredRouteState = {
 
 type PageSignals = PageRegionSignals & {
   routePath: string
+  sectionRoleSequence: string[]
+  layoutPatternSequence: string[]
+  headingPatternSequence: string[]
+  headingDensityBucket: 'none' | 'low' | 'medium' | 'high'
 }
 
 const DEFAULT_LIMITS: MultipageImportLimits = {
@@ -113,6 +119,9 @@ function extractLinksAndSignals(input: {
   const headerLinks: string[] = []
   const footerLinks: string[] = []
   const navBlockSignatures: string[] = []
+  const sectionRoleSequence: string[] = []
+  const layoutPatternSequence: string[] = []
+  const headingCounts = new Map<string, number>()
   let ctaBandSignature: string | null = null
 
   const walk = (node: unknown, ancestors: string[]): void => {
@@ -136,6 +145,58 @@ function extractLinksAndSignals(input: {
       if (navSignatureLinks.length > 0) navBlockSignatures.push(navSignatureLinks.join(','))
     }
 
+    if (name === 'main' || name === 'article' || name === 'section' || name === 'aside') {
+      const descriptor = `${attrs.class ?? ''} ${attrs.id ?? ''} ${attrs['aria-label'] ?? ''}`.toLowerCase()
+      const role =
+        name === 'main'
+          ? 'main'
+          : name === 'article'
+            ? 'article_body'
+            : descriptor.includes('hero')
+              ? 'hero'
+              : descriptor.includes('faq')
+                ? 'faq'
+                : descriptor.includes('feature')
+                  ? 'feature_block'
+                  : descriptor.includes('testimonial')
+                    ? 'testimonial_block'
+                    : descriptor.includes('pricing')
+                      ? 'pricing_block'
+                      : descriptor.includes('cta')
+                        ? 'cta_block'
+                        : descriptor.includes('footer')
+                          ? 'footer_block'
+                          : 'content_block'
+      sectionRoleSequence.push(role)
+
+      const children = ((node as { childNodes?: unknown[] }).childNodes ?? []) as unknown[]
+      let directSectionChildren = 0
+      let hasMedia = false
+      let hasList = false
+      let hasForm = false
+      let headingCount = 0
+      for (const child of children) {
+        const childName = nodeName(child)
+        if (childName === 'section' || childName === 'article') directSectionChildren += 1
+        if (childName === 'img' || childName === 'picture' || childName === 'video') hasMedia = true
+        if (childName === 'ul' || childName === 'ol') hasList = true
+        if (childName === 'form') hasForm = true
+        if (childName === 'h1' || childName === 'h2' || childName === 'h3' || childName === 'h4') headingCount += 1
+      }
+
+      const layout =
+        hasForm ? 'form' : hasMedia && hasList ? 'media_list' : directSectionChildren >= 2 ? 'stacked_sections' : hasList ? 'list' : hasMedia ? 'media' : 'stack'
+      layoutPatternSequence.push(layout)
+      if (headingCount > 0) {
+        const current = headingCounts.get('within_sections') ?? 0
+        headingCounts.set('within_sections', current + headingCount)
+      }
+    }
+
+    if (name === 'h1' || name === 'h2' || name === 'h3' || name === 'h4') {
+      headingCounts.set(name, (headingCounts.get(name) ?? 0) + 1)
+    }
+
     const descriptor = `${attrs.class ?? ''} ${attrs.id ?? ''} ${attrs['aria-label'] ?? ''}`.toLowerCase()
     if (!ctaBandSignature && (descriptor.includes('cta') || descriptor.includes('newsletter') || descriptor.includes('subscribe'))) {
       const ctaLinks = collectAnchorHrefs(node).map((href) => href.toLowerCase()).sort((a, b) => a.localeCompare(b))
@@ -157,6 +218,22 @@ function extractLinksAndSignals(input: {
     .slice()
     .sort((a, b) => (a.href === b.href ? a.source.localeCompare(b.source) : a.href.localeCompare(b.href)))
 
+  const headingPatternSequence = [...headingCounts.entries()]
+    .sort((a, b) => a[0].localeCompare(b[0]))
+    .map(([level, count]) => `${level}:${count}`)
+
+  const headingWeighted = headingPatternSequence.reduce((acc, entry) => {
+    const [level, countRaw] = entry.split(':')
+    const count = Number(countRaw ?? 0)
+    if (!Number.isFinite(count) || count <= 0) return acc
+    if (level === 'h1') return acc + count * 2
+    if (level === 'h2') return acc + count * 1.2
+    if (level === 'h3') return acc + count
+    return acc + count * 0.7
+  }, 0)
+  const headingDensityBucket: PageSignals['headingDensityBucket'] =
+    headingWeighted <= 0 ? 'none' : headingWeighted < 3 ? 'low' : headingWeighted < 8 ? 'medium' : 'high'
+
   return {
     links: sortedLinks,
     signals: {
@@ -166,6 +243,10 @@ function extractLinksAndSignals(input: {
       footerLinks: [...new Set(footerLinks)].sort((a, b) => a.localeCompare(b)),
       navBlockSignatures: [...new Set(navBlockSignatures)].sort((a, b) => a.localeCompare(b)),
       ctaBandSignature,
+      sectionRoleSequence: [...new Set(sectionRoleSequence)],
+      layoutPatternSequence: [...new Set(layoutPatternSequence)],
+      headingPatternSequence,
+      headingDensityBucket,
     },
   }
 }
@@ -224,6 +305,7 @@ export async function discoverMultipageImportTree(
       sharedRegions: [],
       routeFamilies: [],
       pageRelationships: [],
+      templateFamilyExtraction: null,
       limits,
       depthLimitHit: false,
       routeLimitHit: false,
@@ -417,8 +499,25 @@ export async function discoverMultipageImportTree(
   const sharedRegions = inferSharedRegions(pageSignals)
   if (sharedRegions.length > 0) diagnostics.push(diagnosticEntry('MULTIPAGE_SHARED_REGION_INFERRED', `${sharedRegions.length}`))
 
-  const familyResult = inferRouteFamilies(nodes)
+  const routeSignals: RouteTemplateSignals[] = pageSignals
+    .map((signal) => ({
+      routeId: signal.routeId,
+      sectionRoleSequence: signal.sectionRoleSequence.slice(),
+      layoutPatternSequence: signal.layoutPatternSequence.slice(),
+      headingPatternSequence: signal.headingPatternSequence.slice(),
+      headingDensityBucket: signal.headingDensityBucket,
+    }))
+    .sort((a, b) => a.routeId.localeCompare(b.routeId))
+
+  const familyResult = inferRouteFamilies({
+    siteId: input.siteId,
+    sourceTreeId: stableId('mtree', [input.siteId, normalizedSeed.url]),
+    routes: nodes,
+    sharedRegions,
+    routeSignals,
+  })
   if (familyResult.routeFamilies.length > 0) diagnostics.push(diagnosticEntry('MULTIPAGE_TEMPLATE_FAMILY_INFERRED', `${familyResult.routeFamilies.length}`))
+  diagnostics.push(...familyResult.templateFamilyExtraction.diagnostics)
 
   diagnostics.push(diagnosticEntry('MULTIPAGE_DISCOVERY_COMPLETED', `${nodes.length}`))
 
@@ -434,6 +533,7 @@ export async function discoverMultipageImportTree(
     sharedRegions,
     routeFamilies: familyResult.routeFamilies,
     pageRelationships: familyResult.pageRelationships,
+    templateFamilyExtraction: familyResult.templateFamilyExtraction,
     limits,
     depthLimitHit,
     routeLimitHit,
@@ -463,6 +563,7 @@ export function summarizeMultipageImportTree(tree: MultipageImportTree): Multipa
     primaryNavigationCount: countItems(primaryTree?.items ?? []),
     footerNavigationCount: countItems(footerTree?.items ?? []),
     sharedRegionCount: tree.sharedRegions.length,
+    templateFamilyExtraction: summarizeTemplateFamilyExtraction(tree.templateFamilyExtraction),
     depthLimitHit: tree.depthLimitHit,
     routeLimitHit: tree.routeLimitHit,
     diagnostics: tree.diagnostics.slice(),

@@ -200,6 +200,9 @@ test('template family and route relationships are inferred', async () => {
 
   assert.ok(tree.routeFamilies.some((family) => family.kind === 'article_family'))
   assert.ok(tree.pageRelationships.some((relationship) => relationship.kind === 'listing_to_detail'))
+  assert.ok(tree.templateFamilyExtraction)
+  assert.ok((tree.templateFamilyExtraction?.families.length ?? 0) >= 1)
+  assert.ok(tree.templateFamilyExtraction?.diagnostics.some((entry) => entry.startsWith('TEMPLATE_FAMILY_EXTRACTION_COMPLETED')))
 })
 
 test('same input repeats identical multipage tree', async () => {
@@ -226,5 +229,7 @@ test('summary projection surfaces multipage truth counts', async () => {
   assert.equal(summary.routeCount, tree.routeCount)
   assert.equal(summary.pageCount, tree.pageCount)
   assert.ok(summary.primaryNavigationCount >= 1)
+  assert.equal(summary.templateFamilyExtraction.enabled, true)
+  assert.ok(summary.templateFamilyExtraction.familyCount >= 1)
   assert.ok(Array.isArray(summary.diagnostics))
 })

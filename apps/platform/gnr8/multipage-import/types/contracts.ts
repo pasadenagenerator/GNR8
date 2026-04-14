@@ -1,3 +1,8 @@
+import type {
+  SiteTemplateFamilyExtraction,
+  TemplateFamilyExtractionSummary,
+} from '@/gnr8/template-families'
+
 export type MultipagePageRole =
   | 'homepage'
   | 'standard'
@@ -85,6 +90,7 @@ export type MultipageImportTree = {
   sharedRegions: SharedRegionCandidate[]
   routeFamilies: RouteFamily[]
   pageRelationships: PageRelationship[]
+  templateFamilyExtraction: SiteTemplateFamilyExtraction | null
   limits: MultipageImportLimits
   depthLimitHit: boolean
   routeLimitHit: boolean
@@ -98,6 +104,7 @@ export type MultipageImportSummary = {
   primaryNavigationCount: number
   footerNavigationCount: number
   sharedRegionCount: number
+  templateFamilyExtraction: TemplateFamilyExtractionSummary
   depthLimitHit: boolean
   routeLimitHit: boolean
   diagnostics: string[]
