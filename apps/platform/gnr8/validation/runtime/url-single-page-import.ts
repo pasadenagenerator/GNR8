@@ -46,6 +46,9 @@ export type UrlImportExecutionScope = {
 export type UrlImportDiagnosticSeverity = "info" | "warning" | "error" | "fatal";
 
 export type UrlImportDiagnosticCode =
+  | "IMPORT_RUN_ID_CREATED"
+  | "EVIDENCE_RUN_ISOLATED"
+  | "STALE_EVIDENCE_SUPERSEDED"
   | "CAPTURE_JOB_QUEUED"
   | "CAPTURE_JOB_STARTED"
   | "CAPTURE_JOB_RETRIED"
@@ -248,6 +251,8 @@ export type UrlSinglePageImportSnapshot = {
   sourceUrl: string;
   normalizedUrl: string;
   snapshotId: string;
+  snapshotRunId: string;
+  snapshotStableRootDirAbs: string;
   snapshotRootDirAbs: string;
   fixtureSpec: UrlSnapshotFixtureSpec;
   sourceMode: UrlImportSourceMode;
@@ -394,6 +399,12 @@ function normalizeInputPublicUrl(input: string): URL | null {
 
 function snapshotIdForNormalizedUrl(normalizedUrl: string): string {
   return `imported-url-site-${sha256Hex(normalizedUrl).slice(0, 16)}`;
+}
+
+function createSnapshotRunId(input: { requestId?: string }): string {
+  const base = input.requestId ? normalizeBasename(input.requestId) : `run-${Date.now()}`;
+  const suffix = crypto.randomBytes(4).toString("hex");
+  return `${base}-${suffix}`;
 }
 
 const ENTRY_FETCH_MAX_ATTEMPTS = 2;
@@ -2054,6 +2065,7 @@ function resolveSourceSelection(input: {
 export async function importPublicSinglePageUrlToSnapshot(input: {
   sourceUrl: string;
   snapshotRootDirAbs?: string;
+  snapshotRunId?: string;
   requestId?: string;
   fetchImpl?: FetchLike;
   renderedCaptureExecutor?: RenderedCaptureExecutor;
@@ -2093,6 +2105,8 @@ export async function importPublicSinglePageUrlToSnapshot(input: {
       sourceUrl: input.sourceUrl,
       normalizedUrl: "",
       snapshotId: "imported-url-site-invalid",
+      snapshotRunId: "invalid-run",
+      snapshotStableRootDirAbs: path.resolve(snapshotBase, "imported-url-site-invalid"),
       snapshotRootDirAbs: path.resolve(snapshotBase, "imported-url-site-invalid"),
       fixtureSpec: {
         fixtureId: "imported-url-site-invalid",
@@ -2148,7 +2162,9 @@ export async function importPublicSinglePageUrlToSnapshot(input: {
 
   const normalizedHref = normalizedUrl.toString();
   const snapshotId = snapshotIdForNormalizedUrl(normalizedHref);
-  const snapshotRootDirAbs = path.resolve(snapshotBase, snapshotId);
+  const snapshotRunId = normalizeText(input.snapshotRunId) || createSnapshotRunId({ requestId: input.requestId });
+  const snapshotStableRootDirAbs = path.resolve(snapshotBase, snapshotId);
+  const snapshotRootDirAbs = path.resolve(snapshotStableRootDirAbs, "runs", snapshotRunId);
   const responseHtmlPathAbs = path.resolve(snapshotRootDirAbs, "response-html.raw.html");
   const entryHtmlPathAbs = path.resolve(snapshotRootDirAbs, "index.html");
   const assetsDirAbs = path.resolve(snapshotRootDirAbs, "assets");
@@ -2170,8 +2186,62 @@ export async function importPublicSinglePageUrlToSnapshot(input: {
     fetchScope: FETCH_SCOPE,
   };
 
+  const snapshotRunsDirAbs = path.resolve(snapshotStableRootDirAbs, "runs");
+  const previousRuns = fs.existsSync(snapshotRunsDirAbs)
+    ? fs
+        .readdirSync(snapshotRunsDirAbs, { withFileTypes: true })
+        .filter((entry) => entry.isDirectory())
+        .map((entry) => entry.name)
+        .filter((value) => value !== snapshotRunId)
+        .sort((a, b) => a.localeCompare(b))
+    : [];
+
+  fs.mkdirSync(snapshotRootDirAbs, { recursive: true });
+  fs.rmSync(snapshotRootDirAbs, { recursive: true, force: true });
   fs.mkdirSync(snapshotRootDirAbs, { recursive: true });
   fs.mkdirSync(assetsDirAbs, { recursive: true });
+
+  diagnostics.push(
+    createDiagnostic({
+      severity: "info",
+      code: "IMPORT_RUN_ID_CREATED",
+      message: "Import execution run identity created for this URL snapshot execution.",
+      targetUrl: null,
+      details: {
+        snapshotId,
+        snapshotRunId,
+        requestId: input.requestId ?? null,
+      },
+    }),
+  );
+  diagnostics.push(
+    createDiagnostic({
+      severity: "info",
+      code: "EVIDENCE_RUN_ISOLATED",
+      message: "Import evidence path is isolated to a run-specific directory.",
+      targetUrl: null,
+      details: {
+        snapshotStableRootDirAbs,
+        snapshotRunRootDirAbs: snapshotRootDirAbs,
+      },
+    }),
+  );
+  if (previousRuns.length > 0) {
+    diagnostics.push(
+      createDiagnostic({
+        severity: "info",
+        code: "STALE_EVIDENCE_SUPERSEDED",
+        message: "Previous run evidence exists and is superseded by the current run-scoped evidence.",
+        targetUrl: null,
+        details: {
+          snapshotId,
+          snapshotRunId,
+          previousRunCount: previousRuns.length,
+          latestPreviousRunId: previousRuns[previousRuns.length - 1] ?? null,
+        },
+      }),
+    );
+  }
 
   const fetcher = input.fetchImpl ?? fetch;
   let renderedCapture: RenderedCaptureResult = {
@@ -2410,7 +2480,7 @@ export async function importPublicSinglePageUrlToSnapshot(input: {
         })();
       const workerRequest = createRenderedCaptureWorkerRequest({
         requestId: input.requestId ?? `capture-worker-${snapshotId}`,
-        importId: snapshotId,
+        importId: `${snapshotId}:${snapshotRunId}`,
         sourceUrl: entryFetchUrlUsed ?? normalizedHref,
         viewport: DEFAULT_RENDERED_CAPTURE_VIEWPORT,
         readinessPolicy: DEFAULT_RENDERED_CAPTURE_READINESS_POLICY,
@@ -2424,6 +2494,7 @@ export async function importPublicSinglePageUrlToSnapshot(input: {
           targetUrl: null,
           details: {
             snapshotId,
+            snapshotRunId,
             requestId: workerRequest.requestId,
             importId: workerRequest.importId,
             sourceUrl: workerRequest.sourceUrl,
@@ -2439,7 +2510,7 @@ export async function importPublicSinglePageUrlToSnapshot(input: {
         timeoutBudgetMs: workerRequest.capture.timeoutBudgetMs,
         maxAttempts: CAPTURE_JOB_MAX_ATTEMPTS,
         correlation: {
-          importId: snapshotId,
+          importId: workerRequest.importId,
           siteId: null,
           snapshotId,
           sourceUrl: workerRequest.sourceUrl,
@@ -2539,6 +2610,7 @@ export async function importPublicSinglePageUrlToSnapshot(input: {
         targetUrl: null,
         details: {
           snapshotId,
+          snapshotRunId,
           renderedCaptureStatus: renderedCapture.status,
           renderedDocumentCount: renderedCapture.documents.length,
           screenshotCount: renderedCapture.screenshots.length,
@@ -2556,6 +2628,7 @@ export async function importPublicSinglePageUrlToSnapshot(input: {
         targetUrl: null,
         details: {
           snapshotId,
+          snapshotRunId,
           renderedCaptureStatus: renderedCapture.status,
           captureJobId: renderedCaptureJob?.jobId ?? null,
           captureJobStatus: renderedCaptureJob?.status ?? null,
@@ -2582,6 +2655,7 @@ export async function importPublicSinglePageUrlToSnapshot(input: {
           targetUrl: null,
           details: {
             snapshotId,
+            snapshotRunId,
             renderedCaptureStatus: renderedCapture.status,
             renderedDocumentCount: renderedCapture.documents.length,
             screenshotCount: renderedCapture.screenshots.length,
@@ -2599,6 +2673,7 @@ export async function importPublicSinglePageUrlToSnapshot(input: {
         targetUrl: null,
         details: {
           snapshotId,
+          snapshotRunId,
           renderedCaptureStatus: renderedCapture.status,
           renderedDocumentCount: renderedCapture.documents.length,
           captureJobId: renderedCaptureJob?.jobId ?? null,
@@ -3117,8 +3192,26 @@ export async function importPublicSinglePageUrlToSnapshot(input: {
   } as unknown as JsonValue);
 
   writeJsonStable(path.resolve(snapshotRootDirAbs, "url-fetch-manifest.json"), sortedManifest as unknown as JsonValue);
+  writeJsonStable(path.resolve(snapshotStableRootDirAbs, "latest-run.json"), {
+    kind: "url_import_latest_run_v1",
+    snapshotId,
+    snapshotRunId,
+    snapshotStableRootDirAbs,
+    snapshotRunRootDirAbs: snapshotRootDirAbs,
+    requestId: input.requestId ?? null,
+    sourceMode: sourceSelection.sourceMode,
+    renderedCaptureStatus: renderedCapture.status,
+    createdAt: new Date().toISOString(),
+  } as unknown as JsonValue);
   writeJsonStable(acquisitionEvidencePathAbs, {
     kind: "import_acquisition_evidence_v1",
+    executionIdentity: {
+      snapshotId,
+      snapshotRunId,
+      snapshotStableRootDirAbs,
+      snapshotRunRootDirAbs: snapshotRootDirAbs,
+      requestId: input.requestId ?? null,
+    },
     entryFetch: {
       chosenUrl: entryFetchUrlUsed ?? null,
       finalContentType: lastSuccessfulResponseContentType,
@@ -3176,6 +3269,8 @@ export async function importPublicSinglePageUrlToSnapshot(input: {
     sourceUrl: input.sourceUrl,
     normalizedUrl: normalizedHref,
     snapshotId,
+    snapshotRunId,
+    snapshotStableRootDirAbs,
     snapshotRootDirAbs,
     fixtureSpec,
     sourceMode: sourceSelection.sourceMode,

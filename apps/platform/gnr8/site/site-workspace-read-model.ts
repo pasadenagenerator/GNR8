@@ -304,15 +304,21 @@ function toEpoch(value: unknown): number {
 }
 
 function compareRuntimeVersionRows(a: RuntimeVersionRow, b: RuntimeVersionRow): number {
-  const aVersion = Number(a.version_no ?? 0)
-  const bVersion = Number(b.version_no ?? 0)
-  if (aVersion !== bVersion) return aVersion - bVersion
-
   const updatedDelta = toEpoch(a.updated_at) - toEpoch(b.updated_at)
   if (updatedDelta !== 0) return updatedDelta
 
   const createdDelta = toEpoch(a.created_at) - toEpoch(b.created_at)
   if (createdDelta !== 0) return createdDelta
+
+  const aCaptureStatus = normalizeText((isRecord(a.import_provenance_summary) ? a.import_provenance_summary.renderedCaptureStatus : null)).toLowerCase()
+  const bCaptureStatus = normalizeText((isRecord(b.import_provenance_summary) ? b.import_provenance_summary.renderedCaptureStatus : null)).toLowerCase()
+  const captureRank = (value: string): number => (value === 'available' ? 3 : value === 'partial' ? 2 : value === 'failed' ? 1 : 0)
+  const captureDelta = captureRank(aCaptureStatus) - captureRank(bCaptureStatus)
+  if (captureDelta !== 0) return captureDelta
+
+  const aVersion = Number(a.version_no ?? 0)
+  const bVersion = Number(b.version_no ?? 0)
+  if (aVersion !== bVersion) return aVersion - bVersion
 
   return String(a.id ?? '').localeCompare(String(b.id ?? ''))
 }
@@ -714,6 +720,7 @@ function parseImportProvenanceSummary(value: unknown): RuntimeImportProvenanceSu
   const screenshotPaths = Array.isArray(captureEvidence?.screenshotPaths)
     ? captureEvidence.screenshotPaths.map((entry) => normalizeText(entry)).filter(Boolean)
     : []
+  const executionIdentity = isRecord(value.executionIdentity) ? value.executionIdentity : null
   const styleSignals = isRecord(value.styleSignals) ? (value.styleSignals as StyleSignalModel) : null
 
   const renderedCaptureStatusNormalized: RuntimeImportProvenanceSummary['renderedCaptureStatus'] =
@@ -890,6 +897,15 @@ function parseImportProvenanceSummary(value: unknown): RuntimeImportProvenanceSu
 
   return {
     kind: 'runtime_import_provenance_summary_v1',
+    executionIdentity: executionIdentity
+      ? {
+          snapshotId: normalizeText(executionIdentity.snapshotId),
+          snapshotRunId: normalizeText(executionIdentity.snapshotRunId),
+          snapshotStableRootDirAbs: normalizeText(executionIdentity.snapshotStableRootDirAbs),
+          snapshotRunRootDirAbs: normalizeText(executionIdentity.snapshotRunRootDirAbs),
+          requestId: toTextOrNull(executionIdentity.requestId),
+        }
+      : undefined,
     sourceMode: sourceModeRaw,
     importFidelityStatus: fidelityStatusRaw,
     renderedCaptureStatus: renderedCaptureStatusNormalized,
@@ -973,6 +989,7 @@ function parseImportFidelity(input: {
     .sort((a, b) => a.localeCompare(b))
 
   const captureEvidenceRefs = [
+    parsedSummary.executionIdentity?.snapshotRunRootDirAbs ?? null,
     parsedSummary.captureEvidence.selectedSourceHtmlPath,
     parsedSummary.captureEvidence.responseHtmlPath,
     parsedSummary.captureEvidence.entryHtmlPath,

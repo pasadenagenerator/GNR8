@@ -88,7 +88,7 @@ function mockRenderedCaptureWorkerClient(result: RenderedCaptureWorkerResponse):
   };
 }
 
-test("url import snapshot generation remains deterministic for identical URL + response set", async () => {
+test("url import snapshot generation preserves stable import identity while isolating execution runs", async () => {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "gnr8-url-import-determinism-"));
 
   const sourceUrl = "https://Example.com/landing?b=2&a=1#section";
@@ -146,19 +146,31 @@ test("url import snapshot generation remains deterministic for identical URL + r
   });
 
   assert.equal(a.snapshotId, b.snapshotId);
+  assert.notEqual(a.snapshotRunId, b.snapshotRunId);
+  assert.notEqual(a.snapshotRootDirAbs, b.snapshotRootDirAbs);
+  assert.equal(a.snapshotStableRootDirAbs, b.snapshotStableRootDirAbs);
   assert.equal(a.normalizedUrl, "https://example.com/landing?b=2&a=1");
+  assert.equal(a.snapshotRootDirAbs.startsWith(path.resolve(tmp, a.snapshotId, "runs")), true);
+  assert.equal(b.snapshotRootDirAbs.startsWith(path.resolve(tmp, b.snapshotId, "runs")), true);
 
-  const filesA = listFilesRecursively(a.snapshotRootDirAbs)
-    .map((abs) => ({ rel: path.relative(a.snapshotRootDirAbs, abs).replaceAll(path.sep, "/"), sha: fileSha256(abs) }))
-    .sort((x, y) => x.rel.localeCompare(y.rel));
+  const stableFiles = ["index.html", "response-html.raw.html", "url-fetch-manifest.json"];
+  for (const rel of stableFiles) {
+    assert.equal(
+      fileSha256(path.resolve(a.snapshotRootDirAbs, rel)),
+      fileSha256(path.resolve(b.snapshotRootDirAbs, rel)),
+      `Expected deterministic file content for ${rel}`,
+    );
+  }
 
-  const filesB = listFilesRecursively(b.snapshotRootDirAbs)
-    .map((abs) => ({ rel: path.relative(b.snapshotRootDirAbs, abs).replaceAll(path.sep, "/"), sha: fileSha256(abs) }))
-    .sort((x, y) => x.rel.localeCompare(y.rel));
-
-  assert.equal(stableStringify(filesA as unknown as JsonValue), stableStringify(filesB as unknown as JsonValue));
+  const latestRunPointer = JSON.parse(
+    fs.readFileSync(path.resolve(a.snapshotStableRootDirAbs, "latest-run.json"), "utf8"),
+  ) as { snapshotRunId?: string; snapshotRunRootDirAbs?: string };
+  assert.equal(latestRunPointer.snapshotRunId, b.snapshotRunId);
+  assert.equal(latestRunPointer.snapshotRunRootDirAbs, b.snapshotRootDirAbs);
   assert.equal(stableStringify(a.fetchManifest as unknown as JsonValue), stableStringify(b.fetchManifest as unknown as JsonValue));
-  assert.equal(stableStringify(a.importDiagnostics as unknown as JsonValue), stableStringify(b.importDiagnostics as unknown as JsonValue));
+  assert.ok(b.importDiagnostics.issues.some((issue) => issue.code === "IMPORT_RUN_ID_CREATED"));
+  assert.ok(b.importDiagnostics.issues.some((issue) => issue.code === "EVIDENCE_RUN_ISOLATED"));
+  assert.ok(b.importDiagnostics.issues.some((issue) => issue.code === "STALE_EVIDENCE_SUPERSEDED"));
 });
 
 test("rendered capture unavailable falls back to raw_html and preserves raw response html", async () => {
@@ -501,6 +513,156 @@ test("worker-backed failure degrades explicitly to raw_html_fallback", async () 
   assert.equal(snapshot.renderedCapture.status, "unavailable");
   assert.ok(snapshot.importDiagnostics.issues.some((issue) => issue.code === "CAPTURE_WORKER_FALLBACK_TO_RAW_HTML"));
   assert.ok(snapshot.importDiagnostics.issues.some((issue) => issue.code === "RAW_HTML_FALLBACK_USED"));
+});
+
+test("fresh successful run is isolated from stale fallback diagnostics and evidence", async () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "gnr8-url-import-run-isolation-"));
+  const sourceUrl = "https://worker-run-isolation.example.com/";
+
+  const failed = await importPublicSinglePageUrlToSnapshot({
+    sourceUrl,
+    snapshotRootDirAbs: tmp,
+    requestId: "client-site-import-failed",
+    fetchImpl: mockFetchFromTable({
+      [sourceUrl]: {
+        status: 200,
+        headers: { "content-type": "text/html; charset=utf-8" },
+        body: "<!doctype html><html><body><h1>Raw Source</h1></body></html>",
+      },
+    }),
+    renderedCaptureWorkerClient: mockRenderedCaptureWorkerClient({
+      kind: "rendered_capture_worker_response_v1",
+      contractVersion: RENDERED_CAPTURE_WORKER_CONTRACT_VERSION,
+      requestId: "worker-req-failed",
+      status: "unsupported",
+      environment: {
+        runtimeKind: "unknown",
+        environmentSupported: false,
+        browserPackageAvailable: false,
+        browserBinaryAvailable: false,
+        supportDecision: "unknown",
+      },
+      artifacts: [],
+      computedStyleSamples: [],
+      diagnostics: [
+        { code: "CAPTURE_WORKER_HTTP_ERROR", severity: "warning", message: "http error" },
+        { code: "CAPTURE_WORKER_UNAVAILABLE", severity: "warning", message: "worker unavailable" },
+        { code: "RENDERED_CAPTURE_UNAVAILABLE", severity: "warning", message: "unavailable" },
+      ],
+      qualitySummary: {
+        renderedDomQuality: "unusable",
+        domLength: 0,
+        meaningfulNodeCount: 0,
+        screenshotCount: 0,
+        computedStyleSampleCount: 0,
+      },
+      failure: {
+        failureClass: "internal_error",
+        failureCode: "HTTP_502",
+        retryable: true,
+        message: "http error",
+      },
+      timings: {
+        queueLatencyMs: null,
+        executionMs: null,
+        totalMs: null,
+      },
+    }),
+  });
+
+  const successful = await importPublicSinglePageUrlToSnapshot({
+    sourceUrl,
+    snapshotRootDirAbs: tmp,
+    requestId: "client-site-import-success",
+    fetchImpl: mockFetchFromTable({
+      [sourceUrl]: {
+        status: 200,
+        headers: { "content-type": "text/html; charset=utf-8" },
+        body: "<!doctype html><html><body><h1>Raw Source</h1></body></html>",
+      },
+    }),
+    renderedCaptureWorkerClient: mockRenderedCaptureWorkerClient({
+      kind: "rendered_capture_worker_response_v1",
+      contractVersion: RENDERED_CAPTURE_WORKER_CONTRACT_VERSION,
+      requestId: "worker-req-success",
+      status: "available",
+      environment: {
+        runtimeKind: "nodejs",
+        environmentSupported: true,
+        browserPackageAvailable: true,
+        browserBinaryAvailable: true,
+        supportDecision: "supported",
+      },
+      artifacts: [
+        {
+          artifactType: "rendered_dom_html",
+          captureType: null,
+          storage: "inline",
+          uri: `data:text/html;base64,${Buffer.from(
+            "<!doctype html><html><body><main><h1>Rendered Run</h1><p>authoritative</p></main></body></html>",
+            "utf8",
+          ).toString("base64")}`,
+          mediaType: "text/html",
+          sha256: "dom-sha",
+          byteLength: 120,
+        },
+      ],
+      computedStyleSamples: [
+        {
+          kind: "computed_style_sample_v1",
+          sampleId: "style-1",
+          target: "h1",
+          selector: "h1",
+          tagName: "h1",
+          className: null,
+          styles: {
+            fontFamily: "Inter",
+            fontSize: "42px",
+            fontWeight: "700",
+            lineHeight: "1.2",
+            color: "rgb(10,10,10)",
+            backgroundColor: "rgba(0,0,0,0)",
+            borderRadius: "0px",
+            paddingTop: "0px",
+            paddingRight: "0px",
+            paddingBottom: "0px",
+            paddingLeft: "0px",
+          },
+        },
+      ],
+      diagnostics: [
+        { code: "CAPTURE_WORKER_RENDERED_DOM_USED", severity: "info", message: "accepted" },
+        { code: "DOM_SERIALIZATION_SUCCEEDED", severity: "info", message: "dom ok" },
+      ],
+      qualitySummary: {
+        renderedDomQuality: "strong",
+        domLength: 180,
+        meaningfulNodeCount: 30,
+        screenshotCount: 0,
+        computedStyleSampleCount: 1,
+      },
+      failure: null,
+      timings: {
+        queueLatencyMs: 10,
+        executionMs: 100,
+        totalMs: 110,
+      },
+    }),
+  });
+
+  assert.notEqual(failed.snapshotRunId, successful.snapshotRunId);
+  assert.notEqual(failed.snapshotRootDirAbs, successful.snapshotRootDirAbs);
+  assert.equal(failed.snapshotId, successful.snapshotId);
+  assert.equal(successful.sourceMode, "rendered_dom");
+  assert.equal(successful.importDiagnostics.issues.some((issue) => issue.code === "CAPTURE_WORKER_UNAVAILABLE"), false);
+  assert.equal(successful.importDiagnostics.issues.some((issue) => issue.code === "CAPTURE_WORKER_HTTP_ERROR"), false);
+  assert.ok(successful.importDiagnostics.issues.some((issue) => issue.code === "STALE_EVIDENCE_SUPERSEDED"));
+
+  const latestRunPointer = JSON.parse(
+    fs.readFileSync(path.resolve(successful.snapshotStableRootDirAbs, "latest-run.json"), "utf8"),
+  ) as { snapshotRunId: string; snapshotRunRootDirAbs: string };
+  assert.equal(latestRunPointer.snapshotRunId, successful.snapshotRunId);
+  assert.equal(latestRunPointer.snapshotRunRootDirAbs, successful.snapshotRootDirAbs);
 });
 
 test("worker execution failure is distinguished from worker-unavailable transport failure in provenance", async () => {
@@ -1505,10 +1667,12 @@ test("url import captures fetchable head stylesheets and promotes header/logo pl
 
   const exportedHtmlSecond = fs.readFileSync(exportedIndexAbs, "utf8");
   assert.equal(exportedHtmlSecond, exportedHtml);
-  assert.equal(
-    stableStringify(response.snapshot.importDiagnostics as unknown as JsonValue),
-    stableStringify(second.snapshot.importDiagnostics as unknown as JsonValue),
-  );
+  const firstCodes = [...new Set(response.snapshot.importDiagnostics.issues.map((issue) => issue.code))].sort((a, b) => a.localeCompare(b));
+  const secondCodes = [...new Set(second.snapshot.importDiagnostics.issues.map((issue) => issue.code))].sort((a, b) => a.localeCompare(b));
+  for (const code of firstCodes) {
+    assert.ok(secondCodes.includes(code), `Expected repeated run diagnostics to preserve code: ${code}`);
+  }
+  assert.ok(secondCodes.includes("STALE_EVIDENCE_SUPERSEDED"));
 });
 
 test("transporti-style regression guard: gallery placeholders remain visible and remote-first stylesheet does not displace copied local stylesheet", async () => {

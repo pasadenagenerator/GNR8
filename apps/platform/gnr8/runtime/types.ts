@@ -18,6 +18,13 @@ export type SemanticSignal = {
 
 export type RuntimeImportProvenanceSummary = {
   kind: "runtime_import_provenance_summary_v1";
+  executionIdentity?: {
+    snapshotId: string;
+    snapshotRunId: string;
+    snapshotStableRootDirAbs: string;
+    snapshotRunRootDirAbs: string;
+    requestId: string | null;
+  };
   sourceMode: "rendered_dom" | "raw_html_fallback";
   importFidelityStatus: "high_fidelity_import" | "degraded_import" | "capture_failed";
   renderedCaptureStatus: "available" | "partial" | "failed";

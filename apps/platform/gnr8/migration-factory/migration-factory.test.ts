@@ -108,6 +108,8 @@ function createMockSnapshotImporter(input: {
       sourceUrl,
       normalizedUrl: sourceUrl,
       snapshotId: "mock-snapshot",
+      snapshotRunId: "mock-run-1",
+      snapshotStableRootDirAbs: snapshotRootDirAbs,
       snapshotRootDirAbs,
       fixtureSpec: {
         fixtureId: "mock-snapshot",

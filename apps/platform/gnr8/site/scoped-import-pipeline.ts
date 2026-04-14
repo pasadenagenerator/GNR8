@@ -392,7 +392,11 @@ function buildImportProvenanceSummary(snapshot: UrlSinglePageImportSnapshot, sty
     ...captureDiagnostics,
     ...importDiagnostics,
     'RENDERED_CAPTURE_SUMMARY_PERSISTED',
+    'LATEST_EXECUTION_EVIDENCE_SELECTED',
     ...(snapshot.sourceSelection.sourceMode === 'rendered_dom' && workerResultSuccessful ? ['CAPTURE_WORKER_RESULT_PERSISTED'] : []),
+    ...(snapshot.sourceSelection.sourceMode === 'rendered_dom' && importDiagnostics.includes('STALE_EVIDENCE_SUPERSEDED')
+      ? ['FALLBACK_EVIDENCE_SUPERSEDED_BY_RENDERED_CAPTURE']
+      : []),
     ...(snapshot.sourceSelection.sourceMode === 'raw_html_fallback' && (workerResultSuccessful || workerCapturedEvidence)
       ? ['CAPTURE_WORKER_RESULT_SUPERSEDED_BY_FALLBACK']
       : []),
@@ -400,6 +404,13 @@ function buildImportProvenanceSummary(snapshot: UrlSinglePageImportSnapshot, sty
 
   return {
     kind: 'runtime_import_provenance_summary_v1',
+    executionIdentity: {
+      snapshotId: snapshot.snapshotId,
+      snapshotRunId: snapshot.snapshotRunId,
+      snapshotStableRootDirAbs: snapshot.snapshotStableRootDirAbs,
+      snapshotRunRootDirAbs: snapshot.snapshotRootDirAbs,
+      requestId: null,
+    },
     sourceMode: snapshot.sourceSelection.sourceMode,
     importFidelityStatus: snapshot.sourceSelection.fidelityStatus,
     renderedCaptureStatus,

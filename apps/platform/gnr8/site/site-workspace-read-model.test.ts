@@ -103,7 +103,7 @@ test('runtime version selection falls back to latest runtime when selected varia
   assert.equal(selected.selectedVariant?.id, 'variant-a')
 })
 
-test('latest runtime row selection is version-first to avoid stale timestamp overrides', () => {
+test('latest runtime row selection prefers latest execution recency over cross-site version number drift', () => {
   const latest = __siteWorkspaceReadModelTestUtils.resolveLatestRuntimeVersionRow([
     {
       id: 'older-higher-version',
@@ -129,8 +129,8 @@ test('latest runtime row selection is version-first to avoid stale timestamp ove
     } as any,
   ])
 
-  assert.equal(latest?.id, 'older-higher-version')
-  assert.equal(latest?.site_id, 'runtime-site-a')
+  assert.equal(latest?.id, 'fresh-import-version')
+  assert.equal(latest?.site_id, 'runtime-site-b')
 })
 
 test('import fidelity signals are parsed from semantic signal labels', () => {
@@ -321,6 +321,14 @@ test('import fidelity prefers persisted summary over semantic signal labels', ()
       version_no: 1,
       import_provenance_summary: {
         kind: 'runtime_import_provenance_summary_v1',
+        executionIdentity: {
+          snapshotId: 'imported-url-site-abc123',
+          snapshotRunId: 'client-site-import-1776146141914-a1b2c3d4',
+          snapshotStableRootDirAbs: '/tmp/gnr8/validation/url-import-snapshots/imported-url-site-abc123',
+          snapshotRunRootDirAbs:
+            '/tmp/gnr8/validation/url-import-snapshots/imported-url-site-abc123/runs/client-site-import-1776146141914-a1b2c3d4',
+          requestId: 'client-site-import-1776146141914',
+        },
         sourceMode: 'rendered_dom',
         importFidelityStatus: 'high_fidelity_import',
         renderedCaptureStatus: 'available',
@@ -428,6 +436,10 @@ test('import fidelity prefers persisted summary over semantic signal labels', ()
   assert.equal(parsed.styleSignalFallbackUsed, false)
   assert.equal(parsed.styleSignalSourceMode, 'computed_style')
   assert.equal(parsed.evidencePaths.renderedDomPath, '/tmp/snapshot/rendered/rendered-dom.html')
+  assert.equal(
+    parsed.captureEvidenceRefs[0],
+    '/tmp/gnr8/validation/url-import-snapshots/imported-url-site-abc123/runs/client-site-import-1776146141914-a1b2c3d4',
+  )
   assert.ok(parsed.captureEvidenceRefs.some((entry) => entry.includes('rendered-capture.json')))
   assert.equal(parsed.renderedCapture?.domLength, 4300)
   assert.equal(parsed.renderedCapture?.nodeCount, 88)
