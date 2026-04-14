@@ -83,6 +83,11 @@ async function renderTransformedSiteVersionPreview(input: {
       finalSiteModelAvailable: false,
       renderedWithFallback: false,
       matchedPageId: null,
+      contentResolutionApplied: false,
+      resolvedContentCount: 0,
+      unresolvedContentCount: 0,
+      contentResolutionDegraded: false,
+      contentResolutionDiagnostics: [],
       previewDiagnostics: [PREVIEW_RUNTIME_DIAGNOSTIC.FALLBACK_RENDER_SELECTED],
     },
   }
@@ -134,6 +139,11 @@ async function renderDebugSiteVersionPreview(input: {
       finalSiteModelAvailable: false,
       renderedWithFallback: false,
       matchedPageId: null,
+      contentResolutionApplied: false,
+      resolvedContentCount: 0,
+      unresolvedContentCount: 0,
+      contentResolutionDegraded: false,
+      contentResolutionDiagnostics: [],
       previewDiagnostics: [PREVIEW_RUNTIME_DIAGNOSTIC.FALLBACK_RENDER_SELECTED],
     },
   }

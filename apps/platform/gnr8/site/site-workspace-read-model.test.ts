@@ -642,6 +642,11 @@ test('preview runtime summary parser reads persisted preview mode truth', () => 
     finalSiteModelAvailable: true,
     renderedWithFallback: true,
     matchedPageId: 'page-home',
+    contentResolutionApplied: true,
+    resolvedContentCount: 9,
+    unresolvedContentCount: 1,
+    contentResolutionDegraded: true,
+    contentResolutionDiagnostics: ['CONTENT_RESOLUTION_STARTED', 'CONTENT_RESOLUTION_DEGRADED'],
     previewDiagnostics: ['PREVIEW_REAL_REACT_RENDER_DEGRADED', 'PREVIEW_MODE_PERSISTED'],
   })
 
@@ -650,5 +655,10 @@ test('preview runtime summary parser reads persisted preview mode truth', () => 
   assert.equal(parsed?.finalSiteModelAvailable, true)
   assert.equal(parsed?.renderedWithFallback, true)
   assert.equal(parsed?.matchedPageId, 'page-home')
+  assert.equal(parsed?.contentResolutionApplied, true)
+  assert.equal(parsed?.resolvedContentCount, 9)
+  assert.equal(parsed?.unresolvedContentCount, 1)
+  assert.equal(parsed?.contentResolutionDegraded, true)
+  assert.deepEqual(parsed?.contentResolutionDiagnostics, ['CONTENT_RESOLUTION_DEGRADED', 'CONTENT_RESOLUTION_STARTED'])
   assert.deepEqual(parsed?.previewDiagnostics, ['PREVIEW_MODE_PERSISTED', 'PREVIEW_REAL_REACT_RENDER_DEGRADED'])
 })

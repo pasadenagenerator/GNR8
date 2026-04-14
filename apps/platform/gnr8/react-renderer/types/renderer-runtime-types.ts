@@ -7,6 +7,7 @@ import type {
   ReactRenderSiteModel,
   RenderDiagnostic,
 } from "@/gnr8/renderer-contract";
+import type { FinalSiteModel } from "@/gnr8/merge-engine";
 
 export type RealReactRendererOptions = {
   diagnosticsMode?: "silent" | "comments" | "visible";
@@ -16,6 +17,7 @@ export type RealReactRendererOptions = {
 
 export type RealReactRendererInput = {
   siteModel: ReactRenderSiteModel;
+  finalSiteModel?: FinalSiteModel | null;
   routePath: string;
   options?: RealReactRendererOptions;
 };
@@ -24,6 +26,12 @@ export type RealReactRendererResult = {
   matchedPageId: string | null;
   diagnostics: RenderDiagnostic[];
   renderedWithFallback: boolean;
+  contentResolutionApplied: boolean;
+  resolvedContentCount: number;
+  degradedResolvedContentCount: number;
+  unresolvedContentCount: number;
+  contentResolutionDegraded: boolean;
+  contentResolutionDiagnostics: string[];
 };
 
 export type RealReactRendererOutput = {

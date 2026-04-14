@@ -12,6 +12,11 @@ export type PreviewRuntimeSummary = {
   finalSiteModelAvailable: boolean;
   renderedWithFallback: boolean;
   matchedPageId: string | null;
+  contentResolutionApplied: boolean;
+  resolvedContentCount: number;
+  unresolvedContentCount: number;
+  contentResolutionDegraded: boolean;
+  contentResolutionDiagnostics: string[];
   previewDiagnostics: string[];
 };
 

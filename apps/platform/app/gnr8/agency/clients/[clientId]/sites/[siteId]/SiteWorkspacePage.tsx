@@ -328,7 +328,11 @@ function renderPreviewContent(readModel: Awaited<ReturnType<typeof getSiteWorksp
           Runtime truth: contract={readModel.preview.previewRuntimeSummary.rendererContractAvailable ? 'yes' : 'no'} · final-site=
           {readModel.preview.previewRuntimeSummary.finalSiteModelAvailable ? 'yes' : 'no'} · fallback=
           {readModel.preview.previewRuntimeSummary.renderedWithFallback ? 'yes' : 'no'} · matchedPage=
-          {readModel.preview.previewRuntimeSummary.matchedPageId ?? 'none'}
+          {readModel.preview.previewRuntimeSummary.matchedPageId ?? 'none'} · contentResolution=
+          {readModel.preview.previewRuntimeSummary.contentResolutionApplied ? 'yes' : 'no'} · resolved=
+          {readModel.preview.previewRuntimeSummary.resolvedContentCount} · unresolved=
+          {readModel.preview.previewRuntimeSummary.unresolvedContentCount} · degraded=
+          {readModel.preview.previewRuntimeSummary.contentResolutionDegraded ? 'yes' : 'no'}
         </p>
       ) : null}
       {contentRecoveryModeActive ? (

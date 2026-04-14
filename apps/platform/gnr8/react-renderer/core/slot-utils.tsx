@@ -30,10 +30,22 @@ function coerceText(value: unknown): string {
   return "";
 }
 
+function resolveTextFromResolvedValue(value: unknown): string {
+  if (!isObject(value)) return "";
+  if (typeof value.kind !== "string") return "";
+  if (value.kind === "text" || value.kind === "rich_text" || value.kind === "url") {
+    return coerceText(value.value);
+  }
+  return "";
+}
+
 export function resolveTextFromSlot(slotValue: ReactRenderSlotValue | undefined, fallbackLabel: string): string {
   if (!slotValue) return fallbackLabel;
 
   if (isBoundValue(slotValue)) {
+    const resolvedText = resolveTextFromResolvedValue(slotValue.resolvedValue);
+    if (resolvedText) return resolvedText;
+
     if (slotValue.kind === "bound_content") {
       return slotValue.contentId ? `[content:${slotValue.contentId}]` : fallbackLabel;
     }
@@ -60,6 +72,10 @@ export function resolveTextFromSlot(slotValue: ReactRenderSlotValue | undefined,
 export function resolveUrlFromSlot(slotValue: ReactRenderSlotValue | undefined): string {
   if (!slotValue) return "#";
   if (isBoundValue(slotValue)) {
+    if (isObject(slotValue.resolvedValue) && slotValue.resolvedValue.kind === "url") {
+      const url = coerceText(slotValue.resolvedValue.value);
+      if (url) return url;
+    }
     if (slotValue.kind === "fallback") {
       const fallbackValue = coerceText(slotValue.fallbackValue);
       return fallbackValue || "#";
@@ -94,6 +110,13 @@ export function resolveMediaFromSlot(slotValue: ReactRenderSlotValue | undefined
   }
 
   if (isBoundValue(slotValue)) {
+    if (isObject(slotValue.resolvedValue) && slotValue.resolvedValue.kind === "image") {
+      return {
+        src: coerceText(slotValue.resolvedValue.src) || MEDIA_PLACEHOLDER_SRC,
+        alt: coerceText(slotValue.resolvedValue.alt) || fallbackAlt,
+      };
+    }
+
     if (slotValue.kind === "bound_content") {
       return {
         src: MEDIA_PLACEHOLDER_SRC,
@@ -147,6 +170,26 @@ export function resolveListFromSlot(slotValue: ReactRenderSlotValue | undefined,
   }
 
   if (isBoundValue(slotValue)) {
+    if (isObject(slotValue.resolvedValue) && slotValue.resolvedValue.kind === "items" && Array.isArray(slotValue.resolvedValue.items)) {
+      return slotValue.resolvedValue.items
+        .map((item, index) => {
+          if (!isObject(item)) return `${fallbackLabel} ${index + 1}`;
+          const selected = Object.keys(item)
+            .sort((a, b) => stringCmp(a, b))
+            .map((key) => {
+              const entry = item[key];
+              if (!isObject(entry)) return "";
+              if (entry.kind === "text" || entry.kind === "rich_text" || entry.kind === "url") return coerceText(entry.value);
+              if (entry.kind === "image") return coerceText(entry.alt) || coerceText(entry.src);
+              return "";
+            })
+            .find((value) => value.length > 0);
+
+          return selected || `${fallbackLabel} ${index + 1}`;
+        })
+        .filter((value) => value.length > 0);
+    }
+
     return [resolveTextFromSlot(slotValue, fallbackLabel)];
   }
 
@@ -163,6 +206,10 @@ export function renderGenericSlotValue(slotValue: ReactRenderSlotValue | undefin
   if (!slotValue) return <span data-gnr8-slot-empty="true">[empty]</span>;
 
   if (isBoundValue(slotValue)) {
+    if (slotValue.resolvedValue) {
+      return <code data-gnr8-slot-kind="resolved">{stringifyDeterministic(slotValue.resolvedValue)}</code>;
+    }
+
     if (slotValue.kind === "bound_content") {
       return <span data-gnr8-slot-kind="bound_content">{slotValue.contentId ? `[content:${slotValue.contentId}]` : "[content]"}</span>;
     }

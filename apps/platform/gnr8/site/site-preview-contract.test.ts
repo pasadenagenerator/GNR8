@@ -42,6 +42,11 @@ test('resolveSiteWorkspacePreview prefers transformed preview as primary source'
       finalSiteModelAvailable: true,
       renderedWithFallback: true,
       matchedPageId: 'page-home',
+      contentResolutionApplied: true,
+      resolvedContentCount: 12,
+      unresolvedContentCount: 2,
+      contentResolutionDegraded: true,
+      contentResolutionDiagnostics: ['CONTENT_RESOLUTION_DEGRADED'],
       previewDiagnostics: ['PREVIEW_REAL_REACT_RENDER_DEGRADED'],
     },
   })

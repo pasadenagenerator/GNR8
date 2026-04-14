@@ -1099,6 +1099,13 @@ function parsePreviewRuntimeSummary(value: unknown): PreviewRuntimeSummary | nul
     finalSiteModelAvailable: Boolean(value.finalSiteModelAvailable),
     renderedWithFallback: Boolean(value.renderedWithFallback),
     matchedPageId: toTextOrNull(value.matchedPageId),
+    contentResolutionApplied: Boolean(value.contentResolutionApplied),
+    resolvedContentCount: Number.isFinite(Number(value.resolvedContentCount)) ? Number(value.resolvedContentCount) : 0,
+    unresolvedContentCount: Number.isFinite(Number(value.unresolvedContentCount)) ? Number(value.unresolvedContentCount) : 0,
+    contentResolutionDegraded: Boolean(value.contentResolutionDegraded),
+    contentResolutionDiagnostics: Array.isArray(value.contentResolutionDiagnostics)
+      ? [...new Set(value.contentResolutionDiagnostics.map((entry) => normalizeText(entry)).filter(Boolean))].sort((a, b) => a.localeCompare(b))
+      : [],
     previewDiagnostics: [...new Set(diagnostics)].sort((a, b) => a.localeCompare(b)),
   }
 }

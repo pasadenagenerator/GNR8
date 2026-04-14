@@ -64,9 +64,7 @@ function pickValue(input: Record<string, unknown>, keys: string[]): string | nul
 }
 
 function pickSectionSlotValues(sectionProps: Record<string, unknown>): {
-  heading: string | null;
-  body: string | null;
-  image: string | null;
+  [key: string]: unknown;
 } {
   const htmlSummary = isRecord(sectionProps.htmlSummary) ? sectionProps.htmlSummary : null;
   const textFromSummary = normalizeText(htmlSummary?.extractedText);
@@ -79,34 +77,100 @@ function pickSectionSlotValues(sectionProps: Record<string, unknown>): {
   const body =
     pickValue(sectionProps, ["body", "description", "text", "copy", "subtitle", "heroBody"]) ?? (textFromSummary || null);
   const image = pickValue(sectionProps, ["image", "imageSrc", "media", "heroImage"]) ?? firstImageFromSummary ?? null;
+  const ctaLabel = pickValue(sectionProps, ["ctaLabel", "buttonLabel", "label", "primaryCtaLabel"]) ?? null;
+  const ctaHref = pickValue(sectionProps, ["ctaHref", "buttonUrl", "href", "url", "link", "primaryCtaHref"]) ?? null;
+  const quote = pickValue(sectionProps, ["quote", "testimonialQuote"]) ?? null;
+  const author = pickValue(sectionProps, ["author", "testimonialAuthor", "byline"]) ?? null;
+  const listValue =
+    sectionProps.items ??
+    sectionProps.cards ??
+    sectionProps.features ??
+    sectionProps.gallery ??
+    sectionProps.images ??
+    sectionProps.plans ??
+    sectionProps.faq ??
+    sectionProps.faqs ??
+    sectionProps.links ??
+    null;
 
-  return {
-    heading,
-    body,
-    image,
-  };
+  const fallbackFaqQuestion = pickValue(sectionProps, ["question", "faqQuestion"]);
+  const fallbackFaqAnswer = pickValue(sectionProps, ["answer", "faqAnswer"]);
+  const normalizedItems =
+    Array.isArray(listValue)
+      ? listValue
+      : fallbackFaqQuestion || fallbackFaqAnswer
+        ? [
+            {
+              question: fallbackFaqQuestion ?? "",
+              answer: fallbackFaqAnswer ?? "",
+            },
+          ]
+        : null;
+
+  return Object.fromEntries(
+    Object.entries({
+      heading,
+      body,
+      image: image ? { src: image, alt: heading ?? "Section image" } : null,
+      "cta.label": ctaLabel,
+      "cta.href": ctaHref,
+      quote,
+      author,
+      items: normalizedItems,
+      cards: normalizedItems,
+      plans: normalizedItems,
+      questions: normalizedItems,
+      links: normalizedItems,
+    }).filter(([, value]) => value != null),
+  );
 }
 
-function slotKeysForKind(kind: FinalSiteModel["pages"][number]["sections"][number]["components"][number]["kind"]): Array<"heading" | "body" | "image"> {
+function slotKeysForKind(kind: FinalSiteModel["pages"][number]["sections"][number]["components"][number]["kind"]): string[] {
   switch (kind) {
     case "hero":
-      return ["heading", "body", "image"];
+      return ["heading", "body", "cta.label", "cta.href", "image"];
     case "section_heading":
       return ["heading"];
+    case "rich_text":
+      return ["body"];
     case "image":
-    case "gallery":
       return ["image"];
     case "cta_group":
-      return ["heading", "body"];
+      return ["cta.label", "cta.href"];
+    case "card_grid":
+      return ["heading", "items"];
+    case "gallery":
+      return ["heading", "items", "image"];
+    case "testimonial":
+      return ["quote", "author"];
+    case "pricing":
+      return ["heading", "plans"];
+    case "faq":
+      return ["heading", "items"];
+    case "footer_block":
+      return ["heading", "body", "links"];
     default:
-      return ["body"];
+      return ["heading", "body", "image", "items"];
   }
 }
 
-function toValueType(slotKey: "heading" | "body" | "image"): "text" | "rich_text" | "image" {
+function toValueType(slotKey: string): "text" | "rich_text" | "image" | "url" | "list" {
   if (slotKey === "image") return "image";
+  if (slotKey === "cta.href") return "url";
+  if (slotKey === "items" || slotKey === "cards" || slotKey === "plans" || slotKey === "questions" || slotKey === "links") return "list";
   if (slotKey === "body") return "rich_text";
   return "text";
+}
+
+function stringifyDeterministic(value: unknown): string {
+  if (value === null || value === undefined) return "";
+  if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") return String(value);
+  if (Array.isArray(value)) return `[${value.map((entry) => stringifyDeterministic(entry)).join(",")}]`;
+  if (!isRecord(value)) return "";
+  return `{${Object.keys(value)
+    .sort((a, b) => a.localeCompare(b))
+    .map((key) => `${key}:${stringifyDeterministic(value[key])}`)
+    .join(",")}}`;
 }
 
 function mapPageToFinalPage(input: {
@@ -138,11 +202,16 @@ function mapPageToFinalPage(input: {
         valueType: toValueType(slotKey),
         sourceHint: "runtime_section_props",
       }));
+      const resolvedSlotValues = Object.fromEntries(
+        slotKeys
+          .map((slotKey) => [slotKey, slotValues[slotKey]] as const)
+          .filter((entry): entry is readonly [string, unknown] => entry[1] != null),
+      );
       const contentBindings = slotKeys
         .map((slotKey) => {
           const value = slotValues[slotKey];
           if (!value) return null;
-          const contentId = deterministicId("content", `${componentId}:${slotKey}:${value}`);
+          const contentId = deterministicId("content", `${componentId}:${slotKey}:${stringifyDeterministic(value)}`);
           return {
             id: deterministicId("binding", `${componentId}:${slotKey}`),
             componentId,
@@ -154,6 +223,11 @@ function mapPageToFinalPage(input: {
           };
         })
         .filter((entry): entry is NonNullable<typeof entry> => entry != null);
+      const resolvedContentById = Object.fromEntries(
+        contentBindings
+          .map((binding) => [binding.contentId, slotValues[binding.slotPath.split(".").slice(1).join(".")]])
+          .filter((entry): entry is [string, unknown] => entry[1] != null),
+      );
 
       return {
         id: sectionId,
@@ -174,7 +248,11 @@ function mapPageToFinalPage(input: {
             fallback: {
               wrappedAsGeneric: componentKind === "generic",
               reason: componentKind === "generic" ? "unknown_section_type" : null,
-              rawMetadata: componentKind === "generic" ? { sectionType } : null,
+              rawMetadata: {
+                sectionType,
+                resolvedSlotValues,
+                resolvedContentById,
+              },
             },
             provenance: {
               source: "merged",
@@ -362,6 +440,11 @@ function toSummary(input: {
     finalSiteModelAvailable: input.finalSiteModel != null,
     renderedWithFallback: Boolean(input.rendererResult?.renderedWithFallback),
     matchedPageId: input.rendererResult?.matchedPageId ?? null,
+    contentResolutionApplied: Boolean(input.rendererResult?.contentResolutionApplied),
+    resolvedContentCount: input.rendererResult?.resolvedContentCount ?? 0,
+    unresolvedContentCount: input.rendererResult?.unresolvedContentCount ?? 0,
+    contentResolutionDegraded: Boolean(input.rendererResult?.contentResolutionDegraded),
+    contentResolutionDiagnostics: [...new Set(input.rendererResult?.contentResolutionDiagnostics ?? [])].sort((a, b) => a.localeCompare(b)),
     previewDiagnostics: input.diagnostics,
   };
 }
@@ -404,6 +487,7 @@ export function preparePreviewRuntime(input: PreviewRuntimePreparationInput): Pr
       ? null
       : {
           siteModel: reactRenderSiteModel,
+          finalSiteModel,
           routePath,
           options: {
             diagnosticsMode: "silent" as const,
@@ -456,6 +540,11 @@ export function preparePreviewRuntime(input: PreviewRuntimePreparationInput): Pr
       finalSiteModelAvailable: false,
       renderedWithFallback: false,
       matchedPageId: null,
+      contentResolutionApplied: false,
+      resolvedContentCount: 0,
+      unresolvedContentCount: 0,
+      contentResolutionDegraded: false,
+      contentResolutionDiagnostics: [],
       previewDiagnostics: [],
     },
   };

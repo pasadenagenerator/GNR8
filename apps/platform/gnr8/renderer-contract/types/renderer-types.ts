@@ -62,6 +62,9 @@ export type ReactRenderBoundValue = {
   bindingId: string | null;
   confidence: number | null;
   fallbackValue: unknown;
+  resolvedValue?: unknown;
+  resolutionStatus?: "resolved" | "degraded_resolved" | "unresolved_fallback";
+  resolutionSource?: "render_model" | "final_model_binding" | "final_model_structured" | "fallback" | "placeholder";
 };
 
 export type ReactRenderSlotValue =

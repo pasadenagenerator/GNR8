@@ -3,6 +3,7 @@ import test from "node:test";
 
 import type { ReactNode } from "react";
 
+import type { FinalSiteModel } from "@/gnr8/merge-engine";
 import type { ReactRenderSiteModel } from "@/gnr8/renderer-contract";
 import { renderRealReactSite } from "@/gnr8/react-renderer";
 
@@ -223,10 +224,11 @@ function baseSiteModel(): ReactRenderSiteModel {
   };
 }
 
-function render(routePath: string, siteModel: ReactRenderSiteModel = baseSiteModel()) {
+function render(input: { routePath: string; siteModel?: ReactRenderSiteModel; finalSiteModel?: FinalSiteModel | null }) {
   const output = renderRealReactSite({
-    siteModel,
-    routePath,
+    siteModel: input.siteModel ?? baseSiteModel(),
+    finalSiteModel: input.finalSiteModel ?? null,
+    routePath: input.routePath,
     options: {
       diagnosticsMode: "comments",
       fallbackMode: "safe",
@@ -246,7 +248,7 @@ function render(routePath: string, siteModel: ReactRenderSiteModel = baseSiteMod
 }
 
 test("route resolves correct page", () => {
-  const { result, serialized, text } = render("/");
+  const { result, serialized, text } = render({ routePath: "/" });
 
   assert.equal(result.matchedPageId, "page-home");
   assert.ok(serialized.includes('"data-gnr8-page-id":"page-home"'));
@@ -254,7 +256,7 @@ test("route resolves correct page", () => {
 });
 
 test("unknown route renders not-found fallback", () => {
-  const { result, text } = render("/missing");
+  const { result, text } = render({ routePath: "/missing" });
 
   assert.equal(result.matchedPageId, null);
   assert.ok(text.includes("Page not found"));
@@ -317,7 +319,7 @@ test("section order preserved", () => {
     },
   ];
 
-  const { serialized } = render("/", site);
+  const { serialized } = render({ routePath: "/", siteModel: site });
   const b = serialized.indexOf("sec-b");
   const a = serialized.indexOf("sec-a");
 
@@ -327,10 +329,10 @@ test("section order preserved", () => {
 });
 
 test("known render kind maps to real component", () => {
-  const { serialized, text } = render("/");
+  const { serialized, text } = render({ routePath: "/" });
 
   assert.ok(serialized.includes('"data-gnr8-render-kind":"render.hero"'));
-  assert.ok(text.includes("content-hero-heading"));
+  assert.ok(text.includes("[hero heading]"));
 });
 
 test("unknown render kind renders generic fallback", () => {
@@ -339,7 +341,7 @@ test("unknown render kind renders generic fallback", () => {
   component.componentId = "cmp-unknown";
   component.renderKind = "render.unmapped";
 
-  const { result, text } = render("/", site);
+  const { result, text } = render({ routePath: "/", siteModel: site });
 
   assert.ok(text.includes("Generic component fallback"));
   assert.ok(result.diagnostics.some((diagnostic) => diagnostic.code === "RUNTIME_COMPONENT_UNKNOWN_KIND"));
@@ -351,7 +353,7 @@ test("missing props still render safely with diagnostic", () => {
   component.slots = {};
   component.props = {};
 
-  const { result, text } = render("/", site);
+  const { result, text } = render({ routePath: "/", siteModel: site });
 
   assert.ok(text.includes("hero heading"));
   assert.ok(result.diagnostics.some((diagnostic) => diagnostic.code === "RUNTIME_COMPONENT_PROP_MISSING"));
@@ -402,16 +404,16 @@ test("slots render deterministically", () => {
     themeRefs: [],
   };
 
-  const { serialized, text } = render("/", site);
+  const { serialized, text } = render({ routePath: "/", siteModel: site });
 
-  assert.ok(text.includes("content-a"));
-  assert.ok(text.includes("content-alpha"));
+  assert.ok(text.includes("A"));
+  assert.ok(text.includes("alpha"));
   assert.ok(serialized.includes('"data-gnr8-slot-key":"items"'));
   assert.ok(serialized.includes('"data-gnr8-slot-key":"nested"'));
 });
 
 test("theme variables resolve deterministically", () => {
-  const { serialized } = render("/");
+  const { serialized } = render({ routePath: "/" });
 
   assert.ok(serialized.includes("--gnr8-color-color-primary"));
   assert.ok(serialized.includes("--gnr8-space-space-md"));
@@ -421,12 +423,158 @@ test("theme variables resolve deterministically", () => {
 test("repeated runs produce deterministic output and diagnostics order", () => {
   const site = baseSiteModel();
 
-  const first = render("/", site);
-  const second = render("/", site);
+  const first = render({ routePath: "/", siteModel: site });
+  const second = render({ routePath: "/", siteModel: site });
 
   assert.equal(first.serialized, second.serialized);
   assert.deepEqual(
     first.result.diagnostics.map((diagnostic) => `${diagnostic.code}:${diagnostic.message}`),
     second.result.diagnostics.map((diagnostic) => `${diagnostic.code}:${diagnostic.message}`),
   );
+});
+
+test("renderer integration path uses resolved values instead of placeholders when final truth exists", () => {
+  const site = baseSiteModel();
+  const component = site.pages[0]!.sections[0]!.components[0]!;
+  component.slots = {
+    heading: {
+      kind: "bound_content",
+      valueType: "text",
+      slotPath: "cmp-hero.heading",
+      slotKey: "heading",
+      contentId: "content-hero-heading",
+      bindingId: "bind-hero-heading",
+      confidence: 1,
+      fallbackValue: "[hero heading]",
+    },
+    body: {
+      kind: "bound_content",
+      valueType: "rich_text",
+      slotPath: "cmp-hero.body",
+      slotKey: "body",
+      contentId: "content-hero-body",
+      bindingId: "bind-hero-body",
+      confidence: 1,
+      fallbackValue: "[hero body]",
+    },
+  };
+
+  const finalSiteModel: FinalSiteModel = {
+    site: {
+      id: "site-1",
+      locale: "en",
+      defaultPageId: "page-home",
+      routes: [{ id: "route-home", path: "/", pageId: "page-home", parentRouteId: null, titleHint: "Home", order: 0, status: "resolved" }],
+      navigation: [],
+      provenance: {
+        importRunId: "run-1",
+        sourceFingerprint: "fp-1",
+        capturedAtIso: "2026-04-14T00:00:00.000Z",
+        mergeModes: {
+          structureMode: "hybrid",
+          styleMode: "hybrid",
+          contentMode: "preserve_import",
+          unknownComponentPolicy: "wrap_as_generic",
+        },
+        designPagesCount: 0,
+        designWarningsCount: 0,
+      },
+    },
+    pages: [
+      {
+        id: "page-home",
+        path: "/",
+        role: "home",
+        title: "Home",
+        routeNodeId: "route-home",
+        seo: { titleContentIds: [], descriptionContentIds: [] },
+        sections: [
+          {
+            id: "sec-a",
+            pageId: "page-home",
+            semanticRole: "hero",
+            layoutRole: "hero",
+            order: 0,
+            components: [
+              {
+                id: "cmp-hero",
+                sectionId: "sec-a",
+                kind: "hero",
+                mappedType: "hero",
+                variant: "default",
+                order: 0,
+                slots: [
+                  { key: "heading", valueType: "text", sourceHint: "runtime" },
+                  { key: "body", valueType: "rich_text", sourceHint: "runtime" },
+                ],
+                tokenRefs: [],
+                fallback: {
+                  wrappedAsGeneric: false,
+                  reason: null,
+                  rawMetadata: {
+                    resolvedSlotValues: {
+                      heading: "Real Hero Heading",
+                      body: "Real Hero Body",
+                    },
+                    resolvedContentById: {
+                      "content-hero-heading": "Real Hero Heading",
+                      "content-hero-body": "Real Hero Body",
+                    },
+                  },
+                },
+                provenance: { source: "merged", sourceId: "cmp-hero", rationale: "test", confidence: 1 },
+              },
+            ],
+            contentBindings: [
+              {
+                id: "bind-hero-heading",
+                componentId: "cmp-hero",
+                sectionId: "sec-a",
+                slotPath: "cmp-hero.heading",
+                contentId: "content-hero-heading",
+                confidence: 1,
+                source: "canonical_binding",
+              },
+              {
+                id: "bind-hero-body",
+                componentId: "cmp-hero",
+                sectionId: "sec-a",
+                slotPath: "cmp-hero.body",
+                contentId: "content-hero-body",
+                confidence: 1,
+                source: "canonical_binding",
+              },
+            ],
+            styleRefs: { colorTokenIds: [], typographyTokenIds: [], spacingTokenIds: [], gradientIds: [] },
+            provenance: { source: "merged", sourceId: "sec-a", rationale: "test", confidence: 1 },
+          },
+        ],
+        globalRegionIds: [],
+        provenance: { source: "merged", sourceId: "page-home", rationale: "test", confidence: 1 },
+      },
+    ],
+    globalRegions: [],
+    tokens: {
+      colors: [],
+      typography: [],
+      spacing: [],
+      surface: { radiusScalePx: [0], borderStyle: "none", shadowStyle: "flat", provenance: [] },
+      componentProfile: {
+        buttons: { variants: ["solid"], cornerStyle: "rounded", prominence: "medium" },
+        inputs: { border: "thin", cornerStyle: "rounded" },
+        media: { treatment: "edge_to_edge", saturationHint: "balanced" },
+        sectionTone: "corporate",
+        provenance: [],
+      },
+      gradients: [],
+    },
+    reusableComponents: [],
+    diagnostics: [],
+    conflicts: [],
+  };
+
+  const { text, result } = render({ routePath: "/", siteModel: site, finalSiteModel });
+  assert.ok(text.includes("Real Hero Heading"));
+  assert.ok(text.includes("Real Hero Body"));
+  assert.equal(result.resolvedContentCount >= 2, true);
 });

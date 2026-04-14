@@ -1,5 +1,6 @@
 import type { ReactElement } from "react";
 
+import { resolveReactRenderSiteContent } from "@/gnr8/content-resolution";
 import type { ReactRenderComponent, ReactRenderPage, ReactRenderSiteModel, RenderDiagnostic } from "@/gnr8/renderer-contract";
 import { didRenderWithFallback, sortRuntimeDiagnostics } from "@/gnr8/react-renderer/core/diagnostics";
 import { resolveRoutePage } from "@/gnr8/react-renderer/core/route-page-resolver";
@@ -211,9 +212,33 @@ export function renderRealReactSite(input: RealReactRendererInput): RealReactRen
     ...(input.options ?? {}),
   };
 
-  const diagnostics: RenderDiagnostic[] = [...input.siteModel.diagnostics];
-  const resolved = resolveRoutePage({
+  const contentResolution = resolveReactRenderSiteContent({
+    finalSiteModel: input.finalSiteModel ?? null,
     siteModel: input.siteModel,
+    options: { includeDiagnostics: true },
+  });
+
+  const diagnostics: RenderDiagnostic[] = [...contentResolution.resolvedSite.diagnostics];
+  for (const diagnostic of contentResolution.diagnostics) {
+    diagnostics.push({
+      code: diagnostic.code,
+      severity:
+        diagnostic.code === "CONTENT_VALUE_UNRESOLVED_FALLBACK_USED" ||
+        diagnostic.code === "CONTENT_RESOLUTION_DEGRADED" ||
+        diagnostic.code === "CONTENT_BINDING_TARGET_MISSING" ||
+        diagnostic.code === "CONTENT_BINDING_SOURCE_MISSING"
+          ? "warning"
+          : "info",
+      message: diagnostic.message,
+      pageId: diagnostic.pageId,
+      sectionId: diagnostic.sectionId,
+      componentId: diagnostic.componentId,
+      details: diagnostic.details,
+    });
+  }
+
+  const resolved = resolveRoutePage({
+    siteModel: contentResolution.resolvedSite,
     routePath: input.routePath,
     options,
     diagnostics,
@@ -232,7 +257,7 @@ export function renderRealReactSite(input: RealReactRendererInput): RealReactRen
     <RenderedSite
       routePath={input.routePath}
       resolvedPage={resolved.matchedPage}
-      siteModel={input.siteModel}
+      siteModel={contentResolution.resolvedSite}
       diagnostics={sortedDiagnostics}
       options={options}
       registry={DEFAULT_COMPONENT_REGISTRY}
@@ -246,6 +271,12 @@ export function renderRealReactSite(input: RealReactRendererInput): RealReactRen
       matchedPageId: resolved.matchedPageId,
       diagnostics: sortedDiagnostics,
       renderedWithFallback: didRenderWithFallback(sortedDiagnostics) || fallbackComponentIds.size > 0,
+      contentResolutionApplied: contentResolution.contentResolutionApplied,
+      resolvedContentCount: contentResolution.resolvedContentCount,
+      degradedResolvedContentCount: contentResolution.degradedResolvedContentCount,
+      unresolvedContentCount: contentResolution.unresolvedContentCount,
+      contentResolutionDegraded: contentResolution.contentResolutionDegraded,
+      contentResolutionDiagnostics: contentResolution.diagnostics.map((entry) => entry.code),
     },
   };
 }

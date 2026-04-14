@@ -3,6 +3,7 @@ import test from "node:test";
 
 import { PREVIEW_RUNTIME_DIAGNOSTIC } from "@/gnr8/preview-runtime/preview-runtime-diagnostics";
 import { selectPreviewRuntimeMode } from "@/gnr8/preview-runtime/preview-mode-selector";
+import { preparePreviewRuntime } from "@/gnr8/preview-runtime/preview-runtime-preparation";
 import { resolveSiteWorkspacePreview } from "@/gnr8/site/site-preview-contract";
 import type { PreviewRuntimeSummary } from "@/gnr8/preview-runtime/preview-runtime-types";
 
@@ -11,6 +12,10 @@ function summaryFromSelection(input: {
   diagnostics: string[];
   renderedWithFallback?: boolean;
   matchedPageId?: string | null;
+  resolvedContentCount?: number;
+  unresolvedContentCount?: number;
+  contentResolutionDegraded?: boolean;
+  contentResolutionDiagnostics?: string[];
 }): PreviewRuntimeSummary {
   return {
     previewMode: input.mode,
@@ -18,6 +23,11 @@ function summaryFromSelection(input: {
     finalSiteModelAvailable: input.mode !== "fallback_preview",
     renderedWithFallback: Boolean(input.renderedWithFallback),
     matchedPageId: input.matchedPageId ?? (input.mode === "fallback_preview" ? null : "page-home"),
+    contentResolutionApplied: input.mode !== "fallback_preview",
+    resolvedContentCount: input.resolvedContentCount ?? 0,
+    unresolvedContentCount: input.unresolvedContentCount ?? 0,
+    contentResolutionDegraded: Boolean(input.contentResolutionDegraded),
+    contentResolutionDiagnostics: [...new Set(input.contentResolutionDiagnostics ?? [])].sort((a, b) => a.localeCompare(b)),
     previewDiagnostics: [...new Set([...input.diagnostics, PREVIEW_RUNTIME_DIAGNOSTIC.MODE_PERSISTED])].sort((a, b) => a.localeCompare(b)),
   };
 }
@@ -166,4 +176,54 @@ test("repeated identical input yields identical preview mode/diagnostics", () =>
 
   assert.equal(first.mode, second.mode);
   assert.deepEqual(first.diagnostics, second.diagnostics);
+});
+
+test("preview/runtime summary records deterministic content-resolution counts", () => {
+  const prepared = preparePreviewRuntime({
+    siteVersion: {
+      id: "sv-1",
+      siteId: "site-1",
+      versionNo: 1,
+      state: "DRAFT",
+      source: "migration",
+      actor: "test",
+      createdAt: "2026-04-14T00:00:00.000Z",
+      rendererCompatibilityVersion: "gnr8-renderer-v1",
+      artifactId: null,
+      pages: [
+        {
+          id: "pv-1",
+          siteVersionId: "sv-1",
+          pageId: "page-home",
+          path: "/",
+          title: "Home",
+          structureModel: {
+            sections: [{ id: "sec-hero", type: "hero", order: 0 }],
+          },
+          contentModel: {
+            sectionProps: {
+              "sec-hero": {
+                heading: "Preview Heading",
+                body: "Preview Body",
+                ctaLabel: "Get Started",
+                ctaHref: "https://example.com/start",
+              },
+            },
+          },
+          styleTokens: {},
+          assetGraph: [],
+          semanticSignals: [],
+          source: "migration",
+          actor: "test",
+          createdAt: "2026-04-14T00:00:00.000Z",
+        },
+      ],
+    },
+    routePath: "/",
+  });
+
+  assert.equal(prepared.summary.contentResolutionApplied, true);
+  assert.equal(prepared.summary.resolvedContentCount > 0, true);
+  assert.equal(prepared.summary.unresolvedContentCount >= 0, true);
+  assert.equal(Array.isArray(prepared.summary.contentResolutionDiagnostics), true);
 });
