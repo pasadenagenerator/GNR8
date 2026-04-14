@@ -254,6 +254,7 @@ export type UrlSinglePageImportSnapshot = {
   normalizedUrl: string;
   snapshotId: string;
   snapshotRunId: string;
+  requestId: string | null;
   snapshotStableRootDirAbs: string;
   snapshotRootDirAbs: string;
   fixtureSpec: UrlSnapshotFixtureSpec;
@@ -2180,6 +2181,7 @@ export async function importPublicSinglePageUrlToSnapshot(input: {
       normalizedUrl: "",
       snapshotId: "imported-url-site-invalid",
       snapshotRunId: "invalid-run",
+      requestId: null,
       snapshotStableRootDirAbs: path.resolve(snapshotBase, "imported-url-site-invalid"),
       snapshotRootDirAbs: path.resolve(snapshotBase, "imported-url-site-invalid"),
       fixtureSpec: {
@@ -3376,6 +3378,7 @@ export async function importPublicSinglePageUrlToSnapshot(input: {
     normalizedUrl: normalizedHref,
     snapshotId,
     snapshotRunId,
+    requestId: input.requestId ?? null,
     snapshotStableRootDirAbs,
     snapshotRootDirAbs,
     fixtureSpec,

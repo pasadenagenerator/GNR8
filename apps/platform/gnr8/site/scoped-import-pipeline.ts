@@ -635,7 +635,7 @@ async function buildImportProvenanceSummary(input: {
       snapshotRunId: snapshot.snapshotRunId,
       snapshotStableRootDirAbs: snapshot.snapshotStableRootDirAbs,
       snapshotRunRootDirAbs: snapshot.snapshotRootDirAbs,
-      requestId: null,
+      requestId: snapshot.requestId ?? null,
     },
     sourceMode: snapshot.sourceSelection.sourceMode,
     importFidelityStatus: snapshot.sourceSelection.fidelityStatus,

@@ -310,31 +310,194 @@ function toEpoch(value: unknown): number {
   return Number.isFinite(ms) ? ms : 0
 }
 
-function compareRuntimeVersionRows(a: RuntimeVersionRow, b: RuntimeVersionRow): number {
+type RuntimeRowArbitrationCandidate = {
+  row: RuntimeVersionRow
+  summary: RuntimeImportProvenanceSummary | null
+  waveKey: string
+  score: number
+  usableRendered: boolean
+  renderedFailed: boolean
+  recencyEpoch: number
+}
+
+type RuntimeRowArbitrationResult = {
+  selected: RuntimeVersionRow | null
+  latest: RuntimeVersionRow | null
+  diagnostics: string[]
+}
+
+const ARBITRATION_FALLBACK_WAVE_WINDOW_MS = 10 * 60 * 1000
+
+function compareRuntimeRowsByRecency(a: RuntimeVersionRow, b: RuntimeVersionRow): number {
   const updatedDelta = toEpoch(a.updated_at) - toEpoch(b.updated_at)
   if (updatedDelta !== 0) return updatedDelta
 
   const createdDelta = toEpoch(a.created_at) - toEpoch(b.created_at)
   if (createdDelta !== 0) return createdDelta
 
-  const aSummary = parseImportProvenanceSummary(a.import_provenance_summary)
-  const bSummary = parseImportProvenanceSummary(b.import_provenance_summary)
-  const captureRank = (summary: RuntimeImportProvenanceSummary | null): number => {
-    if (!summary) return 0
-    if (summary.sourceMode === 'rendered_dom' && summary.renderedCapture.status === 'available') return 3
-    if (summary.renderedCapture.status === 'partial') return 2
-    if (summary.renderedCapture.status === 'failed') return 1
-    return 0
-  }
-  const captureDelta = captureRank(aSummary) - captureRank(bSummary)
-  if (captureDelta !== 0) return captureDelta
-
   return String(a.id ?? '').localeCompare(String(b.id ?? ''))
 }
 
+function deriveRuntimeRowWaveKey(input: { row: RuntimeVersionRow; summary: RuntimeImportProvenanceSummary | null }): string {
+  const requestId = normalizeText(input.summary?.executionIdentity?.requestId)
+  if (requestId) return `request:${requestId}`
+
+  const snapshotRunId = normalizeText(input.summary?.executionIdentity?.snapshotRunId)
+  if (snapshotRunId) {
+    const trimmedSuffix = snapshotRunId.replace(/-[0-9a-f]{8}$/i, '')
+    return `run:${trimmedSuffix || snapshotRunId}`
+  }
+
+  const snapshotId = normalizeText(input.summary?.executionIdentity?.snapshotId)
+  if (snapshotId) return `snapshot:${snapshotId}`
+
+  const ownershipSiteId = normalizeText(input.row.ownership_site_id)
+  return ownershipSiteId ? `ownership-site:${ownershipSiteId}` : `row:${normalizeText(input.row.id) || 'unknown'}`
+}
+
+function scoreRuntimeRowForRenderedArbitration(summary: RuntimeImportProvenanceSummary | null): {
+  score: number
+  usableRendered: boolean
+  renderedFailed: boolean
+} {
+  if (!summary) {
+    return { score: 50, usableRendered: false, renderedFailed: false }
+  }
+
+  const diagnosticCodes = new Set((summary.importDiagnosticCodes ?? []).map((code) => normalizeText(code).toUpperCase()))
+  const executionFailureCode = normalizeText(summary.renderedCapture?.execution?.failureCode).toUpperCase()
+  const hasFatalEmptyCode =
+    executionFailureCode === 'DOM_EMPTY_AFTER_RENDER' ||
+    executionFailureCode === 'RENDERED_CAPTURE_DOM_EMPTY_AFTER_NAVIGATION' ||
+    diagnosticCodes.has('DOM_EMPTY_AFTER_RENDER') ||
+    diagnosticCodes.has('RENDERED_CAPTURE_DOM_EMPTY_AFTER_NAVIGATION')
+
+  const domCount = Math.max(
+    0,
+    Number(summary.renderedCapture?.nodeCount ?? 0),
+    Number(summary.renderedCapture?.domLength ?? 0),
+  )
+  const hasDomEvidence = domCount > 0 || Boolean(summary.captureEvidence?.renderedDomPath)
+  const hasUsableDom = hasDomEvidence && !hasFatalEmptyCode
+  const hasScreenshots =
+    Number(summary.screenshotCount ?? 0) > 0 ||
+    Boolean(summary.renderedCapture?.screenshots?.viewport) ||
+    Boolean(summary.renderedCapture?.screenshots?.fullPage) ||
+    Number(summary.captureEvidence?.screenshotPaths?.length ?? 0) > 0 ||
+    Boolean(summary.captureEvidence?.renderedViewportScreenshotPath) ||
+    Boolean(summary.captureEvidence?.renderedFullpageScreenshotPath)
+  const hasStyleEvidence = Number(summary.computedStyleSampleCount ?? 0) > 0 || Number(summary.renderedCapture?.styleSampleCount ?? 0) > 0
+  const renderedStatus = summary.renderedCapture?.status ?? summary.renderedCaptureStatus
+  const acceptedByWorker = renderedStatus === 'available' || renderedStatus === 'partial'
+
+  if (summary.sourceMode === 'rendered_dom' && acceptedByWorker && hasUsableDom && hasScreenshots) {
+    return { score: 600, usableRendered: true, renderedFailed: false }
+  }
+  if (summary.sourceMode === 'rendered_dom' && acceptedByWorker && hasUsableDom) {
+    return { score: 500, usableRendered: true, renderedFailed: false }
+  }
+  if (summary.sourceMode === 'rendered_dom' && acceptedByWorker && hasScreenshots) {
+    return { score: 400, usableRendered: true, renderedFailed: false }
+  }
+  if (summary.sourceMode === 'rendered_dom' && renderedStatus === 'partial' && (hasUsableDom || hasScreenshots || hasStyleEvidence)) {
+    return { score: 350, usableRendered: true, renderedFailed: false }
+  }
+  if (renderedStatus === 'failed') {
+    return { score: 200, usableRendered: false, renderedFailed: true }
+  }
+  if (summary.sourceMode === 'raw_html_fallback') {
+    return { score: 100, usableRendered: false, renderedFailed: false }
+  }
+
+  return { score: 75, usableRendered: false, renderedFailed: false }
+}
+
+function compareRuntimeRowCandidates(a: RuntimeRowArbitrationCandidate, b: RuntimeRowArbitrationCandidate): number {
+  const scoreDelta = a.score - b.score
+  if (scoreDelta !== 0) return scoreDelta
+
+  const fidelityDelta =
+    Number(a.summary?.importFidelityScore?.overallScore ?? 0) - Number(b.summary?.importFidelityScore?.overallScore ?? 0)
+  if (fidelityDelta !== 0) return fidelityDelta
+
+  const recencyDelta = a.recencyEpoch - b.recencyEpoch
+  if (recencyDelta !== 0) return recencyDelta
+
+  return String(a.row.id ?? '').localeCompare(String(b.row.id ?? ''))
+}
+
+function selectPrimaryRuntimeVersionRow(runtimeRows: RuntimeVersionRow[]): RuntimeRowArbitrationResult {
+  if (runtimeRows.length === 0) {
+    return { selected: null, latest: null, diagnostics: ['RENDERED_RUN_ARBITRATION_STARTED', 'NO_USABLE_RENDERED_RUN_FOUND'] }
+  }
+
+  const candidates = runtimeRows.map((row) => {
+    const summary = parseImportProvenanceSummary(row.import_provenance_summary)
+    const ranking = scoreRuntimeRowForRenderedArbitration(summary)
+    const recencyEpoch = Math.max(toEpoch(row.updated_at), toEpoch(row.created_at))
+    return {
+      row,
+      summary,
+      waveKey: deriveRuntimeRowWaveKey({ row, summary }),
+      score: ranking.score,
+      usableRendered: ranking.usableRendered,
+      renderedFailed: ranking.renderedFailed,
+      recencyEpoch,
+    }
+  })
+
+  const latest = candidates.slice().sort((left, right) => compareRuntimeRowsByRecency(right.row, left.row))[0] ?? null
+  const waveKey = latest?.waveKey ?? ''
+  const inSameWave = candidates.filter((candidate) => {
+    if (candidate.waveKey !== waveKey) return false
+    if (!waveKey.startsWith('ownership-site:')) return true
+    return Math.abs(candidate.recencyEpoch - (latest?.recencyEpoch ?? 0)) <= ARBITRATION_FALLBACK_WAVE_WINDOW_MS
+  })
+  const evaluationPool = inSameWave.length > 0 ? inSameWave : candidates
+  const selected = evaluationPool.slice().sort((left, right) => compareRuntimeRowCandidates(right, left))[0] ?? latest
+
+  const diagnostics: string[] = ['RENDERED_RUN_ARBITRATION_STARTED', 'RENDERED_RUN_EVALUATED', 'RENDERED_RUN_SELECTED_AS_PRIMARY']
+  if (latest && selected && latest.row.id !== selected.row.id && selected.score > latest.score) {
+    diagnostics.push('LATEST_RUN_SUPERSEDED_BY_BETTER_RENDERED_RUN')
+    if (latest.renderedFailed && selected.usableRendered) {
+      diagnostics.push('FAILED_RUN_REJECTED_IN_FAVOR_OF_USABLE_RENDER')
+    }
+  }
+  if (!evaluationPool.some((candidate) => candidate.usableRendered)) {
+    diagnostics.push('NO_USABLE_RENDERED_RUN_FOUND')
+    if (selected?.summary?.sourceMode === 'raw_html_fallback') {
+      diagnostics.push('RAW_FALLBACK_SELECTED_NO_USABLE_RENDER')
+    }
+  }
+  if (selected?.summary?.sourceMode === 'rendered_dom') {
+    diagnostics.push('PRIMARY_RENDERED_RUN_ALIGNED_TO_READMODEL')
+  }
+
+  return {
+    selected: selected?.row ?? null,
+    latest: latest?.row ?? null,
+    diagnostics,
+  }
+}
+
+function compareRuntimeVersionRows(a: RuntimeVersionRow, b: RuntimeVersionRow): number {
+  const aSummary = parseImportProvenanceSummary(a.import_provenance_summary)
+  const bSummary = parseImportProvenanceSummary(b.import_provenance_summary)
+  const aRank = scoreRuntimeRowForRenderedArbitration(aSummary)
+  const bRank = scoreRuntimeRowForRenderedArbitration(bSummary)
+
+  const scoreDelta = aRank.score - bRank.score
+  if (scoreDelta !== 0) return scoreDelta
+
+  const fidelityDelta =
+    Number(aSummary?.importFidelityScore?.overallScore ?? 0) - Number(bSummary?.importFidelityScore?.overallScore ?? 0)
+  if (fidelityDelta !== 0) return fidelityDelta
+
+  return compareRuntimeRowsByRecency(a, b)
+}
+
 function resolveLatestRuntimeVersionRow(runtimeRows: RuntimeVersionRow[]): RuntimeVersionRow | null {
-  if (runtimeRows.length === 0) return null
-  return runtimeRows.slice().sort((left, right) => compareRuntimeVersionRows(right, left))[0] ?? null
+  return selectPrimaryRuntimeVersionRow(runtimeRows).selected
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -1393,7 +1556,9 @@ export async function getSiteWorkspaceReadModelForPage(input: {
     ? (runtimeResult.data as RuntimeVersionRow[])
     : []
 
-  const latestRuntimeRow = resolveLatestRuntimeVersionRow(runtimeRows)
+  const runtimeArbitration = selectPrimaryRuntimeVersionRow(runtimeRows)
+  const latestRuntimeRow = runtimeArbitration.selected
+  const runtimeArbitrationDiagnostics = [...new Set(runtimeArbitration.diagnostics)].sort((a, b) => a.localeCompare(b))
   const runtimeSnapshot: RuntimeSnapshot | null = latestRuntimeRow
     ? {
         latestRuntimeSiteVersionId: toTextOrNull(latestRuntimeRow.id),
@@ -1476,6 +1641,9 @@ export async function getSiteWorkspaceReadModelForPage(input: {
     pageRows,
     runtimeVersion: selectedRuntimeRow,
   })
+  const importFidelityEvidenceDiagnostics = [...new Set([...importFidelity.evidenceDiagnostics, ...runtimeArbitrationDiagnostics])].sort((a, b) =>
+    a.localeCompare(b),
+  )
   const importFidelityDegraded = importFidelity.importFidelityStatus === 'degraded_import' || importFidelity.importFidelityStatus === 'capture_failed'
 
   const lastAction = normalizedSiteActions[0] ?? null
@@ -1510,13 +1678,17 @@ export async function getSiteWorkspaceReadModelForPage(input: {
     importCaptured: Boolean(selectedRuntimeSiteVersionId),
     previewRuntimeSummary,
   })
+  const previewAlignmentDiagnostics = selectedRuntimeRow && importFidelity.sourceMode === 'rendered_dom' ? ['PRIMARY_RENDERED_RUN_ALIGNED_TO_PREVIEW'] : []
+  const resolvedPreviewDiagnostics = [...new Set([...resolvedPreview.diagnostics, ...previewAlignmentDiagnostics])].sort((a, b) => a.localeCompare(b))
   const diagnosticsSummary = Array.from(
     new Set([
       ...structureRows.flatMap((row) => row.keyDiagnostics),
       ...(lastAction?.diagnostics ?? []),
       ...importFidelity.importDiagnosticCodes,
+      ...runtimeArbitrationDiagnostics,
+      ...previewAlignmentDiagnostics,
       ...(selectedVariant ? [`variant:${selectedVariant.label}`] : []),
-      ...resolvedPreview.diagnostics,
+      ...resolvedPreviewDiagnostics,
     ]),
   ).slice(0, 8)
   const previewUrl = resolvedPreview.mainPreviewUrl
@@ -1555,7 +1727,7 @@ export async function getSiteWorkspaceReadModelForPage(input: {
       styleSignalFallbackUsed: importFidelity.styleSignalFallbackUsed,
       styleSignalSourceMode: importFidelity.styleSignalSourceMode,
       evidencePaths: importFidelity.evidencePaths,
-      evidenceDiagnostics: importFidelity.evidenceDiagnostics,
+      evidenceDiagnostics: importFidelityEvidenceDiagnostics,
       importDiagnosticCodes: importFidelity.importDiagnosticCodes,
       captureEvidenceRefs: importFidelity.captureEvidenceRefs,
       captureJob: importFidelity.captureJob,
@@ -1652,7 +1824,7 @@ export async function getSiteWorkspaceReadModelForPage(input: {
       previewRuntimeSummary: resolvedPreview.previewRuntimeSummary,
       liveUrl: toHttpsUrlOrNull(site.domain),
       selectedVariantLabel: selectedVariant?.label ?? null,
-      diagnostics: resolvedPreview.diagnostics,
+      diagnostics: resolvedPreviewDiagnostics,
     },
     settings: {
       name: site.label || `Site ${shortId(site.id)}`,
@@ -1667,6 +1839,7 @@ export const __siteWorkspaceReadModelTestUtils = {
   parseImportProvenanceSummary,
   parsePreviewRuntimeSummary,
   parseImportFidelity,
+  selectPrimaryRuntimeVersionRow,
   compareRuntimeVersionRows,
   resolveLatestRuntimeVersionRow,
 }

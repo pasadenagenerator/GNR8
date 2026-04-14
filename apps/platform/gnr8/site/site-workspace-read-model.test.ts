@@ -11,6 +11,75 @@ const AGENCY_ID = '00000000-0000-4000-8000-000000000011'
 const CLIENT_ID = '00000000-0000-4000-8000-000000000101'
 const SITE_ID = '00000000-0000-4000-8000-000000009001'
 
+function runtimeSummaryFixture(input: {
+  requestId: string
+  sourceMode: 'rendered_dom' | 'raw_html_fallback'
+  renderedCaptureStatus: 'available' | 'partial' | 'failed'
+  renderedDomQuality: 'strong' | 'weak' | 'unusable'
+  nodeCount: number
+  screenshotCount: number
+  failureCode?: string | null
+  diagnostics?: string[]
+}) {
+  return {
+    kind: 'runtime_import_provenance_summary_v1',
+    executionIdentity: {
+      snapshotId: 'imported-url-site-wave',
+      snapshotRunId: `${input.requestId}-a1b2c3d4`,
+      snapshotStableRootDirAbs: '/tmp/gnr8/validation/url-import-snapshots/imported-url-site-wave',
+      snapshotRunRootDirAbs: `/tmp/gnr8/validation/url-import-snapshots/imported-url-site-wave/runs/${input.requestId}-a1b2c3d4`,
+      requestId: input.requestId,
+    },
+    sourceMode: input.sourceMode,
+    importFidelityStatus: input.sourceMode === 'rendered_dom' ? 'high_fidelity_import' : 'capture_failed',
+    renderedCaptureStatus: input.renderedCaptureStatus,
+    renderedDomQuality: input.renderedDomQuality,
+    screenshotCount: input.screenshotCount,
+    computedStyleSampleCount: 0,
+    renderedCapture: {
+      used: input.sourceMode === 'rendered_dom',
+      status: input.renderedCaptureStatus,
+      quality: input.renderedDomQuality,
+      domLength: input.nodeCount > 0 ? 1200 : 0,
+      nodeCount: input.nodeCount,
+      styleSampleCount: 0,
+      styleCoverage: 0,
+      screenshots: {
+        viewport: input.screenshotCount > 0,
+        fullPage: input.screenshotCount > 1,
+      },
+      execution: {
+        runtimeKind: 'nodejs',
+        environmentSupported: true,
+        browserPackageAvailable: true,
+        browserBinaryAvailable: true,
+        environmentStatus: 'supported',
+        failureCategory: input.failureCode ? 'page' : 'none',
+        failureCode: input.failureCode ?? null,
+        browserLaunch: 'succeeded',
+        navigation: 'succeeded',
+        dom: input.nodeCount > 0 ? 'captured' : 'empty_or_failed',
+        screenshot: input.screenshotCount > 0 ? 'captured' : 'none',
+        styleSampling: 'not_attempted',
+      },
+    },
+    importDiagnosticCodes: input.diagnostics ?? [],
+    captureEvidence: {
+      selectedSourceHtmlPath: input.sourceMode === 'rendered_dom' ? '/tmp/run/rendered/dom.html' : '/tmp/run/index.html',
+      responseHtmlPath: '/tmp/run/response-html.raw.html',
+      entryHtmlPath: '/tmp/run/index.html',
+      renderedCaptureManifestPath: '/tmp/run/rendered-capture.json',
+      acquisitionEvidencePath: '/tmp/run/acquisition-evidence.json',
+      renderedDomPath: input.nodeCount > 0 ? '/tmp/run/rendered/dom.html' : null,
+      computedStylesPath: null,
+      renderedViewportScreenshotPath: input.screenshotCount > 0 ? '/tmp/run/rendered/screenshots/viewport.png' : null,
+      renderedFullpageScreenshotPath: input.screenshotCount > 1 ? '/tmp/run/rendered/screenshots/fullpage.png' : null,
+      screenshotPaths: input.screenshotCount > 0 ? ['/tmp/run/rendered/screenshots/viewport.png'] : [],
+    },
+    styleSignals: null,
+  }
+}
+
 test('assertSiteWorkspaceScope allows site in resolved client and agency scope', () => {
   assert.doesNotThrow(() => {
     assertSiteWorkspaceScope({
@@ -252,6 +321,217 @@ test('latest runtime row selection prefers rendered capture truth when recency t
   ])
 
   assert.equal(latest?.id, 'same-time-rendered')
+})
+
+test('same-import arbitration selects earlier usable rendered run over later failed run', () => {
+  const selection = __siteWorkspaceReadModelTestUtils.selectPrimaryRuntimeVersionRow([
+    {
+      id: 'wave-run-a',
+      site_id: 'runtime-site-a',
+      ownership_site_id: SITE_ID,
+      state: 'DRAFT',
+      version_no: 10,
+      import_provenance_summary: runtimeSummaryFixture({
+        requestId: 'client-site-import-1776146141914',
+        sourceMode: 'rendered_dom',
+        renderedCaptureStatus: 'available',
+        renderedDomQuality: 'strong',
+        nodeCount: 64,
+        screenshotCount: 2,
+      }),
+      artifact_id: null,
+      updated_at: '2026-04-14T10:00:00.000Z',
+      created_at: '2026-04-14T10:00:00.000Z',
+    } as any,
+    {
+      id: 'wave-run-b-failed',
+      site_id: 'runtime-site-a',
+      ownership_site_id: SITE_ID,
+      state: 'DRAFT',
+      version_no: 11,
+      import_provenance_summary: runtimeSummaryFixture({
+        requestId: 'client-site-import-1776146141914',
+        sourceMode: 'raw_html_fallback',
+        renderedCaptureStatus: 'failed',
+        renderedDomQuality: 'unusable',
+        nodeCount: 0,
+        screenshotCount: 0,
+        failureCode: 'DOM_EMPTY_AFTER_RENDER',
+        diagnostics: ['DOM_EMPTY_AFTER_RENDER'],
+      }),
+      artifact_id: null,
+      updated_at: '2026-04-14T10:00:01.000Z',
+      created_at: '2026-04-14T10:00:01.000Z',
+    } as any,
+  ])
+
+  assert.equal(selection.selected?.id, 'wave-run-a')
+  assert.ok(selection.diagnostics.includes('LATEST_RUN_SUPERSEDED_BY_BETTER_RENDERED_RUN'))
+  assert.ok(selection.diagnostics.includes('FAILED_RUN_REJECTED_IN_FAVOR_OF_USABLE_RENDER'))
+})
+
+test('same-import arbitration selects later stronger rendered run over earlier weaker rendered run', () => {
+  const selection = __siteWorkspaceReadModelTestUtils.selectPrimaryRuntimeVersionRow([
+    {
+      id: 'wave-run-weak',
+      site_id: 'runtime-site-a',
+      ownership_site_id: SITE_ID,
+      state: 'DRAFT',
+      version_no: 1,
+      import_provenance_summary: runtimeSummaryFixture({
+        requestId: 'client-site-import-1777000000000',
+        sourceMode: 'rendered_dom',
+        renderedCaptureStatus: 'partial',
+        renderedDomQuality: 'weak',
+        nodeCount: 24,
+        screenshotCount: 0,
+      }),
+      artifact_id: null,
+      updated_at: '2026-04-14T11:00:00.000Z',
+      created_at: '2026-04-14T11:00:00.000Z',
+    } as any,
+    {
+      id: 'wave-run-strong',
+      site_id: 'runtime-site-a',
+      ownership_site_id: SITE_ID,
+      state: 'DRAFT',
+      version_no: 2,
+      import_provenance_summary: runtimeSummaryFixture({
+        requestId: 'client-site-import-1777000000000',
+        sourceMode: 'rendered_dom',
+        renderedCaptureStatus: 'available',
+        renderedDomQuality: 'strong',
+        nodeCount: 92,
+        screenshotCount: 2,
+      }),
+      artifact_id: null,
+      updated_at: '2026-04-14T11:00:02.000Z',
+      created_at: '2026-04-14T11:00:02.000Z',
+    } as any,
+  ])
+
+  assert.equal(selection.selected?.id, 'wave-run-strong')
+  assert.ok(selection.diagnostics.includes('RENDERED_RUN_SELECTED_AS_PRIMARY'))
+})
+
+test('same-import arbitration selects raw fallback when no usable rendered run exists', () => {
+  const selection = __siteWorkspaceReadModelTestUtils.selectPrimaryRuntimeVersionRow([
+    {
+      id: 'wave-failed-a',
+      site_id: 'runtime-site-a',
+      ownership_site_id: SITE_ID,
+      state: 'DRAFT',
+      version_no: 1,
+      import_provenance_summary: runtimeSummaryFixture({
+        requestId: 'client-site-import-1778000000000',
+        sourceMode: 'raw_html_fallback',
+        renderedCaptureStatus: 'failed',
+        renderedDomQuality: 'unusable',
+        nodeCount: 0,
+        screenshotCount: 0,
+        failureCode: 'DOM_EMPTY_AFTER_RENDER',
+      }),
+      artifact_id: null,
+      updated_at: '2026-04-14T12:00:00.000Z',
+      created_at: '2026-04-14T12:00:00.000Z',
+    } as any,
+    {
+      id: 'wave-failed-b',
+      site_id: 'runtime-site-a',
+      ownership_site_id: SITE_ID,
+      state: 'DRAFT',
+      version_no: 2,
+      import_provenance_summary: runtimeSummaryFixture({
+        requestId: 'client-site-import-1778000000000',
+        sourceMode: 'raw_html_fallback',
+        renderedCaptureStatus: 'failed',
+        renderedDomQuality: 'unusable',
+        nodeCount: 0,
+        screenshotCount: 0,
+      }),
+      artifact_id: null,
+      updated_at: '2026-04-14T12:00:01.000Z',
+      created_at: '2026-04-14T12:00:01.000Z',
+    } as any,
+  ])
+
+  assert.equal(selection.selected?.id, 'wave-failed-b')
+  assert.ok(selection.diagnostics.includes('NO_USABLE_RENDERED_RUN_FOUND'))
+  assert.ok(selection.diagnostics.includes('RAW_FALLBACK_SELECTED_NO_USABLE_RENDER'))
+})
+
+test('same-import arbitration tie-break is deterministic for equal-quality runs', () => {
+  const rows = [
+    {
+      id: 'tie-run-a',
+      site_id: 'runtime-site-a',
+      ownership_site_id: SITE_ID,
+      state: 'DRAFT',
+      version_no: 1,
+      import_provenance_summary: runtimeSummaryFixture({
+        requestId: 'client-site-import-1779000000000',
+        sourceMode: 'rendered_dom',
+        renderedCaptureStatus: 'available',
+        renderedDomQuality: 'strong',
+        nodeCount: 50,
+        screenshotCount: 1,
+      }),
+      artifact_id: null,
+      updated_at: '2026-04-14T13:00:00.000Z',
+      created_at: '2026-04-14T13:00:00.000Z',
+    } as any,
+    {
+      id: 'tie-run-b',
+      site_id: 'runtime-site-a',
+      ownership_site_id: SITE_ID,
+      state: 'DRAFT',
+      version_no: 2,
+      import_provenance_summary: runtimeSummaryFixture({
+        requestId: 'client-site-import-1779000000000',
+        sourceMode: 'rendered_dom',
+        renderedCaptureStatus: 'available',
+        renderedDomQuality: 'strong',
+        nodeCount: 50,
+        screenshotCount: 1,
+      }),
+      artifact_id: null,
+      updated_at: '2026-04-14T13:00:01.000Z',
+      created_at: '2026-04-14T13:00:01.000Z',
+    } as any,
+  ]
+
+  const first = __siteWorkspaceReadModelTestUtils.selectPrimaryRuntimeVersionRow(rows)
+  const second = __siteWorkspaceReadModelTestUtils.selectPrimaryRuntimeVersionRow(rows)
+
+  assert.equal(first.selected?.id, 'tie-run-b')
+  assert.equal(second.selected?.id, 'tie-run-b')
+  assert.deepEqual(first.diagnostics, second.diagnostics)
+})
+
+test('same-import arbitration diagnostics include read-model alignment when rendered run is selected', () => {
+  const selection = __siteWorkspaceReadModelTestUtils.selectPrimaryRuntimeVersionRow([
+    {
+      id: 'alignment-run',
+      site_id: 'runtime-site-a',
+      ownership_site_id: SITE_ID,
+      state: 'DRAFT',
+      version_no: 3,
+      import_provenance_summary: runtimeSummaryFixture({
+        requestId: 'client-site-import-1880000000000',
+        sourceMode: 'rendered_dom',
+        renderedCaptureStatus: 'available',
+        renderedDomQuality: 'strong',
+        nodeCount: 80,
+        screenshotCount: 2,
+      }),
+      artifact_id: null,
+      updated_at: '2026-04-14T14:00:00.000Z',
+      created_at: '2026-04-14T14:00:00.000Z',
+    } as any,
+  ])
+
+  assert.equal(selection.selected?.id, 'alignment-run')
+  assert.ok(selection.diagnostics.includes('PRIMARY_RENDERED_RUN_ALIGNED_TO_READMODEL'))
 })
 
 test('import fidelity signals are parsed from semantic signal labels', () => {
