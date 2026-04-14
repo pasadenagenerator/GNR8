@@ -77,11 +77,13 @@ function renderOverviewContent(props: {
           <div>Design strategy: {readModel.overview.designStrategy}</div>
 
           <div style={{ marginTop: 8, fontWeight: 700, color: '#0f172a' }}>Import Evidence</div>
-          <div>Source mode: {readModel.pipeline.sourceMode === 'rendered_dom' ? 'rendered_dom' : readModel.pipeline.sourceMode === 'raw_html_fallback' ? 'raw_html' : 'unknown'}</div>
+          <div>Source mode: {readModel.pipeline.renderedCapture?.used ? 'Rendered Capture' : 'Raw HTML (fallback)'}</div>
           <div>Fidelity: {readModel.pipeline.importFidelityDegraded ? 'degraded' : 'high'}</div>
           <div>Rendered capture status: {readModel.pipeline.renderedCaptureStatus}</div>
           <div>Rendered capture quality: {readModel.pipeline.renderedCapture?.quality ?? readModel.pipeline.renderedDomQuality}</div>
           <div>DOM size: {readModel.pipeline.renderedCapture?.nodeCount ?? 0} nodes</div>
+          <div>Screenshot count: {readModel.pipeline.screenshotCount}</div>
+          <div>Preview mode: {readModel.preview.previewMode ?? 'unknown'}</div>
           <div>
             Style samples: {readModel.pipeline.renderedCapture?.styleSampleCount ?? readModel.pipeline.computedStyleSampleCount} (coverage{' '}
             {Math.round((readModel.pipeline.renderedCapture?.styleCoverage ?? readModel.pipeline.styleSignalCoverage ?? 0) * 100)}%)

@@ -317,15 +317,17 @@ function compareRuntimeVersionRows(a: RuntimeVersionRow, b: RuntimeVersionRow): 
   const createdDelta = toEpoch(a.created_at) - toEpoch(b.created_at)
   if (createdDelta !== 0) return createdDelta
 
-  const aCaptureStatus = normalizeText((isRecord(a.import_provenance_summary) ? a.import_provenance_summary.renderedCaptureStatus : null)).toLowerCase()
-  const bCaptureStatus = normalizeText((isRecord(b.import_provenance_summary) ? b.import_provenance_summary.renderedCaptureStatus : null)).toLowerCase()
-  const captureRank = (value: string): number => (value === 'available' ? 3 : value === 'partial' ? 2 : value === 'failed' ? 1 : 0)
-  const captureDelta = captureRank(aCaptureStatus) - captureRank(bCaptureStatus)
+  const aSummary = parseImportProvenanceSummary(a.import_provenance_summary)
+  const bSummary = parseImportProvenanceSummary(b.import_provenance_summary)
+  const captureRank = (summary: RuntimeImportProvenanceSummary | null): number => {
+    if (!summary) return 0
+    if (summary.sourceMode === 'rendered_dom' && summary.renderedCapture.status === 'available') return 3
+    if (summary.renderedCapture.status === 'partial') return 2
+    if (summary.renderedCapture.status === 'failed') return 1
+    return 0
+  }
+  const captureDelta = captureRank(aSummary) - captureRank(bSummary)
   if (captureDelta !== 0) return captureDelta
-
-  const aVersion = Number(a.version_no ?? 0)
-  const bVersion = Number(b.version_no ?? 0)
-  if (aVersion !== bVersion) return aVersion - bVersion
 
   return String(a.id ?? '').localeCompare(String(b.id ?? ''))
 }
@@ -1177,6 +1179,9 @@ function parseImportFidelity(input: {
     ),
     ...(styleSignals?.diagnostics ?? []).map((diag) => diag.code).filter((code) => code.startsWith('STYLE_SIGNAL_') || code === 'STYLE_SAMPLE_LOW_COVERAGE'),
     ...(parsedSummary.sourceMode === 'rendered_dom' ? ['CAPTURE_WORKER_RESULT_SELECTED', 'READMODEL_SELECTED_RENDERED_CAPTURE'] : []),
+    ...(parsedSummary.sourceMode === 'rendered_dom' && parsedSummary.renderedCapture.status === 'available'
+      ? ['RENDERED_CAPTURE_SELECTED_AS_PRIMARY']
+      : []),
     ...(parsedSummary.sourceMode === 'raw_html_fallback' &&
     (importDiagnosticCodes.includes('CAPTURE_WORKER_RESULT_OVERRIDDEN_BY_FALLBACK') ||
       importDiagnosticCodes.includes('CAPTURE_WORKER_RESULT_SUPERSEDED_BY_FALLBACK'))

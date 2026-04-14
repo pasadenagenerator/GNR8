@@ -39,6 +39,7 @@ export type PreviewRuntimePreparationInput = {
   routePath: string;
   simulateRendererContractUnavailable?: boolean;
   simulateRendererRuntimeFailure?: boolean;
+  renderedCaptureAvailable?: boolean;
 };
 
 export function normalizePreviewRuntimeMode(value: unknown): PreviewRuntimeMode | null {

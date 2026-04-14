@@ -826,6 +826,15 @@ export function buildDeterministicArtifactBundle(input: {
 
   const assetFingerprintMap = buildAssetFingerprintMap(input.siteVersion);
 
+  const persistedPreviewRuntimeSummary = buildPersistedPreviewRuntimeSummary({
+    siteVersion: input.siteVersion,
+    routePath: "/",
+  });
+  const renderedCaptureSummary = input.siteVersion.importProvenanceSummary?.renderedCapture ?? null;
+  const renderedCaptureUsed = Boolean(renderedCaptureSummary?.used && renderedCaptureSummary.status === "available");
+  const domSize = Math.max(0, Math.floor(Number(renderedCaptureSummary?.nodeCount ?? 0)));
+  const screenshotCount = Math.max(0, Math.floor(Number(input.siteVersion.importProvenanceSummary?.screenshotCount ?? 0)));
+
   const manifest = {
     siteId: input.siteVersion.siteId,
     siteVersionId: input.siteVersion.id,
@@ -837,10 +846,13 @@ export function buildDeterministicArtifactBundle(input: {
     provenanceSummaryFlags: {
       contentRecoveryModeActive: [...Object.values(pageRenderModes)].some((mode) => mode === "content_recovery"),
     },
-    previewRuntimeSummary: buildPersistedPreviewRuntimeSummary({
-      siteVersion: input.siteVersion,
-      routePath: "/",
-    }),
+    previewRuntimeSummary: {
+      ...persistedPreviewRuntimeSummary,
+      fallbackUsed: persistedPreviewRuntimeSummary.renderedWithFallback,
+      renderedCaptureUsed,
+      domSize,
+      screenshotCount,
+    },
     generatedAt: "deterministic",
     paths: Object.keys(htmlByPath).sort(),
     assetFingerprints: assetFingerprintMap,

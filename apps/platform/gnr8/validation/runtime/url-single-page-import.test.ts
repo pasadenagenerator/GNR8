@@ -284,7 +284,10 @@ test("url import accepts worker success truth even when timeout diagnostic is pr
           },
         ],
         computedStyleSamples: [],
-        diagnostics: [{ code: "RENDERED_CAPTURE_TIMEOUT", severity: "warning", message: "stale timeout diagnostic" }],
+        diagnostics: [
+          { code: "NAVIGATION_SUCCEEDED", severity: "info", message: "navigation succeeded" },
+          { code: "RENDERED_CAPTURE_TIMEOUT", severity: "warning", message: "stale timeout diagnostic" },
+        ],
         qualitySummary: {
           renderedDomQuality: "strong",
           domLength: renderedHtml.length,
@@ -319,8 +322,18 @@ test("url import accepts worker success truth even when timeout diagnostic is pr
   assert.equal(snapshot.sourceSelection.sourceMode, "rendered_dom");
   assert.equal(snapshot.sourceSelection.fidelityStatus, "high_fidelity_import");
   assert.equal(snapshot.importDiagnostics.issues.some((issue) => issue.code === "CAPTURE_WORKER_RESULT_ACCEPTED"), true);
+  assert.equal(snapshot.importDiagnostics.issues.some((issue) => issue.code === "RENDERED_CAPTURE_ACCEPTED"), true);
   assert.equal(snapshot.importDiagnostics.issues.some((issue) => issue.code === "CAPTURE_WORKER_FALLBACK_TO_RAW_HTML"), false);
   assert.equal(snapshot.renderedCaptureReliability.job?.status, "completed");
+  const renderedDomCanonicalPath = path.resolve(snapshot.snapshotRootDirAbs, "rendered", "dom.html");
+  const renderedScreenshotCanonicalPath = path.resolve(snapshot.snapshotRootDirAbs, "rendered", "screenshot.png");
+  const renderedMetadataCanonicalPath = path.resolve(snapshot.snapshotRootDirAbs, "rendered", "metadata.json");
+  assert.equal(fs.existsSync(renderedDomCanonicalPath), true);
+  assert.equal(fs.existsSync(renderedScreenshotCanonicalPath), true);
+  assert.equal(fs.existsSync(renderedMetadataCanonicalPath), true);
+  const renderedMetadata = JSON.parse(fs.readFileSync(renderedMetadataCanonicalPath, "utf8")) as { status?: string; domSize?: number };
+  assert.equal(renderedMetadata.status, "success");
+  assert.equal(Number(renderedMetadata.domSize) > 0, true);
 });
 
 test("url import persists misconfigured worker health truth without collapsing to generic health unavailable", async () => {

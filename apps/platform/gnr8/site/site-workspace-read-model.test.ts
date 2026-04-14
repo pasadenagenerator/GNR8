@@ -133,6 +133,127 @@ test('latest runtime row selection prefers latest execution recency over cross-s
   assert.equal(latest?.site_id, 'runtime-site-b')
 })
 
+test('latest runtime row selection prefers rendered capture truth when recency ties', () => {
+  const latest = __siteWorkspaceReadModelTestUtils.resolveLatestRuntimeVersionRow([
+    {
+      id: 'same-time-fallback',
+      site_id: 'runtime-site-a',
+      ownership_site_id: SITE_ID,
+      state: 'DRAFT',
+      version_no: 2,
+      import_provenance_summary: {
+        kind: 'runtime_import_provenance_summary_v1',
+        sourceMode: 'raw_html_fallback',
+        importFidelityStatus: 'degraded_import',
+        renderedCaptureStatus: 'failed',
+        renderedDomQuality: 'weak',
+        screenshotCount: 0,
+        computedStyleSampleCount: 0,
+        renderedCapture: {
+          used: false,
+          status: 'failed',
+          quality: 'weak',
+          domLength: 0,
+          nodeCount: 0,
+          styleSampleCount: 0,
+          styleCoverage: 0,
+          screenshots: { viewport: false, fullPage: false },
+          execution: {
+            runtimeKind: 'unknown',
+            environmentSupported: false,
+            browserPackageAvailable: false,
+            browserBinaryAvailable: false,
+            environmentStatus: 'unknown',
+            failureCategory: 'none',
+            failureCode: null,
+            browserLaunch: 'not_attempted',
+            navigation: 'not_attempted',
+            dom: 'not_attempted',
+            screenshot: 'none',
+            styleSampling: 'not_attempted',
+          },
+        },
+        importDiagnosticCodes: [],
+        captureEvidence: {
+          selectedSourceHtmlPath: null,
+          responseHtmlPath: null,
+          entryHtmlPath: null,
+          renderedCaptureManifestPath: null,
+          acquisitionEvidencePath: null,
+          renderedDomPath: null,
+          computedStylesPath: null,
+          renderedViewportScreenshotPath: null,
+          renderedFullpageScreenshotPath: null,
+          screenshotPaths: [],
+        },
+        styleSignals: null,
+      },
+      artifact_id: null,
+      updated_at: '2026-04-12T10:00:00.000Z',
+      created_at: '2026-04-12T10:00:00.000Z',
+    } as any,
+    {
+      id: 'same-time-rendered',
+      site_id: 'runtime-site-b',
+      ownership_site_id: SITE_ID,
+      state: 'DRAFT',
+      version_no: 1,
+      import_provenance_summary: {
+        kind: 'runtime_import_provenance_summary_v1',
+        sourceMode: 'rendered_dom',
+        importFidelityStatus: 'high_fidelity_import',
+        renderedCaptureStatus: 'available',
+        renderedDomQuality: 'strong',
+        screenshotCount: 2,
+        computedStyleSampleCount: 4,
+        renderedCapture: {
+          used: true,
+          status: 'available',
+          quality: 'strong',
+          domLength: 1200,
+          nodeCount: 42,
+          styleSampleCount: 4,
+          styleCoverage: 0.4,
+          screenshots: { viewport: true, fullPage: true },
+          execution: {
+            runtimeKind: 'nodejs',
+            environmentSupported: true,
+            browserPackageAvailable: true,
+            browserBinaryAvailable: true,
+            environmentStatus: 'supported',
+            failureCategory: 'none',
+            failureCode: null,
+            browserLaunch: 'succeeded',
+            navigation: 'succeeded',
+            dom: 'captured',
+            screenshot: 'captured',
+            styleSampling: 'captured',
+          },
+        },
+        importDiagnosticCodes: ['RENDERED_CAPTURE_SELECTED_AS_PRIMARY'],
+        captureEvidence: {
+          selectedSourceHtmlPath: '/tmp/run/rendered/dom.html',
+          responseHtmlPath: '/tmp/run/response-html.raw.html',
+          entryHtmlPath: '/tmp/run/index.html',
+          renderedCaptureManifestPath: '/tmp/run/rendered-capture.json',
+          acquisitionEvidencePath: '/tmp/run/acquisition-evidence.json',
+          renderedDomPath: '/tmp/run/rendered/dom.html',
+          computedStylesPath: '/tmp/run/rendered/computed-styles.json',
+          renderedViewportScreenshotPath: '/tmp/run/rendered/screenshots/viewport.png',
+          renderedFullpageScreenshotPath: '/tmp/run/rendered/screenshots/fullpage.png',
+          screenshotPaths: ['/tmp/run/rendered/screenshot.png'],
+        },
+        styleSignals: null,
+      },
+      artifact_id: null,
+      updated_at: '2026-04-12T10:00:00.000Z',
+      created_at: '2026-04-12T10:00:00.000Z',
+    } as any,
+  ])
+
+  assert.equal(latest?.id, 'same-time-rendered')
+})
+
 test('import fidelity signals are parsed from semantic signal labels', () => {
   const parsed = __siteWorkspaceReadModelTestUtils.parseImportFidelitySignals([
     {
@@ -669,6 +790,72 @@ test('import fidelity fallback flag remains false for high-fidelity imports when
 
   assert.equal(parsed.importFidelityStatus, 'high_fidelity_import')
   assert.equal(parsed.styleSignalFallbackUsed, false)
+})
+
+test('import fidelity parsing marks rendered capture selected as primary in evidence diagnostics', () => {
+  const parsed = __siteWorkspaceReadModelTestUtils.parseImportFidelity({
+    runtimeVersion: {
+      id: 'runtime-row-1',
+      site_id: 'runtime-site',
+      ownership_site_id: SITE_ID,
+      state: 'DRAFT',
+      version_no: 2,
+      artifact_id: 'artifact-1',
+      updated_at: '2026-04-14T10:00:00.000Z',
+      created_at: '2026-04-14T10:00:00.000Z',
+      import_provenance_summary: {
+        kind: 'runtime_import_provenance_summary_v1',
+        sourceMode: 'rendered_dom',
+        importFidelityStatus: 'high_fidelity_import',
+        renderedCaptureStatus: 'available',
+        renderedDomQuality: 'strong',
+        screenshotCount: 2,
+        computedStyleSampleCount: 3,
+        renderedCapture: {
+          used: true,
+          status: 'available',
+          quality: 'strong',
+          domLength: 1200,
+          nodeCount: 45,
+          styleSampleCount: 3,
+          styleCoverage: 0.3,
+          screenshots: { viewport: true, fullPage: true },
+          execution: {
+            runtimeKind: 'nodejs',
+            environmentSupported: true,
+            browserPackageAvailable: true,
+            browserBinaryAvailable: true,
+            environmentStatus: 'supported',
+            failureCategory: 'none',
+            failureCode: null,
+            browserLaunch: 'succeeded',
+            navigation: 'succeeded',
+            dom: 'captured',
+            screenshot: 'captured',
+            styleSampling: 'captured',
+          },
+        },
+        importDiagnosticCodes: ['RENDERED_CAPTURE_PERSISTED'],
+        captureEvidence: {
+          selectedSourceHtmlPath: '/tmp/run/rendered/dom.html',
+          responseHtmlPath: '/tmp/run/response-html.raw.html',
+          entryHtmlPath: '/tmp/run/index.html',
+          renderedCaptureManifestPath: '/tmp/run/rendered-capture.json',
+          acquisitionEvidencePath: '/tmp/run/acquisition-evidence.json',
+          renderedDomPath: '/tmp/run/rendered/dom.html',
+          computedStylesPath: '/tmp/run/rendered/computed-styles.json',
+          renderedViewportScreenshotPath: '/tmp/run/rendered/screenshots/viewport.png',
+          renderedFullpageScreenshotPath: '/tmp/run/rendered/screenshots/fullpage.png',
+          screenshotPaths: ['/tmp/run/rendered/screenshot.png'],
+        },
+        styleSignals: null,
+      },
+    } as any,
+    pageRows: [],
+  })
+
+  assert.equal(parsed.sourceMode, 'rendered_dom')
+  assert.equal(parsed.evidenceDiagnostics.includes('RENDERED_CAPTURE_SELECTED_AS_PRIMARY'), true)
 })
 
 test('preview runtime summary parser reads persisted preview mode truth', () => {

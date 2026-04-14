@@ -78,6 +78,8 @@ export type UrlImportDiagnosticCode =
   | "CAPTURE_WORKER_RESULT_ACCEPTED"
   | "CAPTURE_WORKER_RESULT_PARTIAL_ACCEPTED"
   | "CAPTURE_WORKER_RESULT_OVERRIDDEN_BY_FALLBACK"
+  | "RENDERED_CAPTURE_ACCEPTED"
+  | "RENDERED_CAPTURE_PERSISTED"
   | "CAPTURE_WORKER_FALLBACK_TO_RAW_HTML"
   | "INVALID_INPUT_URL"
   | "ENTRY_FETCH_FAILED"
@@ -1313,13 +1315,19 @@ function ensureRenderedCaptureArtifacts(input: {
   computedStylesPathAbs: string;
   viewportScreenshotPathAbs: string | null;
   fullpageScreenshotPathAbs: string | null;
+  renderedDomCanonicalPathAbs: string;
+  renderedScreenshotCanonicalPathAbs: string | null;
+  renderedMetadataPathAbs: string;
 } {
   const renderedDirAbs = path.resolve(input.snapshotRootDirAbs, "rendered");
   const screenshotDirAbs = path.resolve(renderedDirAbs, "screenshots");
   fs.mkdirSync(screenshotDirAbs, { recursive: true });
 
   const renderedDomPathAbs = path.resolve(renderedDirAbs, "rendered-dom.html");
+  const renderedDomCanonicalPathAbs = path.resolve(renderedDirAbs, "dom.html");
   const computedStylesPathAbs = path.resolve(renderedDirAbs, "computed-styles.json");
+  const renderedScreenshotCanonicalPathAbs = path.resolve(renderedDirAbs, "screenshot.png");
+  const renderedMetadataPathAbs = path.resolve(renderedDirAbs, "metadata.json");
   const viewportScreenshotPathAbs = path.resolve(screenshotDirAbs, "viewport.png");
   const fullpageScreenshotPathAbs = path.resolve(screenshotDirAbs, "fullpage.png");
 
@@ -1333,6 +1341,7 @@ function ensureRenderedCaptureArtifacts(input: {
       })()
     : "";
   fs.writeFileSync(renderedDomPathAbs, renderedHtml, "utf8");
+  fs.writeFileSync(renderedDomCanonicalPathAbs, renderedHtml, "utf8");
 
   writeJsonStable(computedStylesPathAbs, {
     kind: "computed_style_sample_collection_v1",
@@ -1358,6 +1367,43 @@ function ensureRenderedCaptureArtifacts(input: {
     fs.unlinkSync(fullpageScreenshotPathAbs);
   }
 
+  const canonicalScreenshotSource = viewportCaptured
+    ? viewportShot?.filePathAbs ?? null
+    : fullPageCaptured
+      ? fullpageShot?.filePathAbs ?? null
+      : null;
+  if (canonicalScreenshotSource) {
+    fs.copyFileSync(canonicalScreenshotSource, renderedScreenshotCanonicalPathAbs);
+  } else if (fs.existsSync(renderedScreenshotCanonicalPathAbs)) {
+    fs.unlinkSync(renderedScreenshotCanonicalPathAbs);
+  }
+
+  writeJsonStable(renderedMetadataPathAbs, {
+    kind: "rendered_capture_persistence_v1",
+    status: input.renderedCapture.status === "available" ? "success" : input.renderedCapture.status,
+    domSize: renderedHtml.trim().length,
+    screenshotCount: Number(viewportCaptured) + Number(fullPageCaptured),
+    source: "worker",
+  } as unknown as JsonValue);
+
+  if (input.renderedCapture.status === "available" && renderedHtml.trim().length > 0) {
+    input.diagnostics.push(
+      createDiagnostic({
+        severity: "info",
+        code: "RENDERED_CAPTURE_PERSISTED",
+        message: "Rendered capture artifacts persisted to run-scoped rendered evidence paths.",
+        targetUrl: null,
+        details: {
+          renderedDomPathAbs: renderedDomCanonicalPathAbs,
+          renderedScreenshotPathAbs: canonicalScreenshotSource ? renderedScreenshotCanonicalPathAbs : null,
+          renderedMetadataPathAbs,
+          domSize: renderedHtml.trim().length,
+          screenshotCount: Number(viewportCaptured) + Number(fullPageCaptured),
+        },
+      }),
+    );
+  }
+
   if (!renderedHtml && input.renderedCapture.status !== "available") {
     input.diagnostics.push(
       createDiagnostic({
@@ -1380,6 +1426,9 @@ function ensureRenderedCaptureArtifacts(input: {
     computedStylesPathAbs,
     viewportScreenshotPathAbs: viewportCaptured ? viewportScreenshotPathAbs : null,
     fullpageScreenshotPathAbs: fullPageCaptured ? fullpageScreenshotPathAbs : null,
+    renderedDomCanonicalPathAbs,
+    renderedScreenshotCanonicalPathAbs: canonicalScreenshotSource ? renderedScreenshotCanonicalPathAbs : null,
+    renderedMetadataPathAbs,
   };
 }
 
@@ -1801,6 +1850,31 @@ function resolveWorkerFallbackReason(input: {
     return "worker_unhealthy";
   }
   return "rendered_capture_unusable";
+}
+
+function hasWorkerPhaseCompletion(response: {
+  diagnostics?: Array<{ code?: string; details?: unknown }>;
+}): boolean {
+  const diagnostics = Array.isArray(response.diagnostics) ? response.diagnostics : [];
+  return diagnostics.some((entry) => {
+    const code = String(entry?.code ?? "").trim();
+    if (code === "CAPTURE_PHASE_RESPONSE_ASSEMBLY_COMPLETED") return true;
+    if (code === "CAPTURE_PHASE_ASSET_MANIFEST_FINALIZATION_COMPLETED") return true;
+    if (!entry?.details || typeof entry.details !== "object" || Array.isArray(entry.details)) return false;
+    return (entry.details as { phasesCompleted?: unknown }).phasesCompleted === true;
+  });
+}
+
+function hasWorkerNavigationSuccess(response: {
+  diagnostics?: Array<{ code?: string; details?: unknown }>;
+}): boolean {
+  const diagnostics = Array.isArray(response.diagnostics) ? response.diagnostics : [];
+  return diagnostics.some((entry) => {
+    const code = String(entry?.code ?? "").trim();
+    if (code === "NAVIGATION_SUCCEEDED") return true;
+    if (!entry?.details || typeof entry.details !== "object" || Array.isArray(entry.details)) return false;
+    return String((entry.details as { navigationStatus?: unknown }).navigationStatus ?? "").trim().toLowerCase() === "navigation_succeeded";
+  });
 }
 
 function isStylesheetLinkElement(node: unknown): boolean {
@@ -2572,6 +2646,38 @@ export async function importPublicSinglePageUrlToSnapshot(input: {
         snapshotRootDirAbs,
         sourceUrl: entryFetchUrlUsed ?? normalizedHref,
       });
+      const workerStatus = String(workerResponse.status ?? "").trim().toLowerCase();
+      const workerErrorCodeRaw = String(workerResponse.failure?.failureCode ?? "").trim();
+      const workerErrorCode =
+        workerStatus === "available" && renderedCapture.documents.length > 0
+          ? ""
+          : workerErrorCodeRaw;
+      const workerSuccessAccepted =
+        workerStatus === "available" &&
+        !workerErrorCode &&
+        (hasWorkerNavigationSuccess(workerResponse) || hasWorkerPhaseCompletion(workerResponse));
+      if (workerSuccessAccepted) {
+        renderedCapture = {
+          ...renderedCapture,
+          status: "available",
+        };
+        diagnostics.push(
+          createDiagnostic({
+            severity: "info",
+            code: "RENDERED_CAPTURE_ACCEPTED",
+            message: "Rendered capture worker response accepted as success from worker execution truth.",
+            targetUrl: null,
+            details: {
+              workerStatus,
+              workerErrorCode: workerErrorCodeRaw || null,
+              navigationSucceeded: hasWorkerNavigationSuccess(workerResponse),
+              phasesCompleted: hasWorkerPhaseCompletion(workerResponse),
+              renderedDocumentCount: renderedCapture.documents.length,
+              screenshotCount: renderedCapture.screenshots.length,
+            },
+          }),
+        );
+      }
     }
     renderedCaptureDurationMs = Date.now() - captureStartedAt;
     appendRenderedCaptureDiagnostics({

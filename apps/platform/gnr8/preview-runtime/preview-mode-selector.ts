@@ -9,6 +9,7 @@ type PreviewModeSelectorInput = {
   hasMeaningfulRenderableStructure: boolean;
   rendererUsedFallback: boolean;
   rendererRuntimeFailed: boolean;
+  renderedCaptureAvailable?: boolean;
 };
 
 export function selectPreviewRuntimeMode(input: PreviewModeSelectorInput): {
@@ -16,6 +17,23 @@ export function selectPreviewRuntimeMode(input: PreviewModeSelectorInput): {
   diagnostics: string[];
 } {
   const diagnostics: string[] = [];
+  const renderedCaptureAvailable = Boolean(input.renderedCaptureAvailable);
+
+  if (renderedCaptureAvailable) {
+    diagnostics.push(PREVIEW_RUNTIME_DIAGNOSTIC.PREVIEW_MODE_FROM_RENDERED_CAPTURE);
+    if (input.rendererSucceeded && input.rendererMatchedPage && input.hasMeaningfulRenderableStructure && !input.rendererUsedFallback) {
+      diagnostics.push(PREVIEW_RUNTIME_DIAGNOSTIC.REAL_REACT_RENDER_SELECTED);
+      return {
+        mode: "react_preview",
+        diagnostics,
+      };
+    }
+    diagnostics.push(PREVIEW_RUNTIME_DIAGNOSTIC.REAL_REACT_RENDER_DEGRADED);
+    return {
+      mode: "react_preview_degraded",
+      diagnostics,
+    };
+  }
 
   if (!input.finalSiteModelAvailable) {
     diagnostics.push(PREVIEW_RUNTIME_DIAGNOSTIC.FINAL_SITE_MODEL_UNAVAILABLE);

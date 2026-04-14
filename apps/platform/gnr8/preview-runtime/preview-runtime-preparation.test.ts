@@ -99,6 +99,21 @@ test("renderer runtime failure -> fallback with diagnostics", () => {
   assert.ok(selected.diagnostics.includes(PREVIEW_RUNTIME_DIAGNOSTIC.RENDERER_RUNTIME_FAILED));
 });
 
+test("rendered capture availability blocks fallback mode selection", () => {
+  const selected = selectPreviewRuntimeMode({
+    finalSiteModelAvailable: false,
+    rendererContractAvailable: false,
+    rendererSucceeded: false,
+    rendererMatchedPage: false,
+    hasMeaningfulRenderableStructure: false,
+    rendererUsedFallback: false,
+    rendererRuntimeFailed: true,
+    renderedCaptureAvailable: true,
+  });
+  assert.equal(selected.mode, "react_preview_degraded");
+  assert.ok(selected.diagnostics.includes(PREVIEW_RUNTIME_DIAGNOSTIC.PREVIEW_MODE_FROM_RENDERED_CAPTURE));
+});
+
 test("renderer generic fallback counts as degraded React preview, not total fallback", () => {
   const selected = selectPreviewRuntimeMode({
     finalSiteModelAvailable: true,

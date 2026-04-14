@@ -458,6 +458,13 @@ function hasMeaningfulRenderableStructure(finalSiteModel: FinalSiteModel | null,
   return sectionCount > 0 && componentCount > 0;
 }
 
+function hasRenderedCaptureAvailable(input: PreviewRuntimePreparationInput): boolean {
+  if (typeof input.renderedCaptureAvailable === "boolean") return input.renderedCaptureAvailable;
+  const summary = input.siteVersion.importProvenanceSummary ?? null;
+  if (!summary) return false;
+  return summary.renderedCapture.status === "available" && summary.renderedCapture.nodeCount > 0;
+}
+
 export function preparePreviewRuntime(input: PreviewRuntimePreparationInput): PreviewRuntimePreparationResult {
   const diagnostics: string[] = [PREVIEW_RUNTIME_DIAGNOSTIC.PREPARATION_STARTED];
   const finalSiteModel = buildFinalSiteModelFromRuntimeSiteVersion(input);
@@ -519,6 +526,7 @@ export function preparePreviewRuntime(input: PreviewRuntimePreparationInput): Pr
     hasMeaningfulRenderableStructure: hasMeaningfulRenderableStructure(finalSiteModel, rendererResult?.matchedPageId ?? null),
     rendererUsedFallback: Boolean(rendererResult?.renderedWithFallback),
     rendererRuntimeFailed,
+    renderedCaptureAvailable: hasRenderedCaptureAvailable(input),
   });
 
   const finalDiagnostics = withSortedDiagnostics([...diagnostics, ...selection.diagnostics]);

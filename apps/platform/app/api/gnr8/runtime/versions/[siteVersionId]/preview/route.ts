@@ -86,6 +86,9 @@ export async function GET(req: Request, ctx: { params: Promise<{ siteVersionId: 
         "x-gnr8-preview-content-resolution-degraded": preview.previewRuntimeSummary.contentResolutionDegraded ? "true" : "false",
         "x-gnr8-preview-content-resolution-diagnostics": preview.previewRuntimeSummary.contentResolutionDiagnostics.join(","),
         "x-gnr8-preview-diagnostics": preview.previewRuntimeSummary.previewDiagnostics.join(","),
+        "x-gnr8-rendered-capture": preview.renderedCaptureUsed ? "true" : "false",
+        "x-gnr8-dom-size": String(preview.domSize),
+        "x-gnr8-fallback-used": preview.fallbackUsed ? "true" : "false",
       },
     });
   } catch (error) {

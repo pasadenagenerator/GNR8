@@ -67,6 +67,78 @@ function toCoverage(input: { sampleCount: number; expectedCount?: number }): num
   return Number((sampleCount / expectedCount).toFixed(3))
 }
 
+function persistRenderedCaptureRunEvidence(snapshot: UrlSinglePageImportSnapshot): {
+  domPath: string
+  screenshotPath: string | null
+  metadataPath: string
+  domSize: number
+  screenshotCount: number
+  persisted: boolean
+} {
+  const renderedDir = path.resolve(snapshot.snapshotRootDirAbs, 'rendered')
+  fs.mkdirSync(renderedDir, { recursive: true })
+
+  const domPath = path.resolve(renderedDir, 'dom.html')
+  const screenshotPath = path.resolve(renderedDir, 'screenshot.png')
+  const metadataPath = path.resolve(renderedDir, 'metadata.json')
+
+  const renderedDomSourcePath = snapshot.renderedCapture.documents[0]?.htmlPathAbs ?? path.resolve(renderedDir, 'rendered-dom.html')
+  const renderedDomHtml = (() => {
+    try {
+      return fs.readFileSync(renderedDomSourcePath, 'utf8')
+    } catch {
+      return ''
+    }
+  })()
+  fs.writeFileSync(domPath, renderedDomHtml, 'utf8')
+
+  const viewport = snapshot.renderedCapture.screenshots.find((shot) => shot.captureType === 'desktop_viewport')?.filePathAbs ?? null
+  const fullpage = snapshot.renderedCapture.screenshots.find((shot) => shot.captureType === 'desktop_fullpage')?.filePathAbs ?? null
+  const primaryScreenshotSource = [viewport, fullpage].find((candidate) => {
+    if (!candidate) return false
+    try {
+      return fs.existsSync(candidate) && fs.statSync(candidate).isFile() && fs.statSync(candidate).size > 0
+    } catch {
+      return false
+    }
+  }) ?? null
+  if (primaryScreenshotSource) {
+    fs.copyFileSync(primaryScreenshotSource, screenshotPath)
+  } else if (fs.existsSync(screenshotPath)) {
+    fs.unlinkSync(screenshotPath)
+  }
+
+  const domSize = renderedDomHtml.trim().length
+  const screenshotCount = Math.max(snapshot.renderedCapture.screenshots.length, primaryScreenshotSource ? 1 : 0)
+  const renderedCaptureStatus = resolveRenderedCaptureStatus(snapshot)
+  const persisted = renderedCaptureStatus === 'available' && domSize > 0
+
+  fs.writeFileSync(
+    metadataPath,
+    `${JSON.stringify(
+      {
+        kind: 'rendered_capture_metadata_v1',
+        status: persisted ? 'success' : renderedCaptureStatus,
+        domSize,
+        screenshotCount,
+        source: 'worker',
+      },
+      null,
+      2,
+    )}\n`,
+    'utf8',
+  )
+
+  return {
+    domPath,
+    screenshotPath: primaryScreenshotSource ? screenshotPath : null,
+    metadataPath,
+    domSize,
+    screenshotCount,
+    persisted,
+  }
+}
+
 function buildRenderedCaptureExecutionFromSnapshot(snapshot: UrlSinglePageImportSnapshot): RuntimeImportProvenanceSummary['renderedCapture']['execution'] {
   const renderedDiagnostics = Array.isArray(snapshot.renderedCapture.diagnostics) ? snapshot.renderedCapture.diagnostics : []
   const renderedDocuments = Array.isArray(snapshot.renderedCapture.documents) ? snapshot.renderedCapture.documents : []
@@ -509,11 +581,12 @@ async function buildImportProvenanceSummary(input: {
     .map((diag) => normalizeText(diag.code))
     .filter(Boolean)
   const importDiagnostics = snapshot.importDiagnostics.issues.map((issue) => normalizeText(issue.code)).filter(Boolean)
+  const persistedCaptureEvidence = persistRenderedCaptureRunEvidence(snapshot)
 
   const renderedCaptureStatus = resolveRenderedCaptureStatus(snapshot)
   const styleSampleCount = snapshot.renderedCapture.computedStyleSamples.length
   const styleCoverage = toCoverage({ sampleCount: styleSampleCount })
-  const renderedDomPath = path.resolve(snapshot.snapshotRootDirAbs, 'rendered', 'rendered-dom.html')
+  const renderedDomPath = persistedCaptureEvidence.domPath
   const computedStylesPath = path.resolve(snapshot.snapshotRootDirAbs, 'rendered', 'computed-styles.json')
   const viewportScreenshotPath = path.resolve(snapshot.snapshotRootDirAbs, 'rendered', 'screenshots', 'viewport.png')
   const fullpageScreenshotPath = path.resolve(snapshot.snapshotRootDirAbs, 'rendered', 'screenshots', 'fullpage.png')
@@ -524,7 +597,7 @@ async function buildImportProvenanceSummary(input: {
   const screenshotPaths = screenshotPathsResolved.length > 0 ? screenshotPathsResolved : screenshotPathsDeclared
   const renderedViewportScreenshotPath = resolveEvidencePathIfExists(viewportScreenshotPath)
   const renderedFullpageScreenshotPath = resolveEvidencePathIfExists(fullpageScreenshotPath)
-  const screenshotCount = Math.max(screenshotPaths.length, snapshot.renderedCapture.screenshots.length)
+  const screenshotCount = Math.max(screenshotPaths.length, snapshot.renderedCapture.screenshots.length, persistedCaptureEvidence.screenshotCount)
   const importFidelityScore = computeImportFidelityScore({ preparedSite, styleSignals, snapshot })
   const captureJob = snapshot.renderedCaptureReliability?.job ?? null
   const workerHealth = snapshot.renderedCaptureReliability?.workerHealth ?? null
@@ -547,6 +620,7 @@ async function buildImportProvenanceSummary(input: {
     ...(snapshot.sourceSelection.sourceMode === 'raw_html_fallback' && (workerResultSuccessful || workerCapturedEvidence)
       ? ['CAPTURE_WORKER_RESULT_SUPERSEDED_BY_FALLBACK']
       : []),
+    ...(persistedCaptureEvidence.persisted ? ['RENDERED_CAPTURE_PERSISTED'] : []),
   ])
 
   const multipageImport = await buildMultipageImportFromPreparedSite({
@@ -575,7 +649,7 @@ async function buildImportProvenanceSummary(input: {
       status: renderedCaptureStatus,
       quality: snapshot.sourceSelection.renderedDomQuality.quality,
       domLength: snapshot.sourceSelection.renderedDomQuality.bodyTextLength,
-      nodeCount: snapshot.sourceSelection.renderedDomQuality.meaningfulNodeCount,
+      nodeCount: persistedCaptureEvidence.domSize > 0 ? snapshot.sourceSelection.renderedDomQuality.meaningfulNodeCount : 0,
       styleSampleCount,
       styleCoverage,
       screenshots: {

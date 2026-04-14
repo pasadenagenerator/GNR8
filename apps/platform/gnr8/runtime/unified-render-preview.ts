@@ -8,6 +8,28 @@ import type { PreviewRuntimeMode, PreviewRuntimeSummary } from '@/gnr8/preview-r
 
 export type SiteVersionPreviewSource = 'react_runtime_renderer' | 'transformed_artifact' | 'debug_preview_bundle'
 
+type RenderedCapturePreviewTruth = {
+  renderedCaptureUsed: boolean
+  domSize: number
+  screenshotCount: number
+}
+
+type ResolvedSiteVersionPreview = {
+  siteId: string
+  siteVersionId: string
+  path: string
+  rendererCompatibilityVersion: string
+  html: string
+  source: SiteVersionPreviewSource
+  previewMode: PreviewRuntimeMode
+  previewRuntimeSummary: PreviewRuntimeSummary
+  renderedCaptureUsed: boolean
+  fallbackUsed: boolean
+  domSize: number
+  screenshotCount: number
+  sourceMode: 'rendered_capture' | 'raw_html'
+}
+
 export class SiteVersionPreviewUnavailableError extends Error {
   readonly code: 'SITE_VERSION_NOT_FOUND' | 'TRANSFORMED_ARTIFACT_NOT_AVAILABLE' | 'PREVIEW_PATH_NOT_FOUND'
 
@@ -34,20 +56,54 @@ function resolveHtmlForPath(input: { htmlByPath: Record<string, string>; request
   })
 }
 
+function withSortedDiagnostics(diagnostics: string[]): string[] {
+  return [...new Set(diagnostics.filter((value) => value.trim().length > 0))].sort((a, b) => a.localeCompare(b))
+}
+
+function resolveRenderedCapturePreviewTruth(importSummary: unknown): RenderedCapturePreviewTruth {
+  const summary =
+    importSummary && typeof importSummary === 'object' && !Array.isArray(importSummary)
+      ? (importSummary as {
+          renderedCapture?: { status?: string; nodeCount?: number; domLength?: number }
+          screenshotCount?: number
+          renderedCaptureStatus?: string
+        })
+      : null
+  const status = String(summary?.renderedCapture?.status ?? summary?.renderedCaptureStatus ?? '').trim().toLowerCase()
+  const domSize = Math.max(0, Math.floor(Number(summary?.renderedCapture?.nodeCount ?? summary?.renderedCapture?.domLength ?? 0)))
+  const screenshotCount = Math.max(0, Math.floor(Number(summary?.screenshotCount ?? 0)))
+  return {
+    renderedCaptureUsed: status === 'available' && domSize > 0,
+    domSize,
+    screenshotCount,
+  }
+}
+
+function withPreviewTruth(input: {
+  preview: Omit<ResolvedSiteVersionPreview, 'renderedCaptureUsed' | 'fallbackUsed' | 'domSize' | 'screenshotCount' | 'sourceMode'>
+  previewTruth: RenderedCapturePreviewTruth
+  fallbackUsedOverride?: boolean
+}): ResolvedSiteVersionPreview {
+  const fallbackUsed =
+    typeof input.fallbackUsedOverride === 'boolean'
+      ? input.fallbackUsedOverride
+      : input.preview.previewRuntimeSummary.renderedWithFallback || input.preview.previewMode === 'fallback_preview'
+  return {
+    ...input.preview,
+    renderedCaptureUsed: input.previewTruth.renderedCaptureUsed,
+    fallbackUsed,
+    domSize: input.previewTruth.domSize,
+    screenshotCount: input.previewTruth.screenshotCount,
+    sourceMode: input.previewTruth.renderedCaptureUsed ? 'rendered_capture' : 'raw_html',
+  }
+}
+
 async function renderTransformedSiteVersionPreview(input: {
   siteVersionId: string
   requestedPath: string
   fallbackSummary?: PreviewRuntimeSummary | null
-}): Promise<{
-  siteId: string
-  siteVersionId: string
-  path: string
-  rendererCompatibilityVersion: string
-  html: string
-  source: SiteVersionPreviewSource
-  previewMode: PreviewRuntimeMode
-  previewRuntimeSummary: PreviewRuntimeSummary
-}> {
+  previewTruth: RenderedCapturePreviewTruth
+}): Promise<ResolvedSiteVersionPreview> {
   const binding = await getSiteVersionArtifactBinding(input.siteVersionId)
   if (!binding || !binding.artifactId) {
     throw new SiteVersionPreviewUnavailableError({
@@ -69,27 +125,35 @@ async function renderTransformedSiteVersionPreview(input: {
     requestedPath: input.requestedPath,
   })
 
-  return {
-    siteId: artifact.siteId,
-    siteVersionId: artifact.siteVersionId,
-    path: resolved.resolvedPath,
-    rendererCompatibilityVersion: artifact.rendererCompatibilityVersion,
-    html: resolved.html,
-    source: 'transformed_artifact',
+  const previewRuntimeSummary = input.fallbackSummary ?? {
     previewMode: 'fallback_preview',
-    previewRuntimeSummary: input.fallbackSummary ?? {
-      previewMode: 'fallback_preview',
-      rendererContractAvailable: false,
-      finalSiteModelAvailable: false,
-      renderedWithFallback: false,
-      matchedPageId: null,
-      contentResolutionApplied: false,
-      resolvedContentCount: 0,
-      unresolvedContentCount: 0,
-      contentResolutionDegraded: false,
-      contentResolutionDiagnostics: [],
-      previewDiagnostics: [PREVIEW_RUNTIME_DIAGNOSTIC.FALLBACK_RENDER_SELECTED],
-    },
+    rendererContractAvailable: false,
+    finalSiteModelAvailable: false,
+    renderedWithFallback: false,
+    matchedPageId: null,
+    contentResolutionApplied: false,
+    resolvedContentCount: 0,
+    unresolvedContentCount: 0,
+    contentResolutionDegraded: false,
+    contentResolutionDiagnostics: [],
+    previewDiagnostics: [PREVIEW_RUNTIME_DIAGNOSTIC.FALLBACK_RENDER_SELECTED],
+  }
+
+  return {
+    ...withPreviewTruth({
+      preview: {
+        siteId: artifact.siteId,
+        siteVersionId: artifact.siteVersionId,
+        path: resolved.resolvedPath,
+        rendererCompatibilityVersion: artifact.rendererCompatibilityVersion,
+        html: resolved.html,
+        source: 'transformed_artifact',
+        previewMode: previewRuntimeSummary.previewMode,
+        previewRuntimeSummary,
+      },
+      previewTruth: input.previewTruth,
+      fallbackUsedOverride: !input.previewTruth.renderedCaptureUsed,
+    }),
   }
 }
 
@@ -97,16 +161,8 @@ async function renderDebugSiteVersionPreview(input: {
   siteVersionId: string
   requestedPath: string
   fallbackSummary?: PreviewRuntimeSummary | null
-}): Promise<{
-  siteId: string
-  siteVersionId: string
-  path: string
-  rendererCompatibilityVersion: string
-  html: string
-  source: SiteVersionPreviewSource
-  previewMode: PreviewRuntimeMode
-  previewRuntimeSummary: PreviewRuntimeSummary
-}> {
+  previewTruth: RenderedCapturePreviewTruth
+}): Promise<ResolvedSiteVersionPreview> {
   const siteVersion = await getSiteVersion(input.siteVersionId)
   if (!siteVersion) {
     throw new SiteVersionPreviewUnavailableError({
@@ -125,27 +181,35 @@ async function renderDebugSiteVersionPreview(input: {
     requestedPath: input.requestedPath,
   })
 
-  return {
-    siteId: siteVersion.siteId,
-    siteVersionId: siteVersion.id,
-    path: resolved.resolvedPath,
-    rendererCompatibilityVersion: artifact.rendererCompatibilityVersion,
-    html: resolved.html,
-    source: 'debug_preview_bundle',
+  const previewRuntimeSummary = input.fallbackSummary ?? {
     previewMode: 'fallback_preview',
-    previewRuntimeSummary: input.fallbackSummary ?? {
-      previewMode: 'fallback_preview',
-      rendererContractAvailable: false,
-      finalSiteModelAvailable: false,
-      renderedWithFallback: false,
-      matchedPageId: null,
-      contentResolutionApplied: false,
-      resolvedContentCount: 0,
-      unresolvedContentCount: 0,
-      contentResolutionDegraded: false,
-      contentResolutionDiagnostics: [],
-      previewDiagnostics: [PREVIEW_RUNTIME_DIAGNOSTIC.FALLBACK_RENDER_SELECTED],
-    },
+    rendererContractAvailable: false,
+    finalSiteModelAvailable: false,
+    renderedWithFallback: false,
+    matchedPageId: null,
+    contentResolutionApplied: false,
+    resolvedContentCount: 0,
+    unresolvedContentCount: 0,
+    contentResolutionDegraded: false,
+    contentResolutionDiagnostics: [],
+    previewDiagnostics: [PREVIEW_RUNTIME_DIAGNOSTIC.FALLBACK_RENDER_SELECTED],
+  }
+
+  return {
+    ...withPreviewTruth({
+      preview: {
+        siteId: siteVersion.siteId,
+        siteVersionId: siteVersion.id,
+        path: resolved.resolvedPath,
+        rendererCompatibilityVersion: artifact.rendererCompatibilityVersion,
+        html: resolved.html,
+        source: 'debug_preview_bundle',
+        previewMode: previewRuntimeSummary.previewMode,
+        previewRuntimeSummary,
+      },
+      previewTruth: input.previewTruth,
+      fallbackUsedOverride: !input.previewTruth.renderedCaptureUsed,
+    }),
   }
 }
 
@@ -176,17 +240,9 @@ function wrapReactPreviewHtml(input: {
 async function renderReactRuntimeSiteVersionPreview(input: {
   siteVersionId: string
   requestedPath: string
+  previewTruth: RenderedCapturePreviewTruth
 }): Promise<{
-  preview: {
-    siteId: string
-    siteVersionId: string
-    path: string
-    rendererCompatibilityVersion: string
-    html: string
-    source: SiteVersionPreviewSource
-    previewMode: PreviewRuntimeMode
-    previewRuntimeSummary: PreviewRuntimeSummary
-  } | null
+  preview: ResolvedSiteVersionPreview | null
   fallbackSummary: PreviewRuntimeSummary
 }> {
   const siteVersion = await getSiteVersion(input.siteVersionId)
@@ -200,6 +256,7 @@ async function renderReactRuntimeSiteVersionPreview(input: {
   const preparation = preparePreviewRuntime({
     siteVersion,
     routePath: input.requestedPath,
+    renderedCaptureAvailable: input.previewTruth.renderedCaptureUsed,
   })
 
   if (preparation.mode === 'fallback_preview' || !preparation.rendererInput || !preparation.renderedSiteElement) {
@@ -213,20 +270,24 @@ async function renderReactRuntimeSiteVersionPreview(input: {
   const renderedSite = reactDomServer.renderToStaticMarkup(preparation.renderedSiteElement)
 
   return {
-    preview: {
-      siteId: siteVersion.siteId,
-      siteVersionId: siteVersion.id,
-      path: input.requestedPath,
-      rendererCompatibilityVersion: siteVersion.rendererCompatibilityVersion,
-      html: wrapReactPreviewHtml({
-        renderedSiteHtml: renderedSite,
-        routePath: input.requestedPath,
-        summary: preparation.summary,
-      }),
-      source: 'react_runtime_renderer',
-      previewMode: preparation.mode,
-      previewRuntimeSummary: preparation.summary,
-    },
+    preview: withPreviewTruth({
+      preview: {
+        siteId: siteVersion.siteId,
+        siteVersionId: siteVersion.id,
+        path: input.requestedPath,
+        rendererCompatibilityVersion: siteVersion.rendererCompatibilityVersion,
+        html: wrapReactPreviewHtml({
+          renderedSiteHtml: renderedSite,
+          routePath: input.requestedPath,
+          summary: preparation.summary,
+        }),
+        source: 'react_runtime_renderer',
+        previewMode: preparation.mode,
+        previewRuntimeSummary: preparation.summary,
+      },
+      previewTruth: input.previewTruth,
+      fallbackUsedOverride: preparation.summary.renderedWithFallback,
+    }),
     fallbackSummary: preparation.summary,
   }
 }
@@ -234,26 +295,51 @@ async function renderReactRuntimeSiteVersionPreview(input: {
 export async function renderSiteVersionPreview(input: { siteVersionId: string; path?: string; mode?: unknown }) {
   const requestedPath = normalizePagePath(input.path ?? '/')
   const mode: SiteVersionPreviewMode = normalizeSiteVersionPreviewMode(input.mode)
+  const siteVersion = await getSiteVersion(input.siteVersionId)
+  if (!siteVersion) {
+    throw new SiteVersionPreviewUnavailableError({
+      code: 'SITE_VERSION_NOT_FOUND',
+      message: 'SiteVersion not found',
+    })
+  }
+  const previewTruth = resolveRenderedCapturePreviewTruth(siteVersion.importProvenanceSummary)
 
   if (mode === 'transformed') {
     const reactPreview = await renderReactRuntimeSiteVersionPreview({
       siteVersionId: input.siteVersionId,
       requestedPath,
+      previewTruth,
     })
     if (reactPreview.preview) return reactPreview.preview
+
+    const fallbackBlocked = previewTruth.renderedCaptureUsed && previewTruth.domSize > 0
+    const fallbackSummary = fallbackBlocked
+      ? {
+          ...reactPreview.fallbackSummary,
+          previewMode: 'react_preview_degraded' as const,
+          renderedWithFallback: false,
+          previewDiagnostics: withSortedDiagnostics([
+            ...reactPreview.fallbackSummary.previewDiagnostics,
+            PREVIEW_RUNTIME_DIAGNOSTIC.PREVIEW_MODE_FROM_RENDERED_CAPTURE,
+            PREVIEW_RUNTIME_DIAGNOSTIC.FALLBACK_BLOCKED_RENDER_AVAILABLE,
+          ]),
+        }
+      : reactPreview.fallbackSummary
 
     try {
       return await renderTransformedSiteVersionPreview({
         siteVersionId: input.siteVersionId,
         requestedPath,
-        fallbackSummary: reactPreview.fallbackSummary,
+        fallbackSummary,
+        previewTruth,
       })
     } catch (error) {
       if (error instanceof SiteVersionPreviewUnavailableError && error.code === 'TRANSFORMED_ARTIFACT_NOT_AVAILABLE') {
         return renderDebugSiteVersionPreview({
           siteVersionId: input.siteVersionId,
           requestedPath,
-          fallbackSummary: reactPreview.fallbackSummary,
+          fallbackSummary,
+          previewTruth,
         })
       }
       throw error
@@ -263,5 +349,6 @@ export async function renderSiteVersionPreview(input: { siteVersionId: string; p
   return renderDebugSiteVersionPreview({
     siteVersionId: input.siteVersionId,
     requestedPath,
+    previewTruth,
   })
 }
