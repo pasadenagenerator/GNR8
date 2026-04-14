@@ -149,6 +149,7 @@ export type SiteWorkspaceReadModel = {
     workerHealth: RuntimeImportProvenanceSummary['workerHealth'] | null
     captureFallbackReason: string | null
     diagnosticsSummary: string[]
+    multipageImportSummary: RuntimeImportProvenanceSummary['multipageImport'] extends { summary: infer T } | null | undefined ? T | null : null
     styleSignals: StyleSignalModel | null
     runtimeSelection: {
       selectedVersionId: string | null
@@ -759,6 +760,33 @@ function parseImportProvenanceSummary(value: unknown): RuntimeImportProvenanceSu
     : []
   const executionIdentity = isRecord(value.executionIdentity) ? value.executionIdentity : null
   const styleSignals = isRecord(value.styleSignals) ? (value.styleSignals as StyleSignalModel) : null
+  const multipageImport = isRecord(value.multipageImport) ? value.multipageImport : null
+  const multipageSummaryRaw = isRecord(multipageImport?.summary) ? multipageImport.summary : null
+  const multipageSummary =
+    multipageSummaryRaw &&
+    typeof multipageSummaryRaw.enabled === 'boolean' &&
+    Number.isFinite(Number(multipageSummaryRaw.routeCount)) &&
+    Number.isFinite(Number(multipageSummaryRaw.pageCount))
+      ? {
+          enabled: Boolean(multipageSummaryRaw.enabled),
+          routeCount: Math.max(0, Math.floor(Number(multipageSummaryRaw.routeCount))),
+          pageCount: Math.max(0, Math.floor(Number(multipageSummaryRaw.pageCount))),
+          primaryNavigationCount: Number.isFinite(Number(multipageSummaryRaw.primaryNavigationCount))
+            ? Math.max(0, Math.floor(Number(multipageSummaryRaw.primaryNavigationCount)))
+            : 0,
+          footerNavigationCount: Number.isFinite(Number(multipageSummaryRaw.footerNavigationCount))
+            ? Math.max(0, Math.floor(Number(multipageSummaryRaw.footerNavigationCount)))
+            : 0,
+          sharedRegionCount: Number.isFinite(Number(multipageSummaryRaw.sharedRegionCount))
+            ? Math.max(0, Math.floor(Number(multipageSummaryRaw.sharedRegionCount)))
+            : 0,
+          depthLimitHit: Boolean(multipageSummaryRaw.depthLimitHit),
+          routeLimitHit: Boolean(multipageSummaryRaw.routeLimitHit),
+          diagnostics: Array.isArray(multipageSummaryRaw.diagnostics)
+            ? [...new Set(multipageSummaryRaw.diagnostics.map((entry) => normalizeText(entry)).filter(Boolean))].sort((a, b) => a.localeCompare(b))
+            : [],
+        }
+      : null
   const importFidelityScore: RuntimeImportProvenanceSummary['importFidelityScore'] =
     fidelityScoreRaw &&
     Number.isFinite(Number(fidelityScoreRaw.structureScore)) &&
@@ -986,6 +1014,7 @@ function parseImportProvenanceSummary(value: unknown): RuntimeImportProvenanceSu
     captureJob,
     workerHealth,
     styleSignals,
+    multipageImport: multipageSummary ? { summary: multipageSummary, tree: null } : null,
   }
 }
 
@@ -1012,6 +1041,7 @@ function parseImportFidelity(input: {
   workerHealth: RuntimeImportProvenanceSummary['workerHealth'] | null
   captureFallbackReason: string | null
   styleSignals: StyleSignalModel | null
+  multipageImportSummary: RuntimeImportProvenanceSummary['multipageImport'] extends { summary: infer T } | null | undefined ? T | null : null
 } {
   const parsedFromSignals = parseImportFidelitySignals(input.pageRows)
   const parsedSummary = parseImportProvenanceSummary(input.runtimeVersion?.import_provenance_summary ?? null)
@@ -1041,6 +1071,7 @@ function parseImportFidelity(input: {
       workerHealth: null,
       captureFallbackReason: null,
       styleSignals: inferredStyleSignals,
+      multipageImportSummary: null,
     }
   }
 
@@ -1140,6 +1171,7 @@ function parseImportFidelity(input: {
     workerHealth: parsedSummary.workerHealth ?? null,
     captureFallbackReason: resolveCaptureFallbackReason(),
     styleSignals,
+    multipageImportSummary: parsedSummary.multipageImport?.summary ?? null,
   }
 }
 
@@ -1485,6 +1517,7 @@ export async function getSiteWorkspaceReadModelForPage(input: {
       workerHealth: importFidelity.workerHealth,
       captureFallbackReason: importFidelity.captureFallbackReason,
       diagnosticsSummary,
+      multipageImportSummary: importFidelity.multipageImportSummary,
       styleSignals: importFidelity.styleSignals,
       runtimeSelection: {
         selectedVersionId: selectedRuntimeSiteVersionId,

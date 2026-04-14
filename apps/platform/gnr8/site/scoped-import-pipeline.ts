@@ -35,6 +35,7 @@ import {
   styleSignalsToStyleTokens,
   type StyleSignalModel,
 } from '@/gnr8/style-signals'
+import { discoverMultipageImportTree, summarizeMultipageImportTree } from '@/gnr8/multipage-import'
 
 const SECTION_INTENT_BY_SEMANTIC_TYPE: Record<string, string> = {
   header: 'header_nav',
@@ -420,11 +421,79 @@ function resolveEvidencePathIfExists(pathAbs: string): string | null {
   return fs.existsSync(normalized) ? normalized : null
 }
 
-function buildImportProvenanceSummary(input: {
+async function buildMultipageImportFromPreparedSite(input: {
+  sourceUrl: string
+  preparedSite: PreparedSiteModel | null
+}): Promise<RuntimeImportProvenanceSummary['multipageImport']> {
+  if (!input.preparedSite || input.preparedSite.documents.length === 0) {
+    return {
+      summary: {
+        enabled: false,
+        routeCount: 0,
+        pageCount: 0,
+        primaryNavigationCount: 0,
+        footerNavigationCount: 0,
+        sharedRegionCount: 0,
+        depthLimitHit: false,
+        routeLimitHit: false,
+        diagnostics: ['MULTIPAGE_DISCOVERY_PARTIAL:no_prepared_documents'],
+      },
+      tree: null,
+    }
+  }
+
+  const byPath = new Map<string, string>()
+  const sourceUrlNormalized = new URL(input.sourceUrl)
+  for (const doc of input.preparedSite.documents) {
+    const relative = inferPagePathFromSourcePath(doc.path)
+    const normalizedPath = normalizePagePath(relative)
+    byPath.set(normalizedPath, doc.domOutline?.bodyChildElements.map((entry) => entry.preservedMarkupHtml ?? '').join(' ') ?? doc.fidelity.title ?? '')
+  }
+
+  const fallbackDoc = input.preparedSite.documents.find((doc) => doc.isEntry) ?? input.preparedSite.documents[0]
+  const fallbackHtml = fallbackDoc?.path
+    ? byPath.get(normalizePagePath(inferPagePathFromSourcePath(fallbackDoc.path))) ?? '<html><body></body></html>'
+    : '<html><body></body></html>'
+
+  const tree = await discoverMultipageImportTree(
+    {
+      siteId: deterministicId('site', input.sourceUrl),
+      seedUrl: input.sourceUrl,
+      limits: {
+        maxRoutes: 120,
+        maxDepth: 3,
+        maxLinksPerPage: 120,
+        maxTemplateLinksPerRoute: 30,
+      },
+      discoveredAt: null,
+    },
+    {
+      fetchPage: async (url) => {
+        const parsed = new URL(url)
+        const normalizedPath = normalizePagePath(parsed.pathname || '/')
+        const html = byPath.get(normalizedPath)
+        if (!html) return null
+        return {
+          url: `${sourceUrlNormalized.protocol}//${sourceUrlNormalized.host}${normalizedPath}`,
+          html: html.includes('<a ') ? `<!doctype html><html><body>${html}</body></html>` : fallbackHtml,
+          title: null,
+        }
+      },
+    },
+  )
+
+  return {
+    summary: summarizeMultipageImportTree(tree),
+    tree,
+  }
+}
+
+async function buildImportProvenanceSummary(input: {
+  sourceUrl: string
   snapshot: UrlSinglePageImportSnapshot
   styleSignals: StyleSignalModel
   preparedSite: PreparedSiteModel | null
-}): RuntimeImportProvenanceSummary {
+}): Promise<RuntimeImportProvenanceSummary> {
   const { snapshot, styleSignals, preparedSite } = input
   const captureDiagnostics = (Array.isArray(snapshot.renderedCapture.diagnostics) ? snapshot.renderedCapture.diagnostics : [])
     .map((diag) => normalizeText(diag.code))
@@ -469,6 +538,11 @@ function buildImportProvenanceSummary(input: {
       ? ['CAPTURE_WORKER_RESULT_SUPERSEDED_BY_FALLBACK']
       : []),
   ])
+
+  const multipageImport = await buildMultipageImportFromPreparedSite({
+    sourceUrl: input.sourceUrl,
+    preparedSite,
+  })
 
   return {
     kind: 'runtime_import_provenance_summary_v1',
@@ -542,6 +616,7 @@ function buildImportProvenanceSummary(input: {
         }
       : null,
     styleSignals,
+    multipageImport,
   }
 }
 
@@ -556,6 +631,7 @@ function summarizeProvenancePayload(summary: RuntimeImportProvenanceSummary): Re
     screenshotCount: summary.screenshotCount,
     computedStyleSampleCount: summary.computedStyleSampleCount,
     importDiagnosticCodeCount: Array.isArray(summary.importDiagnosticCodes) ? summary.importDiagnosticCodes.length : 0,
+    multipageImport: summary.multipageImport?.summary ?? null,
   }
 }
 
@@ -952,7 +1028,8 @@ export async function runScopedImportPipeline(input: {
       quality: input.snapshot.sourceSelection.renderedDomQuality.quality,
     },
   })
-  const importProvenanceSummary = buildImportProvenanceSummary({
+  const importProvenanceSummary = await buildImportProvenanceSummary({
+    sourceUrl: input.sourceUrl,
     snapshot: input.snapshot,
     styleSignals,
     preparedSite,

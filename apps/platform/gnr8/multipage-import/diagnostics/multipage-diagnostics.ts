@@ -1,0 +1,28 @@
+export type MultipageDiagnosticCode =
+  | 'MULTIPAGE_IMPORT_STARTED'
+  | 'MULTIPAGE_DISCOVERY_COMPLETED'
+  | 'MULTIPAGE_ROUTE_DISCOVERED'
+  | 'MULTIPAGE_ROUTE_DUPLICATE_SKIPPED'
+  | 'MULTIPAGE_ROUTE_LIMIT_REACHED'
+  | 'MULTIPAGE_DEPTH_LIMIT_REACHED'
+  | 'MULTIPAGE_EXTERNAL_LINK_SKIPPED'
+  | 'MULTIPAGE_ASSET_LINK_SKIPPED'
+  | 'MULTIPAGE_ROUTE_CLASSIFIED'
+  | 'MULTIPAGE_NAV_TREE_BUILT'
+  | 'MULTIPAGE_SHARED_REGION_INFERRED'
+  | 'MULTIPAGE_TEMPLATE_FAMILY_INFERRED'
+  | 'MULTIPAGE_DISCOVERY_DEGRADED'
+  | 'MULTIPAGE_DISCOVERY_PARTIAL'
+
+function cleanPart(value: string | null | undefined): string {
+  return String(value ?? '').trim().replace(/\s+/g, ' ')
+}
+
+export function diagnosticEntry(code: MultipageDiagnosticCode, detail?: string | null): string {
+  const normalized = cleanPart(detail)
+  return normalized ? `${code}:${normalized}` : code
+}
+
+export function sortDiagnostics(diagnostics: string[]): string[] {
+  return [...new Set(diagnostics.map((entry) => cleanPart(entry)).filter(Boolean))].sort((a, b) => a.localeCompare(b))
+}

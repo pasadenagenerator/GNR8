@@ -3,6 +3,7 @@ import type { PageEnforcementByStage } from "@/gnr8/migration/enforcement/page-e
 import type { PageMigrationGateResult } from "@/gnr8/migration/quality-gates/page-quality-gate";
 import type { PageRolloutPolicyResult } from "@/gnr8/migration/policy/page-rollout-policy";
 import type { StyleSignalModel } from "@/gnr8/style-signals";
+import type { MultipageImportSummary, MultipageImportTree } from "@/gnr8/multipage-import";
 
 export const RENDERER_COMPATIBILITY_VERSION = "gnr8-renderer-v1" as const;
 
@@ -115,6 +116,10 @@ export type RuntimeImportProvenanceSummary = {
     lastFailureCode: string | null;
   } | null;
   styleSignals: StyleSignalModel | null;
+  multipageImport?: {
+    summary: MultipageImportSummary;
+    tree: MultipageImportTree | null;
+  } | null;
 };
 
 export type StyleTokenRecord = Record<string, string>;

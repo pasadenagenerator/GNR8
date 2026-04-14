@@ -210,6 +210,20 @@ test('import provenance summary is parsed when persisted on runtime site version
       },
     },
     importDiagnosticCodes: ['RAW_HTML_FALLBACK_USED', 'IMPORT_FIDELITY_DEGRADED'],
+    multipageImport: {
+      summary: {
+        enabled: true,
+        routeCount: 14,
+        pageCount: 14,
+        primaryNavigationCount: 6,
+        footerNavigationCount: 3,
+        sharedRegionCount: 2,
+        depthLimitHit: false,
+        routeLimitHit: false,
+        diagnostics: ['MULTIPAGE_DISCOVERY_COMPLETED:14'],
+      },
+      tree: null,
+    },
     captureEvidence: {
       selectedSourceHtmlPath: '/tmp/snapshot/response-html.raw.html',
       responseHtmlPath: '/tmp/snapshot/response-html.raw.html',
@@ -239,6 +253,8 @@ test('import provenance summary is parsed when persisted on runtime site version
   assert.equal(parsed?.importFidelityScore?.fidelityLevel, 'low')
   assert.deepEqual(parsed?.importDiagnosticCodes, ['IMPORT_FIDELITY_DEGRADED', 'RAW_HTML_FALLBACK_USED'])
   assert.equal(parsed?.styleSignals, null)
+  assert.equal(parsed?.multipageImport?.summary.enabled, true)
+  assert.equal(parsed?.multipageImport?.summary.routeCount, 14)
 })
 
 test('import provenance parser preserves capture job + worker health timeout truth', () => {
