@@ -63,6 +63,8 @@ export type ConsolidatedSection = {
     textDensity: number;
     textWordCount: number;
     nodeComplexity: number;
+    avgDomDepth: number;
+    avgChildElementCount: number;
     headingCount: number;
     imageCount: number;
     ctaCount: number;

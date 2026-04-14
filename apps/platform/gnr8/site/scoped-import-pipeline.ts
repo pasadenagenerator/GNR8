@@ -22,6 +22,7 @@ import {
 } from '@/gnr8/runtime/runtime-store'
 import {
   RENDERER_COMPATIBILITY_VERSION,
+  type ImportFidelityScore,
   type CanonicalPageVersionInput,
   type CanonicalSiteMigrationInput,
   type RuntimeImportProvenanceSummary,
@@ -42,6 +43,13 @@ const SECTION_INTENT_BY_SEMANTIC_TYPE: Record<string, string> = {
   cta: 'form_contact',
   contact: 'form_contact',
   gallery: 'gallery_media',
+  faq: 'body',
+  pricing: 'body',
+  services: 'body',
+  features: 'body',
+  testimonials: 'body',
+  about: 'body',
+  footer: 'footer_legal',
 }
 
 function normalizeText(value: unknown): string {
@@ -293,10 +301,14 @@ function mapSectionsFromSemantic(input: {
       order: Number.isFinite(section.ordinalIndex) ? section.ordinalIndex : index,
       props: {
         semanticType: section.inferredType,
+        sectionRole: section.sectionRole,
         confidence: section.confidence,
         rationale: section.rationale,
         dominantRationale: section.dominantRationale,
         classificationDiagnostics: section.classificationDiagnostics,
+        headingHierarchy: section.headingHierarchy,
+        layoutInference: section.layoutInference,
+        groupingSignals: section.groupingSignals,
         sourceDomPaths: section.sourceDomPaths,
         blockIds: section.blockIds,
         mergedBlockCount: section.consolidatedBlockCount,
@@ -304,6 +316,7 @@ function mapSectionsFromSemantic(input: {
         layoutStructural: {
           intent: SECTION_INTENT_BY_SEMANTIC_TYPE[section.inferredType] ?? 'body',
           structuralConfidence: confidenceToScore(section.confidence),
+          layoutKind: section.layoutInference.kind,
         },
         htmlSummary: {
           extractedText: textExcerpt,
@@ -354,13 +367,65 @@ function buildImportFidelitySignals(snapshot: UrlSinglePageImportSnapshot): Arra
   ]
 }
 
+function computeImportFidelityScore(input: {
+  preparedSite: PreparedSiteModel | null
+  styleSignals: StyleSignalModel
+  snapshot: UrlSinglePageImportSnapshot
+}): ImportFidelityScore {
+  const entrySemantic = input.preparedSite?.documents.find((doc) => doc.isEntry)?.semantic ?? input.preparedSite?.documents[0]?.semantic ?? null
+  const semanticScore = entrySemantic?.fidelityScore ?? null
+
+  const structureScore = semanticScore?.structureScore ?? (input.snapshot.sourceSelection.renderedDomQuality.sectionCandidateCount >= 3 ? 0.62 : 0.44)
+  const styleScore = semanticScore?.styleScore ?? Number(
+    Math.min(
+      1,
+      input.styleSignals.provenance.computedStyle.coverage * 0.62 +
+        (input.styleSignals.colors.primaryAccent ? 0.18 : 0.04) +
+        (input.styleSignals.typography.headingCategory !== 'unknown' ? 0.2 : 0.06),
+    ).toFixed(3),
+  )
+  const contentScore = semanticScore?.contentScore ?? Number(
+    Math.min(
+      1,
+      (entrySemantic?.sections.length ?? 0) >= 3 ? 0.56 : 0.4 +
+        ((entrySemantic?.ctaCandidates.length ?? 0) > 0 ? 0.16 : 0.04) +
+        ((entrySemantic?.sections.some((section) => section.groupingSignals.titleSubtitleBody) ?? false) ? 0.12 : 0.04),
+    ).toFixed(3),
+  )
+  const layoutScore = semanticScore?.layoutScore ?? Number(
+    Math.min(
+      1,
+      (entrySemantic?.sections.filter((section) => section.layoutInference.kind !== 'stack').length ?? 0) /
+        Math.max(1, entrySemantic?.sections.length ?? 1) *
+        0.68 +
+        ((entrySemantic?.sections.some((section) => section.layoutInference.kind === 'grid' || section.layoutInference.kind === 'split') ?? false)
+          ? 0.18
+          : 0.04),
+    ).toFixed(3),
+  )
+  const overallScore = Number(((structureScore * 0.34 + styleScore * 0.24 + contentScore * 0.22 + layoutScore * 0.2)).toFixed(3))
+  return {
+    structureScore: Number(structureScore.toFixed(3)),
+    styleScore: Number(styleScore.toFixed(3)),
+    contentScore: Number(contentScore.toFixed(3)),
+    layoutScore: Number(layoutScore.toFixed(3)),
+    overallScore,
+    fidelityLevel: overallScore >= 0.74 ? 'high' : overallScore >= 0.5 ? 'medium' : 'low',
+  }
+}
+
 function resolveEvidencePathIfExists(pathAbs: string): string | null {
   const normalized = normalizeText(pathAbs)
   if (!normalized) return null
   return fs.existsSync(normalized) ? normalized : null
 }
 
-function buildImportProvenanceSummary(snapshot: UrlSinglePageImportSnapshot, styleSignals: StyleSignalModel): RuntimeImportProvenanceSummary {
+function buildImportProvenanceSummary(input: {
+  snapshot: UrlSinglePageImportSnapshot
+  styleSignals: StyleSignalModel
+  preparedSite: PreparedSiteModel | null
+}): RuntimeImportProvenanceSummary {
+  const { snapshot, styleSignals, preparedSite } = input
   const captureDiagnostics = (Array.isArray(snapshot.renderedCapture.diagnostics) ? snapshot.renderedCapture.diagnostics : [])
     .map((diag) => normalizeText(diag.code))
     .filter(Boolean)
@@ -381,6 +446,7 @@ function buildImportProvenanceSummary(snapshot: UrlSinglePageImportSnapshot, sty
   const renderedViewportScreenshotPath = resolveEvidencePathIfExists(viewportScreenshotPath)
   const renderedFullpageScreenshotPath = resolveEvidencePathIfExists(fullpageScreenshotPath)
   const screenshotCount = Math.max(screenshotPaths.length, snapshot.renderedCapture.screenshots.length)
+  const importFidelityScore = computeImportFidelityScore({ preparedSite, styleSignals, snapshot })
   const captureJob = snapshot.renderedCaptureReliability?.job ?? null
   const workerHealth = snapshot.renderedCaptureReliability?.workerHealth ?? null
   const workerResultSuccessful = snapshot.renderedCapture.status === 'available' || snapshot.renderedCapture.status === 'partial'
@@ -391,6 +457,8 @@ function buildImportProvenanceSummary(snapshot: UrlSinglePageImportSnapshot, sty
   const importDiagnosticCodes = uniqueSorted([
     ...captureDiagnostics,
     ...importDiagnostics,
+    ...(snapshot.sourceSelection.sourceMode === 'rendered_dom' ? ['RENDERED_CAPTURE_USED'] : ['RENDERED_CAPTURE_FAILED_FALLBACK_USED']),
+    'IMPORT_FIDELITY_SCORE_COMPUTED',
     'RENDERED_CAPTURE_SUMMARY_PERSISTED',
     'LATEST_EXECUTION_EVIDENCE_SELECTED',
     ...(snapshot.sourceSelection.sourceMode === 'rendered_dom' && workerResultSuccessful ? ['CAPTURE_WORKER_RESULT_PERSISTED'] : []),
@@ -415,6 +483,7 @@ function buildImportProvenanceSummary(snapshot: UrlSinglePageImportSnapshot, sty
     importFidelityStatus: snapshot.sourceSelection.fidelityStatus,
     renderedCaptureStatus,
     renderedDomQuality: snapshot.sourceSelection.renderedDomQuality.quality,
+    importFidelityScore,
     screenshotCount,
     computedStyleSampleCount: snapshot.renderedCapture.computedStyleSamples.length,
     renderedCapture: {
@@ -481,6 +550,7 @@ function summarizeProvenancePayload(summary: RuntimeImportProvenanceSummary): Re
     kind: summary.kind,
     sourceMode: summary.sourceMode,
     importFidelityStatus: summary.importFidelityStatus,
+    importFidelityScore: summary.importFidelityScore ?? null,
     renderedCaptureStatus: summary.renderedCaptureStatus,
     renderedDomQuality: summary.renderedDomQuality,
     screenshotCount: summary.screenshotCount,
@@ -601,6 +671,20 @@ function buildCanonicalMigrationInputFromPipeline(input: {
             confidence: 0.85,
             source: 'migration',
           },
+          ...(doc.semantic?.fidelityScore
+            ? [
+                {
+                  label: `import.fidelity.score.overall:${doc.semantic.fidelityScore.overallScore.toFixed(3)}`,
+                  confidence: 0.92,
+                  source: 'migration' as const,
+                },
+                {
+                  label: `import.fidelity.score.level:${doc.semantic.fidelityScore.fidelityLevel}`,
+                  confidence: 0.92,
+                  source: 'migration' as const,
+                },
+              ]
+            : []),
           ...importFidelitySignals,
           ...styleSignals,
         ],
@@ -635,6 +719,7 @@ function computePipelineReporting(input: {
   preparedSite: PreparedSiteModel | null
   snapshot: UrlSinglePageImportSnapshot
   styleSignals: StyleSignalModel
+  importProvenanceSummary: RuntimeImportProvenanceSummary
 }): {
   executionStatus: 'success' | 'failed'
   consolidationApplied: boolean
@@ -654,6 +739,7 @@ function computePipelineReporting(input: {
   styleSpacingDensity: string
   styleCta: string
   styleDiagnostics: string[]
+  importFidelityScore: RuntimeImportProvenanceSummary['importFidelityScore']
 } {
   const consolidationApplied = Boolean(
     input.preparedSite?.documents.some((doc) => {
@@ -687,6 +773,7 @@ function computePipelineReporting(input: {
     styleSpacingDensity: `${input.styleSignals.spacing.rhythm}/${input.styleSignals.spacing.layoutDensity}`,
     styleCta: `${input.styleSignals.cta.styleHint}/${input.styleSignals.cta.prominence}`,
     styleDiagnostics: input.styleSignals.diagnostics.map((diag) => diag.code),
+    importFidelityScore: input.importProvenanceSummary.importFidelityScore ?? null,
   }
 }
 
@@ -720,6 +807,7 @@ export type ScopedImportPipelineSuccess = {
     styleSpacingDensity: string
     styleCta: string
     styleDiagnostics: string[]
+    importFidelityScore: RuntimeImportProvenanceSummary['importFidelityScore']
     artifactGenerated: boolean
     writePath: {
       createdVersionId: string
@@ -767,6 +855,7 @@ export type ScopedImportPipelineFallback = {
     styleSpacingDensity: string
     styleCta: string
     styleDiagnostics: string[]
+    importFidelityScore: RuntimeImportProvenanceSummary['importFidelityScore']
     writePath: {
       createdVersionId: string
       provenancePayloadBeforeWrite: Record<string, unknown> | null
@@ -863,7 +952,11 @@ export async function runScopedImportPipeline(input: {
       quality: input.snapshot.sourceSelection.renderedDomQuality.quality,
     },
   })
-  const importProvenanceSummary = buildImportProvenanceSummary(input.snapshot, styleSignals)
+  const importProvenanceSummary = buildImportProvenanceSummary({
+    snapshot: input.snapshot,
+    styleSignals,
+    preparedSite,
+  })
 
   if (pipelineResult.status === 'success' && preparedSite) {
     const writePathDiagnostics: ScopedImportPipelineSuccess['reporting']['writePath'] = {
@@ -1036,6 +1129,7 @@ export async function runScopedImportPipeline(input: {
       preparedSite,
       snapshot: input.snapshot,
       styleSignals,
+      importProvenanceSummary,
     })
 
     return {
@@ -1147,7 +1241,7 @@ export async function runScopedImportPipeline(input: {
     siteVersionId: legacyMigrated.siteVersionId,
     versionNo: legacyMigrated.versionNo,
     fallbackReason: 'pipeline_failed',
-      diagnostics: {
+    diagnostics: {
       pipelineStatus: pipelineResult.status,
       stageSummaries: pipelineResult.stages.map((stage) => stage.summary),
       pipelineDiagnosticCodes: uniqueSorted(pipelineResult.diagnostics.map((issue) => issue.code)),
@@ -1158,23 +1252,24 @@ export async function runScopedImportPipeline(input: {
       renderedDomQuality: input.snapshot.sourceSelection.renderedDomQuality.quality,
       screenshotCount: (() => {
         const resolvedCount = uniqueSorted(
-        input.snapshot.renderedCapture.screenshots.map((shot) => resolveEvidencePathIfExists(shot.filePathAbs) ?? '').filter(Boolean),
+          input.snapshot.renderedCapture.screenshots.map((shot) => resolveEvidencePathIfExists(shot.filePathAbs) ?? '').filter(Boolean),
         ).length
         return Math.max(resolvedCount, input.snapshot.renderedCapture.screenshots.length)
       })(),
-        computedStyleSampleCount: input.snapshot.renderedCapture.computedStyleSamples.length,
-        importDiagnosticCodes: uniqueSorted(input.snapshot.importDiagnostics.issues.map((issue) => normalizeText(issue.code)).filter(Boolean)),
-        styleSourceMode: styleSignals.sourceMode,
-        stylePrimaryAccent: styleSignals.colors.primaryAccent,
-        styleBackgroundTone: styleSignals.colors.backgroundTone,
+      computedStyleSampleCount: input.snapshot.renderedCapture.computedStyleSamples.length,
+      importDiagnosticCodes: uniqueSorted(input.snapshot.importDiagnostics.issues.map((issue) => normalizeText(issue.code)).filter(Boolean)),
+      styleSourceMode: styleSignals.sourceMode,
+      stylePrimaryAccent: styleSignals.colors.primaryAccent,
+      styleBackgroundTone: styleSignals.colors.backgroundTone,
       styleTypography: `${styleSignals.typography.headingCategory}/${styleSignals.typography.bodyCategory}`,
       styleSpacingDensity: `${styleSignals.spacing.rhythm}/${styleSignals.spacing.layoutDensity}`,
       styleCta: `${styleSignals.cta.styleHint}/${styleSignals.cta.prominence}`,
       styleDiagnostics: styleSignals.diagnostics.map((diag) => diag.code),
+      importFidelityScore: importProvenanceSummary.importFidelityScore ?? null,
       writePath: fallbackWritePath,
-      },
-    }
+    },
   }
+}
 
 export const __scopedImportPipelineTestUtils = {
   buildCanonicalMigrationInputFromPipeline,

@@ -84,6 +84,7 @@ test('computed-style extraction derives color, typography, spacing and CTA signa
   assert.equal(model.cta.styleHint, 'solid_button')
   assert.equal(model.cta.prominence, 'high')
   assert.equal(model.surfaces.radiusHint, 'rounded')
+  assert.equal(model.componentProfiles?.buttonStyle, 'filled')
 })
 
 test('fallback extraction derives signals when computed samples are missing', () => {
@@ -179,6 +180,7 @@ test('low computed style coverage emits explicit low-coverage diagnostic', () =>
 
   assert.equal(model.provenance.computedStyle.coverage, 0.1)
   assert.ok(model.diagnostics.some((diag) => diag.code === 'STYLE_SAMPLE_LOW_COVERAGE'))
+  assert.ok(model.diagnostics.some((diag) => diag.code === 'STYLE_SIGNAL_LOW_COVERAGE'))
 })
 
 test('computed style evidence dominates conflicting fallback color inference when coherent', () => {

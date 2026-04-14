@@ -437,6 +437,9 @@ test('scoped pipeline import uses pipeline path, maps consolidated sections, and
   assert.equal(createInput.importProvenanceSummary.styleSignals.kind, 'style_signal_model_v2')
   assert.ok(createInput.importProvenanceSummary.importDiagnosticCodes.includes('CAPTURE_WORKER_RESULT_PERSISTED'))
   assert.ok(createInput.importProvenanceSummary.importDiagnosticCodes.includes('RENDERED_CAPTURE_SUMMARY_PERSISTED'))
+  assert.ok(createInput.importProvenanceSummary.importDiagnosticCodes.includes('RENDERED_CAPTURE_USED'))
+  assert.ok(createInput.importProvenanceSummary.importDiagnosticCodes.includes('IMPORT_FIDELITY_SCORE_COMPUTED'))
+  assert.ok(createInput.importProvenanceSummary.importFidelityScore != null)
   assert.equal(createInput.importProvenanceSummary.importDiagnosticCodes.includes('CAPTURE_WORKER_RESULT_SUPERSEDED_BY_FALLBACK'), false)
   assert.equal(persistedImportSummary.siteVersionId, 'site-version-1')
   assert.equal(persistedImportSummary.importProvenanceSummary.renderedCaptureStatus, 'partial')
@@ -557,6 +560,8 @@ test('scoped pipeline import falls back to legacy when pipeline fails', async ()
   assert.equal(persistedImportSummary.importProvenanceSummary.screenshotCount, 0)
   assert.equal(persistedImportSummary.importProvenanceSummary.computedStyleSampleCount, 0)
   assert.ok(persistedImportSummary.importProvenanceSummary.importDiagnosticCodes.includes('RENDERED_CAPTURE_SUMMARY_PERSISTED'))
+  assert.ok(persistedImportSummary.importProvenanceSummary.importDiagnosticCodes.includes('RENDERED_CAPTURE_FAILED_FALLBACK_USED'))
+  assert.ok(persistedImportSummary.importProvenanceSummary.importDiagnosticCodes.includes('IMPORT_FIDELITY_SCORE_COMPUTED'))
   assert.equal(
     persistedImportSummary.importProvenanceSummary.importDiagnosticCodes.includes('CAPTURE_WORKER_RESULT_SUPERSEDED_BY_FALLBACK'),
     false,

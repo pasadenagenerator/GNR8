@@ -172,6 +172,14 @@ test('import provenance summary is parsed when persisted on runtime site version
     importFidelityStatus: 'degraded_import',
     renderedCaptureStatus: 'failed',
     renderedDomQuality: 'weak',
+    importFidelityScore: {
+      structureScore: 0.41,
+      styleScore: 0.33,
+      contentScore: 0.46,
+      layoutScore: 0.38,
+      overallScore: 0.397,
+      fidelityLevel: 'low',
+    },
     screenshotCount: 0,
     computedStyleSampleCount: 0,
     renderedCapture: {
@@ -227,6 +235,8 @@ test('import provenance summary is parsed when persisted on runtime site version
   assert.equal(parsed?.renderedCapture.execution.environmentSupported, false)
   assert.equal(parsed?.renderedCapture.execution.browserPackageAvailable, false)
   assert.equal(parsed?.renderedCapture.execution.browserBinaryAvailable, false)
+  assert.equal(parsed?.importFidelityScore?.overallScore, 0.397)
+  assert.equal(parsed?.importFidelityScore?.fidelityLevel, 'low')
   assert.deepEqual(parsed?.importDiagnosticCodes, ['IMPORT_FIDELITY_DEGRADED', 'RAW_HTML_FALLBACK_USED'])
   assert.equal(parsed?.styleSignals, null)
 })

@@ -321,6 +321,8 @@ function groupToConsolidatedSection(group: SectionGroup, index: Map<string, RawB
   const blocks = groupSourceBlocks(group, index);
   const first = blocks[0]!;
   const avgTextDensity = mean(blocks.map((block) => block.textDensity));
+  const avgDomDepth = mean(blocks.map((block) => block.domDepth));
+  const avgChildElementCount = mean(blocks.map((block) => block.childElementCount));
   const textWordCount = blocks.reduce((sum, block) => sum + block.textWordCount, 0);
   const nodeComplexity = blocks.reduce((sum, block) => sum + block.nodeComplexity, 0);
 
@@ -408,6 +410,8 @@ function groupToConsolidatedSection(group: SectionGroup, index: Map<string, RawB
       textDensity: round3(avgTextDensity),
       textWordCount,
       nodeComplexity,
+      avgDomDepth: Number(avgDomDepth.toFixed(3)),
+      avgChildElementCount: Number(avgChildElementCount.toFixed(3)),
       headingCount,
       imageCount,
       ctaCount,

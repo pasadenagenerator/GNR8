@@ -44,6 +44,14 @@ export type PreparedDocumentRecord = {
 export type SemanticConfidence = "low" | "medium" | "high";
 
 export type SemanticDiagnosticCode =
+  | "IMPORT_STRUCTURE_CONFIDENCE_LOW"
+  | "SECTION_CLASSIFICATION_AMBIGUOUS"
+  | "LAYOUT_INFERENCE_FALLBACK"
+  | "STYLE_SIGNAL_LOW_COVERAGE"
+  | "STYLE_SIGNAL_PARTIAL"
+  | "MEDIA_PROMINENCE_UNCLEAR"
+  | "CTA_NOT_DETECTED"
+  | "REPEATABLE_GROUP_INFERRED"
   | "SEMANTIC_SECTION_LOW_CONFIDENCE"
   | "SEMANTIC_PAGE_TYPE_UNKNOWN"
   | "BRAND_SIGNAL_WEAK"
@@ -89,6 +97,9 @@ export type SectionSemanticType =
   | "unknown";
 
 export type HeroCompositionHint = "text_only" | "split_media" | "centered_cta" | "image_first" | "unknown";
+export type ImportSectionRole = "hero" | "feature" | "cta" | "gallery" | "faq" | "pricing" | "footer" | "generic";
+export type SectionLayoutKind = "stack" | "columns" | "grid" | "split";
+export type HeadingHierarchyHint = "display_h1" | "section_h2" | "body_emphasis" | "unknown";
 
 export type SectionDensitySignal = {
   textDensity: number;
@@ -118,6 +129,7 @@ export type SectionSemanticModel = {
   consolidationMergeDecisions: string[];
   ordinalIndex: number;
   inferredType: SectionSemanticType;
+  sectionRole: ImportSectionRole;
   confidence: SemanticConfidence;
   rationale: string[];
   candidateSignals: {
@@ -130,6 +142,17 @@ export type SectionSemanticModel = {
     dominantCandidate: SectionSemanticType;
   };
   dominantRationale: string;
+  headingHierarchy: HeadingHierarchyHint;
+  layoutInference: {
+    kind: SectionLayoutKind;
+    confidence: SemanticConfidence;
+    rationale: string[];
+  };
+  groupingSignals: {
+    titleSubtitleBody: boolean;
+    cardCluster: boolean;
+    ctaGroup: boolean;
+  };
   classificationDiagnostics: SemanticDiagnosticCode[];
   heroComposition: HeroCompositionHint | null;
   mediaDensity: number;
@@ -137,6 +160,15 @@ export type SectionSemanticModel = {
   ctaCandidates: CtaCandidate[];
   likelyPrimaryCta: CtaCandidate | null;
   density: SectionDensitySignal;
+};
+
+export type ImportFidelityScore = {
+  structureScore: number;
+  styleScore: number;
+  contentScore: number;
+  layoutScore: number;
+  overallScore: number;
+  fidelityLevel: "low" | "medium" | "high";
 };
 
 export type BrandSignalModel = {
@@ -178,6 +210,7 @@ export type PreparedPageSemanticModel = {
   sections: SectionSemanticModel[];
   ctaCandidates: CtaCandidate[];
   primaryCta: CtaCandidate | null;
+  fidelityScore: ImportFidelityScore;
   brandSignals: BrandSignalModel;
   diagnostics: SemanticDiagnostic[];
 };
@@ -698,6 +731,46 @@ function confidenceFromScore(score: number): SemanticConfidence {
   return "low";
 }
 
+function confidenceToNumeric(confidence: SemanticConfidence): number {
+  if (confidence === "high") return 0.9;
+  if (confidence === "medium") return 0.66;
+  return 0.4;
+}
+
+function headingHierarchyFromSignals(input: {
+  hasHeading: boolean;
+  headingCount: number;
+  textWordCount: number;
+  ordinalIndex: number;
+}): HeadingHierarchyHint {
+  if (!input.hasHeading) return "unknown";
+  if (input.ordinalIndex <= 1 && input.headingCount >= 1 && input.textWordCount <= 140) return "display_h1";
+  if (input.headingCount >= 1 && input.textWordCount <= 260) return "section_h2";
+  if (input.headingCount >= 1) return "body_emphasis";
+  return "unknown";
+}
+
+function scoreToRoleLevel(score: number): "low" | "medium" | "high" {
+  if (score >= 0.74) return "high";
+  if (score >= 0.5) return "medium";
+  return "low";
+}
+
+function sortSemanticDiagnostics(diagnostics: SemanticDiagnostic[]): SemanticDiagnostic[] {
+  return diagnostics
+    .slice()
+    .sort((a, b) => {
+      if (a.code !== b.code) return stringCmp(a.code, b.code);
+      const aSection = a.sectionId ?? "";
+      const bSection = b.sectionId ?? "";
+      if (aSection !== bSection) return stringCmp(aSection, bSection);
+      const aPage = a.pageId ?? "";
+      const bPage = b.pageId ?? "";
+      if (aPage !== bPage) return stringCmp(aPage, bPage);
+      return stringCmp(a.message, b.message);
+    });
+}
+
 function sectionSemanticId(input: { pageId: string; sourceDomPath: string; ordinalIndex: number }): string {
   return sha256Hex(
     stableStringify({
@@ -840,12 +913,25 @@ function toRawSemanticBlock(section: PreparedDomOutlineElement, ordinalIndex: nu
 
 function classifyConsolidatedSection(input: {
   section: SectionConsolidationResult["sections"][number];
+  sourceBlocks: RawBlock[];
   ordinalIndex: number;
   sectionCount: number;
 }): {
   inferredType: SectionSemanticType;
+  sectionRole: ImportSectionRole;
   confidence: SemanticConfidence;
   rationale: string[];
+  headingHierarchy: HeadingHierarchyHint;
+  layoutInference: {
+    kind: SectionLayoutKind;
+    confidence: SemanticConfidence;
+    rationale: string[];
+  };
+  groupingSignals: {
+    titleSubtitleBody: boolean;
+    cardCluster: boolean;
+    ctaGroup: boolean;
+  };
   heroComposition: HeroCompositionHint | null;
   mediaDensity: number;
   galleryLikeConfidence: SemanticConfidence;
@@ -859,6 +945,9 @@ function classifyConsolidatedSection(input: {
 } {
   const signals = input.section.signals;
   const candidates = input.section.candidates;
+  const combinedText = input.sourceBlocks.map((block) => block.textExcerpt ?? "").join(" ").toLowerCase();
+  const faqHintCount = countRegex(combinedText, /\b(faq|frequently asked|question|answer)\b|\?/gi);
+  const pricingHintCount = countRegex(combinedText, /\b(pricing|plans?|tiers?|per month|\/mo|price)\b|\$\d/gi);
   const topWindow = input.ordinalIndex <= 1;
   const bottomWindow = input.ordinalIndex >= Math.max(0, input.sectionCount - 2);
   const diagnostics: Array<{ code: SemanticDiagnosticCode; severity: "info" | "warning"; message: string }> = [];
@@ -1050,6 +1139,13 @@ function classifyConsolidatedSection(input: {
   const second = ranked[1]!;
   const rawConfidence = Math.max(0, Math.min(1, best.score + Math.min(0.2, (best.score - second.score) * 0.35)));
   const confidence = confidenceFromScore(rawConfidence);
+  if (Math.abs(best.score - second.score) <= 0.1) {
+    diagnostics.push({
+      code: "SECTION_CLASSIFICATION_AMBIGUOUS",
+      severity: "info",
+      message: "Section role classification remained close between top candidates.",
+    });
+  }
 
   let heroComposition: HeroCompositionHint | null = null;
   if (best.type === "hero") {
@@ -1091,10 +1187,74 @@ function classifyConsolidatedSection(input: {
     unknown: 0,
   };
   const inferredType = best.score < acceptanceThreshold[best.type] ? "unknown" : best.type;
+  const roleScores: Record<ImportSectionRole, number> = {
+    hero: scores.hero + (topWindow ? 0.08 : 0),
+    feature: Math.max(scores.services, scores.features) + signals.repetitionScore * 0.22,
+    cta: Math.max(scores.cta, scores.contact) + (signals.hasCTA ? 0.08 : 0),
+    gallery: scores.gallery + (signals.hasImages ? 0.08 : 0),
+    faq: (faqHintCount >= 2 ? 0.72 : faqHintCount >= 1 ? 0.44 : 0) + (signals.headingCount >= 2 ? 0.12 : 0),
+    pricing: (pricingHintCount >= 2 ? 0.74 : pricingHintCount >= 1 ? 0.48 : 0) + (signals.textWordCount <= 240 ? 0.08 : 0),
+    footer: scores.footer + (bottomWindow ? 0.08 : 0),
+    generic: scores.unknown + 0.05,
+  };
+  const rankedRoles = (Object.keys(roleScores) as ImportSectionRole[])
+    .map((role) => ({ role, score: roleScores[role] }))
+    .sort((a, b) => (b.score !== a.score ? b.score - a.score : stringCmp(a.role, b.role)));
+  const bestRole = rankedRoles[0]!;
+  const secondRole = rankedRoles[1]!;
+  const sectionRole: ImportSectionRole = bestRole.score < 0.5 ? "generic" : bestRole.role;
+  const headingHierarchy = headingHierarchyFromSignals({
+    hasHeading: signals.hasHeading,
+    headingCount: signals.headingCount,
+    textWordCount: signals.textWordCount,
+    ordinalIndex: input.ordinalIndex,
+  });
+
+  const layoutScores = {
+    stack: 0.25,
+    columns: 0,
+    grid: 0,
+    split: 0,
+  };
+  if (input.section.blockIds.length >= 3 || signals.repetitionScore >= 0.22) layoutScores.grid += 0.64;
+  if (input.section.blockIds.length === 2 && signals.avgDomDepth <= 5.2) layoutScores.columns += 0.56;
+  if (signals.hasImages && signals.hasHeading && input.section.blockIds.length >= 2) layoutScores.split += 0.66;
+  if (signals.textDensity >= 0.45 || input.section.blockIds.length <= 1) layoutScores.stack += 0.32;
+  if (signals.avgChildElementCount >= 4 && input.section.blockIds.length >= 2) layoutScores.columns += 0.16;
+  if (signals.repetitionScore >= 0.3) layoutScores.grid += 0.18;
+  if (signals.hasCTA && signals.hasImages && signals.textWordCount <= 220) layoutScores.split += 0.14;
+
+  const rankedLayouts = (Object.keys(layoutScores) as SectionLayoutKind[])
+    .map((kind) => ({ kind, score: layoutScores[kind] }))
+    .sort((a, b) => (b.score !== a.score ? b.score - a.score : stringCmp(a.kind, b.kind)));
+  const bestLayout = rankedLayouts[0]!;
+  const secondLayout = rankedLayouts[1]!;
+  const layoutConfidence = scoreToRoleLevel(bestLayout.score + Math.min(0.18, Math.max(0, bestLayout.score - secondLayout.score) * 0.4));
+  if (bestLayout.kind === "stack" && bestLayout.score < 0.45) {
+    diagnostics.push({
+      code: "LAYOUT_INFERENCE_FALLBACK",
+      severity: "info",
+      message: "Layout inference fell back to stack due to weak sibling/grouping signals.",
+    });
+  }
+
+  const groupingSignals = {
+    titleSubtitleBody: signals.hasHeading && signals.textWordCount >= 24,
+    cardCluster: signals.repetitionScore >= 0.34 || input.section.blockIds.length >= 3,
+    ctaGroup: signals.hasCTA && (signals.ctaCount >= 2 || signals.hasHeading),
+  };
+  if (Math.abs(bestRole.score - secondRole.score) <= 0.08) {
+    diagnostics.push({
+      code: "SECTION_CLASSIFICATION_AMBIGUOUS",
+      severity: "info",
+      message: "Section-role scoring remained close between top role candidates.",
+    });
+  }
   const dominantRationale = `dominant_candidate=${best.type}:${best.score.toFixed(2)} runner_up=${second.type}:${second.score.toFixed(2)}`;
 
   return {
     inferredType,
+    sectionRole,
     confidence,
     rationale: uniqueSortedStrings([
       ...input.section.rationale,
@@ -1104,6 +1264,18 @@ function classifyConsolidatedSection(input: {
       `capture_lift_strength=${captureLiftStrength}`,
       dominantRationale,
     ]),
+    headingHierarchy,
+    layoutInference: {
+      kind: bestLayout.kind,
+      confidence: layoutConfidence,
+      rationale: uniqueSortedStrings([
+        `layout_score=${bestLayout.kind}:${bestLayout.score.toFixed(2)}`,
+        `layout_runner_up=${secondLayout.kind}:${secondLayout.score.toFixed(2)}`,
+        `avg_dom_depth=${signals.avgDomDepth.toFixed(2)}`,
+        `avg_child_elements=${signals.avgChildElementCount.toFixed(2)}`,
+      ]),
+    },
+    groupingSignals,
     heroComposition,
     mediaDensity: Number(mediaDensity.toFixed(3)),
     galleryLikeConfidence: confidenceFromScore(Math.min(1, candidates.galleryCandidate)),
@@ -1340,7 +1512,7 @@ function inferPageSemantic(input: {
   if (/\bportfolio|gallery|projects?\b/.test(bag) || (counts.gallery ?? 0) > 0) {
     return { pageType: "gallery_portfolio", confidence: "medium", rationale: ["gallery_keywords_or_media_sections"], styleFamily: "gallery" };
   }
-  if (/\bproduct|pricing|plan|feature\b/.test(bag)) {
+  if (/\bproduct|pricing|plan|feature\b/.test(bag) || input.sections.some((section) => section.sectionRole === "pricing")) {
     return { pageType: "product_landing", confidence: "medium", rationale: ["product_or_pricing_keywords"], styleFamily: "service" };
   }
   if (input.isEntry && hasHero && hasNav && hasFooter) {
@@ -1436,6 +1608,7 @@ function buildPageSemanticModel(input: {
 }): PreparedPageSemanticModel {
   const boundaryChildren = extractSemanticBoundaryChildren(input.bodyChildElements);
   const rawBlocks = boundaryChildren.map((section, idx) => toRawSemanticBlock(section, idx));
+  const rawBlockById = new Map(rawBlocks.map((block) => [block.id, block]));
   const blockByDomPath = new Map(boundaryChildren.map((section) => [section.domPath, section]));
   const consolidation = consolidateSections({ blocks: rawBlocks });
   const sectionCount = consolidation.sections.length;
@@ -1446,8 +1619,12 @@ function buildPageSemanticModel(input: {
     message: string;
   }> = [];
   const sections = consolidation.sections.map((consolidated, idx) => {
+    const sourceBlocks = consolidated.blockIds
+      .map((blockId) => rawBlockById.get(blockId))
+      .filter((block): block is RawBlock => Boolean(block));
     const classified = classifyConsolidatedSection({
       section: consolidated,
+      sourceBlocks,
       ordinalIndex: idx,
       sectionCount,
     });
@@ -1514,6 +1691,53 @@ function buildPageSemanticModel(input: {
     bodyClass: input.bodyClass,
     sections,
   });
+
+  const structureScore = Number(
+    Math.min(
+      1,
+      (sections.length >= 3 ? 0.32 : sections.length >= 1 ? 0.18 : 0) +
+        (sections.some((section) => section.inferredType === "hero") ? 0.22 : 0) +
+        (sections.some((section) => section.inferredType === "footer") ? 0.16 : 0) +
+        (sections.reduce((sum, section) => sum + confidenceToNumeric(section.confidence), 0) / Math.max(1, sections.length)) * 0.3,
+    ).toFixed(3),
+  );
+  const styleScore = Number(
+    Math.min(
+      1,
+      (brandSignals.dominantColors.length > 0 ? 0.24 : 0) +
+        (brandSignals.accentColors.length > 0 ? 0.18 : 0) +
+        (brandSignals.fontFamilyHints.length > 0 ? 0.24 : 0) +
+        (brandSignals.fontCategoryHints.length > 0 ? 0.18 : 0) +
+        (brandSignals.confidence === "high" ? 0.16 : brandSignals.confidence === "medium" ? 0.1 : 0.04),
+    ).toFixed(3),
+  );
+  const contentScore = Number(
+    Math.min(
+      1,
+      (sections.reduce((sum, section) => sum + Math.min(1, section.density.textDensity + section.density.headingDensity), 0) / Math.max(1, sections.length)) * 0.5 +
+        (allCtas.length > 0 ? 0.24 : 0.08) +
+        (sections.some((section) => section.groupingSignals.titleSubtitleBody) ? 0.14 : 0.06) +
+        (sections.some((section) => section.groupingSignals.cardCluster) ? 0.12 : 0.06),
+    ).toFixed(3),
+  );
+  const layoutScore = Number(
+    Math.min(
+      1,
+      (sections.filter((section) => section.layoutInference.kind !== "stack").length / Math.max(1, sections.length)) * 0.52 +
+        (sections.some((section) => section.layoutInference.kind === "grid") ? 0.18 : 0) +
+        (sections.some((section) => section.layoutInference.kind === "split") ? 0.18 : 0) +
+        (sections.reduce((sum, section) => sum + confidenceToNumeric(section.layoutInference.confidence), 0) / Math.max(1, sections.length)) * 0.12,
+    ).toFixed(3),
+  );
+  const overallScore = Number(((structureScore * 0.34 + styleScore * 0.24 + contentScore * 0.22 + layoutScore * 0.2)).toFixed(3));
+  const fidelityScore: ImportFidelityScore = {
+    structureScore,
+    styleScore,
+    contentScore,
+    layoutScore,
+    overallScore,
+    fidelityLevel: overallScore >= 0.74 ? "high" : overallScore >= 0.5 ? "medium" : "low",
+  };
 
   const diagnostics: SemanticDiagnostic[] = [];
   for (const consolidationDiagnostic of consolidation.diagnostics) {
@@ -1592,9 +1816,60 @@ function buildPageSemanticModel(input: {
   }
   if (allCtas.length === 0) {
     diagnostics.push({
+      code: "CTA_NOT_DETECTED",
+      severity: "warning",
+      message: "CTA could not be detected from deterministic section/grouping signals.",
+      pageId: input.pageId,
+      sectionId: null,
+    });
+    diagnostics.push({
       code: "CTA_PRIMARY_UNCLEAR",
       severity: "info",
       message: "Primary CTA could not be determined from deterministic signals.",
+      pageId: input.pageId,
+      sectionId: null,
+    });
+  }
+  if (!sections.some((section) => section.inferredType === "gallery" || section.mediaDensity >= 0.26)) {
+    diagnostics.push({
+      code: "MEDIA_PROMINENCE_UNCLEAR",
+      severity: "info",
+      message: "Media prominence remained unclear; section imagery signals are weak.",
+      pageId: input.pageId,
+      sectionId: null,
+    });
+  }
+  if (sections.some((section) => section.groupingSignals.cardCluster || section.density.repetitionDensity >= 0.35)) {
+    diagnostics.push({
+      code: "REPEATABLE_GROUP_INFERRED",
+      severity: "info",
+      message: "Repeatable content group inferred from repeated block/card patterns.",
+      pageId: input.pageId,
+      sectionId: null,
+    });
+  }
+  if (structureScore < 0.56) {
+    diagnostics.push({
+      code: "IMPORT_STRUCTURE_CONFIDENCE_LOW",
+      severity: "warning",
+      message: "Overall structure confidence is low; section boundaries may require manual review.",
+      pageId: input.pageId,
+      sectionId: null,
+    });
+  }
+  if (styleScore < 0.34) {
+    diagnostics.push({
+      code: "STYLE_SIGNAL_LOW_COVERAGE",
+      severity: "warning",
+      message: "Style-signal coverage from deterministic import hints is low.",
+      pageId: input.pageId,
+      sectionId: null,
+    });
+  } else if (styleScore < 0.56) {
+    diagnostics.push({
+      code: "STYLE_SIGNAL_PARTIAL",
+      severity: "info",
+      message: "Style-signal coverage is partial and may rely on fallback inference.",
       pageId: input.pageId,
       sectionId: null,
     });
@@ -1612,8 +1887,9 @@ function buildPageSemanticModel(input: {
     sections,
     ctaCandidates: allCtas,
     primaryCta,
+    fidelityScore,
     brandSignals,
-    diagnostics,
+    diagnostics: sortSemanticDiagnostics(diagnostics),
   };
 }
 

@@ -29,6 +29,9 @@ type InternalSignals = {
   computedShadowHint: StyleSignalModel['surfaces']['shadowHint']
   computedCtaStyleHint: StyleSignalModel['cta']['styleHint']
   computedCtaProminence: StyleSignalModel['cta']['prominence']
+  computedButtonProfile: NonNullable<StyleSignalModel['componentProfiles']>['buttonStyle']
+  computedCardProfile: NonNullable<StyleSignalModel['componentProfiles']>['cardStyle']
+  computedSectionContrast: NonNullable<StyleSignalModel['componentProfiles']>['sectionContrast']
 }
 
 function stringCmp(a: string, b: string): number {
@@ -204,6 +207,10 @@ function inferSignalsFromComputed(samples: ComputedStyleSample[]): InternalSigna
   const spacingValues: number[] = []
   const sectionSpacingValues: number[] = []
   const radiusValues: number[] = []
+  const sectionBackgrounds: string[] = []
+  let cardShadowWeight = 0
+  let cardBorderWeight = 0
+  let cardFlatWeight = 0
 
   let ctaStyleHint: StyleSignalModel['cta']['styleHint'] = 'unknown'
   let ctaProminence: StyleSignalModel['cta']['prominence'] = 'unknown'
@@ -229,6 +236,9 @@ function inferSignalsFromComputed(samples: ComputedStyleSample[]): InternalSigna
       }
       if (sample.target === 'primary_cta') {
         ctaWeights.set(bgHex, (ctaWeights.get(bgHex) ?? 0) + weight * 1.5)
+      }
+      if (sample.target === 'hero' || sample.target === 'card' || sample.target === 'footer' || sample.target === 'root') {
+        sectionBackgrounds.push(bgHex)
       }
     }
 
@@ -307,6 +317,12 @@ function inferSignalsFromComputed(samples: ComputedStyleSample[]): InternalSigna
     if (classToken.includes('shadow-xl') || classToken.includes('shadow-lg') || classToken.includes('elevat')) shadowHint = 'elevated'
     else if ((classToken.includes('shadow') || classToken.includes('drop-shadow')) && shadowHint === 'unknown') shadowHint = 'soft'
     else if (shadowHint === 'unknown') shadowHint = 'flat'
+
+    if (sample.target === 'card') {
+      if (classToken.includes('shadow')) cardShadowWeight += weight
+      else if (classToken.includes('border') || classToken.includes('outline')) cardBorderWeight += weight
+      else cardFlatWeight += weight
+    }
   }
 
   const headingFontFamily = pickFromWeightedMap(headingFonts)
@@ -355,6 +371,23 @@ function inferSignalsFromComputed(samples: ComputedStyleSample[]): InternalSigna
     .map(([value]) => value)
     .slice(0, 4)
 
+  const buttonProfile: NonNullable<StyleSignalModel['componentProfiles']>['buttonStyle'] =
+    ctaStyleHint === 'solid_button' ? 'filled'
+    : ctaStyleHint === 'outline_button' ? 'outline'
+    : ctaStyleHint === 'text_link' ? 'ghost'
+    : ctaStyleHint === 'mixed' ? 'mixed'
+    : 'unknown'
+  const cardProfile: NonNullable<StyleSignalModel['componentProfiles']>['cardStyle'] =
+    cardShadowWeight > Math.max(cardBorderWeight, cardFlatWeight) ? 'shadow'
+    : cardBorderWeight > Math.max(cardShadowWeight, cardFlatWeight) ? 'bordered'
+    : cardFlatWeight > 0 ? 'flat'
+    : 'unknown'
+  const uniqueSectionBgCount = uniqueSorted(sectionBackgrounds).length
+  const sectionContrast: NonNullable<StyleSignalModel['componentProfiles']>['sectionContrast'] =
+    uniqueSectionBgCount >= 3 ? 'alternating'
+    : uniqueSectionBgCount >= 1 ? 'uniform'
+    : 'unknown'
+
   return {
     computedPrimaryAccent: primaryAccent,
     computedSecondaryAccent: secondaryAccent,
@@ -372,6 +405,9 @@ function inferSignalsFromComputed(samples: ComputedStyleSample[]): InternalSigna
     computedShadowHint: shadowHint,
     computedCtaStyleHint: ctaStyleHint,
     computedCtaProminence: ctaProminence,
+    computedButtonProfile: buttonProfile,
+    computedCardProfile: cardProfile,
+    computedSectionContrast: sectionContrast,
   }
 }
 
@@ -609,6 +645,11 @@ export function extractStyleSignalModel(input: {
   if (colors.ctaColorHint == null && colors.primaryAccent && (cta.prominence === 'high' || cta.styleHint === 'solid_button')) {
     colors.ctaColorHint = colors.primaryAccent
   }
+  const componentProfiles: NonNullable<StyleSignalModel['componentProfiles']> = {
+    buttonStyle: computedSignals.computedButtonProfile,
+    cardStyle: computedSignals.computedCardProfile,
+    sectionContrast: computedSignals.computedSectionContrast,
+  }
 
   const diagnostics: StyleSignalDiagnostic[] = []
   if (hasComputed) {
@@ -649,6 +690,27 @@ export function extractStyleSignalModel(input: {
       code: 'STYLE_SAMPLE_LOW_COVERAGE',
       severity: 'warning',
       message: 'Computed style sample coverage is below deterministic minimum threshold.',
+    })
+  }
+
+  const inferredSignalCoverage = Number(
+    (
+      [
+        colors.primaryAccent != null || colors.secondaryAccent != null,
+        colors.backgroundTone !== 'unknown',
+        typography.headingCategory !== 'unknown' || typography.bodyCategory !== 'unknown',
+        spacing.rhythm !== 'unknown' || spacing.layoutDensity !== 'unknown',
+        surfaces.radiusHint !== 'unknown' || surfaces.shadowHint !== 'unknown',
+        cta.styleHint !== 'unknown' || cta.prominence !== 'unknown',
+        componentProfiles.buttonStyle !== 'unknown' || componentProfiles.cardStyle !== 'unknown' || componentProfiles.sectionContrast !== 'unknown',
+      ].filter(Boolean).length / 7
+    ).toFixed(3),
+  )
+  if (inferredSignalCoverage < 0.35 || computedCoverage < 0.2) {
+    diagnostics.push({
+      code: 'STYLE_SIGNAL_LOW_COVERAGE',
+      severity: 'warning',
+      message: 'Overall inferred style-signal coverage is below deterministic confidence threshold.',
     })
   }
 
@@ -789,6 +851,7 @@ export function extractStyleSignalModel(input: {
     spacing,
     surfaces,
     cta,
+    componentProfiles,
     visualToneHint,
     diagnostics: normalizeDiagnostics(diagnostics),
   }
@@ -808,6 +871,9 @@ export function styleSignalsToSemanticLabels(model: StyleSignalModel): string[] 
     `style.cta.prominence:${model.cta.prominence}`,
     `style.surfaces.radius:${model.surfaces.radiusHint}`,
     `style.surfaces.shadow:${model.surfaces.shadowHint}`,
+    `style.component.button:${model.componentProfiles?.buttonStyle ?? 'unknown'}`,
+    `style.component.card:${model.componentProfiles?.cardStyle ?? 'unknown'}`,
+    `style.component.section_contrast:${model.componentProfiles?.sectionContrast ?? 'unknown'}`,
     `style.visual_tone:${model.visualToneHint}`,
     ...model.diagnostics.map((diag) => `style.diagnostic:${diag.code}`),
   ])

@@ -124,6 +124,7 @@ export type SiteWorkspaceReadModel = {
     designModelStatus: 'available' | 'unavailable'
     sourceMode: 'rendered_dom' | 'raw_html_fallback' | 'unknown'
     importFidelityStatus: 'high_fidelity_import' | 'degraded_import' | 'capture_failed' | 'unknown'
+    importFidelityScore: RuntimeImportProvenanceSummary['importFidelityScore']
     importFidelityDegraded: boolean
     renderedCaptureStatus: 'available' | 'partial' | 'failed' | 'unknown'
     renderedDomQuality: 'strong' | 'weak' | 'unusable' | 'unknown'
@@ -190,6 +191,7 @@ export type SiteWorkspaceReadModel = {
     statusLabel: 'imported' | 'processed' | 'preview_ready' | 'published' | 'unknown'
     sourceMode: 'rendered_dom' | 'raw_html_fallback' | 'unknown'
     importFidelityStatus: 'high_fidelity_import' | 'degraded_import' | 'capture_failed' | 'unknown'
+    importFidelityScore: RuntimeImportProvenanceSummary['importFidelityScore']
   }
   structure: {
     rows: StructureSectionRow[]
@@ -506,6 +508,7 @@ function parseImportFidelitySignals(pageRows: RuntimePageVersionRow[]): {
   importFidelityStatus: SiteWorkspaceReadModel['pipeline']['importFidelityStatus']
   renderedCaptureStatus: SiteWorkspaceReadModel['pipeline']['renderedCaptureStatus']
   renderedDomQuality: SiteWorkspaceReadModel['pipeline']['renderedDomQuality']
+  importFidelityScore: RuntimeImportProvenanceSummary['importFidelityScore']
   screenshotCount: number
   computedStyleSampleCount: number
   importDiagnosticCodes: string[]
@@ -514,6 +517,7 @@ function parseImportFidelitySignals(pageRows: RuntimePageVersionRow[]): {
   let importFidelityStatus: SiteWorkspaceReadModel['pipeline']['importFidelityStatus'] = 'unknown'
   let renderedCaptureStatus: SiteWorkspaceReadModel['pipeline']['renderedCaptureStatus'] = 'unknown'
   let renderedDomQuality: SiteWorkspaceReadModel['pipeline']['renderedDomQuality'] = 'unknown'
+  let importFidelityScore: RuntimeImportProvenanceSummary['importFidelityScore'] = null
   let screenshotCount = 0
   let computedStyleSampleCount = 0
   const importDiagnosticCodes = new Set<string>()
@@ -550,6 +554,33 @@ function parseImportFidelitySignals(pageRows: RuntimePageVersionRow[]): {
         continue
       }
 
+      if (label.startsWith('import.fidelity.score.overall:')) {
+        const overall = Number(label.slice('import.fidelity.score.overall:'.length).trim())
+        if (Number.isFinite(overall)) {
+          const bounded = Math.max(0, Math.min(1, Number(overall.toFixed(3))))
+          importFidelityScore = {
+            structureScore: bounded,
+            styleScore: bounded,
+            contentScore: bounded,
+            layoutScore: bounded,
+            overallScore: bounded,
+            fidelityLevel: bounded >= 0.74 ? 'high' : bounded >= 0.5 ? 'medium' : 'low',
+          }
+        }
+        continue
+      }
+
+      if (label.startsWith('import.fidelity.score.level:')) {
+        const level = label.slice('import.fidelity.score.level:'.length).trim()
+        if ((level === 'low' || level === 'medium' || level === 'high') && importFidelityScore) {
+          importFidelityScore = {
+            ...importFidelityScore,
+            fidelityLevel: level,
+          }
+        }
+        continue
+      }
+
       if (label.startsWith('import.screenshot_count:')) {
         const value = Number(label.slice('import.screenshot_count:'.length).trim())
         if (Number.isFinite(value)) screenshotCount = Math.max(0, Math.floor(value))
@@ -574,6 +605,7 @@ function parseImportFidelitySignals(pageRows: RuntimePageVersionRow[]): {
     importFidelityStatus,
     renderedCaptureStatus,
     renderedDomQuality,
+    importFidelityScore,
     screenshotCount,
     computedStyleSampleCount,
     importDiagnosticCodes: [...importDiagnosticCodes].sort((a, b) => a.localeCompare(b)),
@@ -707,6 +739,7 @@ function parseImportProvenanceSummary(value: unknown): RuntimeImportProvenanceSu
   const fidelityStatusRaw = normalizeText(value.importFidelityStatus)
   const captureStatusRaw = normalizeText(value.renderedCaptureStatus)
   const domQualityRaw = normalizeText(value.renderedDomQuality)
+  const fidelityScoreRaw = isRecord(value.importFidelityScore) ? value.importFidelityScore : null
   const screenshotCountRaw = Number(value.screenshotCount)
   const computedStyleSampleCountRaw = Number(value.computedStyleSampleCount)
 
@@ -726,6 +759,25 @@ function parseImportProvenanceSummary(value: unknown): RuntimeImportProvenanceSu
     : []
   const executionIdentity = isRecord(value.executionIdentity) ? value.executionIdentity : null
   const styleSignals = isRecord(value.styleSignals) ? (value.styleSignals as StyleSignalModel) : null
+  const importFidelityScore: RuntimeImportProvenanceSummary['importFidelityScore'] =
+    fidelityScoreRaw &&
+    Number.isFinite(Number(fidelityScoreRaw.structureScore)) &&
+    Number.isFinite(Number(fidelityScoreRaw.styleScore)) &&
+    Number.isFinite(Number(fidelityScoreRaw.contentScore)) &&
+    Number.isFinite(Number(fidelityScoreRaw.layoutScore)) &&
+    Number.isFinite(Number(fidelityScoreRaw.overallScore)) &&
+    (normalizeText(fidelityScoreRaw.fidelityLevel) === 'low' ||
+      normalizeText(fidelityScoreRaw.fidelityLevel) === 'medium' ||
+      normalizeText(fidelityScoreRaw.fidelityLevel) === 'high')
+      ? {
+          structureScore: Number(fidelityScoreRaw.structureScore),
+          styleScore: Number(fidelityScoreRaw.styleScore),
+          contentScore: Number(fidelityScoreRaw.contentScore),
+          layoutScore: Number(fidelityScoreRaw.layoutScore),
+          overallScore: Number(fidelityScoreRaw.overallScore),
+          fidelityLevel: normalizeText(fidelityScoreRaw.fidelityLevel) as 'low' | 'medium' | 'high',
+        }
+      : null
 
   const renderedCaptureStatusNormalized: RuntimeImportProvenanceSummary['renderedCaptureStatus'] =
     captureStatusRaw === 'unavailable' ? 'failed' : (captureStatusRaw as RuntimeImportProvenanceSummary['renderedCaptureStatus'])
@@ -914,6 +966,7 @@ function parseImportProvenanceSummary(value: unknown): RuntimeImportProvenanceSu
     importFidelityStatus: fidelityStatusRaw,
     renderedCaptureStatus: renderedCaptureStatusNormalized,
     renderedDomQuality: domQualityRaw,
+    importFidelityScore,
     screenshotCount: Math.max(0, Math.floor(screenshotCountRaw)),
     computedStyleSampleCount: Math.max(0, Math.floor(computedStyleSampleCountRaw)),
     renderedCapture: renderedCaptureSummary,
@@ -944,6 +997,7 @@ function parseImportFidelity(input: {
   importFidelityStatus: SiteWorkspaceReadModel['pipeline']['importFidelityStatus']
   renderedCaptureStatus: SiteWorkspaceReadModel['pipeline']['renderedCaptureStatus']
   renderedDomQuality: SiteWorkspaceReadModel['pipeline']['renderedDomQuality']
+  importFidelityScore: RuntimeImportProvenanceSummary['importFidelityScore']
   screenshotCount: number
   computedStyleSampleCount: number
   renderedCapture: RuntimeImportProvenanceSummary['renderedCapture'] | null
@@ -969,6 +1023,7 @@ function parseImportFidelity(input: {
     return {
       ...parsedFromSignals,
       renderedCapture: null,
+      importFidelityScore: parsedFromSignals.importFidelityScore,
       styleSignalCoverage: inferredStyleSignals?.provenance.computedStyle.coverage ?? 0,
       styleSignalFallbackUsed: inferredStyleSignals?.provenance.fallbackUsed ?? fallbackUsedFromFidelity(parsedFromSignals.importFidelityStatus),
       styleSignalSourceMode: inferredStyleSignals?.sourceMode ?? 'unknown',
@@ -1063,6 +1118,7 @@ function parseImportFidelity(input: {
     importFidelityStatus: parsedSummary.importFidelityStatus,
     renderedCaptureStatus: parsedSummary.renderedCaptureStatus,
     renderedDomQuality: parsedSummary.renderedDomQuality,
+    importFidelityScore: parsedSummary.importFidelityScore ?? parsedFromSignals.importFidelityScore ?? null,
     screenshotCount: parsedSummary.screenshotCount,
     computedStyleSampleCount: parsedSummary.computedStyleSampleCount,
     renderedCapture: parsedSummary.renderedCapture,
@@ -1411,6 +1467,7 @@ export async function getSiteWorkspaceReadModelForPage(input: {
       designModelStatus: sectionsDetected > 0 ? 'available' : 'unavailable',
       sourceMode: importFidelity.sourceMode,
       importFidelityStatus: importFidelity.importFidelityStatus,
+      importFidelityScore: importFidelity.importFidelityScore ?? null,
       importFidelityDegraded,
       renderedCaptureStatus: importFidelity.renderedCaptureStatus,
       renderedDomQuality: importFidelity.renderedDomQuality,
@@ -1474,6 +1531,7 @@ export async function getSiteWorkspaceReadModelForPage(input: {
       }),
       sourceMode: importFidelity.sourceMode,
       importFidelityStatus: importFidelity.importFidelityStatus,
+      importFidelityScore: importFidelity.importFidelityScore ?? null,
     },
     structure: {
       rows: structureRows,

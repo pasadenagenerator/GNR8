@@ -16,6 +16,15 @@ export type SemanticSignal = {
   source: AuditSource;
 };
 
+export type ImportFidelityScore = {
+  structureScore: number;
+  styleScore: number;
+  contentScore: number;
+  layoutScore: number;
+  overallScore: number;
+  fidelityLevel: "low" | "medium" | "high";
+};
+
 export type RuntimeImportProvenanceSummary = {
   kind: "runtime_import_provenance_summary_v1";
   executionIdentity?: {
@@ -29,6 +38,7 @@ export type RuntimeImportProvenanceSummary = {
   importFidelityStatus: "high_fidelity_import" | "degraded_import" | "capture_failed";
   renderedCaptureStatus: "available" | "partial" | "failed";
   renderedDomQuality: "strong" | "weak" | "unusable";
+  importFidelityScore?: ImportFidelityScore | null;
   screenshotCount: number;
   computedStyleSampleCount: number;
   renderedCapture: {

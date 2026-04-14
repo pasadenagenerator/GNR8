@@ -7,6 +7,7 @@ export type StyleSignalSeverity = 'info' | 'warning'
 export type StyleSignalDiagnosticCode =
   | 'STYLE_SIGNAL_WEAK'
   | 'STYLE_SIGNAL_PARTIAL'
+  | 'STYLE_SIGNAL_LOW_COVERAGE'
   | 'STYLE_SIGNAL_COMPUTED_SAMPLE_MISSING'
   | 'STYLE_SIGNAL_COMPUTED_STYLE_NOT_USED'
   | 'STYLE_SIGNAL_RENDERED_DOM_USED'
@@ -83,6 +84,11 @@ export type StyleSignalModel = {
   spacing: SpacingSignalModel
   surfaces: SurfaceStyleSignal
   cta: CtaStyleSignal
+  componentProfiles?: {
+    buttonStyle: 'filled' | 'outline' | 'ghost' | 'mixed' | 'unknown'
+    cardStyle: 'shadow' | 'bordered' | 'flat' | 'mixed' | 'unknown'
+    sectionContrast: 'alternating' | 'uniform' | 'unknown'
+  }
   visualToneHint: 'minimal' | 'editorial' | 'corporate' | 'playful' | 'premium' | 'unknown'
   diagnostics: StyleSignalDiagnostic[]
 }

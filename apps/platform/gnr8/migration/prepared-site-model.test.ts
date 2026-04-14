@@ -431,3 +431,112 @@ test("weak capture evidence remains conservative and avoids aggressive lifts", a
 
   assert.equal(doc!.semantic!.diagnostics.some((d) => d.code === "CAPTURE_DRIVEN_HERO_LIFT_APPLIED"), false);
 });
+
+test("layout inference detects split and grid patterns deterministically", async () => {
+  const tmpRoot = await fs.mkdtemp(path.join(os.tmpdir(), "gnr8-layout-inference-"));
+  const html = [
+    "<!doctype html>",
+    "<html><head><meta charset=\"utf-8\"><title>Layout Inference Fixture</title></head>",
+    "<body><main>",
+    "<section class=\"hero\"><div><h1>Ship faster</h1><p>Deterministic import with strong hierarchy.</p><a href=\"#demo\">Book demo</a></div><div><img src=\"/hero.jpg\" alt=\"Hero\" /></div></section>",
+    "<section class=\"feature-grid\">",
+    "<article class=\"card\"><h3>Plan</h3><p>Roadmap.</p></article>",
+    "<article class=\"card\"><h3>Build</h3><p>Execution.</p></article>",
+    "<article class=\"card\"><h3>Scale</h3><p>Rollout.</p></article>",
+    "</section>",
+    "<footer><p>Copyright 2026</p></footer>",
+    "</main></body></html>",
+  ].join("");
+  await fs.writeFile(path.join(tmpRoot, "index.html"), html, "utf-8");
+
+  const importOutput = await importStaticSite({
+    rootDir: tmpRoot,
+    requestId: "req-layout-inference",
+    source: { kind: "single-entry-html", entryHtmlPath: "index.html" },
+  });
+  const prepared = createPreparedSiteModel({ importOutput, importManifest: createImportManifest(importOutput) });
+  const semantic = prepared.documents.find((d) => d.path === "index.html")?.semantic;
+  assert.ok(semantic);
+
+  assert.ok(semantic!.sections.some((section) => section.layoutInference.kind === "split"));
+  const gridRoot = await fs.mkdtemp(path.join(os.tmpdir(), "gnr8-layout-inference-grid-"));
+  const gridHtml = [
+    "<!doctype html>",
+    "<html><head><meta charset=\"utf-8\"><title>Grid Layout Fixture</title></head>",
+    "<body><main>",
+    "<section class=\"pricing-grid\">",
+    "<div class=\"card\">Plan A</div>",
+    "<div class=\"card\">Plan B</div>",
+    "<div class=\"card\">Plan C</div>",
+    "</section>",
+    "</main></body></html>",
+  ].join("");
+  await fs.writeFile(path.join(gridRoot, "index.html"), gridHtml, "utf-8");
+  const gridImportOutput = await importStaticSite({
+    rootDir: gridRoot,
+    requestId: "req-layout-inference-grid",
+    source: { kind: "single-entry-html", entryHtmlPath: "index.html" },
+  });
+  const gridPrepared = createPreparedSiteModel({ importOutput: gridImportOutput, importManifest: createImportManifest(gridImportOutput) });
+  const gridSemantic = gridPrepared.documents.find((d) => d.path === "index.html")?.semantic;
+  assert.ok(gridSemantic);
+  assert.ok(gridSemantic!.sections.some((section) => section.layoutInference.kind === "grid" || section.layoutInference.kind === "columns"));
+});
+
+test("section role classification covers faq/pricing/generic pathways", async () => {
+  const tmpRoot = await fs.mkdtemp(path.join(os.tmpdir(), "gnr8-role-classification-"));
+  const html = [
+    "<!doctype html>",
+    "<html><head><meta charset=\"utf-8\"><title>Pricing Role Coverage Fixture</title></head>",
+    "<body><main>",
+    "<section><h2>Pricing</h2><p>Starter $29 /mo</p><p>Pro $79 /mo</p></section>",
+    "<section><h2>FAQ</h2><h3>What is included?</h3><p>Everything required for launch.</p><h3>How long does setup take?</h3><p>Usually 48 hours.</p></section>",
+    "<section><p>Plain narrative block without strong section clues.</p></section>",
+    "<footer><p>Copyright 2026</p></footer>",
+    "</main></body></html>",
+  ].join("");
+  await fs.writeFile(path.join(tmpRoot, "index.html"), html, "utf-8");
+
+  const importOutput = await importStaticSite({
+    rootDir: tmpRoot,
+    requestId: "req-role-classification",
+    source: { kind: "single-entry-html", entryHtmlPath: "index.html" },
+  });
+  const prepared = createPreparedSiteModel({ importOutput, importManifest: createImportManifest(importOutput) });
+  const semantic = prepared.documents.find((d) => d.path === "index.html")?.semantic;
+  assert.ok(semantic);
+
+  assert.ok(semantic!.sections.some((section) => section.sectionRole === "pricing") || semantic!.page.pageType === "product_landing");
+  assert.ok(
+    semantic!.sections.every((section) =>
+      ["hero", "feature", "cta", "gallery", "faq", "pricing", "footer", "generic"].includes(section.sectionRole),
+    ),
+  );
+});
+
+test("fidelity score is computed with deterministic diagnostics for degraded structures", async () => {
+  const tmpRoot = await fs.mkdtemp(path.join(os.tmpdir(), "gnr8-fidelity-score-"));
+  const html = [
+    "<!doctype html>",
+    "<html><head><meta charset=\"utf-8\"><title>Fidelity Score Fixture</title></head>",
+    "<body><main>",
+    "<div><p>Minimal content only.</p></div>",
+    "<div><p>No clear hierarchy.</p></div>",
+    "</main></body></html>",
+  ].join("");
+  await fs.writeFile(path.join(tmpRoot, "index.html"), html, "utf-8");
+
+  const importOutput = await importStaticSite({
+    rootDir: tmpRoot,
+    requestId: "req-fidelity-score",
+    source: { kind: "single-entry-html", entryHtmlPath: "index.html" },
+  });
+  const prepared = createPreparedSiteModel({ importOutput, importManifest: createImportManifest(importOutput) });
+  const semantic = prepared.documents.find((d) => d.path === "index.html")?.semantic;
+  assert.ok(semantic);
+
+  assert.equal(typeof semantic!.fidelityScore.overallScore, "number");
+  assert.ok(semantic!.fidelityScore.overallScore >= 0 && semantic!.fidelityScore.overallScore <= 1);
+  assert.ok(semantic!.diagnostics.some((d) => d.code === "IMPORT_STRUCTURE_CONFIDENCE_LOW"));
+  assert.ok(semantic!.diagnostics.some((d) => d.code === "CTA_NOT_DETECTED"));
+});
