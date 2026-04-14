@@ -296,7 +296,17 @@ function renderPreviewContent(readModel: Awaited<ReturnType<typeof getSiteWorksp
         ? 'Debug-only artifact available'
         : readModel.preview.readiness === 'import_captured_not_transformed'
           ? 'Import captured, transformed preview pending'
-          : 'Preview unavailable'
+        : 'Preview unavailable'
+  const previewModeLabel =
+    readModel.preview.previewMode === 'react_preview'
+      ? 'React preview'
+      : readModel.preview.previewMode === 'react_preview_degraded'
+        ? 'React preview (degraded)'
+        : readModel.preview.previewMode === 'fallback_preview'
+          ? 'Fallback preview'
+          : contentRecoveryModeActive
+            ? 'content recovery'
+            : 'canonical'
 
   return (
     <section style={sectionCardStyle()}>
@@ -311,8 +321,16 @@ function renderPreviewContent(readModel: Awaited<ReturnType<typeof getSiteWorksp
         Import provenance: {readModel.pipeline.sourceMode} · {readModel.pipeline.importFidelityStatus} · capture={readModel.pipeline.renderedCaptureStatus}
       </p>
       <p style={{ margin: '6px 0 0', color: '#334155', fontSize: 12 }}>
-        Preview mode: <strong>{contentRecoveryModeActive ? 'content recovery' : 'canonical'}</strong>
+        Preview mode: <strong>{previewModeLabel}</strong>
       </p>
+      {readModel.preview.previewRuntimeSummary ? (
+        <p style={{ margin: '6px 0 0', color: '#334155', fontSize: 12 }}>
+          Runtime truth: contract={readModel.preview.previewRuntimeSummary.rendererContractAvailable ? 'yes' : 'no'} · final-site=
+          {readModel.preview.previewRuntimeSummary.finalSiteModelAvailable ? 'yes' : 'no'} · fallback=
+          {readModel.preview.previewRuntimeSummary.renderedWithFallback ? 'yes' : 'no'} · matchedPage=
+          {readModel.preview.previewRuntimeSummary.matchedPageId ?? 'none'}
+        </p>
+      ) : null}
       {contentRecoveryModeActive ? (
         <div style={{ margin: '6px 0 0', color: '#334155', fontSize: 12 }}>
           <div style={{ fontWeight: 600 }}>Reason:</div>
@@ -368,6 +386,11 @@ function renderPreviewContent(readModel: Awaited<ReturnType<typeof getSiteWorksp
           {readModel.preview.diagnostics.length > 0 ? (
             <p style={{ margin: 0, color: '#7f1d1d', fontSize: 12 }}>
               Diagnostics: {readModel.preview.diagnostics.join(' · ')}
+            </p>
+          ) : null}
+          {readModel.preview.previewRuntimeSummary?.previewDiagnostics?.length ? (
+            <p style={{ margin: 0, color: '#334155', fontSize: 12 }}>
+              Runtime diagnostics: {readModel.preview.previewRuntimeSummary.previewDiagnostics.join(' · ')}
             </p>
           ) : null}
         </div>

@@ -36,10 +36,20 @@ test('resolveSiteWorkspacePreview prefers transformed preview as primary source'
     transformedPreviewAvailable: true,
     debugPreviewAvailable: true,
     importCaptured: true,
+    previewRuntimeSummary: {
+      previewMode: 'react_preview_degraded',
+      rendererContractAvailable: true,
+      finalSiteModelAvailable: true,
+      renderedWithFallback: true,
+      matchedPageId: 'page-home',
+      previewDiagnostics: ['PREVIEW_REAL_REACT_RENDER_DEGRADED'],
+    },
   })
 
   assert.equal(resolved.status, 'preview_available')
   assert.equal(resolved.sourceType, 'transformed')
+  assert.equal(resolved.previewMode, 'react_preview_degraded')
+  assert.equal(resolved.previewRuntimeSummary?.matchedPageId, 'page-home')
   assert.equal(resolved.mainPreviewUrl, resolved.transformedPreviewUrl)
   assert.ok(resolved.debugPreviewUrl)
 })

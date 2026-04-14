@@ -634,3 +634,21 @@ test('import fidelity fallback flag remains false for high-fidelity imports when
   assert.equal(parsed.importFidelityStatus, 'high_fidelity_import')
   assert.equal(parsed.styleSignalFallbackUsed, false)
 })
+
+test('preview runtime summary parser reads persisted preview mode truth', () => {
+  const parsed = __siteWorkspaceReadModelTestUtils.parsePreviewRuntimeSummary({
+    previewMode: 'react_preview_degraded',
+    rendererContractAvailable: true,
+    finalSiteModelAvailable: true,
+    renderedWithFallback: true,
+    matchedPageId: 'page-home',
+    previewDiagnostics: ['PREVIEW_REAL_REACT_RENDER_DEGRADED', 'PREVIEW_MODE_PERSISTED'],
+  })
+
+  assert.equal(parsed?.previewMode, 'react_preview_degraded')
+  assert.equal(parsed?.rendererContractAvailable, true)
+  assert.equal(parsed?.finalSiteModelAvailable, true)
+  assert.equal(parsed?.renderedWithFallback, true)
+  assert.equal(parsed?.matchedPageId, 'page-home')
+  assert.deepEqual(parsed?.previewDiagnostics, ['PREVIEW_MODE_PERSISTED', 'PREVIEW_REAL_REACT_RENDER_DEGRADED'])
+})

@@ -75,6 +75,12 @@ export async function GET(req: Request, ctx: { params: Promise<{ siteVersionId: 
         "content-type": "text/html; charset=utf-8",
         "cache-control": "no-store",
         "x-gnr8-preview-source": preview.source,
+        "x-gnr8-preview-mode": preview.previewMode,
+        "x-gnr8-preview-renderer-contract-available": preview.previewRuntimeSummary.rendererContractAvailable ? "true" : "false",
+        "x-gnr8-preview-final-site-model-available": preview.previewRuntimeSummary.finalSiteModelAvailable ? "true" : "false",
+        "x-gnr8-preview-rendered-with-fallback": preview.previewRuntimeSummary.renderedWithFallback ? "true" : "false",
+        "x-gnr8-preview-matched-page-id": preview.previewRuntimeSummary.matchedPageId ?? "",
+        "x-gnr8-preview-diagnostics": preview.previewRuntimeSummary.previewDiagnostics.join(","),
       },
     });
   } catch (error) {

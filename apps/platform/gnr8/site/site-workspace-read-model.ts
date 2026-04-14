@@ -2,6 +2,7 @@ import 'server-only'
 
 import { toSiteEntity, type RawSiteRow, type SiteEntity } from '@/gnr8/site/site-entity'
 import { resolveSiteWorkspacePreview, type SitePreviewType, type SiteWorkspacePreviewReadiness } from '@/gnr8/site/site-preview-contract'
+import { normalizePreviewRuntimeMode, type PreviewRuntimeSummary } from '@/gnr8/preview-runtime/preview-runtime-types'
 import type { RuntimeImportProvenanceSummary } from '@/gnr8/runtime/types'
 import type { StyleSignalModel } from '@/gnr8/style-signals'
 import { getSupabaseServerClientReadOnly } from '@/src/auth/supabase-server-read-only'
@@ -43,6 +44,7 @@ type RuntimeArtifactRow = {
   id: string | null
   site_version_id: string | null
   html_by_path: unknown
+  manifest: unknown
 }
 
 type SiteActionRow = {
@@ -221,6 +223,8 @@ export type SiteWorkspaceReadModel = {
     previewUrl: string | null
     transformedPreviewUrl: string | null
     debugPreviewUrl: string | null
+    previewMode: PreviewRuntimeSummary['previewMode'] | null
+    previewRuntimeSummary: PreviewRuntimeSummary | null
     liveUrl: string | null
     selectedVariantLabel: string | null
     diagnostics: string[]
@@ -1083,6 +1087,22 @@ function parseImportFidelity(input: {
   }
 }
 
+function parsePreviewRuntimeSummary(value: unknown): PreviewRuntimeSummary | null {
+  if (!isRecord(value)) return null
+  const mode = normalizePreviewRuntimeMode(value.previewMode)
+  if (!mode) return null
+  const diagnostics = Array.isArray(value.previewDiagnostics) ? value.previewDiagnostics.map((entry) => normalizeText(entry)).filter(Boolean) : []
+
+  return {
+    previewMode: mode,
+    rendererContractAvailable: Boolean(value.rendererContractAvailable),
+    finalSiteModelAvailable: Boolean(value.finalSiteModelAvailable),
+    renderedWithFallback: Boolean(value.renderedWithFallback),
+    matchedPageId: toTextOrNull(value.matchedPageId),
+    previewDiagnostics: [...new Set(diagnostics)].sort((a, b) => a.localeCompare(b)),
+  }
+}
+
 export function resolveSelectedRuntimeVersionIdForWorkspace(input: {
   latestRuntimeSiteVersionId: string | null
   availableRuntimeSiteVersionIds?: string[] | null
@@ -1321,10 +1341,11 @@ export async function getSiteWorkspaceReadModelForPage(input: {
   const lastAction = normalizedSiteActions[0] ?? null
   const selectedRuntimeArtifactId = toTextOrNull(selectedRuntimeRow?.artifact_id)
   let transformedPreviewAvailable = Boolean(selectedRuntimeArtifactId)
+  let previewRuntimeSummary: PreviewRuntimeSummary | null = null
   if (selectedRuntimeSiteVersionId) {
     const artifactResult = await supabase
       .from('gnr8_runtime_artifacts')
-      .select('id,site_version_id,html_by_path')
+      .select('id,site_version_id,html_by_path,manifest')
       .eq('site_version_id', selectedRuntimeSiteVersionId)
       .order('created_at', { ascending: false })
       .limit(1)
@@ -1334,6 +1355,9 @@ export async function getSiteWorkspaceReadModelForPage(input: {
       if (toTextOrNull(artifactRow.id)) {
         const htmlByPath = isRecord(artifactRow.html_by_path) ? artifactRow.html_by_path : null
         if (htmlByPath != null && Object.keys(htmlByPath).length > 0) transformedPreviewAvailable = true
+        const manifest = isRecord(artifactRow.manifest) ? artifactRow.manifest : null
+        const summaryFromManifest = parsePreviewRuntimeSummary(manifest?.previewRuntimeSummary)
+        if (summaryFromManifest) previewRuntimeSummary = summaryFromManifest
       }
     }
   }
@@ -1344,6 +1368,7 @@ export async function getSiteWorkspaceReadModelForPage(input: {
     transformedPreviewAvailable,
     debugPreviewAvailable,
     importCaptured: Boolean(selectedRuntimeSiteVersionId),
+    previewRuntimeSummary,
   })
   const diagnosticsSummary = Array.from(
     new Set([
@@ -1480,6 +1505,8 @@ export async function getSiteWorkspaceReadModelForPage(input: {
       previewUrl,
       transformedPreviewUrl: resolvedPreview.transformedPreviewUrl,
       debugPreviewUrl: resolvedPreview.debugPreviewUrl,
+      previewMode: resolvedPreview.previewMode,
+      previewRuntimeSummary: resolvedPreview.previewRuntimeSummary,
       liveUrl: toHttpsUrlOrNull(site.domain),
       selectedVariantLabel: selectedVariant?.label ?? null,
       diagnostics: resolvedPreview.diagnostics,
@@ -1495,6 +1522,7 @@ export async function getSiteWorkspaceReadModelForPage(input: {
 export const __siteWorkspaceReadModelTestUtils = {
   parseImportFidelitySignals,
   parseImportProvenanceSummary,
+  parsePreviewRuntimeSummary,
   parseImportFidelity,
   compareRuntimeVersionRows,
   resolveLatestRuntimeVersionRow,

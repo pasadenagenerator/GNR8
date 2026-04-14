@@ -1,0 +1,486 @@
+import { deterministicId, normalizePagePath } from "@/gnr8/runtime/deterministic";
+import type { CanonicalPageVersionSnapshot } from "@/gnr8/runtime/types";
+import { DEFAULT_MERGE_OPTIONS, type FinalSiteModel } from "@/gnr8/merge-engine";
+import { createReactRendererContract, type RenderDiagnostic } from "@/gnr8/renderer-contract";
+import { renderRealReactSite } from "@/gnr8/react-renderer";
+import type { ReactElement } from "react";
+import { PREVIEW_RUNTIME_DIAGNOSTIC, withSortedDiagnostics } from "@/gnr8/preview-runtime/preview-runtime-diagnostics";
+import { selectPreviewRuntimeMode } from "@/gnr8/preview-runtime/preview-mode-selector";
+import type { PreviewRuntimePreparationInput, PreviewRuntimePreparationResult, PreviewRuntimeSummary } from "@/gnr8/preview-runtime/preview-runtime-types";
+
+function normalizeText(value: unknown): string {
+  return String(value ?? "").trim();
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function toSectionType(section: Record<string, unknown>): string {
+  const sectionType = normalizeText(section.type).toLowerCase();
+  return sectionType || "content";
+}
+
+function inferComponentKind(sectionType: string): FinalSiteModel["pages"][number]["sections"][number]["components"][number]["kind"] {
+  if (sectionType.includes("hero")) return "hero";
+  if (sectionType.includes("faq")) return "faq";
+  if (sectionType.includes("pricing")) return "pricing";
+  if (sectionType.includes("testimonial")) return "testimonial";
+  if (sectionType.includes("gallery")) return "gallery";
+  if (sectionType.includes("image")) return "image";
+  if (sectionType.includes("cta") || sectionType.includes("contact")) return "cta_group";
+  if (sectionType.includes("footer")) return "footer_block";
+  if (sectionType.includes("heading") || sectionType.includes("title")) return "section_heading";
+  if (sectionType.includes("card")) return "card_grid";
+  return "generic";
+}
+
+function inferLayoutRole(sectionType: string): string {
+  if (sectionType.includes("hero")) return "hero";
+  if (sectionType.includes("gallery")) return "grid";
+  if (sectionType.includes("faq")) return "faq_list";
+  if (sectionType.includes("pricing")) return "pricing_table";
+  if (sectionType.includes("footer")) return "footer";
+  return "stack";
+}
+
+function inferSemanticRole(sectionType: string): FinalSiteModel["pages"][number]["sections"][number]["semanticRole"] {
+  if (sectionType.includes("hero")) return "hero";
+  if (sectionType.includes("pricing")) return "pricing";
+  if (sectionType.includes("heading") || sectionType.includes("title")) return "section_heading";
+  return "content";
+}
+
+function pickValue(input: Record<string, unknown>, keys: string[]): string | null {
+  for (const key of keys) {
+    const direct = normalizeText(input[key]);
+    if (direct) return direct;
+    const lowerKey = Object.keys(input).find((candidate) => candidate.toLowerCase() === key.toLowerCase());
+    if (!lowerKey) continue;
+    const viaLower = normalizeText(input[lowerKey]);
+    if (viaLower) return viaLower;
+  }
+  return null;
+}
+
+function pickSectionSlotValues(sectionProps: Record<string, unknown>): {
+  heading: string | null;
+  body: string | null;
+  image: string | null;
+} {
+  const htmlSummary = isRecord(sectionProps.htmlSummary) ? sectionProps.htmlSummary : null;
+  const textFromSummary = normalizeText(htmlSummary?.extractedText);
+  const firstImageFromSummary =
+    Array.isArray(htmlSummary?.extractedImageSrcs) && htmlSummary.extractedImageSrcs.length > 0
+      ? normalizeText(htmlSummary.extractedImageSrcs[0])
+      : null;
+
+  const heading = pickValue(sectionProps, ["heading", "headline", "title", "heroTitle"]) ?? null;
+  const body =
+    pickValue(sectionProps, ["body", "description", "text", "copy", "subtitle", "heroBody"]) ?? (textFromSummary || null);
+  const image = pickValue(sectionProps, ["image", "imageSrc", "media", "heroImage"]) ?? firstImageFromSummary ?? null;
+
+  return {
+    heading,
+    body,
+    image,
+  };
+}
+
+function slotKeysForKind(kind: FinalSiteModel["pages"][number]["sections"][number]["components"][number]["kind"]): Array<"heading" | "body" | "image"> {
+  switch (kind) {
+    case "hero":
+      return ["heading", "body", "image"];
+    case "section_heading":
+      return ["heading"];
+    case "image":
+    case "gallery":
+      return ["image"];
+    case "cta_group":
+      return ["heading", "body"];
+    default:
+      return ["body"];
+  }
+}
+
+function toValueType(slotKey: "heading" | "body" | "image"): "text" | "rich_text" | "image" {
+  if (slotKey === "image") return "image";
+  if (slotKey === "body") return "rich_text";
+  return "text";
+}
+
+function mapPageToFinalPage(input: {
+  page: CanonicalPageVersionSnapshot;
+  siteId: string;
+  pageOrder: number;
+}): FinalSiteModel["pages"][number] {
+  const structure = isRecord(input.page.structureModel) ? input.page.structureModel : {};
+  const sections = Array.isArray((structure as { sections?: unknown }).sections) ? (structure as { sections: unknown[] }).sections : [];
+  const content = isRecord(input.page.contentModel) ? input.page.contentModel : {};
+  const sectionPropsById = isRecord((content as { sectionProps?: unknown }).sectionProps)
+    ? ((content as { sectionProps: Record<string, unknown> }).sectionProps)
+    : {};
+
+  const finalSections: FinalSiteModel["pages"][number]["sections"] = sections
+    .map((section, index) => {
+      const sectionRecord = isRecord(section) ? section : {};
+      const sectionId = normalizeText(sectionRecord.id) || deterministicId("final_section", `${input.page.pageId}:${index}`);
+      const sectionType = toSectionType(sectionRecord);
+      const componentKind = inferComponentKind(sectionType);
+      const componentId = deterministicId("final_component", `${sectionId}:primary`);
+
+      const rawSectionProps = sectionPropsById[sectionId];
+      const sectionProps = isRecord(rawSectionProps) ? rawSectionProps : {};
+      const slotValues = pickSectionSlotValues(sectionProps);
+      const slotKeys = slotKeysForKind(componentKind);
+      const slots = slotKeys.map((slotKey) => ({
+        key: slotKey,
+        valueType: toValueType(slotKey),
+        sourceHint: "runtime_section_props",
+      }));
+      const contentBindings = slotKeys
+        .map((slotKey) => {
+          const value = slotValues[slotKey];
+          if (!value) return null;
+          const contentId = deterministicId("content", `${componentId}:${slotKey}:${value}`);
+          return {
+            id: deterministicId("binding", `${componentId}:${slotKey}`),
+            componentId,
+            sectionId,
+            slotPath: `${componentId}.${slotKey}`,
+            contentId,
+            confidence: 1,
+            source: "heuristic" as const,
+          };
+        })
+        .filter((entry): entry is NonNullable<typeof entry> => entry != null);
+
+      return {
+        id: sectionId,
+        pageId: input.page.pageId,
+        semanticRole: inferSemanticRole(sectionType),
+        layoutRole: inferLayoutRole(sectionType),
+        order: Number.isFinite(Number(sectionRecord.order)) ? Number(sectionRecord.order) : index,
+        components: [
+          {
+            id: componentId,
+            sectionId,
+            kind: componentKind,
+            mappedType: componentKind,
+            variant: "default",
+            order: 0,
+            slots,
+            tokenRefs: [],
+            fallback: {
+              wrappedAsGeneric: componentKind === "generic",
+              reason: componentKind === "generic" ? "unknown_section_type" : null,
+              rawMetadata: componentKind === "generic" ? { sectionType } : null,
+            },
+            provenance: {
+              source: "merged",
+              sourceId: sectionId,
+              rationale: "Deterministic preview runtime projection from canonical runtime page model.",
+              confidence: 1,
+            },
+          },
+        ],
+        contentBindings,
+        styleRefs: {
+          colorTokenIds: [],
+          typographyTokenIds: [],
+          spacingTokenIds: [],
+          gradientIds: [],
+        },
+        provenance: {
+          source: "merged",
+          sourceId: sectionId,
+          rationale: "Deterministic preview runtime projection from canonical runtime page model.",
+          confidence: 1,
+        },
+      } as FinalSiteModel["pages"][number]["sections"][number];
+    })
+    .sort((a, b) => a.order - b.order || a.id.localeCompare(b.id));
+
+  return {
+    id: input.page.pageId,
+    path: normalizePagePath(input.page.path),
+    role: input.pageOrder === 0 ? "home" : "content",
+    title: input.page.title,
+    routeNodeId: deterministicId("route", `${input.siteId}:${normalizePagePath(input.page.path)}`),
+    seo: {
+      titleContentIds: [],
+      descriptionContentIds: [],
+    },
+    sections: finalSections,
+    globalRegionIds: [],
+    provenance: {
+      source: "merged",
+      sourceId: input.page.pageId,
+      rationale: "Deterministic preview runtime projection from canonical runtime page model.",
+      confidence: 1,
+    },
+  };
+}
+
+function buildFinalSiteModelFromRuntimeSiteVersion(input: PreviewRuntimePreparationInput): FinalSiteModel | null {
+  const pages = [...input.siteVersion.pages]
+    .sort((a, b) => normalizePagePath(a.path).localeCompare(normalizePagePath(b.path)) || a.pageId.localeCompare(b.pageId))
+    .map((page, index) =>
+      mapPageToFinalPage({
+        page,
+        siteId: input.siteVersion.siteId,
+        pageOrder: index,
+      }),
+    );
+
+  if (pages.length === 0) return null;
+  const totalSections = pages.reduce((sum, page) => sum + page.sections.length, 0);
+  if (totalSections === 0) return null;
+
+  const sortedRoutes = pages
+    .map((page, index) => ({
+      id: deterministicId("route", `${input.siteVersion.siteId}:${page.path}`),
+      path: normalizePagePath(page.path),
+      pageId: page.id,
+      parentRouteId: null,
+      titleHint: page.title,
+      order: index,
+      status: "resolved" as const,
+    }))
+    .sort((a, b) => a.path.localeCompare(b.path) || a.id.localeCompare(b.id))
+    .map((route, index) => ({ ...route, order: index }));
+
+  const primaryBackground = pages[0]?.title ? "#ffffff" : "#f8fafc";
+  const primaryText = "#111827";
+
+  return {
+    site: {
+      id: input.siteVersion.siteId,
+      locale: "en",
+      defaultPageId: pages[0]?.id ?? null,
+      routes: sortedRoutes,
+      navigation: [],
+      provenance: {
+        importRunId: input.siteVersion.id,
+        sourceFingerprint: deterministicId("preview_source", `${input.siteVersion.siteId}:${input.siteVersion.id}`),
+        capturedAtIso: input.siteVersion.createdAt,
+        mergeModes: DEFAULT_MERGE_OPTIONS,
+        designPagesCount: 0,
+        designWarningsCount: 0,
+      },
+    },
+    pages,
+    globalRegions: [],
+    tokens: {
+      colors: [
+        {
+          id: deterministicId("color", "background"),
+          name: "background",
+          semanticRole: "surface.background",
+          valueHex8: primaryBackground,
+          provenance: [
+            {
+              source: "merged",
+              sourceId: input.siteVersion.id,
+              rationale: "Deterministic preview fallback token for runtime rendering.",
+              confidence: 1,
+            },
+          ],
+        },
+        {
+          id: deterministicId("color", "text"),
+          name: "text",
+          semanticRole: "text.primary",
+          valueHex8: primaryText,
+          provenance: [
+            {
+              source: "merged",
+              sourceId: input.siteVersion.id,
+              rationale: "Deterministic preview fallback token for runtime rendering.",
+              confidence: 1,
+            },
+          ],
+        },
+      ],
+      typography: [],
+      spacing: [],
+      surface: {
+        radiusScalePx: [0, 4, 8, 12],
+        borderStyle: "subtle",
+        shadowStyle: "soft",
+        provenance: [
+          {
+            source: "merged",
+            sourceId: input.siteVersion.id,
+            rationale: "Deterministic preview fallback surface token set.",
+            confidence: 1,
+          },
+        ],
+      },
+      componentProfile: {
+        buttons: {
+          variants: ["solid"],
+          cornerStyle: "rounded",
+          prominence: "medium",
+        },
+        inputs: {
+          border: "thin",
+          cornerStyle: "rounded",
+        },
+        media: {
+          treatment: "edge_to_edge",
+          saturationHint: "balanced",
+        },
+        sectionTone: "corporate",
+        provenance: [
+          {
+            source: "merged",
+            sourceId: input.siteVersion.id,
+            rationale: "Deterministic preview fallback component profile.",
+            confidence: 1,
+          },
+        ],
+      },
+      gradients: [],
+    },
+    reusableComponents: [],
+    diagnostics: [],
+    conflicts: [],
+  };
+}
+
+function toSummary(input: {
+  mode: PreviewRuntimePreparationResult["mode"];
+  finalSiteModel: FinalSiteModel | null;
+  reactRenderSiteModelAvailable: boolean;
+  rendererResult: PreviewRuntimePreparationResult["rendererResult"];
+  diagnostics: string[];
+}): PreviewRuntimeSummary {
+  return {
+    previewMode: input.mode,
+    rendererContractAvailable: input.reactRenderSiteModelAvailable,
+    finalSiteModelAvailable: input.finalSiteModel != null,
+    renderedWithFallback: Boolean(input.rendererResult?.renderedWithFallback),
+    matchedPageId: input.rendererResult?.matchedPageId ?? null,
+    previewDiagnostics: input.diagnostics,
+  };
+}
+
+function hasMeaningfulRenderableStructure(finalSiteModel: FinalSiteModel | null, matchedPageId: string | null): boolean {
+  if (!finalSiteModel || !matchedPageId) return false;
+  const page = finalSiteModel.pages.find((entry) => entry.id === matchedPageId);
+  if (!page) return false;
+  const sectionCount = page.sections.length;
+  const componentCount = page.sections.reduce((sum, section) => sum + section.components.length, 0);
+  return sectionCount > 0 && componentCount > 0;
+}
+
+export function preparePreviewRuntime(input: PreviewRuntimePreparationInput): PreviewRuntimePreparationResult {
+  const diagnostics: string[] = [PREVIEW_RUNTIME_DIAGNOSTIC.PREPARATION_STARTED];
+  const finalSiteModel = buildFinalSiteModelFromRuntimeSiteVersion(input);
+  if (finalSiteModel) diagnostics.push(PREVIEW_RUNTIME_DIAGNOSTIC.FINAL_SITE_MODEL_AVAILABLE);
+
+  let reactRenderSiteModel: PreviewRuntimePreparationResult["reactRenderSiteModel"] = null;
+  if (finalSiteModel && !input.simulateRendererContractUnavailable) {
+    reactRenderSiteModel = createReactRendererContract({
+      site: finalSiteModel,
+      options: {
+        fallbackMode: "safe",
+        includeDiagnostics: true,
+        includeProvenance: false,
+        componentMappingMode: "allow_generic",
+      },
+    });
+    diagnostics.push(PREVIEW_RUNTIME_DIAGNOSTIC.RENDERER_CONTRACT_CREATED);
+  }
+
+  let rendererResult: PreviewRuntimePreparationResult["rendererResult"] = null;
+  let renderedSiteElement: ReactElement | null = null;
+  let rendererDiagnostics: RenderDiagnostic[] = [];
+  let rendererRuntimeFailed = false;
+  const routePath = normalizePagePath(input.routePath);
+  const rendererInput =
+    reactRenderSiteModel == null
+      ? null
+      : {
+          siteModel: reactRenderSiteModel,
+          routePath,
+          options: {
+            diagnosticsMode: "silent" as const,
+            fallbackMode: "safe" as const,
+            includeProvenance: false,
+          },
+        };
+
+  if (rendererInput) {
+    try {
+      if (input.simulateRendererRuntimeFailure) {
+        throw new Error("simulated_renderer_runtime_failure");
+      }
+      const rendered = renderRealReactSite(rendererInput);
+      rendererResult = rendered.result;
+      renderedSiteElement = rendered.renderedSite;
+      rendererDiagnostics = rendered.result.diagnostics;
+    } catch {
+      rendererRuntimeFailed = true;
+      diagnostics.push(PREVIEW_RUNTIME_DIAGNOSTIC.RENDERER_RUNTIME_FAILED);
+    }
+  }
+
+  const selection = selectPreviewRuntimeMode({
+    finalSiteModelAvailable: finalSiteModel != null,
+    rendererContractAvailable: reactRenderSiteModel != null,
+    rendererSucceeded: rendererResult != null,
+    rendererMatchedPage: rendererResult?.matchedPageId != null,
+    hasMeaningfulRenderableStructure: hasMeaningfulRenderableStructure(finalSiteModel, rendererResult?.matchedPageId ?? null),
+    rendererUsedFallback: Boolean(rendererResult?.renderedWithFallback),
+    rendererRuntimeFailed,
+  });
+
+  const finalDiagnostics = withSortedDiagnostics([...diagnostics, ...selection.diagnostics]);
+
+  const prepared: PreviewRuntimePreparationResult = {
+    mode: selection.mode,
+    siteVersionId: input.siteVersion.id,
+    routePath,
+    finalSiteModel,
+    reactRenderSiteModel,
+    rendererInput,
+    rendererResult,
+    renderedSiteElement,
+    rendererDiagnostics,
+    diagnostics: finalDiagnostics,
+    summary: {
+      previewMode: "fallback_preview",
+      rendererContractAvailable: false,
+      finalSiteModelAvailable: false,
+      renderedWithFallback: false,
+      matchedPageId: null,
+      previewDiagnostics: [],
+    },
+  };
+
+  prepared.summary = toSummary({
+    mode: prepared.mode,
+    finalSiteModel: prepared.finalSiteModel,
+    reactRenderSiteModelAvailable: prepared.reactRenderSiteModel != null,
+    rendererResult: prepared.rendererResult,
+    diagnostics: prepared.diagnostics,
+  });
+
+  return prepared;
+}
+
+export function buildPersistedPreviewRuntimeSummary(input: {
+  siteVersion: PreviewRuntimePreparationInput["siteVersion"];
+  routePath?: string;
+}): PreviewRuntimeSummary {
+  const prepared = preparePreviewRuntime({
+    siteVersion: input.siteVersion,
+    routePath: input.routePath ?? "/",
+  });
+  return {
+    ...prepared.summary,
+    previewDiagnostics: withSortedDiagnostics([...prepared.summary.previewDiagnostics, PREVIEW_RUNTIME_DIAGNOSTIC.MODE_PERSISTED]),
+  };
+}

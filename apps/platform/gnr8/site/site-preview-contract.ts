@@ -1,3 +1,5 @@
+import type { PreviewRuntimeMode, PreviewRuntimeSummary } from "@/gnr8/preview-runtime/preview-runtime-types";
+
 export type SitePreviewType = 'raw_imported' | 'transformed' | 'debug_inspect'
 
 export type SiteWorkspacePreviewReadiness =
@@ -35,6 +37,8 @@ export type SiteWorkspacePreviewResolution = {
   mainPreviewUrl: string | null
   transformedPreviewUrl: string | null
   debugPreviewUrl: string | null
+  previewMode: PreviewRuntimeMode | null
+  previewRuntimeSummary: PreviewRuntimeSummary | null
   diagnostics: string[]
 }
 
@@ -43,7 +47,11 @@ export function resolveSiteWorkspacePreview(input: {
   transformedPreviewAvailable: boolean
   debugPreviewAvailable: boolean
   importCaptured: boolean
+  previewRuntimeSummary?: PreviewRuntimeSummary | null
 }): SiteWorkspacePreviewResolution {
+  const summary = input.previewRuntimeSummary ?? null
+  const modeDiagnostic = summary ? `Preview runtime mode: ${summary.previewMode}.` : null
+
   if (!input.siteVersionId) {
     return {
       status: input.importCaptured ? 'import_captured_not_transformed' : 'preview_unavailable',
@@ -51,10 +59,13 @@ export function resolveSiteWorkspacePreview(input: {
       mainPreviewUrl: null,
       transformedPreviewUrl: null,
       debugPreviewUrl: null,
+      previewMode: summary?.previewMode ?? null,
+      previewRuntimeSummary: summary,
       diagnostics: [
         input.importCaptured
           ? 'Import capture exists, but no runtime site version was selected for transformed preview.'
           : 'No runtime site version is available for preview.',
+        ...(modeDiagnostic ? [modeDiagnostic] : []),
       ],
     }
   }
@@ -73,7 +84,12 @@ export function resolveSiteWorkspacePreview(input: {
       mainPreviewUrl: transformedPreviewUrl,
       transformedPreviewUrl,
       debugPreviewUrl,
-      diagnostics: ['Transformed preview artifact is available and selected as the primary Site Workspace preview source.'],
+      previewMode: summary?.previewMode ?? null,
+      previewRuntimeSummary: summary,
+      diagnostics: [
+        'Transformed preview artifact is available and selected as the primary Site Workspace preview source.',
+        ...(modeDiagnostic ? [modeDiagnostic] : []),
+      ],
     }
   }
 
@@ -84,7 +100,12 @@ export function resolveSiteWorkspacePreview(input: {
       mainPreviewUrl: null,
       transformedPreviewUrl: null,
       debugPreviewUrl,
-      diagnostics: ['Only debug/inspect preview is currently available. Transformed preview artifact is not ready yet.'],
+      previewMode: summary?.previewMode ?? null,
+      previewRuntimeSummary: summary,
+      diagnostics: [
+        'Only debug/inspect preview is currently available. Transformed preview artifact is not ready yet.',
+        ...(modeDiagnostic ? [modeDiagnostic] : []),
+      ],
     }
   }
 
@@ -94,10 +115,13 @@ export function resolveSiteWorkspacePreview(input: {
     mainPreviewUrl: null,
     transformedPreviewUrl: null,
     debugPreviewUrl: null,
+    previewMode: summary?.previewMode ?? null,
+    previewRuntimeSummary: summary,
     diagnostics: [
       input.importCaptured
         ? 'Import capture exists, but no transformed artifact or debug render could be resolved.'
         : 'No preview artifacts are available for the selected site version.',
+      ...(modeDiagnostic ? [modeDiagnostic] : []),
     ],
   }
 }

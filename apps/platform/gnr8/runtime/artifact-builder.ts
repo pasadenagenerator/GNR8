@@ -8,6 +8,7 @@ import {
 } from "@/gnr8/runtime/preview-content-recovery-renderer";
 import { renderPreviewFallbackSectionHtml } from "@/gnr8/runtime/preview-fallback-renderer";
 import type { CanonicalSiteVersionSnapshot, RenderMode, RuntimeArtifact } from "@/gnr8/runtime/types";
+import { buildPersistedPreviewRuntimeSummary } from "@/gnr8/preview-runtime/preview-runtime-preparation";
 
 function escapeHtml(value: string): string {
   return value
@@ -836,6 +837,10 @@ export function buildDeterministicArtifactBundle(input: {
     provenanceSummaryFlags: {
       contentRecoveryModeActive: [...Object.values(pageRenderModes)].some((mode) => mode === "content_recovery"),
     },
+    previewRuntimeSummary: buildPersistedPreviewRuntimeSummary({
+      siteVersion: input.siteVersion,
+      routePath: "/",
+    }),
     generatedAt: "deterministic",
     paths: Object.keys(htmlByPath).sort(),
     assetFingerprints: assetFingerprintMap,
