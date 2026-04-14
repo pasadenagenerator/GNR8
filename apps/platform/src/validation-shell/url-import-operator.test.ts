@@ -334,6 +334,107 @@ test("worker-backed rendered capture success selects rendered_dom and materializ
   assert.ok(fs.existsSync(path.resolve(snapshot.snapshotRootDirAbs, "rendered", "screenshots", "fullpage.png")));
 });
 
+test("worker-backed success with shared-storage artifact URIs is accepted and does not degrade to raw fallback", async () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "gnr8-url-import-worker-shared-storage-success-"));
+  const sourceUrl = "https://worker-shared-storage-success.example.com/";
+  const workerArtifactsDir = path.resolve(tmp, "worker-artifacts");
+  fs.mkdirSync(workerArtifactsDir, { recursive: true });
+
+  const renderedHtml = "<!doctype html><html><body><main><h1>Shared Storage DOM</h1><p>Accepted</p></main></body></html>";
+  const viewportPng = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10, 10, 20, 30, 40]);
+  const fullpagePng = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10, 11, 21, 31, 41]);
+  const domPath = path.resolve(workerArtifactsDir, "rendered-dom.html");
+  const viewportPath = path.resolve(workerArtifactsDir, "viewport.png");
+  const fullpagePath = path.resolve(workerArtifactsDir, "fullpage.png");
+  fs.writeFileSync(domPath, renderedHtml, "utf8");
+  fs.writeFileSync(viewportPath, viewportPng);
+  fs.writeFileSync(fullpagePath, fullpagePng);
+
+  const snapshot = await importPublicSinglePageUrlToSnapshot({
+    sourceUrl,
+    snapshotRootDirAbs: tmp,
+    fetchImpl: mockFetchFromTable({
+      [sourceUrl]: {
+        status: 200,
+        headers: { "content-type": "text/html; charset=utf-8" },
+        body: "<!doctype html><html><body><h1>Raw Source</h1></body></html>",
+      },
+    }),
+    renderedCaptureWorkerClient: mockRenderedCaptureWorkerClient({
+      kind: "rendered_capture_worker_response_v1",
+      contractVersion: RENDERED_CAPTURE_WORKER_CONTRACT_VERSION,
+      requestId: "worker-req-shared-storage",
+      status: "available",
+      environment: {
+        runtimeKind: "nodejs",
+        environmentSupported: true,
+        browserPackageAvailable: true,
+        browserBinaryAvailable: true,
+        supportDecision: "supported",
+      },
+      artifacts: [
+        {
+          artifactType: "rendered_dom_html",
+          captureType: null,
+          storage: "shared_storage",
+          uri: `file://${domPath}`,
+          mediaType: "text/html",
+          sha256: crypto.createHash("sha256").update(renderedHtml).digest("hex"),
+          byteLength: Buffer.byteLength(renderedHtml),
+        },
+        {
+          artifactType: "screenshot_png",
+          captureType: "desktop_viewport",
+          storage: "shared_storage",
+          uri: `file://${viewportPath}`,
+          mediaType: "image/png",
+          sha256: crypto.createHash("sha256").update(viewportPng).digest("hex"),
+          byteLength: viewportPng.byteLength,
+        },
+        {
+          artifactType: "screenshot_png",
+          captureType: "desktop_fullpage",
+          storage: "shared_storage",
+          uri: `file://${fullpagePath}`,
+          mediaType: "image/png",
+          sha256: crypto.createHash("sha256").update(fullpagePng).digest("hex"),
+          byteLength: fullpagePng.byteLength,
+        },
+      ],
+      computedStyleSamples: [],
+      diagnostics: [],
+      qualitySummary: {
+        renderedDomQuality: "strong",
+        domLength: renderedHtml.length,
+        meaningfulNodeCount: 8,
+        screenshotCount: 2,
+        computedStyleSampleCount: 0,
+      },
+      failure: null,
+      timings: {
+        queueLatencyMs: null,
+        executionMs: 500,
+        totalMs: 500,
+      },
+    }),
+  });
+
+  assert.equal(snapshot.sourceMode, "rendered_dom");
+  assert.equal(snapshot.sourceSelection.sourceMode, "rendered_dom");
+  assert.equal(snapshot.renderedCapture.status, "available");
+  assert.equal(snapshot.renderedCapture.documents.length > 0, true);
+  assert.equal(snapshot.renderedCapture.screenshots.length, 2);
+  assert.equal(snapshot.importDiagnostics.issues.some((issue) => issue.code === "RAW_HTML_FALLBACK_USED"), false);
+  assert.equal(snapshot.importDiagnostics.issues.some((issue) => issue.code === "CAPTURE_WORKER_UNAVAILABLE"), false);
+  assert.equal(snapshot.importDiagnostics.issues.some((issue) => issue.code === "CAPTURE_WORKER_HTTP_ERROR"), false);
+
+  const acquisitionEvidence = JSON.parse(fs.readFileSync(path.resolve(snapshot.snapshotRootDirAbs, "acquisition-evidence.json"), "utf8"));
+  assert.equal(acquisitionEvidence.selectedSource.mode, "rendered_dom");
+  assert.equal(acquisitionEvidence.renderedCapture.status, "available");
+  assert.equal(acquisitionEvidence.renderedCapture.documentCount > 0, true);
+  assert.equal(acquisitionEvidence.renderedCapture.screenshotCount >= 2, true);
+});
+
 test("worker-backed failure degrades explicitly to raw_html_fallback", async () => {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "gnr8-url-import-worker-fallback-"));
   const sourceUrl = "https://worker-fallback.example.com/";

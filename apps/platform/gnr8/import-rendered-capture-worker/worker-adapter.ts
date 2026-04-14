@@ -38,9 +38,29 @@ function parseDataUri(uri: string): { mediaType: string; bytes: Buffer } | null 
 function decodeInlineArtifactBytes(artifact: RenderedCaptureWorkerArtifactRef): Buffer | null {
   const uri = normalizeText(artifact.uri);
   if (!uri) return null;
-  if (artifact.storage === "inline") {
+  if (artifact.storage === "inline" || uri.startsWith("data:")) {
     const parsed = parseDataUri(uri);
     return parsed?.bytes ?? null;
+  }
+  const localPath = (() => {
+    if (uri.startsWith("file://")) {
+      try {
+        return decodeURIComponent(new URL(uri).pathname);
+      } catch {
+        return null;
+      }
+    }
+    if (path.isAbsolute(uri)) return uri;
+    return null;
+  })();
+  if (!localPath) return null;
+  try {
+    if (!fs.existsSync(localPath)) return null;
+    const stats = fs.statSync(localPath);
+    if (!stats.isFile()) return null;
+    return fs.readFileSync(localPath);
+  } catch {
+    return null;
   }
   return null;
 }

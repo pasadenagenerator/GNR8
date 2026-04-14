@@ -453,6 +453,67 @@ test("http worker client keeps worker-phase timeout truth without transport misc
   assert.equal(response.diagnostics.some((entry) => entry.code === "CAPTURE_WORKER_UNAVAILABLE"), false);
 });
 
+test("http worker client sanitizes stale transport-failure diagnostics for successful worker payloads", async () => {
+  const request = makeRequest("req-success-sanitized");
+  const client = createHttpRenderedCaptureWorkerClient({
+    endpointUrl: "https://worker.example.com/capture",
+    sharedToken: "token-1",
+    timeoutMs: 10_000,
+    fetchImpl: async () =>
+      new Response(
+        JSON.stringify({
+          kind: "rendered_capture_worker_response_v1",
+          contractVersion: "1.0.0",
+          requestId: request.requestId,
+          status: "available",
+          environment: {
+            runtimeKind: "nodejs",
+            environmentSupported: true,
+            browserPackageAvailable: true,
+            browserBinaryAvailable: true,
+            supportDecision: "supported",
+          },
+          artifacts: [],
+          computedStyleSamples: [],
+          diagnostics: [
+            { code: "CAPTURE_WORKER_HTTP_ERROR", severity: "warning", message: "stale transport failure" },
+            { code: "CAPTURE_WORKER_REQUEST_FAILED", severity: "warning", message: "stale request failure" },
+            { code: "CAPTURE_WORKER_UNAVAILABLE", severity: "warning", message: "stale unavailable mapping" },
+          ],
+          qualitySummary: {
+            renderedDomQuality: "strong",
+            domLength: 100,
+            meaningfulNodeCount: 5,
+            screenshotCount: 0,
+            computedStyleSampleCount: 0,
+          },
+          failure: {
+            failureClass: "internal_error",
+            failureCode: "STALE_FAILURE",
+            retryable: true,
+            message: "stale failure",
+          },
+          timings: {
+            queueLatencyMs: null,
+            executionMs: 120,
+            totalMs: 120,
+          },
+        }),
+        {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        },
+      ),
+  });
+
+  const response = await client.execute(request);
+  assert.equal(response.status, "available");
+  assert.equal(response.failure, null);
+  assert.equal(response.diagnostics.some((entry) => entry.code === "CAPTURE_WORKER_HTTP_ERROR"), false);
+  assert.equal(response.diagnostics.some((entry) => entry.code === "CAPTURE_WORKER_REQUEST_FAILED"), false);
+  assert.equal(response.diagnostics.some((entry) => entry.code === "CAPTURE_WORKER_UNAVAILABLE"), false);
+});
+
 test("env client emits URL resolution diagnostics for missing endpoint/token configuration", async () => {
   const client = createRenderedCaptureWorkerClientFromEnv({
     env: {

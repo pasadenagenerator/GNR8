@@ -442,3 +442,85 @@ test("capture job retries retryable unsupported worker failures and preserves en
   assert.equal(result.health.enabled, false);
   assert.ok(result.workerResponse.diagnostics.some((entry) => entry.code === "CAPTURE_JOB_RETRIED"));
 });
+
+test("capture job keeps healthy mapping for successful worker status even if stale failure diagnostics are present", async () => {
+  const tmpDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), "gnr8-capture-job-success-health-"));
+  const orchestrator = new FileBackedRenderedCaptureJobOrchestrator({
+    rootDirAbs: tmpDir,
+  });
+
+  orchestrator.submitJob({
+    jobId: "job-success-with-stale-diags",
+    request: makeRequest("req-success-with-stale-diags"),
+    timeoutBudgetMs: 10_000,
+    maxAttempts: 1,
+    correlation: {
+      importId: "import-1",
+      siteId: "site-1",
+      snapshotId: "snapshot-1",
+      sourceUrl: "https://example.com/",
+    },
+  });
+
+  const workerClient: RenderedCaptureWorkerClient = {
+    async execute(request) {
+      return {
+        kind: "rendered_capture_worker_response_v1",
+        contractVersion: "1.0.0",
+        requestId: request.requestId,
+        status: "available",
+        environment: {
+          runtimeKind: "nodejs",
+          environmentSupported: true,
+          browserPackageAvailable: true,
+          browserBinaryAvailable: true,
+          supportDecision: "supported",
+        },
+        artifacts: [
+          {
+            artifactType: "rendered_dom_html",
+            captureType: null,
+            storage: "inline",
+            uri: "data:text/html;base64,PGh0bWw+PGJvZHk+T0s8L2JvZHk+PC9odG1sPg==",
+            mediaType: "text/html",
+            sha256: "abc",
+            byteLength: 18,
+          },
+        ],
+        computedStyleSamples: [],
+        diagnostics: [
+          { code: "CAPTURE_WORKER_HTTP_ERROR", severity: "warning", message: "stale http code" },
+          { code: "CAPTURE_WORKER_UNAVAILABLE", severity: "warning", message: "stale unavailable code" },
+        ],
+        qualitySummary: {
+          renderedDomQuality: "strong",
+          domLength: 18,
+          meaningfulNodeCount: 1,
+          screenshotCount: 0,
+          computedStyleSampleCount: 0,
+        },
+        failure: {
+          failureClass: "internal_error",
+          failureCode: "STALE_FAILURE",
+          retryable: true,
+          message: "stale",
+        },
+        timings: {
+          queueLatencyMs: null,
+          executionMs: 20,
+          totalMs: 20,
+        },
+      };
+    },
+  };
+
+  const result = await orchestrator.runJob({
+    jobId: "job-success-with-stale-diags",
+    workerClient,
+    waitBudgetMs: 10_000,
+  });
+
+  assert.equal(result.job.status, "completed");
+  assert.equal(result.health.status, "healthy");
+  assert.equal(result.health.reachable, true);
+});

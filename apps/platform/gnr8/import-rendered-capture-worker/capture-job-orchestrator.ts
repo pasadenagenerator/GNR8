@@ -175,6 +175,14 @@ function deriveHealthFromResponse(input: {
     input.response.failure?.failureClass === "timed_out" ||
     hasDiagnosticCode(input.response, "RENDERED_CAPTURE_TIMEOUT") ||
     hasDiagnosticCode(input.response, "CAPTURE_JOB_TIMED_OUT");
+  if (input.response.status === "available" || input.response.status === "partial") {
+    return {
+      reachable: true,
+      browserAvailable,
+      status: "healthy",
+      reason: null,
+    };
+  }
 
   if (!input.enabled || hasDiagnosticCode(input.response, "CAPTURE_WORKER_DISABLED")) {
     return {
@@ -214,14 +222,6 @@ function deriveHealthFromResponse(input: {
       browserAvailable: false,
       status: "unreachable",
       reason: "worker_http_error",
-    };
-  }
-  if (input.response.status === "available" || input.response.status === "partial") {
-    return {
-      reachable: true,
-      browserAvailable,
-      status: "healthy",
-      reason: null,
     };
   }
   if (executionTimedOut) {

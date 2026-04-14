@@ -183,6 +183,30 @@ function isWorkerResponseShape(value: unknown): value is RenderedCaptureWorkerRe
   return true;
 }
 
+function sanitizeSuccessfulWorkerResponse(input: {
+  payload: RenderedCaptureWorkerResponse;
+}): RenderedCaptureWorkerResponse {
+  const { payload } = input;
+  const successfulStatus = payload.status === "available" || payload.status === "partial";
+  if (!successfulStatus) return payload;
+
+  const droppedCodes = new Set<RenderedCaptureDiagnosticCode>([
+    "CAPTURE_WORKER_HTTP_ERROR",
+    "CAPTURE_WORKER_REQUEST_FAILED",
+    "CAPTURE_WORKER_UNAVAILABLE",
+    "CAPTURE_WORKER_EXECUTION_FAILED",
+  ]);
+  const filteredDiagnostics = (Array.isArray(payload.diagnostics) ? payload.diagnostics : []).filter(
+    (entry) => !droppedCodes.has(entry.code),
+  );
+
+  return {
+    ...payload,
+    failure: null,
+    diagnostics: filteredDiagnostics,
+  };
+}
+
 export function createUnavailableRenderedCaptureWorkerClient(input?: {
   reason?: WorkerUnavailableReason;
 }): RenderedCaptureWorkerClient {
@@ -422,7 +446,8 @@ export function createHttpRenderedCaptureWorkerClient(input: {
           });
         }
 
-        const responseDiagnostics = Array.isArray(payload.diagnostics) ? payload.diagnostics : [];
+        const sanitizedPayload = sanitizeSuccessfulWorkerResponse({ payload });
+        const responseDiagnostics = Array.isArray(sanitizedPayload.diagnostics) ? sanitizedPayload.diagnostics : [];
         const diagnosticsPrefix: RenderedCaptureDiagnostic[] = [
           startedDiagnostic,
           requestBuiltDiagnostic,
@@ -440,13 +465,13 @@ export function createHttpRenderedCaptureWorkerClient(input: {
             message: "Rendered capture worker response parsed and validated",
             details: {
               endpointUrl,
-              status: payload.status,
+              status: sanitizedPayload.status,
             },
           }),
         ];
 
-        if (payload.status === "failed") {
-          const timeoutFailure = payload.failure?.failureClass === "timed_out";
+        if (sanitizedPayload.status === "failed") {
+          const timeoutFailure = sanitizedPayload.failure?.failureClass === "timed_out";
           if (timeoutFailure && !responseDiagnostics.some((entry) => entry.code === "RENDERED_CAPTURE_TIMEOUT")) {
             diagnosticsPrefix.push(
               createDiagnostic({
@@ -455,8 +480,8 @@ export function createHttpRenderedCaptureWorkerClient(input: {
                 message: "Rendered capture worker execution timed out",
                 details: {
                   endpointUrl,
-                  failureCode: payload.failure?.failureCode ?? null,
-                  retryable: payload.failure?.retryable ?? null,
+                  failureCode: sanitizedPayload.failure?.failureCode ?? null,
+                  retryable: sanitizedPayload.failure?.retryable ?? null,
                 },
               }),
             );
@@ -470,16 +495,16 @@ export function createHttpRenderedCaptureWorkerClient(input: {
                 : "Rendered capture worker executed but capture failed",
               details: {
                 endpointUrl,
-                failureClass: payload.failure?.failureClass ?? null,
-                failureCode: payload.failure?.failureCode ?? null,
-                retryable: payload.failure?.retryable ?? null,
+                failureClass: sanitizedPayload.failure?.failureClass ?? null,
+                failureCode: sanitizedPayload.failure?.failureCode ?? null,
+                retryable: sanitizedPayload.failure?.retryable ?? null,
               },
             }),
           );
         }
 
-        payload.diagnostics = [...diagnosticsPrefix, ...responseDiagnostics];
-        return payload;
+        sanitizedPayload.diagnostics = [...diagnosticsPrefix, ...responseDiagnostics];
+        return sanitizedPayload;
       } catch (error) {
         const aborted = normalizeText((error as { name?: unknown })?.name) === "AbortError";
         const reason: WorkerUnavailableReason = aborted ? "worker_timeout" : "worker_unreachable";
