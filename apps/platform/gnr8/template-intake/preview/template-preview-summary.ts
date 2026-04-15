@@ -1,4 +1,5 @@
 import fs from 'node:fs'
+import path from 'node:path'
 
 import type { TemplateIntakeDiagnostic, TemplatePreviewSummary } from '@/gnr8/template-intake/types/template-intake-types'
 import { createTemplateIntakeDiagnostic } from '@/gnr8/template-intake/diagnostics/template-intake-diagnostics'
@@ -23,11 +24,14 @@ function resolvePreviewFromScreenshotPaths(paths: string[]): string | null {
 
 export function buildTemplatePreviewSummary(input: {
   screenshotPaths: string[]
+  entryHtmlPath?: string | null
 }): {
   preview: TemplatePreviewSummary
   diagnostics: TemplateIntakeDiagnostic[]
 } {
   const screenshotPath = resolvePreviewFromScreenshotPaths(input.screenshotPaths)
+  const entryHtmlPath = normalizeText(input.entryHtmlPath)
+  const entryHtmlFileName = entryHtmlPath ? path.posix.basename(entryHtmlPath.replaceAll('\\', '/')) : null
 
   if (screenshotPath) {
     return {
@@ -37,6 +41,7 @@ export function buildTemplatePreviewSummary(input: {
         previewSource: 'rendered_capture',
         previewImagePath: screenshotPath,
         previewLabel: 'Rendered preview capture available',
+        entryHtmlFileName,
       },
       diagnostics: [
         createTemplateIntakeDiagnostic({
@@ -56,6 +61,7 @@ export function buildTemplatePreviewSummary(input: {
       previewSource: 'fallback',
       previewImagePath: null,
       previewLabel: 'No preview available',
+      entryHtmlFileName,
     },
     diagnostics: [
       createTemplateIntakeDiagnostic({

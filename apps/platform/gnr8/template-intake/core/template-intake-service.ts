@@ -117,6 +117,7 @@ export async function runTemplateZipIntake(input: {
         previewSource: 'fallback',
         previewImagePath: null,
         previewLabel: 'No preview available',
+        entryHtmlFileName: null,
       },
       tags: [],
       importSnapshotId: zipValidation.snapshotId,
@@ -155,7 +156,53 @@ export async function runTemplateZipIntake(input: {
 
   const manifestSummary = summarizeTemplateDiagnostics(manifest.diagnostics)
 
-  const entryHtmlPath = zipValidation.validation.entryHtmlPath ?? 'index.html'
+  const entryHtmlPath = zipValidation.validation.entryHtmlPath
+  if (!entryHtmlPath) {
+    const updated = await repository.updateTemplateProcessingResult({
+      templateId: initialTemplate.id,
+      status: 'failed',
+      importHealth: 'failed',
+      preview: {
+        previewAvailable: false,
+        previewIsFallback: true,
+        previewSource: 'fallback',
+        previewImagePath: null,
+        previewLabel: 'No preview available',
+        entryHtmlFileName: null,
+      },
+      tags: [],
+      importSnapshotId: zipValidation.snapshotId,
+      diagnosticsSummary: summarizeTemplateDiagnostics([
+        ...createDiagnosticSummary.issues,
+        createTemplateIntakeDiagnostic({
+          code: 'TEMPLATE_HTML_ENTRY_NOT_FOUND',
+          severity: 'fatal',
+          message: 'Template intake validation did not resolve a usable HTML entry file.',
+        }),
+        createTemplateIntakeDiagnostic({
+          code: 'TEMPLATE_RECORD_UPDATED',
+          severity: 'info',
+          message: 'Template record marked as failed during intake validation.',
+        }),
+      ]),
+      templateManifestSummary: {
+        source: 'derived',
+        name: optimisticName,
+        description: null,
+        tags: [],
+      },
+      importManifestSummary: null,
+    })
+
+    return {
+      ok: false,
+      templateId: updated.id,
+      status: updated.status,
+      importHealth: updated.importHealth,
+      diagnosticsSummary: updated.diagnosticsSummary ?? createDiagnosticSummary,
+      errorMessage: 'Template ZIP must include one deterministic root-level HTML entry file.',
+    }
+  }
 
   const intakeDiagnostics = summarizeTemplateDiagnostics([
     ...createDiagnosticSummary.issues,
@@ -191,7 +238,7 @@ export async function runTemplateZipIntake(input: {
     fatalCount: importOutput.importDiagnostics.summary.fatalCount,
   })
 
-  const previewSummary = previewBuilder({ screenshotPaths: [] })
+  const previewSummary = previewBuilder({ screenshotPaths: [], entryHtmlPath })
 
   const importDiagnostics = summarizeTemplateDiagnostics([
     ...intakeDiagnostics.issues,

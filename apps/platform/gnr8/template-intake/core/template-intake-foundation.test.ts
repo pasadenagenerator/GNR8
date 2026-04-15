@@ -420,10 +420,11 @@ test('Import degraded maps template health to degraded', async () => {
 })
 
 test('Preview fallback is used when rendered screenshot is unavailable', () => {
-  const preview = buildTemplatePreviewSummary({ screenshotPaths: [] })
+  const preview = buildTemplatePreviewSummary({ screenshotPaths: [], entryHtmlPath: 'landing.html' })
   assert.equal(preview.preview.previewAvailable, false)
   assert.equal(preview.preview.previewIsFallback, true)
   assert.equal(preview.preview.previewSource, 'fallback')
+  assert.equal(preview.preview.entryHtmlFileName, 'landing.html')
 })
 
 test('Template list ordering is deterministic (newest first, id tie-break)', () => {

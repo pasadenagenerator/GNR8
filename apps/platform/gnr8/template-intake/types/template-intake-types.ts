@@ -20,6 +20,7 @@ export type TemplatePreviewSummary = {
   previewSource: TemplatePreviewSource
   previewImagePath: string | null
   previewLabel: string
+  entryHtmlFileName: string | null
 }
 
 export type TemplateIntakeDiagnosticSeverity = 'info' | 'warning' | 'error' | 'fatal'
@@ -32,9 +33,12 @@ export type TemplateIntakeDiagnosticCode =
   | 'TEMPLATE_ZIP_UNPACK_STARTED'
   | 'TEMPLATE_ZIP_UNPACK_COMPLETED'
   | 'TEMPLATE_ZIP_PATH_TRAVERSAL_BLOCKED'
-  | 'TEMPLATE_INDEX_HTML_FOUND'
-  | 'TEMPLATE_INDEX_HTML_INFERRED'
-  | 'TEMPLATE_INDEX_HTML_MISSING'
+  | 'TEMPLATE_ZIP_SINGLE_ROOT_FOLDER_DETECTED'
+  | 'TEMPLATE_ZIP_ROOT_NORMALIZED'
+  | 'TEMPLATE_HTML_ENTRY_INDEX_FOUND'
+  | 'TEMPLATE_HTML_ENTRY_FALLBACK_SINGLE_FILE'
+  | 'TEMPLATE_HTML_ENTRY_AMBIGUOUS'
+  | 'TEMPLATE_HTML_ENTRY_NOT_FOUND'
   | 'TEMPLATE_MANIFEST_FOUND'
   | 'TEMPLATE_MANIFEST_MISSING'
   | 'TEMPLATE_MANIFEST_NORMALIZED'
@@ -70,7 +74,7 @@ export type TemplateZipValidationResult = {
   ok: boolean
   extractionRootDirAbs: string
   entryHtmlPath: string | null
-  entryHtmlSelection: 'root_index' | 'inferred' | 'missing'
+  entryHtmlSelection: 'root_index' | 'single_file_fallback' | 'missing' | 'ambiguous'
   htmlCandidates: string[]
   assetsDirPath: string | null
   manifestPath: string | null

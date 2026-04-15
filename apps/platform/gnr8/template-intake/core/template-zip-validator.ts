@@ -82,8 +82,33 @@ function selectEntryHtmlPath(relativePaths: string[]): {
   htmlCandidates: string[]
 } {
   const htmlCandidates = relativePaths
-    .filter((entry) => entry.toLowerCase().endsWith('.html') || entry.toLowerCase().endsWith('.htm'))
+    .filter((entry) => !entry.includes('/') && entry.toLowerCase().endsWith('.html'))
     .sort((a, b) => a.localeCompare(b))
+
+  if (htmlCandidates.length > 1) {
+    return {
+      entryHtmlPath: null,
+      selection: 'ambiguous',
+      htmlCandidates,
+    }
+  }
+
+  const rootIndex = htmlCandidates[0]?.toLowerCase() === 'index.html' ? htmlCandidates[0] : null
+  if (rootIndex && htmlCandidates.length === 1) {
+    return {
+      entryHtmlPath: rootIndex,
+      selection: 'root_index',
+      htmlCandidates,
+    }
+  }
+
+  if (htmlCandidates.length === 1) {
+    return {
+      entryHtmlPath: htmlCandidates[0] ?? null,
+      selection: 'single_file_fallback',
+      htmlCandidates,
+    }
+  }
 
   if (htmlCandidates.length === 0) {
     return {
@@ -93,28 +118,50 @@ function selectEntryHtmlPath(relativePaths: string[]): {
     }
   }
 
-  const rootIndex = htmlCandidates.find((entry) => entry.toLowerCase() === 'index.html')
-  if (rootIndex) {
+  return { entryHtmlPath: null, selection: 'missing', htmlCandidates }
+}
+
+function resolveEffectiveZipRoot(relativePaths: string[]): {
+  normalizedPaths: string[]
+  normalizedRootFolderName: string | null
+} {
+  if (relativePaths.length === 0) {
     return {
-      entryHtmlPath: rootIndex,
-      selection: 'root_index',
-      htmlCandidates,
+      normalizedPaths: relativePaths,
+      normalizedRootFolderName: null,
     }
   }
 
-  const nestedIndex = htmlCandidates.find((entry) => path.posix.basename(entry).toLowerCase() === 'index.html')
-  if (nestedIndex) {
+  const rootFiles = relativePaths.filter((entry) => !entry.includes('/'))
+  const rootDirNames = new Set(
+    relativePaths
+      .filter((entry) => entry.includes('/'))
+      .map((entry) => entry.split('/')[0])
+      .filter(Boolean),
+  )
+
+  if (rootFiles.length !== 0 || rootDirNames.size !== 1) {
     return {
-      entryHtmlPath: nestedIndex,
-      selection: 'inferred',
-      htmlCandidates,
+      normalizedPaths: relativePaths,
+      normalizedRootFolderName: null,
     }
   }
 
+  const normalizedRootFolderName = [...rootDirNames][0] ?? null
+  if (!normalizedRootFolderName) {
+    return {
+      normalizedPaths: relativePaths,
+      normalizedRootFolderName: null,
+    }
+  }
+
+  const prefix = `${normalizedRootFolderName}/`
   return {
-    entryHtmlPath: htmlCandidates[0] ?? null,
-    selection: 'inferred',
-    htmlCandidates,
+    normalizedPaths: relativePaths
+      .filter((entry) => entry.startsWith(prefix))
+      .map((entry) => entry.slice(prefix.length))
+      .filter(Boolean),
+    normalizedRootFolderName,
   }
 }
 
@@ -345,29 +392,75 @@ export function validateAndExtractTemplateZip(input: {
     }
   }
 
+  const rootNormalization = resolveEffectiveZipRoot(safeValidation.safeEntries)
+  const normalizedPaths = rootNormalization.normalizedPaths
+  let effectiveExtractionRootDirAbs = extractionRootDirAbs
+  if (rootNormalization.normalizedRootFolderName) {
+    diagnostics.push(
+      createTemplateIntakeDiagnostic({
+        code: 'TEMPLATE_ZIP_SINGLE_ROOT_FOLDER_DETECTED',
+        severity: 'info',
+        message: 'ZIP contains a single root folder and no root-level files.',
+        details: { rootFolderName: rootNormalization.normalizedRootFolderName },
+      }),
+    )
+
+    effectiveExtractionRootDirAbs = path.resolve(extractionRootDirAbs, rootNormalization.normalizedRootFolderName)
+    diagnostics.push(
+      createTemplateIntakeDiagnostic({
+        code: 'TEMPLATE_ZIP_ROOT_NORMALIZED',
+        severity: 'info',
+        message: 'ZIP root normalized to single root folder.',
+        details: { rootFolderName: rootNormalization.normalizedRootFolderName },
+      }),
+    )
+  }
+
   diagnostics.push(
     createTemplateIntakeDiagnostic({
       code: 'TEMPLATE_ZIP_UNPACK_COMPLETED',
       severity: 'info',
       message: 'ZIP unpacking completed.',
-      details: { fileCount: safeValidation.safeEntries.length },
+      details: { fileCount: normalizedPaths.length },
     }),
   )
 
-  const selectedEntry = selectEntryHtmlPath(safeValidation.safeEntries)
-  if (!selectedEntry.entryHtmlPath) {
+  const selectedEntry = selectEntryHtmlPath(normalizedPaths)
+  if (selectedEntry.selection === 'missing') {
     diagnostics.push(
       createTemplateIntakeDiagnostic({
-        code: 'TEMPLATE_INDEX_HTML_MISSING',
+        code: 'TEMPLATE_HTML_ENTRY_NOT_FOUND',
         severity: 'fatal',
-        message: 'No usable HTML entry file found in uploaded ZIP.',
+        message: 'No root-level HTML entry file found in uploaded ZIP.',
       }),
     )
 
     return {
       ok: false,
       diagnostics,
-      errorMessage: 'ZIP must include at least one HTML file (preferably index.html).',
+      errorMessage: 'ZIP must include one root-level HTML file.',
+      snapshotId,
+      zipFileAbsPath,
+      validation: null,
+    }
+  }
+
+  if (selectedEntry.selection === 'ambiguous') {
+    diagnostics.push(
+      createTemplateIntakeDiagnostic({
+        code: 'TEMPLATE_HTML_ENTRY_AMBIGUOUS',
+        severity: 'fatal',
+        message: 'Multiple root-level HTML files found; entry file is ambiguous.',
+        details: {
+          fileCount: selectedEntry.htmlCandidates.length,
+          fileNames: selectedEntry.htmlCandidates,
+        },
+      }),
+    )
+    return {
+      ok: false,
+      diagnostics,
+      errorMessage: 'ZIP has multiple root-level HTML files; entry file is ambiguous.',
       snapshotId,
       zipFileAbsPath,
       validation: null,
@@ -376,20 +469,26 @@ export function validateAndExtractTemplateZip(input: {
 
   diagnostics.push(
     createTemplateIntakeDiagnostic({
-      code: selectedEntry.selection === 'root_index' ? 'TEMPLATE_INDEX_HTML_FOUND' : 'TEMPLATE_INDEX_HTML_INFERRED',
+      code:
+        selectedEntry.selection === 'root_index'
+          ? 'TEMPLATE_HTML_ENTRY_INDEX_FOUND'
+          : 'TEMPLATE_HTML_ENTRY_FALLBACK_SINGLE_FILE',
       severity: selectedEntry.selection === 'root_index' ? 'info' : 'warning',
       message:
         selectedEntry.selection === 'root_index'
           ? 'Root index.html detected as template entry.'
-          : 'Template entry HTML inferred deterministically from ZIP contents.',
+          : 'Template entry HTML resolved using single-file fallback.',
       details: {
         entryHtmlPath: selectedEntry.entryHtmlPath,
         htmlCandidates: selectedEntry.htmlCandidates,
+        ...(selectedEntry.selection === 'single_file_fallback'
+          ? { fileName: selectedEntry.entryHtmlPath }
+          : {}),
       },
     }),
   )
 
-  const manifestPath = selectManifestPath(safeValidation.safeEntries)
+  const manifestPath = selectManifestPath(normalizedPaths)
   if (!manifestPath) {
     diagnostics.push(
       createTemplateIntakeDiagnostic({
@@ -402,13 +501,13 @@ export function validateAndExtractTemplateZip(input: {
 
   const validation: TemplateZipValidationResult = {
     ok: true,
-    extractionRootDirAbs,
+    extractionRootDirAbs: effectiveExtractionRootDirAbs,
     entryHtmlPath: selectedEntry.entryHtmlPath,
     entryHtmlSelection: selectedEntry.selection,
     htmlCandidates: selectedEntry.htmlCandidates,
-    assetsDirPath: resolveAssetsDirPath(safeValidation.safeEntries),
+    assetsDirPath: resolveAssetsDirPath(normalizedPaths),
     manifestPath,
-    assetSummary: computeAssetSummary(safeValidation.safeEntries),
+    assetSummary: computeAssetSummary(normalizedPaths),
   }
 
   return {
