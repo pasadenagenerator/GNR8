@@ -58,10 +58,10 @@ function buildDerivedSection(input: {
     ?? []
 
   const usedComponentIds = new Set<string>()
-  const derivedComponents = input.componentPatterns
+  const derivedComponents: FinalComponentModel[] = input.componentPatterns
     .slice()
     .sort((a, b) => a.order - b.order || a.componentPatternId.localeCompare(b.componentPatternId))
-    .map((pattern) => {
+    .map((pattern): FinalComponentModel => {
       const matched = sourceComponents.find((component) => component.kind === pattern.kind && !usedComponentIds.has(component.id))
       if (!matched) {
         input.diagnostics.push(
@@ -84,7 +84,9 @@ function buildDerivedSection(input: {
           componentPattern: pattern,
         })
       }
+
       usedComponentIds.add(matched.id)
+
       return {
         ...matched,
         sectionId,
