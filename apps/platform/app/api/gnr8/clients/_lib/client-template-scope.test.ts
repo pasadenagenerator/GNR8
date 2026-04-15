@@ -148,3 +148,24 @@ test('templates list and upload routes both use requireClientTemplateScope for d
   assert.match(listRouteSource, /requireClientTemplateScope/)
   assert.match(uploadRouteSource, /requireClientTemplateScope/)
 })
+
+test('client template scope helpers stay read-only and avoid mutating supabase helper', () => {
+  const scopeSource = readFileSync(new URL('./client-template-scope.ts', import.meta.url), 'utf8')
+
+  assert.match(scopeSource, /resolveCurrentUserClientForPage/)
+  assert.match(scopeSource, /getSupabaseServerClientReadOnly/)
+  assert.doesNotMatch(scopeSource, /getSupabaseServerClientMutating/)
+})
+
+test('template routes map repository errors before generic scope parsing', () => {
+  const listRouteSource = readFileSync(new URL('../[clientId]/templates/route.ts', import.meta.url), 'utf8')
+  const uploadRouteSource = readFileSync(new URL('../[clientId]/templates/upload/route.ts', import.meta.url), 'utf8')
+
+  assert.match(listRouteSource, /parseTemplateRepositoryError/)
+  assert.match(uploadRouteSource, /parseTemplateRepositoryError/)
+})
+
+test('mutating Supabase helper still writes cookies in allowed boundaries', () => {
+  const mutatingSource = readFileSync(new URL('../../../../../src/auth/supabase-server-mutating.ts', import.meta.url), 'utf8')
+  assert.match(mutatingSource, /cookieStore\.set\(/)
+})

@@ -1,6 +1,8 @@
 -- Template Intake Foundation V1
 -- ZIP upload intake -> first-class template records -> deterministic status/health surface.
 
+create extension if not exists pgcrypto;
+
 create table if not exists public.gnr8_templates (
   id uuid primary key default gen_random_uuid(),
   client_id uuid not null references public.organizations(id) on delete cascade,

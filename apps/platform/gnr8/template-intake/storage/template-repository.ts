@@ -10,6 +10,70 @@ import type {
 } from '@/gnr8/template-intake/types/template-intake-types'
 import { getSuperadminPool } from '@/src/superadmin/db'
 
+export type TemplateRepositoryErrorCode = 'TEMPLATE_TABLE_NOT_FOUND' | 'TEMPLATE_REPOSITORY_FAILURE'
+
+export class TemplateRepositoryError extends Error {
+  readonly code: TemplateRepositoryErrorCode
+
+  constructor(code: TemplateRepositoryErrorCode, message: string) {
+    super(message)
+    this.name = 'TemplateRepositoryError'
+    this.code = code
+  }
+}
+
+type PgLikeError = {
+  code?: unknown
+  message?: unknown
+  table?: unknown
+}
+
+function normalizeErrorText(value: unknown): string {
+  return String(value ?? '').trim()
+}
+
+function isTemplateTableNotFoundError(error: unknown): boolean {
+  const pgError = error as PgLikeError | null
+  const code = normalizeErrorText(pgError?.code)
+  if (code !== '42P01') return false
+
+  const message = normalizeErrorText(pgError?.message).toLowerCase()
+  const table = normalizeErrorText(pgError?.table).toLowerCase()
+  return message.includes('gnr8_templates') || table === 'gnr8_templates'
+}
+
+function toTemplateRepositoryError(error: unknown): TemplateRepositoryError {
+  if (error instanceof TemplateRepositoryError) return error
+  if (isTemplateTableNotFoundError(error)) {
+    return new TemplateRepositoryError(
+      'TEMPLATE_TABLE_NOT_FOUND',
+      'Template storage is not provisioned. Run DB migrations and retry.',
+    )
+  }
+  return new TemplateRepositoryError('TEMPLATE_REPOSITORY_FAILURE', 'Template storage request failed.')
+}
+
+export function parseTemplateRepositoryError(
+  error: unknown,
+): { status: number; code: TemplateRepositoryErrorCode; message: string } | null {
+  const mapped = error instanceof TemplateRepositoryError ? error : isTemplateTableNotFoundError(error) ? toTemplateRepositoryError(error) : null
+  if (!mapped) return null
+
+  if (mapped.code === 'TEMPLATE_TABLE_NOT_FOUND') {
+    return {
+      status: 500,
+      code: mapped.code,
+      message: mapped.message,
+    }
+  }
+
+  return {
+    status: 500,
+    code: mapped.code,
+    message: mapped.message,
+  }
+}
+
 type TemplateRow = {
   id: string
   client_id: string
@@ -86,8 +150,9 @@ async function withConnection<T>(fn: (client: PoolClient) => Promise<T>): Promis
 
 export async function createTemplate(input: CreateTemplateInput): Promise<TemplateRecord> {
   return withConnection(async (client) => {
-    const result = await client.query<TemplateRow>(
-      `
+    try {
+      const result = await client.query<TemplateRow>(
+        `
       insert into public.gnr8_templates (
         client_id,
         organization_id,
@@ -174,21 +239,25 @@ export async function createTemplate(input: CreateTemplateInput): Promise<Templa
         input.templateManifestSummary,
         input.diagnosticsSummary,
       ],
-    )
+      )
 
-    const row = result.rows[0]
-    if (!row) {
-      throw new Error('Template record creation failed.')
+      const row = result.rows[0]
+      if (!row) {
+        throw new TemplateRepositoryError('TEMPLATE_REPOSITORY_FAILURE', 'Template record creation failed.')
+      }
+
+      return mapTemplateRow(row)
+    } catch (error) {
+      throw toTemplateRepositoryError(error)
     }
-
-    return mapTemplateRow(row)
   })
 }
 
 export async function updateTemplateProcessingResult(input: UpdateTemplateProcessingResultInput): Promise<TemplateRecord> {
   return withConnection(async (client) => {
-    const result = await client.query<TemplateRow>(
-      `
+    try {
+      const result = await client.query<TemplateRow>(
+        `
       update public.gnr8_templates
       set
         status = $2::text,
@@ -244,14 +313,17 @@ export async function updateTemplateProcessingResult(input: UpdateTemplateProces
         input.templateManifestSummary,
         input.importManifestSummary,
       ],
-    )
+      )
 
-    const row = result.rows[0]
-    if (!row) {
-      throw new Error('Template record update failed.')
+      const row = result.rows[0]
+      if (!row) {
+        throw new TemplateRepositoryError('TEMPLATE_REPOSITORY_FAILURE', 'Template record update failed.')
+      }
+
+      return mapTemplateRow(row)
+    } catch (error) {
+      throw toTemplateRepositoryError(error)
     }
-
-    return mapTemplateRow(row)
   })
 }
 
@@ -259,8 +331,9 @@ export async function listTemplatesForClient(input: { clientId: string; limit?: 
   return withConnection(async (client) => {
     const limit = Math.min(Math.max(Number(input.limit ?? 120) || 120, 1), 500)
 
-    const result = await client.query<TemplateRow>(
-      `
+    try {
+      const result = await client.query<TemplateRow>(
+        `
       select
         id::text,
         client_id::text,
@@ -292,8 +365,11 @@ export async function listTemplatesForClient(input: { clientId: string; limit?: 
       limit $2
       `,
       [input.clientId, limit],
-    )
+      )
 
-    return result.rows.map((row) => mapTemplateRow(row))
+      return result.rows.map((row) => mapTemplateRow(row))
+    } catch (error) {
+      throw toTemplateRepositoryError(error)
+    }
   })
 }

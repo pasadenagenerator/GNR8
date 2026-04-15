@@ -5,6 +5,7 @@ import {
   mapTemplateToListCard,
   sortTemplateCardsDeterministically,
 } from '@/gnr8/template-intake/core/template-list-contract'
+import { parseTemplateRepositoryError } from '@/gnr8/template-intake/storage/template-repository'
 import { parseThrownScopeError, requireClientTemplateScope } from '@/app/api/gnr8/clients/_lib/client-template-scope'
 
 export const runtime = 'nodejs'
@@ -37,6 +38,14 @@ export async function GET(_request: Request, ctx: { params: Promise<Params> }) {
       { status: 200 },
     )
   } catch (error) {
+    const storageError = parseTemplateRepositoryError(error)
+    if (storageError) {
+      return NextResponse.json(
+        { ok: false, code: storageError.code, error: storageError.message },
+        { status: storageError.status },
+      )
+    }
+
     const mapped = parseThrownScopeError(error)
     return NextResponse.json({ ok: false, error: mapped.message }, { status: mapped.status })
   }

@@ -1,6 +1,6 @@
 import { requireAgencyActionContext } from '@/app/api/gnr8/agency/_lib/agency-action-access'
-import { ResolveCurrentClientError, resolveCurrentUserClient } from '@/src/auth/resolve-current-client'
-import { getSupabaseServerClientMutating } from '@/src/auth/supabase-server-mutating'
+import { ResolveCurrentClientError, resolveCurrentUserClientForPage } from '@/src/auth/resolve-current-client'
+import { getSupabaseServerClientReadOnly } from '@/src/auth/supabase-server-read-only'
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 
@@ -49,7 +49,7 @@ export function parseThrownScopeError(error: unknown): { status: number; message
 type ClientTemplateScope = { userId: string; clientId: string; organizationId: string; agencyId: string }
 
 type ClientTemplateScopeDeps = {
-  resolveCurrentUserClientForScope: typeof resolveCurrentUserClient
+  resolveCurrentUserClientForScope: typeof resolveCurrentUserClientForPage
   resolveClientAgencyByOrganization: (input: { clientId: string }) => Promise<{ clientId: string; agencyId: string } | null>
   requireAgencyTemplateScope: (input: { agencyId: string }) => Promise<{ userId: string; agencyId: string }>
 }
@@ -57,7 +57,7 @@ type ClientTemplateScopeDeps = {
 async function resolveClientAgencyByOrganization(input: {
   clientId: string
 }): Promise<{ clientId: string; agencyId: string } | null> {
-  const supabase = await getSupabaseServerClientMutating()
+  const supabase = await getSupabaseServerClientReadOnly()
   const organizationResult = await supabase
     .from('organizations')
     .select('id,agency_id,organization_type')
@@ -81,7 +81,7 @@ async function resolveClientAgencyByOrganization(input: {
 }
 
 const DEFAULT_CLIENT_TEMPLATE_SCOPE_DEPS: ClientTemplateScopeDeps = {
-  resolveCurrentUserClientForScope: resolveCurrentUserClient,
+  resolveCurrentUserClientForScope: resolveCurrentUserClientForPage,
   resolveClientAgencyByOrganization,
   requireAgencyTemplateScope: async (input) => {
     const context = await requireAgencyActionContext({
