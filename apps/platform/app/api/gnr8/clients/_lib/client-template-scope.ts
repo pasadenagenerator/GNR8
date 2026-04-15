@@ -1,4 +1,6 @@
+import { requireAgencyActionContext } from '@/app/api/gnr8/agency/_lib/agency-action-access'
 import { ResolveCurrentClientError, resolveCurrentUserClient } from '@/src/auth/resolve-current-client'
+import { getSupabaseServerClientMutating } from '@/src/auth/supabase-server-mutating'
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 
@@ -29,30 +31,6 @@ export function parseTemplateScopeError(error: unknown): { status: number; messa
   return { status: 500, message: 'Template scope resolution failed.' }
 }
 
-export async function requireClientTemplateScope(input: {
-  clientIdParam: string
-}): Promise<{ userId: string; clientId: string; organizationId: string; agencyId: string }> {
-  const clientId = normalizeUuid(input.clientIdParam)
-  if (!clientId) {
-    throw new Error('400|clientId must be a valid UUID.')
-  }
-
-  const currentClient = await resolveCurrentUserClient({
-    activeClientId: clientId,
-  })
-
-  if (currentClient.client_id !== clientId) {
-    throw new Error('403|Client scope mismatch for template operation.')
-  }
-
-  return {
-    userId: currentClient.user_id,
-    clientId: currentClient.client_id,
-    organizationId: currentClient.client_id,
-    agencyId: currentClient.agency_id,
-  }
-}
-
 export function parseThrownScopeError(error: unknown): { status: number; message: string } {
   if (error instanceof Error && error.message.includes('|')) {
     const [statusRaw, ...parts] = error.message.split('|')
@@ -66,4 +44,111 @@ export function parseThrownScopeError(error: unknown): { status: number; message
   }
 
   return parseTemplateScopeError(error)
+}
+
+type ClientTemplateScope = { userId: string; clientId: string; organizationId: string; agencyId: string }
+
+type ClientTemplateScopeDeps = {
+  resolveCurrentUserClientForScope: typeof resolveCurrentUserClient
+  resolveClientAgencyByOrganization: (input: { clientId: string }) => Promise<{ clientId: string; agencyId: string } | null>
+  requireAgencyTemplateScope: (input: { agencyId: string }) => Promise<{ userId: string; agencyId: string }>
+}
+
+async function resolveClientAgencyByOrganization(input: {
+  clientId: string
+}): Promise<{ clientId: string; agencyId: string } | null> {
+  const supabase = await getSupabaseServerClientMutating()
+  const organizationResult = await supabase
+    .from('organizations')
+    .select('id,agency_id,organization_type')
+    .eq('id', input.clientId)
+    .eq('organization_type', 'client')
+    .limit(1)
+    .maybeSingle()
+
+  if (organizationResult.error) {
+    throw new Error(`500|Failed to resolve client organization scope: ${organizationResult.error.message}`)
+  }
+
+  const organization = organizationResult.data
+  const resolvedClientId = normalizeUuid(organization?.id)
+  const resolvedAgencyId = normalizeUuid(organization?.agency_id)
+  if (!resolvedClientId || !resolvedAgencyId) return null
+  return {
+    clientId: resolvedClientId,
+    agencyId: resolvedAgencyId,
+  }
+}
+
+const DEFAULT_CLIENT_TEMPLATE_SCOPE_DEPS: ClientTemplateScopeDeps = {
+  resolveCurrentUserClientForScope: resolveCurrentUserClient,
+  resolveClientAgencyByOrganization,
+  requireAgencyTemplateScope: async (input) => {
+    const context = await requireAgencyActionContext({
+      action: 'view_dashboard',
+      requestedAgencyId: input.agencyId,
+    })
+    return {
+      userId: context.userId,
+      agencyId: context.agencyId,
+    }
+  },
+}
+
+export async function resolveClientTemplateScope(
+  input: {
+    clientIdParam: string
+  },
+  deps: ClientTemplateScopeDeps = DEFAULT_CLIENT_TEMPLATE_SCOPE_DEPS,
+): Promise<ClientTemplateScope> {
+  const clientId = normalizeUuid(input.clientIdParam)
+  if (!clientId) {
+    throw new Error('400|clientId must be a valid UUID.')
+  }
+
+  try {
+    const currentClient = await deps.resolveCurrentUserClientForScope({
+      activeClientId: clientId,
+    })
+    if (currentClient.client_id !== clientId) {
+      throw new Error('403|Client scope mismatch for template operation.')
+    }
+    return {
+      userId: currentClient.user_id,
+      clientId: currentClient.client_id,
+      organizationId: currentClient.client_id,
+      agencyId: currentClient.agency_id,
+    }
+  } catch (error) {
+    if (!(error instanceof ResolveCurrentClientError) || error.code === 'UNAUTHORIZED') {
+      throw error
+    }
+  }
+
+  const clientAgencyScope = await deps.resolveClientAgencyByOrganization({
+    clientId,
+  })
+  if (!clientAgencyScope) {
+    throw new Error('403|Client scope is invalid for current access context.')
+  }
+
+  const agencyScope = await deps.requireAgencyTemplateScope({
+    agencyId: clientAgencyScope.agencyId,
+  })
+  if (agencyScope.agencyId !== clientAgencyScope.agencyId) {
+    throw new Error('403|Agency scope mismatch for template operation.')
+  }
+
+  return {
+    userId: agencyScope.userId,
+    clientId: clientAgencyScope.clientId,
+    organizationId: clientAgencyScope.clientId,
+    agencyId: clientAgencyScope.agencyId,
+  }
+}
+
+export async function requireClientTemplateScope(input: {
+  clientIdParam: string
+}): Promise<{ userId: string; clientId: string; organizationId: string; agencyId: string }> {
+  return resolveClientTemplateScope(input)
 }

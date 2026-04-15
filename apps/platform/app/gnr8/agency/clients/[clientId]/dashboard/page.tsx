@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { redirect } from 'next/navigation'
 
 import ClientDashboardHome from '@/app/gnr8/_components/client-dashboard/ClientDashboardHome'
+import { parseThrownScopeError, resolveClientTemplateScope } from '@/app/api/gnr8/clients/_lib/client-template-scope'
 import { listSwitchableAgencyClientsForPage } from '../../client-switcher-options'
 import ClientContextLayout from '../ClientContextLayout'
 import { getClientDashboardReadModelForPage } from '@/gnr8/client/client-dashboard-read-model'
@@ -200,6 +201,12 @@ export default async function AgencyClientDashboardEntryPage(props: {
     agencyId: currentUserAgency.agency_id,
     adminView,
   })
+  let templateScopeErrorMessage: string | null = null
+  try {
+    await resolveClientTemplateScope({ clientIdParam: clientId })
+  } catch (error) {
+    templateScopeErrorMessage = parseThrownScopeError(error).message
+  }
 
   return (
     <ClientContextLayout
@@ -221,6 +228,7 @@ export default async function AgencyClientDashboardEntryPage(props: {
         readModel={readModel}
         roleLabel={currentUserAgency.role}
         viewMode='agency-managed'
+        templateScopeErrorMessage={templateScopeErrorMessage}
         backToAgencyHref={backToAgencyHref}
         settingsHref={settingsHref}
         teamHref={teamHref}

@@ -9,6 +9,7 @@ type Props = {
   readModel: ClientDashboardReadModel;
   roleLabel: string;
   viewMode: "agency-managed" | "client-self";
+  templateScopeErrorMessage?: string | null;
   backToAgencyHref?: string;
   settingsHref?: string;
   teamHref?: string;
@@ -273,7 +274,7 @@ export default function ClientDashboardHome(props: Props) {
         )}
       </section>
 
-      <TemplateLibraryPanel clientId={props.clientId} />
+      <TemplateLibraryPanel clientId={props.clientId} initialScopeError={props.templateScopeErrorMessage ?? null} />
     </>
   );
 }

@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
+import { resolveTemplateLibraryUiView } from '@/app/gnr8/_components/client-dashboard/template-library-contract'
 
 type TemplateListResponse = {
   ok: boolean
@@ -92,9 +93,9 @@ function StatusBadge(props: { label: string; value: string }) {
   )
 }
 
-export default function TemplateLibraryPanel(props: { clientId: string }) {
+export default function TemplateLibraryPanel(props: { clientId: string; initialScopeError?: string | null }) {
   const [templates, setTemplates] = useState<TemplateListResponse['templates']>([])
-  const [error, setError] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(props.initialScopeError ?? null)
   const [uploadError, setUploadError] = useState<string | null>(null)
   const [successMessage, setSuccessMessage] = useState<string | null>(null)
   const [file, setFile] = useState<File | null>(null)
@@ -130,10 +131,20 @@ export default function TemplateLibraryPanel(props: { clientId: string }) {
   }
 
   useEffect(() => {
+    if (props.initialScopeError) {
+      setError(props.initialScopeError)
+      setIsLoading(false)
+      return
+    }
     void loadTemplates()
-  }, [])
+  }, [props.initialScopeError])
 
   const hasTemplates = (templates?.length ?? 0) > 0
+  const uiView = resolveTemplateLibraryUiView({
+    isLoading,
+    error,
+    templatesCount: templates?.length ?? 0,
+  })
 
   async function onUpload(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -270,9 +281,9 @@ export default function TemplateLibraryPanel(props: { clientId: string }) {
         </div>
       ) : null}
 
-      {isLoading ? (
+      {uiView === 'loading' ? (
         <p style={{ marginTop: 12, marginBottom: 0, color: '#475569', fontSize: 13 }}>Loading templates...</p>
-      ) : hasTemplates ? (
+      ) : uiView === 'list' && hasTemplates ? (
         <div
           style={{
             marginTop: 12,
@@ -343,7 +354,7 @@ export default function TemplateLibraryPanel(props: { clientId: string }) {
             </article>
           ))}
         </div>
-      ) : (
+      ) : uiView === 'empty' ? (
         <div
           style={{
             marginTop: 12,
@@ -357,7 +368,7 @@ export default function TemplateLibraryPanel(props: { clientId: string }) {
         >
           No templates uploaded yet.
         </div>
-      )}
+      ) : null}
     </section>
   )
 }
