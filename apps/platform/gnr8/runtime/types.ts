@@ -4,6 +4,7 @@ import type { PageMigrationGateResult } from "@/gnr8/migration/quality-gates/pag
 import type { PageRolloutPolicyResult } from "@/gnr8/migration/policy/page-rollout-policy";
 import type { StyleSignalModel } from "@/gnr8/style-signals";
 import type { MultipageImportSummary, MultipageImportTree } from "@/gnr8/multipage-import";
+import type { SiteTree, SiteTreeSummary } from "@/gnr8/site-tree";
 
 export const RENDERER_COMPATIBILITY_VERSION = "gnr8-renderer-v1" as const;
 
@@ -119,6 +120,10 @@ export type RuntimeImportProvenanceSummary = {
   multipageImport?: {
     summary: MultipageImportSummary;
     tree: MultipageImportTree | null;
+  } | null;
+  siteTree?: {
+    summary: SiteTreeSummary;
+    tree: SiteTree | null;
   } | null;
 };
 

@@ -36,6 +36,7 @@ import {
   type StyleSignalModel,
 } from '@/gnr8/style-signals'
 import { discoverMultipageImportTree, summarizeMultipageImportTree } from '@/gnr8/multipage-import'
+import { buildSafeSiteTreeFromSeedPage, type SiteTree } from '@/gnr8/site-tree'
 
 const SECTION_INTENT_BY_SEMANTIC_TYPE: Record<string, string> = {
   header: 'header_nav',
@@ -493,6 +494,69 @@ function resolveEvidencePathIfExists(pathAbs: string): string | null {
   return fs.existsSync(normalized) ? normalized : null
 }
 
+function resolveSiteTreeSeedContext(input: { sourceUrl: string; snapshot: UrlSinglePageImportSnapshot }): { siteId: string; seedUrl: string } {
+  const sourceUrl = normalizeText(input.sourceUrl)
+  try {
+    const parsed = new URL(sourceUrl)
+    return {
+      siteId: resolveSiteId(sourceUrl, parsed.pathname || '/'),
+      seedUrl: sourceUrl,
+    }
+  } catch {
+    const fallbackSeedUrl = `https://invalid.local${inferPagePathFromSourcePath(path.basename(input.snapshot.entryHtmlPathAbs || 'index.html'))}`
+    return {
+      siteId: resolveSiteId(fallbackSeedUrl, '/'),
+      seedUrl: fallbackSeedUrl,
+    }
+  }
+}
+
+function readSiteTreeSeedHtml(snapshot: UrlSinglePageImportSnapshot): string {
+  const candidates = [
+    snapshot.sourceSelection.selectedSourceHtmlPathAbs,
+    snapshot.entryHtmlPathAbs,
+    snapshot.responseHtmlPathAbs,
+  ]
+  for (const candidate of candidates) {
+    const normalized = normalizeText(candidate)
+    if (!normalized) continue
+    try {
+      const html = fs.readFileSync(normalized, 'utf8')
+      if (normalizeText(html)) return html
+    } catch {
+      continue
+    }
+  }
+  return ''
+}
+
+function persistSiteTreePayload(input: {
+  snapshot: UrlSinglePageImportSnapshot
+  tree: SiteTree
+}): string | null {
+  try {
+    const dir = path.resolve(input.snapshot.snapshotRootDirAbs, 'site-tree')
+    fs.mkdirSync(dir, { recursive: true })
+    const payloadPath = path.resolve(dir, 'site-tree.json')
+    fs.writeFileSync(
+      payloadPath,
+      `${JSON.stringify(
+        {
+          kind: 'site_tree_payload_v1',
+          generatedAt: new Date().toISOString(),
+          tree: input.tree,
+        },
+        null,
+        2,
+      )}\n`,
+      'utf8',
+    )
+    return payloadPath
+  } catch {
+    return null
+  }
+}
+
 async function buildMultipageImportFromPreparedSite(input: {
   sourceUrl: string
   preparedSite: PreparedSiteModel | null
@@ -627,6 +691,26 @@ async function buildImportProvenanceSummary(input: {
     sourceUrl: input.sourceUrl,
     preparedSite,
   })
+  const siteTreeSeedHtml = readSiteTreeSeedHtml(snapshot)
+  const siteTreeSeedContext = resolveSiteTreeSeedContext({
+    sourceUrl: input.sourceUrl,
+    snapshot,
+  })
+  const siteTreeSeed = buildSafeSiteTreeFromSeedPage({
+    siteId: siteTreeSeedContext.siteId,
+    seedUrl: siteTreeSeedContext.seedUrl,
+    seedHtml: siteTreeSeedHtml,
+    sourceSnapshotId: snapshot.snapshotId,
+    sourceRunId: snapshot.snapshotRunId,
+  })
+  const siteTreePayloadPath = persistSiteTreePayload({
+    snapshot,
+    tree: siteTreeSeed.tree,
+  })
+  const siteTreeSummary = {
+    ...siteTreeSeed.summary,
+    payloadPath: siteTreePayloadPath,
+  }
 
   return {
     kind: 'runtime_import_provenance_summary_v1',
@@ -701,6 +785,10 @@ async function buildImportProvenanceSummary(input: {
       : null,
     styleSignals,
     multipageImport,
+    siteTree: {
+      summary: siteTreeSummary,
+      tree: siteTreeSeed.tree,
+    },
   }
 }
 
@@ -716,6 +804,7 @@ function summarizeProvenancePayload(summary: RuntimeImportProvenanceSummary): Re
     computedStyleSampleCount: summary.computedStyleSampleCount,
     importDiagnosticCodeCount: Array.isArray(summary.importDiagnosticCodes) ? summary.importDiagnosticCodes.length : 0,
     multipageImport: summary.multipageImport?.summary ?? null,
+    siteTree: summary.siteTree?.summary ?? null,
   }
 }
 

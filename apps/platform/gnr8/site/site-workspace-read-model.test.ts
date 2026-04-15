@@ -635,6 +635,19 @@ test('import provenance summary is parsed when persisted on runtime site version
       },
       tree: null,
     },
+    siteTree: {
+      summary: {
+        rootPageId: 'page_home',
+        pageCount: 4,
+        candidatePageCount: 3,
+        internalLinkCount: 6,
+        externalLinkCount: 2,
+        ignoredLinkCount: 5,
+        diagnostics: ['SITE_TREE_BUILD_COMPLETED', 'SITE_TREE_SEED_PAGE_CREATED'],
+        payloadPath: '/tmp/snapshot/site-tree/site-tree.json',
+      },
+      tree: null,
+    },
     captureEvidence: {
       selectedSourceHtmlPath: '/tmp/snapshot/response-html.raw.html',
       responseHtmlPath: '/tmp/snapshot/response-html.raw.html',
@@ -666,6 +679,9 @@ test('import provenance summary is parsed when persisted on runtime site version
   assert.equal(parsed?.styleSignals, null)
   assert.equal(parsed?.multipageImport?.summary.enabled, true)
   assert.equal(parsed?.multipageImport?.summary.routeCount, 14)
+  assert.equal(parsed?.siteTree?.summary.rootPageId, 'page_home')
+  assert.equal(parsed?.siteTree?.summary.pageCount, 4)
+  assert.equal(parsed?.siteTree?.summary.candidatePageCount, 3)
 })
 
 test('import provenance parser preserves capture job + worker health timeout truth', () => {
@@ -1045,6 +1061,86 @@ test('import fidelity falls back to semantic signals and only returns unknown wh
   assert.equal(parsed.styleSignalFallbackUsed, true)
   assert.deepEqual(parsed.importDiagnosticCodes, [])
   assert.deepEqual(parsed.captureEvidenceRefs, [])
+  assert.equal(parsed.siteTreeSummary, null)
+})
+
+test('import fidelity surfaces site tree summary from persisted provenance', () => {
+  const parsed = __siteWorkspaceReadModelTestUtils.parseImportFidelity({
+    runtimeVersion: {
+      id: 'runtime-site-tree-1',
+      site_id: 'runtime-site',
+      ownership_site_id: SITE_ID,
+      state: 'DRAFT',
+      version_no: 5,
+      artifact_id: null,
+      updated_at: '2026-04-14T10:00:00.000Z',
+      created_at: '2026-04-14T10:00:00.000Z',
+      import_provenance_summary: {
+        kind: 'runtime_import_provenance_summary_v1',
+        sourceMode: 'rendered_dom',
+        importFidelityStatus: 'high_fidelity_import',
+        renderedCaptureStatus: 'available',
+        renderedDomQuality: 'strong',
+        screenshotCount: 1,
+        computedStyleSampleCount: 1,
+        renderedCapture: {
+          used: true,
+          status: 'available',
+          quality: 'strong',
+          domLength: 100,
+          nodeCount: 10,
+          styleSampleCount: 1,
+          styleCoverage: 0.1,
+          screenshots: { viewport: true, fullPage: false },
+          execution: {
+            runtimeKind: 'nodejs',
+            environmentSupported: true,
+            browserPackageAvailable: true,
+            browserBinaryAvailable: true,
+            environmentStatus: 'supported',
+            failureCategory: 'none',
+            failureCode: null,
+            browserLaunch: 'succeeded',
+            navigation: 'succeeded',
+            dom: 'captured',
+            screenshot: 'captured',
+            styleSampling: 'captured',
+          },
+        },
+        importDiagnosticCodes: [],
+        captureEvidence: {
+          selectedSourceHtmlPath: '/tmp/source.html',
+          responseHtmlPath: '/tmp/response.html',
+          entryHtmlPath: '/tmp/index.html',
+          renderedCaptureManifestPath: null,
+          acquisitionEvidencePath: null,
+          renderedDomPath: null,
+          computedStylesPath: null,
+          renderedViewportScreenshotPath: null,
+          renderedFullpageScreenshotPath: null,
+          screenshotPaths: [],
+        },
+        siteTree: {
+          summary: {
+            rootPageId: 'page_home',
+            pageCount: 2,
+            candidatePageCount: 1,
+            internalLinkCount: 1,
+            externalLinkCount: 0,
+            ignoredLinkCount: 0,
+            diagnostics: ['SITE_TREE_BUILD_COMPLETED'],
+            payloadPath: '/tmp/snapshot/site-tree/site-tree.json',
+          },
+          tree: null,
+        },
+      },
+    } as any,
+    pageRows: [],
+  })
+
+  assert.equal(parsed.siteTreeSummary?.rootPageId, 'page_home')
+  assert.equal(parsed.siteTreeSummary?.pageCount, 2)
+  assert.equal(parsed.siteTreeSummary?.candidatePageCount, 1)
 })
 
 test('import fidelity fallback flag remains false for high-fidelity imports when style provenance is absent', () => {
