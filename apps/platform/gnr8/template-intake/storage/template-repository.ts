@@ -6,6 +6,7 @@ import type {
   CreateTemplateInput,
   TemplateListItem,
   TemplateRecord,
+  TemplateType,
   UpdateTemplateProcessingResultInput,
 } from '@/gnr8/template-intake/types/template-intake-types'
 import { getSuperadminPool } from '@/src/superadmin/db'
@@ -91,6 +92,9 @@ type TemplateRow = {
   preview_source: string
   tags: string[] | null
   source_filename: string
+  entry_html_path: string | null
+  entry_html_file_name: string | null
+  template_type: string | null
   import_snapshot_id: string | null
   template_manifest_summary: unknown | null
   diagnostics_summary: unknown | null
@@ -110,7 +114,17 @@ function normalizeOptionalText(value: unknown): string | null {
   return normalized || null
 }
 
-function mapTemplateRow(row: TemplateRow): TemplateRecord {
+export function normalizeTemplateTypeForStorage(value: unknown): TemplateType {
+  const normalized = normalizeText(value)
+  if (normalized === 'single_page' || normalized === 'multi_page' || normalized === 'unknown') return normalized
+  if (!normalized) return 'unknown'
+  throw new TemplateRepositoryError(
+    'TEMPLATE_REPOSITORY_FAILURE',
+    `Invalid template_type value "${normalized}".`,
+  )
+}
+
+export function mapTemplateRow(row: TemplateRow): TemplateRecord {
   return {
     id: row.id,
     clientId: row.client_id,
@@ -128,6 +142,9 @@ function mapTemplateRow(row: TemplateRow): TemplateRecord {
     previewSource: row.preview_source === 'rendered_capture' ? 'rendered_capture' : 'fallback',
     tags: Array.isArray(row.tags) ? row.tags.map((value) => normalizeText(value)).filter(Boolean) : [],
     sourceFilename: row.source_filename,
+    entryHtmlPath: normalizeOptionalText(row.entry_html_path),
+    entryHtmlFileName: normalizeOptionalText(row.entry_html_file_name),
+    templateType: normalizeTemplateTypeForStorage(row.template_type),
     importSnapshotId: normalizeOptionalText(row.import_snapshot_id),
     templateManifestSummary: (row.template_manifest_summary ?? null) as TemplateRecord['templateManifestSummary'],
     diagnosticsSummary: (row.diagnostics_summary ?? null) as TemplateRecord['diagnosticsSummary'],
@@ -169,6 +186,9 @@ export async function createTemplate(input: CreateTemplateInput): Promise<Templa
         preview_source,
         tags,
         source_filename,
+        entry_html_path,
+        entry_html_file_name,
+        template_type,
         import_snapshot_id,
         template_manifest_summary,
         diagnostics_summary,
@@ -192,9 +212,12 @@ export async function createTemplate(input: CreateTemplateInput): Promise<Templa
         'fallback'::text,
         $9::text[],
         $10::text,
+        $11::text,
+        $12::text,
+        $13::text,
         null,
-        $11::jsonb,
-        $12::jsonb,
+        $14::jsonb,
+        $15::jsonb,
         null,
         1,
         'private'::text
@@ -216,6 +239,9 @@ export async function createTemplate(input: CreateTemplateInput): Promise<Templa
         preview_source,
         tags,
         source_filename,
+        entry_html_path,
+        entry_html_file_name,
+        template_type,
         import_snapshot_id,
         template_manifest_summary,
         diagnostics_summary,
@@ -236,6 +262,9 @@ export async function createTemplate(input: CreateTemplateInput): Promise<Templa
         input.importHealth,
         input.tags,
         input.sourceFilename,
+        input.entryHtmlPath,
+        input.entryHtmlFileName,
+        normalizeTemplateTypeForStorage(input.templateType),
         input.templateManifestSummary,
         input.diagnosticsSummary,
       ],
@@ -268,9 +297,12 @@ export async function updateTemplateProcessingResult(input: UpdateTemplateProces
         preview_source = $7::text,
         tags = $8::text[],
         import_snapshot_id = $9::text,
-        diagnostics_summary = $10::jsonb,
-        template_manifest_summary = $11::jsonb,
-        import_manifest_summary = $12::jsonb,
+        entry_html_path = $10::text,
+        entry_html_file_name = $11::text,
+        template_type = $12::text,
+        diagnostics_summary = $13::jsonb,
+        template_manifest_summary = $14::jsonb,
+        import_manifest_summary = $15::jsonb,
         updated_at = now()
       where id = $1::uuid
       returning
@@ -290,6 +322,9 @@ export async function updateTemplateProcessingResult(input: UpdateTemplateProces
         preview_source,
         tags,
         source_filename,
+        entry_html_path,
+        entry_html_file_name,
+        template_type,
         import_snapshot_id,
         template_manifest_summary,
         diagnostics_summary,
@@ -309,6 +344,9 @@ export async function updateTemplateProcessingResult(input: UpdateTemplateProces
         input.preview.previewSource,
         input.tags,
         input.importSnapshotId,
+        input.entryHtmlPath,
+        input.entryHtmlFileName,
+        normalizeTemplateTypeForStorage(input.templateType),
         input.diagnosticsSummary,
         input.templateManifestSummary,
         input.importManifestSummary,
@@ -351,6 +389,9 @@ export async function listTemplatesForClient(input: { clientId: string; limit?: 
         preview_source,
         tags,
         source_filename,
+        entry_html_path,
+        entry_html_file_name,
+        template_type,
         import_snapshot_id,
         template_manifest_summary,
         diagnostics_summary,

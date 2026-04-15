@@ -9,6 +9,8 @@ export type TemplateListCard = {
   importHealth: 'clean' | 'degraded' | 'failed'
   tags: string[]
   sourceFilename: string
+  entryHtmlFileName: string | null
+  templateType: 'single_page' | 'multi_page' | 'unknown'
   preview: {
     available: boolean
     isFallback: boolean
@@ -33,6 +35,8 @@ export function mapTemplateToListCard(template: TemplateRecord): TemplateListCar
     importHealth: template.importHealth,
     tags: Array.isArray(template.tags) ? template.tags : [],
     sourceFilename: template.sourceFilename,
+    entryHtmlFileName: normalizeText(template.entryHtmlFileName) || null,
+    templateType: template.templateType,
     preview: {
       available: Boolean(template.previewAvailable),
       isFallback: Boolean(template.previewIsFallback),

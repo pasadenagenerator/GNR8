@@ -6,6 +6,7 @@ export type TemplateImportHealth = 'clean' | 'degraded' | 'failed'
 export type TemplateVisibility = 'private'
 
 export type TemplatePreviewSource = 'rendered_capture' | 'fallback'
+export type TemplateType = 'single_page' | 'multi_page' | 'unknown'
 
 export type TemplateManifestSummary = {
   source: 'template.json' | 'manifest.json' | 'derived'
@@ -104,6 +105,9 @@ export type TemplateRecord = {
   previewSource: TemplatePreviewSource
   tags: string[]
   sourceFilename: string
+  entryHtmlPath: string | null
+  entryHtmlFileName: string | null
+  templateType: TemplateType
   importSnapshotId: string | null
   templateManifestSummary: TemplateManifestSummary | null
   diagnosticsSummary: TemplateDiagnosticsSummary | null
@@ -122,6 +126,9 @@ export type CreateTemplateInput = {
   name: string
   slug: string
   sourceFilename: string
+  entryHtmlPath: string | null
+  entryHtmlFileName: string | null
+  templateType: TemplateType
   tags: string[]
   status: TemplateStatus
   importHealth: TemplateImportHealth
@@ -133,6 +140,9 @@ export type UpdateTemplateProcessingResultInput = {
   templateId: string
   status: TemplateStatus
   importHealth: TemplateImportHealth
+  entryHtmlPath: string | null
+  entryHtmlFileName: string | null
+  templateType: TemplateType
   preview: TemplatePreviewSummary
   tags: string[]
   importSnapshotId: string | null

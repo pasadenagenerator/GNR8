@@ -1,4 +1,3 @@
-import path from 'node:path'
 import { NextResponse } from 'next/server'
 
 import { runTemplateZipIntake } from '@/gnr8/template-intake/core/template-intake-service'
@@ -11,15 +10,6 @@ export const revalidate = 0
 
 type Params = {
   clientId: string
-}
-
-function resolveEntryHtmlFileNameFromDiagnostics(details: unknown): string | null {
-  const record = details as Record<string, unknown> | null
-  const rawFileName = String(record?.fileName ?? '').trim()
-  if (rawFileName) return path.posix.basename(rawFileName.replaceAll('\\', '/'))
-
-  const rawEntryPath = String(record?.entryHtmlPath ?? '').trim()
-  return rawEntryPath ? path.posix.basename(rawEntryPath.replaceAll('\\', '/')) : null
 }
 
 export async function POST(request: Request, ctx: { params: Promise<Params> }) {
@@ -61,13 +51,6 @@ export async function POST(request: Request, ctx: { params: Promise<Params> }) {
       )
     }
 
-    const entryHtmlDiagnostic = intake.template.diagnosticsSummary?.issues?.find(
-      (issue) =>
-        issue.code === 'TEMPLATE_HTML_ENTRY_INDEX_FOUND' ||
-        issue.code === 'TEMPLATE_HTML_ENTRY_FALLBACK_SINGLE_FILE',
-    )
-    const entryHtmlFileName = resolveEntryHtmlFileNameFromDiagnostics(entryHtmlDiagnostic?.details)
-
     return NextResponse.json(
       {
         ok: true,
@@ -76,12 +59,15 @@ export async function POST(request: Request, ctx: { params: Promise<Params> }) {
         name: intake.template.name,
         tags: intake.template.tags,
         importHealth: intake.template.importHealth,
+        entryHtmlFileName: intake.template.entryHtmlFileName,
+        templateType: intake.template.templateType,
         preview: {
           available: intake.template.previewAvailable,
           isFallback: intake.template.previewIsFallback,
           source: intake.template.previewSource,
           imagePath: intake.template.previewImagePath,
-          entryHtmlFileName,
+          entryHtmlFileName: intake.template.entryHtmlFileName,
+          templateType: intake.template.templateType,
         },
         diagnosticsSummary: intake.template.diagnosticsSummary,
       },

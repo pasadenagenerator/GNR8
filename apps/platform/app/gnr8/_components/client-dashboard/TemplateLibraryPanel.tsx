@@ -15,11 +15,15 @@ type TemplateListResponse = {
     importHealth: 'clean' | 'degraded' | 'failed'
     tags: string[]
     sourceFilename: string
+    entryHtmlFileName: string | null
+    templateType: 'single_page' | 'multi_page' | 'unknown'
     preview: {
       available: boolean
       isFallback: boolean
       source: 'rendered_capture' | 'fallback'
       imagePath: string | null
+      entryHtmlFileName?: string | null
+      templateType?: 'single_page' | 'multi_page' | 'unknown'
     }
     createdAt: string
   }>
@@ -33,11 +37,15 @@ type UploadResponse =
       name: string
       tags: string[]
       importHealth: 'clean' | 'degraded' | 'failed'
+      entryHtmlFileName: string | null
+      templateType: 'single_page' | 'multi_page' | 'unknown'
       preview: {
         available: boolean
         isFallback: boolean
         source: 'rendered_capture' | 'fallback'
         imagePath: string | null
+        entryHtmlFileName?: string | null
+        templateType?: 'single_page' | 'multi_page' | 'unknown'
       }
     }
   | {
@@ -56,6 +64,12 @@ function normalizeHealthLabel(health: string): string {
   if (health === 'clean') return 'Clean'
   if (health === 'degraded') return 'Degraded'
   return 'Failed'
+}
+
+function normalizeTemplateTypeLabel(templateType: 'single_page' | 'multi_page' | 'unknown'): string {
+  if (templateType === 'single_page') return 'Single Page'
+  if (templateType === 'multi_page') return 'Multi Page'
+  return 'Unknown'
 }
 
 function badgeColor(value: string): { background: string; border: string; color: string } {
@@ -319,6 +333,10 @@ export default function TemplateLibraryPanel(props: { clientId: string; initialS
                 <div style={{ display: 'grid', gap: 2 }}>
                   <div style={{ fontSize: 14, fontWeight: 700, color: '#0f172a' }}>{template.name}</div>
                   <div style={{ fontSize: 11, color: '#64748b' }}>{template.sourceFilename}</div>
+                  <div style={{ fontSize: 11, color: '#64748b' }}>
+                    {normalizeTemplateTypeLabel(template.templateType)}
+                    {template.entryHtmlFileName ? ` · ${template.entryHtmlFileName}` : ''}
+                  </div>
                 </div>
 
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>

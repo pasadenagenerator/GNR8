@@ -29,6 +29,9 @@ function createTemplateRecord(seed: Partial<TemplateRecord> & { id: string; clie
     previewSource: seed.previewSource ?? 'fallback',
     tags: seed.tags ?? [],
     sourceFilename: seed.sourceFilename,
+    entryHtmlPath: seed.entryHtmlPath ?? null,
+    entryHtmlFileName: seed.entryHtmlFileName ?? null,
+    templateType: seed.templateType ?? 'unknown',
     importSnapshotId: seed.importSnapshotId ?? null,
     templateManifestSummary: seed.templateManifestSummary ?? null,
     diagnosticsSummary: seed.diagnosticsSummary ?? null,
@@ -54,6 +57,9 @@ function createRepositoryStub() {
         name: string
         slug: string
         sourceFilename: string
+        entryHtmlPath: string | null
+        entryHtmlFileName: string | null
+        templateType: 'single_page' | 'multi_page' | 'unknown'
         tags: string[]
         status: 'uploaded' | 'processing' | 'ready' | 'failed'
         importHealth: 'clean' | 'degraded' | 'failed'
@@ -71,6 +77,9 @@ function createRepositoryStub() {
           name: input.name,
           slug: input.slug,
           sourceFilename: input.sourceFilename,
+          entryHtmlPath: input.entryHtmlPath,
+          entryHtmlFileName: input.entryHtmlFileName,
+          templateType: input.templateType,
           tags: input.tags,
           status: input.status,
           importHealth: input.importHealth,
@@ -84,6 +93,9 @@ function createRepositoryStub() {
         templateId: string
         status: 'uploaded' | 'processing' | 'ready' | 'failed'
         importHealth: 'clean' | 'degraded' | 'failed'
+        entryHtmlPath: string | null
+        entryHtmlFileName: string | null
+        templateType: 'single_page' | 'multi_page' | 'unknown'
         preview: {
           previewAvailable: boolean
           previewIsFallback: boolean
@@ -106,6 +118,9 @@ function createRepositoryStub() {
           previewIsFallback: input.preview.previewIsFallback,
           previewSource: input.preview.previewSource,
           previewImagePath: input.preview.previewImagePath,
+          entryHtmlPath: input.entryHtmlPath,
+          entryHtmlFileName: input.entryHtmlFileName,
+          templateType: input.templateType,
           tags: input.tags,
           importSnapshotId: input.importSnapshotId,
           diagnosticsSummary: input.diagnosticsSummary,
@@ -258,6 +273,9 @@ test('ZIP upload with valid index.html creates template record', async () => {
   if (!result.ok) return
   assert.equal(result.template.status, 'ready')
   assert.equal(result.template.importSnapshotId, 'template-zip-abc123')
+  assert.equal(result.template.entryHtmlPath, 'index.html')
+  assert.equal(result.template.entryHtmlFileName, 'index.html')
+  assert.equal(result.template.templateType, 'single_page')
 })
 
 test('Missing manifest derives name from filename', () => {
@@ -438,6 +456,8 @@ test('Template list ordering is deterministic (newest first, id tie-break)', () 
       importHealth: 'clean',
       tags: [],
       sourceFilename: 'a.zip',
+      entryHtmlFileName: null,
+      templateType: 'unknown',
       preview: { available: false, isFallback: true, source: 'fallback', imagePath: null },
       createdAt: '2026-04-14T10:00:00.000Z',
       updatedAt: '2026-04-14T10:00:00.000Z',
@@ -451,6 +471,8 @@ test('Template list ordering is deterministic (newest first, id tie-break)', () 
       importHealth: 'clean',
       tags: [],
       sourceFilename: 'c.zip',
+      entryHtmlFileName: null,
+      templateType: 'unknown',
       preview: { available: false, isFallback: true, source: 'fallback', imagePath: null },
       createdAt: '2026-04-15T10:00:00.000Z',
       updatedAt: '2026-04-15T10:00:00.000Z',
@@ -464,6 +486,8 @@ test('Template list ordering is deterministic (newest first, id tie-break)', () 
       importHealth: 'clean',
       tags: [],
       sourceFilename: 'b.zip',
+      entryHtmlFileName: null,
+      templateType: 'unknown',
       preview: { available: false, isFallback: true, source: 'fallback', imagePath: null },
       createdAt: '2026-04-15T10:00:00.000Z',
       updatedAt: '2026-04-15T10:00:00.000Z',
@@ -496,4 +520,6 @@ test('Read/list contract returns safe defaults when preview/tags are absent', ()
   assert.equal(mapped.preview.imagePath, null)
   assert.equal(mapped.preview.available, false)
   assert.equal(mapped.preview.isFallback, true)
+  assert.equal(mapped.entryHtmlFileName, null)
+  assert.equal(mapped.templateType, 'unknown')
 })

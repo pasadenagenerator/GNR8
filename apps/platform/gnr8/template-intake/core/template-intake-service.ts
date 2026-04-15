@@ -1,3 +1,5 @@
+import path from 'node:path'
+
 import { createImportManifest } from '@/gnr8/import/import-manifest'
 import { importStaticSite } from '@/gnr8/import/runtime/import-static-site'
 import { createTemplateIntakeDiagnostic, summarizeTemplateDiagnostics } from '@/gnr8/template-intake/diagnostics/template-intake-diagnostics'
@@ -18,6 +20,7 @@ import type {
   TemplateImportHealth,
   TemplateIntakeResult,
   TemplateRecord,
+  TemplateType,
   UploadedZipTemplate,
 } from '@/gnr8/template-intake/types/template-intake-types'
 
@@ -39,6 +42,24 @@ function pickImportHealth(input: {
 
 function mergeDiagnostics(...summaries: TemplateDiagnosticsSummary[]): TemplateDiagnosticsSummary {
   return summarizeTemplateDiagnostics(summaries.flatMap((summary) => summary.issues))
+}
+
+function resolveTemplateEntryMetadata(input: {
+  entryHtmlPath: string | null
+  htmlCandidates: string[]
+}): {
+  entryHtmlPath: string | null
+  entryHtmlFileName: string | null
+  templateType: TemplateType
+} {
+  const entryHtmlPath = normalizeText(input.entryHtmlPath) || null
+  const entryHtmlFileName = entryHtmlPath ? path.posix.basename(entryHtmlPath.replaceAll('\\', '/')) : null
+  const hasExactlyOneRootHtml = Array.isArray(input.htmlCandidates) && input.htmlCandidates.length === 1
+  return {
+    entryHtmlPath,
+    entryHtmlFileName,
+    templateType: entryHtmlPath && hasExactlyOneRootHtml ? 'single_page' : 'unknown',
+  }
 }
 
 export type TemplateRepository = {
@@ -80,6 +101,10 @@ export async function runTemplateZipIntake(input: {
 
   const optimisticName = normalizeText(input.uploadedZip.fileName).replace(/\.zip$/i, '').replace(/[_-]+/g, ' ').trim() || 'Untitled Template'
   const optimisticSlug = optimisticName.toLowerCase().replace(/[^a-z0-9\s-]/g, '').replace(/\s+/g, '-').replace(/-+/g, '-').replace(/^-+|-+$/g, '') || 'template'
+  const entryMetadata = resolveTemplateEntryMetadata({
+    entryHtmlPath: zipValidation.validation?.entryHtmlPath ?? null,
+    htmlCandidates: zipValidation.validation?.htmlCandidates ?? [],
+  })
 
   const initialTemplate = await repository.createTemplate({
     clientId: input.clientId,
@@ -89,6 +114,9 @@ export async function runTemplateZipIntake(input: {
     name: optimisticName,
     slug: optimisticSlug,
     sourceFilename: input.uploadedZip.fileName,
+    entryHtmlPath: entryMetadata.entryHtmlPath,
+    entryHtmlFileName: entryMetadata.entryHtmlFileName,
+    templateType: entryMetadata.templateType,
     tags: [],
     status: zipValidation.ok ? 'processing' : 'failed',
     importHealth: zipValidation.ok ? 'degraded' : 'failed',
@@ -111,6 +139,9 @@ export async function runTemplateZipIntake(input: {
       templateId: initialTemplate.id,
       status: 'failed',
       importHealth: 'failed',
+      entryHtmlPath: entryMetadata.entryHtmlPath,
+      entryHtmlFileName: entryMetadata.entryHtmlFileName,
+      templateType: entryMetadata.templateType,
       preview: {
         previewAvailable: false,
         previewIsFallback: true,
@@ -162,6 +193,9 @@ export async function runTemplateZipIntake(input: {
       templateId: initialTemplate.id,
       status: 'failed',
       importHealth: 'failed',
+      entryHtmlPath: entryMetadata.entryHtmlPath,
+      entryHtmlFileName: entryMetadata.entryHtmlFileName,
+      templateType: entryMetadata.templateType,
       preview: {
         previewAvailable: false,
         previewIsFallback: true,
@@ -288,6 +322,9 @@ export async function runTemplateZipIntake(input: {
     templateId: initialTemplate.id,
     status: importHealth === 'failed' ? 'failed' : 'ready',
     importHealth,
+    entryHtmlPath: entryMetadata.entryHtmlPath,
+    entryHtmlFileName: entryMetadata.entryHtmlFileName,
+    templateType: entryMetadata.templateType,
     preview: previewSummary.preview,
     tags: normalizedTags,
     importSnapshotId: finalSnapshotId,
