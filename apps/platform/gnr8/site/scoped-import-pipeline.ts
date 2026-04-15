@@ -36,7 +36,8 @@ import {
   type StyleSignalModel,
 } from '@/gnr8/style-signals'
 import { discoverMultipageImportTree, summarizeMultipageImportTree } from '@/gnr8/multipage-import'
-import { buildSafeSiteTreeFromSeedPage, type SiteTree } from '@/gnr8/site-tree'
+import { buildSafeSiteTreeFromSeedPage, normalizeRoutePath, type SiteTree } from '@/gnr8/site-tree'
+import { buildFamilyHandoffModel, summarizeTemplateFamilies, type FamilyHandoffModel } from '@/gnr8/family-mode'
 
 const SECTION_INTENT_BY_SEMANTIC_TYPE: Record<string, string> = {
   header: 'header_nav',
@@ -557,6 +558,59 @@ function persistSiteTreePayload(input: {
   }
 }
 
+function persistTemplateFamiliesPayload(input: {
+  snapshot: UrlSinglePageImportSnapshot
+  model: FamilyHandoffModel
+}): string | null {
+  try {
+    const dir = path.resolve(input.snapshot.snapshotRootDirAbs, 'template-families')
+    fs.mkdirSync(dir, { recursive: true })
+    const payloadPath = path.resolve(dir, 'families.json')
+    fs.writeFileSync(
+      payloadPath,
+      `${JSON.stringify(
+        {
+          kind: 'template_families_payload_v1',
+          generatedAt: new Date().toISOString(),
+          model: input.model,
+        },
+        null,
+        2,
+      )}\n`,
+      'utf8',
+    )
+    return payloadPath
+  } catch {
+    return null
+  }
+}
+
+function derivePageSectionsByPathFromPreparedSite(preparedSite: PreparedSiteModel | null): Record<string, Array<{
+  kind: string
+  order: number
+  layoutKind?: string
+  hasCardCluster?: boolean
+}>> {
+  if (!preparedSite) return {}
+
+  const pageSectionsByPath: Record<string, Array<{ kind: string; order: number; layoutKind?: string; hasCardCluster?: boolean }>> = {}
+  const orderedDocs = preparedSite.documents.slice().sort((left, right) => left.path.localeCompare(right.path))
+  for (const doc of orderedDocs) {
+    const normalizedPath = normalizeRoutePath(inferPagePathFromSourcePath(doc.path))
+    const sections = (doc.semantic?.sections ?? [])
+      .slice()
+      .sort((left, right) => left.ordinalIndex - right.ordinalIndex)
+      .map((section, index) => ({
+        kind: section.inferredType || 'unknown',
+        order: Number.isFinite(section.ordinalIndex) ? Math.max(0, Math.floor(section.ordinalIndex)) : index,
+        layoutKind: section.layoutInference?.kind,
+        hasCardCluster: Boolean(section.groupingSignals?.cardCluster),
+      }))
+    pageSectionsByPath[normalizedPath] = sections
+  }
+  return pageSectionsByPath
+}
+
 async function buildMultipageImportFromPreparedSite(input: {
   sourceUrl: string
   preparedSite: PreparedSiteModel | null
@@ -711,6 +765,16 @@ async function buildImportProvenanceSummary(input: {
     ...siteTreeSeed.summary,
     payloadPath: siteTreePayloadPath,
   }
+  const templateFamiliesModel = buildFamilyHandoffModel({
+    siteId: siteTreeSeedContext.siteId,
+    siteTree: siteTreeSeed.tree,
+    pageSectionsByPath: derivePageSectionsByPathFromPreparedSite(preparedSite),
+  })
+  const templateFamiliesPayloadPath = persistTemplateFamiliesPayload({
+    snapshot,
+    model: templateFamiliesModel,
+  })
+  const templateFamiliesSummary = summarizeTemplateFamilies(templateFamiliesModel, templateFamiliesPayloadPath)
 
   return {
     kind: 'runtime_import_provenance_summary_v1',
@@ -789,6 +853,10 @@ async function buildImportProvenanceSummary(input: {
       summary: siteTreeSummary,
       tree: siteTreeSeed.tree,
     },
+    templateFamilies: {
+      summary: templateFamiliesSummary,
+      families: templateFamiliesModel,
+    },
   }
 }
 
@@ -805,6 +873,7 @@ function summarizeProvenancePayload(summary: RuntimeImportProvenanceSummary): Re
     importDiagnosticCodeCount: Array.isArray(summary.importDiagnosticCodes) ? summary.importDiagnosticCodes.length : 0,
     multipageImport: summary.multipageImport?.summary ?? null,
     siteTree: summary.siteTree?.summary ?? null,
+    templateFamilies: summary.templateFamilies?.summary ?? null,
   }
 }
 

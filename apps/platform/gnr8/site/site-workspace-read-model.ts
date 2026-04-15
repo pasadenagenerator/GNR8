@@ -151,6 +151,7 @@ export type SiteWorkspaceReadModel = {
     diagnosticsSummary: string[]
     multipageImportSummary: RuntimeImportProvenanceSummary['multipageImport'] extends { summary: infer T } | null | undefined ? T | null : null
     siteTreeSummary: RuntimeImportProvenanceSummary['siteTree'] extends { summary: infer T } | null | undefined ? T | null : null
+    templateFamiliesSummary: RuntimeImportProvenanceSummary['templateFamilies'] extends { summary: infer T } | null | undefined ? T | null : null
     styleSignals: StyleSignalModel | null
     runtimeSelection: {
       selectedVersionId: string | null
@@ -930,6 +931,8 @@ function parseImportProvenanceSummary(value: unknown): RuntimeImportProvenanceSu
   const multipageSummaryRaw = isRecord(multipageImport?.summary) ? multipageImport.summary : null
   const siteTreeRaw = isRecord(value.siteTree) ? value.siteTree : null
   const siteTreeSummaryRaw = isRecord(siteTreeRaw?.summary) ? siteTreeRaw.summary : null
+  const templateFamiliesRaw = isRecord(value.templateFamilies) ? value.templateFamilies : null
+  const templateFamiliesSummaryRaw = isRecord(templateFamiliesRaw?.summary) ? templateFamiliesRaw.summary : null
   const siteTreeSummary =
     siteTreeSummaryRaw &&
     normalizeText(siteTreeSummaryRaw.rootPageId) &&
@@ -1014,6 +1017,21 @@ function parseImportProvenanceSummary(value: unknown): RuntimeImportProvenanceSu
           diagnostics: Array.isArray(multipageSummaryRaw.diagnostics)
             ? [...new Set(multipageSummaryRaw.diagnostics.map((entry) => normalizeText(entry)).filter(Boolean))].sort((a, b) => a.localeCompare(b))
             : [],
+        }
+      : null
+  const templateFamiliesSummary =
+    templateFamiliesSummaryRaw &&
+    Number.isFinite(Number(templateFamiliesSummaryRaw.familyCount)) &&
+    Number.isFinite(Number(templateFamiliesSummaryRaw.largestFamilySize)) &&
+    Number.isFinite(Number(templateFamiliesSummaryRaw.orphanPageCount))
+      ? {
+          familyCount: Math.max(0, Math.floor(Number(templateFamiliesSummaryRaw.familyCount))),
+          largestFamilySize: Math.max(0, Math.floor(Number(templateFamiliesSummaryRaw.largestFamilySize))),
+          orphanPageCount: Math.max(0, Math.floor(Number(templateFamiliesSummaryRaw.orphanPageCount))),
+          diagnostics: Array.isArray(templateFamiliesSummaryRaw.diagnostics)
+            ? [...new Set(templateFamiliesSummaryRaw.diagnostics.map((entry) => normalizeText(entry)).filter(Boolean))].sort((a, b) => a.localeCompare(b))
+            : [],
+          payloadPath: toTextOrNull(templateFamiliesSummaryRaw.payloadPath),
         }
       : null
   const importFidelityScore: RuntimeImportProvenanceSummary['importFidelityScore'] =
@@ -1245,6 +1263,7 @@ function parseImportProvenanceSummary(value: unknown): RuntimeImportProvenanceSu
     styleSignals,
     multipageImport: multipageSummary ? { summary: multipageSummary, tree: null } : null,
     siteTree: siteTreeSummary ? { summary: siteTreeSummary, tree: null } : null,
+    templateFamilies: templateFamiliesSummary ? { summary: templateFamiliesSummary, families: null } : null,
   }
 }
 
@@ -1273,6 +1292,7 @@ function parseImportFidelity(input: {
   styleSignals: StyleSignalModel | null
   multipageImportSummary: RuntimeImportProvenanceSummary['multipageImport'] extends { summary: infer T } | null | undefined ? T | null : null
   siteTreeSummary: RuntimeImportProvenanceSummary['siteTree'] extends { summary: infer T } | null | undefined ? T | null : null
+  templateFamiliesSummary: RuntimeImportProvenanceSummary['templateFamilies'] extends { summary: infer T } | null | undefined ? T | null : null
 } {
   const parsedFromSignals = parseImportFidelitySignals(input.pageRows)
   const parsedSummary = parseImportProvenanceSummary(input.runtimeVersion?.import_provenance_summary ?? null)
@@ -1304,6 +1324,7 @@ function parseImportFidelity(input: {
       styleSignals: inferredStyleSignals,
       multipageImportSummary: null,
       siteTreeSummary: null,
+      templateFamiliesSummary: null,
     }
   }
 
@@ -1408,6 +1429,7 @@ function parseImportFidelity(input: {
     styleSignals,
     multipageImportSummary: parsedSummary.multipageImport?.summary ?? null,
     siteTreeSummary: parsedSummary.siteTree?.summary ?? null,
+    templateFamiliesSummary: parsedSummary.templateFamilies?.summary ?? null,
   }
 }
 
@@ -1764,6 +1786,7 @@ export async function getSiteWorkspaceReadModelForPage(input: {
       diagnosticsSummary,
       multipageImportSummary: importFidelity.multipageImportSummary,
       siteTreeSummary: importFidelity.siteTreeSummary,
+      templateFamiliesSummary: importFidelity.templateFamiliesSummary,
       styleSignals: importFidelity.styleSignals,
       runtimeSelection: {
         selectedVersionId: selectedRuntimeSiteVersionId,

@@ -1062,6 +1062,7 @@ test('import fidelity falls back to semantic signals and only returns unknown wh
   assert.deepEqual(parsed.importDiagnosticCodes, [])
   assert.deepEqual(parsed.captureEvidenceRefs, [])
   assert.equal(parsed.siteTreeSummary, null)
+  assert.equal(parsed.templateFamiliesSummary, null)
 })
 
 test('import fidelity surfaces site tree summary from persisted provenance', () => {
@@ -1133,6 +1134,16 @@ test('import fidelity surfaces site tree summary from persisted provenance', () 
           },
           tree: null,
         },
+        templateFamilies: {
+          summary: {
+            familyCount: 2,
+            largestFamilySize: 2,
+            orphanPageCount: 0,
+            diagnostics: ['FAMILY_BUILD_COMPLETED'],
+            payloadPath: '/tmp/snapshot/template-families/families.json',
+          },
+          families: null,
+        },
       },
     } as any,
     pageRows: [],
@@ -1141,6 +1152,9 @@ test('import fidelity surfaces site tree summary from persisted provenance', () 
   assert.equal(parsed.siteTreeSummary?.rootPageId, 'page_home')
   assert.equal(parsed.siteTreeSummary?.pageCount, 2)
   assert.equal(parsed.siteTreeSummary?.candidatePageCount, 1)
+  assert.equal(parsed.templateFamiliesSummary?.familyCount, 2)
+  assert.equal(parsed.templateFamiliesSummary?.largestFamilySize, 2)
+  assert.equal(parsed.templateFamiliesSummary?.orphanPageCount, 0)
 })
 
 test('import fidelity fallback flag remains false for high-fidelity imports when style provenance is absent', () => {

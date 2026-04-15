@@ -5,6 +5,7 @@ import type { PageRolloutPolicyResult } from "@/gnr8/migration/policy/page-rollo
 import type { StyleSignalModel } from "@/gnr8/style-signals";
 import type { MultipageImportSummary, MultipageImportTree } from "@/gnr8/multipage-import";
 import type { SiteTree, SiteTreeSummary } from "@/gnr8/site-tree";
+import type { FamilyHandoffModel, TemplateFamiliesSummary } from "@/gnr8/family-mode";
 
 export const RENDERER_COMPATIBILITY_VERSION = "gnr8-renderer-v1" as const;
 
@@ -124,6 +125,10 @@ export type RuntimeImportProvenanceSummary = {
   siteTree?: {
     summary: SiteTreeSummary;
     tree: SiteTree | null;
+  } | null;
+  templateFamilies?: {
+    summary: TemplateFamiliesSummary;
+    families: FamilyHandoffModel | null;
   } | null;
 };
 
