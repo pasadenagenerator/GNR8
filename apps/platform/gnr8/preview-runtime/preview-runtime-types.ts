@@ -13,7 +13,7 @@ export type PreviewRuntimeSummary = {
   finalSiteModelAvailable: boolean;
   familyRenderUsed: boolean;
   familyRenderFamilyId: string | null;
-  familyRenderMode: FamilyRenderMode;
+  familyRenderMode: FamilyRenderMode | null;
   familyRenderFallbackToPage: boolean;
   familyRenderDiagnosticsCount: number;
   familyRenderDiagnostics: string[];

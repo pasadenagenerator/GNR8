@@ -61,6 +61,12 @@ test('resolveSiteWorkspacePreview prefers transformed preview as primary source'
   assert.equal(resolved.sourceType, 'transformed')
   assert.equal(resolved.previewMode, 'react_preview_degraded')
   assert.equal(resolved.previewRuntimeSummary?.matchedPageId, 'page-home')
+  assert.equal(resolved.familyRenderUsed, true)
+  assert.equal(resolved.familyRenderMode, 'hybrid_family_page')
+  assert.equal(resolved.familyRenderFamilyId, 'family_marketing_root')
+  assert.equal(resolved.familyRenderFallbackToPage, false)
+  assert.equal(resolved.familyRenderDiagnosticsCount, 1)
+  assert.deepEqual(resolved.familyRenderDiagnostics, ['FAMILY_RENDER_MODE_SELECTED'])
   assert.equal(resolved.mainPreviewUrl, resolved.transformedPreviewUrl)
   assert.ok(resolved.debugPreviewUrl)
 })
@@ -104,4 +110,39 @@ test('resolveSiteWorkspacePreview handles no-preview state safely', () => {
   assert.equal(resolved.status, 'preview_unavailable')
   assert.equal(resolved.mainPreviewUrl, null)
   assert.equal(resolved.debugPreviewUrl, null)
+  assert.equal(resolved.familyRenderUsed, false)
+  assert.equal(resolved.familyRenderMode, null)
+  assert.equal(resolved.familyRenderFamilyId, null)
+  assert.equal(resolved.familyRenderFallbackToPage, false)
+  assert.equal(resolved.familyRenderDiagnosticsCount, 0)
+  assert.deepEqual(resolved.familyRenderDiagnostics, [])
+})
+
+test('resolveSiteWorkspacePreview safely defaults family truth when legacy summary lacks family fields', () => {
+  const resolved = resolveSiteWorkspacePreview({
+    siteVersionId: '8ce51f31-92ff-4ef4-a543-e1177dfe780d',
+    transformedPreviewAvailable: true,
+    debugPreviewAvailable: false,
+    importCaptured: true,
+    previewRuntimeSummary: {
+      previewMode: 'react_preview',
+      rendererContractAvailable: true,
+      finalSiteModelAvailable: true,
+      renderedWithFallback: false,
+      matchedPageId: 'page-home',
+      contentResolutionApplied: true,
+      resolvedContentCount: 1,
+      unresolvedContentCount: 0,
+      contentResolutionDegraded: false,
+      contentResolutionDiagnostics: [],
+      previewDiagnostics: ['PREVIEW_MODE_PERSISTED'],
+    } as any,
+  })
+
+  assert.equal(resolved.familyRenderUsed, false)
+  assert.equal(resolved.familyRenderMode, null)
+  assert.equal(resolved.familyRenderFamilyId, null)
+  assert.equal(resolved.familyRenderFallbackToPage, false)
+  assert.equal(resolved.familyRenderDiagnosticsCount, 0)
+  assert.deepEqual(resolved.familyRenderDiagnostics, [])
 })

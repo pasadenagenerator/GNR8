@@ -309,6 +309,8 @@ function renderPreviewContent(readModel: Awaited<ReturnType<typeof getSiteWorksp
           : contentRecoveryModeActive
             ? 'content recovery'
             : 'canonical'
+  const familyRenderModeLabel = readModel.preview.familyRenderMode ?? 'unavailable'
+  const familyRenderDiagnostics = readModel.preview.familyRenderDiagnostics
 
   return (
     <section style={sectionCardStyle()}>
@@ -337,6 +339,17 @@ function renderPreviewContent(readModel: Awaited<ReturnType<typeof getSiteWorksp
           {readModel.preview.previewRuntimeSummary.contentResolutionDegraded ? 'yes' : 'no'}
         </p>
       ) : null}
+      <div style={{ margin: '8px 0 0', border: '1px solid #e2e8f0', borderRadius: 8, padding: 10, background: '#f8fafc' }}>
+        <div style={{ margin: 0, color: '#0f172a', fontSize: 12, fontWeight: 700 }}>Family Render</div>
+        <div style={{ marginTop: 6, display: 'grid', gap: 4, color: '#334155', fontSize: 12 }}>
+          <div>Family Render: {readModel.preview.familyRenderUsed ? 'Yes' : 'No'}</div>
+          <div>Family Mode: {familyRenderModeLabel}</div>
+          <div>Family ID: {readModel.preview.familyRenderFamilyId ?? '—'}</div>
+          <div>Fallback to Page: {readModel.preview.familyRenderFallbackToPage ? 'Yes' : 'No'}</div>
+          <div>Family Diagnostics: {readModel.preview.familyRenderDiagnosticsCount}</div>
+          {familyRenderDiagnostics.length > 0 ? <div>Diagnostic codes: {familyRenderDiagnostics.join(' · ')}</div> : null}
+        </div>
+      </div>
       {contentRecoveryModeActive ? (
         <div style={{ margin: '6px 0 0', color: '#334155', fontSize: 12 }}>
           <div style={{ fontWeight: 600 }}>Reason:</div>

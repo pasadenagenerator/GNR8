@@ -229,6 +229,12 @@ export type SiteWorkspaceReadModel = {
     transformedPreviewUrl: string | null
     debugPreviewUrl: string | null
     previewMode: PreviewRuntimeSummary['previewMode'] | null
+    familyRenderUsed: boolean
+    familyRenderMode: PreviewRuntimeSummary['familyRenderMode']
+    familyRenderFamilyId: string | null
+    familyRenderFallbackToPage: boolean
+    familyRenderDiagnosticsCount: number
+    familyRenderDiagnostics: string[]
     previewRuntimeSummary: PreviewRuntimeSummary | null
     liveUrl: string | null
     selectedVariantLabel: string | null
@@ -1442,22 +1448,22 @@ function parsePreviewRuntimeSummary(value: unknown): PreviewRuntimeSummary | nul
   const familyRenderMode =
     familyRenderModeRaw === 'family_primary' || familyRenderModeRaw === 'hybrid_family_page' || familyRenderModeRaw === 'page_fallback'
       ? familyRenderModeRaw
-      : 'page_fallback'
+      : null
   const familyRenderDiagnostics = Array.isArray(value.familyRenderDiagnostics)
     ? [...new Set(value.familyRenderDiagnostics.map((entry) => normalizeText(entry)).filter(Boolean))].sort((a, b) => a.localeCompare(b))
     : []
+  const familyRenderUsed = familyRenderMode === 'family_primary' || familyRenderMode === 'hybrid_family_page'
+  const familyRenderFallbackToPage = familyRenderMode === 'page_fallback' ? true : Boolean(value.familyRenderFallbackToPage)
 
   return {
     previewMode: mode,
     rendererContractAvailable: Boolean(value.rendererContractAvailable),
     finalSiteModelAvailable: Boolean(value.finalSiteModelAvailable),
-    familyRenderUsed: Boolean(value.familyRenderUsed),
+    familyRenderUsed,
     familyRenderFamilyId: toTextOrNull(value.familyRenderFamilyId),
     familyRenderMode,
-    familyRenderFallbackToPage: Boolean(value.familyRenderFallbackToPage ?? true),
-    familyRenderDiagnosticsCount: Number.isFinite(Number(value.familyRenderDiagnosticsCount))
-      ? Math.max(0, Math.floor(Number(value.familyRenderDiagnosticsCount)))
-      : familyRenderDiagnostics.length,
+    familyRenderFallbackToPage,
+    familyRenderDiagnosticsCount: familyRenderDiagnostics.length,
     familyRenderDiagnostics,
     renderedWithFallback: Boolean(value.renderedWithFallback),
     matchedPageId: toTextOrNull(value.matchedPageId),
@@ -1889,6 +1895,12 @@ export async function getSiteWorkspaceReadModelForPage(input: {
       transformedPreviewUrl: resolvedPreview.transformedPreviewUrl,
       debugPreviewUrl: resolvedPreview.debugPreviewUrl,
       previewMode: resolvedPreview.previewMode,
+      familyRenderUsed: resolvedPreview.familyRenderUsed,
+      familyRenderMode: resolvedPreview.familyRenderMode,
+      familyRenderFamilyId: resolvedPreview.familyRenderFamilyId,
+      familyRenderFallbackToPage: resolvedPreview.familyRenderFallbackToPage,
+      familyRenderDiagnosticsCount: resolvedPreview.familyRenderDiagnosticsCount,
+      familyRenderDiagnostics: resolvedPreview.familyRenderDiagnostics,
       previewRuntimeSummary: resolvedPreview.previewRuntimeSummary,
       liveUrl: toHttpsUrlOrNull(site.domain),
       selectedVariantLabel: selectedVariant?.label ?? null,

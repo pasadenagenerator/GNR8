@@ -1287,3 +1287,81 @@ test('preview runtime summary parser reads persisted preview mode truth', () => 
   assert.deepEqual(parsed?.contentResolutionDiagnostics, ['CONTENT_RESOLUTION_DEGRADED', 'CONTENT_RESOLUTION_STARTED'])
   assert.deepEqual(parsed?.previewDiagnostics, ['PREVIEW_MODE_PERSISTED', 'PREVIEW_REAL_REACT_RENDER_DEGRADED'])
 })
+
+test('preview runtime summary parser surfaces family_primary truth deterministically', () => {
+  const parsed = __siteWorkspaceReadModelTestUtils.parsePreviewRuntimeSummary({
+    previewMode: 'react_preview',
+    rendererContractAvailable: true,
+    finalSiteModelAvailable: true,
+    familyRenderUsed: true,
+    familyRenderFamilyId: 'family_primary_root',
+    familyRenderMode: 'family_primary',
+    familyRenderFallbackToPage: false,
+    familyRenderDiagnosticsCount: 99,
+    familyRenderDiagnostics: ['FAMILY_RENDER_MODE_SELECTED', 'FAMILY_RENDER_MODEL_BUILT', 'FAMILY_RENDER_MODE_SELECTED'],
+    renderedWithFallback: false,
+    matchedPageId: 'page-home',
+    contentResolutionApplied: true,
+    resolvedContentCount: 10,
+    unresolvedContentCount: 0,
+    contentResolutionDegraded: false,
+    contentResolutionDiagnostics: [],
+    previewDiagnostics: ['PREVIEW_MODE_PERSISTED'],
+  })
+
+  assert.equal(parsed?.familyRenderMode, 'family_primary')
+  assert.equal(parsed?.familyRenderUsed, true)
+  assert.equal(parsed?.familyRenderFallbackToPage, false)
+  assert.equal(parsed?.familyRenderDiagnosticsCount, 2)
+  assert.deepEqual(parsed?.familyRenderDiagnostics, ['FAMILY_RENDER_MODE_SELECTED', 'FAMILY_RENDER_MODEL_BUILT'])
+})
+
+test('preview runtime summary parser surfaces page_fallback truth deterministically', () => {
+  const parsed = __siteWorkspaceReadModelTestUtils.parsePreviewRuntimeSummary({
+    previewMode: 'fallback_preview',
+    rendererContractAvailable: false,
+    finalSiteModelAvailable: false,
+    familyRenderUsed: false,
+    familyRenderFamilyId: null,
+    familyRenderMode: 'page_fallback',
+    familyRenderFallbackToPage: true,
+    familyRenderDiagnosticsCount: 1,
+    familyRenderDiagnostics: ['FAMILY_RENDER_DEGRADED_TO_PAGE'],
+    renderedWithFallback: false,
+    matchedPageId: null,
+    contentResolutionApplied: false,
+    resolvedContentCount: 0,
+    unresolvedContentCount: 0,
+    contentResolutionDegraded: false,
+    contentResolutionDiagnostics: [],
+    previewDiagnostics: ['PREVIEW_MODE_PERSISTED'],
+  })
+
+  assert.equal(parsed?.familyRenderMode, 'page_fallback')
+  assert.equal(parsed?.familyRenderFallbackToPage, true)
+  assert.equal(parsed?.familyRenderDiagnosticsCount, 1)
+  assert.deepEqual(parsed?.familyRenderDiagnostics, ['FAMILY_RENDER_DEGRADED_TO_PAGE'])
+})
+
+test('preview runtime summary parser safely handles legacy rows with no family fields', () => {
+  const parsed = __siteWorkspaceReadModelTestUtils.parsePreviewRuntimeSummary({
+    previewMode: 'react_preview',
+    rendererContractAvailable: true,
+    finalSiteModelAvailable: true,
+    renderedWithFallback: false,
+    matchedPageId: 'page-home',
+    contentResolutionApplied: true,
+    resolvedContentCount: 2,
+    unresolvedContentCount: 0,
+    contentResolutionDegraded: false,
+    contentResolutionDiagnostics: [],
+    previewDiagnostics: ['PREVIEW_MODE_PERSISTED'],
+  })
+
+  assert.equal(parsed?.familyRenderUsed, false)
+  assert.equal(parsed?.familyRenderFamilyId, null)
+  assert.equal(parsed?.familyRenderMode, null)
+  assert.equal(parsed?.familyRenderFallbackToPage, false)
+  assert.equal(parsed?.familyRenderDiagnosticsCount, 0)
+  assert.deepEqual(parsed?.familyRenderDiagnostics, [])
+})

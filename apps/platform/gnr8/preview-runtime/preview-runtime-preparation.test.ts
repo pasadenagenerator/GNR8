@@ -391,4 +391,13 @@ test("family render mode is surfaced when deterministic family truth exists", ()
   assert.equal(prepared.summary.familyRenderUsed, true);
   assert.equal(prepared.summary.familyRenderFamilyId, "family_marketing_root");
   assert.equal(prepared.summary.familyRenderDiagnosticsCount > 0, true);
+  assert.equal(prepared.summary.familyRenderDiagnosticsCount, prepared.summary.familyRenderDiagnostics.length);
+  assert.deepEqual(
+    prepared.summary.familyRenderDiagnostics,
+    [...prepared.summary.familyRenderDiagnostics].sort((a, b) => a.localeCompare(b)),
+  );
+  assert.deepEqual(
+    prepared.summary.familyRenderDiagnostics,
+    [...new Set(prepared.summary.familyRenderDiagnostics)].sort((a, b) => a.localeCompare(b)),
+  );
 });

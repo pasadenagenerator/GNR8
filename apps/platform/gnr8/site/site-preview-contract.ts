@@ -39,7 +39,33 @@ export type SiteWorkspacePreviewResolution = {
   debugPreviewUrl: string | null
   previewMode: PreviewRuntimeMode | null
   previewRuntimeSummary: PreviewRuntimeSummary | null
+  familyRenderUsed: boolean
+  familyRenderMode: PreviewRuntimeSummary['familyRenderMode']
+  familyRenderFamilyId: string | null
+  familyRenderFallbackToPage: boolean
+  familyRenderDiagnosticsCount: number
+  familyRenderDiagnostics: string[]
   diagnostics: string[]
+}
+
+function resolveFamilyRenderTruth(summary: PreviewRuntimeSummary | null): {
+  familyRenderUsed: boolean
+  familyRenderMode: PreviewRuntimeSummary['familyRenderMode']
+  familyRenderFamilyId: string | null
+  familyRenderFallbackToPage: boolean
+  familyRenderDiagnosticsCount: number
+  familyRenderDiagnostics: string[]
+} {
+  const diagnostics = summary?.familyRenderDiagnostics ?? []
+  const familyRenderMode = summary?.familyRenderMode ?? null
+  return {
+    familyRenderUsed: familyRenderMode === 'family_primary' || familyRenderMode === 'hybrid_family_page',
+    familyRenderMode,
+    familyRenderFamilyId: summary?.familyRenderFamilyId ?? null,
+    familyRenderFallbackToPage: familyRenderMode === 'page_fallback' ? true : (summary?.familyRenderFallbackToPage ?? false),
+    familyRenderDiagnosticsCount: diagnostics.length,
+    familyRenderDiagnostics: diagnostics,
+  }
 }
 
 export function resolveSiteWorkspacePreview(input: {
@@ -50,6 +76,7 @@ export function resolveSiteWorkspacePreview(input: {
   previewRuntimeSummary?: PreviewRuntimeSummary | null
 }): SiteWorkspacePreviewResolution {
   const summary = input.previewRuntimeSummary ?? null
+  const familyTruth = resolveFamilyRenderTruth(summary)
   const modeDiagnostic = summary ? `Preview runtime mode: ${summary.previewMode}.` : null
 
   if (!input.siteVersionId) {
@@ -61,6 +88,7 @@ export function resolveSiteWorkspacePreview(input: {
       debugPreviewUrl: null,
       previewMode: summary?.previewMode ?? null,
       previewRuntimeSummary: summary,
+      ...familyTruth,
       diagnostics: [
         input.importCaptured
           ? 'Import capture exists, but no runtime site version was selected for transformed preview.'
@@ -86,6 +114,7 @@ export function resolveSiteWorkspacePreview(input: {
       debugPreviewUrl,
       previewMode: summary?.previewMode ?? null,
       previewRuntimeSummary: summary,
+      ...familyTruth,
       diagnostics: [
         'Transformed preview artifact is available and selected as the primary Site Workspace preview source.',
         ...(modeDiagnostic ? [modeDiagnostic] : []),
@@ -102,6 +131,7 @@ export function resolveSiteWorkspacePreview(input: {
       debugPreviewUrl,
       previewMode: summary?.previewMode ?? null,
       previewRuntimeSummary: summary,
+      ...familyTruth,
       diagnostics: [
         'Only debug/inspect preview is currently available. Transformed preview artifact is not ready yet.',
         ...(modeDiagnostic ? [modeDiagnostic] : []),
@@ -117,6 +147,7 @@ export function resolveSiteWorkspacePreview(input: {
     debugPreviewUrl: null,
     previewMode: summary?.previewMode ?? null,
     previewRuntimeSummary: summary,
+    ...familyTruth,
     diagnostics: [
       input.importCaptured
         ? 'Import capture exists, but no transformed artifact or debug render could be resolved.'

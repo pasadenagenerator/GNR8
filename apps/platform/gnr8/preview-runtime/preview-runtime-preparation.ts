@@ -442,13 +442,14 @@ function toSummary(input: {
   familyRender: FamilyRenderPreparationResult | null;
 }): PreviewRuntimeSummary {
   const familyRenderDiagnostics = diagnosticsCodes(input.familyRender?.diagnostics ?? []);
+  const familyRenderMode = input.familyRender?.selectedMode ?? "page_fallback";
   return {
     previewMode: input.mode,
     rendererContractAvailable: input.reactRenderSiteModelAvailable,
     finalSiteModelAvailable: input.finalSiteModel != null,
-    familyRenderUsed: Boolean(input.familyRender?.selectedMode !== "page_fallback" && !input.familyRender?.fallbackToPage),
+    familyRenderUsed: familyRenderMode === "family_primary" || familyRenderMode === "hybrid_family_page",
     familyRenderFamilyId: input.familyRender?.selectedFamilyId ?? null,
-    familyRenderMode: input.familyRender?.selectedMode ?? "page_fallback",
+    familyRenderMode,
     familyRenderFallbackToPage: Boolean(input.familyRender?.fallbackToPage ?? true),
     familyRenderDiagnosticsCount: familyRenderDiagnostics.length,
     familyRenderDiagnostics,
