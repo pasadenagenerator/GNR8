@@ -213,6 +213,7 @@ export default async function ClientDashboardPage(props: { searchParams?: Promis
       </header>
 
       <ClientDashboardHome
+        clientId={currentUserClient.client_id}
         readModel={readModel}
         roleLabel={currentUserClient.role}
         viewMode="client-self"

@@ -217,6 +217,7 @@ export default async function AgencyClientDashboardEntryPage(props: {
       activeTab='dashboard'
     >
       <ClientDashboardHome
+        clientId={clientId}
         readModel={readModel}
         roleLabel={currentUserAgency.role}
         viewMode='agency-managed'

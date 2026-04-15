@@ -1,9 +1,11 @@
 import Link from "next/link";
 
 import WorkspaceShortcuts, { type WorkspaceShortcut } from "@/app/gnr8/_components/workspace/WorkspaceShortcuts";
+import TemplateLibraryPanel from "@/app/gnr8/_components/client-dashboard/TemplateLibraryPanel";
 import type { ClientDashboardReadModel } from "@/gnr8/client/client-dashboard-read-model";
 
 type Props = {
+  clientId: string;
   readModel: ClientDashboardReadModel;
   roleLabel: string;
   viewMode: "agency-managed" | "client-self";
@@ -270,6 +272,8 @@ export default function ClientDashboardHome(props: Props) {
           </div>
         )}
       </section>
+
+      <TemplateLibraryPanel clientId={props.clientId} />
     </>
   );
 }
