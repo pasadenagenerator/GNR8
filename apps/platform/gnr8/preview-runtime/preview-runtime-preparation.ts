@@ -7,6 +7,12 @@ import type { ReactElement } from "react";
 import { PREVIEW_RUNTIME_DIAGNOSTIC, withSortedDiagnostics } from "@/gnr8/preview-runtime/preview-runtime-diagnostics";
 import { selectPreviewRuntimeMode } from "@/gnr8/preview-runtime/preview-mode-selector";
 import type { PreviewRuntimePreparationInput, PreviewRuntimePreparationResult, PreviewRuntimeSummary } from "@/gnr8/preview-runtime/preview-runtime-types";
+import {
+  applyFamilyPageInstanceToFinalSiteModel,
+  diagnosticsCodes,
+  prepareFamilyRenderForRoute,
+  type FamilyRenderPreparationResult,
+} from "@/gnr8/renderer-family-mode";
 
 function normalizeText(value: unknown): string {
   return String(value ?? "").trim();
@@ -433,11 +439,19 @@ function toSummary(input: {
   reactRenderSiteModelAvailable: boolean;
   rendererResult: PreviewRuntimePreparationResult["rendererResult"];
   diagnostics: string[];
+  familyRender: FamilyRenderPreparationResult | null;
 }): PreviewRuntimeSummary {
+  const familyRenderDiagnostics = diagnosticsCodes(input.familyRender?.diagnostics ?? []);
   return {
     previewMode: input.mode,
     rendererContractAvailable: input.reactRenderSiteModelAvailable,
     finalSiteModelAvailable: input.finalSiteModel != null,
+    familyRenderUsed: Boolean(input.familyRender?.selectedMode !== "page_fallback" && !input.familyRender?.fallbackToPage),
+    familyRenderFamilyId: input.familyRender?.selectedFamilyId ?? null,
+    familyRenderMode: input.familyRender?.selectedMode ?? "page_fallback",
+    familyRenderFallbackToPage: Boolean(input.familyRender?.fallbackToPage ?? true),
+    familyRenderDiagnosticsCount: familyRenderDiagnostics.length,
+    familyRenderDiagnostics,
     renderedWithFallback: Boolean(input.rendererResult?.renderedWithFallback),
     matchedPageId: input.rendererResult?.matchedPageId ?? null,
     contentResolutionApplied: Boolean(input.rendererResult?.contentResolutionApplied),
@@ -467,8 +481,29 @@ function hasRenderedCaptureAvailable(input: PreviewRuntimePreparationInput): boo
 
 export function preparePreviewRuntime(input: PreviewRuntimePreparationInput): PreviewRuntimePreparationResult {
   const diagnostics: string[] = [PREVIEW_RUNTIME_DIAGNOSTIC.PREPARATION_STARTED];
-  const finalSiteModel = buildFinalSiteModelFromRuntimeSiteVersion(input);
+  const routePath = normalizePagePath(input.routePath);
+  let finalSiteModel = buildFinalSiteModelFromRuntimeSiteVersion(input);
+  let familyRenderPreparation: FamilyRenderPreparationResult | null = null;
+
+  if (finalSiteModel) {
+    familyRenderPreparation = prepareFamilyRenderForRoute({
+      siteId: input.siteVersion.siteId,
+      routePath,
+      finalSiteModel,
+      familyHandoffModel: input.siteVersion.importProvenanceSummary?.templateFamilies?.families ?? null,
+    });
+    diagnostics.push(...diagnosticsCodes(familyRenderPreparation.diagnostics));
+
+    if (familyRenderPreparation.pageInstance && !familyRenderPreparation.fallbackToPage) {
+      finalSiteModel = applyFamilyPageInstanceToFinalSiteModel({
+        finalSiteModel,
+        pageInstance: familyRenderPreparation.pageInstance,
+      });
+    }
+  }
+
   if (finalSiteModel) diagnostics.push(PREVIEW_RUNTIME_DIAGNOSTIC.FINAL_SITE_MODEL_AVAILABLE);
+  else diagnostics.push(PREVIEW_RUNTIME_DIAGNOSTIC.FINAL_SITE_MODEL_UNAVAILABLE);
 
   let reactRenderSiteModel: PreviewRuntimePreparationResult["reactRenderSiteModel"] = null;
   if (finalSiteModel && !input.simulateRendererContractUnavailable) {
@@ -488,7 +523,6 @@ export function preparePreviewRuntime(input: PreviewRuntimePreparationInput): Pr
   let renderedSiteElement: ReactElement | null = null;
   let rendererDiagnostics: RenderDiagnostic[] = [];
   let rendererRuntimeFailed = false;
-  const routePath = normalizePagePath(input.routePath);
   const rendererInput =
     reactRenderSiteModel == null
       ? null
@@ -546,6 +580,12 @@ export function preparePreviewRuntime(input: PreviewRuntimePreparationInput): Pr
       previewMode: "fallback_preview",
       rendererContractAvailable: false,
       finalSiteModelAvailable: false,
+      familyRenderUsed: false,
+      familyRenderFamilyId: null,
+      familyRenderMode: "page_fallback",
+      familyRenderFallbackToPage: true,
+      familyRenderDiagnosticsCount: 0,
+      familyRenderDiagnostics: [],
       renderedWithFallback: false,
       matchedPageId: null,
       contentResolutionApplied: false,
@@ -563,6 +603,7 @@ export function preparePreviewRuntime(input: PreviewRuntimePreparationInput): Pr
     reactRenderSiteModelAvailable: prepared.reactRenderSiteModel != null,
     rendererResult: prepared.rendererResult,
     diagnostics: prepared.diagnostics,
+    familyRender: familyRenderPreparation,
   });
 
   return prepared;

@@ -2,6 +2,7 @@ import type { FinalSiteModel } from "@/gnr8/merge-engine";
 import type { ReactRenderSiteModel, RenderDiagnostic } from "@/gnr8/renderer-contract";
 import type { CanonicalSiteVersionSnapshot } from "@/gnr8/runtime/types";
 import type { RealReactRendererInput, RealReactRendererResult } from "@/gnr8/react-renderer";
+import type { FamilyRenderMode } from "@/gnr8/renderer-family-mode";
 import type { ReactElement } from "react";
 
 export type PreviewRuntimeMode = "react_preview" | "react_preview_degraded" | "fallback_preview";
@@ -10,6 +11,12 @@ export type PreviewRuntimeSummary = {
   previewMode: PreviewRuntimeMode;
   rendererContractAvailable: boolean;
   finalSiteModelAvailable: boolean;
+  familyRenderUsed: boolean;
+  familyRenderFamilyId: string | null;
+  familyRenderMode: FamilyRenderMode;
+  familyRenderFallbackToPage: boolean;
+  familyRenderDiagnosticsCount: number;
+  familyRenderDiagnostics: string[];
   renderedWithFallback: boolean;
   matchedPageId: string | null;
   contentResolutionApplied: boolean;

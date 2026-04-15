@@ -1253,6 +1253,12 @@ test('preview runtime summary parser reads persisted preview mode truth', () => 
     previewMode: 'react_preview_degraded',
     rendererContractAvailable: true,
     finalSiteModelAvailable: true,
+    familyRenderUsed: true,
+    familyRenderFamilyId: 'family_marketing_root',
+    familyRenderMode: 'hybrid_family_page',
+    familyRenderFallbackToPage: false,
+    familyRenderDiagnosticsCount: 2,
+    familyRenderDiagnostics: ['FAMILY_RENDER_MODE_SELECTED', 'FAMILY_RENDER_INSTANCE_OVERRIDE_APPLIED'],
     renderedWithFallback: true,
     matchedPageId: 'page-home',
     contentResolutionApplied: true,
@@ -1266,6 +1272,12 @@ test('preview runtime summary parser reads persisted preview mode truth', () => 
   assert.equal(parsed?.previewMode, 'react_preview_degraded')
   assert.equal(parsed?.rendererContractAvailable, true)
   assert.equal(parsed?.finalSiteModelAvailable, true)
+  assert.equal(parsed?.familyRenderUsed, true)
+  assert.equal(parsed?.familyRenderFamilyId, 'family_marketing_root')
+  assert.equal(parsed?.familyRenderMode, 'hybrid_family_page')
+  assert.equal(parsed?.familyRenderFallbackToPage, false)
+  assert.equal(parsed?.familyRenderDiagnosticsCount, 2)
+  assert.deepEqual(parsed?.familyRenderDiagnostics, ['FAMILY_RENDER_INSTANCE_OVERRIDE_APPLIED', 'FAMILY_RENDER_MODE_SELECTED'])
   assert.equal(parsed?.renderedWithFallback, true)
   assert.equal(parsed?.matchedPageId, 'page-home')
   assert.equal(parsed?.contentResolutionApplied, true)

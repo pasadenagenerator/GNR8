@@ -1438,11 +1438,27 @@ function parsePreviewRuntimeSummary(value: unknown): PreviewRuntimeSummary | nul
   const mode = normalizePreviewRuntimeMode(value.previewMode)
   if (!mode) return null
   const diagnostics = Array.isArray(value.previewDiagnostics) ? value.previewDiagnostics.map((entry) => normalizeText(entry)).filter(Boolean) : []
+  const familyRenderModeRaw = normalizeText(value.familyRenderMode)
+  const familyRenderMode =
+    familyRenderModeRaw === 'family_primary' || familyRenderModeRaw === 'hybrid_family_page' || familyRenderModeRaw === 'page_fallback'
+      ? familyRenderModeRaw
+      : 'page_fallback'
+  const familyRenderDiagnostics = Array.isArray(value.familyRenderDiagnostics)
+    ? [...new Set(value.familyRenderDiagnostics.map((entry) => normalizeText(entry)).filter(Boolean))].sort((a, b) => a.localeCompare(b))
+    : []
 
   return {
     previewMode: mode,
     rendererContractAvailable: Boolean(value.rendererContractAvailable),
     finalSiteModelAvailable: Boolean(value.finalSiteModelAvailable),
+    familyRenderUsed: Boolean(value.familyRenderUsed),
+    familyRenderFamilyId: toTextOrNull(value.familyRenderFamilyId),
+    familyRenderMode,
+    familyRenderFallbackToPage: Boolean(value.familyRenderFallbackToPage ?? true),
+    familyRenderDiagnosticsCount: Number.isFinite(Number(value.familyRenderDiagnosticsCount))
+      ? Math.max(0, Math.floor(Number(value.familyRenderDiagnosticsCount)))
+      : familyRenderDiagnostics.length,
+    familyRenderDiagnostics,
     renderedWithFallback: Boolean(value.renderedWithFallback),
     matchedPageId: toTextOrNull(value.matchedPageId),
     contentResolutionApplied: Boolean(value.contentResolutionApplied),
