@@ -14,7 +14,7 @@ export type TemplateListCard = {
   preview: {
     available: boolean
     isFallback: boolean
-    source: 'rendered_capture' | 'fallback'
+    source: 'rendered_capture' | 'html_snapshot' | 'fallback'
     imagePath: string | null
   }
   createdAt: string

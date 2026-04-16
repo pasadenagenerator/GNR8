@@ -4,8 +4,9 @@ export type TemplateSourceType = 'zip_html'
 export type TemplateStatus = 'uploaded' | 'processing' | 'ready' | 'failed'
 export type TemplateImportHealth = 'clean' | 'degraded' | 'failed'
 export type TemplateVisibility = 'private'
+export type TemplateIntakeMode = 'template_intake'
 
-export type TemplatePreviewSource = 'rendered_capture' | 'fallback'
+export type TemplatePreviewSource = 'rendered_capture' | 'html_snapshot' | 'fallback'
 export type TemplateType = 'single_page' | 'multi_page' | 'unknown'
 
 export type TemplateManifestSummary = {
@@ -49,6 +50,11 @@ export type TemplateIntakeDiagnosticCode =
   | 'TEMPLATE_IMPORT_COMPLETED'
   | 'TEMPLATE_IMPORT_DEGRADED'
   | 'TEMPLATE_IMPORT_FAILED'
+  | 'TEMPLATE_INTAKE_NO_ASSETS'
+  | 'TEMPLATE_INTAKE_NO_RENDER_CAPTURE'
+  | 'TEMPLATE_INTAKE_LOW_STYLE_COVERAGE'
+  | 'TEMPLATE_INTAKE_EMPTY_HTML'
+  | 'TEMPLATE_INTAKE_FATAL_IMPORT_DIAGNOSTIC'
   | 'TEMPLATE_PREVIEW_RESOLVED'
   | 'TEMPLATE_PREVIEW_FALLBACK_USED'
   | 'TEMPLATE_RECORD_CREATED'

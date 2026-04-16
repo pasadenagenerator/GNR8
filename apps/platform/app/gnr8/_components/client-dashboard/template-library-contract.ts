@@ -18,7 +18,7 @@ export type TemplateListApiCard = {
   preview: {
     available: boolean
     isFallback: boolean
-    source: 'rendered_capture' | 'fallback'
+    source: 'rendered_capture' | 'html_snapshot' | 'fallback'
     imagePath: string | null
     entryHtmlFileName?: string | null
     templateType?: 'single_page' | 'multi_page' | 'unknown'

@@ -58,16 +58,16 @@ export function buildTemplatePreviewSummary(input: {
     preview: {
       previewAvailable: false,
       previewIsFallback: true,
-      previewSource: 'fallback',
+      previewSource: 'html_snapshot',
       previewImagePath: null,
       previewLabel: 'No preview available',
       entryHtmlFileName,
     },
     diagnostics: [
       createTemplateIntakeDiagnostic({
-        code: 'TEMPLATE_PREVIEW_FALLBACK_USED',
+        code: 'TEMPLATE_INTAKE_NO_RENDER_CAPTURE',
         severity: 'warning',
-        message: 'Rendered preview not available; truthful fallback was used.',
+        message: 'Rendered preview capture is unavailable; template remains usable with HTML snapshot fallback.',
       }),
     ],
   }

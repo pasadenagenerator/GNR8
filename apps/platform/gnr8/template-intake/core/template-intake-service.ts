@@ -1,6 +1,7 @@
 import path from 'node:path'
 
 import { createImportManifest } from '@/gnr8/import/import-manifest'
+import type { ImportOutput } from '@/gnr8/import/import-contract'
 import { importStaticSite } from '@/gnr8/import/runtime/import-static-site'
 import { createTemplateIntakeDiagnostic, summarizeTemplateDiagnostics } from '@/gnr8/template-intake/diagnostics/template-intake-diagnostics'
 import { readTemplateManifest, normalizeTemplateTagsForStorage } from '@/gnr8/template-intake/core/template-manifest-reader'
@@ -19,8 +20,9 @@ import {
 } from '@/gnr8/template-intake/storage/template-repository'
 import type {
   CreateTemplateInput,
-  TemplateDiagnosticsSummary,
   TemplateImportHealth,
+  TemplateIntakeDiagnostic,
+  TemplateIntakeMode,
   TemplateIntakeResult,
   TemplateRecord,
   TemplateType,
@@ -31,20 +33,65 @@ function normalizeText(value: unknown): string {
   return String(value ?? '').trim()
 }
 
+const TEMPLATE_INTAKE_MODE: TemplateIntakeMode = 'template_intake'
+
+const LENIENT_ASSET_DIAGNOSTIC_CODES = new Set(['missing_local_asset', 'unsupported_remote_asset', 'unsupported_data_url_asset'])
+
 function pickImportHealth(input: {
-  importStatus: 'ok' | 'failed'
-  manifestStatus: 'success' | 'success_with_warnings' | 'failed'
   warningCount: number
   errorCount: number
-  fatalCount: number
+  hasLenientSignals: boolean
 }): TemplateImportHealth {
-  if (input.importStatus === 'failed' || input.manifestStatus === 'failed' || input.fatalCount > 0) return 'failed'
-  if (input.manifestStatus === 'success_with_warnings' || input.warningCount > 0 || input.errorCount > 0) return 'degraded'
+  if (input.warningCount > 0 || input.errorCount > 0 || input.hasLenientSignals) return 'degraded'
   return 'clean'
 }
 
-function mergeDiagnostics(...summaries: TemplateDiagnosticsSummary[]): TemplateDiagnosticsSummary {
-  return summarizeTemplateDiagnostics(summaries.flatMap((summary) => summary.issues))
+function hasInlineStyleEvidence(importOutput: ImportOutput): boolean {
+  return importOutput.rawDomSnapshot.documents.some((doc) => {
+    const html = normalizeText(doc.text)
+    if (!html) return false
+    return /<style(\s|>)/i.test(html) || /\sstyle\s*=/i.test(html)
+  })
+}
+
+function buildLenientTemplateIntakeWarnings(input: {
+  importOutput: ImportOutput
+}): TemplateIntakeDiagnostic[] {
+  const diagnostics: TemplateIntakeDiagnostic[] = []
+
+  const localAssetCount = input.importOutput.assetRegistry.files.length
+  const hasAssetValidationIssues = input.importOutput.importDiagnostics.issues.some((issue) => LENIENT_ASSET_DIAGNOSTIC_CODES.has(issue.code))
+  if (localAssetCount === 0 || hasAssetValidationIssues) {
+    diagnostics.push(
+      createTemplateIntakeDiagnostic({
+        code: 'TEMPLATE_INTAKE_NO_ASSETS',
+        severity: 'warning',
+        message: 'No local assets were resolved during template intake; template remains usable in degraded mode.',
+        details: {
+          localAssetCount,
+          hasAssetValidationIssues,
+        },
+      }),
+    )
+  }
+
+  const hasInlineStyles = hasInlineStyleEvidence(input.importOutput)
+  const stylesheetRefCount = input.importOutput.assetRegistry.references.filter((reference) => reference.assetKind === 'stylesheet').length
+  if (!hasInlineStyles && stylesheetRefCount === 0) {
+    diagnostics.push(
+      createTemplateIntakeDiagnostic({
+        code: 'TEMPLATE_INTAKE_LOW_STYLE_COVERAGE',
+        severity: 'warning',
+        message: 'Style coverage is low because no inline or local stylesheet evidence was detected.',
+        details: {
+          hasInlineStyles,
+          stylesheetRefCount,
+        },
+      }),
+    )
+  }
+
+  return diagnostics
 }
 
 function resolveTemplateEntryMetadata(input: {
@@ -89,6 +136,7 @@ export async function runTemplateZipIntake(input: {
   organizationId: string | null
   agencyId: string | null
   uploadedZip: UploadedZipTemplate
+  mode?: TemplateIntakeMode
   repository?: TemplateRepository
   zipValidator?: typeof validateAndExtractTemplateZip
   importRunner?: typeof importStaticSite
@@ -100,6 +148,7 @@ export async function runTemplateZipIntake(input: {
   const importRunner = input.importRunner ?? importStaticSite
   const importManifestBuilder = input.importManifestBuilder ?? createImportManifest
   const previewBuilder = input.previewBuilder ?? buildTemplatePreviewSummary
+  const intakeMode = input.mode ?? TEMPLATE_INTAKE_MODE
 
   const zipValidation = zipValidator({
     fileName: input.uploadedZip.fileName,
@@ -154,7 +203,7 @@ export async function runTemplateZipIntake(input: {
       preview: {
         previewAvailable: false,
         previewIsFallback: true,
-        previewSource: 'fallback',
+        previewSource: 'html_snapshot',
         previewImagePath: null,
         previewLabel: 'No preview available',
         entryHtmlFileName: null,
@@ -208,7 +257,7 @@ export async function runTemplateZipIntake(input: {
       preview: {
         previewAvailable: false,
         previewIsFallback: true,
-        previewSource: 'fallback',
+        previewSource: 'html_snapshot',
         previewImagePath: null,
         previewLabel: 'No preview available',
         entryHtmlFileName: null,
@@ -258,6 +307,7 @@ export async function runTemplateZipIntake(input: {
         templateId: initialTemplate.id,
         snapshotId: zipValidation.snapshotId,
         entryHtmlPath,
+        mode: intakeMode,
       },
     }),
   ])
@@ -273,18 +323,108 @@ export async function runTemplateZipIntake(input: {
   })
 
   const importManifest = importManifestBuilder(importOutput)
-  const importHealth = pickImportHealth({
-    importStatus: importOutput.status,
-    manifestStatus: importManifest.status,
-    warningCount: importOutput.importDiagnostics.summary.warningCount,
-    errorCount: importOutput.importDiagnostics.summary.errorCount,
-    fatalCount: importOutput.importDiagnostics.summary.fatalCount,
+  const previewSummary = previewBuilder({ screenshotPaths: [], entryHtmlPath })
+  const lenientWarnings = buildLenientTemplateIntakeWarnings({
+    importOutput,
   })
 
-  const previewSummary = previewBuilder({ screenshotPaths: [], entryHtmlPath })
+  const hasEmptyHtmlIssue = importOutput.importDiagnostics.issues.some((issue) => issue.code === 'HTML_EMPTY')
+  if (hasEmptyHtmlIssue) {
+    const updated = await repository.updateTemplateProcessingResult({
+      templateId: initialTemplate.id,
+      status: 'failed',
+      importHealth: 'failed',
+      entryHtmlPath: entryMetadata.entryHtmlPath,
+      entryHtmlFileName: entryMetadata.entryHtmlFileName,
+      templateType: entryMetadata.templateType,
+      preview: previewSummary.preview,
+      tags: [],
+      importSnapshotId: zipValidation.snapshotId,
+      diagnosticsSummary: summarizeTemplateDiagnostics([
+        ...intakeDiagnostics.issues,
+        ...previewSummary.diagnostics,
+        createTemplateIntakeDiagnostic({
+          code: 'TEMPLATE_INTAKE_EMPTY_HTML',
+          severity: 'fatal',
+          message: 'Template entry HTML is empty and cannot be accepted.',
+          details: {
+            entryHtmlPath,
+            mode: intakeMode,
+          },
+        }),
+        createTemplateIntakeDiagnostic({
+          code: 'TEMPLATE_RECORD_UPDATED',
+          severity: 'info',
+          message: 'Template record marked as failed during intake validation.',
+        }),
+      ]),
+      templateManifestSummary: manifest.summary,
+      importManifestSummary: importManifest,
+    })
+
+    return {
+      ok: false,
+      templateId: updated.id,
+      status: updated.status,
+      importHealth: updated.importHealth,
+      diagnosticsSummary: updated.diagnosticsSummary ?? intakeDiagnostics,
+      errorMessage: 'Template entry HTML is empty.',
+    }
+  }
+
+  const hasFatalImportIssues = importOutput.importDiagnostics.issues.some((issue) => issue.severity === 'fatal')
+  if (hasFatalImportIssues) {
+    const updated = await repository.updateTemplateProcessingResult({
+      templateId: initialTemplate.id,
+      status: 'failed',
+      importHealth: 'failed',
+      entryHtmlPath: entryMetadata.entryHtmlPath,
+      entryHtmlFileName: entryMetadata.entryHtmlFileName,
+      templateType: entryMetadata.templateType,
+      preview: previewSummary.preview,
+      tags: [],
+      importSnapshotId: zipValidation.snapshotId,
+      diagnosticsSummary: summarizeTemplateDiagnostics([
+        ...intakeDiagnostics.issues,
+        ...previewSummary.diagnostics,
+        createTemplateIntakeDiagnostic({
+          code: 'TEMPLATE_INTAKE_FATAL_IMPORT_DIAGNOSTIC',
+          severity: 'fatal',
+          message: 'Template intake failed due to fatal import diagnostics.',
+          details: {
+            fatalCount: importOutput.importDiagnostics.summary.fatalCount,
+            mode: intakeMode,
+          },
+        }),
+        createTemplateIntakeDiagnostic({
+          code: 'TEMPLATE_RECORD_UPDATED',
+          severity: 'info',
+          message: 'Template record marked as failed during intake validation.',
+        }),
+      ]),
+      templateManifestSummary: manifest.summary,
+      importManifestSummary: importManifest,
+    })
+
+    return {
+      ok: false,
+      templateId: updated.id,
+      status: updated.status,
+      importHealth: updated.importHealth,
+      diagnosticsSummary: updated.diagnosticsSummary ?? intakeDiagnostics,
+      errorMessage: 'Template import failed.',
+    }
+  }
+
+  const importHealth = pickImportHealth({
+    warningCount: importOutput.importDiagnostics.summary.warningCount,
+    errorCount: importOutput.importDiagnostics.summary.errorCount,
+    hasLenientSignals: lenientWarnings.length > 0,
+  })
 
   const importDiagnostics = summarizeTemplateDiagnostics([
     ...intakeDiagnostics.issues,
+    ...lenientWarnings,
     ...(importHealth === 'failed'
       ? [
           createTemplateIntakeDiagnostic({
@@ -302,10 +442,11 @@ export async function runTemplateZipIntake(input: {
             createTemplateIntakeDiagnostic({
               code: 'TEMPLATE_IMPORT_DEGRADED',
               severity: 'warning',
-              message: 'Template import completed with degraded fidelity diagnostics.',
+              message: 'Template import completed in lenient mode with degraded diagnostics.',
               details: {
                 warningCount: importOutput.importDiagnostics.summary.warningCount,
                 errorCount: importOutput.importDiagnostics.summary.errorCount,
+                mode: intakeMode,
               },
             }),
           ]
@@ -329,7 +470,7 @@ export async function runTemplateZipIntake(input: {
 
   const updatedTemplate = await repository.updateTemplateProcessingResult({
     templateId: initialTemplate.id,
-    status: importHealth === 'failed' ? 'failed' : 'ready',
+    status: 'ready',
     importHealth,
     entryHtmlPath: entryMetadata.entryHtmlPath,
     entryHtmlFileName: entryMetadata.entryHtmlFileName,

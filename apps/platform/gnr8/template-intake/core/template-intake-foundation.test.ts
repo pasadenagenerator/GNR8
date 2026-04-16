@@ -12,6 +12,7 @@ import {
   runTemplateZipIntake,
   updateClientTemplateMetadata,
 } from '@/gnr8/template-intake/core/template-intake-service'
+import type { ImportDiagnosticIssue, ImportOutput } from '@/gnr8/import/import-contract'
 import { validateZipEntryPaths } from '@/gnr8/template-intake/core/template-zip-validator'
 import { buildTemplatePreviewSummary } from '@/gnr8/template-intake/preview/template-preview-summary'
 import type { TemplateDiagnosticsSummary, TemplateRecord } from '@/gnr8/template-intake/types/template-intake-types'
@@ -104,7 +105,7 @@ function createRepositoryStub() {
         preview: {
           previewAvailable: boolean
           previewIsFallback: boolean
-          previewSource: 'rendered_capture' | 'fallback'
+          previewSource: 'rendered_capture' | 'html_snapshot' | 'fallback'
           previewImagePath: string | null
         }
         tags: string[]
@@ -177,7 +178,15 @@ function createImportOutput(input: {
   warningCount?: number
   errorCount?: number
   fatalCount?: number
+  entryHtmlText?: string
+  issues?: ImportDiagnosticIssue[]
+  assetFiles?: Array<{ path: string; kind: 'image' | 'stylesheet' | 'script' | 'unknown' }>
+  assetReferences?: ImportOutput['assetRegistry']['references']
 }) {
+  const issues = input.issues ?? []
+  const assetFiles = input.assetFiles ?? []
+  const assetReferences = input.assetReferences ?? []
+
   return {
     contractVersion: '1.1.1' as const,
     status: input.status,
@@ -194,20 +203,39 @@ function createImportOutput(input: {
       },
     },
     rawDomSnapshot: {
-      documents: [],
+      documents: [
+        {
+          path: 'index.html',
+          contentSha256: 'content',
+          byteLength: 10,
+          decoding: { encoding: 'utf-8' as const, hadDecodingErrors: false },
+          text: input.entryHtmlText ?? '<!doctype html><html><body>Hello</body></html>',
+          dom: {
+            serializedDom: '<html><body>Hello</body></html>',
+            nodeCount: 3,
+            parseWarnings: [],
+          },
+        },
+      ],
     },
     assetRegistry: {
       assetsDirPath: null,
-      files: [],
-      references: [],
+      files: assetFiles.map((file) => ({
+        path: file.path,
+        kind: file.kind,
+        mediaType: null,
+        byteLength: 100,
+        contentSha256: 'asset-sha',
+      })),
+      references: assetReferences,
     },
     importDiagnostics: {
-      issues: [],
+      issues,
       summary: {
         infoCount: 0,
-        warningCount: input.warningCount ?? 0,
-        errorCount: input.errorCount ?? 0,
-        fatalCount: input.fatalCount ?? 0,
+        warningCount: input.warningCount ?? issues.filter((issue) => issue.severity === 'warning').length,
+        errorCount: input.errorCount ?? issues.filter((issue) => issue.severity === 'error').length,
+        fatalCount: input.fatalCount ?? issues.filter((issue) => issue.severity === 'fatal').length,
       },
     },
   }
@@ -465,11 +493,371 @@ test('Import degraded maps template health to degraded', async () => {
   assert.equal(result.template.importHealth, 'degraded')
 })
 
+test('A. Valid HTML-only template remains ready and degraded in template intake mode', async () => {
+  const { repository } = createRepositoryStub()
+
+  const result = await runTemplateZipIntake({
+    actorUserId: '00000000-0000-4000-8000-000000000101',
+    clientId: '00000000-0000-4000-8000-000000000201',
+    organizationId: '00000000-0000-4000-8000-000000000201',
+    agencyId: '00000000-0000-4000-8000-000000000301',
+    uploadedZip: {
+      fileName: 'html-only.zip',
+      bytes: new Uint8Array([1, 1, 1]),
+    },
+    repository,
+    zipValidator: () => ({
+      ok: true,
+      diagnostics: [],
+      errorMessage: null,
+      snapshotId: 'template-zip-html-only',
+      zipFileAbsPath: '/tmp/template.zip',
+      validation: {
+        ok: true,
+        extractionRootDirAbs: '/tmp/template',
+        entryHtmlPath: 'index.html',
+        entryHtmlSelection: 'root_index',
+        htmlCandidates: ['index.html'],
+        assetsDirPath: null,
+        manifestPath: null,
+        assetSummary: {
+          fileCount: 1,
+          imageCount: 0,
+          stylesheetCount: 0,
+          scriptCount: 0,
+          otherCount: 1,
+        },
+      },
+    }),
+    importRunner: async () => createImportOutput({ status: 'ok' }),
+    importManifestBuilder: () => ({
+      manifestVersion: '1.0.0' as const,
+      contractVersion: '1.1.1' as const,
+      status: 'success',
+      outputStatus: 'ok',
+      rootDirPath: null,
+      entryHtmlPath: 'index.html',
+      sourceKind: 'single-entry-html',
+      htmlFilePaths: ['index.html'],
+      assetsDirPath: null,
+      fingerprints: { inputSpecSha256: 'spec', inputContentSha256: 'content' },
+      diagnostics: { totalCount: 0, infoCount: 0, warningCount: 0, errorCount: 0, fatalCount: 0, codes: [] },
+      dom: {
+        documentCount: 1,
+        documentsWithDomCount: 1,
+        nodeCount: 10,
+        parseWarningCount: 0,
+        decodingErrorCount: 0,
+        effectivelyEmpty: false,
+        documentPaths: ['index.html'],
+      },
+      assets: {
+        totalAssetFiles: 0,
+        totalAssets: 0,
+        referencesByAssetKind: { image: 0, stylesheet: 0, script: 0, unknown: 0 },
+        referencesByReferenceKind: {
+          relative_local: 0,
+          root_relative: 0,
+          absolute_url: 0,
+          data_url: 0,
+          empty_invalid: 0,
+        },
+        referencesByValidationStatus: {
+          ok: 0,
+          invalid_asset_reference: 0,
+          unsupported_remote_asset: 0,
+          unsupported_data_url_asset: 0,
+          path_traversal_blocked: 0,
+          missing_local_asset: 0,
+        },
+        existingLocalCount: 0,
+        missingLocalCount: 0,
+        references: [],
+      },
+    }),
+  })
+
+  assert.equal(result.ok, true)
+  if (!result.ok) return
+  assert.equal(result.template.status, 'ready')
+  assert.equal(result.template.importHealth, 'degraded')
+  assert.equal(result.template.previewAvailable, false)
+  assert.equal(result.template.previewSource, 'html_snapshot')
+})
+
+test('B. Inline CSS template remains non-failed (degraded allowed)', async () => {
+  const { repository } = createRepositoryStub()
+
+  const result = await runTemplateZipIntake({
+    actorUserId: '00000000-0000-4000-8000-000000000101',
+    clientId: '00000000-0000-4000-8000-000000000201',
+    organizationId: '00000000-0000-4000-8000-000000000201',
+    agencyId: '00000000-0000-4000-8000-000000000301',
+    uploadedZip: {
+      fileName: 'inline-style.zip',
+      bytes: new Uint8Array([1, 1, 1]),
+    },
+    repository,
+    zipValidator: () => ({
+      ok: true,
+      diagnostics: [],
+      errorMessage: null,
+      snapshotId: 'template-zip-inline-style',
+      zipFileAbsPath: '/tmp/template.zip',
+      validation: {
+        ok: true,
+        extractionRootDirAbs: '/tmp/template',
+        entryHtmlPath: 'index.html',
+        entryHtmlSelection: 'root_index',
+        htmlCandidates: ['index.html'],
+        assetsDirPath: null,
+        manifestPath: null,
+        assetSummary: {
+          fileCount: 1,
+          imageCount: 0,
+          stylesheetCount: 0,
+          scriptCount: 0,
+          otherCount: 1,
+        },
+      },
+    }),
+    importRunner: async () =>
+      createImportOutput({
+        status: 'ok',
+        entryHtmlText: '<!doctype html><html><head><style>body{color:red;}</style></head><body>Hi</body></html>',
+      }),
+    importManifestBuilder: () => ({
+      manifestVersion: '1.0.0' as const,
+      contractVersion: '1.1.1' as const,
+      status: 'success',
+      outputStatus: 'ok',
+      rootDirPath: null,
+      entryHtmlPath: 'index.html',
+      sourceKind: 'single-entry-html',
+      htmlFilePaths: ['index.html'],
+      assetsDirPath: null,
+      fingerprints: { inputSpecSha256: 'spec', inputContentSha256: 'content' },
+      diagnostics: { totalCount: 0, infoCount: 0, warningCount: 0, errorCount: 0, fatalCount: 0, codes: [] },
+      dom: {
+        documentCount: 1,
+        documentsWithDomCount: 1,
+        nodeCount: 10,
+        parseWarningCount: 0,
+        decodingErrorCount: 0,
+        effectivelyEmpty: false,
+        documentPaths: ['index.html'],
+      },
+      assets: {
+        totalAssetFiles: 0,
+        totalAssets: 0,
+        referencesByAssetKind: { image: 0, stylesheet: 0, script: 0, unknown: 0 },
+        referencesByReferenceKind: {
+          relative_local: 0,
+          root_relative: 0,
+          absolute_url: 0,
+          data_url: 0,
+          empty_invalid: 0,
+        },
+        referencesByValidationStatus: {
+          ok: 0,
+          invalid_asset_reference: 0,
+          unsupported_remote_asset: 0,
+          unsupported_data_url_asset: 0,
+          path_traversal_blocked: 0,
+          missing_local_asset: 0,
+        },
+        existingLocalCount: 0,
+        missingLocalCount: 0,
+        references: [],
+      },
+    }),
+  })
+
+  assert.equal(result.ok, true)
+  if (!result.ok) return
+  assert.equal(result.template.status, 'ready')
+  assert.equal(result.template.importHealth, 'degraded')
+})
+
+test('C. Remote-only assets map to degraded (not failed)', async () => {
+  const { repository } = createRepositoryStub()
+
+  const result = await runTemplateZipIntake({
+    actorUserId: '00000000-0000-4000-8000-000000000101',
+    clientId: '00000000-0000-4000-8000-000000000201',
+    organizationId: '00000000-0000-4000-8000-000000000201',
+    agencyId: '00000000-0000-4000-8000-000000000301',
+    uploadedZip: {
+      fileName: 'remote-assets.zip',
+      bytes: new Uint8Array([1, 1, 1]),
+    },
+    repository,
+    zipValidator: () => ({
+      ok: true,
+      diagnostics: [],
+      errorMessage: null,
+      snapshotId: 'template-zip-remote-assets',
+      zipFileAbsPath: '/tmp/template.zip',
+      validation: {
+        ok: true,
+        extractionRootDirAbs: '/tmp/template',
+        entryHtmlPath: 'index.html',
+        entryHtmlSelection: 'root_index',
+        htmlCandidates: ['index.html'],
+        assetsDirPath: null,
+        manifestPath: null,
+        assetSummary: {
+          fileCount: 1,
+          imageCount: 0,
+          stylesheetCount: 0,
+          scriptCount: 0,
+          otherCount: 1,
+        },
+      },
+    }),
+    importRunner: async () =>
+      createImportOutput({
+        status: 'ok',
+        issues: [
+          {
+            id: 'diag-1',
+            severity: 'warning',
+            code: 'unsupported_remote_asset',
+            message: 'remote stylesheet unsupported',
+            location: null,
+            details: null,
+          },
+        ],
+        assetReferences: [
+          {
+            id: 'asset-ref-1',
+            fromDocumentPath: 'index.html',
+            tag: 'link',
+            occurrence: 0,
+            attribute: 'href',
+            rawRef: 'https://cdn.example.com/styles.css',
+            assetKind: 'stylesheet',
+            referenceKind: 'absolute_url',
+            resolvedPath: null,
+            existence: 'unknown',
+            validationStatus: 'unsupported_remote_asset',
+          },
+        ],
+      }),
+    importManifestBuilder: () => ({
+      manifestVersion: '1.0.0' as const,
+      contractVersion: '1.1.1' as const,
+      status: 'success_with_warnings',
+      outputStatus: 'ok',
+      rootDirPath: null,
+      entryHtmlPath: 'index.html',
+      sourceKind: 'single-entry-html',
+      htmlFilePaths: ['index.html'],
+      assetsDirPath: null,
+      fingerprints: { inputSpecSha256: 'spec', inputContentSha256: 'content' },
+      diagnostics: { totalCount: 1, infoCount: 0, warningCount: 1, errorCount: 0, fatalCount: 0, codes: ['unsupported_remote_asset'] },
+      dom: {
+        documentCount: 1,
+        documentsWithDomCount: 1,
+        nodeCount: 10,
+        parseWarningCount: 0,
+        decodingErrorCount: 0,
+        effectivelyEmpty: false,
+        documentPaths: ['index.html'],
+      },
+      assets: {
+        totalAssetFiles: 0,
+        totalAssets: 0,
+        referencesByAssetKind: { image: 0, stylesheet: 1, script: 0, unknown: 0 },
+        referencesByReferenceKind: {
+          relative_local: 0,
+          root_relative: 0,
+          absolute_url: 1,
+          data_url: 0,
+          empty_invalid: 0,
+        },
+        referencesByValidationStatus: {
+          ok: 0,
+          invalid_asset_reference: 0,
+          unsupported_remote_asset: 1,
+          unsupported_data_url_asset: 0,
+          path_traversal_blocked: 0,
+          missing_local_asset: 0,
+        },
+        existingLocalCount: 0,
+        missingLocalCount: 0,
+        references: [],
+      },
+    }),
+  })
+
+  assert.equal(result.ok, true)
+  if (!result.ok) return
+  assert.equal(result.template.status, 'ready')
+  assert.equal(result.template.importHealth, 'degraded')
+})
+
+test('D. Missing HTML fails template intake', async () => {
+  const { repository } = createRepositoryStub()
+  const result = await runTemplateZipIntake({
+    actorUserId: '00000000-0000-4000-8000-000000000101',
+    clientId: '00000000-0000-4000-8000-000000000201',
+    organizationId: '00000000-0000-4000-8000-000000000201',
+    agencyId: '00000000-0000-4000-8000-000000000301',
+    uploadedZip: {
+      fileName: 'missing-html.zip',
+      bytes: new Uint8Array([1]),
+    },
+    repository,
+    zipValidator: () => ({
+      ok: false,
+      diagnostics: [],
+      errorMessage: 'ZIP must include one root-level HTML file.',
+      snapshotId: 'template-zip-missing-html',
+      zipFileAbsPath: '/tmp/template.zip',
+      validation: null,
+    }),
+  })
+
+  assert.equal(result.ok, false)
+  if (result.ok) return
+  assert.equal(result.status, 'failed')
+  assert.equal(result.importHealth, 'failed')
+})
+
+test('E. Multiple root HTML files fail template intake', async () => {
+  const { repository } = createRepositoryStub()
+  const result = await runTemplateZipIntake({
+    actorUserId: '00000000-0000-4000-8000-000000000101',
+    clientId: '00000000-0000-4000-8000-000000000201',
+    organizationId: '00000000-0000-4000-8000-000000000201',
+    agencyId: '00000000-0000-4000-8000-000000000301',
+    uploadedZip: {
+      fileName: 'ambiguous-entry.zip',
+      bytes: new Uint8Array([1]),
+    },
+    repository,
+    zipValidator: () => ({
+      ok: false,
+      diagnostics: [],
+      errorMessage: 'ZIP has multiple root-level HTML files; entry file is ambiguous.',
+      snapshotId: 'template-zip-ambiguous',
+      zipFileAbsPath: '/tmp/template.zip',
+      validation: null,
+    }),
+  })
+
+  assert.equal(result.ok, false)
+  if (result.ok) return
+  assert.equal(result.status, 'failed')
+  assert.equal(result.importHealth, 'failed')
+})
+
 test('Preview fallback is used when rendered screenshot is unavailable', () => {
   const preview = buildTemplatePreviewSummary({ screenshotPaths: [], entryHtmlPath: 'landing.html' })
   assert.equal(preview.preview.previewAvailable, false)
   assert.equal(preview.preview.previewIsFallback, true)
-  assert.equal(preview.preview.previewSource, 'fallback')
+  assert.equal(preview.preview.previewSource, 'html_snapshot')
   assert.equal(preview.preview.entryHtmlFileName, 'landing.html')
 })
 

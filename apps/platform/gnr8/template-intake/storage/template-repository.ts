@@ -139,7 +139,10 @@ export function mapTemplateRow(row: TemplateRow): TemplateRecord {
     previewImagePath: normalizeOptionalText(row.preview_image_path),
     previewAvailable: Boolean(row.preview_available),
     previewIsFallback: Boolean(row.preview_is_fallback),
-    previewSource: row.preview_source === 'rendered_capture' ? 'rendered_capture' : 'fallback',
+    previewSource:
+      row.preview_source === 'rendered_capture' || row.preview_source === 'html_snapshot'
+        ? row.preview_source
+        : 'fallback',
     tags: Array.isArray(row.tags) ? row.tags.map((value) => normalizeText(value)).filter(Boolean) : [],
     sourceFilename: row.source_filename,
     entryHtmlPath: normalizeOptionalText(row.entry_html_path),
@@ -209,7 +212,7 @@ export async function createTemplate(input: CreateTemplateInput): Promise<Templa
         null,
         false,
         true,
-        'fallback'::text,
+        'html_snapshot'::text,
         $9::text[],
         $10::text,
         $11::text,

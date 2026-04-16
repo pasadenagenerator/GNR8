@@ -16,7 +16,7 @@ export type TemplateDetailView = {
   preview: {
     available: boolean
     isFallback: boolean
-    source: 'rendered_capture' | 'fallback'
+    source: 'rendered_capture' | 'html_snapshot' | 'fallback'
     imagePath: string | null
   }
   createdAt: string
@@ -33,6 +33,12 @@ function asStringArray(value: unknown): string[] {
     .filter((entry): entry is string => typeof entry === 'string')
     .map((entry) => normalizeText(entry))
     .filter(Boolean)
+}
+
+function normalizePreviewSource(value: unknown): TemplateDetailView['preview']['source'] {
+  const normalized = normalizeText(value)
+  if (normalized === 'rendered_capture' || normalized === 'html_snapshot') return normalized
+  return 'fallback'
 }
 
 export function parseTemplateDetailPayload(payload: unknown): TemplateDetailView | null {
@@ -92,7 +98,7 @@ export function parseTemplateDetailPayload(payload: unknown): TemplateDetailView
     preview: {
       available: Boolean(preview.available),
       isFallback: Boolean(preview.isFallback),
-      source: normalizeText(preview.source) === 'rendered_capture' ? 'rendered_capture' : 'fallback',
+      source: normalizePreviewSource(preview.source),
       imagePath: normalizeText(preview.imagePath) || null,
     },
     createdAt,
