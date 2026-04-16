@@ -30,6 +30,130 @@ export type TemplateLibraryCard = TemplateListApiCard & {
   editHref: string | null
 }
 
+export type TemplateUploadApiSuccess = {
+  ok: true
+  templateId: string
+  sourceType: 'zip_html'
+  status: 'uploaded' | 'processing' | 'ready' | 'failed'
+  name: string
+  tags: string[]
+  importHealth: 'clean' | 'degraded' | 'failed'
+  entryHtmlFileName: string | null
+  templateType: 'single_page' | 'multi_page' | 'unknown'
+  preview: {
+    available: boolean
+    isFallback: boolean
+    source: 'rendered_capture' | 'html_snapshot' | 'fallback'
+    imagePath: string | null
+    entryHtmlFileName?: string | null
+    templateType?: 'single_page' | 'multi_page' | 'unknown'
+  }
+}
+
+export type ParsedTemplateUploadResult =
+  | { ok: true; value: TemplateUploadApiSuccess }
+  | { ok: false; error: string }
+
+function normalizePreviewSource(value: unknown): TemplateUploadApiSuccess['preview']['source'] {
+  const normalized = normalizeText(value)
+  if (normalized === 'rendered_capture' || normalized === 'html_snapshot') return normalized
+  return 'fallback'
+}
+
+function normalizeTemplateStatus(value: unknown): TemplateUploadApiSuccess['status'] | null {
+  const normalized = normalizeText(value)
+  if (normalized === 'uploaded' || normalized === 'processing' || normalized === 'ready' || normalized === 'failed') return normalized
+  return null
+}
+
+function normalizeImportHealth(value: unknown): TemplateUploadApiSuccess['importHealth'] | null {
+  const normalized = normalizeText(value)
+  if (normalized === 'clean' || normalized === 'degraded' || normalized === 'failed') return normalized
+  return null
+}
+
+function normalizeTemplateType(value: unknown): TemplateUploadApiSuccess['templateType'] | null {
+  const normalized = normalizeText(value)
+  if (normalized === 'single_page' || normalized === 'multi_page' || normalized === 'unknown') return normalized
+  return null
+}
+
+function asStringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) return []
+  return value
+    .filter((item): item is string => typeof item === 'string')
+    .map((item) => normalizeText(item))
+    .filter(Boolean)
+}
+
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
+}
+
+function isUploadSuccessPayload(value: unknown): value is TemplateUploadApiSuccess {
+  if (!isPlainRecord(value)) return false
+
+  const templateId = normalizeText(value.templateId)
+  const name = normalizeText(value.name)
+  const status = normalizeTemplateStatus(value.status)
+  const importHealth = normalizeImportHealth(value.importHealth)
+  const templateType = normalizeTemplateType(value.templateType)
+  const preview = isPlainRecord(value.preview) ? value.preview : null
+  const sourceTypeRaw = normalizeText(value.sourceType)
+  const sourceType = sourceTypeRaw === 'zip_html' ? 'zip_html' : 'zip_html'
+
+  if (!templateId || !name || !status || !importHealth || !templateType || !preview) return false
+  if (typeof value.ok !== 'boolean') return false
+
+  const normalizedPayload: TemplateUploadApiSuccess = {
+    ok: true,
+    templateId,
+    sourceType,
+    status,
+    name,
+    tags: asStringArray(value.tags),
+    importHealth,
+    entryHtmlFileName: normalizeText(value.entryHtmlFileName) || null,
+    templateType,
+    preview: {
+      available: Boolean(preview.available),
+      isFallback: Boolean(preview.isFallback),
+      source: normalizePreviewSource(preview.source),
+      imagePath: normalizeText(preview.imagePath) || null,
+      entryHtmlFileName: normalizeText(preview.entryHtmlFileName) || null,
+      templateType,
+    },
+  }
+
+  return Boolean(normalizedPayload.templateId)
+}
+
+export function parseTemplateUploadResponse(input: {
+  httpStatus: number
+  payload: unknown
+}): ParsedTemplateUploadResult {
+  if (isUploadSuccessPayload(input.payload)) {
+    const payload = input.payload
+    if (payload.ok === true) {
+      return { ok: true, value: payload }
+    }
+    if (input.httpStatus >= 200 && input.httpStatus < 300 && payload.status !== 'failed' && payload.importHealth !== 'failed') {
+      return {
+        ok: true,
+        value: {
+          ...payload,
+          ok: true,
+        },
+      }
+    }
+  }
+
+  const failure = isPlainRecord(input.payload) ? input.payload : null
+  const errorText = normalizeText(failure?.error)
+  if (errorText) return { ok: false, error: errorText }
+  return { ok: false, error: `Upload failed (HTTP ${input.httpStatus})` }
+}
+
 export function resolveTemplateEditHref(input: {
   templateId: string
   templateRouteBase?: string | null

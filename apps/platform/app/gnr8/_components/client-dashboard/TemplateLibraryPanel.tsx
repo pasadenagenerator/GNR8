@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { useEffect, useMemo, useState } from 'react'
 import {
+  parseTemplateUploadResponse,
   resolveTemplateLibraryCards,
   resolveTemplateLibraryUiView,
   type TemplateListApiCard,
@@ -13,30 +14,6 @@ type TemplateListResponse = {
   error?: string
   templates?: TemplateListApiCard[]
 }
-
-type UploadResponse =
-  | {
-      ok: true
-      templateId: string
-      status: 'uploaded' | 'processing' | 'ready' | 'failed'
-      name: string
-      tags: string[]
-      importHealth: 'clean' | 'degraded' | 'failed'
-      entryHtmlFileName: string | null
-      templateType: 'single_page' | 'multi_page' | 'unknown'
-      preview: {
-        available: boolean
-        isFallback: boolean
-        source: 'rendered_capture' | 'html_snapshot' | 'fallback'
-        imagePath: string | null
-        entryHtmlFileName?: string | null
-        templateType?: 'single_page' | 'multi_page' | 'unknown'
-      }
-    }
-  | {
-      ok: false
-      error?: string
-    }
 
 function normalizeStatusLabel(status: string): string {
   if (status === 'ready') return 'Ready'
@@ -169,14 +146,15 @@ export default function TemplateLibraryPanel(props: {
         method: 'POST',
         body: formData,
       })
-      const payload = (await response.json().catch(() => null)) as UploadResponse | null
-
-      if (!payload || payload.ok !== true) {
-        setUploadError(payload && 'error' in payload ? payload.error ?? `Upload failed (HTTP ${response.status})` : `Upload failed (HTTP ${response.status})`)
+      const payload = (await response.json().catch(() => null)) as unknown
+      const parsed = parseTemplateUploadResponse({ httpStatus: response.status, payload })
+      if (!parsed.ok) {
+        setUploadError(parsed.error)
         return
       }
+      const uploaded = parsed.value
 
-      setSuccessMessage(`Template \"${payload.name}\" uploaded with status ${normalizeStatusLabel(payload.status)}.`)
+      setSuccessMessage(`Template \"${uploaded.name}\" uploaded with status ${normalizeStatusLabel(uploaded.status)}.`)
       setFile(null)
       const input = document.getElementById('template-zip-input') as HTMLInputElement | null
       if (input) input.value = ''

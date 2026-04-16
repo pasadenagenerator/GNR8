@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import {
+  parseTemplateUploadResponse,
   resolveTemplateEditHref,
   resolveTemplateLibraryCards,
   resolveTemplateLibraryUiView,
@@ -118,4 +119,74 @@ test('template library card contract includes editHref and remains serializable'
   assert.equal(cards[1]?.editHref, '/gnr8/agency/clients/client-1/templates/template-older?agency=agency-1')
   assert.equal(hasFunctionValue(cards), false)
   assert.doesNotThrow(() => JSON.stringify(cards))
+})
+
+test('upload contract accepts degraded no-preview html_snapshot success payload', () => {
+  const parsed = parseTemplateUploadResponse({
+    httpStatus: 200,
+    payload: {
+      ok: true,
+      templateId: 'template-1',
+      sourceType: 'zip_html',
+      status: 'ready',
+      name: 'Landing Template',
+      tags: ['landing'],
+      importHealth: 'degraded',
+      entryHtmlFileName: 'index.html',
+      templateType: 'single_page',
+      preview: {
+        available: false,
+        isFallback: true,
+        source: 'html_snapshot',
+        imagePath: null,
+      },
+    },
+  })
+
+  assert.equal(parsed.ok, true)
+  if (!parsed.ok) return
+  assert.equal(parsed.value.importHealth, 'degraded')
+  assert.equal(parsed.value.preview.source, 'html_snapshot')
+  assert.equal(parsed.value.preview.available, false)
+})
+
+test('upload contract allows 2xx success fallback when status/health are usable', () => {
+  const parsed = parseTemplateUploadResponse({
+    httpStatus: 200,
+    payload: {
+      ok: false,
+      templateId: 'template-2',
+      sourceType: 'zip_html',
+      status: 'ready',
+      name: 'Fallback Success',
+      tags: [],
+      importHealth: 'degraded',
+      entryHtmlFileName: null,
+      templateType: 'unknown',
+      preview: {
+        available: false,
+        isFallback: true,
+        source: 'html_snapshot',
+        imagePath: null,
+      },
+    },
+  })
+
+  assert.equal(parsed.ok, true)
+  if (!parsed.ok) return
+  assert.equal(parsed.value.templateId, 'template-2')
+})
+
+test('upload contract preserves true failure for invalid ZIP response', () => {
+  const parsed = parseTemplateUploadResponse({
+    httpStatus: 400,
+    payload: {
+      ok: false,
+      error: 'ZIP file could not be processed.',
+    },
+  })
+
+  assert.equal(parsed.ok, false)
+  if (parsed.ok) return
+  assert.equal(parsed.error, 'ZIP file could not be processed.')
 })
