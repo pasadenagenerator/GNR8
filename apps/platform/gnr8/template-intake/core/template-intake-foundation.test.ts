@@ -493,6 +493,120 @@ test('Import degraded maps template health to degraded', async () => {
   assert.equal(result.template.importHealth, 'degraded')
 })
 
+test('Import clean persists ready/clean status truth', async () => {
+  const { repository, records } = createRepositoryStub()
+
+  const result = await runTemplateZipIntake({
+    actorUserId: '00000000-0000-4000-8000-000000000101',
+    clientId: '00000000-0000-4000-8000-000000000201',
+    organizationId: '00000000-0000-4000-8000-000000000201',
+    agencyId: '00000000-0000-4000-8000-000000000301',
+    uploadedZip: {
+      fileName: 'clean-template.zip',
+      bytes: new Uint8Array([1, 2, 3]),
+    },
+    repository,
+    zipValidator: () => ({
+      ok: true,
+      diagnostics: [],
+      errorMessage: null,
+      snapshotId: 'template-zip-clean',
+      zipFileAbsPath: '/tmp/template.zip',
+      validation: {
+        ok: true,
+        extractionRootDirAbs: '/tmp/template',
+        entryHtmlPath: 'index.html',
+        entryHtmlSelection: 'root_index',
+        htmlCandidates: ['index.html'],
+        assetsDirPath: 'assets',
+        manifestPath: null,
+        assetSummary: {
+          fileCount: 2,
+          imageCount: 0,
+          stylesheetCount: 1,
+          scriptCount: 0,
+          otherCount: 1,
+        },
+      },
+    }),
+    importRunner: async () =>
+      createImportOutput({
+        status: 'ok',
+        assetFiles: [{ path: 'assets/site.css', kind: 'stylesheet' }],
+        assetReferences: [
+          {
+            id: 'asset-ref-1',
+            fromDocumentPath: 'index.html',
+            tag: 'link',
+            occurrence: 0,
+            attribute: 'href',
+            rawRef: './assets/site.css',
+            assetKind: 'stylesheet',
+            referenceKind: 'relative_local',
+            resolvedPath: 'assets/site.css',
+            existence: 'exists',
+            validationStatus: 'ok',
+          },
+        ],
+      }),
+    importManifestBuilder: () => ({
+      manifestVersion: '1.0.0' as const,
+      contractVersion: '1.1.1' as const,
+      status: 'success',
+      outputStatus: 'ok',
+      rootDirPath: null,
+      entryHtmlPath: 'index.html',
+      sourceKind: 'single-entry-html',
+      htmlFilePaths: ['index.html'],
+      assetsDirPath: 'assets',
+      fingerprints: { inputSpecSha256: 'spec', inputContentSha256: 'content' },
+      diagnostics: { totalCount: 0, infoCount: 0, warningCount: 0, errorCount: 0, fatalCount: 0, codes: [] },
+      dom: {
+        documentCount: 1,
+        documentsWithDomCount: 1,
+        nodeCount: 10,
+        parseWarningCount: 0,
+        decodingErrorCount: 0,
+        effectivelyEmpty: false,
+        documentPaths: ['index.html'],
+      },
+      assets: {
+        totalAssetFiles: 1,
+        totalAssets: 1,
+        referencesByAssetKind: { image: 0, stylesheet: 1, script: 0, unknown: 0 },
+        referencesByReferenceKind: {
+          relative_local: 1,
+          root_relative: 0,
+          absolute_url: 0,
+          data_url: 0,
+          empty_invalid: 0,
+        },
+        referencesByValidationStatus: {
+          ok: 1,
+          invalid_asset_reference: 0,
+          unsupported_remote_asset: 0,
+          unsupported_data_url_asset: 0,
+          path_traversal_blocked: 0,
+          missing_local_asset: 0,
+        },
+        existingLocalCount: 1,
+        missingLocalCount: 0,
+        references: [],
+      },
+    }),
+  })
+
+  assert.equal(result.ok, true)
+  if (!result.ok) return
+  assert.equal(result.template.status, 'ready')
+  assert.equal(result.template.importHealth, 'clean')
+
+  const persisted = records.get(result.template.id)
+  assert.ok(persisted)
+  assert.equal(persisted?.status, 'ready')
+  assert.equal(persisted?.importHealth, 'clean')
+})
+
 test('A. Valid HTML-only template remains ready and degraded in template intake mode', async () => {
   const { repository } = createRepositoryStub()
 

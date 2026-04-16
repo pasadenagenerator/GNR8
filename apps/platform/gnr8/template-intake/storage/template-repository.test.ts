@@ -105,6 +105,79 @@ test('mapTemplateRow keeps legacy null entry fields safe and defaults templateTy
   assert.equal(mapped.templateType, 'unknown')
 })
 
+test('mapTemplateRow preserves ready/degraded html_snapshot no-preview truth', () => {
+  const mapped = mapTemplateRow({
+    id: 'template-3',
+    client_id: 'client-1',
+    organization_id: 'org-1',
+    agency_id: 'agency-1',
+    created_by_user_id: 'user-1',
+    name: 'No Preview Template',
+    slug: 'no-preview-template',
+    source_type: 'zip_html',
+    status: 'ready',
+    import_health: 'degraded',
+    preview_image_path: null,
+    preview_available: false,
+    preview_is_fallback: true,
+    preview_source: 'html_snapshot',
+    tags: [],
+    source_filename: 'template.zip',
+    entry_html_path: 'index.html',
+    entry_html_file_name: 'index.html',
+    template_type: 'single_page',
+    import_snapshot_id: 'snapshot-1',
+    template_manifest_summary: null,
+    diagnostics_summary: null,
+    import_manifest_summary: null,
+    version: 1,
+    visibility: 'private',
+    created_at: '2026-04-15T10:00:00.000Z',
+    updated_at: '2026-04-15T10:01:00.000Z',
+  })
+
+  assert.equal(mapped.status, 'ready')
+  assert.equal(mapped.importHealth, 'degraded')
+  assert.equal(mapped.previewSource, 'html_snapshot')
+  assert.equal(mapped.previewAvailable, false)
+})
+
+test('mapTemplateRow rejects invalid status values instead of coercing to failed', () => {
+  assert.throws(
+    () =>
+      mapTemplateRow({
+        id: 'template-4',
+        client_id: 'client-1',
+        organization_id: 'org-1',
+        agency_id: 'agency-1',
+        created_by_user_id: 'user-1',
+        name: 'Invalid Status Template',
+        slug: 'invalid-status-template',
+        source_type: 'zip_html',
+        status: 'completed',
+        import_health: 'degraded',
+        preview_image_path: null,
+        preview_available: false,
+        preview_is_fallback: true,
+        preview_source: 'html_snapshot',
+        tags: [],
+        source_filename: 'template.zip',
+        entry_html_path: 'index.html',
+        entry_html_file_name: 'index.html',
+        template_type: 'single_page',
+        import_snapshot_id: 'snapshot-1',
+        template_manifest_summary: null,
+        diagnostics_summary: null,
+        import_manifest_summary: null,
+        version: 1,
+        visibility: 'private',
+        created_at: '2026-04-15T10:00:00.000Z',
+        updated_at: '2026-04-15T10:01:00.000Z',
+      }),
+    /Invalid template status value/,
+  )
+})
+
 test('normalizeTemplateTypeForStorage allows expected values and rejects invalid values', () => {
   assert.equal(normalizeTemplateTypeForStorage('single_page'), 'single_page')
   assert.equal(normalizeTemplateTypeForStorage('multi_page'), 'multi_page')

@@ -37,6 +37,31 @@ const TEMPLATE_INTAKE_MODE: TemplateIntakeMode = 'template_intake'
 
 const LENIENT_ASSET_DIAGNOSTIC_CODES = new Set(['missing_local_asset', 'unsupported_remote_asset', 'unsupported_data_url_asset'])
 
+type TemplateRowStatusEvent =
+  | 'TEMPLATE_ROW_CREATED_INITIAL'
+  | 'TEMPLATE_ROW_FINAL_STATUS_COMPUTED'
+  | 'TEMPLATE_ROW_UPDATED_FINAL'
+  | 'TEMPLATE_ROW_FINAL_STATUS_READY'
+  | 'TEMPLATE_ROW_FINAL_STATUS_DEGRADED'
+  | 'TEMPLATE_ROW_FINAL_STATUS_FAILED'
+
+function logTemplateRowStatusEvent(input: {
+  event: TemplateRowStatusEvent
+  templateId: string
+  status: TemplateRecord['status']
+  importHealth: TemplateRecord['importHealth']
+  previewSource: TemplateRecord['previewSource']
+  previewAvailable: boolean
+}) {
+  console.info(`[template-intake] ${input.event}`, {
+    templateId: input.templateId,
+    status: input.status,
+    importHealth: input.importHealth,
+    previewSource: input.previewSource,
+    previewAvailable: input.previewAvailable,
+  })
+}
+
 function pickImportHealth(input: {
   warningCount: number
   errorCount: number
@@ -181,6 +206,14 @@ export async function runTemplateZipIntake(input: {
     templateManifestSummary: null,
     diagnosticsSummary: zipSummary,
   })
+  logTemplateRowStatusEvent({
+    event: 'TEMPLATE_ROW_CREATED_INITIAL',
+    templateId: initialTemplate.id,
+    status: initialTemplate.status,
+    importHealth: initialTemplate.importHealth,
+    previewSource: initialTemplate.previewSource,
+    previewAvailable: initialTemplate.previewAvailable,
+  })
 
   const createDiagnosticSummary = summarizeTemplateDiagnostics([
     ...zipSummary.issues,
@@ -193,6 +226,22 @@ export async function runTemplateZipIntake(input: {
   ])
 
   if (!zipValidation.ok || !zipValidation.validation) {
+    logTemplateRowStatusEvent({
+      event: 'TEMPLATE_ROW_FINAL_STATUS_COMPUTED',
+      templateId: initialTemplate.id,
+      status: 'failed',
+      importHealth: 'failed',
+      previewSource: 'html_snapshot',
+      previewAvailable: false,
+    })
+    logTemplateRowStatusEvent({
+      event: 'TEMPLATE_ROW_FINAL_STATUS_FAILED',
+      templateId: initialTemplate.id,
+      status: 'failed',
+      importHealth: 'failed',
+      previewSource: 'html_snapshot',
+      previewAvailable: false,
+    })
     const updated = await repository.updateTemplateProcessingResult({
       templateId: initialTemplate.id,
       status: 'failed',
@@ -226,6 +275,14 @@ export async function runTemplateZipIntake(input: {
       },
       importManifestSummary: null,
     })
+    logTemplateRowStatusEvent({
+      event: 'TEMPLATE_ROW_UPDATED_FINAL',
+      templateId: updated.id,
+      status: updated.status,
+      importHealth: updated.importHealth,
+      previewSource: updated.previewSource,
+      previewAvailable: updated.previewAvailable,
+    })
 
     return {
       ok: false,
@@ -247,6 +304,22 @@ export async function runTemplateZipIntake(input: {
 
   const entryHtmlPath = zipValidation.validation.entryHtmlPath
   if (!entryHtmlPath) {
+    logTemplateRowStatusEvent({
+      event: 'TEMPLATE_ROW_FINAL_STATUS_COMPUTED',
+      templateId: initialTemplate.id,
+      status: 'failed',
+      importHealth: 'failed',
+      previewSource: 'html_snapshot',
+      previewAvailable: false,
+    })
+    logTemplateRowStatusEvent({
+      event: 'TEMPLATE_ROW_FINAL_STATUS_FAILED',
+      templateId: initialTemplate.id,
+      status: 'failed',
+      importHealth: 'failed',
+      previewSource: 'html_snapshot',
+      previewAvailable: false,
+    })
     const updated = await repository.updateTemplateProcessingResult({
       templateId: initialTemplate.id,
       status: 'failed',
@@ -284,6 +357,14 @@ export async function runTemplateZipIntake(input: {
         tags: [],
       },
       importManifestSummary: null,
+    })
+    logTemplateRowStatusEvent({
+      event: 'TEMPLATE_ROW_UPDATED_FINAL',
+      templateId: updated.id,
+      status: updated.status,
+      importHealth: updated.importHealth,
+      previewSource: updated.previewSource,
+      previewAvailable: updated.previewAvailable,
     })
 
     return {
@@ -330,6 +411,22 @@ export async function runTemplateZipIntake(input: {
 
   const hasEmptyHtmlIssue = importOutput.importDiagnostics.issues.some((issue) => issue.code === 'HTML_EMPTY')
   if (hasEmptyHtmlIssue) {
+    logTemplateRowStatusEvent({
+      event: 'TEMPLATE_ROW_FINAL_STATUS_COMPUTED',
+      templateId: initialTemplate.id,
+      status: 'failed',
+      importHealth: 'failed',
+      previewSource: previewSummary.preview.previewSource,
+      previewAvailable: previewSummary.preview.previewAvailable,
+    })
+    logTemplateRowStatusEvent({
+      event: 'TEMPLATE_ROW_FINAL_STATUS_FAILED',
+      templateId: initialTemplate.id,
+      status: 'failed',
+      importHealth: 'failed',
+      previewSource: previewSummary.preview.previewSource,
+      previewAvailable: previewSummary.preview.previewAvailable,
+    })
     const updated = await repository.updateTemplateProcessingResult({
       templateId: initialTemplate.id,
       status: 'failed',
@@ -361,6 +458,14 @@ export async function runTemplateZipIntake(input: {
       templateManifestSummary: manifest.summary,
       importManifestSummary: importManifest,
     })
+    logTemplateRowStatusEvent({
+      event: 'TEMPLATE_ROW_UPDATED_FINAL',
+      templateId: updated.id,
+      status: updated.status,
+      importHealth: updated.importHealth,
+      previewSource: updated.previewSource,
+      previewAvailable: updated.previewAvailable,
+    })
 
     return {
       ok: false,
@@ -374,6 +479,22 @@ export async function runTemplateZipIntake(input: {
 
   const hasFatalImportIssues = importOutput.importDiagnostics.issues.some((issue) => issue.severity === 'fatal')
   if (hasFatalImportIssues) {
+    logTemplateRowStatusEvent({
+      event: 'TEMPLATE_ROW_FINAL_STATUS_COMPUTED',
+      templateId: initialTemplate.id,
+      status: 'failed',
+      importHealth: 'failed',
+      previewSource: previewSummary.preview.previewSource,
+      previewAvailable: previewSummary.preview.previewAvailable,
+    })
+    logTemplateRowStatusEvent({
+      event: 'TEMPLATE_ROW_FINAL_STATUS_FAILED',
+      templateId: initialTemplate.id,
+      status: 'failed',
+      importHealth: 'failed',
+      previewSource: previewSummary.preview.previewSource,
+      previewAvailable: previewSummary.preview.previewAvailable,
+    })
     const updated = await repository.updateTemplateProcessingResult({
       templateId: initialTemplate.id,
       status: 'failed',
@@ -404,6 +525,14 @@ export async function runTemplateZipIntake(input: {
       ]),
       templateManifestSummary: manifest.summary,
       importManifestSummary: importManifest,
+    })
+    logTemplateRowStatusEvent({
+      event: 'TEMPLATE_ROW_UPDATED_FINAL',
+      templateId: updated.id,
+      status: updated.status,
+      importHealth: updated.importHealth,
+      previewSource: updated.previewSource,
+      previewAvailable: updated.previewAvailable,
     })
 
     return {
@@ -467,6 +596,22 @@ export async function runTemplateZipIntake(input: {
 
   const normalizedTags = normalizeTemplateTagsForStorage(manifest.summary.tags)
   const finalSnapshotId = zipValidation.snapshotId
+  logTemplateRowStatusEvent({
+    event: 'TEMPLATE_ROW_FINAL_STATUS_COMPUTED',
+    templateId: initialTemplate.id,
+    status: 'ready',
+    importHealth,
+    previewSource: previewSummary.preview.previewSource,
+    previewAvailable: previewSummary.preview.previewAvailable,
+  })
+  logTemplateRowStatusEvent({
+    event: importHealth === 'clean' ? 'TEMPLATE_ROW_FINAL_STATUS_READY' : importHealth === 'degraded' ? 'TEMPLATE_ROW_FINAL_STATUS_DEGRADED' : 'TEMPLATE_ROW_FINAL_STATUS_FAILED',
+    templateId: initialTemplate.id,
+    status: 'ready',
+    importHealth,
+    previewSource: previewSummary.preview.previewSource,
+    previewAvailable: previewSummary.preview.previewAvailable,
+  })
 
   const updatedTemplate = await repository.updateTemplateProcessingResult({
     templateId: initialTemplate.id,
@@ -481,6 +626,14 @@ export async function runTemplateZipIntake(input: {
     diagnosticsSummary: importDiagnostics,
     templateManifestSummary: manifest.summary,
     importManifestSummary: importManifest,
+  })
+  logTemplateRowStatusEvent({
+    event: 'TEMPLATE_ROW_UPDATED_FINAL',
+    templateId: updatedTemplate.id,
+    status: updatedTemplate.status,
+    importHealth: updatedTemplate.importHealth,
+    previewSource: updatedTemplate.previewSource,
+    previewAvailable: updatedTemplate.previewAvailable,
   })
 
   if (updatedTemplate.status === 'failed') {

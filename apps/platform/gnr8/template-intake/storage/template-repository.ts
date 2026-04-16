@@ -124,6 +124,33 @@ export function normalizeTemplateTypeForStorage(value: unknown): TemplateType {
   )
 }
 
+function normalizeTemplateStatusForRead(value: unknown): TemplateRecord['status'] {
+  const normalized = normalizeText(value)
+  if (normalized === 'uploaded' || normalized === 'processing' || normalized === 'ready' || normalized === 'failed') return normalized
+  throw new TemplateRepositoryError(
+    'TEMPLATE_REPOSITORY_FAILURE',
+    `Invalid template status value "${normalized || '<empty>'}".`,
+  )
+}
+
+function normalizeTemplateImportHealthForRead(value: unknown): TemplateRecord['importHealth'] {
+  const normalized = normalizeText(value)
+  if (normalized === 'clean' || normalized === 'degraded' || normalized === 'failed') return normalized
+  throw new TemplateRepositoryError(
+    'TEMPLATE_REPOSITORY_FAILURE',
+    `Invalid template import_health value "${normalized || '<empty>'}".`,
+  )
+}
+
+function normalizeTemplatePreviewSourceForRead(value: unknown): TemplateRecord['previewSource'] {
+  const normalized = normalizeText(value)
+  if (normalized === 'rendered_capture' || normalized === 'html_snapshot' || normalized === 'fallback') return normalized
+  throw new TemplateRepositoryError(
+    'TEMPLATE_REPOSITORY_FAILURE',
+    `Invalid template preview_source value "${normalized || '<empty>'}".`,
+  )
+}
+
 export function mapTemplateRow(row: TemplateRow): TemplateRecord {
   return {
     id: row.id,
@@ -134,15 +161,12 @@ export function mapTemplateRow(row: TemplateRow): TemplateRecord {
     name: row.name,
     slug: row.slug,
     sourceType: row.source_type === 'zip_html' ? 'zip_html' : 'zip_html',
-    status: row.status === 'uploaded' || row.status === 'processing' || row.status === 'ready' || row.status === 'failed' ? row.status : 'failed',
-    importHealth: row.import_health === 'clean' || row.import_health === 'degraded' || row.import_health === 'failed' ? row.import_health : 'failed',
+    status: normalizeTemplateStatusForRead(row.status),
+    importHealth: normalizeTemplateImportHealthForRead(row.import_health),
     previewImagePath: normalizeOptionalText(row.preview_image_path),
     previewAvailable: Boolean(row.preview_available),
     previewIsFallback: Boolean(row.preview_is_fallback),
-    previewSource:
-      row.preview_source === 'rendered_capture' || row.preview_source === 'html_snapshot'
-        ? row.preview_source
-        : 'fallback',
+    previewSource: normalizeTemplatePreviewSourceForRead(row.preview_source),
     tags: Array.isArray(row.tags) ? row.tags.map((value) => normalizeText(value)).filter(Boolean) : [],
     sourceFilename: row.source_filename,
     entryHtmlPath: normalizeOptionalText(row.entry_html_path),
