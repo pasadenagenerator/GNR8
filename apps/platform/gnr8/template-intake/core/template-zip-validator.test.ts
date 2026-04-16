@@ -111,6 +111,22 @@ test('passes for a single nested HTML file when no root-level HTML exists', () =
   assert.equal(result.diagnostics.some((issue) => issue.code === 'TEMPLATE_HTML_ENTRY_FALLBACK_SINGLE_FILE'), true)
 })
 
+test('passes for Beauty Clinic style nested single-entry HTML path with spaces', () => {
+  const result = validateTemplateZip({
+    fileName: 'beauty-clinic-template.zip',
+    files: {
+      'Beauty Clinic & Salon Landing Page/Beauty Clinic & Salon Landing Page.html': '<!doctype html><html><body>Beauty</body></html>',
+      'Beauty Clinic & Salon Landing Page/assets/site.css': 'body{margin:0}',
+    },
+  })
+
+  assert.equal(result.ok, true)
+  if (!result.ok || !result.validation) return
+  assert.equal(result.validation.entryHtmlPath, 'Beauty Clinic & Salon Landing Page.html')
+  assert.equal(result.validation.entryHtmlSelection, 'single_file_fallback')
+  assert.equal(result.validation.htmlCandidates.length, 1)
+})
+
 test('fails when multiple root-level HTML files are present', () => {
   const result = validateTemplateZip({
     fileName: 'ambiguous-html.zip',

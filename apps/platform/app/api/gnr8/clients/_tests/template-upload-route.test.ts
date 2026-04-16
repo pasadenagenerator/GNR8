@@ -58,6 +58,8 @@ test('upload route returns success for degraded no-preview template intake', asy
     }),
     runTemplateZipIntake: async () => ({
       ok: true as const,
+      zipValidationOk: true as const,
+      selectedEntryHtmlPath: 'index.html',
       template: createTemplate({
         status: 'ready',
         importHealth: 'degraded',
@@ -93,6 +95,8 @@ test('upload route returns deterministic error for invalid ZIP failure', async (
     }),
     runTemplateZipIntake: async () => ({
       ok: false as const,
+      zipValidationOk: false,
+      selectedEntryHtmlPath: null,
       templateId: '00000000-0000-4000-8000-000000000901',
       status: 'failed',
       importHealth: 'failed',

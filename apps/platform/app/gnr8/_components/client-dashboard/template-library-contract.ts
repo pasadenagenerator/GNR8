@@ -42,6 +42,8 @@ export type TemplateUploadApiSuccess = {
   importHealth: 'clean' | 'degraded' | 'failed'
   entryHtmlFileName: string | null
   templateType: 'single_page' | 'multi_page' | 'unknown'
+  zipValidationOk?: boolean
+  selectedEntryHtmlPath?: string | null
   preview: {
     available: boolean
     isFallback: boolean
@@ -114,16 +116,22 @@ function coerceUploadSuccessPayload(value: unknown): TemplateUploadApiSuccess | 
 
   const id = normalizeText(value.id)
   const templateId = normalizeText(value.templateId)
-  const name = normalizeText(value.name)
+  const name = normalizeText(value.name) || normalizeText(value.sourceFilename) || 'Uploaded template'
   const status = normalizeTemplateStatus(value.status)
   const importHealth = normalizeImportHealth(value.importHealth ?? value.health)
-  const templateType = normalizeTemplateType(value.templateType)
-  const preview = isPlainRecord(value.preview) ? value.preview : null
+  const templateType = normalizeTemplateType(value.templateType) ?? 'unknown'
+  const preview = isPlainRecord(value.preview)
+    ? value.preview
+    : {
+        available: false,
+        isFallback: true,
+        source: 'html_snapshot',
+        imagePath: null,
+      }
   const sourceTypeRaw = normalizeText(value.sourceType)
   const sourceType = sourceTypeRaw === 'zip_html' ? 'zip_html' : 'zip_html'
 
-  if (!templateId || !name || !status || !importHealth || !templateType || !preview) return null
-  if (typeof value.ok !== 'boolean') return null
+  if (!templateId || !status || !importHealth) return null
 
   return {
     ok: true,
@@ -137,6 +145,8 @@ function coerceUploadSuccessPayload(value: unknown): TemplateUploadApiSuccess | 
     importHealth,
     entryHtmlFileName: normalizeText(value.entryHtmlFileName) || null,
     templateType,
+    zipValidationOk: typeof value.zipValidationOk === 'boolean' ? value.zipValidationOk : undefined,
+    selectedEntryHtmlPath: normalizeText(value.selectedEntryHtmlPath) || null,
     preview: {
       available: Boolean(preview.available),
       isFallback: Boolean(preview.isFallback),
@@ -153,15 +163,19 @@ export function parseTemplateUploadResponse(input: {
   payload: unknown
 }): ParsedTemplateUploadResult {
   const payload = coerceUploadSuccessPayload(input.payload)
-  if (payload) {
-    if (input.httpStatus >= 200 && input.httpStatus < 300 && payload.status !== 'failed' && payload.importHealth !== 'failed') {
-      return {
+  if (
+    payload &&
+    input.httpStatus >= 200 &&
+    input.httpStatus < 300 &&
+    payload.status !== 'failed' &&
+    payload.importHealth !== 'failed'
+  ) {
+    return {
+      ok: true,
+      value: {
+        ...payload,
         ok: true,
-        value: {
-          ...payload,
-          ok: true,
-        },
-      }
+      },
     }
   }
 

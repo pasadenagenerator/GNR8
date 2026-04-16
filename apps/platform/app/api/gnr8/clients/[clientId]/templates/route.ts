@@ -28,6 +28,18 @@ export async function GET(_request: Request, ctx: { params: Promise<Params> }) {
       limit: 250,
     })
     const cards = sortTemplateCardsDeterministically(templates.map((template) => mapTemplateToListCard(template)))
+    console.info('[template-upload] TEMPLATE_LIST_RESPONSE_SENT', {
+      clientId: scope.clientId,
+      templateCount: cards.length,
+      templates: cards.map((card) => ({
+        templateId: card.id,
+        status: card.status,
+        importHealth: card.importHealth,
+        previewSource: card.preview.source,
+        previewAvailable: card.preview.available,
+        selectedEntryHtmlPath: card.entryHtmlFileName,
+      })),
+    })
 
     return NextResponse.json(
       {

@@ -45,6 +45,36 @@ type TemplateRowStatusEvent =
   | 'TEMPLATE_ROW_FINAL_STATUS_DEGRADED'
   | 'TEMPLATE_ROW_FINAL_STATUS_FAILED'
 
+type TemplateUploadIntakeEvent =
+  | 'TEMPLATE_UPLOAD_REQUEST_RECEIVED'
+  | 'TEMPLATE_UPLOAD_VALIDATION_RESULT'
+  | 'TEMPLATE_UPLOAD_INITIAL_ROW_WRITTEN'
+  | 'TEMPLATE_UPLOAD_FINAL_RESULT_COMPUTED'
+  | 'TEMPLATE_UPLOAD_FINAL_ROW_WRITTEN'
+
+function logTemplateUploadIntakeEvent(input: {
+  event: TemplateUploadIntakeEvent
+  templateId: string | null
+  zipValidationOk: boolean | null
+  selectedEntryHtmlPath: string | null
+  status: TemplateRecord['status'] | null
+  importHealth: TemplateRecord['importHealth'] | null
+  previewSource: TemplateRecord['previewSource'] | null
+  previewAvailable: boolean | null
+  uploadResponseOk: boolean | null
+}) {
+  console.info(`[template-upload] ${input.event}`, {
+    templateId: input.templateId,
+    zipValidationOk: input.zipValidationOk,
+    selectedEntryHtmlPath: input.selectedEntryHtmlPath,
+    status: input.status,
+    importHealth: input.importHealth,
+    previewSource: input.previewSource,
+    previewAvailable: input.previewAvailable,
+    uploadResponseOk: input.uploadResponseOk,
+  })
+}
+
 function logTemplateRowStatusEvent(input: {
   event: TemplateRowStatusEvent
   templateId: string
@@ -174,6 +204,17 @@ export async function runTemplateZipIntake(input: {
   const importManifestBuilder = input.importManifestBuilder ?? createImportManifest
   const previewBuilder = input.previewBuilder ?? buildTemplatePreviewSummary
   const intakeMode = input.mode ?? TEMPLATE_INTAKE_MODE
+  logTemplateUploadIntakeEvent({
+    event: 'TEMPLATE_UPLOAD_REQUEST_RECEIVED',
+    templateId: null,
+    zipValidationOk: null,
+    selectedEntryHtmlPath: null,
+    status: null,
+    importHealth: null,
+    previewSource: null,
+    previewAvailable: null,
+    uploadResponseOk: null,
+  })
 
   const zipValidation = zipValidator({
     fileName: input.uploadedZip.fileName,
@@ -181,6 +222,18 @@ export async function runTemplateZipIntake(input: {
     maxBytes: TEMPLATE_ZIP_MAX_BYTES,
   })
   const zipSummary = summarizeTemplateDiagnostics(zipValidation.diagnostics)
+  const selectedEntryHtmlPath = normalizeText(zipValidation.validation?.entryHtmlPath) || null
+  logTemplateUploadIntakeEvent({
+    event: 'TEMPLATE_UPLOAD_VALIDATION_RESULT',
+    templateId: null,
+    zipValidationOk: zipValidation.ok,
+    selectedEntryHtmlPath,
+    status: null,
+    importHealth: null,
+    previewSource: null,
+    previewAvailable: null,
+    uploadResponseOk: null,
+  })
 
   const optimisticName = normalizeText(input.uploadedZip.fileName).replace(/\.zip$/i, '').replace(/[_-]+/g, ' ').trim() || 'Untitled Template'
   const optimisticSlug = optimisticName.toLowerCase().replace(/[^a-z0-9\s-]/g, '').replace(/\s+/g, '-').replace(/-+/g, '-').replace(/^-+|-+$/g, '') || 'template'
@@ -214,6 +267,17 @@ export async function runTemplateZipIntake(input: {
     previewSource: initialTemplate.previewSource,
     previewAvailable: initialTemplate.previewAvailable,
   })
+  logTemplateUploadIntakeEvent({
+    event: 'TEMPLATE_UPLOAD_INITIAL_ROW_WRITTEN',
+    templateId: initialTemplate.id,
+    zipValidationOk: zipValidation.ok,
+    selectedEntryHtmlPath,
+    status: initialTemplate.status,
+    importHealth: initialTemplate.importHealth,
+    previewSource: initialTemplate.previewSource,
+    previewAvailable: initialTemplate.previewAvailable,
+    uploadResponseOk: null,
+  })
 
   const createDiagnosticSummary = summarizeTemplateDiagnostics([
     ...zipSummary.issues,
@@ -233,6 +297,17 @@ export async function runTemplateZipIntake(input: {
       importHealth: 'failed',
       previewSource: 'html_snapshot',
       previewAvailable: false,
+    })
+    logTemplateUploadIntakeEvent({
+      event: 'TEMPLATE_UPLOAD_FINAL_RESULT_COMPUTED',
+      templateId: initialTemplate.id,
+      zipValidationOk: zipValidation.ok,
+      selectedEntryHtmlPath,
+      status: 'failed',
+      importHealth: 'failed',
+      previewSource: 'html_snapshot',
+      previewAvailable: false,
+      uploadResponseOk: false,
     })
     logTemplateRowStatusEvent({
       event: 'TEMPLATE_ROW_FINAL_STATUS_FAILED',
@@ -283,9 +358,22 @@ export async function runTemplateZipIntake(input: {
       previewSource: updated.previewSource,
       previewAvailable: updated.previewAvailable,
     })
+    logTemplateUploadIntakeEvent({
+      event: 'TEMPLATE_UPLOAD_FINAL_ROW_WRITTEN',
+      templateId: updated.id,
+      zipValidationOk: zipValidation.ok,
+      selectedEntryHtmlPath,
+      status: updated.status,
+      importHealth: updated.importHealth,
+      previewSource: updated.previewSource,
+      previewAvailable: updated.previewAvailable,
+      uploadResponseOk: false,
+    })
 
     return {
       ok: false,
+      zipValidationOk: zipValidation.ok,
+      selectedEntryHtmlPath,
       templateId: updated.id,
       status: updated.status,
       importHealth: updated.importHealth,
@@ -311,6 +399,17 @@ export async function runTemplateZipIntake(input: {
       importHealth: 'failed',
       previewSource: 'html_snapshot',
       previewAvailable: false,
+    })
+    logTemplateUploadIntakeEvent({
+      event: 'TEMPLATE_UPLOAD_FINAL_RESULT_COMPUTED',
+      templateId: initialTemplate.id,
+      zipValidationOk: zipValidation.ok,
+      selectedEntryHtmlPath,
+      status: 'failed',
+      importHealth: 'failed',
+      previewSource: 'html_snapshot',
+      previewAvailable: false,
+      uploadResponseOk: false,
     })
     logTemplateRowStatusEvent({
       event: 'TEMPLATE_ROW_FINAL_STATUS_FAILED',
@@ -366,9 +465,22 @@ export async function runTemplateZipIntake(input: {
       previewSource: updated.previewSource,
       previewAvailable: updated.previewAvailable,
     })
+    logTemplateUploadIntakeEvent({
+      event: 'TEMPLATE_UPLOAD_FINAL_ROW_WRITTEN',
+      templateId: updated.id,
+      zipValidationOk: zipValidation.ok,
+      selectedEntryHtmlPath,
+      status: updated.status,
+      importHealth: updated.importHealth,
+      previewSource: updated.previewSource,
+      previewAvailable: updated.previewAvailable,
+      uploadResponseOk: false,
+    })
 
     return {
       ok: false,
+      zipValidationOk: zipValidation.ok,
+      selectedEntryHtmlPath,
       templateId: updated.id,
       status: updated.status,
       importHealth: updated.importHealth,
@@ -419,6 +531,17 @@ export async function runTemplateZipIntake(input: {
       previewSource: previewSummary.preview.previewSource,
       previewAvailable: previewSummary.preview.previewAvailable,
     })
+    logTemplateUploadIntakeEvent({
+      event: 'TEMPLATE_UPLOAD_FINAL_RESULT_COMPUTED',
+      templateId: initialTemplate.id,
+      zipValidationOk: zipValidation.ok,
+      selectedEntryHtmlPath,
+      status: 'failed',
+      importHealth: 'failed',
+      previewSource: previewSummary.preview.previewSource,
+      previewAvailable: previewSummary.preview.previewAvailable,
+      uploadResponseOk: false,
+    })
     logTemplateRowStatusEvent({
       event: 'TEMPLATE_ROW_FINAL_STATUS_FAILED',
       templateId: initialTemplate.id,
@@ -466,9 +589,22 @@ export async function runTemplateZipIntake(input: {
       previewSource: updated.previewSource,
       previewAvailable: updated.previewAvailable,
     })
+    logTemplateUploadIntakeEvent({
+      event: 'TEMPLATE_UPLOAD_FINAL_ROW_WRITTEN',
+      templateId: updated.id,
+      zipValidationOk: zipValidation.ok,
+      selectedEntryHtmlPath,
+      status: updated.status,
+      importHealth: updated.importHealth,
+      previewSource: updated.previewSource,
+      previewAvailable: updated.previewAvailable,
+      uploadResponseOk: false,
+    })
 
     return {
       ok: false,
+      zipValidationOk: zipValidation.ok,
+      selectedEntryHtmlPath,
       templateId: updated.id,
       status: updated.status,
       importHealth: updated.importHealth,
@@ -486,6 +622,17 @@ export async function runTemplateZipIntake(input: {
       importHealth: 'failed',
       previewSource: previewSummary.preview.previewSource,
       previewAvailable: previewSummary.preview.previewAvailable,
+    })
+    logTemplateUploadIntakeEvent({
+      event: 'TEMPLATE_UPLOAD_FINAL_RESULT_COMPUTED',
+      templateId: initialTemplate.id,
+      zipValidationOk: zipValidation.ok,
+      selectedEntryHtmlPath,
+      status: 'failed',
+      importHealth: 'failed',
+      previewSource: previewSummary.preview.previewSource,
+      previewAvailable: previewSummary.preview.previewAvailable,
+      uploadResponseOk: false,
     })
     logTemplateRowStatusEvent({
       event: 'TEMPLATE_ROW_FINAL_STATUS_FAILED',
@@ -534,9 +681,22 @@ export async function runTemplateZipIntake(input: {
       previewSource: updated.previewSource,
       previewAvailable: updated.previewAvailable,
     })
+    logTemplateUploadIntakeEvent({
+      event: 'TEMPLATE_UPLOAD_FINAL_ROW_WRITTEN',
+      templateId: updated.id,
+      zipValidationOk: zipValidation.ok,
+      selectedEntryHtmlPath,
+      status: updated.status,
+      importHealth: updated.importHealth,
+      previewSource: updated.previewSource,
+      previewAvailable: updated.previewAvailable,
+      uploadResponseOk: false,
+    })
 
     return {
       ok: false,
+      zipValidationOk: zipValidation.ok,
+      selectedEntryHtmlPath,
       templateId: updated.id,
       status: updated.status,
       importHealth: updated.importHealth,
@@ -604,6 +764,17 @@ export async function runTemplateZipIntake(input: {
     previewSource: previewSummary.preview.previewSource,
     previewAvailable: previewSummary.preview.previewAvailable,
   })
+  logTemplateUploadIntakeEvent({
+    event: 'TEMPLATE_UPLOAD_FINAL_RESULT_COMPUTED',
+    templateId: initialTemplate.id,
+    zipValidationOk: zipValidation.ok,
+    selectedEntryHtmlPath,
+    status: 'ready',
+    importHealth,
+    previewSource: previewSummary.preview.previewSource,
+    previewAvailable: previewSummary.preview.previewAvailable,
+    uploadResponseOk: true,
+  })
   logTemplateRowStatusEvent({
     event: importHealth === 'clean' ? 'TEMPLATE_ROW_FINAL_STATUS_READY' : importHealth === 'degraded' ? 'TEMPLATE_ROW_FINAL_STATUS_DEGRADED' : 'TEMPLATE_ROW_FINAL_STATUS_FAILED',
     templateId: initialTemplate.id,
@@ -635,10 +806,23 @@ export async function runTemplateZipIntake(input: {
     previewSource: updatedTemplate.previewSource,
     previewAvailable: updatedTemplate.previewAvailable,
   })
+  logTemplateUploadIntakeEvent({
+    event: 'TEMPLATE_UPLOAD_FINAL_ROW_WRITTEN',
+    templateId: updatedTemplate.id,
+    zipValidationOk: zipValidation.ok,
+    selectedEntryHtmlPath,
+    status: updatedTemplate.status,
+    importHealth: updatedTemplate.importHealth,
+    previewSource: updatedTemplate.previewSource,
+    previewAvailable: updatedTemplate.previewAvailable,
+    uploadResponseOk: updatedTemplate.status !== 'failed',
+  })
 
   if (updatedTemplate.status === 'failed') {
     return {
       ok: false,
+      zipValidationOk: zipValidation.ok,
+      selectedEntryHtmlPath,
       templateId: updatedTemplate.id,
       status: updatedTemplate.status,
       importHealth: updatedTemplate.importHealth,
@@ -649,6 +833,8 @@ export async function runTemplateZipIntake(input: {
 
   return {
     ok: true,
+    zipValidationOk: zipValidation.ok,
+    selectedEntryHtmlPath,
     template: updatedTemplate,
   }
 }

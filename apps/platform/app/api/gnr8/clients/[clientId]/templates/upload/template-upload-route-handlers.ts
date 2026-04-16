@@ -22,6 +22,29 @@ const DEFAULT_DEPS: TemplateUploadRouteDeps = {
   parseThrownScopeError,
 }
 
+function logTemplateUploadRouteEvent(input: {
+  event: 'TEMPLATE_UPLOAD_REQUEST_RECEIVED' | 'TEMPLATE_UPLOAD_RESPONSE_SENT'
+  templateId: string | null
+  zipValidationOk: boolean | null
+  selectedEntryHtmlPath: string | null
+  status: 'uploaded' | 'processing' | 'ready' | 'failed' | null
+  importHealth: 'clean' | 'degraded' | 'failed' | null
+  previewSource: 'rendered_capture' | 'html_snapshot' | 'fallback' | null
+  previewAvailable: boolean | null
+  uploadResponseOk: boolean
+}) {
+  console.info(`[template-upload] ${input.event}`, {
+    templateId: input.templateId,
+    zipValidationOk: input.zipValidationOk,
+    selectedEntryHtmlPath: input.selectedEntryHtmlPath,
+    status: input.status,
+    importHealth: input.importHealth,
+    previewSource: input.previewSource,
+    previewAvailable: input.previewAvailable,
+    uploadResponseOk: input.uploadResponseOk,
+  })
+}
+
 export function createTemplateUploadRouteHandlers(deps: Partial<TemplateUploadRouteDeps> = {}) {
   const resolved = {
     ...DEFAULT_DEPS,
@@ -39,8 +62,30 @@ export function createTemplateUploadRouteHandlers(deps: Partial<TemplateUploadRo
         const formData = await request.formData()
         const fileValue = formData.get('file')
         if (!(fileValue instanceof File)) {
+          logTemplateUploadRouteEvent({
+            event: 'TEMPLATE_UPLOAD_RESPONSE_SENT',
+            templateId: null,
+            zipValidationOk: null,
+            selectedEntryHtmlPath: null,
+            status: null,
+            importHealth: null,
+            previewSource: null,
+            previewAvailable: null,
+            uploadResponseOk: false,
+          })
           return NextResponse.json({ ok: false, error: 'ZIP file is required.' }, { status: 400 })
         }
+        logTemplateUploadRouteEvent({
+          event: 'TEMPLATE_UPLOAD_REQUEST_RECEIVED',
+          templateId: null,
+          zipValidationOk: null,
+          selectedEntryHtmlPath: null,
+          status: null,
+          importHealth: null,
+          previewSource: null,
+          previewAvailable: null,
+          uploadResponseOk: false,
+        })
 
         const bytes = new Uint8Array(await fileValue.arrayBuffer())
         const intake = await resolved.runTemplateZipIntake({
@@ -55,6 +100,17 @@ export function createTemplateUploadRouteHandlers(deps: Partial<TemplateUploadRo
         })
 
         if (!intake.ok) {
+          logTemplateUploadRouteEvent({
+            event: 'TEMPLATE_UPLOAD_RESPONSE_SENT',
+            templateId: intake.templateId,
+            zipValidationOk: intake.zipValidationOk,
+            selectedEntryHtmlPath: intake.selectedEntryHtmlPath,
+            status: intake.status,
+            importHealth: intake.importHealth,
+            previewSource: 'html_snapshot',
+            previewAvailable: false,
+            uploadResponseOk: false,
+          })
           return NextResponse.json(
             {
               ok: false,
@@ -63,6 +119,8 @@ export function createTemplateUploadRouteHandlers(deps: Partial<TemplateUploadRo
               status: intake.status,
               health: intake.importHealth,
               importHealth: intake.importHealth,
+              zipValidationOk: intake.zipValidationOk,
+              selectedEntryHtmlPath: intake.selectedEntryHtmlPath,
               error: intake.errorMessage,
               diagnosticsSummary: intake.diagnosticsSummary,
             },
@@ -70,6 +128,17 @@ export function createTemplateUploadRouteHandlers(deps: Partial<TemplateUploadRo
           )
         }
 
+        logTemplateUploadRouteEvent({
+          event: 'TEMPLATE_UPLOAD_RESPONSE_SENT',
+          templateId: intake.template.id,
+          zipValidationOk: intake.zipValidationOk,
+          selectedEntryHtmlPath: intake.selectedEntryHtmlPath,
+          status: intake.template.status,
+          importHealth: intake.template.importHealth,
+          previewSource: intake.template.previewSource,
+          previewAvailable: intake.template.previewAvailable,
+          uploadResponseOk: true,
+        })
         return NextResponse.json(
           {
             ok: true,
@@ -81,6 +150,8 @@ export function createTemplateUploadRouteHandlers(deps: Partial<TemplateUploadRo
             name: intake.template.name,
             tags: intake.template.tags,
             importHealth: intake.template.importHealth,
+            zipValidationOk: intake.zipValidationOk,
+            selectedEntryHtmlPath: intake.selectedEntryHtmlPath,
             entryHtmlFileName: intake.template.entryHtmlFileName,
             templateType: intake.template.templateType,
             preview: {
@@ -98,6 +169,17 @@ export function createTemplateUploadRouteHandlers(deps: Partial<TemplateUploadRo
       } catch (error) {
         const storageError = resolved.parseTemplateRepositoryError(error)
         if (storageError) {
+          logTemplateUploadRouteEvent({
+            event: 'TEMPLATE_UPLOAD_RESPONSE_SENT',
+            templateId: null,
+            zipValidationOk: null,
+            selectedEntryHtmlPath: null,
+            status: null,
+            importHealth: null,
+            previewSource: null,
+            previewAvailable: null,
+            uploadResponseOk: false,
+          })
           return NextResponse.json(
             { ok: false, code: storageError.code, error: storageError.message },
             { status: storageError.status },
@@ -105,6 +187,17 @@ export function createTemplateUploadRouteHandlers(deps: Partial<TemplateUploadRo
         }
 
         const mapped = resolved.parseThrownScopeError(error)
+        logTemplateUploadRouteEvent({
+          event: 'TEMPLATE_UPLOAD_RESPONSE_SENT',
+          templateId: null,
+          zipValidationOk: null,
+          selectedEntryHtmlPath: null,
+          status: null,
+          importHealth: null,
+          previewSource: null,
+          previewAvailable: null,
+          uploadResponseOk: false,
+        })
         return NextResponse.json({ ok: false, error: mapped.message }, { status: mapped.status })
       }
     },

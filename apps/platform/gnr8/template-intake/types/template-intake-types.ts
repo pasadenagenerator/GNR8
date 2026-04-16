@@ -167,10 +167,14 @@ export type UploadedZipTemplate = {
 export type TemplateIntakeResult =
   | {
       ok: true
+      zipValidationOk: true
+      selectedEntryHtmlPath: string | null
       template: TemplateRecord
     }
   | {
       ok: false
+      zipValidationOk: boolean
+      selectedEntryHtmlPath: string | null
       templateId: string | null
       status: TemplateStatus
       importHealth: TemplateImportHealth

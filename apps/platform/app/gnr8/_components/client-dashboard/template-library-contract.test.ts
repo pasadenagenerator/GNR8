@@ -154,6 +154,25 @@ test('upload contract accepts degraded no-preview html_snapshot success payload'
   assert.equal(parsed.value.preview.available, false)
 })
 
+test('upload contract treats 2xx ready/degraded payload without preview block as success', () => {
+  const parsed = parseTemplateUploadResponse({
+    httpStatus: 200,
+    payload: {
+      ok: true,
+      templateId: 'template-minimal',
+      status: 'ready',
+      importHealth: 'degraded',
+      sourceFilename: 'beauty-clinic.zip',
+    },
+  })
+
+  assert.equal(parsed.ok, true)
+  if (!parsed.ok) return
+  assert.equal(parsed.value.templateId, 'template-minimal')
+  assert.equal(parsed.value.preview.source, 'html_snapshot')
+  assert.equal(parsed.value.preview.available, false)
+})
+
 test('upload contract accepts health alias when importHealth field is missing', () => {
   const parsed = parseTemplateUploadResponse({
     httpStatus: 200,

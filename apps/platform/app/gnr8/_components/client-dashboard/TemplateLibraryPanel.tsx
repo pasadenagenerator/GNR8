@@ -70,6 +70,29 @@ function StatusBadge(props: { label: string; value: string }) {
   )
 }
 
+function logTemplateUploadClientEvent(input: {
+  event: 'TEMPLATE_UPLOAD_CLIENT_SUCCESS_INTERPRETED' | 'TEMPLATE_UPLOAD_CLIENT_FAILURE_INTERPRETED'
+  templateId: string | null
+  zipValidationOk: boolean | null
+  selectedEntryHtmlPath: string | null
+  status: 'uploaded' | 'processing' | 'ready' | 'failed' | null
+  importHealth: 'clean' | 'degraded' | 'failed' | null
+  previewSource: 'rendered_capture' | 'html_snapshot' | 'fallback' | null
+  previewAvailable: boolean | null
+  uploadResponseOk: boolean
+}) {
+  console.info(`[template-upload] ${input.event}`, {
+    templateId: input.templateId,
+    zipValidationOk: input.zipValidationOk,
+    selectedEntryHtmlPath: input.selectedEntryHtmlPath,
+    status: input.status,
+    importHealth: input.importHealth,
+    previewSource: input.previewSource,
+    previewAvailable: input.previewAvailable,
+    uploadResponseOk: input.uploadResponseOk,
+  })
+}
+
 export default function TemplateLibraryPanel(props: {
   clientId: string
   initialScopeError?: string | null
@@ -151,15 +174,48 @@ export default function TemplateLibraryPanel(props: {
       const parsed = parseTemplateUploadResponse({ httpStatus: response.status, payload })
       const uiState = resolveTemplateUploadUiState(parsed)
       if (!uiState.isSuccess) {
+        logTemplateUploadClientEvent({
+          event: 'TEMPLATE_UPLOAD_CLIENT_FAILURE_INTERPRETED',
+          templateId: null,
+          zipValidationOk: null,
+          selectedEntryHtmlPath: null,
+          status: null,
+          importHealth: null,
+          previewSource: null,
+          previewAvailable: null,
+          uploadResponseOk: response.ok,
+        })
         setUploadError(uiState.uploadError)
         return
       }
       if (!parsed.ok) {
+        logTemplateUploadClientEvent({
+          event: 'TEMPLATE_UPLOAD_CLIENT_FAILURE_INTERPRETED',
+          templateId: null,
+          zipValidationOk: null,
+          selectedEntryHtmlPath: null,
+          status: null,
+          importHealth: null,
+          previewSource: null,
+          previewAvailable: null,
+          uploadResponseOk: response.ok,
+        })
         setUploadError(uiState.uploadError)
         return
       }
       setUploadError(null)
       const uploaded = parsed.value
+      logTemplateUploadClientEvent({
+        event: 'TEMPLATE_UPLOAD_CLIENT_SUCCESS_INTERPRETED',
+        templateId: uploaded.templateId,
+        zipValidationOk: true,
+        selectedEntryHtmlPath: uploaded.entryHtmlFileName,
+        status: uploaded.status,
+        importHealth: uploaded.importHealth,
+        previewSource: uploaded.preview.source,
+        previewAvailable: uploaded.preview.available,
+        uploadResponseOk: response.ok,
+      })
 
       setSuccessMessage(`Template \"${uploaded.name}\" uploaded with status ${normalizeStatusLabel(uploaded.status)}.`)
       setFile(null)

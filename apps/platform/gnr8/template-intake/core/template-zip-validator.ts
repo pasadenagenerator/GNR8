@@ -2,7 +2,7 @@ import crypto from 'node:crypto'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { execFileSync } from 'node:child_process'
+import zlib from 'node:zlib'
 
 import type { TemplateIntakeDiagnostic, TemplateZipValidationResult } from '@/gnr8/template-intake/types/template-intake-types'
 import { createTemplateIntakeDiagnostic } from '@/gnr8/template-intake/diagnostics/template-intake-diagnostics'
@@ -198,17 +198,146 @@ function resolveAssetsDirPath(relativePaths: string[]): string | null {
   return candidate || null
 }
 
-function listZipEntries(zipFileAbsPath: string): string[] {
-  const output = execFileSync('unzip', ['-Z1', zipFileAbsPath], { encoding: 'utf8' })
-  return output
-    .split('\n')
-    .map((line) => normalizeText(line))
-    .filter(Boolean)
+type ParsedZipEntry = {
+  fileName: string
+  compressionMethod: number
+  compressedSize: number
+  uncompressedSize: number
+  localHeaderOffset: number
 }
 
-function unzipToDir(input: { zipFileAbsPath: string; outputDirAbs: string }): void {
+function readUInt16LE(buffer: Buffer, offset: number): number {
+  if (offset < 0 || offset + 2 > buffer.length) {
+    throw new Error('ZIP parsing failed: out-of-bounds uint16 read.')
+  }
+  return buffer.readUInt16LE(offset)
+}
+
+function readUInt32LE(buffer: Buffer, offset: number): number {
+  if (offset < 0 || offset + 4 > buffer.length) {
+    throw new Error('ZIP parsing failed: out-of-bounds uint32 read.')
+  }
+  return buffer.readUInt32LE(offset)
+}
+
+function findEndOfCentralDirectoryOffset(buffer: Buffer): number {
+  const eocdSignature = 0x06054b50
+  const minimumEocdSize = 22
+  const maxCommentLength = 0xffff
+  const searchStart = Math.max(0, buffer.length - minimumEocdSize - maxCommentLength)
+
+  for (let offset = buffer.length - minimumEocdSize; offset >= searchStart; offset -= 1) {
+    if (readUInt32LE(buffer, offset) === eocdSignature) return offset
+  }
+
+  throw new Error('ZIP parsing failed: end of central directory record not found.')
+}
+
+function parseZipEntriesFromBuffer(zipBuffer: Buffer): ParsedZipEntry[] {
+  const eocdOffset = findEndOfCentralDirectoryOffset(zipBuffer)
+  const totalEntries = readUInt16LE(zipBuffer, eocdOffset + 10)
+  const centralDirectorySize = readUInt32LE(zipBuffer, eocdOffset + 12)
+  const centralDirectoryOffset = readUInt32LE(zipBuffer, eocdOffset + 16)
+
+  if (centralDirectoryOffset + centralDirectorySize > zipBuffer.length) {
+    throw new Error('ZIP parsing failed: central directory is out of bounds.')
+  }
+
+  const entries: ParsedZipEntry[] = []
+  let cursor = centralDirectoryOffset
+  const centralSignature = 0x02014b50
+
+  for (let index = 0; index < totalEntries; index += 1) {
+    if (cursor + 46 > zipBuffer.length) {
+      throw new Error('ZIP parsing failed: truncated central directory record.')
+    }
+
+    const signature = readUInt32LE(zipBuffer, cursor)
+    if (signature !== centralSignature) {
+      throw new Error('ZIP parsing failed: invalid central directory record signature.')
+    }
+
+    const compressionMethod = readUInt16LE(zipBuffer, cursor + 10)
+    const compressedSize = readUInt32LE(zipBuffer, cursor + 20)
+    const uncompressedSize = readUInt32LE(zipBuffer, cursor + 24)
+    const fileNameLength = readUInt16LE(zipBuffer, cursor + 28)
+    const extraFieldLength = readUInt16LE(zipBuffer, cursor + 30)
+    const fileCommentLength = readUInt16LE(zipBuffer, cursor + 32)
+    const localHeaderOffset = readUInt32LE(zipBuffer, cursor + 42)
+    const fileNameStart = cursor + 46
+    const fileNameEnd = fileNameStart + fileNameLength
+
+    if (fileNameEnd > zipBuffer.length) {
+      throw new Error('ZIP parsing failed: invalid central directory filename bounds.')
+    }
+
+    const fileName = normalizeText(zipBuffer.subarray(fileNameStart, fileNameEnd).toString('utf8'))
+    if (fileName) {
+      entries.push({
+        fileName,
+        compressionMethod,
+        compressedSize,
+        uncompressedSize,
+        localHeaderOffset,
+      })
+    }
+
+    cursor = fileNameEnd + extraFieldLength + fileCommentLength
+  }
+
+  return entries
+}
+
+function inflateZipEntry(input: { zipBuffer: Buffer; entry: ParsedZipEntry }): Buffer {
+  const localHeaderSignature = 0x04034b50
+  const headerOffset = input.entry.localHeaderOffset
+  if (headerOffset + 30 > input.zipBuffer.length) {
+    throw new Error('ZIP extraction failed: local file header out of bounds.')
+  }
+  if (readUInt32LE(input.zipBuffer, headerOffset) !== localHeaderSignature) {
+    throw new Error('ZIP extraction failed: invalid local file header signature.')
+  }
+
+  const fileNameLength = readUInt16LE(input.zipBuffer, headerOffset + 26)
+  const extraFieldLength = readUInt16LE(input.zipBuffer, headerOffset + 28)
+  const dataStart = headerOffset + 30 + fileNameLength + extraFieldLength
+  const dataEnd = dataStart + input.entry.compressedSize
+
+  if (dataEnd > input.zipBuffer.length) {
+    throw new Error('ZIP extraction failed: entry payload exceeds ZIP size.')
+  }
+
+  const compressed = input.zipBuffer.subarray(dataStart, dataEnd)
+
+  if (input.entry.compressionMethod === 0) {
+    return Buffer.from(compressed)
+  }
+  if (input.entry.compressionMethod === 8) {
+    return zlib.inflateRawSync(compressed)
+  }
+
+  throw new Error(`ZIP extraction failed: unsupported compression method ${input.entry.compressionMethod}.`)
+}
+
+function extractZipEntriesToDir(input: {
+  zipBuffer: Buffer
+  entries: ParsedZipEntry[]
+  outputDirAbs: string
+}): void {
   fs.mkdirSync(input.outputDirAbs, { recursive: true })
-  execFileSync('unzip', ['-qq', '-o', input.zipFileAbsPath, '-d', input.outputDirAbs], { stdio: 'pipe' })
+
+  for (const entry of input.entries) {
+    const normalizedName = sanitizeEntryPath(entry.fileName)
+    if (!normalizedName || normalizedName.endsWith('/')) continue
+
+    const outputFileAbs = path.resolve(input.outputDirAbs, normalizedName)
+    fs.mkdirSync(path.dirname(outputFileAbs), { recursive: true })
+    const inflated = inflateZipEntry({ zipBuffer: input.zipBuffer, entry })
+    if (entry.uncompressedSize > 0 && inflated.length !== entry.uncompressedSize) {
+      throw new Error(`ZIP extraction failed: size mismatch for ${entry.fileName}.`)
+    }
+    fs.writeFileSync(outputFileAbs, inflated)
+  }
 }
 
 export function validateZipEntryPaths(entryPaths: string[]): {
@@ -325,9 +454,10 @@ export function validateAndExtractTemplateZip(input: {
   const workspaceRoot = path.resolve(os.tmpdir(), 'gnr8', 'template-intake', snapshotId)
   const zipFileAbsPath = path.resolve(workspaceRoot, 'upload.zip')
   const extractionRootDirAbs = path.resolve(workspaceRoot, 'extracted')
+  const zipBuffer = Buffer.from(input.bytes)
 
   fs.mkdirSync(workspaceRoot, { recursive: true })
-  fs.writeFileSync(zipFileAbsPath, input.bytes)
+  fs.writeFileSync(zipFileAbsPath, zipBuffer)
 
   diagnostics.push(
     createTemplateIntakeDiagnostic({
@@ -338,15 +468,15 @@ export function validateAndExtractTemplateZip(input: {
     }),
   )
 
-  let entryPaths: string[] = []
+  let zipEntries: ParsedZipEntry[] = []
   try {
-    entryPaths = listZipEntries(zipFileAbsPath)
+    zipEntries = parseZipEntriesFromBuffer(zipBuffer)
   } catch (error) {
     diagnostics.push(
       createTemplateIntakeDiagnostic({
         code: 'TEMPLATE_UPLOAD_REJECTED_INVALID_TYPE',
         severity: 'fatal',
-        message: 'ZIP file could not be read by unzip runtime.',
+        message: 'ZIP file could not be read by validator runtime.',
         details: { error: error instanceof Error ? error.message : String(error) },
       }),
     )
@@ -360,6 +490,7 @@ export function validateAndExtractTemplateZip(input: {
     }
   }
 
+  const entryPaths = zipEntries.map((entry) => entry.fileName)
   const safeValidation = validateZipEntryPaths(entryPaths)
   if (safeValidation.unsafeEntries.length > 0) {
     diagnostics.push(
@@ -384,7 +515,11 @@ export function validateAndExtractTemplateZip(input: {
   fs.mkdirSync(extractionRootDirAbs, { recursive: true })
 
   try {
-    unzipToDir({ zipFileAbsPath, outputDirAbs: extractionRootDirAbs })
+    extractZipEntriesToDir({
+      zipBuffer,
+      entries: zipEntries.filter((entry) => safeValidation.safeEntries.includes(sanitizeEntryPath(entry.fileName))),
+      outputDirAbs: extractionRootDirAbs,
+    })
   } catch (error) {
     diagnostics.push(
       createTemplateIntakeDiagnostic({

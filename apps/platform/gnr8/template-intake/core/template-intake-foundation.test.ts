@@ -699,6 +699,99 @@ test('A. Valid HTML-only template remains ready and degraded in template intake 
   assert.equal(result.template.previewSource, 'html_snapshot')
 })
 
+test('A. Beauty Clinic nested single-entry ZIP persists ready/degraded and keeps html_snapshot no-preview truth', async () => {
+  const { repository } = createRepositoryStub()
+
+  const result = await runTemplateZipIntake({
+    actorUserId: '00000000-0000-4000-8000-000000000101',
+    clientId: '00000000-0000-4000-8000-000000000201',
+    organizationId: '00000000-0000-4000-8000-000000000201',
+    agencyId: '00000000-0000-4000-8000-000000000301',
+    uploadedZip: {
+      fileName: 'Beauty Clinic & Salon Landing Page.html.zip',
+      bytes: new Uint8Array([2, 2, 2]),
+    },
+    repository,
+    zipValidator: () => ({
+      ok: true,
+      diagnostics: [],
+      errorMessage: null,
+      snapshotId: 'template-zip-beauty-clinic',
+      zipFileAbsPath: '/tmp/template.zip',
+      validation: {
+        ok: true,
+        extractionRootDirAbs: '/tmp/template',
+        entryHtmlPath: 'Beauty Clinic & Salon Landing Page.html',
+        entryHtmlSelection: 'single_file_fallback',
+        htmlCandidates: ['Beauty Clinic & Salon Landing Page.html'],
+        assetsDirPath: null,
+        manifestPath: null,
+        assetSummary: {
+          fileCount: 1,
+          imageCount: 0,
+          stylesheetCount: 0,
+          scriptCount: 0,
+          otherCount: 1,
+        },
+      },
+    }),
+    importRunner: async () => createImportOutput({ status: 'ok', warningCount: 1 }),
+    importManifestBuilder: () => ({
+      manifestVersion: '1.0.0' as const,
+      contractVersion: '1.1.1' as const,
+      status: 'success_with_warnings',
+      outputStatus: 'ok',
+      rootDirPath: null,
+      entryHtmlPath: 'Beauty Clinic & Salon Landing Page.html',
+      sourceKind: 'single-entry-html',
+      htmlFilePaths: ['Beauty Clinic & Salon Landing Page.html'],
+      assetsDirPath: null,
+      fingerprints: { inputSpecSha256: 'spec', inputContentSha256: 'content' },
+      diagnostics: { totalCount: 1, infoCount: 0, warningCount: 1, errorCount: 0, fatalCount: 0, codes: ['INPUT_INVALID'] },
+      dom: {
+        documentCount: 1,
+        documentsWithDomCount: 1,
+        nodeCount: 10,
+        parseWarningCount: 0,
+        decodingErrorCount: 0,
+        effectivelyEmpty: false,
+        documentPaths: ['Beauty Clinic & Salon Landing Page.html'],
+      },
+      assets: {
+        totalAssetFiles: 0,
+        totalAssets: 0,
+        referencesByAssetKind: { image: 0, stylesheet: 0, script: 0, unknown: 0 },
+        referencesByReferenceKind: {
+          relative_local: 0,
+          root_relative: 0,
+          absolute_url: 0,
+          data_url: 0,
+          empty_invalid: 0,
+        },
+        referencesByValidationStatus: {
+          ok: 0,
+          invalid_asset_reference: 0,
+          unsupported_remote_asset: 0,
+          unsupported_data_url_asset: 0,
+          path_traversal_blocked: 0,
+          missing_local_asset: 0,
+        },
+        existingLocalCount: 0,
+        missingLocalCount: 0,
+        references: [],
+      },
+    }),
+  })
+
+  assert.equal(result.ok, true)
+  if (!result.ok) return
+  assert.equal(result.template.status, 'ready')
+  assert.equal(result.template.importHealth, 'degraded')
+  assert.equal(result.template.previewSource, 'html_snapshot')
+  assert.equal(result.template.previewAvailable, false)
+  assert.equal(result.template.sourceType, 'zip_html')
+})
+
 test('B. Inline CSS template remains non-failed (degraded allowed)', async () => {
   const { repository } = createRepositoryStub()
 
