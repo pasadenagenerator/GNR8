@@ -414,3 +414,163 @@ export async function listTemplatesForClient(input: { clientId: string; limit?: 
     }
   })
 }
+
+export async function getTemplateByIdForClient(input: {
+  clientId: string
+  templateId: string
+}): Promise<TemplateRecord | null> {
+  return withConnection(async (client) => {
+    try {
+      const result = await client.query<TemplateRow>(
+        `
+      select
+        id::text,
+        client_id::text,
+        organization_id::text,
+        agency_id::text,
+        created_by_user_id::text,
+        name,
+        slug,
+        source_type,
+        status,
+        import_health,
+        preview_image_path,
+        preview_available,
+        preview_is_fallback,
+        preview_source,
+        tags,
+        source_filename,
+        entry_html_path,
+        entry_html_file_name,
+        template_type,
+        import_snapshot_id,
+        template_manifest_summary,
+        diagnostics_summary,
+        import_manifest_summary,
+        version,
+        visibility,
+        created_at::text,
+        updated_at::text
+      from public.gnr8_templates
+      where client_id = $1::uuid
+        and id = $2::uuid
+      limit 1
+      `,
+        [input.clientId, input.templateId],
+      )
+
+      const row = result.rows[0]
+      return row ? mapTemplateRow(row) : null
+    } catch (error) {
+      throw toTemplateRepositoryError(error)
+    }
+  })
+}
+
+export async function updateTemplateMetadataById(input: {
+  clientId: string
+  templateId: string
+  name: string
+  tags: string[]
+}): Promise<TemplateRecord | null> {
+  return withConnection(async (client) => {
+    try {
+      const result = await client.query<TemplateRow>(
+        `
+      update public.gnr8_templates
+      set
+        name = $3::text,
+        tags = $4::text[],
+        updated_at = now()
+      where client_id = $1::uuid
+        and id = $2::uuid
+      returning
+        id::text,
+        client_id::text,
+        organization_id::text,
+        agency_id::text,
+        created_by_user_id::text,
+        name,
+        slug,
+        source_type,
+        status,
+        import_health,
+        preview_image_path,
+        preview_available,
+        preview_is_fallback,
+        preview_source,
+        tags,
+        source_filename,
+        entry_html_path,
+        entry_html_file_name,
+        template_type,
+        import_snapshot_id,
+        template_manifest_summary,
+        diagnostics_summary,
+        import_manifest_summary,
+        version,
+        visibility,
+        created_at::text,
+        updated_at::text
+      `,
+        [input.clientId, input.templateId, input.name, input.tags],
+      )
+
+      const row = result.rows[0]
+      return row ? mapTemplateRow(row) : null
+    } catch (error) {
+      throw toTemplateRepositoryError(error)
+    }
+  })
+}
+
+export async function deleteTemplateByIdForClient(input: {
+  clientId: string
+  templateId: string
+}): Promise<TemplateRecord | null> {
+  return withConnection(async (client) => {
+    try {
+      const result = await client.query<TemplateRow>(
+        `
+      delete from public.gnr8_templates
+      where client_id = $1::uuid
+        and id = $2::uuid
+      returning
+        id::text,
+        client_id::text,
+        organization_id::text,
+        agency_id::text,
+        created_by_user_id::text,
+        name,
+        slug,
+        source_type,
+        status,
+        import_health,
+        preview_image_path,
+        preview_available,
+        preview_is_fallback,
+        preview_source,
+        tags,
+        source_filename,
+        entry_html_path,
+        entry_html_file_name,
+        template_type,
+        import_snapshot_id,
+        template_manifest_summary,
+        diagnostics_summary,
+        import_manifest_summary,
+        version,
+        visibility,
+        created_at::text,
+        updated_at::text
+      `,
+        [input.clientId, input.templateId],
+      )
+
+      const row = result.rows[0]
+      return row ? mapTemplateRow(row) : null
+    } catch (error) {
+      throw toTemplateRepositoryError(error)
+    }
+  })
+}

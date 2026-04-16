@@ -144,9 +144,14 @@ test('resolveClientTemplateScope fails closed when agency scope rejects the user
 test('templates list and upload routes both use requireClientTemplateScope for deterministic scope decisions', () => {
   const listRouteSource = readFileSync(new URL('../[clientId]/templates/route.ts', import.meta.url), 'utf8')
   const uploadRouteSource = readFileSync(new URL('../[clientId]/templates/upload/route.ts', import.meta.url), 'utf8')
+  const detailRouteSource = readFileSync(
+    new URL('../[clientId]/templates/[templateId]/template-detail-route-handlers.ts', import.meta.url),
+    'utf8',
+  )
 
   assert.match(listRouteSource, /requireClientTemplateScope/)
   assert.match(uploadRouteSource, /requireClientTemplateScope/)
+  assert.match(detailRouteSource, /requireClientTemplateScope/)
 })
 
 test('client template scope helpers stay read-only and avoid mutating supabase helper', () => {
@@ -160,9 +165,14 @@ test('client template scope helpers stay read-only and avoid mutating supabase h
 test('template routes map repository errors before generic scope parsing', () => {
   const listRouteSource = readFileSync(new URL('../[clientId]/templates/route.ts', import.meta.url), 'utf8')
   const uploadRouteSource = readFileSync(new URL('../[clientId]/templates/upload/route.ts', import.meta.url), 'utf8')
+  const detailRouteSource = readFileSync(
+    new URL('../[clientId]/templates/[templateId]/template-detail-route-handlers.ts', import.meta.url),
+    'utf8',
+  )
 
   assert.match(listRouteSource, /parseTemplateRepositoryError/)
   assert.match(uploadRouteSource, /parseTemplateRepositoryError/)
+  assert.match(detailRouteSource, /parseTemplateRepositoryError/)
 })
 
 test('mutating Supabase helper still writes cookies in allowed boundaries', () => {

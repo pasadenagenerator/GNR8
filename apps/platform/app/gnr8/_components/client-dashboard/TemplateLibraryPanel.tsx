@@ -1,5 +1,6 @@
 'use client'
 
+import Link from 'next/link'
 import { useEffect, useMemo, useState } from 'react'
 import { resolveTemplateLibraryUiView } from '@/app/gnr8/_components/client-dashboard/template-library-contract'
 
@@ -107,7 +108,11 @@ function StatusBadge(props: { label: string; value: string }) {
   )
 }
 
-export default function TemplateLibraryPanel(props: { clientId: string; initialScopeError?: string | null }) {
+export default function TemplateLibraryPanel(props: {
+  clientId: string
+  initialScopeError?: string | null
+  templateEditHrefBuilder?: (templateId: string) => string
+}) {
   const [templates, setTemplates] = useState<TemplateListResponse['templates']>([])
   const [error, setError] = useState<string | null>(props.initialScopeError ?? null)
   const [uploadError, setUploadError] = useState<string | null>(null)
@@ -115,6 +120,7 @@ export default function TemplateLibraryPanel(props: { clientId: string; initialS
   const [file, setFile] = useState<File | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [isUploading, setIsUploading] = useState(false)
+  const [deletingTemplateId, setDeletingTemplateId] = useState<string | null>(null)
 
   async function loadTemplates() {
     setIsLoading(true)
@@ -195,6 +201,32 @@ export default function TemplateLibraryPanel(props: { clientId: string; initialS
       setUploadError(submitError instanceof Error ? submitError.message : 'Upload failed due to an unexpected error.')
     } finally {
       setIsUploading(false)
+    }
+  }
+
+  async function onDeleteTemplate(templateId: string, templateName: string) {
+    const confirmed = window.confirm(`Delete template "${templateName}"? This action cannot be undone.`)
+    if (!confirmed) return
+
+    setError(null)
+    setSuccessMessage(null)
+    setDeletingTemplateId(templateId)
+    try {
+      const response = await fetch(`/api/gnr8/clients/${encodeURIComponent(props.clientId)}/templates/${encodeURIComponent(templateId)}`, {
+        method: 'DELETE',
+      })
+      const payload = (await response.json().catch(() => null)) as { ok?: boolean; error?: string } | null
+      if (!payload || payload.ok !== true) {
+        setError(payload?.error ?? `Template delete failed (HTTP ${response.status})`)
+        return
+      }
+
+      setSuccessMessage(`Template "${templateName}" was deleted.`)
+      await loadTemplates()
+    } catch (deleteError) {
+      setError(deleteError instanceof Error ? deleteError.message : 'Template delete failed.')
+    } finally {
+      setDeletingTemplateId(null)
     }
   }
 
@@ -368,6 +400,47 @@ export default function TemplateLibraryPanel(props: { clientId: string; initialS
                 ) : (
                   <div style={{ fontSize: 12, color: '#64748b' }}>No tags</div>
                 )}
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                  {props.templateEditHrefBuilder ? (
+                    <Link
+                      href={props.templateEditHrefBuilder(template.id)}
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        padding: '6px 10px',
+                        borderRadius: 8,
+                        border: '1px solid #cbd5e1',
+                        background: '#fff',
+                        color: '#0f172a',
+                        textDecoration: 'none',
+                        fontSize: 12,
+                        fontWeight: 600,
+                      }}
+                    >
+                      Edit
+                    </Link>
+                  ) : null}
+                  <button
+                    type='button'
+                    disabled={deletingTemplateId === template.id}
+                    onClick={() => onDeleteTemplate(template.id, template.name)}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      padding: '6px 10px',
+                      borderRadius: 8,
+                      border: '1px solid #fecaca',
+                      background: '#fff5f5',
+                      color: '#991b1b',
+                      fontSize: 12,
+                      fontWeight: 600,
+                      cursor: deletingTemplateId === template.id ? 'wait' : 'pointer',
+                    }}
+                  >
+                    {deletingTemplateId === template.id ? 'Deleting...' : 'Delete'}
+                  </button>
+                </div>
               </div>
             </article>
           ))}

@@ -6,7 +6,12 @@ import test from 'node:test'
 
 import { mapTemplateToListCard, sortTemplateCardsDeterministically } from '@/gnr8/template-intake/core/template-list-contract'
 import { readTemplateManifest } from '@/gnr8/template-intake/core/template-manifest-reader'
-import { runTemplateZipIntake } from '@/gnr8/template-intake/core/template-intake-service'
+import {
+  deleteClientTemplateById,
+  getClientTemplateById,
+  runTemplateZipIntake,
+  updateClientTemplateMetadata,
+} from '@/gnr8/template-intake/core/template-intake-service'
 import { validateZipEntryPaths } from '@/gnr8/template-intake/core/template-zip-validator'
 import { buildTemplatePreviewSummary } from '@/gnr8/template-intake/preview/template-preview-summary'
 import type { TemplateDiagnosticsSummary, TemplateRecord } from '@/gnr8/template-intake/types/template-intake-types'
@@ -138,6 +143,29 @@ function createRepositoryStub() {
           return b.id.localeCompare(a.id)
         })
         return sorted.slice(0, input.limit ?? 120)
+      },
+      async getTemplateByIdForClient(input: { clientId: string; templateId: string }) {
+        const record = records.get(input.templateId)
+        if (!record) return null
+        return record.clientId === input.clientId ? record : null
+      },
+      async updateTemplateMetadataById(input: { clientId: string; templateId: string; name: string; tags: string[] }) {
+        const existing = records.get(input.templateId)
+        if (!existing || existing.clientId !== input.clientId) return null
+        const updated: TemplateRecord = {
+          ...existing,
+          name: input.name,
+          tags: input.tags,
+          updatedAt: '2026-04-15T10:02:00.000Z',
+        }
+        records.set(input.templateId, updated)
+        return updated
+      },
+      async deleteTemplateByIdForClient(input: { clientId: string; templateId: string }) {
+        const existing = records.get(input.templateId)
+        if (!existing || existing.clientId !== input.clientId) return null
+        records.delete(input.templateId)
+        return existing
       },
     },
     records,
@@ -522,4 +550,108 @@ test('Read/list contract returns safe defaults when preview/tags are absent', ()
   assert.equal(mapped.preview.isFallback, true)
   assert.equal(mapped.entryHtmlFileName, null)
   assert.equal(mapped.templateType, 'unknown')
+})
+
+test('Repository layer supports deterministic get template by id', async () => {
+  const { repository } = createRepositoryStub()
+
+  const created = await repository.createTemplate({
+    clientId: '00000000-0000-4000-8000-000000000201',
+    organizationId: '00000000-0000-4000-8000-000000000201',
+    agencyId: '00000000-0000-4000-8000-000000000301',
+    createdByUserId: '00000000-0000-4000-8000-000000000101',
+    name: 'Initial',
+    slug: 'initial',
+    sourceFilename: 'initial.zip',
+    entryHtmlPath: 'index.html',
+    entryHtmlFileName: 'index.html',
+    templateType: 'single_page',
+    tags: ['alpha'],
+    status: 'ready',
+    importHealth: 'clean',
+    templateManifestSummary: null,
+    diagnosticsSummary: null,
+  })
+
+  const found = await getClientTemplateById({
+    clientId: created.clientId,
+    templateId: created.id,
+    repository,
+  })
+
+  assert.ok(found)
+  assert.equal(found?.id, created.id)
+  assert.equal(found?.name, 'Initial')
+})
+
+test('Repository layer supports deterministic metadata update', async () => {
+  const { repository } = createRepositoryStub()
+
+  const created = await repository.createTemplate({
+    clientId: '00000000-0000-4000-8000-000000000201',
+    organizationId: '00000000-0000-4000-8000-000000000201',
+    agencyId: '00000000-0000-4000-8000-000000000301',
+    createdByUserId: '00000000-0000-4000-8000-000000000101',
+    name: 'Old Name',
+    slug: 'old-name',
+    sourceFilename: 'old.zip',
+    entryHtmlPath: 'index.html',
+    entryHtmlFileName: 'index.html',
+    templateType: 'single_page',
+    tags: ['alpha'],
+    status: 'ready',
+    importHealth: 'clean',
+    templateManifestSummary: null,
+    diagnosticsSummary: null,
+  })
+
+  const updated = await updateClientTemplateMetadata({
+    clientId: created.clientId,
+    templateId: created.id,
+    name: 'New Name',
+    tags: ['brand', 'marketing'],
+    repository,
+  })
+
+  assert.ok(updated)
+  assert.equal(updated?.name, 'New Name')
+  assert.deepEqual(updated?.tags, ['brand', 'marketing'])
+})
+
+test('Repository layer supports deterministic delete by id', async () => {
+  const { repository } = createRepositoryStub()
+
+  const created = await repository.createTemplate({
+    clientId: '00000000-0000-4000-8000-000000000201',
+    organizationId: '00000000-0000-4000-8000-000000000201',
+    agencyId: '00000000-0000-4000-8000-000000000301',
+    createdByUserId: '00000000-0000-4000-8000-000000000101',
+    name: 'To Delete',
+    slug: 'to-delete',
+    sourceFilename: 'delete.zip',
+    entryHtmlPath: 'index.html',
+    entryHtmlFileName: 'index.html',
+    templateType: 'single_page',
+    tags: ['obsolete'],
+    status: 'ready',
+    importHealth: 'clean',
+    templateManifestSummary: null,
+    diagnosticsSummary: null,
+  })
+
+  const deleted = await deleteClientTemplateById({
+    clientId: created.clientId,
+    templateId: created.id,
+    repository,
+  })
+
+  assert.ok(deleted)
+  assert.equal(deleted?.id, created.id)
+
+  const foundAfterDelete = await getClientTemplateById({
+    clientId: created.clientId,
+    templateId: created.id,
+    repository,
+  })
+  assert.equal(foundAfterDelete, null)
 })

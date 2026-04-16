@@ -11,7 +11,10 @@ import {
 import { buildTemplatePreviewSummary } from '@/gnr8/template-intake/preview/template-preview-summary'
 import {
   createTemplate,
+  deleteTemplateByIdForClient,
+  getTemplateByIdForClient,
   listTemplatesForClient,
+  updateTemplateMetadataById,
   updateTemplateProcessingResult,
 } from '@/gnr8/template-intake/storage/template-repository'
 import type {
@@ -66,12 +69,18 @@ export type TemplateRepository = {
   createTemplate: (input: CreateTemplateInput) => Promise<TemplateRecord>
   updateTemplateProcessingResult: typeof updateTemplateProcessingResult
   listTemplatesForClient: typeof listTemplatesForClient
+  getTemplateByIdForClient: typeof getTemplateByIdForClient
+  updateTemplateMetadataById: typeof updateTemplateMetadataById
+  deleteTemplateByIdForClient: typeof deleteTemplateByIdForClient
 }
 
 const DEFAULT_REPOSITORY: TemplateRepository = {
   createTemplate,
   updateTemplateProcessingResult,
   listTemplatesForClient,
+  getTemplateByIdForClient,
+  updateTemplateMetadataById,
+  deleteTemplateByIdForClient,
 }
 
 export async function runTemplateZipIntake(input: {
@@ -359,5 +368,45 @@ export async function listClientTemplates(input: {
   return repository.listTemplatesForClient({
     clientId: input.clientId,
     limit: input.limit,
+  })
+}
+
+export async function getClientTemplateById(input: {
+  clientId: string
+  templateId: string
+  repository?: TemplateRepository
+}): Promise<TemplateRecord | null> {
+  const repository = input.repository ?? DEFAULT_REPOSITORY
+  return repository.getTemplateByIdForClient({
+    clientId: input.clientId,
+    templateId: input.templateId,
+  })
+}
+
+export async function updateClientTemplateMetadata(input: {
+  clientId: string
+  templateId: string
+  name: string
+  tags: string[]
+  repository?: TemplateRepository
+}): Promise<TemplateRecord | null> {
+  const repository = input.repository ?? DEFAULT_REPOSITORY
+  return repository.updateTemplateMetadataById({
+    clientId: input.clientId,
+    templateId: input.templateId,
+    name: input.name,
+    tags: input.tags,
+  })
+}
+
+export async function deleteClientTemplateById(input: {
+  clientId: string
+  templateId: string
+  repository?: TemplateRepository
+}): Promise<TemplateRecord | null> {
+  const repository = input.repository ?? DEFAULT_REPOSITORY
+  return repository.deleteTemplateByIdForClient({
+    clientId: input.clientId,
+    templateId: input.templateId,
   })
 }
