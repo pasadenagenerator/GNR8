@@ -78,8 +78,17 @@ export type UrlImportDiagnosticCode =
   | "CAPTURE_WORKER_RESULT_ACCEPTED"
   | "CAPTURE_WORKER_RESULT_PARTIAL_ACCEPTED"
   | "CAPTURE_WORKER_RESULT_OVERRIDDEN_BY_FALLBACK"
+  | "WORKER_SUCCESS_RESPONSE_ACCEPTED"
+  | "WORKER_SUCCESS_PARTIAL_RENDER_ACCEPTED"
+  | "WORKER_SUCCESS_RESPONSE_REJECTED"
+  | "WORKER_RENDERED_PAYLOAD_HYDRATED"
   | "RENDERED_CAPTURE_ACCEPTED"
   | "RENDERED_CAPTURE_PERSISTED"
+  | "RENDERED_ARTIFACT_PERSISTED"
+  | "RENDERED_SUMMARY_HYDRATED_FROM_WORKER_SUCCESS"
+  | "RENDERED_PRIMARY_SELECTED_AFTER_SUCCESS"
+  | "RAW_FALLBACK_REJECTED_RENDERED_SUCCESS_EXISTS"
+  | "RENDERED_SUCCESS_DEGRADED_BUT_USABLE"
   | "CAPTURE_WORKER_FALLBACK_TO_RAW_HTML"
   | "INVALID_INPUT_URL"
   | "ENTRY_FETCH_FAILED"
@@ -1080,7 +1089,9 @@ function computeRenderedCaptureVisibilityStatus(input: {
   renderedCapture: RenderedCaptureResult;
   renderedDomQuality: RenderedDomQuality;
 }): RenderedCaptureVisibilityStatus {
-  if (input.renderedCapture.status === "failed" || input.renderedCapture.status === "unavailable") return "failed";
+  if ((input.renderedCapture.status === "failed" || input.renderedCapture.status === "unavailable") && !hasUsableRenderedEvidence(input.renderedCapture)) {
+    return "failed";
+  }
   if (input.renderedCapture.status === "partial") return "partial";
   const hasDoc = input.renderedCapture.documents.length > 0;
   const hasViewport = input.renderedCapture.screenshots.some((shot) => shot.captureType === "desktop_viewport");
@@ -1356,6 +1367,8 @@ function ensureRenderedCaptureArtifacts(input: {
   const fullpageShot = input.renderedCapture.screenshots.find((shot) => shot.captureType === "desktop_fullpage");
   const viewportCaptured = Boolean(viewportShot?.filePathAbs && fs.existsSync(viewportShot.filePathAbs) && fs.statSync(viewportShot.filePathAbs).size > 0);
   const fullPageCaptured = Boolean(fullpageShot?.filePathAbs && fs.existsSync(fullpageShot.filePathAbs) && fs.statSync(fullpageShot.filePathAbs).size > 0);
+  const screenshotCount = Number(viewportCaptured) + Number(fullPageCaptured);
+  const renderedEvidenceUsable = renderedHtml.trim().length > 0 || screenshotCount > 0 || input.renderedCapture.computedStyleSamples.length > 0;
 
   if (viewportCaptured && viewportShot?.filePathAbs) {
     fs.copyFileSync(viewportShot.filePathAbs, viewportScreenshotPathAbs);
@@ -1381,13 +1394,32 @@ function ensureRenderedCaptureArtifacts(input: {
 
   writeJsonStable(renderedMetadataPathAbs, {
     kind: "rendered_capture_persistence_v1",
-    status: input.renderedCapture.status === "available" ? "success" : input.renderedCapture.status,
+    status: input.renderedCapture.status === "available" && renderedEvidenceUsable ? "success" : renderedEvidenceUsable ? "degraded_usable" : input.renderedCapture.status,
     domSize: renderedHtml.trim().length,
-    screenshotCount: Number(viewportCaptured) + Number(fullPageCaptured),
+    screenshotCount,
     source: "worker",
   } as unknown as JsonValue);
 
-  if (input.renderedCapture.status === "available" && renderedHtml.trim().length > 0) {
+  if (renderedEvidenceUsable) {
+    input.diagnostics.push(
+      createDiagnostic({
+        severity: "info",
+        code: "RENDERED_ARTIFACT_PERSISTED",
+        message: "Rendered artifacts were persisted to canonical run-scoped evidence paths.",
+        targetUrl: null,
+        details: {
+          renderedDomPathAbs: renderedDomCanonicalPathAbs,
+          renderedScreenshotPathAbs: canonicalScreenshotSource ? renderedScreenshotCanonicalPathAbs : null,
+          renderedMetadataPathAbs,
+          domSize: renderedHtml.trim().length,
+          screenshotCount,
+          computedStyleSampleCount: input.renderedCapture.computedStyleSamples.length,
+        },
+      }),
+    );
+  }
+
+  if ((input.renderedCapture.status === "available" || input.renderedCapture.status === "partial") && renderedEvidenceUsable) {
     input.diagnostics.push(
       createDiagnostic({
         severity: "info",
@@ -1399,13 +1431,13 @@ function ensureRenderedCaptureArtifacts(input: {
           renderedScreenshotPathAbs: canonicalScreenshotSource ? renderedScreenshotCanonicalPathAbs : null,
           renderedMetadataPathAbs,
           domSize: renderedHtml.trim().length,
-          screenshotCount: Number(viewportCaptured) + Number(fullPageCaptured),
+          screenshotCount,
         },
       }),
     );
   }
 
-  if (!renderedHtml && input.renderedCapture.status !== "available") {
+  if (!renderedEvidenceUsable) {
     input.diagnostics.push(
       createDiagnostic({
         severity: "warning",
@@ -1878,6 +1910,32 @@ function hasWorkerNavigationSuccess(response: {
   });
 }
 
+function hasRenderedCaptureSuccessSignal(input: {
+  status: RenderedCaptureResult["status"];
+  diagnostics: RenderedCaptureResult["diagnostics"];
+}): boolean {
+  if (input.status === "available" || input.status === "partial") return true;
+  const successCodes = new Set([
+    "NAVIGATION_SUCCEEDED",
+    "CAPTURE_JOB_COMPLETED",
+    "CAPTURE_JOB_COMPLETED_PARTIAL",
+    "CAPTURE_PHASE_STABILIZATION_COMPLETED",
+    "CAPTURE_PHASE_DOM_SERIALIZATION_COMPLETED",
+    "CAPTURE_PHASE_SCREENSHOT_VIEWPORT_COMPLETED",
+    "CAPTURE_PHASE_STYLE_SAMPLING_COMPLETED",
+    "CAPTURE_PHASE_SCREENSHOT_FULLPAGE_COMPLETED",
+    "CAPTURE_PHASE_ASSET_MANIFEST_FINALIZATION_COMPLETED",
+    "CAPTURE_PHASE_RESPONSE_ASSEMBLY_COMPLETED",
+    "WORKER_SUCCESS_RESPONSE_ACCEPTED",
+    "WORKER_SUCCESS_PARTIAL_RENDER_ACCEPTED",
+  ]);
+  return (Array.isArray(input.diagnostics) ? input.diagnostics : []).some((entry) => successCodes.has(String(entry.code ?? "").trim()));
+}
+
+function hasUsableRenderedEvidence(renderedCapture: RenderedCaptureResult): boolean {
+  return renderedCapture.documents.length > 0 || renderedCapture.screenshots.length > 0 || renderedCapture.computedStyleSamples.length > 0;
+}
+
 function isStylesheetLinkElement(node: unknown): boolean {
   if (!isElement(node) || node.tagName.toLowerCase() !== "link") return false;
   const rel = getAttr(node, "rel");
@@ -1979,16 +2037,48 @@ function resolveSourceSelection(input: {
     }
   })();
   const renderedDomQuality = evaluateRenderedDomQuality(renderedHtml);
-  const workerStatusSuccessful = input.renderedCapture.status === "available" || input.renderedCapture.status === "partial";
+  const workerStatusSuccessful = hasRenderedCaptureSuccessSignal({
+    status: input.renderedCapture.status,
+    diagnostics: input.renderedCapture.diagnostics,
+  });
+  const workerSuccessWithEvidence = workerStatusSuccessful && hasUsableRenderedEvidence(input.renderedCapture);
   const hasRenderedDomArtifact = renderedDomPathAbs.length > 0 && renderedHtml.trim().length > 0;
   const hasScreenshotEvidence = input.renderedCapture.screenshots.length > 0;
   const hasStyleEvidence = input.renderedCapture.computedStyleSamples.length > 0;
   const renderedDomUsableForSource =
     hasRenderedDomArtifact && (renderedDomQuality.quality !== "unusable" || hasScreenshotEvidence || hasStyleEvidence);
 
-  if (workerStatusSuccessful && renderedDomUsableForSource) {
+  if (workerSuccessWithEvidence && renderedDomUsableForSource) {
     const highFidelity = renderedDomQuality.quality === "strong" && input.renderedCapture.status === "available";
+    input.diagnostics.push(
+      createDiagnostic({
+        severity: "info",
+        code: "RENDERED_PRIMARY_SELECTED_AFTER_SUCCESS",
+        message: "Rendered capture selected as primary source after worker success hydration.",
+        targetUrl: null,
+        details: {
+          renderedCaptureStatus: input.renderedCapture.status,
+          renderedDocumentCount: input.renderedCapture.documents.length,
+          screenshotCount: input.renderedCapture.screenshots.length,
+          computedStyleSampleCount: input.renderedCapture.computedStyleSamples.length,
+        },
+      }),
+    );
     if (!highFidelity) {
+      input.diagnostics.push(
+        createDiagnostic({
+          severity: "warning",
+          code: "RENDERED_SUCCESS_DEGRADED_BUT_USABLE",
+          message: "Rendered capture success remained usable but required degraded fidelity mode.",
+          targetUrl: null,
+          details: {
+            renderedCaptureStatus: input.renderedCapture.status,
+            renderedDomQuality: renderedDomQuality.quality,
+            screenshotCount: input.renderedCapture.screenshots.length,
+            computedStyleSampleCount: input.renderedCapture.computedStyleSamples.length,
+          },
+        }),
+      );
       input.diagnostics.push(
         createDiagnostic({
           severity: "warning",
@@ -2029,6 +2119,41 @@ function resolveSourceSelection(input: {
       rawHtmlQuality,
       degraded: !highFidelity,
     };
+  }
+
+  if (workerSuccessWithEvidence) {
+    input.diagnostics.push(
+      createDiagnostic({
+        severity: "warning",
+        code: "RAW_FALLBACK_REJECTED_RENDERED_SUCCESS_EXISTS",
+        message: "Raw fallback remained selected even though worker success contained rendered evidence.",
+        targetUrl: null,
+        details: {
+          renderedCaptureStatus: input.renderedCapture.status,
+          renderedDocumentCount: input.renderedCapture.documents.length,
+          screenshotCount: input.renderedCapture.screenshots.length,
+          computedStyleSampleCount: input.renderedCapture.computedStyleSamples.length,
+          renderedDomUsableForSource,
+        },
+      }),
+    );
+  }
+  if (workerStatusSuccessful && !hasUsableRenderedEvidence(input.renderedCapture)) {
+    input.diagnostics.push(
+      createDiagnostic({
+        severity: "warning",
+        code: "WORKER_SUCCESS_RESPONSE_REJECTED",
+        message: "Worker success signal rejected because no usable rendered evidence could be hydrated.",
+        targetUrl: null,
+        details: {
+          renderedCaptureStatus: input.renderedCapture.status,
+          renderedDocumentCount: input.renderedCapture.documents.length,
+          screenshotCount: input.renderedCapture.screenshots.length,
+          computedStyleSampleCount: input.renderedCapture.computedStyleSamples.length,
+          reason: "no_usable_rendered_evidence",
+        },
+      }),
+    );
   }
 
   input.diagnostics.push(
@@ -2649,33 +2774,98 @@ export async function importPublicSinglePageUrlToSnapshot(input: {
         sourceUrl: entryFetchUrlUsed ?? normalizedHref,
       });
       const workerStatus = String(workerResponse.status ?? "").trim().toLowerCase();
-      const workerErrorCodeRaw = String(workerResponse.failure?.failureCode ?? "").trim();
-      const workerErrorCode =
-        workerStatus === "available" && renderedCapture.documents.length > 0
-          ? ""
-          : workerErrorCodeRaw;
-      const workerSuccessAccepted =
-        workerStatus === "available" &&
-        !workerErrorCode &&
-        (hasWorkerNavigationSuccess(workerResponse) || hasWorkerPhaseCompletion(workerResponse));
-      if (workerSuccessAccepted) {
-        renderedCapture = {
-          ...renderedCapture,
-          status: "available",
-        };
+      const hasSuccessSignal =
+        workerStatus === "available" || workerStatus === "partial" || hasWorkerNavigationSuccess(workerResponse) || hasWorkerPhaseCompletion(workerResponse);
+      const hasUsableEvidence = hasUsableRenderedEvidence(renderedCapture);
+      const acceptedHydratedStatus: RenderedCaptureResult["status"] | null =
+        !hasSuccessSignal || !hasUsableEvidence
+          ? null
+          : workerStatus === "available" && renderedCapture.documents.length > 0
+            ? "available"
+            : "partial";
+
+      if (hasSuccessSignal && hasUsableEvidence) {
         diagnostics.push(
           createDiagnostic({
             severity: "info",
+            code: "WORKER_SUCCESS_RESPONSE_ACCEPTED",
+            message: "Worker success response accepted after rendered payload evidence checks.",
+            targetUrl: null,
+            details: {
+              workerStatus,
+              renderedDocumentCount: renderedCapture.documents.length,
+              screenshotCount: renderedCapture.screenshots.length,
+              computedStyleSampleCount: renderedCapture.computedStyleSamples.length,
+              navigationSucceeded: hasWorkerNavigationSuccess(workerResponse),
+              phasesCompleted: hasWorkerPhaseCompletion(workerResponse),
+            },
+          }),
+        );
+        diagnostics.push(
+          createDiagnostic({
+            severity: "info",
+            code: "WORKER_RENDERED_PAYLOAD_HYDRATED",
+            message: "Worker rendered payload hydrated into import snapshot evidence.",
+            targetUrl: null,
+            details: {
+              workerStatus,
+              renderedCaptureStatus: acceptedHydratedStatus,
+              renderedDocumentCount: renderedCapture.documents.length,
+              screenshotCount: renderedCapture.screenshots.length,
+              computedStyleSampleCount: renderedCapture.computedStyleSamples.length,
+            },
+          }),
+        );
+        if (acceptedHydratedStatus === "partial") {
+          diagnostics.push(
+            createDiagnostic({
+              severity: "warning",
+              code: "WORKER_SUCCESS_PARTIAL_RENDER_ACCEPTED",
+              message: "Worker success payload hydrated as degraded usable rendered evidence.",
+              targetUrl: null,
+              details: {
+                workerStatus,
+                renderedCaptureStatus: acceptedHydratedStatus,
+                renderedDocumentCount: renderedCapture.documents.length,
+                screenshotCount: renderedCapture.screenshots.length,
+                computedStyleSampleCount: renderedCapture.computedStyleSamples.length,
+              },
+            }),
+          );
+        }
+        renderedCapture = {
+          ...renderedCapture,
+          status: acceptedHydratedStatus ?? renderedCapture.status,
+        };
+        diagnostics.push(
+          createDiagnostic({
+            severity: acceptedHydratedStatus === "partial" ? "warning" : "info",
             code: "RENDERED_CAPTURE_ACCEPTED",
             message: "Rendered capture worker response accepted as success from worker execution truth.",
             targetUrl: null,
             details: {
               workerStatus,
-              workerErrorCode: workerErrorCodeRaw || null,
               navigationSucceeded: hasWorkerNavigationSuccess(workerResponse),
               phasesCompleted: hasWorkerPhaseCompletion(workerResponse),
+              renderedCaptureStatus: acceptedHydratedStatus,
               renderedDocumentCount: renderedCapture.documents.length,
               screenshotCount: renderedCapture.screenshots.length,
+            },
+          }),
+        );
+      } else if (hasSuccessSignal) {
+        diagnostics.push(
+          createDiagnostic({
+            severity: "warning",
+            code: "WORKER_SUCCESS_RESPONSE_REJECTED",
+            message: "Worker response signaled success but rendered evidence could not be hydrated.",
+            targetUrl: null,
+            details: {
+              workerStatus,
+              renderedDocumentCount: renderedCapture.documents.length,
+              screenshotCount: renderedCapture.screenshots.length,
+              computedStyleSampleCount: renderedCapture.computedStyleSamples.length,
+              reason: "missing_usable_rendered_evidence",
             },
           }),
         );
@@ -2707,6 +2897,22 @@ export async function importPublicSinglePageUrlToSnapshot(input: {
     renderedCapture,
   });
   if (renderedCaptureViaWorker && sourceSelection.sourceMode === "rendered_dom") {
+    diagnostics.push(
+      createDiagnostic({
+        severity: renderedCapture.status === "partial" ? "warning" : "info",
+        code: "RENDERED_SUMMARY_HYDRATED_FROM_WORKER_SUCCESS",
+        message: "Rendered summary hydrated from accepted worker success payload.",
+        targetUrl: null,
+        details: {
+          sourceMode: sourceSelection.sourceMode,
+          fidelityStatus: sourceSelection.fidelityStatus,
+          renderedCaptureStatus: renderedCapture.status,
+          renderedDocumentCount: renderedCapture.documents.length,
+          screenshotCount: renderedCapture.screenshots.length,
+          computedStyleSampleCount: renderedCapture.computedStyleSamples.length,
+        },
+      }),
+    );
     diagnostics.push(
       createDiagnostic({
         severity: renderedCapture.status === "partial" ? "warning" : "info",

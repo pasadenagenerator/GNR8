@@ -120,6 +120,77 @@ test("rendered capture availability blocks fallback mode selection", () => {
   assert.ok(selected.diagnostics.includes(PREVIEW_RUNTIME_DIAGNOSTIC.PREVIEW_MODE_FROM_RENDERED_CAPTURE));
 });
 
+test("preparePreviewRuntime treats partial rendered evidence as rendered-capture available", () => {
+  const prepared = preparePreviewRuntime({
+    siteVersion: {
+      id: "sv-partial-rendered",
+      siteId: "site-partial-rendered",
+      versionNo: 1,
+      state: "DRAFT",
+      source: "migration",
+      actor: "test",
+      createdAt: "2026-04-16T00:00:00.000Z",
+      rendererCompatibilityVersion: "gnr8-renderer-v1",
+      artifactId: null,
+      importProvenanceSummary: {
+        kind: "runtime_import_provenance_summary_v1",
+        sourceMode: "rendered_dom",
+        importFidelityStatus: "degraded_import",
+        renderedCaptureStatus: "partial",
+        renderedDomQuality: "weak",
+        screenshotCount: 1,
+        computedStyleSampleCount: 1,
+        renderedCapture: {
+          used: true,
+          status: "partial",
+          quality: "weak",
+          domLength: 140,
+          nodeCount: 5,
+          styleSampleCount: 1,
+          styleCoverage: 0.1,
+          screenshots: {
+            viewport: true,
+            fullPage: false,
+          },
+          execution: {
+            runtimeKind: "nodejs",
+            environmentSupported: true,
+            browserPackageAvailable: true,
+            browserBinaryAvailable: true,
+            environmentStatus: "supported",
+            failureCategory: "none",
+            failureCode: null,
+            browserLaunch: "succeeded",
+            navigation: "succeeded",
+            dom: "captured",
+            screenshot: "captured",
+            styleSampling: "captured",
+          },
+        },
+        importDiagnosticCodes: [],
+        captureEvidence: {
+          selectedSourceHtmlPath: "/tmp/snapshot/rendered/dom.html",
+          responseHtmlPath: "/tmp/snapshot/response-html.raw.html",
+          entryHtmlPath: "/tmp/snapshot/index.html",
+          renderedCaptureManifestPath: "/tmp/snapshot/rendered-capture.json",
+          acquisitionEvidencePath: "/tmp/snapshot/acquisition-evidence.json",
+          renderedDomPath: "/tmp/snapshot/rendered/dom.html",
+          computedStylesPath: "/tmp/snapshot/rendered/computed-styles.json",
+          renderedViewportScreenshotPath: "/tmp/snapshot/rendered/screenshots/viewport.png",
+          renderedFullpageScreenshotPath: null,
+          screenshotPaths: ["/tmp/snapshot/rendered/screenshots/viewport.png"],
+        },
+        styleSignals: null,
+      },
+      pages: [],
+    },
+    routePath: "/",
+  } as any);
+
+  assert.equal(prepared.mode, "react_preview_degraded");
+  assert.ok(prepared.summary.previewDiagnostics.includes(PREVIEW_RUNTIME_DIAGNOSTIC.PREVIEW_MODE_FROM_RENDERED_CAPTURE));
+});
+
 test("renderer generic fallback counts as degraded React preview, not total fallback", () => {
   const selected = selectPreviewRuntimeMode({
     finalSiteModelAvailable: true,

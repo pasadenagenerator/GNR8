@@ -501,3 +501,73 @@ test("artifact-builder activates content recovery mode with deterministic diagno
   assert.ok(manifest.recoveryDiagnostics?.includes("CONTENT_RECOVERY_MODE_ACTIVE"));
   assert.equal(manifest.provenanceSummaryFlags?.contentRecoveryModeActive, true);
 });
+
+test("artifact-builder marks rendered capture as used for partial usable rendered summaries", () => {
+  const partialRenderedVersion = {
+    ...siteVersion,
+    importProvenanceSummary: {
+      ...(siteVersion.importProvenanceSummary ?? {}),
+      kind: "runtime_import_provenance_summary_v1",
+      sourceMode: "rendered_dom",
+      importFidelityStatus: "degraded_import",
+      renderedCaptureStatus: "partial",
+      renderedDomQuality: "weak",
+      screenshotCount: 1,
+      computedStyleSampleCount: 1,
+      renderedCapture: {
+        used: true,
+        status: "partial",
+        quality: "weak",
+        domLength: 160,
+        nodeCount: 6,
+        styleSampleCount: 1,
+        styleCoverage: 0.1,
+        screenshots: {
+          viewport: true,
+          fullPage: false,
+        },
+        execution: {
+          runtimeKind: "nodejs",
+          environmentSupported: true,
+          browserPackageAvailable: true,
+          browserBinaryAvailable: true,
+          environmentStatus: "supported",
+          failureCategory: "none",
+          failureCode: null,
+          browserLaunch: "succeeded",
+          navigation: "succeeded",
+          dom: "captured",
+          screenshot: "captured",
+          styleSampling: "captured",
+        },
+      },
+      importDiagnosticCodes: [],
+      captureEvidence: {
+        selectedSourceHtmlPath: "/tmp/snapshot/rendered/dom.html",
+        responseHtmlPath: "/tmp/snapshot/response-html.raw.html",
+        entryHtmlPath: "/tmp/snapshot/index.html",
+        renderedCaptureManifestPath: "/tmp/snapshot/rendered-capture.json",
+        acquisitionEvidencePath: "/tmp/snapshot/acquisition-evidence.json",
+        renderedDomPath: "/tmp/snapshot/rendered/dom.html",
+        computedStylesPath: "/tmp/snapshot/rendered/computed-styles.json",
+        renderedViewportScreenshotPath: "/tmp/snapshot/rendered/screenshots/viewport.png",
+        renderedFullpageScreenshotPath: null,
+        screenshotPaths: ["/tmp/snapshot/rendered/screenshots/viewport.png"],
+      },
+      styleSignals: null,
+    },
+  };
+
+  const out = buildDeterministicArtifactBundle({ siteVersion: partialRenderedVersion as any, renderMode: "PREVIEW" });
+  const manifest = out.manifest as {
+    previewRuntimeSummary?: {
+      renderedCaptureUsed?: boolean;
+      domSize?: number;
+      screenshotCount?: number;
+    };
+  };
+
+  assert.equal(manifest.previewRuntimeSummary?.renderedCaptureUsed, true);
+  assert.equal(Number(manifest.previewRuntimeSummary?.domSize ?? 0) > 0, true);
+  assert.equal(Number(manifest.previewRuntimeSummary?.screenshotCount ?? 0) > 0, true);
+});

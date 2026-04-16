@@ -477,7 +477,10 @@ function hasRenderedCaptureAvailable(input: PreviewRuntimePreparationInput): boo
   if (typeof input.renderedCaptureAvailable === "boolean") return input.renderedCaptureAvailable;
   const summary = input.siteVersion.importProvenanceSummary ?? null;
   if (!summary) return false;
-  return summary.renderedCapture.status === "available" && summary.renderedCapture.nodeCount > 0;
+  const status = String(summary.renderedCapture.status ?? "").trim().toLowerCase();
+  const domSize = Math.max(0, Number(summary.renderedCapture.nodeCount ?? summary.renderedCapture.domLength ?? 0));
+  const screenshotCount = Math.max(0, Number(summary.screenshotCount ?? 0));
+  return (status === "available" || status === "partial") && (domSize > 0 || screenshotCount > 0);
 }
 
 export function preparePreviewRuntime(input: PreviewRuntimePreparationInput): PreviewRuntimePreparationResult {

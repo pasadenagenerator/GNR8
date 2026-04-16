@@ -831,9 +831,14 @@ export function buildDeterministicArtifactBundle(input: {
     routePath: "/",
   });
   const renderedCaptureSummary = input.siteVersion.importProvenanceSummary?.renderedCapture ?? null;
-  const renderedCaptureUsed = Boolean(renderedCaptureSummary?.used && renderedCaptureSummary.status === "available");
   const domSize = Math.max(0, Math.floor(Number(renderedCaptureSummary?.nodeCount ?? 0)));
   const screenshotCount = Math.max(0, Math.floor(Number(input.siteVersion.importProvenanceSummary?.screenshotCount ?? 0)));
+  const renderedCaptureStatus = String(renderedCaptureSummary?.status ?? "").trim().toLowerCase();
+  const renderedCaptureUsed = Boolean(
+    renderedCaptureSummary?.used &&
+      (renderedCaptureStatus === "available" || renderedCaptureStatus === "partial") &&
+      (domSize > 0 || screenshotCount > 0),
+  );
 
   const manifest = {
     siteId: input.siteVersion.siteId,

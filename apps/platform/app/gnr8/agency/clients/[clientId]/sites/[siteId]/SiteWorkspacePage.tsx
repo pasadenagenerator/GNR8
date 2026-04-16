@@ -93,7 +93,7 @@ function renderOverviewContent(props: {
           </div>
           <div>Style source: {readModel.pipeline.styleSignalSourceMode}</div>
           <div>Style coverage: {Math.round(readModel.pipeline.styleSignalCoverage * 100)}%</div>
-          <div>Fallback used: {readModel.pipeline.styleSignalFallbackUsed ? 'yes' : 'no'}</div>
+          <div>Fallback used: {readModel.pipeline.sourceMode === 'raw_html_fallback' ? 'yes' : 'no'}</div>
           {readModel.pipeline.styleSignals ? (
             <>
               <div>

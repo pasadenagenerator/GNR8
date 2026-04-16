@@ -113,14 +113,14 @@ function persistRenderedCaptureRunEvidence(snapshot: UrlSinglePageImportSnapshot
   const domSize = renderedDomHtml.trim().length
   const screenshotCount = Math.max(snapshot.renderedCapture.screenshots.length, primaryScreenshotSource ? 1 : 0)
   const renderedCaptureStatus = resolveRenderedCaptureStatus(snapshot)
-  const persisted = renderedCaptureStatus === 'available' && domSize > 0
+  const persisted = domSize > 0 || screenshotCount > 0 || snapshot.renderedCapture.computedStyleSamples.length > 0
 
   fs.writeFileSync(
     metadataPath,
     `${JSON.stringify(
       {
         kind: 'rendered_capture_metadata_v1',
-        status: persisted ? 'success' : renderedCaptureStatus,
+        status: renderedCaptureStatus === 'available' && persisted ? 'success' : persisted ? 'degraded_usable' : renderedCaptureStatus,
         domSize,
         screenshotCount,
         source: 'worker',
@@ -272,10 +272,12 @@ function buildRenderedCaptureExecutionFromSnapshot(snapshot: UrlSinglePageImport
 }
 
 function resolveRenderedCaptureStatus(snapshot: UrlSinglePageImportSnapshot): 'available' | 'partial' | 'failed' {
-  if (snapshot.renderedCapture.status === 'failed' || snapshot.renderedCapture.status === 'unavailable') return 'failed'
   const documents = Array.isArray(snapshot.renderedCapture.documents) ? snapshot.renderedCapture.documents : []
   const screenshots = Array.isArray(snapshot.renderedCapture.screenshots) ? snapshot.renderedCapture.screenshots : []
   const computedStyleSamples = Array.isArray(snapshot.renderedCapture.computedStyleSamples) ? snapshot.renderedCapture.computedStyleSamples : []
+  if (snapshot.renderedCapture.status === 'failed' || snapshot.renderedCapture.status === 'unavailable') {
+    return documents.length > 0 || screenshots.length > 0 || computedStyleSamples.length > 0 ? 'partial' : 'failed'
+  }
   const hasDoc = documents.length > 0
   const hasViewport = screenshots.some((shot) => shot.captureType === 'desktop_viewport')
   const hasFull = screenshots.some((shot) => shot.captureType === 'desktop_fullpage')
@@ -730,6 +732,7 @@ async function buildImportProvenanceSummary(input: {
     ...(snapshot.sourceSelection.sourceMode === 'rendered_dom' ? ['RENDERED_CAPTURE_USED'] : ['RENDERED_CAPTURE_FAILED_FALLBACK_USED']),
     'IMPORT_FIDELITY_SCORE_COMPUTED',
     'RENDERED_CAPTURE_SUMMARY_PERSISTED',
+    ...(snapshot.sourceSelection.sourceMode === 'rendered_dom' && workerResultSuccessful ? ['RENDERED_SUMMARY_HYDRATED_FROM_WORKER_SUCCESS'] : []),
     'LATEST_EXECUTION_EVIDENCE_SELECTED',
     ...(snapshot.sourceSelection.sourceMode === 'rendered_dom' && workerResultSuccessful ? ['CAPTURE_WORKER_RESULT_PERSISTED'] : []),
     ...(snapshot.sourceSelection.sourceMode === 'rendered_dom' && importDiagnostics.includes('STALE_EVIDENCE_SUPERSEDED')
@@ -796,8 +799,8 @@ async function buildImportProvenanceSummary(input: {
       used: snapshot.sourceSelection.sourceMode === 'rendered_dom',
       status: renderedCaptureStatus,
       quality: snapshot.sourceSelection.renderedDomQuality.quality,
-      domLength: snapshot.sourceSelection.renderedDomQuality.bodyTextLength,
-      nodeCount: persistedCaptureEvidence.domSize > 0 ? snapshot.sourceSelection.renderedDomQuality.meaningfulNodeCount : 0,
+      domLength: persistedCaptureEvidence.domSize,
+      nodeCount: persistedCaptureEvidence.domSize > 0 ? Math.max(1, snapshot.sourceSelection.renderedDomQuality.meaningfulNodeCount) : 0,
       styleSampleCount,
       styleCoverage,
       screenshots: {

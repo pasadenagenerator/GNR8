@@ -72,8 +72,9 @@ function resolveRenderedCapturePreviewTruth(importSummary: unknown): RenderedCap
   const status = String(summary?.renderedCapture?.status ?? summary?.renderedCaptureStatus ?? '').trim().toLowerCase()
   const domSize = Math.max(0, Math.floor(Number(summary?.renderedCapture?.nodeCount ?? summary?.renderedCapture?.domLength ?? 0)))
   const screenshotCount = Math.max(0, Math.floor(Number(summary?.screenshotCount ?? 0)))
+  const renderedEvidenceUsable = domSize > 0 || screenshotCount > 0
   return {
-    renderedCaptureUsed: status === 'available' && domSize > 0,
+    renderedCaptureUsed: (status === 'available' || status === 'partial') && renderedEvidenceUsable,
     domSize,
     screenshotCount,
   }

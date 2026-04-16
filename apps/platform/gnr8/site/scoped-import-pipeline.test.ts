@@ -437,6 +437,7 @@ test('scoped pipeline import uses pipeline path, maps consolidated sections, and
   assert.equal(createInput.importProvenanceSummary.styleSignals.kind, 'style_signal_model_v2')
   assert.ok(createInput.importProvenanceSummary.importDiagnosticCodes.includes('CAPTURE_WORKER_RESULT_PERSISTED'))
   assert.ok(createInput.importProvenanceSummary.importDiagnosticCodes.includes('RENDERED_CAPTURE_SUMMARY_PERSISTED'))
+  assert.ok(createInput.importProvenanceSummary.importDiagnosticCodes.includes('RENDERED_SUMMARY_HYDRATED_FROM_WORKER_SUCCESS'))
   assert.ok(createInput.importProvenanceSummary.importDiagnosticCodes.includes('RENDERED_CAPTURE_PERSISTED'))
   assert.ok(createInput.importProvenanceSummary.importDiagnosticCodes.includes('RENDERED_CAPTURE_USED'))
   assert.ok(createInput.importProvenanceSummary.importDiagnosticCodes.includes('IMPORT_FIDELITY_SCORE_COMPUTED'))

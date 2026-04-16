@@ -322,6 +322,11 @@ test("url import accepts worker success truth even when timeout diagnostic is pr
   assert.equal(snapshot.sourceSelection.sourceMode, "rendered_dom");
   assert.equal(snapshot.sourceSelection.fidelityStatus, "high_fidelity_import");
   assert.equal(snapshot.importDiagnostics.issues.some((issue) => issue.code === "CAPTURE_WORKER_RESULT_ACCEPTED"), true);
+  assert.equal(snapshot.importDiagnostics.issues.some((issue) => issue.code === "WORKER_SUCCESS_RESPONSE_ACCEPTED"), true);
+  assert.equal(snapshot.importDiagnostics.issues.some((issue) => issue.code === "WORKER_RENDERED_PAYLOAD_HYDRATED"), true);
+  assert.equal(snapshot.importDiagnostics.issues.some((issue) => issue.code === "RENDERED_PRIMARY_SELECTED_AFTER_SUCCESS"), true);
+  assert.equal(snapshot.importDiagnostics.issues.some((issue) => issue.code === "RENDERED_SUMMARY_HYDRATED_FROM_WORKER_SUCCESS"), true);
+  assert.equal(snapshot.importDiagnostics.issues.some((issue) => issue.code === "RENDERED_ARTIFACT_PERSISTED"), true);
   assert.equal(snapshot.importDiagnostics.issues.some((issue) => issue.code === "RENDERED_CAPTURE_ACCEPTED"), true);
   assert.equal(snapshot.importDiagnostics.issues.some((issue) => issue.code === "CAPTURE_WORKER_FALLBACK_TO_RAW_HTML"), false);
   assert.equal(snapshot.renderedCaptureReliability.job?.status, "completed");
@@ -334,6 +339,176 @@ test("url import accepts worker success truth even when timeout diagnostic is pr
   const renderedMetadata = JSON.parse(fs.readFileSync(renderedMetadataCanonicalPath, "utf8")) as { status?: string; domSize?: number };
   assert.equal(renderedMetadata.status, "success");
   assert.equal(Number(renderedMetadata.domSize) > 0, true);
+});
+
+test("url import accepts worker partial success as degraded usable rendered truth", async () => {
+  const tmpRoot = await fs.promises.mkdtemp(path.join(os.tmpdir(), "gnr8-url-import-partial-success-"));
+  const entryHtml = "<!doctype html><html><body><main><h1>Entry</h1><p>backup content</p></main></body></html>";
+  const renderedHtml = "<!doctype html><html><body><main><h1>Rendered</h1><p>usable partial evidence</p></main></body></html>";
+  const viewportPng = Buffer.from([137, 80, 78, 71, 9, 8, 7, 6]);
+
+  const workerClient: RenderedCaptureWorkerClient = {
+    async execute(request) {
+      return {
+        kind: "rendered_capture_worker_response_v1",
+        contractVersion: "1.0.0",
+        requestId: request.requestId,
+        status: "partial",
+        environment: {
+          runtimeKind: "nodejs",
+          environmentSupported: true,
+          browserPackageAvailable: true,
+          browserBinaryAvailable: true,
+          supportDecision: "supported",
+        },
+        artifacts: [
+          {
+            artifactType: "rendered_dom_html",
+            captureType: null,
+            storage: "inline",
+            uri: `data:text/html;base64,${Buffer.from(renderedHtml, "utf8").toString("base64")}`,
+            mediaType: "text/html",
+            sha256: "rendered-dom-partial",
+            byteLength: Buffer.byteLength(renderedHtml),
+          },
+          {
+            artifactType: "screenshot_png",
+            captureType: "desktop_viewport",
+            storage: "inline",
+            uri: `data:image/png;base64,${viewportPng.toString("base64")}`,
+            mediaType: "image/png",
+            sha256: "viewport-shot-partial",
+            byteLength: viewportPng.byteLength,
+          },
+        ],
+        computedStyleSamples: [],
+        diagnostics: [{ code: "CAPTURE_PHASE_RESPONSE_ASSEMBLY_COMPLETED", severity: "info", message: "assembly completed" }],
+        qualitySummary: {
+          renderedDomQuality: "weak",
+          domLength: renderedHtml.length,
+          meaningfulNodeCount: 8,
+          screenshotCount: 1,
+          computedStyleSampleCount: 0,
+        },
+        failure: {
+          failureClass: "timed_out",
+          failureCode: "RENDERED_CAPTURE_TIMEOUT",
+          retryable: false,
+          message: "partial timeout",
+        },
+        timings: {
+          queueLatencyMs: null,
+          executionMs: 18,
+          totalMs: 18,
+        },
+      };
+    },
+  };
+
+  const snapshot = await importPublicSinglePageUrlToSnapshot({
+    sourceUrl: "https://example.com/",
+    snapshotRootDirAbs: tmpRoot,
+    requestId: "req-url-import-partial-success",
+    fetchImpl: async () => makeHtmlResponse(entryHtml),
+    renderedCaptureWorkerClient: workerClient,
+  });
+
+  assert.equal(snapshot.sourceMode, "rendered_dom");
+  assert.equal(snapshot.sourceSelection.fidelityStatus, "degraded_import");
+  assert.equal(snapshot.importDiagnostics.issues.some((issue) => issue.code === "WORKER_SUCCESS_PARTIAL_RENDER_ACCEPTED"), true);
+  assert.equal(snapshot.importDiagnostics.issues.some((issue) => issue.code === "RENDERED_SUCCESS_DEGRADED_BUT_USABLE"), true);
+  assert.equal(snapshot.importDiagnostics.issues.some((issue) => issue.code === "RAW_HTML_FALLBACK_USED"), false);
+});
+
+test("url import sanitizes contradictory failed worker status when success evidence is usable", async () => {
+  const tmpRoot = await fs.promises.mkdtemp(path.join(os.tmpdir(), "gnr8-url-import-contradictory-success-"));
+  const entryHtml = "<!doctype html><html><body><main><h1>Entry</h1><p>backup content</p></main></body></html>";
+  const renderedHtml = "<!doctype html><html><body><main><h1>Recovered</h1><p>contradictory payload still usable</p></main></body></html>";
+
+  const workerClient: RenderedCaptureWorkerClient = {
+    async execute(request) {
+      return {
+        kind: "rendered_capture_worker_response_v1",
+        contractVersion: "1.0.0",
+        requestId: request.requestId,
+        status: "failed",
+        environment: {
+          runtimeKind: "nodejs",
+          environmentSupported: true,
+          browserPackageAvailable: true,
+          browserBinaryAvailable: true,
+          supportDecision: "supported",
+        },
+        artifacts: [
+          {
+            artifactType: "rendered_dom_html",
+            captureType: null,
+            storage: "inline",
+            uri: `data:text/html;base64,${Buffer.from(renderedHtml, "utf8").toString("base64")}`,
+            mediaType: "text/html",
+            sha256: "rendered-dom-contradictory",
+            byteLength: Buffer.byteLength(renderedHtml),
+          },
+        ],
+        computedStyleSamples: [
+          {
+            kind: "computed_style_sample_v1",
+            sampleId: "s1",
+            target: "body_text",
+            selector: "body",
+            tagName: "body",
+            className: null,
+            styles: {
+              fontFamily: "Arial, sans-serif",
+              fontSize: "16px",
+              fontWeight: "400",
+              lineHeight: "24px",
+              color: "#111111",
+              backgroundColor: "#ffffff",
+              borderRadius: "0px",
+              paddingTop: "0px",
+              paddingRight: "0px",
+              paddingBottom: "0px",
+              paddingLeft: "0px",
+            },
+          },
+        ],
+        diagnostics: [{ code: "NAVIGATION_SUCCEEDED", severity: "info", message: "navigation succeeded" }],
+        qualitySummary: {
+          renderedDomQuality: "strong",
+          domLength: renderedHtml.length,
+          meaningfulNodeCount: 12,
+          screenshotCount: 0,
+          computedStyleSampleCount: 1,
+        },
+        failure: {
+          failureClass: "dom_empty_after_render",
+          failureCode: "DOM_EMPTY_AFTER_RENDER",
+          retryable: false,
+          message: "stale failure",
+        },
+        timings: {
+          queueLatencyMs: null,
+          executionMs: 12,
+          totalMs: 12,
+        },
+      };
+    },
+  };
+
+  const snapshot = await importPublicSinglePageUrlToSnapshot({
+    sourceUrl: "https://example.com/",
+    snapshotRootDirAbs: tmpRoot,
+    requestId: "req-url-import-contradictory-success",
+    fetchImpl: async () => makeHtmlResponse(entryHtml),
+    renderedCaptureWorkerClient: workerClient,
+  });
+
+  assert.equal(snapshot.sourceMode, "rendered_dom");
+  assert.equal(snapshot.renderedCapture.status, "partial");
+  assert.equal(snapshot.importDiagnostics.issues.some((issue) => issue.code === "WORKER_SUCCESS_RESPONSE_ACCEPTED"), true);
+  assert.equal(snapshot.importDiagnostics.issues.some((issue) => issue.code === "WORKER_SUCCESS_RESPONSE_REJECTED"), false);
+  assert.equal(snapshot.importDiagnostics.issues.some((issue) => issue.code === "CAPTURE_WORKER_FALLBACK_TO_RAW_HTML"), false);
 });
 
 test("url import persists misconfigured worker health truth without collapsing to generic health unavailable", async () => {
