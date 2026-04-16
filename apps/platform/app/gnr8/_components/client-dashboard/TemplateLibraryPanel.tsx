@@ -2,32 +2,16 @@
 
 import Link from 'next/link'
 import { useEffect, useMemo, useState } from 'react'
-import { resolveTemplateLibraryUiView } from '@/app/gnr8/_components/client-dashboard/template-library-contract'
+import {
+  resolveTemplateLibraryCards,
+  resolveTemplateLibraryUiView,
+  type TemplateListApiCard,
+} from '@/app/gnr8/_components/client-dashboard/template-library-contract'
 
 type TemplateListResponse = {
   ok: boolean
   error?: string
-  templates?: Array<{
-    id: string
-    name: string
-    slug: string
-    sourceType: 'zip_html'
-    status: 'uploaded' | 'processing' | 'ready' | 'failed'
-    importHealth: 'clean' | 'degraded' | 'failed'
-    tags: string[]
-    sourceFilename: string
-    entryHtmlFileName: string | null
-    templateType: 'single_page' | 'multi_page' | 'unknown'
-    preview: {
-      available: boolean
-      isFallback: boolean
-      source: 'rendered_capture' | 'fallback'
-      imagePath: string | null
-      entryHtmlFileName?: string | null
-      templateType?: 'single_page' | 'multi_page' | 'unknown'
-    }
-    createdAt: string
-  }>
+  templates?: TemplateListApiCard[]
 }
 
 type UploadResponse =
@@ -111,9 +95,10 @@ function StatusBadge(props: { label: string; value: string }) {
 export default function TemplateLibraryPanel(props: {
   clientId: string
   initialScopeError?: string | null
-  templateEditHrefBuilder?: (templateId: string) => string
+  templateRouteBase?: string | null
+  templateRouteQuery?: string | null
 }) {
-  const [templates, setTemplates] = useState<TemplateListResponse['templates']>([])
+  const [templates, setTemplates] = useState<ReturnType<typeof resolveTemplateLibraryCards>>([])
   const [error, setError] = useState<string | null>(props.initialScopeError ?? null)
   const [uploadError, setUploadError] = useState<string | null>(null)
   const [successMessage, setSuccessMessage] = useState<string | null>(null)
@@ -134,14 +119,13 @@ export default function TemplateLibraryPanel(props: {
         return
       }
 
-      const sorted = [...payload.templates].sort((a, b) => {
-        const tsA = Number(new Date(a.createdAt).getTime()) || 0
-        const tsB = Number(new Date(b.createdAt).getTime()) || 0
-        if (tsA !== tsB) return tsB - tsA
-        return b.id.localeCompare(a.id)
-      })
-
-      setTemplates(sorted)
+      setTemplates(
+        resolveTemplateLibraryCards({
+          templates: payload.templates,
+          templateRouteBase: props.templateRouteBase,
+          templateRouteQuery: props.templateRouteQuery,
+        }),
+      )
     } catch (fetchError) {
       setError(fetchError instanceof Error ? fetchError.message : 'Failed to load templates.')
       setTemplates([])
@@ -157,7 +141,7 @@ export default function TemplateLibraryPanel(props: {
       return
     }
     void loadTemplates()
-  }, [props.initialScopeError])
+  }, [props.initialScopeError, props.templateRouteBase, props.templateRouteQuery])
 
   const hasTemplates = (templates?.length ?? 0) > 0
   const uiView = resolveTemplateLibraryUiView({
@@ -402,9 +386,9 @@ export default function TemplateLibraryPanel(props: {
                 )}
 
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                  {props.templateEditHrefBuilder ? (
+                  {template.editHref ? (
                     <Link
-                      href={props.templateEditHrefBuilder(template.id)}
+                      href={template.editHref}
                       style={{
                         display: 'inline-flex',
                         alignItems: 'center',

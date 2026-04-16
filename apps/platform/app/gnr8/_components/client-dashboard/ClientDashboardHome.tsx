@@ -16,7 +16,8 @@ type Props = {
   clientSelfHref?: string;
   importSiteHref?: string;
   siteWorkspaceHrefBuilder?: (siteId: string) => string | null;
-  templateEditHrefBuilder?: (templateId: string) => string;
+  templateRouteBase?: string | null;
+  templateRouteQuery?: string | null;
 };
 
 function shortId(value: string): string {
@@ -278,7 +279,8 @@ export default function ClientDashboardHome(props: Props) {
       <TemplateLibraryPanel
         clientId={props.clientId}
         initialScopeError={props.templateScopeErrorMessage ?? null}
-        templateEditHrefBuilder={props.templateEditHrefBuilder}
+        templateRouteBase={props.templateRouteBase}
+        templateRouteQuery={props.templateRouteQuery}
       />
     </>
   );

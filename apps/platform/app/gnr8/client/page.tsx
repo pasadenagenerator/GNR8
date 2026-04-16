@@ -221,9 +221,8 @@ export default async function ClientDashboardPage(props: { searchParams?: Promis
         siteWorkspaceHrefBuilder={(siteId) =>
           `/gnr8/agency/clients/${encodeURIComponent(currentUserClient.client_id)}/sites/${encodeURIComponent(siteId)}/overview?${siteWorkspaceAgencyQueryString}`
         }
-        templateEditHrefBuilder={(templateId) =>
-          `/gnr8/agency/clients/${encodeURIComponent(currentUserClient.client_id)}/templates/${encodeURIComponent(templateId)}?${siteWorkspaceAgencyQueryString}`
-        }
+        templateRouteBase={`/gnr8/agency/clients/${encodeURIComponent(currentUserClient.client_id)}/templates`}
+        templateRouteQuery={siteWorkspaceAgencyQueryString}
       />
       <WorkspaceStateSync
         activeAgencyId={currentUserClient.agency_id}

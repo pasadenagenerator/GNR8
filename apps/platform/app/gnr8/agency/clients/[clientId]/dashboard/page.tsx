@@ -237,9 +237,8 @@ export default async function AgencyClientDashboardEntryPage(props: {
         siteWorkspaceHrefBuilder={(siteId) =>
           `/gnr8/agency/clients/${encodeURIComponent(clientId)}/sites/${encodeURIComponent(siteId)}/overview?${agencyParam}`
         }
-        templateEditHrefBuilder={(templateId) =>
-          `/gnr8/agency/clients/${encodeURIComponent(clientId)}/templates/${encodeURIComponent(templateId)}?${agencyParam}`
-        }
+        templateRouteBase={`/gnr8/agency/clients/${encodeURIComponent(clientId)}/templates`}
+        templateRouteQuery={agencyParam}
       />
     </ClientContextLayout>
   )
