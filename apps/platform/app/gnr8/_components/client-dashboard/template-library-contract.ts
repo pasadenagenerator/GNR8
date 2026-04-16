@@ -32,11 +32,13 @@ export type TemplateLibraryCard = TemplateListApiCard & {
 
 export type TemplateUploadApiSuccess = {
   ok: true
+  id: string
   templateId: string
   sourceType: 'zip_html'
   status: 'uploaded' | 'processing' | 'ready' | 'failed'
   name: string
   tags: string[]
+  health: 'clean' | 'degraded' | 'failed'
   importHealth: 'clean' | 'degraded' | 'failed'
   entryHtmlFileName: string | null
   templateType: 'single_page' | 'multi_page' | 'unknown'
@@ -53,6 +55,23 @@ export type TemplateUploadApiSuccess = {
 export type ParsedTemplateUploadResult =
   | { ok: true; value: TemplateUploadApiSuccess }
   | { ok: false; error: string }
+
+export function resolveTemplateUploadUiState(parsed: ParsedTemplateUploadResult): {
+  isSuccess: boolean
+  uploadError: string | null
+} {
+  if (!parsed.ok) {
+    return {
+      isSuccess: false,
+      uploadError: parsed.error,
+    }
+  }
+
+  return {
+    isSuccess: true,
+    uploadError: null,
+  }
+}
 
 function normalizePreviewSource(value: unknown): TemplateUploadApiSuccess['preview']['source'] {
   const normalized = normalizeText(value)
@@ -90,28 +109,31 @@ function isPlainRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
 }
 
-function isUploadSuccessPayload(value: unknown): value is TemplateUploadApiSuccess {
-  if (!isPlainRecord(value)) return false
+function coerceUploadSuccessPayload(value: unknown): TemplateUploadApiSuccess | null {
+  if (!isPlainRecord(value)) return null
 
+  const id = normalizeText(value.id)
   const templateId = normalizeText(value.templateId)
   const name = normalizeText(value.name)
   const status = normalizeTemplateStatus(value.status)
-  const importHealth = normalizeImportHealth(value.importHealth)
+  const importHealth = normalizeImportHealth(value.importHealth ?? value.health)
   const templateType = normalizeTemplateType(value.templateType)
   const preview = isPlainRecord(value.preview) ? value.preview : null
   const sourceTypeRaw = normalizeText(value.sourceType)
   const sourceType = sourceTypeRaw === 'zip_html' ? 'zip_html' : 'zip_html'
 
-  if (!templateId || !name || !status || !importHealth || !templateType || !preview) return false
-  if (typeof value.ok !== 'boolean') return false
+  if (!templateId || !name || !status || !importHealth || !templateType || !preview) return null
+  if (typeof value.ok !== 'boolean') return null
 
-  const normalizedPayload: TemplateUploadApiSuccess = {
+  return {
     ok: true,
+    id: id || templateId,
     templateId,
     sourceType,
     status,
     name,
     tags: asStringArray(value.tags),
+    health: importHealth,
     importHealth,
     entryHtmlFileName: normalizeText(value.entryHtmlFileName) || null,
     templateType,
@@ -124,19 +146,14 @@ function isUploadSuccessPayload(value: unknown): value is TemplateUploadApiSucce
       templateType,
     },
   }
-
-  return Boolean(normalizedPayload.templateId)
 }
 
 export function parseTemplateUploadResponse(input: {
   httpStatus: number
   payload: unknown
 }): ParsedTemplateUploadResult {
-  if (isUploadSuccessPayload(input.payload)) {
-    const payload = input.payload
-    if (payload.ok === true) {
-      return { ok: true, value: payload }
-    }
+  const payload = coerceUploadSuccessPayload(input.payload)
+  if (payload) {
     if (input.httpStatus >= 200 && input.httpStatus < 300 && payload.status !== 'failed' && payload.importHealth !== 'failed') {
       return {
         ok: true,

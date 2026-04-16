@@ -143,7 +143,10 @@ test('resolveClientTemplateScope fails closed when agency scope rejects the user
 
 test('templates list and upload routes both use requireClientTemplateScope for deterministic scope decisions', () => {
   const listRouteSource = readFileSync(new URL('../[clientId]/templates/route.ts', import.meta.url), 'utf8')
-  const uploadRouteSource = readFileSync(new URL('../[clientId]/templates/upload/route.ts', import.meta.url), 'utf8')
+  const uploadRouteSource = readFileSync(
+    new URL('../[clientId]/templates/upload/template-upload-route-handlers.ts', import.meta.url),
+    'utf8',
+  )
   const detailRouteSource = readFileSync(
     new URL('../[clientId]/templates/[templateId]/template-detail-route-handlers.ts', import.meta.url),
     'utf8',
@@ -158,13 +161,19 @@ test('client template scope helpers stay read-only and avoid mutating supabase h
   const scopeSource = readFileSync(new URL('./client-template-scope.ts', import.meta.url), 'utf8')
 
   assert.match(scopeSource, /resolveCurrentUserClientForPage/)
+  assert.match(scopeSource, /resolveCurrentUserAgencyForPage/)
+  assert.match(scopeSource, /requireSuperadminUserIdForPage/)
   assert.match(scopeSource, /getSupabaseServerClientReadOnly/)
+  assert.doesNotMatch(scopeSource, /requireAgencyActionContext/)
   assert.doesNotMatch(scopeSource, /getSupabaseServerClientMutating/)
 })
 
 test('template routes map repository errors before generic scope parsing', () => {
   const listRouteSource = readFileSync(new URL('../[clientId]/templates/route.ts', import.meta.url), 'utf8')
-  const uploadRouteSource = readFileSync(new URL('../[clientId]/templates/upload/route.ts', import.meta.url), 'utf8')
+  const uploadRouteSource = readFileSync(
+    new URL('../[clientId]/templates/upload/template-upload-route-handlers.ts', import.meta.url),
+    'utf8',
+  )
   const detailRouteSource = readFileSync(
     new URL('../[clientId]/templates/[templateId]/template-detail-route-handlers.ts', import.meta.url),
     'utf8',

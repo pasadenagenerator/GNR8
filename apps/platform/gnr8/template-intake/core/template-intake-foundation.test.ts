@@ -812,7 +812,7 @@ test('D. Missing HTML fails template intake', async () => {
     zipValidator: () => ({
       ok: false,
       diagnostics: [],
-      errorMessage: 'ZIP must include one root-level HTML file.',
+      errorMessage: 'ZIP must include one HTML file.',
       snapshotId: 'template-zip-missing-html',
       zipFileAbsPath: '/tmp/template.zip',
       validation: null,
@@ -840,7 +840,7 @@ test('E. Multiple root HTML files fail template intake', async () => {
     zipValidator: () => ({
       ok: false,
       diagnostics: [],
-      errorMessage: 'ZIP has multiple root-level HTML files; entry file is ambiguous.',
+      errorMessage: 'ZIP has multiple HTML files; entry file is ambiguous.',
       snapshotId: 'template-zip-ambiguous',
       zipFileAbsPath: '/tmp/template.zip',
       validation: null,
@@ -928,7 +928,9 @@ test('Read/list contract returns safe defaults when preview/tags are absent', ()
       previewImagePath: '',
       previewAvailable: false,
       previewIsFallback: true,
-      previewSource: 'fallback',
+      previewSource: 'html_snapshot',
+      status: 'ready',
+      importHealth: 'degraded',
     }),
   )
 
@@ -936,6 +938,9 @@ test('Read/list contract returns safe defaults when preview/tags are absent', ()
   assert.equal(mapped.preview.imagePath, null)
   assert.equal(mapped.preview.available, false)
   assert.equal(mapped.preview.isFallback, true)
+  assert.equal(mapped.preview.source, 'html_snapshot')
+  assert.equal(mapped.status, 'ready')
+  assert.equal(mapped.importHealth, 'degraded')
   assert.equal(mapped.entryHtmlFileName, null)
   assert.equal(mapped.templateType, 'unknown')
 })

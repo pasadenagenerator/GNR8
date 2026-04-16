@@ -58,8 +58,10 @@ export function createTemplateUploadRouteHandlers(deps: Partial<TemplateUploadRo
           return NextResponse.json(
             {
               ok: false,
+              id: intake.templateId,
               templateId: intake.templateId,
               status: intake.status,
+              health: intake.importHealth,
               importHealth: intake.importHealth,
               error: intake.errorMessage,
               diagnosticsSummary: intake.diagnosticsSummary,
@@ -71,9 +73,11 @@ export function createTemplateUploadRouteHandlers(deps: Partial<TemplateUploadRo
         return NextResponse.json(
           {
             ok: true,
+            id: intake.template.id,
             templateId: intake.template.id,
             sourceType: intake.template.sourceType,
             status: intake.template.status,
+            health: intake.template.importHealth,
             name: intake.template.name,
             tags: intake.template.tags,
             importHealth: intake.template.importHealth,

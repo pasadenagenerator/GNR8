@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { useEffect, useMemo, useState } from 'react'
 import {
   parseTemplateUploadResponse,
+  resolveTemplateUploadUiState,
   resolveTemplateLibraryCards,
   resolveTemplateLibraryUiView,
   type TemplateListApiCard,
@@ -148,10 +149,16 @@ export default function TemplateLibraryPanel(props: {
       })
       const payload = (await response.json().catch(() => null)) as unknown
       const parsed = parseTemplateUploadResponse({ httpStatus: response.status, payload })
-      if (!parsed.ok) {
-        setUploadError(parsed.error)
+      const uiState = resolveTemplateUploadUiState(parsed)
+      if (!uiState.isSuccess) {
+        setUploadError(uiState.uploadError)
         return
       }
+      if (!parsed.ok) {
+        setUploadError(uiState.uploadError)
+        return
+      }
+      setUploadError(null)
       const uploaded = parsed.value
 
       setSuccessMessage(`Template \"${uploaded.name}\" uploaded with status ${normalizeStatusLabel(uploaded.status)}.`)

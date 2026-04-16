@@ -48,6 +48,24 @@ test('mapTemplateToDetailCard keeps deterministic summary fields', () => {
   assert.equal(mapped.preview.available, true)
 })
 
+test('mapTemplateToDetailCard preserves ready/degraded html_snapshot state', () => {
+  const mapped = mapTemplateToDetailCard(
+    createTemplateRecord({
+      status: 'ready',
+      importHealth: 'degraded',
+      previewAvailable: false,
+      previewIsFallback: true,
+      previewSource: 'html_snapshot',
+      previewImagePath: null,
+    }),
+  )
+
+  assert.equal(mapped.status, 'ready')
+  assert.equal(mapped.importHealth, 'degraded')
+  assert.equal(mapped.preview.source, 'html_snapshot')
+  assert.equal(mapped.preview.available, false)
+})
+
 test('normalizeTemplateMetadataPatchPayload trims name and normalizes tags', () => {
   const normalized = normalizeTemplateMetadataPatchPayload({
     name: '  New Template Name  ',

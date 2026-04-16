@@ -3,6 +3,7 @@ import test from 'node:test'
 
 import {
   parseTemplateUploadResponse,
+  resolveTemplateUploadUiState,
   resolveTemplateEditHref,
   resolveTemplateLibraryCards,
   resolveTemplateLibraryUiView,
@@ -126,6 +127,7 @@ test('upload contract accepts degraded no-preview html_snapshot success payload'
     httpStatus: 200,
     payload: {
       ok: true,
+      id: 'template-1',
       templateId: 'template-1',
       sourceType: 'zip_html',
       status: 'ready',
@@ -145,9 +147,40 @@ test('upload contract accepts degraded no-preview html_snapshot success payload'
 
   assert.equal(parsed.ok, true)
   if (!parsed.ok) return
+  assert.equal(parsed.value.id, 'template-1')
+  assert.equal(parsed.value.health, 'degraded')
   assert.equal(parsed.value.importHealth, 'degraded')
   assert.equal(parsed.value.preview.source, 'html_snapshot')
   assert.equal(parsed.value.preview.available, false)
+})
+
+test('upload contract accepts health alias when importHealth field is missing', () => {
+  const parsed = parseTemplateUploadResponse({
+    httpStatus: 200,
+    payload: {
+      ok: true,
+      templateId: 'template-health-only',
+      sourceType: 'zip_html',
+      status: 'ready',
+      name: 'Health Alias',
+      tags: [],
+      health: 'degraded',
+      entryHtmlFileName: 'index.html',
+      templateType: 'single_page',
+      preview: {
+        available: false,
+        isFallback: true,
+        source: 'html_snapshot',
+        imagePath: null,
+      },
+    },
+  })
+
+  assert.equal(parsed.ok, true)
+  if (!parsed.ok) return
+  assert.equal(parsed.value.id, 'template-health-only')
+  assert.equal(parsed.value.importHealth, 'degraded')
+  assert.equal(parsed.value.health, 'degraded')
 })
 
 test('upload contract allows 2xx success fallback when status/health are usable', () => {
@@ -189,4 +222,46 @@ test('upload contract preserves true failure for invalid ZIP response', () => {
   assert.equal(parsed.ok, false)
   if (parsed.ok) return
   assert.equal(parsed.error, 'ZIP file could not be processed.')
+})
+
+test('client upload branch treats degraded success as success and clears upload error', () => {
+  const parsed = parseTemplateUploadResponse({
+    httpStatus: 200,
+    payload: {
+      ok: true,
+      id: 'template-ui-1',
+      templateId: 'template-ui-1',
+      sourceType: 'zip_html',
+      status: 'ready',
+      name: 'UI Success',
+      tags: [],
+      importHealth: 'degraded',
+      entryHtmlFileName: 'index.html',
+      templateType: 'single_page',
+      preview: {
+        available: false,
+        isFallback: true,
+        source: 'html_snapshot',
+        imagePath: null,
+      },
+    },
+  })
+
+  const uiState = resolveTemplateUploadUiState(parsed)
+  assert.equal(uiState.isSuccess, true)
+  assert.equal(uiState.uploadError, null)
+})
+
+test('client upload branch keeps invalid ZIP error in upload state', () => {
+  const parsed = parseTemplateUploadResponse({
+    httpStatus: 400,
+    payload: {
+      ok: false,
+      error: 'ZIP file could not be processed.',
+    },
+  })
+
+  const uiState = resolveTemplateUploadUiState(parsed)
+  assert.equal(uiState.isSuccess, false)
+  assert.equal(uiState.uploadError, 'ZIP file could not be processed.')
 })

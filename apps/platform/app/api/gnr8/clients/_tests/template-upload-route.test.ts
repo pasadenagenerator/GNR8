@@ -75,7 +75,9 @@ test('upload route returns success for degraded no-preview template intake', asy
 
   assert.equal(response.status, 200)
   assert.equal(body.ok, true)
+  assert.equal(body.id, '00000000-0000-4000-8000-000000000901')
   assert.equal(body.status, 'ready')
+  assert.equal(body.health, 'degraded')
   assert.equal(body.importHealth, 'degraded')
   assert.equal(body.sourceType, 'zip_html')
   assert.equal((body.preview as { source: string }).source, 'html_snapshot')
@@ -106,5 +108,6 @@ test('upload route returns deterministic error for invalid ZIP failure', async (
 
   assert.equal(response.status, 400)
   assert.equal(body.ok, false)
+  assert.equal(body.health, 'failed')
   assert.equal(body.error, 'ZIP file could not be processed.')
 })

@@ -94,6 +94,23 @@ test('passes for nested/template/landing.html with root normalization', () => {
   assert.equal(path.basename(result.validation.extractionRootDirAbs), 'template')
 })
 
+test('passes for a single nested HTML file when no root-level HTML exists', () => {
+  const result = validateTemplateZip({
+    fileName: 'single-nested-html.zip',
+    files: {
+      'landing/index.html': '<!doctype html><html><body>Landing</body></html>',
+      'assets/styles.css': 'body{margin:0}',
+    },
+  })
+
+  assert.equal(result.ok, true)
+  if (!result.ok || !result.validation) return
+  assert.equal(result.validation.entryHtmlPath, 'landing/index.html')
+  assert.equal(result.validation.entryHtmlSelection, 'single_file_fallback')
+  assert.deepEqual(result.validation.htmlCandidates, ['landing/index.html'])
+  assert.equal(result.diagnostics.some((issue) => issue.code === 'TEMPLATE_HTML_ENTRY_FALLBACK_SINGLE_FILE'), true)
+})
+
 test('fails when multiple root-level HTML files are present', () => {
   const result = validateTemplateZip({
     fileName: 'ambiguous-html.zip',

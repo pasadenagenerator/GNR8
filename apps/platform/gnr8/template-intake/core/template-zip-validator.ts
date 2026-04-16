@@ -81,44 +81,56 @@ function selectEntryHtmlPath(relativePaths: string[]): {
   selection: TemplateZipValidationResult['entryHtmlSelection']
   htmlCandidates: string[]
 } {
-  const htmlCandidates = relativePaths
+  const rootHtmlCandidates = relativePaths
     .filter((entry) => !entry.includes('/') && entry.toLowerCase().endsWith('.html'))
     .sort((a, b) => a.localeCompare(b))
 
-  if (htmlCandidates.length > 1) {
+  if (rootHtmlCandidates.length > 1) {
     return {
       entryHtmlPath: null,
       selection: 'ambiguous',
-      htmlCandidates,
+      htmlCandidates: rootHtmlCandidates,
     }
   }
 
-  const rootIndex = htmlCandidates[0]?.toLowerCase() === 'index.html' ? htmlCandidates[0] : null
-  if (rootIndex && htmlCandidates.length === 1) {
+  const rootIndex = rootHtmlCandidates[0]?.toLowerCase() === 'index.html' ? rootHtmlCandidates[0] : null
+  if (rootIndex && rootHtmlCandidates.length === 1) {
     return {
       entryHtmlPath: rootIndex,
       selection: 'root_index',
-      htmlCandidates,
+      htmlCandidates: rootHtmlCandidates,
     }
   }
 
-  if (htmlCandidates.length === 1) {
+  if (rootHtmlCandidates.length === 1) {
     return {
-      entryHtmlPath: htmlCandidates[0] ?? null,
+      entryHtmlPath: rootHtmlCandidates[0] ?? null,
       selection: 'single_file_fallback',
-      htmlCandidates,
+      htmlCandidates: rootHtmlCandidates,
     }
   }
 
-  if (htmlCandidates.length === 0) {
+  const allHtmlCandidates = relativePaths
+    .filter((entry) => entry.toLowerCase().endsWith('.html'))
+    .sort((a, b) => a.localeCompare(b))
+
+  if (allHtmlCandidates.length > 1) {
     return {
       entryHtmlPath: null,
-      selection: 'missing',
-      htmlCandidates,
+      selection: 'ambiguous',
+      htmlCandidates: allHtmlCandidates,
     }
   }
 
-  return { entryHtmlPath: null, selection: 'missing', htmlCandidates }
+  if (allHtmlCandidates.length === 1) {
+    return {
+      entryHtmlPath: allHtmlCandidates[0] ?? null,
+      selection: 'single_file_fallback',
+      htmlCandidates: allHtmlCandidates,
+    }
+  }
+
+  return { entryHtmlPath: null, selection: 'missing', htmlCandidates: [] }
 }
 
 function resolveEffectiveZipRoot(relativePaths: string[]): {
@@ -431,14 +443,14 @@ export function validateAndExtractTemplateZip(input: {
       createTemplateIntakeDiagnostic({
         code: 'TEMPLATE_HTML_ENTRY_NOT_FOUND',
         severity: 'fatal',
-        message: 'No root-level HTML entry file found in uploaded ZIP.',
+        message: 'No HTML entry file found in uploaded ZIP.',
       }),
     )
 
     return {
       ok: false,
       diagnostics,
-      errorMessage: 'ZIP must include one root-level HTML file.',
+      errorMessage: 'ZIP must include one HTML file.',
       snapshotId,
       zipFileAbsPath,
       validation: null,
@@ -450,7 +462,7 @@ export function validateAndExtractTemplateZip(input: {
       createTemplateIntakeDiagnostic({
         code: 'TEMPLATE_HTML_ENTRY_AMBIGUOUS',
         severity: 'fatal',
-        message: 'Multiple root-level HTML files found; entry file is ambiguous.',
+        message: 'Multiple HTML files found; entry file is ambiguous.',
         details: {
           fileCount: selectedEntry.htmlCandidates.length,
           fileNames: selectedEntry.htmlCandidates,
@@ -460,7 +472,7 @@ export function validateAndExtractTemplateZip(input: {
     return {
       ok: false,
       diagnostics,
-      errorMessage: 'ZIP has multiple root-level HTML files; entry file is ambiguous.',
+      errorMessage: 'ZIP has multiple HTML files; entry file is ambiguous.',
       snapshotId,
       zipFileAbsPath,
       validation: null,

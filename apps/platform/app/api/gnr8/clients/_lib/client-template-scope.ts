@@ -1,5 +1,6 @@
-import { requireAgencyActionContext } from '@/app/api/gnr8/agency/_lib/agency-action-access'
 import { ResolveCurrentClientError, resolveCurrentUserClientForPage } from '@/src/auth/resolve-current-client'
+import { ResolveCurrentAgencyError, resolveCurrentUserAgencyForPage } from '@/src/auth/resolve-current-agency'
+import { requireSuperadminUserIdForPage } from '@/src/auth/require-superadmin-user-id'
 import { getSupabaseServerClientReadOnly } from '@/src/auth/supabase-server-read-only'
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
@@ -54,6 +55,52 @@ type ClientTemplateScopeDeps = {
   requireAgencyTemplateScope: (input: { agencyId: string }) => Promise<{ userId: string; agencyId: string }>
 }
 
+function parseAgencyScopeError(error: unknown): { status: number; message: string } {
+  if (error instanceof ResolveCurrentAgencyError) {
+    if (error.code === 'UNAUTHORIZED') return { status: 401, message: 'You must be signed in.' }
+    if (error.code === 'NO_MEMBERSHIP') return { status: 403, message: 'No agency membership found for current account.' }
+    if (error.code === 'ACTIVE_AGENCY_REQUIRED') return { status: 400, message: 'Select an active agency before using template intake.' }
+    if (error.code === 'ACTIVE_AGENCY_INVALID') return { status: 403, message: 'Requested agency scope is invalid for current membership.' }
+    return { status: 403, message: 'Invalid agency membership context.' }
+  }
+
+  if (error instanceof Error) {
+    if (error.message === 'Unauthorized') return { status: 401, message: 'You must be signed in.' }
+    if (error.message.startsWith('Forbidden')) return { status: 403, message: 'Invalid agency membership context.' }
+  }
+
+  return { status: 500, message: 'Agency scope resolution failed.' }
+}
+
+async function requireAgencyTemplateScopeReadOnly(input: {
+  agencyId: string
+}): Promise<{ userId: string; agencyId: string }> {
+  try {
+    const userId = await requireSuperadminUserIdForPage()
+    return {
+      userId,
+      agencyId: input.agencyId,
+    }
+  } catch (error) {
+    if (error instanceof Error && error.message !== 'Unauthorized' && !error.message.startsWith('Forbidden')) {
+      throw error
+    }
+  }
+
+  try {
+    const context = await resolveCurrentUserAgencyForPage({
+      activeAgencyId: input.agencyId,
+    })
+    return {
+      userId: context.user_id,
+      agencyId: context.agency_id,
+    }
+  } catch (error) {
+    const mapped = parseAgencyScopeError(error)
+    throw new Error(`${mapped.status}|${mapped.message}`)
+  }
+}
+
 async function resolveClientAgencyByOrganization(input: {
   clientId: string
 }): Promise<{ clientId: string; agencyId: string } | null> {
@@ -83,16 +130,7 @@ async function resolveClientAgencyByOrganization(input: {
 const DEFAULT_CLIENT_TEMPLATE_SCOPE_DEPS: ClientTemplateScopeDeps = {
   resolveCurrentUserClientForScope: resolveCurrentUserClientForPage,
   resolveClientAgencyByOrganization,
-  requireAgencyTemplateScope: async (input) => {
-    const context = await requireAgencyActionContext({
-      action: 'view_dashboard',
-      requestedAgencyId: input.agencyId,
-    })
-    return {
-      userId: context.userId,
-      agencyId: context.agencyId,
-    }
-  },
+  requireAgencyTemplateScope: requireAgencyTemplateScopeReadOnly,
 }
 
 export async function resolveClientTemplateScope(
