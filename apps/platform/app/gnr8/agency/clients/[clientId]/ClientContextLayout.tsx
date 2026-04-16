@@ -8,7 +8,7 @@ import WorkspaceQuickSwitcher, {
 import WorkspaceShortcuts, { type WorkspaceShortcut } from '../../../_components/workspace/WorkspaceShortcuts'
 import WorkspaceStateSync from '../../../_components/workspace/WorkspaceStateSync'
 import { buildWorkspaceViewModel, type WorkspaceTabInput } from '../../../_components/workspace/workspace-view-model'
-import { agencyClientSiteImportHref } from '@/gnr8/site/site-importer-routing'
+import { agencyClientSiteCreateHref, agencyClientSiteImportHref } from '@/gnr8/site/site-importer-routing'
 import { buildClientSwitchHref } from '@/src/workspace/context-switching'
 
 type ClientContextTab = 'dashboard' | 'settings' | 'users'
@@ -71,6 +71,11 @@ export default function ClientContextLayout(props: Props) {
     agencyId: activeAgencyId,
     adminView: props.adminView,
   })
+  const createWebsiteHref = agencyClientSiteCreateHref({
+    clientId: props.clientId,
+    agencyId: activeAgencyId,
+    adminView: props.adminView,
+  })
   const backToAgencyHref = `/gnr8/agency?${agencyParam}`
   const agencyClientsHref = `/gnr8/agency/clients?${agencyParam}`
   const breadcrumbs: WorkspaceBreadcrumbItem[] = [
@@ -124,6 +129,13 @@ export default function ClientContextLayout(props: Props) {
       href: importHref,
       description: 'Import a website into this client workspace',
       icon: 'I',
+    },
+    {
+      id: 'add-website',
+      label: 'Add Website',
+      href: createWebsiteHref,
+      description: 'Create a new website from a template',
+      icon: 'W',
     },
     {
       id: 'open-settings',
@@ -208,6 +220,7 @@ export default function ClientContextLayout(props: Props) {
           { id: 'route-agency-settings', label: 'Agency Settings', href: `/gnr8/agency/settings?${agencyParam}`, sublabel: 'Key route' },
           { id: 'route-client-dashboard', label: 'Client Dashboard', href: explicitDashboardHref, sublabel: 'Key route' },
           { id: 'route-client-import', label: 'Import Site', href: importHref, sublabel: 'Key route' },
+          { id: 'route-client-create-site', label: 'Add New Website', href: createWebsiteHref, sublabel: 'Key route' },
           { id: 'route-client-settings', label: 'Client Settings', href: settingsHref, sublabel: 'Key route' },
           { id: 'route-client-team', label: 'Client Team', href: usersHref, sublabel: 'Key route' },
           ...siteRouteEntries,

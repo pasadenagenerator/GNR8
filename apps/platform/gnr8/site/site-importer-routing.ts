@@ -36,6 +36,11 @@ export function agencyClientSiteImportHref(input: { clientId: string; agencyId: 
   return `/gnr8/agency/clients/${encodeURIComponent(input.clientId)}/sites/import?${query}`
 }
 
+export function agencyClientSiteCreateHref(input: { clientId: string; agencyId: string; adminView?: boolean }): string {
+  const query = scopedAgencyQuery(input.agencyId, normalizeAdminView(input.adminView))
+  return `/gnr8/agency/clients/${encodeURIComponent(input.clientId)}/sites/new?${query}`
+}
+
 export function agencyClientDashboardHref(input: { clientId: string; agencyId: string; adminView?: boolean }): string {
   const query = scopedAgencyQuery(input.agencyId, normalizeAdminView(input.adminView))
   return `/gnr8/agency/clients/${encodeURIComponent(input.clientId)}/dashboard?${query}`

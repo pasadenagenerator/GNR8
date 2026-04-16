@@ -6,7 +6,7 @@ import { parseThrownScopeError, resolveClientTemplateScope } from '@/app/api/gnr
 import { listSwitchableAgencyClientsForPage } from '../../client-switcher-options'
 import ClientContextLayout from '../ClientContextLayout'
 import { getClientDashboardReadModelForPage } from '@/gnr8/client/client-dashboard-read-model'
-import { agencyClientSiteImportHref } from '@/gnr8/site/site-importer-routing'
+import { agencyClientSiteCreateHref, agencyClientSiteImportHref } from '@/gnr8/site/site-importer-routing'
 import {
   listCurrentUserAgencyMembershipsForPage,
   resolveCurrentUserAgencyForPage,
@@ -201,6 +201,11 @@ export default async function AgencyClientDashboardEntryPage(props: {
     agencyId: currentUserAgency.agency_id,
     adminView,
   })
+  const createWebsiteHref = agencyClientSiteCreateHref({
+    clientId,
+    agencyId: currentUserAgency.agency_id,
+    adminView,
+  })
   let templateScopeErrorMessage: string | null = null
   try {
     await resolveClientTemplateScope({ clientIdParam: clientId })
@@ -219,7 +224,7 @@ export default async function AgencyClientDashboardEntryPage(props: {
       clientOptions={switchableClients}
       siteOptions={readModel.site_rows.map((site) => ({
         siteId: site.site_id,
-        label: site.domain?.trim() || shortId(site.site_id),
+        label: site.name?.trim() || site.domain?.trim() || shortId(site.site_id),
       }))}
       activeTab='dashboard'
     >
@@ -234,6 +239,7 @@ export default async function AgencyClientDashboardEntryPage(props: {
         teamHref={teamHref}
         clientSelfHref={clientSelfHref}
         importSiteHref={importSiteHref}
+        createWebsiteHref={createWebsiteHref}
         siteWorkspaceHrefBuilder={(siteId) =>
           `/gnr8/agency/clients/${encodeURIComponent(clientId)}/sites/${encodeURIComponent(siteId)}/overview?${agencyParam}`
         }

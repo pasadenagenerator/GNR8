@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import {
+  agencyClientSiteCreateHref,
   agencyClientSiteImportHref,
   canAccessClientScopedImporter,
   importerSuccessRedirectHref,
@@ -31,6 +32,19 @@ test('client-scoped importer href never routes through superadmin', () => {
     '/gnr8/agency/clients/00000000-0000-4000-8000-000000000123/sites/import?agency=00000000-0000-4000-8000-000000000999',
   )
   assert.equal(href.includes('/superadmin'), false)
+})
+
+test('client-scoped site create href is deterministic and scoped to agency query context', () => {
+  const href = agencyClientSiteCreateHref({
+    clientId: '00000000-0000-4000-8000-000000000123',
+    agencyId: '00000000-0000-4000-8000-000000000999',
+    adminView: true,
+  })
+
+  assert.equal(
+    href,
+    '/gnr8/agency/clients/00000000-0000-4000-8000-000000000123/sites/new?agency=00000000-0000-4000-8000-000000000999&admin_view=1',
+  )
 })
 
 test('import success redirect targets scoped site workspace', () => {

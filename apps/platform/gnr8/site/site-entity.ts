@@ -14,6 +14,8 @@ export type SiteEntity = {
   id: string
   clientId: string
   agencyId: string | null
+  templateId: string | null
+  name: string | null
   label: string
   domain: string | null
   status: SiteLifecycleStatus
@@ -25,6 +27,8 @@ export type RawSiteRow = {
   id: string | null
   org_id: string | null
   agency_id: string | null
+  template_id?: string | null
+  name?: string | null
   domain: string | null
   status: string | null
   created_at?: string | null
@@ -85,13 +89,17 @@ export function toSiteEntity(row: RawSiteRow | null): SiteEntity | null {
   if (!id || !clientId) return null
 
   const domain = normalizeText(row.domain) || null
+  const name = normalizeText(row.name) || null
   return {
     id,
     clientId,
     agencyId: normalizeText(row.agency_id) || null,
+    templateId: normalizeText(row.template_id) || null,
+    name,
     label: inferSiteLabel({
       id,
       domain,
+      explicitLabel: name,
     }),
     domain,
     status: normalizeSiteStatus(row.status),

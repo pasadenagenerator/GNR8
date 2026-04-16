@@ -21,6 +21,7 @@ type AgencyRow = {
 
 type SiteRow = {
   id: string | null;
+  name?: string | null;
   domain: string | null;
   status: string | null;
   agency_id: string | null;
@@ -55,6 +56,7 @@ export type ClientOrganizationScope = {
 
 export type ClientDashboardSiteRow = {
   site_id: string;
+  name: string | null;
   domain: string | null;
   site_status: string;
   migration_status: MigrationPipelineStatus;
@@ -197,7 +199,7 @@ async function fetchSitesForClient(input: {
     const orderAttempt = orderAttempts[index];
     const result = await supabase
       .from("sites")
-      .select("id,domain,status,agency_id,org_id,created_at,updated_at")
+      .select("id,name,domain,status,agency_id,org_id,created_at,updated_at")
       .eq("org_id", input.clientId)
       .eq("agency_id", input.agencyId)
       .order(orderAttempt.column, { ascending: orderAttempt.ascending })
@@ -321,6 +323,7 @@ export async function getClientDashboardReadModelForPage(input: {
 
       return {
         site_id: siteId,
+        name: toTextOrNull(site.name),
         domain: toTextOrNull(site.domain),
         site_status: status,
         migration_status: migration.effective_status,

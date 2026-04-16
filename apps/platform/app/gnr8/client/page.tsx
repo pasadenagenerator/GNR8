@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import ClientDashboardHome from "@/app/gnr8/_components/client-dashboard/ClientDashboardHome";
 import WorkspaceStateSync from "@/app/gnr8/_components/workspace/WorkspaceStateSync";
 import { getClientDashboardReadModelForPage } from "@/gnr8/client/client-dashboard-read-model";
-import { agencyClientSiteImportHref } from "@/gnr8/site/site-importer-routing";
+import { agencyClientSiteCreateHref, agencyClientSiteImportHref } from "@/gnr8/site/site-importer-routing";
 import { CLIENT_SETUP_PATH, getClientSetupStatusForClientForPage } from "@/src/auth/client-setup-gate";
 import {
   listCurrentUserClientMembershipsForPage,
@@ -193,6 +193,11 @@ export default async function ClientDashboardPage(props: { searchParams?: Promis
     agencyId: currentUserClient.agency_id,
     adminView: resolvedSearchParams?.admin_view === "1",
   });
+  const createWebsiteHref = agencyClientSiteCreateHref({
+    clientId: currentUserClient.client_id,
+    agencyId: currentUserClient.agency_id,
+    adminView: resolvedSearchParams?.admin_view === "1",
+  });
 
   return (
     <main
@@ -218,6 +223,7 @@ export default async function ClientDashboardPage(props: { searchParams?: Promis
         roleLabel={currentUserClient.role}
         viewMode="client-self"
         importSiteHref={importSiteHref}
+        createWebsiteHref={createWebsiteHref}
         siteWorkspaceHrefBuilder={(siteId) =>
           `/gnr8/agency/clients/${encodeURIComponent(currentUserClient.client_id)}/sites/${encodeURIComponent(siteId)}/overview?${siteWorkspaceAgencyQueryString}`
         }

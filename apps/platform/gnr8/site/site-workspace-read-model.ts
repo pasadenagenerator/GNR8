@@ -1530,10 +1530,10 @@ export async function getSiteWorkspaceReadModelForPage(input: {
 
   const [clientOrgResult, siteResult, siteOptionsResult, siteActionsResult, siteVariantsResult] = await Promise.all([
     supabase.from('organizations').select('id,name,agency_id,organization_type').eq('id', clientId).limit(1).maybeSingle(),
-    supabase.from('sites').select('id,org_id,agency_id,status,domain,created_at,updated_at').eq('id', siteId).limit(1).maybeSingle(),
+    supabase.from('sites').select('id,org_id,agency_id,template_id,name,status,domain,created_at,updated_at').eq('id', siteId).limit(1).maybeSingle(),
     supabase
       .from('sites')
-      .select('id,org_id,agency_id,status,domain,created_at,updated_at')
+      .select('id,org_id,agency_id,template_id,name,status,domain,created_at,updated_at')
       .eq('org_id', clientId)
       .eq('agency_id', agencyId)
       .order('created_at', { ascending: false })

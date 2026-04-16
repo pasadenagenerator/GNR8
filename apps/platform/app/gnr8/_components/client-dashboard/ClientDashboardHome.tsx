@@ -15,6 +15,7 @@ type Props = {
   teamHref?: string;
   clientSelfHref?: string;
   importSiteHref?: string;
+  createWebsiteHref?: string;
   siteWorkspaceHrefBuilder?: (siteId: string) => string | null;
   templateRouteBase?: string | null;
   templateRouteQuery?: string | null;
@@ -111,6 +112,7 @@ function ActionLink(props: { href: string; label: string; external?: boolean }) 
 export default function ClientDashboardHome(props: Props) {
   const hasSites = props.readModel.site_rows.length > 0;
   const hasImportAction = Boolean(props.importSiteHref);
+  const hasCreateWebsiteAction = Boolean(props.createWebsiteHref);
   const hasManagementActions = Boolean(props.settingsHref || props.teamHref);
   const latestSiteHref = props.readModel.site_rows[0]?.live_url ?? props.readModel.site_rows[0]?.preview_url ?? null;
   const workspaceShortcuts: WorkspaceShortcut[] = [
@@ -203,7 +205,10 @@ export default function ClientDashboardHome(props: Props) {
       >
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
           <h3 style={{ margin: 0, fontSize: 15, color: "#0f172a" }}>Sites Overview</h3>
-          {hasSites && hasImportAction ? <ActionLink href={props.importSiteHref!} label="Import Site" /> : null}
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            {hasCreateWebsiteAction ? <ActionLink href={props.createWebsiteHref!} label="Add New Website" /> : null}
+            {hasSites && hasImportAction ? <ActionLink href={props.importSiteHref!} label="Import Site" /> : null}
+          </div>
         </div>
         {hasSites ? (
           <div style={{ marginTop: 12, display: "grid", gap: 10 }}>
@@ -211,7 +216,10 @@ export default function ClientDashboardHome(props: Props) {
               <article key={site.site_id} style={{ border: "1px solid #e2e8f0", borderRadius: 10, padding: 10 }}>
                 <div style={{ display: "grid", gap: 8 }}>
                   <div style={{ display: "grid", gap: 2 }}>
-                    <div style={{ fontSize: 14, fontWeight: 700, color: "#0f172a" }}>{site.domain?.trim() || shortId(site.site_id)}</div>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: "#0f172a" }}>
+                      {site.name?.trim() || site.domain?.trim() || shortId(site.site_id)}
+                    </div>
+                    {site.domain?.trim() ? <div style={{ fontSize: 12, color: "#64748b" }}>Domain: {site.domain.trim()}</div> : null}
                     <div style={{ fontSize: 12, color: "#64748b" }}>Site ID: {shortId(site.site_id)}</div>
                   </div>
                   <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
@@ -266,6 +274,25 @@ export default function ClientDashboardHome(props: Props) {
                   }}
                 >
                   Import Existing Website
+                </Link>
+              ) : null}
+              {hasCreateWebsiteAction ? (
+                <Link
+                  href={props.createWebsiteHref!}
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    padding: "7px 12px",
+                    borderRadius: 8,
+                    border: "1px solid #0f172a",
+                    background: "#fff",
+                    color: "#0f172a",
+                    textDecoration: "none",
+                    fontSize: 12,
+                    fontWeight: 700,
+                  }}
+                >
+                  Add New Website
                 </Link>
               ) : null}
               {props.settingsHref ? <ActionLink href={props.settingsHref} label="Open Settings" /> : null}
