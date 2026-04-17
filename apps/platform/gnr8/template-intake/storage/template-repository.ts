@@ -125,34 +125,68 @@ export function normalizeTemplateTypeForStorage(value: unknown): TemplateType {
   )
 }
 
-function normalizeTemplateStatusForRead(value: unknown): TemplateRecord['status'] {
-  const normalized = normalizeText(value)
-  if (normalized === 'uploaded' || normalized === 'processing' || normalized === 'ready' || normalized === 'failed') return normalized
-  throw new TemplateRepositoryError(
-    'TEMPLATE_REPOSITORY_FAILURE',
-    `Invalid template status value "${normalized || '<empty>'}".`,
-  )
+type ReadNormalizedTemplateRow = {
+  status: TemplateRecord['status']
+  importHealth: TemplateRecord['importHealth']
+  previewSource: TemplateRecord['previewSource']
+  previewAvailable: boolean
 }
 
-function normalizeTemplateImportHealthForRead(value: unknown): TemplateRecord['importHealth'] {
-  const normalized = normalizeText(value)
-  if (normalized === 'clean' || normalized === 'degraded' || normalized === 'failed') return normalized
-  throw new TemplateRepositoryError(
-    'TEMPLATE_REPOSITORY_FAILURE',
-    `Invalid template import_health value "${normalized || '<empty>'}".`,
-  )
-}
+function normalizeTemplateRowForRead(row: TemplateRow): ReadNormalizedTemplateRow {
+  const status =
+    row.status === 'ready' || row.status === 'failed'
+      ? row.status
+      : 'failed'
+  const importHealth =
+    row.import_health === 'clean' ||
+    row.import_health === 'degraded' ||
+    row.import_health === 'failed'
+      ? row.import_health
+      : 'failed'
+  const previewSource =
+    row.preview_source === 'html_snapshot' ||
+    row.preview_source === 'fallback'
+      ? row.preview_source
+      : 'fallback'
+  const previewAvailable =
+    typeof row.preview_available === 'boolean'
+      ? row.preview_available
+      : false
 
-function normalizeTemplatePreviewSourceForRead(value: unknown): TemplateRecord['previewSource'] {
-  const normalized = normalizeText(value)
-  if (normalized === 'rendered_capture' || normalized === 'html_snapshot' || normalized === 'fallback') return normalized
-  throw new TemplateRepositoryError(
-    'TEMPLATE_REPOSITORY_FAILURE',
-    `Invalid template preview_source value "${normalized || '<empty>'}".`,
-  )
+  const changed =
+    status !== row.status ||
+    importHealth !== row.import_health ||
+    previewSource !== row.preview_source ||
+    previewAvailable !== row.preview_available
+
+  if (changed) {
+    console.info('[template-intake] TEMPLATE_ROW_NORMALIZED_LEGACY', {
+      templateId: row.id,
+      original: {
+        status: row.status,
+        importHealth: row.import_health,
+        previewSource: row.preview_source,
+        previewAvailable: row.preview_available,
+      },
+      normalized: {
+        status,
+        importHealth,
+        previewSource,
+        previewAvailable,
+      },
+    })
+  }
+
+  return {
+    status,
+    importHealth,
+    previewSource,
+    previewAvailable,
+  }
 }
 
 export function mapTemplateRow(row: TemplateRow): TemplateRecord {
+  const normalizedRead = normalizeTemplateRowForRead(row)
   return {
     id: row.id,
     clientId: row.client_id,
@@ -162,12 +196,12 @@ export function mapTemplateRow(row: TemplateRow): TemplateRecord {
     name: row.name,
     slug: row.slug,
     sourceType: row.source_type === 'zip_html' ? 'zip_html' : 'zip_html',
-    status: normalizeTemplateStatusForRead(row.status),
-    importHealth: normalizeTemplateImportHealthForRead(row.import_health),
+    status: normalizedRead.status,
+    importHealth: normalizedRead.importHealth,
     previewImagePath: normalizeOptionalText(row.preview_image_path),
-    previewAvailable: Boolean(row.preview_available),
+    previewAvailable: normalizedRead.previewAvailable,
     previewIsFallback: Boolean(row.preview_is_fallback),
-    previewSource: normalizeTemplatePreviewSourceForRead(row.preview_source),
+    previewSource: normalizedRead.previewSource,
     tags: Array.isArray(row.tags) ? row.tags.map((value) => normalizeText(value)).filter(Boolean) : [],
     sourceFilename: row.source_filename,
     entryHtmlPath: normalizeOptionalText(row.entry_html_path),
