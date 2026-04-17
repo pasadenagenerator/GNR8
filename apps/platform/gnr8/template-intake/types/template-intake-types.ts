@@ -115,6 +115,7 @@ export type TemplateRecord = {
   entryHtmlFileName: string | null
   templateType: TemplateType
   importSnapshotId: string | null
+  durableSnapshotRootDirAbs: string | null
   templateManifestSummary: TemplateManifestSummary | null
   diagnosticsSummary: TemplateDiagnosticsSummary | null
   importManifestSummary: ImportManifest | null
@@ -152,6 +153,7 @@ export type UpdateTemplateProcessingResultInput = {
   preview: TemplatePreviewSummary
   tags: string[]
   importSnapshotId: string | null
+  durableSnapshotRootDirAbs: string | null
   diagnosticsSummary: TemplateDiagnosticsSummary
   templateManifestSummary: TemplateManifestSummary
   importManifestSummary: ImportManifest | null

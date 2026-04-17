@@ -11,11 +11,16 @@ import {
 } from '@/gnr8/site/site-template-runtime-bootstrap-service'
 import type { ScopedImportPipelineOutcome } from '@/gnr8/site/scoped-import-pipeline'
 
-function createTemplateRoot(input: { snapshotId: string; entryHtmlPath: string; html: string; assetsDir?: string }): {
+function createTemplateRoot(input: {
+  rootDirAbs: string
+  entryHtmlPath: string
+  html: string
+  assetsDir?: string
+}): {
   snapshotRootDirAbs: string
   entryHtmlPathAbs: string
 } {
-  const base = path.resolve(os.tmpdir(), 'gnr8', 'template-intake', input.snapshotId, 'extracted')
+  const base = path.resolve(input.rootDirAbs)
   fs.mkdirSync(base, { recursive: true })
   const entryAbs = path.resolve(base, input.entryHtmlPath)
   fs.mkdirSync(path.dirname(entryAbs), { recursive: true })
@@ -110,12 +115,15 @@ function createPipelineOutcome(seed?: Partial<ScopedImportPipelineOutcome>): Sco
 
 test('bootstrapRuntimeFromTemplateSite creates deterministic initial runtime/preview seed from template truth', async () => {
   const snapshotId = `template-zip-${Date.now()}-success`
+  const legacyRoot = path.resolve(os.tmpdir(), 'gnr8', 'template-intake', snapshotId, 'extracted')
+  const durableRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'gnr8-template-durable-success-'))
   createTemplateRoot({
-    snapshotId,
+    rootDirAbs: durableRoot,
     entryHtmlPath: 'index.html',
     html: '<!doctype html><html><body><section><h1>Beauty Clinic</h1></section><section><p>Services</p></section></body></html>',
     assetsDir: 'assets',
   })
+  fs.rmSync(legacyRoot, { recursive: true, force: true })
 
   let ownershipLinked: { siteId: string; siteVersionId: string } | null = null
   let pipelineInvocations = 0
@@ -133,6 +141,7 @@ test('bootstrapRuntimeFromTemplateSite creates deterministic initial runtime/pre
     },
     template: {
       id: '00000000-0000-4000-8000-000000000901',
+      durableSnapshotRootDirAbs: durableRoot,
       importSnapshotId: snapshotId,
       entryHtmlPath: 'index.html',
       entryHtmlFileName: 'index.html',
@@ -158,9 +167,57 @@ test('bootstrapRuntimeFromTemplateSite creates deterministic initial runtime/pre
   assert.equal(result.siteVersionId, '00000000-0000-4000-8000-000000000771')
   assert.equal(result.previewSeeded, true)
   assert.equal(result.sectionCount > 0, true)
+  fs.rmSync(durableRoot, { recursive: true, force: true })
 })
 
-test('bootstrapRuntimeFromTemplateSite fails truthfully when template artifact evidence is missing', async () => {
+test('bootstrapRuntimeFromTemplateSite resolves legacy temp source when durable source is missing', async () => {
+  const snapshotId = `template-zip-${Date.now()}-legacy`
+  const legacyRoot = path.resolve(os.tmpdir(), 'gnr8', 'template-intake', snapshotId, 'extracted')
+  createTemplateRoot({
+    rootDirAbs: legacyRoot,
+    entryHtmlPath: 'index.html',
+    html: '<!doctype html><html><body><h1>Legacy Template</h1></body></html>',
+    assetsDir: 'assets',
+  })
+  const durableRootMissing = path.resolve(os.tmpdir(), `gnr8-missing-durable-${Date.now()}`)
+  fs.rmSync(durableRootMissing, { recursive: true, force: true })
+
+  let pipelineCalled = false
+  const result = await bootstrapRuntimeFromTemplateSite({
+    site: {
+      siteId: '00000000-0000-4000-8000-000000000779',
+      clientId: '00000000-0000-4000-8000-000000000201',
+      agencyId: '00000000-0000-4000-8000-000000000301',
+      templateId: '00000000-0000-4000-8000-000000000903',
+      name: 'Legacy Template',
+      domain: 'legacy.example.com',
+      status: 'draft',
+      createdAt: '2026-04-17T10:00:00.000Z',
+      updatedAt: '2026-04-17T10:00:00.000Z',
+    },
+    template: {
+      id: '00000000-0000-4000-8000-000000000903',
+      durableSnapshotRootDirAbs: durableRootMissing,
+      importSnapshotId: snapshotId,
+      entryHtmlPath: 'index.html',
+      entryHtmlFileName: 'index.html',
+      importManifestSummary: { assetsDirPath: 'assets' } as any,
+    },
+    deps: {
+      runScopedImportPipeline: async () => {
+        pipelineCalled = true
+        return createPipelineOutcome()
+      },
+      writeOwnershipLink: async () => undefined,
+    },
+  })
+
+  assert.equal(pipelineCalled, true)
+  assert.equal(result.siteVersionNo, 1)
+  fs.rmSync(legacyRoot, { recursive: true, force: true })
+})
+
+test('bootstrapRuntimeFromTemplateSite fails deterministically when both durable and legacy template sources are unavailable', async () => {
   let pipelineCalled = false
 
   try {
@@ -178,7 +235,8 @@ test('bootstrapRuntimeFromTemplateSite fails truthfully when template artifact e
       },
       template: {
         id: '00000000-0000-4000-8000-000000000902',
-        importSnapshotId: null,
+        durableSnapshotRootDirAbs: path.resolve(os.tmpdir(), `gnr8-missing-durable-${Date.now()}`),
+        importSnapshotId: `template-zip-${Date.now()}-missing`,
         entryHtmlPath: 'missing/index.html',
         entryHtmlFileName: 'index.html',
         importManifestSummary: null,
@@ -194,7 +252,8 @@ test('bootstrapRuntimeFromTemplateSite fails truthfully when template artifact e
     assert.fail('bootstrapRuntimeFromTemplateSite should fail when template source evidence is missing')
   } catch (error) {
     const parsed = parseTemplateSiteRuntimeBootstrapError(error)
-    assert.equal(parsed?.code, 'TEMPLATE_SITE_BOOTSTRAP_TEMPLATE_ARTIFACT_MISSING' satisfies TemplateSiteRuntimeBootstrapErrorCode)
+    assert.equal(parsed?.code, 'TEMPLATE_SITE_BOOTSTRAP_IMPORT_SOURCE_MISSING' satisfies TemplateSiteRuntimeBootstrapErrorCode)
+    assert.equal(parsed?.message, 'Template source is unavailable for bootstrap.')
   }
   assert.equal(pipelineCalled, false)
 })

@@ -26,6 +26,7 @@ function createTemplate(seed: Partial<TemplateRecord> = {}): TemplateRecord {
     entryHtmlFileName: seed.entryHtmlFileName ?? 'index.html',
     templateType: seed.templateType ?? 'single_page',
     importSnapshotId: seed.importSnapshotId ?? null,
+    durableSnapshotRootDirAbs: seed.durableSnapshotRootDirAbs ?? null,
     templateManifestSummary: seed.templateManifestSummary ?? null,
     diagnosticsSummary: seed.diagnosticsSummary ?? null,
     importManifestSummary: seed.importManifestSummary ?? null,
@@ -83,6 +84,7 @@ function createDeps(overrides?: {
   parseSiteBootstrapError?: (
     error: unknown,
   ) => { status: number; code: string; message: string; siteId: string; templateId: string } | null
+  rollbackSiteOnBootstrapFailure?: (input: { siteId: string; clientId: string; agencyId: string }) => Promise<void>
 }) {
   return {
     requireScope: async () => ({
@@ -118,6 +120,7 @@ function createDeps(overrides?: {
     parseTemplateStorageError: () => null,
     parseSiteCreateError: () => null,
     parseSiteBootstrapError: overrides?.parseSiteBootstrapError ?? (() => null),
+    rollbackSiteOnBootstrapFailure: overrides?.rollbackSiteOnBootstrapFailure ?? (async () => undefined),
     parseScopeError: (error: unknown) => ({ status: 500, message: error instanceof Error ? error.message : 'failed' }),
   }
 }
@@ -309,10 +312,14 @@ test('POST /sites bootstraps runtime site version before returning success', asy
 })
 
 test('POST /sites reports deterministic bootstrap failure and does not return success payload', async () => {
+  let rollbackInput: { siteId: string; clientId: string; agencyId: string } | null = null
   const handlers = createSiteCreateRouteHandlers(
     createDeps({
       bootstrapTemplateSiteRuntime: async () => {
         throw new Error('bootstrap failed')
+      },
+      rollbackSiteOnBootstrapFailure: async (input) => {
+        rollbackInput = input
       },
       parseSiteBootstrapError: () => ({
         status: 500,
@@ -341,6 +348,8 @@ test('POST /sites reports deterministic bootstrap failure and does not return su
     code: string
     siteId?: string
     templateId?: string
+    site?: unknown
+    redirectTo?: string
   }
 
   assert.equal(response.status, 500)
@@ -348,4 +357,11 @@ test('POST /sites reports deterministic bootstrap failure and does not return su
   assert.equal(body.code, 'TEMPLATE_SITE_BOOTSTRAP_IMPORT_SOURCE_MISSING')
   assert.equal(body.siteId, '00000000-0000-4000-8000-000000000777')
   assert.equal(body.templateId, '00000000-0000-4000-8000-000000000901')
+  assert.equal(body.site, undefined)
+  assert.equal(body.redirectTo, undefined)
+  assert.deepEqual(rollbackInput, {
+    siteId: '00000000-0000-4000-8000-000000000777',
+    clientId: '00000000-0000-4000-8000-000000000201',
+    agencyId: '00000000-0000-4000-8000-000000000301',
+  })
 })

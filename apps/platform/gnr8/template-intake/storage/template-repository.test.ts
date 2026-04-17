@@ -55,6 +55,7 @@ test('mapTemplateRow maps entry metadata and template type fields', () => {
     entry_html_file_name: 'index.html',
     template_type: 'single_page',
     import_snapshot_id: 'snapshot-1',
+    durable_snapshot_root_dir_abs: '/var/gnr8/template-sources/template-1/snapshot',
     template_manifest_summary: null,
     diagnostics_summary: null,
     import_manifest_summary: null,
@@ -67,6 +68,7 @@ test('mapTemplateRow maps entry metadata and template type fields', () => {
   assert.equal(mapped.entryHtmlPath, 'index.html')
   assert.equal(mapped.entryHtmlFileName, 'index.html')
   assert.equal(mapped.templateType, 'single_page')
+  assert.equal(mapped.durableSnapshotRootDirAbs, '/var/gnr8/template-sources/template-1/snapshot')
 })
 
 test('mapTemplateRow keeps legacy null entry fields safe and defaults templateType to unknown', () => {
@@ -91,6 +93,7 @@ test('mapTemplateRow keeps legacy null entry fields safe and defaults templateTy
     entry_html_file_name: null,
     template_type: null,
     import_snapshot_id: null,
+    durable_snapshot_root_dir_abs: null,
     template_manifest_summary: null,
     diagnostics_summary: null,
     import_manifest_summary: null,
@@ -127,6 +130,7 @@ test('mapTemplateRow preserves ready/degraded html_snapshot no-preview truth', (
     entry_html_file_name: 'index.html',
     template_type: 'single_page',
     import_snapshot_id: 'snapshot-1',
+    durable_snapshot_root_dir_abs: null,
     template_manifest_summary: null,
     diagnostics_summary: null,
     import_manifest_summary: null,
@@ -166,6 +170,7 @@ test('mapTemplateRow rejects invalid status values instead of coercing to failed
         entry_html_file_name: 'index.html',
         template_type: 'single_page',
         import_snapshot_id: 'snapshot-1',
+        durable_snapshot_root_dir_abs: null,
         template_manifest_summary: null,
         diagnostics_summary: null,
         import_manifest_summary: null,

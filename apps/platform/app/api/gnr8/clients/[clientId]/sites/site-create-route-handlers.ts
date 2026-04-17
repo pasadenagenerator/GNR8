@@ -15,7 +15,7 @@ type Scope = {
   agencyId: string
 }
 
-type TemplateSelection = Pick<TemplateRecord, 'id' | 'importSnapshotId' | 'entryHtmlPath' | 'entryHtmlFileName' | 'importManifestSummary'>
+type TemplateSelection = Pick<TemplateRecord, 'id' | 'importSnapshotId' | 'durableSnapshotRootDirAbs' | 'entryHtmlPath' | 'entryHtmlFileName' | 'importManifestSummary'>
 
 type CreatedSiteRecord = {
   siteId: string
@@ -54,6 +54,7 @@ export type SiteCreateRouteDeps = {
   parseSiteBootstrapError: (
     error: unknown,
   ) => { status: number; code: string; message: string; siteId: string; templateId: string } | null
+  rollbackSiteOnBootstrapFailure: (input: { siteId: string; clientId: string; agencyId: string }) => Promise<unknown>
   parseScopeError: (error: unknown) => { status: number; message: string }
 }
 
@@ -120,10 +121,27 @@ export function createSiteCreateRouteHandlers(deps: SiteCreateRouteDeps) {
           name: parsed.value.name,
           domain: parsed.value.domain,
         })
-        await deps.bootstrapTemplateSiteRuntime({
-          site: created,
-          template,
-        })
+        try {
+          await deps.bootstrapTemplateSiteRuntime({
+            site: created,
+            template,
+          })
+        } catch (error) {
+          try {
+            await deps.rollbackSiteOnBootstrapFailure({
+              siteId: created.siteId,
+              clientId: scope.clientId,
+              agencyId: scope.agencyId,
+            })
+          } catch (rollbackError) {
+            console.error('[site-create] SITE_BOOTSTRAP_ROLLBACK_FAILED', {
+              siteId: created.siteId,
+              templateId: template.id,
+              reason: rollbackError instanceof Error ? rollbackError.message : String(rollbackError),
+            })
+          }
+          throw error
+        }
         const redirectTo = siteWorkspaceHref({
           clientId: scope.clientId,
           siteId: created.siteId,

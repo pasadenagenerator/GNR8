@@ -29,6 +29,7 @@ function createTemplate(seed: Partial<TemplateRecord> = {}): TemplateRecord {
     entryHtmlFileName: seed.entryHtmlFileName ?? 'index.html',
     templateType: seed.templateType ?? 'single_page',
     importSnapshotId: seed.importSnapshotId ?? 'template-zip-aaaaaaaaaaaaaaaa',
+    durableSnapshotRootDirAbs: seed.durableSnapshotRootDirAbs ?? null,
     templateManifestSummary: seed.templateManifestSummary ?? null,
     diagnosticsSummary: seed.diagnosticsSummary ?? null,
     importManifestSummary: seed.importManifestSummary ?? null,

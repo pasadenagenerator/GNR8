@@ -10,6 +10,7 @@ import {
   validateAndExtractTemplateZip,
 } from '@/gnr8/template-intake/core/template-zip-validator'
 import { buildTemplatePreviewSummary } from '@/gnr8/template-intake/preview/template-preview-summary'
+import { persistTemplateDurableSourceSnapshot } from '@/gnr8/template-intake/storage/template-durable-source'
 import {
   createTemplate,
   deleteTemplateByIdForClient,
@@ -51,6 +52,20 @@ type TemplateUploadIntakeEvent =
   | 'TEMPLATE_UPLOAD_INITIAL_ROW_WRITTEN'
   | 'TEMPLATE_UPLOAD_FINAL_RESULT_COMPUTED'
   | 'TEMPLATE_UPLOAD_FINAL_ROW_WRITTEN'
+
+function logTemplateSourcePersistenceEvent(input: {
+  templateId: string
+  sourceMode: 'durable'
+  sourceRef: string
+  sourceLoadedSuccessfully: boolean
+}) {
+  console.info('[template-intake] TEMPLATE_SOURCE_PERSISTED_DURABLY', {
+    templateId: input.templateId,
+    sourceMode: input.sourceMode,
+    sourceRef: input.sourceRef,
+    sourceLoadedSuccessfully: input.sourceLoadedSuccessfully,
+  })
+}
 
 function logTemplateUploadIntakeEvent(input: {
   event: TemplateUploadIntakeEvent
@@ -288,6 +303,7 @@ export async function runTemplateZipIntake(input: {
       details: { templateId: initialTemplate.id },
     }),
   ])
+  let durableSnapshotRootDirAbs: string | null = null
 
   if (!zipValidation.ok || !zipValidation.validation) {
     logTemplateRowStatusEvent({
@@ -334,6 +350,7 @@ export async function runTemplateZipIntake(input: {
       },
       tags: [],
       importSnapshotId: zipValidation.snapshotId,
+      durableSnapshotRootDirAbs,
       diagnosticsSummary: summarizeTemplateDiagnostics([
         ...createDiagnosticSummary.issues,
         createTemplateIntakeDiagnostic({
@@ -436,6 +453,7 @@ export async function runTemplateZipIntake(input: {
       },
       tags: [],
       importSnapshotId: zipValidation.snapshotId,
+      durableSnapshotRootDirAbs,
       diagnosticsSummary: summarizeTemplateDiagnostics([
         ...createDiagnosticSummary.issues,
         createTemplateIntakeDiagnostic({
@@ -560,6 +578,7 @@ export async function runTemplateZipIntake(input: {
       preview: previewSummary.preview,
       tags: [],
       importSnapshotId: zipValidation.snapshotId,
+      durableSnapshotRootDirAbs,
       diagnosticsSummary: summarizeTemplateDiagnostics([
         ...intakeDiagnostics.issues,
         ...previewSummary.diagnostics,
@@ -652,6 +671,7 @@ export async function runTemplateZipIntake(input: {
       preview: previewSummary.preview,
       tags: [],
       importSnapshotId: zipValidation.snapshotId,
+      durableSnapshotRootDirAbs,
       diagnosticsSummary: summarizeTemplateDiagnostics([
         ...intakeDiagnostics.issues,
         ...previewSummary.diagnostics,
@@ -754,6 +774,70 @@ export async function runTemplateZipIntake(input: {
     }),
   ])
 
+  const importedEntryHtml =
+    importOutput.rawDomSnapshot.documents.find((doc) => normalizeText(doc.path) === entryHtmlPath)?.text ??
+    importOutput.rawDomSnapshot.documents[0]?.text ??
+    ''
+
+  try {
+    const persistedSource = persistTemplateDurableSourceSnapshot({
+      templateId: initialTemplate.id,
+      extractionRootDirAbs: zipValidation.validation.extractionRootDirAbs,
+      entryHtmlPath,
+      entryHtmlContent: importedEntryHtml,
+    })
+    durableSnapshotRootDirAbs = persistedSource.durableSnapshotRootDirAbs
+    logTemplateSourcePersistenceEvent({
+      templateId: initialTemplate.id,
+      sourceMode: 'durable',
+      sourceRef: durableSnapshotRootDirAbs,
+      sourceLoadedSuccessfully: true,
+    })
+  } catch (error) {
+    const updated = await repository.updateTemplateProcessingResult({
+      templateId: initialTemplate.id,
+      status: 'failed',
+      importHealth: 'failed',
+      entryHtmlPath: entryMetadata.entryHtmlPath,
+      entryHtmlFileName: entryMetadata.entryHtmlFileName,
+      templateType: entryMetadata.templateType,
+      preview: {
+        previewAvailable: false,
+        previewIsFallback: true,
+        previewSource: 'html_snapshot',
+        previewImagePath: null,
+        previewLabel: 'No preview available',
+        entryHtmlFileName: null,
+      },
+      tags: [],
+      importSnapshotId: zipValidation.snapshotId,
+      durableSnapshotRootDirAbs: null,
+      diagnosticsSummary: summarizeTemplateDiagnostics([
+        ...importDiagnostics.issues,
+        createTemplateIntakeDiagnostic({
+          code: 'TEMPLATE_IMPORT_FAILED',
+          severity: 'fatal',
+          message: 'Template durable source snapshot could not be persisted.',
+          details: {
+            error: error instanceof Error ? error.message : String(error),
+          },
+        }),
+      ]),
+      templateManifestSummary: manifest.summary,
+      importManifestSummary: importManifest,
+    })
+    return {
+      ok: false,
+      zipValidationOk: zipValidation.ok,
+      selectedEntryHtmlPath,
+      templateId: updated.id,
+      status: updated.status,
+      importHealth: updated.importHealth,
+      diagnosticsSummary: updated.diagnosticsSummary ?? importDiagnostics,
+      errorMessage: 'Template source persistence failed.',
+    }
+  }
+
   const normalizedTags = normalizeTemplateTagsForStorage(manifest.summary.tags)
   const finalSnapshotId = zipValidation.snapshotId
   logTemplateRowStatusEvent({
@@ -794,6 +878,7 @@ export async function runTemplateZipIntake(input: {
     preview: previewSummary.preview,
     tags: normalizedTags,
     importSnapshotId: finalSnapshotId,
+    durableSnapshotRootDirAbs,
     diagnosticsSummary: importDiagnostics,
     templateManifestSummary: manifest.summary,
     importManifestSummary: importManifest,

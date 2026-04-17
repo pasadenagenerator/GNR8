@@ -8,6 +8,7 @@ import {
   bootstrapRuntimeFromTemplateSite,
   parseTemplateSiteRuntimeBootstrapError,
 } from '@/gnr8/site/site-template-runtime-bootstrap-service'
+import { deprovisionSite } from '@/gnr8/site/site-deprovisioning-service'
 import { getClientTemplateById } from '@/gnr8/template-intake/core/template-intake-service'
 import { parseTemplateRepositoryError } from '@/gnr8/template-intake/storage/template-repository'
 
@@ -23,6 +24,7 @@ const handlers = createSiteCreateRouteHandlers({
   parseTemplateStorageError: parseTemplateRepositoryError,
   parseSiteCreateError: parseSiteTemplateInstantiationError,
   parseSiteBootstrapError: parseTemplateSiteRuntimeBootstrapError,
+  rollbackSiteOnBootstrapFailure: deprovisionSite,
   parseScopeError: parseThrownScopeError,
 })
 

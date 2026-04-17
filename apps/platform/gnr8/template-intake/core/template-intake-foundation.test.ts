@@ -39,6 +39,7 @@ function createTemplateRecord(seed: Partial<TemplateRecord> & { id: string; clie
     entryHtmlFileName: seed.entryHtmlFileName ?? null,
     templateType: seed.templateType ?? 'unknown',
     importSnapshotId: seed.importSnapshotId ?? null,
+    durableSnapshotRootDirAbs: seed.durableSnapshotRootDirAbs ?? null,
     templateManifestSummary: seed.templateManifestSummary ?? null,
     diagnosticsSummary: seed.diagnosticsSummary ?? null,
     importManifestSummary: seed.importManifestSummary ?? null,
@@ -110,6 +111,7 @@ function createRepositoryStub() {
         }
         tags: string[]
         importSnapshotId: string | null
+        durableSnapshotRootDirAbs: string | null
         diagnosticsSummary: TemplateDiagnosticsSummary
         templateManifestSummary: TemplateRecord['templateManifestSummary']
         importManifestSummary: TemplateRecord['importManifestSummary']
@@ -129,6 +131,7 @@ function createRepositoryStub() {
           templateType: input.templateType,
           tags: input.tags,
           importSnapshotId: input.importSnapshotId,
+          durableSnapshotRootDirAbs: input.durableSnapshotRootDirAbs,
           diagnosticsSummary: input.diagnosticsSummary,
           templateManifestSummary: input.templateManifestSummary,
           importManifestSummary: input.importManifestSummary,
@@ -243,95 +246,111 @@ function createImportOutput(input: {
 
 test('ZIP upload with valid index.html creates template record', async () => {
   const { repository } = createRepositoryStub()
+  const extractionRootDirAbs = fs.mkdtempSync(path.join(os.tmpdir(), 'template-intake-durable-source-'))
+  const durableRootDirAbs = fs.mkdtempSync(path.join(os.tmpdir(), 'template-intake-durable-root-'))
+  const previousDurableRoot = process.env.GNR8_TEMPLATE_DURABLE_SOURCE_ROOT_ABS
+  process.env.GNR8_TEMPLATE_DURABLE_SOURCE_ROOT_ABS = durableRootDirAbs
+  fs.writeFileSync(path.join(extractionRootDirAbs, 'index.html'), '<!doctype html><html><body>Template</body></html>', 'utf8')
 
-  const result = await runTemplateZipIntake({
-    actorUserId: '00000000-0000-4000-8000-000000000101',
-    clientId: '00000000-0000-4000-8000-000000000201',
-    organizationId: '00000000-0000-4000-8000-000000000201',
-    agencyId: '00000000-0000-4000-8000-000000000301',
-    uploadedZip: {
-      fileName: 'portfolio-template.zip',
-      bytes: new Uint8Array([1, 2, 3]),
-    },
-    repository,
-    zipValidator: () => ({
-      ok: true,
-      diagnostics: [],
-      errorMessage: null,
-      snapshotId: 'template-zip-abc123',
-      zipFileAbsPath: '/tmp/template.zip',
-      validation: {
+  try {
+    const result = await runTemplateZipIntake({
+      actorUserId: '00000000-0000-4000-8000-000000000101',
+      clientId: '00000000-0000-4000-8000-000000000201',
+      organizationId: '00000000-0000-4000-8000-000000000201',
+      agencyId: '00000000-0000-4000-8000-000000000301',
+      uploadedZip: {
+        fileName: 'portfolio-template.zip',
+        bytes: new Uint8Array([1, 2, 3]),
+      },
+      repository,
+      zipValidator: () => ({
         ok: true,
-        extractionRootDirAbs: '/tmp/template',
+        diagnostics: [],
+        errorMessage: null,
+        snapshotId: 'template-zip-abc123',
+        zipFileAbsPath: '/tmp/template.zip',
+        validation: {
+          ok: true,
+          extractionRootDirAbs,
+          entryHtmlPath: 'index.html',
+          entryHtmlSelection: 'root_index',
+          htmlCandidates: ['index.html'],
+          assetsDirPath: 'assets',
+          manifestPath: null,
+          assetSummary: {
+            fileCount: 1,
+            imageCount: 0,
+            stylesheetCount: 0,
+            scriptCount: 0,
+            otherCount: 1,
+          },
+        },
+      }),
+      importRunner: async () => createImportOutput({ status: 'ok' }),
+      importManifestBuilder: () => ({
+        manifestVersion: '1.0.0' as const,
+        contractVersion: '1.1.1' as const,
+        status: 'success',
+        outputStatus: 'ok',
+        rootDirPath: null,
         entryHtmlPath: 'index.html',
-        entryHtmlSelection: 'root_index',
-        htmlCandidates: ['index.html'],
+        sourceKind: 'single-entry-html',
+        htmlFilePaths: [],
         assetsDirPath: 'assets',
-        manifestPath: null,
-        assetSummary: {
-          fileCount: 1,
-          imageCount: 0,
-          stylesheetCount: 0,
-          scriptCount: 0,
-          otherCount: 1,
+        fingerprints: { inputSpecSha256: 'spec', inputContentSha256: 'content' },
+        diagnostics: { totalCount: 0, infoCount: 0, warningCount: 0, errorCount: 0, fatalCount: 0, codes: [] },
+        dom: {
+          documentCount: 1,
+          documentsWithDomCount: 1,
+          nodeCount: 10,
+          parseWarningCount: 0,
+          decodingErrorCount: 0,
+          effectivelyEmpty: false,
+          documentPaths: ['index.html'],
         },
-      },
-    }),
-    importRunner: async () => createImportOutput({ status: 'ok' }),
-    importManifestBuilder: () => ({
-      manifestVersion: '1.0.0' as const,
-      contractVersion: '1.1.1' as const,
-      status: 'success',
-      outputStatus: 'ok',
-      rootDirPath: null,
-      entryHtmlPath: 'index.html',
-      sourceKind: 'single-entry-html',
-      htmlFilePaths: [],
-      assetsDirPath: 'assets',
-      fingerprints: { inputSpecSha256: 'spec', inputContentSha256: 'content' },
-      diagnostics: { totalCount: 0, infoCount: 0, warningCount: 0, errorCount: 0, fatalCount: 0, codes: [] },
-      dom: {
-        documentCount: 1,
-        documentsWithDomCount: 1,
-        nodeCount: 10,
-        parseWarningCount: 0,
-        decodingErrorCount: 0,
-        effectivelyEmpty: false,
-        documentPaths: ['index.html'],
-      },
-      assets: {
-        totalAssetFiles: 0,
-        totalAssets: 0,
-        referencesByAssetKind: { image: 0, stylesheet: 0, script: 0, unknown: 0 },
-        referencesByReferenceKind: {
-          relative_local: 0,
-          root_relative: 0,
-          absolute_url: 0,
-          data_url: 0,
-          empty_invalid: 0,
+        assets: {
+          totalAssetFiles: 0,
+          totalAssets: 0,
+          referencesByAssetKind: { image: 0, stylesheet: 0, script: 0, unknown: 0 },
+          referencesByReferenceKind: {
+            relative_local: 0,
+            root_relative: 0,
+            absolute_url: 0,
+            data_url: 0,
+            empty_invalid: 0,
+          },
+          referencesByValidationStatus: {
+            ok: 0,
+            invalid_asset_reference: 0,
+            unsupported_remote_asset: 0,
+            unsupported_data_url_asset: 0,
+            path_traversal_blocked: 0,
+            missing_local_asset: 0,
+          },
+          existingLocalCount: 0,
+          missingLocalCount: 0,
+          references: [],
         },
-        referencesByValidationStatus: {
-          ok: 0,
-          invalid_asset_reference: 0,
-          unsupported_remote_asset: 0,
-          unsupported_data_url_asset: 0,
-          path_traversal_blocked: 0,
-          missing_local_asset: 0,
-        },
-        existingLocalCount: 0,
-        missingLocalCount: 0,
-        references: [],
-      },
-    }),
-  })
+      }),
+    })
 
-  assert.equal(result.ok, true)
-  if (!result.ok) return
-  assert.equal(result.template.status, 'ready')
-  assert.equal(result.template.importSnapshotId, 'template-zip-abc123')
-  assert.equal(result.template.entryHtmlPath, 'index.html')
-  assert.equal(result.template.entryHtmlFileName, 'index.html')
-  assert.equal(result.template.templateType, 'single_page')
+    assert.equal(result.ok, true)
+    if (!result.ok) return
+    assert.equal(result.template.status, 'ready')
+    assert.equal(result.template.importSnapshotId, 'template-zip-abc123')
+    assert.equal(result.template.entryHtmlPath, 'index.html')
+    assert.equal(result.template.entryHtmlFileName, 'index.html')
+    assert.equal(result.template.templateType, 'single_page')
+    assert.equal(Boolean(result.template.durableSnapshotRootDirAbs), true)
+    assert.equal(result.template.durableSnapshotRootDirAbs?.startsWith(durableRootDirAbs), true)
+    const durableEntryPath = path.resolve(result.template.durableSnapshotRootDirAbs ?? '', 'index.html')
+    assert.equal(fs.existsSync(durableEntryPath), true)
+  } finally {
+    if (previousDurableRoot === undefined) delete process.env.GNR8_TEMPLATE_DURABLE_SOURCE_ROOT_ABS
+    else process.env.GNR8_TEMPLATE_DURABLE_SOURCE_ROOT_ABS = previousDurableRoot
+    fs.rmSync(extractionRootDirAbs, { recursive: true, force: true })
+    fs.rmSync(durableRootDirAbs, { recursive: true, force: true })
+  }
 })
 
 test('Missing manifest derives name from filename', () => {

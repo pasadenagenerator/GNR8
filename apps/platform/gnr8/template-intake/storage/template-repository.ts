@@ -96,6 +96,7 @@ type TemplateRow = {
   entry_html_file_name: string | null
   template_type: string | null
   import_snapshot_id: string | null
+  durable_snapshot_root_dir_abs: string | null
   template_manifest_summary: unknown | null
   diagnostics_summary: unknown | null
   import_manifest_summary: unknown | null
@@ -173,6 +174,7 @@ export function mapTemplateRow(row: TemplateRow): TemplateRecord {
     entryHtmlFileName: normalizeOptionalText(row.entry_html_file_name),
     templateType: normalizeTemplateTypeForStorage(row.template_type),
     importSnapshotId: normalizeOptionalText(row.import_snapshot_id),
+    durableSnapshotRootDirAbs: normalizeOptionalText(row.durable_snapshot_root_dir_abs),
     templateManifestSummary: (row.template_manifest_summary ?? null) as TemplateRecord['templateManifestSummary'],
     diagnosticsSummary: (row.diagnostics_summary ?? null) as TemplateRecord['diagnosticsSummary'],
     importManifestSummary: (row.import_manifest_summary ?? null) as TemplateRecord['importManifestSummary'],
@@ -217,6 +219,7 @@ export async function createTemplate(input: CreateTemplateInput): Promise<Templa
         entry_html_file_name,
         template_type,
         import_snapshot_id,
+        durable_snapshot_root_dir_abs,
         template_manifest_summary,
         diagnostics_summary,
         import_manifest_summary,
@@ -242,6 +245,7 @@ export async function createTemplate(input: CreateTemplateInput): Promise<Templa
         $11::text,
         $12::text,
         $13::text,
+        null,
         null,
         $14::jsonb,
         $15::jsonb,
@@ -270,6 +274,7 @@ export async function createTemplate(input: CreateTemplateInput): Promise<Templa
         entry_html_file_name,
         template_type,
         import_snapshot_id,
+        durable_snapshot_root_dir_abs,
         template_manifest_summary,
         diagnostics_summary,
         import_manifest_summary,
@@ -324,12 +329,13 @@ export async function updateTemplateProcessingResult(input: UpdateTemplateProces
         preview_source = $7::text,
         tags = $8::text[],
         import_snapshot_id = $9::text,
-        entry_html_path = $10::text,
-        entry_html_file_name = $11::text,
-        template_type = $12::text,
-        diagnostics_summary = $13::jsonb,
-        template_manifest_summary = $14::jsonb,
-        import_manifest_summary = $15::jsonb,
+        durable_snapshot_root_dir_abs = $10::text,
+        entry_html_path = $11::text,
+        entry_html_file_name = $12::text,
+        template_type = $13::text,
+        diagnostics_summary = $14::jsonb,
+        template_manifest_summary = $15::jsonb,
+        import_manifest_summary = $16::jsonb,
         updated_at = now()
       where id = $1::uuid
       returning
@@ -353,6 +359,7 @@ export async function updateTemplateProcessingResult(input: UpdateTemplateProces
         entry_html_file_name,
         template_type,
         import_snapshot_id,
+        durable_snapshot_root_dir_abs,
         template_manifest_summary,
         diagnostics_summary,
         import_manifest_summary,
@@ -371,6 +378,7 @@ export async function updateTemplateProcessingResult(input: UpdateTemplateProces
         input.preview.previewSource,
         input.tags,
         input.importSnapshotId,
+        input.durableSnapshotRootDirAbs,
         input.entryHtmlPath,
         input.entryHtmlFileName,
         normalizeTemplateTypeForStorage(input.templateType),
@@ -420,6 +428,7 @@ export async function listTemplatesForClient(input: { clientId: string; limit?: 
         entry_html_file_name,
         template_type,
         import_snapshot_id,
+        durable_snapshot_root_dir_abs,
         template_manifest_summary,
         diagnostics_summary,
         import_manifest_summary,
@@ -471,6 +480,7 @@ export async function getTemplateByIdForClient(input: {
         entry_html_file_name,
         template_type,
         import_snapshot_id,
+        durable_snapshot_root_dir_abs,
         template_manifest_summary,
         diagnostics_summary,
         import_manifest_summary,
@@ -532,6 +542,7 @@ export async function updateTemplateMetadataById(input: {
         entry_html_file_name,
         template_type,
         import_snapshot_id,
+        durable_snapshot_root_dir_abs,
         template_manifest_summary,
         diagnostics_summary,
         import_manifest_summary,
@@ -583,6 +594,7 @@ export async function deleteTemplateByIdForClient(input: {
         entry_html_file_name,
         template_type,
         import_snapshot_id,
+        durable_snapshot_root_dir_abs,
         template_manifest_summary,
         diagnostics_summary,
         import_manifest_summary,

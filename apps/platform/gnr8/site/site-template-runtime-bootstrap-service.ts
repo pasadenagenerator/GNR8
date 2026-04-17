@@ -15,7 +15,7 @@ import {
 
 type BootstrapTemplateRecord = Pick<
   TemplateRecord,
-  'id' | 'importSnapshotId' | 'entryHtmlPath' | 'entryHtmlFileName' | 'importManifestSummary'
+  'id' | 'importSnapshotId' | 'entryHtmlPath' | 'entryHtmlFileName' | 'importManifestSummary' | 'durableSnapshotRootDirAbs'
 >
 
 export type TemplateSiteRuntimeBootstrapResult = {
@@ -86,6 +86,15 @@ function normalizeDomainAsUrl(domain: string): string {
 
 function resolveTemplateSnapshotRoot(snapshotId: string): string {
   return path.resolve(os.tmpdir(), 'gnr8', 'template-intake', snapshotId)
+}
+
+type TemplateBootstrapSourceMode = 'durable' | 'legacy_temp'
+
+type TemplateBootstrapSourceCandidate = {
+  sourceMode: TemplateBootstrapSourceMode
+  snapshotRootDirAbs: string
+  entryHtmlPathAbs: string
+  assetsDirAbs: string
 }
 
 function toStableHash(value: string): string {
@@ -239,6 +248,38 @@ function mapBootstrapError(input: {
   })
 }
 
+function resolveTemplateBootstrapSourceCandidates(input: {
+  template: BootstrapTemplateRecord
+}): TemplateBootstrapSourceCandidate[] {
+  const entryHtmlPath = normalizeText(input.template.entryHtmlPath).replaceAll('\\', '/').replace(/^\/+/, '')
+  const assetsDirRel = normalizeText(input.template.importManifestSummary?.assetsDirPath) || 'assets'
+  const candidates: TemplateBootstrapSourceCandidate[] = []
+
+  const durableRoot = normalizeText(input.template.durableSnapshotRootDirAbs)
+  if (durableRoot && entryHtmlPath) {
+    const snapshotRootDirAbs = path.resolve(durableRoot)
+    candidates.push({
+      sourceMode: 'durable',
+      snapshotRootDirAbs,
+      entryHtmlPathAbs: path.resolve(snapshotRootDirAbs, entryHtmlPath),
+      assetsDirAbs: path.resolve(snapshotRootDirAbs, assetsDirRel),
+    })
+  }
+
+  const importSnapshotId = normalizeText(input.template.importSnapshotId)
+  if (importSnapshotId && entryHtmlPath) {
+    const snapshotRootDirAbs = path.resolve(resolveTemplateSnapshotRoot(importSnapshotId), 'extracted')
+    candidates.push({
+      sourceMode: 'legacy_temp',
+      snapshotRootDirAbs,
+      entryHtmlPathAbs: path.resolve(snapshotRootDirAbs, entryHtmlPath),
+      assetsDirAbs: path.resolve(snapshotRootDirAbs, assetsDirRel),
+    })
+  }
+
+  return candidates
+}
+
 async function linkOwnershipSiteVersion(input: { siteId: string; siteVersionId: string }): Promise<void> {
   const client = await getSuperadminPool().connect()
   try {
@@ -274,25 +315,19 @@ export async function bootstrapRuntimeFromTemplateSite(input: {
   const deps = { ...defaultDeps(), ...(input.deps ?? {}) }
   const siteId = input.site.siteId
   const templateId = input.template.id
-  const importSnapshotId = normalizeText(input.template.importSnapshotId)
   const entryHtmlPath = normalizeText(input.template.entryHtmlPath)
+  const durableSnapshotRootDirAbs = normalizeText(input.template.durableSnapshotRootDirAbs)
+  const importSnapshotId = normalizeText(input.template.importSnapshotId)
 
   console.info('[template-site-bootstrap] TEMPLATE_SITE_BOOTSTRAP_STARTED', {
     siteId,
     templateId,
+    durableSnapshotRootDirAbs: durableSnapshotRootDirAbs || null,
     importSnapshotId: importSnapshotId || null,
     entryHtmlPath: entryHtmlPath || null,
   })
 
   try {
-    if (!importSnapshotId) {
-      throw new TemplateSiteRuntimeBootstrapError({
-        code: 'TEMPLATE_SITE_BOOTSTRAP_TEMPLATE_ARTIFACT_MISSING',
-        message: 'Template import snapshot reference is missing.',
-        siteId,
-        templateId,
-      })
-    }
     if (!entryHtmlPath) {
       throw new TemplateSiteRuntimeBootstrapError({
         code: 'TEMPLATE_SITE_BOOTSTRAP_TEMPLATE_ARTIFACT_MISSING',
@@ -305,38 +340,80 @@ export async function bootstrapRuntimeFromTemplateSite(input: {
     console.info('[template-site-bootstrap] TEMPLATE_SITE_BOOTSTRAP_TEMPLATE_RESOLVED', {
       siteId,
       templateId,
+      durableSnapshotRootDirAbs: durableSnapshotRootDirAbs || null,
       importSnapshotId,
       entryHtmlPath,
     })
 
-    const snapshotBaseDirAbs = resolveTemplateSnapshotRoot(importSnapshotId)
-    const snapshotRootDirAbs = path.resolve(snapshotBaseDirAbs, 'extracted')
-    const entryHtmlPathAbs = path.resolve(snapshotRootDirAbs, entryHtmlPath.replaceAll('\\', '/'))
-    const assetsDirRel = normalizeText(input.template.importManifestSummary?.assetsDirPath) || 'assets'
-    const assetsDirAbs = path.resolve(snapshotRootDirAbs, assetsDirRel)
+    const sourceCandidates = resolveTemplateBootstrapSourceCandidates({
+      template: input.template,
+    })
+    let resolvedSource:
+      | {
+          sourceMode: TemplateBootstrapSourceMode
+          snapshotRootDirAbs: string
+          entryHtmlPathAbs: string
+          assetsDirAbs: string
+          html: string
+        }
+      | null = null
 
-    if (!fs.existsSync(snapshotRootDirAbs)) {
-      throw new TemplateSiteRuntimeBootstrapError({
-        code: 'TEMPLATE_SITE_BOOTSTRAP_IMPORT_SOURCE_MISSING',
-        message: `Template snapshot directory is missing: ${snapshotRootDirAbs}`,
-        siteId,
-        templateId,
-      })
-    }
-    if (!fs.existsSync(entryHtmlPathAbs)) {
-      throw new TemplateSiteRuntimeBootstrapError({
-        code: 'TEMPLATE_SITE_BOOTSTRAP_IMPORT_SOURCE_MISSING',
-        message: `Template entry HTML is missing: ${entryHtmlPathAbs}`,
-        siteId,
-        templateId,
-      })
+    for (const candidate of sourceCandidates) {
+      if (!fs.existsSync(candidate.snapshotRootDirAbs) || !fs.existsSync(candidate.entryHtmlPathAbs)) {
+        continue
+      }
+      try {
+        const html = fs.readFileSync(candidate.entryHtmlPathAbs, 'utf8')
+        if (!normalizeText(html)) {
+          console.error('[template-site-bootstrap] TEMPLATE_BOOTSTRAP_SOURCE_LOAD_FAILED', {
+            templateId,
+            sourceMode: candidate.sourceMode,
+            sourceRef: candidate.entryHtmlPathAbs,
+            sourceLoadedSuccessfully: false,
+            reason: 'entry_html_empty',
+          })
+          continue
+        }
+        resolvedSource = {
+          sourceMode: candidate.sourceMode,
+          snapshotRootDirAbs: candidate.snapshotRootDirAbs,
+          entryHtmlPathAbs: candidate.entryHtmlPathAbs,
+          assetsDirAbs: candidate.assetsDirAbs,
+          html,
+        }
+        console.info(
+          `[template-site-bootstrap] ${
+            candidate.sourceMode === 'durable' ? 'TEMPLATE_SOURCE_RESOLVED_DURABLE' : 'TEMPLATE_SOURCE_RESOLVED_LEGACY_TEMP'
+          }`,
+          {
+            templateId,
+            sourceMode: candidate.sourceMode,
+            sourceRef: candidate.entryHtmlPathAbs,
+            sourceLoadedSuccessfully: true,
+          },
+        )
+        break
+      } catch (error) {
+        console.error('[template-site-bootstrap] TEMPLATE_BOOTSTRAP_SOURCE_LOAD_FAILED', {
+          templateId,
+          sourceMode: candidate.sourceMode,
+          sourceRef: candidate.entryHtmlPathAbs,
+          sourceLoadedSuccessfully: false,
+          reason: error instanceof Error ? error.message : String(error),
+        })
+      }
     }
 
-    const html = fs.readFileSync(entryHtmlPathAbs, 'utf8')
-    if (!normalizeText(html)) {
+    if (!resolvedSource) {
+      console.error('[template-site-bootstrap] TEMPLATE_SOURCE_MISSING_FOR_BOOTSTRAP', {
+        templateId,
+        sourceMode: 'unresolved',
+        sourceRef: sourceCandidates.map((candidate) => candidate.entryHtmlPathAbs),
+        sourceLoadedSuccessfully: false,
+      })
       throw new TemplateSiteRuntimeBootstrapError({
         code: 'TEMPLATE_SITE_BOOTSTRAP_IMPORT_SOURCE_MISSING',
-        message: `Template entry HTML is empty: ${entryHtmlPathAbs}`,
+        message: 'Template source is unavailable for bootstrap.',
         siteId,
         templateId,
       })
@@ -345,18 +422,19 @@ export async function bootstrapRuntimeFromTemplateSite(input: {
     console.info('[template-site-bootstrap] TEMPLATE_SITE_BOOTSTRAP_IMPORT_SOURCE_RESOLVED', {
       siteId,
       templateId,
-      sourcePathRef: entryHtmlPathAbs,
-      snapshotRootDirAbs,
-      assetsDirAbs,
+      sourcePathRef: resolvedSource.entryHtmlPathAbs,
+      snapshotRootDirAbs: resolvedSource.snapshotRootDirAbs,
+      assetsDirAbs: resolvedSource.assetsDirAbs,
+      sourceMode: resolvedSource.sourceMode,
     })
 
     const snapshot = createTemplateSnapshot({
       site: input.site,
       template: input.template,
-      snapshotRootDirAbs,
-      entryHtmlPathAbs,
-      assetsDirAbs,
-      html,
+      snapshotRootDirAbs: resolvedSource.snapshotRootDirAbs,
+      entryHtmlPathAbs: resolvedSource.entryHtmlPathAbs,
+      assetsDirAbs: resolvedSource.assetsDirAbs,
+      html: resolvedSource.html,
       now: deps.now(),
     })
 

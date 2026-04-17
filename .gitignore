@@ -8,6 +8,7 @@ apps/platform/dist-rendered-capture-worker/
 .next/
 out/
 .out/
+.gnr8/
 apps/platform/gnr8/validation/.out/
 
 # env
