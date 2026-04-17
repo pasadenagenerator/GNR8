@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 
 import { parseCreateSiteFromTemplatePayload } from '@/gnr8/site/site-create-contract'
 import { siteWorkspaceHref } from '@/gnr8/site/site-workspace-navigation'
+import type { TemplateRecord } from '@/gnr8/template-intake/types/template-intake-types'
 
 type Params = {
   clientId: string
@@ -14,9 +15,7 @@ type Scope = {
   agencyId: string
 }
 
-type TemplateRecord = {
-  id: string
-}
+type TemplateSelection = Pick<TemplateRecord, 'id' | 'importSnapshotId' | 'entryHtmlPath' | 'entryHtmlFileName' | 'importManifestSummary'>
 
 type CreatedSiteRecord = {
   siteId: string
@@ -34,7 +33,7 @@ type ParsedError = { status: number; code: string; message: string } | null
 
 export type SiteCreateRouteDeps = {
   requireScope: (input: { clientIdParam: string }) => Promise<Scope>
-  getTemplateById: (input: { clientId: string; templateId: string }) => Promise<TemplateRecord | null>
+  getTemplateById: (input: { clientId: string; templateId: string }) => Promise<TemplateSelection | null>
   createSiteFromTemplate: (input: {
     clientId: string
     agencyId: string
@@ -42,8 +41,19 @@ export type SiteCreateRouteDeps = {
     name: string
     domain: string
   }) => Promise<CreatedSiteRecord>
+  bootstrapTemplateSiteRuntime: (input: { site: CreatedSiteRecord; template: TemplateSelection }) => Promise<{
+    siteVersionId: string
+    siteVersionNo: number
+    runtimeSiteId: string
+    artifactId: string | null
+    previewSeeded: boolean
+    sectionCount: number
+  }>
   parseTemplateStorageError: (error: unknown) => ParsedError
   parseSiteCreateError: (error: unknown) => ParsedError
+  parseSiteBootstrapError: (
+    error: unknown,
+  ) => { status: number; code: string; message: string; siteId: string; templateId: string } | null
   parseScopeError: (error: unknown) => { status: number; message: string }
 }
 
@@ -110,6 +120,10 @@ export function createSiteCreateRouteHandlers(deps: SiteCreateRouteDeps) {
           name: parsed.value.name,
           domain: parsed.value.domain,
         })
+        await deps.bootstrapTemplateSiteRuntime({
+          site: created,
+          template,
+        })
         const redirectTo = siteWorkspaceHref({
           clientId: scope.clientId,
           siteId: created.siteId,
@@ -157,6 +171,20 @@ export function createSiteCreateRouteHandlers(deps: SiteCreateRouteDeps) {
               error: siteStorageError.message,
             },
             { status: siteStorageError.status },
+          )
+        }
+
+        const bootstrapError = deps.parseSiteBootstrapError(error)
+        if (bootstrapError) {
+          return NextResponse.json(
+            {
+              ok: false,
+              code: bootstrapError.code,
+              error: bootstrapError.message,
+              siteId: bootstrapError.siteId,
+              templateId: bootstrapError.templateId,
+            },
+            { status: bootstrapError.status },
           )
         }
 

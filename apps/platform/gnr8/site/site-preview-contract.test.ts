@@ -146,3 +146,18 @@ test('resolveSiteWorkspacePreview safely defaults family truth when legacy summa
   assert.equal(resolved.familyRenderDiagnosticsCount, 0)
   assert.deepEqual(resolved.familyRenderDiagnostics, [])
 })
+
+test('resolveSiteWorkspacePreview never returns missing-runtime diagnostic when seeded site version exists', () => {
+  const resolved = resolveSiteWorkspacePreview({
+    siteVersionId: '8ce51f31-92ff-4ef4-a543-e1177dfe780d',
+    transformedPreviewAvailable: true,
+    debugPreviewAvailable: false,
+    importCaptured: true,
+  })
+
+  assert.equal(resolved.status, 'preview_available')
+  assert.equal(
+    resolved.diagnostics.some((entry) => entry.includes('No runtime site version is available for preview')),
+    false,
+  )
+})

@@ -4,6 +4,10 @@ import {
   createSiteFromTemplateRecord,
   parseSiteTemplateInstantiationError,
 } from '@/gnr8/site/site-template-instantiation-service'
+import {
+  bootstrapRuntimeFromTemplateSite,
+  parseTemplateSiteRuntimeBootstrapError,
+} from '@/gnr8/site/site-template-runtime-bootstrap-service'
 import { getClientTemplateById } from '@/gnr8/template-intake/core/template-intake-service'
 import { parseTemplateRepositoryError } from '@/gnr8/template-intake/storage/template-repository'
 
@@ -15,8 +19,10 @@ const handlers = createSiteCreateRouteHandlers({
   requireScope: requireClientTemplateScope,
   getTemplateById: getClientTemplateById,
   createSiteFromTemplate: createSiteFromTemplateRecord,
+  bootstrapTemplateSiteRuntime: bootstrapRuntimeFromTemplateSite,
   parseTemplateStorageError: parseTemplateRepositoryError,
   parseSiteCreateError: parseSiteTemplateInstantiationError,
+  parseSiteBootstrapError: parseTemplateSiteRuntimeBootstrapError,
   parseScopeError: parseThrownScopeError,
 })
 

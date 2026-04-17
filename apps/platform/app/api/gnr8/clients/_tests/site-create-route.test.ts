@@ -59,6 +59,30 @@ function createDeps(overrides?: {
     createdAt: string
     updatedAt: string
   }>
+  bootstrapTemplateSiteRuntime?: (input: {
+    site: {
+      siteId: string
+      clientId: string
+      agencyId: string
+      templateId: string
+      name: string
+      domain: string
+      status: string
+      createdAt: string
+      updatedAt: string
+    }
+    template: TemplateRecord
+  }) => Promise<{
+    siteVersionId: string
+    siteVersionNo: number
+    runtimeSiteId: string
+    artifactId: string | null
+    previewSeeded: boolean
+    sectionCount: number
+  }>
+  parseSiteBootstrapError?: (
+    error: unknown,
+  ) => { status: number; code: string; message: string; siteId: string; templateId: string } | null
 }) {
   return {
     requireScope: async () => ({
@@ -81,8 +105,19 @@ function createDeps(overrides?: {
         createdAt: '2026-04-16T12:00:00.000Z',
         updatedAt: '2026-04-16T12:00:00.000Z',
       })),
+    bootstrapTemplateSiteRuntime:
+      overrides?.bootstrapTemplateSiteRuntime ??
+      (async () => ({
+        siteVersionId: '00000000-0000-4000-8000-000000000991',
+        siteVersionNo: 1,
+        runtimeSiteId: 'runtime-site-001',
+        artifactId: '00000000-0000-4000-8000-000000000992',
+        previewSeeded: true,
+        sectionCount: 5,
+      })),
     parseTemplateStorageError: () => null,
     parseSiteCreateError: () => null,
+    parseSiteBootstrapError: overrides?.parseSiteBootstrapError ?? (() => null),
     parseScopeError: (error: unknown) => ({ status: 500, message: error instanceof Error ? error.message : 'failed' }),
   }
 }
@@ -228,4 +263,89 @@ test('POST /sites passes template linkage into persistence layer', async () => {
   assert.equal(body.ok, true)
   assert.equal(persistedTemplateId, '00000000-0000-4000-8000-000000000901')
   assert.equal(body.site?.templateId, '00000000-0000-4000-8000-000000000901')
+})
+
+test('POST /sites bootstraps runtime site version before returning success', async () => {
+  let bootstrapCalled = false
+  let bootstrappedSiteId: string | null = null
+  let bootstrappedTemplateId: string | null = null
+  const handlers = createSiteCreateRouteHandlers(
+    createDeps({
+      bootstrapTemplateSiteRuntime: async ({ site, template }) => {
+        bootstrapCalled = true
+        bootstrappedSiteId = site.siteId
+        bootstrappedTemplateId = template.id
+        return {
+          siteVersionId: '00000000-0000-4000-8000-000000000981',
+          siteVersionNo: 1,
+          runtimeSiteId: 'runtime-site-bootstrapped',
+          artifactId: '00000000-0000-4000-8000-000000000982',
+          previewSeeded: true,
+          sectionCount: 6,
+        }
+      },
+    }),
+  )
+
+  const response = await handlers.POST(
+    new Request('http://localhost', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        templateId: '00000000-0000-4000-8000-000000000901',
+        name: 'Bootstrapped Site',
+        domain: 'example.com',
+      }),
+    }),
+    { params: getParams() },
+  )
+  const body = (await response.json()) as { ok: boolean; site?: { siteId: string } }
+
+  assert.equal(response.status, 201)
+  assert.equal(body.ok, true)
+  assert.equal(bootstrapCalled, true)
+  assert.equal(bootstrappedSiteId, '00000000-0000-4000-8000-000000000777')
+  assert.equal(bootstrappedTemplateId, '00000000-0000-4000-8000-000000000901')
+})
+
+test('POST /sites reports deterministic bootstrap failure and does not return success payload', async () => {
+  const handlers = createSiteCreateRouteHandlers(
+    createDeps({
+      bootstrapTemplateSiteRuntime: async () => {
+        throw new Error('bootstrap failed')
+      },
+      parseSiteBootstrapError: () => ({
+        status: 500,
+        code: 'TEMPLATE_SITE_BOOTSTRAP_IMPORT_SOURCE_MISSING',
+        message: 'Template entry HTML is missing.',
+        siteId: '00000000-0000-4000-8000-000000000777',
+        templateId: '00000000-0000-4000-8000-000000000901',
+      }),
+    }),
+  )
+
+  const response = await handlers.POST(
+    new Request('http://localhost', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        templateId: '00000000-0000-4000-8000-000000000901',
+        name: 'Bootstrapped Site',
+        domain: 'example.com',
+      }),
+    }),
+    { params: getParams() },
+  )
+  const body = (await response.json()) as {
+    ok: boolean
+    code: string
+    siteId?: string
+    templateId?: string
+  }
+
+  assert.equal(response.status, 500)
+  assert.equal(body.ok, false)
+  assert.equal(body.code, 'TEMPLATE_SITE_BOOTSTRAP_IMPORT_SOURCE_MISSING')
+  assert.equal(body.siteId, '00000000-0000-4000-8000-000000000777')
+  assert.equal(body.templateId, '00000000-0000-4000-8000-000000000901')
 })
