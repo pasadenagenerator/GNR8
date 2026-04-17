@@ -8,7 +8,7 @@ import {
   deleteClientTemplateById,
   getClientTemplateById,
   updateClientTemplateMetadata,
-} from '@/gnr8/template-intake/core/template-intake-service'
+} from '@/gnr8/template-intake/core/template-intake-query-service'
 import {
   mapTemplateToDetailCard,
   normalizeTemplateMetadataPatchPayload,

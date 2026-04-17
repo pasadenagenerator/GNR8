@@ -52,6 +52,55 @@ const nextConfig = {
       './node_modules/playwright-core/lib/server/registry/**',
     ],
   },
+
+  // Keep client template/site CRUD serverless traces focused on route-safe runtime inputs.
+  // These routes do not execute validation fixtures, tests, build cache artifacts, or browser binaries.
+  outputFileTracingExcludes: {
+    '/api/gnr8/clients/[clientId]/templates': [
+      './gnr8/validation/**',
+      './gnr8/**/*.test.ts',
+      './app/**/*.test.ts',
+      './src/**/*.test.ts',
+      './dist-rendered-capture-worker/**',
+      './node_modules/playwright/**',
+      './node_modules/playwright-core/**',
+      './.next/**',
+      './tsconfig.tsbuildinfo',
+    ],
+    '/api/gnr8/clients/[clientId]/templates/[templateId]': [
+      './gnr8/validation/**',
+      './gnr8/**/*.test.ts',
+      './app/**/*.test.ts',
+      './src/**/*.test.ts',
+      './dist-rendered-capture-worker/**',
+      './node_modules/playwright/**',
+      './node_modules/playwright-core/**',
+      './.next/**',
+      './tsconfig.tsbuildinfo',
+    ],
+    '/api/gnr8/clients/[clientId]/templates/upload': [
+      './gnr8/validation/**',
+      './gnr8/**/*.test.ts',
+      './app/**/*.test.ts',
+      './src/**/*.test.ts',
+      './dist-rendered-capture-worker/**',
+      './node_modules/playwright/**',
+      './node_modules/playwright-core/**',
+      './.next/**',
+      './tsconfig.tsbuildinfo',
+    ],
+    '/api/gnr8/clients/[clientId]/sites': [
+      './gnr8/validation/**',
+      './gnr8/**/*.test.ts',
+      './app/**/*.test.ts',
+      './src/**/*.test.ts',
+      './dist-rendered-capture-worker/**',
+      './node_modules/playwright/**',
+      './node_modules/playwright-core/**',
+      './.next/**',
+      './tsconfig.tsbuildinfo',
+    ],
+  },
 }
 
 export default nextConfig

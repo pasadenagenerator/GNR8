@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 
-import { listClientTemplates } from '@/gnr8/template-intake/core/template-intake-service'
+import { listClientTemplates } from '@/gnr8/template-intake/core/template-intake-query-service'
 import {
   mapTemplateToListCard,
   sortTemplateCardsDeterministically,

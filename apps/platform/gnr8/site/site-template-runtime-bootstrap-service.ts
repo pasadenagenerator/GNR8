@@ -10,8 +10,8 @@ import type { TemplateRecord } from '@/gnr8/template-intake/types/template-intak
 import {
   URL_SINGLE_PAGE_IMPORT_VERSION,
   type RenderedDomQuality,
-  type UrlSinglePageImportSnapshot,
-} from '@/gnr8/validation/runtime/url-single-page-import'
+} from '@/gnr8/validation/runtime/url-single-page-import-contract'
+import type { UrlSinglePageImportSnapshot } from '@/gnr8/validation/runtime/url-single-page-import'
 
 type BootstrapTemplateRecord = Pick<
   TemplateRecord,

@@ -23,8 +23,7 @@ import {
 import type { JsonValue } from "../../import/import-contract";
 import { stableStringify } from "../../migration/runtime/diagnostics";
 import { resolveUrlImportSnapshotRootDirAbs } from "./url-import-snapshot-root";
-
-export const URL_SINGLE_PAGE_IMPORT_VERSION = "1.6.0" as const;
+import { URL_SINGLE_PAGE_IMPORT_VERSION, type RenderedDomQuality } from "./url-single-page-import-contract";
 
 export type UrlImportExecutionScope = {
   includes: readonly [
@@ -194,15 +193,6 @@ export type UrlImportDiagnosticCode =
 export type UrlImportSourceMode = "rendered_dom" | "raw_html_fallback";
 
 export type UrlImportFidelityStatus = "high_fidelity_import" | "degraded_import" | "capture_failed";
-
-export type RenderedDomQuality = {
-  quality: "strong" | "weak" | "unusable";
-  bodyTextLength: number;
-  meaningfulNodeCount: number;
-  sectionCandidateCount: number;
-  hasHeading: boolean;
-  reason: string;
-};
 
 type RenderedCaptureVisibilityStatus = "available" | "partial" | "failed";
 

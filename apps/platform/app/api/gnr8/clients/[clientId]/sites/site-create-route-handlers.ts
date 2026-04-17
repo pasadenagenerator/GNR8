@@ -41,7 +41,11 @@ export type SiteCreateRouteDeps = {
     name: string
     domain: string
   }) => Promise<CreatedSiteRecord>
-  bootstrapTemplateSiteRuntime: (input: { site: CreatedSiteRecord; template: TemplateSelection }) => Promise<{
+  bootstrapTemplateSiteRuntime: (input: {
+    site: CreatedSiteRecord
+    template: TemplateSelection
+    request: Request
+  }) => Promise<{
     siteVersionId: string
     siteVersionNo: number
     runtimeSiteId: string
@@ -125,6 +129,7 @@ export function createSiteCreateRouteHandlers(deps: SiteCreateRouteDeps) {
           await deps.bootstrapTemplateSiteRuntime({
             site: created,
             template,
+            request,
           })
         } catch (error) {
           try {
