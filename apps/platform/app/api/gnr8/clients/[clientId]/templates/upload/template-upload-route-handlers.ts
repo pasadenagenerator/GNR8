@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 
-import { runTemplateZipIntake } from '@/gnr8/template-intake/core/template-intake-service'
+import { runTemplateZipIntake } from '@/gnr8/template-intake/core/template-upload-intake-service'
 import { parseTemplateRepositoryError } from '@/gnr8/template-intake/storage/template-repository'
 import { parseThrownScopeError, requireClientTemplateScope } from '@/app/api/gnr8/clients/_lib/client-template-scope'
 
