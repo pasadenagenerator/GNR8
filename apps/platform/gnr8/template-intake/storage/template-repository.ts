@@ -12,6 +12,10 @@ import type {
 import { getSuperadminPool } from '@/src/superadmin/db'
 
 export type TemplateRepositoryErrorCode = 'TEMPLATE_TABLE_NOT_FOUND' | 'TEMPLATE_REPOSITORY_FAILURE'
+export type TemplateListReadDiagnostics = {
+  normalizedRowCount: number
+  skippedRowCount: number
+}
 
 export class TemplateRepositoryError extends Error {
   readonly code: TemplateRepositoryErrorCode
@@ -130,49 +134,59 @@ type ReadNormalizedTemplateRow = {
   importHealth: TemplateRecord['importHealth']
   previewSource: TemplateRecord['previewSource']
   previewAvailable: boolean
+  templateType: TemplateRecord['templateType']
+  normalizedFields: string[]
 }
 
 function normalizeTemplateRowForRead(row: TemplateRow): ReadNormalizedTemplateRow {
+  const normalizedFields: string[] = []
   const status =
-    row.status === 'ready' || row.status === 'failed'
+    row.status === 'uploaded' || row.status === 'processing' || row.status === 'ready' || row.status === 'failed'
       ? row.status
       : 'failed'
+  if (status !== row.status) normalizedFields.push('status')
   const importHealth =
     row.import_health === 'clean' ||
     row.import_health === 'degraded' ||
     row.import_health === 'failed'
       ? row.import_health
       : 'failed'
+  if (importHealth !== row.import_health) normalizedFields.push('import_health')
   const previewSource =
+    row.preview_source === 'rendered_capture' ||
     row.preview_source === 'html_snapshot' ||
     row.preview_source === 'fallback'
       ? row.preview_source
       : 'fallback'
+  if (previewSource !== row.preview_source) normalizedFields.push('preview_source')
   const previewAvailable =
     typeof row.preview_available === 'boolean'
       ? row.preview_available
       : false
+  if (previewAvailable !== row.preview_available) normalizedFields.push('preview_available')
+  const templateType =
+    row.template_type === 'single_page' || row.template_type === 'multi_page' || row.template_type === 'unknown'
+      ? row.template_type
+      : 'unknown'
+  if (templateType !== row.template_type) normalizedFields.push('template_type')
 
-  const changed =
-    status !== row.status ||
-    importHealth !== row.import_health ||
-    previewSource !== row.preview_source ||
-    previewAvailable !== row.preview_available
-
-  if (changed) {
-    console.info('[template-intake] TEMPLATE_ROW_NORMALIZED_LEGACY', {
+  if (normalizedFields.length > 0) {
+    console.info('[template-intake] TEMPLATE_LIST_ROW_NORMALIZED', {
       templateId: row.id,
+      normalizedFields,
       original: {
         status: row.status,
         importHealth: row.import_health,
         previewSource: row.preview_source,
         previewAvailable: row.preview_available,
+        templateType: row.template_type,
       },
       normalized: {
         status,
         importHealth,
         previewSource,
         previewAvailable,
+        templateType,
       },
     })
   }
@@ -182,11 +196,12 @@ function normalizeTemplateRowForRead(row: TemplateRow): ReadNormalizedTemplateRo
     importHealth,
     previewSource,
     previewAvailable,
+    templateType,
+    normalizedFields,
   }
 }
 
-export function mapTemplateRow(row: TemplateRow): TemplateRecord {
-  const normalizedRead = normalizeTemplateRowForRead(row)
+function mapTemplateRowFromNormalizedRead(row: TemplateRow, normalizedRead: ReadNormalizedTemplateRow): TemplateRecord {
   return {
     id: row.id,
     clientId: row.client_id,
@@ -206,7 +221,7 @@ export function mapTemplateRow(row: TemplateRow): TemplateRecord {
     sourceFilename: row.source_filename,
     entryHtmlPath: normalizeOptionalText(row.entry_html_path),
     entryHtmlFileName: normalizeOptionalText(row.entry_html_file_name),
-    templateType: normalizeTemplateTypeForStorage(row.template_type),
+    templateType: normalizedRead.templateType,
     importSnapshotId: normalizeOptionalText(row.import_snapshot_id),
     durableSnapshotRootDirAbs: normalizeOptionalText(row.durable_snapshot_root_dir_abs),
     templateManifestSummary: (row.template_manifest_summary ?? null) as TemplateRecord['templateManifestSummary'],
@@ -216,6 +231,29 @@ export function mapTemplateRow(row: TemplateRow): TemplateRecord {
     visibility: row.visibility === 'private' ? 'private' : 'private',
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+  }
+}
+
+export function mapTemplateRow(row: TemplateRow): TemplateRecord {
+  const normalizedRead = normalizeTemplateRowForRead(row)
+  return mapTemplateRowFromNormalizedRead(row, normalizedRead)
+}
+
+export function mapTemplateRowWithReadDiagnostics(row: TemplateRow): {
+  template: TemplateRecord
+  diagnostics: {
+    normalized: boolean
+    normalizedFields: string[]
+  }
+} {
+  const normalizedRead = normalizeTemplateRowForRead(row)
+  const template = mapTemplateRowFromNormalizedRead(row, normalizedRead)
+  return {
+    template,
+    diagnostics: {
+      normalized: normalizedRead.normalizedFields.length > 0,
+      normalizedFields: normalizedRead.normalizedFields,
+    },
   }
 }
 
@@ -434,7 +472,10 @@ export async function updateTemplateProcessingResult(input: UpdateTemplateProces
   })
 }
 
-export async function listTemplatesForClient(input: { clientId: string; limit?: number }): Promise<TemplateListItem[]> {
+export async function listTemplatesForClientWithDiagnostics(input: {
+  clientId: string
+  limit?: number
+}): Promise<{ templates: TemplateListItem[]; diagnostics: TemplateListReadDiagnostics }> {
   return withConnection(async (client) => {
     const limit = Math.min(Math.max(Number(input.limit ?? 120) || 120, 1), 500)
 
@@ -478,11 +519,40 @@ export async function listTemplatesForClient(input: { clientId: string; limit?: 
       [input.clientId, limit],
       )
 
-      return result.rows.map((row) => mapTemplateRow(row))
+      const mapped: TemplateListItem[] = []
+      let normalizedRowCount = 0
+      let skippedRowCount = 0
+      for (const row of result.rows) {
+        try {
+          const mappedRow = mapTemplateRowWithReadDiagnostics(row)
+          if (mappedRow.diagnostics.normalized) normalizedRowCount += 1
+          mapped.push(mappedRow.template)
+        } catch (error) {
+          skippedRowCount += 1
+          console.warn('[template-intake] TEMPLATE_LIST_ROW_SKIPPED', {
+            templateId: normalizeOptionalText(row.id),
+            cause: error instanceof Error ? error.message : String(error),
+            errorClass: error instanceof Error ? error.constructor.name : typeof error,
+          })
+        }
+      }
+
+      return {
+        templates: mapped,
+        diagnostics: {
+          normalizedRowCount,
+          skippedRowCount,
+        },
+      }
     } catch (error) {
       throw toTemplateRepositoryError(error)
     }
   })
+}
+
+export async function listTemplatesForClient(input: { clientId: string; limit?: number }): Promise<TemplateListItem[]> {
+  const result = await listTemplatesForClientWithDiagnostics(input)
+  return result.templates
 }
 
 export async function getTemplateByIdForClient(input: {

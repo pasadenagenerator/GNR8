@@ -3,6 +3,7 @@ import test from 'node:test'
 
 import {
   mapTemplateRow,
+  mapTemplateRowWithReadDiagnostics,
   normalizeTemplateTypeForStorage,
   parseTemplateRepositoryError,
   TemplateRepositoryError,
@@ -182,6 +183,120 @@ test('mapTemplateRow normalizes invalid read fields for legacy rows without thro
   assert.equal(mapped.importHealth, 'failed')
   assert.equal(mapped.previewSource, 'fallback')
   assert.equal(mapped.previewAvailable, false)
+})
+
+test('mapTemplateRow normalizes unknown template_type to unknown without throwing on read', () => {
+  const mapped = mapTemplateRow({
+    id: 'template-5',
+    client_id: 'client-1',
+    organization_id: 'org-1',
+    agency_id: 'agency-1',
+    created_by_user_id: 'user-1',
+    name: 'Legacy Unknown Type',
+    slug: 'legacy-unknown-type',
+    source_type: 'zip_html',
+    status: 'ready',
+    import_health: 'clean',
+    preview_image_path: null,
+    preview_available: true,
+    preview_is_fallback: false,
+    preview_source: 'html_snapshot',
+    tags: [],
+    source_filename: 'template.zip',
+    entry_html_path: 'index.html',
+    entry_html_file_name: 'index.html',
+    template_type: 'legacy_type',
+    import_snapshot_id: null,
+    durable_snapshot_root_dir_abs: null,
+    template_manifest_summary: null,
+    diagnostics_summary: null,
+    import_manifest_summary: null,
+    version: 1,
+    visibility: 'private',
+    created_at: '2026-04-15T10:00:00.000Z',
+    updated_at: '2026-04-15T10:01:00.000Z',
+  })
+
+  assert.equal(mapped.templateType, 'unknown')
+})
+
+test('mapTemplateRow keeps rendered_capture preview source truthful on read', () => {
+  const mapped = mapTemplateRow({
+    id: 'template-6',
+    client_id: 'client-1',
+    organization_id: 'org-1',
+    agency_id: 'agency-1',
+    created_by_user_id: 'user-1',
+    name: 'Rendered Capture',
+    slug: 'rendered-capture',
+    source_type: 'zip_html',
+    status: 'ready',
+    import_health: 'clean',
+    preview_image_path: '/tmp/preview.png',
+    preview_available: true,
+    preview_is_fallback: false,
+    preview_source: 'rendered_capture',
+    tags: [],
+    source_filename: 'template.zip',
+    entry_html_path: 'index.html',
+    entry_html_file_name: 'index.html',
+    template_type: 'single_page',
+    import_snapshot_id: null,
+    durable_snapshot_root_dir_abs: null,
+    template_manifest_summary: null,
+    diagnostics_summary: null,
+    import_manifest_summary: null,
+    version: 1,
+    visibility: 'private',
+    created_at: '2026-04-15T10:00:00.000Z',
+    updated_at: '2026-04-15T10:01:00.000Z',
+  })
+
+  assert.equal(mapped.previewSource, 'rendered_capture')
+})
+
+test('mapTemplateRowWithReadDiagnostics marks normalized legacy row fields', () => {
+  const mapped = mapTemplateRowWithReadDiagnostics({
+    id: 'template-7',
+    client_id: 'client-1',
+    organization_id: null,
+    agency_id: null,
+    created_by_user_id: null,
+    name: 'Legacy Row',
+    slug: 'legacy-row',
+    source_type: 'zip_html',
+    status: 'unexpected',
+    import_health: 'unexpected',
+    preview_image_path: null,
+    preview_available: null as unknown as boolean,
+    preview_is_fallback: true,
+    preview_source: 'unexpected',
+    tags: null,
+    source_filename: 'legacy.zip',
+    entry_html_path: null,
+    entry_html_file_name: null,
+    template_type: 'unexpected',
+    import_snapshot_id: null,
+    durable_snapshot_root_dir_abs: null,
+    template_manifest_summary: null,
+    diagnostics_summary: null,
+    import_manifest_summary: null,
+    version: 1,
+    visibility: 'private',
+    created_at: '2026-04-15T10:00:00.000Z',
+    updated_at: '2026-04-15T10:01:00.000Z',
+  })
+
+  assert.equal(mapped.template.status, 'failed')
+  assert.equal(mapped.template.importHealth, 'failed')
+  assert.equal(mapped.template.previewSource, 'fallback')
+  assert.equal(mapped.template.previewAvailable, false)
+  assert.equal(mapped.template.templateType, 'unknown')
+  assert.equal(mapped.diagnostics.normalized, true)
+  assert.deepEqual(
+    mapped.diagnostics.normalizedFields,
+    ['status', 'import_health', 'preview_source', 'preview_available', 'template_type'],
+  )
 })
 
 test('normalizeTemplateTypeForStorage allows expected values and rejects invalid values', () => {

@@ -45,6 +45,8 @@ function createDeps(overrides?: {
   updateTemplateMetadata?: (input: { clientId: string; templateId: string; name: string; tags: string[] }) => Promise<TemplateRecord | null>
   deleteTemplateById?: (input: { clientId: string; templateId: string }) => Promise<TemplateRecord | null>
   requireScope?: (input: { clientIdParam: string }) => Promise<{ userId: string; clientId: string; organizationId: string; agencyId: string }>
+  parseStorageError?: (error: unknown) => { status: number; code: string; message: string } | null
+  parseScopeError?: (error: unknown) => { status: number; message: string }
 }) {
   return {
     requireScope:
@@ -70,13 +72,13 @@ function createDeps(overrides?: {
       (async () => {
         return createTemplate()
       }),
-    parseStorageError: () => null,
-    parseScopeError: (error: unknown) => {
+    parseStorageError: overrides?.parseStorageError ?? (() => null),
+    parseScopeError: overrides?.parseScopeError ?? ((error: unknown) => {
       if (error instanceof Error && error.message.startsWith('403|')) {
         return { status: 403, message: error.message.slice(4) }
       }
       return { status: 500, message: error instanceof Error ? error.message : 'failed' }
-    },
+    }),
     cleanupTemplateArtifacts: async () => ({ status: 'not_performed' as const, path: null, reason: 'test', error: null }),
   }
 }
@@ -200,4 +202,27 @@ test('artifact cleanup returns deterministic not_performed reasons when snapshot
   const invalidSnapshot = await cleanupTemplateArtifacts({ importSnapshotId: 'manual-snapshot-123' })
   assert.equal(invalidSnapshot.status, 'not_performed')
   assert.equal(invalidSnapshot.reason, 'snapshot_not_template_zip')
+})
+
+test('GET detail returns structured storage error envelope for malformed row parse failures', async () => {
+  const handlers = createTemplateDetailRouteHandlers(
+    createDeps({
+      getTemplateById: async () => {
+        throw new Error('legacy row parse failure')
+      },
+      parseStorageError: () => ({
+        status: 500,
+        code: 'TEMPLATE_REPOSITORY_FAILURE',
+        message: 'Template storage request failed.',
+      }),
+    }),
+  )
+
+  const response = await handlers.GET(new Request('http://localhost'), { params: getParams() })
+  const body = (await response.json()) as { ok: boolean; code?: string; error?: string }
+
+  assert.equal(response.status, 500)
+  assert.equal(body.ok, false)
+  assert.equal(body.code, 'TEMPLATE_REPOSITORY_FAILURE')
+  assert.equal(body.error, 'Template storage request failed.')
 })

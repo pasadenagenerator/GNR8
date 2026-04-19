@@ -2,15 +2,27 @@ import {
   deleteTemplateByIdForClient,
   getTemplateByIdForClient,
   listTemplatesForClient,
+  listTemplatesForClientWithDiagnostics,
   updateTemplateMetadataById,
 } from '@/gnr8/template-intake/storage/template-repository'
 import type { TemplateRecord } from '@/gnr8/template-intake/types/template-intake-types'
+import type { TemplateListReadDiagnostics } from '@/gnr8/template-intake/storage/template-repository'
 
 export async function listClientTemplates(input: {
   clientId: string
   limit?: number
 }): Promise<TemplateRecord[]> {
   return listTemplatesForClient({
+    clientId: input.clientId,
+    limit: input.limit,
+  })
+}
+
+export async function listClientTemplatesWithReadDiagnostics(input: {
+  clientId: string
+  limit?: number
+}): Promise<{ templates: TemplateRecord[]; diagnostics: TemplateListReadDiagnostics }> {
+  return listTemplatesForClientWithDiagnostics({
     clientId: input.clientId,
     limit: input.limit,
   })
