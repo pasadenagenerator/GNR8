@@ -530,13 +530,10 @@ export async function runTemplateZipIntake(input: {
   ])
 
   const importOutput = await importRunner({
-    rootDir: zipValidation.validation.extractionRootDirAbs,
     requestId: `template-intake-${initialTemplate.id}`,
-    source: {
-      kind: 'single-entry-html',
-      entryHtmlPath,
-      assetsDirPath: zipValidation.validation.assetsDirPath ?? undefined,
-    },
+    entryHtmlPath,
+    entryHtmlBytes: zipValidation.validation.entryHtmlBytes ?? new Uint8Array(),
+    extractedFilePaths: zipValidation.validation.extractedFilePaths ?? [],
   })
 
   const importManifest = importManifestBuilder(importOutput)
@@ -791,6 +788,7 @@ export async function runTemplateZipIntake(input: {
       extractionRootDirAbs: zipValidation.validation.extractionRootDirAbs,
       entryHtmlPath,
       entryHtmlContent: importedEntryHtml,
+      sourceFilePaths: zipValidation.validation.extractedFilePaths ?? [],
     })
     durableSnapshotRootDirAbs = persistedSource.durableSnapshotRootDirAbs
     logTemplateSourcePersistenceEvent({
@@ -929,4 +927,3 @@ export async function runTemplateZipIntake(input: {
     template: updatedTemplate,
   }
 }
-

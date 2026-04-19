@@ -81,8 +81,10 @@ export type TemplateZipValidationResult = {
   ok: boolean
   extractionRootDirAbs: string
   entryHtmlPath: string | null
+  entryHtmlBytes?: Uint8Array
   entryHtmlSelection: 'root_index' | 'single_file_fallback' | 'missing' | 'ambiguous'
   htmlCandidates: string[]
+  extractedFilePaths?: string[]
   assetsDirPath: string | null
   manifestPath: string | null
   assetSummary: {

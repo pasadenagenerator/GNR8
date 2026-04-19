@@ -340,6 +340,21 @@ function extractZipEntriesToDir(input: {
   }
 }
 
+function resolveNormalizedEntryPath(input: {
+  entryFileName: string
+  normalizedRootFolderName: string | null
+}): string | null {
+  const safePath = sanitizeEntryPath(input.entryFileName)
+  if (!safePath || safePath.endsWith('/')) return null
+
+  if (!input.normalizedRootFolderName) return safePath
+
+  const prefix = `${input.normalizedRootFolderName}/`
+  if (!safePath.startsWith(prefix)) return null
+  const normalized = safePath.slice(prefix.length)
+  return normalized || null
+}
+
 export function validateZipEntryPaths(entryPaths: string[]): {
   safeEntries: string[]
   unsafeEntries: string[]
@@ -646,12 +661,88 @@ export function validateAndExtractTemplateZip(input: {
     )
   }
 
+  const parsedEntryMap = new Map<string, ParsedZipEntry>()
+  for (const parsedEntry of zipEntries) {
+    const normalizedEntryPath = resolveNormalizedEntryPath({
+      entryFileName: parsedEntry.fileName,
+      normalizedRootFolderName: rootNormalization.normalizedRootFolderName,
+    })
+    if (!normalizedEntryPath) continue
+    parsedEntryMap.set(normalizedEntryPath, parsedEntry)
+  }
+
+  const selectedEntryHtmlPath = selectedEntry.entryHtmlPath
+  if (!selectedEntryHtmlPath) {
+    diagnostics.push(
+      createTemplateIntakeDiagnostic({
+        code: 'TEMPLATE_HTML_ENTRY_NOT_FOUND',
+        severity: 'fatal',
+        message: 'Template entry HTML could not be resolved for intake processing.',
+      }),
+    )
+    return {
+      ok: false,
+      diagnostics,
+      errorMessage: 'Template entry HTML could not be resolved.',
+      snapshotId,
+      zipFileAbsPath,
+      validation: null,
+    }
+  }
+
+  const parsedSelectedEntry = parsedEntryMap.get(selectedEntryHtmlPath) ?? null
+  if (!parsedSelectedEntry) {
+    diagnostics.push(
+      createTemplateIntakeDiagnostic({
+        code: 'TEMPLATE_HTML_ENTRY_NOT_FOUND',
+        severity: 'fatal',
+        message: 'Template entry HTML could not be resolved for deterministic intake.',
+        details: { entryHtmlPath: selectedEntryHtmlPath },
+      }),
+    )
+    return {
+      ok: false,
+      diagnostics,
+      errorMessage: 'Template entry HTML could not be resolved.',
+      snapshotId,
+      zipFileAbsPath,
+      validation: null,
+    }
+  }
+
+  let entryHtmlBytes: Uint8Array
+  try {
+    entryHtmlBytes = new Uint8Array(inflateZipEntry({ zipBuffer, entry: parsedSelectedEntry }))
+  } catch (error) {
+    diagnostics.push(
+      createTemplateIntakeDiagnostic({
+        code: 'TEMPLATE_UPLOAD_REJECTED_INVALID_TYPE',
+        severity: 'fatal',
+        message: 'Template entry HTML could not be decoded from ZIP payload.',
+        details: {
+          entryHtmlPath: selectedEntryHtmlPath,
+          error: error instanceof Error ? error.message : String(error),
+        },
+      }),
+    )
+    return {
+      ok: false,
+      diagnostics,
+      errorMessage: 'Template entry HTML could not be processed.',
+      snapshotId,
+      zipFileAbsPath,
+      validation: null,
+    }
+  }
+
   const validation: TemplateZipValidationResult = {
     ok: true,
     extractionRootDirAbs: effectiveExtractionRootDirAbs,
-    entryHtmlPath: selectedEntry.entryHtmlPath,
+    entryHtmlPath: selectedEntryHtmlPath,
+    entryHtmlBytes,
     entryHtmlSelection: selectedEntry.selection,
     htmlCandidates: selectedEntry.htmlCandidates,
+    extractedFilePaths: normalizedPaths,
     assetsDirPath: resolveAssetsDirPath(normalizedPaths),
     manifestPath,
     assetSummary: computeAssetSummary(normalizedPaths),
