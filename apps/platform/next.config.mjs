@@ -64,7 +64,6 @@ const nextConfig = {
       './dist-rendered-capture-worker/**',
       './node_modules/playwright/**',
       './node_modules/playwright-core/**',
-      './.next/**',
       './tsconfig.tsbuildinfo',
     ],
     '/api/gnr8/clients/[clientId]/templates/[templateId]': [
@@ -75,7 +74,6 @@ const nextConfig = {
       './dist-rendered-capture-worker/**',
       './node_modules/playwright/**',
       './node_modules/playwright-core/**',
-      './.next/**',
       './tsconfig.tsbuildinfo',
     ],
     '/api/gnr8/clients/[clientId]/templates/upload': [
@@ -86,7 +84,6 @@ const nextConfig = {
       './dist-rendered-capture-worker/**',
       './node_modules/playwright/**',
       './node_modules/playwright-core/**',
-      './.next/**',
       './tsconfig.tsbuildinfo',
     ],
     '/api/gnr8/clients/[clientId]/sites': [
@@ -97,7 +94,6 @@ const nextConfig = {
       './dist-rendered-capture-worker/**',
       './node_modules/playwright/**',
       './node_modules/playwright-core/**',
-      './.next/**',
       './tsconfig.tsbuildinfo',
     ],
   },
