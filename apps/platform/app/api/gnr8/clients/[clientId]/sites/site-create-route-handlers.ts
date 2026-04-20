@@ -15,7 +15,10 @@ type Scope = {
   agencyId: string
 }
 
-type TemplateSelection = Pick<TemplateRecord, 'id' | 'importSnapshotId' | 'durableSnapshotRootDirAbs' | 'entryHtmlPath' | 'entryHtmlFileName' | 'importManifestSummary'>
+type TemplateSelection = Pick<
+  TemplateRecord,
+  'id' | 'status' | 'importSnapshotId' | 'durableSnapshotRootDirAbs' | 'entryHtmlPath' | 'entryHtmlFileName' | 'importManifestSummary'
+>
 
 type CreatedSiteRecord = {
   siteId: string
@@ -115,6 +118,16 @@ export function createSiteCreateRouteHandlers(deps: SiteCreateRouteDeps) {
               error: 'Template was not found for the current client scope.',
             },
             { status: 404 },
+          )
+        }
+        if (template.status !== 'ready') {
+          return NextResponse.json(
+            {
+              ok: false,
+              code: 'TEMPLATE_NOT_READY',
+              error: 'Template is still processing and cannot be used for site creation yet.',
+            },
+            { status: 409 },
           )
         }
 

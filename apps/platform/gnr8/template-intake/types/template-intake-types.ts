@@ -113,6 +113,8 @@ export type TemplateRecord = {
   previewSource: TemplatePreviewSource
   tags: string[]
   sourceFilename: string
+  sourceZipStorageBucket: string | null
+  sourceZipStorageKey: string | null
   entryHtmlPath: string | null
   entryHtmlFileName: string | null
   templateType: TemplateType
@@ -135,6 +137,8 @@ export type CreateTemplateInput = {
   name: string
   slug: string
   sourceFilename: string
+  sourceZipStorageBucket?: string | null
+  sourceZipStorageKey?: string | null
   entryHtmlPath: string | null
   entryHtmlFileName: string | null
   templateType: TemplateType
@@ -159,6 +163,12 @@ export type UpdateTemplateProcessingResultInput = {
   diagnosticsSummary: TemplateDiagnosticsSummary
   templateManifestSummary: TemplateManifestSummary
   importManifestSummary: ImportManifest | null
+}
+
+export type UpdateTemplateSourceZipReferenceInput = {
+  templateId: string
+  sourceZipStorageBucket: string
+  sourceZipStorageKey: string
 }
 
 export type TemplateListItem = TemplateRecord

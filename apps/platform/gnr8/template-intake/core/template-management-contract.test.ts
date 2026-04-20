@@ -25,6 +25,8 @@ function createTemplateRecord(seed?: Partial<TemplateRecord>): TemplateRecord {
     previewSource: seed?.previewSource ?? 'rendered_capture',
     tags: seed?.tags ?? ['brand'],
     sourceFilename: seed?.sourceFilename ?? 'template.zip',
+    sourceZipStorageBucket: seed?.sourceZipStorageBucket ?? 'template-source-zips',
+    sourceZipStorageKey: seed?.sourceZipStorageKey ?? 'client/x/template/y/template.zip',
     entryHtmlPath: seed?.entryHtmlPath ?? 'index.html',
     entryHtmlFileName: seed?.entryHtmlFileName ?? 'index.html',
     templateType: seed?.templateType ?? 'single_page',

@@ -91,7 +91,10 @@ export default function SiteCreateFromTemplateClient(props: Props) {
         }
         if (!cancelled) {
           setTemplates(payload.templates)
-          if (payload.templates.length > 0) setSelectedTemplateId(payload.templates[0]!.id)
+          if (payload.templates.length > 0) {
+            const firstReady = payload.templates.find((template) => template.status === 'ready')
+            setSelectedTemplateId(firstReady?.id ?? '')
+          }
         }
       } catch (fetchError) {
         if (!cancelled) {
@@ -187,6 +190,7 @@ export default function SiteCreateFromTemplateClient(props: Props) {
             <div style={{ display: 'grid', gap: 8 }}>
               {templates.map((template) => {
                 const isSelected = selectedTemplateId === template.id
+                const isReady = template.status === 'ready'
                 return (
                   <label
                     key={template.id}
@@ -207,6 +211,7 @@ export default function SiteCreateFromTemplateClient(props: Props) {
                         value={template.id}
                         checked={isSelected}
                         onChange={() => setSelectedTemplateId(template.id)}
+                        disabled={!isReady}
                         style={{ marginTop: 3 }}
                       />
                       <div style={{ display: 'grid', gap: 3 }}>
@@ -218,12 +223,22 @@ export default function SiteCreateFromTemplateClient(props: Props) {
                         <div style={{ fontSize: 12, color: '#64748b' }}>
                           Preview: {template.preview.available ? 'Available' : 'Unavailable'} ({template.preview.source})
                         </div>
+                        {!isReady ? (
+                          <div style={{ fontSize: 12, color: '#9a3412' }}>
+                            This template is not ready yet and cannot be used for site creation.
+                          </div>
+                        ) : null}
                       </div>
                     </div>
                   </label>
                 )
               })}
             </div>
+            {!selectedTemplateId ? (
+              <p style={{ margin: 0, fontSize: 12, color: '#9a3412' }}>
+                No template is ready yet. Wait for processing to finish before creating a website.
+              </p>
+            ) : null}
           </section>
 
           <section style={{ display: 'grid', gap: 8 }}>
@@ -265,7 +280,7 @@ export default function SiteCreateFromTemplateClient(props: Props) {
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             <button
               type='submit'
-              disabled={isPending || uiView !== 'ready'}
+              disabled={isPending || uiView !== 'ready' || !selectedTemplateId}
               style={{
                 display: 'inline-flex',
                 alignItems: 'center',

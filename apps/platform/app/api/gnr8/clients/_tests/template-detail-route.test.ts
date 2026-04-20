@@ -25,6 +25,8 @@ function createTemplate(seed: Partial<TemplateRecord> = {}): TemplateRecord {
     previewSource: seed.previewSource ?? 'rendered_capture',
     tags: seed.tags ?? ['marketing'],
     sourceFilename: seed.sourceFilename ?? 'template.zip',
+    sourceZipStorageBucket: seed.sourceZipStorageBucket ?? 'template-source-zips',
+    sourceZipStorageKey: seed.sourceZipStorageKey ?? 'client/x/template/y/template.zip',
     entryHtmlPath: seed.entryHtmlPath ?? 'index.html',
     entryHtmlFileName: seed.entryHtmlFileName ?? 'index.html',
     templateType: seed.templateType ?? 'single_page',
@@ -195,11 +197,15 @@ test('GET and DELETE return not found when template does not exist', async () =>
 })
 
 test('artifact cleanup returns deterministic not_performed reasons when snapshot id is missing or invalid', async () => {
-  const missingSnapshot = await cleanupTemplateArtifacts({ importSnapshotId: null })
+  const missingSnapshot = await cleanupTemplateArtifacts({ importSnapshotId: null, sourceZipStorageBucket: null, sourceZipStorageKey: null })
   assert.equal(missingSnapshot.status, 'not_performed')
   assert.equal(missingSnapshot.reason, 'missing_snapshot_id')
 
-  const invalidSnapshot = await cleanupTemplateArtifacts({ importSnapshotId: 'manual-snapshot-123' })
+  const invalidSnapshot = await cleanupTemplateArtifacts({
+    importSnapshotId: 'manual-snapshot-123',
+    sourceZipStorageBucket: null,
+    sourceZipStorageKey: null,
+  })
   assert.equal(invalidSnapshot.status, 'not_performed')
   assert.equal(invalidSnapshot.reason, 'snapshot_not_template_zip')
 })

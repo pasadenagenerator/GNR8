@@ -22,6 +22,8 @@ function createTemplate(seed: Partial<TemplateRecord> = {}): TemplateRecord {
     previewSource: seed.previewSource ?? 'html_snapshot',
     tags: seed.tags ?? [],
     sourceFilename: seed.sourceFilename ?? 'template.zip',
+    sourceZipStorageBucket: seed.sourceZipStorageBucket ?? 'template-source-zips',
+    sourceZipStorageKey: seed.sourceZipStorageKey ?? 'client/x/template/y/template.zip',
     entryHtmlPath: seed.entryHtmlPath ?? 'index.html',
     entryHtmlFileName: seed.entryHtmlFileName ?? 'index.html',
     templateType: seed.templateType ?? 'single_page',
@@ -227,6 +229,36 @@ test('POST /sites enforces template scope ownership and rejects cross-client tem
   assert.equal(response.status, 404)
   assert.equal(body.ok, false)
   assert.equal(body.code, 'TEMPLATE_NOT_FOUND')
+})
+
+test('POST /sites rejects template while processing', async () => {
+  const handlers = createSiteCreateRouteHandlers(
+    createDeps({
+      getTemplateById: async () =>
+        createTemplate({
+          status: 'processing',
+          importHealth: 'degraded',
+        }),
+    }),
+  )
+
+  const response = await handlers.POST(
+    new Request('http://localhost', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        templateId: '00000000-0000-4000-8000-000000000901',
+        name: 'Site',
+        domain: 'example.com',
+      }),
+    }),
+    { params: getParams() },
+  )
+  const body = (await response.json()) as { ok: boolean; code?: string; error?: string }
+  assert.equal(response.status, 409)
+  assert.equal(body.ok, false)
+  assert.equal(body.code, 'TEMPLATE_NOT_READY')
+  assert.equal(body.error, 'Template is still processing and cannot be used for site creation yet.')
 })
 
 test('POST /sites passes template linkage into persistence layer', async () => {

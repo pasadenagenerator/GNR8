@@ -9,6 +9,7 @@ import {
   getClientTemplateById,
   updateClientTemplateMetadata,
 } from '@/gnr8/template-intake/core/template-intake-query-service'
+import { deleteTemplateSourceZip } from '@/gnr8/template-intake/storage/template-source-zip-storage'
 import {
   mapTemplateToDetailCard,
   normalizeTemplateMetadataPatchPayload,
@@ -107,6 +108,8 @@ async function mapThrownErrorToResponse(error: unknown, deps: TemplateDetailRout
 
 export async function cleanupTemplateArtifacts(input: {
   importSnapshotId: string | null
+  sourceZipStorageBucket: string | null
+  sourceZipStorageKey: string | null
 }): Promise<TemplateCleanupResult> {
   const importSnapshotId = normalizeText(input.importSnapshotId)
   if (!importSnapshotId) {
@@ -130,6 +133,14 @@ export async function cleanupTemplateArtifacts(input: {
   const artifactPath = path.resolve(os.tmpdir(), 'gnr8', 'template-intake', importSnapshotId)
   try {
     await fs.rm(artifactPath, { recursive: true, force: true })
+    const sourceZipStorageBucket = normalizeText(input.sourceZipStorageBucket)
+    const sourceZipStorageKey = normalizeText(input.sourceZipStorageKey)
+    if (sourceZipStorageBucket && sourceZipStorageKey) {
+      await deleteTemplateSourceZip({
+        bucket: sourceZipStorageBucket,
+        key: sourceZipStorageKey,
+      })
+    }
     return {
       status: 'performed',
       path: artifactPath,
@@ -224,6 +235,8 @@ export function createTemplateDetailRouteHandlers(deps: TemplateDetailRouteDeps 
 
         const cleanup = await deps.cleanupTemplateArtifacts({
           importSnapshotId: deletedTemplate.importSnapshotId,
+          sourceZipStorageBucket: deletedTemplate.sourceZipStorageBucket,
+          sourceZipStorageKey: deletedTemplate.sourceZipStorageKey,
         })
 
         if (cleanup.status !== 'performed') {

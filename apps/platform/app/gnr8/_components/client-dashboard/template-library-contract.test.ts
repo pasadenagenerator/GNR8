@@ -173,6 +173,33 @@ test('upload contract treats 2xx ready/degraded payload without preview block as
   assert.equal(parsed.value.preview.available, false)
 })
 
+test('upload contract accepts processing status as in-flight success', () => {
+  const parsed = parseTemplateUploadResponse({
+    httpStatus: 200,
+    payload: {
+      ok: true,
+      templateId: 'template-processing-1',
+      sourceType: 'zip_html',
+      status: 'processing',
+      name: 'Processing Template',
+      tags: [],
+      importHealth: 'degraded',
+      entryHtmlFileName: null,
+      templateType: 'unknown',
+      preview: {
+        available: false,
+        isFallback: true,
+        source: 'html_snapshot',
+        imagePath: null,
+      },
+    },
+  })
+
+  assert.equal(parsed.ok, true)
+  if (!parsed.ok) return
+  assert.equal(parsed.value.status, 'processing')
+})
+
 test('upload contract accepts health alias when importHealth field is missing', () => {
   const parsed = parseTemplateUploadResponse({
     httpStatus: 200,

@@ -135,6 +135,28 @@ export default function TemplateLibraryPanel(props: {
     }
   }
 
+  async function pollTemplateProcessingUntilSettled(templateId: string): Promise<void> {
+    const startedAt = Date.now()
+    const timeoutMs = 60_000
+    const intervalMs = 3_000
+    while (Date.now() - startedAt < timeoutMs) {
+      await new Promise((resolve) => setTimeout(resolve, intervalMs))
+      const response = await fetch(`/api/gnr8/clients/${encodeURIComponent(props.clientId)}/templates`, { method: 'GET' })
+      const payload = (await response.json().catch(() => null)) as TemplateListResponse | null
+      if (!payload || payload.ok !== true || !Array.isArray(payload.templates)) return
+
+      const cards = resolveTemplateLibraryCards({
+        templates: payload.templates,
+        templateRouteBase: props.templateRouteBase,
+        templateRouteQuery: props.templateRouteQuery,
+      })
+      setTemplates(cards)
+      const template = cards.find((item) => item.id === templateId)
+      if (!template) return
+      if (template.status !== 'processing' && template.status !== 'uploaded') return
+    }
+  }
+
   useEffect(() => {
     if (props.initialScopeError) {
       setError(props.initialScopeError)
@@ -217,11 +239,14 @@ export default function TemplateLibraryPanel(props: {
         uploadResponseOk: response.ok,
       })
 
-      setSuccessMessage(`Template \"${uploaded.name}\" uploaded with status ${normalizeStatusLabel(uploaded.status)}.`)
+      setSuccessMessage(`Template "${uploaded.name}" uploaded and processing started.`)
       setFile(null)
       const input = document.getElementById('template-zip-input') as HTMLInputElement | null
       if (input) input.value = ''
       await loadTemplates()
+      if (uploaded.status === 'processing' || uploaded.status === 'uploaded') {
+        void pollTemplateProcessingUntilSettled(uploaded.templateId)
+      }
     } catch (submitError) {
       setUploadError(submitError instanceof Error ? submitError.message : 'Upload failed due to an unexpected error.')
     } finally {

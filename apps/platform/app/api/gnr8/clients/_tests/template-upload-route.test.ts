@@ -14,7 +14,7 @@ function createTemplate(seed: Partial<TemplateRecord> = {}): TemplateRecord {
     name: seed.name ?? 'Template One',
     slug: seed.slug ?? 'template-one',
     sourceType: 'zip_html',
-    status: seed.status ?? 'ready',
+    status: seed.status ?? 'processing',
     importHealth: seed.importHealth ?? 'degraded',
     previewImagePath: seed.previewImagePath ?? null,
     previewAvailable: seed.previewAvailable ?? false,
@@ -22,10 +22,12 @@ function createTemplate(seed: Partial<TemplateRecord> = {}): TemplateRecord {
     previewSource: seed.previewSource ?? 'html_snapshot',
     tags: seed.tags ?? ['marketing'],
     sourceFilename: seed.sourceFilename ?? 'template.zip',
-    entryHtmlPath: seed.entryHtmlPath ?? 'index.html',
-    entryHtmlFileName: seed.entryHtmlFileName ?? 'index.html',
-    templateType: seed.templateType ?? 'single_page',
-    importSnapshotId: seed.importSnapshotId ?? 'template-zip-aaaaaaaaaaaaaaaa',
+    sourceZipStorageBucket: seed.sourceZipStorageBucket ?? 'bucket',
+    sourceZipStorageKey: seed.sourceZipStorageKey ?? 'key',
+    entryHtmlPath: seed.entryHtmlPath ?? null,
+    entryHtmlFileName: seed.entryHtmlFileName ?? null,
+    templateType: seed.templateType ?? 'unknown',
+    importSnapshotId: seed.importSnapshotId ?? null,
     durableSnapshotRootDirAbs: seed.durableSnapshotRootDirAbs ?? null,
     templateManifestSummary: seed.templateManifestSummary ?? null,
     diagnosticsSummary: seed.diagnosticsSummary ?? null,
@@ -49,7 +51,10 @@ function getParams() {
   })
 }
 
-test('upload route returns success for degraded no-preview template intake', async () => {
+test('upload route stores zip, creates processing template row, and triggers processing job', async () => {
+  let triggerCalled = false
+  let triggeredTemplateId: string | null = null
+
   const handlers = createTemplateUploadRouteHandlers({
     requireScope: async () => ({
       userId: '00000000-0000-4000-8000-000000000101',
@@ -57,18 +62,16 @@ test('upload route returns success for degraded no-preview template intake', asy
       organizationId: '00000000-0000-4000-8000-000000000201',
       agencyId: '00000000-0000-4000-8000-000000000301',
     }),
-    runTemplateZipIntake: async () => ({
-      ok: true as const,
-      zipValidationOk: true as const,
-      selectedEntryHtmlPath: 'index.html',
-      template: createTemplate({
-        status: 'ready',
+    validateTemplateZipUploadInput: () => ({ ok: true }),
+    createProcessingTemplateFromZipUpload: async () =>
+      createTemplate({
+        status: 'processing',
         importHealth: 'degraded',
-        previewAvailable: false,
-        previewIsFallback: true,
-        previewSource: 'html_snapshot',
       }),
-    }),
+    triggerTemplateProcessingJob: ({ templateId }) => {
+      triggerCalled = true
+      triggeredTemplateId = templateId
+    },
     parseTemplateRepositoryError: () => null,
     parseThrownScopeError: () => ({ status: 500, message: 'failed' }),
   })
@@ -79,14 +82,15 @@ test('upload route returns success for degraded no-preview template intake', asy
   assert.equal(response.status, 200)
   assert.equal(body.ok, true)
   assert.equal(body.id, '00000000-0000-4000-8000-000000000901')
-  assert.equal(body.status, 'ready')
+  assert.equal(body.status, 'processing')
   assert.equal(body.health, 'degraded')
   assert.equal(body.importHealth, 'degraded')
   assert.equal(body.sourceType, 'zip_html')
-  assert.equal((body.preview as { source: string }).source, 'html_snapshot')
+  assert.equal(triggerCalled, true)
+  assert.equal(triggeredTemplateId, '00000000-0000-4000-8000-000000000901')
 })
 
-test('upload route returns deterministic error for invalid ZIP failure', async () => {
+test('upload route returns deterministic validation error when input is not a zip', async () => {
   const handlers = createTemplateUploadRouteHandlers({
     requireScope: async () => ({
       userId: '00000000-0000-4000-8000-000000000101',
@@ -94,25 +98,17 @@ test('upload route returns deterministic error for invalid ZIP failure', async (
       organizationId: '00000000-0000-4000-8000-000000000201',
       agencyId: '00000000-0000-4000-8000-000000000301',
     }),
-    runTemplateZipIntake: async () => ({
-      ok: false as const,
-      zipValidationOk: false,
-      selectedEntryHtmlPath: null,
-      templateId: '00000000-0000-4000-8000-000000000901',
-      status: 'failed',
-      importHealth: 'failed',
-      diagnosticsSummary: { issues: [], counts: { info: 0, warning: 0, error: 0, fatal: 0 } },
-      errorMessage: 'ZIP file could not be processed.',
-    }),
+    validateTemplateZipUploadInput: () => ({ ok: false, status: 400, error: 'Template upload only accepts ZIP files.' }),
+    createProcessingTemplateFromZipUpload: async () => createTemplate(),
+    triggerTemplateProcessingJob: () => undefined,
     parseTemplateRepositoryError: () => null,
     parseThrownScopeError: () => ({ status: 500, message: 'failed' }),
   })
 
-  const response = await handlers.POST(buildUploadRequest('invalid.zip', new Uint8Array([9, 9, 9])), { params: getParams() })
+  const response = await handlers.POST(buildUploadRequest('invalid.txt', new Uint8Array([9, 9, 9])), { params: getParams() })
   const body = (await response.json()) as Record<string, unknown>
 
   assert.equal(response.status, 400)
   assert.equal(body.ok, false)
-  assert.equal(body.health, 'failed')
-  assert.equal(body.error, 'ZIP file could not be processed.')
+  assert.equal(body.error, 'Template upload only accepts ZIP files.')
 })

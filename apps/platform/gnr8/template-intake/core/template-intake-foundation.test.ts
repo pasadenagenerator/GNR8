@@ -35,6 +35,8 @@ function createTemplateRecord(seed: Partial<TemplateRecord> & { id: string; clie
     previewSource: seed.previewSource ?? 'fallback',
     tags: seed.tags ?? [],
     sourceFilename: seed.sourceFilename,
+    sourceZipStorageBucket: seed.sourceZipStorageBucket ?? null,
+    sourceZipStorageKey: seed.sourceZipStorageKey ?? null,
     entryHtmlPath: seed.entryHtmlPath ?? null,
     entryHtmlFileName: seed.entryHtmlFileName ?? null,
     templateType: seed.templateType ?? 'unknown',

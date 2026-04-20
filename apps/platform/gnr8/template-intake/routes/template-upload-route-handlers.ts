@@ -1,5 +1,9 @@
-import { runTemplateZipIntake } from '@/gnr8/template-intake/core/template-upload-intake-service'
+import {
+  createProcessingTemplateFromZipUpload,
+  validateTemplateZipUploadInput,
+} from '@/gnr8/template-intake/core/template-upload-light-service'
 import { parseTemplateRepositoryError } from '@/gnr8/template-intake/storage/template-repository'
+import { triggerTemplateProcessingJob } from '@/gnr8/template-intake/routes/template-processing-trigger'
 import { parseThrownScopeError, requireClientTemplateScopeForUpload } from '@/gnr8/template-intake/routes/template-upload-scope'
 
 type Params = {
@@ -8,14 +12,18 @@ type Params = {
 
 type TemplateUploadRouteDeps = {
   requireScope: typeof requireClientTemplateScopeForUpload
-  runTemplateZipIntake: typeof runTemplateZipIntake
+  createProcessingTemplateFromZipUpload: typeof createProcessingTemplateFromZipUpload
+  validateTemplateZipUploadInput: typeof validateTemplateZipUploadInput
+  triggerTemplateProcessingJob: typeof triggerTemplateProcessingJob
   parseTemplateRepositoryError: typeof parseTemplateRepositoryError
   parseThrownScopeError: typeof parseThrownScopeError
 }
 
 const DEFAULT_DEPS: TemplateUploadRouteDeps = {
   requireScope: requireClientTemplateScopeForUpload,
-  runTemplateZipIntake,
+  createProcessingTemplateFromZipUpload,
+  validateTemplateZipUploadInput,
+  triggerTemplateProcessingJob,
   parseTemplateRepositoryError,
   parseThrownScopeError,
 }
@@ -23,8 +31,6 @@ const DEFAULT_DEPS: TemplateUploadRouteDeps = {
 function logTemplateUploadRouteEvent(input: {
   event: 'TEMPLATE_UPLOAD_REQUEST_RECEIVED' | 'TEMPLATE_UPLOAD_RESPONSE_SENT'
   templateId: string | null
-  zipValidationOk: boolean | null
-  selectedEntryHtmlPath: string | null
   status: 'uploaded' | 'processing' | 'ready' | 'failed' | null
   importHealth: 'clean' | 'degraded' | 'failed' | null
   previewSource: 'rendered_capture' | 'html_snapshot' | 'fallback' | null
@@ -33,8 +39,6 @@ function logTemplateUploadRouteEvent(input: {
 }) {
   console.info(`[template-upload] ${input.event}`, {
     templateId: input.templateId,
-    zipValidationOk: input.zipValidationOk,
-    selectedEntryHtmlPath: input.selectedEntryHtmlPath,
     status: input.status,
     importHealth: input.importHealth,
     previewSource: input.previewSource,
@@ -64,8 +68,6 @@ export function createTemplateUploadRouteHandlers(deps: Partial<TemplateUploadRo
           logTemplateUploadRouteEvent({
             event: 'TEMPLATE_UPLOAD_RESPONSE_SENT',
             templateId: null,
-            zipValidationOk: null,
-            selectedEntryHtmlPath: null,
             status: null,
             importHealth: null,
             previewSource: null,
@@ -74,11 +76,10 @@ export function createTemplateUploadRouteHandlers(deps: Partial<TemplateUploadRo
           })
           return Response.json({ ok: false, error: 'ZIP file is required.' }, { status: 400 })
         }
+
         logTemplateUploadRouteEvent({
           event: 'TEMPLATE_UPLOAD_REQUEST_RECEIVED',
           templateId: null,
-          zipValidationOk: null,
-          selectedEntryHtmlPath: null,
           status: null,
           importHealth: null,
           previewSource: null,
@@ -87,81 +88,97 @@ export function createTemplateUploadRouteHandlers(deps: Partial<TemplateUploadRo
         })
 
         const bytes = new Uint8Array(await fileValue.arrayBuffer())
-        const intake = await resolved.runTemplateZipIntake({
-          actorUserId: scope.userId,
-          clientId: scope.clientId,
-          organizationId: scope.organizationId,
-          agencyId: scope.agencyId,
-          uploadedZip: {
-            fileName: fileValue.name,
-            bytes,
-          },
+        const validation = resolved.validateTemplateZipUploadInput({
+          fileName: fileValue.name,
+          contentType: fileValue.type,
+          bytes,
         })
-
-        if (!intake.ok) {
+        if (!validation.ok) {
           logTemplateUploadRouteEvent({
             event: 'TEMPLATE_UPLOAD_RESPONSE_SENT',
-            templateId: intake.templateId,
-            zipValidationOk: intake.zipValidationOk,
-            selectedEntryHtmlPath: intake.selectedEntryHtmlPath,
-            status: intake.status,
-            importHealth: intake.importHealth,
-            previewSource: 'html_snapshot',
-            previewAvailable: false,
+            templateId: null,
+            status: null,
+            importHealth: null,
+            previewSource: null,
+            previewAvailable: null,
             uploadResponseOk: false,
           })
           return Response.json(
             {
               ok: false,
-              id: intake.templateId,
-              templateId: intake.templateId,
-              status: intake.status,
-              health: intake.importHealth,
-              importHealth: intake.importHealth,
-              zipValidationOk: intake.zipValidationOk,
-              selectedEntryHtmlPath: intake.selectedEntryHtmlPath,
-              error: intake.errorMessage,
-              diagnosticsSummary: intake.diagnosticsSummary,
+              error: validation.error,
             },
-            { status: 400 },
+            { status: validation.status },
           )
         }
 
+        const template = await resolved.createProcessingTemplateFromZipUpload({
+          actorUserId: scope.userId,
+          clientId: scope.clientId,
+          organizationId: scope.organizationId,
+          agencyId: scope.agencyId,
+          fileName: fileValue.name,
+          bytes,
+        })
+
+        if (template.status === 'processing') {
+          resolved.triggerTemplateProcessingJob({
+            request,
+            clientId: scope.clientId,
+            templateId: template.id,
+          })
+        }
+
+        const uploadOk = template.status !== 'failed'
         logTemplateUploadRouteEvent({
           event: 'TEMPLATE_UPLOAD_RESPONSE_SENT',
-          templateId: intake.template.id,
-          zipValidationOk: intake.zipValidationOk,
-          selectedEntryHtmlPath: intake.selectedEntryHtmlPath,
-          status: intake.template.status,
-          importHealth: intake.template.importHealth,
-          previewSource: intake.template.previewSource,
-          previewAvailable: intake.template.previewAvailable,
-          uploadResponseOk: true,
+          templateId: template.id,
+          status: template.status,
+          importHealth: template.importHealth,
+          previewSource: template.previewSource,
+          previewAvailable: template.previewAvailable,
+          uploadResponseOk: uploadOk,
         })
+
+        if (!uploadOk) {
+          return Response.json(
+            {
+              ok: false,
+              id: template.id,
+              templateId: template.id,
+              sourceType: template.sourceType,
+              status: template.status,
+              health: template.importHealth,
+              importHealth: template.importHealth,
+              error: 'Template upload was saved but processing could not start.',
+              diagnosticsSummary: template.diagnosticsSummary,
+            },
+            { status: 500 },
+          )
+        }
+
         return Response.json(
           {
             ok: true,
-            id: intake.template.id,
-            templateId: intake.template.id,
-            sourceType: intake.template.sourceType,
-            status: intake.template.status,
-            health: intake.template.importHealth,
-            name: intake.template.name,
-            tags: intake.template.tags,
-            importHealth: intake.template.importHealth,
-            zipValidationOk: intake.zipValidationOk,
-            selectedEntryHtmlPath: intake.selectedEntryHtmlPath,
-            entryHtmlFileName: intake.template.entryHtmlFileName,
-            templateType: intake.template.templateType,
+            id: template.id,
+            templateId: template.id,
+            sourceType: template.sourceType,
+            status: template.status,
+            health: template.importHealth,
+            name: template.name,
+            tags: template.tags,
+            importHealth: template.importHealth,
+            entryHtmlFileName: template.entryHtmlFileName,
+            templateType: template.templateType,
             preview: {
-              available: intake.template.previewAvailable,
-              isFallback: intake.template.previewIsFallback,
-              source: intake.template.previewSource,
-              imagePath: intake.template.previewImagePath,
-              entryHtmlFileName: intake.template.entryHtmlFileName,
-              templateType: intake.template.templateType,
+              available: template.previewAvailable,
+              isFallback: template.previewIsFallback,
+              source: template.previewSource,
+              imagePath: template.previewImagePath,
+              entryHtmlFileName: template.entryHtmlFileName,
+              templateType: template.templateType,
             },
-            diagnosticsSummary: intake.template.diagnosticsSummary,
+            diagnosticsSummary: template.diagnosticsSummary,
           },
           { status: 200 },
         )
@@ -171,8 +188,6 @@ export function createTemplateUploadRouteHandlers(deps: Partial<TemplateUploadRo
           logTemplateUploadRouteEvent({
             event: 'TEMPLATE_UPLOAD_RESPONSE_SENT',
             templateId: null,
-            zipValidationOk: null,
-            selectedEntryHtmlPath: null,
             status: null,
             importHealth: null,
             previewSource: null,
@@ -189,8 +204,6 @@ export function createTemplateUploadRouteHandlers(deps: Partial<TemplateUploadRo
         logTemplateUploadRouteEvent({
           event: 'TEMPLATE_UPLOAD_RESPONSE_SENT',
           templateId: null,
-          zipValidationOk: null,
-          selectedEntryHtmlPath: null,
           status: null,
           importHealth: null,
           previewSource: null,

@@ -7,6 +7,7 @@ import type {
   TemplateListItem,
   TemplateRecord,
   TemplateType,
+  UpdateTemplateSourceZipReferenceInput,
   UpdateTemplateProcessingResultInput,
 } from '@/gnr8/template-intake/types/template-intake-types'
 import { getSuperadminPool } from '@/src/superadmin/db'
@@ -96,6 +97,8 @@ type TemplateRow = {
   preview_source: string
   tags: string[] | null
   source_filename: string
+  source_zip_storage_bucket: string | null
+  source_zip_storage_key: string | null
   entry_html_path: string | null
   entry_html_file_name: string | null
   template_type: string | null
@@ -219,6 +222,8 @@ function mapTemplateRowFromNormalizedRead(row: TemplateRow, normalizedRead: Read
     previewSource: normalizedRead.previewSource,
     tags: Array.isArray(row.tags) ? row.tags.map((value) => normalizeText(value)).filter(Boolean) : [],
     sourceFilename: row.source_filename,
+    sourceZipStorageBucket: normalizeOptionalText(row.source_zip_storage_bucket),
+    sourceZipStorageKey: normalizeOptionalText(row.source_zip_storage_key),
     entryHtmlPath: normalizeOptionalText(row.entry_html_path),
     entryHtmlFileName: normalizeOptionalText(row.entry_html_file_name),
     templateType: normalizedRead.templateType,
@@ -287,6 +292,8 @@ export async function createTemplate(input: CreateTemplateInput): Promise<Templa
         preview_source,
         tags,
         source_filename,
+        source_zip_storage_bucket,
+        source_zip_storage_key,
         entry_html_path,
         entry_html_file_name,
         template_type,
@@ -317,10 +324,12 @@ export async function createTemplate(input: CreateTemplateInput): Promise<Templa
         $11::text,
         $12::text,
         $13::text,
+        $14::text,
+        $15::text,
         null,
         null,
-        $14::jsonb,
-        $15::jsonb,
+        $16::jsonb,
+        $17::jsonb,
         null,
         1,
         'private'::text
@@ -342,6 +351,8 @@ export async function createTemplate(input: CreateTemplateInput): Promise<Templa
         preview_source,
         tags,
         source_filename,
+        source_zip_storage_bucket,
+        source_zip_storage_key,
         entry_html_path,
         entry_html_file_name,
         template_type,
@@ -366,6 +377,8 @@ export async function createTemplate(input: CreateTemplateInput): Promise<Templa
         input.importHealth,
         input.tags,
         input.sourceFilename,
+        input.sourceZipStorageBucket ?? null,
+        input.sourceZipStorageKey ?? null,
         input.entryHtmlPath,
         input.entryHtmlFileName,
         normalizeTemplateTypeForStorage(input.templateType),
@@ -427,6 +440,8 @@ export async function updateTemplateProcessingResult(input: UpdateTemplateProces
         preview_source,
         tags,
         source_filename,
+        source_zip_storage_bucket,
+        source_zip_storage_key,
         entry_html_path,
         entry_html_file_name,
         template_type,
@@ -472,6 +487,64 @@ export async function updateTemplateProcessingResult(input: UpdateTemplateProces
   })
 }
 
+export async function updateTemplateSourceZipReference(input: UpdateTemplateSourceZipReferenceInput): Promise<TemplateRecord> {
+  return withConnection(async (client) => {
+    try {
+      const result = await client.query<TemplateRow>(
+        `
+      update public.gnr8_templates
+      set
+        source_zip_storage_bucket = $2::text,
+        source_zip_storage_key = $3::text,
+        updated_at = now()
+      where id = $1::uuid
+      returning
+        id::text,
+        client_id::text,
+        organization_id::text,
+        agency_id::text,
+        created_by_user_id::text,
+        name,
+        slug,
+        source_type,
+        status,
+        import_health,
+        preview_image_path,
+        preview_available,
+        preview_is_fallback,
+        preview_source,
+        tags,
+        source_filename,
+        source_zip_storage_bucket,
+        source_zip_storage_key,
+        entry_html_path,
+        entry_html_file_name,
+        template_type,
+        import_snapshot_id,
+        durable_snapshot_root_dir_abs,
+        template_manifest_summary,
+        diagnostics_summary,
+        import_manifest_summary,
+        version,
+        visibility,
+        created_at::text,
+        updated_at::text
+      `,
+        [input.templateId, input.sourceZipStorageBucket, input.sourceZipStorageKey],
+      )
+
+      const row = result.rows[0]
+      if (!row) {
+        throw new TemplateRepositoryError('TEMPLATE_REPOSITORY_FAILURE', 'Template ZIP source update failed.')
+      }
+
+      return mapTemplateRow(row)
+    } catch (error) {
+      throw toTemplateRepositoryError(error)
+    }
+  })
+}
+
 export async function listTemplatesForClientWithDiagnostics(input: {
   clientId: string
   limit?: number
@@ -499,6 +572,8 @@ export async function listTemplatesForClientWithDiagnostics(input: {
         preview_source,
         tags,
         source_filename,
+        source_zip_storage_bucket,
+        source_zip_storage_key,
         entry_html_path,
         entry_html_file_name,
         template_type,
@@ -580,6 +655,8 @@ export async function getTemplateByIdForClient(input: {
         preview_source,
         tags,
         source_filename,
+        source_zip_storage_bucket,
+        source_zip_storage_key,
         entry_html_path,
         entry_html_file_name,
         template_type,
@@ -642,6 +719,8 @@ export async function updateTemplateMetadataById(input: {
         preview_source,
         tags,
         source_filename,
+        source_zip_storage_bucket,
+        source_zip_storage_key,
         entry_html_path,
         entry_html_file_name,
         template_type,
@@ -694,6 +773,8 @@ export async function deleteTemplateByIdForClient(input: {
         preview_source,
         tags,
         source_filename,
+        source_zip_storage_bucket,
+        source_zip_storage_key,
         entry_html_path,
         entry_html_file_name,
         template_type,
