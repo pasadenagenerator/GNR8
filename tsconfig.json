@@ -5,7 +5,9 @@
   "references": [
     { "path": "packages/core" },
     { "path": "packages/data" },
-    { "path": "apps/platform" }
+    { "path": "packages/gnr8-runtime-contracts" },
+    { "path": "apps/platform" },
+    { "path": "apps/worker" }
   ],
 
   "compilerOptions": {

@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Asset Validation Fixture</title>
+    <link rel="stylesheet" href="/assets/styles.css" />
+  </head>
+  <body>
+    <img src="./assets/logo.svg" alt="ok" />
+    <img src="./assets/missing.png" alt="missing" />
+    <img src="https://example.com/remote.png" alt="remote" />
+    <img src="data:image/png;base64,AAAA" alt="data" />
+    <img src="" alt="empty" />
+    <script src="./assets/app.js"></script>
+    <script src="../traversal.js"></script>
+  </body>
+</html>
+
