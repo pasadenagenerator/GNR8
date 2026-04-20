@@ -5,7 +5,6 @@ export * from "@/gnr8/runtime/version-lifecycle-enforcer";
 export * from "@/gnr8/runtime/version-lifecycle-rules";
 export * from "@/gnr8/runtime/artifact-builder";
 export * from "@/gnr8/runtime/render-integrity-gate";
-export * from "@/gnr8/runtime/unified-render-preview";
 export * from "@/gnr8/runtime/publish-activation-orchestrator";
 export * from "@/gnr8/runtime/publish-activation-guard";
 export * from "@/gnr8/runtime/publish-safety-check";
