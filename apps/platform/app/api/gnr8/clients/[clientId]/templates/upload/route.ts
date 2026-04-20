@@ -1,4 +1,4 @@
-import { createTemplateUploadRouteHandlers } from '@/app/api/gnr8/clients/[clientId]/templates/upload/template-upload-route-handlers'
+import { createTemplateUploadRouteHandlers } from '@/gnr8/template-intake/routes/template-upload-route-handlers'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'

@@ -1,4 +1,5 @@
 import fs from 'node:fs'
+import os from 'node:os'
 import path from 'node:path'
 
 const TEMPLATE_DURABLE_SOURCE_ROOT_ENV_VAR = 'GNR8_TEMPLATE_DURABLE_SOURCE_ROOT_ABS' as const
@@ -24,7 +25,7 @@ function resolveFileUnderRoot(rootDirAbs: string, relativePath: string): string 
 export function resolveTemplateDurableSourceRootDirAbs(): string {
   const envValue = normalizeText(process.env[TEMPLATE_DURABLE_SOURCE_ROOT_ENV_VAR])
   if (envValue) return path.resolve(envValue)
-  return path.resolve(process.cwd(), '.gnr8', 'template-intake-sources')
+  return path.resolve(os.tmpdir(), 'gnr8', 'template-intake-sources')
 }
 
 export function persistTemplateDurableSourceSnapshot(input: {
