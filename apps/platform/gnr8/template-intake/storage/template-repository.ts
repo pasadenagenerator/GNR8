@@ -111,6 +111,10 @@ type TemplateRow = {
   visibility: string
   created_at: string
   updated_at: string
+  processing_started_at?: string | null
+  processing_completed_at?: string | null
+  processing_error?: string | null
+  processing_attempts?: number | null
 }
 
 function normalizeText(value: unknown): string {
@@ -232,6 +236,10 @@ function mapTemplateRowFromNormalizedRead(row: TemplateRow, normalizedRead: Read
     templateManifestSummary: (row.template_manifest_summary ?? null) as TemplateRecord['templateManifestSummary'],
     diagnosticsSummary: (row.diagnostics_summary ?? null) as TemplateRecord['diagnosticsSummary'],
     importManifestSummary: (row.import_manifest_summary ?? null) as TemplateRecord['importManifestSummary'],
+    processingStartedAt: normalizeOptionalText(row.processing_started_at),
+    processingCompletedAt: normalizeOptionalText(row.processing_completed_at),
+    processingError: normalizeOptionalText(row.processing_error),
+    processingAttempts: Number(row.processing_attempts ?? 0) || 0,
     version: Number(row.version ?? 1) || 1,
     visibility: row.visibility === 'private' ? 'private' : 'private',
     createdAt: row.created_at,
@@ -302,6 +310,10 @@ export async function createTemplate(input: CreateTemplateInput): Promise<Templa
         template_manifest_summary,
         diagnostics_summary,
         import_manifest_summary,
+        processing_started_at,
+        processing_completed_at,
+        processing_error,
+        processing_attempts,
         version,
         visibility
       )
@@ -331,6 +343,10 @@ export async function createTemplate(input: CreateTemplateInput): Promise<Templa
         $16::jsonb,
         $17::jsonb,
         null,
+        null,
+        null,
+        null,
+        0,
         1,
         'private'::text
       )
@@ -364,7 +380,11 @@ export async function createTemplate(input: CreateTemplateInput): Promise<Templa
         version,
         visibility,
         created_at::text,
-        updated_at::text
+        updated_at::text,
+        processing_started_at::text,
+        processing_completed_at::text,
+        processing_error,
+        processing_attempts
       `,
       [
         input.clientId,
@@ -421,6 +441,8 @@ export async function updateTemplateProcessingResult(input: UpdateTemplateProces
         diagnostics_summary = $14::jsonb,
         template_manifest_summary = $15::jsonb,
         import_manifest_summary = $16::jsonb,
+        processing_completed_at = now(),
+        processing_error = null,
         updated_at = now()
       where id = $1::uuid
       returning
@@ -453,7 +475,11 @@ export async function updateTemplateProcessingResult(input: UpdateTemplateProces
         version,
         visibility,
         created_at::text,
-        updated_at::text
+        updated_at::text,
+        processing_started_at::text,
+        processing_completed_at::text,
+        processing_error,
+        processing_attempts
       `,
       [
         input.templateId,
@@ -528,7 +554,11 @@ export async function updateTemplateSourceZipReference(input: UpdateTemplateSour
         version,
         visibility,
         created_at::text,
-        updated_at::text
+        updated_at::text,
+        processing_started_at::text,
+        processing_completed_at::text,
+        processing_error,
+        processing_attempts
       `,
         [input.templateId, input.sourceZipStorageBucket, input.sourceZipStorageKey],
       )
@@ -539,6 +569,196 @@ export async function updateTemplateSourceZipReference(input: UpdateTemplateSour
       }
 
       return mapTemplateRow(row)
+    } catch (error) {
+      throw toTemplateRepositoryError(error)
+    }
+  })
+}
+
+export async function markTemplateProcessingAttemptStarted(input: {
+  clientId: string
+  templateId: string
+}): Promise<TemplateRecord | null> {
+  return withConnection(async (client) => {
+    try {
+      const result = await client.query<TemplateRow>(
+        `
+      update public.gnr8_templates
+      set
+        status = 'processing',
+        processing_started_at = now(),
+        processing_completed_at = null,
+        processing_error = null,
+        processing_attempts = coalesce(processing_attempts, 0) + 1,
+        updated_at = now()
+      where client_id = $1::uuid
+        and id = $2::uuid
+      returning
+        id::text,
+        client_id::text,
+        organization_id::text,
+        agency_id::text,
+        created_by_user_id::text,
+        name,
+        slug,
+        source_type,
+        status,
+        import_health,
+        preview_image_path,
+        preview_available,
+        preview_is_fallback,
+        preview_source,
+        tags,
+        source_filename,
+        source_zip_storage_bucket,
+        source_zip_storage_key,
+        entry_html_path,
+        entry_html_file_name,
+        template_type,
+        import_snapshot_id,
+        durable_snapshot_root_dir_abs,
+        template_manifest_summary,
+        diagnostics_summary,
+        import_manifest_summary,
+        version,
+        visibility,
+        created_at::text,
+        updated_at::text,
+        processing_started_at::text,
+        processing_completed_at::text,
+        processing_error,
+        processing_attempts
+      `,
+        [input.clientId, input.templateId],
+      )
+      const row = result.rows[0]
+      return row ? mapTemplateRow(row) : null
+    } catch (error) {
+      throw toTemplateRepositoryError(error)
+    }
+  })
+}
+
+export async function markTemplateProcessingRetryableFailure(input: {
+  clientId: string
+  templateId: string
+  errorMessage: string
+}): Promise<TemplateRecord | null> {
+  return withConnection(async (client) => {
+    try {
+      const result = await client.query<TemplateRow>(
+        `
+      update public.gnr8_templates
+      set
+        status = 'processing',
+        processing_error = $3::text,
+        updated_at = now()
+      where client_id = $1::uuid
+        and id = $2::uuid
+      returning
+        id::text,
+        client_id::text,
+        organization_id::text,
+        agency_id::text,
+        created_by_user_id::text,
+        name,
+        slug,
+        source_type,
+        status,
+        import_health,
+        preview_image_path,
+        preview_available,
+        preview_is_fallback,
+        preview_source,
+        tags,
+        source_filename,
+        source_zip_storage_bucket,
+        source_zip_storage_key,
+        entry_html_path,
+        entry_html_file_name,
+        template_type,
+        import_snapshot_id,
+        durable_snapshot_root_dir_abs,
+        template_manifest_summary,
+        diagnostics_summary,
+        import_manifest_summary,
+        version,
+        visibility,
+        created_at::text,
+        updated_at::text,
+        processing_started_at::text,
+        processing_completed_at::text,
+        processing_error,
+        processing_attempts
+      `,
+        [input.clientId, input.templateId, input.errorMessage],
+      )
+      const row = result.rows[0]
+      return row ? mapTemplateRow(row) : null
+    } catch (error) {
+      throw toTemplateRepositoryError(error)
+    }
+  })
+}
+
+export async function markTemplateProcessingFinalFailure(input: {
+  clientId: string
+  templateId: string
+  errorMessage: string
+}): Promise<TemplateRecord | null> {
+  return withConnection(async (client) => {
+    try {
+      const result = await client.query<TemplateRow>(
+        `
+      update public.gnr8_templates
+      set
+        status = 'failed',
+        import_health = 'failed',
+        processing_error = $3::text,
+        processing_completed_at = now(),
+        updated_at = now()
+      where client_id = $1::uuid
+        and id = $2::uuid
+      returning
+        id::text,
+        client_id::text,
+        organization_id::text,
+        agency_id::text,
+        created_by_user_id::text,
+        name,
+        slug,
+        source_type,
+        status,
+        import_health,
+        preview_image_path,
+        preview_available,
+        preview_is_fallback,
+        preview_source,
+        tags,
+        source_filename,
+        source_zip_storage_bucket,
+        source_zip_storage_key,
+        entry_html_path,
+        entry_html_file_name,
+        template_type,
+        import_snapshot_id,
+        durable_snapshot_root_dir_abs,
+        template_manifest_summary,
+        diagnostics_summary,
+        import_manifest_summary,
+        version,
+        visibility,
+        created_at::text,
+        updated_at::text,
+        processing_started_at::text,
+        processing_completed_at::text,
+        processing_error,
+        processing_attempts
+      `,
+        [input.clientId, input.templateId, input.errorMessage],
+      )
+      const row = result.rows[0]
+      return row ? mapTemplateRow(row) : null
     } catch (error) {
       throw toTemplateRepositoryError(error)
     }
@@ -585,7 +805,11 @@ export async function listTemplatesForClientWithDiagnostics(input: {
         version,
         visibility,
         created_at::text,
-        updated_at::text
+        updated_at::text,
+        processing_started_at::text,
+        processing_completed_at::text,
+        processing_error,
+        processing_attempts
       from public.gnr8_templates
       where client_id = $1::uuid
       order by created_at desc, id desc
@@ -668,7 +892,11 @@ export async function getTemplateByIdForClient(input: {
         version,
         visibility,
         created_at::text,
-        updated_at::text
+        updated_at::text,
+        processing_started_at::text,
+        processing_completed_at::text,
+        processing_error,
+        processing_attempts
       from public.gnr8_templates
       where client_id = $1::uuid
         and id = $2::uuid
@@ -732,7 +960,11 @@ export async function updateTemplateMetadataById(input: {
         version,
         visibility,
         created_at::text,
-        updated_at::text
+        updated_at::text,
+        processing_started_at::text,
+        processing_completed_at::text,
+        processing_error,
+        processing_attempts
       `,
         [input.clientId, input.templateId, input.name, input.tags],
       )
@@ -786,7 +1018,11 @@ export async function deleteTemplateByIdForClient(input: {
         version,
         visibility,
         created_at::text,
-        updated_at::text
+        updated_at::text,
+        processing_started_at::text,
+        processing_completed_at::text,
+        processing_error,
+        processing_attempts
       `,
         [input.clientId, input.templateId],
       )

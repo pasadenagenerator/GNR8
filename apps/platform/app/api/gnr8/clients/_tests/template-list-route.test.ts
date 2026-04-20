@@ -76,6 +76,7 @@ test('list route returns 200 and keeps valid row when one row is malformed at ca
           source: template.previewSource,
           imagePath: template.previewImagePath,
         },
+        processingAttempts: template.processingAttempts ?? 0,
         createdAt: template.createdAt,
         updatedAt: template.updatedAt,
       }
@@ -83,6 +84,7 @@ test('list route returns 200 and keeps valid row when one row is malformed at ca
     sortCards: (cards) => cards,
     parseStorageError: () => null,
     parseScopeError: () => ({ status: 500, message: 'failed' }),
+    reenqueueStuckTemplateProcessing: async () => ({ reenqueueCount: 0, candidateCount: 0 }),
   })
 
   const response = await handlers.GET(new Request('http://localhost'), { params: getParams() })
@@ -110,6 +112,7 @@ test('list route returns structured error envelope on unknown enum parser failur
     sortCards: (cards) => cards,
     parseStorageError: () => null,
     parseScopeError: () => ({ status: 500, message: 'Unknown template enum parsing failure' }),
+    reenqueueStuckTemplateProcessing: async () => ({ reenqueueCount: 0, candidateCount: 0 }),
   })
 
   const response = await handlers.GET(new Request('http://localhost'), { params: getParams() })

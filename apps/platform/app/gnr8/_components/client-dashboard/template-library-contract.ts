@@ -23,6 +23,7 @@ export type TemplateListApiCard = {
     entryHtmlFileName?: string | null
     templateType?: 'single_page' | 'multi_page' | 'unknown'
   }
+  processingAttempts?: number
   createdAt: string
 }
 

@@ -17,6 +17,7 @@ export type TemplateListCard = {
     source: 'rendered_capture' | 'html_snapshot' | 'fallback'
     imagePath: string | null
   }
+  processingAttempts: number
   createdAt: string
   updatedAt: string
 }
@@ -43,6 +44,7 @@ export function mapTemplateToListCard(template: TemplateRecord): TemplateListCar
       source: template.previewSource,
       imagePath: normalizeText(template.previewImagePath) || null,
     },
+    processingAttempts: Number(template.processingAttempts ?? 0) || 0,
     createdAt: template.createdAt,
     updatedAt: template.updatedAt,
   }

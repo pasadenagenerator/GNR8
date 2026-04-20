@@ -16,9 +16,12 @@ type TemplateListResponse = {
   templates?: TemplateListApiCard[]
 }
 
-function normalizeStatusLabel(status: string): string {
+function normalizeStatusLabel(status: string, processingAttempts?: number): string {
   if (status === 'ready') return 'Ready'
-  if (status === 'processing') return 'Processing'
+  if (status === 'processing') {
+    if ((Number(processingAttempts ?? 0) || 0) > 1) return 'Processing (retrying...)'
+    return 'Processing'
+  }
   if (status === 'uploaded') return 'Uploaded'
   return 'Failed'
 }
@@ -39,7 +42,7 @@ function badgeColor(value: string): { background: string; border: string; color:
   if (value === 'Ready' || value === 'Clean') {
     return { background: '#ecfdf5', border: '#a7f3d0', color: '#065f46' }
   }
-  if (value === 'Processing' || value === 'Uploaded') {
+  if (value === 'Processing' || value === 'Processing (retrying...)' || value === 'Uploaded') {
     return { background: '#eff6ff', border: '#bfdbfe', color: '#1d4ed8' }
   }
   if (value === 'Degraded') {
@@ -422,7 +425,7 @@ export default function TemplateLibraryPanel(props: {
                 </div>
 
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                  <StatusBadge label='Status' value={normalizeStatusLabel(template.status)} />
+                  <StatusBadge label='Status' value={normalizeStatusLabel(template.status, template.processingAttempts)} />
                   <StatusBadge label='Health' value={normalizeHealthLabel(template.importHealth)} />
                   <StatusBadge label='Source' value='ZIP HTML' />
                 </div>

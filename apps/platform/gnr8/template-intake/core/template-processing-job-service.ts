@@ -192,12 +192,14 @@ async function persistFailedTemplateResult(input: {
 export async function processTemplateZipIntakeJob(input: {
   clientId: string
   templateId: string
+  persistFailure?: boolean
   deps?: Partial<TemplateProcessingDeps>
 }): Promise<{ ok: true; template: TemplateRecord } | { ok: false; template: TemplateRecord | null; error: string }> {
   const deps = {
     ...DEFAULT_DEPS,
     ...(input.deps ?? {}),
   }
+  const persistFailure = input.persistFailure !== false
 
   const template = await deps.getTemplateByIdForClient({
     clientId: input.clientId,
@@ -214,6 +216,13 @@ export async function processTemplateZipIntakeJob(input: {
   const sourceZipStorageBucket = normalizeText(template.sourceZipStorageBucket)
   const sourceZipStorageKey = normalizeText(template.sourceZipStorageKey)
   if (!sourceZipStorageBucket || !sourceZipStorageKey) {
+    if (!persistFailure) {
+      return {
+        ok: false,
+        template,
+        error: 'Template source ZIP reference is missing.',
+      }
+    }
     const failed = await persistFailedTemplateResult({
       template,
       deps,
@@ -249,6 +258,13 @@ export async function processTemplateZipIntakeJob(input: {
       key: sourceZipStorageKey,
     })
   } catch (error) {
+    if (!persistFailure) {
+      return {
+        ok: false,
+        template,
+        error: error instanceof Error ? error.message : 'Failed to load template source ZIP.',
+      }
+    }
     const failed = await persistFailedTemplateResult({
       template,
       deps,
@@ -301,6 +317,13 @@ export async function processTemplateZipIntakeJob(input: {
   ])
 
   if (!zipValidation.ok || !zipValidation.validation || !zipValidation.validation.entryHtmlPath) {
+    if (!persistFailure) {
+      return {
+        ok: false,
+        template,
+        error: zipValidation.errorMessage ?? 'Template ZIP validation failed.',
+      }
+    }
     const failed = await persistFailedTemplateResult({
       template,
       deps,
@@ -346,6 +369,13 @@ export async function processTemplateZipIntakeJob(input: {
   })
 
   if (hasEmptyHtmlIssue || hasFatalImportIssues) {
+    if (!persistFailure) {
+      return {
+        ok: false,
+        template,
+        error: hasEmptyHtmlIssue ? 'Template entry HTML is empty.' : 'Template import failed due to fatal diagnostics.',
+      }
+    }
     const failed = await persistFailedTemplateResult({
       template,
       deps,
@@ -391,6 +421,13 @@ export async function processTemplateZipIntakeJob(input: {
     })
     durableSnapshotRootDirAbs = persistedSource.durableSnapshotRootDirAbs
   } catch (error) {
+    if (!persistFailure) {
+      return {
+        ok: false,
+        template,
+        error: error instanceof Error ? error.message : 'Template durable source snapshot could not be persisted.',
+      }
+    }
     const failed = await persistFailedTemplateResult({
       template,
       deps,

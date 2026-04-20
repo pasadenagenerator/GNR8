@@ -122,11 +122,46 @@ export function createTemplateUploadRouteHandlers(deps: Partial<TemplateUploadRo
         })
 
         if (template.status === 'processing') {
-          resolved.triggerTemplateProcessingJob({
-            request,
+          const sourceZipStorageBucket = String(template.sourceZipStorageBucket ?? '').trim()
+          const sourceZipStorageKey = String(template.sourceZipStorageKey ?? '').trim()
+          if (!sourceZipStorageBucket || !sourceZipStorageKey) {
+            return Response.json(
+              {
+                ok: false,
+                id: template.id,
+                templateId: template.id,
+                sourceType: template.sourceType,
+                status: 'failed',
+                health: 'failed',
+                importHealth: 'failed',
+                error: 'Template upload was saved but ZIP source reference is missing.',
+                diagnosticsSummary: template.diagnosticsSummary,
+              },
+              { status: 500 },
+            )
+          }
+          const triggered = await resolved.triggerTemplateProcessingJob({
             clientId: scope.clientId,
             templateId: template.id,
+            sourceZipStorageBucket,
+            sourceZipStorageKey,
           })
+          if (!triggered) {
+            return Response.json(
+              {
+                ok: false,
+                id: template.id,
+                templateId: template.id,
+                sourceType: template.sourceType,
+                status: template.status,
+                health: template.importHealth,
+                importHealth: template.importHealth,
+                error: 'Template upload was saved but processing event could not be enqueued.',
+                diagnosticsSummary: template.diagnosticsSummary,
+              },
+              { status: 500 },
+            )
+          }
         }
 
         const uploadOk = template.status !== 'failed'

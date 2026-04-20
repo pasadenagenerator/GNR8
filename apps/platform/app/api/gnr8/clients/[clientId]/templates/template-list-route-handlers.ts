@@ -6,6 +6,7 @@ import {
   sortTemplateCardsDeterministically,
   type TemplateListCard,
 } from '@/gnr8/template-intake/core/template-list-contract'
+import { reenqueueStuckTemplateProcessing } from '@/gnr8/template-intake/core/template-processing-watchdog'
 import { parseTemplateRepositoryError } from '@/gnr8/template-intake/storage/template-repository'
 import { parseThrownScopeError, requireClientTemplateScope } from '@/app/api/gnr8/clients/_lib/client-template-scope'
 
@@ -22,6 +23,7 @@ type TemplateListRouteDeps = {
   sortCards: typeof sortTemplateCardsDeterministically
   parseStorageError: typeof parseTemplateRepositoryError
   parseScopeError: typeof parseThrownScopeError
+  reenqueueStuckTemplateProcessing: typeof reenqueueStuckTemplateProcessing
 }
 
 const DEFAULT_DEPS: TemplateListRouteDeps = {
@@ -31,6 +33,7 @@ const DEFAULT_DEPS: TemplateListRouteDeps = {
   sortCards: sortTemplateCardsDeterministically,
   parseStorageError: parseTemplateRepositoryError,
   parseScopeError: parseThrownScopeError,
+  reenqueueStuckTemplateProcessing,
 }
 
 function normalizeText(value: unknown): string {
@@ -102,6 +105,11 @@ export function createTemplateListRouteHandlers(deps: TemplateListRouteDeps = DE
           limit: 250,
         })
 
+        const watchdog = await deps.reenqueueStuckTemplateProcessing({
+          clientId: scope.clientId,
+          templates: queryResult.templates,
+        })
+
         normalizationApplied = queryResult.diagnostics.normalizedRowCount > 0 || queryResult.diagnostics.skippedRowCount > 0
 
         console.info('[template-list] TEMPLATE_LIST_QUERY_COMPLETED', {
@@ -111,6 +119,8 @@ export function createTemplateListRouteHandlers(deps: TemplateListRouteDeps = DE
           normalizationApplied,
           normalizedRowCount: queryResult.diagnostics.normalizedRowCount,
           skippedRowCount: queryResult.diagnostics.skippedRowCount,
+          watchdogCandidateCount: watchdog.candidateCount,
+          watchdogReenqueueCount: watchdog.reenqueueCount,
         })
 
         const cards: TemplateListCard[] = []

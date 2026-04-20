@@ -123,6 +123,10 @@ export type TemplateRecord = {
   templateManifestSummary: TemplateManifestSummary | null
   diagnosticsSummary: TemplateDiagnosticsSummary | null
   importManifestSummary: ImportManifest | null
+  processingStartedAt?: string | null
+  processingCompletedAt?: string | null
+  processingError?: string | null
+  processingAttempts?: number
   version: number
   visibility: TemplateVisibility
   createdAt: string

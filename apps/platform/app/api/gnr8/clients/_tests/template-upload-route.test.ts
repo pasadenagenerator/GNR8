@@ -41,7 +41,8 @@ function createTemplate(seed: Partial<TemplateRecord> = {}): TemplateRecord {
 
 function buildUploadRequest(fileName: string, bytes: Uint8Array): Request {
   const formData = new FormData()
-  formData.set('file', new File([bytes], fileName, { type: 'application/zip' }))
+  const fileBytes = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer
+  formData.set('file', new File([fileBytes], fileName, { type: 'application/zip' }))
   return new Request('http://localhost', { method: 'POST', body: formData })
 }
 
@@ -54,6 +55,8 @@ function getParams() {
 test('upload route stores zip, creates processing template row, and triggers processing job', async () => {
   let triggerCalled = false
   let triggeredTemplateId: string | null = null
+  let triggeredBucket: string | null = null
+  let triggeredKey: string | null = null
 
   const handlers = createTemplateUploadRouteHandlers({
     requireScope: async () => ({
@@ -68,9 +71,12 @@ test('upload route stores zip, creates processing template row, and triggers pro
         status: 'processing',
         importHealth: 'degraded',
       }),
-    triggerTemplateProcessingJob: ({ templateId }) => {
+    triggerTemplateProcessingJob: async ({ templateId, sourceZipStorageBucket, sourceZipStorageKey }) => {
       triggerCalled = true
       triggeredTemplateId = templateId
+      triggeredBucket = sourceZipStorageBucket
+      triggeredKey = sourceZipStorageKey
+      return true
     },
     parseTemplateRepositoryError: () => null,
     parseThrownScopeError: () => ({ status: 500, message: 'failed' }),
@@ -88,6 +94,8 @@ test('upload route stores zip, creates processing template row, and triggers pro
   assert.equal(body.sourceType, 'zip_html')
   assert.equal(triggerCalled, true)
   assert.equal(triggeredTemplateId, '00000000-0000-4000-8000-000000000901')
+  assert.equal(triggeredBucket, 'bucket')
+  assert.equal(triggeredKey, 'key')
 })
 
 test('upload route returns deterministic validation error when input is not a zip', async () => {
@@ -100,7 +108,7 @@ test('upload route returns deterministic validation error when input is not a zi
     }),
     validateTemplateZipUploadInput: () => ({ ok: false, status: 400, error: 'Template upload only accepts ZIP files.' }),
     createProcessingTemplateFromZipUpload: async () => createTemplate(),
-    triggerTemplateProcessingJob: () => undefined,
+    triggerTemplateProcessingJob: async () => true,
     parseTemplateRepositoryError: () => null,
     parseThrownScopeError: () => ({ status: 500, message: 'failed' }),
   })
