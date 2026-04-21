@@ -6,6 +6,9 @@ import path from 'node:path'
 import { getSuperadminPool } from '@/src/superadmin/db'
 import type { CreatedSiteRecord } from '@/gnr8/site/site-template-instantiation-service'
 import type { ScopedImportPipelineOutcome } from '@/gnr8/site/scoped-import-pipeline'
+import { TEMPLATE_ZIP_MAX_BYTES, validateAndExtractTemplateZip } from '@/gnr8/template-intake/core/template-zip-validator'
+import { persistTemplateDurableSourceSnapshot } from '@/gnr8/template-intake/storage/template-durable-source'
+import { loadTemplateSourceZip } from '@/gnr8/template-intake/storage/template-source-zip-storage'
 import type { TemplateRecord } from '@/gnr8/template-intake/types/template-intake-types'
 import {
   URL_SINGLE_PAGE_IMPORT_VERSION,
@@ -15,7 +18,15 @@ import type { UrlSinglePageImportSnapshot } from '@/gnr8/validation/runtime/url-
 
 type BootstrapTemplateRecord = Pick<
   TemplateRecord,
-  'id' | 'importSnapshotId' | 'entryHtmlPath' | 'entryHtmlFileName' | 'importManifestSummary' | 'durableSnapshotRootDirAbs'
+  | 'id'
+  | 'sourceFilename'
+  | 'sourceZipStorageBucket'
+  | 'sourceZipStorageKey'
+  | 'importSnapshotId'
+  | 'entryHtmlPath'
+  | 'entryHtmlFileName'
+  | 'importManifestSummary'
+  | 'durableSnapshotRootDirAbs'
 >
 
 export type TemplateSiteRuntimeBootstrapResult = {
@@ -57,6 +68,9 @@ type BootstrapDeps = {
     input: Parameters<(typeof import('@/gnr8/site/scoped-import-pipeline'))['runScopedImportPipeline']>[0],
   ) => ReturnType<(typeof import('@/gnr8/site/scoped-import-pipeline'))['runScopedImportPipeline']>
   writeOwnershipLink: (input: { siteId: string; siteVersionId: string }) => Promise<void>
+  loadTemplateSourceZip: (input: { bucket: string; key: string }) => Promise<Uint8Array>
+  validateAndExtractTemplateZip: typeof validateAndExtractTemplateZip
+  persistTemplateDurableSourceSnapshot: typeof persistTemplateDurableSourceSnapshot
   now: () => Date
 }
 
@@ -71,6 +85,9 @@ function defaultDeps(): BootstrapDeps {
   return {
     runScopedImportPipeline: runScopedImportPipelineDefault,
     writeOwnershipLink: linkOwnershipSiteVersion,
+    loadTemplateSourceZip,
+    validateAndExtractTemplateZip,
+    persistTemplateDurableSourceSnapshot,
     now: () => new Date(),
   }
 }
@@ -88,10 +105,10 @@ function resolveTemplateSnapshotRoot(snapshotId: string): string {
   return path.resolve(os.tmpdir(), 'gnr8', 'template-intake', snapshotId)
 }
 
-type TemplateBootstrapSourceMode = 'durable' | 'legacy_temp'
+type TemplateBootstrapSourceMode = 'processed' | 'legacy' | 'zip_reconstructed'
 
 type TemplateBootstrapSourceCandidate = {
-  sourceMode: TemplateBootstrapSourceMode
+  sourceMode: 'durable' | 'legacy_temp'
   snapshotRootDirAbs: string
   entryHtmlPathAbs: string
   assetsDirAbs: string
@@ -280,6 +297,132 @@ function resolveTemplateBootstrapSourceCandidates(input: {
   return candidates
 }
 
+function mapCandidateMode(candidate: TemplateBootstrapSourceCandidate['sourceMode']): TemplateBootstrapSourceMode {
+  return candidate === 'durable' ? 'processed' : 'legacy'
+}
+
+async function resolveTemplateBootstrapSource(input: {
+  template: BootstrapTemplateRecord
+  deps: BootstrapDeps
+}): Promise<
+  | {
+      sourceMode: TemplateBootstrapSourceMode
+      snapshotRootDirAbs: string
+      entryHtmlPathAbs: string
+      assetsDirAbs: string
+      html: string
+    }
+  | null
+> {
+  const templateId = input.template.id
+  const entryHtmlPath = normalizeText(input.template.entryHtmlPath).replaceAll('\\', '/').replace(/^\/+/, '')
+  const sourceCandidates = resolveTemplateBootstrapSourceCandidates({ template: input.template })
+  const assetsDirRel = normalizeText(input.template.importManifestSummary?.assetsDirPath) || 'assets'
+  const sourceZipStorageBucket = normalizeText(input.template.sourceZipStorageBucket)
+  const sourceZipStorageKey = normalizeText(input.template.sourceZipStorageKey)
+
+  console.info('[template-site-bootstrap] TEMPLATE_BOOTSTRAP_SOURCE_RESOLUTION_STARTED', {
+    templateId,
+    entryHtmlPath: entryHtmlPath || null,
+    durableSnapshotRootDirAbs: normalizeText(input.template.durableSnapshotRootDirAbs) || null,
+    importSnapshotId: normalizeText(input.template.importSnapshotId) || null,
+    hasSourceZipReference: Boolean(sourceZipStorageBucket && sourceZipStorageKey),
+  })
+
+  for (const candidate of sourceCandidates) {
+    if (!fs.existsSync(candidate.snapshotRootDirAbs) || !fs.existsSync(candidate.entryHtmlPathAbs)) {
+      continue
+    }
+    try {
+      const html = fs.readFileSync(candidate.entryHtmlPathAbs, 'utf8')
+      if (!normalizeText(html)) continue
+      const sourceMode = mapCandidateMode(candidate.sourceMode)
+      const sourceEvent =
+        sourceMode === 'processed' ? 'TEMPLATE_BOOTSTRAP_SOURCE_RESOLVED_PROCESSED' : 'TEMPLATE_BOOTSTRAP_SOURCE_RESOLVED_LEGACY'
+      console.info(`[template-site-bootstrap] ${sourceEvent}`, {
+        templateId,
+        sourceMode,
+        snapshotRootDirAbs: candidate.snapshotRootDirAbs,
+        entryHtmlPathAbs: candidate.entryHtmlPathAbs,
+      })
+      return {
+        sourceMode,
+        snapshotRootDirAbs: candidate.snapshotRootDirAbs,
+        entryHtmlPathAbs: candidate.entryHtmlPathAbs,
+        assetsDirAbs: candidate.assetsDirAbs,
+        html,
+      }
+    } catch {
+      continue
+    }
+  }
+
+  if (entryHtmlPath && sourceZipStorageBucket && sourceZipStorageKey) {
+    try {
+      const zipBytes = await input.deps.loadTemplateSourceZip({
+        bucket: sourceZipStorageBucket,
+        key: sourceZipStorageKey,
+      })
+      const zipValidation = input.deps.validateAndExtractTemplateZip({
+        fileName: normalizeText(input.template.sourceFilename) || `${templateId}.zip`,
+        bytes: zipBytes,
+        maxBytes: TEMPLATE_ZIP_MAX_BYTES,
+      })
+      if (zipValidation.ok && zipValidation.validation) {
+        const extractedEntryPath = path.resolve(zipValidation.validation.extractionRootDirAbs, entryHtmlPath)
+        const chosenEntryAbs = fs.existsSync(extractedEntryPath)
+          ? extractedEntryPath
+          : path.resolve(
+              zipValidation.validation.extractionRootDirAbs,
+              normalizeText(zipValidation.validation.entryHtmlPath).replaceAll('\\', '/').replace(/^\/+/, ''),
+            )
+        if (fs.existsSync(chosenEntryAbs)) {
+          const html = fs.readFileSync(chosenEntryAbs, 'utf8')
+          if (normalizeText(html)) {
+            const persistedSource = input.deps.persistTemplateDurableSourceSnapshot({
+              templateId,
+              extractionRootDirAbs: zipValidation.validation.extractionRootDirAbs,
+              entryHtmlPath: entryHtmlPath || normalizeText(zipValidation.validation.entryHtmlPath) || 'index.html',
+              entryHtmlContent: html,
+              sourceFilePaths: zipValidation.validation.extractedFilePaths ?? [],
+            })
+            const durableEntryHtmlPathAbs = path.resolve(
+              persistedSource.durableSnapshotRootDirAbs,
+              entryHtmlPath || normalizeText(zipValidation.validation.entryHtmlPath) || 'index.html',
+            )
+            console.info('[template-site-bootstrap] TEMPLATE_BOOTSTRAP_SOURCE_RESOLVED_FROM_ZIP', {
+              templateId,
+              sourceMode: 'zip_reconstructed',
+              sourceZipStorageBucket,
+              sourceZipStorageKey,
+              snapshotRootDirAbs: persistedSource.durableSnapshotRootDirAbs,
+              entryHtmlPathAbs: durableEntryHtmlPathAbs,
+            })
+            return {
+              sourceMode: 'zip_reconstructed',
+              snapshotRootDirAbs: persistedSource.durableSnapshotRootDirAbs,
+              entryHtmlPathAbs: durableEntryHtmlPathAbs,
+              assetsDirAbs: path.resolve(persistedSource.durableSnapshotRootDirAbs, assetsDirRel),
+              html,
+            }
+          }
+        }
+      }
+    } catch {
+      // Handled by deterministic unavailable diagnostic below.
+    }
+  }
+
+  console.error('[template-site-bootstrap] TEMPLATE_BOOTSTRAP_SOURCE_UNAVAILABLE', {
+    templateId,
+    attemptedEntryHtmlPath: entryHtmlPath || null,
+    attemptedCandidateEntryPaths: sourceCandidates.map((candidate) => candidate.entryHtmlPathAbs),
+    sourceZipStorageBucket: sourceZipStorageBucket || null,
+    sourceZipStorageKey: sourceZipStorageKey || null,
+  })
+  return null
+}
+
 async function linkOwnershipSiteVersion(input: { siteId: string; siteVersionId: string }): Promise<void> {
   const client = await getSuperadminPool().connect()
   try {
@@ -345,72 +488,12 @@ export async function bootstrapRuntimeFromTemplateSite(input: {
       entryHtmlPath,
     })
 
-    const sourceCandidates = resolveTemplateBootstrapSourceCandidates({
+    const resolvedSource = await resolveTemplateBootstrapSource({
       template: input.template,
+      deps,
     })
-    let resolvedSource:
-      | {
-          sourceMode: TemplateBootstrapSourceMode
-          snapshotRootDirAbs: string
-          entryHtmlPathAbs: string
-          assetsDirAbs: string
-          html: string
-        }
-      | null = null
-
-    for (const candidate of sourceCandidates) {
-      if (!fs.existsSync(candidate.snapshotRootDirAbs) || !fs.existsSync(candidate.entryHtmlPathAbs)) {
-        continue
-      }
-      try {
-        const html = fs.readFileSync(candidate.entryHtmlPathAbs, 'utf8')
-        if (!normalizeText(html)) {
-          console.error('[template-site-bootstrap] TEMPLATE_BOOTSTRAP_SOURCE_LOAD_FAILED', {
-            templateId,
-            sourceMode: candidate.sourceMode,
-            sourceRef: candidate.entryHtmlPathAbs,
-            sourceLoadedSuccessfully: false,
-            reason: 'entry_html_empty',
-          })
-          continue
-        }
-        resolvedSource = {
-          sourceMode: candidate.sourceMode,
-          snapshotRootDirAbs: candidate.snapshotRootDirAbs,
-          entryHtmlPathAbs: candidate.entryHtmlPathAbs,
-          assetsDirAbs: candidate.assetsDirAbs,
-          html,
-        }
-        console.info(
-          `[template-site-bootstrap] ${
-            candidate.sourceMode === 'durable' ? 'TEMPLATE_SOURCE_RESOLVED_DURABLE' : 'TEMPLATE_SOURCE_RESOLVED_LEGACY_TEMP'
-          }`,
-          {
-            templateId,
-            sourceMode: candidate.sourceMode,
-            sourceRef: candidate.entryHtmlPathAbs,
-            sourceLoadedSuccessfully: true,
-          },
-        )
-        break
-      } catch (error) {
-        console.error('[template-site-bootstrap] TEMPLATE_BOOTSTRAP_SOURCE_LOAD_FAILED', {
-          templateId,
-          sourceMode: candidate.sourceMode,
-          sourceRef: candidate.entryHtmlPathAbs,
-          sourceLoadedSuccessfully: false,
-          reason: error instanceof Error ? error.message : String(error),
-        })
-      }
-    }
 
     if (!resolvedSource) {
-      console.error('[template-site-bootstrap] TEMPLATE_SOURCE_MISSING_FOR_BOOTSTRAP', {
-        templateId,
-        sourceMode: 'unresolved',
-        sourceRef: sourceCandidates.map((candidate) => candidate.entryHtmlPathAbs),
-        sourceLoadedSuccessfully: false,
-      })
       throw new TemplateSiteRuntimeBootstrapError({
         code: 'TEMPLATE_SITE_BOOTSTRAP_IMPORT_SOURCE_MISSING',
         message: 'Template source is unavailable for bootstrap.',

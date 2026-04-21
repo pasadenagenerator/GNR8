@@ -141,6 +141,9 @@ test('bootstrapRuntimeFromTemplateSite creates deterministic initial runtime/pre
     },
     template: {
       id: '00000000-0000-4000-8000-000000000901',
+      sourceFilename: 'template.zip',
+      sourceZipStorageBucket: 'template-source-zips',
+      sourceZipStorageKey: 'client/x/template/y/template.zip',
       durableSnapshotRootDirAbs: durableRoot,
       importSnapshotId: snapshotId,
       entryHtmlPath: 'index.html',
@@ -197,6 +200,9 @@ test('bootstrapRuntimeFromTemplateSite resolves legacy temp source when durable 
     },
     template: {
       id: '00000000-0000-4000-8000-000000000903',
+      sourceFilename: 'template.zip',
+      sourceZipStorageBucket: 'template-source-zips',
+      sourceZipStorageKey: 'client/x/template/y/template.zip',
       durableSnapshotRootDirAbs: durableRootMissing,
       importSnapshotId: snapshotId,
       entryHtmlPath: 'index.html',
@@ -235,6 +241,9 @@ test('bootstrapRuntimeFromTemplateSite fails deterministically when both durable
       },
       template: {
         id: '00000000-0000-4000-8000-000000000902',
+        sourceFilename: 'template.zip',
+        sourceZipStorageBucket: null,
+        sourceZipStorageKey: null,
         durableSnapshotRootDirAbs: path.resolve(os.tmpdir(), `gnr8-missing-durable-${Date.now()}`),
         importSnapshotId: `template-zip-${Date.now()}-missing`,
         entryHtmlPath: 'missing/index.html',
@@ -256,6 +265,84 @@ test('bootstrapRuntimeFromTemplateSite fails deterministically when both durable
     assert.equal(parsed?.message, 'Template source is unavailable for bootstrap.')
   }
   assert.equal(pipelineCalled, false)
+})
+
+test('bootstrapRuntimeFromTemplateSite resolves source from ZIP when processed and legacy roots are unavailable', async () => {
+  let pipelineCalled = false
+  const extractedRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'gnr8-template-bootstrap-zip-extracted-'))
+  const extractedEntryAbs = path.resolve(extractedRoot, 'index.html')
+  fs.writeFileSync(extractedEntryAbs, '<!doctype html><html><body><h1>Zip Source</h1></body></html>', 'utf8')
+  const reconstructedRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'gnr8-template-bootstrap-zip-reconstructed-'))
+  const reconstructedEntryAbs = path.resolve(reconstructedRoot, 'index.html')
+  fs.writeFileSync(reconstructedEntryAbs, '<!doctype html><html><body><h1>Zip Source</h1></body></html>', 'utf8')
+
+  const result = await bootstrapRuntimeFromTemplateSite({
+    site: {
+      siteId: '00000000-0000-4000-8000-000000000790',
+      clientId: '00000000-0000-4000-8000-000000000201',
+      agencyId: '00000000-0000-4000-8000-000000000301',
+      templateId: '00000000-0000-4000-8000-000000000990',
+      name: 'Zip Bootstrap Template',
+      domain: 'zip.example.com',
+      status: 'draft',
+      createdAt: '2026-04-17T10:00:00.000Z',
+      updatedAt: '2026-04-17T10:00:00.000Z',
+    },
+    template: {
+      id: '00000000-0000-4000-8000-000000000990',
+      sourceFilename: 'template.zip',
+      sourceZipStorageBucket: 'template-source-zips',
+      sourceZipStorageKey: 'client/x/template/y/template.zip',
+      durableSnapshotRootDirAbs: path.resolve(os.tmpdir(), `gnr8-missing-durable-${Date.now()}`),
+      importSnapshotId: `template-zip-${Date.now()}-missing`,
+      entryHtmlPath: 'index.html',
+      entryHtmlFileName: 'index.html',
+      importManifestSummary: { assetsDirPath: 'assets' } as any,
+    },
+    deps: {
+      loadTemplateSourceZip: async () => new Uint8Array([1, 2, 3]),
+      validateAndExtractTemplateZip: () =>
+        ({
+          ok: true,
+          diagnostics: [],
+          errorMessage: null,
+          snapshotId: 'template-zip-aaaaaaaaaaaaaaaa',
+          zipFileAbsPath: path.resolve(extractedRoot, 'upload.zip'),
+          validation: {
+            ok: true,
+            extractionRootDirAbs: extractedRoot,
+            entryHtmlPath: 'index.html',
+            entryHtmlBytes: new Uint8Array(),
+            entryHtmlSelection: 'root_index',
+            htmlCandidates: ['index.html'],
+            extractedFilePaths: ['index.html', 'assets/styles.css'],
+            assetsDirPath: 'assets',
+            manifestPath: null,
+            assetSummary: {
+              fileCount: 2,
+              imageCount: 0,
+              stylesheetCount: 1,
+              scriptCount: 0,
+              otherCount: 1,
+            },
+          },
+        }) as never,
+      persistTemplateDurableSourceSnapshot: () => ({
+        durableSnapshotRootDirAbs: reconstructedRoot,
+        durableEntryHtmlPathAbs: reconstructedEntryAbs,
+      }),
+      runScopedImportPipeline: async () => {
+        pipelineCalled = true
+        return createPipelineOutcome()
+      },
+      writeOwnershipLink: async () => undefined,
+    },
+  })
+
+  assert.equal(pipelineCalled, true)
+  assert.equal(result.siteVersionNo, 1)
+  fs.rmSync(extractedRoot, { recursive: true, force: true })
+  fs.rmSync(reconstructedRoot, { recursive: true, force: true })
 })
 
 test('parseTemplateSiteRuntimeBootstrapError returns null for non-bootstrap errors', () => {

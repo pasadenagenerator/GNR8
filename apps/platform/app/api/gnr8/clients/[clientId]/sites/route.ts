@@ -35,6 +35,9 @@ async function bootstrapTemplateSiteRuntimeViaInternalRoute(input: {
   }
   template: {
     id: string
+    sourceFilename: string
+    sourceZipStorageBucket: string | null
+    sourceZipStorageKey: string | null
     importSnapshotId: string | null
     durableSnapshotRootDirAbs: string | null
     entryHtmlPath: string | null

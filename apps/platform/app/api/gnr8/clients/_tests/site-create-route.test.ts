@@ -261,6 +261,40 @@ test('POST /sites rejects template while processing', async () => {
   assert.equal(body.error, 'Template is still processing and cannot be used for site creation yet.')
 })
 
+test('POST /sites rejects ready template without bootstrap source truth', async () => {
+  const handlers = createSiteCreateRouteHandlers(
+    createDeps({
+      getTemplateById: async () =>
+        createTemplate({
+          status: 'ready',
+          entryHtmlPath: 'index.html',
+          durableSnapshotRootDirAbs: null,
+          importSnapshotId: null,
+          sourceZipStorageBucket: '',
+          sourceZipStorageKey: '',
+        }),
+    }),
+  )
+
+  const response = await handlers.POST(
+    new Request('http://localhost', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        templateId: '00000000-0000-4000-8000-000000000901',
+        name: 'Site',
+        domain: 'example.com',
+      }),
+    }),
+    { params: getParams() },
+  )
+  const body = (await response.json()) as { ok: boolean; code?: string; error?: string }
+  assert.equal(response.status, 409)
+  assert.equal(body.ok, false)
+  assert.equal(body.code, 'TEMPLATE_READY_WITHOUT_BOOTSTRAP_SOURCE')
+  assert.equal(body.error, 'Template is marked ready but does not contain bootstrap source truth.')
+})
+
 test('POST /sites passes template linkage into persistence layer', async () => {
   let persistedTemplateId: string | null = null
   const handlers = createSiteCreateRouteHandlers(

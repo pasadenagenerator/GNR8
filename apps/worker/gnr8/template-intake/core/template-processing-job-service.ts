@@ -463,6 +463,43 @@ export async function processTemplateZipIntakeJob(input: {
     }),
   ])
 
+  const hasBootstrapSourceTruth = Boolean(
+    normalizeText(entryMetadata.entryHtmlPath) &&
+      (normalizeText(durableSnapshotRootDirAbs) || (sourceZipStorageBucket && sourceZipStorageKey)),
+  )
+  if (!hasBootstrapSourceTruth) {
+    console.error('[template-intake] TEMPLATE_READY_WITHOUT_BOOTSTRAP_SOURCE', {
+      templateId: template.id,
+      durableSnapshotRootDirAbs: durableSnapshotRootDirAbs || null,
+      sourceZipStorageBucket: sourceZipStorageBucket || null,
+      sourceZipStorageKey: sourceZipStorageKey || null,
+      entryHtmlPath: entryMetadata.entryHtmlPath,
+    })
+    if (!persistFailure) {
+      return {
+        ok: false,
+        template,
+        error: 'Template cannot be marked ready without bootstrap source truth.',
+      }
+    }
+    const failed = await persistFailedTemplateResult({
+      template,
+      deps,
+      entryMetadata,
+      diagnosticsSummary,
+      errorCode: 'TEMPLATE_READY_WITHOUT_BOOTSTRAP_SOURCE',
+      errorMessage: 'Template cannot be marked ready without bootstrap source truth.',
+      importSnapshotId: zipValidation.snapshotId,
+      templateManifestSummary: manifest.summary,
+      importManifestSummary,
+    })
+    return {
+      ok: false,
+      template: failed,
+      error: 'Template cannot be marked ready without bootstrap source truth.',
+    }
+  }
+
   const updated = await deps.updateTemplateProcessingResult({
     templateId: template.id,
     status: 'ready',

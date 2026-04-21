@@ -17,7 +17,16 @@ type Scope = {
 
 type TemplateSelection = Pick<
   TemplateRecord,
-  'id' | 'status' | 'importSnapshotId' | 'durableSnapshotRootDirAbs' | 'entryHtmlPath' | 'entryHtmlFileName' | 'importManifestSummary'
+  | 'id'
+  | 'status'
+  | 'sourceFilename'
+  | 'sourceZipStorageBucket'
+  | 'sourceZipStorageKey'
+  | 'importSnapshotId'
+  | 'durableSnapshotRootDirAbs'
+  | 'entryHtmlPath'
+  | 'entryHtmlFileName'
+  | 'importManifestSummary'
 >
 
 type CreatedSiteRecord = {
@@ -87,6 +96,22 @@ function toScopeErrorResponse(mapped: { status: number; message: string }) {
   )
 }
 
+function hasBootstrapSourceTruth(template: TemplateSelection): boolean {
+  const entryHtmlPath = String(template.entryHtmlPath ?? '').trim()
+  if (!entryHtmlPath) return false
+
+  const durableSnapshotRootDirAbs = String(template.durableSnapshotRootDirAbs ?? '').trim()
+  const importSnapshotId = String(template.importSnapshotId ?? '').trim()
+  const sourceZipStorageBucket = String(template.sourceZipStorageBucket ?? '').trim()
+  const sourceZipStorageKey = String(template.sourceZipStorageKey ?? '').trim()
+
+  return Boolean(
+    durableSnapshotRootDirAbs ||
+      importSnapshotId ||
+      (sourceZipStorageBucket && sourceZipStorageKey),
+  )
+}
+
 export function createSiteCreateRouteHandlers(deps: SiteCreateRouteDeps) {
   return {
     POST: async (request: Request, ctx: { params: Promise<Params> }) => {
@@ -126,6 +151,24 @@ export function createSiteCreateRouteHandlers(deps: SiteCreateRouteDeps) {
               ok: false,
               code: 'TEMPLATE_NOT_READY',
               error: 'Template is still processing and cannot be used for site creation yet.',
+            },
+            { status: 409 },
+          )
+        }
+        if (!hasBootstrapSourceTruth(template)) {
+          console.error('[site-create] TEMPLATE_READY_WITHOUT_BOOTSTRAP_SOURCE', {
+            templateId: template.id,
+            durableSnapshotRootDirAbs: template.durableSnapshotRootDirAbs,
+            importSnapshotId: template.importSnapshotId,
+            sourceZipStorageBucket: template.sourceZipStorageBucket,
+            sourceZipStorageKey: template.sourceZipStorageKey,
+            entryHtmlPath: template.entryHtmlPath,
+          })
+          return NextResponse.json(
+            {
+              ok: false,
+              code: 'TEMPLATE_READY_WITHOUT_BOOTSTRAP_SOURCE',
+              error: 'Template is marked ready but does not contain bootstrap source truth.',
             },
             { status: 409 },
           )

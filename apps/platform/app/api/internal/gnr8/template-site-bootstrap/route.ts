@@ -24,6 +24,9 @@ type SitePayload = {
 
 type TemplatePayload = {
   id: string
+  sourceFilename: string
+  sourceZipStorageBucket: string | null
+  sourceZipStorageKey: string | null
   importSnapshotId: string | null
   durableSnapshotRootDirAbs: string | null
   entryHtmlPath: string | null
@@ -52,6 +55,9 @@ function isTemplatePayload(value: unknown): value is TemplatePayload {
   const record = value as Record<string, unknown>
   return (
     typeof record.id === 'string' &&
+    typeof record.sourceFilename === 'string' &&
+    ('sourceZipStorageBucket' in record) &&
+    ('sourceZipStorageKey' in record) &&
     ('importSnapshotId' in record) &&
     ('durableSnapshotRootDirAbs' in record) &&
     ('entryHtmlPath' in record) &&
