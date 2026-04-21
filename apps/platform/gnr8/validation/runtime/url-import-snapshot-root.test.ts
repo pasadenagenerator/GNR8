@@ -21,12 +21,11 @@ function withEnv(input: { key: string; value?: string }, fn: () => void): void {
   }
 }
 
-test("default snapshot root resolves to validation .out outside Vercel runtime", () => {
+test("default snapshot root resolves to tmp root outside Vercel runtime", () => {
   withEnv({ key: URL_IMPORT_SNAPSHOT_ROOT_ENV_VAR, value: undefined }, () => {
     withEnv({ key: "VERCEL", value: undefined }, () => {
-      const resolved = defaultUrlImportSnapshotRootDirAbs();
-      const normalized = resolved.replaceAll(path.sep, "/");
-      assert.ok(normalized.endsWith("/apps/platform/gnr8/validation/.out/url-import-snapshots"));
+      const expected = path.resolve(os.tmpdir(), "gnr8", "validation", "url-import-snapshots");
+      assert.equal(defaultUrlImportSnapshotRootDirAbs(), expected);
     });
   });
 });
@@ -36,6 +35,16 @@ test("default snapshot root resolves to tmp root on Vercel runtime", () => {
     withEnv({ key: "VERCEL", value: "1" }, () => {
       const expected = path.resolve(os.tmpdir(), "gnr8", "validation", "url-import-snapshots");
       assert.equal(defaultUrlImportSnapshotRootDirAbs(), expected);
+    });
+  });
+});
+
+test("default snapshot root is not derived from local repo source paths", () => {
+  withEnv({ key: URL_IMPORT_SNAPSHOT_ROOT_ENV_VAR, value: undefined }, () => {
+    withEnv({ key: "VERCEL", value: undefined }, () => {
+      const resolved = defaultUrlImportSnapshotRootDirAbs();
+      const normalized = resolved.replaceAll(path.sep, "/");
+      assert.equal(normalized.includes("/apps/platform/gnr8/validation/.out/"), false);
     });
   });
 });
@@ -58,4 +67,3 @@ test("explicit input root wins over defaults", () => {
     });
   });
 });
-

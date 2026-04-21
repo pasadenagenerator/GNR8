@@ -123,6 +123,21 @@ const nextConfig = {
       './node_modules/playwright-core/**',
       './tsconfig.tsbuildinfo',
     ],
+    '/api/validation/url-import': [
+      './gnr8/validation/.out/**',
+      './gnr8/validation/beta-runs/**',
+      './gnr8/validation/fixtures/**',
+    ],
+    '/api/gnr8/runtime/migrate/url': [
+      './gnr8/validation/.out/**',
+      './gnr8/validation/beta-runs/**',
+      './gnr8/validation/fixtures/**',
+    ],
+    '/api/gnr8/agency/clients/[clientId]/sites/import': [
+      './gnr8/validation/.out/**',
+      './gnr8/validation/beta-runs/**',
+      './gnr8/validation/fixtures/**',
+    ],
   },
 }
 
