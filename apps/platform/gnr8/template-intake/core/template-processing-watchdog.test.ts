@@ -66,5 +66,36 @@ test('watchdog identifies stale processing templates and re-enqueues them', asyn
 
   assert.equal(result.candidateCount, 1)
   assert.equal(result.reenqueueCount, 1)
+  assert.equal(result.skippedByAttemptLimitCount, 0)
+  assert.equal(result.skippedByRunLimitCount, 0)
+  assert.equal(calls, 1)
+})
+
+test('watchdog applies attempt and per-run limits to avoid uncontrolled re-enqueue loops', async () => {
+  const now = new Date('2026-04-20T10:00:00.000Z').getTime()
+  const stale = new Date('2026-04-20T09:40:00.000Z').toISOString()
+
+  let calls = 0
+  const result = await reenqueueStuckTemplateProcessing({
+    clientId: '00000000-0000-4000-8000-000000000201',
+    templates: [
+      createTemplate({ id: 'limit-attempts', status: 'processing', processingStartedAt: stale, processingAttempts: 3 }),
+      createTemplate({ id: 'run-1', status: 'processing', processingStartedAt: stale, processingAttempts: 0 }),
+      createTemplate({ id: 'run-2', status: 'processing', processingStartedAt: stale, processingAttempts: 0 }),
+    ],
+    nowMs: now,
+    staleAfterMinutes: 10,
+    maxAttempts: 3,
+    maxReenqueuePerRun: 1,
+    triggerTemplateProcessingJob: async () => {
+      calls += 1
+      return true
+    },
+  })
+
+  assert.equal(result.candidateCount, 3)
+  assert.equal(result.reenqueueCount, 1)
+  assert.equal(result.skippedByAttemptLimitCount, 1)
+  assert.equal(result.skippedByRunLimitCount, 1)
   assert.equal(calls, 1)
 })

@@ -6,7 +6,7 @@
   "scripts": {
     "typecheck": "pnpm exec tsc --noEmit",
     "build": "pnpm exec next build",
-    "test": "NODE_OPTIONS='--conditions=react-server' pnpm exec tsx --test gnr8/template-intake/inngest/template-processing-job.test.ts"
+    "test": "NODE_OPTIONS='--conditions=react-server' pnpm exec tsx --test gnr8/template-intake/inngest/*.test.ts gnr8/inngest/*.test.ts"
   },
   "dependencies": {
     "@gnr8/runtime-contracts": "workspace:*",

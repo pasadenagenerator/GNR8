@@ -58,6 +58,9 @@ const DEFAULT_DEPS: TemplateProcessingWorkerDeps = {
   markTemplateProcessingFinalFailure,
 }
 
+export const TEMPLATE_PROCESSING_JOB_ID = 'template-processing-job'
+export const TEMPLATE_PROCESSING_JOB_TRIGGER_EVENT = TEMPLATE_PROCESSING_REQUESTED_EVENT
+
 export async function runTemplateProcessingJob(input: {
   eventData: unknown
   maxAttempts?: number
@@ -133,11 +136,11 @@ export async function runTemplateProcessingJob(input: {
 
 export const templateProcessingJob = inngest.createFunction(
   {
-    id: 'template-processing-job',
+    id: TEMPLATE_PROCESSING_JOB_ID,
     retries: 2,
   },
   {
-    event: TEMPLATE_PROCESSING_REQUESTED_EVENT,
+    event: TEMPLATE_PROCESSING_JOB_TRIGGER_EVENT,
   },
   async ({ event }) => {
     await runTemplateProcessingJob({

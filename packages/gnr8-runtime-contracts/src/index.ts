@@ -10,3 +10,8 @@ export type TemplateProcessingRequestedPayload = {
 }
 
 export type TemplateRuntimeStatus = 'uploaded' | 'processing' | 'ready' | 'failed'
+
+export {
+  CANONICAL_TEMPLATE_PROCESSING_REQUESTED_EVENT,
+  validateTemplateProcessingEventName,
+} from './template-processing-event-validation'

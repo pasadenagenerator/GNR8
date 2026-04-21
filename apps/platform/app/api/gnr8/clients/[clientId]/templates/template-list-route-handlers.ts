@@ -121,6 +121,8 @@ export function createTemplateListRouteHandlers(deps: TemplateListRouteDeps = DE
           skippedRowCount: queryResult.diagnostics.skippedRowCount,
           watchdogCandidateCount: watchdog.candidateCount,
           watchdogReenqueueCount: watchdog.reenqueueCount,
+          watchdogSkippedByAttemptLimitCount: watchdog.skippedByAttemptLimitCount,
+          watchdogSkippedByRunLimitCount: watchdog.skippedByRunLimitCount,
         })
 
         const cards: TemplateListCard[] = []

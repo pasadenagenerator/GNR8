@@ -161,6 +161,35 @@ test('direct client member can upload and trigger processing', async () => {
   })
 })
 
+test('upload route returns deterministic partial-success error when enqueue fails', async () => {
+  const handlers = createTemplateUploadRouteHandlers({
+    requireScope: async () => ({
+      userId: '00000000-0000-4000-8000-000000000101',
+      clientId: '00000000-0000-4000-8000-000000000201',
+      organizationId: '00000000-0000-4000-8000-000000000201',
+      agencyId: '00000000-0000-4000-8000-000000000301',
+    }),
+    validateTemplateZipUploadInput: () => ({ ok: true }),
+    createProcessingTemplateFromZipUpload: async () =>
+      createTemplate({
+        status: 'processing',
+        importHealth: 'degraded',
+      }),
+    triggerTemplateProcessingJob: async () => false,
+    parseTemplateRepositoryError: () => null,
+    parseThrownScopeError: () => ({ status: 500, message: 'failed' }),
+  })
+
+  const response = await handlers.POST(buildUploadRequest('valid.zip', new Uint8Array([1, 2, 3])), { params: getParams() })
+  const body = (await response.json()) as Record<string, unknown>
+
+  assert.equal(response.status, 500)
+  assert.equal(body.ok, false)
+  assert.equal(body.templateId, '00000000-0000-4000-8000-000000000901')
+  assert.equal(body.status, 'processing')
+  assert.equal(body.error, 'Template upload was saved but processing event could not be enqueued.')
+})
+
 test('agency-managed user can upload for owned client workspace', async () => {
   let createdBy: { actorUserId: string; clientId: string; organizationId: string; agencyId: string } | null = null
 
