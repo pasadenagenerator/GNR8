@@ -5,35 +5,19 @@ import test from 'node:test'
 
 import {
   TEMPLATE_PROCESSING_REQUESTED_EVENT,
-  isTemplateRuntimeStatus,
-  parseTemplateProcessingRequestedPayload,
+  TEMPLATE_PROCESSING_MAX_ATTEMPTS,
+  TEMPLATE_PROCESSING_STUCK_AFTER_MINUTES,
 } from './index'
 
-test('event contract payload parsing is stable', () => {
-  const parsed = parseTemplateProcessingRequestedPayload({
-    templateId: 't-1',
-    clientId: 'c-1',
-    sourceZipStorageBucket: 'bucket',
-    sourceZipStorageKey: 'key',
-  })
-
-  assert.deepEqual(parsed, {
-    templateId: 't-1',
-    clientId: 'c-1',
-    sourceZipStorageBucket: 'bucket',
-    sourceZipStorageKey: 'key',
-  })
+test('template processing runtime contract constants remain stable', () => {
   assert.equal(TEMPLATE_PROCESSING_REQUESTED_EVENT, 'template/processing.requested')
-})
-
-test('status contract stays bounded to runtime states', () => {
-  assert.equal(isTemplateRuntimeStatus('processing'), true)
-  assert.equal(isTemplateRuntimeStatus('ready'), true)
-  assert.equal(isTemplateRuntimeStatus('invalid'), false)
+  assert.equal(TEMPLATE_PROCESSING_MAX_ATTEMPTS, 3)
+  assert.equal(TEMPLATE_PROCESSING_STUCK_AFTER_MINUTES, 10)
 })
 
 test('contracts package remains pure and framework-free', () => {
   const source = fs.readFileSync(path.resolve(process.cwd(), 'packages/gnr8-runtime-contracts/src/index.ts'), 'utf8')
   assert.equal(/from ['\"]next\//.test(source), false)
   assert.equal(/from ['\"]react/.test(source), false)
+  assert.equal(/function\s+\w+\s*\(/.test(source), false)
 })

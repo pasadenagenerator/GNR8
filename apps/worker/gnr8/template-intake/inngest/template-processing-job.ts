@@ -1,5 +1,5 @@
 import {
-  parseTemplateProcessingRequestedPayload,
+  type TemplateProcessingRequestedPayload,
   TEMPLATE_PROCESSING_MAX_ATTEMPTS,
   TEMPLATE_PROCESSING_REQUESTED_EVENT,
 } from '@gnr8/runtime-contracts'
@@ -15,6 +15,22 @@ import {
 
 function normalizeText(value: unknown): string {
   return String(value ?? '').trim()
+}
+
+function parseTemplateProcessingRequestedPayload(value: unknown): TemplateProcessingRequestedPayload | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null
+  const record = value as Record<string, unknown>
+  const templateId = normalizeText(record.templateId)
+  const clientId = normalizeText(record.clientId)
+  const sourceZipStorageBucket = normalizeText(record.sourceZipStorageBucket)
+  const sourceZipStorageKey = normalizeText(record.sourceZipStorageKey)
+  if (!templateId || !clientId || !sourceZipStorageBucket || !sourceZipStorageKey) return null
+  return {
+    templateId,
+    clientId,
+    sourceZipStorageBucket,
+    sourceZipStorageKey,
+  }
 }
 
 function toErrorMessage(error: unknown): string {

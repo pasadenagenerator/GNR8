@@ -56,6 +56,14 @@ const nextConfig = {
   // Keep client template/site CRUD serverless traces focused on route-safe runtime inputs.
   // These routes do not execute validation fixtures, tests, build cache artifacts, or browser binaries.
   outputFileTracingExcludes: {
+    '*': [
+      '../worker/**',
+      '../../worker/**',
+      'apps/worker/**',
+      './gnr8/import-rendered-capture-worker/**',
+      './gnr8/rendered-capture-worker-server/**',
+      './dist-rendered-capture-worker/**',
+    ],
     '/api/gnr8/clients/[clientId]/templates': [
       './gnr8/validation/**',
       './gnr8/**/*.test.ts',

@@ -1,5 +1,18 @@
 {
   "extends": ["next/core-web-vitals"],
+  "rules": {
+    "no-restricted-imports": [
+      "error",
+      {
+        "patterns": [
+          {
+            "group": ["apps/worker/**", "../worker/**", "../../worker/**"],
+            "message": "Platform must not import Worker code."
+          }
+        ]
+      }
+    ]
+  },
   "overrides": [
     {
       "files": ["app/**/page.tsx", "app/**/layout.tsx"],
@@ -19,6 +32,12 @@
               {
                 "name": "@/src/auth/supabase-server-mutating",
                 "message": "Mutating Supabase helpers are forbidden in page/layout render paths. Use getSupabaseServerClientReadOnly()."
+              }
+            ],
+            "patterns": [
+              {
+                "group": ["apps/worker/**", "../worker/**", "../../worker/**"],
+                "message": "Platform must not import Worker code."
               }
             ]
           }
@@ -67,6 +86,12 @@
                 "name": "@/src/auth/resolve-current-agency",
                 "message": "Read models must stay decoupled from page auth resolution helpers."
               }
+            ],
+            "patterns": [
+              {
+                "group": ["apps/worker/**", "../worker/**", "../../worker/**"],
+                "message": "Platform must not import Worker code."
+              }
             ]
           }
         ],
@@ -114,6 +139,12 @@
                 "name": "@/src/supabase/service-role-server",
                 "message": "UI/client-oriented components must not import service-role server helpers."
               }
+            ],
+            "patterns": [
+              {
+                "group": ["apps/worker/**", "../worker/**", "../../worker/**"],
+                "message": "Platform must not import Worker code."
+              }
             ]
           }
         ]
@@ -131,7 +162,12 @@
         "no-restricted-imports": [
           "error",
           {
-            "patterns": ["@gnr8/builder-only/*"]
+            "patterns": [
+              "@gnr8/builder-only/*",
+              "apps/worker/**",
+              "../worker/**",
+              "../../worker/**"
+            ]
           }
         ]
       }
