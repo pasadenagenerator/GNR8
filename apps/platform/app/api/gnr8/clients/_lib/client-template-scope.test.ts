@@ -142,9 +142,12 @@ test('resolveClientTemplateScope fails closed when agency scope rejects the user
 })
 
 test('templates list and upload routes both use requireClientTemplateScope for deterministic scope decisions', () => {
-  const listRouteSource = readFileSync(new URL('../[clientId]/templates/route.ts', import.meta.url), 'utf8')
+  const listRouteSource = readFileSync(
+    new URL('../[clientId]/templates/template-list-route-handlers.ts', import.meta.url),
+    'utf8',
+  )
   const uploadRouteSource = readFileSync(
-    new URL('../[clientId]/templates/upload/template-upload-route-handlers.ts', import.meta.url),
+    new URL('../../../../../gnr8/template-intake/routes/template-upload-route-handlers.ts', import.meta.url),
     'utf8',
   )
   const detailRouteSource = readFileSync(
@@ -169,9 +172,12 @@ test('client template scope helpers stay read-only and avoid mutating supabase h
 })
 
 test('template routes map repository errors before generic scope parsing', () => {
-  const listRouteSource = readFileSync(new URL('../[clientId]/templates/route.ts', import.meta.url), 'utf8')
+  const listRouteSource = readFileSync(
+    new URL('../[clientId]/templates/template-list-route-handlers.ts', import.meta.url),
+    'utf8',
+  )
   const uploadRouteSource = readFileSync(
-    new URL('../[clientId]/templates/upload/template-upload-route-handlers.ts', import.meta.url),
+    new URL('../../../../../gnr8/template-intake/routes/template-upload-route-handlers.ts', import.meta.url),
     'utf8',
   )
   const detailRouteSource = readFileSync(

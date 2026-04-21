@@ -120,3 +120,116 @@ test('upload route returns deterministic validation error when input is not a zi
   assert.equal(body.ok, false)
   assert.equal(body.error, 'Template upload only accepts ZIP files.')
 })
+
+test('direct client member can upload and trigger processing', async () => {
+  let createdBy: { actorUserId: string; clientId: string; organizationId: string; agencyId: string } | null = null
+
+  const handlers = createTemplateUploadRouteHandlers({
+    requireScope: async () => ({
+      userId: '00000000-0000-4000-8000-000000000101',
+      clientId: '00000000-0000-4000-8000-000000000201',
+      organizationId: '00000000-0000-4000-8000-000000000201',
+      agencyId: '00000000-0000-4000-8000-000000000301',
+    }),
+    validateTemplateZipUploadInput: () => ({ ok: true }),
+    createProcessingTemplateFromZipUpload: async (input) => {
+      createdBy = {
+        actorUserId: input.actorUserId,
+        clientId: input.clientId,
+        organizationId: input.organizationId,
+        agencyId: input.agencyId,
+      }
+      return createTemplate({
+        status: 'processing',
+      })
+    },
+    triggerTemplateProcessingJob: async () => true,
+    parseTemplateRepositoryError: () => null,
+    parseThrownScopeError: () => ({ status: 500, message: 'failed' }),
+  })
+
+  const response = await handlers.POST(buildUploadRequest('direct.zip', new Uint8Array([1, 2, 3])), { params: getParams() })
+  const body = (await response.json()) as Record<string, unknown>
+
+  assert.equal(response.status, 200)
+  assert.equal(body.ok, true)
+  assert.deepEqual(createdBy, {
+    actorUserId: '00000000-0000-4000-8000-000000000101',
+    clientId: '00000000-0000-4000-8000-000000000201',
+    organizationId: '00000000-0000-4000-8000-000000000201',
+    agencyId: '00000000-0000-4000-8000-000000000301',
+  })
+})
+
+test('agency-managed user can upload for owned client workspace', async () => {
+  let createdBy: { actorUserId: string; clientId: string; organizationId: string; agencyId: string } | null = null
+
+  const handlers = createTemplateUploadRouteHandlers({
+    requireScope: async () => ({
+      userId: '00000000-0000-4000-8000-000000000777',
+      clientId: '00000000-0000-4000-8000-000000000201',
+      organizationId: '00000000-0000-4000-8000-000000000201',
+      agencyId: '00000000-0000-4000-8000-000000000301',
+    }),
+    validateTemplateZipUploadInput: () => ({ ok: true }),
+    createProcessingTemplateFromZipUpload: async (input) => {
+      createdBy = {
+        actorUserId: input.actorUserId,
+        clientId: input.clientId,
+        organizationId: input.organizationId,
+        agencyId: input.agencyId,
+      }
+      return createTemplate({
+        status: 'processing',
+      })
+    },
+    triggerTemplateProcessingJob: async () => true,
+    parseTemplateRepositoryError: () => null,
+    parseThrownScopeError: () => ({ status: 500, message: 'failed' }),
+  })
+
+  const response = await handlers.POST(buildUploadRequest('agency.zip', new Uint8Array([7, 8, 9])), { params: getParams() })
+  const body = (await response.json()) as Record<string, unknown>
+
+  assert.equal(response.status, 200)
+  assert.equal(body.ok, true)
+  assert.deepEqual(createdBy, {
+    actorUserId: '00000000-0000-4000-8000-000000000777',
+    clientId: '00000000-0000-4000-8000-000000000201',
+    organizationId: '00000000-0000-4000-8000-000000000201',
+    agencyId: '00000000-0000-4000-8000-000000000301',
+  })
+})
+
+test('unauthorized user is denied before upload intake runs', async () => {
+  let intakeCalled = false
+
+  const handlers = createTemplateUploadRouteHandlers({
+    requireScope: async () => {
+      throw new Error('401|You must be signed in.')
+    },
+    validateTemplateZipUploadInput: () => ({ ok: true }),
+    createProcessingTemplateFromZipUpload: async () => {
+      intakeCalled = true
+      return createTemplate()
+    },
+    triggerTemplateProcessingJob: async () => true,
+    parseTemplateRepositoryError: () => null,
+    parseThrownScopeError: (error) => {
+      if (error instanceof Error && error.message.startsWith('401|')) {
+        return { status: 401, message: 'You must be signed in.' }
+      }
+      return { status: 500, message: 'failed' }
+    },
+  })
+
+  const response = await handlers.POST(buildUploadRequest('unauthorized.zip', new Uint8Array([1, 1, 1])), {
+    params: getParams(),
+  })
+  const body = (await response.json()) as Record<string, unknown>
+
+  assert.equal(response.status, 401)
+  assert.equal(body.ok, false)
+  assert.equal(body.error, 'You must be signed in.')
+  assert.equal(intakeCalled, false)
+})

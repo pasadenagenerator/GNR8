@@ -4,14 +4,14 @@ import {
 } from '@/gnr8/template-intake/core/template-upload-light-service'
 import { parseTemplateRepositoryError } from '@/gnr8/template-intake/storage/template-repository'
 import { triggerTemplateProcessingJob } from '@/gnr8/template-intake/routes/template-processing-trigger'
-import { parseThrownScopeError, requireClientTemplateScopeForUpload } from '@/gnr8/template-intake/routes/template-upload-scope'
+import { parseThrownScopeError, requireClientTemplateScope } from '@/app/api/gnr8/clients/_lib/client-template-scope'
 
 type Params = {
   clientId: string
 }
 
 type TemplateUploadRouteDeps = {
-  requireScope: typeof requireClientTemplateScopeForUpload
+  requireScope: typeof requireClientTemplateScope
   createProcessingTemplateFromZipUpload: typeof createProcessingTemplateFromZipUpload
   validateTemplateZipUploadInput: typeof validateTemplateZipUploadInput
   triggerTemplateProcessingJob: typeof triggerTemplateProcessingJob
@@ -20,7 +20,7 @@ type TemplateUploadRouteDeps = {
 }
 
 const DEFAULT_DEPS: TemplateUploadRouteDeps = {
-  requireScope: requireClientTemplateScopeForUpload,
+  requireScope: requireClientTemplateScope,
   createProcessingTemplateFromZipUpload,
   validateTemplateZipUploadInput,
   triggerTemplateProcessingJob,
@@ -58,7 +58,6 @@ export function createTemplateUploadRouteHandlers(deps: Partial<TemplateUploadRo
       try {
         const { clientId: clientIdParam } = await ctx.params
         const scope = await resolved.requireScope({
-          request,
           clientIdParam,
         })
 
