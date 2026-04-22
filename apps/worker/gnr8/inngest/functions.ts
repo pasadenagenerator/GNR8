@@ -1,9 +1,16 @@
 import {
+  CANONICAL_SITE_RENDER_REQUESTED_EVENT,
   CANONICAL_SITE_TEMPLATE_BOOTSTRAP_REQUESTED_EVENT,
   CANONICAL_TEMPLATE_PROCESSING_REQUESTED_EVENT,
+  validateSiteRenderEventName,
   validateSiteTemplateBootstrapEventName,
   validateTemplateProcessingEventName,
 } from '@gnr8/runtime-contracts'
+import {
+  SITE_RENDER_CAPTURE_JOB_ID,
+  SITE_RENDER_CAPTURE_JOB_TRIGGER_EVENT,
+  siteRenderCaptureJob,
+} from '@/gnr8/site/inngest/site-render-capture-job'
 import {
   SITE_TEMPLATE_BOOTSTRAP_JOB_ID,
   SITE_TEMPLATE_BOOTSTRAP_JOB_TRIGGER_EVENT,
@@ -15,7 +22,7 @@ import {
   templateProcessingJob,
 } from '@/gnr8/template-intake/inngest/template-processing-job'
 
-export const inngestFunctions = [templateProcessingJob, siteTemplateBootstrapJob]
+export const inngestFunctions = [templateProcessingJob, siteTemplateBootstrapJob, siteRenderCaptureJob]
 
 const hasTemplateProcessingEventMismatch = !validateTemplateProcessingEventName({
   source: 'worker:inngestFunctions',
@@ -43,6 +50,21 @@ if (!hasSiteBootstrapEventMismatch) {
   console.info('[worker] SITE_TEMPLATE_BOOTSTRAP_FUNCTION_REGISTERED', {
     functionId: SITE_TEMPLATE_BOOTSTRAP_JOB_ID,
     eventName: SITE_TEMPLATE_BOOTSTRAP_JOB_TRIGGER_EVENT,
-    registeredFunctionCount: 1,
+    registeredFunctionCount: 2,
+  })
+}
+
+const hasSiteRenderEventMismatch = !validateSiteRenderEventName({
+  source: 'worker:inngestFunctions',
+  eventName: SITE_RENDER_CAPTURE_JOB_TRIGGER_EVENT,
+  expectedEventName: CANONICAL_SITE_RENDER_REQUESTED_EVENT,
+  logger: (message, context) => console.error(`[worker] ${message}`, context),
+})
+
+if (!hasSiteRenderEventMismatch) {
+  console.info('[worker] SITE_RENDER_CAPTURE_FUNCTION_REGISTERED', {
+    functionId: SITE_RENDER_CAPTURE_JOB_ID,
+    eventName: SITE_RENDER_CAPTURE_JOB_TRIGGER_EVENT,
+    registeredFunctionCount: 3,
   })
 }

@@ -8,12 +8,14 @@ import {
   bootstrapRuntimeFromTemplateSite,
   parseTemplateSiteRuntimeBootstrapError,
 } from '@/gnr8/site/site-template-runtime-bootstrap-service'
+import { emitSiteRenderRequestedEvent } from '@/gnr8/site/inngest/site-render-events'
 import {
   getSiteBootstrapRecordById,
   markSiteBootstrapCompleted,
   markSiteBootstrapFailed,
   markSiteBootstrapStarted,
 } from '@/gnr8/site/storage/site-bootstrap-repository'
+import { queueSiteRenderJob } from '@/gnr8/site/storage/site-render-repository'
 import { getTemplateByIdForClient } from '@/gnr8/template-intake/storage/template-repository'
 
 function normalizeText(value: unknown): string {
@@ -68,6 +70,8 @@ type SiteTemplateBootstrapDeps = {
   markSiteBootstrapStarted: typeof markSiteBootstrapStarted
   bootstrapRuntimeFromTemplateSite: typeof bootstrapRuntimeFromTemplateSite
   markSiteBootstrapCompleted: typeof markSiteBootstrapCompleted
+  queueSiteRenderJob: typeof queueSiteRenderJob
+  emitSiteRenderRequestedEvent: typeof emitSiteRenderRequestedEvent
   markSiteBootstrapFailed: typeof markSiteBootstrapFailed
   parseTemplateSiteRuntimeBootstrapError: typeof parseTemplateSiteRuntimeBootstrapError
 }
@@ -79,6 +83,8 @@ const DEFAULT_DEPS: SiteTemplateBootstrapDeps = {
   markSiteBootstrapStarted,
   bootstrapRuntimeFromTemplateSite,
   markSiteBootstrapCompleted,
+  queueSiteRenderJob,
+  emitSiteRenderRequestedEvent,
   markSiteBootstrapFailed,
   parseTemplateSiteRuntimeBootstrapError,
 }
@@ -148,6 +154,40 @@ export async function runSiteTemplateBootstrapJob(input: {
       templateId: payload.templateId,
       result,
     })
+    try {
+      const queuedRender = await deps.queueSiteRenderJob({
+        siteId: payload.siteId,
+        clientId: payload.clientId,
+        agencyId: payload.agencyId,
+        templateId: payload.templateId,
+        runtimeSiteId: result.runtimeSiteId,
+        runtimeSiteVersionId: result.siteVersionId,
+      })
+      console.info('[site-render-worker] SITE_RENDER_CAPTURE_TRIGGERED', {
+        siteId: payload.siteId,
+        siteVersionId: result.siteVersionId,
+        runtimeSiteId: result.runtimeSiteId,
+        triggerAccepted: queuedRender.shouldEmit,
+        guardrailStatus: queuedRender.status,
+      })
+      if (queuedRender.shouldEmit) {
+        await deps.emitSiteRenderRequestedEvent({
+          siteId: payload.siteId,
+          clientId: payload.clientId,
+          agencyId: payload.agencyId,
+          templateId: payload.templateId,
+          runtimeSiteId: result.runtimeSiteId,
+          runtimeSiteVersionId: result.siteVersionId,
+        })
+      }
+    } catch (renderTriggerError) {
+      console.error('[site-render-worker] SITE_RENDER_CAPTURE_TRIGGER_FAILED', {
+        siteId: payload.siteId,
+        siteVersionId: result.siteVersionId,
+        runtimeSiteId: result.runtimeSiteId,
+        message: renderTriggerError instanceof Error ? renderTriggerError.message : String(renderTriggerError),
+      })
+    }
     console.info('[site-bootstrap-worker] TEMPLATE_SITE_BOOTSTRAP_WORKER_COMPLETED', {
       siteId: payload.siteId,
       clientId: payload.clientId,
