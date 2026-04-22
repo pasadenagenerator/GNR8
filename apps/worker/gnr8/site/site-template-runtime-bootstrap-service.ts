@@ -133,7 +133,7 @@ type TemplateBootstrapSourceCandidate = {
   sourceMode: 'durable' | 'legacy_temp'
   snapshotRootDirAbs: string
   configuredEntryHtmlPathRel: string
-  configuredAssetsDirRel: string
+  configuredAssetsDirRel: string | null
 }
 
 function toStableHash(value: string): string {
@@ -163,7 +163,7 @@ function createTemplateSnapshot(input: {
   template: BootstrapTemplateRecord
   snapshotRootDirAbs: string
   entryHtmlPathAbs: string
-  assetsDirAbs: string
+  assetsDirAbs: string | null
   html: string
   now: Date
 }): UrlSinglePageImportSnapshot {
@@ -236,7 +236,7 @@ function createTemplateSnapshot(input: {
     },
     responseHtmlPathAbs: input.entryHtmlPathAbs,
     entryHtmlPathAbs: input.entryHtmlPathAbs,
-    assetsDirAbs: input.assetsDirAbs,
+    assetsDirAbs: input.assetsDirAbs ?? path.resolve(input.snapshotRootDirAbs, 'assets'),
     renderedCapture: {
       kind: 'rendered_capture_result_v1',
       version: '1.0.0',
@@ -291,7 +291,7 @@ function resolveTemplateBootstrapSourceCandidates(input: {
   template: BootstrapTemplateRecord
 }): TemplateBootstrapSourceCandidate[] {
   const entryHtmlPath = normalizeText(input.template.entryHtmlPath).replaceAll('\\', '/').replace(/^\/+/, '')
-  const assetsDirRel = normalizeText(input.template.importManifestSummary?.assetsDirPath) || 'assets'
+  const assetsDirRel = normalizeText(input.template.importManifestSummary?.assetsDirPath) || null
   const candidates: TemplateBootstrapSourceCandidate[] = []
 
   const durableRoot = normalizeText(input.template.durableSnapshotRootDirAbs)
@@ -441,23 +441,25 @@ function summarizeDirectoryEntries(input: { dirAbs: string; maxEntries?: number 
 function validateBootstrapImportInput(input: {
   snapshotRootDirAbs: string
   entryHtmlPathAbs: string
-  assetsDirAbs: string
+  assetsDirAbs: string | null
 }): {
   ok: boolean
   issues: Array<{ code: string; message: string; details: Record<string, unknown> }>
   exists: {
     snapshotRootExists: boolean
     entryHtmlExists: boolean
+    assetsDirProvided: boolean
     assetsDirExists: boolean
   }
 } {
   const snapshotRootDirAbs = path.resolve(input.snapshotRootDirAbs)
   const entryHtmlPathAbs = path.resolve(input.entryHtmlPathAbs)
-  const assetsDirAbs = path.resolve(input.assetsDirAbs)
+  const assetsDirAbs = input.assetsDirAbs ? path.resolve(input.assetsDirAbs) : null
   const issues: Array<{ code: string; message: string; details: Record<string, unknown> }> = []
   const exists = {
     snapshotRootExists: false,
     entryHtmlExists: false,
+    assetsDirProvided: assetsDirAbs !== null,
     assetsDirExists: false,
   }
   try {
@@ -484,7 +486,7 @@ function validateBootstrapImportInput(input: {
       details: { snapshotRootDirAbs, entryHtmlPathAbs },
     })
   }
-  if (!isPathWithinRoot({ rootDirAbs: snapshotRootDirAbs, targetPathAbs: assetsDirAbs })) {
+  if (assetsDirAbs && !isPathWithinRoot({ rootDirAbs: snapshotRootDirAbs, targetPathAbs: assetsDirAbs })) {
     issues.push({
       code: 'ASSETS_DIR_OUTSIDE_SNAPSHOT_ROOT',
       message: 'assetsDirAbs resolves outside snapshotRootDirAbs.',
@@ -510,22 +512,24 @@ function validateBootstrapImportInput(input: {
       details: { entryHtmlPathAbs, error: String((err as Error)?.message ?? err) },
     })
   }
-  try {
-    const assetsStat = fs.statSync(assetsDirAbs)
-    exists.assetsDirExists = assetsStat.isDirectory()
-    if (!exists.assetsDirExists) {
+  if (assetsDirAbs) {
+    try {
+      const assetsStat = fs.statSync(assetsDirAbs)
+      exists.assetsDirExists = assetsStat.isDirectory()
+      if (!exists.assetsDirExists) {
+        issues.push({
+          code: 'ASSETS_DIR_NOT_DIRECTORY',
+          message: 'assetsDirAbs exists but is not a directory.',
+          details: { assetsDirAbs },
+        })
+      }
+    } catch (err) {
       issues.push({
-        code: 'ASSETS_DIR_NOT_DIRECTORY',
-        message: 'assetsDirAbs exists but is not a directory.',
-        details: { assetsDirAbs },
+        code: 'ASSETS_DIR_MISSING',
+        message: 'assetsDirAbs is missing or unreadable.',
+        details: { assetsDirAbs, error: String((err as Error)?.message ?? err) },
       })
     }
-  } catch (err) {
-    issues.push({
-      code: 'ASSETS_DIR_MISSING',
-      message: 'assetsDirAbs is missing or unreadable.',
-      details: { assetsDirAbs, error: String((err as Error)?.message ?? err) },
-    })
   }
   return {
     ok: issues.length === 0,
@@ -542,7 +546,7 @@ async function resolveTemplateBootstrapSource(input: {
       sourceMode: TemplateBootstrapSourceMode
       snapshotRootDirAbs: string
       entryHtmlPathAbs: string
-      assetsDirAbs: string
+      assetsDirAbs: string | null
       html: string
     }
   | null
@@ -550,7 +554,7 @@ async function resolveTemplateBootstrapSource(input: {
   const templateId = input.template.id
   const entryHtmlPath = normalizeText(input.template.entryHtmlPath).replaceAll('\\', '/').replace(/^\/+/, '')
   const sourceCandidates = resolveTemplateBootstrapSourceCandidates({ template: input.template })
-  const assetsDirRel = normalizeText(input.template.importManifestSummary?.assetsDirPath) || 'assets'
+  const assetsDirRel = normalizeText(input.template.importManifestSummary?.assetsDirPath) || null
   const sourceZipStorageBucket = normalizeText(input.template.sourceZipStorageBucket)
   const sourceZipStorageKey = normalizeText(input.template.sourceZipStorageKey)
 
@@ -564,16 +568,20 @@ async function resolveTemplateBootstrapSource(input: {
     })
     if (!entryHtmlPathAbs) continue
     const entryHtmlRel = path.relative(candidate.snapshotRootDirAbs, entryHtmlPathAbs).replaceAll('\\', '/')
-    const assetsDirAbs =
-      resolveFirstExistingPath({
-        rootDirAbs: candidate.snapshotRootDirAbs,
-        relativeCandidates: [
-          candidate.configuredAssetsDirRel,
-          `${path.posix.dirname(entryHtmlRel)}/assets`,
-          'assets',
-        ],
-        expectDirectory: true,
-      }) ?? path.resolve(candidate.snapshotRootDirAbs, normalizeRelPath(candidate.configuredAssetsDirRel || 'assets'))
+    const configuredAssetsDirRel = normalizeRelPath(candidate.configuredAssetsDirRel)
+    const configuredAssetsDirAbs = configuredAssetsDirRel
+      ? path.resolve(candidate.snapshotRootDirAbs, configuredAssetsDirRel)
+      : null
+    const discoveredAssetsDirAbs = resolveFirstExistingPath({
+      rootDirAbs: candidate.snapshotRootDirAbs,
+      relativeCandidates: [
+        configuredAssetsDirRel,
+        `${path.posix.dirname(entryHtmlRel)}/assets`,
+        'assets',
+      ],
+      expectDirectory: true,
+    })
+    const assetsDirAbs = configuredAssetsDirAbs ?? discoveredAssetsDirAbs
     try {
       const html = fs.readFileSync(entryHtmlPathAbs, 'utf8')
       if (!normalizeText(html)) continue
@@ -617,18 +625,22 @@ async function resolveTemplateBootstrapSource(input: {
               path.relative(zipValidation.validation.extractionRootDirAbs, chosenEntryAbs).replaceAll('\\', '/') ||
               normalizeRelPath(zipValidation.validation.entryHtmlPath) ||
               'index.html'
+            const configuredAssetsDirRel = normalizeRelPath(assetsDirRel)
+            const configuredAssetsDirAbs = configuredAssetsDirRel
+              ? path.resolve(zipValidation.validation.extractionRootDirAbs, configuredAssetsDirRel)
+              : null
             const resolvedAssetsRelCandidates = [
-              normalizeRelPath(assetsDirRel),
+              configuredAssetsDirRel,
               normalizeRelPath(zipValidation.validation.assetsDirPath),
               `${path.posix.dirname(resolvedEntryRel)}/assets`,
               'assets',
             ]
-            const resolvedAssetsDirAbs =
-              resolveFirstExistingPath({
-                rootDirAbs: zipValidation.validation.extractionRootDirAbs,
-                relativeCandidates: resolvedAssetsRelCandidates,
-                expectDirectory: true,
-              }) ?? path.resolve(zipValidation.validation.extractionRootDirAbs, normalizeRelPath(assetsDirRel || 'assets'))
+            const discoveredAssetsDirAbs = resolveFirstExistingPath({
+              rootDirAbs: zipValidation.validation.extractionRootDirAbs,
+              relativeCandidates: resolvedAssetsRelCandidates,
+              expectDirectory: true,
+            })
+            const resolvedAssetsDirAbs = configuredAssetsDirAbs ?? discoveredAssetsDirAbs
             const persistedSource = input.deps.persistTemplateDurableSourceSnapshot({
               templateId,
               extractionRootDirAbs: zipValidation.validation.extractionRootDirAbs,
@@ -644,10 +656,12 @@ async function resolveTemplateBootstrapSource(input: {
               sourceMode: 'zip_reconstruction',
               snapshotRootDirAbs: persistedSource.durableSnapshotRootDirAbs,
               entryHtmlPathAbs: durableEntryHtmlPathAbs,
-              assetsDirAbs: path.resolve(
-                persistedSource.durableSnapshotRootDirAbs,
-                path.relative(zipValidation.validation.extractionRootDirAbs, resolvedAssetsDirAbs),
-              ),
+              assetsDirAbs: resolvedAssetsDirAbs
+                ? path.resolve(
+                    persistedSource.durableSnapshotRootDirAbs,
+                    path.relative(zipValidation.validation.extractionRootDirAbs, resolvedAssetsDirAbs),
+                  )
+                : null,
               html,
             }
           }
@@ -765,9 +779,9 @@ export async function bootstrapRuntimeFromTemplateSite(input: {
 
     const snapshotRootDirAbs = path.resolve(resolvedSource.snapshotRootDirAbs)
     const entryHtmlPathAbs = path.resolve(resolvedSource.entryHtmlPathAbs)
-    const assetsDirAbs = path.resolve(resolvedSource.assetsDirAbs)
+    const assetsDirAbs = resolvedSource.assetsDirAbs ? path.resolve(resolvedSource.assetsDirAbs) : null
     const snapshotEntryHtmlPath = path.relative(snapshotRootDirAbs, entryHtmlPathAbs).replaceAll('\\', '/')
-    const snapshotAssetsDirPath = path.relative(snapshotRootDirAbs, assetsDirAbs).replaceAll('\\', '/')
+    const snapshotAssetsDirPath = assetsDirAbs ? path.relative(snapshotRootDirAbs, assetsDirAbs).replaceAll('\\', '/') : null
     const preflight = validateBootstrapImportInput({
       snapshotRootDirAbs,
       entryHtmlPathAbs,
@@ -786,6 +800,16 @@ export async function bootstrapRuntimeFromTemplateSite(input: {
       assetsIsRootAssets: snapshotAssetsDirPath === 'assets',
       entryParentDirRel: path.relative(snapshotRootDirAbs, path.dirname(entryHtmlPathAbs)).replaceAll('\\', '/'),
     }
+    if (!assetsDirAbs) {
+      console.info('[site-bootstrap-worker] TEMPLATE_SITE_BOOTSTRAP_ASSETS_DIR_OPTIONAL_MISSING', {
+        siteId,
+        templateId,
+        sourceResolutionMode,
+        snapshotRootDirAbs,
+        entryHtmlPath: snapshotEntryHtmlPath,
+        assetsDirPresent: false,
+      })
+    }
     console.info('[site-bootstrap-worker] TEMPLATE_SITE_BOOTSTRAP_IMPORT_INPUT_RESOLVED', {
       siteId,
       templateId,
@@ -795,8 +819,10 @@ export async function bootstrapRuntimeFromTemplateSite(input: {
       entryHtmlPath: snapshotEntryHtmlPath,
       assetsDirAbs,
       assetsDirPath: snapshotAssetsDirPath,
+      assetsDirPresent: Boolean(assetsDirAbs),
       snapshotRootExists: preflight.exists.snapshotRootExists,
       entryHtmlExists: preflight.exists.entryHtmlExists,
+      assetsDirProvided: preflight.exists.assetsDirProvided,
       assetsDirExists: preflight.exists.assetsDirExists,
       knownGoodReference,
       knownGoodComparison,
@@ -848,7 +874,7 @@ export async function bootstrapRuntimeFromTemplateSite(input: {
       entryHtmlPathAbs: resolvedSource.entryHtmlPathAbs,
       assetsDirAbs: resolvedSource.assetsDirAbs,
       manifestEntryHtmlPath: normalizeText(snapshot.fixtureSpec.entryHtmlPath),
-      manifestAssetsDirPath: normalizeText(snapshot.fixtureSpec.assetsDirPath),
+      manifestAssetsDirPath: snapshotAssetsDirPath,
       snapshotEntryHtmlPath,
       snapshotAssetsDirPath,
     })

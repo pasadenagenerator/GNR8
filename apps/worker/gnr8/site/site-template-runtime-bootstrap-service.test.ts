@@ -383,12 +383,95 @@ test('template bootstrap surfaces failing stage diagnostics when scoped pipeline
   }
 })
 
-test('template bootstrap fails pre-pipeline validation when resolved assets dir is missing', async () => {
+test('template bootstrap allows missing assets dir and logs optional-missing preflight evidence', async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'template-bootstrap-preflight-missing-assets-'))
   const entryRel = 'nested/site/index.html'
   const entryAbs = path.resolve(root, entryRel)
   fs.mkdirSync(path.dirname(entryAbs), { recursive: true })
   fs.writeFileSync(entryAbs, '<!doctype html><html><body><h1>No assets</h1></body></html>', 'utf8')
+
+  const logs = captureLogs()
+  try {
+    const result = await bootstrapRuntimeFromTemplateSite({
+      site: SITE,
+      template: createTemplate({
+        durableSnapshotRootDirAbs: root,
+        entryHtmlPath: entryRel,
+        importManifestSummary: { assetsDirPath: null },
+      }),
+      deps: {
+        runScopedImportPipeline: async () =>
+          ({
+            mode: 'pipeline',
+            siteId: 'runtime-site-no-assets',
+            siteVersionId: 'runtime-version-no-assets',
+            versionNo: 1,
+            artifactId: 'artifact-no-assets',
+            preparedSite: { documents: [] },
+            layoutModel: null,
+            renderOutput: null,
+            previewDocument: null,
+            pipelineResult: { stages: [] },
+            reporting: {},
+          }) as any,
+        writeOwnershipLink: async () => undefined,
+      },
+    })
+
+    assert.equal(result.runtimeSiteId, 'runtime-site-no-assets')
+    const optionalMissing = logs.infos.find((entry) =>
+      String(entry.message).includes('TEMPLATE_SITE_BOOTSTRAP_ASSETS_DIR_OPTIONAL_MISSING'),
+    )
+    assert.ok(optionalMissing)
+    assert.equal(optionalMissing?.meta.assetsDirPresent, false)
+    assert.equal(optionalMissing?.meta.sourceResolutionMode, 'durable')
+
+    const resolved = logs.infos.find((entry) => String(entry.message).includes('TEMPLATE_SITE_BOOTSTRAP_IMPORT_INPUT_RESOLVED'))
+    assert.ok(resolved)
+    assert.equal(resolved?.meta.assetsDirPath, null)
+    assert.equal(resolved?.meta.assetsDirPresent, false)
+  } finally {
+    logs.restore()
+  }
+})
+
+test('template bootstrap fails pre-pipeline validation when entry html is missing', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'template-bootstrap-preflight-missing-entry-'))
+  fs.mkdirSync(path.resolve(root, 'nested/site/assets'), { recursive: true })
+
+  const logs = captureLogs()
+  try {
+    await assert.rejects(
+      bootstrapRuntimeFromTemplateSite({
+        site: SITE,
+        template: createTemplate({
+          durableSnapshotRootDirAbs: root,
+          entryHtmlPath: 'nested/site/missing.html',
+          importManifestSummary: { assetsDirPath: 'nested/site/assets' },
+        }),
+      }),
+      (error) => {
+        assert.ok(error instanceof TemplateSiteRuntimeBootstrapError)
+        assert.equal(error.code, 'TEMPLATE_SITE_BOOTSTRAP_IMPORT_SOURCE_MISSING')
+        assert.match(error.message, /Template source is unavailable for bootstrap/)
+        return true
+      },
+    )
+
+    const pipelineStarted = logs.infos.find((entry) => String(entry.message).includes('TEMPLATE_SITE_BOOTSTRAP_PIPELINE_STARTED'))
+    assert.equal(Boolean(pipelineStarted), false)
+  } finally {
+    logs.restore()
+  }
+})
+
+test('template bootstrap fails pre-pipeline validation when provided assets dir resolves outside snapshot root', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'template-bootstrap-preflight-assets-outside-'))
+  const entryRel = 'nested/site/index.html'
+  const entryAbs = path.resolve(root, entryRel)
+  fs.mkdirSync(path.dirname(entryAbs), { recursive: true })
+  fs.writeFileSync(entryAbs, '<!doctype html><html><body><h1>Outside assets</h1></body></html>', 'utf8')
+  fs.mkdirSync(path.resolve(root, '..', 'outside-assets-dir'), { recursive: true })
 
   const logs = captureLogs()
   try {
@@ -398,23 +481,20 @@ test('template bootstrap fails pre-pipeline validation when resolved assets dir 
         template: createTemplate({
           durableSnapshotRootDirAbs: root,
           entryHtmlPath: entryRel,
-          importManifestSummary: { assetsDirPath: 'missing-assets' },
+          importManifestSummary: { assetsDirPath: '../outside-assets-dir' },
         }),
       }),
       (error) => {
         assert.ok(error instanceof TemplateSiteRuntimeBootstrapError)
         assert.equal(error.code, 'TEMPLATE_SITE_BOOTSTRAP_IMPORT_SOURCE_MISSING')
-        assert.match(error.message, /ASSETS_DIR_MISSING/)
+        assert.match(error.message, /ASSETS_DIR_OUTSIDE_SNAPSHOT_ROOT/)
         return true
       },
     )
 
     const preflightMissing = logs.errors.find((entry) => String(entry.message).includes('TEMPLATE_SITE_BOOTSTRAP_IMPORT_INPUT_MISSING'))
     assert.ok(preflightMissing)
-    assert.equal(preflightMissing?.meta.issues?.[0]?.code, 'ASSETS_DIR_MISSING')
-
-    const pipelineStarted = logs.infos.find((entry) => String(entry.message).includes('TEMPLATE_SITE_BOOTSTRAP_PIPELINE_STARTED'))
-    assert.equal(Boolean(pipelineStarted), false)
+    assert.equal(preflightMissing?.meta.issues?.[0]?.code, 'ASSETS_DIR_OUTSIDE_SNAPSHOT_ROOT')
   } finally {
     logs.restore()
   }

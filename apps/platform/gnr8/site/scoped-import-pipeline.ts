@@ -1339,6 +1339,19 @@ export async function runScopedImportPipeline(input: {
 }): Promise<ScopedImportPipelineOutcome> {
   const deps = { ...defaultDependencies(), ...(input.deps ?? {}) }
   const fallbackToLegacy = input.fallbackToLegacyOnPipelineFailure ?? true
+  let assetsDirPath: string | null = null
+  try {
+    const assetsStat = fs.statSync(input.snapshot.assetsDirAbs)
+    if (assetsStat.isDirectory()) {
+      assetsDirPath = toSnapshotRelativePath({
+        rootDirAbs: input.snapshot.snapshotRootDirAbs,
+        targetPathAbs: input.snapshot.assetsDirAbs,
+        label: 'assetsDirPath',
+      })
+    }
+  } catch {
+    assetsDirPath = null
+  }
   const importInput = {
     rootDir: path.resolve(input.snapshot.snapshotRootDirAbs),
     entryHtmlPath: toSnapshotRelativePath({
@@ -1346,11 +1359,7 @@ export async function runScopedImportPipeline(input: {
       targetPathAbs: input.snapshot.entryHtmlPathAbs,
       label: 'entryHtmlPath',
     }),
-    assetsDirPath: toSnapshotRelativePath({
-      rootDirAbs: input.snapshot.snapshotRootDirAbs,
-      targetPathAbs: input.snapshot.assetsDirAbs,
-      label: 'assetsDirPath',
-    }),
+    assetsDirPath,
   }
 
   const importOutput = await deps.importStaticSite({

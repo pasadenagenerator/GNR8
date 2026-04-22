@@ -558,6 +558,97 @@ test('scoped pipeline import resolves nested snapshot entry and assets paths rel
   assert.equal(capturedImportInput.source.assetsDirPath, 'nested/site/assets')
 })
 
+test('scoped pipeline import passes null assetsDirPath when snapshot assets directory is missing', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'scoped-pipeline-missing-assets-'))
+  const entryAbs = path.resolve(root, 'index.html')
+  fs.writeFileSync(entryAbs, '<!doctype html><html><body>hello</body></html>', 'utf8')
+
+  const pipeline = createSuccessPipelineFixture()
+  let capturedImportInput: any = null
+  let linkedArtifactId: string | null = null
+
+  const outcome = await runScopedImportPipeline({
+    snapshot: {
+      snapshotRootDirAbs: root,
+      entryHtmlPathAbs: entryAbs,
+      assetsDirAbs: path.resolve(root, 'assets'),
+      sourceMode: 'raw_html_fallback',
+      sourceSelection: {
+        sourceMode: 'raw_html_fallback',
+        fidelityStatus: 'degraded_import',
+        selectedSourceHtmlPathAbs: entryAbs,
+        renderedDomQuality: {
+          quality: 'weak',
+          bodyTextLength: 80,
+          meaningfulNodeCount: 8,
+          sectionCandidateCount: 1,
+          hasHeading: true,
+          reason: 'missing_assets_fixture',
+        },
+        degraded: true,
+      },
+      renderedCapture: {
+        status: 'unavailable',
+        screenshots: [],
+        computedStyleSamples: [],
+      },
+      importDiagnostics: {
+        issues: [],
+      },
+    } as any,
+    sourceUrl: 'https://example.com/missing-assets',
+    actor: 'test:scoped-import-missing-assets',
+    deps: {
+      importStaticSite: async (input) => {
+        capturedImportInput = input
+        return { status: 'ok', documentMeta: { source: { kind: 'single-entry-html' } } } as any
+      },
+      createImportManifest: () => ({ status: 'success' }) as any,
+      runLinearMigrationPipeline: () => pipeline as any,
+      createSiteVersionFromMigration: async () => ({ siteId: 'runtime-site', siteVersionId: 'site-version-1', versionNo: 1 }),
+      setSiteVersionImportProvenanceSummary: async () => ({ affectedRows: 1 }),
+      getSiteVersion: async () =>
+        ({
+          id: 'site-version-1',
+          siteId: 'runtime-site',
+          versionNo: 1,
+          state: 'DRAFT',
+          source: 'migration',
+          actor: 'test',
+          createdAt: new Date().toISOString(),
+          rendererCompatibilityVersion: 'gnr8-renderer-v1',
+          artifactId: linkedArtifactId,
+          importProvenanceSummary: { kind: 'runtime_import_provenance_summary_v1' },
+          pages: [],
+        }) as any,
+      buildDeterministicArtifactBundle: () =>
+        ({
+          siteId: 'runtime-site',
+          siteVersionId: 'site-version-1',
+          rendererCompatibilityVersion: 'gnr8-renderer-v1',
+          bundleSha256: 'bundle-sha',
+          htmlByPath: { '/': '<!doctype html><html><body>preview</body></html>' },
+          compiledTokenStyles: ':root{}',
+          assetFingerprintMap: {},
+          manifest: {},
+        }) as any,
+      createArtifact: async () => ({ artifactId: 'artifact-1' }),
+      bindArtifactToVersion: async (input) => {
+        linkedArtifactId = input.artifactId
+        return { affectedRows: 1 }
+      },
+      importHtmlToPage: () => ({}) as any,
+      migrateImportedPageToCanonicalDraft: async () => ({ siteId: 'legacy-site', siteVersionId: 'legacy-version', versionNo: 1 }),
+    },
+  })
+
+  assert.equal(outcome.mode, 'pipeline')
+  assert.ok(capturedImportInput)
+  assert.equal(capturedImportInput.rootDir, root)
+  assert.equal(capturedImportInput.source.entryHtmlPath, 'index.html')
+  assert.equal(capturedImportInput.source.assetsDirPath, null)
+})
+
 test('scoped pipeline import falls back to legacy when pipeline fails', async () => {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'scoped-pipeline-fallback-'))
   const entryHtmlPath = path.join(tmp, 'index.html')
