@@ -59,6 +59,17 @@ function normalizeText(value: unknown): string {
   return String(value ?? '').trim()
 }
 
+function normalizeDiagnosticDetails(details: unknown): Record<string, unknown> | null {
+  if (details == null) return null
+  if (typeof details === 'object' && !Array.isArray(details)) {
+    return details as Record<string, unknown>
+  }
+  if (Array.isArray(details)) {
+    return { values: details }
+  }
+  return { value: details }
+}
+
 function uniqueSorted(values: string[]): string[] {
   return [...new Set(values.filter(Boolean))].sort((a, b) => a.localeCompare(b))
 }
@@ -1567,7 +1578,7 @@ export async function runScopedImportPipeline(input: {
         code: normalizeText(issue.code),
         message: normalizeText(issue.message),
         source: normalizeText(issue.source),
-        details: issue.details ?? null,
+        details: normalizeDiagnosticDetails(issue.details),
       })),
       pipelineDiagnosticCodes: uniqueSorted(pipelineResult.diagnostics.map((issue) => normalizeText(issue.code)).filter(Boolean)),
       stageSummaries: pipelineResult.stages.map((stage) => stage.summary),
