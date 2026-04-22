@@ -7,7 +7,7 @@ create table if not exists public.gnr8_site_bootstrap_jobs (
   template_id uuid not null references public.gnr8_templates(id) on delete restrict,
   status text not null default 'queued' check (status in ('queued', 'running', 'completed', 'failed')),
   attempts integer not null default 0 check (attempts >= 0),
-  runtime_site_id uuid references public.gnr8_runtime_sites(id) on delete set null,
+  runtime_site_id text references public.gnr8_runtime_sites(id) on delete set null,
   runtime_site_version_id uuid references public.gnr8_runtime_site_versions(id) on delete set null,
   artifact_id uuid references public.gnr8_runtime_artifacts(id) on delete set null,
   section_count integer not null default 0 check (section_count >= 0),

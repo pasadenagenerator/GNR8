@@ -91,6 +91,12 @@ importers:
 
   apps/worker:
     dependencies:
+      '@gnr8/core':
+        specifier: workspace:*
+        version: link:../../packages/core
+      '@gnr8/data':
+        specifier: workspace:*
+        version: link:../../packages/data
       '@gnr8/runtime-contracts':
         specifier: workspace:*
         version: link:../../packages/gnr8-runtime-contracts
