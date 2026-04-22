@@ -1200,6 +1200,64 @@ export type ScopedImportPipelineFallback = {
 
 export type ScopedImportPipelineOutcome = ScopedImportPipelineSuccess | ScopedImportPipelineFallback
 
+export class ScopedImportPipelineFailureError extends Error {
+  readonly code = 'SCOPED_IMPORT_PIPELINE_FAILED' as const
+  readonly pipelineSummary: string
+  readonly firstFailedStageId: string | null
+  readonly firstFailedStageSummary: string | null
+  readonly firstFailedStageDiagnostics: Array<{
+    severity: string
+    code: string
+    message: string
+    source: string
+    details: Record<string, unknown> | null
+  }>
+  readonly pipelineDiagnosticCodes: string[]
+  readonly stageSummaries: string[]
+  readonly importInput: {
+    rootDir: string
+    entryHtmlPath: string
+    assetsDirPath: string | null
+    snapshotRootDirAbs: string
+    entryHtmlPathAbs: string
+    assetsDirAbs: string
+  }
+
+  constructor(input: {
+    pipelineSummary: string
+    firstFailedStageId: string | null
+    firstFailedStageSummary: string | null
+    firstFailedStageDiagnostics: Array<{
+      severity: string
+      code: string
+      message: string
+      source: string
+      details: Record<string, unknown> | null
+    }>
+    pipelineDiagnosticCodes: string[]
+    stageSummaries: string[]
+    importInput: {
+      rootDir: string
+      entryHtmlPath: string
+      assetsDirPath: string | null
+      snapshotRootDirAbs: string
+      entryHtmlPathAbs: string
+      assetsDirAbs: string
+    }
+  }) {
+    const stageSuffix = input.firstFailedStageId ? `; first_failed_stage=${input.firstFailedStageId}` : ''
+    super(`Scoped pipeline import failed without fallback: ${input.pipelineSummary}${stageSuffix}`)
+    this.name = 'ScopedImportPipelineFailureError'
+    this.pipelineSummary = input.pipelineSummary
+    this.firstFailedStageId = input.firstFailedStageId
+    this.firstFailedStageSummary = input.firstFailedStageSummary
+    this.firstFailedStageDiagnostics = input.firstFailedStageDiagnostics
+    this.pipelineDiagnosticCodes = input.pipelineDiagnosticCodes
+    this.stageSummaries = input.stageSummaries
+    this.importInput = input.importInput
+  }
+}
+
 export type ScopedImportPipelineDependencies = {
   importStaticSite: typeof importStaticSite
   createImportManifest: typeof createImportManifest
@@ -1230,6 +1288,18 @@ function defaultDependencies(): ScopedImportPipelineDependencies {
   }
 }
 
+function toSnapshotRelativePath(input: { rootDirAbs: string; targetPathAbs: string; label: 'entryHtmlPath' | 'assetsDirPath' }): string {
+  const rootDirAbs = path.resolve(input.rootDirAbs)
+  const targetPathAbs = path.resolve(input.targetPathAbs)
+  const rel = path.relative(rootDirAbs, targetPathAbs)
+  if (!rel || rel.startsWith('..') || path.isAbsolute(rel)) {
+    throw new Error(
+      `Scoped import ${input.label} must resolve inside snapshot root (root=${rootDirAbs}; target=${targetPathAbs}; rel=${rel || '<empty>'}).`,
+    )
+  }
+  return rel.replaceAll('\\', '/')
+}
+
 export async function runScopedImportPipeline(input: {
   snapshot: UrlSinglePageImportSnapshot
   sourceUrl: string
@@ -1241,14 +1311,27 @@ export async function runScopedImportPipeline(input: {
 }): Promise<ScopedImportPipelineOutcome> {
   const deps = { ...defaultDependencies(), ...(input.deps ?? {}) }
   const fallbackToLegacy = input.fallbackToLegacyOnPipelineFailure ?? true
+  const importInput = {
+    rootDir: path.resolve(input.snapshot.snapshotRootDirAbs),
+    entryHtmlPath: toSnapshotRelativePath({
+      rootDirAbs: input.snapshot.snapshotRootDirAbs,
+      targetPathAbs: input.snapshot.entryHtmlPathAbs,
+      label: 'entryHtmlPath',
+    }),
+    assetsDirPath: toSnapshotRelativePath({
+      rootDirAbs: input.snapshot.snapshotRootDirAbs,
+      targetPathAbs: input.snapshot.assetsDirAbs,
+      label: 'assetsDirPath',
+    }),
+  }
 
   const importOutput = await deps.importStaticSite({
-    rootDir: input.snapshot.snapshotRootDirAbs,
+    rootDir: importInput.rootDir,
     requestId: `scoped-import-${Date.now()}`,
     source: {
       kind: 'single-entry-html',
-      entryHtmlPath: path.basename(input.snapshot.entryHtmlPathAbs),
-      assetsDirPath: path.basename(input.snapshot.assetsDirAbs),
+      entryHtmlPath: importInput.entryHtmlPath,
+      assetsDirPath: importInput.assetsDirPath,
     },
   })
   const importManifest = deps.createImportManifest(importOutput)
@@ -1474,7 +1557,29 @@ export async function runScopedImportPipeline(input: {
   }
 
   if (!fallbackToLegacy) {
-    throw new Error(`Scoped pipeline import failed without fallback: ${pipelineResult.summary}`)
+    const firstFailedStage = pipelineResult.stages.find((stage) => stage.status === 'failed') ?? null
+    throw new ScopedImportPipelineFailureError({
+      pipelineSummary: pipelineResult.summary,
+      firstFailedStageId: firstFailedStage?.stageId ?? null,
+      firstFailedStageSummary: firstFailedStage?.summary ?? null,
+      firstFailedStageDiagnostics: (firstFailedStage?.diagnostics ?? []).map((issue) => ({
+        severity: normalizeText(issue.severity),
+        code: normalizeText(issue.code),
+        message: normalizeText(issue.message),
+        source: normalizeText(issue.source),
+        details: issue.details ?? null,
+      })),
+      pipelineDiagnosticCodes: uniqueSorted(pipelineResult.diagnostics.map((issue) => normalizeText(issue.code)).filter(Boolean)),
+      stageSummaries: pipelineResult.stages.map((stage) => stage.summary),
+      importInput: {
+        rootDir: importInput.rootDir,
+        entryHtmlPath: importInput.entryHtmlPath,
+        assetsDirPath: importInput.assetsDirPath,
+        snapshotRootDirAbs: input.snapshot.snapshotRootDirAbs,
+        entryHtmlPathAbs: input.snapshot.entryHtmlPathAbs,
+        assetsDirAbs: input.snapshot.assetsDirAbs,
+      },
+    })
   }
 
   const html = fs.readFileSync(input.snapshot.entryHtmlPathAbs, 'utf8')

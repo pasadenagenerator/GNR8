@@ -4,7 +4,7 @@ import os from 'node:os'
 import path from 'node:path'
 
 import { getSuperadminPool } from '@/src/superadmin/db'
-import type { ScopedImportPipelineOutcome } from '@/gnr8/site/scoped-import-pipeline'
+import { ScopedImportPipelineFailureError, type ScopedImportPipelineOutcome } from '@/gnr8/site/scoped-import-pipeline'
 import { TEMPLATE_ZIP_MAX_BYTES, validateAndExtractTemplateZip } from '@/gnr8/template-intake/core/template-zip-validator'
 import { persistTemplateDurableSourceSnapshot } from '@/gnr8/template-intake/storage/template-durable-source'
 import { loadTemplateSourceZip } from '@/gnr8/template-intake/storage/template-source-zip-storage'
@@ -116,7 +116,7 @@ function resolveTemplateSnapshotRoot(snapshotId: string): string {
   return path.resolve(os.tmpdir(), 'gnr8', 'template-intake', snapshotId)
 }
 
-type TemplateBootstrapSourceMode = 'processed' | 'legacy' | 'zip_reconstructed'
+type TemplateBootstrapSourceMode = 'durable' | 'legacy' | 'zip_reconstruction'
 
 type TemplateBootstrapSourceCandidate = {
   sourceMode: 'durable' | 'legacy_temp'
@@ -309,7 +309,7 @@ function resolveTemplateBootstrapSourceCandidates(input: {
 }
 
 function mapCandidateMode(candidate: TemplateBootstrapSourceCandidate['sourceMode']): TemplateBootstrapSourceMode {
-  return candidate === 'durable' ? 'processed' : 'legacy'
+  return candidate === 'durable' ? 'durable' : 'legacy'
 }
 
 async function resolveTemplateBootstrapSource(input: {
@@ -386,7 +386,7 @@ async function resolveTemplateBootstrapSource(input: {
               entryHtmlPath || normalizeText(zipValidation.validation.entryHtmlPath) || 'index.html',
             )
             return {
-              sourceMode: 'zip_reconstructed',
+              sourceMode: 'zip_reconstruction',
               snapshotRootDirAbs: persistedSource.durableSnapshotRootDirAbs,
               entryHtmlPathAbs: durableEntryHtmlPathAbs,
               assetsDirAbs: path.resolve(persistedSource.durableSnapshotRootDirAbs, assetsDirRel),
@@ -429,6 +429,34 @@ function countPreparedSections(result: ScopedImportPipelineOutcome): number {
   return result.preparedSite.documents.reduce((sum, doc) => sum + Math.max(0, doc.domOutline?.bodyChildElements.length ?? 0), 0)
 }
 
+function summarizeBootstrapFailure(input: { error: unknown }): {
+  stageId: string | null
+  stageDiagnostics: unknown[] | null
+  pipelineSummary: string | null
+  pipelineDiagnosticCodes: string[] | null
+  stageSummaries: string[] | null
+  pipelineImportInput: Record<string, unknown> | null
+} {
+  if (input.error instanceof ScopedImportPipelineFailureError) {
+    return {
+      stageId: input.error.firstFailedStageId,
+      stageDiagnostics: input.error.firstFailedStageDiagnostics,
+      pipelineSummary: input.error.pipelineSummary,
+      pipelineDiagnosticCodes: input.error.pipelineDiagnosticCodes,
+      stageSummaries: input.error.stageSummaries,
+      pipelineImportInput: input.error.importInput,
+    }
+  }
+  return {
+    stageId: null,
+    stageDiagnostics: null,
+    pipelineSummary: null,
+    pipelineDiagnosticCodes: null,
+    stageSummaries: null,
+    pipelineImportInput: null,
+  }
+}
+
 export async function bootstrapRuntimeFromTemplateSite(input: {
   site: BootstrapSiteRecord
   template: BootstrapTemplateRecord
@@ -438,6 +466,9 @@ export async function bootstrapRuntimeFromTemplateSite(input: {
   const siteId = input.site.siteId
   const templateId = input.template.id
   const entryHtmlPath = normalizeText(input.template.entryHtmlPath)
+  let sourceResolutionMode: TemplateBootstrapSourceMode | null = null
+  let runtimeSiteId: string | null = null
+  let runtimeSiteVersionId: string | null = null
 
   try {
     if (!entryHtmlPath) {
@@ -462,6 +493,7 @@ export async function bootstrapRuntimeFromTemplateSite(input: {
         templateId,
       })
     }
+    sourceResolutionMode = resolvedSource.sourceMode
 
     const snapshot = createTemplateSnapshot({
       site: input.site,
@@ -473,12 +505,44 @@ export async function bootstrapRuntimeFromTemplateSite(input: {
       now: deps.now(),
     })
 
-    const scoped = await deps.runScopedImportPipeline({
-      snapshot,
-      sourceUrl: normalizeDomainAsUrl(input.site.domain),
-      actor: `template-bootstrap:${siteId}`,
-      fallbackToLegacyOnPipelineFailure: false,
+    console.info('[site-bootstrap-worker] TEMPLATE_SITE_BOOTSTRAP_PIPELINE_STARTED', {
+      siteId,
+      templateId,
+      runtimeSiteId,
+      runtimeSiteVersionId,
+      sourceResolutionMode,
+      snapshotRootDirAbs: resolvedSource.snapshotRootDirAbs,
+      entryHtmlPathAbs: resolvedSource.entryHtmlPathAbs,
+      assetsDirAbs: resolvedSource.assetsDirAbs,
+      manifestEntryHtmlPath: normalizeText(snapshot.fixtureSpec.entryHtmlPath),
+      manifestAssetsDirPath: normalizeText(snapshot.fixtureSpec.assetsDirPath),
     })
+
+    let scoped: ScopedImportPipelineOutcome
+    try {
+      scoped = await deps.runScopedImportPipeline({
+        snapshot,
+        sourceUrl: normalizeDomainAsUrl(input.site.domain),
+        actor: `template-bootstrap:${siteId}`,
+        fallbackToLegacyOnPipelineFailure: false,
+      })
+    } catch (pipelineError) {
+      const failure = summarizeBootstrapFailure({ error: pipelineError })
+      console.error('[site-bootstrap-worker] TEMPLATE_SITE_BOOTSTRAP_PIPELINE_STAGE_FAILED', {
+        siteId,
+        templateId,
+        runtimeSiteId,
+        runtimeSiteVersionId,
+        sourceResolutionMode,
+        failingStageId: failure.stageId,
+        failingStageDiagnostics: failure.stageDiagnostics,
+        pipelineSummary: failure.pipelineSummary,
+        pipelineDiagnosticCodes: failure.pipelineDiagnosticCodes,
+        stageSummaries: failure.stageSummaries,
+        pipelineImportInput: failure.pipelineImportInput,
+      })
+      throw pipelineError
+    }
 
     if (scoped.mode !== 'pipeline') {
       throw new TemplateSiteRuntimeBootstrapError({
@@ -488,6 +552,8 @@ export async function bootstrapRuntimeFromTemplateSite(input: {
         templateId,
       })
     }
+    runtimeSiteId = scoped.siteId
+    runtimeSiteVersionId = scoped.siteVersionId
 
     await deps.writeOwnershipLink({ siteId, siteVersionId: scoped.siteVersionId })
 
@@ -503,6 +569,21 @@ export async function bootstrapRuntimeFromTemplateSite(input: {
       sectionCount,
     }
   } catch (error) {
+    const failure = summarizeBootstrapFailure({ error })
+    console.error('[site-bootstrap-worker] TEMPLATE_SITE_BOOTSTRAP_PIPELINE_FAILED', {
+      siteId,
+      templateId,
+      runtimeSiteId,
+      runtimeSiteVersionId,
+      sourceResolutionMode,
+      failingStageId: failure.stageId,
+      failingStageDiagnostics: failure.stageDiagnostics,
+      pipelineSummary: failure.pipelineSummary,
+      pipelineDiagnosticCodes: failure.pipelineDiagnosticCodes,
+      stageSummaries: failure.stageSummaries,
+      pipelineImportInput: failure.pipelineImportInput,
+      message: error instanceof Error ? error.message : String(error),
+    })
     throw mapBootstrapError({ error, siteId, templateId })
   }
 }
