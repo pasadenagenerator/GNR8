@@ -152,6 +152,59 @@ test('template bootstrap succeeds from durable processed source and emits pipeli
     const started = logs.infos.find((entry) => String(entry.message).includes('TEMPLATE_SITE_BOOTSTRAP_PIPELINE_STARTED'))
     assert.ok(started)
     assert.equal(started?.meta.sourceResolutionMode, 'durable')
+    const resolved = logs.infos.find((entry) => String(entry.message).includes('TEMPLATE_SITE_BOOTSTRAP_IMPORT_INPUT_RESOLVED'))
+    assert.ok(resolved)
+    assert.equal(resolved?.meta.entryHtmlPath, entryRel)
+    assert.equal(resolved?.meta.assetsDirPath, assetsRel)
+  } finally {
+    logs.restore()
+  }
+})
+
+test('template bootstrap resolves root-level entry HTML bootstrap input deterministically', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'template-bootstrap-root-entry-'))
+  const entryRel = 'index.html'
+  const assetsRel = 'assets'
+  const entryAbs = path.resolve(root, entryRel)
+  fs.mkdirSync(path.dirname(entryAbs), { recursive: true })
+  fs.writeFileSync(entryAbs, '<!doctype html><html><body><h1>Root Entry</h1></body></html>', 'utf8')
+  fs.mkdirSync(path.resolve(root, assetsRel), { recursive: true })
+
+  const logs = captureLogs()
+  try {
+    await bootstrapRuntimeFromTemplateSite({
+      site: SITE,
+      template: createTemplate({
+        durableSnapshotRootDirAbs: root,
+        entryHtmlPath: entryRel,
+        importManifestSummary: { assetsDirPath: assetsRel },
+      }),
+      deps: {
+        runScopedImportPipeline: async (input) => {
+          assert.equal(input.snapshot.entryHtmlPathAbs, entryAbs)
+          assert.equal(input.snapshot.assetsDirAbs, path.resolve(root, assetsRel))
+          return {
+            mode: 'pipeline',
+            siteId: 'runtime-site-root',
+            siteVersionId: 'runtime-version-root',
+            versionNo: 1,
+            artifactId: 'artifact-root',
+            preparedSite: { documents: [] },
+            layoutModel: null,
+            renderOutput: null,
+            previewDocument: null,
+            pipelineResult: { stages: [] },
+            reporting: {},
+          } as any
+        },
+        writeOwnershipLink: async () => undefined,
+      },
+    })
+
+    const resolved = logs.infos.find((entry) => String(entry.message).includes('TEMPLATE_SITE_BOOTSTRAP_IMPORT_INPUT_RESOLVED'))
+    assert.ok(resolved)
+    assert.equal(resolved?.meta.entryHtmlPath, 'index.html')
+    assert.equal(resolved?.meta.assetsDirPath, 'assets')
   } finally {
     logs.restore()
   }
@@ -163,20 +216,27 @@ test('template bootstrap succeeds from zip reconstruction fallback and emits zip
   const entryAbs = path.resolve(extractionRoot, entryRel)
   fs.mkdirSync(path.dirname(entryAbs), { recursive: true })
   fs.writeFileSync(entryAbs, '<!doctype html><html><body><h1>Zip source</h1></body></html>', 'utf8')
+  const extractedAssetsRel = 'nested/site/assets'
+  fs.mkdirSync(path.resolve(extractionRoot, extractedAssetsRel), { recursive: true })
+  fs.writeFileSync(path.resolve(extractionRoot, extractedAssetsRel, 'app.css'), 'body{color:#111;}', 'utf8')
 
   const durableRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'template-bootstrap-zip-durable-'))
   const durableEntry = path.resolve(durableRoot, entryRel)
   fs.mkdirSync(path.dirname(durableEntry), { recursive: true })
   fs.writeFileSync(durableEntry, '<!doctype html><html><body><h1>Zip source</h1></body></html>', 'utf8')
+  fs.mkdirSync(path.resolve(durableRoot, extractedAssetsRel), { recursive: true })
+  fs.writeFileSync(path.resolve(durableRoot, extractedAssetsRel, 'app.css'), 'body{color:#111;}', 'utf8')
 
   const logs = captureLogs()
+  let capturedSnapshotInput: { entryHtmlPathAbs: string; assetsDirAbs: string } | null = null
   try {
     await bootstrapRuntimeFromTemplateSite({
       site: SITE,
       template: createTemplate({
         sourceZipStorageBucket: 'bucket',
         sourceZipStorageKey: 'key',
-        entryHtmlPath: entryRel,
+        entryHtmlPath: 'index.html',
+        importManifestSummary: { assetsDirPath: 'assets' },
       }),
       deps: {
         loadTemplateSourceZip: async () => new Uint8Array([1, 2, 3]),
@@ -186,15 +246,20 @@ test('template bootstrap succeeds from zip reconstruction fallback and emits zip
             validation: {
               extractionRootDirAbs: extractionRoot,
               entryHtmlPath: entryRel,
-              extractedFilePaths: [entryRel],
+              extractedFilePaths: [entryRel, `${extractedAssetsRel}/app.css`],
+              assetsDirPath: extractedAssetsRel,
             },
           }) as any,
         persistTemplateDurableSourceSnapshot: () => ({
           durableSnapshotRootDirAbs: durableRoot,
           durableEntryHtmlPathAbs: durableEntry,
         }),
-        runScopedImportPipeline: async () =>
-          ({
+        runScopedImportPipeline: async (input) => {
+          capturedSnapshotInput = {
+            entryHtmlPathAbs: input.snapshot.entryHtmlPathAbs,
+            assetsDirAbs: input.snapshot.assetsDirAbs,
+          }
+          return {
             mode: 'pipeline',
             siteId: 'runtime-site-zip',
             siteVersionId: 'runtime-version-zip',
@@ -206,7 +271,8 @@ test('template bootstrap succeeds from zip reconstruction fallback and emits zip
             previewDocument: null,
             pipelineResult: { stages: [] },
             reporting: {},
-          }) as any,
+          } as any
+        },
         writeOwnershipLink: async () => undefined,
       },
     })
@@ -214,6 +280,10 @@ test('template bootstrap succeeds from zip reconstruction fallback and emits zip
     const started = logs.infos.find((entry) => String(entry.message).includes('TEMPLATE_SITE_BOOTSTRAP_PIPELINE_STARTED'))
     assert.ok(started)
     assert.equal(started?.meta.sourceResolutionMode, 'zip_reconstruction')
+    assert.equal(started?.meta.snapshotEntryHtmlPath, entryRel)
+    assert.equal(started?.meta.snapshotAssetsDirPath, extractedAssetsRel)
+    assert.equal(capturedSnapshotInput?.entryHtmlPathAbs, path.resolve(durableRoot, entryRel))
+    assert.equal(capturedSnapshotInput?.assetsDirAbs, path.resolve(durableRoot, extractedAssetsRel))
   } finally {
     logs.restore()
   }
@@ -253,6 +323,24 @@ test('template bootstrap surfaces failing stage diagnostics when scoped pipeline
                 },
               ],
               pipelineDiagnosticCodes: ['ENTRY_HTML_MISSING', 'PIPELINE_BLOCKED_BY_IMPORT'],
+              pipelineDiagnostics: [
+                {
+                  severity: 'fatal',
+                  code: 'ENTRY_HTML_MISSING',
+                  message: 'Entry HTML file is missing or unreadable',
+                  source: 'import',
+                  stageId: 'import_intake',
+                  details: { entryHtmlPath: 'index.html' },
+                },
+                {
+                  severity: 'error',
+                  code: 'PIPELINE_BLOCKED_BY_IMPORT',
+                  message: 'Pipeline blocked by import intake failure',
+                  source: 'pipeline',
+                  stageId: 'import_intake',
+                  details: null,
+                },
+              ],
               stageSummaries: ['import_intake: failed'],
               importInput: {
                 rootDir: '/tmp/bootstrap-root',
@@ -284,6 +372,49 @@ test('template bootstrap surfaces failing stage diagnostics when scoped pipeline
     assert.ok(failed)
     assert.equal(failed?.meta.failingStageId, 'import_intake')
     assert.equal(failed?.meta.pipelineImportInput?.entryHtmlPath, 'index.html')
+
+    const intakeFailed = logs.errors.find((entry) => String(entry.message).includes('TEMPLATE_SITE_BOOTSTRAP_IMPORT_INTAKE_FAILED'))
+    assert.ok(intakeFailed)
+    assert.ok(intakeFailed?.meta.stageDiagnosticCodes.includes('ENTRY_HTML_MISSING'))
+    assert.ok(intakeFailed?.meta.pipelineDiagnosticCodes.includes('PIPELINE_BLOCKED_BY_IMPORT'))
+    assert.ok(intakeFailed?.meta.stageDiagnosticMessages.includes('Entry HTML file is missing or unreadable'))
+  } finally {
+    logs.restore()
+  }
+})
+
+test('template bootstrap fails pre-pipeline validation when resolved assets dir is missing', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'template-bootstrap-preflight-missing-assets-'))
+  const entryRel = 'nested/site/index.html'
+  const entryAbs = path.resolve(root, entryRel)
+  fs.mkdirSync(path.dirname(entryAbs), { recursive: true })
+  fs.writeFileSync(entryAbs, '<!doctype html><html><body><h1>No assets</h1></body></html>', 'utf8')
+
+  const logs = captureLogs()
+  try {
+    await assert.rejects(
+      bootstrapRuntimeFromTemplateSite({
+        site: SITE,
+        template: createTemplate({
+          durableSnapshotRootDirAbs: root,
+          entryHtmlPath: entryRel,
+          importManifestSummary: { assetsDirPath: 'missing-assets' },
+        }),
+      }),
+      (error) => {
+        assert.ok(error instanceof TemplateSiteRuntimeBootstrapError)
+        assert.equal(error.code, 'TEMPLATE_SITE_BOOTSTRAP_IMPORT_SOURCE_MISSING')
+        assert.match(error.message, /ASSETS_DIR_MISSING/)
+        return true
+      },
+    )
+
+    const preflightMissing = logs.errors.find((entry) => String(entry.message).includes('TEMPLATE_SITE_BOOTSTRAP_IMPORT_INPUT_MISSING'))
+    assert.ok(preflightMissing)
+    assert.equal(preflightMissing?.meta.issues?.[0]?.code, 'ASSETS_DIR_MISSING')
+
+    const pipelineStarted = logs.infos.find((entry) => String(entry.message).includes('TEMPLATE_SITE_BOOTSTRAP_PIPELINE_STARTED'))
+    assert.equal(Boolean(pipelineStarted), false)
   } finally {
     logs.restore()
   }

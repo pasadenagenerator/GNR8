@@ -1224,6 +1224,14 @@ export class ScopedImportPipelineFailureError extends Error {
     details: Record<string, unknown> | null
   }>
   readonly pipelineDiagnosticCodes: string[]
+  readonly pipelineDiagnostics: Array<{
+    severity: string
+    code: string
+    message: string
+    source: string
+    stageId: string | null
+    details: Record<string, unknown> | null
+  }>
   readonly stageSummaries: string[]
   readonly importInput: {
     rootDir: string
@@ -1246,6 +1254,14 @@ export class ScopedImportPipelineFailureError extends Error {
       details: Record<string, unknown> | null
     }>
     pipelineDiagnosticCodes: string[]
+    pipelineDiagnostics: Array<{
+      severity: string
+      code: string
+      message: string
+      source: string
+      stageId: string | null
+      details: Record<string, unknown> | null
+    }>
     stageSummaries: string[]
     importInput: {
       rootDir: string
@@ -1264,6 +1280,7 @@ export class ScopedImportPipelineFailureError extends Error {
     this.firstFailedStageSummary = input.firstFailedStageSummary
     this.firstFailedStageDiagnostics = input.firstFailedStageDiagnostics
     this.pipelineDiagnosticCodes = input.pipelineDiagnosticCodes
+    this.pipelineDiagnostics = input.pipelineDiagnostics
     this.stageSummaries = input.stageSummaries
     this.importInput = input.importInput
   }
@@ -1581,6 +1598,14 @@ export async function runScopedImportPipeline(input: {
         details: normalizeDiagnosticDetails(issue.details),
       })),
       pipelineDiagnosticCodes: uniqueSorted(pipelineResult.diagnostics.map((issue) => normalizeText(issue.code)).filter(Boolean)),
+      pipelineDiagnostics: pipelineResult.diagnostics.map((issue) => ({
+        severity: normalizeText(issue.severity),
+        code: normalizeText(issue.code),
+        message: normalizeText(issue.message),
+        source: normalizeText(issue.source),
+        stageId: normalizeText(issue.stageId) || null,
+        details: normalizeDiagnosticDetails(issue.details),
+      })),
       stageSummaries: pipelineResult.stages.map((stage) => stage.summary),
       importInput: {
         rootDir: importInput.rootDir,

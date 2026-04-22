@@ -112,6 +112,17 @@ function normalizeDomainAsUrl(domain: string): string {
   return `https://${normalized || 'invalid.local'}`
 }
 
+function normalizeDiagnosticDetails(details: unknown): Record<string, unknown> | null {
+  if (details == null) return null
+  if (typeof details === 'object' && !Array.isArray(details)) {
+    return details as Record<string, unknown>
+  }
+  if (Array.isArray(details)) {
+    return { values: details }
+  }
+  return { value: details }
+}
+
 function resolveTemplateSnapshotRoot(snapshotId: string): string {
   return path.resolve(os.tmpdir(), 'gnr8', 'template-intake', snapshotId)
 }
@@ -121,8 +132,8 @@ type TemplateBootstrapSourceMode = 'durable' | 'legacy' | 'zip_reconstruction'
 type TemplateBootstrapSourceCandidate = {
   sourceMode: 'durable' | 'legacy_temp'
   snapshotRootDirAbs: string
-  entryHtmlPathAbs: string
-  assetsDirAbs: string
+  configuredEntryHtmlPathRel: string
+  configuredAssetsDirRel: string
 }
 
 function toStableHash(value: string): string {
@@ -289,8 +300,8 @@ function resolveTemplateBootstrapSourceCandidates(input: {
     candidates.push({
       sourceMode: 'durable',
       snapshotRootDirAbs,
-      entryHtmlPathAbs: path.resolve(snapshotRootDirAbs, entryHtmlPath),
-      assetsDirAbs: path.resolve(snapshotRootDirAbs, assetsDirRel),
+      configuredEntryHtmlPathRel: entryHtmlPath,
+      configuredAssetsDirRel: assetsDirRel,
     })
   }
 
@@ -300,8 +311,8 @@ function resolveTemplateBootstrapSourceCandidates(input: {
     candidates.push({
       sourceMode: 'legacy_temp',
       snapshotRootDirAbs,
-      entryHtmlPathAbs: path.resolve(snapshotRootDirAbs, entryHtmlPath),
-      assetsDirAbs: path.resolve(snapshotRootDirAbs, assetsDirRel),
+      configuredEntryHtmlPathRel: entryHtmlPath,
+      configuredAssetsDirRel: assetsDirRel,
     })
   }
 
@@ -310,6 +321,217 @@ function resolveTemplateBootstrapSourceCandidates(input: {
 
 function mapCandidateMode(candidate: TemplateBootstrapSourceCandidate['sourceMode']): TemplateBootstrapSourceMode {
   return candidate === 'durable' ? 'durable' : 'legacy'
+}
+
+function normalizeRelPath(value: unknown): string {
+  return normalizeText(value).replaceAll('\\', '/').replace(/^\/+/, '').replace(/^\.\/+/, '')
+}
+
+function isPathWithinRoot(input: { rootDirAbs: string; targetPathAbs: string }): boolean {
+  const rootDirAbs = path.resolve(input.rootDirAbs)
+  const targetPathAbs = path.resolve(input.targetPathAbs)
+  const rel = path.relative(rootDirAbs, targetPathAbs)
+  return rel !== '' && !rel.startsWith('..') && !path.isAbsolute(rel)
+}
+
+function resolveFirstExistingPath(input: { rootDirAbs: string; relativeCandidates: string[]; expectDirectory: boolean }): string | null {
+  for (const relCandidate of input.relativeCandidates) {
+    const normalizedRel = normalizeRelPath(relCandidate)
+    if (!normalizedRel) continue
+    const abs = path.resolve(input.rootDirAbs, normalizedRel)
+    if (!isPathWithinRoot({ rootDirAbs: input.rootDirAbs, targetPathAbs: abs })) continue
+    try {
+      const stat = fs.statSync(abs)
+      if (input.expectDirectory ? stat.isDirectory() : stat.isFile()) return abs
+    } catch {
+      continue
+    }
+  }
+  return null
+}
+
+function scanHtmlFilesInRoot(input: { rootDirAbs: string; maxFiles?: number }): string[] {
+  const maxFiles = Math.max(1, Math.floor(input.maxFiles ?? 200))
+  const out: string[] = []
+  const stack: string[] = [path.resolve(input.rootDirAbs)]
+  while (stack.length > 0 && out.length < maxFiles) {
+    const current = stack.pop()
+    if (!current) continue
+    let entries: fs.Dirent[] = []
+    try {
+      entries = fs.readdirSync(current, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))
+    } catch {
+      continue
+    }
+    for (const entry of entries) {
+      const abs = path.resolve(current, entry.name)
+      if (!isPathWithinRoot({ rootDirAbs: input.rootDirAbs, targetPathAbs: abs })) continue
+      if (entry.isDirectory()) {
+        stack.push(abs)
+        continue
+      }
+      if (!entry.isFile()) continue
+      if (!/\.html?$/i.test(entry.name)) continue
+      const rel = path.relative(input.rootDirAbs, abs).replaceAll('\\', '/')
+      if (!rel || rel.startsWith('..') || path.isAbsolute(rel)) continue
+      out.push(rel)
+      if (out.length >= maxFiles) break
+    }
+  }
+  return out.sort((a, b) => a.localeCompare(b))
+}
+
+function resolveEntryPathFromCandidate(input: {
+  snapshotRootDirAbs: string
+  configuredEntryHtmlPathRel: string
+}): string | null {
+  const configuredRel = normalizeRelPath(input.configuredEntryHtmlPathRel)
+  const discoveredHtml = scanHtmlFilesInRoot({ rootDirAbs: input.snapshotRootDirAbs, maxFiles: 64 })
+  const relativeCandidates = [
+    configuredRel,
+    'index.html',
+    ...discoveredHtml.filter((candidate) => candidate.endsWith('/index.html')),
+    ...discoveredHtml,
+  ]
+  return resolveFirstExistingPath({
+    rootDirAbs: input.snapshotRootDirAbs,
+    relativeCandidates,
+    expectDirectory: false,
+  })
+}
+
+function summarizeDirectoryEntries(input: { dirAbs: string; maxEntries?: number }): {
+  dirAbs: string
+  exists: boolean
+  readable: boolean
+  entries: string[]
+  truncated: boolean
+  error: string | null
+} {
+  const maxEntries = Math.max(1, Math.floor(input.maxEntries ?? 30))
+  const dirAbs = path.resolve(input.dirAbs)
+  let exists = false
+  let readable = false
+  let entries: string[] = []
+  let truncated = false
+  let error: string | null = null
+  try {
+    const stat = fs.statSync(dirAbs)
+    exists = stat.isDirectory()
+    if (exists) {
+      fs.accessSync(dirAbs, fs.constants.R_OK)
+      readable = true
+      const allEntries = fs.readdirSync(dirAbs, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))
+      truncated = allEntries.length > maxEntries
+      entries = allEntries.slice(0, maxEntries).map((entry) => `${entry.name}${entry.isDirectory() ? '/' : ''}`)
+    }
+  } catch (err) {
+    error = String((err as Error)?.message ?? err)
+  }
+  return {
+    dirAbs,
+    exists,
+    readable,
+    entries,
+    truncated,
+    error,
+  }
+}
+
+function validateBootstrapImportInput(input: {
+  snapshotRootDirAbs: string
+  entryHtmlPathAbs: string
+  assetsDirAbs: string
+}): {
+  ok: boolean
+  issues: Array<{ code: string; message: string; details: Record<string, unknown> }>
+  exists: {
+    snapshotRootExists: boolean
+    entryHtmlExists: boolean
+    assetsDirExists: boolean
+  }
+} {
+  const snapshotRootDirAbs = path.resolve(input.snapshotRootDirAbs)
+  const entryHtmlPathAbs = path.resolve(input.entryHtmlPathAbs)
+  const assetsDirAbs = path.resolve(input.assetsDirAbs)
+  const issues: Array<{ code: string; message: string; details: Record<string, unknown> }> = []
+  const exists = {
+    snapshotRootExists: false,
+    entryHtmlExists: false,
+    assetsDirExists: false,
+  }
+  try {
+    const rootStat = fs.statSync(snapshotRootDirAbs)
+    exists.snapshotRootExists = rootStat.isDirectory()
+    if (!exists.snapshotRootExists) {
+      issues.push({
+        code: 'SNAPSHOT_ROOT_NOT_DIRECTORY',
+        message: 'snapshotRootDirAbs is not a directory.',
+        details: { snapshotRootDirAbs },
+      })
+    }
+  } catch (err) {
+    issues.push({
+      code: 'SNAPSHOT_ROOT_MISSING',
+      message: 'snapshotRootDirAbs is missing or unreadable.',
+      details: { snapshotRootDirAbs, error: String((err as Error)?.message ?? err) },
+    })
+  }
+  if (!isPathWithinRoot({ rootDirAbs: snapshotRootDirAbs, targetPathAbs: entryHtmlPathAbs })) {
+    issues.push({
+      code: 'ENTRY_HTML_OUTSIDE_SNAPSHOT_ROOT',
+      message: 'entryHtmlPathAbs resolves outside snapshotRootDirAbs.',
+      details: { snapshotRootDirAbs, entryHtmlPathAbs },
+    })
+  }
+  if (!isPathWithinRoot({ rootDirAbs: snapshotRootDirAbs, targetPathAbs: assetsDirAbs })) {
+    issues.push({
+      code: 'ASSETS_DIR_OUTSIDE_SNAPSHOT_ROOT',
+      message: 'assetsDirAbs resolves outside snapshotRootDirAbs.',
+      details: { snapshotRootDirAbs, assetsDirAbs },
+    })
+  }
+  try {
+    const entryStat = fs.statSync(entryHtmlPathAbs)
+    exists.entryHtmlExists = entryStat.isFile()
+    if (!exists.entryHtmlExists) {
+      issues.push({
+        code: 'ENTRY_HTML_NOT_FILE',
+        message: 'entryHtmlPathAbs exists but is not a file.',
+        details: { entryHtmlPathAbs },
+      })
+    } else {
+      fs.accessSync(entryHtmlPathAbs, fs.constants.R_OK)
+    }
+  } catch (err) {
+    issues.push({
+      code: 'ENTRY_HTML_MISSING',
+      message: 'entryHtmlPathAbs is missing or unreadable.',
+      details: { entryHtmlPathAbs, error: String((err as Error)?.message ?? err) },
+    })
+  }
+  try {
+    const assetsStat = fs.statSync(assetsDirAbs)
+    exists.assetsDirExists = assetsStat.isDirectory()
+    if (!exists.assetsDirExists) {
+      issues.push({
+        code: 'ASSETS_DIR_NOT_DIRECTORY',
+        message: 'assetsDirAbs exists but is not a directory.',
+        details: { assetsDirAbs },
+      })
+    }
+  } catch (err) {
+    issues.push({
+      code: 'ASSETS_DIR_MISSING',
+      message: 'assetsDirAbs is missing or unreadable.',
+      details: { assetsDirAbs, error: String((err as Error)?.message ?? err) },
+    })
+  }
+  return {
+    ok: issues.length === 0,
+    issues,
+    exists,
+  }
 }
 
 async function resolveTemplateBootstrapSource(input: {
@@ -333,18 +555,34 @@ async function resolveTemplateBootstrapSource(input: {
   const sourceZipStorageKey = normalizeText(input.template.sourceZipStorageKey)
 
   for (const candidate of sourceCandidates) {
-    if (!fs.existsSync(candidate.snapshotRootDirAbs) || !fs.existsSync(candidate.entryHtmlPathAbs)) {
+    if (!fs.existsSync(candidate.snapshotRootDirAbs)) {
       continue
     }
+    const entryHtmlPathAbs = resolveEntryPathFromCandidate({
+      snapshotRootDirAbs: candidate.snapshotRootDirAbs,
+      configuredEntryHtmlPathRel: candidate.configuredEntryHtmlPathRel,
+    })
+    if (!entryHtmlPathAbs) continue
+    const entryHtmlRel = path.relative(candidate.snapshotRootDirAbs, entryHtmlPathAbs).replaceAll('\\', '/')
+    const assetsDirAbs =
+      resolveFirstExistingPath({
+        rootDirAbs: candidate.snapshotRootDirAbs,
+        relativeCandidates: [
+          candidate.configuredAssetsDirRel,
+          `${path.posix.dirname(entryHtmlRel)}/assets`,
+          'assets',
+        ],
+        expectDirectory: true,
+      }) ?? path.resolve(candidate.snapshotRootDirAbs, normalizeRelPath(candidate.configuredAssetsDirRel || 'assets'))
     try {
-      const html = fs.readFileSync(candidate.entryHtmlPathAbs, 'utf8')
+      const html = fs.readFileSync(entryHtmlPathAbs, 'utf8')
       if (!normalizeText(html)) continue
       const sourceMode = mapCandidateMode(candidate.sourceMode)
       return {
         sourceMode,
         snapshotRootDirAbs: candidate.snapshotRootDirAbs,
-        entryHtmlPathAbs: candidate.entryHtmlPathAbs,
-        assetsDirAbs: candidate.assetsDirAbs,
+        entryHtmlPathAbs,
+        assetsDirAbs,
         html,
       }
     } catch {
@@ -364,32 +602,52 @@ async function resolveTemplateBootstrapSource(input: {
         maxBytes: TEMPLATE_ZIP_MAX_BYTES,
       })
       if (zipValidation.ok && zipValidation.validation) {
-        const extractedEntryPath = path.resolve(zipValidation.validation.extractionRootDirAbs, entryHtmlPath)
+        const requestedEntryRel = normalizeRelPath(entryHtmlPath)
+        const extractedEntryPath = path.resolve(zipValidation.validation.extractionRootDirAbs, requestedEntryRel)
         const chosenEntryAbs = fs.existsSync(extractedEntryPath)
           ? extractedEntryPath
           : path.resolve(
               zipValidation.validation.extractionRootDirAbs,
-              normalizeText(zipValidation.validation.entryHtmlPath).replaceAll('\\', '/').replace(/^\/+/, ''),
+              normalizeRelPath(zipValidation.validation.entryHtmlPath),
             )
         if (fs.existsSync(chosenEntryAbs)) {
           const html = fs.readFileSync(chosenEntryAbs, 'utf8')
           if (normalizeText(html)) {
+            const resolvedEntryRel =
+              path.relative(zipValidation.validation.extractionRootDirAbs, chosenEntryAbs).replaceAll('\\', '/') ||
+              normalizeRelPath(zipValidation.validation.entryHtmlPath) ||
+              'index.html'
+            const resolvedAssetsRelCandidates = [
+              normalizeRelPath(assetsDirRel),
+              normalizeRelPath(zipValidation.validation.assetsDirPath),
+              `${path.posix.dirname(resolvedEntryRel)}/assets`,
+              'assets',
+            ]
+            const resolvedAssetsDirAbs =
+              resolveFirstExistingPath({
+                rootDirAbs: zipValidation.validation.extractionRootDirAbs,
+                relativeCandidates: resolvedAssetsRelCandidates,
+                expectDirectory: true,
+              }) ?? path.resolve(zipValidation.validation.extractionRootDirAbs, normalizeRelPath(assetsDirRel || 'assets'))
             const persistedSource = input.deps.persistTemplateDurableSourceSnapshot({
               templateId,
               extractionRootDirAbs: zipValidation.validation.extractionRootDirAbs,
-              entryHtmlPath: entryHtmlPath || normalizeText(zipValidation.validation.entryHtmlPath) || 'index.html',
+              entryHtmlPath: resolvedEntryRel,
               entryHtmlContent: html,
               sourceFilePaths: zipValidation.validation.extractedFilePaths ?? [],
             })
             const durableEntryHtmlPathAbs = path.resolve(
               persistedSource.durableSnapshotRootDirAbs,
-              entryHtmlPath || normalizeText(zipValidation.validation.entryHtmlPath) || 'index.html',
+              resolvedEntryRel,
             )
             return {
               sourceMode: 'zip_reconstruction',
               snapshotRootDirAbs: persistedSource.durableSnapshotRootDirAbs,
               entryHtmlPathAbs: durableEntryHtmlPathAbs,
-              assetsDirAbs: path.resolve(persistedSource.durableSnapshotRootDirAbs, assetsDirRel),
+              assetsDirAbs: path.resolve(
+                persistedSource.durableSnapshotRootDirAbs,
+                path.relative(zipValidation.validation.extractionRootDirAbs, resolvedAssetsDirAbs),
+              ),
               html,
             }
           }
@@ -434,6 +692,14 @@ function summarizeBootstrapFailure(input: { error: unknown }): {
   stageDiagnostics: unknown[] | null
   pipelineSummary: string | null
   pipelineDiagnosticCodes: string[] | null
+  pipelineDiagnostics: Array<{
+    severity: string
+    code: string
+    message: string
+    source: string
+    stageId: string | null
+    details: Record<string, unknown> | null
+  }> | null
   stageSummaries: string[] | null
   pipelineImportInput: Record<string, unknown> | null
 } {
@@ -443,6 +709,7 @@ function summarizeBootstrapFailure(input: { error: unknown }): {
       stageDiagnostics: input.error.firstFailedStageDiagnostics,
       pipelineSummary: input.error.pipelineSummary,
       pipelineDiagnosticCodes: input.error.pipelineDiagnosticCodes,
+      pipelineDiagnostics: input.error.pipelineDiagnostics,
       stageSummaries: input.error.stageSummaries,
       pipelineImportInput: input.error.importInput,
     }
@@ -452,6 +719,7 @@ function summarizeBootstrapFailure(input: { error: unknown }): {
     stageDiagnostics: null,
     pipelineSummary: null,
     pipelineDiagnosticCodes: null,
+    pipelineDiagnostics: null,
     stageSummaries: null,
     pipelineImportInput: null,
   }
@@ -495,12 +763,77 @@ export async function bootstrapRuntimeFromTemplateSite(input: {
     }
     sourceResolutionMode = resolvedSource.sourceMode
 
+    const snapshotRootDirAbs = path.resolve(resolvedSource.snapshotRootDirAbs)
+    const entryHtmlPathAbs = path.resolve(resolvedSource.entryHtmlPathAbs)
+    const assetsDirAbs = path.resolve(resolvedSource.assetsDirAbs)
+    const entryHtmlPath = path.relative(snapshotRootDirAbs, entryHtmlPathAbs).replaceAll('\\', '/')
+    const assetsDirPath = path.relative(snapshotRootDirAbs, assetsDirAbs).replaceAll('\\', '/')
+    const preflight = validateBootstrapImportInput({
+      snapshotRootDirAbs,
+      entryHtmlPathAbs,
+      assetsDirAbs,
+    })
+    const snapshotRootSummary = summarizeDirectoryEntries({ dirAbs: snapshotRootDirAbs, maxEntries: 40 })
+    const entryParentSummary = summarizeDirectoryEntries({ dirAbs: path.dirname(entryHtmlPathAbs), maxEntries: 40 })
+    const knownGoodReference = {
+      sourceKind: 'single-entry-html',
+      rootDir: '<snapshot-root-abs>',
+      entryHtmlPath: 'index.html',
+      assetsDirPath: 'assets',
+    }
+    const knownGoodComparison = {
+      entryIsRootIndex: entryHtmlPath === 'index.html',
+      assetsIsRootAssets: assetsDirPath === 'assets',
+      entryParentDirRel: path.relative(snapshotRootDirAbs, path.dirname(entryHtmlPathAbs)).replaceAll('\\', '/'),
+    }
+    console.info('[site-bootstrap-worker] TEMPLATE_SITE_BOOTSTRAP_IMPORT_INPUT_RESOLVED', {
+      siteId,
+      templateId,
+      sourceResolutionMode,
+      snapshotRootDirAbs,
+      entryHtmlPathAbs,
+      entryHtmlPath,
+      assetsDirAbs,
+      assetsDirPath,
+      snapshotRootExists: preflight.exists.snapshotRootExists,
+      entryHtmlExists: preflight.exists.entryHtmlExists,
+      assetsDirExists: preflight.exists.assetsDirExists,
+      knownGoodReference,
+      knownGoodComparison,
+    })
+    console.info('[site-bootstrap-worker] TEMPLATE_SITE_BOOTSTRAP_IMPORT_INPUT_DIRECTORY_SUMMARY', {
+      siteId,
+      templateId,
+      sourceResolutionMode,
+      snapshotRoot: snapshotRootSummary,
+      entryParentDir: entryParentSummary,
+    })
+    if (!preflight.ok) {
+      console.error('[site-bootstrap-worker] TEMPLATE_SITE_BOOTSTRAP_IMPORT_INPUT_MISSING', {
+        siteId,
+        templateId,
+        sourceResolutionMode,
+        snapshotRootDirAbs,
+        entryHtmlPathAbs,
+        entryHtmlPath,
+        assetsDirAbs,
+        assetsDirPath,
+        issues: preflight.issues,
+      })
+      throw new TemplateSiteRuntimeBootstrapError({
+        code: 'TEMPLATE_SITE_BOOTSTRAP_IMPORT_SOURCE_MISSING',
+        message: `Template bootstrap import input failed preflight: ${preflight.issues.map((issue) => issue.code).join(', ')}`,
+        siteId,
+        templateId,
+      })
+    }
+
     const snapshot = createTemplateSnapshot({
       site: input.site,
       template: input.template,
-      snapshotRootDirAbs: resolvedSource.snapshotRootDirAbs,
-      entryHtmlPathAbs: resolvedSource.entryHtmlPathAbs,
-      assetsDirAbs: resolvedSource.assetsDirAbs,
+      snapshotRootDirAbs,
+      entryHtmlPathAbs,
+      assetsDirAbs,
       html: resolvedSource.html,
       now: deps.now(),
     })
@@ -516,6 +849,8 @@ export async function bootstrapRuntimeFromTemplateSite(input: {
       assetsDirAbs: resolvedSource.assetsDirAbs,
       manifestEntryHtmlPath: normalizeText(snapshot.fixtureSpec.entryHtmlPath),
       manifestAssetsDirPath: normalizeText(snapshot.fixtureSpec.assetsDirPath),
+      snapshotEntryHtmlPath: entryHtmlPath,
+      snapshotAssetsDirPath: assetsDirPath,
     })
 
     let scoped: ScopedImportPipelineOutcome
@@ -538,9 +873,31 @@ export async function bootstrapRuntimeFromTemplateSite(input: {
         failingStageDiagnostics: failure.stageDiagnostics,
         pipelineSummary: failure.pipelineSummary,
         pipelineDiagnosticCodes: failure.pipelineDiagnosticCodes,
+        pipelineDiagnostics: failure.pipelineDiagnostics,
         stageSummaries: failure.stageSummaries,
         pipelineImportInput: failure.pipelineImportInput,
       })
+      if (failure.stageId === 'import_intake') {
+        console.error('[site-bootstrap-worker] TEMPLATE_SITE_BOOTSTRAP_IMPORT_INTAKE_FAILED', {
+          siteId,
+          templateId,
+          runtimeSiteId,
+          runtimeSiteVersionId,
+          sourceResolutionMode,
+          failingStageId: failure.stageId,
+          stageDiagnosticCodes: (failure.stageDiagnostics ?? []).map((diag: any) => normalizeText(diag?.code)).filter(Boolean),
+          stageDiagnosticMessages: (failure.stageDiagnostics ?? []).map((diag: any) => normalizeText(diag?.message)).filter(Boolean),
+          stageDiagnostics: failure.stageDiagnostics,
+          pipelineDiagnosticCodes: failure.pipelineDiagnosticCodes,
+          pipelineDiagnosticMessages: (failure.pipelineDiagnostics ?? []).map((diag) => normalizeText(diag.message)).filter(Boolean),
+          pipelineDiagnostics: failure.pipelineDiagnostics,
+          pipelineSummary: failure.pipelineSummary,
+          pipelineImportInput: failure.pipelineImportInput,
+          invalidContractFields: (failure.stageDiagnostics ?? [])
+            .map((diag: any) => normalizeDiagnosticDetails(diag?.details))
+            .filter((details: Record<string, unknown> | null): details is Record<string, unknown> => details != null),
+        })
+      }
       throw pipelineError
     }
 
@@ -580,6 +937,7 @@ export async function bootstrapRuntimeFromTemplateSite(input: {
       failingStageDiagnostics: failure.stageDiagnostics,
       pipelineSummary: failure.pipelineSummary,
       pipelineDiagnosticCodes: failure.pipelineDiagnosticCodes,
+      pipelineDiagnostics: failure.pipelineDiagnostics,
       stageSummaries: failure.stageSummaries,
       pipelineImportInput: failure.pipelineImportInput,
       message: error instanceof Error ? error.message : String(error),
