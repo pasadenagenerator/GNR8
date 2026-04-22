@@ -1,0 +1,26 @@
+import { SITE_TEMPLATE_BOOTSTRAP_REQUESTED_EVENT } from './index'
+
+const CANONICAL_SITE_TEMPLATE_BOOTSTRAP_REQUESTED_EVENT = 'site/bootstrap.requested'
+
+type ValidationLogger = (message: string, context: Record<string, unknown>) => void
+
+export function validateSiteTemplateBootstrapEventName(input: {
+  source: string
+  eventName?: string
+  expectedEventName?: string
+  logger?: ValidationLogger
+}): boolean {
+  const eventName = String(input.eventName ?? SITE_TEMPLATE_BOOTSTRAP_REQUESTED_EVENT).trim()
+  const expectedEventName = String(input.expectedEventName ?? CANONICAL_SITE_TEMPLATE_BOOTSTRAP_REQUESTED_EVENT).trim()
+  if (eventName === expectedEventName) return true
+
+  const logger = input.logger ?? ((message, context) => console.error(message, context))
+  logger('SITE_TEMPLATE_BOOTSTRAP_EVENT_NAME_MISMATCH', {
+    source: input.source,
+    expectedEventName,
+    eventName,
+  })
+  return false
+}
+
+export { CANONICAL_SITE_TEMPLATE_BOOTSTRAP_REQUESTED_EVENT }

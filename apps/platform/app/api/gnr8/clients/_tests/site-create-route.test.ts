@@ -62,7 +62,7 @@ function createDeps(overrides?: {
     createdAt: string
     updatedAt: string
   }>
-  bootstrapTemplateSiteRuntime?: (input: {
+  triggerTemplateSiteBootstrap?: (input: {
     site: {
       siteId: string
       clientId: string
@@ -75,18 +75,7 @@ function createDeps(overrides?: {
       updatedAt: string
     }
     template: TemplateRecord
-  }) => Promise<{
-    siteVersionId: string
-    siteVersionNo: number
-    runtimeSiteId: string
-    artifactId: string | null
-    previewSeeded: boolean
-    sectionCount: number
-  }>
-  parseSiteBootstrapError?: (
-    error: unknown,
-  ) => { status: number; code: string; message: string; siteId: string; templateId: string } | null
-  rollbackSiteOnBootstrapFailure?: (input: { siteId: string; clientId: string; agencyId: string }) => Promise<void>
+  }) => Promise<boolean>
 }) {
   return {
     requireScope: async () => ({
@@ -109,20 +98,9 @@ function createDeps(overrides?: {
         createdAt: '2026-04-16T12:00:00.000Z',
         updatedAt: '2026-04-16T12:00:00.000Z',
       })),
-    bootstrapTemplateSiteRuntime:
-      overrides?.bootstrapTemplateSiteRuntime ??
-      (async () => ({
-        siteVersionId: '00000000-0000-4000-8000-000000000991',
-        siteVersionNo: 1,
-        runtimeSiteId: 'runtime-site-001',
-        artifactId: '00000000-0000-4000-8000-000000000992',
-        previewSeeded: true,
-        sectionCount: 5,
-      })),
+    triggerTemplateSiteBootstrap: overrides?.triggerTemplateSiteBootstrap ?? (async () => true),
     parseTemplateStorageError: () => null,
     parseSiteCreateError: () => null,
-    parseSiteBootstrapError: overrides?.parseSiteBootstrapError ?? (() => null),
-    rollbackSiteOnBootstrapFailure: overrides?.rollbackSiteOnBootstrapFailure ?? (async () => undefined),
     parseScopeError: (error: unknown) => ({ status: 500, message: error instanceof Error ? error.message : 'failed' }),
   }
 }
@@ -334,24 +312,17 @@ test('POST /sites passes template linkage into persistence layer', async () => {
   assert.equal(body.site?.templateId, '00000000-0000-4000-8000-000000000901')
 })
 
-test('POST /sites bootstraps runtime site version before returning success', async () => {
+test('POST /sites triggers worker-owned template bootstrap before returning success', async () => {
   let bootstrapCalled = false
   let bootstrappedSiteId: string | null = null
   let bootstrappedTemplateId: string | null = null
   const handlers = createSiteCreateRouteHandlers(
     createDeps({
-      bootstrapTemplateSiteRuntime: async ({ site, template }) => {
+      triggerTemplateSiteBootstrap: async ({ site, template }) => {
         bootstrapCalled = true
         bootstrappedSiteId = site.siteId
         bootstrappedTemplateId = template.id
-        return {
-          siteVersionId: '00000000-0000-4000-8000-000000000981',
-          siteVersionNo: 1,
-          runtimeSiteId: 'runtime-site-bootstrapped',
-          artifactId: '00000000-0000-4000-8000-000000000982',
-          previewSeeded: true,
-          sectionCount: 6,
-        }
+        return true
       },
     }),
   )
@@ -377,23 +348,10 @@ test('POST /sites bootstraps runtime site version before returning success', asy
   assert.equal(bootstrappedTemplateId, '00000000-0000-4000-8000-000000000901')
 })
 
-test('POST /sites reports deterministic bootstrap failure and does not return success payload', async () => {
-  let rollbackInput: { siteId: string; clientId: string; agencyId: string } | null = null
+test('POST /sites reports trigger degradation without failing created site response', async () => {
   const handlers = createSiteCreateRouteHandlers(
     createDeps({
-      bootstrapTemplateSiteRuntime: async () => {
-        throw new Error('bootstrap failed')
-      },
-      rollbackSiteOnBootstrapFailure: async (input) => {
-        rollbackInput = input
-      },
-      parseSiteBootstrapError: () => ({
-        status: 500,
-        code: 'TEMPLATE_SITE_BOOTSTRAP_IMPORT_SOURCE_MISSING',
-        message: 'Template entry HTML is missing.',
-        siteId: '00000000-0000-4000-8000-000000000777',
-        templateId: '00000000-0000-4000-8000-000000000901',
-      }),
+      triggerTemplateSiteBootstrap: async () => false,
     }),
   )
 
@@ -411,23 +369,13 @@ test('POST /sites reports deterministic bootstrap failure and does not return su
   )
   const body = (await response.json()) as {
     ok: boolean
-    code: string
-    siteId?: string
-    templateId?: string
+    bootstrap?: { state?: string; triggerAccepted?: boolean }
     site?: unknown
-    redirectTo?: string
   }
 
-  assert.equal(response.status, 500)
-  assert.equal(body.ok, false)
-  assert.equal(body.code, 'TEMPLATE_SITE_BOOTSTRAP_IMPORT_SOURCE_MISSING')
-  assert.equal(body.siteId, '00000000-0000-4000-8000-000000000777')
-  assert.equal(body.templateId, '00000000-0000-4000-8000-000000000901')
-  assert.equal(body.site, undefined)
-  assert.equal(body.redirectTo, undefined)
-  assert.deepEqual(rollbackInput, {
-    siteId: '00000000-0000-4000-8000-000000000777',
-    clientId: '00000000-0000-4000-8000-000000000201',
-    agencyId: '00000000-0000-4000-8000-000000000301',
-  })
+  assert.equal(response.status, 202)
+  assert.equal(body.ok, true)
+  assert.equal(Boolean(body.site), true)
+  assert.equal(body.bootstrap?.state, 'trigger_failed')
+  assert.equal(body.bootstrap?.triggerAccepted, false)
 })

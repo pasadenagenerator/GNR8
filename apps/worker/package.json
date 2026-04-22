@@ -6,9 +6,11 @@
   "scripts": {
     "typecheck": "pnpm exec tsc --noEmit",
     "build": "pnpm exec next build",
-    "test": "NODE_OPTIONS='--conditions=react-server' pnpm exec tsx --test gnr8/template-intake/inngest/*.test.ts gnr8/inngest/*.test.ts"
+    "test": "NODE_OPTIONS='--conditions=react-server' pnpm exec tsx --test gnr8/template-intake/inngest/*.test.ts gnr8/inngest/*.test.ts gnr8/site/inngest/*.test.ts"
   },
   "dependencies": {
+    "@gnr8/core": "workspace:*",
+    "@gnr8/data": "workspace:*",
     "@gnr8/runtime-contracts": "workspace:*",
     "@supabase/supabase-js": "^2.98.0",
     "inngest": "^3.31.8",

@@ -2,10 +2,16 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import {
+  CANONICAL_SITE_TEMPLATE_BOOTSTRAP_REQUESTED_EVENT,
+  SITE_TEMPLATE_BOOTSTRAP_REQUESTED_EVENT,
   CANONICAL_TEMPLATE_PROCESSING_REQUESTED_EVENT,
   TEMPLATE_PROCESSING_REQUESTED_EVENT,
 } from '@gnr8/runtime-contracts'
 import { inngestFunctions } from '@/gnr8/inngest/functions'
+import {
+  SITE_TEMPLATE_BOOTSTRAP_JOB_TRIGGER_EVENT,
+  siteTemplateBootstrapJob,
+} from '@/gnr8/site/inngest/site-template-bootstrap-job'
 import {
   TEMPLATE_PROCESSING_JOB_TRIGGER_EVENT,
   templateProcessingJob,
@@ -16,6 +22,12 @@ test('worker template-processing trigger event uses shared canonical contract', 
   assert.equal(TEMPLATE_PROCESSING_JOB_TRIGGER_EVENT, CANONICAL_TEMPLATE_PROCESSING_REQUESTED_EVENT)
 })
 
-test('worker inngest registration exports template processing job', () => {
+test('worker site-bootstrap trigger event uses shared canonical contract', () => {
+  assert.equal(SITE_TEMPLATE_BOOTSTRAP_REQUESTED_EVENT, CANONICAL_SITE_TEMPLATE_BOOTSTRAP_REQUESTED_EVENT)
+  assert.equal(SITE_TEMPLATE_BOOTSTRAP_JOB_TRIGGER_EVENT, CANONICAL_SITE_TEMPLATE_BOOTSTRAP_REQUESTED_EVENT)
+})
+
+test('worker inngest registration exports template processing and site-bootstrap jobs', () => {
   assert.equal(inngestFunctions.includes(templateProcessingJob), true)
+  assert.equal(inngestFunctions.includes(siteTemplateBootstrapJob), true)
 })

@@ -4,7 +4,6 @@ import os from 'node:os'
 import path from 'node:path'
 
 import { getSuperadminPool } from '@/src/superadmin/db'
-import type { CreatedSiteRecord } from '@/gnr8/site/site-template-instantiation-service'
 import type { ScopedImportPipelineOutcome } from '@/gnr8/site/scoped-import-pipeline'
 import { TEMPLATE_ZIP_MAX_BYTES, validateAndExtractTemplateZip } from '@/gnr8/template-intake/core/template-zip-validator'
 import { persistTemplateDurableSourceSnapshot } from '@/gnr8/template-intake/storage/template-durable-source'
@@ -28,6 +27,18 @@ type BootstrapTemplateRecord = Pick<
   | 'importManifestSummary'
   | 'durableSnapshotRootDirAbs'
 >
+
+type BootstrapSiteRecord = {
+  siteId: string
+  clientId: string
+  agencyId: string
+  templateId: string
+  name: string
+  domain: string
+  status: string
+  createdAt: string
+  updatedAt: string
+}
 
 export type TemplateSiteRuntimeBootstrapResult = {
   siteVersionId: string
@@ -137,7 +148,7 @@ function estimateHtmlQuality(html: string): RenderedDomQuality {
 }
 
 function createTemplateSnapshot(input: {
-  site: CreatedSiteRecord
+  site: BootstrapSiteRecord
   template: BootstrapTemplateRecord
   snapshotRootDirAbs: string
   entryHtmlPathAbs: string
@@ -321,14 +332,6 @@ async function resolveTemplateBootstrapSource(input: {
   const sourceZipStorageBucket = normalizeText(input.template.sourceZipStorageBucket)
   const sourceZipStorageKey = normalizeText(input.template.sourceZipStorageKey)
 
-  console.info('[template-site-bootstrap] TEMPLATE_BOOTSTRAP_SOURCE_RESOLUTION_STARTED', {
-    templateId,
-    entryHtmlPath: entryHtmlPath || null,
-    durableSnapshotRootDirAbs: normalizeText(input.template.durableSnapshotRootDirAbs) || null,
-    importSnapshotId: normalizeText(input.template.importSnapshotId) || null,
-    hasSourceZipReference: Boolean(sourceZipStorageBucket && sourceZipStorageKey),
-  })
-
   for (const candidate of sourceCandidates) {
     if (!fs.existsSync(candidate.snapshotRootDirAbs) || !fs.existsSync(candidate.entryHtmlPathAbs)) {
       continue
@@ -337,14 +340,6 @@ async function resolveTemplateBootstrapSource(input: {
       const html = fs.readFileSync(candidate.entryHtmlPathAbs, 'utf8')
       if (!normalizeText(html)) continue
       const sourceMode = mapCandidateMode(candidate.sourceMode)
-      const sourceEvent =
-        sourceMode === 'processed' ? 'TEMPLATE_BOOTSTRAP_SOURCE_RESOLVED_PROCESSED' : 'TEMPLATE_BOOTSTRAP_SOURCE_RESOLVED_LEGACY'
-      console.info(`[template-site-bootstrap] ${sourceEvent}`, {
-        templateId,
-        sourceMode,
-        snapshotRootDirAbs: candidate.snapshotRootDirAbs,
-        entryHtmlPathAbs: candidate.entryHtmlPathAbs,
-      })
       return {
         sourceMode,
         snapshotRootDirAbs: candidate.snapshotRootDirAbs,
@@ -390,14 +385,6 @@ async function resolveTemplateBootstrapSource(input: {
               persistedSource.durableSnapshotRootDirAbs,
               entryHtmlPath || normalizeText(zipValidation.validation.entryHtmlPath) || 'index.html',
             )
-            console.info('[template-site-bootstrap] TEMPLATE_BOOTSTRAP_SOURCE_RESOLVED_FROM_ZIP', {
-              templateId,
-              sourceMode: 'zip_reconstructed',
-              sourceZipStorageBucket,
-              sourceZipStorageKey,
-              snapshotRootDirAbs: persistedSource.durableSnapshotRootDirAbs,
-              entryHtmlPathAbs: durableEntryHtmlPathAbs,
-            })
             return {
               sourceMode: 'zip_reconstructed',
               snapshotRootDirAbs: persistedSource.durableSnapshotRootDirAbs,
@@ -409,17 +396,9 @@ async function resolveTemplateBootstrapSource(input: {
         }
       }
     } catch {
-      // Handled by deterministic unavailable diagnostic below.
+      // Deterministic unavailable diagnostic is surfaced by null result.
     }
   }
-
-  console.error('[template-site-bootstrap] TEMPLATE_BOOTSTRAP_SOURCE_UNAVAILABLE', {
-    templateId,
-    attemptedEntryHtmlPath: entryHtmlPath || null,
-    attemptedCandidateEntryPaths: sourceCandidates.map((candidate) => candidate.entryHtmlPathAbs),
-    sourceZipStorageBucket: sourceZipStorageBucket || null,
-    sourceZipStorageKey: sourceZipStorageKey || null,
-  })
   return null
 }
 
@@ -451,7 +430,7 @@ function countPreparedSections(result: ScopedImportPipelineOutcome): number {
 }
 
 export async function bootstrapRuntimeFromTemplateSite(input: {
-  site: CreatedSiteRecord
+  site: BootstrapSiteRecord
   template: BootstrapTemplateRecord
   deps?: Partial<BootstrapDeps>
 }): Promise<TemplateSiteRuntimeBootstrapResult> {
@@ -459,16 +438,6 @@ export async function bootstrapRuntimeFromTemplateSite(input: {
   const siteId = input.site.siteId
   const templateId = input.template.id
   const entryHtmlPath = normalizeText(input.template.entryHtmlPath)
-  const durableSnapshotRootDirAbs = normalizeText(input.template.durableSnapshotRootDirAbs)
-  const importSnapshotId = normalizeText(input.template.importSnapshotId)
-
-  console.info('[template-site-bootstrap] TEMPLATE_SITE_BOOTSTRAP_STARTED', {
-    siteId,
-    templateId,
-    durableSnapshotRootDirAbs: durableSnapshotRootDirAbs || null,
-    importSnapshotId: importSnapshotId || null,
-    entryHtmlPath: entryHtmlPath || null,
-  })
 
   try {
     if (!entryHtmlPath) {
@@ -479,14 +448,6 @@ export async function bootstrapRuntimeFromTemplateSite(input: {
         templateId,
       })
     }
-
-    console.info('[template-site-bootstrap] TEMPLATE_SITE_BOOTSTRAP_TEMPLATE_RESOLVED', {
-      siteId,
-      templateId,
-      durableSnapshotRootDirAbs: durableSnapshotRootDirAbs || null,
-      importSnapshotId,
-      entryHtmlPath,
-    })
 
     const resolvedSource = await resolveTemplateBootstrapSource({
       template: input.template,
@@ -501,15 +462,6 @@ export async function bootstrapRuntimeFromTemplateSite(input: {
         templateId,
       })
     }
-
-    console.info('[template-site-bootstrap] TEMPLATE_SITE_BOOTSTRAP_IMPORT_SOURCE_RESOLVED', {
-      siteId,
-      templateId,
-      sourcePathRef: resolvedSource.entryHtmlPathAbs,
-      snapshotRootDirAbs: resolvedSource.snapshotRootDirAbs,
-      assetsDirAbs: resolvedSource.assetsDirAbs,
-      sourceMode: resolvedSource.sourceMode,
-    })
 
     const snapshot = createTemplateSnapshot({
       site: input.site,
@@ -539,33 +491,8 @@ export async function bootstrapRuntimeFromTemplateSite(input: {
 
     await deps.writeOwnershipLink({ siteId, siteVersionId: scoped.siteVersionId })
 
-    console.info('[template-site-bootstrap] TEMPLATE_SITE_BOOTSTRAP_RUNTIME_VERSION_CREATED', {
-      siteId,
-      templateId,
-      siteVersionId: scoped.siteVersionId,
-      runtimeSiteId: scoped.siteId,
-      versionNo: scoped.versionNo,
-    })
-
     const sectionCount = countPreparedSections(scoped)
     const previewSeeded = normalizeText(scoped.artifactId).length > 0
-
-    console.info('[template-site-bootstrap] TEMPLATE_SITE_BOOTSTRAP_PREVIEW_SEEDED', {
-      siteId,
-      templateId,
-      siteVersionId: scoped.siteVersionId,
-      previewArtifactAvailable: previewSeeded,
-      artifactId: scoped.artifactId,
-      sectionCount,
-    })
-
-    console.info('[template-site-bootstrap] TEMPLATE_SITE_BOOTSTRAP_COMPLETED', {
-      siteId,
-      templateId,
-      siteVersionId: scoped.siteVersionId,
-      previewArtifactAvailable: previewSeeded,
-      sectionCount,
-    })
 
     return {
       siteVersionId: scoped.siteVersionId,
@@ -576,14 +503,7 @@ export async function bootstrapRuntimeFromTemplateSite(input: {
       sectionCount,
     }
   } catch (error) {
-    const mapped = mapBootstrapError({ error, siteId, templateId })
-    console.error('[template-site-bootstrap] TEMPLATE_SITE_BOOTSTRAP_FAILED', {
-      siteId,
-      templateId,
-      code: mapped.code,
-      message: mapped.message,
-    })
-    throw mapped
+    throw mapBootstrapError({ error, siteId, templateId })
   }
 }
 

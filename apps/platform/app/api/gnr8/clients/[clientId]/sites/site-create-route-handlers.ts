@@ -53,24 +53,12 @@ export type SiteCreateRouteDeps = {
     name: string
     domain: string
   }) => Promise<CreatedSiteRecord>
-  bootstrapTemplateSiteRuntime: (input: {
+  triggerTemplateSiteBootstrap: (input: {
     site: CreatedSiteRecord
     template: TemplateSelection
-    request: Request
-  }) => Promise<{
-    siteVersionId: string
-    siteVersionNo: number
-    runtimeSiteId: string
-    artifactId: string | null
-    previewSeeded: boolean
-    sectionCount: number
-  }>
+  }) => Promise<boolean>
   parseTemplateStorageError: (error: unknown) => ParsedError
   parseSiteCreateError: (error: unknown) => ParsedError
-  parseSiteBootstrapError: (
-    error: unknown,
-  ) => { status: number; code: string; message: string; siteId: string; templateId: string } | null
-  rollbackSiteOnBootstrapFailure: (input: { siteId: string; clientId: string; agencyId: string }) => Promise<unknown>
   parseScopeError: (error: unknown) => { status: number; message: string }
 }
 
@@ -181,28 +169,10 @@ export function createSiteCreateRouteHandlers(deps: SiteCreateRouteDeps) {
           name: parsed.value.name,
           domain: parsed.value.domain,
         })
-        try {
-          await deps.bootstrapTemplateSiteRuntime({
-            site: created,
-            template,
-            request,
-          })
-        } catch (error) {
-          try {
-            await deps.rollbackSiteOnBootstrapFailure({
-              siteId: created.siteId,
-              clientId: scope.clientId,
-              agencyId: scope.agencyId,
-            })
-          } catch (rollbackError) {
-            console.error('[site-create] SITE_BOOTSTRAP_ROLLBACK_FAILED', {
-              siteId: created.siteId,
-              templateId: template.id,
-              reason: rollbackError instanceof Error ? rollbackError.message : String(rollbackError),
-            })
-          }
-          throw error
-        }
+        const triggered = await deps.triggerTemplateSiteBootstrap({
+          site: created,
+          template,
+        })
         const redirectTo = siteWorkspaceHref({
           clientId: scope.clientId,
           siteId: created.siteId,
@@ -224,9 +194,13 @@ export function createSiteCreateRouteHandlers(deps: SiteCreateRouteDeps) {
               createdAt: created.createdAt,
               updatedAt: created.updatedAt,
             },
+            bootstrap: {
+              state: triggered ? 'bootstrapping' : 'trigger_failed',
+              triggerAccepted: triggered,
+            },
             redirectTo,
           },
-          { status: 201 },
+          { status: triggered ? 201 : 202 },
         )
       } catch (error) {
         const templateStorageError = deps.parseTemplateStorageError(error)
@@ -250,20 +224,6 @@ export function createSiteCreateRouteHandlers(deps: SiteCreateRouteDeps) {
               error: siteStorageError.message,
             },
             { status: siteStorageError.status },
-          )
-        }
-
-        const bootstrapError = deps.parseSiteBootstrapError(error)
-        if (bootstrapError) {
-          return NextResponse.json(
-            {
-              ok: false,
-              code: bootstrapError.code,
-              error: bootstrapError.message,
-              siteId: bootstrapError.siteId,
-              templateId: bootstrapError.templateId,
-            },
-            { status: bootstrapError.status },
           )
         }
 
