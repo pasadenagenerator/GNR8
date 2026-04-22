@@ -733,13 +733,13 @@ export async function bootstrapRuntimeFromTemplateSite(input: {
   const deps = { ...defaultDeps(), ...(input.deps ?? {}) }
   const siteId = input.site.siteId
   const templateId = input.template.id
-  const entryHtmlPath = normalizeText(input.template.entryHtmlPath)
+  const templateEntryHtmlPath = normalizeText(input.template.entryHtmlPath)
   let sourceResolutionMode: TemplateBootstrapSourceMode | null = null
   let runtimeSiteId: string | null = null
   let runtimeSiteVersionId: string | null = null
 
   try {
-    if (!entryHtmlPath) {
+    if (!templateEntryHtmlPath) {
       throw new TemplateSiteRuntimeBootstrapError({
         code: 'TEMPLATE_SITE_BOOTSTRAP_TEMPLATE_ARTIFACT_MISSING',
         message: 'Template entry HTML reference is missing.',
@@ -766,8 +766,8 @@ export async function bootstrapRuntimeFromTemplateSite(input: {
     const snapshotRootDirAbs = path.resolve(resolvedSource.snapshotRootDirAbs)
     const entryHtmlPathAbs = path.resolve(resolvedSource.entryHtmlPathAbs)
     const assetsDirAbs = path.resolve(resolvedSource.assetsDirAbs)
-    const entryHtmlPath = path.relative(snapshotRootDirAbs, entryHtmlPathAbs).replaceAll('\\', '/')
-    const assetsDirPath = path.relative(snapshotRootDirAbs, assetsDirAbs).replaceAll('\\', '/')
+    const snapshotEntryHtmlPath = path.relative(snapshotRootDirAbs, entryHtmlPathAbs).replaceAll('\\', '/')
+    const snapshotAssetsDirPath = path.relative(snapshotRootDirAbs, assetsDirAbs).replaceAll('\\', '/')
     const preflight = validateBootstrapImportInput({
       snapshotRootDirAbs,
       entryHtmlPathAbs,
@@ -782,8 +782,8 @@ export async function bootstrapRuntimeFromTemplateSite(input: {
       assetsDirPath: 'assets',
     }
     const knownGoodComparison = {
-      entryIsRootIndex: entryHtmlPath === 'index.html',
-      assetsIsRootAssets: assetsDirPath === 'assets',
+      entryIsRootIndex: snapshotEntryHtmlPath === 'index.html',
+      assetsIsRootAssets: snapshotAssetsDirPath === 'assets',
       entryParentDirRel: path.relative(snapshotRootDirAbs, path.dirname(entryHtmlPathAbs)).replaceAll('\\', '/'),
     }
     console.info('[site-bootstrap-worker] TEMPLATE_SITE_BOOTSTRAP_IMPORT_INPUT_RESOLVED', {
@@ -792,9 +792,9 @@ export async function bootstrapRuntimeFromTemplateSite(input: {
       sourceResolutionMode,
       snapshotRootDirAbs,
       entryHtmlPathAbs,
-      entryHtmlPath,
+      entryHtmlPath: snapshotEntryHtmlPath,
       assetsDirAbs,
-      assetsDirPath,
+      assetsDirPath: snapshotAssetsDirPath,
       snapshotRootExists: preflight.exists.snapshotRootExists,
       entryHtmlExists: preflight.exists.entryHtmlExists,
       assetsDirExists: preflight.exists.assetsDirExists,
@@ -815,9 +815,9 @@ export async function bootstrapRuntimeFromTemplateSite(input: {
         sourceResolutionMode,
         snapshotRootDirAbs,
         entryHtmlPathAbs,
-        entryHtmlPath,
+        entryHtmlPath: snapshotEntryHtmlPath,
         assetsDirAbs,
-        assetsDirPath,
+        assetsDirPath: snapshotAssetsDirPath,
         issues: preflight.issues,
       })
       throw new TemplateSiteRuntimeBootstrapError({
@@ -849,8 +849,8 @@ export async function bootstrapRuntimeFromTemplateSite(input: {
       assetsDirAbs: resolvedSource.assetsDirAbs,
       manifestEntryHtmlPath: normalizeText(snapshot.fixtureSpec.entryHtmlPath),
       manifestAssetsDirPath: normalizeText(snapshot.fixtureSpec.assetsDirPath),
-      snapshotEntryHtmlPath: entryHtmlPath,
-      snapshotAssetsDirPath: assetsDirPath,
+      snapshotEntryHtmlPath,
+      snapshotAssetsDirPath,
     })
 
     let scoped: ScopedImportPipelineOutcome
