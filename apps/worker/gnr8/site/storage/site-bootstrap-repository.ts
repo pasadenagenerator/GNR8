@@ -23,7 +23,7 @@ export async function getSiteBootstrapRecordById(input: { siteId: string }): Pro
     const result = await client.query<{
       id: string
       org_id: string
-      agency_id: string
+      agency_organization_id: string | null
       template_id: string | null
       name: string
       domain: string | null
@@ -35,7 +35,7 @@ export async function getSiteBootstrapRecordById(input: { siteId: string }): Pro
       select
         s.id::text as id,
         s.org_id::text as org_id,
-        s.agency_id::text as agency_id,
+        agency_org.id::text as agency_organization_id,
         s.template_id::text as template_id,
         s.name,
         s.domain,
@@ -43,19 +43,36 @@ export async function getSiteBootstrapRecordById(input: { siteId: string }): Pro
         s.created_at::text as created_at,
         s.updated_at::text as updated_at
       from public.sites s
+      left join lateral (
+        select o.id
+        from public.organizations o
+        where o.organization_type = 'agency'::public.organization_type_enum
+          and (o.id = s.agency_id or o.agency_id = s.agency_id)
+        order by case when o.id = s.agency_id then 0 else 1 end
+        limit 1
+      ) agency_org on true
       where s.id = $1::uuid
       limit 1
       `,
       [input.siteId],
     )
     const row = result.rows[0]
-    if (!row || !row.id || !row.org_id || !row.agency_id || !row.template_id || !row.domain || !row.created_at || !row.updated_at) {
+    if (
+      !row ||
+      !row.id ||
+      !row.org_id ||
+      !row.agency_organization_id ||
+      !row.template_id ||
+      !row.domain ||
+      !row.created_at ||
+      !row.updated_at
+    ) {
       return null
     }
     return {
       siteId: row.id,
       clientId: row.org_id,
-      agencyId: row.agency_id,
+      agencyId: row.agency_organization_id,
       templateId: row.template_id,
       name: normalizeText(row.name),
       domain: row.domain,

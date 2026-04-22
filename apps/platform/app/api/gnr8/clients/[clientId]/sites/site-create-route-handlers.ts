@@ -203,6 +203,18 @@ export function createSiteCreateRouteHandlers(deps: SiteCreateRouteDeps) {
           { status: triggered ? 201 : 202 },
         )
       } catch (error) {
+        const errorCode = String((error as { code?: unknown } | null)?.code ?? '').trim()
+        if (errorCode === 'INVALID_AGENCY_ID_FOR_BOOTSTRAP') {
+          return NextResponse.json(
+            {
+              ok: false,
+              code: 'INVALID_AGENCY_ID_FOR_BOOTSTRAP',
+              error: 'Agency scope is invalid for site bootstrap.',
+            },
+            { status: 409 },
+          )
+        }
+
         const templateStorageError = deps.parseTemplateStorageError(error)
         if (templateStorageError) {
           return NextResponse.json(

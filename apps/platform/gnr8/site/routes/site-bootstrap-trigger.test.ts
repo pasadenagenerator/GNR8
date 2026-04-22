@@ -1,7 +1,10 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import { triggerSiteTemplateBootstrapJob } from '@/gnr8/site/routes/site-bootstrap-trigger'
+import {
+  InvalidAgencyIdForBootstrapError,
+  triggerSiteTemplateBootstrapJob,
+} from '@/gnr8/site/routes/site-bootstrap-trigger'
 
 test('triggerSiteTemplateBootstrapJob returns true when event emit succeeds', async () => {
   const triggered = await triggerSiteTemplateBootstrapJob(
@@ -12,6 +15,7 @@ test('triggerSiteTemplateBootstrapJob returns true when event emit succeeds', as
       templateId: 'template-1',
     },
     {
+      resolveAgencyOrganizationId: async () => 'agency-org-1',
       emit: async () => undefined,
     },
   )
@@ -28,6 +32,7 @@ test('triggerSiteTemplateBootstrapJob returns false when event emit fails', asyn
       templateId: 'template-1',
     },
     {
+      resolveAgencyOrganizationId: async () => 'agency-org-1',
       emit: async () => {
         throw new Error('failed')
       },
@@ -35,4 +40,27 @@ test('triggerSiteTemplateBootstrapJob returns false when event emit fails', asyn
   )
 
   assert.equal(triggered, false)
+})
+
+test('triggerSiteTemplateBootstrapJob throws deterministic error when agency scope is invalid', async () => {
+  await assert.rejects(
+    triggerSiteTemplateBootstrapJob(
+      {
+        siteId: 'site-1',
+        clientId: 'client-1',
+        agencyId: 'agency-1',
+        templateId: 'template-1',
+      },
+      {
+        resolveAgencyOrganizationId: async () => {
+          throw new InvalidAgencyIdForBootstrapError({ agencyId: 'agency-1' })
+        },
+        emit: async () => undefined,
+      },
+    ),
+    (error: unknown) => {
+      const typed = error as { code?: unknown } | null
+      return typed?.code === 'INVALID_AGENCY_ID_FOR_BOOTSTRAP'
+    },
+  )
 })

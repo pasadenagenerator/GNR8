@@ -379,3 +379,35 @@ test('POST /sites reports trigger degradation without failing created site respo
   assert.equal(body.bootstrap?.state, 'trigger_failed')
   assert.equal(body.bootstrap?.triggerAccepted, false)
 })
+
+test('POST /sites fails deterministically when bootstrap agency scope is invalid', async () => {
+  const handlers = createSiteCreateRouteHandlers(
+    createDeps({
+      triggerTemplateSiteBootstrap: async () => {
+        const error = new Error('Agency scope is invalid for site bootstrap.')
+        const typedError = error as Error & { code?: string }
+        typedError.code = 'INVALID_AGENCY_ID_FOR_BOOTSTRAP'
+        throw error
+      },
+    }),
+  )
+
+  const response = await handlers.POST(
+    new Request('http://localhost', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        templateId: '00000000-0000-4000-8000-000000000901',
+        name: 'Bootstrapped Site',
+        domain: 'example.com',
+      }),
+    }),
+    { params: getParams() },
+  )
+  const body = (await response.json()) as { ok: boolean; code?: string; error?: string }
+
+  assert.equal(response.status, 409)
+  assert.equal(body.ok, false)
+  assert.equal(body.code, 'INVALID_AGENCY_ID_FOR_BOOTSTRAP')
+  assert.equal(body.error, 'Agency scope is invalid for site bootstrap.')
+})
