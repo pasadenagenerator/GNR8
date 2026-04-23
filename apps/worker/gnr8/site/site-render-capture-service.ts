@@ -28,11 +28,15 @@ type RenderedEvidencePaths = {
 }
 
 type RenderedCapturePersistResult = {
+  runtimeSiteId: string
+  runtimeSiteVersionId: string
   siteVersionId: string
   sourceMode: RuntimeImportProvenanceSummary['sourceMode']
   renderedCaptureStatus: RuntimeImportProvenanceSummary['renderedCaptureStatus']
   renderedDomQuality: RuntimeImportProvenanceSummary['renderedDomQuality']
+  hasUsableEvidence: boolean
   evidence: RenderedEvidencePaths
+  importProvenanceSummary: RuntimeImportProvenanceSummary
 }
 
 const DEFAULT_CAPTURE_VIEWPORT = { width: 1366, height: 768 }
@@ -94,6 +98,12 @@ function countMeaningfulDomNodes(domHtml: string): number {
 function resolveCaptureStatus(status: string): RuntimeImportProvenanceSummary['renderedCaptureStatus'] {
   if (status === 'available' || status === 'partial') return status
   return 'failed'
+}
+
+function hasUsableRenderedEvidence(input: {
+  evidence: RenderedEvidencePaths
+}): boolean {
+  return input.evidence.domNodeCount > 0 || input.evidence.screenshotPaths.length > 0
 }
 
 function readRenderedDomFromResult(input: {
@@ -229,11 +239,19 @@ function withPatchedProvenanceSummary(input: {
   sourceMode: RuntimeImportProvenanceSummary['sourceMode']
   renderedDomQuality: RuntimeImportProvenanceSummary['renderedDomQuality']
   diagnostics: RenderedCaptureDiagnostic[]
+  emptySuccess: boolean
 }): RuntimeImportProvenanceSummary {
   const existing = input.existingSummary
   const existingCodes = Array.isArray(existing?.importDiagnosticCodes) ? existing.importDiagnosticCodes : []
   const captureCodes = input.diagnostics.map((entry) => normalizeText(entry.code)).filter(Boolean)
-  const importDiagnosticCodes = [...new Set([...existingCodes, ...captureCodes, 'SITE_RENDER_CAPTURE_COMPLETED'])].sort((a, b) => a.localeCompare(b))
+  const importDiagnosticCodes = [
+    ...new Set([
+      ...existingCodes,
+      ...captureCodes,
+      'SITE_RENDER_CAPTURE_COMPLETED',
+      ...(input.emptySuccess ? ['SITE_RENDER_CAPTURE_EMPTY_SUCCESS', 'NO_USABLE_RENDERED_RUN_FOUND'] : []),
+    ]),
+  ].sort((a, b) => a.localeCompare(b))
   const screenshotCount = input.evidence.screenshotPaths.length
   const fidelityStatus: RuntimeImportProvenanceSummary['importFidelityStatus'] =
     input.sourceMode === 'rendered_dom'
@@ -279,14 +297,14 @@ function withPatchedProvenanceSummary(input: {
       },
       execution: {
         runtimeKind: 'nodejs',
-        environmentSupported: input.renderedCaptureStatus !== 'failed',
+        environmentSupported: !input.emptySuccess && input.renderedCaptureStatus !== 'failed',
         browserPackageAvailable: true,
         browserBinaryAvailable: true,
-        environmentStatus: input.renderedCaptureStatus === 'failed' ? 'unsupported' : 'supported',
-        failureCategory: input.renderedCaptureStatus === 'failed' ? 'page' : 'none',
-        failureCode,
-        browserLaunch: input.renderedCaptureStatus === 'failed' ? 'failed' : 'succeeded',
-        navigation: input.renderedCaptureStatus === 'failed' ? 'failed' : 'succeeded',
+        environmentStatus: input.emptySuccess ? 'supported' : (input.renderedCaptureStatus === 'failed' ? 'unsupported' : 'supported'),
+        failureCategory: input.emptySuccess ? 'page' : (input.renderedCaptureStatus === 'failed' ? 'page' : 'none'),
+        failureCode: input.emptySuccess ? 'SITE_RENDER_CAPTURE_EMPTY_SUCCESS' : failureCode,
+        browserLaunch: input.emptySuccess ? 'succeeded' : (input.renderedCaptureStatus === 'failed' ? 'failed' : 'succeeded'),
+        navigation: input.emptySuccess ? 'succeeded' : (input.renderedCaptureStatus === 'failed' ? 'failed' : 'succeeded'),
         dom: input.evidence.domNodeCount > 0 ? 'captured' : 'empty_or_failed',
         screenshot: screenshotCount > 0 ? 'captured' : 'none',
         styleSampling: input.evidence.computedStyleSampleCount > 0 ? 'captured' : 'failed_or_empty',
@@ -438,14 +456,29 @@ export async function runSiteRenderCapture(input: {
       sourceUrl: pathToFileURL(source.entryHtmlPathAbs).toString(),
       snapshotRootDirAbs: source.snapshotRootDirAbs,
     })
-    const renderedCaptureStatus = resolveCaptureStatus(captureResult.status)
+    const workerCaptureStatus = resolveCaptureStatus(captureResult.status)
     const renderedDomHtml = readRenderedDomFromResult({
       snapshotRootDirAbs: source.snapshotRootDirAbs,
       renderedDocumentPath: captureResult.documents[0]?.htmlPathAbs ?? null,
     })
+    console.info('[site-render-worker] SITE_RENDER_CAPTURE_OUTPUT_SUMMARY', {
+      siteId: input.siteId,
+      runtimeSiteId: runtimeVersion.site_id,
+      runtimeSiteVersionId: input.siteVersionId,
+      snapshotRootDirAbs: source.snapshotRootDirAbs,
+      workerStatus: captureResult.status,
+      normalizedWorkerStatus: workerCaptureStatus,
+      output: {
+        documentCount: captureResult.documents.length,
+        computedStyleSampleCount: captureResult.computedStyleSamples.length,
+        screenshotCount: captureResult.screenshots.length,
+        screenshotRefs: captureResult.screenshots.map((entry) => entry.filePathAbs),
+        diagnostics: captureResult.diagnostics.map((entry) => entry.code),
+      },
+    })
     const evidence = persistRenderedEvidence({
       snapshotRootDirAbs: source.snapshotRootDirAbs,
-      renderedCaptureStatus,
+      renderedCaptureStatus: workerCaptureStatus,
       renderedDomHtml,
       diagnostics: captureResult.diagnostics,
       screenshotViewportPathAbs:
@@ -458,8 +491,30 @@ export async function runSiteRenderCapture(input: {
       domHtml: renderedDomHtml,
       domNodeCount: evidence.domNodeCount,
     })
+    const hasUsableEvidence = hasUsableRenderedEvidence({ evidence })
+    const emptySuccess = workerCaptureStatus !== 'failed' && !hasUsableEvidence
+    const renderedCaptureStatus: RuntimeImportProvenanceSummary['renderedCaptureStatus'] = emptySuccess ? 'failed' : workerCaptureStatus
     const sourceMode: RuntimeImportProvenanceSummary['sourceMode'] =
-      renderedCaptureStatus !== 'failed' && evidence.domNodeCount > 0 ? 'rendered_dom' : 'raw_html_fallback'
+      renderedCaptureStatus !== 'failed' && hasUsableEvidence ? 'rendered_dom' : 'raw_html_fallback'
+
+    console.info('[site-render-worker] SITE_RENDER_CAPTURE_PERSISTED_EVIDENCE', {
+      siteId: input.siteId,
+      runtimeSiteId: runtimeVersion.site_id,
+      runtimeSiteVersionId: input.siteVersionId,
+      renderedDomExists: Boolean(evidence.renderedDomPath) && fs.existsSync(evidence.renderedDomPath),
+      renderedDomLength: evidence.domLength,
+      renderedDomNodeCount: evidence.domNodeCount,
+      computedStylesExists: Boolean(evidence.computedStylesPath) && fs.existsSync(evidence.computedStylesPath),
+      acquisitionEvidenceExists: Boolean(evidence.acquisitionEvidencePath) && fs.existsSync(evidence.acquisitionEvidencePath),
+      screenshotCount: evidence.screenshotPaths.length,
+      evidenceRefs: {
+        renderedDomPath: evidence.renderedDomPath,
+        computedStylesPath: evidence.computedStylesPath,
+        acquisitionEvidencePath: evidence.acquisitionEvidencePath,
+        renderedCaptureManifestPath: evidence.renderedCaptureManifestPath,
+        screenshotPaths: evidence.screenshotPaths,
+      },
+    })
 
     const updatedSummary = withPatchedProvenanceSummary({
       existingSummary,
@@ -468,18 +523,57 @@ export async function runSiteRenderCapture(input: {
       sourceMode,
       renderedDomQuality,
       diagnostics: captureResult.diagnostics,
+      emptySuccess,
     })
     await resolvedDeps.persistRuntimeVersionImportSummary({
       siteVersionId: input.siteVersionId,
       summary: updatedSummary,
     })
 
+    console.info('[site-render-worker] SITE_RENDER_CAPTURE_PERSISTED_RUNTIME_TRUTH', {
+      siteId: input.siteId,
+      runtimeSiteId: runtimeVersion.site_id,
+      runtimeSiteVersionId: input.siteVersionId,
+      sourceMode,
+      renderedCaptureStatus,
+      renderedDomQuality,
+      summary: {
+        screenshotCount: updatedSummary.screenshotCount,
+        computedStyleSampleCount: updatedSummary.computedStyleSampleCount,
+        importFidelityStatus: updatedSummary.importFidelityStatus,
+        importDiagnosticCodes: updatedSummary.importDiagnosticCodes,
+        captureEvidence: {
+          renderedDomPath: updatedSummary.captureEvidence.renderedDomPath,
+          computedStylesPath: updatedSummary.captureEvidence.computedStylesPath,
+          acquisitionEvidencePath: updatedSummary.captureEvidence.acquisitionEvidencePath,
+          renderedCaptureManifestPath: updatedSummary.captureEvidence.renderedCaptureManifestPath,
+          screenshotPaths: updatedSummary.captureEvidence.screenshotPaths,
+        },
+      },
+    })
+    if (emptySuccess) {
+      console.warn('[site-render-worker] SITE_RENDER_CAPTURE_EMPTY_SUCCESS', {
+        siteId: input.siteId,
+        runtimeSiteId: runtimeVersion.site_id,
+        runtimeSiteVersionId: input.siteVersionId,
+        renderedDomLength: evidence.domLength,
+        renderedDomNodeCount: evidence.domNodeCount,
+        screenshotCount: evidence.screenshotPaths.length,
+        computedStyleSampleCount: evidence.computedStyleSampleCount,
+        diagnostics: captureResult.diagnostics.map((entry) => entry.code),
+      })
+    }
+
     return {
+      runtimeSiteId: runtimeVersion.site_id,
+      runtimeSiteVersionId: input.siteVersionId,
       siteVersionId: input.siteVersionId,
       sourceMode,
       renderedCaptureStatus,
       renderedDomQuality,
+      hasUsableEvidence,
       evidence,
+      importProvenanceSummary: updatedSummary,
     }
   } catch (error) {
     if (error instanceof SiteRenderCaptureError) throw error

@@ -106,6 +106,63 @@ export async function runSiteRenderCaptureJob(input: {
       computedStyleSampleCount: result.evidence.computedStyleSampleCount,
       domNodeCount: result.evidence.domNodeCount,
     })
+    const renderedDomExists = Boolean(result.evidence.renderedDomPath)
+    const computedStylesExists = Boolean(result.evidence.computedStylesPath)
+    const acquisitionEvidenceExists = Boolean(result.evidence.acquisitionEvidencePath)
+    const evidenceRefs = [
+      result.evidence.renderedDomPath,
+      result.evidence.computedStylesPath,
+      result.evidence.acquisitionEvidencePath,
+      result.evidence.renderedCaptureManifestPath,
+      ...result.evidence.screenshotPaths,
+    ].filter((value): value is string => Boolean(value))
+    console.info('[site-render-worker] SITE_RENDER_CAPTURE_PERSISTED_EVIDENCE', {
+      siteId: payload.siteId,
+      runtimeSiteId: payload.runtimeSiteId,
+      runtimeSiteVersionId: payload.runtimeSiteVersionId,
+      renderedDomExists,
+      renderedDomLength: result.evidence.domLength,
+      renderedDomNodeCount: result.evidence.domNodeCount,
+      computedStylesExists,
+      acquisitionEvidenceExists,
+      screenshotCount: result.evidence.screenshotPaths.length,
+      evidenceRefs,
+    })
+    const importSummary = result.importProvenanceSummary
+    console.info('[site-render-worker] SITE_RENDER_CAPTURE_PERSISTED_RUNTIME_TRUTH', {
+      siteId: payload.siteId,
+      runtimeSiteId: payload.runtimeSiteId,
+      runtimeSiteVersionId: payload.runtimeSiteVersionId,
+      sourceMode: result.sourceMode,
+      renderedCaptureStatus: result.renderedCaptureStatus,
+      renderedDomQuality: result.renderedDomQuality,
+      summary: {
+        importFidelityStatus: importSummary.importFidelityStatus,
+        screenshotCount: importSummary.screenshotCount,
+        computedStyleSampleCount: importSummary.computedStyleSampleCount,
+        importDiagnosticCodes: importSummary.importDiagnosticCodes,
+        captureEvidence: {
+          renderedDomPath: importSummary.captureEvidence.renderedDomPath,
+          computedStylesPath: importSummary.captureEvidence.computedStylesPath,
+          acquisitionEvidencePath: importSummary.captureEvidence.acquisitionEvidencePath,
+          renderedCaptureManifestPath: importSummary.captureEvidence.renderedCaptureManifestPath,
+          screenshotPaths: importSummary.captureEvidence.screenshotPaths,
+        },
+      },
+    })
+    if (!result.hasUsableEvidence) {
+      console.warn('[site-render-worker] SITE_RENDER_CAPTURE_EMPTY_SUCCESS', {
+        siteId: payload.siteId,
+        runtimeSiteId: payload.runtimeSiteId,
+        runtimeSiteVersionId: payload.runtimeSiteVersionId,
+        renderedDomLength: result.evidence.domLength,
+        renderedDomNodeCount: result.evidence.domNodeCount,
+        screenshotCount: result.evidence.screenshotPaths.length,
+        computedStyleSampleCount: result.evidence.computedStyleSampleCount,
+        sourceMode: result.sourceMode,
+        renderedCaptureStatus: result.renderedCaptureStatus,
+      })
+    }
     console.info('[site-render-worker] SITE_RENDER_CAPTURE_COMPLETED', {
       siteId: payload.siteId,
       siteVersionId: payload.runtimeSiteVersionId,

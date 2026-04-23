@@ -1472,3 +1472,71 @@ test('arbitration no longer falls back to NO_USABLE when synthesized rendered tr
   assert.equal(selection.diagnostics.includes('NO_USABLE_RENDERED_RUN_FOUND'), false)
   assert.equal(selection.diagnostics.includes('PRIMARY_RENDERED_RUN_ALIGNED_TO_READMODEL'), true)
 })
+
+test('import fidelity treats screenshot-only rendered summary as usable rendered truth', () => {
+  const parsed = __siteWorkspaceReadModelTestUtils.parseImportFidelity({
+    pageRows: [],
+    runtimeVersion: {
+      id: 'runtime-version-screenshot-only',
+      site_id: 'runtime-site-1',
+      ownership_site_id: SITE_ID,
+      state: 'DRAFT',
+      version_no: 1,
+      import_provenance_summary: runtimeSummaryFixture({
+        requestId: 'render-screenshot-only',
+        sourceMode: 'rendered_dom',
+        renderedCaptureStatus: 'partial',
+        renderedDomQuality: 'unusable',
+        nodeCount: 0,
+        screenshotCount: 1,
+        diagnostics: ['RENDERED_CAPTURE_SCREENSHOT_ONLY', 'SITE_RENDER_CAPTURE_COMPLETED'],
+      }),
+      artifact_id: null,
+      updated_at: '2026-04-22T11:10:00.000Z',
+      created_at: '2026-04-22T11:10:00.000Z',
+    },
+  })
+
+  assert.equal(parsed.sourceMode, 'rendered_dom')
+  assert.equal(parsed.renderedCaptureStatus, 'partial')
+  assert.equal(parsed.screenshotCount, 1)
+  assert.equal(parsed.captureFallbackReason, null)
+  assert.equal(parsed.importDiagnosticCodes.includes('RENDERED_CAPTURE_SCREENSHOT_ONLY'), true)
+})
+
+test('import fidelity surfaces empty-success diagnostics when render completed without usable evidence', () => {
+  const summary = runtimeSummaryFixture({
+    requestId: 'render-empty-success',
+    sourceMode: 'raw_html_fallback',
+    renderedCaptureStatus: 'failed',
+    renderedDomQuality: 'unusable',
+    nodeCount: 0,
+    screenshotCount: 0,
+    failureCode: 'SITE_RENDER_CAPTURE_EMPTY_SUCCESS',
+    diagnostics: ['SITE_RENDER_CAPTURE_COMPLETED', 'SITE_RENDER_CAPTURE_EMPTY_SUCCESS', 'NO_USABLE_RENDERED_RUN_FOUND'],
+  })
+  summary.renderedCapture.execution.failureCategory = 'page'
+  summary.renderedCapture.execution.browserLaunch = 'succeeded'
+  summary.renderedCapture.execution.navigation = 'succeeded'
+
+  const parsed = __siteWorkspaceReadModelTestUtils.parseImportFidelity({
+    pageRows: [],
+    runtimeVersion: {
+      id: 'runtime-version-empty-success',
+      site_id: 'runtime-site-1',
+      ownership_site_id: SITE_ID,
+      state: 'DRAFT',
+      version_no: 1,
+      import_provenance_summary: summary,
+      artifact_id: null,
+      updated_at: '2026-04-22T11:15:00.000Z',
+      created_at: '2026-04-22T11:15:00.000Z',
+    },
+  })
+
+  assert.equal(parsed.sourceMode, 'raw_html_fallback')
+  assert.equal(parsed.renderedCaptureStatus, 'failed')
+  assert.equal(parsed.captureFallbackReason, 'rendered_capture_unusable')
+  assert.equal(parsed.importDiagnosticCodes.includes('SITE_RENDER_CAPTURE_EMPTY_SUCCESS'), true)
+  assert.equal(parsed.importDiagnosticCodes.includes('NO_USABLE_RENDERED_RUN_FOUND'), true)
+})
