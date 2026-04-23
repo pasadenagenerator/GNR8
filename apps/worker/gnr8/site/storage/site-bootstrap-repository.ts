@@ -148,7 +148,7 @@ export async function markSiteBootstrapCompleted(input: {
       update public.gnr8_site_bootstrap_jobs
       set
         status = 'completed',
-        runtime_site_id = nullif($2::text, '')::uuid,
+        runtime_site_id = nullif($2::text, ''),
         runtime_site_version_id = nullif($3::text, '')::uuid,
         artifact_id = nullif($4::text, '')::uuid,
         section_count = $5::integer,
