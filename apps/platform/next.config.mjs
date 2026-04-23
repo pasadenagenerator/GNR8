@@ -1,4 +1,13 @@
 /** @type {import('next').NextConfig} */
+// Vercel serverless packaging rejects traces that pull in symlinked directory trees from pnpm links.
+// Keep browser tracing file-only and explicit so Next traces real runtime assets, not node_modules symlink dirs.
+const vercelSafeChromiumTraceFiles = [
+  './node_modules/@sparticuz/chromium/bin/al2023.tar.br',
+  './node_modules/@sparticuz/chromium/bin/chromium.br',
+  './node_modules/@sparticuz/chromium/bin/fonts.tar.br',
+  './node_modules/@sparticuz/chromium/bin/swiftshader.tar.br',
+]
+
 const nextConfig = {
   // NUJNO za monorepo + ESM workspace pakete
   transpilePackages: ['@gnr8/core', '@gnr8/data'],
@@ -37,28 +46,17 @@ const nextConfig = {
     '/api/validation/real-site-03': ['./gnr8/validation/fixtures/real-site-03/**'],
     '/api/validation/friend-site-01': ['./gnr8/validation/fixtures/friend-site-01/**'],
     '/api/validation/url-import': [
-      './node_modules/playwright/.local-browsers/**',
-      './node_modules/playwright-core/.local-browsers/**',
-      './node_modules/playwright-core/lib/server/registry/**',
-      './node_modules/@sparticuz/chromium/**',
+      ...vercelSafeChromiumTraceFiles,
     ],
     '/api/gnr8/runtime/migrate/url': [
-      './node_modules/playwright/.local-browsers/**',
-      './node_modules/playwright-core/.local-browsers/**',
-      './node_modules/playwright-core/lib/server/registry/**',
-      './node_modules/@sparticuz/chromium/**',
+      ...vercelSafeChromiumTraceFiles,
     ],
     '/api/gnr8/agency/clients/[clientId]/sites/import': [
-      './node_modules/playwright/.local-browsers/**',
-      './node_modules/playwright-core/.local-browsers/**',
-      './node_modules/playwright-core/lib/server/registry/**',
-      './node_modules/@sparticuz/chromium/**',
+      ...vercelSafeChromiumTraceFiles,
     ],
     '/api/internal/gnr8/rendered-capture-worker': [
-      './node_modules/playwright/.local-browsers/**',
-      './node_modules/playwright-core/.local-browsers/**',
-      './node_modules/playwright-core/lib/server/registry/**',
-      './node_modules/@sparticuz/chromium/**',
+      // Route-level includes intentionally empty: NFT already traces required runtime modules
+      // for this worker via imports, and avoiding manual node_modules globs keeps symlink paths out.
     ],
   },
 
