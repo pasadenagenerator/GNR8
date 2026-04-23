@@ -1368,7 +1368,7 @@ export async function runScopedImportPipeline(input: {
     source: {
       kind: 'single-entry-html',
       entryHtmlPath: importInput.entryHtmlPath,
-      assetsDirPath: importInput.assetsDirPath,
+      assetsDirPath: importInput.assetsDirPath ?? undefined,
     },
   })
   const importManifest = deps.createImportManifest(importOutput)
