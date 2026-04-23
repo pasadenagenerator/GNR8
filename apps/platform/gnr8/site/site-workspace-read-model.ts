@@ -1505,8 +1505,8 @@ function parseImportFidelity(input: {
         computedStyleSampleCount,
         renderedCapture: {
           used: sourceMode === 'rendered_dom',
-          status: renderedCaptureStatus === 'unknown' ? 'failed' : renderedCaptureStatus,
-          quality: renderedDomQuality === 'unknown' ? 'unusable' : renderedDomQuality,
+          status: renderedCaptureStatus,
+          quality: renderedDomQuality,
           domLength: domNodeCount,
           nodeCount: domNodeCount,
           styleSampleCount: computedStyleSampleCount,
