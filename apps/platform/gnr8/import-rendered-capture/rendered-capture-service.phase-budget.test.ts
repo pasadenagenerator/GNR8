@@ -130,3 +130,46 @@ test("runRenderedCapture preserves partial artifacts when later phase timeout is
   assert.equal(fs.existsSync(result.documents[0]!.htmlPathAbs), true);
   assert.equal(fs.existsSync(result.screenshots[0]!.filePathAbs), true);
 });
+
+test("runRenderedCapture upgrades unavailable to partial when browser artifacts exist", async () => {
+  const snapshotRootDirAbs = fs.mkdtempSync(path.join(os.tmpdir(), "gnr8-rendered-capture-status-upgrade-test-"));
+  const result = await runRenderedCapture({
+    sourceUrl: "https://example.com",
+    snapshotRootDirAbs,
+    executor: async () => ({
+      status: "unavailable",
+      document: {
+        html: "<html><body><main>rendered evidence</main></body></html>",
+        readinessState: "dom_stable",
+      },
+      screenshots: [],
+      computedStyleSamples: [],
+      renderedObservedAssetUrls: [],
+      diagnostics: [],
+    }),
+  });
+
+  assert.equal(result.status, "partial");
+  assert.equal(result.sourceMode, "rendered_dom");
+  assert.equal(result.documents.length, 1);
+});
+
+test("runRenderedCapture keeps unavailable when no browser artifacts exist", async () => {
+  const snapshotRootDirAbs = fs.mkdtempSync(path.join(os.tmpdir(), "gnr8-rendered-capture-status-unavailable-test-"));
+  const result = await runRenderedCapture({
+    sourceUrl: "https://example.com",
+    snapshotRootDirAbs,
+    executor: async () => ({
+      status: "unavailable",
+      document: null,
+      screenshots: [],
+      computedStyleSamples: [],
+      renderedObservedAssetUrls: [],
+      diagnostics: [],
+    }),
+  });
+
+  assert.equal(result.status, "unavailable");
+  assert.equal(result.sourceMode, "raw_html");
+  assert.equal(result.documents.length, 0);
+});

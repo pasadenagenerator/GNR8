@@ -51,6 +51,11 @@ const nextConfig = {
       './node_modules/playwright-core/.local-browsers/**',
       './node_modules/playwright-core/lib/server/registry/**',
     ],
+    '/api/internal/gnr8/rendered-capture-worker': [
+      './node_modules/playwright/.local-browsers/**',
+      './node_modules/playwright-core/.local-browsers/**',
+      './node_modules/playwright-core/lib/server/registry/**',
+    ],
   },
 
   // Keep client template/site CRUD serverless traces focused on route-safe runtime inputs.
