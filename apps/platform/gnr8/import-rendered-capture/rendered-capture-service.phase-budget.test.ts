@@ -173,3 +173,94 @@ test("runRenderedCapture keeps unavailable when no browser artifacts exist", asy
   assert.equal(result.sourceMode, "raw_html");
   assert.equal(result.documents.length, 0);
 });
+
+test("runRenderedCapture preserves unsupported classification from runtime diagnostics", async () => {
+  const snapshotRootDirAbs = fs.mkdtempSync(path.join(os.tmpdir(), "gnr8-rendered-capture-status-unsupported-test-"));
+  const result = await runRenderedCapture({
+    sourceUrl: "https://example.com",
+    snapshotRootDirAbs,
+    executor: async () => ({
+      status: "unavailable",
+      document: null,
+      screenshots: [],
+      computedStyleSamples: [],
+      renderedObservedAssetUrls: [],
+      diagnostics: [
+        {
+          code: "ENVIRONMENT_UNSUPPORTED",
+          severity: "error",
+          message: "runtime unsupported",
+          details: { reason: "LAUNCH_PROBE_FAILED" },
+        },
+      ],
+    }),
+  });
+
+  assert.equal(result.status, "unavailable");
+  assert.equal(result.diagnostics.some((entry) => entry.code === "ENVIRONMENT_UNSUPPORTED"), true);
+});
+
+test("runRenderedCapture downgrades available to failed when no rendered evidence exists", async () => {
+  const snapshotRootDirAbs = fs.mkdtempSync(path.join(os.tmpdir(), "gnr8-rendered-capture-status-failed-test-"));
+  const result = await runRenderedCapture({
+    sourceUrl: "https://example.com",
+    snapshotRootDirAbs,
+    executor: async () => ({
+      status: "available",
+      document: null,
+      screenshots: [],
+      computedStyleSamples: [],
+      renderedObservedAssetUrls: [],
+      diagnostics: [],
+    }),
+  });
+
+  assert.equal(result.status, "failed");
+  assert.equal(result.sourceMode, "raw_html");
+  assert.equal(result.documents.length, 0);
+  assert.equal(result.screenshots.length, 0);
+  assert.equal(result.computedStyleSamples.length, 0);
+});
+
+test("runRenderedCapture keeps partial when at least one rendered evidence artifact exists", async () => {
+  const snapshotRootDirAbs = fs.mkdtempSync(path.join(os.tmpdir(), "gnr8-rendered-capture-status-partial-style-test-"));
+  const result = await runRenderedCapture({
+    sourceUrl: "https://example.com",
+    snapshotRootDirAbs,
+    executor: async () => ({
+      status: "partial",
+      document: null,
+      screenshots: [],
+      computedStyleSamples: [
+        {
+          kind: "computed_style_sample_v1",
+          sampleId: "sample-1",
+          target: "root",
+          selector: "body",
+          tagName: "BODY",
+          className: null,
+          styles: {
+            fontFamily: "sans-serif",
+            fontSize: "16px",
+            fontWeight: "400",
+            lineHeight: "24px",
+            color: "rgb(0, 0, 0)",
+            backgroundColor: "rgb(255, 255, 255)",
+            borderRadius: "0px",
+            paddingTop: "0px",
+            paddingRight: "0px",
+            paddingBottom: "0px",
+            paddingLeft: "0px",
+          },
+        },
+      ],
+      renderedObservedAssetUrls: [],
+      diagnostics: [],
+    }),
+  });
+
+  assert.equal(result.status, "partial");
+  assert.equal(result.sourceMode, "raw_html");
+  assert.equal(result.documents.length, 0);
+  assert.equal(result.computedStyleSamples.length, 1);
+});

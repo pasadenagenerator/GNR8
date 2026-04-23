@@ -53,6 +53,34 @@ function toErrorString(error: unknown): string {
   return String((error as Error)?.message ?? error);
 }
 
+function resolveExecutableStat(pathAbs: string | null): {
+  isFile: boolean | null;
+  mode: string | null;
+  sizeBytes: number | null;
+} {
+  if (!pathAbs) {
+    return {
+      isFile: null,
+      mode: null,
+      sizeBytes: null,
+    };
+  }
+  try {
+    const stat = fs.statSync(pathAbs);
+    return {
+      isFile: stat.isFile(),
+      mode: stat.mode.toString(8),
+      sizeBytes: stat.size,
+    };
+  } catch {
+    return {
+      isFile: null,
+      mode: null,
+      sizeBytes: null,
+    };
+  }
+}
+
 function pushDiagnostic(
   diagnostics: RenderedCaptureDiagnostic[],
   input: {
@@ -940,8 +968,40 @@ async function defaultRenderedCaptureExecutor(input: RenderedCaptureExecutorInpu
     details: {
       available: true,
       selectedRuntimeMode: browserRuntime.mode,
+      selectedRuntimeTarget: browserRuntime.target,
       packageName: browserRuntime.packageName,
       attemptedRuntimes: browserRuntime.attempts,
+    },
+  });
+
+  const executableStat = resolveExecutableStat(browserRuntime.executablePath);
+  pushDiagnostic(diagnostics, {
+    code: "PLAYWRIGHT_EXECUTABLE_RESOLUTION",
+    message: "Resolved runtime executable path for browser launch",
+    details: {
+      selectedRuntimeMode: browserRuntime.mode,
+      selectedRuntimeTarget: browserRuntime.target,
+      packageName: browserRuntime.packageName,
+      executablePathResolution: browserRuntime.executablePathResolution,
+      executablePath: browserRuntime.executablePath,
+      attemptedRuntimes: browserRuntime.attempts,
+    },
+  });
+  pushDiagnostic(diagnostics, {
+    code: "PLAYWRIGHT_EXECUTABLE_EXISTS_CHECK",
+    message: "Executable presence/readability/executability check completed",
+    details: {
+      selectedRuntimeMode: browserRuntime.mode,
+      selectedRuntimeTarget: browserRuntime.target,
+      packageName: browserRuntime.packageName,
+      executablePath: browserRuntime.executablePath,
+      executablePathExists: browserRuntime.executablePathExists,
+      executablePathReadable: browserRuntime.executablePathReadable,
+      executablePathExecutable: browserRuntime.executablePathExecutable,
+      executablePathIsFile: executableStat.isFile,
+      executablePathMode: executableStat.mode,
+      executablePathSizeBytes: executableStat.sizeBytes,
+      binariesPresentAtRuntime: browserRuntime.executablePathExists,
     },
   });
 
@@ -1016,19 +1076,40 @@ async function defaultRenderedCaptureExecutor(input: RenderedCaptureExecutorInpu
   const launchArgs = Array.isArray(launchOptions.args)
     ? launchOptions.args.filter((entry): entry is string => typeof entry === "string")
     : [];
+  const launchHeadless = typeof launchOptions.headless === "boolean" ? launchOptions.headless : true;
 
   try {
     try {
+      pushDiagnostic(diagnostics, {
+        code: "BROWSER_LAUNCH_CONFIGURATION",
+        message: "Browser launch configuration resolved",
+        details: {
+          selectedRuntimeMode: browserRuntime.mode,
+          selectedRuntimeTarget: browserRuntime.target,
+          packageName: browserRuntime.packageName,
+          timeoutMs: launchTimeoutMs,
+          launchArgs,
+          headless: launchHeadless,
+          executablePath: chromiumExecutablePath,
+          executablePathExists: chromiumExecutablePathExists,
+          executablePathReadable: browserRuntime.executablePathReadable,
+          executablePathExecutable: browserRuntime.executablePathExecutable,
+          executablePathResolution: browserRuntime.executablePathResolution,
+          launchMode: browserRuntime.mode === "playwright_core_sparticuz" ? "vercel_serverless_chromium" : "playwright_default",
+        },
+      });
       pushDiagnostic(diagnostics, {
         code: "BROWSER_LAUNCH_STARTED",
         message: "Starting browser launch for rendered capture",
         details: {
           timeoutMs: launchTimeoutMs,
           launchArgs,
+          headless: launchHeadless,
           executablePath: chromiumExecutablePath,
           executablePathExists: chromiumExecutablePathExists,
           executablePathResolution: browserRuntime.executablePathResolution,
           selectedRuntimeMode: browserRuntime.mode,
+          selectedRuntimeTarget: browserRuntime.target,
           packageName: browserRuntime.packageName,
         },
       });
@@ -1048,6 +1129,23 @@ async function defaultRenderedCaptureExecutor(input: RenderedCaptureExecutorInpu
             executablePath: chromiumExecutablePath,
             executablePathExists: chromiumExecutablePathExists,
             selectedRuntimeMode: browserRuntime.mode,
+            selectedRuntimeTarget: browserRuntime.target,
+            packageName: browserRuntime.packageName,
+          },
+        });
+        pushDiagnostic(diagnostics, {
+          code: "BROWSER_LAUNCH_ERROR_CLASSIFIED",
+          severity: "error",
+          message: "Browser launch error classified",
+          details: {
+            classifiedFailureCode: "PLAYWRIGHT_LAUNCH_TIMEOUT",
+            timeoutMs: launchTimeoutMs,
+            launchArgs,
+            headless: launchHeadless,
+            executablePath: chromiumExecutablePath,
+            executablePathExists: chromiumExecutablePathExists,
+            selectedRuntimeMode: browserRuntime.mode,
+            selectedRuntimeTarget: browserRuntime.target,
             packageName: browserRuntime.packageName,
           },
         });
@@ -1065,6 +1163,7 @@ async function defaultRenderedCaptureExecutor(input: RenderedCaptureExecutorInpu
             executablePathExists: chromiumExecutablePathExists,
             executablePathResolution: browserRuntime.executablePathResolution,
             selectedRuntimeMode: browserRuntime.mode,
+            selectedRuntimeTarget: browserRuntime.target,
             packageName: browserRuntime.packageName,
             binariesPresentAtRuntime: chromiumExecutablePathExists,
           },
@@ -1080,6 +1179,7 @@ async function defaultRenderedCaptureExecutor(input: RenderedCaptureExecutorInpu
             executablePath: chromiumExecutablePath,
             executablePathExists: chromiumExecutablePathExists,
             selectedRuntimeMode: browserRuntime.mode,
+            selectedRuntimeTarget: browserRuntime.target,
             packageName: browserRuntime.packageName,
           },
         });
@@ -1091,6 +1191,7 @@ async function defaultRenderedCaptureExecutor(input: RenderedCaptureExecutorInpu
             reason: "PLAYWRIGHT_LAUNCH_TIMEOUT",
             timeoutMs: launchTimeoutMs,
             selectedRuntimeMode: browserRuntime.mode,
+            selectedRuntimeTarget: browserRuntime.target,
             packageName: browserRuntime.packageName,
           },
         });
@@ -1106,6 +1207,7 @@ async function defaultRenderedCaptureExecutor(input: RenderedCaptureExecutorInpu
             executablePath: chromiumExecutablePath,
             launchFailureCode: "PLAYWRIGHT_LAUNCH_TIMEOUT",
             selectedRuntimeMode: browserRuntime.mode,
+            selectedRuntimeTarget: browserRuntime.target,
             packageName: browserRuntime.packageName,
             executablePathResolution: browserRuntime.executablePathResolution,
           },
@@ -1154,6 +1256,24 @@ async function defaultRenderedCaptureExecutor(input: RenderedCaptureExecutorInpu
           executablePathExists: chromiumExecutablePathExists,
           executablePathResolution: browserRuntime.executablePathResolution,
           selectedRuntimeMode: browserRuntime.mode,
+          selectedRuntimeTarget: browserRuntime.target,
+          packageName: browserRuntime.packageName,
+        },
+      });
+      pushDiagnostic(diagnostics, {
+        code: "BROWSER_LAUNCH_ERROR_CLASSIFIED",
+        severity: "error",
+        message: "Browser launch error classified",
+        details: {
+          classifiedFailureCode: reason,
+          error: toErrorString(error),
+          timeoutMs: launchTimeoutMs,
+          launchArgs,
+          headless: launchHeadless,
+          executablePath: chromiumExecutablePath,
+          executablePathExists: chromiumExecutablePathExists,
+          selectedRuntimeMode: browserRuntime.mode,
+          selectedRuntimeTarget: browserRuntime.target,
           packageName: browserRuntime.packageName,
         },
       });
@@ -1171,6 +1291,7 @@ async function defaultRenderedCaptureExecutor(input: RenderedCaptureExecutorInpu
           executablePathExists: chromiumExecutablePathExists,
           executablePathResolution: browserRuntime.executablePathResolution,
           selectedRuntimeMode: browserRuntime.mode,
+          selectedRuntimeTarget: browserRuntime.target,
           packageName: browserRuntime.packageName,
           binariesPresentAtRuntime: chromiumExecutablePathExists,
         },
@@ -1183,6 +1304,7 @@ async function defaultRenderedCaptureExecutor(input: RenderedCaptureExecutorInpu
           reason,
           error: toErrorString(error),
           selectedRuntimeMode: browserRuntime.mode,
+          selectedRuntimeTarget: browserRuntime.target,
           packageName: browserRuntime.packageName,
           executablePath: chromiumExecutablePath,
           executablePathExists: chromiumExecutablePathExists,
@@ -1196,6 +1318,7 @@ async function defaultRenderedCaptureExecutor(input: RenderedCaptureExecutorInpu
           reason,
           error: toErrorString(error),
           selectedRuntimeMode: browserRuntime.mode,
+          selectedRuntimeTarget: browserRuntime.target,
           packageName: browserRuntime.packageName,
         },
       });
@@ -1207,6 +1330,7 @@ async function defaultRenderedCaptureExecutor(input: RenderedCaptureExecutorInpu
           error: toErrorString(error),
           launchFailureCode: reason,
           selectedRuntimeMode: browserRuntime.mode,
+          selectedRuntimeTarget: browserRuntime.target,
           packageName: browserRuntime.packageName,
         },
       });
@@ -1218,6 +1342,7 @@ async function defaultRenderedCaptureExecutor(input: RenderedCaptureExecutorInpu
           error: toErrorString(error),
           launchFailureCode: reason,
           selectedRuntimeMode: browserRuntime.mode,
+          selectedRuntimeTarget: browserRuntime.target,
           packageName: browserRuntime.packageName,
         },
       });
@@ -1233,6 +1358,7 @@ async function defaultRenderedCaptureExecutor(input: RenderedCaptureExecutorInpu
           executablePath: chromiumExecutablePath,
           launchFailureCode: reason,
           selectedRuntimeMode: browserRuntime.mode,
+          selectedRuntimeTarget: browserRuntime.target,
           packageName: browserRuntime.packageName,
           executablePathResolution: browserRuntime.executablePathResolution,
         },
@@ -1407,6 +1533,7 @@ async function defaultRenderedCaptureExecutor(input: RenderedCaptureExecutorInpu
         executablePathExists: chromiumExecutablePathExists,
         executablePathResolution: browserRuntime.executablePathResolution,
         selectedRuntimeMode: browserRuntime.mode,
+        selectedRuntimeTarget: browserRuntime.target,
         packageName: browserRuntime.packageName,
         binariesPresentAtRuntime: chromiumExecutablePathExists,
       },

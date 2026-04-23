@@ -40,21 +40,25 @@ const nextConfig = {
       './node_modules/playwright/.local-browsers/**',
       './node_modules/playwright-core/.local-browsers/**',
       './node_modules/playwright-core/lib/server/registry/**',
+      './node_modules/@sparticuz/chromium/**',
     ],
     '/api/gnr8/runtime/migrate/url': [
       './node_modules/playwright/.local-browsers/**',
       './node_modules/playwright-core/.local-browsers/**',
       './node_modules/playwright-core/lib/server/registry/**',
+      './node_modules/@sparticuz/chromium/**',
     ],
     '/api/gnr8/agency/clients/[clientId]/sites/import': [
       './node_modules/playwright/.local-browsers/**',
       './node_modules/playwright-core/.local-browsers/**',
       './node_modules/playwright-core/lib/server/registry/**',
+      './node_modules/@sparticuz/chromium/**',
     ],
     '/api/internal/gnr8/rendered-capture-worker': [
       './node_modules/playwright/.local-browsers/**',
       './node_modules/playwright-core/.local-browsers/**',
       './node_modules/playwright-core/lib/server/registry/**',
+      './node_modules/@sparticuz/chromium/**',
     ],
   },
 
@@ -77,6 +81,7 @@ const nextConfig = {
       './dist-rendered-capture-worker/**',
       './node_modules/playwright/**',
       './node_modules/playwright-core/**',
+      './node_modules/@sparticuz/chromium/**',
       './tsconfig.tsbuildinfo',
     ],
     '/api/gnr8/clients/[clientId]/templates/[templateId]': [
@@ -87,6 +92,7 @@ const nextConfig = {
       './dist-rendered-capture-worker/**',
       './node_modules/playwright/**',
       './node_modules/playwright-core/**',
+      './node_modules/@sparticuz/chromium/**',
       './tsconfig.tsbuildinfo',
     ],
     '/api/gnr8/clients/[clientId]/templates/upload': [
@@ -116,6 +122,7 @@ const nextConfig = {
       './dist-rendered-capture-worker/**',
       './node_modules/playwright/**',
       './node_modules/playwright-core/**',
+      './node_modules/@sparticuz/chromium/**',
       './tsconfig.tsbuildinfo',
     ],
     '/api/gnr8/clients/[clientId]/sites': [
@@ -126,6 +133,7 @@ const nextConfig = {
       './dist-rendered-capture-worker/**',
       './node_modules/playwright/**',
       './node_modules/playwright-core/**',
+      './node_modules/@sparticuz/chromium/**',
       './tsconfig.tsbuildinfo',
     ],
     '/api/validation/url-import': [

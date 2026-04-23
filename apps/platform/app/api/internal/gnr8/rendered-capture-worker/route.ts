@@ -57,6 +57,7 @@ function inferProducedEvidence(response: unknown): {
   domProduced: boolean;
   screenshotProduced: boolean;
   computedStylesProduced: boolean;
+  meaningfulRenderSuccess: boolean;
 } {
   const payload = response as {
     qualitySummary?: {
@@ -74,6 +75,10 @@ function inferProducedEvidence(response: unknown): {
     domProduced: Number.isFinite(domLength) && domLength > 0,
     screenshotProduced: Number.isFinite(screenshotCount) && screenshotCount > 0,
     computedStylesProduced: Number.isFinite(computedStyleSampleCount) && computedStyleSampleCount > 0,
+    meaningfulRenderSuccess:
+      (Number.isFinite(domLength) && domLength > 0) ||
+      (Number.isFinite(screenshotCount) && screenshotCount > 0) ||
+      (Number.isFinite(computedStyleSampleCount) && computedStyleSampleCount > 0),
   };
 }
 
@@ -180,6 +185,7 @@ export async function POST(req: Request) {
       domProduced: produced.domProduced,
       screenshotProduced: produced.screenshotProduced,
       computedStylesProduced: produced.computedStylesProduced,
+      meaningfulRenderSuccess: produced.meaningfulRenderSuccess,
     });
 
     return NextResponse.json(response, { status: 200 });
