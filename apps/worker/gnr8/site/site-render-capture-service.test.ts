@@ -542,3 +542,101 @@ test('runSiteRenderCapture marks unreachable worker as deterministic failure tru
   assert.equal(persistedSummary?.renderedCapture.execution.failureCode, 'CAPTURE_WORKER_TIMEOUT')
   assert.equal(persistedSummary?.importDiagnosticCodes.includes('NO_USABLE_RENDERED_RUN_FOUND'), true)
 })
+
+test('runSiteRenderCapture keeps non-zero DOM length as usable evidence', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'gnr8-site-render-dom-length-only-'))
+  const entryHtmlPath = path.resolve(root, 'index.html')
+  const renderedDomSourcePath = path.resolve(root, 'rendered-capture', 'rendered-dom.html')
+  fs.mkdirSync(path.dirname(renderedDomSourcePath), { recursive: true })
+
+  fs.writeFileSync(entryHtmlPath, '<!doctype html><html><body><div></div></body></html>', 'utf8')
+  fs.writeFileSync(renderedDomSourcePath, '<!doctype html><html><body><div data-shell="1"></div></body></html>', 'utf8')
+
+  const existingSummary: RuntimeImportProvenanceSummary = {
+    kind: 'runtime_import_provenance_summary_v1',
+    sourceMode: 'raw_html_fallback',
+    importFidelityStatus: 'capture_failed',
+    renderedCaptureStatus: 'failed',
+    renderedDomQuality: 'unusable',
+    importFidelityScore: null,
+    screenshotCount: 0,
+    computedStyleSampleCount: 0,
+    renderedCapture: {
+      used: false,
+      status: 'failed',
+      quality: 'unusable',
+      domLength: 0,
+      nodeCount: 0,
+      styleSampleCount: 0,
+      styleCoverage: 0,
+      screenshots: { viewport: false, fullPage: false },
+      execution: {
+        runtimeKind: 'unknown',
+        environmentSupported: false,
+        browserPackageAvailable: false,
+        browserBinaryAvailable: false,
+        environmentStatus: 'unknown',
+        failureCategory: 'none',
+        failureCode: null,
+        browserLaunch: 'not_attempted',
+        navigation: 'not_attempted',
+        dom: 'not_attempted',
+        screenshot: 'none',
+        styleSampling: 'not_attempted',
+      },
+    },
+    importDiagnosticCodes: [],
+    captureEvidence: {
+      selectedSourceHtmlPath: entryHtmlPath,
+      responseHtmlPath: entryHtmlPath,
+      entryHtmlPath,
+      renderedCaptureManifestPath: null,
+      acquisitionEvidencePath: null,
+      renderedDomPath: null,
+      computedStylesPath: null,
+      renderedViewportScreenshotPath: null,
+      renderedFullpageScreenshotPath: null,
+      screenshotPaths: [],
+    },
+    styleSignals: null,
+  }
+
+  const result = await runSiteRenderCapture(
+    {
+      siteId: '00000000-0000-4000-8000-000000000782',
+      siteVersionId: '00000000-0000-4000-8000-000000000986',
+    },
+    {
+      getRuntimeVersionById: async () => ({
+        id: '00000000-0000-4000-8000-000000000986',
+        site_id: 'runtime-site-6',
+        ownership_site_id: '00000000-0000-4000-8000-000000000782',
+        import_provenance_summary: existingSummary,
+      }),
+      runRenderedCapture: async () => ({
+        kind: 'rendered_capture_result_v1',
+        version: '1.0.0',
+        status: 'partial',
+        sourceMode: 'rendered_dom',
+        documents: [
+          {
+            kind: 'rendered_document_snapshot_v1',
+            sourceUrl: 'file://index.html',
+            htmlPathAbs: renderedDomSourcePath,
+            htmlSha256: 'abc',
+            readinessState: 'timeout_partial',
+          },
+        ],
+        screenshots: [],
+        computedStyleSamples: [],
+        renderedObservedAssetUrls: [],
+        diagnostics: [{ code: 'CAPTURE_WORKER_EMPTY_RENDER_RESULT', severity: 'warning', message: 'empty result' }],
+      }),
+      persistRuntimeVersionImportSummary: async () => undefined,
+    },
+  )
+
+  assert.equal(result.hasUsableEvidence, true)
+  assert.equal(result.renderedCaptureStatus, 'partial')
+  assert.equal(result.sourceMode, 'rendered_dom')
+})

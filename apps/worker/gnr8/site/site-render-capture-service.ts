@@ -105,7 +105,7 @@ function resolveCaptureStatus(status: string): RuntimeImportProvenanceSummary['r
 function hasUsableRenderedEvidence(input: {
   evidence: RenderedEvidencePaths
 }): boolean {
-  return input.evidence.domNodeCount > 0 || input.evidence.screenshotPaths.length > 0
+  return input.evidence.domNodeCount > 0 || input.evidence.screenshotPaths.length > 0 || input.evidence.domLength > 0
 }
 
 function hasDiagnosticCode(input: {
@@ -123,6 +123,7 @@ function resolveFailureCodeFromDiagnostics(input: {
   if (input.emptySuccess) return 'SITE_RENDER_CAPTURE_EMPTY_SUCCESS'
   if (input.renderedCaptureStatus !== 'failed') return null
   const prioritizedCodes = [
+    'CAPTURE_WORKER_EMPTY_RENDER_RESULT',
     'CAPTURE_WORKER_NOT_CONFIGURED',
     'CAPTURE_WORKER_DISABLED',
     'CAPTURE_WORKER_TIMEOUT',
