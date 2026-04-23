@@ -69,6 +69,32 @@ type SiteVariantRow = {
   created_at: string | null
 }
 
+type SiteBootstrapJobRow = {
+  site_id: string | null
+  status: string | null
+  runtime_site_id: string | null
+  runtime_site_version_id: string | null
+  artifact_id: string | null
+  section_count: number | null
+  updated_at: string | null
+  completed_at: string | null
+}
+
+type SiteRenderJobRow = {
+  runtime_site_version_id: string | null
+  runtime_site_id: string | null
+  site_id: string | null
+  status: string | null
+  rendered_dom_path: string | null
+  computed_styles_path: string | null
+  acquisition_evidence_path: string | null
+  screenshot_count: number | null
+  computed_style_sample_count: number | null
+  dom_node_count: number | null
+  updated_at: string | null
+  completed_at: string | null
+}
+
 type RuntimeSnapshot = {
   latestRuntimeSiteVersionId: string | null
   latestRuntimeState: string | null
@@ -506,6 +532,146 @@ function compareRuntimeVersionRows(a: RuntimeVersionRow, b: RuntimeVersionRow): 
 
 function resolveLatestRuntimeVersionRow(runtimeRows: RuntimeVersionRow[]): RuntimeVersionRow | null {
   return selectPrimaryRuntimeVersionRow(runtimeRows).selected
+}
+
+function toNonNegativeInt(value: unknown): number {
+  const numeric = Number(value)
+  if (!Number.isFinite(numeric)) return 0
+  return Math.max(0, Math.floor(numeric))
+}
+
+function buildSyntheticSummaryFromRenderJob(input: {
+  renderJob: SiteRenderJobRow
+}): RuntimeImportProvenanceSummary {
+  const screenshotCount = toNonNegativeInt(input.renderJob.screenshot_count)
+  const computedStyleSampleCount = toNonNegativeInt(input.renderJob.computed_style_sample_count)
+  const domNodeCount = toNonNegativeInt(input.renderJob.dom_node_count)
+  const hasRenderedTruth = domNodeCount > 0 || screenshotCount > 0
+  const sourceMode: RuntimeImportProvenanceSummary['sourceMode'] = hasRenderedTruth ? 'rendered_dom' : 'raw_html_fallback'
+  const renderedCaptureStatus: RuntimeImportProvenanceSummary['renderedCaptureStatus'] =
+    domNodeCount > 0
+      ? (screenshotCount > 0 ? 'available' : 'partial')
+      : (screenshotCount > 0 ? 'partial' : 'failed')
+  const renderedDomQuality: RuntimeImportProvenanceSummary['renderedDomQuality'] =
+    domNodeCount >= 12 ? 'strong' : (domNodeCount >= 3 ? 'weak' : 'unusable')
+  const importFidelityStatus: RuntimeImportProvenanceSummary['importFidelityStatus'] =
+    sourceMode === 'rendered_dom'
+      ? (renderedCaptureStatus === 'available' && renderedDomQuality === 'strong' ? 'high_fidelity_import' : 'degraded_import')
+      : 'capture_failed'
+  const screenshotPaths = [
+    ...(screenshotCount > 0 ? ['site-render:viewport'] : []),
+    ...(screenshotCount > 1 ? ['site-render:fullpage'] : []),
+  ]
+
+  return {
+    kind: 'runtime_import_provenance_summary_v1',
+    sourceMode,
+    importFidelityStatus,
+    renderedCaptureStatus,
+    renderedDomQuality,
+    importFidelityScore: null,
+    screenshotCount,
+    computedStyleSampleCount,
+    renderedCapture: {
+      used: sourceMode === 'rendered_dom',
+      status: renderedCaptureStatus,
+      quality: renderedDomQuality,
+      domLength: domNodeCount,
+      nodeCount: domNodeCount,
+      styleSampleCount: computedStyleSampleCount,
+      styleCoverage: Number((Math.max(0, computedStyleSampleCount) / 10).toFixed(3)),
+      screenshots: {
+        viewport: screenshotCount > 0,
+        fullPage: screenshotCount > 1,
+      },
+      execution: {
+        runtimeKind: 'nodejs',
+        environmentSupported: true,
+        browserPackageAvailable: true,
+        browserBinaryAvailable: true,
+        environmentStatus: 'supported',
+        failureCategory: renderedCaptureStatus === 'failed' ? 'page' : 'none',
+        failureCode: renderedCaptureStatus === 'failed' ? 'SITE_RENDER_CAPTURE_MISSING_RENDERED_TRUTH' : null,
+        browserLaunch: renderedCaptureStatus === 'failed' ? 'failed' : 'succeeded',
+        navigation: renderedCaptureStatus === 'failed' ? 'failed' : 'succeeded',
+        dom: domNodeCount > 0 ? 'captured' : 'empty_or_failed',
+        screenshot: screenshotCount > 0 ? 'captured' : 'none',
+        styleSampling: computedStyleSampleCount > 0 ? 'captured' : 'failed_or_empty',
+      },
+    },
+    importDiagnosticCodes: [
+      'SITE_RENDER_CAPTURE_COMPLETED',
+      ...(sourceMode === 'rendered_dom' ? ['CAPTURE_WORKER_RESULT_SELECTED'] : ['NO_USABLE_RENDERED_RUN_FOUND']),
+    ],
+    captureEvidence: {
+      selectedSourceHtmlPath: null,
+      responseHtmlPath: null,
+      entryHtmlPath: null,
+      renderedCaptureManifestPath: null,
+      acquisitionEvidencePath: toTextOrNull(input.renderJob.acquisition_evidence_path),
+      renderedDomPath: toTextOrNull(input.renderJob.rendered_dom_path),
+      computedStylesPath: toTextOrNull(input.renderJob.computed_styles_path),
+      renderedViewportScreenshotPath: screenshotCount > 0 ? 'site-render:viewport' : null,
+      renderedFullpageScreenshotPath: screenshotCount > 1 ? 'site-render:fullpage' : null,
+      screenshotPaths,
+    },
+    captureJob: null,
+    workerHealth: null,
+    styleSignals: null,
+    multipageImport: null,
+    siteTree: null,
+    templateFamilies: null,
+  }
+}
+
+function synthesizeRuntimeVersionRowsFromWorkerJobs(input: {
+  siteId: string
+  bootstrapJob: SiteBootstrapJobRow | null
+  renderJobs: SiteRenderJobRow[]
+  runtimeRows: RuntimeVersionRow[]
+}): RuntimeVersionRow[] {
+  const knownIds = new Set(
+    input.runtimeRows.map((row) => toTextOrNull(row.id)).filter((value): value is string => Boolean(value)),
+  )
+  const syntheticRows: RuntimeVersionRow[] = []
+
+  for (const renderJob of input.renderJobs) {
+    const runtimeSiteVersionId = toTextOrNull(renderJob.runtime_site_version_id)
+    if (!runtimeSiteVersionId || knownIds.has(runtimeSiteVersionId)) continue
+    const status = normalizeText(renderJob.status).toLowerCase()
+    if (status !== 'completed' && status !== 'running') continue
+    const createdAt = toIsoOrNull(renderJob.completed_at) ?? toIsoOrNull(renderJob.updated_at)
+    syntheticRows.push({
+      id: runtimeSiteVersionId,
+      site_id: toTextOrNull(renderJob.runtime_site_id),
+      ownership_site_id: input.siteId,
+      state: 'DRAFT',
+      version_no: null,
+      import_provenance_summary: buildSyntheticSummaryFromRenderJob({ renderJob }),
+      artifact_id: toTextOrNull(input.bootstrapJob?.artifact_id),
+      updated_at: createdAt,
+      created_at: createdAt,
+    })
+    knownIds.add(runtimeSiteVersionId)
+  }
+
+  const bootstrapRuntimeSiteVersionId = toTextOrNull(input.bootstrapJob?.runtime_site_version_id)
+  if (bootstrapRuntimeSiteVersionId && !knownIds.has(bootstrapRuntimeSiteVersionId)) {
+    const createdAt = toIsoOrNull(input.bootstrapJob?.completed_at) ?? toIsoOrNull(input.bootstrapJob?.updated_at)
+    syntheticRows.push({
+      id: bootstrapRuntimeSiteVersionId,
+      site_id: toTextOrNull(input.bootstrapJob?.runtime_site_id),
+      ownership_site_id: input.siteId,
+      state: 'DRAFT',
+      version_no: null,
+      import_provenance_summary: null,
+      artifact_id: toTextOrNull(input.bootstrapJob?.artifact_id),
+      updated_at: createdAt,
+      created_at: createdAt,
+    })
+  }
+
+  return syntheticRows
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -1276,6 +1442,7 @@ function parseImportProvenanceSummary(value: unknown): RuntimeImportProvenanceSu
 function parseImportFidelity(input: {
   pageRows: RuntimePageVersionRow[]
   runtimeVersion: RuntimeVersionRow | null
+  renderJobFallback?: SiteRenderJobRow | null
 }): {
   sourceMode: SiteWorkspaceReadModel['pipeline']['sourceMode']
   importFidelityStatus: SiteWorkspaceReadModel['pipeline']['importFidelityStatus']
@@ -1306,6 +1473,90 @@ function parseImportFidelity(input: {
     fidelity === 'degraded_import' || fidelity === 'capture_failed'
 
   if (!parsedSummary) {
+    const fallbackRenderJob = input.renderJobFallback ?? null
+    if (fallbackRenderJob && normalizeText(fallbackRenderJob.status).toLowerCase() === 'completed') {
+      const domNodeCount = toNonNegativeInt(fallbackRenderJob.dom_node_count)
+      const screenshotCount = toNonNegativeInt(fallbackRenderJob.screenshot_count)
+      const computedStyleSampleCount = toNonNegativeInt(fallbackRenderJob.computed_style_sample_count)
+      const sourceMode: SiteWorkspaceReadModel['pipeline']['sourceMode'] =
+        domNodeCount > 0 || screenshotCount > 0 ? 'rendered_dom' : 'raw_html_fallback'
+      const renderedCaptureStatus: SiteWorkspaceReadModel['pipeline']['renderedCaptureStatus'] =
+        domNodeCount > 0 ? (screenshotCount > 0 ? 'available' : 'partial') : (screenshotCount > 0 ? 'partial' : 'failed')
+      const renderedDomQuality: SiteWorkspaceReadModel['pipeline']['renderedDomQuality'] =
+        domNodeCount >= 12 ? 'strong' : (domNodeCount >= 3 ? 'weak' : 'unusable')
+      const importFidelityStatus: SiteWorkspaceReadModel['pipeline']['importFidelityStatus'] =
+        sourceMode === 'rendered_dom'
+          ? (renderedCaptureStatus === 'available' && renderedDomQuality === 'strong' ? 'high_fidelity_import' : 'degraded_import')
+          : 'capture_failed'
+      const inferredStyleSignals = parseStyleSignalsFromSemanticLabels(input.pageRows)
+      const captureEvidenceRefs = [
+        toTextOrNull(fallbackRenderJob.rendered_dom_path),
+        toTextOrNull(fallbackRenderJob.computed_styles_path),
+        toTextOrNull(fallbackRenderJob.acquisition_evidence_path),
+      ].filter((value): value is string => Boolean(value))
+
+      return {
+        sourceMode,
+        importFidelityStatus,
+        renderedCaptureStatus,
+        renderedDomQuality,
+        importFidelityScore: parsedFromSignals.importFidelityScore,
+        screenshotCount,
+        computedStyleSampleCount,
+        renderedCapture: {
+          used: sourceMode === 'rendered_dom',
+          status: renderedCaptureStatus === 'unknown' ? 'failed' : renderedCaptureStatus,
+          quality: renderedDomQuality === 'unknown' ? 'unusable' : renderedDomQuality,
+          domLength: domNodeCount,
+          nodeCount: domNodeCount,
+          styleSampleCount: computedStyleSampleCount,
+          styleCoverage: Number((Math.max(0, computedStyleSampleCount) / 10).toFixed(3)),
+          screenshots: {
+            viewport: screenshotCount > 0,
+            fullPage: screenshotCount > 1,
+          },
+          execution: {
+            runtimeKind: 'nodejs',
+            environmentSupported: true,
+            browserPackageAvailable: true,
+            browserBinaryAvailable: true,
+            environmentStatus: 'supported',
+            failureCategory: renderedCaptureStatus === 'failed' ? 'page' : 'none',
+            failureCode: renderedCaptureStatus === 'failed' ? 'SITE_RENDER_CAPTURE_MISSING_RENDERED_TRUTH' : null,
+            browserLaunch: renderedCaptureStatus === 'failed' ? 'failed' : 'succeeded',
+            navigation: renderedCaptureStatus === 'failed' ? 'failed' : 'succeeded',
+            dom: domNodeCount > 0 ? 'captured' : 'empty_or_failed',
+            screenshot: screenshotCount > 0 ? 'captured' : 'none',
+            styleSampling: computedStyleSampleCount > 0 ? 'captured' : 'failed_or_empty',
+          },
+        },
+        styleSignalCoverage: inferredStyleSignals?.provenance.computedStyle.coverage ?? 0,
+        styleSignalFallbackUsed: inferredStyleSignals?.provenance.fallbackUsed ?? fallbackUsedFromFidelity(importFidelityStatus),
+        styleSignalSourceMode: inferredStyleSignals?.sourceMode ?? 'unknown',
+        evidencePaths: {
+          renderedDomPath: toTextOrNull(fallbackRenderJob.rendered_dom_path),
+          computedStylesPath: toTextOrNull(fallbackRenderJob.computed_styles_path),
+          acquisitionEvidencePath: toTextOrNull(fallbackRenderJob.acquisition_evidence_path),
+          renderedCaptureManifestPath: null,
+          renderedViewportScreenshotPath: screenshotCount > 0 ? 'site-render:viewport' : null,
+          renderedFullpageScreenshotPath: screenshotCount > 1 ? 'site-render:fullpage' : null,
+        },
+        evidenceDiagnostics: [
+          'SITE_RENDER_CAPTURE_COMPLETED',
+          ...(sourceMode === 'rendered_dom' ? ['READMODEL_RENDERED_TRUTH_FROM_RENDER_JOB'] : ['NO_USABLE_RENDERED_RUN_FOUND']),
+        ],
+        importDiagnosticCodes: sourceMode === 'rendered_dom' ? ['CAPTURE_WORKER_RESULT_SELECTED'] : ['NO_USABLE_RENDERED_RUN_FOUND'],
+        captureEvidenceRefs,
+        captureJob: null,
+        workerHealth: null,
+        captureFallbackReason: sourceMode === 'rendered_dom' ? null : 'rendered_capture_unusable',
+        styleSignals: inferredStyleSignals,
+        multipageImportSummary: null,
+        siteTreeSummary: null,
+        templateFamiliesSummary: null,
+      }
+    }
+
     const inferredStyleSignals = parseStyleSignalsFromSemanticLabels(input.pageRows)
     return {
       ...parsedFromSignals,
@@ -1619,14 +1870,58 @@ export async function getSiteWorkspaceReadModelForPage(input: {
     siteVersionId: variant.siteVersionId,
   }))
 
-  const runtimeResult = await supabase
-    .from('gnr8_runtime_site_versions')
-    .select('id,site_id,ownership_site_id,state,version_no,import_provenance_summary,artifact_id,updated_at,created_at')
-    .eq('ownership_site_id', siteId)
+  const [runtimeResult, bootstrapJobResult, renderJobsResult] = await Promise.all([
+    supabase
+      .from('gnr8_runtime_site_versions')
+      .select('id,site_id,ownership_site_id,state,version_no,import_provenance_summary,artifact_id,updated_at,created_at')
+      .eq('ownership_site_id', siteId),
+    supabase
+      .from('gnr8_site_bootstrap_jobs')
+      .select('site_id,status,runtime_site_id,runtime_site_version_id,artifact_id,section_count,updated_at,completed_at')
+      .eq('site_id', siteId)
+      .limit(1)
+      .maybeSingle(),
+    supabase
+      .from('gnr8_site_render_jobs')
+      .select('runtime_site_version_id,runtime_site_id,site_id,status,rendered_dom_path,computed_styles_path,acquisition_evidence_path,screenshot_count,computed_style_sample_count,dom_node_count,updated_at,completed_at')
+      .eq('site_id', siteId)
+      .order('updated_at', { ascending: false })
+      .limit(20),
+  ])
 
-  const runtimeRows = !runtimeResult.error && Array.isArray(runtimeResult.data)
+  const runtimeRowsDirect = !runtimeResult.error && Array.isArray(runtimeResult.data)
     ? (runtimeResult.data as RuntimeVersionRow[])
     : []
+  const bootstrapJob = !bootstrapJobResult.error ? ((bootstrapJobResult.data as SiteBootstrapJobRow | null) ?? null) : null
+  const renderJobs = !renderJobsResult.error && Array.isArray(renderJobsResult.data)
+    ? (renderJobsResult.data as SiteRenderJobRow[])
+    : []
+  const syntheticRuntimeRows = synthesizeRuntimeVersionRowsFromWorkerJobs({
+    siteId,
+    bootstrapJob,
+    renderJobs,
+    runtimeRows: runtimeRowsDirect,
+  })
+  const runtimeRowsById = new Map<string, RuntimeVersionRow>()
+  for (const row of [...runtimeRowsDirect, ...syntheticRuntimeRows]) {
+    const id = toTextOrNull(row.id)
+    if (!id) continue
+    if (!runtimeRowsById.has(id)) runtimeRowsById.set(id, row)
+  }
+  const runtimeRows = [...runtimeRowsById.values()]
+
+  console.info('[site-workspace] SITE_OVERVIEW_RUNTIME_VERSION_RESOLUTION', {
+    siteId,
+    runtimeRowsByOwnershipCount: runtimeRowsDirect.length,
+    syntheticRuntimeRowsCount: syntheticRuntimeRows.length,
+    bootstrapJobStatus: normalizeText(bootstrapJob?.status) || null,
+    bootstrapRuntimeSiteVersionId: toTextOrNull(bootstrapJob?.runtime_site_version_id),
+    renderJobCount: renderJobs.length,
+    renderCompletedCount: renderJobs.filter((row) => normalizeText(row.status).toLowerCase() === 'completed').length,
+    runtimeQueryError: runtimeResult.error?.message ?? null,
+    bootstrapQueryError: bootstrapJobResult.error?.message ?? null,
+    renderQueryError: renderJobsResult.error?.message ?? null,
+  })
 
   const runtimeArbitration = selectPrimaryRuntimeVersionRow(runtimeRows)
   const latestRuntimeRow = runtimeArbitration.selected
@@ -1658,6 +1953,17 @@ export async function getSiteWorkspaceReadModelForPage(input: {
       ? null
       : normalizedVariants.find((variant) => variant.id === selectedResolution.selectedVariant?.id) ?? null
   const selectedRuntimeRow = runtimeRows.find((row) => toTextOrNull(row.id) === selectedRuntimeSiteVersionId) ?? null
+  const selectedRenderJobFallback = selectedRuntimeSiteVersionId
+    ? (
+        renderJobs.find(
+          (row) =>
+            toTextOrNull(row.runtime_site_version_id) === selectedRuntimeSiteVersionId &&
+            normalizeText(row.status).toLowerCase() === 'completed',
+        ) ?? null
+      )
+    : (
+        renderJobs.find((row) => normalizeText(row.status).toLowerCase() === 'completed') ?? null
+      )
   const selectedRuntimeState = toTextOrNull(selectedRuntimeRow?.state) ?? runtimeSnapshot?.latestRuntimeState ?? null
   let pageRows: RuntimePageVersionRow[] = []
 
@@ -1712,10 +2018,23 @@ export async function getSiteWorkspaceReadModelForPage(input: {
   const importFidelity = parseImportFidelity({
     pageRows,
     runtimeVersion: selectedRuntimeRow,
+    renderJobFallback: selectedRenderJobFallback,
   })
   const importFidelityEvidenceDiagnostics = [...new Set([...importFidelity.evidenceDiagnostics, ...runtimeArbitrationDiagnostics])].sort((a, b) =>
     a.localeCompare(b),
   )
+  console.info('[site-workspace] SITE_OVERVIEW_RENDERED_RUN_RESOLUTION', {
+    siteId,
+    selectedRuntimeSiteVersionId,
+    selectedRuntimeRowFound: Boolean(selectedRuntimeRow),
+    selectedFromRenderJobFallback: selectedRuntimeRow == null && selectedRenderJobFallback != null,
+    sourceMode: importFidelity.sourceMode,
+    renderedCaptureStatus: importFidelity.renderedCaptureStatus,
+    renderedDomQuality: importFidelity.renderedDomQuality,
+    domNodeCount: importFidelity.renderedCapture?.nodeCount ?? 0,
+    screenshotCount: importFidelity.screenshotCount,
+    arbitrationDiagnostics: runtimeArbitrationDiagnostics,
+  })
   const importFidelityDegraded = importFidelity.importFidelityStatus === 'degraded_import' || importFidelity.importFidelityStatus === 'capture_failed'
 
   const lastAction = normalizedSiteActions[0] ?? null
@@ -1919,6 +2238,7 @@ export const __siteWorkspaceReadModelTestUtils = {
   parseImportProvenanceSummary,
   parsePreviewRuntimeSummary,
   parseImportFidelity,
+  synthesizeRuntimeVersionRowsFromWorkerJobs,
   selectPrimaryRuntimeVersionRow,
   compareRuntimeVersionRows,
   resolveLatestRuntimeVersionRow,

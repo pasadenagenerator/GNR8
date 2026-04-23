@@ -1365,3 +1365,110 @@ test('preview runtime summary parser safely handles legacy rows with no family f
   assert.equal(parsed?.familyRenderDiagnosticsCount, 0)
   assert.deepEqual(parsed?.familyRenderDiagnostics, [])
 })
+
+test('worker bootstrap/render persistence synthesizes runtime row visible to read-model arbitration', () => {
+  const synthesized = __siteWorkspaceReadModelTestUtils.synthesizeRuntimeVersionRowsFromWorkerJobs({
+    siteId: SITE_ID,
+    bootstrapJob: {
+      site_id: SITE_ID,
+      status: 'completed',
+      runtime_site_id: 'runtime-site-bootstrap',
+      runtime_site_version_id: 'runtime-version-bootstrap',
+      artifact_id: 'artifact-bootstrap',
+      section_count: 8,
+      updated_at: '2026-04-22T10:00:00.000Z',
+      completed_at: '2026-04-22T10:00:00.000Z',
+    },
+    renderJobs: [
+      {
+        runtime_site_version_id: 'runtime-version-bootstrap',
+        runtime_site_id: 'runtime-site-bootstrap',
+        site_id: SITE_ID,
+        status: 'completed',
+        rendered_dom_path: '/tmp/rendered/rendered-dom.html',
+        computed_styles_path: '/tmp/rendered/computed-styles.json',
+        acquisition_evidence_path: '/tmp/rendered/acquisition-evidence.json',
+        screenshot_count: 2,
+        computed_style_sample_count: 6,
+        dom_node_count: 42,
+        updated_at: '2026-04-22T10:00:12.000Z',
+        completed_at: '2026-04-22T10:00:12.000Z',
+      },
+    ],
+    runtimeRows: [],
+  })
+
+  assert.equal(synthesized.length, 1)
+  assert.equal(synthesized[0]?.id, 'runtime-version-bootstrap')
+  const parsed = __siteWorkspaceReadModelTestUtils.parseImportProvenanceSummary(synthesized[0]?.import_provenance_summary ?? null)
+  assert.equal(parsed?.sourceMode, 'rendered_dom')
+  assert.equal(parsed?.renderedCaptureStatus, 'available')
+  assert.equal(parsed?.screenshotCount, 2)
+  assert.equal(parsed?.renderedCapture.nodeCount, 42)
+})
+
+test('import fidelity falls back to completed render job truth when runtime provenance summary is unavailable', () => {
+  const parsed = __siteWorkspaceReadModelTestUtils.parseImportFidelity({
+    runtimeVersion: null,
+    renderJobFallback: {
+      runtime_site_version_id: 'runtime-version-1',
+      runtime_site_id: 'runtime-site-1',
+      site_id: SITE_ID,
+      status: 'completed',
+      rendered_dom_path: '/tmp/rendered/rendered-dom.html',
+      computed_styles_path: '/tmp/rendered/computed-styles.json',
+      acquisition_evidence_path: '/tmp/rendered/acquisition-evidence.json',
+      screenshot_count: 2,
+      computed_style_sample_count: 5,
+      dom_node_count: 37,
+      updated_at: '2026-04-22T11:00:12.000Z',
+      completed_at: '2026-04-22T11:00:12.000Z',
+    },
+    pageRows: [],
+  })
+
+  assert.equal(parsed.sourceMode, 'rendered_dom')
+  assert.equal(parsed.renderedCaptureStatus, 'available')
+  assert.equal(parsed.renderedDomQuality, 'strong')
+  assert.equal(parsed.screenshotCount, 2)
+  assert.equal(parsed.renderedCapture?.nodeCount, 37)
+  assert.equal(parsed.captureEvidenceRefs.includes('/tmp/rendered/rendered-dom.html'), true)
+})
+
+test('arbitration no longer falls back to NO_USABLE when synthesized rendered truth exists', () => {
+  const synthesized = __siteWorkspaceReadModelTestUtils.synthesizeRuntimeVersionRowsFromWorkerJobs({
+    siteId: SITE_ID,
+    bootstrapJob: {
+      site_id: SITE_ID,
+      status: 'completed',
+      runtime_site_id: 'runtime-site-bootstrap',
+      runtime_site_version_id: 'runtime-version-bootstrap',
+      artifact_id: 'artifact-bootstrap',
+      section_count: 8,
+      updated_at: '2026-04-22T10:00:00.000Z',
+      completed_at: '2026-04-22T10:00:00.000Z',
+    },
+    renderJobs: [
+      {
+        runtime_site_version_id: 'runtime-version-bootstrap',
+        runtime_site_id: 'runtime-site-bootstrap',
+        site_id: SITE_ID,
+        status: 'completed',
+        rendered_dom_path: '/tmp/rendered/rendered-dom.html',
+        computed_styles_path: '/tmp/rendered/computed-styles.json',
+        acquisition_evidence_path: '/tmp/rendered/acquisition-evidence.json',
+        screenshot_count: 2,
+        computed_style_sample_count: 3,
+        dom_node_count: 18,
+        updated_at: '2026-04-22T10:00:12.000Z',
+        completed_at: '2026-04-22T10:00:12.000Z',
+      },
+    ],
+    runtimeRows: [],
+  })
+
+  const selection = __siteWorkspaceReadModelTestUtils.selectPrimaryRuntimeVersionRow(synthesized as any)
+  assert.equal(selection.selected?.id, 'runtime-version-bootstrap')
+  assert.equal(selection.diagnostics.includes('NO_USABLE_RENDERED_RUN_FOUND'), false)
+  assert.equal(selection.diagnostics.includes('PRIMARY_RENDERED_RUN_ALIGNED_TO_READMODEL'), true)
+})

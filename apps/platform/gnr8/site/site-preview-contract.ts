@@ -80,6 +80,13 @@ export function resolveSiteWorkspacePreview(input: {
   const modeDiagnostic = summary ? `Preview runtime mode: ${summary.previewMode}.` : null
 
   if (!input.siteVersionId) {
+    console.warn('[site-preview] SITE_PREVIEW_RENDERED_TRUTH_MISSING', {
+      siteVersionId: null,
+      transformedPreviewAvailable: input.transformedPreviewAvailable,
+      debugPreviewAvailable: input.debugPreviewAvailable,
+      importCaptured: input.importCaptured,
+      reason: 'runtime_site_version_unresolved',
+    })
     return {
       status: input.importCaptured ? 'import_captured_not_transformed' : 'preview_unavailable',
       sourceType: null,
@@ -106,6 +113,13 @@ export function resolveSiteWorkspacePreview(input: {
     : null
 
   if (transformedPreviewUrl) {
+    console.info('[site-preview] SITE_PREVIEW_RENDERED_TRUTH_SELECTED', {
+      siteVersionId: input.siteVersionId,
+      selectedSourceType: 'transformed',
+      transformedPreviewAvailable: true,
+      debugPreviewAvailable: Boolean(debugPreviewUrl),
+      previewMode: summary?.previewMode ?? null,
+    })
     return {
       status: 'preview_available',
       sourceType: 'transformed',
@@ -123,6 +137,13 @@ export function resolveSiteWorkspacePreview(input: {
   }
 
   if (debugPreviewUrl) {
+    console.info('[site-preview] SITE_PREVIEW_RENDERED_TRUTH_SELECTED', {
+      siteVersionId: input.siteVersionId,
+      selectedSourceType: 'debug_inspect',
+      transformedPreviewAvailable: false,
+      debugPreviewAvailable: true,
+      previewMode: summary?.previewMode ?? null,
+    })
     return {
       status: 'debug_only_artifact_available',
       sourceType: 'debug_inspect',
@@ -139,6 +160,13 @@ export function resolveSiteWorkspacePreview(input: {
     }
   }
 
+  console.warn('[site-preview] SITE_PREVIEW_RENDERED_TRUTH_MISSING', {
+    siteVersionId: input.siteVersionId,
+    transformedPreviewAvailable: input.transformedPreviewAvailable,
+    debugPreviewAvailable: input.debugPreviewAvailable,
+    importCaptured: input.importCaptured,
+    reason: 'preview_artifacts_unavailable',
+  })
   return {
     status: input.importCaptured ? 'import_captured_not_transformed' : 'preview_unavailable',
     sourceType: null,
