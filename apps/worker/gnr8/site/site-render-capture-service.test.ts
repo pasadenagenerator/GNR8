@@ -125,6 +125,7 @@ test('runSiteRenderCapture persists rendered evidence and patches runtime proven
   assert.equal(result.sourceMode, 'rendered_dom')
   assert.equal(result.renderedCaptureStatus, 'available')
   assert.equal(result.hasUsableEvidence, true)
+  assert.equal(result.failureReason, null)
   assert.equal(fs.existsSync(path.resolve(root, 'rendered', 'rendered-dom.html')), true)
   assert.equal(fs.existsSync(path.resolve(root, 'rendered', 'computed-styles.json')), true)
   assert.equal(fs.existsSync(path.resolve(root, 'acquisition-evidence.json')), true)
@@ -336,8 +337,208 @@ test('runSiteRenderCapture marks empty success as failed capture truth', async (
   )
 
   assert.equal(result.hasUsableEvidence, false)
+  assert.equal(result.failureReason, 'SITE_RENDER_CAPTURE_EMPTY_SUCCESS')
   assert.equal(result.sourceMode, 'raw_html_fallback')
   assert.equal(result.renderedCaptureStatus, 'failed')
   assert.equal(persistedSummary?.importDiagnosticCodes.includes('SITE_RENDER_CAPTURE_EMPTY_SUCCESS'), true)
   assert.equal(persistedSummary?.renderedCapture.execution.failureCode, 'SITE_RENDER_CAPTURE_EMPTY_SUCCESS')
+})
+
+test('runSiteRenderCapture marks missing worker config as deterministic failure truth', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'gnr8-site-render-worker-config-missing-'))
+  const entryHtmlPath = path.resolve(root, 'index.html')
+  fs.writeFileSync(entryHtmlPath, '<!doctype html><html><body><h1>Hello</h1></body></html>', 'utf8')
+
+  let persistedSummary: RuntimeImportProvenanceSummary | null = null
+  const existingSummary: RuntimeImportProvenanceSummary = {
+    kind: 'runtime_import_provenance_summary_v1',
+    executionIdentity: {
+      snapshotId: 'snapshot-4',
+      snapshotRunId: 'snapshot-run-4',
+      snapshotStableRootDirAbs: root,
+      snapshotRunRootDirAbs: root,
+      requestId: 'request-4',
+    },
+    sourceMode: 'raw_html_fallback',
+    importFidelityStatus: 'capture_failed',
+    renderedCaptureStatus: 'failed',
+    renderedDomQuality: 'unusable',
+    screenshotCount: 0,
+    computedStyleSampleCount: 0,
+    renderedCapture: {
+      used: false,
+      status: 'failed',
+      quality: 'unusable',
+      domLength: 0,
+      nodeCount: 0,
+      styleSampleCount: 0,
+      styleCoverage: 0,
+      screenshots: { viewport: false, fullPage: false },
+      execution: {
+        runtimeKind: 'unknown',
+        environmentSupported: false,
+        browserPackageAvailable: false,
+        browserBinaryAvailable: false,
+        environmentStatus: 'unknown',
+        failureCategory: 'none',
+        failureCode: null,
+        browserLaunch: 'not_attempted',
+        navigation: 'not_attempted',
+        dom: 'not_attempted',
+        screenshot: 'none',
+        styleSampling: 'not_attempted',
+      },
+    },
+    importDiagnosticCodes: [],
+    captureEvidence: {
+      selectedSourceHtmlPath: entryHtmlPath,
+      responseHtmlPath: entryHtmlPath,
+      entryHtmlPath,
+      renderedCaptureManifestPath: null,
+      acquisitionEvidencePath: null,
+      renderedDomPath: null,
+      computedStylesPath: null,
+      renderedViewportScreenshotPath: null,
+      renderedFullpageScreenshotPath: null,
+      screenshotPaths: [],
+    },
+    styleSignals: null,
+  }
+
+  const result = await runSiteRenderCapture(
+    {
+      siteId: '00000000-0000-4000-8000-000000000780',
+      siteVersionId: '00000000-0000-4000-8000-000000000984',
+    },
+    {
+      getRuntimeVersionById: async () => ({
+        id: '00000000-0000-4000-8000-000000000984',
+        site_id: 'runtime-site-4',
+        ownership_site_id: '00000000-0000-4000-8000-000000000780',
+        import_provenance_summary: existingSummary,
+      }),
+      runRenderedCapture: async () => ({
+        kind: 'rendered_capture_result_v1',
+        version: '1.0.0',
+        status: 'failed',
+        sourceMode: 'raw_html',
+        documents: [],
+        screenshots: [],
+        computedStyleSamples: [],
+        renderedObservedAssetUrls: [],
+        diagnostics: [{ code: 'CAPTURE_WORKER_NOT_CONFIGURED', severity: 'warning', message: 'worker config missing' }],
+      }),
+      persistRuntimeVersionImportSummary: async ({ summary }) => {
+        persistedSummary = summary
+      },
+    },
+  )
+
+  assert.equal(result.hasUsableEvidence, false)
+  assert.equal(result.failureReason, 'CAPTURE_WORKER_NOT_CONFIGURED')
+  assert.equal(result.sourceMode, 'raw_html_fallback')
+  assert.equal(result.renderedCaptureStatus, 'failed')
+  assert.equal(persistedSummary?.renderedCapture.execution.failureCode, 'CAPTURE_WORKER_NOT_CONFIGURED')
+  assert.equal(persistedSummary?.importDiagnosticCodes.includes('NO_USABLE_RENDERED_RUN_FOUND'), true)
+})
+
+test('runSiteRenderCapture marks unreachable worker as deterministic failure truth', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'gnr8-site-render-worker-unreachable-'))
+  const entryHtmlPath = path.resolve(root, 'index.html')
+  fs.writeFileSync(entryHtmlPath, '<!doctype html><html><body><h1>Hello</h1></body></html>', 'utf8')
+
+  let persistedSummary: RuntimeImportProvenanceSummary | null = null
+  const existingSummary: RuntimeImportProvenanceSummary = {
+    kind: 'runtime_import_provenance_summary_v1',
+    executionIdentity: {
+      snapshotId: 'snapshot-5',
+      snapshotRunId: 'snapshot-run-5',
+      snapshotStableRootDirAbs: root,
+      snapshotRunRootDirAbs: root,
+      requestId: 'request-5',
+    },
+    sourceMode: 'raw_html_fallback',
+    importFidelityStatus: 'capture_failed',
+    renderedCaptureStatus: 'failed',
+    renderedDomQuality: 'unusable',
+    screenshotCount: 0,
+    computedStyleSampleCount: 0,
+    renderedCapture: {
+      used: false,
+      status: 'failed',
+      quality: 'unusable',
+      domLength: 0,
+      nodeCount: 0,
+      styleSampleCount: 0,
+      styleCoverage: 0,
+      screenshots: { viewport: false, fullPage: false },
+      execution: {
+        runtimeKind: 'unknown',
+        environmentSupported: false,
+        browserPackageAvailable: false,
+        browserBinaryAvailable: false,
+        environmentStatus: 'unknown',
+        failureCategory: 'none',
+        failureCode: null,
+        browserLaunch: 'not_attempted',
+        navigation: 'not_attempted',
+        dom: 'not_attempted',
+        screenshot: 'none',
+        styleSampling: 'not_attempted',
+      },
+    },
+    importDiagnosticCodes: [],
+    captureEvidence: {
+      selectedSourceHtmlPath: entryHtmlPath,
+      responseHtmlPath: entryHtmlPath,
+      entryHtmlPath,
+      renderedCaptureManifestPath: null,
+      acquisitionEvidencePath: null,
+      renderedDomPath: null,
+      computedStylesPath: null,
+      renderedViewportScreenshotPath: null,
+      renderedFullpageScreenshotPath: null,
+      screenshotPaths: [],
+    },
+    styleSignals: null,
+  }
+
+  const result = await runSiteRenderCapture(
+    {
+      siteId: '00000000-0000-4000-8000-000000000781',
+      siteVersionId: '00000000-0000-4000-8000-000000000985',
+    },
+    {
+      getRuntimeVersionById: async () => ({
+        id: '00000000-0000-4000-8000-000000000985',
+        site_id: 'runtime-site-5',
+        ownership_site_id: '00000000-0000-4000-8000-000000000781',
+        import_provenance_summary: existingSummary,
+      }),
+      runRenderedCapture: async () => ({
+        kind: 'rendered_capture_result_v1',
+        version: '1.0.0',
+        status: 'failed',
+        sourceMode: 'raw_html',
+        documents: [],
+        screenshots: [],
+        computedStyleSamples: [],
+        renderedObservedAssetUrls: [],
+        diagnostics: [
+          { code: 'CAPTURE_WORKER_TIMEOUT', severity: 'warning', message: 'timed out' },
+          { code: 'CAPTURE_WORKER_UNAVAILABLE', severity: 'warning', message: 'worker unavailable' },
+        ],
+      }),
+      persistRuntimeVersionImportSummary: async ({ summary }) => {
+        persistedSummary = summary
+      },
+    },
+  )
+
+  assert.equal(result.hasUsableEvidence, false)
+  assert.equal(result.failureReason, 'CAPTURE_WORKER_TIMEOUT')
+  assert.equal(result.sourceMode, 'raw_html_fallback')
+  assert.equal(result.renderedCaptureStatus, 'failed')
+  assert.equal(persistedSummary?.renderedCapture.execution.failureCode, 'CAPTURE_WORKER_TIMEOUT')
+  assert.equal(persistedSummary?.importDiagnosticCodes.includes('NO_USABLE_RENDERED_RUN_FOUND'), true)
 })

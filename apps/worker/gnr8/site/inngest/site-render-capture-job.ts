@@ -4,6 +4,7 @@ import {
   SITE_RENDER_REQUESTED_EVENT,
 } from '@gnr8/runtime-contracts'
 import { inngest } from '@/gnr8/inngest/client'
+import { resolveRenderedCaptureWorkerClientConfigFromEnv } from '@/gnr8/import-rendered-capture-worker/worker-config'
 import { parseSiteRenderCaptureError, runSiteRenderCapture } from '@/gnr8/site/site-render-capture-service'
 import {
   markSiteRenderCompleted,
@@ -56,11 +57,31 @@ const DEFAULT_DEPS: SiteRenderCaptureJobDeps = {
 export const SITE_RENDER_CAPTURE_JOB_ID = 'site-render-capture-job'
 export const SITE_RENDER_CAPTURE_JOB_TRIGGER_EVENT = SITE_RENDER_REQUESTED_EVENT
 
+export type SiteRenderCaptureJobResult = {
+  runtimeSiteId: string
+  runtimeSiteVersionId: string
+  domNodeCount: number
+  screenshotCount: number
+  renderedDomPath: string | null
+  computedStylesPath: string | null
+  acquisitionEvidencePath: string | null
+  usableEvidence: boolean
+  failureReason: string | null
+}
+
+function resolveFailureReason(result: Awaited<ReturnType<typeof runSiteRenderCapture>>): string | null {
+  if (result.hasUsableEvidence) return null
+  const executionFailureCode = normalizeText(result.importProvenanceSummary.renderedCapture.execution.failureCode)
+  if (executionFailureCode) return executionFailureCode
+  if (result.renderedCaptureStatus === 'failed') return 'RENDERED_CAPTURE_FAILED'
+  return 'SITE_RENDER_CAPTURE_EMPTY_SUCCESS'
+}
+
 export async function runSiteRenderCaptureJob(input: {
   eventData: unknown
   maxAttempts?: number
   deps?: Partial<SiteRenderCaptureJobDeps>
-}): Promise<void> {
+}): Promise<SiteRenderCaptureJobResult> {
   const deps = {
     ...DEFAULT_DEPS,
     ...(input.deps ?? {}),
@@ -80,7 +101,17 @@ export async function runSiteRenderCaptureJob(input: {
       triggerAccepted: false,
       reason: start.currentStatus ?? 'job_not_queued',
     })
-    return
+    return {
+      runtimeSiteId: payload.runtimeSiteId,
+      runtimeSiteVersionId: payload.runtimeSiteVersionId,
+      domNodeCount: 0,
+      screenshotCount: 0,
+      renderedDomPath: null,
+      computedStylesPath: null,
+      acquisitionEvidencePath: null,
+      usableEvidence: false,
+      failureReason: 'SITE_RENDER_CAPTURE_NOT_STARTED',
+    }
   }
 
   const maxAttempts = Math.max(1, Number(input.maxAttempts ?? SITE_RENDER_MAX_ATTEMPTS) || SITE_RENDER_MAX_ATTEMPTS)
@@ -151,6 +182,7 @@ export async function runSiteRenderCaptureJob(input: {
       },
     })
     if (!result.hasUsableEvidence) {
+      const workerClientConfig = resolveRenderedCaptureWorkerClientConfigFromEnv()
       console.warn('[site-render-worker] SITE_RENDER_CAPTURE_EMPTY_SUCCESS', {
         siteId: payload.siteId,
         runtimeSiteId: payload.runtimeSiteId,
@@ -161,6 +193,11 @@ export async function runSiteRenderCaptureJob(input: {
         computedStyleSampleCount: result.evidence.computedStyleSampleCount,
         sourceMode: result.sourceMode,
         renderedCaptureStatus: result.renderedCaptureStatus,
+        workerConfigState: {
+          enabled: workerClientConfig.enabled,
+          baseUrlPresent: Boolean(workerClientConfig.resolvedBaseUrl),
+          tokenPresent: Boolean(workerClientConfig.sharedToken),
+        },
       })
     }
     console.info('[site-render-worker] SITE_RENDER_CAPTURE_COMPLETED', {
@@ -174,6 +211,17 @@ export async function runSiteRenderCaptureJob(input: {
       screenshotCount: result.evidence.screenshotPaths.length,
       computedStyleSampleCount: result.evidence.computedStyleSampleCount,
     })
+    return {
+      runtimeSiteId: payload.runtimeSiteId,
+      runtimeSiteVersionId: payload.runtimeSiteVersionId,
+      domNodeCount: result.evidence.domNodeCount,
+      screenshotCount: result.evidence.screenshotPaths.length,
+      renderedDomPath: result.evidence.renderedDomPath,
+      computedStylesPath: result.evidence.computedStylesPath,
+      acquisitionEvidencePath: result.evidence.acquisitionEvidencePath,
+      usableEvidence: result.hasUsableEvidence,
+      failureReason: resolveFailureReason(result),
+    }
   } catch (error) {
     const mapped = deps.parseSiteRenderCaptureError(error)
     const code = mapped?.code ?? 'SITE_RENDER_CAPTURE_FAILED'
@@ -204,7 +252,7 @@ export const siteRenderCaptureJob = inngest.createFunction(
     event: SITE_RENDER_CAPTURE_JOB_TRIGGER_EVENT,
   },
   async ({ event }) => {
-    await runSiteRenderCaptureJob({
+    return await runSiteRenderCaptureJob({
       eventData: event.data,
       maxAttempts: SITE_RENDER_MAX_ATTEMPTS,
     })

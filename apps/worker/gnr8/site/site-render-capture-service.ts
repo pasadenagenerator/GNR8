@@ -4,6 +4,7 @@ import { pathToFileURL } from 'node:url'
 
 import type { RuntimeImportProvenanceSummary } from '@/gnr8/runtime/types'
 import type { RenderedCaptureDiagnostic, RenderedCaptureResult } from '@/gnr8/import-rendered-capture/rendered-capture-contract'
+import { resolveRenderedCaptureWorkerClientConfigFromEnv } from '@/gnr8/import-rendered-capture-worker/worker-config'
 import { getSuperadminPool } from '@/src/superadmin/db'
 
 type RuntimeVersionRow = {
@@ -35,6 +36,7 @@ type RenderedCapturePersistResult = {
   renderedCaptureStatus: RuntimeImportProvenanceSummary['renderedCaptureStatus']
   renderedDomQuality: RuntimeImportProvenanceSummary['renderedDomQuality']
   hasUsableEvidence: boolean
+  failureReason: string | null
   evidence: RenderedEvidencePaths
   importProvenanceSummary: RuntimeImportProvenanceSummary
 }
@@ -104,6 +106,43 @@ function hasUsableRenderedEvidence(input: {
   evidence: RenderedEvidencePaths
 }): boolean {
   return input.evidence.domNodeCount > 0 || input.evidence.screenshotPaths.length > 0
+}
+
+function hasDiagnosticCode(input: {
+  diagnostics: RenderedCaptureDiagnostic[]
+  code: string
+}): boolean {
+  return input.diagnostics.some((entry) => normalizeText(entry.code) === input.code)
+}
+
+function resolveFailureCodeFromDiagnostics(input: {
+  diagnostics: RenderedCaptureDiagnostic[]
+  emptySuccess: boolean
+  renderedCaptureStatus: RuntimeImportProvenanceSummary['renderedCaptureStatus']
+}): string | null {
+  if (input.emptySuccess) return 'SITE_RENDER_CAPTURE_EMPTY_SUCCESS'
+  if (input.renderedCaptureStatus !== 'failed') return null
+  const prioritizedCodes = [
+    'CAPTURE_WORKER_NOT_CONFIGURED',
+    'CAPTURE_WORKER_DISABLED',
+    'CAPTURE_WORKER_TIMEOUT',
+    'CAPTURE_WORKER_UNAUTHORIZED',
+    'CAPTURE_WORKER_HTTP_ERROR',
+    'CAPTURE_WORKER_RESPONSE_INVALID',
+    'CAPTURE_WORKER_EXECUTION_FAILED',
+    'CAPTURE_WORKER_UNAVAILABLE',
+    'RENDERED_CAPTURE_TIMEOUT',
+    'DOM_EMPTY_AFTER_RENDER',
+    'RENDERED_CAPTURE_DOM_EMPTY_AFTER_NAVIGATION',
+    'RENDERED_CAPTURE_FAILED',
+  ]
+  for (const prioritizedCode of prioritizedCodes) {
+    if (hasDiagnosticCode({ diagnostics: input.diagnostics, code: prioritizedCode })) {
+      return prioritizedCode
+    }
+  }
+  const captureCodes = input.diagnostics.map((entry) => normalizeText(entry.code)).filter(Boolean)
+  return normalizeText(captureCodes.find((code) => code.endsWith('FAILED')) ?? captureCodes[0] ?? 'RENDERED_CAPTURE_FAILED')
 }
 
 function readRenderedDomFromResult(input: {
@@ -237,11 +276,13 @@ function persistRenderedEvidence(input: {
 function withPatchedProvenanceSummary(input: {
   existingSummary: RuntimeImportProvenanceSummary | null
   evidence: RenderedEvidencePaths
+  hasUsableEvidence: boolean
   renderedCaptureStatus: RuntimeImportProvenanceSummary['renderedCaptureStatus']
   sourceMode: RuntimeImportProvenanceSummary['sourceMode']
   renderedDomQuality: RuntimeImportProvenanceSummary['renderedDomQuality']
   diagnostics: RenderedCaptureDiagnostic[]
   emptySuccess: boolean
+  failureCode: string | null
 }): RuntimeImportProvenanceSummary {
   const existing = input.existingSummary
   const existingCodes = Array.isArray(existing?.importDiagnosticCodes) ? existing.importDiagnosticCodes : []
@@ -251,7 +292,8 @@ function withPatchedProvenanceSummary(input: {
       ...existingCodes,
       ...captureCodes,
       'SITE_RENDER_CAPTURE_COMPLETED',
-      ...(input.emptySuccess ? ['SITE_RENDER_CAPTURE_EMPTY_SUCCESS', 'NO_USABLE_RENDERED_RUN_FOUND'] : []),
+      ...(input.emptySuccess ? ['SITE_RENDER_CAPTURE_EMPTY_SUCCESS'] : []),
+      ...(!input.hasUsableEvidence ? ['NO_USABLE_RENDERED_RUN_FOUND'] : []),
     ]),
   ].sort((a, b) => a.localeCompare(b))
   const screenshotCount = input.evidence.screenshotPaths.length
@@ -260,10 +302,6 @@ function withPatchedProvenanceSummary(input: {
       ? (input.renderedDomQuality === 'strong' && input.renderedCaptureStatus === 'available' ? 'high_fidelity_import' : 'degraded_import')
       : 'capture_failed'
   const styleCoverage = Number((Math.max(0, input.evidence.computedStyleSampleCount) / 10).toFixed(3))
-  const failureCode =
-    input.renderedCaptureStatus === 'failed'
-      ? normalizeText(captureCodes.find((code) => code.endsWith('FAILED')) ?? captureCodes[0] ?? 'RENDERED_CAPTURE_FAILED')
-      : null
   const executionIdentity = existing?.executionIdentity
   const captureEvidence = existing?.captureEvidence
 
@@ -304,7 +342,7 @@ function withPatchedProvenanceSummary(input: {
         browserBinaryAvailable: true,
         environmentStatus: input.emptySuccess ? 'supported' : (input.renderedCaptureStatus === 'failed' ? 'unsupported' : 'supported'),
         failureCategory: input.emptySuccess ? 'page' : (input.renderedCaptureStatus === 'failed' ? 'page' : 'none'),
-        failureCode: input.emptySuccess ? 'SITE_RENDER_CAPTURE_EMPTY_SUCCESS' : failureCode,
+        failureCode: input.failureCode,
         browserLaunch: input.emptySuccess ? 'succeeded' : (input.renderedCaptureStatus === 'failed' ? 'failed' : 'succeeded'),
         navigation: input.emptySuccess ? 'succeeded' : (input.renderedCaptureStatus === 'failed' ? 'failed' : 'succeeded'),
         dom: input.evidence.domNodeCount > 0 ? 'captured' : 'empty_or_failed',
@@ -454,6 +492,12 @@ export async function runSiteRenderCapture(input: {
   }
 
   try {
+    const workerClientConfig = resolveRenderedCaptureWorkerClientConfigFromEnv()
+    const workerConfigState = {
+      enabled: workerClientConfig.enabled,
+      baseUrlPresent: Boolean(workerClientConfig.resolvedBaseUrl),
+      tokenPresent: Boolean(workerClientConfig.sharedToken),
+    }
     const captureResult = await resolvedDeps.runRenderedCapture({
       sourceUrl: pathToFileURL(source.entryHtmlPathAbs).toString(),
       snapshotRootDirAbs: source.snapshotRootDirAbs,
@@ -496,6 +540,11 @@ export async function runSiteRenderCapture(input: {
     const hasUsableEvidence = hasUsableRenderedEvidence({ evidence })
     const emptySuccess = workerCaptureStatus !== 'failed' && !hasUsableEvidence
     const renderedCaptureStatus: RuntimeImportProvenanceSummary['renderedCaptureStatus'] = emptySuccess ? 'failed' : workerCaptureStatus
+    const failureReason = resolveFailureCodeFromDiagnostics({
+      diagnostics: captureResult.diagnostics,
+      emptySuccess,
+      renderedCaptureStatus,
+    })
     const sourceMode: RuntimeImportProvenanceSummary['sourceMode'] =
       renderedCaptureStatus !== 'failed' && hasUsableEvidence ? 'rendered_dom' : 'raw_html_fallback'
     const renderedDomPath = evidence.renderedDomPath
@@ -532,6 +581,8 @@ export async function runSiteRenderCapture(input: {
       renderedDomQuality,
       diagnostics: captureResult.diagnostics,
       emptySuccess,
+      hasUsableEvidence,
+      failureCode: failureReason,
     })
     await resolvedDeps.persistRuntimeVersionImportSummary({
       siteVersionId: input.siteVersionId,
@@ -559,6 +610,17 @@ export async function runSiteRenderCapture(input: {
         },
       },
     })
+    if (!hasUsableEvidence && hasDiagnosticCode({ diagnostics: captureResult.diagnostics, code: 'CAPTURE_WORKER_UNAVAILABLE' })) {
+      console.warn('[site-render-worker] SITE_RENDER_CAPTURE_WORKER_UNAVAILABLE', {
+        siteId: input.siteId,
+        runtimeSiteId: runtimeVersion.site_id,
+        runtimeSiteVersionId: input.siteVersionId,
+        renderedCaptureStatus,
+        sourceMode,
+        workerConfigState,
+        diagnostics: captureResult.diagnostics.map((entry) => entry.code),
+      })
+    }
     if (emptySuccess) {
       console.warn('[site-render-worker] SITE_RENDER_CAPTURE_EMPTY_SUCCESS', {
         siteId: input.siteId,
@@ -568,6 +630,7 @@ export async function runSiteRenderCapture(input: {
         renderedDomNodeCount: evidence.domNodeCount,
         screenshotCount: evidence.screenshotPaths.length,
         computedStyleSampleCount: evidence.computedStyleSampleCount,
+        workerConfigState,
         diagnostics: captureResult.diagnostics.map((entry) => entry.code),
       })
     }
@@ -580,6 +643,7 @@ export async function runSiteRenderCapture(input: {
       renderedCaptureStatus,
       renderedDomQuality,
       hasUsableEvidence,
+      failureReason,
       evidence,
       importProvenanceSummary: updatedSummary,
     }
