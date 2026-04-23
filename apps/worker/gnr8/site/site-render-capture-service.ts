@@ -167,15 +167,17 @@ function persistRenderedEvidence(input: {
   fs.writeFileSync(computedStylesPath, `${JSON.stringify(input.computedStyleSamples, null, 2)}\n`, 'utf8')
 
   let viewportScreenshotPath: string | null = null
-  if (input.screenshotViewportPathAbs && fs.existsSync(input.screenshotViewportPathAbs)) {
+  const screenshotViewportPathAbs = input.screenshotViewportPathAbs
+  if (screenshotViewportPathAbs !== null && fs.existsSync(screenshotViewportPathAbs)) {
     viewportScreenshotPath = path.resolve(screenshotsDirAbs, 'viewport.png')
-    fs.copyFileSync(input.screenshotViewportPathAbs, viewportScreenshotPath)
+    fs.copyFileSync(screenshotViewportPathAbs, viewportScreenshotPath)
   }
 
   let fullpageScreenshotPath: string | null = null
-  if (input.screenshotFullpagePathAbs && fs.existsSync(input.screenshotFullpagePathAbs)) {
+  const screenshotFullpagePathAbs = input.screenshotFullpagePathAbs
+  if (screenshotFullpagePathAbs !== null && fs.existsSync(screenshotFullpagePathAbs)) {
     fullpageScreenshotPath = path.resolve(screenshotsDirAbs, 'fullpage.png')
-    fs.copyFileSync(input.screenshotFullpagePathAbs, fullpageScreenshotPath)
+    fs.copyFileSync(screenshotFullpagePathAbs, fullpageScreenshotPath)
   }
 
   const screenshotPaths = [viewportScreenshotPath, fullpageScreenshotPath].filter((value): value is string => Boolean(value))
@@ -496,21 +498,27 @@ export async function runSiteRenderCapture(input: {
     const renderedCaptureStatus: RuntimeImportProvenanceSummary['renderedCaptureStatus'] = emptySuccess ? 'failed' : workerCaptureStatus
     const sourceMode: RuntimeImportProvenanceSummary['sourceMode'] =
       renderedCaptureStatus !== 'failed' && hasUsableEvidence ? 'rendered_dom' : 'raw_html_fallback'
+    const renderedDomPath = evidence.renderedDomPath
+    const computedStylesPath = evidence.computedStylesPath
+    const acquisitionEvidencePath = evidence.acquisitionEvidencePath
+    const renderedDomExists = renderedDomPath !== null ? fs.existsSync(renderedDomPath) : false
+    const computedStylesExists = computedStylesPath !== null ? fs.existsSync(computedStylesPath) : false
+    const acquisitionEvidenceExists = acquisitionEvidencePath !== null ? fs.existsSync(acquisitionEvidencePath) : false
 
     console.info('[site-render-worker] SITE_RENDER_CAPTURE_PERSISTED_EVIDENCE', {
       siteId: input.siteId,
       runtimeSiteId: runtimeVersion.site_id,
       runtimeSiteVersionId: input.siteVersionId,
-      renderedDomExists: Boolean(evidence.renderedDomPath) && fs.existsSync(evidence.renderedDomPath),
+      renderedDomExists,
       renderedDomLength: evidence.domLength,
       renderedDomNodeCount: evidence.domNodeCount,
-      computedStylesExists: Boolean(evidence.computedStylesPath) && fs.existsSync(evidence.computedStylesPath),
-      acquisitionEvidenceExists: Boolean(evidence.acquisitionEvidencePath) && fs.existsSync(evidence.acquisitionEvidencePath),
+      computedStylesExists,
+      acquisitionEvidenceExists,
       screenshotCount: evidence.screenshotPaths.length,
       evidenceRefs: {
-        renderedDomPath: evidence.renderedDomPath,
-        computedStylesPath: evidence.computedStylesPath,
-        acquisitionEvidencePath: evidence.acquisitionEvidencePath,
+        renderedDomPath,
+        computedStylesPath,
+        acquisitionEvidencePath,
         renderedCaptureManifestPath: evidence.renderedCaptureManifestPath,
         screenshotPaths: evidence.screenshotPaths,
       },
