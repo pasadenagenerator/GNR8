@@ -142,6 +142,16 @@ test('template bootstrap succeeds from durable processed source and emits pipeli
         writeOwnershipLink: async (input) => {
           ownershipLink = input
         },
+        persistRawTemplateSiteArtifact: async () => ({
+          artifactId: 'raw-artifact-1',
+          artifactType: 'raw_template_site',
+          entryHtmlPath: entryRel,
+          assetBasePath: 'nested/site',
+          fileMap: {
+            [entryRel]: { path: entryRel, mediaType: 'text/html; charset=utf-8', sizeBytes: 58, sha256: 'h1' },
+          },
+          fileCount: 1,
+        }),
       },
     })
 
@@ -159,6 +169,9 @@ test('template bootstrap succeeds from durable processed source and emits pipeli
     assert.ok(resolved)
     assert.equal(resolved?.meta.entryHtmlPath, entryRel)
     assert.equal(resolved?.meta.assetsDirPath, assetsRel)
+    const rawSelected = logs.infos.find((entry) => String(entry.message).includes('RAW_TEMPLATE_PREVIEW_SELECTED'))
+    assert.ok(rawSelected)
+    assert.equal(rawSelected?.meta.artifactType, 'raw_template_site')
   } finally {
     logs.restore()
   }
@@ -201,6 +214,16 @@ test('template bootstrap resolves root-level entry HTML bootstrap input determin
           } as any
         },
         writeOwnershipLink: async () => undefined,
+        persistRawTemplateSiteArtifact: async () => ({
+          artifactId: 'raw-artifact-root',
+          artifactType: 'raw_template_site',
+          entryHtmlPath: entryRel,
+          assetBasePath: '.',
+          fileMap: {
+            [entryRel]: { path: entryRel, mediaType: 'text/html; charset=utf-8', sizeBytes: 63, sha256: 'h-root' },
+          },
+          fileCount: 1,
+        }),
       },
     })
 
@@ -277,6 +300,16 @@ test('template bootstrap succeeds from zip reconstruction fallback and emits zip
           } as any
         },
         writeOwnershipLink: async () => undefined,
+        persistRawTemplateSiteArtifact: async () => ({
+          artifactId: 'raw-artifact-zip',
+          artifactType: 'raw_template_site',
+          entryHtmlPath: entryRel,
+          assetBasePath: 'nested/site',
+          fileMap: {
+            [entryRel]: { path: entryRel, mediaType: 'text/html; charset=utf-8', sizeBytes: 58, sha256: 'h-zip' },
+          },
+          fileCount: 1,
+        }),
       },
     })
 
@@ -355,6 +388,14 @@ test('template bootstrap surfaces failing stage diagnostics when scoped pipeline
               },
             })
           },
+          persistRawTemplateSiteArtifact: async () => ({
+            artifactId: 'raw-artifact-failure',
+            artifactType: 'raw_template_site',
+            entryHtmlPath: entryRel,
+            assetBasePath: 'nested/site',
+            fileMap: {},
+            fileCount: 0,
+          }),
         },
       }),
       (error) => {
@@ -418,6 +459,16 @@ test('template bootstrap allows missing assets dir and logs optional-missing pre
             reporting: {},
           }) as any,
         writeOwnershipLink: async () => undefined,
+        persistRawTemplateSiteArtifact: async () => ({
+          artifactId: 'raw-artifact-no-assets',
+          artifactType: 'raw_template_site',
+          entryHtmlPath: entryRel,
+          assetBasePath: 'nested/site',
+          fileMap: {
+            [entryRel]: { path: entryRel, mediaType: 'text/html; charset=utf-8', sizeBytes: 60, sha256: 'h-na' },
+          },
+          fileCount: 1,
+        }),
       },
     })
 

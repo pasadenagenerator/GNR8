@@ -1373,6 +1373,32 @@ test('preview runtime summary parser accepts semantic fallback preview mode', ()
   assert.equal(parsed?.semanticCtaCount, 2)
 })
 
+test('preview runtime summary parser accepts raw template preview mode', () => {
+  const parsed = __siteWorkspaceReadModelTestUtils.parsePreviewRuntimeSummary({
+    previewMode: 'raw_template_preview',
+    rendererContractAvailable: false,
+    finalSiteModelAvailable: false,
+    familyRenderUsed: false,
+    familyRenderFamilyId: null,
+    familyRenderMode: 'page_fallback',
+    familyRenderFallbackToPage: true,
+    familyRenderDiagnosticsCount: 0,
+    familyRenderDiagnostics: [],
+    renderedWithFallback: false,
+    matchedPageId: null,
+    contentResolutionApplied: false,
+    resolvedContentCount: 5,
+    unresolvedContentCount: 0,
+    contentResolutionDegraded: false,
+    contentResolutionDiagnostics: [],
+    previewDiagnostics: ['RAW_TEMPLATE_PREVIEW_SELECTED', 'RAW_TEMPLATE_PREVIEW_RENDERED'],
+  })
+
+  assert.equal(parsed?.previewMode, 'raw_template_preview')
+  assert.equal(parsed?.renderedWithFallback, false)
+  assert.equal(parsed?.resolvedContentCount, 5)
+})
+
 test('preview runtime summary parser safely handles legacy rows with no family fields', () => {
   const parsed = __siteWorkspaceReadModelTestUtils.parsePreviewRuntimeSummary({
     previewMode: 'react_preview',

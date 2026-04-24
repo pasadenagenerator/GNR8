@@ -12,6 +12,8 @@ import type {
   RuntimeImportProvenanceSummary,
   CanonicalSiteMigrationInput,
   CanonicalSiteVersionSnapshot,
+  RawTemplateSiteArtifact,
+  RawTemplateSiteFileMeta,
   RuntimeArtifact,
   SiteVersionState,
   VersionScopedFormSubmission,
@@ -117,6 +119,33 @@ export async function ensureRuntimeTables(): Promise<void> {
             artifact_governance jsonb not null default '{}'::jsonb,
             created_at timestamptz not null default now(),
             unique (site_version_id)
+          )
+        `);
+
+        await client.query(`
+          create table if not exists public.gnr8_runtime_raw_template_artifacts (
+            id uuid primary key default gen_random_uuid(),
+            artifact_type text not null default 'raw_template_site',
+            site_id text not null references public.gnr8_runtime_sites(id) on delete cascade,
+            site_version_id uuid not null references public.gnr8_runtime_site_versions(id) on delete cascade,
+            entry_html_path text not null,
+            asset_base_path text not null,
+            file_map jsonb not null default '{}'::jsonb,
+            created_at timestamptz not null default now(),
+            unique (site_version_id)
+          )
+        `);
+
+        await client.query(`
+          create table if not exists public.gnr8_runtime_raw_template_artifact_files (
+            artifact_id uuid not null references public.gnr8_runtime_raw_template_artifacts(id) on delete cascade,
+            file_path text not null,
+            media_type text not null,
+            file_size_bytes integer not null,
+            sha256 text not null,
+            content_bytes bytea not null,
+            created_at timestamptz not null default now(),
+            primary key (artifact_id, file_path)
           )
         `);
 
@@ -241,6 +270,24 @@ type PageVersionRow = {
   created_at: string;
 };
 
+type RawTemplateArtifactRow = {
+  id: string;
+  artifact_type: string;
+  site_id: string;
+  site_version_id: string;
+  entry_html_path: string;
+  asset_base_path: string;
+  file_map: unknown;
+  created_at: string;
+};
+
+type RawTemplateArtifactFileRow = {
+  media_type: string;
+  file_size_bytes: number;
+  sha256: string;
+  content_bytes: Buffer | Uint8Array;
+};
+
 export type RuntimeHostBindingStatus = "ACTIVE" | "INACTIVE";
 export type RuntimeHostBindingKind = "shadow" | "canary" | "canonical" | "legacy_source_host_backfill" | "manual";
 
@@ -280,6 +327,38 @@ async function getNextSiteVersionNo(client: PoolClient, siteId: string): Promise
 
 function normalizeRuntimeHost(host: string): string {
   return String(host ?? "").trim().toLowerCase();
+}
+
+function normalizeRawTemplateFilePath(filePath: string): string {
+  const normalized = String(filePath ?? "").trim().replaceAll("\\", "/").replace(/^\/+/, "");
+  if (!normalized || normalized === "." || normalized === "..") return "";
+  const segments = normalized
+    .split("/")
+    .map((segment) => segment.trim())
+    .filter((segment) => segment.length > 0 && segment !== ".");
+  if (segments.some((segment) => segment === "..")) return "";
+  return segments.join("/");
+}
+
+function parseRawTemplateFileMap(value: unknown): Record<string, RawTemplateSiteFileMeta> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  const out: Record<string, RawTemplateSiteFileMeta> = {};
+  for (const [rawPath, rawMeta] of Object.entries(value as Record<string, unknown>)) {
+    const path = normalizeRawTemplateFilePath(rawPath);
+    if (!path || !rawMeta || typeof rawMeta !== "object" || Array.isArray(rawMeta)) continue;
+    const rec = rawMeta as Record<string, unknown>;
+    const mediaType = String(rec.mediaType ?? "").trim() || "application/octet-stream";
+    const sizeBytesRaw = Number(rec.sizeBytes ?? rec.fileSizeBytes ?? 0);
+    const sizeBytes = Number.isFinite(sizeBytesRaw) && sizeBytesRaw >= 0 ? Math.floor(sizeBytesRaw) : 0;
+    const sha256 = String(rec.sha256 ?? "").trim();
+    out[path] = {
+      path,
+      mediaType,
+      sizeBytes,
+      sha256,
+    };
+  }
+  return out;
 }
 
 function resolveServingStageFromBindingKind(bindingKind: string | null): "shadow" | "canary" | "production" {
@@ -1306,6 +1385,86 @@ export async function getSiteVersionArtifactBinding(siteVersionId: string): Prom
     const row = res.rows[0];
     if (!row) return null;
     return { siteId: row.site_id, artifactId: row.artifact_id };
+  } finally {
+    client.release();
+  }
+}
+
+export async function getRawTemplateSiteArtifact(siteVersionId: string): Promise<RawTemplateSiteArtifact | null> {
+  await ensureRuntimeTables();
+  const client = await getSuperadminPool().connect();
+  try {
+    const result = await client.query<RawTemplateArtifactRow>(
+      `
+      select
+        id::text as id,
+        artifact_type::text as artifact_type,
+        site_id::text as site_id,
+        site_version_id::text as site_version_id,
+        entry_html_path::text as entry_html_path,
+        asset_base_path::text as asset_base_path,
+        file_map,
+        created_at::text as created_at
+      from public.gnr8_runtime_raw_template_artifacts
+      where site_version_id = $1::uuid
+      limit 1
+      `,
+      [siteVersionId],
+    );
+    const row = result.rows[0];
+    if (!row) return null;
+    const entryHtmlPath = normalizeRawTemplateFilePath(row.entry_html_path);
+    if (!entryHtmlPath) return null;
+    const assetBasePath = normalizeRawTemplateFilePath(row.asset_base_path);
+    return {
+      id: row.id,
+      artifactType: "raw_template_site",
+      siteId: row.site_id,
+      siteVersionId: row.site_version_id,
+      entryHtmlPath,
+      assetBasePath,
+      fileMap: parseRawTemplateFileMap(row.file_map),
+      createdAt: row.created_at,
+    };
+  } finally {
+    client.release();
+  }
+}
+
+export async function getRawTemplateSiteAsset(input: {
+  siteVersionId: string;
+  filePath: string;
+}): Promise<{ mediaType: string; sizeBytes: number; sha256: string; bytes: Buffer } | null> {
+  await ensureRuntimeTables();
+  const normalizedFilePath = normalizeRawTemplateFilePath(input.filePath);
+  if (!normalizedFilePath) return null;
+  const client = await getSuperadminPool().connect();
+  try {
+    const row = await client.query<RawTemplateArtifactFileRow>(
+      `
+      select
+        f.media_type::text as media_type,
+        f.file_size_bytes::integer as file_size_bytes,
+        f.sha256::text as sha256,
+        f.content_bytes
+      from public.gnr8_runtime_raw_template_artifacts a
+      join public.gnr8_runtime_raw_template_artifact_files f
+        on f.artifact_id = a.id
+      where a.site_version_id = $1::uuid
+        and f.file_path = $2::text
+      limit 1
+      `,
+      [input.siteVersionId, normalizedFilePath],
+    );
+    const hit = row.rows[0];
+    if (!hit) return null;
+    const bytes = Buffer.isBuffer(hit.content_bytes) ? hit.content_bytes : Buffer.from(hit.content_bytes);
+    return {
+      mediaType: hit.media_type,
+      sizeBytes: Math.max(0, Math.floor(Number(hit.file_size_bytes) || 0)),
+      sha256: hit.sha256,
+      bytes,
+    };
   } finally {
     client.release();
   }

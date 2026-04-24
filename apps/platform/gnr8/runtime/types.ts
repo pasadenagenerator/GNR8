@@ -242,6 +242,24 @@ export type RuntimeArtifact = {
   createdAt: string;
 };
 
+export type RawTemplateSiteFileMeta = {
+  path: string;
+  mediaType: string;
+  sizeBytes: number;
+  sha256: string;
+};
+
+export type RawTemplateSiteArtifact = {
+  id: string;
+  artifactType: "raw_template_site";
+  siteId: string;
+  siteVersionId: string;
+  entryHtmlPath: string;
+  assetBasePath: string;
+  fileMap: Record<string, RawTemplateSiteFileMeta>;
+  createdAt: string;
+};
+
 export type RenderMode = "PREVIEW" | "PUBLISH";
 
 export type VersionScopedFormSubmission = {

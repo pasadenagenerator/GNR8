@@ -8,7 +8,7 @@ export type SiteWorkspacePreviewReadiness =
   | 'debug_only_artifact_available'
   | 'import_captured_not_transformed'
 
-export type SiteVersionPreviewMode = 'transformed' | 'debug'
+export type SiteVersionPreviewMode = 'transformed' | 'debug' | 'raw_template_preview'
 
 export const DEFAULT_SITE_VERSION_PREVIEW_MODE: SiteVersionPreviewMode = 'debug'
 
@@ -19,6 +19,7 @@ function normalizeText(value: unknown): string {
 export function normalizeSiteVersionPreviewMode(value: unknown): SiteVersionPreviewMode {
   const normalized = normalizeText(value).toLowerCase()
   if (normalized === 'transformed') return 'transformed'
+  if (normalized === 'raw_template_preview') return 'raw_template_preview'
   return 'debug'
 }
 

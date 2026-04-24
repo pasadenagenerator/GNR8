@@ -336,9 +336,11 @@ function renderPreviewContent(readModel: Awaited<ReturnType<typeof getSiteWorksp
           ? 'Fallback preview'
           : readModel.preview.previewMode === 'semantic_fallback_preview'
             ? 'Semantic fallback preview'
-          : contentRecoveryModeActive
-            ? 'content recovery'
-            : 'canonical'
+            : readModel.preview.previewMode === 'raw_template_preview'
+              ? 'Raw template preview'
+            : contentRecoveryModeActive
+              ? 'content recovery'
+              : 'canonical'
   const familyRenderModeLabel = readModel.preview.familyRenderMode ?? 'unavailable'
   const familyRenderDiagnostics = readModel.preview.familyRenderDiagnostics
 

@@ -1,5 +1,13 @@
+import path from 'node:path'
+
 import { normalizePagePath } from '@/gnr8/runtime/deterministic'
-import { getArtifactById, getSiteVersion, getSiteVersionArtifactBinding } from '@/gnr8/runtime/runtime-store'
+import {
+  getArtifactById,
+  getRawTemplateSiteArtifact,
+  getRawTemplateSiteAsset,
+  getSiteVersion,
+  getSiteVersionArtifactBinding,
+} from '@/gnr8/runtime/runtime-store'
 import type { CanonicalSiteVersionSnapshot } from '@/gnr8/runtime/types'
 import { normalizeSiteVersionPreviewMode, type SiteVersionPreviewMode } from '@/gnr8/site/site-preview-contract'
 import { PREVIEW_RUNTIME_DIAGNOSTIC } from '@/gnr8/preview-runtime/preview-runtime-diagnostics'
@@ -15,6 +23,7 @@ export type SiteVersionPreviewSource =
   | 'transformed_artifact'
   | 'debug_preview_bundle'
   | 'semantic_fallback_renderer'
+  | 'raw_template_site'
 
 type RenderedCapturePreviewTruth = {
   renderedCaptureUsed: boolean
@@ -35,7 +44,7 @@ type ResolvedSiteVersionPreview = {
   fallbackUsed: boolean
   domSize: number
   screenshotCount: number
-  sourceMode: 'rendered_capture' | 'raw_html'
+  sourceMode: 'rendered_capture' | 'raw_html' | 'raw_template'
 }
 
 export class SiteVersionPreviewUnavailableError extends Error {
@@ -147,6 +156,76 @@ function withSortedDiagnostics(diagnostics: string[]): string[] {
   return [...new Set(diagnostics.filter((value) => value.trim().length > 0))].sort((a, b) => a.localeCompare(b))
 }
 
+function normalizeTemplateAssetPath(value: string): string | null {
+  const normalized = String(value ?? '').trim().replaceAll('\\', '/').replace(/^\/+/, '')
+  if (!normalized || normalized === '.' || normalized === '..') return null
+  const segments = normalized
+    .split('/')
+    .map((segment) => segment.trim())
+    .filter((segment) => segment.length > 0 && segment !== '.')
+  if (segments.some((segment) => segment === '..')) return null
+  return segments.join('/')
+}
+
+function rewriteRawTemplateAssetReferences(input: {
+  html: string
+  siteId: string
+  siteVersionId: string
+  entryHtmlPath: string
+}): string {
+  const assetRoot = `/api/gnr8/runtime/preview-assets/${encodeURIComponent(input.siteId)}/${encodeURIComponent(input.siteVersionId)}`
+  const entryDir = path.posix.dirname(input.entryHtmlPath)
+  const baseDir = entryDir === '.' ? '' : entryDir
+
+  const rewriteReference = (rawRef: string): string => {
+    const ref = String(rawRef ?? '').trim()
+    if (!ref) return ref
+    const lower = ref.toLowerCase()
+    if (
+      ref.startsWith('#') ||
+      lower.startsWith('http://') ||
+      lower.startsWith('https://') ||
+      lower.startsWith('//') ||
+      lower.startsWith('data:') ||
+      lower.startsWith('mailto:') ||
+      lower.startsWith('tel:')
+    ) {
+      return ref
+    }
+    if (ref.startsWith('/')) {
+      const normalized = normalizeTemplateAssetPath(ref)
+      return normalized ? `${assetRoot}/${normalized}` : ref
+    }
+    const [pathname, queryHash = ''] = ref.split(/(?=[?#])/)
+    const joined = path.posix.join('/', baseDir, pathname)
+    const normalized = normalizeTemplateAssetPath(joined)
+    if (!normalized) return ref
+    return `${assetRoot}/${normalized}${queryHash}`
+  }
+
+  const rewriteSrcset = (srcset: string): string =>
+    srcset
+      .split(',')
+      .map((entry) => {
+        const trimmed = entry.trim()
+        if (!trimmed) return trimmed
+        const [url, descriptor] = trimmed.split(/\s+/, 2)
+        const rewritten = rewriteReference(url)
+        return descriptor ? `${rewritten} ${descriptor}` : rewritten
+      })
+      .join(', ')
+
+  return input.html
+    .replace(
+      /\b(href|src|poster)\s*=\s*(["'])(.*?)\2/gi,
+      (_full, attr: string, quote: string, value: string) => `${attr}=${quote}${rewriteReference(value)}${quote}`,
+    )
+    .replace(
+      /\bsrcset\s*=\s*(["'])(.*?)\1/gi,
+      (_full, quote: string, value: string) => `srcset=${quote}${rewriteSrcset(value)}${quote}`,
+    )
+}
+
 function resolveRenderedCapturePreviewTruth(importSummary: unknown): RenderedCapturePreviewTruth {
   const summary =
     importSummary && typeof importSummary === 'object' && !Array.isArray(importSummary)
@@ -234,6 +313,101 @@ function buildSemanticPreviewRuntimeSummary(input: {
     semanticSectionCount: input.sectionCount,
     semanticImageCount: input.imageCount,
     semanticCtaCount: input.ctaCount,
+  }
+}
+
+function buildRawTemplatePreviewRuntimeSummary(input: {
+  baseSummary?: PreviewRuntimeSummary | null
+  fileCount: number
+}): PreviewRuntimeSummary {
+  const base = input.baseSummary ?? defaultPreviewRuntimeSummary()
+  const baseDiagnostics = (base.previewDiagnostics ?? []).filter(
+    (entry) =>
+      entry !== PREVIEW_RUNTIME_DIAGNOSTIC.FALLBACK_RENDER_SELECTED &&
+      entry !== PREVIEW_RUNTIME_DIAGNOSTIC.SEMANTIC_PREVIEW_SELECTED,
+  )
+  return {
+    ...base,
+    previewMode: 'raw_template_preview',
+    rendererContractAvailable: false,
+    finalSiteModelAvailable: false,
+    familyRenderUsed: false,
+    familyRenderFamilyId: null,
+    familyRenderMode: null,
+    familyRenderFallbackToPage: false,
+    familyRenderDiagnosticsCount: 0,
+    familyRenderDiagnostics: [],
+    renderedWithFallback: false,
+    contentResolutionApplied: false,
+    resolvedContentCount: input.fileCount,
+    unresolvedContentCount: 0,
+    contentResolutionDegraded: false,
+    previewDiagnostics: withSortedDiagnostics([
+      ...baseDiagnostics,
+      PREVIEW_RUNTIME_DIAGNOSTIC.RAW_TEMPLATE_PREVIEW_SELECTED,
+      PREVIEW_RUNTIME_DIAGNOSTIC.RAW_TEMPLATE_PREVIEW_RENDERED,
+    ]),
+  }
+}
+
+async function renderRawTemplateSiteVersionPreview(input: {
+  siteVersionId: string
+  requestedPath: string
+  previewTruth: RenderedCapturePreviewTruth
+  fallbackSummary?: PreviewRuntimeSummary | null
+}): Promise<ResolvedSiteVersionPreview | null> {
+  const artifact = await getRawTemplateSiteArtifact(input.siteVersionId)
+  if (!artifact) return null
+  const entryAsset = await getRawTemplateSiteAsset({
+    siteVersionId: input.siteVersionId,
+    filePath: artifact.entryHtmlPath,
+  })
+  if (!entryAsset) {
+    throw new SiteVersionPreviewUnavailableError({
+      code: 'TRANSFORMED_ARTIFACT_NOT_AVAILABLE',
+      message: 'Raw template entry HTML is unavailable for this site version.',
+    })
+  }
+
+  const html = rewriteRawTemplateAssetReferences({
+    html: entryAsset.bytes.toString('utf8'),
+    siteId: artifact.siteId,
+    siteVersionId: artifact.siteVersionId,
+    entryHtmlPath: artifact.entryHtmlPath,
+  })
+  const summary = buildRawTemplatePreviewRuntimeSummary({
+    baseSummary: input.fallbackSummary,
+    fileCount: Object.keys(artifact.fileMap).length,
+  })
+  console.info('[preview-runtime] RAW_TEMPLATE_PREVIEW_SELECTED', {
+    siteId: artifact.siteId,
+    siteVersionId: artifact.siteVersionId,
+    requestedPath: normalizePagePath(input.requestedPath),
+    entryHtmlPath: artifact.entryHtmlPath,
+    fileCount: Object.keys(artifact.fileMap).length,
+  })
+  console.info('[preview-runtime] RAW_TEMPLATE_PREVIEW_RENDERED', {
+    siteId: artifact.siteId,
+    siteVersionId: artifact.siteVersionId,
+    requestedPath: normalizePagePath(input.requestedPath),
+    bytes: entryAsset.sizeBytes,
+  })
+  return {
+    ...withPreviewTruth({
+      preview: {
+        siteId: artifact.siteId,
+        siteVersionId: artifact.siteVersionId,
+        path: normalizePagePath(input.requestedPath),
+        rendererCompatibilityVersion: 'gnr8-renderer-v1',
+        html,
+        source: 'raw_template_site',
+        previewMode: 'raw_template_preview',
+        previewRuntimeSummary: summary,
+      },
+      previewTruth: input.previewTruth,
+      fallbackUsedOverride: false,
+    }),
+    sourceMode: 'raw_template',
   }
 }
 
@@ -496,6 +670,21 @@ export async function renderSiteVersionPreview(input: { siteVersionId: string; p
   })
 
   try {
+    if (mode !== 'debug') {
+      const rawTemplatePreview = await renderRawTemplateSiteVersionPreview({
+        siteVersionId: input.siteVersionId,
+        requestedPath,
+        previewTruth,
+      })
+      if (rawTemplatePreview) return rawTemplatePreview
+      if (mode === 'raw_template_preview') {
+        throw new SiteVersionPreviewUnavailableError({
+          code: 'TRANSFORMED_ARTIFACT_NOT_AVAILABLE',
+          message: 'Raw template preview is not available for this site version.',
+        })
+      }
+    }
+
     if (mode === 'transformed') {
       const reactPreview = await renderReactRuntimeSiteVersionPreview({
         siteVersionId: input.siteVersionId,
@@ -578,4 +767,5 @@ export const __unifiedRenderPreviewTestUtils = {
   resolveHtmlForPath,
   resolveSemanticFallbackPreview,
   resolveRenderedCapturePreviewTruth,
+  rewriteRawTemplateAssetReferences,
 }

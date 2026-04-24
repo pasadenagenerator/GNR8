@@ -151,3 +151,28 @@ test('preview resolver no longer raises PREVIEW_PATH_NOT_FOUND for raw_html_only
   assert.equal(semantic?.path, '/')
   assert.equal(semantic?.html.includes('Semantic Hero'), true)
 })
+
+test('raw template preview rewrites local asset references to preview-assets route', () => {
+  const html = [
+    '<!doctype html>',
+    '<html>',
+    '<head><link rel="stylesheet" href="./assets/site.css"></head>',
+    '<body><img src="/images/logo.png"><script src="scripts/app.js"></script></body>',
+    '</html>',
+  ].join('')
+  const rewritten = __unifiedRenderPreviewTestUtils.rewriteRawTemplateAssetReferences({
+    html,
+    siteId: 'site-raw',
+    siteVersionId: 'sv-raw',
+    entryHtmlPath: 'nested/site/index.html',
+  })
+  assert.equal(
+    rewritten.includes('/api/gnr8/runtime/preview-assets/site-raw/sv-raw/nested/site/assets/site.css'),
+    true,
+  )
+  assert.equal(rewritten.includes('/api/gnr8/runtime/preview-assets/site-raw/sv-raw/images/logo.png'), true)
+  assert.equal(
+    rewritten.includes('/api/gnr8/runtime/preview-assets/site-raw/sv-raw/nested/site/scripts/app.js'),
+    true,
+  )
+})

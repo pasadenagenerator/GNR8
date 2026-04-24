@@ -9,6 +9,7 @@ import {
 
 test('normalizeSiteVersionPreviewMode defaults safely to debug', () => {
   assert.equal(normalizeSiteVersionPreviewMode('transformed'), 'transformed')
+  assert.equal(normalizeSiteVersionPreviewMode('raw_template_preview'), 'raw_template_preview')
   assert.equal(normalizeSiteVersionPreviewMode('debug'), 'debug')
   assert.equal(normalizeSiteVersionPreviewMode('unknown'), 'debug')
 })
@@ -27,6 +28,13 @@ test('buildSiteVersionPreviewUrl keeps transformed/debug paths explicit', () => 
       mode: 'debug',
     }),
     '/api/gnr8/runtime/versions/8ce51f31-92ff-4ef4-a543-e1177dfe780d/preview?mode=debug',
+  )
+  assert.equal(
+    buildSiteVersionPreviewUrl({
+      siteVersionId: '8ce51f31-92ff-4ef4-a543-e1177dfe780d',
+      mode: 'raw_template_preview',
+    }),
+    '/api/gnr8/runtime/versions/8ce51f31-92ff-4ef4-a543-e1177dfe780d/preview?mode=raw_template_preview',
   )
 })
 

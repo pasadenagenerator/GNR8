@@ -83,6 +83,19 @@ type BootstrapDeps = {
   loadTemplateSourceZip: (input: { bucket: string; key: string }) => Promise<Uint8Array>
   validateAndExtractTemplateZip: typeof validateAndExtractTemplateZip
   persistTemplateDurableSourceSnapshot: typeof persistTemplateDurableSourceSnapshot
+  persistRawTemplateSiteArtifact: (input: {
+    siteId: string
+    siteVersionId: string
+    snapshotRootDirAbs: string
+    entryHtmlPathAbs: string
+  }) => Promise<{
+    artifactId: string
+    artifactType: 'raw_template_site'
+    entryHtmlPath: string
+    assetBasePath: string
+    fileMap: Record<string, { path: string; mediaType: string; sizeBytes: number; sha256: string }>
+    fileCount: number
+  }>
   now: () => Date
 }
 
@@ -100,6 +113,7 @@ function defaultDeps(): BootstrapDeps {
     loadTemplateSourceZip,
     validateAndExtractTemplateZip,
     persistTemplateDurableSourceSnapshot,
+    persistRawTemplateSiteArtifact,
     now: () => new Date(),
   }
 }
@@ -383,6 +397,199 @@ function scanHtmlFilesInRoot(input: { rootDirAbs: string; maxFiles?: number }): 
     }
   }
   return out.sort((a, b) => a.localeCompare(b))
+}
+
+function scanAllFilesInRoot(input: { rootDirAbs: string; maxFiles?: number }): string[] {
+  const maxFiles = Math.max(1, Math.floor(input.maxFiles ?? 5000))
+  const out: string[] = []
+  const stack: string[] = [path.resolve(input.rootDirAbs)]
+  while (stack.length > 0 && out.length < maxFiles) {
+    const current = stack.pop()
+    if (!current) continue
+    let entries: fs.Dirent[] = []
+    try {
+      entries = fs.readdirSync(current, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))
+    } catch {
+      continue
+    }
+    for (const entry of entries) {
+      const abs = path.resolve(current, entry.name)
+      if (!isPathWithinRoot({ rootDirAbs: input.rootDirAbs, targetPathAbs: abs })) continue
+      if (entry.isDirectory()) {
+        stack.push(abs)
+        continue
+      }
+      if (!entry.isFile()) continue
+      const rel = path.relative(input.rootDirAbs, abs).replaceAll('\\', '/')
+      if (!rel || rel.startsWith('..') || path.isAbsolute(rel)) continue
+      out.push(rel)
+      if (out.length >= maxFiles) break
+    }
+  }
+  return out.sort((a, b) => a.localeCompare(b))
+}
+
+function mediaTypeFromExtension(filePath: string): string {
+  const ext = path.extname(filePath).toLowerCase()
+  if (ext === '.html' || ext === '.htm') return 'text/html; charset=utf-8'
+  if (ext === '.css') return 'text/css; charset=utf-8'
+  if (ext === '.js' || ext === '.mjs' || ext === '.cjs') return 'text/javascript; charset=utf-8'
+  if (ext === '.json') return 'application/json; charset=utf-8'
+  if (ext === '.svg') return 'image/svg+xml'
+  if (ext === '.png') return 'image/png'
+  if (ext === '.jpg' || ext === '.jpeg') return 'image/jpeg'
+  if (ext === '.gif') return 'image/gif'
+  if (ext === '.webp') return 'image/webp'
+  if (ext === '.avif') return 'image/avif'
+  if (ext === '.ico') return 'image/x-icon'
+  if (ext === '.woff') return 'font/woff'
+  if (ext === '.woff2') return 'font/woff2'
+  if (ext === '.ttf') return 'font/ttf'
+  if (ext === '.otf') return 'font/otf'
+  if (ext === '.eot') return 'application/vnd.ms-fontobject'
+  if (ext === '.xml') return 'application/xml; charset=utf-8'
+  if (ext === '.txt') return 'text/plain; charset=utf-8'
+  return 'application/octet-stream'
+}
+
+function sanitizeRawTemplatePath(relativePath: string): string {
+  const normalized = normalizeRelPath(relativePath)
+  if (!normalized || normalized.includes('..')) return ''
+  return normalized
+}
+
+async function persistRawTemplateSiteArtifact(input: {
+  siteId: string
+  siteVersionId: string
+  snapshotRootDirAbs: string
+  entryHtmlPathAbs: string
+}): Promise<{
+  artifactId: string
+  artifactType: 'raw_template_site'
+  entryHtmlPath: string
+  assetBasePath: string
+  fileMap: Record<string, { path: string; mediaType: string; sizeBytes: number; sha256: string }>
+  fileCount: number
+}> {
+  const snapshotRootDirAbs = path.resolve(input.snapshotRootDirAbs)
+  const entryHtmlPathAbs = path.resolve(input.entryHtmlPathAbs)
+  const entryHtmlPath = sanitizeRawTemplatePath(path.relative(snapshotRootDirAbs, entryHtmlPathAbs).replaceAll('\\', '/'))
+  if (!entryHtmlPath) {
+    throw new Error('RAW_TEMPLATE_ARTIFACT_ENTRY_HTML_INVALID')
+  }
+  const assetBasePath = sanitizeRawTemplatePath(path.posix.dirname(entryHtmlPath)) || '.'
+  const filePaths = scanAllFilesInRoot({ rootDirAbs: snapshotRootDirAbs, maxFiles: 10000 })
+  const fileMap: Record<string, { path: string; mediaType: string; sizeBytes: number; sha256: string }> = {}
+  const fileRows: Array<{ path: string; mediaType: string; sizeBytes: number; sha256: string; bytes: Buffer }> = []
+
+  for (const relPath of filePaths) {
+    const safePath = sanitizeRawTemplatePath(relPath)
+    if (!safePath) continue
+    const absPath = path.resolve(snapshotRootDirAbs, safePath)
+    if (!isPathWithinRoot({ rootDirAbs: snapshotRootDirAbs, targetPathAbs: absPath })) continue
+    let bytes: Buffer
+    try {
+      bytes = fs.readFileSync(absPath)
+    } catch {
+      continue
+    }
+    const mediaType = mediaTypeFromExtension(safePath)
+    const sizeBytes = bytes.byteLength
+    const sha256 = crypto.createHash('sha256').update(bytes).digest('hex')
+    fileRows.push({ path: safePath, mediaType, sizeBytes, sha256, bytes })
+    fileMap[safePath] = { path: safePath, mediaType, sizeBytes, sha256 }
+  }
+
+  if (!fileMap[entryHtmlPath]) {
+    throw new Error('RAW_TEMPLATE_ARTIFACT_ENTRY_HTML_MISSING')
+  }
+
+  const client = await getSuperadminPool().connect()
+  try {
+    await client.query('begin')
+    await client.query(`
+      create table if not exists public.gnr8_runtime_raw_template_artifacts (
+        id uuid primary key default gen_random_uuid(),
+        artifact_type text not null default 'raw_template_site',
+        site_id text not null references public.gnr8_runtime_sites(id) on delete cascade,
+        site_version_id uuid not null references public.gnr8_runtime_site_versions(id) on delete cascade,
+        entry_html_path text not null,
+        asset_base_path text not null,
+        file_map jsonb not null default '{}'::jsonb,
+        created_at timestamptz not null default now(),
+        unique (site_version_id)
+      )
+    `)
+    await client.query(`
+      create table if not exists public.gnr8_runtime_raw_template_artifact_files (
+        artifact_id uuid not null references public.gnr8_runtime_raw_template_artifacts(id) on delete cascade,
+        file_path text not null,
+        media_type text not null,
+        file_size_bytes integer not null,
+        sha256 text not null,
+        content_bytes bytea not null,
+        created_at timestamptz not null default now(),
+        primary key (artifact_id, file_path)
+      )
+    `)
+
+    const upsert = await client.query<{ id: string }>(
+      `
+      insert into public.gnr8_runtime_raw_template_artifacts (
+        site_id,
+        site_version_id,
+        artifact_type,
+        entry_html_path,
+        asset_base_path,
+        file_map
+      )
+      values ($1::text, $2::uuid, 'raw_template_site', $3::text, $4::text, $5::jsonb)
+      on conflict (site_version_id)
+      do update set
+        site_id = excluded.site_id,
+        artifact_type = excluded.artifact_type,
+        entry_html_path = excluded.entry_html_path,
+        asset_base_path = excluded.asset_base_path,
+        file_map = excluded.file_map
+      returning id::text as id
+      `,
+      [input.siteId, input.siteVersionId, entryHtmlPath, assetBasePath, JSON.stringify(fileMap)],
+    )
+    const artifactId = upsert.rows[0]?.id
+    if (!artifactId) throw new Error('RAW_TEMPLATE_ARTIFACT_UPSERT_FAILED')
+
+    await client.query(`delete from public.gnr8_runtime_raw_template_artifact_files where artifact_id = $1::uuid`, [artifactId])
+    for (const file of fileRows) {
+      await client.query(
+        `
+        insert into public.gnr8_runtime_raw_template_artifact_files (
+          artifact_id,
+          file_path,
+          media_type,
+          file_size_bytes,
+          sha256,
+          content_bytes
+        )
+        values ($1::uuid, $2::text, $3::text, $4::integer, $5::text, $6::bytea)
+        `,
+        [artifactId, file.path, file.mediaType, file.sizeBytes, file.sha256, file.bytes],
+      )
+    }
+    await client.query('commit')
+    return {
+      artifactId,
+      artifactType: 'raw_template_site',
+      entryHtmlPath,
+      assetBasePath,
+      fileMap,
+      fileCount: fileRows.length,
+    }
+  } catch (error) {
+    await client.query('rollback')
+    throw error
+  } finally {
+    client.release()
+  }
 }
 
 function resolveEntryPathFromCandidate(input: {
@@ -958,6 +1165,23 @@ export async function bootstrapRuntimeFromTemplateSite(input: {
     runtimeSiteVersionId = scoped.siteVersionId
 
     await deps.writeOwnershipLink({ siteId, siteVersionId: scoped.siteVersionId })
+    const rawTemplateArtifact = await deps.persistRawTemplateSiteArtifact({
+      siteId: scoped.siteId,
+      siteVersionId: scoped.siteVersionId,
+      snapshotRootDirAbs,
+      entryHtmlPathAbs,
+    })
+    console.info('[site-bootstrap-worker] RAW_TEMPLATE_PREVIEW_SELECTED', {
+      siteId,
+      templateId,
+      runtimeSiteId,
+      runtimeSiteVersionId,
+      artifactType: rawTemplateArtifact.artifactType,
+      artifactId: rawTemplateArtifact.artifactId,
+      entryHtmlPath: rawTemplateArtifact.entryHtmlPath,
+      assetBasePath: rawTemplateArtifact.assetBasePath,
+      fileCount: rawTemplateArtifact.fileCount,
+    })
 
     const sectionCount = countPreparedSections(scoped)
     const previewSeeded = normalizeText(scoped.artifactId).length > 0
