@@ -5,6 +5,7 @@ import type { CSSProperties, ReactNode } from 'react'
 import SiteContextLayout from './SiteContextLayout'
 import SiteActionsPanel from './SiteActionsPanel'
 import SiteDeletePanel from './SiteDeletePanel'
+import SiteDomainSettingsPanel from './SiteDomainSettingsPanel'
 import { listSwitchableAgencyClientsForPage } from '../../../client-switcher-options'
 import { getSiteWorkspaceReadModelForPage } from '@/gnr8/site/site-workspace-read-model'
 import { type SiteWorkspaceTab } from '@/gnr8/site/site-workspace-navigation'
@@ -456,6 +457,7 @@ function renderPreviewContent(readModel: Awaited<ReturnType<typeof getSiteWorksp
 function renderSettingsContent(input: {
   readModel: Awaited<ReturnType<typeof getSiteWorkspaceReadModelForPage>>
   canDeleteSite: boolean
+  canPublish: boolean
   clientId: string
   siteId: string
   agencyId: string
@@ -481,6 +483,14 @@ function renderSettingsContent(input: {
           <strong>Future placeholders:</strong> publish settings, branding overrides, environment
         </div>
       </div>
+      <SiteDomainSettingsPanel
+        agencyId={input.agencyId}
+        clientId={input.clientId}
+        siteId={input.siteId}
+        siteVersionId={readModel.pipeline.latestRuntimeSiteVersionId}
+        initialDomain={readModel.settings.domain}
+        canPublish={input.canPublish}
+      />
       <SiteDeletePanel
         clientId={input.clientId}
         siteId={input.siteId}
@@ -666,6 +676,7 @@ export default async function SiteWorkspacePage(props: Props) {
           ? renderSettingsContent({
               readModel,
               canDeleteSite,
+              canPublish,
               clientId,
               siteId,
               agencyId: currentUserAgency.agency_id,

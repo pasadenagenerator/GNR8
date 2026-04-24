@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { parseAgencyActionContextError, requireAgencyActionContext } from "@/app/api/gnr8/agency/_lib/agency-action-access";
 import { resolveAgencyIdForSiteVersion } from "@/app/api/gnr8/runtime/_lib/runtime-agency-scope";
 import { publishApprovedSiteVersion } from "@/gnr8/runtime/publish-activation-orchestrator";
+import { activateDomainHostBindingsForSiteVersion } from "@/gnr8/runtime/runtime-store";
 
 export async function POST(req: Request, ctx: { params: Promise<{ siteVersionId: string }> }) {
   try {
@@ -20,10 +21,15 @@ export async function POST(req: Request, ctx: { params: Promise<{ siteVersionId:
     const stage = body.stage === "shadow" || body.stage === "canary" || body.stage === "production" ? body.stage : undefined;
 
     const result = await publishApprovedSiteVersion({ siteVersionId, actor, stage });
+    const activatedDomainBindings = await activateDomainHostBindingsForSiteVersion({
+      siteId: result.siteId,
+      siteVersionId: result.siteVersionId,
+    });
 
     return NextResponse.json({
       ok: true,
       actor_mode: actionContext.actorMode,
+      activated_domain_bindings: activatedDomainBindings,
       ...result,
     });
   } catch (error) {

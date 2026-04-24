@@ -150,6 +150,25 @@ export async function ensureRuntimeTables(): Promise<void> {
         `);
 
         await client.query(`
+          create table if not exists public.gnr8_runtime_domain_host_bindings (
+            id uuid primary key default gen_random_uuid(),
+            site_id text not null references public.gnr8_runtime_sites(id) on delete cascade,
+            site_version_id uuid not null references public.gnr8_runtime_site_versions(id) on delete cascade,
+            domain text not null,
+            status text not null default 'pending' check (status in ('pending', 'active')),
+            created_at timestamptz not null default now(),
+            updated_at timestamptz not null default now(),
+            unique (site_id, domain)
+          )
+        `);
+
+        await client.query(`
+          create unique index if not exists gnr8_runtime_domain_host_bindings_active_domain_uq
+          on public.gnr8_runtime_domain_host_bindings (lower(domain))
+          where status = 'active'
+        `);
+
+        await client.query(`
           alter table public.gnr8_runtime_site_versions
           add column if not exists import_provenance_summary jsonb
         `);
@@ -301,6 +320,18 @@ export type RuntimeHostBinding = {
   updatedAt: string;
 };
 
+export type RuntimeDomainHostBindingStatus = "pending" | "active";
+
+export type RuntimeDomainHostBinding = {
+  id: string;
+  siteId: string;
+  siteVersionId: string;
+  domain: string;
+  status: RuntimeDomainHostBindingStatus;
+  createdAt: string;
+  updatedAt: string;
+};
+
 async function withTx<T>(fn: (client: PoolClient) => Promise<T>): Promise<T> {
   await ensureRuntimeTables();
   const client = await getSuperadminPool().connect();
@@ -327,6 +358,15 @@ async function getNextSiteVersionNo(client: PoolClient, siteId: string): Promise
 
 function normalizeRuntimeHost(host: string): string {
   return String(host ?? "").trim().toLowerCase();
+}
+
+function normalizeRuntimeDomain(domain: string): string {
+  const raw = String(domain ?? "").trim().toLowerCase();
+  if (!raw) return "";
+  const withoutProtocol = raw.replace(/^https?:\/\//, "");
+  const authority = withoutProtocol.split("/")[0] ?? "";
+  const hostOnly = authority.split(":")[0] ?? "";
+  return hostOnly.replace(/\.+$/, "").trim();
 }
 
 function normalizeRawTemplateFilePath(filePath: string): string {
@@ -600,6 +640,301 @@ export async function listHostBindingsForSite(siteId: string): Promise<RuntimeHo
   } finally {
     client.release();
   }
+}
+
+export async function upsertDomainHostBinding(input: {
+  siteId: string;
+  siteVersionId: string;
+  domain: string;
+  status: RuntimeDomainHostBindingStatus;
+}): Promise<RuntimeDomainHostBinding> {
+  return withTx(async (client) => {
+    const normalizedDomain = normalizeRuntimeDomain(input.domain);
+    if (!normalizedDomain) throw new Error("Invalid domain");
+
+    const siteVersionRes = await client.query<{ site_id: string }>(
+      `
+      select site_id::text as site_id
+      from public.gnr8_runtime_site_versions
+      where id = $1::uuid
+      limit 1
+      `,
+      [input.siteVersionId],
+    );
+    const siteVersion = siteVersionRes.rows[0];
+    if (!siteVersion) throw new Error("Runtime site version not found");
+    if (siteVersion.site_id !== input.siteId) {
+      throw new Error("Runtime site version does not belong to runtime site");
+    }
+
+    if (input.status === "active") {
+      await client.query(
+        `
+        update public.gnr8_runtime_domain_host_bindings
+        set status = 'pending', updated_at = now()
+        where lower(domain) = $1::text and status = 'active' and site_id <> $2::text
+        `,
+        [normalizedDomain, input.siteId],
+      );
+    }
+
+    const result = await client.query<{
+      id: string;
+      site_id: string;
+      site_version_id: string;
+      domain: string;
+      status: RuntimeDomainHostBindingStatus;
+      created_at: string;
+      updated_at: string;
+    }>(
+      `
+      insert into public.gnr8_runtime_domain_host_bindings (site_id, site_version_id, domain, status)
+      values ($1::text, $2::uuid, $3::text, $4::text)
+      on conflict (site_id, domain)
+      do update set
+        site_version_id = excluded.site_version_id,
+        status = excluded.status,
+        updated_at = now()
+      returning
+        id::text as id,
+        site_id::text as site_id,
+        site_version_id::text as site_version_id,
+        domain::text as domain,
+        status::text as status,
+        created_at::text as created_at,
+        updated_at::text as updated_at
+      `,
+      [input.siteId, input.siteVersionId, normalizedDomain, input.status],
+    );
+
+    const row = result.rows[0];
+    if (!row) throw new Error("Failed to upsert domain host binding");
+    return {
+      id: row.id,
+      siteId: row.site_id,
+      siteVersionId: row.site_version_id,
+      domain: row.domain,
+      status: row.status,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+    };
+  });
+}
+
+export async function activateDomainHostBindingsForSiteVersion(input: {
+  siteId: string;
+  siteVersionId: string;
+}): Promise<number> {
+  return withTx(async (client) => {
+    const update = await client.query(
+      `
+      update public.gnr8_runtime_domain_host_bindings
+      set site_version_id = $2::uuid, status = 'active', updated_at = now()
+      where site_id = $1::text
+      `,
+      [input.siteId, input.siteVersionId],
+    );
+    return update.rowCount ?? 0;
+  });
+}
+
+export type RuntimeDomainSiteResolution =
+  | {
+      outcome: "domain_hit";
+      host: string;
+      siteId: string;
+      siteVersionId: string;
+      domain: string;
+      status: RuntimeDomainHostBindingStatus;
+      bindingId: string;
+    }
+  | {
+      outcome: "domain_miss";
+      host: string;
+      reasonCode: "domain_not_found";
+    };
+
+export async function resolveDomainSiteVersionForHost(input: { host?: string | null }): Promise<RuntimeDomainSiteResolution> {
+  await ensureRuntimeTables();
+  const client = await getSuperadminPool().connect();
+  try {
+    const host = normalizeRuntimeDomain(String(input.host ?? ""));
+    const result = await client.query<{
+      id: string;
+      site_id: string;
+      site_version_id: string;
+      domain: string;
+      status: RuntimeDomainHostBindingStatus;
+    }>(
+      `
+      select
+        id::text as id,
+        site_id::text as site_id,
+        site_version_id::text as site_version_id,
+        domain::text as domain,
+        status::text as status
+      from public.gnr8_runtime_domain_host_bindings
+      where lower(domain) = $1::text and status = 'active'
+      order by updated_at desc, created_at desc
+      limit 1
+      `,
+      [host],
+    );
+    const row = result.rows[0];
+    if (!row) {
+      return {
+        outcome: "domain_miss",
+        host,
+        reasonCode: "domain_not_found",
+      };
+    }
+    return {
+      outcome: "domain_hit",
+      host,
+      siteId: row.site_id,
+      siteVersionId: row.site_version_id,
+      domain: row.domain,
+      status: row.status,
+      bindingId: row.id,
+    };
+  } finally {
+    client.release();
+  }
+}
+
+export type RawTemplateDomainResolution =
+  | {
+      outcome: "raw_template_hit";
+      host: string;
+      siteId: string;
+      siteVersionId: string;
+      domain: string;
+      bindingId: string;
+      status: RuntimeDomainHostBindingStatus;
+      normalizedPath: string;
+      resolvedFilePath: string;
+      html: string;
+    }
+  | {
+      outcome: "raw_template_miss";
+      host: string;
+      normalizedPath: string;
+      siteId: string | null;
+      siteVersionId: string | null;
+      domain: string | null;
+      bindingId: string | null;
+      status: RuntimeDomainHostBindingStatus | null;
+      reasonCode: "domain_not_found" | "raw_template_site_not_found" | "raw_template_html_not_found";
+    };
+
+function buildRawTemplateHtmlPathCandidates(input: {
+  path: string;
+  entryHtmlPath: string;
+  fileMap: Record<string, RawTemplateSiteFileMeta>;
+}): string[] {
+  const normalizedPath = normalizePagePath(input.path);
+  if (normalizedPath === "/") return [input.entryHtmlPath];
+  const trimmed = normalizedPath.replace(/^\/+/, "").replace(/\/+$/, "");
+  if (!trimmed) return [input.entryHtmlPath];
+
+  const candidates = new Set<string>();
+  if (trimmed.toLowerCase().endsWith(".html")) {
+    candidates.add(trimmed);
+  } else {
+    candidates.add(`${trimmed}.html`);
+    candidates.add(`${trimmed}/index.html`);
+  }
+  candidates.add(trimmed);
+  candidates.add(input.entryHtmlPath);
+
+  return [...candidates].map((candidate) => normalizeRawTemplateFilePath(candidate)).filter((candidate) => Boolean(candidate));
+}
+
+export async function resolveRawTemplateSiteForDomainAndPath(input: {
+  host?: string | null;
+  path: string;
+}): Promise<RawTemplateDomainResolution> {
+  const siteResolution = await resolveDomainSiteVersionForHost({ host: input.host });
+  const normalizedPath = normalizePagePath(input.path);
+  if (siteResolution.outcome === "domain_miss") {
+    return {
+      outcome: "raw_template_miss",
+      host: siteResolution.host,
+      normalizedPath,
+      siteId: null,
+      siteVersionId: null,
+      domain: null,
+      bindingId: null,
+      status: null,
+      reasonCode: "domain_not_found",
+    };
+  }
+
+  const artifact = await getRawTemplateSiteArtifact(siteResolution.siteVersionId);
+  if (!artifact || artifact.siteId !== siteResolution.siteId) {
+    return {
+      outcome: "raw_template_miss",
+      host: siteResolution.host,
+      normalizedPath,
+      siteId: siteResolution.siteId,
+      siteVersionId: siteResolution.siteVersionId,
+      domain: siteResolution.domain,
+      bindingId: siteResolution.bindingId,
+      status: siteResolution.status,
+      reasonCode: "raw_template_site_not_found",
+    };
+  }
+
+  const candidates = buildRawTemplateHtmlPathCandidates({
+    path: input.path,
+    entryHtmlPath: artifact.entryHtmlPath,
+    fileMap: artifact.fileMap,
+  });
+  const resolvedFilePath = candidates.find((candidate) => Boolean(artifact.fileMap[candidate])) ?? null;
+  if (!resolvedFilePath) {
+    return {
+      outcome: "raw_template_miss",
+      host: siteResolution.host,
+      normalizedPath,
+      siteId: artifact.siteId,
+      siteVersionId: artifact.siteVersionId,
+      domain: siteResolution.domain,
+      bindingId: siteResolution.bindingId,
+      status: siteResolution.status,
+      reasonCode: "raw_template_html_not_found",
+    };
+  }
+
+  const htmlAsset = await getRawTemplateSiteAsset({
+    siteVersionId: artifact.siteVersionId,
+    filePath: resolvedFilePath,
+  });
+  if (!htmlAsset) {
+    return {
+      outcome: "raw_template_miss",
+      host: siteResolution.host,
+      normalizedPath,
+      siteId: artifact.siteId,
+      siteVersionId: artifact.siteVersionId,
+      domain: siteResolution.domain,
+      bindingId: siteResolution.bindingId,
+      status: siteResolution.status,
+      reasonCode: "raw_template_html_not_found",
+    };
+  }
+
+  return {
+    outcome: "raw_template_hit",
+    host: siteResolution.host,
+    siteId: artifact.siteId,
+    siteVersionId: artifact.siteVersionId,
+    domain: siteResolution.domain,
+    bindingId: siteResolution.bindingId,
+    status: siteResolution.status,
+    normalizedPath,
+    resolvedFilePath,
+    html: htmlAsset.bytes.toString("utf8"),
+  };
 }
 
 export async function getSiteVersion(siteVersionId: string): Promise<CanonicalSiteVersionSnapshot | null> {

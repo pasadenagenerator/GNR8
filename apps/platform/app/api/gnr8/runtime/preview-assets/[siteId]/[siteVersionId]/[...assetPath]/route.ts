@@ -1,6 +1,10 @@
 import { parseAgencyActionContextError, requireAgencyActionContext } from "@/app/api/gnr8/agency/_lib/agency-action-access";
 import { resolveAgencyIdForSiteVersion } from "@/app/api/gnr8/runtime/_lib/runtime-agency-scope";
-import { getRawTemplateSiteArtifact, getRawTemplateSiteAsset } from "@/gnr8/runtime/runtime-store";
+import {
+  getRawTemplateSiteArtifact,
+  getRawTemplateSiteAsset,
+  resolveDomainSiteVersionForHost,
+} from "@/gnr8/runtime/runtime-store";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -18,20 +22,37 @@ function normalizeAssetPath(parts: string[] | undefined): string | null {
   return segments.join("/");
 }
 
+function resolveRequestHost(headers: Headers): string {
+  return (
+    (headers.get("x-forwarded-host") ?? headers.get("host") ?? "")
+      .split(",")[0]
+      ?.trim() ?? ""
+  );
+}
+
 export async function GET(
-  _req: Request,
+  req: Request,
   ctx: { params: Promise<{ siteId: string; siteVersionId: string; assetPath?: string[] }> },
 ) {
   try {
     const { siteId, siteVersionId, assetPath } = await ctx.params;
-    const agencyId = await resolveAgencyIdForSiteVersion(siteVersionId);
-    if (!agencyId) {
-      return new Response("forbidden", { status: 403, headers: { "content-type": "text/plain; charset=utf-8" } });
+    const requestHost = resolveRequestHost(req.headers);
+    const publicDomainResolution = await resolveDomainSiteVersionForHost({ host: requestHost });
+    const isPublicDomainAssetRequest =
+      publicDomainResolution.outcome === "domain_hit" &&
+      publicDomainResolution.siteId === siteId &&
+      publicDomainResolution.siteVersionId === siteVersionId;
+
+    if (!isPublicDomainAssetRequest) {
+      const agencyId = await resolveAgencyIdForSiteVersion(siteVersionId);
+      if (!agencyId) {
+        return new Response("forbidden", { status: 403, headers: { "content-type": "text/plain; charset=utf-8" } });
+      }
+      await requireAgencyActionContext({
+        action: "view_dashboard",
+        requestedAgencyId: agencyId,
+      });
     }
-    await requireAgencyActionContext({
-      action: "view_dashboard",
-      requestedAgencyId: agencyId,
-    });
 
     const artifact = await getRawTemplateSiteArtifact(siteVersionId);
     if (!artifact || artifact.siteId !== siteId) {

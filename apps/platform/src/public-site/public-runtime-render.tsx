@@ -1,5 +1,6 @@
 import {
   resolveActiveArtifactForHostAndPathWithDiagnostics,
+  resolveRawTemplateSiteForDomainAndPath,
   resolveRuntimeSiteForHost,
   type PublicRuntimeArtifactMissReasonCode,
 } from "@/gnr8/runtime/runtime-store";
@@ -114,11 +115,13 @@ function governanceDeniedHtmlResponse(): Response {
 
 type RuntimeStoreDependencies = {
   resolveActiveArtifactForHostAndPathWithDiagnostics: typeof resolveActiveArtifactForHostAndPathWithDiagnostics;
+  resolveRawTemplateSiteForDomainAndPath: typeof resolveRawTemplateSiteForDomainAndPath;
   resolveRuntimeSiteForHost: typeof resolveRuntimeSiteForHost;
 };
 
 const runtimeStoreDependencies: RuntimeStoreDependencies = {
   resolveActiveArtifactForHostAndPathWithDiagnostics,
+  resolveRawTemplateSiteForDomainAndPath,
   resolveRuntimeSiteForHost,
 };
 
@@ -196,6 +199,11 @@ function sanitizeShadowAssetPath(path: string): string | null {
 function copyHeaderIfPresent(headers: Headers, source: Headers, name: string): void {
   const value = source.get(name);
   if (value) headers.set(name, value);
+}
+
+function rewriteRawTemplateAssetPaths(input: { html: string; siteId: string; siteVersionId: string }): string {
+  const replacementPrefix = `/api/gnr8/runtime/preview-assets/${encodeURIComponent(input.siteId)}/${encodeURIComponent(input.siteVersionId)}/assets/`;
+  return input.html.replaceAll("/assets/", replacementPrefix);
 }
 
 function imageSemanticKey(path: string): string {
@@ -307,6 +315,10 @@ async function renderShadowAssetResponse(input: { host: string; path: string }):
 
 export async function renderPublicPathResponse(input: { path: string; host: string }): Promise<Response> {
   const requestStartedAt = Date.now();
+  console.info("[gnr8.public-runtime.domain] DOMAIN_RESOLUTION_STARTED", {
+    host: input.host,
+    path: input.path,
+  });
 
   if (isShadowAssetPath(input.path)) {
     const assetResponse = await renderShadowAssetResponse(input);
@@ -314,6 +326,61 @@ export async function renderPublicPathResponse(input: { path: string; host: stri
   }
 
   const mode = resolvePublicRuntimeMode();
+  const rawTemplateResolution = await runtimeStoreDependencies.resolveRawTemplateSiteForDomainAndPath({
+    host: input.host,
+    path: input.path,
+  });
+
+  if (rawTemplateResolution.outcome === "raw_template_hit") {
+    console.info("[gnr8.public-runtime.domain] DOMAIN_RESOLVED", {
+      host: input.host,
+      domain: rawTemplateResolution.domain,
+      siteId: rawTemplateResolution.siteId,
+      siteVersionId: rawTemplateResolution.siteVersionId,
+      bindingId: rawTemplateResolution.bindingId,
+      status: rawTemplateResolution.status,
+      normalizedPath: rawTemplateResolution.normalizedPath,
+      resolvedFilePath: rawTemplateResolution.resolvedFilePath,
+    });
+    console.info("[gnr8.public-runtime.domain] RAW_TEMPLATE_SITE_SERVED", {
+      host: input.host,
+      domain: rawTemplateResolution.domain,
+      siteId: rawTemplateResolution.siteId,
+      siteVersionId: rawTemplateResolution.siteVersionId,
+      resolvedFilePath: rawTemplateResolution.resolvedFilePath,
+    });
+    const html = rewriteRawTemplateAssetPaths({
+      html: rawTemplateResolution.html,
+      siteId: rawTemplateResolution.siteId,
+      siteVersionId: rawTemplateResolution.siteVersionId,
+    });
+    return htmlResponse({ html });
+  }
+
+  if (rawTemplateResolution.reasonCode === "domain_not_found") {
+    console.info("[gnr8.public-runtime.domain] DOMAIN_NOT_FOUND", {
+      host: input.host,
+      path: input.path,
+    });
+  } else {
+    console.info("[gnr8.public-runtime.domain] DOMAIN_RESOLVED", {
+      host: input.host,
+      domain: rawTemplateResolution.domain,
+      siteId: rawTemplateResolution.siteId,
+      siteVersionId: rawTemplateResolution.siteVersionId,
+      bindingId: rawTemplateResolution.bindingId,
+      status: rawTemplateResolution.status,
+      normalizedPath: rawTemplateResolution.normalizedPath,
+    });
+    console.info("[gnr8.public-runtime.domain] RAW_TEMPLATE_SITE_NOT_FOUND", {
+      host: input.host,
+      domain: rawTemplateResolution.domain,
+      siteId: rawTemplateResolution.siteId,
+      siteVersionId: rawTemplateResolution.siteVersionId,
+      reasonCode: rawTemplateResolution.reasonCode,
+      normalizedPath: rawTemplateResolution.normalizedPath,
+    });
+  }
 
   const artifactResolution = await runtimeStoreDependencies.resolveActiveArtifactForHostAndPathWithDiagnostics({
     host: input.host,

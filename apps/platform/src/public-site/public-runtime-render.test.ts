@@ -64,6 +64,18 @@ test("public runtime artifact hit: serves artifact HTML with artifact-only diagn
     },
   });
   const restoreDeps = __setPublicRuntimeRenderDependenciesForTest({
+    resolveRawTemplateSiteForDomainAndPath: async () =>
+      ({
+        outcome: "raw_template_miss",
+        host: "maver.app.pasadenagenerator.com",
+        normalizedPath: "/",
+        siteId: null,
+        siteVersionId: null,
+        domain: null,
+        bindingId: null,
+        status: null,
+        reasonCode: "domain_not_found",
+      }) as never,
     resolveActiveArtifactForHostAndPathWithDiagnostics: async () =>
       ({
         outcome: "artifact_hit",
@@ -109,8 +121,80 @@ test("public runtime artifact hit: serves artifact HTML with artifact-only diagn
   }
 });
 
+test("public runtime domain hit: serves raw template HTML and rewrites /assets URLs", async () => {
+  const restoreDeps = __setPublicRuntimeRenderDependenciesForTest({
+    resolveRawTemplateSiteForDomainAndPath: async () =>
+      ({
+        outcome: "raw_template_hit",
+        host: "beauty-clinic.example.com",
+        siteId: "site_raw_1",
+        siteVersionId: "sv_raw_1",
+        domain: "beauty-clinic.example.com",
+        bindingId: "domain_binding_1",
+        status: "active",
+        normalizedPath: "/",
+        resolvedFilePath: "index.html",
+        html: "<!doctype html><html><head><link rel=\"stylesheet\" href=\"/assets/main.css\" /></head><body><img src=\"/assets/hero.jpg\" /></body></html>",
+      }) as never,
+    resolveActiveArtifactForHostAndPathWithDiagnostics: async () => {
+      throw new Error("artifact resolver should not run when raw template domain hit succeeds");
+    },
+  });
+
+  try {
+    const response = await renderPublicPathResponse({ host: "beauty-clinic.example.com", path: "/" });
+    assert.equal(response.status, 200);
+    const html = await response.text();
+    assert.match(html, /\/api\/gnr8\/runtime\/preview-assets\/site_raw_1\/sv_raw_1\/assets\/main\.css/);
+    assert.match(html, /\/api\/gnr8\/runtime\/preview-assets\/site_raw_1\/sv_raw_1\/assets\/hero\.jpg/);
+  } finally {
+    restoreDeps();
+  }
+});
+
+test("public runtime domain hit: supports nested paths when raw template page exists", async () => {
+  const restoreDeps = __setPublicRuntimeRenderDependenciesForTest({
+    resolveRawTemplateSiteForDomainAndPath: async (input) =>
+      ({
+        outcome: "raw_template_hit",
+        host: String(input.host ?? ""),
+        siteId: "site_raw_2",
+        siteVersionId: "sv_raw_2",
+        domain: "spa.example.com",
+        bindingId: "domain_binding_2",
+        status: "active",
+        normalizedPath: "/nested/path",
+        resolvedFilePath: "nested/path/index.html",
+        html: "<!doctype html><html><body><h1>Nested Path</h1></body></html>",
+      }) as never,
+    resolveActiveArtifactForHostAndPathWithDiagnostics: async () => {
+      throw new Error("artifact resolver should not run when nested raw template page is resolved");
+    },
+  });
+
+  try {
+    const response = await renderPublicPathResponse({ host: "spa.example.com", path: "/nested/path" });
+    assert.equal(response.status, 200);
+    assert.match(await response.text(), /Nested Path/);
+  } finally {
+    restoreDeps();
+  }
+});
+
 test("public runtime artifact miss: returns deterministic 404 without builder fallback", async () => {
   const restoreDeps = __setPublicRuntimeRenderDependenciesForTest({
+    resolveRawTemplateSiteForDomainAndPath: async () =>
+      ({
+        outcome: "raw_template_miss",
+        host: "maver.app.pasadenagenerator.com",
+        normalizedPath: "/missing",
+        siteId: null,
+        siteVersionId: null,
+        domain: null,
+        bindingId: null,
+        status: null,
+        reasonCode: "domain_not_found",
+      }) as never,
     resolveActiveArtifactForHostAndPathWithDiagnostics: async () =>
       ({
         outcome: "artifact_miss",
@@ -149,6 +233,18 @@ test("public runtime artifact miss: returns deterministic 404 without builder fa
 
 test("public runtime governance deny: returns deterministic 403 without builder fallback", async () => {
   const restoreDeps = __setPublicRuntimeRenderDependenciesForTest({
+    resolveRawTemplateSiteForDomainAndPath: async () =>
+      ({
+        outcome: "raw_template_miss",
+        host: "canary.app.pasadenagenerator.com",
+        normalizedPath: "/",
+        siteId: null,
+        siteVersionId: null,
+        domain: null,
+        bindingId: null,
+        status: null,
+        reasonCode: "domain_not_found",
+      }) as never,
     resolveActiveArtifactForHostAndPathWithDiagnostics: async () =>
       ({
         outcome: "artifact_miss",
@@ -184,6 +280,18 @@ test("public runtime governance deny: returns deterministic 403 without builder 
 
 test("public runtime unbound host: returns deterministic artifact-only 404", async () => {
   const restoreDeps = __setPublicRuntimeRenderDependenciesForTest({
+    resolveRawTemplateSiteForDomainAndPath: async () =>
+      ({
+        outcome: "raw_template_miss",
+        host: "unbound.example.com",
+        normalizedPath: "/",
+        siteId: null,
+        siteVersionId: null,
+        domain: null,
+        bindingId: null,
+        status: null,
+        reasonCode: "domain_not_found",
+      }) as never,
     resolveActiveArtifactForHostAndPathWithDiagnostics: async () =>
       ({
         outcome: "artifact_miss",
@@ -211,6 +319,48 @@ test("public runtime unbound host: returns deterministic artifact-only 404", asy
     assert.equal(payload.builderFallbackUsed, false);
     assert.equal(payload.reasonCode, "no_runtime_site");
     assert.equal(payload.statusCode, 404);
+  } finally {
+    restoreDeps();
+  }
+});
+
+test("public runtime wrong domain: falls back to artifact behavior", async () => {
+  const restoreDeps = __setPublicRuntimeRenderDependenciesForTest({
+    resolveRawTemplateSiteForDomainAndPath: async () =>
+      ({
+        outcome: "raw_template_miss",
+        host: "wrong.example.com",
+        normalizedPath: "/",
+        siteId: null,
+        siteVersionId: null,
+        domain: null,
+        bindingId: null,
+        status: null,
+        reasonCode: "domain_not_found",
+      }) as never,
+    resolveActiveArtifactForHostAndPathWithDiagnostics: async () =>
+      ({
+        outcome: "artifact_hit",
+        host: "wrong.example.com",
+        path: "/",
+        normalizedPath: "/",
+        siteId: "site_fallback",
+        siteResolution: "fallback_latest_site",
+        hostBindingId: null,
+        hostBindingKind: null,
+        hostBindingStatus: null,
+        activeSiteVersionId: "sv_fallback",
+        artifactId: "artifact_fallback",
+        artifact: {} as never,
+        html: "<!doctype html><html><body>artifact fallback</body></html>",
+        resolvedPath: "/",
+      }) as never,
+  });
+
+  try {
+    const response = await renderPublicPathResponse({ host: "wrong.example.com", path: "/" });
+    assert.equal(response.status, 200);
+    assert.match(await response.text(), /artifact fallback/);
   } finally {
     restoreDeps();
   }
