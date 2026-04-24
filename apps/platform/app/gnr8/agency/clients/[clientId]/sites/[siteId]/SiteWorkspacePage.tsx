@@ -78,6 +78,7 @@ function renderOverviewContent(props: {
 
           <div style={{ marginTop: 8, fontWeight: 700, color: '#0f172a' }}>Import Evidence</div>
           <div>Source mode: {readModel.pipeline.renderedCapture?.used ? 'Rendered Capture' : 'Raw HTML (fallback)'}</div>
+          <div>Capture mode: {readModel.pipeline.captureMode}</div>
           <div>Fidelity: {readModel.pipeline.importFidelityDegraded ? 'degraded' : 'high'}</div>
           <div>Rendered capture status: {readModel.pipeline.renderedCaptureStatus}</div>
           <div>Rendered capture quality: {readModel.pipeline.renderedCapture?.quality ?? readModel.pipeline.renderedDomQuality}</div>
@@ -128,6 +129,33 @@ function renderOverviewContent(props: {
           <div>Capture evidence refs: {readModel.pipeline.captureEvidenceRefs.length > 0 ? readModel.pipeline.captureEvidenceRefs.join(' · ') : 'none'}</div>
           <div>Acquisition diagnostics: {readModel.pipeline.diagnosticsSummary.length > 0 ? readModel.pipeline.diagnosticsSummary.join(' · ') : 'none'}</div>
           {readModel.pipeline.importFidelityDegraded ? <div>Fidelity warning: degraded import (review before redesign)</div> : null}
+        </div>
+      </section>
+
+      <section style={sectionCardStyle()}>
+        <h3 style={{ margin: 0, fontSize: 15, color: '#0f172a' }}>Content</h3>
+        <div style={{ marginTop: 10, display: 'grid', gap: 6, fontSize: 13, color: '#334155' }}>
+          <div>Hero title: {readModel.content.hero?.title ?? 'n/a'}</div>
+          <div>Hero subtitle: {readModel.content.hero?.subtitle ?? 'n/a'}</div>
+          <div>Sections: {readModel.content.sections.length}</div>
+          <div>
+            Section types:{' '}
+            {readModel.content.sections.length > 0
+              ? readModel.content.sections.map((section) => section.type).join(' · ')
+              : 'none'}
+          </div>
+          <div>
+            Images by role:{' '}
+            {Object.entries(readModel.content.imagesByRole)
+              .map(([role, values]) => `${role}=${values.length}`)
+              .join(' · ')}
+          </div>
+          <div>
+            Semantic diagnostics:{' '}
+            {readModel.content.diagnostics.length > 0
+              ? readModel.content.diagnostics.map((diag) => diag.code).join(' · ')
+              : 'none'}
+          </div>
         </div>
       </section>
 

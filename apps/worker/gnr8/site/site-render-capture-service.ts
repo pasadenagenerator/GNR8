@@ -317,6 +317,7 @@ function withPatchedProvenanceSummary(input: {
           requestId: executionIdentity.requestId ?? null,
         }
       : undefined,
+    captureMode: existing?.captureMode ?? 'raw_html_only',
     sourceMode: input.sourceMode,
     importFidelityStatus: fidelityStatus,
     renderedCaptureStatus: input.renderedCaptureStatus,
@@ -367,6 +368,7 @@ function withPatchedProvenanceSummary(input: {
     captureJob: existing?.captureJob ?? null,
     workerHealth: existing?.workerHealth ?? null,
     styleSignals: existing?.styleSignals ?? null,
+    semanticImport: existing?.semanticImport ?? null,
     multipageImport: existing?.multipageImport ?? null,
     siteTree: existing?.siteTree ?? null,
     templateFamilies: existing?.templateFamilies ?? null,

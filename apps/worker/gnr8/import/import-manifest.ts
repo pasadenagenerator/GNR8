@@ -7,6 +7,7 @@ import type {
   ImportOutput,
 } from "./import-contract";
 import { hasStructuralImportBlockers } from "./import-severity-policy";
+import type { SemanticImportResult } from "@/gnr8/import-semantic/semantic-import-engine";
 
 export const IMPORT_MANIFEST_VERSION = "1.0.0" as const;
 
@@ -79,6 +80,8 @@ export type ImportManifest = {
     missingLocalCount: number;
     references: AssetReferenceManifestEntry[];
   };
+
+  semanticImport?: SemanticImportResult | null;
 };
 
 const ASSET_KINDS: readonly AssetKind[] = ["image", "stylesheet", "script", "unknown"];

@@ -38,6 +38,7 @@ import {
 import { discoverMultipageImportTree, summarizeMultipageImportTree } from '@/gnr8/multipage-import'
 import { buildSafeSiteTreeFromSeedPage, normalizeRoutePath, type SiteTree } from '@/gnr8/site-tree'
 import { buildFamilyHandoffModel, summarizeTemplateFamilies, type FamilyHandoffModel } from '@/gnr8/family-mode'
+import { runSemanticImportEngine, type SemanticImportResult } from '@/gnr8/import-semantic/semantic-import-engine'
 
 const SECTION_INTENT_BY_SEMANTIC_TYPE: Record<string, string> = {
   header: 'header_nav',
@@ -544,6 +545,20 @@ function readSiteTreeSeedHtml(snapshot: UrlSinglePageImportSnapshot): string {
   return ''
 }
 
+function resolveSemanticImportForSnapshot(snapshot: UrlSinglePageImportSnapshot): SemanticImportResult | null {
+  if (snapshot.semanticImport && snapshot.semanticImport.sourceMode === 'raw_html_only') {
+    return snapshot.semanticImport
+  }
+  const html = readSiteTreeSeedHtml(snapshot)
+  if (!normalizeText(html)) return null
+  return runSemanticImportEngine({
+    normalizedHtml: html,
+    entryHtmlPath: path.basename(snapshot.entryHtmlPathAbs || 'index.html'),
+    sourceUrl: snapshot.sourceUrl,
+    captureMode: snapshot.captureMode ?? 'raw_html_only',
+  })
+}
+
 function persistSiteTreePayload(input: {
   snapshot: UrlSinglePageImportSnapshot
   tree: SiteTree
@@ -708,6 +723,7 @@ async function buildImportProvenanceSummary(input: {
   preparedSite: PreparedSiteModel | null
 }): Promise<RuntimeImportProvenanceSummary> {
   const { snapshot, styleSignals, preparedSite } = input
+  const semanticImport = resolveSemanticImportForSnapshot(snapshot)
   const captureDiagnostics = (Array.isArray(snapshot.renderedCapture.diagnostics) ? snapshot.renderedCapture.diagnostics : [])
     .map((diag) => normalizeText(diag.code))
     .filter(Boolean)
@@ -753,6 +769,7 @@ async function buildImportProvenanceSummary(input: {
       ? ['CAPTURE_WORKER_RESULT_SUPERSEDED_BY_FALLBACK']
       : []),
     ...(persistedCaptureEvidence.persisted ? ['RENDERED_CAPTURE_PERSISTED'] : []),
+    ...(semanticImport?.diagnostics.map((diag) => normalizeText(diag.code)).filter(Boolean) ?? []),
   ])
 
   const multipageImport = await buildMultipageImportFromPreparedSite({
@@ -792,6 +809,7 @@ async function buildImportProvenanceSummary(input: {
 
   return {
     kind: 'runtime_import_provenance_summary_v1',
+    captureMode: snapshot.captureMode ?? 'raw_html_only',
     executionIdentity: {
       snapshotId: snapshot.snapshotId,
       snapshotRunId: snapshot.snapshotRunId,
@@ -862,6 +880,7 @@ async function buildImportProvenanceSummary(input: {
         }
       : null,
     styleSignals,
+    semanticImport,
     multipageImport,
     siteTree: {
       summary: siteTreeSummary,
@@ -877,6 +896,7 @@ async function buildImportProvenanceSummary(input: {
 function summarizeProvenancePayload(summary: RuntimeImportProvenanceSummary): Record<string, unknown> {
   return {
     kind: summary.kind,
+    captureMode: summary.captureMode ?? 'raw_html_only',
     sourceMode: summary.sourceMode,
     importFidelityStatus: summary.importFidelityStatus,
     importFidelityScore: summary.importFidelityScore ?? null,
@@ -885,10 +905,46 @@ function summarizeProvenancePayload(summary: RuntimeImportProvenanceSummary): Re
     screenshotCount: summary.screenshotCount,
     computedStyleSampleCount: summary.computedStyleSampleCount,
     importDiagnosticCodeCount: Array.isArray(summary.importDiagnosticCodes) ? summary.importDiagnosticCodes.length : 0,
+    semanticImportSectionCount: summary.semanticImport?.sections.length ?? 0,
     multipageImport: summary.multipageImport?.summary ?? null,
     siteTree: summary.siteTree?.summary ?? null,
     templateFamilies: summary.templateFamilies?.summary ?? null,
   }
+}
+
+function mapSectionsFromRawSemanticImport(input: {
+  semanticSections: NonNullable<SemanticImportResult['sections']>
+}): Array<{ id: string; type: string; order: number; props: Record<string, unknown> }> {
+  return input.semanticSections.map((section, index) => {
+    const normalizedType = section.confidence >= 0.6 ? section.type : 'content'
+    return {
+      id: section.id,
+      type: normalizedType,
+      order: index,
+      props: {
+        semanticType: section.type,
+        layoutStructural: {
+          intent: SECTION_INTENT_BY_SEMANTIC_TYPE[normalizedType] ?? 'body',
+          structuralConfidence: section.confidence,
+        },
+        htmlSummary: {
+          extractedText: normalizeText(section.intro) || normalizeText(section.title),
+          extractedImageSrcs: uniqueSorted(section.images.map((image) => normalizeText(image.src)).filter(Boolean)),
+          extractedLinks: uniqueSorted(section.ctas.map((cta) => `${normalizeText(cta.url)}::${normalizeText(cta.label)}`).filter(Boolean)).map((entry) => {
+            const [href, label] = entry.split('::')
+            return { href: href ?? '', label: label ?? '' }
+          }),
+        },
+        importedSemantic: {
+          confidence: section.confidence,
+          diagnostics: section.diagnostics,
+          itemCount: section.items.length,
+          ctaCount: section.ctas.length,
+          formCount: section.forms.length,
+        },
+      },
+    }
+  })
 }
 
 function buildCanonicalMigrationInputFromPipeline(input: {
@@ -905,6 +961,7 @@ function buildCanonicalMigrationInputFromPipeline(input: {
 
   const layoutByDocumentId = new Map(input.layoutModel?.pages.map((page) => [page.sourceDocumentId, page]) ?? [])
   const importFidelitySignals = buildImportFidelitySignals(input.snapshot)
+  const semanticImport = resolveSemanticImportForSnapshot(input.snapshot)
   const styleSignals = styleSignalsToSemanticLabels(input.styleSignals).map((label) => ({
     label,
     confidence: toStyleSignalConfidence(label),
@@ -933,8 +990,14 @@ function buildCanonicalMigrationInputFromPipeline(input: {
       )
 
       const semanticSections = doc.semantic?.sections ?? []
+      const rawSemanticSections = doc.isEntry ? (semanticImport?.sections ?? []) : []
       const mappedSections = semanticSections.length
         ? mapSectionsFromSemantic({ semanticSections, blockById })
+        : (rawSemanticSections.length
+            ? mapSectionsFromRawSemanticImport({ semanticSections: rawSemanticSections })
+            : [])
+      const mappedSectionsOrLayout = mappedSections.length
+        ? mappedSections
         : (layoutPage?.blocks ?? []).map((block, index) => ({
             id: block.id,
             type: 'content',
@@ -954,8 +1017,8 @@ function buildCanonicalMigrationInputFromPipeline(input: {
             },
           }))
 
-      const sections = mappedSections.length
-        ? mappedSections
+      const sections = mappedSectionsOrLayout.length
+        ? mappedSectionsOrLayout
         : [
             {
               id: `${pageId}-fallback-section`,
@@ -1056,6 +1119,7 @@ function computePipelineReporting(input: {
   executionStatus: 'success' | 'failed'
   consolidationApplied: boolean
   renderedCaptureUsed: boolean
+  captureMode: UrlSinglePageImportSnapshot['captureMode']
   sourceMode: UrlSinglePageImportSnapshot['sourceMode']
   fidelityStatus: UrlSinglePageImportSnapshot['sourceSelection']['fidelityStatus']
   fidelityDegraded: boolean
@@ -1090,6 +1154,7 @@ function computePipelineReporting(input: {
     executionStatus: input.pipelineResult.status,
     consolidationApplied,
     renderedCaptureUsed,
+    captureMode: input.snapshot.captureMode ?? 'raw_html_only',
     sourceMode: input.snapshot.sourceSelection.sourceMode,
     fidelityStatus: input.snapshot.sourceSelection.fidelityStatus,
     fidelityDegraded: input.snapshot.sourceSelection.degraded,
@@ -1124,6 +1189,7 @@ export type ScopedImportPipelineSuccess = {
     executionStatus: 'success' | 'failed'
     consolidationApplied: boolean
     renderedCaptureUsed: boolean
+    captureMode: UrlSinglePageImportSnapshot['captureMode']
     sourceMode: UrlSinglePageImportSnapshot['sourceMode']
     fidelityStatus: UrlSinglePageImportSnapshot['sourceSelection']['fidelityStatus']
     fidelityDegraded: boolean
@@ -1172,6 +1238,7 @@ export type ScopedImportPipelineFallback = {
     pipelineStatus: 'success' | 'failed'
     stageSummaries: string[]
     pipelineDiagnosticCodes: string[]
+    captureMode: UrlSinglePageImportSnapshot['captureMode']
     sourceMode: UrlSinglePageImportSnapshot['sourceMode']
     fidelityStatus: UrlSinglePageImportSnapshot['sourceSelection']['fidelityStatus']
     fidelityDegraded: boolean
@@ -1717,6 +1784,7 @@ export async function runScopedImportPipeline(input: {
       pipelineStatus: pipelineResult.status,
       stageSummaries: pipelineResult.stages.map((stage) => stage.summary),
       pipelineDiagnosticCodes: uniqueSorted(pipelineResult.diagnostics.map((issue) => issue.code)),
+      captureMode: input.snapshot.captureMode ?? 'raw_html_only',
       sourceMode: input.snapshot.sourceSelection.sourceMode,
       fidelityStatus: input.snapshot.sourceSelection.fidelityStatus,
       fidelityDegraded: input.snapshot.sourceSelection.degraded,

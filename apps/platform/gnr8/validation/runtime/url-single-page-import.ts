@@ -5,6 +5,7 @@ import path from "node:path";
 import { parse, serialize } from "parse5";
 
 import type { RenderedCaptureExecutor, RenderedCaptureResult } from "../../import-rendered-capture";
+import type { SemanticImportCaptureMode, SemanticImportResult } from "../../import-semantic/semantic-import-engine";
 import {
   FileBackedRenderedCaptureJobOrchestrator,
   createRenderedCaptureWorkerClientFromEnv,
@@ -259,6 +260,7 @@ export type UrlSinglePageImportSnapshot = {
   snapshotStableRootDirAbs: string;
   snapshotRootDirAbs: string;
   fixtureSpec: UrlSnapshotFixtureSpec;
+  captureMode?: SemanticImportCaptureMode;
   sourceMode: UrlImportSourceMode;
   sourceSelection: {
     sourceMode: UrlImportSourceMode;
@@ -289,6 +291,7 @@ export type UrlSinglePageImportSnapshot = {
     > | null;
     workerHealth: RenderedCaptureWorkerHealthTruth | null;
   };
+  semanticImport?: SemanticImportResult | null;
   importDiagnostics: {
     summary: {
       infoCount: number;
@@ -2344,6 +2347,7 @@ export async function importPublicSinglePageUrlToSnapshot(input: {
         assetPathRule: "assets/<kind>/<urlHash12>-<basename>; collisions append -N",
         fetchScope: FETCH_SCOPE,
       },
+      captureMode: "raw_html_only",
       sourceMode: "raw_html_fallback",
       sourceSelection: {
         sourceMode: "raw_html_fallback",
@@ -3610,6 +3614,7 @@ export async function importPublicSinglePageUrlToSnapshot(input: {
     snapshotStableRootDirAbs,
     snapshotRootDirAbs,
     fixtureSpec,
+    captureMode: "raw_html_only",
     sourceMode: sourceSelection.sourceMode,
     sourceSelection: {
       sourceMode: sourceSelection.sourceMode,

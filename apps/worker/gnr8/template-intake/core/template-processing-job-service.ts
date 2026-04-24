@@ -2,6 +2,7 @@ import path from 'node:path'
 
 import { createImportManifest } from '@/gnr8/import/import-manifest'
 import type { ImportOutput } from '@/gnr8/import/import-contract'
+import { runSemanticImportEngine } from '@/gnr8/import-semantic/semantic-import-engine'
 import { createTemplateIntakeDiagnostic, summarizeTemplateDiagnostics } from '@/gnr8/template-intake/diagnostics/template-intake-diagnostics'
 import { normalizeTemplateTagsForStorage, readTemplateManifest } from '@/gnr8/template-intake/core/template-manifest-reader'
 import {
@@ -36,6 +37,7 @@ type TemplateProcessingDeps = {
   importTemplateUploadStaticSite: typeof importTemplateUploadStaticSite
   buildTemplatePreviewSummary: typeof buildTemplatePreviewSummary
   persistTemplateDurableSourceSnapshot: typeof persistTemplateDurableSourceSnapshot
+  runSemanticImportEngine: typeof runSemanticImportEngine
 }
 
 const DEFAULT_DEPS: TemplateProcessingDeps = {
@@ -48,6 +50,7 @@ const DEFAULT_DEPS: TemplateProcessingDeps = {
   importTemplateUploadStaticSite,
   buildTemplatePreviewSummary,
   persistTemplateDurableSourceSnapshot,
+  runSemanticImportEngine,
 }
 
 function normalizeText(value: unknown): string {
@@ -450,7 +453,21 @@ export async function processTemplateZipIntakeJob(input: {
     }
   }
 
-  const importManifestSummary = deps.createImportManifest(importOutput)
+  const semanticImport = deps.runSemanticImportEngine({
+    normalizedHtml: importedEntryHtml,
+    entryHtmlPath: entryMetadata.entryHtmlPath ?? zipValidation.validation.entryHtmlPath,
+    sourceFilename: template.sourceFilename,
+    captureMode: 'raw_html_only',
+    assetManifest: {
+      files: importOutput.assetRegistry.files as unknown as Array<Record<string, unknown>>,
+      references: importOutput.assetRegistry.references as unknown as Array<Record<string, unknown>>,
+    },
+  })
+
+  const importManifestSummary = {
+    ...deps.createImportManifest(importOutput),
+    semanticImport,
+  }
   const diagnosticsSummary = summarizeTemplateDiagnostics([
     ...baseDiagnostics.issues,
     ...manifest.diagnostics,

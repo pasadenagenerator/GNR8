@@ -6,6 +6,7 @@ import type { StyleSignalModel } from "@/gnr8/style-signals";
 import type { MultipageImportSummary, MultipageImportTree } from "@/gnr8/multipage-import";
 import type { SiteTree, SiteTreeSummary } from "@/gnr8/site-tree";
 import type { FamilyHandoffModel, TemplateFamiliesSummary } from "@/gnr8/family-mode";
+import type { SemanticImportCaptureMode, SemanticImportResult } from "@/gnr8/import-semantic/semantic-import-engine";
 
 export const RENDERER_COMPATIBILITY_VERSION = "gnr8-renderer-v1" as const;
 
@@ -37,6 +38,7 @@ export type RuntimeImportProvenanceSummary = {
     snapshotRunRootDirAbs: string;
     requestId: string | null;
   };
+  captureMode?: SemanticImportCaptureMode;
   sourceMode: "rendered_dom" | "raw_html_fallback";
   importFidelityStatus: "high_fidelity_import" | "degraded_import" | "capture_failed";
   renderedCaptureStatus: "available" | "partial" | "failed";
@@ -118,6 +120,7 @@ export type RuntimeImportProvenanceSummary = {
     lastFailureCode: string | null;
   } | null;
   styleSignals: StyleSignalModel | null;
+  semanticImport?: SemanticImportResult | null;
   multipageImport?: {
     summary: MultipageImportSummary;
     tree: MultipageImportTree | null;

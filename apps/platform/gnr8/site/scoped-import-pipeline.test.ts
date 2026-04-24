@@ -4,7 +4,7 @@ import os from 'node:os'
 import path from 'node:path'
 import test from 'node:test'
 
-import { runScopedImportPipeline } from '@/gnr8/site/scoped-import-pipeline'
+import { __scopedImportPipelineTestUtils, runScopedImportPipeline } from '@/gnr8/site/scoped-import-pipeline'
 
 function createSuccessPipelineFixture() {
   const preparedSite = {
@@ -1262,4 +1262,104 @@ test('scoped pipeline import fails hard when provenance summary is missing after
       }),
     /Import provenance summary missing after write/,
   )
+})
+
+test('canonical input uses semantic import sections when prepared semantic sections are unavailable', () => {
+  const preparedSite = {
+    source: {
+      entryHtmlPath: 'index.html',
+    },
+    documents: [
+      {
+        id: 'doc-1',
+        path: 'index.html',
+        isEntry: true,
+        semantic: {
+          sections: [],
+          consolidation: { mode: 'none' },
+          page: { pageType: 'unknown' },
+        },
+        fidelity: { metaDescription: 'Imported page' },
+      },
+    ],
+  } as any
+
+  const canonical = __scopedImportPipelineTestUtils.buildCanonicalMigrationInputFromPipeline({
+    sourceUrl: 'https://example.com/',
+    actor: 'test',
+    preparedSite,
+    layoutModel: { pages: [] } as any,
+    snapshot: {
+      sourceSelection: {
+        sourceMode: 'raw_html_fallback',
+        fidelityStatus: 'degraded_import',
+        renderedDomQuality: { quality: 'weak' },
+      },
+      renderedCapture: { screenshots: [], computedStyleSamples: [] },
+      importDiagnostics: { issues: [] },
+      semanticImport: {
+        sourceMode: 'raw_html_only',
+        captureMode: 'raw_html_only',
+        title: 'Example',
+        language: 'en',
+        navigation: [],
+        hero: null,
+        sections: [
+          {
+            id: 'sem-hero',
+            type: 'hero',
+            title: 'Hero',
+            intro: 'Intro',
+            items: [],
+            images: [],
+            ctas: [],
+            forms: [],
+            confidence: 0.91,
+            diagnostics: [],
+          },
+          {
+            id: 'sem-ambiguous',
+            type: 'services',
+            title: 'Services',
+            intro: 'Ambiguous section',
+            items: [],
+            images: [],
+            ctas: [],
+            forms: [],
+            confidence: 0.42,
+            diagnostics: ['LOW_CONFIDENCE_SECTION_CLASSIFICATION'],
+          },
+        ],
+        assets: {
+          images: [],
+          groupedByRole: {
+            logo: [],
+            hero_image: [],
+            gallery_image: [],
+            service_image: [],
+            testimonial_avatar: [],
+            content_image: [],
+            icon: [],
+            unknown: [],
+          },
+          knownAssets: [],
+        },
+        diagnostics: [],
+      },
+    } as any,
+    styleSignals: {
+      sourceMode: 'html_css_inference',
+      provenance: { computedStyle: { coverage: 0 }, fallbackUsed: true },
+      colors: { backgroundTone: 'neutral', primaryAccent: null },
+      typography: { headingCategory: 'sans', bodyCategory: 'sans' },
+      spacing: { rhythm: 'balanced', layoutDensity: 'balanced' },
+      cta: { styleHint: 'unknown', prominence: 'unknown' },
+      diagnostics: [],
+    } as any,
+  })
+
+  const sections = canonical.pages[0]?.structureModel.sections ?? []
+  assert.equal(sections.length, 2)
+  assert.equal(sections[0]?.type, 'hero')
+  assert.equal(sections[1]?.type, 'content')
 })

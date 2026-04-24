@@ -137,6 +137,8 @@ test('processTemplateZipIntakeJob produces ready template on valid zip', async (
   if (!result.ok) return
   assert.equal(result.template.status, 'ready')
   assert.equal(result.template.importHealth, 'degraded')
+  assert.equal((result.template.importManifestSummary as any)?.semanticImport?.sourceMode, 'raw_html_only')
+  assert.ok(Array.isArray((result.template.importManifestSummary as any)?.semanticImport?.sections))
 })
 
 test('processTemplateZipIntakeJob marks template failed on invalid zip', async () => {

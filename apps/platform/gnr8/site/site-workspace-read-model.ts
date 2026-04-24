@@ -5,6 +5,7 @@ import { resolveSiteWorkspacePreview, type SitePreviewType, type SiteWorkspacePr
 import { normalizePreviewRuntimeMode, type PreviewRuntimeSummary } from '@/gnr8/preview-runtime/preview-runtime-types'
 import type { RuntimeImportProvenanceSummary } from '@/gnr8/runtime/types'
 import type { StyleSignalModel } from '@/gnr8/style-signals'
+import type { SemanticImportResult } from '@/gnr8/import-semantic/semantic-import-engine'
 import { getSupabaseServerClientReadOnly } from '@/src/auth/supabase-server-read-only'
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
@@ -149,6 +150,7 @@ export type SiteWorkspaceReadModel = {
     visualAnalysisStatus: 'available' | 'unavailable'
     designModelStatus: 'available' | 'unavailable'
     sourceMode: 'rendered_dom' | 'raw_html_fallback' | 'unknown'
+    captureMode: 'raw_html_only' | 'dom_parsed' | 'rendered_browser' | 'unknown'
     importFidelityStatus: 'high_fidelity_import' | 'degraded_import' | 'capture_failed' | 'unknown'
     importFidelityScore: RuntimeImportProvenanceSummary['importFidelityScore']
     importFidelityDegraded: boolean
@@ -179,6 +181,7 @@ export type SiteWorkspaceReadModel = {
     siteTreeSummary: RuntimeImportProvenanceSummary['siteTree'] extends { summary: infer T } | null | undefined ? T | null : null
     templateFamiliesSummary: RuntimeImportProvenanceSummary['templateFamilies'] extends { summary: infer T } | null | undefined ? T | null : null
     styleSignals: StyleSignalModel | null
+    semanticImport: SemanticImportResult | null
     runtimeSelection: {
       selectedVersionId: string | null
       selectedSiteId: string | null
@@ -221,6 +224,12 @@ export type SiteWorkspaceReadModel = {
     sourceMode: 'rendered_dom' | 'raw_html_fallback' | 'unknown'
     importFidelityStatus: 'high_fidelity_import' | 'degraded_import' | 'capture_failed' | 'unknown'
     importFidelityScore: RuntimeImportProvenanceSummary['importFidelityScore']
+  }
+  content: {
+    hero: SemanticImportResult['hero']
+    sections: SemanticImportResult['sections']
+    imagesByRole: SemanticImportResult['assets']['groupedByRole']
+    diagnostics: SemanticImportResult['diagnostics']
   }
   structure: {
     rows: StructureSectionRow[]
@@ -292,6 +301,19 @@ function normalizeUuid(value: string | null | undefined, fieldName: string): str
 function toTextOrNull(value: unknown): string | null {
   const normalized = normalizeText(value)
   return normalized || null
+}
+
+function emptySemanticImageGroups(): SemanticImportResult['assets']['groupedByRole'] {
+  return {
+    logo: [],
+    hero_image: [],
+    gallery_image: [],
+    service_image: [],
+    testimonial_avatar: [],
+    content_image: [],
+    icon: [],
+    unknown: [],
+  }
 }
 
 function normalizeSiteActionType(value: string | null | undefined): SiteActionType | null {
@@ -1076,6 +1098,7 @@ function parseImportProvenanceSummary(value: unknown): RuntimeImportProvenanceSu
   if (normalizeText(value.kind) !== 'runtime_import_provenance_summary_v1') return null
 
   const sourceModeRaw = normalizeText(value.sourceMode)
+  const captureModeRaw = normalizeText(value.captureMode)
   const fidelityStatusRaw = normalizeText(value.importFidelityStatus)
   const captureStatusRaw = normalizeText(value.renderedCaptureStatus)
   const domQualityRaw = normalizeText(value.renderedDomQuality)
@@ -1099,6 +1122,7 @@ function parseImportProvenanceSummary(value: unknown): RuntimeImportProvenanceSu
     : []
   const executionIdentity = isRecord(value.executionIdentity) ? value.executionIdentity : null
   const styleSignals = isRecord(value.styleSignals) ? (value.styleSignals as StyleSignalModel) : null
+  const semanticImport = isRecord(value.semanticImport) ? (value.semanticImport as SemanticImportResult) : null
   const multipageImport = isRecord(value.multipageImport) ? value.multipageImport : null
   const multipageSummaryRaw = isRecord(multipageImport?.summary) ? multipageImport.summary : null
   const siteTreeRaw = isRecord(value.siteTree) ? value.siteTree : null
@@ -1409,6 +1433,10 @@ function parseImportProvenanceSummary(value: unknown): RuntimeImportProvenanceSu
           requestId: toTextOrNull(executionIdentity.requestId),
         }
       : undefined,
+    captureMode:
+      captureModeRaw === 'raw_html_only' || captureModeRaw === 'dom_parsed' || captureModeRaw === 'rendered_browser'
+        ? captureModeRaw
+        : 'raw_html_only',
     sourceMode: sourceModeRaw,
     importFidelityStatus: fidelityStatusRaw,
     renderedCaptureStatus: renderedCaptureStatusNormalized,
@@ -1433,6 +1461,7 @@ function parseImportProvenanceSummary(value: unknown): RuntimeImportProvenanceSu
     captureJob,
     workerHealth,
     styleSignals,
+    semanticImport,
     multipageImport: multipageSummary ? { summary: multipageSummary, tree: null } : null,
     siteTree: siteTreeSummary ? { summary: siteTreeSummary, tree: null } : null,
     templateFamilies: templateFamiliesSummary ? { summary: templateFamiliesSummary, families: null } : null,
@@ -1445,6 +1474,7 @@ function parseImportFidelity(input: {
   renderJobFallback?: SiteRenderJobRow | null
 }): {
   sourceMode: SiteWorkspaceReadModel['pipeline']['sourceMode']
+  captureMode: SiteWorkspaceReadModel['pipeline']['captureMode']
   importFidelityStatus: SiteWorkspaceReadModel['pipeline']['importFidelityStatus']
   renderedCaptureStatus: SiteWorkspaceReadModel['pipeline']['renderedCaptureStatus']
   renderedDomQuality: SiteWorkspaceReadModel['pipeline']['renderedDomQuality']
@@ -1463,6 +1493,7 @@ function parseImportFidelity(input: {
   workerHealth: RuntimeImportProvenanceSummary['workerHealth'] | null
   captureFallbackReason: string | null
   styleSignals: StyleSignalModel | null
+  semanticImport: SemanticImportResult | null
   multipageImportSummary: RuntimeImportProvenanceSummary['multipageImport'] extends { summary: infer T } | null | undefined ? T | null : null
   siteTreeSummary: RuntimeImportProvenanceSummary['siteTree'] extends { summary: infer T } | null | undefined ? T | null : null
   templateFamiliesSummary: RuntimeImportProvenanceSummary['templateFamilies'] extends { summary: infer T } | null | undefined ? T | null : null
@@ -1497,6 +1528,7 @@ function parseImportFidelity(input: {
 
       return {
         sourceMode,
+        captureMode: 'raw_html_only',
         importFidelityStatus,
         renderedCaptureStatus,
         renderedDomQuality,
@@ -1551,6 +1583,7 @@ function parseImportFidelity(input: {
         workerHealth: null,
         captureFallbackReason: sourceMode === 'rendered_dom' ? null : 'rendered_capture_unusable',
         styleSignals: inferredStyleSignals,
+        semanticImport: null,
         multipageImportSummary: null,
         siteTreeSummary: null,
         templateFamiliesSummary: null,
@@ -1560,6 +1593,7 @@ function parseImportFidelity(input: {
     const inferredStyleSignals = parseStyleSignalsFromSemanticLabels(input.pageRows)
     return {
       ...parsedFromSignals,
+      captureMode: 'unknown',
       renderedCapture: null,
       importFidelityScore: parsedFromSignals.importFidelityScore,
       styleSignalCoverage: inferredStyleSignals?.provenance.computedStyle.coverage ?? 0,
@@ -1579,6 +1613,7 @@ function parseImportFidelity(input: {
       workerHealth: null,
       captureFallbackReason: null,
       styleSignals: inferredStyleSignals,
+      semanticImport: null,
       multipageImportSummary: null,
       siteTreeSummary: null,
       templateFamiliesSummary: null,
@@ -1659,6 +1694,7 @@ function parseImportFidelity(input: {
 
   return {
     sourceMode: parsedSummary.sourceMode,
+    captureMode: parsedSummary.captureMode ?? 'raw_html_only',
     importFidelityStatus: parsedSummary.importFidelityStatus,
     renderedCaptureStatus: parsedSummary.renderedCaptureStatus,
     renderedDomQuality: parsedSummary.renderedDomQuality,
@@ -1684,6 +1720,7 @@ function parseImportFidelity(input: {
     workerHealth: parsedSummary.workerHealth ?? null,
     captureFallbackReason: resolveCaptureFallbackReason(),
     styleSignals,
+    semanticImport: parsedSummary.semanticImport ?? null,
     multipageImportSummary: parsedSummary.multipageImport?.summary ?? null,
     siteTreeSummary: parsedSummary.siteTree?.summary ?? null,
     templateFamiliesSummary: parsedSummary.templateFamilies?.summary ?? null,
@@ -2106,6 +2143,7 @@ export async function getSiteWorkspaceReadModelForPage(input: {
       visualAnalysisStatus: diagnosticsSummary.length > 0 ? 'available' : 'unavailable',
       designModelStatus: sectionsDetected > 0 ? 'available' : 'unavailable',
       sourceMode: importFidelity.sourceMode,
+      captureMode: importFidelity.captureMode,
       importFidelityStatus: importFidelity.importFidelityStatus,
       importFidelityScore: importFidelity.importFidelityScore ?? null,
       importFidelityDegraded,
@@ -2129,6 +2167,7 @@ export async function getSiteWorkspaceReadModelForPage(input: {
       siteTreeSummary: importFidelity.siteTreeSummary,
       templateFamiliesSummary: importFidelity.templateFamiliesSummary,
       styleSignals: importFidelity.styleSignals,
+      semanticImport: importFidelity.semanticImport,
       runtimeSelection: {
         selectedVersionId: selectedRuntimeSiteVersionId,
         selectedSiteId: toTextOrNull(selectedRuntimeRow?.site_id),
@@ -2175,6 +2214,12 @@ export async function getSiteWorkspaceReadModelForPage(input: {
       sourceMode: importFidelity.sourceMode,
       importFidelityStatus: importFidelity.importFidelityStatus,
       importFidelityScore: importFidelity.importFidelityScore ?? null,
+    },
+    content: {
+      hero: importFidelity.semanticImport?.hero ?? null,
+      sections: importFidelity.semanticImport?.sections ?? [],
+      imagesByRole: importFidelity.semanticImport?.assets.groupedByRole ?? emptySemanticImageGroups(),
+      diagnostics: importFidelity.semanticImport?.diagnostics ?? [],
     },
     structure: {
       rows: structureRows,

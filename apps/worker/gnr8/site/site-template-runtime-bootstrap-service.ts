@@ -14,6 +14,7 @@ import {
   type RenderedDomQuality,
 } from '@/gnr8/validation/runtime/url-single-page-import-contract'
 import type { UrlSinglePageImportSnapshot } from '@/gnr8/validation/runtime/url-single-page-import'
+import { runSemanticImportEngine, type SemanticImportResult } from '@/gnr8/import-semantic/semantic-import-engine'
 
 type BootstrapTemplateRecord = Pick<
   TemplateRecord,
@@ -165,6 +166,7 @@ function createTemplateSnapshot(input: {
   entryHtmlPathAbs: string
   assetsDirAbs: string | null
   html: string
+  semanticImport: SemanticImportResult
   now: Date
 }): UrlSinglePageImportSnapshot {
   const sourceUrl = normalizeDomainAsUrl(input.site.domain)
@@ -225,6 +227,7 @@ function createTemplateSnapshot(input: {
         excludes: ['multi_page_crawl', 'auth_fetch', 'form_submission', 'robots_bypass'],
       },
     },
+    captureMode: 'raw_html_only',
     sourceMode: 'raw_html_fallback',
     sourceSelection: {
       sourceMode: 'raw_html_fallback',
@@ -259,6 +262,7 @@ function createTemplateSnapshot(input: {
       job: null,
       workerHealth: null,
     },
+    semanticImport: input.semanticImport,
     importDiagnostics: {
       summary: {
         infoCount: 0,
@@ -855,6 +859,21 @@ export async function bootstrapRuntimeFromTemplateSite(input: {
     }
 
     const snapshot = createTemplateSnapshot({
+      semanticImport: runSemanticImportEngine({
+        normalizedHtml: resolvedSource.html,
+        entryHtmlPath: snapshotEntryHtmlPath || 'index.html',
+        sourceUrl: normalizeDomainAsUrl(input.site.domain),
+        sourceFilename: input.template.sourceFilename,
+        captureMode: 'raw_html_only',
+        assetManifest: {
+          files: Array.isArray((input.template.importManifestSummary as any)?.assets?.files)
+            ? ((input.template.importManifestSummary as any).assets.files as Array<Record<string, unknown>>)
+            : [],
+          references: Array.isArray((input.template.importManifestSummary as any)?.assets?.references)
+            ? ((input.template.importManifestSummary as any).assets.references as Array<Record<string, unknown>>)
+            : [],
+        },
+      }),
       site: input.site,
       template: input.template,
       snapshotRootDirAbs,

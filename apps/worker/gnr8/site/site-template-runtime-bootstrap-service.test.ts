@@ -81,6 +81,9 @@ test('template bootstrap succeeds from durable processed source and emits pipeli
         runScopedImportPipeline: async (input) => {
           assert.equal(input.snapshot.entryHtmlPathAbs, entryAbs)
           assert.equal(input.snapshot.assetsDirAbs, path.resolve(root, assetsRel))
+          assert.equal(input.snapshot.captureMode, 'raw_html_only')
+          assert.equal(input.snapshot.semanticImport?.sourceMode, 'raw_html_only')
+          assert.ok((input.snapshot.semanticImport?.sections.length ?? 0) >= 1)
           return {
             mode: 'pipeline',
             siteId: 'runtime-site-1',
