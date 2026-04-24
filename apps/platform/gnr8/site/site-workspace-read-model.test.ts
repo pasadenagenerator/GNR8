@@ -1343,6 +1343,36 @@ test('preview runtime summary parser surfaces page_fallback truth deterministica
   assert.deepEqual(parsed?.familyRenderDiagnostics, ['FAMILY_RENDER_DEGRADED_TO_PAGE'])
 })
 
+test('preview runtime summary parser accepts semantic fallback preview mode', () => {
+  const parsed = __siteWorkspaceReadModelTestUtils.parsePreviewRuntimeSummary({
+    previewMode: 'semantic_fallback_preview',
+    rendererContractAvailable: false,
+    finalSiteModelAvailable: false,
+    familyRenderUsed: false,
+    familyRenderFamilyId: null,
+    familyRenderMode: 'page_fallback',
+    familyRenderFallbackToPage: true,
+    familyRenderDiagnosticsCount: 0,
+    familyRenderDiagnostics: [],
+    renderedWithFallback: true,
+    matchedPageId: null,
+    contentResolutionApplied: true,
+    resolvedContentCount: 7,
+    unresolvedContentCount: 0,
+    contentResolutionDegraded: false,
+    contentResolutionDiagnostics: [],
+    semanticSectionCount: 3,
+    semanticImageCount: 2,
+    semanticCtaCount: 2,
+    previewDiagnostics: ['SEMANTIC_PREVIEW_SELECTED'],
+  })
+
+  assert.equal(parsed?.previewMode, 'semantic_fallback_preview')
+  assert.equal(parsed?.semanticSectionCount, 3)
+  assert.equal(parsed?.semanticImageCount, 2)
+  assert.equal(parsed?.semanticCtaCount, 2)
+})
+
 test('preview runtime summary parser safely handles legacy rows with no family fields', () => {
   const parsed = __siteWorkspaceReadModelTestUtils.parsePreviewRuntimeSummary({
     previewMode: 'react_preview',

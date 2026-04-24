@@ -1,12 +1,20 @@
-import { buildDeterministicArtifactBundle } from '@/gnr8/runtime/artifact-builder'
 import { normalizePagePath } from '@/gnr8/runtime/deterministic'
 import { getArtifactById, getSiteVersion, getSiteVersionArtifactBinding } from '@/gnr8/runtime/runtime-store'
+import type { CanonicalSiteVersionSnapshot } from '@/gnr8/runtime/types'
 import { normalizeSiteVersionPreviewMode, type SiteVersionPreviewMode } from '@/gnr8/site/site-preview-contract'
 import { PREVIEW_RUNTIME_DIAGNOSTIC } from '@/gnr8/preview-runtime/preview-runtime-diagnostics'
-import { preparePreviewRuntime } from '@/gnr8/preview-runtime/preview-runtime-preparation'
 import type { PreviewRuntimeMode, PreviewRuntimeSummary } from '@/gnr8/preview-runtime/preview-runtime-types'
+import {
+  renderSemanticPreview,
+  SEMANTIC_PREVIEW_DIAGNOSTIC,
+  shouldUseSemanticFallbackPreview,
+} from '@/gnr8/preview-semantic/semantic-preview-renderer'
 
-export type SiteVersionPreviewSource = 'react_runtime_renderer' | 'transformed_artifact' | 'debug_preview_bundle'
+export type SiteVersionPreviewSource =
+  | 'react_runtime_renderer'
+  | 'transformed_artifact'
+  | 'debug_preview_bundle'
+  | 'semantic_fallback_renderer'
 
 type RenderedCapturePreviewTruth = {
   renderedCaptureUsed: boolean
@@ -167,7 +175,9 @@ function withPreviewTruth(input: {
   const fallbackUsed =
     typeof input.fallbackUsedOverride === 'boolean'
       ? input.fallbackUsedOverride
-      : input.preview.previewRuntimeSummary.renderedWithFallback || input.preview.previewMode === 'fallback_preview'
+      : input.preview.previewRuntimeSummary.renderedWithFallback ||
+        input.preview.previewMode === 'fallback_preview' ||
+        input.preview.previewMode === 'semantic_fallback_preview'
   return {
     ...input.preview,
     renderedCaptureUsed: input.previewTruth.renderedCaptureUsed,
@@ -176,6 +186,105 @@ function withPreviewTruth(input: {
     screenshotCount: input.previewTruth.screenshotCount,
     sourceMode: input.previewTruth.renderedCaptureUsed ? 'rendered_capture' : 'raw_html',
   }
+}
+
+function defaultPreviewRuntimeSummary(): PreviewRuntimeSummary {
+  return {
+    previewMode: 'fallback_preview',
+    rendererContractAvailable: false,
+    finalSiteModelAvailable: false,
+    familyRenderUsed: false,
+    familyRenderFamilyId: null,
+    familyRenderMode: 'page_fallback',
+    familyRenderFallbackToPage: true,
+    familyRenderDiagnosticsCount: 0,
+    familyRenderDiagnostics: [],
+    renderedWithFallback: false,
+    matchedPageId: null,
+    contentResolutionApplied: false,
+    resolvedContentCount: 0,
+    unresolvedContentCount: 0,
+    contentResolutionDegraded: false,
+    contentResolutionDiagnostics: [],
+    previewDiagnostics: [PREVIEW_RUNTIME_DIAGNOSTIC.FALLBACK_RENDER_SELECTED],
+  }
+}
+
+function buildSemanticPreviewRuntimeSummary(input: {
+  fallbackSummary?: PreviewRuntimeSummary | null
+  sectionCount: number
+  imageCount: number
+  ctaCount: number
+  diagnostics: string[]
+}): PreviewRuntimeSummary {
+  const base = input.fallbackSummary ?? defaultPreviewRuntimeSummary()
+  return {
+    ...base,
+    previewMode: 'semantic_fallback_preview',
+    renderedWithFallback: true,
+    contentResolutionApplied: true,
+    resolvedContentCount: Math.max(base.resolvedContentCount, input.sectionCount + input.imageCount + input.ctaCount),
+    unresolvedContentCount: 0,
+    contentResolutionDegraded: false,
+    previewDiagnostics: withSortedDiagnostics([
+      ...base.previewDiagnostics,
+      ...input.diagnostics,
+      PREVIEW_RUNTIME_DIAGNOSTIC.SEMANTIC_PREVIEW_SELECTED,
+    ]),
+    semanticSectionCount: input.sectionCount,
+    semanticImageCount: input.imageCount,
+    semanticCtaCount: input.ctaCount,
+  }
+}
+
+function resolveSemanticFallbackPreview(input: {
+  siteVersion: CanonicalSiteVersionSnapshot
+  requestedPath: string
+  previewTruth: RenderedCapturePreviewTruth
+  fallbackSummary?: PreviewRuntimeSummary | null
+}): ResolvedSiteVersionPreview | null {
+  const semanticImport = input.siteVersion.importProvenanceSummary?.semanticImport ?? null
+  if (
+    !shouldUseSemanticFallbackPreview({
+      captureMode: input.siteVersion.importProvenanceSummary?.captureMode,
+      renderedCaptureUsed: input.previewTruth.renderedCaptureUsed,
+      semanticImport,
+    }) ||
+    !semanticImport
+  ) {
+    return null
+  }
+
+  const rendered = renderSemanticPreview({
+    siteId: input.siteVersion.siteId,
+    runtimeSiteId: input.siteVersion.siteId,
+    runtimeSiteVersionId: input.siteVersion.id,
+    path: normalizePagePath(input.requestedPath),
+    semanticImport,
+    diagnostics: [SEMANTIC_PREVIEW_DIAGNOSTIC.RENDER_STARTED],
+  })
+  const summary = buildSemanticPreviewRuntimeSummary({
+    fallbackSummary: input.fallbackSummary,
+    sectionCount: rendered.sectionCount,
+    imageCount: rendered.imageCount,
+    ctaCount: rendered.ctaCount,
+    diagnostics: rendered.diagnostics,
+  })
+
+  return withPreviewTruth({
+    preview: {
+      siteId: input.siteVersion.siteId,
+      siteVersionId: input.siteVersion.id,
+      path: '/',
+      rendererCompatibilityVersion: input.siteVersion.rendererCompatibilityVersion,
+      html: rendered.html,
+      source: 'semantic_fallback_renderer',
+      previewMode: rendered.previewMode,
+      previewRuntimeSummary: summary,
+    },
+    previewTruth: input.previewTruth,
+    fallbackUsedOverride: true,
+  })
 }
 
 async function renderTransformedSiteVersionPreview(input: {
@@ -200,25 +309,7 @@ async function renderTransformedSiteVersionPreview(input: {
     })
   }
 
-  const previewRuntimeSummary = input.fallbackSummary ?? {
-    previewMode: 'fallback_preview',
-    rendererContractAvailable: false,
-    finalSiteModelAvailable: false,
-    familyRenderUsed: false,
-    familyRenderFamilyId: null,
-    familyRenderMode: 'page_fallback',
-    familyRenderFallbackToPage: true,
-    familyRenderDiagnosticsCount: 0,
-    familyRenderDiagnostics: [],
-    renderedWithFallback: false,
-    matchedPageId: null,
-    contentResolutionApplied: false,
-    resolvedContentCount: 0,
-    unresolvedContentCount: 0,
-    contentResolutionDegraded: false,
-    contentResolutionDiagnostics: [],
-    previewDiagnostics: [PREVIEW_RUNTIME_DIAGNOSTIC.FALLBACK_RENDER_SELECTED],
-  }
+  const previewRuntimeSummary = input.fallbackSummary ?? defaultPreviewRuntimeSummary()
 
   const resolved = resolveHtmlForPath({
     htmlByPath: artifact.htmlByPath,
@@ -264,30 +355,13 @@ async function renderDebugSiteVersionPreview(input: {
     })
   }
 
+  const { buildDeterministicArtifactBundle } = await import('@/gnr8/runtime/artifact-builder')
   const artifact = buildDeterministicArtifactBundle({
     siteVersion,
     renderMode: 'PREVIEW',
   })
 
-  const previewRuntimeSummary = input.fallbackSummary ?? {
-    previewMode: 'fallback_preview',
-    rendererContractAvailable: false,
-    finalSiteModelAvailable: false,
-    familyRenderUsed: false,
-    familyRenderFamilyId: null,
-    familyRenderMode: 'page_fallback',
-    familyRenderFallbackToPage: true,
-    familyRenderDiagnosticsCount: 0,
-    familyRenderDiagnostics: [],
-    renderedWithFallback: false,
-    matchedPageId: null,
-    contentResolutionApplied: false,
-    resolvedContentCount: 0,
-    unresolvedContentCount: 0,
-    contentResolutionDegraded: false,
-    contentResolutionDiagnostics: [],
-    previewDiagnostics: [PREVIEW_RUNTIME_DIAGNOSTIC.FALLBACK_RENDER_SELECTED],
-  }
+  const previewRuntimeSummary = input.fallbackSummary ?? defaultPreviewRuntimeSummary()
 
   const resolved = resolveHtmlForPath({
     htmlByPath: artifact.htmlByPath,
@@ -359,6 +433,7 @@ async function renderReactRuntimeSiteVersionPreview(input: {
     })
   }
 
+  const { preparePreviewRuntime } = await import('@/gnr8/preview-runtime/preview-runtime-preparation')
   const preparation = preparePreviewRuntime({
     siteVersion,
     routePath: input.requestedPath,
@@ -443,6 +518,14 @@ export async function renderSiteVersionPreview(input: { siteVersionId: string; p
           }
         : reactPreview.fallbackSummary
 
+      const semanticFallback = resolveSemanticFallbackPreview({
+        siteVersion,
+        requestedPath,
+        previewTruth,
+        fallbackSummary,
+      })
+      if (semanticFallback) return semanticFallback
+
       try {
         return await renderTransformedSiteVersionPreview({
           siteVersionId: input.siteVersionId,
@@ -470,6 +553,12 @@ export async function renderSiteVersionPreview(input: { siteVersionId: string; p
     })
   } catch (error) {
     if (error instanceof SiteVersionPreviewUnavailableError && error.code === 'PREVIEW_PATH_NOT_FOUND') {
+      const semanticFallback = resolveSemanticFallbackPreview({
+        siteVersion,
+        requestedPath,
+        previewTruth,
+      })
+      if (semanticFallback) return semanticFallback
       logPreviewPathResolution('PREVIEW_PATH_RESOLUTION_FAILED', {
         siteId: siteVersion.siteId,
         runtimeSiteId: siteVersion.siteId,
@@ -487,4 +576,6 @@ export async function renderSiteVersionPreview(input: { siteVersionId: string; p
 
 export const __unifiedRenderPreviewTestUtils = {
   resolveHtmlForPath,
+  resolveSemanticFallbackPreview,
+  resolveRenderedCapturePreviewTruth,
 }

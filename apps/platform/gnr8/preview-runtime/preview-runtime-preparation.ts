@@ -7,6 +7,7 @@ import type { ReactElement } from "react";
 import { PREVIEW_RUNTIME_DIAGNOSTIC, withSortedDiagnostics } from "@/gnr8/preview-runtime/preview-runtime-diagnostics";
 import { selectPreviewRuntimeMode } from "@/gnr8/preview-runtime/preview-mode-selector";
 import type { PreviewRuntimePreparationInput, PreviewRuntimePreparationResult, PreviewRuntimeSummary } from "@/gnr8/preview-runtime/preview-runtime-types";
+import { SEMANTIC_PREVIEW_DIAGNOSTIC, shouldUseSemanticFallbackPreview } from "@/gnr8/preview-semantic/semantic-preview-renderer";
 import {
   applyFamilyPageInstanceToFinalSiteModel,
   diagnosticsCodes,
@@ -621,8 +622,40 @@ export function buildPersistedPreviewRuntimeSummary(input: {
     siteVersion: input.siteVersion,
     routePath: input.routePath ?? "/",
   });
+  const semanticImport = input.siteVersion.importProvenanceSummary?.semanticImport ?? null;
+  const semanticEligible = shouldUseSemanticFallbackPreview({
+    captureMode: input.siteVersion.importProvenanceSummary?.captureMode,
+    renderedCaptureUsed: Boolean(input.siteVersion.importProvenanceSummary?.renderedCapture?.used),
+    semanticImport,
+  });
+  if (!semanticEligible || !semanticImport) {
+    return {
+      ...prepared.summary,
+      previewDiagnostics: withSortedDiagnostics([...prepared.summary.previewDiagnostics, PREVIEW_RUNTIME_DIAGNOSTIC.MODE_PERSISTED]),
+    };
+  }
+
+  const semanticSectionCount = semanticImport.sections.length + (semanticImport.hero ? 1 : 0);
+  const semanticImageCount =
+    (semanticImport.hero?.image ? 1 : 0) + semanticImport.sections.reduce((sum, section) => sum + section.images.length, 0);
+  const semanticCtaCount =
+    (semanticImport.hero?.cta ? 1 : 0) + semanticImport.sections.reduce((sum, section) => sum + section.ctas.length, 0);
+
   return {
     ...prepared.summary,
-    previewDiagnostics: withSortedDiagnostics([...prepared.summary.previewDiagnostics, PREVIEW_RUNTIME_DIAGNOSTIC.MODE_PERSISTED]),
+    previewMode: "semantic_fallback_preview",
+    renderedWithFallback: true,
+    contentResolutionApplied: true,
+    contentResolutionDegraded: false,
+    unresolvedContentCount: 0,
+    resolvedContentCount: Math.max(prepared.summary.resolvedContentCount, semanticSectionCount + semanticImageCount + semanticCtaCount),
+    semanticSectionCount,
+    semanticImageCount,
+    semanticCtaCount,
+    previewDiagnostics: withSortedDiagnostics([
+      ...prepared.summary.previewDiagnostics,
+      SEMANTIC_PREVIEW_DIAGNOSTIC.SELECTED,
+      PREVIEW_RUNTIME_DIAGNOSTIC.MODE_PERSISTED,
+    ]),
   };
 }

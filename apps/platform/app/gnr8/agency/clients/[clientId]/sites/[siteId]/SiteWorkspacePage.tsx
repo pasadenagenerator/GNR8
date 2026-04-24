@@ -334,6 +334,8 @@ function renderPreviewContent(readModel: Awaited<ReturnType<typeof getSiteWorksp
         ? 'React preview (degraded)'
         : readModel.preview.previewMode === 'fallback_preview'
           ? 'Fallback preview'
+          : readModel.preview.previewMode === 'semantic_fallback_preview'
+            ? 'Semantic fallback preview'
           : contentRecoveryModeActive
             ? 'content recovery'
             : 'canonical'
@@ -364,7 +366,10 @@ function renderPreviewContent(readModel: Awaited<ReturnType<typeof getSiteWorksp
           {readModel.preview.previewRuntimeSummary.contentResolutionApplied ? 'yes' : 'no'} · resolved=
           {readModel.preview.previewRuntimeSummary.resolvedContentCount} · unresolved=
           {readModel.preview.previewRuntimeSummary.unresolvedContentCount} · degraded=
-          {readModel.preview.previewRuntimeSummary.contentResolutionDegraded ? 'yes' : 'no'}
+          {readModel.preview.previewRuntimeSummary.contentResolutionDegraded ? 'yes' : 'no'} · semanticSections=
+          {readModel.preview.previewRuntimeSummary.semanticSectionCount ?? 0} · semanticImages=
+          {readModel.preview.previewRuntimeSummary.semanticImageCount ?? 0} · semanticCtas=
+          {readModel.preview.previewRuntimeSummary.semanticCtaCount ?? 0}
         </p>
       ) : null}
       <div style={{ margin: '8px 0 0', border: '1px solid #e2e8f0', borderRadius: 8, padding: 10, background: '#f8fafc' }}>

@@ -5,7 +5,7 @@ import type { RealReactRendererInput, RealReactRendererResult } from "@/gnr8/rea
 import type { FamilyRenderMode } from "@/gnr8/renderer-family-mode";
 import type { ReactElement } from "react";
 
-export type PreviewRuntimeMode = "react_preview" | "react_preview_degraded" | "fallback_preview";
+export type PreviewRuntimeMode = "react_preview" | "react_preview_degraded" | "fallback_preview" | "semantic_fallback_preview";
 
 export type PreviewRuntimeSummary = {
   previewMode: PreviewRuntimeMode;
@@ -25,6 +25,9 @@ export type PreviewRuntimeSummary = {
   contentResolutionDegraded: boolean;
   contentResolutionDiagnostics: string[];
   previewDiagnostics: string[];
+  semanticSectionCount?: number;
+  semanticImageCount?: number;
+  semanticCtaCount?: number;
 };
 
 export type PreviewRuntimePreparationResult = {
@@ -54,5 +57,6 @@ export function normalizePreviewRuntimeMode(value: unknown): PreviewRuntimeMode 
   if (normalized === "react_preview") return "react_preview";
   if (normalized === "react_preview_degraded") return "react_preview_degraded";
   if (normalized === "fallback_preview") return "fallback_preview";
+  if (normalized === "semantic_fallback_preview") return "semantic_fallback_preview";
   return null;
 }

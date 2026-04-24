@@ -1763,6 +1763,9 @@ function parsePreviewRuntimeSummary(value: unknown): PreviewRuntimeSummary | nul
       ? [...new Set(value.contentResolutionDiagnostics.map((entry) => normalizeText(entry)).filter(Boolean))].sort((a, b) => a.localeCompare(b))
       : [],
     previewDiagnostics: [...new Set(diagnostics)].sort((a, b) => a.localeCompare(b)),
+    semanticSectionCount: Number.isFinite(Number(value.semanticSectionCount)) ? Number(value.semanticSectionCount) : undefined,
+    semanticImageCount: Number.isFinite(Number(value.semanticImageCount)) ? Number(value.semanticImageCount) : undefined,
+    semanticCtaCount: Number.isFinite(Number(value.semanticCtaCount)) ? Number(value.semanticCtaCount) : undefined,
   }
 }
 
