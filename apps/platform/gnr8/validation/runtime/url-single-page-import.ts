@@ -6,11 +6,6 @@ import { parse, serialize } from "parse5";
 
 import type { RenderedCaptureExecutor, RenderedCaptureResult } from "../../import-rendered-capture";
 import {
-  DEFAULT_RENDERED_CAPTURE_READINESS_POLICY,
-  DEFAULT_RENDERED_CAPTURE_VIEWPORT,
-  runRenderedCapture,
-} from "../../import-rendered-capture";
-import {
   FileBackedRenderedCaptureJobOrchestrator,
   createRenderedCaptureWorkerClientFromEnv,
   createRenderedCaptureWorkerRequest,
@@ -342,6 +337,36 @@ const DIAGNOSTIC_SEVERITY_RANK: Record<UrlImportDiagnosticSeverity, number> = {
   warning: 2,
   info: 3,
 };
+
+const DEFAULT_RENDERED_CAPTURE_VIEWPORT = {
+  width: 1366,
+  height: 768,
+} as const;
+
+const DEFAULT_RENDERED_CAPTURE_READINESS_POLICY = {
+  navigationTimeoutMs: 20_000,
+  networkQuietTimeoutMs: 4_000,
+  domStabilizationWindowMs: 2_500,
+  domStabilizationPollMs: 250,
+  maxTotalCaptureMs: 30_000,
+  shellContentMinLength: 120,
+  shellDetectionRetryCount: 1,
+  shellDetectionRetryDelayMs: 1_500,
+} as const;
+
+// Keep browser runtime loading request-bounded: Vercel packaging rejects pnpm symlinked browser trees
+// when capture modules are imported at route/module top-level.
+async function runRenderedCaptureViaRuntimeModule(input: {
+  sourceUrl: string;
+  snapshotRootDirAbs: string;
+  executor: RenderedCaptureExecutor;
+}): Promise<RenderedCaptureResult> {
+  const runtimeImport = Function("specifier", "return import(specifier);") as (
+    specifier: string,
+  ) => Promise<{ runRenderedCapture: (args: unknown) => Promise<RenderedCaptureResult> }>;
+  const module = await runtimeImport("../../import-rendered-capture/rendered-capture-service");
+  return module.runRenderedCapture(input);
+}
 
 function sha256Hex(input: string | Uint8Array): string {
   return crypto.createHash("sha256").update(input).digest("hex");
@@ -2662,7 +2687,7 @@ export async function importPublicSinglePageUrlToSnapshot(input: {
     renderedCaptureAttempted = true;
     const captureStartedAt = Date.now();
     if (input.renderedCaptureExecutor) {
-      renderedCapture = await runRenderedCapture({
+      renderedCapture = await runRenderedCaptureViaRuntimeModule({
         sourceUrl: entryFetchUrlUsed ?? normalizedHref,
         snapshotRootDirAbs,
         executor: input.renderedCaptureExecutor,

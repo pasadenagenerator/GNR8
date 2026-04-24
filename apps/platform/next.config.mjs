@@ -1,13 +1,4 @@
 /** @type {import('next').NextConfig} */
-// Vercel serverless packaging rejects traces that pull in symlinked directory trees from pnpm links.
-// Keep browser tracing file-only and explicit so Next traces real runtime assets, not node_modules symlink dirs.
-const vercelSafeChromiumTraceFiles = [
-  './node_modules/@sparticuz/chromium/bin/al2023.tar.br',
-  './node_modules/@sparticuz/chromium/bin/chromium.br',
-  './node_modules/@sparticuz/chromium/bin/fonts.tar.br',
-  './node_modules/@sparticuz/chromium/bin/swiftshader.tar.br',
-]
-
 const nextConfig = {
   // NUJNO za monorepo + ESM workspace pakete
   transpilePackages: ['@gnr8/core', '@gnr8/data'],
@@ -46,13 +37,13 @@ const nextConfig = {
     '/api/validation/real-site-03': ['./gnr8/validation/fixtures/real-site-03/**'],
     '/api/validation/friend-site-01': ['./gnr8/validation/fixtures/friend-site-01/**'],
     '/api/validation/url-import': [
-      ...vercelSafeChromiumTraceFiles,
+      // Browser capture now executes behind the dedicated worker boundary; avoid tracing pnpm browser trees in app lambdas.
     ],
     '/api/gnr8/runtime/migrate/url': [
-      ...vercelSafeChromiumTraceFiles,
+      // Browser capture now executes behind the dedicated worker boundary; avoid tracing pnpm browser trees in app lambdas.
     ],
     '/api/gnr8/agency/clients/[clientId]/sites/import': [
-      ...vercelSafeChromiumTraceFiles,
+      // Browser capture now executes behind the dedicated worker boundary; avoid tracing pnpm browser trees in app lambdas.
     ],
     '/api/internal/gnr8/rendered-capture-worker': [
       // Route-level includes intentionally empty: NFT already traces required runtime modules
