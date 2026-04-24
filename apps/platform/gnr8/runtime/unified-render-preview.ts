@@ -43,12 +43,91 @@ export class SiteVersionPreviewUnavailableError extends Error {
   }
 }
 
-function resolveHtmlForPath(input: { htmlByPath: Record<string, string>; requestedPath: string }): { html: string; resolvedPath: string } {
+type PreviewPathResolutionLogInput = {
+  siteId: string
+  runtimeSiteId: string
+  runtimeSiteVersionId: string
+  requestedPath: string
+  candidatePaths: string[]
+  selectedPath: string | null
+  matchedPageId: string | null
+  unresolvedPathsCount: number
+}
+
+function logPreviewPathResolution(event: string, input: PreviewPathResolutionLogInput): void {
+  console.info(`[preview-runtime] ${event}`, {
+    siteId: input.siteId,
+    runtimeSiteId: input.runtimeSiteId,
+    runtimeSiteVersionId: input.runtimeSiteVersionId,
+    requestedPath: input.requestedPath,
+    candidatePaths: input.candidatePaths,
+    selectedPath: input.selectedPath,
+    matchedPage: input.matchedPageId ? { id: input.matchedPageId } : null,
+    unresolvedPathsCount: input.unresolvedPathsCount,
+  })
+}
+
+function resolveHtmlForPath(input: {
+  htmlByPath: Record<string, string>
+  requestedPath: string
+  diagnostics?: {
+    siteId: string
+    runtimeSiteId: string
+    runtimeSiteVersionId: string
+    matchedPageId: string | null
+    unresolvedPathsCount: number
+  }
+}): { html: string; resolvedPath: string } {
+  const candidatePaths = Object.keys(input.htmlByPath)
+    .map((pathValue) => normalizePagePath(pathValue))
+    .sort((a, b) => a.localeCompare(b))
+
   const exact = input.htmlByPath[input.requestedPath]
-  if (exact) return { html: exact, resolvedPath: input.requestedPath }
+  if (exact) {
+    if (input.diagnostics) {
+      logPreviewPathResolution('RAW_HTML_PREVIEW_PATH_RESOLVED', {
+        siteId: input.diagnostics.siteId,
+        runtimeSiteId: input.diagnostics.runtimeSiteId,
+        runtimeSiteVersionId: input.diagnostics.runtimeSiteVersionId,
+        requestedPath: input.requestedPath,
+        candidatePaths,
+        selectedPath: input.requestedPath,
+        matchedPageId: input.diagnostics.matchedPageId,
+        unresolvedPathsCount: input.diagnostics.unresolvedPathsCount,
+      })
+    }
+    return { html: exact, resolvedPath: input.requestedPath }
+  }
 
   const root = input.htmlByPath['/']
-  if (root) return { html: root, resolvedPath: '/' }
+  if (root) {
+    if (input.diagnostics) {
+      logPreviewPathResolution('RAW_HTML_PREVIEW_PATH_RESOLVED', {
+        siteId: input.diagnostics.siteId,
+        runtimeSiteId: input.diagnostics.runtimeSiteId,
+        runtimeSiteVersionId: input.diagnostics.runtimeSiteVersionId,
+        requestedPath: input.requestedPath,
+        candidatePaths,
+        selectedPath: '/',
+        matchedPageId: input.diagnostics.matchedPageId,
+        unresolvedPathsCount: input.diagnostics.unresolvedPathsCount,
+      })
+    }
+    return { html: root, resolvedPath: '/' }
+  }
+
+  if (input.diagnostics) {
+    logPreviewPathResolution('RAW_HTML_PREVIEW_PATH_MISSING', {
+      siteId: input.diagnostics.siteId,
+      runtimeSiteId: input.diagnostics.runtimeSiteId,
+      runtimeSiteVersionId: input.diagnostics.runtimeSiteVersionId,
+      requestedPath: input.requestedPath,
+      candidatePaths,
+      selectedPath: null,
+      matchedPageId: input.diagnostics.matchedPageId,
+      unresolvedPathsCount: input.diagnostics.unresolvedPathsCount,
+    })
+  }
 
   throw new SiteVersionPreviewUnavailableError({
     code: 'PREVIEW_PATH_NOT_FOUND',
@@ -121,11 +200,6 @@ async function renderTransformedSiteVersionPreview(input: {
     })
   }
 
-  const resolved = resolveHtmlForPath({
-    htmlByPath: artifact.htmlByPath,
-    requestedPath: input.requestedPath,
-  })
-
   const previewRuntimeSummary = input.fallbackSummary ?? {
     previewMode: 'fallback_preview',
     rendererContractAvailable: false,
@@ -145,6 +219,18 @@ async function renderTransformedSiteVersionPreview(input: {
     contentResolutionDiagnostics: [],
     previewDiagnostics: [PREVIEW_RUNTIME_DIAGNOSTIC.FALLBACK_RENDER_SELECTED],
   }
+
+  const resolved = resolveHtmlForPath({
+    htmlByPath: artifact.htmlByPath,
+    requestedPath: input.requestedPath,
+    diagnostics: {
+      siteId: artifact.siteId,
+      runtimeSiteId: artifact.siteId,
+      runtimeSiteVersionId: artifact.siteVersionId,
+      matchedPageId: previewRuntimeSummary.matchedPageId,
+      unresolvedPathsCount: previewRuntimeSummary.unresolvedContentCount,
+    },
+  })
 
   return {
     ...withPreviewTruth({
@@ -183,11 +269,6 @@ async function renderDebugSiteVersionPreview(input: {
     renderMode: 'PREVIEW',
   })
 
-  const resolved = resolveHtmlForPath({
-    htmlByPath: artifact.htmlByPath,
-    requestedPath: input.requestedPath,
-  })
-
   const previewRuntimeSummary = input.fallbackSummary ?? {
     previewMode: 'fallback_preview',
     rendererContractAvailable: false,
@@ -207,6 +288,18 @@ async function renderDebugSiteVersionPreview(input: {
     contentResolutionDiagnostics: [],
     previewDiagnostics: [PREVIEW_RUNTIME_DIAGNOSTIC.FALLBACK_RENDER_SELECTED],
   }
+
+  const resolved = resolveHtmlForPath({
+    htmlByPath: artifact.htmlByPath,
+    requestedPath: input.requestedPath,
+    diagnostics: {
+      siteId: siteVersion.siteId,
+      runtimeSiteId: siteVersion.siteId,
+      runtimeSiteVersionId: siteVersion.id,
+      matchedPageId: previewRuntimeSummary.matchedPageId,
+      unresolvedPathsCount: previewRuntimeSummary.unresolvedContentCount,
+    },
+  })
 
   return {
     ...withPreviewTruth({
@@ -316,52 +409,82 @@ export async function renderSiteVersionPreview(input: { siteVersionId: string; p
     })
   }
   const previewTruth = resolveRenderedCapturePreviewTruth(siteVersion.importProvenanceSummary)
+  logPreviewPathResolution('PREVIEW_PATH_RESOLUTION_STARTED', {
+    siteId: siteVersion.siteId,
+    runtimeSiteId: siteVersion.siteId,
+    runtimeSiteVersionId: siteVersion.id,
+    requestedPath,
+    candidatePaths: [],
+    selectedPath: null,
+    matchedPageId: null,
+    unresolvedPathsCount: 0,
+  })
 
-  if (mode === 'transformed') {
-    const reactPreview = await renderReactRuntimeSiteVersionPreview({
-      siteVersionId: input.siteVersionId,
-      requestedPath,
-      previewTruth,
-    })
-    if (reactPreview.preview) return reactPreview.preview
-
-    const fallbackBlocked = previewTruth.renderedCaptureUsed && previewTruth.domSize > 0
-    const fallbackSummary = fallbackBlocked
-      ? {
-          ...reactPreview.fallbackSummary,
-          previewMode: 'react_preview_degraded' as const,
-          renderedWithFallback: false,
-          previewDiagnostics: withSortedDiagnostics([
-            ...reactPreview.fallbackSummary.previewDiagnostics,
-            PREVIEW_RUNTIME_DIAGNOSTIC.PREVIEW_MODE_FROM_RENDERED_CAPTURE,
-            PREVIEW_RUNTIME_DIAGNOSTIC.FALLBACK_BLOCKED_RENDER_AVAILABLE,
-          ]),
-        }
-      : reactPreview.fallbackSummary
-
-    try {
-      return await renderTransformedSiteVersionPreview({
+  try {
+    if (mode === 'transformed') {
+      const reactPreview = await renderReactRuntimeSiteVersionPreview({
         siteVersionId: input.siteVersionId,
         requestedPath,
-        fallbackSummary,
         previewTruth,
       })
-    } catch (error) {
-      if (error instanceof SiteVersionPreviewUnavailableError && error.code === 'TRANSFORMED_ARTIFACT_NOT_AVAILABLE') {
-        return renderDebugSiteVersionPreview({
+      if (reactPreview.preview) return reactPreview.preview
+
+      const fallbackBlocked = previewTruth.renderedCaptureUsed && previewTruth.domSize > 0
+      const fallbackSummary = fallbackBlocked
+        ? {
+            ...reactPreview.fallbackSummary,
+            previewMode: 'react_preview_degraded' as const,
+            renderedWithFallback: false,
+            previewDiagnostics: withSortedDiagnostics([
+              ...reactPreview.fallbackSummary.previewDiagnostics,
+              PREVIEW_RUNTIME_DIAGNOSTIC.PREVIEW_MODE_FROM_RENDERED_CAPTURE,
+              PREVIEW_RUNTIME_DIAGNOSTIC.FALLBACK_BLOCKED_RENDER_AVAILABLE,
+            ]),
+          }
+        : reactPreview.fallbackSummary
+
+      try {
+        return await renderTransformedSiteVersionPreview({
           siteVersionId: input.siteVersionId,
           requestedPath,
           fallbackSummary,
           previewTruth,
         })
+      } catch (error) {
+        if (error instanceof SiteVersionPreviewUnavailableError && error.code === 'TRANSFORMED_ARTIFACT_NOT_AVAILABLE') {
+          return renderDebugSiteVersionPreview({
+            siteVersionId: input.siteVersionId,
+            requestedPath,
+            fallbackSummary,
+            previewTruth,
+          })
+        }
+        throw error
       }
-      throw error
     }
-  }
 
-  return renderDebugSiteVersionPreview({
-    siteVersionId: input.siteVersionId,
-    requestedPath,
-    previewTruth,
-  })
+    return renderDebugSiteVersionPreview({
+      siteVersionId: input.siteVersionId,
+      requestedPath,
+      previewTruth,
+    })
+  } catch (error) {
+    if (error instanceof SiteVersionPreviewUnavailableError && error.code === 'PREVIEW_PATH_NOT_FOUND') {
+      logPreviewPathResolution('PREVIEW_PATH_RESOLUTION_FAILED', {
+        siteId: siteVersion.siteId,
+        runtimeSiteId: siteVersion.siteId,
+        runtimeSiteVersionId: siteVersion.id,
+        requestedPath,
+        candidatePaths: [],
+        selectedPath: null,
+        matchedPageId: null,
+        unresolvedPathsCount: 0,
+      })
+    }
+    throw error
+  }
+}
+
+export const __unifiedRenderPreviewTestUtils = {
+  resolveHtmlForPath,
 }

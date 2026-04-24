@@ -312,6 +312,40 @@ function inferPagePathFromSourcePath(sourcePath: string): string {
   return normalizePagePath(`/${normalized}`)
 }
 
+function shouldForceCanonicalHomePath(input: {
+  snapshot: UrlSinglePageImportSnapshot
+  isEntryDocument: boolean
+}): boolean {
+  if (!input.isEntryDocument) return false
+  const captureMode = normalizeText(input.snapshot.captureMode).toLowerCase()
+  if (captureMode === 'raw_html_only') return true
+  return normalizeText(input.snapshot.semanticImport?.sourceMode).toLowerCase() === 'raw_html_only'
+}
+
+function resolveCanonicalPagePathForDocument(input: {
+  sourcePath: string
+  isEntryDocument: boolean
+  snapshot: UrlSinglePageImportSnapshot
+}): { pagePath: string; inferredPath: string; forcedToCanonicalHome: boolean } {
+  const inferredPath = inferPagePathFromSourcePath(input.sourcePath)
+  const forcedToCanonicalHome = shouldForceCanonicalHomePath({
+    snapshot: input.snapshot,
+    isEntryDocument: input.isEntryDocument,
+  })
+  if (forcedToCanonicalHome && inferredPath !== '/') {
+    return {
+      pagePath: '/',
+      inferredPath,
+      forcedToCanonicalHome: true,
+    }
+  }
+  return {
+    pagePath: inferredPath,
+    inferredPath,
+    forcedToCanonicalHome: false,
+  }
+}
+
 function resolveSiteId(sourceUrl: string, entryPath: string): string {
   const testPrefix = String(process.env.GNR8_RUNTIME_TEST_SITE_ID_PREFIX ?? '').trim()
   const seed = `${sourceUrl}|${entryPath}`
@@ -976,8 +1010,30 @@ function buildCanonicalMigrationInputFromPipeline(input: {
     .slice()
     .sort((a, b) => a.path.localeCompare(b.path))
     .map((doc) => {
-      const pagePath = inferPagePathFromSourcePath(doc.path)
+      const pagePathResolution = resolveCanonicalPagePathForDocument({
+        sourcePath: doc.path,
+        isEntryDocument: Boolean(doc.isEntry),
+        snapshot: input.snapshot,
+      })
+      const pagePath = pagePathResolution.pagePath
       const pageId = deterministicId('page', `${siteId}:${pagePath}`)
+      if (pagePathResolution.forcedToCanonicalHome) {
+        console.info('[scoped-import] RAW_HTML_PREVIEW_PAGE_CREATED', {
+          siteId,
+          runtimeSiteId: siteId,
+          runtimeSiteVersionId: null,
+          candidatePaths: uniqueSorted([pagePathResolution.inferredPath, pagePath]),
+          selectedPath: pagePath,
+          matchedPage: {
+            id: pageId,
+            path: pagePath,
+          },
+          unresolvedPathsCount: 0,
+          sourcePath: doc.path,
+          captureMode: input.snapshot.captureMode ?? 'raw_html_only',
+          sourceMode: input.snapshot.sourceSelection.sourceMode,
+        })
+      }
       const layoutPage = layoutByDocumentId.get(doc.id) ?? null
       const blockById = new Map(
         (layoutPage?.blocks ?? []).map((block) => [

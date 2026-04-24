@@ -1267,12 +1267,12 @@ test('scoped pipeline import fails hard when provenance summary is missing after
 test('canonical input uses semantic import sections when prepared semantic sections are unavailable', () => {
   const preparedSite = {
     source: {
-      entryHtmlPath: 'index.html',
+      entryHtmlPath: 'nested/site/index.html',
     },
     documents: [
       {
         id: 'doc-1',
-        path: 'index.html',
+        path: 'nested/site/index.html',
         isEntry: true,
         semantic: {
           sections: [],
@@ -1359,7 +1359,57 @@ test('canonical input uses semantic import sections when prepared semantic secti
   })
 
   const sections = canonical.pages[0]?.structureModel.sections ?? []
+  assert.equal(canonical.pages[0]?.path, '/')
   assert.equal(sections.length, 2)
   assert.equal(sections[0]?.type, 'hero')
   assert.equal(sections[1]?.type, 'content')
+})
+
+test('canonical input preserves inferred nested entry path when raw_html_only semantic forcing is not active', () => {
+  const preparedSite = {
+    source: {
+      entryHtmlPath: 'nested/site/index.html',
+    },
+    documents: [
+      {
+        id: 'doc-1',
+        path: 'nested/site/index.html',
+        isEntry: true,
+        semantic: {
+          sections: [],
+          consolidation: { mode: 'none' },
+          page: { pageType: 'unknown' },
+        },
+        fidelity: { metaDescription: 'Imported page' },
+      },
+    ],
+  } as any
+
+  const canonical = __scopedImportPipelineTestUtils.buildCanonicalMigrationInputFromPipeline({
+    sourceUrl: 'https://example.com/nested/site',
+    actor: 'test',
+    preparedSite,
+    layoutModel: { pages: [] } as any,
+    snapshot: {
+      captureMode: 'dom_parsed',
+      sourceSelection: {
+        sourceMode: 'rendered_dom',
+        fidelityStatus: 'high_fidelity_import',
+        renderedDomQuality: { quality: 'strong' },
+      },
+      renderedCapture: { screenshots: [], computedStyleSamples: [] },
+      importDiagnostics: { issues: [] },
+    } as any,
+    styleSignals: {
+      sourceMode: 'html_css_inference',
+      provenance: { computedStyle: { coverage: 0 }, fallbackUsed: true },
+      colors: { backgroundTone: 'neutral', primaryAccent: null },
+      typography: { headingCategory: 'sans', bodyCategory: 'sans' },
+      spacing: { rhythm: 'balanced', layoutDensity: 'balanced' },
+      cta: { styleHint: 'unknown', prominence: 'unknown' },
+      diagnostics: [],
+    } as any,
+  })
+
+  assert.equal(canonical.pages[0]?.path, '/nested/site')
 })
