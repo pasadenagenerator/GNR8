@@ -5,7 +5,9 @@ import test from "node:test";
 import {
   __setPublicRuntimeRenderDependenciesForTest,
   __setPublicRuntimeUsageDependenciesForTest,
+  normalizePublicDomainHost,
   renderPublicPathResponse,
+  resolveRequestHost,
   resolvePublicRuntimeMode,
 } from "@/src/public-site/public-runtime-render";
 
@@ -97,7 +99,7 @@ test("public runtime artifact hit: serves artifact HTML with artifact-only diagn
 
   try {
     const { response, payload } = await captureResolutionLog(() =>
-      renderPublicPathResponse({ host: "maver.app.pasadenagenerator.com", path: "/" }),
+      renderPublicPathResponse({ host: "maver.app.pasadenagenerator.com", rawHost: "maver.app.pasadenagenerator.com", path: "/" }),
     );
 
     assert.equal(response.status, 200);
@@ -214,7 +216,7 @@ test("public runtime artifact miss: returns deterministic 404 without builder fa
 
   try {
     const { response, payload } = await captureResolutionLog(() =>
-      renderPublicPathResponse({ host: "maver.app.pasadenagenerator.com", path: "/missing" }),
+      renderPublicPathResponse({ host: "maver.app.pasadenagenerator.com", rawHost: "maver.app.pasadenagenerator.com", path: "/missing" }),
     );
 
     assert.equal(response.status, 404);
@@ -264,7 +266,7 @@ test("public runtime governance deny: returns deterministic 403 without builder 
 
   try {
     const { response, payload } = await captureResolutionLog(() =>
-      renderPublicPathResponse({ host: "canary.app.pasadenagenerator.com", path: "/" }),
+      renderPublicPathResponse({ host: "canary.app.pasadenagenerator.com", rawHost: "canary.app.pasadenagenerator.com", path: "/" }),
     );
 
     assert.equal(response.status, 403);
@@ -278,7 +280,7 @@ test("public runtime governance deny: returns deterministic 403 without builder 
   }
 });
 
-test("public runtime unbound host: returns deterministic artifact-only 404", async () => {
+test("public runtime unbound host at root: blocks fallback-latest-site leak and serves app shell fallback", async () => {
   const restoreDeps = __setPublicRuntimeRenderDependenciesForTest({
     resolveRawTemplateSiteForDomainAndPath: async () =>
       ({
@@ -294,8 +296,135 @@ test("public runtime unbound host: returns deterministic artifact-only 404", asy
       }) as never,
     resolveActiveArtifactForHostAndPathWithDiagnostics: async () =>
       ({
-        outcome: "artifact_miss",
+        outcome: "artifact_hit",
         host: "unbound.example.com",
+        path: "/",
+        normalizedPath: "/",
+        siteId: "fallback_site",
+        siteResolution: "fallback_latest_site",
+        hostBindingId: null,
+        hostBindingKind: null,
+        hostBindingStatus: null,
+        activeSiteVersionId: "sv_fallback",
+        artifactId: "artifact_fallback",
+        artifact: {} as never,
+        html: "<!doctype html><html><body>should_not_leak</body></html>",
+        resolvedPath: "/",
+      }) as never,
+  });
+
+  try {
+    const response = await renderPublicPathResponse({ host: "unbound.example.com", path: "/" });
+
+    assert.equal(response.status, 200);
+    assert.match(await response.text(), /WEB AGENCY OS/);
+  } finally {
+    restoreDeps();
+  }
+});
+
+test("public runtime pending custom-domain binding: does not serve fallback latest-site artifact at root", async () => {
+  const restoreDeps = __setPublicRuntimeRenderDependenciesForTest({
+    resolveRawTemplateSiteForDomainAndPath: async () =>
+      ({
+        outcome: "raw_template_miss",
+        host: "pending.beauty-clinic.pasadenagenerator.com",
+        normalizedPath: "/",
+        siteId: null,
+        siteVersionId: null,
+        domain: null,
+        bindingId: null,
+        status: null,
+        reasonCode: "domain_not_found",
+      }) as never,
+    resolveActiveArtifactForHostAndPathWithDiagnostics: async () =>
+      ({
+        outcome: "artifact_hit",
+        host: "pending.beauty-clinic.pasadenagenerator.com",
+        path: "/",
+        normalizedPath: "/",
+        siteId: "fallback_site",
+        siteResolution: "fallback_latest_site",
+        hostBindingId: null,
+        hostBindingKind: null,
+        hostBindingStatus: null,
+        activeSiteVersionId: "sv_fallback",
+        artifactId: "artifact_fallback",
+        artifact: {} as never,
+        html: "<!doctype html><html><body>should_not_leak_pending</body></html>",
+        resolvedPath: "/",
+      }) as never,
+  });
+
+  try {
+    const response = await renderPublicPathResponse({ host: "pending.beauty-clinic.pasadenagenerator.com", path: "/" });
+    assert.equal(response.status, 200);
+    const html = await response.text();
+    assert.match(html, /WEB AGENCY OS/);
+    assert.doesNotMatch(html, /should_not_leak_pending/);
+  } finally {
+    restoreDeps();
+  }
+});
+
+test("public runtime wrong domain: nested path falls back safely to deterministic 404", async () => {
+  const restoreDeps = __setPublicRuntimeRenderDependenciesForTest({
+    resolveRawTemplateSiteForDomainAndPath: async () =>
+      ({
+        outcome: "raw_template_miss",
+        host: "wrong.example.com",
+        normalizedPath: "/",
+        siteId: null,
+        siteVersionId: null,
+        domain: null,
+        bindingId: null,
+        status: null,
+        reasonCode: "domain_not_found",
+      }) as never,
+    resolveActiveArtifactForHostAndPathWithDiagnostics: async () =>
+      ({
+        outcome: "artifact_miss",
+        host: "wrong.example.com",
+        path: "/nested/path",
+        normalizedPath: "/nested/path",
+        siteId: null,
+        siteResolution: "none",
+        hostBindingId: null,
+        hostBindingKind: null,
+        hostBindingStatus: null,
+        activeSiteVersionId: null,
+        artifactId: null,
+        reasonCode: "no_runtime_site",
+      }) as never,
+  });
+
+  try {
+    const response = await renderPublicPathResponse({ host: "wrong.example.com", path: "/nested/path" });
+    assert.equal(response.status, 404);
+    assert.match(await response.text(), /could not be found/i);
+  } finally {
+    restoreDeps();
+  }
+});
+
+test("public runtime root on platform host without active domain binding: returns app shell fallback", async () => {
+  const restoreDeps = __setPublicRuntimeRenderDependenciesForTest({
+    resolveRawTemplateSiteForDomainAndPath: async () =>
+      ({
+        outcome: "raw_template_miss",
+        host: "app.pasadenagenerator.com",
+        normalizedPath: "/",
+        siteId: null,
+        siteVersionId: null,
+        domain: null,
+        bindingId: null,
+        status: null,
+        reasonCode: "domain_not_found",
+      }) as never,
+    resolveActiveArtifactForHostAndPathWithDiagnostics: async () =>
+      ({
+        outcome: "artifact_miss",
+        host: "app.pasadenagenerator.com",
         path: "/",
         normalizedPath: "/",
         siteId: null,
@@ -310,60 +439,30 @@ test("public runtime unbound host: returns deterministic artifact-only 404", asy
   });
 
   try {
-    const { response, payload } = await captureResolutionLog(() =>
-      renderPublicPathResponse({ host: "unbound.example.com", path: "/" }),
-    );
-
-    assert.equal(response.status, 404);
-    assert.equal(payload.runtimeResolutionMode, "artifact_only");
-    assert.equal(payload.builderFallbackUsed, false);
-    assert.equal(payload.reasonCode, "no_runtime_site");
-    assert.equal(payload.statusCode, 404);
+    const response = await renderPublicPathResponse({ host: "app.pasadenagenerator.com", path: "/" });
+    assert.equal(response.status, 200);
+    assert.match(await response.text(), /WEB AGENCY OS/);
   } finally {
     restoreDeps();
   }
 });
 
-test("public runtime wrong domain: falls back to artifact behavior", async () => {
-  const restoreDeps = __setPublicRuntimeRenderDependenciesForTest({
-    resolveRawTemplateSiteForDomainAndPath: async () =>
-      ({
-        outcome: "raw_template_miss",
-        host: "wrong.example.com",
-        normalizedPath: "/",
-        siteId: null,
-        siteVersionId: null,
-        domain: null,
-        bindingId: null,
-        status: null,
-        reasonCode: "domain_not_found",
-      }) as never,
-    resolveActiveArtifactForHostAndPathWithDiagnostics: async () =>
-      ({
-        outcome: "artifact_hit",
-        host: "wrong.example.com",
-        path: "/",
-        normalizedPath: "/",
-        siteId: "site_fallback",
-        siteResolution: "fallback_latest_site",
-        hostBindingId: null,
-        hostBindingKind: null,
-        hostBindingStatus: null,
-        activeSiteVersionId: "sv_fallback",
-        artifactId: "artifact_fallback",
-        artifact: {} as never,
-        html: "<!doctype html><html><body>artifact fallback</body></html>",
-        resolvedPath: "/",
-      }) as never,
-  });
+test("host normalization lowercases and strips protocol/port/trailing slash", () => {
+  assert.equal(normalizePublicDomainHost("HTTPS://Beauty-Clinic.PasadenaGenerator.com:443/"), "beauty-clinic.pasadenagenerator.com");
+  assert.equal(normalizePublicDomainHost("beauty-clinic.pasadenagenerator.com:3000"), "beauty-clinic.pasadenagenerator.com");
+  assert.equal(normalizePublicDomainHost(""), "");
+});
 
-  try {
-    const response = await renderPublicPathResponse({ host: "wrong.example.com", path: "/" });
-    assert.equal(response.status, 200);
-    assert.match(await response.text(), /artifact fallback/);
-  } finally {
-    restoreDeps();
-  }
+test("request host extraction prefers x-forwarded-host and keeps first host before normalization", () => {
+  const host = resolveRequestHost({
+    get(name: string): string | null {
+      if (name === "x-forwarded-host") return "Beauty-Clinic.PasadenaGenerator.com:443, proxy.internal";
+      if (name === "host") return "ignored.example.com";
+      return null;
+    },
+  });
+  assert.equal(host, "Beauty-Clinic.PasadenaGenerator.com:443");
+  assert.equal(normalizePublicDomainHost(host), "beauty-clinic.pasadenagenerator.com");
 });
 
 test("public runtime regression guard: no builder-page fallback usage remains in serving path", async () => {
