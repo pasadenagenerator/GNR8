@@ -5,6 +5,7 @@ import {
   type PublicRuntimeArtifactMissReasonCode,
 } from "@/gnr8/runtime/runtime-store";
 import { persistRuntimeUsageEvent } from "@/gnr8/runtime/runtime-usage-event-logger";
+import { injectRuntimeDebugPanel, rewriteRawTemplateHtmlForRuntime } from "@/src/public-site/raw-template-runtime";
 
 export type Gnr8PublicRuntimeMode = "artifact-only";
 
@@ -237,11 +238,6 @@ function copyHeaderIfPresent(headers: Headers, source: Headers, name: string): v
   if (value) headers.set(name, value);
 }
 
-export function rewriteRawTemplateAssetPaths(input: { html: string; siteId: string; siteVersionId: string }): string {
-  const replacementPrefix = `/api/gnr8/runtime/preview-assets/${encodeURIComponent(input.siteId)}/${encodeURIComponent(input.siteVersionId)}/assets/`;
-  return input.html.replaceAll("/assets/", replacementPrefix);
-}
-
 function logPublicDomainDiagnostic(event: string, payload: Record<string, unknown>): void {
   console.info(`[gnr8.public-runtime.domain] ${event}`, payload);
 }
@@ -367,7 +363,12 @@ async function renderShadowAssetResponse(input: { host: string; path: string }):
   });
 }
 
-export async function renderPublicPathResponse(input: { path: string; host: string; rawHost?: string | null }): Promise<Response> {
+export async function renderPublicPathResponse(input: {
+  path: string;
+  host: string;
+  rawHost?: string | null;
+  debugMode?: boolean;
+}): Promise<Response> {
   const rawHost = String(input.rawHost ?? input.host ?? "").trim();
   const normalizedHost = normalizePublicDomainHost(rawHost);
   const requestStartedAt = Date.now();
@@ -416,11 +417,22 @@ export async function renderPublicPathResponse(input: { path: string; host: stri
       siteVersionId: rawTemplateResolution.siteVersionId,
       resolvedFilePath: rawTemplateResolution.resolvedFilePath,
     });
-    const html = rewriteRawTemplateAssetPaths({
+    let html = rewriteRawTemplateHtmlForRuntime({
       html: rawTemplateResolution.html,
       siteId: rawTemplateResolution.siteId,
       siteVersionId: rawTemplateResolution.siteVersionId,
+      resolvedFilePath: rawTemplateResolution.resolvedFilePath,
     });
+    if (input.debugMode) {
+      html = injectRuntimeDebugPanel({
+        html,
+        debug: {
+          siteId: rawTemplateResolution.siteId,
+          siteVersionId: rawTemplateResolution.siteVersionId,
+          bindingStatus: rawTemplateResolution.status,
+        },
+      });
+    }
     return htmlResponse({ html });
   }
 

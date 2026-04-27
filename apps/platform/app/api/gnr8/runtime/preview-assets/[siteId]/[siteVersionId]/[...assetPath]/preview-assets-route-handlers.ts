@@ -5,6 +5,7 @@ import {
   getRawTemplateSiteAsset,
   resolveDomainSiteVersionForHost,
 } from "@/gnr8/runtime/runtime-store";
+import { resolveAssetMediaType, rewriteRawTemplateCssForRuntime } from "@/src/public-site/raw-template-runtime";
 
 type PreviewAssetGetContext = { params: Promise<{ siteId: string; siteVersionId: string; assetPath?: string[] }> };
 
@@ -55,11 +56,18 @@ export function createPreviewAssetsRouteHandlers(overrides: Partial<PreviewAsset
       try {
         const { siteId, siteVersionId, assetPath } = await ctx.params;
         const requestHost = resolveRequestHost(req.headers);
+        const debugMode = new URL(req.url).searchParams.get("__debug") === "1";
         const publicDomainResolution = await deps.resolveDomainSiteVersionForHost({ host: requestHost });
         const isPublicDomainAssetRequest =
           publicDomainResolution.outcome === "domain_hit" &&
           publicDomainResolution.siteId === siteId &&
           publicDomainResolution.siteVersionId === siteVersionId;
+        const mismatchedPublicDomainAssetRequest =
+          publicDomainResolution.outcome === "domain_hit" && !isPublicDomainAssetRequest;
+
+        if (mismatchedPublicDomainAssetRequest) {
+          return new Response("forbidden", { status: 403, headers: { "content-type": "text/plain; charset=utf-8" } });
+        }
 
         if (!isPublicDomainAssetRequest) {
           const agencyId = await deps.resolveAgencyIdForSiteVersion(siteVersionId);
@@ -115,13 +123,36 @@ export function createPreviewAssetsRouteHandlers(overrides: Partial<PreviewAsset
           bytes: asset.sizeBytes,
           mediaType: asset.mediaType,
         });
-        return new Response(new Uint8Array(asset.bytes), {
+
+        const isCssAsset = normalizedPath.toLowerCase().endsWith(".css");
+        const responseBody =
+          isCssAsset
+            ? new TextEncoder().encode(
+                rewriteRawTemplateCssForRuntime({
+                  css: asset.bytes.toString("utf8"),
+                  siteId,
+                  siteVersionId,
+                  assetFilePath: normalizedPath,
+                }),
+              )
+            : new Uint8Array(asset.bytes);
+        const contentType = resolveAssetMediaType({ filePath: normalizedPath, mediaType: asset.mediaType });
+
+        const headers: Record<string, string> = {
+          "content-type": contentType,
+          "cache-control": "public, max-age=31536000, immutable",
+          "x-gnr8-preview-asset-path": normalizedPath,
+        };
+        if (debugMode) {
+          headers["x-gnr8-debug-site-id"] = siteId;
+          headers["x-gnr8-debug-version-id"] = siteVersionId;
+          headers["x-gnr8-debug-binding"] =
+            publicDomainResolution.outcome === "domain_hit" ? publicDomainResolution.status : "dashboard_auth";
+        }
+
+        return new Response(responseBody, {
           status: 200,
-          headers: {
-            "content-type": asset.mediaType || "application/octet-stream",
-            "cache-control": "no-store",
-            "x-gnr8-preview-asset-path": normalizedPath,
-          },
+          headers,
         });
       } catch (error) {
         const mapped = deps.parseAgencyActionContextError(error);

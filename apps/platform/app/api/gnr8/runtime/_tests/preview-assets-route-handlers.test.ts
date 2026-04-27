@@ -43,9 +43,9 @@ test("custom-domain asset request is allowed without dashboard auth when host ma
     getRawTemplateSiteAsset: async () =>
       ({
         mediaType: "text/css; charset=utf-8",
-        sizeBytes: 19,
+        sizeBytes: 44,
         sha256: "abc",
-        bytes: Buffer.from("body{color:#111;}", "utf8"),
+        bytes: Buffer.from(".hero{background:url('../assets/bg.jpg');}", "utf8"),
       }) as never,
   });
 
@@ -58,7 +58,11 @@ test("custom-domain asset request is allowed without dashboard auth when host ma
 
   assert.equal(response.status, 200);
   assert.equal(response.headers.get("content-type"), "text/css; charset=utf-8");
-  assert.equal(await response.text(), "body{color:#111;}");
+  assert.equal(response.headers.get("cache-control"), "public, max-age=31536000, immutable");
+  assert.equal(
+    await response.text(),
+    ".hero{background:url('/api/gnr8/runtime/preview-assets/site_1/sv_1/assets/bg.jpg');}",
+  );
   assert.equal(authCalls, 0);
 });
 
@@ -102,4 +106,36 @@ test("non-matching host requires dashboard auth path", async () => {
 
   assert.equal(response.status, 200);
   assert.equal(authCalls, 1);
+});
+
+test("custom-domain asset request is denied when host binding resolves to different site/version", async () => {
+  let authCalls = 0;
+  const handlers = createPreviewAssetsRouteHandlers({
+    resolveDomainSiteVersionForHost: async () =>
+      ({
+        outcome: "domain_hit",
+        host: "beauty-clinic.pasadenagenerator.com",
+        siteId: "site_other",
+        siteVersionId: "sv_other",
+        domain: "beauty-clinic.pasadenagenerator.com",
+        status: "active",
+        bindingId: "binding_other",
+      }) as never,
+    resolveAgencyIdForSiteVersion: async () => "agency_1",
+    requireAgencyActionContext: async () => {
+      authCalls += 1;
+      return { actorMode: "agency_member", agencyId: "agency_1" } as never;
+    },
+  });
+
+  const response = await handlers.GET(
+    new Request("https://beauty-clinic.pasadenagenerator.com/api/gnr8/runtime/preview-assets/site_1/sv_1/assets/main.css", {
+      headers: { host: "beauty-clinic.pasadenagenerator.com" },
+    }),
+    { params: getParams() },
+  );
+
+  assert.equal(response.status, 403);
+  assert.equal(await response.text(), "forbidden");
+  assert.equal(authCalls, 0);
 });

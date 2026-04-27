@@ -135,8 +135,8 @@ test("public runtime domain hit: serves raw template HTML and rewrites /assets U
         bindingId: "domain_binding_1",
         status: "active",
         normalizedPath: "/",
-        resolvedFilePath: "index.html",
-        html: "<!doctype html><html><head><link rel=\"stylesheet\" href=\"/assets/main.css\" /></head><body><img src=\"/assets/hero.jpg\" /></body></html>",
+        resolvedFilePath: "nested/page.html",
+        html: "<!doctype html><html><head><link rel=\"stylesheet\" href=\"/assets/main.css\" /><link rel=\"stylesheet\" href=\"../assets/nested.css\" /><style>.hero{background-image:url('./assets/bg.jpg')}</style></head><body style=\"background-image:url('../assets/body-bg.jpg')\"><img src=\"/assets/hero.jpg\" /><script src=\"./assets/app.js\"></script></body></html>",
       }) as never,
     resolveActiveArtifactForHostAndPathWithDiagnostics: async () => {
       throw new Error("artifact resolver should not run when raw template domain hit succeeds");
@@ -147,8 +147,13 @@ test("public runtime domain hit: serves raw template HTML and rewrites /assets U
     const response = await renderPublicPathResponse({ host: "beauty-clinic.example.com", path: "/" });
     assert.equal(response.status, 200);
     const html = await response.text();
+    assert.match(html, /<base href="\/" data-gnr8-runtime="1" \/>/);
     assert.match(html, /\/api\/gnr8\/runtime\/preview-assets\/site_raw_1\/sv_raw_1\/assets\/main\.css/);
+    assert.match(html, /\/api\/gnr8\/runtime\/preview-assets\/site_raw_1\/sv_raw_1\/assets\/nested\.css/);
     assert.match(html, /\/api\/gnr8\/runtime\/preview-assets\/site_raw_1\/sv_raw_1\/assets\/hero\.jpg/);
+    assert.match(html, /\/api\/gnr8\/runtime\/preview-assets\/site_raw_1\/sv_raw_1\/nested\/assets\/app\.js/);
+    assert.match(html, /\/api\/gnr8\/runtime\/preview-assets\/site_raw_1\/sv_raw_1\/nested\/assets\/bg\.jpg/);
+    assert.match(html, /\/api\/gnr8\/runtime\/preview-assets\/site_raw_1\/sv_raw_1\/assets\/body-bg\.jpg/);
   } finally {
     restoreDeps();
   }
@@ -178,6 +183,39 @@ test("public runtime domain hit: supports nested paths when raw template page ex
     const response = await renderPublicPathResponse({ host: "spa.example.com", path: "/nested/path" });
     assert.equal(response.status, 200);
     assert.match(await response.text(), /Nested Path/);
+  } finally {
+    restoreDeps();
+  }
+});
+
+test("public runtime debug mode: appends custom-domain runtime panel on raw-template hit", async () => {
+  const restoreDeps = __setPublicRuntimeRenderDependenciesForTest({
+    resolveRawTemplateSiteForDomainAndPath: async () =>
+      ({
+        outcome: "raw_template_hit",
+        host: "debug.example.com",
+        siteId: "site_debug_1",
+        siteVersionId: "sv_debug_1",
+        domain: "debug.example.com",
+        bindingId: "domain_binding_debug_1",
+        status: "active",
+        normalizedPath: "/",
+        resolvedFilePath: "index.html",
+        html: "<!doctype html><html><body><h1>Debug Site</h1></body></html>",
+      }) as never,
+    resolveActiveArtifactForHostAndPathWithDiagnostics: async () => {
+      throw new Error("artifact resolver should not run when raw template domain hit succeeds");
+    },
+  });
+
+  try {
+    const response = await renderPublicPathResponse({ host: "debug.example.com", path: "/", debugMode: true });
+    assert.equal(response.status, 200);
+    const html = await response.text();
+    assert.match(html, /data-gnr8-runtime-debug="1"/);
+    assert.match(html, /siteId: site_debug_1/);
+    assert.match(html, /versionId: sv_debug_1/);
+    assert.match(html, /binding: active/);
   } finally {
     restoreDeps();
   }
