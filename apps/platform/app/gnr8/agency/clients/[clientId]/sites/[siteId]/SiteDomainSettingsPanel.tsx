@@ -3,15 +3,32 @@
 import { useMemo, useState } from "react";
 
 type DomainBindingStatus = "pending" | "verifying" | "active" | "failed";
+type DomainType = "apex_domain" | "subdomain" | "wildcard_domain" | "unknown";
 type DomainVerificationType = "cname" | "txt";
+type DomainDnsRecordType = "a" | "cname" | "txt";
+type DomainDnsRecordPurpose = "verification" | "routing";
+
+type DomainDnsInstruction = {
+  type: DomainDnsRecordType;
+  host: string;
+  value: string;
+  purpose: DomainDnsRecordPurpose;
+  source: "vercel" | "inferred";
+};
 
 type DomainBinding = {
   id: string;
   domain: string;
   status: DomainBindingStatus;
+  domainType: DomainType | null;
   verificationType: DomainVerificationType | null;
   verificationValue: string | null;
   verificationHost: string | null;
+  dnsRecordType: DomainDnsRecordType | null;
+  dnsRecordHost: string | null;
+  dnsRecordValue: string | null;
+  dnsRecordPurpose: DomainDnsRecordPurpose | null;
+  dnsInstructions: DomainDnsInstruction[] | null;
   lastCheckedAt: string | null;
 };
 
@@ -40,12 +57,59 @@ function noticeStyle(tone: Notice["tone"]): Record<string, string> {
   return { color: "#334155" };
 }
 
-function renderVerificationInstruction(binding: DomainBinding): string | null {
-  if (!binding.verificationType || !binding.verificationValue || !binding.verificationHost) return null;
-  if (binding.verificationType === "cname") {
-    return `Add CNAME: ${binding.verificationHost} -> ${binding.verificationValue}`;
+function typeLabel(type: DomainDnsRecordType): string {
+  if (type === "a") return "A";
+  if (type === "cname") return "CNAME";
+  return "TXT";
+}
+
+function buildDnsCards(binding: DomainBinding): Array<{ title: string; record: DomainDnsInstruction }> {
+  const records = binding.dnsInstructions ?? [];
+  if (records.length > 0) {
+    return records.map((record) => ({
+      title:
+        record.type === "txt" && record.purpose === "verification"
+          ? "Add this TXT verification record"
+          : `Add this ${typeLabel(record.type)} record`,
+      record,
+    }));
   }
-  return `Add TXT: ${binding.verificationHost} -> ${binding.verificationValue}`;
+
+  if (binding.dnsRecordType && binding.dnsRecordHost && binding.dnsRecordValue && binding.dnsRecordPurpose) {
+    const fallback: DomainDnsInstruction = {
+      type: binding.dnsRecordType,
+      host: binding.dnsRecordHost,
+      value: binding.dnsRecordValue,
+      purpose: binding.dnsRecordPurpose,
+      source: "inferred",
+    };
+    return [
+      {
+        title:
+          fallback.type === "txt" && fallback.purpose === "verification"
+            ? "Add this TXT verification record"
+            : `Add this ${typeLabel(fallback.type)} record`,
+        record: fallback,
+      },
+    ];
+  }
+
+  if (binding.verificationType && binding.verificationHost && binding.verificationValue) {
+    return [
+      {
+        title: binding.verificationType === "txt" ? "Add this TXT verification record" : "Add this CNAME record",
+        record: {
+          type: binding.verificationType,
+          host: binding.verificationHost,
+          value: binding.verificationValue,
+          purpose: "verification",
+          source: "vercel",
+        },
+      },
+    ];
+  }
+
+  return [];
 }
 
 export default function SiteDomainSettingsPanel(props: Props) {
@@ -76,6 +140,7 @@ export default function SiteDomainSettingsPanel(props: Props) {
       const payload = (await response.json().catch(() => ({}))) as {
         ok?: boolean;
         error?: string;
+        warning?: string;
         domain?: string;
         binding?: DomainBinding;
       };
@@ -85,13 +150,15 @@ export default function SiteDomainSettingsPanel(props: Props) {
       const nextDomain = payload.domain ?? normalizeDomainInput(domain);
       setDomain(nextDomain);
       setDomainBinding(payload.binding ?? null);
-      const instruction = payload.binding ? renderVerificationInstruction(payload.binding) : null;
       setNotice({
-        tone: "success",
+        tone: payload.binding?.domainType === "wildcard_domain" ? "neutral" : "success",
         text:
-          payload.binding?.status === "active"
+          payload.warning ??
+          (payload.binding?.status === "active"
             ? "Domain connected and verified."
-            : instruction ?? "Domain connected. DNS verification is in progress.",
+            : payload.binding?.domainType === "wildcard_domain"
+              ? "Wildcard domains are not supported yet in this flow."
+              : "Domain connected. Add the DNS records below while verification is in progress."),
       });
     } catch (error) {
       setNotice({
@@ -140,7 +207,7 @@ export default function SiteDomainSettingsPanel(props: Props) {
     }
   }
 
-  const verificationInstruction = domainBinding ? renderVerificationInstruction(domainBinding) : null;
+  const dnsCards = domainBinding ? buildDnsCards(domainBinding) : [];
 
   return (
     <div style={{ marginTop: 14, display: "grid", gap: 10 }}>
@@ -202,9 +269,37 @@ export default function SiteDomainSettingsPanel(props: Props) {
         </button>
       </div>
 
+      {domainBinding?.domainType === "wildcard_domain" ? (
+        <p style={{ margin: 0, color: "#7f1d1d", fontSize: 12 }}>Wildcard domains are not supported yet in this flow.</p>
+      ) : null}
+      {domainBinding && dnsCards.length > 0 ? (
+        <div style={{ display: "grid", gap: 8 }}>
+          {dnsCards.map((card, index) => (
+            <div
+              key={`${card.record.type}-${card.record.host}-${card.record.value}-${index}`}
+              style={{
+                border: "1px solid #cbd5e1",
+                borderRadius: 8,
+                padding: "10px 12px",
+                background: "#f8fafc",
+                display: "grid",
+                gap: 4,
+                fontSize: 12,
+                color: "#0f172a",
+              }}
+            >
+              <strong>{card.title}</strong>
+              <div>Type: {typeLabel(card.record.type)}</div>
+              <div>Name/Host: {card.record.host}</div>
+              <div>{card.record.type === "txt" ? "Value" : "Value/Target"}: {card.record.value}</div>
+              <div>Status: {domainBinding.status}</div>
+            </div>
+          ))}
+        </div>
+      ) : null}
       {domainBinding?.status === "verifying" || domainBinding?.status === "pending" ? (
         <p style={{ margin: 0, color: "#475569", fontSize: 12 }}>
-          {verificationInstruction ?? "Verification pending. Add the DNS record and wait for Vercel to verify."}
+          Verification pending. Add the DNS record and wait for Vercel to verify.
         </p>
       ) : null}
       {domainBinding?.status === "active" ? (

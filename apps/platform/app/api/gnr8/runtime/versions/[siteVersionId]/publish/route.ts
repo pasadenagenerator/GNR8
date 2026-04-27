@@ -9,6 +9,7 @@ import {
   listDomainHostBindingsForSite,
   updateDomainHostBindingById,
 } from "@/gnr8/runtime/runtime-store";
+import { computeDomainDnsInstructions } from "@/src/lib/vercel/domain-dns-instructions";
 import { checkDomainStatus } from "@/src/lib/vercel/vercel-domain-client";
 
 function logDomainEvent(event: string, details: Record<string, unknown>): void {
@@ -29,13 +30,34 @@ async function reconcileDomainVerificationOnPublish(input: { siteId: string; sit
     try {
       const vercelStatus = await checkDomainStatus(binding.domain);
       const nextStatus = vercelStatus.status;
+      const dnsComputation = computeDomainDnsInstructions({
+        domain: binding.domain,
+        vercelStatus,
+      });
+      for (const diagnostic of dnsComputation.diagnostics) {
+        logDomainEvent(diagnostic, {
+          domain: binding.domain,
+          siteId: input.siteId,
+          bindingId: binding.id,
+          source: "publish_reconcile",
+        });
+      }
       await updateDomainHostBindingById({
         bindingId: binding.id,
         siteVersionId: nextStatus === "active" ? input.siteVersionId : undefined,
         status: nextStatus,
-        verificationType: vercelStatus.verification?.type ?? binding.verificationType,
-        verificationValue: vercelStatus.verification?.value ?? binding.verificationValue,
-        verificationHost: vercelStatus.verification?.host ?? binding.verificationHost,
+        domainType: dnsComputation.domainType,
+        verificationType:
+          dnsComputation.verificationInstruction?.type === "cname" || dnsComputation.verificationInstruction?.type === "txt"
+            ? dnsComputation.verificationInstruction.type
+            : binding.verificationType,
+        verificationValue: dnsComputation.verificationInstruction?.value ?? binding.verificationValue,
+        verificationHost: dnsComputation.verificationInstruction?.host ?? binding.verificationHost,
+        dnsRecordType: dnsComputation.primaryInstruction?.type ?? binding.dnsRecordType,
+        dnsRecordHost: dnsComputation.primaryInstruction?.host ?? binding.dnsRecordHost,
+        dnsRecordValue: dnsComputation.primaryInstruction?.value ?? binding.dnsRecordValue,
+        dnsRecordPurpose: dnsComputation.primaryInstruction?.purpose ?? binding.dnsRecordPurpose,
+        dnsInstructions: dnsComputation.instructions.length > 0 ? dnsComputation.instructions : binding.dnsInstructions,
         vercelDomainId: vercelStatus.domainId ?? binding.vercelDomainId,
         lastCheckedAt: vercelStatus.lastCheckedAt,
       });

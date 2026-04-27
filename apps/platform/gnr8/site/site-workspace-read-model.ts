@@ -54,9 +54,15 @@ type RuntimeDomainHostBindingRow = {
   site_version_id: string | null
   domain: string | null
   status: string | null
+  domain_type: string | null
   verification_type: string | null
   verification_value: string | null
   verification_host: string | null
+  dns_record_type: string | null
+  dns_record_host: string | null
+  dns_record_value: string | null
+  dns_record_purpose: string | null
+  dns_instructions_json: unknown
   last_checked_at: string | null
   updated_at: string | null
 }
@@ -295,9 +301,21 @@ export type SiteWorkspaceReadModel = {
       id: string
       domain: string
       status: 'pending' | 'verifying' | 'active' | 'failed'
+      domainType: 'apex_domain' | 'subdomain' | 'wildcard_domain' | 'unknown' | null
       verificationType: 'cname' | 'txt' | null
       verificationValue: string | null
       verificationHost: string | null
+      dnsRecordType: 'a' | 'cname' | 'txt' | null
+      dnsRecordHost: string | null
+      dnsRecordValue: string | null
+      dnsRecordPurpose: 'verification' | 'routing' | null
+      dnsInstructions: Array<{
+        type: 'a' | 'cname' | 'txt'
+        host: string
+        value: string
+        purpose: 'verification' | 'routing'
+        source: 'vercel' | 'inferred'
+      }> | null
       lastCheckedAt: string | null
     } | null
   }
@@ -323,6 +341,46 @@ function normalizeUuid(value: string | null | undefined, fieldName: string): str
 function toTextOrNull(value: unknown): string | null {
   const normalized = normalizeText(value)
   return normalized || null
+}
+
+function parseDnsInstructions(
+  value: unknown,
+): Array<{
+  type: 'a' | 'cname' | 'txt'
+  host: string
+  value: string
+  purpose: 'verification' | 'routing'
+  source: 'vercel' | 'inferred'
+}> | null {
+  if (!Array.isArray(value)) return null
+  const out: Array<{
+    type: 'a' | 'cname' | 'txt'
+    host: string
+    value: string
+    purpose: 'verification' | 'routing'
+    source: 'vercel' | 'inferred'
+  }> = []
+  for (const entry of value) {
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) continue
+    const record = entry as Record<string, unknown>
+    const type = normalizeText(record.type).toLowerCase()
+    const host = normalizeText(record.host)
+    const recordValue = normalizeText(record.value)
+    const purpose = normalizeText(record.purpose).toLowerCase()
+    const source = normalizeText(record.source).toLowerCase()
+    if (!(type === 'a' || type === 'cname' || type === 'txt')) continue
+    if (!(purpose === 'verification' || purpose === 'routing')) continue
+    if (!(source === 'vercel' || source === 'inferred')) continue
+    if (!host || !recordValue) continue
+    out.push({
+      type,
+      host,
+      value: recordValue,
+      purpose,
+      source,
+    })
+  }
+  return out.length > 0 ? out : null
 }
 
 function emptySemanticImageGroups(): SemanticImportResult['assets']['groupedByRole'] {
@@ -2020,7 +2078,9 @@ export async function getSiteWorkspaceReadModelForPage(input: {
   if (selectedRuntimeSiteId && site.domain) {
     const domainBindingResult = await supabase
       .from('gnr8_runtime_domain_host_bindings')
-      .select('id,site_id,site_version_id,domain,status,verification_type,verification_value,verification_host,last_checked_at,updated_at')
+      .select(
+        'id,site_id,site_version_id,domain,status,domain_type,verification_type,verification_value,verification_host,dns_record_type,dns_record_host,dns_record_value,dns_record_purpose,dns_instructions_json,last_checked_at,updated_at',
+      )
       .eq('site_id', selectedRuntimeSiteId)
       .eq('domain', site.domain)
       .order('updated_at', { ascending: false })
@@ -2029,15 +2089,27 @@ export async function getSiteWorkspaceReadModelForPage(input: {
     if (!domainBindingResult.error && domainBindingResult.data) {
       const row = domainBindingResult.data as RuntimeDomainHostBindingRow
       const status = toTextOrNull(row.status)
+      const domainType = toTextOrNull(row.domain_type)
       const verificationType = toTextOrNull(row.verification_type)
+      const dnsRecordType = toTextOrNull(row.dns_record_type)
+      const dnsRecordPurpose = toTextOrNull(row.dns_record_purpose)
       if (row.id && row.domain && (status === 'pending' || status === 'verifying' || status === 'active' || status === 'failed')) {
         domainBinding = {
           id: row.id,
           domain: row.domain,
           status,
+          domainType:
+            domainType === 'apex_domain' || domainType === 'subdomain' || domainType === 'wildcard_domain' || domainType === 'unknown'
+              ? domainType
+              : null,
           verificationType: verificationType === 'cname' || verificationType === 'txt' ? verificationType : null,
           verificationValue: toTextOrNull(row.verification_value),
           verificationHost: toTextOrNull(row.verification_host),
+          dnsRecordType: dnsRecordType === 'a' || dnsRecordType === 'cname' || dnsRecordType === 'txt' ? dnsRecordType : null,
+          dnsRecordHost: toTextOrNull(row.dns_record_host),
+          dnsRecordValue: toTextOrNull(row.dns_record_value),
+          dnsRecordPurpose: dnsRecordPurpose === 'verification' || dnsRecordPurpose === 'routing' ? dnsRecordPurpose : null,
+          dnsInstructions: parseDnsInstructions(row.dns_instructions_json),
           lastCheckedAt: toIsoOrNull(row.last_checked_at),
         }
       }

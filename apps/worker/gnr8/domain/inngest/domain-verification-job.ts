@@ -5,6 +5,14 @@ import {
   DOMAIN_VERIFICATION_CHECK_EVENT,
 } from '@gnr8/runtime-contracts'
 import { inngest } from '@/gnr8/inngest/client'
+import {
+  classifyDomainType,
+  computeDomainDnsInstructions,
+  type DomainDnsInstruction,
+  type DomainDnsRecordPurpose,
+  type DomainDnsRecordType,
+  type DomainType,
+} from '@/src/lib/vercel/domain-dns-instructions'
 import { checkDomainStatus } from '@/src/lib/vercel/vercel-domain-client'
 import { getSuperadminPool } from '@/src/superadmin/db'
 
@@ -17,6 +25,7 @@ export const DOMAIN_VERIFICATION_INTER_CALL_DELAY_MS = 150
 
 export type RuntimeDomainHostBindingStatus = 'pending' | 'verifying' | 'active' | 'failed'
 export type RuntimeDomainVerificationType = 'cname' | 'txt'
+export type RuntimeDomainType = DomainType
 
 export type RuntimeDomainHostBinding = {
   id: string
@@ -24,11 +33,43 @@ export type RuntimeDomainHostBinding = {
   siteVersionId: string
   domain: string
   status: RuntimeDomainHostBindingStatus
+  domainType: RuntimeDomainType | null
   verificationType: RuntimeDomainVerificationType | null
   verificationValue: string | null
   verificationHost: string | null
+  dnsRecordType: DomainDnsRecordType | null
+  dnsRecordHost: string | null
+  dnsRecordValue: string | null
+  dnsRecordPurpose: DomainDnsRecordPurpose | null
+  dnsInstructions: DomainDnsInstruction[] | null
   lastCheckedAt: string | null
   vercelDomainId: string | null
+}
+
+function parseDnsInstructions(value: unknown): DomainDnsInstruction[] | null {
+  if (!Array.isArray(value)) return null
+  const out: DomainDnsInstruction[] = []
+  for (const entry of value) {
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) continue
+    const record = entry as Record<string, unknown>
+    const type = String(record.type ?? '').trim().toLowerCase()
+    const host = String(record.host ?? '').trim()
+    const recordValue = String(record.value ?? '').trim()
+    const purpose = String(record.purpose ?? '').trim().toLowerCase()
+    const source = String(record.source ?? '').trim().toLowerCase()
+    if (!(type === 'a' || type === 'cname' || type === 'txt')) continue
+    if (!(purpose === 'verification' || purpose === 'routing')) continue
+    if (!(source === 'vercel' || source === 'inferred')) continue
+    if (!host || !recordValue) continue
+    out.push({
+      type,
+      host,
+      value: recordValue,
+      purpose,
+      source,
+    })
+  }
+  return out.length > 0 ? out : null
 }
 
 async function listDomainHostBindingsForVerification(input: {
@@ -43,9 +84,15 @@ async function listDomainHostBindingsForVerification(input: {
       site_version_id: string
       domain: string
       status: RuntimeDomainHostBindingStatus
+      domain_type: RuntimeDomainType | null
       verification_type: RuntimeDomainVerificationType | null
       verification_value: string | null
       verification_host: string | null
+      dns_record_type: DomainDnsRecordType | null
+      dns_record_host: string | null
+      dns_record_value: string | null
+      dns_record_purpose: DomainDnsRecordPurpose | null
+      dns_instructions_json: unknown
       last_checked_at: string | null
       vercel_domain_id: string | null
     }>(
@@ -56,9 +103,15 @@ async function listDomainHostBindingsForVerification(input: {
         site_version_id::text as site_version_id,
         domain::text as domain,
         status::text as status,
+        domain_type::text as domain_type,
         verification_type::text as verification_type,
         verification_value::text as verification_value,
         verification_host::text as verification_host,
+        dns_record_type::text as dns_record_type,
+        dns_record_host::text as dns_record_host,
+        dns_record_value::text as dns_record_value,
+        dns_record_purpose::text as dns_record_purpose,
+        dns_instructions_json as dns_instructions_json,
         last_checked_at::text as last_checked_at,
         vercel_domain_id::text as vercel_domain_id
       from public.gnr8_runtime_domain_host_bindings
@@ -74,9 +127,15 @@ async function listDomainHostBindingsForVerification(input: {
       siteVersionId: row.site_version_id,
       domain: row.domain,
       status: row.status,
+      domainType: row.domain_type,
       verificationType: row.verification_type,
       verificationValue: row.verification_value,
       verificationHost: row.verification_host,
+      dnsRecordType: row.dns_record_type,
+      dnsRecordHost: row.dns_record_host,
+      dnsRecordValue: row.dns_record_value,
+      dnsRecordPurpose: row.dns_record_purpose,
+      dnsInstructions: parseDnsInstructions(row.dns_instructions_json),
       lastCheckedAt: row.last_checked_at,
       vercelDomainId: row.vercel_domain_id,
     }))
@@ -88,9 +147,15 @@ async function listDomainHostBindingsForVerification(input: {
 async function updateDomainHostBindingById(input: {
   bindingId: string
   status: RuntimeDomainHostBindingStatus
+  domainType?: RuntimeDomainType | null
   verificationType?: RuntimeDomainVerificationType | null
   verificationValue?: string | null
   verificationHost?: string | null
+  dnsRecordType?: DomainDnsRecordType | null
+  dnsRecordHost?: string | null
+  dnsRecordValue?: string | null
+  dnsRecordPurpose?: DomainDnsRecordPurpose | null
+  dnsInstructions?: DomainDnsInstruction[] | null
   lastCheckedAt?: string | null
   vercelDomainId?: string | null
 }): Promise<RuntimeDomainHostBinding | null> {
@@ -102,9 +167,15 @@ async function updateDomainHostBindingById(input: {
       site_version_id: string
       domain: string
       status: RuntimeDomainHostBindingStatus
+      domain_type: RuntimeDomainType | null
       verification_type: RuntimeDomainVerificationType | null
       verification_value: string | null
       verification_host: string | null
+      dns_record_type: DomainDnsRecordType | null
+      dns_record_host: string | null
+      dns_record_value: string | null
+      dns_record_purpose: DomainDnsRecordPurpose | null
+      dns_instructions_json: unknown
       last_checked_at: string | null
       vercel_domain_id: string | null
     }>(
@@ -112,11 +183,17 @@ async function updateDomainHostBindingById(input: {
       update public.gnr8_runtime_domain_host_bindings
       set
         status = $2::text,
-        verification_type = coalesce($3::text, verification_type),
-        verification_value = coalesce($4::text, verification_value),
-        verification_host = coalesce($5::text, verification_host),
-        last_checked_at = coalesce($6::timestamptz, last_checked_at),
-        vercel_domain_id = coalesce($7::text, vercel_domain_id),
+        domain_type = coalesce($3::text, domain_type),
+        verification_type = coalesce($4::text, verification_type),
+        verification_value = coalesce($5::text, verification_value),
+        verification_host = coalesce($6::text, verification_host),
+        dns_record_type = coalesce($7::text, dns_record_type),
+        dns_record_host = coalesce($8::text, dns_record_host),
+        dns_record_value = coalesce($9::text, dns_record_value),
+        dns_record_purpose = coalesce($10::text, dns_record_purpose),
+        dns_instructions_json = coalesce($11::jsonb, dns_instructions_json),
+        last_checked_at = coalesce($12::timestamptz, last_checked_at),
+        vercel_domain_id = coalesce($13::text, vercel_domain_id),
         updated_at = now()
       where id = $1::uuid
       returning
@@ -125,18 +202,30 @@ async function updateDomainHostBindingById(input: {
         site_version_id::text as site_version_id,
         domain::text as domain,
         status::text as status,
+        domain_type::text as domain_type,
         verification_type::text as verification_type,
         verification_value::text as verification_value,
         verification_host::text as verification_host,
+        dns_record_type::text as dns_record_type,
+        dns_record_host::text as dns_record_host,
+        dns_record_value::text as dns_record_value,
+        dns_record_purpose::text as dns_record_purpose,
+        dns_instructions_json as dns_instructions_json,
         last_checked_at::text as last_checked_at,
         vercel_domain_id::text as vercel_domain_id
       `,
       [
         input.bindingId,
         input.status,
+        input.domainType ?? null,
         input.verificationType ?? null,
         input.verificationValue ?? null,
         input.verificationHost ?? null,
+        input.dnsRecordType ?? null,
+        input.dnsRecordHost ?? null,
+        input.dnsRecordValue ?? null,
+        input.dnsRecordPurpose ?? null,
+        input.dnsInstructions ? JSON.stringify(input.dnsInstructions) : null,
         input.lastCheckedAt ?? null,
         input.vercelDomainId ?? null,
       ],
@@ -149,9 +238,15 @@ async function updateDomainHostBindingById(input: {
       siteVersionId: row.site_version_id,
       domain: row.domain,
       status: row.status,
+      domainType: row.domain_type,
       verificationType: row.verification_type,
       verificationValue: row.verification_value,
       verificationHost: row.verification_host,
+      dnsRecordType: row.dns_record_type,
+      dnsRecordHost: row.dns_record_host,
+      dnsRecordValue: row.dns_record_value,
+      dnsRecordPurpose: row.dns_record_purpose,
+      dnsInstructions: parseDnsInstructions(row.dns_instructions_json),
       lastCheckedAt: row.last_checked_at,
       vercelDomainId: row.vercel_domain_id,
     }
@@ -197,7 +292,9 @@ function resolveNextStatus(input: {
   binding: RuntimeDomainHostBinding
   verified: boolean
   verificationPresent: boolean
+  unsupportedWildcard: boolean
 }): RuntimeDomainHostBindingStatus {
+  if (input.unsupportedWildcard) return 'failed'
   if (input.verified) return 'active'
   if (input.verificationPresent) return 'verifying'
   return 'failed'
@@ -248,18 +345,65 @@ export async function runDomainVerificationCheckJob(input: {
     }
 
     try {
+      const classified = classifyDomainType(binding.domain)
+      console.info('[domain-verification-worker] DOMAIN_TYPE_CLASSIFIED', {
+        bindingId: binding.id,
+        domain: binding.domain,
+        siteId: binding.siteId,
+        siteVersionId: binding.siteVersionId,
+        domainType: classified,
+      })
+      if (classified === 'wildcard_domain') {
+        await deps.updateDomainHostBindingById({
+          bindingId: binding.id,
+          status: 'failed',
+          domainType: classified,
+          lastCheckedAt: deps.now().toISOString(),
+        })
+        failedCount += 1
+        console.warn('[domain-verification-worker] DNS_WILDCARD_UNSUPPORTED', {
+          bindingId: binding.id,
+          domain: binding.domain,
+          siteId: binding.siteId,
+          siteVersionId: binding.siteVersionId,
+        })
+        continue
+      }
+
       const vercelStatus = await deps.checkDomainStatus(binding.domain)
+      const dnsComputation = computeDomainDnsInstructions({
+        domain: binding.domain,
+        vercelStatus,
+      })
+      for (const diagnostic of dnsComputation.diagnostics.filter((code) => code !== 'DOMAIN_TYPE_CLASSIFIED')) {
+        console.info(`[domain-verification-worker] ${diagnostic}`, {
+          bindingId: binding.id,
+          domain: binding.domain,
+          siteId: binding.siteId,
+          siteVersionId: binding.siteVersionId,
+        })
+      }
       const nextStatus = resolveNextStatus({
         binding,
         verified: vercelStatus.verified,
-        verificationPresent: Boolean(vercelStatus.verification),
+        verificationPresent: Boolean(dnsComputation.verificationInstruction),
+        unsupportedWildcard: dnsComputation.unsupportedWildcard,
       })
       const updated = await deps.updateDomainHostBindingById({
         bindingId: binding.id,
         status: nextStatus,
-        verificationType: vercelStatus.verification?.type ?? binding.verificationType,
-        verificationValue: vercelStatus.verification?.value ?? binding.verificationValue,
-        verificationHost: vercelStatus.verification?.host ?? binding.verificationHost,
+        domainType: dnsComputation.domainType,
+        verificationType:
+          dnsComputation.verificationInstruction?.type === 'cname' || dnsComputation.verificationInstruction?.type === 'txt'
+            ? dnsComputation.verificationInstruction.type
+            : binding.verificationType,
+        verificationValue: dnsComputation.verificationInstruction?.value ?? binding.verificationValue,
+        verificationHost: dnsComputation.verificationInstruction?.host ?? binding.verificationHost,
+        dnsRecordType: dnsComputation.primaryInstruction?.type ?? binding.dnsRecordType,
+        dnsRecordHost: dnsComputation.primaryInstruction?.host ?? binding.dnsRecordHost,
+        dnsRecordValue: dnsComputation.primaryInstruction?.value ?? binding.dnsRecordValue,
+        dnsRecordPurpose: dnsComputation.primaryInstruction?.purpose ?? binding.dnsRecordPurpose,
+        dnsInstructions: dnsComputation.instructions.length > 0 ? dnsComputation.instructions : binding.dnsInstructions,
         vercelDomainId: vercelStatus.domainId ?? binding.vercelDomainId,
         lastCheckedAt: vercelStatus.lastCheckedAt,
       })
@@ -297,8 +441,8 @@ export async function runDomainVerificationCheckJob(input: {
           domain: binding.domain,
           siteId: binding.siteId,
           siteVersionId: binding.siteVersionId,
-          verificationType: vercelStatus.verification?.type ?? null,
-          verificationHost: vercelStatus.verification?.host ?? null,
+          verificationType: dnsComputation.verificationInstruction?.type ?? null,
+          verificationHost: dnsComputation.verificationInstruction?.host ?? null,
         })
       } else {
         failedCount += 1

@@ -199,6 +199,77 @@ test("checkDomainStatus maps verification details for cname", async () => {
   }
 });
 
+test("checkDomainStatus maps TXT verification details when required", async () => {
+  const global = globalThis as MutableGlobal;
+  const previousFetch = global.fetch;
+
+  global.fetch = (async () =>
+    jsonResponse(200, {
+      id: "dom_3",
+      apexName: "example.com",
+      verified: false,
+      verification: [
+        {
+          type: "TXT",
+          domain: "_vercel.example.com",
+          value: "vc-domain-verify=token",
+        },
+      ],
+    })) as typeof fetch;
+
+  try {
+    const out = await checkDomainStatus("example.com", {
+      VERCEL_API_TOKEN: "token",
+      VERCEL_PROJECT_ID_PLATFORM: "project_123",
+    } as unknown as NodeJS.ProcessEnv);
+
+    assert.equal(out.verification?.type, "txt");
+    assert.equal(out.verification?.host, "_vercel");
+    assert.equal(out.verification?.value, "vc-domain-verify=token");
+  } finally {
+    global.fetch = previousFetch;
+  }
+});
+
+test("checkDomainStatus reads routing record config when present", async () => {
+  const global = globalThis as MutableGlobal;
+  const previousFetch = global.fetch;
+
+  global.fetch = (async () =>
+    jsonResponse(200, {
+      id: "dom_4",
+      apexName: "example.com",
+      verified: false,
+      verification: [
+        {
+          type: "TXT",
+          domain: "_vercel.example.com",
+          value: "vc-domain-verify=token",
+        },
+      ],
+      config: [
+        {
+          type: "CNAME",
+          domain: "www.example.com",
+          value: "cname.vercel-dns.com",
+        },
+      ],
+    })) as typeof fetch;
+
+  try {
+    const out = await checkDomainStatus("www.example.com", {
+      VERCEL_API_TOKEN: "token",
+      VERCEL_PROJECT_ID_PLATFORM: "project_123",
+    } as unknown as NodeJS.ProcessEnv);
+
+    assert.equal(out.routing?.type, "cname");
+    assert.equal(out.routing?.host, "www");
+    assert.equal(out.routing?.value, "cname.vercel-dns.com");
+  } finally {
+    global.fetch = previousFetch;
+  }
+});
+
 test("checkDomainStatus returns active when verified", async () => {
   const global = globalThis as MutableGlobal;
   const previousFetch = global.fetch;
@@ -218,6 +289,7 @@ test("checkDomainStatus returns active when verified", async () => {
 
     assert.equal(out.status, "active");
     assert.equal(out.verification, null);
+    assert.equal(out.routing, null);
   } finally {
     global.fetch = previousFetch;
   }

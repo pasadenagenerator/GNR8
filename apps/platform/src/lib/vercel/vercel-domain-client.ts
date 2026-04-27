@@ -2,6 +2,14 @@ import { buildVercelUrl, getVercelConfig, vercelFetch } from "@/src/lib/vercel/v
 
 export type VercelDomainVerificationType = "cname" | "txt";
 
+export type VercelDomainDnsRecordType = "a" | "cname" | "txt";
+
+export type VercelDomainDnsRecord = {
+  type: VercelDomainDnsRecordType;
+  host: string;
+  value: string;
+};
+
 export type VercelDomainVerificationRecord = {
   type: VercelDomainVerificationType;
   host: string;
@@ -19,6 +27,7 @@ export type VercelDomainStatus = {
   verified: boolean;
   status: "active" | "verifying";
   verification: VercelDomainVerificationRecord | null;
+  routing: VercelDomainDnsRecord | null;
   lastCheckedAt: string;
 };
 
@@ -55,6 +64,14 @@ function readStringField(input: Record<string, unknown> | null, key: string): st
 
 function asVerificationType(value: string | null): VercelDomainVerificationType | null {
   const normalized = normalizeText(value).toLowerCase();
+  if (normalized === "cname") return "cname";
+  if (normalized === "txt") return "txt";
+  return null;
+}
+
+function asDnsRecordType(value: string | null): VercelDomainDnsRecordType | null {
+  const normalized = normalizeText(value).toLowerCase();
+  if (normalized === "a") return "a";
   if (normalized === "cname") return "cname";
   if (normalized === "txt") return "txt";
   return null;
@@ -98,6 +115,51 @@ function parseVerificationRecord(input: {
   return {
     type,
     host: toRelativeHost(recordDomain, apexName),
+    value,
+  };
+}
+
+function parseRoutingRecord(input: {
+  domain: string;
+  payload: Record<string, unknown> | null;
+}): VercelDomainDnsRecord | null {
+  const arrays = [
+    input.payload?.config,
+    input.payload?.configs,
+    input.payload?.dnsRecords,
+    input.payload?.records,
+    input.payload?.configuredBy,
+  ].filter((candidate): candidate is unknown[] => Array.isArray(candidate));
+
+  const allCandidates = arrays.flatMap((records) => records as Array<Record<string, unknown>>);
+  if (allCandidates.length === 0) return null;
+
+  const apexName = readStringField(input.payload, "apexName") ?? input.domain;
+  const candidate = allCandidates.find((record) => {
+    const type = asDnsRecordType(readStringField(record, "type") ?? readStringField(record, "recordType"));
+    const value = readStringField(record, "value") ?? readStringField(record, "target");
+    const host =
+      readStringField(record, "domain") ??
+      readStringField(record, "host") ??
+      readStringField(record, "name") ??
+      readStringField(record, "subdomain");
+    return (type === "a" || type === "cname") && Boolean(value) && Boolean(host);
+  });
+
+  if (!candidate) return null;
+
+  const type = asDnsRecordType(readStringField(candidate, "type") ?? readStringField(candidate, "recordType"));
+  const value = readStringField(candidate, "value") ?? readStringField(candidate, "target");
+  const hostRaw =
+    readStringField(candidate, "domain") ??
+    readStringField(candidate, "host") ??
+    readStringField(candidate, "name") ??
+    readStringField(candidate, "subdomain");
+  if (!type || !value || !hostRaw || (type !== "a" && type !== "cname")) return null;
+
+  return {
+    type,
+    host: toRelativeHost(hostRaw, apexName),
     value,
   };
 }
@@ -198,6 +260,10 @@ export async function checkDomainStatus(domain: string, env: NodeJS.ProcessEnv =
     domain: normalizedDomain,
     payload: response.payload,
   });
+  const routing = parseRoutingRecord({
+    domain: normalizedDomain,
+    payload: response.payload,
+  });
 
   return {
     domain: normalizedDomain,
@@ -205,6 +271,7 @@ export async function checkDomainStatus(domain: string, env: NodeJS.ProcessEnv =
     verified,
     status: verified ? "active" : "verifying",
     verification,
+    routing,
     lastCheckedAt: new Date().toISOString(),
   };
 }

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import { parseAgencyActionContextError, requireAgencyActionContext } from "@/app/api/gnr8/agency/_lib/agency-action-access";
 import { upsertDomainHostBinding } from "@/gnr8/runtime/runtime-store";
+import { classifyDomainType, computeDomainDnsInstructions, normalizeDomainForDns } from "@/src/lib/vercel/domain-dns-instructions";
 import { checkDomainStatus, addDomainToVercel } from "@/src/lib/vercel/vercel-domain-client";
 import { getSuperadminPool } from "@/src/superadmin/db";
 
@@ -10,7 +11,6 @@ export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-const DOMAIN_RE = /^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/i;
 
 function normalizeText(value: unknown): string {
   return String(value ?? "").trim();
@@ -23,17 +23,27 @@ function normalizeUuid(value: unknown): string | null {
 }
 
 function normalizeDomain(value: unknown): string | null {
-  const raw = normalizeText(value).toLowerCase();
-  if (!raw) return null;
-  const withoutProtocol = raw.replace(/^https?:\/\//, "");
-  const authority = withoutProtocol.split("/")[0] ?? "";
-  const domain = (authority.split(":")[0] ?? "").replace(/\.+$/, "").trim();
-  if (!domain || !DOMAIN_RE.test(domain)) return null;
-  return domain;
+  const domain = normalizeDomainForDns(value);
+  return domain || null;
 }
 
 function logDomainEvent(event: string, details: Record<string, unknown>): void {
   console.info(`[gnr8.domain] ${event}`, details);
+}
+
+function logDnsDiagnostics(input: {
+  diagnostics: string[];
+  domain: string;
+  runtimeSiteId: string;
+  siteVersionId: string;
+}): void {
+  for (const diagnostic of input.diagnostics) {
+    logDomainEvent(diagnostic, {
+      domain: input.domain,
+      runtimeSiteId: input.runtimeSiteId,
+      siteVersionId: input.siteVersionId,
+    });
+  }
 }
 
 function toPublicErrorMessage(raw: string): string {
@@ -147,6 +157,28 @@ export async function POST(
     });
 
     try {
+      const classifiedDomainType = classifyDomainType(domain);
+      logDomainEvent("DOMAIN_TYPE_CLASSIFIED", { domain, runtimeSiteId, siteVersionId, domainType: classifiedDomainType });
+      if (classifiedDomainType === "wildcard_domain") {
+        const wildcardBinding = await upsertDomainHostBinding({
+          siteId: runtimeSiteId,
+          siteVersionId,
+          domain,
+          status: "failed",
+          domainType: classifiedDomainType,
+          lastCheckedAt: new Date().toISOString(),
+        });
+        logDomainEvent("DNS_WILDCARD_UNSUPPORTED", { domain, runtimeSiteId, siteVersionId, bindingId: wildcardBinding.id });
+        return NextResponse.json({
+          ok: true,
+          domain: wildcardBinding.domain,
+          binding: wildcardBinding,
+          dnsInstruction: null,
+          dnsInstructions: [],
+          warning: "Wildcard domains are not supported yet in this flow.",
+        });
+      }
+
       const addResult = await addDomainToVercel(domain);
       if (addResult.outcome === "already_exists") {
         logDomainEvent("VERCEL_DOMAIN_ALREADY_EXISTS", { domain, runtimeSiteId, siteVersionId });
@@ -155,14 +187,33 @@ export async function POST(
       }
 
       const vercelStatus = await checkDomainStatus(domain);
+      const dnsComputation = computeDomainDnsInstructions({
+        domain,
+        vercelStatus,
+      });
+      logDnsDiagnostics({
+        diagnostics: dnsComputation.diagnostics.filter((code) => code !== "DOMAIN_TYPE_CLASSIFIED"),
+        domain,
+        runtimeSiteId,
+        siteVersionId,
+      });
       const binding = await upsertDomainHostBinding({
         siteId: runtimeSiteId,
         siteVersionId,
         domain,
         status: vercelStatus.status,
-        verificationType: vercelStatus.verification?.type ?? null,
-        verificationValue: vercelStatus.verification?.value ?? null,
-        verificationHost: vercelStatus.verification?.host ?? null,
+        domainType: dnsComputation.domainType,
+        verificationType:
+          dnsComputation.verificationInstruction?.type === "cname" || dnsComputation.verificationInstruction?.type === "txt"
+            ? dnsComputation.verificationInstruction.type
+            : null,
+        verificationValue: dnsComputation.verificationInstruction?.value ?? null,
+        verificationHost: dnsComputation.verificationInstruction?.host ?? null,
+        dnsRecordType: dnsComputation.primaryInstruction?.type ?? null,
+        dnsRecordHost: dnsComputation.primaryInstruction?.host ?? null,
+        dnsRecordValue: dnsComputation.primaryInstruction?.value ?? null,
+        dnsRecordPurpose: dnsComputation.primaryInstruction?.purpose ?? null,
+        dnsInstructions: dnsComputation.instructions,
         vercelDomainId: vercelStatus.domainId ?? addResult.domainId,
         lastCheckedAt: vercelStatus.lastCheckedAt,
       });
@@ -194,13 +245,14 @@ export async function POST(
         domain: binding.domain,
         binding,
         dnsInstruction:
-          binding.status !== "active" && binding.verificationType && binding.verificationValue && binding.verificationHost
+          binding.status !== "active" && binding.dnsRecordType && binding.dnsRecordValue && binding.dnsRecordHost
             ? {
-                type: binding.verificationType,
-                host: binding.verificationHost,
-                value: binding.verificationValue,
+                type: binding.dnsRecordType,
+                host: binding.dnsRecordHost,
+                value: binding.dnsRecordValue,
               }
             : null,
+        dnsInstructions: binding.dnsInstructions ?? [],
       });
     } catch (error) {
       const rawMessage = error instanceof Error ? error.message : "Domain connection failed";
@@ -211,6 +263,7 @@ export async function POST(
         siteVersionId,
         domain,
         status: "failed",
+        domainType: classifyDomainType(domain),
         lastCheckedAt: new Date().toISOString(),
       }).catch(() => null);
       if (!isDomainConflict) {

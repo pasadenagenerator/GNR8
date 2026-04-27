@@ -156,9 +156,15 @@ export async function ensureRuntimeTables(): Promise<void> {
             site_version_id uuid not null references public.gnr8_runtime_site_versions(id) on delete cascade,
             domain text not null,
             status text not null default 'pending' check (status in ('pending', 'verifying', 'active', 'failed')),
+            domain_type text check (domain_type in ('apex_domain', 'subdomain', 'wildcard_domain', 'unknown')),
             verification_type text check (verification_type in ('cname', 'txt')),
             verification_value text,
             verification_host text,
+            dns_record_type text check (dns_record_type in ('a', 'cname', 'txt')),
+            dns_record_host text,
+            dns_record_value text,
+            dns_record_purpose text check (dns_record_purpose in ('verification', 'routing')),
+            dns_instructions_json jsonb,
             last_checked_at timestamptz,
             vercel_domain_id text,
             created_at timestamptz not null default now(),
@@ -170,6 +176,10 @@ export async function ensureRuntimeTables(): Promise<void> {
         await client.query(`
           alter table public.gnr8_runtime_domain_host_bindings
           add column if not exists verification_type text
+        `);
+        await client.query(`
+          alter table public.gnr8_runtime_domain_host_bindings
+          add column if not exists domain_type text
         `);
         await client.query(`
           alter table public.gnr8_runtime_domain_host_bindings
@@ -186,6 +196,26 @@ export async function ensureRuntimeTables(): Promise<void> {
         await client.query(`
           alter table public.gnr8_runtime_domain_host_bindings
           add column if not exists vercel_domain_id text
+        `);
+        await client.query(`
+          alter table public.gnr8_runtime_domain_host_bindings
+          add column if not exists dns_record_type text
+        `);
+        await client.query(`
+          alter table public.gnr8_runtime_domain_host_bindings
+          add column if not exists dns_record_host text
+        `);
+        await client.query(`
+          alter table public.gnr8_runtime_domain_host_bindings
+          add column if not exists dns_record_value text
+        `);
+        await client.query(`
+          alter table public.gnr8_runtime_domain_host_bindings
+          add column if not exists dns_record_purpose text
+        `);
+        await client.query(`
+          alter table public.gnr8_runtime_domain_host_bindings
+          add column if not exists dns_instructions_json jsonb
         `);
         await client.query(`
           do $$
@@ -230,6 +260,51 @@ export async function ensureRuntimeTables(): Promise<void> {
               alter table public.gnr8_runtime_domain_host_bindings
               add constraint gnr8_runtime_domain_host_bindings_verification_type_ck
               check (verification_type in ('cname', 'txt'));
+            end if;
+          end $$;
+        `);
+        await client.query(`
+          do $$
+          begin
+            if not exists (
+              select 1
+              from pg_constraint
+              where conrelid = 'public.gnr8_runtime_domain_host_bindings'::regclass
+                and conname = 'gnr8_runtime_domain_host_bindings_domain_type_ck'
+            ) then
+              alter table public.gnr8_runtime_domain_host_bindings
+              add constraint gnr8_runtime_domain_host_bindings_domain_type_ck
+              check (domain_type in ('apex_domain', 'subdomain', 'wildcard_domain', 'unknown'));
+            end if;
+          end $$;
+        `);
+        await client.query(`
+          do $$
+          begin
+            if not exists (
+              select 1
+              from pg_constraint
+              where conrelid = 'public.gnr8_runtime_domain_host_bindings'::regclass
+                and conname = 'gnr8_runtime_domain_host_bindings_dns_record_type_ck'
+            ) then
+              alter table public.gnr8_runtime_domain_host_bindings
+              add constraint gnr8_runtime_domain_host_bindings_dns_record_type_ck
+              check (dns_record_type in ('a', 'cname', 'txt'));
+            end if;
+          end $$;
+        `);
+        await client.query(`
+          do $$
+          begin
+            if not exists (
+              select 1
+              from pg_constraint
+              where conrelid = 'public.gnr8_runtime_domain_host_bindings'::regclass
+                and conname = 'gnr8_runtime_domain_host_bindings_dns_record_purpose_ck'
+            ) then
+              alter table public.gnr8_runtime_domain_host_bindings
+              add constraint gnr8_runtime_domain_host_bindings_dns_record_purpose_ck
+              check (dns_record_purpose in ('verification', 'routing'));
             end if;
           end $$;
         `);
@@ -394,6 +469,17 @@ export type RuntimeHostBinding = {
 
 export type RuntimeDomainHostBindingStatus = "pending" | "verifying" | "active" | "failed";
 export type RuntimeDomainVerificationType = "cname" | "txt";
+export type RuntimeDomainType = "apex_domain" | "subdomain" | "wildcard_domain" | "unknown";
+export type RuntimeDomainDnsRecordType = "a" | "cname" | "txt";
+export type RuntimeDomainDnsRecordPurpose = "verification" | "routing";
+
+export type RuntimeDomainDnsInstruction = {
+  type: RuntimeDomainDnsRecordType;
+  host: string;
+  value: string;
+  purpose: RuntimeDomainDnsRecordPurpose;
+  source: "vercel" | "inferred";
+};
 
 export type RuntimeDomainHostBinding = {
   id: string;
@@ -401,9 +487,15 @@ export type RuntimeDomainHostBinding = {
   siteVersionId: string;
   domain: string;
   status: RuntimeDomainHostBindingStatus;
+  domainType: RuntimeDomainType | null;
   verificationType: RuntimeDomainVerificationType | null;
   verificationValue: string | null;
   verificationHost: string | null;
+  dnsRecordType: RuntimeDomainDnsRecordType | null;
+  dnsRecordHost: string | null;
+  dnsRecordValue: string | null;
+  dnsRecordPurpose: RuntimeDomainDnsRecordPurpose | null;
+  dnsInstructions: RuntimeDomainDnsInstruction[] | null;
   lastCheckedAt: string | null;
   vercelDomainId: string | null;
   createdAt: string;
@@ -445,6 +537,32 @@ function normalizeRuntimeDomain(domain: string): string {
   const authority = withoutProtocol.split("/")[0] ?? "";
   const hostOnly = authority.split(":")[0] ?? "";
   return hostOnly.replace(/\.+$/, "").trim();
+}
+
+function parseRuntimeDomainDnsInstructions(value: unknown): RuntimeDomainDnsInstruction[] | null {
+  if (!Array.isArray(value)) return null;
+  const records: RuntimeDomainDnsInstruction[] = [];
+  for (const entry of value) {
+    if (!entry || typeof entry !== "object" || Array.isArray(entry)) continue;
+    const record = entry as Record<string, unknown>;
+    const typeRaw = String(record.type ?? "").trim().toLowerCase();
+    const host = String(record.host ?? "").trim();
+    const valueRaw = String(record.value ?? "").trim();
+    const purposeRaw = String(record.purpose ?? "").trim().toLowerCase();
+    const sourceRaw = String(record.source ?? "").trim().toLowerCase();
+    const type = typeRaw === "a" || typeRaw === "cname" || typeRaw === "txt" ? typeRaw : null;
+    const purpose = purposeRaw === "verification" || purposeRaw === "routing" ? purposeRaw : null;
+    const source = sourceRaw === "vercel" || sourceRaw === "inferred" ? sourceRaw : null;
+    if (!type || !purpose || !source || !host || !valueRaw) continue;
+    records.push({
+      type,
+      host,
+      value: valueRaw,
+      purpose,
+      source,
+    });
+  }
+  return records.length > 0 ? records : null;
 }
 
 function normalizeRawTemplateFilePath(filePath: string): string {
@@ -725,9 +843,15 @@ export async function upsertDomainHostBinding(input: {
   siteVersionId: string;
   domain: string;
   status: RuntimeDomainHostBindingStatus;
+  domainType?: RuntimeDomainType | null;
   verificationType?: RuntimeDomainVerificationType | null;
   verificationValue?: string | null;
   verificationHost?: string | null;
+  dnsRecordType?: RuntimeDomainDnsRecordType | null;
+  dnsRecordHost?: string | null;
+  dnsRecordValue?: string | null;
+  dnsRecordPurpose?: RuntimeDomainDnsRecordPurpose | null;
+  dnsInstructions?: RuntimeDomainDnsInstruction[] | null;
   lastCheckedAt?: string | null;
   vercelDomainId?: string | null;
 }): Promise<RuntimeDomainHostBinding> {
@@ -770,9 +894,15 @@ export async function upsertDomainHostBinding(input: {
       site_version_id: string;
       domain: string;
       status: RuntimeDomainHostBindingStatus;
+      domain_type: RuntimeDomainType | null;
       verification_type: RuntimeDomainVerificationType | null;
       verification_value: string | null;
       verification_host: string | null;
+      dns_record_type: RuntimeDomainDnsRecordType | null;
+      dns_record_host: string | null;
+      dns_record_value: string | null;
+      dns_record_purpose: RuntimeDomainDnsRecordPurpose | null;
+      dns_instructions_json: unknown;
       last_checked_at: string | null;
       vercel_domain_id: string | null;
       created_at: string;
@@ -784,20 +914,48 @@ export async function upsertDomainHostBinding(input: {
         site_version_id,
         domain,
         status,
+        domain_type,
         verification_type,
         verification_value,
         verification_host,
+        dns_record_type,
+        dns_record_host,
+        dns_record_value,
+        dns_record_purpose,
+        dns_instructions_json,
         last_checked_at,
         vercel_domain_id
       )
-      values ($1::text, $2::uuid, $3::text, $4::text, $5::text, $6::text, $7::text, $8::timestamptz, $9::text)
+      values (
+        $1::text,
+        $2::uuid,
+        $3::text,
+        $4::text,
+        $5::text,
+        $6::text,
+        $7::text,
+        $8::text,
+        $9::text,
+        $10::text,
+        $11::text,
+        $12::text,
+        $13::jsonb,
+        $14::timestamptz,
+        $15::text
+      )
       on conflict (site_id, domain)
       do update set
         site_version_id = excluded.site_version_id,
         status = excluded.status,
+        domain_type = excluded.domain_type,
         verification_type = excluded.verification_type,
         verification_value = excluded.verification_value,
         verification_host = excluded.verification_host,
+        dns_record_type = excluded.dns_record_type,
+        dns_record_host = excluded.dns_record_host,
+        dns_record_value = excluded.dns_record_value,
+        dns_record_purpose = excluded.dns_record_purpose,
+        dns_instructions_json = excluded.dns_instructions_json,
         last_checked_at = excluded.last_checked_at,
         vercel_domain_id = excluded.vercel_domain_id,
         updated_at = now()
@@ -807,9 +965,15 @@ export async function upsertDomainHostBinding(input: {
         site_version_id::text as site_version_id,
         domain::text as domain,
         status::text as status,
+        domain_type::text as domain_type,
         verification_type::text as verification_type,
         verification_value::text as verification_value,
         verification_host::text as verification_host,
+        dns_record_type::text as dns_record_type,
+        dns_record_host::text as dns_record_host,
+        dns_record_value::text as dns_record_value,
+        dns_record_purpose::text as dns_record_purpose,
+        dns_instructions_json as dns_instructions_json,
         last_checked_at::text as last_checked_at,
         vercel_domain_id::text as vercel_domain_id,
         created_at::text as created_at,
@@ -820,9 +984,15 @@ export async function upsertDomainHostBinding(input: {
         input.siteVersionId,
         normalizedDomain,
         input.status,
+        input.domainType ?? null,
         input.verificationType ?? null,
         input.verificationValue ?? null,
         input.verificationHost ?? null,
+        input.dnsRecordType ?? null,
+        input.dnsRecordHost ?? null,
+        input.dnsRecordValue ?? null,
+        input.dnsRecordPurpose ?? null,
+        input.dnsInstructions ? JSON.stringify(input.dnsInstructions) : null,
         input.lastCheckedAt ?? null,
         input.vercelDomainId ?? null,
       ],
@@ -836,9 +1006,15 @@ export async function upsertDomainHostBinding(input: {
       siteVersionId: row.site_version_id,
       domain: row.domain,
       status: row.status,
+      domainType: row.domain_type,
       verificationType: row.verification_type,
       verificationValue: row.verification_value,
       verificationHost: row.verification_host,
+      dnsRecordType: row.dns_record_type,
+      dnsRecordHost: row.dns_record_host,
+      dnsRecordValue: row.dns_record_value,
+      dnsRecordPurpose: row.dns_record_purpose,
+      dnsInstructions: parseRuntimeDomainDnsInstructions(row.dns_instructions_json),
       lastCheckedAt: row.last_checked_at,
       vercelDomainId: row.vercel_domain_id,
       createdAt: row.created_at,
@@ -851,9 +1027,15 @@ export async function updateDomainHostBindingById(input: {
   bindingId: string;
   siteVersionId?: string;
   status: RuntimeDomainHostBindingStatus;
+  domainType?: RuntimeDomainType | null;
   verificationType?: RuntimeDomainVerificationType | null;
   verificationValue?: string | null;
   verificationHost?: string | null;
+  dnsRecordType?: RuntimeDomainDnsRecordType | null;
+  dnsRecordHost?: string | null;
+  dnsRecordValue?: string | null;
+  dnsRecordPurpose?: RuntimeDomainDnsRecordPurpose | null;
+  dnsInstructions?: RuntimeDomainDnsInstruction[] | null;
   lastCheckedAt?: string | null;
   vercelDomainId?: string | null;
 }): Promise<RuntimeDomainHostBinding | null> {
@@ -864,9 +1046,15 @@ export async function updateDomainHostBindingById(input: {
       site_version_id: string;
       domain: string;
       status: RuntimeDomainHostBindingStatus;
+      domain_type: RuntimeDomainType | null;
       verification_type: RuntimeDomainVerificationType | null;
       verification_value: string | null;
       verification_host: string | null;
+      dns_record_type: RuntimeDomainDnsRecordType | null;
+      dns_record_host: string | null;
+      dns_record_value: string | null;
+      dns_record_purpose: RuntimeDomainDnsRecordPurpose | null;
+      dns_instructions_json: unknown;
       last_checked_at: string | null;
       vercel_domain_id: string | null;
       created_at: string;
@@ -877,11 +1065,17 @@ export async function updateDomainHostBindingById(input: {
       set
         status = $2::text,
         site_version_id = coalesce($3::uuid, site_version_id),
-        verification_type = coalesce($4::text, verification_type),
-        verification_value = coalesce($5::text, verification_value),
-        verification_host = coalesce($6::text, verification_host),
-        last_checked_at = coalesce($7::timestamptz, last_checked_at),
-        vercel_domain_id = coalesce($8::text, vercel_domain_id),
+        domain_type = coalesce($4::text, domain_type),
+        verification_type = coalesce($5::text, verification_type),
+        verification_value = coalesce($6::text, verification_value),
+        verification_host = coalesce($7::text, verification_host),
+        dns_record_type = coalesce($8::text, dns_record_type),
+        dns_record_host = coalesce($9::text, dns_record_host),
+        dns_record_value = coalesce($10::text, dns_record_value),
+        dns_record_purpose = coalesce($11::text, dns_record_purpose),
+        dns_instructions_json = coalesce($12::jsonb, dns_instructions_json),
+        last_checked_at = coalesce($13::timestamptz, last_checked_at),
+        vercel_domain_id = coalesce($14::text, vercel_domain_id),
         updated_at = now()
       where id = $1::uuid
       returning
@@ -890,9 +1084,15 @@ export async function updateDomainHostBindingById(input: {
         site_version_id::text as site_version_id,
         domain::text as domain,
         status::text as status,
+        domain_type::text as domain_type,
         verification_type::text as verification_type,
         verification_value::text as verification_value,
         verification_host::text as verification_host,
+        dns_record_type::text as dns_record_type,
+        dns_record_host::text as dns_record_host,
+        dns_record_value::text as dns_record_value,
+        dns_record_purpose::text as dns_record_purpose,
+        dns_instructions_json as dns_instructions_json,
         last_checked_at::text as last_checked_at,
         vercel_domain_id::text as vercel_domain_id,
         created_at::text as created_at,
@@ -902,9 +1102,15 @@ export async function updateDomainHostBindingById(input: {
         input.bindingId,
         input.status,
         input.siteVersionId ?? null,
+        input.domainType ?? null,
         input.verificationType ?? null,
         input.verificationValue ?? null,
         input.verificationHost ?? null,
+        input.dnsRecordType ?? null,
+        input.dnsRecordHost ?? null,
+        input.dnsRecordValue ?? null,
+        input.dnsRecordPurpose ?? null,
+        input.dnsInstructions ? JSON.stringify(input.dnsInstructions) : null,
         input.lastCheckedAt ?? null,
         input.vercelDomainId ?? null,
       ],
@@ -917,9 +1123,15 @@ export async function updateDomainHostBindingById(input: {
       siteVersionId: row.site_version_id,
       domain: row.domain,
       status: row.status,
+      domainType: row.domain_type,
       verificationType: row.verification_type,
       verificationValue: row.verification_value,
       verificationHost: row.verification_host,
+      dnsRecordType: row.dns_record_type,
+      dnsRecordHost: row.dns_record_host,
+      dnsRecordValue: row.dns_record_value,
+      dnsRecordPurpose: row.dns_record_purpose,
+      dnsInstructions: parseRuntimeDomainDnsInstructions(row.dns_instructions_json),
       lastCheckedAt: row.last_checked_at,
       vercelDomainId: row.vercel_domain_id,
       createdAt: row.created_at,
@@ -942,9 +1154,15 @@ export async function listDomainHostBindingsForSite(input: {
       site_version_id: string;
       domain: string;
       status: RuntimeDomainHostBindingStatus;
+      domain_type: RuntimeDomainType | null;
       verification_type: RuntimeDomainVerificationType | null;
       verification_value: string | null;
       verification_host: string | null;
+      dns_record_type: RuntimeDomainDnsRecordType | null;
+      dns_record_host: string | null;
+      dns_record_value: string | null;
+      dns_record_purpose: RuntimeDomainDnsRecordPurpose | null;
+      dns_instructions_json: unknown;
       last_checked_at: string | null;
       vercel_domain_id: string | null;
       created_at: string;
@@ -957,9 +1175,15 @@ export async function listDomainHostBindingsForSite(input: {
         site_version_id::text as site_version_id,
         domain::text as domain,
         status::text as status,
+        domain_type::text as domain_type,
         verification_type::text as verification_type,
         verification_value::text as verification_value,
         verification_host::text as verification_host,
+        dns_record_type::text as dns_record_type,
+        dns_record_host::text as dns_record_host,
+        dns_record_value::text as dns_record_value,
+        dns_record_purpose::text as dns_record_purpose,
+        dns_instructions_json as dns_instructions_json,
         last_checked_at::text as last_checked_at,
         vercel_domain_id::text as vercel_domain_id,
         created_at::text as created_at,
@@ -977,9 +1201,15 @@ export async function listDomainHostBindingsForSite(input: {
       siteVersionId: row.site_version_id,
       domain: row.domain,
       status: row.status,
+      domainType: row.domain_type,
       verificationType: row.verification_type,
       verificationValue: row.verification_value,
       verificationHost: row.verification_host,
+      dnsRecordType: row.dns_record_type,
+      dnsRecordHost: row.dns_record_host,
+      dnsRecordValue: row.dns_record_value,
+      dnsRecordPurpose: row.dns_record_purpose,
+      dnsInstructions: parseRuntimeDomainDnsInstructions(row.dns_instructions_json),
       lastCheckedAt: row.last_checked_at,
       vercelDomainId: row.vercel_domain_id,
       createdAt: row.created_at,
@@ -1005,9 +1235,15 @@ export async function listDomainHostBindingsForVerification(input?: {
       site_version_id: string;
       domain: string;
       status: RuntimeDomainHostBindingStatus;
+      domain_type: RuntimeDomainType | null;
       verification_type: RuntimeDomainVerificationType | null;
       verification_value: string | null;
       verification_host: string | null;
+      dns_record_type: RuntimeDomainDnsRecordType | null;
+      dns_record_host: string | null;
+      dns_record_value: string | null;
+      dns_record_purpose: RuntimeDomainDnsRecordPurpose | null;
+      dns_instructions_json: unknown;
       last_checked_at: string | null;
       vercel_domain_id: string | null;
       created_at: string;
@@ -1020,9 +1256,15 @@ export async function listDomainHostBindingsForVerification(input?: {
         site_version_id::text as site_version_id,
         domain::text as domain,
         status::text as status,
+        domain_type::text as domain_type,
         verification_type::text as verification_type,
         verification_value::text as verification_value,
         verification_host::text as verification_host,
+        dns_record_type::text as dns_record_type,
+        dns_record_host::text as dns_record_host,
+        dns_record_value::text as dns_record_value,
+        dns_record_purpose::text as dns_record_purpose,
+        dns_instructions_json as dns_instructions_json,
         last_checked_at::text as last_checked_at,
         vercel_domain_id::text as vercel_domain_id,
         created_at::text as created_at,
@@ -1040,9 +1282,15 @@ export async function listDomainHostBindingsForVerification(input?: {
       siteVersionId: row.site_version_id,
       domain: row.domain,
       status: row.status,
+      domainType: row.domain_type,
       verificationType: row.verification_type,
       verificationValue: row.verification_value,
       verificationHost: row.verification_host,
+      dnsRecordType: row.dns_record_type,
+      dnsRecordHost: row.dns_record_host,
+      dnsRecordValue: row.dns_record_value,
+      dnsRecordPurpose: row.dns_record_purpose,
+      dnsInstructions: parseRuntimeDomainDnsInstructions(row.dns_instructions_json),
       lastCheckedAt: row.last_checked_at,
       vercelDomainId: row.vercel_domain_id,
       createdAt: row.created_at,
