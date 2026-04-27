@@ -3,7 +3,67 @@ import { NextResponse } from "next/server";
 import { parseAgencyActionContextError, requireAgencyActionContext } from "@/app/api/gnr8/agency/_lib/agency-action-access";
 import { resolveAgencyIdForSiteVersion } from "@/app/api/gnr8/runtime/_lib/runtime-agency-scope";
 import { publishApprovedSiteVersion } from "@/gnr8/runtime/publish-activation-orchestrator";
-import { activateDomainHostBindingsForSiteVersion } from "@/gnr8/runtime/runtime-store";
+import {
+  activateDomainHostBindingsForSiteVersion,
+  countNonActiveDomainHostBindingsForSite,
+  listDomainHostBindingsForSite,
+  updateDomainHostBindingById,
+} from "@/gnr8/runtime/runtime-store";
+import { checkDomainStatus } from "@/src/lib/vercel/vercel-domain-client";
+
+function logDomainEvent(event: string, details: Record<string, unknown>): void {
+  console.info(`[gnr8.domain] ${event}`, details);
+}
+
+async function reconcileDomainVerificationOnPublish(input: { siteId: string; siteVersionId: string }): Promise<void> {
+  const vercelConfigured =
+    String(process.env.VERCEL_API_TOKEN ?? "").trim().length > 0 &&
+    String(process.env.VERCEL_PROJECT_ID_PLATFORM ?? "").trim().length > 0;
+  if (!vercelConfigured) return;
+
+  const bindings = await listDomainHostBindingsForSite({
+    siteId: input.siteId,
+    statuses: ["pending", "verifying"],
+  });
+  for (const binding of bindings) {
+    try {
+      const vercelStatus = await checkDomainStatus(binding.domain);
+      const nextStatus = vercelStatus.status;
+      await updateDomainHostBindingById({
+        bindingId: binding.id,
+        siteVersionId: nextStatus === "active" ? input.siteVersionId : undefined,
+        status: nextStatus,
+        verificationType: vercelStatus.verification?.type ?? binding.verificationType,
+        verificationValue: vercelStatus.verification?.value ?? binding.verificationValue,
+        verificationHost: vercelStatus.verification?.host ?? binding.verificationHost,
+        vercelDomainId: vercelStatus.domainId ?? binding.vercelDomainId,
+        lastCheckedAt: vercelStatus.lastCheckedAt,
+      });
+      if (nextStatus === "active") {
+        logDomainEvent("VERCEL_DOMAIN_VERIFIED", { domain: binding.domain, siteId: input.siteId, bindingId: binding.id });
+      } else {
+        logDomainEvent("VERCEL_DOMAIN_VERIFICATION_REQUIRED", {
+          domain: binding.domain,
+          siteId: input.siteId,
+          bindingId: binding.id,
+          verificationType: vercelStatus.verification?.type ?? null,
+        });
+      }
+    } catch (error) {
+      await updateDomainHostBindingById({
+        bindingId: binding.id,
+        status: binding.status === "pending" ? "pending" : "verifying",
+        lastCheckedAt: new Date().toISOString(),
+      });
+      logDomainEvent("VERCEL_DOMAIN_FAILED", {
+        domain: binding.domain,
+        siteId: input.siteId,
+        bindingId: binding.id,
+        error: error instanceof Error ? error.message : "domain_status_check_failed",
+      });
+    }
+  }
+}
 
 export async function POST(req: Request, ctx: { params: Promise<{ siteVersionId: string }> }) {
   try {
@@ -21,15 +81,24 @@ export async function POST(req: Request, ctx: { params: Promise<{ siteVersionId:
     const stage = body.stage === "shadow" || body.stage === "canary" || body.stage === "production" ? body.stage : undefined;
 
     const result = await publishApprovedSiteVersion({ siteVersionId, actor, stage });
+    await reconcileDomainVerificationOnPublish({
+      siteId: result.siteId,
+      siteVersionId: result.siteVersionId,
+    });
     const activatedDomainBindings = await activateDomainHostBindingsForSiteVersion({
       siteId: result.siteId,
       siteVersionId: result.siteVersionId,
     });
+    const nonActiveDomainBindings = await countNonActiveDomainHostBindingsForSite(result.siteId);
 
     return NextResponse.json({
       ok: true,
       actor_mode: actionContext.actorMode,
       activated_domain_bindings: activatedDomainBindings,
+      domain_warning:
+        nonActiveDomainBindings > 0
+          ? `Publish completed. ${nonActiveDomainBindings} domain binding(s) still pending verification and will activate automatically after DNS verification.`
+          : null,
       ...result,
     });
   } catch (error) {

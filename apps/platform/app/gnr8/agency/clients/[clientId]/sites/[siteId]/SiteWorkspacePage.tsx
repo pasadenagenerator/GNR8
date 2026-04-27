@@ -489,6 +489,7 @@ function renderSettingsContent(input: {
         siteId={input.siteId}
         siteVersionId={readModel.pipeline.latestRuntimeSiteVersionId}
         initialDomain={readModel.settings.domain}
+        initialDomainBinding={readModel.settings.domainBinding}
         canPublish={input.canPublish}
       />
       <SiteDeletePanel

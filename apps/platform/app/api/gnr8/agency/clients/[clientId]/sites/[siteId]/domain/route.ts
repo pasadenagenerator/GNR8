@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import { parseAgencyActionContextError, requireAgencyActionContext } from "@/app/api/gnr8/agency/_lib/agency-action-access";
 import { upsertDomainHostBinding } from "@/gnr8/runtime/runtime-store";
+import { checkDomainStatus, addDomainToVercel } from "@/src/lib/vercel/vercel-domain-client";
 import { getSuperadminPool } from "@/src/superadmin/db";
 
 export const runtime = "nodejs";
@@ -29,6 +30,23 @@ function normalizeDomain(value: unknown): string | null {
   const domain = (authority.split(":")[0] ?? "").replace(/\.+$/, "").trim();
   if (!domain || !DOMAIN_RE.test(domain)) return null;
   return domain;
+}
+
+function logDomainEvent(event: string, details: Record<string, unknown>): void {
+  console.info(`[gnr8.domain] ${event}`, details);
+}
+
+function toPublicErrorMessage(raw: string): string {
+  const prefixes = ["VERCEL_DOMAIN_ADD_FAILED:", "VERCEL_DOMAIN_STATUS_FAILED:"];
+  const prefix = prefixes.find((candidate) => raw.startsWith(candidate));
+  if (!prefix) return raw;
+  try {
+    const payload = JSON.parse(raw.slice(prefix.length)) as { message?: string };
+    const message = normalizeText(payload.message);
+    return message || "Vercel domain automation failed.";
+  } catch {
+    return "Vercel domain automation failed.";
+  }
 }
 
 type ConnectDomainBody = {
@@ -111,8 +129,45 @@ export async function POST(
           { status: 409 },
         );
       }
+    } finally {
+      client.release();
+    }
 
-      await client.query(
+    if (!runtimeSiteId) {
+      return NextResponse.json({ ok: false, error: "Runtime site is not available." }, { status: 409 });
+    }
+
+    logDomainEvent("VERCEL_DOMAIN_ADD_REQUESTED", {
+      agencyId: actionContext.agencyId,
+      clientId,
+      siteId,
+      siteVersionId,
+      runtimeSiteId,
+      domain,
+    });
+
+    try {
+      const addResult = await addDomainToVercel(domain);
+      if (addResult.outcome === "already_exists") {
+        logDomainEvent("VERCEL_DOMAIN_ALREADY_EXISTS", { domain, runtimeSiteId, siteVersionId });
+      } else {
+        logDomainEvent("VERCEL_DOMAIN_ADDED", { domain, runtimeSiteId, siteVersionId, vercelDomainId: addResult.domainId });
+      }
+
+      const vercelStatus = await checkDomainStatus(domain);
+      const binding = await upsertDomainHostBinding({
+        siteId: runtimeSiteId,
+        siteVersionId,
+        domain,
+        status: vercelStatus.status,
+        verificationType: vercelStatus.verification?.type ?? null,
+        verificationValue: vercelStatus.verification?.value ?? null,
+        verificationHost: vercelStatus.verification?.host ?? null,
+        vercelDomainId: vercelStatus.domainId ?? addResult.domainId,
+        lastCheckedAt: vercelStatus.lastCheckedAt,
+      });
+
+      await pool.query(
         `
         update public.sites
         set domain = $2::text, updated_at = now()
@@ -120,27 +175,72 @@ export async function POST(
         `,
         [siteId, domain],
       );
-    } finally {
-      client.release();
+
+      if (binding.status === "active") {
+        logDomainEvent("VERCEL_DOMAIN_VERIFIED", { domain, runtimeSiteId, siteVersionId, bindingId: binding.id });
+      } else {
+        logDomainEvent("VERCEL_DOMAIN_VERIFICATION_REQUIRED", {
+          domain,
+          runtimeSiteId,
+          siteVersionId,
+          bindingId: binding.id,
+          verificationType: binding.verificationType,
+          verificationHost: binding.verificationHost,
+        });
+      }
+
+      return NextResponse.json({
+        ok: true,
+        domain: binding.domain,
+        binding,
+        dnsInstruction:
+          binding.status !== "active" && binding.verificationType && binding.verificationValue && binding.verificationHost
+            ? {
+                type: binding.verificationType,
+                host: binding.verificationHost,
+                value: binding.verificationValue,
+              }
+            : null,
+      });
+    } catch (error) {
+      const rawMessage = error instanceof Error ? error.message : "Domain connection failed";
+      const isDomainConflict = rawMessage.includes("DOMAIN_ALREADY_BOUND_TO_ANOTHER_SITE");
+      const message = isDomainConflict ? "Domain is already connected to another site." : toPublicErrorMessage(rawMessage);
+      const failedBinding = await upsertDomainHostBinding({
+        siteId: runtimeSiteId,
+        siteVersionId,
+        domain,
+        status: "failed",
+        lastCheckedAt: new Date().toISOString(),
+      }).catch(() => null);
+      if (!isDomainConflict) {
+        await pool.query(
+          `
+          update public.sites
+          set domain = $2::text, updated_at = now()
+          where id = $1::uuid
+          `,
+          [siteId, domain],
+        ).catch(() => null);
+      }
+
+      logDomainEvent("VERCEL_DOMAIN_FAILED", {
+        domain,
+        runtimeSiteId,
+        siteVersionId,
+        error: rawMessage,
+        bindingId: failedBinding?.id ?? null,
+      });
+
+      return NextResponse.json(
+        {
+          ok: false,
+          error: message,
+          binding: failedBinding,
+        },
+        { status: isDomainConflict ? 409 : 502 },
+      );
     }
-
-    const binding = await upsertDomainHostBinding({
-      siteId: runtimeSiteId,
-      siteVersionId,
-      domain,
-      status: "pending",
-    });
-
-    return NextResponse.json({
-      ok: true,
-      domain: binding.domain,
-      binding,
-      vercelSetupRequired: true,
-      vercelSetupChecklist: [
-        "Add this domain to your Vercel project settings.",
-        "Point your DNS records to Vercel.",
-      ],
-    });
   } catch (error) {
     const mapped = parseAgencyActionContextError(error);
     return NextResponse.json({ ok: false, error: mapped.message }, { status: mapped.status });

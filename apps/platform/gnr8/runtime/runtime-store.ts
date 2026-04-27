@@ -155,11 +155,83 @@ export async function ensureRuntimeTables(): Promise<void> {
             site_id text not null references public.gnr8_runtime_sites(id) on delete cascade,
             site_version_id uuid not null references public.gnr8_runtime_site_versions(id) on delete cascade,
             domain text not null,
-            status text not null default 'pending' check (status in ('pending', 'active')),
+            status text not null default 'pending' check (status in ('pending', 'verifying', 'active', 'failed')),
+            verification_type text check (verification_type in ('cname', 'txt')),
+            verification_value text,
+            verification_host text,
+            last_checked_at timestamptz,
+            vercel_domain_id text,
             created_at timestamptz not null default now(),
             updated_at timestamptz not null default now(),
             unique (site_id, domain)
           )
+        `);
+
+        await client.query(`
+          alter table public.gnr8_runtime_domain_host_bindings
+          add column if not exists verification_type text
+        `);
+        await client.query(`
+          alter table public.gnr8_runtime_domain_host_bindings
+          add column if not exists verification_value text
+        `);
+        await client.query(`
+          alter table public.gnr8_runtime_domain_host_bindings
+          add column if not exists verification_host text
+        `);
+        await client.query(`
+          alter table public.gnr8_runtime_domain_host_bindings
+          add column if not exists last_checked_at timestamptz
+        `);
+        await client.query(`
+          alter table public.gnr8_runtime_domain_host_bindings
+          add column if not exists vercel_domain_id text
+        `);
+        await client.query(`
+          do $$
+          declare
+            r record;
+          begin
+            for r in
+              select c.conname
+              from pg_constraint c
+              where c.conrelid = 'public.gnr8_runtime_domain_host_bindings'::regclass
+                and c.contype = 'c'
+                and pg_get_constraintdef(c.oid) ilike '%status in (''pending'', ''active'')%'
+            loop
+              execute format('alter table public.gnr8_runtime_domain_host_bindings drop constraint %I', r.conname);
+            end loop;
+          end $$;
+        `);
+        await client.query(`
+          do $$
+          begin
+            if not exists (
+              select 1
+              from pg_constraint
+              where conrelid = 'public.gnr8_runtime_domain_host_bindings'::regclass
+                and conname = 'gnr8_runtime_domain_host_bindings_status_ck'
+            ) then
+              alter table public.gnr8_runtime_domain_host_bindings
+              add constraint gnr8_runtime_domain_host_bindings_status_ck
+              check (status in ('pending', 'verifying', 'active', 'failed'));
+            end if;
+          end $$;
+        `);
+        await client.query(`
+          do $$
+          begin
+            if not exists (
+              select 1
+              from pg_constraint
+              where conrelid = 'public.gnr8_runtime_domain_host_bindings'::regclass
+                and conname = 'gnr8_runtime_domain_host_bindings_verification_type_ck'
+            ) then
+              alter table public.gnr8_runtime_domain_host_bindings
+              add constraint gnr8_runtime_domain_host_bindings_verification_type_ck
+              check (verification_type in ('cname', 'txt'));
+            end if;
+          end $$;
         `);
 
         await client.query(`
@@ -320,7 +392,8 @@ export type RuntimeHostBinding = {
   updatedAt: string;
 };
 
-export type RuntimeDomainHostBindingStatus = "pending" | "active";
+export type RuntimeDomainHostBindingStatus = "pending" | "verifying" | "active" | "failed";
+export type RuntimeDomainVerificationType = "cname" | "txt";
 
 export type RuntimeDomainHostBinding = {
   id: string;
@@ -328,6 +401,11 @@ export type RuntimeDomainHostBinding = {
   siteVersionId: string;
   domain: string;
   status: RuntimeDomainHostBindingStatus;
+  verificationType: RuntimeDomainVerificationType | null;
+  verificationValue: string | null;
+  verificationHost: string | null;
+  lastCheckedAt: string | null;
+  vercelDomainId: string | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -647,6 +725,11 @@ export async function upsertDomainHostBinding(input: {
   siteVersionId: string;
   domain: string;
   status: RuntimeDomainHostBindingStatus;
+  verificationType?: RuntimeDomainVerificationType | null;
+  verificationValue?: string | null;
+  verificationHost?: string | null;
+  lastCheckedAt?: string | null;
+  vercelDomainId?: string | null;
 }): Promise<RuntimeDomainHostBinding> {
   return withTx(async (client) => {
     const normalizedDomain = normalizeRuntimeDomain(input.domain);
@@ -667,15 +750,18 @@ export async function upsertDomainHostBinding(input: {
       throw new Error("Runtime site version does not belong to runtime site");
     }
 
-    if (input.status === "active") {
-      await client.query(
-        `
-        update public.gnr8_runtime_domain_host_bindings
-        set status = 'pending', updated_at = now()
-        where lower(domain) = $1::text and status = 'active' and site_id <> $2::text
-        `,
-        [normalizedDomain, input.siteId],
-      );
+    const conflictingDomain = await client.query<{ site_id: string }>(
+      `
+      select site_id::text as site_id
+      from public.gnr8_runtime_domain_host_bindings
+      where lower(domain) = $1::text
+        and site_id <> $2::text
+      limit 1
+      `,
+      [normalizedDomain, input.siteId],
+    );
+    if (conflictingDomain.rows[0]) {
+      throw new Error("DOMAIN_ALREADY_BOUND_TO_ANOTHER_SITE");
     }
 
     const result = await client.query<{
@@ -684,16 +770,36 @@ export async function upsertDomainHostBinding(input: {
       site_version_id: string;
       domain: string;
       status: RuntimeDomainHostBindingStatus;
+      verification_type: RuntimeDomainVerificationType | null;
+      verification_value: string | null;
+      verification_host: string | null;
+      last_checked_at: string | null;
+      vercel_domain_id: string | null;
       created_at: string;
       updated_at: string;
     }>(
       `
-      insert into public.gnr8_runtime_domain_host_bindings (site_id, site_version_id, domain, status)
-      values ($1::text, $2::uuid, $3::text, $4::text)
+      insert into public.gnr8_runtime_domain_host_bindings (
+        site_id,
+        site_version_id,
+        domain,
+        status,
+        verification_type,
+        verification_value,
+        verification_host,
+        last_checked_at,
+        vercel_domain_id
+      )
+      values ($1::text, $2::uuid, $3::text, $4::text, $5::text, $6::text, $7::text, $8::timestamptz, $9::text)
       on conflict (site_id, domain)
       do update set
         site_version_id = excluded.site_version_id,
         status = excluded.status,
+        verification_type = excluded.verification_type,
+        verification_value = excluded.verification_value,
+        verification_host = excluded.verification_host,
+        last_checked_at = excluded.last_checked_at,
+        vercel_domain_id = excluded.vercel_domain_id,
         updated_at = now()
       returning
         id::text as id,
@@ -701,10 +807,25 @@ export async function upsertDomainHostBinding(input: {
         site_version_id::text as site_version_id,
         domain::text as domain,
         status::text as status,
+        verification_type::text as verification_type,
+        verification_value::text as verification_value,
+        verification_host::text as verification_host,
+        last_checked_at::text as last_checked_at,
+        vercel_domain_id::text as vercel_domain_id,
         created_at::text as created_at,
         updated_at::text as updated_at
       `,
-      [input.siteId, input.siteVersionId, normalizedDomain, input.status],
+      [
+        input.siteId,
+        input.siteVersionId,
+        normalizedDomain,
+        input.status,
+        input.verificationType ?? null,
+        input.verificationValue ?? null,
+        input.verificationHost ?? null,
+        input.lastCheckedAt ?? null,
+        input.vercelDomainId ?? null,
+      ],
     );
 
     const row = result.rows[0];
@@ -715,10 +836,177 @@ export async function upsertDomainHostBinding(input: {
       siteVersionId: row.site_version_id,
       domain: row.domain,
       status: row.status,
+      verificationType: row.verification_type,
+      verificationValue: row.verification_value,
+      verificationHost: row.verification_host,
+      lastCheckedAt: row.last_checked_at,
+      vercelDomainId: row.vercel_domain_id,
       createdAt: row.created_at,
       updatedAt: row.updated_at,
     };
   });
+}
+
+export async function updateDomainHostBindingById(input: {
+  bindingId: string;
+  siteVersionId?: string;
+  status: RuntimeDomainHostBindingStatus;
+  verificationType?: RuntimeDomainVerificationType | null;
+  verificationValue?: string | null;
+  verificationHost?: string | null;
+  lastCheckedAt?: string | null;
+  vercelDomainId?: string | null;
+}): Promise<RuntimeDomainHostBinding | null> {
+  return withTx(async (client) => {
+    const result = await client.query<{
+      id: string;
+      site_id: string;
+      site_version_id: string;
+      domain: string;
+      status: RuntimeDomainHostBindingStatus;
+      verification_type: RuntimeDomainVerificationType | null;
+      verification_value: string | null;
+      verification_host: string | null;
+      last_checked_at: string | null;
+      vercel_domain_id: string | null;
+      created_at: string;
+      updated_at: string;
+    }>(
+      `
+      update public.gnr8_runtime_domain_host_bindings
+      set
+        status = $2::text,
+        site_version_id = coalesce($3::uuid, site_version_id),
+        verification_type = coalesce($4::text, verification_type),
+        verification_value = coalesce($5::text, verification_value),
+        verification_host = coalesce($6::text, verification_host),
+        last_checked_at = coalesce($7::timestamptz, last_checked_at),
+        vercel_domain_id = coalesce($8::text, vercel_domain_id),
+        updated_at = now()
+      where id = $1::uuid
+      returning
+        id::text as id,
+        site_id::text as site_id,
+        site_version_id::text as site_version_id,
+        domain::text as domain,
+        status::text as status,
+        verification_type::text as verification_type,
+        verification_value::text as verification_value,
+        verification_host::text as verification_host,
+        last_checked_at::text as last_checked_at,
+        vercel_domain_id::text as vercel_domain_id,
+        created_at::text as created_at,
+        updated_at::text as updated_at
+      `,
+      [
+        input.bindingId,
+        input.status,
+        input.siteVersionId ?? null,
+        input.verificationType ?? null,
+        input.verificationValue ?? null,
+        input.verificationHost ?? null,
+        input.lastCheckedAt ?? null,
+        input.vercelDomainId ?? null,
+      ],
+    );
+    const row = result.rows[0];
+    if (!row) return null;
+    return {
+      id: row.id,
+      siteId: row.site_id,
+      siteVersionId: row.site_version_id,
+      domain: row.domain,
+      status: row.status,
+      verificationType: row.verification_type,
+      verificationValue: row.verification_value,
+      verificationHost: row.verification_host,
+      lastCheckedAt: row.last_checked_at,
+      vercelDomainId: row.vercel_domain_id,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+    };
+  });
+}
+
+export async function listDomainHostBindingsForSite(input: {
+  siteId: string;
+  statuses?: RuntimeDomainHostBindingStatus[];
+}): Promise<RuntimeDomainHostBinding[]> {
+  await ensureRuntimeTables();
+  const client = await getSuperadminPool().connect();
+  try {
+    const normalizedStatuses = (input.statuses ?? []).filter(Boolean);
+    const result = await client.query<{
+      id: string;
+      site_id: string;
+      site_version_id: string;
+      domain: string;
+      status: RuntimeDomainHostBindingStatus;
+      verification_type: RuntimeDomainVerificationType | null;
+      verification_value: string | null;
+      verification_host: string | null;
+      last_checked_at: string | null;
+      vercel_domain_id: string | null;
+      created_at: string;
+      updated_at: string;
+    }>(
+      `
+      select
+        id::text as id,
+        site_id::text as site_id,
+        site_version_id::text as site_version_id,
+        domain::text as domain,
+        status::text as status,
+        verification_type::text as verification_type,
+        verification_value::text as verification_value,
+        verification_host::text as verification_host,
+        last_checked_at::text as last_checked_at,
+        vercel_domain_id::text as vercel_domain_id,
+        created_at::text as created_at,
+        updated_at::text as updated_at
+      from public.gnr8_runtime_domain_host_bindings
+      where site_id = $1::text
+        and ($2::text[] is null or status = any($2::text[]))
+      order by updated_at desc, created_at desc
+      `,
+      [input.siteId, normalizedStatuses.length > 0 ? normalizedStatuses : null],
+    );
+    return result.rows.map((row) => ({
+      id: row.id,
+      siteId: row.site_id,
+      siteVersionId: row.site_version_id,
+      domain: row.domain,
+      status: row.status,
+      verificationType: row.verification_type,
+      verificationValue: row.verification_value,
+      verificationHost: row.verification_host,
+      lastCheckedAt: row.last_checked_at,
+      vercelDomainId: row.vercel_domain_id,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+    }));
+  } finally {
+    client.release();
+  }
+}
+
+export async function countNonActiveDomainHostBindingsForSite(siteId: string): Promise<number> {
+  await ensureRuntimeTables();
+  const client = await getSuperadminPool().connect();
+  try {
+    const result = await client.query<{ count: string }>(
+      `
+      select count(*)::text as count
+      from public.gnr8_runtime_domain_host_bindings
+      where site_id = $1::text
+        and status <> 'active'
+      `,
+      [siteId],
+    );
+    return Number(result.rows[0]?.count ?? "0");
+  } finally {
+    client.release();
+  }
 }
 
 export async function activateDomainHostBindingsForSiteVersion(input: {
@@ -730,7 +1018,7 @@ export async function activateDomainHostBindingsForSiteVersion(input: {
       `
       update public.gnr8_runtime_domain_host_bindings
       set site_version_id = $2::uuid, status = 'active', updated_at = now()
-      where site_id = $1::text
+      where site_id = $1::text and status = 'active'
       `,
       [input.siteId, input.siteVersionId],
     );

@@ -48,6 +48,19 @@ type RuntimeArtifactRow = {
   manifest: unknown
 }
 
+type RuntimeDomainHostBindingRow = {
+  id: string | null
+  site_id: string | null
+  site_version_id: string | null
+  domain: string | null
+  status: string | null
+  verification_type: string | null
+  verification_value: string | null
+  verification_host: string | null
+  last_checked_at: string | null
+  updated_at: string | null
+}
+
 type SiteActionRow = {
   id: string | null
   site_id: string | null
@@ -278,6 +291,15 @@ export type SiteWorkspaceReadModel = {
   settings: {
     name: string
     domain: string | null
+    domainBinding: {
+      id: string
+      domain: string
+      status: 'pending' | 'verifying' | 'active' | 'failed'
+      verificationType: 'cname' | 'txt' | null
+      verificationValue: string | null
+      verificationHost: string | null
+      lastCheckedAt: string | null
+    } | null
   }
   siteOptions: Array<{ siteId: string; label: string }>
 }
@@ -1993,6 +2015,34 @@ export async function getSiteWorkspaceReadModelForPage(input: {
       ? null
       : normalizedVariants.find((variant) => variant.id === selectedResolution.selectedVariant?.id) ?? null
   const selectedRuntimeRow = runtimeRows.find((row) => toTextOrNull(row.id) === selectedRuntimeSiteVersionId) ?? null
+  const selectedRuntimeSiteId = toTextOrNull(selectedRuntimeRow?.site_id) ?? toTextOrNull(latestRuntimeRow?.site_id)
+  let domainBinding: SiteWorkspaceReadModel['settings']['domainBinding'] = null
+  if (selectedRuntimeSiteId && site.domain) {
+    const domainBindingResult = await supabase
+      .from('gnr8_runtime_domain_host_bindings')
+      .select('id,site_id,site_version_id,domain,status,verification_type,verification_value,verification_host,last_checked_at,updated_at')
+      .eq('site_id', selectedRuntimeSiteId)
+      .eq('domain', site.domain)
+      .order('updated_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+    if (!domainBindingResult.error && domainBindingResult.data) {
+      const row = domainBindingResult.data as RuntimeDomainHostBindingRow
+      const status = toTextOrNull(row.status)
+      const verificationType = toTextOrNull(row.verification_type)
+      if (row.id && row.domain && (status === 'pending' || status === 'verifying' || status === 'active' || status === 'failed')) {
+        domainBinding = {
+          id: row.id,
+          domain: row.domain,
+          status,
+          verificationType: verificationType === 'cname' || verificationType === 'txt' ? verificationType : null,
+          verificationValue: toTextOrNull(row.verification_value),
+          verificationHost: toTextOrNull(row.verification_host),
+          lastCheckedAt: toIsoOrNull(row.last_checked_at),
+        }
+      }
+    }
+  }
   const selectedRenderJobFallback = selectedRuntimeSiteVersionId
     ? (
         renderJobs.find(
@@ -2276,6 +2326,7 @@ export async function getSiteWorkspaceReadModelForPage(input: {
     settings: {
       name: site.label || `Site ${shortId(site.id)}`,
       domain: site.domain,
+      domainBinding,
     },
     siteOptions,
   }

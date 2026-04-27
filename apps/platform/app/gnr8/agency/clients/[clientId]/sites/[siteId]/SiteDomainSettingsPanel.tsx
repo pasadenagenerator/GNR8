@@ -2,12 +2,26 @@
 
 import { useMemo, useState } from "react";
 
+type DomainBindingStatus = "pending" | "verifying" | "active" | "failed";
+type DomainVerificationType = "cname" | "txt";
+
+type DomainBinding = {
+  id: string;
+  domain: string;
+  status: DomainBindingStatus;
+  verificationType: DomainVerificationType | null;
+  verificationValue: string | null;
+  verificationHost: string | null;
+  lastCheckedAt: string | null;
+};
+
 type Props = {
   agencyId: string;
   clientId: string;
   siteId: string;
   siteVersionId: string | null;
   initialDomain: string | null;
+  initialDomainBinding: DomainBinding | null;
   canPublish: boolean;
 };
 
@@ -26,10 +40,19 @@ function noticeStyle(tone: Notice["tone"]): Record<string, string> {
   return { color: "#334155" };
 }
 
+function renderVerificationInstruction(binding: DomainBinding): string | null {
+  if (!binding.verificationType || !binding.verificationValue || !binding.verificationHost) return null;
+  if (binding.verificationType === "cname") {
+    return `Add CNAME: ${binding.verificationHost} -> ${binding.verificationValue}`;
+  }
+  return `Add TXT: ${binding.verificationHost} -> ${binding.verificationValue}`;
+}
+
 export default function SiteDomainSettingsPanel(props: Props) {
   const [domain, setDomain] = useState(props.initialDomain ?? "");
   const [busyMode, setBusyMode] = useState<"connect" | "publish" | null>(null);
   const [notice, setNotice] = useState<Notice | null>(null);
+  const [domainBinding, setDomainBinding] = useState<DomainBinding | null>(props.initialDomainBinding);
   const resolvedSiteVersionId = useMemo(() => (props.siteVersionId ?? "").trim() || null, [props.siteVersionId]);
   const canConnectDomain = props.canPublish && resolvedSiteVersionId != null && normalizeDomainInput(domain).length > 0;
 
@@ -50,14 +73,25 @@ export default function SiteDomainSettingsPanel(props: Props) {
           }),
         },
       );
-      const payload = (await response.json().catch(() => ({}))) as { ok?: boolean; error?: string; domain?: string };
+      const payload = (await response.json().catch(() => ({}))) as {
+        ok?: boolean;
+        error?: string;
+        domain?: string;
+        binding?: DomainBinding;
+      };
       if (!response.ok || payload.ok !== true) {
         throw new Error(payload.error || "Failed to connect domain.");
       }
-      setDomain(payload.domain ?? normalizeDomainInput(domain));
+      const nextDomain = payload.domain ?? normalizeDomainInput(domain);
+      setDomain(nextDomain);
+      setDomainBinding(payload.binding ?? null);
+      const instruction = payload.binding ? renderVerificationInstruction(payload.binding) : null;
       setNotice({
         tone: "success",
-        text: "Domain connected in pending mode. Add it in Vercel and configure DNS, then publish.",
+        text:
+          payload.binding?.status === "active"
+            ? "Domain connected and verified."
+            : instruction ?? "Domain connected. DNS verification is in progress.",
       });
     } catch (error) {
       setNotice({
@@ -85,13 +119,16 @@ export default function SiteDomainSettingsPanel(props: Props) {
         ok?: boolean;
         error?: string;
         activated_domain_bindings?: number;
+        domain_warning?: string | null;
       };
       if (!response.ok || payload.ok !== true) {
         throw new Error(payload.error || "Failed to publish runtime version.");
       }
       setNotice({
-        tone: "success",
-        text: `Published. Active domain bindings updated: ${Math.max(0, Number(payload.activated_domain_bindings ?? 0))}.`,
+        tone: payload.domain_warning ? "neutral" : "success",
+        text:
+          payload.domain_warning ??
+          `Published. Active domain bindings updated: ${Math.max(0, Number(payload.activated_domain_bindings ?? 0))}.`,
       });
     } catch (error) {
       setNotice({
@@ -102,6 +139,8 @@ export default function SiteDomainSettingsPanel(props: Props) {
       setBusyMode(null);
     }
   }
+
+  const verificationInstruction = domainBinding ? renderVerificationInstruction(domainBinding) : null;
 
   return (
     <div style={{ marginTop: 14, display: "grid", gap: 10 }}>
@@ -162,9 +201,21 @@ export default function SiteDomainSettingsPanel(props: Props) {
           {busyMode === "publish" ? "Publishing..." : "Publish"}
         </button>
       </div>
-      <p style={{ margin: 0, color: "#475569", fontSize: 12 }}>
-        Manual step: add this domain to your Vercel project and point DNS to Vercel.
-      </p>
+
+      {domainBinding?.status === "verifying" || domainBinding?.status === "pending" ? (
+        <p style={{ margin: 0, color: "#475569", fontSize: 12 }}>
+          {verificationInstruction ?? "Verification pending. Add the DNS record and wait for Vercel to verify."}
+        </p>
+      ) : null}
+      {domainBinding?.status === "active" ? (
+        <p style={{ margin: 0, color: "#14532d", fontSize: 12 }}>Domain connected.</p>
+      ) : null}
+      {domainBinding?.status === "failed" ? (
+        <p style={{ margin: 0, color: "#7f1d1d", fontSize: 12 }}>
+          Domain verification failed. Reconnect the domain and re-check DNS records.
+        </p>
+      ) : null}
+
       {notice ? (
         <p style={{ margin: 0, fontSize: 12, ...noticeStyle(notice.tone) }}>
           {notice.text}
