@@ -1,4 +1,4 @@
-const VERCEL_API_BASE_URL = "https://api.vercel.com";
+import { buildVercelUrl, getVercelConfig, vercelFetch } from "@/src/lib/vercel/vercel-api";
 
 export type VercelDomainVerificationType = "cname" | "txt";
 
@@ -22,12 +22,6 @@ export type VercelDomainStatus = {
   lastCheckedAt: string;
 };
 
-type VercelClientConfig = {
-  token: string;
-  projectId: string;
-  teamId: string | null;
-};
-
 function normalizeText(value: unknown): string {
   return String(value ?? "").trim();
 }
@@ -38,33 +32,6 @@ function normalizeDomain(value: string): string {
   const authority = withoutProtocol.split("/")[0] ?? "";
   const hostOnly = authority.split(":")[0] ?? "";
   return hostOnly.replace(/\.+$/, "").trim();
-}
-
-function readClientConfig(env: NodeJS.ProcessEnv = process.env): VercelClientConfig {
-  const token = normalizeText(env.VERCEL_API_TOKEN);
-  const projectId = normalizeText(env.VERCEL_PROJECT_ID_PLATFORM);
-  const teamId = normalizeText(env.VERCEL_TEAM_ID) || null;
-
-  if (!token) throw new Error("VERCEL_API_TOKEN is required for Vercel domain automation.");
-  if (!projectId) throw new Error("VERCEL_PROJECT_ID_PLATFORM is required for Vercel domain automation.");
-
-  return { token, projectId, teamId };
-}
-
-function buildProjectDomainUrl(input: {
-  projectId: string;
-  domain?: string;
-  teamId?: string | null;
-  apiVersion: "v9" | "v10";
-}): string {
-  const path = input.domain
-    ? `/${input.apiVersion}/projects/${encodeURIComponent(input.projectId)}/domains/${encodeURIComponent(input.domain)}`
-    : `/${input.apiVersion}/projects/${encodeURIComponent(input.projectId)}/domains`;
-  const url = new URL(path, `${VERCEL_API_BASE_URL}/`);
-  if (input.teamId) {
-    url.searchParams.set("teamId", input.teamId);
-  }
-  return url.toString();
 }
 
 function parseJson(input: string): Record<string, unknown> | null {
@@ -146,19 +113,19 @@ function isAlreadyExistsResponse(status: number, payload: Record<string, unknown
 
 async function vercelRequest(input: {
   url: string;
-  token: string;
   method: "GET" | "POST";
   body?: Record<string, unknown>;
+  env?: NodeJS.ProcessEnv;
 }): Promise<{ ok: boolean; status: number; payload: Record<string, unknown> | null }> {
-  const response = await fetch(input.url, {
-    method: input.method,
-    headers: {
-      authorization: `Bearer ${input.token}`,
-      "content-type": "application/json",
+  const response = await vercelFetch(
+    input.url,
+    {
+      method: input.method,
+      body: input.body ? JSON.stringify(input.body) : undefined,
+      cache: "no-store",
     },
-    body: input.body ? JSON.stringify(input.body) : undefined,
-    cache: "no-store",
-  });
+    input.env,
+  );
 
   const text = await response.text().catch(() => "");
   return {
@@ -172,18 +139,14 @@ export async function addDomainToVercel(domain: string, env: NodeJS.ProcessEnv =
   const normalizedDomain = normalizeDomain(domain);
   if (!normalizedDomain) throw new Error("Domain is required.");
 
-  const config = readClientConfig(env);
-  const url = buildProjectDomainUrl({
-    apiVersion: "v10",
-    projectId: config.projectId,
-    teamId: config.teamId,
-  });
+  const { projectId } = getVercelConfig(env);
+  const url = buildVercelUrl(`/v10/projects/${encodeURIComponent(projectId)}/domains`, undefined, env);
 
   const response = await vercelRequest({
     url,
-    token: config.token,
     method: "POST",
     body: { name: normalizedDomain },
+    env,
   });
 
   if (response.ok) {
@@ -210,18 +173,17 @@ export async function checkDomainStatus(domain: string, env: NodeJS.ProcessEnv =
   const normalizedDomain = normalizeDomain(domain);
   if (!normalizedDomain) throw new Error("Domain is required.");
 
-  const config = readClientConfig(env);
-  const url = buildProjectDomainUrl({
-    apiVersion: "v9",
-    projectId: config.projectId,
-    domain: normalizedDomain,
-    teamId: config.teamId,
-  });
+  const { projectId } = getVercelConfig(env);
+  const url = buildVercelUrl(
+    `/v9/projects/${encodeURIComponent(projectId)}/domains/${encodeURIComponent(normalizedDomain)}`,
+    undefined,
+    env,
+  );
 
   const response = await vercelRequest({
     url,
-    token: config.token,
     method: "GET",
+    env,
   });
 
   if (!response.ok) {
