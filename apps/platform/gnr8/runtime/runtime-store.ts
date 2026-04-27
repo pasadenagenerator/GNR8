@@ -990,6 +990,69 @@ export async function listDomainHostBindingsForSite(input: {
   }
 }
 
+export async function listDomainHostBindingsForVerification(input?: {
+  statuses?: RuntimeDomainHostBindingStatus[];
+  limit?: number;
+}): Promise<RuntimeDomainHostBinding[]> {
+  await ensureRuntimeTables();
+  const client = await getSuperadminPool().connect();
+  try {
+    const normalizedStatuses = (input?.statuses ?? ["pending", "verifying"]).filter(Boolean);
+    const normalizedLimit = Math.max(1, Math.min(500, Number(input?.limit ?? 50) || 50));
+    const result = await client.query<{
+      id: string;
+      site_id: string;
+      site_version_id: string;
+      domain: string;
+      status: RuntimeDomainHostBindingStatus;
+      verification_type: RuntimeDomainVerificationType | null;
+      verification_value: string | null;
+      verification_host: string | null;
+      last_checked_at: string | null;
+      vercel_domain_id: string | null;
+      created_at: string;
+      updated_at: string;
+    }>(
+      `
+      select
+        id::text as id,
+        site_id::text as site_id,
+        site_version_id::text as site_version_id,
+        domain::text as domain,
+        status::text as status,
+        verification_type::text as verification_type,
+        verification_value::text as verification_value,
+        verification_host::text as verification_host,
+        last_checked_at::text as last_checked_at,
+        vercel_domain_id::text as vercel_domain_id,
+        created_at::text as created_at,
+        updated_at::text as updated_at
+      from public.gnr8_runtime_domain_host_bindings
+      where ($1::text[] is null or status = any($1::text[]))
+      order by coalesce(last_checked_at, created_at) asc, updated_at asc
+      limit $2::int
+      `,
+      [normalizedStatuses.length > 0 ? normalizedStatuses : null, normalizedLimit],
+    );
+    return result.rows.map((row) => ({
+      id: row.id,
+      siteId: row.site_id,
+      siteVersionId: row.site_version_id,
+      domain: row.domain,
+      status: row.status,
+      verificationType: row.verification_type,
+      verificationValue: row.verification_value,
+      verificationHost: row.verification_host,
+      lastCheckedAt: row.last_checked_at,
+      vercelDomainId: row.vercel_domain_id,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+    }));
+  } finally {
+    client.release();
+  }
+}
+
 export async function countNonActiveDomainHostBindingsForSite(siteId: string): Promise<number> {
   await ensureRuntimeTables();
   const client = await getSuperadminPool().connect();

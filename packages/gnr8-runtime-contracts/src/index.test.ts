@@ -4,9 +4,12 @@ import path from 'node:path'
 import test from 'node:test'
 
 import {
+  CANONICAL_DOMAIN_VERIFICATION_CHECK_EVENT,
   CANONICAL_SITE_RENDER_REQUESTED_EVENT,
   CANONICAL_SITE_TEMPLATE_BOOTSTRAP_REQUESTED_EVENT,
   CANONICAL_TEMPLATE_PROCESSING_REQUESTED_EVENT,
+  DOMAIN_ACTIVATED_EVENT,
+  DOMAIN_VERIFICATION_CHECK_EVENT,
   SITE_RENDER_MAX_ATTEMPTS,
   SITE_RENDER_REQUESTED_EVENT,
   SITE_TEMPLATE_BOOTSTRAP_MAX_ATTEMPTS,
@@ -14,6 +17,7 @@ import {
   TEMPLATE_PROCESSING_REQUESTED_EVENT,
   TEMPLATE_PROCESSING_MAX_ATTEMPTS,
   TEMPLATE_PROCESSING_STUCK_AFTER_MINUTES,
+  validateDomainVerificationCheckEventName,
   validateSiteRenderEventName,
   validateSiteTemplateBootstrapEventName,
   validateTemplateProcessingEventName,
@@ -27,6 +31,8 @@ test('template processing runtime contract constants remain stable', () => {
   assert.equal(SITE_TEMPLATE_BOOTSTRAP_MAX_ATTEMPTS, 3)
   assert.equal(SITE_RENDER_REQUESTED_EVENT, 'site/render.requested')
   assert.equal(SITE_RENDER_MAX_ATTEMPTS, 3)
+  assert.equal(DOMAIN_VERIFICATION_CHECK_EVENT, 'domain/verification.check')
+  assert.equal(DOMAIN_ACTIVATED_EVENT, 'domain/activated')
 })
 
 test('template processing event validation catches mismatches deterministically', () => {
@@ -110,6 +116,34 @@ test('site render event validation catches mismatches deterministically', () => 
     source: 'runtime-contracts:test',
     expectedEventName: CANONICAL_SITE_RENDER_REQUESTED_EVENT,
     eventName: 'site.render.requested',
+  })
+})
+
+test('domain verification check event validation catches mismatches deterministically', () => {
+  const logs: Array<{ message: string; context: Record<string, unknown> }> = []
+  const logger = (message: string, context: Record<string, unknown>) => {
+    logs.push({ message, context })
+  }
+
+  const valid = validateDomainVerificationCheckEventName({
+    source: 'runtime-contracts:test',
+    eventName: DOMAIN_VERIFICATION_CHECK_EVENT,
+    logger,
+  })
+  const invalid = validateDomainVerificationCheckEventName({
+    source: 'runtime-contracts:test',
+    eventName: 'domain.verification.check',
+    logger,
+  })
+
+  assert.equal(valid, true)
+  assert.equal(invalid, false)
+  assert.equal(logs.length, 1)
+  assert.equal(logs[0]?.message, 'DOMAIN_VERIFICATION_CHECK_EVENT_NAME_MISMATCH')
+  assert.deepEqual(logs[0]?.context, {
+    source: 'runtime-contracts:test',
+    expectedEventName: CANONICAL_DOMAIN_VERIFICATION_CHECK_EVENT,
+    eventName: 'domain.verification.check',
   })
 })
 

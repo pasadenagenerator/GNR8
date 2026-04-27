@@ -9,7 +9,7 @@ export const revalidate = 0
 
 console.info('[worker] WORKER_INNGEST_FUNCTIONS_EXPOSED', {
   functionIds: workerInngestFunctionRegistrations.map((entry) => entry.id),
-  eventNames: workerInngestFunctionRegistrations.map((entry) => entry.eventName),
+  eventNames: workerInngestFunctionRegistrations.map((entry) => entry.eventName).filter(Boolean),
   functionCount: workerInngestFunctionRegistrations.length,
 })
 

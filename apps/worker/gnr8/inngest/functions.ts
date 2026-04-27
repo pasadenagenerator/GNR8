@@ -1,11 +1,20 @@
 import {
+  CANONICAL_DOMAIN_VERIFICATION_CHECK_EVENT,
   CANONICAL_SITE_RENDER_REQUESTED_EVENT,
   CANONICAL_SITE_TEMPLATE_BOOTSTRAP_REQUESTED_EVENT,
   CANONICAL_TEMPLATE_PROCESSING_REQUESTED_EVENT,
+  validateDomainVerificationCheckEventName,
   validateSiteRenderEventName,
   validateSiteTemplateBootstrapEventName,
   validateTemplateProcessingEventName,
 } from '@gnr8/runtime-contracts'
+import {
+  DOMAIN_VERIFICATION_CHECK_JOB_ID,
+  DOMAIN_VERIFICATION_CHECK_JOB_TRIGGER_EVENT,
+  DOMAIN_VERIFICATION_CHECK_SCHEDULER_JOB_ID,
+  domainVerificationCheckJob,
+  domainVerificationCheckSchedulerJob,
+} from '@/gnr8/domain/inngest/domain-verification-job'
 import {
   SITE_RENDER_CAPTURE_JOB_ID,
   SITE_RENDER_CAPTURE_JOB_TRIGGER_EVENT,
@@ -24,8 +33,13 @@ import {
 
 export type WorkerInngestFunctionRegistration = {
   id: string
-  eventName: string
-  fn: typeof templateProcessingJob | typeof siteTemplateBootstrapJob | typeof siteRenderCaptureJob
+  eventName?: string
+  fn:
+    | typeof templateProcessingJob
+    | typeof siteTemplateBootstrapJob
+    | typeof siteRenderCaptureJob
+    | typeof domainVerificationCheckJob
+    | typeof domainVerificationCheckSchedulerJob
 }
 
 export const workerInngestFunctionRegistrations: WorkerInngestFunctionRegistration[] = [
@@ -43,6 +57,15 @@ export const workerInngestFunctionRegistrations: WorkerInngestFunctionRegistrati
     id: SITE_RENDER_CAPTURE_JOB_ID,
     eventName: SITE_RENDER_CAPTURE_JOB_TRIGGER_EVENT,
     fn: siteRenderCaptureJob,
+  },
+  {
+    id: DOMAIN_VERIFICATION_CHECK_SCHEDULER_JOB_ID,
+    fn: domainVerificationCheckSchedulerJob,
+  },
+  {
+    id: DOMAIN_VERIFICATION_CHECK_JOB_ID,
+    eventName: DOMAIN_VERIFICATION_CHECK_JOB_TRIGGER_EVENT,
+    fn: domainVerificationCheckJob,
   },
 ]
 
@@ -121,6 +144,32 @@ if (!siteRenderRegistration) {
     console.info('[worker] SITE_RENDER_CAPTURE_FUNCTION_REGISTERED', {
       functionId: siteRenderRegistration.id,
       eventName: siteRenderRegistration.eventName,
+      registeredFunctionCount: workerInngestFunctionRegistrations.length,
+    })
+  }
+}
+
+const domainVerificationRegistration = workerInngestFunctionRegistrations.find(
+  (entry) => entry.id === DOMAIN_VERIFICATION_CHECK_JOB_ID,
+)
+
+if (!domainVerificationRegistration) {
+  console.error('[worker] DOMAIN_VERIFICATION_CHECK_FUNCTION_MISSING', {
+    functionId: DOMAIN_VERIFICATION_CHECK_JOB_ID,
+    registeredFunctionCount: workerInngestFunctionRegistrations.length,
+  })
+} else {
+  const hasDomainVerificationEventMismatch = !validateDomainVerificationCheckEventName({
+    source: 'worker:inngestFunctions',
+    eventName: domainVerificationRegistration.eventName,
+    expectedEventName: CANONICAL_DOMAIN_VERIFICATION_CHECK_EVENT,
+    logger: (message, context) => console.error(`[worker] ${message}`, context),
+  })
+
+  if (!hasDomainVerificationEventMismatch) {
+    console.info('[worker] DOMAIN_VERIFICATION_CHECK_FUNCTION_REGISTERED', {
+      functionId: domainVerificationRegistration.id,
+      eventName: domainVerificationRegistration.eventName,
       registeredFunctionCount: workerInngestFunctionRegistrations.length,
     })
   }

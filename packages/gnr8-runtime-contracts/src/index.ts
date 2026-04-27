@@ -5,6 +5,8 @@ export const SITE_TEMPLATE_BOOTSTRAP_REQUESTED_EVENT = 'site/bootstrap.requested
 export const SITE_TEMPLATE_BOOTSTRAP_MAX_ATTEMPTS = 3
 export const SITE_RENDER_REQUESTED_EVENT = 'site/render.requested'
 export const SITE_RENDER_MAX_ATTEMPTS = 3
+export const DOMAIN_VERIFICATION_CHECK_EVENT = 'domain/verification.check'
+export const DOMAIN_ACTIVATED_EVENT = 'domain/activated'
 
 export type TemplateProcessingRequestedPayload = {
   templateId: string
@@ -31,6 +33,21 @@ export type SiteRenderRequestedPayload = {
   runtimeSiteVersionId: string
 }
 
+export type DomainVerificationCheckPayload = {
+  source?: 'schedule' | 'manual' | 'publish'
+  requestedAt?: string
+}
+
+export type DomainActivatedPayload = {
+  bindingId: string
+  siteId: string
+  siteVersionId: string
+  domain: string
+  previousStatus: 'pending' | 'verifying' | 'active' | 'failed'
+  activatedAt: string
+  vercelDomainId: string | null
+}
+
 export {
   CANONICAL_TEMPLATE_PROCESSING_REQUESTED_EVENT,
   validateTemplateProcessingEventName,
@@ -45,3 +62,8 @@ export {
   CANONICAL_SITE_RENDER_REQUESTED_EVENT,
   validateSiteRenderEventName,
 } from './site-render-event-validation'
+
+export {
+  CANONICAL_DOMAIN_VERIFICATION_CHECK_EVENT,
+  validateDomainVerificationCheckEventName,
+} from './domain-verification-check-event-validation'

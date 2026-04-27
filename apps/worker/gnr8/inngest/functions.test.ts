@@ -2,6 +2,8 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import {
+  CANONICAL_DOMAIN_VERIFICATION_CHECK_EVENT,
+  DOMAIN_VERIFICATION_CHECK_EVENT,
   CANONICAL_SITE_RENDER_REQUESTED_EVENT,
   SITE_RENDER_REQUESTED_EVENT,
   CANONICAL_SITE_TEMPLATE_BOOTSTRAP_REQUESTED_EVENT,
@@ -10,6 +12,13 @@ import {
   TEMPLATE_PROCESSING_REQUESTED_EVENT,
 } from '@gnr8/runtime-contracts'
 import { inngestFunctions, workerInngestFunctionRegistrations } from '@/gnr8/inngest/functions'
+import {
+  DOMAIN_VERIFICATION_CHECK_JOB_ID,
+  DOMAIN_VERIFICATION_CHECK_JOB_TRIGGER_EVENT,
+  DOMAIN_VERIFICATION_CHECK_SCHEDULER_JOB_ID,
+  domainVerificationCheckJob,
+  domainVerificationCheckSchedulerJob,
+} from '@/gnr8/domain/inngest/domain-verification-job'
 import {
   SITE_RENDER_CAPTURE_JOB_ID,
   SITE_RENDER_CAPTURE_JOB_TRIGGER_EVENT,
@@ -41,10 +50,17 @@ test('worker site-render trigger event uses shared canonical contract', () => {
   assert.equal(SITE_RENDER_CAPTURE_JOB_TRIGGER_EVENT, CANONICAL_SITE_RENDER_REQUESTED_EVENT)
 })
 
-test('worker inngest registration exports template processing, site-bootstrap, and site-render jobs', () => {
+test('worker domain verification trigger event uses shared canonical contract', () => {
+  assert.equal(DOMAIN_VERIFICATION_CHECK_EVENT, CANONICAL_DOMAIN_VERIFICATION_CHECK_EVENT)
+  assert.equal(DOMAIN_VERIFICATION_CHECK_JOB_TRIGGER_EVENT, CANONICAL_DOMAIN_VERIFICATION_CHECK_EVENT)
+})
+
+test('worker inngest registration exports template processing, site-bootstrap, site-render, and domain-verification jobs', () => {
   assert.equal(inngestFunctions.includes(templateProcessingJob), true)
   assert.equal(inngestFunctions.includes(siteTemplateBootstrapJob), true)
   assert.equal(inngestFunctions.includes(siteRenderCaptureJob), true)
+  assert.equal(inngestFunctions.includes(domainVerificationCheckSchedulerJob), true)
+  assert.equal(inngestFunctions.includes(domainVerificationCheckJob), true)
 })
 
 test('worker inngest registration includes required function ids and exact trigger events', () => {
@@ -54,8 +70,11 @@ test('worker inngest registration includes required function ids and exact trigg
   assert.equal(ids.includes(TEMPLATE_PROCESSING_JOB_ID), true)
   assert.equal(ids.includes(SITE_TEMPLATE_BOOTSTRAP_JOB_ID), true)
   assert.equal(ids.includes(SITE_RENDER_CAPTURE_JOB_ID), true)
+  assert.equal(ids.includes(DOMAIN_VERIFICATION_CHECK_SCHEDULER_JOB_ID), true)
+  assert.equal(ids.includes(DOMAIN_VERIFICATION_CHECK_JOB_ID), true)
 
   assert.equal(eventsById.get(TEMPLATE_PROCESSING_JOB_ID), 'template/processing.requested')
   assert.equal(eventsById.get(SITE_TEMPLATE_BOOTSTRAP_JOB_ID), 'site/bootstrap.requested')
   assert.equal(eventsById.get(SITE_RENDER_CAPTURE_JOB_ID), 'site/render.requested')
+  assert.equal(eventsById.get(DOMAIN_VERIFICATION_CHECK_JOB_ID), 'domain/verification.check')
 })
