@@ -117,7 +117,12 @@ function resolveByPath(root: Node, selector: string): Element | null {
     if (!m) return null
     const tag = m[1]!.toLowerCase()
     const nth = Math.max(1, Number(m[2] ?? '1'))
-    const matches = childrenOf(current).map(asElement).filter((v): v is Element => Boolean(v) && (v!.tagName || '').toLowerCase() === tag)
+    const childElements: Element[] = childrenOf(current)
+      .map(asElement)
+      .filter((value): value is Element => value !== null)
+    const matches: Element[] = childElements.filter((element) => {
+      return (element.tagName || '').toLowerCase() === tag
+    })
     current = matches[nth - 1] ?? null
   }
   return current
