@@ -34,6 +34,7 @@ export type ContentOverride = {
 
 type Node = DefaultTreeAdapterMap['node']
 type Element = DefaultTreeAdapterMap['element']
+type Parse5Document = DefaultTreeAdapterMap['document']
 
 function asElement(node: Node | null | undefined): Element | null {
   if (!node || typeof (node as any).tagName !== 'string') return null
@@ -135,7 +136,7 @@ export function inferContentSlotsFromSemanticImport(input: {
   semanticImport: SemanticImportResult
 }): { slots: Omit<ContentSlot, 'id'>[]; diagnostics: string[] } {
   const diagnostics: string[] = ['CONTENT_SLOT_INFERENCE_STARTED']
-  const root = parse(input.html) as Node
+  const root: Parse5Document = parse(input.html)
   const slots: Omit<ContentSlot, 'id'>[] = []
 
   const h1 = collect(root, (el) => (el.tagName || '').toLowerCase() === 'h1')[0] ?? null
@@ -245,7 +246,7 @@ export function applyContentOverridesToRawHtml(input: {
   overrides: Array<Pick<ContentOverride, 'slotKey' | 'valueType' | 'valueJson'>>
 }): { html: string; appliedCount: number; skippedCount: number; diagnostics: string[] } {
   const diagnostics = ['CONTENT_OVERRIDE_PATCH_STARTED']
-  const root = parse(String(input.html ?? '')) as Node
+  const root: Parse5Document = parse(String(input.html ?? ''))
   const slotMap = new Map(input.slots.map((slot) => [slot.slotKey, slot]))
   let appliedCount = 0
   let skippedCount = 0
