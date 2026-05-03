@@ -1,10 +1,13 @@
 import {
+  listContentOverrides,
+  listContentSlots,
   resolveActiveArtifactForHostAndPathWithDiagnostics,
   resolveRawTemplateSiteForDomainAndPath,
   resolveRuntimeSiteForHost,
   type PublicRuntimeArtifactMissReasonCode,
 } from "@/gnr8/runtime/runtime-store";
 import { persistRuntimeUsageEvent } from "@/gnr8/runtime/runtime-usage-event-logger";
+import { applyContentOverridesToRawHtml } from "@/src/public-site/content-override-runtime";
 import { injectRuntimeDebugPanel, rewriteRawTemplateHtmlForRuntime } from "@/src/public-site/raw-template-runtime";
 
 export type Gnr8PublicRuntimeMode = "artifact-only";
@@ -154,12 +157,16 @@ type RuntimeStoreDependencies = {
   resolveActiveArtifactForHostAndPathWithDiagnostics: typeof resolveActiveArtifactForHostAndPathWithDiagnostics;
   resolveRawTemplateSiteForDomainAndPath: typeof resolveRawTemplateSiteForDomainAndPath;
   resolveRuntimeSiteForHost: typeof resolveRuntimeSiteForHost;
+  listContentSlots: typeof listContentSlots;
+  listContentOverrides: typeof listContentOverrides;
 };
 
 const runtimeStoreDependencies: RuntimeStoreDependencies = {
   resolveActiveArtifactForHostAndPathWithDiagnostics,
   resolveRawTemplateSiteForDomainAndPath,
   resolveRuntimeSiteForHost,
+  listContentSlots,
+  listContentOverrides,
 };
 
 type RuntimeUsageDependencies = {
@@ -417,8 +424,18 @@ export async function renderPublicPathResponse(input: {
       siteVersionId: rawTemplateResolution.siteVersionId,
       resolvedFilePath: rawTemplateResolution.resolvedFilePath,
     });
-    let html = rewriteRawTemplateHtmlForRuntime({
+    const slots = await runtimeStoreDependencies.listContentSlots(rawTemplateResolution.siteVersionId);
+    const publishedOverrides = await runtimeStoreDependencies.listContentOverrides({
+      siteVersionId: rawTemplateResolution.siteVersionId,
+      status: "published",
+    });
+    const patched = applyContentOverridesToRawHtml({
       html: rawTemplateResolution.html,
+      slots,
+      overrides: publishedOverrides,
+    });
+    let html = rewriteRawTemplateHtmlForRuntime({
+      html: patched.html,
       siteId: rawTemplateResolution.siteId,
       siteVersionId: rawTemplateResolution.siteVersionId,
       resolvedFilePath: rawTemplateResolution.resolvedFilePath,

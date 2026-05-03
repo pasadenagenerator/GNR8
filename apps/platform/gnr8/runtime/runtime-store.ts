@@ -18,6 +18,7 @@ import type {
   SiteVersionState,
   VersionScopedFormSubmission,
 } from "@/gnr8/runtime/types";
+import type { ContentOverride, ContentOverrideStatus, ContentSlot, ContentSlotType } from "@/gnr8/runtime/content-binding";
 
 let tablesReady: Promise<void> | null = null;
 
@@ -146,6 +147,39 @@ export async function ensureRuntimeTables(): Promise<void> {
             content_bytes bytea not null,
             created_at timestamptz not null default now(),
             primary key (artifact_id, file_path)
+          )
+        `);
+
+        await client.query(`
+          create table if not exists public.gnr8_content_slots (
+            id uuid primary key default gen_random_uuid(),
+            site_id text not null,
+            site_version_id uuid not null references public.gnr8_runtime_site_versions(id) on delete cascade,
+            slot_key text not null,
+            slot_type text not null,
+            source_selector text,
+            source_text text,
+            source_asset_path text,
+            confidence numeric,
+            diagnostics jsonb,
+            created_at timestamptz not null default now(),
+            updated_at timestamptz not null default now(),
+            unique (site_version_id, slot_key)
+          )
+        `);
+
+        await client.query(`
+          create table if not exists public.gnr8_content_overrides (
+            id uuid primary key default gen_random_uuid(),
+            site_id text not null,
+            site_version_id uuid not null references public.gnr8_runtime_site_versions(id) on delete cascade,
+            slot_key text not null,
+            value_type text not null,
+            value_json jsonb not null,
+            status text not null default 'draft',
+            created_at timestamptz not null default now(),
+            updated_at timestamptz not null default now(),
+            unique (site_version_id, slot_key, status)
           )
         `);
 
@@ -2653,6 +2687,157 @@ export async function saveFormSubmission(input: VersionScopedFormSubmission): Pr
       submissionId: insert.rows[0]!.id,
       createdAt: insert.rows[0]!.created_at,
     };
+  });
+}
+
+export async function upsertContentSlots(input: {
+  siteId: string;
+  siteVersionId: string;
+  slots: Array<Omit<ContentSlot, "id" | "createdAt" | "updatedAt">>;
+}): Promise<number> {
+  if (input.slots.length === 0) return 0;
+  return withTx(async (client) => {
+    let affected = 0;
+    for (const slot of input.slots) {
+      const res = await client.query(
+        `
+        insert into public.gnr8_content_slots (
+          site_id, site_version_id, slot_key, slot_type, source_selector, source_text, source_asset_path, confidence, diagnostics, updated_at
+        )
+        values ($1::text, $2::uuid, $3::text, $4::text, $5::text, $6::text, $7::text, $8::numeric, $9::jsonb, now())
+        on conflict (site_version_id, slot_key)
+        do update set
+          slot_type = excluded.slot_type,
+          source_selector = excluded.source_selector,
+          source_text = excluded.source_text,
+          source_asset_path = excluded.source_asset_path,
+          confidence = excluded.confidence,
+          diagnostics = excluded.diagnostics,
+          updated_at = now()
+        `,
+        [
+          input.siteId,
+          input.siteVersionId,
+          slot.slotKey,
+          slot.slotType,
+          slot.sourceSelector,
+          slot.sourceText,
+          slot.sourceAssetPath,
+          slot.confidence,
+          JSON.stringify(slot.diagnostics ?? {}),
+        ],
+      );
+      affected += res.rowCount ?? 0;
+    }
+    return affected;
+  });
+}
+
+export async function listContentSlots(siteVersionId: string): Promise<ContentSlot[]> {
+  await ensureRuntimeTables();
+  const client = await getSuperadminPool().connect();
+  try {
+    const res = await client.query<any>(
+      `
+      select id::text, site_id::text, site_version_id::text, slot_key::text, slot_type::text, source_selector::text, source_text::text, source_asset_path::text, confidence::text, diagnostics, created_at::text, updated_at::text
+      from public.gnr8_content_slots
+      where site_version_id = $1::uuid
+      order by slot_key asc
+      `,
+      [siteVersionId],
+    );
+    return res.rows.map((row: any) => ({
+      id: row.id,
+      siteId: row.site_id,
+      siteVersionId: row.site_version_id,
+      slotKey: row.slot_key,
+      slotType: row.slot_type as ContentSlotType,
+      sourceSelector: row.source_selector ?? null,
+      sourceText: row.source_text ?? null,
+      sourceAssetPath: row.source_asset_path ?? null,
+      confidence: Number(row.confidence ?? 0),
+      diagnostics: (row.diagnostics ?? null) as Record<string, unknown> | null,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+    }));
+  } finally {
+    client.release();
+  }
+}
+
+export async function listContentOverrides(input: {
+  siteVersionId: string;
+  status?: ContentOverrideStatus;
+}): Promise<ContentOverride[]> {
+  await ensureRuntimeTables();
+  const client = await getSuperadminPool().connect();
+  try {
+    const res = await client.query<any>(
+      `
+      select id::text, site_id::text, site_version_id::text, slot_key::text, value_type::text, value_json, status::text, created_at::text, updated_at::text
+      from public.gnr8_content_overrides
+      where site_version_id = $1::uuid
+        and ($2::text is null or status = $2::text)
+      order by slot_key asc
+      `,
+      [input.siteVersionId, input.status ?? null],
+    );
+    return res.rows.map((row: any) => ({
+      id: row.id,
+      siteId: row.site_id,
+      siteVersionId: row.site_version_id,
+      slotKey: row.slot_key,
+      valueType: row.value_type as ContentSlotType,
+      valueJson: row.value_json,
+      status: row.status as ContentOverrideStatus,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+    }));
+  } finally {
+    client.release();
+  }
+}
+
+export async function upsertContentOverrideDraft(input: {
+  siteId: string;
+  siteVersionId: string;
+  slotKey: string;
+  valueType: ContentSlotType;
+  valueJson: unknown;
+}): Promise<void> {
+  await withTx(async (client) => {
+    await client.query(
+      `
+      insert into public.gnr8_content_overrides (site_id, site_version_id, slot_key, value_type, value_json, status, updated_at)
+      values ($1::text, $2::uuid, $3::text, $4::text, $5::jsonb, 'draft', now())
+      on conflict (site_version_id, slot_key, status)
+      do update set value_type = excluded.value_type, value_json = excluded.value_json, updated_at = now()
+      `,
+      [input.siteId, input.siteVersionId, input.slotKey, input.valueType, JSON.stringify(input.valueJson ?? {})],
+    );
+  });
+}
+
+export async function publishDraftContentOverrides(input: { siteId: string; siteVersionId: string }): Promise<number> {
+  return withTx(async (client) => {
+    const drafts = await client.query<any>(
+      `select slot_key::text, value_type::text, value_json from public.gnr8_content_overrides where site_version_id = $1::uuid and status = 'draft'`,
+      [input.siteVersionId],
+    );
+    let count = 0;
+    for (const row of drafts.rows) {
+      const res = await client.query(
+        `
+        insert into public.gnr8_content_overrides (site_id, site_version_id, slot_key, value_type, value_json, status, updated_at)
+        values ($1::text, $2::uuid, $3::text, $4::text, $5::jsonb, 'published', now())
+        on conflict (site_version_id, slot_key, status)
+        do update set value_type = excluded.value_type, value_json = excluded.value_json, updated_at = now()
+        `,
+        [input.siteId, input.siteVersionId, row.slot_key, row.value_type, JSON.stringify(row.value_json)],
+      );
+      count += res.rowCount ?? 0;
+    }
+    return count;
   });
 }
 

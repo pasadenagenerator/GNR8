@@ -141,6 +141,8 @@ test("public runtime domain hit: serves raw template HTML and rewrites /assets U
     resolveActiveArtifactForHostAndPathWithDiagnostics: async () => {
       throw new Error("artifact resolver should not run when raw template domain hit succeeds");
     },
+    listContentSlots: async () => [],
+    listContentOverrides: async () => [],
   });
 
   try {
@@ -177,6 +179,8 @@ test("public runtime domain hit: supports nested paths when raw template page ex
     resolveActiveArtifactForHostAndPathWithDiagnostics: async () => {
       throw new Error("artifact resolver should not run when nested raw template page is resolved");
     },
+    listContentSlots: async () => [],
+    listContentOverrides: async () => [],
   });
 
   try {
@@ -206,6 +210,8 @@ test("public runtime debug mode: appends custom-domain runtime panel on raw-temp
     resolveActiveArtifactForHostAndPathWithDiagnostics: async () => {
       throw new Error("artifact resolver should not run when raw template domain hit succeeds");
     },
+    listContentSlots: async () => [],
+    listContentOverrides: async () => [],
   });
 
   try {

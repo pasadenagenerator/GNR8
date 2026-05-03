@@ -15,6 +15,8 @@ import {
 } from '@/gnr8/validation/runtime/url-single-page-import-contract'
 import type { UrlSinglePageImportSnapshot } from '@/gnr8/validation/runtime/url-single-page-import'
 import { runSemanticImportEngine, type SemanticImportResult } from '@/gnr8/import-semantic/semantic-import-engine'
+import { inferContentSlotsFromSemanticImport } from '@/gnr8/runtime/content-binding'
+import { upsertContentSlots } from '@/gnr8/runtime/runtime-store'
 
 type BootstrapTemplateRecord = Pick<
   TemplateRecord,
@@ -96,6 +98,12 @@ type BootstrapDeps = {
     fileMap: Record<string, { path: string; mediaType: string; sizeBytes: number; sha256: string }>
     fileCount: number
   }>
+  persistContentSlots: (input: {
+    siteId: string
+    siteVersionId: string
+    html: string
+    semanticImport: SemanticImportResult
+  }) => Promise<void>
   now: () => Date
 }
 
@@ -114,8 +122,28 @@ function defaultDeps(): BootstrapDeps {
     validateAndExtractTemplateZip,
     persistTemplateDurableSourceSnapshot,
     persistRawTemplateSiteArtifact,
+    persistContentSlots,
     now: () => new Date(),
   }
+}
+
+async function persistContentSlots(input: {
+  siteId: string
+  siteVersionId: string
+  html: string
+  semanticImport: SemanticImportResult
+}): Promise<void> {
+  const inferred = inferContentSlotsFromSemanticImport({
+    siteId: input.siteId,
+    siteVersionId: input.siteVersionId,
+    html: input.html,
+    semanticImport: input.semanticImport,
+  })
+  await upsertContentSlots({
+    siteId: input.siteId,
+    siteVersionId: input.siteVersionId,
+    slots: inferred.slots,
+  })
 }
 
 function normalizeText(value: unknown): string {
@@ -1170,6 +1198,12 @@ export async function bootstrapRuntimeFromTemplateSite(input: {
       siteVersionId: scoped.siteVersionId,
       snapshotRootDirAbs,
       entryHtmlPathAbs,
+    })
+    await deps.persistContentSlots({
+      siteId: scoped.siteId,
+      siteVersionId: scoped.siteVersionId,
+      html: resolvedSource.html,
+      semanticImport: snapshot.semanticImport,
     })
     console.info('[site-bootstrap-worker] RAW_TEMPLATE_PREVIEW_SELECTED', {
       siteId,

@@ -4,6 +4,7 @@ import type { CSSProperties, ReactNode } from 'react'
 
 import SiteContextLayout from './SiteContextLayout'
 import SiteActionsPanel from './SiteActionsPanel'
+import ContentBindingsPanel from './ContentBindingsPanel'
 import SiteDeletePanel from './SiteDeletePanel'
 import SiteDomainSettingsPanel from './SiteDomainSettingsPanel'
 import { listSwitchableAgencyClientsForPage } from '../../../client-switcher-options'
@@ -661,6 +662,7 @@ export default async function SiteWorkspacePage(props: Props) {
           lastAction={readModel.actions.lastAction}
           variants={readModel.variants}
         />
+        <ContentBindingsPanel agencyId={currentUserAgency.agency_id} clientId={clientId} siteId={siteId} />
 
         {props.activeTab === 'overview'
           ? renderOverviewContent({

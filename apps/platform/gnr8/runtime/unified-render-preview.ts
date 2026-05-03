@@ -3,11 +3,14 @@ import path from 'node:path'
 import { normalizePagePath } from '@/gnr8/runtime/deterministic'
 import {
   getArtifactById,
+  listContentOverrides,
+  listContentSlots,
   getRawTemplateSiteArtifact,
   getRawTemplateSiteAsset,
   getSiteVersion,
   getSiteVersionArtifactBinding,
 } from '@/gnr8/runtime/runtime-store'
+import { applyContentOverridesToRawHtml } from '@/src/public-site/content-override-runtime'
 import type { CanonicalSiteVersionSnapshot } from '@/gnr8/runtime/types'
 import { normalizeSiteVersionPreviewMode, type SiteVersionPreviewMode } from '@/gnr8/site/site-preview-contract'
 import { PREVIEW_RUNTIME_DIAGNOSTIC } from '@/gnr8/preview-runtime/preview-runtime-diagnostics'
@@ -375,6 +378,14 @@ async function renderRawTemplateSiteVersionPreview(input: {
     siteVersionId: artifact.siteVersionId,
     entryHtmlPath: artifact.entryHtmlPath,
   })
+  const slots = await listContentSlots(artifact.siteVersionId)
+  const draftOverrides = await listContentOverrides({ siteVersionId: artifact.siteVersionId, status: 'draft' })
+  const publishedOverrides = await listContentOverrides({ siteVersionId: artifact.siteVersionId, status: 'published' })
+  const patched = applyContentOverridesToRawHtml({
+    html,
+    slots,
+    overrides: draftOverrides.length > 0 ? draftOverrides : publishedOverrides,
+  })
   const summary = buildRawTemplatePreviewRuntimeSummary({
     baseSummary: input.fallbackSummary,
     fileCount: Object.keys(artifact.fileMap).length,
@@ -399,7 +410,7 @@ async function renderRawTemplateSiteVersionPreview(input: {
         siteVersionId: artifact.siteVersionId,
         path: normalizePagePath(input.requestedPath),
         rendererCompatibilityVersion: 'gnr8-renderer-v1',
-        html,
+        html: patched.html,
         source: 'raw_template_site',
         previewMode: 'raw_template_preview',
         previewRuntimeSummary: summary,
