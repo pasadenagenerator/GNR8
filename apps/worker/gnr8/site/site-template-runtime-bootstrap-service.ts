@@ -1199,12 +1199,21 @@ export async function bootstrapRuntimeFromTemplateSite(input: {
       snapshotRootDirAbs,
       entryHtmlPathAbs,
     })
-    await deps.persistContentSlots({
-      siteId: scoped.siteId,
-      siteVersionId: scoped.siteVersionId,
-      html: resolvedSource.html,
-      semanticImport: snapshot.semanticImport,
-    })
+    if (snapshot.semanticImport) {
+      await deps.persistContentSlots({
+        siteId: scoped.siteId,
+        siteVersionId: scoped.siteVersionId,
+        html: resolvedSource.html,
+        semanticImport: snapshot.semanticImport,
+      })
+    } else {
+      console.warn('[site-bootstrap-worker] CONTENT_SLOT_INFERENCE_SKIPPED_NO_SEMANTIC_IMPORT', {
+        siteId,
+        runtimeSiteId: scoped.runtimeSiteId,
+        siteVersionId: scoped.siteVersionId,
+        templateId,
+      })
+    }
     console.info('[site-bootstrap-worker] RAW_TEMPLATE_PREVIEW_SELECTED', {
       siteId,
       templateId,
