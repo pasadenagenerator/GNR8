@@ -1209,7 +1209,6 @@ export async function bootstrapRuntimeFromTemplateSite(input: {
     } else {
       console.warn('[site-bootstrap-worker] CONTENT_SLOT_INFERENCE_SKIPPED_NO_SEMANTIC_IMPORT', {
         siteId,
-        runtimeSiteId: scoped.runtimeSiteId,
         siteVersionId: scoped.siteVersionId,
         templateId,
       })
