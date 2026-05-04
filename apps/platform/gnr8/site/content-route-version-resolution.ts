@@ -91,6 +91,13 @@ export async function resolveRuntimeScopeDetailed(
   deps: { pool?: Queryable } = {},
 ): Promise<RuntimeScopeResolution> {
   const pool = deps.pool ?? getSuperadminPool()
+  console.info('[gnr8.content-api] CONTENT_GET_VERSION_QUERY_TYPED', {
+    siteIdParamType: 'uuid',
+    clientIdParamType: 'uuid',
+    agencyIdParamType: 'uuid',
+    requestedSiteVersionIdParamType: input.requestedSiteVersionId ? 'uuid' : null,
+    diagnostics: ['CONTENT_GET_VERSION_QUERY_TYPED'],
+  })
 
   const candidateRes = await pool.query<any>(
     `
@@ -131,12 +138,12 @@ export async function resolveRuntimeScopeDetailed(
         or exists (
           select 1
           from public.gnr8_site_bootstrap_jobs b
-          where b.site_id = ss.ownership_site_id and b.runtime_site_version_id = sv.id
+          where b.site_id = ss.ownership_site_id::uuid and b.runtime_site_version_id = sv.id::uuid
         )
         or exists (
           select 1
           from public.gnr8_site_render_jobs r
-          where r.site_id = ss.ownership_site_id and r.runtime_site_version_id = sv.id
+          where r.site_id = ss.ownership_site_id::uuid and r.runtime_site_version_id = sv.id::uuid
         )
     ),
     prioritized as (

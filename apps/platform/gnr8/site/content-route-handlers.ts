@@ -17,19 +17,19 @@ export type ContentRouteDeps = {
   resolveRuntimeScopeDetailed: (input: ResolveRuntimeScopeInput) => Promise<RuntimeScopeResolution>
   listContentSlots: typeof listContentSlots
   listContentOverrides: typeof listContentOverrides
-  queryHistoryCount: (input: { runtimeSiteId: string; siteVersionId: string }) => Promise<number>
+  queryHistoryCount: (input: { siteVersionId: string }) => Promise<number>
   querySiteScopeContext: (input: { siteId: string }) => Promise<{ siteId: string; siteClientId: string | null; siteAgencyId: string | null } | null>
 }
 
-async function queryHistoryCount(input: { runtimeSiteId: string; siteVersionId: string }): Promise<number> {
+async function queryHistoryCount(input: { siteVersionId: string }): Promise<number> {
   const pool = getSuperadminPool()
   const historyCountRes = await pool.query<{ count: string }>(
     `
     select count(*)::text as count
     from public.gnr8_content_override_history
-    where site_id = $1::text and site_version_id = $2::uuid
+    where site_version_id = $1::uuid
     `,
-    [input.runtimeSiteId, input.siteVersionId],
+    [input.siteVersionId],
   )
   return Number(historyCountRes.rows[0]?.count ?? '0')
 }
@@ -81,6 +81,10 @@ export function createContentRouteHandlers(deps: ContentRouteDeps) {
           clientId,
           siteId,
           effectiveAgencyId,
+        })
+        console.info('[gnr8.content-api] CONTENT_GET_SCOPE_QUERY_TYPED', {
+          siteIdParamType: 'uuid',
+          diagnostics: ['CONTENT_GET_SCOPE_QUERY_TYPED'],
         })
         let scopeContext: Awaited<ReturnType<typeof deps.querySiteScopeContext>> = null
         try {
@@ -143,7 +147,7 @@ export function createContentRouteHandlers(deps: ContentRouteDeps) {
         const slots = await deps.listContentSlots(scope.siteVersionId)
         const draftOverrides = await deps.listContentOverrides({ siteVersionId: scope.siteVersionId, status: 'draft' })
         const publishedOverrides = await deps.listContentOverrides({ siteVersionId: scope.siteVersionId, status: 'published' })
-        const historyCount = await deps.queryHistoryCount({ runtimeSiteId: scope.runtimeSiteId, siteVersionId: scope.siteVersionId })
+        const historyCount = await deps.queryHistoryCount({ siteVersionId: scope.siteVersionId })
 
         console.info('[gnr8.content-api] CONTENT_GET_SLOTS_LOADED', {
           ownershipSiteId: siteId,
@@ -154,7 +158,13 @@ export function createContentRouteHandlers(deps: ContentRouteDeps) {
         })
 
         const grouped = groupSlots(slots)
-        const diagnostics: string[] = ['CONTENT_GET_VERSION_RESOLUTION_FOUND', 'CONTENT_GET_SLOTS_LOADED']
+        const diagnostics: string[] = [
+          'CONTENT_GET_SQL_TYPE_GUARD_APPLIED',
+          'CONTENT_GET_SCOPE_QUERY_TYPED',
+          'CONTENT_GET_VERSION_QUERY_TYPED',
+          'CONTENT_GET_VERSION_RESOLUTION_FOUND',
+          'CONTENT_GET_SLOTS_LOADED',
+        ]
         if (scope.reasonCode.startsWith('fallback_')) diagnostics.push('CONTENT_GET_VERSION_RESOLUTION_FALLBACK_USED')
         if (slots.length === 0) diagnostics.push('CONTENT_GET_SLOTS_EMPTY')
         if (!grouped.sections.length) diagnostics.push('CONTENT_SECTION_SLOTS_MISSING')
