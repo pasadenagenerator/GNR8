@@ -18,6 +18,7 @@ export type ContentRouteDeps = {
   listContentSlots: typeof listContentSlots
   listContentOverrides: typeof listContentOverrides
   queryHistoryCount: (input: { runtimeSiteId: string; siteVersionId: string }) => Promise<number>
+  querySiteScopeContext: (input: { siteId: string }) => Promise<{ siteId: string; siteClientId: string | null; siteAgencyId: string | null } | null>
 }
 
 async function queryHistoryCount(input: { runtimeSiteId: string; siteVersionId: string }): Promise<number> {
@@ -33,6 +34,26 @@ async function queryHistoryCount(input: { runtimeSiteId: string; siteVersionId: 
   return Number(historyCountRes.rows[0]?.count ?? '0')
 }
 
+async function querySiteScopeContext(input: { siteId: string }): Promise<{ siteId: string; siteClientId: string | null; siteAgencyId: string | null } | null> {
+  const pool = getSuperadminPool()
+  const result = await pool.query<{ site_id: string; site_client_id: string | null; site_agency_id: string | null }>(
+    `
+    select s.id::text as site_id, s.org_id::text as site_client_id, s.agency_id::text as site_agency_id
+    from public.sites s
+    where s.id = $1::uuid
+    limit 1
+    `,
+    [input.siteId],
+  )
+  const row = result.rows[0]
+  if (!row) return null
+  return {
+    siteId: row.site_id,
+    siteClientId: row.site_client_id,
+    siteAgencyId: row.site_agency_id,
+  }
+}
+
 export function createContentRouteHandlers(deps: ContentRouteDeps) {
   return {
     async GET(req: Request, ctx: { params: Promise<{ clientId?: string; siteId?: string }> }) {
@@ -44,8 +65,36 @@ export function createContentRouteHandlers(deps: ContentRouteDeps) {
 
         const url = new URL(req.url)
         const agencyId = normalizeUuid(url.searchParams.get('agencyId'))
-        if (!agencyId) return NextResponse.json({ ok: false, error: 'agencyId is required' }, { status: 400 })
-        await deps.requireAgencyActionContext({ action: 'view_dashboard', requestedAgencyId: agencyId })
+        const agencyQuery = normalizeUuid(url.searchParams.get('agency'))
+        const agencyHeader = normalizeUuid(req.headers.get('x-gnr8-agency-id'))
+        const effectiveAgencyId = agencyId ?? agencyQuery ?? agencyHeader
+        console.info('[gnr8.content-api] CONTENT_GET_PARAMS_RECEIVED', {
+          clientId,
+          siteId,
+          agencyIdQuery: agencyId,
+          agencyQuery,
+          agencyHeader,
+          effectiveAgencyId,
+        })
+        if (!effectiveAgencyId) return NextResponse.json({ ok: false, error: 'agencyId (or agency) is required' }, { status: 400 })
+        console.info('[gnr8.content-api] CONTENT_GET_SCOPE_VALIDATION_STARTED', {
+          clientId,
+          siteId,
+          effectiveAgencyId,
+        })
+        let scopeContext: Awaited<ReturnType<typeof deps.querySiteScopeContext>> = null
+        try {
+          scopeContext = await deps.querySiteScopeContext({ siteId })
+        } catch {
+          scopeContext = null
+        }
+        await deps.requireAgencyActionContext({ action: 'view_dashboard', requestedAgencyId: effectiveAgencyId })
+        console.info('[gnr8.content-api] CONTENT_GET_SCOPE_VALIDATION_RESULT', {
+          success: true,
+          reasonCode: 'agency_action_context_valid',
+          siteClientId: scopeContext?.siteClientId ?? null,
+          siteAgencyId: scopeContext?.siteAgencyId ?? null,
+        })
 
         const requestedSiteVersionId = normalizeUuid(url.searchParams.get('siteVersionId'))
         console.info('[gnr8.content-api] CONTENT_GET_VERSION_RESOLUTION_STARTED', {
@@ -53,7 +102,7 @@ export function createContentRouteHandlers(deps: ContentRouteDeps) {
           requestedSiteVersionId,
         })
 
-        const resolution = await deps.resolveRuntimeScopeDetailed({ clientId, siteId, agencyId, requestedSiteVersionId })
+        const resolution = await deps.resolveRuntimeScopeDetailed({ clientId, siteId, agencyId: effectiveAgencyId, requestedSiteVersionId })
         const scope = resolution.scope
         console.info('[gnr8.content-api] CONTENT_GET_VERSION_CANDIDATES', resolution.debug)
         if (!scope) {
@@ -127,6 +176,12 @@ export function createContentRouteHandlers(deps: ContentRouteDeps) {
           diagnostics,
         })
       } catch (error) {
+        const message = error instanceof Error ? error.message : String(error)
+        console.warn('[gnr8.content-api] CONTENT_GET_SCOPE_VALIDATION_RESULT', {
+          success: false,
+          reasonCode: 'agency_action_context_invalid',
+          error: message,
+        })
         const mapped = deps.parseAgencyActionContextError(error)
         return NextResponse.json({ ok: false, error: mapped.message }, { status: mapped.status })
       }
@@ -141,4 +196,5 @@ export const contentRouteHandlers = createContentRouteHandlers({
   listContentSlots,
   listContentOverrides,
   queryHistoryCount,
+  querySiteScopeContext,
 })

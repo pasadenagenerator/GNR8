@@ -39,6 +39,7 @@ function createHandlers(overrides: Partial<Parameters<typeof createContentRouteH
     listContentSlots: async () => [{ slotKey: 'hero.title', slotType: 'text' } as never],
     listContentOverrides: async () => [],
     queryHistoryCount: async () => 0,
+    querySiteScopeContext: async () => null,
     ...overrides,
   })
 }
@@ -165,6 +166,19 @@ test('GET content returns slots when slots exist', async () => {
   assert.equal(response.status, 200)
   assert.equal(body.ok, true)
   assert.equal(body.slotCount, 2)
+})
+
+test('GET content accepts agency query fallback when agencyId is missing', async () => {
+  const handlers = createHandlers()
+  const response = await handlers.GET(
+    new Request(`http://localhost/api?agency=${IDS.agencyId}`),
+    { params: getParams() },
+  )
+  const body = await response.json() as { ok: boolean; siteVersionId: string }
+
+  assert.equal(response.status, 200)
+  assert.equal(body.ok, true)
+  assert.equal(body.siteVersionId, IDS.siteVersionId)
 })
 
 test('GET content returns clear error when no version exists', async () => {

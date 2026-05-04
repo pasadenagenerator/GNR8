@@ -99,6 +99,7 @@ export default function ContentBindingsPanel(props: { agencyId: string; clientId
   const [publishStatus, setPublishStatus] = useState<'idle' | 'success' | 'no_drafts' | 'error'>('idle')
   const [saveAllStatus, setSaveAllStatus] = useState<'idle' | 'success' | 'error'>('idle')
   const [historyRows, setHistoryRows] = useState<HistoryRow[]>([])
+  const [loadError, setLoadError] = useState<{ error: string; reasonCode?: string; diagnostics?: string[]; debug?: any } | null>(null)
 
   const endpoint = useMemo(() => `/api/gnr8/clients/${encodeURIComponent(props.clientId)}/sites/${encodeURIComponent(props.siteId)}/content?agencyId=${encodeURIComponent(props.agencyId)}`, [props])
 
@@ -147,8 +148,17 @@ export default function ContentBindingsPanel(props: { agencyId: string; clientId
   }, [props.agencyId, props.clientId, props.siteId])
 
   const loadContent = useCallback(async (): Promise<void> => {
+    setLoadError(null)
     const payload = (await fetch(endpoint).then((r) => r.json()).catch(() => null)) as any
-    if (!payload?.ok) return
+    if (!payload?.ok) {
+      setLoadError({
+        error: typeof payload?.error === 'string' ? payload.error : 'Failed to load content.',
+        reasonCode: typeof payload?.reasonCode === 'string' ? payload.reasonCode : undefined,
+        diagnostics: Array.isArray(payload?.diagnostics) ? payload.diagnostics : undefined,
+        debug: payload?.debug,
+      })
+      return
+    }
     setGrouped(payload.grouped ?? EMPTY_GROUPED)
     const resolvedSiteVersionId = typeof payload.siteVersionId === 'string' ? payload.siteVersionId : ''
     const loadedActiveSiteVersionId = typeof payload.activeSiteVersionId === 'string' ? payload.activeSiteVersionId : ''
@@ -301,6 +311,14 @@ export default function ContentBindingsPanel(props: { agencyId: string; clientId
         <div><strong>Debug:</strong> siteVersionId={siteVersionId || 'n/a'} activeSiteVersionId={activeSiteVersionId || 'n/a'}</div>
         <div>slotCount={slotCount} draftOverrideCount={draftOverrideCount} publishedOverrideCount={publishedOverrideCount}</div>
       </div>
+      {loadError ? (
+        <div style={{ fontSize: 12, color: '#991b1b', border: '1px solid #fecaca', borderRadius: 8, padding: 8, background: '#fef2f2', display: 'grid', gap: 4 }}>
+          <div><strong>Content API error:</strong> {loadError.error}</div>
+          <div>reasonCode={loadError.reasonCode ?? 'n/a'}</div>
+          <div>diagnostics={(loadError.diagnostics ?? []).join(', ') || 'n/a'}</div>
+          <div style={{ overflowX: 'auto', whiteSpace: 'pre-wrap' }}>debug={loadError.debug ? JSON.stringify(loadError.debug) : 'n/a'}</div>
+        </div>
+      ) : null}
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
         <button
           type='button'
