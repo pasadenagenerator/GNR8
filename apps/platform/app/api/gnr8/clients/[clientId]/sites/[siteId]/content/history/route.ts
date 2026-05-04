@@ -17,11 +17,11 @@ async function resolveRuntimeScope(input: {
   siteId: string
   agencyId: string
   siteVersionId: string
-}): Promise<{ runtimeSiteId: string; siteVersionId: string } | null> {
+}): Promise<{ runtimeSiteId: string; ownershipSiteId: string; siteVersionId: string } | null> {
   const pool = getSuperadminPool()
   const res = await pool.query<any>(
     `
-    select sv.site_id::text as runtime_site_id, sv.id::text as site_version_id
+    select sv.site_id::text as runtime_site_id, s.id::text as ownership_site_id, sv.id::text as site_version_id
     from public.sites s
     join public.organizations o on o.id=s.org_id
     join public.gnr8_runtime_site_versions sv on sv.ownership_site_id=s.id
@@ -32,7 +32,7 @@ async function resolveRuntimeScope(input: {
   )
   const row = res.rows[0]
   if (!row) return null
-  return { runtimeSiteId: row.runtime_site_id, siteVersionId: row.site_version_id }
+  return { runtimeSiteId: row.runtime_site_id, ownershipSiteId: row.ownership_site_id, siteVersionId: row.site_version_id }
 }
 
 export async function GET(req: Request, ctx: { params: Promise<{ clientId?: string; siteId?: string }> }) {
@@ -55,7 +55,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ clientId?: stri
     if (!scope) return NextResponse.json({ ok: false, error: 'Site scope not found' }, { status: 404 })
 
     const [historyRows, slots] = await Promise.all([
-      listContentOverrideHistory({ siteId: scope.runtimeSiteId, siteVersionId: scope.siteVersionId, limit }),
+      listContentOverrideHistory({ siteId: scope.ownershipSiteId, siteVersionId: scope.siteVersionId, limit }),
       listContentSlots(scope.siteVersionId),
     ])
     const slotLabelMap = new Map(slots.map((slot) => [slot.slotKey, friendlySlotLabel(slot.slotKey)]))

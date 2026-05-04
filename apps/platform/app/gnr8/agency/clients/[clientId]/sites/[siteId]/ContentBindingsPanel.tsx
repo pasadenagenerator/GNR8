@@ -203,13 +203,16 @@ export default function ContentBindingsPanel(props: { agencyId: string; clientId
     if (!siteVersionId) return
     setBusy(true)
     try {
-      console.info('[gnr8.content-editor] CONTENT_EDITOR_DRAFT_SAVE_REQUESTED', { siteId: props.siteId, siteVersionId, slotKeyCount: 1 })
-      const response = await fetch(`/api/gnr8/clients/${encodeURIComponent(props.clientId)}/sites/${encodeURIComponent(props.siteId)}/content/overrides`, {
+      const apiUrl = `/api/gnr8/clients/${encodeURIComponent(props.clientId)}/sites/${encodeURIComponent(props.siteId)}/content/overrides`
+      const payloadBody = { agencyId: props.agencyId, siteVersionId, slotKey: slot.slotKey, valueType: slot.slotType, valueJson: { value: drafts[slot.slotKey] ?? '' }, status: 'draft' }
+      console.info('[gnr8.content-editor] CONTENT_EDITOR_DRAFT_SAVE_REQUESTED', { siteId: props.siteId, siteVersionId, slotKey: slot.slotKey, slotKeyCount: 1, targetApiUrl: apiUrl, payload: payloadBody })
+      const response = await fetch(apiUrl, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ agencyId: props.agencyId, siteVersionId, slotKey: slot.slotKey, valueType: slot.slotType, valueJson: { value: drafts[slot.slotKey] ?? '' } }),
+        body: JSON.stringify(payloadBody),
       })
       const payload = (await response.json().catch(() => null)) as any
+      console.info('[gnr8.content-editor] CONTENT_EDITOR_DRAFT_SAVE_RESPONSE', { siteId: props.siteId, siteVersionId, slotKey: slot.slotKey, status: response.status, responseJson: payload })
       if (!response.ok || !payload?.ok) throw new Error(payload?.code ?? 'draft_save_failed')
       console.info('[gnr8.content-editor] CONTENT_DRAFT_SAVE_COMPLETED', { siteId: props.siteId, siteVersionId, slotKeyCount: 1, persistedRowCount: payload?.persistedRowCount ?? 0 })
       await fetchHistory(siteVersionId)
@@ -224,21 +227,24 @@ export default function ContentBindingsPanel(props: { agencyId: string; clientId
     setBusy(true)
     setSaveAllStatus('idle')
     try {
-      console.info('[gnr8.content-editor] CONTENT_EDITOR_BATCH_SAVE_REQUESTED', { siteId: props.siteId, siteVersionId, slotKeyCount: modifiedEditableSlots.length })
-      const response = await fetch(`/api/gnr8/clients/${encodeURIComponent(props.clientId)}/sites/${encodeURIComponent(props.siteId)}/content/overrides/batch`, {
+      const apiUrl = `/api/gnr8/clients/${encodeURIComponent(props.clientId)}/sites/${encodeURIComponent(props.siteId)}/content/overrides/batch`
+      const payloadBody = {
+        agencyId: props.agencyId,
+        siteVersionId,
+        overrides: modifiedEditableSlots.map((slot) => ({
+          slotKey: slot.slotKey,
+          value: drafts[slot.slotKey] ?? '',
+          status: 'draft',
+        })),
+      }
+      console.info('[gnr8.content-editor] CONTENT_EDITOR_BATCH_SAVE_REQUESTED', { siteId: props.siteId, siteVersionId, slotKeyCount: modifiedEditableSlots.length, targetApiUrl: apiUrl, payload: payloadBody })
+      const response = await fetch(apiUrl, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({
-          agencyId: props.agencyId,
-          siteVersionId,
-          overrides: modifiedEditableSlots.map((slot) => ({
-            slotKey: slot.slotKey,
-            value: drafts[slot.slotKey] ?? '',
-            status: 'draft',
-          })),
-        }),
+        body: JSON.stringify(payloadBody),
       })
       const payload = (await response.json().catch(() => null)) as any
+      console.info('[gnr8.content-editor] CONTENT_EDITOR_BATCH_SAVE_RESPONSE', { siteId: props.siteId, siteVersionId, slotKeyCount: modifiedEditableSlots.length, status: response.status, responseJson: payload })
       if (!response.ok || !payload?.ok) throw new Error(payload?.code ?? 'batch_save_failed')
       setPublishedAtLoad((prev) => {
         const next = { ...prev }
@@ -259,13 +265,16 @@ export default function ContentBindingsPanel(props: { agencyId: string; clientId
     setBusy(true)
     setPublishStatus('idle')
     try {
-      console.info('[gnr8.content-editor] CONTENT_EDITOR_PUBLISH_REQUESTED', { siteId: props.siteId, siteVersionId, slotKeyCount: Object.keys(drafts).length })
-      const response = await fetch(`/api/gnr8/clients/${encodeURIComponent(props.clientId)}/sites/${encodeURIComponent(props.siteId)}/content/publish`, {
+      const apiUrl = `/api/gnr8/clients/${encodeURIComponent(props.clientId)}/sites/${encodeURIComponent(props.siteId)}/content/publish`
+      const payloadBody = { agencyId: props.agencyId, siteVersionId }
+      console.info('[gnr8.content-editor] CONTENT_EDITOR_PUBLISH_REQUESTED', { siteId: props.siteId, siteVersionId, slotKeyCount: Object.keys(drafts).length, targetApiUrl: apiUrl, payload: payloadBody })
+      const response = await fetch(apiUrl, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ agencyId: props.agencyId, siteVersionId }),
+        body: JSON.stringify(payloadBody),
       })
       const payload = (await response.json().catch(() => null)) as any
+      console.info('[gnr8.content-editor] CONTENT_EDITOR_PUBLISH_RESPONSE', { siteId: props.siteId, siteVersionId, status: response.status, responseJson: payload })
       if (!response.ok || !payload?.ok) throw new Error(payload?.code ?? 'publish_failed')
       setPublished({ ...drafts })
       setPublishedAtLoad({ ...drafts })

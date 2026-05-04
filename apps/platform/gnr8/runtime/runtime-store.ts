@@ -2913,7 +2913,7 @@ export async function upsertContentOverrideDraft(input: {
   valueJson: unknown;
   actorUserId?: string | null;
   source?: ContentOverrideHistorySource;
-}): Promise<{ changed: boolean; historyRecorded: boolean; diagnostics: string[] }> {
+}): Promise<{ changed: boolean; historyRecorded: boolean; draftOverrideCountForVersion: number; diagnostics: string[] }> {
   return withTx(async (client) => {
     const diagnostics: string[] = ["CONTENT_HISTORY_WRITE_STARTED"];
     const previous = await getContentOverrideBySlotWithClient({
@@ -2924,7 +2924,11 @@ export async function upsertContentOverrideDraft(input: {
     });
     if (previous && contentJsonEquals(previous.valueJson, input.valueJson) && previous.valueType === input.valueType) {
       diagnostics.push("CONTENT_HISTORY_SKIPPED_UNCHANGED");
-      return { changed: false, historyRecorded: false, diagnostics };
+      const countRes = await client.query<{ count: string }>(
+        `select count(*)::text as count from public.gnr8_content_overrides where site_version_id = $1::uuid and slot_key = $2::text and status = 'draft'`,
+        [input.siteVersionId, input.slotKey],
+      );
+      return { changed: false, historyRecorded: false, draftOverrideCountForVersion: Number(countRes.rows[0]?.count ?? 0), diagnostics };
     }
 
     await client.query(
@@ -2936,20 +2940,30 @@ export async function upsertContentOverrideDraft(input: {
       `,
       [input.siteId, input.siteVersionId, input.slotKey, input.valueType, JSON.stringify(input.valueJson ?? {})],
     );
-    await insertContentOverrideHistoryWithClient({
-      client,
-      siteId: input.siteId,
-      siteVersionId: input.siteVersionId,
-      slotKey: input.slotKey,
-      valueType: input.valueType,
-      previousValueJson: previous?.valueJson ?? null,
-      nextValueJson: input.valueJson ?? {},
-      action: "draft_saved",
-      actorUserId: input.actorUserId ?? null,
-      source: input.source ?? "manual",
-    });
-    diagnostics.push("CONTENT_HISTORY_RECORDED");
-    return { changed: true, historyRecorded: true, diagnostics };
+    let historyRecorded = false;
+    try {
+      await insertContentOverrideHistoryWithClient({
+        client,
+        siteId: input.siteId,
+        siteVersionId: input.siteVersionId,
+        slotKey: input.slotKey,
+        valueType: input.valueType,
+        previousValueJson: previous?.valueJson ?? null,
+        nextValueJson: input.valueJson ?? {},
+        action: "draft_saved",
+        actorUserId: input.actorUserId ?? null,
+        source: input.source ?? "manual",
+      });
+      historyRecorded = true;
+      diagnostics.push("CONTENT_HISTORY_RECORDED");
+    } catch {
+      diagnostics.push("CONTENT_HISTORY_WRITE_FAILED_NON_BLOCKING");
+    }
+    const countRes = await client.query<{ count: string }>(
+      `select count(*)::text as count from public.gnr8_content_overrides where site_version_id = $1::uuid and slot_key = $2::text and status = 'draft'`,
+      [input.siteVersionId, input.slotKey],
+    );
+    return { changed: true, historyRecorded, draftOverrideCountForVersion: Number(countRes.rows[0]?.count ?? 0), diagnostics };
   });
 }
 
@@ -2992,20 +3006,24 @@ export async function upsertContentOverrideDraftBatch(input: {
         [input.siteId, input.siteVersionId, override.slotKey, override.valueType, JSON.stringify(override.valueJson ?? {})],
       );
       affected += res.rowCount ?? 0;
-      await insertContentOverrideHistoryWithClient({
-        client,
-        siteId: input.siteId,
-        siteVersionId: input.siteVersionId,
-        slotKey: override.slotKey,
-        valueType: override.valueType,
-        previousValueJson: previous?.valueJson ?? null,
-        nextValueJson: override.valueJson ?? {},
-        action: "draft_saved",
-        actorUserId: input.actorUserId ?? null,
-        source: input.source ?? "batch",
-      });
-      historyCount += 1;
-      diagnostics.push("CONTENT_HISTORY_RECORDED");
+      try {
+        await insertContentOverrideHistoryWithClient({
+          client,
+          siteId: input.siteId,
+          siteVersionId: input.siteVersionId,
+          slotKey: override.slotKey,
+          valueType: override.valueType,
+          previousValueJson: previous?.valueJson ?? null,
+          nextValueJson: override.valueJson ?? {},
+          action: "draft_saved",
+          actorUserId: input.actorUserId ?? null,
+          source: input.source ?? "batch",
+        });
+        historyCount += 1;
+        diagnostics.push("CONTENT_HISTORY_RECORDED");
+      } catch {
+        diagnostics.push("CONTENT_HISTORY_WRITE_FAILED_NON_BLOCKING");
+      }
     }
     return { updatedCount: affected, historyCount, skippedUnchangedCount, diagnostics };
   });
@@ -3055,20 +3073,24 @@ export async function publishDraftContentOverrides(input: {
         [input.siteId, input.siteVersionId, row.slot_key, row.value_type, JSON.stringify(row.value_json)],
       );
       count += res.rowCount ?? 0;
-      await insertContentOverrideHistoryWithClient({
-        client,
-        siteId: input.siteId,
-        siteVersionId: input.siteVersionId,
-        slotKey: row.slot_key,
-        valueType: row.value_type as ContentSlotType,
-        previousValueJson: previousPublished?.valueJson ?? null,
-        nextValueJson: row.value_json,
-        action: "content_published",
-        actorUserId: input.actorUserId ?? null,
-        source: input.source ?? "manual",
-      });
-      historyCount += 1;
-      diagnostics.push("CONTENT_HISTORY_RECORDED");
+      try {
+        await insertContentOverrideHistoryWithClient({
+          client,
+          siteId: input.siteId,
+          siteVersionId: input.siteVersionId,
+          slotKey: row.slot_key,
+          valueType: row.value_type as ContentSlotType,
+          previousValueJson: previousPublished?.valueJson ?? null,
+          nextValueJson: row.value_json,
+          action: "content_published",
+          actorUserId: input.actorUserId ?? null,
+          source: input.source ?? "manual",
+        });
+        historyCount += 1;
+        diagnostics.push("CONTENT_HISTORY_RECORDED");
+      } catch {
+        diagnostics.push("CONTENT_HISTORY_WRITE_FAILED_NON_BLOCKING");
+      }
     }
     return { publishedCount: count, draftCount, historyCount, diagnostics };
   });

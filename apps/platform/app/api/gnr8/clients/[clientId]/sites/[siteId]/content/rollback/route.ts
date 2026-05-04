@@ -16,11 +16,11 @@ async function resolveRuntimeScope(input: {
   siteId: string
   agencyId: string
   siteVersionId: string
-}): Promise<{ runtimeSiteId: string; siteVersionId: string } | null> {
+}): Promise<{ runtimeSiteId: string; ownershipSiteId: string; siteVersionId: string } | null> {
   const pool = getSuperadminPool()
   const res = await pool.query<any>(
     `
-    select sv.site_id::text as runtime_site_id, sv.id::text as site_version_id
+    select sv.site_id::text as runtime_site_id, s.id::text as ownership_site_id, sv.id::text as site_version_id
     from public.sites s
     join public.organizations o on o.id=s.org_id
     join public.gnr8_runtime_site_versions sv on sv.ownership_site_id=s.id
@@ -31,7 +31,7 @@ async function resolveRuntimeScope(input: {
   )
   const row = res.rows[0]
   if (!row) return null
-  return { runtimeSiteId: row.runtime_site_id, siteVersionId: row.site_version_id }
+  return { runtimeSiteId: row.runtime_site_id, ownershipSiteId: row.ownership_site_id, siteVersionId: row.site_version_id }
 }
 
 export async function POST(req: Request, ctx: { params: Promise<{ clientId?: string; siteId?: string }> }) {
@@ -62,7 +62,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ clientId?: str
     if (!slot) return NextResponse.json({ ok: false, error: 'slot does not exist' }, { status: 400 })
 
     const result = await rollbackContentOverride({
-      siteId: scope.runtimeSiteId,
+      siteId: scope.ownershipSiteId,
       siteVersionId: scope.siteVersionId,
       slotKey,
       historyId,

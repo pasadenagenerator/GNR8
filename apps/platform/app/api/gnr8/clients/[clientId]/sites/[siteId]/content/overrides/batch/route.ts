@@ -18,11 +18,11 @@ async function resolveRuntimeScope(input: {
   siteId: string
   agencyId: string
   siteVersionId: string
-}): Promise<{ runtimeSiteId: string; siteVersionId: string } | null> {
+}): Promise<{ runtimeSiteId: string; ownershipSiteId: string; siteVersionId: string } | null> {
   const pool = getSuperadminPool()
   const res = await pool.query<any>(
     `
-    select sv.site_id::text as runtime_site_id, sv.id::text as site_version_id
+    select sv.site_id::text as runtime_site_id, s.id::text as ownership_site_id, sv.id::text as site_version_id
     from public.sites s
     join public.organizations o on o.id=s.org_id
     join public.gnr8_runtime_site_versions sv on sv.ownership_site_id=s.id
@@ -33,11 +33,11 @@ async function resolveRuntimeScope(input: {
   )
   const row = res.rows[0]
   if (!row) return null
-  return { runtimeSiteId: row.runtime_site_id, siteVersionId: row.site_version_id }
+  return { runtimeSiteId: row.runtime_site_id, ownershipSiteId: row.ownership_site_id, siteVersionId: row.site_version_id }
 }
 
 export async function POST(req: Request, ctx: { params: Promise<{ clientId?: string; siteId?: string }> }) {
-  const diagnostics: string[] = ['CONTENT_BATCH_UPDATE_STARTED', 'CONTENT_DRAFT_SAVE_STARTED']
+  const diagnostics: string[] = ['CONTENT_BATCH_UPDATE_STARTED']
   try {
     const params = await ctx.params
     const clientId = normalizeUuid(params.clientId)
@@ -66,10 +66,12 @@ export async function POST(req: Request, ctx: { params: Promise<{ clientId?: str
     const planned = planBatchDraftUpserts({ slots, overrides })
     const valid = planned.valid
     const skippedCount = planned.skippedCount
+    diagnostics.push('CONTENT_BATCH_PAYLOAD_NORMALIZED')
     diagnostics.push(...planned.diagnostics)
+    if (valid.length > 0) diagnostics.push('CONTENT_BATCH_SLOT_VALIDATED')
 
     const saveResult = await upsertContentOverrideDraftBatch({
-      siteId: scope.runtimeSiteId,
+      siteId: scope.ownershipSiteId,
       siteVersionId: scope.siteVersionId,
       overrides: valid,
       actorUserId: actionContext.userId,
@@ -77,18 +79,18 @@ export async function POST(req: Request, ctx: { params: Promise<{ clientId?: str
     })
     const updatedCount = saveResult.updatedCount
     diagnostics.push(...saveResult.diagnostics)
-    diagnostics.push('CONTENT_BATCH_UPDATE_COMPLETED', 'CONTENT_DRAFT_SAVE_COMPLETED')
+    if (valid.length === 0) diagnostics.push('CONTENT_BATCH_NO_VALID_OVERRIDES')
+    diagnostics.push('CONTENT_BATCH_UPDATE_COMPLETED')
     return NextResponse.json({
       ok: true,
       updatedCount,
-      persistedRowCount: updatedCount,
       skippedCount,
       siteVersionId: scope.siteVersionId,
       diagnostics,
     })
   } catch (error) {
     const mapped = parseAgencyActionContextError(error)
-    diagnostics.push('CONTENT_DRAFT_SAVE_FAILED')
-    return NextResponse.json({ ok: false, error: mapped.message, updatedCount: 0, skippedCount: 0, diagnostics }, { status: mapped.status })
+    diagnostics.push('CONTENT_BATCH_UPDATE_FAILED')
+    return NextResponse.json({ ok: false, reasonCode: 'CONTENT_BATCH_SAVE_FAILED', error: mapped.message, updatedCount: 0, skippedCount: 0, diagnostics }, { status: mapped.status })
   }
 }
