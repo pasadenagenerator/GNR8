@@ -1217,6 +1217,13 @@ export async function bootstrapRuntimeFromTemplateSite(input: {
         templateId,
         persistedCount,
       })
+      if (persistedCount === 0) {
+        console.error('[site-bootstrap-worker] CONTENT_SLOT_BOOTSTRAP_PERSISTED_COUNT_ZERO', {
+          siteId: scoped.siteId,
+          siteVersionId: scoped.siteVersionId,
+          templateId,
+        })
+      }
       console.info('[site-bootstrap-worker] CONTENT_SLOT_BOOTSTRAP_COMPLETED', {
         siteId: scoped.siteId,
         siteVersionId: scoped.siteVersionId,
@@ -1351,6 +1358,13 @@ export async function regenerateContentSlotsForSiteVersion(
     source: 'operator_backfill',
     persistedCount,
   })
+  if (persistedCount === 0) {
+    console.error('[site-bootstrap-worker] CONTENT_SLOT_BOOTSTRAP_PERSISTED_COUNT_ZERO', {
+      siteId: siteVersion.siteId,
+      siteVersionId: input.siteVersionId,
+      source: 'operator_backfill',
+    })
+  }
   console.info('[site-bootstrap-worker] CONTENT_SLOT_BOOTSTRAP_COMPLETED', {
     siteId: siteVersion.siteId,
     siteVersionId: input.siteVersionId,

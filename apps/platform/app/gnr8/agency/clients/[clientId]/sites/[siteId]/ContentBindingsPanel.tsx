@@ -2,7 +2,7 @@
 
 import { memo, useCallback, useEffect, useMemo, useState } from 'react'
 
-import { detectFieldDraftState, draftStateLabel, friendlySlotLabel, inputKindForSlot, sectionTitle, type Slot } from '@/gnr8/site/content-bindings-panel-helpers'
+import { detectFieldDraftState, draftStateLabel, friendlySlotLabel, inputKindForSlot, sectionTitle, shouldUseFlatSlotFallback, type Slot } from '@/gnr8/site/content-bindings-panel-helpers'
 
 type Override = { slotKey: string; valueJson: any }
 type HistoryRow = {
@@ -86,10 +86,15 @@ const Field = memo(function Field(props: {
 
 export default function ContentBindingsPanel(props: { agencyId: string; clientId: string; siteId: string }) {
   const [grouped, setGrouped] = useState<Grouped>(EMPTY_GROUPED)
+  const [siteVersionId, setSiteVersionId] = useState<string>('')
   const [activeSiteVersionId, setActiveSiteVersionId] = useState<string>('')
+  const [slots, setSlots] = useState<Slot[]>([])
   const [drafts, setDrafts] = useState<Record<string, string>>({})
   const [published, setPublished] = useState<Record<string, string>>({})
   const [publishedAtLoad, setPublishedAtLoad] = useState<Record<string, string>>({})
+  const [slotCount, setSlotCount] = useState(0)
+  const [draftOverrideCount, setDraftOverrideCount] = useState(0)
+  const [publishedOverrideCount, setPublishedOverrideCount] = useState(0)
   const [busy, setBusy] = useState(false)
   const [publishStatus, setPublishStatus] = useState<'idle' | 'success' | 'no_drafts' | 'error'>('idle')
   const [saveAllStatus, setSaveAllStatus] = useState<'idle' | 'success' | 'error'>('idle')
@@ -145,11 +150,19 @@ export default function ContentBindingsPanel(props: { agencyId: string; clientId
     const payload = (await fetch(endpoint).then((r) => r.json()).catch(() => null)) as any
     if (!payload?.ok) return
     setGrouped(payload.grouped ?? EMPTY_GROUPED)
-    const loadedSiteVersionId = typeof payload.activeSiteVersionId === 'string'
-      ? payload.activeSiteVersionId
-      : (typeof payload.siteVersionId === 'string' ? payload.siteVersionId : '')
-    setActiveSiteVersionId(loadedSiteVersionId)
-    console.info('[gnr8.content-editor] CONTENT_EDITOR_VERSION_RESOLVED', { siteId: props.siteId, siteVersionId: loadedSiteVersionId })
+    const resolvedSiteVersionId = typeof payload.siteVersionId === 'string' ? payload.siteVersionId : ''
+    const loadedActiveSiteVersionId = typeof payload.activeSiteVersionId === 'string' ? payload.activeSiteVersionId : ''
+    setSiteVersionId(resolvedSiteVersionId)
+    setActiveSiteVersionId(loadedActiveSiteVersionId)
+    setSlots(Array.isArray(payload.slots) ? payload.slots : [])
+    setSlotCount(typeof payload.slotCount === 'number' ? payload.slotCount : 0)
+    setDraftOverrideCount(typeof payload.draftOverrideCount === 'number' ? payload.draftOverrideCount : 0)
+    setPublishedOverrideCount(typeof payload.publishedOverrideCount === 'number' ? payload.publishedOverrideCount : 0)
+    console.info('[gnr8.content-editor] CONTENT_EDITOR_VERSION_RESOLVED', {
+      siteId: props.siteId,
+      siteVersionId: resolvedSiteVersionId,
+      activeSiteVersionId: loadedActiveSiteVersionId,
+    })
     const draftMap: Record<string, string> = {}
     const draftOverrides: Override[] = Array.isArray(payload.draftOverrides) ? payload.draftOverrides : []
     for (const ov of draftOverrides) draftMap[ov.slotKey] = typeof ov.valueJson?.value === 'string' ? ov.valueJson.value : ''
@@ -159,7 +172,7 @@ export default function ContentBindingsPanel(props: { agencyId: string; clientId
     setDrafts(draftMap)
     setPublished(pubMap)
     setPublishedAtLoad(pubMap)
-    if (loadedSiteVersionId) await fetchHistory(loadedSiteVersionId)
+    if (resolvedSiteVersionId) await fetchHistory(resolvedSiteVersionId)
   }, [endpoint, fetchHistory])
 
   useEffect(() => {
@@ -170,7 +183,11 @@ export default function ContentBindingsPanel(props: { agencyId: string; clientId
     setDrafts((p) => ({ ...p, [slotKey]: nextValue }))
   }, [])
 
-  const siteVersionId = activeSiteVersionId
+  const shouldRenderFlatFallback = shouldUseFlatSlotFallback({
+    groupedHeroCount: grouped.hero.length,
+    groupedSectionCount: grouped.sections.length,
+    slotCount: slots.length,
+  })
 
   async function saveDraft(slot: Slot): Promise<void> {
     if (!siteVersionId) return
@@ -280,6 +297,10 @@ export default function ContentBindingsPanel(props: { agencyId: string; clientId
   return (
     <section style={{ border: '1px solid #dbe6f1', borderRadius: 12, background: '#fff', padding: 14, display: 'grid', gap: 12 }}>
       <h3 style={{ margin: 0, fontSize: 15, color: '#0f172a' }}>Content</h3>
+      <div style={{ fontSize: 12, color: '#334155', border: '1px dashed #cbd5e1', borderRadius: 8, padding: 8, background: '#f8fafc' }}>
+        <div><strong>Debug:</strong> siteVersionId={siteVersionId || 'n/a'} activeSiteVersionId={activeSiteVersionId || 'n/a'}</div>
+        <div>slotCount={slotCount} draftOverrideCount={draftOverrideCount} publishedOverrideCount={publishedOverrideCount}</div>
+      </div>
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
         <button
           type='button'
@@ -304,15 +325,24 @@ export default function ContentBindingsPanel(props: { agencyId: string; clientId
         {!hasDraftChangesToPublish ? <div style={{ fontSize: 12, color: '#64748b', alignSelf: 'center' }}>No draft changes to publish</div> : null}
       </div>
 
-      <h4 style={{ margin: 0, fontSize: 14 }}>Hero</h4>
-      <Field slot={grouped.hero.find((s) => s.slotKey === 'hero.title') ?? null} busy={busy} value={drafts['hero.title'] ?? ''} publishedValue={published['hero.title'] ?? ''} onChange={handleDraftChange} onSave={saveDraft} />
-      <Field slot={grouped.hero.find((s) => s.slotKey === 'hero.subtitle') ?? null} busy={busy} value={drafts['hero.subtitle'] ?? ''} publishedValue={published['hero.subtitle'] ?? ''} onChange={handleDraftChange} onSave={saveDraft} />
-      <Field slot={grouped.hero.find((s) => s.slotKey === 'hero.cta.label') ?? null} busy={busy} value={drafts['hero.cta.label'] ?? ''} publishedValue={published['hero.cta.label'] ?? ''} onChange={handleDraftChange} onSave={saveDraft} />
-      <Field slot={grouped.hero.find((s) => s.slotKey === 'hero.cta.href') ?? null} busy={busy} value={drafts['hero.cta.href'] ?? ''} publishedValue={published['hero.cta.href'] ?? ''} onChange={handleDraftChange} onSave={saveDraft} />
-      <Field slot={grouped.hero.find((s) => s.slotKey === 'hero.image') ?? null} busy={busy} value={drafts['hero.image'] ?? ''} publishedValue={published['hero.image'] ?? ''} onChange={handleDraftChange} onSave={saveDraft} />
+      {shouldRenderFlatFallback ? (
+        <>
+          <h4 style={{ margin: 0, fontSize: 14 }}>All content slots</h4>
+          {slots.map((slot) => (
+            <Field key={slot.slotKey} slot={slot} busy={busy} value={drafts[slot.slotKey] ?? ''} publishedValue={published[slot.slotKey] ?? ''} onChange={handleDraftChange} onSave={saveDraft} />
+          ))}
+        </>
+      ) : (
+        <>
+          <h4 style={{ margin: 0, fontSize: 14 }}>Hero</h4>
+          <Field slot={grouped.hero.find((s) => s.slotKey === 'hero.title') ?? null} busy={busy} value={drafts['hero.title'] ?? ''} publishedValue={published['hero.title'] ?? ''} onChange={handleDraftChange} onSave={saveDraft} />
+          <Field slot={grouped.hero.find((s) => s.slotKey === 'hero.subtitle') ?? null} busy={busy} value={drafts['hero.subtitle'] ?? ''} publishedValue={published['hero.subtitle'] ?? ''} onChange={handleDraftChange} onSave={saveDraft} />
+          <Field slot={grouped.hero.find((s) => s.slotKey === 'hero.cta.label') ?? null} busy={busy} value={drafts['hero.cta.label'] ?? ''} publishedValue={published['hero.cta.label'] ?? ''} onChange={handleDraftChange} onSave={saveDraft} />
+          <Field slot={grouped.hero.find((s) => s.slotKey === 'hero.cta.href') ?? null} busy={busy} value={drafts['hero.cta.href'] ?? ''} publishedValue={published['hero.cta.href'] ?? ''} onChange={handleDraftChange} onSave={saveDraft} />
+          <Field slot={grouped.hero.find((s) => s.slotKey === 'hero.image') ?? null} busy={busy} value={drafts['hero.image'] ?? ''} publishedValue={published['hero.image'] ?? ''} onChange={handleDraftChange} onSave={saveDraft} />
 
-      <h4 style={{ margin: 0, fontSize: 14 }}>Sections</h4>
-      {grouped.sections.map((section) => (
+          <h4 style={{ margin: 0, fontSize: 14 }}>Sections</h4>
+          {grouped.sections.map((section) => (
         <div key={section.titleSlot?.slotKey ?? `section-${section.index}`} style={{ borderTop: '1px solid #e2e8f0', paddingTop: 10, display: 'grid', gap: 10 }}>
           <div style={{ fontWeight: 600, fontSize: 13 }}>{sectionTitle({ index: section.index, type: section.type })}</div>
           <Field slot={section.titleSlot} busy={busy} value={drafts[section.titleSlot?.slotKey ?? ''] ?? ''} publishedValue={published[section.titleSlot?.slotKey ?? ''] ?? ''} onChange={handleDraftChange} onSave={saveDraft} />
@@ -344,16 +374,18 @@ export default function ContentBindingsPanel(props: { agencyId: string; clientId
             </div>
           ) : null}
         </div>
-      ))}
-
-      {grouped.footer.length > 0 ? (
-        <>
-          <h4 style={{ margin: 0, fontSize: 14 }}>Footer</h4>
-          {grouped.footer.map((slot) => (
-            <Field key={slot.slotKey} slot={slot} busy={busy} value={drafts[slot.slotKey] ?? ''} publishedValue={published[slot.slotKey] ?? ''} onChange={handleDraftChange} onSave={saveDraft} />
           ))}
+
+          {grouped.footer.length > 0 ? (
+            <>
+              <h4 style={{ margin: 0, fontSize: 14 }}>Footer</h4>
+              {grouped.footer.map((slot) => (
+                <Field key={slot.slotKey} slot={slot} busy={busy} value={drafts[slot.slotKey] ?? ''} publishedValue={published[slot.slotKey] ?? ''} onChange={handleDraftChange} onSave={saveDraft} />
+              ))}
+            </>
+          ) : null}
         </>
-      ) : null}
+      )}
 
       <h4 style={{ margin: 0, fontSize: 14 }}>Recent changes</h4>
       {historyRows.length === 0 ? <div style={{ fontSize: 12, color: '#64748b' }}>No history yet.</div> : null}

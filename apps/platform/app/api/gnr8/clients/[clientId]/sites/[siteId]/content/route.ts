@@ -62,7 +62,7 @@ function toIndexFromKey(prefix: string, slotKey: string): number | null {
   return Number.isInteger(n) ? n : null
 }
 
-function groupSlots(slots: ContentSlot[]): {
+export type GroupedContentSlots = {
   hero: ContentSlot[]
   sections: Array<{
     index: number
@@ -76,7 +76,9 @@ function groupSlots(slots: ContentSlot[]): {
     contact: { emailSlot: ContentSlot | null; phoneSlot: ContentSlot | null; addressSlot: ContentSlot | null; formTitleSlot: ContentSlot | null }
   }>
   footer: ContentSlot[]
-} {
+}
+
+export function groupSlots(slots: ContentSlot[]): GroupedContentSlots {
   const hero = slots.filter((slot) => slot.slotKey.startsWith('hero.'))
   const footer = slots.filter((slot) => slot.slotKey.startsWith('footer.'))
   const sectionSlots = slots.filter((slot) => slot.slotKey.startsWith('sections.'))
@@ -138,6 +140,10 @@ function groupSlots(slots: ContentSlot[]): {
   return { hero, sections, footer }
 }
 
+export function groupedContentLooksEmpty(grouped: GroupedContentSlots): boolean {
+  return grouped.hero.length === 0 && grouped.sections.length === 0 && grouped.footer.length === 0
+}
+
 export async function GET(req: Request, ctx: { params: Promise<{ clientId?: string; siteId?: string }> }) {
   try {
     const params = await ctx.params
@@ -151,12 +157,27 @@ export async function GET(req: Request, ctx: { params: Promise<{ clientId?: stri
     await requireAgencyActionContext({ action: 'view_dashboard', requestedAgencyId: agencyId })
 
     const requestedSiteVersionId = normalizeUuid(url.searchParams.get('siteVersionId'))
+    console.info('[gnr8.content-api] CONTENT_GET_STARTED', { clientId, siteId, agencyId, requestedSiteVersionId })
     const scope = await resolveRuntimeScope({ clientId, siteId, agencyId, requestedSiteVersionId })
     if (!scope) return NextResponse.json({ ok: false, error: 'Site scope not found' }, { status: 404 })
+    console.info('[gnr8.content-api] CONTENT_GET_SITE_VERSION_RESOLVED', {
+      clientId,
+      siteId,
+      requestedSiteVersionId,
+      resolvedSiteVersionId: scope.siteVersionId,
+      activeSiteVersionId: scope.activeSiteVersionId,
+    })
 
     const slots = await listContentSlots(scope.siteVersionId)
     const draftOverrides = await listContentOverrides({ siteVersionId: scope.siteVersionId, status: 'draft' })
     const publishedOverrides = await listContentOverrides({ siteVersionId: scope.siteVersionId, status: 'published' })
+    console.info('[gnr8.content-api] CONTENT_GET_SLOTS_LOADED', {
+      siteId: scope.runtimeSiteId,
+      siteVersionId: scope.siteVersionId,
+      slotCount: slots.length,
+      draftOverrideCount: draftOverrides.length,
+      publishedOverrideCount: publishedOverrides.length,
+    })
     const pool = getSuperadminPool()
     const historyCountRes = await pool.query<{ count: string }>(
       `
@@ -168,8 +189,24 @@ export async function GET(req: Request, ctx: { params: Promise<{ clientId?: stri
     )
     const historyCount = Number(historyCountRes.rows[0]?.count ?? '0')
     const grouped = groupSlots(slots)
-    const diagnostics: string[] = []
+    const diagnostics: string[] = ['CONTENT_GET_STARTED', 'CONTENT_GET_SITE_VERSION_RESOLVED', 'CONTENT_GET_SLOTS_LOADED']
+    if (slots.length === 0) {
+      diagnostics.push('CONTENT_GET_SLOTS_EMPTY')
+      console.warn('[gnr8.content-api] CONTENT_GET_SLOTS_EMPTY', {
+        siteId: scope.runtimeSiteId,
+        siteVersionId: scope.siteVersionId,
+      })
+    }
+    diagnostics.push('CONTENT_GET_GROUPING_COMPLETED')
+    console.info('[gnr8.content-api] CONTENT_GET_GROUPING_COMPLETED', {
+      siteId: scope.runtimeSiteId,
+      siteVersionId: scope.siteVersionId,
+      heroCount: grouped.hero.length,
+      sectionCount: grouped.sections.length,
+      footerCount: grouped.footer.length,
+    })
     if (!grouped.sections.length) diagnostics.push('CONTENT_SECTION_SLOTS_MISSING')
+    if (groupedContentLooksEmpty(grouped) && slots.length > 0) diagnostics.push('CONTENT_GROUPING_EMPTY_WITH_FLAT_SLOTS_PRESENT')
     return NextResponse.json({
       ok: true,
       siteVersionId: scope.siteVersionId,

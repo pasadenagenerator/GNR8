@@ -122,3 +122,11 @@ export function slotGroupKey(slotKey: string): string {
   if (match) return `sections.${match[1]}.contact`
   return slotKey
 }
+
+export function shouldUseFlatSlotFallback(input: {
+  groupedHeroCount: number
+  groupedSectionCount: number
+  slotCount: number
+}): boolean {
+  return input.groupedHeroCount === 0 && input.groupedSectionCount === 0 && input.slotCount > 0
+}

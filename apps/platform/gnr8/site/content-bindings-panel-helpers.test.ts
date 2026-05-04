@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import { detectFieldDraftState, friendlySlotLabel, sectionTitle, slotGroupKey } from '@/gnr8/site/content-bindings-panel-helpers'
+import { detectFieldDraftState, friendlySlotLabel, sectionTitle, shouldUseFlatSlotFallback, slotGroupKey } from '@/gnr8/site/content-bindings-panel-helpers'
 
 test('friendlySlotLabel maps known slot keys to editor-friendly labels', () => {
   assert.equal(friendlySlotLabel('hero.cta.href'), 'Button link')
@@ -30,3 +30,9 @@ test('detectFieldDraftState identifies original, draft pending, and published st
   assert.equal(detectFieldDraftState({ slotKey: 'hero.title', draftValue: undefined, publishedValue: 'A' }), 'published_override')
 })
 
+test('shouldUseFlatSlotFallback returns true only when grouped hero/sections are empty and slots exist', () => {
+  assert.equal(shouldUseFlatSlotFallback({ groupedHeroCount: 0, groupedSectionCount: 0, slotCount: 3 }), true)
+  assert.equal(shouldUseFlatSlotFallback({ groupedHeroCount: 1, groupedSectionCount: 0, slotCount: 3 }), false)
+  assert.equal(shouldUseFlatSlotFallback({ groupedHeroCount: 0, groupedSectionCount: 1, slotCount: 3 }), false)
+  assert.equal(shouldUseFlatSlotFallback({ groupedHeroCount: 0, groupedSectionCount: 0, slotCount: 0 }), false)
+})
