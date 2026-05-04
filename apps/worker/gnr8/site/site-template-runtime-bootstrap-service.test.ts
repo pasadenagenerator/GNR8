@@ -8,6 +8,7 @@ import { ScopedImportPipelineFailureError } from '@/gnr8/site/scoped-import-pipe
 import {
   TemplateSiteRuntimeBootstrapError,
   bootstrapRuntimeFromTemplateSite,
+  regenerateContentSlotsForSiteVersion,
 } from '@/gnr8/site/site-template-runtime-bootstrap-service'
 
 const SITE = {
@@ -40,20 +41,27 @@ function createTemplate(overrides?: Partial<any>) {
 function captureLogs() {
   const infos: Array<{ message: unknown; meta: any }> = []
   const errors: Array<{ message: unknown; meta: any }> = []
+  const warns: Array<{ message: unknown; meta: any }> = []
   const originalInfo = console.info
   const originalError = console.error
+  const originalWarn = console.warn
   console.info = ((message: unknown, meta: any) => {
     infos.push({ message, meta })
   }) as typeof console.info
   console.error = ((message: unknown, meta: any) => {
     errors.push({ message, meta })
   }) as typeof console.error
+  console.warn = ((message: unknown, meta: any) => {
+    warns.push({ message, meta })
+  }) as typeof console.warn
   return {
     infos,
     errors,
+    warns,
     restore: () => {
       console.info = originalInfo
       console.error = originalError
+      console.warn = originalWarn
     },
   }
 }
@@ -172,9 +180,113 @@ test('template bootstrap succeeds from durable processed source and emits pipeli
     const rawSelected = logs.infos.find((entry) => String(entry.message).includes('RAW_TEMPLATE_PREVIEW_SELECTED'))
     assert.ok(rawSelected)
     assert.equal(rawSelected?.meta.artifactType, 'raw_template_site')
+    const slotStarted = logs.infos.find((entry) => String(entry.message).includes('CONTENT_SLOT_BOOTSTRAP_STARTED'))
+    const slotPersisted = logs.infos.find((entry) => String(entry.message).includes('CONTENT_SLOT_BOOTSTRAP_PERSISTED_COUNT'))
+    const slotCompleted = logs.infos.find((entry) => String(entry.message).includes('CONTENT_SLOT_BOOTSTRAP_COMPLETED'))
+    assert.ok(slotStarted)
+    assert.ok(slotPersisted)
+    assert.ok(slotCompleted)
+    assert.equal(typeof slotPersisted?.meta.persistedCount, 'number')
   } finally {
     logs.restore()
   }
+})
+
+test('regenerateContentSlotsForSiteVersion backfills slots idempotently from semantic import + raw template artifact', async () => {
+  const logs = captureLogs()
+  try {
+    const result = await regenerateContentSlotsForSiteVersion(
+      { siteVersionId: 'runtime-version-1' },
+      {
+        getSiteVersion: async () =>
+          ({
+            id: 'runtime-version-1',
+            siteId: 'runtime-site-1',
+            importProvenanceSummary: {
+              kind: 'runtime_import_provenance_summary_v1',
+              sourceMode: 'raw_html_fallback',
+              importFidelityStatus: 'degraded_import',
+              renderedCaptureStatus: 'failed',
+              renderedDomQuality: 'weak',
+              screenshotCount: 0,
+              computedStyleSampleCount: 0,
+              importDiagnosticCodes: [],
+              captureEvidence: {
+                selectedSourceHtmlPath: null,
+                responseHtmlPath: null,
+                entryHtmlPath: null,
+                renderedCaptureManifestPath: null,
+                acquisitionEvidencePath: null,
+                renderedDomPath: null,
+                computedStylesPath: null,
+                renderedViewportScreenshotPath: null,
+                renderedFullpageScreenshotPath: null,
+                screenshotPaths: [],
+              },
+              renderedCapture: {
+                used: false,
+                status: 'failed',
+                quality: 'weak',
+                domLength: 0,
+                nodeCount: 0,
+                styleSampleCount: 0,
+                styleCoverage: 0,
+                screenshots: { viewport: false, fullPage: false },
+                execution: {
+                  runtimeKind: 'nodejs',
+                  environmentSupported: true,
+                  browserPackageAvailable: false,
+                  browserBinaryAvailable: false,
+                  environmentStatus: 'supported',
+                  failureCategory: 'none',
+                  failureCode: null,
+                  browserLaunch: 'not_attempted',
+                  navigation: 'not_attempted',
+                  dom: 'not_attempted',
+                  screenshot: 'none',
+                  styleSampling: 'not_attempted',
+                },
+              },
+              styleSignals: null,
+              semanticImport: {
+                sourceMode: 'raw_html_only',
+                diagnostics: [],
+                navigation: [],
+                hero: { title: 'Hero title', subtitle: 'Hero subtitle', cta: null, image: null },
+                sections: [],
+                assets: { knownAssets: [], images: [], groupedByRole: { logo: [], hero: [], gallery: [], team: [], icon: [], other: [] } },
+              },
+            },
+          }) as any,
+        getRawTemplateSiteArtifact: async () =>
+          ({ siteVersionId: 'runtime-version-1', siteId: 'runtime-site-1', entryHtmlPath: 'index.html' }) as any,
+        getRawTemplateSiteAsset: async () =>
+          ({ bytes: Buffer.from('<!doctype html><html><body><h1>Hero title</h1></body></html>', 'utf8') }) as any,
+        persistContentSlots: async () => 5,
+      },
+    )
+    assert.equal(result.skippedReason, null)
+    assert.equal(result.persistedCount, 5)
+    assert.equal(logs.infos.some((entry) => String(entry.message).includes('CONTENT_SLOT_BOOTSTRAP_STARTED')), true)
+    assert.equal(logs.infos.some((entry) => String(entry.message).includes('CONTENT_SLOT_BOOTSTRAP_COMPLETED')), true)
+    assert.equal(logs.infos.some((entry) => String(entry.message).includes('CONTENT_SLOT_BOOTSTRAP_PERSISTED_COUNT')), true)
+  } finally {
+    logs.restore()
+  }
+})
+
+test('regenerateContentSlotsForSiteVersion skips when semantic import is missing', async () => {
+  const result = await regenerateContentSlotsForSiteVersion(
+    { siteVersionId: 'runtime-version-2' },
+    {
+      getSiteVersion: async () => ({ id: 'runtime-version-2', siteId: 'runtime-site-2', importProvenanceSummary: null } as any),
+      getRawTemplateSiteArtifact: async () =>
+        ({ siteVersionId: 'runtime-version-2', siteId: 'runtime-site-2', entryHtmlPath: 'index.html' }) as any,
+      getRawTemplateSiteAsset: async () => ({ bytes: Buffer.from('<html></html>', 'utf8') }) as any,
+    },
+  )
+  assert.equal(result.skippedReason, 'SEMANTIC_IMPORT_MISSING')
+  assert.equal(result.persistedCount, 0)
 })
 
 test('template bootstrap resolves root-level entry HTML bootstrap input deterministically', async () => {

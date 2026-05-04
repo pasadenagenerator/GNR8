@@ -16,7 +16,7 @@ import {
 import type { UrlSinglePageImportSnapshot } from '@/gnr8/validation/runtime/url-single-page-import'
 import { runSemanticImportEngine, type SemanticImportResult } from '@/gnr8/import-semantic/semantic-import-engine'
 import { inferContentSlotsFromSemanticImport } from '@/gnr8/runtime/content-binding'
-import { upsertContentSlots } from '@/gnr8/runtime/runtime-store'
+import { getRawTemplateSiteArtifact, getRawTemplateSiteAsset, getSiteVersion, upsertContentSlots } from '@/gnr8/runtime/runtime-store'
 
 type BootstrapTemplateRecord = Pick<
   TemplateRecord,
@@ -103,7 +103,7 @@ type BootstrapDeps = {
     siteVersionId: string
     html: string
     semanticImport: SemanticImportResult
-  }) => Promise<void>
+  }) => Promise<number>
   now: () => Date
 }
 
@@ -132,14 +132,14 @@ async function persistContentSlots(input: {
   siteVersionId: string
   html: string
   semanticImport: SemanticImportResult
-}): Promise<void> {
+}): Promise<number> {
   const inferred = inferContentSlotsFromSemanticImport({
     siteId: input.siteId,
     siteVersionId: input.siteVersionId,
     html: input.html,
     semanticImport: input.semanticImport,
   })
-  await upsertContentSlots({
+  return upsertContentSlots({
     siteId: input.siteId,
     siteVersionId: input.siteVersionId,
     slots: inferred.slots,
@@ -1200,14 +1200,30 @@ export async function bootstrapRuntimeFromTemplateSite(input: {
       entryHtmlPathAbs,
     })
     if (snapshot.semanticImport) {
-      await deps.persistContentSlots({
+      console.info('[site-bootstrap-worker] CONTENT_SLOT_BOOTSTRAP_STARTED', {
+        siteId: scoped.siteId,
+        siteVersionId: scoped.siteVersionId,
+        templateId,
+      })
+      const persistedCount = await deps.persistContentSlots({
         siteId: scoped.siteId,
         siteVersionId: scoped.siteVersionId,
         html: resolvedSource.html,
         semanticImport: snapshot.semanticImport,
       })
+      console.info('[site-bootstrap-worker] CONTENT_SLOT_BOOTSTRAP_PERSISTED_COUNT', {
+        siteId: scoped.siteId,
+        siteVersionId: scoped.siteVersionId,
+        templateId,
+        persistedCount,
+      })
+      console.info('[site-bootstrap-worker] CONTENT_SLOT_BOOTSTRAP_COMPLETED', {
+        siteId: scoped.siteId,
+        siteVersionId: scoped.siteVersionId,
+        templateId,
+      })
     } else {
-      console.warn('[site-bootstrap-worker] CONTENT_SLOT_INFERENCE_SKIPPED_NO_SEMANTIC_IMPORT', {
+      console.warn('[site-bootstrap-worker] CONTENT_SLOT_BOOTSTRAP_SKIPPED_NO_SEMANTIC_IMPORT', {
         siteId,
         siteVersionId: scoped.siteVersionId,
         templateId,
@@ -1254,6 +1270,97 @@ export async function bootstrapRuntimeFromTemplateSite(input: {
       message: error instanceof Error ? error.message : String(error),
     })
     throw mapBootstrapError({ error, siteId, templateId })
+  }
+}
+
+export async function regenerateContentSlotsForSiteVersion(
+  input: { siteVersionId: string },
+  deps?: {
+    getSiteVersion?: typeof getSiteVersion
+    getRawTemplateSiteArtifact?: typeof getRawTemplateSiteArtifact
+    getRawTemplateSiteAsset?: typeof getRawTemplateSiteAsset
+    persistContentSlots?: typeof persistContentSlots
+  },
+): Promise<{
+  siteId: string
+  siteVersionId: string
+  persistedCount: number
+  skippedReason: null | 'SITE_VERSION_NOT_FOUND' | 'RAW_TEMPLATE_ARTIFACT_NOT_FOUND' | 'ENTRY_HTML_MISSING' | 'SEMANTIC_IMPORT_MISSING'
+}> {
+  const resolvedDeps = {
+    getSiteVersion,
+    getRawTemplateSiteArtifact,
+    getRawTemplateSiteAsset,
+    persistContentSlots,
+    ...(deps ?? {}),
+  }
+
+  const siteVersion = await resolvedDeps.getSiteVersion(input.siteVersionId)
+  if (!siteVersion) {
+    return {
+      siteId: '',
+      siteVersionId: input.siteVersionId,
+      persistedCount: 0,
+      skippedReason: 'SITE_VERSION_NOT_FOUND',
+    }
+  }
+  const artifact = await resolvedDeps.getRawTemplateSiteArtifact(input.siteVersionId)
+  if (!artifact) {
+    return {
+      siteId: siteVersion.siteId,
+      siteVersionId: input.siteVersionId,
+      persistedCount: 0,
+      skippedReason: 'RAW_TEMPLATE_ARTIFACT_NOT_FOUND',
+    }
+  }
+  const htmlAsset = await resolvedDeps.getRawTemplateSiteAsset({
+    siteVersionId: input.siteVersionId,
+    filePath: artifact.entryHtmlPath,
+  })
+  if (!htmlAsset) {
+    return {
+      siteId: siteVersion.siteId,
+      siteVersionId: input.siteVersionId,
+      persistedCount: 0,
+      skippedReason: 'ENTRY_HTML_MISSING',
+    }
+  }
+  const semanticImport = siteVersion.importProvenanceSummary?.semanticImport ?? null
+  if (!semanticImport) {
+    return {
+      siteId: siteVersion.siteId,
+      siteVersionId: input.siteVersionId,
+      persistedCount: 0,
+      skippedReason: 'SEMANTIC_IMPORT_MISSING',
+    }
+  }
+  console.info('[site-bootstrap-worker] CONTENT_SLOT_BOOTSTRAP_STARTED', {
+    siteId: siteVersion.siteId,
+    siteVersionId: input.siteVersionId,
+    source: 'operator_backfill',
+  })
+  const persistedCount = await resolvedDeps.persistContentSlots({
+    siteId: siteVersion.siteId,
+    siteVersionId: input.siteVersionId,
+    html: htmlAsset.bytes.toString('utf8'),
+    semanticImport,
+  })
+  console.info('[site-bootstrap-worker] CONTENT_SLOT_BOOTSTRAP_PERSISTED_COUNT', {
+    siteId: siteVersion.siteId,
+    siteVersionId: input.siteVersionId,
+    source: 'operator_backfill',
+    persistedCount,
+  })
+  console.info('[site-bootstrap-worker] CONTENT_SLOT_BOOTSTRAP_COMPLETED', {
+    siteId: siteVersion.siteId,
+    siteVersionId: input.siteVersionId,
+    source: 'operator_backfill',
+  })
+  return {
+    siteId: siteVersion.siteId,
+    siteVersionId: input.siteVersionId,
+    persistedCount,
+    skippedReason: null,
   }
 }
 
