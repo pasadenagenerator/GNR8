@@ -1,0 +1,142 @@
+import assert from 'node:assert/strict'
+import test from 'node:test'
+
+import { createContentRouteHandlers } from '@/app/api/gnr8/clients/[clientId]/sites/[siteId]/content/route'
+
+const IDS = {
+  clientId: '00000000-0000-4000-8000-000000000201',
+  siteId: '00000000-0000-4000-8000-000000000501',
+  agencyId: '00000000-0000-4000-8000-000000000301',
+  siteVersionId: '00000000-0000-4000-8000-000000000701',
+  activeSiteVersionId: '00000000-0000-4000-8000-000000000702',
+}
+
+function getParams() {
+  return Promise.resolve({ clientId: IDS.clientId, siteId: IDS.siteId })
+}
+
+function createHandlers(overrides: Partial<Parameters<typeof createContentRouteHandlers>[0]> = {}) {
+  return createContentRouteHandlers({
+    requireAgencyActionContext: async () => ({ actorMode: 'agency_member', agencyId: IDS.agencyId }) as never,
+    parseAgencyActionContextError: () => ({ status: 500, message: 'failed' }),
+    resolveRuntimeScope: async () => ({
+      runtimeSiteId: 'runtime-site-1',
+      siteVersionId: IDS.siteVersionId,
+      activeSiteVersionId: IDS.activeSiteVersionId,
+      reasonCode: 'direct_runtime_version',
+    }),
+    listContentSlots: async () => [{ slotKey: 'hero.title', slotType: 'text' } as never],
+    listContentOverrides: async () => [],
+    queryHistoryCount: async () => 0,
+    ...overrides,
+  })
+}
+
+test('GET content resolves version from normal runtime path', async () => {
+  const handlers = createHandlers({
+    resolveRuntimeScope: async () => ({
+      runtimeSiteId: 'runtime-site-1',
+      siteVersionId: IDS.siteVersionId,
+      activeSiteVersionId: IDS.siteVersionId,
+      reasonCode: 'direct_runtime_version',
+    }),
+  })
+
+  const response = await handlers.GET(
+    new Request(`http://localhost/api?agencyId=${IDS.agencyId}`),
+    { params: getParams() },
+  )
+  const body = await response.json() as { ok: boolean; siteVersionId: string; activeSiteVersionId: string; reasonCode: string }
+
+  assert.equal(response.status, 200)
+  assert.equal(body.ok, true)
+  assert.equal(body.siteVersionId, IDS.siteVersionId)
+  assert.equal(body.activeSiteVersionId, IDS.siteVersionId)
+  assert.equal(body.reasonCode, 'direct_runtime_version')
+})
+
+test('GET content resolves version from fallback/bootstrap path', async () => {
+  const handlers = createHandlers({
+    resolveRuntimeScope: async () => ({
+      runtimeSiteId: 'runtime-site-bootstrap',
+      siteVersionId: IDS.siteVersionId,
+      activeSiteVersionId: IDS.siteVersionId,
+      reasonCode: 'fallback_bootstrap_runtime_site_version',
+    }),
+  })
+
+  const response = await handlers.GET(
+    new Request(`http://localhost/api?agencyId=${IDS.agencyId}`),
+    { params: getParams() },
+  )
+  const body = await response.json() as { ok: boolean; diagnostics: string[]; reasonCode: string }
+
+  assert.equal(response.status, 200)
+  assert.equal(body.ok, true)
+  assert.equal(body.reasonCode, 'fallback_bootstrap_runtime_site_version')
+  assert.ok(body.diagnostics.includes('CONTENT_GET_VERSION_RESOLUTION_FALLBACK_USED'))
+})
+
+test('GET content with explicit siteVersionId works', async () => {
+  let requested: string | null = null
+  const handlers = createHandlers({
+    resolveRuntimeScope: async (input) => {
+      requested = input.requestedSiteVersionId ?? null
+      return {
+        runtimeSiteId: 'runtime-site-1',
+        siteVersionId: IDS.siteVersionId,
+        activeSiteVersionId: IDS.activeSiteVersionId,
+        reasonCode: 'requested_site_version_validated',
+      }
+    },
+  })
+
+  const response = await handlers.GET(
+    new Request(`http://localhost/api?agencyId=${IDS.agencyId}&siteVersionId=${IDS.siteVersionId}`),
+    { params: getParams() },
+  )
+  const body = await response.json() as { ok: boolean; siteVersionId: string; reasonCode: string }
+
+  assert.equal(response.status, 200)
+  assert.equal(body.ok, true)
+  assert.equal(requested, IDS.siteVersionId)
+  assert.equal(body.siteVersionId, IDS.siteVersionId)
+  assert.equal(body.reasonCode, 'requested_site_version_validated')
+})
+
+test('GET content returns slots when slots exist', async () => {
+  const handlers = createHandlers({
+    listContentSlots: async () => [
+      { slotKey: 'hero.title', slotType: 'text' },
+      { slotKey: 'section.1.title', slotType: 'text' },
+    ] as never,
+  })
+
+  const response = await handlers.GET(
+    new Request(`http://localhost/api?agencyId=${IDS.agencyId}`),
+    { params: getParams() },
+  )
+  const body = await response.json() as { ok: boolean; slotCount: number }
+
+  assert.equal(response.status, 200)
+  assert.equal(body.ok, true)
+  assert.equal(body.slotCount, 2)
+})
+
+test('GET content returns clear error when no version exists', async () => {
+  const handlers = createHandlers({
+    resolveRuntimeScope: async () => null,
+  })
+
+  const response = await handlers.GET(
+    new Request(`http://localhost/api?agencyId=${IDS.agencyId}`),
+    { params: getParams() },
+  )
+  const body = await response.json() as { ok: boolean; error: string; reasonCode: string; diagnostics: string[] }
+
+  assert.equal(response.status, 404)
+  assert.equal(body.ok, false)
+  assert.equal(body.error, 'Content version could not be resolved for this site.')
+  assert.equal(body.reasonCode, 'no_runtime_version_found')
+  assert.ok(body.diagnostics.includes('CONTENT_GET_VERSION_RESOLUTION_FAILED'))
+})
