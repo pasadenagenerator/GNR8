@@ -36,7 +36,7 @@ async function resolveRuntimeScope(input: {
 }
 
 export async function POST(req: Request, ctx: { params: Promise<{ clientId?: string; siteId?: string }> }) {
-  const diagnostics: string[] = ['CONTENT_BATCH_UPDATE_STARTED']
+  const diagnostics: string[] = ['CONTENT_BATCH_UPDATE_STARTED', 'CONTENT_DRAFT_SAVE_STARTED']
   try {
     const params = await ctx.params
     const clientId = normalizeUuid(params.clientId)
@@ -68,11 +68,11 @@ export async function POST(req: Request, ctx: { params: Promise<{ clientId?: str
     })
     const updatedCount = saveResult.updatedCount
     diagnostics.push(...saveResult.diagnostics)
-    diagnostics.push('CONTENT_BATCH_UPDATE_COMPLETED')
+    diagnostics.push('CONTENT_BATCH_UPDATE_COMPLETED', 'CONTENT_DRAFT_SAVE_COMPLETED')
     return NextResponse.json({ ok: true, updatedCount, skippedCount, diagnostics })
   } catch (error) {
     const mapped = parseAgencyActionContextError(error)
-    diagnostics.push('CONTENT_BATCH_SLOT_SKIPPED', 'CONTENT_BATCH_UPDATE_COMPLETED')
+    diagnostics.push('CONTENT_BATCH_SLOT_SKIPPED', 'CONTENT_BATCH_UPDATE_COMPLETED', 'CONTENT_DRAFT_SAVE_COMPLETED')
     return NextResponse.json({ ok: false, error: mapped.message, updatedCount: 0, skippedCount: 0, diagnostics }, { status: mapped.status })
   }
 }

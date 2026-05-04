@@ -392,6 +392,13 @@ async function renderRawTemplateSiteVersionPreview(input: {
   const slots = await listContentSlots(artifact.siteVersionId)
   const draftOverrides = await listContentOverrides({ siteVersionId: artifact.siteVersionId, status: 'draft' })
   const publishedOverrides = await listContentOverrides({ siteVersionId: artifact.siteVersionId, status: 'published' })
+  console.info('[gnr8.content-runtime] CONTENT_PREVIEW_OVERRIDES_LOADED', {
+    siteId: artifact.siteId,
+    siteVersionId: artifact.siteVersionId,
+    slotKeyCount: slots.length,
+    draftCount: draftOverrides.length,
+    publishedCount: publishedOverrides.length,
+  })
   const sameVersionDraftOverrides = draftOverrides.filter((override) => override.siteVersionId === artifact.siteVersionId)
   const sameVersionPublishedOverrides = publishedOverrides.filter((override) => override.siteVersionId === artifact.siteVersionId)
   if (sameVersionDraftOverrides.length !== draftOverrides.length || sameVersionPublishedOverrides.length !== publishedOverrides.length) {
@@ -409,14 +416,22 @@ async function renderRawTemplateSiteVersionPreview(input: {
     siteVersionId: artifact.siteVersionId,
     mode: 'preview',
   })
+  const selectedOverrides = selectPreviewOverridesByVersion({
+    siteVersionId: artifact.siteVersionId,
+    draftOverrides,
+    publishedOverrides,
+  })
   const patched = applyContentOverridesToRawHtml({
     html,
     slots,
-    overrides: selectPreviewOverridesByVersion({
-      siteVersionId: artifact.siteVersionId,
-      draftOverrides,
-      publishedOverrides,
-    }),
+    overrides: selectedOverrides,
+  })
+  console.info('[gnr8.content-runtime] CONTENT_PREVIEW_OVERRIDES_APPLIED', {
+    siteId: artifact.siteId,
+    siteVersionId: artifact.siteVersionId,
+    selectedCount: selectedOverrides.length,
+    appliedCount: patched.appliedCount,
+    skippedCount: patched.skippedCount,
   })
   const summary = buildRawTemplatePreviewRuntimeSummary({
     baseSummary: input.fallbackSummary,

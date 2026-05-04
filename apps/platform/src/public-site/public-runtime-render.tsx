@@ -429,6 +429,12 @@ export async function renderPublicPathResponse(input: {
       siteVersionId: rawTemplateResolution.siteVersionId,
       status: "published",
     });
+    console.info("[gnr8.content-runtime] CONTENT_RUNTIME_OVERRIDES_LOADED", {
+      siteId: rawTemplateResolution.siteId,
+      siteVersionId: rawTemplateResolution.siteVersionId,
+      publishedCount: publishedOverrides.length,
+      slotKeyCount: slots.length,
+    });
     const sameVersionOverrides = publishedOverrides.filter(
       (override) => override.siteVersionId === rawTemplateResolution.siteVersionId,
     );
@@ -448,6 +454,20 @@ export async function renderPublicPathResponse(input: {
       html: rawTemplateResolution.html,
       slots,
       overrides: sameVersionOverrides,
+    });
+    if (sameVersionOverrides.length === 0) {
+      console.info("[gnr8.content-runtime] CONTENT_RUNTIME_OVERRIDES_EMPTY", {
+        siteId: rawTemplateResolution.siteId,
+        siteVersionId: rawTemplateResolution.siteVersionId,
+        slotKeyCount: slots.length,
+      });
+    }
+    console.info("[gnr8.content-runtime] CONTENT_RUNTIME_OVERRIDES_APPLIED", {
+      siteId: rawTemplateResolution.siteId,
+      siteVersionId: rawTemplateResolution.siteVersionId,
+      appliedCount: patched.appliedCount,
+      skippedCount: patched.skippedCount,
+      publishedCount: sameVersionOverrides.length,
     });
     let html = rewriteRawTemplateHtmlForRuntime({
       html: patched.html,

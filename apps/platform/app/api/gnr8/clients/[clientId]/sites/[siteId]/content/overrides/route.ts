@@ -33,6 +33,7 @@ async function resolveRuntimeScope(input: {
 }
 
 export async function POST(req: Request, ctx: { params: Promise<{ clientId?: string; siteId?: string }> }) {
+  const diagnostics: string[] = []
   try {
     const params = await ctx.params
     const clientId = normalizeUuid(params.clientId)
@@ -64,9 +65,11 @@ export async function POST(req: Request, ctx: { params: Promise<{ clientId?: str
       actorUserId: actionContext.userId,
       source: 'manual',
     })
-    return NextResponse.json({ ok: true, diagnostics: result.diagnostics })
+    diagnostics.push('CONTENT_DRAFT_SAVE_STARTED', ...result.diagnostics, 'CONTENT_DRAFT_SAVE_COMPLETED')
+    return NextResponse.json({ ok: true, diagnostics })
   } catch (error) {
     const mapped = parseAgencyActionContextError(error)
-    return NextResponse.json({ ok: false, error: mapped.message }, { status: mapped.status })
+    diagnostics.push('CONTENT_DRAFT_SAVE_COMPLETED')
+    return NextResponse.json({ ok: false, error: mapped.message, diagnostics }, { status: mapped.status })
   }
 }

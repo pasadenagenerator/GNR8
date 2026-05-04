@@ -36,6 +36,7 @@ async function resolveRuntimeScope(input: {
 }
 
 export async function GET(req: Request, ctx: { params: Promise<{ clientId?: string; siteId?: string }> }) {
+  const diagnostics: string[] = ['CONTENT_HISTORY_FETCH_STARTED']
   try {
     const params = await ctx.params
     const clientId = normalizeUuid(params.clientId)
@@ -71,9 +72,14 @@ export async function GET(req: Request, ctx: { params: Promise<{ clientId?: stri
       siteVersionId: scope.siteVersionId,
       rows: historyRows.map((row) => ({ ...row, slotLabel: slotLabelMap.get(row.slotKey) ?? friendlySlotLabel(row.slotKey) })),
       groupedBySlot,
+      diagnostics: [
+        ...diagnostics,
+        historyRows.length === 0 ? 'CONTENT_HISTORY_EMPTY' : 'CONTENT_HISTORY_FETCH_COMPLETED',
+      ],
     })
   } catch (error) {
     const mapped = parseAgencyActionContextError(error)
-    return NextResponse.json({ ok: false, error: mapped.message }, { status: mapped.status })
+    diagnostics.push('CONTENT_HISTORY_FETCH_COMPLETED')
+    return NextResponse.json({ ok: false, error: mapped.message, diagnostics }, { status: mapped.status })
   }
 }

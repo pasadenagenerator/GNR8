@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { memo, useCallback, useEffect, useMemo, useState } from 'react'
 
 import { detectFieldDraftState, draftStateLabel, friendlySlotLabel, inputKindForSlot, sectionTitle, type Slot } from '@/gnr8/site/content-bindings-panel-helpers'
 
@@ -31,8 +31,61 @@ type Grouped = {
   footer: Slot[]
 }
 
+const EMPTY_GROUPED: Grouped = { hero: [], sections: [], footer: [] }
+
+const Field = memo(function Field(props: {
+  slot: Slot | null
+  busy: boolean
+  value: string
+  publishedValue: string
+  onChange: (slotKey: string, nextValue: string) => void
+  onSave: (slot: Slot) => void
+}) {
+  const { slot, busy, value, publishedValue, onChange, onSave } = props
+  if (!slot) return null
+  const editable = Boolean(slot.sourceSelector)
+  const original = slot.sourceText ?? slot.sourceAssetPath ?? 'n/a'
+  const lowConfidence = (slot.confidence ?? 1) < 0.6
+  const state = detectFieldDraftState({ slotKey: slot.slotKey, draftValue: value, publishedValue })
+  const stateText = draftStateLabel(state)
+  const inputKind = inputKindForSlot(slot)
+
+  return (
+    <div style={{ display: 'grid', gap: 6, border: '1px solid #e2e8f0', borderRadius: 10, padding: 10, background: '#fff' }}>
+      <div style={{ fontSize: 12, color: '#334155', display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8 }}>
+        <strong>{friendlySlotLabel(slot.slotKey)}</strong>
+        <span style={{ color: '#64748b' }}>{stateText}</span>
+        {lowConfidence ? <span style={{ color: '#b45309', border: '1px solid #fcd34d', borderRadius: 999, padding: '1px 7px' }}>Low confidence</span> : null}
+      </div>
+      <div style={{ fontSize: 11, color: '#94a3b8' }}>{slot.slotKey}</div>
+      {inputKind === 'textarea' ? (
+        <textarea
+          value={value}
+          onChange={(e) => onChange(slot.slotKey, e.target.value)}
+          style={{ border: '1px solid #cbd5e1', borderRadius: 8, padding: 8, fontSize: 13, minHeight: 84 }}
+          disabled={!editable}
+        />
+      ) : (
+        <input
+          type={inputKind}
+          value={value}
+          onChange={(e) => onChange(slot.slotKey, e.target.value)}
+          style={{ border: '1px solid #cbd5e1', borderRadius: 8, padding: 8, fontSize: 13 }}
+          disabled={!editable}
+        />
+      )}
+      <div style={{ fontSize: 12, color: '#64748b' }}>Original: {original}</div>
+      <div style={{ fontSize: 12, color: '#64748b' }}>Published: {publishedValue || 'n/a'}</div>
+      {!editable ? <div style={{ fontSize: 12, color: '#64748b' }}>Detected, but not safely editable yet.</div> : null}
+      <button type='button' disabled={busy || !editable} onClick={() => onSave(slot)} style={{ width: 'fit-content', padding: '6px 10px', borderRadius: 8, border: '1px solid #cbd5e1', background: '#fff' }}>
+        Save Draft
+      </button>
+    </div>
+  )
+})
+
 export default function ContentBindingsPanel(props: { agencyId: string; clientId: string; siteId: string }) {
-  const [grouped, setGrouped] = useState<Grouped>({ hero: [], sections: [], footer: [] })
+  const [grouped, setGrouped] = useState<Grouped>(EMPTY_GROUPED)
   const [siteVersionId, setSiteVersionId] = useState<string>('')
   const [drafts, setDrafts] = useState<Record<string, string>>({})
   const [published, setPublished] = useState<Record<string, string>>({})
@@ -76,52 +129,55 @@ export default function ContentBindingsPanel(props: { agencyId: string; clientId
     return editableVisibleSlots.filter((slot) => (drafts[slot.slotKey] ?? '') !== (publishedAtLoad[slot.slotKey] ?? ''))
   }, [drafts, editableVisibleSlots, publishedAtLoad])
 
-  useEffect(() => {
-    let done = false
-    fetch(endpoint)
-      .then((r) => r.json())
-      .then((payload) => {
-        if (done || !payload?.ok) return
-        setGrouped(payload.grouped ?? { hero: [], sections: [], footer: [] })
-        setSiteVersionId(typeof payload.siteVersionId === 'string' ? payload.siteVersionId : '')
-        const draftMap: Record<string, string> = {}
-        const draftOverrides: Override[] = Array.isArray(payload.draftOverrides) ? payload.draftOverrides : []
-        for (const ov of draftOverrides) draftMap[ov.slotKey] = typeof ov.valueJson?.value === 'string' ? ov.valueJson.value : ''
-        const pubMap: Record<string, string> = {}
-        const pubOverrides: Override[] = Array.isArray(payload.publishedOverrides) ? payload.publishedOverrides : []
-        for (const ov of pubOverrides) pubMap[ov.slotKey] = typeof ov.valueJson?.value === 'string' ? ov.valueJson.value : ''
-        setDrafts(draftMap)
-        setPublished(pubMap)
-        setPublishedAtLoad(pubMap)
-        const loadedSiteVersionId = typeof payload.siteVersionId === 'string' ? payload.siteVersionId : ''
-        if (loadedSiteVersionId) {
-          fetch(`/api/gnr8/clients/${encodeURIComponent(props.clientId)}/sites/${encodeURIComponent(props.siteId)}/content/history?agencyId=${encodeURIComponent(props.agencyId)}&siteVersionId=${encodeURIComponent(loadedSiteVersionId)}&limit=100`)
-            .then((r) => r.json())
-            .then((historyPayload) => {
-              if (!done && historyPayload?.ok && Array.isArray(historyPayload.rows)) setHistoryRows(historyPayload.rows)
-            })
-            .catch(() => undefined)
-        }
-      })
-      .catch(() => undefined)
-    return () => {
-      done = true
+  const fetchHistory = useCallback(async (requestedSiteVersionId: string): Promise<void> => {
+    if (!requestedSiteVersionId) return
+    console.info('[gnr8.content-editor] CONTENT_HISTORY_FETCH_STARTED', { siteId: props.siteId, siteVersionId: requestedSiteVersionId })
+    const historyResponse = await fetch(`/api/gnr8/clients/${encodeURIComponent(props.clientId)}/sites/${encodeURIComponent(props.siteId)}/content/history?agencyId=${encodeURIComponent(props.agencyId)}&siteVersionId=${encodeURIComponent(requestedSiteVersionId)}&limit=100`)
+    const historyPayload = (await historyResponse.json().catch(() => null)) as any
+    if (historyPayload?.ok && Array.isArray(historyPayload.rows)) {
+      setHistoryRows(historyPayload.rows)
+      console.info('[gnr8.content-editor] CONTENT_HISTORY_FETCH_COMPLETED', { siteId: props.siteId, siteVersionId: requestedSiteVersionId, rowCount: historyPayload.rows.length })
+      if (historyPayload.rows.length === 0) console.info('[gnr8.content-editor] CONTENT_HISTORY_EMPTY', { siteId: props.siteId, siteVersionId: requestedSiteVersionId })
     }
-  }, [endpoint])
+  }, [props.agencyId, props.clientId, props.siteId])
+
+  const loadContent = useCallback(async (): Promise<void> => {
+    const payload = (await fetch(endpoint).then((r) => r.json()).catch(() => null)) as any
+    if (!payload?.ok) return
+    setGrouped(payload.grouped ?? EMPTY_GROUPED)
+    const loadedSiteVersionId = typeof payload.siteVersionId === 'string' ? payload.siteVersionId : ''
+    setSiteVersionId(loadedSiteVersionId)
+    const draftMap: Record<string, string> = {}
+    const draftOverrides: Override[] = Array.isArray(payload.draftOverrides) ? payload.draftOverrides : []
+    for (const ov of draftOverrides) draftMap[ov.slotKey] = typeof ov.valueJson?.value === 'string' ? ov.valueJson.value : ''
+    const pubMap: Record<string, string> = {}
+    const pubOverrides: Override[] = Array.isArray(payload.publishedOverrides) ? payload.publishedOverrides : []
+    for (const ov of pubOverrides) pubMap[ov.slotKey] = typeof ov.valueJson?.value === 'string' ? ov.valueJson.value : ''
+    setDrafts(draftMap)
+    setPublished(pubMap)
+    setPublishedAtLoad(pubMap)
+    if (loadedSiteVersionId) await fetchHistory(loadedSiteVersionId)
+  }, [endpoint, fetchHistory])
+
+  useEffect(() => {
+    void loadContent()
+  }, [loadContent])
+
+  const handleDraftChange = useCallback((slotKey: string, nextValue: string) => {
+    setDrafts((p) => ({ ...p, [slotKey]: nextValue }))
+  }, [])
 
   async function saveDraft(slot: Slot): Promise<void> {
     setBusy(true)
     try {
+      console.info('[gnr8.content-editor] CONTENT_DRAFT_SAVE_STARTED', { siteId: props.siteId, siteVersionId, slotKeyCount: 1 })
       await fetch(`/api/gnr8/clients/${encodeURIComponent(props.clientId)}/sites/${encodeURIComponent(props.siteId)}/content/overrides`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ agencyId: props.agencyId, slotKey: slot.slotKey, valueType: slot.slotType, valueJson: { value: drafts[slot.slotKey] ?? '' } }),
+        body: JSON.stringify({ agencyId: props.agencyId, siteVersionId, slotKey: slot.slotKey, valueType: slot.slotType, valueJson: { value: drafts[slot.slotKey] ?? '' } }),
       })
-      if (siteVersionId) {
-        const historyResponse = await fetch(`/api/gnr8/clients/${encodeURIComponent(props.clientId)}/sites/${encodeURIComponent(props.siteId)}/content/history?agencyId=${encodeURIComponent(props.agencyId)}&siteVersionId=${encodeURIComponent(siteVersionId)}&limit=100`)
-        const historyPayload = (await historyResponse.json().catch(() => null)) as any
-        if (historyPayload?.ok && Array.isArray(historyPayload.rows)) setHistoryRows(historyPayload.rows)
-      }
+      console.info('[gnr8.content-editor] CONTENT_DRAFT_SAVE_COMPLETED', { siteId: props.siteId, siteVersionId, slotKeyCount: 1 })
+      await fetchHistory(siteVersionId)
     } finally {
       setBusy(false)
     }
@@ -152,9 +208,7 @@ export default function ContentBindingsPanel(props: { agencyId: string; clientId
         return next
       })
       setSaveAllStatus('success')
-      const historyResponse = await fetch(`/api/gnr8/clients/${encodeURIComponent(props.clientId)}/sites/${encodeURIComponent(props.siteId)}/content/history?agencyId=${encodeURIComponent(props.agencyId)}&siteVersionId=${encodeURIComponent(siteVersionId)}&limit=100`)
-      const historyPayload = (await historyResponse.json().catch(() => null)) as any
-      if (historyPayload?.ok && Array.isArray(historyPayload.rows)) setHistoryRows(historyPayload.rows)
+      await fetchHistory(siteVersionId)
     } catch {
       setSaveAllStatus('error')
     } finally {
@@ -166,19 +220,17 @@ export default function ContentBindingsPanel(props: { agencyId: string; clientId
     setBusy(true)
     setPublishStatus('idle')
     try {
+      console.info('[gnr8.content-editor] CONTENT_PUBLISH_STARTED', { siteId: props.siteId, siteVersionId, slotKeyCount: Object.keys(drafts).length })
       await fetch(`/api/gnr8/clients/${encodeURIComponent(props.clientId)}/sites/${encodeURIComponent(props.siteId)}/content/publish`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ agencyId: props.agencyId }),
+        body: JSON.stringify({ agencyId: props.agencyId, siteVersionId }),
       })
       setPublished({ ...drafts })
       setPublishedAtLoad({ ...drafts })
       setPublishStatus('success')
-      if (siteVersionId) {
-        const historyResponse = await fetch(`/api/gnr8/clients/${encodeURIComponent(props.clientId)}/sites/${encodeURIComponent(props.siteId)}/content/history?agencyId=${encodeURIComponent(props.agencyId)}&siteVersionId=${encodeURIComponent(siteVersionId)}&limit=100`)
-        const historyPayload = (await historyResponse.json().catch(() => null)) as any
-        if (historyPayload?.ok && Array.isArray(historyPayload.rows)) setHistoryRows(historyPayload.rows)
-      }
+      console.info('[gnr8.content-editor] CONTENT_PUBLISH_COMPLETED', { siteId: props.siteId, siteVersionId, slotKeyCount: Object.keys(drafts).length })
+      await fetchHistory(siteVersionId)
     } finally {
       setBusy(false)
     }
@@ -193,22 +245,8 @@ export default function ContentBindingsPanel(props: { agencyId: string; clientId
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ agencyId: props.agencyId, siteVersionId, slotKey: row.slotKey, historyId: row.id, targetStatus: 'draft' }),
       })
-      const contentResponse = await fetch(endpoint)
-      const payload = (await contentResponse.json().catch(() => null)) as any
-      if (payload?.ok) {
-        const draftMap: Record<string, string> = {}
-        const draftOverrides: Override[] = Array.isArray(payload.draftOverrides) ? payload.draftOverrides : []
-        for (const ov of draftOverrides) draftMap[ov.slotKey] = typeof ov.valueJson?.value === 'string' ? ov.valueJson.value : ''
-        const pubMap: Record<string, string> = {}
-        const pubOverrides: Override[] = Array.isArray(payload.publishedOverrides) ? payload.publishedOverrides : []
-        for (const ov of pubOverrides) pubMap[ov.slotKey] = typeof ov.valueJson?.value === 'string' ? ov.valueJson.value : ''
-        setDrafts(draftMap)
-        setPublished(pubMap)
-        setPublishedAtLoad(pubMap)
-      }
-      const historyResponse = await fetch(`/api/gnr8/clients/${encodeURIComponent(props.clientId)}/sites/${encodeURIComponent(props.siteId)}/content/history?agencyId=${encodeURIComponent(props.agencyId)}&siteVersionId=${encodeURIComponent(siteVersionId)}&limit=100`)
-      const historyPayload = (await historyResponse.json().catch(() => null)) as any
-      if (historyPayload?.ok && Array.isArray(historyPayload.rows)) setHistoryRows(historyPayload.rows)
+      await loadContent()
+      await fetchHistory(siteVersionId)
     } finally {
       setBusy(false)
     }
@@ -218,49 +256,6 @@ export default function ContentBindingsPanel(props: { agencyId: string; clientId
     const value = valueJson?.value
     if (typeof value === 'string') return value
     return value == null ? 'empty' : JSON.stringify(value)
-  }
-
-  function Field({ slot }: { slot: Slot | null }) {
-    if (!slot) return null
-    const editable = Boolean(slot.sourceSelector)
-    const original = slot.sourceText ?? slot.sourceAssetPath ?? 'n/a'
-    const lowConfidence = (slot.confidence ?? 1) < 0.6
-    const state = detectFieldDraftState({ slotKey: slot.slotKey, draftValue: drafts[slot.slotKey], publishedValue: published[slot.slotKey] })
-    const stateText = draftStateLabel(state)
-    const inputKind = inputKindForSlot(slot)
-
-    return (
-      <div style={{ display: 'grid', gap: 6, border: '1px solid #e2e8f0', borderRadius: 10, padding: 10, background: '#fff' }}>
-        <div style={{ fontSize: 12, color: '#334155', display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8 }}>
-          <strong>{friendlySlotLabel(slot.slotKey)}</strong>
-          <span style={{ color: '#64748b' }}>{stateText}</span>
-          {lowConfidence ? <span style={{ color: '#b45309', border: '1px solid #fcd34d', borderRadius: 999, padding: '1px 7px' }}>Low confidence</span> : null}
-        </div>
-        <div style={{ fontSize: 11, color: '#94a3b8' }}>{slot.slotKey}</div>
-        {inputKind === 'textarea' ? (
-          <textarea
-            value={drafts[slot.slotKey] ?? ''}
-            onChange={(e) => setDrafts((p) => ({ ...p, [slot.slotKey]: e.target.value }))}
-            style={{ border: '1px solid #cbd5e1', borderRadius: 8, padding: 8, fontSize: 13, minHeight: 84 }}
-            disabled={!editable}
-          />
-        ) : (
-          <input
-            type={inputKind}
-            value={drafts[slot.slotKey] ?? ''}
-            onChange={(e) => setDrafts((p) => ({ ...p, [slot.slotKey]: e.target.value }))}
-            style={{ border: '1px solid #cbd5e1', borderRadius: 8, padding: 8, fontSize: 13 }}
-            disabled={!editable}
-          />
-        )}
-        <div style={{ fontSize: 12, color: '#64748b' }}>Original: {original}</div>
-        <div style={{ fontSize: 12, color: '#64748b' }}>Published: {published[slot.slotKey] ?? 'n/a'}</div>
-        {!editable ? <div style={{ fontSize: 12, color: '#64748b' }}>Detected, but not safely editable yet.</div> : null}
-        <button type='button' disabled={busy || !editable} onClick={() => saveDraft(slot)} style={{ width: 'fit-content', padding: '6px 10px', borderRadius: 8, border: '1px solid #cbd5e1', background: '#fff' }}>
-          Save Draft
-        </button>
-      </div>
-    )
   }
 
   const hasDraftChangesToPublish = Object.keys(drafts).some((slotKey) => (drafts[slotKey] ?? '') !== (published[slotKey] ?? ''))
@@ -291,42 +286,42 @@ export default function ContentBindingsPanel(props: { agencyId: string; clientId
       </div>
 
       <h4 style={{ margin: 0, fontSize: 14 }}>Hero</h4>
-      <Field slot={grouped.hero.find((s) => s.slotKey === 'hero.title') ?? null} />
-      <Field slot={grouped.hero.find((s) => s.slotKey === 'hero.subtitle') ?? null} />
-      <Field slot={grouped.hero.find((s) => s.slotKey === 'hero.cta.label') ?? null} />
-      <Field slot={grouped.hero.find((s) => s.slotKey === 'hero.cta.href') ?? null} />
-      <Field slot={grouped.hero.find((s) => s.slotKey === 'hero.image') ?? null} />
+      <Field slot={grouped.hero.find((s) => s.slotKey === 'hero.title') ?? null} busy={busy} value={drafts['hero.title'] ?? ''} publishedValue={published['hero.title'] ?? ''} onChange={handleDraftChange} onSave={saveDraft} />
+      <Field slot={grouped.hero.find((s) => s.slotKey === 'hero.subtitle') ?? null} busy={busy} value={drafts['hero.subtitle'] ?? ''} publishedValue={published['hero.subtitle'] ?? ''} onChange={handleDraftChange} onSave={saveDraft} />
+      <Field slot={grouped.hero.find((s) => s.slotKey === 'hero.cta.label') ?? null} busy={busy} value={drafts['hero.cta.label'] ?? ''} publishedValue={published['hero.cta.label'] ?? ''} onChange={handleDraftChange} onSave={saveDraft} />
+      <Field slot={grouped.hero.find((s) => s.slotKey === 'hero.cta.href') ?? null} busy={busy} value={drafts['hero.cta.href'] ?? ''} publishedValue={published['hero.cta.href'] ?? ''} onChange={handleDraftChange} onSave={saveDraft} />
+      <Field slot={grouped.hero.find((s) => s.slotKey === 'hero.image') ?? null} busy={busy} value={drafts['hero.image'] ?? ''} publishedValue={published['hero.image'] ?? ''} onChange={handleDraftChange} onSave={saveDraft} />
 
       <h4 style={{ margin: 0, fontSize: 14 }}>Sections</h4>
       {grouped.sections.map((section) => (
-        <div key={section.index} style={{ borderTop: '1px solid #e2e8f0', paddingTop: 10, display: 'grid', gap: 10 }}>
+        <div key={section.titleSlot?.slotKey ?? `section-${section.index}`} style={{ borderTop: '1px solid #e2e8f0', paddingTop: 10, display: 'grid', gap: 10 }}>
           <div style={{ fontWeight: 600, fontSize: 13 }}>{sectionTitle({ index: section.index, type: section.type })}</div>
-          <Field slot={section.titleSlot} />
-          <Field slot={section.introSlot} />
-          <Field slot={section.bodySlot} />
-          <Field slot={section.ctas[0]?.labelSlot ?? null} />
-          <Field slot={section.ctas[0]?.hrefSlot ?? null} />
+          <Field slot={section.titleSlot} busy={busy} value={drafts[section.titleSlot?.slotKey ?? ''] ?? ''} publishedValue={published[section.titleSlot?.slotKey ?? ''] ?? ''} onChange={handleDraftChange} onSave={saveDraft} />
+          <Field slot={section.introSlot} busy={busy} value={drafts[section.introSlot?.slotKey ?? ''] ?? ''} publishedValue={published[section.introSlot?.slotKey ?? ''] ?? ''} onChange={handleDraftChange} onSave={saveDraft} />
+          <Field slot={section.bodySlot} busy={busy} value={drafts[section.bodySlot?.slotKey ?? ''] ?? ''} publishedValue={published[section.bodySlot?.slotKey ?? ''] ?? ''} onChange={handleDraftChange} onSave={saveDraft} />
+          <Field slot={section.ctas[0]?.labelSlot ?? null} busy={busy} value={drafts[section.ctas[0]?.labelSlot?.slotKey ?? ''] ?? ''} publishedValue={published[section.ctas[0]?.labelSlot?.slotKey ?? ''] ?? ''} onChange={handleDraftChange} onSave={saveDraft} />
+          <Field slot={section.ctas[0]?.hrefSlot ?? null} busy={busy} value={drafts[section.ctas[0]?.hrefSlot?.slotKey ?? ''] ?? ''} publishedValue={published[section.ctas[0]?.hrefSlot?.slotKey ?? ''] ?? ''} onChange={handleDraftChange} onSave={saveDraft} />
           {section.items.map((item) => (
-            <div key={item.index} style={{ display: 'grid', gap: 8, border: '1px solid #e2e8f0', borderRadius: 10, padding: 10, background: '#f8fafc' }}>
+            <div key={item.titleSlot?.slotKey ?? item.descriptionSlot?.slotKey ?? item.imageSlot?.slotKey ?? `item-${section.index}-${item.index}`} style={{ display: 'grid', gap: 8, border: '1px solid #e2e8f0', borderRadius: 10, padding: 10, background: '#f8fafc' }}>
               <div style={{ fontSize: 12, fontWeight: 600 }}>{section.type === 'services' ? `Service ${item.index + 1}` : `Item ${item.index + 1}`}</div>
-              <Field slot={item.titleSlot} />
-              <Field slot={item.descriptionSlot} />
-              <Field slot={item.imageSlot} />
+              <Field slot={item.titleSlot} busy={busy} value={drafts[item.titleSlot?.slotKey ?? ''] ?? ''} publishedValue={published[item.titleSlot?.slotKey ?? ''] ?? ''} onChange={handleDraftChange} onSave={saveDraft} />
+              <Field slot={item.descriptionSlot} busy={busy} value={drafts[item.descriptionSlot?.slotKey ?? ''] ?? ''} publishedValue={published[item.descriptionSlot?.slotKey ?? ''] ?? ''} onChange={handleDraftChange} onSave={saveDraft} />
+              <Field slot={item.imageSlot} busy={busy} value={drafts[item.imageSlot?.slotKey ?? ''] ?? ''} publishedValue={published[item.imageSlot?.slotKey ?? ''] ?? ''} onChange={handleDraftChange} onSave={saveDraft} />
             </div>
           ))}
           {section.gallery.map((entry) => (
-            <div key={entry.index} style={{ display: 'grid', gap: 8, border: '1px solid #e2e8f0', borderRadius: 10, padding: 10, background: '#f8fafc' }}>
+            <div key={entry.imageSlot?.slotKey ?? entry.altSlot?.slotKey ?? `gallery-${section.index}-${entry.index}`} style={{ display: 'grid', gap: 8, border: '1px solid #e2e8f0', borderRadius: 10, padding: 10, background: '#f8fafc' }}>
               <div style={{ fontSize: 12, fontWeight: 600 }}>Gallery image {entry.index + 1}</div>
-              <Field slot={entry.imageSlot} />
-              <Field slot={entry.altSlot} />
+              <Field slot={entry.imageSlot} busy={busy} value={drafts[entry.imageSlot?.slotKey ?? ''] ?? ''} publishedValue={published[entry.imageSlot?.slotKey ?? ''] ?? ''} onChange={handleDraftChange} onSave={saveDraft} />
+              <Field slot={entry.altSlot} busy={busy} value={drafts[entry.altSlot?.slotKey ?? ''] ?? ''} publishedValue={published[entry.altSlot?.slotKey ?? ''] ?? ''} onChange={handleDraftChange} onSave={saveDraft} />
             </div>
           ))}
           {(section.contact.emailSlot || section.contact.phoneSlot || section.contact.addressSlot) ? (
             <div style={{ display: 'grid', gap: 8, border: '1px solid #e2e8f0', borderRadius: 10, padding: 10, background: '#f8fafc' }}>
               <div style={{ fontSize: 12, fontWeight: 600 }}>Contact details</div>
-              <Field slot={section.contact.emailSlot} />
-              <Field slot={section.contact.phoneSlot} />
-              <Field slot={section.contact.addressSlot} />
+              <Field slot={section.contact.emailSlot} busy={busy} value={drafts[section.contact.emailSlot?.slotKey ?? ''] ?? ''} publishedValue={published[section.contact.emailSlot?.slotKey ?? ''] ?? ''} onChange={handleDraftChange} onSave={saveDraft} />
+              <Field slot={section.contact.phoneSlot} busy={busy} value={drafts[section.contact.phoneSlot?.slotKey ?? ''] ?? ''} publishedValue={published[section.contact.phoneSlot?.slotKey ?? ''] ?? ''} onChange={handleDraftChange} onSave={saveDraft} />
+              <Field slot={section.contact.addressSlot} busy={busy} value={drafts[section.contact.addressSlot?.slotKey ?? ''] ?? ''} publishedValue={published[section.contact.addressSlot?.slotKey ?? ''] ?? ''} onChange={handleDraftChange} onSave={saveDraft} />
             </div>
           ) : null}
         </div>
@@ -336,7 +331,7 @@ export default function ContentBindingsPanel(props: { agencyId: string; clientId
         <>
           <h4 style={{ margin: 0, fontSize: 14 }}>Footer</h4>
           {grouped.footer.map((slot) => (
-            <Field key={slot.slotKey} slot={slot} />
+            <Field key={slot.slotKey} slot={slot} busy={busy} value={drafts[slot.slotKey] ?? ''} publishedValue={published[slot.slotKey] ?? ''} onChange={handleDraftChange} onSave={saveDraft} />
           ))}
         </>
       ) : null}

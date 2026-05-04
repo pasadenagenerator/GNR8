@@ -2915,6 +2915,7 @@ export async function upsertContentOverrideDraft(input: {
   source?: ContentOverrideHistorySource;
 }): Promise<{ changed: boolean; historyRecorded: boolean; diagnostics: string[] }> {
   return withTx(async (client) => {
+    const diagnostics: string[] = ["CONTENT_HISTORY_WRITE_STARTED"];
     const previous = await getContentOverrideBySlotWithClient({
       client,
       siteVersionId: input.siteVersionId,
@@ -2922,7 +2923,8 @@ export async function upsertContentOverrideDraft(input: {
       status: "draft",
     });
     if (previous && contentJsonEquals(previous.valueJson, input.valueJson) && previous.valueType === input.valueType) {
-      return { changed: false, historyRecorded: false, diagnostics: ["CONTENT_HISTORY_SKIPPED_UNCHANGED"] };
+      diagnostics.push("CONTENT_HISTORY_SKIPPED_UNCHANGED");
+      return { changed: false, historyRecorded: false, diagnostics };
     }
 
     await client.query(
@@ -2946,7 +2948,8 @@ export async function upsertContentOverrideDraft(input: {
       actorUserId: input.actorUserId ?? null,
       source: input.source ?? "manual",
     });
-    return { changed: true, historyRecorded: true, diagnostics: ["CONTENT_HISTORY_RECORDED"] };
+    diagnostics.push("CONTENT_HISTORY_RECORDED");
+    return { changed: true, historyRecorded: true, diagnostics };
   });
 }
 
@@ -2961,12 +2964,12 @@ export async function upsertContentOverrideDraftBatch(input: {
   actorUserId?: string | null;
   source?: ContentOverrideHistorySource;
 }): Promise<{ updatedCount: number; historyCount: number; skippedUnchangedCount: number; diagnostics: string[] }> {
-  if (input.overrides.length === 0) return { updatedCount: 0, historyCount: 0, skippedUnchangedCount: 0, diagnostics: [] };
+  if (input.overrides.length === 0) return { updatedCount: 0, historyCount: 0, skippedUnchangedCount: 0, diagnostics: ["CONTENT_HISTORY_WRITE_STARTED"] };
   return withTx(async (client) => {
     let affected = 0;
     let historyCount = 0;
     let skippedUnchangedCount = 0;
-    const diagnostics: string[] = [];
+    const diagnostics: string[] = ["CONTENT_HISTORY_WRITE_STARTED"];
     for (const override of input.overrides) {
       const previous = await getContentOverrideBySlotWithClient({
         client,
@@ -3021,7 +3024,11 @@ export async function publishDraftContentOverrides(input: {
     );
     let count = 0;
     let historyCount = 0;
-    const diagnostics: string[] = [];
+    const diagnostics: string[] = ["CONTENT_HISTORY_WRITE_STARTED"];
+    if ((drafts.rows ?? []).length === 0) {
+      diagnostics.push("CONTENT_PUBLISH_NO_DRAFTS_FOUND");
+      return { publishedCount: 0, historyCount: 0, diagnostics };
+    }
     for (const row of drafts.rows) {
       const previousPublished = await getContentOverrideBySlotWithClient({
         client,
