@@ -5,6 +5,16 @@ import { useEffect, useMemo, useState } from 'react'
 import { detectFieldDraftState, draftStateLabel, friendlySlotLabel, inputKindForSlot, sectionTitle, type Slot } from '@/gnr8/site/content-bindings-panel-helpers'
 
 type Override = { slotKey: string; valueJson: any }
+type HistoryRow = {
+  id: string
+  slotKey: string
+  slotLabel: string
+  action: 'draft_saved' | 'content_published' | 'rollback_applied'
+  source: 'manual' | 'batch' | 'system' | 'ai'
+  previousValueJson: any
+  nextValueJson: any
+  createdAt: string
+}
 type Grouped = {
   hero: Slot[]
   sections: Array<{
@@ -30,6 +40,7 @@ export default function ContentBindingsPanel(props: { agencyId: string; clientId
   const [busy, setBusy] = useState(false)
   const [publishStatus, setPublishStatus] = useState<'idle' | 'success'>('idle')
   const [saveAllStatus, setSaveAllStatus] = useState<'idle' | 'success' | 'error'>('idle')
+  const [historyRows, setHistoryRows] = useState<HistoryRow[]>([])
 
   const endpoint = useMemo(() => `/api/gnr8/clients/${encodeURIComponent(props.clientId)}/sites/${encodeURIComponent(props.siteId)}/content?agencyId=${encodeURIComponent(props.agencyId)}`, [props])
 
@@ -82,6 +93,15 @@ export default function ContentBindingsPanel(props: { agencyId: string; clientId
         setDrafts(draftMap)
         setPublished(pubMap)
         setPublishedAtLoad(pubMap)
+        const loadedSiteVersionId = typeof payload.siteVersionId === 'string' ? payload.siteVersionId : ''
+        if (loadedSiteVersionId) {
+          fetch(`/api/gnr8/clients/${encodeURIComponent(props.clientId)}/sites/${encodeURIComponent(props.siteId)}/content/history?agencyId=${encodeURIComponent(props.agencyId)}&siteVersionId=${encodeURIComponent(loadedSiteVersionId)}&limit=100`)
+            .then((r) => r.json())
+            .then((historyPayload) => {
+              if (!done && historyPayload?.ok && Array.isArray(historyPayload.rows)) setHistoryRows(historyPayload.rows)
+            })
+            .catch(() => undefined)
+        }
       })
       .catch(() => undefined)
     return () => {
@@ -97,6 +117,11 @@ export default function ContentBindingsPanel(props: { agencyId: string; clientId
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ agencyId: props.agencyId, slotKey: slot.slotKey, valueType: slot.slotType, valueJson: { value: drafts[slot.slotKey] ?? '' } }),
       })
+      if (siteVersionId) {
+        const historyResponse = await fetch(`/api/gnr8/clients/${encodeURIComponent(props.clientId)}/sites/${encodeURIComponent(props.siteId)}/content/history?agencyId=${encodeURIComponent(props.agencyId)}&siteVersionId=${encodeURIComponent(siteVersionId)}&limit=100`)
+        const historyPayload = (await historyResponse.json().catch(() => null)) as any
+        if (historyPayload?.ok && Array.isArray(historyPayload.rows)) setHistoryRows(historyPayload.rows)
+      }
     } finally {
       setBusy(false)
     }
@@ -127,6 +152,9 @@ export default function ContentBindingsPanel(props: { agencyId: string; clientId
         return next
       })
       setSaveAllStatus('success')
+      const historyResponse = await fetch(`/api/gnr8/clients/${encodeURIComponent(props.clientId)}/sites/${encodeURIComponent(props.siteId)}/content/history?agencyId=${encodeURIComponent(props.agencyId)}&siteVersionId=${encodeURIComponent(siteVersionId)}&limit=100`)
+      const historyPayload = (await historyResponse.json().catch(() => null)) as any
+      if (historyPayload?.ok && Array.isArray(historyPayload.rows)) setHistoryRows(historyPayload.rows)
     } catch {
       setSaveAllStatus('error')
     } finally {
@@ -146,9 +174,50 @@ export default function ContentBindingsPanel(props: { agencyId: string; clientId
       setPublished({ ...drafts })
       setPublishedAtLoad({ ...drafts })
       setPublishStatus('success')
+      if (siteVersionId) {
+        const historyResponse = await fetch(`/api/gnr8/clients/${encodeURIComponent(props.clientId)}/sites/${encodeURIComponent(props.siteId)}/content/history?agencyId=${encodeURIComponent(props.agencyId)}&siteVersionId=${encodeURIComponent(siteVersionId)}&limit=100`)
+        const historyPayload = (await historyResponse.json().catch(() => null)) as any
+        if (historyPayload?.ok && Array.isArray(historyPayload.rows)) setHistoryRows(historyPayload.rows)
+      }
     } finally {
       setBusy(false)
     }
+  }
+
+  async function rollback(row: HistoryRow): Promise<void> {
+    if (!siteVersionId) return
+    setBusy(true)
+    try {
+      await fetch(`/api/gnr8/clients/${encodeURIComponent(props.clientId)}/sites/${encodeURIComponent(props.siteId)}/content/rollback`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ agencyId: props.agencyId, siteVersionId, slotKey: row.slotKey, historyId: row.id, targetStatus: 'draft' }),
+      })
+      const contentResponse = await fetch(endpoint)
+      const payload = (await contentResponse.json().catch(() => null)) as any
+      if (payload?.ok) {
+        const draftMap: Record<string, string> = {}
+        const draftOverrides: Override[] = Array.isArray(payload.draftOverrides) ? payload.draftOverrides : []
+        for (const ov of draftOverrides) draftMap[ov.slotKey] = typeof ov.valueJson?.value === 'string' ? ov.valueJson.value : ''
+        const pubMap: Record<string, string> = {}
+        const pubOverrides: Override[] = Array.isArray(payload.publishedOverrides) ? payload.publishedOverrides : []
+        for (const ov of pubOverrides) pubMap[ov.slotKey] = typeof ov.valueJson?.value === 'string' ? ov.valueJson.value : ''
+        setDrafts(draftMap)
+        setPublished(pubMap)
+        setPublishedAtLoad(pubMap)
+      }
+      const historyResponse = await fetch(`/api/gnr8/clients/${encodeURIComponent(props.clientId)}/sites/${encodeURIComponent(props.siteId)}/content/history?agencyId=${encodeURIComponent(props.agencyId)}&siteVersionId=${encodeURIComponent(siteVersionId)}&limit=100`)
+      const historyPayload = (await historyResponse.json().catch(() => null)) as any
+      if (historyPayload?.ok && Array.isArray(historyPayload.rows)) setHistoryRows(historyPayload.rows)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  function displayValue(valueJson: any): string {
+    const value = valueJson?.value
+    if (typeof value === 'string') return value
+    return value == null ? 'empty' : JSON.stringify(value)
   }
 
   function Field({ slot }: { slot: Slot | null }) {
@@ -271,6 +340,22 @@ export default function ContentBindingsPanel(props: { agencyId: string; clientId
           ))}
         </>
       ) : null}
+
+      <h4 style={{ margin: 0, fontSize: 14 }}>Recent changes</h4>
+      {historyRows.length === 0 ? <div style={{ fontSize: 12, color: '#64748b' }}>No history yet.</div> : null}
+      {historyRows.map((row) => (
+        <div key={row.id} style={{ border: '1px solid #e2e8f0', borderRadius: 10, padding: 10, display: 'grid', gap: 6, background: '#f8fafc' }}>
+          <div style={{ fontSize: 12, color: '#334155' }}>
+            <strong>{row.slotLabel}</strong> · {row.action} · {new Date(row.createdAt).toLocaleString()}
+          </div>
+          <div style={{ fontSize: 12, color: '#64748b' }}>
+            {displayValue(row.previousValueJson)} {'->'} {displayValue(row.nextValueJson)}
+          </div>
+          <button type='button' disabled={busy} onClick={() => rollback(row)} style={{ width: 'fit-content', padding: '6px 10px', borderRadius: 8, border: '1px solid #cbd5e1', background: '#fff' }}>
+            Rollback slot
+          </button>
+        </div>
+      ))}
     </section>
   )
 }

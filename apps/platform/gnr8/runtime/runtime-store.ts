@@ -184,6 +184,27 @@ export async function ensureRuntimeTables(): Promise<void> {
         `);
 
         await client.query(`
+          create table if not exists public.gnr8_content_override_history (
+            id uuid primary key default gen_random_uuid(),
+            site_id text not null,
+            site_version_id uuid not null references public.gnr8_runtime_site_versions(id) on delete cascade,
+            slot_key text not null,
+            value_type text not null,
+            previous_value_json jsonb,
+            next_value_json jsonb not null,
+            action text not null check (action in ('draft_saved', 'content_published', 'rollback_applied')),
+            actor_user_id uuid,
+            source text not null default 'manual' check (source in ('manual', 'batch', 'system', 'ai')),
+            created_at timestamptz not null default now(),
+            metadata jsonb
+          )
+        `);
+        await client.query(`create index if not exists gnr8_content_override_history_site_version_idx on public.gnr8_content_override_history (site_version_id)`);
+        await client.query(`create index if not exists gnr8_content_override_history_site_idx on public.gnr8_content_override_history (site_id)`);
+        await client.query(`create index if not exists gnr8_content_override_history_slot_key_idx on public.gnr8_content_override_history (slot_key)`);
+        await client.query(`create index if not exists gnr8_content_override_history_created_at_desc_idx on public.gnr8_content_override_history (created_at desc)`);
+
+        await client.query(`
           create table if not exists public.gnr8_runtime_domain_host_bindings (
             id uuid primary key default gen_random_uuid(),
             site_id text not null references public.gnr8_runtime_sites(id) on delete cascade,
@@ -2798,14 +2819,112 @@ export async function listContentOverrides(input: {
   }
 }
 
+export type ContentOverrideHistoryAction = "draft_saved" | "content_published" | "rollback_applied";
+export type ContentOverrideHistorySource = "manual" | "batch" | "system" | "ai";
+
+export type ContentOverrideHistoryRow = {
+  id: string;
+  siteId: string;
+  siteVersionId: string;
+  slotKey: string;
+  valueType: ContentSlotType;
+  previousValueJson: unknown | null;
+  nextValueJson: unknown;
+  action: ContentOverrideHistoryAction;
+  actorUserId: string | null;
+  source: ContentOverrideHistorySource;
+  createdAt: string;
+  metadata: Record<string, unknown> | null;
+};
+
+function contentJsonEquals(left: unknown, right: unknown): boolean {
+  return JSON.stringify(left ?? null) === JSON.stringify(right ?? null);
+}
+
+async function getContentOverrideBySlotWithClient(input: {
+  client: PoolClient;
+  siteVersionId: string;
+  slotKey: string;
+  status: ContentOverrideStatus;
+}): Promise<{ valueType: ContentSlotType; valueJson: unknown } | null> {
+  const res = await input.client.query<any>(
+    `
+    select value_type::text as value_type, value_json
+    from public.gnr8_content_overrides
+    where site_version_id = $1::uuid and slot_key = $2::text and status = $3::text
+    limit 1
+    `,
+    [input.siteVersionId, input.slotKey, input.status],
+  );
+  const row = res.rows[0];
+  if (!row) return null;
+  return { valueType: row.value_type as ContentSlotType, valueJson: row.value_json };
+}
+
+async function insertContentOverrideHistoryWithClient(input: {
+  client: PoolClient;
+  siteId: string;
+  siteVersionId: string;
+  slotKey: string;
+  valueType: ContentSlotType;
+  previousValueJson: unknown | null;
+  nextValueJson: unknown;
+  action: ContentOverrideHistoryAction;
+  actorUserId?: string | null;
+  source: ContentOverrideHistorySource;
+  metadata?: Record<string, unknown> | null;
+}): Promise<void> {
+  await input.client.query(
+    `
+    insert into public.gnr8_content_override_history (
+      site_id,
+      site_version_id,
+      slot_key,
+      value_type,
+      previous_value_json,
+      next_value_json,
+      action,
+      actor_user_id,
+      source,
+      metadata
+    )
+    values ($1::text, $2::uuid, $3::text, $4::text, $5::jsonb, $6::jsonb, $7::text, $8::uuid, $9::text, $10::jsonb)
+    `,
+    [
+      input.siteId,
+      input.siteVersionId,
+      input.slotKey,
+      input.valueType,
+      input.previousValueJson == null ? null : JSON.stringify(input.previousValueJson),
+      JSON.stringify(input.nextValueJson ?? {}),
+      input.action,
+      input.actorUserId ?? null,
+      input.source,
+      input.metadata == null ? null : JSON.stringify(input.metadata),
+    ],
+  );
+}
+
 export async function upsertContentOverrideDraft(input: {
   siteId: string;
   siteVersionId: string;
   slotKey: string;
   valueType: ContentSlotType;
   valueJson: unknown;
-}): Promise<void> {
-  await withTx(async (client) => {
+  actorUserId?: string | null;
+  source?: ContentOverrideHistorySource;
+}): Promise<{ changed: boolean; historyRecorded: boolean; diagnostics: string[] }> {
+  return withTx(async (client) => {
+    const previous = await getContentOverrideBySlotWithClient({
+      client,
+      siteVersionId: input.siteVersionId,
+      slotKey: input.slotKey,
+      status: "draft",
+    });
+    if (previous && contentJsonEquals(previous.valueJson, input.valueJson) && previous.valueType === input.valueType) {
+      return { changed: false, historyRecorded: false, diagnostics: ["CONTENT_HISTORY_SKIPPED_UNCHANGED"] };
+    }
+
     await client.query(
       `
       insert into public.gnr8_content_overrides (site_id, site_version_id, slot_key, value_type, value_json, status, updated_at)
@@ -2815,6 +2934,19 @@ export async function upsertContentOverrideDraft(input: {
       `,
       [input.siteId, input.siteVersionId, input.slotKey, input.valueType, JSON.stringify(input.valueJson ?? {})],
     );
+    await insertContentOverrideHistoryWithClient({
+      client,
+      siteId: input.siteId,
+      siteVersionId: input.siteVersionId,
+      slotKey: input.slotKey,
+      valueType: input.valueType,
+      previousValueJson: previous?.valueJson ?? null,
+      nextValueJson: input.valueJson ?? {},
+      action: "draft_saved",
+      actorUserId: input.actorUserId ?? null,
+      source: input.source ?? "manual",
+    });
+    return { changed: true, historyRecorded: true, diagnostics: ["CONTENT_HISTORY_RECORDED"] };
   });
 }
 
@@ -2826,11 +2958,27 @@ export async function upsertContentOverrideDraftBatch(input: {
     valueType: ContentSlotType;
     valueJson: unknown;
   }>;
-}): Promise<number> {
-  if (input.overrides.length === 0) return 0;
+  actorUserId?: string | null;
+  source?: ContentOverrideHistorySource;
+}): Promise<{ updatedCount: number; historyCount: number; skippedUnchangedCount: number; diagnostics: string[] }> {
+  if (input.overrides.length === 0) return { updatedCount: 0, historyCount: 0, skippedUnchangedCount: 0, diagnostics: [] };
   return withTx(async (client) => {
     let affected = 0;
+    let historyCount = 0;
+    let skippedUnchangedCount = 0;
+    const diagnostics: string[] = [];
     for (const override of input.overrides) {
+      const previous = await getContentOverrideBySlotWithClient({
+        client,
+        siteVersionId: input.siteVersionId,
+        slotKey: override.slotKey,
+        status: "draft",
+      });
+      if (previous && contentJsonEquals(previous.valueJson, override.valueJson) && previous.valueType === override.valueType) {
+        skippedUnchangedCount += 1;
+        diagnostics.push("CONTENT_HISTORY_SKIPPED_UNCHANGED");
+        continue;
+      }
       const res = await client.query(
         `
         insert into public.gnr8_content_overrides (site_id, site_version_id, slot_key, value_type, value_json, status, updated_at)
@@ -2841,19 +2989,54 @@ export async function upsertContentOverrideDraftBatch(input: {
         [input.siteId, input.siteVersionId, override.slotKey, override.valueType, JSON.stringify(override.valueJson ?? {})],
       );
       affected += res.rowCount ?? 0;
+      await insertContentOverrideHistoryWithClient({
+        client,
+        siteId: input.siteId,
+        siteVersionId: input.siteVersionId,
+        slotKey: override.slotKey,
+        valueType: override.valueType,
+        previousValueJson: previous?.valueJson ?? null,
+        nextValueJson: override.valueJson ?? {},
+        action: "draft_saved",
+        actorUserId: input.actorUserId ?? null,
+        source: input.source ?? "batch",
+      });
+      historyCount += 1;
+      diagnostics.push("CONTENT_HISTORY_RECORDED");
     }
-    return affected;
+    return { updatedCount: affected, historyCount, skippedUnchangedCount, diagnostics };
   });
 }
 
-export async function publishDraftContentOverrides(input: { siteId: string; siteVersionId: string }): Promise<number> {
+export async function publishDraftContentOverrides(input: {
+  siteId: string;
+  siteVersionId: string;
+  actorUserId?: string | null;
+  source?: ContentOverrideHistorySource;
+}): Promise<{ publishedCount: number; historyCount: number; diagnostics: string[] }> {
   return withTx(async (client) => {
     const drafts = await client.query<any>(
       `select slot_key::text, value_type::text, value_json from public.gnr8_content_overrides where site_version_id = $1::uuid and status = 'draft'`,
       [input.siteVersionId],
     );
     let count = 0;
+    let historyCount = 0;
+    const diagnostics: string[] = [];
     for (const row of drafts.rows) {
+      const previousPublished = await getContentOverrideBySlotWithClient({
+        client,
+        siteVersionId: input.siteVersionId,
+        slotKey: row.slot_key,
+        status: "published",
+      });
+      if (
+        previousPublished &&
+        contentJsonEquals(previousPublished.valueJson, row.value_json) &&
+        previousPublished.valueType === row.value_type
+      ) {
+        diagnostics.push("CONTENT_HISTORY_SKIPPED_UNCHANGED");
+        continue;
+      }
       const res = await client.query(
         `
         insert into public.gnr8_content_overrides (site_id, site_version_id, slot_key, value_type, value_json, status, updated_at)
@@ -2864,8 +3047,132 @@ export async function publishDraftContentOverrides(input: { siteId: string; site
         [input.siteId, input.siteVersionId, row.slot_key, row.value_type, JSON.stringify(row.value_json)],
       );
       count += res.rowCount ?? 0;
+      await insertContentOverrideHistoryWithClient({
+        client,
+        siteId: input.siteId,
+        siteVersionId: input.siteVersionId,
+        slotKey: row.slot_key,
+        valueType: row.value_type as ContentSlotType,
+        previousValueJson: previousPublished?.valueJson ?? null,
+        nextValueJson: row.value_json,
+        action: "content_published",
+        actorUserId: input.actorUserId ?? null,
+        source: input.source ?? "manual",
+      });
+      historyCount += 1;
+      diagnostics.push("CONTENT_HISTORY_RECORDED");
     }
-    return count;
+    return { publishedCount: count, historyCount, diagnostics };
+  });
+}
+
+export async function listContentOverrideHistory(input: {
+  siteId: string;
+  siteVersionId: string;
+  limit?: number;
+}): Promise<ContentOverrideHistoryRow[]> {
+  await ensureRuntimeTables();
+  const client = await getSuperadminPool().connect();
+  try {
+    const limit = Math.max(1, Math.min(500, Math.floor(input.limit ?? 100)));
+    const res = await client.query<any>(
+      `
+      select
+        id::text,
+        site_id::text,
+        site_version_id::text,
+        slot_key::text,
+        value_type::text,
+        previous_value_json,
+        next_value_json,
+        action::text,
+        actor_user_id::text,
+        source::text,
+        created_at::text,
+        metadata
+      from public.gnr8_content_override_history
+      where site_id = $1::text and site_version_id = $2::uuid
+      order by created_at desc
+      limit $3::int
+      `,
+      [input.siteId, input.siteVersionId, limit],
+    );
+    return res.rows.map((row: any) => ({
+      id: row.id,
+      siteId: row.site_id,
+      siteVersionId: row.site_version_id,
+      slotKey: row.slot_key,
+      valueType: row.value_type as ContentSlotType,
+      previousValueJson: row.previous_value_json ?? null,
+      nextValueJson: row.next_value_json,
+      action: row.action as ContentOverrideHistoryAction,
+      actorUserId: row.actor_user_id ?? null,
+      source: row.source as ContentOverrideHistorySource,
+      createdAt: row.created_at,
+      metadata: (row.metadata ?? null) as Record<string, unknown> | null,
+    }));
+  } finally {
+    client.release();
+  }
+}
+
+export async function rollbackContentOverride(input: {
+  siteId: string;
+  siteVersionId: string;
+  slotKey: string;
+  historyId: string;
+  targetStatus: ContentOverrideStatus;
+  actorUserId?: string | null;
+  source?: ContentOverrideHistorySource;
+}): Promise<{ restored: boolean; diagnostics: string[] }> {
+  return withTx(async (client) => {
+    const historyRes = await client.query<any>(
+      `
+      select id::text, slot_key::text, value_type::text, previous_value_json, next_value_json
+      from public.gnr8_content_override_history
+      where id = $1::uuid and site_id = $2::text and site_version_id = $3::uuid
+      limit 1
+      `,
+      [input.historyId, input.siteId, input.siteVersionId],
+    );
+    const history = historyRes.rows[0];
+    if (!history) return { restored: false, diagnostics: ["CONTENT_ROLLBACK_FAILED"] };
+    if (history.slot_key !== input.slotKey) return { restored: false, diagnostics: ["CONTENT_ROLLBACK_FAILED"] };
+
+    const targetValue = history.previous_value_json ?? history.next_value_json;
+    const current = await getContentOverrideBySlotWithClient({
+      client,
+      siteVersionId: input.siteVersionId,
+      slotKey: input.slotKey,
+      status: input.targetStatus,
+    });
+    if (current && contentJsonEquals(current.valueJson, targetValue) && current.valueType === history.value_type) {
+      return { restored: false, diagnostics: ["CONTENT_HISTORY_SKIPPED_UNCHANGED"] };
+    }
+
+    await client.query(
+      `
+      insert into public.gnr8_content_overrides (site_id, site_version_id, slot_key, value_type, value_json, status, updated_at)
+      values ($1::text, $2::uuid, $3::text, $4::text, $5::jsonb, $6::text, now())
+      on conflict (site_version_id, slot_key, status)
+      do update set value_type = excluded.value_type, value_json = excluded.value_json, updated_at = now()
+      `,
+      [input.siteId, input.siteVersionId, input.slotKey, history.value_type, JSON.stringify(targetValue ?? {}), input.targetStatus],
+    );
+    await insertContentOverrideHistoryWithClient({
+      client,
+      siteId: input.siteId,
+      siteVersionId: input.siteVersionId,
+      slotKey: input.slotKey,
+      valueType: history.value_type as ContentSlotType,
+      previousValueJson: current?.valueJson ?? null,
+      nextValueJson: targetValue ?? {},
+      action: "rollback_applied",
+      actorUserId: input.actorUserId ?? null,
+      source: input.source ?? "manual",
+      metadata: { historyId: input.historyId, targetStatus: input.targetStatus },
+    });
+    return { restored: true, diagnostics: ["CONTENT_HISTORY_RECORDED", "CONTENT_ROLLBACK_APPLIED"] };
   });
 }
 

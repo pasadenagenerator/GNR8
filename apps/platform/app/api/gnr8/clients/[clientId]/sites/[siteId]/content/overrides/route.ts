@@ -46,7 +46,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ clientId?: str
     const valueJson = body?.valueJson
     if (!agencyId || !slotKey || !valueType) return NextResponse.json({ ok: false, error: 'agencyId, slotKey, valueType are required' }, { status: 400 })
 
-    await requireAgencyActionContext({ action: 'run_migration', requestedAgencyId: agencyId })
+    const actionContext = await requireAgencyActionContext({ action: 'run_migration', requestedAgencyId: agencyId })
     const scope = await resolveRuntimeScope({ clientId, siteId, agencyId, requestedSiteVersionId: siteVersionId })
     if (!scope) return NextResponse.json({ ok: false, error: 'Site scope not found' }, { status: 404 })
 
@@ -55,8 +55,16 @@ export async function POST(req: Request, ctx: { params: Promise<{ clientId?: str
     if (!slot) return NextResponse.json({ ok: false, error: 'slot does not exist' }, { status: 400 })
     if (slot.slotType !== valueType) return NextResponse.json({ ok: false, error: 'value type mismatch' }, { status: 400 })
 
-    await upsertContentOverrideDraft({ siteId: scope.runtimeSiteId, siteVersionId: scope.siteVersionId, slotKey, valueType: slot.slotType, valueJson })
-    return NextResponse.json({ ok: true })
+    const result = await upsertContentOverrideDraft({
+      siteId: scope.runtimeSiteId,
+      siteVersionId: scope.siteVersionId,
+      slotKey,
+      valueType: slot.slotType,
+      valueJson,
+      actorUserId: actionContext.userId,
+      source: 'manual',
+    })
+    return NextResponse.json({ ok: true, diagnostics: result.diagnostics })
   } catch (error) {
     const mapped = parseAgencyActionContextError(error)
     return NextResponse.json({ ok: false, error: mapped.message }, { status: mapped.status })

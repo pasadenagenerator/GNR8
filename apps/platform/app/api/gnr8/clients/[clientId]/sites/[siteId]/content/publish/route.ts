@@ -30,12 +30,17 @@ export async function POST(req: Request, ctx: { params: Promise<{ clientId?: str
     const agencyId = normalizeUuid(body?.agencyId)
     if (!agencyId) return NextResponse.json({ ok: false, error: 'agencyId is required' }, { status: 400 })
 
-    await requireAgencyActionContext({ action: 'publish', requestedAgencyId: agencyId })
+    const actionContext = await requireAgencyActionContext({ action: 'publish', requestedAgencyId: agencyId })
     const scope = await resolveRuntimeScope({ clientId, siteId, agencyId })
     if (!scope) return NextResponse.json({ ok: false, error: 'Site scope not found' }, { status: 404 })
 
-    const publishedCount = await publishDraftContentOverrides({ siteId: scope.runtimeSiteId, siteVersionId: scope.siteVersionId })
-    return NextResponse.json({ ok: true, publishedCount })
+    const result = await publishDraftContentOverrides({
+      siteId: scope.runtimeSiteId,
+      siteVersionId: scope.siteVersionId,
+      actorUserId: actionContext.userId,
+      source: 'manual',
+    })
+    return NextResponse.json({ ok: true, publishedCount: result.publishedCount, diagnostics: result.diagnostics })
   } catch (error) {
     const mapped = parseAgencyActionContextError(error)
     return NextResponse.json({ ok: false, error: mapped.message }, { status: mapped.status })

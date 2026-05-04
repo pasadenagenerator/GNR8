@@ -1,8 +1,7 @@
 import { NextResponse } from 'next/server'
 
 import { parseAgencyActionContextError, requireAgencyActionContext } from '@/app/api/gnr8/agency/_lib/agency-action-access'
-import { planBatchDraftUpserts } from '@/app/api/gnr8/clients/[clientId]/sites/[siteId]/content/overrides/batch/batch-overrides-route-helpers'
-import { listContentSlots, upsertContentOverrideDraftBatch } from '@/gnr8/runtime/runtime-store'
+import { listContentSlots, rollbackContentOverride } from '@/gnr8/runtime/runtime-store'
 import { getSuperadminPool } from '@/src/superadmin/db'
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
@@ -36,7 +35,7 @@ async function resolveRuntimeScope(input: {
 }
 
 export async function POST(req: Request, ctx: { params: Promise<{ clientId?: string; siteId?: string }> }) {
-  const diagnostics: string[] = ['CONTENT_BATCH_UPDATE_STARTED']
+  const diagnostics: string[] = ['CONTENT_ROLLBACK_STARTED']
   try {
     const params = await ctx.params
     const clientId = normalizeUuid(params.clientId)
@@ -46,33 +45,41 @@ export async function POST(req: Request, ctx: { params: Promise<{ clientId?: str
     const body = (await req.json().catch(() => null)) as any
     const agencyId = normalizeUuid(body?.agencyId)
     const siteVersionId = normalizeUuid(body?.siteVersionId)
-    const overrides = Array.isArray(body?.overrides) ? body.overrides : []
-    if (!agencyId || !siteVersionId) return NextResponse.json({ ok: false, error: 'agencyId and siteVersionId are required' }, { status: 400 })
+    const historyId = normalizeUuid(body?.historyId)
+    const slotKey = normalizeText(body?.slotKey)
+    const targetStatus = normalizeText(body?.targetStatus) === 'published' ? 'published' : 'draft'
+
+    if (!agencyId || !siteVersionId || !historyId || !slotKey) {
+      return NextResponse.json({ ok: false, error: 'agencyId, siteVersionId, slotKey, historyId are required' }, { status: 400 })
+    }
 
     const actionContext = await requireAgencyActionContext({ action: 'run_migration', requestedAgencyId: agencyId })
     const scope = await resolveRuntimeScope({ clientId, siteId, agencyId, siteVersionId })
     if (!scope) return NextResponse.json({ ok: false, error: 'Site scope not found' }, { status: 404 })
 
     const slots = await listContentSlots(scope.siteVersionId)
-    const planned = planBatchDraftUpserts({ slots, overrides })
-    const valid = planned.valid
-    const skippedCount = planned.skippedCount
-    diagnostics.push(...planned.diagnostics)
+    const slot = slots.find((item) => item.slotKey === slotKey)
+    if (!slot) return NextResponse.json({ ok: false, error: 'slot does not exist' }, { status: 400 })
 
-    const saveResult = await upsertContentOverrideDraftBatch({
+    const result = await rollbackContentOverride({
       siteId: scope.runtimeSiteId,
       siteVersionId: scope.siteVersionId,
-      overrides: valid,
+      slotKey,
+      historyId,
+      targetStatus,
       actorUserId: actionContext.userId,
-      source: 'batch',
+      source: 'manual',
     })
-    const updatedCount = saveResult.updatedCount
-    diagnostics.push(...saveResult.diagnostics)
-    diagnostics.push('CONTENT_BATCH_UPDATE_COMPLETED')
-    return NextResponse.json({ ok: true, updatedCount, skippedCount, diagnostics })
+    diagnostics.push(...result.diagnostics)
+    if (!result.restored) {
+      diagnostics.push('CONTENT_ROLLBACK_FAILED')
+      return NextResponse.json({ ok: false, error: 'Rollback could not be applied', diagnostics }, { status: 400 })
+    }
+    diagnostics.push('CONTENT_ROLLBACK_APPLIED')
+    return NextResponse.json({ ok: true, diagnostics })
   } catch (error) {
     const mapped = parseAgencyActionContextError(error)
-    diagnostics.push('CONTENT_BATCH_SLOT_SKIPPED', 'CONTENT_BATCH_UPDATE_COMPLETED')
-    return NextResponse.json({ ok: false, error: mapped.message, updatedCount: 0, skippedCount: 0, diagnostics }, { status: mapped.status })
+    diagnostics.push('CONTENT_ROLLBACK_FAILED')
+    return NextResponse.json({ ok: false, error: mapped.message, diagnostics }, { status: mapped.status })
   }
 }
