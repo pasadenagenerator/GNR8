@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import type { ContentSlot } from '@/gnr8/runtime/content-binding'
-import { groupedContentLooksEmpty, groupSlots } from '@/app/api/gnr8/clients/[clientId]/sites/[siteId]/content/route'
+import { groupedContentLooksEmpty, groupSlots } from '@/gnr8/site/content-route-grouping'
 
 function slot(slotKey: string, sourceText: string | null = 'x'): ContentSlot {
   return {
