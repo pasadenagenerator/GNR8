@@ -3,13 +3,18 @@ import { NextResponse } from 'next/server'
 import { parseAgencyActionContextError, requireAgencyActionContext } from '@/app/api/gnr8/agency/_lib/agency-action-access'
 import { listContentOverrides, listContentSlots } from '@/gnr8/runtime/runtime-store'
 import { groupedContentLooksEmpty, groupSlots } from '@/gnr8/site/content-route-grouping'
-import { normalizeUuid, resolveRuntimeScope, type ResolveRuntimeScopeInput, type RuntimeScope } from '@/gnr8/site/content-route-version-resolution'
+import {
+  normalizeUuid,
+  resolveRuntimeScopeDetailed,
+  type ResolveRuntimeScopeInput,
+  type RuntimeScopeResolution,
+} from '@/gnr8/site/content-route-version-resolution'
 import { getSuperadminPool } from '@/src/superadmin/db'
 
 export type ContentRouteDeps = {
   requireAgencyActionContext: typeof requireAgencyActionContext
   parseAgencyActionContextError: typeof parseAgencyActionContextError
-  resolveRuntimeScope: (input: ResolveRuntimeScopeInput) => Promise<RuntimeScope | null>
+  resolveRuntimeScopeDetailed: (input: ResolveRuntimeScopeInput) => Promise<RuntimeScopeResolution>
   listContentSlots: typeof listContentSlots
   listContentOverrides: typeof listContentOverrides
   queryHistoryCount: (input: { runtimeSiteId: string; siteVersionId: string }) => Promise<number>
@@ -48,18 +53,22 @@ export function createContentRouteHandlers(deps: ContentRouteDeps) {
           requestedSiteVersionId,
         })
 
-        const scope = await deps.resolveRuntimeScope({ clientId, siteId, agencyId, requestedSiteVersionId })
+        const resolution = await deps.resolveRuntimeScopeDetailed({ clientId, siteId, agencyId, requestedSiteVersionId })
+        const scope = resolution.scope
+        console.info('[gnr8.content-api] CONTENT_GET_VERSION_CANDIDATES', resolution.debug)
         if (!scope) {
           console.warn('[gnr8.content-api] CONTENT_GET_VERSION_RESOLUTION_FAILED', {
             ownershipSiteId: siteId,
             siteVersionId: requestedSiteVersionId,
-            reasonCode: requestedSiteVersionId ? 'requested_site_version_not_in_scope' : 'no_runtime_version_found',
+            reasonCode: resolution.unresolvedReasonCode ?? (requestedSiteVersionId ? 'requested_site_version_not_in_scope' : 'CONTENT_VERSION_NOT_FOUND'),
+            debug: resolution.debug,
           })
           return NextResponse.json(
             {
               ok: false,
               error: 'Content version could not be resolved for this site.',
-              reasonCode: requestedSiteVersionId ? 'requested_site_version_not_in_scope' : 'no_runtime_version_found',
+              reasonCode: resolution.unresolvedReasonCode ?? (requestedSiteVersionId ? 'requested_site_version_not_in_scope' : 'CONTENT_VERSION_NOT_FOUND'),
+              debug: resolution.debug,
               diagnostics: ['CONTENT_GET_VERSION_RESOLUTION_FAILED'],
             },
             { status: 404 },
@@ -128,7 +137,7 @@ export function createContentRouteHandlers(deps: ContentRouteDeps) {
 export const contentRouteHandlers = createContentRouteHandlers({
   requireAgencyActionContext,
   parseAgencyActionContextError,
-  resolveRuntimeScope,
+  resolveRuntimeScopeDetailed,
   listContentSlots,
   listContentOverrides,
   queryHistoryCount,

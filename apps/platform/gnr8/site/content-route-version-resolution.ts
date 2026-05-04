@@ -18,6 +18,22 @@ export type RuntimeScope = {
   reasonCode: string
 }
 
+export type RuntimeVersionCandidateDebug = {
+  ownershipSiteId: string
+  directVersionIds: string[]
+  bootstrapVersionIds: string[]
+  renderVersionIds: string[]
+  slotBackedVersionIds: string[]
+  selectedSiteVersionId: string | null
+  selectedReason: string
+}
+
+export type RuntimeScopeResolution = {
+  scope: RuntimeScope | null
+  debug: RuntimeVersionCandidateDebug
+  unresolvedReasonCode?: 'CONTENT_VERSION_NOT_FOUND' | 'requested_site_version_not_in_scope'
+}
+
 export type ResolveRuntimeScopeInput = {
   clientId: string
   siteId: string
@@ -25,8 +41,56 @@ export type ResolveRuntimeScopeInput = {
   requestedSiteVersionId?: string | null
 }
 
-export async function resolveRuntimeScope(input: ResolveRuntimeScopeInput): Promise<RuntimeScope | null> {
-  const pool = getSuperadminPool()
+type Queryable = {
+  query: <T = unknown>(text: string, values: unknown[]) => Promise<{ rows: T[] }>
+}
+
+function dedupeNormalized(values: Array<string | null | undefined>): string[] {
+  const out: string[] = []
+  for (const value of values) {
+    const normalized = normalizeText(value)
+    if (!normalized) continue
+    if (out.includes(normalized)) continue
+    out.push(normalized)
+  }
+  return out
+}
+
+function pickRequestedSiteVersionId(input: {
+  requestedSiteVersionId: string | null
+  selectedSiteVersionId: string | null
+  selectedRuntimeSiteId: string | null
+  activeSiteVersionId: string | null
+  activeRuntimeSiteId: string | null
+  allCandidateVersionIds: string[]
+}): RuntimeScope | null {
+  const requested = input.requestedSiteVersionId
+  if (!requested) return null
+  if (!input.allCandidateVersionIds.includes(requested)) return null
+
+  if (requested === input.selectedSiteVersionId && input.selectedRuntimeSiteId && input.activeSiteVersionId) {
+    return {
+      runtimeSiteId: input.selectedRuntimeSiteId,
+      siteVersionId: requested,
+      activeSiteVersionId: input.activeSiteVersionId,
+      reasonCode: 'requested_site_version_validated',
+    }
+  }
+
+  if (!input.activeRuntimeSiteId || !input.activeSiteVersionId) return null
+  return {
+    runtimeSiteId: input.activeRuntimeSiteId,
+    siteVersionId: requested,
+    activeSiteVersionId: input.activeSiteVersionId,
+    reasonCode: 'requested_site_version_validated',
+  }
+}
+
+export async function resolveRuntimeScopeDetailed(
+  input: ResolveRuntimeScopeInput,
+  deps: { pool?: Queryable } = {},
+): Promise<RuntimeScopeResolution> {
+  const pool = deps.pool ?? getSuperadminPool()
 
   const candidateRes = await pool.query<any>(
     `
@@ -40,134 +104,160 @@ export async function resolveRuntimeScope(input: ResolveRuntimeScopeInput): Prom
         and o.organization_type = 'client'
       limit 1
     ),
-    runtime_site_candidates as (
-      select nullif(b.runtime_site_id::text, '') as runtime_site_id
-      from public.gnr8_site_bootstrap_jobs b
-      join scoped_site ss on ss.ownership_site_id = b.site_id
-      union
-      select nullif(r.runtime_site_id::text, '') as runtime_site_id
-      from public.gnr8_site_render_jobs r
-      join scoped_site ss on ss.ownership_site_id = r.site_id
-    ),
-    version_candidates as (
-      select
-        sv.id::text as site_version_id,
-        sv.site_id::text as runtime_site_id,
-        'direct_ownership'::text as resolution_path,
-        sv.version_no,
-        sv.updated_at,
-        sv.created_at
+    direct_versions as (
+      select sv.id::text as site_version_id
       from public.gnr8_runtime_site_versions sv
       join scoped_site ss on sv.ownership_site_id = ss.ownership_site_id
-
-      union all
-
-      select
-        sv.id::text as site_version_id,
-        sv.site_id::text as runtime_site_id,
-        'bootstrap_runtime_site_version'::text as resolution_path,
-        sv.version_no,
-        sv.updated_at,
-        sv.created_at
+    ),
+    bootstrap_versions as (
+      select sv.id::text as site_version_id
       from public.gnr8_site_bootstrap_jobs b
       join scoped_site ss on ss.ownership_site_id = b.site_id
       join public.gnr8_runtime_site_versions sv on sv.id = b.runtime_site_version_id
-
-      union all
-
-      select
-        sv.id::text as site_version_id,
-        sv.site_id::text as runtime_site_id,
-        'render_runtime_site_version'::text as resolution_path,
-        sv.version_no,
-        sv.updated_at,
-        sv.created_at
+    ),
+    render_versions as (
+      select sv.id::text as site_version_id
       from public.gnr8_site_render_jobs r
       join scoped_site ss on ss.ownership_site_id = r.site_id
       join public.gnr8_runtime_site_versions sv on sv.id = r.runtime_site_version_id
-
-      union all
-
-      select
-        sv.id::text as site_version_id,
-        sv.site_id::text as runtime_site_id,
-        'runtime_site_lookup'::text as resolution_path,
-        sv.version_no,
-        sv.updated_at,
-        sv.created_at
-      from public.gnr8_runtime_site_versions sv
-      join runtime_site_candidates c on c.runtime_site_id = sv.site_id
-
-      union all
-
-      select
-        sv.id::text as site_version_id,
-        sv.site_id::text as runtime_site_id,
-        'raw_template_artifact_lookup'::text as resolution_path,
-        sv.version_no,
-        sv.updated_at,
-        sv.created_at
-      from public.gnr8_runtime_raw_template_artifacts a
-      join public.gnr8_runtime_site_versions sv on sv.id = a.site_version_id
-      join runtime_site_candidates c on c.runtime_site_id = sv.site_id
     ),
-    deduped as (
-      select distinct on (site_version_id)
-        site_version_id,
-        runtime_site_id,
-        resolution_path,
-        version_no,
-        updated_at,
-        created_at
-      from version_candidates
-      where site_version_id is not null
-      order by site_version_id, version_no desc nulls last, updated_at desc nulls last, created_at desc nulls last
+    slot_backed_versions as (
+      select distinct sv.id::text as site_version_id
+      from public.gnr8_content_slots cs
+      join public.gnr8_runtime_site_versions sv on sv.id = cs.site_version_id
+      join scoped_site ss on true
+      where
+        sv.ownership_site_id = ss.ownership_site_id
+        or exists (
+          select 1
+          from public.gnr8_site_bootstrap_jobs b
+          where b.site_id = ss.ownership_site_id and b.runtime_site_version_id = sv.id
+        )
+        or exists (
+          select 1
+          from public.gnr8_site_render_jobs r
+          where r.site_id = ss.ownership_site_id and r.runtime_site_version_id = sv.id
+        )
+    ),
+    prioritized as (
+      select sv.id::text as site_version_id, sv.site_id::text as runtime_site_id, sv.version_no, sv.updated_at, sv.created_at,
+        'direct_ownership'::text as resolution_path, 10 as confidence
+      from public.gnr8_runtime_site_versions sv
+      join direct_versions d on d.site_version_id = sv.id::text
+
+      union all
+
+      select sv.id::text as site_version_id, sv.site_id::text as runtime_site_id, sv.version_no, sv.updated_at, sv.created_at,
+        'bootstrap_runtime_site_version'::text as resolution_path, 20 as confidence
+      from public.gnr8_runtime_site_versions sv
+      join bootstrap_versions b on b.site_version_id = sv.id::text
+
+      union all
+
+      select sv.id::text as site_version_id, sv.site_id::text as runtime_site_id, sv.version_no, sv.updated_at, sv.created_at,
+        'render_runtime_site_version'::text as resolution_path, 30 as confidence
+      from public.gnr8_runtime_site_versions sv
+      join render_versions r on r.site_version_id = sv.id::text
+
+      union all
+
+      select sv.id::text as site_version_id, sv.site_id::text as runtime_site_id, sv.version_no, sv.updated_at, sv.created_at,
+        case
+          when exists (select 1 from direct_versions d where d.site_version_id = sv.id::text) then 'slot_linked_direct'
+          when exists (select 1 from bootstrap_versions b where b.site_version_id = sv.id::text) then 'slot_linked_bootstrap'
+          when exists (select 1 from render_versions r where r.site_version_id = sv.id::text) then 'slot_linked_render'
+          else 'slot_linked_runtime_version'
+        end as resolution_path,
+        40 as confidence
+      from public.gnr8_runtime_site_versions sv
+      join slot_backed_versions sb on sb.site_version_id = sv.id::text
+    ),
+    selected as (
+      select
+        p.site_version_id,
+        p.runtime_site_id,
+        p.resolution_path
+      from prioritized p
+      order by p.confidence asc, p.version_no desc nulls last, p.updated_at desc nulls last, p.created_at desc nulls last
+      limit 1
     )
     select
-      site_version_id,
-      runtime_site_id,
-      resolution_path,
-      version_no,
-      updated_at,
-      created_at
-    from deduped
-    order by version_no desc nulls last, updated_at desc nulls last, created_at desc nulls last
+      (select array_agg(distinct dv.site_version_id) from direct_versions dv) as direct_version_ids,
+      (select array_agg(distinct bv.site_version_id) from bootstrap_versions bv) as bootstrap_version_ids,
+      (select array_agg(distinct rv.site_version_id) from render_versions rv) as render_version_ids,
+      (select array_agg(distinct sb.site_version_id) from slot_backed_versions sb) as slot_backed_version_ids,
+      (select s.site_version_id from selected s) as selected_site_version_id,
+      (select s.runtime_site_id from selected s) as selected_runtime_site_id,
+      (select s.resolution_path from selected s) as selected_reason
     `,
     [input.siteId, input.clientId, input.agencyId],
   )
 
-  const candidates = candidateRes.rows as Array<{
-    site_version_id: string | null
-    runtime_site_id: string | null
-    resolution_path: string | null
-  }>
+  const row = (candidateRes.rows[0] ?? {}) as {
+    direct_version_ids?: string[] | null
+    bootstrap_version_ids?: string[] | null
+    render_version_ids?: string[] | null
+    slot_backed_version_ids?: string[] | null
+    selected_site_version_id?: string | null
+    selected_runtime_site_id?: string | null
+    selected_reason?: string | null
+  }
 
-  if (!candidates.length) return null
+  const directVersionIds = dedupeNormalized(row.direct_version_ids ?? [])
+  const bootstrapVersionIds = dedupeNormalized(row.bootstrap_version_ids ?? [])
+  const renderVersionIds = dedupeNormalized(row.render_version_ids ?? [])
+  const slotBackedVersionIds = dedupeNormalized(row.slot_backed_version_ids ?? [])
+  const selectedSiteVersionId = normalizeText(row.selected_site_version_id) || null
+  const selectedRuntimeSiteId = normalizeText(row.selected_runtime_site_id) || null
+  const selectedReason = normalizeText(row.selected_reason) || 'no_candidate_found'
 
-  const active = candidates[0]
-  const activeSiteVersionId = normalizeText(active?.site_version_id)
-  const activeRuntimeSiteId = normalizeText(active?.runtime_site_id)
-  if (!activeSiteVersionId || !activeRuntimeSiteId) return null
+  const debug: RuntimeVersionCandidateDebug = {
+    ownershipSiteId: input.siteId,
+    directVersionIds,
+    bootstrapVersionIds,
+    renderVersionIds,
+    slotBackedVersionIds,
+    selectedSiteVersionId,
+    selectedReason,
+  }
+
+  const allCandidateVersionIds = dedupeNormalized([
+    ...directVersionIds,
+    ...bootstrapVersionIds,
+    ...renderVersionIds,
+    ...slotBackedVersionIds,
+  ])
 
   if (input.requestedSiteVersionId) {
-    const scoped = candidates.find((candidate) => normalizeText(candidate.site_version_id) === input.requestedSiteVersionId)
-    if (!scoped) return null
-    const scopedRuntimeSiteId = normalizeText(scoped.runtime_site_id)
-    const scopedSiteVersionId = normalizeText(scoped.site_version_id)
-    if (!scopedRuntimeSiteId || !scopedSiteVersionId) return null
-    return {
-      runtimeSiteId: scopedRuntimeSiteId,
-      siteVersionId: scopedSiteVersionId,
-      activeSiteVersionId,
-      reasonCode: 'requested_site_version_validated',
-    }
+    const requested = pickRequestedSiteVersionId({
+      requestedSiteVersionId: input.requestedSiteVersionId,
+      selectedSiteVersionId,
+      selectedRuntimeSiteId,
+      activeSiteVersionId: selectedSiteVersionId,
+      activeRuntimeSiteId: selectedRuntimeSiteId,
+      allCandidateVersionIds,
+    })
+    if (!requested) return { scope: null, debug, unresolvedReasonCode: 'requested_site_version_not_in_scope' }
+    return { scope: requested, debug }
   }
 
-  const resolutionPath = normalizeText(active.resolution_path) || 'unknown_resolution_path'
-  return {
-    runtimeSiteId: activeRuntimeSiteId,
-    siteVersionId: activeSiteVersionId,
-    activeSiteVersionId,
-    reasonCode: resolutionPath === 'direct_ownership' ? 'direct_runtime_version' : `fallback_${resolutionPath}`,
+  if (!selectedSiteVersionId || !selectedRuntimeSiteId) {
+    return { scope: null, debug, unresolvedReasonCode: 'CONTENT_VERSION_NOT_FOUND' }
   }
+
+  const reasonCode = selectedReason === 'direct_ownership' ? 'direct_runtime_version' : `fallback_${selectedReason}`
+  return {
+    scope: {
+      runtimeSiteId: selectedRuntimeSiteId,
+      siteVersionId: selectedSiteVersionId,
+      activeSiteVersionId: selectedSiteVersionId,
+      reasonCode,
+    },
+    debug,
+  }
+}
+
+export async function resolveRuntimeScope(input: ResolveRuntimeScopeInput): Promise<RuntimeScope | null> {
+  const result = await resolveRuntimeScopeDetailed(input)
+  return result.scope
 }
