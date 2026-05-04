@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import { createContentRouteHandlers } from '@/app/api/gnr8/clients/[clientId]/sites/[siteId]/content/route'
+import { createContentRouteHandlers } from '@/gnr8/site/content-route-handlers'
 
 const IDS = {
   clientId: '00000000-0000-4000-8000-000000000201',
