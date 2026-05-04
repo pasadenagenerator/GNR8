@@ -601,3 +601,64 @@ test("public runtime domain hit: uses published overrides only (never draft)", a
     restoreDeps()
   }
 })
+
+test("public runtime version isolation: overrides for v1 never leak into v2 render", async () => {
+  const calls: string[] = []
+  const restoreDeps = __setPublicRuntimeRenderDependenciesForTest({
+    resolveRawTemplateSiteForDomainAndPath: async () =>
+      ({
+        outcome: "raw_template_hit",
+        host: "versioned.example.com",
+        siteId: "site_pub_2",
+        siteVersionId: "sv_v2",
+        domain: "versioned.example.com",
+        bindingId: "domain_binding_pub_2",
+        status: "active",
+        normalizedPath: "/",
+        resolvedFilePath: "index.html",
+        html: "<!doctype html><html><body><p>Original text</p></body></html>",
+      }) as never,
+    resolveActiveArtifactForHostAndPathWithDiagnostics: async () => {
+      throw new Error("artifact resolver should not run when raw template domain hit succeeds")
+    },
+    listContentSlots: async () => [
+      {
+        id: "slot_v2",
+        siteId: "site_pub_2",
+        siteVersionId: "sv_v2",
+        slotKey: "sections.0.intro",
+        slotType: "text",
+        sourceSelector: "html > body:nth-of-type(1) > p:nth-of-type(1)",
+        sourceText: "Original text",
+        sourceAssetPath: null,
+        confidence: 1,
+        diagnostics: null,
+      },
+    ],
+    listContentOverrides: async ({ siteVersionId, status }) => {
+      calls.push(`${siteVersionId}:${status}`)
+      return [
+        {
+          id: "ov_v2",
+          siteId: "site_pub_2",
+          siteVersionId,
+          slotKey: "sections.0.intro",
+          valueType: "text",
+          valueJson: { value: siteVersionId === "sv_v2" ? "V2 content only" : "V1 leaked content" },
+          status: "published",
+        },
+      ]
+    },
+  })
+
+  try {
+    const response = await renderPublicPathResponse({ host: "versioned.example.com", path: "/" })
+    assert.equal(response.status, 200)
+    const html = await response.text()
+    assert.match(html, /V2 content only/)
+    assert.doesNotMatch(html, /V1 leaked content/)
+    assert.equal(calls.includes("sv_v2:published"), true)
+  } finally {
+    restoreDeps()
+  }
+})

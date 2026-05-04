@@ -2818,6 +2818,34 @@ export async function upsertContentOverrideDraft(input: {
   });
 }
 
+export async function upsertContentOverrideDraftBatch(input: {
+  siteId: string;
+  siteVersionId: string;
+  overrides: Array<{
+    slotKey: string;
+    valueType: ContentSlotType;
+    valueJson: unknown;
+  }>;
+}): Promise<number> {
+  if (input.overrides.length === 0) return 0;
+  return withTx(async (client) => {
+    let affected = 0;
+    for (const override of input.overrides) {
+      const res = await client.query(
+        `
+        insert into public.gnr8_content_overrides (site_id, site_version_id, slot_key, value_type, value_json, status, updated_at)
+        values ($1::text, $2::uuid, $3::text, $4::text, $5::jsonb, 'draft', now())
+        on conflict (site_version_id, slot_key, status)
+        do update set value_type = excluded.value_type, value_json = excluded.value_json, updated_at = now()
+        `,
+        [input.siteId, input.siteVersionId, override.slotKey, override.valueType, JSON.stringify(override.valueJson ?? {})],
+      );
+      affected += res.rowCount ?? 0;
+    }
+    return affected;
+  });
+}
+
 export async function publishDraftContentOverrides(input: { siteId: string; siteVersionId: string }): Promise<number> {
   return withTx(async (client) => {
     const drafts = await client.query<any>(

@@ -23,11 +23,13 @@ type Grouped = {
 
 export default function ContentBindingsPanel(props: { agencyId: string; clientId: string; siteId: string }) {
   const [grouped, setGrouped] = useState<Grouped>({ hero: [], sections: [], footer: [] })
+  const [siteVersionId, setSiteVersionId] = useState<string>('')
   const [drafts, setDrafts] = useState<Record<string, string>>({})
   const [published, setPublished] = useState<Record<string, string>>({})
   const [publishedAtLoad, setPublishedAtLoad] = useState<Record<string, string>>({})
   const [busy, setBusy] = useState(false)
   const [publishStatus, setPublishStatus] = useState<'idle' | 'success'>('idle')
+  const [saveAllStatus, setSaveAllStatus] = useState<'idle' | 'success' | 'error'>('idle')
 
   const endpoint = useMemo(() => `/api/gnr8/clients/${encodeURIComponent(props.clientId)}/sites/${encodeURIComponent(props.siteId)}/content?agencyId=${encodeURIComponent(props.agencyId)}`, [props])
 
@@ -70,6 +72,7 @@ export default function ContentBindingsPanel(props: { agencyId: string; clientId
       .then((payload) => {
         if (done || !payload?.ok) return
         setGrouped(payload.grouped ?? { hero: [], sections: [], footer: [] })
+        setSiteVersionId(typeof payload.siteVersionId === 'string' ? payload.siteVersionId : '')
         const draftMap: Record<string, string> = {}
         const draftOverrides: Override[] = Array.isArray(payload.draftOverrides) ? payload.draftOverrides : []
         for (const ov of draftOverrides) draftMap[ov.slotKey] = typeof ov.valueJson?.value === 'string' ? ov.valueJson.value : ''
@@ -100,23 +103,32 @@ export default function ContentBindingsPanel(props: { agencyId: string; clientId
   }
 
   async function saveAllDrafts(): Promise<void> {
-    if (modifiedEditableSlots.length === 0) return
+    if (modifiedEditableSlots.length === 0 || !siteVersionId) return
     setBusy(true)
+    setSaveAllStatus('idle')
     try {
-      await Promise.all(
-        modifiedEditableSlots.map((slot) =>
-          fetch(`/api/gnr8/clients/${encodeURIComponent(props.clientId)}/sites/${encodeURIComponent(props.siteId)}/content/overrides`, {
-            method: 'POST',
-            headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({ agencyId: props.agencyId, slotKey: slot.slotKey, valueType: slot.slotType, valueJson: { value: drafts[slot.slotKey] ?? '' } }),
-          })
-        )
-      )
+      const response = await fetch(`/api/gnr8/clients/${encodeURIComponent(props.clientId)}/sites/${encodeURIComponent(props.siteId)}/content/overrides/batch`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          agencyId: props.agencyId,
+          siteVersionId,
+          overrides: modifiedEditableSlots.map((slot) => ({
+            slotKey: slot.slotKey,
+            value: drafts[slot.slotKey] ?? '',
+            status: 'draft',
+          })),
+        }),
+      })
+      if (!response.ok) throw new Error('batch_save_failed')
       setPublishedAtLoad((prev) => {
         const next = { ...prev }
         for (const slot of modifiedEditableSlots) next[slot.slotKey] = drafts[slot.slotKey] ?? ''
         return next
       })
+      setSaveAllStatus('success')
+    } catch {
+      setSaveAllStatus('error')
     } finally {
       setBusy(false)
     }
@@ -196,6 +208,8 @@ export default function ContentBindingsPanel(props: { agencyId: string; clientId
         >
           Save all drafts
         </button>
+        {saveAllStatus === 'success' ? <div style={{ fontSize: 12, color: '#166534', alignSelf: 'center' }}>All changes saved</div> : null}
+        {saveAllStatus === 'error' ? <div style={{ fontSize: 12, color: '#b91c1c', alignSelf: 'center' }}>Save failed. Try per-field save.</div> : null}
         <button
           type='button'
           disabled={busy || !hasDraftChangesToPublish}

@@ -11,6 +11,7 @@ import {
   getSiteVersionArtifactBinding,
 } from '@/gnr8/runtime/runtime-store'
 import { applyContentOverridesToRawHtml } from '@/src/public-site/content-override-runtime'
+import type { ContentOverride } from '@/gnr8/runtime/content-binding'
 import type { CanonicalSiteVersionSnapshot } from '@/gnr8/runtime/types'
 import { normalizeSiteVersionPreviewMode, type SiteVersionPreviewMode } from '@/gnr8/site/site-preview-contract'
 import { PREVIEW_RUNTIME_DIAGNOSTIC } from '@/gnr8/preview-runtime/preview-runtime-diagnostics'
@@ -353,6 +354,16 @@ function buildRawTemplatePreviewRuntimeSummary(input: {
   }
 }
 
+function selectPreviewOverridesByVersion(input: {
+  siteVersionId: string
+  draftOverrides: ContentOverride[]
+  publishedOverrides: ContentOverride[]
+}): ContentOverride[] {
+  const sameVersionDraftOverrides = input.draftOverrides.filter((override) => override.siteVersionId === input.siteVersionId)
+  if (sameVersionDraftOverrides.length > 0) return sameVersionDraftOverrides
+  return input.publishedOverrides.filter((override) => override.siteVersionId === input.siteVersionId)
+}
+
 async function renderRawTemplateSiteVersionPreview(input: {
   siteVersionId: string
   requestedPath: string
@@ -381,10 +392,31 @@ async function renderRawTemplateSiteVersionPreview(input: {
   const slots = await listContentSlots(artifact.siteVersionId)
   const draftOverrides = await listContentOverrides({ siteVersionId: artifact.siteVersionId, status: 'draft' })
   const publishedOverrides = await listContentOverrides({ siteVersionId: artifact.siteVersionId, status: 'published' })
+  const sameVersionDraftOverrides = draftOverrides.filter((override) => override.siteVersionId === artifact.siteVersionId)
+  const sameVersionPublishedOverrides = publishedOverrides.filter((override) => override.siteVersionId === artifact.siteVersionId)
+  if (sameVersionDraftOverrides.length !== draftOverrides.length || sameVersionPublishedOverrides.length !== publishedOverrides.length) {
+    console.info('[gnr8.content-runtime] CONTENT_RUNTIME_VERSION_MISMATCH_BLOCKED', {
+      siteId: artifact.siteId,
+      expectedSiteVersionId: artifact.siteVersionId,
+      blockedCount:
+        (draftOverrides.length - sameVersionDraftOverrides.length) +
+        (publishedOverrides.length - sameVersionPublishedOverrides.length),
+      mode: 'preview',
+    })
+  }
+  console.info('[gnr8.content-runtime] CONTENT_RUNTIME_VERSION_RESOLVED', {
+    siteId: artifact.siteId,
+    siteVersionId: artifact.siteVersionId,
+    mode: 'preview',
+  })
   const patched = applyContentOverridesToRawHtml({
     html,
     slots,
-    overrides: draftOverrides.length > 0 ? draftOverrides : publishedOverrides,
+    overrides: selectPreviewOverridesByVersion({
+      siteVersionId: artifact.siteVersionId,
+      draftOverrides,
+      publishedOverrides,
+    }),
   })
   const summary = buildRawTemplatePreviewRuntimeSummary({
     baseSummary: input.fallbackSummary,
@@ -779,4 +811,5 @@ export const __unifiedRenderPreviewTestUtils = {
   resolveSemanticFallbackPreview,
   resolveRenderedCapturePreviewTruth,
   rewriteRawTemplateAssetReferences,
+  selectPreviewOverridesByVersion,
 }

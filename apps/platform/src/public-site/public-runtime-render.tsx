@@ -429,10 +429,25 @@ export async function renderPublicPathResponse(input: {
       siteVersionId: rawTemplateResolution.siteVersionId,
       status: "published",
     });
+    const sameVersionOverrides = publishedOverrides.filter(
+      (override) => override.siteVersionId === rawTemplateResolution.siteVersionId,
+    );
+    console.info("[gnr8.content-runtime] CONTENT_RUNTIME_VERSION_RESOLVED", {
+      siteId: rawTemplateResolution.siteId,
+      siteVersionId: rawTemplateResolution.siteVersionId,
+      mode: "production",
+    });
+    if (sameVersionOverrides.length !== publishedOverrides.length) {
+      console.info("[gnr8.content-runtime] CONTENT_RUNTIME_VERSION_MISMATCH_BLOCKED", {
+        siteId: rawTemplateResolution.siteId,
+        expectedSiteVersionId: rawTemplateResolution.siteVersionId,
+        blockedCount: publishedOverrides.length - sameVersionOverrides.length,
+      });
+    }
     const patched = applyContentOverridesToRawHtml({
       html: rawTemplateResolution.html,
       slots,
-      overrides: publishedOverrides,
+      overrides: sameVersionOverrides,
     });
     let html = rewriteRawTemplateHtmlForRuntime({
       html: patched.html,
