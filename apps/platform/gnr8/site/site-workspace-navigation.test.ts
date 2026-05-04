@@ -4,7 +4,7 @@ import test from 'node:test'
 import { normalizeSiteWorkspaceTab, SITE_WORKSPACE_TABS, siteWorkspaceHref } from '@/gnr8/site/site-workspace-navigation'
 
 test('SITE_WORKSPACE_TABS exposes the expected foundational tabs', () => {
-  assert.deepEqual(SITE_WORKSPACE_TABS, ['overview', 'structure', 'design', 'preview', 'settings'])
+  assert.deepEqual(SITE_WORKSPACE_TABS, ['overview', 'structure', 'design', 'preview', 'content', 'settings'])
 })
 
 test('normalizeSiteWorkspaceTab falls back safely', () => {

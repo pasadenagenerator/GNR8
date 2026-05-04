@@ -662,7 +662,9 @@ export default async function SiteWorkspacePage(props: Props) {
           lastAction={readModel.actions.lastAction}
           variants={readModel.variants}
         />
-        <ContentBindingsPanel agencyId={currentUserAgency.agency_id} clientId={clientId} siteId={siteId} />
+        {props.activeTab === 'content' ? (
+          <ContentBindingsPanel agencyId={currentUserAgency.agency_id} clientId={clientId} siteId={siteId} />
+        ) : null}
 
         {props.activeTab === 'overview'
           ? renderOverviewContent({

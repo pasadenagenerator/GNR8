@@ -75,6 +75,8 @@ function resolveRecentRouteContext(pathname: string, searchParams: URLSearchPara
             ? 'Design'
             : rawSection === 'preview'
               ? 'Preview'
+              : rawSection === 'content'
+                ? 'Content'
               : rawSection === 'settings'
                 ? 'Settings'
                 : 'Overview'

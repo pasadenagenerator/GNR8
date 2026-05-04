@@ -1,6 +1,6 @@
-export type SiteWorkspaceTab = 'overview' | 'structure' | 'design' | 'preview' | 'settings'
+export type SiteWorkspaceTab = 'overview' | 'structure' | 'design' | 'preview' | 'content' | 'settings'
 
-export const SITE_WORKSPACE_TABS: SiteWorkspaceTab[] = ['overview', 'structure', 'design', 'preview', 'settings']
+export const SITE_WORKSPACE_TABS: SiteWorkspaceTab[] = ['overview', 'structure', 'design', 'preview', 'content', 'settings']
 
 function normalizeText(value: unknown): string {
   return String(value ?? '').trim()
@@ -11,6 +11,7 @@ export function normalizeSiteWorkspaceTab(value: unknown): SiteWorkspaceTab {
   if (normalized === 'structure') return 'structure'
   if (normalized === 'design') return 'design'
   if (normalized === 'preview') return 'preview'
+  if (normalized === 'content') return 'content'
   if (normalized === 'settings') return 'settings'
   return 'overview'
 }

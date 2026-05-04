@@ -12,7 +12,7 @@ type Props = {
   agencyId: string
   clientId: string
   siteName: string
-  activeTab: 'overview' | 'structure' | 'design' | 'preview' | 'settings'
+  activeTab: 'overview' | 'structure' | 'design' | 'preview' | 'content' | 'settings'
   canRunTransformation: boolean
   canPublish: boolean
   lastRunAt: string | null

@@ -25,6 +25,7 @@ const SITE_TAB_LABELS: Record<SiteWorkspaceTab, string> = {
   structure: 'Structure',
   design: 'Design',
   preview: 'Preview',
+  content: 'Content',
   settings: 'Settings',
 }
 
@@ -81,6 +82,14 @@ export default function SiteContextLayout(props: Props) {
     adminView: props.adminView,
     variantId: props.selectedVariantId,
   })
+  const contentHref = siteWorkspaceHref({
+    clientId: props.readModel.client.clientId,
+    siteId: props.readModel.site.id,
+    tab: 'content',
+    agencyId: activeAgencyId,
+    adminView: props.adminView,
+    variantId: props.selectedVariantId,
+  })
 
   const backToClientHref = `/gnr8/agency/clients/${encodeURIComponent(props.readModel.client.clientId)}/dashboard?${agencyQuery}&client_tab=dashboard`
   const agencyClientsHref = `/gnr8/agency/clients?${agencyQuery}`
@@ -100,6 +109,7 @@ export default function SiteContextLayout(props: Props) {
     { key: 'structure', label: 'Structure', href: structureHref },
     { key: 'design', label: 'Design', href: designHref },
     { key: 'preview', label: 'Preview', href: previewHref },
+    { key: 'content', label: 'Content', href: contentHref },
     { key: 'settings', label: 'Settings', href: settingsHref },
   ]
 
