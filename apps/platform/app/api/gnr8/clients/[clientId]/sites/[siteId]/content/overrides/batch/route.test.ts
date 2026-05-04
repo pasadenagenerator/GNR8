@@ -35,3 +35,21 @@ test('batch override plan skips invalid slot keys and non-draft statuses', () =>
   assert.ok(result.diagnostics.includes('CONTENT_BATCH_SLOT_INVALID'))
   assert.ok(result.diagnostics.includes('CONTENT_BATCH_SLOT_SKIPPED'))
 })
+
+test('batch override plan accepts rich_text and skips unsupported list slots', () => {
+  const result = planBatchDraftUpserts({
+    slots: [
+      { slotKey: 'hero.body', slotType: 'rich_text' },
+      { slotKey: 'faq.items', slotType: 'list' },
+    ],
+    overrides: [
+      { slotKey: 'hero.body', value: '<p>Updated body</p>', status: 'draft' },
+      { slotKey: 'faq.items', value: '["one","two"]', status: 'draft' },
+    ],
+  })
+
+  assert.equal(result.valid.length, 1)
+  assert.equal(result.valid[0]?.valueType, 'rich_text')
+  assert.equal(result.skippedCount, 1)
+  assert.ok(result.diagnostics.includes('CONTENT_BATCH_SLOT_SKIPPED_UNSUPPORTED_TYPE'))
+})
