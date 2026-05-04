@@ -532,3 +532,72 @@ test("public runtime mode defaults to artifact-only, even in production env", ()
     else process.env.VERCEL_ENV = previousVercelEnv;
   }
 });
+
+test("public runtime domain hit: uses published overrides only (never draft)", async () => {
+  const restoreDeps = __setPublicRuntimeRenderDependenciesForTest({
+    resolveRawTemplateSiteForDomainAndPath: async () =>
+      ({
+        outcome: "raw_template_hit",
+        host: "published-only.example.com",
+        siteId: "site_pub_1",
+        siteVersionId: "sv_pub_1",
+        domain: "published-only.example.com",
+        bindingId: "domain_binding_pub_1",
+        status: "active",
+        normalizedPath: "/",
+        resolvedFilePath: "index.html",
+        html: "<!doctype html><html><body><h2>Services</h2><p>Old content</p></body></html>",
+      }) as never,
+    resolveActiveArtifactForHostAndPathWithDiagnostics: async () => {
+      throw new Error("artifact resolver should not run when raw template domain hit succeeds")
+    },
+    listContentSlots: async () => [
+      {
+        id: "slot_1",
+        siteId: "site_pub_1",
+        siteVersionId: "sv_pub_1",
+        slotKey: "sections.0.intro",
+        slotType: "text",
+        sourceSelector: "html > body:nth-of-type(1) > p:nth-of-type(1)",
+        sourceText: "Old content",
+        sourceAssetPath: null,
+        confidence: 1,
+        diagnostics: null,
+      },
+    ],
+    listContentOverrides: async ({ status }) =>
+      status === "published"
+        ? [
+            {
+              id: "ov_pub_1",
+              siteId: "site_pub_1",
+              siteVersionId: "sv_pub_1",
+              slotKey: "sections.0.intro",
+              valueType: "text",
+              valueJson: { value: "Published content" },
+              status: "published",
+            },
+          ]
+        : [
+            {
+              id: "ov_draft_1",
+              siteId: "site_pub_1",
+              siteVersionId: "sv_pub_1",
+              slotKey: "sections.0.intro",
+              valueType: "text",
+              valueJson: { value: "Draft content" },
+              status: "draft",
+            },
+          ],
+  })
+
+  try {
+    const response = await renderPublicPathResponse({ host: "published-only.example.com", path: "/" })
+    assert.equal(response.status, 200)
+    const html = await response.text()
+    assert.match(html, /Published content/)
+    assert.doesNotMatch(html, /Draft content/)
+  } finally {
+    restoreDeps()
+  }
+})
