@@ -421,6 +421,14 @@ async function renderRawTemplateSiteVersionPreview(input: {
     draftOverrides,
     publishedOverrides,
   })
+  if (selectedOverrides.length === 0) {
+    console.info('[gnr8.content-runtime] CONTENT_PREVIEW_OVERRIDES_EMPTY', {
+      siteId: artifact.siteId,
+      siteVersionId: artifact.siteVersionId,
+      loadedCount: draftOverrides.length + publishedOverrides.length,
+      slotKeyCount: slots.length,
+    })
+  }
   const patched = applyContentOverridesToRawHtml({
     html,
     slots,
@@ -429,7 +437,7 @@ async function renderRawTemplateSiteVersionPreview(input: {
   console.info('[gnr8.content-runtime] CONTENT_PREVIEW_OVERRIDES_APPLIED', {
     siteId: artifact.siteId,
     siteVersionId: artifact.siteVersionId,
-    selectedCount: selectedOverrides.length,
+    loadedCount: selectedOverrides.length,
     appliedCount: patched.appliedCount,
     skippedCount: patched.skippedCount,
   })

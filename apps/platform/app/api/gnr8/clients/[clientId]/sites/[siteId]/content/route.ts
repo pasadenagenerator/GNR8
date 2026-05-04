@@ -157,6 +157,16 @@ export async function GET(req: Request, ctx: { params: Promise<{ clientId?: stri
     const slots = await listContentSlots(scope.siteVersionId)
     const draftOverrides = await listContentOverrides({ siteVersionId: scope.siteVersionId, status: 'draft' })
     const publishedOverrides = await listContentOverrides({ siteVersionId: scope.siteVersionId, status: 'published' })
+    const pool = getSuperadminPool()
+    const historyCountRes = await pool.query<{ count: string }>(
+      `
+      select count(*)::text as count
+      from public.gnr8_content_override_history
+      where site_id = $1::text and site_version_id = $2::uuid
+      `,
+      [scope.runtimeSiteId, scope.siteVersionId],
+    )
+    const historyCount = Number(historyCountRes.rows[0]?.count ?? '0')
     const grouped = groupSlots(slots)
     const diagnostics: string[] = []
     if (!grouped.sections.length) diagnostics.push('CONTENT_SECTION_SLOTS_MISSING')
@@ -164,6 +174,10 @@ export async function GET(req: Request, ctx: { params: Promise<{ clientId?: stri
       ok: true,
       siteVersionId: scope.siteVersionId,
       activeSiteVersionId: scope.activeSiteVersionId,
+      slotCount: slots.length,
+      draftOverrideCount: draftOverrides.length,
+      publishedOverrideCount: publishedOverrides.length,
+      historyCount,
       slots,
       grouped,
       draftOverrides,

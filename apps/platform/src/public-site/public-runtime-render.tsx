@@ -432,7 +432,7 @@ export async function renderPublicPathResponse(input: {
     console.info("[gnr8.content-runtime] CONTENT_RUNTIME_OVERRIDES_LOADED", {
       siteId: rawTemplateResolution.siteId,
       siteVersionId: rawTemplateResolution.siteVersionId,
-      publishedCount: publishedOverrides.length,
+      loadedCount: publishedOverrides.length,
       slotKeyCount: slots.length,
     });
     const sameVersionOverrides = publishedOverrides.filter(
@@ -465,9 +465,9 @@ export async function renderPublicPathResponse(input: {
     console.info("[gnr8.content-runtime] CONTENT_RUNTIME_OVERRIDES_APPLIED", {
       siteId: rawTemplateResolution.siteId,
       siteVersionId: rawTemplateResolution.siteVersionId,
+      loadedCount: sameVersionOverrides.length,
       appliedCount: patched.appliedCount,
       skippedCount: patched.skippedCount,
-      publishedCount: sameVersionOverrides.length,
     });
     let html = rewriteRawTemplateHtmlForRuntime({
       html: patched.html,

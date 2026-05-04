@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 
 import { parseAgencyActionContextError, requireAgencyActionContext } from '@/app/api/gnr8/agency/_lib/agency-action-access'
+import { requireContentSiteVersionId } from '@/app/api/gnr8/clients/[clientId]/sites/[siteId]/content/content-version-guards'
 import { publishDraftContentOverrides } from '@/gnr8/runtime/runtime-store'
 import { getSuperadminPool } from '@/src/superadmin/db'
 
@@ -30,11 +31,19 @@ export async function POST(req: Request, ctx: { params: Promise<{ clientId?: str
     const body = (await req.json().catch(() => null)) as any
     const agencyId = normalizeUuid(body?.agencyId)
     const siteVersionId = normalizeUuid(body?.siteVersionId)
-    if (!agencyId || !siteVersionId) return NextResponse.json({ ok: false, error: 'agencyId and siteVersionId are required' }, { status: 400 })
+    if (!agencyId) return NextResponse.json({ ok: false, error: 'agencyId is required' }, { status: 400 })
+    const versionRequirement = requireContentSiteVersionId(siteVersionId)
+    if (!versionRequirement.ok) {
+      diagnostics.push('CONTENT_PUBLISH_FAILED')
+      return NextResponse.json({ ok: false, error: 'siteVersionId is required', code: 'CONTENT_SITE_VERSION_REQUIRED', diagnostics }, { status: 400 })
+    }
 
     const actionContext = await requireAgencyActionContext({ action: 'publish', requestedAgencyId: agencyId })
-    const scope = await resolveRuntimeScope({ clientId, siteId, agencyId, siteVersionId })
-    if (!scope) return NextResponse.json({ ok: false, error: 'Site scope not found' }, { status: 404 })
+    const scope = await resolveRuntimeScope({ clientId, siteId, agencyId, siteVersionId: versionRequirement.siteVersionId })
+    if (!scope) {
+      diagnostics.push('CONTENT_PUBLISH_FAILED')
+      return NextResponse.json({ ok: false, error: 'Site version is outside site scope', code: 'CONTENT_SITE_VERSION_SCOPE_MISMATCH', diagnostics }, { status: 404 })
+    }
 
     diagnostics.push('CONTENT_PUBLISH_STARTED')
     const result = await publishDraftContentOverrides({
@@ -46,10 +55,16 @@ export async function POST(req: Request, ctx: { params: Promise<{ clientId?: str
     diagnostics.push(...result.diagnostics)
     if (result.publishedCount === 0) diagnostics.push('CONTENT_PUBLISH_NO_DRAFTS_FOUND')
     diagnostics.push('CONTENT_PUBLISH_COMPLETED')
-    return NextResponse.json({ ok: true, publishedCount: result.publishedCount, diagnostics })
+    return NextResponse.json({
+      ok: true,
+      publishedCount: result.publishedCount,
+      draftCount: result.draftCount,
+      siteVersionId: scope.siteVersionId,
+      diagnostics,
+    })
   } catch (error) {
     const mapped = parseAgencyActionContextError(error)
-    diagnostics.push('CONTENT_PUBLISH_COMPLETED')
+    diagnostics.push('CONTENT_PUBLISH_FAILED')
     return NextResponse.json({ ok: false, error: mapped.message, diagnostics }, { status: mapped.status })
   }
 }

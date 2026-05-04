@@ -86,12 +86,12 @@ const Field = memo(function Field(props: {
 
 export default function ContentBindingsPanel(props: { agencyId: string; clientId: string; siteId: string }) {
   const [grouped, setGrouped] = useState<Grouped>(EMPTY_GROUPED)
-  const [siteVersionId, setSiteVersionId] = useState<string>('')
+  const [activeSiteVersionId, setActiveSiteVersionId] = useState<string>('')
   const [drafts, setDrafts] = useState<Record<string, string>>({})
   const [published, setPublished] = useState<Record<string, string>>({})
   const [publishedAtLoad, setPublishedAtLoad] = useState<Record<string, string>>({})
   const [busy, setBusy] = useState(false)
-  const [publishStatus, setPublishStatus] = useState<'idle' | 'success'>('idle')
+  const [publishStatus, setPublishStatus] = useState<'idle' | 'success' | 'no_drafts' | 'error'>('idle')
   const [saveAllStatus, setSaveAllStatus] = useState<'idle' | 'success' | 'error'>('idle')
   const [historyRows, setHistoryRows] = useState<HistoryRow[]>([])
 
@@ -145,8 +145,11 @@ export default function ContentBindingsPanel(props: { agencyId: string; clientId
     const payload = (await fetch(endpoint).then((r) => r.json()).catch(() => null)) as any
     if (!payload?.ok) return
     setGrouped(payload.grouped ?? EMPTY_GROUPED)
-    const loadedSiteVersionId = typeof payload.siteVersionId === 'string' ? payload.siteVersionId : ''
-    setSiteVersionId(loadedSiteVersionId)
+    const loadedSiteVersionId = typeof payload.activeSiteVersionId === 'string'
+      ? payload.activeSiteVersionId
+      : (typeof payload.siteVersionId === 'string' ? payload.siteVersionId : '')
+    setActiveSiteVersionId(loadedSiteVersionId)
+    console.info('[gnr8.content-editor] CONTENT_EDITOR_VERSION_RESOLVED', { siteId: props.siteId, siteVersionId: loadedSiteVersionId })
     const draftMap: Record<string, string> = {}
     const draftOverrides: Override[] = Array.isArray(payload.draftOverrides) ? payload.draftOverrides : []
     for (const ov of draftOverrides) draftMap[ov.slotKey] = typeof ov.valueJson?.value === 'string' ? ov.valueJson.value : ''
@@ -167,17 +170,23 @@ export default function ContentBindingsPanel(props: { agencyId: string; clientId
     setDrafts((p) => ({ ...p, [slotKey]: nextValue }))
   }, [])
 
+  const siteVersionId = activeSiteVersionId
+
   async function saveDraft(slot: Slot): Promise<void> {
+    if (!siteVersionId) return
     setBusy(true)
     try {
-      console.info('[gnr8.content-editor] CONTENT_DRAFT_SAVE_STARTED', { siteId: props.siteId, siteVersionId, slotKeyCount: 1 })
-      await fetch(`/api/gnr8/clients/${encodeURIComponent(props.clientId)}/sites/${encodeURIComponent(props.siteId)}/content/overrides`, {
+      console.info('[gnr8.content-editor] CONTENT_EDITOR_DRAFT_SAVE_REQUESTED', { siteId: props.siteId, siteVersionId, slotKeyCount: 1 })
+      const response = await fetch(`/api/gnr8/clients/${encodeURIComponent(props.clientId)}/sites/${encodeURIComponent(props.siteId)}/content/overrides`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ agencyId: props.agencyId, siteVersionId, slotKey: slot.slotKey, valueType: slot.slotType, valueJson: { value: drafts[slot.slotKey] ?? '' } }),
       })
-      console.info('[gnr8.content-editor] CONTENT_DRAFT_SAVE_COMPLETED', { siteId: props.siteId, siteVersionId, slotKeyCount: 1 })
+      const payload = (await response.json().catch(() => null)) as any
+      if (!response.ok || !payload?.ok) throw new Error(payload?.code ?? 'draft_save_failed')
+      console.info('[gnr8.content-editor] CONTENT_DRAFT_SAVE_COMPLETED', { siteId: props.siteId, siteVersionId, slotKeyCount: 1, persistedRowCount: payload?.persistedRowCount ?? 0 })
       await fetchHistory(siteVersionId)
+      await loadContent()
     } finally {
       setBusy(false)
     }
@@ -188,6 +197,7 @@ export default function ContentBindingsPanel(props: { agencyId: string; clientId
     setBusy(true)
     setSaveAllStatus('idle')
     try {
+      console.info('[gnr8.content-editor] CONTENT_EDITOR_BATCH_SAVE_REQUESTED', { siteId: props.siteId, siteVersionId, slotKeyCount: modifiedEditableSlots.length })
       const response = await fetch(`/api/gnr8/clients/${encodeURIComponent(props.clientId)}/sites/${encodeURIComponent(props.siteId)}/content/overrides/batch`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
@@ -201,7 +211,8 @@ export default function ContentBindingsPanel(props: { agencyId: string; clientId
           })),
         }),
       })
-      if (!response.ok) throw new Error('batch_save_failed')
+      const payload = (await response.json().catch(() => null)) as any
+      if (!response.ok || !payload?.ok) throw new Error(payload?.code ?? 'batch_save_failed')
       setPublishedAtLoad((prev) => {
         const next = { ...prev }
         for (const slot of modifiedEditableSlots) next[slot.slotKey] = drafts[slot.slotKey] ?? ''
@@ -209,6 +220,7 @@ export default function ContentBindingsPanel(props: { agencyId: string; clientId
       })
       setSaveAllStatus('success')
       await fetchHistory(siteVersionId)
+      await loadContent()
     } catch {
       setSaveAllStatus('error')
     } finally {
@@ -220,17 +232,22 @@ export default function ContentBindingsPanel(props: { agencyId: string; clientId
     setBusy(true)
     setPublishStatus('idle')
     try {
-      console.info('[gnr8.content-editor] CONTENT_PUBLISH_STARTED', { siteId: props.siteId, siteVersionId, slotKeyCount: Object.keys(drafts).length })
-      await fetch(`/api/gnr8/clients/${encodeURIComponent(props.clientId)}/sites/${encodeURIComponent(props.siteId)}/content/publish`, {
+      console.info('[gnr8.content-editor] CONTENT_EDITOR_PUBLISH_REQUESTED', { siteId: props.siteId, siteVersionId, slotKeyCount: Object.keys(drafts).length })
+      const response = await fetch(`/api/gnr8/clients/${encodeURIComponent(props.clientId)}/sites/${encodeURIComponent(props.siteId)}/content/publish`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ agencyId: props.agencyId, siteVersionId }),
       })
+      const payload = (await response.json().catch(() => null)) as any
+      if (!response.ok || !payload?.ok) throw new Error(payload?.code ?? 'publish_failed')
       setPublished({ ...drafts })
       setPublishedAtLoad({ ...drafts })
-      setPublishStatus('success')
+      setPublishStatus((payload?.publishedCount ?? 0) > 0 ? 'success' : 'no_drafts')
       console.info('[gnr8.content-editor] CONTENT_PUBLISH_COMPLETED', { siteId: props.siteId, siteVersionId, slotKeyCount: Object.keys(drafts).length })
       await fetchHistory(siteVersionId)
+      await loadContent()
+    } catch {
+      setPublishStatus('error')
     } finally {
       setBusy(false)
     }
@@ -280,8 +297,10 @@ export default function ContentBindingsPanel(props: { agencyId: string; clientId
           onClick={publish}
           style={{ width: 'fit-content', padding: '8px 12px', borderRadius: 8, border: '1px solid #0f172a', background: hasDraftChangesToPublish ? '#0f172a' : '#cbd5e1', color: '#fff', fontWeight: 600 }}
         >
-          {publishStatus === 'success' ? 'Content published' : 'Publish content changes'}
+          {publishStatus === 'success' ? 'Content published' : publishStatus === 'no_drafts' ? 'No drafts to publish' : 'Publish content changes'}
         </button>
+        {publishStatus === 'no_drafts' ? <div style={{ fontSize: 12, color: '#854d0e', alignSelf: 'center' }}>Publish completed with 0 promoted drafts.</div> : null}
+        {publishStatus === 'error' ? <div style={{ fontSize: 12, color: '#b91c1c', alignSelf: 'center' }}>Publish failed. Please retry.</div> : null}
         {!hasDraftChangesToPublish ? <div style={{ fontSize: 12, color: '#64748b', alignSelf: 'center' }}>No draft changes to publish</div> : null}
       </div>
 

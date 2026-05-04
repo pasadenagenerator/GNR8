@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 
 import { parseAgencyActionContextError, requireAgencyActionContext } from '@/app/api/gnr8/agency/_lib/agency-action-access'
+import { requireContentSiteVersionId } from '@/app/api/gnr8/clients/[clientId]/sites/[siteId]/content/content-version-guards'
 import { planBatchDraftUpserts } from '@/app/api/gnr8/clients/[clientId]/sites/[siteId]/content/overrides/batch/batch-overrides-route-helpers'
 import { listContentSlots, upsertContentOverrideDraftBatch } from '@/gnr8/runtime/runtime-store'
 import { getSuperadminPool } from '@/src/superadmin/db'
@@ -47,11 +48,19 @@ export async function POST(req: Request, ctx: { params: Promise<{ clientId?: str
     const agencyId = normalizeUuid(body?.agencyId)
     const siteVersionId = normalizeUuid(body?.siteVersionId)
     const overrides = Array.isArray(body?.overrides) ? body.overrides : []
-    if (!agencyId || !siteVersionId) return NextResponse.json({ ok: false, error: 'agencyId and siteVersionId are required' }, { status: 400 })
+    if (!agencyId) return NextResponse.json({ ok: false, error: 'agencyId is required' }, { status: 400 })
+    const versionRequirement = requireContentSiteVersionId(siteVersionId)
+    if (!versionRequirement.ok) {
+      diagnostics.push('CONTENT_DRAFT_SAVE_FAILED')
+      return NextResponse.json({ ok: false, error: 'siteVersionId is required', code: 'CONTENT_SITE_VERSION_REQUIRED', diagnostics }, { status: 400 })
+    }
 
     const actionContext = await requireAgencyActionContext({ action: 'run_migration', requestedAgencyId: agencyId })
-    const scope = await resolveRuntimeScope({ clientId, siteId, agencyId, siteVersionId })
-    if (!scope) return NextResponse.json({ ok: false, error: 'Site scope not found' }, { status: 404 })
+    const scope = await resolveRuntimeScope({ clientId, siteId, agencyId, siteVersionId: versionRequirement.siteVersionId })
+    if (!scope) {
+      diagnostics.push('CONTENT_DRAFT_SAVE_FAILED')
+      return NextResponse.json({ ok: false, error: 'Site version is outside site scope', code: 'CONTENT_SITE_VERSION_SCOPE_MISMATCH', diagnostics }, { status: 404 })
+    }
 
     const slots = await listContentSlots(scope.siteVersionId)
     const planned = planBatchDraftUpserts({ slots, overrides })
@@ -69,10 +78,17 @@ export async function POST(req: Request, ctx: { params: Promise<{ clientId?: str
     const updatedCount = saveResult.updatedCount
     diagnostics.push(...saveResult.diagnostics)
     diagnostics.push('CONTENT_BATCH_UPDATE_COMPLETED', 'CONTENT_DRAFT_SAVE_COMPLETED')
-    return NextResponse.json({ ok: true, updatedCount, skippedCount, diagnostics })
+    return NextResponse.json({
+      ok: true,
+      updatedCount,
+      persistedRowCount: updatedCount,
+      skippedCount,
+      siteVersionId: scope.siteVersionId,
+      diagnostics,
+    })
   } catch (error) {
     const mapped = parseAgencyActionContextError(error)
-    diagnostics.push('CONTENT_BATCH_SLOT_SKIPPED', 'CONTENT_BATCH_UPDATE_COMPLETED', 'CONTENT_DRAFT_SAVE_COMPLETED')
+    diagnostics.push('CONTENT_DRAFT_SAVE_FAILED')
     return NextResponse.json({ ok: false, error: mapped.message, updatedCount: 0, skippedCount: 0, diagnostics }, { status: mapped.status })
   }
 }

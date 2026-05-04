@@ -3016,7 +3016,7 @@ export async function publishDraftContentOverrides(input: {
   siteVersionId: string;
   actorUserId?: string | null;
   source?: ContentOverrideHistorySource;
-}): Promise<{ publishedCount: number; historyCount: number; diagnostics: string[] }> {
+}): Promise<{ publishedCount: number; draftCount: number; historyCount: number; diagnostics: string[] }> {
   return withTx(async (client) => {
     const drafts = await client.query<any>(
       `select slot_key::text, value_type::text, value_json from public.gnr8_content_overrides where site_version_id = $1::uuid and status = 'draft'`,
@@ -3027,8 +3027,9 @@ export async function publishDraftContentOverrides(input: {
     const diagnostics: string[] = ["CONTENT_HISTORY_WRITE_STARTED"];
     if ((drafts.rows ?? []).length === 0) {
       diagnostics.push("CONTENT_PUBLISH_NO_DRAFTS_FOUND");
-      return { publishedCount: 0, historyCount: 0, diagnostics };
+      return { publishedCount: 0, draftCount: 0, historyCount: 0, diagnostics };
     }
+    const draftCount = drafts.rows.length;
     for (const row of drafts.rows) {
       const previousPublished = await getContentOverrideBySlotWithClient({
         client,
@@ -3069,7 +3070,7 @@ export async function publishDraftContentOverrides(input: {
       historyCount += 1;
       diagnostics.push("CONTENT_HISTORY_RECORDED");
     }
-    return { publishedCount: count, historyCount, diagnostics };
+    return { publishedCount: count, draftCount, historyCount, diagnostics };
   });
 }
 
