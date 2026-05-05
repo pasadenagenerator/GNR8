@@ -54,7 +54,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ clientId?: str
     }
 
     const actionContext = await requireAgencyActionContext({ action: 'run_migration', requestedAgencyId: agencyId })
-    const scope = await resolveRuntimeScope({ clientId, siteId, agencyId, siteVersionId })
+    const scope = await resolveRuntimeScope({ clientId, siteId, agencyId: actionContext.agencyId, siteVersionId })
     if (!scope) return NextResponse.json({ ok: false, error: 'Site scope not found' }, { status: 404 })
 
     const slots = await listContentSlots(scope.siteVersionId)

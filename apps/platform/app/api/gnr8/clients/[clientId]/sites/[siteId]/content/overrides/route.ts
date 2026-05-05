@@ -51,7 +51,12 @@ export async function POST(req: Request, ctx: { params: Promise<{ clientId?: str
     }
 
     const actionContext = await requireAgencyActionContext({ action: 'run_migration', requestedAgencyId: agencyId })
-    const scope = await resolveRuntimeScope({ clientId, siteId, agencyId, requestedSiteVersionId: versionRequirement.siteVersionId })
+    const scope = await resolveRuntimeScope({
+      clientId,
+      siteId,
+      agencyId: actionContext.agencyId,
+      requestedSiteVersionId: versionRequirement.siteVersionId,
+    })
     if (!scope) {
       diagnostics.push('CONTENT_DRAFT_SAVE_FAILED')
       return NextResponse.json(

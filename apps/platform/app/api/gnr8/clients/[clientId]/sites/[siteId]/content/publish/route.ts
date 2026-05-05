@@ -39,7 +39,12 @@ export async function POST(req: Request, ctx: { params: Promise<{ clientId?: str
     }
 
     const actionContext = await requireAgencyActionContext({ action: 'publish', requestedAgencyId: agencyId })
-    const scope = await resolveRuntimeScope({ clientId, siteId, agencyId, siteVersionId: versionRequirement.siteVersionId })
+    const scope = await resolveRuntimeScope({
+      clientId,
+      siteId,
+      agencyId: actionContext.agencyId,
+      siteVersionId: versionRequirement.siteVersionId,
+    })
     if (!scope) {
       diagnostics.push('CONTENT_PUBLISH_FAILED')
       return NextResponse.json({ ok: false, error: 'Site version is outside site scope', code: 'CONTENT_SITE_VERSION_SCOPE_MISMATCH', diagnostics }, { status: 404 })
