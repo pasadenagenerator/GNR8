@@ -168,6 +168,46 @@ test('GET content returns slots when slots exist', async () => {
   assert.equal(body.slotCount, 2)
 })
 
+test('GET content hydrates slot effective values with draft > published > original precedence', async () => {
+  const handlers = createHandlers({
+    listContentSlots: async () => [
+      { slotKey: 'hero.title', slotType: 'text', sourceText: 'Original title', sourceAssetPath: null },
+      { slotKey: 'hero.cta.href', slotType: 'url', sourceText: '/original', sourceAssetPath: null },
+      { slotKey: 'hero.image', slotType: 'image', sourceText: null, sourceAssetPath: '/original.jpg' },
+    ] as never,
+    listContentOverrides: async ({ status }) => {
+      if (status === 'draft') {
+        return [{ slotKey: 'hero.title', valueJson: 'Draft title', valueType: 'text' }] as never
+      }
+      return [
+        { slotKey: 'hero.title', valueJson: { value: 'Published title' }, valueType: 'text' },
+        { slotKey: 'hero.cta.href', valueJson: { href: '/published' }, valueType: 'url' },
+      ] as never
+    },
+  })
+
+  const response = await handlers.GET(
+    new Request(`http://localhost/api?agencyId=${IDS.agencyId}`),
+    { params: getParams() },
+  )
+  const body = await response.json() as {
+    ok: boolean
+    slots: Array<{ slotKey: string; draftValue: string | null; publishedValue: string | null; effectiveEditorValue: string; originalValue: string }>
+    diagnostics: string[]
+  }
+  const slotsByKey = Object.fromEntries(body.slots.map((slot) => [slot.slotKey, slot]))
+
+  assert.equal(response.status, 200)
+  assert.equal(body.ok, true)
+  assert.equal(slotsByKey['hero.title']?.draftValue, 'Draft title')
+  assert.equal(slotsByKey['hero.title']?.publishedValue, 'Published title')
+  assert.equal(slotsByKey['hero.title']?.effectiveEditorValue, 'Draft title')
+  assert.equal(slotsByKey['hero.cta.href']?.effectiveEditorValue, '/published')
+  assert.equal(slotsByKey['hero.image']?.effectiveEditorValue, '/original.jpg')
+  assert.ok(body.diagnostics.includes('CONTENT_OVERRIDES_HYDRATED'))
+  assert.ok(body.diagnostics.includes('CONTENT_SLOT_EFFECTIVE_VALUE_RESOLVED'))
+})
+
 test('GET content accepts agency query fallback when agencyId is missing', async () => {
   const handlers = createHandlers()
   const response = await handlers.GET(

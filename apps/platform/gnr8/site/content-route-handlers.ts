@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 
 import { parseAgencyActionContextError, requireAgencyActionContext } from '@/app/api/gnr8/agency/_lib/agency-action-access'
 import { listContentOverrides, listContentSlots } from '@/gnr8/runtime/runtime-store'
+import { getOverrideDisplayValue, getSlotOriginalDisplayValue } from '@/gnr8/site/content-override-display-value'
 import { groupedContentLooksEmpty, groupSlots } from '@/gnr8/site/content-route-grouping'
 import {
   normalizeUuid,
@@ -157,13 +158,30 @@ export function createContentRouteHandlers(deps: ContentRouteDeps) {
           reasonCode: scope.reasonCode,
         })
 
-        const grouped = groupSlots(slots)
+        const draftOverridesBySlot = new Map(draftOverrides.map((override) => [override.slotKey, override]))
+        const publishedOverridesBySlot = new Map(publishedOverrides.map((override) => [override.slotKey, override]))
+        const hydratedSlots = slots.map((slot) => {
+          const draftValue = getOverrideDisplayValue(draftOverridesBySlot.get(slot.slotKey), slot.slotType)
+          const publishedValue = getOverrideDisplayValue(publishedOverridesBySlot.get(slot.slotKey), slot.slotType)
+          const originalValue = getSlotOriginalDisplayValue(slot)
+          const effectiveEditorValue = draftValue ?? publishedValue ?? originalValue
+          return {
+            ...slot,
+            originalValue,
+            draftValue,
+            publishedValue,
+            effectiveEditorValue,
+          }
+        })
+        const grouped = groupSlots(hydratedSlots)
         const diagnostics: string[] = [
           'CONTENT_GET_SQL_TYPE_GUARD_APPLIED',
           'CONTENT_GET_SCOPE_QUERY_TYPED',
           'CONTENT_GET_VERSION_QUERY_TYPED',
           'CONTENT_GET_VERSION_RESOLUTION_FOUND',
           'CONTENT_GET_SLOTS_LOADED',
+          'CONTENT_OVERRIDES_HYDRATED',
+          'CONTENT_SLOT_EFFECTIVE_VALUE_RESOLVED',
         ]
         if (scope.reasonCode.startsWith('fallback_')) diagnostics.push('CONTENT_GET_VERSION_RESOLUTION_FALLBACK_USED')
         if (slots.length === 0) diagnostics.push('CONTENT_GET_SLOTS_EMPTY')
@@ -179,7 +197,7 @@ export function createContentRouteHandlers(deps: ContentRouteDeps) {
           publishedOverrideCount: publishedOverrides.length,
           historyCount,
           reasonCode: scope.reasonCode,
-          slots,
+          slots: hydratedSlots,
           grouped,
           draftOverrides,
           publishedOverrides,

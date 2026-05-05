@@ -3,6 +3,7 @@
 import { memo, useCallback, useEffect, useMemo, useState } from 'react'
 
 import { detectFieldDraftState, draftStateLabel, friendlySlotLabel, inputKindForSlot, sectionTitle, shouldUseFlatSlotFallback, type Slot } from '@/gnr8/site/content-bindings-panel-helpers'
+import { getOverrideDisplayValue, getSlotOriginalDisplayValue } from '@/gnr8/site/content-override-display-value'
 
 type Override = { slotKey: string; valueJson: any }
 type HistoryRow = {
@@ -91,6 +92,7 @@ export default function ContentBindingsPanel(props: { agencyId: string; clientId
   const [slots, setSlots] = useState<Slot[]>([])
   const [drafts, setDrafts] = useState<Record<string, string>>({})
   const [published, setPublished] = useState<Record<string, string>>({})
+  const [publishedOverrides, setPublishedOverrides] = useState<Record<string, string>>({})
   const [publishedAtLoad, setPublishedAtLoad] = useState<Record<string, string>>({})
   const [slotCount, setSlotCount] = useState(0)
   const [draftOverrideCount, setDraftOverrideCount] = useState(0)
@@ -173,15 +175,52 @@ export default function ContentBindingsPanel(props: { agencyId: string; clientId
       siteVersionId: resolvedSiteVersionId,
       activeSiteVersionId: loadedActiveSiteVersionId,
     })
+    const slotList: Array<Slot & { draftValue?: string | null; publishedValue?: string | null }> = Array.isArray(payload.slots) ? payload.slots : []
     const draftMap: Record<string, string> = {}
+    const publishBaselineMap: Record<string, string> = {}
+    const publishedOverridesMap: Record<string, string> = {}
+    const initialEditorSourceCounts = { draft: 0, published: 0, original: 0 }
     const draftOverrides: Override[] = Array.isArray(payload.draftOverrides) ? payload.draftOverrides : []
-    for (const ov of draftOverrides) draftMap[ov.slotKey] = typeof ov.valueJson?.value === 'string' ? ov.valueJson.value : ''
-    const pubMap: Record<string, string> = {}
     const pubOverrides: Override[] = Array.isArray(payload.publishedOverrides) ? payload.publishedOverrides : []
-    for (const ov of pubOverrides) pubMap[ov.slotKey] = typeof ov.valueJson?.value === 'string' ? ov.valueJson.value : ''
+    const draftOverridesBySlot = new Map(draftOverrides.map((override) => [override.slotKey, override]))
+    const publishedOverridesBySlot = new Map(pubOverrides.map((override) => [override.slotKey, override]))
+    for (const slot of slotList) {
+      const originalValue = getSlotOriginalDisplayValue(slot)
+      const draftValue = slot.draftValue ?? getOverrideDisplayValue(draftOverridesBySlot.get(slot.slotKey), slot.slotType)
+      const publishedValue = slot.publishedValue ?? getOverrideDisplayValue(publishedOverridesBySlot.get(slot.slotKey), slot.slotType)
+      const effectiveEditorValue = draftValue ?? publishedValue ?? originalValue
+
+      draftMap[slot.slotKey] = effectiveEditorValue
+      publishBaselineMap[slot.slotKey] = publishedValue ?? originalValue
+      publishedOverridesMap[slot.slotKey] = publishedValue ?? ''
+
+      if (draftValue !== null && draftValue !== undefined) {
+        initialEditorSourceCounts.draft += 1
+      } else if (publishedValue !== null && publishedValue !== undefined) {
+        initialEditorSourceCounts.published += 1
+      } else {
+        initialEditorSourceCounts.original += 1
+      }
+    }
     setDrafts(draftMap)
-    setPublished(pubMap)
-    setPublishedAtLoad(pubMap)
+    setPublished(publishBaselineMap)
+    setPublishedOverrides(publishedOverridesMap)
+    setPublishedAtLoad(draftMap)
+    console.info('[gnr8.content-editor] CONTENT_EDITOR_STATE_INITIALIZED_FROM_DRAFT', {
+      siteId: props.siteId,
+      siteVersionId: resolvedSiteVersionId,
+      slotCount: initialEditorSourceCounts.draft,
+    })
+    console.info('[gnr8.content-editor] CONTENT_EDITOR_STATE_INITIALIZED_FROM_PUBLISHED', {
+      siteId: props.siteId,
+      siteVersionId: resolvedSiteVersionId,
+      slotCount: initialEditorSourceCounts.published,
+    })
+    console.info('[gnr8.content-editor] CONTENT_EDITOR_STATE_INITIALIZED_FROM_ORIGINAL', {
+      siteId: props.siteId,
+      siteVersionId: resolvedSiteVersionId,
+      slotCount: initialEditorSourceCounts.original,
+    })
     if (resolvedSiteVersionId) await fetchHistory(resolvedSiteVersionId)
   }, [endpoint, fetchHistory])
 
@@ -277,6 +316,7 @@ export default function ContentBindingsPanel(props: { agencyId: string; clientId
       console.info('[gnr8.content-editor] CONTENT_EDITOR_PUBLISH_RESPONSE', { siteId: props.siteId, siteVersionId, status: response.status, responseJson: payload })
       if (!response.ok || !payload?.ok) throw new Error(payload?.code ?? 'publish_failed')
       setPublished({ ...drafts })
+      setPublishedOverrides({ ...drafts })
       setPublishedAtLoad({ ...drafts })
       setPublishStatus((payload?.publishedCount ?? 0) > 0 ? 'success' : 'no_drafts')
       console.info('[gnr8.content-editor] CONTENT_PUBLISH_COMPLETED', { siteId: props.siteId, siteVersionId, slotKeyCount: Object.keys(drafts).length })
@@ -356,48 +396,48 @@ export default function ContentBindingsPanel(props: { agencyId: string; clientId
         <>
           <h4 style={{ margin: 0, fontSize: 14 }}>All content slots</h4>
           {slots.map((slot) => (
-            <Field key={slot.slotKey} slot={slot} busy={busy} value={drafts[slot.slotKey] ?? ''} publishedValue={published[slot.slotKey] ?? ''} onChange={handleDraftChange} onSave={saveDraft} />
+            <Field key={slot.slotKey} slot={slot} busy={busy} value={drafts[slot.slotKey] ?? ''} publishedValue={publishedOverrides[slot.slotKey] ?? ''} onChange={handleDraftChange} onSave={saveDraft} />
           ))}
         </>
       ) : (
         <>
           <h4 style={{ margin: 0, fontSize: 14 }}>Hero</h4>
-          <Field slot={grouped.hero.find((s) => s.slotKey === 'hero.title') ?? null} busy={busy} value={drafts['hero.title'] ?? ''} publishedValue={published['hero.title'] ?? ''} onChange={handleDraftChange} onSave={saveDraft} />
-          <Field slot={grouped.hero.find((s) => s.slotKey === 'hero.subtitle') ?? null} busy={busy} value={drafts['hero.subtitle'] ?? ''} publishedValue={published['hero.subtitle'] ?? ''} onChange={handleDraftChange} onSave={saveDraft} />
-          <Field slot={grouped.hero.find((s) => s.slotKey === 'hero.cta.label') ?? null} busy={busy} value={drafts['hero.cta.label'] ?? ''} publishedValue={published['hero.cta.label'] ?? ''} onChange={handleDraftChange} onSave={saveDraft} />
-          <Field slot={grouped.hero.find((s) => s.slotKey === 'hero.cta.href') ?? null} busy={busy} value={drafts['hero.cta.href'] ?? ''} publishedValue={published['hero.cta.href'] ?? ''} onChange={handleDraftChange} onSave={saveDraft} />
-          <Field slot={grouped.hero.find((s) => s.slotKey === 'hero.image') ?? null} busy={busy} value={drafts['hero.image'] ?? ''} publishedValue={published['hero.image'] ?? ''} onChange={handleDraftChange} onSave={saveDraft} />
+          <Field slot={grouped.hero.find((s) => s.slotKey === 'hero.title') ?? null} busy={busy} value={drafts['hero.title'] ?? ''} publishedValue={publishedOverrides['hero.title'] ?? ''} onChange={handleDraftChange} onSave={saveDraft} />
+          <Field slot={grouped.hero.find((s) => s.slotKey === 'hero.subtitle') ?? null} busy={busy} value={drafts['hero.subtitle'] ?? ''} publishedValue={publishedOverrides['hero.subtitle'] ?? ''} onChange={handleDraftChange} onSave={saveDraft} />
+          <Field slot={grouped.hero.find((s) => s.slotKey === 'hero.cta.label') ?? null} busy={busy} value={drafts['hero.cta.label'] ?? ''} publishedValue={publishedOverrides['hero.cta.label'] ?? ''} onChange={handleDraftChange} onSave={saveDraft} />
+          <Field slot={grouped.hero.find((s) => s.slotKey === 'hero.cta.href') ?? null} busy={busy} value={drafts['hero.cta.href'] ?? ''} publishedValue={publishedOverrides['hero.cta.href'] ?? ''} onChange={handleDraftChange} onSave={saveDraft} />
+          <Field slot={grouped.hero.find((s) => s.slotKey === 'hero.image') ?? null} busy={busy} value={drafts['hero.image'] ?? ''} publishedValue={publishedOverrides['hero.image'] ?? ''} onChange={handleDraftChange} onSave={saveDraft} />
 
           <h4 style={{ margin: 0, fontSize: 14 }}>Sections</h4>
           {grouped.sections.map((section) => (
         <div key={section.titleSlot?.slotKey ?? `section-${section.index}`} style={{ borderTop: '1px solid #e2e8f0', paddingTop: 10, display: 'grid', gap: 10 }}>
           <div style={{ fontWeight: 600, fontSize: 13 }}>{sectionTitle({ index: section.index, type: section.type })}</div>
-          <Field slot={section.titleSlot} busy={busy} value={drafts[section.titleSlot?.slotKey ?? ''] ?? ''} publishedValue={published[section.titleSlot?.slotKey ?? ''] ?? ''} onChange={handleDraftChange} onSave={saveDraft} />
-          <Field slot={section.introSlot} busy={busy} value={drafts[section.introSlot?.slotKey ?? ''] ?? ''} publishedValue={published[section.introSlot?.slotKey ?? ''] ?? ''} onChange={handleDraftChange} onSave={saveDraft} />
-          <Field slot={section.bodySlot} busy={busy} value={drafts[section.bodySlot?.slotKey ?? ''] ?? ''} publishedValue={published[section.bodySlot?.slotKey ?? ''] ?? ''} onChange={handleDraftChange} onSave={saveDraft} />
-          <Field slot={section.ctas[0]?.labelSlot ?? null} busy={busy} value={drafts[section.ctas[0]?.labelSlot?.slotKey ?? ''] ?? ''} publishedValue={published[section.ctas[0]?.labelSlot?.slotKey ?? ''] ?? ''} onChange={handleDraftChange} onSave={saveDraft} />
-          <Field slot={section.ctas[0]?.hrefSlot ?? null} busy={busy} value={drafts[section.ctas[0]?.hrefSlot?.slotKey ?? ''] ?? ''} publishedValue={published[section.ctas[0]?.hrefSlot?.slotKey ?? ''] ?? ''} onChange={handleDraftChange} onSave={saveDraft} />
+          <Field slot={section.titleSlot} busy={busy} value={drafts[section.titleSlot?.slotKey ?? ''] ?? ''} publishedValue={publishedOverrides[section.titleSlot?.slotKey ?? ''] ?? ''} onChange={handleDraftChange} onSave={saveDraft} />
+          <Field slot={section.introSlot} busy={busy} value={drafts[section.introSlot?.slotKey ?? ''] ?? ''} publishedValue={publishedOverrides[section.introSlot?.slotKey ?? ''] ?? ''} onChange={handleDraftChange} onSave={saveDraft} />
+          <Field slot={section.bodySlot} busy={busy} value={drafts[section.bodySlot?.slotKey ?? ''] ?? ''} publishedValue={publishedOverrides[section.bodySlot?.slotKey ?? ''] ?? ''} onChange={handleDraftChange} onSave={saveDraft} />
+          <Field slot={section.ctas[0]?.labelSlot ?? null} busy={busy} value={drafts[section.ctas[0]?.labelSlot?.slotKey ?? ''] ?? ''} publishedValue={publishedOverrides[section.ctas[0]?.labelSlot?.slotKey ?? ''] ?? ''} onChange={handleDraftChange} onSave={saveDraft} />
+          <Field slot={section.ctas[0]?.hrefSlot ?? null} busy={busy} value={drafts[section.ctas[0]?.hrefSlot?.slotKey ?? ''] ?? ''} publishedValue={publishedOverrides[section.ctas[0]?.hrefSlot?.slotKey ?? ''] ?? ''} onChange={handleDraftChange} onSave={saveDraft} />
           {section.items.map((item) => (
             <div key={item.titleSlot?.slotKey ?? item.descriptionSlot?.slotKey ?? item.imageSlot?.slotKey ?? `item-${section.index}-${item.index}`} style={{ display: 'grid', gap: 8, border: '1px solid #e2e8f0', borderRadius: 10, padding: 10, background: '#f8fafc' }}>
               <div style={{ fontSize: 12, fontWeight: 600 }}>{section.type === 'services' ? `Service ${item.index + 1}` : `Item ${item.index + 1}`}</div>
-              <Field slot={item.titleSlot} busy={busy} value={drafts[item.titleSlot?.slotKey ?? ''] ?? ''} publishedValue={published[item.titleSlot?.slotKey ?? ''] ?? ''} onChange={handleDraftChange} onSave={saveDraft} />
-              <Field slot={item.descriptionSlot} busy={busy} value={drafts[item.descriptionSlot?.slotKey ?? ''] ?? ''} publishedValue={published[item.descriptionSlot?.slotKey ?? ''] ?? ''} onChange={handleDraftChange} onSave={saveDraft} />
-              <Field slot={item.imageSlot} busy={busy} value={drafts[item.imageSlot?.slotKey ?? ''] ?? ''} publishedValue={published[item.imageSlot?.slotKey ?? ''] ?? ''} onChange={handleDraftChange} onSave={saveDraft} />
+              <Field slot={item.titleSlot} busy={busy} value={drafts[item.titleSlot?.slotKey ?? ''] ?? ''} publishedValue={publishedOverrides[item.titleSlot?.slotKey ?? ''] ?? ''} onChange={handleDraftChange} onSave={saveDraft} />
+              <Field slot={item.descriptionSlot} busy={busy} value={drafts[item.descriptionSlot?.slotKey ?? ''] ?? ''} publishedValue={publishedOverrides[item.descriptionSlot?.slotKey ?? ''] ?? ''} onChange={handleDraftChange} onSave={saveDraft} />
+              <Field slot={item.imageSlot} busy={busy} value={drafts[item.imageSlot?.slotKey ?? ''] ?? ''} publishedValue={publishedOverrides[item.imageSlot?.slotKey ?? ''] ?? ''} onChange={handleDraftChange} onSave={saveDraft} />
             </div>
           ))}
           {section.gallery.map((entry) => (
             <div key={entry.imageSlot?.slotKey ?? entry.altSlot?.slotKey ?? `gallery-${section.index}-${entry.index}`} style={{ display: 'grid', gap: 8, border: '1px solid #e2e8f0', borderRadius: 10, padding: 10, background: '#f8fafc' }}>
               <div style={{ fontSize: 12, fontWeight: 600 }}>Gallery image {entry.index + 1}</div>
-              <Field slot={entry.imageSlot} busy={busy} value={drafts[entry.imageSlot?.slotKey ?? ''] ?? ''} publishedValue={published[entry.imageSlot?.slotKey ?? ''] ?? ''} onChange={handleDraftChange} onSave={saveDraft} />
-              <Field slot={entry.altSlot} busy={busy} value={drafts[entry.altSlot?.slotKey ?? ''] ?? ''} publishedValue={published[entry.altSlot?.slotKey ?? ''] ?? ''} onChange={handleDraftChange} onSave={saveDraft} />
+              <Field slot={entry.imageSlot} busy={busy} value={drafts[entry.imageSlot?.slotKey ?? ''] ?? ''} publishedValue={publishedOverrides[entry.imageSlot?.slotKey ?? ''] ?? ''} onChange={handleDraftChange} onSave={saveDraft} />
+              <Field slot={entry.altSlot} busy={busy} value={drafts[entry.altSlot?.slotKey ?? ''] ?? ''} publishedValue={publishedOverrides[entry.altSlot?.slotKey ?? ''] ?? ''} onChange={handleDraftChange} onSave={saveDraft} />
             </div>
           ))}
           {(section.contact.emailSlot || section.contact.phoneSlot || section.contact.addressSlot) ? (
             <div style={{ display: 'grid', gap: 8, border: '1px solid #e2e8f0', borderRadius: 10, padding: 10, background: '#f8fafc' }}>
               <div style={{ fontSize: 12, fontWeight: 600 }}>Contact details</div>
-              <Field slot={section.contact.emailSlot} busy={busy} value={drafts[section.contact.emailSlot?.slotKey ?? ''] ?? ''} publishedValue={published[section.contact.emailSlot?.slotKey ?? ''] ?? ''} onChange={handleDraftChange} onSave={saveDraft} />
-              <Field slot={section.contact.phoneSlot} busy={busy} value={drafts[section.contact.phoneSlot?.slotKey ?? ''] ?? ''} publishedValue={published[section.contact.phoneSlot?.slotKey ?? ''] ?? ''} onChange={handleDraftChange} onSave={saveDraft} />
-              <Field slot={section.contact.addressSlot} busy={busy} value={drafts[section.contact.addressSlot?.slotKey ?? ''] ?? ''} publishedValue={published[section.contact.addressSlot?.slotKey ?? ''] ?? ''} onChange={handleDraftChange} onSave={saveDraft} />
+              <Field slot={section.contact.emailSlot} busy={busy} value={drafts[section.contact.emailSlot?.slotKey ?? ''] ?? ''} publishedValue={publishedOverrides[section.contact.emailSlot?.slotKey ?? ''] ?? ''} onChange={handleDraftChange} onSave={saveDraft} />
+              <Field slot={section.contact.phoneSlot} busy={busy} value={drafts[section.contact.phoneSlot?.slotKey ?? ''] ?? ''} publishedValue={publishedOverrides[section.contact.phoneSlot?.slotKey ?? ''] ?? ''} onChange={handleDraftChange} onSave={saveDraft} />
+              <Field slot={section.contact.addressSlot} busy={busy} value={drafts[section.contact.addressSlot?.slotKey ?? ''] ?? ''} publishedValue={publishedOverrides[section.contact.addressSlot?.slotKey ?? ''] ?? ''} onChange={handleDraftChange} onSave={saveDraft} />
             </div>
           ) : null}
         </div>
@@ -407,7 +447,7 @@ export default function ContentBindingsPanel(props: { agencyId: string; clientId
             <>
               <h4 style={{ margin: 0, fontSize: 14 }}>Footer</h4>
               {grouped.footer.map((slot) => (
-                <Field key={slot.slotKey} slot={slot} busy={busy} value={drafts[slot.slotKey] ?? ''} publishedValue={published[slot.slotKey] ?? ''} onChange={handleDraftChange} onSave={saveDraft} />
+                <Field key={slot.slotKey} slot={slot} busy={busy} value={drafts[slot.slotKey] ?? ''} publishedValue={publishedOverrides[slot.slotKey] ?? ''} onChange={handleDraftChange} onSave={saveDraft} />
               ))}
             </>
           ) : null}
