@@ -94,4 +94,8 @@ test('runtime patcher applies section text/url/image and contact mailto', () => 
   assert.match(patched.html, /href="\/book-now"/)
   assert.match(patched.html, /mailto:team@site.com/)
   assert.equal(patched.skippedCount > 0, true)
+  assert.equal(patched.diagnostics.includes('CONTENT_OVERRIDE_PATCH_STARTED'), true)
+  assert.equal(patched.diagnostics.includes('CONTENT_OVERRIDE_PATCH_COMPLETED'), true)
+  assert.equal(patched.diagnostics.includes('CONTENT_OVERRIDE_PATCH_APPLIED'), true)
+  assert.equal(patched.skippedDiagnostics.some((entry) => entry.reason === 'slot_missing'), true)
 })

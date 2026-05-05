@@ -375,6 +375,7 @@ export async function renderPublicPathResponse(input: {
   host: string;
   rawHost?: string | null;
   debugMode?: boolean;
+  contentDebugMode?: boolean;
 }): Promise<Response> {
   const rawHost = String(input.rawHost ?? input.host ?? "").trim();
   const normalizedHost = normalizePublicDomainHost(rawHost);
@@ -424,16 +425,22 @@ export async function renderPublicPathResponse(input: {
       siteVersionId: rawTemplateResolution.siteVersionId,
       resolvedFilePath: rawTemplateResolution.resolvedFilePath,
     });
+    console.info("[gnr8.content-runtime] CONTENT_RUNTIME_OVERRIDES_LOAD_STARTED", {
+      host: normalizedHost,
+      domain: rawTemplateResolution.domain,
+      siteVersionId: rawTemplateResolution.siteVersionId,
+    });
     const slots = await runtimeStoreDependencies.listContentSlots(rawTemplateResolution.siteVersionId);
     const publishedOverrides = await runtimeStoreDependencies.listContentOverrides({
       siteVersionId: rawTemplateResolution.siteVersionId,
       status: "published",
     });
     console.info("[gnr8.content-runtime] CONTENT_RUNTIME_OVERRIDES_LOADED", {
-      siteId: rawTemplateResolution.siteId,
+      host: normalizedHost,
+      domain: rawTemplateResolution.domain,
       siteVersionId: rawTemplateResolution.siteVersionId,
-      loadedCount: publishedOverrides.length,
-      slotKeyCount: slots.length,
+      publishedCount: publishedOverrides.length,
+      slotKeys: publishedOverrides.map((override) => override.slotKey),
     });
     const sameVersionOverrides = publishedOverrides.filter(
       (override) => override.siteVersionId === rawTemplateResolution.siteVersionId,
@@ -450,6 +457,13 @@ export async function renderPublicPathResponse(input: {
         blockedCount: publishedOverrides.length - sameVersionOverrides.length,
       });
     }
+    console.info("[gnr8.content-runtime] CONTENT_RUNTIME_OVERRIDES_APPLY_STARTED", {
+      host: normalizedHost,
+      domain: rawTemplateResolution.domain,
+      siteVersionId: rawTemplateResolution.siteVersionId,
+      publishedCount: sameVersionOverrides.length,
+      slotKeys: sameVersionOverrides.map((override) => override.slotKey),
+    });
     const patched = applyContentOverridesToRawHtml({
       html: rawTemplateResolution.html,
       slots,
@@ -457,18 +471,40 @@ export async function renderPublicPathResponse(input: {
     });
     if (sameVersionOverrides.length === 0) {
       console.info("[gnr8.content-runtime] CONTENT_RUNTIME_OVERRIDES_EMPTY", {
-        siteId: rawTemplateResolution.siteId,
+        host: normalizedHost,
+        domain: rawTemplateResolution.domain,
         siteVersionId: rawTemplateResolution.siteVersionId,
-        slotKeyCount: slots.length,
+        publishedCount: 0,
+        slotKeys: [],
       });
     }
     console.info("[gnr8.content-runtime] CONTENT_RUNTIME_OVERRIDES_APPLIED", {
-      siteId: rawTemplateResolution.siteId,
+      host: normalizedHost,
+      domain: rawTemplateResolution.domain,
       siteVersionId: rawTemplateResolution.siteVersionId,
-      loadedCount: sameVersionOverrides.length,
+      publishedCount: sameVersionOverrides.length,
       appliedCount: patched.appliedCount,
       skippedCount: patched.skippedCount,
+      slotKeys: sameVersionOverrides.map((override) => override.slotKey),
     });
+    for (const skipped of patched.skippedDiagnostics) {
+      if (skipped.reason === "selector_missing") {
+        console.info("[gnr8.content-runtime] CONTENT_RUNTIME_OVERRIDE_SELECTOR_MISSING", {
+          host: normalizedHost,
+          domain: rawTemplateResolution.domain,
+          siteVersionId: rawTemplateResolution.siteVersionId,
+          slotKeys: [skipped.slotKey],
+        });
+      }
+      if (skipped.reason === "value_empty") {
+        console.info("[gnr8.content-runtime] CONTENT_RUNTIME_OVERRIDE_VALUE_EMPTY", {
+          host: normalizedHost,
+          domain: rawTemplateResolution.domain,
+          siteVersionId: rawTemplateResolution.siteVersionId,
+          slotKeys: [skipped.slotKey],
+        });
+      }
+    }
     let html = rewriteRawTemplateHtmlForRuntime({
       html: patched.html,
       siteId: rawTemplateResolution.siteId,
@@ -482,6 +518,21 @@ export async function renderPublicPathResponse(input: {
           siteId: rawTemplateResolution.siteId,
           siteVersionId: rawTemplateResolution.siteVersionId,
           bindingStatus: rawTemplateResolution.status,
+          details: input.contentDebugMode
+            ? {
+                host: normalizedHost,
+                domain: rawTemplateResolution.domain,
+                siteVersionId: rawTemplateResolution.siteVersionId,
+                rawTemplateArtifactFound: true,
+                draftOverrideCount: 0,
+                publishedOverrideCount: sameVersionOverrides.length,
+                mergedOverrideCount: sameVersionOverrides.length,
+                appliedCount: patched.appliedCount,
+                skippedCount: patched.skippedCount,
+                skippedDiagnostics: patched.skippedDiagnostics,
+                slotKeys: sameVersionOverrides.map((override) => override.slotKey).slice(0, 10),
+              }
+            : undefined,
         },
       });
     }

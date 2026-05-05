@@ -544,10 +544,17 @@ export function applyContentOverridesToRawHtml(input: {
   html: string
   slots: Array<Pick<ContentSlot, 'slotKey' | 'slotType' | 'sourceSelector'>>
   overrides: Array<Pick<ContentOverride, 'slotKey' | 'valueType' | 'valueJson'>>
-}): { html: string; appliedCount: number; skippedCount: number; diagnostics: string[] } {
+}): {
+  html: string
+  appliedCount: number
+  skippedCount: number
+  diagnostics: string[]
+  skippedDiagnostics: Array<{ slotKey: string; reason: 'selector_missing' | 'target_not_found' | 'slot_missing' | 'value_empty' }>
+} {
   const diagnostics = ['CONTENT_OVERRIDE_PATCH_STARTED']
   const root: Parse5Document = parse(String(input.html ?? ''))
   const slotMap = new Map(input.slots.map((slot) => [slot.slotKey, slot]))
+  const skippedDiagnostics: Array<{ slotKey: string; reason: 'selector_missing' | 'target_not_found' | 'slot_missing' | 'value_empty' }> = []
   let appliedCount = 0
   let skippedCount = 0
 
@@ -557,27 +564,40 @@ export function applyContentOverridesToRawHtml(input: {
     if (sectionScoped) diagnostics.push('CONTENT_OVERRIDE_SECTION_PATCH_STARTED')
     if (!slot) {
       skippedCount += 1
+      skippedDiagnostics.push({ slotKey: ov.slotKey, reason: 'slot_missing' })
       diagnostics.push(sectionScoped ? 'CONTENT_OVERRIDE_SECTION_PATCH_SKIPPED' : 'CONTENT_OVERRIDE_SKIPPED_NO_SLOT')
+      diagnostics.push('CONTENT_OVERRIDE_PATCH_SKIPPED_TARGET_NOT_FOUND')
       continue
     }
     if (!slot.sourceSelector) {
       skippedCount += 1
+      skippedDiagnostics.push({ slotKey: ov.slotKey, reason: 'selector_missing' })
       diagnostics.push(sectionScoped ? 'CONTENT_OVERRIDE_SECTION_PATCH_SKIPPED' : 'CONTENT_OVERRIDE_SKIPPED_NO_SELECTOR')
+      diagnostics.push('CONTENT_OVERRIDE_PATCH_SKIPPED_SELECTOR_MISSING')
       continue
     }
     const target = resolveByPath(root, slot.sourceSelector)
     if (!target) {
       skippedCount += 1
+      skippedDiagnostics.push({ slotKey: ov.slotKey, reason: 'target_not_found' })
       diagnostics.push(sectionScoped ? 'CONTENT_OVERRIDE_SECTION_PATCH_SKIPPED' : 'CONTENT_OVERRIDE_SKIPPED_SELECTOR_NOT_FOUND')
+      diagnostics.push('CONTENT_OVERRIDE_PATCH_SKIPPED_TARGET_NOT_FOUND')
       continue
     }
 
     const text = asTextValue(ov.valueJson)
+    if (!text.trim().length) {
+      skippedCount += 1
+      skippedDiagnostics.push({ slotKey: ov.slotKey, reason: 'value_empty' })
+      diagnostics.push('CONTENT_OVERRIDE_VALUE_EMPTY')
+      continue
+    }
     if (slot.slotType === 'text' || slot.slotType === 'rich_text') {
       if (ov.slotKey.endsWith('.alt')) {
         setAttr(target, 'alt', text)
         appliedCount += 1
         diagnostics.push('CONTENT_OVERRIDE_IMAGE_PATCH_APPLIED')
+        diagnostics.push('CONTENT_OVERRIDE_PATCH_APPLIED')
         continue
       }
       const href = attrValue(target, 'href')
@@ -590,6 +610,7 @@ export function applyContentOverridesToRawHtml(input: {
       ;(target as any).childNodes = [{ nodeName: '#text', value: text, parentNode: target } as any]
       appliedCount += 1
       diagnostics.push(sectionScoped ? 'CONTENT_OVERRIDE_SECTION_PATCH_APPLIED' : 'CONTENT_OVERRIDE_APPLIED')
+      diagnostics.push('CONTENT_OVERRIDE_PATCH_APPLIED')
       continue
     }
     if (slot.slotType === 'url') {
@@ -597,6 +618,7 @@ export function applyContentOverridesToRawHtml(input: {
       appliedCount += 1
       diagnostics.push('CONTENT_OVERRIDE_LINK_PATCH_APPLIED')
       diagnostics.push(sectionScoped ? 'CONTENT_OVERRIDE_SECTION_PATCH_APPLIED' : 'CONTENT_OVERRIDE_APPLIED')
+      diagnostics.push('CONTENT_OVERRIDE_PATCH_APPLIED')
       continue
     }
     if (slot.slotType === 'image') {
@@ -604,10 +626,11 @@ export function applyContentOverridesToRawHtml(input: {
       appliedCount += 1
       diagnostics.push('CONTENT_OVERRIDE_IMAGE_PATCH_APPLIED')
       diagnostics.push(sectionScoped ? 'CONTENT_OVERRIDE_SECTION_PATCH_APPLIED' : 'CONTENT_OVERRIDE_APPLIED')
+      diagnostics.push('CONTENT_OVERRIDE_PATCH_APPLIED')
       continue
     }
   }
 
   diagnostics.push('CONTENT_OVERRIDE_PATCH_COMPLETED')
-  return { html: serialize(root), appliedCount, skippedCount, diagnostics }
+  return { html: serialize(root), appliedCount, skippedCount, diagnostics, skippedDiagnostics }
 }

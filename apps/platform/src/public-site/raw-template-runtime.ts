@@ -13,6 +13,7 @@ type RuntimeDebugContext = {
   siteId: string;
   siteVersionId: string;
   bindingStatus: string;
+  details?: Record<string, unknown>;
 };
 
 function normalizeTemplatePath(value: string): string {
@@ -185,7 +186,10 @@ function escapeHtml(value: string): string {
 }
 
 export function injectRuntimeDebugPanel(input: { html: string; debug: RuntimeDebugContext }): string {
-  const panelHtml = `<aside data-gnr8-runtime-debug="1" style="position:fixed;right:12px;bottom:12px;z-index:2147483647;background:rgba(15,23,42,0.94);color:#e2e8f0;font:12px/1.45 ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,Liberation Mono,Courier New,monospace;padding:10px 12px;border-radius:8px;box-shadow:0 8px 20px rgba(0,0,0,0.25);max-width:min(92vw,420px)"><strong style="display:block;margin-bottom:6px;color:#93c5fd">GNR8 Debug</strong><div>siteId: ${escapeHtml(input.debug.siteId)}</div><div>versionId: ${escapeHtml(input.debug.siteVersionId)}</div><div>binding: ${escapeHtml(input.debug.bindingStatus)}</div></aside>`;
+  const detailRows = Object.entries(input.debug.details ?? {})
+    .map(([key, value]) => `<div>${escapeHtml(key)}: ${escapeHtml(typeof value === "string" ? value : JSON.stringify(value))}</div>`)
+    .join("");
+  const panelHtml = `<aside data-gnr8-runtime-debug="1" style="position:fixed;right:12px;bottom:12px;z-index:2147483647;background:rgba(15,23,42,0.94);color:#e2e8f0;font:12px/1.45 ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,Liberation Mono,Courier New,monospace;padding:10px 12px;border-radius:8px;box-shadow:0 8px 20px rgba(0,0,0,0.25);max-width:min(92vw,560px)"><strong style="display:block;margin-bottom:6px;color:#93c5fd">GNR8 Debug</strong><div>siteId: ${escapeHtml(input.debug.siteId)}</div><div>versionId: ${escapeHtml(input.debug.siteVersionId)}</div><div>binding: ${escapeHtml(input.debug.bindingStatus)}</div>${detailRows}</aside>`;
   const source = String(input.html ?? "");
   const bodyClose = /<\/body>/i;
   if (bodyClose.test(source)) {

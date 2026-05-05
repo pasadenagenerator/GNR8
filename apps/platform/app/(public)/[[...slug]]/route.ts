@@ -11,8 +11,10 @@ export async function GET(
 ): Promise<Response> {
   const { slug } = await props.params;
   const path = "/" + (slug?.join("/") ?? "");
-  const debugMode = new URL(req.url).searchParams.get("__debug") === "1";
+  const debugParam = new URL(req.url).searchParams.get("__debug");
+  const debugMode = debugParam === "1" || debugParam === "content";
+  const contentDebugMode = debugParam === "content";
   const rawHost = resolveRequestHost(req.headers);
   const host = normalizePublicDomainHost(rawHost);
-  return renderPublicPathResponse({ path, host, rawHost, debugMode });
+  return renderPublicPathResponse({ path, host, rawHost, debugMode, contentDebugMode });
 }

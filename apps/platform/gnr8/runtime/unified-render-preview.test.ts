@@ -177,7 +177,7 @@ test('raw template preview rewrites local asset references to preview-assets rou
   )
 })
 
-test('preview override selection prefers draft and blocks cross-version overrides', () => {
+test('preview override selection merges by slot with draft precedence and published fallback', () => {
   const selected = __unifiedRenderPreviewTestUtils.selectPreviewOverridesByVersion({
     siteVersionId: 'sv-2',
     draftOverrides: [
@@ -210,9 +210,20 @@ test('preview override selection prefers draft and blocks cross-version override
         valueJson: { value: 'published fallback' },
         status: 'published',
       },
+      {
+        id: 'pub-2',
+        siteId: 'site-1',
+        siteVersionId: 'sv-2',
+        slotKey: 'hero.subtitle',
+        valueType: 'text',
+        valueJson: { value: 'published subtitle' },
+        status: 'published',
+      },
     ],
   })
 
-  assert.equal(selected.length, 1)
-  assert.equal(selected[0]?.valueJson?.value, 'correct version draft')
+  assert.equal(selected.length, 2)
+  const bySlot = Object.fromEntries(selected.map((override) => [override.slotKey, override]))
+  assert.equal(bySlot['hero.title']?.valueJson?.value, 'correct version draft')
+  assert.equal(bySlot['hero.subtitle']?.valueJson?.value, 'published subtitle')
 })

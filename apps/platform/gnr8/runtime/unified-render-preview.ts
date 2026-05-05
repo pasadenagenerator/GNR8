@@ -49,6 +49,17 @@ type ResolvedSiteVersionPreview = {
   domSize: number
   screenshotCount: number
   sourceMode: 'rendered_capture' | 'raw_html' | 'raw_template'
+  contentDebug?: {
+    siteVersionId: string
+    rawTemplateArtifactFound: boolean
+    draftOverrideCount: number
+    publishedOverrideCount: number
+    mergedOverrideCount: number
+    appliedCount: number
+    skippedCount: number
+    skippedDiagnostics: Array<{ slotKey: string; reason: string }>
+    slotKeys: string[]
+  }
 }
 
 export class SiteVersionPreviewUnavailableError extends Error {
@@ -360,8 +371,11 @@ function selectPreviewOverridesByVersion(input: {
   publishedOverrides: ContentOverride[]
 }): ContentOverride[] {
   const sameVersionDraftOverrides = input.draftOverrides.filter((override) => override.siteVersionId === input.siteVersionId)
-  if (sameVersionDraftOverrides.length > 0) return sameVersionDraftOverrides
-  return input.publishedOverrides.filter((override) => override.siteVersionId === input.siteVersionId)
+  const sameVersionPublishedOverrides = input.publishedOverrides.filter((override) => override.siteVersionId === input.siteVersionId)
+  const mergedBySlot = new Map<string, ContentOverride>()
+  for (const override of sameVersionPublishedOverrides) mergedBySlot.set(override.slotKey, override)
+  for (const override of sameVersionDraftOverrides) mergedBySlot.set(override.slotKey, override)
+  return [...mergedBySlot.values()]
 }
 
 async function renderRawTemplateSiteVersionPreview(input: {
@@ -390,14 +404,16 @@ async function renderRawTemplateSiteVersionPreview(input: {
     entryHtmlPath: artifact.entryHtmlPath,
   })
   const slots = await listContentSlots(artifact.siteVersionId)
+  console.info('[gnr8.content-runtime] CONTENT_PREVIEW_OVERRIDES_LOAD_STARTED', {
+    siteVersionId: artifact.siteVersionId,
+  })
   const draftOverrides = await listContentOverrides({ siteVersionId: artifact.siteVersionId, status: 'draft' })
   const publishedOverrides = await listContentOverrides({ siteVersionId: artifact.siteVersionId, status: 'published' })
   console.info('[gnr8.content-runtime] CONTENT_PREVIEW_OVERRIDES_LOADED', {
-    siteId: artifact.siteId,
     siteVersionId: artifact.siteVersionId,
-    slotKeyCount: slots.length,
     draftCount: draftOverrides.length,
     publishedCount: publishedOverrides.length,
+    slotKeys: slots.map((slot) => slot.slotKey),
   })
   const sameVersionDraftOverrides = draftOverrides.filter((override) => override.siteVersionId === artifact.siteVersionId)
   const sameVersionPublishedOverrides = publishedOverrides.filter((override) => override.siteVersionId === artifact.siteVersionId)
@@ -421,12 +437,20 @@ async function renderRawTemplateSiteVersionPreview(input: {
     draftOverrides,
     publishedOverrides,
   })
+  console.info('[gnr8.content-runtime] CONTENT_PREVIEW_OVERRIDES_APPLY_STARTED', {
+    siteVersionId: artifact.siteVersionId,
+    draftCount: sameVersionDraftOverrides.length,
+    publishedCount: sameVersionPublishedOverrides.length,
+    mergedOverrideCount: selectedOverrides.length,
+    slotKeys: selectedOverrides.map((override) => override.slotKey),
+  })
   if (selectedOverrides.length === 0) {
     console.info('[gnr8.content-runtime] CONTENT_PREVIEW_OVERRIDES_EMPTY', {
-      siteId: artifact.siteId,
       siteVersionId: artifact.siteVersionId,
-      loadedCount: draftOverrides.length + publishedOverrides.length,
-      slotKeyCount: slots.length,
+      draftCount: sameVersionDraftOverrides.length,
+      publishedCount: sameVersionPublishedOverrides.length,
+      mergedOverrideCount: 0,
+      slotKeys: [],
     })
   }
   const patched = applyContentOverridesToRawHtml({
@@ -435,12 +459,28 @@ async function renderRawTemplateSiteVersionPreview(input: {
     overrides: selectedOverrides,
   })
   console.info('[gnr8.content-runtime] CONTENT_PREVIEW_OVERRIDES_APPLIED', {
-    siteId: artifact.siteId,
     siteVersionId: artifact.siteVersionId,
-    loadedCount: selectedOverrides.length,
+    draftCount: sameVersionDraftOverrides.length,
+    publishedCount: sameVersionPublishedOverrides.length,
+    mergedOverrideCount: selectedOverrides.length,
     appliedCount: patched.appliedCount,
     skippedCount: patched.skippedCount,
+    slotKeys: selectedOverrides.map((override) => override.slotKey),
   })
+  for (const skipped of patched.skippedDiagnostics) {
+    if (skipped.reason === 'selector_missing') {
+      console.info('[gnr8.content-runtime] CONTENT_PREVIEW_OVERRIDE_SELECTOR_MISSING', {
+        siteVersionId: artifact.siteVersionId,
+        slotKeys: [skipped.slotKey],
+      })
+    }
+    if (skipped.reason === 'value_empty') {
+      console.info('[gnr8.content-runtime] CONTENT_PREVIEW_OVERRIDE_VALUE_EMPTY', {
+        siteVersionId: artifact.siteVersionId,
+        slotKeys: [skipped.slotKey],
+      })
+    }
+  }
   const summary = buildRawTemplatePreviewRuntimeSummary({
     baseSummary: input.fallbackSummary,
     fileCount: Object.keys(artifact.fileMap).length,
@@ -474,6 +514,17 @@ async function renderRawTemplateSiteVersionPreview(input: {
       fallbackUsedOverride: false,
     }),
     sourceMode: 'raw_template',
+    contentDebug: {
+      siteVersionId: artifact.siteVersionId,
+      rawTemplateArtifactFound: true,
+      draftOverrideCount: sameVersionDraftOverrides.length,
+      publishedOverrideCount: sameVersionPublishedOverrides.length,
+      mergedOverrideCount: selectedOverrides.length,
+      appliedCount: patched.appliedCount,
+      skippedCount: patched.skippedCount,
+      skippedDiagnostics: patched.skippedDiagnostics,
+      slotKeys: selectedOverrides.map((override) => override.slotKey).slice(0, 10),
+    },
   }
 }
 

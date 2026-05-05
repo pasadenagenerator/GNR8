@@ -161,6 +161,64 @@ test("public runtime domain hit: serves raw template HTML and rewrites /assets U
   }
 });
 
+test("public runtime domain hit: applies published content overrides and ignores draft status", async () => {
+  const restoreDeps = __setPublicRuntimeRenderDependenciesForTest({
+    resolveRawTemplateSiteForDomainAndPath: async () =>
+      ({
+        outcome: "raw_template_hit",
+        host: "override.example.com",
+        siteId: "site_override_1",
+        siteVersionId: "sv_override_1",
+        domain: "override.example.com",
+        bindingId: "domain_binding_override_1",
+        status: "active",
+        normalizedPath: "/",
+        resolvedFilePath: "index.html",
+        html: "<!doctype html><html><body><h1>Old title</h1></body></html>",
+      }) as never,
+    resolveActiveArtifactForHostAndPathWithDiagnostics: async () => {
+      throw new Error("artifact resolver should not run when raw template domain hit succeeds");
+    },
+    listContentSlots: async () =>
+      [
+        {
+          id: "slot-1",
+          siteId: "site_override_1",
+          siteVersionId: "sv_override_1",
+          slotKey: "hero.title",
+          slotType: "text",
+          sourceSelector: "html > body:nth-of-type(1) > h1:nth-of-type(1)",
+          sourceText: "Old title",
+          sourceAssetPath: null,
+          confidence: 1,
+          diagnostics: null,
+        },
+      ] as never,
+    listContentOverrides: async () =>
+      [
+        {
+          id: "override-1",
+          siteId: "site_override_1",
+          siteVersionId: "sv_override_1",
+          slotKey: "hero.title",
+          valueType: "text",
+          valueJson: { value: "Published title" },
+          status: "published",
+        },
+      ] as never,
+  });
+
+  try {
+    const response = await renderPublicPathResponse({ host: "override.example.com", path: "/" });
+    assert.equal(response.status, 200);
+    const html = await response.text();
+    assert.match(html, /Published title/);
+    assert.ok(!html.includes("Old title"));
+  } finally {
+    restoreDeps();
+  }
+});
+
 test("public runtime domain hit: supports nested paths when raw template page exists", async () => {
   const restoreDeps = __setPublicRuntimeRenderDependenciesForTest({
     resolveRawTemplateSiteForDomainAndPath: async (input) =>

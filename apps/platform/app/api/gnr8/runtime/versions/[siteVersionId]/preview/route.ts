@@ -1,6 +1,7 @@
 import { renderSiteVersionPreview, SiteVersionPreviewUnavailableError } from "@/gnr8/runtime/unified-render-preview";
 import { parseAgencyActionContextError, requireAgencyActionContext } from "@/app/api/gnr8/agency/_lib/agency-action-access";
 import { resolveAgencyIdForSiteVersion } from "@/app/api/gnr8/runtime/_lib/runtime-agency-scope";
+import { injectRuntimeDebugPanel } from "@/src/public-site/raw-template-runtime";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -62,14 +63,36 @@ export async function GET(req: Request, ctx: { params: Promise<{ siteVersionId: 
     const url = new URL(req.url);
     const path = url.searchParams.get("path") ?? "/";
     const mode = url.searchParams.get("mode") ?? undefined;
+    const contentDebugMode = url.searchParams.get("__debug") === "content";
 
     const preview = await renderSiteVersionPreview({
       siteVersionId,
       path,
       mode,
     });
+    const html = contentDebugMode
+      ? injectRuntimeDebugPanel({
+          html: preview.html,
+          debug: {
+            siteId: preview.siteId,
+            siteVersionId: preview.siteVersionId,
+            bindingStatus: "preview",
+            details: {
+              siteVersionId: preview.contentDebug?.siteVersionId ?? preview.siteVersionId,
+              rawTemplateArtifactFound: preview.contentDebug?.rawTemplateArtifactFound ?? false,
+              draftOverrideCount: preview.contentDebug?.draftOverrideCount ?? 0,
+              publishedOverrideCount: preview.contentDebug?.publishedOverrideCount ?? 0,
+              mergedOverrideCount: preview.contentDebug?.mergedOverrideCount ?? 0,
+              appliedCount: preview.contentDebug?.appliedCount ?? 0,
+              skippedCount: preview.contentDebug?.skippedCount ?? 0,
+              skippedDiagnostics: preview.contentDebug?.skippedDiagnostics ?? [],
+              slotKeys: preview.contentDebug?.slotKeys ?? [],
+            },
+          },
+        })
+      : preview.html;
 
-    return new Response(preview.html, {
+    return new Response(html, {
       status: 200,
       headers: {
         "content-type": "text/html; charset=utf-8",
