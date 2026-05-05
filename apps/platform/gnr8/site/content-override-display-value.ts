@@ -11,8 +11,12 @@ function asString(value: unknown): string | null {
   return typeof value === 'string' ? value : null
 }
 
-export function getSlotOriginalDisplayValue(slot: Pick<ContentSlot, 'sourceText' | 'sourceAssetPath'>): string {
-  return slot.sourceText ?? slot.sourceAssetPath ?? ''
+type SlotSource = Partial<Pick<ContentSlot, 'sourceText' | 'sourceAssetPath'>>
+
+export function getSlotOriginalDisplayValue(slot: SlotSource): string {
+  const text = slot.sourceText ?? null
+  const asset = slot.sourceAssetPath ?? null
+  return text ?? asset ?? ''
 }
 
 export function getOverrideDisplayValue(
