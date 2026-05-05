@@ -10,6 +10,11 @@ export function applyContentOverridesToRawHtml(input: {
   appliedCount: number
   skippedCount: number
   diagnostics: string[]
+  skippedDiagnostics: Array<{
+    slotKey: string
+    reason: 'slot_missing' | 'selector_missing' | 'target_not_found' | 'value_empty'
+    sourceSelector?: string | null
+  }>
 } {
   return applyOverridesCore({
     html: input.html,

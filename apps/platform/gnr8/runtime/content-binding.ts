@@ -549,12 +549,20 @@ export function applyContentOverridesToRawHtml(input: {
   appliedCount: number
   skippedCount: number
   diagnostics: string[]
-  skippedDiagnostics: Array<{ slotKey: string; reason: 'selector_missing' | 'target_not_found' | 'slot_missing' | 'value_empty' }>
+  skippedDiagnostics: Array<{
+    slotKey: string
+    reason: 'slot_missing' | 'selector_missing' | 'target_not_found' | 'value_empty'
+    sourceSelector?: string | null
+  }>
 } {
   const diagnostics = ['CONTENT_OVERRIDE_PATCH_STARTED']
   const root: Parse5Document = parse(String(input.html ?? ''))
   const slotMap = new Map(input.slots.map((slot) => [slot.slotKey, slot]))
-  const skippedDiagnostics: Array<{ slotKey: string; reason: 'selector_missing' | 'target_not_found' | 'slot_missing' | 'value_empty' }> = []
+  const skippedDiagnostics: Array<{
+    slotKey: string
+    reason: 'slot_missing' | 'selector_missing' | 'target_not_found' | 'value_empty'
+    sourceSelector?: string | null
+  }> = []
   let appliedCount = 0
   let skippedCount = 0
 
@@ -564,14 +572,14 @@ export function applyContentOverridesToRawHtml(input: {
     if (sectionScoped) diagnostics.push('CONTENT_OVERRIDE_SECTION_PATCH_STARTED')
     if (!slot) {
       skippedCount += 1
-      skippedDiagnostics.push({ slotKey: ov.slotKey, reason: 'slot_missing' })
+      skippedDiagnostics.push({ slotKey: ov.slotKey, reason: 'slot_missing', sourceSelector: null })
       diagnostics.push(sectionScoped ? 'CONTENT_OVERRIDE_SECTION_PATCH_SKIPPED' : 'CONTENT_OVERRIDE_SKIPPED_NO_SLOT')
       diagnostics.push('CONTENT_OVERRIDE_PATCH_SKIPPED_TARGET_NOT_FOUND')
       continue
     }
     if (!slot.sourceSelector) {
       skippedCount += 1
-      skippedDiagnostics.push({ slotKey: ov.slotKey, reason: 'selector_missing' })
+      skippedDiagnostics.push({ slotKey: ov.slotKey, reason: 'selector_missing', sourceSelector: slot.sourceSelector ?? null })
       diagnostics.push(sectionScoped ? 'CONTENT_OVERRIDE_SECTION_PATCH_SKIPPED' : 'CONTENT_OVERRIDE_SKIPPED_NO_SELECTOR')
       diagnostics.push('CONTENT_OVERRIDE_PATCH_SKIPPED_SELECTOR_MISSING')
       continue
@@ -579,7 +587,7 @@ export function applyContentOverridesToRawHtml(input: {
     const target = resolveByPath(root, slot.sourceSelector)
     if (!target) {
       skippedCount += 1
-      skippedDiagnostics.push({ slotKey: ov.slotKey, reason: 'target_not_found' })
+      skippedDiagnostics.push({ slotKey: ov.slotKey, reason: 'target_not_found', sourceSelector: slot.sourceSelector })
       diagnostics.push(sectionScoped ? 'CONTENT_OVERRIDE_SECTION_PATCH_SKIPPED' : 'CONTENT_OVERRIDE_SKIPPED_SELECTOR_NOT_FOUND')
       diagnostics.push('CONTENT_OVERRIDE_PATCH_SKIPPED_TARGET_NOT_FOUND')
       continue
@@ -588,7 +596,7 @@ export function applyContentOverridesToRawHtml(input: {
     const text = asTextValue(ov.valueJson)
     if (!text.trim().length) {
       skippedCount += 1
-      skippedDiagnostics.push({ slotKey: ov.slotKey, reason: 'value_empty' })
+      skippedDiagnostics.push({ slotKey: ov.slotKey, reason: 'value_empty', sourceSelector: slot.sourceSelector })
       diagnostics.push('CONTENT_OVERRIDE_VALUE_EMPTY')
       continue
     }
