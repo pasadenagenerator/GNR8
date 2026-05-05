@@ -37,6 +37,7 @@ async function resolveRuntimeScope(input: {
 
 export async function GET(req: Request, ctx: { params: Promise<{ clientId?: string; siteId?: string }> }) {
   const diagnostics: string[] = ['CONTENT_HISTORY_FETCH_STARTED']
+  let resolvedSiteVersionId: string | null = null
   try {
     const params = await ctx.params
     const clientId = normalizeUuid(params.clientId)
@@ -48,14 +49,18 @@ export async function GET(req: Request, ctx: { params: Promise<{ clientId?: stri
     const siteVersionId = normalizeUuid(url.searchParams.get('siteVersionId'))
     const requestedLimit = Number(url.searchParams.get('limit') ?? '100')
     const limit = Number.isFinite(requestedLimit) ? Math.max(1, Math.min(500, Math.floor(requestedLimit))) : 100
-    if (!agencyId || !siteVersionId) return NextResponse.json({ ok: false, error: 'agencyId and siteVersionId are required' }, { status: 400 })
+    if (!agencyId || !siteVersionId) {
+      return NextResponse.json({ ok: false, error: 'agencyId and siteVersionId are required', diagnostics }, { status: 400 })
+    }
+    resolvedSiteVersionId = siteVersionId
 
     await requireAgencyActionContext({ action: 'view_dashboard', requestedAgencyId: agencyId })
     const scope = await resolveRuntimeScope({ clientId, siteId, agencyId, siteVersionId })
-    if (!scope) return NextResponse.json({ ok: false, error: 'Site scope not found' }, { status: 404 })
+    if (!scope) return NextResponse.json({ ok: false, error: 'Site scope not found', diagnostics }, { status: 404 })
+    resolvedSiteVersionId = scope.siteVersionId
 
     const [historyRows, slots] = await Promise.all([
-      listContentOverrideHistory({ siteId: scope.ownershipSiteId, siteVersionId: scope.siteVersionId, limit }),
+      listContentOverrideHistory({ siteVersionId: scope.siteVersionId, limit }),
       listContentSlots(scope.siteVersionId),
     ])
     const slotLabelMap = new Map(slots.map((slot) => [slot.slotKey, friendlySlotLabel(slot.slotKey)]))
@@ -71,6 +76,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ clientId?: stri
       ok: true,
       siteVersionId: scope.siteVersionId,
       rows: historyRows.map((row) => ({ ...row, slotLabel: slotLabelMap.get(row.slotKey) ?? friendlySlotLabel(row.slotKey) })),
+      historyCount: historyRows.length,
       groupedBySlot,
       diagnostics: [
         ...diagnostics,
@@ -79,7 +85,16 @@ export async function GET(req: Request, ctx: { params: Promise<{ clientId?: stri
     })
   } catch (error) {
     const mapped = parseAgencyActionContextError(error)
-    diagnostics.push('CONTENT_HISTORY_FETCH_COMPLETED')
-    return NextResponse.json({ ok: false, error: mapped.message, diagnostics }, { status: mapped.status })
+    diagnostics.push('CONTENT_HISTORY_FETCH_FAILED')
+    return NextResponse.json(
+      {
+        ok: false,
+        reasonCode: 'CONTENT_HISTORY_FETCH_FAILED',
+        error: mapped.message,
+        diagnostics,
+        siteVersionId: resolvedSiteVersionId,
+      },
+      { status: mapped.status },
+    )
   }
 }

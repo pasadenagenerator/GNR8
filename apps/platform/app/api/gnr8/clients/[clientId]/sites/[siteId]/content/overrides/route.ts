@@ -31,6 +31,8 @@ async function resolveRuntimeScope(input: {
 
 export async function POST(req: Request, ctx: { params: Promise<{ clientId?: string; siteId?: string }> }) {
   const diagnostics: string[] = []
+  let resolvedSiteVersionId: string | null = null
+  let resolvedSlotKey: string | null = null
   try {
     const params = await ctx.params
     const clientId = normalizeUuid(params.clientId)
@@ -40,6 +42,8 @@ export async function POST(req: Request, ctx: { params: Promise<{ clientId?: str
     const agencyId = normalizeUuid(body?.agencyId)
     const siteVersionId = normalizeUuid(body?.siteVersionId)
     const slotKey = normalizeText(body?.slotKey)
+    resolvedSiteVersionId = siteVersionId
+    resolvedSlotKey = slotKey || null
     diagnostics.push('CONTENT_DRAFT_SAVE_STARTED')
     const versionRequirement = requireContentSiteVersionId(siteVersionId)
     if (!versionRequirement.ok) {
@@ -57,6 +61,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ clientId?: str
       agencyId: actionContext.agencyId,
       requestedSiteVersionId: versionRequirement.siteVersionId,
     })
+    resolvedSiteVersionId = scope?.siteVersionId ?? resolvedSiteVersionId
     if (!scope) {
       diagnostics.push('CONTENT_DRAFT_SAVE_FAILED')
       return NextResponse.json(
@@ -157,6 +162,16 @@ export async function POST(req: Request, ctx: { params: Promise<{ clientId?: str
   } catch (error) {
     const mapped = parseAgencyActionContextError(error)
     diagnostics.push('CONTENT_DRAFT_SAVE_FAILED')
-    return NextResponse.json({ ok: false, error: mapped.message, diagnostics }, { status: mapped.status })
+    return NextResponse.json(
+      {
+        ok: false,
+        reasonCode: 'CONTENT_DRAFT_SAVE_FAILED',
+        error: mapped.message,
+        diagnostics,
+        siteVersionId: resolvedSiteVersionId,
+        slotKey: resolvedSlotKey,
+      },
+      { status: mapped.status },
+    )
   }
 }

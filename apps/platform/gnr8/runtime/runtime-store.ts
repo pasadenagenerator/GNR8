@@ -2888,7 +2888,7 @@ async function insertContentOverrideHistoryWithClient(input: {
       source,
       metadata
     )
-    values ($1::text, $2::uuid, $3::text, $4::text, $5::jsonb, $6::jsonb, $7::text, $8::uuid, $9::text, $10::jsonb)
+    values ($1, $2::uuid, $3::text, $4::text, $5::jsonb, $6::jsonb, $7::text, $8::uuid, $9::text, $10::jsonb)
     `,
     [
       input.siteId,
@@ -2970,7 +2970,7 @@ export async function upsertContentOverrideDraft(input: {
     await client.query(
       `
       insert into public.gnr8_content_overrides (site_id, site_version_id, slot_key, value_type, value_json, status, updated_at)
-      values ($1::text, $2::uuid, $3::text, $4::text, $5::jsonb, 'draft', now())
+      values ($1, $2::uuid, $3::text, $4::text, $5::jsonb, 'draft', now())
       on conflict (site_version_id, slot_key, status)
       do update set value_type = excluded.value_type, value_json = excluded.value_json, updated_at = now()
       `,
@@ -3063,7 +3063,7 @@ export async function upsertContentOverrideDraftBatch(input: {
       const res = await client.query(
         `
         insert into public.gnr8_content_overrides (site_id, site_version_id, slot_key, value_type, value_json, status, updated_at)
-        values ($1::text, $2::uuid, $3::text, $4::text, $5::jsonb, 'draft', now())
+        values ($1, $2::uuid, $3::text, $4::text, $5::jsonb, 'draft', now())
         on conflict (site_version_id, slot_key, status)
         do update set value_type = excluded.value_type, value_json = excluded.value_json, updated_at = now()
         `,
@@ -3130,7 +3130,7 @@ export async function publishDraftContentOverrides(input: {
       const res = await client.query(
         `
         insert into public.gnr8_content_overrides (site_id, site_version_id, slot_key, value_type, value_json, status, updated_at)
-        values ($1::text, $2::uuid, $3::text, $4::text, $5::jsonb, 'published', now())
+        values ($1, $2::uuid, $3::text, $4::text, $5::jsonb, 'published', now())
         on conflict (site_version_id, slot_key, status)
         do update set value_type = excluded.value_type, value_json = excluded.value_json, updated_at = now()
         `,
@@ -3161,7 +3161,7 @@ export async function publishDraftContentOverrides(input: {
 }
 
 export async function listContentOverrideHistory(input: {
-  siteId: string;
+  siteId?: string;
   siteVersionId: string;
   limit?: number;
 }): Promise<ContentOverrideHistoryRow[]> {
@@ -3185,11 +3185,12 @@ export async function listContentOverrideHistory(input: {
         created_at::text,
         metadata
       from public.gnr8_content_override_history
-      where site_id = $1::text and site_version_id = $2::uuid
+      where site_version_id = $1::uuid
+        and ($2::text is null or site_id::text = $2::text)
       order by created_at desc
       limit $3::int
       `,
-      [input.siteId, input.siteVersionId, limit],
+      [input.siteVersionId, input.siteId ?? null, limit],
     );
     return res.rows.map((row: any) => ({
       id: row.id,

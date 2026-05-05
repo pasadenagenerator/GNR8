@@ -93,6 +93,7 @@ const Field = memo(function Field(props: {
 })
 
 export default function ContentBindingsPanel(props: { agencyId: string; clientId: string; siteId: string }) {
+  const [isHydrated, setIsHydrated] = useState(false)
   const [grouped, setGrouped] = useState<Grouped>(EMPTY_GROUPED)
   const [siteVersionId, setSiteVersionId] = useState<string>('')
   const [activeSiteVersionId, setActiveSiteVersionId] = useState<string>('')
@@ -157,7 +158,17 @@ export default function ContentBindingsPanel(props: { agencyId: string; clientId
     console.info('[gnr8.content-editor] CONTENT_HISTORY_FETCH_STARTED', { siteId: props.siteId, siteVersionId: requestedSiteVersionId })
     const historyResponse = await fetch(`/api/gnr8/clients/${encodeURIComponent(props.clientId)}/sites/${encodeURIComponent(props.siteId)}/content/history?agencyId=${encodeURIComponent(props.agencyId)}&siteVersionId=${encodeURIComponent(requestedSiteVersionId)}&limit=100`)
     const historyPayload = (await historyResponse.json().catch(() => null)) as any
-    if (historyPayload?.ok && Array.isArray(historyPayload.rows)) {
+    if (!historyResponse.ok || !historyPayload?.ok) {
+      console.warn('[gnr8.content-editor] CONTENT_HISTORY_FETCH_FAILED', {
+        siteId: props.siteId,
+        siteVersionId: requestedSiteVersionId,
+        status: historyResponse.status,
+        responseJson: historyPayload,
+      })
+      setHistoryRows([])
+      return
+    }
+    if (Array.isArray(historyPayload.rows)) {
       setHistoryRows(historyPayload.rows)
       console.info('[gnr8.content-editor] CONTENT_HISTORY_FETCH_COMPLETED', { siteId: props.siteId, siteVersionId: requestedSiteVersionId, rowCount: historyPayload.rows.length })
       if (historyPayload.rows.length === 0) console.info('[gnr8.content-editor] CONTENT_HISTORY_EMPTY', { siteId: props.siteId, siteVersionId: requestedSiteVersionId })
@@ -255,6 +266,10 @@ export default function ContentBindingsPanel(props: { agencyId: string; clientId
     const payload = await fetchContentPayload()
     await applyContentPayload(payload)
   }, [applyContentPayload, fetchContentPayload])
+
+  useEffect(() => {
+    setIsHydrated(true)
+  }, [])
 
   useEffect(() => {
     void loadContent()
@@ -355,6 +370,15 @@ export default function ContentBindingsPanel(props: { agencyId: string; clientId
         })
       }
       await applyContentPayload(refreshedPayload)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'draft_save_failed'
+      console.warn('[gnr8.content-editor] CONTENT_EDITOR_DRAFT_SAVE_FAILED', {
+        siteId: props.siteId,
+        siteVersionId,
+        slotKey,
+        error: message,
+      })
+      setSaveFeedbackBySlot((prev) => ({ ...prev, [slotKey]: `Save failed (${message})` }))
     } finally {
       setBusy(false)
     }
@@ -442,6 +466,12 @@ export default function ContentBindingsPanel(props: { agencyId: string; clientId
     const value = valueJson?.value
     if (typeof value === 'string') return value
     return value == null ? 'empty' : JSON.stringify(value)
+  }
+
+  function displayTimestamp(value: string): string {
+    if (!isHydrated) return value
+    const date = new Date(value)
+    return Number.isFinite(date.getTime()) ? date.toLocaleString() : value
   }
 
   const hasDraftChangesToPublish = Object.keys(drafts).some((slotKey) => (drafts[slotKey] ?? '') !== (published[slotKey] ?? ''))
@@ -583,7 +613,7 @@ export default function ContentBindingsPanel(props: { agencyId: string; clientId
       {historyRows.map((row) => (
         <div key={row.id} style={{ border: '1px solid #e2e8f0', borderRadius: 10, padding: 10, display: 'grid', gap: 6, background: '#f8fafc' }}>
           <div style={{ fontSize: 12, color: '#334155' }}>
-            <strong>{row.slotLabel}</strong> · {row.action} · {new Date(row.createdAt).toLocaleString()}
+            <strong>{row.slotLabel}</strong> · {row.action} · {displayTimestamp(row.createdAt)}
           </div>
           <div style={{ fontSize: 12, color: '#64748b' }}>
             {displayValue(row.previousValueJson)} {'->'} {displayValue(row.nextValueJson)}
