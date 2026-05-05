@@ -38,16 +38,20 @@ const Field = memo(function Field(props: {
   slot: Slot | null
   busy: boolean
   value: string
+  originalValue: string
+  draftValue: string | undefined
   publishedValue: string
+  isDirty: boolean
+  stateBadge: 'No changes' | 'Modified' | 'Same as published' | 'Same as draft'
+  saveMessage: string | null
   onChange: (slotKey: string, nextValue: string) => void
   onSave: (slot: Slot) => void
 }) {
-  const { slot, busy, value, publishedValue, onChange, onSave } = props
+  const { slot, busy, value, originalValue, draftValue, publishedValue, isDirty, stateBadge, saveMessage, onChange, onSave } = props
   if (!slot) return null
   const editable = Boolean(slot.sourceSelector)
-  const original = slot.sourceText ?? slot.sourceAssetPath ?? 'n/a'
   const lowConfidence = (slot.confidence ?? 1) < 0.6
-  const state = detectFieldDraftState({ slotKey: slot.slotKey, draftValue: value, publishedValue })
+  const state = detectFieldDraftState({ slotKey: slot.slotKey, draftValue, publishedValue })
   const stateText = draftStateLabel(state)
   const inputKind = inputKindForSlot(slot)
 
@@ -56,6 +60,7 @@ const Field = memo(function Field(props: {
       <div style={{ fontSize: 12, color: '#334155', display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8 }}>
         <strong>{friendlySlotLabel(slot.slotKey)}</strong>
         <span style={{ color: '#64748b' }}>{stateText}</span>
+        <span style={{ color: isDirty ? '#166534' : '#475569', border: `1px solid ${isDirty ? '#86efac' : '#cbd5e1'}`, borderRadius: 999, padding: '1px 7px', background: isDirty ? '#f0fdf4' : '#f8fafc' }}>{stateBadge}</span>
         {lowConfidence ? <span style={{ color: '#b45309', border: '1px solid #fcd34d', borderRadius: 999, padding: '1px 7px' }}>Low confidence</span> : null}
       </div>
       <div style={{ fontSize: 11, color: '#94a3b8' }}>{slot.slotKey}</div>
@@ -75,10 +80,12 @@ const Field = memo(function Field(props: {
           disabled={!editable}
         />
       )}
-      <div style={{ fontSize: 12, color: '#64748b' }}>Original: {original}</div>
+      {!isDirty ? <div style={{ fontSize: 12, color: '#64748b' }}>No changes to save</div> : null}
+      {saveMessage ? <div style={{ fontSize: 12, color: '#854d0e' }}>{saveMessage}</div> : null}
+      <div style={{ fontSize: 12, color: '#64748b' }}>Original: {originalValue || 'n/a'}</div>
       <div style={{ fontSize: 12, color: '#64748b' }}>Published: {publishedValue || 'n/a'}</div>
       {!editable ? <div style={{ fontSize: 12, color: '#64748b' }}>Detected, but not safely editable yet.</div> : null}
-      <button type='button' disabled={busy || !editable} onClick={() => onSave(slot)} style={{ width: 'fit-content', padding: '6px 10px', borderRadius: 8, border: '1px solid #cbd5e1', background: '#fff' }}>
+      <button type='button' disabled={busy || !editable || !isDirty} onClick={() => onSave(slot)} style={{ width: 'fit-content', padding: '6px 10px', borderRadius: 8, border: '1px solid #cbd5e1', background: '#fff' }}>
         Save Draft
       </button>
     </div>
@@ -93,7 +100,10 @@ export default function ContentBindingsPanel(props: { agencyId: string; clientId
   const [drafts, setDrafts] = useState<Record<string, string>>({})
   const [published, setPublished] = useState<Record<string, string>>({})
   const [publishedOverrides, setPublishedOverrides] = useState<Record<string, string>>({})
-  const [publishedAtLoad, setPublishedAtLoad] = useState<Record<string, string>>({})
+  const [draftValuesAtLoad, setDraftValuesAtLoad] = useState<Record<string, string>>({})
+  const [publishedValuesAtLoad, setPublishedValuesAtLoad] = useState<Record<string, string>>({})
+  const [originalValuesAtLoad, setOriginalValuesAtLoad] = useState<Record<string, string>>({})
+  const [saveFeedbackBySlot, setSaveFeedbackBySlot] = useState<Record<string, string>>({})
   const [slotCount, setSlotCount] = useState(0)
   const [draftOverrideCount, setDraftOverrideCount] = useState(0)
   const [publishedOverrideCount, setPublishedOverrideCount] = useState(0)
@@ -134,8 +144,13 @@ export default function ContentBindingsPanel(props: { agencyId: string; clientId
   const editableVisibleSlots = useMemo(() => allSlots.filter((slot) => Boolean(slot.sourceSelector)), [allSlots])
 
   const modifiedEditableSlots = useMemo(() => {
-    return editableVisibleSlots.filter((slot) => (drafts[slot.slotKey] ?? '') !== (publishedAtLoad[slot.slotKey] ?? ''))
-  }, [drafts, editableVisibleSlots, publishedAtLoad])
+    return editableVisibleSlots.filter((slot) => {
+      const slotKey = slot.slotKey
+      const currentValue = drafts[slotKey] ?? ''
+      const baselineValue = draftValuesAtLoad[slotKey] ?? publishedValuesAtLoad[slotKey] ?? originalValuesAtLoad[slotKey] ?? ''
+      return currentValue !== baselineValue
+    })
+  }, [draftValuesAtLoad, drafts, editableVisibleSlots, originalValuesAtLoad, publishedValuesAtLoad])
 
   const fetchHistory = useCallback(async (requestedSiteVersionId: string): Promise<void> => {
     if (!requestedSiteVersionId) return
@@ -179,6 +194,9 @@ export default function ContentBindingsPanel(props: { agencyId: string; clientId
     const draftMap: Record<string, string> = {}
     const publishBaselineMap: Record<string, string> = {}
     const publishedOverridesMap: Record<string, string> = {}
+    const draftAtLoadMap: Record<string, string> = {}
+    const publishedAtLoadMap: Record<string, string> = {}
+    const originalAtLoadMap: Record<string, string> = {}
     const initialEditorSourceCounts = { draft: 0, published: 0, original: 0 }
     const draftOverrides: Override[] = Array.isArray(payload.draftOverrides) ? payload.draftOverrides : []
     const pubOverrides: Override[] = Array.isArray(payload.publishedOverrides) ? payload.publishedOverrides : []
@@ -193,6 +211,9 @@ export default function ContentBindingsPanel(props: { agencyId: string; clientId
       draftMap[slot.slotKey] = effectiveEditorValue
       publishBaselineMap[slot.slotKey] = publishedValue ?? originalValue
       publishedOverridesMap[slot.slotKey] = publishedValue ?? ''
+      if (draftValue !== null && draftValue !== undefined) draftAtLoadMap[slot.slotKey] = draftValue
+      if (publishedValue !== null && publishedValue !== undefined) publishedAtLoadMap[slot.slotKey] = publishedValue
+      originalAtLoadMap[slot.slotKey] = originalValue
 
       if (draftValue !== null && draftValue !== undefined) {
         initialEditorSourceCounts.draft += 1
@@ -205,7 +226,10 @@ export default function ContentBindingsPanel(props: { agencyId: string; clientId
     setDrafts(draftMap)
     setPublished(publishBaselineMap)
     setPublishedOverrides(publishedOverridesMap)
-    setPublishedAtLoad(draftMap)
+    setDraftValuesAtLoad(draftAtLoadMap)
+    setPublishedValuesAtLoad(publishedAtLoadMap)
+    setOriginalValuesAtLoad(originalAtLoadMap)
+    setSaveFeedbackBySlot({})
     console.info('[gnr8.content-editor] CONTENT_EDITOR_STATE_INITIALIZED_FROM_DRAFT', {
       siteId: props.siteId,
       siteVersionId: resolvedSiteVersionId,
@@ -229,8 +253,17 @@ export default function ContentBindingsPanel(props: { agencyId: string; clientId
   }, [loadContent])
 
   const handleDraftChange = useCallback((slotKey: string, nextValue: string) => {
+    const baselineValue = draftValuesAtLoad[slotKey] ?? publishedValuesAtLoad[slotKey] ?? originalValuesAtLoad[slotKey] ?? ''
+    const isDirty = nextValue !== baselineValue
+    console.info(`[gnr8.content-editor] ${isDirty ? 'CONTENT_EDITOR_DIRTY_TRUE' : 'CONTENT_EDITOR_DIRTY_FALSE'}`, { siteId: props.siteId, siteVersionId, slotKey, baselineValue, nextValue })
+    setSaveFeedbackBySlot((prev) => {
+      if (!prev[slotKey]) return prev
+      const next = { ...prev }
+      delete next[slotKey]
+      return next
+    })
     setDrafts((p) => ({ ...p, [slotKey]: nextValue }))
-  }, [])
+  }, [draftValuesAtLoad, originalValuesAtLoad, props.siteId, publishedValuesAtLoad, siteVersionId])
 
   const shouldRenderFlatFallback = shouldUseFlatSlotFallback({
     groupedHeroCount: grouped.hero.length,
@@ -240,11 +273,20 @@ export default function ContentBindingsPanel(props: { agencyId: string; clientId
 
   async function saveDraft(slot: Slot): Promise<void> {
     if (!siteVersionId) return
+    const slotKey = slot.slotKey
+    const newValue = drafts[slotKey] ?? ''
+    const baselineValue = draftValuesAtLoad[slotKey] ?? publishedValuesAtLoad[slotKey] ?? originalValuesAtLoad[slotKey] ?? ''
+    const isDirty = newValue !== baselineValue
+    console.info(`[gnr8.content-editor] ${isDirty ? 'CONTENT_EDITOR_DIRTY_TRUE' : 'CONTENT_EDITOR_DIRTY_FALSE'}`, { siteId: props.siteId, siteVersionId, slotKey, baselineValue, newValue })
+    if (!isDirty) {
+      console.info('[gnr8.content-editor] CONTENT_EDITOR_NO_CHANGE', { siteId: props.siteId, siteVersionId, slotKey, reason: 'save_skipped_not_dirty' })
+      setSaveFeedbackBySlot((prev) => ({ ...prev, [slotKey]: 'No changes detected' }))
+      return
+    }
     setBusy(true)
     try {
       const apiUrl = `/api/gnr8/clients/${encodeURIComponent(props.clientId)}/sites/${encodeURIComponent(props.siteId)}/content/overrides`
       const oldValue = published[slot.slotKey] ?? ''
-      const newValue = drafts[slot.slotKey] ?? ''
       const payloadBody = { agencyId: props.agencyId, siteVersionId, slotKey: slot.slotKey, valueType: slot.slotType, valueJson: { value: drafts[slot.slotKey] ?? '' }, status: 'draft' }
       console.info('[gnr8.content-editor] CONTENT_EDITOR_DRAFT_SAVE_PAYLOAD', {
         slotKey: slot.slotKey,
@@ -262,6 +304,17 @@ export default function ContentBindingsPanel(props: { agencyId: string; clientId
       const payload = (await response.json().catch(() => null)) as any
       console.info('[gnr8.content-editor] CONTENT_EDITOR_DRAFT_SAVE_RESPONSE', { siteId: props.siteId, siteVersionId, slotKey: slot.slotKey, status: response.status, responseJson: payload })
       if (!response.ok || !payload?.ok) throw new Error(payload?.code ?? 'draft_save_failed')
+      if ((payload?.persistedRowCount ?? 0) === 0) {
+        console.info('[gnr8.content-editor] CONTENT_EDITOR_NO_CHANGE', { siteId: props.siteId, siteVersionId, slotKey, reason: 'persisted_row_count_zero' })
+        setSaveFeedbackBySlot((prev) => ({ ...prev, [slotKey]: 'No changes detected' }))
+      } else {
+        setSaveFeedbackBySlot((prev) => {
+          if (!prev[slotKey]) return prev
+          const next = { ...prev }
+          delete next[slotKey]
+          return next
+        })
+      }
       console.info('[gnr8.content-editor] CONTENT_DRAFT_SAVE_COMPLETED', { siteId: props.siteId, siteVersionId, slotKeyCount: 1, persistedRowCount: payload?.persistedRowCount ?? 0 })
       await fetchHistory(siteVersionId)
       await loadContent()
@@ -294,11 +347,6 @@ export default function ContentBindingsPanel(props: { agencyId: string; clientId
       const payload = (await response.json().catch(() => null)) as any
       console.info('[gnr8.content-editor] CONTENT_EDITOR_BATCH_SAVE_RESPONSE', { siteId: props.siteId, siteVersionId, slotKeyCount: modifiedEditableSlots.length, status: response.status, responseJson: payload })
       if (!response.ok || !payload?.ok) throw new Error(payload?.code ?? 'batch_save_failed')
-      setPublishedAtLoad((prev) => {
-        const next = { ...prev }
-        for (const slot of modifiedEditableSlots) next[slot.slotKey] = drafts[slot.slotKey] ?? ''
-        return next
-      })
       setSaveAllStatus('success')
       await fetchHistory(siteVersionId)
       await loadContent()
@@ -326,7 +374,6 @@ export default function ContentBindingsPanel(props: { agencyId: string; clientId
       if (!response.ok || !payload?.ok) throw new Error(payload?.code ?? 'publish_failed')
       setPublished({ ...drafts })
       setPublishedOverrides({ ...drafts })
-      setPublishedAtLoad({ ...drafts })
       setPublishStatus((payload?.publishedCount ?? 0) > 0 ? 'success' : 'no_drafts')
       console.info('[gnr8.content-editor] CONTENT_PUBLISH_COMPLETED', { siteId: props.siteId, siteVersionId, slotKeyCount: Object.keys(drafts).length })
       await fetchHistory(siteVersionId)
@@ -361,6 +408,39 @@ export default function ContentBindingsPanel(props: { agencyId: string; clientId
   }
 
   const hasDraftChangesToPublish = Object.keys(drafts).some((slotKey) => (drafts[slotKey] ?? '') !== (published[slotKey] ?? ''))
+  const fieldState = useCallback((slotKey: string): { isDirty: boolean; stateBadge: 'No changes' | 'Modified' | 'Same as published' | 'Same as draft' } => {
+    const currentValue = drafts[slotKey] ?? ''
+    const draftAtLoad = draftValuesAtLoad[slotKey]
+    const publishedAtLoad = publishedValuesAtLoad[slotKey]
+    const originalAtLoad = originalValuesAtLoad[slotKey] ?? ''
+    const baselineValue = draftAtLoad ?? publishedAtLoad ?? originalAtLoad
+    const isDirty = currentValue !== baselineValue
+    if (isDirty) return { isDirty: true, stateBadge: 'Modified' }
+    if (draftAtLoad !== undefined && currentValue === draftAtLoad) return { isDirty: false, stateBadge: 'Same as draft' }
+    if (publishedAtLoad !== undefined && currentValue === publishedAtLoad) return { isDirty: false, stateBadge: 'Same as published' }
+    return { isDirty: false, stateBadge: 'No changes' }
+  }, [draftValuesAtLoad, drafts, originalValuesAtLoad, publishedValuesAtLoad])
+
+  const renderField = useCallback((slot: Slot | null, key?: string) => {
+    if (!slot) return null
+    const state = fieldState(slot.slotKey)
+    return (
+      <Field
+        key={key ?? slot.slotKey}
+        slot={slot}
+        busy={busy}
+        value={drafts[slot.slotKey] ?? ''}
+        originalValue={originalValuesAtLoad[slot.slotKey] ?? ''}
+        draftValue={draftValuesAtLoad[slot.slotKey]}
+        publishedValue={publishedOverrides[slot.slotKey] ?? ''}
+        isDirty={state.isDirty}
+        stateBadge={state.stateBadge}
+        saveMessage={saveFeedbackBySlot[slot.slotKey] ?? null}
+        onChange={handleDraftChange}
+        onSave={saveDraft}
+      />
+    )
+  }, [busy, draftValuesAtLoad, drafts, fieldState, handleDraftChange, originalValuesAtLoad, publishedOverrides, saveFeedbackBySlot])
 
   return (
     <section style={{ border: '1px solid #dbe6f1', borderRadius: 12, background: '#fff', padding: 14, display: 'grid', gap: 12 }}>
@@ -404,49 +484,47 @@ export default function ContentBindingsPanel(props: { agencyId: string; clientId
       {shouldRenderFlatFallback ? (
         <>
           <h4 style={{ margin: 0, fontSize: 14 }}>All content slots</h4>
-          {slots.map((slot) => (
-            <Field key={slot.slotKey} slot={slot} busy={busy} value={drafts[slot.slotKey] ?? ''} publishedValue={publishedOverrides[slot.slotKey] ?? ''} onChange={handleDraftChange} onSave={saveDraft} />
-          ))}
+          {slots.map((slot) => renderField(slot))}
         </>
       ) : (
         <>
           <h4 style={{ margin: 0, fontSize: 14 }}>Hero</h4>
-          <Field slot={grouped.hero.find((s) => s.slotKey === 'hero.title') ?? null} busy={busy} value={drafts['hero.title'] ?? ''} publishedValue={publishedOverrides['hero.title'] ?? ''} onChange={handleDraftChange} onSave={saveDraft} />
-          <Field slot={grouped.hero.find((s) => s.slotKey === 'hero.subtitle') ?? null} busy={busy} value={drafts['hero.subtitle'] ?? ''} publishedValue={publishedOverrides['hero.subtitle'] ?? ''} onChange={handleDraftChange} onSave={saveDraft} />
-          <Field slot={grouped.hero.find((s) => s.slotKey === 'hero.cta.label') ?? null} busy={busy} value={drafts['hero.cta.label'] ?? ''} publishedValue={publishedOverrides['hero.cta.label'] ?? ''} onChange={handleDraftChange} onSave={saveDraft} />
-          <Field slot={grouped.hero.find((s) => s.slotKey === 'hero.cta.href') ?? null} busy={busy} value={drafts['hero.cta.href'] ?? ''} publishedValue={publishedOverrides['hero.cta.href'] ?? ''} onChange={handleDraftChange} onSave={saveDraft} />
-          <Field slot={grouped.hero.find((s) => s.slotKey === 'hero.image') ?? null} busy={busy} value={drafts['hero.image'] ?? ''} publishedValue={publishedOverrides['hero.image'] ?? ''} onChange={handleDraftChange} onSave={saveDraft} />
+          {renderField(grouped.hero.find((s) => s.slotKey === 'hero.title') ?? null, 'hero.title')}
+          {renderField(grouped.hero.find((s) => s.slotKey === 'hero.subtitle') ?? null, 'hero.subtitle')}
+          {renderField(grouped.hero.find((s) => s.slotKey === 'hero.cta.label') ?? null, 'hero.cta.label')}
+          {renderField(grouped.hero.find((s) => s.slotKey === 'hero.cta.href') ?? null, 'hero.cta.href')}
+          {renderField(grouped.hero.find((s) => s.slotKey === 'hero.image') ?? null, 'hero.image')}
 
           <h4 style={{ margin: 0, fontSize: 14 }}>Sections</h4>
           {grouped.sections.map((section) => (
         <div key={section.titleSlot?.slotKey ?? `section-${section.index}`} style={{ borderTop: '1px solid #e2e8f0', paddingTop: 10, display: 'grid', gap: 10 }}>
           <div style={{ fontWeight: 600, fontSize: 13 }}>{sectionTitle({ index: section.index, type: section.type })}</div>
-          <Field slot={section.titleSlot} busy={busy} value={drafts[section.titleSlot?.slotKey ?? ''] ?? ''} publishedValue={publishedOverrides[section.titleSlot?.slotKey ?? ''] ?? ''} onChange={handleDraftChange} onSave={saveDraft} />
-          <Field slot={section.introSlot} busy={busy} value={drafts[section.introSlot?.slotKey ?? ''] ?? ''} publishedValue={publishedOverrides[section.introSlot?.slotKey ?? ''] ?? ''} onChange={handleDraftChange} onSave={saveDraft} />
-          <Field slot={section.bodySlot} busy={busy} value={drafts[section.bodySlot?.slotKey ?? ''] ?? ''} publishedValue={publishedOverrides[section.bodySlot?.slotKey ?? ''] ?? ''} onChange={handleDraftChange} onSave={saveDraft} />
-          <Field slot={section.ctas[0]?.labelSlot ?? null} busy={busy} value={drafts[section.ctas[0]?.labelSlot?.slotKey ?? ''] ?? ''} publishedValue={publishedOverrides[section.ctas[0]?.labelSlot?.slotKey ?? ''] ?? ''} onChange={handleDraftChange} onSave={saveDraft} />
-          <Field slot={section.ctas[0]?.hrefSlot ?? null} busy={busy} value={drafts[section.ctas[0]?.hrefSlot?.slotKey ?? ''] ?? ''} publishedValue={publishedOverrides[section.ctas[0]?.hrefSlot?.slotKey ?? ''] ?? ''} onChange={handleDraftChange} onSave={saveDraft} />
+          {renderField(section.titleSlot)}
+          {renderField(section.introSlot)}
+          {renderField(section.bodySlot)}
+          {renderField(section.ctas[0]?.labelSlot ?? null)}
+          {renderField(section.ctas[0]?.hrefSlot ?? null)}
           {section.items.map((item) => (
             <div key={item.titleSlot?.slotKey ?? item.descriptionSlot?.slotKey ?? item.imageSlot?.slotKey ?? `item-${section.index}-${item.index}`} style={{ display: 'grid', gap: 8, border: '1px solid #e2e8f0', borderRadius: 10, padding: 10, background: '#f8fafc' }}>
               <div style={{ fontSize: 12, fontWeight: 600 }}>{section.type === 'services' ? `Service ${item.index + 1}` : `Item ${item.index + 1}`}</div>
-              <Field slot={item.titleSlot} busy={busy} value={drafts[item.titleSlot?.slotKey ?? ''] ?? ''} publishedValue={publishedOverrides[item.titleSlot?.slotKey ?? ''] ?? ''} onChange={handleDraftChange} onSave={saveDraft} />
-              <Field slot={item.descriptionSlot} busy={busy} value={drafts[item.descriptionSlot?.slotKey ?? ''] ?? ''} publishedValue={publishedOverrides[item.descriptionSlot?.slotKey ?? ''] ?? ''} onChange={handleDraftChange} onSave={saveDraft} />
-              <Field slot={item.imageSlot} busy={busy} value={drafts[item.imageSlot?.slotKey ?? ''] ?? ''} publishedValue={publishedOverrides[item.imageSlot?.slotKey ?? ''] ?? ''} onChange={handleDraftChange} onSave={saveDraft} />
+              {renderField(item.titleSlot)}
+              {renderField(item.descriptionSlot)}
+              {renderField(item.imageSlot)}
             </div>
           ))}
           {section.gallery.map((entry) => (
             <div key={entry.imageSlot?.slotKey ?? entry.altSlot?.slotKey ?? `gallery-${section.index}-${entry.index}`} style={{ display: 'grid', gap: 8, border: '1px solid #e2e8f0', borderRadius: 10, padding: 10, background: '#f8fafc' }}>
               <div style={{ fontSize: 12, fontWeight: 600 }}>Gallery image {entry.index + 1}</div>
-              <Field slot={entry.imageSlot} busy={busy} value={drafts[entry.imageSlot?.slotKey ?? ''] ?? ''} publishedValue={publishedOverrides[entry.imageSlot?.slotKey ?? ''] ?? ''} onChange={handleDraftChange} onSave={saveDraft} />
-              <Field slot={entry.altSlot} busy={busy} value={drafts[entry.altSlot?.slotKey ?? ''] ?? ''} publishedValue={publishedOverrides[entry.altSlot?.slotKey ?? ''] ?? ''} onChange={handleDraftChange} onSave={saveDraft} />
+              {renderField(entry.imageSlot)}
+              {renderField(entry.altSlot)}
             </div>
           ))}
           {(section.contact.emailSlot || section.contact.phoneSlot || section.contact.addressSlot) ? (
             <div style={{ display: 'grid', gap: 8, border: '1px solid #e2e8f0', borderRadius: 10, padding: 10, background: '#f8fafc' }}>
               <div style={{ fontSize: 12, fontWeight: 600 }}>Contact details</div>
-              <Field slot={section.contact.emailSlot} busy={busy} value={drafts[section.contact.emailSlot?.slotKey ?? ''] ?? ''} publishedValue={publishedOverrides[section.contact.emailSlot?.slotKey ?? ''] ?? ''} onChange={handleDraftChange} onSave={saveDraft} />
-              <Field slot={section.contact.phoneSlot} busy={busy} value={drafts[section.contact.phoneSlot?.slotKey ?? ''] ?? ''} publishedValue={publishedOverrides[section.contact.phoneSlot?.slotKey ?? ''] ?? ''} onChange={handleDraftChange} onSave={saveDraft} />
-              <Field slot={section.contact.addressSlot} busy={busy} value={drafts[section.contact.addressSlot?.slotKey ?? ''] ?? ''} publishedValue={publishedOverrides[section.contact.addressSlot?.slotKey ?? ''] ?? ''} onChange={handleDraftChange} onSave={saveDraft} />
+              {renderField(section.contact.emailSlot)}
+              {renderField(section.contact.phoneSlot)}
+              {renderField(section.contact.addressSlot)}
             </div>
           ) : null}
         </div>
@@ -456,7 +534,7 @@ export default function ContentBindingsPanel(props: { agencyId: string; clientId
             <>
               <h4 style={{ margin: 0, fontSize: 14 }}>Footer</h4>
               {grouped.footer.map((slot) => (
-                <Field key={slot.slotKey} slot={slot} busy={busy} value={drafts[slot.slotKey] ?? ''} publishedValue={publishedOverrides[slot.slotKey] ?? ''} onChange={handleDraftChange} onSave={saveDraft} />
+                renderField(slot)
               ))}
             </>
           ) : null}
