@@ -90,6 +90,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ clientId?: str
       )
     }
     diagnostics.push('CONTENT_DRAFT_SAVE_PAYLOAD_NORMALIZED')
+    const currentInputValue = normalizedPayload.valueJson.value
     console.info('[gnr8.content-api] CONTENT_DRAFT_SAVE_PAYLOAD_NORMALIZED', {
       siteId,
       siteVersionId: scope.siteVersionId,
@@ -123,7 +124,26 @@ export async function POST(req: Request, ctx: { params: Promise<{ clientId?: str
         readBackValue: result.savedRow?.valueJson ?? null,
       })
     }
+    const normalizedStringValue =
+      typeof (result.normalizedValue as { value?: unknown } | null)?.value === 'string'
+        ? ((result.normalizedValue as { value: string }).value)
+        : null
+    if (normalizedStringValue !== currentInputValue) {
+      console.warn('[gnr8.content-api] CONTENT_DRAFT_SAVE_NORMALIZATION_MISMATCH', {
+        slotKey,
+        siteVersionId: scope.siteVersionId,
+        currentInputValue,
+        normalizedValue: result.normalizedValue,
+      })
+    }
     diagnostics.push(...result.diagnostics, 'CONTENT_DRAFT_SAVE_COMPLETED')
+    const responseSavedRow = result.savedRow
+      ? {
+          ...result.savedRow,
+          value_json: result.savedRow.value_json,
+          updated_at: result.savedRow.updated_at,
+        }
+      : null
     return NextResponse.json({
       ok: true,
       slotKey,
@@ -131,7 +151,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ clientId?: str
       draftOverrideCountForVersion: result.draftOverrideCountForVersion,
       siteVersionId: scope.siteVersionId,
       normalizedValue: result.normalizedValue,
-      savedRow: result.savedRow,
+      savedRow: responseSavedRow,
       diagnostics,
     })
   } catch (error) {

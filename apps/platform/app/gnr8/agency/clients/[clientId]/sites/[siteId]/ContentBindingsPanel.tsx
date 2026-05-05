@@ -164,9 +164,12 @@ export default function ContentBindingsPanel(props: { agencyId: string; clientId
     }
   }, [props.agencyId, props.clientId, props.siteId])
 
-  const loadContent = useCallback(async (): Promise<void> => {
+  const fetchContentPayload = useCallback(async (): Promise<any | null> => {
+    return (await fetch(endpoint).then((r) => r.json()).catch(() => null)) as any
+  }, [endpoint])
+
+  const applyContentPayload = useCallback(async (payload: any): Promise<void> => {
     setLoadError(null)
-    const payload = (await fetch(endpoint).then((r) => r.json()).catch(() => null)) as any
     if (!payload?.ok) {
       setLoadError({
         error: typeof payload?.error === 'string' ? payload.error : 'Failed to load content.',
@@ -246,7 +249,12 @@ export default function ContentBindingsPanel(props: { agencyId: string; clientId
       slotCount: initialEditorSourceCounts.original,
     })
     if (resolvedSiteVersionId) await fetchHistory(resolvedSiteVersionId)
-  }, [endpoint, fetchHistory])
+  }, [fetchHistory, props.siteId])
+
+  const loadContent = useCallback(async (): Promise<void> => {
+    const payload = await fetchContentPayload()
+    await applyContentPayload(payload)
+  }, [applyContentPayload, fetchContentPayload])
 
   useEffect(() => {
     void loadContent()
@@ -274,9 +282,22 @@ export default function ContentBindingsPanel(props: { agencyId: string; clientId
   async function saveDraft(slot: Slot): Promise<void> {
     if (!siteVersionId) return
     const slotKey = slot.slotKey
-    const newValue = drafts[slotKey] ?? ''
+    const currentInputValue = drafts[slotKey] ?? ''
+    const newValue = currentInputValue
     const baselineValue = draftValuesAtLoad[slotKey] ?? publishedValuesAtLoad[slotKey] ?? originalValuesAtLoad[slotKey] ?? ''
+    const draftAtLoad = draftValuesAtLoad[slotKey]
+    const publishedAtLoad = publishedValuesAtLoad[slotKey]
+    const originalValue = originalValuesAtLoad[slotKey] ?? ''
     const isDirty = newValue !== baselineValue
+    console.info('[gnr8.content-editor] CONTENT_EDITOR_SAVE_VALUE_TRACE', {
+      slotKey,
+      originalValue,
+      draftAtLoad: draftAtLoad ?? null,
+      publishedAtLoad: publishedAtLoad ?? null,
+      currentInputValue,
+      valueBeingSent: currentInputValue,
+      siteVersionId,
+    })
     console.info(`[gnr8.content-editor] ${isDirty ? 'CONTENT_EDITOR_DIRTY_TRUE' : 'CONTENT_EDITOR_DIRTY_FALSE'}`, { siteId: props.siteId, siteVersionId, slotKey, baselineValue, newValue })
     if (!isDirty) {
       console.info('[gnr8.content-editor] CONTENT_EDITOR_NO_CHANGE', { siteId: props.siteId, siteVersionId, slotKey, reason: 'save_skipped_not_dirty' })
@@ -287,7 +308,7 @@ export default function ContentBindingsPanel(props: { agencyId: string; clientId
     try {
       const apiUrl = `/api/gnr8/clients/${encodeURIComponent(props.clientId)}/sites/${encodeURIComponent(props.siteId)}/content/overrides`
       const oldValue = published[slot.slotKey] ?? ''
-      const payloadBody = { agencyId: props.agencyId, siteVersionId, slotKey: slot.slotKey, valueType: slot.slotType, valueJson: { value: drafts[slot.slotKey] ?? '' }, status: 'draft' }
+      const payloadBody = { agencyId: props.agencyId, siteVersionId, slotKey: slot.slotKey, value: currentInputValue, status: 'draft' }
       console.info('[gnr8.content-editor] CONTENT_EDITOR_DRAFT_SAVE_PAYLOAD', {
         slotKey: slot.slotKey,
         siteVersionId,
@@ -317,7 +338,23 @@ export default function ContentBindingsPanel(props: { agencyId: string; clientId
       }
       console.info('[gnr8.content-editor] CONTENT_DRAFT_SAVE_COMPLETED', { siteId: props.siteId, siteVersionId, slotKeyCount: 1, persistedRowCount: payload?.persistedRowCount ?? 0 })
       await fetchHistory(siteVersionId)
-      await loadContent()
+      const refreshedPayload = await fetchContentPayload()
+      const refreshedSlots = Array.isArray(refreshedPayload?.slots) ? refreshedPayload.slots : []
+      const readbackSlot = refreshedSlots.find((entry: any) => entry?.slotKey === slotKey)
+      const readbackDraftValue = typeof readbackSlot?.draftValue === 'string'
+        ? readbackSlot.draftValue
+        : readbackSlot?.draftValue == null
+          ? null
+          : String(readbackSlot.draftValue)
+      if (readbackDraftValue !== currentInputValue) {
+        console.warn('[gnr8.content-editor] CONTENT_EDITOR_SAVE_READBACK_MISMATCH', {
+          slotKey,
+          siteVersionId,
+          currentInputValue,
+          readbackDraftValue,
+        })
+      }
+      await applyContentPayload(refreshedPayload)
     } finally {
       setBusy(false)
     }

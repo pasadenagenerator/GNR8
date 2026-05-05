@@ -2917,7 +2917,7 @@ export async function upsertContentOverrideDraft(input: {
   changed: boolean;
   historyRecorded: boolean;
   draftOverrideCountForVersion: number;
-  savedRow: { slotKey: string; valueJson: unknown; status: ContentOverrideStatus; siteVersionId: string } | null;
+  savedRow: { slotKey: string; valueJson: unknown; value_json: unknown; status: ContentOverrideStatus; siteVersionId: string; updated_at: string | null } | null;
   normalizedValue: unknown;
   diagnostics: string[];
 }> {
@@ -2938,7 +2938,7 @@ export async function upsertContentOverrideDraft(input: {
       );
       const savedRes = await client.query<any>(
         `
-        select slot_key::text, value_json, status::text, site_version_id::text
+        select slot_key::text, value_json, status::text, site_version_id::text, updated_at::text
         from public.gnr8_content_overrides
         where site_version_id = $1::uuid and slot_key = $2::text and status = 'draft'
         limit 1
@@ -2949,8 +2949,10 @@ export async function upsertContentOverrideDraft(input: {
         ? {
             slotKey: savedRes.rows[0].slot_key,
             valueJson: savedRes.rows[0].value_json,
+            value_json: savedRes.rows[0].value_json,
             status: savedRes.rows[0].status as ContentOverrideStatus,
             siteVersionId: savedRes.rows[0].site_version_id,
+            updated_at: savedRes.rows[0].updated_at ?? null,
           }
         : null;
       diagnostics.push("CONTENT_DRAFT_SAVE_ROW_READBACK");
@@ -2999,7 +3001,7 @@ export async function upsertContentOverrideDraft(input: {
     );
     const savedRes = await client.query<any>(
       `
-      select slot_key::text, value_json, status::text, site_version_id::text
+      select slot_key::text, value_json, status::text, site_version_id::text, updated_at::text
       from public.gnr8_content_overrides
       where site_version_id = $1::uuid and slot_key = $2::text and status = 'draft'
       limit 1
@@ -3010,8 +3012,10 @@ export async function upsertContentOverrideDraft(input: {
       ? {
           slotKey: savedRes.rows[0].slot_key,
           valueJson: savedRes.rows[0].value_json,
+          value_json: savedRes.rows[0].value_json,
           status: savedRes.rows[0].status as ContentOverrideStatus,
           siteVersionId: savedRes.rows[0].site_version_id,
+          updated_at: savedRes.rows[0].updated_at ?? null,
         }
       : null;
     if (!contentJsonEquals(savedRow?.valueJson ?? null, normalizedValue)) diagnostics.push("CONTENT_DRAFT_SAVE_VALUE_MISMATCH");
