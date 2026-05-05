@@ -208,6 +208,36 @@ test('GET content hydrates slot effective values with draft > published > origin
   assert.ok(body.diagnostics.includes('CONTENT_SLOT_EFFECTIVE_VALUE_RESOLVED'))
 })
 
+test('GET content returns updated draftValue when draft override uses normalized { value } shape', async () => {
+  const handlers = createHandlers({
+    listContentSlots: async () => [
+      { slotKey: 'hero.title', slotType: 'text', sourceText: 'Original title', sourceAssetPath: null },
+    ] as never,
+    listContentOverrides: async ({ status }) => {
+      if (status === 'draft') {
+        return [{ slotKey: 'hero.title', valueJson: { value: 'Updated draft title' }, valueType: 'text' }] as never
+      }
+      return [{ slotKey: 'hero.title', valueJson: { value: 'Published title' }, valueType: 'text' }] as never
+    },
+  })
+
+  const response = await handlers.GET(
+    new Request(`http://localhost/api?agencyId=${IDS.agencyId}`),
+    { params: getParams() },
+  )
+  const body = await response.json() as {
+    ok: boolean
+    slots: Array<{ slotKey: string; draftValue: string | null; publishedValue: string | null; effectiveEditorValue: string }>
+  }
+  const slot = body.slots.find((item) => item.slotKey === 'hero.title')
+
+  assert.equal(response.status, 200)
+  assert.equal(body.ok, true)
+  assert.equal(slot?.draftValue, 'Updated draft title')
+  assert.equal(slot?.publishedValue, 'Published title')
+  assert.equal(slot?.effectiveEditorValue, 'Updated draft title')
+})
+
 test('GET content accepts agency query fallback when agencyId is missing', async () => {
   const handlers = createHandlers()
   const response = await handlers.GET(

@@ -2913,22 +2913,56 @@ export async function upsertContentOverrideDraft(input: {
   valueJson: unknown;
   actorUserId?: string | null;
   source?: ContentOverrideHistorySource;
-}): Promise<{ changed: boolean; historyRecorded: boolean; draftOverrideCountForVersion: number; diagnostics: string[] }> {
+}): Promise<{
+  changed: boolean;
+  historyRecorded: boolean;
+  draftOverrideCountForVersion: number;
+  savedRow: { slotKey: string; valueJson: unknown; status: ContentOverrideStatus; siteVersionId: string } | null;
+  normalizedValue: unknown;
+  diagnostics: string[];
+}> {
   return withTx(async (client) => {
     const diagnostics: string[] = ["CONTENT_HISTORY_WRITE_STARTED"];
+    const normalizedValue = input.valueJson ?? {};
     const previous = await getContentOverrideBySlotWithClient({
       client,
       siteVersionId: input.siteVersionId,
       slotKey: input.slotKey,
       status: "draft",
     });
-    if (previous && contentJsonEquals(previous.valueJson, input.valueJson) && previous.valueType === input.valueType) {
+    if (previous && contentJsonEquals(previous.valueJson, normalizedValue) && previous.valueType === input.valueType) {
       diagnostics.push("CONTENT_HISTORY_SKIPPED_UNCHANGED");
       const countRes = await client.query<{ count: string }>(
-        `select count(*)::text as count from public.gnr8_content_overrides where site_version_id = $1::uuid and slot_key = $2::text and status = 'draft'`,
+        `select count(*)::text as count from public.gnr8_content_overrides where site_version_id = $1::uuid and status = 'draft'`,
+        [input.siteVersionId],
+      );
+      const savedRes = await client.query<any>(
+        `
+        select slot_key::text, value_json, status::text, site_version_id::text
+        from public.gnr8_content_overrides
+        where site_version_id = $1::uuid and slot_key = $2::text and status = 'draft'
+        limit 1
+        `,
         [input.siteVersionId, input.slotKey],
       );
-      return { changed: false, historyRecorded: false, draftOverrideCountForVersion: Number(countRes.rows[0]?.count ?? 0), diagnostics };
+      const savedRow = savedRes.rows[0]
+        ? {
+            slotKey: savedRes.rows[0].slot_key,
+            valueJson: savedRes.rows[0].value_json,
+            status: savedRes.rows[0].status as ContentOverrideStatus,
+            siteVersionId: savedRes.rows[0].site_version_id,
+          }
+        : null;
+      diagnostics.push("CONTENT_DRAFT_SAVE_ROW_READBACK");
+      if (!contentJsonEquals(savedRow?.valueJson ?? null, normalizedValue)) diagnostics.push("CONTENT_DRAFT_SAVE_VALUE_MISMATCH");
+      return {
+        changed: false,
+        historyRecorded: false,
+        draftOverrideCountForVersion: Number(countRes.rows[0]?.count ?? 0),
+        savedRow,
+        normalizedValue,
+        diagnostics,
+      };
     }
 
     await client.query(
@@ -2938,7 +2972,7 @@ export async function upsertContentOverrideDraft(input: {
       on conflict (site_version_id, slot_key, status)
       do update set value_type = excluded.value_type, value_json = excluded.value_json, updated_at = now()
       `,
-      [input.siteId, input.siteVersionId, input.slotKey, input.valueType, JSON.stringify(input.valueJson ?? {})],
+      [input.siteId, input.siteVersionId, input.slotKey, input.valueType, JSON.stringify(normalizedValue)],
     );
     let historyRecorded = false;
     try {
@@ -2949,7 +2983,7 @@ export async function upsertContentOverrideDraft(input: {
         slotKey: input.slotKey,
         valueType: input.valueType,
         previousValueJson: previous?.valueJson ?? null,
-        nextValueJson: input.valueJson ?? {},
+        nextValueJson: normalizedValue,
         action: "draft_saved",
         actorUserId: input.actorUserId ?? null,
         source: input.source ?? "manual",
@@ -2960,10 +2994,36 @@ export async function upsertContentOverrideDraft(input: {
       diagnostics.push("CONTENT_HISTORY_WRITE_FAILED_NON_BLOCKING");
     }
     const countRes = await client.query<{ count: string }>(
-      `select count(*)::text as count from public.gnr8_content_overrides where site_version_id = $1::uuid and slot_key = $2::text and status = 'draft'`,
+      `select count(*)::text as count from public.gnr8_content_overrides where site_version_id = $1::uuid and status = 'draft'`,
+      [input.siteVersionId],
+    );
+    const savedRes = await client.query<any>(
+      `
+      select slot_key::text, value_json, status::text, site_version_id::text
+      from public.gnr8_content_overrides
+      where site_version_id = $1::uuid and slot_key = $2::text and status = 'draft'
+      limit 1
+      `,
       [input.siteVersionId, input.slotKey],
     );
-    return { changed: true, historyRecorded, draftOverrideCountForVersion: Number(countRes.rows[0]?.count ?? 0), diagnostics };
+    const savedRow = savedRes.rows[0]
+      ? {
+          slotKey: savedRes.rows[0].slot_key,
+          valueJson: savedRes.rows[0].value_json,
+          status: savedRes.rows[0].status as ContentOverrideStatus,
+          siteVersionId: savedRes.rows[0].site_version_id,
+        }
+      : null;
+    if (!contentJsonEquals(savedRow?.valueJson ?? null, normalizedValue)) diagnostics.push("CONTENT_DRAFT_SAVE_VALUE_MISMATCH");
+    diagnostics.push("CONTENT_DRAFT_SAVE_ROW_READBACK");
+    return {
+      changed: true,
+      historyRecorded,
+      draftOverrideCountForVersion: Number(countRes.rows[0]?.count ?? 0),
+      savedRow,
+      normalizedValue,
+      diagnostics,
+    };
   });
 }
 

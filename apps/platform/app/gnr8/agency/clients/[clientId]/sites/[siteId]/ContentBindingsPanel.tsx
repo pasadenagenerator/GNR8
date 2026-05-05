@@ -243,7 +243,16 @@ export default function ContentBindingsPanel(props: { agencyId: string; clientId
     setBusy(true)
     try {
       const apiUrl = `/api/gnr8/clients/${encodeURIComponent(props.clientId)}/sites/${encodeURIComponent(props.siteId)}/content/overrides`
+      const oldValue = published[slot.slotKey] ?? ''
+      const newValue = drafts[slot.slotKey] ?? ''
       const payloadBody = { agencyId: props.agencyId, siteVersionId, slotKey: slot.slotKey, valueType: slot.slotType, valueJson: { value: drafts[slot.slotKey] ?? '' }, status: 'draft' }
+      console.info('[gnr8.content-editor] CONTENT_EDITOR_DRAFT_SAVE_PAYLOAD', {
+        slotKey: slot.slotKey,
+        siteVersionId,
+        oldValue,
+        newValue,
+        requestBody: payloadBody,
+      })
       console.info('[gnr8.content-editor] CONTENT_EDITOR_DRAFT_SAVE_REQUESTED', { siteId: props.siteId, siteVersionId, slotKey: slot.slotKey, slotKeyCount: 1, targetApiUrl: apiUrl, payload: payloadBody })
       const response = await fetch(apiUrl, {
         method: 'POST',

@@ -7,6 +7,10 @@ test('getOverrideDisplayValue supports { value: string }', () => {
   assert.equal(getOverrideDisplayValue({ valueJson: { value: 'Hello' } } as never, 'text'), 'Hello')
 })
 
+test('getOverrideDisplayValue preserves updated draft text from normalized payload shape', () => {
+  assert.equal(getOverrideDisplayValue({ valueJson: { value: 'Updated draft copy' } } as never, 'rich_text'), 'Updated draft copy')
+})
+
 test('getOverrideDisplayValue supports raw string payload', () => {
   assert.equal(getOverrideDisplayValue({ valueJson: '/book' } as never, 'url'), '/book')
 })

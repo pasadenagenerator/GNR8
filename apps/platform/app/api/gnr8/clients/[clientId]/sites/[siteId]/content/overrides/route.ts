@@ -90,6 +90,13 @@ export async function POST(req: Request, ctx: { params: Promise<{ clientId?: str
       )
     }
     diagnostics.push('CONTENT_DRAFT_SAVE_PAYLOAD_NORMALIZED')
+    console.info('[gnr8.content-api] CONTENT_DRAFT_SAVE_PAYLOAD_NORMALIZED', {
+      siteId,
+      siteVersionId: scope.siteVersionId,
+      slotKey,
+      valueType: normalizedPayload.ok ? normalizedPayload.valueType : null,
+      normalizedValue: normalizedPayload.ok ? normalizedPayload.valueJson : null,
+    })
 
     const result = await upsertContentOverrideDraft({
       siteId: scope.ownershipSiteId,
@@ -100,6 +107,22 @@ export async function POST(req: Request, ctx: { params: Promise<{ clientId?: str
       actorUserId: actionContext.userId,
       source: 'manual',
     })
+    console.info('[gnr8.content-api] CONTENT_DRAFT_SAVE_ROW_READBACK', {
+      slotKey,
+      siteVersionId: scope.siteVersionId,
+      normalizedValue: result.normalizedValue,
+      persistedRowCount: result.changed ? 1 : 0,
+      draftOverrideCountForVersion: result.draftOverrideCountForVersion,
+      savedRow: result.savedRow,
+    })
+    if (JSON.stringify(result.savedRow?.valueJson ?? null) !== JSON.stringify(result.normalizedValue ?? null)) {
+      console.warn('[gnr8.content-api] CONTENT_DRAFT_SAVE_VALUE_MISMATCH', {
+        slotKey,
+        siteVersionId: scope.siteVersionId,
+        normalizedValue: result.normalizedValue,
+        readBackValue: result.savedRow?.valueJson ?? null,
+      })
+    }
     diagnostics.push(...result.diagnostics, 'CONTENT_DRAFT_SAVE_COMPLETED')
     return NextResponse.json({
       ok: true,
@@ -107,6 +130,8 @@ export async function POST(req: Request, ctx: { params: Promise<{ clientId?: str
       persistedRowCount: result.changed ? 1 : 0,
       draftOverrideCountForVersion: result.draftOverrideCountForVersion,
       siteVersionId: scope.siteVersionId,
+      normalizedValue: result.normalizedValue,
+      savedRow: result.savedRow,
       diagnostics,
     })
   } catch (error) {
