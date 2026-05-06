@@ -5,6 +5,7 @@ import { parseAgencyActionContextError, requireAgencyActionContext } from '@/app
 import { SCOPED_SITE_IMPORT_CANONICAL_PATH } from '@/gnr8/site/site-import-contract'
 import { importerSuccessRedirectHref } from '@/gnr8/site/site-importer-routing'
 import { resolveImportPreview } from '@/gnr8/site/import-preview-resolution'
+import { extractTitleFromHtmlDocument, resolveImportedSiteName } from '@/gnr8/site/site-import-site-name'
 import { runScopedImportPipeline } from '@/gnr8/site/scoped-import-pipeline'
 import { getArtifactById } from '@/gnr8/runtime/runtime-store'
 import { importPublicSinglePageUrlToSnapshot } from '@/gnr8/validation/runtime/url-single-page-import'
@@ -22,6 +23,7 @@ type Params = {
 
 type Body = {
   url?: string
+  siteName?: string
   agencyId?: string
   adminView?: boolean
 }
@@ -115,6 +117,7 @@ async function resolveOrCreateOwnershipSiteId(input: {
   siteVersionId: string
   clientId: string
   agencyId: string
+  siteName: string
   domainHost: string | null
 }): Promise<string> {
   const pool = getSuperadminPool()
@@ -169,11 +172,11 @@ async function resolveOrCreateOwnershipSiteId(input: {
     if (!ownershipSiteId) {
       const inserted = await client.query<{ site_id: string }>(
         `
-        insert into public.sites (org_id, agency_id, status, domain, is_template)
-        values ($1::uuid, $2::uuid, 'draft'::public.site_status_enum, $3::text, false)
+        insert into public.sites (org_id, agency_id, name, status, domain, is_template)
+        values ($1::uuid, $2::uuid, $3::text, 'draft'::public.site_status_enum, $4::text, false)
         returning id::text as site_id
         `,
-        [input.clientId, input.agencyId, input.domainHost],
+        [input.clientId, input.agencyId, input.siteName, input.domainHost],
       )
       ownershipSiteId = normalizeText(inserted.rows[0]?.site_id)
       if (!ownershipSiteId) {
@@ -234,6 +237,24 @@ export async function POST(req: Request, ctx: { params: Promise<Params> }) {
       sourceUrl: importUrl.toString(),
       requestId: `client-site-import-${Date.now()}`,
     })
+    const rawHtml = fs.readFileSync(snapshot.entryHtmlPathAbs, 'utf8')
+    const siteNameResolution = resolveImportedSiteName({
+      userProvidedName: body.siteName,
+      sourceUrl: importUrl.toString(),
+      documentTitle: extractTitleFromHtmlDocument(rawHtml),
+    })
+    const diagnostics: string[] = ['SITE_IMPORT_SITE_NAME_RESOLVED']
+    if (siteNameResolution.source !== 'user_provided') {
+      diagnostics.push('SITE_IMPORT_SITE_NAME_FALLBACK_USED')
+    }
+    diagnostics.push('SITE_IMPORT_SITE_CREATE_STARTED')
+    console.info('[site-import] SITE_IMPORT_SITE_NAME_RESOLVED', {
+      source: siteNameResolution.source,
+      resolvedName: siteNameResolution.resolvedName,
+      sourceUrl: importUrl.toString(),
+      clientId,
+      agencyId: actionContext.agencyId,
+    })
     const intake = snapshot.importIntake ?? null
     const rawHtmlUsable = Boolean((intake?.rawHtmlAvailable ?? false) && (intake?.htmlByteLength ?? 0) > 0)
     const pipelineMode: 'strict' | 'degraded_html_fallback' = !intake?.ok && rawHtmlUsable ? 'degraded_html_fallback' : 'strict'
@@ -264,7 +285,16 @@ export async function POST(req: Request, ctx: { params: Promise<Params> }) {
       siteVersionId: imported.siteVersionId,
       clientId,
       agencyId: actionContext.agencyId,
+      siteName: siteNameResolution.resolvedName,
       domainHost: normalizeText(importUrl.host) || null,
+    })
+    diagnostics.push('SITE_IMPORT_SITE_CREATE_COMPLETED')
+    console.info('[site-import] SITE_IMPORT_SITE_CREATE_COMPLETED', {
+      siteId: ownershipSiteId,
+      resolvedName: siteNameResolution.resolvedName,
+      sourceUrl: importUrl.toString(),
+      clientId,
+      agencyId: actionContext.agencyId,
     })
 
     const redirectTo = importerSuccessRedirectHref({
@@ -274,7 +304,6 @@ export async function POST(req: Request, ctx: { params: Promise<Params> }) {
       adminView: body.adminView,
     })
 
-    const rawHtml = fs.readFileSync(snapshot.entryHtmlPathAbs, 'utf8')
     const rawHtmlLength = rawHtml.trim().length
     let structuredHtmlLength = 0
     if (imported.mode === 'pipeline') {
@@ -306,7 +335,9 @@ export async function POST(req: Request, ctx: { params: Promise<Params> }) {
         previewMode: preview.previewMode,
         htmlLength: preview.htmlLength,
         appliedTransformationsCount: preview.appliedTransformationsCount,
-        diagnostics: preview.diagnostics,
+        diagnostics: [...new Set([...preview.diagnostics, ...diagnostics])],
+        siteName: siteNameResolution.resolvedName,
+        siteNameSource: siteNameResolution.source,
         preview,
         importManifest: {
           status: pipelineMode === 'degraded_html_fallback' ? 'degraded' : 'success',
@@ -371,12 +402,15 @@ export async function POST(req: Request, ctx: { params: Promise<Params> }) {
       { status: 200 },
     )
   } catch (error) {
+    console.error('[site-import] SITE_IMPORT_SITE_CREATE_FAILED', {
+      message: error instanceof Error ? error.message : String(error),
+    })
     const mapped = parseAgencyActionContextError(error)
     if (mapped.status >= 400 && mapped.status < 500) {
-      return NextResponse.json({ ok: false, error: mapped.message }, { status: mapped.status })
+      return NextResponse.json({ ok: false, error: mapped.message, diagnostics: ['SITE_IMPORT_SITE_CREATE_FAILED'] }, { status: mapped.status })
     }
 
     const message = error instanceof Error ? error.message : 'Internal server error'
-    return NextResponse.json({ ok: false, error: message }, { status: 500 })
+    return NextResponse.json({ ok: false, error: message, diagnostics: ['SITE_IMPORT_SITE_CREATE_FAILED'] }, { status: 500 })
   }
 }

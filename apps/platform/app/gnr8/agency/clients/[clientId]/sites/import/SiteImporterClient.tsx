@@ -19,6 +19,7 @@ type ImportResponse =
       siteId: string
       siteVersionId: string
       redirectTo: string
+      siteName?: string
     }
   | {
       ok: false
@@ -39,6 +40,7 @@ type ImportResponse =
 export default function SiteImporterClient(props: Props) {
   const router = useRouter()
   const [url, setUrl] = useState('')
+  const [siteName, setSiteName] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [isPending, startTransition] = useTransition()
 
@@ -51,6 +53,22 @@ export default function SiteImporterClient(props: Props) {
       }),
     [props.adminView, props.agencyId, props.clientId],
   )
+
+  const hostnamePlaceholder = useMemo(() => {
+    try {
+      const parsed = new URL(url.trim())
+      return parsed.hostname || 'example.com'
+    } catch {
+      return 'example.com'
+    }
+  }, [url])
+
+  const resolvedSiteNamePreview = useMemo(() => {
+    const explicitName = siteName.trim()
+    if (explicitName) return explicitName
+    if (hostnamePlaceholder && hostnamePlaceholder !== 'example.com') return hostnamePlaceholder
+    return 'Imported Site'
+  }, [hostnamePlaceholder, siteName])
 
   async function onSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -68,6 +86,7 @@ export default function SiteImporterClient(props: Props) {
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
           url: normalizedUrl,
+          siteName: siteName.trim() || null,
           agencyId: props.agencyId,
           adminView: props.adminView ?? false,
         }),
@@ -124,6 +143,26 @@ export default function SiteImporterClient(props: Props) {
             }}
           />
         </label>
+
+        <label style={{ display: 'grid', gap: 6 }}>
+          <span style={{ fontSize: 12, color: '#334155' }}>Site name (optional)</span>
+          <input
+            type='text'
+            value={siteName}
+            placeholder={hostnamePlaceholder}
+            onChange={(event) => setSiteName(event.currentTarget.value)}
+            style={{
+              border: '1px solid #cbd5e1',
+              borderRadius: 8,
+              padding: '10px 12px',
+              fontSize: 14,
+            }}
+          />
+        </label>
+
+        <p style={{ margin: 0, fontSize: 12, color: '#475569' }}>
+          Imported site name: <strong>{resolvedSiteNamePreview}</strong>
+        </p>
 
         {error ? (
           <div

@@ -14,6 +14,7 @@ test('scoped import API route is pinned to nodejs runtime surface', () => {
   const routeSource = readFileFromWorkspace('app/api/gnr8/agency/clients/[clientId]/sites/import/route.ts')
   assert.match(routeSource, /export const runtime = ['"]nodejs['"]/)
   assert.doesNotMatch(routeSource, /export const runtime = ['"]edge['"]/)
+  assert.match(routeSource, /insert into public\.sites \(org_id, agency_id, name, status, domain, is_template\)/)
 })
 
 test('runtime migrate URL API route is pinned to nodejs runtime surface', () => {
