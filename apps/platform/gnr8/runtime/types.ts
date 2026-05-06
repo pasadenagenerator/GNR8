@@ -260,6 +260,33 @@ export type RawTemplateSiteArtifact = {
   createdAt: string;
 };
 
+export type RawImportedSiteArtifactDiagnostics = {
+  codes: string[];
+};
+
+export type RawImportedSiteArtifactMetadata = {
+  sourceUrl: string;
+  finalUrl: string | null;
+  htmlByteLength: number;
+  diagnostics: RawImportedSiteArtifactDiagnostics;
+  assetSummary: {
+    persistedAssetCount: number;
+    externalFallbackAssetCount: number;
+  };
+};
+
+export type RawImportedSiteArtifact = {
+  id: string;
+  artifactType: "raw_imported_site";
+  siteId: string;
+  siteVersionId: string;
+  entryHtmlPath: string;
+  assetBasePath: string;
+  fileMap: Record<string, RawTemplateSiteFileMeta>;
+  metadata: RawImportedSiteArtifactMetadata;
+  createdAt: string;
+};
+
 export type RenderMode = "PREVIEW" | "PUBLISH";
 
 export type VersionScopedFormSubmission = {

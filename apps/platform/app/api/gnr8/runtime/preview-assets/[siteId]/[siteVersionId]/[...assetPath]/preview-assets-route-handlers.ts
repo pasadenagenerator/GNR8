@@ -2,6 +2,7 @@ import { parseAgencyActionContextError, requireAgencyActionContext } from "@/app
 import { resolveAgencyIdForSiteVersion } from "@/app/api/gnr8/runtime/_lib/runtime-agency-scope";
 import {
   getRawTemplateSiteArtifact,
+  getRawImportedSiteArtifact,
   getRawTemplateSiteAsset,
   resolveDomainSiteVersionForHost,
 } from "@/gnr8/runtime/runtime-store";
@@ -14,6 +15,7 @@ type PreviewAssetRouteDependencies = {
   resolveAgencyIdForSiteVersion: typeof resolveAgencyIdForSiteVersion;
   requireAgencyActionContext: typeof requireAgencyActionContext;
   getRawTemplateSiteArtifact: typeof getRawTemplateSiteArtifact;
+  getRawImportedSiteArtifact: typeof getRawImportedSiteArtifact;
   getRawTemplateSiteAsset: typeof getRawTemplateSiteAsset;
   parseAgencyActionContextError: typeof parseAgencyActionContextError;
 };
@@ -23,6 +25,7 @@ const defaultDependencies: PreviewAssetRouteDependencies = {
   resolveAgencyIdForSiteVersion,
   requireAgencyActionContext,
   getRawTemplateSiteArtifact,
+  getRawImportedSiteArtifact,
   getRawTemplateSiteAsset,
   parseAgencyActionContextError,
 };
@@ -80,7 +83,7 @@ export function createPreviewAssetsRouteHandlers(overrides: Partial<PreviewAsset
           });
         }
 
-        const artifact = await deps.getRawTemplateSiteArtifact(siteVersionId);
+        const artifact = (await deps.getRawImportedSiteArtifact(siteVersionId)) ?? (await deps.getRawTemplateSiteArtifact(siteVersionId));
         if (!artifact || artifact.siteId !== siteId) {
           console.warn("[preview-runtime] RAW_TEMPLATE_ASSET_MISSING", {
             siteId,

@@ -1,5 +1,6 @@
 import fs from 'node:fs'
 import path from 'node:path'
+import crypto from 'node:crypto'
 
 import { createImportManifest } from '@/gnr8/import/import-manifest'
 import { importStaticSite } from '@/gnr8/import/runtime/import-static-site'
@@ -18,6 +19,7 @@ import {
   createArtifact,
   createSiteVersionFromMigration,
   getSiteVersion,
+  persistRawImportedSiteArtifact,
   setSiteVersionImportProvenanceSummary,
 } from '@/gnr8/runtime/runtime-store'
 import {
@@ -1419,6 +1421,7 @@ export type ScopedImportPipelineDependencies = {
   buildDeterministicArtifactBundle: typeof buildDeterministicArtifactBundle
   createArtifact: typeof createArtifact
   bindArtifactToVersion: typeof bindArtifactToVersion
+  persistRawImportedSiteArtifact: typeof persistRawImportedSiteArtifact
   importHtmlToPage: typeof importHtmlToPage
   migrateImportedPageToCanonicalDraft: typeof migrateImportedPageToCanonicalDraft
 }
@@ -1434,6 +1437,7 @@ function defaultDependencies(): ScopedImportPipelineDependencies {
     buildDeterministicArtifactBundle,
     createArtifact,
     bindArtifactToVersion,
+    persistRawImportedSiteArtifact,
     importHtmlToPage,
     migrateImportedPageToCanonicalDraft,
   }
@@ -1449,6 +1453,50 @@ function toSnapshotRelativePath(input: { rootDirAbs: string; targetPathAbs: stri
     )
   }
   return rel.replaceAll('\\', '/')
+}
+
+function mediaTypeFromPath(filePath: string): string {
+  const ext = path.posix.extname(filePath.toLowerCase())
+  if (ext === '.html' || ext === '.htm') return 'text/html; charset=utf-8'
+  if (ext === '.css') return 'text/css; charset=utf-8'
+  if (ext === '.js' || ext === '.mjs' || ext === '.cjs') return 'application/javascript; charset=utf-8'
+  if (ext === '.svg') return 'image/svg+xml'
+  if (ext === '.png') return 'image/png'
+  if (ext === '.jpg' || ext === '.jpeg') return 'image/jpeg'
+  if (ext === '.gif') return 'image/gif'
+  if (ext === '.webp') return 'image/webp'
+  if (ext === '.woff') return 'font/woff'
+  if (ext === '.woff2') return 'font/woff2'
+  if (ext === '.ttf') return 'font/ttf'
+  if (ext === '.ico') return 'image/x-icon'
+  return 'application/octet-stream'
+}
+
+function collectRawImportFiles(snapshotRootDirAbs: string): Array<{ path: string; mediaType: string; sizeBytes: number; sha256: string; bytes: Buffer }> {
+  const out: Array<{ path: string; mediaType: string; sizeBytes: number; sha256: string; bytes: Buffer }> = []
+  const stack = [snapshotRootDirAbs]
+  while (stack.length > 0) {
+    const current = stack.pop()!
+    for (const entry of fs.readdirSync(current, { withFileTypes: true })) {
+      const abs = path.resolve(current, entry.name)
+      if (entry.isDirectory()) {
+        stack.push(abs)
+        continue
+      }
+      if (!entry.isFile()) continue
+      const rel = path.relative(snapshotRootDirAbs, abs).replaceAll('\\', '/').replace(/^\/+/, '')
+      if (!rel || rel.includes('..')) continue
+      const bytes = fs.readFileSync(abs)
+      out.push({
+        path: rel,
+        mediaType: mediaTypeFromPath(rel),
+        sizeBytes: bytes.byteLength,
+        sha256: crypto.createHash('sha256').update(bytes).digest('hex'),
+        bytes,
+      })
+    }
+  }
+  return out
 }
 
 export async function runScopedImportPipeline(input: {
@@ -1581,6 +1629,52 @@ export async function runScopedImportPipeline(input: {
       throw new Error(`Provenance write affected 0 rows for site version ${migrated.siteVersionId}.`)
     }
     writePathDiagnostics.provenanceWriteSucceeded = true
+    console.info('[scoped-import] RAW_IMPORT_ARTIFACT_PERSIST_STARTED', {
+      siteId: migrated.siteId,
+      siteVersionId: migrated.siteVersionId,
+    })
+    console.info('[scoped-import] RAW_IMPORT_ASSET_PERSIST_STARTED', {
+      siteId: migrated.siteId,
+      siteVersionId: migrated.siteVersionId,
+    })
+    const persistedFileRows = collectRawImportFiles(input.snapshot.snapshotRootDirAbs)
+    const unresolvedExternalAssets = input.snapshot.fetchManifest.filter((entry) => entry.fetchStatus !== 'fetched' && Boolean(entry.resolvedUrl))
+    const rawImportArtifact = await deps.persistRawImportedSiteArtifact({
+      siteId: migrated.siteId,
+      siteVersionId: migrated.siteVersionId,
+      entryHtmlPath: importInput.entryHtmlPath,
+      assetBasePath: path.posix.dirname(importInput.entryHtmlPath) || '.',
+      fileRows: persistedFileRows,
+      metadata: {
+        sourceUrl: input.snapshot.sourceUrl,
+        finalUrl: input.snapshot.importIntake?.evidence?.finalUrl ?? null,
+        htmlByteLength: input.snapshot.importIntake?.htmlByteLength ?? fs.readFileSync(input.snapshot.entryHtmlPathAbs).byteLength,
+        diagnostics: {
+          codes: [
+            'RAW_IMPORT_ARTIFACT_PERSIST_STARTED',
+            'RAW_IMPORT_ASSET_PERSIST_STARTED',
+            'RAW_IMPORT_ASSET_PERSIST_COMPLETED',
+            'RAW_IMPORT_ARTIFACT_PERSIST_COMPLETED',
+            ...(unresolvedExternalAssets.length > 0 ? ['RAW_IMPORT_ASSET_EXTERNAL_FALLBACK_USED'] : []),
+          ],
+        },
+        assetSummary: {
+          persistedAssetCount: persistedFileRows.length,
+          externalFallbackAssetCount: unresolvedExternalAssets.length,
+        },
+      },
+    })
+    console.info('[scoped-import] RAW_IMPORT_ASSET_PERSIST_COMPLETED', {
+      siteId: migrated.siteId,
+      siteVersionId: migrated.siteVersionId,
+      persistedAssetCount: rawImportArtifact.fileCount,
+      externalFallbackAssetCount: unresolvedExternalAssets.length,
+    })
+    console.info('[scoped-import] RAW_IMPORT_ARTIFACT_PERSIST_COMPLETED', {
+      siteId: migrated.siteId,
+      siteVersionId: migrated.siteVersionId,
+      artifactId: rawImportArtifact.artifactId,
+    })
 
     const siteVersion = await deps.getSiteVersion(migrated.siteVersionId)
     if (!siteVersion) {

@@ -12,6 +12,8 @@ import type {
   RuntimeImportProvenanceSummary,
   CanonicalSiteMigrationInput,
   CanonicalSiteVersionSnapshot,
+  RawImportedSiteArtifact,
+  RawImportedSiteArtifactMetadata,
   RawTemplateSiteArtifact,
   RawTemplateSiteFileMeta,
   RuntimeArtifact,
@@ -132,9 +134,14 @@ export async function ensureRuntimeTables(): Promise<void> {
             entry_html_path text not null,
             asset_base_path text not null,
             file_map jsonb not null default '{}'::jsonb,
+            metadata_json jsonb not null default '{}'::jsonb,
             created_at timestamptz not null default now(),
             unique (site_version_id)
           )
+        `);
+        await client.query(`
+          alter table public.gnr8_runtime_raw_template_artifacts
+          add column if not exists metadata_json jsonb not null default '{}'::jsonb
         `);
 
         await client.query(`
@@ -499,6 +506,7 @@ type RawTemplateArtifactRow = {
   entry_html_path: string;
   asset_base_path: string;
   file_map: unknown;
+  metadata_json: unknown;
   created_at: string;
 };
 
@@ -650,6 +658,30 @@ function parseRawTemplateFileMap(value: unknown): Record<string, RawTemplateSite
     };
   }
   return out;
+}
+
+function parseRawImportedSiteArtifactMetadata(value: unknown): RawImportedSiteArtifactMetadata {
+  const record = value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
+  const diagnostics = record.diagnostics && typeof record.diagnostics === "object" && !Array.isArray(record.diagnostics)
+    ? (record.diagnostics as Record<string, unknown>)
+    : {};
+  const assetSummary = record.assetSummary && typeof record.assetSummary === "object" && !Array.isArray(record.assetSummary)
+    ? (record.assetSummary as Record<string, unknown>)
+    : {};
+  return {
+    sourceUrl: String(record.sourceUrl ?? "").trim(),
+    finalUrl: String(record.finalUrl ?? "").trim() || null,
+    htmlByteLength: Math.max(0, Math.floor(Number(record.htmlByteLength ?? 0) || 0)),
+    diagnostics: {
+      codes: Array.isArray(diagnostics.codes)
+        ? diagnostics.codes.map((value) => String(value ?? "").trim()).filter(Boolean)
+        : [],
+    },
+    assetSummary: {
+      persistedAssetCount: Math.max(0, Math.floor(Number(assetSummary.persistedAssetCount ?? 0) || 0)),
+      externalFallbackAssetCount: Math.max(0, Math.floor(Number(assetSummary.externalFallbackAssetCount ?? 0) || 0)),
+    },
+  };
 }
 
 function resolveServingStageFromBindingKind(bindingKind: string | null): "shadow" | "canary" | "production" {
@@ -1524,7 +1556,7 @@ export async function resolveRawTemplateSiteForDomainAndPath(input: {
     };
   }
 
-  const artifact = await getRawTemplateSiteArtifact(siteResolution.siteVersionId);
+  const artifact = (await getRawImportedSiteArtifact(siteResolution.siteVersionId)) ?? (await getRawTemplateSiteArtifact(siteResolution.siteVersionId));
   if (!artifact || artifact.siteId !== siteResolution.siteId) {
     return {
       outcome: "raw_template_miss",
@@ -2393,9 +2425,11 @@ export async function getRawTemplateSiteArtifact(siteVersionId: string): Promise
         entry_html_path::text as entry_html_path,
         asset_base_path::text as asset_base_path,
         file_map,
+        metadata_json,
         created_at::text as created_at
       from public.gnr8_runtime_raw_template_artifacts
       where site_version_id = $1::uuid
+        and artifact_type = 'raw_template_site'
       limit 1
       `,
       [siteVersionId],
@@ -2413,6 +2447,50 @@ export async function getRawTemplateSiteArtifact(siteVersionId: string): Promise
       entryHtmlPath,
       assetBasePath,
       fileMap: parseRawTemplateFileMap(row.file_map),
+      createdAt: row.created_at,
+    };
+  } finally {
+    client.release();
+  }
+}
+
+export async function getRawImportedSiteArtifact(siteVersionId: string): Promise<RawImportedSiteArtifact | null> {
+  await ensureRuntimeTables();
+  const client = await getSuperadminPool().connect();
+  try {
+    const result = await client.query<RawTemplateArtifactRow>(
+      `
+      select
+        id::text as id,
+        artifact_type::text as artifact_type,
+        site_id::text as site_id,
+        site_version_id::text as site_version_id,
+        entry_html_path::text as entry_html_path,
+        asset_base_path::text as asset_base_path,
+        file_map,
+        metadata_json,
+        created_at::text as created_at
+      from public.gnr8_runtime_raw_template_artifacts
+      where site_version_id = $1::uuid
+        and artifact_type = 'raw_imported_site'
+      limit 1
+      `,
+      [siteVersionId],
+    );
+    const row = result.rows[0];
+    if (!row) return null;
+    const entryHtmlPath = normalizeRawTemplateFilePath(row.entry_html_path);
+    if (!entryHtmlPath) return null;
+    const assetBasePath = normalizeRawTemplateFilePath(row.asset_base_path);
+    return {
+      id: row.id,
+      artifactType: "raw_imported_site",
+      siteId: row.site_id,
+      siteVersionId: row.site_version_id,
+      entryHtmlPath,
+      assetBasePath,
+      fileMap: parseRawTemplateFileMap(row.file_map),
+      metadata: parseRawImportedSiteArtifactMetadata(row.metadata_json),
       createdAt: row.created_at,
     };
   } finally {
@@ -2457,6 +2535,76 @@ export async function getRawTemplateSiteAsset(input: {
   } finally {
     client.release();
   }
+}
+
+export async function persistRawImportedSiteArtifact(input: {
+  siteId: string;
+  siteVersionId: string;
+  entryHtmlPath: string;
+  assetBasePath: string;
+  fileRows: Array<{ path: string; mediaType: string; sizeBytes: number; sha256: string; bytes: Buffer }>;
+  metadata: RawImportedSiteArtifactMetadata;
+}): Promise<{ artifactId: string; fileCount: number }> {
+  await ensureRuntimeTables();
+  const entryHtmlPath = normalizeRawTemplateFilePath(input.entryHtmlPath);
+  const assetBasePath = normalizeRawTemplateFilePath(input.assetBasePath) || ".";
+  if (!entryHtmlPath) throw new Error("RAW_IMPORT_ARTIFACT_ENTRY_HTML_INVALID");
+  const fileMap: Record<string, RawTemplateSiteFileMeta> = {};
+  for (const row of input.fileRows) {
+    const p = normalizeRawTemplateFilePath(row.path);
+    if (!p) continue;
+    fileMap[p] = { path: p, mediaType: row.mediaType, sizeBytes: row.sizeBytes, sha256: row.sha256 };
+  }
+  if (!fileMap[entryHtmlPath]) throw new Error("RAW_IMPORT_ARTIFACT_ENTRY_HTML_MISSING");
+
+  return withTx(async (client) => {
+    const upsert = await client.query<{ id: string }>(
+      `
+      insert into public.gnr8_runtime_raw_template_artifacts (
+        site_id,
+        site_version_id,
+        artifact_type,
+        entry_html_path,
+        asset_base_path,
+        file_map,
+        metadata_json
+      )
+      values ($1::text, $2::uuid, 'raw_imported_site', $3::text, $4::text, $5::jsonb, $6::jsonb)
+      on conflict (site_version_id)
+      do update set
+        site_id = excluded.site_id,
+        artifact_type = excluded.artifact_type,
+        entry_html_path = excluded.entry_html_path,
+        asset_base_path = excluded.asset_base_path,
+        file_map = excluded.file_map,
+        metadata_json = excluded.metadata_json
+      returning id::text as id
+      `,
+      [input.siteId, input.siteVersionId, entryHtmlPath, assetBasePath, JSON.stringify(fileMap), JSON.stringify(input.metadata)],
+    );
+    const artifactId = upsert.rows[0]?.id;
+    if (!artifactId) throw new Error("RAW_IMPORT_ARTIFACT_UPSERT_FAILED");
+    await client.query(`delete from public.gnr8_runtime_raw_template_artifact_files where artifact_id = $1::uuid`, [artifactId]);
+    for (const file of input.fileRows) {
+      const filePath = normalizeRawTemplateFilePath(file.path);
+      if (!filePath) continue;
+      await client.query(
+        `
+        insert into public.gnr8_runtime_raw_template_artifact_files (
+          artifact_id,
+          file_path,
+          media_type,
+          file_size_bytes,
+          sha256,
+          content_bytes
+        )
+        values ($1::uuid, $2::text, $3::text, $4::integer, $5::text, $6::bytea)
+        `,
+        [artifactId, filePath, file.mediaType, file.sizeBytes, file.sha256, file.bytes],
+      );
+    }
+    return { artifactId, fileCount: Object.keys(fileMap).length };
+  });
 }
 
 export async function getActivePointerForSite(siteId: string): Promise<{ siteVersionId: string; artifactId: string } | null> {

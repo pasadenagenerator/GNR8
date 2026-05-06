@@ -134,6 +134,11 @@ function renderOverviewContent(props: {
           <div>Style source: {readModel.pipeline.styleSignalSourceMode}</div>
           <div>Style coverage: {Math.round(readModel.pipeline.styleSignalCoverage * 100)}%</div>
           <div>Fallback used: {readModel.pipeline.sourceMode === 'raw_html_fallback' ? 'yes' : 'no'}</div>
+          <div>Raw import artifact: {readModel.overview.rawImportArtifactFound ? 'yes' : 'no'}</div>
+          <div>Persisted asset count: {readModel.overview.rawImportPersistedAssetCount}</div>
+          <div>External fallback asset count: {readModel.overview.rawImportExternalFallbackAssetCount}</div>
+          <div>Source URL: {readModel.overview.rawImportSourceUrl ?? 'n/a'}</div>
+          <div>Final URL: {readModel.overview.rawImportFinalUrl ?? 'n/a'}</div>
           {readModel.pipeline.styleSignals ? (
             <>
               <div>

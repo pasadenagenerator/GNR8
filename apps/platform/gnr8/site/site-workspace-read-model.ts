@@ -104,11 +104,13 @@ type SiteBootstrapJobRow = {
 
 type RawTemplateArtifactRow = {
   id: string | null
+  artifact_type: string | null
   site_id: string | null
   site_version_id: string | null
   entry_html_path: string | null
   asset_base_path: string | null
   file_map: unknown
+  metadata_json: unknown
 }
 
 type SiteRenderJobRow = {
@@ -256,8 +258,13 @@ export type SiteWorkspaceReadModel = {
     importFidelityScore: RuntimeImportProvenanceSummary['importFidelityScore']
     templateSource: string | null
     rawTemplateArtifactFound: boolean
+    rawImportArtifactFound: boolean
     rawTemplateEntryHtmlFound: boolean
     rawTemplateFileMapCount: number
+    rawImportPersistedAssetCount: number
+    rawImportExternalFallbackAssetCount: number
+    rawImportSourceUrl: string | null
+    rawImportFinalUrl: string | null
     contentSlotCount: number
     previewReady: boolean
     publishReady: boolean
@@ -2272,7 +2279,7 @@ export async function getSiteWorkspaceReadModelForPage(input: {
     const [rawArtifactResult, slotCountResult] = await Promise.all([
       supabase
         .from('gnr8_runtime_raw_template_artifacts')
-        .select('id,site_id,site_version_id,entry_html_path,asset_base_path,file_map')
+        .select('id,artifact_type,site_id,site_version_id,entry_html_path,asset_base_path,file_map,metadata_json')
         .eq('site_version_id', selectedRuntimeSiteVersionId)
         .limit(1)
         .maybeSingle(),
@@ -2289,8 +2296,21 @@ export async function getSiteWorkspaceReadModelForPage(input: {
     }
   }
   const rawTemplateArtifactFound = Boolean(toTextOrNull(rawTemplateArtifact?.id))
+  const rawImportArtifactFound = normalizeText(rawTemplateArtifact?.artifact_type) === 'raw_imported_site'
   const rawTemplateEntryHtmlFound = Boolean(toTextOrNull(rawTemplateArtifact?.entry_html_path))
   const rawTemplateFileMapCount = isRecord(rawTemplateArtifact?.file_map) ? Object.keys(rawTemplateArtifact!.file_map as Record<string, unknown>).length : 0
+  const rawImportMetadata =
+    rawTemplateArtifact?.metadata_json && typeof rawTemplateArtifact.metadata_json === 'object' && !Array.isArray(rawTemplateArtifact.metadata_json)
+      ? (rawTemplateArtifact.metadata_json as Record<string, unknown>)
+      : null
+  const rawImportAssetSummary =
+    rawImportMetadata?.assetSummary && typeof rawImportMetadata.assetSummary === 'object' && !Array.isArray(rawImportMetadata.assetSummary)
+      ? (rawImportMetadata.assetSummary as Record<string, unknown>)
+      : null
+  const rawImportPersistedAssetCount = Math.max(0, Number(rawImportAssetSummary?.persistedAssetCount ?? 0) || 0)
+  const rawImportExternalFallbackAssetCount = Math.max(0, Number(rawImportAssetSummary?.externalFallbackAssetCount ?? 0) || 0)
+  const rawImportSourceUrl = toTextOrNull(rawImportMetadata?.sourceUrl)
+  const rawImportFinalUrl = toTextOrNull(rawImportMetadata?.finalUrl)
   const previewReady = Boolean(previewUrl) && rawTemplateArtifactFound && rawTemplateEntryHtmlFound && rawTemplateFileMapCount > 0
   const publishReady = previewReady && contentSlotCount > 0
   const bootstrapStatus = toTextOrNull(bootstrapJob?.status)
@@ -2403,8 +2423,13 @@ export async function getSiteWorkspaceReadModelForPage(input: {
       importFidelityScore: importFidelity.importFidelityScore ?? null,
       templateSource: site.templateId ?? null,
       rawTemplateArtifactFound,
+      rawImportArtifactFound,
       rawTemplateEntryHtmlFound,
       rawTemplateFileMapCount,
+      rawImportPersistedAssetCount,
+      rawImportExternalFallbackAssetCount,
+      rawImportSourceUrl,
+      rawImportFinalUrl,
       contentSlotCount,
       previewReady,
       publishReady,

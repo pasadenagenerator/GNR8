@@ -6,6 +6,7 @@ import {
   listContentOverrides,
   listContentSlots,
   getRawTemplateSiteArtifact,
+  getRawImportedSiteArtifact,
   getRawTemplateSiteAsset,
   getSiteVersion,
   getSiteVersionArtifactBinding,
@@ -384,7 +385,8 @@ async function renderRawTemplateSiteVersionPreview(input: {
   previewTruth: RenderedCapturePreviewTruth
   fallbackSummary?: PreviewRuntimeSummary | null
 }): Promise<ResolvedSiteVersionPreview | null> {
-  const artifact = await getRawTemplateSiteArtifact(input.siteVersionId)
+  const importedArtifact = await getRawImportedSiteArtifact(input.siteVersionId)
+  const artifact = importedArtifact ?? (await getRawTemplateSiteArtifact(input.siteVersionId))
   if (!artifact) return null
   const entryAsset = await getRawTemplateSiteAsset({
     siteVersionId: input.siteVersionId,
@@ -503,6 +505,16 @@ async function renderRawTemplateSiteVersionPreview(input: {
     entryHtmlPath: artifact.entryHtmlPath,
     fileCount: Object.keys(artifact.fileMap).length,
   })
+  if (importedArtifact) {
+    console.info('[preview-runtime] RAW_IMPORT_PREVIEW_SELECTED', {
+      siteId: artifact.siteId,
+      siteVersionId: artifact.siteVersionId,
+      requestedPath: normalizePagePath(input.requestedPath),
+      entryHtmlPath: artifact.entryHtmlPath,
+      persistedAssetCount: importedArtifact.metadata.assetSummary.persistedAssetCount,
+      externalFallbackAssetCount: importedArtifact.metadata.assetSummary.externalFallbackAssetCount,
+    })
+  }
   console.info('[preview-runtime] RAW_TEMPLATE_PREVIEW_RENDERED', {
     siteId: artifact.siteId,
     siteVersionId: artifact.siteVersionId,
