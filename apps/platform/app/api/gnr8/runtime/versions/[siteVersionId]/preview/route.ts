@@ -2,9 +2,34 @@ import { renderSiteVersionPreview, SiteVersionPreviewUnavailableError } from "@/
 import { parseAgencyActionContextError, requireAgencyActionContext } from "@/app/api/gnr8/agency/_lib/agency-action-access";
 import { resolveAgencyIdForSiteVersion } from "@/app/api/gnr8/runtime/_lib/runtime-agency-scope";
 import { injectRuntimeDebugPanel } from "@/src/public-site/raw-template-runtime";
+import { canShowContentDebug } from "@/src/public-site/content-debug-access";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+
+type PreviewRouteDependencies = {
+  canShowContentDebug: typeof canShowContentDebug;
+  resolveAgencyIdForSiteVersion: typeof resolveAgencyIdForSiteVersion;
+  requireAgencyActionContext: typeof requireAgencyActionContext;
+  renderSiteVersionPreview: typeof renderSiteVersionPreview;
+  injectRuntimeDebugPanel: typeof injectRuntimeDebugPanel;
+};
+
+const previewRouteDependencies: PreviewRouteDependencies = {
+  canShowContentDebug,
+  resolveAgencyIdForSiteVersion,
+  requireAgencyActionContext,
+  renderSiteVersionPreview,
+  injectRuntimeDebugPanel,
+};
+
+export function __setPreviewRouteDependenciesForTest(overrides: Partial<PreviewRouteDependencies>): () => void {
+  const previous = { ...previewRouteDependencies };
+  Object.assign(previewRouteDependencies, overrides);
+  return () => {
+    Object.assign(previewRouteDependencies, previous);
+  };
+}
 
 function escapeHtml(value: string): string {
   return value
@@ -49,29 +74,38 @@ function toPreviewFallbackHtml(input: { statusTitle: string; message: string; de
 export async function GET(req: Request, ctx: { params: Promise<{ siteVersionId: string }> }) {
   try {
     const { siteVersionId } = await ctx.params;
-    const agencyId = await resolveAgencyIdForSiteVersion(siteVersionId);
+    const agencyId = await previewRouteDependencies.resolveAgencyIdForSiteVersion(siteVersionId);
     if (!agencyId) {
       return new Response(JSON.stringify({ error: "Unable to resolve agency scope for site version." }), {
         status: 403,
         headers: { "content-type": "application/json; charset=utf-8" },
       });
     }
-    await requireAgencyActionContext({
+    await previewRouteDependencies.requireAgencyActionContext({
       action: "view_dashboard",
       requestedAgencyId: agencyId,
     });
     const url = new URL(req.url);
     const path = url.searchParams.get("path") ?? "/";
     const mode = url.searchParams.get("mode") ?? undefined;
-    const contentDebugMode = url.searchParams.get("__debug") === "content";
+    const contentDebugRequested = url.searchParams.get("__debug") === "content";
+    let contentDebugMode = false;
+    if (contentDebugRequested) {
+      console.info("[gnr8.content-runtime] CONTENT_DEBUG_REQUESTED", { path, siteVersionId });
+      contentDebugMode = await previewRouteDependencies.canShowContentDebug(req);
+      console.info(
+        `[gnr8.content-runtime] ${contentDebugMode ? "CONTENT_DEBUG_ACCESS_GRANTED" : "CONTENT_DEBUG_ACCESS_DENIED"}`,
+        { path, siteVersionId },
+      );
+    }
 
-    const preview = await renderSiteVersionPreview({
+    const preview = await previewRouteDependencies.renderSiteVersionPreview({
       siteVersionId,
       path,
       mode,
     });
     const html = contentDebugMode
-      ? injectRuntimeDebugPanel({
+      ? previewRouteDependencies.injectRuntimeDebugPanel({
           html: preview.html,
           debug: {
             siteId: preview.siteId,
