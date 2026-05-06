@@ -18,6 +18,7 @@ import {
 import { triggerTemplateProcessingJob } from '@/gnr8/template-intake/routes/template-processing-trigger'
 import { parseTemplateRepositoryError } from '@/gnr8/template-intake/storage/template-repository'
 import { parseThrownScopeError, requireClientTemplateScope } from '@/app/api/gnr8/clients/_lib/client-template-scope'
+import { isTemplateProcessingReasonRetryable } from '@/gnr8/template-intake/core/template-processing-reason-code'
 
 type Params = {
   clientId: string
@@ -276,6 +277,12 @@ export function createTemplateDetailRouteHandlers(deps: TemplateDetailRouteDeps 
         if (!template) return toNotFoundResponse()
         if (template.status !== 'failed') {
           return NextResponse.json({ ok: false, code: 'TEMPLATE_RETRY_NOT_ALLOWED', error: 'Retry is allowed only for failed templates.' }, { status: 409 })
+        }
+        if (!isTemplateProcessingReasonRetryable(template.reasonCode)) {
+          return NextResponse.json(
+            { ok: false, code: 'TEMPLATE_RETRY_NOT_ALLOWED', error: 'Retry is not allowed for this failure reason.' },
+            { status: 409 },
+          )
         }
         const bucket = normalizeText(template.sourceZipStorageBucket)
         const key = normalizeText(template.sourceZipStorageKey)

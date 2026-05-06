@@ -114,6 +114,7 @@ type TemplateRow = {
   processing_started_at?: string | null
   processing_completed_at?: string | null
   processing_error?: string | null
+  reason_code?: string | null
   processing_attempts?: number | null
 }
 
@@ -239,6 +240,7 @@ function mapTemplateRowFromNormalizedRead(row: TemplateRow, normalizedRead: Read
     processingStartedAt: normalizeOptionalText(row.processing_started_at),
     processingCompletedAt: normalizeOptionalText(row.processing_completed_at),
     processingError: normalizeOptionalText(row.processing_error),
+    reasonCode: normalizeOptionalText(row.reason_code) as TemplateRecord["reasonCode"],
     processingAttempts: Number(row.processing_attempts ?? 0) || 0,
     version: Number(row.version ?? 1) || 1,
     visibility: row.visibility === 'private' ? 'private' : 'private',
@@ -313,6 +315,7 @@ export async function createTemplate(input: CreateTemplateInput): Promise<Templa
         processing_started_at,
         processing_completed_at,
         processing_error,
+        reason_code,
         processing_attempts,
         version,
         visibility
@@ -384,6 +387,7 @@ export async function createTemplate(input: CreateTemplateInput): Promise<Templa
         processing_started_at::text,
         processing_completed_at::text,
         processing_error,
+        reason_code,
         processing_attempts
       `,
       [
@@ -442,7 +446,8 @@ export async function updateTemplateProcessingResult(input: UpdateTemplateProces
         template_manifest_summary = $15::jsonb,
         import_manifest_summary = $16::jsonb,
         processing_completed_at = now(),
-        processing_error = null,
+        processing_error = coalesce($17::text, null),
+        reason_code = $18::text,
         updated_at = now()
       where id = $1::uuid
       returning
@@ -479,6 +484,7 @@ export async function updateTemplateProcessingResult(input: UpdateTemplateProces
         processing_started_at::text,
         processing_completed_at::text,
         processing_error,
+        reason_code,
         processing_attempts
       `,
       [
@@ -498,6 +504,8 @@ export async function updateTemplateProcessingResult(input: UpdateTemplateProces
         input.diagnosticsSummary,
         input.templateManifestSummary,
         input.importManifestSummary,
+        input.processingError ?? null,
+        input.reasonCode ?? null,
       ],
       )
 
@@ -558,6 +566,7 @@ export async function updateTemplateSourceZipReference(input: UpdateTemplateSour
         processing_started_at::text,
         processing_completed_at::text,
         processing_error,
+        reason_code,
         processing_attempts
       `,
         [input.templateId, input.sourceZipStorageBucket, input.sourceZipStorageKey],
@@ -589,6 +598,7 @@ export async function markTemplateProcessingAttemptStarted(input: {
         processing_started_at = now(),
         processing_completed_at = null,
         processing_error = null,
+        reason_code = null,
         processing_attempts = coalesce(processing_attempts, 0) + 1,
         updated_at = now()
       where client_id = $1::uuid
@@ -627,6 +637,7 @@ export async function markTemplateProcessingAttemptStarted(input: {
         processing_started_at::text,
         processing_completed_at::text,
         processing_error,
+        reason_code,
         processing_attempts
       `,
         [input.clientId, input.templateId],
@@ -643,6 +654,7 @@ export async function markTemplateProcessingRetryableFailure(input: {
   clientId: string
   templateId: string
   errorMessage: string
+  reasonCode: TemplateRecord["reasonCode"]
 }): Promise<TemplateRecord | null> {
   return withConnection(async (client) => {
     try {
@@ -652,6 +664,7 @@ export async function markTemplateProcessingRetryableFailure(input: {
       set
         status = 'processing',
         processing_error = $3::text,
+        reason_code = $4::text,
         updated_at = now()
       where client_id = $1::uuid
         and id = $2::uuid
@@ -689,9 +702,10 @@ export async function markTemplateProcessingRetryableFailure(input: {
         processing_started_at::text,
         processing_completed_at::text,
         processing_error,
+        reason_code,
         processing_attempts
       `,
-        [input.clientId, input.templateId, input.errorMessage],
+        [input.clientId, input.templateId, input.errorMessage, input.reasonCode],
       )
       const row = result.rows[0]
       return row ? mapTemplateRow(row) : null
@@ -705,6 +719,7 @@ export async function markTemplateProcessingFinalFailure(input: {
   clientId: string
   templateId: string
   errorMessage: string
+  reasonCode: TemplateRecord["reasonCode"]
 }): Promise<TemplateRecord | null> {
   return withConnection(async (client) => {
     try {
@@ -715,6 +730,7 @@ export async function markTemplateProcessingFinalFailure(input: {
         status = 'failed',
         import_health = 'failed',
         processing_error = $3::text,
+        reason_code = $4::text,
         processing_completed_at = now(),
         updated_at = now()
       where client_id = $1::uuid
@@ -753,9 +769,10 @@ export async function markTemplateProcessingFinalFailure(input: {
         processing_started_at::text,
         processing_completed_at::text,
         processing_error,
+        reason_code,
         processing_attempts
       `,
-        [input.clientId, input.templateId, input.errorMessage],
+        [input.clientId, input.templateId, input.errorMessage, input.reasonCode],
       )
       const row = result.rows[0]
       return row ? mapTemplateRow(row) : null
@@ -809,6 +826,7 @@ export async function listTemplatesForClientWithDiagnostics(input: {
         processing_started_at::text,
         processing_completed_at::text,
         processing_error,
+        reason_code,
         processing_attempts
       from public.gnr8_templates
       where client_id = $1::uuid
@@ -896,6 +914,7 @@ export async function getTemplateByIdForClient(input: {
         processing_started_at::text,
         processing_completed_at::text,
         processing_error,
+        reason_code,
         processing_attempts
       from public.gnr8_templates
       where client_id = $1::uuid
@@ -964,6 +983,7 @@ export async function updateTemplateMetadataById(input: {
         processing_started_at::text,
         processing_completed_at::text,
         processing_error,
+        reason_code,
         processing_attempts
       `,
         [input.clientId, input.templateId, input.name, input.tags],
@@ -1022,6 +1042,7 @@ export async function deleteTemplateByIdForClient(input: {
         processing_started_at::text,
         processing_completed_at::text,
         processing_error,
+        reason_code,
         processing_attempts
       `,
         [input.clientId, input.templateId],

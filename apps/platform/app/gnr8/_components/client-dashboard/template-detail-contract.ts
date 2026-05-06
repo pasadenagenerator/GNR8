@@ -1,4 +1,8 @@
 import { formatTagsForInput, parseTagsInputForForm } from '@/gnr8/template-intake/core/template-management-contract'
+import {
+  isRetryableTemplateFailure,
+  templateFailureReasonMessage,
+} from '@/app/gnr8/_components/client-dashboard/template-library-contract'
 
 export type TemplateDetailUiState = 'loading' | 'not_found' | 'unauthorized' | 'error' | 'ready'
 
@@ -131,7 +135,7 @@ export function parseTemplateDetailPayload(payload: unknown): TemplateDetailView
         ? (template.importManifestSummary as TemplateDetailView['importManifestSummary'])
         : null,
     processingError: normalizeText(template.processingError) || null,
-    reasonCode: normalizeText(template.reasonCode) || null,
+    reasonCode: status === 'failed' ? normalizeText(template.reasonCode) || 'TEMPLATE_UNKNOWN_FAILURE' : null,
     rawArtifactAvailable: Boolean(template.rawArtifactAvailable),
     importManifestFileCount: Number(template.importManifestFileCount ?? 0) || null,
     semanticImportSummary: normalizeText(template.semanticImportSummary) || 'Unavailable',
@@ -155,3 +159,4 @@ export function resolveTemplateDetailUiState(input: {
 }
 
 export { parseTagsInputForForm, formatTagsForInput }
+export { isRetryableTemplateFailure, templateFailureReasonMessage }

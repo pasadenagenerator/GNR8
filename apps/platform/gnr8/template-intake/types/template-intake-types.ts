@@ -1,4 +1,5 @@
 import type { ImportManifest } from '@/gnr8/import/import-manifest'
+import type { TemplateProcessingReasonCode } from '@/gnr8/template-intake/core/template-processing-reason-code'
 
 export type TemplateSourceType = 'zip_html'
 export type TemplateStatus = 'uploaded' | 'processing' | 'ready' | 'failed'
@@ -126,6 +127,7 @@ export type TemplateRecord = {
   processingStartedAt?: string | null
   processingCompletedAt?: string | null
   processingError?: string | null
+  reasonCode?: TemplateProcessingReasonCode | null
   processingAttempts?: number
   version: number
   visibility: TemplateVisibility
@@ -167,6 +169,8 @@ export type UpdateTemplateProcessingResultInput = {
   diagnosticsSummary: TemplateDiagnosticsSummary
   templateManifestSummary: TemplateManifestSummary
   importManifestSummary: ImportManifest | null
+  reasonCode?: TemplateProcessingReasonCode | null
+  processingError?: string | null
 }
 
 export type UpdateTemplateSourceZipReferenceInput = {

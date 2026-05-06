@@ -12,6 +12,7 @@ import {
   markTemplateProcessingRetryableFailure,
   updateTemplateSourceZipReference,
 } from '@/gnr8/template-intake/storage/template-repository'
+import { isTemplateProcessingReasonRetryable } from '@/gnr8/template-intake/core/template-processing-reason-code'
 
 function normalizeText(value: unknown): string {
   return String(value ?? '').trim()
@@ -112,7 +113,23 @@ export async function runTemplateProcessingJob(input: {
       persistFailure: false,
     })
     if (!result.ok) {
-      throw new Error(result.error)
+      const attempts = Number(started.processingAttempts ?? 0) || 0
+      if (attempts < maxAttempts && (result.retryable || isTemplateProcessingReasonRetryable(result.reasonCode))) {
+        await deps.markTemplateProcessingRetryableFailure({
+          clientId: payload.clientId,
+          templateId: payload.templateId,
+          errorMessage: result.error,
+          reasonCode: result.reasonCode,
+        })
+        throw new Error(result.error)
+      }
+      await deps.markTemplateProcessingFinalFailure({
+        clientId: payload.clientId,
+        templateId: payload.templateId,
+        errorMessage: result.error,
+        reasonCode: result.reasonCode,
+      })
+      return
     }
   } catch (error) {
     const message = toErrorMessage(error)
@@ -122,6 +139,7 @@ export async function runTemplateProcessingJob(input: {
         clientId: payload.clientId,
         templateId: payload.templateId,
         errorMessage: message,
+        reasonCode: 'TEMPLATE_IMPORT_FAILED',
       })
       throw new Error(message)
     }
@@ -130,6 +148,7 @@ export async function runTemplateProcessingJob(input: {
       clientId: payload.clientId,
       templateId: payload.templateId,
       errorMessage: message,
+      reasonCode: 'TEMPLATE_UNKNOWN_FAILURE',
     })
   }
 }

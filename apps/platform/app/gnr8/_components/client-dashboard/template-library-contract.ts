@@ -2,6 +2,29 @@ function normalizeText(value: unknown): string {
   return String(value ?? '').trim()
 }
 
+export function isRetryableTemplateFailure(reasonCode: string | null | undefined): boolean {
+  return (
+    reasonCode === 'TEMPLATE_IMPORT_FAILED' ||
+    reasonCode === 'TEMPLATE_SNAPSHOT_FAILED' ||
+    reasonCode === 'TEMPLATE_BOOTSTRAP_ENQUEUE_FAILED'
+  )
+}
+
+export function templateFailureReasonMessage(reasonCode: string | null | undefined): string {
+  if (reasonCode === 'TEMPLATE_ZIP_INVALID') return 'Uploaded file is not a valid ZIP archive.'
+  if (reasonCode === 'TEMPLATE_ZIP_EMPTY') return 'Uploaded ZIP archive is empty.'
+  if (reasonCode === 'TEMPLATE_ZIP_UNREADABLE') return 'ZIP archive could not be read.'
+  if (reasonCode === 'TEMPLATE_IMPORT_NO_HTML') return 'No HTML file found in uploaded template.'
+  if (reasonCode === 'TEMPLATE_IMPORT_MULTIPLE_ENTRY_HTML') return 'Multiple HTML entry files found; entry is ambiguous.'
+  if (reasonCode === 'TEMPLATE_ENTRY_HTML_UNRESOLVED') return "Could not determine entry HTML for '/' route."
+  if (reasonCode === 'TEMPLATE_FILE_MAP_EMPTY') return 'Template contains no usable files.'
+  if (reasonCode === 'TEMPLATE_STORAGE_WRITE_FAILED') return 'Template processing results could not be persisted.'
+  if (reasonCode === 'TEMPLATE_BOOTSTRAP_ENQUEUE_FAILED') return 'Template processing could not be enqueued.'
+  if (reasonCode === 'TEMPLATE_SNAPSHOT_FAILED') return 'Template snapshot generation failed.'
+  if (reasonCode === 'TEMPLATE_IMPORT_FAILED') return 'Template import pipeline failed.'
+  return 'Template processing failed due to an unknown error.'
+}
+
 export type TemplateLibraryUiView = 'loading' | 'error' | 'list' | 'empty'
 
 export type TemplateListApiCard = {

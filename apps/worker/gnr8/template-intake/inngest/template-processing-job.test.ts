@@ -35,6 +35,7 @@ function createTemplate(seed: Partial<TemplateRecord> = {}): TemplateRecord {
     processingStartedAt: seed.processingStartedAt ?? null,
     processingCompletedAt: seed.processingCompletedAt ?? null,
     processingError: seed.processingError ?? null,
+    reasonCode: seed.reasonCode ?? null,
     processingAttempts: seed.processingAttempts ?? 0,
     version: seed.version ?? 1,
     visibility: 'private',
@@ -90,7 +91,13 @@ test('worker retry path marks retryable failure and throws', async () => {
         getTemplateByIdForClient: async () => createTemplate(),
         updateTemplateSourceZipReference: async () => createTemplate(),
         markTemplateProcessingAttemptStarted: async () => createTemplate({ processingAttempts: 2 }),
-        processTemplateZipIntakeJob: async () => ({ ok: false, template: createTemplate(), error: 'boom' }),
+        processTemplateZipIntakeJob: async () => ({
+          ok: false,
+          template: createTemplate(),
+          error: 'boom',
+          reasonCode: 'TEMPLATE_IMPORT_FAILED',
+          retryable: true,
+        }),
         markTemplateProcessingRetryableFailure: async () => {
           retryFailureCalled = true
           return createTemplate({ processingError: 'boom' })
@@ -122,7 +129,13 @@ test('worker final failure path marks template failed without throwing', async (
       getTemplateByIdForClient: async () => createTemplate(),
       updateTemplateSourceZipReference: async () => createTemplate(),
       markTemplateProcessingAttemptStarted: async () => createTemplate({ processingAttempts: 3 }),
-      processTemplateZipIntakeJob: async () => ({ ok: false, template: createTemplate(), error: 'boom-final' }),
+      processTemplateZipIntakeJob: async () => ({
+        ok: false,
+        template: createTemplate(),
+        error: 'boom-final',
+        reasonCode: 'TEMPLATE_IMPORT_NO_HTML',
+        retryable: false,
+      }),
       markTemplateProcessingRetryableFailure: async () => {
         retryFailureCalled = true
         return createTemplate({ processingError: 'boom-final' })
@@ -137,4 +150,3 @@ test('worker final failure path marks template failed without throwing', async (
   assert.equal(retryFailureCalled, false)
   assert.equal(finalFailureCalled, true)
 })
-

@@ -45,7 +45,7 @@ export function mapTemplateToListCard(template: TemplateRecord): TemplateListCar
       normalizeText(template.importSnapshotId) ||
       (normalizeText(template.sourceZipStorageBucket) && normalizeText(template.sourceZipStorageKey)),
   )
-  const reasonCode = template.status === 'failed' ? 'TEMPLATE_PROCESSING_FAILED' : null
+  const reasonCode = template.status === 'failed' ? template.reasonCode ?? 'TEMPLATE_UNKNOWN_FAILURE' : null
   return {
     id: template.id,
     name: template.name,

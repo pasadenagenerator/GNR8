@@ -73,7 +73,7 @@ export function mapTemplateToDetailCard(template: TemplateRecord): TemplateDetai
     diagnosticsSummary: template.diagnosticsSummary,
     importManifestSummary: template.importManifestSummary,
     processingError: normalizeText(template.processingError) || null,
-    reasonCode: template.status === 'failed' ? 'TEMPLATE_PROCESSING_FAILED' : null,
+    reasonCode: template.status === 'failed' ? template.reasonCode ?? 'TEMPLATE_UNKNOWN_FAILURE' : null,
     rawArtifactAvailable,
     importManifestFileCount: Array.isArray(template.importManifestSummary?.htmlFilePaths)
       ? template.importManifestSummary.htmlFilePaths.length

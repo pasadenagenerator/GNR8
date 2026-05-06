@@ -171,4 +171,6 @@ test('processTemplateZipIntakeJob marks template failed on invalid zip', async (
   if (result.ok) return
   assert.equal(result.template?.status, 'failed')
   assert.equal(result.template?.importHealth, 'failed')
+  assert.equal(result.reasonCode, 'TEMPLATE_ZIP_INVALID')
+  assert.equal(result.retryable, false)
 })

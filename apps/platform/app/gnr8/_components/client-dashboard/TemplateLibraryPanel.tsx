@@ -7,6 +7,8 @@ import {
   resolveTemplateUploadUiState,
   resolveTemplateLibraryCards,
   resolveTemplateLibraryUiView,
+  isRetryableTemplateFailure,
+  templateFailureReasonMessage,
   type TemplateListApiCard,
 } from '@/app/gnr8/_components/client-dashboard/template-library-contract'
 
@@ -465,9 +467,17 @@ export default function TemplateLibraryPanel(props: {
                   Diagnostics: {template.diagnosticsSummary?.issues?.slice(0, 2).map((d) => d.code || d.message).join(' · ') || 'None'}
                 </div>
                 {template.status === 'failed' ? (
+                  <details style={{ fontSize: 12, color: '#334155' }}>
+                    <summary style={{ cursor: 'pointer' }}>View diagnostics</summary>
+                    <div style={{ marginTop: 6 }}>
+                      {template.diagnosticsSummary?.issues?.slice(0, 5).map((d) => `${d.severity ?? 'unknown'}:${d.code ?? 'unknown'}`).join(' · ') ||
+                        'No diagnostics recorded.'}
+                    </div>
+                  </details>
+                ) : null}
+                {template.status === 'failed' ? (
                   <div style={{ fontSize: 12, color: '#991b1b' }}>
-                    Reason code: {template.reasonCode ?? 'TEMPLATE_PROCESSING_FAILED'}
-                    {template.processingError ? ` · ${template.processingError}` : ''}
+                    {templateFailureReasonMessage(template.reasonCode)} ({template.reasonCode ?? 'TEMPLATE_UNKNOWN_FAILURE'})
                   </div>
                 ) : null}
 
@@ -537,7 +547,7 @@ export default function TemplateLibraryPanel(props: {
                   {template.status === 'failed' ? (
                     <button
                       type='button'
-                      disabled={retryingTemplateId === template.id || !template.rawArtifactAvailable}
+                      disabled={retryingTemplateId === template.id || !template.rawArtifactAvailable || !isRetryableTemplateFailure(template.reasonCode)}
                       onClick={() => onRetryTemplate(template.id, template.name)}
                       style={{
                         display: 'inline-flex',
@@ -552,7 +562,7 @@ export default function TemplateLibraryPanel(props: {
                         cursor: retryingTemplateId === template.id ? 'wait' : 'pointer',
                       }}
                     >
-                      {retryingTemplateId === template.id ? 'Retrying...' : 'Retry'}
+                      {retryingTemplateId === template.id ? 'Retrying...' : isRetryableTemplateFailure(template.reasonCode) ? 'Retry' : 'Retry Unavailable'}
                     </button>
                   ) : null}
                 </div>

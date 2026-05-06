@@ -6,9 +6,11 @@ import { useEffect, useMemo, useState } from 'react'
 
 import {
   formatTagsForInput,
+  isRetryableTemplateFailure,
   parseTagsInputForForm,
   parseTemplateDetailPayload,
   resolveTemplateDetailUiState,
+  templateFailureReasonMessage,
 } from '@/app/gnr8/_components/client-dashboard/template-detail-contract'
 
 function normalizeText(value: unknown): string {
@@ -248,8 +250,7 @@ export default function TemplateEditClient(props: {
         </p>
         {template.status === 'failed' ? (
           <p style={{ margin: 0, fontSize: 12, color: '#991b1b' }}>
-            Reason code: {template.reasonCode ?? 'TEMPLATE_PROCESSING_FAILED'}
-            {template.processingError ? ` · ${template.processingError}` : ''}
+            {templateFailureReasonMessage(template.reasonCode)} ({template.reasonCode ?? 'TEMPLATE_UNKNOWN_FAILURE'})
           </p>
         ) : null}
       </header>
@@ -343,6 +344,13 @@ export default function TemplateEditClient(props: {
         <div style={{ fontSize: 12, color: '#334155' }}>
           {template.diagnosticsSummary?.issues?.slice(0, 5).map((issue) => `${issue.severity}:${issue.code}`).join(' · ') || 'No diagnostics recorded.'}
         </div>
+        <details style={{ fontSize: 12, color: '#334155' }}>
+          <summary style={{ cursor: 'pointer' }}>View diagnostics</summary>
+          <div style={{ marginTop: 6 }}>
+            {template.diagnosticsSummary?.issues?.slice(0, 10).map((issue) => `${issue.severity}:${issue.code}:${issue.message}`).join(' · ') ||
+              'No diagnostics recorded.'}
+          </div>
+        </details>
       </section>
 
       <form onSubmit={onSave} style={{ display: 'grid', gap: 10 }}>
@@ -418,7 +426,7 @@ export default function TemplateEditClient(props: {
           </button>
           <button
             type='button'
-            disabled={isRetrying || template.status !== 'failed' || !template.rawArtifactAvailable}
+            disabled={isRetrying || template.status !== 'failed' || !template.rawArtifactAvailable || !isRetryableTemplateFailure(template.reasonCode)}
             onClick={onRetryProcessing}
             style={{
               display: 'inline-flex',

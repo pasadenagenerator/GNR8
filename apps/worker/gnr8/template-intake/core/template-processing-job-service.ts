@@ -10,6 +10,11 @@ import {
   validateAndExtractTemplateZip,
 } from '@/gnr8/template-intake/core/template-zip-validator'
 import { importTemplateUploadStaticSite } from '@/gnr8/template-intake/core/template-upload-import-runner'
+import {
+  resolveTemplateFailureMessage,
+  isTemplateProcessingReasonRetryable,
+  type TemplateProcessingReasonCode,
+} from '@/gnr8/template-intake/core/template-processing-reason-code'
 import { buildTemplatePreviewSummary } from '@/gnr8/template-intake/preview/template-preview-summary'
 import { persistTemplateDurableSourceSnapshot } from '@/gnr8/template-intake/storage/template-durable-source'
 import {
@@ -147,12 +152,13 @@ async function persistFailedTemplateResult(input: {
     templateType: TemplateType
   }
   diagnosticsSummary: TemplateDiagnosticsSummary
-  errorCode: string
-  errorMessage: string
+  reasonCode: TemplateProcessingReasonCode
+  errorMessage?: string
   importSnapshotId: string | null
   templateManifestSummary: TemplateRecord['templateManifestSummary']
   importManifestSummary: TemplateRecord['importManifestSummary']
 }): Promise<TemplateRecord> {
+  const message = normalizeText(input.errorMessage) || resolveTemplateFailureMessage(input.reasonCode)
   return input.deps.updateTemplateProcessingResult({
     templateId: input.template.id,
     status: 'failed',
@@ -176,9 +182,9 @@ async function persistFailedTemplateResult(input: {
       createTemplateIntakeDiagnostic({
         code: 'TEMPLATE_IMPORT_FAILED',
         severity: 'fatal',
-        message: input.errorMessage,
+        message,
         details: {
-          code: input.errorCode,
+          reasonCode: input.reasonCode,
         },
       }),
     ]),
@@ -189,6 +195,8 @@ async function persistFailedTemplateResult(input: {
       tags: [],
     },
     importManifestSummary: input.importManifestSummary,
+    reasonCode: input.reasonCode,
+    processingError: message,
   })
 }
 
@@ -197,7 +205,7 @@ export async function processTemplateZipIntakeJob(input: {
   templateId: string
   persistFailure?: boolean
   deps?: Partial<TemplateProcessingDeps>
-}): Promise<{ ok: true; template: TemplateRecord } | { ok: false; template: TemplateRecord | null; error: string }> {
+}): Promise<{ ok: true; template: TemplateRecord } | { ok: false; template: TemplateRecord | null; error: string; reasonCode: TemplateProcessingReasonCode; retryable: boolean }> {
   const deps = {
     ...DEFAULT_DEPS,
     ...(input.deps ?? {}),
@@ -209,11 +217,13 @@ export async function processTemplateZipIntakeJob(input: {
     templateId: input.templateId,
   })
   if (!template) {
-    return {
-      ok: false,
-      template: null,
-      error: 'Template was not found for processing.',
-    }
+      return {
+        ok: false,
+        template: null,
+        error: 'Template was not found for processing.',
+        reasonCode: 'TEMPLATE_STORAGE_WRITE_FAILED',
+        retryable: false,
+      }
   }
 
   const sourceZipStorageBucket = normalizeText(template.sourceZipStorageBucket)
@@ -224,6 +234,8 @@ export async function processTemplateZipIntakeJob(input: {
         ok: false,
         template,
         error: 'Template source ZIP reference is missing.',
+        reasonCode: 'TEMPLATE_STORAGE_WRITE_FAILED',
+        retryable: false,
       }
     }
     const failed = await persistFailedTemplateResult({
@@ -241,7 +253,7 @@ export async function processTemplateZipIntakeJob(input: {
           message: 'Template processing job started.',
         }),
       ]),
-      errorCode: 'TEMPLATE_SOURCE_ZIP_REF_MISSING',
+      reasonCode: 'TEMPLATE_STORAGE_WRITE_FAILED',
       errorMessage: 'Template source ZIP reference is missing.',
       importSnapshotId: template.importSnapshotId,
       templateManifestSummary: template.templateManifestSummary,
@@ -251,6 +263,8 @@ export async function processTemplateZipIntakeJob(input: {
       ok: false,
       template: failed,
       error: 'Template source ZIP reference is missing.',
+      reasonCode: 'TEMPLATE_STORAGE_WRITE_FAILED',
+      retryable: false,
     }
   }
 
@@ -266,6 +280,8 @@ export async function processTemplateZipIntakeJob(input: {
         ok: false,
         template,
         error: error instanceof Error ? error.message : 'Failed to load template source ZIP.',
+        reasonCode: 'TEMPLATE_STORAGE_WRITE_FAILED',
+        retryable: false,
       }
     }
     const failed = await persistFailedTemplateResult({
@@ -283,7 +299,7 @@ export async function processTemplateZipIntakeJob(input: {
           message: 'Template processing job started.',
         }),
       ]),
-      errorCode: 'TEMPLATE_SOURCE_ZIP_LOAD_FAILED',
+      reasonCode: 'TEMPLATE_STORAGE_WRITE_FAILED',
       errorMessage: error instanceof Error ? error.message : 'Failed to load template source ZIP.',
       importSnapshotId: template.importSnapshotId,
       templateManifestSummary: template.templateManifestSummary,
@@ -293,6 +309,8 @@ export async function processTemplateZipIntakeJob(input: {
       ok: false,
       template: failed,
       error: 'Failed to load template source ZIP.',
+      reasonCode: 'TEMPLATE_STORAGE_WRITE_FAILED',
+      retryable: false,
     }
   }
 
@@ -319,12 +337,27 @@ export async function processTemplateZipIntakeJob(input: {
     }),
   ])
 
+  const zipFailureReasonCode: TemplateProcessingReasonCode =
+    zipValidation.errorMessage === 'ZIP file is empty.'
+      ? 'TEMPLATE_ZIP_EMPTY'
+      : zipValidation.errorMessage === 'ZIP must include one HTML file.'
+        ? 'TEMPLATE_IMPORT_NO_HTML'
+        : zipValidation.errorMessage === 'ZIP has multiple HTML files; entry file is ambiguous.'
+          ? 'TEMPLATE_IMPORT_MULTIPLE_ENTRY_HTML'
+          : zipValidation.errorMessage === 'Template entry HTML could not be resolved.'
+            ? 'TEMPLATE_ENTRY_HTML_UNRESOLVED'
+            : zipValidation.errorMessage === 'Template entry HTML could not be processed.'
+              ? 'TEMPLATE_ZIP_UNREADABLE'
+              : 'TEMPLATE_ZIP_INVALID'
+
   if (!zipValidation.ok || !zipValidation.validation || !zipValidation.validation.entryHtmlPath) {
     if (!persistFailure) {
       return {
         ok: false,
         template,
         error: zipValidation.errorMessage ?? 'Template ZIP validation failed.',
+        reasonCode: zipFailureReasonCode,
+        retryable: isTemplateProcessingReasonRetryable(zipFailureReasonCode),
       }
     }
     const failed = await persistFailedTemplateResult({
@@ -332,7 +365,7 @@ export async function processTemplateZipIntakeJob(input: {
       deps,
       entryMetadata,
       diagnosticsSummary: baseDiagnostics,
-      errorCode: 'TEMPLATE_ZIP_VALIDATION_FAILED',
+      reasonCode: zipFailureReasonCode,
       errorMessage: zipValidation.errorMessage ?? 'Template ZIP validation failed.',
       importSnapshotId: zipValidation.snapshotId,
       templateManifestSummary: {
@@ -347,6 +380,8 @@ export async function processTemplateZipIntakeJob(input: {
       ok: false,
       template: failed,
       error: zipValidation.errorMessage ?? 'Template ZIP validation failed.',
+      reasonCode: zipFailureReasonCode,
+      retryable: isTemplateProcessingReasonRetryable(zipFailureReasonCode),
     }
   }
 
@@ -377,6 +412,8 @@ export async function processTemplateZipIntakeJob(input: {
         ok: false,
         template,
         error: hasEmptyHtmlIssue ? 'Template entry HTML is empty.' : 'Template import failed due to fatal diagnostics.',
+        reasonCode: hasEmptyHtmlIssue ? 'TEMPLATE_IMPORT_NO_HTML' : 'TEMPLATE_IMPORT_FAILED',
+        retryable: !hasEmptyHtmlIssue,
       }
     }
     const failed = await persistFailedTemplateResult({
@@ -388,7 +425,7 @@ export async function processTemplateZipIntakeJob(input: {
         ...manifest.diagnostics,
         ...previewSummary.diagnostics,
       ]),
-      errorCode: hasEmptyHtmlIssue ? 'TEMPLATE_INTAKE_EMPTY_HTML' : 'TEMPLATE_INTAKE_FATAL_IMPORT_DIAGNOSTIC',
+      reasonCode: hasEmptyHtmlIssue ? 'TEMPLATE_IMPORT_NO_HTML' : 'TEMPLATE_IMPORT_FAILED',
       errorMessage: hasEmptyHtmlIssue ? 'Template entry HTML is empty.' : 'Template import failed due to fatal diagnostics.',
       importSnapshotId: zipValidation.snapshotId,
       templateManifestSummary: manifest.summary,
@@ -398,6 +435,8 @@ export async function processTemplateZipIntakeJob(input: {
       ok: false,
       template: failed,
       error: hasEmptyHtmlIssue ? 'Template entry HTML is empty.' : 'Template import failed due to fatal diagnostics.',
+      reasonCode: hasEmptyHtmlIssue ? 'TEMPLATE_IMPORT_NO_HTML' : 'TEMPLATE_IMPORT_FAILED',
+      retryable: !hasEmptyHtmlIssue,
     }
   }
 
@@ -429,6 +468,8 @@ export async function processTemplateZipIntakeJob(input: {
         ok: false,
         template,
         error: error instanceof Error ? error.message : 'Template durable source snapshot could not be persisted.',
+        reasonCode: 'TEMPLATE_SNAPSHOT_FAILED',
+        retryable: true,
       }
     }
     const failed = await persistFailedTemplateResult({
@@ -440,7 +481,7 @@ export async function processTemplateZipIntakeJob(input: {
         ...manifest.diagnostics,
         ...previewSummary.diagnostics,
       ]),
-      errorCode: 'TEMPLATE_SOURCE_SNAPSHOT_PERSIST_FAILED',
+      reasonCode: 'TEMPLATE_SNAPSHOT_FAILED',
       errorMessage: error instanceof Error ? error.message : 'Template durable source snapshot could not be persisted.',
       importSnapshotId: zipValidation.snapshotId,
       templateManifestSummary: manifest.summary,
@@ -450,6 +491,8 @@ export async function processTemplateZipIntakeJob(input: {
       ok: false,
       template: failed,
       error: 'Template durable source snapshot could not be persisted.',
+      reasonCode: 'TEMPLATE_SNAPSHOT_FAILED',
+      retryable: true,
     }
   }
 
@@ -497,6 +540,8 @@ export async function processTemplateZipIntakeJob(input: {
         ok: false,
         template,
         error: 'Template cannot be marked ready without bootstrap source truth.',
+        reasonCode: 'TEMPLATE_FILE_MAP_EMPTY',
+        retryable: false,
       }
     }
     const failed = await persistFailedTemplateResult({
@@ -504,7 +549,7 @@ export async function processTemplateZipIntakeJob(input: {
       deps,
       entryMetadata,
       diagnosticsSummary,
-      errorCode: 'TEMPLATE_READY_WITHOUT_BOOTSTRAP_SOURCE',
+      reasonCode: 'TEMPLATE_FILE_MAP_EMPTY',
       errorMessage: 'Template cannot be marked ready without bootstrap source truth.',
       importSnapshotId: zipValidation.snapshotId,
       templateManifestSummary: manifest.summary,
@@ -514,6 +559,8 @@ export async function processTemplateZipIntakeJob(input: {
       ok: false,
       template: failed,
       error: 'Template cannot be marked ready without bootstrap source truth.',
+      reasonCode: 'TEMPLATE_FILE_MAP_EMPTY',
+      retryable: false,
     }
   }
 
