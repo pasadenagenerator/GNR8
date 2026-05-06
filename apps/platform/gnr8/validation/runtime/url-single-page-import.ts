@@ -244,11 +244,12 @@ export type UrlImportDiagnostic = {
 
 export type UrlImportAssetKind = "stylesheet" | "image" | "script" | "style_asset";
 
-export type UrlImportAssetTag = "link" | "img" | "script" | "source" | "a";
+export type UrlImportAssetTag = "link" | "img" | "script" | "source" | "a" | "object" | "embed";
 
 export type UrlImportAssetAttribute =
   | "href"
   | "src"
+  | "data"
   | "srcset"
   | "data-src"
   | "data-srcset"
@@ -436,13 +437,24 @@ function normalizeBasename(value: string): string {
 
 function assetKindFromNode(input: { tag: string; rel: string | null }): UrlImportAssetKind | null {
   if (input.tag === "img") return "image";
+  if (input.tag === "source") return "image";
+  if (input.tag === "object" || input.tag === "embed") return "image";
   if (input.tag === "script") return "script";
   if (input.tag === "link") {
     const relTokens = (input.rel ?? "")
       .toLowerCase()
       .split(/\s+/)
       .filter(Boolean);
-    return relTokens.includes("stylesheet") ? "stylesheet" : null;
+    if (relTokens.includes("stylesheet")) return "stylesheet";
+    if (
+      relTokens.includes("icon") ||
+      relTokens.includes("apple-touch-icon") ||
+      relTokens.includes("apple-touch-icon-precomposed") ||
+      relTokens.includes("shortcut")
+    ) {
+      return "image";
+    }
+    return null;
   }
   return null;
 }
@@ -657,6 +669,10 @@ function defaultExtensionForAssetKind(assetKind: UrlImportAssetKind): string {
 
 function computeLocalPathCandidate(input: { resolvedUrl: string; assetKind: UrlImportAssetKind }): string {
   const u = new URL(input.resolvedUrl);
+  const normalizedPathname = normalizeSnapshotLocalTargetPath(decodeURIComponent(u.pathname ?? ""));
+  if (input.assetKind === "image" && normalizedPathname) {
+    return normalizedPathname;
+  }
   const urlHash12 = sha256Hex(input.resolvedUrl).slice(0, 12);
   const rawBase = path.posix.basename(u.pathname || "") || "asset";
   const normalizedBase = normalizeBasename(rawBase);
@@ -1691,9 +1707,11 @@ function collectAssetRefs(input: {
     const tag = node.tagName.toLowerCase() as UrlImportAssetTag | string;
     const rel = getAttr(node, "rel");
     const assetKind = assetKindFromNode({ tag, rel });
-    if (!assetKind && tag !== "source" && tag !== "a") {
-      if (tag === "link") {
+    if (!assetKind && tag !== "a") {
+      if (tag === "link" || tag === "object" || tag === "embed") {
         const href = getAttr(node, "href");
+        const data = getAttr(node, "data");
+        const src = getAttr(node, "src");
         if (href && href.trim()) {
           input.diagnostics.push(
             createDiagnostic({
@@ -1702,6 +1720,28 @@ function collectAssetRefs(input: {
               message: "Skipped non-stylesheet <link> reference",
               targetUrl: null,
               details: { tag, href, rel: rel ?? "" },
+            }),
+          );
+        }
+        if (data && data.trim()) {
+          input.diagnostics.push(
+            createDiagnostic({
+              severity: "info",
+              code: "ASSET_REFERENCE_UNSUPPORTED",
+              message: "Skipped unsupported element reference",
+              targetUrl: null,
+              details: { tag, data, rel: rel ?? "" },
+            }),
+          );
+        }
+        if (src && src.trim()) {
+          input.diagnostics.push(
+            createDiagnostic({
+              severity: "info",
+              code: "ASSET_REFERENCE_UNSUPPORTED",
+              message: "Skipped unsupported element reference",
+              targetUrl: null,
+              details: { tag, src, rel: rel ?? "" },
             }),
           );
         }
@@ -1741,6 +1781,20 @@ function collectAssetRefs(input: {
       return;
     }
 
+    if (tag === "object") {
+      const data = getAttr(node, "data");
+      if (!data || !data.trim()) return;
+      pushRef({ tag: "object", attribute: "data", rawRef: data, assetKind: "image", surface: "html_object_data" });
+      return;
+    }
+
+    if (tag === "embed") {
+      const src = getAttr(node, "src");
+      if (!src || !src.trim()) return;
+      pushRef({ tag: "embed", attribute: "src", rawRef: src, assetKind: "image", surface: "html_embed_src" });
+      return;
+    }
+
     if (tag === "script") {
       const src = getAttr(node, "src");
       if (!src || !src.trim()) return;
@@ -1774,6 +1828,11 @@ function collectAssetRefs(input: {
       const tokens = parseSrcsetTokens(rawSrcset);
       for (const token of tokens) {
         if (!token.url) continue;
+        console.info("[raw-import] RAW_IMPORT_SRCSET_ASSET_DISCOVERED", {
+          tag,
+          attribute: srcsetAttr,
+          rawRef: token.url,
+        });
         pushRef({
           tag: tag as UrlImportAssetTag,
           attribute: srcsetAttr,
@@ -3256,6 +3315,20 @@ export async function importPublicSinglePageUrlToSnapshot(input: {
       );
     }
     const localPathByUrl = resolvePathCollisions(refs, diagnostics);
+    const htmlImageRefByUrl = new Map<string, ParsedAssetRef[]>();
+    for (const ref of refs) {
+      if (ref.assetKind !== "image" || !ref.resolvedUrl) continue;
+      const list = htmlImageRefByUrl.get(ref.resolvedUrl) ?? [];
+      list.push(ref);
+      htmlImageRefByUrl.set(ref.resolvedUrl, list);
+      console.info("[raw-import] RAW_IMPORT_HTML_IMAGE_ASSET_DISCOVERED", {
+        resolvedUrl: ref.resolvedUrl,
+        rawRef: ref.rawRef,
+        tag: ref.tag,
+        attribute: ref.attribute,
+        surface: ref.sourceScope ?? "other",
+      });
+    }
 
     const fetchOutcomeByUrl = new Map<string, FetchOutcome>();
     const uniqueUrls = [...localPathByUrl.keys()].sort((a, b) => a.localeCompare(b));
@@ -3265,6 +3338,14 @@ export async function importPublicSinglePageUrlToSnapshot(input: {
       localPath: string,
       messageLabel: "Direct asset fetch" | "Stylesheet-linked asset fetch",
     ): Promise<FetchOutcome> {
+      const htmlImageRefs = htmlImageRefByUrl.get(resolvedUrl) ?? [];
+      if (htmlImageRefs.length > 0) {
+        console.info("[raw-import] RAW_IMPORT_HTML_IMAGE_ASSET_FETCH_STARTED", {
+          resolvedUrl,
+          localPath,
+          refs: htmlImageRefs.map((ref) => ({ tag: ref.tag, attribute: ref.attribute, rawRef: ref.rawRef })),
+        });
+      }
       try {
         const response = await fetcher(resolvedUrl, {
           method: "GET",
@@ -3298,6 +3379,13 @@ export async function importPublicSinglePageUrlToSnapshot(input: {
         const absPath = path.resolve(snapshotRootDirAbs, localPath);
         fs.mkdirSync(path.dirname(absPath), { recursive: true });
         fs.writeFileSync(absPath, bytes);
+        if (htmlImageRefs.length > 0) {
+          console.info("[raw-import] RAW_IMPORT_HTML_IMAGE_ASSET_PERSISTED", {
+            resolvedUrl,
+            localPath,
+            byteLength: bytes.byteLength,
+          });
+        }
 
         return {
           fetchStatus: "fetched",
@@ -3306,6 +3394,13 @@ export async function importPublicSinglePageUrlToSnapshot(input: {
           byteLength: bytes.byteLength,
         };
       } catch (error) {
+        if (htmlImageRefs.length > 0) {
+          console.warn("[raw-import] RAW_IMPORT_HTML_IMAGE_ASSET_FETCH_FAILED", {
+            resolvedUrl,
+            localPath,
+            error: String((error as Error)?.message ?? error),
+          });
+        }
         diagnostics.push(
           createDiagnostic({
             severity: "warning",

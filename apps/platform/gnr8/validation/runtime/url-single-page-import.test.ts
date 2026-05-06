@@ -697,6 +697,44 @@ test("site import intake succeeds for valid html url", async () => {
       if (String(url).includes("logo.png")) return new Response("png", { status: 200, headers: { "content-type": "image/png" } });
       return makeHtmlResponse(html);
     },
+    renderedCaptureWorkerClient: {
+      async execute(request) {
+        return {
+          kind: "rendered_capture_worker_response_v1",
+          contractVersion: "1.0.0",
+          requestId: request.requestId,
+          status: "unsupported",
+          environment: {
+            runtimeKind: "edge",
+            environmentSupported: false,
+            browserPackageAvailable: false,
+            browserBinaryAvailable: false,
+            supportDecision: "runtime_incompatible",
+          },
+          artifacts: [],
+          computedStyleSamples: [],
+          diagnostics: [{ code: "ENVIRONMENT_UNSUPPORTED", severity: "warning", message: "unsupported runtime" }],
+          qualitySummary: {
+            renderedDomQuality: "unusable",
+            domLength: 0,
+            meaningfulNodeCount: 0,
+            screenshotCount: 0,
+            computedStyleSampleCount: 0,
+          },
+          failure: {
+            failureClass: "environment_unsupported",
+            failureCode: "ENVIRONMENT_UNSUPPORTED",
+            retryable: false,
+            message: "unsupported runtime",
+          },
+          timings: {
+            queueLatencyMs: null,
+            executionMs: 2,
+            totalMs: 2,
+          },
+        };
+      },
+    },
   });
   assert.equal(snapshot.importIntake?.ok, true);
   assert.equal(snapshot.importIntake?.reasonCode, "ok");

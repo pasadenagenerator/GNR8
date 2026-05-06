@@ -157,7 +157,7 @@ test('raw template preview rewrites local asset references to preview-assets rou
     '<!doctype html>',
     '<html>',
     '<head><link rel="stylesheet" href="./assets/site.css"></head>',
-    '<body><img src="/images/logo.png"><script src="scripts/app.js"></script></body>',
+    '<body><img src="/uploads/logo.png" srcset="/uploads/logo.png 1x, /uploads/logo@2x.png 2x"><script src="scripts/app.js"></script></body>',
     '</html>',
   ].join('')
   const rewritten = __unifiedRenderPreviewTestUtils.rewriteRawTemplateAssetReferences({
@@ -170,7 +170,8 @@ test('raw template preview rewrites local asset references to preview-assets rou
     rewritten.includes('/api/gnr8/runtime/preview-assets/site-raw/sv-raw/nested/site/assets/site.css'),
     true,
   )
-  assert.equal(rewritten.includes('/api/gnr8/runtime/preview-assets/site-raw/sv-raw/images/logo.png'), true)
+  assert.equal(rewritten.includes('/api/gnr8/runtime/preview-assets/site-raw/sv-raw/uploads/logo.png'), true)
+  assert.equal(rewritten.includes('/api/gnr8/runtime/preview-assets/site-raw/sv-raw/uploads/logo@2x.png 2x'), true)
   assert.equal(
     rewritten.includes('/api/gnr8/runtime/preview-assets/site-raw/sv-raw/nested/site/scripts/app.js'),
     true,

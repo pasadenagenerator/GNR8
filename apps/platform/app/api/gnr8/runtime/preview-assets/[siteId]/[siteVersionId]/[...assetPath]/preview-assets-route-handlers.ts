@@ -43,6 +43,13 @@ function normalizeAssetPath(parts: string[] | undefined): string | null {
   return segments.join("/");
 }
 
+function resolveLookupCandidates(normalizedPath: string): string[] {
+  const candidates = new Set<string>([normalizedPath]);
+  if (!normalizedPath.startsWith("uploads/")) candidates.add(`uploads/${normalizedPath}`);
+  if (!normalizedPath.startsWith("assets/")) candidates.add(`assets/${normalizedPath}`);
+  return [...candidates];
+}
+
 function resolveRequestHost(headers: Headers): string {
   return (
     (headers.get("x-forwarded-host") ?? headers.get("host") ?? "")
@@ -85,7 +92,7 @@ export function createPreviewAssetsRouteHandlers(overrides: Partial<PreviewAsset
 
         const artifact = (await deps.getRawImportedSiteArtifact(siteVersionId)) ?? (await deps.getRawTemplateSiteArtifact(siteVersionId));
         if (!artifact || artifact.siteId !== siteId) {
-          console.warn("[preview-runtime] RAW_TEMPLATE_ASSET_MISSING", {
+          console.warn("[preview-runtime] RAW_IMPORT_ASSET_LOOKUP_MISSING", {
             siteId,
             siteVersionId,
             path: normalizeAssetPath(assetPath),
@@ -96,7 +103,7 @@ export function createPreviewAssetsRouteHandlers(overrides: Partial<PreviewAsset
 
         const normalizedPath = normalizeAssetPath(assetPath);
         if (!normalizedPath) {
-          console.warn("[preview-runtime] RAW_TEMPLATE_ASSET_MISSING", {
+          console.warn("[preview-runtime] RAW_IMPORT_ASSET_LOOKUP_MISSING", {
             siteId,
             siteVersionId,
             path: null,
@@ -104,30 +111,50 @@ export function createPreviewAssetsRouteHandlers(overrides: Partial<PreviewAsset
           });
           return new Response("not found", { status: 404, headers: { "content-type": "text/plain; charset=utf-8" } });
         }
-
-        const asset = await deps.getRawTemplateSiteAsset({
+        const lookupCandidates = resolveLookupCandidates(normalizedPath);
+        console.info("[preview-runtime] RAW_IMPORT_ASSET_LOOKUP_STARTED", {
+          siteId,
           siteVersionId,
-          filePath: normalizedPath,
+          artifactType: artifact.artifactType,
+          path: normalizedPath,
+          candidates: lookupCandidates,
         });
+        let resolvedPath: string | null = null;
+        let asset: Awaited<ReturnType<typeof deps.getRawTemplateSiteAsset>> | null = null;
+        for (const candidate of lookupCandidates) {
+          const maybeAsset = await deps.getRawTemplateSiteAsset({
+            siteVersionId,
+            artifactId: artifact.id,
+            filePath: candidate,
+          });
+          if (!maybeAsset) continue;
+          resolvedPath = candidate;
+          asset = maybeAsset;
+          break;
+        }
         if (!asset) {
-          console.warn("[preview-runtime] RAW_TEMPLATE_ASSET_MISSING", {
+          console.warn("[preview-runtime] RAW_IMPORT_ASSET_LOOKUP_MISSING", {
             siteId,
             siteVersionId,
             path: normalizedPath,
+            candidates: lookupCandidates,
             reason: "asset_not_found",
           });
           return new Response("not found", { status: 404, headers: { "content-type": "text/plain; charset=utf-8" } });
         }
 
-        console.info("[preview-runtime] RAW_TEMPLATE_ASSET_RESOLVED", {
+        console.info("[preview-runtime] RAW_IMPORT_ASSET_LOOKUP_FOUND", {
           siteId,
           siteVersionId,
-          path: normalizedPath,
+          requestedPath: normalizedPath,
+          resolvedPath,
+          artifactType: artifact.artifactType,
           bytes: asset.sizeBytes,
           mediaType: asset.mediaType,
         });
 
-        const isCssAsset = normalizedPath.toLowerCase().endsWith(".css");
+        const effectivePath = resolvedPath ?? normalizedPath;
+        const isCssAsset = effectivePath.toLowerCase().endsWith(".css");
         const responseBody =
           isCssAsset
             ? new TextEncoder().encode(
@@ -135,16 +162,16 @@ export function createPreviewAssetsRouteHandlers(overrides: Partial<PreviewAsset
                   css: asset.bytes.toString("utf8"),
                   siteId,
                   siteVersionId,
-                  assetFilePath: normalizedPath,
+                  assetFilePath: effectivePath,
                 }),
               )
             : new Uint8Array(asset.bytes);
-        const contentType = resolveAssetMediaType({ filePath: normalizedPath, mediaType: asset.mediaType });
+        const contentType = resolveAssetMediaType({ filePath: effectivePath, mediaType: asset.mediaType });
 
         const headers: Record<string, string> = {
           "content-type": contentType,
           "cache-control": "public, max-age=31536000, immutable",
-          "x-gnr8-preview-asset-path": normalizedPath,
+          "x-gnr8-preview-asset-path": effectivePath,
         };
         if (debugMode) {
           headers["x-gnr8-debug-site-id"] = siteId;

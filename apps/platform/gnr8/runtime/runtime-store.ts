@@ -2501,28 +2501,45 @@ export async function getRawImportedSiteArtifact(siteVersionId: string): Promise
 export async function getRawTemplateSiteAsset(input: {
   siteVersionId: string;
   filePath: string;
+  artifactId?: string | null;
 }): Promise<{ mediaType: string; sizeBytes: number; sha256: string; bytes: Buffer } | null> {
   await ensureRuntimeTables();
   const normalizedFilePath = normalizeRawTemplateFilePath(input.filePath);
   if (!normalizedFilePath) return null;
   const client = await getSuperadminPool().connect();
   try {
-    const row = await client.query<RawTemplateArtifactFileRow>(
-      `
-      select
-        f.media_type::text as media_type,
-        f.file_size_bytes::integer as file_size_bytes,
-        f.sha256::text as sha256,
-        f.content_bytes
-      from public.gnr8_runtime_raw_template_artifacts a
-      join public.gnr8_runtime_raw_template_artifact_files f
-        on f.artifact_id = a.id
-      where a.site_version_id = $1::uuid
-        and f.file_path = $2::text
-      limit 1
-      `,
-      [input.siteVersionId, normalizedFilePath],
-    );
+    const artifactId = String(input.artifactId ?? "").trim();
+    const row = artifactId
+      ? await client.query<RawTemplateArtifactFileRow>(
+          `
+          select
+            f.media_type::text as media_type,
+            f.file_size_bytes::integer as file_size_bytes,
+            f.sha256::text as sha256,
+            f.content_bytes
+          from public.gnr8_runtime_raw_template_artifact_files f
+          where f.artifact_id = $1::uuid
+            and f.file_path = $2::text
+          limit 1
+          `,
+          [artifactId, normalizedFilePath],
+        )
+      : await client.query<RawTemplateArtifactFileRow>(
+          `
+          select
+            f.media_type::text as media_type,
+            f.file_size_bytes::integer as file_size_bytes,
+            f.sha256::text as sha256,
+            f.content_bytes
+          from public.gnr8_runtime_raw_template_artifacts a
+          join public.gnr8_runtime_raw_template_artifact_files f
+            on f.artifact_id = a.id
+          where a.site_version_id = $1::uuid
+            and f.file_path = $2::text
+          limit 1
+          `,
+          [input.siteVersionId, normalizedFilePath],
+        );
     const hit = row.rows[0];
     if (!hit) return null;
     const bytes = Buffer.isBuffer(hit.content_bytes) ? hit.content_bytes : Buffer.from(hit.content_bytes);
