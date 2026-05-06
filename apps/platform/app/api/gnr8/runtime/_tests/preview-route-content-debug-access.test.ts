@@ -1,10 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { GET, __setPreviewRouteDependenciesForTest } from "@/app/api/gnr8/runtime/versions/[siteVersionId]/preview/route";
+import { GET } from "@/app/api/gnr8/runtime/versions/[siteVersionId]/preview/route";
+import { setPreviewRouteDependenciesForTest } from "@/app/api/gnr8/runtime/versions/[siteVersionId]/preview/preview-route-dependencies";
 
 function mockPreviewDeps(canShowContentDebug: boolean): () => void {
-  return __setPreviewRouteDependenciesForTest({
+  return setPreviewRouteDependenciesForTest({
     resolveAgencyIdForSiteVersion: async () => "agency_1",
     requireAgencyActionContext: async () => ({ agencyId: "agency_1" }) as never,
     renderSiteVersionPreview: async () =>

@@ -2,6 +2,9 @@
   "name": "gnr8-platform",
   "private": true,
   "packageManager": "pnpm@10.28.2",
+  "scripts": {
+    "check:next-route-exports": "node scripts/check-next-route-exports.mjs"
+  },
   "devDependencies": {
     "@types/node": "^25.2.3",
     "@types/pg": "^8.16.0",

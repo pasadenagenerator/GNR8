@@ -1,35 +1,9 @@
-import { renderSiteVersionPreview, SiteVersionPreviewUnavailableError } from "@/gnr8/runtime/unified-render-preview";
-import { parseAgencyActionContextError, requireAgencyActionContext } from "@/app/api/gnr8/agency/_lib/agency-action-access";
-import { resolveAgencyIdForSiteVersion } from "@/app/api/gnr8/runtime/_lib/runtime-agency-scope";
-import { injectRuntimeDebugPanel } from "@/src/public-site/raw-template-runtime";
-import { canShowContentDebug } from "@/src/public-site/content-debug-access";
+import { SiteVersionPreviewUnavailableError } from "@/gnr8/runtime/unified-render-preview";
+import { parseAgencyActionContextError } from "@/app/api/gnr8/agency/_lib/agency-action-access";
+import { previewRouteDependencies } from "./preview-route-dependencies";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-
-type PreviewRouteDependencies = {
-  canShowContentDebug: typeof canShowContentDebug;
-  resolveAgencyIdForSiteVersion: typeof resolveAgencyIdForSiteVersion;
-  requireAgencyActionContext: typeof requireAgencyActionContext;
-  renderSiteVersionPreview: typeof renderSiteVersionPreview;
-  injectRuntimeDebugPanel: typeof injectRuntimeDebugPanel;
-};
-
-const previewRouteDependencies: PreviewRouteDependencies = {
-  canShowContentDebug,
-  resolveAgencyIdForSiteVersion,
-  requireAgencyActionContext,
-  renderSiteVersionPreview,
-  injectRuntimeDebugPanel,
-};
-
-export function __setPreviewRouteDependenciesForTest(overrides: Partial<PreviewRouteDependencies>): () => void {
-  const previous = { ...previewRouteDependencies };
-  Object.assign(previewRouteDependencies, overrides);
-  return () => {
-    Object.assign(previewRouteDependencies, previous);
-  };
-}
 
 function escapeHtml(value: string): string {
   return value
