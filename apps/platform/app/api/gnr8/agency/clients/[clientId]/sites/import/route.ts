@@ -3,6 +3,7 @@ import fs from 'node:fs'
 
 import { parseAgencyActionContextError, requireAgencyActionContext } from '@/app/api/gnr8/agency/_lib/agency-action-access'
 import { SCOPED_SITE_IMPORT_CANONICAL_PATH } from '@/gnr8/site/site-import-contract'
+import { buildSiteImportCreatePayload } from '@/gnr8/site/site-import-create-payload'
 import { importerSuccessRedirectHref } from '@/gnr8/site/site-importer-routing'
 import { resolveImportPreview } from '@/gnr8/site/import-preview-resolution'
 import { extractTitleFromHtmlDocument, resolveImportedSiteName } from '@/gnr8/site/site-import-site-name'
@@ -238,22 +239,37 @@ export async function POST(req: Request, ctx: { params: Promise<Params> }) {
       requestId: `client-site-import-${Date.now()}`,
     })
     const rawHtml = fs.readFileSync(snapshot.entryHtmlPathAbs, 'utf8')
+    const documentTitle = extractTitleFromHtmlDocument(rawHtml)
     const siteNameResolution = resolveImportedSiteName({
       userProvidedName: body.siteName,
       sourceUrl: importUrl.toString(),
-      documentTitle: extractTitleFromHtmlDocument(rawHtml),
+      documentTitle,
+    })
+    const createPayload = buildSiteImportCreatePayload({
+      userProvidedSiteName: body.siteName,
+      sourceUrl: importUrl.toString(),
+      documentTitle,
+      clientId,
+      agencyId: actionContext.agencyId,
     })
     const diagnostics: string[] = ['SITE_IMPORT_SITE_NAME_RESOLVED']
     if (siteNameResolution.source !== 'user_provided') {
       diagnostics.push('SITE_IMPORT_SITE_NAME_FALLBACK_USED')
+      console.info('[site-import] SITE_IMPORT_SITE_NAME_FALLBACK_USED', {
+        source: siteNameResolution.source,
+        resolvedName: createPayload.name,
+        sourceUrl: createPayload.sourceUrl,
+        clientId: createPayload.clientId,
+        agencyId: createPayload.agencyId,
+      })
     }
     diagnostics.push('SITE_IMPORT_SITE_CREATE_STARTED')
     console.info('[site-import] SITE_IMPORT_SITE_NAME_RESOLVED', {
       source: siteNameResolution.source,
-      resolvedName: siteNameResolution.resolvedName,
-      sourceUrl: importUrl.toString(),
-      clientId,
-      agencyId: actionContext.agencyId,
+      resolvedName: createPayload.name,
+      sourceUrl: createPayload.sourceUrl,
+      clientId: createPayload.clientId,
+      agencyId: createPayload.agencyId,
     })
     const intake = snapshot.importIntake ?? null
     const rawHtmlUsable = Boolean((intake?.rawHtmlAvailable ?? false) && (intake?.htmlByteLength ?? 0) > 0)
@@ -283,9 +299,9 @@ export async function POST(req: Request, ctx: { params: Promise<Params> }) {
     const ownershipSiteId = await resolveOrCreateOwnershipSiteId({
       runtimeSiteId: imported.siteId,
       siteVersionId: imported.siteVersionId,
-      clientId,
-      agencyId: actionContext.agencyId,
-      siteName: siteNameResolution.resolvedName,
+      clientId: createPayload.clientId,
+      agencyId: createPayload.agencyId,
+      siteName: createPayload.name,
       domainHost: normalizeText(importUrl.host) || null,
     })
     diagnostics.push('SITE_IMPORT_SITE_CREATE_COMPLETED')
