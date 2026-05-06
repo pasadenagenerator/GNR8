@@ -3,6 +3,7 @@ import {
   getTemplateByIdForClient,
   listTemplatesForClient,
   listTemplatesForClientWithDiagnostics,
+  markTemplateProcessingAttemptStarted,
   updateTemplateMetadataById,
 } from '@/gnr8/template-intake/storage/template-repository'
 import type { TemplateRecord } from '@/gnr8/template-intake/types/template-intake-types'
@@ -57,6 +58,16 @@ export async function deleteClientTemplateById(input: {
   templateId: string
 }): Promise<TemplateRecord | null> {
   return deleteTemplateByIdForClient({
+    clientId: input.clientId,
+    templateId: input.templateId,
+  })
+}
+
+export async function markClientTemplateProcessingAttemptStarted(input: {
+  clientId: string
+  templateId: string
+}): Promise<TemplateRecord | null> {
+  return markTemplateProcessingAttemptStarted({
     clientId: input.clientId,
     templateId: input.templateId,
   })

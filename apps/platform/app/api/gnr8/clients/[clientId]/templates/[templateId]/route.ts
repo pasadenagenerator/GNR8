@@ -9,3 +9,4 @@ const handlers = createTemplateDetailRouteHandlers()
 export const GET = handlers.GET
 export const PATCH = handlers.PATCH
 export const DELETE = handlers.DELETE
+export const POST = handlers.POST

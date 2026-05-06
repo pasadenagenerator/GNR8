@@ -7,6 +7,7 @@ import { NextResponse } from 'next/server'
 import {
   deleteClientTemplateById,
   getClientTemplateById,
+  markClientTemplateProcessingAttemptStarted,
   updateClientTemplateMetadata,
 } from '@/gnr8/template-intake/core/template-intake-query-service'
 import { deleteTemplateSourceZip } from '@/gnr8/template-intake/storage/template-source-zip-storage'
@@ -14,6 +15,7 @@ import {
   mapTemplateToDetailCard,
   normalizeTemplateMetadataPatchPayload,
 } from '@/gnr8/template-intake/core/template-management-contract'
+import { triggerTemplateProcessingJob } from '@/gnr8/template-intake/routes/template-processing-trigger'
 import { parseTemplateRepositoryError } from '@/gnr8/template-intake/storage/template-repository'
 import { parseThrownScopeError, requireClientTemplateScope } from '@/app/api/gnr8/clients/_lib/client-template-scope'
 
@@ -34,6 +36,8 @@ type TemplateDetailRouteDeps = {
   getTemplateById: typeof getClientTemplateById
   updateTemplateMetadata: typeof updateClientTemplateMetadata
   deleteTemplateById: typeof deleteClientTemplateById
+  markTemplateProcessingAttemptStarted: typeof markClientTemplateProcessingAttemptStarted
+  triggerTemplateProcessing: typeof triggerTemplateProcessingJob
   parseStorageError: typeof parseTemplateRepositoryError
   parseScopeError: typeof parseThrownScopeError
   cleanupTemplateArtifacts: typeof cleanupTemplateArtifacts
@@ -44,6 +48,8 @@ const DEFAULT_DEPS: TemplateDetailRouteDeps = {
   getTemplateById: getClientTemplateById,
   updateTemplateMetadata: updateClientTemplateMetadata,
   deleteTemplateById: deleteClientTemplateById,
+  markTemplateProcessingAttemptStarted: markClientTemplateProcessingAttemptStarted,
+  triggerTemplateProcessing: triggerTemplateProcessingJob,
   parseStorageError: parseTemplateRepositoryError,
   parseScopeError: parseThrownScopeError,
   cleanupTemplateArtifacts,
@@ -255,6 +261,45 @@ export function createTemplateDetailRouteHandlers(deps: TemplateDetailRouteDeps 
           },
           { status: 200 },
         )
+      } catch (error) {
+        return mapThrownErrorToResponse(error, deps)
+      }
+    },
+
+    POST: async (_request: Request, ctx: { params: Promise<Params> }) => {
+      try {
+        const { clientId: clientIdParam, templateId } = await ctx.params
+        const scope = await deps.requireScope({
+          clientIdParam,
+        })
+        const template = await deps.getTemplateById({ clientId: scope.clientId, templateId })
+        if (!template) return toNotFoundResponse()
+        if (template.status !== 'failed') {
+          return NextResponse.json({ ok: false, code: 'TEMPLATE_RETRY_NOT_ALLOWED', error: 'Retry is allowed only for failed templates.' }, { status: 409 })
+        }
+        const bucket = normalizeText(template.sourceZipStorageBucket)
+        const key = normalizeText(template.sourceZipStorageKey)
+        if (!bucket || !key) {
+          return NextResponse.json(
+            { ok: false, code: 'TEMPLATE_RETRY_NOT_ALLOWED', error: 'Retry requires original template ZIP source.' },
+            { status: 409 },
+          )
+        }
+        const updated = await deps.markTemplateProcessingAttemptStarted({ clientId: scope.clientId, templateId })
+        if (!updated) return toNotFoundResponse()
+        const triggered = await deps.triggerTemplateProcessing({
+          clientId: scope.clientId,
+          templateId,
+          sourceZipStorageBucket: bucket,
+          sourceZipStorageKey: key,
+        })
+        if (!triggered) {
+          return NextResponse.json(
+            { ok: false, code: 'TEMPLATE_RETRY_TRIGGER_FAILED', error: 'Retry was staged but processing enqueue failed.' },
+            { status: 202 },
+          )
+        }
+        return NextResponse.json({ ok: true, template: mapTemplateToDetailCard(updated) }, { status: 200 })
       } catch (error) {
         return mapThrownErrorToResponse(error, deps)
       }

@@ -24,6 +24,21 @@ export type TemplateListApiCard = {
     templateType?: 'single_page' | 'multi_page' | 'unknown'
   }
   processingAttempts?: number
+  processingError?: string | null
+  reasonCode?: string | null
+  diagnosticsSummary?: {
+    issues?: Array<{ code?: string; severity?: string; message?: string }>
+    counts?: { info?: number; warning?: number; error?: number; fatal?: number }
+  } | null
+  importManifestSummary?: {
+    entryHtmlPath?: string | null
+    htmlFilePaths?: string[]
+  } | null
+  importManifestEntryHtmlPath?: string | null
+  importManifestFileCount?: number | null
+  semanticImportSummary?: string
+  rawArtifactAvailable?: boolean
+  contentSlotCount?: number | null
   createdAt: string
 }
 

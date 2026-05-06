@@ -60,6 +60,8 @@ export default function TemplateEditClient(props: {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
   const [deleteErrorMessage, setDeleteErrorMessage] = useState<string | null>(null)
+  const [isRetrying, setIsRetrying] = useState(false)
+  const [retryMessage, setRetryMessage] = useState<string | null>(null)
 
   async function loadTemplate() {
     setIsLoading(true)
@@ -178,6 +180,27 @@ export default function TemplateEditClient(props: {
     }
   }
 
+  async function onRetryProcessing() {
+    setRetryMessage(null)
+    setIsRetrying(true)
+    try {
+      const response = await fetch(`/api/gnr8/clients/${encodeURIComponent(props.clientId)}/templates/${encodeURIComponent(props.templateId)}`, {
+        method: 'POST',
+      })
+      const payload = (await response.json().catch(() => null)) as { ok?: boolean; error?: string } | null
+      if (!payload || payload.ok !== true) {
+        setRetryMessage(payload?.error ?? `Retry failed (HTTP ${response.status}).`)
+        return
+      }
+      setRetryMessage('Retry queued. Processing will resume shortly.')
+      await loadTemplate()
+    } catch (error) {
+      setRetryMessage(error instanceof Error ? error.message : 'Retry failed.')
+    } finally {
+      setIsRetrying(false)
+    }
+  }
+
   const createdAtLabel = useMemo(() => {
     if (!template?.createdAt) return 'Unavailable'
     const parsed = new Date(template.createdAt)
@@ -223,6 +246,12 @@ export default function TemplateEditClient(props: {
         <p style={{ margin: 0, fontSize: 13, color: '#475569' }}>
           Update template metadata and remove template records safely.
         </p>
+        {template.status === 'failed' ? (
+          <p style={{ margin: 0, fontSize: 12, color: '#991b1b' }}>
+            Reason code: {template.reasonCode ?? 'TEMPLATE_PROCESSING_FAILED'}
+            {template.processingError ? ` · ${template.processingError}` : ''}
+          </p>
+        ) : null}
       </header>
 
       <div style={{ border: '1px solid #e2e8f0', borderRadius: 10, overflow: 'hidden', background: '#fff' }}>
@@ -284,8 +313,37 @@ export default function TemplateEditClient(props: {
             <dt style={{ fontSize: 11, color: '#64748b', fontWeight: 700 }}>Source Filename</dt>
             <dd style={{ margin: 0, fontSize: 13, color: '#0f172a' }}>{template.sourceFilename}</dd>
           </div>
+          <div>
+            <dt style={{ fontSize: 11, color: '#64748b', fontWeight: 700 }}>Raw Artifact</dt>
+            <dd style={{ margin: 0, fontSize: 13, color: '#0f172a' }}>{template.rawArtifactAvailable ? 'Available' : 'Missing'}</dd>
+          </div>
+          <div>
+            <dt style={{ fontSize: 11, color: '#64748b', fontWeight: 700 }}>File Count</dt>
+            <dd style={{ margin: 0, fontSize: 13, color: '#0f172a' }}>{template.importManifestFileCount ?? 'Unknown'}</dd>
+          </div>
+          <div style={{ gridColumn: '1 / -1' }}>
+            <dt style={{ fontSize: 11, color: '#64748b', fontWeight: 700 }}>Semantic Import Summary</dt>
+            <dd style={{ margin: 0, fontSize: 13, color: '#0f172a' }}>{template.semanticImportSummary}</dd>
+          </div>
+          <div style={{ gridColumn: '1 / -1' }}>
+            <dt style={{ fontSize: 11, color: '#64748b', fontWeight: 700 }}>Content Slot Readiness Preview</dt>
+            <dd style={{ margin: 0, fontSize: 13, color: '#0f172a' }}>{template.contentSlotReadinessPreview}</dd>
+          </div>
         </dl>
       </div>
+
+      <section style={{ border: '1px solid #e2e8f0', borderRadius: 10, padding: 12, display: 'grid', gap: 6 }}>
+        <h3 style={{ margin: 0, fontSize: 14, color: '#0f172a' }}>Import Manifest Summary</h3>
+        <div style={{ fontSize: 12, color: '#334155' }}>Entry HTML Path: {template.importManifestSummary?.entryHtmlPath ?? 'Unavailable'}</div>
+        <div style={{ fontSize: 12, color: '#334155' }}>Import Status: {template.importManifestSummary?.status ?? 'Unavailable'}</div>
+      </section>
+
+      <section style={{ border: '1px solid #e2e8f0', borderRadius: 10, padding: 12, display: 'grid', gap: 6 }}>
+        <h3 style={{ margin: 0, fontSize: 14, color: '#0f172a' }}>Diagnostics Summary</h3>
+        <div style={{ fontSize: 12, color: '#334155' }}>
+          {template.diagnosticsSummary?.issues?.slice(0, 5).map((issue) => `${issue.severity}:${issue.code}`).join(' · ') || 'No diagnostics recorded.'}
+        </div>
+      </section>
 
       <form onSubmit={onSave} style={{ display: 'grid', gap: 10 }}>
         <label style={{ display: 'grid', gap: 4 }}>
@@ -358,6 +416,25 @@ export default function TemplateEditClient(props: {
           >
             Delete Template
           </button>
+          <button
+            type='button'
+            disabled={isRetrying || template.status !== 'failed' || !template.rawArtifactAvailable}
+            onClick={onRetryProcessing}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              padding: '7px 12px',
+              borderRadius: 8,
+              border: '1px solid #cbd5e1',
+              background: '#fff',
+              color: '#0f172a',
+              fontSize: 12,
+              fontWeight: 700,
+              cursor: isRetrying ? 'wait' : 'pointer',
+            }}
+          >
+            {isRetrying ? 'Retrying...' : 'Retry Processing'}
+          </button>
           <Link
             href={props.backHref}
             style={{
@@ -376,6 +453,7 @@ export default function TemplateEditClient(props: {
             Back
           </Link>
         </div>
+        {retryMessage ? <div style={{ fontSize: 12, color: '#334155' }}>{retryMessage}</div> : null}
       </form>
 
       {saveSuccessMessage ? (

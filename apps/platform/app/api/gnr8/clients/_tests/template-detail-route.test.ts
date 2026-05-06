@@ -46,6 +46,13 @@ function createDeps(overrides?: {
   getTemplateById?: (input: { clientId: string; templateId: string }) => Promise<TemplateRecord | null>
   updateTemplateMetadata?: (input: { clientId: string; templateId: string; name: string; tags: string[] }) => Promise<TemplateRecord | null>
   deleteTemplateById?: (input: { clientId: string; templateId: string }) => Promise<TemplateRecord | null>
+  markTemplateProcessingAttemptStarted?: (input: { clientId: string; templateId: string }) => Promise<TemplateRecord | null>
+  triggerTemplateProcessing?: (input: {
+    clientId: string
+    templateId: string
+    sourceZipStorageBucket: string
+    sourceZipStorageKey: string
+  }) => Promise<boolean>
   requireScope?: (input: { clientIdParam: string }) => Promise<{ userId: string; clientId: string; organizationId: string; agencyId: string }>
   parseStorageError?: (error: unknown) => { status: number; code: string; message: string } | null
   parseScopeError?: (error: unknown) => { status: number; message: string }
@@ -74,6 +81,12 @@ function createDeps(overrides?: {
       (async () => {
         return createTemplate()
       }),
+    markTemplateProcessingAttemptStarted:
+      overrides?.markTemplateProcessingAttemptStarted ??
+      (async () => {
+        return createTemplate({ status: 'processing' })
+      }),
+    triggerTemplateProcessing: overrides?.triggerTemplateProcessing ?? (async () => true),
     parseStorageError: overrides?.parseStorageError ?? (() => null),
     parseScopeError: overrides?.parseScopeError ?? ((error: unknown) => {
       if (error instanceof Error && error.message.startsWith('403|')) {

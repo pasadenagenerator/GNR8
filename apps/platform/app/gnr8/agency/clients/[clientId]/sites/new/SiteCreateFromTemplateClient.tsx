@@ -96,7 +96,9 @@ export default function SiteCreateFromTemplateClient(props: Props) {
         if (!cancelled) {
           setTemplates(payload.templates)
           if (payload.templates.length > 0) {
-            const firstReady = payload.templates.find((template) => template.status === 'ready')
+            const firstReady = payload.templates.find(
+              (template) => template.status === 'ready' && template.rawArtifactAvailable && Boolean(template.importManifestEntryHtmlPath || template.entryHtmlFileName),
+            )
             setSelectedTemplateId(firstReady?.id ?? '')
           }
         }
@@ -121,6 +123,13 @@ export default function SiteCreateFromTemplateClient(props: Props) {
     error,
     templatesCount: templates.length,
   })
+  const selectedTemplate = templates.find((template) => template.id === selectedTemplateId) ?? null
+  const selectedTemplateCanCreate = Boolean(
+    selectedTemplate &&
+      selectedTemplate.status === 'ready' &&
+      selectedTemplate.rawArtifactAvailable &&
+      (selectedTemplate.importManifestEntryHtmlPath || selectedTemplate.entryHtmlFileName),
+  )
 
   function startBootstrapStatusPolling(siteId: string): void {
     setIsPolling(true)
@@ -270,6 +279,9 @@ export default function SiteCreateFromTemplateClient(props: Props) {
               {templates.map((template) => {
                 const isSelected = selectedTemplateId === template.id
                 const isReady = template.status === 'ready'
+                const hasRawArtifact = Boolean(template.rawArtifactAvailable)
+                const hasEntryHtml = Boolean(template.importManifestEntryHtmlPath || template.entryHtmlFileName)
+                const canCreateFromTemplate = isReady && hasRawArtifact && hasEntryHtml
                 return (
                   <label
                     key={template.id}
@@ -290,7 +302,7 @@ export default function SiteCreateFromTemplateClient(props: Props) {
                         value={template.id}
                         checked={isSelected}
                         onChange={() => setSelectedTemplateId(template.id)}
-                        disabled={!isReady}
+                        disabled={!canCreateFromTemplate}
                         style={{ marginTop: 3 }}
                       />
                       <div style={{ display: 'grid', gap: 3 }}>
@@ -302,9 +314,9 @@ export default function SiteCreateFromTemplateClient(props: Props) {
                         <div style={{ fontSize: 12, color: '#64748b' }}>
                           Preview: {template.preview.available ? 'Available' : 'Unavailable'} ({template.preview.source})
                         </div>
-                        {!isReady ? (
+                        {!canCreateFromTemplate ? (
                           <div style={{ fontSize: 12, color: '#9a3412' }}>
-                            This template is not ready yet and cannot be used for site creation.
+                            Cannot create: {!isReady ? 'template not ready' : !hasRawArtifact ? 'raw artifact missing' : 'entry HTML missing'}.
                           </div>
                         ) : null}
                       </div>
@@ -454,7 +466,7 @@ export default function SiteCreateFromTemplateClient(props: Props) {
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             <button
               type='submit'
-              disabled={isPending || isPolling || uiView !== 'ready' || !selectedTemplateId}
+              disabled={isPending || isPolling || uiView !== 'ready' || !selectedTemplateId || !selectedTemplateCanCreate}
               style={{
                 display: 'inline-flex',
                 alignItems: 'center',

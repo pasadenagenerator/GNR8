@@ -19,6 +19,23 @@ export type TemplateDetailView = {
     source: 'rendered_capture' | 'html_snapshot' | 'fallback'
     imagePath: string | null
   }
+  templateManifestSummary: Record<string, unknown> | null
+  diagnosticsSummary: {
+    issues: Array<{ code: string; severity: string; message: string }>
+    counts?: { info?: number; warning?: number; error?: number; fatal?: number }
+  } | null
+  importManifestSummary: {
+    entryHtmlPath?: string | null
+    htmlFilePaths?: string[]
+    status?: string
+    diagnostics?: { totalCount?: number; warningCount?: number; errorCount?: number; fatalCount?: number }
+  } | null
+  processingError: string | null
+  reasonCode: string | null
+  rawArtifactAvailable: boolean
+  importManifestFileCount: number | null
+  semanticImportSummary: string
+  contentSlotReadinessPreview: string
   createdAt: string
   updatedAt: string
 }
@@ -101,6 +118,24 @@ export function parseTemplateDetailPayload(payload: unknown): TemplateDetailView
       source: normalizePreviewSource(preview.source),
       imagePath: normalizeText(preview.imagePath) || null,
     },
+    templateManifestSummary:
+      template.templateManifestSummary && typeof template.templateManifestSummary === 'object' && !Array.isArray(template.templateManifestSummary)
+        ? (template.templateManifestSummary as Record<string, unknown>)
+        : null,
+    diagnosticsSummary:
+      template.diagnosticsSummary && typeof template.diagnosticsSummary === 'object' && !Array.isArray(template.diagnosticsSummary)
+        ? (template.diagnosticsSummary as TemplateDetailView['diagnosticsSummary'])
+        : null,
+    importManifestSummary:
+      template.importManifestSummary && typeof template.importManifestSummary === 'object' && !Array.isArray(template.importManifestSummary)
+        ? (template.importManifestSummary as TemplateDetailView['importManifestSummary'])
+        : null,
+    processingError: normalizeText(template.processingError) || null,
+    reasonCode: normalizeText(template.reasonCode) || null,
+    rawArtifactAvailable: Boolean(template.rawArtifactAvailable),
+    importManifestFileCount: Number(template.importManifestFileCount ?? 0) || null,
+    semanticImportSummary: normalizeText(template.semanticImportSummary) || 'Unavailable',
+    contentSlotReadinessPreview: normalizeText(template.contentSlotReadinessPreview) || 'Unavailable',
     createdAt,
     updatedAt,
   }

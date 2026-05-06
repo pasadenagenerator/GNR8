@@ -82,10 +82,7 @@ function toScopeErrorResponse(mapped: { status: number; message: string }) {
   )
 }
 
-function hasBootstrapSourceTruth(template: TemplateSelection): boolean {
-  const entryHtmlPath = String(template.entryHtmlPath ?? '').trim()
-  if (!entryHtmlPath) return false
-
+function hasRawArtifactSource(template: TemplateSelection): boolean {
   const durableSnapshotRootDirAbs = String(template.durableSnapshotRootDirAbs ?? '').trim()
   const importSnapshotId = String(template.importSnapshotId ?? '').trim()
   const sourceZipStorageBucket = String(template.sourceZipStorageBucket ?? '').trim()
@@ -164,7 +161,17 @@ export function createSiteCreateRouteHandlers(deps: SiteCreateRouteDeps) {
             { status: 409 },
           )
         }
-        if (!hasBootstrapSourceTruth(template)) {
+        if (!String(template.entryHtmlPath ?? '').trim()) {
+          return NextResponse.json(
+            failedResult({
+              reasonCode: 'TEMPLATE_ENTRY_HTML_MISSING',
+              templateId: template.id,
+              diagnostics: ['Template is ready but entry HTML path is missing.'],
+            }),
+            { status: 409 },
+          )
+        }
+        if (!hasRawArtifactSource(template)) {
           console.error('[site-create] TEMPLATE_READY_WITHOUT_BOOTSTRAP_SOURCE', {
             templateId: template.id,
             durableSnapshotRootDirAbs: template.durableSnapshotRootDirAbs,
@@ -175,7 +182,7 @@ export function createSiteCreateRouteHandlers(deps: SiteCreateRouteDeps) {
           })
           return NextResponse.json(
             failedResult({
-              reasonCode: 'TEMPLATE_READY_WITHOUT_BOOTSTRAP_SOURCE',
+              reasonCode: 'TEMPLATE_RAW_ARTIFACT_MISSING',
               templateId: template.id,
               diagnostics: ['Template is marked ready but does not contain bootstrap source truth.'],
             }),

@@ -30,6 +30,13 @@ export type TemplateDetailCard = {
   updatedAt: string
   templateManifestSummary: TemplateRecord['templateManifestSummary']
   diagnosticsSummary: TemplateRecord['diagnosticsSummary']
+  importManifestSummary: TemplateRecord['importManifestSummary']
+  processingError: string | null
+  reasonCode: string | null
+  rawArtifactAvailable: boolean
+  importManifestFileCount: number | null
+  semanticImportSummary: string
+  contentSlotReadinessPreview: string
 }
 
 export type NormalizedTemplateMetadataPatch = {
@@ -38,6 +45,11 @@ export type NormalizedTemplateMetadataPatch = {
 }
 
 export function mapTemplateToDetailCard(template: TemplateRecord): TemplateDetailCard {
+  const rawArtifactAvailable = Boolean(
+    normalizeText(template.durableSnapshotRootDirAbs) ||
+      normalizeText(template.importSnapshotId) ||
+      (normalizeText(template.sourceZipStorageBucket) && normalizeText(template.sourceZipStorageKey)),
+  )
   return {
     id: template.id,
     clientId: template.clientId,
@@ -59,6 +71,23 @@ export function mapTemplateToDetailCard(template: TemplateRecord): TemplateDetai
     updatedAt: template.updatedAt,
     templateManifestSummary: template.templateManifestSummary,
     diagnosticsSummary: template.diagnosticsSummary,
+    importManifestSummary: template.importManifestSummary,
+    processingError: normalizeText(template.processingError) || null,
+    reasonCode: template.status === 'failed' ? 'TEMPLATE_PROCESSING_FAILED' : null,
+    rawArtifactAvailable,
+    importManifestFileCount: Array.isArray(template.importManifestSummary?.htmlFilePaths)
+      ? template.importManifestSummary.htmlFilePaths.length
+      : null,
+    semanticImportSummary:
+      template.importHealth === 'clean'
+        ? 'Semantic import clean'
+        : template.importHealth === 'degraded'
+          ? 'Semantic import degraded'
+          : 'Semantic import failed',
+    contentSlotReadinessPreview:
+      template.status === 'ready' && rawArtifactAvailable && normalizeText(template.entryHtmlPath)
+        ? 'Template ready for slot extraction during site bootstrap.'
+        : 'Template not yet ready for slot extraction.',
   }
 }
 

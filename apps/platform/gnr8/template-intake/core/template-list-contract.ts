@@ -18,6 +18,15 @@ export type TemplateListCard = {
     imagePath: string | null
   }
   processingAttempts: number
+  processingError: string | null
+  reasonCode: string | null
+  diagnosticsSummary: TemplateRecord['diagnosticsSummary']
+  importManifestSummary: TemplateRecord['importManifestSummary']
+  importManifestFileCount: number | null
+  importManifestEntryHtmlPath: string | null
+  semanticImportSummary: string
+  rawArtifactAvailable: boolean
+  contentSlotCount: number | null
   createdAt: string
   updatedAt: string
 }
@@ -27,6 +36,16 @@ function normalizeText(value: unknown): string {
 }
 
 export function mapTemplateToListCard(template: TemplateRecord): TemplateListCard {
+  const importManifestFileCount = Array.isArray(template.importManifestSummary?.htmlFilePaths)
+    ? template.importManifestSummary?.htmlFilePaths.length
+    : null
+  const importManifestEntryHtmlPath = normalizeText(template.importManifestSummary?.entryHtmlPath) || null
+  const rawArtifactAvailable = Boolean(
+    normalizeText(template.durableSnapshotRootDirAbs) ||
+      normalizeText(template.importSnapshotId) ||
+      (normalizeText(template.sourceZipStorageBucket) && normalizeText(template.sourceZipStorageKey)),
+  )
+  const reasonCode = template.status === 'failed' ? 'TEMPLATE_PROCESSING_FAILED' : null
   return {
     id: template.id,
     name: template.name,
@@ -45,6 +64,20 @@ export function mapTemplateToListCard(template: TemplateRecord): TemplateListCar
       imagePath: normalizeText(template.previewImagePath) || null,
     },
     processingAttempts: Number(template.processingAttempts ?? 0) || 0,
+    processingError: normalizeText(template.processingError) || null,
+    reasonCode,
+    diagnosticsSummary: template.diagnosticsSummary,
+    importManifestSummary: template.importManifestSummary,
+    importManifestFileCount,
+    importManifestEntryHtmlPath,
+    semanticImportSummary:
+      template.importHealth === 'clean'
+        ? 'Semantic import clean'
+        : template.importHealth === 'degraded'
+          ? 'Semantic import degraded'
+          : 'Semantic import failed',
+    rawArtifactAvailable,
+    contentSlotCount: null,
     createdAt: template.createdAt,
     updatedAt: template.updatedAt,
   }

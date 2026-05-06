@@ -110,6 +110,7 @@ export default function TemplateLibraryPanel(props: {
   const [isLoading, setIsLoading] = useState(true)
   const [isUploading, setIsUploading] = useState(false)
   const [deletingTemplateId, setDeletingTemplateId] = useState<string | null>(null)
+  const [retryingTemplateId, setRetryingTemplateId] = useState<string | null>(null)
 
   async function loadTemplates() {
     setIsLoading(true)
@@ -283,6 +284,29 @@ export default function TemplateLibraryPanel(props: {
     }
   }
 
+  async function onRetryTemplate(templateId: string, templateName: string) {
+    setError(null)
+    setSuccessMessage(null)
+    setRetryingTemplateId(templateId)
+    try {
+      const response = await fetch(`/api/gnr8/clients/${encodeURIComponent(props.clientId)}/templates/${encodeURIComponent(templateId)}`, {
+        method: 'POST',
+      })
+      const payload = (await response.json().catch(() => null)) as { ok?: boolean; error?: string } | null
+      if (!payload || payload.ok !== true) {
+        setError(payload?.error ?? `Template retry failed (HTTP ${response.status})`)
+        return
+      }
+      setSuccessMessage(`Retry queued for "${templateName}".`)
+      await loadTemplates()
+      void pollTemplateProcessingUntilSettled(templateId)
+    } catch (retryError) {
+      setError(retryError instanceof Error ? retryError.message : 'Template retry failed.')
+    } finally {
+      setRetryingTemplateId(null)
+    }
+  }
+
   const templateCards = useMemo(() => templates ?? [], [templates])
 
   return (
@@ -316,9 +340,7 @@ export default function TemplateLibraryPanel(props: {
             Add New Template
           </label>
         </div>
-        <p style={{ margin: 0, fontSize: 13, color: '#475569' }}>
-          Upload ZIP HTML templates. Cards show truthful status, import health, tags, and preview fallback state.
-        </p>
+        <p style={{ margin: 0, fontSize: 13, color: '#475569' }}>Upload ZIP HTML templates and review true readiness before create-from-template.</p>
       </header>
 
       <form onSubmit={onUpload} style={{ marginTop: 12, display: 'grid', gap: 10 }}>
@@ -422,6 +444,7 @@ export default function TemplateLibraryPanel(props: {
                     {normalizeTemplateTypeLabel(template.templateType)}
                     {template.entryHtmlFileName ? ` · ${template.entryHtmlFileName}` : ''}
                   </div>
+                  <div style={{ fontSize: 11, color: '#64748b' }}>Created: {new Date(template.createdAt).toLocaleString()}</div>
                 </div>
 
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
@@ -429,6 +452,24 @@ export default function TemplateLibraryPanel(props: {
                   <StatusBadge label='Health' value={normalizeHealthLabel(template.importHealth)} />
                   <StatusBadge label='Source' value='ZIP HTML' />
                 </div>
+                <div style={{ fontSize: 12, color: '#334155' }}>
+                  Preview: {template.preview.available ? 'Yes' : 'No'} · Raw artifact: {template.rawArtifactAvailable ? 'Yes' : 'No'} · Entry HTML:{' '}
+                  {template.importManifestEntryHtmlPath ?? template.entryHtmlFileName ?? 'Missing'}
+                </div>
+                <div style={{ fontSize: 12, color: '#334155' }}>
+                  Content slots: {template.contentSlotCount == null ? 'Unknown' : String(template.contentSlotCount)} · File count:{' '}
+                  {template.importManifestFileCount == null ? 'Unknown' : String(template.importManifestFileCount)}
+                </div>
+                <div style={{ fontSize: 12, color: '#334155' }}>Semantic import: {template.semanticImportSummary ?? 'Unavailable'}</div>
+                <div style={{ fontSize: 12, color: '#64748b' }}>
+                  Diagnostics: {template.diagnosticsSummary?.issues?.slice(0, 2).map((d) => d.code || d.message).join(' · ') || 'None'}
+                </div>
+                {template.status === 'failed' ? (
+                  <div style={{ fontSize: 12, color: '#991b1b' }}>
+                    Reason code: {template.reasonCode ?? 'TEMPLATE_PROCESSING_FAILED'}
+                    {template.processingError ? ` · ${template.processingError}` : ''}
+                  </div>
+                ) : null}
 
                 {template.tags.length > 0 ? (
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
@@ -493,6 +534,27 @@ export default function TemplateLibraryPanel(props: {
                   >
                     {deletingTemplateId === template.id ? 'Deleting...' : 'Delete'}
                   </button>
+                  {template.status === 'failed' ? (
+                    <button
+                      type='button'
+                      disabled={retryingTemplateId === template.id || !template.rawArtifactAvailable}
+                      onClick={() => onRetryTemplate(template.id, template.name)}
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        padding: '6px 10px',
+                        borderRadius: 8,
+                        border: '1px solid #cbd5e1',
+                        background: '#fff',
+                        color: '#0f172a',
+                        fontSize: 12,
+                        fontWeight: 600,
+                        cursor: retryingTemplateId === template.id ? 'wait' : 'pointer',
+                      }}
+                    >
+                      {retryingTemplateId === template.id ? 'Retrying...' : 'Retry'}
+                    </button>
+                  ) : null}
                 </div>
               </div>
             </article>
