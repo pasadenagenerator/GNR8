@@ -720,3 +720,86 @@ test("public runtime version isolation: overrides for v1 never leak into v2 rend
     restoreDeps()
   }
 })
+
+test("uploads variant path falls back to original upload path when direct variant is missing", async () => {
+  const originalFetch = globalThis.fetch;
+  const originalInfo = console.info;
+  const loggedEvents: string[] = [];
+  const requestedUrls: string[] = [];
+
+  const restoreDeps = __setPublicRuntimeRenderDependenciesForTest({
+    resolveRuntimeSiteForHost: async () =>
+      ({
+        outcome: "site_hit",
+        siteId: "site_1",
+        sourceUrl: "https://source.example.com/",
+      }) as never,
+  });
+
+  console.info = (...args: unknown[]) => {
+    const message = String(args[0] ?? "");
+    if (message.startsWith("[gnr8.public-runtime.domain]")) {
+      loggedEvents.push(message);
+    }
+  };
+
+  globalThis.fetch = (async (input: RequestInfo | URL) => {
+    const url = String(input);
+    requestedUrls.push(url);
+    if (url.endsWith("/uploads/VmPFXCum/236x0_247x0/image.png")) return new Response(null, { status: 404 });
+    if (url.endsWith("/uploads/VmPFXCum/image.png")) {
+      return new Response("ok-image", {
+        status: 200,
+        headers: { "content-type": "image/png" },
+      });
+    }
+    return new Response(null, { status: 404 });
+  }) as typeof fetch;
+
+  try {
+    const response = await renderPublicPathResponse({ host: "maver.app.pasadenagenerator.com", path: "/uploads/VmPFXCum/236x0_247x0/image.png" });
+    assert.equal(response.status, 200);
+    assert.equal(await response.text(), "ok-image");
+    assert.equal(requestedUrls.some((url) => url.endsWith("/uploads/VmPFXCum/236x0_247x0/image.png")), true);
+    assert.equal(requestedUrls.some((url) => url.endsWith("/uploads/VmPFXCum/image.png")), true);
+    assert.equal(loggedEvents.some((entry) => entry.includes("CONTENT_ASSET_VARIANT_FALLBACK_USED")), true);
+  } finally {
+    globalThis.fetch = originalFetch;
+    console.info = originalInfo;
+    restoreDeps();
+  }
+});
+
+test("uploads variant path logs variant not found when both direct and fallback are missing", async () => {
+  const originalFetch = globalThis.fetch;
+  const originalInfo = console.info;
+  const loggedEvents: string[] = [];
+
+  const restoreDeps = __setPublicRuntimeRenderDependenciesForTest({
+    resolveRuntimeSiteForHost: async () =>
+      ({
+        outcome: "site_hit",
+        siteId: "site_1",
+        sourceUrl: "https://source.example.com/",
+      }) as never,
+  });
+
+  console.info = (...args: unknown[]) => {
+    const message = String(args[0] ?? "");
+    if (message.startsWith("[gnr8.public-runtime.domain]")) {
+      loggedEvents.push(message);
+    }
+  };
+
+  globalThis.fetch = (async () => new Response(null, { status: 404 })) as typeof fetch;
+
+  try {
+    const response = await renderPublicPathResponse({ host: "maver.app.pasadenagenerator.com", path: "/uploads/VmPFXCum/767x0_2560x0/image.png" });
+    assert.equal(response.status, 404);
+    assert.equal(loggedEvents.some((entry) => entry.includes("CONTENT_ASSET_VARIANT_NOT_FOUND")), true);
+  } finally {
+    globalThis.fetch = originalFetch;
+    console.info = originalInfo;
+    restoreDeps();
+  }
+});

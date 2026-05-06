@@ -245,6 +245,20 @@ function copyHeaderIfPresent(headers: Headers, source: Headers, name: string): v
   if (value) headers.set(name, value);
 }
 
+function isUploadVariantSegment(segment: string): boolean {
+  return /^\d+x\d+(?:_\d+x\d+)*$/i.test(segment);
+}
+
+function resolveUploadVariantFallbackPath(path: string): string | null {
+  if (!path.startsWith("/uploads/")) return null;
+  const parts = path.split("/");
+  const variantIndex = parts.findIndex((part, index) => index > 2 && isUploadVariantSegment(part));
+  if (variantIndex < 0) return null;
+  const withoutVariant = parts.filter((_, index) => index !== variantIndex).join("/");
+  if (!withoutVariant.startsWith("/uploads/")) return null;
+  return withoutVariant;
+}
+
 function logPublicDomainDiagnostic(event: string, payload: Record<string, unknown>): void {
   console.info(`[gnr8.public-runtime.domain] ${event}`, payload);
 }
@@ -354,6 +368,24 @@ async function renderShadowAssetResponse(input: { host: string; path: string }):
 
   const direct = await fetchShadowAssetFromSource({ sourceUrl: site.sourceUrl, sourcePath: normalizedPath });
   if (direct) return direct;
+
+  const fallbackPath = resolveUploadVariantFallbackPath(normalizedPath);
+  if (fallbackPath) {
+    const fallback = await fetchShadowAssetFromSource({ sourceUrl: site.sourceUrl, sourcePath: fallbackPath });
+    if (fallback) {
+      logPublicDomainDiagnostic("CONTENT_ASSET_VARIANT_FALLBACK_USED", {
+        host: input.host,
+        requestedPath: normalizedPath,
+        fallbackPath,
+      });
+      return fallback;
+    }
+    logPublicDomainDiagnostic("CONTENT_ASSET_VARIANT_NOT_FOUND", {
+      host: input.host,
+      requestedPath: normalizedPath,
+      fallbackPath,
+    });
+  }
 
   const mapped = await tryMappedAssetFallback({
     host: input.host,
