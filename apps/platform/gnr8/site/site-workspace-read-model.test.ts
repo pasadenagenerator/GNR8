@@ -1391,12 +1391,16 @@ test('preview runtime summary parser accepts raw template preview mode', () => {
     unresolvedContentCount: 0,
     contentResolutionDegraded: false,
     contentResolutionDiagnostics: [],
+    persistedAssetCount: 4,
+    externalFallbackAssetCount: 2,
     previewDiagnostics: ['RAW_TEMPLATE_PREVIEW_SELECTED', 'RAW_TEMPLATE_PREVIEW_RENDERED'],
   })
 
   assert.equal(parsed?.previewMode, 'raw_template_preview')
   assert.equal(parsed?.renderedWithFallback, false)
   assert.equal(parsed?.resolvedContentCount, 5)
+  assert.equal(parsed?.persistedAssetCount, 4)
+  assert.equal(parsed?.externalFallbackAssetCount, 2)
 })
 
 test('preview runtime summary parser safely handles legacy rows with no family fields', () => {

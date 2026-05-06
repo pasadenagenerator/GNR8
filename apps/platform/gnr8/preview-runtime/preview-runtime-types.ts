@@ -33,6 +33,8 @@ export type PreviewRuntimeSummary = {
   semanticSectionCount?: number;
   semanticImageCount?: number;
   semanticCtaCount?: number;
+  persistedAssetCount?: number;
+  externalFallbackAssetCount?: number;
 };
 
 export type PreviewRuntimePreparationResult = {

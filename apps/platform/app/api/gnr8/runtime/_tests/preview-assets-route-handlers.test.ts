@@ -201,3 +201,72 @@ test("preview assets route serves persisted raw imported-site assets when availa
   assert.equal(response.headers.get("content-type"), "application/javascript; charset=utf-8");
   assert.equal(await response.text(), "console.log('ok')");
 });
+
+test("preview assets route prefers raw imported-site artifact over raw template artifact when both exist", async () => {
+  const handlers = createPreviewAssetsRouteHandlers({
+    resolveDomainSiteVersionForHost: async () =>
+      ({
+        outcome: "domain_hit",
+        host: "beauty-clinic.pasadenagenerator.com",
+        siteId: "site_1",
+        siteVersionId: "sv_1",
+        domain: "beauty-clinic.pasadenagenerator.com",
+        status: "active",
+        bindingId: "binding_1",
+      }) as never,
+    resolveAgencyIdForSiteVersion: async () => "agency_1",
+    requireAgencyActionContext: async () => ({ actorMode: "agency_member", agencyId: "agency_1" } as never),
+    getRawImportedSiteArtifact: async () =>
+      ({
+        id: "artifact_imported_1",
+        artifactType: "raw_imported_site",
+        siteId: "site_1",
+        siteVersionId: "sv_1",
+        entryHtmlPath: "index.html",
+        assetBasePath: ".",
+        fileMap: {},
+        metadata: {
+          sourceUrl: "https://example.com",
+          finalUrl: "https://www.example.com",
+          htmlByteLength: 123,
+          diagnostics: { codes: [] },
+          assetSummary: { persistedAssetCount: 1, externalFallbackAssetCount: 0 },
+        },
+        createdAt: "2026-05-06T00:00:00.000Z",
+      }) as never,
+    getRawTemplateSiteArtifact: async () =>
+      ({
+        id: "artifact_template_1",
+        artifactType: "raw_template_site",
+        siteId: "site_1",
+        siteVersionId: "sv_1",
+        entryHtmlPath: "index.html",
+        assetBasePath: "assets",
+        fileMap: {},
+        createdAt: "2026-05-06T00:00:00.000Z",
+      }) as never,
+    getRawTemplateSiteAsset: async () =>
+      ({
+        mediaType: "application/javascript; charset=utf-8",
+        sizeBytes: 26,
+        sha256: "abc",
+        bytes: Buffer.from("console.log('imported-first')", "utf8"),
+      }) as never,
+  });
+
+  const response = await handlers.GET(
+    new Request("https://beauty-clinic.pasadenagenerator.com/api/gnr8/runtime/preview-assets/site_1/sv_1/assets/app.js", {
+      headers: { host: "beauty-clinic.pasadenagenerator.com" },
+    }),
+    {
+      params: Promise.resolve({
+        siteId: "site_1",
+        siteVersionId: "sv_1",
+        assetPath: ["assets", "app.js"],
+      }),
+    },
+  );
+
+  assert.equal(response.status, 200);
+  assert.equal(await response.text(), "console.log('imported-first')");
+});

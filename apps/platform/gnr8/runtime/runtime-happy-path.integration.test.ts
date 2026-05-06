@@ -68,6 +68,37 @@ async function countArtifacts(siteId: string): Promise<number> {
   return Number(res.rows[0]?.count ?? 0);
 }
 
+async function readRawImportArtifactForSiteVersion(siteVersionId: string): Promise<{
+  artifactType: string;
+  entryHtmlPath: string;
+  fileMapCount: number;
+} | null> {
+  const pool = getSuperadminPool();
+  const res = await pool.query<{
+    artifact_type: string;
+    entry_html_path: string;
+    file_map_count: string;
+  }>(
+    `
+    select
+      artifact_type::text as artifact_type,
+      entry_html_path::text as entry_html_path,
+      jsonb_object_length(coalesce(file_map, '{}'::jsonb))::text as file_map_count
+    from public.gnr8_runtime_raw_template_artifacts
+    where site_version_id = $1::uuid
+    limit 1
+    `,
+    [siteVersionId],
+  );
+  const row = res.rows[0];
+  if (!row) return null;
+  return {
+    artifactType: row.artifact_type,
+    entryHtmlPath: row.entry_html_path,
+    fileMapCount: Math.max(0, Number(row.file_map_count ?? 0) || 0),
+  };
+}
+
 async function readResolvedActiveArtifactForSite(siteId: string, pagePath: string): Promise<{ artifactId: string; html: string } | null> {
   assertIsTestSiteId(siteId);
   const pool = getSuperadminPool();
@@ -139,6 +170,11 @@ test("phase-5a runtime happy path lock: migrate -> ready -> approve -> preview -
     assert.equal(migrateV1.lifecycleState, "DRAFT");
     assert.equal(migrateV1.siteVersionNo, 1);
     assertUuid(migrateV1.siteVersionId, "siteVersionId(v1)");
+    const rawImportArtifactV1 = await readRawImportArtifactForSiteVersion(migrateV1.siteVersionId);
+    assert.ok(rawImportArtifactV1, "scoped URL import should persist a raw import artifact");
+    assert.equal(rawImportArtifactV1!.artifactType, "raw_imported_site");
+    assert.ok(rawImportArtifactV1!.entryHtmlPath.length > 0, "persisted imported entry HTML path should exist");
+    assert.ok(rawImportArtifactV1!.fileMapCount > 0, "raw import file map should contain persisted files");
 
     const readyV1Res = await readyRoute(new Request("http://localhost", { method: "POST" }), {
       params: Promise.resolve({ siteVersionId: migrateV1.siteVersionId }),
@@ -206,6 +242,8 @@ test("phase-5a runtime happy path lock: migrate -> ready -> approve -> preview -
     });
     assertOkResponse(previewV2Res, "preview v2");
     const previewV2Html = await previewV2Res.text();
+    assert.equal(previewV2Res.headers.get("x-gnr8-preview-source"), "raw_template_site");
+    assert.equal(previewV2Res.headers.get("x-gnr8-preview-external-fallback-asset-count"), "0");
     assert.match(previewV2Html, /data-gnr8-render-mode="preview"/);
     assert.match(previewV2Html, /data-gnr8-section-id=/);
     assert.match(previewV2Html, /data-gnr8-section-props/);

@@ -1874,6 +1874,8 @@ function parsePreviewRuntimeSummary(value: unknown): PreviewRuntimeSummary | nul
     semanticSectionCount: Number.isFinite(Number(value.semanticSectionCount)) ? Number(value.semanticSectionCount) : undefined,
     semanticImageCount: Number.isFinite(Number(value.semanticImageCount)) ? Number(value.semanticImageCount) : undefined,
     semanticCtaCount: Number.isFinite(Number(value.semanticCtaCount)) ? Number(value.semanticCtaCount) : undefined,
+    persistedAssetCount: Number.isFinite(Number(value.persistedAssetCount)) ? Number(value.persistedAssetCount) : undefined,
+    externalFallbackAssetCount: Number.isFinite(Number(value.externalFallbackAssetCount)) ? Number(value.externalFallbackAssetCount) : undefined,
   }
 }
 
@@ -2316,13 +2318,15 @@ export async function getSiteWorkspaceReadModelForPage(input: {
   const bootstrapStatus = toTextOrNull(bootstrapJob?.status)
   const bootstrapReasonCode = toTextOrNull(bootstrapJob?.last_error_code)
   const createDiagnostics = [...new Set([
-    'TEMPLATE_SITE_CREATE_STARTED',
-    bootstrapStatus === 'completed' ? 'TEMPLATE_SITE_CREATE_COMPLETED' : null,
-    bootstrapStatus === 'running' ? 'TEMPLATE_SITE_BOOTSTRAP_STARTED' : null,
-    bootstrapStatus === 'completed' ? 'TEMPLATE_SITE_BOOTSTRAP_COMPLETED' : null,
-    previewReady ? 'TEMPLATE_SITE_PREVIEW_READY' : null,
-    contentSlotCount > 0 ? 'TEMPLATE_SITE_CONTENT_SLOTS_READY' : null,
-    bootstrapStatus === 'failed' ? 'TEMPLATE_SITE_CREATE_FAILED' : null,
+    rawImportArtifactFound ? 'IMPORT_SITE_CREATE_STARTED' : 'TEMPLATE_SITE_CREATE_STARTED',
+    bootstrapStatus === 'completed' ? (rawImportArtifactFound ? 'IMPORT_SITE_CREATE_COMPLETED' : 'TEMPLATE_SITE_CREATE_COMPLETED') : null,
+    bootstrapStatus === 'running' ? (rawImportArtifactFound ? 'IMPORT_SITE_BOOTSTRAP_STARTED' : 'TEMPLATE_SITE_BOOTSTRAP_STARTED') : null,
+    bootstrapStatus === 'completed' ? (rawImportArtifactFound ? 'IMPORT_SITE_BOOTSTRAP_COMPLETED' : 'TEMPLATE_SITE_BOOTSTRAP_COMPLETED') : null,
+    previewReady ? (rawImportArtifactFound ? 'IMPORT_PREVIEW_READY' : 'TEMPLATE_SITE_PREVIEW_READY') : null,
+    contentSlotCount > 0 ? (rawImportArtifactFound ? 'IMPORT_CONTENT_SLOTS_READY' : 'TEMPLATE_SITE_CONTENT_SLOTS_READY') : null,
+    rawImportArtifactFound && rawImportSourceUrl ? 'IMPORT_SOURCE_URL_PRESENT' : null,
+    rawImportArtifactFound && rawImportFinalUrl ? 'IMPORT_FINAL_URL_PRESENT' : null,
+    bootstrapStatus === 'failed' ? (rawImportArtifactFound ? 'IMPORT_SITE_CREATE_FAILED' : 'TEMPLATE_SITE_CREATE_FAILED') : null,
   ].filter((value): value is string => Boolean(value)))]
   if (contentSlotCount === 0 && bootstrapStatus === 'completed') {
     createDiagnostics.push('CONTENT_SLOTS_EMPTY')

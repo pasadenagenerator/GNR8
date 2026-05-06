@@ -10,6 +10,12 @@ type Props = {
   clientId: string
   siteId: string
   initialStatus: TemplateSiteBootstrapStatusResult
+  labels?: {
+    previewReady: string
+    artifactFound: string
+    entryHtmlFound: string
+    fileMapCount: string
+  }
 }
 
 export default function SiteBootstrapStatusPanel(props: Props) {
@@ -66,14 +72,21 @@ export default function SiteBootstrapStatusPanel(props: Props) {
     router.refresh()
   }
 
+  const labels = props.labels ?? {
+    previewReady: 'Preview ready',
+    artifactFound: 'Raw template artifact found',
+    entryHtmlFound: 'Entry HTML found',
+    fileMapCount: 'Raw artifact file map count',
+  }
+
   return (
     <div style={{ marginTop: 10, display: 'grid', gap: 6, fontSize: 13, color: '#334155' }}>
       <div>Status: {status.status}</div>
-      <div>Preview ready: {status.previewReady ? 'yes' : 'no'}</div>
+      <div>{labels.previewReady}: {status.previewReady ? 'yes' : 'no'}</div>
       <div>Preview URL: {status.previewUrl ?? 'not ready'}</div>
-      <div>Raw template artifact found: {status.rawTemplateArtifactFound ? 'yes' : 'no'}</div>
-      <div>Entry HTML found: {status.entryHtmlFound ? 'yes' : 'no'}</div>
-      <div>Raw artifact file map count: {status.fileMapCount}</div>
+      <div>{labels.artifactFound}: {status.rawTemplateArtifactFound ? 'yes' : 'no'}</div>
+      <div>{labels.entryHtmlFound}: {status.entryHtmlFound ? 'yes' : 'no'}</div>
+      <div>{labels.fileMapCount}: {status.fileMapCount}</div>
       <div>Content slot count: {status.slotCount}</div>
       <div>Publish readiness: {status.publishReady ? 'ready' : 'not ready'}</div>
       {status.reasonCode ? <div>Reason code: {status.reasonCode}</div> : null}

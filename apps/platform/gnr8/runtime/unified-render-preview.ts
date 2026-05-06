@@ -335,6 +335,8 @@ function buildSemanticPreviewRuntimeSummary(input: {
 function buildRawTemplatePreviewRuntimeSummary(input: {
   baseSummary?: PreviewRuntimeSummary | null
   fileCount: number
+  persistedAssetCount?: number
+  externalFallbackAssetCount?: number
 }): PreviewRuntimeSummary {
   const base = input.baseSummary ?? defaultPreviewRuntimeSummary()
   const baseDiagnostics = (base.previewDiagnostics ?? []).filter(
@@ -358,6 +360,8 @@ function buildRawTemplatePreviewRuntimeSummary(input: {
     resolvedContentCount: input.fileCount,
     unresolvedContentCount: 0,
     contentResolutionDegraded: false,
+    persistedAssetCount: input.persistedAssetCount,
+    externalFallbackAssetCount: input.externalFallbackAssetCount,
     previewDiagnostics: withSortedDiagnostics([
       ...baseDiagnostics,
       PREVIEW_RUNTIME_DIAGNOSTIC.RAW_TEMPLATE_PREVIEW_SELECTED,
@@ -497,6 +501,8 @@ async function renderRawTemplateSiteVersionPreview(input: {
   const summary = buildRawTemplatePreviewRuntimeSummary({
     baseSummary: input.fallbackSummary,
     fileCount: Object.keys(artifact.fileMap).length,
+    persistedAssetCount: importedArtifact?.metadata.assetSummary.persistedAssetCount,
+    externalFallbackAssetCount: importedArtifact?.metadata.assetSummary.externalFallbackAssetCount,
   })
   console.info('[preview-runtime] RAW_TEMPLATE_PREVIEW_SELECTED', {
     siteId: artifact.siteId,

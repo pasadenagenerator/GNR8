@@ -59,6 +59,17 @@ function renderOverviewContent(props: {
 
   return (
     <div style={{ display: 'grid', gap: 12 }}>
+      {(() => {
+        const isImportedSite = readModel.overview.rawImportArtifactFound
+        const readinessTitle = isImportedSite ? 'Site Import Readiness' : 'Template Bootstrap Readiness'
+        const templateSourceLabel = isImportedSite ? 'Import source' : 'Template source'
+        const previewReadyLabel = isImportedSite ? 'Import preview ready' : 'Preview ready'
+        const artifactFoundLabel = isImportedSite ? 'Raw import artifact found' : 'Raw template artifact found'
+        const entryHtmlFoundLabel = isImportedSite ? 'Imported entry HTML found' : 'Template entry HTML found'
+        const fileMapCountLabel = isImportedSite ? 'Raw import file map count' : 'Raw template file map count'
+
+        return (
+          <>
       <section style={sectionCardStyle()}>
         <h2 style={{ margin: 0, fontSize: 18, color: '#0f172a' }}>Site Overview</h2>
         <p style={{ margin: '8px 0 0', color: '#475569', fontSize: 13 }}>
@@ -72,13 +83,21 @@ function renderOverviewContent(props: {
       </section>
 
       <section style={sectionCardStyle()}>
-        <h3 style={{ margin: 0, fontSize: 15, color: '#0f172a' }}>Template Bootstrap Readiness</h3>
+        <h3 style={{ margin: 0, fontSize: 15, color: '#0f172a' }}>{readinessTitle}</h3>
         <div style={{ marginTop: 10, display: 'grid', gap: 6, fontSize: 13, color: '#334155' }}>
-          <div>Template source: {readModel.overview.templateSource ?? 'unknown'}</div>
+          <div>{templateSourceLabel}: {readModel.overview.templateSource ?? 'unknown'}</div>
+          {isImportedSite ? <div>Import source URL: {readModel.overview.rawImportSourceUrl ?? 'n/a'}</div> : null}
+          {isImportedSite ? <div>Final URL: {readModel.overview.rawImportFinalUrl ?? 'n/a'}</div> : null}
         </div>
         <SiteBootstrapStatusPanel
           clientId={readModel.client.clientId}
           siteId={readModel.site.id}
+          labels={{
+            previewReady: previewReadyLabel,
+            artifactFound: artifactFoundLabel,
+            entryHtmlFound: entryHtmlFoundLabel,
+            fileMapCount: fileMapCountLabel,
+          }}
           initialStatus={{
             ok: true,
             siteId: readModel.site.id,
@@ -106,6 +125,9 @@ function renderOverviewContent(props: {
           }}
         />
       </section>
+          </>
+        )
+      })()}
 
       <section style={sectionCardStyle()}>
         <h3 style={{ margin: 0, fontSize: 15, color: '#0f172a' }}>Pipeline Summary</h3>
