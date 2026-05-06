@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { GET, __setPublicRouteDependenciesForTest } from "@/app/(public)/[[...slug]]/route";
+import { GET } from "@/app/(public)/[[...slug]]/route";
+import { __setPublicRouteDependenciesForTest } from "@/app/(public)/[[...slug]]/public-route-handlers";
 import { __setPublicRuntimeRenderDependenciesForTest } from "@/src/public-site/public-runtime-render";
 
 function mockRawTemplateDeps() {

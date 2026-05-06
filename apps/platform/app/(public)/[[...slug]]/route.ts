@@ -1,31 +1,16 @@
 import type { NextRequest } from "next/server";
 
-import { canShowContentDebug } from "@/src/public-site/content-debug-access";
 import { normalizePublicDomainHost, renderPublicPathResponse, resolveRequestHost } from "@/src/public-site/public-runtime-render";
+import { getPublicRouteDependencies } from "./public-route-handlers";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-
-type PublicRouteDependencies = {
-  canShowContentDebug: typeof canShowContentDebug;
-};
-
-const publicRouteDependencies: PublicRouteDependencies = {
-  canShowContentDebug,
-};
-
-export function __setPublicRouteDependenciesForTest(overrides: Partial<PublicRouteDependencies>): () => void {
-  const previous = { ...publicRouteDependencies };
-  Object.assign(publicRouteDependencies, overrides);
-  return () => {
-    Object.assign(publicRouteDependencies, previous);
-  };
-}
 
 export async function GET(
   req: NextRequest,
   props: { params: Promise<{ slug?: string[] }> },
 ): Promise<Response> {
+  const publicRouteDependencies = getPublicRouteDependencies();
   const { slug } = await props.params;
   const path = "/" + (slug?.join("/") ?? "");
   const debugParam = new URL(req.url).searchParams.get("__debug");
