@@ -23,6 +23,17 @@ type ImportResponse =
   | {
       ok: false
       error?: string
+      reasonCode?: string
+      intake?: {
+        evidence?: {
+          requestedUrl?: string
+          finalUrl?: string | null
+          httpStatus?: number | null
+          contentType?: string | null
+          htmlByteLength?: number
+          assetCount?: number
+        }
+      }
     }
 
 export default function SiteImporterClient(props: Props) {
@@ -67,7 +78,11 @@ export default function SiteImporterClient(props: Props) {
         return
       }
       if (payload.ok !== true) {
-        setError(payload.error ?? `Import failed (HTTP ${response.status})`)
+        const evidence = payload.intake?.evidence
+        const evidenceSummary = evidence
+          ? ` requested=${evidence.requestedUrl ?? 'n/a'} final=${evidence.finalUrl ?? 'n/a'} status=${evidence.httpStatus ?? 'n/a'} contentType=${evidence.contentType ?? 'n/a'} htmlBytes=${evidence.htmlByteLength ?? 0} assets=${evidence.assetCount ?? 0}`
+          : ''
+        setError(`${payload.error ?? `Import failed (HTTP ${response.status})`}${payload.reasonCode ? ` [${payload.reasonCode}]` : ''}${evidenceSummary}`)
         return
       }
       if (!response.ok) {

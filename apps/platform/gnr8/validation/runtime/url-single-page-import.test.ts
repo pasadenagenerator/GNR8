@@ -686,3 +686,85 @@ test("url import sends worker payload that passes contract validation and contin
   assert.equal(parsePassed, true);
   assert.equal(snapshot.importDiagnostics.issues.some((issue) => String(issue.code) === "INVALID_WORKER_REQUEST"), false);
 });
+
+test("site import intake succeeds for valid html url", async () => {
+  const tmpRoot = await fs.promises.mkdtemp(path.join(os.tmpdir(), "gnr8-intake-valid-html-"));
+  const html = "<!doctype html><html><body><main><h1>Hello</h1><img src=\"/logo.png\" /></main></body></html>";
+  const snapshot = await importPublicSinglePageUrlToSnapshot({
+    sourceUrl: "https://example.com/",
+    snapshotRootDirAbs: tmpRoot,
+    fetchImpl: async (url) => {
+      if (String(url).includes("logo.png")) return new Response("png", { status: 200, headers: { "content-type": "image/png" } });
+      return makeHtmlResponse(html);
+    },
+  });
+  assert.equal(snapshot.importIntake?.ok, true);
+  assert.equal(snapshot.importIntake?.reasonCode, "ok");
+  assert.equal(snapshot.importIntake?.rawHtmlAvailable, true);
+  assert.equal((snapshot.importIntake?.htmlByteLength ?? 0) > 0, true);
+});
+
+test("site import intake keeps raw html fallback when rendered capture is unavailable", async () => {
+  const tmpRoot = await fs.promises.mkdtemp(path.join(os.tmpdir(), "gnr8-intake-rendered-fallback-"));
+  const html = "<!doctype html><html><body><main><h1>Fallback</h1><p>raw html available</p></main></body></html>";
+  const workerClient: RenderedCaptureWorkerClient = {
+    async execute(request) {
+      return {
+        kind: "rendered_capture_worker_response_v1",
+        contractVersion: "1.0.0",
+        requestId: request.requestId,
+        status: "unsupported",
+        environment: { runtimeKind: "edge", environmentSupported: false, browserPackageAvailable: false, browserBinaryAvailable: false, supportDecision: "runtime_incompatible" },
+        artifacts: [],
+        computedStyleSamples: [],
+        diagnostics: [{ code: "ENVIRONMENT_UNSUPPORTED", severity: "warning", message: "unsupported" }],
+        qualitySummary: { renderedDomQuality: "unusable", domLength: 0, meaningfulNodeCount: 0, screenshotCount: 0, computedStyleSampleCount: 0 },
+        failure: { failureClass: "environment_unsupported", failureCode: "ENVIRONMENT_UNSUPPORTED", retryable: false, message: "unsupported" },
+        timings: { queueLatencyMs: null, executionMs: 5, totalMs: 5 },
+      };
+    },
+  };
+  const snapshot = await importPublicSinglePageUrlToSnapshot({
+    sourceUrl: "https://example.com/",
+    snapshotRootDirAbs: tmpRoot,
+    fetchImpl: async () => makeHtmlResponse(html),
+    renderedCaptureWorkerClient: workerClient,
+  });
+  assert.equal(snapshot.sourceMode, "raw_html_fallback");
+  assert.equal(snapshot.importIntake?.ok, true);
+  assert.equal(snapshot.importIntake?.reasonCode, "ok");
+});
+
+test("site import intake returns clear failure for empty html", async () => {
+  const tmpRoot = await fs.promises.mkdtemp(path.join(os.tmpdir(), "gnr8-intake-empty-html-"));
+  const snapshot = await importPublicSinglePageUrlToSnapshot({
+    sourceUrl: "https://example.com/",
+    snapshotRootDirAbs: tmpRoot,
+    fetchImpl: async () => makeHtmlResponse("   "),
+  });
+  assert.equal(snapshot.importIntake?.ok, false);
+  assert.equal(snapshot.importIntake?.reasonCode, "empty_html");
+});
+
+test("site import intake returns clear failure for invalid url", async () => {
+  const snapshot = await importPublicSinglePageUrlToSnapshot({
+    sourceUrl: "notaurl",
+  });
+  assert.equal(snapshot.importIntake?.ok, false);
+  assert.equal(snapshot.importIntake?.reasonCode, "invalid_url");
+});
+
+test("site import intake returns clear failure for non-html response", async () => {
+  const tmpRoot = await fs.promises.mkdtemp(path.join(os.tmpdir(), "gnr8-intake-non-html-"));
+  const snapshot = await importPublicSinglePageUrlToSnapshot({
+    sourceUrl: "https://example.com/",
+    snapshotRootDirAbs: tmpRoot,
+    fetchImpl: async () =>
+      new Response("{\"ok\":true}", {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      }),
+  });
+  assert.equal(snapshot.importIntake?.ok, false);
+  assert.equal(snapshot.importIntake?.reasonCode, "unsupported_response_content_type");
+});

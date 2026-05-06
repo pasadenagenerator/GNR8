@@ -23,6 +23,15 @@ type Body = {
   adminView?: boolean
 }
 
+function mapSiteImportReasonToMessage(reasonCode: string): string {
+  if (reasonCode === 'fetch_failed') return 'Import failed: could not fetch URL.'
+  if (reasonCode === 'empty_html') return 'Import failed: empty HTML response.'
+  if (reasonCode === 'invalid_url') return 'Import failed: invalid URL.'
+  if (reasonCode === 'blocked_by_cors_or_network') return 'Import failed: blocked by CORS/network.'
+  if (reasonCode === 'unsupported_response_content_type') return 'Import failed: unsupported response content type.'
+  return 'Import failed during intake.'
+}
+
 type ClientScopeRow = {
   client_id: string
   client_name: string | null
@@ -220,11 +229,14 @@ export async function POST(req: Request, ctx: { params: Promise<Params> }) {
       sourceUrl: importUrl.toString(),
       requestId: `client-site-import-${Date.now()}`,
     })
-    if (snapshot.importDiagnostics.summary.fatalCount > 0) {
+    if (!snapshot.importIntake?.ok) {
+      const reasonCode = snapshot.importIntake?.reasonCode ?? 'fetch_failed'
       return NextResponse.json(
         {
           ok: false,
-          error: 'URL snapshot capture failed.',
+          reasonCode,
+          error: mapSiteImportReasonToMessage(reasonCode),
+          intake: snapshot.importIntake ?? null,
           diagnostics: snapshot.importDiagnostics,
         },
         { status: 502 },

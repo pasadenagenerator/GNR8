@@ -41,6 +41,14 @@ export type UrlImportExecutionScope = {
 export type UrlImportDiagnosticSeverity = "info" | "warning" | "error" | "fatal";
 
 export type UrlImportDiagnosticCode =
+  | "SITE_IMPORT_INTAKE_STARTED"
+  | "SITE_IMPORT_URL_FETCH_STARTED"
+  | "SITE_IMPORT_URL_FETCH_FAILED"
+  | "SITE_IMPORT_HTML_EMPTY"
+  | "SITE_IMPORT_HTML_RECEIVED"
+  | "SITE_IMPORT_ASSET_DISCOVERY_STARTED"
+  | "SITE_IMPORT_INTAKE_COMPLETED"
+  | "SITE_IMPORT_INTAKE_FAILED"
   | "IMPORT_RUN_ID_CREATED"
   | "EVIDENCE_RUN_ISOLATED"
   | "STALE_EVIDENCE_SUPERSEDED"
@@ -199,6 +207,32 @@ export type UrlImportFidelityStatus = "high_fidelity_import" | "degraded_import"
 
 type RenderedCaptureVisibilityStatus = "available" | "partial" | "failed";
 
+export type SiteImportIntakeReasonCode =
+  | "ok"
+  | "fetch_failed"
+  | "empty_html"
+  | "invalid_url"
+  | "blocked_by_cors_or_network"
+  | "unsupported_response_content_type";
+
+export type SiteImportIntakeEvidence = {
+  requestedUrl: string;
+  finalUrl: string | null;
+  httpStatus: number | null;
+  contentType: string | null;
+  htmlByteLength: number;
+  assetCount: number;
+};
+
+export type SiteImportIntakeResult = {
+  ok: boolean;
+  reasonCode: SiteImportIntakeReasonCode;
+  diagnostics: UrlImportDiagnosticCode[];
+  rawHtmlAvailable: boolean;
+  htmlByteLength: number;
+  evidence: SiteImportIntakeEvidence;
+};
+
 export type UrlImportDiagnostic = {
   id: string;
   severity: UrlImportDiagnosticSeverity;
@@ -301,6 +335,7 @@ export type UrlSinglePageImportSnapshot = {
     };
     issues: UrlImportDiagnostic[];
   };
+  importIntake?: SiteImportIntakeResult;
   fetchManifest: UrlImportFetchManifestEntry[];
 };
 
@@ -2304,6 +2339,15 @@ export async function importPublicSinglePageUrlToSnapshot(input: {
   if (!normalizedUrl) {
     diagnostics.push(
       createDiagnostic({
+        severity: "info",
+        code: "SITE_IMPORT_INTAKE_STARTED",
+        message: "Site import intake started.",
+        targetUrl: input.sourceUrl,
+        details: null,
+      }),
+    );
+    diagnostics.push(
+      createDiagnostic({
         severity: "fatal",
         code: "INVALID_INPUT_URL",
         message: "sourceUrl must be a valid public http(s) URL",
@@ -2383,6 +2427,21 @@ export async function importPublicSinglePageUrlToSnapshot(input: {
         summary: summarizeDiagnostics(emptyIssues),
         issues: emptyIssues,
       },
+      importIntake: {
+        ok: false,
+        reasonCode: "invalid_url",
+        diagnostics: [...new Set(emptyIssues.map((issue) => issue.code))],
+        rawHtmlAvailable: false,
+        htmlByteLength: 0,
+        evidence: {
+          requestedUrl: input.sourceUrl,
+          finalUrl: null,
+          httpStatus: null,
+          contentType: null,
+          htmlByteLength: 0,
+          assetCount: 0,
+        },
+      },
       fetchManifest: [],
     };
   }
@@ -2439,6 +2498,15 @@ export async function importPublicSinglePageUrlToSnapshot(input: {
         snapshotRunId,
         requestId: input.requestId ?? null,
       },
+    }),
+  );
+  diagnostics.push(
+    createDiagnostic({
+      severity: "info",
+      code: "SITE_IMPORT_INTAKE_STARTED",
+      message: "Site import intake started.",
+      targetUrl: normalizedHref,
+      details: { snapshotId, snapshotRunId },
     }),
   );
   diagnostics.push(
@@ -2507,9 +2575,20 @@ export async function importPublicSinglePageUrlToSnapshot(input: {
   let entryHtml = "";
   let entryFetchUrlUsed: string | null = null;
   let lastSuccessfulResponseContentType: string | null = null;
+  let lastSuccessfulStatus: number | null = null;
+  let finalResponseUrl: string | null = null;
 
   outer: for (const candidateUrl of entryFetchCandidates) {
     for (let attempt = 1; attempt <= ENTRY_FETCH_MAX_ATTEMPTS; attempt++) {
+      diagnostics.push(
+        createDiagnostic({
+          severity: "info",
+          code: "SITE_IMPORT_URL_FETCH_STARTED",
+          message: "Site import URL fetch attempt started.",
+          targetUrl: candidateUrl,
+          details: { attempt },
+        }),
+      );
       const startedAt = Date.now();
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), ENTRY_FETCH_TIMEOUT_MS);
@@ -2621,6 +2700,23 @@ export async function importPublicSinglePageUrlToSnapshot(input: {
         entryHtml = body;
         entryFetchUrlUsed = candidateUrl;
         lastSuccessfulResponseContentType = contentType;
+        lastSuccessfulStatus = response.status;
+        finalResponseUrl = response.url || candidateUrl;
+        diagnostics.push(
+          createDiagnostic({
+            severity: "info",
+            code: "SITE_IMPORT_HTML_RECEIVED",
+            message: "Site import received HTML payload.",
+            targetUrl: candidateUrl,
+            details: {
+              attempt,
+              finalUrl: finalResponseUrl,
+              httpStatus: response.status,
+              contentType,
+              htmlByteLength: Buffer.byteLength(body, "utf8"),
+            },
+          }),
+        );
         break outer;
       } catch (error) {
         clearTimeout(timer);
@@ -2638,6 +2734,15 @@ export async function importPublicSinglePageUrlToSnapshot(input: {
           diagnostics.push(
             createDiagnostic({
               severity: "warning",
+              code: "SITE_IMPORT_URL_FETCH_FAILED",
+              message: "Site import URL fetch attempt failed.",
+              targetUrl: candidateUrl,
+              details: { attempt, classification, error: String((error as Error)?.message ?? error) },
+            }),
+          );
+          diagnostics.push(
+            createDiagnostic({
+              severity: "warning",
               code: "ENTRY_FETCH_TIMEOUT",
               message: "Entry fetch attempt timed out",
               targetUrl: candidateUrl,
@@ -2648,6 +2753,15 @@ export async function importPublicSinglePageUrlToSnapshot(input: {
           diagnostics.push(
             createDiagnostic({
               severity: "warning",
+              code: "SITE_IMPORT_URL_FETCH_FAILED",
+              message: "Site import URL fetch attempt failed.",
+              targetUrl: candidateUrl,
+              details: { attempt, classification, error: String((error as Error)?.message ?? error) },
+            }),
+          );
+          diagnostics.push(
+            createDiagnostic({
+              severity: "warning",
               code: "ENTRY_FETCH_REDIRECT_LOOP",
               message: "Entry fetch encountered redirect loop or redirect failure",
               targetUrl: candidateUrl,
@@ -2655,6 +2769,15 @@ export async function importPublicSinglePageUrlToSnapshot(input: {
             }),
           );
         } else {
+          diagnostics.push(
+            createDiagnostic({
+              severity: "warning",
+              code: "SITE_IMPORT_URL_FETCH_FAILED",
+              message: "Site import URL fetch attempt failed.",
+              targetUrl: candidateUrl,
+              details: { attempt, classification, error: String((error as Error)?.message ?? error) },
+            }),
+          );
           diagnostics.push(
             createDiagnostic({
               severity: "warning",
@@ -2670,6 +2793,27 @@ export async function importPublicSinglePageUrlToSnapshot(input: {
   }
 
   if (!entryHtml.trim()) {
+    diagnostics.push(
+      createDiagnostic({
+        severity: "fatal",
+        code: "SITE_IMPORT_HTML_EMPTY",
+        message: "Site import HTML payload is empty.",
+        targetUrl: normalizedHref,
+        details: {
+          candidatesTried: entryFetchCandidates,
+          attempts: entryFetchAttemptDetails,
+        },
+      }),
+    );
+    diagnostics.push(
+      createDiagnostic({
+        severity: "fatal",
+        code: "SITE_IMPORT_INTAKE_FAILED",
+        message: "Site import intake failed.",
+        targetUrl: normalizedHref,
+        details: { reasonCode: "fetch_failed" },
+      }),
+    );
     diagnostics.push(
       createDiagnostic({
         severity: "fatal",
@@ -3055,6 +3199,15 @@ export async function importPublicSinglePageUrlToSnapshot(input: {
   let rewrittenHtml = sourceSelection.selectedHtml;
 
   if (!hasFatal(diagnostics) && rewrittenHtml.trim().length > 0) {
+    diagnostics.push(
+      createDiagnostic({
+        severity: "info",
+        code: "SITE_IMPORT_ASSET_DISCOVERY_STARTED",
+        message: "Site import asset discovery started.",
+        targetUrl: entryFetchUrlUsed ?? normalizedHref,
+        details: null,
+      }),
+    );
     const document = parse(rewrittenHtml);
     const refs = collectAssetRefs({
       document,
@@ -3603,6 +3756,42 @@ export async function importPublicSinglePageUrlToSnapshot(input: {
     },
   } as unknown as JsonValue);
 
+  const htmlByteLength = Buffer.byteLength(entryHtml || "", "utf8");
+  const hasUnsupportedContentType = sortedDiagnostics.some((issue) => issue.code === "ENTRY_FETCH_UNSUPPORTED_CONTENT_TYPE");
+  const hasEmptyHtml = sortedDiagnostics.some((issue) => issue.code === "SITE_IMPORT_HTML_EMPTY" || issue.code === "ENTRY_EMPTY_RESPONSE");
+  const hasNetworkBlocked = entryFetchAttemptDetails.some((attempt) => attempt.outcome === "network_error" || attempt.outcome === "timeout");
+  const rawHtmlAvailable = htmlByteLength > 0;
+  const intakeReasonCode: SiteImportIntakeReasonCode = normalizedUrl
+    ? hasFatal(sortedDiagnostics)
+      ? hasUnsupportedContentType && !rawHtmlAvailable
+        ? "unsupported_response_content_type"
+        : hasEmptyHtml
+          ? "empty_html"
+        : hasNetworkBlocked && !rawHtmlAvailable
+          ? "blocked_by_cors_or_network"
+          : rawHtmlAvailable
+            ? "empty_html"
+            : "fetch_failed"
+      : rawHtmlAvailable
+        ? "ok"
+        : "empty_html"
+    : "invalid_url";
+  const intakeOk = intakeReasonCode === "ok";
+  sortedDiagnostics.push(
+    createDiagnostic({
+      severity: intakeOk ? "info" : "fatal",
+      code: intakeOk ? "SITE_IMPORT_INTAKE_COMPLETED" : "SITE_IMPORT_INTAKE_FAILED",
+      message: intakeOk ? "Site import intake completed." : "Site import intake failed.",
+      targetUrl: finalResponseUrl ?? entryFetchUrlUsed ?? normalizedHref,
+      details: {
+        reasonCode: intakeReasonCode,
+        htmlByteLength,
+        rawHtmlAvailable,
+        assetCount: sortedManifest.length,
+      },
+    }),
+  );
+
   return {
     kind: "url_single_page_import_snapshot_v1",
     snapshotVersion: URL_SINGLE_PAGE_IMPORT_VERSION,
@@ -3635,6 +3824,21 @@ export async function importPublicSinglePageUrlToSnapshot(input: {
     importDiagnostics: {
       summary: summarizeDiagnostics(sortedDiagnostics),
       issues: sortedDiagnostics,
+    },
+    importIntake: {
+      ok: intakeOk,
+      reasonCode: intakeReasonCode,
+      diagnostics: [...new Set(sortedDiagnostics.map((issue) => issue.code))],
+      rawHtmlAvailable,
+      htmlByteLength,
+      evidence: {
+        requestedUrl: input.sourceUrl,
+        finalUrl: finalResponseUrl ?? entryFetchUrlUsed,
+        httpStatus: lastSuccessfulStatus,
+        contentType: lastSuccessfulResponseContentType,
+        htmlByteLength,
+        assetCount: sortedManifest.length,
+      },
     },
     fetchManifest: sortedManifest,
   };
