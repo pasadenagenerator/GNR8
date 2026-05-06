@@ -467,6 +467,17 @@ async function renderRawTemplateSiteVersionPreview(input: {
     skippedCount: patched.skippedCount,
     slotKeys: selectedOverrides.map((override) => override.slotKey),
   })
+  if (selectedOverrides.length > 0 && patched.appliedCount === 0) {
+    const selectorBySlot = new Map(slots.map((slot) => [slot.slotKey, slot.sourceSelector]))
+    console.error('[gnr8.content-runtime] CONTENT_OVERRIDE_APPLY_FAILED', {
+      siteVersionId: artifact.siteVersionId,
+      slotKeys: selectedOverrides.map((override) => override.slotKey),
+      selectors: selectedOverrides.map((override) => selectorBySlot.get(override.slotKey) ?? null),
+      htmlLength: html.length,
+      mergedOverrideCount: selectedOverrides.length,
+      appliedCount: patched.appliedCount,
+    })
+  }
   for (const skipped of patched.skippedDiagnostics) {
     if (skipped.reason === 'selector_missing') {
       console.info('[gnr8.content-runtime] CONTENT_PREVIEW_OVERRIDE_SELECTOR_MISSING', {

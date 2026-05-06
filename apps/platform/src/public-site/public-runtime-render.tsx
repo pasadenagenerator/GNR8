@@ -487,6 +487,19 @@ export async function renderPublicPathResponse(input: {
       skippedCount: patched.skippedCount,
       slotKeys: sameVersionOverrides.map((override) => override.slotKey),
     });
+    if (sameVersionOverrides.length > 0 && patched.appliedCount === 0) {
+      const selectorBySlot = new Map(slots.map((slot) => [slot.slotKey, slot.sourceSelector]));
+      console.error("[gnr8.content-runtime] CONTENT_OVERRIDE_APPLY_FAILED", {
+        host: normalizedHost,
+        domain: rawTemplateResolution.domain,
+        siteVersionId: rawTemplateResolution.siteVersionId,
+        slotKeys: sameVersionOverrides.map((override) => override.slotKey),
+        selectors: sameVersionOverrides.map((override) => selectorBySlot.get(override.slotKey) ?? null),
+        htmlLength: rawTemplateResolution.html.length,
+        mergedOverrideCount: sameVersionOverrides.length,
+        appliedCount: patched.appliedCount,
+      });
+    }
     for (const skipped of patched.skippedDiagnostics) {
       if (skipped.reason === "selector_missing") {
         console.info("[gnr8.content-runtime] CONTENT_RUNTIME_OVERRIDE_SELECTOR_MISSING", {

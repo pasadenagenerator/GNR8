@@ -1,17 +1,9 @@
-import { NextResponse } from 'next/server'
-
 import { parseAgencyActionContextError, requireAgencyActionContext } from '@/app/api/gnr8/agency/_lib/agency-action-access'
+import { failureResponse, normalizeUuid, successResponse, validationErrorResponse } from '@/app/api/gnr8/clients/[clientId]/sites/[siteId]/content/content-api-contract'
 import { requireContentSiteVersionId } from '@/app/api/gnr8/clients/[clientId]/sites/[siteId]/content/content-version-guards'
 import { planBatchDraftUpserts } from '@/app/api/gnr8/clients/[clientId]/sites/[siteId]/content/overrides/batch/batch-overrides-route-helpers'
 import { listContentSlots, upsertContentOverrideDraftBatch } from '@/gnr8/runtime/runtime-store'
 import { getSuperadminPool } from '@/src/superadmin/db'
-
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
-const normalizeText = (v: unknown) => String(v ?? '').trim()
-const normalizeUuid = (v: unknown) => {
-  const n = normalizeText(v)
-  return n && UUID_RE.test(n) ? n : null
-}
 
 async function resolveRuntimeScope(input: {
   clientId: string
@@ -42,17 +34,20 @@ export async function POST(req: Request, ctx: { params: Promise<{ clientId?: str
     const params = await ctx.params
     const clientId = normalizeUuid(params.clientId)
     const siteId = normalizeUuid(params.siteId)
-    if (!clientId || !siteId) return NextResponse.json({ ok: false, error: 'Invalid clientId/siteId' }, { status: 400 })
+    if (!clientId || !siteId) return validationErrorResponse({ diagnostics, error: 'Invalid clientId/siteId', details: { clientId: params.clientId, siteId: params.siteId } })
 
     const body = (await req.json().catch(() => null)) as any
     const agencyId = normalizeUuid(body?.agencyId)
     const siteVersionId = normalizeUuid(body?.siteVersionId)
     const overrides = Array.isArray(body?.overrides) ? body.overrides : []
-    if (!agencyId) return NextResponse.json({ ok: false, error: 'agencyId is required' }, { status: 400 })
+    if (!agencyId) return validationErrorResponse({ diagnostics, error: 'agencyId is required', details: { agencyId: body?.agencyId } })
     const versionRequirement = requireContentSiteVersionId(siteVersionId)
     if (!versionRequirement.ok) {
       diagnostics.push('CONTENT_DRAFT_SAVE_FAILED')
-      return NextResponse.json({ ok: false, error: 'siteVersionId is required', code: 'CONTENT_SITE_VERSION_REQUIRED', diagnostics }, { status: 400 })
+      return validationErrorResponse({ diagnostics, error: 'siteVersionId is required', details: { siteVersionId } })
+    }
+    if (!Array.isArray(body?.overrides)) {
+      return validationErrorResponse({ diagnostics, error: 'overrides must be an array', details: { overridesType: typeof body?.overrides } })
     }
 
     const actionContext = await requireAgencyActionContext({ action: 'run_migration', requestedAgencyId: agencyId })
@@ -64,7 +59,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ clientId?: str
     })
     if (!scope) {
       diagnostics.push('CONTENT_DRAFT_SAVE_FAILED')
-      return NextResponse.json({ ok: false, error: 'Site version is outside site scope', code: 'CONTENT_SITE_VERSION_SCOPE_MISMATCH', diagnostics }, { status: 404 })
+      return failureResponse({ reasonCode: 'CONTENT_SITE_VERSION_SCOPE_MISMATCH', error: 'Site version is outside site scope', diagnostics, status: 404 })
     }
 
     const slots = await listContentSlots(scope.siteVersionId)
@@ -86,16 +81,25 @@ export async function POST(req: Request, ctx: { params: Promise<{ clientId?: str
     diagnostics.push(...saveResult.diagnostics)
     if (valid.length === 0) diagnostics.push('CONTENT_BATCH_NO_VALID_OVERRIDES')
     diagnostics.push('CONTENT_BATCH_UPDATE_COMPLETED')
-    return NextResponse.json({
-      ok: true,
-      updatedCount,
-      skippedCount,
-      siteVersionId: scope.siteVersionId,
+    return successResponse({
       diagnostics,
+      body: {
+        updatedCount,
+        skippedCount,
+        siteVersionId: scope.siteVersionId,
+      },
     })
   } catch (error) {
     const mapped = parseAgencyActionContextError(error)
     diagnostics.push('CONTENT_BATCH_UPDATE_FAILED')
-    return NextResponse.json({ ok: false, reasonCode: 'CONTENT_BATCH_SAVE_FAILED', error: mapped.message, updatedCount: 0, skippedCount: 0, diagnostics }, { status: mapped.status })
+    const isWriteMismatch = error instanceof Error && error.message === 'CONTENT_WRITE_MISMATCH_FATAL'
+    if (isWriteMismatch) diagnostics.push('CONTENT_WRITE_MISMATCH_FATAL')
+    return failureResponse({
+      reasonCode: isWriteMismatch ? 'CONTENT_WRITE_MISMATCH_FATAL' : 'CONTENT_BATCH_SAVE_FAILED',
+      error: isWriteMismatch ? 'Batch draft write verification failed' : mapped.message,
+      diagnostics,
+      debug: { updatedCount: 0, skippedCount: 0 },
+      status: isWriteMismatch ? 500 : mapped.status,
+    })
   }
 }

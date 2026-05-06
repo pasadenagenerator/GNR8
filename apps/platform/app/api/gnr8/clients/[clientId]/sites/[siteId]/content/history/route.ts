@@ -1,16 +1,8 @@
-import { NextResponse } from 'next/server'
-
 import { parseAgencyActionContextError, requireAgencyActionContext } from '@/app/api/gnr8/agency/_lib/agency-action-access'
+import { normalizeUuid, successResponse, validationErrorResponse } from '@/app/api/gnr8/clients/[clientId]/sites/[siteId]/content/content-api-contract'
 import { listContentOverrideHistory, listContentSlots } from '@/gnr8/runtime/runtime-store'
 import { friendlySlotLabel } from '@/gnr8/site/content-bindings-panel-helpers'
 import { getSuperadminPool } from '@/src/superadmin/db'
-
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
-const normalizeText = (v: unknown) => String(v ?? '').trim()
-const normalizeUuid = (v: unknown) => {
-  const n = normalizeText(v)
-  return n && UUID_RE.test(n) ? n : null
-}
 
 async function resolveRuntimeScope(input: {
   clientId: string
@@ -42,7 +34,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ clientId?: stri
     const params = await ctx.params
     const clientId = normalizeUuid(params.clientId)
     const siteId = normalizeUuid(params.siteId)
-    if (!clientId || !siteId) return NextResponse.json({ ok: false, error: 'Invalid clientId/siteId' }, { status: 400 })
+    if (!clientId || !siteId) return validationErrorResponse({ diagnostics, error: 'Invalid clientId/siteId', details: { clientId: params.clientId, siteId: params.siteId } })
 
     const url = new URL(req.url)
     const agencyId = normalizeUuid(url.searchParams.get('agencyId'))
@@ -50,13 +42,13 @@ export async function GET(req: Request, ctx: { params: Promise<{ clientId?: stri
     const requestedLimit = Number(url.searchParams.get('limit') ?? '100')
     const limit = Number.isFinite(requestedLimit) ? Math.max(1, Math.min(500, Math.floor(requestedLimit))) : 100
     if (!agencyId || !siteVersionId) {
-      return NextResponse.json({ ok: false, error: 'agencyId and siteVersionId are required', diagnostics }, { status: 400 })
+      return validationErrorResponse({ diagnostics, error: 'agencyId and siteVersionId are required', details: { agencyId, siteVersionId } })
     }
     resolvedSiteVersionId = siteVersionId
 
     await requireAgencyActionContext({ action: 'view_dashboard', requestedAgencyId: agencyId })
     const scope = await resolveRuntimeScope({ clientId, siteId, agencyId, siteVersionId })
-    if (!scope) return NextResponse.json({ ok: false, error: 'Site scope not found', diagnostics }, { status: 404 })
+    if (!scope) return successResponse({ diagnostics: [...diagnostics, 'CONTENT_HISTORY_FETCH_FAILED'], body: { rows: [], historyCount: 0 } })
     resolvedSiteVersionId = scope.siteVersionId
 
     const [historyRows, slots] = await Promise.all([
@@ -72,29 +64,19 @@ export async function GET(req: Request, ctx: { params: Promise<{ clientId?: stri
       return acc
     }, {})
 
-    return NextResponse.json({
-      ok: true,
-      siteVersionId: scope.siteVersionId,
-      rows: historyRows.map((row) => ({ ...row, slotLabel: slotLabelMap.get(row.slotKey) ?? friendlySlotLabel(row.slotKey) })),
-      historyCount: historyRows.length,
-      groupedBySlot,
-      diagnostics: [
-        ...diagnostics,
-        historyRows.length === 0 ? 'CONTENT_HISTORY_EMPTY' : 'CONTENT_HISTORY_FETCH_COMPLETED',
-      ],
+    return successResponse({
+      diagnostics: [...diagnostics, historyRows.length === 0 ? 'CONTENT_HISTORY_EMPTY' : 'CONTENT_HISTORY_FETCH_COMPLETED'],
+      body: {
+        siteVersionId: scope.siteVersionId,
+        rows: historyRows.map((row) => ({ ...row, slotLabel: slotLabelMap.get(row.slotKey) ?? friendlySlotLabel(row.slotKey) })),
+        historyCount: historyRows.length,
+        groupedBySlot,
+      },
     })
   } catch (error) {
     const mapped = parseAgencyActionContextError(error)
     diagnostics.push('CONTENT_HISTORY_FETCH_FAILED')
-    return NextResponse.json(
-      {
-        ok: false,
-        reasonCode: 'CONTENT_HISTORY_FETCH_FAILED',
-        error: mapped.message,
-        diagnostics,
-        siteVersionId: resolvedSiteVersionId,
-      },
-      { status: mapped.status },
-    )
+    console.error('[gnr8.content-api] CONTENT_HISTORY_FETCH_FAILED', { error: mapped.message, siteVersionId: resolvedSiteVersionId, diagnostics })
+    return successResponse({ diagnostics, body: { siteVersionId: resolvedSiteVersionId, rows: [], historyCount: 0 } })
   }
 }

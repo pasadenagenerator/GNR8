@@ -1,16 +1,8 @@
-import { NextResponse } from 'next/server'
-
 import { parseAgencyActionContextError, requireAgencyActionContext } from '@/app/api/gnr8/agency/_lib/agency-action-access'
+import { failureResponse, normalizeUuid, successResponse, validationErrorResponse } from '@/app/api/gnr8/clients/[clientId]/sites/[siteId]/content/content-api-contract'
 import { requireContentSiteVersionId } from '@/app/api/gnr8/clients/[clientId]/sites/[siteId]/content/content-version-guards'
 import { publishDraftContentOverrides } from '@/gnr8/runtime/runtime-store'
 import { getSuperadminPool } from '@/src/superadmin/db'
-
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
-const normalizeText = (v: unknown) => String(v ?? '').trim()
-const normalizeUuid = (v: unknown) => {
-  const n = normalizeText(v)
-  return n && UUID_RE.test(n) ? n : null
-}
 
 async function resolveRuntimeScope(input: { clientId: string; siteId: string; agencyId: string; siteVersionId: string }): Promise<{ runtimeSiteId: string; ownershipSiteId: string; siteVersionId: string } | null> {
   const pool = getSuperadminPool()
@@ -26,16 +18,16 @@ export async function POST(req: Request, ctx: { params: Promise<{ clientId?: str
     const params = await ctx.params
     const clientId = normalizeUuid(params.clientId)
     const siteId = normalizeUuid(params.siteId)
-    if (!clientId || !siteId) return NextResponse.json({ ok: false, error: 'Invalid clientId/siteId' }, { status: 400 })
+    if (!clientId || !siteId) return validationErrorResponse({ diagnostics, error: 'Invalid clientId/siteId', details: { clientId: params.clientId, siteId: params.siteId } })
 
     const body = (await req.json().catch(() => null)) as any
     const agencyId = normalizeUuid(body?.agencyId)
     const siteVersionId = normalizeUuid(body?.siteVersionId)
-    if (!agencyId) return NextResponse.json({ ok: false, error: 'agencyId is required' }, { status: 400 })
+    if (!agencyId) return validationErrorResponse({ diagnostics, error: 'agencyId is required', details: { agencyId: body?.agencyId } })
     const versionRequirement = requireContentSiteVersionId(siteVersionId)
     if (!versionRequirement.ok) {
       diagnostics.push('CONTENT_PUBLISH_FAILED')
-      return NextResponse.json({ ok: false, error: 'siteVersionId is required', code: 'CONTENT_SITE_VERSION_REQUIRED', diagnostics }, { status: 400 })
+      return validationErrorResponse({ diagnostics, error: 'siteVersionId is required', details: { siteVersionId } })
     }
 
     const actionContext = await requireAgencyActionContext({ action: 'publish', requestedAgencyId: agencyId })
@@ -47,7 +39,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ clientId?: str
     })
     if (!scope) {
       diagnostics.push('CONTENT_PUBLISH_FAILED')
-      return NextResponse.json({ ok: false, error: 'Site version is outside site scope', code: 'CONTENT_SITE_VERSION_SCOPE_MISMATCH', diagnostics }, { status: 404 })
+      return failureResponse({ reasonCode: 'CONTENT_SITE_VERSION_SCOPE_MISMATCH', error: 'Site version is outside site scope', diagnostics, status: 404 })
     }
 
     diagnostics.push('CONTENT_PUBLISH_STARTED')
@@ -60,16 +52,17 @@ export async function POST(req: Request, ctx: { params: Promise<{ clientId?: str
     diagnostics.push(...result.diagnostics)
     if (result.publishedCount === 0) diagnostics.push('CONTENT_PUBLISH_NO_DRAFTS_FOUND')
     diagnostics.push('CONTENT_PUBLISH_COMPLETED')
-    return NextResponse.json({
-      ok: true,
-      publishedCount: result.publishedCount,
-      draftCount: result.draftCount,
-      siteVersionId: scope.siteVersionId,
+    return successResponse({
       diagnostics,
+      body: {
+        publishedCount: result.publishedCount,
+        draftCount: result.draftCount,
+        siteVersionId: scope.siteVersionId,
+      },
     })
   } catch (error) {
     const mapped = parseAgencyActionContextError(error)
     diagnostics.push('CONTENT_PUBLISH_FAILED')
-    return NextResponse.json({ ok: false, error: mapped.message, diagnostics }, { status: mapped.status })
+    return failureResponse({ reasonCode: 'CONTENT_PUBLISH_FAILED', error: mapped.message, diagnostics, status: mapped.status })
   }
 }

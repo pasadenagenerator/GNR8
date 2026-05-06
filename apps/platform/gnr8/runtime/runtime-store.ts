@@ -2955,8 +2955,11 @@ export async function upsertContentOverrideDraft(input: {
             updated_at: savedRes.rows[0].updated_at ?? null,
           }
         : null;
-      diagnostics.push("CONTENT_DRAFT_SAVE_ROW_READBACK");
-      if (!contentJsonEquals(savedRow?.valueJson ?? null, normalizedValue)) diagnostics.push("CONTENT_DRAFT_SAVE_VALUE_MISMATCH");
+      if (!contentJsonEquals(savedRow?.valueJson ?? null, normalizedValue)) {
+        diagnostics.push("CONTENT_WRITE_MISMATCH_FATAL");
+        throw new Error("CONTENT_WRITE_MISMATCH_FATAL");
+      }
+      diagnostics.push("CONTENT_DRAFT_SAVE_ROW_READBACK", "CONTENT_WRITE_VERIFIED");
       return {
         changed: false,
         historyRecorded: false,
@@ -3018,8 +3021,11 @@ export async function upsertContentOverrideDraft(input: {
           updated_at: savedRes.rows[0].updated_at ?? null,
         }
       : null;
-    if (!contentJsonEquals(savedRow?.valueJson ?? null, normalizedValue)) diagnostics.push("CONTENT_DRAFT_SAVE_VALUE_MISMATCH");
-    diagnostics.push("CONTENT_DRAFT_SAVE_ROW_READBACK");
+    if (!contentJsonEquals(savedRow?.valueJson ?? null, normalizedValue)) {
+      diagnostics.push("CONTENT_WRITE_MISMATCH_FATAL");
+      throw new Error("CONTENT_WRITE_MISMATCH_FATAL");
+    }
+    diagnostics.push("CONTENT_DRAFT_SAVE_ROW_READBACK", "CONTENT_WRITE_VERIFIED");
     return {
       changed: true,
       historyRecorded,
@@ -3070,6 +3076,21 @@ export async function upsertContentOverrideDraftBatch(input: {
         [input.siteId, input.siteVersionId, override.slotKey, override.valueType, JSON.stringify(override.valueJson ?? {})],
       );
       affected += res.rowCount ?? 0;
+      const readbackRes = await client.query<any>(
+        `
+        select value_json
+        from public.gnr8_content_overrides
+        where site_version_id = $1::uuid and slot_key = $2::text and status = 'draft'
+        limit 1
+        `,
+        [input.siteVersionId, override.slotKey],
+      );
+      const readbackValue = readbackRes.rows[0]?.value_json ?? null;
+      if (!contentJsonEquals(readbackValue, override.valueJson ?? {})) {
+        diagnostics.push("CONTENT_WRITE_MISMATCH_FATAL");
+        throw new Error("CONTENT_WRITE_MISMATCH_FATAL");
+      }
+      diagnostics.push("CONTENT_WRITE_VERIFIED");
       try {
         await insertContentOverrideHistoryWithClient({
           client,

@@ -1,17 +1,9 @@
-import { NextResponse } from 'next/server'
-
 import { parseAgencyActionContextError, requireAgencyActionContext } from '@/app/api/gnr8/agency/_lib/agency-action-access'
+import { failureResponse, isContentStatus, normalizeText, normalizeUuid, successResponse, validationErrorResponse } from '@/app/api/gnr8/clients/[clientId]/sites/[siteId]/content/content-api-contract'
 import { ensureSlotBelongsToSiteVersion, requireContentSiteVersionId } from '@/app/api/gnr8/clients/[clientId]/sites/[siteId]/content/content-version-guards'
 import { normalizeSingleDraftSavePayload } from '@/app/api/gnr8/clients/[clientId]/sites/[siteId]/content/overrides/overrides-route-helpers'
 import { listContentSlots, upsertContentOverrideDraft } from '@/gnr8/runtime/runtime-store'
 import { getSuperadminPool } from '@/src/superadmin/db'
-
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
-const normalizeText = (v: unknown) => String(v ?? '').trim()
-const normalizeUuid = (v: unknown) => {
-  const n = normalizeText(v)
-  return n && UUID_RE.test(n) ? n : null
-}
 
 async function resolveRuntimeScope(input: {
   clientId: string
@@ -37,21 +29,35 @@ export async function POST(req: Request, ctx: { params: Promise<{ clientId?: str
     const params = await ctx.params
     const clientId = normalizeUuid(params.clientId)
     const siteId = normalizeUuid(params.siteId)
-    if (!clientId || !siteId) return NextResponse.json({ ok: false, error: 'Invalid clientId/siteId' }, { status: 400 })
+    if (!clientId || !siteId) {
+      return validationErrorResponse({ diagnostics, error: 'Invalid clientId/siteId', details: { clientId: params.clientId, siteId: params.siteId } })
+    }
     const body = (await req.json().catch(() => null)) as any
     const agencyId = normalizeUuid(body?.agencyId)
     const siteVersionId = normalizeUuid(body?.siteVersionId)
     const slotKey = normalizeText(body?.slotKey)
+    const status = normalizeText(body?.status)
+    const rawValue = body?.value
     resolvedSiteVersionId = siteVersionId
     resolvedSlotKey = slotKey || null
     diagnostics.push('CONTENT_DRAFT_SAVE_STARTED')
+    if (!agencyId || !slotKey || typeof rawValue !== 'string' || !isContentStatus(status) || status !== 'draft') {
+      return validationErrorResponse({
+        diagnostics,
+        error: 'agencyId, siteVersionId, slotKey, value, and status=draft are required',
+        details: {
+          agencyId,
+          siteVersionId,
+          slotKey,
+          status,
+          hasStringValue: typeof rawValue === 'string',
+        },
+      })
+    }
     const versionRequirement = requireContentSiteVersionId(siteVersionId)
     if (!versionRequirement.ok) {
       diagnostics.push('CONTENT_DRAFT_SAVE_FAILED')
-      return NextResponse.json(
-        { ok: false, error: 'siteVersionId is required', code: 'CONTENT_SITE_VERSION_REQUIRED', diagnostics },
-        { status: 400 },
-      )
+      return validationErrorResponse({ diagnostics, error: 'siteVersionId is required', details: { siteVersionId } })
     }
 
     const actionContext = await requireAgencyActionContext({ action: 'run_migration', requestedAgencyId: agencyId })
@@ -64,35 +70,25 @@ export async function POST(req: Request, ctx: { params: Promise<{ clientId?: str
     resolvedSiteVersionId = scope?.siteVersionId ?? resolvedSiteVersionId
     if (!scope) {
       diagnostics.push('CONTENT_DRAFT_SAVE_FAILED')
-      return NextResponse.json(
-        { ok: false, error: 'Site version is outside site scope', code: 'CONTENT_SITE_VERSION_SCOPE_MISMATCH', diagnostics },
-        { status: 404 },
-      )
+      return failureResponse({ reasonCode: 'CONTENT_SITE_VERSION_SCOPE_MISMATCH', error: 'Site version is outside site scope', diagnostics, status: 404 })
     }
 
     const slots = await listContentSlots(scope.siteVersionId)
     const slotMembership = ensureSlotBelongsToSiteVersion({ slots, slotKey })
     if (!slotMembership.ok) {
       diagnostics.push('CONTENT_DRAFT_SAVE_FAILED')
-      return NextResponse.json(
-        { ok: false, error: 'slot does not belong to provided siteVersionId', code: 'CONTENT_SLOT_VERSION_MISMATCH', diagnostics },
-        { status: 400 },
-      )
+      return failureResponse({ reasonCode: 'CONTENT_SLOT_VERSION_MISMATCH', error: 'slot does not belong to provided siteVersionId', diagnostics, status: 400 })
     }
     const slot = slotMembership.slot
     diagnostics.push('CONTENT_DRAFT_SAVE_SLOT_VALIDATED')
     const normalizedPayload = normalizeSingleDraftSavePayload({ slotType: slot.slotType, body })
     if (!normalizedPayload.ok || !agencyId || !slotKey) {
       diagnostics.push('CONTENT_DRAFT_SAVE_FAILED')
-      return NextResponse.json(
-        {
-          ok: false,
-          reasonCode: normalizedPayload.ok ? 'CONTENT_DRAFT_SAVE_INVALID_PAYLOAD' : normalizedPayload.reasonCode,
-          error: 'agencyId, slotKey, status=draft, and value/valueJson are required',
-          diagnostics,
-        },
-        { status: 400 },
-      )
+      return validationErrorResponse({
+        diagnostics,
+        error: 'agencyId, slotKey, status=draft, and value/valueJson are required',
+        details: { reasonCode: normalizedPayload.ok ? 'CONTENT_DRAFT_SAVE_INVALID_PAYLOAD' : normalizedPayload.reasonCode },
+      })
     }
     diagnostics.push('CONTENT_DRAFT_SAVE_PAYLOAD_NORMALIZED')
     const currentInputValue = normalizedPayload.valueJson.value
@@ -149,29 +145,31 @@ export async function POST(req: Request, ctx: { params: Promise<{ clientId?: str
           updated_at: result.savedRow.updated_at,
         }
       : null
-    return NextResponse.json({
-      ok: true,
-      slotKey,
-      persistedRowCount: result.changed ? 1 : 0,
-      draftOverrideCountForVersion: result.draftOverrideCountForVersion,
-      siteVersionId: scope.siteVersionId,
-      normalizedValue: result.normalizedValue,
-      savedRow: responseSavedRow,
+    return successResponse({
       diagnostics,
+      body: {
+        slotKey,
+        persistedRowCount: result.changed ? 1 : 0,
+        draftOverrideCountForVersion: result.draftOverrideCountForVersion,
+        siteVersionId: scope.siteVersionId,
+        normalizedValue: result.normalizedValue,
+        savedRow: responseSavedRow,
+      },
     })
   } catch (error) {
     const mapped = parseAgencyActionContextError(error)
     diagnostics.push('CONTENT_DRAFT_SAVE_FAILED')
-    return NextResponse.json(
-      {
-        ok: false,
-        reasonCode: 'CONTENT_DRAFT_SAVE_FAILED',
-        error: mapped.message,
-        diagnostics,
+    const isWriteMismatch = error instanceof Error && error.message === 'CONTENT_WRITE_MISMATCH_FATAL'
+    if (isWriteMismatch) diagnostics.push('CONTENT_WRITE_MISMATCH_FATAL')
+    return failureResponse({
+      reasonCode: isWriteMismatch ? 'CONTENT_WRITE_MISMATCH_FATAL' : 'CONTENT_DRAFT_SAVE_FAILED',
+      error: isWriteMismatch ? 'Draft write verification failed' : mapped.message,
+      diagnostics,
+      debug: {
         siteVersionId: resolvedSiteVersionId,
         slotKey: resolvedSlotKey,
       },
-      { status: mapped.status },
-    )
+      status: isWriteMismatch ? 500 : mapped.status,
+    })
   }
 }

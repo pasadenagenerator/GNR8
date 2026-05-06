@@ -1,7 +1,6 @@
-import { NextResponse } from 'next/server'
-
 import { parseAgencyActionContextError, requireAgencyActionContext } from '@/app/api/gnr8/agency/_lib/agency-action-access'
-import { listContentOverrides, listContentSlots } from '@/gnr8/runtime/runtime-store'
+import { failureResponse, normalizeText, successResponse, validationErrorResponse } from '@/app/api/gnr8/clients/[clientId]/sites/[siteId]/content/content-api-contract'
+import { getRawTemplateSiteArtifact, getRawTemplateSiteAsset, listContentOverrides, listContentSlots } from '@/gnr8/runtime/runtime-store'
 import { getOverrideDisplayValue, getSlotOriginalDisplayValue } from '@/gnr8/site/content-override-display-value'
 import { groupedContentLooksEmpty, groupSlots } from '@/gnr8/site/content-route-grouping'
 import {
@@ -55,14 +54,28 @@ async function querySiteScopeContext(input: { siteId: string }): Promise<{ siteI
   }
 }
 
+function getSelectorValidation(input: { html: string; slots: Array<{ slotKey: string; sourceSelector: string | null }> }) {
+  const invalid: Array<{ slotKey: string; selector: string }> = []
+  for (const slot of input.slots) {
+    const selector = normalizeText(slot.sourceSelector)
+    if (!selector) continue
+    if (!input.html.includes(selector)) {
+      invalid.push({ slotKey: slot.slotKey, selector })
+      console.error('[gnr8.content-api] CONTENT_SLOT_SELECTOR_INVALID', { slotKey: slot.slotKey, selector })
+    }
+  }
+  return invalid
+}
+
 export function createContentRouteHandlers(deps: ContentRouteDeps) {
   return {
     async GET(req: Request, ctx: { params: Promise<{ clientId?: string; siteId?: string }> }) {
       try {
+        const diagnostics: string[] = []
         const params = await ctx.params
         const clientId = normalizeUuid(params.clientId)
         const siteId = normalizeUuid(params.siteId)
-        if (!clientId || !siteId) return NextResponse.json({ ok: false, error: 'Invalid clientId/siteId' }, { status: 400 })
+        if (!clientId || !siteId) return validationErrorResponse({ diagnostics, error: 'Invalid clientId/siteId', details: { clientId: params.clientId, siteId: params.siteId } })
 
         const url = new URL(req.url)
         const agencyId = normalizeUuid(url.searchParams.get('agencyId'))
@@ -77,7 +90,7 @@ export function createContentRouteHandlers(deps: ContentRouteDeps) {
           agencyHeader,
           effectiveAgencyId,
         })
-        if (!effectiveAgencyId) return NextResponse.json({ ok: false, error: 'agencyId (or agency) is required' }, { status: 400 })
+        if (!effectiveAgencyId) return validationErrorResponse({ diagnostics, error: 'agencyId (or agency) is required' })
         console.info('[gnr8.content-api] CONTENT_GET_SCOPE_VALIDATION_STARTED', {
           clientId,
           siteId,
@@ -117,16 +130,13 @@ export function createContentRouteHandlers(deps: ContentRouteDeps) {
             reasonCode: resolution.unresolvedReasonCode ?? (requestedSiteVersionId ? 'requested_site_version_not_in_scope' : 'CONTENT_VERSION_NOT_FOUND'),
             debug: resolution.debug,
           })
-          return NextResponse.json(
-            {
-              ok: false,
-              error: 'Content version could not be resolved for this site.',
-              reasonCode: resolution.unresolvedReasonCode ?? (requestedSiteVersionId ? 'requested_site_version_not_in_scope' : 'CONTENT_VERSION_NOT_FOUND'),
-              debug: resolution.debug,
-              diagnostics: ['CONTENT_GET_VERSION_RESOLUTION_FAILED'],
-            },
-            { status: 404 },
-          )
+          return failureResponse({
+            reasonCode: resolution.unresolvedReasonCode ?? (requestedSiteVersionId ? 'requested_site_version_not_in_scope' : 'CONTENT_VERSION_NOT_FOUND'),
+            error: 'Content version could not be resolved for this site.',
+            debug: resolution.debug,
+            diagnostics: ['CONTENT_GET_VERSION_RESOLUTION_FAILED'],
+            status: 404,
+          })
         }
 
         console.info('[gnr8.content-api] CONTENT_GET_VERSION_RESOLUTION_FOUND', {
@@ -174,7 +184,7 @@ export function createContentRouteHandlers(deps: ContentRouteDeps) {
           }
         })
         const grouped = groupSlots(hydratedSlots)
-        const diagnostics: string[] = [
+        diagnostics.push(
           'CONTENT_GET_SQL_TYPE_GUARD_APPLIED',
           'CONTENT_GET_SCOPE_QUERY_TYPED',
           'CONTENT_GET_VERSION_QUERY_TYPED',
@@ -182,26 +192,40 @@ export function createContentRouteHandlers(deps: ContentRouteDeps) {
           'CONTENT_GET_SLOTS_LOADED',
           'CONTENT_OVERRIDES_HYDRATED',
           'CONTENT_SLOT_EFFECTIVE_VALUE_RESOLVED',
-        ]
+        )
+        const artifact = await getRawTemplateSiteArtifact(scope.siteVersionId)
+        let invalidSlotSelectors: Array<{ slotKey: string; selector: string }> = []
+        if (artifact) {
+          const htmlAsset = await getRawTemplateSiteAsset({ siteVersionId: scope.siteVersionId, filePath: artifact.entryHtmlPath })
+          if (htmlAsset) {
+            invalidSlotSelectors = getSelectorValidation({
+              html: htmlAsset.bytes.toString('utf8'),
+              slots: hydratedSlots.map((slot) => ({ slotKey: slot.slotKey, sourceSelector: slot.sourceSelector })),
+            })
+          }
+        }
+        if (invalidSlotSelectors.length > 0) diagnostics.push('CONTENT_SLOT_SELECTOR_INVALID')
         if (scope.reasonCode.startsWith('fallback_')) diagnostics.push('CONTENT_GET_VERSION_RESOLUTION_FALLBACK_USED')
         if (slots.length === 0) diagnostics.push('CONTENT_GET_SLOTS_EMPTY')
         if (!grouped.sections.length) diagnostics.push('CONTENT_SECTION_SLOTS_MISSING')
         if (groupedContentLooksEmpty(grouped) && slots.length > 0) diagnostics.push('CONTENT_GROUPING_EMPTY_WITH_FLAT_SLOTS_PRESENT')
 
-        return NextResponse.json({
-          ok: true,
-          siteVersionId: scope.siteVersionId,
-          activeSiteVersionId: scope.activeSiteVersionId,
-          slotCount: slots.length,
-          draftOverrideCount: draftOverrides.length,
-          publishedOverrideCount: publishedOverrides.length,
-          historyCount,
-          reasonCode: scope.reasonCode,
-          slots: hydratedSlots,
-          grouped,
-          draftOverrides,
-          publishedOverrides,
+        return successResponse({
           diagnostics,
+          body: {
+            siteVersionId: scope.siteVersionId,
+            activeSiteVersionId: scope.activeSiteVersionId,
+            slotCount: slots.length,
+            draftOverrideCount: draftOverrides.length,
+            publishedOverrideCount: publishedOverrides.length,
+            historyCount,
+            reasonCode: scope.reasonCode,
+            slots: hydratedSlots,
+            grouped,
+            draftOverrides,
+            publishedOverrides,
+            debug: invalidSlotSelectors.length > 0 ? { invalidSlotSelectors } : undefined,
+          },
         })
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error)
@@ -211,7 +235,7 @@ export function createContentRouteHandlers(deps: ContentRouteDeps) {
           error: message,
         })
         const mapped = deps.parseAgencyActionContextError(error)
-        return NextResponse.json({ ok: false, error: mapped.message }, { status: mapped.status })
+        return failureResponse({ reasonCode: 'CONTENT_GET_FAILED', error: mapped.message, diagnostics: ['CONTENT_GET_FAILED'], status: mapped.status })
       }
     },
   }

@@ -113,6 +113,7 @@ export default function ContentBindingsPanel(props: { agencyId: string; clientId
   const [saveAllStatus, setSaveAllStatus] = useState<'idle' | 'success' | 'error'>('idle')
   const [historyRows, setHistoryRows] = useState<HistoryRow[]>([])
   const [loadError, setLoadError] = useState<{ error: string; reasonCode?: string; diagnostics?: string[]; debug?: any } | null>(null)
+  const [actionError, setActionError] = useState<{ reasonCode: string; message: string } | null>(null)
 
   const endpoint = useMemo(() => `/api/gnr8/clients/${encodeURIComponent(props.clientId)}/sites/${encodeURIComponent(props.siteId)}/content?agencyId=${encodeURIComponent(props.agencyId)}`, [props])
 
@@ -181,6 +182,7 @@ export default function ContentBindingsPanel(props: { agencyId: string; clientId
 
   const applyContentPayload = useCallback(async (payload: any): Promise<void> => {
     setLoadError(null)
+    setActionError(null)
     if (!payload?.ok) {
       setLoadError({
         error: typeof payload?.error === 'string' ? payload.error : 'Failed to load content.',
@@ -320,6 +322,7 @@ export default function ContentBindingsPanel(props: { agencyId: string; clientId
       return
     }
     setBusy(true)
+    setActionError(null)
     try {
       const apiUrl = `/api/gnr8/clients/${encodeURIComponent(props.clientId)}/sites/${encodeURIComponent(props.siteId)}/content/overrides`
       const oldValue = published[slot.slotKey] ?? ''
@@ -339,7 +342,10 @@ export default function ContentBindingsPanel(props: { agencyId: string; clientId
       })
       const payload = (await response.json().catch(() => null)) as any
       console.info('[gnr8.content-editor] CONTENT_EDITOR_DRAFT_SAVE_RESPONSE', { siteId: props.siteId, siteVersionId, slotKey: slot.slotKey, status: response.status, responseJson: payload })
-      if (!response.ok || !payload?.ok) throw new Error(payload?.code ?? 'draft_save_failed')
+      if (!response.ok || !payload?.ok) {
+        const reasonCode = typeof payload?.reasonCode === 'string' ? payload.reasonCode : (typeof payload?.code === 'string' ? payload.code : 'draft_save_failed')
+        throw new Error(`${reasonCode}:${typeof payload?.error === 'string' ? payload.error : 'Save failed'}`)
+      }
       if ((payload?.persistedRowCount ?? 0) === 0) {
         console.info('[gnr8.content-editor] CONTENT_EDITOR_NO_CHANGE', { siteId: props.siteId, siteVersionId, slotKey, reason: 'persisted_row_count_zero' })
         setSaveFeedbackBySlot((prev) => ({ ...prev, [slotKey]: 'No changes detected' }))
@@ -368,17 +374,22 @@ export default function ContentBindingsPanel(props: { agencyId: string; clientId
           currentInputValue,
           readbackDraftValue,
         })
+        setSaveFeedbackBySlot((prev) => ({ ...prev, [slotKey]: 'CONTENT_WRITE_MISMATCH_FATAL: saved value did not match readback' }))
+        setActionError({ reasonCode: 'CONTENT_WRITE_MISMATCH_FATAL', message: 'Saved value did not match readback verification.' })
       }
       await applyContentPayload(refreshedPayload)
     } catch (error) {
       const message = error instanceof Error ? error.message : 'draft_save_failed'
+      const [reasonCode, ...rest] = message.split(':')
+      const shortMessage = rest.join(':').trim() || 'Save failed'
       console.warn('[gnr8.content-editor] CONTENT_EDITOR_DRAFT_SAVE_FAILED', {
         siteId: props.siteId,
         siteVersionId,
         slotKey,
         error: message,
       })
-      setSaveFeedbackBySlot((prev) => ({ ...prev, [slotKey]: `Save failed (${message})` }))
+      setSaveFeedbackBySlot((prev) => ({ ...prev, [slotKey]: `${reasonCode || 'SAVE_FAILED'}: ${shortMessage}` }))
+      setActionError({ reasonCode: reasonCode || 'SAVE_FAILED', message: shortMessage })
     } finally {
       setBusy(false)
     }
@@ -388,6 +399,7 @@ export default function ContentBindingsPanel(props: { agencyId: string; clientId
     if (modifiedEditableSlots.length === 0 || !siteVersionId) return
     setBusy(true)
     setSaveAllStatus('idle')
+    setActionError(null)
     try {
       const apiUrl = `/api/gnr8/clients/${encodeURIComponent(props.clientId)}/sites/${encodeURIComponent(props.siteId)}/content/overrides/batch`
       const payloadBody = {
@@ -407,12 +419,18 @@ export default function ContentBindingsPanel(props: { agencyId: string; clientId
       })
       const payload = (await response.json().catch(() => null)) as any
       console.info('[gnr8.content-editor] CONTENT_EDITOR_BATCH_SAVE_RESPONSE', { siteId: props.siteId, siteVersionId, slotKeyCount: modifiedEditableSlots.length, status: response.status, responseJson: payload })
-      if (!response.ok || !payload?.ok) throw new Error(payload?.code ?? 'batch_save_failed')
+      if (!response.ok || !payload?.ok) {
+        const reasonCode = typeof payload?.reasonCode === 'string' ? payload.reasonCode : 'batch_save_failed'
+        throw new Error(`${reasonCode}:${typeof payload?.error === 'string' ? payload.error : 'Batch save failed'}`)
+      }
       setSaveAllStatus('success')
       await fetchHistory(siteVersionId)
       await loadContent()
-    } catch {
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'batch_save_failed'
+      const [reasonCode, ...rest] = message.split(':')
       setSaveAllStatus('error')
+      setActionError({ reasonCode: reasonCode || 'BATCH_SAVE_FAILED', message: rest.join(':').trim() || 'Batch save failed.' })
     } finally {
       setBusy(false)
     }
@@ -421,6 +439,7 @@ export default function ContentBindingsPanel(props: { agencyId: string; clientId
   async function publish(): Promise<void> {
     setBusy(true)
     setPublishStatus('idle')
+    setActionError(null)
     try {
       const apiUrl = `/api/gnr8/clients/${encodeURIComponent(props.clientId)}/sites/${encodeURIComponent(props.siteId)}/content/publish`
       const payloadBody = { agencyId: props.agencyId, siteVersionId }
@@ -432,15 +451,21 @@ export default function ContentBindingsPanel(props: { agencyId: string; clientId
       })
       const payload = (await response.json().catch(() => null)) as any
       console.info('[gnr8.content-editor] CONTENT_EDITOR_PUBLISH_RESPONSE', { siteId: props.siteId, siteVersionId, status: response.status, responseJson: payload })
-      if (!response.ok || !payload?.ok) throw new Error(payload?.code ?? 'publish_failed')
+      if (!response.ok || !payload?.ok) {
+        const reasonCode = typeof payload?.reasonCode === 'string' ? payload.reasonCode : 'publish_failed'
+        throw new Error(`${reasonCode}:${typeof payload?.error === 'string' ? payload.error : 'Publish failed'}`)
+      }
       setPublished({ ...drafts })
       setPublishedOverrides({ ...drafts })
       setPublishStatus((payload?.publishedCount ?? 0) > 0 ? 'success' : 'no_drafts')
       console.info('[gnr8.content-editor] CONTENT_PUBLISH_COMPLETED', { siteId: props.siteId, siteVersionId, slotKeyCount: Object.keys(drafts).length })
       await fetchHistory(siteVersionId)
       await loadContent()
-    } catch {
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'publish_failed'
+      const [reasonCode, ...rest] = message.split(':')
       setPublishStatus('error')
+      setActionError({ reasonCode: reasonCode || 'PUBLISH_FAILED', message: rest.join(':').trim() || 'Publish failed.' })
     } finally {
       setBusy(false)
     }
@@ -547,6 +572,11 @@ export default function ContentBindingsPanel(props: { agencyId: string; clientId
         {publishStatus === 'error' ? <div style={{ fontSize: 12, color: '#b91c1c', alignSelf: 'center' }}>Publish failed. Please retry.</div> : null}
         {!hasDraftChangesToPublish ? <div style={{ fontSize: 12, color: '#64748b', alignSelf: 'center' }}>No draft changes to publish</div> : null}
       </div>
+      {actionError ? (
+        <div style={{ fontSize: 12, color: '#991b1b', border: '1px solid #fecaca', borderRadius: 8, padding: 8, background: '#fef2f2' }}>
+          <strong>{actionError.reasonCode}</strong>: {actionError.message}
+        </div>
+      ) : null}
 
       {shouldRenderFlatFallback ? (
         <>
