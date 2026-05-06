@@ -88,12 +88,14 @@ export type ImportIntakeStageOutput =
   | {
       kind: "import_intake_ok_v0";
       pipelineInput: PipelineInput;
+      pipelineMode: "strict" | "degraded_html_fallback";
       canProceed: true;
       blockedReason: null;
     }
   | {
       kind: "import_intake_blocked_v0";
       pipelineInput: PipelineInput;
+      pipelineMode: "strict";
       canProceed: false;
       blockedReason: "import_failed";
     };

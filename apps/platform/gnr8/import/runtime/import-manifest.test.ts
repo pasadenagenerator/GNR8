@@ -72,6 +72,32 @@ test("createImportManifest fails on structural blockers (missing entry html)", a
   assert.ok(m.diagnostics.codes.includes("ENTRY_HTML_MISSING"));
 });
 
+test("createImportManifest marks degraded with fallback metadata when strict blockers exist but raw HTML is available", async () => {
+  const rootDir = fixtureDir("simple-site");
+  const out = await importStaticSite({
+    rootDir,
+    source: { kind: "single-entry-html", entryHtmlPath: "index.html", assetsDirPath: "assets" },
+  });
+
+  out.status = "failed";
+  out.importDiagnostics.issues.push({
+    severity: "fatal",
+    code: "ENTRY_HTML_MISSING",
+    message: "Simulated strict blocker with usable raw HTML.",
+    location: null,
+    details: null,
+  });
+  out.importDiagnostics.summary.fatalCount += 1;
+
+  const m = createImportManifest(out);
+
+  assert.equal(m.status, "degraded");
+  assert.equal(m.intake.fallbackUsed, true);
+  assert.equal(m.intake.rawHtmlAvailable, true);
+  assert.equal(m.intake.htmlByteLength > 0, true);
+  assert.equal(m.intake.reasonCode, "ENTRY_HTML_MISSING");
+});
+
 test("equivalent normalized inputs produce equivalent manifest summaries", async () => {
   const rootDir = fixtureDir("simple-site");
   const entryAbs = path.resolve(rootDir, "index.html");

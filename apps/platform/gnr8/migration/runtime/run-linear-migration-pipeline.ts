@@ -119,8 +119,52 @@ function runImportIntakeStage(input: PipelineInput): LinearMigrationPipelineStag
   const importIssues = mapImportDiagnosticsToPipelineStage("import_intake", input.importOutput.importDiagnostics.issues);
   const stageIssues: ReturnType<typeof createPipelineDiagnosticIssue>[] = [];
 
-  const importBlocked = input.importManifest.status === "failed" || hasStructuralImportBlockers(input.importOutput);
+  const htmlByteLength = input.importOutput.rawDomSnapshot.documents.reduce((sum, doc) => sum + Math.max(0, doc.byteLength), 0);
+  const rawHtmlAvailable = htmlByteLength > 0;
+  const importStrictlyBlocked = input.importManifest.status === "failed" || hasStructuralImportBlockers(input.importOutput);
+  const fallbackActivated = importStrictlyBlocked && rawHtmlAvailable;
+  const importBlocked = importStrictlyBlocked && !rawHtmlAvailable;
   const status: PipelineStageStatus = importBlocked ? "failed" : "success";
+
+  if (fallbackActivated) {
+    stageIssues.push(
+      createPipelineDiagnosticIssue({
+        stageId: "import_intake",
+        source: "pipeline",
+        severity: "warning",
+        code: "SITE_IMPORT_FALLBACK_ACTIVATED",
+        message: "Import intake activated raw HTML fallback mode to continue pipeline execution.",
+        location: null,
+        details: {
+          htmlByteLength,
+          rawHtmlAvailable,
+        },
+      }),
+      createPipelineDiagnosticIssue({
+        stageId: "import_intake",
+        source: "pipeline",
+        severity: "warning",
+        code: "SITE_IMPORT_FALLBACK_REASON",
+        message: "Import intake reported strict-mode blockers; continuing in degraded HTML fallback mode.",
+        location: null,
+        details: {
+          reasonCode: "import_failed",
+        },
+      }),
+      createPipelineDiagnosticIssue({
+        stageId: "import_intake",
+        source: "pipeline",
+        severity: "warning",
+        code: "SITE_IMPORT_PIPELINE_CONTINUED_WITH_RAW_HTML",
+        message: "Pipeline continued with available raw HTML despite strict intake failure.",
+        location: null,
+        details: {
+          htmlByteLength,
+          rawHtmlAvailable,
+        },
+      }),
+    );
+  }
 
   if (importBlocked) {
     stageIssues.push(
@@ -134,6 +178,8 @@ function runImportIntakeStage(input: PipelineInput): LinearMigrationPipelineStag
         details: {
           importOutputStatus: input.importOutput.status,
           importManifestStatus: input.importManifest.status,
+          rawHtmlAvailable,
+          htmlByteLength,
         },
       }),
     );
@@ -145,12 +191,14 @@ function runImportIntakeStage(input: PipelineInput): LinearMigrationPipelineStag
     ? {
         kind: "import_intake_blocked_v0",
         pipelineInput: input,
+        pipelineMode: "strict",
         canProceed: false,
         blockedReason: "import_failed",
       }
     : {
         kind: "import_intake_ok_v0",
         pipelineInput: input,
+        pipelineMode: fallbackActivated ? "degraded_html_fallback" : "strict",
         canProceed: true,
         blockedReason: null,
       };
@@ -159,6 +207,9 @@ function runImportIntakeStage(input: PipelineInput): LinearMigrationPipelineStag
   const details = [
     `importOutput.status=${input.importOutput.status}`,
     `importManifest.status=${input.importManifest.status}`,
+    `pipelineMode=${fallbackActivated ? "degraded_html_fallback" : "strict"}`,
+    `rawHtmlAvailable=${rawHtmlAvailable}`,
+    `htmlByteLength=${htmlByteLength}`,
     `importDiagnostics(info=${counts.infoCount},warning=${counts.warningCount},error=${counts.errorCount},fatal=${counts.fatalCount})`,
   ];
 

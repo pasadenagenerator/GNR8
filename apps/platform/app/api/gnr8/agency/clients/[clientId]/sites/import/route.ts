@@ -229,14 +229,18 @@ export async function POST(req: Request, ctx: { params: Promise<Params> }) {
       sourceUrl: importUrl.toString(),
       requestId: `client-site-import-${Date.now()}`,
     })
-    if (!snapshot.importIntake?.ok) {
-      const reasonCode = snapshot.importIntake?.reasonCode ?? 'fetch_failed'
+    const intake = snapshot.importIntake ?? null
+    const rawHtmlUsable = Boolean((intake?.rawHtmlAvailable ?? false) && (intake?.htmlByteLength ?? 0) > 0)
+    const pipelineMode: 'strict' | 'degraded_html_fallback' = !intake?.ok && rawHtmlUsable ? 'degraded_html_fallback' : 'strict'
+
+    if (!intake?.ok && !rawHtmlUsable) {
+      const reasonCode = intake?.reasonCode ?? 'fetch_failed'
       return NextResponse.json(
         {
           ok: false,
           reasonCode,
           error: mapSiteImportReasonToMessage(reasonCode),
-          intake: snapshot.importIntake ?? null,
+          intake,
           diagnostics: snapshot.importDiagnostics,
         },
         { status: 502 },
@@ -276,6 +280,15 @@ export async function POST(req: Request, ctx: { params: Promise<Params> }) {
         siteVersionNo: imported.versionNo,
         actor_mode: actionContext.actorMode,
         fallbackUsed: imported.mode === 'legacy_fallback',
+        importManifest: {
+          status: pipelineMode === 'degraded_html_fallback' ? 'degraded' : 'success',
+          intakeReasonCode: intake?.reasonCode ?? null,
+          fallbackUsed: pipelineMode === 'degraded_html_fallback',
+        },
+        warning:
+          pipelineMode === 'degraded_html_fallback'
+            ? 'Imported using raw HTML fallback. Some structure may be incomplete.'
+            : null,
         previewArtifacts: {
           rawImportCaptured: true,
           transformedPreviewGenerated: imported.mode === 'pipeline',
@@ -283,6 +296,7 @@ export async function POST(req: Request, ctx: { params: Promise<Params> }) {
           runtimePreviewLinked: imported.mode === 'pipeline' && imported.reporting.writePath.artifactBindSucceeded,
         },
         pipeline: {
+          pipelineMode,
           executionStatus: imported.mode === 'pipeline' ? imported.reporting.executionStatus : imported.diagnostics.pipelineStatus,
           consolidationApplied: imported.mode === 'pipeline' ? imported.reporting.consolidationApplied : false,
           renderedCaptureUsed: imported.mode === 'pipeline' ? imported.reporting.renderedCaptureUsed : imported.diagnostics.sourceMode === 'rendered_dom',
@@ -301,14 +315,26 @@ export async function POST(req: Request, ctx: { params: Promise<Params> }) {
             imported.mode === 'legacy_fallback'
               ? {
                   stageSummaries: imported.diagnostics.stageSummaries,
-                  pipelineDiagnosticCodes: imported.diagnostics.pipelineDiagnosticCodes,
+                  pipelineDiagnosticCodes: [
+                    ...new Set([
+                      ...imported.diagnostics.pipelineDiagnosticCodes,
+                      ...(pipelineMode === 'degraded_html_fallback'
+                        ? ['SITE_IMPORT_FALLBACK_ACTIVATED', 'SITE_IMPORT_FALLBACK_REASON', 'SITE_IMPORT_PIPELINE_CONTINUED_WITH_RAW_HTML']
+                        : []),
+                    ]),
+                  ].sort((a, b) => a.localeCompare(b)),
                   writePath: imported.diagnostics.writePath,
                 }
               : {
                   stageSummaries: imported.pipelineResult.stages.map((stage) => stage.summary),
-                  pipelineDiagnosticCodes: [...new Set(imported.pipelineResult.diagnostics.map((issue) => issue.code))].sort((a, b) =>
-                    a.localeCompare(b),
-                  ),
+                  pipelineDiagnosticCodes: [
+                    ...new Set([
+                      ...imported.pipelineResult.diagnostics.map((issue) => issue.code),
+                      ...(pipelineMode === 'degraded_html_fallback'
+                        ? ['SITE_IMPORT_FALLBACK_ACTIVATED', 'SITE_IMPORT_FALLBACK_REASON', 'SITE_IMPORT_PIPELINE_CONTINUED_WITH_RAW_HTML']
+                        : []),
+                    ]),
+                  ].sort((a, b) => a.localeCompare(b)),
                   writePath: imported.reporting.writePath,
                 },
         },

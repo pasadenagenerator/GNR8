@@ -10,7 +10,7 @@ import { hasStructuralImportBlockers } from "./import-severity-policy";
 
 export const IMPORT_MANIFEST_VERSION = "1.0.0" as const;
 
-export type ImportStatusSummary = "success" | "success_with_warnings" | "failed";
+export type ImportStatusSummary = "success" | "success_with_warnings" | "degraded" | "failed";
 
 export type AssetReferenceManifestEntry = {
   id: string;
@@ -59,6 +59,13 @@ export type ImportManifest = {
     codes: ImportDiagnosticCode[];
   };
 
+  intake: {
+    reasonCode: string | null;
+    fallbackUsed: boolean;
+    rawHtmlAvailable: boolean;
+    htmlByteLength: number;
+  };
+
   dom: {
     documentCount: number;
     documentsWithDomCount: number;
@@ -105,9 +112,16 @@ function emptyCountRecord<T extends string>(keys: readonly T[]): Record<T, numbe
 }
 
 function computeStatusSummary(output: ImportOutput): ImportStatusSummary {
-  if (hasStructuralImportBlockers(output)) return "failed";
+  const htmlByteLength = output.rawDomSnapshot.documents.reduce((sum, doc) => sum + Math.max(0, doc.byteLength), 0);
+  const rawHtmlAvailable = htmlByteLength > 0;
+  if (hasStructuralImportBlockers(output)) return rawHtmlAvailable ? "degraded" : "failed";
   if (output.importDiagnostics.issues.length > 0) return "success_with_warnings";
   return "success";
+}
+
+function resolveIntakeReasonCode(output: ImportOutput): string | null {
+  const code = output.importDiagnostics.issues.find((issue) => issue.severity === "fatal" || issue.severity === "error")?.code;
+  return code ?? null;
 }
 
 export function createImportManifest(output: ImportOutput): ImportManifest {
@@ -119,6 +133,9 @@ export function createImportManifest(output: ImportOutput): ImportManifest {
   const diagnosticCodes = [...diagnosticCodeSet].sort((a, b) => a.localeCompare(b));
 
   const documents = output.rawDomSnapshot.documents;
+  const htmlByteLength = documents.reduce((sum, doc) => sum + Math.max(0, doc.byteLength), 0);
+  const rawHtmlAvailable = htmlByteLength > 0;
+  const status = computeStatusSummary(output);
   const documentPaths = documents.map((d) => d.path).slice().sort((a, b) => a.localeCompare(b));
 
   let documentsWithDomCount = 0;
@@ -175,7 +192,7 @@ export function createImportManifest(output: ImportOutput): ImportManifest {
     manifestVersion: IMPORT_MANIFEST_VERSION,
     contractVersion: output.contractVersion,
 
-    status: computeStatusSummary(output),
+    status,
     outputStatus: output.status,
 
     rootDirPath: null,
@@ -214,6 +231,12 @@ export function createImportManifest(output: ImportOutput): ImportManifest {
       existingLocalCount,
       missingLocalCount,
       references: referenceEntries,
+    },
+    intake: {
+      reasonCode: resolveIntakeReasonCode(output),
+      fallbackUsed: status === "degraded",
+      rawHtmlAvailable,
+      htmlByteLength,
     },
   };
 }

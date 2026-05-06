@@ -136,6 +136,52 @@ test("linear migration pipeline still blocks on structural import failures", asy
   assert.ok(result.diagnostics.some((d) => d.code === "PIPELINE_BLOCKED_BY_IMPORT"));
 });
 
+test("linear migration pipeline continues when intake is failed but raw HTML is available", async () => {
+  const rootDir = fixtureDir("simple-site");
+  const importOutput = await importStaticSite({
+    rootDir,
+    requestId: "req-intake-failed-raw-html-available",
+    source: { kind: "single-entry-html", entryHtmlPath: "index.html", assetsDirPath: "assets" },
+  });
+
+  importOutput.status = "failed";
+  importOutput.importDiagnostics.issues.push({
+    severity: "fatal",
+    code: "ENTRY_HTML_MISSING",
+    message: "Simulated strict intake failure with usable HTML fallback.",
+    location: null,
+    details: null,
+  });
+  importOutput.importDiagnostics.summary.fatalCount += 1;
+
+  const importManifest = createImportManifest(importOutput);
+  const result = runLinearMigrationPipeline({ importOutput, importManifest });
+
+  assert.equal(importManifest.status, "degraded");
+  assert.equal(result.status, "success");
+  assert.equal(result.stages[0].status, "success");
+  assert.equal(result.stages[0].output.pipelineMode, "degraded_html_fallback");
+  assert.ok(result.diagnostics.some((d) => d.code === "SITE_IMPORT_FALLBACK_ACTIVATED"));
+  assert.ok(result.diagnostics.some((d) => d.code === "SITE_IMPORT_FALLBACK_REASON"));
+  assert.ok(result.diagnostics.some((d) => d.code === "SITE_IMPORT_PIPELINE_CONTINUED_WITH_RAW_HTML"));
+});
+
+test("linear migration pipeline fails when intake is failed and no raw HTML is available", async () => {
+  const rootDir = fixtureDir("simple-site");
+  const importOutput = await importStaticSite({
+    rootDir,
+    requestId: "req-intake-failed-no-html",
+    source: { kind: "single-entry-html", entryHtmlPath: "missing.html", assetsDirPath: "assets" },
+  });
+  const importManifest = createImportManifest(importOutput);
+  const result = runLinearMigrationPipeline({ importOutput, importManifest });
+
+  assert.equal((importManifest.intake.htmlByteLength ?? 0) > 0, false);
+  assert.equal(result.status, "failed");
+  assert.equal(result.stages[0].status, "failed");
+  assert.equal(result.stages[0].output.pipelineMode, "strict");
+});
+
 test("linear migration pipeline stage results are deterministic across repeated runs", async () => {
   const rootDir = fixtureDir("simple-site");
 

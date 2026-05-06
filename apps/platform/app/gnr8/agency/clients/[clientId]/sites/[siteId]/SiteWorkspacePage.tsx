@@ -167,7 +167,9 @@ function renderOverviewContent(props: {
           <div>Import diagnostics: {readModel.pipeline.importDiagnosticCodes.length > 0 ? readModel.pipeline.importDiagnosticCodes.join(' · ') : 'none'}</div>
           <div>Capture evidence refs: {readModel.pipeline.captureEvidenceRefs.length > 0 ? readModel.pipeline.captureEvidenceRefs.join(' · ') : 'none'}</div>
           <div>Acquisition diagnostics: {readModel.pipeline.diagnosticsSummary.length > 0 ? readModel.pipeline.diagnosticsSummary.join(' · ') : 'none'}</div>
-          {readModel.pipeline.importFidelityDegraded ? <div>Fidelity warning: degraded import (review before redesign)</div> : null}
+          {readModel.pipeline.importFidelityDegraded ? (
+            <div>Imported using raw HTML fallback. Some structure may be incomplete.</div>
+          ) : null}
         </div>
       </section>
 
