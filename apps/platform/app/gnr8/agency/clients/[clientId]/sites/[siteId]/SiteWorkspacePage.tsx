@@ -400,6 +400,21 @@ function renderPreviewContent(readModel: Awaited<ReturnType<typeof getSiteWorksp
       <p style={{ margin: '6px 0 0', color: '#334155', fontSize: 12 }}>
         Preview mode: <strong>{previewModeLabel}</strong>
       </p>
+      {readModel.pipeline.sourceMode === 'raw_html_fallback' ? (
+        <div
+          style={{
+            marginTop: 8,
+            border: '1px solid #fcd34d',
+            background: '#fffbeb',
+            color: '#92400e',
+            borderRadius: 8,
+            padding: '8px 10px',
+            fontSize: 12,
+          }}
+        >
+          This preview is based on raw imported HTML. Layout and structure improvements are pending.
+        </div>
+      ) : null}
       {readModel.preview.previewRuntimeSummary ? (
         <p style={{ margin: '6px 0 0', color: '#334155', fontSize: 12 }}>
           Runtime truth: contract={readModel.preview.previewRuntimeSummary.rendererContractAvailable ? 'yes' : 'no'} · final-site=

@@ -1,9 +1,12 @@
 import { NextResponse } from 'next/server'
+import fs from 'node:fs'
 
 import { parseAgencyActionContextError, requireAgencyActionContext } from '@/app/api/gnr8/agency/_lib/agency-action-access'
 import { SCOPED_SITE_IMPORT_CANONICAL_PATH } from '@/gnr8/site/site-import-contract'
 import { importerSuccessRedirectHref } from '@/gnr8/site/site-importer-routing'
+import { resolveImportPreview } from '@/gnr8/site/import-preview-resolution'
 import { runScopedImportPipeline } from '@/gnr8/site/scoped-import-pipeline'
+import { getArtifactById } from '@/gnr8/runtime/runtime-store'
 import { importPublicSinglePageUrlToSnapshot } from '@/gnr8/validation/runtime/url-single-page-import'
 import { getSuperadminPool } from '@/src/superadmin/db'
 
@@ -22,6 +25,7 @@ type Body = {
   agencyId?: string
   adminView?: boolean
 }
+
 
 function mapSiteImportReasonToMessage(reasonCode: string): string {
   if (reasonCode === 'fetch_failed') return 'Import failed: could not fetch URL.'
@@ -67,6 +71,7 @@ function parseHttpUrl(value: unknown): URL | null {
     return null
   }
 }
+
 
 async function assertClientScope(input: {
   clientId: string
@@ -269,6 +274,24 @@ export async function POST(req: Request, ctx: { params: Promise<Params> }) {
       adminView: body.adminView,
     })
 
+    const rawHtml = fs.readFileSync(snapshot.entryHtmlPathAbs, 'utf8')
+    const rawHtmlLength = rawHtml.trim().length
+    let structuredHtmlLength = 0
+    if (imported.mode === 'pipeline') {
+      const artifact = await getArtifactById(imported.artifactId)
+      if (artifact) {
+        const structuredHtml = artifact.htmlByPath['/'] ?? Object.values(artifact.htmlByPath)[0] ?? ''
+        structuredHtmlLength = String(structuredHtml).trim().length
+      }
+    }
+    const preview = resolveImportPreview({
+      pipelineMode,
+      preparedSite: imported.mode === 'pipeline' ? imported.preparedSite : null,
+      renderOutput: imported.mode === 'pipeline' ? imported.renderOutput : null,
+      structuredHtmlLength,
+      rawHtmlLength,
+    })
+
     return NextResponse.json(
       {
         ok: true,
@@ -280,6 +303,11 @@ export async function POST(req: Request, ctx: { params: Promise<Params> }) {
         siteVersionNo: imported.versionNo,
         actor_mode: actionContext.actorMode,
         fallbackUsed: imported.mode === 'legacy_fallback',
+        previewMode: preview.previewMode,
+        htmlLength: preview.htmlLength,
+        appliedTransformationsCount: preview.appliedTransformationsCount,
+        diagnostics: preview.diagnostics,
+        preview,
         importManifest: {
           status: pipelineMode === 'degraded_html_fallback' ? 'degraded' : 'success',
           intakeReasonCode: intake?.reasonCode ?? null,
