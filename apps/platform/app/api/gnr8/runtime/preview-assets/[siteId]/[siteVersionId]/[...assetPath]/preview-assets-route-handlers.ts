@@ -50,6 +50,20 @@ function resolveLookupCandidates(normalizedPath: string): string[] {
   return [...candidates];
 }
 
+function isUploadVariantSegment(segment: string): boolean {
+  return /^\d+x\d+(?:_\d+x\d+)*$/i.test(segment);
+}
+
+function resolveUploadVariantFallbackPath(path: string): string | null {
+  if (!path.startsWith("uploads/")) return null;
+  const parts = path.split("/");
+  const variantIndex = parts.findIndex((part, index) => index > 1 && isUploadVariantSegment(part));
+  if (variantIndex < 0) return null;
+  const withoutVariant = parts.filter((_, index) => index !== variantIndex).join("/");
+  if (!withoutVariant.startsWith("uploads/")) return null;
+  return withoutVariant;
+}
+
 function resolveRequestHost(headers: Headers): string {
   return (
     (headers.get("x-forwarded-host") ?? headers.get("host") ?? "")
@@ -131,6 +145,35 @@ export function createPreviewAssetsRouteHandlers(overrides: Partial<PreviewAsset
           resolvedPath = candidate;
           asset = maybeAsset;
           break;
+        }
+        if (!asset) {
+          const fallbackPath = resolveUploadVariantFallbackPath(normalizedPath);
+          if (fallbackPath) {
+            const fallbackAsset = await deps.getRawTemplateSiteAsset({
+              siteVersionId,
+              artifactId: artifact.id,
+              filePath: fallbackPath,
+            });
+            if (fallbackAsset) {
+              console.info("[preview-runtime] CONTENT_ASSET_VARIANT_FALLBACK_USED", {
+                siteId,
+                siteVersionId,
+                requestedPath: normalizedPath,
+                fallbackPath,
+                artifactType: artifact.artifactType,
+              });
+              resolvedPath = fallbackPath;
+              asset = fallbackAsset;
+            } else {
+              console.warn("[preview-runtime] CONTENT_ASSET_VARIANT_NOT_FOUND", {
+                siteId,
+                siteVersionId,
+                requestedPath: normalizedPath,
+                fallbackPath,
+                artifactType: artifact.artifactType,
+              });
+            }
+          }
         }
         if (!asset) {
           console.warn("[preview-runtime] RAW_IMPORT_ASSET_LOOKUP_MISSING", {
