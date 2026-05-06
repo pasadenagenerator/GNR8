@@ -189,6 +189,7 @@ export async function runSiteTemplateBootstrapJob(input: {
       })
     }
     console.info('[site-bootstrap-worker] TEMPLATE_SITE_BOOTSTRAP_WORKER_COMPLETED', {
+      diagnostic: 'TEMPLATE_SITE_BOOTSTRAP_COMPLETED',
       siteId: payload.siteId,
       clientId: payload.clientId,
       agencyId: payload.agencyId,
@@ -197,7 +198,25 @@ export async function runSiteTemplateBootstrapJob(input: {
       runtimeSiteId: result.runtimeSiteId,
       artifactId: result.artifactId,
       sectionCount: result.sectionCount,
+      slotCount: result.slotCount,
+      warningCode: result.warningCode,
+      previewReady: result.previewReady,
+      previewUrl: result.previewUrl,
     })
+    if (result.previewReady) {
+      console.info('[site-bootstrap-worker] TEMPLATE_SITE_PREVIEW_READY', {
+        siteId: payload.siteId,
+        siteVersionId: result.siteVersionId,
+        previewUrl: result.previewUrl,
+      })
+    }
+    if (result.slotCount > 0) {
+      console.info('[site-bootstrap-worker] TEMPLATE_SITE_CONTENT_SLOTS_READY', {
+        siteId: payload.siteId,
+        siteVersionId: result.siteVersionId,
+        slotCount: result.slotCount,
+      })
+    }
   } catch (error) {
     const mapped = deps.parseTemplateSiteRuntimeBootstrapError(error)
     const code = mapped?.code ?? 'TEMPLATE_SITE_BOOTSTRAP_FAILED'
@@ -209,6 +228,7 @@ export async function runSiteTemplateBootstrapJob(input: {
       errorMessage: message,
     })
     console.error('[site-bootstrap-worker] TEMPLATE_SITE_BOOTSTRAP_WORKER_FAILED', {
+      diagnostic: 'TEMPLATE_SITE_CREATE_FAILED',
       siteId: payload.siteId,
       clientId: payload.clientId,
       agencyId: payload.agencyId,

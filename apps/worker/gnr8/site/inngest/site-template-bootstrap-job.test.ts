@@ -54,6 +54,10 @@ test('worker site bootstrap success path persists completion', async () => {
         artifactId: '00000000-0000-4000-8000-000000000983',
         previewSeeded: true,
         sectionCount: 6,
+        slotCount: 4,
+        previewReady: true,
+        previewUrl: '/api/gnr8/runtime/versions/00000000-0000-4000-8000-000000000981/preview?mode=raw_template_preview&path=/',
+        warningCode: null,
       }),
       markSiteBootstrapCompleted: async () => {
         completed = true
@@ -136,6 +140,10 @@ test('worker site bootstrap success does not emit duplicate render event when gu
         artifactId: '00000000-0000-4000-8000-000000000983',
         previewSeeded: true,
         sectionCount: 6,
+        slotCount: 0,
+        previewReady: true,
+        previewUrl: '/api/gnr8/runtime/versions/00000000-0000-4000-8000-000000000981/preview?mode=raw_template_preview&path=/',
+        warningCode: 'CONTENT_SLOTS_EMPTY',
       }),
       markSiteBootstrapCompleted: async () => undefined,
       queueSiteRenderJob: async () => ({

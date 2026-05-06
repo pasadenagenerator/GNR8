@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation'
 
 import { resolveSiteCreateUiView } from '@/app/gnr8/_components/client-dashboard/site-create-contract'
 import type { TemplateListApiCard } from '@/app/gnr8/_components/client-dashboard/template-library-contract'
-import { parseCreateSiteFromTemplatePayload } from '@/gnr8/site/site-create-contract'
+import { parseCreateSiteFromTemplatePayload, type CreateSiteFromTemplateResult } from '@/gnr8/site/site-create-contract'
 import { agencyClientDashboardHref } from '@/gnr8/site/site-importer-routing'
 
 type TemplateListResponse = {
@@ -15,18 +15,7 @@ type TemplateListResponse = {
   templates?: TemplateListApiCard[]
 }
 
-type CreateSiteResponse =
-  | {
-      ok: true
-      redirectTo: string
-      site: {
-        siteId: string
-      }
-    }
-  | {
-      ok: false
-      error?: string
-    }
+type CreateSiteResponse = CreateSiteFromTemplateResult
 
 type Props = {
   clientId: string
@@ -63,6 +52,12 @@ export default function SiteCreateFromTemplateClient(props: Props) {
   const [name, setName] = useState('')
   const [domain, setDomain] = useState('')
   const [isPending, startTransition] = useTransition()
+  const [businessName, setBusinessName] = useState('')
+  const [primaryCtaLabel, setPrimaryCtaLabel] = useState('')
+  const [contactEmail, setContactEmail] = useState('')
+  const [contactPhone, setContactPhone] = useState('')
+  const [createStatus, setCreateStatus] = useState<'idle' | 'creating' | 'bootstrap_running' | 'preview_ready' | 'failed'>('idle')
+  const [lastResult, setLastResult] = useState<CreateSiteFromTemplateResult | null>(null)
 
   const dashboardHref = useMemo(
     () =>
@@ -125,6 +120,10 @@ export default function SiteCreateFromTemplateClient(props: Props) {
       templateId: selectedTemplateId,
       name,
       domain,
+      businessName,
+      primaryCtaLabel,
+      contactEmail,
+      contactPhone,
     })
     if (!parsed.ok) {
       setError(parsed.error)
@@ -132,20 +131,34 @@ export default function SiteCreateFromTemplateClient(props: Props) {
     }
 
     try {
+      setCreateStatus('creating')
       const response = await fetch(`/api/gnr8/clients/${encodeURIComponent(props.clientId)}/sites`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify(parsed.value),
       })
       const payload = (await response.json().catch(() => null)) as CreateSiteResponse | null
-      if (!payload || payload.ok !== true || !response.ok || !payload.redirectTo) {
-        setError(payload && payload.ok === false ? payload.error ?? `Create failed (HTTP ${response.status})` : `Create failed (HTTP ${response.status})`)
+      if (!payload) {
+        setCreateStatus('failed')
+        setError(`Create failed (HTTP ${response.status})`)
         return
       }
+
+      setLastResult(payload)
+
+      if (!payload.ok || !response.ok || !payload.nextUrl) {
+        setCreateStatus('failed')
+        setError(payload.diagnostics?.[0] ?? payload.reasonCode ?? `Create failed (HTTP ${response.status})`)
+        return
+      }
+
+      setCreateStatus(payload.status === 'preview_ready' ? 'preview_ready' : 'bootstrap_running')
+
       startTransition(() => {
-        router.push(payload.redirectTo)
+        router.push(payload.nextUrl!)
       })
     } catch (submitError) {
+      setCreateStatus('failed')
       setError(submitError instanceof Error ? submitError.message : 'Create website failed.')
     }
   }
@@ -155,7 +168,7 @@ export default function SiteCreateFromTemplateClient(props: Props) {
       <header style={{ display: 'grid', gap: 6, marginBottom: 12 }}>
         <h2 style={{ margin: 0, fontSize: 20, color: '#0f172a' }}>Add New Website</h2>
         <p style={{ margin: 0, fontSize: 13, color: '#475569' }}>
-          Select one template, enter website name and domain, and create a scoped website for {props.clientName}.
+          Select one template, enter website + domain details, and create a scoped website for {props.clientName}.
         </p>
       </header>
 
@@ -244,6 +257,15 @@ export default function SiteCreateFromTemplateClient(props: Props) {
           <section style={{ display: 'grid', gap: 8 }}>
             <h3 style={{ margin: 0, fontSize: 15, color: '#0f172a' }}>Website Details</h3>
             <label style={{ display: 'grid', gap: 6 }}>
+              <span style={{ fontSize: 12, color: '#334155' }}>Client</span>
+              <input
+                type='text'
+                value={props.clientName}
+                readOnly
+                style={{ border: '1px solid #e2e8f0', borderRadius: 8, padding: '10px 12px', fontSize: 14, color: '#64748b', background: '#f8fafc' }}
+              />
+            </label>
+            <label style={{ display: 'grid', gap: 6 }}>
               <span style={{ fontSize: 12, color: '#334155' }}>Website Name</span>
               <input
                 type='text'
@@ -256,7 +278,7 @@ export default function SiteCreateFromTemplateClient(props: Props) {
             </label>
 
             <label style={{ display: 'grid', gap: 6 }}>
-              <span style={{ fontSize: 12, color: '#334155' }}>Domain</span>
+              <span style={{ fontSize: 12, color: '#334155' }}>Domain / Subdomain</span>
               <input
                 type='text'
                 value={domain}
@@ -268,12 +290,85 @@ export default function SiteCreateFromTemplateClient(props: Props) {
             </label>
           </section>
 
+          <section style={{ display: 'grid', gap: 8 }}>
+            <h3 style={{ margin: 0, fontSize: 15, color: '#0f172a' }}>Initial Metadata (Optional)</h3>
+            <label style={{ display: 'grid', gap: 6 }}>
+              <span style={{ fontSize: 12, color: '#334155' }}>Business Name</span>
+              <input
+                type='text'
+                value={businessName}
+                onChange={(event) => setBusinessName(event.currentTarget.value)}
+                placeholder='Acme Studio'
+                style={{ border: '1px solid #cbd5e1', borderRadius: 8, padding: '10px 12px', fontSize: 14 }}
+              />
+            </label>
+            <label style={{ display: 'grid', gap: 6 }}>
+              <span style={{ fontSize: 12, color: '#334155' }}>Primary CTA Label</span>
+              <input
+                type='text'
+                value={primaryCtaLabel}
+                onChange={(event) => setPrimaryCtaLabel(event.currentTarget.value)}
+                placeholder='Book a Call'
+                style={{ border: '1px solid #cbd5e1', borderRadius: 8, padding: '10px 12px', fontSize: 14 }}
+              />
+            </label>
+            <label style={{ display: 'grid', gap: 6 }}>
+              <span style={{ fontSize: 12, color: '#334155' }}>Contact Email</span>
+              <input
+                type='email'
+                value={contactEmail}
+                onChange={(event) => setContactEmail(event.currentTarget.value)}
+                placeholder='hello@example.com'
+                style={{ border: '1px solid #cbd5e1', borderRadius: 8, padding: '10px 12px', fontSize: 14 }}
+              />
+            </label>
+            <label style={{ display: 'grid', gap: 6 }}>
+              <span style={{ fontSize: 12, color: '#334155' }}>Contact Phone</span>
+              <input
+                type='text'
+                value={contactPhone}
+                onChange={(event) => setContactPhone(event.currentTarget.value)}
+                placeholder='+1 555 123 4567'
+                style={{ border: '1px solid #cbd5e1', borderRadius: 8, padding: '10px 12px', fontSize: 14 }}
+              />
+            </label>
+          </section>
+
+          {createStatus !== 'idle' ? (
+            <div style={{ border: '1px solid #dbe6f1', background: '#f8fafc', color: '#0f172a', borderRadius: 8, padding: 10, fontSize: 13 }}>
+              <strong style={{ display: 'block', marginBottom: 4 }}>Create Status</strong>
+              <div>
+                {createStatus === 'creating'
+                  ? 'creating'
+                  : createStatus === 'bootstrap_running'
+                    ? 'bootstrap running'
+                    : createStatus === 'preview_ready'
+                      ? 'preview ready'
+                      : 'failed'}
+              </div>
+              {lastResult?.reasonCode ? <div>Reason: {lastResult.reasonCode}</div> : null}
+              {lastResult?.diagnostics?.length ? <div>Diagnostics: {lastResult.diagnostics.join(' · ')}</div> : null}
+            </div>
+          ) : null}
+
           {error ? (
             <div
               role='alert'
               style={{ border: '1px solid #fecaca', background: '#fff5f5', color: '#7f1d1d', borderRadius: 8, padding: 10, fontSize: 13 }}
             >
               {error}
+              {createStatus === 'failed' ? (
+                <button
+                  type='button'
+                  onClick={() => {
+                    setError(null)
+                    setCreateStatus('idle')
+                  }}
+                  style={{ marginLeft: 10, padding: '4px 8px', borderRadius: 6, border: '1px solid #fecaca', background: '#fff', color: '#7f1d1d' }}
+                >
+                  Retry
+                </button>
+              ) : null}
             </div>
           ) : null}
 
@@ -295,7 +390,7 @@ export default function SiteCreateFromTemplateClient(props: Props) {
                 opacity: isPending ? 0.8 : 1,
               }}
             >
-              {isPending ? 'Creating...' : 'Create Website'}
+              {isPending || createStatus === 'creating' ? 'Creating...' : 'Create Website'}
             </button>
 
             <Link

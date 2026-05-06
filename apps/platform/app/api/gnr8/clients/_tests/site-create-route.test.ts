@@ -121,18 +121,21 @@ test('POST /sites creates site from template successfully', async () => {
   )
   const body = (await response.json()) as {
     ok: boolean
-    site?: { siteId: string; templateId: string; name: string; domain: string }
-    redirectTo?: string
+    siteId?: string
+    siteVersionId?: string | null
+    templateId?: string
+    status?: string
+    nextUrl?: string
   }
 
   assert.equal(response.status, 201)
   assert.equal(body.ok, true)
-  assert.equal(body.site?.siteId, '00000000-0000-4000-8000-000000000777')
-  assert.equal(body.site?.templateId, '00000000-0000-4000-8000-000000000901')
-  assert.equal(body.site?.name, 'New Website')
-  assert.equal(body.site?.domain, 'example.com')
+  assert.equal(body.siteId, '00000000-0000-4000-8000-000000000777')
+  assert.equal(body.templateId, '00000000-0000-4000-8000-000000000901')
+  assert.equal(body.siteVersionId, null)
+  assert.equal(body.status, 'bootstrap_running')
   assert.equal(
-    body.redirectTo,
+    body.nextUrl,
     '/gnr8/agency/clients/00000000-0000-4000-8000-000000000201/sites/00000000-0000-4000-8000-000000000777/overview?agency=00000000-0000-4000-8000-000000000301',
   )
 })
@@ -148,11 +151,11 @@ test('POST /sites validates missing templateId, name, and domain', async () => {
     }),
     { params: getParams() },
   )
-  const missingTemplateBody = (await missingTemplate.json()) as { ok: boolean; code?: string; error?: string }
+  const missingTemplateBody = (await missingTemplate.json()) as { ok: boolean; reasonCode?: string; diagnostics?: string[] }
   assert.equal(missingTemplate.status, 400)
   assert.equal(missingTemplateBody.ok, false)
-  assert.equal(missingTemplateBody.code, 'SITE_INVALID_PAYLOAD')
-  assert.equal(missingTemplateBody.error, 'templateId is required.')
+  assert.equal(missingTemplateBody.reasonCode, 'SITE_INVALID_PAYLOAD')
+  assert.equal(missingTemplateBody.diagnostics?.[0], 'templateId is required.')
 
   const missingName = await handlers.POST(
     new Request('http://localhost', {
@@ -165,9 +168,9 @@ test('POST /sites validates missing templateId, name, and domain', async () => {
     }),
     { params: getParams() },
   )
-  const missingNameBody = (await missingName.json()) as { ok: boolean; code?: string; error?: string }
+  const missingNameBody = (await missingName.json()) as { ok: boolean; diagnostics?: string[] }
   assert.equal(missingName.status, 400)
-  assert.equal(missingNameBody.error, 'name is required.')
+  assert.equal(missingNameBody.diagnostics?.[0], 'name is required.')
 
   const missingDomain = await handlers.POST(
     new Request('http://localhost', {
@@ -180,9 +183,9 @@ test('POST /sites validates missing templateId, name, and domain', async () => {
     }),
     { params: getParams() },
   )
-  const missingDomainBody = (await missingDomain.json()) as { ok: boolean; code?: string; error?: string }
+  const missingDomainBody = (await missingDomain.json()) as { ok: boolean; diagnostics?: string[] }
   assert.equal(missingDomain.status, 400)
-  assert.equal(missingDomainBody.error, 'domain is required.')
+  assert.equal(missingDomainBody.diagnostics?.[0], 'domain is required.')
 })
 
 test('POST /sites enforces template scope ownership and rejects cross-client template usage', async () => {
@@ -203,10 +206,10 @@ test('POST /sites enforces template scope ownership and rejects cross-client tem
     }),
     { params: getParams() },
   )
-  const body = (await response.json()) as { ok: boolean; code?: string }
+  const body = (await response.json()) as { ok: boolean; reasonCode?: string }
   assert.equal(response.status, 404)
   assert.equal(body.ok, false)
-  assert.equal(body.code, 'TEMPLATE_NOT_FOUND')
+  assert.equal(body.reasonCode, 'TEMPLATE_NOT_FOUND')
 })
 
 test('POST /sites rejects template while processing', async () => {
@@ -232,11 +235,11 @@ test('POST /sites rejects template while processing', async () => {
     }),
     { params: getParams() },
   )
-  const body = (await response.json()) as { ok: boolean; code?: string; error?: string }
+  const body = (await response.json()) as { ok: boolean; reasonCode?: string; diagnostics?: string[] }
   assert.equal(response.status, 409)
   assert.equal(body.ok, false)
-  assert.equal(body.code, 'TEMPLATE_NOT_READY')
-  assert.equal(body.error, 'Template is still processing and cannot be used for site creation yet.')
+  assert.equal(body.reasonCode, 'TEMPLATE_NOT_READY')
+  assert.equal(body.diagnostics?.[0], 'Template is still processing and cannot be used for site creation yet.')
 })
 
 test('POST /sites rejects ready template without bootstrap source truth', async () => {
@@ -266,11 +269,11 @@ test('POST /sites rejects ready template without bootstrap source truth', async 
     }),
     { params: getParams() },
   )
-  const body = (await response.json()) as { ok: boolean; code?: string; error?: string }
+  const body = (await response.json()) as { ok: boolean; reasonCode?: string; diagnostics?: string[] }
   assert.equal(response.status, 409)
   assert.equal(body.ok, false)
-  assert.equal(body.code, 'TEMPLATE_READY_WITHOUT_BOOTSTRAP_SOURCE')
-  assert.equal(body.error, 'Template is marked ready but does not contain bootstrap source truth.')
+  assert.equal(body.reasonCode, 'TEMPLATE_READY_WITHOUT_BOOTSTRAP_SOURCE')
+  assert.equal(body.diagnostics?.[0], 'Template is marked ready but does not contain bootstrap source truth.')
 })
 
 test('POST /sites passes template linkage into persistence layer', async () => {
@@ -305,11 +308,11 @@ test('POST /sites passes template linkage into persistence layer', async () => {
     }),
     { params: getParams() },
   )
-  const body = (await response.json()) as { ok: boolean; site?: { templateId: string } }
+  const body = (await response.json()) as { ok: boolean; templateId?: string }
   assert.equal(response.status, 201)
   assert.equal(body.ok, true)
   assert.equal(persistedTemplateId, '00000000-0000-4000-8000-000000000901')
-  assert.equal(body.site?.templateId, '00000000-0000-4000-8000-000000000901')
+  assert.equal(body.templateId, '00000000-0000-4000-8000-000000000901')
 })
 
 test('POST /sites triggers worker-owned template bootstrap before returning success', async () => {
@@ -339,7 +342,7 @@ test('POST /sites triggers worker-owned template bootstrap before returning succ
     }),
     { params: getParams() },
   )
-  const body = (await response.json()) as { ok: boolean; site?: { siteId: string } }
+  const body = (await response.json()) as { ok: boolean; siteId?: string }
 
   assert.equal(response.status, 201)
   assert.equal(body.ok, true)
@@ -369,15 +372,16 @@ test('POST /sites reports trigger degradation without failing created site respo
   )
   const body = (await response.json()) as {
     ok: boolean
-    bootstrap?: { state?: string; triggerAccepted?: boolean }
-    site?: unknown
+    status?: string
+    reasonCode?: string | null
+    diagnostics?: string[]
   }
 
   assert.equal(response.status, 202)
-  assert.equal(body.ok, true)
-  assert.equal(Boolean(body.site), true)
-  assert.equal(body.bootstrap?.state, 'trigger_failed')
-  assert.equal(body.bootstrap?.triggerAccepted, false)
+  assert.equal(body.ok, false)
+  assert.equal(body.status, 'failed')
+  assert.equal(body.reasonCode, 'TEMPLATE_SITE_BOOTSTRAP_TRIGGER_FAILED')
+  assert.equal(body.diagnostics?.includes('TEMPLATE_SITE_CREATE_FAILED'), true)
 })
 
 test('POST /sites fails deterministically when bootstrap agency scope is invalid', async () => {
@@ -404,10 +408,10 @@ test('POST /sites fails deterministically when bootstrap agency scope is invalid
     }),
     { params: getParams() },
   )
-  const body = (await response.json()) as { ok: boolean; code?: string; error?: string }
+  const body = (await response.json()) as { ok: boolean; reasonCode?: string; diagnostics?: string[] }
 
   assert.equal(response.status, 409)
   assert.equal(body.ok, false)
-  assert.equal(body.code, 'INVALID_AGENCY_ID_FOR_BOOTSTRAP')
-  assert.equal(body.error, 'Agency scope is invalid for site bootstrap.')
+  assert.equal(body.reasonCode, 'INVALID_AGENCY_ID_FOR_BOOTSTRAP')
+  assert.equal(body.diagnostics?.[0], 'Agency scope is invalid for site bootstrap.')
 })

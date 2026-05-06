@@ -166,6 +166,10 @@ test('template bootstrap succeeds from durable processed source and emits pipeli
     assert.equal(result.runtimeSiteId, 'runtime-site-1')
     assert.equal(result.siteVersionId, 'runtime-version-1')
     assert.equal(result.sectionCount, 1)
+    assert.equal(typeof result.slotCount, 'number')
+    assert.equal(result.previewReady, true)
+    assert.equal(typeof result.previewUrl, 'string')
+    assert.equal(result.warningCode, null)
     assert.deepEqual(ownershipLink, {
       siteId: SITE.siteId,
       siteVersionId: 'runtime-version-1',

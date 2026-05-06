@@ -96,8 +96,19 @@ type SiteBootstrapJobRow = {
   runtime_site_version_id: string | null
   artifact_id: string | null
   section_count: number | null
+  last_error_code: string | null
+  last_error_message: string | null
   updated_at: string | null
   completed_at: string | null
+}
+
+type RawTemplateArtifactRow = {
+  id: string | null
+  site_id: string | null
+  site_version_id: string | null
+  entry_html_path: string | null
+  asset_base_path: string | null
+  file_map: unknown
 }
 
 type SiteRenderJobRow = {
@@ -243,6 +254,16 @@ export type SiteWorkspaceReadModel = {
     sourceMode: 'rendered_dom' | 'raw_html_fallback' | 'unknown'
     importFidelityStatus: 'high_fidelity_import' | 'degraded_import' | 'capture_failed' | 'unknown'
     importFidelityScore: RuntimeImportProvenanceSummary['importFidelityScore']
+    templateSource: string | null
+    rawTemplateArtifactFound: boolean
+    rawTemplateEntryHtmlFound: boolean
+    rawTemplateFileMapCount: number
+    contentSlotCount: number
+    previewReady: boolean
+    publishReady: boolean
+    bootstrapStatus: string | null
+    reasonCode: string | null
+    createDiagnostics: string[]
   }
   content: {
     hero: SemanticImportResult['hero']
@@ -1997,7 +2018,7 @@ export async function getSiteWorkspaceReadModelForPage(input: {
       .eq('ownership_site_id', siteId),
     supabase
       .from('gnr8_site_bootstrap_jobs')
-      .select('site_id,status,runtime_site_id,runtime_site_version_id,artifact_id,section_count,updated_at,completed_at')
+      .select('site_id,status,runtime_site_id,runtime_site_version_id,artifact_id,section_count,last_error_code,last_error_message,updated_at,completed_at')
       .eq('site_id', siteId)
       .limit(1)
       .maybeSingle(),
@@ -2245,6 +2266,47 @@ export async function getSiteWorkspaceReadModelForPage(input: {
     ]),
   ).slice(0, 8)
   const previewUrl = resolvedPreview.mainPreviewUrl
+  let rawTemplateArtifact: RawTemplateArtifactRow | null = null
+  let contentSlotCount = 0
+  if (selectedRuntimeSiteVersionId) {
+    const [rawArtifactResult, slotCountResult] = await Promise.all([
+      supabase
+        .from('gnr8_runtime_raw_template_artifacts')
+        .select('id,site_id,site_version_id,entry_html_path,asset_base_path,file_map')
+        .eq('site_version_id', selectedRuntimeSiteVersionId)
+        .limit(1)
+        .maybeSingle(),
+      supabase
+        .from('gnr8_content_slots')
+        .select('id', { count: 'exact', head: true })
+        .eq('site_version_id', selectedRuntimeSiteVersionId),
+    ])
+    if (!rawArtifactResult.error && rawArtifactResult.data) {
+      rawTemplateArtifact = rawArtifactResult.data as RawTemplateArtifactRow
+    }
+    if (!slotCountResult.error) {
+      contentSlotCount = Math.max(0, Number(slotCountResult.count ?? 0) || 0)
+    }
+  }
+  const rawTemplateArtifactFound = Boolean(toTextOrNull(rawTemplateArtifact?.id))
+  const rawTemplateEntryHtmlFound = Boolean(toTextOrNull(rawTemplateArtifact?.entry_html_path))
+  const rawTemplateFileMapCount = isRecord(rawTemplateArtifact?.file_map) ? Object.keys(rawTemplateArtifact!.file_map as Record<string, unknown>).length : 0
+  const previewReady = Boolean(previewUrl) && rawTemplateArtifactFound && rawTemplateEntryHtmlFound && rawTemplateFileMapCount > 0
+  const publishReady = previewReady && contentSlotCount > 0
+  const bootstrapStatus = toTextOrNull(bootstrapJob?.status)
+  const bootstrapReasonCode = toTextOrNull(bootstrapJob?.last_error_code)
+  const createDiagnostics = [...new Set([
+    'TEMPLATE_SITE_CREATE_STARTED',
+    bootstrapStatus === 'completed' ? 'TEMPLATE_SITE_CREATE_COMPLETED' : null,
+    bootstrapStatus === 'running' ? 'TEMPLATE_SITE_BOOTSTRAP_STARTED' : null,
+    bootstrapStatus === 'completed' ? 'TEMPLATE_SITE_BOOTSTRAP_COMPLETED' : null,
+    previewReady ? 'TEMPLATE_SITE_PREVIEW_READY' : null,
+    contentSlotCount > 0 ? 'TEMPLATE_SITE_CONTENT_SLOTS_READY' : null,
+    bootstrapStatus === 'failed' ? 'TEMPLATE_SITE_CREATE_FAILED' : null,
+  ].filter((value): value is string => Boolean(value)))]
+  if (contentSlotCount === 0 && bootstrapStatus === 'completed') {
+    createDiagnostics.push('CONTENT_SLOTS_EMPTY')
+  }
 
   return {
     site,
@@ -2339,6 +2401,16 @@ export async function getSiteWorkspaceReadModelForPage(input: {
       sourceMode: importFidelity.sourceMode,
       importFidelityStatus: importFidelity.importFidelityStatus,
       importFidelityScore: importFidelity.importFidelityScore ?? null,
+      templateSource: site.templateId ?? null,
+      rawTemplateArtifactFound,
+      rawTemplateEntryHtmlFound,
+      rawTemplateFileMapCount,
+      contentSlotCount,
+      previewReady,
+      publishReady,
+      bootstrapStatus,
+      reasonCode: bootstrapReasonCode,
+      createDiagnostics,
     },
     content: {
       hero: importFidelity.semanticImport?.hero ?? null,

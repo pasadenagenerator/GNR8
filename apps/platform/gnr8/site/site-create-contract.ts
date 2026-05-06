@@ -39,6 +39,32 @@ export type CreateSiteFromTemplateInput = {
   templateId: string
   name: string
   domain: string
+  businessName?: string
+  primaryCtaLabel?: string
+  contactEmail?: string
+  contactPhone?: string
+}
+
+export type CreateSiteFromTemplateStatus =
+  | 'creating'
+  | 'bootstrap_running'
+  | 'preview_ready'
+  | 'failed'
+
+export type CreateSiteFromTemplateResult = {
+  ok: boolean
+  siteId: string | null
+  runtimeSiteId: string | null
+  siteVersionId: string | null
+  templateId: string | null
+  status: CreateSiteFromTemplateStatus
+  diagnostics: string[]
+  nextUrl: string | null
+  previewReady?: boolean
+  previewUrl?: string | null
+  slotCount?: number
+  warningCode?: string | null
+  reasonCode?: string | null
 }
 
 export function parseCreateSiteFromTemplatePayload(
@@ -51,6 +77,10 @@ export function parseCreateSiteFromTemplatePayload(
   const templateId = normalizeText(payload.templateId)
   const name = normalizeSiteName(payload.name)
   const domain = normalizeDomain(payload.domain)
+  const businessName = normalizeText(payload.businessName)
+  const primaryCtaLabel = normalizeText(payload.primaryCtaLabel)
+  const contactEmail = normalizeText(payload.contactEmail)
+  const contactPhone = normalizeText(payload.contactPhone)
 
   if (!templateId) return { ok: false, error: 'templateId is required.' }
   if (!UUID_RE.test(templateId)) return { ok: false, error: 'templateId must be a valid UUID.' }
@@ -64,6 +94,10 @@ export function parseCreateSiteFromTemplatePayload(
       templateId,
       name,
       domain,
+      businessName: businessName || undefined,
+      primaryCtaLabel: primaryCtaLabel || undefined,
+      contactEmail: contactEmail || undefined,
+      contactPhone: contactPhone || undefined,
     },
   }
 }

@@ -71,6 +71,25 @@ function renderOverviewContent(props: {
       </section>
 
       <section style={sectionCardStyle()}>
+        <h3 style={{ margin: 0, fontSize: 15, color: '#0f172a' }}>Template Bootstrap Readiness</h3>
+        <div style={{ marginTop: 10, display: 'grid', gap: 6, fontSize: 13, color: '#334155' }}>
+          <div>Template source: {readModel.overview.templateSource ?? 'unknown'}</div>
+          <div>Raw template artifact found: {readModel.overview.rawTemplateArtifactFound ? 'yes' : 'no'}</div>
+          <div>Entry HTML found: {readModel.overview.rawTemplateEntryHtmlFound ? 'yes' : 'no'}</div>
+          <div>Raw artifact file map count: {readModel.overview.rawTemplateFileMapCount}</div>
+          <div>Content slot count: {readModel.overview.contentSlotCount}</div>
+          <div>Preview ready: {readModel.overview.previewReady ? 'yes' : 'no'}</div>
+          <div>Publish readiness: {readModel.overview.publishReady ? 'ready' : 'not ready'}</div>
+          <div>Bootstrap status: {readModel.overview.bootstrapStatus ?? 'unknown'}</div>
+          {readModel.overview.reasonCode ? <div>Reason code: {readModel.overview.reasonCode}</div> : null}
+          <div>Diagnostics: {readModel.overview.createDiagnostics.length > 0 ? readModel.overview.createDiagnostics.join(' · ') : 'none'}</div>
+          {readModel.overview.contentSlotCount === 0 ? (
+            <div style={{ color: '#9a3412' }}>Warning: CONTENT_SLOTS_EMPTY</div>
+          ) : null}
+        </div>
+      </section>
+
+      <section style={sectionCardStyle()}>
         <h3 style={{ margin: 0, fontSize: 15, color: '#0f172a' }}>Pipeline Summary</h3>
         <div style={{ marginTop: 10, display: 'grid', gap: 6, fontSize: 13, color: '#334155' }}>
           <div>Sections detected: {readModel.overview.sectionsDetected}</div>

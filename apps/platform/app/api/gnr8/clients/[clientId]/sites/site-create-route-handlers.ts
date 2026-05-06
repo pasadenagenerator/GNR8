@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 
-import { parseCreateSiteFromTemplatePayload } from '@/gnr8/site/site-create-contract'
+import { parseCreateSiteFromTemplatePayload, type CreateSiteFromTemplateResult } from '@/gnr8/site/site-create-contract'
 import { siteWorkspaceHref } from '@/gnr8/site/site-workspace-navigation'
 import type { TemplateRecord } from '@/gnr8/template-intake/types/template-intake-types'
 
@@ -64,22 +64,20 @@ export type SiteCreateRouteDeps = {
 
 function toUnauthorizedResponse(mapped: { status: number; message: string }) {
   return NextResponse.json(
-    {
-      ok: false,
-      code: 'SITE_UNAUTHORIZED',
-      error: mapped.message,
-    },
+    failedResult({
+      reasonCode: 'SITE_UNAUTHORIZED',
+      diagnostics: [mapped.message],
+    }),
     { status: mapped.status },
   )
 }
 
 function toScopeErrorResponse(mapped: { status: number; message: string }) {
   return NextResponse.json(
-    {
-      ok: false,
-      code: 'SITE_SCOPE_ERROR',
-      error: mapped.message,
-    },
+    failedResult({
+      reasonCode: 'SITE_SCOPE_ERROR',
+      diagnostics: [mapped.message],
+    }),
     { status: mapped.status },
   )
 }
@@ -100,6 +98,30 @@ function hasBootstrapSourceTruth(template: TemplateSelection): boolean {
   )
 }
 
+function okResult(input: Omit<CreateSiteFromTemplateResult, 'ok'>): CreateSiteFromTemplateResult {
+  return { ok: true, ...input }
+}
+
+function failedResult(input: {
+  status?: 'failed'
+  templateId?: string | null
+  diagnostics?: string[]
+  nextUrl?: string | null
+  reasonCode: string
+}): CreateSiteFromTemplateResult {
+  return {
+    ok: false,
+    siteId: null,
+    runtimeSiteId: null,
+    siteVersionId: null,
+    templateId: input.templateId ?? null,
+    status: 'failed',
+    diagnostics: input.diagnostics ?? [],
+    nextUrl: input.nextUrl ?? null,
+    reasonCode: input.reasonCode,
+  }
+}
+
 export function createSiteCreateRouteHandlers(deps: SiteCreateRouteDeps) {
   return {
     POST: async (request: Request, ctx: { params: Promise<Params> }) => {
@@ -110,11 +132,10 @@ export function createSiteCreateRouteHandlers(deps: SiteCreateRouteDeps) {
         const parsed = parseCreateSiteFromTemplatePayload(payload)
         if (!parsed.ok) {
           return NextResponse.json(
-            {
-              ok: false,
-              code: 'SITE_INVALID_PAYLOAD',
-              error: parsed.error,
-            },
+            failedResult({
+              reasonCode: 'SITE_INVALID_PAYLOAD',
+              diagnostics: [parsed.error],
+            }),
             { status: 400 },
           )
         }
@@ -125,21 +146,21 @@ export function createSiteCreateRouteHandlers(deps: SiteCreateRouteDeps) {
         })
         if (!template) {
           return NextResponse.json(
-            {
-              ok: false,
-              code: 'TEMPLATE_NOT_FOUND',
-              error: 'Template was not found for the current client scope.',
-            },
+            failedResult({
+              reasonCode: 'TEMPLATE_NOT_FOUND',
+              templateId: parsed.value.templateId,
+              diagnostics: ['Template was not found for the current client scope.'],
+            }),
             { status: 404 },
           )
         }
         if (template.status !== 'ready') {
           return NextResponse.json(
-            {
-              ok: false,
-              code: 'TEMPLATE_NOT_READY',
-              error: 'Template is still processing and cannot be used for site creation yet.',
-            },
+            failedResult({
+              reasonCode: 'TEMPLATE_NOT_READY',
+              templateId: template.id,
+              diagnostics: ['Template is still processing and cannot be used for site creation yet.'],
+            }),
             { status: 409 },
           )
         }
@@ -153,14 +174,22 @@ export function createSiteCreateRouteHandlers(deps: SiteCreateRouteDeps) {
             entryHtmlPath: template.entryHtmlPath,
           })
           return NextResponse.json(
-            {
-              ok: false,
-              code: 'TEMPLATE_READY_WITHOUT_BOOTSTRAP_SOURCE',
-              error: 'Template is marked ready but does not contain bootstrap source truth.',
-            },
+            failedResult({
+              reasonCode: 'TEMPLATE_READY_WITHOUT_BOOTSTRAP_SOURCE',
+              templateId: template.id,
+              diagnostics: ['Template is marked ready but does not contain bootstrap source truth.'],
+            }),
             { status: 409 },
           )
         }
+
+        console.info('[site-create] TEMPLATE_SITE_CREATE_STARTED', {
+          templateId: template.id,
+          clientId: scope.clientId,
+          agencyId: scope.agencyId,
+          name: parsed.value.name,
+          domain: parsed.value.domain,
+        })
 
         const created = await deps.createSiteFromTemplate({
           clientId: scope.clientId,
@@ -168,6 +197,13 @@ export function createSiteCreateRouteHandlers(deps: SiteCreateRouteDeps) {
           templateId: parsed.value.templateId,
           name: parsed.value.name,
           domain: parsed.value.domain,
+        })
+        console.info('[site-create] TEMPLATE_SITE_CREATE_COMPLETED', {
+          siteId: created.siteId,
+          templateId: created.templateId,
+          clientId: created.clientId,
+          agencyId: created.agencyId,
+          domain: created.domain,
         })
         const triggered = await deps.triggerTemplateSiteBootstrap({
           site: created,
@@ -180,37 +216,48 @@ export function createSiteCreateRouteHandlers(deps: SiteCreateRouteDeps) {
           agencyId: scope.agencyId,
         })
 
-        return NextResponse.json(
-          {
-            ok: true,
-            site: {
+        if (!triggered) {
+          return NextResponse.json(
+            {
+              ok: false,
               siteId: created.siteId,
-              clientId: created.clientId,
-              agencyId: created.agencyId,
+              runtimeSiteId: null,
+              siteVersionId: null,
               templateId: created.templateId,
-              name: created.name,
-              domain: created.domain,
-              status: created.status,
-              createdAt: created.createdAt,
-              updatedAt: created.updatedAt,
-            },
-            bootstrap: {
-              state: triggered ? 'bootstrapping' : 'trigger_failed',
-              triggerAccepted: triggered,
-            },
-            redirectTo,
-          },
-          { status: triggered ? 201 : 202 },
+              status: 'failed',
+              diagnostics: [
+                'TEMPLATE_SITE_CREATE_STARTED',
+                'TEMPLATE_SITE_CREATE_COMPLETED',
+                'TEMPLATE_SITE_CREATE_FAILED',
+                'TEMPLATE_SITE_BOOTSTRAP_TRIGGER_FAILED',
+              ],
+              nextUrl: redirectTo,
+              reasonCode: 'TEMPLATE_SITE_BOOTSTRAP_TRIGGER_FAILED',
+            } satisfies CreateSiteFromTemplateResult,
+            { status: 202 },
+          )
+        }
+
+        return NextResponse.json(
+          okResult({
+            siteId: created.siteId,
+            runtimeSiteId: null,
+            siteVersionId: null,
+            templateId: created.templateId,
+            status: 'bootstrap_running',
+            diagnostics: ['TEMPLATE_SITE_CREATE_STARTED', 'TEMPLATE_SITE_CREATE_COMPLETED', 'TEMPLATE_SITE_BOOTSTRAP_STARTED'],
+            nextUrl: redirectTo,
+          }),
+          { status: 201 },
         )
       } catch (error) {
         const errorCode = String((error as { code?: unknown } | null)?.code ?? '').trim()
         if (errorCode === 'INVALID_AGENCY_ID_FOR_BOOTSTRAP') {
           return NextResponse.json(
-            {
-              ok: false,
-              code: 'INVALID_AGENCY_ID_FOR_BOOTSTRAP',
-              error: 'Agency scope is invalid for site bootstrap.',
-            },
+            failedResult({
+              reasonCode: 'INVALID_AGENCY_ID_FOR_BOOTSTRAP',
+              diagnostics: ['Agency scope is invalid for site bootstrap.', 'TEMPLATE_SITE_CREATE_FAILED'],
+            }),
             { status: 409 },
           )
         }
@@ -218,11 +265,10 @@ export function createSiteCreateRouteHandlers(deps: SiteCreateRouteDeps) {
         const templateStorageError = deps.parseTemplateStorageError(error)
         if (templateStorageError) {
           return NextResponse.json(
-            {
-              ok: false,
-              code: templateStorageError.code,
-              error: templateStorageError.message,
-            },
+            failedResult({
+              reasonCode: templateStorageError.code,
+              diagnostics: [templateStorageError.message, 'TEMPLATE_SITE_CREATE_FAILED'],
+            }),
             { status: templateStorageError.status },
           )
         }
@@ -230,11 +276,10 @@ export function createSiteCreateRouteHandlers(deps: SiteCreateRouteDeps) {
         const siteStorageError = deps.parseSiteCreateError(error)
         if (siteStorageError) {
           return NextResponse.json(
-            {
-              ok: false,
-              code: siteStorageError.code,
-              error: siteStorageError.message,
-            },
+            failedResult({
+              reasonCode: siteStorageError.code,
+              diagnostics: [siteStorageError.message, 'TEMPLATE_SITE_CREATE_FAILED'],
+            }),
             { status: siteStorageError.status },
           )
         }

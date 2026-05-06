@@ -50,6 +50,10 @@ export type TemplateSiteRuntimeBootstrapResult = {
   artifactId: string | null
   previewSeeded: boolean
   sectionCount: number
+  slotCount: number
+  previewReady: boolean
+  previewUrl: string | null
+  warningCode: string | null
 }
 
 export type TemplateSiteRuntimeBootstrapErrorCode =
@@ -486,6 +490,14 @@ function sanitizeRawTemplatePath(relativePath: string): string {
   return normalized
 }
 
+function hasResolvableHomepage(input: { entryHtmlPath: string; fileMap: Record<string, unknown> }): boolean {
+  const entry = sanitizeRawTemplatePath(input.entryHtmlPath)
+  if (!entry) return false
+  if (entry === 'index.html') return true
+  const indexAtDir = sanitizeRawTemplatePath(`${path.posix.dirname(entry)}/index.html`)
+  return Boolean(indexAtDir && Object.prototype.hasOwnProperty.call(input.fileMap, indexAtDir))
+}
+
 async function persistRawTemplateSiteArtifact(input: {
   siteId: string
   siteVersionId: string
@@ -528,9 +540,9 @@ async function persistRawTemplateSiteArtifact(input: {
     fileMap[safePath] = { path: safePath, mediaType, sizeBytes, sha256 }
   }
 
-  if (!fileMap[entryHtmlPath]) {
-    throw new Error('RAW_TEMPLATE_ARTIFACT_ENTRY_HTML_MISSING')
-  }
+    if (!fileMap[entryHtmlPath]) {
+      throw new Error('RAW_TEMPLATE_ARTIFACT_ENTRY_HTML_MISSING')
+    }
 
   const client = await getSuperadminPool().connect()
   try {
@@ -1199,6 +1211,7 @@ export async function bootstrapRuntimeFromTemplateSite(input: {
       snapshotRootDirAbs,
       entryHtmlPathAbs,
     })
+    let slotCount = 0
     if (snapshot.semanticImport) {
       console.info('[site-bootstrap-worker] CONTENT_SLOT_BOOTSTRAP_STARTED', {
         siteId: scoped.siteId,
@@ -1217,6 +1230,7 @@ export async function bootstrapRuntimeFromTemplateSite(input: {
         templateId,
         persistedCount,
       })
+      slotCount = persistedCount
       if (persistedCount === 0) {
         console.error('[site-bootstrap-worker] CONTENT_SLOT_BOOTSTRAP_PERSISTED_COUNT_ZERO', {
           siteId: scoped.siteId,
@@ -1250,6 +1264,24 @@ export async function bootstrapRuntimeFromTemplateSite(input: {
 
     const sectionCount = countPreparedSections(scoped)
     const previewSeeded = normalizeText(scoped.artifactId).length > 0
+    if (rawTemplateArtifact.fileCount <= 0) {
+      throw new TemplateSiteRuntimeBootstrapError({
+        code: 'TEMPLATE_SITE_BOOTSTRAP_TEMPLATE_ARTIFACT_MISSING',
+        message: 'Raw template artifact file map is empty.',
+        siteId,
+        templateId,
+      })
+    }
+    if (!hasResolvableHomepage({ entryHtmlPath: rawTemplateArtifact.entryHtmlPath, fileMap: rawTemplateArtifact.fileMap })) {
+      throw new TemplateSiteRuntimeBootstrapError({
+        code: 'TEMPLATE_SITE_BOOTSTRAP_TEMPLATE_ARTIFACT_MISSING',
+        message: 'Raw template artifact homepage cannot resolve /. ',
+        siteId,
+        templateId,
+      })
+    }
+    const previewReady = previewSeeded && rawTemplateArtifact.fileCount > 0
+    const previewUrl = previewReady ? `/api/gnr8/runtime/versions/${encodeURIComponent(scoped.siteVersionId)}/preview?mode=raw_template_preview&path=/` : null
 
     return {
       siteVersionId: scoped.siteVersionId,
@@ -1258,6 +1290,10 @@ export async function bootstrapRuntimeFromTemplateSite(input: {
       artifactId: scoped.artifactId,
       previewSeeded,
       sectionCount,
+      slotCount,
+      previewReady,
+      previewUrl,
+      warningCode: slotCount === 0 ? 'CONTENT_SLOTS_EMPTY' : null,
     }
   } catch (error) {
     const failure = summarizeBootstrapFailure({ error })
