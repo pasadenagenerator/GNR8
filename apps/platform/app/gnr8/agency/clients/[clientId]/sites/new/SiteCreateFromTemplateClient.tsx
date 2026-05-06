@@ -61,11 +61,12 @@ export default function SiteCreateFromTemplateClient(props: Props) {
   const [primaryCtaLabel, setPrimaryCtaLabel] = useState('')
   const [contactEmail, setContactEmail] = useState('')
   const [contactPhone, setContactPhone] = useState('')
-  const [createStatus, setCreateStatus] = useState<'idle' | 'creating' | 'bootstrap_running' | 'preview_ready' | 'failed'>('idle')
+  const [createStatus, setCreateStatus] = useState<'idle' | 'creating' | 'bootstrap_running' | 'preview_ready' | 'still_checking' | 'failed'>('idle')
   const [lastResult, setLastResult] = useState<CreateSiteFromTemplateResult | null>(null)
   const [statusResult, setStatusResult] = useState<TemplateSiteBootstrapStatusResult | null>(null)
   const [nextUrl, setNextUrl] = useState<string | null>(null)
   const [isPolling, setIsPolling] = useState(false)
+  const [pollSiteId, setPollSiteId] = useState<string | null>(null)
 
   const dashboardHref = useMemo(
     () =>
@@ -121,6 +122,64 @@ export default function SiteCreateFromTemplateClient(props: Props) {
     templatesCount: templates.length,
   })
 
+  function startBootstrapStatusPolling(siteId: string): void {
+    setIsPolling(true)
+    void pollTemplateSiteStatus({
+      endpoint: `/api/gnr8/clients/${encodeURIComponent(props.clientId)}/sites/${encodeURIComponent(siteId)}/bootstrap-status`,
+      intervalMs: 1500,
+      timeoutMs: 60_000,
+      onPollStarted: () => {
+        setLastResult((prev) =>
+          prev
+            ? {
+                ...prev,
+                diagnostics: [...new Set([...(prev.diagnostics ?? []), 'TEMPLATE_SITE_STATUS_POLL_STARTED'])],
+              }
+            : prev,
+        )
+      },
+      onPollCompleted: (result) => {
+        setStatusResult(result)
+        setCreateStatus(result.status)
+        setError(null)
+        setLastResult((prev) =>
+          prev
+            ? {
+                ...prev,
+                diagnostics: [...new Set([...(prev.diagnostics ?? []), ...result.diagnostics, 'TEMPLATE_SITE_STATUS_POLL_COMPLETED'])],
+                reasonCode: result.reasonCode ?? prev.reasonCode,
+              }
+            : prev,
+        )
+      },
+      onPollTimeout: () => {
+        setCreateStatus('still_checking')
+        setLastResult((prev) =>
+          prev
+            ? {
+                ...prev,
+                diagnostics: [...new Set([...(prev.diagnostics ?? []), 'TEMPLATE_SITE_STATUS_POLL_TIMEOUT'])],
+                reasonCode: prev.reasonCode ?? 'TEMPLATE_SITE_STATUS_POLL_TIMEOUT',
+              }
+            : prev,
+        )
+        setIsPolling(false)
+      },
+      onPollFailed: () => {
+        setLastResult((prev) =>
+          prev
+            ? {
+                ...prev,
+                diagnostics: [...new Set([...(prev.diagnostics ?? []), 'TEMPLATE_SITE_STATUS_FAILED'])],
+              }
+            : prev,
+        )
+      },
+    }).finally(() => {
+      setIsPolling(false)
+    })
+  }
+
   async function onSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
     setError(null)
@@ -161,62 +220,9 @@ export default function SiteCreateFromTemplateClient(props: Props) {
       }
 
       setNextUrl(payload.nextUrl)
+      setPollSiteId(payload.siteId)
       setCreateStatus(payload.status === 'preview_ready' ? 'preview_ready' : 'bootstrap_running')
-      setIsPolling(true)
-      void pollTemplateSiteStatus({
-        endpoint: `/api/gnr8/clients/${encodeURIComponent(props.clientId)}/sites/${encodeURIComponent(payload.siteId)}/bootstrap-status`,
-        intervalMs: 1500,
-        timeoutMs: 60_000,
-        onPollStarted: () => {
-          setLastResult((prev) =>
-            prev
-              ? {
-                  ...prev,
-                  diagnostics: [...new Set([...(prev.diagnostics ?? []), 'TEMPLATE_SITE_STATUS_POLL_STARTED'])],
-                }
-              : prev,
-          )
-        },
-        onPollCompleted: (result) => {
-          setStatusResult(result)
-          setCreateStatus(result.status)
-          setLastResult((prev) =>
-            prev
-              ? {
-                  ...prev,
-                  diagnostics: [...new Set([...(prev.diagnostics ?? []), ...result.diagnostics, 'TEMPLATE_SITE_STATUS_POLL_COMPLETED'])],
-                  reasonCode: result.reasonCode ?? prev.reasonCode,
-                }
-              : prev,
-          )
-        },
-        onPollTimeout: () => {
-          setCreateStatus('failed')
-          setLastResult((prev) =>
-            prev
-              ? {
-                  ...prev,
-                  diagnostics: [...new Set([...(prev.diagnostics ?? []), 'TEMPLATE_SITE_STATUS_POLL_TIMEOUT'])],
-                  reasonCode: prev.reasonCode ?? 'TEMPLATE_SITE_STATUS_POLL_TIMEOUT',
-                }
-              : prev,
-          )
-          setError('Bootstrap status polling timed out. You can open Site Workspace and continue from there.')
-          setIsPolling(false)
-        },
-        onPollFailed: () => {
-          setLastResult((prev) =>
-            prev
-              ? {
-                  ...prev,
-                  diagnostics: [...new Set([...(prev.diagnostics ?? []), 'TEMPLATE_SITE_STATUS_FAILED'])],
-                }
-              : prev,
-          )
-        },
-      }).finally(() => {
-        setIsPolling(false)
-      })
+      startBootstrapStatusPolling(payload.siteId)
     } catch (submitError) {
       setCreateStatus('failed')
       setError(submitError instanceof Error ? submitError.message : 'Create website failed.')
@@ -404,6 +410,8 @@ export default function SiteCreateFromTemplateClient(props: Props) {
                     ? 'bootstrap running'
                     : createStatus === 'preview_ready'
                       ? 'preview ready'
+                      : createStatus === 'still_checking'
+                        ? 'still checking'
                       : 'failed'}
               </div>
               {statusResult?.previewUrl ? <div>Preview URL: {statusResult.previewUrl}</div> : null}
@@ -427,12 +435,19 @@ export default function SiteCreateFromTemplateClient(props: Props) {
                     setCreateStatus('idle')
                     setStatusResult(null)
                     setNextUrl(null)
+                    setPollSiteId(null)
                   }}
                   style={{ marginLeft: 10, padding: '4px 8px', borderRadius: 6, border: '1px solid #fecaca', background: '#fff', color: '#7f1d1d' }}
                 >
                   Retry
                 </button>
               ) : null}
+            </div>
+          ) : null}
+
+          {createStatus === 'still_checking' ? (
+            <div style={{ border: '1px solid #dbe6f1', background: '#f8fafc', color: '#0f172a', borderRadius: 8, padding: 10, fontSize: 13 }}>
+              Bootstrap is taking longer than expected. You can open the workspace and continue checking status there.
             </div>
           ) : null}
 
@@ -477,6 +492,54 @@ export default function SiteCreateFromTemplateClient(props: Props) {
                 }}
               >
                 Open Site Workspace
+              </button>
+            ) : null}
+            {createStatus === 'still_checking' && nextUrl ? (
+              <button
+                type='button'
+                onClick={() => {
+                  startTransition(() => {
+                    router.push(nextUrl)
+                  })
+                }}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  padding: '8px 12px',
+                  borderRadius: 8,
+                  border: '1px solid #0f172a',
+                  background: '#fff',
+                  color: '#0f172a',
+                  fontSize: 12,
+                  fontWeight: 700,
+                }}
+              >
+                Open Site Workspace
+              </button>
+            ) : null}
+            {createStatus === 'still_checking' && pollSiteId ? (
+              <button
+                type='button'
+                disabled={isPolling}
+                onClick={() => {
+                  setCreateStatus('bootstrap_running')
+                  startBootstrapStatusPolling(pollSiteId)
+                }}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  padding: '8px 12px',
+                  borderRadius: 8,
+                  border: '1px solid #0f172a',
+                  background: '#0f172a',
+                  color: '#fff',
+                  fontSize: 12,
+                  fontWeight: 700,
+                  cursor: isPolling ? 'not-allowed' : 'pointer',
+                  opacity: isPolling ? 0.8 : 1,
+                }}
+              >
+                Check Again
               </button>
             ) : null}
 
