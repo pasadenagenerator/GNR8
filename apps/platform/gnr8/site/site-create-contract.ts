@@ -67,6 +67,25 @@ export type CreateSiteFromTemplateResult = {
   reasonCode?: string | null
 }
 
+export type TemplateSiteBootstrapStatus = 'bootstrap_running' | 'preview_ready' | 'failed'
+
+export type TemplateSiteBootstrapStatusResult = {
+  ok: boolean
+  siteId: string | null
+  runtimeSiteId: string | null
+  siteVersionId: string | null
+  status: TemplateSiteBootstrapStatus
+  previewReady: boolean
+  previewUrl: string | null
+  rawTemplateArtifactFound: boolean
+  entryHtmlFound: boolean
+  fileMapCount: number
+  slotCount: number
+  publishReady: boolean
+  diagnostics: string[]
+  reasonCode?: string | null
+}
+
 export function parseCreateSiteFromTemplatePayload(
   payload: unknown,
 ): { ok: true; value: CreateSiteFromTemplateInput } | { ok: false; error: string } {

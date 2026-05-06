@@ -5,8 +5,13 @@ import { useEffect, useMemo, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 
 import { resolveSiteCreateUiView } from '@/app/gnr8/_components/client-dashboard/site-create-contract'
+import { pollTemplateSiteStatus } from '@/app/gnr8/_components/client-dashboard/template-site-status-polling'
 import type { TemplateListApiCard } from '@/app/gnr8/_components/client-dashboard/template-library-contract'
-import { parseCreateSiteFromTemplatePayload, type CreateSiteFromTemplateResult } from '@/gnr8/site/site-create-contract'
+import {
+  parseCreateSiteFromTemplatePayload,
+  type CreateSiteFromTemplateResult,
+  type TemplateSiteBootstrapStatusResult,
+} from '@/gnr8/site/site-create-contract'
 import { agencyClientDashboardHref } from '@/gnr8/site/site-importer-routing'
 
 type TemplateListResponse = {
@@ -58,6 +63,9 @@ export default function SiteCreateFromTemplateClient(props: Props) {
   const [contactPhone, setContactPhone] = useState('')
   const [createStatus, setCreateStatus] = useState<'idle' | 'creating' | 'bootstrap_running' | 'preview_ready' | 'failed'>('idle')
   const [lastResult, setLastResult] = useState<CreateSiteFromTemplateResult | null>(null)
+  const [statusResult, setStatusResult] = useState<TemplateSiteBootstrapStatusResult | null>(null)
+  const [nextUrl, setNextUrl] = useState<string | null>(null)
+  const [isPolling, setIsPolling] = useState(false)
 
   const dashboardHref = useMemo(
     () =>
@@ -146,16 +154,68 @@ export default function SiteCreateFromTemplateClient(props: Props) {
 
       setLastResult(payload)
 
-      if (!payload.ok || !response.ok || !payload.nextUrl) {
+      if (!payload.ok || !response.ok || !payload.nextUrl || !payload.siteId) {
         setCreateStatus('failed')
         setError(payload.diagnostics?.[0] ?? payload.reasonCode ?? `Create failed (HTTP ${response.status})`)
         return
       }
 
+      setNextUrl(payload.nextUrl)
       setCreateStatus(payload.status === 'preview_ready' ? 'preview_ready' : 'bootstrap_running')
-
-      startTransition(() => {
-        router.push(payload.nextUrl!)
+      setIsPolling(true)
+      void pollTemplateSiteStatus({
+        endpoint: `/api/gnr8/clients/${encodeURIComponent(props.clientId)}/sites/${encodeURIComponent(payload.siteId)}/bootstrap-status`,
+        intervalMs: 1500,
+        timeoutMs: 60_000,
+        onPollStarted: () => {
+          setLastResult((prev) =>
+            prev
+              ? {
+                  ...prev,
+                  diagnostics: [...new Set([...(prev.diagnostics ?? []), 'TEMPLATE_SITE_STATUS_POLL_STARTED'])],
+                }
+              : prev,
+          )
+        },
+        onPollCompleted: (result) => {
+          setStatusResult(result)
+          setCreateStatus(result.status)
+          setLastResult((prev) =>
+            prev
+              ? {
+                  ...prev,
+                  diagnostics: [...new Set([...(prev.diagnostics ?? []), ...result.diagnostics, 'TEMPLATE_SITE_STATUS_POLL_COMPLETED'])],
+                  reasonCode: result.reasonCode ?? prev.reasonCode,
+                }
+              : prev,
+          )
+        },
+        onPollTimeout: () => {
+          setCreateStatus('failed')
+          setLastResult((prev) =>
+            prev
+              ? {
+                  ...prev,
+                  diagnostics: [...new Set([...(prev.diagnostics ?? []), 'TEMPLATE_SITE_STATUS_POLL_TIMEOUT'])],
+                  reasonCode: prev.reasonCode ?? 'TEMPLATE_SITE_STATUS_POLL_TIMEOUT',
+                }
+              : prev,
+          )
+          setError('Bootstrap status polling timed out. You can open Site Workspace and continue from there.')
+          setIsPolling(false)
+        },
+        onPollFailed: () => {
+          setLastResult((prev) =>
+            prev
+              ? {
+                  ...prev,
+                  diagnostics: [...new Set([...(prev.diagnostics ?? []), 'TEMPLATE_SITE_STATUS_FAILED'])],
+                }
+              : prev,
+          )
+        },
+      }).finally(() => {
+        setIsPolling(false)
       })
     } catch (submitError) {
       setCreateStatus('failed')
@@ -346,6 +406,8 @@ export default function SiteCreateFromTemplateClient(props: Props) {
                       ? 'preview ready'
                       : 'failed'}
               </div>
+              {statusResult?.previewUrl ? <div>Preview URL: {statusResult.previewUrl}</div> : null}
+              {statusResult?.publishReady != null ? <div>Publish readiness: {statusResult.publishReady ? 'ready' : 'not ready'}</div> : null}
               {lastResult?.reasonCode ? <div>Reason: {lastResult.reasonCode}</div> : null}
               {lastResult?.diagnostics?.length ? <div>Diagnostics: {lastResult.diagnostics.join(' · ')}</div> : null}
             </div>
@@ -363,6 +425,8 @@ export default function SiteCreateFromTemplateClient(props: Props) {
                   onClick={() => {
                     setError(null)
                     setCreateStatus('idle')
+                    setStatusResult(null)
+                    setNextUrl(null)
                   }}
                   style={{ marginLeft: 10, padding: '4px 8px', borderRadius: 6, border: '1px solid #fecaca', background: '#fff', color: '#7f1d1d' }}
                 >
@@ -375,7 +439,7 @@ export default function SiteCreateFromTemplateClient(props: Props) {
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             <button
               type='submit'
-              disabled={isPending || uiView !== 'ready' || !selectedTemplateId}
+              disabled={isPending || isPolling || uiView !== 'ready' || !selectedTemplateId}
               style={{
                 display: 'inline-flex',
                 alignItems: 'center',
@@ -392,6 +456,29 @@ export default function SiteCreateFromTemplateClient(props: Props) {
             >
               {isPending || createStatus === 'creating' ? 'Creating...' : 'Create Website'}
             </button>
+            {createStatus === 'preview_ready' && nextUrl ? (
+              <button
+                type='button'
+                onClick={() => {
+                  startTransition(() => {
+                    router.push(nextUrl)
+                  })
+                }}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  padding: '8px 12px',
+                  borderRadius: 8,
+                  border: '1px solid #0f172a',
+                  background: '#fff',
+                  color: '#0f172a',
+                  fontSize: 12,
+                  fontWeight: 700,
+                }}
+              >
+                Open Site Workspace
+              </button>
+            ) : null}
 
             <Link
               href={dashboardHref}

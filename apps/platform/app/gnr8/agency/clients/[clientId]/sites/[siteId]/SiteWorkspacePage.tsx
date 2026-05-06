@@ -7,6 +7,7 @@ import SiteActionsPanel from './SiteActionsPanel'
 import ContentBindingsPanel from './ContentBindingsPanel'
 import SiteDeletePanel from './SiteDeletePanel'
 import SiteDomainSettingsPanel from './SiteDomainSettingsPanel'
+import SiteBootstrapStatusPanel from './SiteBootstrapStatusPanel'
 import { listSwitchableAgencyClientsForPage } from '../../../client-switcher-options'
 import { getSiteWorkspaceReadModelForPage } from '@/gnr8/site/site-workspace-read-model'
 import { type SiteWorkspaceTab } from '@/gnr8/site/site-workspace-navigation'
@@ -74,19 +75,36 @@ function renderOverviewContent(props: {
         <h3 style={{ margin: 0, fontSize: 15, color: '#0f172a' }}>Template Bootstrap Readiness</h3>
         <div style={{ marginTop: 10, display: 'grid', gap: 6, fontSize: 13, color: '#334155' }}>
           <div>Template source: {readModel.overview.templateSource ?? 'unknown'}</div>
-          <div>Raw template artifact found: {readModel.overview.rawTemplateArtifactFound ? 'yes' : 'no'}</div>
-          <div>Entry HTML found: {readModel.overview.rawTemplateEntryHtmlFound ? 'yes' : 'no'}</div>
-          <div>Raw artifact file map count: {readModel.overview.rawTemplateFileMapCount}</div>
-          <div>Content slot count: {readModel.overview.contentSlotCount}</div>
-          <div>Preview ready: {readModel.overview.previewReady ? 'yes' : 'no'}</div>
-          <div>Publish readiness: {readModel.overview.publishReady ? 'ready' : 'not ready'}</div>
-          <div>Bootstrap status: {readModel.overview.bootstrapStatus ?? 'unknown'}</div>
-          {readModel.overview.reasonCode ? <div>Reason code: {readModel.overview.reasonCode}</div> : null}
-          <div>Diagnostics: {readModel.overview.createDiagnostics.length > 0 ? readModel.overview.createDiagnostics.join(' · ') : 'none'}</div>
-          {readModel.overview.contentSlotCount === 0 ? (
-            <div style={{ color: '#9a3412' }}>Warning: CONTENT_SLOTS_EMPTY</div>
-          ) : null}
         </div>
+        <SiteBootstrapStatusPanel
+          clientId={readModel.client.clientId}
+          siteId={readModel.site.id}
+          initialStatus={{
+            ok: true,
+            siteId: readModel.site.id,
+            runtimeSiteId: readModel.pipeline.runtimeSelection.selectedSiteId,
+            siteVersionId: readModel.pipeline.runtimeSelection.selectedVersionId,
+            status: readModel.overview.previewReady
+              ? 'preview_ready'
+              : readModel.overview.bootstrapStatus === 'failed'
+                ? 'failed'
+                : 'bootstrap_running',
+            previewReady: readModel.overview.previewReady,
+            previewUrl: readModel.preview.previewUrl,
+            rawTemplateArtifactFound: readModel.overview.rawTemplateArtifactFound,
+            entryHtmlFound: readModel.overview.rawTemplateEntryHtmlFound,
+            fileMapCount: readModel.overview.rawTemplateFileMapCount,
+            slotCount: readModel.overview.contentSlotCount,
+            publishReady: readModel.overview.publishReady,
+            diagnostics: [
+              'TEMPLATE_SITE_STATUS_REQUESTED',
+              ...readModel.overview.createDiagnostics,
+              readModel.overview.bootstrapStatus === 'failed' ? 'TEMPLATE_SITE_STATUS_FAILED' : null,
+              'TEMPLATE_SITE_STATUS_RESOLVED',
+            ].filter((value): value is string => Boolean(value)),
+            reasonCode: readModel.overview.reasonCode,
+          }}
+        />
       </section>
 
       <section style={sectionCardStyle()}>
