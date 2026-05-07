@@ -176,6 +176,27 @@ export function createPreviewAssetsRouteHandlers(overrides: Partial<PreviewAsset
           }
         }
         if (!asset) {
+          const fileMapCandidates = new Set<string>(lookupCandidates);
+          const fallbackPath = resolveUploadVariantFallbackPath(normalizedPath);
+          if (fallbackPath) fileMapCandidates.add(fallbackPath);
+          const missingPersistedPath = [...fileMapCandidates].find((candidate) => Boolean(artifact.fileMap[candidate]));
+          if (missingPersistedPath) {
+            console.warn("[preview-runtime] RAW_IMPORT_FILE_MAP_ENTRY_FOUND_WITHOUT_FILE_ROW", {
+              siteId,
+              siteVersionId,
+              requestedPath: normalizedPath,
+              matchedFileMapPath: missingPersistedPath,
+              candidates: [...fileMapCandidates],
+              artifactType: artifact.artifactType,
+            });
+            return new Response("not found", {
+              status: 404,
+              headers: {
+                "content-type": "text/plain; charset=utf-8",
+                "x-gnr8-preview-asset-diagnostic": "RAW_IMPORT_FILE_MAP_ENTRY_FOUND_WITHOUT_FILE_ROW",
+              },
+            });
+          }
           console.warn("[preview-runtime] RAW_IMPORT_ASSET_LOOKUP_MISSING", {
             siteId,
             siteVersionId,

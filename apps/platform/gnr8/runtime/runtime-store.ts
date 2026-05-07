@@ -2509,6 +2509,16 @@ export async function getRawTemplateSiteAsset(input: {
   const client = await getSuperadminPool().connect();
   try {
     const artifactId = String(input.artifactId ?? "").trim();
+    console.info("[preview-runtime] RAW_IMPORT_ASSET_DB_COLUMN_MAPPING_USED", {
+      table: "public.gnr8_runtime_raw_template_artifact_files",
+      filePathColumn: "file_path",
+      mediaTypeColumn: "media_type",
+      contentColumn: "content_bytes",
+      artifactScopedLookup: Boolean(artifactId),
+      siteVersionId: input.siteVersionId,
+      artifactId: artifactId || null,
+      filePath: normalizedFilePath,
+    });
     const row = artifactId
       ? await client.query<RawTemplateArtifactFileRow>(
           `
@@ -2541,7 +2551,21 @@ export async function getRawTemplateSiteAsset(input: {
           [input.siteVersionId, normalizedFilePath],
         );
     const hit = row.rows[0];
-    if (!hit) return null;
+    if (!hit) {
+      console.warn("[preview-runtime] RAW_IMPORT_ASSET_FILE_ROW_MISSING", {
+        siteVersionId: input.siteVersionId,
+        artifactId: artifactId || null,
+        filePath: normalizedFilePath,
+      });
+      return null;
+    }
+    console.info("[preview-runtime] RAW_IMPORT_ASSET_FILE_ROW_FOUND", {
+      siteVersionId: input.siteVersionId,
+      artifactId: artifactId || null,
+      filePath: normalizedFilePath,
+      mediaType: hit.media_type,
+      sizeBytes: Number(hit.file_size_bytes) || 0,
+    });
     const bytes = Buffer.isBuffer(hit.content_bytes) ? hit.content_bytes : Buffer.from(hit.content_bytes);
     return {
       mediaType: hit.media_type,

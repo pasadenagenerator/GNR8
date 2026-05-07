@@ -332,6 +332,69 @@ test("preview assets route resolves uploads lookup candidates on raw imported-si
   assert.equal(response.headers.get("x-gnr8-preview-asset-path"), "uploads/logo.png");
 });
 
+test("preview assets route returns 200 for exact persisted uploads asset path", async () => {
+  const handlers = createPreviewAssetsRouteHandlers({
+    resolveDomainSiteVersionForHost: async () =>
+      ({
+        outcome: "domain_hit",
+        host: "beauty-clinic.pasadenagenerator.com",
+        siteId: "site_1",
+        siteVersionId: "sv_1",
+        domain: "beauty-clinic.pasadenagenerator.com",
+        status: "active",
+        bindingId: "binding_1",
+      }) as never,
+    resolveAgencyIdForSiteVersion: async () => "agency_1",
+    requireAgencyActionContext: async () => ({ actorMode: "agency_member", agencyId: "agency_1" } as never),
+    getRawImportedSiteArtifact: async () =>
+      ({
+        id: "artifact_imported_1",
+        artifactType: "raw_imported_site",
+        siteId: "site_1",
+        siteVersionId: "sv_1",
+        entryHtmlPath: "index.html",
+        assetBasePath: ".",
+        fileMap: {},
+        metadata: {
+          sourceUrl: "https://example.com",
+          finalUrl: "https://www.example.com",
+          htmlByteLength: 123,
+          diagnostics: { codes: [] },
+          assetSummary: { persistedAssetCount: 1, externalFallbackAssetCount: 0 },
+        },
+        createdAt: "2026-05-06T00:00:00.000Z",
+      }) as never,
+    getRawTemplateSiteArtifact: async () => null,
+    getRawTemplateSiteAsset: async ({ filePath }) =>
+      filePath === "uploads/oFPgBb3g/767x0_2560x0/roboplast_tiskarna_plakat_ofset_B1.jpg"
+        ? ({
+            mediaType: "image/jpeg",
+            sizeBytes: 4,
+            sha256: "abc",
+            bytes: Buffer.from([255, 216, 255, 217]),
+          } as never)
+        : null,
+  });
+
+  const response = await handlers.GET(
+    new Request(
+      "https://beauty-clinic.pasadenagenerator.com/api/gnr8/runtime/preview-assets/site_1/sv_1/uploads/oFPgBb3g/767x0_2560x0/roboplast_tiskarna_plakat_ofset_B1.jpg",
+      { headers: { host: "beauty-clinic.pasadenagenerator.com" } },
+    ),
+    {
+      params: Promise.resolve({
+        siteId: "site_1",
+        siteVersionId: "sv_1",
+        assetPath: ["uploads", "oFPgBb3g", "767x0_2560x0", "roboplast_tiskarna_plakat_ofset_B1.jpg"],
+      }),
+    },
+  );
+
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get("content-type"), "image/jpeg");
+  assert.equal(response.headers.get("x-gnr8-preview-asset-path"), "uploads/oFPgBb3g/767x0_2560x0/roboplast_tiskarna_plakat_ofset_B1.jpg");
+});
+
 test("preview assets route returns deterministic 404 for missing upload asset", async () => {
   const handlers = createPreviewAssetsRouteHandlers({
     resolveDomainSiteVersionForHost: async () =>
@@ -519,6 +582,79 @@ test("preview assets route logs variant not found when uploads variant and origi
 
     assert.equal(response.status, 404);
     assert.equal(loggedEvents.some((entry) => entry.includes("CONTENT_ASSET_VARIANT_NOT_FOUND")), true);
+  } finally {
+    console.warn = originalWarn;
+  }
+});
+
+test("preview assets route returns diagnostic 404 when file_map entry exists but file row is missing", async () => {
+  const loggedEvents: string[] = [];
+  const originalWarn = console.warn;
+  console.warn = (...args: unknown[]) => {
+    loggedEvents.push(args.map((arg) => String(arg)).join(" "));
+  };
+  try {
+    const handlers = createPreviewAssetsRouteHandlers({
+      resolveDomainSiteVersionForHost: async () =>
+        ({
+          outcome: "domain_hit",
+          host: "beauty-clinic.pasadenagenerator.com",
+          siteId: "site_1",
+          siteVersionId: "sv_1",
+          domain: "beauty-clinic.pasadenagenerator.com",
+          status: "active",
+          bindingId: "binding_1",
+        }) as never,
+      resolveAgencyIdForSiteVersion: async () => "agency_1",
+      requireAgencyActionContext: async () => ({ actorMode: "agency_member", agencyId: "agency_1" } as never),
+      getRawImportedSiteArtifact: async () =>
+        ({
+          id: "artifact_imported_1",
+          artifactType: "raw_imported_site",
+          siteId: "site_1",
+          siteVersionId: "sv_1",
+          entryHtmlPath: "index.html",
+          assetBasePath: ".",
+          fileMap: {
+            "uploads/VmPFXCum/236x0_247x0/ROBOPLAST-znak-02-134x136px.png": {
+              path: "uploads/VmPFXCum/236x0_247x0/ROBOPLAST-znak-02-134x136px.png",
+              mediaType: "image/png",
+              sizeBytes: 100,
+              sha256: "abc",
+            },
+          },
+          metadata: {
+            sourceUrl: "https://example.com",
+            finalUrl: "https://www.example.com",
+            htmlByteLength: 123,
+            diagnostics: { codes: [] },
+            assetSummary: { persistedAssetCount: 1, externalFallbackAssetCount: 0 },
+          },
+          createdAt: "2026-05-06T00:00:00.000Z",
+        }) as never,
+      getRawTemplateSiteArtifact: async () => null,
+      getRawTemplateSiteAsset: async () => null,
+    });
+
+    const response = await handlers.GET(
+      new Request(
+        "https://beauty-clinic.pasadenagenerator.com/api/gnr8/runtime/preview-assets/site_1/sv_1/uploads/VmPFXCum/236x0_247x0/ROBOPLAST-znak-02-134x136px.png",
+        {
+          headers: { host: "beauty-clinic.pasadenagenerator.com" },
+        },
+      ),
+      {
+        params: Promise.resolve({
+          siteId: "site_1",
+          siteVersionId: "sv_1",
+          assetPath: ["uploads", "VmPFXCum", "236x0_247x0", "ROBOPLAST-znak-02-134x136px.png"],
+        }),
+      },
+    );
+
+    assert.equal(response.status, 404);
+    assert.equal(response.headers.get("x-gnr8-preview-asset-diagnostic"), "RAW_IMPORT_FILE_MAP_ENTRY_FOUND_WITHOUT_FILE_ROW");
+    assert.equal(loggedEvents.some((entry) => entry.includes("RAW_IMPORT_FILE_MAP_ENTRY_FOUND_WITHOUT_FILE_ROW")), true);
   } finally {
     console.warn = originalWarn;
   }
