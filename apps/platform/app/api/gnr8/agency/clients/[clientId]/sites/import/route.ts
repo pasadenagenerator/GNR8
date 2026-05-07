@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import fs from 'node:fs'
+import crypto from 'node:crypto'
 
 import { parseAgencyActionContextError, requireAgencyActionContext } from '@/app/api/gnr8/agency/_lib/agency-action-access'
 import { SCOPED_SITE_IMPORT_CANONICAL_PATH } from '@/gnr8/site/site-import-contract'
@@ -8,7 +9,9 @@ import { importerSuccessRedirectHref } from '@/gnr8/site/site-importer-routing'
 import { resolveImportPreview } from '@/gnr8/site/import-preview-resolution'
 import { extractTitleFromHtmlDocument, resolveImportedSiteName } from '@/gnr8/site/site-import-site-name'
 import { runScopedImportPipeline } from '@/gnr8/site/scoped-import-pipeline'
-import { getArtifactById } from '@/gnr8/runtime/runtime-store'
+import { deterministicId } from '@/gnr8/runtime/deterministic'
+import { RENDERER_COMPATIBILITY_VERSION } from '@/gnr8/runtime/types'
+import { getArtifactById, preallocateSiteVersionIdentity } from '@/gnr8/runtime/runtime-store'
 import { importPublicSinglePageUrlToSnapshot } from '@/gnr8/validation/runtime/url-single-page-import'
 import { getSuperadminPool } from '@/src/superadmin/db'
 
@@ -73,6 +76,22 @@ function parseHttpUrl(value: unknown): URL | null {
   } catch {
     return null
   }
+}
+
+function buildScopedImportRuntimeIdentity(input: { sourceUrl: string; clientId: string; agencyId: string }): {
+  siteId: string
+  siteVersionId: string
+  correlationKey: string
+} {
+  const siteId = deterministicId('site', `${input.sourceUrl}|/`)
+  const correlationKey = deterministicId('runtime-import-correlation', `${input.agencyId}|${input.clientId}|${input.sourceUrl}|${siteId}`)
+  const digest = crypto.createHash('sha256').update(`${correlationKey}|site-version`).digest()
+  const bytes = Uint8Array.from(digest.subarray(0, 16))
+  bytes[6] = (bytes[6] & 0x0f) | 0x40
+  bytes[8] = (bytes[8] & 0x3f) | 0x80
+  const hex = Buffer.from(bytes).toString('hex')
+  const siteVersionId = `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20, 32)}`
+  return { siteId, siteVersionId, correlationKey }
 }
 
 
@@ -233,10 +252,51 @@ export async function POST(req: Request, ctx: { params: Promise<Params> }) {
       clientId,
       agencyId: actionContext.agencyId,
     })
+    const diagnostics: string[] = ['SITE_IMPORT_SITE_NAME_RESOLVED']
+
+    const runtimeIdentity = buildScopedImportRuntimeIdentity({
+      sourceUrl: importUrl.toString(),
+      clientId,
+      agencyId: actionContext.agencyId,
+    })
+    const preallocatedIdentity = await preallocateSiteVersionIdentity({
+      siteId: runtimeIdentity.siteId,
+      siteVersionId: runtimeIdentity.siteVersionId,
+      sourceUrl: importUrl.toString(),
+      actor: `agency:client-scoped-import:${actionContext.actorMode}`,
+      rendererCompatibilityVersion: RENDERER_COMPATIBILITY_VERSION,
+      correlationKey: runtimeIdentity.correlationKey,
+    }).catch((error) => {
+      diagnostics.push('RUNTIME_IMPORT_IDENTITY_PREALLOCATION_FAILED')
+      console.error('[site-import] RUNTIME_IMPORT_IDENTITY_PREALLOCATION_FAILED', {
+        orgId: actionContext.agencyId,
+        agencyId: actionContext.agencyId,
+        clientId,
+        siteId: runtimeIdentity.siteId,
+        siteVersionId: runtimeIdentity.siteVersionId,
+        sourceUrl: importUrl.toString(),
+        correlationKey: runtimeIdentity.correlationKey,
+        reasonCode: error instanceof Error ? error.message : 'preallocation_failed',
+      })
+      throw error
+    })
+    diagnostics.push(preallocatedIdentity.reused ? 'RUNTIME_IMPORT_IDENTITY_REUSED' : 'RUNTIME_IMPORT_IDENTITY_PREALLOCATED')
+    console.info(`[site-import] ${preallocatedIdentity.reused ? 'RUNTIME_IMPORT_IDENTITY_REUSED' : 'RUNTIME_IMPORT_IDENTITY_PREALLOCATED'}`, {
+      orgId: actionContext.agencyId,
+      agencyId: actionContext.agencyId,
+      clientId,
+      siteId: preallocatedIdentity.siteId,
+      siteVersionId: preallocatedIdentity.siteVersionId,
+      sourceUrl: importUrl.toString(),
+      correlationKey: runtimeIdentity.correlationKey,
+      reasonCode: preallocatedIdentity.reused ? 'preallocated_identity_exists' : 'preallocated_identity_created',
+    })
 
     const snapshot = await importPublicSinglePageUrlToSnapshot({
       sourceUrl: importUrl.toString(),
       requestId: `client-site-import-${Date.now()}`,
+      siteId: preallocatedIdentity.siteId,
+      siteVersionId: preallocatedIdentity.siteVersionId,
     })
     const rawHtml = fs.readFileSync(snapshot.entryHtmlPathAbs, 'utf8')
     const documentTitle = extractTitleFromHtmlDocument(rawHtml)
@@ -252,7 +312,6 @@ export async function POST(req: Request, ctx: { params: Promise<Params> }) {
       clientId,
       agencyId: actionContext.agencyId,
     })
-    const diagnostics: string[] = ['SITE_IMPORT_SITE_NAME_RESOLVED']
     if (siteNameResolution.source !== 'user_provided') {
       diagnostics.push('SITE_IMPORT_SITE_NAME_FALLBACK_USED')
       console.info('[site-import] SITE_IMPORT_SITE_NAME_FALLBACK_USED', {
@@ -294,6 +353,10 @@ export async function POST(req: Request, ctx: { params: Promise<Params> }) {
       sourceUrl: importUrl.toString(),
       actor: `agency:client-scoped-import:${actionContext.actorMode}`,
       fallbackToLegacyOnPipelineFailure: false,
+      runtimeIdentity: {
+        siteId: preallocatedIdentity.siteId,
+        siteVersionId: preallocatedIdentity.siteVersionId,
+      },
     })
 
     const ownershipSiteId = await resolveOrCreateOwnershipSiteId({

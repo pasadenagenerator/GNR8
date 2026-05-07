@@ -751,7 +751,7 @@ function mapPageVersionRow(row: PageVersionRow): CanonicalPageVersionSnapshot {
 }
 
 export async function createSiteVersionFromMigration(
-  input: CanonicalSiteMigrationInput & { rendererCompatibilityVersion: string },
+  input: CanonicalSiteMigrationInput & { rendererCompatibilityVersion: string; siteVersionId?: string },
 ): Promise<{ siteId: string; siteVersionId: string; versionNo: number }> {
   return withTx(async (client) => {
     const sourceHost = (() => {
@@ -781,31 +781,55 @@ export async function createSiteVersionFromMigration(
       });
     }
 
-    const versionNo = await getNextSiteVersionNo(client, input.siteId);
-    const siteVersionInsert = await client.query<{ id: string }>(
-      `
-      insert into public.gnr8_runtime_site_versions (
-        site_id,
-        version_no,
-        state,
-        source,
-        actor,
-        renderer_compatibility_version,
-        import_provenance_summary
-      )
-      values ($1::text, $2::int, 'DRAFT', 'migration', $3::text, $4::text, $5::jsonb)
-      returning id::text as id
-      `,
-      [
-        input.siteId,
-        versionNo,
-        input.actor,
-        input.rendererCompatibilityVersion,
-        input.importProvenanceSummary ? JSON.stringify(input.importProvenanceSummary) : null,
-      ],
-    );
+    const preallocatedSiteVersionId = typeof input.siteVersionId === "string" ? input.siteVersionId.trim() : "";
+    const existingSiteVersion = preallocatedSiteVersionId
+      ? await client.query<{ id: string; site_id: string; version_no: number }>(
+          `
+          select id::text as id, site_id::text as site_id, version_no::int as version_no
+          from public.gnr8_runtime_site_versions
+          where id = $1::uuid
+          limit 1
+          `,
+          [preallocatedSiteVersionId],
+        )
+      : { rows: [] };
 
-    const siteVersionId = siteVersionInsert.rows[0]!.id;
+    let siteVersionId = preallocatedSiteVersionId;
+    let versionNo = 0;
+    if (existingSiteVersion.rows[0]) {
+      if (existingSiteVersion.rows[0].site_id !== input.siteId) {
+        throw new Error("RUNTIME_IMPORT_IDENTITY_SITE_VERSION_SITE_MISMATCH");
+      }
+      siteVersionId = existingSiteVersion.rows[0].id;
+      versionNo = existingSiteVersion.rows[0].version_no;
+    } else {
+      versionNo = await getNextSiteVersionNo(client, input.siteId);
+      const siteVersionInsert = await client.query<{ id: string }>(
+        `
+        insert into public.gnr8_runtime_site_versions (
+          id,
+          site_id,
+          version_no,
+          state,
+          source,
+          actor,
+          renderer_compatibility_version,
+          import_provenance_summary
+        )
+        values ($1::uuid, $2::text, $3::int, 'DRAFT', 'migration', $4::text, $5::text, $6::jsonb)
+        returning id::text as id
+        `,
+        [
+          preallocatedSiteVersionId || null,
+          input.siteId,
+          versionNo,
+          input.actor,
+          input.rendererCompatibilityVersion,
+          input.importProvenanceSummary ? JSON.stringify(input.importProvenanceSummary) : null,
+        ],
+      );
+      siteVersionId = siteVersionInsert.rows[0]!.id;
+    }
 
     for (const page of input.pages) {
       const path = normalizePagePath(page.path);
@@ -863,6 +887,99 @@ export async function createSiteVersionFromMigration(
     );
 
     return { siteId: input.siteId, siteVersionId, versionNo };
+  });
+}
+
+export async function preallocateSiteVersionIdentity(input: {
+  siteId: string;
+  siteVersionId: string;
+  sourceUrl: string;
+  actor: string;
+  rendererCompatibilityVersion: string;
+  correlationKey: string;
+}): Promise<{ siteId: string; siteVersionId: string; versionNo: number; reused: boolean }> {
+  return withTx(async (client) => {
+    const sourceHost = (() => {
+      try {
+        return new URL(input.sourceUrl).host;
+      } catch {
+        return null;
+      }
+    })();
+
+    await client.query(
+      `
+      insert into public.gnr8_runtime_sites (id, source_url, source_host)
+      values ($1::text, $2::text, $3::text)
+      on conflict (id)
+      do update set source_url = excluded.source_url, source_host = excluded.source_host, updated_at = now()
+      `,
+      [input.siteId, input.sourceUrl, sourceHost],
+    );
+
+    if (sourceHost) {
+      await bindHostToSiteInTx(client, {
+        siteId: input.siteId,
+        host: sourceHost,
+        status: "ACTIVE",
+        bindingKind: "shadow",
+      });
+    }
+
+    const existing = await client.query<{ id: string; site_id: string; version_no: number }>(
+      `
+      select id::text as id, site_id::text as site_id, version_no::int as version_no
+      from public.gnr8_runtime_site_versions
+      where id = $1::uuid
+      limit 1
+      `,
+      [input.siteVersionId],
+    );
+    if (existing.rows[0]) {
+      if (existing.rows[0].site_id !== input.siteId) {
+        throw new Error("RUNTIME_IMPORT_IDENTITY_SITE_VERSION_SITE_MISMATCH");
+      }
+      return {
+        siteId: input.siteId,
+        siteVersionId: existing.rows[0].id,
+        versionNo: existing.rows[0].version_no,
+        reused: true,
+      };
+    }
+
+    const versionNo = await getNextSiteVersionNo(client, input.siteId);
+    await client.query(
+      `
+      insert into public.gnr8_runtime_site_versions (
+        id,
+        site_id,
+        version_no,
+        state,
+        source,
+        actor,
+        renderer_compatibility_version,
+        import_provenance_summary
+      )
+      values ($1::uuid, $2::text, $3::int, 'DRAFT', 'migration', $4::text, $5::text, $6::jsonb)
+      `,
+      [
+        input.siteVersionId,
+        input.siteId,
+        versionNo,
+        input.actor,
+        input.rendererCompatibilityVersion,
+        JSON.stringify({
+          kind: "runtime_import_preallocation_v1",
+          correlationKey: input.correlationKey,
+        }),
+      ],
+    );
+    return {
+      siteId: input.siteId,
+      siteVersionId: input.siteVersionId,
+      versionNo,
+      reused: false,
+    };
   });
 }
 

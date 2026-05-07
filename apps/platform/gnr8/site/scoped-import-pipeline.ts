@@ -990,10 +990,11 @@ function buildCanonicalMigrationInputFromPipeline(input: {
   layoutModel: LayoutPreparationModel | null
   snapshot: UrlSinglePageImportSnapshot
   styleSignals: StyleSignalModel
+  siteId?: string
 }): CanonicalSiteMigrationInput {
   const entrySourcePath = input.preparedSite.source.entryHtmlPath ?? input.preparedSite.documents[0]?.path ?? '/'
   const entryPagePath = inferPagePathFromSourcePath(entrySourcePath)
-  const siteId = resolveSiteId(input.sourceUrl, entryPagePath)
+  const siteId = normalizeText(input.siteId) || resolveSiteId(input.sourceUrl, entryPagePath)
 
   const layoutByDocumentId = new Map(input.layoutModel?.pages.map((page) => [page.sourceDocumentId, page]) ?? [])
   const importFidelitySignals = buildImportFidelitySignals(input.snapshot)
@@ -1506,6 +1507,10 @@ export async function runScopedImportPipeline(input: {
   fallbackToLegacyOnPipelineFailure?: boolean
   legacySlug?: string
   legacyTitle?: string
+  runtimeIdentity?: {
+    siteId: string
+    siteVersionId: string
+  }
   deps?: Partial<ScopedImportPipelineDependencies>
 }): Promise<ScopedImportPipelineOutcome> {
   const deps = { ...defaultDependencies(), ...(input.deps ?? {}) }
@@ -1598,12 +1603,14 @@ export async function runScopedImportPipeline(input: {
       layoutModel,
       snapshot: input.snapshot,
       styleSignals,
+      siteId: input.runtimeIdentity?.siteId,
     })
 
     const migrated = await deps.createSiteVersionFromMigration({
       ...canonicalInput,
       rendererCompatibilityVersion: RENDERER_COMPATIBILITY_VERSION,
       importProvenanceSummary,
+      siteVersionId: input.runtimeIdentity?.siteVersionId,
     })
     writePathDiagnostics.createdVersionId = migrated.siteVersionId
     writePathDiagnostics.provenancePayloadBeforeWrite = summarizeProvenancePayload(importProvenanceSummary)

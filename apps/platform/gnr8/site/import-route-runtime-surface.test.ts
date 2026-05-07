@@ -15,6 +15,11 @@ test('scoped import API route is pinned to nodejs runtime surface', () => {
   assert.match(routeSource, /export const runtime = ['"]nodejs['"]/)
   assert.doesNotMatch(routeSource, /export const runtime = ['"]edge['"]/)
   assert.match(routeSource, /insert into public\.sites \(org_id, agency_id, name, status, domain, is_template\)/)
+  assert.match(routeSource, /preallocateSiteVersionIdentity\(/)
+  assert.match(routeSource, /importPublicSinglePageUrlToSnapshot\(\{[\s\S]*siteId:\s*preallocatedIdentity\.siteId,[\s\S]*siteVersionId:\s*preallocatedIdentity\.siteVersionId,/)
+  assert.match(routeSource, /RUNTIME_IMPORT_IDENTITY_PREALLOCATED/)
+  assert.match(routeSource, /RUNTIME_IMPORT_IDENTITY_REUSED/)
+  assert.match(routeSource, /RUNTIME_IMPORT_IDENTITY_PREALLOCATION_FAILED/)
 })
 
 test('runtime migrate URL API route is pinned to nodejs runtime surface', () => {

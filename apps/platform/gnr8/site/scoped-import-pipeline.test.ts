@@ -1413,3 +1413,83 @@ test('canonical input preserves inferred nested entry path when raw_html_only se
 
   assert.equal(canonical.pages[0]?.path, '/nested/site')
 })
+
+test('scoped pipeline forwards preallocated runtime identity to migration write path', async () => {
+  const pipeline = createSuccessPipelineFixture()
+  let createInput: any = null
+  let linkedArtifactId: string | null = null
+
+  await runScopedImportPipeline({
+    snapshot: {
+      snapshotRootDirAbs: '/tmp/snapshot-root',
+      entryHtmlPathAbs: '/tmp/snapshot-root/index.html',
+      assetsDirAbs: '/tmp/snapshot-root/assets',
+      sourceMode: 'rendered_dom',
+      sourceSelection: {
+        sourceMode: 'rendered_dom',
+        fidelityStatus: 'high_fidelity_import',
+        selectedSourceHtmlPathAbs: '/tmp/snapshot-root/index.html',
+        renderedDomQuality: { quality: 'strong' },
+        degraded: false,
+      },
+      renderedCapture: { status: 'available', screenshots: [], computedStyleSamples: [] },
+      importDiagnostics: { issues: [] },
+      renderedCaptureReliability: { job: null, workerHealth: null },
+      fetchManifest: [],
+      sourceUrl: 'https://example.com/',
+    } as any,
+    sourceUrl: 'https://example.com/',
+    actor: 'test:scoped-import',
+    runtimeIdentity: {
+      siteId: 'runtime-site-preallocated',
+      siteVersionId: '11111111-1111-4111-8111-111111111111',
+    },
+    deps: {
+      importStaticSite: async () => ({ status: 'ok', documentMeta: { source: { kind: 'single-entry-html' } } }) as any,
+      createImportManifest: () => ({ status: 'success' }) as any,
+      runLinearMigrationPipeline: () => pipeline as any,
+      createSiteVersionFromMigration: async (input) => {
+        createInput = input
+        return { siteId: 'runtime-site-preallocated', siteVersionId: '11111111-1111-4111-8111-111111111111', versionNo: 7 }
+      },
+      setSiteVersionImportProvenanceSummary: async () => ({ affectedRows: 1 }),
+      getSiteVersion: async () =>
+        ({
+          id: '11111111-1111-4111-8111-111111111111',
+          siteId: 'runtime-site-preallocated',
+          versionNo: 7,
+          state: 'DRAFT',
+          source: 'migration',
+          actor: 'test',
+          createdAt: new Date().toISOString(),
+          rendererCompatibilityVersion: 'gnr8-renderer-v1',
+          artifactId: linkedArtifactId,
+          importProvenanceSummary: createInput?.importProvenanceSummary ?? null,
+          pages: [],
+        }) as any,
+      buildDeterministicArtifactBundle: () =>
+        ({
+          siteId: 'runtime-site-preallocated',
+          siteVersionId: '11111111-1111-4111-8111-111111111111',
+          rendererCompatibilityVersion: 'gnr8-renderer-v1',
+          bundleSha256: 'bundle-sha',
+          htmlByPath: { '/': '<!doctype html><html><body>preview</body></html>' },
+          compiledTokenStyles: ':root{}',
+          assetFingerprintMap: {},
+          manifest: {},
+        }) as any,
+      createArtifact: async () => ({ artifactId: 'artifact-1' }),
+      bindArtifactToVersion: async (input) => {
+        linkedArtifactId = input.artifactId
+        return { affectedRows: 1 }
+      },
+      persistRawImportedSiteArtifact: async () => ({ artifactId: 'raw-artifact-1', fileCount: 1 }),
+      importHtmlToPage: () => ({} as any),
+      migrateImportedPageToCanonicalDraft: async () => ({ siteId: 'legacy-site', siteVersionId: 'legacy-version', versionNo: 1 }),
+    },
+  })
+
+  assert.ok(createInput)
+  assert.equal(createInput.siteId, 'runtime-site-preallocated')
+  assert.equal(createInput.siteVersionId, '11111111-1111-4111-8111-111111111111')
+})
