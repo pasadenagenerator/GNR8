@@ -257,6 +257,7 @@ export type UrlImportAssetAttribute =
   | "data"
   | "srcset"
   | "data-src"
+  | "data-lazyload-src"
   | "data-srcset"
   | "data-original"
   | "data-lazy-src"
@@ -357,6 +358,7 @@ type ParsedAssetRef = {
   resolvedUrl: string | null;
   assetKind: UrlImportAssetKind;
   sourceScope: "head_stylesheet" | "other";
+  sourceContext: "html" | "noscript";
 };
 
 type HtmlImageAssetDiscoveryEntry = {
@@ -367,6 +369,7 @@ type HtmlImageAssetDiscoveryEntry = {
   normalizedLocalPath: string | null;
   fetchStatus: "pending" | "fetched" | "fetch_failed" | "unsupported";
   persisted: boolean;
+  sourceContext: "html" | "noscript";
 };
 
 const FETCH_SCOPE: UrlImportExecutionScope = {
@@ -745,7 +748,7 @@ function resolvePathCollisions(
   return assigned;
 }
 
-const LAZY_IMAGE_ATTR_PRIORITY: readonly UrlImportAssetAttribute[] = ["data-src", "data-original", "data-lazy-src"] as const;
+const LAZY_IMAGE_ATTR_PRIORITY: readonly UrlImportAssetAttribute[] = ["data-src", "data-lazyload-src", "data-original", "data-lazy-src"] as const;
 const SRCSET_ATTRS: readonly UrlImportAssetAttribute[] = ["srcset", "data-srcset"] as const;
 const EXTRA_IMAGE_ATTRS: readonly UrlImportAssetAttribute[] = ["data-req"] as const;
 
@@ -1063,6 +1066,10 @@ function walkDomWithAncestors(
       }
     }
   }
+}
+
+function decodeHtmlEntitiesForFragment(input: string): string {
+  return input.replace(/&lt;/gi, "<").replace(/&gt;/gi, ">").replace(/&quot;/gi, '"').replace(/&#39;/gi, "'").replace(/&amp;/gi, "&");
 }
 
 function findFirstNodeByTag(root: unknown, tagName: string): unknown | null {
@@ -1679,6 +1686,7 @@ function collectAssetRefs(input: {
   document: unknown;
   entryUrl: URL;
   diagnostics: UrlImportDiagnostic[];
+  rawHtml?: string;
 }): ParsedAssetRef[] {
   const refs: ParsedAssetRef[] = [];
   const occurrenceCounter = new Map<string, number>();
@@ -1724,8 +1732,8 @@ function collectAssetRefs(input: {
     }
   }
 
-  function nextOccurrence(tag: UrlImportAssetTag, attribute: UrlImportAssetAttribute): number {
-    const occurrenceKey = `${tag}:${attribute}`;
+  function nextOccurrence(sourceContext: "html" | "noscript", tag: UrlImportAssetTag, attribute: UrlImportAssetAttribute): number {
+    const occurrenceKey = `${sourceContext}:${tag}:${attribute}`;
     const occurrence = occurrenceCounter.get(occurrenceKey) ?? 0;
     occurrenceCounter.set(occurrenceKey, occurrence + 1);
     return occurrence;
@@ -1738,10 +1746,12 @@ function collectAssetRefs(input: {
     assetKind: UrlImportAssetKind;
     surface: string;
     sourceScope?: "head_stylesheet" | "other";
+    sourceContext?: "html" | "noscript";
   }): void {
     const trimmed = args.rawRef.trim();
     if (!trimmed) return;
-    const occurrence = nextOccurrence(args.tag, args.attribute);
+    const sourceContext = args.sourceContext ?? "html";
+    const occurrence = nextOccurrence(sourceContext, args.tag, args.attribute);
     const resolvedUrl = resolveAssetUrl({
       rawRef: trimmed,
       baseUrl: input.entryUrl,
@@ -1749,7 +1759,7 @@ function collectAssetRefs(input: {
       diagnosticContext: { tag: args.tag, attribute: args.attribute, surface: args.surface },
     });
     refs.push({
-      key: `${args.tag}:${args.attribute}:${occurrence}`,
+      key: `${sourceContext}:${args.tag}:${args.attribute}:${occurrence}`,
       tag: args.tag,
       attribute: args.attribute,
       occurrence,
@@ -1757,10 +1767,11 @@ function collectAssetRefs(input: {
       resolvedUrl,
       assetKind: args.assetKind,
       sourceScope: args.sourceScope ?? "other",
+      sourceContext,
     });
   }
 
-  walkDomWithAncestors(input.document, (node, ancestors) => {
+  function collectFromNode(node: unknown, ancestors: unknown[], sourceContext: "html" | "noscript"): void {
     if (!isElement(node)) return;
     const tag = node.tagName.toLowerCase() as UrlImportAssetTag | string;
     const rel = getAttr(node, "rel");
@@ -1819,6 +1830,7 @@ function collectAssetRefs(input: {
         rawRef: href,
         assetKind: "image",
         surface: "gallery_anchor",
+        sourceContext,
       });
       return;
     }
@@ -1835,6 +1847,7 @@ function collectAssetRefs(input: {
         assetKind,
         surface: "direct",
         sourceScope: inHead ? "head_stylesheet" : "other",
+        sourceContext,
       });
       return;
     }
@@ -1842,14 +1855,14 @@ function collectAssetRefs(input: {
     if (tag === "object") {
       const data = getAttr(node, "data");
       if (!data || !data.trim()) return;
-      pushRef({ tag: "object", attribute: "data", rawRef: data, assetKind: "image", surface: "html_object_data" });
+      pushRef({ tag: "object", attribute: "data", rawRef: data, assetKind: "image", surface: "html_object_data", sourceContext });
       return;
     }
 
     if (tag === "embed") {
       const src = getAttr(node, "src");
       if (!src || !src.trim()) return;
-      pushRef({ tag: "embed", attribute: "src", rawRef: src, assetKind: "image", surface: "html_embed_src" });
+      pushRef({ tag: "embed", attribute: "src", rawRef: src, assetKind: "image", surface: "html_embed_src", sourceContext });
       return;
     }
 
@@ -1857,14 +1870,21 @@ function collectAssetRefs(input: {
       const src = getAttr(node, "src");
       if (!src || !src.trim()) return;
       if (!assetKind) return;
-      pushRef({ tag: "script", attribute: "src", rawRef: src, assetKind, surface: "direct" });
+      pushRef({ tag: "script", attribute: "src", rawRef: src, assetKind, surface: "direct", sourceContext });
       return;
     }
 
     if (tag !== "img" && tag !== "source") return;
     const primarySrc = getAttr(node, "src");
     if (primarySrc && primarySrc.trim()) {
-      pushRef({ tag: tag as UrlImportAssetTag, attribute: "src", rawRef: primarySrc, assetKind: "image", surface: "direct" });
+      pushRef({
+        tag: tag as UrlImportAssetTag,
+        attribute: "src",
+        rawRef: primarySrc,
+        assetKind: "image",
+        surface: "direct",
+        sourceContext,
+      });
     }
     if (tag === "img") {
       for (const lazyAttr of LAZY_IMAGE_ATTR_PRIORITY) {
@@ -1876,6 +1896,7 @@ function collectAssetRefs(input: {
           rawRef: lazyRef,
           assetKind: "image",
           surface: "lazy_fallback",
+          sourceContext,
         });
       }
       for (const extraAttr of EXTRA_IMAGE_ATTRS) {
@@ -1888,6 +1909,7 @@ function collectAssetRefs(input: {
             rawRef: candidate,
             assetKind: "image",
             surface: "lazy_module_attr",
+            sourceContext,
           });
         }
       }
@@ -1910,10 +1932,34 @@ function collectAssetRefs(input: {
           rawRef: token.url,
           assetKind: "image",
           surface: "srcset_candidate",
+          sourceContext,
         });
       }
     }
-  });
+  }
+
+  walkDomWithAncestors(input.document, (node, ancestors) => collectFromNode(node, ancestors, "html"));
+
+  const noscriptRegex = /<noscript\b[^>]*>([\s\S]*?)<\/noscript>/gi;
+  const htmlSource = input.rawHtml ?? "";
+  let match: RegExpExecArray | null = null;
+  while ((match = noscriptRegex.exec(htmlSource)) !== null) {
+    const noscriptInnerHtml = String(match[1] ?? "").trim();
+    if (!noscriptInnerHtml) continue;
+    const parseCandidates = [noscriptInnerHtml];
+    const decoded = decodeHtmlEntitiesForFragment(noscriptInnerHtml);
+    if (decoded !== noscriptInnerHtml) parseCandidates.push(decoded);
+    for (const fragmentHtml of parseCandidates) {
+      try {
+        const fragmentDoc = parse(fragmentHtml);
+        walkDomWithAncestors(fragmentDoc, (fragmentNode, fragmentAncestors) => {
+          collectFromNode(fragmentNode, fragmentAncestors, "noscript");
+        });
+      } catch {
+        continue;
+      }
+    }
+  }
 
   return refs;
 }
@@ -3344,6 +3390,7 @@ export async function importPublicSinglePageUrlToSnapshot(input: {
       document,
       entryUrl: normalizedUrl,
       diagnostics,
+      rawHtml: rewrittenHtml,
     });
     for (const ref of refs) {
       if (ref.tag !== "link" || ref.assetKind !== "stylesheet" || !ref.resolvedUrl) continue;
@@ -3398,6 +3445,7 @@ export async function importPublicSinglePageUrlToSnapshot(input: {
         normalizedLocalPath: null,
         fetchStatus: ref.resolvedUrl ? "pending" : "unsupported",
         persisted: false,
+        sourceContext: ref.sourceContext,
       });
       diagnostics.push(
         createDiagnostic({
@@ -3405,7 +3453,7 @@ export async function importPublicSinglePageUrlToSnapshot(input: {
           code: "RAW_IMPORT_HTML_IMAGE_CANDIDATE_FOUND",
           message: "Discovered HTML image candidate.",
           targetUrl: ref.resolvedUrl,
-          details: { originalAttribute: ref.attribute, originalValue: ref.rawRef },
+          details: { originalAttribute: ref.attribute, originalValue: ref.rawRef, sourceContext: ref.sourceContext },
         }),
       );
       if (ref.resolvedUrl) {
@@ -3415,7 +3463,7 @@ export async function importPublicSinglePageUrlToSnapshot(input: {
             code: "RAW_IMPORT_HTML_IMAGE_CANDIDATE_RESOLVED",
             message: "Resolved HTML image candidate URL.",
             targetUrl: ref.resolvedUrl,
-            details: { originalAttribute: ref.attribute, originalValue: ref.rawRef },
+            details: { originalAttribute: ref.attribute, originalValue: ref.rawRef, sourceContext: ref.sourceContext },
           }),
         );
       } else {
@@ -3425,7 +3473,7 @@ export async function importPublicSinglePageUrlToSnapshot(input: {
             code: "RAW_IMPORT_HTML_IMAGE_CANDIDATE_SKIPPED",
             message: "Skipped HTML image candidate due to unresolved/unsupported URL.",
             targetUrl: null,
-            details: { originalAttribute: ref.attribute, originalValue: ref.rawRef },
+            details: { originalAttribute: ref.attribute, originalValue: ref.rawRef, sourceContext: ref.sourceContext },
           }),
         );
       }
@@ -3711,6 +3759,7 @@ export async function importPublicSinglePageUrlToSnapshot(input: {
           resolvedUrl: resolvedCssUrl,
           assetKind: "style_asset",
           sourceScope: "other",
+          sourceContext: "html",
         });
         cssRefOccurrence += 1;
       }
@@ -3835,10 +3884,10 @@ export async function importPublicSinglePageUrlToSnapshot(input: {
 
           for (let i = 0; i < tokens.length; i++) {
             const token = tokens[i]!;
-            const keyRoot = `${tag}:${attribute}`;
+            const keyRoot = `html:${tag}:${attribute}`;
             const occurrence = occurrenceCounter.get(keyRoot) ?? 0;
             occurrenceCounter.set(keyRoot, occurrence + 1);
-            const parsedRef = refsByKey.get(`${tag}:${attribute}:${occurrence}`);
+            const parsedRef = refsByKey.get(`html:${tag}:${attribute}:${occurrence}`);
             const resolvedUrl = parsedRef?.resolvedUrl ?? null;
             const localPath = resolvedUrl ? localPathByUrl.get(resolvedUrl) ?? null : null;
             const outcome = resolvedUrl ? fetchOutcomeByUrl.get(resolvedUrl) : null;
@@ -3859,10 +3908,10 @@ export async function importPublicSinglePageUrlToSnapshot(input: {
           continue;
         }
 
-        const keyRoot = `${tag}:${attribute}`;
+        const keyRoot = `html:${tag}:${attribute}`;
         const occurrence = occurrenceCounter.get(keyRoot) ?? 0;
         occurrenceCounter.set(keyRoot, occurrence + 1);
-        const parsedRef = refsByKey.get(`${tag}:${attribute}:${occurrence}`);
+        const parsedRef = refsByKey.get(`html:${tag}:${attribute}:${occurrence}`);
 
         const resolvedUrl = parsedRef?.resolvedUrl ?? null;
         const localPath = resolvedUrl ? localPathByUrl.get(resolvedUrl) ?? null : null;
@@ -3953,6 +4002,7 @@ export async function importPublicSinglePageUrlToSnapshot(input: {
       .map((entry) => ({
         originalAttribute: entry.originalAttribute,
         originalValue: entry.originalValue,
+        sourceContext: entry.sourceContext,
         resolvedUrl: entry.resolvedUrl,
         normalizedLocalPath: entry.normalizedLocalPath,
         fetchStatus: entry.fetchStatus,
