@@ -6,33 +6,6 @@ import { getSuperadminPool } from "@/src/superadmin/db";
 
 const TEST_SITE_ID_PREFIX = "test_runtime_store_prealloc";
 
-function summarizeConnectionString(connectionString: string): {
-  protocol: string | null;
-  usernamePresent: boolean;
-  hostname: string | null;
-  port: string | null;
-  database: string | null;
-} {
-  try {
-    const parsed = new URL(connectionString);
-    return {
-      protocol: parsed.protocol || null,
-      usernamePresent: parsed.username.length > 0,
-      hostname: parsed.hostname || null,
-      port: parsed.port || null,
-      database: parsed.pathname ? parsed.pathname.replace(/^\//, "") || null : null,
-    };
-  } catch {
-    return {
-      protocol: null,
-      usernamePresent: false,
-      hostname: null,
-      port: null,
-      database: null,
-    };
-  }
-}
-
 function assertIsTestSiteId(siteId: string): void {
   assert.match(siteId, /^test_runtime_store_prealloc_[a-z0-9_]+$/, "siteId must use test_runtime_store_prealloc_* prefix");
 }
@@ -134,10 +107,6 @@ test("runtime-store preallocation reuse: createSiteVersionFromMigration reuses r
     t.skip("DATABASE_URL is required for DB-backed runtime-store verification");
     return;
   }
-  console.error("[runtime-db-debug] test DATABASE_URL summary", {
-    sourceEnvVar: "DATABASE_URL",
-    databaseUrlSummary: summarizeConnectionString(process.env.DATABASE_URL),
-  });
 
   const runId = String(process.env.GNR8_RUNTIME_E2E_RUN_ID ?? "").trim();
   if (!runId) {
