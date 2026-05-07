@@ -4,6 +4,7 @@ import { previewRouteDependencies } from "./preview-route-dependencies";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+const PREVIEW_ASSET_ROUTE_PREFIX = "/api/gnr8/runtime/preview-assets";
 
 function escapeHtml(value: string): string {
   return value
@@ -45,6 +46,44 @@ function toPreviewFallbackHtml(input: { statusTitle: string; message: string; de
 </html>`;
 }
 
+function truncateForLog(value: string, limit = 220): string {
+  if (value.length <= limit) {
+    return value;
+  }
+  return `${value.slice(0, limit)}...`;
+}
+
+function redactPreviewAssetSample(value: string): string {
+  return value.replace(/\/uploads\/[^"'\s<)]+/gi, "/uploads/<redacted>");
+}
+
+function normalizeTransformedPreviewOutputDoublePrefixedUrls(input: {
+  html: string;
+  siteId: string;
+  siteVersionId: string;
+}): { html: string; occurrenceCount: number; sampleBefore: string | null; sampleAfter: string | null } {
+  const encodedSiteId = encodeURIComponent(input.siteId);
+  const encodedSiteVersionId = encodeURIComponent(input.siteVersionId);
+  const routePrefix = `${PREVIEW_ASSET_ROUTE_PREFIX}/${encodedSiteId}/${encodedSiteVersionId}/`;
+  const duplicatedRoutePrefix = `${routePrefix}${PREVIEW_ASSET_ROUTE_PREFIX.slice(1)}/${encodedSiteId}/${encodedSiteVersionId}/`;
+  const occurrenceCount = input.html.split(duplicatedRoutePrefix).length - 1;
+  if (occurrenceCount <= 0) {
+    return { html: input.html, occurrenceCount: 0, sampleBefore: null, sampleAfter: null };
+  }
+  const firstMatchIndex = input.html.indexOf(duplicatedRoutePrefix);
+  const sampleStart = Math.max(0, firstMatchIndex - 40);
+  const sampleEnd = Math.min(input.html.length, firstMatchIndex + duplicatedRoutePrefix.length + 120);
+  const sampleBefore = input.html.slice(sampleStart, sampleEnd);
+  const normalizedHtml = input.html.split(duplicatedRoutePrefix).join(routePrefix);
+  const sampleAfter = normalizedHtml.slice(sampleStart, sampleEnd);
+  return {
+    html: normalizedHtml,
+    occurrenceCount,
+    sampleBefore: truncateForLog(redactPreviewAssetSample(sampleBefore)),
+    sampleAfter: truncateForLog(redactPreviewAssetSample(sampleAfter)),
+  };
+}
+
 export async function GET(req: Request, ctx: { params: Promise<{ siteVersionId: string }> }) {
   try {
     const { siteVersionId } = await ctx.params;
@@ -78,7 +117,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ siteVersionId: 
       path,
       mode,
     });
-    const html = contentDebugMode
+    const htmlWithOptionalDebug = contentDebugMode
       ? previewRouteDependencies.injectRuntimeDebugPanel({
           html: preview.html,
           debug: {
@@ -99,6 +138,34 @@ export async function GET(req: Request, ctx: { params: Promise<{ siteVersionId: 
           },
         })
       : preview.html;
+    const shouldNormalizeFinalOutput = mode === "transformed";
+    const normalizedOutput = shouldNormalizeFinalOutput
+      ? normalizeTransformedPreviewOutputDoublePrefixedUrls({
+          html: htmlWithOptionalDebug,
+          siteId: preview.siteId,
+          siteVersionId: preview.siteVersionId,
+        })
+      : { html: htmlWithOptionalDebug, occurrenceCount: 0, sampleBefore: null, sampleAfter: null };
+    const html = normalizedOutput.html;
+    if (normalizedOutput.occurrenceCount > 0) {
+      const correlationKey = `${preview.siteId}:${preview.siteVersionId}:preview-transformed-output-double-prefix`;
+      console.info("[gnr8.runtime.preview] PREVIEW_TRANSFORMED_OUTPUT_DOUBLE_PREFIX_FOUND", {
+        siteId: preview.siteId,
+        siteVersionId: preview.siteVersionId,
+        occurrenceCount: normalizedOutput.occurrenceCount,
+        sampleBefore: normalizedOutput.sampleBefore,
+        reasonCode: "FINAL_OUTPUT_DOUBLE_PREFIX_NORMALIZED",
+        correlationKey,
+      });
+      console.info("[gnr8.runtime.preview] PREVIEW_TRANSFORMED_OUTPUT_DOUBLE_PREFIX_NORMALIZED", {
+        siteId: preview.siteId,
+        siteVersionId: preview.siteVersionId,
+        occurrenceCount: normalizedOutput.occurrenceCount,
+        sampleAfter: normalizedOutput.sampleAfter,
+        reasonCode: "FINAL_OUTPUT_DOUBLE_PREFIX_NORMALIZED",
+        correlationKey,
+      });
+    }
 
     return new Response(html, {
       status: 200,
