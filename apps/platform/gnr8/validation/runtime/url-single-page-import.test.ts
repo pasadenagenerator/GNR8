@@ -919,6 +919,74 @@ test("persisted img asset rewrites to preview-assets URL when runtime ids are pr
   assert.equal(resolutionHit?.siteVersionId, "sv_1");
 });
 
+test("preview-assets img src is not rewritten again when already route-shaped", async () => {
+  const tmpRoot = await fs.promises.mkdtemp(path.join(os.tmpdir(), "gnr8-image-rewrite-idempotent-src-"));
+  const existingPreviewSrc =
+    "/api/gnr8/runtime/preview-assets/site_1/sv_1/uploads/VmPFXCum/236x0_247x0/ROBOPLAST-znak-02-134x136px.png";
+  const html = `<!doctype html><html><body><main><img src="${existingPreviewSrc}" alt="logo"></main></body></html>`;
+  const snapshot = await importPublicSinglePageUrlToSnapshot({
+    sourceUrl: "https://www.roboplast.si/",
+    snapshotRootDirAbs: tmpRoot,
+    siteId: "site_1",
+    siteVersionId: "sv_1",
+    renderedCaptureWorkerClient: unsupportedWorkerClient(),
+    fetchImpl: async () => makeHtmlResponse(html),
+  });
+  const writtenHtml = await fs.promises.readFile(snapshot.entryHtmlPathAbs, "utf8");
+  assert.equal(writtenHtml.includes(`${existingPreviewSrc}/api/gnr8/runtime/preview-assets/`), false);
+  const diagnostics = JSON.parse(
+    await fs.promises.readFile(path.resolve(snapshot.snapshotRootDirAbs, "url-import-diagnostics.json"), "utf8"),
+  ) as { issues: Array<{ code?: string; details?: { reasonCode?: string } | null }> };
+  assert.equal(
+    diagnostics.issues.some((issue) => issue.code === "PREVIEW_HTML_IMAGE_REWRITE_SKIPPED" && issue.details?.reasonCode === "ALREADY_PREVIEW_ASSET_URL"),
+    true,
+  );
+});
+
+test("double-prefixed preview-assets img src is normalized", async () => {
+  const tmpRoot = await fs.promises.mkdtemp(path.join(os.tmpdir(), "gnr8-image-rewrite-double-prefix-src-"));
+  const html = `<!doctype html><html><body><main><img src="/api/gnr8/runtime/preview-assets/site_1/sv_1/api/gnr8/runtime/preview-assets/site_1/sv_1/uploads/VmPFXCum/236x0_247x0/ROBOPLAST-znak-02-134x136px.png" alt="logo"></main></body></html>`;
+  const snapshot = await importPublicSinglePageUrlToSnapshot({
+    sourceUrl: "https://www.roboplast.si/",
+    snapshotRootDirAbs: tmpRoot,
+    siteId: "site_1",
+    siteVersionId: "sv_1",
+    renderedCaptureWorkerClient: unsupportedWorkerClient(),
+    fetchImpl: async () => makeHtmlResponse(html),
+  });
+  const writtenHtml = await fs.promises.readFile(snapshot.entryHtmlPathAbs, "utf8");
+  assert.equal(writtenHtml.includes("/preview-assets/site_1/sv_1/api/gnr8/runtime/preview-assets/"), false);
+  assert.equal(
+    writtenHtml.includes("/api/gnr8/runtime/preview-assets/site_1/sv_1/uploads/VmPFXCum/236x0_247x0/ROBOPLAST-znak-02-134x136px.png"),
+    true,
+  );
+  const diagnostics = JSON.parse(
+    await fs.promises.readFile(path.resolve(snapshot.snapshotRootDirAbs, "url-import-diagnostics.json"), "utf8"),
+  ) as { issues: Array<{ code?: string; details?: { reasonCode?: string } | null }> };
+  assert.equal(
+    diagnostics.issues.some((issue) => issue.code === "PREVIEW_HTML_IMAGE_REWRITE_APPLIED" && issue.details?.reasonCode === "DOUBLE_PREFIX_NORMALIZED"),
+    true,
+  );
+});
+
+test("preview-assets srcset URLs are not double-rewritten", async () => {
+  const tmpRoot = await fs.promises.mkdtemp(path.join(os.tmpdir(), "gnr8-image-rewrite-idempotent-srcset-"));
+  const previewSrcset =
+    "/api/gnr8/runtime/preview-assets/site_1/sv_1/uploads/VmPFXCum/236x0_247x0/ROBOPLAST-znak-02-134x136px.png 1x";
+  const html = `<!doctype html><html><body><main><img src="/placeholder.png" srcset="${previewSrcset}" alt="logo"></main></body></html>`;
+  const snapshot = await importPublicSinglePageUrlToSnapshot({
+    sourceUrl: "https://www.roboplast.si/",
+    snapshotRootDirAbs: tmpRoot,
+    siteId: "site_1",
+    siteVersionId: "sv_1",
+    renderedCaptureWorkerClient: unsupportedWorkerClient(),
+    fetchImpl: async () => makeHtmlResponse(html),
+  });
+  const writtenHtml = await fs.promises.readFile(snapshot.entryHtmlPathAbs, "utf8");
+  assert.equal(writtenHtml.includes("/preview-assets/site_1/sv_1/api/gnr8/runtime/preview-assets/"), false);
+  assert.equal(writtenHtml.includes(previewSrcset), true);
+});
+
 test("persisted img asset records runtime ids missing when absent", async () => {
   const tmpRoot = await fs.promises.mkdtemp(path.join(os.tmpdir(), "gnr8-image-runtime-missing-"));
   const logoPath = "/uploads/VmPFXCum/236x0_247x0/ROBOPLAST-znak-02-134x136px.png";

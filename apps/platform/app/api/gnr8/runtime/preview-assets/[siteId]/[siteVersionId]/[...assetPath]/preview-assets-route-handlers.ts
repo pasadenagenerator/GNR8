@@ -92,12 +92,35 @@ export function createPreviewAssetsRouteHandlers(overrides: Partial<PreviewAsset
 
   return {
     GET: async (req: Request, ctx: PreviewAssetGetContext) => {
+      let requestedUrl = req.url;
+      let siteId = "unknown_site";
+      let siteVersionId = "unknown_version";
+      let requestedPathRaw = "";
+      let normalizedPath: string | null = null;
+      let correlationKey = "unknown_site:unknown_version:invalid_path";
+      const emitFallbackInternalDiagnostic = (code: string, reasonCode: string, error: unknown) => {
+        console.error(`[preview-runtime] ${code}`, {
+          code,
+          requestedUrl,
+          siteId,
+          siteVersionId,
+          requestedPath: requestedPathRaw,
+          normalizedRequestedPath: normalizedPath,
+          reasonCode,
+          correlationKey,
+          errorName: (error as { name?: string })?.name ?? "Error",
+          errorMessage: String((error as { message?: string })?.message ?? "unknown"),
+        });
+      };
       try {
-        const { siteId, siteVersionId, assetPath } = await ctx.params;
-        const requestedUrl = req.url;
-        const requestedPathRaw = (assetPath ?? []).join("/");
-        const normalizedPath = normalizeAssetPath(assetPath);
-        const correlationKey = buildCorrelationKey({ siteId, siteVersionId, normalizedRequestedPath: normalizedPath });
+        const params = await ctx.params;
+        siteId = params.siteId;
+        siteVersionId = params.siteVersionId;
+        const assetPath = params.assetPath;
+        requestedUrl = req.url;
+        requestedPathRaw = (assetPath ?? []).join("/");
+        normalizedPath = normalizeAssetPath(assetPath);
+        correlationKey = buildCorrelationKey({ siteId, siteVersionId, normalizedRequestedPath: normalizedPath });
         const emitRouteDiagnostic = (code: string, details: { reasonCode: string; artifactId?: string | null; lookupResult?: string | null }) => {
           console.info(`[preview-runtime] ${code}`, {
             code,
@@ -143,7 +166,25 @@ export function createPreviewAssetsRouteHandlers(overrides: Partial<PreviewAsset
           });
         }
 
-        const artifact = (await deps.getRawImportedSiteArtifact(siteVersionId)) ?? (await deps.getRawTemplateSiteArtifact(siteVersionId));
+        let artifact: Awaited<ReturnType<typeof deps.getRawImportedSiteArtifact>> | Awaited<ReturnType<typeof deps.getRawTemplateSiteArtifact>> | null =
+          null;
+        try {
+          artifact = (await deps.getRawImportedSiteArtifact(siteVersionId)) ?? (await deps.getRawTemplateSiteArtifact(siteVersionId));
+        } catch (error) {
+          emitRouteDiagnostic("PREVIEW_ASSET_ROUTE_DB_LOOKUP_ERROR", {
+            artifactId: null,
+            lookupResult: "artifact_lookup_failed",
+            reasonCode: "artifact_lookup_failed",
+          });
+          emitFallbackInternalDiagnostic("PREVIEW_ASSET_ROUTE_DB_LOOKUP_ERROR", "artifact_lookup_failed", error);
+          return new Response("Internal server error", {
+            status: 500,
+            headers: {
+              "content-type": "text/plain; charset=utf-8",
+              "x-gnr8-preview-asset-diagnostic": "PREVIEW_ASSET_ROUTE_DB_LOOKUP_ERROR",
+            },
+          });
+        }
         if (!artifact) {
           emitRouteDiagnostic("PREVIEW_ASSET_ROUTE_ARTIFACT_MISMATCH", {
             artifactId: null,
@@ -194,11 +235,28 @@ export function createPreviewAssetsRouteHandlers(overrides: Partial<PreviewAsset
         let resolvedPath: string | null = null;
         let asset: Awaited<ReturnType<typeof deps.getRawTemplateSiteAsset>> | null = null;
         for (const candidate of lookupCandidates) {
-          const maybeAsset = await deps.getRawTemplateSiteAsset({
-            siteVersionId,
-            artifactId: artifact.id,
-            filePath: candidate,
-          });
+          let maybeAsset: Awaited<ReturnType<typeof deps.getRawTemplateSiteAsset>> | null = null;
+          try {
+            maybeAsset = await deps.getRawTemplateSiteAsset({
+              siteVersionId,
+              artifactId: artifact.id,
+              filePath: candidate,
+            });
+          } catch (error) {
+            emitRouteDiagnostic("PREVIEW_ASSET_ROUTE_DB_LOOKUP_ERROR", {
+              artifactId: artifact.id,
+              lookupResult: candidate,
+              reasonCode: "asset_lookup_failed",
+            });
+            emitFallbackInternalDiagnostic("PREVIEW_ASSET_ROUTE_DB_LOOKUP_ERROR", "asset_lookup_failed", error);
+            return new Response("Internal server error", {
+              status: 500,
+              headers: {
+                "content-type": "text/plain; charset=utf-8",
+                "x-gnr8-preview-asset-diagnostic": "PREVIEW_ASSET_ROUTE_DB_LOOKUP_ERROR",
+              },
+            });
+          }
           if (!maybeAsset) continue;
           resolvedPath = candidate;
           asset = maybeAsset;
@@ -207,11 +265,28 @@ export function createPreviewAssetsRouteHandlers(overrides: Partial<PreviewAsset
         if (!asset) {
           const fallbackPath = resolveUploadVariantFallbackPath(normalizedPath);
           if (fallbackPath) {
-            const fallbackAsset = await deps.getRawTemplateSiteAsset({
-              siteVersionId,
-              artifactId: artifact.id,
-              filePath: fallbackPath,
-            });
+            let fallbackAsset: Awaited<ReturnType<typeof deps.getRawTemplateSiteAsset>> | null = null;
+            try {
+              fallbackAsset = await deps.getRawTemplateSiteAsset({
+                siteVersionId,
+                artifactId: artifact.id,
+                filePath: fallbackPath,
+              });
+            } catch (error) {
+              emitRouteDiagnostic("PREVIEW_ASSET_ROUTE_DB_LOOKUP_ERROR", {
+                artifactId: artifact.id,
+                lookupResult: fallbackPath,
+                reasonCode: "asset_lookup_failed",
+              });
+              emitFallbackInternalDiagnostic("PREVIEW_ASSET_ROUTE_DB_LOOKUP_ERROR", "asset_lookup_failed", error);
+              return new Response("Internal server error", {
+                status: 500,
+                headers: {
+                  "content-type": "text/plain; charset=utf-8",
+                  "x-gnr8-preview-asset-diagnostic": "PREVIEW_ASSET_ROUTE_DB_LOOKUP_ERROR",
+                },
+              });
+            }
             if (fallbackAsset) {
               console.info("[preview-runtime] CONTENT_ASSET_VARIANT_FALLBACK_USED", {
                 siteId,
@@ -298,17 +373,36 @@ export function createPreviewAssetsRouteHandlers(overrides: Partial<PreviewAsset
 
         const effectivePath = resolvedPath ?? normalizedPath;
         const isCssAsset = effectivePath.toLowerCase().endsWith(".css");
-        const responseBody =
-          isCssAsset
-            ? new TextEncoder().encode(
-                rewriteRawTemplateCssForRuntime({
-                  css: asset.bytes.toString("utf8"),
-                  siteId,
-                  siteVersionId,
-                  assetFilePath: effectivePath,
-                }),
-              )
-            : new Uint8Array(asset.bytes);
+        let responseBody: BodyInit;
+        try {
+          const binaryBytes = new Uint8Array(asset.bytes);
+          const binaryBody = binaryBytes.buffer.slice(
+            binaryBytes.byteOffset,
+            binaryBytes.byteOffset + binaryBytes.byteLength,
+          ) as ArrayBuffer;
+          responseBody = isCssAsset
+            ? rewriteRawTemplateCssForRuntime({
+                css: asset.bytes.toString("utf8"),
+                siteId,
+                siteVersionId,
+                assetFilePath: effectivePath,
+              })
+            : binaryBody;
+        } catch (error) {
+          emitRouteDiagnostic("PREVIEW_ASSET_ROUTE_FILE_READ_ERROR", {
+            artifactId: artifact.id,
+            lookupResult: effectivePath,
+            reasonCode: "asset_bytes_read_failed",
+          });
+          emitFallbackInternalDiagnostic("PREVIEW_ASSET_ROUTE_FILE_READ_ERROR", "asset_bytes_read_failed", error);
+          return new Response("Internal server error", {
+            status: 500,
+            headers: {
+              "content-type": "text/plain; charset=utf-8",
+              "x-gnr8-preview-asset-diagnostic": "PREVIEW_ASSET_ROUTE_FILE_READ_ERROR",
+            },
+          });
+        }
         const contentType = resolveAssetMediaType({ filePath: effectivePath, mediaType: asset.mediaType });
 
         const headers: Record<string, string> = {
@@ -335,9 +429,13 @@ export function createPreviewAssetsRouteHandlers(overrides: Partial<PreviewAsset
             headers: { "content-type": "text/plain; charset=utf-8" },
           });
         }
+        emitFallbackInternalDiagnostic("PREVIEW_ASSET_ROUTE_INTERNAL_ERROR", "unhandled_exception", error);
         return new Response("Internal server error", {
           status: 500,
-          headers: { "content-type": "text/plain; charset=utf-8" },
+          headers: {
+            "content-type": "text/plain; charset=utf-8",
+            "x-gnr8-preview-asset-diagnostic": "PREVIEW_ASSET_ROUTE_INTERNAL_ERROR",
+          },
         });
       }
     },

@@ -450,6 +450,56 @@ function buildPreviewAssetRouteUrl(input: { siteId: string; siteVersionId: strin
   return `/api/gnr8/runtime/preview-assets/${encodedSiteId}/${encodedSiteVersionId}/${encodedPath}`;
 }
 
+function inspectAndNormalizePreviewAssetUrl(input: {
+  value: string;
+  siteId: string;
+  siteVersionId: string;
+}): {
+  isPreviewAssetUrl: boolean;
+  isDoublePrefixed: boolean;
+  normalizedValue: string;
+  normalizedAssetPath: string | null;
+} {
+  const raw = input.value.trim();
+  if (!raw) return { isPreviewAssetUrl: false, isDoublePrefixed: false, normalizedValue: input.value, normalizedAssetPath: null };
+  const routePrefix = `/api/gnr8/runtime/preview-assets/${encodeURIComponent(input.siteId)}/${encodeURIComponent(input.siteVersionId)}/`;
+  const routePrefixNoLeadingSlash = routePrefix.replace(/^\//, "");
+  const absolutePrefixPattern = new RegExp(
+    `^https?:\\/\\/[^/]+${routePrefix.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`,
+    "i",
+  );
+  const routeStartIndex = raw.indexOf(routePrefix);
+  if (!(raw.startsWith(routePrefix) || absolutePrefixPattern.test(raw) || routeStartIndex >= 0)) {
+    return { isPreviewAssetUrl: false, isDoublePrefixed: false, normalizedValue: input.value, normalizedAssetPath: null };
+  }
+
+  const cutFrom = routeStartIndex >= 0 ? routeStartIndex : 0;
+  const routeAndPath = raw.slice(cutFrom);
+  const firstPayload = routeAndPath.slice(routePrefix.length);
+  const nestedIndex = firstPayload.indexOf(routePrefix);
+  const nestedNoSlashIndex = firstPayload.indexOf(routePrefixNoLeadingSlash);
+  const normalizedPayload =
+    nestedIndex >= 0
+      ? firstPayload.slice(nestedIndex + routePrefix.length)
+      : nestedNoSlashIndex >= 0
+        ? firstPayload.slice(nestedNoSlashIndex + routePrefixNoLeadingSlash.length)
+        : firstPayload;
+  const normalizedValue = `${routePrefix}${normalizedPayload}`.replace(/\/{2,}/g, "/");
+  let decodedPayload = normalizedPayload;
+  try {
+    decodedPayload = decodeURIComponent(normalizedPayload);
+  } catch {
+    decodedPayload = normalizedPayload;
+  }
+  const normalizedAssetPath = normalizeSnapshotLocalTargetPath(decodedPayload);
+  return {
+    isPreviewAssetUrl: true,
+    isDoublePrefixed: nestedIndex >= 0 || nestedNoSlashIndex >= 0,
+    normalizedValue,
+    normalizedAssetPath,
+  };
+}
+
 function buildPreviewRewriteCorrelationKey(input: { originalValue: string; normalizedLocalPath: string | null }): string {
   return sha256Hex(`${input.originalValue}::${input.normalizedLocalPath ?? "missing"}`).slice(0, 16);
 }
@@ -3893,6 +3943,38 @@ export async function importPublicSinglePageUrlToSnapshot(input: {
         if (attribute === "srcset" || attribute === "data-srcset") {
           const tokens = parseSrcsetTokens(rawRef);
           const rewrittenTokens = tokens.map((token) => {
+            const previewInspection =
+              runtimeIdsAvailable && (tag === "img" || tag === "source")
+                ? inspectAndNormalizePreviewAssetUrl({
+                    value: token.url,
+                    siteId: runtimeSiteId!,
+                    siteVersionId: runtimeSiteVersionId!,
+                  })
+                : null;
+            if (previewInspection?.isPreviewAssetUrl) {
+              if (previewInspection.isDoublePrefixed) {
+                diagnostics.push(
+                  createDiagnostic({
+                    severity: "info",
+                    code: "PREVIEW_HTML_IMAGE_REWRITE_APPLIED",
+                    message: "Preview HTML image rewrite normalized an already double-prefixed preview-assets URL.",
+                    targetUrl: token.url,
+                    details: { reasonCode: "DOUBLE_PREFIX_NORMALIZED", normalizedValue: previewInspection.normalizedValue },
+                  }),
+                );
+                return { url: previewInspection.normalizedValue, descriptor: token.descriptor };
+              }
+              diagnostics.push(
+                createDiagnostic({
+                  severity: "info",
+                  code: "PREVIEW_HTML_IMAGE_REWRITE_SKIPPED",
+                  message: "Preview HTML image rewrite skipped because URL already targets preview-assets route.",
+                  targetUrl: token.url,
+                  details: { reasonCode: "ALREADY_PREVIEW_ASSET_URL" },
+                }),
+              );
+              return token;
+            }
             const resolvedUrl = resolveAssetUrl({
               rawRef: token.url,
               baseUrl: normalizedUrl,
@@ -3952,6 +4034,39 @@ export async function importPublicSinglePageUrlToSnapshot(input: {
         const localPath = resolvedUrl ? localPathByUrl.get(resolvedUrl) ?? null : null;
         const outcome = resolvedUrl ? fetchOutcomeByUrl.get(resolvedUrl) : null;
         const rewriteEligibleLocalPath = localPath && outcome?.fetchStatus === "fetched" ? localPath : null;
+        const previewInspection =
+          runtimeIdsAvailable && (tag === "img" || tag === "source")
+            ? inspectAndNormalizePreviewAssetUrl({
+                value: rawRef,
+                siteId: runtimeSiteId!,
+                siteVersionId: runtimeSiteVersionId!,
+              })
+            : null;
+        if (previewInspection?.isPreviewAssetUrl) {
+          if (previewInspection.isDoublePrefixed) {
+            diagnostics.push(
+              createDiagnostic({
+                severity: "info",
+                code: "PREVIEW_HTML_IMAGE_REWRITE_APPLIED",
+                message: "Preview HTML image rewrite normalized an already double-prefixed preview-assets URL.",
+                targetUrl: rawRef,
+                details: { reasonCode: "DOUBLE_PREFIX_NORMALIZED", normalizedValue: previewInspection.normalizedValue },
+              }),
+            );
+            setAttr(node, attribute, previewInspection.normalizedValue);
+          } else {
+            diagnostics.push(
+              createDiagnostic({
+                severity: "info",
+                code: "PREVIEW_HTML_IMAGE_REWRITE_SKIPPED",
+                message: "Preview HTML image rewrite skipped because URL already targets preview-assets route.",
+                targetUrl: rawRef,
+                details: { reasonCode: "ALREADY_PREVIEW_ASSET_URL" },
+              }),
+            );
+          }
+          continue;
+        }
         if (rewriteEligibleLocalPath) {
           const rewrittenValue =
             (tag === "img" || tag === "source") && runtimeIdsAvailable
@@ -3993,6 +4108,39 @@ export async function importPublicSinglePageUrlToSnapshot(input: {
       }
 
       if (tag === "img") {
+        const currentSrc = getAttr(node, "src");
+        if (currentSrc && runtimeIdsAvailable) {
+          const previewInspection = inspectAndNormalizePreviewAssetUrl({
+            value: currentSrc,
+            siteId: runtimeSiteId!,
+            siteVersionId: runtimeSiteVersionId!,
+          });
+          if (previewInspection.isPreviewAssetUrl) {
+            if (previewInspection.isDoublePrefixed) {
+              diagnostics.push(
+                createDiagnostic({
+                  severity: "info",
+                  code: "PREVIEW_HTML_IMAGE_REWRITE_APPLIED",
+                  message: "Preview HTML image rewrite normalized an already double-prefixed preview-assets URL.",
+                  targetUrl: currentSrc,
+                  details: { reasonCode: "DOUBLE_PREFIX_NORMALIZED", normalizedValue: previewInspection.normalizedValue },
+                }),
+              );
+              setAttr(node, "src", previewInspection.normalizedValue);
+            } else {
+              diagnostics.push(
+                createDiagnostic({
+                  severity: "info",
+                  code: "PREVIEW_HTML_IMAGE_REWRITE_SKIPPED",
+                  message: "Preview HTML image rewrite skipped because URL already targets preview-assets route.",
+                  targetUrl: currentSrc,
+                  details: { reasonCode: "ALREADY_PREVIEW_ASSET_URL" },
+                }),
+              );
+            }
+            return;
+          }
+        }
         const promotedLocalPath = choosePromotedImageLocalPath({
           imgNode: node,
           ancestors,

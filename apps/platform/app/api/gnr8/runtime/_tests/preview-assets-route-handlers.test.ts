@@ -449,6 +449,122 @@ test("preview assets route returns deterministic 404 for missing upload asset", 
   assert.equal(response.headers.get("x-gnr8-preview-asset-diagnostic"), "PREVIEW_ASSET_ROUTE_FILE_NOT_FOUND");
 });
 
+test("preview assets route returns DB lookup diagnostic on asset query failure", async () => {
+  const handlers = createPreviewAssetsRouteHandlers({
+    resolveDomainSiteVersionForHost: async () =>
+      ({
+        outcome: "domain_hit",
+        host: "beauty-clinic.pasadenagenerator.com",
+        siteId: "site_1",
+        siteVersionId: "sv_1",
+        domain: "beauty-clinic.pasadenagenerator.com",
+        status: "active",
+        bindingId: "binding_1",
+      }) as never,
+    resolveAgencyIdForSiteVersion: async () => "agency_1",
+    requireAgencyActionContext: async () => ({ actorMode: "agency_member", agencyId: "agency_1" } as never),
+    getRawImportedSiteArtifact: async () =>
+      ({
+        id: "artifact_imported_1",
+        artifactType: "raw_imported_site",
+        siteId: "site_1",
+        siteVersionId: "sv_1",
+        entryHtmlPath: "index.html",
+        assetBasePath: ".",
+        fileMap: {},
+        metadata: {
+          sourceUrl: "https://example.com",
+          finalUrl: "https://www.example.com",
+          htmlByteLength: 123,
+          diagnostics: { codes: [] },
+          assetSummary: { persistedAssetCount: 1, externalFallbackAssetCount: 0 },
+        },
+        createdAt: "2026-05-06T00:00:00.000Z",
+      }) as never,
+    getRawTemplateSiteArtifact: async () => null,
+    getRawTemplateSiteAsset: async () => {
+      throw new Error("db down");
+    },
+  });
+
+  const response = await handlers.GET(
+    new Request("https://beauty-clinic.pasadenagenerator.com/api/gnr8/runtime/preview-assets/site_1/sv_1/uploads/logo.png", {
+      headers: { host: "beauty-clinic.pasadenagenerator.com" },
+    }),
+    {
+      params: Promise.resolve({
+        siteId: "site_1",
+        siteVersionId: "sv_1",
+        assetPath: ["uploads", "logo.png"],
+      }),
+    },
+  );
+
+  assert.equal(response.status, 500);
+  assert.equal(response.headers.get("x-gnr8-preview-asset-diagnostic"), "PREVIEW_ASSET_ROUTE_DB_LOOKUP_ERROR");
+});
+
+test("preview assets route returns file read diagnostic when bytes access fails", async () => {
+  const brokenAsset = {
+    mediaType: "image/png",
+    sizeBytes: 4,
+    sha256: "abc",
+    get bytes() {
+      throw new Error("cannot read bytes");
+    },
+  };
+  const handlers = createPreviewAssetsRouteHandlers({
+    resolveDomainSiteVersionForHost: async () =>
+      ({
+        outcome: "domain_hit",
+        host: "beauty-clinic.pasadenagenerator.com",
+        siteId: "site_1",
+        siteVersionId: "sv_1",
+        domain: "beauty-clinic.pasadenagenerator.com",
+        status: "active",
+        bindingId: "binding_1",
+      }) as never,
+    resolveAgencyIdForSiteVersion: async () => "agency_1",
+    requireAgencyActionContext: async () => ({ actorMode: "agency_member", agencyId: "agency_1" } as never),
+    getRawImportedSiteArtifact: async () =>
+      ({
+        id: "artifact_imported_1",
+        artifactType: "raw_imported_site",
+        siteId: "site_1",
+        siteVersionId: "sv_1",
+        entryHtmlPath: "index.html",
+        assetBasePath: ".",
+        fileMap: {},
+        metadata: {
+          sourceUrl: "https://example.com",
+          finalUrl: "https://www.example.com",
+          htmlByteLength: 123,
+          diagnostics: { codes: [] },
+          assetSummary: { persistedAssetCount: 1, externalFallbackAssetCount: 0 },
+        },
+        createdAt: "2026-05-06T00:00:00.000Z",
+      }) as never,
+    getRawTemplateSiteArtifact: async () => null,
+    getRawTemplateSiteAsset: async () => brokenAsset as never,
+  });
+
+  const response = await handlers.GET(
+    new Request("https://beauty-clinic.pasadenagenerator.com/api/gnr8/runtime/preview-assets/site_1/sv_1/uploads/logo.png", {
+      headers: { host: "beauty-clinic.pasadenagenerator.com" },
+    }),
+    {
+      params: Promise.resolve({
+        siteId: "site_1",
+        siteVersionId: "sv_1",
+        assetPath: ["uploads", "logo.png"],
+      }),
+    },
+  );
+
+  assert.equal(response.status, 500);
+  assert.equal(response.headers.get("x-gnr8-preview-asset-diagnostic"), "PREVIEW_ASSET_ROUTE_FILE_READ_ERROR");
+});
+
 test("preview assets route falls back uploads variant path to original upload path", async () => {
   const loggedEvents: string[] = [];
   const originalInfo = console.info;
