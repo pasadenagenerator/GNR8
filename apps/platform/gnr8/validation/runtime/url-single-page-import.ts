@@ -113,6 +113,11 @@ export type UrlImportDiagnosticCode =
   | "RAW_IMPORT_HTML_IMAGE_CANDIDATE_SKIPPED"
   | "RAW_IMPORT_HTML_IMAGE_ASSET_PERSISTED"
   | "RAW_IMPORT_HTML_IMAGE_ASSET_NOT_PERSISTED"
+  | "PREVIEW_HTML_IMAGE_REWRITE_STARTED"
+  | "PREVIEW_HTML_IMAGE_REWRITE_APPLIED"
+  | "PREVIEW_HTML_IMAGE_REWRITE_SKIPPED"
+  | "PREVIEW_HTML_IMAGE_REWRITE_RUNTIME_IDS_MISSING"
+  | "PREVIEW_HTML_IMAGE_REWRITE_FILEMAP_MISS"
   | "ASSET_FETCH_UNSUPPORTED_SCHEME"
   | "ASSET_COLLISION_RESOLVED"
   | "PRIMARY_STYLESHEET_DETECTED"
@@ -432,6 +437,21 @@ function sha256Hex(input: string | Uint8Array): string {
 
 function toPosixPath(p: string): string {
   return p.replaceAll(path.sep, "/");
+}
+
+function buildPreviewAssetRouteUrl(input: { siteId: string; siteVersionId: string; normalizedLocalPath: string }): string {
+  const encodedSiteId = encodeURIComponent(input.siteId);
+  const encodedSiteVersionId = encodeURIComponent(input.siteVersionId);
+  const encodedPath = toPosixPath(input.normalizedLocalPath)
+    .split("/")
+    .filter(Boolean)
+    .map((segment) => encodeURIComponent(segment))
+    .join("/");
+  return `/api/gnr8/runtime/preview-assets/${encodedSiteId}/${encodedSiteVersionId}/${encodedPath}`;
+}
+
+function buildPreviewRewriteCorrelationKey(input: { originalValue: string; normalizedLocalPath: string | null }): string {
+  return sha256Hex(`${input.originalValue}::${input.normalizedLocalPath ?? "missing"}`).slice(0, 16);
 }
 
 function normalizeSnapshotLocalTargetPath(rawPath: string): string | null {
@@ -2503,6 +2523,8 @@ export async function importPublicSinglePageUrlToSnapshot(input: {
   snapshotRootDirAbs?: string;
   snapshotRunId?: string;
   requestId?: string;
+  siteId?: string;
+  siteVersionId?: string;
   fetchImpl?: FetchLike;
   renderedCaptureExecutor?: RenderedCaptureExecutor;
   renderedCaptureWorkerClient?: RenderedCaptureWorkerClient;
@@ -3374,6 +3396,9 @@ export async function importPublicSinglePageUrlToSnapshot(input: {
 
   let rewrittenHtml = sourceSelection.selectedHtml;
   const imageAssetDiscoveryEntries = new Map<string, HtmlImageAssetDiscoveryEntry>();
+  const runtimeSiteId = typeof input.siteId === "string" && input.siteId.trim() ? input.siteId.trim() : null;
+  const runtimeSiteVersionId = typeof input.siteVersionId === "string" && input.siteVersionId.trim() ? input.siteVersionId.trim() : null;
+  const runtimeIdsAvailable = Boolean(runtimeSiteId && runtimeSiteVersionId);
 
   if (!hasFatal(diagnostics) && rewrittenHtml.trim().length > 0) {
     diagnostics.push(
@@ -3876,7 +3901,17 @@ export async function importPublicSinglePageUrlToSnapshot(input: {
             });
             const localPath = resolvedUrl ? localPathByUrl.get(resolvedUrl) : null;
             const outcome = resolvedUrl ? fetchOutcomeByUrl.get(resolvedUrl) : null;
-            if (localPath && outcome?.fetchStatus === "fetched") return { url: `/${toPosixPath(localPath)}`, descriptor: token.descriptor };
+            if (localPath && outcome?.fetchStatus === "fetched") {
+              const rewrittenSrcsetUrl =
+                (tag === "img" || tag === "source") && runtimeIdsAvailable
+                  ? buildPreviewAssetRouteUrl({
+                      siteId: runtimeSiteId!,
+                      siteVersionId: runtimeSiteVersionId!,
+                      normalizedLocalPath: localPath,
+                    })
+                  : `/${toPosixPath(localPath)}`;
+              return { url: rewrittenSrcsetUrl, descriptor: token.descriptor };
+            }
             return token;
           });
           const rewritten = buildSrcsetValue(rewrittenTokens);
@@ -3917,10 +3952,29 @@ export async function importPublicSinglePageUrlToSnapshot(input: {
         const localPath = resolvedUrl ? localPathByUrl.get(resolvedUrl) ?? null : null;
         const outcome = resolvedUrl ? fetchOutcomeByUrl.get(resolvedUrl) : null;
         const rewriteEligibleLocalPath = localPath && outcome?.fetchStatus === "fetched" ? localPath : null;
-        if (rewriteEligibleLocalPath) setAttr(node, attribute, `/${toPosixPath(rewriteEligibleLocalPath)}`);
+        if (rewriteEligibleLocalPath) {
+          const rewrittenValue =
+            (tag === "img" || tag === "source") && runtimeIdsAvailable
+              ? buildPreviewAssetRouteUrl({
+                  siteId: runtimeSiteId!,
+                  siteVersionId: runtimeSiteVersionId!,
+                  normalizedLocalPath: rewriteEligibleLocalPath,
+                })
+              : `/${toPosixPath(rewriteEligibleLocalPath)}`;
+          setAttr(node, attribute, rewrittenValue);
+        }
         if (tag === "img" && attribute !== "src" && rewriteEligibleLocalPath) {
           const imgSrc = getAttr(node, "src");
-          if (!imgSrc || !imgSrc.trim()) setAttr(node, "src", `/${toPosixPath(rewriteEligibleLocalPath)}`);
+          if (!imgSrc || !imgSrc.trim()) {
+            const rewrittenImgSrc = runtimeIdsAvailable
+              ? buildPreviewAssetRouteUrl({
+                  siteId: runtimeSiteId!,
+                  siteVersionId: runtimeSiteVersionId!,
+                  normalizedLocalPath: rewriteEligibleLocalPath,
+                })
+              : `/${toPosixPath(rewriteEligibleLocalPath)}`;
+            setAttr(node, "src", rewrittenImgSrc);
+          }
         }
 
         fetchManifest.push({
@@ -3946,7 +4000,16 @@ export async function importPublicSinglePageUrlToSnapshot(input: {
           localPathByUrl,
           fetchOutcomeByUrl,
         });
-        if (promotedLocalPath) setAttr(node, "src", `/${toPosixPath(promotedLocalPath)}`);
+        if (promotedLocalPath) {
+          const rewrittenPromotedSrc = runtimeIdsAvailable
+            ? buildPreviewAssetRouteUrl({
+                siteId: runtimeSiteId!,
+                siteVersionId: runtimeSiteVersionId!,
+                normalizedLocalPath: promotedLocalPath,
+              })
+            : `/${toPosixPath(promotedLocalPath)}`;
+          setAttr(node, "src", rewrittenPromotedSrc);
+        }
       }
     });
 
@@ -3976,6 +4039,139 @@ export async function importPublicSinglePageUrlToSnapshot(input: {
 
   fs.writeFileSync(entryHtmlPathAbs, rewrittenHtml, "utf8");
   writeJsonStable(path.resolve(snapshotRootDirAbs, "fixture.json"), fixtureSpec as unknown as JsonValue);
+
+  const previewAssetResolutionEntries = [...imageAssetDiscoveryEntries.values()]
+    .sort((a, b) => a.key.localeCompare(b.key))
+    .map((entry) => {
+      const normalizedLookupPath = entry.normalizedLocalPath;
+      const fileFound = entry.fetchStatus === "fetched" && entry.persisted;
+      const hasLookupPath = Boolean(normalizedLookupPath);
+      const routeStatus = fileFound ? 200 : 404;
+      const correlationKey = buildPreviewRewriteCorrelationKey({
+        originalValue: entry.originalValue,
+        normalizedLocalPath: normalizedLookupPath,
+      });
+      const defaultSnapshotLocalUrl = normalizedLookupPath ? `/${toPosixPath(normalizedLookupPath)}` : null;
+      const rewrittenPreviewUrl =
+        normalizedLookupPath && runtimeIdsAvailable
+          ? buildPreviewAssetRouteUrl({
+              siteId: runtimeSiteId!,
+              siteVersionId: runtimeSiteVersionId!,
+              normalizedLocalPath: normalizedLookupPath,
+            })
+          : defaultSnapshotLocalUrl;
+      let rewriteMode: "preview_assets_route" | "snapshot_local" | "skipped" = "skipped";
+      let reasonCode = "missing_lookup_path";
+      if (!hasLookupPath) {
+        rewriteMode = "skipped";
+        reasonCode = "missing_lookup_path";
+      } else if (!fileFound) {
+        rewriteMode = "skipped";
+        reasonCode = entry.fetchStatus === "fetch_failed" ? "fetch_failed" : "unsupported";
+      } else if (runtimeIdsAvailable) {
+        rewriteMode = "preview_assets_route";
+        reasonCode = "ok_preview_assets_route";
+      } else {
+        rewriteMode = "snapshot_local";
+        reasonCode = "RUNTIME_IDS_MISSING_SNAPSHOT_LOCAL_PREVIEW";
+      }
+      const rewriteDiagnosticDetails = {
+        originalValue: entry.originalValue,
+        normalizedLocalPath: normalizedLookupPath,
+        persisted: entry.persisted,
+        fileMapMatched: fileFound,
+        siteId: runtimeSiteId,
+        siteVersionId: runtimeSiteVersionId,
+        rewrittenPreviewUrl,
+        reasonCode,
+        correlationKey,
+      } as JsonValue;
+      diagnostics.push(
+        createDiagnostic({
+          severity: "info",
+          code: "PREVIEW_HTML_IMAGE_REWRITE_STARTED",
+          message: "Preview HTML image rewrite decision started.",
+          targetUrl: entry.resolvedUrl,
+          details: rewriteDiagnosticDetails,
+        }),
+      );
+      if (!hasLookupPath) {
+        diagnostics.push(
+          createDiagnostic({
+            severity: "warning",
+            code: "PREVIEW_HTML_IMAGE_REWRITE_SKIPPED",
+            message: "Preview HTML image rewrite skipped because normalized local path is unavailable.",
+            targetUrl: entry.resolvedUrl,
+            details: { ...(rewriteDiagnosticDetails as Record<string, JsonValue>), reasonCode: "MISSING_NORMALIZED_LOCAL_PATH" } as JsonValue,
+          }),
+        );
+      } else if (!fileFound) {
+        diagnostics.push(
+          createDiagnostic({
+            severity: "warning",
+            code: "PREVIEW_HTML_IMAGE_REWRITE_FILEMAP_MISS",
+            message: "Preview HTML image rewrite skipped because persisted file map lookup did not match.",
+            targetUrl: entry.resolvedUrl,
+            details: { ...(rewriteDiagnosticDetails as Record<string, JsonValue>), reasonCode: "FILEMAP_MISS" } as JsonValue,
+          }),
+        );
+        diagnostics.push(
+          createDiagnostic({
+            severity: "warning",
+            code: "PREVIEW_HTML_IMAGE_REWRITE_SKIPPED",
+            message: "Preview HTML image rewrite skipped because persisted lookup failed.",
+            targetUrl: entry.resolvedUrl,
+            details: { ...(rewriteDiagnosticDetails as Record<string, JsonValue>), reasonCode: "PERSISTED_LOOKUP_FAILED" } as JsonValue,
+          }),
+        );
+      } else if (!runtimeIdsAvailable) {
+        diagnostics.push(
+          createDiagnostic({
+            severity: "warning",
+            code: "PREVIEW_HTML_IMAGE_REWRITE_RUNTIME_IDS_MISSING",
+            message: "Preview HTML image rewrite could not generate preview-assets route because runtime identifiers are missing.",
+            targetUrl: entry.resolvedUrl,
+            details: {
+              ...(rewriteDiagnosticDetails as Record<string, JsonValue>),
+              reasonCode: "RUNTIME_IDS_MISSING_SNAPSHOT_LOCAL_PREVIEW",
+            } as JsonValue,
+          }),
+        );
+        diagnostics.push(
+          createDiagnostic({
+            severity: "info",
+            code: "PREVIEW_HTML_IMAGE_REWRITE_SKIPPED",
+            message: "Preview HTML image rewrite remained snapshot-local.",
+            targetUrl: entry.resolvedUrl,
+            details: rewriteDiagnosticDetails,
+          }),
+        );
+      } else {
+        diagnostics.push(
+          createDiagnostic({
+            severity: "info",
+            code: "PREVIEW_HTML_IMAGE_REWRITE_APPLIED",
+            message: "Preview HTML image rewrite applied preview-assets route URL.",
+            targetUrl: entry.resolvedUrl,
+            details: rewriteDiagnosticDetails,
+          }),
+        );
+      }
+      return {
+        originalHtmlValue: entry.originalValue,
+        rewrittenPreviewUrl,
+        normalizedLookupPath,
+        artifactIdUsedForLookup: null,
+        persisted: entry.persisted,
+        fileMapMatched: fileFound,
+        siteId: runtimeSiteId,
+        siteVersionId: runtimeSiteVersionId,
+        rewriteMode,
+        fileFound,
+        routeStatus,
+        reasonCode,
+      };
+    });
 
   const sortedDiagnostics = sortDiagnostics(diagnostics);
   const sortedManifest = [...fetchManifest].sort((a, b) => {
@@ -4011,31 +4207,7 @@ export async function importPublicSinglePageUrlToSnapshot(input: {
   );
   writeJsonStable(
     path.resolve(snapshotRootDirAbs, "preview-asset-resolution.json"),
-    [...imageAssetDiscoveryEntries.values()]
-      .sort((a, b) => a.key.localeCompare(b.key))
-      .map((entry) => {
-        const normalizedLookupPath = entry.normalizedLocalPath;
-        const fileFound = entry.fetchStatus === "fetched" && entry.persisted;
-        const hasLookupPath = Boolean(normalizedLookupPath);
-        const routeStatus = fileFound ? 200 : 404;
-        const reasonCode = !hasLookupPath
-          ? "missing_lookup_path"
-          : fileFound
-            ? "ok"
-            : entry.fetchStatus === "fetch_failed"
-              ? "fetch_failed"
-              : "unsupported";
-        return {
-          originalHtmlValue: entry.originalValue,
-          rewrittenPreviewUrl: normalizedLookupPath ? `/${toPosixPath(normalizedLookupPath)}` : null,
-          normalizedLookupPath,
-          artifactIdUsedForLookup: null,
-          fileMapMatched: fileFound,
-          fileFound,
-          routeStatus,
-          reasonCode,
-        };
-      }) as unknown as JsonValue,
+    previewAssetResolutionEntries as unknown as JsonValue,
   );
   writeJsonStable(path.resolve(snapshotStableRootDirAbs, "latest-run.json"), {
     kind: "url_import_latest_run_v1",

@@ -885,6 +885,71 @@ test("raw html import discovers and persists img src logo under normalized origi
   assert.equal(resolutionHit.routeStatus, 200);
 });
 
+test("persisted img asset rewrites to preview-assets URL when runtime ids are present", async () => {
+  const tmpRoot = await fs.promises.mkdtemp(path.join(os.tmpdir(), "gnr8-image-runtime-rewrite-"));
+  const logoPath = "/uploads/VmPFXCum/236x0_247x0/ROBOPLAST-znak-02-134x136px.png";
+  const html = `<!doctype html><html><body><main><h1>Roboplast</h1><img src="${logoPath}" alt="logo"></main></body></html>`;
+  const snapshot = await importPublicSinglePageUrlToSnapshot({
+    sourceUrl: "https://www.roboplast.si/",
+    snapshotRootDirAbs: tmpRoot,
+    siteId: "site_1",
+    siteVersionId: "sv_1",
+    renderedCaptureWorkerClient: unsupportedWorkerClient(),
+    fetchImpl: async (url) => {
+      if (String(url).includes("ROBOPLAST-znak-02-134x136px.png")) {
+        return new Response("png", { status: 200, headers: { "content-type": "image/png" } });
+      }
+      return makeHtmlResponse(html);
+    },
+  });
+  const writtenHtml = await fs.promises.readFile(snapshot.entryHtmlPathAbs, "utf8");
+  assert.equal(
+    writtenHtml.includes(
+      "/api/gnr8/runtime/preview-assets/site_1/sv_1/uploads/VmPFXCum/236x0_247x0/ROBOPLAST-znak-02-134x136px.png",
+    ),
+    true,
+  );
+  const resolution = JSON.parse(
+    await fs.promises.readFile(path.resolve(snapshot.snapshotRootDirAbs, "preview-asset-resolution.json"), "utf8"),
+  ) as Array<Record<string, unknown>>;
+  const resolutionHit = resolution.find((entry) => String(entry.originalHtmlValue).includes("ROBOPLAST-znak-02-134x136px.png"));
+  assert.ok(resolutionHit);
+  assert.equal(resolutionHit?.rewriteMode, "preview_assets_route");
+  assert.equal(resolutionHit?.siteId, "site_1");
+  assert.equal(resolutionHit?.siteVersionId, "sv_1");
+});
+
+test("persisted img asset records runtime ids missing when absent", async () => {
+  const tmpRoot = await fs.promises.mkdtemp(path.join(os.tmpdir(), "gnr8-image-runtime-missing-"));
+  const logoPath = "/uploads/VmPFXCum/236x0_247x0/ROBOPLAST-znak-02-134x136px.png";
+  const html = `<!doctype html><html><body><main><h1>Roboplast</h1><img src="${logoPath}" alt="logo"></main></body></html>`;
+  const snapshot = await importPublicSinglePageUrlToSnapshot({
+    sourceUrl: "https://www.roboplast.si/",
+    snapshotRootDirAbs: tmpRoot,
+    renderedCaptureWorkerClient: unsupportedWorkerClient(),
+    fetchImpl: async (url) => {
+      if (String(url).includes("ROBOPLAST-znak-02-134x136px.png")) {
+        return new Response("png", { status: 200, headers: { "content-type": "image/png" } });
+      }
+      return makeHtmlResponse(html);
+    },
+  });
+  const resolution = JSON.parse(
+    await fs.promises.readFile(path.resolve(snapshot.snapshotRootDirAbs, "preview-asset-resolution.json"), "utf8"),
+  ) as Array<Record<string, unknown>>;
+  const resolutionHit = resolution.find((entry) => String(entry.originalHtmlValue).includes("ROBOPLAST-znak-02-134x136px.png"));
+  assert.ok(resolutionHit);
+  assert.equal(resolutionHit?.rewriteMode, "snapshot_local");
+  assert.equal(resolutionHit?.reasonCode, "RUNTIME_IDS_MISSING_SNAPSHOT_LOCAL_PREVIEW");
+  const diagnostics = JSON.parse(
+    await fs.promises.readFile(path.resolve(snapshot.snapshotRootDirAbs, "url-import-diagnostics.json"), "utf8"),
+  ) as { issues: Array<{ code?: string }> };
+  assert.equal(
+    diagnostics.issues.some((issue) => issue.code === "PREVIEW_HTML_IMAGE_REWRITE_RUNTIME_IDS_MISSING"),
+    true,
+  );
+});
+
 test("raw html import discovers and persists data-src logo candidate", async () => {
   const tmpRoot = await fs.promises.mkdtemp(path.join(os.tmpdir(), "gnr8-image-data-src-logo-"));
   const logoPath = "/uploads/VmPFXCum/236x0_247x0/logo-data-src.png";
@@ -1095,4 +1160,38 @@ test("image discovery evidence records fetch failure without breaking import", a
   assert.ok(miss);
   assert.equal(miss.fileFound, false);
   assert.equal(miss.routeStatus, 404);
+  const diagnostics = JSON.parse(
+    await fs.promises.readFile(path.resolve(snapshot.snapshotRootDirAbs, "url-import-diagnostics.json"), "utf8"),
+  ) as { issues: Array<{ code?: string }> };
+  assert.equal(diagnostics.issues.some((issue) => issue.code === "PREVIEW_HTML_IMAGE_REWRITE_FILEMAP_MISS"), true);
+});
+
+test("noscript Roboplast logo participates in rewrite decision evidence", async () => {
+  const tmpRoot = await fs.promises.mkdtemp(path.join(os.tmpdir(), "gnr8-image-noscript-rewrite-evidence-"));
+  const logoPath = "/uploads/VmPFXCum/236x0_247x0/ROBOPLAST-znak-02-134x136px.png";
+  const html = `<!doctype html><html><body><main><h1>Roboplast</h1><noscript><img src="${logoPath}" alt="logo"></noscript></main></body></html>`;
+  const snapshot = await importPublicSinglePageUrlToSnapshot({
+    sourceUrl: "https://www.roboplast.si/",
+    snapshotRootDirAbs: tmpRoot,
+    siteId: "site_1",
+    siteVersionId: "sv_1",
+    renderedCaptureWorkerClient: unsupportedWorkerClient(),
+    fetchImpl: async (url) => {
+      if (String(url).includes("ROBOPLAST-znak-02-134x136px.png")) {
+        return new Response("png", { status: 200, headers: { "content-type": "image/png" } });
+      }
+      return makeHtmlResponse(html);
+    },
+  });
+  const resolution = JSON.parse(
+    await fs.promises.readFile(path.resolve(snapshot.snapshotRootDirAbs, "preview-asset-resolution.json"), "utf8"),
+  ) as Array<Record<string, unknown>>;
+  const hit = resolution.find((entry) => String(entry.originalHtmlValue).includes("ROBOPLAST-znak-02-134x136px.png"));
+  assert.ok(hit);
+  assert.equal(hit?.rewriteMode, "preview_assets_route");
+  const discovery = JSON.parse(
+    await fs.promises.readFile(path.resolve(snapshot.snapshotRootDirAbs, "image-asset-discovery.json"), "utf8"),
+  ) as Array<Record<string, unknown>>;
+  const found = discovery.find((entry) => String(entry.originalValue).includes("ROBOPLAST-znak-02-134x136px.png"));
+  assert.equal(found?.sourceContext, "noscript");
 });
