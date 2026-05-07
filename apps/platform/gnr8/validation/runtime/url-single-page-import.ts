@@ -116,6 +116,9 @@ export type UrlImportDiagnosticCode =
   | "PREVIEW_HTML_IMAGE_REWRITE_STARTED"
   | "PREVIEW_HTML_IMAGE_REWRITE_APPLIED"
   | "PREVIEW_HTML_IMAGE_REWRITE_SKIPPED"
+  | "PREVIEW_GALLERY_IMAGE_REWRITE_APPLIED"
+  | "PREVIEW_GALLERY_IMAGE_REWRITE_SKIPPED"
+  | "PREVIEW_GALLERY_IMAGE_DOUBLE_PREFIX_NORMALIZED"
   | "PREVIEW_HTML_IMAGE_REWRITE_RUNTIME_IDS_MISSING"
   | "PREVIEW_HTML_IMAGE_REWRITE_FILEMAP_MISS"
   | "ASSET_FETCH_UNSUPPORTED_SCHEME"
@@ -266,7 +269,10 @@ export type UrlImportAssetAttribute =
   | "data-srcset"
   | "data-original"
   | "data-lazy-src"
-  | "data-req";
+  | "data-req"
+  | "data-image"
+  | "data-thumb"
+  | "data-gallery";
 
 export type UrlImportFetchManifestEntry = {
   tag: UrlImportAssetTag;
@@ -502,6 +508,32 @@ function inspectAndNormalizePreviewAssetUrl(input: {
 
 function buildPreviewRewriteCorrelationKey(input: { originalValue: string; normalizedLocalPath: string | null }): string {
   return sha256Hex(`${input.originalValue}::${input.normalizedLocalPath ?? "missing"}`).slice(0, 16);
+}
+
+function buildPreviewRewriteDiagnosticDetails(input: {
+  originalValue: string;
+  rewrittenValue: string;
+  attributeName?: string;
+  payloadPath?: string;
+  normalizedLocalPath: string | null;
+  siteId: string | null;
+  siteVersionId: string | null;
+  reasonCode: string;
+}): JsonValue {
+  return {
+    originalValue: input.originalValue,
+    rewrittenValue: input.rewrittenValue,
+    attributeName: input.attributeName ?? null,
+    payloadPath: input.payloadPath ?? null,
+    normalizedLocalPath: input.normalizedLocalPath,
+    siteId: input.siteId,
+    siteVersionId: input.siteVersionId,
+    reasonCode: input.reasonCode,
+    correlationKey: buildPreviewRewriteCorrelationKey({
+      originalValue: input.originalValue,
+      normalizedLocalPath: input.normalizedLocalPath,
+    }),
+  } as JsonValue;
 }
 
 function normalizeSnapshotLocalTargetPath(rawPath: string): string | null {
@@ -820,7 +852,8 @@ function resolvePathCollisions(
 
 const LAZY_IMAGE_ATTR_PRIORITY: readonly UrlImportAssetAttribute[] = ["data-src", "data-lazyload-src", "data-original", "data-lazy-src"] as const;
 const SRCSET_ATTRS: readonly UrlImportAssetAttribute[] = ["srcset", "data-srcset"] as const;
-const EXTRA_IMAGE_ATTRS: readonly UrlImportAssetAttribute[] = ["data-req"] as const;
+const EXTRA_IMAGE_ATTRS: readonly UrlImportAssetAttribute[] = ["data-req", "data-image", "data-thumb", "data-gallery"] as const;
+const GALLERY_REWRITE_ATTRS: readonly UrlImportAssetAttribute[] = ["data-req", "data-image", "data-thumb", "data-gallery"] as const;
 
 function isStylesheetKind(assetKind: UrlImportAssetKind): boolean {
   return assetKind === "stylesheet";
@@ -2146,6 +2179,142 @@ function choosePromotedImageLocalPath(input: {
   if (promoted) return promoted;
 
   return pickFirstFetched([primarySrc]);
+}
+
+function shouldTreatJsonKeyAsImageCandidate(key: string): boolean {
+  const keyLower = key.toLowerCase();
+  return (
+    keyLower.includes("src") ||
+    keyLower.includes("url") ||
+    keyLower.includes("image") ||
+    keyLower.includes("img") ||
+    keyLower.includes("background") ||
+    keyLower.includes("thumb") ||
+    keyLower.includes("gallery")
+  );
+}
+
+function rewriteGalleryAttributeValue(input: {
+  rawValue: string;
+  attributeName: UrlImportAssetAttribute;
+  runtimeIdsAvailable: boolean;
+  runtimeSiteId: string | null;
+  runtimeSiteVersionId: string | null;
+  normalizedUrl: URL;
+  localPathByUrl: Map<string, string>;
+  fetchOutcomeByUrl: Map<string, FetchOutcome>;
+  diagnostics: UrlImportDiagnostic[];
+}): string {
+  const addDiagnostic = (args: {
+    code: "PREVIEW_GALLERY_IMAGE_REWRITE_APPLIED" | "PREVIEW_GALLERY_IMAGE_REWRITE_SKIPPED" | "PREVIEW_GALLERY_IMAGE_DOUBLE_PREFIX_NORMALIZED";
+    message: string;
+    originalValue: string;
+    rewrittenValue: string;
+    normalizedLocalPath: string | null;
+    reasonCode: string;
+    payloadPath?: string;
+  }) => {
+    input.diagnostics.push(
+      createDiagnostic({
+        severity: "info",
+        code: args.code,
+        message: args.message,
+        targetUrl: args.originalValue,
+        details: buildPreviewRewriteDiagnosticDetails({
+          originalValue: args.originalValue,
+          rewrittenValue: args.rewrittenValue,
+          attributeName: input.attributeName,
+          payloadPath: args.payloadPath,
+          normalizedLocalPath: args.normalizedLocalPath,
+          siteId: input.runtimeSiteId,
+          siteVersionId: input.runtimeSiteVersionId,
+          reasonCode: args.reasonCode,
+        }),
+      }),
+    );
+  };
+
+  const rewriteOne = (candidate: string, payloadPath?: string): string => {
+    if (!input.runtimeIdsAvailable) return candidate;
+    const previewInspection = inspectAndNormalizePreviewAssetUrl({
+      value: candidate,
+      siteId: input.runtimeSiteId!,
+      siteVersionId: input.runtimeSiteVersionId!,
+    });
+    if (previewInspection.isPreviewAssetUrl) {
+      if (previewInspection.isDoublePrefixed) {
+        addDiagnostic({
+          code: "PREVIEW_GALLERY_IMAGE_DOUBLE_PREFIX_NORMALIZED",
+          message: "Gallery image attribute normalized a double-prefixed preview-assets URL.",
+          originalValue: candidate,
+          rewrittenValue: previewInspection.normalizedValue,
+          normalizedLocalPath: previewInspection.normalizedAssetPath,
+          reasonCode: "DOUBLE_PREFIX_NORMALIZED",
+          payloadPath,
+        });
+        return previewInspection.normalizedValue;
+      }
+      addDiagnostic({
+        code: "PREVIEW_GALLERY_IMAGE_REWRITE_SKIPPED",
+        message: "Gallery image attribute rewrite skipped because URL already targets preview-assets route.",
+        originalValue: candidate,
+        rewrittenValue: candidate,
+        normalizedLocalPath: previewInspection.normalizedAssetPath,
+        reasonCode: "ALREADY_PREVIEW_ASSET_URL",
+        payloadPath,
+      });
+      return candidate;
+    }
+    const localPath = resolveFetchedLocalPathForRawRef({
+      rawRef: candidate,
+      baseUrl: input.normalizedUrl,
+      localPathByUrl: input.localPathByUrl,
+      fetchOutcomeByUrl: input.fetchOutcomeByUrl,
+    });
+    if (!localPath) return candidate;
+    const rewritten = buildPreviewAssetRouteUrl({
+      siteId: input.runtimeSiteId!,
+      siteVersionId: input.runtimeSiteVersionId!,
+      normalizedLocalPath: localPath,
+    });
+    addDiagnostic({
+      code: "PREVIEW_GALLERY_IMAGE_REWRITE_APPLIED",
+      message: "Gallery image attribute rewrite applied preview-assets route URL.",
+      originalValue: candidate,
+      rewrittenValue: rewritten,
+      normalizedLocalPath: normalizeSnapshotLocalTargetPath(localPath),
+      reasonCode: "PREVIEW_ASSET_ROUTE_APPLIED",
+      payloadPath,
+    });
+    return rewritten;
+  };
+
+  const trimmed = input.rawValue.trim();
+  if (!trimmed) return input.rawValue;
+  if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
+    try {
+      const parsed = JSON.parse(trimmed) as unknown;
+      const visit = (value: unknown, payloadPath: string): unknown => {
+        if (typeof value === "string") return rewriteOne(value, payloadPath);
+        if (Array.isArray(value)) return value.map((entry, index) => visit(entry, `${payloadPath}[${index}]`));
+        if (!value || typeof value !== "object") return value;
+        const out: Record<string, unknown> = {};
+        for (const [key, next] of Object.entries(value as Record<string, unknown>)) {
+          const childPath = payloadPath ? `${payloadPath}.${key}` : key;
+          if (typeof next === "string" && shouldTreatJsonKeyAsImageCandidate(key)) {
+            out[key] = rewriteOne(next, childPath);
+            continue;
+          }
+          out[key] = visit(next, childPath);
+        }
+        return out;
+      };
+      return JSON.stringify(visit(parsed, ""));
+    } catch {
+      return rewriteOne(input.rawValue);
+    }
+  }
+  return rewriteOne(input.rawValue);
 }
 
 type FetchOutcome = {
@@ -4158,6 +4327,26 @@ export async function importPublicSinglePageUrlToSnapshot(input: {
             : `/${toPosixPath(promotedLocalPath)}`;
           setAttr(node, "src", rewrittenPromotedSrc);
         }
+      }
+    });
+
+    walkDomWithAncestors(document, (node) => {
+      if (!isElement(node)) return;
+      for (const attributeName of GALLERY_REWRITE_ATTRS) {
+        const rawValue = getAttr(node, attributeName);
+        if (!rawValue || !rawValue.trim()) continue;
+        const rewrittenValue = rewriteGalleryAttributeValue({
+          rawValue,
+          attributeName,
+          runtimeIdsAvailable,
+          runtimeSiteId,
+          runtimeSiteVersionId,
+          normalizedUrl,
+          localPathByUrl,
+          fetchOutcomeByUrl,
+          diagnostics,
+        });
+        if (rewrittenValue !== rawValue) setAttr(node, attributeName, rewrittenValue);
       }
     });
 
