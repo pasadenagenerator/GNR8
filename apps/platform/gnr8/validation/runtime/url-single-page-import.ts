@@ -108,6 +108,11 @@ export type UrlImportDiagnosticCode =
   | "ASSET_URL_PARSE_FAILED"
   | "ASSET_FETCH_FAILED"
   | "ASSET_FETCH_NON_OK"
+  | "RAW_IMPORT_HTML_IMAGE_CANDIDATE_FOUND"
+  | "RAW_IMPORT_HTML_IMAGE_CANDIDATE_RESOLVED"
+  | "RAW_IMPORT_HTML_IMAGE_CANDIDATE_SKIPPED"
+  | "RAW_IMPORT_HTML_IMAGE_ASSET_PERSISTED"
+  | "RAW_IMPORT_HTML_IMAGE_ASSET_NOT_PERSISTED"
   | "ASSET_FETCH_UNSUPPORTED_SCHEME"
   | "ASSET_COLLISION_RESOLVED"
   | "PRIMARY_STYLESHEET_DETECTED"
@@ -254,7 +259,8 @@ export type UrlImportAssetAttribute =
   | "data-src"
   | "data-srcset"
   | "data-original"
-  | "data-lazy-src";
+  | "data-lazy-src"
+  | "data-req";
 
 export type UrlImportFetchManifestEntry = {
   tag: UrlImportAssetTag;
@@ -351,6 +357,16 @@ type ParsedAssetRef = {
   resolvedUrl: string | null;
   assetKind: UrlImportAssetKind;
   sourceScope: "head_stylesheet" | "other";
+};
+
+type HtmlImageAssetDiscoveryEntry = {
+  key: string;
+  originalAttribute: UrlImportAssetAttribute;
+  originalValue: string;
+  resolvedUrl: string | null;
+  normalizedLocalPath: string | null;
+  fetchStatus: "pending" | "fetched" | "fetch_failed" | "unsupported";
+  persisted: boolean;
 };
 
 const FETCH_SCOPE: UrlImportExecutionScope = {
@@ -731,6 +747,7 @@ function resolvePathCollisions(
 
 const LAZY_IMAGE_ATTR_PRIORITY: readonly UrlImportAssetAttribute[] = ["data-src", "data-original", "data-lazy-src"] as const;
 const SRCSET_ATTRS: readonly UrlImportAssetAttribute[] = ["srcset", "data-srcset"] as const;
+const EXTRA_IMAGE_ATTRS: readonly UrlImportAssetAttribute[] = ["data-req"] as const;
 
 function isStylesheetKind(assetKind: UrlImportAssetKind): boolean {
   return assetKind === "stylesheet";
@@ -1665,6 +1682,47 @@ function collectAssetRefs(input: {
 }): ParsedAssetRef[] {
   const refs: ParsedAssetRef[] = [];
   const occurrenceCounter = new Map<string, number>();
+  function extractImageCandidatesFromDataReq(rawValue: string): string[] {
+    const trimmed = rawValue.trim();
+    if (!trimmed) return [];
+    if (!trimmed.startsWith("{") && !trimmed.startsWith("[")) return [trimmed];
+    try {
+      const parsed = JSON.parse(trimmed) as unknown;
+      const out = new Set<string>();
+      const queue: unknown[] = [parsed];
+      while (queue.length > 0) {
+        const current = queue.shift();
+        if (!current || typeof current !== "object") continue;
+        if (Array.isArray(current)) {
+          for (const item of current) queue.push(item);
+          continue;
+        }
+        for (const [key, value] of Object.entries(current as Record<string, unknown>)) {
+          if (value && typeof value === "object") {
+            queue.push(value);
+            continue;
+          }
+          if (typeof value !== "string") continue;
+          const candidate = value.trim();
+          if (!candidate) continue;
+          if (!/[/.]/.test(candidate)) continue;
+          const keyLower = key.toLowerCase();
+          if (
+            keyLower.includes("src") ||
+            keyLower.includes("url") ||
+            keyLower.includes("image") ||
+            keyLower.includes("img") ||
+            keyLower.includes("background")
+          ) {
+            out.add(candidate);
+          }
+        }
+      }
+      return [...out];
+    } catch {
+      return [trimmed];
+    }
+  }
 
   function nextOccurrence(tag: UrlImportAssetTag, attribute: UrlImportAssetAttribute): number {
     const occurrenceKey = `${tag}:${attribute}`;
@@ -1807,7 +1865,8 @@ function collectAssetRefs(input: {
     const primarySrc = getAttr(node, "src");
     if (primarySrc && primarySrc.trim()) {
       pushRef({ tag: tag as UrlImportAssetTag, attribute: "src", rawRef: primarySrc, assetKind: "image", surface: "direct" });
-    } else if (tag === "img") {
+    }
+    if (tag === "img") {
       for (const lazyAttr of LAZY_IMAGE_ATTR_PRIORITY) {
         const lazyRef = getAttr(node, lazyAttr);
         if (!lazyRef || !lazyRef.trim()) continue;
@@ -1818,7 +1877,19 @@ function collectAssetRefs(input: {
           assetKind: "image",
           surface: "lazy_fallback",
         });
-        break;
+      }
+      for (const extraAttr of EXTRA_IMAGE_ATTRS) {
+        const rawValue = getAttr(node, extraAttr);
+        if (!rawValue || !rawValue.trim()) continue;
+        for (const candidate of extractImageCandidatesFromDataReq(rawValue)) {
+          pushRef({
+            tag: "img",
+            attribute: extraAttr,
+            rawRef: candidate,
+            assetKind: "image",
+            surface: "lazy_module_attr",
+          });
+        }
       }
     }
 
@@ -3256,6 +3327,7 @@ export async function importPublicSinglePageUrlToSnapshot(input: {
   );
 
   let rewrittenHtml = sourceSelection.selectedHtml;
+  const imageAssetDiscoveryEntries = new Map<string, HtmlImageAssetDiscoveryEntry>();
 
   if (!hasFatal(diagnostics) && rewrittenHtml.trim().length > 0) {
     diagnostics.push(
@@ -3317,7 +3389,47 @@ export async function importPublicSinglePageUrlToSnapshot(input: {
     const localPathByUrl = resolvePathCollisions(refs, diagnostics);
     const htmlImageRefByUrl = new Map<string, ParsedAssetRef[]>();
     for (const ref of refs) {
-      if (ref.assetKind !== "image" || !ref.resolvedUrl) continue;
+      if (ref.assetKind !== "image") continue;
+      imageAssetDiscoveryEntries.set(ref.key, {
+        key: ref.key,
+        originalAttribute: ref.attribute,
+        originalValue: ref.rawRef,
+        resolvedUrl: ref.resolvedUrl,
+        normalizedLocalPath: null,
+        fetchStatus: ref.resolvedUrl ? "pending" : "unsupported",
+        persisted: false,
+      });
+      diagnostics.push(
+        createDiagnostic({
+          severity: "info",
+          code: "RAW_IMPORT_HTML_IMAGE_CANDIDATE_FOUND",
+          message: "Discovered HTML image candidate.",
+          targetUrl: ref.resolvedUrl,
+          details: { originalAttribute: ref.attribute, originalValue: ref.rawRef },
+        }),
+      );
+      if (ref.resolvedUrl) {
+        diagnostics.push(
+          createDiagnostic({
+            severity: "info",
+            code: "RAW_IMPORT_HTML_IMAGE_CANDIDATE_RESOLVED",
+            message: "Resolved HTML image candidate URL.",
+            targetUrl: ref.resolvedUrl,
+            details: { originalAttribute: ref.attribute, originalValue: ref.rawRef },
+          }),
+        );
+      } else {
+        diagnostics.push(
+          createDiagnostic({
+            severity: "info",
+            code: "RAW_IMPORT_HTML_IMAGE_CANDIDATE_SKIPPED",
+            message: "Skipped HTML image candidate due to unresolved/unsupported URL.",
+            targetUrl: null,
+            details: { originalAttribute: ref.attribute, originalValue: ref.rawRef },
+          }),
+        );
+      }
+      if (!ref.resolvedUrl) continue;
       const list = htmlImageRefByUrl.get(ref.resolvedUrl) ?? [];
       list.push(ref);
       htmlImageRefByUrl.set(ref.resolvedUrl, list);
@@ -3339,6 +3451,10 @@ export async function importPublicSinglePageUrlToSnapshot(input: {
       messageLabel: "Direct asset fetch" | "Stylesheet-linked asset fetch",
     ): Promise<FetchOutcome> {
       const htmlImageRefs = htmlImageRefByUrl.get(resolvedUrl) ?? [];
+      for (const ref of htmlImageRefs) {
+        const entry = imageAssetDiscoveryEntries.get(ref.key);
+        if (entry) entry.normalizedLocalPath = localPath;
+      }
       if (htmlImageRefs.length > 0) {
         console.info("[raw-import] RAW_IMPORT_HTML_IMAGE_ASSET_FETCH_STARTED", {
           resolvedUrl,
@@ -3358,6 +3474,24 @@ export async function importPublicSinglePageUrlToSnapshot(input: {
 
         const contentType = safeContentType(response.headers.get("content-type"));
         if (!response.ok) {
+          for (const ref of htmlImageRefs) {
+            const entry = imageAssetDiscoveryEntries.get(ref.key);
+            if (entry) {
+              entry.fetchStatus = "fetch_failed";
+              entry.persisted = false;
+            }
+          }
+          if (htmlImageRefs.length > 0) {
+            diagnostics.push(
+              createDiagnostic({
+                severity: "warning",
+                code: "RAW_IMPORT_HTML_IMAGE_ASSET_NOT_PERSISTED",
+                message: "HTML image candidate was not persisted due to non-success fetch status.",
+                targetUrl: resolvedUrl,
+                details: { normalizedLocalPath: localPath, fetchStatus: "fetch_failed", httpStatus: response.status },
+              }),
+            );
+          }
           diagnostics.push(
             createDiagnostic({
               severity: "warning",
@@ -3380,6 +3514,22 @@ export async function importPublicSinglePageUrlToSnapshot(input: {
         fs.mkdirSync(path.dirname(absPath), { recursive: true });
         fs.writeFileSync(absPath, bytes);
         if (htmlImageRefs.length > 0) {
+          for (const ref of htmlImageRefs) {
+            const entry = imageAssetDiscoveryEntries.get(ref.key);
+            if (entry) {
+              entry.fetchStatus = "fetched";
+              entry.persisted = true;
+            }
+          }
+          diagnostics.push(
+            createDiagnostic({
+              severity: "info",
+              code: "RAW_IMPORT_HTML_IMAGE_ASSET_PERSISTED",
+              message: "HTML image candidate asset persisted.",
+              targetUrl: resolvedUrl,
+              details: { normalizedLocalPath: localPath, fetchStatus: "fetched", byteLength: bytes.byteLength },
+            }),
+          );
           console.info("[raw-import] RAW_IMPORT_HTML_IMAGE_ASSET_PERSISTED", {
             resolvedUrl,
             localPath,
@@ -3395,6 +3545,22 @@ export async function importPublicSinglePageUrlToSnapshot(input: {
         };
       } catch (error) {
         if (htmlImageRefs.length > 0) {
+          for (const ref of htmlImageRefs) {
+            const entry = imageAssetDiscoveryEntries.get(ref.key);
+            if (entry) {
+              entry.fetchStatus = "fetch_failed";
+              entry.persisted = false;
+            }
+          }
+          diagnostics.push(
+            createDiagnostic({
+              severity: "warning",
+              code: "RAW_IMPORT_HTML_IMAGE_ASSET_NOT_PERSISTED",
+              message: "HTML image candidate was not persisted due to fetch failure.",
+              targetUrl: resolvedUrl,
+              details: { normalizedLocalPath: localPath, fetchStatus: "fetch_failed", error: String((error as Error)?.message ?? error) },
+            }),
+          );
           console.warn("[raw-import] RAW_IMPORT_HTML_IMAGE_ASSET_FETCH_FAILED", {
             resolvedUrl,
             localPath,
@@ -3780,6 +3946,19 @@ export async function importPublicSinglePageUrlToSnapshot(input: {
   } as unknown as JsonValue);
 
   writeJsonStable(path.resolve(snapshotRootDirAbs, "url-fetch-manifest.json"), sortedManifest as unknown as JsonValue);
+  writeJsonStable(
+    path.resolve(snapshotRootDirAbs, "image-asset-discovery.json"),
+    [...imageAssetDiscoveryEntries.values()]
+      .sort((a, b) => a.key.localeCompare(b.key))
+      .map((entry) => ({
+        originalAttribute: entry.originalAttribute,
+        originalValue: entry.originalValue,
+        resolvedUrl: entry.resolvedUrl,
+        normalizedLocalPath: entry.normalizedLocalPath,
+        fetchStatus: entry.fetchStatus,
+        persisted: entry.persisted,
+      })) as unknown as JsonValue,
+  );
   writeJsonStable(path.resolve(snapshotStableRootDirAbs, "latest-run.json"), {
     kind: "url_import_latest_run_v1",
     snapshotId,

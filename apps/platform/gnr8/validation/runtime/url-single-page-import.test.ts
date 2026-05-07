@@ -8,6 +8,47 @@ import type { RenderedCaptureWorkerClient } from "@/gnr8/import-rendered-capture
 import { parseRenderedCaptureWorkerRequestDetailed } from "@/gnr8/import-rendered-capture-worker/worker-service";
 import { importPublicSinglePageUrlToSnapshot } from "@/gnr8/validation/runtime/url-single-page-import";
 
+function unsupportedWorkerClient(): RenderedCaptureWorkerClient {
+  return {
+    async execute(request) {
+      return {
+        kind: "rendered_capture_worker_response_v1",
+        contractVersion: "1.0.0",
+        requestId: request.requestId,
+        status: "unsupported",
+        environment: {
+          runtimeKind: "edge",
+          environmentSupported: false,
+          browserPackageAvailable: false,
+          browserBinaryAvailable: false,
+          supportDecision: "runtime_incompatible",
+        },
+        artifacts: [],
+        computedStyleSamples: [],
+        diagnostics: [{ code: "ENVIRONMENT_UNSUPPORTED", severity: "warning", message: "unsupported runtime" }],
+        qualitySummary: {
+          renderedDomQuality: "unusable",
+          domLength: 0,
+          meaningfulNodeCount: 0,
+          screenshotCount: 0,
+          computedStyleSampleCount: 0,
+        },
+        failure: {
+          failureClass: "environment_unsupported",
+          failureCode: "ENVIRONMENT_UNSUPPORTED",
+          retryable: false,
+          message: "unsupported runtime",
+        },
+        timings: {
+          queueLatencyMs: null,
+          executionMs: 2,
+          totalMs: 2,
+        },
+      };
+    },
+  };
+}
+
 function makeHtmlResponse(html: string): Response {
   return new Response(html, {
     status: 200,
@@ -805,4 +846,99 @@ test("site import intake returns clear failure for non-html response", async () 
   });
   assert.equal(snapshot.importIntake?.ok, false);
   assert.equal(snapshot.importIntake?.reasonCode, "unsupported_response_content_type");
+});
+
+test("raw html import discovers and persists img src logo under normalized original path", async () => {
+  const tmpRoot = await fs.promises.mkdtemp(path.join(os.tmpdir(), "gnr8-image-src-logo-"));
+  const logoPath = "/uploads/VmPFXCum/236x0_247x0/ROBOPLAST-znak-02-134x136px.png";
+  const html = `<!doctype html><html><body><main><h1>Roboplast</h1><p>This raw imported page contains enough deterministic content to remain usable and allows logo asset discovery in import tests.</p><img src="${logoPath}" alt="logo"></main></body></html>`;
+  const snapshot = await importPublicSinglePageUrlToSnapshot({
+    sourceUrl: "https://www.roboplast.si/",
+    snapshotRootDirAbs: tmpRoot,
+    renderedCaptureWorkerClient: unsupportedWorkerClient(),
+    fetchImpl: async (url) => {
+      if (String(url).includes("ROBOPLAST-znak-02-134x136px.png")) {
+        return new Response("png", { status: 200, headers: { "content-type": "image/png" } });
+      }
+      return makeHtmlResponse(html);
+    },
+  });
+  const evidencePath = path.resolve(snapshot.snapshotRootDirAbs, "image-asset-discovery.json");
+  const evidence = JSON.parse(await fs.promises.readFile(evidencePath, "utf8")) as Array<Record<string, unknown>>;
+  const found = evidence.find(
+    (entry) => String(entry.originalValue).includes("ROBOPLAST-znak-02-134x136px.png") && entry.persisted === true && entry.fetchStatus === "fetched",
+  );
+  assert.ok(found);
+  assert.ok(found.normalizedLocalPath);
+  const persistedPath = path.resolve(snapshot.snapshotRootDirAbs, String(found.normalizedLocalPath));
+  assert.equal(fs.existsSync(persistedPath), true);
+  assert.equal(
+    evidence.some((entry) => String(entry.originalValue).includes("ROBOPLAST-znak-02-134x136px.png") && entry.persisted === true),
+    true,
+  );
+});
+
+test("raw html import discovers and persists data-src logo candidate", async () => {
+  const tmpRoot = await fs.promises.mkdtemp(path.join(os.tmpdir(), "gnr8-image-data-src-logo-"));
+  const logoPath = "/uploads/VmPFXCum/236x0_247x0/logo-data-src.png";
+  const html = `<!doctype html><html><body><main><h1>Roboplast</h1><p>This raw imported page contains enough deterministic content to remain usable and allows data-src logo discovery in import tests.</p><img src="/placeholder.png" data-src="${logoPath}" alt="logo"></main></body></html>`;
+  const snapshot = await importPublicSinglePageUrlToSnapshot({
+    sourceUrl: "https://www.roboplast.si/",
+    snapshotRootDirAbs: tmpRoot,
+    renderedCaptureWorkerClient: unsupportedWorkerClient(),
+    fetchImpl: async (url) => {
+      if (String(url).includes("/uploads/VmPFXCum/236x0_247x0/logo-data-src.png")) {
+        return new Response("png", { status: 200, headers: { "content-type": "image/png" } });
+      }
+      if (String(url).includes("/placeholder.png")) {
+        return new Response("png", { status: 404, headers: { "content-type": "image/png" } });
+      }
+      return makeHtmlResponse(html);
+    },
+  });
+  const evidencePath = path.resolve(snapshot.snapshotRootDirAbs, "image-asset-discovery.json");
+  const evidence = JSON.parse(await fs.promises.readFile(evidencePath, "utf8")) as Array<Record<string, unknown>>;
+  const found = evidence.find((entry) => String(entry.originalValue).includes("logo-data-src.png") && entry.persisted === true);
+  assert.ok(found);
+  assert.ok(found.normalizedLocalPath);
+  const persistedPath = path.resolve(snapshot.snapshotRootDirAbs, String(found.normalizedLocalPath));
+  assert.equal(fs.existsSync(persistedPath), true);
+  assert.equal(
+    evidence.some(
+      (entry) =>
+        String(entry.originalValue).includes("logo-data-src.png") &&
+        entry.persisted === true &&
+        entry.fetchStatus === "fetched",
+    ),
+    true,
+  );
+});
+
+test("image discovery evidence records fetch failure without breaking import", async () => {
+  const tmpRoot = await fs.promises.mkdtemp(path.join(os.tmpdir(), "gnr8-image-evidence-miss-"));
+  const html =
+    "<!doctype html><html><body><main><h1>Roboplast</h1><p>This raw imported page remains usable even when an image fetch fails, and evidence should capture that miss.</p><img src=\"/uploads/missing-logo.png\" alt=\"logo\"></main></body></html>";
+  const snapshot = await importPublicSinglePageUrlToSnapshot({
+    sourceUrl: "https://www.roboplast.si/",
+    snapshotRootDirAbs: tmpRoot,
+    renderedCaptureWorkerClient: unsupportedWorkerClient(),
+    fetchImpl: async (url) => {
+      if (String(url).includes("/uploads/missing-logo.png")) {
+        return new Response("missing", { status: 404, headers: { "content-type": "text/plain" } });
+      }
+      return makeHtmlResponse(html);
+    },
+  });
+  assert.equal(snapshot.importIntake?.ok, true);
+  const evidencePath = path.resolve(snapshot.snapshotRootDirAbs, "image-asset-discovery.json");
+  const evidence = JSON.parse(await fs.promises.readFile(evidencePath, "utf8")) as Array<Record<string, unknown>>;
+  assert.equal(
+    evidence.some(
+      (entry) =>
+        String(entry.originalValue).includes("missing-logo.png") &&
+        entry.persisted === false &&
+        entry.fetchStatus === "fetch_failed",
+    ),
+    true,
+  );
 });
