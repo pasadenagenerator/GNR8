@@ -3959,6 +3959,34 @@ export async function importPublicSinglePageUrlToSnapshot(input: {
         persisted: entry.persisted,
       })) as unknown as JsonValue,
   );
+  writeJsonStable(
+    path.resolve(snapshotRootDirAbs, "preview-asset-resolution.json"),
+    [...imageAssetDiscoveryEntries.values()]
+      .sort((a, b) => a.key.localeCompare(b.key))
+      .map((entry) => {
+        const normalizedLookupPath = entry.normalizedLocalPath;
+        const fileFound = entry.fetchStatus === "fetched" && entry.persisted;
+        const hasLookupPath = Boolean(normalizedLookupPath);
+        const routeStatus = fileFound ? 200 : 404;
+        const reasonCode = !hasLookupPath
+          ? "missing_lookup_path"
+          : fileFound
+            ? "ok"
+            : entry.fetchStatus === "fetch_failed"
+              ? "fetch_failed"
+              : "unsupported";
+        return {
+          originalHtmlValue: entry.originalValue,
+          rewrittenPreviewUrl: normalizedLookupPath ? `/${toPosixPath(normalizedLookupPath)}` : null,
+          normalizedLookupPath,
+          artifactIdUsedForLookup: null,
+          fileMapMatched: fileFound,
+          fileFound,
+          routeStatus,
+          reasonCode,
+        };
+      }) as unknown as JsonValue,
+  );
   writeJsonStable(path.resolve(snapshotStableRootDirAbs, "latest-run.json"), {
     kind: "url_import_latest_run_v1",
     snapshotId,

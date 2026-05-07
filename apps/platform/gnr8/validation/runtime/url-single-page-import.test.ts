@@ -876,6 +876,13 @@ test("raw html import discovers and persists img src logo under normalized origi
     evidence.some((entry) => String(entry.originalValue).includes("ROBOPLAST-znak-02-134x136px.png") && entry.persisted === true),
     true,
   );
+  const resolutionPath = path.resolve(snapshot.snapshotRootDirAbs, "preview-asset-resolution.json");
+  const resolution = JSON.parse(await fs.promises.readFile(resolutionPath, "utf8")) as Array<Record<string, unknown>>;
+  const resolutionHit = resolution.find((entry) => String(entry.originalHtmlValue).includes("ROBOPLAST-znak-02-134x136px.png"));
+  assert.ok(resolutionHit);
+  assert.equal(resolutionHit.fileMapMatched, true);
+  assert.equal(resolutionHit.fileFound, true);
+  assert.equal(resolutionHit.routeStatus, 200);
 });
 
 test("raw html import discovers and persists data-src logo candidate", async () => {
@@ -941,4 +948,10 @@ test("image discovery evidence records fetch failure without breaking import", a
     ),
     true,
   );
+  const resolutionPath = path.resolve(snapshot.snapshotRootDirAbs, "preview-asset-resolution.json");
+  const resolution = JSON.parse(await fs.promises.readFile(resolutionPath, "utf8")) as Array<Record<string, unknown>>;
+  const miss = resolution.find((entry) => String(entry.originalHtmlValue).includes("missing-logo.png"));
+  assert.ok(miss);
+  assert.equal(miss.fileFound, false);
+  assert.equal(miss.routeStatus, 404);
 });

@@ -35,12 +35,27 @@ function normalizeText(value: unknown): string {
 }
 
 function normalizeAssetPath(parts: string[] | undefined): string | null {
-  const joined = (parts ?? []).map((segment) => normalizeText(segment)).filter(Boolean).join("/");
+  const joined = (parts ?? [])
+    .map((segment) => {
+      const raw = normalizeText(segment);
+      if (!raw) return "";
+      try {
+        return decodeURIComponent(raw);
+      } catch {
+        return raw;
+      }
+    })
+    .filter(Boolean)
+    .join("/");
   if (!joined) return null;
   const normalized = joined.replaceAll("\\", "/").replace(/^\/+/, "");
   const segments = normalized.split("/").filter((segment) => segment.length > 0 && segment !== ".");
   if (segments.length === 0 || segments.some((segment) => segment === "..")) return null;
   return segments.join("/");
+}
+
+function buildCorrelationKey(input: { siteId: string; siteVersionId: string; normalizedRequestedPath: string | null }): string {
+  return `${input.siteId}:${input.siteVersionId}:${input.normalizedRequestedPath ?? "invalid_path"}`;
 }
 
 function resolveLookupCandidates(normalizedPath: string): string[] {
@@ -79,6 +94,30 @@ export function createPreviewAssetsRouteHandlers(overrides: Partial<PreviewAsset
     GET: async (req: Request, ctx: PreviewAssetGetContext) => {
       try {
         const { siteId, siteVersionId, assetPath } = await ctx.params;
+        const requestedUrl = req.url;
+        const requestedPathRaw = (assetPath ?? []).join("/");
+        const normalizedPath = normalizeAssetPath(assetPath);
+        const correlationKey = buildCorrelationKey({ siteId, siteVersionId, normalizedRequestedPath: normalizedPath });
+        const emitRouteDiagnostic = (code: string, details: { reasonCode: string; artifactId?: string | null; lookupResult?: string | null }) => {
+          console.info(`[preview-runtime] ${code}`, {
+            code,
+            requestedUrl,
+            siteId,
+            siteVersionId,
+            snapshotId: siteVersionId,
+            requestedPath: requestedPathRaw,
+            normalizedRequestedPath: normalizedPath,
+            artifactId: details.artifactId ?? null,
+            lookupResult: details.lookupResult ?? null,
+            reasonCode: details.reasonCode,
+            correlationKey,
+          });
+        };
+        emitRouteDiagnostic("PREVIEW_ASSET_ROUTE_REQUEST_RECEIVED", {
+          artifactId: null,
+          lookupResult: null,
+          reasonCode: "request_received",
+        });
         const requestHost = resolveRequestHost(req.headers);
         const debugMode = new URL(req.url).searchParams.get("__debug") === "1";
         const publicDomainResolution = await deps.resolveDomainSiteVersionForHost({ host: requestHost });
@@ -105,33 +144,52 @@ export function createPreviewAssetsRouteHandlers(overrides: Partial<PreviewAsset
         }
 
         const artifact = (await deps.getRawImportedSiteArtifact(siteVersionId)) ?? (await deps.getRawTemplateSiteArtifact(siteVersionId));
-        if (!artifact || artifact.siteId !== siteId) {
-          console.warn("[preview-runtime] RAW_IMPORT_ASSET_LOOKUP_MISSING", {
-            siteId,
-            siteVersionId,
-            path: normalizeAssetPath(assetPath),
-            reason: "artifact_missing_or_site_mismatch",
+        if (!artifact) {
+          emitRouteDiagnostic("PREVIEW_ASSET_ROUTE_ARTIFACT_MISMATCH", {
+            artifactId: null,
+            lookupResult: "artifact_not_found",
+            reasonCode: "artifact_not_found",
           });
           return new Response("not found", { status: 404, headers: { "content-type": "text/plain; charset=utf-8" } });
         }
-
-        const normalizedPath = normalizeAssetPath(assetPath);
-        if (!normalizedPath) {
-          console.warn("[preview-runtime] RAW_IMPORT_ASSET_LOOKUP_MISSING", {
-            siteId,
-            siteVersionId,
-            path: null,
-            reason: "invalid_asset_path",
+        if (artifact.siteId !== siteId) {
+          emitRouteDiagnostic("PREVIEW_ASSET_ROUTE_ARTIFACT_MISMATCH", {
+            artifactId: artifact.id,
+            lookupResult: "artifact_site_mismatch",
+            reasonCode: "artifact_site_mismatch",
           });
-          return new Response("not found", { status: 404, headers: { "content-type": "text/plain; charset=utf-8" } });
+          return new Response("not found", {
+            status: 404,
+            headers: {
+              "content-type": "text/plain; charset=utf-8",
+              "x-gnr8-preview-asset-diagnostic": "PREVIEW_ASSET_ROUTE_ARTIFACT_MISMATCH",
+            },
+          });
+        }
+        emitRouteDiagnostic("PREVIEW_ASSET_ROUTE_ARTIFACT_RESOLVED", {
+          artifactId: artifact.id,
+          lookupResult: artifact.artifactType,
+          reasonCode: "artifact_resolved",
+        });
+        if (!normalizedPath) {
+          emitRouteDiagnostic("PREVIEW_ASSET_ROUTE_PATH_MISMATCH", {
+            artifactId: artifact.id,
+            lookupResult: "invalid_asset_path",
+            reasonCode: "invalid_asset_path",
+          });
+          return new Response("not found", {
+            status: 404,
+            headers: {
+              "content-type": "text/plain; charset=utf-8",
+              "x-gnr8-preview-asset-diagnostic": "PREVIEW_ASSET_ROUTE_PATH_MISMATCH",
+            },
+          });
         }
         const lookupCandidates = resolveLookupCandidates(normalizedPath);
-        console.info("[preview-runtime] RAW_IMPORT_ASSET_LOOKUP_STARTED", {
-          siteId,
-          siteVersionId,
-          artifactType: artifact.artifactType,
-          path: normalizedPath,
-          candidates: lookupCandidates,
+        emitRouteDiagnostic("PREVIEW_ASSET_ROUTE_LOOKUP_STARTED", {
+          artifactId: artifact.id,
+          lookupResult: JSON.stringify(lookupCandidates),
+          reasonCode: "lookup_started",
         });
         let resolvedPath: string | null = null;
         let asset: Awaited<ReturnType<typeof deps.getRawTemplateSiteAsset>> | null = null;
@@ -181,6 +239,11 @@ export function createPreviewAssetsRouteHandlers(overrides: Partial<PreviewAsset
           if (fallbackPath) fileMapCandidates.add(fallbackPath);
           const missingPersistedPath = [...fileMapCandidates].find((candidate) => Boolean(artifact.fileMap[candidate]));
           if (missingPersistedPath) {
+            emitRouteDiagnostic("PREVIEW_ASSET_ROUTE_PATH_MISMATCH", {
+              artifactId: artifact.id,
+              lookupResult: missingPersistedPath,
+              reasonCode: "file_map_entry_found_without_file_row",
+            });
             console.warn("[preview-runtime] RAW_IMPORT_FILE_MAP_ENTRY_FOUND_WITHOUT_FILE_ROW", {
               siteId,
               siteVersionId,
@@ -189,14 +252,19 @@ export function createPreviewAssetsRouteHandlers(overrides: Partial<PreviewAsset
               candidates: [...fileMapCandidates],
               artifactType: artifact.artifactType,
             });
-            return new Response("not found", {
-              status: 404,
-              headers: {
-                "content-type": "text/plain; charset=utf-8",
-                "x-gnr8-preview-asset-diagnostic": "RAW_IMPORT_FILE_MAP_ENTRY_FOUND_WITHOUT_FILE_ROW",
-              },
-            });
-          }
+          return new Response("not found", {
+            status: 404,
+            headers: {
+              "content-type": "text/plain; charset=utf-8",
+              "x-gnr8-preview-asset-diagnostic": "PREVIEW_ASSET_ROUTE_PATH_MISMATCH",
+            },
+          });
+        }
+          emitRouteDiagnostic("PREVIEW_ASSET_ROUTE_FILE_NOT_FOUND", {
+            artifactId: artifact.id,
+            lookupResult: "asset_not_found",
+            reasonCode: "asset_not_found",
+          });
           console.warn("[preview-runtime] RAW_IMPORT_ASSET_LOOKUP_MISSING", {
             siteId,
             siteVersionId,
@@ -204,9 +272,20 @@ export function createPreviewAssetsRouteHandlers(overrides: Partial<PreviewAsset
             candidates: lookupCandidates,
             reason: "asset_not_found",
           });
-          return new Response("not found", { status: 404, headers: { "content-type": "text/plain; charset=utf-8" } });
+          return new Response("not found", {
+            status: 404,
+            headers: {
+              "content-type": "text/plain; charset=utf-8",
+              "x-gnr8-preview-asset-diagnostic": "PREVIEW_ASSET_ROUTE_FILE_NOT_FOUND",
+            },
+          });
         }
 
+        emitRouteDiagnostic("PREVIEW_ASSET_ROUTE_FILE_FOUND", {
+          artifactId: artifact.id,
+          lookupResult: resolvedPath ?? normalizedPath,
+          reasonCode: "asset_found",
+        });
         console.info("[preview-runtime] RAW_IMPORT_ASSET_LOOKUP_FOUND", {
           siteId,
           siteVersionId,

@@ -446,6 +446,7 @@ test("preview assets route returns deterministic 404 for missing upload asset", 
 
   assert.equal(response.status, 404);
   assert.equal(await response.text(), "not found");
+  assert.equal(response.headers.get("x-gnr8-preview-asset-diagnostic"), "PREVIEW_ASSET_ROUTE_FILE_NOT_FOUND");
 });
 
 test("preview assets route falls back uploads variant path to original upload path", async () => {
@@ -653,9 +654,126 @@ test("preview assets route returns diagnostic 404 when file_map entry exists but
     );
 
     assert.equal(response.status, 404);
-    assert.equal(response.headers.get("x-gnr8-preview-asset-diagnostic"), "RAW_IMPORT_FILE_MAP_ENTRY_FOUND_WITHOUT_FILE_ROW");
+    assert.equal(response.headers.get("x-gnr8-preview-asset-diagnostic"), "PREVIEW_ASSET_ROUTE_PATH_MISMATCH");
     assert.equal(loggedEvents.some((entry) => entry.includes("RAW_IMPORT_FILE_MAP_ENTRY_FOUND_WITHOUT_FILE_ROW")), true);
   } finally {
     console.warn = originalWarn;
   }
+});
+
+test("preview assets route decodes percent-encoded path segments and resolves persisted file", async () => {
+  const handlers = createPreviewAssetsRouteHandlers({
+    resolveDomainSiteVersionForHost: async () =>
+      ({
+        outcome: "domain_hit",
+        host: "beauty-clinic.pasadenagenerator.com",
+        siteId: "site_1",
+        siteVersionId: "sv_1",
+        domain: "beauty-clinic.pasadenagenerator.com",
+        status: "active",
+        bindingId: "binding_1",
+      }) as never,
+    resolveAgencyIdForSiteVersion: async () => "agency_1",
+    requireAgencyActionContext: async () => ({ actorMode: "agency_member", agencyId: "agency_1" } as never),
+    getRawImportedSiteArtifact: async () =>
+      ({
+        id: "artifact_imported_1",
+        artifactType: "raw_imported_site",
+        siteId: "site_1",
+        siteVersionId: "sv_1",
+        entryHtmlPath: "index.html",
+        assetBasePath: ".",
+        fileMap: {},
+        metadata: {
+          sourceUrl: "https://example.com",
+          finalUrl: "https://www.example.com",
+          htmlByteLength: 123,
+          diagnostics: { codes: [] },
+          assetSummary: { persistedAssetCount: 1, externalFallbackAssetCount: 0 },
+        },
+        createdAt: "2026-05-06T00:00:00.000Z",
+      }) as never,
+    getRawTemplateSiteArtifact: async () => null,
+    getRawTemplateSiteAsset: async ({ filePath }) =>
+      filePath === "uploads/VmPFXCum/236x0_247x0/logo mark.png"
+        ? ({
+            mediaType: "image/png",
+            sizeBytes: 4,
+            sha256: "abc",
+            bytes: Buffer.from([137, 80, 78, 71]),
+          } as never)
+        : null,
+  });
+
+  const response = await handlers.GET(
+    new Request(
+      "https://beauty-clinic.pasadenagenerator.com/api/gnr8/runtime/preview-assets/site_1/sv_1/uploads/VmPFXCum/236x0_247x0/logo%20mark.png",
+      {
+        headers: { host: "beauty-clinic.pasadenagenerator.com" },
+      },
+    ),
+    {
+      params: Promise.resolve({
+        siteId: "site_1",
+        siteVersionId: "sv_1",
+        assetPath: ["uploads", "VmPFXCum", "236x0_247x0", "logo%20mark.png"],
+      }),
+    },
+  );
+
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get("x-gnr8-preview-asset-path"), "uploads/VmPFXCum/236x0_247x0/logo mark.png");
+});
+
+test("preview assets route returns explicit artifact mismatch diagnostic for site mismatch", async () => {
+  const handlers = createPreviewAssetsRouteHandlers({
+    resolveDomainSiteVersionForHost: async () =>
+      ({
+        outcome: "domain_hit",
+        host: "beauty-clinic.pasadenagenerator.com",
+        siteId: "site_1",
+        siteVersionId: "sv_1",
+        domain: "beauty-clinic.pasadenagenerator.com",
+        status: "active",
+        bindingId: "binding_1",
+      }) as never,
+    resolveAgencyIdForSiteVersion: async () => "agency_1",
+    requireAgencyActionContext: async () => ({ actorMode: "agency_member", agencyId: "agency_1" } as never),
+    getRawImportedSiteArtifact: async () =>
+      ({
+        id: "artifact_imported_1",
+        artifactType: "raw_imported_site",
+        siteId: "site_other",
+        siteVersionId: "sv_1",
+        entryHtmlPath: "index.html",
+        assetBasePath: ".",
+        fileMap: {},
+        metadata: {
+          sourceUrl: "https://example.com",
+          finalUrl: "https://www.example.com",
+          htmlByteLength: 123,
+          diagnostics: { codes: [] },
+          assetSummary: { persistedAssetCount: 1, externalFallbackAssetCount: 0 },
+        },
+        createdAt: "2026-05-06T00:00:00.000Z",
+      }) as never,
+    getRawTemplateSiteArtifact: async () => null,
+    getRawTemplateSiteAsset: async () => null,
+  });
+
+  const response = await handlers.GET(
+    new Request("https://beauty-clinic.pasadenagenerator.com/api/gnr8/runtime/preview-assets/site_1/sv_1/uploads/logo.png", {
+      headers: { host: "beauty-clinic.pasadenagenerator.com" },
+    }),
+    {
+      params: Promise.resolve({
+        siteId: "site_1",
+        siteVersionId: "sv_1",
+        assetPath: ["uploads", "logo.png"],
+      }),
+    },
+  );
+
+  assert.equal(response.status, 404);
+  assert.equal(response.headers.get("x-gnr8-preview-asset-diagnostic"), "PREVIEW_ASSET_ROUTE_ARTIFACT_MISMATCH");
 });
