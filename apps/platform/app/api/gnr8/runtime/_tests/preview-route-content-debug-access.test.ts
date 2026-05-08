@@ -4,6 +4,16 @@ import test from "node:test";
 import { GET, POST } from "@/app/api/gnr8/runtime/versions/[siteVersionId]/preview/route";
 import { setPreviewRouteDependenciesForTest } from "@/app/api/gnr8/runtime/versions/[siteVersionId]/preview/preview-route-dependencies";
 
+function extractInjectedGalleryRuntimeShim(html: string): string {
+  const startToken = "<script>(function(){var payload=";
+  const start = html.indexOf(startToken);
+  assert.notEqual(start, -1, "expected injected gallery runtime shim script start token");
+  const endToken = "</script>";
+  const end = html.indexOf(endToken, start);
+  assert.notEqual(end, -1, "expected injected gallery runtime shim script end token");
+  return html.slice(start + "<script>".length, end);
+}
+
 function mockPreviewDeps(canShowContentDebug: boolean): () => void {
   return setPreviewRouteDependenciesForTest({
     resolveAgencyIdForSiteVersion: async () => "agency_1",
@@ -164,6 +174,11 @@ test("preview route: transformed final output normalizes double-prefixed preview
     assert.match(html, /return moduleHidden\|\|firstImageHidden\|\|firstAnchorHidden/);
     assert.match(html, /if\(computeGalleryHiddenByLoadedState\(state\)\)return"GALLERY_IMAGES_LOAD_BUT_HIDDEN_BY_CSS"/);
     assert.match(html, /if\(!state\.hasMonogalleryFn\|\|!state\.hasLightboxFn\)return"GALLERY_PLUGIN_DEPENDENCY_MISSING"/);
+    const injectedShim = extractInjectedGalleryRuntimeShim(html);
+    assert.doesNotThrow(() => {
+      // Parsing as a function body catches malformed try/catch and similar syntax errors in inline script assembly.
+      new Function(injectedShim);
+    });
   } finally {
     restoreDeps();
   }
