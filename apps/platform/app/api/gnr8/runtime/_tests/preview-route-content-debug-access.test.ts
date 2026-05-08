@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { GET } from "@/app/api/gnr8/runtime/versions/[siteVersionId]/preview/route";
+import { GET, POST } from "@/app/api/gnr8/runtime/versions/[siteVersionId]/preview/route";
 import { setPreviewRouteDependenciesForTest } from "@/app/api/gnr8/runtime/versions/[siteVersionId]/preview/preview-route-dependencies";
 
 function mockPreviewDeps(canShowContentDebug: boolean): () => void {
@@ -141,6 +141,65 @@ test("preview route: transformed final output normalizes double-prefixed preview
     assert.match(html, /\/api\/gnr8\/runtime\/preview-assets\/site_preview_1\/sv_preview_1\/uploads\/gallery\/one\.jpg/);
     assert.match(html, /\/api\/gnr8\/runtime\/preview-assets\/site_preview_1\/sv_preview_1\/uploads\/gallery\/two\.jpg/);
     assert.match(html, /\/api\/other\/endpoint\?id=1/);
+  } finally {
+    restoreDeps();
+  }
+});
+
+test("preview route: POST module request with dm returns deterministic unsupported-module payload instead of 405", async () => {
+  const restoreDeps = mockPreviewDeps(false);
+  try {
+    const response = await POST(
+      new Request("https://app.pasadenagenerator.com/api/gnr8/runtime/versions/sv_preview_1/preview?mode=transformed&dm=m1830", {
+        method: "POST",
+      }),
+      {
+        params: Promise.resolve({ siteVersionId: "sv_preview_1" }),
+      },
+    );
+    const payload = JSON.parse(await response.text()) as {
+      ok: boolean;
+      reasonCode: string;
+      siteVersionId: string;
+      mode: string | null;
+      dm: string | null;
+    };
+    assert.equal(response.status, 200);
+    assert.equal(response.headers.get("content-type"), "application/json; charset=utf-8");
+    assert.equal(payload.ok, false);
+    assert.equal(payload.reasonCode, "UNSUPPORTED_DM_MODULE_REQUEST");
+    assert.equal(payload.siteVersionId, "sv_preview_1");
+    assert.equal(payload.mode, "transformed");
+    assert.equal(payload.dm, "m1830");
+  } finally {
+    restoreDeps();
+  }
+});
+
+test("preview route: POST module request without dm returns explicit bad-request payload", async () => {
+  const restoreDeps = mockPreviewDeps(false);
+  try {
+    const response = await POST(
+      new Request("https://app.pasadenagenerator.com/api/gnr8/runtime/versions/sv_preview_1/preview?mode=transformed", {
+        method: "POST",
+      }),
+      {
+        params: Promise.resolve({ siteVersionId: "sv_preview_1" }),
+      },
+    );
+    const payload = JSON.parse(await response.text()) as {
+      ok: boolean;
+      reasonCode: string;
+      siteVersionId: string;
+      mode: string | null;
+      dm: string | null;
+    };
+    assert.equal(response.status, 400);
+    assert.equal(payload.ok, false);
+    assert.equal(payload.reasonCode, "MISSING_DM_QUERY");
+    assert.equal(payload.siteVersionId, "sv_preview_1");
+    assert.equal(payload.mode, "transformed");
+    assert.equal(payload.dm, null);
   } finally {
     restoreDeps();
   }

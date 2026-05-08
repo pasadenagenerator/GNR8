@@ -239,3 +239,98 @@ export async function GET(req: Request, ctx: { params: Promise<{ siteVersionId: 
     });
   }
 }
+
+export async function POST(req: Request, ctx: { params: Promise<{ siteVersionId: string }> }) {
+  try {
+    const { siteVersionId } = await ctx.params;
+    const agencyId = await previewRouteDependencies.resolveAgencyIdForSiteVersion(siteVersionId);
+    if (!agencyId) {
+      return new Response(JSON.stringify({ error: "Unable to resolve agency scope for site version." }), {
+        status: 403,
+        headers: { "content-type": "application/json; charset=utf-8" },
+      });
+    }
+    await previewRouteDependencies.requireAgencyActionContext({
+      action: "view_dashboard",
+      requestedAgencyId: agencyId,
+    });
+
+    const url = new URL(req.url);
+    const mode = url.searchParams.get("mode") ?? null;
+    const dm = url.searchParams.get("dm");
+    const correlationKey = `${siteVersionId}:${mode ?? "none"}:${dm ?? "none"}`;
+    console.info("[gnr8.runtime.preview] PREVIEW_RUNTIME_MODULE_REQUEST_RECEIVED", {
+      siteVersionId,
+      mode,
+      dm: dm ?? null,
+      method: "POST",
+      correlationKey,
+    });
+
+    if (!dm) {
+      console.info("[gnr8.runtime.preview] PREVIEW_RUNTIME_MODULE_REQUEST_UNSUPPORTED", {
+        siteVersionId,
+        mode,
+        dm: null,
+        method: "POST",
+        reasonCode: "MISSING_DM_QUERY",
+        correlationKey,
+      });
+      return new Response(
+        JSON.stringify({
+          ok: false,
+          reasonCode: "MISSING_DM_QUERY",
+          siteVersionId,
+          mode,
+          dm: null,
+        }),
+        {
+          status: 400,
+          headers: {
+            "content-type": "application/json; charset=utf-8",
+            "cache-control": "no-store",
+          },
+        },
+      );
+    }
+
+    console.info("[gnr8.runtime.preview] PREVIEW_RUNTIME_MODULE_REQUEST_UNSUPPORTED", {
+      siteVersionId,
+      mode,
+      dm,
+      method: "POST",
+      reasonCode: "UNSUPPORTED_DM_MODULE_REQUEST",
+      correlationKey,
+    });
+
+    return new Response(
+      JSON.stringify({
+        ok: false,
+        reasonCode: "UNSUPPORTED_DM_MODULE_REQUEST",
+        siteVersionId,
+        mode,
+        dm,
+      }),
+      {
+        status: 200,
+        headers: {
+          "content-type": "application/json; charset=utf-8",
+          "cache-control": "no-store",
+        },
+      },
+    );
+  } catch (error) {
+    const mapped = parseAgencyActionContextError(error);
+    if (mapped.status >= 400 && mapped.status < 500) {
+      return new Response(JSON.stringify({ error: mapped.message }), {
+        status: mapped.status,
+        headers: { "content-type": "application/json; charset=utf-8" },
+      });
+    }
+    const message = error instanceof Error ? error.message : "Internal server error";
+    return new Response(JSON.stringify({ error: "Preview runtime module request failed.", details: message }), {
+      status: 500,
+      headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" },
+    });
+  }
+}
