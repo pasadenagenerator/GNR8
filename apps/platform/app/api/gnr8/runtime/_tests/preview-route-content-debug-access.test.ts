@@ -143,6 +143,9 @@ test("preview route: transformed final output normalizes double-prefixed preview
     assert.match(html, /\/api\/other\/endpoint\?id=1/);
     assert.match(html, /PREVIEW_RUNTIME_MODULE_INIT_ERROR_ISOLATED/);
     assert.match(html, /PREVIEW_GALLERY_INIT_COMPLETED/);
+    assert.match(html, /PREVIEW_GALLERY_VISIBILITY_STATUS/);
+    assert.match(html, /PREVIEW_GALLERY_VISIBILITY_FIX_APPLIED/);
+    assert.match(html, /gnr8-gallery-visibility-compat/);
   } finally {
     restoreDeps();
   }
@@ -161,7 +164,11 @@ test("preview route: __debug=gallery_runtime injects isolated runtime-module dia
     assert.equal(response.status, 200);
     assert.match(html, /PREVIEW_RUNTIME_MODULE_INIT_ERROR_ISOLATED/);
     assert.match(html, /PREVIEW_GALLERY_INIT_COMPLETED/);
+    assert.match(html, /PREVIEW_GALLERY_VISIBILITY_STATUS/);
+    assert.match(html, /PREVIEW_GALLERY_VISIBILITY_FIX_APPLIED/);
     assert.match(html, /JQUERY_READY_EXCEPTION_ISOLATED/);
+    assert.match(html, /document\.getElementById\(payload\.moduleId\)/);
+    assert.doesNotMatch(html, /querySelectorAll\("img"\)\.forEach\(function\(img\)/);
   } finally {
     restoreDeps();
   }
