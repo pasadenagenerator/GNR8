@@ -146,6 +146,24 @@ test("preview route: transformed final output normalizes double-prefixed preview
     assert.match(html, /PREVIEW_GALLERY_VISIBILITY_STATUS/);
     assert.match(html, /PREVIEW_GALLERY_VISIBILITY_FIX_APPLIED/);
     assert.match(html, /gnr8-gallery-visibility-compat/);
+    assert.match(html, /GALLERY_IMAGES_LOAD_BUT_HIDDEN_BY_CSS/);
+    assert.match(html, /MODULE_HIDDEN_STYLE_NORMALIZED/);
+    assert.match(html, /hiddenImageCountBeforeFix/);
+    assert.match(html, /visibleImageCountAfterFix/);
+    assert.match(html, /moduleCssBefore/);
+    assert.match(html, /moduleCssAfter/);
+    assert.match(html, /firstImageCssBefore/);
+    assert.match(html, /firstImageCssAfter/);
+    assert.match(html, /payload\.moduleId==="m4695"/);
+    assert.match(html, /state\.moduleEl\.classList\.contains\("module"\)/);
+    assert.match(html, /state\.moduleEl\.classList\.contains\("gallery"\)/);
+    assert.match(html, /state\.moduleEl\.style\.visibility="visible"/);
+    assert.match(html, /state\.moduleEl\.style\.opacity="1"/);
+    assert.match(html, /state\.anchors\.forEach/);
+    assert.match(html, /state\.imgs\.forEach/);
+    assert.match(html, /return moduleHidden\|\|firstImageHidden\|\|firstAnchorHidden/);
+    assert.match(html, /if\(computeGalleryHiddenByLoadedState\(state\)\)return"GALLERY_IMAGES_LOAD_BUT_HIDDEN_BY_CSS"/);
+    assert.match(html, /if\(!state\.hasMonogalleryFn\|\|!state\.hasLightboxFn\)return"GALLERY_PLUGIN_DEPENDENCY_MISSING"/);
   } finally {
     restoreDeps();
   }
@@ -166,9 +184,12 @@ test("preview route: __debug=gallery_runtime injects isolated runtime-module dia
     assert.match(html, /PREVIEW_GALLERY_INIT_COMPLETED/);
     assert.match(html, /PREVIEW_GALLERY_VISIBILITY_STATUS/);
     assert.match(html, /PREVIEW_GALLERY_VISIBILITY_FIX_APPLIED/);
+    assert.match(html, /GALLERY_IMAGES_LOAD_BUT_HIDDEN_BY_CSS/);
+    assert.match(html, /MODULE_HIDDEN_STYLE_NORMALIZED/);
     assert.match(html, /JQUERY_READY_EXCEPTION_ISOLATED/);
     assert.match(html, /document\.getElementById\(payload\.moduleId\)/);
     assert.doesNotMatch(html, /querySelectorAll\("img"\)\.forEach\(function\(img\)/);
+    assert.match(html, /payload\.moduleId!=="m4695"/);
   } finally {
     restoreDeps();
   }
