@@ -157,6 +157,8 @@ test("preview route: transformed final output normalizes double-prefixed preview
     assert.match(html, /PREVIEW_GALLERY_VISIBILITY_FIX_APPLIED/);
     assert.match(html, /PREVIEW_GALLERY_LAYOUT_STATUS/);
     assert.match(html, /PREVIEW_GALLERY_LAYOUT_FIX_APPLIED/);
+    assert.match(html, /PREVIEW_GALLERY_LAYOUT_GEOMETRY_STATUS/);
+    assert.match(html, /PREVIEW_GALLERY_LAYOUT_GEOMETRY_FIX_APPLIED/);
     assert.match(html, /gnr8-gallery-visibility-compat/);
     assert.match(html, /gnr8-gallery-layout-compat/);
     assert.match(html, /GALLERY_IMAGES_LOAD_BUT_HIDDEN_BY_CSS/);
@@ -175,9 +177,19 @@ test("preview route: transformed final output normalizes double-prefixed preview
     assert.match(html, /imagecols===4/);
     assert.match(html, /state\.moduleEl\.style\.visibility="visible"/);
     assert.match(html, /state\.moduleEl\.style\.opacity="1"/);
-    assert.match(html, /state\.anchors\.forEach/);
+    assert.match(html, /directGridAnchors\.forEach/);
     assert.match(html, /state\.imgs\.forEach/);
-    assert.match(html, /layoutContainer\.style\.gridTemplateColumns="repeat\("\+String\(imagecols\)\+", minmax\(0, 1fr\)\)"/);
+    assert.match(html, /layoutContainer\.style\.gridTemplateColumns="repeat\(4, minmax\(0, 1fr\)\)"/);
+    assert.match(html, /layoutContainer\.style\.gap="12px"/);
+    assert.match(html, /img\.style\.setProperty\("height","auto","important"\)/);
+    assert.match(html, /img\.style\.objectFit="contain"/);
+    assert.match(html, /arrowsExcludedFromGrid/);
+    assert.match(html, /detectedColumnCountBefore/);
+    assert.match(html, /detectedColumnCountAfter/);
+    assert.match(html, /selectedLayoutContainer/);
+    assert.match(html, /selectedContainerClientWidth/);
+    assert.match(html, /galleryAnchorCount/);
+    assert.match(html, /anchorsAreDirectChildren/);
     assert.match(html, /return moduleHidden\|\|firstImageHidden\|\|firstAnchorHidden/);
     assert.match(html, /if\(computeGalleryHiddenByLoadedState\(state\)\)return"GALLERY_IMAGES_LOAD_BUT_HIDDEN_BY_CSS"/);
     assert.match(html, /if\(!state\.hasMonogalleryFn\|\|!state\.hasLightboxFn\)return"GALLERY_PLUGIN_DEPENDENCY_MISSING"/);
@@ -208,6 +220,7 @@ test("preview route: __debug=gallery_runtime injects isolated runtime-module dia
     assert.match(html, /PREVIEW_GALLERY_VISIBILITY_FIX_APPLIED/);
     assert.match(html, /PREVIEW_GALLERY_LAYOUT_STATUS/);
     assert.match(html, /PREVIEW_GALLERY_LAYOUT_FIX_APPLIED/);
+    assert.match(html, /PREVIEW_GALLERY_LAYOUT_GEOMETRY_STATUS/);
     assert.match(html, /GALLERY_IMAGES_LOAD_BUT_HIDDEN_BY_CSS/);
     assert.match(html, /MODULE_HIDDEN_STYLE_NORMALIZED/);
     assert.match(html, /JQUERY_READY_EXCEPTION_ISOLATED/);
