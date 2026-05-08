@@ -84,6 +84,20 @@ function normalizeTransformedPreviewOutputDoublePrefixedUrls(input: {
   };
 }
 
+function injectGalleryRuntimeDiagnostic(input: { html: string; siteVersionId: string; moduleId: string }): string {
+  const payload = JSON.stringify({
+    siteVersionId: input.siteVersionId,
+    moduleId: input.moduleId,
+  });
+  const script = `<script>(function(){try{var payload=${payload};var correlationKey=[payload.siteVersionId,payload.moduleId,String(Date.now())].join(":");var errors=[];window.addEventListener("error",function(ev){errors.push({message:ev&&ev.message?String(ev.message):"unknown",filename:ev&&ev.filename?String(ev.filename):"",lineno:ev&&ev.lineno?Number(ev.lineno):0,colno:ev&&ev.colno?Number(ev.colno):0});});window.addEventListener("unhandledrejection",function(ev){var reason=ev&&ev.reason;errors.push({message:reason&&reason.message?String(reason.message):String(reason??"unhandledrejection"),filename:"promise",lineno:0,colno:0});});function css(el){if(!el)return null;var s=window.getComputedStyle(el);return{display:s.display,visibility:s.visibility,opacity:s.opacity,height:s.height,width:s.width};}function emit(code,details){console.info("[gnr8.runtime.preview] "+code,Object.assign({siteVersionId:payload.siteVersionId,moduleId:payload.moduleId,correlationKey:correlationKey},details||{}));}function run(){var moduleEl=document.getElementById(payload.moduleId);var imgs=moduleEl?Array.prototype.slice.call(moduleEl.querySelectorAll("img")):[];var anchors=moduleEl?Array.prototype.slice.call(moduleEl.querySelectorAll("a")):[];var hiddenImageCount=imgs.filter(function(img){var c=css(img);return !c||c.display==="none"||c.visibility==="hidden"||Number(c.opacity)===0||img.clientHeight===0||img.clientWidth===0;}).length;var loadedImageCount=imgs.filter(function(img){return !!img.complete&&Number(img.naturalWidth)>0&&Number(img.naturalHeight)>0;}).length;var firstThree=imgs.slice(0,3).map(function(img){var src=img.currentSrc||img.getAttribute("src")||"";var perf=window.performance&&window.performance.getEntriesByName?window.performance.getEntriesByName(src):[];var entry=perf&&perf.length?perf[perf.length-1]:null;return{src:src,naturalWidth:Number(img.naturalWidth)||0,naturalHeight:Number(img.naturalHeight)||0,complete:!!img.complete,transferSize:entry&&typeof entry.transferSize==="number"?entry.transferSize:null,encodedBodySize:entry&&typeof entry.encodedBodySize==="number"?entry.encodedBodySize:null};});var jq=window.jQuery||window.$;var hasMonogalleryFn=!!(jq&&jq.fn&&typeof jq.fn.monogallery==="function");var hasLightboxFn=!!(jq&&jq.fn&&typeof jq.fn.lightbox==="function");var hasGalleryInit=!!(jq&&moduleEl&&jq(moduleEl).data&&jq(moduleEl).data("monogallery"));var hasLightboxInit=!!(jq&&moduleEl&&jq(moduleEl).data&&jq(moduleEl).data("lightbox"));var lazyTouched=imgs.some(function(img){return !!img.getAttribute("data-lazyload-src")||!!img.getAttribute("data-src");});var blockerReason="";if(!moduleEl){blockerReason="MODULE_NOT_FOUND";}else if(!hasMonogalleryFn||!hasLightboxFn){blockerReason="GALLERY_PLUGIN_DEPENDENCY_MISSING";}else if(!hasGalleryInit){blockerReason="GALLERY_PLUGIN_INIT_NOT_CALLED";}else if(imgs.length>0&&loadedImageCount===0){blockerReason="GALLERY_IMAGE_REQUESTS_NOT_EMITTED_OR_FAILED";}else if(imgs.length>0&&hiddenImageCount===imgs.length){blockerReason="GALLERY_IMAGES_LOAD_BUT_HIDDEN_BY_CSS";}else if(errors.length>0&&(!hasGalleryInit||loadedImageCount===0)){blockerReason="GALLERY_BLOCKED_BY_GLOBAL_LOADER_ERROR";}emit("PREVIEW_GALLERY_RUNTIME_DIAGNOSTIC",{initStatus:{galleryInitCalled:hasGalleryInit,lightboxInitCalled:hasLightboxInit,lazyloadTouchesGallery:lazyTouched,monogalleryFnPresent:hasMonogalleryFn,lightboxFnPresent:hasLightboxFn},blockerReason:blockerReason||null,imageCount:imgs.length,loadedImageCount:loadedImageCount,hiddenImageCount:hiddenImageCount,moduleCss:css(moduleEl),firstImageCss:css(imgs[0]||null),firstAnchorCss:css(anchors[0]||null)});emit("PREVIEW_GALLERY_IMAGE_STATUS",{imageCount:imgs.length,loadedImageCount:loadedImageCount,hiddenImageCount:hiddenImageCount,images:firstThree});emit("PREVIEW_GALLERY_INIT_STATUS",{initStatus:hasGalleryInit?"INITIALIZED":"NOT_INITIALIZED",galleryInitCalled:hasGalleryInit,lightboxInitCalled:hasLightboxInit,lazyloadTouchesGallery:lazyTouched});if(blockerReason==="GALLERY_BLOCKED_BY_GLOBAL_LOADER_ERROR"){emit("PREVIEW_RUNTIME_MODULE_INIT_BLOCKED",{blockerReason:blockerReason,errorCount:errors.length,errors:errors.slice(0,5)});}if(errors.length>0&&blockerReason!=="GALLERY_BLOCKED_BY_GLOBAL_LOADER_ERROR"){emit("PREVIEW_RUNTIME_MODULE_INIT_BLOCKED",{blockerReason:"NON_BLOCKING_ERRORS_PRESENT",errorCount:errors.length,errors:errors.slice(0,5)});}}if(document.readyState==="complete"){setTimeout(run,0);}else{window.addEventListener("load",function(){setTimeout(run,0);});}}catch(err){console.info("[gnr8.runtime.preview] PREVIEW_RUNTIME_MODULE_INIT_BLOCKED",{siteVersionId:${JSON.stringify(
+    input.siteVersionId,
+  )},moduleId:${JSON.stringify(input.moduleId)},correlationKey:"${input.siteVersionId}:${input.moduleId}:inject-error",blockerReason:"DIAGNOSTIC_SCRIPT_ERROR",error:String(err&&err.message?err.message:err)});}})();</script>`;
+  if (input.html.includes("</body>")) {
+    return input.html.replace("</body>", `${script}</body>`);
+  }
+  return `${input.html}${script}`;
+}
+
 export async function GET(req: Request, ctx: { params: Promise<{ siteVersionId: string }> }) {
   try {
     const { siteVersionId } = await ctx.params;
@@ -102,6 +116,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ siteVersionId: 
     const path = url.searchParams.get("path") ?? "/";
     const mode = url.searchParams.get("mode") ?? undefined;
     const contentDebugRequested = url.searchParams.get("__debug") === "content";
+    const galleryRuntimeDiagnosticRequested = url.searchParams.get("__debug") === "gallery_runtime";
     let contentDebugMode = false;
     if (contentDebugRequested) {
       console.info("[gnr8.content-runtime] CONTENT_DEBUG_REQUESTED", { path, siteVersionId });
@@ -138,14 +153,21 @@ export async function GET(req: Request, ctx: { params: Promise<{ siteVersionId: 
           },
         })
       : preview.html;
+    const htmlWithGalleryRuntimeDiagnostic = galleryRuntimeDiagnosticRequested
+      ? injectGalleryRuntimeDiagnostic({
+          html: htmlWithOptionalDebug,
+          siteVersionId: preview.siteVersionId,
+          moduleId: "m4695",
+        })
+      : htmlWithOptionalDebug;
     const shouldNormalizeFinalOutput = mode === "transformed";
     const normalizedOutput = shouldNormalizeFinalOutput
       ? normalizeTransformedPreviewOutputDoublePrefixedUrls({
-          html: htmlWithOptionalDebug,
+          html: htmlWithGalleryRuntimeDiagnostic,
           siteId: preview.siteId,
           siteVersionId: preview.siteVersionId,
         })
-      : { html: htmlWithOptionalDebug, occurrenceCount: 0, sampleBefore: null, sampleAfter: null };
+      : { html: htmlWithGalleryRuntimeDiagnostic, occurrenceCount: 0, sampleBefore: null, sampleAfter: null };
     const html = normalizedOutput.html;
     if (normalizedOutput.occurrenceCount > 0) {
       const correlationKey = `${preview.siteId}:${preview.siteVersionId}:preview-transformed-output-double-prefix`;
