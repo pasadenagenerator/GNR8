@@ -141,6 +141,27 @@ test("preview route: transformed final output normalizes double-prefixed preview
     assert.match(html, /\/api\/gnr8\/runtime\/preview-assets\/site_preview_1\/sv_preview_1\/uploads\/gallery\/one\.jpg/);
     assert.match(html, /\/api\/gnr8\/runtime\/preview-assets\/site_preview_1\/sv_preview_1\/uploads\/gallery\/two\.jpg/);
     assert.match(html, /\/api\/other\/endpoint\?id=1/);
+    assert.match(html, /PREVIEW_RUNTIME_MODULE_INIT_ERROR_ISOLATED/);
+    assert.match(html, /PREVIEW_GALLERY_INIT_COMPLETED/);
+  } finally {
+    restoreDeps();
+  }
+});
+
+test("preview route: __debug=gallery_runtime injects isolated runtime-module diagnostics", async () => {
+  const restoreDeps = mockPreviewDeps(false);
+  try {
+    const response = await GET(
+      new Request("https://app.pasadenagenerator.com/api/gnr8/runtime/versions/sv_preview_1/preview?__debug=gallery_runtime"),
+      {
+        params: Promise.resolve({ siteVersionId: "sv_preview_1" }),
+      },
+    );
+    const html = await response.text();
+    assert.equal(response.status, 200);
+    assert.match(html, /PREVIEW_RUNTIME_MODULE_INIT_ERROR_ISOLATED/);
+    assert.match(html, /PREVIEW_GALLERY_INIT_COMPLETED/);
+    assert.match(html, /JQUERY_READY_EXCEPTION_ISOLATED/);
   } finally {
     restoreDeps();
   }
