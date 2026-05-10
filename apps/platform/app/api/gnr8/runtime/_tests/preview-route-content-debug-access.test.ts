@@ -220,6 +220,8 @@ test("preview route: transformed injected gallery runtime shim parses with paged
     assert.match(injectedShim, /PREVIEW_GALLERY_PAGED_LAYOUT_APPLIED/);
     assert.match(injectedShim, /PREVIEW_GALLERY_PAGE_SWITCH/);
     assert.match(injectedShim, /PREVIEW_GALLERY_THUMBNAIL_NORMALIZATION_APPLIED/);
+    assert.match(injectedShim, /PREVIEW_GALLERY_LIST_MARKER_CLEANUP/);
+    assert.match(injectedShim, /PREVIEW_GALLERY_ARROW_POSITION_NORMALIZED/);
     assert.match(injectedShim, /PREVIEW_GALLERY_PAGED_VISIBILITY_STATUS/);
     assert.match(injectedShim, /PREVIEW_GALLERY_PAGED_VISIBILITY_FIX_APPLIED/);
     assert.match(injectedShim, /PREVIEW_GALLERY_THUMBNAIL_CAPTIONS_HIDDEN/);
@@ -265,8 +267,21 @@ test("preview route: transformed injected gallery runtime shim parses with paged
     assert.match(injectedShim, /anchor\.style\.position="relative"/);
     assert.match(injectedShim, /tileAspectRatio:"1 \/ 1"/);
     assert.match(injectedShim, /listMarkersSuppressed:listMarkerNormalization\.listMarkersSuppressed/);
+    assert.match(injectedShim, /removedBulletNodeCount/);
+    assert.match(injectedShim, /listContainersNormalized/);
     assert.match(injectedShim, /styleTag\.textContent="#"\+String\(payload\.moduleId\)\+"/);
-    assert.match(injectedShim, /\.gnr8-gallery-pages li::marker\{content:none;display:none;\}/);
+    assert.match(injectedShim, /#"\+String\(payload\.moduleId\)\+" ul,#"\+String\(payload\.moduleId\)\+" ol,#"\+String\(payload\.moduleId\)\+" li/);
+    assert.match(injectedShim, /li::marker\{content:none !important;\}/);
+    assert.match(injectedShim, /node\.style\.setProperty\("list-style","none","important"\)/);
+    assert.match(injectedShim, /node\.style\.setProperty\("padding","0","important"\)/);
+    assert.match(injectedShim, /node\.style\.setProperty\("margin","0","important"\)/);
+    assert.match(injectedShim, /moduleEl\.style\.position="relative"/);
+    assert.match(injectedShim, /node\.style\.position="absolute"/);
+    assert.match(injectedShim, /node\.style\.top="50%"/);
+    assert.match(injectedShim, /node\.style\.transform="translateY\(-50%\)"/);
+    assert.match(injectedShim, /node\.style\.left="-44px"/);
+    assert.match(injectedShim, /node\.style\.right="-44px"/);
+    assert.match(injectedShim, /node\.style\.pointerEvents="auto"/);
     assert.doesNotMatch(injectedShim, /moduleEl\.querySelectorAll\("ul,ol,li"\)/);
     assert.doesNotMatch(injectedShim, /\/\\\\\\\\\/uploads\\\\\\\\\//);
   } finally {
@@ -292,6 +307,10 @@ test("preview route: injected shim keeps paged split logic for 12 + 3 and only o
     assert.match(injectedShim, /setActivePage\(pagesHost,0\)/);
     assert.match(injectedShim, /page0\.style\.display==="grid"/);
     assert.match(injectedShim, /page1Hidden:!page1\|\|page1\.style\.display==="none"/);
+    assert.match(injectedShim, /leftArrowDetected/);
+    assert.match(injectedShim, /rightArrowDetected/);
+    assert.match(injectedShim, /arrowsPositioned/);
+    assert.match(injectedShim, /overlapProtectionApplied/);
   } finally {
     restoreDeps();
   }
