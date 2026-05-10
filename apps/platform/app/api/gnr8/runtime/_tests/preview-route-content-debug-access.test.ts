@@ -14,6 +14,17 @@ function extractInjectedGalleryRuntimeShim(html: string): string {
   return html.slice(start + "<script>".length, end);
 }
 
+function extractParseSettingFunctionFromInjectedShim(injectedShim: string): (dataSettings: string, key: string) => number | null {
+  const startToken = "function parseSetting(dataSettings,key){";
+  const start = injectedShim.indexOf(startToken);
+  assert.notEqual(start, -1, "expected parseSetting function in injected shim");
+  const endToken = "}function isLikelyControlNode";
+  const end = injectedShim.indexOf(endToken, start);
+  assert.notEqual(end, -1, "expected parseSetting function end marker in injected shim");
+  const functionSource = injectedShim.slice(start, end + 1);
+  return new Function(`${functionSource}; return parseSetting;`)() as (dataSettings: string, key: string) => number | null;
+}
+
 function mockPreviewDeps(canShowContentDebug: boolean): () => void {
   return setPreviewRouteDependenciesForTest({
     resolveAgencyIdForSiteVersion: async () => "agency_1",
@@ -204,6 +215,7 @@ test("preview route: transformed injected gallery runtime shim parses with paged
     assert.equal(response.status, 200);
 
     const injectedShim = extractInjectedGalleryRuntimeShim(html);
+    assert.doesNotThrow(() => new Function(injectedShim), "expected injected shim to parse as JavaScript");
     assert.match(injectedShim, /PREVIEW_GALLERY_PAGED_LAYOUT_STATUS/);
     assert.match(injectedShim, /PREVIEW_GALLERY_PAGED_LAYOUT_APPLIED/);
     assert.match(injectedShim, /PREVIEW_GALLERY_THUMBNAIL_CAPTIONS_HIDDEN/);
@@ -214,6 +226,47 @@ test("preview route: transformed injected gallery runtime shim parses with paged
     assert.match(injectedShim, /isExcludedControlAnchor/);
     assert.match(injectedShim, /ensurePagesHost/);
     assert.match(injectedShim, /ensurePage/);
+    assert.doesNotMatch(injectedShim, /\/\\\\\\\\\/uploads\\\\\\\\\//);
+  } finally {
+    restoreDeps();
+  }
+});
+
+test("preview route: injected shim parseSetting parses imagecols and imagenr from comma-separated data-settings", async () => {
+  const restoreDeps = mockPreviewDeps(false);
+  try {
+    const response = await GET(
+      new Request("https://app.pasadenagenerator.com/api/gnr8/runtime/versions/sv_preview_1/preview?mode=transformed&__debug=gallery_runtime"),
+      {
+        params: Promise.resolve({ siteVersionId: "sv_preview_1" }),
+      },
+    );
+    const html = await response.text();
+    const injectedShim = extractInjectedGalleryRuntimeShim(html);
+    const parseSetting = extractParseSettingFunctionFromInjectedShim(injectedShim);
+    assert.equal(parseSetting("imagecols=4,imagenr=12", "imagecols"), 4);
+    assert.equal(parseSetting("imagecols=4,imagenr=12", "imagenr"), 12);
+  } finally {
+    restoreDeps();
+  }
+});
+
+test("preview route: injected shim parseSetting parses semicolon and ampersand separators", async () => {
+  const restoreDeps = mockPreviewDeps(false);
+  try {
+    const response = await GET(
+      new Request("https://app.pasadenagenerator.com/api/gnr8/runtime/versions/sv_preview_1/preview?mode=transformed&__debug=gallery_runtime"),
+      {
+        params: Promise.resolve({ siteVersionId: "sv_preview_1" }),
+      },
+    );
+    const html = await response.text();
+    const injectedShim = extractInjectedGalleryRuntimeShim(html);
+    const parseSetting = extractParseSettingFunctionFromInjectedShim(injectedShim);
+    assert.equal(parseSetting("foo=1; imagecols=5; bar=2", "imagecols"), 5);
+    assert.equal(parseSetting("foo=1&imagenr=9&bar=2", "imagenr"), 9);
+    assert.equal(parseSetting("imagecols='6'&imagenr=\"11\"", "imagecols"), 6);
+    assert.equal(parseSetting("imagecols='6'&imagenr=\"11\"", "imagenr"), 11);
   } finally {
     restoreDeps();
   }
