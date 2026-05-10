@@ -5,7 +5,7 @@ import { GET, POST } from "@/app/api/gnr8/runtime/versions/[siteVersionId]/previ
 import { setPreviewRouteDependenciesForTest } from "@/app/api/gnr8/runtime/versions/[siteVersionId]/preview/preview-route-dependencies";
 
 function extractInjectedGalleryRuntimeShim(html: string): string {
-  const startToken = "<script>(function(){var payload=";
+  const startToken = "<script>(function(){";
   const start = html.indexOf(startToken);
   assert.notEqual(start, -1, "expected injected gallery runtime shim script start token");
   const endToken = "</script>";
@@ -18,7 +18,7 @@ function extractParseSettingFunctionFromInjectedShim(injectedShim: string): (dat
   const startToken = "function parseSetting(dataSettings,key){";
   const start = injectedShim.indexOf(startToken);
   assert.notEqual(start, -1, "expected parseSetting function in injected shim");
-  const endToken = "}function isLikelyControlNode";
+  const endToken = "}\nfunction isLikelyControlNode";
   const end = injectedShim.indexOf(endToken, start);
   assert.notEqual(end, -1, "expected parseSetting function end marker in injected shim");
   const functionSource = injectedShim.slice(start, end + 1);
@@ -218,6 +218,8 @@ test("preview route: transformed injected gallery runtime shim parses with paged
     assert.doesNotThrow(() => new Function(injectedShim), "expected injected shim to parse as JavaScript");
     assert.match(injectedShim, /PREVIEW_GALLERY_PAGED_LAYOUT_STATUS/);
     assert.match(injectedShim, /PREVIEW_GALLERY_PAGED_LAYOUT_APPLIED/);
+    assert.match(injectedShim, /PREVIEW_GALLERY_PAGED_VISIBILITY_STATUS/);
+    assert.match(injectedShim, /PREVIEW_GALLERY_PAGED_VISIBILITY_FIX_APPLIED/);
     assert.match(injectedShim, /PREVIEW_GALLERY_THUMBNAIL_CAPTIONS_HIDDEN/);
     assert.match(injectedShim, /PAGED_GALLERY_CONTROLS_NOT_WIRED/);
     assert.doesNotMatch(injectedShim, /PREVIEW_GALLERY_UNIFIED_GRID_STATUS/);
@@ -226,7 +228,47 @@ test("preview route: transformed injected gallery runtime shim parses with paged
     assert.match(injectedShim, /isExcludedControlAnchor/);
     assert.match(injectedShim, /ensurePagesHost/);
     assert.match(injectedShim, /ensurePage/);
+    assert.match(injectedShim, /page\.style\.display="grid"/);
+    assert.match(injectedShim, /page0\.style\.display="grid"/);
+    assert.match(injectedShim, /page1\.style\.display=controlsWired\?"grid":"none"/);
+    assert.match(injectedShim, /pagesHost\.style\.visibility="visible"/);
+    assert.match(injectedShim, /moduleEl\.style\.visibility="visible"/);
+    assert.match(injectedShim, /PAGED_CONTROLS_UNWIRED_PAGE0_ENFORCED/);
+    assert.match(injectedShim, /page0VisibleImageCount/);
+    assert.match(injectedShim, /firstPage0ImageSize/);
+    assert.match(injectedShim, /clientWidth/);
+    assert.match(injectedShim, /clientHeight/);
+    assert.match(injectedShim, /naturalWidth/);
+    assert.match(injectedShim, /naturalHeight/);
+    assert.match(injectedShim, /var pageSize=imagenr/);
+    assert.match(injectedShim, /var pageCount=Math\.max\(1,Math\.ceil\(anchors\.length\/pageSize\)\)/);
+    assert.match(injectedShim, /setActivePage\(pagesHost,0\)/);
+    assert.match(injectedShim, /visibilityDetails=applyPagedVisibilityFix/);
+    assert.match(injectedShim, /reasonCode:"PAGED_LAYOUT_ACTIVE_VISIBILITY_PRESERVED"/);
     assert.doesNotMatch(injectedShim, /\/\\\\\\\\\/uploads\\\\\\\\\//);
+  } finally {
+    restoreDeps();
+  }
+});
+
+test("preview route: injected shim keeps captions hidden and preserves img alt attributes", async () => {
+  const restoreDeps = mockPreviewDeps(false);
+  try {
+    const response = await GET(
+      new Request("https://app.pasadenagenerator.com/api/gnr8/runtime/versions/sv_preview_1/preview?mode=transformed&__debug=gallery_runtime"),
+      {
+        params: Promise.resolve({ siteVersionId: "sv_preview_1" }),
+      },
+    );
+    const html = await response.text();
+    const injectedShim = extractInjectedGalleryRuntimeShim(html);
+
+    assert.match(injectedShim, /hideThumbnailCaptions/);
+    assert.match(injectedShim, /node\.style\.display="none"/);
+    assert.match(injectedShim, /PREVIEW_GALLERY_THUMBNAIL_CAPTIONS_HIDDEN/);
+    assert.doesNotMatch(injectedShim, /removeAttribute\("alt"\)/);
+    assert.doesNotMatch(injectedShim, /\.alt\s*=/);
+    assert.doesNotMatch(injectedShim, /setAttribute\("alt"/);
   } finally {
     restoreDeps();
   }
