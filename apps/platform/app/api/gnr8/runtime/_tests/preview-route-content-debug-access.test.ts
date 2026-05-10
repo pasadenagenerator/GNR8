@@ -183,9 +183,18 @@ test("preview route: transformed final output normalizes double-prefixed preview
     assert.match(html, /img\.style\.setProperty\("height","auto","important"\)/);
     assert.match(html, /img\.style\.objectFit="contain"/);
     assert.match(html, /PREVIEW_GALLERY_LAYOUT_CONTAINER_CANDIDATES/);
+    assert.match(html, /PREVIEW_GALLERY_LAYOUT_MULTI_CONTAINER_STATUS/);
+    assert.match(html, /PREVIEW_GALLERY_LAYOUT_MULTI_CONTAINER_FIX_APPLIED/);
+    assert.match(html, /PREVIEW_GALLERY_LAYOUT_INCOMPLETE_COVERAGE/);
     assert.match(html, /PREVIEW_GALLERY_LAYOUT_RETRY_SCHEDULED/);
     assert.match(html, /PREVIEW_GALLERY_LAYOUT_RETRY_APPLIED/);
     assert.match(html, /arrowsExcludedFromGrid/);
+    assert.match(html, /uncoveredImageCount/);
+    assert.match(html, /imagesCovered/);
+    assert.match(html, /imagesTotal/);
+    assert.match(html, /containerCount/);
+    assert.match(html, /containersFixed/);
+    assert.match(html, /containsTrailingImages/);
     assert.match(html, /gridChildType/);
     assert.match(html, /first4ItemSizesBefore/);
     assert.match(html, /first4ItemSizesAfter/);
@@ -203,6 +212,9 @@ test("preview route: transformed final output normalizes double-prefixed preview
     assert.match(html, /GALLERY_JS_OVERWROTE_LAYOUT/);
     assert.match(html, /detectedColumnCountBefore/);
     assert.match(html, /detectedColumnCountAfter/);
+    assert.match(html, /totalImageCount/);
+    assert.match(html, /fixedImageCount/);
+    assert.match(html, /uncoveredContainerSummaries/);
     assert.match(html, /galleryAnchorCount/);
     assert.match(html, /return moduleHidden\|\|firstImageHidden\|\|firstAnchorHidden/);
     assert.match(html, /if\(computeGalleryHiddenByLoadedState\(state\)\)return"GALLERY_IMAGES_LOAD_BUT_HIDDEN_BY_CSS"/);
