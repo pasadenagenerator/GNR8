@@ -260,9 +260,14 @@ test("preview route: transformed injected gallery runtime shim parses with paged
     assert.match(injectedShim, /img\.style\.removeProperty\("max-width"\)/);
     assert.match(injectedShim, /img\.style\.removeProperty\("aspect-ratio"\)/);
     assert.match(injectedShim, /img\.style\.removeProperty\("transform"\)/);
-    assert.match(injectedShim, /anchor\.style\.aspectRatio="4 \/ 3"/);
+    assert.match(injectedShim, /anchor\.style\.aspectRatio="1 \/ 1"/);
     assert.match(injectedShim, /anchor\.style\.overflow="hidden"/);
     assert.match(injectedShim, /anchor\.style\.position="relative"/);
+    assert.match(injectedShim, /tileAspectRatio:"1 \/ 1"/);
+    assert.match(injectedShim, /listMarkersSuppressed:listMarkerNormalization\.listMarkersSuppressed/);
+    assert.match(injectedShim, /styleTag\.textContent="#"\+String\(payload\.moduleId\)\+"/);
+    assert.match(injectedShim, /\.gnr8-gallery-pages li::marker\{content:none;display:none;\}/);
+    assert.doesNotMatch(injectedShim, /moduleEl\.querySelectorAll\("ul,ol,li"\)/);
     assert.doesNotMatch(injectedShim, /\/\\\\\\\\\/uploads\\\\\\\\\//);
   } finally {
     restoreDeps();
