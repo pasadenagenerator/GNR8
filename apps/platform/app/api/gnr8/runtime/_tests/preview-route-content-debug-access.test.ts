@@ -307,6 +307,36 @@ test("preview route: unified gallery grid shim is scoped to m4695 and supports s
   }
 });
 
+test("preview route: transformed injected gallery runtime shim parses with full unified-grid diagnostics", async () => {
+  const restoreDeps = mockPreviewDeps(false);
+  try {
+    const response = await GET(
+      new Request("https://app.pasadenagenerator.com/api/gnr8/runtime/versions/sv_preview_1/preview?mode=transformed&__debug=gallery_runtime"),
+      {
+        params: Promise.resolve({ siteVersionId: "sv_preview_1" }),
+      },
+    );
+    const html = await response.text();
+    assert.equal(response.status, 200);
+
+    const injectedShim = extractInjectedGalleryRuntimeShim(html);
+    assert.doesNotThrow(() => {
+      new Function(injectedShim);
+    });
+
+    assert.match(injectedShim, /PREVIEW_GALLERY_VISIBILITY_STATUS/);
+    assert.match(injectedShim, /PREVIEW_GALLERY_VISIBILITY_FIX_APPLIED/);
+    assert.match(injectedShim, /PREVIEW_GALLERY_LAYOUT_CONTAINER_CANDIDATES/);
+    assert.match(injectedShim, /PREVIEW_GALLERY_GRID_ITEM_STATUS/);
+    assert.match(injectedShim, /PREVIEW_GALLERY_GRID_ITEM_FIX_APPLIED/);
+    assert.match(injectedShim, /PREVIEW_GALLERY_UNIFIED_GRID_STATUS/);
+    assert.match(injectedShim, /PREVIEW_GALLERY_UNIFIED_GRID_APPLIED/);
+    assert.match(injectedShim, /PREVIEW_GALLERY_LAYOUT_GEOMETRY_FIX_APPLIED/);
+  } finally {
+    restoreDeps();
+  }
+});
+
 test("preview route: POST module request with dm returns deterministic unsupported-module payload instead of 405", async () => {
   const restoreDeps = mockPreviewDeps(false);
   try {
