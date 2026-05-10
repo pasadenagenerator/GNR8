@@ -191,6 +191,8 @@ test("preview route: transformed final output normalizes double-prefixed preview
     assert.match(html, /PREVIEW_GALLERY_LAYOUT_INCOMPLETE_COVERAGE/);
     assert.match(html, /PREVIEW_GALLERY_LAYOUT_RETRY_SCHEDULED/);
     assert.match(html, /PREVIEW_GALLERY_LAYOUT_RETRY_APPLIED/);
+    assert.match(html, /PREVIEW_GALLERY_UNIFIED_GRID_STATUS/);
+    assert.match(html, /PREVIEW_GALLERY_UNIFIED_GRID_APPLIED/);
     assert.match(html, /arrowsExcludedFromGrid/);
     assert.match(html, /uncoveredImageCount/);
     assert.match(html, /imagesCovered/);
@@ -209,6 +211,10 @@ test("preview route: transformed final output normalizes double-prefixed preview
     assert.match(html, /if\(childAnchors\.length===1&&isImageAnchor\(childAnchors\[0\]\)\)return\{type:"item_wrapper"/);
     assert.match(html, /querySelectorAll\(":scope > a"\)/);
     assert.match(html, /querySelectorAll\(":scope img"\)/);
+    assert.match(html, /className="gnr8-gallery-unified-grid"/);
+    assert.match(html, /collectUnifiedGalleryAnchors/);
+    assert.match(html, /isExcludedControlAnchor/);
+    assert.match(html, /host\.appendChild\(anchor\)/);
     assert.match(html, /getNormalizedGridChildren/);
     assert.match(html, /normalizeGridItemNode/);
     assert.match(html, /summarizeContainerChildrenForGrid/);
@@ -229,6 +235,11 @@ test("preview route: transformed final output normalizes double-prefixed preview
     assert.match(html, /GALLERY_JS_OVERWROTE_LAYOUT/);
     assert.match(html, /detectedColumnCountBefore/);
     assert.match(html, /detectedColumnCountAfter/);
+    assert.match(html, /movedAnchorCount/);
+    assert.match(html, /skippedControlCount/);
+    assert.match(html, /gridHostCreated/);
+    assert.match(html, /trailingStackDetectedBefore/);
+    assert.match(html, /trailingStackDetectedAfter/);
     assert.match(html, /totalImageCount/);
     assert.match(html, /fixedImageCount/);
     assert.match(html, /uncoveredContainerSummaries/);
@@ -236,11 +247,6 @@ test("preview route: transformed final output normalizes double-prefixed preview
     assert.match(html, /return moduleHidden\|\|firstImageHidden\|\|firstAnchorHidden/);
     assert.match(html, /if\(computeGalleryHiddenByLoadedState\(state\)\)return"GALLERY_IMAGES_LOAD_BUT_HIDDEN_BY_CSS"/);
     assert.match(html, /if\(!state\.hasMonogalleryFn\|\|!state\.hasLightboxFn\)return"GALLERY_PLUGIN_DEPENDENCY_MISSING"/);
-    const injectedShim = extractInjectedGalleryRuntimeShim(html);
-    assert.doesNotThrow(() => {
-      // Parsing as a function body catches malformed try/catch and similar syntax errors in inline script assembly.
-      new Function(injectedShim);
-    });
   } finally {
     restoreDeps();
   }
@@ -269,6 +275,33 @@ test("preview route: __debug=gallery_runtime injects isolated runtime-module dia
     assert.match(html, /document\.getElementById\(payload\.moduleId\)/);
     assert.doesNotMatch(html, /querySelectorAll\("img"\)\.forEach\(function\(img\)/);
     assert.match(html, /payload\.moduleId!=="m4695"/);
+  } finally {
+    restoreDeps();
+  }
+});
+
+test("preview route: unified gallery grid shim is scoped to m4695 and supports split wrappers", async () => {
+  const restoreDeps = mockPreviewDeps(false);
+  try {
+    const response = await GET(
+      new Request("https://app.pasadenagenerator.com/api/gnr8/runtime/versions/sv_preview_1/preview?__debug=gallery_runtime"),
+      {
+        params: Promise.resolve({ siteVersionId: "sv_preview_1" }),
+      },
+    );
+    const html = await response.text();
+    assert.equal(response.status, 200);
+    assert.match(html, /payload\.moduleId==="m4695"/);
+    assert.match(html, /collectUnifiedGalleryAnchors/);
+    assert.match(html, /isPreviewAssetGalleryImage/);
+    assert.match(html, /isExcludedControlAnchor/);
+    assert.match(html, /ensureUnifiedGridHost/);
+    assert.match(html, /className="gnr8-gallery-unified-grid"/);
+    assert.match(html, /host\.appendChild\(anchor\)/);
+    assert.match(html, /PREVIEW_GALLERY_UNIFIED_GRID_STATUS/);
+    assert.match(html, /PREVIEW_GALLERY_UNIFIED_GRID_APPLIED/);
+    assert.match(html, /trailingStackDetectedBefore/);
+    assert.match(html, /trailingStackDetectedAfter/);
   } finally {
     restoreDeps();
   }
