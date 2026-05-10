@@ -1742,9 +1742,8 @@ export async function resolveRawTemplateSiteForDomainAndPath(input: {
 
 export async function getSiteVersion(siteVersionId: string): Promise<CanonicalSiteVersionSnapshot | null> {
   await ensureRuntimeTables();
-  const client = await getSuperadminPool().connect();
-  try {
-    const res = await client.query<SiteVersionRow>(
+  const pool = getSuperadminPool();
+  const res = await pool.query<SiteVersionRow>(
       `
       select
         id::text as id,
@@ -1766,7 +1765,7 @@ export async function getSiteVersion(siteVersionId: string): Promise<CanonicalSi
     const row = res.rows[0];
     if (!row) return null;
 
-    const pages = await client.query<PageVersionRow>(
+    const pages = await pool.query<PageVersionRow>(
       `
       select
         id::text as id,
@@ -1803,9 +1802,6 @@ export async function getSiteVersion(siteVersionId: string): Promise<CanonicalSi
       artifactId: row.artifact_id,
       pages: pages.rows.map(mapPageVersionRow),
     };
-  } finally {
-    client.release();
-  }
 }
 
 export async function setSiteVersionImportProvenanceSummary(input: {
@@ -2031,15 +2027,11 @@ export async function getPublishedVersionForSite(siteId: string): Promise<{ id: 
 
 export async function getArtifactById(artifactId: string): Promise<RuntimeArtifact | null> {
   await ensureRuntimeTables();
-  const client = await getSuperadminPool().connect();
-  try {
-    return getArtifactByIdWithClient(client, artifactId);
-  } finally {
-    client.release();
-  }
+  const pool = getSuperadminPool();
+  return getArtifactByIdWithClient(pool, artifactId);
 }
 
-async function getArtifactByIdWithClient(client: PoolClient, artifactId: string): Promise<RuntimeArtifact | null> {
+async function getArtifactByIdWithClient(client: QueryableClient, artifactId: string): Promise<RuntimeArtifact | null> {
   const res = await client.query<{
     id: string;
     site_id: string;
@@ -2095,6 +2087,8 @@ async function getArtifactByIdWithClient(client: PoolClient, artifactId: string)
     createdAt: row.created_at,
   };
 }
+
+type QueryableClient = Pick<PoolClient, "query">;
 
 export async function resolveActiveArtifactForHostAndPath(input: {
   host?: string | null;
@@ -2509,9 +2503,8 @@ export async function getVersionState(siteVersionId: string): Promise<SiteVersio
 
 export async function getSiteVersionArtifactBinding(siteVersionId: string): Promise<{ siteId: string; artifactId: string | null } | null> {
   await ensureRuntimeTables();
-  const client = await getSuperadminPool().connect();
-  try {
-    const res = await client.query<{ site_id: string; artifact_id: string | null }>(
+  const pool = getSuperadminPool();
+  const res = await pool.query<{ site_id: string; artifact_id: string | null }>(
       `
       select site_id::text as site_id, artifact_id::text as artifact_id
       from public.gnr8_runtime_site_versions
@@ -2520,19 +2513,15 @@ export async function getSiteVersionArtifactBinding(siteVersionId: string): Prom
       `,
       [siteVersionId],
     );
-    const row = res.rows[0];
-    if (!row) return null;
-    return { siteId: row.site_id, artifactId: row.artifact_id };
-  } finally {
-    client.release();
-  }
+  const row = res.rows[0];
+  if (!row) return null;
+  return { siteId: row.site_id, artifactId: row.artifact_id };
 }
 
 export async function getRawTemplateSiteArtifact(siteVersionId: string): Promise<RawTemplateSiteArtifact | null> {
   await ensureRuntimeTables();
-  const client = await getSuperadminPool().connect();
-  try {
-    const result = await client.query<RawTemplateArtifactRow>(
+  const pool = getSuperadminPool();
+  const result = await pool.query<RawTemplateArtifactRow>(
       `
       select
         id::text as id,
@@ -2551,31 +2540,27 @@ export async function getRawTemplateSiteArtifact(siteVersionId: string): Promise
       `,
       [siteVersionId],
     );
-    const row = result.rows[0];
-    if (!row) return null;
-    const entryHtmlPath = normalizeRawTemplateFilePath(row.entry_html_path);
-    if (!entryHtmlPath) return null;
-    const assetBasePath = normalizeRawTemplateFilePath(row.asset_base_path);
-    return {
-      id: row.id,
-      artifactType: "raw_template_site",
-      siteId: row.site_id,
-      siteVersionId: row.site_version_id,
-      entryHtmlPath,
-      assetBasePath,
-      fileMap: parseRawTemplateFileMap(row.file_map),
-      createdAt: row.created_at,
-    };
-  } finally {
-    client.release();
-  }
+  const row = result.rows[0];
+  if (!row) return null;
+  const entryHtmlPath = normalizeRawTemplateFilePath(row.entry_html_path);
+  if (!entryHtmlPath) return null;
+  const assetBasePath = normalizeRawTemplateFilePath(row.asset_base_path);
+  return {
+    id: row.id,
+    artifactType: "raw_template_site",
+    siteId: row.site_id,
+    siteVersionId: row.site_version_id,
+    entryHtmlPath,
+    assetBasePath,
+    fileMap: parseRawTemplateFileMap(row.file_map),
+    createdAt: row.created_at,
+  };
 }
 
 export async function getRawImportedSiteArtifact(siteVersionId: string): Promise<RawImportedSiteArtifact | null> {
   await ensureRuntimeTables();
-  const client = await getSuperadminPool().connect();
-  try {
-    const result = await client.query<RawTemplateArtifactRow>(
+  const pool = getSuperadminPool();
+  const result = await pool.query<RawTemplateArtifactRow>(
       `
       select
         id::text as id,
@@ -2594,25 +2579,22 @@ export async function getRawImportedSiteArtifact(siteVersionId: string): Promise
       `,
       [siteVersionId],
     );
-    const row = result.rows[0];
-    if (!row) return null;
-    const entryHtmlPath = normalizeRawTemplateFilePath(row.entry_html_path);
-    if (!entryHtmlPath) return null;
-    const assetBasePath = normalizeRawTemplateFilePath(row.asset_base_path);
-    return {
-      id: row.id,
-      artifactType: "raw_imported_site",
-      siteId: row.site_id,
-      siteVersionId: row.site_version_id,
-      entryHtmlPath,
-      assetBasePath,
-      fileMap: parseRawTemplateFileMap(row.file_map),
-      metadata: parseRawImportedSiteArtifactMetadata(row.metadata_json),
-      createdAt: row.created_at,
-    };
-  } finally {
-    client.release();
-  }
+  const row = result.rows[0];
+  if (!row) return null;
+  const entryHtmlPath = normalizeRawTemplateFilePath(row.entry_html_path);
+  if (!entryHtmlPath) return null;
+  const assetBasePath = normalizeRawTemplateFilePath(row.asset_base_path);
+  return {
+    id: row.id,
+    artifactType: "raw_imported_site",
+    siteId: row.site_id,
+    siteVersionId: row.site_version_id,
+    entryHtmlPath,
+    assetBasePath,
+    fileMap: parseRawTemplateFileMap(row.file_map),
+    metadata: parseRawImportedSiteArtifactMetadata(row.metadata_json),
+    createdAt: row.created_at,
+  };
 }
 
 export async function getRawTemplateSiteAsset(input: {
@@ -2623,9 +2605,8 @@ export async function getRawTemplateSiteAsset(input: {
   await ensureRuntimeTables();
   const normalizedFilePath = normalizeRawTemplateFilePath(input.filePath);
   if (!normalizedFilePath) return null;
-  const client = await getSuperadminPool().connect();
-  try {
-    const artifactId = String(input.artifactId ?? "").trim();
+  const pool = getSuperadminPool();
+  const artifactId = String(input.artifactId ?? "").trim();
     console.info("[preview-runtime] RAW_IMPORT_ASSET_DB_COLUMN_MAPPING_USED", {
       table: "public.gnr8_runtime_raw_template_artifact_files",
       filePathColumn: "file_path",
@@ -2637,7 +2618,7 @@ export async function getRawTemplateSiteAsset(input: {
       filePath: normalizedFilePath,
     });
     const row = artifactId
-      ? await client.query<RawTemplateArtifactFileRow>(
+      ? await pool.query<RawTemplateArtifactFileRow>(
           `
           select
             f.media_type::text as media_type,
@@ -2651,7 +2632,7 @@ export async function getRawTemplateSiteAsset(input: {
           `,
           [artifactId, normalizedFilePath],
         )
-      : await client.query<RawTemplateArtifactFileRow>(
+      : await pool.query<RawTemplateArtifactFileRow>(
           `
           select
             f.media_type::text as media_type,
@@ -2690,9 +2671,6 @@ export async function getRawTemplateSiteAsset(input: {
       sha256: hit.sha256,
       bytes,
     };
-  } finally {
-    client.release();
-  }
 }
 
 export async function persistRawImportedSiteArtifact(input: {
@@ -3062,9 +3040,8 @@ export async function upsertContentSlots(input: {
 
 export async function listContentSlots(siteVersionId: string): Promise<ContentSlot[]> {
   await ensureRuntimeTables();
-  const client = await getSuperadminPool().connect();
-  try {
-    const res = await client.query<any>(
+  const pool = getSuperadminPool();
+  const res = await pool.query<any>(
       `
       select id::text, site_id::text, site_version_id::text, slot_key::text, slot_type::text, source_selector::text, source_text::text, source_asset_path::text, confidence::text, diagnostics, created_at::text, updated_at::text
       from public.gnr8_content_slots
@@ -3073,23 +3050,20 @@ export async function listContentSlots(siteVersionId: string): Promise<ContentSl
       `,
       [siteVersionId],
     );
-    return res.rows.map((row: any) => ({
-      id: row.id,
-      siteId: row.site_id,
-      siteVersionId: row.site_version_id,
-      slotKey: row.slot_key,
-      slotType: row.slot_type as ContentSlotType,
-      sourceSelector: row.source_selector ?? null,
-      sourceText: row.source_text ?? null,
-      sourceAssetPath: row.source_asset_path ?? null,
-      confidence: Number(row.confidence ?? 0),
-      diagnostics: (row.diagnostics ?? null) as Record<string, unknown> | null,
-      createdAt: row.created_at,
-      updatedAt: row.updated_at,
-    }));
-  } finally {
-    client.release();
-  }
+  return res.rows.map((row: any) => ({
+    id: row.id,
+    siteId: row.site_id,
+    siteVersionId: row.site_version_id,
+    slotKey: row.slot_key,
+    slotType: row.slot_type as ContentSlotType,
+    sourceSelector: row.source_selector ?? null,
+    sourceText: row.source_text ?? null,
+    sourceAssetPath: row.source_asset_path ?? null,
+    confidence: Number(row.confidence ?? 0),
+    diagnostics: (row.diagnostics ?? null) as Record<string, unknown> | null,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  }));
 }
 
 export async function listContentOverrides(input: {
@@ -3097,9 +3071,8 @@ export async function listContentOverrides(input: {
   status?: ContentOverrideStatus;
 }): Promise<ContentOverride[]> {
   await ensureRuntimeTables();
-  const client = await getSuperadminPool().connect();
-  try {
-    const res = await client.query<any>(
+  const pool = getSuperadminPool();
+  const res = await pool.query<any>(
       `
       select id::text, site_id::text, site_version_id::text, slot_key::text, value_type::text, value_json, status::text, created_at::text, updated_at::text
       from public.gnr8_content_overrides
@@ -3109,20 +3082,17 @@ export async function listContentOverrides(input: {
       `,
       [input.siteVersionId, input.status ?? null],
     );
-    return res.rows.map((row: any) => ({
-      id: row.id,
-      siteId: row.site_id,
-      siteVersionId: row.site_version_id,
-      slotKey: row.slot_key,
-      valueType: row.value_type as ContentSlotType,
-      valueJson: row.value_json,
-      status: row.status as ContentOverrideStatus,
-      createdAt: row.created_at,
-      updatedAt: row.updated_at,
-    }));
-  } finally {
-    client.release();
-  }
+  return res.rows.map((row: any) => ({
+    id: row.id,
+    siteId: row.site_id,
+    siteVersionId: row.site_version_id,
+    slotKey: row.slot_key,
+    valueType: row.value_type as ContentSlotType,
+    valueJson: row.value_json,
+    status: row.status as ContentOverrideStatus,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  }));
 }
 
 export type ContentOverrideHistoryAction = "draft_saved" | "content_published" | "rollback_applied";

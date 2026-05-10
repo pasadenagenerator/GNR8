@@ -662,22 +662,14 @@ async function renderTransformedSiteVersionPreview(input: {
 }
 
 async function renderDebugSiteVersionPreview(input: {
-  siteVersionId: string
+  siteVersion: CanonicalSiteVersionSnapshot
   requestedPath: string
   fallbackSummary?: PreviewRuntimeSummary | null
   previewTruth: RenderedCapturePreviewTruth
 }): Promise<ResolvedSiteVersionPreview> {
-  const siteVersion = await getSiteVersion(input.siteVersionId)
-  if (!siteVersion) {
-    throw new SiteVersionPreviewUnavailableError({
-      code: 'SITE_VERSION_NOT_FOUND',
-      message: 'SiteVersion not found',
-    })
-  }
-
   const { buildDeterministicArtifactBundle } = await import('@/gnr8/runtime/artifact-builder')
   const artifact = buildDeterministicArtifactBundle({
-    siteVersion,
+    siteVersion: input.siteVersion,
     renderMode: 'PREVIEW',
   })
 
@@ -687,9 +679,9 @@ async function renderDebugSiteVersionPreview(input: {
     htmlByPath: artifact.htmlByPath,
     requestedPath: input.requestedPath,
     diagnostics: {
-      siteId: siteVersion.siteId,
-      runtimeSiteId: siteVersion.siteId,
-      runtimeSiteVersionId: siteVersion.id,
+      siteId: input.siteVersion.siteId,
+      runtimeSiteId: input.siteVersion.siteId,
+      runtimeSiteVersionId: input.siteVersion.id,
       matchedPageId: previewRuntimeSummary.matchedPageId,
       unresolvedPathsCount: previewRuntimeSummary.unresolvedContentCount,
     },
@@ -698,8 +690,8 @@ async function renderDebugSiteVersionPreview(input: {
   return {
     ...withPreviewTruth({
       preview: {
-        siteId: siteVersion.siteId,
-        siteVersionId: siteVersion.id,
+        siteId: input.siteVersion.siteId,
+        siteVersionId: input.siteVersion.id,
         path: resolved.resolvedPath,
         rendererCompatibilityVersion: artifact.rendererCompatibilityVersion,
         html: resolved.html,
@@ -738,24 +730,16 @@ function wrapReactPreviewHtml(input: {
 }
 
 async function renderReactRuntimeSiteVersionPreview(input: {
-  siteVersionId: string
+  siteVersion: CanonicalSiteVersionSnapshot
   requestedPath: string
   previewTruth: RenderedCapturePreviewTruth
 }): Promise<{
   preview: ResolvedSiteVersionPreview | null
   fallbackSummary: PreviewRuntimeSummary
 }> {
-  const siteVersion = await getSiteVersion(input.siteVersionId)
-  if (!siteVersion) {
-    throw new SiteVersionPreviewUnavailableError({
-      code: 'SITE_VERSION_NOT_FOUND',
-      message: 'SiteVersion not found',
-    })
-  }
-
   const { preparePreviewRuntime } = await import('@/gnr8/preview-runtime/preview-runtime-preparation')
   const preparation = preparePreviewRuntime({
-    siteVersion,
+    siteVersion: input.siteVersion,
     routePath: input.requestedPath,
     renderedCaptureAvailable: input.previewTruth.renderedCaptureUsed,
   })
@@ -773,10 +757,10 @@ async function renderReactRuntimeSiteVersionPreview(input: {
   return {
     preview: withPreviewTruth({
       preview: {
-        siteId: siteVersion.siteId,
-        siteVersionId: siteVersion.id,
+        siteId: input.siteVersion.siteId,
+        siteVersionId: input.siteVersion.id,
         path: input.requestedPath,
-        rendererCompatibilityVersion: siteVersion.rendererCompatibilityVersion,
+        rendererCompatibilityVersion: input.siteVersion.rendererCompatibilityVersion,
         html: wrapReactPreviewHtml({
           renderedSiteHtml: renderedSite,
           routePath: input.requestedPath,
@@ -833,7 +817,7 @@ export async function renderSiteVersionPreview(input: { siteVersionId: string; p
 
     if (mode === 'transformed') {
       const reactPreview = await renderReactRuntimeSiteVersionPreview({
-        siteVersionId: input.siteVersionId,
+        siteVersion,
         requestedPath,
         previewTruth,
       })
@@ -871,7 +855,7 @@ export async function renderSiteVersionPreview(input: { siteVersionId: string; p
       } catch (error) {
         if (error instanceof SiteVersionPreviewUnavailableError && error.code === 'TRANSFORMED_ARTIFACT_NOT_AVAILABLE') {
           return renderDebugSiteVersionPreview({
-            siteVersionId: input.siteVersionId,
+            siteVersion,
             requestedPath,
             fallbackSummary,
             previewTruth,
@@ -882,7 +866,7 @@ export async function renderSiteVersionPreview(input: { siteVersionId: string; p
     }
 
     return renderDebugSiteVersionPreview({
-      siteVersionId: input.siteVersionId,
+      siteVersion,
       requestedPath,
       previewTruth,
     })

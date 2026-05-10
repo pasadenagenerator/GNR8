@@ -1,7 +1,37 @@
 import 'server-only'
-import { Pool } from 'pg'
+import { Pool, type PoolClient } from 'pg'
 
-let pool: Pool | null = null
+type PoolDiagnosticsState = {
+  checkoutCount: number
+  releaseCount: number
+  pendingAcquireCount: number
+}
+
+type GlobalPoolState = {
+  pool: Pool | null
+  diagnosticsBound: boolean
+  diagnostics: PoolDiagnosticsState
+}
+
+declare global {
+  // eslint-disable-next-line no-var
+  var __gnr8SuperadminPoolState__: GlobalPoolState | undefined
+}
+
+function getGlobalPoolState(): GlobalPoolState {
+  if (!globalThis.__gnr8SuperadminPoolState__) {
+    globalThis.__gnr8SuperadminPoolState__ = {
+      pool: null,
+      diagnosticsBound: false,
+      diagnostics: {
+        checkoutCount: 0,
+        releaseCount: 0,
+        pendingAcquireCount: 0,
+      },
+    }
+  }
+  return globalThis.__gnr8SuperadminPoolState__
+}
 
 type RedactedConnSummary = {
   protocol: string | null
@@ -61,11 +91,12 @@ function validateDatabaseUrlOrThrow(connectionString: string | undefined): strin
 }
 
 export function getSuperadminPool(): Pool {
-  if (pool) return pool
+  const state = getGlobalPoolState()
+  if (state.pool) return state.pool
 
   const connectionString = validateDatabaseUrlOrThrow(process.env.DATABASE_URL)
 
-  pool = new Pool({
+  state.pool = new Pool({
     connectionString,
 
     // Supabase običajno zahteva TLS
@@ -79,5 +110,39 @@ export function getSuperadminPool(): Pool {
     connectionTimeoutMillis: 5000,
   })
 
-  return pool
+  if (!state.diagnosticsBound) {
+    state.diagnosticsBound = true
+    state.pool.on('acquire', () => {
+      state.diagnostics.checkoutCount += 1
+      state.diagnostics.pendingAcquireCount = Math.max(0, state.diagnostics.pendingAcquireCount - 1)
+    })
+    state.pool.on('release', () => {
+      state.diagnostics.releaseCount += 1
+    })
+    state.pool.on('remove', () => {
+      const inUse = Math.max(0, state.diagnostics.checkoutCount - state.diagnostics.releaseCount)
+      if (inUse > 0) {
+        console.warn('[gnr8.db.pool] SUPERADMIN_POOL_CLIENT_REMOVED_WHILE_TRACKING_IN_USE', {
+          inUse,
+          totalCount: state.pool?.totalCount ?? 0,
+          idleCount: state.pool?.idleCount ?? 0,
+          waitingCount: state.pool?.waitingCount ?? 0,
+        })
+      }
+    })
+  }
+
+  return state.pool
+}
+
+export async function withSuperadminClient<T>(fn: (client: PoolClient) => Promise<T>): Promise<T> {
+  const pool = getSuperadminPool()
+  const state = getGlobalPoolState()
+  state.diagnostics.pendingAcquireCount += 1
+  const client = await pool.connect()
+  try {
+    return await fn(client)
+  } finally {
+    client.release()
+  }
 }

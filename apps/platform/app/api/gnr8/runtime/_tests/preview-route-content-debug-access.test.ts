@@ -372,3 +372,54 @@ test("preview route: POST module request without dm returns explicit bad-request
     restoreDeps();
   }
 });
+
+test("preview route: repeated transformed requests resolve consistently without dependency churn", async () => {
+  let renderCalls = 0;
+  const restoreDeps = setPreviewRouteDependenciesForTest({
+    resolveAgencyIdForSiteVersion: async () => "agency_1",
+    requireAgencyActionContext: async () => ({ agencyId: "agency_1" }) as never,
+    renderSiteVersionPreview: async () => {
+      renderCalls += 1;
+      return {
+        html: "<!doctype html><html><body><h1>Preview Site</h1></body></html>",
+        siteId: "site_preview_1",
+        siteVersionId: "sv_preview_1",
+        source: "preview",
+        previewMode: "transformed",
+        previewRuntimeSummary: {
+          rendererContractAvailable: true,
+          finalSiteModelAvailable: true,
+          renderedWithFallback: false,
+          matchedPageId: null,
+          contentResolutionApplied: true,
+          resolvedContentCount: 0,
+          unresolvedContentCount: 0,
+          contentResolutionDegraded: false,
+          contentResolutionDiagnostics: [],
+          previewDiagnostics: [],
+          familyRenderUsed: false,
+          familyRenderMode: null,
+          familyRenderFamilyId: null,
+          familyRenderFallbackToPage: false,
+          familyRenderDiagnosticsCount: 0,
+        },
+        renderedCaptureUsed: false,
+        domSize: 100,
+        fallbackUsed: false,
+      } as never;
+    },
+    canShowContentDebug: async () => false,
+  });
+  try {
+    const runs = 40;
+    for (let index = 0; index < runs; index += 1) {
+      const response = await GET(new Request("https://app.pasadenagenerator.com/api/gnr8/runtime/versions/sv_preview_1/preview?mode=transformed"), {
+        params: Promise.resolve({ siteVersionId: "sv_preview_1" }),
+      });
+      assert.equal(response.status, 200);
+    }
+    assert.equal(renderCalls, 40);
+  } finally {
+    restoreDeps();
+  }
+});
