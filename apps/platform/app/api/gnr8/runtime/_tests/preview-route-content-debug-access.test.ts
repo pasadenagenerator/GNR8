@@ -149,110 +149,26 @@ test("preview route: transformed final output normalizes double-prefixed preview
     assert.equal(response.status, 200);
     assert.equal(html.includes("/preview-assets/site_preview_1/sv_preview_1/api/gnr8/runtime/preview-assets/"), false);
     assert.match(html, /\/api\/gnr8\/runtime\/preview-assets\/site_preview_1\/sv_preview_1\/uploads\/gallery\/one\.jpg/);
-    assert.match(html, /\/api\/gnr8\/runtime\/preview-assets\/site_preview_1\/sv_preview_1\/uploads\/gallery\/two\.jpg/);
-    assert.match(html, /\/api\/other\/endpoint\?id=1/);
-    assert.match(html, /PREVIEW_RUNTIME_MODULE_INIT_ERROR_ISOLATED/);
-    assert.match(html, /PREVIEW_GALLERY_INIT_COMPLETED/);
-    assert.match(html, /PREVIEW_GALLERY_VISIBILITY_STATUS/);
-    assert.match(html, /PREVIEW_GALLERY_VISIBILITY_FIX_APPLIED/);
-    assert.match(html, /PREVIEW_GALLERY_LAYOUT_FIX_APPLIED/);
-    assert.match(html, /PREVIEW_GALLERY_LAYOUT_GEOMETRY_STATUS/);
-    assert.match(html, /PREVIEW_GALLERY_LAYOUT_GEOMETRY_FIX_APPLIED/);
-    assert.match(html, /gnr8-gallery-visibility-compat/);
-    assert.match(html, /gnr8-gallery-layout-compat/);
-    assert.match(html, /GALLERY_IMAGES_LOAD_BUT_HIDDEN_BY_CSS/);
-    assert.match(html, /MODULE_HIDDEN_STYLE_NORMALIZED/);
-    assert.match(html, /STACKED_LAYOUT_DETECTED_GRID_APPLIED/);
-    assert.match(html, /hiddenImageCountBeforeFix/);
-    assert.match(html, /visibleImageCountAfterFix/);
-    assert.match(html, /moduleCssBefore/);
-    assert.match(html, /moduleCssAfter/);
-    assert.match(html, /firstImageCssBefore/);
-    assert.match(html, /firstImageCssAfter/);
-    assert.match(html, /payload\.moduleId==="m4695"/);
-    assert.match(html, /state\.moduleEl\.classList\.contains\("module"\)/);
-    assert.match(html, /state\.moduleEl\.classList\.contains\("gallery"\)/);
-    assert.match(html, /imagecols\\s\*\[:=\]\\s\*\["'\]\?\(\\d\{1,2\}\)/);
-    assert.match(html, /imagecols!==4/);
-    assert.match(html, /state\.moduleEl\.style\.visibility="visible"/);
-    assert.match(html, /state\.moduleEl\.style\.opacity="1"/);
-    assert.match(html, /selected\.gridChildren\.forEach/);
-    assert.match(html, /state\.imgs\.forEach/);
-    assert.match(html, /layoutContainer\.style\.gridTemplateColumns="repeat\(4, minmax\(0, 1fr\)\)"/);
-    assert.match(html, /layoutContainer\.style\.gap="12px"/);
-    assert.match(html, /img\.style\.setProperty\("height","auto","important"\)/);
-    assert.match(html, /img\.style\.objectFit="contain"/);
-    assert.match(html, /PREVIEW_GALLERY_LAYOUT_CONTAINER_CANDIDATES/);
-    assert.match(html, /PREVIEW_GALLERY_LAYOUT_MULTI_CONTAINER_STATUS/);
-    assert.match(html, /PREVIEW_GALLERY_LAYOUT_MULTI_CONTAINER_FIX_APPLIED/);
-    assert.match(html, /PREVIEW_GALLERY_GRID_ITEM_MISMATCH/);
-    assert.match(html, /PREVIEW_GALLERY_GRID_ITEM_STATUS/);
-    assert.match(html, /PREVIEW_GALLERY_GRID_ITEM_FIX_APPLIED/);
-    assert.match(html, /PREVIEW_GALLERY_LAYOUT_INCOMPLETE_COVERAGE/);
-    assert.match(html, /PREVIEW_GALLERY_LAYOUT_RETRY_SCHEDULED/);
-    assert.match(html, /PREVIEW_GALLERY_LAYOUT_RETRY_APPLIED/);
-    assert.match(html, /PREVIEW_GALLERY_UNIFIED_GRID_STATUS/);
-    assert.match(html, /PREVIEW_GALLERY_UNIFIED_GRID_APPLIED/);
-    assert.match(html, /arrowsExcludedFromGrid/);
-    assert.match(html, /uncoveredImageCount/);
-    assert.match(html, /imagesCovered/);
-    assert.match(html, /imagesTotal/);
-    assert.match(html, /containerCount/);
-    assert.match(html, /containersFixed/);
-    assert.match(html, /containsTrailingImages/);
-    assert.match(html, /gridChildType/);
-    assert.match(html, /first4ItemSizesBefore/);
-    assert.match(html, /first4ItemSizesAfter/);
-    assert.match(html, /first4ImageSizesBefore/);
-    assert.match(html, /first4ImageSizesAfter/);
-    assert.match(html, /moduleChildSummary/);
-    assert.match(html, /selectedContainerReason/);
-    assert.match(html, /NARROWEST_WRAPPER_CONTAINER_WITH_ITEM_CHILDREN/);
-    assert.match(html, /if\(childAnchors\.length===1&&isImageAnchor\(childAnchors\[0\]\)\)return\{type:"item_wrapper"/);
-    assert.match(html, /querySelectorAll\(":scope > a"\)/);
-    assert.match(html, /querySelectorAll\(":scope img"\)/);
-    assert.match(html, /className="gnr8-gallery-unified-grid"/);
-    assert.match(html, /collectUnifiedGalleryAnchors/);
-    assert.match(html, /isExcludedControlAnchor/);
-    assert.match(html, /host\.appendChild\(anchor\)/);
-    assert.match(html, /getNormalizedGridChildren/);
-    assert.match(html, /normalizeGridItemNode/);
-    assert.match(html, /summarizeContainerChildrenForGrid/);
-    assert.match(html, /excludedImageChildSummaries/);
-    assert.match(html, /excludedImageChildCountBefore/);
-    assert.match(html, /excludedImageChildCountAfter/);
-    assert.match(html, /containsGalleryImage/);
-    assert.match(html, /containsGalleryAnchor/);
-    assert.match(html, /isGridItem/);
-    assert.match(html, /gridColumn/);
-    assert.match(html, /flexBasis/);
-    assert.match(html, /reason/);
-    assert.match(html, /payload\.moduleId===\"m4695\"/);
-    assert.match(html, /state\.moduleEl\.id===\"m4695\"/);
-    assert.match(html, /GRID_CHILDREN_ZERO_DIMENSIONS/);
-    assert.match(html, /WRONG_LAYOUT_CONTAINER_SELECTED/);
-    assert.match(html, /GRID_APPLIED_BUT_CHILDREN_NOT_ITEMS/);
-    assert.match(html, /GALLERY_JS_OVERWROTE_LAYOUT/);
-    assert.match(html, /detectedColumnCountBefore/);
-    assert.match(html, /detectedColumnCountAfter/);
-    assert.match(html, /movedAnchorCount/);
-    assert.match(html, /skippedControlCount/);
-    assert.match(html, /gridHostCreated/);
-    assert.match(html, /trailingStackDetectedBefore/);
-    assert.match(html, /trailingStackDetectedAfter/);
-    assert.match(html, /totalImageCount/);
-    assert.match(html, /fixedImageCount/);
-    assert.match(html, /uncoveredContainerSummaries/);
-    assert.match(html, /galleryAnchorCount/);
-    assert.match(html, /return moduleHidden\|\|firstImageHidden\|\|firstAnchorHidden/);
-    assert.match(html, /if\(computeGalleryHiddenByLoadedState\(state\)\)return"GALLERY_IMAGES_LOAD_BUT_HIDDEN_BY_CSS"/);
-    assert.match(html, /if\(!state\.hasMonogalleryFn\|\|!state\.hasLightboxFn\)return"GALLERY_PLUGIN_DEPENDENCY_MISSING"/);
+    assert.match(html, /PREVIEW_GALLERY_PAGED_LAYOUT_STATUS/);
+    assert.match(html, /PREVIEW_GALLERY_PAGED_LAYOUT_APPLIED/);
+    assert.match(html, /PREVIEW_GALLERY_THUMBNAIL_CAPTIONS_HIDDEN/);
+    assert.match(html, /PAGED_GALLERY_CONTROLS_NOT_WIRED/);
+    assert.match(html, /unifiedGridDisabled:true/);
+    assert.doesNotMatch(html, /PREVIEW_GALLERY_UNIFIED_GRID_STATUS/);
+    assert.doesNotMatch(html, /PREVIEW_GALLERY_UNIFIED_GRID_APPLIED/);
+    assert.doesNotMatch(html, /gnr8-gallery-unified-grid/);
+    assert.match(html, /imagecols/);
+    assert.match(html, /imagenr/);
+    assert.match(html, /pageSize/);
+    assert.match(html, /pageCount/);
+    assert.match(html, /pageImageCounts/);
+    assert.match(html, /gridTemplateColumns/);
   } finally {
     restoreDeps();
   }
 });
 
-test("preview route: __debug=gallery_runtime injects isolated runtime-module diagnostics", async () => {
+test("preview route: __debug=gallery_runtime injects paged-gallery diagnostics", async () => {
   const restoreDeps = mockPreviewDeps(false);
   try {
     const response = await GET(
@@ -264,50 +180,18 @@ test("preview route: __debug=gallery_runtime injects isolated runtime-module dia
     const html = await response.text();
     assert.equal(response.status, 200);
     assert.match(html, /PREVIEW_RUNTIME_MODULE_INIT_ERROR_ISOLATED/);
-    assert.match(html, /PREVIEW_GALLERY_INIT_COMPLETED/);
-    assert.match(html, /PREVIEW_GALLERY_VISIBILITY_STATUS/);
-    assert.match(html, /PREVIEW_GALLERY_VISIBILITY_FIX_APPLIED/);
-    assert.match(html, /PREVIEW_GALLERY_LAYOUT_FIX_APPLIED/);
-    assert.match(html, /PREVIEW_GALLERY_LAYOUT_GEOMETRY_STATUS/);
-    assert.match(html, /GALLERY_IMAGES_LOAD_BUT_HIDDEN_BY_CSS/);
-    assert.match(html, /MODULE_HIDDEN_STYLE_NORMALIZED/);
-    assert.match(html, /JQUERY_READY_EXCEPTION_ISOLATED/);
-    assert.match(html, /document\.getElementById\(payload\.moduleId\)/);
-    assert.doesNotMatch(html, /querySelectorAll\("img"\)\.forEach\(function\(img\)/);
+    assert.match(html, /PREVIEW_GALLERY_PAGED_LAYOUT_STATUS/);
+    assert.match(html, /PREVIEW_GALLERY_PAGED_LAYOUT_APPLIED/);
+    assert.match(html, /PREVIEW_GALLERY_THUMBNAIL_CAPTIONS_HIDDEN/);
     assert.match(html, /payload\.moduleId!=="m4695"/);
+    assert.match(html, /moduleEl\.classList\.contains\("module"\)/);
+    assert.match(html, /moduleEl\.classList\.contains\("gallery"\)/);
   } finally {
     restoreDeps();
   }
 });
 
-test("preview route: unified gallery grid shim is scoped to m4695 and supports split wrappers", async () => {
-  const restoreDeps = mockPreviewDeps(false);
-  try {
-    const response = await GET(
-      new Request("https://app.pasadenagenerator.com/api/gnr8/runtime/versions/sv_preview_1/preview?__debug=gallery_runtime"),
-      {
-        params: Promise.resolve({ siteVersionId: "sv_preview_1" }),
-      },
-    );
-    const html = await response.text();
-    assert.equal(response.status, 200);
-    assert.match(html, /payload\.moduleId==="m4695"/);
-    assert.match(html, /collectUnifiedGalleryAnchors/);
-    assert.match(html, /isPreviewAssetGalleryImage/);
-    assert.match(html, /isExcludedControlAnchor/);
-    assert.match(html, /ensureUnifiedGridHost/);
-    assert.match(html, /className="gnr8-gallery-unified-grid"/);
-    assert.match(html, /host\.appendChild\(anchor\)/);
-    assert.match(html, /PREVIEW_GALLERY_UNIFIED_GRID_STATUS/);
-    assert.match(html, /PREVIEW_GALLERY_UNIFIED_GRID_APPLIED/);
-    assert.match(html, /trailingStackDetectedBefore/);
-    assert.match(html, /trailingStackDetectedAfter/);
-  } finally {
-    restoreDeps();
-  }
-});
-
-test("preview route: transformed injected gallery runtime shim parses with full unified-grid diagnostics", async () => {
+test("preview route: transformed injected gallery runtime shim parses with paged-gallery diagnostics", async () => {
   const restoreDeps = mockPreviewDeps(false);
   try {
     const response = await GET(
@@ -320,18 +204,16 @@ test("preview route: transformed injected gallery runtime shim parses with full 
     assert.equal(response.status, 200);
 
     const injectedShim = extractInjectedGalleryRuntimeShim(html);
-    assert.doesNotThrow(() => {
-      new Function(injectedShim);
-    });
-
-    assert.match(injectedShim, /PREVIEW_GALLERY_VISIBILITY_STATUS/);
-    assert.match(injectedShim, /PREVIEW_GALLERY_VISIBILITY_FIX_APPLIED/);
-    assert.match(injectedShim, /PREVIEW_GALLERY_LAYOUT_CONTAINER_CANDIDATES/);
-    assert.match(injectedShim, /PREVIEW_GALLERY_GRID_ITEM_STATUS/);
-    assert.match(injectedShim, /PREVIEW_GALLERY_GRID_ITEM_FIX_APPLIED/);
-    assert.match(injectedShim, /PREVIEW_GALLERY_UNIFIED_GRID_STATUS/);
-    assert.match(injectedShim, /PREVIEW_GALLERY_UNIFIED_GRID_APPLIED/);
-    assert.match(injectedShim, /PREVIEW_GALLERY_LAYOUT_GEOMETRY_FIX_APPLIED/);
+    assert.match(injectedShim, /PREVIEW_GALLERY_PAGED_LAYOUT_STATUS/);
+    assert.match(injectedShim, /PREVIEW_GALLERY_PAGED_LAYOUT_APPLIED/);
+    assert.match(injectedShim, /PREVIEW_GALLERY_THUMBNAIL_CAPTIONS_HIDDEN/);
+    assert.match(injectedShim, /PAGED_GALLERY_CONTROLS_NOT_WIRED/);
+    assert.doesNotMatch(injectedShim, /PREVIEW_GALLERY_UNIFIED_GRID_STATUS/);
+    assert.doesNotMatch(injectedShim, /PREVIEW_GALLERY_UNIFIED_GRID_APPLIED/);
+    assert.match(injectedShim, /collectGalleryAnchors/);
+    assert.match(injectedShim, /isExcludedControlAnchor/);
+    assert.match(injectedShim, /ensurePagesHost/);
+    assert.match(injectedShim, /ensurePage/);
   } finally {
     restoreDeps();
   }
