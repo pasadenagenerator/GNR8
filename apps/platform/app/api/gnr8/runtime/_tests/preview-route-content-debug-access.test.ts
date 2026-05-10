@@ -218,6 +218,8 @@ test("preview route: transformed injected gallery runtime shim parses with paged
     assert.doesNotThrow(() => new Function(injectedShim), "expected injected shim to parse as JavaScript");
     assert.match(injectedShim, /PREVIEW_GALLERY_PAGED_LAYOUT_STATUS/);
     assert.match(injectedShim, /PREVIEW_GALLERY_PAGED_LAYOUT_APPLIED/);
+    assert.match(injectedShim, /PREVIEW_GALLERY_PAGE_SWITCH/);
+    assert.match(injectedShim, /PREVIEW_GALLERY_THUMBNAIL_NORMALIZATION_APPLIED/);
     assert.match(injectedShim, /PREVIEW_GALLERY_PAGED_VISIBILITY_STATUS/);
     assert.match(injectedShim, /PREVIEW_GALLERY_PAGED_VISIBILITY_FIX_APPLIED/);
     assert.match(injectedShim, /PREVIEW_GALLERY_THUMBNAIL_CAPTIONS_HIDDEN/);
@@ -230,7 +232,7 @@ test("preview route: transformed injected gallery runtime shim parses with paged
     assert.match(injectedShim, /ensurePage/);
     assert.match(injectedShim, /page\.style\.display="grid"/);
     assert.match(injectedShim, /page0\.style\.display="grid"/);
-    assert.match(injectedShim, /page1\.style\.display=controlsWired\?"grid":"none"/);
+    assert.match(injectedShim, /page1\.style\.display="none"/);
     assert.match(injectedShim, /pagesHost\.style\.visibility="visible"/);
     assert.match(injectedShim, /moduleEl\.style\.visibility="visible"/);
     assert.match(injectedShim, /PAGED_CONTROLS_UNWIRED_PAGE0_ENFORCED/);
@@ -245,7 +247,46 @@ test("preview route: transformed injected gallery runtime shim parses with paged
     assert.match(injectedShim, /setActivePage\(pagesHost,0\)/);
     assert.match(injectedShim, /visibilityDetails=applyPagedVisibilityFix/);
     assert.match(injectedShim, /reasonCode:"PAGED_LAYOUT_ACTIVE_VISIBILITY_PRESERVED"/);
+    assert.match(injectedShim, /activePageBefore/);
+    assert.match(injectedShim, /activePageAfter/);
+    assert.match(injectedShim, /visiblePageIndex/);
+    assert.match(injectedShim, /arrowHandlersAttached/);
+    assert.match(injectedShim, /img\.style\.objectFit="cover"/);
+    assert.match(injectedShim, /img\.style\.objectPosition="center"/);
+    assert.match(injectedShim, /img\.style\.width="100%"/);
+    assert.match(injectedShim, /img\.style\.height="100%"/);
+    assert.match(injectedShim, /img\.removeAttribute\("width"\)/);
+    assert.match(injectedShim, /img\.removeAttribute\("height"\)/);
+    assert.match(injectedShim, /img\.style\.removeProperty\("max-width"\)/);
+    assert.match(injectedShim, /img\.style\.removeProperty\("aspect-ratio"\)/);
+    assert.match(injectedShim, /img\.style\.removeProperty\("transform"\)/);
+    assert.match(injectedShim, /anchor\.style\.aspectRatio="4 \/ 3"/);
+    assert.match(injectedShim, /anchor\.style\.overflow="hidden"/);
+    assert.match(injectedShim, /anchor\.style\.position="relative"/);
     assert.doesNotMatch(injectedShim, /\/\\\\\\\\\/uploads\\\\\\\\\//);
+  } finally {
+    restoreDeps();
+  }
+});
+
+test("preview route: injected shim keeps paged split logic for 12 + 3 and only one page visible at init", async () => {
+  const restoreDeps = mockPreviewDeps(false);
+  try {
+    const response = await GET(
+      new Request("https://app.pasadenagenerator.com/api/gnr8/runtime/versions/sv_preview_1/preview?mode=transformed&__debug=gallery_runtime"),
+      {
+        params: Promise.resolve({ siteVersionId: "sv_preview_1" }),
+      },
+    );
+    const html = await response.text();
+    const injectedShim = extractInjectedGalleryRuntimeShim(html);
+    assert.match(injectedShim, /var imagenr=parseSetting\(dataSettings,"imagenr"\)\|\|12/);
+    assert.match(injectedShim, /var pageSize=imagenr/);
+    assert.match(injectedShim, /var start=i\*pageSize/);
+    assert.match(injectedShim, /var end=Math\.min\(anchors\.length,start\+pageSize\)/);
+    assert.match(injectedShim, /setActivePage\(pagesHost,0\)/);
+    assert.match(injectedShim, /page0\.style\.display==="grid"/);
+    assert.match(injectedShim, /page1Hidden:!page1\|\|page1\.style\.display==="none"/);
   } finally {
     restoreDeps();
   }
