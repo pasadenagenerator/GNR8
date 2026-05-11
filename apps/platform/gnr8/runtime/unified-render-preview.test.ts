@@ -2,8 +2,11 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import {
+  PreviewDbBackpressureError,
   __unifiedRenderPreviewTestUtils,
   SiteVersionPreviewUnavailableError,
+  renderSiteVersionPreview,
+  setUnifiedRenderPreviewDependenciesForTest,
 } from '@/gnr8/runtime/unified-render-preview'
 import type { SemanticImportResult } from '@/gnr8/import-semantic/semantic-import-engine'
 
@@ -227,4 +230,117 @@ test('preview override selection merges by slot with draft precedence and publis
   const bySlot = Object.fromEntries(selected.map((override) => [override.slotKey, override]))
   assert.equal(bySlot['hero.title']?.valueJson?.value, 'correct version draft')
   assert.equal(bySlot['hero.subtitle']?.valueJson?.value, 'published subtitle')
+})
+
+test('transformed preview reuses request-local cache and keeps query count bounded per request', async () => {
+  const calls = {
+    getSiteVersion: 0,
+    getRawImportedSiteArtifact: 0,
+    getRawTemplateSiteArtifact: 0,
+    getRawTemplateSiteAsset: 0,
+    listContentSlots: 0,
+    listContentOverrides: 0,
+    getSiteVersionArtifactBinding: 0,
+    getArtifactById: 0,
+  }
+  const restore = setUnifiedRenderPreviewDependenciesForTest({
+    getPoolStatus: () => ({ totalCount: 1, idleCount: 1, waitingCount: 0 }),
+    getSiteVersion: async () => {
+      calls.getSiteVersion += 1
+      return {
+        id: 'sv-cache',
+        siteId: 'site-cache',
+        rendererCompatibilityVersion: 'gnr8-renderer-v1',
+        pages: [],
+        importProvenanceSummary: null,
+      } as any
+    },
+    getRawImportedSiteArtifact: async () => {
+      calls.getRawImportedSiteArtifact += 1
+      return {
+        artifactType: 'raw_imported_site',
+        siteId: 'site-cache',
+        siteVersionId: 'sv-cache',
+        entryHtmlPath: 'index.html',
+        assetBasePath: '/',
+        fileMap: { 'index.html': { mediaType: 'text/html', sizeBytes: 10, sha256: 'x' } },
+        metadata: { assetSummary: { persistedAssetCount: 1, externalFallbackAssetCount: 0 } },
+      } as any
+    },
+    getRawTemplateSiteArtifact: async () => {
+      calls.getRawTemplateSiteArtifact += 1
+      return null
+    },
+    getRawTemplateSiteAsset: async () => {
+      calls.getRawTemplateSiteAsset += 1
+      return { bytes: Buffer.from('<html><body>ok</body></html>'), sizeBytes: 24, mediaType: 'text/html' } as any
+    },
+    listContentSlots: async () => {
+      calls.listContentSlots += 1
+      return []
+    },
+    listContentOverrides: async () => {
+      calls.listContentOverrides += 1
+      return []
+    },
+    getSiteVersionArtifactBinding: async () => {
+      calls.getSiteVersionArtifactBinding += 1
+      return { siteId: 'site-cache', artifactId: 'artifact-cache' }
+    },
+    getArtifactById: async () => {
+      calls.getArtifactById += 1
+      return {
+        id: 'artifact-cache',
+        siteId: 'site-cache',
+        siteVersionId: 'sv-cache',
+        rendererCompatibilityVersion: 'gnr8-renderer-v1',
+        htmlByPath: { '/': '<html><body>artifact</body></html>' },
+        bundleSha256: 'x',
+        compiledTokenStyles: '',
+        assetFingerprintMap: {},
+        manifest: {},
+        publishStage: 'production',
+        shadowRestricted: false,
+        artifactGovernance: {},
+      } as any
+    },
+  })
+
+  try {
+    for (let index = 0; index < 20; index += 1) {
+      await renderSiteVersionPreview({
+        siteVersionId: 'sv-cache',
+        mode: 'transformed',
+        requestCorrelationKey: `req-cache-${index + 1}`,
+      })
+    }
+  } finally {
+    restore()
+  }
+
+  assert.equal(calls.getSiteVersion, 20)
+  assert.equal(calls.getRawImportedSiteArtifact, 20)
+  assert.equal(calls.getRawTemplateSiteArtifact, 0)
+  assert.equal(calls.getRawTemplateSiteAsset, 20)
+  assert.equal(calls.listContentSlots, 20)
+  assert.equal(calls.listContentOverrides, 40)
+  assert.equal(calls.getSiteVersionArtifactBinding, 0)
+  assert.equal(calls.getArtifactById, 0)
+})
+
+test('transformed preview blocks under high pool waiting count with deterministic backpressure error', async () => {
+  const restore = setUnifiedRenderPreviewDependenciesForTest({
+    getPoolStatus: () => ({ totalCount: 5, idleCount: 0, waitingCount: 99 }),
+  })
+  try {
+    await assert.rejects(
+      () => renderSiteVersionPreview({ siteVersionId: 'sv-bp', mode: 'transformed', requestCorrelationKey: 'req-bp-1' }),
+      (error: unknown) =>
+        error instanceof PreviewDbBackpressureError &&
+        error.code === 'PREVIEW_DB_BACKPRESSURE' &&
+        error.requestCorrelationKey === 'req-bp-1',
+    )
+  } finally {
+    restore()
+  }
 })

@@ -1,4 +1,4 @@
-import { SiteVersionPreviewUnavailableError } from "@/gnr8/runtime/unified-render-preview";
+import { PreviewDbBackpressureError, SiteVersionPreviewUnavailableError } from "@/gnr8/runtime/unified-render-preview";
 import { parseAgencyActionContextError } from "@/app/api/gnr8/agency/_lib/agency-action-access";
 import { previewRouteDependencies } from "./preview-route-dependencies";
 
@@ -1177,6 +1177,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ siteVersionId: 
     const url = new URL(req.url);
     const path = url.searchParams.get("path") ?? "/";
     const mode = url.searchParams.get("mode") ?? undefined;
+    const requestCorrelationKey = `${siteVersionId}:${mode ?? "none"}:${Date.now().toString(36)}`;
     const contentDebugRequested = url.searchParams.get("__debug") === "content";
     const galleryRuntimeDiagnosticRequested = url.searchParams.get("__debug") === "gallery_runtime";
     const runtimeIsolationEnabled = galleryRuntimeDiagnosticRequested || mode === "transformed";
@@ -1194,6 +1195,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ siteVersionId: 
       siteVersionId,
       path,
       mode,
+      requestCorrelationKey,
     });
     const htmlWithOptionalDebug = contentDebugMode
       ? previewRouteDependencies.injectRuntimeDebugPanel({
@@ -1321,6 +1323,21 @@ export async function GET(req: Request, ctx: { params: Promise<{ siteVersionId: 
       });
       return new Response(html, {
         status: 409,
+        headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" },
+      });
+    }
+    if (error instanceof PreviewDbBackpressureError) {
+      const html = toPreviewFallbackHtml({
+        statusTitle: "Preview Temporarily Busy",
+        message: "Preview is temporarily rate-limited due to database pool pressure. Please retry shortly.",
+        details: [
+          "reason_code=PREVIEW_DB_BACKPRESSURE",
+          `request_correlation_key=${error.requestCorrelationKey}`,
+          `pool_waiting_count=${error.poolWaitingCount}`,
+        ],
+      });
+      return new Response(html, {
+        status: 503,
         headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" },
       });
     }

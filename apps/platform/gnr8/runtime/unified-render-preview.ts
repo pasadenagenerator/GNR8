@@ -11,6 +11,7 @@ import {
   getSiteVersion,
   getSiteVersionArtifactBinding,
 } from '@/gnr8/runtime/runtime-store'
+import { getSuperadminPool } from '@/src/superadmin/db'
 import { applyContentOverridesToRawHtml } from '@/src/public-site/content-override-runtime'
 import type { ContentOverride } from '@/gnr8/runtime/content-binding'
 import type { CanonicalSiteVersionSnapshot } from '@/gnr8/runtime/types'
@@ -74,6 +75,118 @@ export class SiteVersionPreviewUnavailableError extends Error {
     this.name = 'SiteVersionPreviewUnavailableError'
     this.code = input.code
   }
+}
+
+export class PreviewDbBackpressureError extends Error {
+  readonly code = 'PREVIEW_DB_BACKPRESSURE'
+  readonly requestCorrelationKey: string
+  readonly poolWaitingCount: number
+
+  constructor(input: { requestCorrelationKey: string; poolWaitingCount: number }) {
+    super('Preview database pool is under backpressure.')
+    this.name = 'PreviewDbBackpressureError'
+    this.requestCorrelationKey = input.requestCorrelationKey
+    this.poolWaitingCount = input.poolWaitingCount
+  }
+}
+
+type PoolStatus = {
+  totalCount: number
+  idleCount: number
+  waitingCount: number
+}
+
+type PreviewReadDependencies = {
+  getPoolStatus: () => PoolStatus
+  getSiteVersion: typeof getSiteVersion
+  getSiteVersionArtifactBinding: typeof getSiteVersionArtifactBinding
+  getArtifactById: typeof getArtifactById
+  getRawTemplateSiteArtifact: typeof getRawTemplateSiteArtifact
+  getRawImportedSiteArtifact: typeof getRawImportedSiteArtifact
+  getRawTemplateSiteAsset: typeof getRawTemplateSiteAsset
+  listContentSlots: typeof listContentSlots
+  listContentOverrides: typeof listContentOverrides
+}
+
+const defaultPreviewReadDependencies: PreviewReadDependencies = {
+  getPoolStatus: () => {
+    const pool = getSuperadminPool()
+    return {
+      totalCount: pool.totalCount,
+      idleCount: pool.idleCount,
+      waitingCount: pool.waitingCount,
+    }
+  },
+  getSiteVersion,
+  getSiteVersionArtifactBinding,
+  getArtifactById,
+  getRawTemplateSiteArtifact,
+  getRawImportedSiteArtifact,
+  getRawTemplateSiteAsset,
+  listContentSlots,
+  listContentOverrides,
+}
+
+let previewReadDependencies: PreviewReadDependencies = defaultPreviewReadDependencies
+
+export function setUnifiedRenderPreviewDependenciesForTest(overrides: Partial<PreviewReadDependencies>): () => void {
+  const previous = previewReadDependencies
+  previewReadDependencies = {
+    ...previewReadDependencies,
+    ...overrides,
+  }
+  return () => {
+    previewReadDependencies = previous
+  }
+}
+
+type PreviewReadContext = {
+  requestCorrelationKey: string
+  queryCount: number
+  uniqueLookupCount: number
+  siteVersionById: Map<string, Promise<CanonicalSiteVersionSnapshot | null>>
+  artifactBindingBySiteVersionId: Map<string, Promise<{ siteId: string; artifactId: string | null } | null>>
+  artifactById: Map<string, Promise<Awaited<ReturnType<typeof getArtifactById>>>>
+  rawTemplateArtifactBySiteVersionId: Map<string, Promise<Awaited<ReturnType<typeof getRawTemplateSiteArtifact>>>>
+  rawImportedArtifactBySiteVersionId: Map<string, Promise<Awaited<ReturnType<typeof getRawImportedSiteArtifact>>>>
+  rawTemplateAssetByKey: Map<string, Promise<Awaited<ReturnType<typeof getRawTemplateSiteAsset>>>>
+  slotsBySiteVersionId: Map<string, Promise<Awaited<ReturnType<typeof listContentSlots>>>>
+  overridesBySiteVersionAndStatus: Map<string, Promise<Awaited<ReturnType<typeof listContentOverrides>>>>
+}
+
+const PREVIEW_DB_POOL_WAITING_THRESHOLD = 8
+
+function createPreviewReadContext(requestCorrelationKey: string): PreviewReadContext {
+  return {
+    requestCorrelationKey,
+    queryCount: 0,
+    uniqueLookupCount: 0,
+    siteVersionById: new Map(),
+    artifactBindingBySiteVersionId: new Map(),
+    artifactById: new Map(),
+    rawTemplateArtifactBySiteVersionId: new Map(),
+    rawImportedArtifactBySiteVersionId: new Map(),
+    rawTemplateAssetByKey: new Map(),
+    slotsBySiteVersionId: new Map(),
+    overridesBySiteVersionAndStatus: new Map(),
+  }
+}
+
+function cacheLookup<T>(input: {
+  context: PreviewReadContext
+  cache: Map<string, Promise<T>>
+  key: string
+  loader: () => Promise<T>
+}): Promise<T> {
+  const existing = input.cache.get(input.key)
+  if (existing) return existing
+  input.context.uniqueLookupCount += 1
+  const created = (async () => {
+    input.context.queryCount += 1
+    return input.loader()
+  })()
+  input.cache.set(input.key, created)
+  return created
 }
 
 type PreviewPathResolutionLogInput = {
@@ -388,13 +501,32 @@ async function renderRawTemplateSiteVersionPreview(input: {
   requestedPath: string
   previewTruth: RenderedCapturePreviewTruth
   fallbackSummary?: PreviewRuntimeSummary | null
+  context: PreviewReadContext
 }): Promise<ResolvedSiteVersionPreview | null> {
-  const importedArtifact = await getRawImportedSiteArtifact(input.siteVersionId)
-  const artifact = importedArtifact ?? (await getRawTemplateSiteArtifact(input.siteVersionId))
+  const importedArtifact = await cacheLookup({
+    context: input.context,
+    cache: input.context.rawImportedArtifactBySiteVersionId,
+    key: input.siteVersionId,
+    loader: () => previewReadDependencies.getRawImportedSiteArtifact(input.siteVersionId),
+  })
+  const artifact =
+    importedArtifact ??
+    (await cacheLookup({
+      context: input.context,
+      cache: input.context.rawTemplateArtifactBySiteVersionId,
+      key: input.siteVersionId,
+      loader: () => previewReadDependencies.getRawTemplateSiteArtifact(input.siteVersionId),
+    }))
   if (!artifact) return null
-  const entryAsset = await getRawTemplateSiteAsset({
-    siteVersionId: input.siteVersionId,
-    filePath: artifact.entryHtmlPath,
+  const entryAsset = await cacheLookup({
+    context: input.context,
+    cache: input.context.rawTemplateAssetByKey,
+    key: `${input.siteVersionId}:${artifact.entryHtmlPath}`,
+    loader: () =>
+      previewReadDependencies.getRawTemplateSiteAsset({
+        siteVersionId: input.siteVersionId,
+        filePath: artifact.entryHtmlPath,
+      }),
   })
   if (!entryAsset) {
     throw new SiteVersionPreviewUnavailableError({
@@ -409,12 +541,27 @@ async function renderRawTemplateSiteVersionPreview(input: {
     siteVersionId: artifact.siteVersionId,
     entryHtmlPath: artifact.entryHtmlPath,
   })
-  const slots = await listContentSlots(artifact.siteVersionId)
+  const slots = await cacheLookup({
+    context: input.context,
+    cache: input.context.slotsBySiteVersionId,
+    key: artifact.siteVersionId,
+    loader: () => previewReadDependencies.listContentSlots(artifact.siteVersionId),
+  })
   console.info('[gnr8.content-runtime] CONTENT_PREVIEW_OVERRIDES_LOAD_STARTED', {
     siteVersionId: artifact.siteVersionId,
   })
-  const draftOverrides = await listContentOverrides({ siteVersionId: artifact.siteVersionId, status: 'draft' })
-  const publishedOverrides = await listContentOverrides({ siteVersionId: artifact.siteVersionId, status: 'published' })
+  const draftOverrides = await cacheLookup({
+    context: input.context,
+    cache: input.context.overridesBySiteVersionAndStatus,
+    key: `${artifact.siteVersionId}:draft`,
+    loader: () => previewReadDependencies.listContentOverrides({ siteVersionId: artifact.siteVersionId, status: 'draft' }),
+  })
+  const publishedOverrides = await cacheLookup({
+    context: input.context,
+    cache: input.context.overridesBySiteVersionAndStatus,
+    key: `${artifact.siteVersionId}:published`,
+    loader: () => previewReadDependencies.listContentOverrides({ siteVersionId: artifact.siteVersionId, status: 'published' }),
+  })
   console.info('[gnr8.content-runtime] CONTENT_PREVIEW_OVERRIDES_LOADED', {
     siteVersionId: artifact.siteVersionId,
     draftCount: draftOverrides.length,
@@ -612,8 +759,14 @@ async function renderTransformedSiteVersionPreview(input: {
   requestedPath: string
   fallbackSummary?: PreviewRuntimeSummary | null
   previewTruth: RenderedCapturePreviewTruth
+  context: PreviewReadContext
 }): Promise<ResolvedSiteVersionPreview> {
-  const binding = await getSiteVersionArtifactBinding(input.siteVersionId)
+  const binding = await cacheLookup({
+    context: input.context,
+    cache: input.context.artifactBindingBySiteVersionId,
+    key: input.siteVersionId,
+    loader: () => previewReadDependencies.getSiteVersionArtifactBinding(input.siteVersionId),
+  })
   if (!binding || !binding.artifactId) {
     throw new SiteVersionPreviewUnavailableError({
       code: 'TRANSFORMED_ARTIFACT_NOT_AVAILABLE',
@@ -621,7 +774,12 @@ async function renderTransformedSiteVersionPreview(input: {
     })
   }
 
-  const artifact = await getArtifactById(binding.artifactId)
+  const artifact = await cacheLookup({
+    context: input.context,
+    cache: input.context.artifactById,
+    key: binding.artifactId,
+    loader: () => previewReadDependencies.getArtifactById(binding.artifactId!),
+  })
   if (!artifact) {
     throw new SiteVersionPreviewUnavailableError({
       code: 'TRANSFORMED_ARTIFACT_NOT_AVAILABLE',
@@ -777,10 +935,58 @@ async function renderReactRuntimeSiteVersionPreview(input: {
   }
 }
 
-export async function renderSiteVersionPreview(input: { siteVersionId: string; path?: string; mode?: unknown }) {
+export async function renderSiteVersionPreview(input: {
+  siteVersionId: string
+  path?: string
+  mode?: unknown
+  requestCorrelationKey?: string
+}) {
+  const requestCorrelationKey =
+    String(input.requestCorrelationKey ?? '').trim() || `preview:${input.siteVersionId}:${Date.now().toString(36)}`
+  const context = createPreviewReadContext(requestCorrelationKey)
+  const poolAtStart = previewReadDependencies.getPoolStatus()
+  console.info('[gnr8.runtime.preview] PREVIEW_DB_QUERY_BATCH_STARTED', {
+    requestCorrelationKey,
+    queryCount: context.queryCount,
+    uniqueLookupCount: context.uniqueLookupCount,
+    poolTotalCount: poolAtStart.totalCount,
+    poolIdleCount: poolAtStart.idleCount,
+    poolWaitingCount: poolAtStart.waitingCount,
+  })
+  if (poolAtStart.waitingCount >= PREVIEW_DB_POOL_WAITING_THRESHOLD) {
+    console.warn('[gnr8.runtime.preview] PREVIEW_DB_POOL_EXHAUSTION_PREVENTED', {
+      requestCorrelationKey,
+      queryCount: context.queryCount,
+      uniqueLookupCount: context.uniqueLookupCount,
+      poolTotalCount: poolAtStart.totalCount,
+      poolIdleCount: poolAtStart.idleCount,
+      poolWaitingCount: poolAtStart.waitingCount,
+      reasonCode: 'POOL_WAITING_COUNT_HIGH',
+    })
+    throw new PreviewDbBackpressureError({
+      requestCorrelationKey,
+      poolWaitingCount: poolAtStart.waitingCount,
+    })
+  }
+
   const requestedPath = normalizePagePath(input.path ?? '/')
   const mode: SiteVersionPreviewMode = normalizeSiteVersionPreviewMode(input.mode)
-  const siteVersion = await getSiteVersion(input.siteVersionId)
+  try {
+    console.info('[gnr8.runtime.preview] PREVIEW_DB_POOL_STATUS', {
+      requestCorrelationKey,
+      queryCount: context.queryCount,
+      uniqueLookupCount: context.uniqueLookupCount,
+      poolTotalCount: poolAtStart.totalCount,
+      poolIdleCount: poolAtStart.idleCount,
+      poolWaitingCount: poolAtStart.waitingCount,
+      phase: 'before_preview_reads',
+    })
+    const siteVersion = await cacheLookup({
+      context,
+      cache: context.siteVersionById,
+      key: input.siteVersionId,
+      loader: () => previewReadDependencies.getSiteVersion(input.siteVersionId),
+    })
   if (!siteVersion) {
     throw new SiteVersionPreviewUnavailableError({
       code: 'SITE_VERSION_NOT_FOUND',
@@ -805,6 +1011,7 @@ export async function renderSiteVersionPreview(input: { siteVersionId: string; p
         siteVersionId: input.siteVersionId,
         requestedPath,
         previewTruth,
+        context,
       })
       if (rawTemplatePreview) return rawTemplatePreview
       if (mode === 'raw_template_preview') {
@@ -851,6 +1058,7 @@ export async function renderSiteVersionPreview(input: { siteVersionId: string; p
           requestedPath,
           fallbackSummary,
           previewTruth,
+          context,
         })
       } catch (error) {
         if (error instanceof SiteVersionPreviewUnavailableError && error.code === 'TRANSFORMED_ARTIFACT_NOT_AVAILABLE') {
@@ -891,6 +1099,17 @@ export async function renderSiteVersionPreview(input: { siteVersionId: string; p
     }
     throw error
   }
+  } finally {
+    const poolAtEnd = previewReadDependencies.getPoolStatus()
+    console.info('[gnr8.runtime.preview] PREVIEW_DB_QUERY_BATCH_COMPLETED', {
+      requestCorrelationKey,
+      queryCount: context.queryCount,
+      uniqueLookupCount: context.uniqueLookupCount,
+      poolTotalCount: poolAtEnd.totalCount,
+      poolIdleCount: poolAtEnd.idleCount,
+      poolWaitingCount: poolAtEnd.waitingCount,
+    })
+  }
 }
 
 export const __unifiedRenderPreviewTestUtils = {
@@ -899,4 +1118,6 @@ export const __unifiedRenderPreviewTestUtils = {
   resolveRenderedCapturePreviewTruth,
   rewriteRawTemplateAssetReferences,
   selectPreviewOverridesByVersion,
+  createPreviewReadContext,
+  cacheLookup,
 }
