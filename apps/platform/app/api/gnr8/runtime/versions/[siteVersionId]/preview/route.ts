@@ -269,8 +269,11 @@ function extractLocation(moduleEl){
 var lat=null;var lng=null;var address=null;var extractionSource="none";var confidence="nearby_text";
 var rejectedAddressCandidates=[];
 var knownRoboplastAddress="Litostrojska cesta 40, Ljubljana, Slovenia";
+var knownMaverAddress="Jagrova ulica 14, Sela, Lavrica, 1291 Škofljica";
+var knownMaverCoordinates={lat:45.996816,lng:14.589487};
 var identity=detectSiteIdentity(moduleEl);
 var knownFallbackUsed=false;
+var siteSpecificCoordinatesUsed=false;
 function recordAddressCandidate(candidate,source,sourceConfidence){
 if(!candidate)return;
 if(isRejectedAddressCandidate(candidate)){rejectedAddressCandidates.push(candidate);return;}
@@ -333,11 +336,20 @@ extractionSource="known_roboplast_page_fallback";
 confidence="known_site_fallback";
 knownFallbackUsed=true;
 }
+if(identity.siteIdentity==="maver_transport"&&address&&/jagrova\s+ulica\s+14,\s*sela,\s*lavrica,\s*1291\s+škofljica/i.test(address)){
+if(lat===null||lng===null){
+lat=knownMaverCoordinates.lat;
+lng=knownMaverCoordinates.lng;
+extractionSource="known_maver_site_address_coordinates";
+confidence="known_site_address";
+siteSpecificCoordinatesUsed=true;
+}
+}
 if(address&&/litostrojska\\s+cesta\\s+40/i.test(address)&&(lat===null||lng===null)){
 lat=46.07827;
 lng=14.49097;
 }
-return{address:address,lat:lat,lng:lng,extractionSource:extractionSource,confidence:confidence,rejectedAddressCandidates:rejectedAddressCandidates,siteIdentity:identity.siteIdentity,matchedSignals:identity.matchedSignals,knownFallbackUsed:knownFallbackUsed};
+return{address:address,lat:lat,lng:lng,extractionSource:extractionSource,confidence:confidence,rejectedAddressCandidates:rejectedAddressCandidates,siteIdentity:identity.siteIdentity,matchedSignals:identity.matchedSignals,knownFallbackUsed:knownFallbackUsed,siteSpecificCoordinatesUsed:siteSpecificCoordinatesUsed};
 }
 function buildIframeSrc(location){
 if(location&&location.lat!==null&&location.lng!==null){
@@ -503,6 +515,9 @@ emit("PREVIEW_MAP_MODULE_DETECTED",{moduleId:moduleId,providerType:providerType,
 var location=extractLocation(detected.el);
 emit("PREVIEW_MAP_SITE_IDENTITY_DETECTED",{moduleId:moduleId,siteIdentity:location.siteIdentity||"unknown",matchedSignals:location.matchedSignals||[],correlationKey:correlationKey});
 emit("PREVIEW_MAP_LOCATION_EXTRACTED",{moduleId:moduleId,address:location.address||null,lat:location.lat,lng:location.lng,extractionSource:location.extractionSource,confidence:location.confidence,siteIdentity:location.siteIdentity||"unknown",rejectedAddressCandidates:location.rejectedAddressCandidates||[],knownFallbackUsed:location.knownFallbackUsed===true,correlationKey:correlationKey});
+if(location.siteSpecificCoordinatesUsed===true&&location.lat!==null&&location.lng!==null){
+emit("PREVIEW_MAP_SITE_SPECIFIC_COORDINATES_USED",{siteIdentity:location.siteIdentity||"unknown",address:location.address||null,lat:location.lat,lng:location.lng,confidence:"known_site_address",correlationKey:correlationKey});
+}
 emit("PREVIEW_MAP_COORDINATES_EXTRACTED",{lat:location.lat,lng:location.lng,precisionSource:location.extractionSource,coordinatesConfidence:location.confidence,correlationKey:correlationKey});
 var fallback=applyFallback(detected.el,moduleId,location,correlationKey);
 emit("PREVIEW_MAP_FALLBACK_APPLIED",{moduleId:moduleId,fallbackType:fallback.fallbackType,addressUsed:fallback.addressUsed,coordinatesUsed:fallback.coordinatesUsed,iframeUsed:fallback.iframeUsed,gapBeforePx:fallback.spacing&&fallback.spacing.gapBeforePx||0,spacerNodesRemoved:fallback.spacing&&fallback.spacing.spacerNodesRemoved||0,normalizedWrapperCount:fallback.spacing&&fallback.spacing.normalizedWrapperCount||0,maxSpacingApplied:fallback.spacing&&fallback.spacing.maxSpacingApplied||48,replacedNodeTag:fallback.replacedNodeTag,replacementStrategy:fallback.replacementStrategy,correlationKey:correlationKey});

@@ -562,10 +562,72 @@ test("preview route: Maver page never uses Roboplast fallback and uses Maver add
     assert.match(html, /maver_transport/);
     assert.match(html, /BRAND_MAVER_TRANSPORT/);
     assert.match(html, /Jagrova ulica 14, Sela, Lavrica, 1291 Škofljica/);
-    assert.match(html, /knownFallbackUsed:location\.knownFallbackUsed===true/);
+    assert.match(html, /knownMaverCoordinates=\{lat:45\.996816,lng:14\.589487\}/);
+    assert.match(html, /known_maver_site_address_coordinates/);
+    assert.match(html, /siteSpecificCoordinatesUsed=true/);
+    assert.match(html, /PREVIEW_MAP_SITE_SPECIFIC_COORDINATES_USED/);
+    assert.match(html, /confidence:"known_site_address"/);
+    assert.match(html, /finalUrlType:finalUrlType/);
+    assert.match(html, /iframeUsed:!!iframeSrc/);
+    assert.match(html, /var finalUrlType=iframeSrc\?"embed":"placeholder";/);
+    assert.match(html, /return "https:\/\/www\.openstreetmap\.org\/export\/embed\.html\?bbox="/);
     assert.doesNotMatch(html, /<iframe[^>]+openstreetmap\.org\/search\?query=/);
+    assert.doesNotMatch(html, /iframe\.src="https:\/\/www\.openstreetmap\.org\/search\?query=/);
     assert.match(html, /PREVIEW_MAP_EMBED_URL_NORMALIZED/);
+    assert.match(html, /if\(location\.siteSpecificCoordinatesUsed===true&&location\.lat!==null&&location\.lng!==null\)/);
     assert.match(html, /recordAddressCandidate\(pageWideCandidate,"page_wide_contact_text","page_wide_text"\)/);
+  } finally {
+    restoreDeps();
+  }
+});
+
+test("preview route: generic unknown site with address only still uses placeholder fallback link", async () => {
+  const restoreDeps = setPreviewRouteDependenciesForTest({
+    resolveAgencyIdForSiteVersion: async () => "agency_1",
+    requireAgencyActionContext: async () => ({ agencyId: "agency_1" }) as never,
+    renderSiteVersionPreview: async () =>
+      ({
+        html: `<!doctype html><html><body>
+<section id="m782" class="module osmap" data-req="osmap"><div class="map-shell"></div></section>
+<footer>Address: Litostrojska cesta 40, Ljubljana, Slovenia</footer>
+</body></html>`,
+        siteId: "site_preview_1",
+        siteVersionId: "sv_preview_1",
+        source: "preview",
+        previewMode: "transformed",
+        previewRuntimeSummary: {
+          rendererContractAvailable: true,
+          finalSiteModelAvailable: true,
+          renderedWithFallback: false,
+          matchedPageId: null,
+          contentResolutionApplied: true,
+          resolvedContentCount: 0,
+          unresolvedContentCount: 0,
+          contentResolutionDegraded: false,
+          contentResolutionDiagnostics: [],
+          previewDiagnostics: [],
+          familyRenderUsed: false,
+          familyRenderMode: null,
+          familyRenderFamilyId: null,
+          familyRenderFallbackToPage: false,
+          familyRenderDiagnosticsCount: 0,
+        },
+        renderedCaptureUsed: false,
+        domSize: 100,
+        fallbackUsed: false,
+      }) as never,
+    canShowContentDebug: async () => false,
+  });
+  try {
+    const response = await GET(new Request("https://app.pasadenagenerator.com/api/gnr8/runtime/versions/sv_preview_1/preview?mode=transformed"), {
+      params: Promise.resolve({ siteVersionId: "sv_preview_1" }),
+    });
+    const html = await response.text();
+    assert.equal(response.status, 200);
+    assert.match(html, /Map preview fallback active\./);
+    assert.match(html, /openLink\.href="https:\/\/www\.openstreetmap\.org\/search\?query="\+encodeURIComponent\(location\.address\)/);
+    assert.match(html, /fallbackType:iframeUsed\?"iframe":"placeholder"/);
+    assert.match(html, /PREVIEW_MAP_FALLBACK_APPLIED/);
   } finally {
     restoreDeps();
   }
