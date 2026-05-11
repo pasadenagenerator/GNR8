@@ -521,6 +521,9 @@ var BACK_TO_TOP_TOKEN_REGEX=/scrolltop|backtotop|back-to-top|totop|topbutton|one
 var BACK_TO_TOP_TOKENS=["scrolltop","backtotop","back-to-top","totop","topbutton","onepage-up","scroll-up","scroll","up","arrow","sticky","floating","back","mono","dm","fa-angle-up","fa-chevron-up","icon-up"];
 var HORIZONTAL_ARROW_CONTENT_REGEX=/\u2039|\u203a|<|>|fa-angle-left|fa-angle-right|fa-chevron-left|fa-chevron-right|arrow-left|arrow-right|\bprev\b|\bnext\b|\bprevious\b/;
 var UP_ARROW_CONTENT_REGEX=/\u2191|\u25b2|\u02c4|fa-angle-up|fa-chevron-up|arrow-up|icon-up/;
+var ROBOPLAST_BLUE_CIRCLE_MIN_SIZE=42;
+var ROBOPLAST_BLUE_MIN_B=120;
+var ROBOPLAST_BLUE_MIN_SATURATION=35;
 var HORIZONTAL_NAV_TOKEN_LIST=["slider","carousel","slideshow","gallery-nav","lightbox","prev","next","arrow-left","arrow-right","nav-left","nav-right","flex-prev","flex-next","slick-prev","slick-next","swiper-button-prev","swiper-button-next"];
 var STRONG_UP_TOKEN_LIST=["backtotop","scrolltop","totop","topbutton","onepage-up","scroll-up"];
 function hasAnyToken(value,tokens){var source=String(value||"").toLowerCase();for(var i=0;i<tokens.length;i+=1){if(source.indexOf(tokens[i])>=0)return true;}return false;}
@@ -686,7 +689,9 @@ var smallButton=rect.width>0&&rect.width<=90&&rect.height>0&&rect.height<=90;
 var shapeStrong=clickable&&fixedLike&&bottomRightish&&smallButton&&(upArrowStrong||explicitTokenStrong||hrefStrong||upTextStrong);
 var strongCount=(hrefStrong?1:0)+(upArrowStrong?1:0)+(explicitTokenStrong?1:0)+(upTextStrong?1:0)+(shapeStrong?1:0);
 var hasVerticalUpEvidence=hrefStrong||explicitTokenStrong||upArrowStrong||upTextStrong;
-return clickable&&hasVerticalUpEvidence&&strongCount>=2;
+if(clickable&&hasVerticalUpEvidence&&strongCount>=2)return true;
+var roboplastDetection=detectRoboplastOriginalCandidate(el);
+return !!roboplastDetection.isOriginal;
 }
 function isFallbackElement(el){
 if(!el||!el.getAttribute)return false;
@@ -705,6 +710,61 @@ var txt=String(s.textContent||"").toLowerCase();
 if(/scrolltop|backtotop|back-to-top|totop|topbutton|onepage-up|scroll-up|scrollto\\s*\\(|scroll\\s*to\\s*top/.test(src+" "+txt))return true;
 }
 return false;
+}
+function detectRuntimeBehaviorSignals(el){
+if(!el||!el.getAttribute)return{runtimeBehaviorDetected:false,reason:"none"};
+var onclickAttr=String(el.getAttribute("onclick")||"").toLowerCase();
+if(/scrollto\s*\(|scroll\s*to\s*top|back\s*to\s*top|totop/.test(onclickAttr))return{runtimeBehaviorDetected:true,reason:"onclick_scroll_signal"};
+if(typeof el.onclick==="function")return{runtimeBehaviorDetected:true,reason:"onclick_handler_function"};
+var aggregate=getCandidateText(el).toLowerCase();
+if(/scroll|totop|back-to-top|backtotop|onepage-up/.test(aggregate)&&hasRuntimeSignals())return{runtimeBehaviorDetected:true,reason:"runtime_signal_with_candidate_tokens"};
+var pageText=((document.documentElement&&document.documentElement.outerHTML)||"").toLowerCase();
+if((String(el.id||"").length>0||String(el.className||"").length>0)&&/scrolltop|backtotop|back-to-top|totop|topbutton|onepage-up|scroll-up/.test(pageText)){
+return{runtimeBehaviorDetected:true,reason:"runtime_initialized_scroll_control"};
+}
+return{runtimeBehaviorDetected:false,reason:"none"};
+}
+function detectRoboplastOriginalCandidate(el){
+if(!el||!el.getAttribute)return{isOriginal:false,detectionReason:"none",iconEvidence:"none",runtimeBehaviorDetected:false,positionEvidence:"none",className:""};
+var rect=getRectSafe(el);
+var style=window.getComputedStyle?window.getComputedStyle(el):null;
+var viewportW=Math.max(window.innerWidth||0,document.documentElement&&document.documentElement.clientWidth||0);
+var viewportH=Math.max(window.innerHeight||0,document.documentElement&&document.documentElement.clientHeight||0);
+var fixedLike=style&&(style.position==="fixed"||style.position==="sticky");
+var bottomRightish=rect.width>0&&rect.height>0&&rect.right>=viewportW-220&&rect.bottom>=viewportH-220;
+var circularShape=rect.width>=ROBOPLAST_BLUE_CIRCLE_MIN_SIZE&&rect.height>=ROBOPLAST_BLUE_CIRCLE_MIN_SIZE&&Math.abs(rect.width-rect.height)<=18;
+var borderRadius=style?String(style.borderRadius||""):"";
+var borderRadiusNumeric=parseFloat(borderRadius);
+var radiusCircular=!Number.isNaN(borderRadiusNumeric)&&borderRadiusNumeric>=20||/999|50%/.test(borderRadius);
+var bg=parseRgbLike(style&&style.backgroundColor?style.backgroundColor:"");
+var isBlueLike=!!bg&&bg.b>=ROBOPLAST_BLUE_MIN_B&&bg.b>=bg.r+15&&bg.b>=bg.g+15&&(Math.max(bg.r,bg.g,bg.b)-Math.min(bg.r,bg.g,bg.b))>=ROBOPLAST_BLUE_MIN_SATURATION;
+var text=(getCandidateText(el)||"").toLowerCase();
+var iconEvidence=UP_ARROW_CONTENT_REGEX.test(text)?"up_chevron_token":"none";
+if(iconEvidence==="none"){
+var svgUp=el.querySelector&&el.querySelector("svg,[class*='chevron-up'],[class*='angle-up'],[class*='arrow-up'],i.fa-chevron-up,i.fa-angle-up");
+if(svgUp)iconEvidence="up_icon_node";
+}
+var runtime=detectRuntimeBehaviorSignals(el);
+var className=String(el.className||"");
+var id=String(el.id||"").toLowerCase();
+var tokenMatched=hasAnyToken(id+" "+String(className||"").toLowerCase(),BACK_TO_TOP_TOKENS);
+var detectionReasonParts=[];
+if(fixedLike)detectionReasonParts.push("fixed_like");
+if(bottomRightish)detectionReasonParts.push("bottom_right");
+if(circularShape||radiusCircular)detectionReasonParts.push("circular");
+if(isBlueLike)detectionReasonParts.push("blue_circle");
+if(iconEvidence!=="none")detectionReasonParts.push("up_icon");
+if(runtime.runtimeBehaviorDetected)detectionReasonParts.push(runtime.reason);
+if(tokenMatched)detectionReasonParts.push("token");
+var isOriginal=fixedLike&&bottomRightish&&(circularShape||radiusCircular)&&iconEvidence!=="none"&&(runtime.runtimeBehaviorDetected||tokenMatched||isBlueLike);
+return{
+isOriginal:isOriginal,
+detectionReason:detectionReasonParts.join("|")||"none",
+iconEvidence:iconEvidence,
+runtimeBehaviorDetected:runtime.runtimeBehaviorDetected,
+positionEvidence:(fixedLike?"fixed_like":"not_fixed")+"|"+(bottomRightish?"bottom_right":"not_bottom_right"),
+className:className
+};
 }
 function isPotentiallyUsableOriginal(el){
 if(!el||!el.style||!el.isConnected)return false;
@@ -983,13 +1043,25 @@ function runDedupePass(passName){
 var candidates=findCandidateElements();
 var existing=getPreferredOriginal(candidates);
 var existingElementFound=!!existing;
+var originalRuntimeDetection=existing?detectRoboplastOriginalCandidate(existing):null;
 var fallbackCandidate=getFallbackCandidate(candidates);
 var originalCandidateCount=candidates.filter(function(node){return !isFallbackElement(node);}).length;
 var fallbackCandidateCount=candidates.filter(function(node){return isFallbackElement(node);}).length;
 var fallbackInjected=false;
-var detectionReason=existingElementFound?"EXISTING_MARKUP":"NO_ELEMENT";
+var detectionReason=existingElementFound?(originalRuntimeDetection&&originalRuntimeDetection.isOriginal?"ROBOPLAST_RUNTIME_ORIGINAL":"EXISTING_MARKUP"):"NO_ELEMENT";
 var detectedTheme=pickAccentColor(existing||fallbackCandidate||null);
 emit("PREVIEW_BACK_TO_TOP_DETECTED",{siteVersionId:payload.siteVersionId,detectionReason:detectionReason,existingElementFound:existingElementFound,fallbackInjected:fallbackInjected,correlationKey:correlationKey("detected")});
+if(existing&&originalRuntimeDetection&&originalRuntimeDetection.isOriginal){
+emit("PREVIEW_BACK_TO_TOP_RUNTIME_ORIGINAL_DETECTED",{
+siteVersionId:payload.siteVersionId,
+detectionReason:originalRuntimeDetection.detectionReason,
+iconEvidence:originalRuntimeDetection.iconEvidence,
+runtimeBehaviorDetected:originalRuntimeDetection.runtimeBehaviorDetected,
+positionEvidence:originalRuntimeDetection.positionEvidence,
+className:originalRuntimeDetection.className,
+correlationKey:correlationKey("runtime_original_detected_"+passName)
+});
+}
 if(existing){
 var suppressedFallbackCount=0;
 for(var s=0;s<candidates.length;s+=1){
@@ -1012,8 +1084,25 @@ applyTheme(existing,detectedTheme,true,false);
 normalizeIconForeground(existing,true,false);
 wireClick(existing,detectionReason,true,false);
 var dedupedOriginal=dedupeCandidates(existing,passName);
-emit("PREVIEW_BACK_TO_TOP_DEDUPED",{siteVersionId:payload.siteVersionId,passName:passName,candidateCount:dedupedOriginal.candidateCount,originalCandidateCount:dedupedOriginal.originalCandidateCount,fallbackCandidateCount:dedupedOriginal.fallbackCandidateCount,finalButtonSource:"original",hiddenDuplicateCount:dedupedOriginal.hiddenDuplicateCount,visibleCandidateCountAfter:dedupedOriginal.visibleCandidateCountAfter,excludedFalsePositiveCount:dedupedOriginal.excludedFalsePositiveCount,correlationKey:correlationKey("deduped_original_"+passName)});
+emit("PREVIEW_BACK_TO_TOP_DEDUPED",{siteVersionId:payload.siteVersionId,passName:passName,candidateCount:dedupedOriginal.candidateCount,originalCandidateCount:dedupedOriginal.originalCandidateCount,fallbackCandidateCount:dedupedOriginal.fallbackCandidateCount,fallbackInjectionPrevented:fallbackCandidateCount>0||!!fallbackCandidate,finalButtonSource:"original",hiddenDuplicateCount:dedupedOriginal.hiddenDuplicateCount,visibleCandidateCountAfter:dedupedOriginal.visibleCandidateCountAfter,excludedFalsePositiveCount:dedupedOriginal.excludedFalsePositiveCount,correlationKey:correlationKey("deduped_original_"+passName)});
 emit("PREVIEW_BACK_TO_TOP_RESTORED",{siteVersionId:payload.siteVersionId,detectionReason:detectionReason,existingElementFound:true,fallbackInjected:false,correlationKey:correlationKey("restored")});
+return;
+}
+var rescannedCandidates=findCandidateElements();
+var rescannedOriginal=getPreferredOriginal(rescannedCandidates);
+if(rescannedOriginal){
+var rescannedDetection=detectRoboplastOriginalCandidate(rescannedOriginal);
+emit("PREVIEW_BACK_TO_TOP_RUNTIME_ORIGINAL_DETECTED",{
+siteVersionId:payload.siteVersionId,
+detectionReason:rescannedDetection.detectionReason,
+iconEvidence:rescannedDetection.iconEvidence,
+runtimeBehaviorDetected:rescannedDetection.runtimeBehaviorDetected,
+positionEvidence:rescannedDetection.positionEvidence,
+className:rescannedDetection.className,
+correlationKey:correlationKey("runtime_original_rescan_"+passName)
+});
+var dedupedRescanned=dedupeCandidates(rescannedOriginal,passName);
+emit("PREVIEW_BACK_TO_TOP_DEDUPED",{siteVersionId:payload.siteVersionId,passName:passName,candidateCount:dedupedRescanned.candidateCount,originalCandidateCount:dedupedRescanned.originalCandidateCount,fallbackCandidateCount:dedupedRescanned.fallbackCandidateCount,fallbackInjectionPrevented:true,finalButtonSource:"original",hiddenDuplicateCount:dedupedRescanned.hiddenDuplicateCount,visibleCandidateCountAfter:dedupedRescanned.visibleCandidateCountAfter,excludedFalsePositiveCount:dedupedRescanned.excludedFalsePositiveCount,correlationKey:correlationKey("deduped_original_rescan_"+passName)});
 return;
 }
 if(!fallbackCandidate&&!hasRuntimeSignals())return;
@@ -1028,7 +1117,7 @@ applyTheme(fallback,detectedTheme,false,true);
 normalizeIconForeground(fallback,false,true);
 wireClick(fallback,detectionReason,false,true);
 var dedupedFallback=dedupeCandidates(fallback,passName);
-emit("PREVIEW_BACK_TO_TOP_DEDUPED",{siteVersionId:payload.siteVersionId,passName:passName,candidateCount:dedupedFallback.candidateCount,originalCandidateCount:dedupedFallback.originalCandidateCount,fallbackCandidateCount:dedupedFallback.fallbackCandidateCount,finalButtonSource:"fallback",hiddenDuplicateCount:dedupedFallback.hiddenDuplicateCount,visibleCandidateCountAfter:dedupedFallback.visibleCandidateCountAfter,excludedFalsePositiveCount:dedupedFallback.excludedFalsePositiveCount,correlationKey:correlationKey("deduped_fallback_"+passName)});
+emit("PREVIEW_BACK_TO_TOP_DEDUPED",{siteVersionId:payload.siteVersionId,passName:passName,candidateCount:dedupedFallback.candidateCount,originalCandidateCount:dedupedFallback.originalCandidateCount,fallbackCandidateCount:dedupedFallback.fallbackCandidateCount,fallbackInjectionPrevented:false,finalButtonSource:"fallback",hiddenDuplicateCount:dedupedFallback.hiddenDuplicateCount,visibleCandidateCountAfter:dedupedFallback.visibleCandidateCountAfter,excludedFalsePositiveCount:dedupedFallback.excludedFalsePositiveCount,correlationKey:correlationKey("deduped_fallback_"+passName)});
 emit("PREVIEW_BACK_TO_TOP_FALLBACK_APPLIED",{siteVersionId:payload.siteVersionId,detectionReason:detectionReason,existingElementFound:false,fallbackInjected:true,correlationKey:correlationKey("fallback")});
 }
 function schedulePass(name,delayMs){

@@ -891,6 +891,7 @@ test("preview route: transformed output injects back-to-top restore compatibilit
     assert.match(html, /PREVIEW_BACK_TO_TOP_THEME_APPLIED/);
     assert.match(html, /PREVIEW_BACK_TO_TOP_ICON_NORMALIZED/);
     assert.match(html, /PREVIEW_BACK_TO_TOP_DEDUPED/);
+    assert.match(html, /fallbackInjectionPrevented/);
     assert.match(html, /PREVIEW_BACK_TO_TOP_CANDIDATES_SNAPSHOT/);
     assert.match(html, /finalButtonSource:"original"/);
     assert.match(html, /passName:passName/);
@@ -976,6 +977,8 @@ test("preview route: transformed output injects back-to-top fallback and prevent
     assert.match(html, /Back to top/);
     assert.match(html, /gnr8-preview-backtotop-fallback/);
     assert.match(html, /if\(!fallbackCandidate&&!hasRuntimeSignals\(\)\)return;/);
+    assert.match(html, /var rescannedCandidates=findCandidateElements\(\);/);
+    assert.match(html, /if\(rescannedOriginal\)\{/);
     assert.match(html, /data-gnr8-backtotop-hidden-duplicate/);
     assert.match(html, /fallback\.style\.color="#fff"/);
     assert.match(html, /fallback\.style\.background="#1f2937"/);
@@ -1104,7 +1107,8 @@ test("preview route: transformed output hides unusable original and falls back t
     assert.match(html, /isPotentiallyUsableOriginal/);
     assert.match(html, /function getPreferredOriginal\(candidates\)/);
     assert.match(html, /hasVerticalUpEvidence/);
-    assert.match(html, /return clickable&&hasVerticalUpEvidence&&strongCount>=2;/);
+    assert.match(html, /if\(clickable&&hasVerticalUpEvidence&&strongCount>=2\)return true;/);
+    assert.match(html, /detectRoboplastOriginalCandidate/);
     assert.match(html, /finalButtonSource:"fallback"/);
     assert.match(html, /window\.scrollTo\(\{ top: 0, behavior: "smooth" \}\)/);
   } finally {
@@ -1171,7 +1175,7 @@ test("preview route: transformed output icon normalization handles svg, stroke, 
   }
 });
 
-test("preview route: transformed output includes Roboplast-style unmatched fixed arrow candidate heuristics", async () => {
+test("preview route: transformed output includes Roboplast-style floating circular up-chevron original detection without href", async () => {
   const restoreDeps = setPreviewRouteDependenciesForTest({
     resolveAgencyIdForSiteVersion: async () => "agency_1",
     requireAgencyActionContext: async () => ({ agencyId: "agency_1" }) as never,
@@ -1211,7 +1215,18 @@ test("preview route: transformed output includes Roboplast-style unmatched fixed
     });
     const html = await response.text();
     assert.equal(response.status, 200);
-    assert.match(html, /HORIZONTAL_ARROW_CONTENT_REGEX/);
+    assert.match(html, /PREVIEW_BACK_TO_TOP_RUNTIME_ORIGINAL_DETECTED/);
+    assert.match(html, /detectRoboplastOriginalCandidate/);
+    assert.match(html, /ROBOPLAST_BLUE_CIRCLE_MIN_SIZE/);
+    assert.match(html, /ROBOPLAST_BLUE_MIN_B/);
+    assert.match(html, /detectRuntimeBehaviorSignals/);
+    assert.match(html, /runtimeBehaviorDetected/);
+    assert.match(html, /iconEvidence/);
+    assert.match(html, /positionEvidence/);
+    assert.match(html, /className/);
+    assert.match(html, /detectionReason/);
+    assert.match(html, /circularShape/);
+    assert.match(html, /isBlueLike/);
     assert.match(html, /HORIZONTAL_NAV_TOKEN_LIST/);
     assert.match(html, /STRONG_UP_TOKEN_LIST/);
     assert.match(html, /hasVerticalUpEvidence/);
@@ -1336,6 +1351,59 @@ test("preview route: transformed output excludes slider right arrow and injects 
     assert.match(html, /PREVIEW_BACK_TO_TOP_FALSE_POSITIVE_EXCLUDED/);
     assert.match(html, /finalButtonSource:"fallback"/);
     assert.match(html, /PREVIEW_BACK_TO_TOP_FALLBACK_APPLIED/);
+    assert.match(html, /visibleCandidateCountAfter/);
+    assert.match(html, /fallbackInjectionPrevented:false/);
+  } finally {
+    restoreDeps();
+  }
+});
+
+test("preview route: transformed output guards fallback injection when runtime original exists and keeps one visible candidate", async () => {
+  const restoreDeps = setPreviewRouteDependenciesForTest({
+    resolveAgencyIdForSiteVersion: async () => "agency_1",
+    requireAgencyActionContext: async () => ({ agencyId: "agency_1" }) as never,
+    renderSiteVersionPreview: async () =>
+      ({
+        html: `<!doctype html><html><body>
+<div>roboplast runtime original guard</div>
+</body></html>`,
+        siteId: "site_preview_1",
+        siteVersionId: "sv_preview_1",
+        source: "preview",
+        previewMode: "transformed",
+        previewRuntimeSummary: {
+          rendererContractAvailable: true,
+          finalSiteModelAvailable: true,
+          renderedWithFallback: false,
+          matchedPageId: null,
+          contentResolutionApplied: true,
+          resolvedContentCount: 0,
+          unresolvedContentCount: 0,
+          contentResolutionDegraded: false,
+          contentResolutionDiagnostics: [],
+          previewDiagnostics: [],
+          familyRenderUsed: false,
+          familyRenderMode: null,
+          familyRenderFamilyId: null,
+          familyRenderFallbackToPage: false,
+          familyRenderDiagnosticsCount: 0,
+        },
+        renderedCaptureUsed: false,
+        domSize: 100,
+        fallbackUsed: false,
+      }) as never,
+    canShowContentDebug: async () => false,
+  });
+  try {
+    const response = await GET(new Request("https://app.pasadenagenerator.com/api/gnr8/runtime/versions/sv_preview_1/preview?mode=transformed"), {
+      params: Promise.resolve({ siteVersionId: "sv_preview_1" }),
+    });
+    const html = await response.text();
+    assert.equal(response.status, 200);
+    assert.match(html, /runtime_original_rescan/);
+    assert.match(html, /deduped_original_rescan/);
+    assert.match(html, /fallbackInjectionPrevented:true/);
+    assert.match(html, /finalButtonSource:"original"/);
     assert.match(html, /visibleCandidateCountAfter/);
   } finally {
     restoreDeps();
