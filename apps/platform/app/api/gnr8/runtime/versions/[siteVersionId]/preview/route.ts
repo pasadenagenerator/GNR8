@@ -190,8 +190,16 @@ function extractAddressCandidate(source){
 var text=String(source||"").replace(/\\s+/g," ").trim();
 if(!text)return null;
 if(/litostrojska\\s+cesta\\s+40/i.test(text))return "Litostrojska cesta 40, Ljubljana, Slovenia";
-var canonicalMatch=text.match(/([A-Za-zÀ-ž0-9 .,'\\-]{3,140}\\b(?:cesta|street|st\\.?|avenue|ave\\.?|road|rd\\.?|ulica|trg|lane|ln\\.?|way|blvd|boulevard)\\b[^<\\n\\r]{0,140})/i);
+if(/jagrova\\s+ulica\\s+14/i.test(text))return "Jagrova ulica 14, Sela, Lavrica, 1291 Škofljica";
+var sanitized=text.split(/\\b(?:kontakt|tel|fax|gsm|e-?mail|email)\\s*:?/i)[0].trim();
+if(/\\b(?:as punctual and fast as possible|naše podjetje|about us|we currently have|trucks for vehicles|prevozi)\\b/i.test(sanitized)){
+var forcedMaver=sanitized.match(/(Jagrova\\s+ulica\\s*\\d+[^<\\n\\r]{0,120})/i);
+if(forcedMaver&&forcedMaver[1])return normalizeAddressText(forcedMaver[1]);
+}
+var canonicalMatch=sanitized.match(/([A-Za-zÀ-ž0-9 .,'\\-]{3,160}\\b(?:cesta|street|st\\.?|avenue|ave\\.?|road|rd\\.?|ulica|trg|lane|ln\\.?|way|blvd|boulevard)\\b[^<\\n\\r]{0,120})/i);
 if(canonicalMatch&&canonicalMatch[1])return normalizeAddressText(canonicalMatch[1]);
+var withPostcode=sanitized.match(/([A-Za-zÀ-ž0-9 .,'\\-]{3,120}\\b\\d{4}\\s+[A-Za-zÀ-ž][A-Za-zÀ-ž .,'\\-]{1,40})/i);
+if(withPostcode&&withPostcode[1])return normalizeAddressText(withPostcode[1]);
 if(isLikelyAddressText(text))return normalizeAddressText(text.slice(0,180));
 return null;
 }
@@ -222,6 +230,9 @@ var value=toLower(addr);
 if(!value)return true;
 if(/\\b(?:road|street|avenue|ulica|cesta)\\s*\\d\\b/.test(value)&&/\\b(?:germany|berlin|london|paris|city|country)\\b/.test(value))return true;
 if(/^(test|demo|sample|placeholder)\\b/.test(value))return true;
+if(value.length>160&&!parseCoordinatesFromText(value))return true;
+if(/\\b(?:kontakt|tel|fax|gsm|email|e-mail)\\b/.test(value))return true;
+if(/\\b(?:as punctual and fast as possible|we currently have|naše podjetje|about us)\\b/.test(value))return true;
 return false;
 }
 function detectMapModule(){
@@ -335,9 +346,6 @@ var delta=0.01;
 var bbox=[(lng-delta).toFixed(6),(lat-delta).toFixed(6),(lng+delta).toFixed(6),(lat+delta).toFixed(6)].join("%2C");
 return "https://www.openstreetmap.org/export/embed.html?bbox="+bbox+"&layer=mapnik&marker="+encodeURIComponent(String(lat)+","+String(lng));
 }
-if(location&&location.address){
-return "https://www.openstreetmap.org/search?query="+encodeURIComponent(location.address);
-}
 return null;
 }
 function detectMapRenderNode(moduleEl){
@@ -425,8 +433,13 @@ host.style.background="#f8fafc";
 host.style.marginTop="0";
 host.style.marginBottom="0";
 host.style.overflow="hidden";
+var existingIframe=moduleEl.querySelector("iframe");
+var existingSrc=String(existingIframe&&existingIframe.getAttribute?existingIframe.getAttribute("src")||"":"");
+var previousUrlType=existingSrc?(/openstreetmap\\.org\\/search\\?/i.test(existingSrc)?"search":(/openstreetmap\\.org\\/export\\/embed\\.html/i.test(existingSrc)?"embed":"none")):"none";
 var iframeSrc=buildIframeSrc(location);
 var iframeUsed=false;
+var finalUrlType=iframeSrc?"embed":"placeholder";
+emit("PREVIEW_MAP_EMBED_URL_NORMALIZED",{moduleId:moduleId,previousUrlType:previousUrlType,finalUrlType:finalUrlType,iframeUsed:!!iframeSrc,correlationKey:correlationKey});
 if(iframeSrc){
 var iframe=document.createElement("iframe");
 iframe.src=iframeSrc;
@@ -452,6 +465,18 @@ placeholder.style.color="#0f172a";
 placeholder.style.background="linear-gradient(180deg, #f8fafc 0%, #eef2ff 100%)";
 var addressLabel=location&&location.address?location.address:"Location unavailable";
 placeholder.textContent="Map preview fallback active. "+addressLabel;
+if(location&&location.address){
+var openLink=document.createElement("a");
+openLink.href="https://www.openstreetmap.org/search?query="+encodeURIComponent(location.address);
+openLink.target="_blank";
+openLink.rel="noopener noreferrer";
+openLink.style.display="inline-block";
+openLink.style.marginTop="12px";
+openLink.style.color="#0f172a";
+openLink.textContent="Open map";
+placeholder.appendChild(document.createElement("br"));
+placeholder.appendChild(openLink);
+}
 host.appendChild(placeholder);
 }
 var replacedNodeTag=String(renderNode&&renderNode.tagName||moduleEl.tagName||"div").toLowerCase();
@@ -517,7 +542,6 @@ var corrSeed=String(Date.now());
 function correlationKey(reason){return [payload.siteVersionId,reason||"backtotop",corrSeed].join(":");}
 function emit(code,details){try{console.info("[gnr8.runtime.preview] "+code,details||{});}catch(_err){}}
 var BACK_TO_TOP_FALLBACK_ID="gnr8-preview-backtotop-fallback";
-var BACK_TO_TOP_TOKEN_REGEX=/scrolltop|backtotop|back-to-top|totop|topbutton|onepage-up|scroll-up|scroll|up|arrow|sticky|floating|back|mono|dm|fa-angle-up|fa-chevron-up|icon-up/;
 var BACK_TO_TOP_TOKENS=["scrolltop","backtotop","back-to-top","totop","topbutton","onepage-up","scroll-up","scroll","up","arrow","sticky","floating","back","mono","dm","fa-angle-up","fa-chevron-up","icon-up"];
 var HORIZONTAL_ARROW_CONTENT_REGEX=/\u2039|\u203a|<|>|fa-angle-left|fa-angle-right|fa-chevron-left|fa-chevron-right|arrow-left|arrow-right|\bprev\b|\bnext\b|\bprevious\b/;
 var UP_ARROW_CONTENT_REGEX=/\u2191|\u25b2|\u02c4|fa-angle-up|fa-chevron-up|arrow-up|icon-up/;
@@ -527,6 +551,7 @@ var ROBOPLAST_BLUE_MIN_SATURATION=35;
 var HORIZONTAL_NAV_TOKEN_LIST=["slider","carousel","slideshow","gallery-nav","lightbox","prev","next","arrow-left","arrow-right","nav-left","nav-right","flex-prev","flex-next","slick-prev","slick-next","swiper-button-prev","swiper-button-next"];
 var STRONG_UP_TOKEN_LIST=["backtotop","scrolltop","totop","topbutton","onepage-up","scroll-up"];
 function hasAnyToken(value,tokens){var source=String(value||"").toLowerCase();for(var i=0;i<tokens.length;i+=1){if(source.indexOf(tokens[i])>=0)return true;}return false;}
+function hasAnyPhrase(value,phrases){var source=String(value||"").toLowerCase();for(var i=0;i<phrases.length;i+=1){if(source.indexOf(String(phrases[i]||"").toLowerCase())>=0)return true;}return false;}
 function normalizeText(value){return String(value||"").replace(/\s+/g," ").trim();}
 function getCandidateText(el){
 if(!el||!el.getAttribute)return "";
@@ -701,25 +726,25 @@ return false;
 }
 function hasRuntimeSignals(){
 var pageText=((document.documentElement&&document.documentElement.outerHTML)||"").toLowerCase();
-if(/scrolltop|backtotop|back-to-top|totop|topbutton|onepage-up|scroll-up|href\\s*=\\s*["']#top["']/.test(pageText))return true;
+if(hasAnyPhrase(pageText,["scrolltop","backtotop","back-to-top","totop","topbutton","onepage-up","scroll-up","href=\\\"#top\\\"","href='#top'"]))return true;
 var scripts=Array.prototype.slice.call(document.querySelectorAll("script"));
 for(var i=0;i<scripts.length;i+=1){
 var s=scripts[i];
 var src=String(s.getAttribute&&s.getAttribute("src")||"").toLowerCase();
 var txt=String(s.textContent||"").toLowerCase();
-if(/scrolltop|backtotop|back-to-top|totop|topbutton|onepage-up|scroll-up|scrollto\\s*\\(|scroll\\s*to\\s*top/.test(src+" "+txt))return true;
+if(hasAnyPhrase(src+" "+txt,["scrolltop","backtotop","back-to-top","totop","topbutton","onepage-up","scroll-up","scrollto(","scroll to top","back to top"]))return true;
 }
 return false;
 }
 function detectRuntimeBehaviorSignals(el){
 if(!el||!el.getAttribute)return{runtimeBehaviorDetected:false,reason:"none"};
 var onclickAttr=String(el.getAttribute("onclick")||"").toLowerCase();
-if(/scrollto\s*\(|scroll\s*to\s*top|back\s*to\s*top|totop/.test(onclickAttr))return{runtimeBehaviorDetected:true,reason:"onclick_scroll_signal"};
+if(hasAnyPhrase(onclickAttr,["scrollto(","scroll to top","back to top","totop"]))return{runtimeBehaviorDetected:true,reason:"onclick_scroll_signal"};
 if(typeof el.onclick==="function")return{runtimeBehaviorDetected:true,reason:"onclick_handler_function"};
 var aggregate=getCandidateText(el).toLowerCase();
-if(/scroll|totop|back-to-top|backtotop|onepage-up/.test(aggregate)&&hasRuntimeSignals())return{runtimeBehaviorDetected:true,reason:"runtime_signal_with_candidate_tokens"};
+if(hasAnyPhrase(aggregate,["scroll","totop","back-to-top","backtotop","onepage-up"])&&hasRuntimeSignals())return{runtimeBehaviorDetected:true,reason:"runtime_signal_with_candidate_tokens"};
 var pageText=((document.documentElement&&document.documentElement.outerHTML)||"").toLowerCase();
-if((String(el.id||"").length>0||String(el.className||"").length>0)&&/scrolltop|backtotop|back-to-top|totop|topbutton|onepage-up|scroll-up/.test(pageText)){
+if((String(el.id||"").length>0||String(el.className||"").length>0)&&hasAnyPhrase(pageText,["scrolltop","backtotop","back-to-top","totop","topbutton","onepage-up","scroll-up"])){
 return{runtimeBehaviorDetected:true,reason:"runtime_initialized_scroll_control"};
 }
 return{runtimeBehaviorDetected:false,reason:"none"};

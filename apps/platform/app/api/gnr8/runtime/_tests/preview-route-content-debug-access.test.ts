@@ -14,6 +14,16 @@ function extractInjectedGalleryRuntimeShim(html: string): string {
   return html.slice(start + "<script>".length, end);
 }
 
+function extractInjectedScriptContaining(html: string, marker: string): string {
+  const markerIndex = html.indexOf(marker);
+  assert.notEqual(markerIndex, -1, `expected marker ${marker}`);
+  const scriptStart = html.lastIndexOf("<script>", markerIndex);
+  assert.notEqual(scriptStart, -1, "expected script start before marker");
+  const scriptEnd = html.indexOf("</script>", markerIndex);
+  assert.notEqual(scriptEnd, -1, "expected script end after marker");
+  return html.slice(scriptStart + "<script>".length, scriptEnd);
+}
+
 function extractParseSettingFunctionFromInjectedShim(injectedShim: string): (dataSettings: string, key: string) => number | null {
   const startToken = "function parseSetting(dataSettings,key){";
   const start = injectedShim.indexOf(startToken);
@@ -345,7 +355,7 @@ test("preview route: map fallback supports placeholder path when location cannot
     const html = await response.text();
     assert.equal(response.status, 200);
     assert.match(html, /fallbackType:iframeUsed\?"iframe":"placeholder"/);
-    assert.match(html, /if\(location&&location\.address\)/);
+    assert.match(html, /Open map/);
     assert.match(html, /Location unavailable/);
     assert.match(html, /knownFallbackUsed:location\.knownFallbackUsed===true/);
     assert.match(html, /PREVIEW_MAP_SITE_IDENTITY_DETECTED/);
@@ -437,6 +447,9 @@ test("preview route: map fallback prioritizes explicit coordinates over address 
     assert.match(html, /marker=/);
     assert.match(html, /if\(location&&location\.lat!==null&&location\.lng!==null\)/);
     assert.match(html, /return "https:\/\/www\.openstreetmap\.org\/export\/embed\.html\?bbox="/);
+    assert.match(html, /PREVIEW_MAP_EMBED_URL_NORMALIZED/);
+    assert.match(html, /previousUrlType/);
+    assert.match(html, /finalUrlType/);
   } finally {
     restoreDeps();
   }
@@ -511,7 +524,7 @@ test("preview route: Maver page never uses Roboplast fallback and uses Maver add
       ({
         html: `<!doctype html><html><body>
 <section id="m781" class="module osmap" data-req="osmap"><div class="map-shell"></div></section>
-<footer>Kontakt: Maver Transport d.o.o., Cesta v Gorice 12, Ljubljana, Slovenia | info@mavertransport.si</footer>
+<footer>Parking and workshop facilities are at Jagrova ulica 14, Sela, Lavrica, 1291 Škofljica. Kontakt: Tel: +386 (0)1 366 38 36 Fax: +386 (0)1 366 38 38 GSM: +386 (0)41 269 064 E-mail: transporti.maver@siol.net</footer>
 </body></html>`,
         siteId: "site_preview_1",
         siteVersionId: "sv_preview_1",
@@ -548,9 +561,28 @@ test("preview route: Maver page never uses Roboplast fallback and uses Maver add
     assert.equal(response.status, 200);
     assert.match(html, /maver_transport/);
     assert.match(html, /BRAND_MAVER_TRANSPORT/);
-    assert.match(html, /Cesta v Gorice 12, Ljubljana, Slovenia/);
+    assert.match(html, /Jagrova ulica 14, Sela, Lavrica, 1291 Škofljica/);
     assert.match(html, /knownFallbackUsed:location\.knownFallbackUsed===true/);
+    assert.doesNotMatch(html, /<iframe[^>]+openstreetmap\.org\/search\?query=/);
+    assert.match(html, /PREVIEW_MAP_EMBED_URL_NORMALIZED/);
     assert.match(html, /recordAddressCandidate\(pageWideCandidate,"page_wide_contact_text","page_wide_text"\)/);
+  } finally {
+    restoreDeps();
+  }
+});
+
+test("preview route: transformed back-to-top shim parses and avoids unsafe regex patterns", async () => {
+  const restoreDeps = mockPreviewDeps(false);
+  try {
+    const response = await GET(new Request("https://app.pasadenagenerator.com/api/gnr8/runtime/versions/sv_preview_1/preview?mode=transformed"), {
+      params: Promise.resolve({ siteVersionId: "sv_preview_1" }),
+    });
+    const html = await response.text();
+    assert.equal(response.status, 200);
+    const shim = extractInjectedScriptContaining(html, "PREVIEW_BACK_TO_TOP_DEDUPED");
+    assert.doesNotThrow(() => new Function(shim), "expected back-to-top shim to parse as JavaScript");
+    assert.doesNotMatch(shim, /scrollto\\s*\\\*\\s*\\\(/);
+    assert.doesNotMatch(shim, /scrolltos\*\\\(\|scrolls\*tos\*top\|backs\*tos\*top\|totop/);
   } finally {
     restoreDeps();
   }
