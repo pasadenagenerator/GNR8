@@ -1144,9 +1144,12 @@ test("preview route: transformed output detects same builder native pattern for 
     const html = await response.text();
     assert.equal(response.status, 200);
     assert.match(html, /PREVIEW_BACK_TO_TOP_NATIVE_BUILDER_DETECTED/);
+    assert.match(html, /PREVIEW_BACK_TO_TOP_NATIVE_RESTORED/);
+    assert.match(html, /selectorMatched:"a\.scrollIcon\[data-req='scrollTop'\]"/);
     assert.match(html, /PREVIEW_BACK_TO_TOP_NATIVE_STATUS/);
     assert.match(html, /nativeDetected:nativeDetected/);
     assert.match(html, /finalButtonSource:nativeDetected\?"native_builder":"none"/);
+    assert.doesNotMatch(html, /PREVIEW_BACK_TO_TOP_FALLBACK_APPLIED/);
   } finally {
     restoreDeps();
   }
@@ -1338,10 +1341,68 @@ test("preview route: transformed output keeps hidden/unwired native restore logi
     const html = await response.text();
     assert.equal(response.status, 200);
     assert.match(html, /normalizeHiddenNative/);
+    assert.match(html, /classList\.remove\("hidden"\)/);
+    assert.match(html, /window\.scrollTo\(\{top:0,behavior:"smooth"\}\)/);
     assert.match(html, /hiddenNativeRestored/);
     assert.match(html, /smoothScrollWired/);
     assert.doesNotMatch(html, /PREVIEW_BACK_TO_TOP_FALLBACK_APPLIED/);
     assert.match(html, /onepage-scrollup/);
+  } finally {
+    restoreDeps();
+  }
+});
+
+test("preview route: transformed output detects scrollIcon hidden bottom_right and emits native restored diagnostics", async () => {
+  const restoreDeps = setPreviewRouteDependenciesForTest({
+    resolveAgencyIdForSiteVersion: async () => "agency_1",
+    requireAgencyActionContext: async () => ({ agencyId: "agency_1" }) as never,
+    renderSiteVersionPreview: async () =>
+      ({
+        html: `<!doctype html><html><body>
+<a href="#" data-req="scrollTop" class="scrollIcon hidden bottom_right" data-track-event="click" data-track-action="internal_link_clicked"><i class="fa fa-chevron-up"></i></a>
+</body></html>`,
+        siteId: "site_preview_1",
+        siteVersionId: "sv_preview_1",
+        source: "preview",
+        previewMode: "transformed",
+        previewRuntimeSummary: {
+          rendererContractAvailable: true,
+          finalSiteModelAvailable: true,
+          renderedWithFallback: false,
+          matchedPageId: null,
+          contentResolutionApplied: true,
+          resolvedContentCount: 0,
+          unresolvedContentCount: 0,
+          contentResolutionDegraded: false,
+          contentResolutionDiagnostics: [],
+          previewDiagnostics: [],
+          familyRenderUsed: false,
+          familyRenderMode: null,
+          familyRenderFamilyId: null,
+          familyRenderFallbackToPage: false,
+          familyRenderDiagnosticsCount: 0,
+        },
+        renderedCaptureUsed: false,
+        domSize: 100,
+        fallbackUsed: false,
+      }) as never,
+    canShowContentDebug: async () => false,
+  });
+  try {
+    const response = await GET(new Request("https://app.pasadenagenerator.com/api/gnr8/runtime/versions/sv_preview_1/preview?mode=transformed"), {
+      params: Promise.resolve({ siteVersionId: "sv_preview_1" }),
+    });
+    const html = await response.text();
+    assert.equal(response.status, 200);
+    assert.match(html, /a\.scrollIcon\[data-req='scrollTop'\],\.scrollIcon\.bottom_right\[href='#'\]/);
+    assert.match(html, /PREVIEW_BACK_TO_TOP_NATIVE_BUILDER_DETECTED/);
+    assert.match(html, /PREVIEW_BACK_TO_TOP_NATIVE_RESTORED/);
+    assert.match(html, /selectorMatched:"a\.scrollIcon\[data-req='scrollTop'\]"/);
+    assert.match(html, /removedHiddenClass/);
+    assert.match(html, /visibilityRestored/);
+    assert.match(html, /clickWired/);
+    assert.match(html, /fallbackInjectionDisabled:true/);
+    assert.doesNotMatch(html, /PREVIEW_BACK_TO_TOP_FALLBACK_APPLIED/);
   } finally {
     restoreDeps();
   }
