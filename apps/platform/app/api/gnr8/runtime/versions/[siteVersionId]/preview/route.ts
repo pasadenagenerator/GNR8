@@ -469,6 +469,9 @@ var payload=${payload};
 var corrSeed=String(Date.now());
 function correlationKey(reason){return [payload.siteVersionId,reason||"backtotop",corrSeed].join(":");}
 function emit(code,details){try{console.info("[gnr8.runtime.preview] "+code,details||{});}catch(_err){}}
+var BACK_TO_TOP_FALLBACK_ID="gnr8-preview-backtotop-fallback";
+var BACK_TO_TOP_TOKEN_REGEX=/scrolltop|backtotop|back-to-top|totop|topbutton|onepage-up|scroll-up/;
+var BACK_TO_TOP_TOKENS=["scrolltop","backtotop","back-to-top","totop","topbutton","onepage-up","scroll-up"];
 function hasAnyToken(value,tokens){var source=String(value||"").toLowerCase();for(var i=0;i<tokens.length;i+=1){if(source.indexOf(tokens[i])>=0)return true;}return false;}
 function clamp(v,min,max){return Math.max(min,Math.min(max,v));}
 function parseRgbLike(input){
@@ -505,7 +508,7 @@ var l=luminance(bg);
 var whiteRatio=(1.05)/(l+0.05);
 return whiteRatio>=4.5?"#fff":"#111";
 }
-function pickAccentColor(){
+function pickAccentColor(existing){
 var fallback={color:"#1f2937",source:"fallback_neutral_dark"};
 var root=document.documentElement;
 var body=document.body;
@@ -554,7 +557,6 @@ addCandidate(st.backgroundColor,"prominent:"+prominentSelectors[j]+":bg",3);
 addCandidate(st.color,"prominent:"+prominentSelectors[j]+":text",2);
 }
 }
-var existing=findExistingElement();
 if(existing&&window.getComputedStyle){
 var exStyle=window.getComputedStyle(existing);
 addCandidate(exStyle.backgroundColor,"existing_backtotop:bg",5);
@@ -584,8 +586,13 @@ if(href==="#top")return true;
 var id=String(el.id||"").toLowerCase();
 var className=String(el.className||"").toLowerCase();
 var aria=String(el.getAttribute("aria-label")||"").toLowerCase();
-var tokens=["scrolltop","backtotop","back-to-top","totop","topbutton","onepage-up","scroll-up"];
-if(hasAnyToken(id,tokens)||hasAnyToken(className,tokens)||hasAnyToken(aria,tokens))return true;
+if(hasAnyToken(id,BACK_TO_TOP_TOKENS)||hasAnyToken(className,BACK_TO_TOP_TOKENS)||hasAnyToken(aria,BACK_TO_TOP_TOKENS))return true;
+return false;
+}
+function isFallbackElement(el){
+if(!el||!el.getAttribute)return false;
+if(String(el.id||"")===BACK_TO_TOP_FALLBACK_ID)return true;
+if(el.getAttribute("data-gnr8-backtotop-fallback")==="1")return true;
 return false;
 }
 function hasRuntimeSignals(){
@@ -599,6 +606,20 @@ var txt=String(s.textContent||"").toLowerCase();
 if(/scrolltop|backtotop|back-to-top|totop|topbutton|onepage-up|scroll-up|scrollto\\s*\\(|scroll\\s*to\\s*top/.test(src+" "+txt))return true;
 }
 return false;
+}
+function isPotentiallyUsableOriginal(el){
+if(!el||!el.style||!el.isConnected)return false;
+if(el.hasAttribute("disabled"))return false;
+var current=el;
+while(current&&current!==document.body&&current!==document.documentElement){
+if(current.hasAttribute&&current.hasAttribute("hidden"))return false;
+if(window.getComputedStyle){
+var st=window.getComputedStyle(current);
+if(st&&st.display==="none")return false;
+}
+current=current.parentElement;
+}
+return true;
 }
 function applyTheme(el,theme,existingElementFound,fallbackInjected){
 if(!el||!el.style)return;
@@ -692,14 +713,50 @@ catch(_err){window.scrollTo(0,0);}
 emit("PREVIEW_BACK_TO_TOP_CLICK_HANDLED",{siteVersionId:payload.siteVersionId,detectionReason:detectionReason,existingElementFound:existingElementFound,fallbackInjected:fallbackInjected,correlationKey:correlationKey("click")});
 });
 }
-function findExistingElement(){
+function findCandidateElements(){
 var selectors=["a[href='#top']","button[href='#top']","a","button","[role='button']","[id]","[class]"];
+var seen=[];
+var all=[];
 for(var i=0;i<selectors.length;i+=1){
 var nodes=Array.prototype.slice.call(document.querySelectorAll(selectors[i]));
 for(var j=0;j<nodes.length;j+=1){
 var node=nodes[j];
-if(isBackToTopCandidate(node))return node;
+if(!node||seen.indexOf(node)>=0)continue;
+seen.push(node);
+if(isBackToTopCandidate(node))all.push(node);
 }
+}
+return all;
+}
+function hideDuplicate(el){
+if(!el||!el.style)return false;
+if(el.getAttribute("data-gnr8-backtotop-hidden-duplicate")==="1")return false;
+el.style.display="none";
+el.style.visibility="hidden";
+el.style.opacity="0";
+el.style.pointerEvents="none";
+el.setAttribute("aria-hidden","true");
+el.setAttribute("data-gnr8-backtotop-hidden-duplicate","1");
+return true;
+}
+function dedupeCandidates(selected){
+var candidates=findCandidateElements();
+var hiddenCount=0;
+for(var i=0;i<candidates.length;i+=1){
+var node=candidates[i];
+if(node===selected)continue;
+if(hideDuplicate(node))hiddenCount+=1;
+}
+return{
+candidateCount:candidates.length,
+originalCandidateCount:candidates.filter(function(node){return !isFallbackElement(node);}).length,
+fallbackCandidateCount:candidates.filter(function(node){return isFallbackElement(node);}).length,
+hiddenDuplicateCount:hiddenCount
+};
+}
+function findPreferredOriginal(candidates){
+for(var i=0;i<candidates.length;i+=1){
+if(!isFallbackElement(candidates[i]))return candidates[i];
 }
 return null;
 }
@@ -709,25 +766,33 @@ var vh=Math.max(window.innerHeight||0,document.documentElement&&document.documen
 return h>vh+80;
 }
 function init(){
-var existing=findExistingElement();
+var candidates=findCandidateElements();
+var existing=findPreferredOriginal(candidates);
 var existingElementFound=!!existing;
+var fallbackCandidate=null;
+for(var i=0;i<candidates.length;i+=1){if(isFallbackElement(candidates[i])){fallbackCandidate=candidates[i];break;}}
 var fallbackInjected=false;
 var detectionReason=existingElementFound?"EXISTING_MARKUP":"NO_ELEMENT";
-var detectedTheme=pickAccentColor();
+var existingUsable=existingElementFound?isPotentiallyUsableOriginal(existing):false;
+var detectedTheme=pickAccentColor(existing||fallbackCandidate||null);
 emit("PREVIEW_BACK_TO_TOP_DETECTED",{siteVersionId:payload.siteVersionId,detectionReason:detectionReason,existingElementFound:existingElementFound,fallbackInjected:fallbackInjected,correlationKey:correlationKey("detected")});
-if(existing){
+if(existing&&existingUsable){
 ensureVisible(existing);
 if(!existing.getAttribute("aria-label"))existing.setAttribute("aria-label","Back to top");
 applyTheme(existing,detectedTheme,true,false);
 normalizeIconForeground(existing,true,false);
 wireClick(existing,detectionReason,true,false);
+var dedupedOriginal=dedupeCandidates(existing);
+emit("PREVIEW_BACK_TO_TOP_DEDUPED",{siteVersionId:payload.siteVersionId,candidateCount:dedupedOriginal.candidateCount,originalCandidateCount:dedupedOriginal.originalCandidateCount,fallbackCandidateCount:dedupedOriginal.fallbackCandidateCount,finalButtonSource:"original",hiddenDuplicateCount:dedupedOriginal.hiddenDuplicateCount,correlationKey:correlationKey("deduped_original")});
 emit("PREVIEW_BACK_TO_TOP_RESTORED",{siteVersionId:payload.siteVersionId,detectionReason:detectionReason,existingElementFound:true,fallbackInjected:false,correlationKey:correlationKey("restored")});
 return;
 }
-if(document.getElementById("gnr8-preview-backtotop-fallback"))return;
-if(!hasRuntimeSignals())return;
-var fallback=document.createElement("button");
-fallback.id="gnr8-preview-backtotop-fallback";
+if(existing&&!existingUsable){hideDuplicate(existing);}
+if(!fallbackCandidate&&!hasRuntimeSignals())return;
+var fallback=fallbackCandidate;
+if(!fallback){
+fallback=document.createElement("button");
+fallback.id=BACK_TO_TOP_FALLBACK_ID;
 fallback.type="button";
 fallback.setAttribute("aria-label","Back to top");
 fallback.textContent="↑";
@@ -757,10 +822,14 @@ fallback.style.opacity="1";
 }
 document.body.appendChild(fallback);
 fallbackInjected=true;
+}
 detectionReason="RUNTIME_SIGNAL_FALLBACK";
+ensureVisible(fallback);
 applyTheme(fallback,detectedTheme,false,true);
 normalizeIconForeground(fallback,false,true);
 wireClick(fallback,detectionReason,false,true);
+var dedupedFallback=dedupeCandidates(fallback);
+emit("PREVIEW_BACK_TO_TOP_DEDUPED",{siteVersionId:payload.siteVersionId,candidateCount:dedupedFallback.candidateCount,originalCandidateCount:dedupedFallback.originalCandidateCount,fallbackCandidateCount:dedupedFallback.fallbackCandidateCount,finalButtonSource:"fallback",hiddenDuplicateCount:dedupedFallback.hiddenDuplicateCount,correlationKey:correlationKey("deduped_fallback")});
 emit("PREVIEW_BACK_TO_TOP_FALLBACK_APPLIED",{siteVersionId:payload.siteVersionId,detectionReason:detectionReason,existingElementFound:false,fallbackInjected:true,correlationKey:correlationKey("fallback")});
 }
 try{
