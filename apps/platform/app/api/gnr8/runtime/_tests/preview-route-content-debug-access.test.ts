@@ -1411,6 +1411,12 @@ test("preview route: transformed output excludes slider left arrow and preserves
     assert.match(html, /finalButtonSource:"original"/);
     assert.match(html, /excludedFalsePositiveCount/);
     assert.match(html, /hrefStrong=href==="#top"/);
+    assert.match(html, /PREVIEW_BACK_TO_TOP_FINAL_VISUAL_PASS/);
+    assert.match(html, /visibleOriginalLikeCount/);
+    assert.match(html, /visibleFallbackCountBefore/);
+    assert.match(html, /fallbackRemovedCount/);
+    assert.match(html, /fallbackHiddenCount/);
+    assert.match(html, /finalVisibleBackToTopCount/);
   } finally {
     restoreDeps();
   }
@@ -1464,6 +1470,66 @@ test("preview route: transformed output excludes slider right arrow and injects 
     assert.match(html, /PREVIEW_BACK_TO_TOP_FALLBACK_APPLIED/);
     assert.match(html, /visibleCandidateCountAfter/);
     assert.match(html, /fallbackInjectionPrevented:false/);
+    assert.match(html, /runFinalVisualPass/);
+    assert.match(html, /scheduleFinalVisualPass\("mutation_observer",120\)/);
+    assert.match(html, /scheduleFinalVisualPass\("final_settle",2200\)/);
+  } finally {
+    restoreDeps();
+  }
+});
+
+test("preview route: transformed output avoids false-positive logs for non-control nodes and fallback", async () => {
+  const restoreDeps = setPreviewRouteDependenciesForTest({
+    resolveAgencyIdForSiteVersion: async () => "agency_1",
+    requireAgencyActionContext: async () => ({ agencyId: "agency_1" }) as never,
+    renderSiteVersionPreview: async () =>
+      ({
+        html: `<!doctype html><html><body>
+<div class="gnr8-gallery-pages">gallery</div>
+<style>.x{color:red;}</style>
+<div>plain div</div><span>plain span</span><p>plain p</p>
+<button id="gnr8-preview-backtotop-fallback" data-gnr8-backtotop-fallback="1">↑</button>
+</body></html>`,
+        siteId: "site_preview_1",
+        siteVersionId: "sv_preview_1",
+        source: "preview",
+        previewMode: "transformed",
+        previewRuntimeSummary: {
+          rendererContractAvailable: true,
+          finalSiteModelAvailable: true,
+          renderedWithFallback: false,
+          matchedPageId: null,
+          contentResolutionApplied: true,
+          resolvedContentCount: 0,
+          unresolvedContentCount: 0,
+          contentResolutionDegraded: false,
+          contentResolutionDiagnostics: [],
+          previewDiagnostics: [],
+          familyRenderUsed: false,
+          familyRenderMode: null,
+          familyRenderFamilyId: null,
+          familyRenderFallbackToPage: false,
+          familyRenderDiagnosticsCount: 0,
+        },
+        renderedCaptureUsed: false,
+        domSize: 100,
+        fallbackUsed: false,
+      }) as never,
+    canShowContentDebug: async () => false,
+  });
+  try {
+    const response = await GET(new Request("https://app.pasadenagenerator.com/api/gnr8/runtime/versions/sv_preview_1/preview?mode=transformed"), {
+      params: Promise.resolve({ siteVersionId: "sv_preview_1" }),
+    });
+    const html = await response.text();
+    assert.equal(response.status, 200);
+    assert.match(html, /function isFalsePositiveLoggableCandidate/);
+    assert.match(html, /if\(isFallbackElement\(el\)\)return false;/);
+    assert.match(html, /if\(tag==="body"\|\|tag==="html"\|\|tag==="style"\)return false;/);
+    assert.match(html, /aggregate\.indexOf\("gnr8-gallery-pages"\)>=0/);
+    assert.match(html, /if\(\(tag==="div"\|\|tag==="span"\|\|tag==="p"\)/);
+    assert.match(html, /MAP_FALLBACK_EXCLUSION_TOKENS/);
+    assert.match(html, /if\(!isFalsePositiveLoggableCandidate\(nodeForExclude,excludeAggregate\)\)continue;/);
   } finally {
     restoreDeps();
   }
