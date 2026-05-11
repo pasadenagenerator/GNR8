@@ -221,6 +221,145 @@ test("preview route: __debug=gallery_runtime injects paged-gallery diagnostics",
   }
 });
 
+test("preview route: transformed output injects map module detection and fallback diagnostics", async () => {
+  const restoreDeps = setPreviewRouteDependenciesForTest({
+    resolveAgencyIdForSiteVersion: async () => "agency_1",
+    requireAgencyActionContext: async () => ({ agencyId: "agency_1" }) as never,
+    renderSiteVersionPreview: async () =>
+      ({
+        html: `<!doctype html><html><body>
+<section id="m777" class="module osmap" data-req="osmap">
+  <div class="map-shell"></div>
+</section>
+<div>Litostrojska cesta 40, Ljubljana, Slovenia</div>
+</body></html>`,
+        siteId: "site_preview_1",
+        siteVersionId: "sv_preview_1",
+        source: "preview",
+        previewMode: "transformed",
+        previewRuntimeSummary: {
+          rendererContractAvailable: true,
+          finalSiteModelAvailable: true,
+          renderedWithFallback: false,
+          matchedPageId: null,
+          contentResolutionApplied: true,
+          resolvedContentCount: 0,
+          unresolvedContentCount: 0,
+          contentResolutionDegraded: false,
+          contentResolutionDiagnostics: [],
+          previewDiagnostics: [],
+          familyRenderUsed: false,
+          familyRenderMode: null,
+          familyRenderFamilyId: null,
+          familyRenderFallbackToPage: false,
+          familyRenderDiagnosticsCount: 0,
+        },
+        renderedCaptureUsed: false,
+        domSize: 100,
+        fallbackUsed: false,
+      }) as never,
+    canShowContentDebug: async () => false,
+  });
+  try {
+    const response = await GET(new Request("https://app.pasadenagenerator.com/api/gnr8/runtime/versions/sv_preview_1/preview?mode=transformed"), {
+      params: Promise.resolve({ siteVersionId: "sv_preview_1" }),
+    });
+    const html = await response.text();
+    assert.equal(response.status, 200);
+    assert.match(html, /PREVIEW_MAP_MODULE_DETECTED/);
+    assert.match(html, /data-req="osmap"/);
+    assert.match(html, /moduleId:moduleId/);
+    assert.match(html, /providerType/);
+    assert.match(html, /detectionReason/);
+    assert.match(html, /PREVIEW_MAP_LOCATION_EXTRACTED/);
+    assert.match(html, /PREVIEW_MAP_FALLBACK_APPLIED/);
+    assert.match(html, /PREVIEW_MAP_RUNTIME_INIT_FAILED/);
+    assert.match(html, /OSMAP_JSON_ENDPOINT_UNAVAILABLE/);
+    assert.match(html, /gnr8-map-fallback/);
+    assert.match(html, /openstreetmap\.org\/export\/embed\.html/);
+    assert.match(html, /Litostrojska cesta 40, Ljubljana, Slovenia/);
+  } finally {
+    restoreDeps();
+  }
+});
+
+test("preview route: map fallback supports placeholder path when location cannot be extracted", async () => {
+  const restoreDeps = setPreviewRouteDependenciesForTest({
+    resolveAgencyIdForSiteVersion: async () => "agency_1",
+    requireAgencyActionContext: async () => ({ agencyId: "agency_1" }) as never,
+    renderSiteVersionPreview: async () =>
+      ({
+        html: `<!doctype html><html><body>
+<section id="m778" class="module map" data-req="map">
+  <div class="map-shell"></div>
+</section>
+</body></html>`,
+        siteId: "site_preview_1",
+        siteVersionId: "sv_preview_1",
+        source: "preview",
+        previewMode: "transformed",
+        previewRuntimeSummary: {
+          rendererContractAvailable: true,
+          finalSiteModelAvailable: true,
+          renderedWithFallback: false,
+          matchedPageId: null,
+          contentResolutionApplied: true,
+          resolvedContentCount: 0,
+          unresolvedContentCount: 0,
+          contentResolutionDegraded: false,
+          contentResolutionDiagnostics: [],
+          previewDiagnostics: [],
+          familyRenderUsed: false,
+          familyRenderMode: null,
+          familyRenderFamilyId: null,
+          familyRenderFallbackToPage: false,
+          familyRenderDiagnosticsCount: 0,
+        },
+        renderedCaptureUsed: false,
+        domSize: 100,
+        fallbackUsed: false,
+      }) as never,
+    canShowContentDebug: async () => false,
+  });
+  try {
+    const response = await GET(new Request("https://app.pasadenagenerator.com/api/gnr8/runtime/versions/sv_preview_1/preview?mode=transformed"), {
+      params: Promise.resolve({ siteVersionId: "sv_preview_1" }),
+    });
+    const html = await response.text();
+    assert.equal(response.status, 200);
+    assert.match(html, /fallbackType:iframeUsed\?"iframe":"placeholder"/);
+    assert.match(html, /Map preview fallback active/);
+    assert.match(html, /Location unavailable/);
+    assert.match(html, /if\(iframeSrc\)/);
+    assert.match(html, /fallbackType:"placeholder"/);
+  } finally {
+    restoreDeps();
+  }
+});
+
+test("preview route: map fallback shim is scoped to map modules and does not alter gallery diagnostics", async () => {
+  const restoreDeps = mockPreviewDeps(false);
+  try {
+    const response = await GET(
+      new Request("https://app.pasadenagenerator.com/api/gnr8/runtime/versions/sv_preview_1/preview?mode=transformed&__debug=gallery_runtime"),
+      {
+        params: Promise.resolve({ siteVersionId: "sv_preview_1" }),
+      },
+    );
+    const html = await response.text();
+    assert.equal(response.status, 200);
+    assert.match(html, /PREVIEW_GALLERY_PAGED_LAYOUT_STATUS/);
+    assert.match(html, /PREVIEW_GALLERY_PAGED_LAYOUT_APPLIED/);
+    assert.match(html, /PREVIEW_MAP_MODULE_DETECTED/);
+    assert.match(html, /detectMapModule/);
+    assert.match(html, /data-gnr8-map-fallback/);
+    assert.match(html, /function applyFallback\(moduleEl,moduleId,location\)/);
+    assert.match(html, /if\(!detected\)return;/);
+  } finally {
+    restoreDeps();
+  }
+});
+
 test("preview route: transformed injected gallery runtime shim parses with paged-gallery diagnostics", async () => {
   const restoreDeps = mockPreviewDeps(false);
   try {

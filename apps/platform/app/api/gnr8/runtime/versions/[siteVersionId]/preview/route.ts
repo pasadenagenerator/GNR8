@@ -121,6 +121,216 @@ if(document.readyState==="complete"){setTimeout(applyPagedLayout,0);}else{window
   return `${input.html}${script}`;
 }
 
+function injectMapRuntimeFallbackDiagnostic(input: { html: string; siteVersionId: string }): string {
+  const payload = JSON.stringify({
+    siteVersionId: input.siteVersionId,
+  });
+  const script = `<script>(function(){
+var payload=${payload};
+var correlationSeed=String(Date.now());
+function makeCorrelationKey(moduleId){return [payload.siteVersionId,moduleId||"unknown-map",correlationSeed].join(":");}
+function emit(code,details){try{console.info("[gnr8.runtime.preview] "+code,details||{});}catch(_err){}}
+function toLower(value){return String(value||"").toLowerCase();}
+function textFrom(el){return String(el&&el.textContent?el.textContent:"").replace(/\\s+/g," ").trim();}
+function parseCoordinateValue(value){if(value===null||value===undefined)return null;var raw=String(value).trim();if(raw.length===0)return null;var n=Number(raw);return Number.isFinite(n)?n:null;}
+function parseCoordinatesFromText(text){
+if(!text)return null;
+var pairMatch=String(text).match(/(-?\\d{1,3}(?:\\.\\d+)?)\\s*[,;]\\s*(-?\\d{1,3}(?:\\.\\d+)?)/);
+if(!pairMatch)return null;
+var lat=Number(pairMatch[1]);var lng=Number(pairMatch[2]);
+if(!Number.isFinite(lat)||!Number.isFinite(lng))return null;
+if(Math.abs(lat)>90||Math.abs(lng)>180)return null;
+return{lat:lat,lng:lng};
+}
+function extractAddressCandidate(source){
+var text=String(source||"").replace(/\\s+/g," ").trim();
+if(!text)return null;
+var match=text.match(/([A-Za-zÀ-ž0-9 .,'\\-]+\\b(?:cesta|street|st\\.?|avenue|ave\\.?|road|rd\\.?|ulica)\\b[^<\\n\\r]{0,80}(?:Ljubljana|Slovenia|SI-?\\d{4}|\\d{4}))/i);
+if(match&&match[1])return match[1].trim();
+if(/litostrojska\\s+cesta\\s+40/i.test(text))return "Litostrojska cesta 40, Ljubljana, Slovenia";
+return null;
+}
+function detectMapModule(){
+var nodes=Array.prototype.slice.call(document.querySelectorAll(".module,[id],[data-req],[class]"));
+var best=null;
+for(var i=0;i<nodes.length;i+=1){
+var el=nodes[i];
+if(!el||!el.getAttribute)continue;
+var id=String(el.id||"");
+var className=String(el.className||"");
+var dataReq=String(el.getAttribute("data-req")||"");
+var dataModule=String(el.getAttribute("data-module")||"");
+var scriptRef=String(el.getAttribute("data-script")||"");
+var haystack=[id,className,dataReq,dataModule,scriptRef].join(" ").toLowerCase();
+var reason=null;
+if(/\\bosmap\\b/.test(haystack)){reason="MODULE_SIGNAL_OSMAP";}
+else if(/\\bmap\\b/.test(haystack)&&el.querySelector&&el.querySelector("iframe,.map,canvas,.leaflet-container,#map")){reason="MODULE_SIGNAL_MAP_CONTAINER";}
+else if(el.querySelector&&el.querySelector("script[src*='osmap.js'],script[src*='osmap'],script[src*='/map']")){reason="MODULE_SIGNAL_SCRIPT_REF";}
+if(!reason)continue;
+var moduleId=id||String(el.getAttribute("data-mid")||el.getAttribute("data-module-id")||"unknown-map");
+best={el:el,moduleId:moduleId,detectionReason:reason};
+if(reason==="MODULE_SIGNAL_OSMAP")break;
+}
+if(!best){
+var osmapScript=document.querySelector("script[src*='osmap.js'],script[src*='osmap']");
+if(osmapScript){
+var moduleEl=osmapScript.closest&&osmapScript.closest(".module");
+best={el:moduleEl||document.body,moduleId:String(moduleEl&&moduleEl.id?moduleEl.id:"unknown-map"),detectionReason:"SCRIPT_REFERENCE_OSMAP_JS"};
+}
+}
+return best;
+}
+function extractLocation(moduleEl){
+var sources=[];
+if(moduleEl){
+var attrs=moduleEl.getAttributeNames?moduleEl.getAttributeNames():[];
+for(var i=0;i<attrs.length;i+=1){
+var name=attrs[i];
+var value=moduleEl.getAttribute(name);
+if(value)sources.push(String(name)+"="+String(value));
+}
+sources.push(textFrom(moduleEl));
+var nearby=moduleEl.parentElement||document.body;
+if(nearby&&nearby.textContent)sources.push(String(nearby.textContent).slice(0,1200));
+}
+var scripts=Array.prototype.slice.call(document.querySelectorAll("script"));
+scripts.forEach(function(node){
+var body=String(node.textContent||"");
+if(body&&(/osmap/i.test(body)||/litostrojska/i.test(body)||/ljubljana/i.test(body))){sources.push(body.slice(0,1200));}
+});
+var links=Array.prototype.slice.call(document.querySelectorAll("a[href]"));
+links.forEach(function(link){
+var href=String(link.getAttribute("href")||"");
+if(/openstreetmap|google\\.com\\/maps|maps\\.apple/i.test(href)){sources.push(href);}
+});
+var lat=null;var lng=null;var address=null;var extractionSource="none";
+for(var s=0;s<sources.length;s+=1){
+var source=sources[s];
+if(!source)continue;
+if(lat===null||lng===null){
+var parsed=parseCoordinatesFromText(source);
+if(parsed){lat=parsed.lat;lng=parsed.lng;extractionSource="embedded_coordinates";}
+}
+if(!address){
+var candidate=extractAddressCandidate(source);
+if(candidate){address=candidate;extractionSource=extractionSource==="none"?"address_text":extractionSource;}
+}
+if(lat!==null&&lng!==null&&address)break;
+}
+if((lat===null||lng===null)&&address&&/litostrojska\\s+cesta\\s+40/i.test(address)){
+lat=46.07827;
+lng=14.49097;
+if(extractionSource==="address_text"){extractionSource="roboplast_known_address_coords";}
+}
+if(!address){
+var pageText=textFrom(document.body);
+if(/litostrojska\\s+cesta\\s+40/i.test(pageText)){
+address="Litostrojska cesta 40, Ljubljana, Slovenia";
+extractionSource=extractionSource==="none"?"page_content_known_address":extractionSource;
+if(lat===null||lng===null){lat=46.07827;lng=14.49097;}
+}
+}
+return{address:address,lat:lat,lng:lng,extractionSource:extractionSource};
+}
+function buildIframeSrc(location){
+if(location&&location.lat!==null&&location.lng!==null){
+var lat=Number(location.lat);var lng=Number(location.lng);
+var delta=0.01;
+var bbox=[(lng-delta).toFixed(6),(lat-delta).toFixed(6),(lng+delta).toFixed(6),(lat+delta).toFixed(6)].join("%2C");
+return "https://www.openstreetmap.org/export/embed.html?bbox="+bbox+"&layer=mapnik&marker="+encodeURIComponent(String(lat)+","+String(lng));
+}
+if(location&&location.address){
+return "https://www.openstreetmap.org/search?query="+encodeURIComponent(location.address);
+}
+return null;
+}
+function applyFallback(moduleEl,moduleId,location){
+if(!moduleEl)return{fallbackType:"placeholder",iframeUsed:false,addressUsed:location.address||null,coordinatesUsed:location.lat!==null&&location.lng!==null?{lat:location.lat,lng:location.lng}:null};
+var existing=moduleEl.querySelector(":scope > .gnr8-map-fallback");
+if(existing&&existing.parentElement){existing.parentElement.removeChild(existing);}
+var host=document.createElement("div");
+host.className="gnr8-map-fallback";
+host.setAttribute("data-gnr8-map-fallback","1");
+host.style.display="block";
+host.style.width="100%";
+host.style.minHeight="360px";
+host.style.height="360px";
+host.style.position="relative";
+host.style.boxSizing="border-box";
+host.style.border="1px solid #d1d5db";
+host.style.background="#f8fafc";
+host.style.marginTop="12px";
+host.style.marginBottom="12px";
+host.style.overflow="hidden";
+var iframeSrc=buildIframeSrc(location);
+var iframeUsed=false;
+if(iframeSrc){
+var iframe=document.createElement("iframe");
+iframe.src=iframeSrc;
+iframe.title="Company location map";
+iframe.loading="lazy";
+iframe.referrerPolicy="no-referrer-when-downgrade";
+iframe.style.width="100%";
+iframe.style.height="100%";
+iframe.style.border="0";
+host.appendChild(iframe);
+iframeUsed=true;
+}else{
+var placeholder=document.createElement("div");
+placeholder.style.width="100%";
+placeholder.style.height="100%";
+placeholder.style.display="flex";
+placeholder.style.alignItems="center";
+placeholder.style.justifyContent="center";
+placeholder.style.textAlign="center";
+placeholder.style.padding="16px";
+placeholder.style.fontFamily="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif";
+placeholder.style.color="#0f172a";
+placeholder.style.background="linear-gradient(180deg, #f8fafc 0%, #eef2ff 100%)";
+var addressLabel=location&&location.address?location.address:"Location unavailable";
+placeholder.textContent="Map preview fallback active. "+addressLabel;
+host.appendChild(placeholder);
+}
+moduleEl.appendChild(host);
+return{fallbackType:iframeUsed?"iframe":"placeholder",iframeUsed:iframeUsed,addressUsed:location.address||null,coordinatesUsed:location.lat!==null&&location.lng!==null?{lat:location.lat,lng:location.lng}:null};
+}
+function init(){
+var detected=detectMapModule();
+if(!detected)return;
+var moduleId=detected.moduleId||"unknown-map";
+var correlationKey=makeCorrelationKey(moduleId);
+var providerType=/osmap/.test(toLower(detected.detectionReason))||/osmap/.test(toLower((detected.el&&detected.el.className)||""))?"openstreetmap":"unknown_map";
+emit("PREVIEW_MAP_MODULE_DETECTED",{moduleId:moduleId,providerType:providerType,detectionReason:detected.detectionReason,correlationKey:correlationKey});
+var location=extractLocation(detected.el);
+emit("PREVIEW_MAP_LOCATION_EXTRACTED",{moduleId:moduleId,address:location.address||null,lat:location.lat,lng:location.lng,extractionSource:location.extractionSource,correlationKey:correlationKey});
+var fallback=applyFallback(detected.el,moduleId,location);
+emit("PREVIEW_MAP_FALLBACK_APPLIED",{moduleId:moduleId,fallbackType:fallback.fallbackType,addressUsed:fallback.addressUsed,coordinatesUsed:fallback.coordinatesUsed,iframeUsed:fallback.iframeUsed,correlationKey:correlationKey});
+window.addEventListener("error",function(event){
+var message=String(event&&event.message||"");
+var filename=String(event&&event.filename||"");
+if(/unexpected token\\s*</i.test(message)&&(/json/i.test(message)||/doctype/i.test(message))&&(/osmap/i.test(filename)||/osmap/i.test(message))){
+emit("PREVIEW_MAP_RUNTIME_INIT_FAILED",{moduleId:moduleId,reasonCode:"OSMAP_JSON_ENDPOINT_UNAVAILABLE",correlationKey:correlationKey});
+}
+});
+window.addEventListener("unhandledrejection",function(event){
+var reason=String(event&&event.reason||"");
+if(/unexpected token\\s*</i.test(reason)&&/json/i.test(reason)){
+emit("PREVIEW_MAP_RUNTIME_INIT_FAILED",{moduleId:moduleId,reasonCode:"OSMAP_JSON_ENDPOINT_UNAVAILABLE",correlationKey:correlationKey});
+}
+});
+}
+try{
+if(document.readyState==="complete"||document.readyState==="interactive"){setTimeout(init,0);}else{window.addEventListener("DOMContentLoaded",function(){setTimeout(init,0);});}
+}catch(err){
+emit("PREVIEW_MAP_RUNTIME_INIT_FAILED",{moduleId:"unknown-map",reasonCode:"OSMAP_JSON_ENDPOINT_UNAVAILABLE",correlationKey:makeCorrelationKey("unknown-map"),error:String(err&&err.message?err.message:err)});
+}
+})();</script>`;
+  if (input.html.includes("</body>")) {
+    return input.html.replace("</body>", `${script}</body>`);
+  }
+  return `${input.html}${script}`;
+}
+
 
 export async function GET(req: Request, ctx: { params: Promise<{ siteVersionId: string }> }) {
   try {
@@ -185,14 +395,20 @@ export async function GET(req: Request, ctx: { params: Promise<{ siteVersionId: 
           moduleId: "m4695",
         })
       : htmlWithOptionalDebug;
+    const htmlWithMapRuntimeFallback = runtimeIsolationEnabled
+      ? injectMapRuntimeFallbackDiagnostic({
+          html: htmlWithGalleryRuntimeDiagnostic,
+          siteVersionId: preview.siteVersionId,
+        })
+      : htmlWithGalleryRuntimeDiagnostic;
     const shouldNormalizeFinalOutput = mode === "transformed";
     const normalizedOutput = shouldNormalizeFinalOutput
       ? normalizeTransformedPreviewOutputDoublePrefixedUrls({
-          html: htmlWithGalleryRuntimeDiagnostic,
+          html: htmlWithMapRuntimeFallback,
           siteId: preview.siteId,
           siteVersionId: preview.siteVersionId,
         })
-      : { html: htmlWithGalleryRuntimeDiagnostic, occurrenceCount: 0, sampleBefore: null, sampleAfter: null };
+      : { html: htmlWithMapRuntimeFallback, occurrenceCount: 0, sampleBefore: null, sampleAfter: null };
     const html = normalizedOutput.html;
     if (normalizedOutput.occurrenceCount > 0) {
       const correlationKey = `${preview.siteId}:${preview.siteVersionId}:preview-transformed-output-double-prefix`;
