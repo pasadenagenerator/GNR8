@@ -1203,6 +1203,150 @@ test("preview route: transformed output includes native discovery snapshot paylo
   }
 });
 
+test("preview route: transformed output emits native comparison status for Roboplast site version", async () => {
+  const restoreDeps = setPreviewRouteDependenciesForTest({
+    resolveAgencyIdForSiteVersion: async () => "agency_1",
+    requireAgencyActionContext: async () => ({ agencyId: "agency_1" }) as never,
+    renderSiteVersionPreview: async () =>
+      ({
+        html: `<!doctype html><html><body><a id="scroll-top-control" class="scrolltop back-to-top onepage-up" href="#top"><i class="fa fa-chevron-up"></i></a></body></html>`,
+        siteId: "site_preview_1",
+        siteVersionId: "30bfe5b1-a441-41ef-92e3-0d6b3ee678e1",
+        source: "preview",
+        previewMode: "transformed",
+        previewRuntimeSummary: {
+          rendererContractAvailable: true,
+          finalSiteModelAvailable: true,
+          renderedWithFallback: false,
+          matchedPageId: null,
+          contentResolutionApplied: true,
+          resolvedContentCount: 0,
+          unresolvedContentCount: 0,
+          contentResolutionDegraded: false,
+          contentResolutionDiagnostics: [],
+          previewDiagnostics: [],
+          familyRenderUsed: false,
+          familyRenderMode: null,
+          familyRenderFamilyId: null,
+          familyRenderFallbackToPage: false,
+          familyRenderDiagnosticsCount: 0,
+        },
+        renderedCaptureUsed: false,
+        domSize: 100,
+        fallbackUsed: false,
+      }) as never,
+    canShowContentDebug: async () => false,
+  });
+  try {
+    const response = await GET(new Request("https://app.pasadenagenerator.com/api/gnr8/runtime/versions/30bfe5b1-a441-41ef-92e3-0d6b3ee678e1/preview?mode=transformed"), {
+      params: Promise.resolve({ siteVersionId: "30bfe5b1-a441-41ef-92e3-0d6b3ee678e1" }),
+    });
+    const html = await response.text();
+    assert.equal(response.status, 200);
+    assert.match(html, /PREVIEW_BACK_TO_TOP_NATIVE_COMPARISON_STATUS/);
+    assert.match(html, /nativeCandidateSummaries/);
+  } finally {
+    restoreDeps();
+  }
+});
+
+test("preview route: transformed output classifies Maver native missing state", async () => {
+  const restoreDeps = setPreviewRouteDependenciesForTest({
+    resolveAgencyIdForSiteVersion: async () => "agency_1",
+    requireAgencyActionContext: async () => ({ agencyId: "agency_1" }) as never,
+    renderSiteVersionPreview: async () =>
+      ({
+        html: `<!doctype html><html><body><div>no back to top</div></body></html>`,
+        siteId: "site_preview_1",
+        siteVersionId: "01ebd946-4085-4f01-8fbf-416ac6cf601e",
+        source: "preview",
+        previewMode: "transformed",
+        previewRuntimeSummary: {
+          rendererContractAvailable: true,
+          finalSiteModelAvailable: true,
+          renderedWithFallback: false,
+          matchedPageId: null,
+          contentResolutionApplied: true,
+          resolvedContentCount: 0,
+          unresolvedContentCount: 0,
+          contentResolutionDegraded: false,
+          contentResolutionDiagnostics: [],
+          previewDiagnostics: [],
+          familyRenderUsed: false,
+          familyRenderMode: null,
+          familyRenderFamilyId: null,
+          familyRenderFallbackToPage: false,
+          familyRenderDiagnosticsCount: 0,
+        },
+        renderedCaptureUsed: false,
+        domSize: 100,
+        fallbackUsed: false,
+      }) as never,
+    canShowContentDebug: async () => false,
+  });
+  try {
+    const response = await GET(new Request("https://app.pasadenagenerator.com/api/gnr8/runtime/versions/01ebd946-4085-4f01-8fbf-416ac6cf601e/preview?mode=transformed"), {
+      params: Promise.resolve({ siteVersionId: "01ebd946-4085-4f01-8fbf-416ac6cf601e" }),
+    });
+    const html = await response.text();
+    assert.equal(response.status, 200);
+    assert.match(html, /PREVIEW_BACK_TO_TOP_NATIVE_MISSING_CLASSIFIED/);
+    assert.match(html, /NATIVE_BACK_TO_TOP_MISSING_FROM_IMPORTED_HTML/);
+  } finally {
+    restoreDeps();
+  }
+});
+
+test("preview route: transformed output keeps hidden/unwired native restore logic and never reintroduces fallback", async () => {
+  const restoreDeps = setPreviewRouteDependenciesForTest({
+    resolveAgencyIdForSiteVersion: async () => "agency_1",
+    requireAgencyActionContext: async () => ({ agencyId: "agency_1" }) as never,
+    renderSiteVersionPreview: async () =>
+      ({
+        html: `<!doctype html><html><body><a id="onepage-scrollup" class="onepage-up scroll-up" href="javascript:void(0)" style="display:none;visibility:hidden;opacity:0">Top</a></body></html>`,
+        siteId: "site_preview_1",
+        siteVersionId: "sv_preview_1",
+        source: "preview",
+        previewMode: "transformed",
+        previewRuntimeSummary: {
+          rendererContractAvailable: true,
+          finalSiteModelAvailable: true,
+          renderedWithFallback: false,
+          matchedPageId: null,
+          contentResolutionApplied: true,
+          resolvedContentCount: 0,
+          unresolvedContentCount: 0,
+          contentResolutionDegraded: false,
+          contentResolutionDiagnostics: [],
+          previewDiagnostics: [],
+          familyRenderUsed: false,
+          familyRenderMode: null,
+          familyRenderFamilyId: null,
+          familyRenderFallbackToPage: false,
+          familyRenderDiagnosticsCount: 0,
+        },
+        renderedCaptureUsed: false,
+        domSize: 100,
+        fallbackUsed: false,
+      }) as never,
+    canShowContentDebug: async () => false,
+  });
+  try {
+    const response = await GET(new Request("https://app.pasadenagenerator.com/api/gnr8/runtime/versions/sv_preview_1/preview?mode=transformed"), {
+      params: Promise.resolve({ siteVersionId: "sv_preview_1" }),
+    });
+    const html = await response.text();
+    assert.equal(response.status, 200);
+    assert.match(html, /normalizeHiddenNative/);
+    assert.match(html, /hiddenNativeRestored/);
+    assert.match(html, /smoothScrollWired/);
+    assert.doesNotMatch(html, /PREVIEW_BACK_TO_TOP_FALLBACK_APPLIED/);
+    assert.match(html, /onepage-scrollup/);
+  } finally {
+    restoreDeps();
+  }
+});
+
 test("preview route: transformed map fallback for Roboplast remains active with back-to-top compatibility present", async () => {
   const restoreDeps = setPreviewRouteDependenciesForTest({
     resolveAgencyIdForSiteVersion: async () => "agency_1",

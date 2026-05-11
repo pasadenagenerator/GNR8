@@ -550,8 +550,16 @@ emit("PREVIEW_MAP_RUNTIME_INIT_FAILED",{moduleId:"unknown-map",reasonCode:"OSMAP
 }
 
 function injectBackToTopRuntimeCompatibility(input: { html: string; siteVersionId: string }): string {
+  const sourceSignalsFound = /scrolltop|back-to-top|backtotop|onepage-up|scroll-up|href\s*=\s*["']#top["']/i.test(input.html);
+  const sourceSignalMatches = Array.from(
+    input.html.matchAll(/<(a|button)[^>]*(id|class|title|aria-label|href)[^>]*(scrolltop|back-to-top|backtotop|onepage-up|scroll-up|#top)[^>]*>/gi),
+  )
+    .slice(0, 8)
+    .map((match) => String(match[0]).replace(/\s+/g, " ").trim().slice(0, 180));
   const payload = JSON.stringify({
     siteVersionId: input.siteVersionId,
+    sourceSignalsFound,
+    sourceSignalMatches,
   });
   const script = `<script>(function(){
 var payload=${payload};
@@ -572,6 +580,15 @@ var NATIVE_HINT_SELECTOR=[
 "[aria-label*='back to top' i]",
 "[title*='back to top' i]"
 ].join(",");
+function runtimeSignalsFound(){
+var scriptText=Array.prototype.slice.call(document.querySelectorAll("script")).map(function(s){return String((s&&s.textContent)||"").toLowerCase();}).join("\\n");
+var styleText=Array.prototype.slice.call(document.querySelectorAll("style")).map(function(s){return String((s&&s.textContent)||"").toLowerCase();}).join("\\n");
+var joined=scriptText+"\\n"+styleText;
+var terms=["scroll","top","up","onepage","totop","back-to-top","backtotop"];
+var found=[];
+for(var i=0;i<terms.length;i+=1){if(joined.indexOf(terms[i])>=0)found.push(terms[i]);}
+return found;
+}
 function textOf(el){return String((el&&el.textContent)||"").replace(/\\s+/g," ").trim();}
 function isVisible(el){
 if(!el||!el.isConnected)return false;
@@ -594,8 +611,8 @@ var aggregate=(String(el.id||"")+" "+String(el.className||"")+" "+String(el.getA
 var hasSvg=!!(el.querySelector&&el.querySelector("svg"));
 var hasUpIcon=hasSvg||/chevron-up|angle-up|arrow-up|totop|top/.test(aggregate);
 var fixedLike=!!(style&&(style.position==="fixed"||style.position==="sticky"||style.position==="absolute"));
-var row={element:el,tag:String(el.tagName||"").toLowerCase(),id:String(el.id||""),className:String(el.className||""),wrapperTag:String(el.parentElement&&el.parentElement.tagName||"").toLowerCase(),iconMarkup:hasSvg?String((el.querySelector("svg")&&el.querySelector("svg").outerHTML)||"").slice(0,240):"",computedStyle:{position:style?String(style.position||""):"",bottom:style?String(style.bottom||""):"",right:style?String(style.right||""):"",display:style?String(style.display||""):"",visibility:style?String(style.visibility||""):"",opacity:style?String(style.opacity||""):""},boundingClientRect:{x:Number(rect.left||0),y:Number(rect.top||0),width:Number(rect.width||0),height:Number(rect.height||0)},isVisible:isVisible(el),hasUpIcon:hasUpIcon,fixedLike:fixedLike};
-if(row.isVisible&&(row.hasUpIcon||row.fixedLike||String(el.getAttribute&&el.getAttribute("href")||"").toLowerCase()==="#top"))rows.push(row);
+var row={element:el,tag:String(el.tagName||"").toLowerCase(),id:String(el.id||""),className:String(el.className||""),wrapperTag:String(el.parentElement&&el.parentElement.tagName||"").toLowerCase(),iconMarkup:hasSvg?String((el.querySelector("svg")&&el.querySelector("svg").outerHTML)||"").slice(0,240):"",computedStyle:{position:style?String(style.position||""):"",bottom:style?String(style.bottom||""):"",right:style?String(style.right||""):"",display:style?String(style.display||""):"",visibility:style?String(style.visibility||""):"",opacity:style?String(style.opacity||""):""},boundingClientRect:{x:Number(rect.left||0),y:Number(rect.top||0),width:Number(rect.width||0),height:Number(rect.height||0)},isVisible:isVisible(el),hasUpIcon:hasUpIcon,fixedLike:fixedLike,href:String(el.getAttribute&&el.getAttribute("href")||"")};
+if(row.hasUpIcon||row.fixedLike||String(row.href).toLowerCase()==="#top")rows.push(row);
 }
 return rows;
 }
@@ -613,30 +630,67 @@ if(styleEl&&styleEl.parentNode){styleEl.parentNode.removeChild(styleEl);}
 }
 return removed;
 }
+function normalizeHiddenNative(el){
+if(!el||!el.style)return false;
+var st=window.getComputedStyle?window.getComputedStyle(el):null;
+var changed=false;
+if(st&&st.display==="none"){el.style.display="block";changed=true;}
+if(st&&st.visibility==="hidden"){el.style.visibility="visible";changed=true;}
+if(st&&Number(st.opacity||"1")===0){el.style.opacity="1";changed=true;}
+if(st&&st.pointerEvents==="none"){el.style.pointerEvents="auto";changed=true;}
+return changed;
+}
 function maybeWireSmoothScroll(el){
 if(!el||!el.addEventListener)return;
 var hasInline=String(el.getAttribute&&el.getAttribute("onclick")||"").trim().length>0;
 var hasOnclickFn=typeof el.onclick==="function";
 var href=String(el.getAttribute&&el.getAttribute("href")||"").trim().toLowerCase();
-if(hasInline||hasOnclickFn||href==="#top")return;
+if(hasInline||hasOnclickFn)return false;
+if(href==="#top")return false;
 el.addEventListener("click",function(ev){
 if(ev&&ev.preventDefault)ev.preventDefault();
 try{window.scrollTo({top:0,behavior:"smooth"});}catch(_err){window.scrollTo(0,0);}
 },{passive:false});
+return true;
+}
+function classifyMissing(details){
+if(details.nativeDetected)return null;
+if(details.runtimeCandidateCount>0&&details.visibleCandidateCount===0)return "NATIVE_BACK_TO_TOP_PRESENT_BUT_HIDDEN_BY_CSS";
+if(payload.sourceSignalsFound===true&&details.runtimeSignalTerms.length===0)return "NATIVE_BACK_TO_TOP_RUNTIME_ASSET_MISSING";
+if(payload.sourceSignalsFound===false&&details.runtimeCandidateCount===0)return "NATIVE_BACK_TO_TOP_MISSING_FROM_IMPORTED_HTML";
+if(payload.sourceSignalsFound===true&&details.runtimeCandidateCount===0)return "NATIVE_BACK_TO_TOP_PRESENT_BUT_NOT_INITIALIZED";
+return "OTHER_WITH_EVIDENCE";
 }
 function runNativeOnlyPass(passName){
 var fallbackRemovedCount=removeFallbackNodes();
 var nativeCandidates=collectNativeCandidates();
+var visibleCandidates=nativeCandidates.filter(function(c){return c.isVisible;});
+var runtimeTerms=runtimeSignalsFound();
 emit("PREVIEW_BACK_TO_TOP_NATIVE_DISCOVERY_SNAPSHOT",{siteVersionId:payload.siteVersionId,passName:passName,candidateCount:nativeCandidates.length,candidates:nativeCandidates.slice(0,20).map(function(c){return{tag:c.tag,id:c.id,className:c.className,wrapperTag:c.wrapperTag,iconMarkup:c.iconMarkup,computedStyle:c.computedStyle,boundingClientRect:c.boundingClientRect,isVisible:c.isVisible,hasUpIcon:c.hasUpIcon,fixedLike:c.fixedLike};}),correlationKey:correlationKey("native_discovery_snapshot_"+passName)});
-var nativeDetected=nativeCandidates.length>0;
+var nativeDetected=visibleCandidates.length>0;
+var restoredHidden=false;
+var wiredSmoothScroll=false;
+if(!nativeDetected&&nativeCandidates.length>0){
+restoredHidden=normalizeHiddenNative(nativeCandidates[0].element)===true;
+if(restoredHidden===true){
+nativeCandidates=collectNativeCandidates();
+visibleCandidates=nativeCandidates.filter(function(c){return c.isVisible;});
+nativeDetected=visibleCandidates.length>0;
+}
+}
 if(nativeDetected){
-var chosen=nativeCandidates[0];
+var chosen=visibleCandidates[0]||nativeCandidates[0];
 if(chosen.element&&!chosen.element.getAttribute("aria-label"))chosen.element.setAttribute("aria-label","Back to top");
-maybeWireSmoothScroll(chosen.element);
+wiredSmoothScroll=maybeWireSmoothScroll(chosen.element)===true;
 emit("PREVIEW_BACK_TO_TOP_NATIVE_BUILDER_DETECTED",{siteVersionId:payload.siteVersionId,passName:passName,tag:chosen.tag,id:chosen.id,className:chosen.className,wrapperTag:chosen.wrapperTag,correlationKey:correlationKey("native_builder_detected_"+passName)});
 }
+var missingClassification=classifyMissing({nativeDetected:nativeDetected,runtimeCandidateCount:nativeCandidates.length,visibleCandidateCount:visibleCandidates.length,runtimeSignalTerms:runtimeTerms});
+emit("PREVIEW_BACK_TO_TOP_NATIVE_COMPARISON_STATUS",{siteVersionId:payload.siteVersionId,nativeDetected:nativeDetected,nativeCandidateCount:nativeCandidates.length,nativeCandidateSummaries:nativeCandidates.slice(0,8).map(function(c){return{tag:c.tag,id:c.id,className:c.className,wrapperTag:c.wrapperTag,hasIcon:c.hasUpIcon,isVisible:c.isVisible,href:c.href};}),sourceSignalsFound:payload.sourceSignalsFound===true||payload.sourceSignalMatches.length>0,runtimeSignalsFound:runtimeTerms.length>0,missingReason:missingClassification,correlationKey:correlationKey("native_comparison_status_"+passName)});
+if(missingClassification){
+emit("PREVIEW_BACK_TO_TOP_NATIVE_MISSING_CLASSIFIED",{siteVersionId:payload.siteVersionId,classification:missingClassification,evidence:{sourceSignalsFound:payload.sourceSignalsFound===true,sourceSignalMatches:payload.sourceSignalMatches,runtimeSignalsFoundTerms:runtimeTerms,runtimeCandidateCount:nativeCandidates.length,visibleCandidateCount:visibleCandidates.length},recommendedFix:missingClassification==="NATIVE_BACK_TO_TOP_PRESENT_BUT_HIDDEN_BY_CSS"?"normalize visibility/position on native node only":missingClassification==="NATIVE_BACK_TO_TOP_PRESENT_BUT_NOT_INITIALIZED"?"initialize native node click behavior only":"preserve native import/runtime assets; do not reintroduce fallback",correlationKey:correlationKey("native_missing_classified_"+passName)});
+}
 emit("PREVIEW_BACK_TO_TOP_FALLBACK_REMOVED_GLOBALLY",{siteVersionId:payload.siteVersionId,passName:passName,fallbackRemovedCount:fallbackRemovedCount,fallbackInjectionDisabled:true,correlationKey:correlationKey("fallback_removed_"+passName)});
-emit("PREVIEW_BACK_TO_TOP_NATIVE_STATUS",{siteVersionId:payload.siteVersionId,nativeDetected:nativeDetected,nativeCandidateCount:nativeCandidates.length,fallbackRemovedCount:fallbackRemovedCount,fallbackInjectionDisabled:true,finalButtonSource:nativeDetected?"native_builder":"none",correlationKey:correlationKey("native_status_"+passName)});
+emit("PREVIEW_BACK_TO_TOP_NATIVE_STATUS",{siteVersionId:payload.siteVersionId,nativeDetected:nativeDetected,nativeCandidateCount:nativeCandidates.length,fallbackRemovedCount:fallbackRemovedCount,fallbackInjectionDisabled:true,hiddenNativeRestored:restoredHidden,smoothScrollWired:wiredSmoothScroll,finalButtonSource:nativeDetected?"native_builder":"none",correlationKey:correlationKey("native_status_"+passName)});
 }
 try{
 runNativeOnlyPass("initial");
