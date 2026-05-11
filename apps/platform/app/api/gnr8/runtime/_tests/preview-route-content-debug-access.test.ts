@@ -834,7 +834,10 @@ test("preview route: transformed output injects back-to-top restore compatibilit
     assert.match(html, /PREVIEW_BACK_TO_TOP_THEME_APPLIED/);
     assert.match(html, /PREVIEW_BACK_TO_TOP_ICON_NORMALIZED/);
     assert.match(html, /PREVIEW_BACK_TO_TOP_DEDUPED/);
+    assert.match(html, /PREVIEW_BACK_TO_TOP_CANDIDATES_SNAPSHOT/);
     assert.match(html, /finalButtonSource:"original"/);
+    assert.match(html, /passName:passName/);
+    assert.match(html, /visibleCandidateCountAfter/);
     assert.match(html, /iconTypeDetected/);
     assert.match(html, /whiteForegroundApplied/);
     assert.match(html, /detectedAccentColor/);
@@ -911,6 +914,7 @@ test("preview route: transformed output injects back-to-top fallback and prevent
     assert.match(html, /PREVIEW_BACK_TO_TOP_THEME_APPLIED/);
     assert.match(html, /PREVIEW_BACK_TO_TOP_ICON_NORMALIZED/);
     assert.match(html, /PREVIEW_BACK_TO_TOP_DEDUPED/);
+    assert.match(html, /PREVIEW_BACK_TO_TOP_CANDIDATES_SNAPSHOT/);
     assert.match(html, /finalButtonSource:"fallback"/);
     assert.match(html, /Back to top/);
     assert.match(html, /gnr8-preview-backtotop-fallback/);
@@ -920,6 +924,11 @@ test("preview route: transformed output injects back-to-top fallback and prevent
     assert.match(html, /fallback\.style\.background="#1f2937"/);
     assert.match(html, /applyTheme\(fallback,detectedTheme,false,true\)/);
     assert.match(html, /normalizeIconForeground\(fallback,false,true\)/);
+    assert.match(html, /window\.addEventListener\("load",function\(\)\{runDedupePass\("window_load"\);\}\)/);
+    assert.match(html, /schedulePass\("delayed_500ms",500\)/);
+    assert.match(html, /schedulePass\("delayed_1500ms",1500\)/);
+    assert.match(html, /runDedupePass\("mutation_observer"\)/);
+    assert.match(html, /new MutationObserver/);
     assert.match(html, /\[data-gnr8-backtotop-fallback\]::after/);
   } finally {
     restoreDeps();
@@ -1025,7 +1034,8 @@ test("preview route: transformed output hides unusable original and falls back t
     const html = await response.text();
     assert.equal(response.status, 200);
     assert.match(html, /isPotentiallyUsableOriginal/);
-    assert.match(html, /if\(existing&&!existingUsable\)\{hideDuplicate\(existing\);\}/);
+    assert.match(html, /function getPreferredOriginal\(candidates\)/);
+    assert.match(html, /return clickable&&strongCount>=2;/);
     assert.match(html, /finalButtonSource:"fallback"/);
     assert.match(html, /window\.scrollTo\(\{ top: 0, behavior: "smooth" \}\)/);
   } finally {
@@ -1087,6 +1097,58 @@ test("preview route: transformed output icon normalization handles svg, stroke, 
     assert.match(html, /iconTypeDetected:iconTypeDetected/);
     assert.match(html, /whiteForegroundApplied:true/);
     assert.match(html, /normalizeIconForeground\(existing,true,false\)/);
+  } finally {
+    restoreDeps();
+  }
+});
+
+test("preview route: transformed output includes Roboplast-style unmatched fixed arrow candidate heuristics", async () => {
+  const restoreDeps = setPreviewRouteDependenciesForTest({
+    resolveAgencyIdForSiteVersion: async () => "agency_1",
+    requireAgencyActionContext: async () => ({ agencyId: "agency_1" }) as never,
+    renderSiteVersionPreview: async () =>
+      ({
+        html: `<!doctype html><html><body><div>roboplast</div></body></html>`,
+        siteId: "site_preview_1",
+        siteVersionId: "sv_preview_1",
+        source: "preview",
+        previewMode: "transformed",
+        previewRuntimeSummary: {
+          rendererContractAvailable: true,
+          finalSiteModelAvailable: true,
+          renderedWithFallback: false,
+          matchedPageId: null,
+          contentResolutionApplied: true,
+          resolvedContentCount: 0,
+          unresolvedContentCount: 0,
+          contentResolutionDegraded: false,
+          contentResolutionDiagnostics: [],
+          previewDiagnostics: [],
+          familyRenderUsed: false,
+          familyRenderMode: null,
+          familyRenderFamilyId: null,
+          familyRenderFallbackToPage: false,
+          familyRenderDiagnosticsCount: 0,
+        },
+        renderedCaptureUsed: false,
+        domSize: 100,
+        fallbackUsed: false,
+      }) as never,
+    canShowContentDebug: async () => false,
+  });
+  try {
+    const response = await GET(new Request("https://app.pasadenagenerator.com/api/gnr8/runtime/versions/sv_preview_1/preview?mode=transformed"), {
+      params: Promise.resolve({ siteVersionId: "sv_preview_1" }),
+    });
+    const html = await response.text();
+    assert.equal(response.status, 200);
+    assert.match(html, /fa-angle-up/);
+    assert.match(html, /fa-chevron-up/);
+    assert.match(html, /icon-up/);
+    assert.match(html, /fixedLike/);
+    assert.match(html, /bottomRightish/);
+    assert.match(html, /smallButton/);
+    assert.match(html, /position:style\?String\(style\.position\|\|""\):""/);
   } finally {
     restoreDeps();
   }
