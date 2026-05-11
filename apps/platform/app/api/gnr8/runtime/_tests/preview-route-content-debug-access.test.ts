@@ -1035,7 +1035,8 @@ test("preview route: transformed output hides unusable original and falls back t
     assert.equal(response.status, 200);
     assert.match(html, /isPotentiallyUsableOriginal/);
     assert.match(html, /function getPreferredOriginal\(candidates\)/);
-    assert.match(html, /return clickable&&strongCount>=2;/);
+    assert.match(html, /hasVerticalUpEvidence/);
+    assert.match(html, /return clickable&&hasVerticalUpEvidence&&strongCount>=2;/);
     assert.match(html, /finalButtonSource:"fallback"/);
     assert.match(html, /window\.scrollTo\(\{ top: 0, behavior: "smooth" \}\)/);
   } finally {
@@ -1142,6 +1143,20 @@ test("preview route: transformed output includes Roboplast-style unmatched fixed
     });
     const html = await response.text();
     assert.equal(response.status, 200);
+    assert.match(html, /HORIZONTAL_ARROW_CONTENT_REGEX/);
+    assert.match(html, /HORIZONTAL_NAV_TOKEN_LIST/);
+    assert.match(html, /STRONG_UP_TOKEN_LIST/);
+    assert.match(html, /hasVerticalUpEvidence/);
+    assert.match(html, /hrefStrong=href==="#top"/);
+    assert.match(html, /PREVIEW_BACK_TO_TOP_FALSE_POSITIVE_EXCLUDED/);
+    assert.match(html, /SLIDER_OR_HORIZONTAL_NAV_ARROW/);
+    assert.match(html, /excludedFalsePositiveCount/);
+    assert.match(html, /el\.style\.right="20px"/);
+    assert.match(html, /el\.style\.bottom="20px"/);
+    assert.match(html, /el\.removeAttribute\("data-gnr8-backtotop-restored"\)/);
+    assert.match(html, /el\.removeAttribute\("data-gnr8-backtotop-hidden-duplicate"\)/);
+    assert.match(html, /el\.style\.display=""/);
+    assert.match(html, /el\.style\.position="fixed"/);
     assert.match(html, /fa-angle-up/);
     assert.match(html, /fa-chevron-up/);
     assert.match(html, /icon-up/);
@@ -1149,6 +1164,111 @@ test("preview route: transformed output includes Roboplast-style unmatched fixed
     assert.match(html, /bottomRightish/);
     assert.match(html, /smallButton/);
     assert.match(html, /position:style\?String\(style\.position\|\|""\):""/);
+  } finally {
+    restoreDeps();
+  }
+});
+
+test("preview route: transformed output excludes slider left arrow and preserves original href top candidate", async () => {
+  const restoreDeps = setPreviewRouteDependenciesForTest({
+    resolveAgencyIdForSiteVersion: async () => "agency_1",
+    requireAgencyActionContext: async () => ({ agencyId: "agency_1" }) as never,
+    renderSiteVersionPreview: async () =>
+      ({
+        html: `<!doctype html><html><body>
+<button id="hero-prev" class="slider arrow-left slick-prev" aria-label="previous">‹</button>
+<a id="scroll-top-control" class="scrolltop back-to-top" href="#top">Top</a>
+</body></html>`,
+        siteId: "site_preview_1",
+        siteVersionId: "sv_preview_1",
+        source: "preview",
+        previewMode: "transformed",
+        previewRuntimeSummary: {
+          rendererContractAvailable: true,
+          finalSiteModelAvailable: true,
+          renderedWithFallback: false,
+          matchedPageId: null,
+          contentResolutionApplied: true,
+          resolvedContentCount: 0,
+          unresolvedContentCount: 0,
+          contentResolutionDegraded: false,
+          contentResolutionDiagnostics: [],
+          previewDiagnostics: [],
+          familyRenderUsed: false,
+          familyRenderMode: null,
+          familyRenderFamilyId: null,
+          familyRenderFallbackToPage: false,
+          familyRenderDiagnosticsCount: 0,
+        },
+        renderedCaptureUsed: false,
+        domSize: 100,
+        fallbackUsed: false,
+      }) as never,
+    canShowContentDebug: async () => false,
+  });
+  try {
+    const response = await GET(new Request("https://app.pasadenagenerator.com/api/gnr8/runtime/versions/sv_preview_1/preview?mode=transformed"), {
+      params: Promise.resolve({ siteVersionId: "sv_preview_1" }),
+    });
+    const html = await response.text();
+    assert.equal(response.status, 200);
+    assert.match(html, /PREVIEW_BACK_TO_TOP_FALSE_POSITIVE_EXCLUDED/);
+    assert.match(html, /reasonCode:"SLIDER_OR_HORIZONTAL_NAV_ARROW"/);
+    assert.match(html, /finalButtonSource:"original"/);
+    assert.match(html, /excludedFalsePositiveCount/);
+    assert.match(html, /hrefStrong=href==="#top"/);
+  } finally {
+    restoreDeps();
+  }
+});
+
+test("preview route: transformed output excludes slider right arrow and injects fallback when no up evidence exists", async () => {
+  const restoreDeps = setPreviewRouteDependenciesForTest({
+    resolveAgencyIdForSiteVersion: async () => "agency_1",
+    requireAgencyActionContext: async () => ({ agencyId: "agency_1" }) as never,
+    renderSiteVersionPreview: async () =>
+      ({
+        html: `<!doctype html><html><body>
+<button id="hero-next" class="carousel-next swiper-button-next" aria-label="next">›</button>
+<script>window.legacyTopScroll=true;function onepage_up(){return true;}</script>
+</body></html>`,
+        siteId: "site_preview_1",
+        siteVersionId: "sv_preview_1",
+        source: "preview",
+        previewMode: "transformed",
+        previewRuntimeSummary: {
+          rendererContractAvailable: true,
+          finalSiteModelAvailable: true,
+          renderedWithFallback: false,
+          matchedPageId: null,
+          contentResolutionApplied: true,
+          resolvedContentCount: 0,
+          unresolvedContentCount: 0,
+          contentResolutionDegraded: false,
+          contentResolutionDiagnostics: [],
+          previewDiagnostics: [],
+          familyRenderUsed: false,
+          familyRenderMode: null,
+          familyRenderFamilyId: null,
+          familyRenderFallbackToPage: false,
+          familyRenderDiagnosticsCount: 0,
+        },
+        renderedCaptureUsed: false,
+        domSize: 100,
+        fallbackUsed: false,
+      }) as never,
+    canShowContentDebug: async () => false,
+  });
+  try {
+    const response = await GET(new Request("https://app.pasadenagenerator.com/api/gnr8/runtime/versions/sv_preview_1/preview?mode=transformed"), {
+      params: Promise.resolve({ siteVersionId: "sv_preview_1" }),
+    });
+    const html = await response.text();
+    assert.equal(response.status, 200);
+    assert.match(html, /PREVIEW_BACK_TO_TOP_FALSE_POSITIVE_EXCLUDED/);
+    assert.match(html, /finalButtonSource:"fallback"/);
+    assert.match(html, /PREVIEW_BACK_TO_TOP_FALLBACK_APPLIED/);
+    assert.match(html, /visibleCandidateCountAfter/);
   } finally {
     restoreDeps();
   }
