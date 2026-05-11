@@ -273,11 +273,17 @@ test("preview route: transformed output injects map module detection and fallbac
     assert.match(html, /detectionReason/);
     assert.match(html, /PREVIEW_MAP_LOCATION_EXTRACTED/);
     assert.match(html, /PREVIEW_MAP_FALLBACK_APPLIED/);
+    assert.match(html, /PREVIEW_MAP_SPACING_STATUS/);
+    assert.match(html, /PREVIEW_MAP_SPACING_FIX_APPLIED/);
     assert.match(html, /PREVIEW_MAP_RUNTIME_INIT_FAILED/);
     assert.match(html, /OSMAP_JSON_ENDPOINT_UNAVAILABLE/);
     assert.match(html, /gnr8-map-fallback/);
     assert.match(html, /openstreetmap\.org\/export\/embed\.html/);
     assert.match(html, /Litostrojska cesta 40, Ljubljana, Slovenia/);
+    assert.match(html, /confidence/);
+    assert.match(html, /rejectedAddressCandidates/);
+    assert.match(html, /addressUsed:fallback\.addressUsed/);
+    assert.match(html, /maxSpacingApplied/);
   } finally {
     restoreDeps();
   }
@@ -328,10 +334,11 @@ test("preview route: map fallback supports placeholder path when location cannot
     const html = await response.text();
     assert.equal(response.status, 200);
     assert.match(html, /fallbackType:iframeUsed\?"iframe":"placeholder"/);
-    assert.match(html, /Map preview fallback active/);
-    assert.match(html, /Location unavailable/);
+    assert.match(html, /openstreetmap\.org\/search\?query=/);
+    assert.match(html, /Litostrojska cesta 40, Ljubljana, Slovenia/);
     assert.match(html, /if\(iframeSrc\)/);
-    assert.match(html, /fallbackType:"placeholder"/);
+    assert.match(html, /known_roboplast_page_fallback/);
+    assert.match(html, /known_site_fallback/);
   } finally {
     restoreDeps();
   }
@@ -351,10 +358,75 @@ test("preview route: map fallback shim is scoped to map modules and does not alt
     assert.match(html, /PREVIEW_GALLERY_PAGED_LAYOUT_STATUS/);
     assert.match(html, /PREVIEW_GALLERY_PAGED_LAYOUT_APPLIED/);
     assert.match(html, /PREVIEW_MAP_MODULE_DETECTED/);
+    assert.match(html, /PREVIEW_MAP_SPACING_STATUS/);
+    assert.match(html, /PREVIEW_MAP_SPACING_FIX_APPLIED/);
     assert.match(html, /detectMapModule/);
     assert.match(html, /data-gnr8-map-fallback/);
-    assert.match(html, /function applyFallback\(moduleEl,moduleId,location\)/);
+    assert.match(html, /function applyFallback\(moduleEl,moduleId,location,correlationKey\)/);
+    assert.match(html, /function normalizeMapSpacing\(moduleEl,host,moduleId,correlationKey\)/);
+    assert.match(html, /isSpacerElement/);
+    assert.match(html, /spacerNodesRemoved/);
+    assert.match(html, /normalizedWrapperCount/);
+    assert.match(html, /maxSpacingApplied/);
     assert.match(html, /if\(!detected\)return;/);
+  } finally {
+    restoreDeps();
+  }
+});
+
+test("preview route: map location extraction rejects generic address candidates and keeps Roboplast fallback", async () => {
+  const restoreDeps = setPreviewRouteDependenciesForTest({
+    resolveAgencyIdForSiteVersion: async () => "agency_1",
+    requireAgencyActionContext: async () => ({ agencyId: "agency_1" }) as never,
+    renderSiteVersionPreview: async () =>
+      ({
+        html: `<!doctype html><html><body>
+<div style="margin-top:420px"></div>
+<section id="m779" class="module osmap" data-req="osmap">
+  <div>Road 1, Berlin, Germany</div>
+</section>
+<div id="hero" style="margin-top:96px">Hero spacing</div>
+</body></html>`,
+        siteId: "site_preview_1",
+        siteVersionId: "sv_preview_1",
+        source: "preview",
+        previewMode: "transformed",
+        previewRuntimeSummary: {
+          rendererContractAvailable: true,
+          finalSiteModelAvailable: true,
+          renderedWithFallback: false,
+          matchedPageId: null,
+          contentResolutionApplied: true,
+          resolvedContentCount: 0,
+          unresolvedContentCount: 0,
+          contentResolutionDegraded: false,
+          contentResolutionDiagnostics: [],
+          previewDiagnostics: [],
+          familyRenderUsed: false,
+          familyRenderMode: null,
+          familyRenderFamilyId: null,
+          familyRenderFallbackToPage: false,
+          familyRenderDiagnosticsCount: 0,
+        },
+        renderedCaptureUsed: false,
+        domSize: 100,
+        fallbackUsed: false,
+      }) as never,
+    canShowContentDebug: async () => false,
+  });
+  try {
+    const response = await GET(new Request("https://app.pasadenagenerator.com/api/gnr8/runtime/versions/sv_preview_1/preview?mode=transformed"), {
+      params: Promise.resolve({ siteVersionId: "sv_preview_1" }),
+    });
+    const html = await response.text();
+    assert.equal(response.status, 200);
+    assert.match(html, /rejectedAddressCandidates\.push/);
+    assert.match(html, /knownRoboplastAddress/);
+    assert.match(html, /known_roboplast_page_fallback/);
+    assert.match(html, /PREVIEW_MAP_LOCATION_EXTRACTED/);
+    assert.match(html, /PREVIEW_MAP_SPACING_STATUS/);
+    assert.match(html, /PREVIEW_MAP_FALLBACK_APPLIED/);
+    assert.match(html, /addressUsed:fallback\.addressUsed/);
   } finally {
     restoreDeps();
   }
