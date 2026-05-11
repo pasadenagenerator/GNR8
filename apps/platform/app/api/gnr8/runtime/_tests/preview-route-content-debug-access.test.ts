@@ -569,8 +569,16 @@ test("preview route: Maver page never uses Roboplast fallback and uses Maver add
     assert.match(html, /confidence:"known_site_address"/);
     assert.match(html, /finalUrlType:finalUrlType/);
     assert.match(html, /iframeUsed:!!iframeSrc/);
+    assert.match(html, /PREVIEW_MAP_RENDER_DECISION/);
+    assert.match(html, /hasKnownSiteCoordinates:location\.siteSpecificCoordinatesUsed===true/);
+    assert.match(html, /fallbackReason:fallbackReason/);
+    assert.match(html, /host\.className="gnr8-map-iframe-host"/);
+    assert.doesNotMatch(html, /host\.className="gnr8-map-fallback";\s*host\.setAttribute\("data-gnr8-map-fallback","1"\);\s*var iframe=document\.createElement\("iframe"\)/);
     assert.match(html, /var finalUrlType=iframeSrc\?"embed":"placeholder";/);
     assert.match(html, /return "https:\/\/www\.openstreetmap\.org\/export\/embed\.html\?bbox="/);
+    assert.match(html, /marker=/);
+    assert.match(html, /45\.996816/);
+    assert.match(html, /14\.589487/);
     assert.doesNotMatch(html, /<iframe[^>]+openstreetmap\.org\/search\?query=/);
     assert.doesNotMatch(html, /iframe\.src="https:\/\/www\.openstreetmap\.org\/search\?query=/);
     assert.match(html, /PREVIEW_MAP_EMBED_URL_NORMALIZED/);
@@ -625,6 +633,7 @@ test("preview route: generic unknown site with address only still uses placehold
     const html = await response.text();
     assert.equal(response.status, 200);
     assert.match(html, /Map preview fallback active\./);
+    assert.match(html, /host\.className="gnr8-map-fallback"/);
     assert.match(html, /openLink\.href="https:\/\/www\.openstreetmap\.org\/search\?query="\+encodeURIComponent\(location\.address\)/);
     assert.match(html, /fallbackType:iframeUsed\?"iframe":"placeholder"/);
     assert.match(html, /PREVIEW_MAP_FALLBACK_APPLIED/);
@@ -1000,6 +1009,10 @@ test("preview route: transformed output injects back-to-top restore compatibilit
     assert.match(html, /correlationKey/);
     assert.match(html, /window\.scrollTo\(\{ top: 0, behavior: "smooth" \}\)/);
     assert.match(html, /a\[href='#top'\]/);
+    assert.match(html, /\[role='button'\]/);
+    assert.match(html, /#gnr8-preview-backtotop-fallback,\[data-gnr8-backtotop-fallback='1'\]/);
+    assert.doesNotMatch(html, /selectors=\[[^\]]*"a","button","\[role='button'\]","\[id\]","\[class\]","\[title\]","\[aria-label\]"/);
+    assert.doesNotMatch(html, /querySelectorAll\("html"\)|querySelectorAll\("body"\)|querySelectorAll\("style"\)|querySelectorAll\("div"\)|querySelectorAll\("span"\)|querySelectorAll\("p"\)/);
     assert.match(html, /scrolltop/);
     assert.match(html, /back-to-top/);
     assert.match(html, /cssVars=\["--primary","--primary-color","--accent","--accent-color","--theme-color"\]/);
@@ -1067,6 +1080,10 @@ test("preview route: transformed output injects back-to-top fallback and prevent
     assert.match(html, /PREVIEW_BACK_TO_TOP_ICON_NORMALIZED/);
     assert.match(html, /PREVIEW_BACK_TO_TOP_DEDUPED/);
     assert.match(html, /PREVIEW_BACK_TO_TOP_CANDIDATES_SNAPSHOT/);
+    assert.match(html, /MAX_FALSE_POSITIVE_LOGS=20/);
+    assert.match(html, /suppressedFalsePositiveLogCount/);
+    assert.match(html, /if\(falsePositiveLogCount<MAX_FALSE_POSITIVE_LOGS\)/);
+    assert.match(html, /if\(\(String\(el\.id\|\|""\)===BACK_TO_TOP_FALLBACK_ID\)\|\|el\.getAttribute\("data-gnr8-backtotop-fallback"\)==="1"\)\{\s*return true;\s*\}/);
     assert.match(html, /finalButtonSource:"fallback"/);
     assert.match(html, /Back to top/);
     assert.match(html, /gnr8-preview-backtotop-fallback/);
