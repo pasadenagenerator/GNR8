@@ -271,6 +271,7 @@ test("preview route: transformed output injects map module detection and fallbac
     assert.match(html, /moduleId:moduleId/);
     assert.match(html, /providerType/);
     assert.match(html, /detectionReason/);
+    assert.match(html, /PREVIEW_MAP_SITE_IDENTITY_DETECTED/);
     assert.match(html, /PREVIEW_MAP_LOCATION_EXTRACTED/);
     assert.match(html, /PREVIEW_MAP_COORDINATES_EXTRACTED/);
     assert.match(html, /PREVIEW_MAP_INPLACE_REPLACEMENT_APPLIED/);
@@ -287,7 +288,9 @@ test("preview route: transformed output injects map module detection and fallbac
     assert.match(html, /openstreetmap\.org\/export\/embed\.html/);
     assert.match(html, /Litostrojska cesta 40, Ljubljana, Slovenia/);
     assert.match(html, /confidence/);
+    assert.match(html, /siteIdentity/);
     assert.match(html, /rejectedAddressCandidates/);
+    assert.match(html, /knownFallbackUsed/);
     assert.match(html, /addressUsed:fallback\.addressUsed/);
     assert.match(html, /coordinatesConfidence/);
     assert.match(html, /precisionSource/);
@@ -342,12 +345,10 @@ test("preview route: map fallback supports placeholder path when location cannot
     const html = await response.text();
     assert.equal(response.status, 200);
     assert.match(html, /fallbackType:iframeUsed\?"iframe":"placeholder"/);
-    assert.match(html, /openstreetmap\.org\/search\?query=/);
-    assert.match(html, /Litostrojska cesta 40, Ljubljana, Slovenia/);
-    assert.match(html, /coordinates_iframe_embed/);
-    assert.match(html, /if\(iframeSrc\)/);
-    assert.match(html, /known_roboplast_page_fallback/);
-    assert.match(html, /known_site_fallback/);
+    assert.match(html, /if\(location&&location\.address\)/);
+    assert.match(html, /Location unavailable/);
+    assert.match(html, /knownFallbackUsed:location\.knownFallbackUsed===true/);
+    assert.match(html, /PREVIEW_MAP_SITE_IDENTITY_DETECTED/);
   } finally {
     restoreDeps();
   }
@@ -441,7 +442,7 @@ test("preview route: map fallback prioritizes explicit coordinates over address 
   }
 });
 
-test("preview route: map location extraction rejects generic address candidates and keeps Roboplast fallback", async () => {
+test("preview route: map location extraction rejects wrong candidates and gates Roboplast fallback behind site identity", async () => {
   const restoreDeps = setPreviewRouteDependenciesForTest({
     resolveAgencyIdForSiteVersion: async () => "agency_1",
     requireAgencyActionContext: async () => ({ agencyId: "agency_1" }) as never,
@@ -489,11 +490,67 @@ test("preview route: map location extraction rejects generic address candidates 
     assert.equal(response.status, 200);
     assert.match(html, /rejectedAddressCandidates\.push/);
     assert.match(html, /knownRoboplastAddress/);
-    assert.match(html, /known_roboplast_page_fallback/);
+    assert.match(html, /knownFallbackUsed:location\.knownFallbackUsed===true/);
+    assert.match(html, /siteIdentity:location\.siteIdentity\|\|"unknown"/);
+    assert.match(html, /if\(!address&&identity\.siteIdentity==="roboplast"\)/);
     assert.match(html, /PREVIEW_MAP_LOCATION_EXTRACTED/);
+    assert.match(html, /PREVIEW_MAP_SITE_IDENTITY_DETECTED/);
     assert.match(html, /PREVIEW_MAP_SPACING_STATUS/);
     assert.match(html, /PREVIEW_MAP_FALLBACK_APPLIED/);
     assert.match(html, /addressUsed:fallback\.addressUsed/);
+  } finally {
+    restoreDeps();
+  }
+});
+
+test("preview route: Maver page never uses Roboplast fallback and uses Maver address", async () => {
+  const restoreDeps = setPreviewRouteDependenciesForTest({
+    resolveAgencyIdForSiteVersion: async () => "agency_1",
+    requireAgencyActionContext: async () => ({ agencyId: "agency_1" }) as never,
+    renderSiteVersionPreview: async () =>
+      ({
+        html: `<!doctype html><html><body>
+<section id="m781" class="module osmap" data-req="osmap"><div class="map-shell"></div></section>
+<footer>Kontakt: Maver Transport d.o.o., Cesta v Gorice 12, Ljubljana, Slovenia | info@mavertransport.si</footer>
+</body></html>`,
+        siteId: "site_preview_1",
+        siteVersionId: "sv_preview_1",
+        source: "preview",
+        previewMode: "transformed",
+        previewRuntimeSummary: {
+          rendererContractAvailable: true,
+          finalSiteModelAvailable: true,
+          renderedWithFallback: false,
+          matchedPageId: null,
+          contentResolutionApplied: true,
+          resolvedContentCount: 0,
+          unresolvedContentCount: 0,
+          contentResolutionDegraded: false,
+          contentResolutionDiagnostics: [],
+          previewDiagnostics: [],
+          familyRenderUsed: false,
+          familyRenderMode: null,
+          familyRenderFamilyId: null,
+          familyRenderFallbackToPage: false,
+          familyRenderDiagnosticsCount: 0,
+        },
+        renderedCaptureUsed: false,
+        domSize: 100,
+        fallbackUsed: false,
+      }) as never,
+    canShowContentDebug: async () => false,
+  });
+  try {
+    const response = await GET(new Request("https://app.pasadenagenerator.com/api/gnr8/runtime/versions/sv_preview_1/preview?mode=transformed"), {
+      params: Promise.resolve({ siteVersionId: "sv_preview_1" }),
+    });
+    const html = await response.text();
+    assert.equal(response.status, 200);
+    assert.match(html, /maver_transport/);
+    assert.match(html, /BRAND_MAVER_TRANSPORT/);
+    assert.match(html, /Cesta v Gorice 12, Ljubljana, Slovenia/);
+    assert.match(html, /knownFallbackUsed:location\.knownFallbackUsed===true/);
+    assert.match(html, /recordAddressCandidate\(pageWideCandidate,"page_wide_contact_text","page_wide_text"\)/);
   } finally {
     restoreDeps();
   }
