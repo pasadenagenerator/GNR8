@@ -831,10 +831,24 @@ test("preview route: transformed output injects back-to-top restore compatibilit
     assert.match(html, /PREVIEW_BACK_TO_TOP_DETECTED/);
     assert.match(html, /PREVIEW_BACK_TO_TOP_RESTORED/);
     assert.match(html, /PREVIEW_BACK_TO_TOP_CLICK_HANDLED/);
+    assert.match(html, /PREVIEW_BACK_TO_TOP_THEME_APPLIED/);
+    assert.match(html, /detectedAccentColor/);
+    assert.match(html, /detectionSource/);
+    assert.match(html, /contrastColor/);
+    assert.match(html, /existingElementFound/);
+    assert.match(html, /fallbackInjected/);
+    assert.match(html, /correlationKey/);
     assert.match(html, /window\.scrollTo\(\{ top: 0, behavior: "smooth" \}\)/);
     assert.match(html, /a\[href='#top'\]/);
     assert.match(html, /scrolltop/);
     assert.match(html, /back-to-top/);
+    assert.match(html, /cssVars=\["--primary","--primary-color","--accent","--accent-color","--theme-color"\]/);
+    assert.match(html, /meta\[name='theme-color'\]/);
+    assert.match(html, /prominent:/);
+    assert.match(html, /existing_backtotop:bg/);
+    assert.match(html, /fallback_neutral_dark/);
+    assert.match(html, /el\.style\.fill=contrast/);
+    assert.match(html, /el\.style\.stroke=contrast/);
   } finally {
     restoreDeps();
   }
@@ -884,10 +898,67 @@ test("preview route: transformed output injects back-to-top fallback and prevent
     const html = await response.text();
     assert.equal(response.status, 200);
     assert.match(html, /PREVIEW_BACK_TO_TOP_FALLBACK_APPLIED/);
+    assert.match(html, /PREVIEW_BACK_TO_TOP_THEME_APPLIED/);
     assert.match(html, /Back to top/);
     assert.match(html, /gnr8-preview-backtotop-fallback/);
     assert.match(html, /document\.getElementById\("gnr8-preview-backtotop-fallback"\)/);
     assert.match(html, /if\(existing\)\{/);
+    assert.match(html, /fallback\.style\.color="#fff"/);
+    assert.match(html, /fallback\.style\.background="#1f2937"/);
+    assert.match(html, /applyTheme\(fallback,detectedTheme,false,true\)/);
+  } finally {
+    restoreDeps();
+  }
+});
+
+test("preview route: transformed output includes deterministic back-to-top accent detection heuristics", async () => {
+  const restoreDeps = setPreviewRouteDependenciesForTest({
+    resolveAgencyIdForSiteVersion: async () => "agency_1",
+    requireAgencyActionContext: async () => ({ agencyId: "agency_1" }) as never,
+    renderSiteVersionPreview: async () =>
+      ({
+        html: `<!doctype html><html><head><meta name="theme-color" content="#cc0000"></head><body>
+<style>:root{--primary:#cc0000;--accent:#bb1111;}</style>
+<a class="btn red-link" href="#top">Top</a>
+</body></html>`,
+        siteId: "site_preview_1",
+        siteVersionId: "sv_preview_1",
+        source: "preview",
+        previewMode: "transformed",
+        previewRuntimeSummary: {
+          rendererContractAvailable: true,
+          finalSiteModelAvailable: true,
+          renderedWithFallback: false,
+          matchedPageId: null,
+          contentResolutionApplied: true,
+          resolvedContentCount: 0,
+          unresolvedContentCount: 0,
+          contentResolutionDegraded: false,
+          contentResolutionDiagnostics: [],
+          previewDiagnostics: [],
+          familyRenderUsed: false,
+          familyRenderMode: null,
+          familyRenderFamilyId: null,
+          familyRenderFallbackToPage: false,
+          familyRenderDiagnosticsCount: 0,
+        },
+        renderedCaptureUsed: false,
+        domSize: 100,
+        fallbackUsed: false,
+      }) as never,
+    canShowContentDebug: async () => false,
+  });
+  try {
+    const response = await GET(new Request("https://app.pasadenagenerator.com/api/gnr8/runtime/versions/sv_preview_1/preview?mode=transformed"), {
+      params: Promise.resolve({ siteVersionId: "sv_preview_1" }),
+    });
+    const html = await response.text();
+    assert.equal(response.status, 200);
+    assert.match(html, /function pickAccentColor\(\)/);
+    assert.match(html, /--primary/);
+    assert.match(html, /meta_theme_color/);
+    assert.match(html, /redBonus=/);
+    assert.match(html, /function contrastColorFor\(bg\)/);
   } finally {
     restoreDeps();
   }
