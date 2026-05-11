@@ -272,17 +272,25 @@ test("preview route: transformed output injects map module detection and fallbac
     assert.match(html, /providerType/);
     assert.match(html, /detectionReason/);
     assert.match(html, /PREVIEW_MAP_LOCATION_EXTRACTED/);
+    assert.match(html, /PREVIEW_MAP_COORDINATES_EXTRACTED/);
+    assert.match(html, /PREVIEW_MAP_INPLACE_REPLACEMENT_APPLIED/);
     assert.match(html, /PREVIEW_MAP_FALLBACK_APPLIED/);
     assert.match(html, /PREVIEW_MAP_SPACING_STATUS/);
     assert.match(html, /PREVIEW_MAP_SPACING_FIX_APPLIED/);
     assert.match(html, /PREVIEW_MAP_RUNTIME_INIT_FAILED/);
     assert.match(html, /OSMAP_JSON_ENDPOINT_UNAVAILABLE/);
     assert.match(html, /gnr8-map-fallback/);
+    assert.match(html, /function detectMapRenderNode\(moduleEl\)/);
+    assert.match(html, /replacementStrategy:replacementStrategy/);
+    assert.match(html, /while\(renderNode\.firstChild\)\{renderNode\.removeChild\(renderNode\.firstChild\);\}/);
+    assert.match(html, /renderNode\.appendChild\(host\)/);
     assert.match(html, /openstreetmap\.org\/export\/embed\.html/);
     assert.match(html, /Litostrojska cesta 40, Ljubljana, Slovenia/);
     assert.match(html, /confidence/);
     assert.match(html, /rejectedAddressCandidates/);
     assert.match(html, /addressUsed:fallback\.addressUsed/);
+    assert.match(html, /coordinatesConfidence/);
+    assert.match(html, /precisionSource/);
     assert.match(html, /maxSpacingApplied/);
   } finally {
     restoreDeps();
@@ -336,6 +344,7 @@ test("preview route: map fallback supports placeholder path when location cannot
     assert.match(html, /fallbackType:iframeUsed\?"iframe":"placeholder"/);
     assert.match(html, /openstreetmap\.org\/search\?query=/);
     assert.match(html, /Litostrojska cesta 40, Ljubljana, Slovenia/);
+    assert.match(html, /coordinates_iframe_embed/);
     assert.match(html, /if\(iframeSrc\)/);
     assert.match(html, /known_roboplast_page_fallback/);
     assert.match(html, /known_site_fallback/);
@@ -364,11 +373,69 @@ test("preview route: map fallback shim is scoped to map modules and does not alt
     assert.match(html, /data-gnr8-map-fallback/);
     assert.match(html, /function applyFallback\(moduleEl,moduleId,location,correlationKey\)/);
     assert.match(html, /function normalizeMapSpacing\(moduleEl,host,moduleId,correlationKey\)/);
+    assert.match(html, /PREVIEW_MAP_INPLACE_REPLACEMENT_APPLIED/);
+    assert.match(html, /PREVIEW_MAP_COORDINATES_EXTRACTED/);
     assert.match(html, /isSpacerElement/);
     assert.match(html, /spacerNodesRemoved/);
     assert.match(html, /normalizedWrapperCount/);
     assert.match(html, /maxSpacingApplied/);
     assert.match(html, /if\(!detected\)return;/);
+  } finally {
+    restoreDeps();
+  }
+});
+
+test("preview route: map fallback prioritizes explicit coordinates over address fallback and uses coordinate iframe query", async () => {
+  const restoreDeps = setPreviewRouteDependenciesForTest({
+    resolveAgencyIdForSiteVersion: async () => "agency_1",
+    requireAgencyActionContext: async () => ({ agencyId: "agency_1" }) as never,
+    renderSiteVersionPreview: async () =>
+      ({
+        html: `<!doctype html><html><body>
+<section id="m780" class="module osmap" data-req="osmap" data-lat="46.056946" data-lng="14.505751" data-address="Road 99, Berlin">
+  <div class="map-shell"><iframe src="https://www.openstreetmap.org/export/embed.html?bbox=14.49%2C46.04%2C14.52%2C46.07&layer=mapnik&marker=46.056946%2C14.505751"></iframe></div>
+</section>
+</body></html>`,
+        siteId: "site_preview_1",
+        siteVersionId: "sv_preview_1",
+        source: "preview",
+        previewMode: "transformed",
+        previewRuntimeSummary: {
+          rendererContractAvailable: true,
+          finalSiteModelAvailable: true,
+          renderedWithFallback: false,
+          matchedPageId: null,
+          contentResolutionApplied: true,
+          resolvedContentCount: 0,
+          unresolvedContentCount: 0,
+          contentResolutionDegraded: false,
+          contentResolutionDiagnostics: [],
+          previewDiagnostics: [],
+          familyRenderUsed: false,
+          familyRenderMode: null,
+          familyRenderFamilyId: null,
+          familyRenderFallbackToPage: false,
+          familyRenderDiagnosticsCount: 0,
+        },
+        renderedCaptureUsed: false,
+        domSize: 100,
+        fallbackUsed: false,
+      }) as never,
+    canShowContentDebug: async () => false,
+  });
+  try {
+    const response = await GET(new Request("https://app.pasadenagenerator.com/api/gnr8/runtime/versions/sv_preview_1/preview?mode=transformed"), {
+      params: Promise.resolve({ siteVersionId: "sv_preview_1" }),
+    });
+    const html = await response.text();
+    assert.equal(response.status, 200);
+    assert.match(html, /coordinates_config/);
+    assert.match(html, /PREVIEW_MAP_COORDINATES_EXTRACTED/);
+    assert.match(html, /coordinatesUsed:fallback\.coordinatesUsed/);
+    assert.match(html, /openstreetmap\.org\/export\/embed\.html\?bbox=/);
+    assert.match(html, /marker=/);
+    assert.match(html, /if\(location&&location\.lat!==null&&location\.lng!==null\)/);
+    assert.match(html, /return "https:\/\/www\.openstreetmap\.org\/export\/embed\.html\?bbox="/);
   } finally {
     restoreDeps();
   }

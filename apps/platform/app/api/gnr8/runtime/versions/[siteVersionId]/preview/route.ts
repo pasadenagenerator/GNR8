@@ -147,6 +147,29 @@ if(!Number.isFinite(lat)||!Number.isFinite(lng))return null;
 if(Math.abs(lat)>90||Math.abs(lng)>180)return null;
 return{lat:lat,lng:lng};
 }
+function parseCoordinatesFromIframeSrc(src){
+if(!src)return null;
+var raw=String(src||"");
+var markerMatch=raw.match(/[?&]marker=(-?\\d{1,3}(?:\\.\\d+)?)%2C(-?\\d{1,3}(?:\\.\\d+)?)/i)||raw.match(/[?&]marker=(-?\\d{1,3}(?:\\.\\d+)?),(-?\\d{1,3}(?:\\.\\d+)?)/i);
+if(markerMatch){
+var markerLat=Number(markerMatch[1]);var markerLng=Number(markerMatch[2]);
+if(Number.isFinite(markerLat)&&Number.isFinite(markerLng)&&Math.abs(markerLat)<=90&&Math.abs(markerLng)<=180)return{lat:markerLat,lng:markerLng};
+}
+var llMatch=raw.match(/[?&](?:ll|center|q)=(-?\\d{1,3}(?:\\.\\d+)?),(-?\\d{1,3}(?:\\.\\d+)?)/i);
+if(llMatch){
+var llLat=Number(llMatch[1]);var llLng=Number(llMatch[2]);
+if(Number.isFinite(llLat)&&Number.isFinite(llLng)&&Math.abs(llLat)<=90&&Math.abs(llLng)<=180)return{lat:llLat,lng:llLng};
+}
+var bboxMatch=raw.match(/[?&]bbox=(-?\\d{1,3}(?:\\.\\d+)?)%2C(-?\\d{1,3}(?:\\.\\d+)?)%2C(-?\\d{1,3}(?:\\.\\d+)?)%2C(-?\\d{1,3}(?:\\.\\d+)?)/i);
+if(bboxMatch){
+var minLng=Number(bboxMatch[1]);var minLat=Number(bboxMatch[2]);var maxLng=Number(bboxMatch[3]);var maxLat=Number(bboxMatch[4]);
+if(Number.isFinite(minLat)&&Number.isFinite(minLng)&&Number.isFinite(maxLat)&&Number.isFinite(maxLng)){
+var cLat=(minLat+maxLat)/2;var cLng=(minLng+maxLng)/2;
+if(Math.abs(cLat)<=90&&Math.abs(cLng)<=180)return{lat:cLat,lng:cLng};
+}
+}
+return null;
+}
 function normalizeAddressText(value){
 var text=String(value||"").replace(/\\s+/g," ").trim();
 if(!text)return null;
@@ -216,6 +239,16 @@ var addr=extractAddressCandidate(pair.value)||normalizeAddressText(pair.value);
 if(addr&&/litostrojska\\s+cesta\\s+40/i.test(addr)){address=knownRoboplastAddress;extractionSource="module_settings_address";confidence="explicit";}
 else if(addr){rejectedAddressCandidates.push(addr);}
 }
+if((lat===null||lng===null)&&moduleEl&&moduleEl.querySelector){
+var mapIframe=moduleEl.querySelector("iframe[src*='openstreetmap'],iframe[src*='google.com/maps'],iframe[src*='maps']");
+var iframeCoords=mapIframe?parseCoordinatesFromIframeSrc(String(mapIframe.getAttribute("src")||"")):null;
+if(iframeCoords){lat=iframeCoords.lat;lng=iframeCoords.lng;extractionSource="coordinates_iframe_embed";confidence="explicit";}
+}
+if((lat===null||lng===null)&&moduleEl){
+var nearbyRuntimeText=textFrom(moduleEl.closest("section,article,main,.contact,.location,.module")||moduleEl.parentElement||moduleEl).slice(0,2400);
+var runtimeCoords=parseCoordinatesFromText(nearbyRuntimeText);
+if(runtimeCoords){lat=runtimeCoords.lat;lng=runtimeCoords.lng;extractionSource="coordinates_runtime_text";confidence="nearby_text";}
+}
 }
 if(!address&&moduleEl){
 var settingsText=String(moduleEl.getAttribute("data-settings")||"")+";"+String(moduleEl.getAttribute("data-req")||"");
@@ -260,6 +293,26 @@ if(location&&location.address){
 return "https://www.openstreetmap.org/search?query="+encodeURIComponent(location.address);
 }
 return null;
+}
+function detectMapRenderNode(moduleEl){
+if(!moduleEl)return null;
+var candidates=[
+  ".map-shell",
+  ".map-canvas",
+  ".osmap",
+  "[data-map-canvas]",
+  "[data-osmap]",
+  ".leaflet-container",
+  "canvas",
+  "iframe",
+  "#map",
+  ".map"
+];
+for(var i=0;i<candidates.length;i+=1){
+  var found=moduleEl.querySelector(candidates[i]);
+  if(found&&found!==moduleEl)return found;
+}
+return moduleEl;
 }
 function isSpacerElement(node){
 if(!node||node.nodeType!==1)return false;
@@ -309,7 +362,8 @@ return{gapBeforePx:gapBeforePx,spacerNodesRemoved:spacerNodesRemoved,normalizedW
 }
 function applyFallback(moduleEl,moduleId,location,correlationKey){
 if(!moduleEl)return{fallbackType:"placeholder",iframeUsed:false,addressUsed:location.address||null,coordinatesUsed:location.lat!==null&&location.lng!==null?{lat:location.lat,lng:location.lng}:null};
-var existing=moduleEl.querySelector(":scope > .gnr8-map-fallback");
+var renderNode=detectMapRenderNode(moduleEl);
+var existing=moduleEl.querySelector(".gnr8-map-fallback");
 if(existing&&existing.parentElement){existing.parentElement.removeChild(existing);}
 var host=document.createElement("div");
 host.className="gnr8-map-fallback";
@@ -322,8 +376,8 @@ host.style.position="relative";
 host.style.boxSizing="border-box";
 host.style.border="1px solid #d1d5db";
 host.style.background="#f8fafc";
-host.style.marginTop="12px";
-host.style.marginBottom="12px";
+host.style.marginTop="0";
+host.style.marginBottom="0";
 host.style.overflow="hidden";
 var iframeSrc=buildIframeSrc(location);
 var iframeUsed=false;
@@ -354,9 +408,19 @@ var addressLabel=location&&location.address?location.address:"Location unavailab
 placeholder.textContent="Map preview fallback active. "+addressLabel;
 host.appendChild(placeholder);
 }
+var replacedNodeTag=String(renderNode&&renderNode.tagName||moduleEl.tagName||"div").toLowerCase();
+var replacementStrategy="replace_node_contents";
+if(renderNode&&renderNode!==moduleEl){
+while(renderNode.firstChild){renderNode.removeChild(renderNode.firstChild);}
+renderNode.appendChild(host);
+}else{
+while(moduleEl.firstChild){moduleEl.removeChild(moduleEl.firstChild);}
 moduleEl.appendChild(host);
+replacementStrategy="replace_module_contents";
+}
+emit("PREVIEW_MAP_INPLACE_REPLACEMENT_APPLIED",{moduleId:moduleId,replacedNodeTag:replacedNodeTag,replacementStrategy:replacementStrategy,originalContainerPreserved:true,correlationKey:correlationKey});
 var spacing=normalizeMapSpacing(moduleEl,host,moduleId,correlationKey);
-return{fallbackType:iframeUsed?"iframe":"placeholder",iframeUsed:iframeUsed,addressUsed:location.address||null,coordinatesUsed:location.lat!==null&&location.lng!==null?{lat:location.lat,lng:location.lng}:null,spacing:spacing};
+return{fallbackType:iframeUsed?"iframe":"placeholder",iframeUsed:iframeUsed,addressUsed:location.address||null,coordinatesUsed:location.lat!==null&&location.lng!==null?{lat:location.lat,lng:location.lng}:null,spacing:spacing,replacedNodeTag:replacedNodeTag,replacementStrategy:replacementStrategy};
 }
 function init(){
 var detected=detectMapModule();
@@ -367,8 +431,9 @@ var providerType=/osmap/.test(toLower(detected.detectionReason))||/osmap/.test(t
 emit("PREVIEW_MAP_MODULE_DETECTED",{moduleId:moduleId,providerType:providerType,detectionReason:detected.detectionReason,correlationKey:correlationKey});
 var location=extractLocation(detected.el);
 emit("PREVIEW_MAP_LOCATION_EXTRACTED",{moduleId:moduleId,address:location.address||null,lat:location.lat,lng:location.lng,extractionSource:location.extractionSource,confidence:location.confidence,rejectedAddressCandidates:location.rejectedAddressCandidates||[],correlationKey:correlationKey});
+emit("PREVIEW_MAP_COORDINATES_EXTRACTED",{lat:location.lat,lng:location.lng,precisionSource:location.extractionSource,coordinatesConfidence:location.confidence,correlationKey:correlationKey});
 var fallback=applyFallback(detected.el,moduleId,location,correlationKey);
-emit("PREVIEW_MAP_FALLBACK_APPLIED",{moduleId:moduleId,fallbackType:fallback.fallbackType,addressUsed:fallback.addressUsed,coordinatesUsed:fallback.coordinatesUsed,iframeUsed:fallback.iframeUsed,gapBeforePx:fallback.spacing&&fallback.spacing.gapBeforePx||0,spacerNodesRemoved:fallback.spacing&&fallback.spacing.spacerNodesRemoved||0,normalizedWrapperCount:fallback.spacing&&fallback.spacing.normalizedWrapperCount||0,maxSpacingApplied:fallback.spacing&&fallback.spacing.maxSpacingApplied||48,correlationKey:correlationKey});
+emit("PREVIEW_MAP_FALLBACK_APPLIED",{moduleId:moduleId,fallbackType:fallback.fallbackType,addressUsed:fallback.addressUsed,coordinatesUsed:fallback.coordinatesUsed,iframeUsed:fallback.iframeUsed,gapBeforePx:fallback.spacing&&fallback.spacing.gapBeforePx||0,spacerNodesRemoved:fallback.spacing&&fallback.spacing.spacerNodesRemoved||0,normalizedWrapperCount:fallback.spacing&&fallback.spacing.normalizedWrapperCount||0,maxSpacingApplied:fallback.spacing&&fallback.spacing.maxSpacingApplied||48,replacedNodeTag:fallback.replacedNodeTag,replacementStrategy:fallback.replacementStrategy,correlationKey:correlationKey});
 window.addEventListener("error",function(event){
 var message=String(event&&event.message||"");
 var filename=String(event&&event.filename||"");
