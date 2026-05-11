@@ -1645,6 +1645,113 @@ test("preview route: transformed output guards fallback injection when runtime o
   }
 });
 
+test("preview route: transformed output includes targeted native discovery snapshot payload with computed style rect and icon evidence", async () => {
+  const restoreDeps = setPreviewRouteDependenciesForTest({
+    resolveAgencyIdForSiteVersion: async () => "agency_1",
+    requireAgencyActionContext: async () => ({ agencyId: "agency_1" }) as never,
+    renderSiteVersionPreview: async () =>
+      ({
+        html: `<!doctype html><html><body><div>roboplast discovery diagnostics</div></body></html>`,
+        siteId: "site_preview_1",
+        siteVersionId: "sv_preview_1",
+        source: "preview",
+        previewMode: "transformed",
+        previewRuntimeSummary: {
+          rendererContractAvailable: true,
+          finalSiteModelAvailable: true,
+          renderedWithFallback: false,
+          matchedPageId: null,
+          contentResolutionApplied: true,
+          resolvedContentCount: 0,
+          unresolvedContentCount: 0,
+          contentResolutionDegraded: false,
+          contentResolutionDiagnostics: [],
+          previewDiagnostics: [],
+          familyRenderUsed: false,
+          familyRenderMode: null,
+          familyRenderFamilyId: null,
+          familyRenderFallbackToPage: false,
+          familyRenderDiagnosticsCount: 0,
+        },
+        renderedCaptureUsed: false,
+        domSize: 100,
+        fallbackUsed: false,
+      }) as never,
+    canShowContentDebug: async () => false,
+  });
+  try {
+    const response = await GET(new Request("https://app.pasadenagenerator.com/api/gnr8/runtime/versions/sv_preview_1/preview?mode=transformed"), {
+      params: Promise.resolve({ siteVersionId: "sv_preview_1" }),
+    });
+    const html = await response.text();
+    assert.equal(response.status, 200);
+    assert.match(html, /PREVIEW_BACK_TO_TOP_NATIVE_DISCOVERY_SNAPSHOT/);
+    assert.match(html, /discoverLikelyNativeBackToTopCandidates/);
+    assert.match(html, /a,button,\[role='button'\],\[onclick\]/);
+    assert.match(html, /rows\.slice\(0,20\)/);
+    assert.match(html, /computedStyle:/);
+    assert.match(html, /boundingClientRect:/);
+    assert.match(html, /hasSvg:/);
+    assert.match(html, /svgPathCount:/);
+    assert.match(html, /hasIconClass:/);
+    assert.match(html, /isNearBottomRight:/);
+    assert.match(html, /looksCircular:/);
+    assert.match(html, /looksLikeUpControl:/);
+    assert.match(html, /isGnr8Fallback:/);
+  } finally {
+    restoreDeps();
+  }
+});
+
+test("preview route: transformed output suppresses fallback with native suppression event when native appears after fallback", async () => {
+  const restoreDeps = setPreviewRouteDependenciesForTest({
+    resolveAgencyIdForSiteVersion: async () => "agency_1",
+    requireAgencyActionContext: async () => ({ agencyId: "agency_1" }) as never,
+    renderSiteVersionPreview: async () =>
+      ({
+        html: `<!doctype html><html><body><div>native and fallback suppression diagnostic</div></body></html>`,
+        siteId: "site_preview_1",
+        siteVersionId: "sv_preview_1",
+        source: "preview",
+        previewMode: "transformed",
+        previewRuntimeSummary: {
+          rendererContractAvailable: true,
+          finalSiteModelAvailable: true,
+          renderedWithFallback: false,
+          matchedPageId: null,
+          contentResolutionApplied: true,
+          resolvedContentCount: 0,
+          unresolvedContentCount: 0,
+          contentResolutionDegraded: false,
+          contentResolutionDiagnostics: [],
+          previewDiagnostics: [],
+          familyRenderUsed: false,
+          familyRenderMode: null,
+          familyRenderFamilyId: null,
+          familyRenderFallbackToPage: false,
+          familyRenderDiagnosticsCount: 0,
+        },
+        renderedCaptureUsed: false,
+        domSize: 100,
+        fallbackUsed: false,
+      }) as never,
+    canShowContentDebug: async () => false,
+  });
+  try {
+    const response = await GET(new Request("https://app.pasadenagenerator.com/api/gnr8/runtime/versions/sv_preview_1/preview?mode=transformed"), {
+      params: Promise.resolve({ siteVersionId: "sv_preview_1" }),
+    });
+    const html = await response.text();
+    assert.equal(response.status, 200);
+    assert.match(html, /PREVIEW_BACK_TO_TOP_NATIVE_SUPPRESSED_FALLBACK/);
+    assert.match(html, /nativeCandidateSummary/);
+    assert.match(html, /fallbackSuppressedCount/);
+    assert.match(html, /finalButtonSource:"native_builder"/);
+  } finally {
+    restoreDeps();
+  }
+});
+
 test("preview route: transformed output includes deterministic back-to-top accent detection heuristics", async () => {
   const restoreDeps = setPreviewRouteDependenciesForTest({
     resolveAgencyIdForSiteVersion: async () => "agency_1",
