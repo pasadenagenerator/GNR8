@@ -995,8 +995,11 @@ test("preview route: transformed output injects back-to-top restore compatibilit
     assert.match(html, /PREVIEW_BACK_TO_TOP_ICON_NORMALIZED/);
     assert.match(html, /PREVIEW_BACK_TO_TOP_DEDUPED/);
     assert.match(html, /fallbackInjectionPrevented/);
+    assert.match(html, /nativeBuilderCandidateCount/);
+    assert.match(html, /fallbackSuppressedCount/);
+    assert.match(html, /finalVisibleBackToTopCount/);
     assert.match(html, /PREVIEW_BACK_TO_TOP_CANDIDATES_SNAPSHOT/);
-    assert.match(html, /finalButtonSource:"original"/);
+    assert.match(html, /finalButtonSource:"native_builder"/);
     assert.match(html, /passName:passName/);
     assert.match(html, /visibleCandidateCountAfter/);
     assert.match(html, /iconTypeDetected/);
@@ -1153,7 +1156,7 @@ test("preview route: transformed output dedupes existing original over duplicate
     assert.equal(response.status, 200);
     assert.match(html, /PREVIEW_BACK_TO_TOP_FALLBACK_SUPPRESSED/);
     assert.match(html, /PREVIEW_BACK_TO_TOP_DEDUPED/);
-    assert.match(html, /finalButtonSource:"original"/);
+    assert.match(html, /finalButtonSource:"native_builder"/);
     assert.match(html, /originalCandidateCount:originalCandidateCount/);
     assert.match(html, /fallbackCandidateCount:fallbackCandidateCount/);
     assert.match(html, /suppressedFallbackCount:suppressedFallbackCount/);
@@ -1219,7 +1222,7 @@ test("preview route: transformed output hides unusable original and falls back t
     assert.match(html, /function getPreferredOriginal\(candidates\)/);
     assert.match(html, /hasVerticalUpEvidence/);
     assert.match(html, /if\(clickable&&hasVerticalUpEvidence&&strongCount>=2\)return true;/);
-    assert.match(html, /detectRoboplastOriginalCandidate/);
+    assert.match(html, /detectNativeBuilderBackToTopCandidate/);
     assert.match(html, /finalButtonSource:"fallback"/);
     assert.match(html, /window\.scrollTo\(\{ top: 0, behavior: "smooth" \}\)/);
   } finally {
@@ -1326,10 +1329,15 @@ test("preview route: transformed output includes Roboplast-style floating circul
     });
     const html = await response.text();
     assert.equal(response.status, 200);
-    assert.match(html, /PREVIEW_BACK_TO_TOP_RUNTIME_ORIGINAL_DETECTED/);
-    assert.match(html, /detectRoboplastOriginalCandidate/);
-    assert.match(html, /ROBOPLAST_BLUE_CIRCLE_MIN_SIZE/);
-    assert.match(html, /ROBOPLAST_BLUE_MIN_B/);
+    assert.match(html, /PREVIEW_BACK_TO_TOP_NATIVE_BUILDER_DETECTED/);
+    assert.match(html, /detectNativeBuilderBackToTopCandidate/);
+    assert.match(html, /matchedSignals/);
+    assert.match(html, /delayedRuntimeDetected/);
+    assert.match(html, /tag:nativeBuilderDetection\.tag/);
+    assert.match(html, /id:nativeBuilderDetection\.id/);
+    assert.match(html, /className:nativeBuilderDetection\.className/);
+    assert.match(html, /BUILDER_NATIVE_CIRCLE_MIN_SIZE/);
+    assert.match(html, /BUILDER_NATIVE_MIN_B/);
     assert.match(html, /detectRuntimeBehaviorSignals/);
     assert.match(html, /runtimeBehaviorDetected/);
     assert.match(html, /iconEvidence/);
@@ -1358,6 +1366,56 @@ test("preview route: transformed output includes Roboplast-style floating circul
     assert.match(html, /bottomRightish/);
     assert.match(html, /smallButton/);
     assert.match(html, /position:style\?String\(style\.position\|\|""\):""/);
+    assert.doesNotMatch(html, /ROBOPLAST_RUNTIME_ORIGINAL/);
+  } finally {
+    restoreDeps();
+  }
+});
+
+test("preview route: transformed output detects same-builder onepage-up pattern without site identity coupling", async () => {
+  const restoreDeps = setPreviewRouteDependenciesForTest({
+    resolveAgencyIdForSiteVersion: async () => "agency_1",
+    requireAgencyActionContext: async () => ({ agencyId: "agency_1" }) as never,
+    renderSiteVersionPreview: async () =>
+      ({
+        html: `<!doctype html><html><body>
+<a id="onepage-scrollup" class="onepage-up scroll-up" title="Nazaj na vrh" href="#top"><i class="fa fa-chevron-up"></i></a>
+</body></html>`,
+        siteId: "site_preview_1",
+        siteVersionId: "sv_preview_1",
+        source: "preview",
+        previewMode: "transformed",
+        previewRuntimeSummary: {
+          rendererContractAvailable: true,
+          finalSiteModelAvailable: true,
+          renderedWithFallback: false,
+          matchedPageId: null,
+          contentResolutionApplied: true,
+          resolvedContentCount: 0,
+          unresolvedContentCount: 0,
+          contentResolutionDegraded: false,
+          contentResolutionDiagnostics: [],
+          previewDiagnostics: [],
+          familyRenderUsed: false,
+          familyRenderMode: null,
+          familyRenderFamilyId: null,
+          familyRenderFallbackToPage: false,
+          familyRenderDiagnosticsCount: 0,
+        },
+        renderedCaptureUsed: false,
+        domSize: 100,
+        fallbackUsed: false,
+      }) as never,
+    canShowContentDebug: async () => false,
+  });
+  try {
+    const response = await GET(new Request("https://app.pasadenagenerator.com/api/gnr8/runtime/versions/sv_preview_1/preview?mode=transformed"), {
+      params: Promise.resolve({ siteVersionId: "sv_preview_1" }),
+    });
+    const html = await response.text();
+    assert.equal(response.status, 200);
+    assert.match(html, /PREVIEW_BACK_TO_TOP_NATIVE_BUILDER_DETECTED/);
+    assert.match(html, /finalButtonSource:"native_builder"/);
   } finally {
     restoreDeps();
   }
@@ -1408,7 +1466,7 @@ test("preview route: transformed output excludes slider left arrow and preserves
     assert.equal(response.status, 200);
     assert.match(html, /PREVIEW_BACK_TO_TOP_FALSE_POSITIVE_EXCLUDED/);
     assert.match(html, /reasonCode:"SLIDER_OR_HORIZONTAL_NAV_ARROW"/);
-    assert.match(html, /finalButtonSource:"original"/);
+    assert.match(html, /finalButtonSource:"native_builder"/);
     assert.match(html, /excludedFalsePositiveCount/);
     assert.match(html, /hrefStrong=href==="#top"/);
     assert.match(html, /PREVIEW_BACK_TO_TOP_FINAL_VISUAL_PASS/);
@@ -1577,10 +1635,10 @@ test("preview route: transformed output guards fallback injection when runtime o
     });
     const html = await response.text();
     assert.equal(response.status, 200);
-    assert.match(html, /runtime_original_rescan/);
+    assert.match(html, /native_builder_rescan/);
     assert.match(html, /deduped_original_rescan/);
     assert.match(html, /fallbackInjectionPrevented:true/);
-    assert.match(html, /finalButtonSource:"original"/);
+    assert.match(html, /finalButtonSource:"native_builder"/);
     assert.match(html, /visibleCandidateCountAfter/);
   } finally {
     restoreDeps();
