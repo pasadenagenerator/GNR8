@@ -829,6 +829,16 @@ el.setAttribute("aria-hidden","true");
 el.setAttribute("data-gnr8-backtotop-hidden-duplicate","1");
 return true;
 }
+function suppressFallbackCandidate(el){
+if(!el||!el.style)return false;
+el.style.setProperty("display","none","important");
+el.style.setProperty("visibility","hidden","important");
+el.style.setProperty("pointer-events","none","important");
+el.style.setProperty("opacity","0","important");
+el.setAttribute("aria-hidden","true");
+el.setAttribute("data-gnr8-backtotop-hidden-duplicate","1");
+return true;
+}
 function dedupeCandidates(selected,passName){
 var candidates=findCandidateElements();
 var excludedFalsePositiveCount=0;
@@ -908,7 +918,7 @@ fallback.style.color="#fff";
 fallback.style.fontSize="20px";
 fallback.style.lineHeight="1";
 fallback.style.cursor="pointer";
-fallback.style.boxShadow="0 6px 16px rgba(0,0,0,0.18)";
+fallback.style.boxShadow="0 2px 6px rgba(0,0,0,0.16)";
 if(shouldShowWithScroll()){
 fallback.style.opacity="0";
 window.addEventListener("scroll",function(){
@@ -927,11 +937,28 @@ var candidates=findCandidateElements();
 var existing=getPreferredOriginal(candidates);
 var existingElementFound=!!existing;
 var fallbackCandidate=getFallbackCandidate(candidates);
+var originalCandidateCount=candidates.filter(function(node){return !isFallbackElement(node);}).length;
+var fallbackCandidateCount=candidates.filter(function(node){return isFallbackElement(node);}).length;
 var fallbackInjected=false;
 var detectionReason=existingElementFound?"EXISTING_MARKUP":"NO_ELEMENT";
 var detectedTheme=pickAccentColor(existing||fallbackCandidate||null);
 emit("PREVIEW_BACK_TO_TOP_DETECTED",{siteVersionId:payload.siteVersionId,detectionReason:detectionReason,existingElementFound:existingElementFound,fallbackInjected:fallbackInjected,correlationKey:correlationKey("detected")});
 if(existing){
+var suppressedFallbackCount=0;
+for(var s=0;s<candidates.length;s+=1){
+var candidate=candidates[s];
+if(isFallbackElement(candidate)&&suppressFallbackCandidate(candidate))suppressedFallbackCount+=1;
+}
+if(fallbackCandidateCount>0){
+emit("PREVIEW_BACK_TO_TOP_FALLBACK_SUPPRESSED",{
+siteVersionId:payload.siteVersionId,
+originalCandidateCount:originalCandidateCount,
+fallbackCandidateCount:fallbackCandidateCount,
+suppressedFallbackCount:suppressedFallbackCount,
+finalButtonSource:"original",
+correlationKey:correlationKey("fallback_suppressed_"+passName)
+});
+}
 ensureVisible(existing);
 if(!existing.getAttribute("aria-label"))existing.setAttribute("aria-label","Back to top");
 applyTheme(existing,detectedTheme,true,false);

@@ -922,6 +922,8 @@ test("preview route: transformed output injects back-to-top fallback and prevent
     assert.match(html, /data-gnr8-backtotop-hidden-duplicate/);
     assert.match(html, /fallback\.style\.color="#fff"/);
     assert.match(html, /fallback\.style\.background="#1f2937"/);
+    assert.match(html, /fallback\.style\.boxShadow="0 2px 6px rgba\(0,0,0,0.16\)"/);
+    assert.doesNotMatch(html, /fallback\.style\.boxShadow="0 6px 16px rgba\(0,0,0,0.18\)"/);
     assert.match(html, /applyTheme\(fallback,detectedTheme,false,true\)/);
     assert.match(html, /normalizeIconForeground\(fallback,false,true\)/);
     assert.match(html, /window\.addEventListener\("load",function\(\)\{runDedupePass\("window_load"\);\}\)/);
@@ -978,9 +980,18 @@ test("preview route: transformed output dedupes existing original over duplicate
     });
     const html = await response.text();
     assert.equal(response.status, 200);
+    assert.match(html, /PREVIEW_BACK_TO_TOP_FALLBACK_SUPPRESSED/);
     assert.match(html, /PREVIEW_BACK_TO_TOP_DEDUPED/);
     assert.match(html, /finalButtonSource:"original"/);
+    assert.match(html, /originalCandidateCount:originalCandidateCount/);
+    assert.match(html, /fallbackCandidateCount:fallbackCandidateCount/);
+    assert.match(html, /suppressedFallbackCount:suppressedFallbackCount/);
     assert.match(html, /hideDuplicate\(node\)/);
+    assert.match(html, /suppressFallbackCandidate\(candidate\)/);
+    assert.match(html, /style\.setProperty\("display","none","important"\)/);
+    assert.match(html, /style\.setProperty\("visibility","hidden","important"\)/);
+    assert.match(html, /style\.setProperty\("pointer-events","none","important"\)/);
+    assert.match(html, /if\(isVisibleCandidate\(candidates\[v\]\)\)visibleAfter\+=1;/);
     assert.match(html, /candidateCount/);
     assert.match(html, /originalCandidateCount/);
     assert.match(html, /fallbackCandidateCount/);
