@@ -87,6 +87,29 @@ function resolveRequestHost(headers: Headers): string {
   );
 }
 
+function classifyDynamicAssetMissReason(input: {
+  url: string;
+  normalizedPath: string | null;
+  routeDiagnostic: "PREVIEW_ASSET_ROUTE_FILE_NOT_FOUND" | "PREVIEW_ASSET_ROUTE_PATH_MISMATCH";
+}): "FILE_NOT_FOUND" | "PATH_MISMATCH" | "QUERYSTRING_VARIANT" | "NON_IMPORTED_DYNAMIC_ASSET" | "UNSUPPORTED_RUNTIME_GENERATED_ASSET" {
+  const url = new URL(input.url);
+  if (url.searchParams.size > 0) return "QUERYSTRING_VARIANT";
+  const path = (input.normalizedPath ?? "").toLowerCase();
+  if (
+    path.includes("sw-cleanup.js") ||
+    path.includes("service-worker") ||
+    path.includes("workbox") ||
+    path.includes("manifest.json") ||
+    /runtime\.[a-f0-9]{6,}\.(js|css)$/i.test(path)
+  ) {
+    return "UNSUPPORTED_RUNTIME_GENERATED_ASSET";
+  }
+  if (path.startsWith("uploads/") || path.startsWith("assets/")) {
+    return input.routeDiagnostic === "PREVIEW_ASSET_ROUTE_PATH_MISMATCH" ? "PATH_MISMATCH" : "FILE_NOT_FOUND";
+  }
+  return "NON_IMPORTED_DYNAMIC_ASSET";
+}
+
 export function createPreviewAssetsRouteHandlers(overrides: Partial<PreviewAssetRouteDependencies> = {}) {
   const deps = { ...defaultDependencies, ...overrides };
 
@@ -223,6 +246,11 @@ export function createPreviewAssetsRouteHandlers(overrides: Partial<PreviewAsset
             headers: {
               "content-type": "text/plain; charset=utf-8",
               "x-gnr8-preview-asset-diagnostic": "PREVIEW_ASSET_ROUTE_PATH_MISMATCH",
+              "x-gnr8-preview-asset-miss-reason": classifyDynamicAssetMissReason({
+                url: req.url,
+                normalizedPath,
+                routeDiagnostic: "PREVIEW_ASSET_ROUTE_PATH_MISMATCH",
+              }),
             },
           });
         }
@@ -332,6 +360,11 @@ export function createPreviewAssetsRouteHandlers(overrides: Partial<PreviewAsset
             headers: {
               "content-type": "text/plain; charset=utf-8",
               "x-gnr8-preview-asset-diagnostic": "PREVIEW_ASSET_ROUTE_PATH_MISMATCH",
+              "x-gnr8-preview-asset-miss-reason": classifyDynamicAssetMissReason({
+                url: req.url,
+                normalizedPath,
+                routeDiagnostic: "PREVIEW_ASSET_ROUTE_PATH_MISMATCH",
+              }),
             },
           });
         }
@@ -352,6 +385,11 @@ export function createPreviewAssetsRouteHandlers(overrides: Partial<PreviewAsset
             headers: {
               "content-type": "text/plain; charset=utf-8",
               "x-gnr8-preview-asset-diagnostic": "PREVIEW_ASSET_ROUTE_FILE_NOT_FOUND",
+              "x-gnr8-preview-asset-miss-reason": classifyDynamicAssetMissReason({
+                url: req.url,
+                normalizedPath,
+                routeDiagnostic: "PREVIEW_ASSET_ROUTE_FILE_NOT_FOUND",
+              }),
             },
           });
         }

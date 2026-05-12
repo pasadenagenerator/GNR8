@@ -195,6 +195,13 @@ test("preview route: transformed final output normalizes double-prefixed preview
     assert.match(html, /pageCount/);
     assert.match(html, /pageImageCounts/);
     assert.match(html, /gridTemplateColumns/);
+    assert.match(html, /PREVIEW_SERVICE_WORKER_BLOCKED/);
+    assert.match(html, /PREVIEW_ANALYTICS_BLOCKED/);
+    assert.match(html, /SERVICE_WORKER_REQUEST/);
+    assert.match(html, /EXTERNAL_ANALYTICS_REQUEST/);
+    assert.match(html, /LEGACY_BACKEND_REQUEST/);
+    assert.match(html, /DYNAMIC_ASSET_REQUEST/);
+    assert.match(html, /PREFETCH_REQUEST/);
   } finally {
     restoreDeps();
   }

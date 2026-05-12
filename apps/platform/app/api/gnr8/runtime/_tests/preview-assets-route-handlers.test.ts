@@ -447,6 +447,7 @@ test("preview assets route returns deterministic 404 for missing upload asset", 
   assert.equal(response.status, 404);
   assert.equal(await response.text(), "not found");
   assert.equal(response.headers.get("x-gnr8-preview-asset-diagnostic"), "PREVIEW_ASSET_ROUTE_FILE_NOT_FOUND");
+  assert.equal(response.headers.get("x-gnr8-preview-asset-miss-reason"), "FILE_NOT_FOUND");
 });
 
 test("preview assets route returns DB lookup diagnostic on asset query failure", async () => {
@@ -771,6 +772,7 @@ test("preview assets route returns diagnostic 404 when file_map entry exists but
 
     assert.equal(response.status, 404);
     assert.equal(response.headers.get("x-gnr8-preview-asset-diagnostic"), "PREVIEW_ASSET_ROUTE_PATH_MISMATCH");
+    assert.equal(response.headers.get("x-gnr8-preview-asset-miss-reason"), "PATH_MISMATCH");
     assert.equal(loggedEvents.some((entry) => entry.includes("RAW_IMPORT_FILE_MAP_ENTRY_FOUND_WITHOUT_FILE_ROW")), true);
   } finally {
     console.warn = originalWarn;

@@ -306,6 +306,60 @@ function rewriteRawTemplateAssetReferences(input: {
   const assetRoot = `/api/gnr8/runtime/preview-assets/${encodeURIComponent(input.siteId)}/${encodeURIComponent(input.siteVersionId)}`
   const entryDir = path.posix.dirname(input.entryHtmlPath)
   const baseDir = entryDir === '.' ? '' : entryDir
+  const correlationKey = `${input.siteId}:${input.siteVersionId}:${input.entryHtmlPath}`
+  const cssUrlPattern = /url\(\s*(['"]?)([^"')]+)\1\s*\)/gi
+
+  const emitCssAssetRewriteApplied = (originalUrl: string, rewrittenUrl: string, sourceType: 'inline_style' | 'style_block' | 'stylesheet' | 'script_detected') => {
+    console.info('[preview-runtime] PREVIEW_CSS_ASSET_REWRITE_APPLIED', {
+      originalUrl,
+      rewrittenUrl,
+      sourceType,
+      siteId: input.siteId,
+      siteVersionId: input.siteVersionId,
+      correlationKey,
+    })
+  }
+
+  const emitCssAssetRewriteSkipped = (originalUrl: string, reasonCode: string, sourceType: 'inline_style' | 'style_block' | 'stylesheet' | 'script_detected') => {
+    console.info('[preview-runtime] PREVIEW_CSS_ASSET_REWRITE_SKIPPED', {
+      originalUrl,
+      reasonCode,
+      sourceType,
+      siteId: input.siteId,
+      siteVersionId: input.siteVersionId,
+      correlationKey,
+    })
+  }
+
+  const rewriteCssUrlTokens = (cssValue: string, sourceType: 'inline_style' | 'style_block' | 'stylesheet' | 'script_detected'): string =>
+    String(cssValue ?? '').replace(cssUrlPattern, (full, quote: string, rawValue: string) => {
+      const originalUrl = String(rawValue ?? '').trim()
+      if (!originalUrl) return full
+      const lower = originalUrl.toLowerCase()
+      if (
+        !lower.startsWith('/uploads/') ||
+        lower.startsWith('/api/gnr8/runtime/preview-assets/')
+      ) {
+        if (lower.startsWith('/api/gnr8/runtime/preview-assets/')) {
+          emitCssAssetRewriteSkipped(originalUrl, 'already_rewritten', sourceType)
+        }
+        return full
+      }
+      const [pathname, suffix = ''] = originalUrl.split(/(?=[?#])/)
+      const normalized = normalizeTemplateAssetPath(pathname)
+      if (!normalized) {
+        emitCssAssetRewriteSkipped(originalUrl, 'invalid_path', sourceType)
+        return full
+      }
+      if (input.fileMapPaths && !input.fileMapPaths.has(normalized)) {
+        emitCssAssetRewriteSkipped(originalUrl, 'file_map_path_not_found', sourceType)
+        return full
+      }
+      const rewrittenUrl = `${assetRoot}/${normalized}${suffix}`
+      emitCssAssetRewriteApplied(originalUrl, rewrittenUrl, sourceType)
+      const safeQuote = quote || ''
+      return `url(${safeQuote}${rewrittenUrl}${safeQuote})`
+    })
 
   const rewriteReference = (rawRef: string): string => {
     const ref = String(rawRef ?? '').trim()
@@ -323,8 +377,9 @@ function rewriteRawTemplateAssetReferences(input: {
       return ref
     }
     if (ref.startsWith('/')) {
-      const normalized = normalizeTemplateAssetPath(ref)
-      return normalized ? `${assetRoot}/${normalized}` : ref
+      const [pathname, suffix = ''] = ref.split(/(?=[?#])/)
+      const normalized = normalizeTemplateAssetPath(pathname)
+      return normalized ? `${assetRoot}/${normalized}${suffix}` : ref
     }
     const [pathname, queryHash = ''] = ref.split(/(?=[?#])/)
     const joined = path.posix.join('/', baseDir, pathname)
@@ -361,6 +416,20 @@ function rewriteRawTemplateAssetReferences(input: {
       /\bsrcset\s*=\s*(["'])(.*?)\1/gi,
       (_full, quote: string, value: string) => `srcset=${quote}${rewriteSrcset(value)}${quote}`,
     )
+    .replace(/\bstyle\s*=\s*(["'])([\s\S]*?)\1/gi, (_full, quote: string, value: string) => {
+      const rewritten = rewriteCssUrlTokens(value, 'inline_style')
+      return `style=${quote}${rewritten}${quote}`
+    })
+    .replace(/<style\b([^>]*)>([\s\S]*?)<\/style>/gi, (_full, attrs: string, css: string) => {
+      const rewritten = rewriteCssUrlTokens(css, 'style_block')
+      return `<style${attrs}>${rewritten}</style>`
+    })
+    .replace(/<script\b[^>]*>([\s\S]*?)<\/script>/gi, (full, scriptBody: string) => {
+      if (/\/uploads\/[^"'\s<)]+/i.test(String(scriptBody ?? ''))) {
+        emitCssAssetRewriteSkipped('/uploads/*', 'script_generated_css_detected', 'script_detected')
+      }
+      return full
+    })
 }
 
 function resolveRenderedCapturePreviewTruth(importSummary: unknown): RenderedCapturePreviewTruth {

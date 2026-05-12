@@ -225,6 +225,86 @@ test('raw template preview rewrites persisted local stylesheet links to preview-
   )
 })
 
+test('raw template preview rewrites root-relative uploads URLs in inline style and style blocks', () => {
+  const html = [
+    '<!doctype html>',
+    '<html>',
+    '<head><style>.hero{background-image:url("/uploads/QBSeVQys/overlay.png");}</style></head>',
+    "<body><section style=\"background-image: url('/uploads/KcGdxACT/hero-01.jpg')\"></section></body>",
+    '</html>',
+  ].join('')
+  const rewritten = __unifiedRenderPreviewTestUtils.rewriteRawTemplateAssetReferences({
+    html,
+    siteId: 'site-maver',
+    siteVersionId: 'sv-maver',
+    entryHtmlPath: 'index.html',
+    fileMapPaths: new Set(['uploads/QBSeVQys/overlay.png', 'uploads/KcGdxACT/hero-01.jpg']),
+  })
+  assert.equal(
+    rewritten.includes('/api/gnr8/runtime/preview-assets/site-maver/sv-maver/uploads/QBSeVQys/overlay.png'),
+    true,
+  )
+  assert.equal(
+    rewritten.includes('/api/gnr8/runtime/preview-assets/site-maver/sv-maver/uploads/KcGdxACT/hero-01.jpg'),
+    true,
+  )
+})
+
+test('raw template preview does not rewrite missing file-map uploads CSS URL and emits skipped diagnostic', () => {
+  const logs: Array<{ code: string; payload: Record<string, unknown> }> = []
+  const originalInfo = console.info
+  console.info = ((message?: unknown, payload?: unknown) => {
+    if (String(message ?? '').includes('PREVIEW_CSS_ASSET_REWRITE_SKIPPED')) {
+      logs.push({
+        code: String(message),
+        payload: (payload && typeof payload === 'object' ? (payload as Record<string, unknown>) : {}) ?? {},
+      })
+    }
+  }) as typeof console.info
+  try {
+    const html = '<!doctype html><html><head><style>.hero{background-image:url(/uploads/missing.png)}</style></head><body></body></html>'
+    const rewritten = __unifiedRenderPreviewTestUtils.rewriteRawTemplateAssetReferences({
+      html,
+      siteId: 'site-missing',
+      siteVersionId: 'sv-missing',
+      entryHtmlPath: 'index.html',
+      fileMapPaths: new Set(['uploads/exists.png']),
+    })
+    assert.equal(rewritten.includes('/api/gnr8/runtime/preview-assets/site-missing/sv-missing/uploads/missing.png'), false)
+    assert.equal(rewritten.includes('url(/uploads/missing.png)'), true)
+  } finally {
+    console.info = originalInfo
+  }
+  assert.equal(logs.length > 0, true)
+  assert.equal(logs.some((entry) => entry.payload.reasonCode === 'file_map_path_not_found'), true)
+  assert.equal(logs.some((entry) => entry.payload.sourceType === 'style_block'), true)
+})
+
+test('raw template preview rewrites Maver-like dual uploads hero background references', () => {
+  const html = [
+    '<!doctype html>',
+    '<html>',
+    '<head><style>.hero::before{background:url("/uploads/QBSeVQys/overlay.png#v1") center/cover no-repeat;}</style></head>',
+    '<body><section class="hero" style="background-image:url(/uploads/KcGdxACT/hero-01.jpg?cache=1)"></section></body>',
+    '</html>',
+  ].join('')
+  const rewritten = __unifiedRenderPreviewTestUtils.rewriteRawTemplateAssetReferences({
+    html,
+    siteId: 'site-maver-2',
+    siteVersionId: 'sv-maver-2',
+    entryHtmlPath: 'index.html',
+    fileMapPaths: new Set(['uploads/QBSeVQys/overlay.png', 'uploads/KcGdxACT/hero-01.jpg']),
+  })
+  assert.equal(
+    rewritten.includes('/api/gnr8/runtime/preview-assets/site-maver-2/sv-maver-2/uploads/QBSeVQys/overlay.png#v1'),
+    true,
+  )
+  assert.equal(
+    rewritten.includes('/api/gnr8/runtime/preview-assets/site-maver-2/sv-maver-2/uploads/KcGdxACT/hero-01.jpg?cache=1'),
+    true,
+  )
+})
+
 test('preview override selection merges by slot with draft precedence and published fallback', () => {
   const selected = __unifiedRenderPreviewTestUtils.selectPreviewOverridesByVersion({
     siteVersionId: 'sv-2',

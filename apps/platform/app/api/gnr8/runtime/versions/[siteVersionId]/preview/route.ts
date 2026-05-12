@@ -549,6 +549,137 @@ emit("PREVIEW_MAP_RUNTIME_INIT_FAILED",{moduleId:"unknown-map",reasonCode:"OSMAP
   return `${input.html}${script}`;
 }
 
+function injectPreviewRequestHardeningDiagnostics(input: { html: string; siteVersionId: string }): string {
+  const payload = JSON.stringify({
+    siteVersionId: input.siteVersionId,
+  });
+  const script = `<script>(function(){
+var payload=${payload};
+var correlationSeed=String(Date.now());
+function correlationKey(url){return [payload.siteVersionId,correlationSeed,String(url||"")].join(":");}
+function emit(code,details){
+try{console.info("[gnr8.runtime.preview] "+code,Object.assign({siteVersionId:payload.siteVersionId},details||{}));}catch(_err){}
+}
+function toUrl(value){
+try{return new URL(String(value||""),window.location.href);}catch(_err){return null;}
+}
+function classify(urlObj,context){
+var path=urlObj?String(urlObj.pathname||""):"";
+var host=urlObj?String(urlObj.host||""):"";
+var sameOrigin=!!urlObj&&host===window.location.host;
+var reqType="DYNAMIC_ASSET_REQUEST";
+if(/(^|\\/)sw(?:-cleanup)?\\.js$/i.test(path)||/service-?worker/i.test(path)){reqType="SERVICE_WORKER_REQUEST";}
+else if(/google-analytics\\.com|googletagmanager\\.com|doubleclick\\.net|facebook\\.com\\/tr|connect\\.facebook\\.net|hotjar\\.com|clarity\\.ms|segment\\.io|mixpanel\\.com|amplitude\\.com|plausible\\.io|posthog\\.com/i.test(host+(urlObj?urlObj.href:""))){reqType="EXTERNAL_ANALYTICS_REQUEST";}
+else if(/\\/api\\.php\\//i.test(path)||/wp-admin\\/admin-ajax\\.php/i.test(path)||/\\/components\\/com_.*\\/ajax/i.test(path)||/\\/ajax\\//i.test(path)||/\\/utils\\/lang/i.test(path)){reqType="LEGACY_BACKEND_REQUEST";}
+else if((context&&context.prefetch===true)||/\\b(prefetch|prerender|quicklink)\\b/i.test(String(context&&context.urlHint||""))){reqType="PREFETCH_REQUEST";}
+return {requestType:reqType,sameOrigin:sameOrigin};
+}
+function emitRequestDiagnostic(urlObj,requestType,sameOrigin,handled,ignored){
+var urlValue=urlObj?urlObj.href:String(urlObj||"");
+emit(requestType,{url:urlValue,requestType:requestType,sameOrigin:sameOrigin,handled:handled,ignored:ignored,correlationKey:correlationKey(urlValue)});
+}
+function responseForLegacy(urlObj){
+var path=String(urlObj&&urlObj.pathname||"");
+if(/sw-cleanup\\.js$/i.test(path)){return new Response("self.addEventListener('install',function(){});",{status:200,headers:{"content-type":"application/javascript; charset=utf-8"}});}
+if(/\\/utils\\/lang/i.test(path)){return new Response(JSON.stringify({ok:true,lang:null,reason:"preview_noop"}),{status:200,headers:{"content-type":"application/json; charset=utf-8"}});}
+if(/\\.php($|\\/)/i.test(path)||/admin-ajax\\.php/i.test(path)||/\\/ajax\\//i.test(path)){return new Response(JSON.stringify({ok:true,reason:"preview_legacy_backend_noop"}),{status:200,headers:{"content-type":"application/json; charset=utf-8"}});}
+return new Response("",{status:204,headers:{"content-type":"text/plain; charset=utf-8"}});
+}
+function classifyMissingAssetReason(urlObj,response){
+var diagnostic=response&&response.headers?String(response.headers.get("x-gnr8-preview-asset-diagnostic")||""):"";
+if(diagnostic!=="PREVIEW_ASSET_ROUTE_FILE_NOT_FOUND"&&diagnostic!=="PREVIEW_ASSET_ROUTE_PATH_MISMATCH"){return null;}
+var path=String(urlObj&&urlObj.pathname||"");
+var query=String(urlObj&&urlObj.search||"");
+if(query&&query.length>1){return "QUERYSTRING_VARIANT";}
+if(/\\/uploads\\//i.test(path)||/\\/assets\\//i.test(path)){return diagnostic==="PREVIEW_ASSET_ROUTE_PATH_MISMATCH"?"PATH_MISMATCH":"FILE_NOT_FOUND";}
+if(/sw-cleanup\\.js|service-?worker|manifest\\.json|workbox|runtime\\.[a-f0-9]{6,}\\.(js|css)/i.test(path)){return "UNSUPPORTED_RUNTIME_GENERATED_ASSET";}
+return "NON_IMPORTED_DYNAMIC_ASSET";
+}
+try{
+if(navigator&&navigator.serviceWorker&&typeof navigator.serviceWorker.register==="function"){
+var originalRegister=navigator.serviceWorker.register.bind(navigator.serviceWorker);
+navigator.serviceWorker.register=function(scriptURL){
+var urlObj=toUrl(scriptURL);
+emit("PREVIEW_SERVICE_WORKER_BLOCKED",{url:urlObj?urlObj.href:String(scriptURL||""),requestType:"SERVICE_WORKER_REQUEST",sameOrigin:!!(urlObj&&urlObj.host===window.location.host),handled:true,ignored:false,correlationKey:correlationKey(urlObj?urlObj.href:String(scriptURL||""))});
+emitRequestDiagnostic(urlObj,"SERVICE_WORKER_REQUEST",!!(urlObj&&urlObj.host===window.location.host),true,false);
+return Promise.resolve({scope:"/",active:null,installing:null,waiting:null,update:function(){return Promise.resolve();},unregister:function(){return Promise.resolve(true);}});
+};
+void originalRegister;
+}
+}catch(_err){}
+if(typeof window.fetch==="function"){
+var originalFetch=window.fetch.bind(window);
+window.fetch=function(input,init){
+var urlObj=toUrl(typeof input==="string"?input:(input&&input.url?input.url:input));
+var urlHint=(init&&init.headers&&typeof init.headers.get==="function"?String(init.headers.get("purpose")||""):"")+" "+String(urlObj?urlObj.href:"");
+var req=classify(urlObj,{prefetch:(init&&init.mode==="no-cors")||/\\bprefetch\\b/i.test(urlHint),urlHint:urlHint});
+if(req.requestType==="SERVICE_WORKER_REQUEST"||req.requestType==="LEGACY_BACKEND_REQUEST"){
+emitRequestDiagnostic(urlObj,req.requestType,req.sameOrigin,true,false);
+if(req.requestType==="SERVICE_WORKER_REQUEST"){emit("PREVIEW_SERVICE_WORKER_BLOCKED",{url:urlObj?urlObj.href:null,requestType:req.requestType,sameOrigin:req.sameOrigin,handled:true,ignored:false,correlationKey:correlationKey(urlObj?urlObj.href:"")});}
+return Promise.resolve(responseForLegacy(urlObj));
+}
+if(req.requestType==="EXTERNAL_ANALYTICS_REQUEST"){
+emit("PREVIEW_ANALYTICS_BLOCKED",{url:urlObj?urlObj.href:null,requestType:req.requestType,sameOrigin:req.sameOrigin,handled:true,ignored:false,correlationKey:correlationKey(urlObj?urlObj.href:"")});
+emitRequestDiagnostic(urlObj,req.requestType,req.sameOrigin,true,false);
+return Promise.resolve(new Response("",{status:204,headers:{"content-type":"text/plain; charset=utf-8"}}));
+}
+if(req.requestType==="PREFETCH_REQUEST"){
+emitRequestDiagnostic(urlObj,req.requestType,req.sameOrigin,false,true);
+}
+return originalFetch(input,init).then(function(resp){
+if(urlObj&&/\\/api\\/gnr8\\/runtime\\/preview-assets\\//.test(String(urlObj.pathname||""))&&(resp.status===404||resp.status===410)){
+var reason=classifyMissingAssetReason(urlObj,resp);
+emit("DYNAMIC_ASSET_REQUEST",{url:urlObj.href,requestType:"DYNAMIC_ASSET_REQUEST",sameOrigin:req.sameOrigin,handled:false,ignored:false,correlationKey:correlationKey(urlObj.href),reason:reason});
+}
+return resp;
+});
+};
+}
+if(navigator&&typeof navigator.sendBeacon==="function"){
+var originalBeacon=navigator.sendBeacon.bind(navigator);
+navigator.sendBeacon=function(url,data){
+var urlObj=toUrl(url);
+var req=classify(urlObj,{prefetch:false,urlHint:String(urlObj?urlObj.href:"")});
+if(req.requestType==="EXTERNAL_ANALYTICS_REQUEST"){
+emit("PREVIEW_ANALYTICS_BLOCKED",{url:urlObj?urlObj.href:String(url||""),requestType:req.requestType,sameOrigin:req.sameOrigin,handled:true,ignored:false,correlationKey:correlationKey(urlObj?urlObj.href:String(url||""))});
+emitRequestDiagnostic(urlObj,req.requestType,req.sameOrigin,true,false);
+return true;
+}
+if(req.requestType==="PREFETCH_REQUEST"){emitRequestDiagnostic(urlObj,req.requestType,req.sameOrigin,false,true);}
+return originalBeacon(url,data);
+};
+}
+if(typeof window.XMLHttpRequest==="function"){
+var OriginalXHR=window.XMLHttpRequest;
+var openRef=OriginalXHR.prototype.open;
+var sendRef=OriginalXHR.prototype.send;
+OriginalXHR.prototype.open=function(method,url){
+this.__gnr8PreviewUrl=url;
+this.__gnr8PreviewMethod=method;
+return openRef.apply(this,arguments);
+};
+OriginalXHR.prototype.send=function(body){
+var urlObj=toUrl(this.__gnr8PreviewUrl);
+var req=classify(urlObj,{prefetch:false,urlHint:String(urlObj?urlObj.href:"")});
+if(req.requestType==="SERVICE_WORKER_REQUEST"||req.requestType==="LEGACY_BACKEND_REQUEST"||req.requestType==="EXTERNAL_ANALYTICS_REQUEST"){
+if(req.requestType==="EXTERNAL_ANALYTICS_REQUEST"){emit("PREVIEW_ANALYTICS_BLOCKED",{url:urlObj?urlObj.href:null,requestType:req.requestType,sameOrigin:req.sameOrigin,handled:true,ignored:false,correlationKey:correlationKey(urlObj?urlObj.href:"")});}
+if(req.requestType==="SERVICE_WORKER_REQUEST"){emit("PREVIEW_SERVICE_WORKER_BLOCKED",{url:urlObj?urlObj.href:null,requestType:req.requestType,sameOrigin:req.sameOrigin,handled:true,ignored:false,correlationKey:correlationKey(urlObj?urlObj.href:"")});}
+emitRequestDiagnostic(urlObj,req.requestType,req.sameOrigin,true,false);
+try{this.readyState=4;this.status=204;this.responseText="";if(typeof this.onreadystatechange==="function"){this.onreadystatechange();}if(typeof this.onload==="function"){this.onload();}}catch(_err){}
+return;
+}
+if(req.requestType==="PREFETCH_REQUEST"){emitRequestDiagnostic(urlObj,req.requestType,req.sameOrigin,false,true);}
+return sendRef.call(this,body);
+};
+}
+}catch(err){emit("PREVIEW_RUNTIME_MODULE_INIT_BLOCKED",{blockerReason:"REQUEST_HARDENING_INIT_FAILED",error:String(err&&err.message?err.message:err),correlationKey:[payload.siteVersionId,"request-hardening","inject-error"].join(":")});}
+})();</script>`;
+  if (input.html.includes("</body>")) {
+    return input.html.replace("</body>", `${script}</body>`);
+  }
+  return `${input.html}${script}`;
+}
+
 function injectBackToTopRuntimeCompatibility(input: { html: string; siteVersionId: string }): string {
   const payload = JSON.stringify({
     siteVersionId: input.siteVersionId,
@@ -683,12 +814,18 @@ export async function GET(req: Request, ctx: { params: Promise<{ siteVersionId: 
           siteVersionId: preview.siteVersionId,
         })
       : htmlWithGalleryRuntimeDiagnostic;
-    const htmlWithBackToTopCompatibility = runtimeIsolationEnabled
-      ? injectBackToTopRuntimeCompatibility({
+    const htmlWithPreviewRequestHardening = runtimeIsolationEnabled
+      ? injectPreviewRequestHardeningDiagnostics({
           html: htmlWithMapRuntimeFallback,
           siteVersionId: preview.siteVersionId,
         })
       : htmlWithMapRuntimeFallback;
+    const htmlWithBackToTopCompatibility = runtimeIsolationEnabled
+      ? injectBackToTopRuntimeCompatibility({
+          html: htmlWithPreviewRequestHardening,
+          siteVersionId: preview.siteVersionId,
+        })
+      : htmlWithPreviewRequestHardening;
     const shouldNormalizeFinalOutput = mode === "transformed";
     const normalizedOutput = shouldNormalizeFinalOutput
       ? normalizeTransformedPreviewOutputDoublePrefixedUrls({
