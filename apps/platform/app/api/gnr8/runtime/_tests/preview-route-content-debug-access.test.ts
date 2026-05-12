@@ -994,20 +994,19 @@ test("preview route: transformed output restores native back-to-top with native-
     assert.match(html, /PREVIEW_BACK_TO_TOP_NATIVE_ONLY_STATUS/);
     assert.match(shim, /nativeSelector='a\.scrollIcon\[data-req="scrollTop"\],a\.scrollIcon\.bottom_right\[href="#"\],a\[data-req="scrollTop"\]'/);
     assert.match(shim, /nativeFound:!!nativeEl/);
-    assert.match(shim, /nativeRestored:nativeRestored/);
-    assert.match(shim, /glyphPresent:glyphPresent/);
+    assert.match(shim, /nativeClickWired:nativeClickWired/);
+    assert.match(shim, /nativeVisualUntouched:true/);
     assert.match(shim, /fallbackAllowed:false/);
-    assert.match(shim, /observerUsed:false/);
-    assert.match(shim, /timerUsed:false/);
+    assert.match(shim, /glyphInjected:false/);
+    assert.match(shim, /visualBoxNormalized:false/);
     assert.match(shim, /siteVersionId:payload\.siteVersionId/);
     assert.match(shim, /correlationKey:correlationKey/);
-    assert.match(shim, /data-gnr8-native-scrollicon-glyph/);
     assert.match(shim, /window\.scrollTo\(\{top:0,behavior:"smooth"\}\)/);
-    assert.doesNotMatch(shim, /runNativeOnlyPass/);
-    assert.doesNotMatch(shim, /MutationObserver/);
-    assert.doesNotMatch(shim, /setTimeout\(/);
-    assert.doesNotMatch(shim, /setInterval\(/);
-    assert.doesNotMatch(shim, /requestAnimationFrame\(/);
+    assert.doesNotMatch(shim, /gnr8-native-scrollicon-glyph/);
+    assert.doesNotMatch(shim, /width:44px/);
+    assert.doesNotMatch(shim, /height:44px/);
+    assert.doesNotMatch(shim, /border-radius:9999px/);
+    assert.doesNotMatch(shim, /PREVIEW_BACK_TO_TOP_NATIVE_ICON_RENDERED/);
     assert.doesNotMatch(shim, new RegExp(["gnr8", "preview", "backtotop", "fallback"].join("-")));
   } finally {
     restoreDeps();
@@ -1026,19 +1025,18 @@ test("preview route: source uses static native restore only without observer, ti
   const backToTopBlock = fnMatch?.[0] ?? "";
   assert.match(backToTopBlock, /PREVIEW_BACK_TO_TOP_NATIVE_ONLY_STATUS/);
   assert.match(backToTopBlock, /nativeFound:\!\!nativeEl/);
-  assert.match(backToTopBlock, /nativeRestored:nativeRestored/);
-  assert.match(backToTopBlock, /glyphPresent:glyphPresent/);
+  assert.match(backToTopBlock, /nativeClickWired:nativeClickWired/);
+  assert.match(backToTopBlock, /nativeVisualUntouched:true/);
   assert.match(backToTopBlock, /fallbackAllowed:false/);
-  assert.match(backToTopBlock, /observerUsed:false/);
-  assert.match(backToTopBlock, /timerUsed:false/);
-  assert.doesNotMatch(backToTopBlock, /runNativeOnlyPass/);
-  assert.doesNotMatch(backToTopBlock, /MutationObserver/);
-  assert.doesNotMatch(backToTopBlock, /setTimeout\(/);
-  assert.doesNotMatch(backToTopBlock, /setInterval\(/);
-  assert.doesNotMatch(backToTopBlock, /requestAnimationFrame\(/);
+  assert.match(backToTopBlock, /glyphInjected:false/);
+  assert.match(backToTopBlock, /visualBoxNormalized:false/);
   assert.doesNotMatch(backToTopBlock, /createElement\("button"\)/);
+  assert.doesNotMatch(backToTopBlock, /gnr8-native-scrollicon-glyph/);
+  assert.doesNotMatch(backToTopBlock, /width:44px/);
+  assert.doesNotMatch(backToTopBlock, /height:44px/);
+  assert.doesNotMatch(backToTopBlock, /border-radius:9999px/);
+  assert.doesNotMatch(backToTopBlock, /PREVIEW_BACK_TO_TOP_NATIVE_ICON_RENDERED/);
   assert.doesNotMatch(backToTopBlock, new RegExp(["gnr8", "preview", "backtotop", "fallback"].join("-")));
-  assert.match(backToTopBlock, /data-gnr8-native-scrollicon-glyph/);
   assert.match(backToTopBlock, /nativeSelector='a\.scrollIcon\[data-req="scrollTop"\],a\.scrollIcon\.bottom_right\[href="#"\],a\[data-req="scrollTop"\]'/);
 });
 
@@ -1087,6 +1085,12 @@ test("preview route: transformed output never includes fallback back-to-top mark
       ["data", "gnr8", "backtotop", "fallback"].join("-"),
       ["PREVIEW_BACK_TO_TOP_FALLBACK", "APPLIED"].join("_"),
       ["RUNTIME_SIGNAL", "FALLBACK"].join("_"),
+      "gnr8-native-scrollicon-glyph",
+      "data-gnr8-native-scrollicon-glyph",
+      "width:44px",
+      "height:44px",
+      "border-radius:9999px",
+      "PREVIEW_BACK_TO_TOP_NATIVE_ICON_RENDERED",
     ];
     for (const marker of forbiddenMarkers) {
       assert.equal(html.includes(marker), false, `transformed preview html must not include fallback marker: ${marker}`);
