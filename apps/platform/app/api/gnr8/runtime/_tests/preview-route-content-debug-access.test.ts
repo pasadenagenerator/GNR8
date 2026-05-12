@@ -652,7 +652,7 @@ test("preview route: transformed back-to-top shim parses and avoids unsafe regex
     });
     const html = await response.text();
     assert.equal(response.status, 200);
-    const shim = extractInjectedScriptContaining(html, "PREVIEW_BACK_TO_TOP_NATIVE_STATUS");
+    const shim = extractInjectedScriptContaining(html, "PREVIEW_BACK_TO_TOP_SHIM_DISABLED");
     assert.doesNotThrow(() => new Function(shim), "expected back-to-top shim to parse as JavaScript");
     assert.doesNotMatch(shim, /scrollto\\s*\\\*\\s*\\\(/);
     assert.doesNotMatch(shim, /scrolltos\*\\\(\|scrolls\*tos\*top\|backs\*tos\*top\|totop/);
@@ -948,7 +948,8 @@ test("preview route: repeated transformed requests resolve consistently without 
   }
 });
 
-test("preview route: transformed output removes back-to-top fallback globally and disables injection", async () => {
+
+test("preview route: transformed output disables back-to-top shim with emergency diagnostic only", async () => {
   const restoreDeps = setPreviewRouteDependenciesForTest({
     resolveAgencyIdForSiteVersion: async () => "agency_1",
     requireAgencyActionContext: async () => ({ agencyId: "agency_1" }) as never,
@@ -989,571 +990,36 @@ test("preview route: transformed output removes back-to-top fallback globally an
       params: Promise.resolve({ siteVersionId: "sv_preview_1" }),
     });
     const html = await response.text();
+    const shim = extractInjectedScriptContaining(html, "PREVIEW_BACK_TO_TOP_SHIM_DISABLED");
     assert.equal(response.status, 200);
-    assert.match(html, /PREVIEW_BACK_TO_TOP_FALLBACK_HARD_REMOVED/);
-    assert.match(html, /removedNodeCount/);
-    assert.match(html, /removedStyleCount/);
-    assert.match(html, /fallbackCreationDisabled:true/);
-    assert.match(html, /PREVIEW_BACK_TO_TOP_FALLBACK_REMOVED_GLOBALLY/);
-    assert.match(html, /fallbackInjectionDisabled:true/);
-    assert.match(html, /fallbackRemovedCount/);
-    assert.doesNotMatch(html, /PREVIEW_BACK_TO_TOP_FALLBACK_APPLIED/);
-    assert.doesNotMatch(html, /data-gnr8-backtotop-fallback\]::/);
-    assert.doesNotMatch(html, /createFallbackButton/);
-    assert.doesNotMatch(html, /createElement\("button"\)/);
-    assert.doesNotMatch(html, /createElement\('button'\)/);
+    assert.match(html, /PREVIEW_BACK_TO_TOP_SHIM_DISABLED/);
+    assert.match(html, /EMERGENCY_DISABLE_PAGE_FREEZE/);
+    assert.match(shim, /siteVersionId:payload\.siteVersionId/);
+    assert.match(shim, /correlationKey:correlationKey/);
+    assert.doesNotMatch(shim, /runNativeOnlyPass/);
+    assert.doesNotMatch(shim, /MutationObserver/);
+    assert.doesNotMatch(shim, /setTimeout\(/);
+    assert.doesNotMatch(shim, /delayed_500ms/);
+    assert.doesNotMatch(shim, /delayed_1500ms/);
   } finally {
     restoreDeps();
   }
 });
 
-test("preview route: source disables all legacy fallback creation markers", async () => {
+test("preview route: source disables back-to-top runtime restore and fallback hard-remove paths", async () => {
   const routeSource = readFileSync(
     path.resolve(process.cwd(), "app/api/gnr8/runtime/versions/[siteVersionId]/preview/route.ts"),
     "utf-8",
   );
-  assert.doesNotMatch(routeSource, /gnr8-preview-backtotop-fallback/);
-  assert.doesNotMatch(routeSource, /data-gnr8-backtotop-fallback/);
-  assert.doesNotMatch(routeSource, /PREVIEW_BACK_TO_TOP_FALLBACK_APPLIED/);
-  assert.doesNotMatch(routeSource, /createElement\("button"\)/);
-  assert.doesNotMatch(routeSource, /createElement\('button'\)/);
-  assert.doesNotMatch(routeSource, /fallbackInjected/);
-  assert.doesNotMatch(routeSource, /RUNTIME_SIGNAL_FALLBACK/);
+  assert.match(routeSource, /PREVIEW_BACK_TO_TOP_SHIM_DISABLED/);
+  assert.match(routeSource, /EMERGENCY_DISABLE_PAGE_FREEZE/);
+  assert.doesNotMatch(routeSource, /runNativeOnlyPass/);
+  assert.doesNotMatch(routeSource, /PREVIEW_BACK_TO_TOP_NATIVE_RESTORED/);
+  assert.doesNotMatch(routeSource, /PREVIEW_BACK_TO_TOP_FALLBACK_HARD_REMOVED/);
+  assert.doesNotMatch(routeSource, /PREVIEW_BACK_TO_TOP_FALLBACK_REMOVED_GLOBALLY/);
 });
 
-test("preview route: transformed output emits native status as none when no native candidate exists", async () => {
-  const restoreDeps = setPreviewRouteDependenciesForTest({
-    resolveAgencyIdForSiteVersion: async () => "agency_1",
-    requireAgencyActionContext: async () => ({ agencyId: "agency_1" }) as never,
-    renderSiteVersionPreview: async () =>
-      ({
-        html: `<!doctype html><html><body><div>no explicit back-to-top node</div></body></html>`,
-        siteId: "site_preview_1",
-        siteVersionId: "sv_preview_1",
-        source: "preview",
-        previewMode: "transformed",
-        previewRuntimeSummary: {
-          rendererContractAvailable: true,
-          finalSiteModelAvailable: true,
-          renderedWithFallback: false,
-          matchedPageId: null,
-          contentResolutionApplied: true,
-          resolvedContentCount: 0,
-          unresolvedContentCount: 0,
-          contentResolutionDegraded: false,
-          contentResolutionDiagnostics: [],
-          previewDiagnostics: [],
-          familyRenderUsed: false,
-          familyRenderMode: null,
-          familyRenderFamilyId: null,
-          familyRenderFallbackToPage: false,
-          familyRenderDiagnosticsCount: 0,
-        },
-        renderedCaptureUsed: false,
-        domSize: 100,
-        fallbackUsed: false,
-      }) as never,
-    canShowContentDebug: async () => false,
-  });
-  try {
-    const response = await GET(new Request("https://app.pasadenagenerator.com/api/gnr8/runtime/versions/sv_preview_1/preview?mode=transformed"), {
-      params: Promise.resolve({ siteVersionId: "sv_preview_1" }),
-    });
-    const html = await response.text();
-    assert.equal(response.status, 200);
-    assert.match(html, /PREVIEW_BACK_TO_TOP_NATIVE_STATUS/);
-    assert.match(html, /nativeDetected:stableNativeDetected/);
-    assert.match(html, /missingReason:missingClassification/);
-    assert.match(html, /finalButtonSource:stableNativeDetected\?"native_builder":"none"/);
-    assert.match(html, /fallbackInjectionDisabled:true/);
-    assert.doesNotMatch(html, /PREVIEW_BACK_TO_TOP_FALLBACK_APPLIED/);
-  } finally {
-    restoreDeps();
-  }
-});
-
-test("preview route: transformed output detects Roboplast native scrollIcon candidate", async () => {
-  const restoreDeps = setPreviewRouteDependenciesForTest({
-    resolveAgencyIdForSiteVersion: async () => "agency_1",
-    requireAgencyActionContext: async () => ({ agencyId: "agency_1" }) as never,
-    renderSiteVersionPreview: async () =>
-      ({
-        html: `<!doctype html><html><body><a href="#" data-req="scrollTop" class="scrollIcon bottom_right"><i class="fa fa-chevron-up"></i></a></body></html>`,
-        siteId: "site_preview_1",
-        siteVersionId: "sv_preview_1",
-        source: "preview",
-        previewMode: "transformed",
-        previewRuntimeSummary: {
-          rendererContractAvailable: true,
-          finalSiteModelAvailable: true,
-          renderedWithFallback: false,
-          matchedPageId: null,
-          contentResolutionApplied: true,
-          resolvedContentCount: 0,
-          unresolvedContentCount: 0,
-          contentResolutionDegraded: false,
-          contentResolutionDiagnostics: [],
-          previewDiagnostics: [],
-          familyRenderUsed: false,
-          familyRenderMode: null,
-          familyRenderFamilyId: null,
-          familyRenderFallbackToPage: false,
-          familyRenderDiagnosticsCount: 0,
-        },
-        renderedCaptureUsed: false,
-        domSize: 100,
-        fallbackUsed: false,
-      }) as never,
-    canShowContentDebug: async () => false,
-  });
-  try {
-    const response = await GET(new Request("https://app.pasadenagenerator.com/api/gnr8/runtime/versions/sv_preview_1/preview?mode=transformed"), {
-      params: Promise.resolve({ siteVersionId: "sv_preview_1" }),
-    });
-    const html = await response.text();
-    assert.equal(response.status, 200);
-    assert.match(html, /PREVIEW_BACK_TO_TOP_NATIVE_DISCOVERY_SNAPSHOT/);
-    assert.match(html, /PREVIEW_BACK_TO_TOP_NATIVE_BUILDER_DETECTED/);
-    assert.match(html, /PREVIEW_BACK_TO_TOP_NATIVE_STATUS/);
-    assert.match(html, /finalButtonSource:stableNativeDetected\?"native_builder":"none"/);
-    assert.match(html, /nativeDetected:stableNativeDetected/);
-    assert.match(html, /missingReason:missingClassification/);
-  } finally {
-    restoreDeps();
-  }
-});
-
-test("preview route: transformed output detects Maver native scrollIcon and renders visible glyph", async () => {
-  const restoreDeps = setPreviewRouteDependenciesForTest({
-    resolveAgencyIdForSiteVersion: async () => "agency_1",
-    requireAgencyActionContext: async () => ({ agencyId: "agency_1" }) as never,
-    renderSiteVersionPreview: async () =>
-      ({
-        html: `<!doctype html><html><body><a href="#" data-req="scrollTop" class="scrollIcon bottom_right"></a></body></html>`,
-        siteId: "site_preview_1",
-        siteVersionId: "sv_preview_1",
-        source: "preview",
-        previewMode: "transformed",
-        previewRuntimeSummary: {
-          rendererContractAvailable: true,
-          finalSiteModelAvailable: true,
-          renderedWithFallback: false,
-          matchedPageId: null,
-          contentResolutionApplied: true,
-          resolvedContentCount: 0,
-          unresolvedContentCount: 0,
-          contentResolutionDegraded: false,
-          contentResolutionDiagnostics: [],
-          previewDiagnostics: [],
-          familyRenderUsed: false,
-          familyRenderMode: null,
-          familyRenderFamilyId: null,
-          familyRenderFallbackToPage: false,
-          familyRenderDiagnosticsCount: 0,
-        },
-        renderedCaptureUsed: false,
-        domSize: 100,
-        fallbackUsed: false,
-      }) as never,
-    canShowContentDebug: async () => false,
-  });
-  try {
-    const response = await GET(new Request("https://app.pasadenagenerator.com/api/gnr8/runtime/versions/sv_preview_1/preview?mode=transformed"), {
-      params: Promise.resolve({ siteVersionId: "sv_preview_1" }),
-    });
-    const html = await response.text();
-    assert.equal(response.status, 200);
-    assert.match(html, /PREVIEW_BACK_TO_TOP_NATIVE_BUILDER_DETECTED/);
-    assert.match(html, /PREVIEW_BACK_TO_TOP_NATIVE_RESTORED/);
-    assert.match(html, /PREVIEW_BACK_TO_TOP_NATIVE_ICON_RENDERED/);
-    assert.match(html, /selectorMatched:"a\.scrollIcon\[data-req='scrollTop'\], a\.scrollIcon\.bottom_right\[href='#'\], a\[data-req='scrollTop'\]"/);
-    assert.match(html, /PREVIEW_BACK_TO_TOP_NATIVE_STATUS/);
-    assert.match(html, /nativeDetected:stableNativeDetected/);
-    assert.match(html, /finalButtonSource:stableNativeDetected\?"native_builder":"none"/);
-    assert.doesNotMatch(html, /PREVIEW_BACK_TO_TOP_FALLBACK_APPLIED/);
-  } finally {
-    restoreDeps();
-  }
-});
-test("preview route: transformed output includes native discovery snapshot payload for builder modules", async () => {
-  const restoreDeps = setPreviewRouteDependenciesForTest({
-    resolveAgencyIdForSiteVersion: async () => "agency_1",
-    requireAgencyActionContext: async () => ({ agencyId: "agency_1" }) as never,
-    renderSiteVersionPreview: async () =>
-      ({
-        html: `<!doctype html><html><body><a href="#" data-req="scrollTop" class="scrollIcon bottom_right"><svg><path d="M1 1"></path></svg></a></body></html>`,
-        siteId: "site_preview_1",
-        siteVersionId: "sv_preview_1",
-        source: "preview",
-        previewMode: "transformed",
-        previewRuntimeSummary: {
-          rendererContractAvailable: true,
-          finalSiteModelAvailable: true,
-          renderedWithFallback: false,
-          matchedPageId: null,
-          contentResolutionApplied: true,
-          resolvedContentCount: 0,
-          unresolvedContentCount: 0,
-          contentResolutionDegraded: false,
-          contentResolutionDiagnostics: [],
-          previewDiagnostics: [],
-          familyRenderUsed: false,
-          familyRenderMode: null,
-          familyRenderFamilyId: null,
-          familyRenderFallbackToPage: false,
-          familyRenderDiagnosticsCount: 0,
-        },
-        renderedCaptureUsed: false,
-        domSize: 100,
-        fallbackUsed: false,
-      }) as never,
-    canShowContentDebug: async () => false,
-  });
-  try {
-    const response = await GET(new Request("https://app.pasadenagenerator.com/api/gnr8/runtime/versions/sv_preview_1/preview?mode=transformed"), {
-      params: Promise.resolve({ siteVersionId: "sv_preview_1" }),
-    });
-    const html = await response.text();
-    assert.equal(response.status, 200);
-    assert.match(html, /PREVIEW_BACK_TO_TOP_NATIVE_DISCOVERY_SNAPSHOT/);
-    assert.match(html, /nativeCandidates\.slice\(0,20\)/);
-    assert.match(html, /computedStyle:/);
-    assert.match(html, /boundingClientRect:/);
-    assert.match(html, /iconMarkup:/);
-    assert.match(html, /wrapperTag:/);
-    assert.match(html, /fixedLike:/);
-  } finally {
-    restoreDeps();
-  }
-});
-
-test("preview route: transformed output emits native comparison status for Roboplast site version", async () => {
-  const restoreDeps = setPreviewRouteDependenciesForTest({
-    resolveAgencyIdForSiteVersion: async () => "agency_1",
-    requireAgencyActionContext: async () => ({ agencyId: "agency_1" }) as never,
-    renderSiteVersionPreview: async () =>
-      ({
-        html: `<!doctype html><html><body><a href="#" data-req="scrollTop" class="scrollIcon bottom_right"><i class="fa fa-chevron-up"></i></a></body></html>`,
-        siteId: "site_preview_1",
-        siteVersionId: "30bfe5b1-a441-41ef-92e3-0d6b3ee678e1",
-        source: "preview",
-        previewMode: "transformed",
-        previewRuntimeSummary: {
-          rendererContractAvailable: true,
-          finalSiteModelAvailable: true,
-          renderedWithFallback: false,
-          matchedPageId: null,
-          contentResolutionApplied: true,
-          resolvedContentCount: 0,
-          unresolvedContentCount: 0,
-          contentResolutionDegraded: false,
-          contentResolutionDiagnostics: [],
-          previewDiagnostics: [],
-          familyRenderUsed: false,
-          familyRenderMode: null,
-          familyRenderFamilyId: null,
-          familyRenderFallbackToPage: false,
-          familyRenderDiagnosticsCount: 0,
-        },
-        renderedCaptureUsed: false,
-        domSize: 100,
-        fallbackUsed: false,
-      }) as never,
-    canShowContentDebug: async () => false,
-  });
-  try {
-    const response = await GET(new Request("https://app.pasadenagenerator.com/api/gnr8/runtime/versions/30bfe5b1-a441-41ef-92e3-0d6b3ee678e1/preview?mode=transformed"), {
-      params: Promise.resolve({ siteVersionId: "30bfe5b1-a441-41ef-92e3-0d6b3ee678e1" }),
-    });
-    const html = await response.text();
-    assert.equal(response.status, 200);
-    assert.match(html, /PREVIEW_BACK_TO_TOP_NATIVE_COMPARISON_STATUS/);
-    assert.match(html, /nativeCandidateSummaries/);
-  } finally {
-    restoreDeps();
-  }
-});
-
-test("preview route: transformed output classifies Maver native missing state", async () => {
-  const restoreDeps = setPreviewRouteDependenciesForTest({
-    resolveAgencyIdForSiteVersion: async () => "agency_1",
-    requireAgencyActionContext: async () => ({ agencyId: "agency_1" }) as never,
-    renderSiteVersionPreview: async () =>
-      ({
-        html: `<!doctype html><html><body><div>no back to top</div></body></html>`,
-        siteId: "site_preview_1",
-        siteVersionId: "01ebd946-4085-4f01-8fbf-416ac6cf601e",
-        source: "preview",
-        previewMode: "transformed",
-        previewRuntimeSummary: {
-          rendererContractAvailable: true,
-          finalSiteModelAvailable: true,
-          renderedWithFallback: false,
-          matchedPageId: null,
-          contentResolutionApplied: true,
-          resolvedContentCount: 0,
-          unresolvedContentCount: 0,
-          contentResolutionDegraded: false,
-          contentResolutionDiagnostics: [],
-          previewDiagnostics: [],
-          familyRenderUsed: false,
-          familyRenderMode: null,
-          familyRenderFamilyId: null,
-          familyRenderFallbackToPage: false,
-          familyRenderDiagnosticsCount: 0,
-        },
-        renderedCaptureUsed: false,
-        domSize: 100,
-        fallbackUsed: false,
-      }) as never,
-    canShowContentDebug: async () => false,
-  });
-  try {
-    const response = await GET(new Request("https://app.pasadenagenerator.com/api/gnr8/runtime/versions/01ebd946-4085-4f01-8fbf-416ac6cf601e/preview?mode=transformed"), {
-      params: Promise.resolve({ siteVersionId: "01ebd946-4085-4f01-8fbf-416ac6cf601e" }),
-    });
-    const html = await response.text();
-    assert.equal(response.status, 200);
-    assert.match(html, /PREVIEW_BACK_TO_TOP_NATIVE_MISSING_CLASSIFIED/);
-    assert.match(html, /NATIVE_BACK_TO_TOP_MISSING_FROM_IMPORTED_HTML/);
-  } finally {
-    restoreDeps();
-  }
-});
-
-test("preview route: transformed output keeps hidden/unwired native restore logic and never reintroduces fallback", async () => {
-  const restoreDeps = setPreviewRouteDependenciesForTest({
-    resolveAgencyIdForSiteVersion: async () => "agency_1",
-    requireAgencyActionContext: async () => ({ agencyId: "agency_1" }) as never,
-    renderSiteVersionPreview: async () =>
-      ({
-        html: `<!doctype html><html><body><a href="#" data-req="scrollTop" class="scrollIcon hidden bottom_right" style="display:none;visibility:hidden;opacity:0">Top</a></body></html>`,
-        siteId: "site_preview_1",
-        siteVersionId: "sv_preview_1",
-        source: "preview",
-        previewMode: "transformed",
-        previewRuntimeSummary: {
-          rendererContractAvailable: true,
-          finalSiteModelAvailable: true,
-          renderedWithFallback: false,
-          matchedPageId: null,
-          contentResolutionApplied: true,
-          resolvedContentCount: 0,
-          unresolvedContentCount: 0,
-          contentResolutionDegraded: false,
-          contentResolutionDiagnostics: [],
-          previewDiagnostics: [],
-          familyRenderUsed: false,
-          familyRenderMode: null,
-          familyRenderFamilyId: null,
-          familyRenderFallbackToPage: false,
-          familyRenderDiagnosticsCount: 0,
-        },
-        renderedCaptureUsed: false,
-        domSize: 100,
-        fallbackUsed: false,
-      }) as never,
-    canShowContentDebug: async () => false,
-  });
-  try {
-    const response = await GET(new Request("https://app.pasadenagenerator.com/api/gnr8/runtime/versions/sv_preview_1/preview?mode=transformed"), {
-      params: Promise.resolve({ siteVersionId: "sv_preview_1" }),
-    });
-    const html = await response.text();
-    assert.equal(response.status, 200);
-    assert.match(html, /normalizeHiddenNative/);
-    assert.match(html, /classList\.remove\("hidden"\)/);
-    assert.match(html, /window\.scrollTo\(\{top:0,behavior:"smooth"\}\)/);
-    assert.match(html, /hiddenNativeRestored/);
-    assert.match(html, /smoothScrollWired/);
-    assert.doesNotMatch(html, /PREVIEW_BACK_TO_TOP_FALLBACK_APPLIED/);
-    assert.match(html, /scrollIcon hidden bottom_right/);
-  } finally {
-    restoreDeps();
-  }
-});
-
-test("preview route: transformed output detects scrollIcon hidden bottom_right and emits native restored diagnostics", async () => {
-  const restoreDeps = setPreviewRouteDependenciesForTest({
-    resolveAgencyIdForSiteVersion: async () => "agency_1",
-    requireAgencyActionContext: async () => ({ agencyId: "agency_1" }) as never,
-    renderSiteVersionPreview: async () =>
-      ({
-        html: `<!doctype html><html><body>
-<a href="#" data-req="scrollTop" class="scrollIcon hidden bottom_right" data-track-event="click" data-track-action="internal_link_clicked"><i class="fa fa-chevron-up"></i></a>
-</body></html>`,
-        siteId: "site_preview_1",
-        siteVersionId: "sv_preview_1",
-        source: "preview",
-        previewMode: "transformed",
-        previewRuntimeSummary: {
-          rendererContractAvailable: true,
-          finalSiteModelAvailable: true,
-          renderedWithFallback: false,
-          matchedPageId: null,
-          contentResolutionApplied: true,
-          resolvedContentCount: 0,
-          unresolvedContentCount: 0,
-          contentResolutionDegraded: false,
-          contentResolutionDiagnostics: [],
-          previewDiagnostics: [],
-          familyRenderUsed: false,
-          familyRenderMode: null,
-          familyRenderFamilyId: null,
-          familyRenderFallbackToPage: false,
-          familyRenderDiagnosticsCount: 0,
-        },
-        renderedCaptureUsed: false,
-        domSize: 100,
-        fallbackUsed: false,
-      }) as never,
-    canShowContentDebug: async () => false,
-  });
-  try {
-    const response = await GET(new Request("https://app.pasadenagenerator.com/api/gnr8/runtime/versions/sv_preview_1/preview?mode=transformed"), {
-      params: Promise.resolve({ siteVersionId: "sv_preview_1" }),
-    });
-    const html = await response.text();
-    assert.equal(response.status, 200);
-    assert.match(html, /a\.scrollIcon\[data-req='scrollTop'\],a\.scrollIcon\.bottom_right\[href='#'\],a\[data-req='scrollTop'\]/);
-    assert.match(html, /PREVIEW_BACK_TO_TOP_NATIVE_BUILDER_DETECTED/);
-    assert.match(html, /PREVIEW_BACK_TO_TOP_NATIVE_RESTORED/);
-    assert.match(html, /selectorMatched:"a\.scrollIcon\[data-req='scrollTop'\], a\.scrollIcon\.bottom_right\[href='#'\], a\[data-req='scrollTop'\]"/);
-    assert.match(html, /isNativeBuilderMatch/);
-    assert.match(html, /function isRestoredNativeDetected\(el,hadHiddenClassBeforeRestore\)/);
-    assert.match(html, /nativeDetected=visibleCandidates\.length>0\|\|restoredCandidateDetected/);
-    assert.match(html, /var stableNativeDetected=nativeDetected\|\|nativeRestoredPersistently/);
-    assert.match(html, /\(restoredCandidateDetected===true\|\|nativeRestoredPersistently===true\)\?"NATIVE_BACK_TO_TOP_RESTORED":classifyMissing/);
-    assert.match(html, /if\(missingClassification&&missingClassification!=="NATIVE_BACK_TO_TOP_RESTORED"\)/);
-    assert.match(html, /nativeCandidateCount:nativeCandidates\.length/);
-    assert.match(html, /PREVIEW_BACK_TO_TOP_NATIVE_COMPARISON_STATUS/);
-    assert.match(html, /finalButtonSource:stableNativeDetected\?"native_builder":"none"/);
-    assert.match(html, /missingReason:missingClassification/);
-    assert.match(html, /finalButtonSource:stableNativeDetected\?"native_builder":"none"/);
-    assert.match(html, /removedHiddenClass/);
-    assert.match(html, /visibilityRestored/);
-    assert.match(html, /clickWired/);
-    assert.match(html, /style\.setProperty\("display","block","important"\)/);
-    assert.match(html, /style\.setProperty\("visibility","visible","important"\)/);
-    assert.match(html, /style\.setProperty\("opacity","1","important"\)/);
-    assert.match(html, /style\.setProperty\("pointer-events","auto","important"\)/);
-    assert.match(html, /style\.setProperty\("position","fixed","important"\)/);
-    assert.match(html, /style\.setProperty\("right","24px","important"\)/);
-    assert.match(html, /style\.setProperty\("bottom","24px","important"\)/);
-    assert.match(html, /style\.setProperty\("z-index","2147483647","important"\)/);
-    assert.match(html, /data-gnr8-native-scrollicon-glyph/);
-    assert.match(html, /var glyph=el\.querySelector\?el\.querySelector\(glyphSelector\):null;/);
-    assert.match(html, /if\(!glyph\)/);
-    assert.doesNotMatch(html, /hasRenderableText/);
-    assert.doesNotMatch(html, /hasRenderableIcon/);
-    assert.match(html, /glyph\.textContent="↑"/);
-    assert.match(html, /glyph\.style\.setProperty\("display","inline-block","important"\)/);
-    assert.match(html, /glyph\.style\.setProperty\("font-weight","700","important"\)/);
-    assert.match(html, /glyph\.style\.setProperty\("pointer-events","none","important"\)/);
-    assert.match(html, /\["width","44px"\]/);
-    assert.match(html, /\["height","44px"\]/);
-    assert.match(html, /\["border-radius","9999px"\]/);
-    assert.match(html, /\["display","flex"\]/);
-    assert.match(html, /\["align-items","center"\]/);
-    assert.match(html, /\["justify-content","center"\]/);
-    assert.match(html, /\["text-decoration","none"\]/);
-    assert.match(html, /\["font-size","24px"\]/);
-    assert.match(html, /\["line-height","1"\]/);
-    assert.match(html, /style\.setProperty\("color","#fff","important"\)/);
-    assert.match(html, /style\.setProperty\("fill","#fff","important"\)/);
-    assert.match(html, /style\.setProperty\("stroke","#fff","important"\)/);
-    assert.match(html, /glyphInjected:iconRenderResult\.glyphInjected/);
-    assert.match(html, /glyphPresent:iconRenderResult\.glyphPresent/);
-    assert.match(html, /glyphText:iconRenderResult\.glyphText/);
-    assert.match(html, /visualBoxNormalized:iconRenderResult\.visualBoxNormalized/);
-    assert.match(html, /backgroundColorApplied:iconRenderResult\.backgroundColorApplied/);
-    assert.match(html, /foregroundColorApplied:iconRenderResult\.foregroundColorApplied/);
-    assert.match(html, /PREVIEW_BACK_TO_TOP_NATIVE_REHIDE_DETECTED/);
-    assert.match(html, /reasonCode:"NATIVE_SCROLLICON_REHIDDEN_BY_RUNTIME"/);
-    assert.match(html, /attributeFilter:\["class","style","hidden","aria-hidden"\]/);
-    assert.match(html, /PREVIEW_BACK_TO_TOP_FALLBACK_HARD_REMOVED/);
-    assert.match(html, /removedNodeCount:fallbackRemoval\.removedNodeCount/);
-    assert.match(html, /removedStyleCount:fallbackRemoval\.removedStyleCount/);
-    assert.match(html, /fallbackCreationDisabled:true/);
-    assert.match(html, /fallbackInjectionDisabled:true/);
-    assert.doesNotMatch(html, /PREVIEW_BACK_TO_TOP_FALLBACK_APPLIED/);
-    assert.doesNotMatch(html, /gnr8-preview-backtotop-fallback/);
-    assert.doesNotMatch(html, /data-gnr8-backtotop-fallback/);
-    assert.match(html, /var prioritizedNodes=Array\.prototype\.slice\.call\(document\.querySelectorAll\(NATIVE_BUILDER_SELECTOR\)\);/);
-    assert.doesNotMatch(html, /querySelectorAll\(NATIVE_HINT_SELECTOR\)/);
-  } finally {
-    restoreDeps();
-  }
-});
-
-test("preview route: transformed output forces native scrollIcon glyph presence and style without fallback injection", async () => {
-  const restoreDeps = setPreviewRouteDependenciesForTest({
-    resolveAgencyIdForSiteVersion: async () => "agency_1",
-    requireAgencyActionContext: async () => ({ agencyId: "agency_1" }) as never,
-    renderSiteVersionPreview: async () =>
-      ({
-        html: `<!doctype html><html><body>
-<a href="#" data-req="scrollTop" class="scrollIcon bottom_right"></a>
-<a href="#" data-req="scrollTop" class="scrollIcon bottom_right"><span style="opacity:0">invisible</span></a>
-<a href="#" data-req="scrollTop" class="scrollIcon bottom_right"><span data-gnr8-native-scrollicon-glyph="1">x</span></a>
-</body></html>`,
-        siteId: "site_preview_1",
-        siteVersionId: "sv_preview_1",
-        source: "preview",
-        previewMode: "transformed",
-        previewRuntimeSummary: {
-          rendererContractAvailable: true,
-          finalSiteModelAvailable: true,
-          renderedWithFallback: false,
-          matchedPageId: null,
-          contentResolutionApplied: true,
-          resolvedContentCount: 0,
-          unresolvedContentCount: 0,
-          contentResolutionDegraded: false,
-          contentResolutionDiagnostics: [],
-          previewDiagnostics: [],
-          familyRenderUsed: false,
-          familyRenderMode: null,
-          familyRenderFamilyId: null,
-          familyRenderFallbackToPage: false,
-          familyRenderDiagnosticsCount: 0,
-        },
-        renderedCaptureUsed: false,
-        domSize: 100,
-        fallbackUsed: false,
-      }) as never,
-    canShowContentDebug: async () => false,
-  });
-  try {
-    const response = await GET(new Request("https://app.pasadenagenerator.com/api/gnr8/runtime/versions/sv_preview_1/preview?mode=transformed"), {
-      params: Promise.resolve({ siteVersionId: "sv_preview_1" }),
-    });
-    const html = await response.text();
-    assert.equal(response.status, 200);
-    assert.match(html, /if\(!glyph\)\{/);
-    assert.match(html, /el\.appendChild\(glyph\)/);
-    assert.match(html, /glyphInjected=true/);
-    assert.match(html, /glyphPresent=true/);
-    assert.match(html, /glyphText=String\(glyph\.textContent\|\|""\)/);
-    assert.match(html, /glyph\.textContent="↑"/);
-    assert.match(html, /glyph\.style\.setProperty\("font-size","24px","important"\)/);
-    assert.match(html, /glyph\.style\.setProperty\("line-height","1","important"\)/);
-    assert.match(html, /glyph\.style\.setProperty\("color","#fff","important"\)/);
-    assert.match(html, /glyph\.style\.setProperty\("fill","#fff","important"\)/);
-    assert.match(html, /glyph\.style\.setProperty\("stroke","#fff","important"\)/);
-    assert.match(html, /glyph\.style\.setProperty\("pointer-events","none","important"\)/);
-    assert.match(html, /return \{glyphInjected:glyphInjected,glyphPresent:glyphPresent,glyphText:glyphText/);
-    assert.doesNotMatch(html, /PREVIEW_BACK_TO_TOP_FALLBACK_APPLIED/);
-    assert.match(html, /el\.appendChild\(glyph\)/);
-    assert.doesNotMatch(html, /document\.body\.appendChild\(glyph\)/);
-    assert.doesNotMatch(html, /createElement\("button"\)/);
-    assert.doesNotMatch(html, /createElement\('button'\)/);
-  } finally {
-    restoreDeps();
-  }
-});
-
-test("preview route: transformed map fallback for Roboplast remains active with back-to-top compatibility present", async () => {
+test("preview route: transformed map fallback for Roboplast remains active with back-to-top shim disabled", async () => {
   const restoreDeps = setPreviewRouteDependenciesForTest({
     resolveAgencyIdForSiteVersion: async () => "agency_1",
     requireAgencyActionContext: async () => ({ agencyId: "agency_1" }) as never,
@@ -1596,13 +1062,14 @@ test("preview route: transformed map fallback for Roboplast remains active with 
       params: Promise.resolve({ siteVersionId: "sv_preview_1" }),
     });
     const html = await response.text();
+    const shim = extractInjectedScriptContaining(html, "PREVIEW_BACK_TO_TOP_SHIM_DISABLED");
     assert.equal(response.status, 200);
     assert.match(html, /PREVIEW_MAP_MODULE_DETECTED/);
     assert.match(html, /PREVIEW_MAP_FALLBACK_APPLIED/);
-    assert.match(html, /PREVIEW_BACK_TO_TOP_NATIVE_STATUS/);
-    assert.match(html, /PREVIEW_BACK_TO_TOP_FALLBACK_HARD_REMOVED/);
-    assert.match(html, /PREVIEW_BACK_TO_TOP_FALLBACK_REMOVED_GLOBALLY/);
-    assert.doesNotMatch(html, /PREVIEW_BACK_TO_TOP_FALLBACK_APPLIED/);
+    assert.match(html, /PREVIEW_GALLERY_PAGED_LAYOUT_STATUS/);
+    assert.match(html, /PREVIEW_BACK_TO_TOP_SHIM_DISABLED/);
+    assert.doesNotMatch(shim, /MutationObserver/);
+    assert.doesNotMatch(shim, /setTimeout\(/);
   } finally {
     restoreDeps();
   }
