@@ -555,10 +555,58 @@ function injectBackToTopRuntimeCompatibility(input: { html: string; siteVersionI
   });
   const script = `<script>(function(){
 var payload=${payload};
-var correlationKey=[payload.siteVersionId,"backtotop-shim-disabled",String(Date.now())].join(":");
+var correlationKey=[payload.siteVersionId,"backtotop-native-static-restore",String(Date.now())].join(":");
+var nativeSelector='a.scrollIcon[data-req="scrollTop"],a.scrollIcon.bottom_right[href="#"],a[data-req="scrollTop"]';
+var nativeEl=document.querySelector(nativeSelector);
+var hiddenClassRemoved=false;
+var glyphPresent=false;
+var clickWired=false;
+if(nativeEl&&nativeEl.classList&&nativeEl.classList.contains("hidden")){
+nativeEl.classList.remove("hidden");
+hiddenClassRemoved=true;
+}
+if(nativeEl){
+nativeEl.removeAttribute("hidden");
+nativeEl.setAttribute("aria-hidden","false");
+nativeEl.style.setProperty("display","flex","important");
+nativeEl.style.setProperty("visibility","visible","important");
+nativeEl.style.setProperty("opacity","1","important");
+nativeEl.style.setProperty("pointer-events","auto","important");
+nativeEl.style.setProperty("position","fixed","important");
+nativeEl.style.setProperty("right","24px","important");
+nativeEl.style.setProperty("bottom","24px","important");
+nativeEl.style.setProperty("width","44px","important");
+nativeEl.style.setProperty("height","44px","important");
+nativeEl.style.setProperty("border-radius","9999px","important");
+nativeEl.style.setProperty("align-items","center","important");
+nativeEl.style.setProperty("justify-content","center","important");
+nativeEl.style.setProperty("z-index","2147483647","important");
+nativeEl.style.setProperty("text-decoration","none","important");
+var glyph=nativeEl.querySelector('span[data-gnr8-native-scrollicon-glyph="1"]');
+if(!glyph){
+glyph=document.createElement("span");
+glyph.setAttribute("data-gnr8-native-scrollicon-glyph","1");
+glyph.setAttribute("aria-hidden","true");
+glyph.textContent="↑";
+nativeEl.appendChild(glyph);
+}
+glyph.style.setProperty("color","#fff","important");
+glyphPresent=true;
+nativeEl.addEventListener("click",function(event){
+event.preventDefault();
+window.scrollTo({top:0,behavior:"smooth"});
+});
+clickWired=true;
+}
 try{
-console.info("[gnr8.runtime.preview] PREVIEW_BACK_TO_TOP_SHIM_DISABLED",{
-reasonCode:"EMERGENCY_DISABLE_PAGE_FREEZE",
+console.info("[gnr8.runtime.preview] PREVIEW_BACK_TO_TOP_NATIVE_STATIC_RESTORE_APPLIED",{
+nativeFound:!!nativeEl,
+hiddenClassRemoved:hiddenClassRemoved,
+glyphPresent:glyphPresent,
+clickWired:clickWired,
+fallbackDisabled:true,
+observerUsed:false,
+timerUsed:false,
 siteVersionId:payload.siteVersionId,
 correlationKey:correlationKey
 });
