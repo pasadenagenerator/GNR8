@@ -558,6 +558,11 @@ var payload=${payload};
 var correlationKey=[payload.siteVersionId,"backtotop-native-static-restore",String(Date.now())].join(":");
 var nativeSelector='a.scrollIcon[data-req="scrollTop"],a.scrollIcon.bottom_right[href="#"],a[data-req="scrollTop"]';
 var nativeEl=document.querySelector(nativeSelector);
+var nativeClassValue=nativeEl&&typeof nativeEl.className==="string"?nativeEl.className:"";
+var nativeHiddenClass=typeof nativeClassValue==="string"&&nativeClassValue.split(/\\s+/).indexOf("hidden")>=0;
+var stylesheetNodes=Array.prototype.slice.call(document.querySelectorAll('link[rel~="stylesheet"][href]'));
+var stylesheetHrefs=stylesheetNodes.map(function(node){return String(node&&node.getAttribute&&node.getAttribute("href")||"");});
+var localStylesheetHrefs=stylesheetHrefs.filter(function(href){return href.indexOf("/api/gnr8/runtime/preview-assets/")===0||href.indexOf("/assets/")===0||href.indexOf("assets/")===0;});
 var nativeClickWired=false;
 if(nativeEl){
 if(!nativeEl.__gnr8NativeScrollTopWired){
@@ -570,6 +575,16 @@ nativeClickWired=true;
 }
 }
 try{
+console.info("[gnr8.runtime.preview] PREVIEW_BACK_TO_TOP_NATIVE_ASSET_STATUS",{
+nativeFound:!!nativeEl,
+nativeHasHiddenClass:nativeHiddenClass,
+stylesheetHrefCount:stylesheetHrefs.length,
+localStylesheetHrefCount:localStylesheetHrefs.length,
+stylesheetHrefs:stylesheetHrefs,
+localStylesheetHrefs:localStylesheetHrefs,
+siteVersionId:payload.siteVersionId,
+correlationKey:correlationKey
+});
 console.info("[gnr8.runtime.preview] PREVIEW_BACK_TO_TOP_NATIVE_ONLY_STATUS",{
 nativeFound:!!nativeEl,
 nativeClickWired:nativeClickWired,
@@ -577,6 +592,14 @@ nativeVisualUntouched:true,
 fallbackAllowed:false,
 glyphInjected:false,
 visualBoxNormalized:false,
+siteVersionId:payload.siteVersionId,
+correlationKey:correlationKey
+});
+console.info("[gnr8.runtime.preview] PREVIEW_BACK_TO_TOP_NATIVE_RUNTIME_STATUS",{
+nativeFound:!!nativeEl,
+nativeHasHiddenClass:nativeHiddenClass,
+nativeClickWired:nativeClickWired,
+nativeVisualUntouched:true,
 siteVersionId:payload.siteVersionId,
 correlationKey:correlationKey
 });

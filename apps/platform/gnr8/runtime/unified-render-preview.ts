@@ -301,6 +301,7 @@ function rewriteRawTemplateAssetReferences(input: {
   siteId: string
   siteVersionId: string
   entryHtmlPath: string
+  fileMapPaths?: ReadonlySet<string>
 }): string {
   const assetRoot = `/api/gnr8/runtime/preview-assets/${encodeURIComponent(input.siteId)}/${encodeURIComponent(input.siteVersionId)}`
   const entryDir = path.posix.dirname(input.entryHtmlPath)
@@ -327,7 +328,14 @@ function rewriteRawTemplateAssetReferences(input: {
     }
     const [pathname, queryHash = ''] = ref.split(/(?=[?#])/)
     const joined = path.posix.join('/', baseDir, pathname)
-    const normalized = normalizeTemplateAssetPath(joined)
+    const normalizedJoined = normalizeTemplateAssetPath(joined)
+    const normalizedRootLike = normalizeTemplateAssetPath(pathname)
+    const normalizedCandidates = [normalizedJoined, normalizedRootLike].filter((candidate): candidate is string => Boolean(candidate))
+    const existingCandidate =
+      input.fileMapPaths && normalizedCandidates.length > 0
+        ? normalizedCandidates.find((candidate) => input.fileMapPaths!.has(candidate)) ?? null
+        : null
+    const normalized = existingCandidate ?? normalizedJoined ?? normalizedRootLike
     if (!normalized) return ref
     return `${assetRoot}/${normalized}${queryHash}`
   }
@@ -540,6 +548,7 @@ async function renderRawTemplateSiteVersionPreview(input: {
     siteId: artifact.siteId,
     siteVersionId: artifact.siteVersionId,
     entryHtmlPath: artifact.entryHtmlPath,
+    fileMapPaths: new Set(Object.keys(artifact.fileMap ?? {})),
   })
   const slots = await cacheLookup({
     context: input.context,

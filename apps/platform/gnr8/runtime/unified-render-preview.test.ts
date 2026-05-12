@@ -181,6 +181,25 @@ test('raw template preview rewrites local asset references to preview-assets rou
   )
 })
 
+test('raw template preview prefers persisted fileMap match for relative stylesheet refs', () => {
+  const html = '<!doctype html><html><head><link rel="stylesheet" href="assets/user-style.css"></head><body></body></html>'
+  const rewritten = __unifiedRenderPreviewTestUtils.rewriteRawTemplateAssetReferences({
+    html,
+    siteId: 'site-raw',
+    siteVersionId: 'sv-raw',
+    entryHtmlPath: 'nested/site/index.html',
+    fileMapPaths: new Set(['assets/user-style.css']),
+  })
+  assert.equal(
+    rewritten.includes('/api/gnr8/runtime/preview-assets/site-raw/sv-raw/assets/user-style.css'),
+    true,
+  )
+  assert.equal(
+    rewritten.includes('/api/gnr8/runtime/preview-assets/site-raw/sv-raw/nested/site/assets/user-style.css'),
+    false,
+  )
+})
+
 test('preview override selection merges by slot with draft precedence and published fallback', () => {
   const selected = __unifiedRenderPreviewTestUtils.selectPreviewOverridesByVersion({
     siteVersionId: 'sv-2',
