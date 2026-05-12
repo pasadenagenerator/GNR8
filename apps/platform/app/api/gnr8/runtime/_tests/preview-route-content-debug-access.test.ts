@@ -1145,7 +1145,7 @@ test("preview route: transformed output detects same builder native pattern for 
     assert.equal(response.status, 200);
     assert.match(html, /PREVIEW_BACK_TO_TOP_NATIVE_BUILDER_DETECTED/);
     assert.match(html, /PREVIEW_BACK_TO_TOP_NATIVE_RESTORED/);
-    assert.match(html, /selectorMatched:"a\.scrollIcon\[data-req='scrollTop'\]"/);
+    assert.match(html, /selectorMatched:"a\.scrollIcon\[data-req='scrollTop'\], a\.scrollIcon\.bottom_right\[href='#'\], a\[data-req='scrollTop'\]"/);
     assert.match(html, /PREVIEW_BACK_TO_TOP_NATIVE_STATUS/);
     assert.match(html, /nativeDetected:nativeDetected/);
     assert.match(html, /finalButtonSource:nativeDetected\?"native_builder":"none"/);
@@ -1394,10 +1394,13 @@ test("preview route: transformed output detects scrollIcon hidden bottom_right a
     });
     const html = await response.text();
     assert.equal(response.status, 200);
-    assert.match(html, /a\.scrollIcon\[data-req='scrollTop'\],\.scrollIcon\.bottom_right\[href='#'\]/);
+    assert.match(html, /a\.scrollIcon\[data-req='scrollTop'\],a\.scrollIcon\.bottom_right\[href='#'\],a\[data-req='scrollTop'\]/);
     assert.match(html, /PREVIEW_BACK_TO_TOP_NATIVE_BUILDER_DETECTED/);
     assert.match(html, /PREVIEW_BACK_TO_TOP_NATIVE_RESTORED/);
-    assert.match(html, /selectorMatched:"a\.scrollIcon\[data-req='scrollTop'\]"/);
+    assert.match(html, /selectorMatched:"a\.scrollIcon\[data-req='scrollTop'\], a\.scrollIcon\.bottom_right\[href='#'\], a\[data-req='scrollTop'\]"/);
+    assert.match(html, /isNativeBuilderMatch/);
+    assert.match(html, /nativeCandidateCount:nativeCandidates\.length/);
+    assert.match(html, /finalButtonSource:nativeDetected\?"native_builder":"none"/);
     assert.match(html, /removedHiddenClass/);
     assert.match(html, /visibilityRestored/);
     assert.match(html, /clickWired/);
