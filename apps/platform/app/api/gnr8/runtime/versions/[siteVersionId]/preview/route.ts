@@ -801,23 +801,33 @@ if(!isTransparentColor(bg))return bg;
 return "rgb(220, 38, 38)";
 }
 function normalizeNativeIconRendering(el){
-if(!el||!el.style)return {glyphInjected:false,visualBoxNormalized:false,backgroundColorApplied:false,foregroundColorApplied:false};
+if(!el||!el.style)return {glyphInjected:false,glyphPresent:false,glyphText:"",visualBoxNormalized:false,backgroundColorApplied:false,foregroundColorApplied:false};
 var glyphInjected=false;
+var glyphPresent=false;
+var glyphText="";
 var visualBoxNormalized=false;
 var backgroundColorApplied=false;
 var foregroundColorApplied=false;
 var glyphSelector="[data-gnr8-native-scrollicon-glyph='1']";
-var hasGlyph=!!(el.querySelector&&el.querySelector(glyphSelector));
-var hasRenderableText=String(el.textContent||"").replace(/\s+/g,"").length>0;
-var hasRenderableIcon=!!(el.querySelector&&el.querySelector("svg,img"));
-if(!hasGlyph&&!hasRenderableText&&!hasRenderableIcon){
-var glyph=document.createElement("span");
+var glyph=el.querySelector?el.querySelector(glyphSelector):null;
+if(!glyph){
+glyph=document.createElement("span");
 glyph.setAttribute("data-gnr8-native-scrollicon-glyph","1");
 glyph.setAttribute("aria-hidden","true");
-glyph.textContent="↑";
 el.appendChild(glyph);
 glyphInjected=true;
 }
+glyph.textContent="↑";
+glyphPresent=true;
+glyphText=String(glyph.textContent||"");
+glyph.style.setProperty("display","inline-block","important");
+glyph.style.setProperty("color","#fff","important");
+glyph.style.setProperty("fill","#fff","important");
+glyph.style.setProperty("stroke","#fff","important");
+glyph.style.setProperty("font-size","24px","important");
+glyph.style.setProperty("line-height","1","important");
+glyph.style.setProperty("font-weight","700","important");
+glyph.style.setProperty("pointer-events","none","important");
 var boxRules=[
 ["width","44px"],
 ["height","44px"],
@@ -850,7 +860,7 @@ child.style.setProperty("color","#fff","important");
 child.style.setProperty("fill","#fff","important");
 child.style.setProperty("stroke","#fff","important");
 }
-return {glyphInjected:glyphInjected,visualBoxNormalized:visualBoxNormalized,backgroundColorApplied:backgroundColorApplied,foregroundColorApplied:foregroundColorApplied};
+return {glyphInjected:glyphInjected,glyphPresent:glyphPresent,glyphText:glyphText,visualBoxNormalized:visualBoxNormalized,backgroundColorApplied:backgroundColorApplied,foregroundColorApplied:foregroundColorApplied};
 }
 function classifyMissing(details){
 if(details.nativeDetected)return null;
@@ -932,7 +942,7 @@ lastKnownNativeNode=chosen.element;
 lastKnownNativeFingerprint=buildNativeFingerprint(chosen.element);
 emit("PREVIEW_BACK_TO_TOP_NATIVE_BUILDER_DETECTED",{siteVersionId:payload.siteVersionId,passName:passName,tag:chosen.tag,id:chosen.id,className:chosen.className,wrapperTag:chosen.wrapperTag,selectorMatched:"a.scrollIcon[data-req='scrollTop'], a.scrollIcon.bottom_right[href='#'], a[data-req='scrollTop']",removedHiddenClass:removedHiddenClass,visibilityRestored:visibilityRestored,clickWired:wiredSmoothScroll,correlationKey:correlationKey("native_builder_detected_"+passName)});
 emit("PREVIEW_BACK_TO_TOP_NATIVE_RESTORED",{siteVersionId:payload.siteVersionId,passName:passName,selectorMatched:"a.scrollIcon[data-req='scrollTop'], a.scrollIcon.bottom_right[href='#'], a[data-req='scrollTop']",removedHiddenClass:removedHiddenClass,visibilityRestored:visibilityRestored,clickWired:wiredSmoothScroll,correlationKey:correlationKey("native_restored_"+passName)});
-emit("PREVIEW_BACK_TO_TOP_NATIVE_ICON_RENDERED",{siteVersionId:payload.siteVersionId,passName:passName,glyphInjected:iconRenderResult.glyphInjected,visualBoxNormalized:iconRenderResult.visualBoxNormalized,backgroundColorApplied:iconRenderResult.backgroundColorApplied,foregroundColorApplied:iconRenderResult.foregroundColorApplied,correlationKey:correlationKey("native_icon_rendered_"+passName)});
+emit("PREVIEW_BACK_TO_TOP_NATIVE_ICON_RENDERED",{siteVersionId:payload.siteVersionId,passName:passName,glyphInjected:iconRenderResult.glyphInjected,glyphPresent:iconRenderResult.glyphPresent,glyphText:iconRenderResult.glyphText,visualBoxNormalized:iconRenderResult.visualBoxNormalized,backgroundColorApplied:iconRenderResult.backgroundColorApplied,foregroundColorApplied:iconRenderResult.foregroundColorApplied,correlationKey:correlationKey("native_icon_rendered_"+passName)});
 }
 if(!nativeDetected&&lastKnownNativeNode){
 var stillConnected=!!lastKnownNativeNode.isConnected;

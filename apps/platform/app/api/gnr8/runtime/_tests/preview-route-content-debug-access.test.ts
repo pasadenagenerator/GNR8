@@ -1424,8 +1424,14 @@ test("preview route: transformed output detects scrollIcon hidden bottom_right a
     assert.match(html, /style\.setProperty\("bottom","24px","important"\)/);
     assert.match(html, /style\.setProperty\("z-index","2147483647","important"\)/);
     assert.match(html, /data-gnr8-native-scrollicon-glyph/);
-    assert.match(html, /if\(!hasGlyph&&!hasRenderableText&&!hasRenderableIcon\)/);
+    assert.match(html, /var glyph=el\.querySelector\?el\.querySelector\(glyphSelector\):null;/);
+    assert.match(html, /if\(!glyph\)/);
+    assert.doesNotMatch(html, /hasRenderableText/);
+    assert.doesNotMatch(html, /hasRenderableIcon/);
     assert.match(html, /glyph\.textContent="↑"/);
+    assert.match(html, /glyph\.style\.setProperty\("display","inline-block","important"\)/);
+    assert.match(html, /glyph\.style\.setProperty\("font-weight","700","important"\)/);
+    assert.match(html, /glyph\.style\.setProperty\("pointer-events","none","important"\)/);
     assert.match(html, /\["width","44px"\]/);
     assert.match(html, /\["height","44px"\]/);
     assert.match(html, /\["border-radius","9999px"\]/);
@@ -1439,6 +1445,8 @@ test("preview route: transformed output detects scrollIcon hidden bottom_right a
     assert.match(html, /style\.setProperty\("fill","#fff","important"\)/);
     assert.match(html, /style\.setProperty\("stroke","#fff","important"\)/);
     assert.match(html, /glyphInjected:iconRenderResult\.glyphInjected/);
+    assert.match(html, /glyphPresent:iconRenderResult\.glyphPresent/);
+    assert.match(html, /glyphText:iconRenderResult\.glyphText/);
     assert.match(html, /visualBoxNormalized:iconRenderResult\.visualBoxNormalized/);
     assert.match(html, /backgroundColorApplied:iconRenderResult\.backgroundColorApplied/);
     assert.match(html, /foregroundColorApplied:iconRenderResult\.foregroundColorApplied/);
@@ -1446,6 +1454,69 @@ test("preview route: transformed output detects scrollIcon hidden bottom_right a
     assert.match(html, /reasonCode:"NATIVE_SCROLLICON_REHIDDEN_BY_RUNTIME"/);
     assert.match(html, /attributeFilter:\["class","style","hidden","aria-hidden"\]/);
     assert.match(html, /fallbackInjectionDisabled:true/);
+    assert.doesNotMatch(html, /PREVIEW_BACK_TO_TOP_FALLBACK_APPLIED/);
+  } finally {
+    restoreDeps();
+  }
+});
+
+test("preview route: transformed output forces native scrollIcon glyph presence and style without fallback injection", async () => {
+  const restoreDeps = setPreviewRouteDependenciesForTest({
+    resolveAgencyIdForSiteVersion: async () => "agency_1",
+    requireAgencyActionContext: async () => ({ agencyId: "agency_1" }) as never,
+    renderSiteVersionPreview: async () =>
+      ({
+        html: `<!doctype html><html><body>
+<a href="#" data-req="scrollTop" class="scrollIcon bottom_right"></a>
+<a href="#" data-req="scrollTop" class="scrollIcon bottom_right"><span style="opacity:0">invisible</span></a>
+<a href="#" data-req="scrollTop" class="scrollIcon bottom_right"><span data-gnr8-native-scrollicon-glyph="1">x</span></a>
+</body></html>`,
+        siteId: "site_preview_1",
+        siteVersionId: "sv_preview_1",
+        source: "preview",
+        previewMode: "transformed",
+        previewRuntimeSummary: {
+          rendererContractAvailable: true,
+          finalSiteModelAvailable: true,
+          renderedWithFallback: false,
+          matchedPageId: null,
+          contentResolutionApplied: true,
+          resolvedContentCount: 0,
+          unresolvedContentCount: 0,
+          contentResolutionDegraded: false,
+          contentResolutionDiagnostics: [],
+          previewDiagnostics: [],
+          familyRenderUsed: false,
+          familyRenderMode: null,
+          familyRenderFamilyId: null,
+          familyRenderFallbackToPage: false,
+          familyRenderDiagnosticsCount: 0,
+        },
+        renderedCaptureUsed: false,
+        domSize: 100,
+        fallbackUsed: false,
+      }) as never,
+    canShowContentDebug: async () => false,
+  });
+  try {
+    const response = await GET(new Request("https://app.pasadenagenerator.com/api/gnr8/runtime/versions/sv_preview_1/preview?mode=transformed"), {
+      params: Promise.resolve({ siteVersionId: "sv_preview_1" }),
+    });
+    const html = await response.text();
+    assert.equal(response.status, 200);
+    assert.match(html, /if\(!glyph\)\{/);
+    assert.match(html, /el\.appendChild\(glyph\)/);
+    assert.match(html, /glyphInjected=true/);
+    assert.match(html, /glyphPresent=true/);
+    assert.match(html, /glyphText=String\(glyph\.textContent\|\|""\)/);
+    assert.match(html, /glyph\.textContent="↑"/);
+    assert.match(html, /glyph\.style\.setProperty\("font-size","24px","important"\)/);
+    assert.match(html, /glyph\.style\.setProperty\("line-height","1","important"\)/);
+    assert.match(html, /glyph\.style\.setProperty\("color","#fff","important"\)/);
+    assert.match(html, /glyph\.style\.setProperty\("fill","#fff","important"\)/);
+    assert.match(html, /glyph\.style\.setProperty\("stroke","#fff","important"\)/);
+    assert.match(html, /glyph\.style\.setProperty\("pointer-events","none","important"\)/);
+    assert.match(html, /return \{glyphInjected:glyphInjected,glyphPresent:glyphPresent,glyphText:glyphText/);
     assert.doesNotMatch(html, /PREVIEW_BACK_TO_TOP_FALLBACK_APPLIED/);
   } finally {
     restoreDeps();
