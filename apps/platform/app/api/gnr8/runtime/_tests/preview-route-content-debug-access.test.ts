@@ -1041,6 +1041,7 @@ test("preview route: transformed output emits native status as none when no nati
     assert.equal(response.status, 200);
     assert.match(html, /PREVIEW_BACK_TO_TOP_NATIVE_STATUS/);
     assert.match(html, /nativeDetected:nativeDetected/);
+    assert.match(html, /missingReason:missingClassification/);
     assert.match(html, /finalButtonSource:nativeDetected\?"native_builder":"none"/);
     assert.match(html, /fallbackInjectionDisabled:true/);
     assert.doesNotMatch(html, /PREVIEW_BACK_TO_TOP_FALLBACK_APPLIED/);
@@ -1096,6 +1097,7 @@ test("preview route: transformed output detects Roboplast-style native builder c
     assert.match(html, /PREVIEW_BACK_TO_TOP_NATIVE_STATUS/);
     assert.match(html, /finalButtonSource:nativeDetected\?"native_builder":"none"/);
     assert.match(html, /nativeDetected:nativeDetected/);
+    assert.match(html, /missingReason:missingClassification/);
   } finally {
     restoreDeps();
   }
@@ -1399,7 +1401,14 @@ test("preview route: transformed output detects scrollIcon hidden bottom_right a
     assert.match(html, /PREVIEW_BACK_TO_TOP_NATIVE_RESTORED/);
     assert.match(html, /selectorMatched:"a\.scrollIcon\[data-req='scrollTop'\], a\.scrollIcon\.bottom_right\[href='#'\], a\[data-req='scrollTop'\]"/);
     assert.match(html, /isNativeBuilderMatch/);
+    assert.match(html, /function isRestoredNativeDetected\(el,hadHiddenClassBeforeRestore\)/);
+    assert.match(html, /nativeDetected=visibleCandidates\.length>0\|\|restoredCandidateDetected/);
+    assert.match(html, /restoredCandidateDetected===true\?"NATIVE_BACK_TO_TOP_RESTORED":classifyMissing/);
+    assert.match(html, /if\(missingClassification&&missingClassification!=="NATIVE_BACK_TO_TOP_RESTORED"\)/);
     assert.match(html, /nativeCandidateCount:nativeCandidates\.length/);
+    assert.match(html, /PREVIEW_BACK_TO_TOP_NATIVE_COMPARISON_STATUS/);
+    assert.match(html, /finalButtonSource:nativeDetected\?"native_builder":"none"/);
+    assert.match(html, /missingReason:missingClassification/);
     assert.match(html, /finalButtonSource:nativeDetected\?"native_builder":"none"/);
     assert.match(html, /removedHiddenClass/);
     assert.match(html, /visibilityRestored/);

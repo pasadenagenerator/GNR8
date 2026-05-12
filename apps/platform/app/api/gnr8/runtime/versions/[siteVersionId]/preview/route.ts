@@ -637,6 +637,18 @@ if(st&&(st.display==="none"||st.visibility==="hidden"||Number(st.opacity||"1")==
 var rect=el.getBoundingClientRect?el.getBoundingClientRect():{width:0,height:0};
 return Number(rect.width||0)>0&&Number(rect.height||0)>0;
 }
+function isRestoredNativeDetected(el,hadHiddenClassBeforeRestore){
+if(!el||!el.isConnected)return false;
+var st=window.getComputedStyle?window.getComputedStyle(el):null;
+if(!st)return false;
+var hiddenRemoved=hadHiddenClassBeforeRestore===true&&!!(el.classList&&!el.classList.contains("hidden"));
+var displayRestored=st.display!=="none";
+if(!(hiddenRemoved||displayRestored))return false;
+if(st.visibility==="hidden")return false;
+if(Number(st.opacity||"1")===0)return false;
+if(st.pointerEvents==="none")return false;
+return true;
+}
 function collectNativeCandidates(){
 var prioritizedNodes=Array.prototype.slice.call(document.querySelectorAll(NATIVE_BUILDER_SELECTOR));
 var nodes=prioritizedNodes.concat(Array.prototype.slice.call(document.querySelectorAll(NATIVE_HINT_SELECTOR)));
@@ -735,6 +747,7 @@ var runtimeTerms=runtimeSignalsFound();
 emit("PREVIEW_BACK_TO_TOP_NATIVE_DISCOVERY_SNAPSHOT",{siteVersionId:payload.siteVersionId,passName:passName,candidateCount:nativeCandidates.length,candidates:nativeCandidates.slice(0,20).map(function(c){return{tag:c.tag,id:c.id,className:c.className,wrapperTag:c.wrapperTag,iconMarkup:c.iconMarkup,computedStyle:c.computedStyle,boundingClientRect:c.boundingClientRect,isVisible:c.isVisible,hasUpIcon:c.hasUpIcon,fixedLike:c.fixedLike,isNativeBuilderMatch:c.isNativeBuilderMatch};}),correlationKey:correlationKey("native_discovery_snapshot_"+passName)});
 var nativeDetected=visibleCandidates.length>0;
 var restoredHidden=false;
+var restoredCandidateDetected=false;
 var wiredSmoothScroll=false;
 var removedHiddenClass=false;
 var visibilityRestored=false;
@@ -749,7 +762,8 @@ visibilityRestored=restoredHidden===true;
 if(restoredHidden===true){
 nativeCandidates=collectNativeCandidates();
 visibleCandidates=nativeCandidates.filter(function(c){return c.isVisible;});
-nativeDetected=visibleCandidates.length>0;
+restoredCandidateDetected=isRestoredNativeDetected(nativeCandidates[0]&&nativeCandidates[0].element,hadHiddenBeforeRestore);
+nativeDetected=visibleCandidates.length>0||restoredCandidateDetected;
 }
 }
 if(nativeDetected){
@@ -782,6 +796,8 @@ emitNativeTrace("filtered",chosen.element,{matchedSelector:chosen.isNativeBuilde
 }
 },500);
 removedHiddenClass=removedHiddenClass||(chosenHadHiddenBeforeRestore&&!!(chosen.element&&chosen.element.classList&&!chosen.element.classList.contains("hidden")));
+restoredCandidateDetected=restoredCandidateDetected||isRestoredNativeDetected(chosen.element,chosenHadHiddenBeforeRestore);
+nativeDetected=nativeDetected||restoredCandidateDetected;
 wiredSmoothScroll=maybeWireSmoothScroll(chosen.element)===true;
 lastKnownNativeNode=chosen.element;
 lastKnownNativeFingerprint=buildNativeFingerprint(chosen.element);
@@ -800,13 +816,13 @@ lastKnownNativeFingerprint=buildNativeFingerprint(replacement);
 }
 }
 }
-var missingClassification=classifyMissing({nativeDetected:nativeDetected,runtimeCandidateCount:nativeCandidates.length,visibleCandidateCount:visibleCandidates.length,runtimeSignalTerms:runtimeTerms});
-emit("PREVIEW_BACK_TO_TOP_NATIVE_COMPARISON_STATUS",{siteVersionId:payload.siteVersionId,nativeDetected:nativeDetected,nativeCandidateCount:nativeCandidates.length,nativeCandidateSummaries:nativeCandidates.slice(0,8).map(function(c){return{tag:c.tag,id:c.id,className:c.className,wrapperTag:c.wrapperTag,hasIcon:c.hasUpIcon,isVisible:c.isVisible,href:c.href};}),sourceSignalsFound:payload.sourceSignalsFound===true||payload.sourceSignalMatches.length>0,runtimeSignalsFound:runtimeTerms.length>0,missingReason:missingClassification,correlationKey:correlationKey("native_comparison_status_"+passName)});
-if(missingClassification){
+var missingClassification=restoredCandidateDetected===true?"NATIVE_BACK_TO_TOP_RESTORED":classifyMissing({nativeDetected:nativeDetected,runtimeCandidateCount:nativeCandidates.length,visibleCandidateCount:visibleCandidates.length,runtimeSignalTerms:runtimeTerms});
+emit("PREVIEW_BACK_TO_TOP_NATIVE_COMPARISON_STATUS",{siteVersionId:payload.siteVersionId,nativeDetected:nativeDetected,nativeCandidateCount:nativeCandidates.length,nativeCandidateSummaries:nativeCandidates.slice(0,8).map(function(c){return{tag:c.tag,id:c.id,className:c.className,wrapperTag:c.wrapperTag,hasIcon:c.hasUpIcon,isVisible:c.isVisible,href:c.href};}),sourceSignalsFound:payload.sourceSignalsFound===true||payload.sourceSignalMatches.length>0,runtimeSignalsFound:runtimeTerms.length>0,missingReason:missingClassification,finalButtonSource:nativeDetected?"native_builder":"none",correlationKey:correlationKey("native_comparison_status_"+passName)});
+if(missingClassification&&missingClassification!=="NATIVE_BACK_TO_TOP_RESTORED"){
 emit("PREVIEW_BACK_TO_TOP_NATIVE_MISSING_CLASSIFIED",{siteVersionId:payload.siteVersionId,classification:missingClassification,evidence:{sourceSignalsFound:payload.sourceSignalsFound===true,sourceSignalMatches:payload.sourceSignalMatches,runtimeSignalsFoundTerms:runtimeTerms,runtimeCandidateCount:nativeCandidates.length,visibleCandidateCount:visibleCandidates.length},recommendedFix:missingClassification==="NATIVE_BACK_TO_TOP_PRESENT_BUT_HIDDEN_BY_CSS"?"normalize visibility/position on native node only":missingClassification==="NATIVE_BACK_TO_TOP_PRESENT_BUT_NOT_INITIALIZED"?"initialize native node click behavior only":"preserve native import/runtime assets; do not reintroduce fallback",correlationKey:correlationKey("native_missing_classified_"+passName)});
 }
 emit("PREVIEW_BACK_TO_TOP_FALLBACK_REMOVED_GLOBALLY",{siteVersionId:payload.siteVersionId,passName:passName,fallbackRemovedCount:fallbackRemovedCount,fallbackInjectionDisabled:true,correlationKey:correlationKey("fallback_removed_"+passName)});
-emit("PREVIEW_BACK_TO_TOP_NATIVE_STATUS",{siteVersionId:payload.siteVersionId,nativeDetected:nativeDetected,nativeCandidateCount:nativeCandidates.length,fallbackRemovedCount:fallbackRemovedCount,fallbackInjectionDisabled:true,hiddenNativeRestored:restoredHidden,smoothScrollWired:wiredSmoothScroll,finalButtonSource:nativeDetected?"native_builder":"none",correlationKey:correlationKey("native_status_"+passName)});
+emit("PREVIEW_BACK_TO_TOP_NATIVE_STATUS",{siteVersionId:payload.siteVersionId,nativeDetected:nativeDetected,nativeCandidateCount:nativeCandidates.length,fallbackRemovedCount:fallbackRemovedCount,fallbackInjectionDisabled:true,hiddenNativeRestored:restoredHidden,smoothScrollWired:wiredSmoothScroll,missingReason:missingClassification,finalButtonSource:nativeDetected?"native_builder":"none",correlationKey:correlationKey("native_status_"+passName)});
 }
 try{
 runNativeOnlyPass("initial");
