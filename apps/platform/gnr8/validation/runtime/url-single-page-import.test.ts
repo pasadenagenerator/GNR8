@@ -382,6 +382,53 @@ test("url import accepts worker success truth even when timeout diagnostic is pr
   assert.equal(Number(renderedMetadata.domSize) > 0, true);
 });
 
+test("url import fetches CSS url() upload image assets from style blocks and inline styles", async () => {
+  const tmpRoot = await fs.promises.mkdtemp(path.join(os.tmpdir(), "gnr8-url-import-css-upload-assets-"));
+  const sourceUrl = "https://transportimaver.si/";
+  const heroUrl = "https://app.pasadenagenerator.com/uploads/KcGdxACT/hero-01.jpg";
+  const overlayUrl = "https://app.pasadenagenerator.com/uploads/QBSeVQys/overlay.png";
+  const entryHtml = `<!doctype html>
+<html>
+  <head>
+    <style>
+      .hero { background-image: url('${heroUrl}'); }
+    </style>
+  </head>
+  <body>
+    <section class="hero" style="background-image:url('${overlayUrl}')"></section>
+  </body>
+</html>`;
+
+  const imageBytes = Buffer.from([137, 80, 78, 71, 1, 2, 3, 4]);
+  const snapshot = await importPublicSinglePageUrlToSnapshot({
+    sourceUrl,
+    snapshotRootDirAbs: tmpRoot,
+    requestId: "req-css-upload-assets",
+    renderedCaptureWorkerClient: unsupportedWorkerClient(),
+    fetchImpl: async (input) => {
+      const url = String(input instanceof Request ? input.url : input);
+      if (url === sourceUrl) return makeHtmlResponse(entryHtml);
+      if (url === heroUrl || url === overlayUrl) {
+        return new Response(imageBytes, {
+          status: 200,
+          headers: { "content-type": "image/png" },
+        });
+      }
+      return new Response("not found", { status: 404 });
+    },
+  });
+
+  const persistedUrlTargets = new Set(
+    snapshot.importDiagnostics.issues
+      .filter((issue) => issue.code === "RAW_IMPORT_HTML_IMAGE_ASSET_PERSISTED")
+      .map((issue) => issue.targetUrl),
+  );
+  assert.ok(persistedUrlTargets.has(heroUrl));
+  assert.ok(persistedUrlTargets.has(overlayUrl));
+  assert.ok(fs.existsSync(path.resolve(snapshot.snapshotRootDirAbs, "uploads/KcGdxACT/hero-01.jpg")));
+  assert.ok(fs.existsSync(path.resolve(snapshot.snapshotRootDirAbs, "uploads/QBSeVQys/overlay.png")));
+});
+
 test("url import accepts worker partial success as degraded usable rendered truth", async () => {
   const tmpRoot = await fs.promises.mkdtemp(path.join(os.tmpdir(), "gnr8-url-import-partial-success-"));
   const entryHtml = "<!doctype html><html><body><main><h1>Entry</h1><p>backup content</p></main></body></html>";

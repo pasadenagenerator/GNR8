@@ -934,6 +934,33 @@ function buildSrcsetValue(tokens: Array<{ url: string; descriptor: string }>): s
     .join(", ");
 }
 
+function extractCssUrlCandidates(rawCssText: string): string[] {
+  const cssText = String(rawCssText ?? "");
+  if (!cssText) return [];
+  const regex = /url\(\s*(['"]?)([^'")]+)\1\s*\)/gi;
+  const out = new Set<string>();
+  let match: RegExpExecArray | null = null;
+  while ((match = regex.exec(cssText)) !== null) {
+    const candidate = String(match[2] ?? "").trim();
+    if (!candidate || candidate.startsWith("data:") || candidate.startsWith("#")) continue;
+    out.add(candidate);
+  }
+  return [...out];
+}
+
+function inferCssUrlAssetKind(rawRef: string): UrlImportAssetKind {
+  const trimmed = String(rawRef ?? "").trim();
+  if (!trimmed) return "style_asset";
+  try {
+    const resolved = new URL(trimmed, "https://example.invalid");
+    const ext = path.posix.extname(resolved.pathname.toLowerCase());
+    if (IMAGE_FILE_EXTENSION_SET.has(ext)) return "image";
+  } catch {
+    // fall through
+  }
+  return "style_asset";
+}
+
 const IMAGE_FILE_EXTENSION_SET = new Set<string>([
   ".apng",
   ".avif",
@@ -1883,6 +1910,41 @@ function collectAssetRefs(input: {
     const typeAttr = getAttr(node, "type");
     const href = getAttr(node, "href");
     const assetKind = assetKindFromNode({ tag, rel, typeAttr, href });
+
+    const inlineStyleValue = getAttr(node, "style");
+    if (inlineStyleValue && inlineStyleValue.trim()) {
+      for (const cssRef of extractCssUrlCandidates(inlineStyleValue)) {
+        pushRef({
+          tag: "link",
+          attribute: "href",
+          rawRef: cssRef,
+          assetKind: inferCssUrlAssetKind(cssRef),
+          surface: "inline_style_url",
+          sourceContext,
+        });
+      }
+    }
+
+    if (tag === "style") {
+      const childNodes = (node as { childNodes?: unknown[] }).childNodes;
+      const cssText = Array.isArray(childNodes)
+        ? childNodes
+            .map((child) => ((child as { value?: unknown }).value != null ? String((child as { value?: unknown }).value) : ""))
+            .join("\n")
+        : "";
+      for (const cssRef of extractCssUrlCandidates(cssText)) {
+        pushRef({
+          tag: "link",
+          attribute: "href",
+          rawRef: cssRef,
+          assetKind: inferCssUrlAssetKind(cssRef),
+          surface: "style_block_url",
+          sourceContext,
+        });
+      }
+      return;
+    }
+
     if (!assetKind && tag !== "a") {
       if (tag === "link" || tag === "object" || tag === "embed") {
         const href = getAttr(node, "href");
