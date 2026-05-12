@@ -556,7 +556,7 @@ function normalizeBasename(value: string): string {
   return cleaned || "asset";
 }
 
-function assetKindFromNode(input: { tag: string; rel: string | null }): UrlImportAssetKind | null {
+function assetKindFromNode(input: { tag: string; rel: string | null; typeAttr?: string | null; href?: string | null }): UrlImportAssetKind | null {
   if (input.tag === "img") return "image";
   if (input.tag === "source") return "image";
   if (input.tag === "object" || input.tag === "embed") return "image";
@@ -567,6 +567,8 @@ function assetKindFromNode(input: { tag: string; rel: string | null }): UrlImpor
       .split(/\s+/)
       .filter(Boolean);
     if (relTokens.includes("stylesheet")) return "stylesheet";
+    const typeAttr = String(input.typeAttr ?? "").trim().toLowerCase();
+    if (typeAttr === "text/css" || typeAttr.startsWith("text/css;")) return "stylesheet";
     if (
       relTokens.includes("icon") ||
       relTokens.includes("apple-touch-icon") ||
@@ -1878,7 +1880,9 @@ function collectAssetRefs(input: {
     if (!isElement(node)) return;
     const tag = node.tagName.toLowerCase() as UrlImportAssetTag | string;
     const rel = getAttr(node, "rel");
-    const assetKind = assetKindFromNode({ tag, rel });
+    const typeAttr = getAttr(node, "type");
+    const href = getAttr(node, "href");
+    const assetKind = assetKindFromNode({ tag, rel, typeAttr, href });
     if (!assetKind && tag !== "a") {
       if (tag === "link" || tag === "object" || tag === "embed") {
         const href = getAttr(node, "href");
@@ -4092,7 +4096,9 @@ export async function importPublicSinglePageUrlToSnapshot(input: {
       if (tag !== "link" && tag !== "img" && tag !== "script" && tag !== "source" && tag !== "a") return;
 
       const rel = getAttr(node, "rel");
-      const kind = tag === "source" ? "image" : assetKindFromNode({ tag, rel });
+      const typeAttr = getAttr(node, "type");
+      const href = getAttr(node, "href");
+      const kind = tag === "source" ? "image" : assetKindFromNode({ tag, rel, typeAttr, href });
       if (!kind && tag !== "img" && tag !== "source" && tag !== "a") return;
 
       const attrsToHandle: UrlImportAssetAttribute[] = [];

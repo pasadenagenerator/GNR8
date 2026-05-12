@@ -27,7 +27,7 @@ function referenceKindFromRawRef(rawRef: string): AssetReference["referenceKind"
   return "relative_local";
 }
 
-function assetKindFromTag(input: { tag: string; relAttr: string | null }): AssetReference["assetKind"] {
+function assetKindFromTag(input: { tag: string; relAttr: string | null; typeAttr?: string | null; hrefAttr?: string | null }): AssetReference["assetKind"] {
   switch (input.tag) {
     case "img":
     case "a":
@@ -37,7 +37,10 @@ function assetKindFromTag(input: { tag: string; relAttr: string | null }): Asset
     case "link": {
       const rel = (input.relAttr ?? "").toLowerCase();
       const tokens = rel.split(/\s+/).filter(Boolean);
-      return tokens.includes("stylesheet") ? "stylesheet" : "unknown";
+      if (tokens.includes("stylesheet")) return "stylesheet";
+      const typeAttr = String(input.typeAttr ?? "").trim().toLowerCase();
+      if (typeAttr === "text/css" || typeAttr.startsWith("text/css;")) return "stylesheet";
+      return "unknown";
     }
     default:
       return "unknown";
@@ -271,7 +274,8 @@ export function extractAssetReferencesFromDom(input: {
         attribute: "href",
       });
       const occurrence = nextOccurrence(tag, "href");
-      const assetKind = assetKindFromTag({ tag, relAttr });
+      const typeAttr = getAttr(node, "type");
+      const assetKind = assetKindFromTag({ tag, relAttr, typeAttr, hrefAttr: rawRef });
       const id = sha256Hex(
         stableStringify({
           fromDocumentPath: input.fromDocumentPath,

@@ -200,6 +200,31 @@ test('raw template preview prefers persisted fileMap match for relative styleshe
   )
 })
 
+test('raw template preview rewrites persisted local stylesheet links to preview-assets so native stylesheet detection stays local', () => {
+  const html = '<!doctype html><html><head><link type="text/css" href="/assets/stylesheet/site.css"><link href="/assets/stylesheet/user-style.css" rel="stylesheet"></head><body><a href="#" data-req="scrollTop" class="scrollIcon hidden bottom_right">Top</a></body></html>'
+  const rewritten = __unifiedRenderPreviewTestUtils.rewriteRawTemplateAssetReferences({
+    html,
+    siteId: 'site-raw',
+    siteVersionId: 'sv-raw',
+    entryHtmlPath: 'index.html',
+    fileMapPaths: new Set(['assets/stylesheet/site.css', 'assets/stylesheet/user-style.css']),
+  })
+  const stylesheetHrefs = [...rewritten.matchAll(/<link[^>]*href="([^"]+)"/g)].map((match) => match[1] ?? '')
+  const localStylesheetHrefs = stylesheetHrefs.filter(
+    (href) =>
+      href.startsWith('/api/gnr8/runtime/preview-assets/') ||
+      href.startsWith('/assets/') ||
+      href.startsWith('assets/'),
+  )
+  assert.equal(localStylesheetHrefs.length > 0, true)
+  assert.equal(
+    localStylesheetHrefs.every((href) =>
+      href.startsWith('/api/gnr8/runtime/preview-assets/site-raw/sv-raw/assets/stylesheet/'),
+    ),
+    true,
+  )
+})
+
 test('preview override selection merges by slot with draft precedence and published fallback', () => {
   const selected = __unifiedRenderPreviewTestUtils.selectPreviewOverridesByVersion({
     siteVersionId: 'sv-2',
