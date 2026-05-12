@@ -1040,9 +1040,9 @@ test("preview route: transformed output emits native status as none when no nati
     const html = await response.text();
     assert.equal(response.status, 200);
     assert.match(html, /PREVIEW_BACK_TO_TOP_NATIVE_STATUS/);
-    assert.match(html, /nativeDetected:nativeDetected/);
+    assert.match(html, /nativeDetected:stableNativeDetected/);
     assert.match(html, /missingReason:missingClassification/);
-    assert.match(html, /finalButtonSource:nativeDetected\?"native_builder":"none"/);
+    assert.match(html, /finalButtonSource:stableNativeDetected\?"native_builder":"none"/);
     assert.match(html, /fallbackInjectionDisabled:true/);
     assert.doesNotMatch(html, /PREVIEW_BACK_TO_TOP_FALLBACK_APPLIED/);
   } finally {
@@ -1095,8 +1095,8 @@ test("preview route: transformed output detects Roboplast-style native builder c
     assert.match(html, /PREVIEW_BACK_TO_TOP_NATIVE_DISCOVERY_SNAPSHOT/);
     assert.match(html, /PREVIEW_BACK_TO_TOP_NATIVE_BUILDER_DETECTED/);
     assert.match(html, /PREVIEW_BACK_TO_TOP_NATIVE_STATUS/);
-    assert.match(html, /finalButtonSource:nativeDetected\?"native_builder":"none"/);
-    assert.match(html, /nativeDetected:nativeDetected/);
+    assert.match(html, /finalButtonSource:stableNativeDetected\?"native_builder":"none"/);
+    assert.match(html, /nativeDetected:stableNativeDetected/);
     assert.match(html, /missingReason:missingClassification/);
   } finally {
     restoreDeps();
@@ -1149,8 +1149,8 @@ test("preview route: transformed output detects same builder native pattern for 
     assert.match(html, /PREVIEW_BACK_TO_TOP_NATIVE_RESTORED/);
     assert.match(html, /selectorMatched:"a\.scrollIcon\[data-req='scrollTop'\], a\.scrollIcon\.bottom_right\[href='#'\], a\[data-req='scrollTop'\]"/);
     assert.match(html, /PREVIEW_BACK_TO_TOP_NATIVE_STATUS/);
-    assert.match(html, /nativeDetected:nativeDetected/);
-    assert.match(html, /finalButtonSource:nativeDetected\?"native_builder":"none"/);
+    assert.match(html, /nativeDetected:stableNativeDetected/);
+    assert.match(html, /finalButtonSource:stableNativeDetected\?"native_builder":"none"/);
     assert.doesNotMatch(html, /PREVIEW_BACK_TO_TOP_FALLBACK_APPLIED/);
   } finally {
     restoreDeps();
@@ -1403,16 +1403,28 @@ test("preview route: transformed output detects scrollIcon hidden bottom_right a
     assert.match(html, /isNativeBuilderMatch/);
     assert.match(html, /function isRestoredNativeDetected\(el,hadHiddenClassBeforeRestore\)/);
     assert.match(html, /nativeDetected=visibleCandidates\.length>0\|\|restoredCandidateDetected/);
-    assert.match(html, /restoredCandidateDetected===true\?"NATIVE_BACK_TO_TOP_RESTORED":classifyMissing/);
+    assert.match(html, /var stableNativeDetected=nativeDetected\|\|nativeRestoredPersistently/);
+    assert.match(html, /\(restoredCandidateDetected===true\|\|nativeRestoredPersistently===true\)\?"NATIVE_BACK_TO_TOP_RESTORED":classifyMissing/);
     assert.match(html, /if\(missingClassification&&missingClassification!=="NATIVE_BACK_TO_TOP_RESTORED"\)/);
     assert.match(html, /nativeCandidateCount:nativeCandidates\.length/);
     assert.match(html, /PREVIEW_BACK_TO_TOP_NATIVE_COMPARISON_STATUS/);
-    assert.match(html, /finalButtonSource:nativeDetected\?"native_builder":"none"/);
+    assert.match(html, /finalButtonSource:stableNativeDetected\?"native_builder":"none"/);
     assert.match(html, /missingReason:missingClassification/);
-    assert.match(html, /finalButtonSource:nativeDetected\?"native_builder":"none"/);
+    assert.match(html, /finalButtonSource:stableNativeDetected\?"native_builder":"none"/);
     assert.match(html, /removedHiddenClass/);
     assert.match(html, /visibilityRestored/);
     assert.match(html, /clickWired/);
+    assert.match(html, /style\.setProperty\("display","block","important"\)/);
+    assert.match(html, /style\.setProperty\("visibility","visible","important"\)/);
+    assert.match(html, /style\.setProperty\("opacity","1","important"\)/);
+    assert.match(html, /style\.setProperty\("pointer-events","auto","important"\)/);
+    assert.match(html, /style\.setProperty\("position","fixed","important"\)/);
+    assert.match(html, /style\.setProperty\("right","24px","important"\)/);
+    assert.match(html, /style\.setProperty\("bottom","24px","important"\)/);
+    assert.match(html, /style\.setProperty\("z-index","2147483647","important"\)/);
+    assert.match(html, /PREVIEW_BACK_TO_TOP_NATIVE_REHIDE_DETECTED/);
+    assert.match(html, /reasonCode:"NATIVE_SCROLLICON_REHIDDEN_BY_RUNTIME"/);
+    assert.match(html, /attributeFilter:\["class","style","hidden","aria-hidden"\]/);
     assert.match(html, /fallbackInjectionDisabled:true/);
     assert.doesNotMatch(html, /PREVIEW_BACK_TO_TOP_FALLBACK_APPLIED/);
   } finally {

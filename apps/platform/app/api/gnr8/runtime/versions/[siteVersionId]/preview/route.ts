@@ -584,6 +584,7 @@ var NATIVE_HINT_SELECTORS=[
 var NATIVE_HINT_SELECTOR=NATIVE_HINT_SELECTORS.join(",");
 var lastKnownNativeNode=null;
 var lastKnownNativeFingerprint="";
+var nativeRestoredPersistently=false;
 function computeRect(el){
 var rect=el&&el.getBoundingClientRect?el.getBoundingClientRect():{top:0,left:0,right:0,bottom:0,width:0,height:0};
 return {x:Number(rect.left||0),y:Number(rect.top||0),width:Number(rect.width||0),height:Number(rect.height||0),top:Number(rect.top||0),right:Number(rect.right||0),bottom:Number(rect.bottom||0),left:Number(rect.left||0)};
@@ -696,6 +697,8 @@ if(!el||!el.style)return false;
 var st=window.getComputedStyle?window.getComputedStyle(el):null;
 var changed=false;
 if(el.classList&&el.classList.contains("hidden")){el.classList.remove("hidden");changed=true;}
+if(el.hasAttribute&&el.hasAttribute("hidden")){el.removeAttribute("hidden");changed=true;}
+if(el.getAttribute&&String(el.getAttribute("aria-hidden")||"").toLowerCase()==="true"){el.setAttribute("aria-hidden","false");changed=true;}
 if(st&&st.display==="none"){el.style.display="block";changed=true;}
 if(st&&st.display!=="none"&&!el.style.display){el.style.display=st.display==="inline"?"inline-block":st.display;changed=true;}
 if(st&&st.visibility==="hidden"){el.style.visibility="visible";changed=true;}
@@ -715,6 +718,49 @@ if(!el.style.zIndex)el.style.zIndex="9999";
 changed=true;
 }
 return changed;
+}
+function enforceNativeVisibleImportant(el){
+if(!el||!el.style)return false;
+var changed=normalizeHiddenNative(el)===true;
+var before=window.getComputedStyle?window.getComputedStyle(el):null;
+if(before&&before.display!=="block"){changed=true;}
+el.style.setProperty("display","block","important");
+el.style.setProperty("visibility","visible","important");
+el.style.setProperty("opacity","1","important");
+el.style.setProperty("pointer-events","auto","important");
+el.style.setProperty("position","fixed","important");
+el.style.setProperty("right","24px","important");
+el.style.setProperty("bottom","24px","important");
+el.style.setProperty("z-index","2147483647","important");
+return changed;
+}
+function isRehidden(el){
+if(!el)return false;
+var st=window.getComputedStyle?window.getComputedStyle(el):null;
+if(el.classList&&el.classList.contains("hidden"))return true;
+if(el.hasAttribute&&el.hasAttribute("hidden"))return true;
+if(el.getAttribute&&String(el.getAttribute("aria-hidden")||"").toLowerCase()==="true")return true;
+if(st&&st.display==="none")return true;
+if(st&&st.visibility==="hidden")return true;
+if(st&&Number(st.opacity||"1")===0)return true;
+if(st&&st.pointerEvents==="none")return true;
+return false;
+}
+function attachNativeRehideObserver(el,passName){
+if(!el||!window.MutationObserver)return;
+if(el.__gnr8NativeObserverAttached===true)return;
+var observer=new MutationObserver(function(){
+if(!isRehidden(el))return;
+var before=window.getComputedStyle?window.getComputedStyle(el):null;
+var classNameBefore=String(el.className||"");
+var displayBefore=before?String(before.display||""):"";
+var restoredAgain=enforceNativeVisibleImportant(el)===true;
+nativeRestoredPersistently=nativeRestoredPersistently||restoredAgain||!isRehidden(el);
+emit("PREVIEW_BACK_TO_TOP_NATIVE_REHIDE_DETECTED",{siteVersionId:payload.siteVersionId,passName:passName,classNameBefore:classNameBefore,displayBefore:displayBefore,restoredAgain:restoredAgain,reasonCode:"NATIVE_SCROLLICON_REHIDDEN_BY_RUNTIME",correlationKey:correlationKey("native_rehide_detected_"+passName)});
+emitNativeTrace("restored",el,{matchedSelector:NATIVE_BUILDER_SELECTOR,passName:passName,wasPromoted:true});
+});
+observer.observe(el,{attributes:true,attributeFilter:["class","style","hidden","aria-hidden"]});
+el.__gnr8NativeObserverAttached=true;
 }
 function maybeWireSmoothScroll(el){
 if(!el||!el.addEventListener)return;
@@ -764,14 +810,16 @@ nativeCandidates=collectNativeCandidates();
 visibleCandidates=nativeCandidates.filter(function(c){return c.isVisible;});
 restoredCandidateDetected=isRestoredNativeDetected(nativeCandidates[0]&&nativeCandidates[0].element,hadHiddenBeforeRestore);
 nativeDetected=visibleCandidates.length>0||restoredCandidateDetected;
+nativeRestoredPersistently=nativeRestoredPersistently||restoredCandidateDetected;
 }
 }
 if(nativeDetected){
 var chosen=visibleCandidates[0]||nativeCandidates[0];
 if(chosen.element&&!chosen.element.getAttribute("aria-label"))chosen.element.setAttribute("aria-label","Back to top");
 var chosenHadHiddenBeforeRestore=!!(chosen.element&&chosen.element.classList&&chosen.element.classList.contains("hidden"));
-visibilityRestored=normalizeHiddenNative(chosen.element)===true||visibilityRestored===true;
+visibilityRestored=enforceNativeVisibleImportant(chosen.element)===true||visibilityRestored===true;
 emitNativeTrace("restored",chosen.element,{matchedSelector:chosen.isNativeBuilderMatch?NATIVE_BUILDER_SELECTOR:getMatchedSelector(chosen.element,false),passName:passName,wasPromoted:true});
+attachNativeRehideObserver(chosen.element,passName);
 emitNativeTrace("post_restore_layout",chosen.element,{matchedSelector:chosen.isNativeBuilderMatch?NATIVE_BUILDER_SELECTOR:getMatchedSelector(chosen.element,false),passName:passName});
 setTimeout(function(){
 emitNativeTrace("post_restore_timeout_100ms",chosen.element,{matchedSelector:chosen.isNativeBuilderMatch?NATIVE_BUILDER_SELECTOR:getMatchedSelector(chosen.element,false),passName:passName});
@@ -797,6 +845,7 @@ emitNativeTrace("filtered",chosen.element,{matchedSelector:chosen.isNativeBuilde
 },500);
 removedHiddenClass=removedHiddenClass||(chosenHadHiddenBeforeRestore&&!!(chosen.element&&chosen.element.classList&&!chosen.element.classList.contains("hidden")));
 restoredCandidateDetected=restoredCandidateDetected||isRestoredNativeDetected(chosen.element,chosenHadHiddenBeforeRestore);
+nativeRestoredPersistently=nativeRestoredPersistently||restoredCandidateDetected;
 nativeDetected=nativeDetected||restoredCandidateDetected;
 wiredSmoothScroll=maybeWireSmoothScroll(chosen.element)===true;
 lastKnownNativeNode=chosen.element;
@@ -816,13 +865,14 @@ lastKnownNativeFingerprint=buildNativeFingerprint(replacement);
 }
 }
 }
-var missingClassification=restoredCandidateDetected===true?"NATIVE_BACK_TO_TOP_RESTORED":classifyMissing({nativeDetected:nativeDetected,runtimeCandidateCount:nativeCandidates.length,visibleCandidateCount:visibleCandidates.length,runtimeSignalTerms:runtimeTerms});
-emit("PREVIEW_BACK_TO_TOP_NATIVE_COMPARISON_STATUS",{siteVersionId:payload.siteVersionId,nativeDetected:nativeDetected,nativeCandidateCount:nativeCandidates.length,nativeCandidateSummaries:nativeCandidates.slice(0,8).map(function(c){return{tag:c.tag,id:c.id,className:c.className,wrapperTag:c.wrapperTag,hasIcon:c.hasUpIcon,isVisible:c.isVisible,href:c.href};}),sourceSignalsFound:payload.sourceSignalsFound===true||payload.sourceSignalMatches.length>0,runtimeSignalsFound:runtimeTerms.length>0,missingReason:missingClassification,finalButtonSource:nativeDetected?"native_builder":"none",correlationKey:correlationKey("native_comparison_status_"+passName)});
+var stableNativeDetected=nativeDetected||nativeRestoredPersistently;
+var missingClassification=(restoredCandidateDetected===true||nativeRestoredPersistently===true)?"NATIVE_BACK_TO_TOP_RESTORED":classifyMissing({nativeDetected:stableNativeDetected,runtimeCandidateCount:nativeCandidates.length,visibleCandidateCount:visibleCandidates.length,runtimeSignalTerms:runtimeTerms});
+emit("PREVIEW_BACK_TO_TOP_NATIVE_COMPARISON_STATUS",{siteVersionId:payload.siteVersionId,nativeDetected:stableNativeDetected,nativeCandidateCount:nativeCandidates.length,nativeCandidateSummaries:nativeCandidates.slice(0,8).map(function(c){return{tag:c.tag,id:c.id,className:c.className,wrapperTag:c.wrapperTag,hasIcon:c.hasUpIcon,isVisible:c.isVisible,href:c.href};}),sourceSignalsFound:payload.sourceSignalsFound===true||payload.sourceSignalMatches.length>0,runtimeSignalsFound:runtimeTerms.length>0,missingReason:missingClassification,finalButtonSource:stableNativeDetected?"native_builder":"none",correlationKey:correlationKey("native_comparison_status_"+passName)});
 if(missingClassification&&missingClassification!=="NATIVE_BACK_TO_TOP_RESTORED"){
 emit("PREVIEW_BACK_TO_TOP_NATIVE_MISSING_CLASSIFIED",{siteVersionId:payload.siteVersionId,classification:missingClassification,evidence:{sourceSignalsFound:payload.sourceSignalsFound===true,sourceSignalMatches:payload.sourceSignalMatches,runtimeSignalsFoundTerms:runtimeTerms,runtimeCandidateCount:nativeCandidates.length,visibleCandidateCount:visibleCandidates.length},recommendedFix:missingClassification==="NATIVE_BACK_TO_TOP_PRESENT_BUT_HIDDEN_BY_CSS"?"normalize visibility/position on native node only":missingClassification==="NATIVE_BACK_TO_TOP_PRESENT_BUT_NOT_INITIALIZED"?"initialize native node click behavior only":"preserve native import/runtime assets; do not reintroduce fallback",correlationKey:correlationKey("native_missing_classified_"+passName)});
 }
 emit("PREVIEW_BACK_TO_TOP_FALLBACK_REMOVED_GLOBALLY",{siteVersionId:payload.siteVersionId,passName:passName,fallbackRemovedCount:fallbackRemovedCount,fallbackInjectionDisabled:true,correlationKey:correlationKey("fallback_removed_"+passName)});
-emit("PREVIEW_BACK_TO_TOP_NATIVE_STATUS",{siteVersionId:payload.siteVersionId,nativeDetected:nativeDetected,nativeCandidateCount:nativeCandidates.length,fallbackRemovedCount:fallbackRemovedCount,fallbackInjectionDisabled:true,hiddenNativeRestored:restoredHidden,smoothScrollWired:wiredSmoothScroll,missingReason:missingClassification,finalButtonSource:nativeDetected?"native_builder":"none",correlationKey:correlationKey("native_status_"+passName)});
+emit("PREVIEW_BACK_TO_TOP_NATIVE_STATUS",{siteVersionId:payload.siteVersionId,nativeDetected:stableNativeDetected,nativeCandidateCount:nativeCandidates.length,fallbackRemovedCount:fallbackRemovedCount,fallbackInjectionDisabled:true,hiddenNativeRestored:restoredHidden,smoothScrollWired:wiredSmoothScroll,missingReason:missingClassification,finalButtonSource:stableNativeDetected?"native_builder":"none",correlationKey:correlationKey("native_status_"+passName)});
 }
 try{
 runNativeOnlyPass("initial");
