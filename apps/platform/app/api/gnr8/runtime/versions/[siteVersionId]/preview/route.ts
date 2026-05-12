@@ -773,6 +773,85 @@ try{window.scrollTo({top:0,behavior:"smooth"});}catch(_err){window.scrollTo(0,0)
 },{passive:false});
 return true;
 }
+function isTransparentColor(value){
+var normalized=String(value||"").trim().toLowerCase();
+if(!normalized)return true;
+if(normalized==="transparent"||normalized==="initial"||normalized==="inherit")return true;
+if(normalized==="rgba(0, 0, 0, 0)"||normalized==="rgba(0,0,0,0)")return true;
+return false;
+}
+function detectSiteAccentColor(){
+var accentCandidates=[
+"button",
+"a.btn",
+".btn",
+".button",
+".cta",
+".site_btn",
+".onepage-up",
+".scrollIcon"
+];
+for(var i=0;i<accentCandidates.length;i+=1){
+var candidate=document.querySelector(accentCandidates[i]);
+if(!candidate||!window.getComputedStyle)continue;
+var candidateStyle=window.getComputedStyle(candidate);
+var bg=String(candidateStyle.backgroundColor||"");
+if(!isTransparentColor(bg))return bg;
+}
+return "rgb(220, 38, 38)";
+}
+function normalizeNativeIconRendering(el){
+if(!el||!el.style)return {glyphInjected:false,visualBoxNormalized:false,backgroundColorApplied:false,foregroundColorApplied:false};
+var glyphInjected=false;
+var visualBoxNormalized=false;
+var backgroundColorApplied=false;
+var foregroundColorApplied=false;
+var glyphSelector="[data-gnr8-native-scrollicon-glyph='1']";
+var hasGlyph=!!(el.querySelector&&el.querySelector(glyphSelector));
+var hasRenderableText=String(el.textContent||"").replace(/\s+/g,"").length>0;
+var hasRenderableIcon=!!(el.querySelector&&el.querySelector("svg,img"));
+if(!hasGlyph&&!hasRenderableText&&!hasRenderableIcon){
+var glyph=document.createElement("span");
+glyph.setAttribute("data-gnr8-native-scrollicon-glyph","1");
+glyph.setAttribute("aria-hidden","true");
+glyph.textContent="↑";
+el.appendChild(glyph);
+glyphInjected=true;
+}
+var boxRules=[
+["width","44px"],
+["height","44px"],
+["border-radius","9999px"],
+["display","flex"],
+["align-items","center"],
+["justify-content","center"],
+["text-decoration","none"],
+["font-size","24px"],
+["line-height","1"]
+];
+for(var ruleIdx=0;ruleIdx<boxRules.length;ruleIdx+=1){
+el.style.setProperty(boxRules[ruleIdx][0],boxRules[ruleIdx][1],"important");
+}
+visualBoxNormalized=true;
+var st=window.getComputedStyle?window.getComputedStyle(el):null;
+if(!st||isTransparentColor(st.backgroundColor)){
+el.style.setProperty("background-color",detectSiteAccentColor(),"important");
+backgroundColorApplied=true;
+}
+el.style.setProperty("color","#fff","important");
+el.style.setProperty("fill","#fff","important");
+el.style.setProperty("stroke","#fff","important");
+foregroundColorApplied=true;
+var childNodes=Array.prototype.slice.call(el.querySelectorAll("*"));
+for(var childIdx=0;childIdx<childNodes.length;childIdx+=1){
+var child=childNodes[childIdx];
+if(!child||!child.style)continue;
+child.style.setProperty("color","#fff","important");
+child.style.setProperty("fill","#fff","important");
+child.style.setProperty("stroke","#fff","important");
+}
+return {glyphInjected:glyphInjected,visualBoxNormalized:visualBoxNormalized,backgroundColorApplied:backgroundColorApplied,foregroundColorApplied:foregroundColorApplied};
+}
 function classifyMissing(details){
 if(details.nativeDetected)return null;
 if(details.runtimeCandidateCount>0&&details.visibleCandidateCount===0)return "NATIVE_BACK_TO_TOP_PRESENT_BUT_HIDDEN_BY_CSS";
@@ -848,10 +927,12 @@ restoredCandidateDetected=restoredCandidateDetected||isRestoredNativeDetected(ch
 nativeRestoredPersistently=nativeRestoredPersistently||restoredCandidateDetected;
 nativeDetected=nativeDetected||restoredCandidateDetected;
 wiredSmoothScroll=maybeWireSmoothScroll(chosen.element)===true;
+var iconRenderResult=normalizeNativeIconRendering(chosen.element);
 lastKnownNativeNode=chosen.element;
 lastKnownNativeFingerprint=buildNativeFingerprint(chosen.element);
 emit("PREVIEW_BACK_TO_TOP_NATIVE_BUILDER_DETECTED",{siteVersionId:payload.siteVersionId,passName:passName,tag:chosen.tag,id:chosen.id,className:chosen.className,wrapperTag:chosen.wrapperTag,selectorMatched:"a.scrollIcon[data-req='scrollTop'], a.scrollIcon.bottom_right[href='#'], a[data-req='scrollTop']",removedHiddenClass:removedHiddenClass,visibilityRestored:visibilityRestored,clickWired:wiredSmoothScroll,correlationKey:correlationKey("native_builder_detected_"+passName)});
 emit("PREVIEW_BACK_TO_TOP_NATIVE_RESTORED",{siteVersionId:payload.siteVersionId,passName:passName,selectorMatched:"a.scrollIcon[data-req='scrollTop'], a.scrollIcon.bottom_right[href='#'], a[data-req='scrollTop']",removedHiddenClass:removedHiddenClass,visibilityRestored:visibilityRestored,clickWired:wiredSmoothScroll,correlationKey:correlationKey("native_restored_"+passName)});
+emit("PREVIEW_BACK_TO_TOP_NATIVE_ICON_RENDERED",{siteVersionId:payload.siteVersionId,passName:passName,glyphInjected:iconRenderResult.glyphInjected,visualBoxNormalized:iconRenderResult.visualBoxNormalized,backgroundColorApplied:iconRenderResult.backgroundColorApplied,foregroundColorApplied:iconRenderResult.foregroundColorApplied,correlationKey:correlationKey("native_icon_rendered_"+passName)});
 }
 if(!nativeDetected&&lastKnownNativeNode){
 var stillConnected=!!lastKnownNativeNode.isConnected;
