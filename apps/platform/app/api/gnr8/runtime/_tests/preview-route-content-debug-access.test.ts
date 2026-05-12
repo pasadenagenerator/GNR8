@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import path from "node:path";
 import test from "node:test";
 
 import { GET, POST } from "@/app/api/gnr8/runtime/versions/[siteVersionId]/preview/route";
@@ -988,15 +990,35 @@ test("preview route: transformed output removes back-to-top fallback globally an
     });
     const html = await response.text();
     assert.equal(response.status, 200);
+    assert.match(html, /PREVIEW_BACK_TO_TOP_FALLBACK_HARD_REMOVED/);
+    assert.match(html, /removedNodeCount/);
+    assert.match(html, /removedStyleCount/);
+    assert.match(html, /fallbackCreationDisabled:true/);
     assert.match(html, /PREVIEW_BACK_TO_TOP_FALLBACK_REMOVED_GLOBALLY/);
     assert.match(html, /fallbackInjectionDisabled:true/);
     assert.match(html, /fallbackRemovedCount/);
     assert.doesNotMatch(html, /PREVIEW_BACK_TO_TOP_FALLBACK_APPLIED/);
     assert.doesNotMatch(html, /data-gnr8-backtotop-fallback\]::/);
     assert.doesNotMatch(html, /createFallbackButton/);
+    assert.doesNotMatch(html, /createElement\("button"\)/);
+    assert.doesNotMatch(html, /createElement\('button'\)/);
   } finally {
     restoreDeps();
   }
+});
+
+test("preview route: source disables all legacy fallback creation markers", async () => {
+  const routeSource = readFileSync(
+    path.resolve(process.cwd(), "app/api/gnr8/runtime/versions/[siteVersionId]/preview/route.ts"),
+    "utf-8",
+  );
+  assert.doesNotMatch(routeSource, /gnr8-preview-backtotop-fallback/);
+  assert.doesNotMatch(routeSource, /data-gnr8-backtotop-fallback/);
+  assert.doesNotMatch(routeSource, /PREVIEW_BACK_TO_TOP_FALLBACK_APPLIED/);
+  assert.doesNotMatch(routeSource, /createElement\("button"\)/);
+  assert.doesNotMatch(routeSource, /createElement\('button'\)/);
+  assert.doesNotMatch(routeSource, /fallbackInjected/);
+  assert.doesNotMatch(routeSource, /RUNTIME_SIGNAL_FALLBACK/);
 });
 
 test("preview route: transformed output emits native status as none when no native candidate exists", async () => {
@@ -1050,15 +1072,13 @@ test("preview route: transformed output emits native status as none when no nati
   }
 });
 
-test("preview route: transformed output detects Roboplast-style native builder candidate", async () => {
+test("preview route: transformed output detects Roboplast native scrollIcon candidate", async () => {
   const restoreDeps = setPreviewRouteDependenciesForTest({
     resolveAgencyIdForSiteVersion: async () => "agency_1",
     requireAgencyActionContext: async () => ({ agencyId: "agency_1" }) as never,
     renderSiteVersionPreview: async () =>
       ({
-        html: `<!doctype html><html><body>
-<a id="scroll-top-control" class="scrolltop back-to-top onepage-up scroll-up" href="#top"><i class="fa fa-chevron-up"></i></a>
-</body></html>`,
+        html: `<!doctype html><html><body><a href="#" data-req="scrollTop" class="scrollIcon bottom_right"><i class="fa fa-chevron-up"></i></a></body></html>`,
         siteId: "site_preview_1",
         siteVersionId: "sv_preview_1",
         source: "preview",
@@ -1103,15 +1123,13 @@ test("preview route: transformed output detects Roboplast-style native builder c
   }
 });
 
-test("preview route: transformed output detects same builder native pattern for Maver-like markup", async () => {
+test("preview route: transformed output detects Maver native scrollIcon and renders visible glyph", async () => {
   const restoreDeps = setPreviewRouteDependenciesForTest({
     resolveAgencyIdForSiteVersion: async () => "agency_1",
     requireAgencyActionContext: async () => ({ agencyId: "agency_1" }) as never,
     renderSiteVersionPreview: async () =>
       ({
-        html: `<!doctype html><html><body>
-<a id="onepage-scrollup" class="onepage-up scroll-up" title="Nazaj na vrh" href="#top"><i class="fa fa-chevron-up"></i></a>
-</body></html>`,
+        html: `<!doctype html><html><body><a href="#" data-req="scrollTop" class="scrollIcon bottom_right"></a></body></html>`,
         siteId: "site_preview_1",
         siteVersionId: "sv_preview_1",
         source: "preview",
@@ -1163,7 +1181,7 @@ test("preview route: transformed output includes native discovery snapshot paylo
     requireAgencyActionContext: async () => ({ agencyId: "agency_1" }) as never,
     renderSiteVersionPreview: async () =>
       ({
-        html: `<!doctype html><html><body><a id="scroll-top-control" class="scrolltop back-to-top onepage-up" href="#top"><svg><path d="M1 1"></path></svg></a></body></html>`,
+        html: `<!doctype html><html><body><a href="#" data-req="scrollTop" class="scrollIcon bottom_right"><svg><path d="M1 1"></path></svg></a></body></html>`,
         siteId: "site_preview_1",
         siteVersionId: "sv_preview_1",
         source: "preview",
@@ -1215,7 +1233,7 @@ test("preview route: transformed output emits native comparison status for Robop
     requireAgencyActionContext: async () => ({ agencyId: "agency_1" }) as never,
     renderSiteVersionPreview: async () =>
       ({
-        html: `<!doctype html><html><body><a id="scroll-top-control" class="scrolltop back-to-top onepage-up" href="#top"><i class="fa fa-chevron-up"></i></a></body></html>`,
+        html: `<!doctype html><html><body><a href="#" data-req="scrollTop" class="scrollIcon bottom_right"><i class="fa fa-chevron-up"></i></a></body></html>`,
         siteId: "site_preview_1",
         siteVersionId: "30bfe5b1-a441-41ef-92e3-0d6b3ee678e1",
         source: "preview",
@@ -1309,7 +1327,7 @@ test("preview route: transformed output keeps hidden/unwired native restore logi
     requireAgencyActionContext: async () => ({ agencyId: "agency_1" }) as never,
     renderSiteVersionPreview: async () =>
       ({
-        html: `<!doctype html><html><body><a id="onepage-scrollup" class="onepage-up scroll-up" href="javascript:void(0)" style="display:none;visibility:hidden;opacity:0">Top</a></body></html>`,
+        html: `<!doctype html><html><body><a href="#" data-req="scrollTop" class="scrollIcon hidden bottom_right" style="display:none;visibility:hidden;opacity:0">Top</a></body></html>`,
         siteId: "site_preview_1",
         siteVersionId: "sv_preview_1",
         source: "preview",
@@ -1349,7 +1367,7 @@ test("preview route: transformed output keeps hidden/unwired native restore logi
     assert.match(html, /hiddenNativeRestored/);
     assert.match(html, /smoothScrollWired/);
     assert.doesNotMatch(html, /PREVIEW_BACK_TO_TOP_FALLBACK_APPLIED/);
-    assert.match(html, /onepage-scrollup/);
+    assert.match(html, /scrollIcon hidden bottom_right/);
   } finally {
     restoreDeps();
   }
@@ -1453,8 +1471,16 @@ test("preview route: transformed output detects scrollIcon hidden bottom_right a
     assert.match(html, /PREVIEW_BACK_TO_TOP_NATIVE_REHIDE_DETECTED/);
     assert.match(html, /reasonCode:"NATIVE_SCROLLICON_REHIDDEN_BY_RUNTIME"/);
     assert.match(html, /attributeFilter:\["class","style","hidden","aria-hidden"\]/);
+    assert.match(html, /PREVIEW_BACK_TO_TOP_FALLBACK_HARD_REMOVED/);
+    assert.match(html, /removedNodeCount:fallbackRemoval\.removedNodeCount/);
+    assert.match(html, /removedStyleCount:fallbackRemoval\.removedStyleCount/);
+    assert.match(html, /fallbackCreationDisabled:true/);
     assert.match(html, /fallbackInjectionDisabled:true/);
     assert.doesNotMatch(html, /PREVIEW_BACK_TO_TOP_FALLBACK_APPLIED/);
+    assert.doesNotMatch(html, /gnr8-preview-backtotop-fallback/);
+    assert.doesNotMatch(html, /data-gnr8-backtotop-fallback/);
+    assert.match(html, /var prioritizedNodes=Array\.prototype\.slice\.call\(document\.querySelectorAll\(NATIVE_BUILDER_SELECTOR\)\);/);
+    assert.doesNotMatch(html, /querySelectorAll\(NATIVE_HINT_SELECTOR\)/);
   } finally {
     restoreDeps();
   }
@@ -1518,6 +1544,10 @@ test("preview route: transformed output forces native scrollIcon glyph presence 
     assert.match(html, /glyph\.style\.setProperty\("pointer-events","none","important"\)/);
     assert.match(html, /return \{glyphInjected:glyphInjected,glyphPresent:glyphPresent,glyphText:glyphText/);
     assert.doesNotMatch(html, /PREVIEW_BACK_TO_TOP_FALLBACK_APPLIED/);
+    assert.match(html, /el\.appendChild\(glyph\)/);
+    assert.doesNotMatch(html, /document\.body\.appendChild\(glyph\)/);
+    assert.doesNotMatch(html, /createElement\("button"\)/);
+    assert.doesNotMatch(html, /createElement\('button'\)/);
   } finally {
     restoreDeps();
   }
@@ -1532,7 +1562,7 @@ test("preview route: transformed map fallback for Roboplast remains active with 
         html: `<!doctype html><html><body>
 <section id="m777" class="module osmap" data-req="osmap"><div class="map-shell"></div></section>
 <div>Litostrojska cesta 40, Ljubljana, Slovenia</div>
-<a class="onepage-up" href="#top">Top</a>
+<a href="#" data-req="scrollTop" class="scrollIcon bottom_right">Top</a>
 </body></html>`,
         siteId: "site_preview_1",
         siteVersionId: "sv_preview_1",
@@ -1570,6 +1600,7 @@ test("preview route: transformed map fallback for Roboplast remains active with 
     assert.match(html, /PREVIEW_MAP_MODULE_DETECTED/);
     assert.match(html, /PREVIEW_MAP_FALLBACK_APPLIED/);
     assert.match(html, /PREVIEW_BACK_TO_TOP_NATIVE_STATUS/);
+    assert.match(html, /PREVIEW_BACK_TO_TOP_FALLBACK_HARD_REMOVED/);
     assert.match(html, /PREVIEW_BACK_TO_TOP_FALLBACK_REMOVED_GLOBALLY/);
     assert.doesNotMatch(html, /PREVIEW_BACK_TO_TOP_FALLBACK_APPLIED/);
   } finally {
