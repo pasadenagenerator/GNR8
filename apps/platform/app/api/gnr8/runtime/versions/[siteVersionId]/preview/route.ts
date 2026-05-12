@@ -558,14 +558,13 @@ var payload=${payload};
 var correlationKey=[payload.siteVersionId,"backtotop-native-static-restore",String(Date.now())].join(":");
 var nativeSelector='a.scrollIcon[data-req="scrollTop"],a.scrollIcon.bottom_right[href="#"],a[data-req="scrollTop"]';
 var nativeEl=document.querySelector(nativeSelector);
-var hiddenClassRemoved=false;
 var glyphPresent=false;
-var clickWired=false;
+var nativeRestored=false;
 if(nativeEl&&nativeEl.classList&&nativeEl.classList.contains("hidden")){
 nativeEl.classList.remove("hidden");
-hiddenClassRemoved=true;
 }
 if(nativeEl){
+nativeRestored=true;
 nativeEl.removeAttribute("hidden");
 nativeEl.setAttribute("aria-hidden","false");
 nativeEl.style.setProperty("display","flex","important");
@@ -596,15 +595,13 @@ nativeEl.addEventListener("click",function(event){
 event.preventDefault();
 window.scrollTo({top:0,behavior:"smooth"});
 });
-clickWired=true;
 }
 try{
-console.info("[gnr8.runtime.preview] PREVIEW_BACK_TO_TOP_NATIVE_STATIC_RESTORE_APPLIED",{
+console.info("[gnr8.runtime.preview] PREVIEW_BACK_TO_TOP_NATIVE_ONLY_STATUS",{
 nativeFound:!!nativeEl,
-hiddenClassRemoved:hiddenClassRemoved,
+nativeRestored:nativeRestored,
 glyphPresent:glyphPresent,
-clickWired:clickWired,
-fallbackDisabled:true,
+fallbackAllowed:false,
 observerUsed:false,
 timerUsed:false,
 siteVersionId:payload.siteVersionId,

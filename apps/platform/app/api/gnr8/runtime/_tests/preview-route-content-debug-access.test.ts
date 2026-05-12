@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import test from "node:test";
+import { spawnSync } from "node:child_process";
 
 import { GET, POST } from "@/app/api/gnr8/runtime/versions/[siteVersionId]/preview/route";
 import { setPreviewRouteDependenciesForTest } from "@/app/api/gnr8/runtime/versions/[siteVersionId]/preview/preview-route-dependencies";
@@ -652,7 +653,7 @@ test("preview route: transformed back-to-top shim parses and avoids unsafe regex
     });
     const html = await response.text();
     assert.equal(response.status, 200);
-    const shim = extractInjectedScriptContaining(html, "PREVIEW_BACK_TO_TOP_NATIVE_STATIC_RESTORE_APPLIED");
+    const shim = extractInjectedScriptContaining(html, "PREVIEW_BACK_TO_TOP_NATIVE_ONLY_STATUS");
     assert.doesNotThrow(() => new Function(shim), "expected back-to-top shim to parse as JavaScript");
     assert.doesNotMatch(shim, /scrollto\\s*\\\*\\s*\\\(/);
     assert.doesNotMatch(shim, /scrolltos\*\\\(\|scrolls\*tos\*top\|backs\*tos\*top\|totop/);
@@ -949,15 +950,13 @@ test("preview route: repeated transformed requests resolve consistently without 
 });
 
 
-test("preview route: transformed output restores native back-to-top with static diagnostic only", async () => {
+test("preview route: transformed output restores native back-to-top with native-only diagnostic only", async () => {
   const restoreDeps = setPreviewRouteDependenciesForTest({
     resolveAgencyIdForSiteVersion: async () => "agency_1",
     requireAgencyActionContext: async () => ({ agencyId: "agency_1" }) as never,
     renderSiteVersionPreview: async () =>
       ({
-        html: `<!doctype html><html><body>
-<button id="gnr8-preview-backtotop-fallback" data-gnr8-backtotop-fallback="1">↑</button>
-</body></html>`,
+        html: `<!doctype html><html><body><a href="#" data-req="scrollTop" class="scrollIcon bottom_right">Top</a></body></html>`,
         siteId: "site_preview_1",
         siteVersionId: "sv_preview_1",
         source: "preview",
@@ -990,15 +989,18 @@ test("preview route: transformed output restores native back-to-top with static 
       params: Promise.resolve({ siteVersionId: "sv_preview_1" }),
     });
     const html = await response.text();
-    const shim = extractInjectedScriptContaining(html, "PREVIEW_BACK_TO_TOP_NATIVE_STATIC_RESTORE_APPLIED");
+    const shim = extractInjectedScriptContaining(html, "PREVIEW_BACK_TO_TOP_NATIVE_ONLY_STATUS");
     assert.equal(response.status, 200);
-    assert.match(html, /PREVIEW_BACK_TO_TOP_NATIVE_STATIC_RESTORE_APPLIED/);
+    assert.match(html, /PREVIEW_BACK_TO_TOP_NATIVE_ONLY_STATUS/);
     assert.match(shim, /nativeSelector='a\.scrollIcon\[data-req="scrollTop"\],a\.scrollIcon\.bottom_right\[href="#"\],a\[data-req="scrollTop"\]'/);
-    assert.match(shim, /siteVersionId:payload\.siteVersionId/);
-    assert.match(shim, /correlationKey:correlationKey/);
-    assert.match(shim, /fallbackDisabled:true/);
+    assert.match(shim, /nativeFound:!!nativeEl/);
+    assert.match(shim, /nativeRestored:nativeRestored/);
+    assert.match(shim, /glyphPresent:glyphPresent/);
+    assert.match(shim, /fallbackAllowed:false/);
     assert.match(shim, /observerUsed:false/);
     assert.match(shim, /timerUsed:false/);
+    assert.match(shim, /siteVersionId:payload\.siteVersionId/);
+    assert.match(shim, /correlationKey:correlationKey/);
     assert.match(shim, /data-gnr8-native-scrollicon-glyph/);
     assert.match(shim, /window\.scrollTo\(\{top:0,behavior:"smooth"\}\)/);
     assert.doesNotMatch(shim, /runNativeOnlyPass/);
@@ -1006,7 +1008,7 @@ test("preview route: transformed output restores native back-to-top with static 
     assert.doesNotMatch(shim, /setTimeout\(/);
     assert.doesNotMatch(shim, /setInterval\(/);
     assert.doesNotMatch(shim, /requestAnimationFrame\(/);
-    assert.doesNotMatch(shim, /gnr8-preview-backtotop-fallback/);
+    assert.doesNotMatch(shim, new RegExp(["gnr8", "preview", "backtotop", "fallback"].join("-")));
   } finally {
     restoreDeps();
   }
@@ -1022,16 +1024,92 @@ test("preview route: source uses static native restore only without observer, ti
   );
   assert.ok(fnMatch, "expected injectBackToTopRuntimeCompatibility function in route source");
   const backToTopBlock = fnMatch?.[0] ?? "";
-  assert.match(backToTopBlock, /PREVIEW_BACK_TO_TOP_NATIVE_STATIC_RESTORE_APPLIED/);
+  assert.match(backToTopBlock, /PREVIEW_BACK_TO_TOP_NATIVE_ONLY_STATUS/);
+  assert.match(backToTopBlock, /nativeFound:\!\!nativeEl/);
+  assert.match(backToTopBlock, /nativeRestored:nativeRestored/);
+  assert.match(backToTopBlock, /glyphPresent:glyphPresent/);
+  assert.match(backToTopBlock, /fallbackAllowed:false/);
+  assert.match(backToTopBlock, /observerUsed:false/);
+  assert.match(backToTopBlock, /timerUsed:false/);
   assert.doesNotMatch(backToTopBlock, /runNativeOnlyPass/);
   assert.doesNotMatch(backToTopBlock, /MutationObserver/);
   assert.doesNotMatch(backToTopBlock, /setTimeout\(/);
   assert.doesNotMatch(backToTopBlock, /setInterval\(/);
   assert.doesNotMatch(backToTopBlock, /requestAnimationFrame\(/);
   assert.doesNotMatch(backToTopBlock, /createElement\("button"\)/);
-  assert.doesNotMatch(backToTopBlock, /gnr8-preview-backtotop-fallback/);
+  assert.doesNotMatch(backToTopBlock, new RegExp(["gnr8", "preview", "backtotop", "fallback"].join("-")));
   assert.match(backToTopBlock, /data-gnr8-native-scrollicon-glyph/);
   assert.match(backToTopBlock, /nativeSelector='a\.scrollIcon\[data-req="scrollTop"\],a\.scrollIcon\.bottom_right\[href="#"\],a\[data-req="scrollTop"\]'/);
+});
+
+test("preview route: transformed output never includes fallback back-to-top markers", async () => {
+  const restoreDeps = setPreviewRouteDependenciesForTest({
+    resolveAgencyIdForSiteVersion: async () => "agency_1",
+    requireAgencyActionContext: async () => ({ agencyId: "agency_1" }) as never,
+    renderSiteVersionPreview: async () =>
+      ({
+        html: `<!doctype html><html><body><a href="#" data-req="scrollTop" class="scrollIcon bottom_right">Top</a></body></html>`,
+        siteId: "site_preview_1",
+        siteVersionId: "sv_preview_1",
+        source: "preview",
+        previewMode: "transformed",
+        previewRuntimeSummary: {
+          rendererContractAvailable: true,
+          finalSiteModelAvailable: true,
+          renderedWithFallback: false,
+          matchedPageId: null,
+          contentResolutionApplied: true,
+          resolvedContentCount: 0,
+          unresolvedContentCount: 0,
+          contentResolutionDegraded: false,
+          contentResolutionDiagnostics: [],
+          previewDiagnostics: [],
+          familyRenderUsed: false,
+          familyRenderMode: null,
+          familyRenderFamilyId: null,
+          familyRenderFallbackToPage: false,
+          familyRenderDiagnosticsCount: 0,
+        },
+        renderedCaptureUsed: false,
+        domSize: 100,
+        fallbackUsed: false,
+      }) as never,
+    canShowContentDebug: async () => false,
+  });
+  try {
+    const response = await GET(new Request("https://app.pasadenagenerator.com/api/gnr8/runtime/versions/sv_preview_1/preview?mode=transformed"), {
+      params: Promise.resolve({ siteVersionId: "sv_preview_1" }),
+    });
+    const html = await response.text();
+    assert.equal(response.status, 200);
+    const forbiddenMarkers = [
+      ["gnr8", "preview", "backtotop", "fallback"].join("-"),
+      ["data", "gnr8", "backtotop", "fallback"].join("-"),
+      ["PREVIEW_BACK_TO_TOP_FALLBACK", "APPLIED"].join("_"),
+      ["RUNTIME_SIGNAL", "FALLBACK"].join("_"),
+    ];
+    for (const marker of forbiddenMarkers) {
+      assert.equal(html.includes(marker), false, `transformed preview html must not include fallback marker: ${marker}`);
+    }
+  } finally {
+    restoreDeps();
+  }
+});
+
+test("repo guard: fallback back-to-top markers are banned from source", async () => {
+  const repoRoot = path.resolve(process.cwd(), "..", "..");
+  const forbiddenMarkers = [
+    ["gnr8", "preview", "backtotop", "fallback"].join("-"),
+    ["data", "gnr8", "backtotop", "fallback"].join("-"),
+    ["PREVIEW_BACK_TO_TOP_FALLBACK", "APPLIED"].join("_"),
+    ["RUNTIME_SIGNAL", "FALLBACK"].join("_"),
+  ];
+  for (const marker of forbiddenMarkers) {
+    const result = spawnSync("rg", ["-n", "--hidden", "--glob", "!.git", marker, repoRoot], {
+      encoding: "utf-8",
+    });
+    assert.equal(result.status, 1, `forbidden marker detected in repository source: ${marker}\n${result.stdout ?? ""}${result.stderr ?? ""}`);
+  }
 });
 
 test("preview route: transformed map fallback for Roboplast remains active with back-to-top shim disabled", async () => {
@@ -1077,12 +1155,12 @@ test("preview route: transformed map fallback for Roboplast remains active with 
       params: Promise.resolve({ siteVersionId: "sv_preview_1" }),
     });
     const html = await response.text();
-    const shim = extractInjectedScriptContaining(html, "PREVIEW_BACK_TO_TOP_NATIVE_STATIC_RESTORE_APPLIED");
+    const shim = extractInjectedScriptContaining(html, "PREVIEW_BACK_TO_TOP_NATIVE_ONLY_STATUS");
     assert.equal(response.status, 200);
     assert.match(html, /PREVIEW_MAP_MODULE_DETECTED/);
     assert.match(html, /PREVIEW_MAP_FALLBACK_APPLIED/);
     assert.match(html, /PREVIEW_GALLERY_PAGED_LAYOUT_STATUS/);
-    assert.match(html, /PREVIEW_BACK_TO_TOP_NATIVE_STATIC_RESTORE_APPLIED/);
+    assert.match(html, /PREVIEW_BACK_TO_TOP_NATIVE_ONLY_STATUS/);
     assert.doesNotMatch(shim, /MutationObserver/);
     assert.doesNotMatch(shim, /setTimeout\(/);
     assert.doesNotMatch(shim, /setInterval\(/);
