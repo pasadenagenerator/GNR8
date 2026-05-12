@@ -2068,7 +2068,34 @@ function collectAssetRefs(input: {
     }
   }
 
+  // Some builders inject stylesheet links at runtime (e.g. `l.href='/assets/user-style.css?123'`).
+  // Import these same-origin/root-relative stylesheet refs so preview can serve them locally.
+  const scriptAssignedStylesheetHrefRegex = /\bhref\s*=\s*(["'])(\/assets\/[^"'?#\s>]+\.css(?:\?[^"'#\s>]*)?(?:#[^"'\s>]*)?)\1/gi;
+  while ((match = scriptAssignedStylesheetHrefRegex.exec(htmlSource)) !== null) {
+    const rawRef = String(match[2] ?? "").trim();
+    if (!rawRef) continue;
+    pushRef({
+      tag: "link",
+      attribute: "href",
+      rawRef,
+      assetKind: "stylesheet",
+      surface: "script_assigned_stylesheet_href",
+      sourceScope: "other",
+      sourceContext: "html",
+    });
+  }
+
   return refs;
+}
+
+function normalizeStylesheetLocalPathFromRawRef(rawRef: string): string | null {
+  const trimmed = rawRef.trim();
+  if (!trimmed) return null;
+  const [pathPart] = trimmed.split(/[?#]/, 1);
+  const normalized = normalizeSnapshotLocalTargetPath(pathPart ?? "");
+  if (!normalized) return null;
+  if (!normalized.startsWith("assets/")) return null;
+  return normalized;
 }
 
 function resolveFetchedLocalPathForRawRef(input: {
@@ -3682,6 +3709,53 @@ export async function importPublicSinglePageUrlToSnapshot(input: {
       );
     }
     const localPathByUrl = resolvePathCollisions(refs, diagnostics);
+    const usedPathToUrl = new Map<string, string>();
+    for (const [url, localPath] of [...localPathByUrl.entries()].sort((a, b) => a[0].localeCompare(b[0]))) {
+      usedPathToUrl.set(localPath, url);
+    }
+    const stylesheetRefOverrides = refs.filter((ref) => ref.assetKind === "stylesheet" && typeof ref.resolvedUrl === "string");
+    for (const ref of stylesheetRefOverrides) {
+      const targetLocalPath = normalizeStylesheetLocalPathFromRawRef(ref.rawRef);
+      if (!targetLocalPath) {
+        diagnostics.push(
+          createDiagnostic({
+            severity: "info",
+            code: "ASSET_REFERENCE_UNSUPPORTED",
+            message: "Skipped stylesheet local-path override",
+            targetUrl: ref.resolvedUrl,
+            details: {
+              tag: ref.tag,
+              attribute: ref.attribute,
+              rawRef: ref.rawRef,
+              reasonCode: "STYLESHEET_LOCAL_PATH_NOT_ELIGIBLE",
+            },
+          }),
+        );
+        continue;
+      }
+      const existingUrl = usedPathToUrl.get(targetLocalPath);
+      if (existingUrl && existingUrl !== ref.resolvedUrl) {
+        diagnostics.push(
+          createDiagnostic({
+            severity: "warning",
+            code: "ASSET_COLLISION_RESOLVED",
+            message: "Skipped stylesheet local-path override due to collision",
+            targetUrl: ref.resolvedUrl,
+            details: {
+              rawRef: ref.rawRef,
+              reasonCode: "STYLESHEET_LOCAL_PATH_COLLISION",
+              targetLocalPath,
+              existingResolvedUrl: existingUrl,
+            },
+          }),
+        );
+        continue;
+      }
+      const previousLocalPath = localPathByUrl.get(ref.resolvedUrl!);
+      if (previousLocalPath && previousLocalPath !== targetLocalPath) usedPathToUrl.delete(previousLocalPath);
+      localPathByUrl.set(ref.resolvedUrl!, targetLocalPath);
+      usedPathToUrl.set(targetLocalPath, ref.resolvedUrl!);
+    }
     const htmlImageRefByUrl = new Map<string, ParsedAssetRef[]>();
     for (const ref of refs) {
       if (ref.assetKind !== "image") continue;

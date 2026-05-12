@@ -1357,3 +1357,30 @@ test("noscript Roboplast logo participates in rewrite decision evidence", async 
   const found = discovery.find((entry) => String(entry.originalValue).includes("ROBOPLAST-znak-02-134x136px.png"));
   assert.equal(found?.sourceContext, "noscript");
 });
+
+test("script-assigned root-relative stylesheet is fetched and persisted at local assets path", async () => {
+  const tmpRoot = await fs.promises.mkdtemp(path.join(os.tmpdir(), "gnr8-script-stylesheet-preserve-"));
+  const html = [
+    "<!doctype html><html><head><script>",
+    "var cb=function(){var l=document.createElement('link'); l.rel='stylesheet'; l.href='/assets/user-style.css?1749115631';};",
+    "cb();",
+    "</script></head><body><main><h1>Maver</h1></main></body></html>",
+  ].join("");
+  const snapshot = await importPublicSinglePageUrlToSnapshot({
+    sourceUrl: "https://www.transportimaver.si/",
+    snapshotRootDirAbs: tmpRoot,
+    siteId: "site_test",
+    siteVersionId: "sv_test",
+    renderedCaptureWorkerClient: unsupportedWorkerClient(),
+    fetchImpl: async (url) => {
+      if (String(url).includes("/assets/user-style.css?1749115631")) {
+        return new Response("body{opacity:1}", { status: 200, headers: { "content-type": "text/css; charset=utf-8" } });
+      }
+      return makeHtmlResponse(html);
+    },
+  });
+
+  const persistedCssAbs = path.resolve(snapshot.snapshotRootDirAbs, "assets/user-style.css");
+  const persistedCss = await fs.promises.readFile(persistedCssAbs, "utf8");
+  assert.match(persistedCss, /opacity:1/);
+});
