@@ -1574,6 +1574,14 @@ export type RuntimeSiteResolutionBinding = {
   candidateSiteVersions: RuntimeSiteResolutionCandidate[];
 };
 
+type RuntimeSiteResolutionBindingVersionRow = {
+  id: string;
+  version_no: number;
+  state: SiteVersionState;
+  created_at: string;
+  artifact_id: string | null;
+};
+
 function inferCanonicalSlug(input: { domain: string | null; sourceHost: string | null }): string | undefined {
   const host = String(input.domain ?? input.sourceHost ?? "").trim().toLowerCase();
   if (!host) return undefined;
@@ -1588,6 +1596,46 @@ function sortResolutionCandidates(a: RuntimeSiteResolutionCandidate, b: RuntimeS
   const createdDiff = a.createdAt.localeCompare(b.createdAt);
   if (createdDiff !== 0) return createdDiff;
   return a.siteVersionId.localeCompare(b.siteVersionId);
+}
+
+export function mapRuntimeSiteResolutionBindingRows(input: {
+  siteId: string;
+  sourceHost: string | null;
+  domain: string | null;
+  activeSiteVersionId: string | null;
+  versionRows: RuntimeSiteResolutionBindingVersionRow[];
+}): RuntimeSiteResolutionBinding {
+  const candidateSiteVersions: RuntimeSiteResolutionCandidate[] = input.versionRows
+    .map((row) => ({
+      siteVersionId: row.id,
+      versionNo: row.version_no,
+      state: row.state,
+      createdAt: row.created_at,
+      artifactId: row.artifact_id,
+    }))
+    .sort(sortResolutionCandidates);
+
+  const latestImported = candidateSiteVersions[candidateSiteVersions.length - 1]?.siteVersionId ?? null;
+  const publishedCandidates = candidateSiteVersions.filter((candidate) => candidate.state === "PUBLISHED");
+  const publishedSiteVersionId = publishedCandidates[publishedCandidates.length - 1]?.siteVersionId;
+  const previewCandidates = candidateSiteVersions.filter(
+    (candidate) => candidate.state !== "PUBLISHED" && candidate.state !== "ARCHIVED",
+  );
+  const previewSiteVersionId =
+    previewCandidates.length > 0 ? previewCandidates[previewCandidates.length - 1]?.siteVersionId : undefined;
+
+  return {
+    siteId: input.siteId,
+    canonicalSlug: inferCanonicalSlug({
+      domain: input.domain,
+      sourceHost: input.sourceHost,
+    }),
+    activeSiteVersionId: input.activeSiteVersionId,
+    latestImportedSiteVersionId: latestImported,
+    publishedSiteVersionId,
+    previewSiteVersionId,
+    candidateSiteVersions,
+  };
 }
 
 export async function getRuntimeSiteResolutionBinding(siteId: string): Promise<RuntimeSiteResolutionBinding | null> {
@@ -1625,13 +1673,7 @@ export async function getRuntimeSiteResolutionBinding(siteId: string): Promise<R
         `,
         [siteId],
       ),
-      client.query<{
-        id: string;
-        version_no: number;
-        state: SiteVersionState;
-        created_at: string;
-        artifact_id: string | null;
-      }>(
+      client.query<RuntimeSiteResolutionBindingVersionRow>(
         `
         select
           id::text as id,
@@ -1647,36 +1689,13 @@ export async function getRuntimeSiteResolutionBinding(siteId: string): Promise<R
       ),
     ]);
 
-    const candidateSiteVersions: RuntimeSiteResolutionCandidate[] = versionsRes.rows
-      .map((row) => ({
-        siteVersionId: row.id,
-        versionNo: row.version_no,
-        state: row.state,
-        createdAt: row.created_at,
-        artifactId: row.artifact_id,
-      }))
-      .sort(sortResolutionCandidates);
-
-    const latestImported = candidateSiteVersions[candidateSiteVersions.length - 1]?.siteVersionId ?? null;
-    const publishedCandidates = candidateSiteVersions.filter((candidate) => candidate.state === "PUBLISHED");
-    const publishedSiteVersionId = publishedCandidates[publishedCandidates.length - 1]?.siteVersionId;
-    const previewCandidates = candidateSiteVersions.filter((candidate) => candidate.state !== "PUBLISHED" && candidate.state !== "ARCHIVED");
-    const previewSiteVersionId = previewCandidates.length > 0
-      ? previewCandidates[previewCandidates.length - 1]?.siteVersionId
-      : undefined;
-
-    return {
+    return mapRuntimeSiteResolutionBindingRows({
       siteId,
-      canonicalSlug: inferCanonicalSlug({
-        domain: domainBindingRes.rows[0]?.domain ?? null,
-        sourceHost: siteRes.rows[0].source_host,
-      }),
+      sourceHost: siteRes.rows[0].source_host,
+      domain: domainBindingRes.rows[0]?.domain ?? null,
       activeSiteVersionId: activePointer.rows[0]?.active_site_version_id ?? null,
-      latestImportedSiteVersionId: latestImported,
-      publishedSiteVersionId,
-      previewSiteVersionId,
-      candidateSiteVersions,
-    };
+      versionRows: versionsRes.rows,
+    });
   } finally {
     client.release();
   }
