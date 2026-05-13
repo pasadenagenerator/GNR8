@@ -6,7 +6,7 @@ import {
   getRawTemplateSiteAsset,
   resolveDomainSiteVersionForHost,
 } from "@/gnr8/runtime/runtime-store";
-import { normalizeRuntimeDomain, normalizeRuntimeHost, normalizeRuntimePath } from "@/gnr8/runtime/identity/runtime-identity";
+import { createRuntimeCorrelationKey, normalizeRuntimeDomain, normalizeRuntimeHost, normalizeRuntimePath } from "@/gnr8/runtime/identity/runtime-identity";
 import { resolveAssetMediaType, rewriteRawTemplateCssForRuntime } from "@/src/public-site/raw-template-runtime";
 
 type PreviewAssetGetContext = { params: Promise<{ siteId: string; siteVersionId: string; assetPath?: string[] }> };
@@ -56,7 +56,12 @@ function normalizeAssetPath(parts: string[] | undefined): string | null {
 }
 
 function buildCorrelationKey(input: { siteId: string; siteVersionId: string; normalizedRequestedPath: string | null }): string {
-  return `${input.siteId}:${input.siteVersionId}:${input.normalizedRequestedPath ?? "invalid_path"}`;
+  return createRuntimeCorrelationKey({
+    type: "preview_asset_route",
+    siteId: input.siteId,
+    siteVersionId: input.siteVersionId,
+    path: input.normalizedRequestedPath ?? "invalid_path",
+  });
 }
 
 function resolveLookupCandidates(normalizedPath: string): string[] {

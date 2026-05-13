@@ -5,6 +5,10 @@ import type { PoolClient } from "pg";
 import { getSuperadminPool } from "@/src/superadmin/db";
 
 import { normalizePagePath } from "@/gnr8/runtime/deterministic";
+import {
+  normalizeRuntimeDomain as normalizeRuntimeDomainIdentity,
+  normalizeRuntimeHost as normalizeRuntimeHostIdentity,
+} from "@/gnr8/runtime/identity/runtime-identity";
 import { evaluateRuntimeArtifactServingEligibility } from "@/gnr8/runtime/publish-enforcement";
 import type {
   CanonicalPageVersionInput,
@@ -590,16 +594,11 @@ async function getNextSiteVersionNo(client: PoolClient, siteId: string): Promise
 }
 
 function normalizeRuntimeHost(host: string): string {
-  return String(host ?? "").trim().toLowerCase();
+  return normalizeRuntimeHostIdentity(host);
 }
 
 function normalizeRuntimeDomain(domain: string): string {
-  const raw = String(domain ?? "").trim().toLowerCase();
-  if (!raw) return "";
-  const withoutProtocol = raw.replace(/^https?:\/\//, "");
-  const authority = withoutProtocol.split("/")[0] ?? "";
-  const hostOnly = authority.split(":")[0] ?? "";
-  return hostOnly.replace(/\.+$/, "").trim();
+  return normalizeRuntimeDomainIdentity(domain);
 }
 
 function parseRuntimeDomainDnsInstructions(value: unknown): RuntimeDomainDnsInstruction[] | null {

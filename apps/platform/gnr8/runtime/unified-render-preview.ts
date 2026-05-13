@@ -1,6 +1,7 @@
 import path from 'node:path'
 
 import { normalizePagePath } from '@/gnr8/runtime/deterministic'
+import { createRuntimeCorrelationKey } from '@/gnr8/runtime/identity/runtime-identity'
 import {
   getArtifactById,
   listContentOverrides,
@@ -306,7 +307,11 @@ function rewriteRawTemplateAssetReferences(input: {
   const assetRoot = `/api/gnr8/runtime/preview-assets/${encodeURIComponent(input.siteId)}/${encodeURIComponent(input.siteVersionId)}`
   const entryDir = path.posix.dirname(input.entryHtmlPath)
   const baseDir = entryDir === '.' ? '' : entryDir
-  const correlationKey = `${input.siteId}:${input.siteVersionId}:${input.entryHtmlPath}`
+  const correlationKey = createRuntimeCorrelationKey({
+    siteId: input.siteId,
+    siteVersionId: input.siteVersionId,
+    entryHtmlPath: input.entryHtmlPath,
+  })
   const cssUrlPattern = /url\(\s*(['"]?)([^"')]+)\1\s*\)/gi
   const duplicatePreviewPrefixPattern = new RegExp(`^${assetRoot.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}/api/gnr8/runtime/preview-assets/`, 'i')
 
@@ -1025,7 +1030,13 @@ export async function renderSiteVersionPreview(input: {
   requestCorrelationKey?: string
 }) {
   const requestCorrelationKey =
-    String(input.requestCorrelationKey ?? '').trim() || `preview:${input.siteVersionId}:${Date.now().toString(36)}`
+    String(input.requestCorrelationKey ?? '').trim() ||
+    createRuntimeCorrelationKey({
+      type: 'preview_request',
+      siteVersionId: input.siteVersionId,
+      path: String(input.path ?? '/'),
+      mode: String(input.mode ?? 'none'),
+    })
   const context = createPreviewReadContext(requestCorrelationKey)
   const poolAtStart = previewReadDependencies.getPoolStatus()
   console.info('[gnr8.runtime.preview] PREVIEW_DB_QUERY_BATCH_STARTED', {

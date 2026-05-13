@@ -1,6 +1,6 @@
 import { PreviewDbBackpressureError, SiteVersionPreviewUnavailableError } from "@/gnr8/runtime/unified-render-preview";
 import { parseAgencyActionContextError } from "@/app/api/gnr8/agency/_lib/agency-action-access";
-import { createRuntimePreviewIdentity } from "@/gnr8/runtime/identity/runtime-identity";
+import { createRuntimeCorrelationKey, createRuntimePreviewIdentity } from "@/gnr8/runtime/identity/runtime-identity";
 import { previewRouteDependencies } from "./preview-route-dependencies";
 
 export const runtime = "nodejs";
@@ -923,7 +923,11 @@ export async function GET(req: Request, ctx: { params: Promise<{ siteVersionId: 
       : { html: htmlWithBackToTopCompatibility, occurrenceCount: 0, sampleBefore: null, sampleAfter: null };
     const html = normalizedOutput.html;
     if (normalizedOutput.occurrenceCount > 0) {
-      const correlationKey = `${preview.siteId}:${preview.siteVersionId}:preview-transformed-output-double-prefix`;
+      const correlationKey = createRuntimeCorrelationKey({
+        type: "preview_transformed_output_double_prefix",
+        siteId: preview.siteId,
+        siteVersionId: preview.siteVersionId,
+      });
       console.info("[gnr8.runtime.preview] PREVIEW_TRANSFORMED_OUTPUT_DOUBLE_PREFIX_FOUND", {
         siteId: preview.siteId,
         siteVersionId: preview.siteVersionId,
@@ -1048,7 +1052,12 @@ export async function POST(req: Request, ctx: { params: Promise<{ siteVersionId:
     const url = new URL(req.url);
     const mode = url.searchParams.get("mode") ?? null;
     const dm = url.searchParams.get("dm");
-    const correlationKey = `${siteVersionId}:${mode ?? "none"}:${dm ?? "none"}`;
+    const correlationKey = createRuntimeCorrelationKey({
+      type: "preview_runtime_module_request",
+      siteVersionId,
+      mode: mode ?? "none",
+      dm: dm ?? "none",
+    });
     console.info("[gnr8.runtime.preview] PREVIEW_RUNTIME_MODULE_REQUEST_RECEIVED", {
       siteVersionId,
       mode,
