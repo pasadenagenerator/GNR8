@@ -565,18 +565,25 @@ try{return new URL(String(value||""),window.location.href);}catch(_err){return n
 }
 function classify(urlObj,context){
 var path=urlObj?String(urlObj.pathname||""):"";
+var query=urlObj?String(urlObj.search||""):"";
 var host=urlObj?String(urlObj.host||""):"";
 var sameOrigin=!!urlObj&&host===window.location.host;
 var reqType="DYNAMIC_ASSET_REQUEST";
+var reasonCode="REQUEST_NOT_CLASSIFIED";
 if(/(^|\\/)sw(?:-cleanup)?\\.js$/i.test(path)||/service-?worker/i.test(path)){reqType="SERVICE_WORKER_REQUEST";}
-else if(/google-analytics\\.com|googletagmanager\\.com|doubleclick\\.net|facebook\\.com\\/tr|connect\\.facebook\\.net|hotjar\\.com|clarity\\.ms|segment\\.io|mixpanel\\.com|amplitude\\.com|plausible\\.io|posthog\\.com/i.test(host+(urlObj?urlObj.href:""))){reqType="EXTERNAL_ANALYTICS_REQUEST";}
-else if(/\\/api\\.php\\//i.test(path)||/wp-admin\\/admin-ajax\\.php/i.test(path)||/\\/components\\/com_.*\\/ajax/i.test(path)||/\\/ajax\\//i.test(path)||/\\/utils\\/lang/i.test(path)){reqType="LEGACY_BACKEND_REQUEST";}
-else if((context&&context.prefetch===true)||/\\b(prefetch|prerender|quicklink)\\b/i.test(String(context&&context.urlHint||""))){reqType="PREFETCH_REQUEST";}
-return {requestType:reqType,sameOrigin:sameOrigin};
+if(reqType==="SERVICE_WORKER_REQUEST"){reasonCode="SERVICE_WORKER_REGISTRATION_OR_SCRIPT";}
+else if(/google-analytics\\.com|googletagmanager\\.com|doubleclick\\.net|facebook\\.com\\/tr|connect\\.facebook\\.net|hotjar\\.com|clarity\\.ms|segment\\.io|mixpanel\\.com|amplitude\\.com|plausible\\.io|posthog\\.com|(^|\\.)google\\.com/i.test(host+(urlObj?urlObj.href:""))&&/\\/g\\/collect/i.test(path)){reqType="EXTERNAL_ANALYTICS_REQUEST";reasonCode="ANALYTICS_BLOCKED_BY_CLIENT";}
+else if(/\\/api\\.php\\//i.test(path)||/wp-admin\\/admin-ajax\\.php/i.test(path)||/\\/components\\/com_.*\\/ajax/i.test(path)||/\\/ajax\\//i.test(path)||/\\/utils\\/lang/i.test(path)){reqType="LEGACY_BACKEND_REQUEST";reasonCode="LEGACY_BACKEND_PREVIEW_NOOP";}
+else if((context&&context.prefetch===true)||/\\b(prefetch|prerender|quicklink)\\b/i.test(String(context&&context.urlHint||""))||/^\\/legal\\d+$/i.test(path)||/downloadvcard=1/i.test(query)){reqType="PREFETCH_REQUEST";reasonCode="PREFETCH_MISS_PREVIEW_UNAVAILABLE_ROUTE";}
+else if(/sw-cleanup\\.js|manifest\\.json|workbox|runtime\\.[a-f0-9]{6,}\\.(js|css)/i.test(path)){reasonCode="UNSUPPORTED_RUNTIME_GENERATED_ASSET";}
+return {requestType:reqType,sameOrigin:sameOrigin,reasonCode:reasonCode};
 }
-function emitRequestDiagnostic(urlObj,requestType,sameOrigin,handled,ignored){
+function emitRequestDiagnostic(urlObj,requestType,reasonCode,handled,ignored,sameOrigin){
 var urlValue=urlObj?urlObj.href:String(urlObj||"");
-emit(requestType,{url:urlValue,requestType:requestType,sameOrigin:sameOrigin,handled:handled,ignored:ignored,correlationKey:correlationKey(urlValue)});
+var payload={url:urlValue,requestType:requestType,reasonCode:reasonCode,sameOrigin:sameOrigin,handled:handled,ignored:ignored,correlationKey:correlationKey(urlValue)};
+emit("PREVIEW_REQUEST_NOISE_CLASSIFIED",payload);
+if(handled===true||ignored===true){emit("PREVIEW_REQUEST_NOISE_SUPPRESSED",payload);}
+emit(requestType,payload);
 }
 function responseForLegacy(urlObj){
 var path=String(urlObj&&urlObj.pathname||"");
@@ -601,7 +608,7 @@ var originalRegister=navigator.serviceWorker.register.bind(navigator.serviceWork
 navigator.serviceWorker.register=function(scriptURL){
 var urlObj=toUrl(scriptURL);
 emit("PREVIEW_SERVICE_WORKER_BLOCKED",{url:urlObj?urlObj.href:String(scriptURL||""),requestType:"SERVICE_WORKER_REQUEST",sameOrigin:!!(urlObj&&urlObj.host===window.location.host),handled:true,ignored:false,correlationKey:correlationKey(urlObj?urlObj.href:String(scriptURL||""))});
-emitRequestDiagnostic(urlObj,"SERVICE_WORKER_REQUEST",!!(urlObj&&urlObj.host===window.location.host),true,false);
+emitRequestDiagnostic(urlObj,"SERVICE_WORKER_REQUEST","SERVICE_WORKER_REGISTRATION_OR_SCRIPT",true,false,!!(urlObj&&urlObj.host===window.location.host));
 return Promise.resolve({scope:"/",active:null,installing:null,waiting:null,update:function(){return Promise.resolve();},unregister:function(){return Promise.resolve(true);}});
 };
 void originalRegister;
@@ -614,22 +621,24 @@ var urlObj=toUrl(typeof input==="string"?input:(input&&input.url?input.url:input
 var urlHint=(init&&init.headers&&typeof init.headers.get==="function"?String(init.headers.get("purpose")||""):"")+" "+String(urlObj?urlObj.href:"");
 var req=classify(urlObj,{prefetch:(init&&init.mode==="no-cors")||/\\bprefetch\\b/i.test(urlHint),urlHint:urlHint});
 if(req.requestType==="SERVICE_WORKER_REQUEST"||req.requestType==="LEGACY_BACKEND_REQUEST"){
-emitRequestDiagnostic(urlObj,req.requestType,req.sameOrigin,true,false);
-if(req.requestType==="SERVICE_WORKER_REQUEST"){emit("PREVIEW_SERVICE_WORKER_BLOCKED",{url:urlObj?urlObj.href:null,requestType:req.requestType,sameOrigin:req.sameOrigin,handled:true,ignored:false,correlationKey:correlationKey(urlObj?urlObj.href:"")});}
-return Promise.resolve(responseForLegacy(urlObj));
+emitRequestDiagnostic(urlObj,req.requestType,req.reasonCode,true,false,req.sameOrigin);
+if(req.requestType==="SERVICE_WORKER_REQUEST"){emit("PREVIEW_SERVICE_WORKER_BLOCKED",{url:urlObj?urlObj.href:null,requestType:req.requestType,reasonCode:req.reasonCode,sameOrigin:req.sameOrigin,handled:true,ignored:false,correlationKey:correlationKey(urlObj?urlObj.href:"")});}
+var legacyResponse=responseForLegacy(urlObj);
+if(req.requestType==="LEGACY_BACKEND_REQUEST"){emit("PREVIEW_LEGACY_BACKEND_NOOP_RESPONSE",{url:urlObj?urlObj.href:null,requestType:req.requestType,reasonCode:req.reasonCode,handled:true,ignored:false,correlationKey:correlationKey(urlObj?urlObj.href:"")});}
+return Promise.resolve(legacyResponse);
 }
 if(req.requestType==="EXTERNAL_ANALYTICS_REQUEST"){
-emit("PREVIEW_ANALYTICS_BLOCKED",{url:urlObj?urlObj.href:null,requestType:req.requestType,sameOrigin:req.sameOrigin,handled:true,ignored:false,correlationKey:correlationKey(urlObj?urlObj.href:"")});
-emitRequestDiagnostic(urlObj,req.requestType,req.sameOrigin,true,false);
+emit("PREVIEW_ANALYTICS_BLOCKED",{url:urlObj?urlObj.href:null,requestType:req.requestType,reasonCode:req.reasonCode,sameOrigin:req.sameOrigin,handled:true,ignored:false,correlationKey:correlationKey(urlObj?urlObj.href:"")});
+emitRequestDiagnostic(urlObj,req.requestType,req.reasonCode,true,false,req.sameOrigin);
 return Promise.resolve(new Response("",{status:204,headers:{"content-type":"text/plain; charset=utf-8"}}));
 }
 if(req.requestType==="PREFETCH_REQUEST"){
-emitRequestDiagnostic(urlObj,req.requestType,req.sameOrigin,false,true);
+emitRequestDiagnostic(urlObj,req.requestType,req.reasonCode,false,true,req.sameOrigin);
 }
 return originalFetch(input,init).then(function(resp){
 if(urlObj&&/\\/api\\/gnr8\\/runtime\\/preview-assets\\//.test(String(urlObj.pathname||""))&&(resp.status===404||resp.status===410)){
 var reason=classifyMissingAssetReason(urlObj,resp);
-emit("DYNAMIC_ASSET_REQUEST",{url:urlObj.href,requestType:"DYNAMIC_ASSET_REQUEST",sameOrigin:req.sameOrigin,handled:false,ignored:false,correlationKey:correlationKey(urlObj.href),reason:reason});
+emit("DYNAMIC_ASSET_REQUEST",{url:urlObj.href,requestType:"DYNAMIC_ASSET_REQUEST",reasonCode:reason||req.reasonCode,sameOrigin:req.sameOrigin,handled:false,ignored:false,correlationKey:correlationKey(urlObj.href),reason:reason});
 }
 return resp;
 });
@@ -641,11 +650,11 @@ navigator.sendBeacon=function(url,data){
 var urlObj=toUrl(url);
 var req=classify(urlObj,{prefetch:false,urlHint:String(urlObj?urlObj.href:"")});
 if(req.requestType==="EXTERNAL_ANALYTICS_REQUEST"){
-emit("PREVIEW_ANALYTICS_BLOCKED",{url:urlObj?urlObj.href:String(url||""),requestType:req.requestType,sameOrigin:req.sameOrigin,handled:true,ignored:false,correlationKey:correlationKey(urlObj?urlObj.href:String(url||""))});
-emitRequestDiagnostic(urlObj,req.requestType,req.sameOrigin,true,false);
+emit("PREVIEW_ANALYTICS_BLOCKED",{url:urlObj?urlObj.href:String(url||""),requestType:req.requestType,reasonCode:req.reasonCode,sameOrigin:req.sameOrigin,handled:true,ignored:false,correlationKey:correlationKey(urlObj?urlObj.href:String(url||""))});
+emitRequestDiagnostic(urlObj,req.requestType,req.reasonCode,true,false,req.sameOrigin);
 return true;
 }
-if(req.requestType==="PREFETCH_REQUEST"){emitRequestDiagnostic(urlObj,req.requestType,req.sameOrigin,false,true);}
+if(req.requestType==="PREFETCH_REQUEST"){emitRequestDiagnostic(urlObj,req.requestType,req.reasonCode,false,true,req.sameOrigin);}
 return originalBeacon(url,data);
 };
 }
@@ -662,13 +671,14 @@ OriginalXHR.prototype.send=function(body){
 var urlObj=toUrl(this.__gnr8PreviewUrl);
 var req=classify(urlObj,{prefetch:false,urlHint:String(urlObj?urlObj.href:"")});
 if(req.requestType==="SERVICE_WORKER_REQUEST"||req.requestType==="LEGACY_BACKEND_REQUEST"||req.requestType==="EXTERNAL_ANALYTICS_REQUEST"){
-if(req.requestType==="EXTERNAL_ANALYTICS_REQUEST"){emit("PREVIEW_ANALYTICS_BLOCKED",{url:urlObj?urlObj.href:null,requestType:req.requestType,sameOrigin:req.sameOrigin,handled:true,ignored:false,correlationKey:correlationKey(urlObj?urlObj.href:"")});}
-if(req.requestType==="SERVICE_WORKER_REQUEST"){emit("PREVIEW_SERVICE_WORKER_BLOCKED",{url:urlObj?urlObj.href:null,requestType:req.requestType,sameOrigin:req.sameOrigin,handled:true,ignored:false,correlationKey:correlationKey(urlObj?urlObj.href:"")});}
-emitRequestDiagnostic(urlObj,req.requestType,req.sameOrigin,true,false);
+if(req.requestType==="EXTERNAL_ANALYTICS_REQUEST"){emit("PREVIEW_ANALYTICS_BLOCKED",{url:urlObj?urlObj.href:null,requestType:req.requestType,reasonCode:req.reasonCode,sameOrigin:req.sameOrigin,handled:true,ignored:false,correlationKey:correlationKey(urlObj?urlObj.href:"")});}
+if(req.requestType==="SERVICE_WORKER_REQUEST"){emit("PREVIEW_SERVICE_WORKER_BLOCKED",{url:urlObj?urlObj.href:null,requestType:req.requestType,reasonCode:req.reasonCode,sameOrigin:req.sameOrigin,handled:true,ignored:false,correlationKey:correlationKey(urlObj?urlObj.href:"")});}
+if(req.requestType==="LEGACY_BACKEND_REQUEST"){emit("PREVIEW_LEGACY_BACKEND_NOOP_RESPONSE",{url:urlObj?urlObj.href:null,requestType:req.requestType,reasonCode:req.reasonCode,handled:true,ignored:false,correlationKey:correlationKey(urlObj?urlObj.href:"")});}
+emitRequestDiagnostic(urlObj,req.requestType,req.reasonCode,true,false,req.sameOrigin);
 try{this.readyState=4;this.status=204;this.responseText="";if(typeof this.onreadystatechange==="function"){this.onreadystatechange();}if(typeof this.onload==="function"){this.onload();}}catch(_err){}
 return;
 }
-if(req.requestType==="PREFETCH_REQUEST"){emitRequestDiagnostic(urlObj,req.requestType,req.sameOrigin,false,true);}
+if(req.requestType==="PREFETCH_REQUEST"){emitRequestDiagnostic(urlObj,req.requestType,req.reasonCode,false,true,req.sameOrigin);}
 return sendRef.call(this,body);
 };
 }

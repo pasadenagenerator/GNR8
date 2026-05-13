@@ -196,12 +196,24 @@ test("preview route: transformed final output normalizes double-prefixed preview
     assert.match(html, /pageImageCounts/);
     assert.match(html, /gridTemplateColumns/);
     assert.match(html, /PREVIEW_SERVICE_WORKER_BLOCKED/);
+    assert.match(html, /PREVIEW_REQUEST_NOISE_CLASSIFIED/);
+    assert.match(html, /PREVIEW_REQUEST_NOISE_SUPPRESSED/);
+    assert.match(html, /PREVIEW_LEGACY_BACKEND_NOOP_RESPONSE/);
     assert.match(html, /PREVIEW_ANALYTICS_BLOCKED/);
+    assert.match(html, /reasonCode/);
+    assert.match(html, /handled/);
+    assert.match(html, /ignored/);
+    assert.match(html, /correlationKey/);
     assert.match(html, /SERVICE_WORKER_REQUEST/);
     assert.match(html, /EXTERNAL_ANALYTICS_REQUEST/);
     assert.match(html, /LEGACY_BACKEND_REQUEST/);
     assert.match(html, /DYNAMIC_ASSET_REQUEST/);
     assert.match(html, /PREFETCH_REQUEST/);
+    assert.equal(html.includes("/^\\/legal\\d+$/i"), true);
+    assert.equal(html.includes("downloadvcard=1"), true);
+    assert.equal(html.includes("/sw-cleanup\\.js$/i"), true);
+    assert.equal(html.includes("api\\.php"), true);
+    assert.equal(html.includes("google-analytics\\.com"), true);
   } finally {
     restoreDeps();
   }
