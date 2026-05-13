@@ -91,10 +91,19 @@ function classifyDynamicAssetMissReason(input: {
   url: string;
   normalizedPath: string | null;
   routeDiagnostic: "PREVIEW_ASSET_ROUTE_FILE_NOT_FOUND" | "PREVIEW_ASSET_ROUTE_PATH_MISMATCH";
-}): "FILE_NOT_FOUND" | "PATH_MISMATCH" | "QUERYSTRING_VARIANT" | "NON_IMPORTED_DYNAMIC_ASSET" | "UNSUPPORTED_RUNTIME_GENERATED_ASSET" {
+}):
+  | "missing_imported_file"
+  | "duplicated_preview_assets_prefix"
+  | "querystring_variant"
+  | "prefetch_noise"
+  | "dynamic_download_endpoint"
+  | "unsupported_runtime_generated_asset" {
   const url = new URL(input.url);
-  if (url.searchParams.size > 0) return "QUERYSTRING_VARIANT";
+  if (url.searchParams.has("downloadVcard")) return "dynamic_download_endpoint";
+  if (url.searchParams.size > 0) return "querystring_variant";
   const path = (input.normalizedPath ?? "").toLowerCase();
+  if (path.startsWith("api/gnr8/runtime/preview-assets/")) return "duplicated_preview_assets_prefix";
+  if (path === "legal1" || /^legal\d*$/.test(path)) return "prefetch_noise";
   if (
     path.includes("sw-cleanup.js") ||
     path.includes("service-worker") ||
@@ -102,12 +111,10 @@ function classifyDynamicAssetMissReason(input: {
     path.includes("manifest.json") ||
     /runtime\.[a-f0-9]{6,}\.(js|css)$/i.test(path)
   ) {
-    return "UNSUPPORTED_RUNTIME_GENERATED_ASSET";
+    return "unsupported_runtime_generated_asset";
   }
-  if (path.startsWith("uploads/") || path.startsWith("assets/")) {
-    return input.routeDiagnostic === "PREVIEW_ASSET_ROUTE_PATH_MISMATCH" ? "PATH_MISMATCH" : "FILE_NOT_FOUND";
-  }
-  return "NON_IMPORTED_DYNAMIC_ASSET";
+  if (path.startsWith("uploads/") || path.startsWith("assets/")) return "missing_imported_file";
+  return input.routeDiagnostic === "PREVIEW_ASSET_ROUTE_PATH_MISMATCH" ? "prefetch_noise" : "dynamic_download_endpoint";
 }
 
 export function createPreviewAssetsRouteHandlers(overrides: Partial<PreviewAssetRouteDependencies> = {}) {

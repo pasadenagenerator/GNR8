@@ -308,6 +308,7 @@ function rewriteRawTemplateAssetReferences(input: {
   const baseDir = entryDir === '.' ? '' : entryDir
   const correlationKey = `${input.siteId}:${input.siteVersionId}:${input.entryHtmlPath}`
   const cssUrlPattern = /url\(\s*(['"]?)([^"')]+)\1\s*\)/gi
+  const duplicatePreviewPrefixPattern = new RegExp(`^${assetRoot.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}/api/gnr8/runtime/preview-assets/`, 'i')
 
   const emitCssAssetRewriteApplied = (originalUrl: string, rewrittenUrl: string, sourceType: 'inline_style' | 'style_block' | 'stylesheet' | 'script_detected') => {
     console.info('[preview-runtime] PREVIEW_CSS_ASSET_REWRITE_APPLIED', {
@@ -377,6 +378,10 @@ function rewriteRawTemplateAssetReferences(input: {
       return ref
     }
     if (ref.startsWith('/')) {
+      if (ref.toLowerCase().startsWith('/api/gnr8/runtime/preview-assets/')) {
+        const deduped = ref.replace(duplicatePreviewPrefixPattern, `${assetRoot}/`)
+        return deduped
+      }
       const [pathname, suffix = ''] = ref.split(/(?=[?#])/)
       const normalized = normalizeTemplateAssetPath(pathname)
       return normalized ? `${assetRoot}/${normalized}${suffix}` : ref

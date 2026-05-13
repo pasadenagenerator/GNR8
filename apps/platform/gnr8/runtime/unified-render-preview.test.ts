@@ -337,6 +337,18 @@ test('raw template preview rewrites Maver-like dual uploads hero background refe
   assert.equal(logs.length >= 2, true)
 })
 
+test('raw template preview does not emit duplicated preview-assets prefix when source HTML is already rewritten', () => {
+  const html = '<img src="/api/gnr8/runtime/preview-assets/site-maver/sv-maver/uploads/7xhKQCOl/767x0_2560x0/IMG.jpg">'
+  const rewritten = __unifiedRenderPreviewTestUtils.rewriteRawTemplateAssetReferences({
+    html,
+    siteId: 'site-maver',
+    siteVersionId: 'sv-maver',
+    entryHtmlPath: 'index.html',
+  })
+  assert.equal(rewritten.includes('/api/gnr8/runtime/preview-assets/site-maver/sv-maver/api/gnr8/runtime/preview-assets/'), false)
+  assert.equal(rewritten.includes('/api/gnr8/runtime/preview-assets/site-maver/sv-maver/uploads/7xhKQCOl/767x0_2560x0/IMG.jpg'), true)
+})
+
 test('preview override selection merges by slot with draft precedence and published fallback', () => {
   const selected = __unifiedRenderPreviewTestUtils.selectPreviewOverridesByVersion({
     siteVersionId: 'sv-2',
