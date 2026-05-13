@@ -317,6 +317,9 @@ test("preview smoke validator: strategy-based active resolution emits determinis
   assert.equal(summary.runtimeReadiness?.readinessStatus, "ready_with_warnings");
   assert.equal(summary.runtimeReadiness?.siteId, "site_preview_active");
   assert.deepEqual(summary.runtimeReadiness?.warnings, ["missing_published_site_version"]);
+  assert.equal(summary.runtimeDomainReadiness?.siteId, "site_preview_active");
+  assert.equal(summary.runtimeDomainReadiness?.domainReadinessStatus, "ready_with_warnings");
+  assert.deepEqual(summary.runtimeDomainReadiness?.warnings, ["missing_custom_domain", "missing_active_domain_binding", "missing_internal_host"]);
 });
 
 test("preview smoke validator: Maver and Roboplast strategy resolution resolves expected siteVersionId", async () => {

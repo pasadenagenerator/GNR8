@@ -1,4 +1,8 @@
 import { createRuntimePreviewIdentity } from "@/gnr8/runtime/identity/runtime-identity";
+import {
+  createRuntimeDomainReadinessReport,
+  type RuntimeDomainReadinessReport,
+} from "@/gnr8/runtime/readiness/runtime-domain-readiness";
 import { createRuntimeSiteReadinessReport, type RuntimeSiteReadinessReport } from "@/gnr8/runtime/readiness/runtime-site-readiness";
 import {
   resolveRuntimeSiteVersion,
@@ -44,6 +48,7 @@ export type PreviewSmokeSummary = {
   siteVersionId: string;
   runtimeResolutionDiagnostic: RuntimeResolutionDiagnostics | null;
   runtimeReadiness?: RuntimeSiteReadinessReport;
+  runtimeDomainReadiness?: RuntimeDomainReadinessReport;
   previewStatus: number;
   previewMode: string | null;
   sourceMode: string | null;
@@ -154,6 +159,11 @@ export async function runPreviewSmokeValidation(
   const runtimeReadiness = target.resolution?.siteResolutionBinding
     ? createRuntimeSiteReadinessReport(target.resolution.siteResolutionBinding)
     : undefined;
+  const runtimeDomainReadiness = target.resolution?.siteResolutionBinding
+    ? createRuntimeDomainReadinessReport({
+        siteBinding: target.resolution.siteResolutionBinding,
+      })
+    : undefined;
 
   const siteId = resolveSiteId({
     expectedSiteId: target.expectedSiteId,
@@ -249,6 +259,7 @@ export async function runPreviewSmokeValidation(
     siteVersionId: resolvedTarget.siteVersionId,
     runtimeResolutionDiagnostic: resolvedTarget.runtimeResolutionDiagnostic,
     runtimeReadiness,
+    runtimeDomainReadiness,
     previewStatus,
     previewMode: selectedPreviewMode,
     sourceMode: selectedSourceMode,
