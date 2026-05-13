@@ -258,3 +258,92 @@ test("preview smoke validator: route harness mode validates auth-gated preview r
     restorePreviewDeps();
   }
 });
+
+test("preview smoke validator: strategy-based active resolution emits deterministic runtime diagnostic", async () => {
+  const summary = await runPreviewSmokeValidation(
+    {
+      fetchPreviewHtml: async ({ siteVersionId }) => ({
+        status: 200,
+        body: `<html><body>maver PREVIEW_BACK_TO_TOP_NATIVE_ONLY_STATUS <a data-req="scrollTop" class="scrollIcon">Top</a><div class="gallery"></div><section data-req="osmap"></section><img src="/api/gnr8/runtime/preview-assets/site_preview_active/${siteVersionId}/uploads/x.jpg"/></body></html>`,
+        headers: makeHeaders({
+          "x-gnr8-preview-mode": "transformed",
+          "x-gnr8-preview-source": "preview",
+        }),
+      }),
+      fetchPreviewAsset: async () => ({ status: 200, body: "ok" }),
+    },
+    {
+      siteLabel: "Maver",
+      expectedSiteId: "site_preview_active",
+      resolution: {
+        strategy: "active",
+        binding: {
+          siteId: "site_preview_active",
+          canonicalSlug: "maver",
+          activeSiteVersionId: "sv_active_1",
+          latestImportedSiteVersionId: "sv_latest_1",
+          publishedSiteVersionId: null,
+          previewSiteVersionId: null,
+        },
+      },
+      identitySignals: ["maver", "PREVIEW_BACK_TO_TOP_NATIVE_ONLY_STATUS"],
+      requiredAssets: [{ label: "hero", path: "uploads/x.jpg", required: true }],
+    },
+  );
+
+  assert.equal(summary.siteVersionId, "sv_active_1");
+  assert.equal(summary.runtimeResolutionDiagnostic?.code, "PREVIEW_RUNTIME_RESOLUTION_APPLIED");
+  assert.equal(summary.runtimeResolutionDiagnostic?.strategy, "active");
+  assert.equal(summary.runtimeResolutionDiagnostic?.resolvedSiteVersionId, "sv_active_1");
+  assert.equal(summary.runtimeResolutionDiagnostic?.fallbackUsed, false);
+  assert.equal((summary.runtimeResolutionDiagnostic?.resolutionKey?.length ?? 0) > 0, true);
+});
+
+test("preview smoke validator: Maver and Roboplast strategy resolution resolves expected siteVersionId", async () => {
+  const deps = {
+    fetchPreviewHtml: async ({ siteVersionId }: { siteVersionId: string }) => ({
+      status: 200,
+      body: `<html><body>PREVIEW_BACK_TO_TOP_NATIVE_ONLY_STATUS <a data-req="scrollTop" class="scrollIcon">Top</a><div class="gallery"></div><section data-req="osmap"></section><img src="/api/gnr8/runtime/preview-assets/site_test/${siteVersionId}/uploads/x.jpg"/></body></html>`,
+      headers: makeHeaders({
+        "x-gnr8-preview-mode": "transformed",
+        "x-gnr8-preview-source": "preview",
+      }),
+    }),
+    fetchPreviewAsset: async () => ({ status: 200, body: "ok" }),
+  };
+
+  const maver = await runPreviewSmokeValidation(deps, {
+    siteLabel: "Maver",
+    expectedSiteId: "site_test",
+    resolution: {
+      strategy: "active",
+      binding: {
+        siteId: "site_test",
+        canonicalSlug: "maver",
+        activeSiteVersionId: "sv_maver_active",
+        latestImportedSiteVersionId: "sv_maver_latest",
+      },
+    },
+    identitySignals: ["PREVIEW_BACK_TO_TOP_NATIVE_ONLY_STATUS"],
+    requiredAssets: [{ label: "hero", path: "uploads/x.jpg", required: true }],
+  });
+  assert.equal(maver.siteVersionId, "sv_maver_active");
+
+  const roboplast = await runPreviewSmokeValidation(deps, {
+    siteLabel: "Roboplast",
+    expectedSiteId: "site_test",
+    resolution: {
+      strategy: "latest_imported",
+      binding: {
+        siteId: "site_test",
+        canonicalSlug: "roboplast",
+        activeSiteVersionId: null,
+        latestImportedSiteVersionId: null,
+      },
+      candidateSiteVersionIds: ["sv_robo_001", "sv_robo_003", "sv_robo_002"],
+    },
+    identitySignals: ["PREVIEW_BACK_TO_TOP_NATIVE_ONLY_STATUS"],
+    requiredAssets: [{ label: "hero", path: "uploads/x.jpg", required: true }],
+  });
+  assert.equal(roboplast.siteVersionId, "sv_robo_003");
+});

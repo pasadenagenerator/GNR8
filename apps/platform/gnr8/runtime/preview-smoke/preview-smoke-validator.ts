@@ -1,3 +1,12 @@
+import { createRuntimePreviewIdentity } from "@/gnr8/runtime/identity/runtime-identity";
+import {
+  resolveRuntimeSiteVersion,
+  type RuntimeResolutionDiagnostics,
+  type RuntimeResolutionRequest,
+  type RuntimeResolutionStrategy,
+  type RuntimeSiteBinding,
+} from "@/gnr8/runtime/resolution/runtime-resolution";
+
 export type SmokeAssetExpectation = {
   label: string;
   path: string;
@@ -12,10 +21,15 @@ export type SmokeFetchResult = {
 
 export type PreviewSmokeTarget = {
   siteLabel: string;
-  siteVersionId: string;
+  siteVersionId?: string;
   expectedSiteId?: string;
   previewPath?: string;
   previewMode?: string;
+  resolution?: {
+    strategy: RuntimeResolutionStrategy;
+    binding: RuntimeSiteBinding;
+    candidateSiteVersionIds?: readonly string[];
+  };
   identitySignals: string[];
   requiredAssets: SmokeAssetExpectation[];
   optionalNoiseAssets?: string[];
@@ -25,6 +39,7 @@ export type PreviewSmokeSummary = {
   siteLabel: string;
   siteId: string | null;
   siteVersionId: string;
+  runtimeResolutionDiagnostic: RuntimeResolutionDiagnostics | null;
   previewStatus: number;
   previewMode: string | null;
   sourceMode: string | null;
@@ -49,6 +64,27 @@ export type PreviewSmokeValidatorDependencies = {
   fetchPreviewHtml: (input: { siteVersionId: string; previewPath: string; previewMode: string }) => Promise<SmokeFetchResult>;
   fetchPreviewAsset: (input: { siteId: string; siteVersionId: string; assetPath: string }) => Promise<SmokeFetchResult>;
 };
+
+function resolveTargetSiteVersion(input: PreviewSmokeTarget): {
+  siteVersionId: string;
+  runtimeResolutionDiagnostic: RuntimeResolutionDiagnostics | null;
+} {
+  const explicitSiteVersionId = String(input.siteVersionId ?? "").trim();
+  if (explicitSiteVersionId.length > 0) {
+    return {
+      siteVersionId: explicitSiteVersionId,
+      runtimeResolutionDiagnostic: null,
+    };
+  }
+  if (!input.resolution) {
+    throw new Error("Preview smoke target requires siteVersionId or a runtime resolution request.");
+  }
+  const resolved = resolveRuntimeSiteVersion(input.resolution as RuntimeResolutionRequest);
+  return {
+    siteVersionId: resolved.siteVersionId,
+    runtimeResolutionDiagnostic: resolved.diagnostics,
+  };
+}
 
 const FORBIDDEN_BACK_TO_TOP_MARKERS = [
   ["gnr8", "preview", "backtotop", "fallback"].join("-"),
@@ -98,10 +134,11 @@ export async function runPreviewSmokeValidation(
   deps: PreviewSmokeValidatorDependencies,
   target: PreviewSmokeTarget,
 ): Promise<PreviewSmokeSummary> {
+  const resolvedTarget = resolveTargetSiteVersion(target);
   const previewPath = target.previewPath ?? "/";
   const previewMode = target.previewMode ?? "transformed";
   const previewResponse = await deps.fetchPreviewHtml({
-    siteVersionId: target.siteVersionId,
+    siteVersionId: resolvedTarget.siteVersionId,
     previewPath,
     previewMode,
   });
@@ -137,7 +174,7 @@ export async function runPreviewSmokeValidation(
     agencyId: "unknown_agency",
     clientId: "unknown_client",
     siteId: siteId ?? "unknown_site",
-    siteVersionId: target.siteVersionId,
+    siteVersionId: resolvedTarget.siteVersionId,
     previewMode: selectedPreviewMode ?? "unknown_preview_mode",
     sourceMode: selectedSourceMode ?? "unknown_source_mode",
     path: previewPath,
@@ -153,7 +190,7 @@ export async function runPreviewSmokeValidation(
         .replace(/^\//, "");
       const response = await deps.fetchPreviewAsset({
         siteId,
-        siteVersionId: target.siteVersionId,
+        siteVersionId: resolvedTarget.siteVersionId,
         assetPath: normalizedPath,
       });
       const ok = response.status === 200 || !asset.required;
@@ -173,7 +210,7 @@ export async function runPreviewSmokeValidation(
       const normalizedPath = path.replace(/^\//, "");
       const response = await deps.fetchPreviewAsset({
         siteId,
-        siteVersionId: target.siteVersionId,
+        siteVersionId: resolvedTarget.siteVersionId,
         assetPath: normalizedPath,
       });
       if (response.status !== 200) {
@@ -202,7 +239,8 @@ export async function runPreviewSmokeValidation(
   return {
     siteLabel: target.siteLabel,
     siteId,
-    siteVersionId: target.siteVersionId,
+    siteVersionId: resolvedTarget.siteVersionId,
+    runtimeResolutionDiagnostic: resolvedTarget.runtimeResolutionDiagnostic,
     previewStatus,
     previewMode: selectedPreviewMode,
     sourceMode: selectedSourceMode,
@@ -223,4 +261,3 @@ export async function runPreviewSmokeValidation(
     pass: hardChecks.every(Boolean),
   };
 }
-import { createRuntimePreviewIdentity } from "@/gnr8/runtime/identity/runtime-identity";
