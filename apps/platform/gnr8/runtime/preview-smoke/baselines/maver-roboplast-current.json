@@ -1,0 +1,37 @@
+{
+  "kind": "preview_smoke_baseline_v1",
+  "capturedAt": "2026-05-13T11:56:38.367Z",
+  "executionMode": "route_harness",
+  "aggregate": {
+    "smokeResult": "PASS/PASS",
+    "previewRouteStatus": "200/200",
+    "requiredAssets": "PASS",
+    "forbiddenFallbackMarkers": "absent",
+    "duplicatedPreviewAssetsPrefix": "absent",
+    "nativeScrollIcon": "native-only, no fallback, no glyph injection, no visual shim",
+    "map": "present",
+    "gallery": "present"
+  },
+  "sites": [
+    {
+      "label": "Maver",
+      "siteId": "site_7c77126de646f746b3bd",
+      "siteVersionId": "88253466-783e-4484-8b68-df6c83b8a11c",
+      "previewStatus": 200,
+      "pass": true
+    },
+    {
+      "label": "Roboplast",
+      "siteId": "site_aa6b25cd33e9c1384d35",
+      "siteVersionId": "30bfe5b1-a441-41ef-92e3-0d6b3ee678e1",
+      "previewStatus": 200,
+      "pass": true
+    }
+  ],
+  "knownNonBlockingNoise": [
+    "Permissions-Policy browsing-topics warning",
+    "analytics blocked by client",
+    "optional Roboplast PDF prefetch 404 classified as non-blocking",
+    "quicklink/prefetch noise classified/suppressed where interceptable"
+  ]
+}
