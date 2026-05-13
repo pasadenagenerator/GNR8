@@ -693,6 +693,66 @@ test("preview route: transformed request-noise hardening shim parses without dan
     assert.doesNotThrow(() => new Function(shim), "expected request-noise hardening shim to parse as JavaScript");
     assert.match(shim, /try\{\nif\(typeof window\.fetch==="function"\)\{/);
     assert.match(shim, /\}catch\(err\)\{emit\("PREVIEW_RUNTIME_MODULE_INIT_BLOCKED"/);
+    assert.match(shim, /navigator\.serviceWorker\.register=function\(scriptURL\)/);
+    assert.match(shim, /if\(sameOrigin\)\{/);
+    assert.match(shim, /return originalRegister\(scriptURL\)/);
+    assert.match(shim, /OPTIONAL_DOCUMENT_PREFETCH/);
+    assert.match(shim, /responseForPrefetch/);
+    assert.match(shim, /preview_noop_lang/);
+    assert.match(shim, /preview_legacy_backend_noop/);
+    assert.match(shim, /normalizedKey/);
+    assert.match(shim, /PREVIEW_REQUEST_NOISE_SUPPRESSED/);
+    assert.match(shim, /if\(prefetchResponse\)\{return Promise\.resolve\(prefetchResponse\);\}/);
+  } finally {
+    restoreDeps();
+  }
+});
+
+test("preview route: request-noise shim is injected in head before inline service-worker scripts", async () => {
+  const restoreDeps = setPreviewRouteDependenciesForTest({
+    resolveAgencyIdForSiteVersion: async () => "agency_1",
+    requireAgencyActionContext: async () => ({ agencyId: "agency_1" }) as never,
+    renderSiteVersionPreview: async () =>
+      ({
+        html: `<!doctype html><html><head><script>navigator.serviceWorker.register('/sw-cleanup.js');</script></head><body><h1>Preview Site</h1></body></html>`,
+        siteId: "site_preview_1",
+        siteVersionId: "sv_preview_1",
+        source: "preview",
+        previewMode: "transformed",
+        previewRuntimeSummary: {
+          rendererContractAvailable: true,
+          finalSiteModelAvailable: true,
+          renderedWithFallback: false,
+          matchedPageId: null,
+          contentResolutionApplied: true,
+          resolvedContentCount: 0,
+          unresolvedContentCount: 0,
+          contentResolutionDegraded: false,
+          contentResolutionDiagnostics: [],
+          previewDiagnostics: [],
+          familyRenderUsed: false,
+          familyRenderMode: null,
+          familyRenderFamilyId: null,
+          familyRenderFallbackToPage: false,
+          familyRenderDiagnosticsCount: 0,
+        },
+        renderedCaptureUsed: false,
+        domSize: 100,
+        fallbackUsed: false,
+      }) as never,
+    canShowContentDebug: async () => false,
+  });
+  try {
+    const response = await GET(new Request("https://app.pasadenagenerator.com/api/gnr8/runtime/versions/sv_preview_1/preview?mode=transformed"), {
+      params: Promise.resolve({ siteVersionId: "sv_preview_1" }),
+    });
+    const html = await response.text();
+    assert.equal(response.status, 200);
+    const shimIndex = html.indexOf("PREVIEW_REQUEST_NOISE_CLASSIFIED");
+    const swRegisterIndex = html.indexOf("navigator.serviceWorker.register('/sw-cleanup.js')");
+    assert.notEqual(shimIndex, -1);
+    assert.notEqual(swRegisterIndex, -1);
+    assert.ok(shimIndex < swRegisterIndex, "request-noise shim should be injected before inline service-worker registration calls");
   } finally {
     restoreDeps();
   }

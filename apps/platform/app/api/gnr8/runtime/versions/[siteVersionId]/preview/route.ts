@@ -560,6 +560,15 @@ function correlationKey(url){return [payload.siteVersionId,correlationSeed,Strin
 function emit(code,details){
 try{console.info("[gnr8.runtime.preview] "+code,Object.assign({siteVersionId:payload.siteVersionId},details||{}));}catch(_err){}
 }
+var dedupeCache={};
+function shouldEmit(code,key){
+var now=Date.now();
+var bucket=String(code||"")+"::"+String(key||"");
+var last=Number(dedupeCache[bucket]||0);
+if(Number.isFinite(last)&&now-last<3000){return false;}
+dedupeCache[bucket]=now;
+return true;
+}
 function toUrl(value){
 try{return new URL(String(value||""),window.location.href);}catch(_err){return null;}
 }
@@ -574,23 +583,31 @@ if(/(^|\\/)sw(?:-cleanup)?\\.js$/i.test(path)||/service-?worker/i.test(path)){re
 if(reqType==="SERVICE_WORKER_REQUEST"){reasonCode="SERVICE_WORKER_REGISTRATION_OR_SCRIPT";}
 else if(/google-analytics\\.com|googletagmanager\\.com|doubleclick\\.net|facebook\\.com\\/tr|connect\\.facebook\\.net|hotjar\\.com|clarity\\.ms|segment\\.io|mixpanel\\.com|amplitude\\.com|plausible\\.io|posthog\\.com|(^|\\.)google\\.com/i.test(host+(urlObj?urlObj.href:""))&&/\\/g\\/collect/i.test(path)){reqType="EXTERNAL_ANALYTICS_REQUEST";reasonCode="ANALYTICS_BLOCKED_BY_CLIENT";}
 else if(/\\/api\\.php\\//i.test(path)||/wp-admin\\/admin-ajax\\.php/i.test(path)||/\\/components\\/com_.*\\/ajax/i.test(path)||/\\/ajax\\//i.test(path)||/\\/utils\\/lang/i.test(path)){reqType="LEGACY_BACKEND_REQUEST";reasonCode="LEGACY_BACKEND_PREVIEW_NOOP";}
-else if((context&&context.prefetch===true)||/\\b(prefetch|prerender|quicklink)\\b/i.test(String(context&&context.urlHint||""))||/^\\/legal\\d+$/i.test(path)||/downloadvcard=1/i.test(query)){reqType="PREFETCH_REQUEST";reasonCode="PREFETCH_MISS_PREVIEW_UNAVAILABLE_ROUTE";}
+else if((context&&context.prefetch===true)||/\\b(prefetch|prerender|quicklink)\\b/i.test(String(context&&context.urlHint||""))||/^\\/legal\\d+$/i.test(path)||/downloadvcard=1/i.test(query)){reqType="PREFETCH_REQUEST";reasonCode=/\\/(uploads|assets)\\/[^?#]+\\.(pdf|doc|docx|rtf|odt)(?:[?#].*)?$/i.test(path)?"OPTIONAL_DOCUMENT_PREFETCH":"PREFETCH_MISS_PREVIEW_UNAVAILABLE_ROUTE";}
 else if(/sw-cleanup\\.js|manifest\\.json|workbox|runtime\\.[a-f0-9]{6,}\\.(js|css)/i.test(path)){reasonCode="UNSUPPORTED_RUNTIME_GENERATED_ASSET";}
 return {requestType:reqType,sameOrigin:sameOrigin,reasonCode:reasonCode};
 }
 function emitRequestDiagnostic(urlObj,requestType,reasonCode,handled,ignored,sameOrigin){
 var urlValue=urlObj?urlObj.href:String(urlObj||"");
-var payload={url:urlValue,requestType:requestType,reasonCode:reasonCode,sameOrigin:sameOrigin,handled:handled,ignored:ignored,correlationKey:correlationKey(urlValue)};
-emit("PREVIEW_REQUEST_NOISE_CLASSIFIED",payload);
-if(handled===true||ignored===true){emit("PREVIEW_REQUEST_NOISE_SUPPRESSED",payload);}
-emit(requestType,payload);
+var normalizedKey=[String(requestType||""),String(urlObj&&urlObj.origin===window.location.origin?(urlObj.pathname+urlObj.search):urlValue||"")].join("|");
+var payload={url:urlValue,requestType:requestType,reasonCode:reasonCode,sameOrigin:sameOrigin,handled:handled,ignored:ignored,correlationKey:correlationKey(urlValue),normalizedKey:normalizedKey};
+if(shouldEmit("PREVIEW_REQUEST_NOISE_CLASSIFIED",normalizedKey)){emit("PREVIEW_REQUEST_NOISE_CLASSIFIED",payload);}
+if((handled===true||ignored===true)&&shouldEmit("PREVIEW_REQUEST_NOISE_SUPPRESSED",normalizedKey)){emit("PREVIEW_REQUEST_NOISE_SUPPRESSED",payload);}
+if(shouldEmit(requestType,normalizedKey)){emit(requestType,payload);}
 }
 function responseForLegacy(urlObj){
 var path=String(urlObj&&urlObj.pathname||"");
 if(/sw-cleanup\\.js$/i.test(path)){return new Response("self.addEventListener('install',function(){});",{status:200,headers:{"content-type":"application/javascript; charset=utf-8"}});}
-if(/\\/utils\\/lang/i.test(path)){return new Response(JSON.stringify({ok:true,lang:null,reason:"preview_noop"}),{status:200,headers:{"content-type":"application/json; charset=utf-8"}});}
-if(/\\.php($|\\/)/i.test(path)||/admin-ajax\\.php/i.test(path)||/\\/ajax\\//i.test(path)){return new Response(JSON.stringify({ok:true,reason:"preview_legacy_backend_noop"}),{status:200,headers:{"content-type":"application/json; charset=utf-8"}});}
-return new Response("",{status:204,headers:{"content-type":"text/plain; charset=utf-8"}});
+if(/\\/utils\\/lang/i.test(path)){return new Response(JSON.stringify({ok:true,lang:"sl",language:"sl",labels:{},translations:{},reason:"preview_noop_lang"}),{status:200,headers:{"content-type":"application/json; charset=utf-8"}});}
+if(/\\.php($|\\/)/i.test(path)||/admin-ajax\\.php/i.test(path)||/\\/ajax\\//i.test(path)||/opennow/i.test(path)){return new Response(JSON.stringify({ok:true,success:true,html:"<div></div>",data:{},reason:"preview_legacy_backend_noop"}),{status:200,headers:{"content-type":"application/json; charset=utf-8"}});}
+return new Response("<div></div>",{status:200,headers:{"content-type":"text/html; charset=utf-8"}});
+}
+function responseForPrefetch(urlObj,req){
+var path=String(urlObj&&urlObj.pathname||"");
+if(/^\\/legal\\d+$/i.test(path)||/downloadvcard=1/i.test(String(urlObj&&urlObj.search||""))){return new Response("",{status:204,headers:{"content-type":"text/plain; charset=utf-8"}});}
+if(/\\/(uploads|assets)\\/[^?#]+\\.(pdf|doc|docx|rtf|odt)(?:[?#].*)?$/i.test(path)){return new Response("",{status:204,headers:{"content-type":"text/plain; charset=utf-8"}});}
+if(req&&req.reasonCode==="PREFETCH_MISS_PREVIEW_UNAVAILABLE_ROUTE"){return new Response("",{status:204,headers:{"content-type":"text/plain; charset=utf-8"}});}
+return null;
 }
 function classifyMissingAssetReason(urlObj,response){
 var diagnostic=response&&response.headers?String(response.headers.get("x-gnr8-preview-asset-diagnostic")||""):"";
@@ -609,9 +626,13 @@ if(navigator&&navigator.serviceWorker&&typeof navigator.serviceWorker.register==
 var originalRegister=navigator.serviceWorker.register.bind(navigator.serviceWorker);
 navigator.serviceWorker.register=function(scriptURL){
 var urlObj=toUrl(scriptURL);
-emit("PREVIEW_SERVICE_WORKER_BLOCKED",{url:urlObj?urlObj.href:String(scriptURL||""),requestType:"SERVICE_WORKER_REQUEST",sameOrigin:!!(urlObj&&urlObj.host===window.location.host),handled:true,ignored:false,correlationKey:correlationKey(urlObj?urlObj.href:String(scriptURL||""))});
-emitRequestDiagnostic(urlObj,"SERVICE_WORKER_REQUEST","SERVICE_WORKER_REGISTRATION_OR_SCRIPT",true,false,!!(urlObj&&urlObj.host===window.location.host));
+var sameOrigin=!!(urlObj&&urlObj.origin===window.location.origin);
+if(sameOrigin){
+emit("PREVIEW_SERVICE_WORKER_BLOCKED",{url:urlObj?urlObj.href:String(scriptURL||""),requestType:"SERVICE_WORKER_REQUEST",sameOrigin:sameOrigin,handled:true,ignored:false,correlationKey:correlationKey(urlObj?urlObj.href:String(scriptURL||""))});
+emitRequestDiagnostic(urlObj,"SERVICE_WORKER_REQUEST","SERVICE_WORKER_REGISTRATION_OR_SCRIPT",true,false,sameOrigin);
 return Promise.resolve({scope:"/",active:null,installing:null,waiting:null,update:function(){return Promise.resolve();},unregister:function(){return Promise.resolve(true);}});
+}
+return originalRegister(scriptURL);
 };
 void originalRegister;
 }
@@ -637,6 +658,8 @@ return Promise.resolve(new Response("",{status:204,headers:{"content-type":"text
 }
 if(req.requestType==="PREFETCH_REQUEST"){
 emitRequestDiagnostic(urlObj,req.requestType,req.reasonCode,false,true,req.sameOrigin);
+var prefetchResponse=responseForPrefetch(urlObj,req);
+if(prefetchResponse){return Promise.resolve(prefetchResponse);}
 }
 return originalFetch(input,init).then(function(resp){
 if(urlObj&&/\\/api\\/gnr8\\/runtime\\/preview-assets\\//.test(String(urlObj.pathname||""))&&(resp.status===404||resp.status===410)){
@@ -658,6 +681,7 @@ emitRequestDiagnostic(urlObj,req.requestType,req.reasonCode,true,false,req.sameO
 return true;
 }
 if(req.requestType==="PREFETCH_REQUEST"){emitRequestDiagnostic(urlObj,req.requestType,req.reasonCode,false,true,req.sameOrigin);}
+if(req.requestType==="PREFETCH_REQUEST"){return true;}
 return originalBeacon(url,data);
 };
 }
@@ -682,15 +706,28 @@ try{this.readyState=4;this.status=204;this.responseText="";if(typeof this.onread
 return;
 }
 if(req.requestType==="PREFETCH_REQUEST"){emitRequestDiagnostic(urlObj,req.requestType,req.reasonCode,false,true,req.sameOrigin);}
+if(req.requestType==="PREFETCH_REQUEST"){
+var prefetchResponse=responseForPrefetch(urlObj,req);
+if(prefetchResponse){
+try{this.readyState=4;this.status=204;this.responseText="";if(typeof this.onreadystatechange==="function"){this.onreadystatechange();}if(typeof this.onload==="function"){this.onload();}}catch(_err){}
+return;
+}
+}
 return sendRef.call(this,body);
 };
 }
 }catch(err){emit("PREVIEW_RUNTIME_MODULE_INIT_BLOCKED",{blockerReason:"REQUEST_HARDENING_INIT_FAILED",error:String(err&&err.message?err.message:err),correlationKey:[payload.siteVersionId,"request-hardening","inject-error"].join(":")});}
 })();</script>`;
+  if (input.html.includes("<head>")) {
+    return input.html.replace("<head>", `<head>${script}`);
+  }
+  if (input.html.includes("</head>")) {
+    return input.html.replace("</head>", `${script}</head>`);
+  }
   if (input.html.includes("</body>")) {
     return input.html.replace("</body>", `${script}</body>`);
   }
-  return `${input.html}${script}`;
+  return `${script}${input.html}`;
 }
 
 function injectBackToTopRuntimeCompatibility(input: { html: string; siteVersionId: string }): string {
