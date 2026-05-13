@@ -84,9 +84,7 @@ async function main(): Promise<void> {
     { label: "local stylesheet", path: "assets/user-style.css", required: true },
   ]);
 
-  const roboplastAssets = parseAssetList(parseArg("roboplast-assets"), [
-    { label: "local stylesheet", path: "assets/stylesheet/site.css", required: true },
-  ]);
+  const roboplastAssets = parseAssetList(parseArg("roboplast-assets"), []);
 
   const targets: PreviewSmokeTarget[] = [];
   const maver = await makeTarget({
