@@ -1,5 +1,6 @@
 import { PreviewDbBackpressureError, SiteVersionPreviewUnavailableError } from "@/gnr8/runtime/unified-render-preview";
 import { parseAgencyActionContextError } from "@/app/api/gnr8/agency/_lib/agency-action-access";
+import { createRuntimePreviewIdentity } from "@/gnr8/runtime/identity/runtime-identity";
 import { previewRouteDependencies } from "./preview-route-dependencies";
 
 export const runtime = "nodejs";
@@ -821,7 +822,15 @@ export async function GET(req: Request, ctx: { params: Promise<{ siteVersionId: 
     const url = new URL(req.url);
     const path = url.searchParams.get("path") ?? "/";
     const mode = url.searchParams.get("mode") ?? undefined;
-    const requestCorrelationKey = `${siteVersionId}:${mode ?? "none"}:${Date.now().toString(36)}`;
+    const requestCorrelationKey = createRuntimePreviewIdentity({
+      agencyId,
+      clientId: "unknown_client",
+      siteId: "unknown_site",
+      siteVersionId,
+      previewMode: mode ?? "none",
+      sourceMode: "request",
+      path,
+    }).correlationKey;
     const contentDebugRequested = url.searchParams.get("__debug") === "content";
     const galleryRuntimeDiagnosticRequested = url.searchParams.get("__debug") === "gallery_runtime";
     const runtimeIsolationEnabled = galleryRuntimeDiagnosticRequested || mode === "transformed";
@@ -840,6 +849,23 @@ export async function GET(req: Request, ctx: { params: Promise<{ siteVersionId: 
       path,
       mode,
       requestCorrelationKey,
+    });
+    const previewIdentity = createRuntimePreviewIdentity({
+      agencyId,
+      clientId: "unknown_client",
+      siteId: preview.siteId,
+      siteVersionId: preview.siteVersionId,
+      previewMode: preview.previewMode,
+      sourceMode: preview.source,
+      path,
+    });
+    console.info("[gnr8.runtime.preview] PREVIEW_RUNTIME_IDENTITY_RESOLVED", {
+      siteId: previewIdentity.siteId,
+      siteVersionId: previewIdentity.siteVersionId,
+      previewMode: previewIdentity.previewMode,
+      sourceMode: previewIdentity.sourceMode,
+      normalizedPath: previewIdentity.path,
+      correlationKey: previewIdentity.correlationKey,
     });
     const htmlWithOptionalDebug = contentDebugMode
       ? previewRouteDependencies.injectRuntimeDebugPanel({

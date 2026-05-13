@@ -6,6 +6,7 @@ import {
   getRawTemplateSiteAsset,
   resolveDomainSiteVersionForHost,
 } from "@/gnr8/runtime/runtime-store";
+import { normalizeRuntimeDomain, normalizeRuntimeHost, normalizeRuntimePath } from "@/gnr8/runtime/identity/runtime-identity";
 import { resolveAssetMediaType, rewriteRawTemplateCssForRuntime } from "@/src/public-site/raw-template-runtime";
 
 type PreviewAssetGetContext = { params: Promise<{ siteId: string; siteVersionId: string; assetPath?: string[] }> };
@@ -83,11 +84,12 @@ function resolveUploadVariantFallbackPath(path: string): string | null {
 }
 
 function resolveRequestHost(headers: Headers): string {
-  return (
+  const rawHost = (
     (headers.get("x-forwarded-host") ?? headers.get("host") ?? "")
       .split(",")[0]
       ?.trim() ?? ""
   );
+  return normalizeRuntimeHost(rawHost);
 }
 
 function classifyDynamicAssetMissReason(input: {
@@ -163,6 +165,7 @@ export function createPreviewAssetsRouteHandlers(overrides: Partial<PreviewAsset
         requestedPathRaw = (assetPath ?? []).join("/");
         normalizedPath = normalizeAssetPath(assetPath);
         correlationKey = buildCorrelationKey({ siteId, siteVersionId, normalizedRequestedPath: normalizedPath });
+        const requestHost = resolveRequestHost(req.headers);
         const emitRouteDiagnostic = (code: string, details: { reasonCode: string; artifactId?: string | null; lookupResult?: string | null }) => {
           console.info(`[preview-runtime] ${code}`, {
             code,
@@ -172,6 +175,9 @@ export function createPreviewAssetsRouteHandlers(overrides: Partial<PreviewAsset
             snapshotId: siteVersionId,
             requestedPath: requestedPathRaw,
             normalizedRequestedPath: normalizedPath,
+            normalizedRequestedPathCanonical: normalizedPath ? normalizeRuntimePath(normalizedPath) : null,
+            normalizedHost: normalizeRuntimeHost(requestHost),
+            normalizedDomain: normalizeRuntimeDomain(requestHost),
             artifactId: details.artifactId ?? null,
             lookupResult: details.lookupResult ?? null,
             reasonCode: details.reasonCode,
@@ -183,7 +189,6 @@ export function createPreviewAssetsRouteHandlers(overrides: Partial<PreviewAsset
           lookupResult: null,
           reasonCode: "request_received",
         });
-        const requestHost = resolveRequestHost(req.headers);
         const debugMode = new URL(req.url).searchParams.get("__debug") === "1";
         const publicDomainResolution = await deps.resolveDomainSiteVersionForHost({ host: requestHost });
         const isPublicDomainAssetRequest =

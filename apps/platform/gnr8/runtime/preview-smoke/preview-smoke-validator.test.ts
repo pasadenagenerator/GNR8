@@ -66,6 +66,12 @@ test("preview smoke validator: reports pass with deterministic transformed fixtu
   assert.deepEqual(assetCalls.sort(), ["assets/user-style.css", "legal1", "uploads/KcGdxACT/hero-01.jpg", "uploads/docs/missing.pdf"].sort());
   assert.equal(summary.nonBlockingNoise.length, 2);
   assert.equal(summary.nonBlockingNoise[0]?.classification.length > 0, true);
+  assert.equal(summary.runtimeIdentity.siteId, "site_preview_1");
+  assert.equal(summary.runtimeIdentity.siteVersionId, "sv_preview_1");
+  assert.equal(summary.runtimeIdentity.previewMode, "transformed");
+  assert.equal(summary.runtimeIdentity.sourceMode, "transformed_artifact");
+  assert.equal(summary.runtimeIdentity.normalizedPath, "/");
+  assert.equal(summary.runtimeIdentity.correlationKey.length, 64);
 });
 
 test("preview smoke validator: fails when forbidden fallback marker appears", async () => {
@@ -93,6 +99,9 @@ test("preview smoke validator: fails when forbidden fallback marker appears", as
 
   assert.equal(summary.pass, false);
   assert.equal(summary.forbiddenMarkerChecks.some((entry) => entry.marker === fallbackMarker && !entry.ok), true);
+  assert.equal(summary.runtimeIdentity.siteId, "site_preview_2");
+  assert.equal(summary.runtimeIdentity.normalizedPath, "/");
+  assert.equal(summary.runtimeIdentity.previewMode, "transformed");
 });
 
 test("preview smoke validator: fails when duplicated preview-assets prefix exists", async () => {

@@ -28,6 +28,14 @@ export type PreviewSmokeSummary = {
   previewStatus: number;
   previewMode: string | null;
   sourceMode: string | null;
+  runtimeIdentity: {
+    siteId: string | null;
+    siteVersionId: string;
+    previewMode: string;
+    sourceMode: string;
+    normalizedPath: string;
+    correlationKey: string;
+  };
   assetChecks: Array<{ label: string; path: string; required: boolean; status: number; ok: boolean }>;
   forbiddenMarkerChecks: Array<{ marker: string; ok: boolean }>;
   nativeBackToTopStatus: "present" | "missing";
@@ -125,6 +133,15 @@ export async function runPreviewSmokeValidation(
 
   const duplicatedPrefixAbsent = !/\/preview-assets\/[^/]+\/[^/]+\/api\/gnr8\/runtime\/preview-assets\//.test(previewHtml);
   const duplicatedPrefixCheck = { marker: "duplicated_preview_assets_prefix_absent", ok: duplicatedPrefixAbsent };
+  const runtimeIdentity = createRuntimePreviewIdentity({
+    agencyId: "unknown_agency",
+    clientId: "unknown_client",
+    siteId: siteId ?? "unknown_site",
+    siteVersionId: target.siteVersionId,
+    previewMode: selectedPreviewMode ?? "unknown_preview_mode",
+    sourceMode: selectedSourceMode ?? "unknown_source_mode",
+    path: previewPath,
+  });
 
   const identityChecks = target.identitySignals.map((signal) => ({ marker: `identity:${signal}`, ok: previewHtml.includes(signal) }));
 
@@ -189,6 +206,14 @@ export async function runPreviewSmokeValidation(
     previewStatus,
     previewMode: selectedPreviewMode,
     sourceMode: selectedSourceMode,
+    runtimeIdentity: {
+      siteId: siteId ?? null,
+      siteVersionId: runtimeIdentity.siteVersionId,
+      previewMode: runtimeIdentity.previewMode,
+      sourceMode: runtimeIdentity.sourceMode,
+      normalizedPath: runtimeIdentity.path,
+      correlationKey: runtimeIdentity.correlationKey,
+    },
     assetChecks,
     forbiddenMarkerChecks: [...forbiddenMarkerChecks, duplicatedPrefixCheck, ...identityChecks],
     nativeBackToTopStatus,
@@ -198,3 +223,4 @@ export async function runPreviewSmokeValidation(
     pass: hardChecks.every(Boolean),
   };
 }
+import { createRuntimePreviewIdentity } from "@/gnr8/runtime/identity/runtime-identity";
