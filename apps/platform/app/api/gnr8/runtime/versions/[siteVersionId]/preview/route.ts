@@ -595,6 +595,8 @@ return new Response("",{status:204,headers:{"content-type":"text/plain; charset=
 function classifyMissingAssetReason(urlObj,response){
 var diagnostic=response&&response.headers?String(response.headers.get("x-gnr8-preview-asset-diagnostic")||""):"";
 if(diagnostic!=="PREVIEW_ASSET_ROUTE_FILE_NOT_FOUND"&&diagnostic!=="PREVIEW_ASSET_ROUTE_PATH_MISMATCH"){return null;}
+var reasonCodeHeader=response&&response.headers?String(response.headers.get("x-gnr8-preview-asset-reason-code")||""):"";
+if(reasonCodeHeader){return reasonCodeHeader;}
 var path=String(urlObj&&urlObj.pathname||"");
 var query=String(urlObj&&urlObj.search||"");
 if(query&&query.length>1){return "QUERYSTRING_VARIANT";}

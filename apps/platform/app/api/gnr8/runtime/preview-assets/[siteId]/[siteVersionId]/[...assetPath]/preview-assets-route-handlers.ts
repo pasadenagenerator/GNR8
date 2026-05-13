@@ -59,9 +59,12 @@ function buildCorrelationKey(input: { siteId: string; siteVersionId: string; nor
 }
 
 function resolveLookupCandidates(normalizedPath: string): string[] {
-  const candidates = new Set<string>([normalizedPath]);
+  const basePath = normalizedPath.split(/[?#]/, 1)[0] ?? normalizedPath;
+  const candidates = new Set<string>([normalizedPath, basePath]);
   if (!normalizedPath.startsWith("uploads/")) candidates.add(`uploads/${normalizedPath}`);
   if (!normalizedPath.startsWith("assets/")) candidates.add(`assets/${normalizedPath}`);
+  if (!basePath.startsWith("uploads/")) candidates.add(`uploads/${basePath}`);
+  if (!basePath.startsWith("assets/")) candidates.add(`assets/${basePath}`);
   return [...candidates];
 }
 
@@ -115,6 +118,15 @@ function classifyDynamicAssetMissReason(input: {
   }
   if (path.startsWith("uploads/") || path.startsWith("assets/")) return "missing_imported_file";
   return input.routeDiagnostic === "PREVIEW_ASSET_ROUTE_PATH_MISMATCH" ? "prefetch_noise" : "dynamic_download_endpoint";
+}
+
+function resolveOptionalAssetReasonCode(normalizedPath: string | null): string | null {
+  const path = (normalizedPath ?? "").toLowerCase().split(/[?#]/, 1)[0] ?? "";
+  if (!path) return null;
+  if ((path.startsWith("uploads/") || path.startsWith("assets/")) && /\.(pdf|doc|docx|rtf|odt)$/i.test(path)) {
+    return "OPTIONAL_DOCUMENT_ASSET_MISSING";
+  }
+  return null;
 }
 
 export function createPreviewAssetsRouteHandlers(overrides: Partial<PreviewAssetRouteDependencies> = {}) {
@@ -344,6 +356,7 @@ export function createPreviewAssetsRouteHandlers(overrides: Partial<PreviewAsset
           }
         }
         if (!asset) {
+          const optionalReasonCode = resolveOptionalAssetReasonCode(normalizedPath);
           const fileMapCandidates = new Set<string>(lookupCandidates);
           const fallbackPath = resolveUploadVariantFallbackPath(normalizedPath);
           if (fallbackPath) fileMapCandidates.add(fallbackPath);
@@ -372,6 +385,7 @@ export function createPreviewAssetsRouteHandlers(overrides: Partial<PreviewAsset
                 normalizedPath,
                 routeDiagnostic: "PREVIEW_ASSET_ROUTE_PATH_MISMATCH",
               }),
+              ...(optionalReasonCode ? { "x-gnr8-preview-asset-reason-code": optionalReasonCode } : {}),
             },
           });
         }
@@ -397,6 +411,7 @@ export function createPreviewAssetsRouteHandlers(overrides: Partial<PreviewAsset
                 normalizedPath,
                 routeDiagnostic: "PREVIEW_ASSET_ROUTE_FILE_NOT_FOUND",
               }),
+              ...(optionalReasonCode ? { "x-gnr8-preview-asset-reason-code": optionalReasonCode } : {}),
             },
           });
         }

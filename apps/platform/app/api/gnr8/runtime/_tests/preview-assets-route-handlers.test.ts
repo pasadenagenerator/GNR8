@@ -284,6 +284,70 @@ test("preview assets route returns 200 with content-type for Maver baseline asse
   }
 });
 
+test("preview assets route resolves persisted css file when asset path contains encoded query suffix", async () => {
+  const handlers = createPreviewAssetsRouteHandlers({
+    resolveDomainSiteVersionForHost: async () =>
+      ({
+        outcome: "domain_hit",
+        host: "beauty-clinic.pasadenagenerator.com",
+        siteId: "site_1",
+        siteVersionId: "sv_1",
+        domain: "beauty-clinic.pasadenagenerator.com",
+        status: "active",
+        bindingId: "binding_1",
+      }) as never,
+    resolveAgencyIdForSiteVersion: async () => "agency_1",
+    requireAgencyActionContext: async () => ({ actorMode: "agency_member", agencyId: "agency_1" } as never),
+    getRawImportedSiteArtifact: async () =>
+      ({
+        id: "artifact_imported_1",
+        artifactType: "raw_imported_site",
+        siteId: "site_1",
+        siteVersionId: "sv_1",
+        entryHtmlPath: "index.html",
+        assetBasePath: ".",
+        fileMap: {
+          "assets/user-style.css": { path: "assets/user-style.css", mediaType: "text/css; charset=utf-8", sizeBytes: 18, sha256: "h3" },
+        },
+        metadata: {
+          sourceUrl: "https://example.com",
+          finalUrl: "https://www.example.com",
+          htmlByteLength: 123,
+          diagnostics: { codes: [] },
+          assetSummary: { persistedAssetCount: 1, externalFallbackAssetCount: 0 },
+        },
+        createdAt: "2026-05-06T00:00:00.000Z",
+      }) as never,
+    getRawTemplateSiteArtifact: async () => null,
+    getRawTemplateSiteAsset: async ({ filePath }) =>
+      filePath === "assets/user-style.css"
+        ? ({
+            mediaType: "text/css; charset=utf-8",
+            sizeBytes: 18,
+            sha256: "h3",
+            bytes: Buffer.from("body{color:#111;}", "utf8"),
+          } as never)
+        : null,
+  });
+
+  const response = await handlers.GET(
+    new Request("https://beauty-clinic.pasadenagenerator.com/api/gnr8/runtime/preview-assets/site_1/sv_1/assets/user-style.css%3F1749115631", {
+      headers: { host: "beauty-clinic.pasadenagenerator.com" },
+    }),
+    {
+      params: Promise.resolve({
+        siteId: "site_1",
+        siteVersionId: "sv_1",
+        assetPath: ["assets", "user-style.css%3F1749115631"],
+      }),
+    },
+  );
+
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get("content-type"), "text/css; charset=utf-8");
+  assert.equal(response.headers.get("x-gnr8-preview-asset-path"), "assets/user-style.css");
+});
+
 test("preview assets route prefers raw imported-site artifact over raw template artifact when both exist", async () => {
   const handlers = createPreviewAssetsRouteHandlers({
     resolveDomainSiteVersionForHost: async () =>
@@ -530,6 +594,61 @@ test("preview assets route returns deterministic 404 for missing upload asset", 
   assert.equal(await response.text(), "not found");
   assert.equal(response.headers.get("x-gnr8-preview-asset-diagnostic"), "PREVIEW_ASSET_ROUTE_FILE_NOT_FOUND");
   assert.equal(response.headers.get("x-gnr8-preview-asset-miss-reason"), "missing_imported_file");
+});
+
+test("preview assets route marks missing optional pdf upload as non-blocking optional document asset", async () => {
+  const handlers = createPreviewAssetsRouteHandlers({
+    resolveDomainSiteVersionForHost: async () =>
+      ({
+        outcome: "domain_hit",
+        host: "beauty-clinic.pasadenagenerator.com",
+        siteId: "site_1",
+        siteVersionId: "sv_1",
+        domain: "beauty-clinic.pasadenagenerator.com",
+        status: "active",
+        bindingId: "binding_1",
+      }) as never,
+    resolveAgencyIdForSiteVersion: async () => "agency_1",
+    requireAgencyActionContext: async () => ({ actorMode: "agency_member", agencyId: "agency_1" } as never),
+    getRawImportedSiteArtifact: async () =>
+      ({
+        id: "artifact_imported_1",
+        artifactType: "raw_imported_site",
+        siteId: "site_1",
+        siteVersionId: "sv_1",
+        entryHtmlPath: "index.html",
+        assetBasePath: ".",
+        fileMap: {},
+        metadata: {
+          sourceUrl: "https://example.com",
+          finalUrl: "https://www.example.com",
+          htmlByteLength: 123,
+          diagnostics: { codes: [] },
+          assetSummary: { persistedAssetCount: 0, externalFallbackAssetCount: 0 },
+        },
+        createdAt: "2026-05-06T00:00:00.000Z",
+      }) as never,
+    getRawTemplateSiteArtifact: async () => null,
+    getRawTemplateSiteAsset: async () => null,
+  });
+
+  const response = await handlers.GET(
+    new Request(
+      "https://beauty-clinic.pasadenagenerator.com/api/gnr8/runtime/preview-assets/site_1/sv_1/uploads/GpTlYiuH/RoboplastPDFpredstavitev2022.pdf",
+      { headers: { host: "beauty-clinic.pasadenagenerator.com" } },
+    ),
+    {
+      params: Promise.resolve({
+        siteId: "site_1",
+        siteVersionId: "sv_1",
+        assetPath: ["uploads", "GpTlYiuH", "RoboplastPDFpredstavitev2022.pdf"],
+      }),
+    },
+  );
+
+  assert.equal(response.status, 404);
+  assert.equal(response.headers.get("x-gnr8-preview-asset-miss-reason"), "missing_imported_file");
+  assert.equal(response.headers.get("x-gnr8-preview-asset-reason-code"), "OPTIONAL_DOCUMENT_ASSET_MISSING");
 });
 
 test("preview assets route classifies legal prefetch URLs as prefetch noise", async () => {
