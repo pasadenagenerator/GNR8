@@ -693,16 +693,55 @@ test("preview route: transformed request-noise hardening shim parses without dan
     assert.doesNotThrow(() => new Function(shim), "expected request-noise hardening shim to parse as JavaScript");
     assert.match(shim, /try\{\nif\(typeof window\.fetch==="function"\)\{/);
     assert.match(shim, /\}catch\(err\)\{emit\("PREVIEW_RUNTIME_MODULE_INIT_BLOCKED"/);
-    assert.match(shim, /navigator\.serviceWorker\.register=function\(scriptURL\)/);
+    assert.match(shim, /swContainer\.register=blockRegister/);
+    assert.match(shim, /ServiceWorkerContainer\.prototype\.register=blockRegister/);
     assert.match(shim, /if\(sameOrigin\)\{/);
     assert.match(shim, /return originalRegister\(scriptURL\)/);
     assert.match(shim, /OPTIONAL_DOCUMENT_PREFETCH/);
     assert.match(shim, /responseForPrefetch/);
     assert.match(shim, /preview_noop_lang/);
     assert.match(shim, /preview_legacy_backend_noop/);
+    assert.match(shim, /LEGACY_AJAX_HTML_PREVIEW_NOOP/);
+    assert.match(shim, /this\.status=noopResponse\.status;this\.responseText=noopResponse\.body/);
+    assert.match(shim, /requestType!=="EXTERNAL_ANALYTICS_REQUEST"/);
     assert.match(shim, /normalizedKey/);
     assert.match(shim, /PREVIEW_REQUEST_NOISE_SUPPRESSED/);
     assert.match(shim, /if\(prefetchResponse\)\{return Promise\.resolve\(prefetchResponse\);\}/);
+  } finally {
+    restoreDeps();
+  }
+});
+
+test("preview route: transformed request-noise shim includes legacy lang noop payload shape compatible with lang.js", async () => {
+  const restoreDeps = mockPreviewDeps(false);
+  try {
+    const response = await GET(new Request("https://app.pasadenagenerator.com/api/gnr8/runtime/versions/sv_preview_1/preview?mode=transformed"), {
+      params: Promise.resolve({ siteVersionId: "sv_preview_1" }),
+    });
+    const html = await response.text();
+    assert.equal(response.status, 200);
+    const shim = extractInjectedScriptContaining(html, "PREVIEW_REQUEST_NOISE_CLASSIFIED");
+    assert.match(shim, /language:"sl"/);
+    assert.match(shim, /translations:\{\}/);
+    assert.match(shim, /data:\{lang:"sl",labels:\{\},translations:\{\}\}/);
+  } finally {
+    restoreDeps();
+  }
+});
+
+test("preview route: transformed request-noise shim suppresses quicklink prefetch noise targets", async () => {
+  const restoreDeps = mockPreviewDeps(false);
+  try {
+    const response = await GET(new Request("https://app.pasadenagenerator.com/api/gnr8/runtime/versions/sv_preview_1/preview?mode=transformed"), {
+      params: Promise.resolve({ siteVersionId: "sv_preview_1" }),
+    });
+    const html = await response.text();
+    assert.equal(response.status, 200);
+    const shim = extractInjectedScriptContaining(html, "PREVIEW_REQUEST_NOISE_CLASSIFIED");
+    assert.match(shim, /\^\\\/legal\\d\+\$\/i/);
+    assert.match(shim, /downloadvcard=1/i);
+    assert.match(shim, /OPTIONAL_DOCUMENT_PREFETCH/);
+    assert.match(shim, /status:204/);
   } finally {
     restoreDeps();
   }

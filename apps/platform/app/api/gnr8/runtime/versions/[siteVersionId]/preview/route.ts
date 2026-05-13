@@ -565,7 +565,7 @@ function shouldEmit(code,key){
 var now=Date.now();
 var bucket=String(code||"")+"::"+String(key||"");
 var last=Number(dedupeCache[bucket]||0);
-if(Number.isFinite(last)&&now-last<3000){return false;}
+if(Number.isFinite(last)&&now-last<5000){return false;}
 dedupeCache[bucket]=now;
 return true;
 }
@@ -582,7 +582,7 @@ var reasonCode="REQUEST_NOT_CLASSIFIED";
 if(/(^|\\/)sw(?:-cleanup)?\\.js$/i.test(path)||/service-?worker/i.test(path)){reqType="SERVICE_WORKER_REQUEST";}
 if(reqType==="SERVICE_WORKER_REQUEST"){reasonCode="SERVICE_WORKER_REGISTRATION_OR_SCRIPT";}
 else if(/google-analytics\\.com|googletagmanager\\.com|doubleclick\\.net|facebook\\.com\\/tr|connect\\.facebook\\.net|hotjar\\.com|clarity\\.ms|segment\\.io|mixpanel\\.com|amplitude\\.com|plausible\\.io|posthog\\.com|(^|\\.)google\\.com/i.test(host+(urlObj?urlObj.href:""))&&/\\/g\\/collect/i.test(path)){reqType="EXTERNAL_ANALYTICS_REQUEST";reasonCode="ANALYTICS_BLOCKED_BY_CLIENT";}
-else if(/\\/api\\.php\\//i.test(path)||/wp-admin\\/admin-ajax\\.php/i.test(path)||/\\/components\\/com_.*\\/ajax/i.test(path)||/\\/ajax\\//i.test(path)||/\\/utils\\/lang/i.test(path)){reqType="LEGACY_BACKEND_REQUEST";reasonCode="LEGACY_BACKEND_PREVIEW_NOOP";}
+else if(/\\/api\\.php\\//i.test(path)||/wp-admin\\/admin-ajax\\.php/i.test(path)||/\\/components\\/com_.*\\/ajax/i.test(path)||/\\/ajax\\//i.test(path)||/\\/utils\\/lang/i.test(path)||/opennow/i.test(path)){reqType="LEGACY_BACKEND_REQUEST";reasonCode=/\\/utils\\/lang/i.test(path)?"LEGACY_LANG_ENDPOINT_PREVIEW_NOOP":"LEGACY_BACKEND_PREVIEW_NOOP";}
 else if((context&&context.prefetch===true)||/\\b(prefetch|prerender|quicklink)\\b/i.test(String(context&&context.urlHint||""))||/^\\/legal\\d+$/i.test(path)||/downloadvcard=1/i.test(query)){reqType="PREFETCH_REQUEST";reasonCode=/\\/(uploads|assets)\\/[^?#]+\\.(pdf|doc|docx|rtf|odt)(?:[?#].*)?$/i.test(path)?"OPTIONAL_DOCUMENT_PREFETCH":"PREFETCH_MISS_PREVIEW_UNAVAILABLE_ROUTE";}
 else if(/sw-cleanup\\.js|manifest\\.json|workbox|runtime\\.[a-f0-9]{6,}\\.(js|css)/i.test(path)){reasonCode="UNSUPPORTED_RUNTIME_GENERATED_ASSET";}
 return {requestType:reqType,sameOrigin:sameOrigin,reasonCode:reasonCode};
@@ -593,14 +593,19 @@ var normalizedKey=[String(requestType||""),String(urlObj&&urlObj.origin===window
 var payload={url:urlValue,requestType:requestType,reasonCode:reasonCode,sameOrigin:sameOrigin,handled:handled,ignored:ignored,correlationKey:correlationKey(urlValue),normalizedKey:normalizedKey};
 if(shouldEmit("PREVIEW_REQUEST_NOISE_CLASSIFIED",normalizedKey)){emit("PREVIEW_REQUEST_NOISE_CLASSIFIED",payload);}
 if((handled===true||ignored===true)&&shouldEmit("PREVIEW_REQUEST_NOISE_SUPPRESSED",normalizedKey)){emit("PREVIEW_REQUEST_NOISE_SUPPRESSED",payload);}
-if(shouldEmit(requestType,normalizedKey)){emit(requestType,payload);}
+if(requestType!=="EXTERNAL_ANALYTICS_REQUEST"&&shouldEmit(requestType,normalizedKey)){emit(requestType,payload);}
+}
+function resolveLegacyNoop(urlObj){
+var path=String(urlObj&&urlObj.pathname||"");
+if(/sw-cleanup\\.js$/i.test(path)){return {status:200,contentType:"application/javascript; charset=utf-8",body:"self.addEventListener('install',function(){});",reasonCode:"SERVICE_WORKER_SCRIPT_PREVIEW_NOOP"};}
+if(/\\/utils\\/lang/i.test(path)){return {status:200,contentType:"application/json; charset=utf-8",body:JSON.stringify({ok:true,success:true,status:"ok",lang:"sl",language:"sl",labels:{},dictionary:{},translations:{},data:{lang:"sl",labels:{},translations:{}},reason:"preview_noop_lang"}),reasonCode:"LEGACY_LANG_ENDPOINT_PREVIEW_NOOP"};}
+if(/opennow/i.test(path)||/\\/ajax\\//i.test(path)){return {status:200,contentType:"text/html; charset=utf-8",body:"<div data-preview-legacy-noop='1'></div>",reasonCode:"LEGACY_AJAX_HTML_PREVIEW_NOOP"};}
+if(/\\.php($|\\/)/i.test(path)||/admin-ajax\\.php/i.test(path)){return {status:200,contentType:"application/json; charset=utf-8",body:JSON.stringify({ok:true,success:true,status:"ok",html:"<div data-preview-legacy-noop='1'></div>",content:"<div data-preview-legacy-noop='1'></div>",result:"<div data-preview-legacy-noop='1'></div>",data:{html:"<div data-preview-legacy-noop='1'></div>"},reason:"preview_legacy_backend_noop"}),reasonCode:"LEGACY_BACKEND_PREVIEW_NOOP"};}
+return {status:200,contentType:"text/html; charset=utf-8",body:"<div data-preview-legacy-noop='1'></div>",reasonCode:"LEGACY_BACKEND_PREVIEW_NOOP"};
 }
 function responseForLegacy(urlObj){
-var path=String(urlObj&&urlObj.pathname||"");
-if(/sw-cleanup\\.js$/i.test(path)){return new Response("self.addEventListener('install',function(){});",{status:200,headers:{"content-type":"application/javascript; charset=utf-8"}});}
-if(/\\/utils\\/lang/i.test(path)){return new Response(JSON.stringify({ok:true,lang:"sl",language:"sl",labels:{},translations:{},reason:"preview_noop_lang"}),{status:200,headers:{"content-type":"application/json; charset=utf-8"}});}
-if(/\\.php($|\\/)/i.test(path)||/admin-ajax\\.php/i.test(path)||/\\/ajax\\//i.test(path)||/opennow/i.test(path)){return new Response(JSON.stringify({ok:true,success:true,html:"<div></div>",data:{},reason:"preview_legacy_backend_noop"}),{status:200,headers:{"content-type":"application/json; charset=utf-8"}});}
-return new Response("<div></div>",{status:200,headers:{"content-type":"text/html; charset=utf-8"}});
+var noop=resolveLegacyNoop(urlObj);
+return new Response(noop.body,{status:noop.status,headers:{"content-type":noop.contentType}});
 }
 function responseForPrefetch(urlObj,req){
 var path=String(urlObj&&urlObj.pathname||"");
@@ -622,9 +627,10 @@ if(/sw-cleanup\\.js|service-?worker|manifest\\.json|workbox|runtime\\.[a-f0-9]{6
 return "NON_IMPORTED_DYNAMIC_ASSET";
 }
 try{
-if(navigator&&navigator.serviceWorker&&typeof navigator.serviceWorker.register==="function"){
-var originalRegister=navigator.serviceWorker.register.bind(navigator.serviceWorker);
-navigator.serviceWorker.register=function(scriptURL){
+var swContainer=navigator&&navigator.serviceWorker?navigator.serviceWorker:null;
+if(swContainer&&typeof swContainer.register==="function"){
+var originalRegister=swContainer.register.bind(swContainer);
+var blockRegister=function(scriptURL){
 var urlObj=toUrl(scriptURL);
 var sameOrigin=!!(urlObj&&urlObj.origin===window.location.origin);
 if(sameOrigin){
@@ -634,6 +640,10 @@ return Promise.resolve({scope:"/",active:null,installing:null,waiting:null,updat
 }
 return originalRegister(scriptURL);
 };
+swContainer.register=blockRegister;
+if(window.ServiceWorkerContainer&&window.ServiceWorkerContainer.prototype&&typeof window.ServiceWorkerContainer.prototype.register==="function"){
+window.ServiceWorkerContainer.prototype.register=blockRegister;
+}
 void originalRegister;
 }
 }catch(_err){}
@@ -648,7 +658,7 @@ if(req.requestType==="SERVICE_WORKER_REQUEST"||req.requestType==="LEGACY_BACKEND
 emitRequestDiagnostic(urlObj,req.requestType,req.reasonCode,true,false,req.sameOrigin);
 if(req.requestType==="SERVICE_WORKER_REQUEST"){emit("PREVIEW_SERVICE_WORKER_BLOCKED",{url:urlObj?urlObj.href:null,requestType:req.requestType,reasonCode:req.reasonCode,sameOrigin:req.sameOrigin,handled:true,ignored:false,correlationKey:correlationKey(urlObj?urlObj.href:"")});}
 var legacyResponse=responseForLegacy(urlObj);
-if(req.requestType==="LEGACY_BACKEND_REQUEST"){emit("PREVIEW_LEGACY_BACKEND_NOOP_RESPONSE",{url:urlObj?urlObj.href:null,requestType:req.requestType,reasonCode:req.reasonCode,handled:true,ignored:false,correlationKey:correlationKey(urlObj?urlObj.href:"")});}
+if(req.requestType==="LEGACY_BACKEND_REQUEST"){emit("PREVIEW_LEGACY_BACKEND_NOOP_RESPONSE",{url:urlObj?urlObj.href:null,requestType:req.requestType,reasonCode:resolveLegacyNoop(urlObj).reasonCode||req.reasonCode,handled:true,ignored:false,correlationKey:correlationKey(urlObj?urlObj.href:"")});}
 return Promise.resolve(legacyResponse);
 }
 if(req.requestType==="EXTERNAL_ANALYTICS_REQUEST"){
@@ -700,9 +710,10 @@ var req=classify(urlObj,{prefetch:false,urlHint:String(urlObj?urlObj.href:"")});
 if(req.requestType==="SERVICE_WORKER_REQUEST"||req.requestType==="LEGACY_BACKEND_REQUEST"||req.requestType==="EXTERNAL_ANALYTICS_REQUEST"){
 if(req.requestType==="EXTERNAL_ANALYTICS_REQUEST"){emit("PREVIEW_ANALYTICS_BLOCKED",{url:urlObj?urlObj.href:null,requestType:req.requestType,reasonCode:req.reasonCode,sameOrigin:req.sameOrigin,handled:true,ignored:false,correlationKey:correlationKey(urlObj?urlObj.href:"")});}
 if(req.requestType==="SERVICE_WORKER_REQUEST"){emit("PREVIEW_SERVICE_WORKER_BLOCKED",{url:urlObj?urlObj.href:null,requestType:req.requestType,reasonCode:req.reasonCode,sameOrigin:req.sameOrigin,handled:true,ignored:false,correlationKey:correlationKey(urlObj?urlObj.href:"")});}
-if(req.requestType==="LEGACY_BACKEND_REQUEST"){emit("PREVIEW_LEGACY_BACKEND_NOOP_RESPONSE",{url:urlObj?urlObj.href:null,requestType:req.requestType,reasonCode:req.reasonCode,handled:true,ignored:false,correlationKey:correlationKey(urlObj?urlObj.href:"")});}
+if(req.requestType==="LEGACY_BACKEND_REQUEST"){emit("PREVIEW_LEGACY_BACKEND_NOOP_RESPONSE",{url:urlObj?urlObj.href:null,requestType:req.requestType,reasonCode:resolveLegacyNoop(urlObj).reasonCode||req.reasonCode,handled:true,ignored:false,correlationKey:correlationKey(urlObj?urlObj.href:"")});}
 emitRequestDiagnostic(urlObj,req.requestType,req.reasonCode,true,false,req.sameOrigin);
-try{this.readyState=4;this.status=204;this.responseText="";if(typeof this.onreadystatechange==="function"){this.onreadystatechange();}if(typeof this.onload==="function"){this.onload();}}catch(_err){}
+var noopResponse=resolveLegacyNoop(urlObj);
+try{this.readyState=4;this.status=noopResponse.status;this.responseText=noopResponse.body;if(typeof this.onreadystatechange==="function"){this.onreadystatechange();}if(typeof this.onload==="function"){this.onload();}}catch(_err){}
 return;
 }
 if(req.requestType==="PREFETCH_REQUEST"){emitRequestDiagnostic(urlObj,req.requestType,req.reasonCode,false,true,req.sameOrigin);}
