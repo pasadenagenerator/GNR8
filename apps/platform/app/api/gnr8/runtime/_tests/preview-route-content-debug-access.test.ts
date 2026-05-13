@@ -1102,6 +1102,9 @@ test("preview route: transformed output never includes fallback back-to-top mark
       ["data", "gnr8", "backtotop", "fallback"].join("-"),
       ["PREVIEW_BACK_TO_TOP_FALLBACK", "APPLIED"].join("_"),
       ["RUNTIME_SIGNAL", "FALLBACK"].join("_"),
+      ["fallbackInjected", " true"].join(":"),
+      ["finalButtonSource", '"fallback"'].join(":"),
+      ["finalButtonSource", ' "fallback"'].join(":"),
       "gnr8-native-scrollicon-glyph",
       "data-gnr8-native-scrollicon-glyph",
       "width:44px",
@@ -1124,12 +1127,75 @@ test("repo guard: fallback back-to-top markers are banned from source", async ()
     ["data", "gnr8", "backtotop", "fallback"].join("-"),
     ["PREVIEW_BACK_TO_TOP_FALLBACK", "APPLIED"].join("_"),
     ["RUNTIME_SIGNAL", "FALLBACK"].join("_"),
+    ["fallbackInjected", " true"].join(":"),
+    ["finalButtonSource", '"fallback"'].join(":"),
+    ["finalButtonSource", ' "fallback"'].join(":"),
   ];
   for (const marker of forbiddenMarkers) {
     const result = spawnSync("rg", ["-n", "--hidden", "--glob", "!.git", marker, repoRoot], {
       encoding: "utf-8",
     });
     assert.equal(result.status, 1, `forbidden marker detected in repository source: ${marker}\n${result.stdout ?? ""}${result.stderr ?? ""}`);
+  }
+});
+
+test("preview route: Roboplast-like fixture keeps native scrollIcon and local stylesheet semantics without fallback markers", async () => {
+  const restoreDeps = setPreviewRouteDependenciesForTest({
+    resolveAgencyIdForSiteVersion: async () => "agency_1",
+    requireAgencyActionContext: async () => ({ agencyId: "agency_1" }) as never,
+    renderSiteVersionPreview: async () =>
+      ({
+        html: `<!doctype html><html><head><link rel="stylesheet" href="/api/gnr8/runtime/preview-assets/site_preview_1/sv_preview_1/assets/stylesheet/site.css"></head><body><a href="#" data-req="scrollTop" class="scrollIcon hidden bottom_right">Top</a></body></html>`,
+        siteId: "site_preview_1",
+        siteVersionId: "sv_preview_1",
+        source: "preview",
+        previewMode: "transformed",
+        previewRuntimeSummary: {
+          rendererContractAvailable: true,
+          finalSiteModelAvailable: true,
+          renderedWithFallback: false,
+          matchedPageId: null,
+          contentResolutionApplied: true,
+          resolvedContentCount: 0,
+          unresolvedContentCount: 0,
+          contentResolutionDegraded: false,
+          contentResolutionDiagnostics: [],
+          previewDiagnostics: [],
+          familyRenderUsed: false,
+          familyRenderMode: null,
+          familyRenderFamilyId: null,
+          familyRenderFallbackToPage: false,
+          familyRenderDiagnosticsCount: 0,
+        },
+        renderedCaptureUsed: false,
+        domSize: 100,
+        fallbackUsed: false,
+      }) as never,
+    canShowContentDebug: async () => false,
+  });
+  try {
+    const response = await GET(new Request("https://app.pasadenagenerator.com/api/gnr8/runtime/versions/sv_preview_1/preview?mode=transformed"), {
+      params: Promise.resolve({ siteVersionId: "sv_preview_1" }),
+    });
+    const html = await response.text();
+    const shim = extractInjectedScriptContaining(html, "PREVIEW_BACK_TO_TOP_NATIVE_ONLY_STATUS");
+    assert.equal(response.status, 200);
+    assert.match(html, /PREVIEW_BACK_TO_TOP_NATIVE_ONLY_STATUS/);
+    assert.match(shim, /fallbackAllowed:false/);
+    assert.match(shim, /glyphInjected:false/);
+    assert.match(shim, /visualBoxNormalized:false/);
+    assert.match(shim, /nativeVisualUntouched:true/);
+    assert.match(shim, /localStylesheetHrefCount:localStylesheetHrefs\.length/);
+    assert.match(shim, /nativeFound:\!\!nativeEl/);
+    assert.equal(html.includes(["gnr8", "preview", "backtotop", "fallback"].join("-")), false);
+    assert.equal(html.includes(["data", "gnr8", "backtotop", "fallback"].join("-")), false);
+    assert.equal(html.includes(["PREVIEW_BACK_TO_TOP_FALLBACK", "APPLIED"].join("_")), false);
+    assert.equal(html.includes(["RUNTIME_SIGNAL", "FALLBACK"].join("_")), false);
+    assert.equal(html.includes(["fallbackInjected", " true"].join(":")), false);
+    assert.equal(html.includes(["finalButtonSource", '"fallback"'].join(":")), false);
+    assert.equal(html.includes(["finalButtonSource", ' "fallback"'].join(":")), false);
+  } finally {
+    restoreDeps();
   }
 });
 

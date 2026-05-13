@@ -226,6 +226,18 @@ test('raw template preview rewrites persisted local stylesheet links to preview-
 })
 
 test('raw template preview rewrites root-relative uploads URLs in inline style and style blocks', () => {
+  const logs: Array<{ code: string; payload: Record<string, unknown> }> = []
+  const originalInfo = console.info
+  console.info = ((message?: unknown, payload?: unknown) => {
+    const code = String(message ?? '')
+    if (code.includes('PREVIEW_CSS_ASSET_REWRITE_APPLIED') || code.includes('PREVIEW_CSS_ASSET_REWRITE_SKIPPED')) {
+      logs.push({
+        code,
+        payload: (payload && typeof payload === 'object' ? (payload as Record<string, unknown>) : {}) ?? {},
+      })
+    }
+  }) as typeof console.info
+  try {
   const html = [
     '<!doctype html>',
     '<html>',
@@ -248,6 +260,11 @@ test('raw template preview rewrites root-relative uploads URLs in inline style a
     rewritten.includes('/api/gnr8/runtime/preview-assets/site-maver/sv-maver/uploads/KcGdxACT/hero-01.jpg'),
     true,
   )
+  } finally {
+    console.info = originalInfo
+  }
+  assert.equal(logs.some((entry) => entry.code.includes('PREVIEW_CSS_ASSET_REWRITE_APPLIED')), true)
+  assert.equal(logs.some((entry) => entry.code.includes('PREVIEW_CSS_ASSET_REWRITE_SKIPPED')), false)
 })
 
 test('raw template preview does not rewrite missing file-map uploads CSS URL and emits skipped diagnostic', () => {
@@ -281,6 +298,17 @@ test('raw template preview does not rewrite missing file-map uploads CSS URL and
 })
 
 test('raw template preview rewrites Maver-like dual uploads hero background references', () => {
+  const logs: Array<{ code: string; payload: Record<string, unknown> }> = []
+  const originalInfo = console.info
+  console.info = ((message?: unknown, payload?: unknown) => {
+    if (String(message ?? '').includes('PREVIEW_CSS_ASSET_REWRITE_APPLIED')) {
+      logs.push({
+        code: String(message),
+        payload: (payload && typeof payload === 'object' ? (payload as Record<string, unknown>) : {}) ?? {},
+      })
+    }
+  }) as typeof console.info
+  try {
   const html = [
     '<!doctype html>',
     '<html>',
@@ -303,6 +331,10 @@ test('raw template preview rewrites Maver-like dual uploads hero background refe
     rewritten.includes('/api/gnr8/runtime/preview-assets/site-maver-2/sv-maver-2/uploads/KcGdxACT/hero-01.jpg?cache=1'),
     true,
   )
+  } finally {
+    console.info = originalInfo
+  }
+  assert.equal(logs.length >= 2, true)
 })
 
 test('preview override selection merges by slot with draft precedence and published fallback', () => {

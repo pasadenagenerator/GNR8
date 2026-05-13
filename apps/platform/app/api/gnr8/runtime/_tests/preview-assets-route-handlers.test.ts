@@ -202,6 +202,88 @@ test("preview assets route serves persisted raw imported-site assets when availa
   assert.equal(await response.text(), "console.log('ok')");
 });
 
+test("preview assets route returns 200 with content-type for Maver baseline asset set", async () => {
+  const handlers = createPreviewAssetsRouteHandlers({
+    resolveDomainSiteVersionForHost: async () =>
+      ({
+        outcome: "domain_hit",
+        host: "beauty-clinic.pasadenagenerator.com",
+        siteId: "site_1",
+        siteVersionId: "sv_1",
+        domain: "beauty-clinic.pasadenagenerator.com",
+        status: "active",
+        bindingId: "binding_1",
+      }) as never,
+    resolveAgencyIdForSiteVersion: async () => "agency_1",
+    requireAgencyActionContext: async () => ({ actorMode: "agency_member", agencyId: "agency_1" } as never),
+    getRawImportedSiteArtifact: async () =>
+      ({
+        id: "artifact_imported_1",
+        artifactType: "raw_imported_site",
+        siteId: "site_1",
+        siteVersionId: "sv_1",
+        entryHtmlPath: "index.html",
+        assetBasePath: ".",
+        fileMap: {
+          "uploads/KcGdxACT/hero-01.jpg": { path: "uploads/KcGdxACT/hero-01.jpg", mediaType: "image/jpeg", sizeBytes: 4, sha256: "h1" },
+          "uploads/QBSeVQys/overlay.png": { path: "uploads/QBSeVQys/overlay.png", mediaType: "image/png", sizeBytes: 4, sha256: "h2" },
+          "assets/user-style.css": { path: "assets/user-style.css", mediaType: "text/css; charset=utf-8", sizeBytes: 18, sha256: "h3" },
+        },
+        metadata: {
+          sourceUrl: "https://example.com",
+          finalUrl: "https://www.example.com",
+          htmlByteLength: 123,
+          diagnostics: { codes: [] },
+          assetSummary: { persistedAssetCount: 3, externalFallbackAssetCount: 0 },
+        },
+        createdAt: "2026-05-06T00:00:00.000Z",
+      }) as never,
+    getRawTemplateSiteArtifact: async () => null,
+    getRawTemplateSiteAsset: async ({ filePath }) => {
+      if (filePath === "uploads/KcGdxACT/hero-01.jpg") {
+        return { mediaType: "image/jpeg", sizeBytes: 4, sha256: "h1", bytes: Buffer.from([255, 216, 255, 217]) } as never;
+      }
+      if (filePath === "uploads/QBSeVQys/overlay.png") {
+        return { mediaType: "image/png", sizeBytes: 4, sha256: "h2", bytes: Buffer.from([137, 80, 78, 71]) } as never;
+      }
+      if (filePath === "assets/user-style.css") {
+        return { mediaType: "text/css; charset=utf-8", sizeBytes: 18, sha256: "h3", bytes: Buffer.from("body{color:#111;}", "utf8") } as never;
+      }
+      return null;
+    },
+  });
+
+  const cases = [
+    {
+      requestUrl: "https://beauty-clinic.pasadenagenerator.com/api/gnr8/runtime/preview-assets/site_1/sv_1/uploads/KcGdxACT/hero-01.jpg",
+      assetPath: ["uploads", "KcGdxACT", "hero-01.jpg"],
+      contentType: "image/jpeg",
+    },
+    {
+      requestUrl: "https://beauty-clinic.pasadenagenerator.com/api/gnr8/runtime/preview-assets/site_1/sv_1/uploads/QBSeVQys/overlay.png",
+      assetPath: ["uploads", "QBSeVQys", "overlay.png"],
+      contentType: "image/png",
+    },
+    {
+      requestUrl: "https://beauty-clinic.pasadenagenerator.com/api/gnr8/runtime/preview-assets/site_1/sv_1/assets/user-style.css?1749115631",
+      assetPath: ["assets", "user-style.css"],
+      contentType: "text/css; charset=utf-8",
+    },
+  ];
+
+  for (const testCase of cases) {
+    const response = await handlers.GET(new Request(testCase.requestUrl, { headers: { host: "beauty-clinic.pasadenagenerator.com" } }), {
+      params: Promise.resolve({
+        siteId: "site_1",
+        siteVersionId: "sv_1",
+        assetPath: testCase.assetPath,
+      }),
+    });
+    assert.equal(response.status, 200);
+    assert.equal(response.headers.get("content-type"), testCase.contentType);
+  }
+});
+
 test("preview assets route prefers raw imported-site artifact over raw template artifact when both exist", async () => {
   const handlers = createPreviewAssetsRouteHandlers({
     resolveDomainSiteVersionForHost: async () =>
