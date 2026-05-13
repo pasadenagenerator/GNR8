@@ -130,6 +130,7 @@ async function makeTargetFromSiteResolution(input: {
       strategy: input.strategy,
       binding: resolutionBinding,
       candidateSiteVersionIds,
+      siteResolutionBinding: binding,
     },
     previewMode: "transformed",
     previewPath: "/",

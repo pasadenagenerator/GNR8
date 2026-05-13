@@ -285,6 +285,23 @@ test("preview smoke validator: strategy-based active resolution emits determinis
           publishedSiteVersionId: null,
           previewSiteVersionId: null,
         },
+        siteResolutionBinding: {
+          siteId: "site_preview_active",
+          canonicalSlug: "maver",
+          activeSiteVersionId: "sv_active_1",
+          latestImportedSiteVersionId: "sv_latest_1",
+          publishedSiteVersionId: undefined,
+          previewSiteVersionId: undefined,
+          candidateSiteVersions: [
+            {
+              siteVersionId: "sv_latest_1",
+              versionNo: 1,
+              state: "READY",
+              createdAt: "2026-05-12T10:00:00.000Z",
+              artifactId: "artifact_1",
+            },
+          ],
+        },
       },
       identitySignals: ["maver", "PREVIEW_BACK_TO_TOP_NATIVE_ONLY_STATUS"],
       requiredAssets: [{ label: "hero", path: "uploads/x.jpg", required: true }],
@@ -297,6 +314,9 @@ test("preview smoke validator: strategy-based active resolution emits determinis
   assert.equal(summary.runtimeResolutionDiagnostic?.resolvedSiteVersionId, "sv_active_1");
   assert.equal(summary.runtimeResolutionDiagnostic?.fallbackUsed, false);
   assert.equal((summary.runtimeResolutionDiagnostic?.resolutionKey?.length ?? 0) > 0, true);
+  assert.equal(summary.runtimeReadiness?.readinessStatus, "ready_with_warnings");
+  assert.equal(summary.runtimeReadiness?.siteId, "site_preview_active");
+  assert.deepEqual(summary.runtimeReadiness?.warnings, ["missing_published_site_version"]);
 });
 
 test("preview smoke validator: Maver and Roboplast strategy resolution resolves expected siteVersionId", async () => {

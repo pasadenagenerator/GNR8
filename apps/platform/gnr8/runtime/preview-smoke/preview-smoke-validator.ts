@@ -1,4 +1,5 @@
 import { createRuntimePreviewIdentity } from "@/gnr8/runtime/identity/runtime-identity";
+import { createRuntimeSiteReadinessReport, type RuntimeSiteReadinessReport } from "@/gnr8/runtime/readiness/runtime-site-readiness";
 import {
   resolveRuntimeSiteVersion,
   type RuntimeResolutionDiagnostics,
@@ -6,6 +7,7 @@ import {
   type RuntimeResolutionStrategy,
   type RuntimeSiteBinding,
 } from "@/gnr8/runtime/resolution/runtime-resolution";
+import type { RuntimeSiteResolutionBinding } from "@/gnr8/runtime/runtime-store";
 
 export type SmokeAssetExpectation = {
   label: string;
@@ -29,6 +31,7 @@ export type PreviewSmokeTarget = {
     strategy: RuntimeResolutionStrategy;
     binding: RuntimeSiteBinding;
     candidateSiteVersionIds?: readonly string[];
+    siteResolutionBinding?: RuntimeSiteResolutionBinding;
   };
   identitySignals: string[];
   requiredAssets: SmokeAssetExpectation[];
@@ -40,6 +43,7 @@ export type PreviewSmokeSummary = {
   siteId: string | null;
   siteVersionId: string;
   runtimeResolutionDiagnostic: RuntimeResolutionDiagnostics | null;
+  runtimeReadiness?: RuntimeSiteReadinessReport;
   previewStatus: number;
   previewMode: string | null;
   sourceMode: string | null;
@@ -147,6 +151,9 @@ export async function runPreviewSmokeValidation(
   const previewHtml = previewResponse.body;
   const selectedPreviewMode = headerValue(previewResponse.headers, "x-gnr8-preview-mode");
   const selectedSourceMode = headerValue(previewResponse.headers, "x-gnr8-preview-source");
+  const runtimeReadiness = target.resolution?.siteResolutionBinding
+    ? createRuntimeSiteReadinessReport(target.resolution.siteResolutionBinding)
+    : undefined;
 
   const siteId = resolveSiteId({
     expectedSiteId: target.expectedSiteId,
@@ -241,6 +248,7 @@ export async function runPreviewSmokeValidation(
     siteId,
     siteVersionId: resolvedTarget.siteVersionId,
     runtimeResolutionDiagnostic: resolvedTarget.runtimeResolutionDiagnostic,
+    runtimeReadiness,
     previewStatus,
     previewMode: selectedPreviewMode,
     sourceMode: selectedSourceMode,
