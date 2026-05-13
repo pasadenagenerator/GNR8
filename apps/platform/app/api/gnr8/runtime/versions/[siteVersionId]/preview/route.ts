@@ -616,6 +616,7 @@ return Promise.resolve({scope:"/",active:null,installing:null,waiting:null,updat
 void originalRegister;
 }
 }catch(_err){}
+try{
 if(typeof window.fetch==="function"){
 var originalFetch=window.fetch.bind(window);
 window.fetch=function(input,init){

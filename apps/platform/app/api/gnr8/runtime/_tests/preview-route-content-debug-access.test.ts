@@ -681,6 +681,23 @@ test("preview route: transformed back-to-top shim parses and avoids unsafe regex
   }
 });
 
+test("preview route: transformed request-noise hardening shim parses without dangling catch", async () => {
+  const restoreDeps = mockPreviewDeps(false);
+  try {
+    const response = await GET(new Request("https://app.pasadenagenerator.com/api/gnr8/runtime/versions/sv_preview_1/preview?mode=transformed"), {
+      params: Promise.resolve({ siteVersionId: "sv_preview_1" }),
+    });
+    const html = await response.text();
+    assert.equal(response.status, 200);
+    const shim = extractInjectedScriptContaining(html, "PREVIEW_REQUEST_NOISE_CLASSIFIED");
+    assert.doesNotThrow(() => new Function(shim), "expected request-noise hardening shim to parse as JavaScript");
+    assert.match(shim, /try\{\nif\(typeof window\.fetch==="function"\)\{/);
+    assert.match(shim, /\}catch\(err\)\{emit\("PREVIEW_RUNTIME_MODULE_INIT_BLOCKED"/);
+  } finally {
+    restoreDeps();
+  }
+});
+
 test("preview route: transformed injected gallery runtime shim parses with paged-gallery diagnostics", async () => {
   const restoreDeps = mockPreviewDeps(false);
   try {
