@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { createSiteVersionFromMigration, ensureRuntimeTables, preallocateSiteVersionIdentity } from "@/gnr8/runtime/runtime-store";
+import { createSiteVersionFromMigration, ensureRuntimeTables, getRuntimeSiteResolutionBinding, preallocateSiteVersionIdentity, switchActivePointer } from "@/gnr8/runtime/runtime-store";
 import { getSuperadminPool } from "@/src/superadmin/db";
 
 const TEST_SITE_ID_PREFIX = "test_runtime_store_prealloc";
@@ -100,6 +100,48 @@ async function countPageVersionRows(siteVersionId: string): Promise<number> {
     [siteVersionId],
   );
   return Number(res.rows[0]?.count ?? 0);
+}
+
+async function insertArtifactForVersion(input: {
+  siteId: string;
+  siteVersionId: string;
+  artifactId: string;
+  publishStage?: "production" | "shadow" | "canary";
+}): Promise<void> {
+  await getSuperadminPool().query(
+    `
+    insert into public.gnr8_runtime_artifacts (
+      id,
+      site_id,
+      site_version_id,
+      renderer_compatibility_version,
+      bundle_sha256,
+      html_by_path,
+      compiled_token_styles,
+      asset_fingerprint_map,
+      manifest,
+      publish_stage,
+      shadow_restricted,
+      artifact_governance
+    )
+    values (
+      $1::uuid,
+      $2::text,
+      $3::uuid,
+      'gnr8-renderer-v1',
+      'sha_test',
+      '{}'::jsonb,
+      '',
+      '{}'::jsonb,
+      '{}'::jsonb,
+      $4::text,
+      false,
+      '{}'::jsonb
+    )
+    on conflict (site_version_id) do update set id = excluded.id
+    `,
+    [input.artifactId, input.siteId, input.siteVersionId, input.publishStage ?? "production"],
+  );
 }
 
 test("runtime-store preallocation reuse: createSiteVersionFromMigration reuses reserved siteVersionId without duplicate site_version row", async (t) => {
@@ -255,5 +297,81 @@ test("runtime-store preallocation scope mismatch: createSiteVersionFromMigration
   } finally {
     await cleanRuntimeSite(ownerSiteId);
     await cleanRuntimeSite(otherSiteId);
+  }
+});
+
+test("runtime-store resolution binding maps records deterministically", async (t) => {
+  if (!process.env.DATABASE_URL) {
+    t.skip("DATABASE_URL is required for DB-backed runtime-store verification");
+    return;
+  }
+  const runId = String(process.env.GNR8_RUNTIME_E2E_RUN_ID ?? "").trim();
+  if (!runId) {
+    t.skip("GNR8_RUNTIME_E2E_RUN_ID is required for deterministic shared-db isolation");
+    return;
+  }
+
+  const siteId = `${TEST_SITE_ID_PREFIX}_${runId}_resolution_binding`;
+  assertIsTestSiteId(siteId);
+  await ensureRuntimeTables();
+  await cleanRuntimeSite(siteId);
+
+  const sv1 = "33333333-3333-4333-8333-333333333331";
+  const sv2 = "33333333-3333-4333-8333-333333333332";
+  const sv3 = "33333333-3333-4333-8333-333333333333";
+  const artifact1 = "44444444-4444-4444-8444-444444444441";
+  const artifact2 = "44444444-4444-4444-8444-444444444442";
+  const artifact3 = "44444444-4444-4444-8444-444444444443";
+
+  try {
+    await createSiteVersionFromMigration({
+      siteId,
+      siteVersionId: sv1,
+      sourceUrl: "https://maver.app.pasadenagenerator.com/",
+      actor: "test:migration",
+      rendererCompatibilityVersion: "gnr8-renderer-v1",
+      pages: [],
+    });
+    await createSiteVersionFromMigration({
+      siteId,
+      siteVersionId: sv2,
+      sourceUrl: "https://maver.app.pasadenagenerator.com/",
+      actor: "test:migration",
+      rendererCompatibilityVersion: "gnr8-renderer-v1",
+      pages: [],
+    });
+    await createSiteVersionFromMigration({
+      siteId,
+      siteVersionId: sv3,
+      sourceUrl: "https://maver.app.pasadenagenerator.com/",
+      actor: "test:migration",
+      rendererCompatibilityVersion: "gnr8-renderer-v1",
+      pages: [],
+    });
+
+    await getSuperadminPool().query(`update public.gnr8_runtime_site_versions set state = 'PUBLISHED' where id = $1::uuid`, [sv2]);
+
+    await insertArtifactForVersion({ siteId, siteVersionId: sv1, artifactId: artifact1, publishStage: "shadow" });
+    await insertArtifactForVersion({ siteId, siteVersionId: sv2, artifactId: artifact2, publishStage: "production" });
+    await insertArtifactForVersion({ siteId, siteVersionId: sv3, artifactId: artifact3, publishStage: "shadow" });
+    await getSuperadminPool().query(`update public.gnr8_runtime_site_versions set artifact_id = $2::uuid where id = $1::uuid`, [sv1, artifact1]);
+    await getSuperadminPool().query(`update public.gnr8_runtime_site_versions set artifact_id = $2::uuid where id = $1::uuid`, [sv2, artifact2]);
+    await getSuperadminPool().query(`update public.gnr8_runtime_site_versions set artifact_id = $2::uuid where id = $1::uuid`, [sv3, artifact3]);
+    await switchActivePointer({ siteId, siteVersionId: sv3, artifactId: artifact3 });
+
+    const binding = await getRuntimeSiteResolutionBinding(siteId);
+    assert.ok(binding);
+    assert.equal(binding?.siteId, siteId);
+    assert.equal(binding?.canonicalSlug, "maver");
+    assert.equal(binding?.activeSiteVersionId, sv3);
+    assert.equal(binding?.latestImportedSiteVersionId, sv3);
+    assert.equal(binding?.publishedSiteVersionId, sv2);
+    assert.equal(binding?.previewSiteVersionId, sv3);
+    assert.deepEqual(
+      binding?.candidateSiteVersions.map((candidate) => candidate.siteVersionId),
+      [sv1, sv2, sv3],
+    );
+  } finally {
+    await cleanRuntimeSite(siteId);
   }
 });

@@ -1,8 +1,10 @@
 import { resolveDomainSiteVersionForHost } from "@/gnr8/runtime/runtime-store";
+import { getRuntimeSiteResolutionBinding } from "@/gnr8/runtime/runtime-store";
 import { runPreviewSmokeValidation, type PreviewSmokeTarget, type SmokeAssetExpectation } from "@/gnr8/runtime/preview-smoke/preview-smoke-validator";
 import { GET as previewRouteGet } from "@/app/api/gnr8/runtime/versions/[siteVersionId]/preview/route";
 import { setPreviewRouteDependenciesForTest } from "@/app/api/gnr8/runtime/versions/[siteVersionId]/preview/preview-route-dependencies";
 import { createPreviewAssetsRouteHandlers } from "@/app/api/gnr8/runtime/preview-assets/[siteId]/[siteVersionId]/[...assetPath]/preview-assets-route-handlers";
+import type { RuntimeResolutionStrategy, RuntimeSiteBinding } from "@/gnr8/runtime/resolution/runtime-resolution";
 
 type SmokeExecutionMode = "http" | "route_harness";
 
@@ -25,6 +27,15 @@ function parseArg(flag: string): string | null {
   if (!arg) return null;
   const value = arg.slice(prefix.length).trim();
   return value.length > 0 ? value : null;
+}
+
+function parseResolutionStrategy(value: string | null): RuntimeResolutionStrategy | null {
+  const normalized = String(value ?? "").trim().toLowerCase();
+  if (!normalized) return null;
+  if (normalized === "latest_imported" || normalized === "active" || normalized === "published" || normalized === "preview") {
+    return normalized;
+  }
+  throw new Error(`Unsupported runtime resolution strategy '${value}'. Use latest_imported, active, published, or preview.`);
 }
 
 async function resolveTargetFromHost(host: string): Promise<ResolvedSite | null> {
@@ -71,12 +82,71 @@ async function makeTarget(input: {
   };
 }
 
+async function makeTargetFromSiteResolution(input: {
+  label: string;
+  siteId: string | null;
+  strategy: RuntimeResolutionStrategy | null;
+  identitySignals: string[];
+  fallbackAssets: SmokeAssetExpectation[];
+}): Promise<PreviewSmokeTarget | null> {
+  if (!input.siteId || !input.strategy) return null;
+
+  const binding = await getRuntimeSiteResolutionBinding(input.siteId);
+  if (!binding) {
+    console.warn("[preview-smoke] RUNTIME_RESOLUTION_BINDING_MISSING", {
+      siteLabel: input.label,
+      siteId: input.siteId,
+      strategy: input.strategy,
+    });
+    return null;
+  }
+
+  const resolutionBinding: RuntimeSiteBinding = {
+    siteId: binding.siteId,
+    canonicalSlug: binding.canonicalSlug ?? input.label.toLowerCase(),
+    activeSiteVersionId: binding.activeSiteVersionId,
+    latestImportedSiteVersionId: binding.latestImportedSiteVersionId,
+    publishedSiteVersionId: binding.publishedSiteVersionId,
+    previewSiteVersionId: binding.previewSiteVersionId,
+  };
+  const candidateSiteVersionIds = binding.candidateSiteVersions.map((candidate) => candidate.siteVersionId);
+
+  console.info("[preview-smoke] RUNTIME_RESOLUTION_BINDING_LOADED", {
+    siteLabel: input.label,
+    siteId: binding.siteId,
+    strategy: input.strategy,
+    canonicalSlug: binding.canonicalSlug ?? null,
+    activeSiteVersionId: binding.activeSiteVersionId,
+    latestImportedSiteVersionId: binding.latestImportedSiteVersionId,
+    publishedSiteVersionId: binding.publishedSiteVersionId ?? null,
+    previewSiteVersionId: binding.previewSiteVersionId ?? null,
+    candidateSiteVersionIds,
+  });
+
+  return {
+    siteLabel: input.label,
+    expectedSiteId: binding.siteId,
+    resolution: {
+      strategy: input.strategy,
+      binding: resolutionBinding,
+      candidateSiteVersionIds,
+    },
+    previewMode: "transformed",
+    previewPath: "/",
+    identitySignals: input.identitySignals,
+    requiredAssets: input.fallbackAssets,
+    optionalNoiseAssets: ["legal1", "uploads/documents/missing.pdf"],
+  };
+}
+
 async function main(): Promise<void> {
   const executionMode = parseExecutionMode(parseArg("execution-mode") ?? process.env.GNR8_PREVIEW_SMOKE_EXECUTION_MODE ?? "route_harness");
   const explicitMaverSiteId = parseArg("maver-site-id") ?? process.env.GNR8_MAVER_SITE_ID ?? null;
   const explicitMaverVersionId = parseArg("maver-site-version-id") ?? process.env.GNR8_MAVER_SITE_VERSION_ID ?? null;
   const explicitRoboplastSiteId = parseArg("roboplast-site-id") ?? process.env.GNR8_ROBOPLAST_SITE_ID ?? null;
   const explicitRoboplastVersionId = parseArg("roboplast-site-version-id") ?? process.env.GNR8_ROBOPLAST_SITE_VERSION_ID ?? null;
+  const maverStrategy = parseResolutionStrategy(parseArg("maver-strategy") ?? process.env.GNR8_MAVER_STRATEGY ?? null);
+  const roboplastStrategy = parseResolutionStrategy(parseArg("roboplast-strategy") ?? process.env.GNR8_ROBOPLAST_STRATEGY ?? null);
 
   const maverAssets = parseAssetList(parseArg("maver-assets"), [
     { label: "hero image", path: "uploads/KcGdxACT/hero-01.jpg", required: true },
@@ -87,28 +157,52 @@ async function main(): Promise<void> {
   const roboplastAssets = parseAssetList(parseArg("roboplast-assets"), []);
 
   const targets: PreviewSmokeTarget[] = [];
-  const maver = await makeTarget({
+  const maver = await makeTargetFromSiteResolution({
     label: "Maver",
-    host: MAVER_HOST,
-    explicitSiteId: explicitMaverSiteId,
-    explicitSiteVersionId: explicitMaverVersionId,
+    siteId: explicitMaverSiteId,
+    strategy: maverStrategy,
     identitySignals: ["maver", "PREVIEW_BACK_TO_TOP_NATIVE_ONLY_STATUS"],
     fallbackAssets: maverAssets,
-  });
+  }) ??
+    (await makeTarget({
+      label: "Maver",
+      host: MAVER_HOST,
+      explicitSiteId: explicitMaverSiteId,
+      explicitSiteVersionId: explicitMaverVersionId,
+      identitySignals: ["maver", "PREVIEW_BACK_TO_TOP_NATIVE_ONLY_STATUS"],
+      fallbackAssets: maverAssets,
+    }));
   if (maver) targets.push(maver);
 
-  const roboplast = await makeTarget({
+  const roboplast = await makeTargetFromSiteResolution({
     label: "Roboplast",
-    host: ROBOPLAST_HOST,
-    explicitSiteId: explicitRoboplastSiteId,
-    explicitSiteVersionId: explicitRoboplastVersionId,
+    siteId: explicitRoboplastSiteId,
+    strategy: roboplastStrategy,
     identitySignals: ["roboplast", "PREVIEW_BACK_TO_TOP_NATIVE_ONLY_STATUS"],
     fallbackAssets: roboplastAssets,
-  });
+  }) ??
+    (await makeTarget({
+      label: "Roboplast",
+      host: ROBOPLAST_HOST,
+      explicitSiteId: explicitRoboplastSiteId,
+      explicitSiteVersionId: explicitRoboplastVersionId,
+      identitySignals: ["roboplast", "PREVIEW_BACK_TO_TOP_NATIVE_ONLY_STATUS"],
+      fallbackAssets: roboplastAssets,
+    }));
   if (roboplast) targets.push(roboplast);
 
   if (targets.length === 0) {
-    throw new Error("No smoke targets resolved. Provide env/args for siteVersionIds or ensure host bindings resolve.");
+    const output = {
+      kind: "preview_smoke_summary_v1",
+      generatedAt: new Date().toISOString(),
+      executionMode,
+      pass: false,
+      diagnostics: ["RUNTIME_RESOLUTION_BINDING_MISSING"],
+      results: [],
+    };
+    process.stdout.write(`${JSON.stringify(output, null, 2)}\n`);
+    process.exitCode = 1;
+    return;
   }
 
   const restorePreviewRouteDeps =

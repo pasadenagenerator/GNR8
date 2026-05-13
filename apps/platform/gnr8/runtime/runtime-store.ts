@@ -1556,6 +1556,132 @@ export type RuntimeDomainSiteResolution =
       reasonCode: "domain_not_found";
     };
 
+export type RuntimeSiteResolutionCandidate = {
+  siteVersionId: string;
+  versionNo: number;
+  state: SiteVersionState;
+  createdAt: string;
+  artifactId: string | null;
+};
+
+export type RuntimeSiteResolutionBinding = {
+  siteId: string;
+  canonicalSlug?: string;
+  activeSiteVersionId: string | null;
+  latestImportedSiteVersionId: string | null;
+  publishedSiteVersionId?: string;
+  previewSiteVersionId?: string;
+  candidateSiteVersions: RuntimeSiteResolutionCandidate[];
+};
+
+function inferCanonicalSlug(input: { domain: string | null; sourceHost: string | null }): string | undefined {
+  const host = String(input.domain ?? input.sourceHost ?? "").trim().toLowerCase();
+  if (!host) return undefined;
+  const firstLabel = host.split(".")[0]?.trim() ?? "";
+  if (!firstLabel) return undefined;
+  if (!/^[a-z0-9-]+$/.test(firstLabel)) return undefined;
+  return firstLabel;
+}
+
+function sortResolutionCandidates(a: RuntimeSiteResolutionCandidate, b: RuntimeSiteResolutionCandidate): number {
+  if (a.versionNo !== b.versionNo) return a.versionNo - b.versionNo;
+  const createdDiff = a.createdAt.localeCompare(b.createdAt);
+  if (createdDiff !== 0) return createdDiff;
+  return a.siteVersionId.localeCompare(b.siteVersionId);
+}
+
+export async function getRuntimeSiteResolutionBinding(siteId: string): Promise<RuntimeSiteResolutionBinding | null> {
+  await ensureRuntimeTables();
+  const client = await getSuperadminPool().connect();
+  try {
+    const siteRes = await client.query<{ source_host: string | null }>(
+      `
+      select source_host::text as source_host
+      from public.gnr8_runtime_sites
+      where id = $1::text
+      limit 1
+      `,
+      [siteId],
+    );
+    if (!siteRes.rows[0]) return null;
+
+    const [activePointer, domainBindingRes, versionsRes] = await Promise.all([
+      client.query<{ active_site_version_id: string }>(
+        `
+        select active_site_version_id::text as active_site_version_id
+        from public.gnr8_runtime_active_pointers
+        where site_id = $1::text
+        limit 1
+        `,
+        [siteId],
+      ),
+      client.query<{ domain: string }>(
+        `
+        select domain::text as domain
+        from public.gnr8_runtime_domain_host_bindings
+        where site_id = $1::text and status = 'active'
+        order by updated_at desc, created_at desc
+        limit 1
+        `,
+        [siteId],
+      ),
+      client.query<{
+        id: string;
+        version_no: number;
+        state: SiteVersionState;
+        created_at: string;
+        artifact_id: string | null;
+      }>(
+        `
+        select
+          id::text as id,
+          version_no::int as version_no,
+          state::text as state,
+          created_at::text as created_at,
+          artifact_id::text as artifact_id
+        from public.gnr8_runtime_site_versions
+        where site_id = $1::text
+        order by version_no asc, created_at asc, id asc
+        `,
+        [siteId],
+      ),
+    ]);
+
+    const candidateSiteVersions: RuntimeSiteResolutionCandidate[] = versionsRes.rows
+      .map((row) => ({
+        siteVersionId: row.id,
+        versionNo: row.version_no,
+        state: row.state,
+        createdAt: row.created_at,
+        artifactId: row.artifact_id,
+      }))
+      .sort(sortResolutionCandidates);
+
+    const latestImported = candidateSiteVersions[candidateSiteVersions.length - 1]?.siteVersionId ?? null;
+    const publishedCandidates = candidateSiteVersions.filter((candidate) => candidate.state === "PUBLISHED");
+    const publishedSiteVersionId = publishedCandidates[publishedCandidates.length - 1]?.siteVersionId;
+    const previewCandidates = candidateSiteVersions.filter((candidate) => candidate.state !== "PUBLISHED" && candidate.state !== "ARCHIVED");
+    const previewSiteVersionId = previewCandidates.length > 0
+      ? previewCandidates[previewCandidates.length - 1]?.siteVersionId
+      : undefined;
+
+    return {
+      siteId,
+      canonicalSlug: inferCanonicalSlug({
+        domain: domainBindingRes.rows[0]?.domain ?? null,
+        sourceHost: siteRes.rows[0].source_host,
+      }),
+      activeSiteVersionId: activePointer.rows[0]?.active_site_version_id ?? null,
+      latestImportedSiteVersionId: latestImported,
+      publishedSiteVersionId,
+      previewSiteVersionId,
+      candidateSiteVersions,
+    };
+  } finally {
+    client.release();
+  }
+}
+
 export async function resolveDomainSiteVersionForHost(input: { host?: string | null }): Promise<RuntimeDomainSiteResolution> {
   await ensureRuntimeTables();
   const client = await getSuperadminPool().connect();
