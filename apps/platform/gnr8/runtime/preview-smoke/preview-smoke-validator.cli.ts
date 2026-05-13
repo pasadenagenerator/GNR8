@@ -1,11 +1,23 @@
 import { resolveDomainSiteVersionForHost } from "@/gnr8/runtime/runtime-store";
 import { runPreviewSmokeValidation, type PreviewSmokeTarget, type SmokeAssetExpectation } from "@/gnr8/runtime/preview-smoke/preview-smoke-validator";
+import { GET as previewRouteGet } from "@/app/api/gnr8/runtime/versions/[siteVersionId]/preview/route";
+import { setPreviewRouteDependenciesForTest } from "@/app/api/gnr8/runtime/versions/[siteVersionId]/preview/preview-route-dependencies";
+import { createPreviewAssetsRouteHandlers } from "@/app/api/gnr8/runtime/preview-assets/[siteId]/[siteVersionId]/[...assetPath]/preview-assets-route-handlers";
+
+type SmokeExecutionMode = "http" | "route_harness";
 
 type ResolvedSite = { siteId: string; siteVersionId: string };
 
 const APP_BASE_URL = process.env.GNR8_PREVIEW_BASE_URL?.trim() || "http://localhost:3000";
 const MAVER_HOST = process.env.GNR8_MAVER_HOST?.trim() || "maver.app.pasadenagenerator.com";
 const ROBOPLAST_HOST = process.env.GNR8_ROBOPLAST_HOST?.trim() || "roboplast.app.pasadenagenerator.com";
+
+function parseExecutionMode(value: string | null): SmokeExecutionMode {
+  const normalized = (value ?? "").trim().toLowerCase();
+  if (normalized === "" || normalized === "http") return "http";
+  if (normalized === "route_harness") return "route_harness";
+  throw new Error(`Unsupported execution mode '${value}'. Use http or route_harness.`);
+}
 
 function parseArg(flag: string): string | null {
   const prefix = `--${flag}=`;
@@ -60,6 +72,7 @@ async function makeTarget(input: {
 }
 
 async function main(): Promise<void> {
+  const executionMode = parseExecutionMode(parseArg("execution-mode") ?? process.env.GNR8_PREVIEW_SMOKE_EXECUTION_MODE ?? "route_harness");
   const explicitMaverSiteId = parseArg("maver-site-id") ?? process.env.GNR8_MAVER_SITE_ID ?? null;
   const explicitMaverVersionId = parseArg("maver-site-version-id") ?? process.env.GNR8_MAVER_SITE_VERSION_ID ?? null;
   const explicitRoboplastSiteId = parseArg("roboplast-site-id") ?? process.env.GNR8_ROBOPLAST_SITE_ID ?? null;
@@ -100,30 +113,83 @@ async function main(): Promise<void> {
     throw new Error("No smoke targets resolved. Provide env/args for siteVersionIds or ensure host bindings resolve.");
   }
 
+  const restorePreviewRouteDeps =
+    executionMode === "route_harness"
+      ? setPreviewRouteDependenciesForTest({
+          resolveAgencyIdForSiteVersion: async () => "agency_preview_smoke",
+          requireAgencyActionContext: async () => ({ agencyId: "agency_preview_smoke", actorMode: "agency_member" }) as never,
+        })
+      : null;
+  const previewAssetHandlers =
+    executionMode === "route_harness"
+      ? createPreviewAssetsRouteHandlers({
+          resolveAgencyIdForSiteVersion: async () => "agency_preview_smoke",
+          requireAgencyActionContext: async () => ({ agencyId: "agency_preview_smoke", actorMode: "agency_member" }) as never,
+        })
+      : null;
+
   const results = [];
-  for (const target of targets) {
-    const summary = await runPreviewSmokeValidation(
-      {
-        fetchPreviewHtml: async ({ siteVersionId, previewPath, previewMode }) => {
-          const previewUrl = `${APP_BASE_URL}/api/gnr8/runtime/versions/${encodeURIComponent(siteVersionId)}/preview?mode=${encodeURIComponent(previewMode)}&path=${encodeURIComponent(previewPath)}`;
-          const response = await fetch(previewUrl, { method: "GET" });
-          return { status: response.status, body: await response.text(), headers: response.headers };
+  try {
+    for (const target of targets) {
+      const summary = await runPreviewSmokeValidation(
+        {
+          fetchPreviewHtml: async ({ siteVersionId, previewPath, previewMode }) => {
+            if (executionMode === "route_harness") {
+              const request = new Request(
+                `${APP_BASE_URL}/api/gnr8/runtime/versions/${encodeURIComponent(siteVersionId)}/preview?mode=${encodeURIComponent(previewMode)}&path=${encodeURIComponent(previewPath)}`,
+                {
+                  method: "GET",
+                  headers: { host: "app.pasadenagenerator.com", "x-forwarded-host": "app.pasadenagenerator.com" },
+                },
+              );
+              const response = await previewRouteGet(request, {
+                params: Promise.resolve({ siteVersionId }),
+              });
+              return { status: response.status, body: await response.text(), headers: response.headers };
+            }
+            const previewUrl = `${APP_BASE_URL}/api/gnr8/runtime/versions/${encodeURIComponent(siteVersionId)}/preview?mode=${encodeURIComponent(previewMode)}&path=${encodeURIComponent(previewPath)}`;
+            const response = await fetch(previewUrl, { method: "GET" });
+            return { status: response.status, body: await response.text(), headers: response.headers };
+          },
+          fetchPreviewAsset: async ({ siteId, siteVersionId, assetPath }) => {
+            if (executionMode === "route_harness" && previewAssetHandlers) {
+              const normalizedSegments = assetPath.split("/").filter(Boolean);
+              const response = await previewAssetHandlers.GET(
+                new Request(
+                  `${APP_BASE_URL}/api/gnr8/runtime/preview-assets/${encodeURIComponent(siteId)}/${encodeURIComponent(siteVersionId)}/${assetPath}`,
+                  {
+                    method: "GET",
+                    headers: { host: "app.pasadenagenerator.com", "x-forwarded-host": "app.pasadenagenerator.com" },
+                  },
+                ),
+                {
+                  params: Promise.resolve({
+                    siteId,
+                    siteVersionId,
+                    assetPath: normalizedSegments,
+                  }),
+                },
+              );
+              return { status: response.status, body: await response.text(), headers: response.headers };
+            }
+            const assetUrl = `${APP_BASE_URL}/api/gnr8/runtime/preview-assets/${encodeURIComponent(siteId)}/${encodeURIComponent(siteVersionId)}/${assetPath}`;
+            const response = await fetch(assetUrl, { method: "GET" });
+            return { status: response.status, body: await response.text(), headers: response.headers };
+          },
         },
-        fetchPreviewAsset: async ({ siteId, siteVersionId, assetPath }) => {
-          const assetUrl = `${APP_BASE_URL}/api/gnr8/runtime/preview-assets/${encodeURIComponent(siteId)}/${encodeURIComponent(siteVersionId)}/${assetPath}`;
-          const response = await fetch(assetUrl, { method: "GET" });
-          return { status: response.status, body: await response.text(), headers: response.headers };
-        },
-      },
-      target,
-    );
-    results.push(summary);
+        target,
+      );
+      results.push(summary);
+    }
+  } finally {
+    restorePreviewRouteDeps?.();
   }
 
   const pass = results.every((entry) => entry.pass);
   const output = {
     kind: "preview_smoke_summary_v1",
     generatedAt: new Date().toISOString(),
+    executionMode,
     pass,
     results,
   };
