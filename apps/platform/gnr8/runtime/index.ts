@@ -15,3 +15,4 @@ export * from "@/gnr8/runtime/ownership-backfill-activation";
 export * from "@/gnr8/runtime/runtime-usage-collector";
 export * from "@/gnr8/runtime/runtime-usage-event-logger";
 export * from "@/gnr8/runtime/runtime-usage-flusher";
+export * from "@/gnr8/runtime/dns/dns-provider-types";
