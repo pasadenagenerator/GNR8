@@ -12,6 +12,10 @@ import {
   type RuntimeDomainLifecyclePlan,
 } from "@/gnr8/runtime/domains/runtime-domain-lifecycle";
 import {
+  createRuntimeDomainExecutionIntent,
+  type RuntimeDomainExecutionIntent,
+} from "@/gnr8/runtime/domains/runtime-domain-execution-intent";
+import {
   createRuntimeDomainReadinessReport,
   type RuntimeDomainReadinessReport,
 } from "@/gnr8/runtime/readiness/runtime-domain-readiness";
@@ -65,6 +69,7 @@ export type PreviewSmokeSummary = {
   runtimeDnsReadinessPlan?: RuntimeDnsReadinessPlan;
   runtimeDomainLifecyclePlan?: RuntimeDomainLifecyclePlan;
   runtimeDomainProviderSelection?: RuntimeDomainProviderSelection;
+  runtimeDomainExecutionIntent?: RuntimeDomainExecutionIntent;
   previewStatus: number;
   previewMode: string | null;
   sourceMode: string | null;
@@ -300,6 +305,14 @@ export async function runPreviewSmokeValidation(
           preferredProviderId: "manual",
         })
       : undefined;
+  const runtimeDomainExecutionIntent =
+    runtimeDomainLifecyclePlan && runtimeDnsReadinessPlan && runtimeDomainProviderSelection
+      ? createRuntimeDomainExecutionIntent({
+          lifecyclePlan: runtimeDomainLifecyclePlan,
+          dnsReadinessPlan: runtimeDnsReadinessPlan,
+          providerSelection: runtimeDomainProviderSelection,
+        })
+      : undefined;
 
   return {
     siteLabel: target.siteLabel,
@@ -311,6 +324,7 @@ export async function runPreviewSmokeValidation(
     runtimeDnsReadinessPlan,
     runtimeDomainLifecyclePlan,
     runtimeDomainProviderSelection,
+    runtimeDomainExecutionIntent,
     previewStatus,
     previewMode: selectedPreviewMode,
     sourceMode: selectedSourceMode,
