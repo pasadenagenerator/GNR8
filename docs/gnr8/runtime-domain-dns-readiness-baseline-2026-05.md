@@ -65,6 +65,7 @@ Freeze the deterministic baseline for runtime identity, runtime/domain readiness
   - `runtimeDomainLifecyclePlan`
   - `runtimeDomainProviderSelection`
   - `runtimeDomainExecutionIntent`
+  - `runtimeDomainExecutionDryRun`
 - These fields are informational and do not alter smoke pass/fail semantics.
 
 ### 8) Explicit strategy route-harness execution mode
@@ -111,6 +112,21 @@ Freeze the deterministic baseline for runtime identity, runtime/domain readiness
   - Emitted only when deterministic baseline fallback is actually used.
 - Current smoke evidence with real bindings did not emit fallback usage diagnostics.
 
+### 13) Domain execution dry-run baseline (Maver/Roboplast)
+
+- Source: `apps/platform/gnr8/runtime/domains/runtime-domain-execution-dry-run.ts`
+- Maver route-harness summary now carries `runtimeDomainExecutionDryRun` with:
+  - `dryRunStatus: ready_with_warnings`
+  - `dryRunActions` populated
+  - `skippedActions` empty
+  - `blockedActions` empty
+- Roboplast route-harness summary now carries `runtimeDomainExecutionDryRun` with:
+  - `dryRunStatus: ready_with_warnings`
+  - `dryRunActions` populated
+  - `skippedActions` empty
+  - `blockedActions` empty
+- Current boundary is dry-run only; no external DNS/provider execution is performed.
+
 ## Explicit Current Boundaries
 
 - No external DNS API calls.
@@ -119,6 +135,7 @@ Freeze the deterministic baseline for runtime identity, runtime/domain readiness
 - No DB schema changes yet.
 - No smoke pass/fail impact yet.
 - Execution intent only: no external execution of DNS/provider actions yet.
+- Dry-run only: no external execution of DNS/provider actions.
 
 ## Validation Summary
 
@@ -132,8 +149,10 @@ Freeze the deterministic baseline for runtime identity, runtime/domain readiness
 - Runtime domain readiness present in strategy mode: **present**
 - Runtime domain provider selection present in strategy mode: **present**
 - Runtime domain execution intent present in strategy mode: **present**
+- Runtime domain execution dry-run present in strategy mode: **present**
 - Fallback diagnostic used with real bindings: **absent**
 - Preview-smoke-validator tests: **PASS**
+- Domain execution dry-run tests: **PASS**
 - Domain execution intent tests: **PASS**
 - Provider selection tests: **PASS**
 - DNS/readiness/lifecycle/resolution/store tests: **PASS**
@@ -153,13 +172,13 @@ cd apps/platform && set -a; source .env.production; set +a; NODE_OPTIONS='--cond
 Result:
 
 - `kind`: `preview_smoke_summary_v1`
-- `generatedAt`: `2026-05-14T12:24:08.383Z`
+- `generatedAt`: `2026-05-14T16:22:36.916Z`
 - `executionMode`: `route_harness`
 - `pass`: `true`
 - Maver: `site_7c77126de646f746b3bd` / `88253466-783e-4484-8b68-df6c83b8a11c` / preview `200` / pass `true`
 - Roboplast: `site_aa6b25cd33e9c1384d35` / `30bfe5b1-a441-41ef-92e3-0d6b3ee678e1` / preview `200` / pass `true`
-- Maver runtime fields: `runtimeDomainReadiness` present, `runtimeDnsReadinessPlan` present, `runtimeDomainLifecyclePlan` present, `runtimeDomainProviderSelection` present, `runtimeDomainExecutionIntent` present (`executionMode: manual`)
-- Roboplast runtime fields: `runtimeDomainReadiness` present, `runtimeDnsReadinessPlan` present, `runtimeDomainLifecyclePlan` present, `runtimeDomainProviderSelection` present, `runtimeDomainExecutionIntent` present (`executionMode: manual`)
+- Maver runtime fields: `runtimeDomainReadiness` present, `runtimeDnsReadinessPlan` present, `runtimeDomainLifecyclePlan` present, `runtimeDomainProviderSelection` present, `runtimeDomainExecutionIntent` present (`executionMode: manual`), `runtimeDomainExecutionDryRun` present (`dryRunStatus: ready_with_warnings`)
+- Roboplast runtime fields: `runtimeDomainReadiness` present, `runtimeDnsReadinessPlan` present, `runtimeDomainLifecyclePlan` present, `runtimeDomainProviderSelection` present, `runtimeDomainExecutionIntent` present (`executionMode: manual`), `runtimeDomainExecutionDryRun` present (`dryRunStatus: ready_with_warnings`)
 - Route-harness fallback behavior: no `RUNTIME_SMOKE_BASELINE_TARGET_FALLBACK_USED` when real bindings are available
 
 ## Linked Baseline JSON
