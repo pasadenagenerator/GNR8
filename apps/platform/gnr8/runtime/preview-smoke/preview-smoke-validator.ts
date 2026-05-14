@@ -11,7 +11,7 @@ import {
   type RuntimeResolutionStrategy,
   type RuntimeSiteBinding,
 } from "@/gnr8/runtime/resolution/runtime-resolution";
-import type { RuntimeSiteResolutionBinding } from "@/gnr8/runtime/runtime-store";
+import type { RuntimeSiteDomainReadinessBinding, RuntimeSiteResolutionBinding } from "@/gnr8/runtime/runtime-store";
 
 export type SmokeAssetExpectation = {
   label: string;
@@ -36,6 +36,7 @@ export type PreviewSmokeTarget = {
     binding: RuntimeSiteBinding;
     candidateSiteVersionIds?: readonly string[];
     siteResolutionBinding?: RuntimeSiteResolutionBinding;
+    siteDomainReadinessBinding?: RuntimeSiteDomainReadinessBinding;
   };
   identitySignals: string[];
   requiredAssets: SmokeAssetExpectation[];
@@ -162,6 +163,15 @@ export async function runPreviewSmokeValidation(
   const runtimeDomainReadiness = target.resolution?.siteResolutionBinding
     ? createRuntimeDomainReadinessReport({
         siteBinding: target.resolution.siteResolutionBinding,
+        primaryHost: target.resolution.siteDomainReadinessBinding?.primaryHost,
+        internalPreviewHost: target.resolution.siteDomainReadinessBinding?.internalPreviewHost,
+        domainBindings:
+          target.resolution.siteDomainReadinessBinding?.domainBindingCandidates.map((candidate) => ({
+            domain: candidate.host,
+            status: candidate.status,
+            isInternalHost: candidate.isInternalHost,
+            isActive: candidate.isActive,
+          })) ?? [],
       })
     : undefined;
 

@@ -302,6 +302,30 @@ test("preview smoke validator: strategy-based active resolution emits determinis
             },
           ],
         },
+        siteDomainReadinessBinding: {
+          siteId: "site_preview_active",
+          canonicalSlug: "maver",
+          primaryHost: "source.example.com",
+          internalPreviewHost: "maver.preview.gnr8.test",
+          customDomains: ["maver.example.com"],
+          activeDomainBindingHost: "maver.example.com",
+          domainBindingCandidates: [
+            {
+              host: "maver.preview.gnr8.test",
+              source: "runtime_host_binding",
+              status: "ACTIVE",
+              isInternalHost: true,
+              isActive: true,
+            },
+            {
+              host: "maver.example.com",
+              source: "runtime_domain_binding",
+              status: "active",
+              isInternalHost: false,
+              isActive: true,
+            },
+          ],
+        },
       },
       identitySignals: ["maver", "PREVIEW_BACK_TO_TOP_NATIVE_ONLY_STATUS"],
       requiredAssets: [{ label: "hero", path: "uploads/x.jpg", required: true }],
@@ -318,8 +342,8 @@ test("preview smoke validator: strategy-based active resolution emits determinis
   assert.equal(summary.runtimeReadiness?.siteId, "site_preview_active");
   assert.deepEqual(summary.runtimeReadiness?.warnings, ["missing_published_site_version"]);
   assert.equal(summary.runtimeDomainReadiness?.siteId, "site_preview_active");
-  assert.equal(summary.runtimeDomainReadiness?.domainReadinessStatus, "ready_with_warnings");
-  assert.deepEqual(summary.runtimeDomainReadiness?.warnings, ["missing_custom_domain", "missing_active_domain_binding", "missing_internal_host"]);
+  assert.equal(summary.runtimeDomainReadiness?.domainReadinessStatus, "ready");
+  assert.deepEqual(summary.runtimeDomainReadiness?.warnings, []);
 });
 
 test("preview smoke validator: Maver and Roboplast strategy resolution resolves expected siteVersionId", async () => {
@@ -369,4 +393,30 @@ test("preview smoke validator: Maver and Roboplast strategy resolution resolves 
     requiredAssets: [{ label: "hero", path: "uploads/x.jpg", required: true }],
   });
   assert.equal(roboplast.siteVersionId, "sv_robo_003");
+});
+
+test("preview smoke validator: direct siteVersionId mode keeps runtimeDomainReadiness unchanged", async () => {
+  const summary = await runPreviewSmokeValidation(
+    {
+      fetchPreviewHtml: async () => ({
+        status: 200,
+        body: `<html><body>PREVIEW_BACK_TO_TOP_NATIVE_ONLY_STATUS <a data-req="scrollTop" class="scrollIcon">Top</a><div class="gallery"></div><section data-req="osmap"></section></body></html>`,
+        headers: makeHeaders({
+          "x-gnr8-preview-mode": "transformed",
+          "x-gnr8-preview-source": "preview",
+        }),
+      }),
+      fetchPreviewAsset: async () => ({ status: 200, body: "ok" }),
+    },
+    {
+      siteLabel: "Direct",
+      expectedSiteId: "site_direct",
+      siteVersionId: "sv_direct",
+      identitySignals: ["PREVIEW_BACK_TO_TOP_NATIVE_ONLY_STATUS"],
+      requiredAssets: [],
+    },
+  );
+
+  assert.equal(summary.runtimeReadiness, undefined);
+  assert.equal(summary.runtimeDomainReadiness, undefined);
 });

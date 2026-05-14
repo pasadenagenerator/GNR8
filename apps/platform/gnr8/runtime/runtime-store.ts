@@ -1564,6 +1564,24 @@ export type RuntimeSiteResolutionCandidate = {
   artifactId: string | null;
 };
 
+export type RuntimeSiteDomainReadinessBindingCandidate = {
+  host: string;
+  source: "runtime_host_binding" | "runtime_domain_binding";
+  status: string | null;
+  isInternalHost: boolean;
+  isActive: boolean;
+};
+
+export type RuntimeSiteDomainReadinessBinding = {
+  siteId: string;
+  canonicalSlug?: string;
+  primaryHost: string | null;
+  internalPreviewHost: string | null;
+  customDomains: string[];
+  activeDomainBindingHost: string | null;
+  domainBindingCandidates: RuntimeSiteDomainReadinessBindingCandidate[];
+};
+
 export type RuntimeSiteResolutionBinding = {
   siteId: string;
   canonicalSlug?: string;
@@ -1582,6 +1600,16 @@ type RuntimeSiteResolutionBindingVersionRow = {
   artifact_id: string | null;
 };
 
+type RuntimeSiteDomainReadinessBindingHostRow = {
+  host: string;
+  status: RuntimeHostBindingStatus;
+};
+
+type RuntimeSiteDomainReadinessBindingDomainRow = {
+  domain: string;
+  status: RuntimeDomainHostBindingStatus;
+};
+
 function inferCanonicalSlug(input: { domain: string | null; sourceHost: string | null }): string | undefined {
   const host = String(input.domain ?? input.sourceHost ?? "").trim().toLowerCase();
   if (!host) return undefined;
@@ -1596,6 +1624,85 @@ function sortResolutionCandidates(a: RuntimeSiteResolutionCandidate, b: RuntimeS
   const createdDiff = a.createdAt.localeCompare(b.createdAt);
   if (createdDiff !== 0) return createdDiff;
   return a.siteVersionId.localeCompare(b.siteVersionId);
+}
+
+function sortDomainReadinessCandidates(
+  a: RuntimeSiteDomainReadinessBindingCandidate,
+  b: RuntimeSiteDomainReadinessBindingCandidate,
+): number {
+  const hostDiff = a.host.localeCompare(b.host);
+  if (hostDiff !== 0) return hostDiff;
+  const sourceDiff = a.source.localeCompare(b.source);
+  if (sourceDiff !== 0) return sourceDiff;
+  return String(a.status ?? "").localeCompare(String(b.status ?? ""));
+}
+
+export function mapRuntimeSiteDomainReadinessBindingRows(input: {
+  siteId: string;
+  sourceHost: string | null;
+  hostBindingRows: RuntimeSiteDomainReadinessBindingHostRow[];
+  domainBindingRows: RuntimeSiteDomainReadinessBindingDomainRow[];
+}): RuntimeSiteDomainReadinessBinding {
+  const normalizedPrimaryHost = normalizeRuntimeHost(String(input.sourceHost ?? ""));
+  const primaryHost = normalizedPrimaryHost || null;
+  const domainRows = [...input.domainBindingRows].sort((a, b) => {
+    const domainDiff = normalizeRuntimeDomain(a.domain).localeCompare(normalizeRuntimeDomain(b.domain));
+    if (domainDiff !== 0) return domainDiff;
+    return a.status.localeCompare(b.status);
+  });
+  const customDomains = [...new Set(domainRows.map((row) => normalizeRuntimeDomain(row.domain)).filter(Boolean))].sort((a, b) =>
+    a.localeCompare(b),
+  );
+
+  const hostRows = [...input.hostBindingRows].sort((a, b) => {
+    const hostDiff = normalizeRuntimeHost(a.host).localeCompare(normalizeRuntimeHost(b.host));
+    if (hostDiff !== 0) return hostDiff;
+    return a.status.localeCompare(b.status);
+  });
+  const internalPreviewHost =
+    hostRows
+      .map((row) => ({ host: normalizeRuntimeHost(row.host), status: row.status }))
+      .find((row) => row.host.length > 0 && row.status === "ACTIVE")?.host ?? null;
+
+  const domainBindingCandidates = [
+    ...hostRows
+      .map((row) => ({ host: normalizeRuntimeHost(row.host), status: row.status }))
+      .filter((row) => row.host.length > 0)
+      .map((row) => ({
+        host: row.host,
+        source: "runtime_host_binding" as const,
+        status: row.status,
+        isInternalHost: true,
+        isActive: row.status === "ACTIVE",
+      })),
+    ...domainRows.map((row) => ({
+      host: normalizeRuntimeDomain(row.domain),
+      source: "runtime_domain_binding" as const,
+      status: row.status,
+      isInternalHost: false,
+      isActive: row.status === "active",
+    })),
+  ]
+    .filter((candidate) => candidate.host.length > 0)
+    .sort(sortDomainReadinessCandidates);
+
+  const activeDomainBindingHost =
+    domainBindingCandidates.find((candidate) => candidate.source === "runtime_domain_binding" && candidate.isActive)?.host ??
+    domainBindingCandidates.find((candidate) => candidate.isActive)?.host ??
+    null;
+
+  return {
+    siteId: input.siteId,
+    canonicalSlug: inferCanonicalSlug({
+      domain: customDomains[0] ?? null,
+      sourceHost: primaryHost,
+    }),
+    primaryHost,
+    internalPreviewHost,
+    customDomains,
+    activeDomainBindingHost,
+    domainBindingCandidates,
+  };
 }
 
 export function mapRuntimeSiteResolutionBindingRows(input: {
@@ -1695,6 +1802,55 @@ export async function getRuntimeSiteResolutionBinding(siteId: string): Promise<R
       domain: domainBindingRes.rows[0]?.domain ?? null,
       activeSiteVersionId: activePointer.rows[0]?.active_site_version_id ?? null,
       versionRows: versionsRes.rows,
+    });
+  } finally {
+    client.release();
+  }
+}
+
+export async function getRuntimeSiteDomainReadinessBinding(siteId: string): Promise<RuntimeSiteDomainReadinessBinding | null> {
+  await ensureRuntimeTables();
+  const client = await getSuperadminPool().connect();
+  try {
+    const siteRes = await client.query<{ source_host: string | null }>(
+      `
+      select source_host::text as source_host
+      from public.gnr8_runtime_sites
+      where id = $1::text
+      limit 1
+      `,
+      [siteId],
+    );
+    if (!siteRes.rows[0]) return null;
+
+    const [hostBindingsRes, domainBindingsRes] = await Promise.all([
+      client.query<RuntimeSiteDomainReadinessBindingHostRow>(
+        `
+        select
+          host::text as host,
+          status::text as status
+        from public.gnr8_runtime_host_bindings
+        where site_id = $1::text
+        `,
+        [siteId],
+      ),
+      client.query<RuntimeSiteDomainReadinessBindingDomainRow>(
+        `
+        select
+          domain::text as domain,
+          status::text as status
+        from public.gnr8_runtime_domain_host_bindings
+        where site_id = $1::text
+        `,
+        [siteId],
+      ),
+    ]);
+
+    return mapRuntimeSiteDomainReadinessBindingRows({
+      siteId,
+      sourceHost: siteRes.rows[0].source_host,
+      hostBindingRows: hostBindingsRes.rows,
+      domainBindingRows: domainBindingsRes.rows,
     });
   } finally {
     client.release();

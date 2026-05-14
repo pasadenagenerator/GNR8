@@ -1,5 +1,6 @@
 import { resolveDomainSiteVersionForHost } from "@/gnr8/runtime/runtime-store";
 import { getRuntimeSiteResolutionBinding } from "@/gnr8/runtime/runtime-store";
+import { getRuntimeSiteDomainReadinessBinding } from "@/gnr8/runtime/runtime-store";
 import { runPreviewSmokeValidation, type PreviewSmokeTarget, type SmokeAssetExpectation } from "@/gnr8/runtime/preview-smoke/preview-smoke-validator";
 import { GET as previewRouteGet } from "@/app/api/gnr8/runtime/versions/[siteVersionId]/preview/route";
 import { setPreviewRouteDependenciesForTest } from "@/app/api/gnr8/runtime/versions/[siteVersionId]/preview/preview-route-dependencies";
@@ -91,7 +92,10 @@ async function makeTargetFromSiteResolution(input: {
 }): Promise<PreviewSmokeTarget | null> {
   if (!input.siteId || !input.strategy) return null;
 
-  const binding = await getRuntimeSiteResolutionBinding(input.siteId);
+  const [binding, domainReadinessBinding] = await Promise.all([
+    getRuntimeSiteResolutionBinding(input.siteId),
+    getRuntimeSiteDomainReadinessBinding(input.siteId),
+  ]);
   if (!binding) {
     console.warn("[preview-smoke] RUNTIME_RESOLUTION_BINDING_MISSING", {
       siteLabel: input.label,
@@ -99,6 +103,26 @@ async function makeTargetFromSiteResolution(input: {
       strategy: input.strategy,
     });
     return null;
+  }
+
+  if (domainReadinessBinding) {
+    console.info("[preview-smoke] RUNTIME_DOMAIN_READINESS_BINDING_LOADED", {
+      siteLabel: input.label,
+      siteId: domainReadinessBinding.siteId,
+      strategy: input.strategy,
+      canonicalSlug: domainReadinessBinding.canonicalSlug ?? null,
+      primaryHost: domainReadinessBinding.primaryHost,
+      internalPreviewHost: domainReadinessBinding.internalPreviewHost,
+      customDomains: domainReadinessBinding.customDomains,
+      activeDomainBindingHost: domainReadinessBinding.activeDomainBindingHost,
+      candidateHosts: domainReadinessBinding.domainBindingCandidates.map((candidate) => candidate.host),
+    });
+  } else {
+    console.warn("[preview-smoke] RUNTIME_DOMAIN_READINESS_BINDING_MISSING", {
+      siteLabel: input.label,
+      siteId: input.siteId,
+      strategy: input.strategy,
+    });
   }
 
   const resolutionBinding: RuntimeSiteBinding = {
@@ -131,6 +155,7 @@ async function makeTargetFromSiteResolution(input: {
       binding: resolutionBinding,
       candidateSiteVersionIds,
       siteResolutionBinding: binding,
+      siteDomainReadinessBinding: domainReadinessBinding ?? undefined,
     },
     previewMode: "transformed",
     previewPath: "/",
