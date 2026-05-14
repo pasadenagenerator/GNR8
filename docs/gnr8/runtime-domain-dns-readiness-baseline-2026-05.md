@@ -64,6 +64,7 @@ Freeze the deterministic baseline for runtime identity, runtime/domain readiness
   - `runtimeDnsReadinessPlan`
   - `runtimeDomainLifecyclePlan`
   - `runtimeDomainProviderSelection`
+  - `runtimeDomainExecutionIntent`
 - These fields are informational and do not alter smoke pass/fail semantics.
 
 ### 8) Explicit strategy route-harness execution mode
@@ -87,7 +88,22 @@ Freeze the deterministic baseline for runtime identity, runtime/domain readiness
 - Maver route-harness summary now carries `runtimeDomainProviderSelection` (present, selected status).
 - Roboplast route-harness summary now carries `runtimeDomainProviderSelection` (present, selected status).
 
-### 11) Diagnostics baseline (fallback behavior)
+### 11) Domain execution intent baseline (Maver/Roboplast)
+
+- Source: `apps/platform/gnr8/runtime/domains/runtime-domain-execution-intent.ts`
+- Maver route-harness summary now carries `runtimeDomainExecutionIntent` with:
+  - `executionMode: manual`
+  - `manualActions` populated
+  - `executableActions` empty
+  - `blockedActions` empty
+- Roboplast route-harness summary now carries `runtimeDomainExecutionIntent` with:
+  - `executionMode: manual`
+  - `manualActions` populated
+  - `executableActions` empty
+  - `blockedActions` empty
+- Current boundary is execution intent only; no external provider execution is performed.
+
+### 12) Diagnostics baseline (fallback behavior)
 
 - `RUNTIME_RESOLUTION_BINDING_MISSING`
   - Emitted only when a strategy-mode route-harness run cannot load a runtime resolution binding for a target site.
@@ -102,6 +118,7 @@ Freeze the deterministic baseline for runtime identity, runtime/domain readiness
 - No billing/domain pricing integration yet.
 - No DB schema changes yet.
 - No smoke pass/fail impact yet.
+- Execution intent only: no external execution of DNS/provider actions yet.
 
 ## Validation Summary
 
@@ -114,7 +131,16 @@ Freeze the deterministic baseline for runtime identity, runtime/domain readiness
 - Domain lifecycle plan present in strategy mode: **present**
 - Runtime domain readiness present in strategy mode: **present**
 - Runtime domain provider selection present in strategy mode: **present**
+- Runtime domain execution intent present in strategy mode: **present**
 - Fallback diagnostic used with real bindings: **absent**
+- Preview-smoke-validator tests: **PASS**
+- Domain execution intent tests: **PASS**
+- Provider selection tests: **PASS**
+- DNS/readiness/lifecycle/resolution/store tests: **PASS**
+- Preview route/assets/unified preview tests: **PASS**
+- Route-harness smoke (`.env.production` + explicit strategy flags): **PASS**
+- Platform build: **PASS**
+- Worker build: **PASS**
 
 ## Route-Harness Smoke Evidence
 
@@ -127,13 +153,13 @@ cd apps/platform && set -a; source .env.production; set +a; NODE_OPTIONS='--cond
 Result:
 
 - `kind`: `preview_smoke_summary_v1`
-- `generatedAt`: `2026-05-14T11:33:37.083Z`
+- `generatedAt`: `2026-05-14T12:24:08.383Z`
 - `executionMode`: `route_harness`
 - `pass`: `true`
 - Maver: `site_7c77126de646f746b3bd` / `88253466-783e-4484-8b68-df6c83b8a11c` / preview `200` / pass `true`
 - Roboplast: `site_aa6b25cd33e9c1384d35` / `30bfe5b1-a441-41ef-92e3-0d6b3ee678e1` / preview `200` / pass `true`
-- Maver runtime fields: `runtimeDomainReadiness` present, `runtimeDnsReadinessPlan` present, `runtimeDomainLifecyclePlan` present, `runtimeDomainProviderSelection` present
-- Roboplast runtime fields: `runtimeDomainReadiness` present, `runtimeDnsReadinessPlan` present, `runtimeDomainLifecyclePlan` present, `runtimeDomainProviderSelection` present
+- Maver runtime fields: `runtimeDomainReadiness` present, `runtimeDnsReadinessPlan` present, `runtimeDomainLifecyclePlan` present, `runtimeDomainProviderSelection` present, `runtimeDomainExecutionIntent` present (`executionMode: manual`)
+- Roboplast runtime fields: `runtimeDomainReadiness` present, `runtimeDnsReadinessPlan` present, `runtimeDomainLifecyclePlan` present, `runtimeDomainProviderSelection` present, `runtimeDomainExecutionIntent` present (`executionMode: manual`)
 - Route-harness fallback behavior: no `RUNTIME_SMOKE_BASELINE_TARGET_FALLBACK_USED` when real bindings are available
 
 ## Linked Baseline JSON

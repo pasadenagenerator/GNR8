@@ -1,6 +1,6 @@
 {
   "kind": "runtime_domain_dns_readiness_baseline_v1",
-  "capturedAt": "2026-05-14T11:33:37.083Z",
+  "capturedAt": "2026-05-14T12:24:08.383Z",
   "scope": {
     "code": "apps/platform",
     "docs": "docs",
@@ -86,7 +86,8 @@
       "runtimeDomainReadiness",
       "runtimeDnsReadinessPlan",
       "runtimeDomainLifecyclePlan",
-      "runtimeDomainProviderSelection"
+      "runtimeDomainProviderSelection",
+      "runtimeDomainExecutionIntent"
     ],
     "summary": "Preview smoke summary carries runtime/domain/dns readiness strategy data without mutating smoke pass/fail semantics."
   },
@@ -135,6 +136,24 @@
       "selectionStatus": "selected"
     }
   },
+  "executionIntentBaseline": {
+    "source": "gnr8/runtime/domains/runtime-domain-execution-intent.ts",
+    "boundary": "execution_intent_only_no_external_execution",
+    "maver": {
+      "runtimeDomainExecutionIntentPresent": true,
+      "executionMode": "manual",
+      "manualActionsPresent": true,
+      "executableActionsPresent": false,
+      "blockedActionsPresent": false
+    },
+    "roboplast": {
+      "runtimeDomainExecutionIntentPresent": true,
+      "executionMode": "manual",
+      "manualActionsPresent": true,
+      "executableActionsPresent": false,
+      "blockedActionsPresent": false
+    }
+  },
   "diagnosticsBaseline": {
     "RUNTIME_RESOLUTION_BINDING_MISSING": {
       "emittedWhen": "strategy-mode route-harness run cannot load runtime resolution binding",
@@ -150,7 +169,8 @@
     "noRegistrarPurchaseFlow": true,
     "noBillingOrDomainPricingIntegrationYet": true,
     "noDbSchemaChangesYet": true,
-    "noSmokePassFailImpactYet": true
+    "noSmokePassFailImpactYet": true,
+    "executionIntentOnlyNoExternalExecutionYet": true
   },
   "validationSummary": {
     "maverSmoke": "PASS",
@@ -162,12 +182,21 @@
     "dnsReadinessPlanStrategyMode": "present",
     "domainLifecyclePlanStrategyMode": "present",
     "runtimeDomainProviderSelectionStrategyMode": "present",
+    "runtimeDomainExecutionIntentStrategyMode": "present",
+    "previewSmokeValidatorTests": "PASS",
+    "domainExecutionIntentTests": "PASS",
+    "providerSelectionTests": "PASS",
+    "dnsReadinessLifecycleResolutionStoreTests": "PASS",
+    "previewRouteAssetsUnifiedPreviewTests": "PASS",
+    "routeHarnessSmokeWithEnvProductionAndExplicitStrategies": "PASS",
+    "platformBuild": "PASS",
+    "workerBuild": "PASS",
     "fallbackDiagnosticUsedWithRealBindings": "absent"
   },
   "routeHarnessSmoke": {
     "attempted": true,
     "executionMode": "route_harness",
-    "generatedAt": "2026-05-14T11:33:37.083Z",
+    "generatedAt": "2026-05-14T12:24:08.383Z",
     "command": "--execution-mode=route_harness --maver-strategy=active --roboplast-strategy=active",
     "overallPass": true,
     "maver": {
@@ -179,6 +208,8 @@
       "runtimeDomainLifecyclePlanPresent": true,
       "runtimeDomainProviderSelectionPresent": true,
       "runtimeDomainProviderSelectionStatus": "selected",
+      "runtimeDomainExecutionIntentPresent": true,
+      "runtimeDomainExecutionIntentMode": "manual",
       "pass": true
     },
     "roboplast": {
@@ -190,6 +221,8 @@
       "runtimeDomainLifecyclePlanPresent": true,
       "runtimeDomainProviderSelectionPresent": true,
       "runtimeDomainProviderSelectionStatus": "selected",
+      "runtimeDomainExecutionIntentPresent": true,
+      "runtimeDomainExecutionIntentMode": "manual",
       "pass": true
     },
     "fallbackDiagnosticNotEmittedWithRealBindings": true
