@@ -61,6 +61,24 @@ function parseArg(flag: string): string | null {
   return value.length > 0 ? value : null;
 }
 
+function hasArg(flag: string): boolean {
+  const prefix = `--${flag}=`;
+  return process.argv.slice(2).some((part) => part.startsWith(prefix));
+}
+
+export function resolveStrategySiteIdForRouteHarness(input: {
+  label: string;
+  executionMode: SmokeExecutionMode;
+  explicitSiteId: string | null;
+  strategy: RuntimeResolutionStrategy | null;
+  explicitStrategyFlag: boolean;
+}): string | null {
+  if (input.explicitSiteId) return input.explicitSiteId;
+  if (input.executionMode !== "route_harness") return null;
+  if (!input.strategy || !input.explicitStrategyFlag) return null;
+  return RUNTIME_SMOKE_BASELINE_FALLBACK_TARGETS[input.label]?.siteId ?? null;
+}
+
 function parseResolutionStrategy(value: string | null): RuntimeResolutionStrategy | null {
   const normalized = String(value ?? "").trim().toLowerCase();
   if (!normalized) return null;
@@ -228,6 +246,8 @@ async function main(): Promise<void> {
   const explicitRoboplastVersionId = parseArg("roboplast-site-version-id") ?? process.env.GNR8_ROBOPLAST_SITE_VERSION_ID ?? null;
   const maverStrategy = parseResolutionStrategy(parseArg("maver-strategy") ?? process.env.GNR8_MAVER_STRATEGY ?? null);
   const roboplastStrategy = parseResolutionStrategy(parseArg("roboplast-strategy") ?? process.env.GNR8_ROBOPLAST_STRATEGY ?? null);
+  const explicitMaverStrategyFlag = hasArg("maver-strategy");
+  const explicitRoboplastStrategyFlag = hasArg("roboplast-strategy");
 
   const maverAssets = parseAssetList(parseArg("maver-assets"), [
     { label: "hero image", path: "uploads/KcGdxACT/hero-01.jpg", required: true },
@@ -240,7 +260,13 @@ async function main(): Promise<void> {
   const targets: PreviewSmokeTarget[] = [];
   const maver = await makeTargetFromSiteResolution({
     label: "Maver",
-    siteId: explicitMaverSiteId,
+    siteId: resolveStrategySiteIdForRouteHarness({
+      label: "Maver",
+      executionMode,
+      explicitSiteId: explicitMaverSiteId,
+      strategy: maverStrategy,
+      explicitStrategyFlag: explicitMaverStrategyFlag,
+    }),
     strategy: maverStrategy,
     identitySignals: ["maver", "PREVIEW_BACK_TO_TOP_NATIVE_ONLY_STATUS"],
     fallbackAssets: maverAssets,
@@ -258,7 +284,13 @@ async function main(): Promise<void> {
 
   const roboplast = await makeTargetFromSiteResolution({
     label: "Roboplast",
-    siteId: explicitRoboplastSiteId,
+    siteId: resolveStrategySiteIdForRouteHarness({
+      label: "Roboplast",
+      executionMode,
+      explicitSiteId: explicitRoboplastSiteId,
+      strategy: roboplastStrategy,
+      explicitStrategyFlag: explicitRoboplastStrategyFlag,
+    }),
     strategy: roboplastStrategy,
     identitySignals: ["roboplast", "PREVIEW_BACK_TO_TOP_NATIVE_ONLY_STATUS"],
     fallbackAssets: roboplastAssets,

@@ -5,6 +5,7 @@ import {
   makeTarget,
   makeTargetFromSiteResolution,
   RUNTIME_SMOKE_BASELINE_FALLBACK_TARGETS,
+  resolveStrategySiteIdForRouteHarness,
 } from "@/gnr8/runtime/preview-smoke/preview-smoke-validator.cli";
 
 test("preview smoke cli: missing resolution binding uses known Maver baseline fallback in route_harness strategy mode", async () => {
@@ -123,4 +124,34 @@ test("preview smoke cli: direct siteVersionId mode unchanged", async () => {
   assert.equal(target?.expectedSiteId, "site_direct");
   assert.equal(target?.siteVersionId, "sv_direct");
   assert.equal(target?.resolution, undefined);
+});
+
+test("preview smoke cli: explicit route_harness strategy args seed deterministic known-site fallback resolution", async () => {
+  const argv = [
+    "node",
+    "preview-smoke-validator.cli.ts",
+    "--execution-mode=route_harness",
+    "--maver-strategy=active",
+    "--roboplast-strategy=active",
+  ];
+  const explicitMaverStrategyFlag = argv.slice(2).some((part) => part.startsWith("--maver-strategy="));
+  const explicitRoboplastStrategyFlag = argv.slice(2).some((part) => part.startsWith("--roboplast-strategy="));
+
+  const maverSiteId = resolveStrategySiteIdForRouteHarness({
+    label: "Maver",
+    executionMode: "route_harness",
+    explicitSiteId: null,
+    strategy: "active",
+    explicitStrategyFlag: explicitMaverStrategyFlag,
+  });
+  const roboplastSiteId = resolveStrategySiteIdForRouteHarness({
+    label: "Roboplast",
+    executionMode: "route_harness",
+    explicitSiteId: null,
+    strategy: "active",
+    explicitStrategyFlag: explicitRoboplastStrategyFlag,
+  });
+
+  assert.equal(maverSiteId, RUNTIME_SMOKE_BASELINE_FALLBACK_TARGETS.Maver.siteId);
+  assert.equal(roboplastSiteId, RUNTIME_SMOKE_BASELINE_FALLBACK_TARGETS.Roboplast.siteId);
 });
