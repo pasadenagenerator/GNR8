@@ -1,0 +1,124 @@
+{
+  "kind": "runtime_domain_dns_readiness_baseline_v1",
+  "capturedAt": "2026-05-14T06:40:35.269Z",
+  "scope": {
+    "code": "apps/platform",
+    "docs": "docs",
+    "intent": "deterministic runtime/domain/dns readiness planning baseline before external provider integration"
+  },
+  "runtimeIdentityHelpers": {
+    "module": "gnr8/runtime/identity/runtime-identity.ts",
+    "summary": [
+      "Runtime identity normalization and correlation-key generation are deterministic.",
+      "Site/siteVersion/preview/domain identities are derived from normalized tokens (host/domain/path normalized, no random/time dependency).",
+      "Preview identity emits stable correlation keys for equivalent inputs."
+    ]
+  },
+  "runtimeResolutionStrategies": {
+    "module": "gnr8/runtime/resolution/runtime-resolution.ts",
+    "strategies": [
+      "latest_imported",
+      "active",
+      "published",
+      "preview"
+    ],
+    "summary": [
+      "Resolution is deterministic with explicit fallback chains.",
+      "Published resolves published -> active -> latest_imported.",
+      "Preview resolves preview -> active -> latest_imported."
+    ]
+  },
+  "runtimeSiteReadiness": {
+    "module": "gnr8/runtime/readiness/runtime-site-readiness.ts",
+    "statuses": [
+      "ready",
+      "ready_with_warnings",
+      "blocked"
+    ],
+    "summary": [
+      "Readiness is computed from candidate versions and pointer presence.",
+      "Missing candidate/latest-imported signals block readiness.",
+      "Missing active/published pointers generate warnings without blocking when core identity exists."
+    ]
+  },
+  "runtimeDomainReadiness": {
+    "module": "gnr8/runtime/readiness/runtime-domain-readiness.ts",
+    "statuses": [
+      "ready",
+      "ready_with_warnings",
+      "blocked"
+    ],
+    "summary": [
+      "Readiness derives from site binding + domain signals + binding activity.",
+      "Missing site/domain identity signals block readiness.",
+      "Missing custom domain, active binding, or internal host produce warnings."
+    ]
+  },
+  "dnsProviderAbstraction": {
+    "module": "gnr8/runtime/dns/dns-provider-types.ts",
+    "providerIds": [
+      "manual",
+      "openprovider",
+      "realtime_register",
+      "netim",
+      "inwx"
+    ],
+    "contractSummary": [
+      "Provider capability registry and adapter contract exist.",
+      "Current provider capability map is placeholder for future adapters.",
+      "Current tests verify deterministic typing/correlation behavior and no concrete network behavior."
+    ]
+  },
+  "dnsReadinessPlanning": {
+    "module": "gnr8/runtime/dns/runtime-dns-readiness-plan.ts",
+    "mode": "strategy_only",
+    "summary": [
+      "Plan generation is deterministic from domain readiness report + provider id.",
+      "Manual provider emits explicit manual steps when records are planned.",
+      "Plan supports internal preview, custom apex/www, and verification TXT intents."
+    ]
+  },
+  "smokeIntegrationFields": {
+    "source": "gnr8/runtime/preview-smoke/preview-smoke-validator.ts",
+    "fields": [
+      "runtimeResolutionDiagnostic",
+      "runtimeReadiness",
+      "runtimeDomainReadiness",
+      "runtimeDnsReadinessPlan"
+    ],
+    "summary": "Preview smoke summary carries runtime/domain/dns readiness strategy data without mutating smoke pass/fail semantics."
+  },
+  "currentBoundaries": {
+    "noExternalDnsApiCalls": true,
+    "noRegistrarPurchaseFlow": true,
+    "noBillingOrDomainPricingIntegrationYet": true,
+    "noDbSchemaChangesYet": true,
+    "noSmokePassFailImpactYet": true
+  },
+  "validationSummary": {
+    "maverSmoke": "PASS",
+    "roboplastSmoke": "PASS",
+    "requiredPreviewAssets": "PASS",
+    "forbiddenBackToTopFallbackMarkers": "absent",
+    "duplicatedPreviewAssetsPrefix": "absent",
+    "dnsReadinessPlanStrategyMode": "present"
+  },
+  "routeHarnessSmoke": {
+    "attempted": true,
+    "executionMode": "route_harness",
+    "generatedAt": "2026-05-14T06:40:35.269Z",
+    "overallPass": true,
+    "maver": {
+      "siteId": "site_7c77126de646f746b3bd",
+      "siteVersionId": "88253466-783e-4484-8b68-df6c83b8a11c",
+      "previewStatus": 200,
+      "pass": true
+    },
+    "roboplast": {
+      "siteId": "site_aa6b25cd33e9c1384d35",
+      "siteVersionId": "30bfe5b1-a441-41ef-92e3-0d6b3ee678e1",
+      "previewStatus": 200,
+      "pass": true
+    }
+  }
+}
