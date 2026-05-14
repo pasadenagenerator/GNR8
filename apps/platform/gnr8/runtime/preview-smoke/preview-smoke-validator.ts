@@ -16,6 +16,10 @@ import {
   type RuntimeDomainExecutionIntent,
 } from "@/gnr8/runtime/domains/runtime-domain-execution-intent";
 import {
+  createRuntimeDomainExecutionDryRun,
+  type RuntimeDomainExecutionDryRun,
+} from "@/gnr8/runtime/domains/runtime-domain-execution-dry-run";
+import {
   createRuntimeDomainReadinessReport,
   type RuntimeDomainReadinessReport,
 } from "@/gnr8/runtime/readiness/runtime-domain-readiness";
@@ -70,6 +74,7 @@ export type PreviewSmokeSummary = {
   runtimeDomainLifecyclePlan?: RuntimeDomainLifecyclePlan;
   runtimeDomainProviderSelection?: RuntimeDomainProviderSelection;
   runtimeDomainExecutionIntent?: RuntimeDomainExecutionIntent;
+  runtimeDomainExecutionDryRun?: RuntimeDomainExecutionDryRun;
   previewStatus: number;
   previewMode: string | null;
   sourceMode: string | null;
@@ -313,6 +318,9 @@ export async function runPreviewSmokeValidation(
           providerSelection: runtimeDomainProviderSelection,
         })
       : undefined;
+  const runtimeDomainExecutionDryRun = runtimeDomainExecutionIntent
+    ? createRuntimeDomainExecutionDryRun(runtimeDomainExecutionIntent)
+    : undefined;
 
   return {
     siteLabel: target.siteLabel,
@@ -325,6 +333,7 @@ export async function runPreviewSmokeValidation(
     runtimeDomainLifecyclePlan,
     runtimeDomainProviderSelection,
     runtimeDomainExecutionIntent,
+    runtimeDomainExecutionDryRun,
     previewStatus,
     previewMode: selectedPreviewMode,
     sourceMode: selectedSourceMode,
