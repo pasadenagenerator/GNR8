@@ -1,6 +1,6 @@
 {
   "kind": "runtime_domain_dns_readiness_baseline_v1",
-  "capturedAt": "2026-05-14T06:40:35.269Z",
+  "capturedAt": "2026-05-14T10:31:59.769Z",
   "scope": {
     "code": "apps/platform",
     "docs": "docs",
@@ -84,9 +84,48 @@
       "runtimeResolutionDiagnostic",
       "runtimeReadiness",
       "runtimeDomainReadiness",
-      "runtimeDnsReadinessPlan"
+      "runtimeDnsReadinessPlan",
+      "runtimeDomainLifecyclePlan"
     ],
     "summary": "Preview smoke summary carries runtime/domain/dns readiness strategy data without mutating smoke pass/fail semantics."
+  },
+  "routeHarnessExecutionMode": {
+    "enabled": true,
+    "mode": "route_harness",
+    "summary": [
+      "Route-harness mode is used for deterministic control-plane smoke evidence.",
+      "Route-harness validates preview + preview-assets through runtime bindings without changing smoke pass/fail semantics."
+    ]
+  },
+  "knownBaselineFallbackResolver": {
+    "module": "gnr8/runtime/preview-smoke/preview-smoke-validator.cli.ts",
+    "reasonCode": "runtime_resolution_binding_missing",
+    "targets": [
+      {
+        "siteLabel": "Maver",
+        "siteId": "site_7c77126de646f746b3bd",
+        "siteVersionId": "88253466-783e-4484-8b68-df6c83b8a11c"
+      },
+      {
+        "siteLabel": "Roboplast",
+        "siteId": "site_aa6b25cd33e9c1384d35",
+        "siteVersionId": "30bfe5b1-a441-41ef-92e3-0d6b3ee678e1"
+      }
+    ],
+    "summary": [
+      "Baseline fallback targets are deterministic and limited to known smoke baselines.",
+      "Fallback is only used in route-harness strategy mode when runtime resolution binding is missing."
+    ]
+  },
+  "diagnosticsBaseline": {
+    "RUNTIME_RESOLUTION_BINDING_MISSING": {
+      "emittedWhen": "strategy-mode route-harness run cannot load runtime resolution binding",
+      "observedInLatestRealBindingSmoke": false
+    },
+    "RUNTIME_SMOKE_BASELINE_TARGET_FALLBACK_USED": {
+      "emittedWhen": "deterministic baseline fallback target is used",
+      "observedInLatestRealBindingSmoke": false
+    }
   },
   "currentBoundaries": {
     "noExternalDnsApiCalls": true,
@@ -101,24 +140,34 @@
     "requiredPreviewAssets": "PASS",
     "forbiddenBackToTopFallbackMarkers": "absent",
     "duplicatedPreviewAssetsPrefix": "absent",
-    "dnsReadinessPlanStrategyMode": "present"
+    "runtimeDomainReadinessStrategyMode": "present",
+    "dnsReadinessPlanStrategyMode": "present",
+    "domainLifecyclePlanStrategyMode": "present",
+    "fallbackDiagnosticUsedWithRealBindings": "absent"
   },
   "routeHarnessSmoke": {
     "attempted": true,
     "executionMode": "route_harness",
-    "generatedAt": "2026-05-14T06:40:35.269Z",
+    "generatedAt": "2026-05-14T10:31:59.769Z",
     "overallPass": true,
     "maver": {
       "siteId": "site_7c77126de646f746b3bd",
       "siteVersionId": "88253466-783e-4484-8b68-df6c83b8a11c",
       "previewStatus": 200,
+      "runtimeDomainReadinessPresent": true,
+      "runtimeDnsReadinessPlanPresent": true,
+      "runtimeDomainLifecyclePlanPresent": true,
       "pass": true
     },
     "roboplast": {
       "siteId": "site_aa6b25cd33e9c1384d35",
       "siteVersionId": "30bfe5b1-a441-41ef-92e3-0d6b3ee678e1",
       "previewStatus": 200,
+      "runtimeDomainReadinessPresent": true,
+      "runtimeDnsReadinessPlanPresent": true,
+      "runtimeDomainLifecyclePlanPresent": true,
       "pass": true
-    }
+    },
+    "fallbackDiagnosticNotEmittedWithRealBindings": true
   }
 }
