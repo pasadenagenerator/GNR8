@@ -1,5 +1,9 @@
 import { createRuntimePreviewIdentity } from "@/gnr8/runtime/identity/runtime-identity";
 import {
+  createRuntimeDnsReadinessPlan,
+  type RuntimeDnsReadinessPlan,
+} from "@/gnr8/runtime/dns/runtime-dns-readiness-plan";
+import {
   createRuntimeDomainReadinessReport,
   type RuntimeDomainReadinessReport,
 } from "@/gnr8/runtime/readiness/runtime-domain-readiness";
@@ -50,6 +54,7 @@ export type PreviewSmokeSummary = {
   runtimeResolutionDiagnostic: RuntimeResolutionDiagnostics | null;
   runtimeReadiness?: RuntimeSiteReadinessReport;
   runtimeDomainReadiness?: RuntimeDomainReadinessReport;
+  runtimeDnsReadinessPlan?: RuntimeDnsReadinessPlan;
   previewStatus: number;
   previewMode: string | null;
   sourceMode: string | null;
@@ -263,6 +268,13 @@ export async function runPreviewSmokeValidation(
     assetChecks.every((entry) => entry.ok),
   ];
 
+  const runtimeDnsReadinessPlan = runtimeDomainReadiness
+    ? createRuntimeDnsReadinessPlan({
+        report: runtimeDomainReadiness,
+        providerId: "manual",
+      })
+    : undefined;
+
   return {
     siteLabel: target.siteLabel,
     siteId,
@@ -270,6 +282,7 @@ export async function runPreviewSmokeValidation(
     runtimeResolutionDiagnostic: resolvedTarget.runtimeResolutionDiagnostic,
     runtimeReadiness,
     runtimeDomainReadiness,
+    runtimeDnsReadinessPlan,
     previewStatus,
     previewMode: selectedPreviewMode,
     sourceMode: selectedSourceMode,

@@ -344,6 +344,8 @@ test("preview smoke validator: strategy-based active resolution emits determinis
   assert.equal(summary.runtimeDomainReadiness?.siteId, "site_preview_active");
   assert.equal(summary.runtimeDomainReadiness?.domainReadinessStatus, "ready");
   assert.deepEqual(summary.runtimeDomainReadiness?.warnings, []);
+  assert.equal(summary.runtimeDnsReadinessPlan?.providerId, "manual");
+  assert.equal((summary.runtimeDnsReadinessPlan?.plannedRecords.length ?? 0) > 0, true);
 });
 
 test("preview smoke validator: Maver and Roboplast strategy resolution resolves expected siteVersionId", async () => {
@@ -419,4 +421,5 @@ test("preview smoke validator: direct siteVersionId mode keeps runtimeDomainRead
 
   assert.equal(summary.runtimeReadiness, undefined);
   assert.equal(summary.runtimeDomainReadiness, undefined);
+  assert.equal(summary.runtimeDnsReadinessPlan, undefined);
 });
