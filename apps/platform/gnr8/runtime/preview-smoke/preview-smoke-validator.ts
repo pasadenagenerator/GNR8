@@ -4,6 +4,10 @@ import {
   type RuntimeDnsReadinessPlan,
 } from "@/gnr8/runtime/dns/runtime-dns-readiness-plan";
 import {
+  selectRuntimeDomainProvider,
+  type RuntimeDomainProviderSelection,
+} from "@/gnr8/runtime/dns/domain-provider-selection";
+import {
   createRuntimeDomainLifecyclePlan,
   type RuntimeDomainLifecyclePlan,
 } from "@/gnr8/runtime/domains/runtime-domain-lifecycle";
@@ -60,6 +64,7 @@ export type PreviewSmokeSummary = {
   runtimeDomainReadiness?: RuntimeDomainReadinessReport;
   runtimeDnsReadinessPlan?: RuntimeDnsReadinessPlan;
   runtimeDomainLifecyclePlan?: RuntimeDomainLifecyclePlan;
+  runtimeDomainProviderSelection?: RuntimeDomainProviderSelection;
   previewStatus: number;
   previewMode: string | null;
   sourceMode: string | null;
@@ -287,6 +292,14 @@ export async function runPreviewSmokeValidation(
         providerId: "manual",
       })
     : undefined;
+  const runtimeDomainProviderSelection =
+    runtimeDomainLifecyclePlan && runtimeDnsReadinessPlan
+      ? selectRuntimeDomainProvider({
+          lifecyclePlan: runtimeDomainLifecyclePlan,
+          dnsReadinessPlan: runtimeDnsReadinessPlan,
+          preferredProviderId: "manual",
+        })
+      : undefined;
 
   return {
     siteLabel: target.siteLabel,
@@ -297,6 +310,7 @@ export async function runPreviewSmokeValidation(
     runtimeDomainReadiness,
     runtimeDnsReadinessPlan,
     runtimeDomainLifecyclePlan,
+    runtimeDomainProviderSelection,
     previewStatus,
     previewMode: selectedPreviewMode,
     sourceMode: selectedSourceMode,
