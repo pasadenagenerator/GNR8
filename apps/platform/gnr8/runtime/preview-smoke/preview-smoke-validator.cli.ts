@@ -10,10 +10,41 @@ import type { RuntimeResolutionStrategy, RuntimeSiteBinding } from "@/gnr8/runti
 type SmokeExecutionMode = "http" | "route_harness";
 
 type ResolvedSite = { siteId: string; siteVersionId: string };
+type StrategyTargetInput = {
+  label: string;
+  siteId: string | null;
+  strategy: RuntimeResolutionStrategy | null;
+  identitySignals: string[];
+  fallbackAssets: SmokeAssetExpectation[];
+  executionMode: SmokeExecutionMode;
+};
+type StrategyTargetDeps = {
+  getResolutionBinding: typeof getRuntimeSiteResolutionBinding;
+  getDomainReadinessBinding: typeof getRuntimeSiteDomainReadinessBinding;
+  logWarn: typeof console.warn;
+  logInfo: typeof console.info;
+};
+
+type BaselineFallbackTarget = {
+  siteId: string;
+  siteVersionId: string;
+};
 
 const APP_BASE_URL = process.env.GNR8_PREVIEW_BASE_URL?.trim() || "http://localhost:3000";
 const MAVER_HOST = process.env.GNR8_MAVER_HOST?.trim() || "maver.app.pasadenagenerator.com";
 const ROBOPLAST_HOST = process.env.GNR8_ROBOPLAST_HOST?.trim() || "roboplast.app.pasadenagenerator.com";
+const BASELINE_FALLBACK_REASON_CODE = "runtime_resolution_binding_missing";
+
+export const RUNTIME_SMOKE_BASELINE_FALLBACK_TARGETS: Record<string, BaselineFallbackTarget> = {
+  Maver: {
+    siteId: "site_7c77126de646f746b3bd",
+    siteVersionId: "88253466-783e-4484-8b68-df6c83b8a11c",
+  },
+  Roboplast: {
+    siteId: "site_aa6b25cd33e9c1384d35",
+    siteVersionId: "30bfe5b1-a441-41ef-92e3-0d6b3ee678e1",
+  },
+};
 
 function parseExecutionMode(value: string | null): SmokeExecutionMode {
   const normalized = (value ?? "").trim().toLowerCase();
@@ -59,7 +90,7 @@ function parseAssetList(input: string | null, fallback: SmokeAssetExpectation[])
   return out.length > 0 ? out : fallback;
 }
 
-async function makeTarget(input: {
+export async function makeTarget(input: {
   label: string;
   host: string;
   explicitSiteId: string | null;
@@ -83,30 +114,54 @@ async function makeTarget(input: {
   };
 }
 
-async function makeTargetFromSiteResolution(input: {
-  label: string;
-  siteId: string | null;
-  strategy: RuntimeResolutionStrategy | null;
-  identitySignals: string[];
-  fallbackAssets: SmokeAssetExpectation[];
-}): Promise<PreviewSmokeTarget | null> {
+function makeDeterministicBaselineTarget(input: StrategyTargetInput, logWarn: typeof console.warn): PreviewSmokeTarget | null {
+  if (input.executionMode !== "route_harness" || !input.strategy) return null;
+  const baseline = RUNTIME_SMOKE_BASELINE_FALLBACK_TARGETS[input.label];
+  if (!baseline) return null;
+  logWarn("[preview-smoke] RUNTIME_SMOKE_BASELINE_TARGET_FALLBACK_USED", {
+    siteLabel: input.label,
+    siteId: baseline.siteId,
+    siteVersionId: baseline.siteVersionId,
+    reasonCode: BASELINE_FALLBACK_REASON_CODE,
+  });
+  return {
+    siteLabel: input.label,
+    expectedSiteId: baseline.siteId,
+    siteVersionId: baseline.siteVersionId,
+    previewMode: "transformed",
+    previewPath: "/",
+    identitySignals: input.identitySignals,
+    requiredAssets: input.fallbackAssets,
+    optionalNoiseAssets: ["legal1", "uploads/documents/missing.pdf"],
+  };
+}
+
+export async function makeTargetFromSiteResolution(
+  input: StrategyTargetInput,
+  deps: StrategyTargetDeps = {
+    getResolutionBinding: getRuntimeSiteResolutionBinding,
+    getDomainReadinessBinding: getRuntimeSiteDomainReadinessBinding,
+    logWarn: console.warn,
+    logInfo: console.info,
+  },
+): Promise<PreviewSmokeTarget | null> {
   if (!input.siteId || !input.strategy) return null;
 
   const [binding, domainReadinessBinding] = await Promise.all([
-    getRuntimeSiteResolutionBinding(input.siteId),
-    getRuntimeSiteDomainReadinessBinding(input.siteId),
+    deps.getResolutionBinding(input.siteId),
+    deps.getDomainReadinessBinding(input.siteId),
   ]);
   if (!binding) {
-    console.warn("[preview-smoke] RUNTIME_RESOLUTION_BINDING_MISSING", {
+    deps.logWarn("[preview-smoke] RUNTIME_RESOLUTION_BINDING_MISSING", {
       siteLabel: input.label,
       siteId: input.siteId,
       strategy: input.strategy,
     });
-    return null;
+    return makeDeterministicBaselineTarget(input, deps.logWarn);
   }
 
   if (domainReadinessBinding) {
-    console.info("[preview-smoke] RUNTIME_DOMAIN_READINESS_BINDING_LOADED", {
+    deps.logInfo("[preview-smoke] RUNTIME_DOMAIN_READINESS_BINDING_LOADED", {
       siteLabel: input.label,
       siteId: domainReadinessBinding.siteId,
       strategy: input.strategy,
@@ -118,7 +173,7 @@ async function makeTargetFromSiteResolution(input: {
       candidateHosts: domainReadinessBinding.domainBindingCandidates.map((candidate) => candidate.host),
     });
   } else {
-    console.warn("[preview-smoke] RUNTIME_DOMAIN_READINESS_BINDING_MISSING", {
+    deps.logWarn("[preview-smoke] RUNTIME_DOMAIN_READINESS_BINDING_MISSING", {
       siteLabel: input.label,
       siteId: input.siteId,
       strategy: input.strategy,
@@ -135,7 +190,7 @@ async function makeTargetFromSiteResolution(input: {
   };
   const candidateSiteVersionIds = binding.candidateSiteVersions.map((candidate) => candidate.siteVersionId);
 
-  console.info("[preview-smoke] RUNTIME_RESOLUTION_BINDING_LOADED", {
+  deps.logInfo("[preview-smoke] RUNTIME_RESOLUTION_BINDING_LOADED", {
     siteLabel: input.label,
     siteId: binding.siteId,
     strategy: input.strategy,
@@ -189,6 +244,7 @@ async function main(): Promise<void> {
     strategy: maverStrategy,
     identitySignals: ["maver", "PREVIEW_BACK_TO_TOP_NATIVE_ONLY_STATUS"],
     fallbackAssets: maverAssets,
+    executionMode,
   }) ??
     (await makeTarget({
       label: "Maver",
@@ -206,6 +262,7 @@ async function main(): Promise<void> {
     strategy: roboplastStrategy,
     identitySignals: ["roboplast", "PREVIEW_BACK_TO_TOP_NATIVE_ONLY_STATUS"],
     fallbackAssets: roboplastAssets,
+    executionMode,
   }) ??
     (await makeTarget({
       label: "Roboplast",
@@ -316,4 +373,12 @@ async function main(): Promise<void> {
   process.exitCode = pass ? 0 : 1;
 }
 
-void main();
+const isDirectExecution = (() => {
+  const entry = process.argv[1];
+  if (!entry) return false;
+  return import.meta.url === new URL(`file://${entry}`).href;
+})();
+
+if (isDirectExecution) {
+  void main();
+}
