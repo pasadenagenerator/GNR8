@@ -1,6 +1,6 @@
 {
   "kind": "runtime_domain_dns_readiness_baseline_v1",
-  "capturedAt": "2026-05-14T10:31:59.769Z",
+  "capturedAt": "2026-05-14T11:33:37.083Z",
   "scope": {
     "code": "apps/platform",
     "docs": "docs",
@@ -85,15 +85,21 @@
       "runtimeReadiness",
       "runtimeDomainReadiness",
       "runtimeDnsReadinessPlan",
-      "runtimeDomainLifecyclePlan"
+      "runtimeDomainLifecyclePlan",
+      "runtimeDomainProviderSelection"
     ],
     "summary": "Preview smoke summary carries runtime/domain/dns readiness strategy data without mutating smoke pass/fail semantics."
   },
   "routeHarnessExecutionMode": {
     "enabled": true,
     "mode": "route_harness",
+    "strategyFlags": [
+      "--maver-strategy=active",
+      "--roboplast-strategy=active"
+    ],
     "summary": [
       "Route-harness mode is used for deterministic control-plane smoke evidence.",
+      "Explicit strategy flags seed deterministic known-site baseline site/version resolution in CLI route-harness mode.",
       "Route-harness validates preview + preview-assets through runtime bindings without changing smoke pass/fail semantics."
     ]
   },
@@ -114,8 +120,20 @@
     ],
     "summary": [
       "Baseline fallback targets are deterministic and limited to known smoke baselines.",
-      "Fallback is only used in route-harness strategy mode when runtime resolution binding is missing."
+      "Fallback is only used in route-harness strategy mode when runtime resolution binding is missing.",
+      "Fallback diagnostic is emitted only when a real runtime resolution binding is missing."
     ]
+  },
+  "providerSelectionBaseline": {
+    "source": "gnr8/runtime/preview-smoke/preview-smoke-validator.ts",
+    "maver": {
+      "runtimeDomainProviderSelectionPresent": true,
+      "selectionStatus": "selected"
+    },
+    "roboplast": {
+      "runtimeDomainProviderSelectionPresent": true,
+      "selectionStatus": "selected"
+    }
   },
   "diagnosticsBaseline": {
     "RUNTIME_RESOLUTION_BINDING_MISSING": {
@@ -143,12 +161,14 @@
     "runtimeDomainReadinessStrategyMode": "present",
     "dnsReadinessPlanStrategyMode": "present",
     "domainLifecyclePlanStrategyMode": "present",
+    "runtimeDomainProviderSelectionStrategyMode": "present",
     "fallbackDiagnosticUsedWithRealBindings": "absent"
   },
   "routeHarnessSmoke": {
     "attempted": true,
     "executionMode": "route_harness",
-    "generatedAt": "2026-05-14T10:31:59.769Z",
+    "generatedAt": "2026-05-14T11:33:37.083Z",
+    "command": "--execution-mode=route_harness --maver-strategy=active --roboplast-strategy=active",
     "overallPass": true,
     "maver": {
       "siteId": "site_7c77126de646f746b3bd",
@@ -157,6 +177,8 @@
       "runtimeDomainReadinessPresent": true,
       "runtimeDnsReadinessPlanPresent": true,
       "runtimeDomainLifecyclePlanPresent": true,
+      "runtimeDomainProviderSelectionPresent": true,
+      "runtimeDomainProviderSelectionStatus": "selected",
       "pass": true
     },
     "roboplast": {
@@ -166,6 +188,8 @@
       "runtimeDomainReadinessPresent": true,
       "runtimeDnsReadinessPlanPresent": true,
       "runtimeDomainLifecyclePlanPresent": true,
+      "runtimeDomainProviderSelectionPresent": true,
+      "runtimeDomainProviderSelectionStatus": "selected",
       "pass": true
     },
     "fallbackDiagnosticNotEmittedWithRealBindings": true
