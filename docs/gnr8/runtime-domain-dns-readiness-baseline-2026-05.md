@@ -129,16 +129,38 @@ Freeze the deterministic baseline for runtime identity, runtime/domain readiness
 
 - Source: `apps/platform/gnr8/runtime/domains/runtime-domain-execution-dry-run.ts`
 - Maver route-harness summary now carries `runtimeDomainExecutionDryRun` with:
+  - `providerId: manual`
+  - `providerAdapterStatus.providerId: manual`
+  - `providerAdapterStatus.adapterAvailable: true`
+  - `providerAdapterStatus.contractStatus: pass`
   - `dryRunStatus: ready_with_warnings`
   - `dryRunActions` populated
   - `skippedActions` empty
   - `blockedActions` empty
 - Roboplast route-harness summary now carries `runtimeDomainExecutionDryRun` with:
+  - `providerId: manual`
+  - `providerAdapterStatus.providerId: manual`
+  - `providerAdapterStatus.adapterAvailable: true`
+  - `providerAdapterStatus.contractStatus: pass`
   - `dryRunStatus: ready_with_warnings`
   - `dryRunActions` populated
   - `skippedActions` empty
   - `blockedActions` empty
 - Current boundary is dry-run only; no external DNS/provider execution is performed.
+
+### 13a) Provider adapter status baseline (manual contract pass)
+
+- Source: `apps/platform/gnr8/runtime/domains/runtime-domain-execution-dry-run.ts`
+- `runtimeDomainExecutionDryRun.providerAdapterStatus` baseline:
+  - `providerId: manual`
+  - `adapterAvailable: true`
+  - `contractStatus: pass`
+  - `warnings: []`
+  - `blockers: []`
+- Manual adapter contract pass is baseline-gated evidence for both Maver and Roboplast route-harness results.
+- No-network-call boundary remains explicit:
+  - provider adapter contract and dry-run validation do not perform external DNS/registrar calls
+  - route-harness remains a local control-plane verification path
 
 ## Explicit Current Boundaries
 
@@ -186,13 +208,13 @@ cd apps/platform && set -a; source .env.production; set +a; NODE_OPTIONS='--cond
 Result:
 
 - `kind`: `preview_smoke_summary_v1`
-- `generatedAt`: `2026-05-16T17:05:43.630Z`
+- `generatedAt`: `2026-05-16T18:22:56Z` (latest run window)
 - `executionMode`: `route_harness`
 - `pass`: `true`
 - Maver: `site_7c77126de646f746b3bd` / `88253466-783e-4484-8b68-df6c83b8a11c` / preview `200` / pass `true`
 - Roboplast: `site_aa6b25cd33e9c1384d35` / `30bfe5b1-a441-41ef-92e3-0d6b3ee678e1` / preview `200` / pass `true`
-- Maver runtime fields: `runtimeDomainReadiness` present, `runtimeDnsReadinessPlan` present, `runtimeDomainLifecyclePlan` present, `runtimeDomainProviderSelection` present, `runtimeDomainExecutionIntent` present (`executionMode: manual`), `runtimeDomainExecutionDryRun` present (`dryRunStatus: ready_with_warnings`)
-- Roboplast runtime fields: `runtimeDomainReadiness` present, `runtimeDnsReadinessPlan` present, `runtimeDomainLifecyclePlan` present, `runtimeDomainProviderSelection` present, `runtimeDomainExecutionIntent` present (`executionMode: manual`), `runtimeDomainExecutionDryRun` present (`dryRunStatus: ready_with_warnings`)
+- Maver runtime fields: `runtimeDomainReadiness` present, `runtimeDnsReadinessPlan` present, `runtimeDomainLifecyclePlan` present, `runtimeDomainProviderSelection` present, `runtimeDomainExecutionIntent` present (`executionMode: manual`), `runtimeDomainExecutionDryRun` present (`providerId: manual`, `providerAdapterStatus.adapterAvailable: true`, `providerAdapterStatus.contractStatus: pass`, `dryRunStatus: ready_with_warnings`)
+- Roboplast runtime fields: `runtimeDomainReadiness` present, `runtimeDnsReadinessPlan` present, `runtimeDomainLifecyclePlan` present, `runtimeDomainProviderSelection` present, `runtimeDomainExecutionIntent` present (`executionMode: manual`), `runtimeDomainExecutionDryRun` present (`providerId: manual`, `providerAdapterStatus.adapterAvailable: true`, `providerAdapterStatus.contractStatus: pass`, `dryRunStatus: ready_with_warnings`)
 - Route-harness fallback behavior: no `RUNTIME_SMOKE_BASELINE_TARGET_FALLBACK_USED` when real bindings are available
 
 ## Linked Baseline JSON

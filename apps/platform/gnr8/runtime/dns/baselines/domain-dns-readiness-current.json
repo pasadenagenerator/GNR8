@@ -1,6 +1,6 @@
 {
   "kind": "runtime_domain_dns_readiness_baseline_v1",
-  "capturedAt": "2026-05-16T17:05:43.630Z",
+  "capturedAt": "2026-05-16T18:22:56Z",
   "scope": {
     "code": "apps/platform",
     "docs": "docs",
@@ -176,6 +176,12 @@
     "boundary": "dry_run_only_no_external_execution",
     "maver": {
       "runtimeDomainExecutionDryRunPresent": true,
+      "providerId": "manual",
+      "providerAdapterStatus": {
+        "providerId": "manual",
+        "adapterAvailable": true,
+        "contractStatus": "pass"
+      },
       "dryRunStatus": "ready_with_warnings",
       "dryRunActionsPresent": true,
       "skippedActionsPresent": false,
@@ -183,6 +189,12 @@
     },
     "roboplast": {
       "runtimeDomainExecutionDryRunPresent": true,
+      "providerId": "manual",
+      "providerAdapterStatus": {
+        "providerId": "manual",
+        "adapterAvailable": true,
+        "contractStatus": "pass"
+      },
       "dryRunStatus": "ready_with_warnings",
       "dryRunActionsPresent": true,
       "skippedActionsPresent": false,
@@ -220,6 +232,8 @@
     "runtimeDomainProviderSelectionStrategyMode": "present",
     "runtimeDomainExecutionIntentStrategyMode": "present",
     "runtimeDomainExecutionDryRunStrategyMode": "present",
+    "runtimeDomainExecutionDryRunProviderAdapterStatusMaver": "manual_available_pass",
+    "runtimeDomainExecutionDryRunProviderAdapterStatusRoboplast": "manual_available_pass",
     "providerAdapterContractHarnessTests": "PASS",
     "previewSmokeValidatorTests": "PASS",
     "domainExecutionDryRunTests": "PASS",
@@ -250,6 +264,12 @@
       "runtimeDomainExecutionIntentPresent": true,
       "runtimeDomainExecutionIntentMode": "manual",
       "runtimeDomainExecutionDryRunPresent": true,
+      "runtimeDomainExecutionDryRunProviderId": "manual",
+      "runtimeDomainExecutionDryRunProviderAdapterStatus": {
+        "providerId": "manual",
+        "adapterAvailable": true,
+        "contractStatus": "pass"
+      },
       "runtimeDomainExecutionDryRunStatus": "ready_with_warnings",
       "pass": true
     },
@@ -265,6 +285,12 @@
       "runtimeDomainExecutionIntentPresent": true,
       "runtimeDomainExecutionIntentMode": "manual",
       "runtimeDomainExecutionDryRunPresent": true,
+      "runtimeDomainExecutionDryRunProviderId": "manual",
+      "runtimeDomainExecutionDryRunProviderAdapterStatus": {
+        "providerId": "manual",
+        "adapterAvailable": true,
+        "contractStatus": "pass"
+      },
       "runtimeDomainExecutionDryRunStatus": "ready_with_warnings",
       "pass": true
     },
