@@ -90,6 +90,31 @@ Freeze the deterministic baseline for runtime identity, runtime/domain readiness
   - readiness validation remains no-network and no-live-execution
   - sandbox readiness is required before any future live-provider path
 
+### 6c) Provider credentials boundary baseline
+
+- Source: `apps/platform/gnr8/runtime/dns/provider-credentials-boundary.ts`
+- Credentials boundary environments:
+  - `contract`
+  - `sandbox`
+  - `live`
+- Safety statuses:
+  - `safe`
+  - `warning`
+  - `blocked`
+- Manual provider boundary:
+  - no credentials are required in this phase
+  - `contract` environment remains `safe`
+- Non-manual provider boundary:
+  - `contract`: `safe` without credentials
+  - `sandbox`: required credential names are enforced, missing names are reported; credential values are not required
+  - `live`: blocked in this phase even if credential names are present
+- Secret boundary:
+  - secret-like credential values are forbidden and produce blocked status
+  - boundary validates names/shape only; no secret values are persisted
+- Control-plane boundary:
+  - no secret storage
+  - no external API/DNS/registrar calls during credential-boundary evaluation
+
 ### 7) Smoke integration fields
 
 - Source: `apps/platform/gnr8/runtime/preview-smoke/preview-smoke-validator.ts`
@@ -195,6 +220,8 @@ Freeze the deterministic baseline for runtime identity, runtime/domain readiness
 - No smoke pass/fail impact yet.
 - Execution intent only: no external execution of DNS/provider actions yet.
 - Dry-run only: no external execution of DNS/provider actions.
+- No secret-like credential values accepted in boundary inputs.
+- No secret storage in control-plane evidence path.
 
 ## Validation Summary
 
@@ -210,6 +237,7 @@ Freeze the deterministic baseline for runtime identity, runtime/domain readiness
 - Runtime domain execution intent present in strategy mode: **present**
 - Runtime domain execution dry-run present in strategy mode: **present**
 - Provider adapter contract harness status: **PASS**
+- Provider credentials boundary tests: **PASS**
 - Fallback diagnostic used with real bindings: **absent**
 - Preview-smoke-validator tests: **PASS**
 - Domain execution dry-run tests: **PASS**
@@ -217,6 +245,7 @@ Freeze the deterministic baseline for runtime identity, runtime/domain readiness
 - Provider selection tests: **PASS**
 - DNS/readiness/lifecycle/resolution/store tests: **PASS**
 - Preview route/assets/unified preview tests: **PASS**
+- Full deterministic stack: **PASS**
 - Route-harness smoke (`.env.production` + explicit strategy flags): **PASS**
 - Platform build: **PASS**
 - Worker build: **PASS**
@@ -232,7 +261,7 @@ cd apps/platform && set -a; source .env.production; set +a; NODE_OPTIONS='--cond
 Result:
 
 - `kind`: `preview_smoke_summary_v1`
-- `generatedAt`: `2026-05-16T19:29:38.847Z` (latest run window)
+- `generatedAt`: `2026-05-16T20:08:54.986Z` (latest run window)
 - `executionMode`: `route_harness`
 - `pass`: `true`
 - Maver: `site_7c77126de646f746b3bd` / `88253466-783e-4484-8b68-df6c83b8a11c` / preview `200` / pass `true`

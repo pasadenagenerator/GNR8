@@ -1,6 +1,6 @@
 {
   "kind": "runtime_domain_dns_readiness_baseline_v1",
-  "capturedAt": "2026-05-16T19:29:38.847Z",
+  "capturedAt": "2026-05-16T20:08:54.986Z",
   "scope": {
     "code": "apps/platform",
     "docs": "docs",
@@ -143,6 +143,55 @@
       "noLiveExecution": true
     }
   },
+  "providerCredentialsBoundary": {
+    "module": "gnr8/runtime/dns/provider-credentials-boundary.ts",
+    "environments": [
+      "contract",
+      "sandbox",
+      "live"
+    ],
+    "safetyStatuses": [
+      "safe",
+      "warning",
+      "blocked"
+    ],
+    "manualProvider": {
+      "providerId": "manual",
+      "contract": {
+        "safetyStatus": "safe",
+        "requiredCredentials": [],
+        "missingCredentials": []
+      },
+      "credentialsRequiredInCurrentPhase": false
+    },
+    "nonManualProviders": {
+      "contract": {
+        "safetyStatus": "safe",
+        "requiredCredentials": [],
+        "missingCredentials": [],
+        "credentialValuesRequired": false
+      },
+      "sandbox": {
+        "safetyStatus": "blocked",
+        "credentialNamesRequired": true,
+        "missingCredentialNamesReported": true,
+        "credentialValuesRequired": false
+      },
+      "live": {
+        "safetyStatus": "blocked",
+        "blockedInCurrentPhase": true
+      }
+    },
+    "forbiddenBoundary": {
+      "forbiddenSecretLikeValues": true,
+      "forbiddenBlockerCodePrefix": "forbidden_secret_like_values_passed:"
+    },
+    "controlPlaneBoundary": {
+      "noSecretStorage": true,
+      "noExternalApiCalls": true,
+      "noExternalDnsOrRegistrarCalls": true
+    }
+  },
   "smokeIntegrationFields": {
     "source": "gnr8/runtime/preview-smoke/preview-smoke-validator.ts",
     "fields": [
@@ -268,7 +317,10 @@
     "noSmokePassFailImpactYet": true,
     "executionIntentOnlyNoExternalExecutionYet": true,
     "dryRunOnlyNoExternalExecutionYet": true,
-    "noLiveProviderExecutionEnabled": true
+    "noLiveProviderExecutionEnabled": true,
+    "forbiddenSecretLikeValuesBoundary": true,
+    "noSecretStorageInControlPlaneBoundary": true,
+    "providerCredentialsBoundaryNoExternalApiCalls": true
   },
   "validationSummary": {
     "maverSmoke": "PASS",
@@ -285,6 +337,7 @@
     "runtimeDomainExecutionDryRunProviderAdapterStatusMaver": "manual_available_pass",
     "runtimeDomainExecutionDryRunProviderAdapterStatusRoboplast": "manual_available_pass",
     "providerAdapterContractHarnessTests": "PASS",
+    "providerCredentialsBoundaryTests": "PASS",
     "providerImplementationReadinessTests": "PASS",
     "providerAdapterRegistryTests": "PASS",
     "previewSmokeValidatorTests": "PASS",
@@ -293,6 +346,7 @@
     "providerSelectionTests": "PASS",
     "dnsReadinessLifecycleResolutionStoreTests": "PASS",
     "previewRouteAssetsUnifiedPreviewTests": "PASS",
+    "fullDeterministicStack": "PASS",
     "routeHarnessSmokeWithEnvProductionAndExplicitStrategies": "PASS",
     "platformBuild": "PASS",
     "workerBuild": "PASS",
@@ -301,7 +355,7 @@
   "routeHarnessSmoke": {
     "attempted": true,
     "executionMode": "route_harness",
-    "generatedAt": "2026-05-16T19:29:38.847Z",
+    "generatedAt": "2026-05-16T20:08:54.986Z",
     "command": "--execution-mode=route_harness --maver-strategy=active --roboplast-strategy=active",
     "overallPass": true,
     "maver": {
