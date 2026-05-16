@@ -1,6 +1,6 @@
 # GNR8 Runtime/Domain/DNS Readiness Baseline - 2026-05
 
-Date: 2026-05-14  
+Date: 2026-05-16  
 Scope: `apps/platform` + `docs` evidence only. No runtime behavior mutation.
 
 ## Purpose
@@ -53,6 +53,19 @@ Freeze the deterministic baseline for runtime identity, runtime/domain readiness
 - Planning operates in strategy-only mode from readiness reports.
 - Manual provider emits manual step guidance when records are planned.
 - Supported plan intents include internal preview host, custom apex/www, and verification TXT.
+
+### 6a) Provider adapter contract harness
+
+- Source: `apps/platform/gnr8/runtime/dns/provider-adapter-contract-test.ts`
+- Harness validates adapter contract behavior deterministically against fixture input.
+- Manual adapter fixture behavior baseline:
+  - fixture provider: `manual`
+  - deterministic fixture zone/domain + TXT verification record
+  - repeated invocations produce stable check ordering/correlation behavior
+- Contract status output is explicit: `contractStatus: pass | fail`.
+- No-network-call boundary:
+  - harness enforces adapter contract checks without external DNS/registrar calls
+  - network behavior is treated as disallowed in this baseline harness
 
 ### 7) Smoke integration fields
 
@@ -150,6 +163,7 @@ Freeze the deterministic baseline for runtime identity, runtime/domain readiness
 - Runtime domain provider selection present in strategy mode: **present**
 - Runtime domain execution intent present in strategy mode: **present**
 - Runtime domain execution dry-run present in strategy mode: **present**
+- Provider adapter contract harness status: **PASS**
 - Fallback diagnostic used with real bindings: **absent**
 - Preview-smoke-validator tests: **PASS**
 - Domain execution dry-run tests: **PASS**
@@ -172,7 +186,7 @@ cd apps/platform && set -a; source .env.production; set +a; NODE_OPTIONS='--cond
 Result:
 
 - `kind`: `preview_smoke_summary_v1`
-- `generatedAt`: `2026-05-14T16:22:36.916Z`
+- `generatedAt`: `2026-05-16T17:05:43.630Z`
 - `executionMode`: `route_harness`
 - `pass`: `true`
 - Maver: `site_7c77126de646f746b3bd` / `88253466-783e-4484-8b68-df6c83b8a11c` / preview `200` / pass `true`

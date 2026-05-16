@@ -1,6 +1,6 @@
 {
   "kind": "runtime_domain_dns_readiness_baseline_v1",
-  "capturedAt": "2026-05-14T16:22:36.916Z",
+  "capturedAt": "2026-05-16T17:05:43.630Z",
   "scope": {
     "code": "apps/platform",
     "docs": "docs",
@@ -76,6 +76,22 @@
       "Plan generation is deterministic from domain readiness report + provider id.",
       "Manual provider emits explicit manual steps when records are planned.",
       "Plan supports internal preview, custom apex/www, and verification TXT intents."
+    ]
+  },
+  "providerAdapterContractHarness": {
+    "module": "gnr8/runtime/dns/provider-adapter-contract-test.ts",
+    "manualAdapterFixtureBehavior": {
+      "providerId": "manual",
+      "domain": "contract-example.test",
+      "zoneId": "zone_contract_fixture",
+      "verificationRecordType": "txt"
+    },
+    "contractStatus": "pass",
+    "noNetworkCallBoundary": true,
+    "summary": [
+      "Contract harness validates deterministic adapter behavior and stable check ordering/correlation output.",
+      "Manual adapter fixture path is baseline evidence for contract pass status.",
+      "Harness boundary disallows network calls and external DNS/registrar execution."
     ]
   },
   "smokeIntegrationFields": {
@@ -204,6 +220,7 @@
     "runtimeDomainProviderSelectionStrategyMode": "present",
     "runtimeDomainExecutionIntentStrategyMode": "present",
     "runtimeDomainExecutionDryRunStrategyMode": "present",
+    "providerAdapterContractHarnessTests": "PASS",
     "previewSmokeValidatorTests": "PASS",
     "domainExecutionDryRunTests": "PASS",
     "domainExecutionIntentTests": "PASS",
@@ -218,7 +235,7 @@
   "routeHarnessSmoke": {
     "attempted": true,
     "executionMode": "route_harness",
-    "generatedAt": "2026-05-14T16:22:36.916Z",
+    "generatedAt": "2026-05-16T17:05:43.630Z",
     "command": "--execution-mode=route_harness --maver-strategy=active --roboplast-strategy=active",
     "overallPass": true,
     "maver": {
