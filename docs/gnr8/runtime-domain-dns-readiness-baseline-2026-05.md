@@ -67,6 +67,29 @@ Freeze the deterministic baseline for runtime identity, runtime/domain readiness
   - harness enforces adapter contract checks without external DNS/registrar calls
   - network behavior is treated as disallowed in this baseline harness
 
+### 6b) Provider implementation readiness baseline
+
+- Source: `apps/platform/gnr8/runtime/dns/provider-implementation-readiness.ts`
+- Readiness model baseline:
+  - `readinessStatus: ready_for_mock | ready_for_sandbox | blocked`
+  - checklist keys:
+    - `capability_defined`
+    - `adapter_registered`
+    - `contract_passes`
+    - `credentials_not_required_for_contract`
+    - `sandbox_mode_required_before_live`
+    - `no_live_execution_enabled`
+- Manual provider baseline:
+  - `providerId: manual`
+  - `readinessStatus: ready_for_mock`
+  - all checklist keys satisfied
+- Future provider baseline:
+  - `openprovider`, `realtime_register`, `netim`, `inwx` remain `blocked`
+  - baseline reason: adapters are not registered yet
+- Control-plane boundary:
+  - readiness validation remains no-network and no-live-execution
+  - sandbox readiness is required before any future live-provider path
+
 ### 7) Smoke integration fields
 
 - Source: `apps/platform/gnr8/runtime/preview-smoke/preview-smoke-validator.ts`
@@ -161,6 +184,7 @@ Freeze the deterministic baseline for runtime identity, runtime/domain readiness
 - No-network-call boundary remains explicit:
   - provider adapter contract and dry-run validation do not perform external DNS/registrar calls
   - route-harness remains a local control-plane verification path
+  - no live provider execution is enabled in this baseline
 
 ## Explicit Current Boundaries
 
@@ -208,7 +232,7 @@ cd apps/platform && set -a; source .env.production; set +a; NODE_OPTIONS='--cond
 Result:
 
 - `kind`: `preview_smoke_summary_v1`
-- `generatedAt`: `2026-05-16T18:22:56Z` (latest run window)
+- `generatedAt`: `2026-05-16T19:29:38.847Z` (latest run window)
 - `executionMode`: `route_harness`
 - `pass`: `true`
 - Maver: `site_7c77126de646f746b3bd` / `88253466-783e-4484-8b68-df6c83b8a11c` / preview `200` / pass `true`

@@ -1,6 +1,6 @@
 {
   "kind": "runtime_domain_dns_readiness_baseline_v1",
-  "capturedAt": "2026-05-16T18:22:56Z",
+  "capturedAt": "2026-05-16T19:29:38.847Z",
   "scope": {
     "code": "apps/platform",
     "docs": "docs",
@@ -93,6 +93,55 @@
       "Manual adapter fixture path is baseline evidence for contract pass status.",
       "Harness boundary disallows network calls and external DNS/registrar execution."
     ]
+  },
+  "providerImplementationReadiness": {
+    "module": "gnr8/runtime/dns/provider-implementation-readiness.ts",
+    "statuses": [
+      "ready_for_mock",
+      "ready_for_sandbox",
+      "blocked"
+    ],
+    "checklistKeys": [
+      "capability_defined",
+      "adapter_registered",
+      "contract_passes",
+      "credentials_not_required_for_contract",
+      "sandbox_mode_required_before_live",
+      "no_live_execution_enabled"
+    ],
+    "providers": {
+      "manual": {
+        "readinessStatus": "ready_for_mock",
+        "checklist": {
+          "capability_defined": true,
+          "adapter_registered": true,
+          "contract_passes": true,
+          "credentials_not_required_for_contract": true,
+          "sandbox_mode_required_before_live": true,
+          "no_live_execution_enabled": true
+        }
+      },
+      "openprovider": {
+        "readinessStatus": "blocked",
+        "blockedReason": "adapter_not_registered"
+      },
+      "realtime_register": {
+        "readinessStatus": "blocked",
+        "blockedReason": "adapter_not_registered"
+      },
+      "netim": {
+        "readinessStatus": "blocked",
+        "blockedReason": "adapter_not_registered"
+      },
+      "inwx": {
+        "readinessStatus": "blocked",
+        "blockedReason": "adapter_not_registered"
+      }
+    },
+    "boundaries": {
+      "noNetworkCalls": true,
+      "noLiveExecution": true
+    }
   },
   "smokeIntegrationFields": {
     "source": "gnr8/runtime/preview-smoke/preview-smoke-validator.ts",
@@ -218,7 +267,8 @@
     "noDbSchemaChangesYet": true,
     "noSmokePassFailImpactYet": true,
     "executionIntentOnlyNoExternalExecutionYet": true,
-    "dryRunOnlyNoExternalExecutionYet": true
+    "dryRunOnlyNoExternalExecutionYet": true,
+    "noLiveProviderExecutionEnabled": true
   },
   "validationSummary": {
     "maverSmoke": "PASS",
@@ -235,6 +285,8 @@
     "runtimeDomainExecutionDryRunProviderAdapterStatusMaver": "manual_available_pass",
     "runtimeDomainExecutionDryRunProviderAdapterStatusRoboplast": "manual_available_pass",
     "providerAdapterContractHarnessTests": "PASS",
+    "providerImplementationReadinessTests": "PASS",
+    "providerAdapterRegistryTests": "PASS",
     "previewSmokeValidatorTests": "PASS",
     "domainExecutionDryRunTests": "PASS",
     "domainExecutionIntentTests": "PASS",
@@ -249,7 +301,7 @@
   "routeHarnessSmoke": {
     "attempted": true,
     "executionMode": "route_harness",
-    "generatedAt": "2026-05-16T17:05:43.630Z",
+    "generatedAt": "2026-05-16T19:29:38.847Z",
     "command": "--execution-mode=route_harness --maver-strategy=active --roboplast-strategy=active",
     "overallPass": true,
     "maver": {
