@@ -6,6 +6,7 @@ import {
   type RuntimeDomainExecutionDryRun,
 } from "@/gnr8/runtime/domains/runtime-domain-execution-dry-run";
 import type { RuntimeDomainExecutionIntent } from "@/gnr8/runtime/domains/runtime-domain-execution-intent";
+import type { DnsProviderAdapterContractReport } from "@/gnr8/runtime/dns/provider-adapter-contract-test";
 
 function buildIntent(input?: Partial<RuntimeDomainExecutionIntent>): RuntimeDomainExecutionIntent {
   return {
@@ -41,7 +42,7 @@ test("runtime domain execution dry-run: manual intent maps to manual_instruction
   assert.equal(dryRun.warnings.includes("manual_execution_required"), true);
 });
 
-test("runtime domain execution dry-run: provider future intent maps to provider_api_future and ready status", () => {
+test("runtime domain execution dry-run: provider future intent maps to provider_api_future and blocks when adapter is unavailable", () => {
   const dryRun = createRuntimeDomainExecutionDryRun(
     buildIntent({
       providerId: "inwx",
@@ -52,9 +53,10 @@ test("runtime domain execution dry-run: provider future intent maps to provider_
     }),
   );
 
-  assert.equal(dryRun.dryRunStatus, "ready");
+  assert.equal(dryRun.dryRunStatus, "blocked");
   assert.equal(dryRun.dryRunActions.length, 1);
   assert.equal(dryRun.dryRunActions[0]?.actionMode, "provider_api_future");
+  assert.equal(dryRun.providerAdapterStatus.contractStatus, "unavailable");
 });
 
 test("runtime domain execution dry-run: blocked intent remains blocked", () => {
@@ -125,4 +127,84 @@ test("runtime domain execution dry-run: stable correlation key", () => {
 
   assert.equal(a.correlationKey, b.correlationKey);
   assert.equal(a.correlationKey.length, 64);
+});
+
+test("runtime domain execution dry-run: manual adapter contract pass is reflected and does not block", () => {
+  const report: DnsProviderAdapterContractReport = {
+    providerId: "manual",
+    contractStatus: "pass",
+    checks: [],
+    warnings: [],
+    blockers: [],
+    correlationKey: "contract_manual_pass",
+  };
+  const dryRun = createRuntimeDomainExecutionDryRun({
+    intent: buildIntent({
+      providerId: "manual",
+      executionMode: "manual",
+      manualActions: [{ kind: "manual_instruction", reason: "dns_manual_step", manualStep: "add CNAME" }],
+    }),
+    providerAdapterContractReport: report,
+  });
+
+  assert.equal(dryRun.providerAdapterStatus.providerId, "manual");
+  assert.equal(dryRun.providerAdapterStatus.adapterAvailable, true);
+  assert.equal(dryRun.providerAdapterStatus.contractStatus, "pass");
+  assert.deepEqual(dryRun.providerAdapterStatus.blockers, []);
+  assert.equal(dryRun.dryRunStatus, "ready_with_warnings");
+});
+
+test("runtime domain execution dry-run: unavailable future provider adds warning", () => {
+  const dryRun = createRuntimeDomainExecutionDryRun(
+    buildIntent({
+      providerId: "inwx",
+      executionMode: "manual",
+      manualActions: [{ kind: "manual_instruction", reason: "dns_manual_step", manualStep: "add CNAME" }],
+    }),
+  );
+
+  assert.equal(dryRun.providerAdapterStatus.adapterAvailable, false);
+  assert.equal(dryRun.providerAdapterStatus.contractStatus, "unavailable");
+  assert.equal(dryRun.providerAdapterStatus.warnings.includes("provider_adapter_unavailable:inwx"), true);
+  assert.deepEqual(dryRun.providerAdapterStatus.blockers, []);
+});
+
+test("runtime domain execution dry-run: provider_api_future unavailable adapter blocks dry-run", () => {
+  const dryRun = createRuntimeDomainExecutionDryRun(
+    buildIntent({
+      providerId: "inwx",
+      executionMode: "provider_api_future",
+      executableActions: [
+        { kind: "upsert_dns_record", reason: "dns_planned_record:cname", name: "www", type: "CNAME", value: "target.example.com" },
+      ],
+    }),
+  );
+
+  assert.equal(dryRun.providerAdapterStatus.blockers.includes("provider_adapter_unavailable_for_provider_api_future:inwx"), true);
+  assert.equal(dryRun.dryRunStatus, "blocked");
+});
+
+test("runtime domain execution dry-run: failing contract blocks provider_api_future", () => {
+  const report: DnsProviderAdapterContractReport = {
+    providerId: "inwx",
+    contractStatus: "fail",
+    checks: [],
+    warnings: ["report_warning"],
+    blockers: ["contract_check_failed:required_methods"],
+    correlationKey: "contract_inwx_fail",
+  };
+  const dryRun = createRuntimeDomainExecutionDryRun({
+    intent: buildIntent({
+      providerId: "inwx",
+      executionMode: "provider_api_future",
+      executableActions: [
+        { kind: "upsert_dns_record", reason: "dns_planned_record:cname", name: "www", type: "CNAME", value: "target.example.com" },
+      ],
+    }),
+    providerAdapterContractReport: report,
+  });
+
+  assert.equal(dryRun.providerAdapterStatus.contractStatus, "fail");
+  assert.equal(dryRun.providerAdapterStatus.blockers.includes("provider_adapter_contract_failed_for_provider_api_future:inwx"), true);
+  assert.equal(dryRun.dryRunStatus, "blocked");
 });

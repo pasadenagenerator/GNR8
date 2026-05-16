@@ -3,6 +3,7 @@ import {
   createRuntimeDnsReadinessPlan,
   type RuntimeDnsReadinessPlan,
 } from "@/gnr8/runtime/dns/runtime-dns-readiness-plan";
+import { assertDnsProviderAdapterContract } from "@/gnr8/runtime/dns/provider-adapter-registry";
 import {
   selectRuntimeDomainProvider,
   type RuntimeDomainProviderSelection,
@@ -319,7 +320,12 @@ export async function runPreviewSmokeValidation(
         })
       : undefined;
   const runtimeDomainExecutionDryRun = runtimeDomainExecutionIntent
-    ? createRuntimeDomainExecutionDryRun(runtimeDomainExecutionIntent)
+    ? createRuntimeDomainExecutionDryRun({
+        intent: runtimeDomainExecutionIntent,
+        providerAdapterContractReport: await assertDnsProviderAdapterContract(
+          runtimeDomainProviderSelection?.selectedProviderId ?? runtimeDomainExecutionIntent.providerId,
+        ),
+      })
     : undefined;
 
   return {
