@@ -6,6 +6,7 @@
     "node": ">=22 <23"
   },
   "scripts": {
+    "preinstall": "node scripts/check-node-version.js",
     "check:next-route-exports": "node scripts/check-next-route-exports.mjs"
   },
   "devDependencies": {
