@@ -1,6 +1,6 @@
 {
   "kind": "runtime_domain_dns_readiness_baseline_v1",
-  "capturedAt": "2026-05-17T07:08:55Z",
+  "capturedAt": "2026-05-17T08:30:58Z",
   "scope": {
     "code": "apps/platform",
     "docs": "docs",
@@ -192,6 +192,49 @@
       "noExternalDnsOrRegistrarCalls": true
     }
   },
+  "providerSandboxAdapterDescriptor": {
+    "module": "gnr8/runtime/dns/provider-sandbox-adapters.ts",
+    "modes": [
+      "manual",
+      "mock",
+      "sandbox_disabled",
+      "live_blocked"
+    ],
+    "descriptorFields": [
+      "mode",
+      "adapterAvailable",
+      "sandboxEligible",
+      "liveEligible"
+    ],
+    "manualProviderBaseline": {
+      "providerId": "manual",
+      "mode": "manual",
+      "adapterAvailable": true,
+      "sandboxEligible": false,
+      "liveEligible": false
+    },
+    "futureProviderSandboxDisabledBaseline": {
+      "appliesTo": [
+        "openprovider",
+        "realtime_register",
+        "netim",
+        "inwx"
+      ],
+      "mode": "sandbox_disabled",
+      "adapterAvailable": false,
+      "sandboxEligible": false,
+      "liveEligible": false
+    },
+    "liveBlockedBoundary": {
+      "mode": "live_blocked",
+      "liveEligible": false
+    },
+    "noNetworkNoExternalExecutionBoundary": {
+      "noExternalDnsApiCalls": true,
+      "noExternalProviderExecution": true,
+      "noExternalRegistrarCalls": true
+    }
+  },
   "smokeIntegrationFields": {
     "source": "gnr8/runtime/preview-smoke/preview-smoke-validator.ts",
     "fields": [
@@ -381,6 +424,7 @@
     "runtimeDomainExecutionDryRunProviderAdapterStatusMaver": "manual_available_pass",
     "runtimeDomainExecutionDryRunProviderAdapterStatusRoboplast": "manual_available_pass",
     "providerAdapterContractHarnessTests": "PASS",
+    "providerSandboxAdapterTests": "PASS",
     "providerExecutionGateTests": "PASS",
     "providerCredentialsBoundaryTests": "PASS",
     "providerImplementationReadinessTests": "PASS",
@@ -399,7 +443,7 @@
   "routeHarnessSmoke": {
     "attempted": true,
     "executionMode": "route_harness",
-    "generatedAt": "2026-05-17T07:08:55Z",
+    "generatedAt": "2026-05-17T08:30:58Z",
     "command": "--execution-mode=route_harness --maver-strategy=active --roboplast-strategy=active",
     "overallPass": true,
     "maver": {

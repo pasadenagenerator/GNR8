@@ -115,6 +115,32 @@ Freeze the deterministic baseline for runtime identity, runtime/domain readiness
   - no secret storage
   - no external API/DNS/registrar calls during credential-boundary evaluation
 
+### 6d) Provider sandbox adapter descriptor baseline
+
+- Source: `apps/platform/gnr8/runtime/dns/provider-sandbox-adapters.ts`
+- Descriptor model baseline:
+  - `providerSandboxAdapterDescriptor.mode: manual | mock | sandbox_disabled | live_blocked`
+  - `providerSandboxAdapterDescriptor.adapterAvailable`
+  - `providerSandboxAdapterDescriptor.sandboxEligible`
+  - `providerSandboxAdapterDescriptor.liveEligible`
+- Manual provider descriptor baseline:
+  - `providerId: manual`
+  - `mode: manual`
+  - `adapterAvailable: true`
+  - `sandboxEligible: false`
+  - `liveEligible: false`
+- Future provider sandbox-disabled baseline:
+  - non-manual providers without registered adapters are `mode: sandbox_disabled`
+  - `adapterAvailable: false`
+  - `sandboxEligible: false`
+  - `liveEligible: false`
+- Live blocked boundary:
+  - live-intent requests are represented as `mode: live_blocked`
+  - `liveEligible` remains `false` in this phase for all providers
+- No-network/no-external-execution boundary:
+  - descriptor derivation is control-plane only and deterministic
+  - no external DNS/provider/registrar execution is performed
+
 ### 7) Smoke integration fields
 
 - Source: `apps/platform/gnr8/runtime/preview-smoke/preview-smoke-validator.ts`
@@ -261,6 +287,7 @@ Freeze the deterministic baseline for runtime identity, runtime/domain readiness
 - Runtime domain execution intent present in strategy mode: **present**
 - Runtime domain execution dry-run present in strategy mode: **present**
 - Provider adapter contract harness status: **PASS**
+- Provider sandbox adapter tests: **PASS**
 - Provider execution gate tests: **PASS**
 - Provider credentials boundary tests: **PASS**
 - Provider implementation readiness tests: **PASS**
@@ -287,7 +314,7 @@ cd apps/platform && set -a; source .env.production; set +a; NODE_OPTIONS='--cond
 Result:
 
 - `kind`: `preview_smoke_summary_v1`
-- `generatedAt`: `2026-05-16T20:08:54.986Z` (latest run window)
+- `generatedAt`: `2026-05-17T08:30:58Z` (latest run window)
 - `executionMode`: `route_harness`
 - `pass`: `true`
 - Maver: `site_7c77126de646f746b3bd` / `88253466-783e-4484-8b68-df6c83b8a11c` / preview `200` / pass `true`
