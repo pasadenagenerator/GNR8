@@ -59,6 +59,10 @@ export type PreviewSmokeTarget = {
     siteResolutionBinding?: RuntimeSiteResolutionBinding;
     siteDomainReadinessBinding?: RuntimeSiteDomainReadinessBinding;
   };
+  runtimeDomainProviderSelection?: {
+    preferredProviderId?: "mock_provider" | "openprovider" | "realtime_register" | "netim" | "inwx" | "manual";
+    allowedProviderIds?: readonly ("mock_provider" | "openprovider" | "realtime_register" | "netim" | "inwx" | "manual")[];
+  };
   identitySignals: string[];
   requiredAssets: SmokeAssetExpectation[];
   optionalNoiseAssets?: string[];
@@ -308,7 +312,8 @@ export async function runPreviewSmokeValidation(
       ? selectRuntimeDomainProvider({
           lifecyclePlan: runtimeDomainLifecyclePlan,
           dnsReadinessPlan: runtimeDnsReadinessPlan,
-          preferredProviderId: "manual",
+          preferredProviderId: target.runtimeDomainProviderSelection?.preferredProviderId ?? "manual",
+          allowedProviderIds: target.runtimeDomainProviderSelection?.allowedProviderIds ?? undefined,
         })
       : undefined;
   const runtimeDomainExecutionIntent =

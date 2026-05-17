@@ -2,6 +2,12 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { runPreviewSmokeValidation, type PreviewSmokeTarget } from "@/gnr8/runtime/preview-smoke/preview-smoke-validator";
+import { evaluateProviderCredentialBoundary } from "@/gnr8/runtime/dns/provider-credentials-boundary";
+import { evaluateDnsProviderImplementationReadiness } from "@/gnr8/runtime/dns/provider-implementation-readiness";
+import { evaluateProviderExecutionGate } from "@/gnr8/runtime/dns/provider-execution-gate";
+import { createProviderSandboxAdapterDescriptor } from "@/gnr8/runtime/dns/provider-sandbox-adapters";
+import { assertDnsProviderAdapterContract, getDnsProviderAdapter } from "@/gnr8/runtime/dns/provider-adapter-registry";
+import { DNS_PROVIDER_CAPABILITIES } from "@/gnr8/runtime/dns/dns-provider-types";
 import { GET as previewRouteGet } from "@/app/api/gnr8/runtime/versions/[siteVersionId]/preview/route";
 import { setPreviewRouteDependenciesForTest } from "@/app/api/gnr8/runtime/versions/[siteVersionId]/preview/preview-route-dependencies";
 import { createPreviewAssetsRouteHandlers } from "@/app/api/gnr8/runtime/preview-assets/[siteId]/[siteVersionId]/[...assetPath]/preview-assets-route-handlers";
@@ -358,6 +364,130 @@ test("preview smoke validator: strategy-based active resolution emits determinis
   assert.equal(summary.runtimeDomainExecutionDryRun?.providerAdapterStatus.providerId, "manual");
   assert.equal(summary.runtimeDomainExecutionDryRun?.providerAdapterStatus.adapterAvailable, true);
   assert.equal(summary.runtimeDomainExecutionDryRun?.providerAdapterStatus.contractStatus, "pass");
+});
+
+test("preview smoke validator: mock provider deterministic dry-run path remains non-live", async () => {
+  const summary = await runPreviewSmokeValidation(
+    {
+      fetchPreviewHtml: async ({ siteVersionId }) => ({
+        status: 200,
+        body: `<html><body>maver PREVIEW_BACK_TO_TOP_NATIVE_ONLY_STATUS <a data-req="scrollTop" class="scrollIcon">Top</a><div class="gallery"></div><section data-req="osmap"></section><img src="/api/gnr8/runtime/preview-assets/site_preview_mock/${siteVersionId}/uploads/x.jpg"/></body></html>`,
+        headers: makeHeaders({
+          "x-gnr8-preview-mode": "transformed",
+          "x-gnr8-preview-source": "preview",
+        }),
+      }),
+      fetchPreviewAsset: async () => ({ status: 200, body: "ok" }),
+    },
+    {
+      siteLabel: "Maver",
+      expectedSiteId: "site_preview_mock",
+      resolution: {
+        strategy: "active",
+        binding: {
+          siteId: "site_preview_mock",
+          canonicalSlug: "maver",
+          activeSiteVersionId: "sv_active_mock_1",
+          latestImportedSiteVersionId: "sv_latest_mock_1",
+          publishedSiteVersionId: null,
+          previewSiteVersionId: null,
+        },
+        siteResolutionBinding: {
+          siteId: "site_preview_mock",
+          canonicalSlug: "maver",
+          activeSiteVersionId: "sv_active_mock_1",
+          latestImportedSiteVersionId: "sv_latest_mock_1",
+          publishedSiteVersionId: undefined,
+          previewSiteVersionId: undefined,
+          candidateSiteVersions: [
+            {
+              siteVersionId: "sv_latest_mock_1",
+              versionNo: 1,
+              state: "READY",
+              createdAt: "2026-05-12T10:00:00.000Z",
+              artifactId: "artifact_mock_1",
+            },
+          ],
+        },
+        siteDomainReadinessBinding: {
+          siteId: "site_preview_mock",
+          canonicalSlug: "maver",
+          primaryHost: "source.example.com",
+          internalPreviewHost: "maver.preview.gnr8.test",
+          customDomains: ["maver.example.com"],
+          activeDomainBindingHost: "maver.example.com",
+          domainBindingCandidates: [
+            {
+              host: "maver.preview.gnr8.test",
+              source: "runtime_host_binding",
+              status: "ACTIVE",
+              isInternalHost: true,
+              isActive: true,
+            },
+            {
+              host: "maver.example.com",
+              source: "runtime_domain_binding",
+              status: "active",
+              isInternalHost: false,
+              isActive: true,
+            },
+          ],
+        },
+      },
+      runtimeDomainProviderSelection: {
+        preferredProviderId: "mock_provider",
+        allowedProviderIds: ["mock_provider"],
+      },
+      identitySignals: ["maver", "PREVIEW_BACK_TO_TOP_NATIVE_ONLY_STATUS"],
+      requiredAssets: [{ label: "hero", path: "uploads/x.jpg", required: true }],
+    },
+  );
+
+  assert.equal(summary.runtimeDomainProviderSelection?.selectedProviderId, "mock_provider");
+  assert.equal(summary.runtimeDomainExecutionIntent?.executionMode, "provider_api_future");
+  assert.equal(summary.runtimeDomainExecutionDryRun?.providerAdapterStatus.providerId, "mock_provider");
+  assert.equal(summary.runtimeDomainExecutionDryRun?.providerAdapterStatus.contractStatus, "pass");
+  assert.equal(
+    summary.runtimeDomainExecutionDryRun?.dryRunStatus === "ready" || summary.runtimeDomainExecutionDryRun?.dryRunStatus === "ready_with_warnings",
+    true,
+  );
+
+  const dryRun = summary.runtimeDomainExecutionDryRun;
+  if (!dryRun) {
+    throw new Error("Expected runtimeDomainExecutionDryRun to be defined for mock provider scenario.");
+  }
+
+  const providerId = "mock_provider";
+  const contractReport = await assertDnsProviderAdapterContract(providerId);
+  const providerReadiness = evaluateDnsProviderImplementationReadiness({
+    providerId,
+    capability: DNS_PROVIDER_CAPABILITIES[providerId],
+    adapter: getDnsProviderAdapter(providerId),
+    contractReport,
+  });
+  const credentialBoundary = evaluateProviderCredentialBoundary({
+    providerId,
+    environment: "sandbox",
+    availableCredentialNames: [],
+    credentialValuesByName: {},
+  });
+  const executionGate = evaluateProviderExecutionGate({
+    dryRun,
+    providerReadiness,
+    credentialBoundary,
+    requestedEnvironment: "live",
+  });
+  assert.equal(executionGate.gateStatus, "blocked");
+  assert.equal(executionGate.blockers.includes("live_execution_blocked_in_current_phase"), true);
+
+  const sandboxExecutionGate = evaluateProviderExecutionGate({
+    dryRun,
+    providerReadiness,
+    credentialBoundary,
+    requestedEnvironment: "sandbox",
+  });
+  const descriptor = createProviderSandboxAdapterDescriptor(providerId, providerReadiness, credentialBoundary, sandboxExecutionGate);
+  assert.equal(descriptor.mode === "mock" || descriptor.sandboxEligible, true);
 });
 
 test("preview smoke validator: Maver and Roboplast strategy resolution resolves expected siteVersionId", async () => {
