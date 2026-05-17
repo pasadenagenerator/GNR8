@@ -41,11 +41,14 @@ Freeze the deterministic baseline for runtime identity, runtime/domain readiness
 - Source: `apps/platform/gnr8/runtime/dns/dns-provider-types.ts`
 - Provider IDs baseline:
   - `manual`
+  - `mock_provider`
   - `openprovider`
   - `realtime_register`
   - `netim`
   - `inwx`
-- Provider contract/capability registry is present, deterministic, and currently placeholder-oriented.
+- Provider contract/capability registry is present and deterministic:
+  - active adapters: `manual`, `mock_provider`
+  - placeholders only: `openprovider`, `realtime_register`, `netim`, `inwx`
 
 ### 6) DNS readiness planning
 
@@ -62,6 +65,17 @@ Freeze the deterministic baseline for runtime identity, runtime/domain readiness
   - fixture provider: `manual`
   - deterministic fixture zone/domain + TXT verification record
   - repeated invocations produce stable check ordering/correlation behavior
+- Mock provider adapter behavior baseline:
+  - fixture provider: `mock_provider`
+  - deterministic availability rules:
+    - unavailable: domains ending `.unavailable.test` or containing `taken`
+    - reserved: domains ending `.reserved.test` or starting `reserved.`
+  - deterministic zone ref: `mock_zone_<hash20>`
+  - deterministic record ref: `mock_record_<hash20>`
+  - deterministic verification:
+    - expected value format: `verify_<hash20>`
+    - `verified: true` only when record value equals expected deterministic verification value
+  - delete behavior is deterministic and side-effect free (`deleted: true`)
 - Contract status output is explicit: `contractStatus: pass | fail`.
 - No-network-call boundary:
   - harness enforces adapter contract checks without external DNS/registrar calls
@@ -83,6 +97,10 @@ Freeze the deterministic baseline for runtime identity, runtime/domain readiness
   - `providerId: manual`
   - `readinessStatus: ready_for_mock`
   - all checklist keys satisfied
+- Mock provider baseline:
+  - `providerId: mock_provider`
+  - `readinessStatus: ready_for_sandbox`
+  - checklist keys satisfied for capability/adapter/contract; still bounded by no-live-execution gate
 - Future provider baseline:
   - `openprovider`, `realtime_register`, `netim`, `inwx` remain `blocked`
   - baseline reason: adapters are not registered yet
@@ -128,6 +146,12 @@ Freeze the deterministic baseline for runtime identity, runtime/domain readiness
   - `mode: manual`
   - `adapterAvailable: true`
   - `sandboxEligible: false`
+  - `liveEligible: false`
+- Mock provider descriptor baseline:
+  - `providerId: mock_provider`
+  - `mode: mock`
+  - `adapterAvailable: true`
+  - `sandboxEligible`: environment-dependent and deterministic from readiness + credential boundary + gate
   - `liveEligible: false`
 - Future provider sandbox-disabled baseline:
   - non-manual providers without registered adapters are `mode: sandbox_disabled`
@@ -287,6 +311,7 @@ Freeze the deterministic baseline for runtime identity, runtime/domain readiness
 - Runtime domain execution intent present in strategy mode: **present**
 - Runtime domain execution dry-run present in strategy mode: **present**
 - Provider adapter contract harness status: **PASS**
+- Mock provider adapter tests: **PASS**
 - Provider sandbox adapter tests: **PASS**
 - Provider execution gate tests: **PASS**
 - Provider credentials boundary tests: **PASS**
@@ -314,7 +339,7 @@ cd apps/platform && set -a; source .env.production; set +a; NODE_OPTIONS='--cond
 Result:
 
 - `kind`: `preview_smoke_summary_v1`
-- `generatedAt`: `2026-05-17T08:30:58Z` (latest run window)
+- `generatedAt`: `2026-05-17T09:39:51.470Z` (latest run window)
 - `executionMode`: `route_harness`
 - `pass`: `true`
 - Maver: `site_7c77126de646f746b3bd` / `88253466-783e-4484-8b68-df6c83b8a11c` / preview `200` / pass `true`

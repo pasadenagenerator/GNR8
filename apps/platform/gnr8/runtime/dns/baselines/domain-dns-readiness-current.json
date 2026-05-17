@@ -1,6 +1,6 @@
 {
   "kind": "runtime_domain_dns_readiness_baseline_v1",
-  "capturedAt": "2026-05-17T08:30:58Z",
+  "capturedAt": "2026-05-17T09:39:51.470Z",
   "scope": {
     "code": "apps/platform",
     "docs": "docs",
@@ -58,6 +58,7 @@
     "module": "gnr8/runtime/dns/dns-provider-types.ts",
     "providerIds": [
       "manual",
+      "mock_provider",
       "openprovider",
       "realtime_register",
       "netim",
@@ -65,7 +66,7 @@
     ],
     "contractSummary": [
       "Provider capability registry and adapter contract exist.",
-      "Current provider capability map is placeholder for future adapters.",
+      "Registry includes active manual + mock_provider adapters; future adapters remain placeholders.",
       "Current tests verify deterministic typing/correlation behavior and no concrete network behavior."
     ]
   },
@@ -112,6 +113,17 @@
     "providers": {
       "manual": {
         "readinessStatus": "ready_for_mock",
+        "checklist": {
+          "capability_defined": true,
+          "adapter_registered": true,
+          "contract_passes": true,
+          "credentials_not_required_for_contract": true,
+          "sandbox_mode_required_before_live": true,
+          "no_live_execution_enabled": true
+        }
+      },
+      "mock_provider": {
+        "readinessStatus": "ready_for_sandbox",
         "checklist": {
           "capability_defined": true,
           "adapter_registered": true,
@@ -209,6 +221,13 @@
     "manualProviderBaseline": {
       "providerId": "manual",
       "mode": "manual",
+      "adapterAvailable": true,
+      "sandboxEligible": false,
+      "liveEligible": false
+    },
+    "mockProviderBaseline": {
+      "providerId": "mock_provider",
+      "mode": "mock",
       "adapterAvailable": true,
       "sandboxEligible": false,
       "liveEligible": false
@@ -424,6 +443,7 @@
     "runtimeDomainExecutionDryRunProviderAdapterStatusMaver": "manual_available_pass",
     "runtimeDomainExecutionDryRunProviderAdapterStatusRoboplast": "manual_available_pass",
     "providerAdapterContractHarnessTests": "PASS",
+    "mockProviderAdapterTests": "PASS",
     "providerSandboxAdapterTests": "PASS",
     "providerExecutionGateTests": "PASS",
     "providerCredentialsBoundaryTests": "PASS",
@@ -443,7 +463,7 @@
   "routeHarnessSmoke": {
     "attempted": true,
     "executionMode": "route_harness",
-    "generatedAt": "2026-05-17T08:30:58Z",
+    "generatedAt": "2026-05-17T09:39:51.470Z",
     "command": "--execution-mode=route_harness --maver-strategy=active --roboplast-strategy=active",
     "overallPass": true,
     "maver": {
