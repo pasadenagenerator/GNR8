@@ -16,6 +16,14 @@ test("provider adapter registry: manual adapter available", () => {
   assert.equal(hasDnsProviderAdapter("manual"), true);
 });
 
+test("provider adapter registry: mock adapter available", () => {
+  const adapter = getDnsProviderAdapter("mock_provider");
+
+  assert.ok(adapter);
+  assert.equal(adapter?.providerId, "mock_provider");
+  assert.equal(hasDnsProviderAdapter("mock_provider"), true);
+});
+
 test("provider adapter registry: future providers not available", () => {
   for (const providerId of ["openprovider", "realtime_register", "netim", "inwx"]) {
     assert.equal(getDnsProviderAdapter(providerId), null);
@@ -30,7 +38,7 @@ test("provider adapter registry: unknown provider returns null", () => {
 
 test("provider adapter registry: list ordering stable", () => {
   const providerIds = listDnsProviderAdapters().map((entry) => entry.providerId);
-  assert.deepEqual(providerIds, ["manual", "openprovider", "realtime_register", "netim", "inwx"]);
+  assert.deepEqual(providerIds, ["manual", "mock_provider", "openprovider", "realtime_register", "netim", "inwx"]);
 });
 
 test("provider adapter registry: manual adapter contract passes", async () => {
@@ -42,6 +50,11 @@ test("provider adapter registry: manual adapter contract passes", async () => {
 });
 
 test("provider adapter registry: future provider contract unavailable but non-throwing", async () => {
+  const mockReport = await assertDnsProviderAdapterContract("mock_provider");
+  assert.ok(mockReport);
+  assert.equal(mockReport?.providerId, "mock_provider");
+  assert.equal(mockReport?.contractStatus, "pass");
+
   for (const providerId of ["openprovider", "realtime_register", "netim", "inwx", "unknown_provider"]) {
     const report = await assertDnsProviderAdapterContract(providerId);
     assert.equal(report, null);

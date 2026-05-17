@@ -131,6 +131,7 @@ test("dns provider types: provider capability registry exists for all providers"
   assert.deepEqual(Object.keys(DNS_PROVIDER_CAPABILITIES).sort(), [
     "inwx",
     "manual",
+    "mock_provider",
     "netim",
     "openprovider",
     "realtime_register",

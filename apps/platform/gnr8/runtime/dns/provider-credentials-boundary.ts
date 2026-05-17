@@ -32,6 +32,7 @@ export type ProviderCredentialBoundaryInput = {
 
 const PROVIDER_REQUIREMENT_NAMES: Record<DnsProviderId, readonly string[]> = {
   manual: [],
+  mock_provider: [],
   openprovider: ["OPENPROVIDER_USERNAME", "OPENPROVIDER_PASSWORD"],
   realtime_register: ["REALTIME_REGISTER_USERNAME", "REALTIME_REGISTER_PASSWORD"],
   netim: ["NETIM_USERNAME", "NETIM_PASSWORD"],
@@ -102,8 +103,8 @@ export function evaluateProviderCredentialBoundary(
   const warnings: string[] = [];
   const blockers: string[] = [];
 
-  if (input.providerId === "manual") {
-    // Manual provider remains always safe in this phase.
+  if (input.providerId === "manual" || input.providerId === "mock_provider") {
+    // Manual and mock providers remain always safe in this phase.
   } else if (input.environment === "sandbox") {
     if (missingCredentials.length > 0) {
       warnings.push(`sandbox_required_credentials_missing:${input.providerId}`);

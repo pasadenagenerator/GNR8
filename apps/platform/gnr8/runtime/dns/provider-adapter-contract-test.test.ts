@@ -6,6 +6,7 @@ import {
   createManualDnsProviderAdapterFixture,
   runDnsProviderAdapterContractTest,
 } from "@/gnr8/runtime/dns/provider-adapter-contract-test";
+import { createMockDnsProviderAdapter } from "@/gnr8/runtime/dns/mock-provider-adapter";
 
 test("provider adapter contract: manual adapter passes", async () => {
   const adapter = createManualDnsProviderAdapterFixture();
@@ -41,6 +42,18 @@ test("provider adapter contract: mismatched providerId fails", async () => {
 
   assert.equal(report.contractStatus, "fail");
   assert.ok(report.blockers.includes("contract_check_failed:provider_id_matches_capability"));
+});
+
+test("provider adapter contract: mock provider adapter passes", async () => {
+  const adapter = createMockDnsProviderAdapter();
+  const report = await runDnsProviderAdapterContractTest({
+    adapter,
+    capability: DNS_PROVIDER_CAPABILITIES.mock_provider,
+  });
+
+  assert.equal(report.providerId, "mock_provider");
+  assert.equal(report.contractStatus, "pass");
+  assert.equal(report.blockers.length, 0);
 });
 
 test("provider adapter contract: missing method fails", async () => {

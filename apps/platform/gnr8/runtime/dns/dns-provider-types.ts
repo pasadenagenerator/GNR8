@@ -1,6 +1,7 @@
 import { sha256Hex, stableStringify } from "@/gnr8/runtime/deterministic";
 
 export type DnsProviderId =
+  | "mock_provider"
   | "openprovider"
   | "realtime_register"
   | "netim"
@@ -81,6 +82,14 @@ export interface DnsProviderAdapterContract {
 }
 
 export const DNS_PROVIDER_CAPABILITIES: Record<DnsProviderId, DnsProviderCapability> = {
+  mock_provider: {
+    providerId: "mock_provider",
+    supportsApexAlias: true,
+    supportsFlattenedCname: true,
+    supportsHostRedirect: true,
+    supportsTxtVerification: true,
+    notes: "deterministic mock provider capability map for sandbox execution tests",
+  },
   openprovider: {
     providerId: "openprovider",
     supportsApexAlias: false,

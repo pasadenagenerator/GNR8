@@ -116,6 +116,17 @@ function isDeterministicUnsupportedResultShape(results: Awaited<ReturnType<typeo
   return true;
 }
 
+function isDeterministicResultShape(results: Awaited<ReturnType<typeof invokeOperations>>): boolean {
+  if (typeof results.checkAvailability.available !== "boolean") return false;
+  if (results.checkAvailability.reason != null && typeof results.checkAvailability.reason !== "string") return false;
+  if (typeof results.createZone.zoneReference !== "string" || results.createZone.zoneReference.length === 0) return false;
+  if (typeof results.upsertRecord.recordReference !== "string" || results.upsertRecord.recordReference.length === 0) return false;
+  if (typeof results.deleteRecord.deleted !== "boolean") return false;
+  if (typeof results.verifyRecord.verified !== "boolean") return false;
+  if (results.verifyRecord.observedValue != null && typeof results.verifyRecord.observedValue !== "string") return false;
+  return true;
+}
+
 export async function runDnsProviderAdapterContractTest(input: {
   adapter: DnsProviderAdapterContract;
   capability: DnsProviderCapability;
@@ -168,7 +179,10 @@ export async function runDnsProviderAdapterContractTest(input: {
     const firstRun = await invokeOperations({ adapter: input.adapter, fixture });
     const secondRun = await invokeOperations({ adapter: input.adapter, fixture });
 
-    deterministicUnsupportedPass = isDeterministicUnsupportedResultShape(firstRun);
+    deterministicUnsupportedPass =
+      input.adapter.providerId === "manual"
+        ? isDeterministicUnsupportedResultShape(firstRun)
+        : isDeterministicResultShape(firstRun);
     deterministicShapePass = stableStringify(firstRun) === stableStringify(secondRun);
   } catch (error) {
     noThrowPass = false;

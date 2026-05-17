@@ -78,9 +78,22 @@ test("domain provider selection: manual fallback", () => {
     lifecyclePlan,
     dnsReadinessPlan: dnsPlan,
     preferredProviderId: "openprovider",
+    allowedProviderIds: ["manual"],
   });
   assert.equal(selection.selectedProviderId, "manual");
   assert.equal(selection.selectionStatus, "manual_required");
+});
+
+test("domain provider selection: mock provider can be selected when allowed and preferred", () => {
+  const { dnsPlan, lifecyclePlan } = buildPlans({ customDomains: ["example.com"] });
+  const selection = selectRuntimeDomainProvider({
+    lifecyclePlan,
+    dnsReadinessPlan: dnsPlan,
+    preferredProviderId: "mock_provider",
+    allowedProviderIds: ["mock_provider", "manual"],
+  });
+  assert.equal(selection.selectedProviderId, "mock_provider");
+  assert.equal(selection.selectionStatus, "selected");
 });
 
 test("domain provider selection: blocked lifecycle blocks selection", () => {
