@@ -3,6 +3,9 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
+  "engines": {
+    "node": ">=22 <23"
+  },
   "scripts": {
     "build:rendered-capture-worker": "pnpm exec tsc -p gnr8/rendered-capture-worker-server/tsconfig.build.json && node gnr8/rendered-capture-worker-server/write-dist-package-json.mjs",
     "start:rendered-capture-worker": "node dist-rendered-capture-worker/gnr8/rendered-capture-worker-server/index.js",
