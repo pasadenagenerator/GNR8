@@ -1,6 +1,6 @@
 # GNR8 Runtime/Domain/DNS Readiness Baseline - 2026-05
 
-Date: 2026-05-16  
+Date: 2026-05-17  
 Scope: `apps/platform` + `docs` evidence only. No runtime behavior mutation.
 
 ## Purpose
@@ -209,7 +209,29 @@ Freeze the deterministic baseline for runtime identity, runtime/domain readiness
 - No-network-call boundary remains explicit:
   - provider adapter contract and dry-run validation do not perform external DNS/registrar calls
   - route-harness remains a local control-plane verification path
-  - no live provider execution is enabled in this baseline
+- no live provider execution is enabled in this baseline
+
+### 13b) Provider execution gate baseline
+
+- Source: `apps/platform/gnr8/runtime/dns/provider-execution-gate.ts`
+- Gate model baseline:
+  - `requestedEnvironment: contract | sandbox | live`
+  - `gateStatus: open_for_mock | open_for_sandbox_dry_run | blocked`
+  - `allowedActionKinds`
+  - `blockedActionKinds`
+- Manual contract mock gate baseline:
+  - manual + contract opens gate as `open_for_mock`
+  - allowed action kinds are deterministic manual/dry-run action kinds
+  - blocked action kinds are empty when no pre-blocked actions exist
+- Sandbox dry-run only boundary:
+  - only `ready_for_sandbox` + credential boundary `safe|warning` + dry-run `ready|ready_with_warnings` may open gate as `open_for_sandbox_dry_run`
+  - otherwise gate remains `blocked`
+  - provider future action kinds remain blocked unless sandbox readiness is satisfied
+- Live always blocked boundary:
+  - `requestedEnvironment: live` is always `blocked` in this phase
+- No external execution boundary:
+  - execution-gate evaluation is control-plane only
+  - no external DNS/provider/registrar execution occurs
 
 ## Explicit Current Boundaries
 
@@ -220,6 +242,8 @@ Freeze the deterministic baseline for runtime identity, runtime/domain readiness
 - No smoke pass/fail impact yet.
 - Execution intent only: no external execution of DNS/provider actions yet.
 - Dry-run only: no external execution of DNS/provider actions.
+- Sandbox dry-run only boundary: provider execution gate may open only for sandbox dry-run readiness state.
+- Live always blocked boundary: provider execution gate blocks all live execution paths in current phase.
 - No secret-like credential values accepted in boundary inputs.
 - No secret storage in control-plane evidence path.
 
@@ -237,13 +261,15 @@ Freeze the deterministic baseline for runtime identity, runtime/domain readiness
 - Runtime domain execution intent present in strategy mode: **present**
 - Runtime domain execution dry-run present in strategy mode: **present**
 - Provider adapter contract harness status: **PASS**
+- Provider execution gate tests: **PASS**
 - Provider credentials boundary tests: **PASS**
+- Provider implementation readiness tests: **PASS**
+- Provider adapter registry + contract tests: **PASS**
+- DNS/provider-selection/readiness tests: **PASS**
+- Domain lifecycle/execution-intent/dry-run tests: **PASS**
+- Runtime readiness/resolution/store tests: **PASS**
 - Fallback diagnostic used with real bindings: **absent**
-- Preview-smoke-validator tests: **PASS**
-- Domain execution dry-run tests: **PASS**
-- Domain execution intent tests: **PASS**
-- Provider selection tests: **PASS**
-- DNS/readiness/lifecycle/resolution/store tests: **PASS**
+- Preview-smoke-validator + CLI tests: **PASS**
 - Preview route/assets/unified preview tests: **PASS**
 - Full deterministic stack: **PASS**
 - Route-harness smoke (`.env.production` + explicit strategy flags): **PASS**

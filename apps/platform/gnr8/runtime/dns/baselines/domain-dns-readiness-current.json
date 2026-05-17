@@ -1,6 +1,6 @@
 {
   "kind": "runtime_domain_dns_readiness_baseline_v1",
-  "capturedAt": "2026-05-16T20:08:54.986Z",
+  "capturedAt": "2026-05-17T07:08:55Z",
   "scope": {
     "code": "apps/platform",
     "docs": "docs",
@@ -299,6 +299,48 @@
       "blockedActionsPresent": false
     }
   },
+  "providerExecutionGateBaseline": {
+    "module": "gnr8/runtime/dns/provider-execution-gate.ts",
+    "requestedEnvironments": [
+      "contract",
+      "sandbox",
+      "live"
+    ],
+    "gateStatuses": [
+      "open_for_mock",
+      "open_for_sandbox_dry_run",
+      "blocked"
+    ],
+    "contractMockGate": {
+      "providerId": "manual",
+      "requestedEnvironment": "contract",
+      "gateStatus": "open_for_mock",
+      "allowedActionKinds": [
+        "activate_domain_binding",
+        "manual_instruction",
+        "upsert_dns_record"
+      ],
+      "blockedActionKinds": []
+    },
+    "sandboxDryRunOnlyBoundary": {
+      "requestedEnvironment": "sandbox",
+      "opensOnlyWhen": [
+        "provider_readiness_ready_for_sandbox",
+        "credential_boundary_safe_or_warning",
+        "dry_run_ready_or_ready_with_warnings"
+      ],
+      "otherwiseGateStatus": "blocked"
+    },
+    "liveAlwaysBlockedBoundary": {
+      "requestedEnvironment": "live",
+      "gateStatus": "blocked"
+    },
+    "noExternalExecutionBoundary": {
+      "noExternalDnsApiCalls": true,
+      "noExternalProviderExecution": true,
+      "noExternalRegistrarCalls": true
+    }
+  },
   "diagnosticsBaseline": {
     "RUNTIME_RESOLUTION_BINDING_MISSING": {
       "emittedWhen": "strategy-mode route-harness run cannot load runtime resolution binding",
@@ -317,6 +359,8 @@
     "noSmokePassFailImpactYet": true,
     "executionIntentOnlyNoExternalExecutionYet": true,
     "dryRunOnlyNoExternalExecutionYet": true,
+    "providerExecutionGateSandboxDryRunOnly": true,
+    "providerExecutionGateLiveAlwaysBlocked": true,
     "noLiveProviderExecutionEnabled": true,
     "forbiddenSecretLikeValuesBoundary": true,
     "noSecretStorageInControlPlaneBoundary": true,
@@ -337,14 +381,14 @@
     "runtimeDomainExecutionDryRunProviderAdapterStatusMaver": "manual_available_pass",
     "runtimeDomainExecutionDryRunProviderAdapterStatusRoboplast": "manual_available_pass",
     "providerAdapterContractHarnessTests": "PASS",
+    "providerExecutionGateTests": "PASS",
     "providerCredentialsBoundaryTests": "PASS",
     "providerImplementationReadinessTests": "PASS",
-    "providerAdapterRegistryTests": "PASS",
-    "previewSmokeValidatorTests": "PASS",
-    "domainExecutionDryRunTests": "PASS",
-    "domainExecutionIntentTests": "PASS",
-    "providerSelectionTests": "PASS",
-    "dnsReadinessLifecycleResolutionStoreTests": "PASS",
+    "providerAdapterRegistryAndContractTests": "PASS",
+    "dnsProviderSelectionReadinessTests": "PASS",
+    "domainLifecycleExecutionIntentDryRunTests": "PASS",
+    "runtimeReadinessResolutionStoreTests": "PASS",
+    "previewSmokeValidatorAndCliTests": "PASS",
     "previewRouteAssetsUnifiedPreviewTests": "PASS",
     "fullDeterministicStack": "PASS",
     "routeHarnessSmokeWithEnvProductionAndExplicitStrategies": "PASS",
@@ -355,7 +399,7 @@
   "routeHarnessSmoke": {
     "attempted": true,
     "executionMode": "route_harness",
-    "generatedAt": "2026-05-16T20:08:54.986Z",
+    "generatedAt": "2026-05-17T07:08:55Z",
     "command": "--execution-mode=route_harness --maver-strategy=active --roboplast-strategy=active",
     "overallPass": true,
     "maver": {
