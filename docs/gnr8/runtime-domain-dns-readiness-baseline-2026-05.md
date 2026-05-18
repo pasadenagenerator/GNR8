@@ -345,6 +345,30 @@ Freeze the deterministic baseline for runtime identity, runtime/domain readiness
   - communicator performs deterministic control-plane routing only
   - no external DNS/provider/registrar calls
 
+### 13e) Runtime provider operation orchestrator baseline
+
+- Source: `apps/platform/gnr8/runtime/providers/runtime-provider-operation-orchestrator.ts`
+- Orchestration flow baseline (deterministic control-plane composition):
+  1. agency provider selection
+  2. provider communicator
+  3. execution intent
+  4. execution dry-run
+  5. execution gate
+  6. provider job planning
+  7. operation bundle
+- Path status baseline:
+  - manual path: provider selection `manual` + communicator `manual` + bundle `ready_for_manual`
+  - mock provider path: provider selection `mock_provider` + communicator `resolved` + bundle `ready_for_mock`
+  - unavailable path: communicator `unavailable` + bundle `blocked`
+  - blocked path: communicator `blocked` + bundle `blocked`
+- Deterministic baseline evidence:
+  - repeated equivalent inputs produce stable orchestrator correlation keys and stable operation bundle output.
+- Explicit control-plane boundaries:
+  - no DB writes
+  - no worker execution
+  - no provider execution
+  - no external DNS/registrar calls
+
 ## Explicit Current Boundaries
 
 - No external DNS API calls.
@@ -362,6 +386,11 @@ Freeze the deterministic baseline for runtime identity, runtime/domain readiness
 - No provider job DB persistence yet.
 - No provider job worker execution yet.
 - No external provider calls from provider job planner.
+- Runtime provider operation orchestrator remains pure control-plane composition with:
+  - no DB writes
+  - no worker execution
+  - no provider execution
+  - no external DNS/registrar calls
 
 ## Validation Summary
 
@@ -379,6 +408,7 @@ Freeze the deterministic baseline for runtime identity, runtime/domain readiness
 - Provider adapter contract harness status: **PASS**
 - Provider job planner tests: **PASS**
 - Runtime provider communicator tests: **PASS**
+- Runtime provider operation orchestrator tests: **PASS**
 - Mock provider adapter tests: **PASS**
 - Provider sandbox adapter tests: **PASS**
 - Provider execution gate tests: **PASS**
@@ -388,6 +418,7 @@ Freeze the deterministic baseline for runtime identity, runtime/domain readiness
 - DNS/provider-selection/readiness tests: **PASS**
 - Domain lifecycle/execution-intent/dry-run tests: **PASS**
 - Runtime readiness/resolution/store tests: **PASS**
+- Full provider stack (settings + communicator + intent + dry-run + gate + jobs + bundle + orchestrator): **PASS**
 - Fallback diagnostic used with real bindings: **absent**
 - Preview-smoke-validator + CLI tests: **PASS**
 - Preview route/assets/unified preview tests: **PASS**
@@ -395,6 +426,7 @@ Freeze the deterministic baseline for runtime identity, runtime/domain readiness
 - Route-harness smoke (`.env.production` + explicit strategy flags): **PASS**
 - Platform build: **PASS**
 - Worker build: **PASS**
+- DB-backed repository tests requiring `DATABASE_URL`: **skipped when `DATABASE_URL` missing** (expected baseline guard)
 
 ## Route-Harness Smoke Evidence
 
@@ -407,7 +439,7 @@ cd apps/platform && set -a; source .env.production; set +a; NODE_OPTIONS='--cond
 Result:
 
 - `kind`: `preview_smoke_summary_v1`
-- `generatedAt`: `2026-05-18T15:31:54.819Z` (latest run window)
+- `generatedAt`: `2026-05-18T17:13:17.849Z` (latest run window)
 - `executionMode`: `route_harness`
 - `pass`: `true`
 - Maver: `site_7c77126de646f746b3bd` / `88253466-783e-4484-8b68-df6c83b8a11c` / preview `200` / pass `true`

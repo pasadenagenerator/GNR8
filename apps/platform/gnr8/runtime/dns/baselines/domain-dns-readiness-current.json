@@ -1,6 +1,6 @@
 {
   "kind": "runtime_domain_dns_readiness_baseline_v1",
-  "capturedAt": "2026-05-18T15:31:54.819Z",
+  "capturedAt": "2026-05-18T17:13:17.849Z",
   "scope": {
     "code": "apps/platform",
     "docs": "docs",
@@ -459,6 +459,43 @@
       "noExternalRegistrarCalls": true
     }
   },
+  "runtimeProviderOperationOrchestratorBaseline": {
+    "module": "gnr8/runtime/providers/runtime-provider-operation-orchestrator.ts",
+    "flow": [
+      "agency_provider_selection",
+      "provider_communicator",
+      "execution_intent",
+      "execution_dry_run",
+      "execution_gate",
+      "provider_job_planning",
+      "operation_bundle"
+    ],
+    "pathStatuses": {
+      "manualPath": {
+        "communicatorRouteStatus": "manual",
+        "bundleStatus": "ready_for_manual"
+      },
+      "mockProviderPath": {
+        "communicatorRouteStatus": "resolved",
+        "bundleStatus": "ready_for_mock"
+      },
+      "unavailablePath": {
+        "communicatorRouteStatus": "unavailable",
+        "bundleStatus": "blocked"
+      },
+      "blockedPath": {
+        "communicatorRouteStatus": "blocked",
+        "bundleStatus": "blocked"
+      }
+    },
+    "deterministicOutputAndStableKey": true,
+    "boundaries": {
+      "noDbWrites": true,
+      "noWorkerExecution": true,
+      "noProviderExecution": true,
+      "noExternalDnsOrRegistrarCalls": true
+    }
+  },
   "diagnosticsBaseline": {
     "RUNTIME_RESOLUTION_BINDING_MISSING": {
       "emittedWhen": "strategy-mode route-harness run cannot load runtime resolution binding",
@@ -486,7 +523,11 @@
     "providerJobsPlannedOnly": true,
     "providerJobsNoDbPersistenceYet": true,
     "providerJobsNoWorkerExecutionYet": true,
-    "providerJobsNoExternalCallsYet": true
+    "providerJobsNoExternalCallsYet": true,
+    "runtimeProviderOperationOrchestratorNoDbWrites": true,
+    "runtimeProviderOperationOrchestratorNoWorkerExecution": true,
+    "runtimeProviderOperationOrchestratorNoProviderExecution": true,
+    "runtimeProviderOperationOrchestratorNoExternalDnsOrRegistrarCalls": true
   },
   "validationSummary": {
     "maverSmoke": "PASS",
@@ -503,6 +544,7 @@
     "runtimeDomainExecutionDryRunProviderAdapterStatusMaver": "manual_available_pass",
     "runtimeDomainExecutionDryRunProviderAdapterStatusRoboplast": "manual_available_pass",
     "providerAdapterContractHarnessTests": "PASS",
+    "runtimeProviderOperationOrchestratorTests": "PASS",
     "runtimeProviderCommunicatorTests": "PASS",
     "mockProviderAdapterTests": "PASS",
     "providerSandboxAdapterTests": "PASS",
@@ -513,6 +555,7 @@
     "dnsProviderSelectionReadinessTests": "PASS",
     "domainLifecycleExecutionIntentDryRunTests": "PASS",
     "runtimeReadinessResolutionStoreTests": "PASS",
+    "fullProviderStack": "PASS",
     "previewSmokeValidatorAndCliTests": "PASS",
     "previewRouteAssetsUnifiedPreviewTests": "PASS",
     "fullDeterministicStack": "PASS",
@@ -520,12 +563,13 @@
     "platformBuild": "PASS",
     "workerBuild": "PASS",
     "fallbackDiagnosticUsedWithRealBindings": "absent",
-    "providerJobPlannerTests": "PASS"
+    "providerJobPlannerTests": "PASS",
+    "repositoryDbTestsSkippedWhenDatabaseUrlMissing": "PASS_EXPECTED_SKIP"
   },
   "routeHarnessSmoke": {
     "attempted": true,
     "executionMode": "route_harness",
-    "generatedAt": "2026-05-18T15:31:54.819Z",
+    "generatedAt": "2026-05-18T17:13:17.849Z",
     "command": "--execution-mode=route_harness --maver-strategy=active --roboplast-strategy=active",
     "overallPass": true,
     "maver": {
