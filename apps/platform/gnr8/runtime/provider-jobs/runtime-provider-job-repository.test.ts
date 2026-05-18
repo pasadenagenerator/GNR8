@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import test from "node:test";
+import test, { type TestContext } from "node:test";
 
 import {
   createRuntimeProviderJobs,
@@ -11,6 +11,9 @@ import {
 } from "@/gnr8/runtime/provider-jobs/runtime-provider-job-repository";
 import type { RuntimeProviderJob } from "@/gnr8/runtime/provider-jobs/runtime-provider-job-types";
 import { getSuperadminPool } from "@/src/superadmin/db";
+
+const MISSING_TABLE_MESSAGE = `relation "public.gnr8_runtime_provider_jobs" does not exist`;
+const MISSING_DB_CONFIG_MESSAGE = `Invalid database configuration: {"sourceEnvVar":"DATABASE_URL","protocol":null,"hostname":null,"reasonCode":"MISSING"}`;
 
 function buildJob(input?: Partial<RuntimeProviderJob>): RuntimeProviderJob {
   const nonce = randomUUID();
@@ -38,7 +41,42 @@ async function cleanup(ids: string[]): Promise<void> {
   await getSuperadminPool().query(`delete from public.gnr8_runtime_provider_jobs where id = any($1::text[])`, [ids]);
 }
 
-test("runtime provider job repository: create/read roundtrip by id and correlation key", async () => {
+function getMissingTableSkipReason(error: unknown): string | null {
+  if (!(error instanceof Error)) return null;
+  if (error.message.includes(MISSING_DB_CONFIG_MESSAGE)) {
+    return "Skipping DB-backed runtime provider job repository tests: DATABASE_URL is not configured for local integration runs.";
+  }
+  if (!error.message.includes(MISSING_TABLE_MESSAGE)) return null;
+  return `Skipping DB-backed runtime provider job repository tests: missing migration table public.gnr8_runtime_provider_jobs (${MISSING_TABLE_MESSAGE}).`;
+}
+
+let dbSkipReasonPromise: Promise<string | null> | null = null;
+
+async function getRepositoryDbSkipReason(): Promise<string | null> {
+  if (!dbSkipReasonPromise) {
+    dbSkipReasonPromise = (async () => {
+      try {
+        await getSuperadminPool().query(`select 1 from public.gnr8_runtime_provider_jobs limit 1`);
+        return null;
+      } catch (error) {
+        const skipReason = getMissingTableSkipReason(error);
+        if (skipReason) return skipReason;
+        throw error;
+      }
+    })();
+  }
+  return dbSkipReasonPromise;
+}
+
+async function skipIfRepositoryTableMissing(t: TestContext): Promise<boolean> {
+  const skipReason = await getRepositoryDbSkipReason();
+  if (!skipReason) return false;
+  t.skip(skipReason);
+  return true;
+}
+
+test("runtime provider job repository: create/read roundtrip by id and correlation key", async (t) => {
+  if (await skipIfRepositoryTableMissing(t)) return;
   const job = buildJob();
   try {
     const inserted = await createRuntimeProviderJobs([job]);
@@ -55,7 +93,8 @@ test("runtime provider job repository: create/read roundtrip by id and correlati
   }
 });
 
-test("runtime provider job repository: duplicate correlation insert is ignored", async () => {
+test("runtime provider job repository: duplicate correlation insert is ignored", async (t) => {
+  if (await skipIfRepositoryTableMissing(t)) return;
   const sharedCorrelation = `corr_duplicate_${randomUUID()}`;
   const first = buildJob({ id: `provider_job_first_${randomUUID()}`, correlationKey: sharedCorrelation });
   const second = buildJob({ id: `provider_job_second_${randomUUID()}`, correlationKey: sharedCorrelation });
@@ -73,7 +112,8 @@ test("runtime provider job repository: duplicate correlation insert is ignored",
   }
 });
 
-test("runtime provider job repository: deterministic insert ordering", async () => {
+test("runtime provider job repository: deterministic insert ordering", async (t) => {
+  if (await skipIfRepositoryTableMissing(t)) return;
   const siteId = `site_order_${randomUUID()}`;
   const a = buildJob({
     id: `provider_job_a_${randomUUID()}`,
@@ -112,7 +152,8 @@ test("runtime provider job repository: deterministic insert ordering", async () 
   }
 });
 
-test("runtime provider job repository: valid status transitions are applied", async () => {
+test("runtime provider job repository: valid status transitions are applied", async (t) => {
+  if (await skipIfRepositoryTableMissing(t)) return;
   const job = buildJob();
   try {
     await createRuntimeProviderJobs([job]);
@@ -143,7 +184,8 @@ test("runtime provider job repository: valid status transitions are applied", as
   }
 });
 
-test("runtime provider job repository: invalid status transitions are rejected with unchanged object", async () => {
+test("runtime provider job repository: invalid status transitions are rejected with unchanged object", async (t) => {
+  if (await skipIfRepositoryTableMissing(t)) return;
   const job = buildJob();
   try {
     await createRuntimeProviderJobs([job]);
@@ -168,7 +210,8 @@ test("runtime provider job repository: invalid status transitions are rejected w
   }
 });
 
-test("runtime provider job repository: get by site applies stable ordering (created_at asc, id asc)", async () => {
+test("runtime provider job repository: get by site applies stable ordering (created_at asc, id asc)", async (t) => {
+  if (await skipIfRepositoryTableMissing(t)) return;
   const siteId = `site_sort_${randomUUID()}`;
   const secondCreated = "2026-05-18T12:01:00.000Z";
   const firstCreated = "2026-05-18T12:00:00.000Z";
@@ -207,7 +250,8 @@ test("runtime provider job repository: get by site applies stable ordering (crea
   }
 });
 
-test("runtime provider job repository: no execution side effects, persistence-only updates", async () => {
+test("runtime provider job repository: no execution side effects, persistence-only updates", async (t) => {
+  if (await skipIfRepositoryTableMissing(t)) return;
   const job = buildJob({
     intentPayload: { operation: "manual_instruction", note: "no-op side effect check" },
     dryRunPayload: { readiness: "blocked", warnings: ["manual_execution_required"] },

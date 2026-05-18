@@ -6,26 +6,14 @@ import {
   mapRuntimeProviderJobRow,
   type RuntimeProviderJobRow,
 } from "@/gnr8/runtime/provider-jobs/runtime-provider-job-store";
+import {
+  applyRuntimeProviderJobStatusTransition,
+  type RuntimeProviderJobTransitionReport,
+} from "@/gnr8/runtime/provider-jobs/runtime-provider-job-transitions";
 import type { RuntimeProviderJob, RuntimeProviderJobStatus } from "@/gnr8/runtime/provider-jobs/runtime-provider-job-types";
 import { getSuperadminPool } from "@/src/superadmin/db";
 
 type QueryableClient = Pick<PoolClient, "query">;
-
-const VALID_STATUS_TRANSITIONS = new Set<string>([
-  "queued->running",
-  "running->completed",
-  "running->failed",
-  "queued->blocked",
-]);
-
-export type RuntimeProviderJobTransitionReport = {
-  status: "applied" | "rejected";
-  previousStatus: RuntimeProviderJobStatus;
-  requestedStatus: RuntimeProviderJobStatus;
-  warnings: string[];
-  blockers: string[];
-  correlationKey: string;
-};
 
 export type UpdateRuntimeProviderJobStatusInput = {
   id: string;
@@ -37,10 +25,6 @@ export type UpdateRuntimeProviderJobStatusResult = {
   job: RuntimeProviderJob;
   report: RuntimeProviderJobTransitionReport;
 };
-
-function isAllowedTransition(previousStatus: RuntimeProviderJobStatus, requestedStatus: RuntimeProviderJobStatus): boolean {
-  return VALID_STATUS_TRANSITIONS.has(`${previousStatus}->${requestedStatus}`);
-}
 
 async function getRuntimeProviderJobByIdWithClient(client: QueryableClient, id: string): Promise<RuntimeProviderJob | null> {
   const res = await client.query<RuntimeProviderJobRow>(
@@ -248,18 +232,15 @@ export async function updateRuntimeProviderJobStatus(input: UpdateRuntimeProvide
   const current = await getRuntimeProviderJobByIdWithClient(pool, input.id);
   if (!current) return null;
 
-  const allowed = isAllowedTransition(current.status, input.status);
-  if (!allowed) {
+  const transition = applyRuntimeProviderJobStatusTransition({
+    job: current,
+    requestedStatus: input.status,
+    updatedAt: input.updatedAt,
+  });
+  if (transition.report.status === "rejected") {
     return {
-      job: current,
-      report: {
-        status: "rejected",
-        previousStatus: current.status,
-        requestedStatus: input.status,
-        warnings: [`invalid_status_transition:${current.status}->${input.status}`],
-        blockers: [`status_transition_not_allowed:${current.status}->${input.status}`],
-        correlationKey: current.correlationKey,
-      },
+      job: transition.job,
+      report: transition.report,
     };
   }
 
@@ -293,13 +274,6 @@ export async function updateRuntimeProviderJobStatus(input: UpdateRuntimeProvide
   const updated = mapRuntimeProviderJobRow(updatedRow);
   return {
     job: updated,
-    report: {
-      status: "applied",
-      previousStatus: current.status,
-      requestedStatus: input.status,
-      warnings: [],
-      blockers: [],
-      correlationKey: current.correlationKey,
-    },
+    report: transition.report,
   };
 }
