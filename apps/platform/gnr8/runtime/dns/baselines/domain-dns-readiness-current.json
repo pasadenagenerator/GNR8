@@ -1,6 +1,6 @@
 {
   "kind": "runtime_domain_dns_readiness_baseline_v1",
-  "capturedAt": "2026-05-18T09:20:16.864Z",
+  "capturedAt": "2026-05-18T15:31:54.819Z",
   "scope": {
     "code": "apps/platform",
     "docs": "docs",
@@ -403,6 +403,62 @@
       "noExternalRegistrarCalls": true
     }
   },
+  "runtimeProviderCommunicatorBaseline": {
+    "module": "gnr8/runtime/providers/runtime-provider-communicator.ts",
+    "requestModel": [
+      "providerId",
+      "environment",
+      "operationKind",
+      "capability"
+    ],
+    "resultModel": [
+      "providerId",
+      "environment",
+      "capability",
+      "operationKind",
+      "adapterAvailable",
+      "routeStatus",
+      "warnings",
+      "blockers",
+      "correlationKey"
+    ],
+    "routeStatuses": [
+      "resolved",
+      "manual",
+      "unavailable",
+      "blocked"
+    ],
+    "manualRouteBaseline": {
+      "providerId": "manual",
+      "routeStatus": "manual"
+    },
+    "mockProviderResolvedBaseline": {
+      "providerId": "mock_provider",
+      "adapterAvailable": true,
+      "environment": "sandbox",
+      "routeStatus": "resolved"
+    },
+    "futureProvidersUnavailableBaseline": {
+      "providers": [
+        "openprovider",
+        "realtime_register",
+        "netim",
+        "inwx"
+      ],
+      "adapterAvailable": false,
+      "routeStatus": "unavailable"
+    },
+    "liveBlockedBaseline": {
+      "environment": "live",
+      "adapterAvailable": true,
+      "routeStatus": "blocked"
+    },
+    "noExternalCallBoundary": {
+      "noExternalDnsApiCalls": true,
+      "noExternalProviderExecution": true,
+      "noExternalRegistrarCalls": true
+    }
+  },
   "diagnosticsBaseline": {
     "RUNTIME_RESOLUTION_BINDING_MISSING": {
       "emittedWhen": "strategy-mode route-harness run cannot load runtime resolution binding",
@@ -447,6 +503,7 @@
     "runtimeDomainExecutionDryRunProviderAdapterStatusMaver": "manual_available_pass",
     "runtimeDomainExecutionDryRunProviderAdapterStatusRoboplast": "manual_available_pass",
     "providerAdapterContractHarnessTests": "PASS",
+    "runtimeProviderCommunicatorTests": "PASS",
     "mockProviderAdapterTests": "PASS",
     "providerSandboxAdapterTests": "PASS",
     "providerExecutionGateTests": "PASS",
@@ -468,7 +525,7 @@
   "routeHarnessSmoke": {
     "attempted": true,
     "executionMode": "route_harness",
-    "generatedAt": "2026-05-18T09:20:16.864Z",
+    "generatedAt": "2026-05-18T15:31:54.819Z",
     "command": "--execution-mode=route_harness --maver-strategy=active --roboplast-strategy=active",
     "overallPass": true,
     "maver": {

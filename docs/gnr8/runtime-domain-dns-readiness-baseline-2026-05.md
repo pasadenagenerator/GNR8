@@ -1,6 +1,6 @@
 # GNR8 Runtime/Domain/DNS Readiness Baseline - 2026-05
 
-Date: 2026-05-17  
+Date: 2026-05-18  
 Scope: `apps/platform` + `docs` evidence only. No runtime behavior mutation.
 
 ## Purpose
@@ -311,7 +311,39 @@ Freeze the deterministic baseline for runtime identity, runtime/domain readiness
   - provider jobs are planned only
   - no DB persistence yet
   - no worker execution yet
-  - no external provider calls yet
+- no external provider calls yet
+
+### 13d) Runtime provider communicator baseline
+
+- Source: `apps/platform/gnr8/runtime/providers/runtime-provider-communicator.ts`
+- Request model baseline:
+  - `providerId`
+  - `environment`
+  - `operationKind`
+  - `capability`
+- Result model baseline:
+  - `providerId`
+  - `environment`
+  - `capability`
+  - `operationKind`
+  - `adapterAvailable`
+  - `routeStatus`
+  - `warnings`
+  - `blockers`
+  - `correlationKey`
+- Route status baseline:
+  - `resolved`: mock provider + adapter available + non-live environment
+  - `manual`: manual provider selected
+  - `unavailable`: adapter missing
+  - `blocked`: live environment execution
+- Route-status fixture evidence:
+  - manual route baseline: `providerId: manual` -> `routeStatus: manual`
+  - mock provider resolved baseline: `providerId: mock_provider` + adapter available -> `routeStatus: resolved`
+  - future providers unavailable baseline: `openprovider | realtime_register | netim | inwx` (without adapters) -> `routeStatus: unavailable`
+  - live blocked baseline: any adapter-available non-manual provider in `environment: live` -> `routeStatus: blocked`
+- No external call boundary:
+  - communicator performs deterministic control-plane routing only
+  - no external DNS/provider/registrar calls
 
 ## Explicit Current Boundaries
 
@@ -346,6 +378,7 @@ Freeze the deterministic baseline for runtime identity, runtime/domain readiness
 - Runtime domain execution dry-run present in strategy mode: **present**
 - Provider adapter contract harness status: **PASS**
 - Provider job planner tests: **PASS**
+- Runtime provider communicator tests: **PASS**
 - Mock provider adapter tests: **PASS**
 - Provider sandbox adapter tests: **PASS**
 - Provider execution gate tests: **PASS**
@@ -374,7 +407,7 @@ cd apps/platform && set -a; source .env.production; set +a; NODE_OPTIONS='--cond
 Result:
 
 - `kind`: `preview_smoke_summary_v1`
-- `generatedAt`: `2026-05-18T09:20:16.864Z` (latest run window)
+- `generatedAt`: `2026-05-18T15:31:54.819Z` (latest run window)
 - `executionMode`: `route_harness`
 - `pass`: `true`
 - Maver: `site_7c77126de646f746b3bd` / `88253466-783e-4484-8b68-df6c83b8a11c` / preview `200` / pass `true`
