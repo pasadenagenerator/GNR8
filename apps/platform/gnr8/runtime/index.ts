@@ -18,3 +18,4 @@ export * from "@/gnr8/runtime/runtime-usage-flusher";
 export * from "@/gnr8/runtime/dns/dns-provider-types";
 export * from "@/gnr8/runtime/provider-jobs/runtime-provider-job-types";
 export * from "@/gnr8/runtime/provider-jobs/runtime-provider-job-planner";
+export * from "@/gnr8/runtime/provider-jobs/runtime-provider-job-repository";
