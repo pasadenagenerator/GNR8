@@ -8,6 +8,8 @@ import {
   selectRuntimeDomainProvider,
   type RuntimeDomainProviderSelection,
 } from "@/gnr8/runtime/dns/domain-provider-selection";
+import { resolveAgencyProviderSelection } from "@/gnr8/runtime/providers/agency-provider-selection";
+import type { AgencyProviderSettings } from "@/gnr8/runtime/providers/agency-provider-settings";
 import {
   createRuntimeDomainLifecyclePlan,
   type RuntimeDomainLifecyclePlan,
@@ -63,6 +65,7 @@ export type PreviewSmokeTarget = {
     preferredProviderId?: "mock_provider" | "openprovider" | "realtime_register" | "netim" | "inwx" | "manual";
     allowedProviderIds?: readonly ("mock_provider" | "openprovider" | "realtime_register" | "netim" | "inwx" | "manual")[];
   };
+  agencyProviderSettings?: AgencyProviderSettings[];
   identitySignals: string[];
   requiredAssets: SmokeAssetExpectation[];
   optionalNoiseAssets?: string[];
@@ -104,6 +107,8 @@ export type PreviewSmokeValidatorDependencies = {
   fetchPreviewHtml: (input: { siteVersionId: string; previewPath: string; previewMode: string }) => Promise<SmokeFetchResult>;
   fetchPreviewAsset: (input: { siteId: string; siteVersionId: string; assetPath: string }) => Promise<SmokeFetchResult>;
 };
+
+const PROVIDER_SELECTION_ORDER = ["mock_provider", "manual", "openprovider", "realtime_register", "netim", "inwx"] as const;
 
 function resolveTargetSiteVersion(input: PreviewSmokeTarget): {
   siteVersionId: string;
@@ -168,6 +173,12 @@ function classifyNoiseAsset(path: string): string {
   if (/\.(pdf|doc|docx|rtf|odt)(\?|$)/i.test(normalized)) return "optional_document_asset";
   if (normalized.includes("downloadvcard")) return "dynamic_download_endpoint";
   return "non_blocking_asset_miss";
+}
+
+function sortProviderIds(
+  providerIds: readonly ("mock_provider" | "openprovider" | "realtime_register" | "netim" | "inwx" | "manual")[],
+): ("mock_provider" | "openprovider" | "realtime_register" | "netim" | "inwx" | "manual")[] {
+  return [...providerIds].sort((left, right) => PROVIDER_SELECTION_ORDER.indexOf(left) - PROVIDER_SELECTION_ORDER.indexOf(right));
 }
 
 export async function runPreviewSmokeValidation(
@@ -312,8 +323,26 @@ export async function runPreviewSmokeValidation(
       ? selectRuntimeDomainProvider({
           lifecyclePlan: runtimeDomainLifecyclePlan,
           dnsReadinessPlan: runtimeDnsReadinessPlan,
-          preferredProviderId: target.runtimeDomainProviderSelection?.preferredProviderId ?? "manual",
-          allowedProviderIds: target.runtimeDomainProviderSelection?.allowedProviderIds ?? undefined,
+          preferredProviderId:
+            target.agencyProviderSettings && target.agencyProviderSettings.length > 0
+              ? resolveAgencyProviderSelection({
+                  agencyProviderSettings: target.agencyProviderSettings,
+                  requiredCapability: "dns",
+                  preferredEnvironment: "sandbox",
+                }).selectedProviderId
+              : (target.runtimeDomainProviderSelection?.preferredProviderId ?? "manual"),
+          allowedProviderIds:
+            target.agencyProviderSettings && target.agencyProviderSettings.length > 0
+              ? (sortProviderIds(
+                  [
+                    ...new Set(
+                      target.agencyProviderSettings
+                        .filter((setting) => setting.enabled && setting.capabilities.includes("dns"))
+                        .map((setting) => setting.providerId),
+                    ),
+                  ] as readonly ("mock_provider" | "openprovider" | "realtime_register" | "netim" | "inwx" | "manual")[],
+                ) as readonly ("mock_provider" | "openprovider" | "realtime_register" | "netim" | "inwx" | "manual")[])
+              : (target.runtimeDomainProviderSelection?.allowedProviderIds ?? undefined),
         })
       : undefined;
   const runtimeDomainExecutionIntent =
