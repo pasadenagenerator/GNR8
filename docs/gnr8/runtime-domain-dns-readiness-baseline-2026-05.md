@@ -283,6 +283,36 @@ Freeze the deterministic baseline for runtime identity, runtime/domain readiness
   - execution-gate evaluation is control-plane only
   - no external DNS/provider/registrar execution occurs
 
+### 13c) Runtime provider job planner baseline
+
+- Source:
+  - `apps/platform/gnr8/runtime/provider-jobs/runtime-provider-job-types.ts`
+  - `apps/platform/gnr8/runtime/provider-jobs/runtime-provider-job-planner.ts`
+- RuntimeProviderJob model baseline:
+  - statuses: `queued | running | completed | failed | blocked`
+  - environments: `contract | sandbox | live`
+  - operation kinds:
+    - `check_domain_availability`
+    - `purchase_domain`
+    - `create_dns_zone`
+    - `upsert_dns_record`
+    - `verify_dns_record`
+    - `activate_domain_binding`
+    - `manual_instruction`
+- Planner rules baseline:
+  - deterministic provider job IDs: `provider_job_<correlationKey[0..24]>`
+  - deterministic correlation keys are derived from dry-run key + execution-gate key + environment + deterministic order index
+  - manual dry-run actions always map to `queued` `manual_instruction` jobs
+  - `mock_provider` + `provider_api_future` dry-run actions map to queued `sandbox` jobs only when gate is `open_for_sandbox_dry_run`
+  - live-environment `provider_api_future` actions map to `blocked` jobs
+  - blocked dry-run actions map to `blocked` jobs
+  - planner performs no external provider calls
+- Current boundary:
+  - provider jobs are planned only
+  - no DB persistence yet
+  - no worker execution yet
+  - no external provider calls yet
+
 ## Explicit Current Boundaries
 
 - No external DNS API calls.
@@ -296,6 +326,10 @@ Freeze the deterministic baseline for runtime identity, runtime/domain readiness
 - Live always blocked boundary: provider execution gate blocks all live execution paths in current phase.
 - No secret-like credential values accepted in boundary inputs.
 - No secret storage in control-plane evidence path.
+- Provider jobs are planned-only control-plane artifacts.
+- No provider job DB persistence yet.
+- No provider job worker execution yet.
+- No external provider calls from provider job planner.
 
 ## Validation Summary
 
@@ -311,6 +345,7 @@ Freeze the deterministic baseline for runtime identity, runtime/domain readiness
 - Runtime domain execution intent present in strategy mode: **present**
 - Runtime domain execution dry-run present in strategy mode: **present**
 - Provider adapter contract harness status: **PASS**
+- Provider job planner tests: **PASS**
 - Mock provider adapter tests: **PASS**
 - Provider sandbox adapter tests: **PASS**
 - Provider execution gate tests: **PASS**
@@ -339,7 +374,7 @@ cd apps/platform && set -a; source .env.production; set +a; NODE_OPTIONS='--cond
 Result:
 
 - `kind`: `preview_smoke_summary_v1`
-- `generatedAt`: `2026-05-17T09:39:51.470Z` (latest run window)
+- `generatedAt`: `2026-05-18T09:20:16.864Z` (latest run window)
 - `executionMode`: `route_harness`
 - `pass`: `true`
 - Maver: `site_7c77126de646f746b3bd` / `88253466-783e-4484-8b68-df6c83b8a11c` / preview `200` / pass `true`

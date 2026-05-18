@@ -1,6 +1,6 @@
 {
   "kind": "runtime_domain_dns_readiness_baseline_v1",
-  "capturedAt": "2026-05-17T09:39:51.470Z",
+  "capturedAt": "2026-05-18T09:20:16.864Z",
   "scope": {
     "code": "apps/platform",
     "docs": "docs",
@@ -426,7 +426,11 @@
     "noLiveProviderExecutionEnabled": true,
     "forbiddenSecretLikeValuesBoundary": true,
     "noSecretStorageInControlPlaneBoundary": true,
-    "providerCredentialsBoundaryNoExternalApiCalls": true
+    "providerCredentialsBoundaryNoExternalApiCalls": true,
+    "providerJobsPlannedOnly": true,
+    "providerJobsNoDbPersistenceYet": true,
+    "providerJobsNoWorkerExecutionYet": true,
+    "providerJobsNoExternalCallsYet": true
   },
   "validationSummary": {
     "maverSmoke": "PASS",
@@ -458,12 +462,13 @@
     "routeHarnessSmokeWithEnvProductionAndExplicitStrategies": "PASS",
     "platformBuild": "PASS",
     "workerBuild": "PASS",
-    "fallbackDiagnosticUsedWithRealBindings": "absent"
+    "fallbackDiagnosticUsedWithRealBindings": "absent",
+    "providerJobPlannerTests": "PASS"
   },
   "routeHarnessSmoke": {
     "attempted": true,
     "executionMode": "route_harness",
-    "generatedAt": "2026-05-17T09:39:51.470Z",
+    "generatedAt": "2026-05-18T09:20:16.864Z",
     "command": "--execution-mode=route_harness --maver-strategy=active --roboplast-strategy=active",
     "overallPass": true,
     "maver": {
@@ -509,5 +514,49 @@
       "pass": true
     },
     "fallbackDiagnosticNotEmittedWithRealBindings": true
+  },
+  "providerJobPlannerBaseline": {
+    "modules": [
+      "gnr8/runtime/provider-jobs/runtime-provider-job-types.ts",
+      "gnr8/runtime/provider-jobs/runtime-provider-job-planner.ts"
+    ],
+    "model": {
+      "statuses": [
+        "queued",
+        "running",
+        "completed",
+        "failed",
+        "blocked"
+      ],
+      "environments": [
+        "contract",
+        "sandbox",
+        "live"
+      ],
+      "operationKinds": [
+        "check_domain_availability",
+        "purchase_domain",
+        "create_dns_zone",
+        "upsert_dns_record",
+        "verify_dns_record",
+        "activate_domain_binding",
+        "manual_instruction"
+      ]
+    },
+    "plannerRules": {
+      "deterministicJobIds": true,
+      "deterministicCorrelationKeys": true,
+      "manualDryRunActionsQueuedManualInstructionJobs": true,
+      "mockProviderApiFutureSandboxQueueWhenGateOpenForSandboxDryRun": true,
+      "liveActionsBlocked": true,
+      "blockedDryRunActionsBecomeBlockedJobs": true,
+      "noExternalProviderCalls": true
+    },
+    "currentBoundary": {
+      "plannedOnly": true,
+      "noDbPersistenceYet": true,
+      "noWorkerExecutionYet": true,
+      "noExternalProviderCallsYet": true
+    }
   }
 }
