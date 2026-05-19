@@ -540,6 +540,51 @@ Freeze the deterministic baseline for runtime identity, runtime/domain readiness
   - correlation key generation is stable for equivalent bundle inputs.
   - no execution side effects (no provider calls, no worker execution, no DB writes).
 
+### 13i) Runtime provider operation approval artifact baseline
+
+- Source: `apps/platform/gnr8/runtime/providers/runtime-provider-operation-approval-artifact.ts`
+- Artifact model baseline:
+  - `RuntimeProviderOperationApprovalArtifact` is the human-review object produced before provider execution.
+  - The artifact is control-plane only and deterministic.
+- Artifact shape baseline:
+  - `artifactId`
+  - `siteId`
+  - `siteVersionId`
+  - `providerId`
+  - `environment`
+  - `capability`
+  - `operationKind`
+  - `bundleStatus`
+  - `approvalStatus`
+  - `requiredApprovals`
+  - `summary`
+  - `riskLevel`
+  - `reviewerChecklist`
+  - `warnings`
+  - `blockers`
+  - `correlationKey`
+- Risk levels baseline:
+  - `low`
+  - `medium`
+  - `high`
+  - `blocked`
+- Risk rules baseline:
+  - blocked approval => `blocked`
+  - live environment => `blocked`
+  - `purchase_domain` => `high`
+  - `activate_domain_binding` => `medium`
+  - manual/mock sandbox => `low` unless blocked
+- Reviewer checklist baseline:
+  - `verify_provider`
+  - `verify_environment`
+  - `verify_operation_kind`
+  - `verify_required_approvals`
+  - `verify_no_live_execution`
+- Boundary baseline:
+  - no DB writes
+  - no provider execution
+  - no external calls
+
 ## Explicit Current Boundaries
 
 - No external DNS API calls.
@@ -585,6 +630,7 @@ Freeze the deterministic baseline for runtime identity, runtime/domain readiness
 - Runtime provider communicator tests: **PASS**
 - Runtime provider operation orchestrator tests: **PASS**
 - Runtime provider operation approval tests: **PASS**
+- Runtime provider operation approval artifact tests: **PASS**
 - Mock provider adapter tests: **PASS**
 - Provider sandbox adapter tests: **PASS**
 - Provider execution gate tests: **PASS**

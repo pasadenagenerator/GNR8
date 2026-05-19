@@ -647,6 +647,54 @@
       "noExecutionSideEffects": true
     }
   },
+  "runtimeProviderOperationApprovalArtifactBaseline": {
+    "module": "gnr8/runtime/providers/runtime-provider-operation-approval-artifact.ts",
+    "model": "RuntimeProviderOperationApprovalArtifact",
+    "position": "future_human_review_object_before_provider_execution",
+    "artifactShape": [
+      "artifactId",
+      "siteId",
+      "siteVersionId",
+      "providerId",
+      "environment",
+      "capability",
+      "operationKind",
+      "bundleStatus",
+      "approvalStatus",
+      "requiredApprovals",
+      "summary",
+      "riskLevel",
+      "reviewerChecklist",
+      "warnings",
+      "blockers",
+      "correlationKey"
+    ],
+    "riskLevels": [
+      "low",
+      "medium",
+      "high",
+      "blocked"
+    ],
+    "riskRules": [
+      "blocked_approval_implies_blocked_risk",
+      "live_environment_implies_blocked_risk",
+      "purchase_domain_implies_high_risk",
+      "activate_domain_binding_implies_medium_risk",
+      "manual_or_mock_sandbox_defaults_low_unless_blocked"
+    ],
+    "reviewerChecklist": [
+      "verify_provider",
+      "verify_environment",
+      "verify_operation_kind",
+      "verify_required_approvals",
+      "verify_no_live_execution"
+    ],
+    "boundaries": {
+      "noDbWrites": true,
+      "noProviderExecution": true,
+      "noExternalCalls": true
+    }
+  },
   "providerCredentialResolutionOrchestrationBaseline": {
     "matchingRules": {
       "providerId": true,
@@ -747,6 +795,7 @@
     "runtimeProviderOperationOrchestratorTests": "PASS",
     "runtimeProviderCommunicatorTests": "PASS",
     "runtimeProviderOperationApprovalTests": "PASS",
+    "runtimeProviderOperationApprovalArtifactTests": "PASS",
     "mockProviderAdapterTests": "PASS",
     "providerSandboxAdapterTests": "PASS",
     "providerExecutionGateTests": "PASS",
