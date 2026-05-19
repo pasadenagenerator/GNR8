@@ -207,6 +207,42 @@ Freeze the deterministic baseline for runtime identity, runtime/domain readiness
   - descriptor derivation is control-plane only and deterministic
   - no external DNS/provider/registrar execution is performed
 
+### 6e) Provider credential resolution baseline
+
+- Source: `apps/platform/gnr8/runtime/dns/provider-credential-resolution.ts`
+- Control-plane metadata statuses:
+  - `resolved`
+  - `missing_reference`
+  - `incomplete`
+  - `blocked`
+- Resolution report fields:
+  - `providerId`
+  - `environment`
+  - `credentialReference`
+  - `requiredCredentialNames`
+  - `availableCredentialNames`
+  - `missingCredentialNames`
+  - `resolutionStatus`
+  - `warnings`
+  - `blockers`
+  - `correlationKey`
+- Resolution rules baseline:
+  - `manual` is always `resolved`
+  - `contract` requires no credentials
+  - `openprovider` `sandbox` requires:
+    - `OPENPROVIDER_SANDBOX_USERNAME`
+    - `OPENPROVIDER_SANDBOX_PASSWORD`
+  - `openprovider` `live` requires:
+    - `OPENPROVIDER_LIVE_USERNAME`
+    - `OPENPROVIDER_LIVE_PASSWORD`
+  - `openprovider` `live` remains `blocked` in this phase
+  - missing credential reference maps to `missing_reference`
+  - missing required credential names maps to `incomplete`
+- Safety and execution boundary:
+  - names/metadata only; no credential values
+  - no environment-variable reads
+  - no secret leakage in output
+
 ### 7) Smoke integration fields
 
 - Source: `apps/platform/gnr8/runtime/preview-smoke/preview-smoke-validator.ts`

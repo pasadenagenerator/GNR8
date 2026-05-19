@@ -1,6 +1,6 @@
 {
   "kind": "runtime_domain_dns_readiness_baseline_v1",
-  "capturedAt": "2026-05-19T07:50:12.948Z",
+  "capturedAt": "2026-05-19T09:39:26.000Z",
   "scope": {
     "code": "apps/platform",
     "docs": "docs",
@@ -259,6 +259,45 @@
     "boundaries": {
       "forbidSecretLikeCredentialValues": true,
       "neverLeakCredentialValuesInOutputs": true
+    }
+  },
+  "providerCredentialResolutionBaseline": {
+    "module": "gnr8/runtime/dns/provider-credential-resolution.ts",
+    "statuses": [
+      "resolved",
+      "missing_reference",
+      "incomplete",
+      "blocked"
+    ],
+    "reportFields": [
+      "providerId",
+      "environment",
+      "credentialReference",
+      "requiredCredentialNames",
+      "availableCredentialNames",
+      "missingCredentialNames",
+      "resolutionStatus",
+      "warnings",
+      "blockers",
+      "correlationKey"
+    ],
+    "rules": {
+      "manualAlwaysResolved": true,
+      "contractRequiresNoCredentials": true,
+      "openproviderSandboxRequiredCredentialNames": [
+        "OPENPROVIDER_SANDBOX_USERNAME",
+        "OPENPROVIDER_SANDBOX_PASSWORD"
+      ],
+      "openproviderLiveRequiredCredentialNames": [
+        "OPENPROVIDER_LIVE_USERNAME",
+        "OPENPROVIDER_LIVE_PASSWORD"
+      ],
+      "openproviderLiveRemainsBlockedInCurrentPhase": true,
+      "missingReferenceMapsTo": "missing_reference",
+      "missingRequiredNamesMapsTo": "incomplete",
+      "namesOnlyNoValues": true,
+      "noEnvironmentReads": true,
+      "noSecretLeakage": true
     }
   },
   "providerSandboxAdapterDescriptor": {
@@ -641,6 +680,7 @@
     "providerSandboxAdapterTests": "PASS",
     "providerExecutionGateTests": "PASS",
     "providerCredentialsBoundaryTests": "PASS",
+    "providerCredentialResolutionTests": "PASS",
     "openproviderCredentialContractTests": "PASS",
     "providerImplementationReadinessTests": "PASS",
     "providerAdapterRegistryAndContractTests": "PASS",
@@ -662,7 +702,7 @@
   "routeHarnessSmoke": {
     "attempted": true,
     "executionMode": "route_harness",
-    "generatedAt": "2026-05-19T07:50:12.948Z",
+    "generatedAt": "2026-05-19T09:39:26.000Z",
     "command": "--execution-mode=route_harness --maver-strategy=active --roboplast-strategy=active",
     "overallPass": true,
     "maver": {
