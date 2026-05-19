@@ -156,7 +156,7 @@ test("openprovider sandbox adapter: sandbox descriptor mode mock and live blocke
   const boundary = evaluateProviderCredentialBoundary({
     providerId: "openprovider",
     environment: "sandbox",
-    availableCredentialNames: ["OPENPROVIDER_USERNAME", "OPENPROVIDER_PASSWORD"],
+    availableCredentialNames: ["OPENPROVIDER_SANDBOX_USERNAME", "OPENPROVIDER_SANDBOX_PASSWORD"],
   });
 
   const sandboxGate = evaluateProviderExecutionGate({

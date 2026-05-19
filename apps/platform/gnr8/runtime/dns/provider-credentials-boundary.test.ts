@@ -34,14 +34,36 @@ test("provider credentials boundary: openprovider sandbox missing credential nam
   const report = evaluateProviderCredentialBoundary({
     providerId: "openprovider",
     environment: "sandbox",
-    availableCredentialNames: ["OPENPROVIDER_USERNAME"],
+    availableCredentialNames: ["OPENPROVIDER_SANDBOX_USERNAME"],
   });
 
   assert.equal(report.safetyStatus, "blocked");
-  assert.deepEqual(report.requiredCredentials, ["OPENPROVIDER_PASSWORD", "OPENPROVIDER_USERNAME"]);
-  assert.deepEqual(report.missingCredentials, ["OPENPROVIDER_PASSWORD"]);
+  assert.deepEqual(report.requiredCredentials, ["OPENPROVIDER_SANDBOX_PASSWORD", "OPENPROVIDER_SANDBOX_USERNAME"]);
+  assert.deepEqual(report.missingCredentials, ["OPENPROVIDER_SANDBOX_PASSWORD"]);
   assert.equal(report.warnings.includes("sandbox_required_credentials_missing:openprovider"), true);
   assert.equal(report.blockers.includes("sandbox_credentials_unavailable_for_phase:openprovider"), true);
+});
+
+test("provider credentials boundary: openprovider sandbox names present remain warning/safe according to model", () => {
+  const report = evaluateProviderCredentialBoundary({
+    providerId: "openprovider",
+    environment: "sandbox",
+    availableCredentialNames: ["OPENPROVIDER_SANDBOX_USERNAME", "OPENPROVIDER_SANDBOX_PASSWORD"],
+  });
+
+  assert.deepEqual(report.missingCredentials, []);
+  assert.equal(report.safetyStatus === "warning" || report.safetyStatus === "safe", true);
+});
+
+test("provider credentials boundary: openprovider live blocked even if names exist", () => {
+  const report = evaluateProviderCredentialBoundary({
+    providerId: "openprovider",
+    environment: "live",
+    availableCredentialNames: ["OPENPROVIDER_LIVE_USERNAME", "OPENPROVIDER_LIVE_PASSWORD"],
+  });
+
+  assert.equal(report.safetyStatus, "blocked");
+  assert.equal(report.blockers.includes("live_credentials_blocked_in_current_phase:openprovider"), true);
 });
 
 test("provider credentials boundary: live blocked", () => {
@@ -89,13 +111,13 @@ test("provider credentials boundary: stable correlation key", () => {
   const a = evaluateProviderCredentialBoundary({
     providerId: "openprovider",
     environment: "sandbox",
-    availableCredentialNames: ["OPENPROVIDER_USERNAME"],
+    availableCredentialNames: ["OPENPROVIDER_SANDBOX_USERNAME"],
   });
 
   const b = evaluateProviderCredentialBoundary({
     providerId: "openprovider",
     environment: "sandbox",
-    availableCredentialNames: ["OPENPROVIDER_USERNAME"],
+    availableCredentialNames: ["OPENPROVIDER_SANDBOX_USERNAME"],
   });
 
   assert.equal(a.correlationKey, b.correlationKey);
@@ -109,4 +131,18 @@ test("provider credentials boundary: requirement list contract has no required c
   });
 
   assert.deepEqual(requirements, []);
+});
+
+test("provider credentials boundary: output never leaks credential values", () => {
+  const secretValue = "sk_live_ABCDEF1234567890SECRET";
+  const report = evaluateProviderCredentialBoundary({
+    providerId: "openprovider",
+    environment: "sandbox",
+    credentialValuesByName: {
+      OPENPROVIDER_SANDBOX_PASSWORD: secretValue,
+    },
+  });
+
+  const serialized = JSON.stringify(report);
+  assert.equal(serialized.includes(secretValue), false);
 });

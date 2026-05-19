@@ -33,7 +33,12 @@ export type ProviderCredentialBoundaryInput = {
 const PROVIDER_REQUIREMENT_NAMES: Record<DnsProviderId, readonly string[]> = {
   manual: [],
   mock_provider: [],
-  openprovider: ["OPENPROVIDER_USERNAME", "OPENPROVIDER_PASSWORD"],
+  openprovider: [
+    "OPENPROVIDER_SANDBOX_USERNAME",
+    "OPENPROVIDER_SANDBOX_PASSWORD",
+    "OPENPROVIDER_LIVE_USERNAME",
+    "OPENPROVIDER_LIVE_PASSWORD",
+  ],
   realtime_register: ["REALTIME_REGISTER_USERNAME", "REALTIME_REGISTER_PASSWORD"],
   netim: ["NETIM_USERNAME", "NETIM_PASSWORD"],
   inwx: ["INWX_USERNAME", "INWX_PASSWORD"],
@@ -50,6 +55,12 @@ function normalizeCredentialName(value: string): string {
 function listRequiredCredentialNames(providerId: DnsProviderId, environment: ProviderCredentialEnvironment): string[] {
   if (environment === "contract") {
     return [];
+  }
+  if (providerId === "openprovider" && environment === "sandbox") {
+    return uniqueSorted(["OPENPROVIDER_SANDBOX_USERNAME", "OPENPROVIDER_SANDBOX_PASSWORD"]);
+  }
+  if (providerId === "openprovider" && environment === "live") {
+    return uniqueSorted(["OPENPROVIDER_LIVE_USERNAME", "OPENPROVIDER_LIVE_PASSWORD"]);
   }
   return uniqueSorted(PROVIDER_REQUIREMENT_NAMES[providerId]);
 }
