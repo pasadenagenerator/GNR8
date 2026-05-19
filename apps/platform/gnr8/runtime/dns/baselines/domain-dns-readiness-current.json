@@ -560,6 +560,19 @@
       "noExternalDnsOrRegistrarCalls": true
     }
   },
+  "openproviderSandboxOperationBundleScenario": {
+    "selectedProviderId": "openprovider",
+    "environment": "sandbox",
+    "communicatorRouteStatus": "resolved",
+    "executionIntentMode": "provider_api_future",
+    "dryRunProviderAdapterStatus": "openprovider_contract_pass",
+    "bundleStatus": "blocked",
+    "expectedBlocker": "sandbox_credential_names_unavailable_for_phase",
+    "noRunningJobs": true,
+    "noCompletedJobs": true,
+    "noLiveJobs": true,
+    "noExternalExecution": true
+  },
   "providerControlPlaneDbReadiness": {
     "status": "missing_tables",
     "missingTables": [

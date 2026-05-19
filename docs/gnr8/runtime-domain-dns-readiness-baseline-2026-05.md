@@ -429,6 +429,32 @@ Freeze the deterministic baseline for runtime identity, runtime/domain readiness
   - provider credential reference pure tests pass
   - Openprovider credential flow is blocked until migration is applied
 
+### 13g) Openprovider sandbox operation bundle scenario baseline
+
+- Source: `apps/platform/gnr8/runtime/providers/runtime-provider-operation-orchestrator.ts`
+- Agency setting baseline:
+  - `providerId: openprovider`
+  - `environment: sandbox`
+  - `capabilities: dns/domains`
+  - `credentialReference: openprovider-sandbox`
+- Expected flow baseline:
+  1. provider selection resolves `openprovider/sandbox`
+  2. communicator route status resolves `resolved`
+  3. execution intent mode resolves `provider_api_future`
+  4. dry-run adapter contract resolves pass for Openprovider sandbox adapter path
+  5. execution gate remains blocked due to credential boundary in current phase
+  6. no running jobs
+  7. no completed jobs
+  8. no live jobs
+- Current bundle status:
+  - `blocked`
+- Block reason baseline:
+  - sandbox credential names unavailable for this phase
+- Boundary baseline:
+  - no live execution
+  - no external calls
+  - no DB writes
+
 ## Explicit Current Boundaries
 
 - No external DNS API calls.
