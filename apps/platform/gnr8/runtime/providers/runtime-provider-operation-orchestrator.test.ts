@@ -20,7 +20,7 @@ function providerSettings(overrides: Partial<AgencyProviderSettings>): AgencyPro
 }
 
 test("runtime provider operation orchestrator: manual path", async () => {
-  const bundle = await createRuntimeProviderOperationBundleFromRequest({
+  const { bundle, approvalRequirement, approvalArtifact } = await createRuntimeProviderOperationBundleFromRequest({
     siteId: "site_manual",
     siteVersionId: "version_manual",
     providerCapability: "dns",
@@ -39,10 +39,14 @@ test("runtime provider operation orchestrator: manual path", async () => {
   assert.equal(bundle.bundleStatus, "ready_for_manual");
   assert.equal(bundle.communicatorResult.routeStatus, "manual");
   assert.equal(bundle.credentialResolution?.resolutionStatus, "resolved");
+  assert.equal(approvalRequirement.approvalStatus, "required");
+  assert.equal(approvalRequirement.requiredApprovals.includes("manual_provider_action"), true);
+  assert.equal(approvalArtifact.approvalStatus, "required");
+  assert.equal(approvalArtifact.requiredApprovals.includes("manual_provider_action"), true);
 });
 
 test("runtime provider operation orchestrator: mock provider path", async () => {
-  const bundle = await createRuntimeProviderOperationBundleFromRequest({
+  const { bundle, approvalRequirement, approvalArtifact } = await createRuntimeProviderOperationBundleFromRequest({
     siteId: "site_mock",
     siteVersionId: "version_mock",
     providerCapability: "dns",
@@ -60,10 +64,14 @@ test("runtime provider operation orchestrator: mock provider path", async () => 
   assert.equal(bundle.providerId, "mock_provider");
   assert.equal(bundle.bundleStatus, "ready_for_mock");
   assert.equal(bundle.communicatorResult.routeStatus, "resolved");
+  assert.equal(approvalRequirement.approvalStatus, "required");
+  assert.equal(approvalRequirement.requiredApprovals.includes("sandbox_provider_action"), true);
+  assert.equal(approvalArtifact.approvalStatus, "required");
+  assert.equal(approvalArtifact.requiredApprovals.includes("sandbox_provider_action"), true);
 });
 
 test("runtime provider operation orchestrator: openprovider sandbox path", async () => {
-  const bundle = await createRuntimeProviderOperationBundleFromRequest({
+  const { bundle, approvalRequirement, approvalArtifact } = await createRuntimeProviderOperationBundleFromRequest({
     siteId: "site_unavailable",
     siteVersionId: "version_unavailable",
     providerCapability: "dns",
@@ -84,10 +92,12 @@ test("runtime provider operation orchestrator: openprovider sandbox path", async
   assert.equal(bundle.credentialResolution?.resolutionStatus, "missing_reference");
   assert.equal(bundle.blockers.includes("provider_adapter_missing"), false);
   assert.equal(bundle.blockers.includes("sandbox_credentials_unavailable_for_phase:openprovider"), true);
+  assert.equal(approvalRequirement.approvalStatus, "blocked");
+  assert.equal(approvalArtifact.riskLevel, "blocked");
 });
 
 test("runtime provider operation orchestrator: openprovider sandbox path builds non-live bundle", async () => {
-  const bundle = await createRuntimeProviderOperationBundleFromRequest({
+  const { bundle, approvalRequirement, approvalArtifact } = await createRuntimeProviderOperationBundleFromRequest({
     siteId: "site_openprovider_sandbox",
     siteVersionId: "version_openprovider_sandbox",
     providerCapability: "dns",
@@ -140,10 +150,11 @@ test("runtime provider operation orchestrator: openprovider sandbox path builds 
   assert.equal(bundle.plannedJobs.some((job) => job.status === "running"), false);
   assert.equal(bundle.plannedJobs.some((job) => job.status === "completed"), false);
   assert.equal(bundle.plannedJobs.every((job) => job.environment !== "live"), true);
+  assert.equal(approvalArtifact.artifactId.length > 0, true);
 });
 
 test("runtime provider operation orchestrator: openprovider sandbox complete credential names resolves metadata only", async () => {
-  const bundle = await createRuntimeProviderOperationBundleFromRequest({
+  const { bundle, approvalRequirement, approvalArtifact } = await createRuntimeProviderOperationBundleFromRequest({
     siteId: "site_openprovider_sandbox_complete",
     siteVersionId: "version_openprovider_sandbox_complete",
     providerCapability: "dns",
@@ -177,10 +188,11 @@ test("runtime provider operation orchestrator: openprovider sandbox complete cre
   assert.equal(bundle.communicatorResult.routeStatus, "resolved");
   assert.equal(bundle.plannedJobs.some((job) => job.status === "running"), false);
   assert.equal(bundle.plannedJobs.some((job) => job.status === "completed"), false);
+  assert.equal(approvalArtifact.approvalStatus === "blocked", bundle.bundleStatus === "blocked");
 });
 
 test("runtime provider operation orchestrator: credential resolution report does not leak secret values", async () => {
-  const bundle = await createRuntimeProviderOperationBundleFromRequest({
+  const { bundle, approvalRequirement, approvalArtifact } = await createRuntimeProviderOperationBundleFromRequest({
     siteId: "site_openprovider_no_leak",
     siteVersionId: "version_openprovider_no_leak",
     providerCapability: "dns",
@@ -219,10 +231,11 @@ test("runtime provider operation orchestrator: credential resolution report does
     "resolutionStatus",
     "warnings",
   ]);
+  assert.equal(approvalArtifact.summary.includes("risk="), true);
 });
 
 test("runtime provider operation orchestrator: blocked path", async () => {
-  const bundle = await createRuntimeProviderOperationBundleFromRequest({
+  const { bundle, approvalRequirement, approvalArtifact } = await createRuntimeProviderOperationBundleFromRequest({
     siteId: "site_blocked",
     siteVersionId: "version_blocked",
     providerCapability: "dns",
@@ -241,6 +254,8 @@ test("runtime provider operation orchestrator: blocked path", async () => {
   assert.equal(bundle.communicatorResult.routeStatus, "blocked");
   assert.equal(bundle.bundleStatus, "blocked");
   assert.equal(bundle.blockers.includes("live_environment_provider_execution_blocked"), true);
+  assert.equal(approvalRequirement.approvalStatus, "blocked");
+  assert.equal(approvalArtifact.riskLevel, "blocked");
 });
 
 test("runtime provider operation orchestrator: deterministic output and stable key", async () => {
@@ -269,10 +284,12 @@ test("runtime provider operation orchestrator: deterministic output and stable k
   });
 
   assert.equal(left.correlationKey, right.correlationKey);
+  assert.equal(left.bundle.correlationKey, right.bundle.correlationKey);
+  assert.equal(left.approvalArtifact.artifactId, right.approvalArtifact.artifactId);
   assert.deepEqual(
-    left.plannedJobs.map((job) => [job.id, job.operationKind, job.status]),
-    right.plannedJobs.map((job) => [job.id, job.operationKind, job.status]),
+    left.bundle.plannedJobs.map((job) => [job.id, job.operationKind, job.status]),
+    right.bundle.plannedJobs.map((job) => [job.id, job.operationKind, job.status]),
   );
-  assert.deepEqual(left.warnings, right.warnings);
-  assert.deepEqual(left.blockers, right.blockers);
+  assert.deepEqual(left.bundle.warnings, right.bundle.warnings);
+  assert.deepEqual(left.bundle.blockers, right.bundle.blockers);
 });

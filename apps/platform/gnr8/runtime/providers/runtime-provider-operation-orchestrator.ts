@@ -20,6 +20,14 @@ import type {
 import type { ProviderCredentialReference } from "@/gnr8/runtime/providers/provider-credential-reference";
 import { resolveProviderCredentialReference } from "@/gnr8/runtime/providers/provider-credential-resolution";
 import { resolveAgencyProviderSelection } from "@/gnr8/runtime/providers/agency-provider-selection";
+import {
+  createRuntimeProviderOperationApprovalRequirement,
+  type RuntimeProviderOperationApprovalRequirement,
+} from "@/gnr8/runtime/providers/runtime-provider-operation-approval";
+import {
+  createRuntimeProviderOperationApprovalArtifact,
+  type RuntimeProviderOperationApprovalArtifact,
+} from "@/gnr8/runtime/providers/runtime-provider-operation-approval-artifact";
 import { createRuntimeProviderOperationBundle, type RuntimeProviderOperationBundle } from "@/gnr8/runtime/providers/runtime-provider-operation-bundle";
 import { resolveRuntimeProviderCommunication } from "@/gnr8/runtime/providers/runtime-provider-communicator";
 
@@ -31,6 +39,13 @@ type CreateRuntimeProviderOperationBundleFromRequestInput = {
   agencyProviderSettings: AgencyProviderSettings[];
   executionEnvironment: AgencyProviderEnvironment;
   credentialReferences?: ProviderCredentialReference[];
+};
+
+export type RuntimeProviderOperationOrchestratorOutput = {
+  bundle: RuntimeProviderOperationBundle;
+  approvalRequirement: RuntimeProviderOperationApprovalRequirement;
+  approvalArtifact: RuntimeProviderOperationApprovalArtifact;
+  correlationKey: string;
 };
 
 function toDnsProviderId(providerId: string): DnsProviderId {
@@ -194,7 +209,7 @@ function resolveMatchedCredentialReference(input: {
 
 export async function createRuntimeProviderOperationBundleFromRequest(
   input: CreateRuntimeProviderOperationBundleFromRequestInput,
-): Promise<RuntimeProviderOperationBundle> {
+): Promise<RuntimeProviderOperationOrchestratorOutput> {
   const providerSelection = resolveAgencyProviderSelection({
     agencyProviderSettings: input.agencyProviderSettings,
     requiredCapability: input.providerCapability,
@@ -270,7 +285,7 @@ export async function createRuntimeProviderOperationBundleFromRequest(
     environment: input.executionEnvironment,
   });
 
-  return createRuntimeProviderOperationBundle({
+  const bundle = createRuntimeProviderOperationBundle({
     siteId: input.siteId,
     siteVersionId: input.siteVersionId,
     providerId: providerSelection.selectedProviderId,
@@ -285,4 +300,14 @@ export async function createRuntimeProviderOperationBundleFromRequest(
     executionGate,
     plannedJobs,
   });
+
+  const approvalRequirement = createRuntimeProviderOperationApprovalRequirement(bundle);
+  const approvalArtifact = createRuntimeProviderOperationApprovalArtifact(bundle, approvalRequirement);
+
+  return {
+    bundle,
+    approvalRequirement,
+    approvalArtifact,
+    correlationKey: bundle.correlationKey,
+  };
 }
