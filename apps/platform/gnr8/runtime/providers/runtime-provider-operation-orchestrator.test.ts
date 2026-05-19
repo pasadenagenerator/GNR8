@@ -83,6 +83,50 @@ test("runtime provider operation orchestrator: openprovider sandbox path", async
   assert.equal(bundle.blockers.includes("sandbox_credentials_unavailable_for_phase:openprovider"), true);
 });
 
+test("runtime provider operation orchestrator: openprovider sandbox path builds non-live bundle", async () => {
+  const bundle = await createRuntimeProviderOperationBundleFromRequest({
+    siteId: "site_openprovider_sandbox",
+    siteVersionId: "version_openprovider_sandbox",
+    providerCapability: "dns",
+    operationKind: "upsert_dns_record",
+    agencyProviderSettings: [
+      providerSettings({
+        id: "openprovider_sandbox_setting",
+        providerId: "openprovider",
+        environment: "sandbox",
+        capabilities: ["dns", "domains"],
+        credentialReference: "openprovider-sandbox",
+        enabled: true,
+      }),
+    ],
+    executionEnvironment: "sandbox",
+  });
+
+  assert.equal(bundle.providerSelection.selectedProviderId, "openprovider");
+  assert.equal(bundle.providerSelection.environment, "sandbox");
+  assert.equal(bundle.communicatorResult.routeStatus, "resolved");
+  assert.equal(bundle.executionIntent.executionMode, "provider_api_future");
+  assert.equal(bundle.executionDryRun.providerAdapterStatus.providerId, "openprovider");
+  assert.equal(bundle.executionDryRun.providerAdapterStatus.contractStatus, "pass");
+  assert.notEqual(bundle.executionGate.gateStatus, "open_for_live");
+  assert.notEqual(bundle.executionGate.gateStatus, "live");
+
+  const hasMissingSandboxCredentialBlocker = bundle.blockers.some((blocker) =>
+    blocker.startsWith("sandbox_credentials_unavailable_for_phase:"),
+  );
+
+  if (hasMissingSandboxCredentialBlocker) {
+    assert.equal(bundle.bundleStatus, "blocked");
+    assert.equal(bundle.blockers.includes("sandbox_credentials_unavailable_for_phase:openprovider"), true);
+  } else {
+    assert.equal(bundle.bundleStatus, "ready_for_mock");
+  }
+
+  assert.equal(bundle.plannedJobs.some((job) => job.status === "running"), false);
+  assert.equal(bundle.plannedJobs.some((job) => job.status === "completed"), false);
+  assert.equal(bundle.plannedJobs.every((job) => job.environment !== "live"), true);
+});
+
 test("runtime provider operation orchestrator: blocked path", async () => {
   const bundle = await createRuntimeProviderOperationBundleFromRequest({
     siteId: "site_blocked",
