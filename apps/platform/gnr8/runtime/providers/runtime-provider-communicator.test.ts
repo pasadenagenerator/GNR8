@@ -44,7 +44,7 @@ test("runtime provider communicator: mock route", () => {
   assert.deepEqual(result.blockers, []);
 });
 
-test("runtime provider communicator: missing adapter", () => {
+test("runtime provider communicator: openprovider sandbox route resolves", () => {
   const result = resolveRuntimeProviderCommunication(
     buildRequest({
       providerId: "openprovider",
@@ -52,10 +52,10 @@ test("runtime provider communicator: missing adapter", () => {
     }),
   );
 
-  assert.equal(result.routeStatus, "unavailable");
-  assert.equal(result.adapterAvailable, false);
+  assert.equal(result.routeStatus, "resolved");
+  assert.equal(result.adapterAvailable, true);
   assert.deepEqual(result.warnings, []);
-  assert.deepEqual(result.blockers, ["provider_adapter_missing"]);
+  assert.deepEqual(result.blockers, []);
 });
 
 test("runtime provider communicator: live blocked", () => {

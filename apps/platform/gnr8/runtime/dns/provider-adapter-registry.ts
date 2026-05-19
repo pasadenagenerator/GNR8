@@ -9,6 +9,7 @@ import {
   type DnsProviderAdapterContractReport,
 } from "@/gnr8/runtime/dns/provider-adapter-contract-test";
 import { createMockDnsProviderAdapter } from "@/gnr8/runtime/dns/mock-provider-adapter";
+import { createOpenproviderSandboxAdapter } from "@/gnr8/runtime/dns/openprovider-sandbox-adapter";
 
 export type DnsProviderAdapterRegistryEntry = {
   providerId: DnsProviderId;
@@ -16,8 +17,8 @@ export type DnsProviderAdapterRegistryEntry = {
 };
 
 const PROVIDER_ORDER: readonly DnsProviderId[] = [
-  "manual",
   "mock_provider",
+  "manual",
   "openprovider",
   "realtime_register",
   "netim",
@@ -27,9 +28,9 @@ const PROVIDER_ORDER: readonly DnsProviderId[] = [
 const MANUAL_ADAPTER_FIXTURE: DnsProviderAdapterContract = createManualDnsProviderAdapterFixture();
 
 const ADAPTER_REGISTRY: Record<DnsProviderId, DnsProviderAdapterContract | null> = {
-  manual: MANUAL_ADAPTER_FIXTURE,
   mock_provider: createMockDnsProviderAdapter(),
-  openprovider: null,
+  manual: MANUAL_ADAPTER_FIXTURE,
+  openprovider: createOpenproviderSandboxAdapter(),
   realtime_register: null,
   netim: null,
   inwx: null,

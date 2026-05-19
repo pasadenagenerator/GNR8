@@ -25,10 +25,18 @@ test("provider adapter registry: mock adapter available", () => {
 });
 
 test("provider adapter registry: future providers not available", () => {
-  for (const providerId of ["openprovider", "realtime_register", "netim", "inwx"]) {
+  for (const providerId of ["realtime_register", "netim", "inwx"]) {
     assert.equal(getDnsProviderAdapter(providerId), null);
     assert.equal(hasDnsProviderAdapter(providerId), false);
   }
+});
+
+test("provider adapter registry: openprovider sandbox adapter available", () => {
+  const adapter = getDnsProviderAdapter("openprovider");
+
+  assert.ok(adapter);
+  assert.equal(adapter?.providerId, "openprovider");
+  assert.equal(hasDnsProviderAdapter("openprovider"), true);
 });
 
 test("provider adapter registry: unknown provider returns null", () => {
@@ -38,7 +46,7 @@ test("provider adapter registry: unknown provider returns null", () => {
 
 test("provider adapter registry: list ordering stable", () => {
   const providerIds = listDnsProviderAdapters().map((entry) => entry.providerId);
-  assert.deepEqual(providerIds, ["manual", "mock_provider", "openprovider", "realtime_register", "netim", "inwx"]);
+  assert.deepEqual(providerIds, ["mock_provider", "manual", "openprovider", "realtime_register", "netim", "inwx"]);
 });
 
 test("provider adapter registry: manual adapter contract passes", async () => {
@@ -55,7 +63,12 @@ test("provider adapter registry: future provider contract unavailable but non-th
   assert.equal(mockReport?.providerId, "mock_provider");
   assert.equal(mockReport?.contractStatus, "pass");
 
-  for (const providerId of ["openprovider", "realtime_register", "netim", "inwx", "unknown_provider"]) {
+  const openproviderReport = await assertDnsProviderAdapterContract("openprovider");
+  assert.ok(openproviderReport);
+  assert.equal(openproviderReport?.providerId, "openprovider");
+  assert.equal(openproviderReport?.contractStatus, "pass");
+
+  for (const providerId of ["realtime_register", "netim", "inwx", "unknown_provider"]) {
     const report = await assertDnsProviderAdapterContract(providerId);
     assert.equal(report, null);
   }

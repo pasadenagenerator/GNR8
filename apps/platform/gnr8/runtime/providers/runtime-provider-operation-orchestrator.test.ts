@@ -60,7 +60,7 @@ test("runtime provider operation orchestrator: mock provider path", async () => 
   assert.equal(bundle.communicatorResult.routeStatus, "resolved");
 });
 
-test("runtime provider operation orchestrator: provider unavailable path", async () => {
+test("runtime provider operation orchestrator: openprovider sandbox path", async () => {
   const bundle = await createRuntimeProviderOperationBundleFromRequest({
     siteId: "site_unavailable",
     siteVersionId: "version_unavailable",
@@ -77,9 +77,10 @@ test("runtime provider operation orchestrator: provider unavailable path", async
   });
 
   assert.equal(bundle.providerId, "openprovider");
-  assert.equal(bundle.communicatorResult.routeStatus, "unavailable");
+  assert.equal(bundle.communicatorResult.routeStatus, "resolved");
   assert.equal(bundle.bundleStatus, "blocked");
-  assert.equal(bundle.blockers.includes("provider_adapter_missing"), true);
+  assert.equal(bundle.blockers.includes("provider_adapter_missing"), false);
+  assert.equal(bundle.blockers.includes("sandbox_credentials_unavailable_for_phase:openprovider"), true);
 });
 
 test("runtime provider operation orchestrator: blocked path", async () => {
