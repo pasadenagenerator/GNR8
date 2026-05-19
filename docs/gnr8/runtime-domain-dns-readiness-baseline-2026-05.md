@@ -585,6 +585,43 @@ Freeze the deterministic baseline for runtime identity, runtime/domain readiness
   - no provider execution
   - no external calls
 
+### 13j) Runtime provider operation approval persistence foundation baseline
+
+- Source: `apps/platform/gnr8/runtime/providers/runtime-provider-operation-approval-artifact-store.ts`
+- Persistence scope baseline:
+  - Foundation mapping is defined for `RuntimeProviderOperationApprovalArtifact` persistence shape.
+  - Persistence target table baseline:
+    - `public.gnr8_runtime_provider_operation_approvals`
+- Persistence columns baseline:
+  - `id`
+  - `artifact_id`
+  - `site_id`
+  - `site_version_id`
+  - `provider_id`
+  - `environment`
+  - `capability`
+  - `operation_kind`
+  - `approval_status`
+  - `risk_level`
+  - `required_approvals`
+  - `reviewer_checklist`
+  - `warnings`
+  - `blockers`
+  - `correlation_key`
+  - `created_at`
+  - `updated_at`
+- Mapper function baseline:
+  - `mapApprovalArtifactToRow`
+  - `mapApprovalArtifactRow`
+  - `createApprovalInsertRows`
+- Boundary baseline:
+  - pure mapping only
+  - no DB repository yet
+  - no approval state transitions yet
+  - no worker execution
+  - no provider execution
+  - no external calls
+
 ## Explicit Current Boundaries
 
 - No external DNS API calls.
@@ -631,6 +668,7 @@ Freeze the deterministic baseline for runtime identity, runtime/domain readiness
 - Runtime provider operation orchestrator tests: **PASS**
 - Runtime provider operation approval tests: **PASS**
 - Runtime provider operation approval artifact tests: **PASS**
+- Runtime provider operation approval store tests: **PASS**
 - Mock provider adapter tests: **PASS**
 - Provider sandbox adapter tests: **PASS**
 - Provider execution gate tests: **PASS**
