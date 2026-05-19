@@ -8,6 +8,7 @@ import type {
 import type { RuntimeProviderJob } from "@/gnr8/runtime/provider-jobs/runtime-provider-job-types";
 import type { AgencyProviderCapability, AgencyProviderEnvironment, AgencyProviderId } from "@/gnr8/runtime/providers/agency-provider-settings";
 import type { AgencyProviderSelection } from "@/gnr8/runtime/providers/agency-provider-selection";
+import type { ProviderCredentialResolutionReport } from "@/gnr8/runtime/providers/provider-credential-resolution";
 import type { RuntimeProviderCommunicatorResult } from "@/gnr8/runtime/providers/runtime-provider-communicator";
 
 export type RuntimeProviderOperationBundleStatus = "ready_for_manual" | "ready_for_mock" | "blocked";
@@ -20,6 +21,7 @@ export type RuntimeProviderOperationBundle = {
   capability: AgencyProviderCapability;
   operationKind: RuntimeDomainExecutionActionKind;
   providerSelection: AgencyProviderSelection;
+  credentialResolution?: ProviderCredentialResolutionReport;
   communicatorResult: RuntimeProviderCommunicatorResult;
   executionIntent: RuntimeDomainExecutionIntent;
   executionDryRun: RuntimeDomainExecutionDryRun;
@@ -39,6 +41,7 @@ export type CreateRuntimeProviderOperationBundleInput = {
   capability: AgencyProviderCapability;
   operationKind: RuntimeDomainExecutionActionKind;
   providerSelection: AgencyProviderSelection;
+  credentialResolution?: ProviderCredentialResolutionReport;
   communicatorResult: RuntimeProviderCommunicatorResult;
   executionIntent: RuntimeDomainExecutionIntent;
   executionDryRun: RuntimeDomainExecutionDryRun;
@@ -144,6 +147,7 @@ export function createRuntimeProviderOperationBundle(
     capability: input.capability,
     operationKind: input.operationKind,
     providerSelection: input.providerSelection,
+    credentialResolution: input.credentialResolution,
     communicatorResult: input.communicatorResult,
     executionIntent: input.executionIntent,
     executionDryRun: input.executionDryRun,

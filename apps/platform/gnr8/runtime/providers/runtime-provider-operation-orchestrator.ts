@@ -17,6 +17,8 @@ import type {
   AgencyProviderEnvironment,
   AgencyProviderSettings,
 } from "@/gnr8/runtime/providers/agency-provider-settings";
+import type { ProviderCredentialReference } from "@/gnr8/runtime/providers/provider-credential-reference";
+import { resolveProviderCredentialReference } from "@/gnr8/runtime/providers/provider-credential-resolution";
 import { resolveAgencyProviderSelection } from "@/gnr8/runtime/providers/agency-provider-selection";
 import { createRuntimeProviderOperationBundle, type RuntimeProviderOperationBundle } from "@/gnr8/runtime/providers/runtime-provider-operation-bundle";
 import { resolveRuntimeProviderCommunication } from "@/gnr8/runtime/providers/runtime-provider-communicator";
@@ -28,6 +30,7 @@ type CreateRuntimeProviderOperationBundleFromRequestInput = {
   operationKind: RuntimeDomainExecutionActionKind;
   agencyProviderSettings: AgencyProviderSettings[];
   executionEnvironment: AgencyProviderEnvironment;
+  credentialReferences?: ProviderCredentialReference[];
 };
 
 function toDnsProviderId(providerId: string): DnsProviderId {
@@ -154,6 +157,41 @@ function createRuntimeProviderJobs(input: {
   });
 }
 
+function resolveSelectedProviderSetting(input: {
+  agencyProviderSettings: AgencyProviderSettings[];
+  selectedProviderId: AgencyProviderSettings["providerId"];
+  selectedEnvironment: AgencyProviderSettings["environment"];
+  providerCapability: AgencyProviderCapability;
+}): AgencyProviderSettings | null {
+  const candidates = input.agencyProviderSettings.filter(
+    (entry) =>
+      entry.enabled &&
+      entry.providerId === input.selectedProviderId &&
+      entry.environment === input.selectedEnvironment &&
+      entry.capabilities.includes(input.providerCapability),
+  );
+
+  if (candidates.length === 0) return null;
+  return [...candidates].sort((left, right) => left.id.localeCompare(right.id))[0] ?? null;
+}
+
+function resolveMatchedCredentialReference(input: {
+  setting: AgencyProviderSettings;
+  credentialReferences?: ProviderCredentialReference[];
+}): ProviderCredentialReference | null {
+  const referenceKey = input.setting.credentialReference?.trim() ?? "";
+  if (!referenceKey) return null;
+
+  return (
+    input.credentialReferences?.find(
+      (reference) =>
+        reference.providerId === input.setting.providerId &&
+        reference.environment === input.setting.environment &&
+        reference.referenceKey === referenceKey,
+    ) ?? null
+  );
+}
+
 export async function createRuntimeProviderOperationBundleFromRequest(
   input: CreateRuntimeProviderOperationBundleFromRequestInput,
 ): Promise<RuntimeProviderOperationBundle> {
@@ -161,6 +199,34 @@ export async function createRuntimeProviderOperationBundleFromRequest(
     agencyProviderSettings: input.agencyProviderSettings,
     requiredCapability: input.providerCapability,
     preferredEnvironment: input.executionEnvironment,
+  });
+
+  const selectedProviderSetting =
+    resolveSelectedProviderSetting({
+      agencyProviderSettings: input.agencyProviderSettings,
+      selectedProviderId: providerSelection.selectedProviderId,
+      selectedEnvironment: providerSelection.environment,
+      providerCapability: input.providerCapability,
+    }) ??
+    {
+      id: "synthetic_selected_provider_setting",
+      agencyId: "synthetic_agency",
+      providerId: providerSelection.selectedProviderId,
+      environment: providerSelection.environment,
+      credentialReference: undefined,
+      enabled: true,
+      capabilities: [input.providerCapability],
+      correlationKey: "synthetic_selected_provider_setting",
+      createdAt: "1970-01-01T00:00:00.000Z",
+      updatedAt: "1970-01-01T00:00:00.000Z",
+    };
+
+  const credentialResolution = resolveProviderCredentialReference({
+    settings: selectedProviderSetting,
+    credentialReference: resolveMatchedCredentialReference({
+      setting: selectedProviderSetting,
+      credentialReferences: input.credentialReferences,
+    }),
   });
 
   const communicatorResult = resolveRuntimeProviderCommunication({
@@ -212,6 +278,7 @@ export async function createRuntimeProviderOperationBundleFromRequest(
     capability: input.providerCapability,
     operationKind: input.operationKind,
     providerSelection,
+    credentialResolution,
     communicatorResult,
     executionIntent,
     executionDryRun,

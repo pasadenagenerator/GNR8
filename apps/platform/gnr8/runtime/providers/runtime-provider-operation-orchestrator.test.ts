@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { createAgencyProviderSettings, type AgencyProviderSettings } from "@/gnr8/runtime/providers/agency-provider-settings";
+import { createProviderCredentialReference } from "@/gnr8/runtime/providers/provider-credential-reference";
 import { createRuntimeProviderOperationBundleFromRequest } from "@/gnr8/runtime/providers/runtime-provider-operation-orchestrator";
 
 function providerSettings(overrides: Partial<AgencyProviderSettings>): AgencyProviderSettings {
@@ -37,6 +38,7 @@ test("runtime provider operation orchestrator: manual path", async () => {
   assert.equal(bundle.providerId, "manual");
   assert.equal(bundle.bundleStatus, "ready_for_manual");
   assert.equal(bundle.communicatorResult.routeStatus, "manual");
+  assert.equal(bundle.credentialResolution?.resolutionStatus, "resolved");
 });
 
 test("runtime provider operation orchestrator: mock provider path", async () => {
@@ -79,6 +81,7 @@ test("runtime provider operation orchestrator: openprovider sandbox path", async
   assert.equal(bundle.providerId, "openprovider");
   assert.equal(bundle.communicatorResult.routeStatus, "resolved");
   assert.equal(bundle.bundleStatus, "blocked");
+  assert.equal(bundle.credentialResolution?.resolutionStatus, "missing_reference");
   assert.equal(bundle.blockers.includes("provider_adapter_missing"), false);
   assert.equal(bundle.blockers.includes("sandbox_credentials_unavailable_for_phase:openprovider"), true);
 });
@@ -100,10 +103,22 @@ test("runtime provider operation orchestrator: openprovider sandbox path builds 
       }),
     ],
     executionEnvironment: "sandbox",
+    credentialReferences: [
+      createProviderCredentialReference({
+        id: "openprovider_ref_partial",
+        agencyId: "agency_1",
+        providerId: "openprovider",
+        referenceKey: "openprovider-sandbox",
+        environment: "sandbox",
+        credentialNames: ["openprovider_sandbox_username"],
+      }),
+    ],
   });
 
   assert.equal(bundle.providerSelection.selectedProviderId, "openprovider");
   assert.equal(bundle.providerSelection.environment, "sandbox");
+  assert.equal(bundle.credentialResolution?.resolutionStatus, "incomplete");
+  assert.deepEqual(bundle.credentialResolution?.missingCredentialNames, ["OPENPROVIDER_SANDBOX_PASSWORD"]);
   assert.equal(bundle.communicatorResult.routeStatus, "resolved");
   assert.equal(bundle.executionIntent.executionMode, "provider_api_future");
   assert.equal(bundle.executionDryRun.providerAdapterStatus.providerId, "openprovider");
@@ -125,6 +140,85 @@ test("runtime provider operation orchestrator: openprovider sandbox path builds 
   assert.equal(bundle.plannedJobs.some((job) => job.status === "running"), false);
   assert.equal(bundle.plannedJobs.some((job) => job.status === "completed"), false);
   assert.equal(bundle.plannedJobs.every((job) => job.environment !== "live"), true);
+});
+
+test("runtime provider operation orchestrator: openprovider sandbox complete credential names resolves metadata only", async () => {
+  const bundle = await createRuntimeProviderOperationBundleFromRequest({
+    siteId: "site_openprovider_sandbox_complete",
+    siteVersionId: "version_openprovider_sandbox_complete",
+    providerCapability: "dns",
+    operationKind: "upsert_dns_record",
+    agencyProviderSettings: [
+      providerSettings({
+        id: "openprovider_sandbox_setting_complete",
+        providerId: "openprovider",
+        environment: "sandbox",
+        capabilities: ["dns", "domains"],
+        credentialReference: "openprovider-sandbox-complete",
+        enabled: true,
+      }),
+    ],
+    executionEnvironment: "sandbox",
+    credentialReferences: [
+      createProviderCredentialReference({
+        id: "openprovider_ref_complete",
+        agencyId: "agency_1",
+        providerId: "openprovider",
+        referenceKey: "openprovider-sandbox-complete",
+        environment: "sandbox",
+        credentialNames: ["openprovider_sandbox_username", "openprovider_sandbox_password"],
+      }),
+    ],
+  });
+
+  assert.equal(bundle.providerId, "openprovider");
+  assert.equal(bundle.credentialResolution?.resolutionStatus, "resolved");
+  assert.deepEqual(bundle.credentialResolution?.missingCredentialNames, []);
+  assert.equal(bundle.communicatorResult.routeStatus, "resolved");
+  assert.equal(bundle.plannedJobs.some((job) => job.status === "running"), false);
+  assert.equal(bundle.plannedJobs.some((job) => job.status === "completed"), false);
+});
+
+test("runtime provider operation orchestrator: credential resolution report does not leak secret values", async () => {
+  const bundle = await createRuntimeProviderOperationBundleFromRequest({
+    siteId: "site_openprovider_no_leak",
+    siteVersionId: "version_openprovider_no_leak",
+    providerCapability: "dns",
+    operationKind: "upsert_dns_record",
+    agencyProviderSettings: [
+      providerSettings({
+        id: "openprovider_sandbox_setting_no_leak",
+        providerId: "openprovider",
+        environment: "sandbox",
+        capabilities: ["dns"],
+        credentialReference: "openprovider-sandbox-no-leak",
+      }),
+    ],
+    executionEnvironment: "sandbox",
+    credentialReferences: [
+      createProviderCredentialReference({
+        id: "openprovider_ref_no_leak",
+        agencyId: "agency_1",
+        providerId: "openprovider",
+        referenceKey: "openprovider-sandbox-no-leak",
+        environment: "sandbox",
+        credentialNames: ["openprovider_sandbox_username", "openprovider_sandbox_password"],
+      }),
+    ],
+  });
+
+  assert.deepEqual(Object.keys(bundle.credentialResolution ?? {}).sort(), [
+    "availableCredentialNames",
+    "blockers",
+    "correlationKey",
+    "credentialReference",
+    "environment",
+    "missingCredentialNames",
+    "providerId",
+    "requiredCredentialNames",
+    "resolutionStatus",
+    "warnings",
+  ]);
 });
 
 test("runtime provider operation orchestrator: blocked path", async () => {
