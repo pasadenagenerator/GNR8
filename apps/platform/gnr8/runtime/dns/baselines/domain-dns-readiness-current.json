@@ -616,6 +616,37 @@
     "module": "gnr8/runtime/providers/runtime-provider-operation-bundle.ts",
     "credentialResolutionField": "credentialResolution?: ProviderCredentialResolutionReport"
   },
+  "runtimeProviderOperationApprovalBaseline": {
+    "module": "gnr8/runtime/providers/runtime-provider-operation-approval.ts",
+    "model": "RuntimeProviderOperationApprovalRequirement",
+    "position": "final_pre_execution_safety_layer",
+    "approvalStatuses": [
+      "not_required",
+      "required",
+      "blocked"
+    ],
+    "requiredApprovalsCatalog": [
+      "manual_provider_action",
+      "sandbox_provider_action",
+      "domain_purchase",
+      "dns_delete",
+      "domain_activation"
+    ],
+    "rules": [
+      "blocked_bundle_implies_blocked_status",
+      "manual_provider_bundle_requires_manual_provider_action",
+      "mock_provider_bundle_requires_sandbox_provider_action",
+      "purchase_domain_requires_domain_purchase",
+      "delete_dns_record_requires_dns_delete",
+      "activate_domain_binding_requires_domain_activation",
+      "live_environment_implies_blocked_status"
+    ],
+    "deterministic": {
+      "requiredApprovalsDedupeAndSort": true,
+      "stableCorrelationKey": true,
+      "noExecutionSideEffects": true
+    }
+  },
   "providerCredentialResolutionOrchestrationBaseline": {
     "matchingRules": {
       "providerId": true,
@@ -715,6 +746,7 @@
     "providerAdapterContractHarnessTests": "PASS",
     "runtimeProviderOperationOrchestratorTests": "PASS",
     "runtimeProviderCommunicatorTests": "PASS",
+    "runtimeProviderOperationApprovalTests": "PASS",
     "mockProviderAdapterTests": "PASS",
     "providerSandboxAdapterTests": "PASS",
     "providerExecutionGateTests": "PASS",

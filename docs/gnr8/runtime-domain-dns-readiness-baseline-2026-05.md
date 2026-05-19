@@ -511,6 +511,35 @@ Freeze the deterministic baseline for runtime identity, runtime/domain readiness
   - no external calls
   - no DB writes
 
+### 13h) Runtime provider operation approval requirement baseline
+
+- Source: `apps/platform/gnr8/runtime/providers/runtime-provider-operation-approval.ts`
+- Requirement model baseline:
+  - `RuntimeProviderOperationApprovalRequirement` is the final pre-execution safety layer for provider operation bundles.
+  - The approval requirement is control-plane only and deterministic.
+- Approval status baseline:
+  - `not_required`
+  - `required`
+  - `blocked`
+- Required approval catalog baseline (`requiredApprovals[]`):
+  - `manual_provider_action`
+  - `sandbox_provider_action`
+  - `domain_purchase`
+  - `dns_delete`
+  - `domain_activation`
+- Rules baseline:
+  - blocked bundle => `blocked`
+  - manual provider bundle => `manual_provider_action`
+  - mock provider bundle => `sandbox_provider_action`
+  - `purchase_domain` => `domain_purchase`
+  - `delete_dns_record` => `dns_delete`
+  - `activate_domain_binding` => `domain_activation`
+  - live environment => `blocked`
+- Determinism baseline:
+  - `requiredApprovals[]` is deduplicated and sorted deterministically.
+  - correlation key generation is stable for equivalent bundle inputs.
+  - no execution side effects (no provider calls, no worker execution, no DB writes).
+
 ## Explicit Current Boundaries
 
 - No external DNS API calls.
@@ -555,6 +584,7 @@ Freeze the deterministic baseline for runtime identity, runtime/domain readiness
 - Provider job planner tests: **PASS**
 - Runtime provider communicator tests: **PASS**
 - Runtime provider operation orchestrator tests: **PASS**
+- Runtime provider operation approval tests: **PASS**
 - Mock provider adapter tests: **PASS**
 - Provider sandbox adapter tests: **PASS**
 - Provider execution gate tests: **PASS**
