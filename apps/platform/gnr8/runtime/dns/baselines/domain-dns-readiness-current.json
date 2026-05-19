@@ -496,6 +496,20 @@
       "noExternalDnsOrRegistrarCalls": true
     }
   },
+  "providerControlPlaneDbReadiness": {
+    "status": "missing_tables",
+    "missingTables": [
+      "public.gnr8_provider_credential_references"
+    ],
+    "presentTables": [
+      "public.gnr8_runtime_provider_jobs",
+      "public.gnr8_agency_provider_settings"
+    ],
+    "psqlAvailable": false,
+    "migrationExists": true,
+    "routeHarnessUnaffected": true,
+    "openproviderCredentialFlowBlockedUntilMigrationApplied": true
+  },
   "diagnosticsBaseline": {
     "RUNTIME_RESOLUTION_BINDING_MISSING": {
       "emittedWhen": "strategy-mode route-harness run cannot load runtime resolution binding",

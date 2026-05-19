@@ -369,6 +369,24 @@ Freeze the deterministic baseline for runtime identity, runtime/domain readiness
   - no provider execution
   - no external DNS/registrar calls
 
+### 13f) Provider control-plane DB readiness baseline
+
+- Source:
+  - `apps/platform/gnr8/runtime/dns/provider-control-plane-db-readiness.ts`
+  - `apps/platform/gnr8/runtime/dns/provider-control-plane-db-readiness.cli.ts`
+- Table readiness baseline:
+  - `gnr8_runtime_provider_jobs`: present
+  - `gnr8_agency_provider_settings`: present
+  - `gnr8_provider_credential_references`: missing
+- Missing-table reason baseline:
+  - migration for provider credential references exists
+  - `psql` is unavailable in the local environment
+  - migration was not applied
+- Impact baseline:
+  - route-harness is unaffected
+  - provider credential reference pure tests pass
+  - Openprovider credential flow is blocked until migration is applied
+
 ## Explicit Current Boundaries
 
 - No external DNS API calls.
@@ -391,6 +409,10 @@ Freeze the deterministic baseline for runtime identity, runtime/domain readiness
   - no worker execution
   - no provider execution
   - no external DNS/registrar calls
+- Provider control-plane DB readiness currently has a missing table gate:
+  - `gnr8_provider_credential_references` is missing
+  - migration exists but is not yet applied because `psql` is unavailable locally
+  - Openprovider credential flow remains blocked until migration apply
 
 ## Validation Summary
 
