@@ -40,15 +40,15 @@ Freeze the deterministic baseline for runtime identity, runtime/domain readiness
 
 - Source: `apps/platform/gnr8/runtime/dns/dns-provider-types.ts`
 - Provider IDs baseline:
-  - `manual`
   - `mock_provider`
+  - `manual`
   - `openprovider`
   - `realtime_register`
   - `netim`
   - `inwx`
 - Provider contract/capability registry is present and deterministic:
-  - active adapters: `manual`, `mock_provider`
-  - placeholders only: `openprovider`, `realtime_register`, `netim`, `inwx`
+  - active adapters: `mock_provider`, `manual`, `openprovider`
+  - placeholders only: `realtime_register`, `netim`, `inwx`
 
 ### 6) DNS readiness planning
 
@@ -76,6 +76,29 @@ Freeze the deterministic baseline for runtime identity, runtime/domain readiness
     - expected value format: `verify_<hash20>`
     - `verified: true` only when record value equals expected deterministic verification value
   - delete behavior is deterministic and side-effect free (`deleted: true`)
+- Openprovider sandbox adapter behavior baseline:
+  - fixture provider: `openprovider`
+  - deterministic availability rules:
+    - unavailable: domains ending `.unavailable.test`
+    - unavailable: domains containing `reserved`, `taken`, or `blocked`
+    - available: all other domains
+  - deterministic zone ref: `openprovider_sandbox_zone_<hash>`
+  - deterministic record ref: `openprovider_sandbox_record_<hash>`
+  - deterministic verification:
+    - expected value is deterministic for zone + record input
+    - `verified: true` only when record value equals expected deterministic verification value
+  - implementation readiness:
+    - `ready_for_sandbox`
+    - not live-ready
+  - sandbox descriptor baseline:
+    - `mode: mock`
+    - `liveEligible: false`
+  - no external execution boundary:
+    - no `fetch`
+    - no `axios`
+    - no SDK
+    - no env/credential reads
+    - no DNS writes
 - Contract status output is explicit: `contractStatus: pass | fail`.
 - No-network-call boundary:
   - harness enforces adapter contract checks without external DNS/registrar calls
@@ -102,7 +125,8 @@ Freeze the deterministic baseline for runtime identity, runtime/domain readiness
   - `readinessStatus: ready_for_sandbox`
   - checklist keys satisfied for capability/adapter/contract; still bounded by no-live-execution gate
 - Future provider baseline:
-  - `openprovider`, `realtime_register`, `netim`, `inwx` remain `blocked`
+  - `openprovider` baseline is `ready_for_sandbox` and not live-ready
+  - `realtime_register`, `netim`, `inwx` remain `blocked`
   - baseline reason: adapters are not registered yet
 - Control-plane boundary:
   - readiness validation remains no-network and no-live-execution
@@ -149,6 +173,12 @@ Freeze the deterministic baseline for runtime identity, runtime/domain readiness
   - `liveEligible: false`
 - Mock provider descriptor baseline:
   - `providerId: mock_provider`
+  - `mode: mock`
+  - `adapterAvailable: true`
+  - `sandboxEligible`: environment-dependent and deterministic from readiness + credential boundary + gate
+  - `liveEligible: false`
+- Openprovider sandbox descriptor baseline:
+  - `providerId: openprovider`
   - `mode: mock`
   - `adapterAvailable: true`
   - `sandboxEligible`: environment-dependent and deterministic from readiness + credential boundary + gate

@@ -1,6 +1,6 @@
 {
   "kind": "runtime_domain_dns_readiness_baseline_v1",
-  "capturedAt": "2026-05-18T17:13:17.849Z",
+  "capturedAt": "2026-05-19T07:50:12.948Z",
   "scope": {
     "code": "apps/platform",
     "docs": "docs",
@@ -57,8 +57,8 @@
   "dnsProviderAbstraction": {
     "module": "gnr8/runtime/dns/dns-provider-types.ts",
     "providerIds": [
-      "manual",
       "mock_provider",
+      "manual",
       "openprovider",
       "realtime_register",
       "netim",
@@ -68,6 +68,14 @@
       "Provider capability registry and adapter contract exist.",
       "Registry includes active manual + mock_provider adapters; future adapters remain placeholders.",
       "Current tests verify deterministic typing/correlation behavior and no concrete network behavior."
+    ],
+    "registryOrder": [
+      "mock_provider",
+      "manual",
+      "openprovider",
+      "realtime_register",
+      "netim",
+      "inwx"
     ]
   },
   "dnsReadinessPlanning": {
@@ -134,8 +142,16 @@
         }
       },
       "openprovider": {
-        "readinessStatus": "blocked",
-        "blockedReason": "adapter_not_registered"
+        "readinessStatus": "ready_for_sandbox",
+        "checklist": {
+          "capability_defined": true,
+          "adapter_registered": true,
+          "contract_passes": true,
+          "credentials_not_required_for_contract": true,
+          "sandbox_mode_required_before_live": true,
+          "no_live_execution_enabled": true
+        },
+        "liveReady": false
       },
       "realtime_register": {
         "readinessStatus": "blocked",
@@ -252,6 +268,13 @@
       "noExternalDnsApiCalls": true,
       "noExternalProviderExecution": true,
       "noExternalRegistrarCalls": true
+    },
+    "openproviderBaseline": {
+      "providerId": "openprovider",
+      "mode": "mock",
+      "adapterAvailable": true,
+      "sandboxEligible": false,
+      "liveEligible": false
     }
   },
   "smokeIntegrationFields": {
@@ -578,12 +601,13 @@
     "workerBuild": "PASS",
     "fallbackDiagnosticUsedWithRealBindings": "absent",
     "providerJobPlannerTests": "PASS",
-    "repositoryDbTestsSkippedWhenDatabaseUrlMissing": "PASS_EXPECTED_SKIP"
+    "repositoryDbTestsSkippedWhenDatabaseUrlMissing": "PASS_EXPECTED_SKIP",
+    "openproviderSandboxAdapterTests": "PASS"
   },
   "routeHarnessSmoke": {
     "attempted": true,
     "executionMode": "route_harness",
-    "generatedAt": "2026-05-18T17:13:17.849Z",
+    "generatedAt": "2026-05-19T07:50:12.948Z",
     "command": "--execution-mode=route_harness --maver-strategy=active --roboplast-strategy=active",
     "overallPass": true,
     "maver": {
@@ -672,6 +696,35 @@
       "noDbPersistenceYet": true,
       "noWorkerExecutionYet": true,
       "noExternalProviderCallsYet": true
+    }
+  },
+  "openproviderSandboxAdapterBaseline": {
+    "providerId": "openprovider",
+    "deterministicAvailabilityRules": [
+      "domains ending .unavailable.test are unavailable",
+      "domains containing reserved/taken/blocked are unavailable",
+      "all other domains are available"
+    ],
+    "deterministicZoneReference": "openprovider_sandbox_zone_<hash>",
+    "deterministicRecordReference": "openprovider_sandbox_record_<hash>",
+    "deterministicVerifyBehavior": {
+      "expectedValue": "deterministic_by_zone_and_record",
+      "verifiedTrueWhen": "record_value_equals_expected"
+    },
+    "implementationReadiness": {
+      "readinessStatus": "ready_for_sandbox",
+      "liveReady": false
+    },
+    "sandboxDescriptor": {
+      "mode": "mock",
+      "liveEligible": false
+    },
+    "noExternalExecution": {
+      "noFetch": true,
+      "noAxios": true,
+      "noSdk": true,
+      "noEnvOrCredentialReads": true,
+      "noDnsWrites": true
     }
   }
 }
