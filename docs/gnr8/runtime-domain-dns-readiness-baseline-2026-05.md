@@ -428,12 +428,28 @@ Freeze the deterministic baseline for runtime identity, runtime/domain readiness
 - Source: `apps/platform/gnr8/runtime/providers/runtime-provider-operation-orchestrator.ts`
 - Orchestration flow baseline (deterministic control-plane composition):
   1. agency provider selection
+  2. provider credential resolution
   2. provider communicator
   3. execution intent
   4. execution dry-run
   5. execution gate
   6. provider job planning
   7. operation bundle
+- Runtime provider operation bundle baseline now includes:
+  - `credentialResolution?: ProviderCredentialResolutionReport`
+- Provider credential resolution orchestration ordering baseline:
+  - resolved after provider selection
+  - resolved before credential boundary / execution-gate logic
+- Provider credential reference matching baseline:
+  - `providerId`
+  - `environment`
+  - `referenceKey === selectedSetting.credentialReference`
+- Orchestrated credential-resolution outcomes baseline:
+  - manual path => `resolved`
+  - Openprovider sandbox with no reference => `missing_reference`
+  - Openprovider sandbox with partial names => `incomplete`
+  - Openprovider sandbox with complete names => `resolved`
+  - Openprovider live => `blocked`
 - Path status baseline:
   - manual path: provider selection `manual` + communicator `manual` + bundle `ready_for_manual`
   - mock provider path: provider selection `mock_provider` + communicator `resolved` + bundle `ready_for_mock`
@@ -442,6 +458,10 @@ Freeze the deterministic baseline for runtime identity, runtime/domain readiness
 - Deterministic baseline evidence:
   - repeated equivalent inputs produce stable orchestrator correlation keys and stable operation bundle output.
 - Explicit control-plane boundaries:
+  - metadata only credential-resolution evidence
+  - no environment-variable reads
+  - no DB reads for resolution metadata synthesis
+  - no secret values in bundle/report outputs
   - no DB writes
   - no worker execution
   - no provider execution

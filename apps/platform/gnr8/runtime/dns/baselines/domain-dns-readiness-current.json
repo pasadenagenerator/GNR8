@@ -566,6 +566,7 @@
     "module": "gnr8/runtime/providers/runtime-provider-operation-orchestrator.ts",
     "flow": [
       "agency_provider_selection",
+      "provider_credential_resolution",
       "provider_communicator",
       "execution_intent",
       "execution_dry_run",
@@ -573,6 +574,14 @@
       "provider_job_planning",
       "operation_bundle"
     ],
+    "credentialResolutionStep": {
+      "order": "after_provider_selection_before_credential_boundary_or_gate",
+      "matchingRules": [
+        "providerId",
+        "environment",
+        "referenceKey_equals_selectedSetting_credentialReference"
+      ]
+    },
     "pathStatuses": {
       "manualPath": {
         "communicatorRouteStatus": "manual",
@@ -593,10 +602,40 @@
     },
     "deterministicOutputAndStableKey": true,
     "boundaries": {
+      "credentialResolutionMetadataOnly": true,
+      "credentialResolutionNoEnvironmentReads": true,
+      "credentialResolutionNoDbReads": true,
+      "credentialResolutionNoSecretValues": true,
       "noDbWrites": true,
       "noWorkerExecution": true,
       "noProviderExecution": true,
       "noExternalDnsOrRegistrarCalls": true
+    }
+  },
+  "runtimeProviderOperationBundleBaseline": {
+    "module": "gnr8/runtime/providers/runtime-provider-operation-bundle.ts",
+    "credentialResolutionField": "credentialResolution?: ProviderCredentialResolutionReport"
+  },
+  "providerCredentialResolutionOrchestrationBaseline": {
+    "matchingRules": {
+      "providerId": true,
+      "environment": true,
+      "referenceKeyMatchesSelectedSettingCredentialReference": true
+    },
+    "outcomes": {
+      "manualPath": "resolved",
+      "openproviderSandboxNoReference": "missing_reference",
+      "openproviderSandboxPartialNames": "incomplete",
+      "openproviderSandboxCompleteNames": "resolved",
+      "openproviderLive": "blocked"
+    },
+    "boundaries": {
+      "metadataOnly": true,
+      "noEnvironmentReads": true,
+      "noDbReads": true,
+      "noSecretValues": true,
+      "noExternalCalls": true,
+      "noProviderExecution": true
     }
   },
   "openproviderSandboxOperationBundleScenario": {
@@ -681,6 +720,7 @@
     "providerExecutionGateTests": "PASS",
     "providerCredentialsBoundaryTests": "PASS",
     "providerCredentialResolutionTests": "PASS",
+    "providerCredentialResolutionOrchestrationTests": "PASS",
     "openproviderCredentialContractTests": "PASS",
     "providerImplementationReadinessTests": "PASS",
     "providerAdapterRegistryAndContractTests": "PASS",
