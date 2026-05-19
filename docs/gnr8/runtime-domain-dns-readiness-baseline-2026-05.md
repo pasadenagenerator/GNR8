@@ -150,6 +150,18 @@ Freeze the deterministic baseline for runtime identity, runtime/domain readiness
   - `contract`: `safe` without credentials
   - `sandbox`: required credential names are enforced, missing names are reported; credential values are not required
   - `live`: blocked in this phase even if credential names are present
+- Openprovider credential contract baseline:
+  - sandbox credential names:
+    - `OPENPROVIDER_SANDBOX_USERNAME`
+    - `OPENPROVIDER_SANDBOX_PASSWORD`
+  - live credential names:
+    - `OPENPROVIDER_LIVE_USERNAME`
+    - `OPENPROVIDER_LIVE_PASSWORD`
+  - `contract` environment requires no credentials
+  - `sandbox` reports missing credential names without requiring values
+  - `live` remains blocked regardless of credential presence
+  - secret-like credential values are forbidden
+  - output never leaks credential values
 - Secret boundary:
   - secret-like credential values are forbidden and produce blocked status
   - boundary validates names/shape only; no secret values are persisted

@@ -193,6 +193,22 @@
       "credentialsRequiredInCurrentPhase": false
     },
     "nonManualProviders": {
+      "openprovider": {
+        "providerId": "openprovider",
+        "contractEnvironmentRequiresNoCredentials": true,
+        "sandboxCredentialNames": [
+          "OPENPROVIDER_SANDBOX_USERNAME",
+          "OPENPROVIDER_SANDBOX_PASSWORD"
+        ],
+        "liveCredentialNames": [
+          "OPENPROVIDER_LIVE_USERNAME",
+          "OPENPROVIDER_LIVE_PASSWORD"
+        ],
+        "sandboxMissingCredentialNamesReportedWithoutValues": true,
+        "liveBlockedRegardlessOfCredentialPresence": true,
+        "forbidSecretLikeCredentialValues": true,
+        "neverLeakCredentialValuesInOutputs": true
+      },
       "contract": {
         "safetyStatus": "safe",
         "requiredCredentials": [],
@@ -218,6 +234,31 @@
       "noSecretStorage": true,
       "noExternalApiCalls": true,
       "noExternalDnsOrRegistrarCalls": true
+    }
+  },
+  "openproviderCredentialContractBaseline": {
+    "providerId": "openprovider",
+    "contractEnvironment": {
+      "credentialsRequired": false
+    },
+    "sandboxEnvironment": {
+      "requiredCredentialNames": [
+        "OPENPROVIDER_SANDBOX_USERNAME",
+        "OPENPROVIDER_SANDBOX_PASSWORD"
+      ],
+      "missingCredentialNamesReported": true,
+      "credentialValuesRequired": false
+    },
+    "liveEnvironment": {
+      "requiredCredentialNames": [
+        "OPENPROVIDER_LIVE_USERNAME",
+        "OPENPROVIDER_LIVE_PASSWORD"
+      ],
+      "blockedRegardlessOfCredentialPresence": true
+    },
+    "boundaries": {
+      "forbidSecretLikeCredentialValues": true,
+      "neverLeakCredentialValuesInOutputs": true
     }
   },
   "providerSandboxAdapterDescriptor": {
@@ -587,6 +628,7 @@
     "providerSandboxAdapterTests": "PASS",
     "providerExecutionGateTests": "PASS",
     "providerCredentialsBoundaryTests": "PASS",
+    "openproviderCredentialContractTests": "PASS",
     "providerImplementationReadinessTests": "PASS",
     "providerAdapterRegistryAndContractTests": "PASS",
     "dnsProviderSelectionReadinessTests": "PASS",
