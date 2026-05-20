@@ -739,6 +739,56 @@
       "noExternalCalls": true
     }
   },
+  "runtimeProviderWorkerPickupReadinessBaseline": {
+    "module": "gnr8/runtime/providers/runtime-provider-worker-pickup-readiness.ts",
+    "model": "RuntimeProviderWorkerPickupReadinessReport",
+    "position": "final_pre_worker_readiness_check",
+    "reportFields": [
+      "handoffId",
+      "providerId",
+      "environment",
+      "capability",
+      "operationKind",
+      "readinessStatus",
+      "requiredConditions",
+      "satisfiedConditions",
+      "missingConditions",
+      "warnings",
+      "blockers",
+      "correlationKey"
+    ],
+    "readinessStatuses": [
+      "ready_for_worker",
+      "not_ready",
+      "blocked"
+    ],
+    "requiredConditions": [
+      "handoff_status_ready",
+      "non_live_environment",
+      "has_planned_jobs",
+      "approval_status_approved"
+    ],
+    "rules": [
+      "ready_for_worker_when_all_required_conditions_satisfied_and_no_blockers",
+      "not_ready_when_required_conditions_missing_and_no_blockers",
+      "blocked_for_live_environment",
+      "blocked_for_handoff_status_blocked",
+      "blocked_for_unapproved_and_blocked_handoff",
+      "blocked_for_executable_provider_handoff_with_no_planned_jobs"
+    ],
+    "deterministic": {
+      "requiredConditionsFixedOrder": true,
+      "warningsDedupeAndSort": true,
+      "blockersDedupeAndSort": true,
+      "stableCorrelationKey": true
+    },
+    "boundaries": {
+      "noDbAccess": true,
+      "noWorkerExecution": true,
+      "noProviderExecution": true,
+      "noExternalCalls": true
+    }
+  },
   "runtimeProviderOperationApprovalPersistenceBaseline": {
     "module": "gnr8/runtime/providers/runtime-provider-operation-approval-artifact-store.ts",
     "table": "public.gnr8_runtime_provider_operation_approvals",
@@ -1048,6 +1098,7 @@
     "runtimeProviderOperationApprovalTransitionRepositoryTests": "PASS_WITH_EXPECTED_DB_SKIPS",
     "runtimeProviderOperationApprovalArtifactTests": "PASS",
     "runtimeProviderExecutionHandoffTests": "PASS",
+    "runtimeProviderWorkerPickupReadinessTests": "PASS",
     "runtimeProviderExecutionHandoffStoreTests": "PASS",
     "runtimeProviderExecutionHandoffRepositoryTests": "PASS_WITH_EXPECTED_DB_SKIPS",
     "runtimeProviderOperationApprovalRepositoryTests": "PASS_WITH_EXPECTED_DB_SKIPS",

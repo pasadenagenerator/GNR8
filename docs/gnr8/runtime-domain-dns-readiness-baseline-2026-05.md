@@ -624,6 +624,51 @@ Freeze the deterministic baseline for runtime identity, runtime/domain readiness
   - no provider execution
   - no external calls
 
+### 13ib) Runtime provider worker pickup readiness baseline
+
+- Source: `apps/platform/gnr8/runtime/providers/runtime-provider-worker-pickup-readiness.ts`
+- Report model baseline:
+  - `RuntimeProviderWorkerPickupReadinessReport` is the final pre-worker readiness check derived from execution handoff artifacts.
+  - The readiness report is control-plane only and deterministic.
+- Report fields baseline:
+  - `handoffId`
+  - `providerId`
+  - `environment`
+  - `capability`
+  - `operationKind`
+  - `readinessStatus`
+  - `requiredConditions`
+  - `satisfiedConditions`
+  - `missingConditions`
+  - `warnings`
+  - `blockers`
+  - `correlationKey`
+- Readiness statuses baseline:
+  - `ready_for_worker`
+  - `not_ready`
+  - `blocked`
+- Required conditions baseline:
+  - `handoff_status_ready`
+  - `non_live_environment`
+  - `has_planned_jobs`
+  - `approval_status_approved`
+- Readiness rules baseline:
+  - `ready_for_worker` when all required conditions are satisfied and no blockers exist
+  - `not_ready` when required conditions are missing and no blockers exist
+  - `blocked` for live environment
+  - `blocked` for `handoffStatus == blocked`
+  - `blocked` for unapproved + blocked handoff
+  - `blocked` for executable (non-manual) provider handoff with no planned jobs
+- Determinism baseline:
+  - `requiredConditions` has a fixed deterministic order
+  - `warnings` and `blockers` are deduplicated and sorted deterministically
+  - correlation key is stable for equivalent handoff inputs + readiness output
+- Boundary baseline:
+  - no DB access
+  - no worker execution
+  - no provider execution
+  - no external calls
+
 ### 13j) Runtime provider operation approval persistence foundation baseline
 
 - Source: `apps/platform/gnr8/runtime/providers/runtime-provider-operation-approval-artifact-store.ts`
