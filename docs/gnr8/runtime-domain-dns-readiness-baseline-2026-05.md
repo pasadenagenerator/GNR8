@@ -585,6 +585,45 @@ Freeze the deterministic baseline for runtime identity, runtime/domain readiness
   - no provider execution
   - no external calls
 
+### 13ia) Runtime provider execution handoff artifact baseline
+
+- Source: `apps/platform/gnr8/runtime/providers/runtime-provider-execution-handoff-artifact.ts`
+- Artifact model baseline:
+  - `RuntimeProviderExecutionHandoffArtifact` is the bridge from approved provider operation to future worker execution.
+  - The handoff artifact is control-plane only and deterministic.
+- Artifact shape baseline:
+  - `handoffId`
+  - `artifactId`
+  - `siteId`
+  - `siteVersionId`
+  - `providerId`
+  - `environment`
+  - `capability`
+  - `operationKind`
+  - `approvalStatus`
+  - `riskLevel`
+  - `handoffStatus`
+  - `plannedJobIds`
+  - `warnings`
+  - `blockers`
+  - `correlationKey`
+- Handoff statuses baseline:
+  - `ready`
+  - `blocked`
+- Handoff rules baseline:
+  - `approvalStatus != approved` => `blocked`
+  - `bundleStatus == blocked` => `blocked`
+  - `environment == live` => `blocked`
+  - approved + non-blocked + non-live => `ready`
+  - `plannedJobIds` are deduplicated and sorted deterministically.
+  - `warnings` and `blockers` are deduplicated and sorted deterministically.
+  - `handoffId` is deterministic for equivalent inputs.
+- Boundary baseline:
+  - no DB writes
+  - no worker execution
+  - no provider execution
+  - no external calls
+
 ### 13j) Runtime provider operation approval persistence foundation baseline
 
 - Source: `apps/platform/gnr8/runtime/providers/runtime-provider-operation-approval-artifact-store.ts`

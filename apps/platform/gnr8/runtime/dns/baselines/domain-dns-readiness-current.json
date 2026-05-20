@@ -695,6 +695,50 @@
       "noExternalCalls": true
     }
   },
+  "runtimeProviderExecutionHandoffBaseline": {
+    "module": "gnr8/runtime/providers/runtime-provider-execution-handoff-artifact.ts",
+    "model": "RuntimeProviderExecutionHandoffArtifact",
+    "position": "bridge_from_approved_provider_operation_to_future_worker_execution",
+    "artifactShape": [
+      "handoffId",
+      "artifactId",
+      "siteId",
+      "siteVersionId",
+      "providerId",
+      "environment",
+      "capability",
+      "operationKind",
+      "approvalStatus",
+      "riskLevel",
+      "handoffStatus",
+      "plannedJobIds",
+      "warnings",
+      "blockers",
+      "correlationKey"
+    ],
+    "handoffStatuses": [
+      "ready",
+      "blocked"
+    ],
+    "rules": [
+      "approval_status_not_approved_implies_blocked",
+      "blocked_bundle_implies_blocked",
+      "live_environment_implies_blocked",
+      "approved_and_non_blocked_and_non_live_implies_ready"
+    ],
+    "deterministic": {
+      "plannedJobIdsDedupeAndSort": true,
+      "warningsDedupeAndSort": true,
+      "blockersDedupeAndSort": true,
+      "handoffIdDeterministic": true
+    },
+    "boundaries": {
+      "noDbWrites": true,
+      "noWorkerExecution": true,
+      "noProviderExecution": true,
+      "noExternalCalls": true
+    }
+  },
   "runtimeProviderOperationApprovalPersistenceBaseline": {
     "module": "gnr8/runtime/providers/runtime-provider-operation-approval-artifact-store.ts",
     "table": "public.gnr8_runtime_provider_operation_approvals",
@@ -937,6 +981,7 @@
     "runtimeProviderOperationApprovalTransitionTests": "PASS",
     "runtimeProviderOperationApprovalTransitionRepositoryTests": "PASS_WITH_EXPECTED_DB_SKIPS",
     "runtimeProviderOperationApprovalArtifactTests": "PASS",
+    "runtimeProviderExecutionHandoffTests": "PASS",
     "runtimeProviderOperationApprovalRepositoryTests": "PASS_WITH_EXPECTED_DB_SKIPS",
     "runtimeProviderOperationApprovalStoreTests": "PASS",
     "mockProviderAdapterTests": "PASS",
