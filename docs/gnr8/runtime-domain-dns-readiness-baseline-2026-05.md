@@ -658,6 +658,43 @@ Freeze the deterministic baseline for runtime identity, runtime/domain readiness
   - no DB repository yet
   - no approval state transitions yet
 
+### 13ja) Runtime provider execution handoff persistence foundation baseline
+
+- Source: `apps/platform/gnr8/runtime/providers/runtime-provider-execution-handoff-store.ts`
+- Persistence scope baseline:
+  - Foundation mapping is defined for `RuntimeProviderExecutionHandoffArtifact` persistence shape.
+  - Persistence target table baseline:
+    - `public.gnr8_runtime_provider_execution_handoffs`
+- Persistence columns baseline:
+  - `id`
+  - `handoff_id`
+  - `artifact_id`
+  - `site_id`
+  - `site_version_id`
+  - `provider_id`
+  - `environment`
+  - `capability`
+  - `operation_kind`
+  - `approval_status`
+  - `risk_level`
+  - `handoff_status`
+  - `planned_job_ids`
+  - `warnings`
+  - `blockers`
+  - `correlation_key`
+  - `created_at`
+  - `updated_at`
+- Mapper function baseline:
+  - `mapExecutionHandoffArtifactToRow`
+  - `mapExecutionHandoffArtifactRow`
+  - `createExecutionHandoffInsertRows`
+- Boundary baseline:
+  - pure mapping only
+  - no DB repository yet
+  - no worker execution
+  - no provider execution
+  - no external calls
+
 ### 13k) Runtime provider operation approval transition repository foundation baseline
 
 - Source: `apps/platform/gnr8/runtime/providers/runtime-provider-operation-approval-repository.ts`

@@ -775,6 +775,42 @@
       "noExternalCalls": true
     }
   },
+  "runtimeProviderExecutionHandoffPersistenceBaseline": {
+    "module": "gnr8/runtime/providers/runtime-provider-execution-handoff-store.ts",
+    "table": "public.gnr8_runtime_provider_execution_handoffs",
+    "columns": [
+      "id",
+      "handoff_id",
+      "artifact_id",
+      "site_id",
+      "site_version_id",
+      "provider_id",
+      "environment",
+      "capability",
+      "operation_kind",
+      "approval_status",
+      "risk_level",
+      "handoff_status",
+      "planned_job_ids",
+      "warnings",
+      "blockers",
+      "correlation_key",
+      "created_at",
+      "updated_at"
+    ],
+    "mapperFunctions": [
+      "mapExecutionHandoffArtifactToRow",
+      "mapExecutionHandoffArtifactRow",
+      "createExecutionHandoffInsertRows"
+    ],
+    "boundaries": {
+      "pureMappingOnly": true,
+      "noDbRepositoryYet": true,
+      "noWorkerExecution": true,
+      "noProviderExecution": true,
+      "noExternalCalls": true
+    }
+  },
   "runtimeProviderOperationApprovalRepositoryBaseline": {
     "module": "gnr8/runtime/providers/runtime-provider-operation-approval-repository.ts",
     "methods": [
@@ -982,6 +1018,7 @@
     "runtimeProviderOperationApprovalTransitionRepositoryTests": "PASS_WITH_EXPECTED_DB_SKIPS",
     "runtimeProviderOperationApprovalArtifactTests": "PASS",
     "runtimeProviderExecutionHandoffTests": "PASS",
+    "runtimeProviderExecutionHandoffStoreTests": "PASS",
     "runtimeProviderOperationApprovalRepositoryTests": "PASS_WITH_EXPECTED_DB_SKIPS",
     "runtimeProviderOperationApprovalStoreTests": "PASS",
     "mockProviderAdapterTests": "PASS",
