@@ -4,6 +4,12 @@ import {
   type RuntimeProviderOperationApprovalArtifactRecord,
   type RuntimeProviderOperationApprovalArtifactRow,
 } from "@/gnr8/runtime/providers/runtime-provider-operation-approval-store";
+import {
+  applyProviderOperationApprovalStateTransition,
+  createProviderOperationApprovalTransitionReport,
+  type ProviderOperationApprovalState,
+  type ProviderOperationApprovalTransitionReport,
+} from "@/gnr8/runtime/providers/runtime-provider-operation-approval-transitions";
 import { getSuperadminPool } from "@/src/superadmin/db";
 
 export async function createProviderOperationApprovalArtifacts(
@@ -234,4 +240,80 @@ export async function getProviderOperationApprovalsByCorrelationKey(
   );
 
   return res.rows.map(mapApprovalArtifactRow);
+}
+
+export async function updateProviderOperationApprovalState(input: {
+  artifactId: string;
+  previousState: ProviderOperationApprovalState;
+  requestedState: ProviderOperationApprovalState;
+}): Promise<{
+  approvalArtifact?: RuntimeProviderOperationApprovalArtifactRecord;
+  transitionReport: ProviderOperationApprovalTransitionReport;
+}> {
+  const existing = await getProviderOperationApprovalByArtifactId(input.artifactId);
+  if (!existing) {
+    return {
+      transitionReport: {
+        ...createProviderOperationApprovalTransitionReport(input.previousState, input.requestedState),
+        status: "rejected",
+        blockers: ["approval_artifact_not_found"],
+      },
+    };
+  }
+
+  const transitionReport = applyProviderOperationApprovalStateTransition(
+    existing,
+    input.previousState,
+    input.requestedState,
+  );
+  if (transitionReport.status === "rejected") {
+    return {
+      approvalArtifact: existing,
+      transitionReport,
+    };
+  }
+
+  const pool = getSuperadminPool();
+  const res = await pool.query<RuntimeProviderOperationApprovalArtifactRow>(
+    `
+    update public.gnr8_runtime_provider_operation_approvals
+    set approval_status = $2::text
+    where artifact_id = $1::text
+    returning
+      id::text as id,
+      artifact_id::text as artifact_id,
+      site_id::text as site_id,
+      site_version_id::text as site_version_id,
+      provider_id::text as provider_id,
+      environment::text as environment,
+      capability::text as capability,
+      operation_kind::text as operation_kind,
+      approval_status::text as approval_status,
+      risk_level::text as risk_level,
+      required_approvals,
+      reviewer_checklist,
+      warnings,
+      blockers,
+      correlation_key::text as correlation_key,
+      created_at::text as created_at,
+      updated_at::text as updated_at
+    `,
+    [input.artifactId, input.requestedState],
+  );
+
+  const updated = res.rows[0];
+  if (!updated) {
+    return {
+      transitionReport: {
+        ...transitionReport,
+        status: "rejected",
+        blockers: [...transitionReport.blockers, "approval_artifact_not_found"],
+      },
+    };
+  }
+
+  return {
+    approvalArtifact: mapApprovalArtifactRow(updated),
+    transitionReport,
+  };
 }

@@ -13,6 +13,7 @@ import {
   getProviderOperationApprovalByArtifactId,
   getProviderOperationApprovalsByCorrelationKey,
   getProviderOperationApprovalsBySite,
+  updateProviderOperationApprovalState,
 } from "@/gnr8/runtime/providers/runtime-provider-operation-approval-repository";
 import { getSuperadminPool } from "@/src/superadmin/db";
 
@@ -238,6 +239,182 @@ test("runtime provider operation approval repository: no execution side effects"
     assert.deepEqual(stored?.warnings, artifact.warnings);
     assert.deepEqual(stored?.blockers, artifact.blockers);
     assert.equal(stored?.summary.includes("risk="), true);
+  } finally {
+    await cleanup([artifact.artifactId]);
+  }
+});
+
+test("runtime provider operation approval repository: pending -> approved applied", async (t) => {
+  if (await skipIfRepositoryTableMissing(t)) return;
+
+  const artifact = buildArtifact({
+    approvalStatus: "pending" as RuntimeProviderOperationApprovalArtifactRecord["approvalStatus"],
+  });
+
+  try {
+    await createProviderOperationApprovalArtifacts([artifact]);
+    const result = await updateProviderOperationApprovalState({
+      artifactId: artifact.artifactId,
+      previousState: "pending",
+      requestedState: "approved",
+    });
+
+    assert.equal(result.transitionReport.status, "applied");
+    assert.equal(result.approvalArtifact?.approvalStatus, "approved");
+  } finally {
+    await cleanup([artifact.artifactId]);
+  }
+});
+
+test("runtime provider operation approval repository: pending -> rejected applied", async (t) => {
+  if (await skipIfRepositoryTableMissing(t)) return;
+
+  const artifact = buildArtifact({
+    approvalStatus: "pending" as RuntimeProviderOperationApprovalArtifactRecord["approvalStatus"],
+  });
+
+  try {
+    await createProviderOperationApprovalArtifacts([artifact]);
+    const result = await updateProviderOperationApprovalState({
+      artifactId: artifact.artifactId,
+      previousState: "pending",
+      requestedState: "rejected",
+    });
+
+    assert.equal(result.transitionReport.status, "applied");
+    assert.equal(result.approvalArtifact?.approvalStatus, "rejected");
+  } finally {
+    await cleanup([artifact.artifactId]);
+  }
+});
+
+test("runtime provider operation approval repository: approved -> rejected rejected", async (t) => {
+  if (await skipIfRepositoryTableMissing(t)) return;
+
+  const artifact = buildArtifact({
+    approvalStatus: "approved" as RuntimeProviderOperationApprovalArtifactRecord["approvalStatus"],
+  });
+
+  try {
+    await createProviderOperationApprovalArtifacts([artifact]);
+    const before = await getProviderOperationApprovalByArtifactId(artifact.artifactId);
+    const result = await updateProviderOperationApprovalState({
+      artifactId: artifact.artifactId,
+      previousState: "approved",
+      requestedState: "rejected",
+    });
+    const after = await getProviderOperationApprovalByArtifactId(artifact.artifactId);
+
+    assert.equal(result.transitionReport.status, "rejected");
+    assert.deepEqual(result.transitionReport.warnings, ["invalid_transition"]);
+    assert.deepEqual(result.approvalArtifact, before);
+    assert.deepEqual(after, before);
+  } finally {
+    await cleanup([artifact.artifactId]);
+  }
+});
+
+test("runtime provider operation approval repository: blocked artifact cannot approve", async (t) => {
+  if (await skipIfRepositoryTableMissing(t)) return;
+
+  const artifact = buildArtifact({
+    approvalStatus: "blocked",
+  });
+
+  try {
+    await createProviderOperationApprovalArtifacts([artifact]);
+    const before = await getProviderOperationApprovalByArtifactId(artifact.artifactId);
+    const result = await updateProviderOperationApprovalState({
+      artifactId: artifact.artifactId,
+      previousState: "pending",
+      requestedState: "approved",
+    });
+    const after = await getProviderOperationApprovalByArtifactId(artifact.artifactId);
+
+    assert.equal(result.transitionReport.status, "rejected");
+    assert.deepEqual(result.transitionReport.blockers, ["blocked_artifact_cannot_be_approved"]);
+    assert.deepEqual(after, before);
+  } finally {
+    await cleanup([artifact.artifactId]);
+  }
+});
+
+test("runtime provider operation approval repository: artifact not found", async (t) => {
+  if (await skipIfRepositoryTableMissing(t)) return;
+
+  const result = await updateProviderOperationApprovalState({
+    artifactId: `missing_artifact_${randomUUID()}`,
+    previousState: "pending",
+    requestedState: "approved",
+  });
+
+  assert.equal(result.approvalArtifact, undefined);
+  assert.equal(result.transitionReport.status, "rejected");
+  assert.deepEqual(result.transitionReport.blockers, ["approval_artifact_not_found"]);
+});
+
+test("runtime provider operation approval repository: invalid transition does not update row", async (t) => {
+  if (await skipIfRepositoryTableMissing(t)) return;
+
+  const artifact = buildArtifact({
+    approvalStatus: "approved" as RuntimeProviderOperationApprovalArtifactRecord["approvalStatus"],
+  });
+
+  try {
+    await createProviderOperationApprovalArtifacts([artifact]);
+    const before = await getProviderOperationApprovalByArtifactId(artifact.artifactId);
+    const result = await updateProviderOperationApprovalState({
+      artifactId: artifact.artifactId,
+      previousState: "approved",
+      requestedState: "blocked",
+    });
+    const after = await getProviderOperationApprovalByArtifactId(artifact.artifactId);
+
+    assert.equal(result.transitionReport.status, "rejected");
+    assert.deepEqual(result.transitionReport.warnings, ["invalid_transition"]);
+    assert.equal(after?.approvalStatus, before?.approvalStatus);
+    assert.deepEqual(after, before);
+  } finally {
+    await cleanup([artifact.artifactId]);
+  }
+});
+
+test("runtime provider operation approval repository: state update mutates only approval_status", async (t) => {
+  if (await skipIfRepositoryTableMissing(t)) return;
+
+  const artifact = buildArtifact({
+    approvalStatus: "pending" as RuntimeProviderOperationApprovalArtifactRecord["approvalStatus"],
+    warnings: ["manual_review_only"],
+    blockers: [],
+    summary: "provider=mock_provider; environment=sandbox; operation=upsert_dns_record; approval=pending; risk=low",
+  });
+
+  try {
+    await createProviderOperationApprovalArtifacts([artifact]);
+    const before = await getProviderOperationApprovalByArtifactId(artifact.artifactId);
+    const result = await updateProviderOperationApprovalState({
+      artifactId: artifact.artifactId,
+      previousState: "pending",
+      requestedState: "approved",
+    });
+    const after = await getProviderOperationApprovalByArtifactId(artifact.artifactId);
+
+    assert.equal(result.transitionReport.status, "applied");
+    assert.equal(before?.approvalStatus, "pending");
+    assert.equal(after?.approvalStatus, "approved");
+    assert.equal(after?.siteId, before?.siteId);
+    assert.equal(after?.siteVersionId, before?.siteVersionId);
+    assert.equal(after?.providerId, before?.providerId);
+    assert.equal(after?.environment, before?.environment);
+    assert.equal(after?.capability, before?.capability);
+    assert.equal(after?.operationKind, before?.operationKind);
+    assert.equal(after?.riskLevel, before?.riskLevel);
+    assert.deepEqual(after?.requiredApprovals, before?.requiredApprovals);
+    assert.deepEqual(after?.reviewerChecklist, before?.reviewerChecklist);
+    assert.deepEqual(after?.warnings, before?.warnings);
+    assert.deepEqual(after?.blockers, before?.blockers);
+    assert.equal(after?.correlationKey, before?.correlationKey);
+    assert.equal(after?.createdAt, before?.createdAt);
   } finally {
     await cleanup([artifact.artifactId]);
   }
