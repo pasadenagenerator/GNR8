@@ -695,6 +695,31 @@ Freeze the deterministic baseline for runtime identity, runtime/domain readiness
   - no provider execution
   - no external calls
 
+### 13jb) Runtime provider execution handoff repository foundation baseline
+
+- Source: `apps/platform/gnr8/runtime/providers/runtime-provider-execution-handoff-repository.ts`
+- Repository methods baseline:
+  - `createProviderExecutionHandoffArtifacts`
+  - `getProviderExecutionHandoffByHandoffId`
+  - `getProviderExecutionHandoffsBySite`
+  - `getProviderExecutionHandoffsByCorrelationKey`
+- Behavior baseline:
+  - deterministic insert ordering for batched handoff persistence
+  - duplicate `handoff_id` conflicts are ignored
+  - duplicate `correlation_key` conflicts are ignored
+  - `getProviderExecutionHandoffsBySite` ordering:
+    - `created_at` ascending
+    - `handoff_id` ascending (tie-breaker)
+- Current boundaries:
+  - repository persistence/query only
+  - no handoff state transitions yet
+  - no worker execution
+  - no provider execution
+  - no external calls
+- DB integration test baseline:
+  - repository DB tests are expected to skip when `DATABASE_URL` is missing
+  - repository DB tests are expected to skip when `gnr8_runtime_provider_execution_handoffs` table is missing
+
 ### 13k) Runtime provider operation approval transition repository foundation baseline
 
 - Source: `apps/platform/gnr8/runtime/providers/runtime-provider-operation-approval-repository.ts`
