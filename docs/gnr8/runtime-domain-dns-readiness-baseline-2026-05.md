@@ -635,13 +635,49 @@ Freeze the deterministic baseline for runtime identity, runtime/domain readiness
     - `created_at` ascending
     - `artifact_id` ascending (tie-breaker)
 - Current boundaries:
-  - no approval transitions yet
+  - repository persistence/query only
   - no worker execution
   - no provider execution
   - no external calls
 - DB test behavior baseline:
   - repository DB tests are expected to skip when `DATABASE_URL` is missing
   - repository DB tests are expected to skip when `gnr8_runtime_provider_operation_approvals` table is missing
+  - no worker execution
+  - no provider execution
+  - no external calls
+
+### 13l) Runtime provider operation approval transition model baseline
+
+- Source: `apps/platform/gnr8/runtime/providers/runtime-provider-operation-approval-transitions.ts`
+- Approval states:
+  - `pending`
+  - `approved`
+  - `rejected`
+  - `expired`
+  - `blocked`
+- Allowed transitions:
+  - `pending -> approved`
+  - `pending -> rejected`
+  - `pending -> expired`
+  - `pending -> blocked`
+- Terminal states:
+  - `approved`
+  - `rejected`
+  - `expired`
+  - `blocked`
+- Safety rules:
+  - blocked artifact cannot be approved
+  - live environment artifact cannot be approved
+- Transition report shape:
+  - `status`: `applied | rejected`
+  - `previousState`
+  - `requestedState`
+  - `warnings`
+  - `blockers`
+  - `correlationKey`
+- Boundaries:
+  - pure transition model only
+  - no DB writes
   - no worker execution
   - no provider execution
   - no external calls
@@ -691,6 +727,7 @@ Freeze the deterministic baseline for runtime identity, runtime/domain readiness
 - Runtime provider communicator tests: **PASS**
 - Runtime provider operation orchestrator tests: **PASS**
 - Runtime provider operation approval tests: **PASS**
+- Runtime provider operation approval transition tests: **PASS**
 - Runtime provider operation approval artifact tests: **PASS**
 - Runtime provider operation approval store tests: **PASS**
 - Mock provider adapter tests: **PASS**

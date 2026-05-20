@@ -749,7 +749,7 @@
       ]
     },
     "boundaries": {
-      "noApprovalTransitionsYet": true,
+      "repositoryPersistenceAndQueryOnly": true,
       "noWorkerExecution": true,
       "noProviderExecution": true,
       "noExternalCalls": true
@@ -758,6 +758,49 @@
       "skipWhenDatabaseUrlMissing": true,
       "skipWhenApprovalTableMissing": true,
       "approvalTable": "public.gnr8_runtime_provider_operation_approvals"
+    }
+  },
+  "runtimeProviderOperationApprovalTransitionBaseline": {
+    "module": "gnr8/runtime/providers/runtime-provider-operation-approval-transitions.ts",
+    "approvalStates": [
+      "pending",
+      "approved",
+      "rejected",
+      "expired",
+      "blocked"
+    ],
+    "allowedTransitions": [
+      "pending->approved",
+      "pending->rejected",
+      "pending->expired",
+      "pending->blocked"
+    ],
+    "terminalStates": [
+      "approved",
+      "rejected",
+      "expired",
+      "blocked"
+    ],
+    "safetyRules": {
+      "blockedArtifactCannotBeApproved": true,
+      "liveEnvironmentArtifactCannotBeApproved": true
+    },
+    "transitionReportShape": {
+      "status": "applied|rejected",
+      "fields": [
+        "previousState",
+        "requestedState",
+        "warnings",
+        "blockers",
+        "correlationKey"
+      ]
+    },
+    "boundaries": {
+      "pureTransitionModelOnly": true,
+      "noDbWrites": true,
+      "noWorkerExecution": true,
+      "noProviderExecution": true,
+      "noExternalCalls": true
     }
   },
   "providerCredentialResolutionOrchestrationBaseline": {
@@ -860,6 +903,7 @@
     "runtimeProviderOperationOrchestratorTests": "PASS",
     "runtimeProviderCommunicatorTests": "PASS",
     "runtimeProviderOperationApprovalTests": "PASS",
+    "runtimeProviderOperationApprovalTransitionTests": "PASS",
     "runtimeProviderOperationApprovalArtifactTests": "PASS",
     "runtimeProviderOperationApprovalRepositoryTests": "PASS_WITH_EXPECTED_DB_SKIPS",
     "runtimeProviderOperationApprovalStoreTests": "PASS",
