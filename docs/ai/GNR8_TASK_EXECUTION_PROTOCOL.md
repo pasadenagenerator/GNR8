@@ -1,16 +1,19 @@
 # GNR8 TASK EXECUTION PROTOCOL
 
 ## 1) Purpose
-Ta dokument definira obvezen nacin podajanja in izvajanja nalog, da ostane razvoj deterministcen, sledljiv in brez arhitekturnega drifta.
+
+Ta dokument definira obvezen nacin podajanja in izvajanja nalog, da ostane razvoj deterministicen, sledljiv in brez arhitekturnega drifta.
 
 ## 2) Mandatory Rules
+
 - Task mora biti podan v TXT bloku.
-- Uporabi deterministic language only.
+- Deterministic language only.
 - No speculative refactors.
 - No architecture redesign brez ADR.
-- Vse spremembe morajo imeti dokaz uspeha.
+- Vsaka sprememba mora imeti dokaz uspeha.
 - Brez silent fallbackov.
 - Brez implicitnih sprememb contractov.
+- Brez skritega runtime/provider execution.
 
 ## 3) Required Task Template (Copy/Paste)
 
@@ -29,21 +32,18 @@ Expected Evidence:
 Success Criteria:
 TXT TASK END
 
-## 4) Field Definition Standard
-- Title: kratek, enolicen naslov naloge.
-- Context: trenutno stanje in zakaj naloga obstaja.
-- Goal: tocno kaj mora biti dosezeno.
-- Non-Goals: kaj ni del naloge.
-- Scope (Allowed Files): ekspliciten seznam dovoljenih datotek/modulov.
-- Out of Scope: cesa se ne sme spreminjati.
-- Constraints: pravila (deterministic, contracts, no drift).
-- Implementation Requirements: konkretna implementacijska pravila.
-- Diagnostics Requirements: katere diagnosticne evente dodati/spremeniti.
-- Validation Commands: tocni ukazi za preverjanje.
-- Expected Evidence: kaj mora biti vidno v outputu/logih.
-- Success Criteria: merljiv zakljucek naloge.
+## 4) Required Constraints For Current Phase
+
+V tej fazi so obvezne meje:
+- NO provider execution.
+- NO live DNS.
+- NO external registrar calls.
+- NO worker execution for provider actions.
+- Openprovider sandbox only.
+- control-plane only.
 
 ## 5) Output Contract for Codex
+
 Po izvedbi mora biti vrnjen:
 1. Summary of changes
 2. Files changed (exact list)
@@ -52,20 +52,9 @@ Po izvedbi mora biti vrnjen:
 5. Validation evidence
 6. Residual risks / follow-ups
 
-## 6) Allowed vs Disallowed
-Allowed:
-- deterministcne izboljsave znotraj obstojecih arhitekturnih meja
-- eksplicitno dodajanje diagnostike
-- contract-preserving refactors
+## 6) Quality Gate Checklist
 
-Disallowed:
-- arhitekturni pivot brez ADR
-- nejasni "cleanup" posegi brez success criteria
-- fallback logika brez diagnosticnega zapisa
-- spremembe izven declared scope
-
-## 7) Quality Gate Checklist
-Pred zakljuckom mora vsak task potrditi:
+Pred zakljuckom mora task potrditi:
 - [ ] Scope spostovan
 - [ ] Contracts ohranjeni
 - [ ] Diagnostics dodani/posodobljeni
@@ -73,9 +62,20 @@ Pred zakljuckom mora vsak task potrditi:
 - [ ] Evidence prilozen
 - [ ] Ni silent fallbackov
 - [ ] Ni architecture drift-a
+- [ ] Current execution boundaries niso krsene
+
+## 7) Canonical Context Requirement
+
+Pred vecjimi spremembami vedno preberi:
+- `docs/ai/GNR8_THREAD_HANDOFF.md`
+- `docs/ai/GNR8_MASTER_CONTEXT_BOOTSTRAP.md`
+- `docs/ai/GNR8_CURRENT_STATE.md`
+- `docs/ai/GNR8_PROJECT_MAP.md`
+- `docs/ai/decisions/*.md`
 
 ## 8) Escalation Rule
-Ce task zahteva arhitekturno spremembo:
+
+Ce task zahteva arhitekturno spremembo ali live/provider execution premik:
 - STOP izvedba
 - predlagaj ADR
 - nadaljuj sele po potrditvi odlocitve

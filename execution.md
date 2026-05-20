@@ -1,3 +1,7 @@
+> Canonical AI/bootstrap context now lives in `docs/ai/` (start with `docs/ai/GNR8_THREAD_HANDOFF.md` and `docs/ai/GNR8_CANONICAL_DOC_INDEX.md`).
+
+> This file remains valid as supporting platform policy/history.
+
 # EXECUTION LOOP — PLATFORM
 
 Codex operates as a senior platform engineer.

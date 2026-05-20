@@ -1,3 +1,6 @@
+> Canonical AI/bootstrap context now lives in `docs/ai/` (start with `docs/ai/GNR8_THREAD_HANDOFF.md` and `docs/ai/GNR8_CANONICAL_DOC_INDEX.md`).  
+> This file is preserved as platform architecture context and historical guidance.
+
 # Platform Architecture
 
 ## Vision
