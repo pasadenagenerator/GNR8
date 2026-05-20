@@ -619,6 +619,33 @@ Freeze the deterministic baseline for runtime identity, runtime/domain readiness
   - no DB repository yet
   - no approval state transitions yet
 
+### 13k) Runtime provider operation approval transition repository foundation baseline
+
+- Source: `apps/platform/gnr8/runtime/providers/runtime-provider-operation-approval-repository.ts`
+- Repository method baseline:
+  - `updateProviderOperationApprovalState(input)`
+- Input shape baseline:
+  - `artifactId`
+  - `previousState`
+  - `requestedState`
+- Output shape baseline:
+  - `approvalArtifact?`
+  - `transitionReport`
+- Behavior baseline:
+  - loads approval artifact by `artifactId`
+  - missing artifact returns rejected transition with blocker `approval_artifact_not_found`
+  - rejected transition performs no DB update
+  - applied transition updates `approval_status` only
+  - all non-status fields are preserved
+- Boundary baseline:
+  - no worker execution
+  - no provider execution
+  - no external calls
+  - no smoke behavior changes
+- DB integration test baseline:
+  - skip when `DATABASE_URL` is missing
+  - skip when `public.gnr8_runtime_provider_operation_approvals` table is missing
+
 ### 13k) Runtime provider operation approval repository foundation baseline
 
 - Source: `apps/platform/gnr8/runtime/providers/runtime-provider-operation-approval-repository.ts`

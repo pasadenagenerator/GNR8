@@ -803,6 +803,37 @@
       "noExternalCalls": true
     }
   },
+  "runtimeProviderOperationApprovalTransitionRepositoryBaseline": {
+    "module": "gnr8/runtime/providers/runtime-provider-operation-approval-repository.ts",
+    "method": "updateProviderOperationApprovalState",
+    "inputShape": [
+      "artifactId",
+      "previousState",
+      "requestedState"
+    ],
+    "outputShape": [
+      "approvalArtifact?",
+      "transitionReport"
+    ],
+    "behavior": {
+      "loadsApprovalByArtifactId": true,
+      "missingArtifactRejectedBlocker": "approval_artifact_not_found",
+      "rejectedTransitionDoesNotUpdateDb": true,
+      "appliedTransitionUpdatesApprovalStatusOnly": true,
+      "preservesAllOtherFields": true
+    },
+    "boundaries": {
+      "noWorkerExecution": true,
+      "noProviderExecution": true,
+      "noExternalCalls": true,
+      "noSmokeBehaviorChanges": true
+    },
+    "dbTestBehavior": {
+      "skipWhenDatabaseUrlMissing": true,
+      "skipWhenApprovalTableMissing": true,
+      "approvalTable": "public.gnr8_runtime_provider_operation_approvals"
+    }
+  },
   "providerCredentialResolutionOrchestrationBaseline": {
     "matchingRules": {
       "providerId": true,
@@ -904,6 +935,7 @@
     "runtimeProviderCommunicatorTests": "PASS",
     "runtimeProviderOperationApprovalTests": "PASS",
     "runtimeProviderOperationApprovalTransitionTests": "PASS",
+    "runtimeProviderOperationApprovalTransitionRepositoryTests": "PASS_WITH_EXPECTED_DB_SKIPS",
     "runtimeProviderOperationApprovalArtifactTests": "PASS",
     "runtimeProviderOperationApprovalRepositoryTests": "PASS_WITH_EXPECTED_DB_SKIPS",
     "runtimeProviderOperationApprovalStoreTests": "PASS",
