@@ -618,6 +618,30 @@ Freeze the deterministic baseline for runtime identity, runtime/domain readiness
   - pure mapping only
   - no DB repository yet
   - no approval state transitions yet
+
+### 13k) Runtime provider operation approval repository foundation baseline
+
+- Source: `apps/platform/gnr8/runtime/providers/runtime-provider-operation-approval-repository.ts`
+- Repository methods baseline:
+  - `createProviderOperationApprovalArtifacts`
+  - `getProviderOperationApprovalByArtifactId`
+  - `getProviderOperationApprovalsBySite`
+  - `getProviderOperationApprovalsByCorrelationKey`
+- Behavior baseline:
+  - deterministic insert ordering for batched artifact persistence
+  - duplicate `artifact_id` conflicts are ignored
+  - duplicate `correlation_key` conflicts are ignored
+  - `getProviderOperationApprovalsBySite` ordering:
+    - `created_at` ascending
+    - `artifact_id` ascending (tie-breaker)
+- Current boundaries:
+  - no approval transitions yet
+  - no worker execution
+  - no provider execution
+  - no external calls
+- DB test behavior baseline:
+  - repository DB tests are expected to skip when `DATABASE_URL` is missing
+  - repository DB tests are expected to skip when `gnr8_runtime_provider_operation_approvals` table is missing
   - no worker execution
   - no provider execution
   - no external calls

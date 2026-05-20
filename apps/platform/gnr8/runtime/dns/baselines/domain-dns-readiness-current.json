@@ -731,6 +731,35 @@
       "noExternalCalls": true
     }
   },
+  "runtimeProviderOperationApprovalRepositoryBaseline": {
+    "module": "gnr8/runtime/providers/runtime-provider-operation-approval-repository.ts",
+    "methods": [
+      "createProviderOperationApprovalArtifacts",
+      "getProviderOperationApprovalByArtifactId",
+      "getProviderOperationApprovalsBySite",
+      "getProviderOperationApprovalsByCorrelationKey"
+    ],
+    "behavior": {
+      "deterministicInsertOrdering": true,
+      "duplicateArtifactIdConflictsIgnored": true,
+      "duplicateCorrelationKeyConflictsIgnored": true,
+      "getBySiteOrder": [
+        "created_at_asc",
+        "artifact_id_asc"
+      ]
+    },
+    "boundaries": {
+      "noApprovalTransitionsYet": true,
+      "noWorkerExecution": true,
+      "noProviderExecution": true,
+      "noExternalCalls": true
+    },
+    "dbTestBehavior": {
+      "skipWhenDatabaseUrlMissing": true,
+      "skipWhenApprovalTableMissing": true,
+      "approvalTable": "public.gnr8_runtime_provider_operation_approvals"
+    }
+  },
   "providerCredentialResolutionOrchestrationBaseline": {
     "matchingRules": {
       "providerId": true,
@@ -832,6 +861,7 @@
     "runtimeProviderCommunicatorTests": "PASS",
     "runtimeProviderOperationApprovalTests": "PASS",
     "runtimeProviderOperationApprovalArtifactTests": "PASS",
+    "runtimeProviderOperationApprovalRepositoryTests": "PASS_WITH_EXPECTED_DB_SKIPS",
     "runtimeProviderOperationApprovalStoreTests": "PASS",
     "mockProviderAdapterTests": "PASS",
     "providerSandboxAdapterTests": "PASS",
