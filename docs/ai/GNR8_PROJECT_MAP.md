@@ -113,10 +113,20 @@ Runtime-centric areas currently concentrated in:
 - NO live DNS.
 - NO external registrar calls.
 - NO worker execution for provider actions.
-- Openprovider sandbox only.
-- control-plane only.
+- Openprovider sandbox planning/dry-run artifacts only. No provider execution is permitted, including sandbox execution. Control-plane metadata and deterministic planning only.
 
-## 4) Current DB Readiness State
+## 4) Canonical Bootstrap Read Order
+
+Read in this exact order:
+1. `docs/ai/GNR8_THREAD_HANDOFF.md`
+2. `docs/ai/GNR8_MASTER_CONTEXT_BOOTSTRAP.md`
+3. `docs/ai/GNR8_CURRENT_STATE.md`
+4. `docs/ai/GNR8_TASK_EXECUTION_PROTOCOL.md`
+5. `docs/ai/GNR8_PROJECT_MAP.md`
+6. `docs/ai/GNR8_CANONICAL_DOC_INDEX.md`
+7. `docs/ai/decisions/*.md`
+
+## 5) Current DB Readiness State
 
 Source baseline: `docs/gnr8/dns-provider-control-plane-checkpoint-2026-05.md` and migration inventory under `apps/platform/supabase/migrations`.
 
@@ -129,7 +139,26 @@ Present:
 - `gnr8_runtime_provider_operation_approvals`
 - `gnr8_runtime_provider_execution_handoffs`
 
-## 5) Current Next Phase Recommendation
+## 6) Worker Pickup Readiness Criteria
+
+Worker pickup readiness required conditions:
+- handoff_status_ready
+- non_live_environment
+- has_planned_jobs
+- approval_status_approved
+
+Blocked when:
+- live environment
+- handoffStatus blocked
+- unapproved blocked handoff
+- executable provider handoff with no planned jobs
+
+Clarifications:
+- readiness model exists
+- worker execution is not enabled
+- this is pre-worker control-plane only
+
+## 7) Current Next Phase Recommendation
 
 1. Apply/verify provider-control-plane migrations in target DBs (especially credential references).
 2. Run DB-backed repository validation for provider jobs, approvals, and handoffs.

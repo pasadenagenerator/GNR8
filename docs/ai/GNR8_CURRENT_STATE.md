@@ -23,6 +23,36 @@ Provider/DNS control-plane consolidation with DB-readiness convergence.
 - Validate repository roundtrip/ordering behavior for provider jobs, approvals, and handoffs against real DB.
 - Keep execution paths dry-run/sandbox-gated only.
 
+## Latest Provider Control Plane State
+
+- provider selection: implemented
+- credential references: implemented
+- credential resolution: implemented
+- provider communicator: implemented
+- operation bundle: implemented
+- operation orchestrator: implemented
+- approval requirement: implemented
+- approval artifact: implemented
+- approval repository: implemented
+- approval transitions: implemented
+- approval transition repository: implemented
+- execution handoff: implemented
+- execution handoff repository: implemented
+- worker pickup readiness: implemented
+
+Openprovider:
+- sandbox adapter exists
+- readiness: ready_for_sandbox
+- execution: planning/dry-run only
+- liveEligible: false
+- Openprovider API calls: not enabled
+
+DB readiness:
+- gnr8_runtime_provider_jobs: present
+- gnr8_agency_provider_settings: present
+- gnr8_provider_credential_references: migration exists, target DB table may still be missing until applied
+- approval/handoff migrations exist; target DB application must be verified per environment
+
 ## Active Runtime Architecture
 
 - Runtime identity/readiness/resolution models are active and deterministic.
@@ -35,8 +65,26 @@ Provider/DNS control-plane consolidation with DB-readiness convergence.
 - NO live DNS.
 - NO external registrar calls.
 - NO worker execution for provider actions.
-- Openprovider sandbox only.
-- control-plane only.
+- Openprovider sandbox planning/dry-run artifacts only. No provider execution is permitted, including sandbox execution. Control-plane metadata and deterministic planning only.
+
+## Worker Pickup Readiness Criteria
+
+Worker pickup readiness required conditions:
+- handoff_status_ready
+- non_live_environment
+- has_planned_jobs
+- approval_status_approved
+
+Blocked when:
+- live environment
+- handoffStatus blocked
+- unapproved blocked handoff
+- executable provider handoff with no planned jobs
+
+Clarifications:
+- readiness model exists
+- worker execution is not enabled
+- this is pre-worker control-plane only
 
 ## Current DB/Schema Readiness State
 
@@ -64,3 +112,4 @@ Start every new thread with:
 4. `docs/ai/GNR8_TASK_EXECUTION_PROTOCOL.md`
 5. `docs/ai/GNR8_PROJECT_MAP.md`
 6. `docs/ai/GNR8_CANONICAL_DOC_INDEX.md`
+7. `docs/ai/decisions/*.md`

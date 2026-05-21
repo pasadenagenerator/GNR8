@@ -39,8 +39,7 @@ V tej fazi so obvezne meje:
 - NO live DNS.
 - NO external registrar calls.
 - NO worker execution for provider actions.
-- Openprovider sandbox only.
-- control-plane only.
+- Openprovider sandbox planning/dry-run artifacts only. No provider execution is permitted, including sandbox execution. Control-plane metadata and deterministic planning only.
 
 ## 5) Output Contract for Codex
 
@@ -70,7 +69,9 @@ Pred vecjimi spremembami vedno preberi:
 - `docs/ai/GNR8_THREAD_HANDOFF.md`
 - `docs/ai/GNR8_MASTER_CONTEXT_BOOTSTRAP.md`
 - `docs/ai/GNR8_CURRENT_STATE.md`
+- `docs/ai/GNR8_TASK_EXECUTION_PROTOCOL.md`
 - `docs/ai/GNR8_PROJECT_MAP.md`
+- `docs/ai/GNR8_CANONICAL_DOC_INDEX.md`
 - `docs/ai/decisions/*.md`
 
 ## 8) Escalation Rule
@@ -79,3 +80,5 @@ Ce task zahteva arhitekturno spremembo ali live/provider execution premik:
 - STOP izvedba
 - predlagaj ADR
 - nadaljuj sele po potrditvi odlocitve
+
+For collaboration roles, language rules, and Grega ↔ ChatGPT ↔ Codex workflow, see `docs/ai/GNR8_COLLABORATION_PROTOCOL.md`.

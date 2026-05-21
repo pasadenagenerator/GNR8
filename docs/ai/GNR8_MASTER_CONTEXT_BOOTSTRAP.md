@@ -19,8 +19,7 @@ Ni klasicen website builder in ni klasicen CMS.
 - NO live DNS.
 - NO external registrar calls.
 - NO worker execution for provider actions.
-- Openprovider sandbox only.
-- control-plane only.
+- Openprovider sandbox planning/dry-run artifacts only. No provider execution is permitted, including sandbox execution. Control-plane metadata and deterministic planning only.
 
 ## 4) System Architecture Backbone
 

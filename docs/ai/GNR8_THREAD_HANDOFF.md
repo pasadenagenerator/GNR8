@@ -15,14 +15,18 @@ Current snapshot sources:
 ## B) Canonical Docs
 
 Read these as the canonical bootstrap set:
+- `docs/ai/GNR8_THREAD_HANDOFF.md`
 - `docs/ai/GNR8_MASTER_CONTEXT_BOOTSTRAP.md`
 - `docs/ai/GNR8_CURRENT_STATE.md`
 - `docs/ai/GNR8_TASK_EXECUTION_PROTOCOL.md`
+- `docs/ai/GNR8_COLLABORATION_PROTOCOL.md`
 - `docs/ai/GNR8_PROJECT_MAP.md`
 - `docs/ai/GNR8_CANONICAL_DOC_INDEX.md`
 - `docs/ai/decisions/ADR-001-deterministic-pipeline.md`
 - `docs/ai/decisions/ADR-002-preview-assets-architecture.md`
 - `docs/ai/decisions/ADR-003-runtime-artifact-model.md`
+
+Read `docs/ai/GNR8_COLLABORATION_PROTOCOL.md` before generating Codex tasks.
 
 ## C) Rules
 
@@ -50,6 +54,7 @@ Hard boundaries remain:
 - no DNS writes
 - no external registrar calls
 - no secret value reads/stores
+- Openprovider sandbox planning/dry-run artifacts only. No provider execution is permitted, including sandbox execution. Control-plane metadata and deterministic planning only.
 
 ## F) Current Active Implementation Phase
 
@@ -68,6 +73,15 @@ Practical next phase:
 4. Preserve deterministic contracts and explicit diagnostics.
 5. Treat live/provider execution as disallowed unless explicitly re-authorized.
 
+## Documentation Discipline
+
+Rules:
+- Update canonical docs instead of creating parallel doctrine.
+- Do not create "final/v2/new/current" duplicates.
+- If a document is historical, mark or index it as secondary/archive.
+- Baseline/checkpoint docs are evidence, not the primary doctrine.
+- When current state changes, update `docs/ai/GNR8_CURRENT_STATE.md` and relevant baseline/checkpoint docs.
+
 ## Ready-to-Copy Prompt
 
-"Read these files first: docs/ai/GNR8_THREAD_HANDOFF.md, docs/ai/GNR8_MASTER_CONTEXT_BOOTSTRAP.md, docs/ai/GNR8_CURRENT_STATE.md, docs/ai/GNR8_TASK_EXECUTION_PROTOCOL.md, docs/ai/GNR8_PROJECT_MAP.md, docs/ai/GNR8_CANONICAL_DOC_INDEX.md, and docs/ai/decisions/*.md. Then compare with apps/platform/gnr8/**, apps/worker/gnr8/**, and apps/platform/supabase/migrations/** before making any changes. Keep deterministic contracts, control-plane boundaries, and no-live-execution rules intact." 
+"Read these files first in this exact order: docs/ai/GNR8_THREAD_HANDOFF.md, docs/ai/GNR8_MASTER_CONTEXT_BOOTSTRAP.md, docs/ai/GNR8_CURRENT_STATE.md, docs/ai/GNR8_TASK_EXECUTION_PROTOCOL.md, docs/ai/GNR8_COLLABORATION_PROTOCOL.md, docs/ai/GNR8_PROJECT_MAP.md, docs/ai/GNR8_CANONICAL_DOC_INDEX.md, and docs/ai/decisions/*.md. Read docs/ai/GNR8_COLLABORATION_PROTOCOL.md before generating Codex tasks. Then compare with apps/platform/gnr8/**, apps/worker/gnr8/**, and apps/platform/supabase/migrations/** before making any changes. Keep deterministic contracts, control-plane boundaries, and no-live-execution rules intact."

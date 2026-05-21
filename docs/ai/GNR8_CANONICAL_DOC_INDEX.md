@@ -2,11 +2,17 @@
 
 ## Canonical
 
-- `docs/ai/GNR8_THREAD_HANDOFF.md`
-- `docs/ai/GNR8_MASTER_CONTEXT_BOOTSTRAP.md`
-- `docs/ai/GNR8_CURRENT_STATE.md`
-- `docs/ai/GNR8_TASK_EXECUTION_PROTOCOL.md`
-- `docs/ai/GNR8_PROJECT_MAP.md`
+Read in this exact order:
+1. `docs/ai/GNR8_THREAD_HANDOFF.md`
+2. `docs/ai/GNR8_MASTER_CONTEXT_BOOTSTRAP.md`
+3. `docs/ai/GNR8_CURRENT_STATE.md`
+4. `docs/ai/GNR8_TASK_EXECUTION_PROTOCOL.md`
+5. `docs/ai/GNR8_COLLABORATION_PROTOCOL.md`
+6. `docs/ai/GNR8_PROJECT_MAP.md`
+7. `docs/ai/GNR8_CANONICAL_DOC_INDEX.md`
+8. `docs/ai/decisions/*.md`
+
+Current decision records:
 - `docs/ai/decisions/ADR-001-deterministic-pipeline.md`
 - `docs/ai/decisions/ADR-002-preview-assets-architecture.md`
 - `docs/ai/decisions/ADR-003-runtime-artifact-model.md`
