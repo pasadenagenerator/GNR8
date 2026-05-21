@@ -6,11 +6,40 @@ import {
 } from "@/gnr8/runtime/providers/runtime-provider-execution-handoff-store";
 import { getSuperadminPool } from "@/src/superadmin/db";
 
+function stringifyJsonbColumnValue(input: { field: string; rowId: string; value: unknown }): string {
+  if (typeof input.value === "string") {
+    throw new Error(
+      `provider_execution_handoff_persistence_invalid_json_field:${input.field}:row=${input.rowId}:reason=string_payload_not_allowed`,
+    );
+  }
+  try {
+    const json = JSON.stringify(input.value);
+    if (typeof json !== "string") {
+      throw new Error("json_stringify_returned_non_string");
+    }
+    JSON.parse(json);
+    return json;
+  } catch {
+    throw new Error(
+      `provider_execution_handoff_persistence_invalid_json_field:${input.field}:row=${input.rowId}:reason=not_json_serializable`,
+    );
+  }
+}
+
 export async function createProviderExecutionHandoffArtifacts(
   input: readonly RuntimeProviderExecutionHandoffArtifactRecord[],
 ): Promise<RuntimeProviderExecutionHandoffArtifactRecord[]> {
   const rows = createExecutionHandoffInsertRows(input);
   if (rows.length === 0) return [];
+  const plannedJobIdsJson = rows.map((row) =>
+    stringifyJsonbColumnValue({ field: "planned_job_ids", rowId: row.id, value: row.planned_job_ids }),
+  );
+  const warningsJson = rows.map((row) =>
+    stringifyJsonbColumnValue({ field: "warnings", rowId: row.id, value: row.warnings }),
+  );
+  const blockersJson = rows.map((row) =>
+    stringifyJsonbColumnValue({ field: "blockers", rowId: row.id, value: row.blockers }),
+  );
 
   const pool = getSuperadminPool();
   const res = await pool.query<RuntimeProviderExecutionHandoffArtifactRow>(
@@ -67,9 +96,9 @@ export async function createProviderExecutionHandoffArtifacts(
       $10::text[],
       $11::text[],
       $12::text[],
-      $13::jsonb[],
-      $14::jsonb[],
-      $15::jsonb[],
+      $13::text[],
+      $14::text[],
+      $15::text[],
       $16::text[],
       $17::timestamptz[],
       $18::timestamptz[]
@@ -127,9 +156,9 @@ export async function createProviderExecutionHandoffArtifacts(
       rows.map((row) => row.approval_status),
       rows.map((row) => row.risk_level),
       rows.map((row) => row.handoff_status),
-      rows.map((row) => row.planned_job_ids),
-      rows.map((row) => row.warnings),
-      rows.map((row) => row.blockers),
+      plannedJobIdsJson,
+      warningsJson,
+      blockersJson,
       rows.map((row) => row.correlation_key),
       rows.map((row) => row.created_at),
       rows.map((row) => row.updated_at),

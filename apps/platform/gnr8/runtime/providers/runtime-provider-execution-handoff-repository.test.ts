@@ -128,6 +128,17 @@ test("runtime provider execution handoff repository: helper deterministic orderi
   );
 });
 
+test("runtime provider execution handoff repository: invalid json payload is rejected before insert mapping", async () => {
+  const artifact = buildArtifact({
+    plannedJobIds: "not-json-array" as never,
+  });
+
+  await assert.rejects(
+    createProviderExecutionHandoffArtifacts([artifact]),
+    /provider_execution_handoff_persistence_invalid_json_field:planned_job_ids/,
+  );
+});
+
 test("runtime provider execution handoff repository: create/read roundtrip", async (t) => {
   if (await skipIfRepositoryTableMissing(t)) return;
 

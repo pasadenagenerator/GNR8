@@ -156,3 +156,24 @@ test("readiness seed route: no provider or external execution path is invoked an
   assert.equal(serialized.includes("sk_abc1234567890"), false);
   assert.equal(serialized.includes("apiKey"), false);
 });
+
+test("readiness seed route: persistence diagnostics identify field and redact secrets", async () => {
+  const handlers = createProviderHandoffReadinessSeedRouteHandlers({
+    requireSuperadminUserId: async () => "user_1",
+    getNodeEnv: () => "production",
+    isProductionSeedEnabled: () => true,
+    createProviderHandoffReadinessDevSeed: async () => {
+      throw new Error(
+        "provider_execution_handoff_persistence_invalid_json_field:planned_job_ids:row=handoff_1:reason=not_json_serializable token=super_secret_value",
+      );
+    },
+  });
+
+  const response = await handlers.POST(new Request("http://localhost/api/gnr8/admin/provider-handoffs/readiness-seed", { method: "POST" }));
+  assert.equal(response.status, 500);
+  const body = (await response.json()) as { ok: boolean; error: string };
+  assert.equal(body.ok, false);
+  assert.equal(body.error.includes("planned_job_ids"), true);
+  assert.equal(body.error.includes("super_secret_value"), false);
+  assert.equal(body.error.includes("[redacted]"), true);
+});

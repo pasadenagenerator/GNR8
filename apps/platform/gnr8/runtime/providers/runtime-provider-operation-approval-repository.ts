@@ -12,11 +12,43 @@ import {
 } from "@/gnr8/runtime/providers/runtime-provider-operation-approval-transitions";
 import { getSuperadminPool } from "@/src/superadmin/db";
 
+function stringifyJsonbColumnValue(input: { field: string; rowId: string; value: unknown }): string {
+  if (typeof input.value === "string") {
+    throw new Error(
+      `provider_operation_approval_persistence_invalid_json_field:${input.field}:row=${input.rowId}:reason=string_payload_not_allowed`,
+    );
+  }
+  try {
+    const json = JSON.stringify(input.value);
+    if (typeof json !== "string") {
+      throw new Error("json_stringify_returned_non_string");
+    }
+    JSON.parse(json);
+    return json;
+  } catch {
+    throw new Error(
+      `provider_operation_approval_persistence_invalid_json_field:${input.field}:row=${input.rowId}:reason=not_json_serializable`,
+    );
+  }
+}
+
 export async function createProviderOperationApprovalArtifacts(
   input: readonly RuntimeProviderOperationApprovalArtifactRecord[],
 ): Promise<RuntimeProviderOperationApprovalArtifactRecord[]> {
   const rows = createApprovalInsertRows(input);
   if (rows.length === 0) return [];
+  const requiredApprovalsJson = rows.map((row) =>
+    stringifyJsonbColumnValue({ field: "required_approvals", rowId: row.id, value: row.required_approvals }),
+  );
+  const reviewerChecklistJson = rows.map((row) =>
+    stringifyJsonbColumnValue({ field: "reviewer_checklist", rowId: row.id, value: row.reviewer_checklist }),
+  );
+  const warningsJson = rows.map((row) =>
+    stringifyJsonbColumnValue({ field: "warnings", rowId: row.id, value: row.warnings }),
+  );
+  const blockersJson = rows.map((row) =>
+    stringifyJsonbColumnValue({ field: "blockers", rowId: row.id, value: row.blockers }),
+  );
 
   const pool = getSuperadminPool();
   const res = await pool.query<RuntimeProviderOperationApprovalArtifactRow>(
@@ -69,10 +101,10 @@ export async function createProviderOperationApprovalArtifacts(
       $8::text[],
       $9::text[],
       $10::text[],
-      $11::jsonb[],
-      $12::jsonb[],
-      $13::jsonb[],
-      $14::jsonb[],
+      $11::text[],
+      $12::text[],
+      $13::text[],
+      $14::text[],
       $15::text[],
       $16::timestamptz[],
       $17::timestamptz[]
@@ -126,10 +158,10 @@ export async function createProviderOperationApprovalArtifacts(
       rows.map((row) => row.operation_kind),
       rows.map((row) => row.approval_status),
       rows.map((row) => row.risk_level),
-      rows.map((row) => row.required_approvals),
-      rows.map((row) => row.reviewer_checklist),
-      rows.map((row) => row.warnings),
-      rows.map((row) => row.blockers),
+      requiredApprovalsJson,
+      reviewerChecklistJson,
+      warningsJson,
+      blockersJson,
       rows.map((row) => row.correlation_key),
       rows.map((row) => row.created_at),
       rows.map((row) => row.updated_at),

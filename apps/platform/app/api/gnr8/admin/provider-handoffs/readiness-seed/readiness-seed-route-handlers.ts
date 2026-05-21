@@ -21,7 +21,7 @@ type ProviderHandoffReadinessSeedResponse = {
 };
 
 function mapError(error: unknown): { status: number; message: string } {
-  const message = error instanceof Error ? error.message : "Internal server error";
+  const message = redactSensitive(sanitizeToken(error instanceof Error ? error.message : "Internal server error"));
   if (message === "Unauthorized") return { status: 401, message };
   if (message.startsWith("Forbidden")) return { status: 403, message };
   return { status: 500, message };

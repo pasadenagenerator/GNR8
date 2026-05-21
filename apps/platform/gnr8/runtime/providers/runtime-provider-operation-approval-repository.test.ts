@@ -129,6 +129,17 @@ test("runtime provider operation approval repository: helper deterministic order
   );
 });
 
+test("runtime provider operation approval repository: invalid json payload is rejected before insert mapping", async () => {
+  const artifact = buildArtifact({
+    requiredApprovals: "not-json-array" as never,
+  });
+
+  await assert.rejects(
+    createProviderOperationApprovalArtifacts([artifact]),
+    /provider_operation_approval_persistence_invalid_json_field:required_approvals/,
+  );
+});
+
 test("runtime provider operation approval repository: create/read roundtrip", async (t) => {
   if (await skipIfRepositoryTableMissing(t)) return;
 
