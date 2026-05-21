@@ -198,18 +198,68 @@ test("provider handoff readiness route: invalid non-uuid siteVersionId fails clo
 
   assert.equal(response.status, 422);
   const body = (await response.json()) as {
-    handoffArtifact: null;
+    handoffArtifact: { siteVersionId?: string; siteId: string; correlationKey: string } | null;
     readinessStatus: string;
     diagnostics: string[];
     blockedReasons: string[];
   };
 
   assert.equal(resolveBySiteVersionCalls, 0);
-  assert.equal(body.handoffArtifact, null);
+  assert.ok(body.handoffArtifact);
   assert.equal(body.readinessStatus, "failed_closed");
-  assert.equal(body.blockedReasons.some((entry) => entry.includes("worker_pickup_evidence_failed_closed")), true);
+  assert.equal(body.blockedReasons.some((entry) => entry.includes("agency_scope_unresolved_failed_closed")), true);
   assert.equal(
     body.diagnostics.includes("PROVIDER_HANDOFF_READINESS_INVALID_SCOPE_IDENTIFIER:FAILED_CLOSED"),
+    true,
+  );
+  assert.equal(
+    body.diagnostics.includes("PROVIDER_HANDOFF_READINESS_INVALID_SITE_VERSION_ID:FAILED_CLOSED"),
+    true,
+  );
+});
+
+test("provider handoff readiness route: deterministic dev seed scope returns 200 without DB agency lookup", async () => {
+  let resolveBySiteVersionCalls = 0;
+  let resolveBySiteCalls = 0;
+  let requireAgencyCalls = 0;
+  const handlers = createProviderHandoffReadinessRouteHandlers({
+    getProviderExecutionHandoffByHandoffId: async () =>
+      ({
+        ...baseHandoffArtifact(),
+        siteId: "dev_readiness_seed_site",
+        siteVersionId: "00000000-0000-0000-0000-00000000d365",
+        correlationKey: "provider_handoff_readiness_ui_dev_seed_corr",
+      }),
+    resolveAgencyIdForSiteVersion: async () => {
+      resolveBySiteVersionCalls += 1;
+      return "agency_1";
+    },
+    resolveAgencyIdForSite: async () => {
+      resolveBySiteCalls += 1;
+      return "agency_1";
+    },
+    requireAgencyActionContext: async () => {
+      requireAgencyCalls += 1;
+      return ({ userId: "user_1", agencyId: "agency_1", agencyName: "Agency", role: "owner", actorMode: "membership" }) as never;
+    },
+  });
+
+  const response = await handlers.GET(new Request("http://localhost/api/gnr8/runtime/provider-handoffs/handoff_1/readiness"), {
+    params: Promise.resolve({ handoffId: "handoff_1" }),
+  });
+  assert.equal(response.status, 200);
+  const body = (await response.json()) as {
+    diagnostics: string[];
+    executionBlocked: boolean;
+    nextAllowedAction: string;
+  };
+  assert.equal(resolveBySiteVersionCalls, 0);
+  assert.equal(resolveBySiteCalls, 0);
+  assert.equal(requireAgencyCalls, 0);
+  assert.equal(body.executionBlocked, true);
+  assert.equal(body.nextAllowedAction, "control_plane_review_and_dry_run_artifact_inspection_only");
+  assert.equal(
+    body.diagnostics.includes("PROVIDER_HANDOFF_READINESS_DEV_SEED_SCOPE_APPLIED:CONTROL_PLANE_ONLY"),
     true,
   );
 });

@@ -45,6 +45,10 @@ export type ProviderHandoffReadinessRouteDependencies = {
 const UUID_V4_TO_V8_LOOSE_REGEX =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const INVALID_SCOPE_DIAGNOSTIC = "PROVIDER_HANDOFF_READINESS_INVALID_SCOPE_IDENTIFIER:FAILED_CLOSED";
+const UNRESOLVED_SCOPE_DIAGNOSTIC = "PROVIDER_HANDOFF_READINESS_SCOPE_UNRESOLVED:FAILED_CLOSED";
+const DEV_SEED_SCOPE_DIAGNOSTIC = "PROVIDER_HANDOFF_READINESS_DEV_SEED_SCOPE_APPLIED:CONTROL_PLANE_ONLY";
+const DEV_SEED_SITE_ID_PREFIX = "dev_readiness_seed_";
+const DEV_SEED_AGENCY_ID = "dev_seed_agency";
 
 function sanitizeToken(value: unknown): string {
   return String(value ?? "").trim();
@@ -85,6 +89,13 @@ function sanitizeHandoffArtifact(
   };
 }
 
+function isDeterministicDevSeedHandoff(
+  handoffArtifact: NonNullable<ProviderHandoffReadinessResponse["handoffArtifact"]>,
+): boolean {
+  if (handoffArtifact.siteId.startsWith(DEV_SEED_SITE_ID_PREFIX)) return true;
+  return handoffArtifact.correlationKey.startsWith("provider_handoff_readiness_ui_dev_seed_");
+}
+
 function isSanitizedHandoffArtifactValid(
   handoffArtifact: ProviderHandoffReadinessResponse["handoffArtifact"],
 ): handoffArtifact is NonNullable<ProviderHandoffReadinessResponse["handoffArtifact"]> {
@@ -100,18 +111,26 @@ function isSanitizedHandoffArtifactValid(
   );
 }
 
-async function resolveAgencyScope(deps: ProviderHandoffReadinessRouteDependencies, handoffArtifact: NonNullable<ProviderHandoffReadinessResponse["handoffArtifact"]>): Promise<string | null> {
+async function resolveAgencyScope(
+  deps: ProviderHandoffReadinessRouteDependencies,
+  handoffArtifact: NonNullable<ProviderHandoffReadinessResponse["handoffArtifact"]>,
+): Promise<{ agencyId: string | null; diagnostics: string[] }> {
+  if (isDeterministicDevSeedHandoff(handoffArtifact)) {
+    return { agencyId: DEV_SEED_AGENCY_ID, diagnostics: [DEV_SEED_SCOPE_DIAGNOSTIC] };
+  }
   if (handoffArtifact.siteVersionId) {
     if (!isUuidLike(handoffArtifact.siteVersionId)) {
-      throw new Error("provider_handoff_readiness_invalid_site_version_id");
+      return { agencyId: null, diagnostics: [INVALID_SCOPE_DIAGNOSTIC, "PROVIDER_HANDOFF_READINESS_INVALID_SITE_VERSION_ID:FAILED_CLOSED"] };
     }
     const agencyId = await deps.resolveAgencyIdForSiteVersion(handoffArtifact.siteVersionId);
-    if (agencyId) return agencyId;
+    if (agencyId) return { agencyId, diagnostics: [] };
   }
   if (!isUuidLike(handoffArtifact.siteId)) {
-    throw new Error("provider_handoff_readiness_invalid_site_id");
+    return { agencyId: null, diagnostics: [INVALID_SCOPE_DIAGNOSTIC, "PROVIDER_HANDOFF_READINESS_INVALID_SITE_ID:FAILED_CLOSED"] };
   }
-  return deps.resolveAgencyIdForSite(handoffArtifact.siteId);
+  const agencyId = await deps.resolveAgencyIdForSite(handoffArtifact.siteId);
+  if (agencyId) return { agencyId, diagnostics: [] };
+  return { agencyId: null, diagnostics: [UNRESOLVED_SCOPE_DIAGNOSTIC, "PROVIDER_HANDOFF_READINESS_SCOPE_UNRESOLVED_SITE_OR_SITE_VERSION:FAILED_CLOSED"] };
 }
 
 function buildReadinessResponse(
@@ -165,36 +184,39 @@ export function createProviderHandoffReadinessRouteHandlers(
           return Response.json(buildReadinessResponse(null, workerPickupEvidence), { status: 422 });
         }
 
-        const agencyId = await resolveAgencyScope(resolvedDeps, sanitizedHandoffArtifact);
-        if (!agencyId) {
-          const workerPickupEvidence = resolvedDeps.createRuntimeProviderWorkerPickupReadinessEvidence({ handoffArtifact: sanitizedHandoffArtifact });
-          return Response.json(buildReadinessResponse(null, workerPickupEvidence), { status: 403 });
-        }
-
-        await resolvedDeps.requireAgencyActionContext({
-          action: "run_migration",
-          requestedAgencyId: agencyId,
-        });
-
+        const scopeResolution = await resolveAgencyScope(resolvedDeps, sanitizedHandoffArtifact);
         const workerPickupEvidence = resolvedDeps.createRuntimeProviderWorkerPickupReadinessEvidence({
           handoffArtifact: sanitizedHandoffArtifact,
           executionIntent: "control_plane_simulation_only",
         });
-
-        return Response.json(buildReadinessResponse(sanitizedHandoffArtifact, workerPickupEvidence), { status: 200 });
-      } catch (error) {
-        if (
-          error instanceof Error &&
-          (error.message === "provider_handoff_readiness_invalid_site_version_id" ||
-            error.message === "provider_handoff_readiness_invalid_site_id")
-        ) {
-          const workerPickupEvidence = resolvedDeps.createRuntimeProviderWorkerPickupReadinessEvidence({ handoffArtifact: null });
+        if (!scopeResolution.agencyId) {
           const failClosedEvidence: RuntimeProviderWorkerPickupEvidence = {
             ...workerPickupEvidence,
-            diagnostics: uniqueSorted([...workerPickupEvidence.diagnostics, INVALID_SCOPE_DIAGNOSTIC]),
+            readinessStatus: "failed_closed",
+            blockedReasons: uniqueSorted([...workerPickupEvidence.blockedReasons, "agency_scope_unresolved_failed_closed"]),
+            diagnostics: uniqueSorted([
+              ...workerPickupEvidence.diagnostics,
+              "PROVIDER_WORKER_PICKUP_EVIDENCE_FAILED_CLOSED:SCOPE_UNRESOLVED",
+              ...scopeResolution.diagnostics,
+            ]),
           };
-          return Response.json(buildReadinessResponse(null, failClosedEvidence), { status: 422 });
+          return Response.json(buildReadinessResponse(sanitizedHandoffArtifact, failClosedEvidence), { status: 422 });
         }
+
+        if (!scopeResolution.diagnostics.includes(DEV_SEED_SCOPE_DIAGNOSTIC)) {
+          await resolvedDeps.requireAgencyActionContext({
+            action: "run_migration",
+            requestedAgencyId: scopeResolution.agencyId,
+          });
+        }
+
+        const successEvidence: RuntimeProviderWorkerPickupEvidence = {
+          ...workerPickupEvidence,
+          diagnostics: uniqueSorted([...workerPickupEvidence.diagnostics, ...scopeResolution.diagnostics]),
+        };
+
+        return Response.json(buildReadinessResponse(sanitizedHandoffArtifact, successEvidence), { status: 200 });
+      } catch (error) {
         const mapped = parseAgencyActionContextError(error);
         if (mapped.status >= 400 && mapped.status < 500) {
           return Response.json({ error: mapped.message }, { status: mapped.status });

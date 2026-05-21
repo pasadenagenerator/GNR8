@@ -54,6 +54,17 @@ test("provider handoff readiness dev seed: persisted handoff can be read back an
 
   assert.ok(persisted);
   assert.equal(persisted?.handoffId, seed.handoffId);
+  assert.equal(typeof persisted?.providerId, "string");
+  assert.equal(typeof persisted?.environment, "string");
+  assert.equal(typeof persisted?.capability, "string");
+  assert.equal(typeof persisted?.operationKind, "string");
+  assert.equal(typeof persisted?.approvalStatus, "string");
+  assert.equal(typeof persisted?.riskLevel, "string");
+  assert.equal(typeof persisted?.handoffStatus, "string");
+  assert.ok(Array.isArray(persisted?.plannedJobIds));
+  assert.ok(Array.isArray(persisted?.warnings));
+  assert.ok(Array.isArray(persisted?.blockers));
+  assert.equal(typeof persisted?.correlationKey, "string");
   assert.equal(seed.readinessUiPath, `/gnr8/admin/provider-handoffs/${seed.handoffId}/readiness`);
   assert.equal(seed.workerPickupEvidence.executionBlocked, true);
   assert.equal(seed.workerPickupEvidence.nextAllowedAction, "control_plane_review_and_dry_run_artifact_inspection_only");
