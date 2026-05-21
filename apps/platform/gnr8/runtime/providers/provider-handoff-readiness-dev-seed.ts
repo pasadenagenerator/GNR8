@@ -83,11 +83,14 @@ export async function createProviderHandoffReadinessDevSeed(
     nodeEnv?: string;
     siteId?: string;
     siteVersionId?: string;
+    allowProduction?: boolean;
   } = {},
   deps: Partial<ProviderHandoffReadinessDevSeedDependencies> = {},
 ): Promise<ProviderHandoffReadinessDevSeedOutput> {
   const nodeEnv = String(input.nodeEnv ?? process.env.NODE_ENV ?? "development").trim().toLowerCase();
-  ensureDevOrTest(nodeEnv);
+  if (input.allowProduction !== true) {
+    ensureDevOrTest(nodeEnv);
+  }
 
   const resolvedDeps: ProviderHandoffReadinessDevSeedDependencies = {
     createRuntimeProviderOperationBundleFromRequest,
