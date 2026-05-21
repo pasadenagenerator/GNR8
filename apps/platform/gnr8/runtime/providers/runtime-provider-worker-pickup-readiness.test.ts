@@ -2,7 +2,10 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import type { RuntimeProviderExecutionHandoffArtifact } from "@/gnr8/runtime/providers/runtime-provider-execution-handoff";
-import { createRuntimeProviderWorkerPickupReadinessReport } from "@/gnr8/runtime/providers/runtime-provider-worker-pickup-readiness";
+import {
+  createRuntimeProviderWorkerPickupReadinessReport,
+  simulateRuntimeProviderWorkerPickupReadiness,
+} from "@/gnr8/runtime/providers/runtime-provider-worker-pickup-readiness";
 
 function baseHandoffArtifact(
   overrides: Partial<RuntimeProviderExecutionHandoffArtifact> = {},
@@ -119,4 +122,94 @@ test("worker pickup readiness: no side effects", () => {
   createRuntimeProviderWorkerPickupReadinessReport(handoffArtifact);
 
   assert.equal(JSON.stringify(handoffArtifact), before);
+});
+
+test("worker pickup simulation: approved handoff is pickup-ready but execution-blocked", () => {
+  const result = simulateRuntimeProviderWorkerPickupReadiness({
+    handoffArtifact: baseHandoffArtifact({ approvalStatus: "approved", handoffStatus: "ready" }),
+  });
+
+  assert.equal(result.readinessStatus, "pickup_ready");
+  assert.equal(result.executionBlocked, true);
+  assert.deepEqual(result.diagnostics, [
+    { code: "WORKER_PICKUP_SIMULATION_STARTED", reasonCode: "SIMULATION_STARTED" },
+    {
+      code: "WORKER_PICKUP_SIMULATION_READY_BLOCKED",
+      reasonCode: "PICKUP_READY_EXECUTION_BLOCKED_BY_CONTROL_PLANE_BOUNDARY",
+    },
+  ]);
+  assert.equal(result.nextAllowedAction, "control_plane_review_and_dry_run_artifact_inspection_only");
+});
+
+test("worker pickup simulation: missing required handoff data fails closed", () => {
+  const result = simulateRuntimeProviderWorkerPickupReadiness({
+    handoffArtifact: { ...baseHandoffArtifact(), handoffId: " ", plannedJobIds: undefined },
+  });
+
+  assert.equal(result.readinessStatus, "failed_closed");
+  assert.equal(result.executionBlocked, true);
+  assert.equal(result.blockedReasons.some((reason) => reason.includes("missing_required_handoff_fields")), true);
+  assert.equal(
+    result.diagnostics.some((entry) => entry.code === "WORKER_PICKUP_SIMULATION_FAILED_CLOSED"),
+    true,
+  );
+});
+
+test("worker pickup simulation: not-approved handoff is not pickup-ready", () => {
+  const result = simulateRuntimeProviderWorkerPickupReadiness({
+    handoffArtifact: baseHandoffArtifact({ approvalStatus: "pending", handoffStatus: "ready" }),
+  });
+
+  assert.equal(result.readinessStatus, "pickup_not_ready");
+  assert.equal(result.executionBlocked, true);
+  assert.equal(result.blockedReasons.includes("approval_status_approved"), true);
+  assert.deepEqual(result.diagnostics, [
+    { code: "WORKER_PICKUP_SIMULATION_STARTED", reasonCode: "SIMULATION_STARTED" },
+    { code: "WORKER_PICKUP_SIMULATION_NOT_READY", reasonCode: "PICKUP_NOT_READY_FROM_HANDOFF_CONDITIONS" },
+  ]);
+});
+
+test("worker pickup simulation: execution intent is explicitly blocked", () => {
+  const result = simulateRuntimeProviderWorkerPickupReadiness({
+    handoffArtifact: baseHandoffArtifact(),
+    executionIntent: "execute",
+  });
+
+  assert.equal(result.readinessStatus, "pickup_not_ready");
+  assert.equal(result.executionBlocked, true);
+  assert.deepEqual(result.blockedReasons, ["execution_intent_blocked"]);
+  assert.deepEqual(result.diagnostics, [
+    { code: "WORKER_PICKUP_SIMULATION_STARTED", reasonCode: "SIMULATION_STARTED" },
+    { code: "WORKER_PICKUP_SIMULATION_EXECUTION_INTENT_BLOCKED", reasonCode: "EXECUTION_INTENT_NOT_ALLOWED" },
+  ]);
+});
+
+test("worker pickup simulation: deterministic and stable shape", () => {
+  const left = simulateRuntimeProviderWorkerPickupReadiness({
+    handoffArtifact: baseHandoffArtifact({ plannedJobIds: ["job_2", "job_1"] }),
+  });
+  const right = simulateRuntimeProviderWorkerPickupReadiness({
+    handoffArtifact: baseHandoffArtifact({ plannedJobIds: ["job_1", "job_2"] }),
+  });
+
+  assert.deepEqual(left, right);
+});
+
+test("worker pickup simulation: does not invoke external execution paths", () => {
+  const originalFetch = globalThis.fetch;
+  let fetchCalled = false;
+  globalThis.fetch = (async () => {
+    fetchCalled = true;
+    throw new Error("fetch must not be called in pickup simulation");
+  }) as typeof fetch;
+
+  try {
+    const result = simulateRuntimeProviderWorkerPickupReadiness({
+      handoffArtifact: baseHandoffArtifact(),
+    });
+    assert.equal(result.executionBlocked, true);
+    assert.equal(fetchCalled, false);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
 });
