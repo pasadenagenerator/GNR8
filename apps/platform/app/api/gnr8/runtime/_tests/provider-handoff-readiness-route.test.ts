@@ -177,3 +177,55 @@ test("provider handoff readiness route: no provider or external execution path i
   assert.equal(asJson.includes("providerPayloadCredentials"), false);
   assert.equal(asJson.includes("apiToken"), false);
 });
+
+test("provider handoff readiness route: invalid non-uuid siteVersionId fails closed with deterministic diagnostic", async () => {
+  let resolveBySiteVersionCalls = 0;
+  const handlers = createProviderHandoffReadinessRouteHandlers({
+    getProviderExecutionHandoffByHandoffId: async () =>
+      ({ ...baseHandoffArtifact(), siteVersionId: "dev_readiness_seed_site_version" }),
+    resolveAgencyIdForSiteVersion: async () => {
+      resolveBySiteVersionCalls += 1;
+      return "agency_1";
+    },
+    resolveAgencyIdForSite: async () => "agency_1",
+    requireAgencyActionContext: async () =>
+      ({ userId: "user_1", agencyId: "agency_1", agencyName: "Agency", role: "owner", actorMode: "membership" }) as never,
+  });
+
+  const response = await handlers.GET(new Request("http://localhost/api/gnr8/runtime/provider-handoffs/handoff_1/readiness"), {
+    params: Promise.resolve({ handoffId: "handoff_1" }),
+  });
+
+  assert.equal(response.status, 422);
+  const body = (await response.json()) as {
+    handoffArtifact: null;
+    readinessStatus: string;
+    diagnostics: string[];
+    blockedReasons: string[];
+  };
+
+  assert.equal(resolveBySiteVersionCalls, 0);
+  assert.equal(body.handoffArtifact, null);
+  assert.equal(body.readinessStatus, "failed_closed");
+  assert.equal(body.blockedReasons.some((entry) => entry.includes("worker_pickup_evidence_failed_closed")), true);
+  assert.equal(
+    body.diagnostics.includes("PROVIDER_HANDOFF_READINESS_INVALID_SCOPE_IDENTIFIER:FAILED_CLOSED"),
+    true,
+  );
+});
+
+test("provider handoff readiness route: unexpected errors are sanitized", async () => {
+  const handlers = createProviderHandoffReadinessRouteHandlers({
+    getProviderExecutionHandoffByHandoffId: async () => {
+      throw new Error('invalid input syntax for type uuid: "dev_readiness_seed_site_version"');
+    },
+  });
+
+  const response = await handlers.GET(new Request("http://localhost/api/gnr8/runtime/provider-handoffs/handoff_1/readiness"), {
+    params: Promise.resolve({ handoffId: "handoff_1" }),
+  });
+
+  assert.equal(response.status, 500);
+  const body = (await response.json()) as { error: string };
+  assert.equal(body.error, "provider_handoff_readiness_failed_closed");
+});

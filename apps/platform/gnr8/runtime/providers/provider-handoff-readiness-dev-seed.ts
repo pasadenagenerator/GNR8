@@ -17,7 +17,7 @@ import {
 
 const DEV_ONLY_LABEL = "DEV_TEST_ONLY_PROVIDER_HANDOFF_SEED";
 const DEFAULT_SITE_ID = "dev_readiness_seed_site";
-const DEFAULT_SITE_VERSION_ID = "dev_readiness_seed_site_version";
+const DEFAULT_SITE_VERSION_ID = "00000000-0000-0000-0000-00000000d365";
 
 export type ProviderHandoffReadinessDevSeedOutput = {
   label: typeof DEV_ONLY_LABEL;

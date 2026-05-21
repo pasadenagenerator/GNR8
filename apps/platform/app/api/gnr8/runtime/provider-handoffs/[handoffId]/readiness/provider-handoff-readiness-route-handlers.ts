@@ -42,8 +42,16 @@ export type ProviderHandoffReadinessRouteDependencies = {
   requireAgencyActionContext: typeof requireAgencyActionContext;
 };
 
+const UUID_V4_TO_V8_LOOSE_REGEX =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const INVALID_SCOPE_DIAGNOSTIC = "PROVIDER_HANDOFF_READINESS_INVALID_SCOPE_IDENTIFIER:FAILED_CLOSED";
+
 function sanitizeToken(value: unknown): string {
   return String(value ?? "").trim();
+}
+
+function isUuidLike(value: string): boolean {
+  return UUID_V4_TO_V8_LOOSE_REGEX.test(value);
 }
 
 function uniqueSorted(values: readonly string[]): string[] {
@@ -94,8 +102,14 @@ function isSanitizedHandoffArtifactValid(
 
 async function resolveAgencyScope(deps: ProviderHandoffReadinessRouteDependencies, handoffArtifact: NonNullable<ProviderHandoffReadinessResponse["handoffArtifact"]>): Promise<string | null> {
   if (handoffArtifact.siteVersionId) {
+    if (!isUuidLike(handoffArtifact.siteVersionId)) {
+      throw new Error("provider_handoff_readiness_invalid_site_version_id");
+    }
     const agencyId = await deps.resolveAgencyIdForSiteVersion(handoffArtifact.siteVersionId);
     if (agencyId) return agencyId;
+  }
+  if (!isUuidLike(handoffArtifact.siteId)) {
+    throw new Error("provider_handoff_readiness_invalid_site_id");
   }
   return deps.resolveAgencyIdForSite(handoffArtifact.siteId);
 }
@@ -169,12 +183,23 @@ export function createProviderHandoffReadinessRouteHandlers(
 
         return Response.json(buildReadinessResponse(sanitizedHandoffArtifact, workerPickupEvidence), { status: 200 });
       } catch (error) {
+        if (
+          error instanceof Error &&
+          (error.message === "provider_handoff_readiness_invalid_site_version_id" ||
+            error.message === "provider_handoff_readiness_invalid_site_id")
+        ) {
+          const workerPickupEvidence = resolvedDeps.createRuntimeProviderWorkerPickupReadinessEvidence({ handoffArtifact: null });
+          const failClosedEvidence: RuntimeProviderWorkerPickupEvidence = {
+            ...workerPickupEvidence,
+            diagnostics: uniqueSorted([...workerPickupEvidence.diagnostics, INVALID_SCOPE_DIAGNOSTIC]),
+          };
+          return Response.json(buildReadinessResponse(null, failClosedEvidence), { status: 422 });
+        }
         const mapped = parseAgencyActionContextError(error);
         if (mapped.status >= 400 && mapped.status < 500) {
           return Response.json({ error: mapped.message }, { status: mapped.status });
         }
-        const message = error instanceof Error ? error.message : "Internal server error";
-        return Response.json({ error: message }, { status: 500 });
+        return Response.json({ error: "provider_handoff_readiness_failed_closed" }, { status: 500 });
       }
     },
   };

@@ -12,7 +12,7 @@ function createRecord(input: Partial<RuntimeProviderExecutionHandoffArtifactReco
     handoffId: "handoff_seed_1",
     artifactId: "approval_seed_1",
     siteId: "dev_readiness_seed_site",
-    siteVersionId: "dev_readiness_seed_site_version",
+    siteVersionId: "00000000-0000-0000-0000-00000000d365",
     providerId: "openprovider",
     environment: "sandbox",
     capability: "dns",
@@ -109,6 +109,29 @@ test("provider handoff readiness dev seed: returns handoff id and readiness url 
   assert.equal(seed.readinessUiPath, "/gnr8/admin/provider-handoffs/handoff_seed_1/readiness");
   assert.equal(seed.reusedExisting, true);
   assert.equal(seed.workerPickupEvidence.executionBlocked, true);
+});
+
+test("provider handoff readiness dev seed: default siteVersionId is UUID-safe", async () => {
+  let observedSiteVersionId = "";
+  let correlationLookups = 0;
+  const record = createRecord();
+  const deps = createDeps();
+  const seed = await createProviderHandoffReadinessDevSeed({
+    nodeEnv: "development",
+  }, {
+    ...deps,
+    createRuntimeProviderOperationBundleFromRequest: async (input) => {
+      observedSiteVersionId = String(input.siteVersionId ?? "");
+      return (await deps.createRuntimeProviderOperationBundleFromRequest(input as never)) as never;
+    },
+    getProviderExecutionHandoffsByCorrelationKey: async () => {
+      correlationLookups += 1;
+      return correlationLookups === 1 ? [] : [record];
+    },
+  });
+
+  assert.equal(seed.workerPickupEvidence.executionBlocked, true);
+  assert.match(observedSiteVersionId, /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i);
 });
 
 test("provider handoff readiness dev seed: no provider/dns/openprovider/external execution path is invoked", async () => {
