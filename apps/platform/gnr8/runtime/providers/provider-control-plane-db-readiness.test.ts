@@ -37,6 +37,53 @@ test("provider control-plane db readiness: all tables and required columns prese
         ],
       },
       {
+        tableName: "public.gnr8_runtime_provider_execution_handoffs",
+        exists: true,
+        columns: [
+          "id",
+          "handoff_id",
+          "artifact_id",
+          "site_id",
+          "site_version_id",
+          "provider_id",
+          "environment",
+          "capability",
+          "operation_kind",
+          "approval_status",
+          "risk_level",
+          "handoff_status",
+          "planned_job_ids",
+          "warnings",
+          "blockers",
+          "correlation_key",
+          "created_at",
+          "updated_at",
+        ],
+      },
+      {
+        tableName: "public.gnr8_runtime_provider_operation_approvals",
+        exists: true,
+        columns: [
+          "id",
+          "artifact_id",
+          "site_id",
+          "site_version_id",
+          "provider_id",
+          "environment",
+          "capability",
+          "operation_kind",
+          "approval_status",
+          "risk_level",
+          "required_approvals",
+          "reviewer_checklist",
+          "warnings",
+          "blockers",
+          "correlation_key",
+          "created_at",
+          "updated_at",
+        ],
+      },
+      {
         tableName: "public.gnr8_agency_provider_settings",
         exists: true,
         columns: [
@@ -72,7 +119,7 @@ test("provider control-plane db readiness: all tables and required columns prese
   assert.equal(report.status, "ready");
   assert.deepEqual(report.warnings, []);
   assert.deepEqual(report.blockers, []);
-  assert.equal(report.tables.length, 3);
+  assert.equal(report.tables.length, 5);
 });
 
 test("provider control-plane db readiness: missing table => missing_tables", () => {
@@ -83,6 +130,16 @@ test("provider control-plane db readiness: missing table => missing_tables", () 
         tableName: "public.gnr8_runtime_provider_jobs",
         exists: true,
         columns: ["id", "site_id", "site_version_id", "provider_id", "environment", "operation_kind", "status", "intent_payload", "dry_run_payload", "result_payload", "error_payload", "correlation_key", "created_at", "updated_at"],
+      },
+      {
+        tableName: "public.gnr8_runtime_provider_execution_handoffs",
+        exists: true,
+        columns: ["id", "handoff_id", "artifact_id", "site_id", "site_version_id", "provider_id", "environment", "capability", "operation_kind", "approval_status", "risk_level", "handoff_status", "planned_job_ids", "warnings", "blockers", "correlation_key", "created_at", "updated_at"],
+      },
+      {
+        tableName: "public.gnr8_runtime_provider_operation_approvals",
+        exists: true,
+        columns: ["id", "artifact_id", "site_id", "site_version_id", "provider_id", "environment", "capability", "operation_kind", "approval_status", "risk_level", "required_approvals", "reviewer_checklist", "warnings", "blockers", "correlation_key", "created_at", "updated_at"],
       },
       {
         tableName: "public.gnr8_agency_provider_settings",
@@ -110,6 +167,16 @@ test("provider control-plane db readiness: missing required column => blocked", 
         tableName: "public.gnr8_runtime_provider_jobs",
         exists: true,
         columns: ["id", "site_id", "site_version_id", "provider_id", "environment", "operation_kind", "status", "intent_payload", "dry_run_payload", "result_payload", "error_payload", "correlation_key", "created_at", "updated_at"],
+      },
+      {
+        tableName: "public.gnr8_runtime_provider_execution_handoffs",
+        exists: true,
+        columns: ["id", "handoff_id", "artifact_id", "site_id", "site_version_id", "provider_id", "environment", "capability", "operation_kind", "approval_status", "risk_level", "handoff_status", "planned_job_ids", "warnings", "blockers", "correlation_key", "created_at", "updated_at"],
+      },
+      {
+        tableName: "public.gnr8_runtime_provider_operation_approvals",
+        exists: true,
+        columns: ["id", "artifact_id", "site_id", "site_version_id", "provider_id", "environment", "capability", "operation_kind", "approval_status", "risk_level", "required_approvals", "reviewer_checklist", "warnings", "blockers", "correlation_key", "created_at", "updated_at"],
       },
       {
         tableName: "public.gnr8_agency_provider_settings",
@@ -147,6 +214,16 @@ test("provider control-plane db readiness: stable ordering and correlation key",
     hasDatabaseUrl: true,
     tableSnapshots: [
       {
+        tableName: "public.gnr8_runtime_provider_execution_handoffs",
+        exists: true,
+        columns: ["updated_at", "created_at", "correlation_key", "blockers", "warnings", "planned_job_ids", "handoff_status", "risk_level", "approval_status", "operation_kind", "capability", "environment", "provider_id", "site_version_id", "site_id", "artifact_id", "handoff_id", "id"],
+      },
+      {
+        tableName: "public.gnr8_runtime_provider_operation_approvals",
+        exists: true,
+        columns: ["updated_at", "created_at", "correlation_key", "blockers", "warnings", "reviewer_checklist", "required_approvals", "risk_level", "approval_status", "operation_kind", "capability", "environment", "provider_id", "site_version_id", "site_id", "artifact_id", "id"],
+      },
+      {
         tableName: "public.gnr8_provider_credential_references",
         exists: true,
         columns: ["updated_at", "created_at", "enabled", "credential_names", "environment", "reference_key", "provider_id", "agency_id", "id"],
@@ -173,9 +250,19 @@ test("provider control-plane db readiness: stable ordering and correlation key",
         columns: ["id", "agency_id", "provider_id", "environment", "credential_reference", "enabled", "capabilities", "created_at", "updated_at"],
       },
       {
+        tableName: "public.gnr8_runtime_provider_execution_handoffs",
+        exists: true,
+        columns: ["id", "handoff_id", "artifact_id", "site_id", "site_version_id", "provider_id", "environment", "capability", "operation_kind", "approval_status", "risk_level", "handoff_status", "planned_job_ids", "warnings", "blockers", "correlation_key", "created_at", "updated_at"],
+      },
+      {
         tableName: "public.gnr8_provider_credential_references",
         exists: true,
         columns: ["id", "agency_id", "provider_id", "reference_key", "environment", "credential_names", "enabled", "created_at", "updated_at"],
+      },
+      {
+        tableName: "public.gnr8_runtime_provider_operation_approvals",
+        exists: true,
+        columns: ["id", "artifact_id", "site_id", "site_version_id", "provider_id", "environment", "capability", "operation_kind", "approval_status", "risk_level", "required_approvals", "reviewer_checklist", "warnings", "blockers", "correlation_key", "created_at", "updated_at"],
       },
       {
         tableName: "public.gnr8_runtime_provider_jobs",
@@ -190,7 +277,9 @@ test("provider control-plane db readiness: stable ordering and correlation key",
     [
       "public.gnr8_agency_provider_settings",
       "public.gnr8_provider_credential_references",
+      "public.gnr8_runtime_provider_execution_handoffs",
       "public.gnr8_runtime_provider_jobs",
+      "public.gnr8_runtime_provider_operation_approvals",
     ],
   );
   assert.deepEqual(first.tables, second.tables);

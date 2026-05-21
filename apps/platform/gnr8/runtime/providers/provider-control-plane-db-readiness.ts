@@ -56,6 +56,53 @@ const PROVIDER_CONTROL_PLANE_TABLE_DEFINITIONS: readonly TableDefinition[] = [
   },
   {
     schema: "public",
+    table: "gnr8_runtime_provider_operation_approvals",
+    requiredColumns: [
+      "id",
+      "artifact_id",
+      "site_id",
+      "site_version_id",
+      "provider_id",
+      "environment",
+      "capability",
+      "operation_kind",
+      "approval_status",
+      "risk_level",
+      "required_approvals",
+      "reviewer_checklist",
+      "warnings",
+      "blockers",
+      "correlation_key",
+      "created_at",
+      "updated_at",
+    ],
+  },
+  {
+    schema: "public",
+    table: "gnr8_runtime_provider_execution_handoffs",
+    requiredColumns: [
+      "id",
+      "handoff_id",
+      "artifact_id",
+      "site_id",
+      "site_version_id",
+      "provider_id",
+      "environment",
+      "capability",
+      "operation_kind",
+      "approval_status",
+      "risk_level",
+      "handoff_status",
+      "planned_job_ids",
+      "warnings",
+      "blockers",
+      "correlation_key",
+      "created_at",
+      "updated_at",
+    ],
+  },
+  {
+    schema: "public",
     table: "gnr8_agency_provider_settings",
     requiredColumns: [
       "id",
@@ -172,6 +219,8 @@ async function loadProviderControlPlaneTableSnapshots(client: QueryableClient): 
           (t.table_schema = $1::text and t.table_name = $2::text)
           or (t.table_schema = $3::text and t.table_name = $4::text)
           or (t.table_schema = $5::text and t.table_name = $6::text)
+          or (t.table_schema = $7::text and t.table_name = $8::text)
+          or (t.table_schema = $9::text and t.table_name = $10::text)
         )
       `,
       [
@@ -181,6 +230,10 @@ async function loadProviderControlPlaneTableSnapshots(client: QueryableClient): 
         definitions[1]!.table,
         definitions[2]!.schema,
         definitions[2]!.table,
+        definitions[3]!.schema,
+        definitions[3]!.table,
+        definitions[4]!.schema,
+        definitions[4]!.table,
       ],
     ),
     client.query<{ table_schema: string; table_name: string; column_name: string }>(
@@ -191,6 +244,8 @@ async function loadProviderControlPlaneTableSnapshots(client: QueryableClient): 
         (c.table_schema = $1::text and c.table_name = $2::text)
         or (c.table_schema = $3::text and c.table_name = $4::text)
         or (c.table_schema = $5::text and c.table_name = $6::text)
+        or (c.table_schema = $7::text and c.table_name = $8::text)
+        or (c.table_schema = $9::text and c.table_name = $10::text)
       `,
       [
         definitions[0]!.schema,
@@ -199,6 +254,10 @@ async function loadProviderControlPlaneTableSnapshots(client: QueryableClient): 
         definitions[1]!.table,
         definitions[2]!.schema,
         definitions[2]!.table,
+        definitions[3]!.schema,
+        definitions[3]!.table,
+        definitions[4]!.schema,
+        definitions[4]!.table,
       ],
     ),
   ]);
