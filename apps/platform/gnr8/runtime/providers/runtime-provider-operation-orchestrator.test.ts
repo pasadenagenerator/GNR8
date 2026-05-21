@@ -301,3 +301,118 @@ test("runtime provider operation orchestrator: deterministic output and stable k
   assert.deepEqual(left.bundle.warnings, right.bundle.warnings);
   assert.deepEqual(left.bundle.blockers, right.bundle.blockers);
 });
+
+test("runtime provider operation orchestrator: openprovider sandbox control-plane output contract remains deterministic", async () => {
+  const request = {
+    siteId: "site_orchestrator_control_plane_contract",
+    siteVersionId: "version_orchestrator_control_plane_contract",
+    providerCapability: "dns" as const,
+    operationKind: "upsert_dns_record" as const,
+    executionEnvironment: "sandbox" as const,
+    agencyProviderSettings: [
+      providerSettings({
+        id: "openprovider_contract_setting",
+        providerId: "openprovider",
+        environment: "sandbox",
+        capabilities: ["dns"],
+        credentialReference: "openprovider-contract-sandbox",
+        enabled: true,
+      }),
+    ],
+    credentialReferences: [
+      createProviderCredentialReference({
+        id: "openprovider_contract_reference",
+        agencyId: "agency_1",
+        providerId: "openprovider",
+        referenceKey: "openprovider-contract-sandbox",
+        environment: "sandbox",
+        credentialNames: ["openprovider_sandbox_username"],
+      }),
+    ],
+  };
+
+  const first = await createRuntimeProviderOperationBundleFromRequest(request);
+  const second = await createRuntimeProviderOperationBundleFromRequest(request);
+
+  const toContractShape = (
+    output: Awaited<ReturnType<typeof createRuntimeProviderOperationBundleFromRequest>>,
+  ) => ({
+    providerPlanningResult: {
+      providerId: output.bundle.providerId,
+      environment: output.bundle.environment,
+      bundleStatus: output.bundle.bundleStatus,
+      routeStatus: output.bundle.communicatorResult.routeStatus,
+      executionMode: output.bundle.executionIntent.executionMode,
+    },
+    approvalState: {
+      approvalStatus: output.approvalRequirement.approvalStatus,
+      approvalArtifactId: output.approvalArtifact.artifactId,
+      requiredApprovals: output.approvalRequirement.requiredApprovals,
+    },
+    handoffArtifact: {
+      artifactId: output.handoffArtifact.artifactId,
+      handoffId: output.handoffArtifact.handoffId,
+      handoffStatus: output.handoffArtifact.handoffStatus,
+      correlationKey: output.handoffArtifact.correlationKey,
+      plannedJobIds: output.handoffArtifact.plannedJobIds,
+      blockers: output.handoffArtifact.blockers,
+    },
+    workerPickupEvidence: {
+      handoffRef: output.workerPickupEvidence.handoffRef,
+      approvalRef: output.workerPickupEvidence.approvalRef,
+      correlationKey: output.workerPickupEvidence.correlationKey,
+      readinessStatus: output.workerPickupEvidence.readinessStatus,
+      executionBlocked: output.workerPickupEvidence.executionBlocked,
+      nextAllowedAction: output.workerPickupEvidence.nextAllowedAction,
+      blockedReasons: output.workerPickupEvidence.blockedReasons,
+      diagnostics: output.workerPickupEvidence.diagnostics,
+    },
+    correlationKey: output.correlationKey,
+  });
+
+  const firstShape = toContractShape(first);
+  const secondShape = toContractShape(second);
+
+  assert.equal(first.handoffArtifact.artifactId, first.approvalArtifact.artifactId);
+  assert.equal(first.workerPickupEvidence.handoffRef, first.handoffArtifact.handoffId);
+  assert.equal(first.workerPickupEvidence.approvalRef, first.handoffArtifact.artifactId);
+  assert.equal(first.workerPickupEvidence.correlationKey, first.handoffArtifact.correlationKey);
+  assert.equal(first.workerPickupEvidence.executionBlocked, true);
+  assert.equal(
+    first.workerPickupEvidence.nextAllowedAction,
+    "control_plane_review_and_dry_run_artifact_inspection_only",
+  );
+  assert.equal(first.workerPickupEvidence.readinessStatus, "pickup_not_ready");
+  assert.deepEqual(first.workerPickupEvidence.blockedReasons, [
+    "approval_status_approved",
+    "approval_status_not_approved_when_handoff_blocked",
+    "executable_provider_handoff_has_no_planned_jobs",
+    "handoff_status_blocked",
+    "handoff_status_ready",
+    "has_planned_jobs",
+  ]);
+  assert.equal(
+    first.workerPickupEvidence.diagnostics.includes(
+      "WORKER_PICKUP_SIMULATION_NOT_READY:PICKUP_NOT_READY_FROM_HANDOFF_CONDITIONS",
+    ),
+    true,
+  );
+  assert.equal(
+    first.workerPickupEvidence.diagnostics.includes("PROVIDER_WORKER_PICKUP_EVIDENCE_CREATED:EVIDENCE_CREATED"),
+    true,
+  );
+  assert.equal(
+    first.workerPickupEvidence.diagnostics.some((entry) => entry.includes("EXECUTION_INTENT_NOT_ALLOWED")),
+    false,
+  );
+  assert.equal(
+    first.workerPickupEvidence.diagnostics.some((entry) => entry.includes("EXECUTION_PATH")),
+    false,
+  );
+  assert.equal(
+    first.workerPickupEvidence.diagnostics.some((entry) => entry.includes("OPENPROVIDER")),
+    false,
+  );
+
+  assert.deepEqual(firstShape, secondShape);
+});
