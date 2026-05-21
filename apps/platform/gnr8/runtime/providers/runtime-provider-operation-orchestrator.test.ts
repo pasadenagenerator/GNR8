@@ -97,7 +97,7 @@ test("runtime provider operation orchestrator: openprovider sandbox path", async
 });
 
 test("runtime provider operation orchestrator: openprovider sandbox path builds non-live bundle", async () => {
-  const { bundle, approvalRequirement, approvalArtifact } = await createRuntimeProviderOperationBundleFromRequest({
+  const { bundle, approvalRequirement, approvalArtifact, handoffArtifact, workerPickupEvidence } = await createRuntimeProviderOperationBundleFromRequest({
     siteId: "site_openprovider_sandbox",
     siteVersionId: "version_openprovider_sandbox",
     providerCapability: "dns",
@@ -151,6 +151,14 @@ test("runtime provider operation orchestrator: openprovider sandbox path builds 
   assert.equal(bundle.plannedJobs.some((job) => job.status === "completed"), false);
   assert.equal(bundle.plannedJobs.every((job) => job.environment !== "live"), true);
   assert.equal(approvalArtifact.artifactId.length > 0, true);
+  assert.equal(handoffArtifact.artifactId, approvalArtifact.artifactId);
+  assert.equal(workerPickupEvidence.handoffRef, handoffArtifact.handoffId);
+  assert.equal(workerPickupEvidence.approvalRef, approvalArtifact.artifactId);
+  assert.equal(workerPickupEvidence.executionBlocked, true);
+  assert.equal(
+    workerPickupEvidence.nextAllowedAction,
+    "control_plane_review_and_dry_run_artifact_inspection_only",
+  );
 });
 
 test("runtime provider operation orchestrator: openprovider sandbox complete credential names resolves metadata only", async () => {

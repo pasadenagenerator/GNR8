@@ -28,6 +28,14 @@ import {
   createRuntimeProviderOperationApprovalArtifact,
   type RuntimeProviderOperationApprovalArtifact,
 } from "@/gnr8/runtime/providers/runtime-provider-operation-approval-artifact";
+import {
+  createRuntimeProviderExecutionHandoffArtifact,
+  type RuntimeProviderExecutionHandoffArtifact,
+} from "@/gnr8/runtime/providers/runtime-provider-execution-handoff";
+import {
+  createRuntimeProviderWorkerPickupReadinessEvidence,
+  type RuntimeProviderWorkerPickupEvidence,
+} from "@/gnr8/runtime/providers/runtime-provider-worker-pickup-readiness";
 import { createRuntimeProviderOperationBundle, type RuntimeProviderOperationBundle } from "@/gnr8/runtime/providers/runtime-provider-operation-bundle";
 import { resolveRuntimeProviderCommunication } from "@/gnr8/runtime/providers/runtime-provider-communicator";
 
@@ -45,6 +53,8 @@ export type RuntimeProviderOperationOrchestratorOutput = {
   bundle: RuntimeProviderOperationBundle;
   approvalRequirement: RuntimeProviderOperationApprovalRequirement;
   approvalArtifact: RuntimeProviderOperationApprovalArtifact;
+  handoffArtifact: RuntimeProviderExecutionHandoffArtifact;
+  workerPickupEvidence: RuntimeProviderWorkerPickupEvidence;
   correlationKey: string;
 };
 
@@ -303,11 +313,18 @@ export async function createRuntimeProviderOperationBundleFromRequest(
 
   const approvalRequirement = createRuntimeProviderOperationApprovalRequirement(bundle);
   const approvalArtifact = createRuntimeProviderOperationApprovalArtifact(bundle, approvalRequirement);
+  const handoffArtifact = createRuntimeProviderExecutionHandoffArtifact(approvalArtifact, approvalRequirement, bundle);
+  const workerPickupEvidence = createRuntimeProviderWorkerPickupReadinessEvidence({
+    handoffArtifact,
+    executionIntent: "control_plane_simulation_only",
+  });
 
   return {
     bundle,
     approvalRequirement,
     approvalArtifact,
+    handoffArtifact,
+    workerPickupEvidence,
     correlationKey: bundle.correlationKey,
   };
 }

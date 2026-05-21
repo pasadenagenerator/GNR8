@@ -53,6 +53,24 @@ export type RuntimeProviderWorkerPickupSimulationResult = {
   correlationKey: string;
 };
 
+export type RuntimeProviderWorkerPickupEvidenceDiagnosticCode =
+  | "PROVIDER_WORKER_PICKUP_EVIDENCE_CREATED"
+  | "PROVIDER_WORKER_PICKUP_EVIDENCE_FAILED_CLOSED";
+
+export type RuntimeProviderWorkerPickupEvidence = {
+  handoffRef: string;
+  providerRef: string;
+  jobRefs: string[];
+  approvalRef: string;
+  approvalStatus: string;
+  readinessStatus: RuntimeProviderWorkerPickupSimulationReadiness;
+  executionBlocked: true;
+  blockedReasons: string[];
+  diagnostics: string[];
+  nextAllowedAction: "control_plane_review_and_dry_run_artifact_inspection_only";
+  correlationKey: string;
+};
+
 const REQUIRED_CONDITIONS = [
   "handoff_status_ready",
   "non_live_environment",
@@ -273,6 +291,99 @@ export function simulateRuntimeProviderWorkerPickupReadiness(input: {
     executionBlocked: true,
     blockedReasons: uniqueSorted([...report.blockers, ...report.missingConditions]),
     diagnostics,
+    nextAllowedAction: "control_plane_review_and_dry_run_artifact_inspection_only",
+    correlationKey,
+  };
+}
+
+function normalizeDiagnostics(
+  diagnostics: readonly RuntimeProviderWorkerPickupSimulationDiagnostic[] | unknown,
+): string[] {
+  if (!Array.isArray(diagnostics)) return [];
+  return uniqueSorted(
+    diagnostics.map((entry) => {
+      if (!entry || typeof entry !== "object") return "";
+      const code = sanitizeToken((entry as { code?: unknown }).code);
+      const reasonCode = sanitizeToken((entry as { reasonCode?: unknown }).reasonCode);
+      if (!code || !reasonCode) return "";
+      return `${code}:${reasonCode}`;
+    }),
+  );
+}
+
+export function createRuntimeProviderWorkerPickupReadinessEvidence(input: {
+  handoffArtifact: Partial<RuntimeProviderExecutionHandoffArtifact> | null | undefined;
+  executionIntent?: RuntimeProviderWorkerPickupSimulationExecutionIntent;
+}): RuntimeProviderWorkerPickupEvidence {
+  const simulation = simulateRuntimeProviderWorkerPickupReadiness({
+    handoffArtifact: input.handoffArtifact,
+    executionIntent: input.executionIntent,
+  });
+
+  const handoffRef = sanitizeToken(simulation.handoffRef) || "missing_handoff_ref";
+  const providerRef = sanitizeToken(simulation.providerId) || "missing_provider_ref";
+  const jobRefs = sanitizeList(simulation.plannedJobRefs);
+  const approvalRef = sanitizeToken(simulation.artifactRef) || "missing_approval_ref";
+  const approvalStatus = sanitizeToken(simulation.approvalStatus) || "missing_approval_status";
+  const correlationKey = sanitizeToken(simulation.correlationKey) || createRuntimeCorrelationKey({ evidence: "failed_closed" });
+  const blockedReasons = sanitizeList(simulation.blockedReasons);
+  const diagnostics = normalizeDiagnostics(simulation.diagnostics);
+
+  const isSimulationShapeValid =
+    handoffRef.length > 0 &&
+    providerRef.length > 0 &&
+    approvalRef.length > 0 &&
+    approvalStatus.length > 0 &&
+    correlationKey.length > 0 &&
+    (simulation.readinessStatus === "pickup_ready" ||
+      simulation.readinessStatus === "pickup_not_ready" ||
+      simulation.readinessStatus === "failed_closed") &&
+    simulation.executionBlocked === true &&
+    simulation.nextAllowedAction === "control_plane_review_and_dry_run_artifact_inspection_only";
+
+  if (simulation.readinessStatus === "failed_closed") {
+    return {
+      handoffRef,
+      providerRef,
+      jobRefs,
+      approvalRef,
+      approvalStatus,
+      readinessStatus: "failed_closed",
+      executionBlocked: true,
+      blockedReasons: uniqueSorted([...blockedReasons, "worker_pickup_evidence_failed_closed"]),
+      diagnostics: uniqueSorted([...diagnostics, "PROVIDER_WORKER_PICKUP_EVIDENCE_FAILED_CLOSED:SIMULATION_FAILED_CLOSED"]),
+      nextAllowedAction: "control_plane_review_and_dry_run_artifact_inspection_only",
+      correlationKey,
+    };
+  }
+
+  if (!isSimulationShapeValid || diagnostics.length === 0) {
+    return {
+      handoffRef: handoffRef || "failed_closed_handoff_ref",
+      providerRef: providerRef || "failed_closed_provider_ref",
+      jobRefs,
+      approvalRef: approvalRef || "failed_closed_approval_ref",
+      approvalStatus: approvalStatus || "failed_closed_approval_status",
+      readinessStatus: "failed_closed",
+      executionBlocked: true,
+      blockedReasons: uniqueSorted([...blockedReasons, "worker_pickup_evidence_failed_closed"]),
+      diagnostics: uniqueSorted([...diagnostics, "PROVIDER_WORKER_PICKUP_EVIDENCE_FAILED_CLOSED:INVALID_SIMULATION_RESULT"]),
+      nextAllowedAction: "control_plane_review_and_dry_run_artifact_inspection_only",
+      correlationKey,
+    };
+  }
+
+  const evidenceDiagnostics = uniqueSorted([...diagnostics, "PROVIDER_WORKER_PICKUP_EVIDENCE_CREATED:EVIDENCE_CREATED"]);
+  return {
+    handoffRef,
+    providerRef,
+    jobRefs,
+    approvalRef,
+    approvalStatus,
+    readinessStatus: simulation.readinessStatus,
+    executionBlocked: true,
+    blockedReasons,
+    diagnostics: evidenceDiagnostics,
     nextAllowedAction: "control_plane_review_and_dry_run_artifact_inspection_only",
     correlationKey,
   };

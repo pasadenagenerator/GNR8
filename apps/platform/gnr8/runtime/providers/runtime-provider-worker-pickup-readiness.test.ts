@@ -3,6 +3,7 @@ import test from "node:test";
 
 import type { RuntimeProviderExecutionHandoffArtifact } from "@/gnr8/runtime/providers/runtime-provider-execution-handoff";
 import {
+  createRuntimeProviderWorkerPickupReadinessEvidence,
   createRuntimeProviderWorkerPickupReadinessReport,
   simulateRuntimeProviderWorkerPickupReadiness,
 } from "@/gnr8/runtime/providers/runtime-provider-worker-pickup-readiness";
@@ -208,6 +209,72 @@ test("worker pickup simulation: does not invoke external execution paths", () =>
       handoffArtifact: baseHandoffArtifact(),
     });
     assert.equal(result.executionBlocked, true);
+    assert.equal(fetchCalled, false);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("worker pickup evidence: valid simulation produces stable evidence", () => {
+  const left = createRuntimeProviderWorkerPickupReadinessEvidence({
+    handoffArtifact: baseHandoffArtifact({ plannedJobIds: ["job_2", "job_1"] }),
+  });
+  const right = createRuntimeProviderWorkerPickupReadinessEvidence({
+    handoffArtifact: baseHandoffArtifact({ plannedJobIds: ["job_1", "job_2"] }),
+  });
+
+  assert.equal(left.handoffRef, "handoff_1");
+  assert.equal(left.providerRef, "mock_provider");
+  assert.equal(left.approvalRef, "artifact_1");
+  assert.equal(left.readinessStatus, "pickup_ready");
+  assert.equal(left.executionBlocked, true);
+  assert.equal(left.nextAllowedAction, "control_plane_review_and_dry_run_artifact_inspection_only");
+  assert.equal(left.diagnostics.includes("PROVIDER_WORKER_PICKUP_EVIDENCE_CREATED:EVIDENCE_CREATED"), true);
+  assert.deepEqual(left, right);
+});
+
+test("worker pickup evidence: blocked reasons and diagnostics preserved from simulation", () => {
+  const evidence = createRuntimeProviderWorkerPickupReadinessEvidence({
+    handoffArtifact: baseHandoffArtifact({ approvalStatus: "pending", handoffStatus: "ready", plannedJobIds: [] }),
+  });
+
+  assert.equal(evidence.executionBlocked, true);
+  assert.equal(evidence.blockedReasons.includes("approval_status_approved"), true);
+  assert.equal(evidence.blockedReasons.includes("has_planned_jobs"), true);
+  assert.equal(evidence.diagnostics.includes("WORKER_PICKUP_SIMULATION_NOT_READY:PICKUP_NOT_READY_FROM_HANDOFF_CONDITIONS"), true);
+});
+
+test("worker pickup evidence: missing required fields fails closed", () => {
+  const evidence = createRuntimeProviderWorkerPickupReadinessEvidence({
+    handoffArtifact: { ...baseHandoffArtifact(), handoffId: " ", plannedJobIds: undefined },
+  });
+
+  assert.equal(evidence.executionBlocked, true);
+  assert.equal(evidence.readinessStatus, "failed_closed");
+  assert.equal(evidence.blockedReasons.includes("worker_pickup_evidence_failed_closed"), true);
+  assert.equal(
+    evidence.diagnostics.includes("PROVIDER_WORKER_PICKUP_EVIDENCE_FAILED_CLOSED:SIMULATION_FAILED_CLOSED"),
+    true,
+  );
+  assert.equal(
+    evidence.diagnostics.some((entry) => entry.startsWith("WORKER_PICKUP_SIMULATION_FAILED_CLOSED:")),
+    true,
+  );
+});
+
+test("worker pickup evidence: does not invoke provider/dns/external execution paths", () => {
+  const originalFetch = globalThis.fetch;
+  let fetchCalled = false;
+  globalThis.fetch = (async () => {
+    fetchCalled = true;
+    throw new Error("fetch must not be called while building worker pickup evidence");
+  }) as typeof fetch;
+
+  try {
+    const evidence = createRuntimeProviderWorkerPickupReadinessEvidence({
+      handoffArtifact: baseHandoffArtifact(),
+    });
+    assert.equal(evidence.executionBlocked, true);
     assert.equal(fetchCalled, false);
   } finally {
     globalThis.fetch = originalFetch;
