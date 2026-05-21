@@ -1,16 +1,19 @@
 # GNR8 CURRENT STATE SNAPSHOT
 
 ## Snapshot Date
-2026-05-20
+2026-05-21
 
 ## Current Phase
-Provider/DNS control-plane consolidation with DB-readiness convergence.
+Provider handoff readiness inspection hardening (control-plane only).
 
 ## Latest Completed Milestone
 
 - Control-plane layers for provider settings, credential reference contract, provider selection/communicator, job planning, approvals, and execution handoffs are implemented.
 - Deterministic Openprovider sandbox adapter and contract/readiness boundaries are in place.
 - Explicit execution boundaries are enforced in control-plane artifacts and dry-run paths.
+- Provider handoff readiness inspection simulation is implemented and persisted-handoff driven.
+- `workerPickupEvidence` is deterministic, always execution-blocked, and reconstructable from persisted `handoffArtifact`.
+- Read-only readiness API route and internal debug UI route are implemented for operator inspection.
 
 ## Current Blocker
 
@@ -19,9 +22,7 @@ Provider/DNS control-plane consolidation with DB-readiness convergence.
 
 ## Next Milestone
 
-- Apply/verify provider-control-plane migrations in target DBs.
-- Validate repository roundtrip/ordering behavior for provider jobs, approvals, and handoffs against real DB.
-- Keep execution paths dry-run/sandbox-gated only.
+- Provider handoff readiness inspection hardening / operator review flow planning.
 
 ## Latest Provider Control Plane State
 
@@ -39,6 +40,8 @@ Provider/DNS control-plane consolidation with DB-readiness convergence.
 - execution handoff: implemented
 - execution handoff repository: implemented
 - worker pickup readiness: implemented
+- provider handoff readiness inspection route: implemented
+- provider handoff readiness debug UI: implemented
 
 Openprovider:
 - sandbox adapter exists
@@ -57,14 +60,34 @@ DB readiness:
 
 - Runtime identity/readiness/resolution models are active and deterministic.
 - Provider/DNS/domain layers are active at control-plane level.
-- Worker pickup readiness is modeled, but provider action execution remains disabled by policy.
+- Worker pickup readiness simulation and evidence projection are modeled, but provider action execution remains disabled by policy.
+
+## Completed Readiness Inspection Files/Routes
+
+Files:
+- `apps/platform/gnr8/runtime/providers/runtime-provider-worker-pickup-readiness.ts`
+- `apps/platform/app/api/gnr8/runtime/provider-handoffs/[handoffId]/readiness/provider-handoff-readiness-route-handlers.ts`
+- `apps/platform/app/api/gnr8/runtime/provider-handoffs/[handoffId]/readiness/route.ts`
+- `apps/platform/app/gnr8/admin/provider-handoffs/[handoffId]/readiness/page.tsx`
+- `apps/platform/app/gnr8/admin/provider-handoffs/[handoffId]/readiness/provider-handoff-readiness-debug-view.tsx`
+- `apps/platform/app/gnr8/admin/provider-handoffs/[handoffId]/readiness/provider-handoff-readiness-debug-presenter.ts`
+- `apps/platform/app/api/gnr8/runtime/_tests/provider-handoff-readiness-route.test.ts`
+
+Routes:
+- `GET /api/gnr8/runtime/provider-handoffs/[handoffId]/readiness` (read-only control-plane inspection response)
+- `/gnr8/admin/provider-handoffs/[handoffId]/readiness` (internal debug/operator inspection UI)
 
 ## Execution Boundaries (Current)
 
 - NO provider execution.
+- NO sandbox execution.
 - NO live DNS.
+- NO DNS writes.
+- NO queue/Inngest execution for provider handoff readiness inspection.
 - NO external registrar calls.
+- NO Openprovider API calls.
 - NO worker execution for provider actions.
+- NO secret reads.
 - Openprovider sandbox planning/dry-run artifacts only. No provider execution is permitted, including sandbox execution. Control-plane metadata and deterministic planning only.
 
 ## Worker Pickup Readiness Criteria
@@ -83,6 +106,7 @@ Blocked when:
 
 Clarifications:
 - readiness model exists
+- worker pickup evidence is deterministic and reconstructable from persisted handoff artifact
 - worker execution is not enabled
 - this is pre-worker control-plane only
 
