@@ -100,8 +100,12 @@ function ListField(props: { label: string; values: string[] }) {
   );
 }
 
-export function ProviderHandoffReadinessDebugView(props: { model: ProviderHandoffReadinessDebugModel; fetchError?: string | null }) {
-  const { model, fetchError } = props;
+export function ProviderHandoffReadinessDebugView(props: {
+  model: ProviderHandoffReadinessDebugModel;
+  fetchError?: string | null;
+  operatorReviewFetchError?: string | null;
+}) {
+  const { model, fetchError, operatorReviewFetchError } = props;
   const display = buildProviderHandoffReadinessDebugDisplay(model);
   const artifact = display.handoffArtifactSummary;
   const evidence = display.workerPickupEvidenceSummary;
@@ -160,6 +164,11 @@ export function ProviderHandoffReadinessDebugView(props: { model: ProviderHandof
       <section style={{ border: "1px solid #dbe3ea", borderRadius: 10, background: "#ffffff", padding: 12, marginTop: 12 }}>
         <h2 style={{ margin: "0 0 8px 0", fontSize: 16 }}>Operator Review</h2>
         <p style={{ margin: "0 0 10px 0", color: "#4b5563" }}>Review intent only. Execution remains blocked.</p>
+        {operatorReviewFetchError ? (
+          <section style={{ border: "1px solid #fecaca", borderRadius: 10, background: "#fff1f2", padding: 12, marginBottom: 12 }}>
+            <strong>Operator review fetch error:</strong> {redactSecretLikeText(operatorReviewFetchError)}
+          </section>
+        ) : null}
         <OperatorReviewIntentForm handoffId={model.handoffId} />
         <div style={{ height: 8 }} />
         <div style={{ border: "1px solid #e5e7eb", borderRadius: 8, padding: 10, marginBottom: 8, background: "#f9fafb" }}>

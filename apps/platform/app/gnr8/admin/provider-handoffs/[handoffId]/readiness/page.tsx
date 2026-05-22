@@ -74,20 +74,43 @@ function normalizeGovernanceSnapshot(value: unknown): ProviderHandoffReadinessDe
   };
 }
 
-async function fetchReadinessModel(handoffId: string): Promise<{ model: ProviderHandoffReadinessDebugModel; fetchError: string | null }> {
-  const incomingHeaders = await headers();
+type ReadinessPageFetchResult = {
+  model: ProviderHandoffReadinessDebugModel;
+  fetchError: string | null;
+  operatorReviewFetchError: string | null;
+};
+
+const DEFAULT_REVIEW_SUMMARY: ProviderHandoffReadinessDebugModel["operatorReviewSummary"] = {
+  reviewSummaryStatus: "no_reviews",
+  reviewCount: 0,
+  latestReviewer: "",
+  latestCreatedAt: "",
+  latestReason: "",
+  intentOnly: true,
+  executionBlocked: true,
+};
+
+type FetchReadinessModelDeps = {
+  fetchImpl?: typeof fetch;
+  headersImpl?: typeof headers;
+};
+
+async function fetchReadinessModel(
+  handoffId: string,
+  deps: FetchReadinessModelDeps = {},
+): Promise<ReadinessPageFetchResult> {
+  const incomingHeaders = await (deps.headersImpl ?? headers)();
+  const fetchImpl = deps.fetchImpl ?? fetch;
   const proto = normalizeToken(incomingHeaders.get("x-forwarded-proto")) || "http";
   const host = normalizeToken(incomingHeaders.get("x-forwarded-host")) || normalizeToken(incomingHeaders.get("host")) || "localhost:3000";
   const endpoint = `${proto}://${host}/api/gnr8/runtime/provider-handoffs/${encodeURIComponent(handoffId)}/readiness`;
+  const reviewsEndpoint = `${proto}://${host}/api/gnr8/admin/provider-handoffs/${encodeURIComponent(handoffId)}/reviews`;
+  const cookie = normalizeToken(incomingHeaders.get("cookie"));
+  const requestHeaders = cookie ? { cookie } : undefined;
 
   try {
-    const reviewsEndpoint = `${proto}://${host}/api/gnr8/admin/provider-handoffs/${encodeURIComponent(handoffId)}/reviews`;
-    const [response, reviewsResponse] = await Promise.all([
-      fetch(endpoint, { method: "GET", cache: "no-store" }),
-      fetch(reviewsEndpoint, { method: "GET", cache: "no-store" }),
-    ]);
-    const payload = (await response.json()) as Record<string, unknown>;
-    const reviewsPayload = (await reviewsResponse.json()) as Record<string, unknown>;
+    const response = await fetchImpl(endpoint, { method: "GET", cache: "no-store", headers: requestHeaders });
+    const payload = (await response.json().catch(() => ({}))) as Record<string, unknown>;
 
     const model: ProviderHandoffReadinessDebugModel = {
       handoffId,
@@ -100,17 +123,37 @@ async function fetchReadinessModel(handoffId: string): Promise<{ model: Provider
       handoffArtifact: (payload.handoffArtifact as ProviderHandoffReadinessDebugModel["handoffArtifact"]) ?? null,
       workerPickupEvidence: (payload.workerPickupEvidence as ProviderHandoffReadinessDebugModel["workerPickupEvidence"]) ?? {},
       governanceSnapshot: normalizeGovernanceSnapshot(payload.governanceSnapshot),
-      operatorReviews: normalizeReviewList(reviewsPayload.reviews),
-      operatorReviewSummary: normalizeReviewSummary(reviewsPayload.reviewSummary),
-      operatorReviewIntentOnly: Boolean(reviewsPayload.intentOnly),
+      operatorReviews: [],
+      operatorReviewSummary: DEFAULT_REVIEW_SUMMARY,
+      operatorReviewIntentOnly: true,
     };
+
+    if (!response.ok) {
+      return {
+        model,
+        fetchError: normalizeToken(payload.error) || `HTTP_${response.status}`,
+        operatorReviewFetchError: null,
+      };
+    }
+
+    let operatorReviewFetchError: string | null = null;
+    try {
+      const reviewsResponse = await fetchImpl(reviewsEndpoint, { method: "GET", cache: "no-store", headers: requestHeaders });
+      const reviewsPayload = (await reviewsResponse.json().catch(() => ({}))) as Record<string, unknown>;
+      model.operatorReviews = normalizeReviewList(reviewsPayload.reviews);
+      model.operatorReviewSummary = normalizeReviewSummary(reviewsPayload.reviewSummary);
+      model.operatorReviewIntentOnly = Boolean(reviewsPayload.intentOnly);
+      if (!reviewsResponse.ok) {
+        operatorReviewFetchError = normalizeToken(reviewsPayload.error) || `HTTP_${reviewsResponse.status}`;
+      }
+    } catch (error) {
+      operatorReviewFetchError = error instanceof Error ? error.message : "Unknown fetch error";
+    }
 
     return {
       model,
-      fetchError:
-        response.ok && reviewsResponse.ok
-          ? null
-          : normalizeToken(payload.error) || normalizeToken(reviewsPayload.error) || `HTTP_${response.status}`,
+      fetchError: null,
+      operatorReviewFetchError,
     };
   } catch (error) {
     return {
@@ -126,18 +169,11 @@ async function fetchReadinessModel(handoffId: string): Promise<{ model: Provider
         workerPickupEvidence: {},
         governanceSnapshot: undefined,
         operatorReviews: [],
-        operatorReviewSummary: {
-          reviewSummaryStatus: "no_reviews",
-          reviewCount: 0,
-          latestReviewer: "",
-          latestCreatedAt: "",
-          latestReason: "",
-          intentOnly: true,
-          executionBlocked: true,
-        },
+        operatorReviewSummary: DEFAULT_REVIEW_SUMMARY,
         operatorReviewIntentOnly: true,
       },
       fetchError: error instanceof Error ? error.message : "Unknown fetch error",
+      operatorReviewFetchError: null,
     };
   }
 }
@@ -145,7 +181,7 @@ async function fetchReadinessModel(handoffId: string): Promise<{ model: Provider
 export default async function ProviderHandoffReadinessDebugPage(props: PageProps) {
   const { handoffId } = await props.params;
   const normalizedHandoffId = normalizeToken(handoffId);
-  const { model, fetchError } = await fetchReadinessModel(normalizedHandoffId);
+  const { model, fetchError, operatorReviewFetchError } = await fetchReadinessModel(normalizedHandoffId);
 
-  return <ProviderHandoffReadinessDebugView model={model} fetchError={fetchError} />;
+  return <ProviderHandoffReadinessDebugView model={model} fetchError={fetchError} operatorReviewFetchError={operatorReviewFetchError} />;
 }

@@ -6,6 +6,7 @@ import { createOperatorReviewIntentEndpoint, submitOperatorReviewIntent } from "
 
 const VIEW_FILE = new URL("./[handoffId]/readiness/provider-handoff-readiness-debug-view.tsx", import.meta.url);
 const FORM_FILE = new URL("./[handoffId]/readiness/operator-review-intent-form.tsx", import.meta.url);
+const PAGE_FILE = new URL("./[handoffId]/readiness/page.tsx", import.meta.url);
 
 test("provider handoff readiness view source: renders form and intent-only warning", async () => {
   const [viewSource, formSource] = await Promise.all([readFile(VIEW_FILE, "utf8"), readFile(FORM_FILE, "utf8")]);
@@ -15,6 +16,7 @@ test("provider handoff readiness view source: renders form and intent-only warni
   assert.equal(combined.includes("Save review intent"), true);
   assert.equal(combined.includes("Saving review intent does not execute provider actions."), true);
   assert.equal(combined.includes("Operator Review Summary"), true);
+  assert.equal(combined.includes("Operator review fetch error:"), true);
   assert.equal(combined.includes("summary status"), true);
   assert.equal(combined.includes("latest timestamp"), true);
   assert.equal(combined.includes("Review intent only. Execution remains blocked."), true);
@@ -30,6 +32,17 @@ test("provider handoff readiness view source: no execution controls rendered", a
   assert.equal(combined.includes(">Retry execution<"), false);
   assert.equal(combined.includes(">DNS write<"), false);
   assert.equal(combined.includes(">Provider call<"), false);
+});
+
+test("provider handoff readiness page source: separates readiness and operator review fetch errors", async () => {
+  const pageSource = await readFile(PAGE_FILE, "utf8");
+
+  assert.equal(pageSource.includes("operatorReviewFetchError"), true);
+  assert.equal(pageSource.includes("fetchError: null"), true);
+  assert.equal(pageSource.includes("if (!response.ok)"), true);
+  assert.equal(pageSource.includes("if (!reviewsResponse.ok)"), true);
+  assert.equal(pageSource.includes("<ProviderHandoffReadinessDebugView model={model} fetchError={fetchError} operatorReviewFetchError={operatorReviewFetchError} />"), true);
+  assert.equal(pageSource.includes("const cookie = normalizeToken(incomingHeaders.get(\"cookie\"));"), true);
 });
 
 test("operator review intent submit: posts to route and refreshes on success", async () => {
