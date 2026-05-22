@@ -163,11 +163,54 @@ test("worker pickup simulation: not-approved handoff is not pickup-ready", () =>
 
   assert.equal(result.readinessStatus, "pickup_not_ready");
   assert.equal(result.executionBlocked, true);
-  assert.equal(result.blockedReasons.includes("approval_status_approved"), true);
+  assert.equal(result.blockedReasons.includes("approval_status_not_approved"), true);
+  assert.equal(result.blockedReasons.includes("approval_status_approved"), false);
   assert.deepEqual(result.diagnostics, [
     { code: "WORKER_PICKUP_SIMULATION_STARTED", reasonCode: "SIMULATION_STARTED" },
     { code: "WORKER_PICKUP_SIMULATION_NOT_READY", reasonCode: "PICKUP_NOT_READY_FROM_HANDOFF_CONDITIONS" },
   ]);
+});
+
+test("worker pickup simulation: blocked handoff emits coherent blocked reasons", () => {
+  const result = simulateRuntimeProviderWorkerPickupReadiness({
+    handoffArtifact: baseHandoffArtifact({
+      approvalStatus: "blocked",
+      handoffStatus: "blocked",
+      plannedJobIds: [],
+      providerId: "openprovider_sandbox",
+    }),
+  });
+
+  assert.equal(result.readinessStatus, "pickup_not_ready");
+  assert.equal(result.executionBlocked, true);
+  assert.equal(result.blockedReasons.includes("approval_status_blocked"), true);
+  assert.equal(result.blockedReasons.includes("handoff_status_blocked"), true);
+  assert.equal(result.blockedReasons.includes("execution_blocked_by_control_plane_policy"), true);
+  assert.equal(result.blockedReasons.includes("no_planned_jobs_when_pickup_requires_jobs"), true);
+  assert.equal(result.blockedReasons.includes("approval_status_approved"), false);
+  assert.equal(result.blockedReasons.includes("handoff_status_ready"), false);
+  assert.equal(result.blockedReasons.includes("has_planned_jobs"), false);
+});
+
+test("worker pickup simulation: empty planned jobs does not emit has_planned_jobs", () => {
+  const result = simulateRuntimeProviderWorkerPickupReadiness({
+    handoffArtifact: baseHandoffArtifact({ plannedJobIds: [] }),
+  });
+
+  assert.equal(result.readinessStatus, "pickup_not_ready");
+  assert.equal(result.executionBlocked, true);
+  assert.equal(result.blockedReasons.includes("has_planned_jobs"), false);
+  assert.equal(result.blockedReasons.includes("no_planned_jobs_when_pickup_requires_jobs"), true);
+});
+
+test("worker pickup simulation: approved ready handoff remains coherent ready but execution-blocked", () => {
+  const result = simulateRuntimeProviderWorkerPickupReadiness({
+    handoffArtifact: baseHandoffArtifact({ approvalStatus: "approved", handoffStatus: "ready", plannedJobIds: ["job_1"] }),
+  });
+
+  assert.equal(result.readinessStatus, "pickup_ready");
+  assert.equal(result.executionBlocked, true);
+  assert.deepEqual(result.blockedReasons, ["provider_execution_disabled_control_plane_boundary"]);
 });
 
 test("worker pickup simulation: execution intent is explicitly blocked", () => {
@@ -239,8 +282,10 @@ test("worker pickup evidence: blocked reasons and diagnostics preserved from sim
   });
 
   assert.equal(evidence.executionBlocked, true);
-  assert.equal(evidence.blockedReasons.includes("approval_status_approved"), true);
-  assert.equal(evidence.blockedReasons.includes("has_planned_jobs"), true);
+  assert.equal(evidence.blockedReasons.includes("approval_status_not_approved"), true);
+  assert.equal(evidence.blockedReasons.includes("no_planned_jobs_when_pickup_requires_jobs"), true);
+  assert.equal(evidence.blockedReasons.includes("approval_status_approved"), false);
+  assert.equal(evidence.blockedReasons.includes("has_planned_jobs"), false);
   assert.equal(evidence.diagnostics.includes("WORKER_PICKUP_SIMULATION_NOT_READY:PICKUP_NOT_READY_FROM_HANDOFF_CONDITIONS"), true);
 });
 

@@ -111,6 +111,36 @@ function isExecutableProviderHandoff(handoffArtifact: RuntimeProviderExecutionHa
   return handoffArtifact.providerId !== "manual";
 }
 
+function buildPickupNotReadyBlockedReasons(report: RuntimeProviderWorkerPickupReadinessReport): string[] {
+  const reasons: string[] = ["execution_blocked_by_control_plane_policy"];
+
+  if (report.blockers.includes("live_environment_provider_execution_blocked")) {
+    reasons.push("live_environment_provider_execution_blocked");
+  }
+
+  if (report.blockers.includes("handoff_status_blocked")) {
+    reasons.push("handoff_status_blocked");
+  } else if (report.missingConditions.includes("handoff_status_ready")) {
+    reasons.push("handoff_status_not_ready_for_pickup");
+  }
+
+  if (report.missingConditions.includes("approval_status_approved")) {
+    reasons.push(
+      report.blockers.includes("handoff_status_blocked") ? "approval_status_blocked" : "approval_status_not_approved",
+    );
+  }
+
+  if (report.missingConditions.includes("has_planned_jobs")) {
+    reasons.push("no_planned_jobs_when_pickup_requires_jobs");
+  }
+
+  if (report.blockers.includes("executable_provider_handoff_has_no_planned_jobs")) {
+    reasons.push("executable_provider_handoff_has_no_planned_jobs");
+  }
+
+  return uniqueSorted(reasons);
+}
+
 export function createRuntimeProviderWorkerPickupReadinessReport(
   handoffArtifact: RuntimeProviderExecutionHandoffArtifact,
 ): RuntimeProviderWorkerPickupReadinessReport {
@@ -289,7 +319,7 @@ export function simulateRuntimeProviderWorkerPickupReadiness(input: {
     handoffStatus,
     readinessStatus: "pickup_not_ready",
     executionBlocked: true,
-    blockedReasons: uniqueSorted([...report.blockers, ...report.missingConditions]),
+    blockedReasons: buildPickupNotReadyBlockedReasons(report),
     diagnostics,
     nextAllowedAction: "control_plane_review_and_dry_run_artifact_inspection_only",
     correlationKey,
