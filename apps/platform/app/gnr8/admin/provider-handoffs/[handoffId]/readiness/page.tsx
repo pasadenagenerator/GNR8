@@ -38,6 +38,19 @@ function normalizeReviewList(values: unknown): ProviderHandoffReadinessDebugMode
     .sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.reviewId.localeCompare(b.reviewId));
 }
 
+function normalizeReviewSummary(value: unknown): ProviderHandoffReadinessDebugModel["operatorReviewSummary"] {
+  const summary = normalizeObject(value);
+  return {
+    reviewSummaryStatus: normalizeToken(summary.reviewSummaryStatus),
+    reviewCount: Number.isFinite(summary.reviewCount) ? Number(summary.reviewCount) : 0,
+    latestReviewer: normalizeToken(summary.latestReviewer),
+    latestCreatedAt: normalizeToken(summary.latestCreatedAt),
+    latestReason: normalizeToken(summary.latestReason),
+    intentOnly: Boolean(summary.intentOnly),
+    executionBlocked: Boolean(summary.executionBlocked),
+  };
+}
+
 async function fetchReadinessModel(handoffId: string): Promise<{ model: ProviderHandoffReadinessDebugModel; fetchError: string | null }> {
   const incomingHeaders = await headers();
   const proto = normalizeToken(incomingHeaders.get("x-forwarded-proto")) || "http";
@@ -64,6 +77,7 @@ async function fetchReadinessModel(handoffId: string): Promise<{ model: Provider
       handoffArtifact: (payload.handoffArtifact as ProviderHandoffReadinessDebugModel["handoffArtifact"]) ?? null,
       workerPickupEvidence: (payload.workerPickupEvidence as ProviderHandoffReadinessDebugModel["workerPickupEvidence"]) ?? {},
       operatorReviews: normalizeReviewList(reviewsPayload.reviews),
+      operatorReviewSummary: normalizeReviewSummary(reviewsPayload.reviewSummary),
       operatorReviewIntentOnly: Boolean(reviewsPayload.intentOnly),
     };
 
@@ -87,6 +101,15 @@ async function fetchReadinessModel(handoffId: string): Promise<{ model: Provider
         handoffArtifact: null,
         workerPickupEvidence: {},
         operatorReviews: [],
+        operatorReviewSummary: {
+          reviewSummaryStatus: "no_reviews",
+          reviewCount: 0,
+          latestReviewer: "",
+          latestCreatedAt: "",
+          latestReason: "",
+          intentOnly: true,
+          executionBlocked: true,
+        },
         operatorReviewIntentOnly: true,
       },
       fetchError: error instanceof Error ? error.message : "Unknown fetch error",

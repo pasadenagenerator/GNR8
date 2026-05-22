@@ -54,6 +54,15 @@ function buildModel(): ProviderHandoffReadinessDebugModel {
         createdAt: "2026-05-22T00:00:00.000Z",
       },
     ],
+    operatorReviewSummary: {
+      reviewSummaryStatus: "approved_for_future_execution",
+      reviewCount: 2,
+      latestReviewer: "reviewer_b",
+      latestCreatedAt: "2026-05-22T00:00:01.000Z",
+      latestReason: "checked dry run",
+      intentOnly: true,
+      executionBlocked: true,
+    },
     operatorReviewIntentOnly: true,
   };
 }
@@ -72,6 +81,10 @@ test("provider handoff readiness presenter: renders mocked readiness evidence", 
     display.operatorReviews.map((review) => review.reviewId),
     ["review_1", "review_2"],
   );
+  assert.equal(display.operatorReviewSummary.reviewSummaryStatus, "approved_for_future_execution");
+  assert.equal(display.operatorReviewSummary.reviewCount, 2);
+  assert.equal(display.operatorReviewSummary.intentOnly, true);
+  assert.equal(display.operatorReviewSummary.executionBlocked, true);
   assert.equal(display.hasMutationControls, false);
 });
 

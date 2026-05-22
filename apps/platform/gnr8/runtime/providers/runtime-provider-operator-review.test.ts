@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  buildRuntimeProviderOperatorReviewSummary,
   createRuntimeProviderOperatorReview,
   type RuntimeProviderOperatorReviewStatus,
 } from "@/gnr8/runtime/providers/runtime-provider-operator-review";
@@ -102,4 +103,63 @@ test("operator review: execution path remains untouched", () => {
   } finally {
     globalThis.fetch = originalFetch;
   }
+});
+
+test("operator review summary: no reviews => no_reviews", () => {
+  const result = buildRuntimeProviderOperatorReviewSummary({ reviews: [] });
+  assert.equal(result.reviewSummary.reviewSummaryStatus, "no_reviews");
+  assert.equal(result.reviewSummary.reviewCount, 0);
+  assert.equal(result.reviewSummary.intentOnly, true);
+  assert.equal(result.reviewSummary.executionBlocked, true);
+});
+
+test("operator review summary: one review => exact status", () => {
+  const review = createReview("needs_changes").reviewArtifact;
+  assert.ok(review);
+  const result = buildRuntimeProviderOperatorReviewSummary({ reviews: [review] });
+  assert.equal(result.reviewSummary.reviewSummaryStatus, "needs_changes");
+});
+
+test("operator review summary: conflicting history => mixed_review_state", () => {
+  const pending = createRuntimeProviderOperatorReview({
+    handoffRef: { handoffId: "handoff_1", correlationKey: "corr_1" },
+    reviewerRef: "reviewer_a",
+    reviewStatus: "pending_review",
+    reviewReason: "awaiting",
+    createdAt: "2026-05-22T00:00:00.000Z",
+  }).reviewArtifact;
+  const rejected = createRuntimeProviderOperatorReview({
+    handoffRef: { handoffId: "handoff_1", correlationKey: "corr_1" },
+    reviewerRef: "reviewer_b",
+    reviewStatus: "rejected",
+    reviewReason: "unsafe",
+    createdAt: "2026-05-22T00:00:01.000Z",
+  }).reviewArtifact;
+  assert.ok(pending);
+  assert.ok(rejected);
+  const result = buildRuntimeProviderOperatorReviewSummary({ reviews: [pending, rejected] });
+  assert.equal(result.reviewSummary.reviewSummaryStatus, "mixed_review_state");
+  assert.equal(result.diagnostics.includes("OPERATOR_REVIEW_SUMMARY_MIXED_STATE"), true);
+});
+
+test("operator review summary: latest coherent review wins", () => {
+  const pending = createRuntimeProviderOperatorReview({
+    handoffRef: { handoffId: "handoff_1", correlationKey: "corr_1" },
+    reviewerRef: "reviewer_a",
+    reviewStatus: "pending_review",
+    reviewReason: "awaiting",
+    createdAt: "2026-05-22T00:00:00.000Z",
+  }).reviewArtifact;
+  const approved = createRuntimeProviderOperatorReview({
+    handoffRef: { handoffId: "handoff_1", correlationKey: "corr_1" },
+    reviewerRef: "reviewer_b",
+    reviewStatus: "approved_for_future_execution",
+    reviewReason: "good",
+    createdAt: "2026-05-22T00:00:01.000Z",
+  }).reviewArtifact;
+  assert.ok(pending);
+  assert.ok(approved);
+  const result = buildRuntimeProviderOperatorReviewSummary({ reviews: [approved, pending] });
+  assert.equal(result.reviewSummary.reviewSummaryStatus, "approved_for_future_execution");
+  assert.equal(result.reviewSummary.latestReviewer, "reviewer_b");
 });

@@ -45,6 +45,16 @@ type OperatorReviewSummary = {
   createdAt: string;
 };
 
+type OperatorReviewStateSummary = {
+  reviewSummaryStatus: string;
+  reviewCount: number;
+  latestReviewer: string;
+  latestCreatedAt: string;
+  latestReason: string;
+  intentOnly: boolean;
+  executionBlocked: boolean;
+};
+
 export type ProviderHandoffReadinessDebugModel = {
   handoffId: string;
   readinessStatus: string;
@@ -56,6 +66,7 @@ export type ProviderHandoffReadinessDebugModel = {
   handoffArtifact: ProviderHandoffArtifactSummary;
   workerPickupEvidence: WorkerPickupEvidenceSummary;
   operatorReviews: OperatorReviewSummary[];
+  operatorReviewSummary: OperatorReviewStateSummary;
   operatorReviewIntentOnly: boolean;
 };
 
@@ -138,6 +149,15 @@ export function ProviderHandoffReadinessDebugView(props: { model: ProviderHandof
         <p style={{ margin: "0 0 10px 0", color: "#4b5563" }}>Review intent only. Execution remains blocked.</p>
         <OperatorReviewIntentForm handoffId={model.handoffId} />
         <div style={{ height: 8 }} />
+        <div style={{ border: "1px solid #e5e7eb", borderRadius: 8, padding: 10, marginBottom: 8, background: "#f9fafb" }}>
+          <h3 style={{ margin: "0 0 8px 0", fontSize: 14 }}>Operator Review Summary</h3>
+          <Field label="summary status" value={display.operatorReviewSummary.reviewSummaryStatus} />
+          <Field label="review count" value={String(display.operatorReviewSummary.reviewCount)} />
+          <Field label="latest reviewer" value={display.operatorReviewSummary.latestReviewer} />
+          <Field label="latest timestamp" value={display.operatorReviewSummary.latestCreatedAt} />
+          <Field label="latest reason" value={display.operatorReviewSummary.latestReason} />
+          <p style={{ margin: "8px 0 0 0", color: "#4b5563" }}>Review intent only. Execution remains blocked.</p>
+        </div>
         {display.operatorReviews.length > 0 ? (
           display.operatorReviews.map((review) => (
             <div

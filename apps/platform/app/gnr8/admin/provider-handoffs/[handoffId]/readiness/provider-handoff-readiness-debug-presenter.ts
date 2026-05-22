@@ -56,6 +56,15 @@ export function buildProviderHandoffReadinessDebugDisplay(model: ProviderHandoff
         createdAt: redactSecretLikeText(review.createdAt),
       }))
       .sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.reviewId.localeCompare(b.reviewId)),
+    operatorReviewSummary: {
+      reviewSummaryStatus: redactSecretLikeText(model.operatorReviewSummary.reviewSummaryStatus),
+      reviewCount: Number.isFinite(model.operatorReviewSummary.reviewCount) ? model.operatorReviewSummary.reviewCount : 0,
+      latestReviewer: redactSecretLikeText(model.operatorReviewSummary.latestReviewer),
+      latestCreatedAt: redactSecretLikeText(model.operatorReviewSummary.latestCreatedAt),
+      latestReason: redactSecretLikeText(model.operatorReviewSummary.latestReason),
+      intentOnly: model.operatorReviewSummary.intentOnly === true,
+      executionBlocked: model.operatorReviewSummary.executionBlocked === true,
+    },
     operatorReviewIntentOnly: model.operatorReviewIntentOnly === true,
     hasMutationControls: false,
   };

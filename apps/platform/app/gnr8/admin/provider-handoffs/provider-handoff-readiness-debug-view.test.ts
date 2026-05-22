@@ -14,6 +14,10 @@ test("provider handoff readiness view source: renders form and intent-only warni
   assert.equal(combined.includes("Create operator review"), true);
   assert.equal(combined.includes("Save review intent"), true);
   assert.equal(combined.includes("Saving review intent does not execute provider actions."), true);
+  assert.equal(combined.includes("Operator Review Summary"), true);
+  assert.equal(combined.includes("summary status"), true);
+  assert.equal(combined.includes("latest timestamp"), true);
+  assert.equal(combined.includes("Review intent only. Execution remains blocked."), true);
 });
 
 test("provider handoff readiness view source: no execution controls rendered", async () => {

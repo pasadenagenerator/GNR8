@@ -1,10 +1,11 @@
 import { parseAgencyActionContextError, requireAgencyActionContext } from "@/app/api/gnr8/agency/_lib/agency-action-access";
 import { getProviderExecutionHandoffByHandoffId } from "@/gnr8/runtime/providers/runtime-provider-execution-handoff-repository";
-import { createRuntimeProviderOperatorReview } from "@/gnr8/runtime/providers/runtime-provider-operator-review";
+import { buildRuntimeProviderOperatorReviewSummary, createRuntimeProviderOperatorReview } from "@/gnr8/runtime/providers/runtime-provider-operator-review";
 import { getProviderOperatorReviewsByHandoffId } from "@/gnr8/runtime/providers/runtime-provider-operator-review-repository";
 import { createProviderOperatorReviewArtifacts } from "@/gnr8/runtime/providers/runtime-provider-operator-review-repository";
 import type {
   RuntimeProviderOperatorReviewArtifact,
+  RuntimeProviderOperatorReviewSummary,
   RuntimeProviderOperatorReviewStatus,
 } from "@/gnr8/runtime/providers/runtime-provider-operator-review";
 import { requireSuperadminUserId } from "@/src/superadmin/require-superadmin-user-id";
@@ -21,6 +22,7 @@ type ReadOnlyOperatorReview = {
 
 export type ProviderHandoffOperatorReviewsResponse = {
   reviews: Readonly<ReadOnlyOperatorReview[]>;
+  reviewSummary: RuntimeProviderOperatorReviewSummary;
   executionBlocked: true;
   intentOnly: true;
   diagnostics: string[];
@@ -79,6 +81,14 @@ function sanitizeReviewReason(value: unknown): string {
   return redacted.slice(0, 2000);
 }
 
+function sanitizeReviewSummary(summary: RuntimeProviderOperatorReviewSummary): RuntimeProviderOperatorReviewSummary {
+  return {
+    ...summary,
+    latestReviewer: SECRET_LIKE.test(summary.latestReviewer) ? "[redacted]" : summary.latestReviewer,
+    latestReason: SECRET_LIKE.test(summary.latestReason) ? "[redacted]" : summary.latestReason,
+  };
+}
+
 function isAllowedReviewStatus(value: string): value is RuntimeProviderOperatorReviewStatus {
   return ALLOWED_REVIEW_STATUSES.has(value as RuntimeProviderOperatorReviewStatus);
 }
@@ -125,10 +135,12 @@ export function createProviderHandoffOperatorReviewsRouteHandlers(
         await resolvedDeps.requireAgencyActionContext({ action: "run_migration" });
 
         const result = await resolvedDeps.getProviderOperatorReviewsByHandoffId(normalizedHandoffId);
-        const diagnostics = uniqueSorted(["OPERATOR_REVIEW_READ", ...result.diagnostics]);
+        const summaryResult = buildRuntimeProviderOperatorReviewSummary({ reviews: result.reviews });
+        const diagnostics = uniqueSorted(["OPERATOR_REVIEW_READ", ...result.diagnostics, ...summaryResult.diagnostics]);
         return Response.json(
           {
             reviews: result.reviews.map(sanitizeReview),
+            reviewSummary: sanitizeReviewSummary(summaryResult.reviewSummary),
             executionBlocked: true,
             intentOnly: true,
             diagnostics,

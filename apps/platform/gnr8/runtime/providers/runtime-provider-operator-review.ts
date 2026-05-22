@@ -7,10 +7,18 @@ export type RuntimeProviderOperatorReviewStatus =
   | "rejected"
   | "needs_changes";
 
+export type RuntimeProviderOperatorReviewSummaryStatus =
+  | "no_reviews"
+  | RuntimeProviderOperatorReviewStatus
+  | "mixed_review_state";
+
 export type RuntimeProviderOperatorReviewDiagnosticCode =
   | "OPERATOR_REVIEW_CREATED"
   | "OPERATOR_REVIEW_REJECTED"
-  | "OPERATOR_REVIEW_NEEDS_CHANGES";
+  | "OPERATOR_REVIEW_NEEDS_CHANGES"
+  | "OPERATOR_REVIEW_SUMMARY_CREATED"
+  | "OPERATOR_REVIEW_SUMMARY_MIXED_STATE"
+  | "OPERATOR_REVIEW_SUMMARY_NO_REVIEWS";
 
 export type RuntimeProviderOperatorReviewArtifact = {
   reviewId: string;
@@ -30,6 +38,21 @@ export type RuntimeProviderOperatorReviewResult = {
   blockedReasons: string[];
   diagnostics: string[];
   correlationKey: string;
+};
+
+export type RuntimeProviderOperatorReviewSummary = {
+  reviewSummaryStatus: RuntimeProviderOperatorReviewSummaryStatus;
+  reviewCount: number;
+  latestReviewer: string;
+  latestCreatedAt: string;
+  latestReason: string;
+  intentOnly: true;
+  executionBlocked: true;
+};
+
+export type RuntimeProviderOperatorReviewSummaryResult = {
+  reviewSummary: RuntimeProviderOperatorReviewSummary;
+  diagnostics: RuntimeProviderOperatorReviewDiagnosticCode[];
 };
 
 type HandoffReference = Pick<RuntimeProviderExecutionHandoffArtifact, "handoffId" | "correlationKey">;
@@ -57,6 +80,66 @@ function resolveMissingReferences(input: {
   if (!sanitizeToken(input.handoffRef?.correlationKey)) missing.push("handoffCorrelationKey");
   if (!sanitizeToken(input.reviewerRef)) missing.push("reviewerRef");
   return missing.sort((a, b) => a.localeCompare(b));
+}
+
+function sortReviewsChronologically(
+  reviews: readonly RuntimeProviderOperatorReviewArtifact[],
+): RuntimeProviderOperatorReviewArtifact[] {
+  return [...reviews].sort((a, b) => {
+    const createdAtCompare = sanitizeToken(a.createdAt).localeCompare(sanitizeToken(b.createdAt));
+    if (createdAtCompare !== 0) return createdAtCompare;
+    return sanitizeToken(a.reviewId).localeCompare(sanitizeToken(b.reviewId));
+  });
+}
+
+function hasMixedReviewState(statuses: ReadonlySet<RuntimeProviderOperatorReviewStatus>): boolean {
+  if (statuses.size <= 1) return false;
+  const hasRejected = statuses.has("rejected");
+  const hasNeedsChanges = statuses.has("needs_changes");
+  const hasApproved = statuses.has("approved_for_future_execution");
+  if (hasRejected) return true;
+  if (hasNeedsChanges && hasApproved) return true;
+  return false;
+}
+
+export function buildRuntimeProviderOperatorReviewSummary(input: {
+  reviews: readonly RuntimeProviderOperatorReviewArtifact[];
+}): RuntimeProviderOperatorReviewSummaryResult {
+  const orderedReviews = sortReviewsChronologically(input.reviews);
+  const latest = orderedReviews.at(-1);
+
+  if (!latest) {
+    return {
+      reviewSummary: {
+        reviewSummaryStatus: "no_reviews",
+        reviewCount: 0,
+        latestReviewer: "",
+        latestCreatedAt: "",
+        latestReason: "",
+        intentOnly: true,
+        executionBlocked: true,
+      },
+      diagnostics: ["OPERATOR_REVIEW_SUMMARY_CREATED", "OPERATOR_REVIEW_SUMMARY_NO_REVIEWS"],
+    };
+  }
+
+  const statuses = new Set<RuntimeProviderOperatorReviewStatus>(orderedReviews.map((review) => review.reviewStatus));
+  const mixedState = hasMixedReviewState(statuses);
+
+  return {
+    reviewSummary: {
+      reviewSummaryStatus: mixedState ? "mixed_review_state" : latest.reviewStatus,
+      reviewCount: orderedReviews.length,
+      latestReviewer: sanitizeToken(latest.reviewerRef),
+      latestCreatedAt: sanitizeToken(latest.createdAt),
+      latestReason: sanitizeToken(latest.reviewReason),
+      intentOnly: true,
+      executionBlocked: true,
+    },
+    diagnostics: mixedState
+      ? ["OPERATOR_REVIEW_SUMMARY_CREATED", "OPERATOR_REVIEW_SUMMARY_MIXED_STATE"]
+      : ["OPERATOR_REVIEW_SUMMARY_CREATED"],
+  };
 }
 
 export function createRuntimeProviderOperatorReview(input: {
