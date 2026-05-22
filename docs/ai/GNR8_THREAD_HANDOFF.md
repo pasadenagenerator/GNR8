@@ -6,7 +6,7 @@ This is the first file every new ChatGPT/Codex thread should read.
 
 GNR8 is currently in provider/DNS control-plane hardening and migration/preview validation mode.
 The active emphasis is deterministic contracts, approval/handoff safety, and no hidden execution.
-Provider handoff readiness milestone is complete and testable end-to-end from deployed UI (seed + inspection surfaces), and execution remains explicitly blocked.
+Provider handoff readiness with operator review creation milestone is complete and testable end-to-end from deployed UI (seed + inspection surfaces), and execution remains explicitly blocked.
 
 Current snapshot sources:
 - `docs/ai/GNR8_CURRENT_STATE.md`
@@ -47,13 +47,15 @@ Read `docs/ai/GNR8_COLLABORATION_PROTOCOL.md` before generating Codex tasks.
 ## E) Current Provider-Control-Plane Status
 
 Implemented control-plane layers include provider settings, credential references contract, provider selection/communicator, job planner/repository foundation, approval artifacts/transitions, execution handoff, and worker pickup readiness checks.
-Readiness inspection now includes deterministic `workerPickupEvidence` projection from persisted `handoffArtifact`, read-only API inspection route, internal debug UI route, deployed superadmin readiness-test UI, and admin seed API for deterministic persisted handoff creation/reuse.
+Readiness inspection now includes deterministic `workerPickupEvidence` projection from persisted `handoffArtifact`, read-only API inspection route, internal debug UI route, deployed superadmin readiness-test UI, admin seed API for deterministic persisted handoff creation/reuse, and operator review intent persistence/creation surfaces.
 
 Completed readiness inspection routes:
 - `GET /api/gnr8/runtime/provider-handoffs/[handoffId]/readiness` (read-only)
 - `/gnr8/admin/provider-handoffs/[handoffId]/readiness` (internal debug UI)
 - `/gnr8/admin/provider-handoffs/readiness-test` (deployed superadmin readiness test UI)
 - `POST /api/gnr8/admin/provider-handoffs/readiness-seed` (admin seed API)
+- `GET /api/gnr8/admin/provider-handoffs/[handoffId]/reviews` (read-only operator reviews)
+- `POST /api/gnr8/admin/provider-handoffs/[handoffId]/reviews` (admin-only operator review intent creation)
 
 Required production env flag:
 - `GNR8_ADMIN_PROVIDER_HANDOFF_READINESS_SEED_ENABLED=1`
@@ -62,6 +64,14 @@ Evidence and diagnostics milestone:
 - seed creates/reuses deterministic persisted handoff
 - readiness page shows persisted `handoffArtifact` and reconstructed deterministic `workerPickupEvidence`
 - `workerPickupEvidence.blockedReasons` is normalized with no contradictory approval/handoff/planned-job reasons; reasons are deterministic and operator-readable
+- operator review persistence exists via `gnr8_runtime_provider_operator_reviews`
+- readiness UI includes read-only operator review section
+- readiness UI includes create operator review form with:
+  - status dropdown values: `pending_review`, `approved_for_future_execution`, `rejected`, `needs_changes`
+  - reason textarea
+  - Save review intent action
+- `approved_for_future_execution` is intent-only; it does not authorize execution
+- `executionBlocked` remains `true`
 
 Hard boundaries remain:
 - no live provider execution
@@ -77,10 +87,10 @@ Hard boundaries remain:
 
 ## F) Current Active Implementation Phase
 
-Active phase: provider handoff readiness deployed-UI testability milestone.
+Active phase: provider handoff readiness with operator review creation milestone.
 
 Practical next phase:
-1. Operator review persistence and read-only UI surfacing.
+1. Operator review audit/history hardening, or review state summarization in readiness evidence.
 2. Keep execution paths in dry-run/sandbox-gated mode with explicit execution-blocked evidence (still no execution).
 
 ## G) How Next Thread Should Behave

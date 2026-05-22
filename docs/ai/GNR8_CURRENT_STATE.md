@@ -4,7 +4,7 @@
 2026-05-22
 
 ## Current Phase
-Provider handoff readiness deployed-UI testability milestone (control-plane only).
+Operator review creation milestone for provider handoff readiness (control-plane only).
 
 ## Latest Completed Milestone
 
@@ -15,6 +15,11 @@ Provider handoff readiness deployed-UI testability milestone (control-plane only
 - Admin seed flow creates/reuses a deterministic persisted handoff for readiness inspection.
 - Readiness inspection displays persisted `handoffArtifact` and reconstructed deterministic `workerPickupEvidence`.
 - `workerPickupEvidence.blockedReasons` is normalized to deterministic, operator-readable reasons with no contradictory approval/handoff/planned-job reasons.
+- Operator review intent can now be created, persisted, and surfaced from readiness UI.
+- Operator review persistence exists via `gnr8_runtime_provider_operator_reviews`.
+- Read-only operator review API exists: `GET /api/gnr8/admin/provider-handoffs/[handoffId]/reviews`.
+- Admin-only operator review creation API exists: `POST /api/gnr8/admin/provider-handoffs/[handoffId]/reviews`.
+- Readiness UI now includes read-only operator review section and create-review form with status/reason fields.
 
 ## Current Blocker
 
@@ -23,7 +28,7 @@ Provider handoff readiness deployed-UI testability milestone (control-plane only
 
 ## Next Milestone
 
-- Operator review persistence and read-only UI surfacing (still no execution).
+- Operator review audit/history hardening, or review state summarization in readiness evidence (still no execution).
 
 ## Latest Provider Control Plane State
 
@@ -45,6 +50,11 @@ Provider handoff readiness deployed-UI testability milestone (control-plane only
 - provider handoff readiness debug UI: implemented
 - deployed superadmin readiness test UI: implemented
 - admin readiness seed API: implemented
+- operator review persistence: implemented
+- operator review read-only API: implemented
+- operator review create API (admin-only): implemented
+- operator review read-only readiness UI section: implemented
+- operator review create readiness UI form: implemented
 
 Openprovider:
 - sandbox adapter exists
@@ -81,6 +91,19 @@ Routes:
 - `/gnr8/admin/provider-handoffs/[handoffId]/readiness` (internal debug/operator inspection UI)
 - `/gnr8/admin/provider-handoffs/readiness-test` (deployed superadmin readiness test UI)
 - `POST /api/gnr8/admin/provider-handoffs/readiness-seed` (admin seed API for deterministic persisted handoff)
+- `GET /api/gnr8/admin/provider-handoffs/[handoffId]/reviews` (read-only operator reviews)
+- `POST /api/gnr8/admin/provider-handoffs/[handoffId]/reviews` (admin-only operator review intent creation)
+
+Readiness UI operator review controls:
+- read-only operator review section
+- create operator review form
+- status dropdown values:
+  - `pending_review`
+  - `approved_for_future_execution`
+  - `rejected`
+  - `needs_changes`
+- reason textarea
+- Save review intent action
 
 Required production env flag:
 - `GNR8_ADMIN_PROVIDER_HANDOFF_READINESS_SEED_ENABLED=1`
@@ -98,6 +121,8 @@ Required production env flag:
 - NO secret reads.
 - NO secret resolution.
 - Openprovider sandbox planning/dry-run artifacts only. No provider execution is permitted, including sandbox execution. Control-plane metadata and deterministic planning only.
+- `approved_for_future_execution` is intent-only and does not authorize execution.
+- `executionBlocked` remains `true`.
 
 ## Worker Pickup Readiness Criteria
 
@@ -130,6 +155,7 @@ Present (migration-defined baseline):
 - `gnr8_agency_provider_settings`
 - `gnr8_runtime_provider_operation_approvals`
 - `gnr8_runtime_provider_execution_handoffs`
+- `gnr8_runtime_provider_operator_reviews`
 
 ## Open Decisions (Needs ADR Before Live Execution)
 
