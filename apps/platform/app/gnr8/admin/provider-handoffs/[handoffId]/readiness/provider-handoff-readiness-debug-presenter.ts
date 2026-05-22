@@ -47,6 +47,16 @@ export function buildProviderHandoffReadinessDebugDisplay(model: ProviderHandoff
       blockedReasons: sanitizeDisplayList(model.workerPickupEvidence.blockedReasons),
       diagnostics: sanitizeDisplayList(model.workerPickupEvidence.diagnostics),
     },
+    governanceSnapshot: {
+      snapshotId: redactSecretLikeText(model.governanceSnapshot?.snapshotId),
+      handoffId: redactSecretLikeText(model.governanceSnapshot?.handoffId),
+      correlationKey: redactSecretLikeText(model.governanceSnapshot?.correlationKey),
+      readinessStatus: redactSecretLikeText(model.governanceSnapshot?.readinessStatus),
+      executionBlocked: model.governanceSnapshot?.executionBlocked === true,
+      createdAt: redactSecretLikeText(model.governanceSnapshot?.createdAt),
+      reviewSummaryStatus: redactSecretLikeText(model.governanceSnapshot?.reviewSummary?.reviewSummaryStatus),
+      diagnostics: sanitizeDisplayList(model.governanceSnapshot?.diagnostics),
+    },
     operatorReviews: [...model.operatorReviews]
       .map((review) => ({
         reviewId: redactSecretLikeText(review.reviewId),

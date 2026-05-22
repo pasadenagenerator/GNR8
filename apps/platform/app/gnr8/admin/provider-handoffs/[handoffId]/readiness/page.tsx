@@ -51,6 +51,29 @@ function normalizeReviewSummary(value: unknown): ProviderHandoffReadinessDebugMo
   };
 }
 
+function normalizeGovernanceSnapshot(value: unknown): ProviderHandoffReadinessDebugModel["governanceSnapshot"] {
+  const snapshot = normalizeObject(value);
+  const reviewSummary = normalizeObject(snapshot.reviewSummary);
+  return {
+    snapshotId: normalizeToken(snapshot.snapshotId),
+    handoffId: normalizeToken(snapshot.handoffId),
+    correlationKey: normalizeToken(snapshot.correlationKey),
+    readinessStatus: normalizeToken(snapshot.readinessStatus),
+    executionBlocked: Boolean(snapshot.executionBlocked),
+    diagnostics: normalizeList(snapshot.diagnostics),
+    createdAt: normalizeToken(snapshot.createdAt),
+    reviewSummary: {
+      reviewSummaryStatus: normalizeToken(reviewSummary.reviewSummaryStatus),
+      reviewCount: Number.isFinite(reviewSummary.reviewCount) ? Number(reviewSummary.reviewCount) : 0,
+      latestReviewer: normalizeToken(reviewSummary.latestReviewer),
+      latestCreatedAt: normalizeToken(reviewSummary.latestCreatedAt),
+      latestReason: normalizeToken(reviewSummary.latestReason),
+      intentOnly: Boolean(reviewSummary.intentOnly),
+      executionBlocked: Boolean(reviewSummary.executionBlocked),
+    },
+  };
+}
+
 async function fetchReadinessModel(handoffId: string): Promise<{ model: ProviderHandoffReadinessDebugModel; fetchError: string | null }> {
   const incomingHeaders = await headers();
   const proto = normalizeToken(incomingHeaders.get("x-forwarded-proto")) || "http";
@@ -76,6 +99,7 @@ async function fetchReadinessModel(handoffId: string): Promise<{ model: Provider
       diagnostics: normalizeList(payload.diagnostics),
       handoffArtifact: (payload.handoffArtifact as ProviderHandoffReadinessDebugModel["handoffArtifact"]) ?? null,
       workerPickupEvidence: (payload.workerPickupEvidence as ProviderHandoffReadinessDebugModel["workerPickupEvidence"]) ?? {},
+      governanceSnapshot: normalizeGovernanceSnapshot(payload.governanceSnapshot),
       operatorReviews: normalizeReviewList(reviewsPayload.reviews),
       operatorReviewSummary: normalizeReviewSummary(reviewsPayload.reviewSummary),
       operatorReviewIntentOnly: Boolean(reviewsPayload.intentOnly),
@@ -100,6 +124,7 @@ async function fetchReadinessModel(handoffId: string): Promise<{ model: Provider
         diagnostics: ["PROVIDER_HANDOFF_DEBUG_FETCH_FAILED"],
         handoffArtifact: null,
         workerPickupEvidence: {},
+        governanceSnapshot: undefined,
         operatorReviews: [],
         operatorReviewSummary: {
           reviewSummaryStatus: "no_reviews",

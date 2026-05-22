@@ -55,6 +55,18 @@ type OperatorReviewStateSummary = {
   executionBlocked: boolean;
 };
 
+type GovernanceSnapshotSummary = {
+  snapshotId?: string;
+  handoffId?: string;
+  correlationKey?: string;
+  readinessStatus?: string;
+  executionBlocked?: boolean;
+  workerPickupEvidence?: WorkerPickupEvidenceSummary;
+  reviewSummary?: OperatorReviewStateSummary;
+  diagnostics?: string[];
+  createdAt?: string;
+};
+
 export type ProviderHandoffReadinessDebugModel = {
   handoffId: string;
   readinessStatus: string;
@@ -65,6 +77,7 @@ export type ProviderHandoffReadinessDebugModel = {
   diagnostics: string[];
   handoffArtifact: ProviderHandoffArtifactSummary;
   workerPickupEvidence: WorkerPickupEvidenceSummary;
+  governanceSnapshot?: GovernanceSnapshotSummary;
   operatorReviews: OperatorReviewSummary[];
   operatorReviewSummary: OperatorReviewStateSummary;
   operatorReviewIntentOnly: boolean;
@@ -185,6 +198,18 @@ export function ProviderHandoffReadinessDebugView(props: { model: ProviderHandof
         <ListField label="jobRefs" values={evidence.jobRefs} />
         <ListField label="blockedReasons" values={evidence.blockedReasons} />
         <ListField label="diagnostics" values={evidence.diagnostics} />
+      </section>
+
+      <section style={{ border: "1px solid #dbe3ea", borderRadius: 10, background: "#ffffff", padding: 12, marginTop: 12 }}>
+        <h2 style={{ margin: "0 0 8px 0", fontSize: 16 }}>Governance Snapshot</h2>
+        <Field label="snapshotId" value={redactSecretLikeText(display.governanceSnapshot.snapshotId)} />
+        <Field label="handoffId" value={redactSecretLikeText(display.governanceSnapshot.handoffId)} />
+        <Field label="readinessStatus" value={redactSecretLikeText(display.governanceSnapshot.readinessStatus)} />
+        <Field label="executionBlocked" value={String(Boolean(display.governanceSnapshot.executionBlocked))} />
+        <Field label="correlationKey" value={redactSecretLikeText(display.governanceSnapshot.correlationKey)} />
+        <Field label="createdAt" value={redactSecretLikeText(display.governanceSnapshot.createdAt)} />
+        <Field label="reviewSummaryStatus" value={redactSecretLikeText(display.governanceSnapshot.reviewSummaryStatus)} />
+        <ListField label="diagnostics" values={display.governanceSnapshot.diagnostics} />
       </section>
     </main>
   );

@@ -38,6 +38,24 @@ function buildModel(): ProviderHandoffReadinessDebugModel {
       blockedReasons: ["provider_execution_disabled_control_plane_boundary"],
       diagnostics: ["WORKER_PICKUP_EVIDENCE_AVAILABLE", "token=secret_token_value"],
     },
+    governanceSnapshot: {
+      snapshotId: "snapshot_1",
+      handoffId: "handoff_123",
+      correlationKey: "snapshot_corr_1",
+      readinessStatus: "pickup_ready",
+      executionBlocked: true,
+      diagnostics: ["GOVERNANCE_SNAPSHOT_CREATED"],
+      createdAt: "2026-05-22T00:00:00.000Z",
+      reviewSummary: {
+        reviewSummaryStatus: "approved_for_future_execution",
+        reviewCount: 2,
+        latestReviewer: "reviewer_b",
+        latestCreatedAt: "2026-05-22T00:00:01.000Z",
+        latestReason: "checked dry run",
+        intentOnly: true,
+        executionBlocked: true,
+      },
+    },
     operatorReviews: [
       {
         reviewId: "review_2",
@@ -85,6 +103,9 @@ test("provider handoff readiness presenter: renders mocked readiness evidence", 
   assert.equal(display.operatorReviewSummary.reviewCount, 2);
   assert.equal(display.operatorReviewSummary.intentOnly, true);
   assert.equal(display.operatorReviewSummary.executionBlocked, true);
+  assert.equal(display.governanceSnapshot.snapshotId, "snapshot_1");
+  assert.equal(display.governanceSnapshot.reviewSummaryStatus, "approved_for_future_execution");
+  assert.equal(display.governanceSnapshot.executionBlocked, true);
   assert.equal(display.hasMutationControls, false);
 });
 

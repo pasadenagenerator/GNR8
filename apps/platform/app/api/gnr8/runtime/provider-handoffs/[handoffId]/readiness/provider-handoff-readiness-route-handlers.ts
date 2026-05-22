@@ -1,7 +1,13 @@
 import { parseAgencyActionContextError, requireAgencyActionContext } from "@/app/api/gnr8/agency/_lib/agency-action-access";
 import { resolveAgencyIdForSite, resolveAgencyIdForSiteVersion } from "@/app/api/gnr8/runtime/_lib/runtime-agency-scope";
 import { getProviderExecutionHandoffByHandoffId } from "@/gnr8/runtime/providers/runtime-provider-execution-handoff-repository";
+import { getProviderOperatorReviewsByHandoffId } from "@/gnr8/runtime/providers/runtime-provider-operator-review-repository";
 import type { RuntimeProviderExecutionHandoffArtifactRecord } from "@/gnr8/runtime/providers/runtime-provider-execution-handoff-store";
+import { buildRuntimeProviderOperatorReviewSummary } from "@/gnr8/runtime/providers/runtime-provider-operator-review";
+import {
+  createRuntimeProviderGovernanceSnapshot,
+  type RuntimeProviderGovernanceSnapshot,
+} from "@/gnr8/runtime/providers/runtime-provider-governance-snapshot";
 import {
   createRuntimeProviderWorkerPickupReadinessEvidence,
   type RuntimeProviderWorkerPickupEvidence,
@@ -26,6 +32,7 @@ export type ProviderHandoffReadinessResponse = {
     correlationKey: string;
   }> | null;
   workerPickupEvidence: RuntimeProviderWorkerPickupEvidence;
+  governanceSnapshot: RuntimeProviderGovernanceSnapshot;
   readinessStatus: RuntimeProviderWorkerPickupEvidence["readinessStatus"];
   executionBlocked: true;
   blockedReasons: string[];
@@ -39,6 +46,9 @@ export type ProviderHandoffReadinessRouteDependencies = {
   createRuntimeProviderWorkerPickupReadinessEvidence: typeof createRuntimeProviderWorkerPickupReadinessEvidence;
   resolveAgencyIdForSiteVersion: typeof resolveAgencyIdForSiteVersion;
   resolveAgencyIdForSite: typeof resolveAgencyIdForSite;
+  getProviderOperatorReviewsByHandoffId: typeof getProviderOperatorReviewsByHandoffId;
+  buildRuntimeProviderOperatorReviewSummary: typeof buildRuntimeProviderOperatorReviewSummary;
+  createRuntimeProviderGovernanceSnapshot: typeof createRuntimeProviderGovernanceSnapshot;
   requireAgencyActionContext: typeof requireAgencyActionContext;
 };
 
@@ -136,10 +146,12 @@ async function resolveAgencyScope(
 function buildReadinessResponse(
   handoffArtifact: ProviderHandoffReadinessResponse["handoffArtifact"],
   workerPickupEvidence: RuntimeProviderWorkerPickupEvidence,
+  governanceSnapshot: RuntimeProviderGovernanceSnapshot,
 ): ProviderHandoffReadinessResponse {
   return {
     handoffArtifact,
     workerPickupEvidence,
+    governanceSnapshot,
     readinessStatus: workerPickupEvidence.readinessStatus,
     executionBlocked: true,
     blockedReasons: sanitizeList(workerPickupEvidence.blockedReasons),
@@ -157,6 +169,9 @@ export function createProviderHandoffReadinessRouteHandlers(
     createRuntimeProviderWorkerPickupReadinessEvidence,
     resolveAgencyIdForSiteVersion,
     resolveAgencyIdForSite,
+    getProviderOperatorReviewsByHandoffId,
+    buildRuntimeProviderOperatorReviewSummary,
+    createRuntimeProviderGovernanceSnapshot,
     requireAgencyActionContext,
     ...deps,
   };
@@ -169,22 +184,39 @@ export function createProviderHandoffReadinessRouteHandlers(
 
         if (!normalizedHandoffId) {
           const workerPickupEvidence = resolvedDeps.createRuntimeProviderWorkerPickupReadinessEvidence({ handoffArtifact: null });
-          return Response.json(buildReadinessResponse(null, workerPickupEvidence), { status: 400 });
+          const governanceSnapshot = resolvedDeps.createRuntimeProviderGovernanceSnapshot({
+            workerPickupEvidence,
+            reviewSummary: resolvedDeps.buildRuntimeProviderOperatorReviewSummary({ reviews: [] }).reviewSummary,
+          });
+          return Response.json(buildReadinessResponse(null, workerPickupEvidence, governanceSnapshot), { status: 400 });
         }
 
         const persistedArtifact = await resolvedDeps.getProviderExecutionHandoffByHandoffId(normalizedHandoffId);
         if (!persistedArtifact) {
           const workerPickupEvidence = resolvedDeps.createRuntimeProviderWorkerPickupReadinessEvidence({ handoffArtifact: null });
-          return Response.json(buildReadinessResponse(null, workerPickupEvidence), { status: 404 });
+          const governanceSnapshot = resolvedDeps.createRuntimeProviderGovernanceSnapshot({
+            handoffId: normalizedHandoffId,
+            workerPickupEvidence,
+            reviewSummary: resolvedDeps.buildRuntimeProviderOperatorReviewSummary({ reviews: [] }).reviewSummary,
+          });
+          return Response.json(buildReadinessResponse(null, workerPickupEvidence, governanceSnapshot), { status: 404 });
         }
 
         const sanitizedHandoffArtifact = sanitizeHandoffArtifact(persistedArtifact);
         if (!isSanitizedHandoffArtifactValid(sanitizedHandoffArtifact)) {
           const workerPickupEvidence = resolvedDeps.createRuntimeProviderWorkerPickupReadinessEvidence({ handoffArtifact: sanitizedHandoffArtifact });
-          return Response.json(buildReadinessResponse(null, workerPickupEvidence), { status: 422 });
+          const governanceSnapshot = resolvedDeps.createRuntimeProviderGovernanceSnapshot({
+            handoffId: sanitizedHandoffArtifact?.handoffId,
+            correlationKey: sanitizedHandoffArtifact?.correlationKey,
+            workerPickupEvidence,
+            reviewSummary: resolvedDeps.buildRuntimeProviderOperatorReviewSummary({ reviews: [] }).reviewSummary,
+          });
+          return Response.json(buildReadinessResponse(null, workerPickupEvidence, governanceSnapshot), { status: 422 });
         }
 
         const scopeResolution = await resolveAgencyScope(resolvedDeps, sanitizedHandoffArtifact);
+        const operatorReviews = await resolvedDeps.getProviderOperatorReviewsByHandoffId(sanitizedHandoffArtifact.handoffId);
+        const reviewSummaryResult = resolvedDeps.buildRuntimeProviderOperatorReviewSummary({ reviews: operatorReviews.reviews });
         const workerPickupEvidence = resolvedDeps.createRuntimeProviderWorkerPickupReadinessEvidence({
           handoffArtifact: sanitizedHandoffArtifact,
           executionIntent: "control_plane_simulation_only",
@@ -200,7 +232,14 @@ export function createProviderHandoffReadinessRouteHandlers(
               ...scopeResolution.diagnostics,
             ]),
           };
-          return Response.json(buildReadinessResponse(sanitizedHandoffArtifact, failClosedEvidence), { status: 422 });
+          const governanceSnapshot = resolvedDeps.createRuntimeProviderGovernanceSnapshot({
+            handoffId: sanitizedHandoffArtifact.handoffId,
+            correlationKey: sanitizedHandoffArtifact.correlationKey,
+            workerPickupEvidence: failClosedEvidence,
+            reviewSummary: reviewSummaryResult.reviewSummary,
+            diagnostics: [...reviewSummaryResult.diagnostics, ...scopeResolution.diagnostics],
+          });
+          return Response.json(buildReadinessResponse(sanitizedHandoffArtifact, failClosedEvidence, governanceSnapshot), { status: 422 });
         }
 
         if (!scopeResolution.diagnostics.includes(DEV_SEED_SCOPE_DIAGNOSTIC)) {
@@ -214,8 +253,15 @@ export function createProviderHandoffReadinessRouteHandlers(
           ...workerPickupEvidence,
           diagnostics: uniqueSorted([...workerPickupEvidence.diagnostics, ...scopeResolution.diagnostics]),
         };
+        const governanceSnapshot = resolvedDeps.createRuntimeProviderGovernanceSnapshot({
+          handoffId: sanitizedHandoffArtifact.handoffId,
+          correlationKey: sanitizedHandoffArtifact.correlationKey,
+          workerPickupEvidence: successEvidence,
+          reviewSummary: reviewSummaryResult.reviewSummary,
+          diagnostics: [...reviewSummaryResult.diagnostics, ...scopeResolution.diagnostics],
+        });
 
-        return Response.json(buildReadinessResponse(sanitizedHandoffArtifact, successEvidence), { status: 200 });
+        return Response.json(buildReadinessResponse(sanitizedHandoffArtifact, successEvidence, governanceSnapshot), { status: 200 });
       } catch (error) {
         const mapped = parseAgencyActionContextError(error);
         if (mapped.status >= 400 && mapped.status < 500) {
