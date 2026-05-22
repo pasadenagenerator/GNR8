@@ -4,7 +4,7 @@
 2026-05-22
 
 ## Current Phase
-Operator review creation milestone for provider handoff readiness (control-plane only).
+Operator review summary milestone for provider handoff readiness (control-plane only).
 
 ## Latest Completed Milestone
 
@@ -19,7 +19,27 @@ Operator review creation milestone for provider handoff readiness (control-plane
 - Operator review persistence exists via `gnr8_runtime_provider_operator_reviews`.
 - Read-only operator review API exists: `GET /api/gnr8/admin/provider-handoffs/[handoffId]/reviews`.
 - Admin-only operator review creation API exists: `POST /api/gnr8/admin/provider-handoffs/[handoffId]/reviews`.
-- Readiness UI now includes read-only operator review section and create-review form with status/reason fields.
+- Operator review summary model exists and is deterministic.
+- `GET /api/gnr8/admin/provider-handoffs/[handoffId]/reviews` now returns `reviewSummary` alongside detailed reviews.
+- `reviewSummary.status` supports:
+  - `no_reviews`
+  - `pending_review`
+  - `approved_for_future_execution`
+  - `rejected`
+  - `needs_changes`
+  - `mixed_review_state`
+- `reviewSummary` fields include:
+  - `reviewCount`
+  - `latestReviewer`
+  - `latestCreatedAt`
+  - `latestReason`
+  - `intentOnly: true`
+  - `executionBlocked: true`
+- Readiness UI now displays an Operator Review Summary while keeping the detailed review list and create-review form visible.
+- Operator review summary diagnostics are emitted:
+  - `OPERATOR_REVIEW_SUMMARY_CREATED`
+  - `OPERATOR_REVIEW_SUMMARY_MIXED_STATE`
+  - `OPERATOR_REVIEW_SUMMARY_NO_REVIEWS`
 
 ## Current Blocker
 
@@ -28,7 +48,7 @@ Operator review creation milestone for provider handoff readiness (control-plane
 
 ## Next Milestone
 
-- Operator review audit/history hardening, or review state summarization in readiness evidence (still no execution).
+- Operator review audit/history hardening, or governance snapshot evidence integrated into handoff readiness evidence (still no execution).
 
 ## Latest Provider Control Plane State
 
@@ -53,7 +73,10 @@ Operator review creation milestone for provider handoff readiness (control-plane
 - operator review persistence: implemented
 - operator review read-only API: implemented
 - operator review create API (admin-only): implemented
+- operator review summary model: implemented
+- operator review summary diagnostics: implemented
 - operator review read-only readiness UI section: implemented
+- operator review summary readiness UI section: implemented
 - operator review create readiness UI form: implemented
 
 Openprovider:
@@ -92,9 +115,11 @@ Routes:
 - `/gnr8/admin/provider-handoffs/readiness-test` (deployed superadmin readiness test UI)
 - `POST /api/gnr8/admin/provider-handoffs/readiness-seed` (admin seed API for deterministic persisted handoff)
 - `GET /api/gnr8/admin/provider-handoffs/[handoffId]/reviews` (read-only operator reviews)
+  - includes deterministic `reviewSummary` projection
 - `POST /api/gnr8/admin/provider-handoffs/[handoffId]/reviews` (admin-only operator review intent creation)
 
 Readiness UI operator review controls:
+- Operator Review Summary section (deterministic status + latest review metadata)
 - read-only operator review section
 - create operator review form
 - status dropdown values:
