@@ -8,6 +8,7 @@ import {
   createRuntimeProviderGovernanceSnapshot,
   type RuntimeProviderGovernanceSnapshot,
 } from "@/gnr8/runtime/providers/runtime-provider-governance-snapshot";
+import { persistProviderGovernanceSnapshot } from "@/gnr8/runtime/providers/runtime-provider-governance-snapshot-repository";
 import {
   createRuntimeProviderWorkerPickupReadinessEvidence,
   type RuntimeProviderWorkerPickupEvidence,
@@ -49,6 +50,7 @@ export type ProviderHandoffReadinessRouteDependencies = {
   getProviderOperatorReviewsByHandoffId: typeof getProviderOperatorReviewsByHandoffId;
   buildRuntimeProviderOperatorReviewSummary: typeof buildRuntimeProviderOperatorReviewSummary;
   createRuntimeProviderGovernanceSnapshot: typeof createRuntimeProviderGovernanceSnapshot;
+  persistProviderGovernanceSnapshot: typeof persistProviderGovernanceSnapshot;
   requireAgencyActionContext: typeof requireAgencyActionContext;
 };
 
@@ -172,6 +174,7 @@ export function createProviderHandoffReadinessRouteHandlers(
     getProviderOperatorReviewsByHandoffId,
     buildRuntimeProviderOperatorReviewSummary,
     createRuntimeProviderGovernanceSnapshot,
+    persistProviderGovernanceSnapshot,
     requireAgencyActionContext,
     ...deps,
   };
@@ -184,21 +187,31 @@ export function createProviderHandoffReadinessRouteHandlers(
 
         if (!normalizedHandoffId) {
           const workerPickupEvidence = resolvedDeps.createRuntimeProviderWorkerPickupReadinessEvidence({ handoffArtifact: null });
-          const governanceSnapshot = resolvedDeps.createRuntimeProviderGovernanceSnapshot({
+          const governanceSnapshotDraft = resolvedDeps.createRuntimeProviderGovernanceSnapshot({
             workerPickupEvidence,
             reviewSummary: resolvedDeps.buildRuntimeProviderOperatorReviewSummary({ reviews: [] }).reviewSummary,
           });
+          const persisted = await resolvedDeps.persistProviderGovernanceSnapshot(governanceSnapshotDraft);
+          const governanceSnapshot: RuntimeProviderGovernanceSnapshot = {
+            ...persisted.snapshot,
+            diagnostics: uniqueSorted([...persisted.snapshot.diagnostics, ...persisted.diagnostics]),
+          };
           return Response.json(buildReadinessResponse(null, workerPickupEvidence, governanceSnapshot), { status: 400 });
         }
 
         const persistedArtifact = await resolvedDeps.getProviderExecutionHandoffByHandoffId(normalizedHandoffId);
         if (!persistedArtifact) {
           const workerPickupEvidence = resolvedDeps.createRuntimeProviderWorkerPickupReadinessEvidence({ handoffArtifact: null });
-          const governanceSnapshot = resolvedDeps.createRuntimeProviderGovernanceSnapshot({
+          const governanceSnapshotDraft = resolvedDeps.createRuntimeProviderGovernanceSnapshot({
             handoffId: normalizedHandoffId,
             workerPickupEvidence,
             reviewSummary: resolvedDeps.buildRuntimeProviderOperatorReviewSummary({ reviews: [] }).reviewSummary,
           });
+          const persisted = await resolvedDeps.persistProviderGovernanceSnapshot(governanceSnapshotDraft);
+          const governanceSnapshot: RuntimeProviderGovernanceSnapshot = {
+            ...persisted.snapshot,
+            diagnostics: uniqueSorted([...persisted.snapshot.diagnostics, ...persisted.diagnostics]),
+          };
           return Response.json(buildReadinessResponse(null, workerPickupEvidence, governanceSnapshot), { status: 404 });
         }
 
@@ -207,12 +220,17 @@ export function createProviderHandoffReadinessRouteHandlers(
           sanitizedHandoffArtifact;
         if (!isSanitizedHandoffArtifactValid(sanitizedHandoffArtifact)) {
           const workerPickupEvidence = resolvedDeps.createRuntimeProviderWorkerPickupReadinessEvidence({ handoffArtifact: sanitizedHandoffArtifact });
-          const governanceSnapshot = resolvedDeps.createRuntimeProviderGovernanceSnapshot({
+          const governanceSnapshotDraft = resolvedDeps.createRuntimeProviderGovernanceSnapshot({
             handoffId: governanceHandoffArtifact?.handoffId,
             correlationKey: governanceHandoffArtifact?.correlationKey,
             workerPickupEvidence,
             reviewSummary: resolvedDeps.buildRuntimeProviderOperatorReviewSummary({ reviews: [] }).reviewSummary,
           });
+          const persisted = await resolvedDeps.persistProviderGovernanceSnapshot(governanceSnapshotDraft);
+          const governanceSnapshot: RuntimeProviderGovernanceSnapshot = {
+            ...persisted.snapshot,
+            diagnostics: uniqueSorted([...persisted.snapshot.diagnostics, ...persisted.diagnostics]),
+          };
           return Response.json(buildReadinessResponse(null, workerPickupEvidence, governanceSnapshot), { status: 422 });
         }
 
@@ -234,13 +252,18 @@ export function createProviderHandoffReadinessRouteHandlers(
               ...scopeResolution.diagnostics,
             ]),
           };
-          const governanceSnapshot = resolvedDeps.createRuntimeProviderGovernanceSnapshot({
+          const governanceSnapshotDraft = resolvedDeps.createRuntimeProviderGovernanceSnapshot({
             handoffId: sanitizedHandoffArtifact.handoffId,
             correlationKey: sanitizedHandoffArtifact.correlationKey,
             workerPickupEvidence: failClosedEvidence,
             reviewSummary: reviewSummaryResult.reviewSummary,
             diagnostics: [...reviewSummaryResult.diagnostics, ...scopeResolution.diagnostics],
           });
+          const persisted = await resolvedDeps.persistProviderGovernanceSnapshot(governanceSnapshotDraft);
+          const governanceSnapshot: RuntimeProviderGovernanceSnapshot = {
+            ...persisted.snapshot,
+            diagnostics: uniqueSorted([...persisted.snapshot.diagnostics, ...persisted.diagnostics]),
+          };
           return Response.json(buildReadinessResponse(sanitizedHandoffArtifact, failClosedEvidence, governanceSnapshot), { status: 422 });
         }
 
@@ -255,13 +278,18 @@ export function createProviderHandoffReadinessRouteHandlers(
           ...workerPickupEvidence,
           diagnostics: uniqueSorted([...workerPickupEvidence.diagnostics, ...scopeResolution.diagnostics]),
         };
-        const governanceSnapshot = resolvedDeps.createRuntimeProviderGovernanceSnapshot({
+        const governanceSnapshotDraft = resolvedDeps.createRuntimeProviderGovernanceSnapshot({
           handoffId: sanitizedHandoffArtifact.handoffId,
           correlationKey: sanitizedHandoffArtifact.correlationKey,
           workerPickupEvidence: successEvidence,
           reviewSummary: reviewSummaryResult.reviewSummary,
           diagnostics: [...reviewSummaryResult.diagnostics, ...scopeResolution.diagnostics],
         });
+        const persisted = await resolvedDeps.persistProviderGovernanceSnapshot(governanceSnapshotDraft);
+        const governanceSnapshot: RuntimeProviderGovernanceSnapshot = {
+          ...persisted.snapshot,
+          diagnostics: uniqueSorted([...persisted.snapshot.diagnostics, ...persisted.diagnostics]),
+        };
 
         return Response.json(buildReadinessResponse(sanitizedHandoffArtifact, successEvidence, governanceSnapshot), { status: 200 });
       } catch (error) {

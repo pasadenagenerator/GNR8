@@ -9,6 +9,11 @@ function createHandlers(
 ) {
   return createProviderHandoffReadinessRouteHandlers({
     getProviderOperatorReviewsByHandoffId: async () => ({ reviews: [], diagnostics: [] }),
+    persistProviderGovernanceSnapshot: async (snapshot) => ({
+      snapshot,
+      reused: false,
+      diagnostics: ["GOVERNANCE_SNAPSHOT_PERSISTED"],
+    }),
     ...overrides,
   });
 }
@@ -328,6 +333,50 @@ test("provider handoff readiness route: governance snapshot preserves mixed revi
   };
   assert.equal(body.governanceSnapshot.reviewSummary.reviewSummaryStatus, "mixed_review_state");
   assert.equal(body.governanceSnapshot.executionBlocked, true);
+});
+
+test("provider handoff readiness route: governance snapshot persisted path propagates persisted diagnostic", async () => {
+  const handlers = createHandlers({
+    getProviderExecutionHandoffByHandoffId: async () => baseHandoffArtifact(),
+    resolveAgencyIdForSiteVersion: async () => "agency_1",
+    resolveAgencyIdForSite: async () => "agency_1",
+    requireAgencyActionContext: async () =>
+      ({ userId: "user_1", agencyId: "agency_1", agencyName: "Agency", role: "owner", actorMode: "membership" }) as never,
+    persistProviderGovernanceSnapshot: async (snapshot) => ({
+      snapshot,
+      reused: false,
+      diagnostics: ["GOVERNANCE_SNAPSHOT_PERSISTED"],
+    }),
+  });
+
+  const response = await handlers.GET(new Request("http://localhost/api/gnr8/runtime/provider-handoffs/handoff_1/readiness"), {
+    params: Promise.resolve({ handoffId: "handoff_1" }),
+  });
+  assert.equal(response.status, 200);
+  const body = (await response.json()) as { governanceSnapshot: { diagnostics: string[] } };
+  assert.equal(body.governanceSnapshot.diagnostics.includes("GOVERNANCE_SNAPSHOT_PERSISTED"), true);
+});
+
+test("provider handoff readiness route: governance snapshot duplicate reused path propagates reused diagnostic", async () => {
+  const handlers = createHandlers({
+    getProviderExecutionHandoffByHandoffId: async () => baseHandoffArtifact(),
+    resolveAgencyIdForSiteVersion: async () => "agency_1",
+    resolveAgencyIdForSite: async () => "agency_1",
+    requireAgencyActionContext: async () =>
+      ({ userId: "user_1", agencyId: "agency_1", agencyName: "Agency", role: "owner", actorMode: "membership" }) as never,
+    persistProviderGovernanceSnapshot: async (snapshot) => ({
+      snapshot,
+      reused: true,
+      diagnostics: ["GOVERNANCE_SNAPSHOT_REUSED"],
+    }),
+  });
+
+  const response = await handlers.GET(new Request("http://localhost/api/gnr8/runtime/provider-handoffs/handoff_1/readiness"), {
+    params: Promise.resolve({ handoffId: "handoff_1" }),
+  });
+  assert.equal(response.status, 200);
+  const body = (await response.json()) as { governanceSnapshot: { diagnostics: string[] } };
+  assert.equal(body.governanceSnapshot.diagnostics.includes("GOVERNANCE_SNAPSHOT_REUSED"), true);
 });
 
 test("provider handoff readiness route: unexpected errors are sanitized", async () => {

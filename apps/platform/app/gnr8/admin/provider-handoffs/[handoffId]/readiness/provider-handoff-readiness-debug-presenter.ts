@@ -57,6 +57,16 @@ export function buildProviderHandoffReadinessDebugDisplay(model: ProviderHandoff
       reviewSummaryStatus: redactSecretLikeText(model.governanceSnapshot?.reviewSummary?.reviewSummaryStatus),
       diagnostics: sanitizeDisplayList(model.governanceSnapshot?.diagnostics),
     },
+    governanceTimeline: (Array.isArray(model.governanceTimeline) ? model.governanceTimeline : [])
+      .map((snapshot) => ({
+        snapshotId: redactSecretLikeText(snapshot.snapshotId),
+        createdAt: redactSecretLikeText(snapshot.createdAt),
+        reviewSummaryStatus: redactSecretLikeText(snapshot.reviewSummaryStatus),
+        reviewCount: Number.isFinite(snapshot.reviewCount) ? snapshot.reviewCount : 0,
+        readinessStatus: redactSecretLikeText(snapshot.readinessStatus),
+        diagnostics: sanitizeDisplayList(snapshot.diagnostics),
+      }))
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt) || b.snapshotId.localeCompare(a.snapshotId)),
     operatorReviews: [...model.operatorReviews]
       .map((review) => ({
         reviewId: redactSecretLikeText(review.reviewId),

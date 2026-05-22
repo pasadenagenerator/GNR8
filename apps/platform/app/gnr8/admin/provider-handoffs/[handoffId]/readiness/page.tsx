@@ -73,6 +73,21 @@ function normalizeGovernanceSnapshot(value: unknown): ProviderHandoffReadinessDe
     },
   };
 }
+function normalizeGovernanceTimeline(value: unknown): NonNullable<ProviderHandoffReadinessDebugModel["governanceTimeline"]> {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((entry) => normalizeObject(entry))
+    .map((snapshot) => ({
+      snapshotId: normalizeToken(snapshot.snapshotId),
+      createdAt: normalizeToken(snapshot.createdAt),
+      reviewSummaryStatus: normalizeToken(snapshot.reviewSummaryStatus),
+      reviewCount: Number.isFinite(snapshot.reviewCount) ? Number(snapshot.reviewCount) : 0,
+      readinessStatus: normalizeToken(snapshot.readinessStatus),
+      diagnostics: normalizeList(snapshot.diagnostics),
+    }))
+    .filter((snapshot) => snapshot.snapshotId && snapshot.createdAt)
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt) || b.snapshotId.localeCompare(a.snapshotId));
+}
 
 type ReadinessPageFetchResult = {
   model: ProviderHandoffReadinessDebugModel;
@@ -105,6 +120,7 @@ async function fetchReadinessModel(
   const host = normalizeToken(incomingHeaders.get("x-forwarded-host")) || normalizeToken(incomingHeaders.get("host")) || "localhost:3000";
   const endpoint = `${proto}://${host}/api/gnr8/runtime/provider-handoffs/${encodeURIComponent(handoffId)}/readiness`;
   const reviewsEndpoint = `${proto}://${host}/api/gnr8/admin/provider-handoffs/${encodeURIComponent(handoffId)}/reviews`;
+  const governanceTimelineEndpoint = `${proto}://${host}/api/gnr8/admin/provider-handoffs/${encodeURIComponent(handoffId)}/governance-timeline`;
   const cookie = normalizeToken(incomingHeaders.get("cookie"));
   const requestHeaders = cookie ? { cookie } : undefined;
 
@@ -126,6 +142,7 @@ async function fetchReadinessModel(
       operatorReviews: [],
       operatorReviewSummary: DEFAULT_REVIEW_SUMMARY,
       operatorReviewIntentOnly: true,
+      governanceTimeline: [],
     };
 
     if (!response.ok) {
@@ -137,6 +154,7 @@ async function fetchReadinessModel(
     }
 
     let operatorReviewFetchError: string | null = null;
+    let governanceTimelineError: string | null = null;
     try {
       const reviewsResponse = await fetchImpl(reviewsEndpoint, { method: "GET", cache: "no-store", headers: requestHeaders });
       const reviewsPayload = (await reviewsResponse.json().catch(() => ({}))) as Record<string, unknown>;
@@ -148,6 +166,19 @@ async function fetchReadinessModel(
       }
     } catch (error) {
       operatorReviewFetchError = error instanceof Error ? error.message : "Unknown fetch error";
+    }
+    try {
+      const timelineResponse = await fetchImpl(governanceTimelineEndpoint, { method: "GET", cache: "no-store", headers: requestHeaders });
+      const timelinePayload = (await timelineResponse.json().catch(() => ({}))) as Record<string, unknown>;
+      model.governanceTimeline = normalizeGovernanceTimeline(timelinePayload.snapshots);
+      if (!timelineResponse.ok) {
+        governanceTimelineError = normalizeToken(timelinePayload.error) || `HTTP_${timelineResponse.status}`;
+      }
+    } catch (error) {
+      governanceTimelineError = error instanceof Error ? error.message : "Unknown fetch error";
+    }
+    if (governanceTimelineError) {
+      model.diagnostics = normalizeList([...model.diagnostics, `GOVERNANCE_TIMELINE_FETCH_ERROR:${governanceTimelineError}`]);
     }
 
     return {
@@ -171,6 +202,7 @@ async function fetchReadinessModel(
         operatorReviews: [],
         operatorReviewSummary: DEFAULT_REVIEW_SUMMARY,
         operatorReviewIntentOnly: true,
+        governanceTimeline: [],
       },
       fetchError: error instanceof Error ? error.message : "Unknown fetch error",
       operatorReviewFetchError: null,

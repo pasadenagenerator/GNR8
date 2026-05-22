@@ -66,6 +66,14 @@ type GovernanceSnapshotSummary = {
   diagnostics?: string[];
   createdAt?: string;
 };
+type GovernanceTimelineSnapshotSummary = {
+  snapshotId: string;
+  createdAt: string;
+  reviewSummaryStatus: string;
+  reviewCount: number;
+  readinessStatus: string;
+  diagnostics: string[];
+};
 
 export type ProviderHandoffReadinessDebugModel = {
   handoffId: string;
@@ -78,6 +86,7 @@ export type ProviderHandoffReadinessDebugModel = {
   handoffArtifact: ProviderHandoffArtifactSummary;
   workerPickupEvidence: WorkerPickupEvidenceSummary;
   governanceSnapshot?: GovernanceSnapshotSummary;
+  governanceTimeline?: GovernanceTimelineSnapshotSummary[];
   operatorReviews: OperatorReviewSummary[];
   operatorReviewSummary: OperatorReviewStateSummary;
   operatorReviewIntentOnly: boolean;
@@ -219,6 +228,27 @@ export function ProviderHandoffReadinessDebugView(props: {
         <Field label="createdAt" value={redactSecretLikeText(display.governanceSnapshot.createdAt)} />
         <Field label="reviewSummaryStatus" value={redactSecretLikeText(display.governanceSnapshot.reviewSummaryStatus)} />
         <ListField label="diagnostics" values={display.governanceSnapshot.diagnostics} />
+      </section>
+
+      <section style={{ border: "1px solid #dbe3ea", borderRadius: 10, background: "#ffffff", padding: 12, marginTop: 12 }}>
+        <h2 style={{ margin: "0 0 8px 0", fontSize: 16 }}>Governance Timeline</h2>
+        {display.governanceTimeline.length > 0 ? (
+          display.governanceTimeline.map((snapshot) => (
+            <div
+              key={snapshot.snapshotId}
+              style={{ border: "1px solid #e5e7eb", borderRadius: 8, padding: 10, marginBottom: 8, background: "#f9fafb" }}
+            >
+              <Field label="snapshotId" value={snapshot.snapshotId} />
+              <Field label="createdAt" value={snapshot.createdAt} />
+              <Field label="reviewSummaryStatus" value={snapshot.reviewSummaryStatus} />
+              <Field label="reviewCount" value={String(snapshot.reviewCount)} />
+              <Field label="readinessStatus" value={snapshot.readinessStatus} />
+              <ListField label="diagnostics" values={snapshot.diagnostics} />
+            </div>
+          ))
+        ) : (
+          <p style={{ margin: 0, color: "#6b7280" }}>No governance timeline snapshots available for this handoff.</p>
+        )}
       </section>
     </main>
   );
