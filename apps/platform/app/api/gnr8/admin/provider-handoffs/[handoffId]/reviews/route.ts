@@ -3,4 +3,4 @@ import { createProviderHandoffOperatorReviewsRouteHandlers } from "@/app/api/gnr
 const handlers = createProviderHandoffOperatorReviewsRouteHandlers();
 
 export const GET = handlers.GET;
-
+export const POST = handlers.POST;
