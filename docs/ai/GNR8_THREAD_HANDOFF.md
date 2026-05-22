@@ -6,7 +6,7 @@ This is the first file every new ChatGPT/Codex thread should read.
 
 GNR8 is currently in provider/DNS control-plane hardening and migration/preview validation mode.
 The active emphasis is deterministic contracts, approval/handoff safety, and no hidden execution.
-Provider handoff readiness inspection milestone is complete (simulation + inspection surfaces) and execution remains explicitly blocked.
+Provider handoff readiness milestone is complete and testable end-to-end from deployed UI (seed + inspection surfaces), and execution remains explicitly blocked.
 
 Current snapshot sources:
 - `docs/ai/GNR8_CURRENT_STATE.md`
@@ -47,11 +47,21 @@ Read `docs/ai/GNR8_COLLABORATION_PROTOCOL.md` before generating Codex tasks.
 ## E) Current Provider-Control-Plane Status
 
 Implemented control-plane layers include provider settings, credential references contract, provider selection/communicator, job planner/repository foundation, approval artifacts/transitions, execution handoff, and worker pickup readiness checks.
-Readiness inspection now includes deterministic `workerPickupEvidence` projection from persisted `handoffArtifact`, read-only API inspection route, and internal debug UI route.
+Readiness inspection now includes deterministic `workerPickupEvidence` projection from persisted `handoffArtifact`, read-only API inspection route, internal debug UI route, deployed superadmin readiness-test UI, and admin seed API for deterministic persisted handoff creation/reuse.
 
 Completed readiness inspection routes:
 - `GET /api/gnr8/runtime/provider-handoffs/[handoffId]/readiness` (read-only)
 - `/gnr8/admin/provider-handoffs/[handoffId]/readiness` (internal debug UI)
+- `/gnr8/admin/provider-handoffs/readiness-test` (deployed superadmin readiness test UI)
+- `POST /api/gnr8/admin/provider-handoffs/readiness-seed` (admin seed API)
+
+Required production env flag:
+- `GNR8_ADMIN_PROVIDER_HANDOFF_READINESS_SEED_ENABLED=1`
+
+Evidence and diagnostics milestone:
+- seed creates/reuses deterministic persisted handoff
+- readiness page shows persisted `handoffArtifact` and reconstructed deterministic `workerPickupEvidence`
+- `workerPickupEvidence.blockedReasons` is normalized with no contradictory approval/handoff/planned-job reasons; reasons are deterministic and operator-readable
 
 Hard boundaries remain:
 - no live provider execution
@@ -62,15 +72,16 @@ Hard boundaries remain:
 - no queue/Inngest execution for provider handoff readiness inspection
 - no external registrar calls
 - no secret reads/stores
+- no secret resolution
 - Openprovider sandbox planning/dry-run artifacts only. No provider execution is permitted, including sandbox execution. Control-plane metadata and deterministic planning only.
 
 ## F) Current Active Implementation Phase
 
-Active phase: provider handoff readiness inspection hardening.
+Active phase: provider handoff readiness deployed-UI testability milestone.
 
 Practical next phase:
-1. Provider handoff readiness inspection hardening / operator review flow planning.
-2. Keep execution paths in dry-run/sandbox-gated mode with explicit execution-blocked evidence.
+1. Operator review persistence and read-only UI surfacing.
+2. Keep execution paths in dry-run/sandbox-gated mode with explicit execution-blocked evidence (still no execution).
 
 ## G) How Next Thread Should Behave
 

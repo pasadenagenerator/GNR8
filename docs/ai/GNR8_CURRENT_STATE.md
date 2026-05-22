@@ -1,19 +1,20 @@
 # GNR8 CURRENT STATE SNAPSHOT
 
 ## Snapshot Date
-2026-05-21
+2026-05-22
 
 ## Current Phase
-Provider handoff readiness inspection hardening (control-plane only).
+Provider handoff readiness deployed-UI testability milestone (control-plane only).
 
 ## Latest Completed Milestone
 
 - Control-plane layers for provider settings, credential reference contract, provider selection/communicator, job planning, approvals, and execution handoffs are implemented.
 - Deterministic Openprovider sandbox adapter and contract/readiness boundaries are in place.
 - Explicit execution boundaries are enforced in control-plane artifacts and dry-run paths.
-- Provider handoff readiness inspection simulation is implemented and persisted-handoff driven.
-- `workerPickupEvidence` is deterministic, always execution-blocked, and reconstructable from persisted `handoffArtifact`.
-- Read-only readiness API route and internal debug UI route are implemented for operator inspection.
+- Provider handoff readiness is testable end-to-end from deployed UI.
+- Admin seed flow creates/reuses a deterministic persisted handoff for readiness inspection.
+- Readiness inspection displays persisted `handoffArtifact` and reconstructed deterministic `workerPickupEvidence`.
+- `workerPickupEvidence.blockedReasons` is normalized to deterministic, operator-readable reasons with no contradictory approval/handoff/planned-job reasons.
 
 ## Current Blocker
 
@@ -22,7 +23,7 @@ Provider handoff readiness inspection hardening (control-plane only).
 
 ## Next Milestone
 
-- Provider handoff readiness inspection hardening / operator review flow planning.
+- Operator review persistence and read-only UI surfacing (still no execution).
 
 ## Latest Provider Control Plane State
 
@@ -42,6 +43,8 @@ Provider handoff readiness inspection hardening (control-plane only).
 - worker pickup readiness: implemented
 - provider handoff readiness inspection route: implemented
 - provider handoff readiness debug UI: implemented
+- deployed superadmin readiness test UI: implemented
+- admin readiness seed API: implemented
 
 Openprovider:
 - sandbox adapter exists
@@ -76,6 +79,11 @@ Files:
 Routes:
 - `GET /api/gnr8/runtime/provider-handoffs/[handoffId]/readiness` (read-only control-plane inspection response)
 - `/gnr8/admin/provider-handoffs/[handoffId]/readiness` (internal debug/operator inspection UI)
+- `/gnr8/admin/provider-handoffs/readiness-test` (deployed superadmin readiness test UI)
+- `POST /api/gnr8/admin/provider-handoffs/readiness-seed` (admin seed API for deterministic persisted handoff)
+
+Required production env flag:
+- `GNR8_ADMIN_PROVIDER_HANDOFF_READINESS_SEED_ENABLED=1`
 
 ## Execution Boundaries (Current)
 
@@ -88,6 +96,7 @@ Routes:
 - NO Openprovider API calls.
 - NO worker execution for provider actions.
 - NO secret reads.
+- NO secret resolution.
 - Openprovider sandbox planning/dry-run artifacts only. No provider execution is permitted, including sandbox execution. Control-plane metadata and deterministic planning only.
 
 ## Worker Pickup Readiness Criteria
@@ -107,6 +116,7 @@ Blocked when:
 Clarifications:
 - readiness model exists
 - worker pickup evidence is deterministic and reconstructable from persisted handoff artifact
+- blockedReasons are normalized: no contradictory approval/handoff/planned-job reasons; reasons remain deterministic and operator-readable
 - worker execution is not enabled
 - this is pre-worker control-plane only
 
