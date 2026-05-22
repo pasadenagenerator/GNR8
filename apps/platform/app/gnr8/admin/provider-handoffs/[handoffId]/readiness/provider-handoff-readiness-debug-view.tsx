@@ -36,6 +36,14 @@ type WorkerPickupEvidenceSummary = {
   correlationKey?: string;
 };
 
+type OperatorReviewSummary = {
+  reviewId: string;
+  reviewerRef: string;
+  reviewStatus: string;
+  reviewReason: string;
+  createdAt: string;
+};
+
 export type ProviderHandoffReadinessDebugModel = {
   handoffId: string;
   readinessStatus: string;
@@ -46,6 +54,8 @@ export type ProviderHandoffReadinessDebugModel = {
   diagnostics: string[];
   handoffArtifact: ProviderHandoffArtifactSummary;
   workerPickupEvidence: WorkerPickupEvidenceSummary;
+  operatorReviews: OperatorReviewSummary[];
+  operatorReviewIntentOnly: boolean;
 };
 
 function Field(props: { label: string; value: string }) {
@@ -119,6 +129,26 @@ export function ProviderHandoffReadinessDebugView(props: { model: ProviderHandof
           </>
         ) : (
           <p style={{ margin: 0, color: "#6b7280" }}>No persisted handoff artifact available.</p>
+        )}
+      </section>
+
+      <section style={{ border: "1px solid #dbe3ea", borderRadius: 10, background: "#ffffff", padding: 12, marginTop: 12 }}>
+        <h2 style={{ margin: "0 0 8px 0", fontSize: 16 }}>Operator Review</h2>
+        <p style={{ margin: "0 0 10px 0", color: "#4b5563" }}>Review intent only. Execution remains blocked.</p>
+        {display.operatorReviews.length > 0 ? (
+          display.operatorReviews.map((review) => (
+            <div
+              key={review.reviewId}
+              style={{ border: "1px solid #e5e7eb", borderRadius: 8, padding: 10, marginBottom: 8, background: "#f9fafb" }}
+            >
+              <Field label="reviewer" value={redactSecretLikeText(review.reviewerRef)} />
+              <Field label="status" value={redactSecretLikeText(review.reviewStatus)} />
+              <Field label="reason" value={redactSecretLikeText(review.reviewReason)} />
+              <Field label="createdAt" value={redactSecretLikeText(review.createdAt)} />
+            </div>
+          ))
+        ) : (
+          <p style={{ margin: 0, color: "#6b7280" }}>No operator reviews persisted for this handoff.</p>
         )}
       </section>
 

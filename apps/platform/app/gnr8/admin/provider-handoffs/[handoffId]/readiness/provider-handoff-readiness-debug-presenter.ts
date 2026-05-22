@@ -47,6 +47,16 @@ export function buildProviderHandoffReadinessDebugDisplay(model: ProviderHandoff
       blockedReasons: sanitizeDisplayList(model.workerPickupEvidence.blockedReasons),
       diagnostics: sanitizeDisplayList(model.workerPickupEvidence.diagnostics),
     },
+    operatorReviews: [...model.operatorReviews]
+      .map((review) => ({
+        reviewId: redactSecretLikeText(review.reviewId),
+        reviewerRef: redactSecretLikeText(review.reviewerRef),
+        reviewStatus: redactSecretLikeText(review.reviewStatus),
+        reviewReason: redactSecretLikeText(review.reviewReason),
+        createdAt: redactSecretLikeText(review.createdAt),
+      }))
+      .sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.reviewId.localeCompare(b.reviewId)),
+    operatorReviewIntentOnly: model.operatorReviewIntentOnly === true,
     hasMutationControls: false,
   };
 }

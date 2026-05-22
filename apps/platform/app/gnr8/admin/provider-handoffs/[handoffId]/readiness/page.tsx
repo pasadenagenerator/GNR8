@@ -19,6 +19,25 @@ function normalizeList(values: unknown): string[] {
   return [...new Set(values.map((value) => normalizeToken(value)).filter(Boolean))].sort((a, b) => a.localeCompare(b));
 }
 
+function normalizeObject(value: unknown): Record<string, unknown> {
+  return typeof value === "object" && value !== null ? (value as Record<string, unknown>) : {};
+}
+
+function normalizeReviewList(values: unknown): ProviderHandoffReadinessDebugModel["operatorReviews"] {
+  if (!Array.isArray(values)) return [];
+  return values
+    .map((value) => normalizeObject(value))
+    .map((review) => ({
+      reviewId: normalizeToken(review.reviewId),
+      reviewerRef: normalizeToken(review.reviewerRef),
+      reviewStatus: normalizeToken(review.reviewStatus),
+      reviewReason: normalizeToken(review.reviewReason),
+      createdAt: normalizeToken(review.createdAt),
+    }))
+    .filter((review) => review.reviewId && review.reviewerRef && review.reviewStatus && review.createdAt)
+    .sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.reviewId.localeCompare(b.reviewId));
+}
+
 async function fetchReadinessModel(handoffId: string): Promise<{ model: ProviderHandoffReadinessDebugModel; fetchError: string | null }> {
   const incomingHeaders = await headers();
   const proto = normalizeToken(incomingHeaders.get("x-forwarded-proto")) || "http";
@@ -26,8 +45,13 @@ async function fetchReadinessModel(handoffId: string): Promise<{ model: Provider
   const endpoint = `${proto}://${host}/api/gnr8/runtime/provider-handoffs/${encodeURIComponent(handoffId)}/readiness`;
 
   try {
-    const response = await fetch(endpoint, { method: "GET", cache: "no-store" });
+    const reviewsEndpoint = `${proto}://${host}/api/gnr8/admin/provider-handoffs/${encodeURIComponent(handoffId)}/reviews`;
+    const [response, reviewsResponse] = await Promise.all([
+      fetch(endpoint, { method: "GET", cache: "no-store" }),
+      fetch(reviewsEndpoint, { method: "GET", cache: "no-store" }),
+    ]);
     const payload = (await response.json()) as Record<string, unknown>;
+    const reviewsPayload = (await reviewsResponse.json()) as Record<string, unknown>;
 
     const model: ProviderHandoffReadinessDebugModel = {
       handoffId,
@@ -39,11 +63,16 @@ async function fetchReadinessModel(handoffId: string): Promise<{ model: Provider
       diagnostics: normalizeList(payload.diagnostics),
       handoffArtifact: (payload.handoffArtifact as ProviderHandoffReadinessDebugModel["handoffArtifact"]) ?? null,
       workerPickupEvidence: (payload.workerPickupEvidence as ProviderHandoffReadinessDebugModel["workerPickupEvidence"]) ?? {},
+      operatorReviews: normalizeReviewList(reviewsPayload.reviews),
+      operatorReviewIntentOnly: Boolean(reviewsPayload.intentOnly),
     };
 
     return {
       model,
-      fetchError: response.ok ? null : normalizeToken(payload.error) || `HTTP_${response.status}`,
+      fetchError:
+        response.ok && reviewsResponse.ok
+          ? null
+          : normalizeToken(payload.error) || normalizeToken(reviewsPayload.error) || `HTTP_${response.status}`,
     };
   } catch (error) {
     return {
@@ -57,6 +86,8 @@ async function fetchReadinessModel(handoffId: string): Promise<{ model: Provider
         diagnostics: ["PROVIDER_HANDOFF_DEBUG_FETCH_FAILED"],
         handoffArtifact: null,
         workerPickupEvidence: {},
+        operatorReviews: [],
+        operatorReviewIntentOnly: true,
       },
       fetchError: error instanceof Error ? error.message : "Unknown fetch error",
     };

@@ -38,6 +38,23 @@ function buildModel(): ProviderHandoffReadinessDebugModel {
       blockedReasons: ["provider_execution_disabled_control_plane_boundary"],
       diagnostics: ["WORKER_PICKUP_EVIDENCE_AVAILABLE", "token=secret_token_value"],
     },
+    operatorReviews: [
+      {
+        reviewId: "review_2",
+        reviewerRef: "reviewer_b",
+        reviewStatus: "approved_for_future_execution",
+        reviewReason: "checked dry run",
+        createdAt: "2026-05-22T00:00:01.000Z",
+      },
+      {
+        reviewId: "review_1",
+        reviewerRef: "reviewer_a",
+        reviewStatus: "pending_review",
+        reviewReason: "initial review",
+        createdAt: "2026-05-22T00:00:00.000Z",
+      },
+    ],
+    operatorReviewIntentOnly: true,
   };
 }
 
@@ -50,6 +67,11 @@ test("provider handoff readiness presenter: renders mocked readiness evidence", 
   assert.equal(display.executionBlocked, "true");
   assert.equal(display.nextAllowedAction, "control_plane_review_and_dry_run_artifact_inspection_only");
   assert.equal(display.diagnostics.includes("PROVIDER_WORKER_PICKUP_EVIDENCE_CREATED:EVIDENCE_CREATED"), true);
+  assert.equal(display.operatorReviewIntentOnly, true);
+  assert.deepEqual(
+    display.operatorReviews.map((review) => review.reviewId),
+    ["review_1", "review_2"],
+  );
   assert.equal(display.hasMutationControls, false);
 });
 
