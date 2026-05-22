@@ -7,6 +7,7 @@ This is the first file every new ChatGPT/Codex thread should read.
 GNR8 is currently in provider/DNS control-plane hardening and migration/preview validation mode.
 The active emphasis is deterministic contracts, approval/handoff safety, and no hidden execution.
 Provider handoff readiness with governance snapshot evidence milestone is complete and testable end-to-end from deployed UI (seed + inspection surfaces), and execution remains explicitly blocked.
+The deployed dev-seed governance loop is manually verified end-to-end as an evidence milestone (still control-plane only).
 
 Current snapshot sources:
 - `docs/ai/GNR8_CURRENT_STATE.md`
@@ -82,6 +83,22 @@ Evidence and diagnostics milestone:
 - `approved_for_future_execution` is intent-only; it does not authorize execution
 - `executionBlocked` remains `true`
 - governance snapshot is evidence only
+
+Deployed manual verification loop (completed):
+- readiness-test UI creates/reuses deterministic handoff
+- readiness inspection loads `handoffArtifact`
+- `workerPickupEvidence` is displayed
+- operator review form creates persisted review intent
+- operator review list displays persisted review
+- Operator Review Summary transitions from `no_reviews` to `pending_review`
+- Governance Snapshot `reviewSummaryStatus` transitions to `pending_review`
+- `executionBlocked` remains `true`
+
+Example verified values:
+- review status: `pending_review`
+- review reason: `Manual deployed governance test`
+- review count: `1`
+- `reviewSummaryStatus`: `pending_review`
 
 Hard boundaries remain:
 - no live provider execution

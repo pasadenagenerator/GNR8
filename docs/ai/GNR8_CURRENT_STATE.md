@@ -8,6 +8,7 @@ Governance snapshot evidence milestone for provider handoff readiness (control-p
 
 ## Latest Completed Milestone
 
+- Deployed dev-seed governance loop has been manually verified end-to-end (control-plane only).
 - Control-plane layers for provider settings, credential reference contract, provider selection/communicator, job planning, approvals, and execution handoffs are implemented.
 - Deterministic Openprovider sandbox adapter and contract/readiness boundaries are in place.
 - Explicit execution boundaries are enforced in control-plane artifacts and dry-run paths.
@@ -41,6 +42,20 @@ Governance snapshot evidence milestone for provider handoff readiness (control-p
   - `GOVERNANCE_SNAPSHOT_FAILED_CLOSED`
 - Readiness API now includes `governanceSnapshot`.
 - Readiness UI now displays a Governance Snapshot section.
+- Verified deployed governance loop behavior:
+  - readiness-test UI creates/reuses deterministic handoff
+  - readiness inspection loads `handoffArtifact`
+  - `workerPickupEvidence` is displayed
+  - operator review form creates persisted review intent
+  - operator review list displays persisted review
+  - Operator Review Summary updates from `no_reviews` to `pending_review`
+  - Governance Snapshot updates `reviewSummaryStatus` to `pending_review`
+  - `executionBlocked` remains `true`
+- Example verified values from deployed manual verification:
+  - review status: `pending_review`
+  - review reason: `Manual deployed governance test`
+  - review count: `1`
+  - `reviewSummaryStatus`: `pending_review`
 
 ## Current Blocker
 
