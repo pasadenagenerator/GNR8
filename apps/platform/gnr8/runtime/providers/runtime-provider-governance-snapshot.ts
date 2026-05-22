@@ -97,7 +97,7 @@ export function createRuntimeProviderGovernanceSnapshot(
     baseCorrelationKey,
     readinessStatus: input.workerPickupEvidence.readinessStatus,
     reviewSummaryStatus: reviewSummary.reviewSummaryStatus,
-    reviewCount: reviewSummary.reviewCount,
+    reviewCount: String(reviewSummary.reviewCount),
     workerPickupEvidenceCorrelationKey: input.workerPickupEvidence.correlationKey,
     workerPickupEvidenceDiagnostics: uniqueSorted(input.workerPickupEvidence.diagnostics).join(","),
     diagnostics: baseDiagnostics.join(","),

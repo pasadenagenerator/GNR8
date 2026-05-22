@@ -6,7 +6,7 @@ This is the first file every new ChatGPT/Codex thread should read.
 
 GNR8 is currently in provider/DNS control-plane hardening and migration/preview validation mode.
 The active emphasis is deterministic contracts, approval/handoff safety, and no hidden execution.
-Provider handoff readiness with operator review summary milestone is complete and testable end-to-end from deployed UI (seed + inspection surfaces), and execution remains explicitly blocked.
+Provider handoff readiness with governance snapshot evidence milestone is complete and testable end-to-end from deployed UI (seed + inspection surfaces), and execution remains explicitly blocked.
 
 Current snapshot sources:
 - `docs/ai/GNR8_CURRENT_STATE.md`
@@ -47,7 +47,7 @@ Read `docs/ai/GNR8_COLLABORATION_PROTOCOL.md` before generating Codex tasks.
 ## E) Current Provider-Control-Plane Status
 
 Implemented control-plane layers include provider settings, credential references contract, provider selection/communicator, job planner/repository foundation, approval artifacts/transitions, execution handoff, and worker pickup readiness checks.
-Readiness inspection now includes deterministic `workerPickupEvidence` projection from persisted `handoffArtifact`, read-only API inspection route, internal debug UI route, deployed superadmin readiness-test UI, admin seed API for deterministic persisted handoff creation/reuse, operator review intent persistence/creation surfaces, and deterministic operator review summary surfacing.
+Readiness inspection now includes deterministic `workerPickupEvidence` projection from persisted `handoffArtifact`, read-only API inspection route, internal debug UI route, deployed superadmin readiness-test UI, admin seed API for deterministic persisted handoff creation/reuse, operator review intent persistence/creation surfaces, and deterministic governance snapshot surfacing.
 
 Completed readiness inspection routes:
 - `GET /api/gnr8/runtime/provider-handoffs/[handoffId]/readiness` (read-only)
@@ -66,20 +66,22 @@ Evidence and diagnostics milestone:
 - `workerPickupEvidence.blockedReasons` is normalized with no contradictory approval/handoff/planned-job reasons; reasons are deterministic and operator-readable
 - operator review persistence exists via `gnr8_runtime_provider_operator_reviews`
 - reviews API returns deterministic `reviewSummary` in `GET /api/gnr8/admin/provider-handoffs/[handoffId]/reviews`
-- `reviewSummary.status` values: `no_reviews`, `pending_review`, `approved_for_future_execution`, `rejected`, `needs_changes`, `mixed_review_state`
-- `reviewSummary` fields: `reviewCount`, `latestReviewer`, `latestCreatedAt`, `latestReason`, `intentOnly: true`, `executionBlocked: true`
-- readiness UI displays Operator Review Summary
+- governance snapshot model exists: `runtime-provider-governance-snapshot.ts`
+- governance snapshot combines: handoff readiness, `workerPickupEvidence`, operator `reviewSummary`, diagnostics
+- governance snapshot fields: `snapshotId`, `handoffId`, `correlationKey`, `readinessStatus`, `executionBlocked: true`, `workerPickupEvidence`, `reviewSummary`, `diagnostics`, `createdAt`
+- readiness API includes `governanceSnapshot`
+- readiness UI displays Governance Snapshot section
 - readiness UI keeps detailed operator review list visible
 - readiness UI includes create operator review form with:
   - status dropdown values: `pending_review`, `approved_for_future_execution`, `rejected`, `needs_changes`
   - reason textarea
   - Save review intent action
 - diagnostics include:
-  - `OPERATOR_REVIEW_SUMMARY_CREATED`
-  - `OPERATOR_REVIEW_SUMMARY_MIXED_STATE`
-  - `OPERATOR_REVIEW_SUMMARY_NO_REVIEWS`
+  - `GOVERNANCE_SNAPSHOT_CREATED`
+  - `GOVERNANCE_SNAPSHOT_FAILED_CLOSED`
 - `approved_for_future_execution` is intent-only; it does not authorize execution
 - `executionBlocked` remains `true`
+- governance snapshot is evidence only
 
 Hard boundaries remain:
 - no live provider execution
@@ -88,6 +90,7 @@ Hard boundaries remain:
 - no Openprovider API calls
 - no DNS writes
 - no queue/Inngest execution for provider handoff readiness inspection
+- no queue/Inngest/worker execution
 - no external registrar calls
 - no secret reads/stores
 - no secret resolution
@@ -95,10 +98,10 @@ Hard boundaries remain:
 
 ## F) Current Active Implementation Phase
 
-Active phase: provider handoff readiness with operator review summary milestone.
+Active phase: provider handoff readiness with governance snapshot evidence milestone.
 
 Practical next phase:
-1. Operator review audit/history hardening, or governance snapshot evidence integrated into handoff readiness evidence.
+1. Governance snapshot persistence and audit timeline.
 2. Keep execution paths in dry-run/sandbox-gated mode with explicit execution-blocked evidence (still no execution).
 
 ## G) How Next Thread Should Behave

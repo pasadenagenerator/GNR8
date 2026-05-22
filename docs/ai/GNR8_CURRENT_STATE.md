@@ -4,7 +4,7 @@
 2026-05-22
 
 ## Current Phase
-Operator review summary milestone for provider handoff readiness (control-plane only).
+Governance snapshot evidence milestone for provider handoff readiness (control-plane only).
 
 ## Latest Completed Milestone
 
@@ -19,27 +19,28 @@ Operator review summary milestone for provider handoff readiness (control-plane 
 - Operator review persistence exists via `gnr8_runtime_provider_operator_reviews`.
 - Read-only operator review API exists: `GET /api/gnr8/admin/provider-handoffs/[handoffId]/reviews`.
 - Admin-only operator review creation API exists: `POST /api/gnr8/admin/provider-handoffs/[handoffId]/reviews`.
-- Operator review summary model exists and is deterministic.
-- `GET /api/gnr8/admin/provider-handoffs/[handoffId]/reviews` now returns `reviewSummary` alongside detailed reviews.
-- `reviewSummary.status` supports:
-  - `no_reviews`
-  - `pending_review`
-  - `approved_for_future_execution`
-  - `rejected`
-  - `needs_changes`
-  - `mixed_review_state`
-- `reviewSummary` fields include:
-  - `reviewCount`
-  - `latestReviewer`
-  - `latestCreatedAt`
-  - `latestReason`
-  - `intentOnly: true`
+- Governance snapshot model exists:
+  - `runtime-provider-governance-snapshot.ts`
+- Governance snapshot combines:
+  - handoff readiness
+  - `workerPickupEvidence`
+  - operator `reviewSummary`
+  - diagnostics
+- Governance snapshot fields include:
+  - `snapshotId`
+  - `handoffId`
+  - `correlationKey`
+  - `readinessStatus`
   - `executionBlocked: true`
-- Readiness UI now displays an Operator Review Summary while keeping the detailed review list and create-review form visible.
-- Operator review summary diagnostics are emitted:
-  - `OPERATOR_REVIEW_SUMMARY_CREATED`
-  - `OPERATOR_REVIEW_SUMMARY_MIXED_STATE`
-  - `OPERATOR_REVIEW_SUMMARY_NO_REVIEWS`
+  - `workerPickupEvidence`
+  - `reviewSummary`
+  - `diagnostics`
+  - `createdAt`
+- Governance snapshot diagnostics are emitted:
+  - `GOVERNANCE_SNAPSHOT_CREATED`
+  - `GOVERNANCE_SNAPSHOT_FAILED_CLOSED`
+- Readiness API now includes `governanceSnapshot`.
+- Readiness UI now displays a Governance Snapshot section.
 
 ## Current Blocker
 
@@ -48,7 +49,7 @@ Operator review summary milestone for provider handoff readiness (control-plane 
 
 ## Next Milestone
 
-- Operator review audit/history hardening, or governance snapshot evidence integrated into handoff readiness evidence (still no execution).
+- Governance snapshot persistence and audit timeline (still no execution).
 
 ## Latest Provider Control Plane State
 
@@ -74,9 +75,10 @@ Operator review summary milestone for provider handoff readiness (control-plane 
 - operator review read-only API: implemented
 - operator review create API (admin-only): implemented
 - operator review summary model: implemented
-- operator review summary diagnostics: implemented
+- governance snapshot model: implemented
+- governance snapshot diagnostics: implemented
 - operator review read-only readiness UI section: implemented
-- operator review summary readiness UI section: implemented
+- governance snapshot readiness UI section: implemented
 - operator review create readiness UI form: implemented
 
 Openprovider:
@@ -119,7 +121,7 @@ Routes:
 - `POST /api/gnr8/admin/provider-handoffs/[handoffId]/reviews` (admin-only operator review intent creation)
 
 Readiness UI operator review controls:
-- Operator Review Summary section (deterministic status + latest review metadata)
+- Governance Snapshot section (deterministic evidence projection)
 - read-only operator review section
 - create operator review form
 - status dropdown values:
@@ -148,6 +150,9 @@ Required production env flag:
 - Openprovider sandbox planning/dry-run artifacts only. No provider execution is permitted, including sandbox execution. Control-plane metadata and deterministic planning only.
 - `approved_for_future_execution` is intent-only and does not authorize execution.
 - `executionBlocked` remains `true`.
+- governance snapshot is evidence only.
+- NO Openprovider/registrar calls.
+- NO queue/Inngest/worker execution.
 
 ## Worker Pickup Readiness Criteria
 

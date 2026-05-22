@@ -203,11 +203,13 @@ export function createProviderHandoffReadinessRouteHandlers(
         }
 
         const sanitizedHandoffArtifact = sanitizeHandoffArtifact(persistedArtifact);
+        const governanceHandoffArtifact: NonNullable<ProviderHandoffReadinessResponse["handoffArtifact"]> | null =
+          sanitizedHandoffArtifact;
         if (!isSanitizedHandoffArtifactValid(sanitizedHandoffArtifact)) {
           const workerPickupEvidence = resolvedDeps.createRuntimeProviderWorkerPickupReadinessEvidence({ handoffArtifact: sanitizedHandoffArtifact });
           const governanceSnapshot = resolvedDeps.createRuntimeProviderGovernanceSnapshot({
-            handoffId: sanitizedHandoffArtifact?.handoffId,
-            correlationKey: sanitizedHandoffArtifact?.correlationKey,
+            handoffId: governanceHandoffArtifact?.handoffId,
+            correlationKey: governanceHandoffArtifact?.correlationKey,
             workerPickupEvidence,
             reviewSummary: resolvedDeps.buildRuntimeProviderOperatorReviewSummary({ reviews: [] }).reviewSummary,
           });
