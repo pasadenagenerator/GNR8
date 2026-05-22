@@ -5,6 +5,7 @@ import { createProviderHandoffOperatorReviewsRouteHandlers } from "@/app/api/gnr
 
 test("provider handoff operator reviews route: returns deterministic review list and intentOnly/executionBlocked", async () => {
   const handlers = createProviderHandoffOperatorReviewsRouteHandlers({
+    requireSuperadminUserId: async () => "superadmin_1",
     getProviderExecutionHandoffByHandoffId: async () =>
       ({
         handoffId: "handoff_1",
@@ -12,6 +13,8 @@ test("provider handoff operator reviews route: returns deterministic review list
         siteId: "11111111-1111-1111-1111-111111111111",
         siteVersionId: "22222222-2222-2222-2222-222222222222",
       }) as never,
+    resolveAgencyIdForSiteVersion: async () => "agency_1",
+    resolveAgencyIdForSite: async () => "agency_1",
     getProviderOperatorReviewsByHandoffId: async () => ({
       reviews: [
         {
@@ -70,7 +73,9 @@ test("provider handoff operator reviews route: returns deterministic review list
 });
 
 test("provider handoff operator reviews route: fails closed on missing handoff id", async () => {
-  const handlers = createProviderHandoffOperatorReviewsRouteHandlers();
+  const handlers = createProviderHandoffOperatorReviewsRouteHandlers({
+    requireSuperadminUserId: async () => "superadmin_1",
+  });
   const response = await handlers.GET(new Request("http://localhost/api/gnr8/admin/provider-handoffs//reviews"), {
     params: Promise.resolve({ handoffId: " " }),
   });
@@ -86,6 +91,7 @@ test("provider handoff operator reviews route: no provider execution path and no
   let dnsWriteCallCount = 0;
   let externalCallCount = 0;
   const handlers = createProviderHandoffOperatorReviewsRouteHandlers({
+    requireSuperadminUserId: async () => "superadmin_1",
     getProviderExecutionHandoffByHandoffId: async () =>
       ({
         handoffId: "handoff_1",
@@ -93,6 +99,8 @@ test("provider handoff operator reviews route: no provider execution path and no
         siteId: "11111111-1111-1111-1111-111111111111",
         siteVersionId: "22222222-2222-2222-2222-222222222222",
       }) as never,
+    resolveAgencyIdForSiteVersion: async () => "agency_1",
+    resolveAgencyIdForSite: async () => "agency_1",
     getProviderOperatorReviewsByHandoffId: async () => {
       providerExecutionCallCount += 0;
       dnsWriteCallCount += 0;
@@ -131,6 +139,7 @@ test("provider handoff operator reviews route: no provider execution path and no
 
 test("provider handoff operator reviews route: conflicting reviews summarize as mixed state", async () => {
   const handlers = createProviderHandoffOperatorReviewsRouteHandlers({
+    requireSuperadminUserId: async () => "superadmin_1",
     getProviderExecutionHandoffByHandoffId: async () =>
       ({
         handoffId: "handoff_1",
@@ -138,6 +147,8 @@ test("provider handoff operator reviews route: conflicting reviews summarize as 
         siteId: "11111111-1111-1111-1111-111111111111",
         siteVersionId: "22222222-2222-2222-2222-222222222222",
       }) as never,
+    resolveAgencyIdForSiteVersion: async () => "agency_1",
+    resolveAgencyIdForSite: async () => "agency_1",
     getProviderOperatorReviewsByHandoffId: async () => ({
       reviews: [
         {
@@ -197,7 +208,13 @@ test("provider handoff operator reviews route POST: invalid status rejected", as
       ({
         handoffId: "handoff_1",
         correlationKey: "corr_1",
+        siteId: "11111111-1111-1111-1111-111111111111",
+        siteVersionId: "22222222-2222-2222-2222-222222222222",
       }) as never,
+    resolveAgencyIdForSiteVersion: async () => "agency_1",
+    resolveAgencyIdForSite: async () => "agency_1",
+    requireAgencyActionContext: async () =>
+      ({ userId: "user_1", agencyId: "agency_1", agencyName: "Agency", role: "owner", actorMode: "membership" }) as never,
   });
   const response = await handlers.POST(
     new Request("http://localhost/api/gnr8/admin/provider-handoffs/handoff_1/reviews", {
@@ -218,7 +235,13 @@ test("provider handoff operator reviews route POST: valid review persisted", asy
       ({
         handoffId: "handoff_1",
         correlationKey: "corr_1",
+        siteId: "11111111-1111-1111-1111-111111111111",
+        siteVersionId: "22222222-2222-2222-2222-222222222222",
       }) as never,
+    resolveAgencyIdForSiteVersion: async () => "agency_1",
+    resolveAgencyIdForSite: async () => "agency_1",
+    requireAgencyActionContext: async () =>
+      ({ userId: "user_1", agencyId: "agency_1", agencyName: "Agency", role: "owner", actorMode: "membership" }) as never,
     createProviderOperatorReviewArtifacts: async (input) => {
       persistedCount += input.length;
       return [...input];
@@ -247,7 +270,13 @@ test("provider handoff operator reviews route POST: approved_for_future_executio
       ({
         handoffId: "handoff_1",
         correlationKey: "corr_1",
+        siteId: "11111111-1111-1111-1111-111111111111",
+        siteVersionId: "22222222-2222-2222-2222-222222222222",
       }) as never,
+    resolveAgencyIdForSiteVersion: async () => "agency_1",
+    resolveAgencyIdForSite: async () => "agency_1",
+    requireAgencyActionContext: async () =>
+      ({ userId: "user_1", agencyId: "agency_1", agencyName: "Agency", role: "owner", actorMode: "membership" }) as never,
     createProviderOperatorReviewArtifacts: async (input) => [...input],
   });
   const response = await handlers.POST(
@@ -293,7 +322,13 @@ test("provider handoff operator reviews route POST: no provider/DNS/external exe
       ({
         handoffId: "handoff_1",
         correlationKey: "corr_1",
+        siteId: "11111111-1111-1111-1111-111111111111",
+        siteVersionId: "22222222-2222-2222-2222-222222222222",
       }) as never,
+    resolveAgencyIdForSiteVersion: async () => "agency_1",
+    resolveAgencyIdForSite: async () => "agency_1",
+    requireAgencyActionContext: async () =>
+      ({ userId: "user_1", agencyId: "agency_1", agencyName: "Agency", role: "owner", actorMode: "membership" }) as never,
     createProviderOperatorReviewArtifacts: async (input) => {
       providerExecutionCallCount += 0;
       dnsWriteCallCount += 0;
@@ -316,4 +351,97 @@ test("provider handoff operator reviews route POST: no provider/DNS/external exe
   assert.equal(dnsWriteCallCount, 0);
   assert.equal(externalCallCount, 0);
   assert.equal(asJson.includes("secret_123"), false);
+});
+
+test("provider handoff operator reviews route GET: dev-seed succeeds without agency scope and is superadmin-only", async () => {
+  const handlers = createProviderHandoffOperatorReviewsRouteHandlers({
+    requireSuperadminUserId: async () => "superadmin_1",
+    getProviderExecutionHandoffByHandoffId: async () =>
+      ({
+        handoffId: "handoff_dev_seed_1",
+        artifactId: "approval_1",
+        siteId: "dev_readiness_seed_site",
+        siteVersionId: "dev_readiness_seed_site_version",
+        correlationKey: "provider_handoff_readiness_ui_dev_seed_abc",
+      }) as never,
+    getProviderOperatorReviewsByHandoffId: async () => ({ reviews: [], diagnostics: ["OPERATOR_REVIEW_READ"] }),
+    requireAgencyActionContext: async () => {
+      throw new Error("Agency scope is required for admin-view actions.");
+    },
+  });
+  const response = await handlers.GET(new Request("http://localhost/api/gnr8/admin/provider-handoffs/handoff_dev_seed_1/reviews"), {
+    params: Promise.resolve({ handoffId: "handoff_dev_seed_1" }),
+  });
+  assert.equal(response.status, 200);
+  const body = (await response.json()) as { diagnostics: string[] };
+  assert.equal(body.diagnostics.includes("OPERATOR_REVIEW_DEV_SEED_SCOPE_APPLIED:CONTROL_PLANE_ONLY"), true);
+});
+
+test("provider handoff operator reviews route POST: dev-seed succeeds without agency scope and updates summary on read", async () => {
+  const store: Array<Record<string, unknown>> = [];
+  const handlers = createProviderHandoffOperatorReviewsRouteHandlers({
+    requireSuperadminUserId: async () => "superadmin_1",
+    getProviderExecutionHandoffByHandoffId: async () =>
+      ({
+        handoffId: "handoff_dev_seed_1",
+        correlationKey: "provider_handoff_readiness_ui_dev_seed_abc",
+        siteId: "dev_readiness_seed_site",
+        siteVersionId: "dev_readiness_seed_site_version",
+      }) as never,
+    getProviderOperatorReviewsByHandoffId: async () => ({ reviews: store as never, diagnostics: ["OPERATOR_REVIEW_READ"] }),
+    createProviderOperatorReviewArtifacts: async (input) => {
+      store.push(...(input as unknown as Array<Record<string, unknown>>));
+      return [...input];
+    },
+    requireAgencyActionContext: async () => {
+      throw new Error("Agency scope is required for admin-view actions.");
+    },
+  });
+  const post = await handlers.POST(
+    new Request("http://localhost/api/gnr8/admin/provider-handoffs/handoff_dev_seed_1/reviews", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ reviewStatus: "approved_for_future_execution", reviewReason: "seed intent" }),
+    }),
+    { params: Promise.resolve({ handoffId: "handoff_dev_seed_1" }) },
+  );
+  assert.equal(post.status, 200);
+  const postBody = (await post.json()) as { diagnostics: string[]; executionBlocked: boolean; intentOnly: boolean };
+  assert.equal(postBody.executionBlocked, true);
+  assert.equal(postBody.intentOnly, true);
+  assert.equal(postBody.diagnostics.includes("OPERATOR_REVIEW_DEV_SEED_SCOPE_APPLIED:CONTROL_PLANE_ONLY"), true);
+
+  const get = await handlers.GET(new Request("http://localhost/api/gnr8/admin/provider-handoffs/handoff_dev_seed_1/reviews"), {
+    params: Promise.resolve({ handoffId: "handoff_dev_seed_1" }),
+  });
+  assert.equal(get.status, 200);
+  const getBody = (await get.json()) as { reviewSummary: { reviewSummaryStatus: string; reviewCount: number } };
+  assert.equal(getBody.reviewSummary.reviewSummaryStatus, "approved_for_future_execution");
+  assert.equal(getBody.reviewSummary.reviewCount, 1);
+});
+
+test("provider handoff operator reviews route POST: normal handoff still requires agency scope", async () => {
+  const handlers = createProviderHandoffOperatorReviewsRouteHandlers({
+    requireSuperadminUserId: async () => "superadmin_1",
+    getProviderExecutionHandoffByHandoffId: async () =>
+      ({
+        handoffId: "handoff_1",
+        correlationKey: "corr_1",
+        siteId: "11111111-1111-1111-1111-111111111111",
+        siteVersionId: "22222222-2222-2222-2222-222222222222",
+      }) as never,
+    resolveAgencyIdForSiteVersion: async () => null,
+    resolveAgencyIdForSite: async () => null,
+  });
+  const response = await handlers.POST(
+    new Request("http://localhost/api/gnr8/admin/provider-handoffs/handoff_1/reviews", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ reviewStatus: "pending_review", reviewReason: "intent only" }),
+    }),
+    { params: Promise.resolve({ handoffId: "handoff_1" }) },
+  );
+  assert.equal(response.status, 422);
+  const body = (await response.json()) as { diagnostics: string[] };
+  assert.equal(body.diagnostics.includes("OPERATOR_REVIEW_CREATE_FAILED_CLOSED:AGENCY_SCOPE_REQUIRED"), true);
 });

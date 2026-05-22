@@ -1,4 +1,5 @@
 import { parseAgencyActionContextError, requireAgencyActionContext } from "@/app/api/gnr8/agency/_lib/agency-action-access";
+import { resolveAgencyIdForSite, resolveAgencyIdForSiteVersion } from "@/app/api/gnr8/runtime/_lib/runtime-agency-scope";
 import { getProviderExecutionHandoffByHandoffId } from "@/gnr8/runtime/providers/runtime-provider-execution-handoff-repository";
 import { buildRuntimeProviderOperatorReviewSummary, createRuntimeProviderOperatorReview } from "@/gnr8/runtime/providers/runtime-provider-operator-review";
 import { getProviderOperatorReviewsByHandoffId } from "@/gnr8/runtime/providers/runtime-provider-operator-review-repository";
@@ -44,11 +45,19 @@ type ProviderHandoffOperatorReviewsRouteDependencies = {
   getProviderExecutionHandoffByHandoffId: typeof getProviderExecutionHandoffByHandoffId;
   getProviderOperatorReviewsByHandoffId: typeof getProviderOperatorReviewsByHandoffId;
   createProviderOperatorReviewArtifacts: typeof createProviderOperatorReviewArtifacts;
+  resolveAgencyIdForSiteVersion: typeof resolveAgencyIdForSiteVersion;
+  resolveAgencyIdForSite: typeof resolveAgencyIdForSite;
   requireAgencyActionContext: typeof requireAgencyActionContext;
   requireSuperadminUserId: typeof requireSuperadminUserId;
 };
 
 const SECRET_LIKE = /(token|secret|password|credential|api[_-]?key|bearer|private[_-]?key)/i;
+const UUID_V4_TO_V8_LOOSE_REGEX =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const DEV_SEED_SITE_ID_PREFIX = "dev_readiness_seed_";
+const DEV_SEED_SCOPE_DIAGNOSTIC = "OPERATOR_REVIEW_DEV_SEED_SCOPE_APPLIED:CONTROL_PLANE_ONLY";
+const INVALID_SCOPE_DIAGNOSTIC = "OPERATOR_REVIEW_SCOPE_INVALID:FAILED_CLOSED";
+const UNRESOLVED_SCOPE_DIAGNOSTIC = "OPERATOR_REVIEW_SCOPE_UNRESOLVED:FAILED_CLOSED";
 
 function sanitizeToken(value: unknown): string {
   return String(value ?? "").trim();
@@ -56,6 +65,44 @@ function sanitizeToken(value: unknown): string {
 
 function uniqueSorted(values: readonly string[]): string[] {
   return [...new Set(values.map((value) => sanitizeToken(value)).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+}
+
+function isUuidLike(value: string): boolean {
+  return UUID_V4_TO_V8_LOOSE_REGEX.test(value);
+}
+
+function isDeterministicDevSeedHandoff(handoff: {
+  siteId?: string | null;
+  siteVersionId?: string | null;
+  correlationKey?: string | null;
+}): boolean {
+  const siteId = sanitizeToken(handoff.siteId);
+  const siteVersionId = sanitizeToken(handoff.siteVersionId);
+  const correlationKey = sanitizeToken(handoff.correlationKey);
+  if (siteId.startsWith(DEV_SEED_SITE_ID_PREFIX)) return true;
+  if (siteVersionId.startsWith(DEV_SEED_SITE_ID_PREFIX)) return true;
+  return correlationKey.startsWith("provider_handoff_readiness_ui_dev_seed_");
+}
+
+async function resolveOperatorReviewAgencyScope(
+  deps: Pick<ProviderHandoffOperatorReviewsRouteDependencies, "resolveAgencyIdForSiteVersion" | "resolveAgencyIdForSite">,
+  handoff: { siteId?: string | null; siteVersionId?: string | null },
+): Promise<{ agencyId: string | null; diagnostics: string[] }> {
+  const siteVersionId = sanitizeToken(handoff.siteVersionId);
+  const siteId = sanitizeToken(handoff.siteId);
+  if (siteVersionId) {
+    if (!isUuidLike(siteVersionId)) {
+      return { agencyId: null, diagnostics: [INVALID_SCOPE_DIAGNOSTIC, "OPERATOR_REVIEW_SCOPE_INVALID:SITE_VERSION_ID"] };
+    }
+    const agencyId = await deps.resolveAgencyIdForSiteVersion(siteVersionId);
+    if (agencyId) return { agencyId, diagnostics: [] };
+  }
+  if (!isUuidLike(siteId)) {
+    return { agencyId: null, diagnostics: [INVALID_SCOPE_DIAGNOSTIC, "OPERATOR_REVIEW_SCOPE_INVALID:SITE_ID"] };
+  }
+  const agencyId = await deps.resolveAgencyIdForSite(siteId);
+  if (agencyId) return { agencyId, diagnostics: [] };
+  return { agencyId: null, diagnostics: [UNRESOLVED_SCOPE_DIAGNOSTIC, "OPERATOR_REVIEW_SCOPE_UNRESOLVED:SITE_OR_SITE_VERSION"] };
 }
 
 function sanitizeReview(review: RuntimeProviderOperatorReviewArtifact): ReadOnlyOperatorReview {
@@ -107,6 +154,8 @@ export function createProviderHandoffOperatorReviewsRouteHandlers(
     getProviderExecutionHandoffByHandoffId,
     getProviderOperatorReviewsByHandoffId,
     createProviderOperatorReviewArtifacts,
+    resolveAgencyIdForSiteVersion,
+    resolveAgencyIdForSite,
     requireAgencyActionContext,
     requireSuperadminUserId,
     ...deps,
@@ -117,6 +166,7 @@ export function createProviderHandoffOperatorReviewsRouteHandlers(
       try {
         const { handoffId } = await context.params;
         const normalizedHandoffId = sanitizeToken(handoffId);
+        await resolvedDeps.requireSuperadminUserId();
         if (!normalizedHandoffId) {
           return Response.json(
             { reviews: [], executionBlocked: true, intentOnly: true, diagnostics: ["OPERATOR_REVIEW_FAILED_CLOSED:MISSING_HANDOFF_ID"] },
@@ -132,11 +182,30 @@ export function createProviderHandoffOperatorReviewsRouteHandlers(
           );
         }
 
-        await resolvedDeps.requireAgencyActionContext({ action: "run_migration" });
+        const devSeedScopeApplied = isDeterministicDevSeedHandoff(handoff);
+        const scopeDiagnostics: string[] = [];
+        if (!devSeedScopeApplied) {
+          const scopeResolution = await resolveOperatorReviewAgencyScope(resolvedDeps, handoff);
+          if (!scopeResolution.agencyId) {
+            return Response.json(
+              {
+                reviews: [],
+                executionBlocked: true,
+                intentOnly: true,
+                diagnostics: uniqueSorted(["OPERATOR_REVIEW_FAILED_CLOSED:AGENCY_SCOPE_REQUIRED", ...scopeResolution.diagnostics]),
+              },
+              { status: 422 },
+            );
+          }
+          await resolvedDeps.requireAgencyActionContext({ action: "run_migration", requestedAgencyId: scopeResolution.agencyId });
+          scopeDiagnostics.push(...scopeResolution.diagnostics);
+        } else {
+          scopeDiagnostics.push(DEV_SEED_SCOPE_DIAGNOSTIC);
+        }
 
         const result = await resolvedDeps.getProviderOperatorReviewsByHandoffId(normalizedHandoffId);
         const summaryResult = buildRuntimeProviderOperatorReviewSummary({ reviews: result.reviews });
-        const diagnostics = uniqueSorted(["OPERATOR_REVIEW_READ", ...result.diagnostics, ...summaryResult.diagnostics]);
+        const diagnostics = uniqueSorted(["OPERATOR_REVIEW_READ", ...result.diagnostics, ...summaryResult.diagnostics, ...scopeDiagnostics]);
         return Response.json(
           {
             reviews: result.reviews.map(sanitizeReview),
@@ -177,6 +246,25 @@ export function createProviderHandoffOperatorReviewsRouteHandlers(
             { ok: false, executionBlocked: true, intentOnly: true, diagnostics: uniqueSorted([...diagnostics, "OPERATOR_REVIEW_CREATE_FAILED_CLOSED:HANDOFF_NOT_FOUND"]) },
             { status: 404 },
           );
+        }
+        const devSeedScopeApplied = isDeterministicDevSeedHandoff(handoff);
+        if (!devSeedScopeApplied) {
+          const scopeResolution = await resolveOperatorReviewAgencyScope(resolvedDeps, handoff);
+          if (!scopeResolution.agencyId) {
+            return Response.json(
+              {
+                ok: false,
+                executionBlocked: true,
+                intentOnly: true,
+                diagnostics: uniqueSorted([...diagnostics, "OPERATOR_REVIEW_CREATE_FAILED_CLOSED:AGENCY_SCOPE_REQUIRED", ...scopeResolution.diagnostics]),
+              },
+              { status: 422 },
+            );
+          }
+          await resolvedDeps.requireAgencyActionContext({ action: "run_migration", requestedAgencyId: scopeResolution.agencyId });
+          diagnostics.push(...scopeResolution.diagnostics);
+        } else {
+          diagnostics.push(DEV_SEED_SCOPE_DIAGNOSTIC);
         }
 
         const payload = ((await request.json()) ?? {}) as ReviewCreateRequest;
