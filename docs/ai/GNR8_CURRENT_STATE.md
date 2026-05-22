@@ -4,11 +4,11 @@
 2026-05-22
 
 ## Current Phase
-Governance snapshot evidence milestone for provider handoff readiness (control-plane only).
+Governance Snapshot Persistence + Audit Timeline milestone (control-plane only).
 
 ## Latest Completed Milestone
 
-- Deployed dev-seed governance loop has been manually verified end-to-end (control-plane only).
+- Governance Snapshot Persistence + Audit Timeline is deployed and manually verified end-to-end (control-plane only).
 - Control-plane layers for provider settings, credential reference contract, provider selection/communicator, job planning, approvals, and execution handoffs are implemented.
 - Deterministic Openprovider sandbox adapter and contract/readiness boundaries are in place.
 - Explicit execution boundaries are enforced in control-plane artifacts and dry-run paths.
@@ -39,23 +39,40 @@ Governance snapshot evidence milestone for provider handoff readiness (control-p
   - `createdAt`
 - Governance snapshot diagnostics are emitted:
   - `GOVERNANCE_SNAPSHOT_CREATED`
-  - `GOVERNANCE_SNAPSHOT_FAILED_CLOSED`
+  - `GOVERNANCE_SNAPSHOT_REUSED`
+  - `GOVERNANCE_SNAPSHOT_AUDIT_READ`
+  - `GOVERNANCE_SNAPSHOT_PERSIST_FAILED_CLOSED`
 - Readiness API now includes `governanceSnapshot`.
 - Readiness UI now displays a Governance Snapshot section.
+- Governance Timeline API is deployed:
+  - `GET /api/gnr8/admin/provider-handoffs/[handoffId]/governance-timeline`
+- Governance Timeline UI section is deployed.
+- Governance snapshot persistence table is deployed:
+  - `gnr8_runtime_provider_governance_snapshots`
 - Verified deployed governance loop behavior:
   - readiness-test UI creates/reuses deterministic handoff
-  - readiness inspection loads `handoffArtifact`
-  - `workerPickupEvidence` is displayed
+  - readiness inspection loads `handoffArtifact` and `workerPickupEvidence`
   - operator review form creates persisted review intent
-  - operator review list displays persisted review
-  - Operator Review Summary updates from `no_reviews` to `pending_review`
-  - Governance Snapshot updates `reviewSummaryStatus` to `pending_review`
+  - operator review summary is displayed from persisted reviews
+  - Governance Snapshot is displayed
+  - Governance Timeline is displayed
+  - Governance Timeline fields verified:
+    - `snapshotId`
+    - `createdAt`
+    - `reviewSummaryStatus`
+    - `reviewCount`
+    - `readinessStatus`
+    - `diagnostics`
   - `executionBlocked` remains `true`
 - Example verified values from deployed manual verification:
-  - review status: `pending_review`
-  - review reason: `Manual deployed governance test`
-  - review count: `1`
   - `reviewSummaryStatus`: `pending_review`
+  - `reviewCount`: `1`
+  - `readinessStatus`: `pickup_not_ready`
+  - `executionBlocked`: `true`
+  - snapshot reuse observed: `GOVERNANCE_SNAPSHOT_REUSED`
+- Future note:
+  - deterministic `createdAt` may show epoch values for dev-seed artifacts
+  - potential future improvement: add `snapshotCreatedAt` and `persistedAt`
 
 ## Current Blocker
 
@@ -64,7 +81,7 @@ Governance snapshot evidence milestone for provider handoff readiness (control-p
 
 ## Next Milestone
 
-- Governance snapshot persistence and audit timeline (still no execution).
+- Governance authorization layer (intent-only first; still no execution).
 
 ## Latest Provider Control Plane State
 
@@ -134,6 +151,7 @@ Routes:
 - `GET /api/gnr8/admin/provider-handoffs/[handoffId]/reviews` (read-only operator reviews)
   - includes deterministic `reviewSummary` projection
 - `POST /api/gnr8/admin/provider-handoffs/[handoffId]/reviews` (admin-only operator review intent creation)
+- `GET /api/gnr8/admin/provider-handoffs/[handoffId]/governance-timeline` (read-only governance timeline audit projection)
 
 Readiness UI operator review controls:
 - Governance Snapshot section (deterministic evidence projection)
@@ -201,6 +219,7 @@ Present (migration-defined baseline):
 - `gnr8_runtime_provider_operation_approvals`
 - `gnr8_runtime_provider_execution_handoffs`
 - `gnr8_runtime_provider_operator_reviews`
+- `gnr8_runtime_provider_governance_snapshots`
 
 ## Open Decisions (Needs ADR Before Live Execution)
 
