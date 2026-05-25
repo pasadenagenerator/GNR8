@@ -20,6 +20,7 @@ test("provider handoff readiness view source: renders form and intent-only warni
   assert.equal(combined.includes("summary status"), true);
   assert.equal(combined.includes("latest timestamp"), true);
   assert.equal(combined.includes("Review intent only. Execution remains blocked."), true);
+  assert.equal(combined.includes("Authorization is intent only. Execution remains blocked."), true);
 });
 
 test("provider handoff readiness view source: no execution controls rendered", async () => {
@@ -43,6 +44,17 @@ test("provider handoff readiness page source: separates readiness and operator r
   assert.equal(pageSource.includes("if (!reviewsResponse.ok)"), true);
   assert.equal(pageSource.includes("<ProviderHandoffReadinessDebugView model={model} fetchError={fetchError} operatorReviewFetchError={operatorReviewFetchError} />"), true);
   assert.equal(pageSource.includes("const cookie = normalizeToken(incomingHeaders.get(\"cookie\"));"), true);
+});
+
+test("provider handoff readiness page source: authorization fallback is fail-safe", async () => {
+  const pageSource = await readFile(PAGE_FILE, "utf8");
+
+  assert.equal(pageSource.includes("authorizationStatus: \"not_requested\""), true);
+  assert.equal(pageSource.includes("intentOnly: true"), true);
+  assert.equal(pageSource.includes("executionBlocked: true"), true);
+  assert.equal(pageSource.includes("GOVERNANCE_AUTHORIZATION_INTENT_ONLY"), true);
+  assert.equal(pageSource.includes("normalizeGovernanceAuthorization(\n        authorizationPayload.authorization,\n        authorizationPayload.authorizationSummary,\n      )"), true);
+  assert.equal(pageSource.includes("GOVERNANCE_AUTHORIZATION_FETCH_ERROR:"), true);
 });
 
 test("operator review intent submit: posts to route and refreshes on success", async () => {

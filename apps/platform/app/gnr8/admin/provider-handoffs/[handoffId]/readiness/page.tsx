@@ -88,18 +88,40 @@ function normalizeGovernanceTimeline(value: unknown): NonNullable<ProviderHandof
     .filter((snapshot) => snapshot.snapshotId && snapshot.createdAt)
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt) || b.snapshotId.localeCompare(a.snapshotId));
 }
-function normalizeGovernanceAuthorization(value: unknown): NonNullable<ProviderHandoffReadinessDebugModel["governanceAuthorization"]> {
+const DEFAULT_GOVERNANCE_AUTHORIZATION: NonNullable<ProviderHandoffReadinessDebugModel["governanceAuthorization"]> = {
+  authorizationId: "",
+  handoffId: "",
+  correlationKey: "",
+  authorizationStatus: "not_requested",
+  authorizationReason: "",
+  intentOnly: true,
+  executionBlocked: true,
+  createdAt: "",
+  diagnostics: ["GOVERNANCE_AUTHORIZATION_INTENT_ONLY"],
+};
+
+function normalizeGovernanceAuthorization(
+  value: unknown,
+  summaryValue?: unknown,
+): NonNullable<ProviderHandoffReadinessDebugModel["governanceAuthorization"]> {
   const authorization = normalizeObject(value);
+  const summary = normalizeObject(summaryValue);
+  const status = normalizeToken(authorization.authorizationStatus) || normalizeToken(summary.authorizationStatus) || "not_requested";
+  const reason = normalizeToken(authorization.authorizationReason) || normalizeToken(summary.authorizationReason);
+  const diagnostics = normalizeList([
+    ...(DEFAULT_GOVERNANCE_AUTHORIZATION.diagnostics ?? []),
+    ...normalizeList(authorization.diagnostics),
+  ]);
   return {
-    authorizationId: normalizeToken(authorization.authorizationId),
+    authorizationId: normalizeToken(authorization.authorizationId) || normalizeToken(summary.latestAuthorizationId),
     handoffId: normalizeToken(authorization.handoffId),
     correlationKey: normalizeToken(authorization.correlationKey),
-    authorizationStatus: normalizeToken(authorization.authorizationStatus),
-    authorizationReason: normalizeToken(authorization.authorizationReason),
-    intentOnly: Boolean(authorization.intentOnly),
-    executionBlocked: Boolean(authorization.executionBlocked),
-    createdAt: normalizeToken(authorization.createdAt),
-    diagnostics: normalizeList(authorization.diagnostics),
+    authorizationStatus: status,
+    authorizationReason: reason,
+    intentOnly: true,
+    executionBlocked: true,
+    createdAt: normalizeToken(authorization.createdAt) || normalizeToken(summary.latestCreatedAt),
+    diagnostics,
   };
 }
 
@@ -158,7 +180,7 @@ async function fetchReadinessModel(
       operatorReviewSummary: DEFAULT_REVIEW_SUMMARY,
       operatorReviewIntentOnly: true,
       governanceTimeline: [],
-      governanceAuthorization: null,
+      governanceAuthorization: DEFAULT_GOVERNANCE_AUTHORIZATION,
     };
 
     if (!response.ok) {
@@ -187,7 +209,10 @@ async function fetchReadinessModel(
     try {
       const authorizationResponse = await fetchImpl(governanceAuthorizationEndpoint, { method: "GET", cache: "no-store", headers: requestHeaders });
       const authorizationPayload = (await authorizationResponse.json().catch(() => ({}))) as Record<string, unknown>;
-      model.governanceAuthorization = normalizeGovernanceAuthorization(authorizationPayload.authorization);
+      model.governanceAuthorization = normalizeGovernanceAuthorization(
+        authorizationPayload.authorization,
+        authorizationPayload.authorizationSummary,
+      );
       if (!authorizationResponse.ok) {
         governanceAuthorizationError = normalizeToken(authorizationPayload.error) || `HTTP_${authorizationResponse.status}`;
       }
@@ -233,7 +258,7 @@ async function fetchReadinessModel(
         operatorReviewSummary: DEFAULT_REVIEW_SUMMARY,
         operatorReviewIntentOnly: true,
         governanceTimeline: [],
-        governanceAuthorization: null,
+        governanceAuthorization: DEFAULT_GOVERNANCE_AUTHORIZATION,
       },
       fetchError: error instanceof Error ? error.message : "Unknown fetch error",
       operatorReviewFetchError: null,

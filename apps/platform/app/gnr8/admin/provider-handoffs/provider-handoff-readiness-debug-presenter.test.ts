@@ -120,3 +120,36 @@ test("provider handoff readiness presenter: secret-like values are redacted", ()
   assert.equal(flat.includes("apiToken"), false);
   assert.equal(flat.includes("[redacted]"), true);
 });
+
+test("provider handoff readiness presenter: no authorization stays intent-only and blocked", () => {
+  const display = buildProviderHandoffReadinessDebugDisplay(buildModel());
+
+  assert.equal(display.governanceAuthorization.authorizationStatus, "not_requested");
+  assert.equal(display.governanceAuthorization.authorizationReason, "");
+  assert.equal(display.governanceAuthorization.intentOnly, true);
+  assert.equal(display.governanceAuthorization.executionBlocked, true);
+  assert.equal(display.governanceAuthorization.diagnostics.includes("GOVERNANCE_AUTHORIZATION_INTENT_ONLY"), true);
+});
+
+test("provider handoff readiness presenter: all authorization states remain intent-only and blocked", () => {
+  const statuses = ["pending_authorization", "authorized_for_future_execution", "denied"] as const;
+  for (const status of statuses) {
+    const display = buildProviderHandoffReadinessDebugDisplay({
+      ...buildModel(),
+      governanceAuthorization: {
+        authorizationId: `auth_${status}`,
+        handoffId: "handoff_123",
+        correlationKey: "corr_123",
+        authorizationStatus: status,
+        authorizationReason: "intent record",
+        intentOnly: false,
+        executionBlocked: false,
+        createdAt: "2026-05-25T00:00:00.000Z",
+        diagnostics: [],
+      },
+    });
+    assert.equal(display.governanceAuthorization.authorizationStatus, status);
+    assert.equal(display.governanceAuthorization.intentOnly, true);
+    assert.equal(display.governanceAuthorization.executionBlocked, true);
+  }
+});

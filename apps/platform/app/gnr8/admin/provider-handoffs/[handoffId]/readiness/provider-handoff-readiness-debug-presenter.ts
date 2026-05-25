@@ -15,6 +15,14 @@ export function sanitizeDisplayList(input: unknown): string[] {
 }
 
 export function buildProviderHandoffReadinessDebugDisplay(model: ProviderHandoffReadinessDebugModel) {
+  const authorization = model.governanceAuthorization;
+  const authorizationStatus = redactSecretLikeText(authorization?.authorizationStatus) || "not_requested";
+  const authorizationReason = redactSecretLikeText(authorization?.authorizationReason);
+  const authorizationDiagnostics = sanitizeDisplayList([
+    "GOVERNANCE_AUTHORIZATION_INTENT_ONLY",
+    ...(authorization?.diagnostics ?? []),
+  ]);
+
   return {
     executionBlockedLabel: "Execution blocked",
     reviewOnlyLabel: "Control-plane review / dry-run artifact inspection only",
@@ -68,15 +76,15 @@ export function buildProviderHandoffReadinessDebugDisplay(model: ProviderHandoff
       }))
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt) || b.snapshotId.localeCompare(a.snapshotId)),
     governanceAuthorization: {
-      authorizationId: redactSecretLikeText(model.governanceAuthorization?.authorizationId),
-      handoffId: redactSecretLikeText(model.governanceAuthorization?.handoffId),
-      correlationKey: redactSecretLikeText(model.governanceAuthorization?.correlationKey),
-      authorizationStatus: redactSecretLikeText(model.governanceAuthorization?.authorizationStatus),
-      authorizationReason: redactSecretLikeText(model.governanceAuthorization?.authorizationReason),
-      intentOnly: model.governanceAuthorization?.intentOnly === true,
-      executionBlocked: model.governanceAuthorization?.executionBlocked === true,
-      createdAt: redactSecretLikeText(model.governanceAuthorization?.createdAt),
-      diagnostics: sanitizeDisplayList(model.governanceAuthorization?.diagnostics),
+      authorizationId: redactSecretLikeText(authorization?.authorizationId),
+      handoffId: redactSecretLikeText(authorization?.handoffId),
+      correlationKey: redactSecretLikeText(authorization?.correlationKey),
+      authorizationStatus,
+      authorizationReason,
+      intentOnly: true,
+      executionBlocked: true,
+      createdAt: redactSecretLikeText(authorization?.createdAt),
+      diagnostics: authorizationDiagnostics,
     },
     operatorReviews: [...model.operatorReviews]
       .map((review) => ({

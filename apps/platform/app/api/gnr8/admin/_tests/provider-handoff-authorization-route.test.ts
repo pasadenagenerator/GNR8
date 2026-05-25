@@ -150,3 +150,30 @@ test("provider handoff authorization route: no provider execution paths", async 
   assert.equal(dnsWriteCallCount, 0);
   assert.equal(externalCallCount, 0);
 });
+
+test("provider handoff authorization route: empty authorization returns fail-safe summary", async () => {
+  const handlers = createProviderHandoffAuthorizationRouteHandlers({
+    requireSuperadminUserId: async () => "superadmin_1",
+    getProviderExecutionHandoffByHandoffId: async () => ({ handoffId: "handoff_1", correlationKey: "corr_1" }) as never,
+    getProviderGovernanceAuthorizationsByHandoffId: async () => ({ authorizations: [], diagnostics: ["GOVERNANCE_AUTHORIZATION_READ"] }),
+  });
+
+  const response = await handlers.GET(new Request("http://localhost/api/gnr8/admin/provider-handoffs/handoff_1/authorization"), {
+    params: Promise.resolve({ handoffId: "handoff_1" }),
+  });
+  const body = (await response.json()) as {
+    authorization: null;
+    authorizationSummary: { authorizationStatus: string; authorizationReason: string; intentOnly: boolean; executionBlocked: boolean };
+    executionBlocked: boolean;
+    intentOnly: boolean;
+  };
+
+  assert.equal(response.status, 200);
+  assert.equal(body.authorization, null);
+  assert.equal(body.authorizationSummary.authorizationStatus, "not_requested");
+  assert.equal(body.authorizationSummary.authorizationReason, "");
+  assert.equal(body.authorizationSummary.intentOnly, true);
+  assert.equal(body.authorizationSummary.executionBlocked, true);
+  assert.equal(body.executionBlocked, true);
+  assert.equal(body.intentOnly, true);
+});
