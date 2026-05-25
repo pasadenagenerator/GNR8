@@ -149,6 +149,17 @@ const DEFAULT_DRYRUN_JOB_PLAN: NonNullable<ProviderHandoffReadinessDebugModel["d
   diagnostics: ["PROVIDER_DRYRUN_JOB_PLAN_CREATED", "PROVIDER_DRYRUN_JOBS_GENERATED", "PROVIDER_DRYRUN_INTENT_ONLY"],
   createdAt: "",
 };
+const DEFAULT_EXECUTION_JOB_PREVIEW: NonNullable<ProviderHandoffReadinessDebugModel["executionJobPreview"]> = {
+  previewId: "",
+  executionAllowed: false,
+  executionBlocked: true,
+  intentOnly: true,
+  handoffId: "",
+  correlationKey: "",
+  summary: "No deterministic execution jobs could be previewed.",
+  jobs: [],
+  diagnostics: ["EXECUTION_JOB_PREVIEW_CREATED", "EXECUTION_JOB_PREVIEW_INTENT_ONLY"],
+};
 function normalizeGovernanceDecisionPackage(
   value: unknown,
 ): NonNullable<ProviderHandoffReadinessDebugModel["governanceDecisionPackage"]> {
@@ -289,6 +300,44 @@ function normalizeDryRunJobPlan(
     createdAt: normalizeToken(plan.createdAt),
   };
 }
+function normalizeExecutionJobPreview(
+  value: unknown,
+): NonNullable<ProviderHandoffReadinessDebugModel["executionJobPreview"]> {
+  const preview = normalizeObject(value);
+  const jobs = Array.isArray(preview.jobs)
+    ? preview.jobs
+        .map((entry) => normalizeObject(entry))
+        .map((entry) => ({
+          jobId: normalizeToken(entry.jobId),
+          jobType: normalizeToken(entry.jobType),
+          provider: normalizeToken(entry.provider),
+          environment: normalizeToken(entry.environment),
+          simulatedStatus: "preview_only" as const,
+          queueTarget: normalizeToken(entry.queueTarget) || "provider-control-plane",
+          workerTarget: normalizeToken(entry.workerTarget) || "provider-execution-worker",
+          payloadShape: {
+            providerId: normalizeToken(normalizeObject(entry.payloadShape).providerId),
+            operationKind: normalizeToken(normalizeObject(entry.payloadShape).operationKind),
+            siteId: normalizeToken(normalizeObject(entry.payloadShape).siteId),
+            siteVersionId: normalizeToken(normalizeObject(entry.payloadShape).siteVersionId),
+            correlationKey: normalizeToken(normalizeObject(entry.payloadShape).correlationKey),
+          },
+          diagnostics: normalizeList(entry.diagnostics),
+        }))
+        .filter((entry) => entry.jobId.length > 0)
+    : [];
+  return {
+    previewId: normalizeToken(preview.previewId),
+    executionAllowed: false,
+    executionBlocked: true,
+    intentOnly: true,
+    handoffId: normalizeToken(preview.handoffId),
+    correlationKey: normalizeToken(preview.correlationKey),
+    summary: normalizeToken(preview.summary) || "No deterministic execution jobs could be previewed.",
+    jobs,
+    diagnostics: normalizeList(preview.diagnostics),
+  };
+}
 
 function normalizeGovernanceAuthorization(
   value: unknown,
@@ -353,6 +402,7 @@ async function fetchReadinessModel(
   const executionPreconditionsEndpoint = `${proto}://${host}/api/gnr8/admin/provider-handoffs/${encodeURIComponent(handoffId)}/execution-preconditions`;
   const executionRemediationPlanEndpoint = `${proto}://${host}/api/gnr8/admin/provider-handoffs/${encodeURIComponent(handoffId)}/execution-remediation-plan`;
   const dryRunJobPlanEndpoint = `${proto}://${host}/api/gnr8/admin/provider-handoffs/${encodeURIComponent(handoffId)}/dryrun-job-plan`;
+  const executionJobPreviewEndpoint = `${proto}://${host}/api/gnr8/admin/provider-handoffs/${encodeURIComponent(handoffId)}/execution-job-preview`;
   const cookie = normalizeToken(incomingHeaders.get("cookie"));
   const requestHeaders = cookie ? { cookie } : undefined;
 
@@ -381,6 +431,7 @@ async function fetchReadinessModel(
       executionPreconditionsLedger: DEFAULT_EXECUTION_PRECONDITIONS_LEDGER,
       executionRemediationPlan: DEFAULT_EXECUTION_REMEDIATION_PLAN,
       dryRunJobPlan: DEFAULT_DRYRUN_JOB_PLAN,
+      executionJobPreview: DEFAULT_EXECUTION_JOB_PREVIEW,
     };
 
     if (!response.ok) {
@@ -399,6 +450,7 @@ async function fetchReadinessModel(
     let executionPreconditionsError: string | null = null;
     let executionRemediationPlanError: string | null = null;
     let dryRunJobPlanError: string | null = null;
+    let executionJobPreviewError: string | null = null;
     try {
       const reviewsResponse = await fetchImpl(reviewsEndpoint, { method: "GET", cache: "no-store", headers: requestHeaders });
       const reviewsPayload = (await reviewsResponse.json().catch(() => ({}))) as Record<string, unknown>;
@@ -475,6 +527,20 @@ async function fetchReadinessModel(
       dryRunJobPlanError = error instanceof Error ? error.message : "Unknown fetch error";
     }
     try {
+      const executionJobPreviewResponse = await fetchImpl(executionJobPreviewEndpoint, {
+        method: "GET",
+        cache: "no-store",
+        headers: requestHeaders,
+      });
+      const executionJobPreviewPayload = (await executionJobPreviewResponse.json().catch(() => ({}))) as Record<string, unknown>;
+      model.executionJobPreview = normalizeExecutionJobPreview(executionJobPreviewPayload.executionJobPreview);
+      if (!executionJobPreviewResponse.ok) {
+        executionJobPreviewError = normalizeToken(executionJobPreviewPayload.error) || `HTTP_${executionJobPreviewResponse.status}`;
+      }
+    } catch (error) {
+      executionJobPreviewError = error instanceof Error ? error.message : "Unknown fetch error";
+    }
+    try {
       const timelineResponse = await fetchImpl(governanceTimelineEndpoint, { method: "GET", cache: "no-store", headers: requestHeaders });
       const timelinePayload = (await timelineResponse.json().catch(() => ({}))) as Record<string, unknown>;
       model.governanceTimeline = normalizeGovernanceTimeline(timelinePayload.snapshots);
@@ -505,6 +571,9 @@ async function fetchReadinessModel(
     if (dryRunJobPlanError) {
       model.diagnostics = normalizeList([...model.diagnostics, `PROVIDER_DRYRUN_JOB_PLAN_FETCH_ERROR:${dryRunJobPlanError}`]);
     }
+    if (executionJobPreviewError) {
+      model.diagnostics = normalizeList([...model.diagnostics, `EXECUTION_JOB_PREVIEW_FETCH_ERROR:${executionJobPreviewError}`]);
+    }
 
     return {
       model,
@@ -534,6 +603,7 @@ async function fetchReadinessModel(
         executionPreconditionsLedger: DEFAULT_EXECUTION_PRECONDITIONS_LEDGER,
         executionRemediationPlan: DEFAULT_EXECUTION_REMEDIATION_PLAN,
         dryRunJobPlan: DEFAULT_DRYRUN_JOB_PLAN,
+        executionJobPreview: DEFAULT_EXECUTION_JOB_PREVIEW,
       },
       fetchError: error instanceof Error ? error.message : "Unknown fetch error",
       operatorReviewFetchError: null,

@@ -6,7 +6,7 @@ This is the first file every new ChatGPT/Codex thread should read.
 
 GNR8 is currently in provider/DNS control-plane hardening and migration/preview validation mode.
 The active emphasis is deterministic contracts, approval/handoff safety, and no hidden execution.
-Provider handoff readiness with Execution Blocker Remediation Planner / Missing Requirements Planner milestone is complete and testable end-to-end from deployed UI (seed + inspection surfaces), and execution remains explicitly blocked.
+Provider handoff readiness with Provider Planned Jobs Generation / Dry-run Job Plan Builder milestone is complete and testable end-to-end from deployed UI (seed + inspection surfaces), and execution remains explicitly blocked.
 The deployed dev-seed governance loop is manually verified end-to-end including governance decision package surfaces (still control-plane only).
 
 Current snapshot sources:
@@ -62,6 +62,7 @@ Completed readiness inspection routes:
 - `GET /api/gnr8/admin/provider-handoffs/[handoffId]/execution-readiness-gate` (read-only execution readiness gate)
 - `GET /api/gnr8/admin/provider-handoffs/[handoffId]/execution-preconditions` (read-only execution preconditions ledger)
 - `GET /api/gnr8/admin/provider-handoffs/[handoffId]/execution-remediation-plan` (read-only execution blocker remediation planner)
+- `GET /api/gnr8/admin/provider-handoffs/[handoffId]/dryrun-job-plan` (read-only dry-run planned jobs simulation evidence)
 
 Required production env flag:
 - `GNR8_ADMIN_PROVIDER_HANDOFF_READINESS_SEED_ENABLED=1`
@@ -83,9 +84,27 @@ Evidence and diagnostics milestone:
 - readiness UI displays Governance Snapshot section
 - readiness UI displays Governance Timeline section
 - readiness UI displays Authorization section
+- readiness UI displays Dry-run Job Plan section
 - readiness UI displays Execution Readiness Gate section
 - readiness UI displays Execution Preconditions Ledger section
 - readiness UI displays Execution Remediation Plan section
+- runtime dry-run job plan model exists: `runtime-provider-dryrun-job-plan.ts`
+- dry-run job plan verified deployed values:
+  - `jobCount`: `1`
+  - `summary`: `1 simulated provider jobs generated for readiness evidence.`
+  - first job:
+    - `jobType`: `provider_dns_upsert`
+    - `provider`: `openprovider`
+    - `environment`: `sandbox`
+    - `status`: `simulated`
+    - `reason`: `Deterministic simulation for operationKind=upsert_dns_record; execution remains disabled.`
+- dry-run job plan is simulated evidence only:
+  - no persisted execution jobs are created
+  - `plannedJobIds` are not changed
+  - no workers are enqueued
+  - no provider calls are made
+  - `executionAllowed` remains `false`
+  - `executionBlocked` remains `true`
 - governance authorization statuses:
   - `not_requested`
   - `pending_authorization`
@@ -213,14 +232,16 @@ Hard boundaries remain:
 - no external registrar calls
 - no secret reads/stores
 - no secret resolution
+- no persisted execution job creation from dry-run job plan
+- no `plannedJobIds` mutation from dry-run job plan
 - Openprovider sandbox planning/dry-run artifacts only. No provider execution is permitted, including sandbox execution. Control-plane metadata and deterministic planning only.
 
 ## F) Current Active Implementation Phase
 
-Active phase: Execution Blocker Remediation Planner / Missing Requirements Planner milestone (deployed and verified).
+Active phase: Provider Planned Jobs Generation / Dry-run Job Plan Builder milestone (deployed and verified).
 
 Practical next phase:
-1. Provider Planned Jobs Generation / Dry-run Job Plan Builder.
+1. Planned Job Materialization Contract / Execution Job Shape Preview.
 2. Keep execution paths in dry-run/sandbox-gated mode with explicit execution-blocked evidence (still no execution).
 
 ## G) How Next Thread Should Behave

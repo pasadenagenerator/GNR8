@@ -29,9 +29,16 @@ test("provider handoff readiness view source: renders form and intent-only warni
   assert.equal(combined.includes("Remediation guidance is advisory only. Execution remains disabled."), true);
   assert.equal(combined.includes("Dry-run Job Plan"), true);
   assert.equal(combined.includes("Job plan is simulated only. Execution remains disabled."), true);
+  assert.equal(combined.includes("Execution job preview is evidence only. Execution remains disabled."), true);
   assert.equal(combined.includes("jobCount"), true);
   assert.equal(combined.includes("jobType"), true);
   assert.equal(combined.includes("No dry-run jobs available."), true);
+  assert.equal(combined.includes("Execution Job Preview"), true);
+  assert.equal(combined.includes("queueTarget"), true);
+  assert.equal(combined.includes("workerTarget"), true);
+  assert.equal(combined.includes("simulatedStatus"), true);
+  assert.equal(combined.includes("payloadShape"), true);
+  assert.equal(combined.includes("No execution job previews available."), true);
 });
 
 test("provider handoff readiness view source: no execution controls rendered", async () => {
@@ -55,6 +62,7 @@ test("provider handoff readiness page source: separates readiness and operator r
   assert.equal(pageSource.includes("if (!reviewsResponse.ok)"), true);
   assert.equal(pageSource.includes("execution-remediation-plan"), true);
   assert.equal(pageSource.includes("dryrun-job-plan"), true);
+  assert.equal(pageSource.includes("execution-job-preview"), true);
   assert.equal(pageSource.includes("<ProviderHandoffReadinessDebugView model={model} fetchError={fetchError} operatorReviewFetchError={operatorReviewFetchError} />"), true);
   assert.equal(pageSource.includes("const cookie = normalizeToken(incomingHeaders.get(\"cookie\"));"), true);
 });

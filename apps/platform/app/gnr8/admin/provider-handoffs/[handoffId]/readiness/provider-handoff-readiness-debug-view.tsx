@@ -162,6 +162,33 @@ type DryRunJobPlanSummary = {
   diagnostics: string[];
   createdAt: string;
 };
+type ExecutionJobPreviewSummary = {
+  previewId: string;
+  executionAllowed: boolean;
+  executionBlocked: boolean;
+  intentOnly: boolean;
+  handoffId: string;
+  correlationKey: string;
+  summary: string;
+  jobs: {
+    jobId: string;
+    jobType: string;
+    provider: string;
+    environment: string;
+    simulatedStatus: "preview_only";
+    queueTarget: string;
+    workerTarget: string;
+    payloadShape: {
+      providerId: string;
+      operationKind: string;
+      siteId: string;
+      siteVersionId: string;
+      correlationKey: string;
+    };
+    diagnostics: string[];
+  }[];
+  diagnostics: string[];
+};
 
 export type ProviderHandoffReadinessDebugModel = {
   handoffId: string;
@@ -181,6 +208,7 @@ export type ProviderHandoffReadinessDebugModel = {
   executionPreconditionsLedger?: ExecutionPreconditionsLedgerSummary | null;
   executionRemediationPlan?: ExecutionRemediationPlanSummary | null;
   dryRunJobPlan?: DryRunJobPlanSummary | null;
+  executionJobPreview?: ExecutionJobPreviewSummary | null;
   operatorReviews: OperatorReviewSummary[];
   operatorReviewSummary: OperatorReviewStateSummary;
   operatorReviewIntentOnly: boolean;
@@ -240,6 +268,9 @@ export function ProviderHandoffReadinessDebugView(props: {
       </section>
       <section style={{ border: "1px solid #bfdbfe", borderRadius: 10, background: "#eff6ff", padding: 12, marginTop: 12 }}>
         <strong>Job plan is simulated only. Execution remains disabled.</strong>
+      </section>
+      <section style={{ border: "1px solid #bfdbfe", borderRadius: 10, background: "#eff6ff", padding: 12, marginTop: 12 }}>
+        <strong>Execution job preview is evidence only. Execution remains disabled.</strong>
       </section>
 
       {fetchError ? (
@@ -311,6 +342,40 @@ export function ProviderHandoffReadinessDebugView(props: {
           ))
         ) : (
           <p style={{ margin: 0, color: "#6b7280" }}>No dry-run jobs available.</p>
+        )}
+      </section>
+
+      <section style={{ border: "1px solid #dbe3ea", borderRadius: 10, background: "#ffffff", padding: 12, marginTop: 12 }}>
+        <h2 style={{ margin: "0 0 8px 0", fontSize: 16 }}>Execution Job Preview</h2>
+        <Field label="jobCount" value={String(display.executionJobPreview.jobs.length)} />
+        <Field label="summary" value={redactSecretLikeText(display.executionJobPreview.summary)} />
+        {display.executionJobPreview.jobs.length > 0 ? (
+          display.executionJobPreview.jobs.map((job) => (
+            <div
+              key={job.jobId}
+              style={{ border: "1px solid #e5e7eb", borderRadius: 8, padding: 10, marginBottom: 8, background: "#f9fafb" }}
+            >
+              <Field label="jobType" value={redactSecretLikeText(job.jobType)} />
+              <Field label="provider" value={redactSecretLikeText(job.provider)} />
+              <Field label="environment" value={redactSecretLikeText(job.environment)} />
+              <Field label="queueTarget" value={redactSecretLikeText(job.queueTarget)} />
+              <Field label="workerTarget" value={redactSecretLikeText(job.workerTarget)} />
+              <Field label="simulatedStatus" value={redactSecretLikeText(job.simulatedStatus)} />
+              <Field
+                label="payloadShape"
+                value={JSON.stringify({
+                  providerId: job.payloadShape.providerId,
+                  operationKind: job.payloadShape.operationKind,
+                  siteId: job.payloadShape.siteId,
+                  siteVersionId: job.payloadShape.siteVersionId,
+                  correlationKey: job.payloadShape.correlationKey,
+                })}
+              />
+              <ListField label="diagnostics" values={job.diagnostics} />
+            </div>
+          ))
+        ) : (
+          <p style={{ margin: 0, color: "#6b7280" }}>No execution job previews available.</p>
         )}
       </section>
 

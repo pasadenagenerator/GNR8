@@ -4,10 +4,33 @@
 2026-05-25
 
 ## Current Phase
-Execution Blocker Remediation Planner / Missing Requirements Planner milestone (control-plane only, deployed and verified).
+Provider Planned Jobs Generation / Dry-run Job Plan Builder milestone (control-plane only, deployed and verified).
 
 ## Latest Completed Milestone
 
+- Provider Planned Jobs Generation / Dry-run Job Plan Builder is deployed and manually verified end-to-end (control-plane only).
+- Runtime model exists:
+  - `runtime-provider-dryrun-job-plan.ts`
+- Dry-run job plan API is deployed:
+  - `GET /api/gnr8/admin/provider-handoffs/[handoffId]/dryrun-job-plan`
+- Readiness UI now includes a Dry-run Job Plan section.
+- Dry-run Job Plan verified deployed values:
+  - `jobCount`: `1`
+  - `summary`: `1 simulated provider jobs generated for readiness evidence.`
+  - first job:
+    - `jobType`: `provider_dns_upsert`
+    - `provider`: `openprovider`
+    - `environment`: `sandbox`
+    - `status`: `simulated`
+    - `reason`: `Deterministic simulation for operationKind=upsert_dns_record; execution remains disabled.`
+- Dry-run Job Plan boundary distinction:
+  - simulated evidence only
+  - does not create persisted execution jobs
+  - does not change `plannedJobIds`
+  - does not enqueue workers
+  - does not call providers
+  - `executionAllowed` remains `false`
+  - `executionBlocked` remains `true`
 - Governance authorization intent is deployed and manually verified end-to-end (control-plane only).
 - Control-plane layers for provider settings, credential reference contract, provider selection/communicator, job planning, approvals, and execution handoffs are implemented.
 - Deterministic Openprovider sandbox adapter and contract/readiness boundaries are in place.
@@ -175,7 +198,7 @@ Execution Blocker Remediation Planner / Missing Requirements Planner milestone (
 
 ## Next Milestone
 
-- Provider Planned Jobs Generation / Dry-run Job Plan Builder (still no execution).
+- Planned Job Materialization Contract / Execution Job Shape Preview (still no execution).
 
 ## Latest Provider Control Plane State
 
@@ -256,9 +279,11 @@ Routes:
 - `GET /api/gnr8/admin/provider-handoffs/[handoffId]/execution-readiness-gate` (read-only execution readiness gate)
 - `GET /api/gnr8/admin/provider-handoffs/[handoffId]/execution-preconditions` (read-only execution preconditions ledger)
 - `GET /api/gnr8/admin/provider-handoffs/[handoffId]/execution-remediation-plan` (read-only execution blocker remediation planner)
+- `GET /api/gnr8/admin/provider-handoffs/[handoffId]/dryrun-job-plan` (read-only dry-run planned jobs simulation evidence)
 
 Readiness UI operator review controls:
 - Governance Snapshot section (deterministic evidence projection)
+- Dry-run Job Plan section
 - Execution Readiness Gate section
 - Execution Preconditions Ledger section
 - Execution Remediation Plan section
@@ -287,6 +312,8 @@ Required production env flag:
 - NO worker execution for provider actions.
 - NO secret reads.
 - NO secret resolution.
+- NO persisted execution job creation from dry-run job plan.
+- NO `plannedJobIds` mutation from dry-run job plan.
 - Openprovider sandbox planning/dry-run artifacts only. No provider execution is permitted, including sandbox execution. Control-plane metadata and deterministic planning only.
 - `approved_for_future_execution` is intent-only and does not authorize execution.
 - `authorized_for_future_execution` is intent-only and does not authorize execution.

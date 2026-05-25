@@ -111,6 +111,26 @@ export function buildProviderHandoffReadinessDebugDisplay(model: ProviderHandoff
         reason: redactSecretLikeText(job.reason),
       }))
     : [];
+  const executionJobPreview = model.executionJobPreview;
+  const executionPreviewJobs = Array.isArray(executionJobPreview?.jobs)
+    ? executionJobPreview.jobs.map((job) => ({
+        jobId: redactSecretLikeText(job.jobId),
+        jobType: redactSecretLikeText(job.jobType),
+        provider: redactSecretLikeText(job.provider),
+        environment: redactSecretLikeText(job.environment),
+        simulatedStatus: "preview_only" as const,
+        queueTarget: redactSecretLikeText(job.queueTarget),
+        workerTarget: redactSecretLikeText(job.workerTarget),
+        payloadShape: {
+          providerId: redactSecretLikeText(job.payloadShape?.providerId),
+          operationKind: redactSecretLikeText(job.payloadShape?.operationKind),
+          siteId: redactSecretLikeText(job.payloadShape?.siteId),
+          siteVersionId: redactSecretLikeText(job.payloadShape?.siteVersionId),
+          correlationKey: redactSecretLikeText(job.payloadShape?.correlationKey),
+        },
+        diagnostics: sanitizeDisplayList(job.diagnostics),
+      }))
+    : [];
 
   return {
     executionBlockedLabel: "Execution blocked",
@@ -228,6 +248,17 @@ export function buildProviderHandoffReadinessDebugDisplay(model: ProviderHandoff
       summary: redactSecretLikeText(dryRunJobPlan?.summary) || "No deterministic jobs could be generated.",
       diagnostics: sanitizeDisplayList(dryRunJobPlan?.diagnostics),
       createdAt: redactSecretLikeText(dryRunJobPlan?.createdAt),
+    },
+    executionJobPreview: {
+      previewId: redactSecretLikeText(executionJobPreview?.previewId),
+      executionAllowed: false,
+      executionBlocked: true,
+      intentOnly: true,
+      handoffId: redactSecretLikeText(executionJobPreview?.handoffId),
+      correlationKey: redactSecretLikeText(executionJobPreview?.correlationKey),
+      summary: redactSecretLikeText(executionJobPreview?.summary) || "No deterministic execution jobs could be previewed.",
+      jobs: executionPreviewJobs,
+      diagnostics: sanitizeDisplayList(executionJobPreview?.diagnostics),
     },
     operatorReviews: [...model.operatorReviews]
       .map((review) => ({
