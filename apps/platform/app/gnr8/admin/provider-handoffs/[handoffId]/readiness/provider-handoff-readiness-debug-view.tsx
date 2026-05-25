@@ -378,7 +378,27 @@ function collectUniqueNonEmpty(values: string[]): string[] {
   return [...new Set(values.map((value) => value.trim()).filter((value) => value.length > 0))];
 }
 
-function ExecutiveSummaryCard(props: { title: string; badgeLevel: EvidenceBadgeLevel; lines: string[] }) {
+function EvidenceSourceChip(props: { source: string }) {
+  return (
+    <span
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        border: "1px solid #d1d5db",
+        borderRadius: 999,
+        padding: "2px 8px",
+        fontSize: 11,
+        color: "#6b7280",
+        background: "#f9fafb",
+        lineHeight: 1.2,
+      }}
+    >
+      {props.source}
+    </span>
+  );
+}
+
+function ExecutiveSummaryCard(props: { title: string; badgeLevel: EvidenceBadgeLevel; lines: string[]; sources: string[] }) {
   const theme = BADGE_THEME[props.badgeLevel];
   return (
     <section style={{ border: "1px solid #dbe3ea", borderRadius: 10, background: "#ffffff", padding: 12 }}>
@@ -412,6 +432,14 @@ function ExecutiveSummaryCard(props: { title: string; badgeLevel: EvidenceBadgeL
       ) : (
         <p style={{ margin: "10px 0 0 0", color: "#6b7280" }}>No summary available.</p>
       )}
+      <div style={{ marginTop: 10 }}>
+        <div style={{ fontSize: 11, fontWeight: 700, color: "#6b7280", marginBottom: 6 }}>Evidence Sources</div>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+          {props.sources.map((source) => (
+            <EvidenceSourceChip key={`${props.title}:${source}`} source={source} />
+          ))}
+        </div>
+      </div>
     </section>
   );
 }
@@ -530,6 +558,12 @@ export function ProviderHandoffReadinessDebugView(props: {
     display.governanceDecisionPackage.recommendedAction,
     ...display.executionRemediationPlan.actions.map((action) => action.recommendedAction),
   ]);
+  const executiveSummaryEvidenceSources = {
+    currentSituation: ["Readiness", "Safety Manifest"],
+    primaryBlockers: ["Execution Preconditions Ledger", "Execution Readiness Gate", "Execution Remediation Plan"],
+    verifiedPositives: ["Governance Decision Package", "Execution Preconditions Ledger", "Safety Manifest"],
+    recommendedNextStep: ["Execution Remediation Plan"],
+  };
 
   return (
     <main
@@ -564,10 +598,30 @@ export function ProviderHandoffReadinessDebugView(props: {
 
       <GroupSection title="Executive Summary">
         <section style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 10 }}>
-          <ExecutiveSummaryCard title="Current Situation" badgeLevel="warning" lines={currentSituationLines} />
-          <ExecutiveSummaryCard title="Primary Blockers" badgeLevel="critical" lines={primaryBlockerLines} />
-          <ExecutiveSummaryCard title="Verified Positives" badgeLevel="success" lines={verifiedPositiveLines} />
-          <ExecutiveSummaryCard title="Recommended Next Step" badgeLevel="info" lines={recommendedNextStepLines} />
+          <ExecutiveSummaryCard
+            title="Current Situation"
+            badgeLevel="warning"
+            lines={currentSituationLines}
+            sources={executiveSummaryEvidenceSources.currentSituation}
+          />
+          <ExecutiveSummaryCard
+            title="Primary Blockers"
+            badgeLevel="critical"
+            lines={primaryBlockerLines}
+            sources={executiveSummaryEvidenceSources.primaryBlockers}
+          />
+          <ExecutiveSummaryCard
+            title="Verified Positives"
+            badgeLevel="success"
+            lines={verifiedPositiveLines}
+            sources={executiveSummaryEvidenceSources.verifiedPositives}
+          />
+          <ExecutiveSummaryCard
+            title="Recommended Next Step"
+            badgeLevel="info"
+            lines={recommendedNextStepLines}
+            sources={executiveSummaryEvidenceSources.recommendedNextStep}
+          />
         </section>
       </GroupSection>
 

@@ -27,6 +27,14 @@ test("provider handoff readiness view source: renders form and intent-only warni
   assert.equal(combined.includes("Primary Blockers"), true);
   assert.equal(combined.includes("Verified Positives"), true);
   assert.equal(combined.includes("Recommended Next Step"), true);
+  assert.equal(combined.includes("Evidence Sources"), true);
+  assert.equal(combined.includes("EvidenceSourceChip"), true);
+  assert.equal(combined.includes("Readiness"), true);
+  assert.equal(combined.includes("Safety Manifest"), true);
+  assert.equal(combined.includes("Execution Preconditions Ledger"), true);
+  assert.equal(combined.includes("Execution Readiness Gate"), true);
+  assert.equal(combined.includes("Execution Remediation Plan"), true);
+  assert.equal(combined.includes("Governance Decision Package"), true);
   assert.equal(combined.includes("No summary available."), true);
   assert.equal(combined.includes("Critical:"), true);
   assert.equal(combined.includes("Warnings:"), true);
