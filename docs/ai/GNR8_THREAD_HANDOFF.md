@@ -11,6 +11,7 @@ The deployed dev-seed governance loop is manually verified end-to-end including 
 Provider Execution Contract Envelope / Worker Payload Contract Preview milestone is implemented, deployed, and manually verified (still control-plane only, no execution).
 Provider Execution Safety Manifest / No-Execution Boundary Proof milestone is implemented, deployed, and manually verified (still control-plane only, no execution).
 Evidence Surface Consolidation / Operator Cockpit Layout Pass milestone is implemented, deployed, and manually verified (UI/read-model only, still control-plane only, no execution).
+Operator Cockpit Evidence Status Badges / Severity System milestone is implemented, deployed, and manually verified (UI/read-model only, still control-plane only, no execution).
 
 Current snapshot sources:
 - `docs/ai/GNR8_CURRENT_STATE.md`
@@ -74,6 +75,27 @@ Required production env flag:
 - `GNR8_ADMIN_PROVIDER_HANDOFF_READINESS_SEED_ENABLED=1`
 
 Evidence and diagnostics milestone:
+- Operator Cockpit Evidence Status Badges / Severity System is deployed:
+  - badge severity levels: `critical`, `warning`, `success`, `info`, `neutral`
+  - verified counters: `Critical: 8`, `Warnings: 4`, `Success: 8`
+  - verified top cards: `Execution State`, `Governance State`, `Readiness State`, `Safety State`
+  - verified sticky banner: `Execution impossible. Control-plane simulation only.`
+  - verified grouping: `Governance`, `Execution Analysis`, `Execution Simulation`, `Safety`
+  - UI/read-model only, no runtime changes, no API changes, no behavior changes
+  - no execution controls added
+  - milestone note: some badge chips currently render as a compact raw evidence strip below counters; acceptable for this milestone and may be refined later
+  - execution boundary remains explicit:
+    - no provider execution
+    - no sandbox execution
+    - no DNS writes
+    - no Openprovider/registrar calls
+    - no queue/Inngest/worker execution
+    - no secret resolution
+  - conclusion:
+    - operator can now identify execution risk, readiness state, governance state, and safety state quickly through counters and visual badges
+  - recommended next milestone:
+    - Operator Cockpit Compact Evidence Strip / Visual Polish Pass
+    - still no execution
 - Evidence Surface Consolidation / Operator Cockpit Layout Pass is deployed:
   - readiness page reorganized from linear debug layout into operator-oriented cockpit layout
   - sticky summary banner: `Execution impossible. Control-plane simulation only.`
@@ -318,7 +340,7 @@ Example verified values:
 Future note:
 - deterministic `createdAt` may show epoch values for dev-seed artifacts
 - potential future improvement: add `snapshotCreatedAt` and `persistedAt`
-- recommended next milestone: Operator Cockpit Evidence Status Badges / Severity System (still no execution)
+- recommended next milestone: Operator Cockpit Compact Evidence Strip / Visual Polish Pass (still no execution)
 
 Hard boundaries remain:
 - no live provider execution
@@ -345,10 +367,10 @@ Hard boundaries remain:
 
 ## F) Current Active Implementation Phase
 
-Active phase: Evidence Surface Consolidation / Operator Cockpit Layout Pass milestone (deployed and verified).
+Active phase: Operator Cockpit Evidence Status Badges / Severity System milestone (deployed and verified).
 
 Practical next phase:
-1. Operator Cockpit Evidence Status Badges / Severity System.
+1. Operator Cockpit Compact Evidence Strip / Visual Polish Pass.
 2. Keep execution paths in dry-run/sandbox-gated mode with explicit execution-blocked evidence (still no execution).
 
 ## G) How Next Thread Should Behave

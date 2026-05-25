@@ -4,10 +4,54 @@
 2026-05-25
 
 ## Current Phase
-Evidence Surface Consolidation / Operator Cockpit Layout Pass milestone (control-plane only, deployed and verified).
+Operator Cockpit Evidence Status Badges / Severity System milestone (control-plane only, deployed and verified).
 
 ## Latest Completed Milestone
 
+- Operator Cockpit Evidence Status Badges / Severity System is implemented, deployed, and manually verified end-to-end (control-plane only).
+- Evidence counters and badge levels are now visible in the Operator Cockpit for fast risk/readiness/governance/safety scanning.
+- Badge severity levels verified:
+  - `critical`
+  - `warning`
+  - `success`
+  - `info`
+  - `neutral`
+- Deployed verified counters:
+  - `Critical: 8`
+  - `Warnings: 4`
+  - `Success: 8`
+- Verified top cards:
+  - `Execution State`
+  - `Governance State`
+  - `Readiness State`
+  - `Safety State`
+- Verified sticky banner:
+  - `Execution impossible. Control-plane simulation only.`
+- Verified grouping:
+  - `Governance`
+  - `Execution Analysis`
+  - `Execution Simulation`
+  - `Safety`
+- Milestone scope distinction:
+  - UI/read-model only
+  - no runtime changes
+  - no API changes
+  - no behavior changes
+  - no execution controls added
+- Milestone note:
+  - some badge chips currently render as a compact raw evidence strip below the counters; this is acceptable for the milestone and may be refined later
+- Boundary remains explicit:
+  - no provider execution
+  - no sandbox execution
+  - no DNS writes
+  - no Openprovider/registrar calls
+  - no queue/Inngest/worker execution
+  - no secret resolution
+- Conclusion:
+  - operator can now identify execution risk, readiness state, governance state, and safety state quickly through counters and visual badges
+- Recommended next milestone:
+  - Operator Cockpit Compact Evidence Strip / Visual Polish Pass
+  - still no execution
 - Evidence Surface Consolidation / Operator Cockpit Layout Pass is implemented, deployed, and manually verified end-to-end (control-plane only).
 - Readiness page has been reorganized from a linear debug page into an operator-oriented cockpit layout.
 - Cockpit layout updates:
@@ -289,7 +333,7 @@ Evidence Surface Consolidation / Operator Cockpit Layout Pass milestone (control
 
 ## Recommended Next Milestone
 
-- Operator Cockpit Evidence Status Badges / Severity System
+- Operator Cockpit Compact Evidence Strip / Visual Polish Pass
 - remains control-plane only (no execution)
 - Future note:
   - deterministic `createdAt` may show epoch values for dev-seed artifacts
@@ -302,7 +346,7 @@ Evidence Surface Consolidation / Operator Cockpit Layout Pass milestone (control
 
 ## Next Milestone
 
-- Operator Cockpit Evidence Status Badges / Severity System (still no execution).
+- Operator Cockpit Compact Evidence Strip / Visual Polish Pass (still no execution).
 
 ## Latest Provider Control Plane State
 
