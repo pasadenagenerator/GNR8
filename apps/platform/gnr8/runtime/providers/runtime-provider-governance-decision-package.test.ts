@@ -110,6 +110,65 @@ test("governance decision package: missing evidence fails closed", () => {
   assert.equal(result.readinessStatus, "failed_closed");
   assert.equal(result.decisionSignals.recommendedAction, "failed_closed");
   assert.equal(result.diagnostics.includes("GOVERNANCE_DECISION_PACKAGE_FAILED_CLOSED"), true);
+  assert.equal(result.diagnostics.includes("GOVERNANCE_DECISION_PACKAGE_CREATED"), false);
+});
+
+test("governance decision package: valid package never includes FAILED_CLOSED", () => {
+  const result = createRuntimeProviderGovernanceDecisionPackage({
+    handoffArtifact: baseHandoffArtifact(),
+    workerPickupEvidence: baseEvidence({
+      diagnostics: [
+        "PROVIDER_WORKER_PICKUP_EVIDENCE_CREATED:EVIDENCE_CREATED",
+        "GOVERNANCE_DECISION_PACKAGE_FAILED_CLOSED",
+      ],
+    }),
+    createdAt: "2026-05-25T00:00:00.000Z",
+  });
+
+  assert.equal(result.diagnostics.includes("GOVERNANCE_DECISION_PACKAGE_CREATED"), true);
+  assert.equal(result.diagnostics.includes("GOVERNANCE_DECISION_PACKAGE_FAILED_CLOSED"), false);
+  assert.equal(result.diagnostics.includes("GOVERNANCE_DECISION_PACKAGE_EVIDENCE_AGGREGATED"), true);
+});
+
+test("governance decision package: fail-closed package never includes CREATED", () => {
+  const result = createRuntimeProviderGovernanceDecisionPackage({
+    handoffArtifact: null,
+    workerPickupEvidence: baseEvidence({
+      diagnostics: [
+        "PROVIDER_WORKER_PICKUP_EVIDENCE_CREATED:EVIDENCE_CREATED",
+        "GOVERNANCE_DECISION_PACKAGE_CREATED",
+      ],
+    }),
+    createdAt: "2026-05-25T00:00:00.000Z",
+  });
+
+  assert.equal(result.diagnostics.includes("GOVERNANCE_DECISION_PACKAGE_FAILED_CLOSED"), true);
+  assert.equal(result.diagnostics.includes("GOVERNANCE_DECISION_PACKAGE_CREATED"), false);
+  assert.equal(result.diagnostics.includes("GOVERNANCE_DECISION_PACKAGE_EVIDENCE_AGGREGATED"), true);
+});
+
+test("governance decision package: diagnostics are mutually exclusive", () => {
+  const valid = createRuntimeProviderGovernanceDecisionPackage({
+    handoffArtifact: baseHandoffArtifact(),
+    workerPickupEvidence: baseEvidence(),
+    createdAt: "2026-05-25T00:00:00.000Z",
+  });
+  const failClosed = createRuntimeProviderGovernanceDecisionPackage({
+    handoffArtifact: null,
+    workerPickupEvidence: null,
+    createdAt: "2026-05-25T00:00:00.000Z",
+  });
+
+  assert.equal(
+    valid.diagnostics.includes("GOVERNANCE_DECISION_PACKAGE_CREATED") &&
+      valid.diagnostics.includes("GOVERNANCE_DECISION_PACKAGE_FAILED_CLOSED"),
+    false,
+  );
+  assert.equal(
+    failClosed.diagnostics.includes("GOVERNANCE_DECISION_PACKAGE_CREATED") &&
+      failClosed.diagnostics.includes("GOVERNANCE_DECISION_PACKAGE_FAILED_CLOSED"),
+    false,
+  );
 });
 
 test("governance decision package: authorization approved remains blocked", () => {

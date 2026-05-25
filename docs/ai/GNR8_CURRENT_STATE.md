@@ -4,7 +4,7 @@
 2026-05-25
 
 ## Current Phase
-Governance Authorization Intent milestone (control-plane only, deployed and verified).
+Governance Decision Package / Pre-execution Readiness Dossier milestone (control-plane only, deployed and verified).
 
 ## Latest Completed Milestone
 
@@ -63,6 +63,21 @@ Governance Authorization Intent milestone (control-plane only, deployed and veri
   - `authorized_for_future_execution`
   - `denied`
 - `authorized_for_future_execution` remains intent-only and does not authorize execution.
+- Governance Decision Package / Pre-execution Readiness Dossier is deployed and manually verified.
+- Verified deployed flow:
+  - readiness
+  - operator review summary
+  - governance authorization
+  - governance snapshot
+  - governance timeline
+  - governance decision package
+- Governance Decision Package verified values:
+  - `recommendedAction`: `remain_blocked`
+  - `executionBlocked`: `true`
+  - `reviewStatus`: `approved_for_future_execution`
+  - `authorizationStatus`: `authorized_for_future_execution`
+  - `snapshotCount`: `3`
+- Decision package remains advisory only; execution remains blocked.
 - Verified deployed governance loop behavior:
   - readiness-test UI creates/reuses deterministic handoff
   - readiness inspection loads `handoffArtifact` and `workerPickupEvidence`
@@ -100,7 +115,7 @@ Governance Authorization Intent milestone (control-plane only, deployed and veri
 
 ## Next Milestone
 
-- Governance decision package / pre-execution readiness dossier (still no execution).
+- Governance decision package diagnostics normalization and downstream operator UX hardening (still no execution).
 
 ## Latest Provider Control Plane State
 

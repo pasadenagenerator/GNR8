@@ -53,6 +53,11 @@ function uniqueSorted(values: readonly string[]): string[] {
   return [...new Set(values.map((value) => sanitizeToken(value)).filter(Boolean))].sort((a, b) => a.localeCompare(b));
 }
 
+const GOVERNANCE_DECISION_PACKAGE_STATUS_DIAGNOSTICS = new Set([
+  "GOVERNANCE_DECISION_PACKAGE_CREATED",
+  "GOVERNANCE_DECISION_PACKAGE_FAILED_CLOSED",
+]);
+
 function pickLatestSnapshot(
   snapshots: readonly RuntimeProviderGovernanceSnapshotRecord[],
 ): RuntimeProviderGovernanceSnapshotRecord | null {
@@ -162,7 +167,9 @@ export function createRuntimeProviderGovernanceDecisionPackage(input: {
   });
 
   const diagnostics = uniqueSorted([
-    ...(input.workerPickupEvidence?.diagnostics ?? []),
+    ...(input.workerPickupEvidence?.diagnostics ?? []).filter(
+      (diagnostic) => !GOVERNANCE_DECISION_PACKAGE_STATUS_DIAGNOSTICS.has(sanitizeToken(diagnostic)),
+    ),
     hasMissingEvidence ? "GOVERNANCE_DECISION_PACKAGE_FAILED_CLOSED" : "GOVERNANCE_DECISION_PACKAGE_CREATED",
     "GOVERNANCE_DECISION_PACKAGE_EVIDENCE_AGGREGATED",
   ]);

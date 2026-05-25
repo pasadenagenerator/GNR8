@@ -6,8 +6,8 @@ This is the first file every new ChatGPT/Codex thread should read.
 
 GNR8 is currently in provider/DNS control-plane hardening and migration/preview validation mode.
 The active emphasis is deterministic contracts, approval/handoff safety, and no hidden execution.
-Provider handoff readiness with Governance Authorization Intent milestone is complete and testable end-to-end from deployed UI (seed + inspection surfaces), and execution remains explicitly blocked.
-The deployed dev-seed governance loop is manually verified end-to-end including authorization intent persistence and timeline audit surfaces (still control-plane only).
+Provider handoff readiness with Governance Decision Package / Pre-execution Readiness Dossier milestone is complete and testable end-to-end from deployed UI (seed + inspection surfaces), and execution remains explicitly blocked.
+The deployed dev-seed governance loop is manually verified end-to-end including governance decision package surfaces (still control-plane only).
 
 Current snapshot sources:
 - `docs/ai/GNR8_CURRENT_STATE.md`
@@ -111,6 +111,7 @@ Deployed manual verification loop (completed):
 - operator review summary displays persisted review state
 - Governance Snapshot is displayed
 - Governance Timeline is displayed
+- Governance Decision Package is displayed
 - Governance Timeline verified fields:
   - `snapshotId`
   - `createdAt`
@@ -119,6 +120,24 @@ Deployed manual verification loop (completed):
   - `readinessStatus`
   - `diagnostics`
 - `executionBlocked` remains `true`
+
+Governance Decision Package milestone verification:
+- verified deployed flow:
+  - readiness
+  - operator review summary
+  - governance authorization
+  - governance snapshot
+  - governance timeline
+  - governance decision package
+- verified values:
+  - `recommendedAction`: `remain_blocked`
+  - `executionBlocked`: `true`
+  - `reviewStatus`: `approved_for_future_execution`
+  - `authorizationStatus`: `authorized_for_future_execution`
+  - `snapshotCount`: `3`
+- boundary reminder:
+  - decision package remains advisory only
+  - execution remains blocked
 
 Example verified values:
 - `authorizationStatus`: `authorized_for_future_execution`
@@ -148,10 +167,10 @@ Hard boundaries remain:
 
 ## F) Current Active Implementation Phase
 
-Active phase: Governance Authorization Intent milestone (deployed and verified).
+Active phase: Governance Decision Package / Pre-execution Readiness Dossier milestone (deployed and verified).
 
 Practical next phase:
-1. Governance decision package / pre-execution readiness dossier.
+1. Governance decision package diagnostics normalization and downstream operator UX hardening.
 2. Keep execution paths in dry-run/sandbox-gated mode with explicit execution-blocked evidence (still no execution).
 
 ## G) How Next Thread Should Behave
