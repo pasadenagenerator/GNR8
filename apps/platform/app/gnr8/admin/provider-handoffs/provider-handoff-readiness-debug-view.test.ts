@@ -22,6 +22,12 @@ test("provider handoff readiness view source: renders form and intent-only warni
   assert.equal(combined.includes("Review intent only. Execution remains blocked."), true);
   assert.equal(combined.includes("Authorization is intent only. Execution remains blocked."), true);
   assert.equal(combined.includes("Execution impossible. Control-plane simulation only."), true);
+  assert.equal(combined.includes("Executive Summary"), true);
+  assert.equal(combined.includes("Current Situation"), true);
+  assert.equal(combined.includes("Primary Blockers"), true);
+  assert.equal(combined.includes("Verified Positives"), true);
+  assert.equal(combined.includes("Recommended Next Step"), true);
+  assert.equal(combined.includes("No summary available."), true);
   assert.equal(combined.includes("Critical:"), true);
   assert.equal(combined.includes("Warnings:"), true);
   assert.equal(combined.includes("Success:"), true);

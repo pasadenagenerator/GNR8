@@ -374,6 +374,48 @@ function EvidenceStripGroup(props: { title: string; entries: Array<{ label: stri
   );
 }
 
+function collectUniqueNonEmpty(values: string[]): string[] {
+  return [...new Set(values.map((value) => value.trim()).filter((value) => value.length > 0))];
+}
+
+function ExecutiveSummaryCard(props: { title: string; badgeLevel: EvidenceBadgeLevel; lines: string[] }) {
+  const theme = BADGE_THEME[props.badgeLevel];
+  return (
+    <section style={{ border: "1px solid #dbe3ea", borderRadius: 10, background: "#ffffff", padding: 12 }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+        <h3 style={{ margin: 0, fontSize: 15 }}>{props.title}</h3>
+        <span
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            border: `1px solid ${theme.border}`,
+            borderRadius: 999,
+            padding: "2px 8px",
+            fontSize: 11,
+            fontWeight: 700,
+            background: theme.bg,
+            color: theme.text,
+            textTransform: "uppercase",
+          }}
+        >
+          {props.badgeLevel}
+        </span>
+      </div>
+      {props.lines.length > 0 ? (
+        <ul style={{ margin: "10px 0 0 18px", padding: 0, color: "#1f2937" }}>
+          {props.lines.map((line) => (
+            <li key={`${props.title}:${line}`} style={{ marginTop: 4 }}>
+              {line}
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p style={{ margin: "10px 0 0 0", color: "#6b7280" }}>No summary available.</p>
+      )}
+    </section>
+  );
+}
+
 type TimelineBadgeLevel = "critical" | "warning" | "success" | "neutral";
 
 function resolveTimelineBadgeLevel(status: string): TimelineBadgeLevel {
@@ -465,6 +507,29 @@ export function ProviderHandoffReadinessDebugView(props: {
     },
     { critical: 0, warning: 0, success: 0 },
   );
+  const currentSituationLines = collectUniqueNonEmpty([
+    display.executionSafetyManifest.summary,
+    display.executionBlockedLabel,
+    display.reviewOnlyLabel,
+  ]);
+  const primaryBlockerLines = collectUniqueNonEmpty([
+    ...display.blockedReasons,
+    ...display.executionReadinessGate.blockingReasons,
+    ...display.executionPreconditionsLedger.missingRequirements.map((requirement) => requirement.reason),
+    ...display.executionPreconditionsLedger.blockedRequirements.map((requirement) => requirement.reason),
+    ...display.executionRemediationPlan.actions.filter((action) => action.priority === "critical").map((action) => action.reason),
+  ]);
+  const verifiedPositiveLines = collectUniqueNonEmpty([
+    ...display.executionReadinessGate.requiredConditions.filter((condition) => condition.status === "passed").map((condition) => condition.reason),
+    ...display.executionPreconditionsLedger.requirements.filter((requirement) => requirement.status === "satisfied").map((requirement) => requirement.reason),
+    ...display.executionSafetyManifest.barriers.map((barrier) => barrier.reason),
+    ...display.executionSafetyManifest.diagnostics,
+  ]);
+  const recommendedNextStepLines = collectUniqueNonEmpty([
+    display.nextAllowedAction,
+    display.governanceDecisionPackage.recommendedAction,
+    ...display.executionRemediationPlan.actions.map((action) => action.recommendedAction),
+  ]);
 
   return (
     <main
@@ -496,6 +561,15 @@ export function ProviderHandoffReadinessDebugView(props: {
           </div>
         </div>
       </section>
+
+      <GroupSection title="Executive Summary">
+        <section style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 10 }}>
+          <ExecutiveSummaryCard title="Current Situation" badgeLevel="warning" lines={currentSituationLines} />
+          <ExecutiveSummaryCard title="Primary Blockers" badgeLevel="critical" lines={primaryBlockerLines} />
+          <ExecutiveSummaryCard title="Verified Positives" badgeLevel="success" lines={verifiedPositiveLines} />
+          <ExecutiveSummaryCard title="Recommended Next Step" badgeLevel="info" lines={recommendedNextStepLines} />
+        </section>
+      </GroupSection>
 
       {fetchError ? (
         <section style={{ border: "1px solid #fecaca", borderRadius: 10, background: "#fff1f2", padding: 12, marginTop: 12 }}>
