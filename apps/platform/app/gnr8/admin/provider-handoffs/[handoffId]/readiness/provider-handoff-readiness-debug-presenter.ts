@@ -90,6 +90,16 @@ export function buildProviderHandoffReadinessDebugDisplay(model: ProviderHandoff
         reason: redactSecretLikeText(requirement.reason),
       }))
     : [];
+  const executionRemediationPlan = model.executionRemediationPlan;
+  const executionRemediationActions = Array.isArray(executionRemediationPlan?.actions)
+    ? executionRemediationPlan.actions.map((action) => ({
+        actionId: redactSecretLikeText(action.actionId),
+        priority: redactSecretLikeText(action.priority) as "critical" | "high" | "normal",
+        source: redactSecretLikeText(action.source) as "ledger" | "gate" | "handoff",
+        reason: redactSecretLikeText(action.reason),
+        recommendedAction: redactSecretLikeText(action.recommendedAction),
+      }))
+    : [];
 
   return {
     executionBlockedLabel: "Execution blocked",
@@ -182,6 +192,19 @@ export function buildProviderHandoffReadinessDebugDisplay(model: ProviderHandoff
       blockedRequirements: executionPreconditionsLedgerBlockedRequirements,
       requirements: executionPreconditionsLedgerRequirements,
       diagnostics: sanitizeDisplayList(executionPreconditionsLedger?.diagnostics),
+    },
+    executionRemediationPlan: {
+      planId: redactSecretLikeText(executionRemediationPlan?.planId),
+      overallStatus: (redactSecretLikeText(executionRemediationPlan?.overallStatus) ||
+        "ready_but_execution_disabled") as "blocked" | "missing_requirements" | "ready_but_execution_disabled",
+      summary:
+        redactSecretLikeText(executionRemediationPlan?.summary) ||
+        "All evidence conditions satisfied; execution remains intentionally disabled.",
+      executionAllowed: false,
+      executionBlocked: true,
+      intentOnly: true,
+      actions: executionRemediationActions,
+      diagnostics: sanitizeDisplayList(executionRemediationPlan?.diagnostics),
     },
     operatorReviews: [...model.operatorReviews]
       .map((review) => ({

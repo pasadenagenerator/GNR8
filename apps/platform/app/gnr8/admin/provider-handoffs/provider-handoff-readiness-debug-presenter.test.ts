@@ -82,6 +82,24 @@ function buildModel(): ProviderHandoffReadinessDebugModel {
       executionBlocked: true,
     },
     operatorReviewIntentOnly: true,
+    executionRemediationPlan: {
+      planId: "plan_1",
+      overallStatus: "blocked",
+      summary: "Execution remains blocked because 2 remediation actions are still unresolved.",
+      executionAllowed: false,
+      executionBlocked: true,
+      intentOnly: true,
+      actions: [
+        {
+          actionId: "approval_status_blocked_1",
+          priority: "critical",
+          source: "ledger",
+          reason: "Approval status is blocked.",
+          recommendedAction: "Review approval workflow before execution eligibility can be evaluated.",
+        },
+      ],
+      diagnostics: ["EXECUTION_REMEDIATION_PLAN_CREATED"],
+    },
   };
 }
 
@@ -106,6 +124,8 @@ test("provider handoff readiness presenter: renders mocked readiness evidence", 
   assert.equal(display.governanceSnapshot.snapshotId, "snapshot_1");
   assert.equal(display.governanceSnapshot.reviewSummaryStatus, "approved_for_future_execution");
   assert.equal(display.governanceSnapshot.executionBlocked, true);
+  assert.equal(display.executionRemediationPlan.overallStatus, "blocked");
+  assert.equal(display.executionRemediationPlan.actions[0]?.priority, "critical");
   assert.equal(display.hasMutationControls, false);
 });
 

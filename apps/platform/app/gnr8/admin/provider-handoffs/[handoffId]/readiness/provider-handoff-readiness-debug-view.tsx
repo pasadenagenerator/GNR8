@@ -126,6 +126,23 @@ type ExecutionPreconditionsLedgerSummary = {
   requirements: ExecutionPreconditionsLedgerRequirement[];
   diagnostics: string[];
 };
+type ExecutionRemediationActionSummary = {
+  actionId: string;
+  priority: "critical" | "high" | "normal";
+  source: "ledger" | "gate" | "handoff";
+  reason: string;
+  recommendedAction: string;
+};
+type ExecutionRemediationPlanSummary = {
+  planId: string;
+  overallStatus: "blocked" | "missing_requirements" | "ready_but_execution_disabled";
+  summary: string;
+  executionAllowed: boolean;
+  executionBlocked: boolean;
+  intentOnly: boolean;
+  actions: ExecutionRemediationActionSummary[];
+  diagnostics: string[];
+};
 
 export type ProviderHandoffReadinessDebugModel = {
   handoffId: string;
@@ -143,6 +160,7 @@ export type ProviderHandoffReadinessDebugModel = {
   governanceDecisionPackage?: GovernanceDecisionPackageSummary | null;
   executionReadinessGate?: ExecutionReadinessGateSummary | null;
   executionPreconditionsLedger?: ExecutionPreconditionsLedgerSummary | null;
+  executionRemediationPlan?: ExecutionRemediationPlanSummary | null;
   operatorReviews: OperatorReviewSummary[];
   operatorReviewSummary: OperatorReviewStateSummary;
   operatorReviewIntentOnly: boolean;
@@ -197,6 +215,9 @@ export function ProviderHandoffReadinessDebugView(props: {
       <section style={{ border: "1px solid #bfdbfe", borderRadius: 10, background: "#eff6ff", padding: 12, marginTop: 12 }}>
         <strong>Preconditions are evidence only. Execution remains disabled.</strong>
       </section>
+      <section style={{ border: "1px solid #bfdbfe", borderRadius: 10, background: "#eff6ff", padding: 12, marginTop: 12 }}>
+        <strong>Remediation guidance is advisory only. Execution remains disabled.</strong>
+      </section>
 
       {fetchError ? (
         <section style={{ border: "1px solid #fecaca", borderRadius: 10, background: "#fff1f2", padding: 12, marginTop: 12 }}>
@@ -224,6 +245,28 @@ export function ProviderHandoffReadinessDebugView(props: {
         <Field label="authorizationStatus" value={redactSecretLikeText(display.governanceDecisionPackage.authorizationStatus)} />
         <Field label="snapshotCount" value={String(display.governanceDecisionPackage.snapshotCount)} />
         <ListField label="diagnostics" values={display.governanceDecisionPackage.diagnostics} />
+      </section>
+
+      <section style={{ border: "1px solid #dbe3ea", borderRadius: 10, background: "#ffffff", padding: 12, marginTop: 12 }}>
+        <h2 style={{ margin: "0 0 8px 0", fontSize: 16 }}>Execution Remediation Plan</h2>
+        <Field label="overallStatus" value={redactSecretLikeText(display.executionRemediationPlan.overallStatus)} />
+        <Field label="summary" value={redactSecretLikeText(display.executionRemediationPlan.summary)} />
+        <ListField label="diagnostics" values={display.executionRemediationPlan.diagnostics} />
+        {display.executionRemediationPlan.actions.length > 0 ? (
+          display.executionRemediationPlan.actions.map((action) => (
+            <div
+              key={action.actionId}
+              style={{ border: "1px solid #e5e7eb", borderRadius: 8, padding: 10, marginBottom: 8, background: "#f9fafb" }}
+            >
+              <Field label="priority" value={redactSecretLikeText(action.priority)} />
+              <Field label="source" value={redactSecretLikeText(action.source)} />
+              <Field label="reason" value={redactSecretLikeText(action.reason)} />
+              <Field label="recommendedAction" value={redactSecretLikeText(action.recommendedAction)} />
+            </div>
+          ))
+        ) : (
+          <p style={{ margin: 0, color: "#6b7280" }}>No remediation actions required.</p>
+        )}
       </section>
 
       <section style={{ border: "1px solid #dbe3ea", borderRadius: 10, background: "#ffffff", padding: 12, marginTop: 12 }}>

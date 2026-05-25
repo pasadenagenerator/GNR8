@@ -127,6 +127,16 @@ const DEFAULT_EXECUTION_PRECONDITIONS_LEDGER: NonNullable<ProviderHandoffReadine
   requirements: [],
   diagnostics: ["EXECUTION_PRECONDITIONS_LEDGER_CREATED"],
 };
+const DEFAULT_EXECUTION_REMEDIATION_PLAN: NonNullable<ProviderHandoffReadinessDebugModel["executionRemediationPlan"]> = {
+  planId: "",
+  overallStatus: "ready_but_execution_disabled",
+  summary: "All evidence conditions satisfied; execution remains intentionally disabled.",
+  executionAllowed: false,
+  executionBlocked: true,
+  intentOnly: true,
+  actions: [],
+  diagnostics: ["EXECUTION_REMEDIATION_PLAN_CREATED", "EXECUTION_REMEDIATION_ACTIONS_GENERATED", "EXECUTION_REMEDIATION_INTENT_ONLY"],
+};
 function normalizeGovernanceDecisionPackage(
   value: unknown,
 ): NonNullable<ProviderHandoffReadinessDebugModel["governanceDecisionPackage"]> {
@@ -203,6 +213,33 @@ function normalizeExecutionPreconditionsLedger(
     diagnostics: normalizeList(ledger.diagnostics),
   };
 }
+function normalizeExecutionRemediationPlan(
+  value: unknown,
+): NonNullable<ProviderHandoffReadinessDebugModel["executionRemediationPlan"]> {
+  const plan = normalizeObject(value);
+  const actions = Array.isArray(plan.actions)
+    ? plan.actions
+        .map((entry) => normalizeObject(entry))
+        .map((entry) => ({
+          actionId: normalizeToken(entry.actionId),
+          priority: (normalizeToken(entry.priority) || "normal") as "critical" | "high" | "normal",
+          source: (normalizeToken(entry.source) || "ledger") as "ledger" | "gate" | "handoff",
+          reason: normalizeToken(entry.reason),
+          recommendedAction: normalizeToken(entry.recommendedAction),
+        }))
+        .filter((entry) => entry.actionId.length > 0)
+    : [];
+  return {
+    planId: normalizeToken(plan.planId),
+    overallStatus: (normalizeToken(plan.overallStatus) || "ready_but_execution_disabled") as "blocked" | "missing_requirements" | "ready_but_execution_disabled",
+    summary: normalizeToken(plan.summary) || "All evidence conditions satisfied; execution remains intentionally disabled.",
+    executionAllowed: false,
+    executionBlocked: true,
+    intentOnly: true,
+    actions,
+    diagnostics: normalizeList(plan.diagnostics),
+  };
+}
 
 function normalizeGovernanceAuthorization(
   value: unknown,
@@ -265,6 +302,7 @@ async function fetchReadinessModel(
   const governanceDecisionPackageEndpoint = `${proto}://${host}/api/gnr8/admin/provider-handoffs/${encodeURIComponent(handoffId)}/decision-package`;
   const executionReadinessGateEndpoint = `${proto}://${host}/api/gnr8/admin/provider-handoffs/${encodeURIComponent(handoffId)}/execution-readiness-gate`;
   const executionPreconditionsEndpoint = `${proto}://${host}/api/gnr8/admin/provider-handoffs/${encodeURIComponent(handoffId)}/execution-preconditions`;
+  const executionRemediationPlanEndpoint = `${proto}://${host}/api/gnr8/admin/provider-handoffs/${encodeURIComponent(handoffId)}/execution-remediation-plan`;
   const cookie = normalizeToken(incomingHeaders.get("cookie"));
   const requestHeaders = cookie ? { cookie } : undefined;
 
@@ -291,6 +329,7 @@ async function fetchReadinessModel(
       governanceDecisionPackage: DEFAULT_GOVERNANCE_DECISION_PACKAGE,
       executionReadinessGate: DEFAULT_EXECUTION_READINESS_GATE,
       executionPreconditionsLedger: DEFAULT_EXECUTION_PRECONDITIONS_LEDGER,
+      executionRemediationPlan: DEFAULT_EXECUTION_REMEDIATION_PLAN,
     };
 
     if (!response.ok) {
@@ -307,6 +346,7 @@ async function fetchReadinessModel(
     let governanceDecisionPackageError: string | null = null;
     let executionReadinessGateError: string | null = null;
     let executionPreconditionsError: string | null = null;
+    let executionRemediationPlanError: string | null = null;
     try {
       const reviewsResponse = await fetchImpl(reviewsEndpoint, { method: "GET", cache: "no-store", headers: requestHeaders });
       const reviewsPayload = (await reviewsResponse.json().catch(() => ({}))) as Record<string, unknown>;
@@ -363,6 +403,16 @@ async function fetchReadinessModel(
       executionPreconditionsError = error instanceof Error ? error.message : "Unknown fetch error";
     }
     try {
+      const remediationResponse = await fetchImpl(executionRemediationPlanEndpoint, { method: "GET", cache: "no-store", headers: requestHeaders });
+      const remediationPayload = (await remediationResponse.json().catch(() => ({}))) as Record<string, unknown>;
+      model.executionRemediationPlan = normalizeExecutionRemediationPlan(remediationPayload.executionRemediationPlan);
+      if (!remediationResponse.ok) {
+        executionRemediationPlanError = normalizeToken(remediationPayload.error) || `HTTP_${remediationResponse.status}`;
+      }
+    } catch (error) {
+      executionRemediationPlanError = error instanceof Error ? error.message : "Unknown fetch error";
+    }
+    try {
       const timelineResponse = await fetchImpl(governanceTimelineEndpoint, { method: "GET", cache: "no-store", headers: requestHeaders });
       const timelinePayload = (await timelineResponse.json().catch(() => ({}))) as Record<string, unknown>;
       model.governanceTimeline = normalizeGovernanceTimeline(timelinePayload.snapshots);
@@ -386,6 +436,9 @@ async function fetchReadinessModel(
     }
     if (executionPreconditionsError) {
       model.diagnostics = normalizeList([...model.diagnostics, `EXECUTION_PRECONDITIONS_FETCH_ERROR:${executionPreconditionsError}`]);
+    }
+    if (executionRemediationPlanError) {
+      model.diagnostics = normalizeList([...model.diagnostics, `EXECUTION_REMEDIATION_PLAN_FETCH_ERROR:${executionRemediationPlanError}`]);
     }
 
     return {
@@ -413,6 +466,8 @@ async function fetchReadinessModel(
         governanceAuthorization: DEFAULT_GOVERNANCE_AUTHORIZATION,
         governanceDecisionPackage: DEFAULT_GOVERNANCE_DECISION_PACKAGE,
         executionReadinessGate: DEFAULT_EXECUTION_READINESS_GATE,
+        executionPreconditionsLedger: DEFAULT_EXECUTION_PRECONDITIONS_LEDGER,
+        executionRemediationPlan: DEFAULT_EXECUTION_REMEDIATION_PLAN,
       },
       fetchError: error instanceof Error ? error.message : "Unknown fetch error",
       operatorReviewFetchError: null,

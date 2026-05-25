@@ -4,7 +4,7 @@
 2026-05-25
 
 ## Current Phase
-Governance Decision Package / Pre-execution Readiness Dossier milestone (control-plane only, deployed and verified).
+Execution Readiness Gate + Execution Preconditions Ledger milestone (control-plane only, deployed and verified).
 
 ## Latest Completed Milestone
 
@@ -64,6 +64,37 @@ Governance Decision Package / Pre-execution Readiness Dossier milestone (control
   - `denied`
 - `authorized_for_future_execution` remains intent-only and does not authorize execution.
 - Governance Decision Package / Pre-execution Readiness Dossier is deployed and manually verified.
+- Execution Readiness Gate model is deployed and manually verified.
+- Execution Preconditions Ledger is deployed and manually verified.
+- Execution Readiness Gate API is deployed:
+  - `GET /api/gnr8/admin/provider-handoffs/[handoffId]/execution-readiness-gate`
+- Execution Preconditions Ledger API is deployed:
+  - `GET /api/gnr8/admin/provider-handoffs/[handoffId]/execution-preconditions`
+- Readiness UI now includes an Execution Readiness Gate section.
+- Readiness UI now includes an Execution Preconditions Ledger section.
+- Execution Readiness Gate verified deployed values:
+  - `gateStatus`: `blocked`
+  - `executionAllowed`: `false`
+  - `executionBlocked`: `true`
+  - `blockingReasons`:
+    - `approval_status_blocked`
+    - `global_execution_boundary_active`
+    - `handoff_status_blocked`
+    - `no_planned_jobs`
+- Execution Preconditions Ledger verified deployed values:
+  - `overallStatus`: `blocked`
+  - `executionAllowed`: `false`
+  - `executionBlocked`: `true`
+  - `missingRequirements`:
+    - `execution_planned_jobs_present:missing`
+  - `blockedRequirements`:
+    - `approval_status_not_blocked:blocked`
+    - `execution_handoff_status_not_blocked:blocked`
+- Governance conditions verified as satisfied/passed while execution remained blocked:
+  - `review_approved_for_future_execution`: satisfied/passed
+  - `authorization_authorized_for_future_execution`: satisfied/passed
+- Conclusion:
+  - governance intent can be satisfied while execution readiness remains blocked
 - Verified deployed flow:
   - readiness
   - operator review summary
@@ -71,6 +102,8 @@ Governance Decision Package / Pre-execution Readiness Dossier milestone (control
   - governance snapshot
   - governance timeline
   - governance decision package
+  - execution readiness gate
+  - execution preconditions ledger
 - Governance Decision Package verified values:
   - `recommendedAction`: `remain_blocked`
   - `executionBlocked`: `true`
@@ -115,7 +148,7 @@ Governance Decision Package / Pre-execution Readiness Dossier milestone (control
 
 ## Next Milestone
 
-- Governance decision package diagnostics normalization and downstream operator UX hardening (still no execution).
+- Execution Blocker Remediation Plan / Missing Requirements Planner (still no execution).
 
 ## Latest Provider Control Plane State
 
@@ -193,9 +226,13 @@ Routes:
 - `GET /api/gnr8/admin/provider-handoffs/[handoffId]/governance-timeline` (read-only governance timeline audit projection)
 - `GET /api/gnr8/admin/provider-handoffs/[handoffId]/authorization` (read-only governance authorization)
 - `POST /api/gnr8/admin/provider-handoffs/[handoffId]/authorization` (admin-only governance authorization intent creation)
+- `GET /api/gnr8/admin/provider-handoffs/[handoffId]/execution-readiness-gate` (read-only execution readiness gate)
+- `GET /api/gnr8/admin/provider-handoffs/[handoffId]/execution-preconditions` (read-only execution preconditions ledger)
 
 Readiness UI operator review controls:
 - Governance Snapshot section (deterministic evidence projection)
+- Execution Readiness Gate section
+- Execution Preconditions Ledger section
 - read-only operator review section
 - create operator review form
 - status dropdown values:
