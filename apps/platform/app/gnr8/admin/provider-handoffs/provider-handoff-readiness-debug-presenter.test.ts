@@ -188,9 +188,29 @@ test("provider handoff readiness presenter: malformed governance decision packag
   assert.equal(display.governanceDecisionPackage.reviewStatus, "no_reviews");
   assert.equal(display.governanceDecisionPackage.authorizationStatus, "not_requested");
   assert.equal(display.governanceDecisionPackage.snapshotCount, 0);
+  assert.equal(display.governanceDecisionPackage.diagnostics.includes("GOVERNANCE_DECISION_PACKAGE_FAILED_CLOSED"), true);
 });
 
-test("provider handoff readiness presenter: valid governance decision package remains blocked", () => {
+test("provider handoff readiness presenter: failed_closed governance decision package renders FAILED_CLOSED diagnostic", () => {
+  const display = buildProviderHandoffReadinessDebugDisplay({
+    ...buildModel(),
+    governanceDecisionPackage: {
+      packageId: "pkg_failed",
+      recommendedAction: "failed_closed",
+      executionBlocked: true,
+      reviewStatus: "no_reviews",
+      authorizationStatus: "not_requested",
+      snapshotCount: 0,
+      diagnostics: [],
+    },
+  });
+
+  assert.equal(display.governanceDecisionPackage.executionBlocked, true);
+  assert.equal(display.governanceDecisionPackage.recommendedAction, "failed_closed");
+  assert.equal(display.governanceDecisionPackage.diagnostics.includes("GOVERNANCE_DECISION_PACKAGE_FAILED_CLOSED"), true);
+});
+
+test("provider handoff readiness presenter: valid governance decision package with CREATED does not render FAILED_CLOSED", () => {
   const display = buildProviderHandoffReadinessDebugDisplay({
     ...buildModel(),
     governanceDecisionPackage: {
@@ -209,5 +229,6 @@ test("provider handoff readiness presenter: valid governance decision package re
   assert.equal(display.governanceDecisionPackage.reviewStatus, "approved_for_future_execution");
   assert.equal(display.governanceDecisionPackage.authorizationStatus, "pending_authorization");
   assert.equal(display.governanceDecisionPackage.snapshotCount, 2);
-  assert.equal(display.governanceDecisionPackage.diagnostics.includes("GOVERNANCE_DECISION_PACKAGE_FAILED_CLOSED"), true);
+  assert.equal(display.governanceDecisionPackage.diagnostics.includes("GOVERNANCE_DECISION_PACKAGE_CREATED"), true);
+  assert.equal(display.governanceDecisionPackage.diagnostics.includes("GOVERNANCE_DECISION_PACKAGE_FAILED_CLOSED"), false);
 });

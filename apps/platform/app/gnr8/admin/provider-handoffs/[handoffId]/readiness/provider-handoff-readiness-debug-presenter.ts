@@ -23,10 +23,36 @@ export function buildProviderHandoffReadinessDebugDisplay(model: ProviderHandoff
     ...(authorization?.diagnostics ?? []),
   ]);
   const governanceDecisionPackage = model.governanceDecisionPackage;
-  const fallbackGovernanceDecisionPackageDiagnostics = ["GOVERNANCE_DECISION_PACKAGE_FAILED_CLOSED"];
+  const governanceDecisionPackagePackageId = redactSecretLikeText(governanceDecisionPackage?.packageId);
+  const governanceDecisionPackageRecommendedAction =
+    redactSecretLikeText(governanceDecisionPackage?.recommendedAction) || "failed_closed";
+  const governanceDecisionPackageExecutionBlocked = governanceDecisionPackage?.executionBlocked === true;
+  const governanceDecisionPackageReviewStatus = redactSecretLikeText(governanceDecisionPackage?.reviewStatus) || "no_reviews";
+  const governanceDecisionPackageAuthorizationStatus =
+    redactSecretLikeText(governanceDecisionPackage?.authorizationStatus) || "not_requested";
+  const governanceDecisionPackageSnapshotCount = Number.isFinite(governanceDecisionPackage?.snapshotCount)
+    ? Number(governanceDecisionPackage?.snapshotCount)
+    : 0;
+  const incomingGovernanceDecisionPackageDiagnostics = sanitizeDisplayList(governanceDecisionPackage?.diagnostics);
+  const governanceDecisionPackageMalformed =
+    Boolean(governanceDecisionPackage) &&
+    (!governanceDecisionPackagePackageId ||
+      !redactSecretLikeText(governanceDecisionPackage?.recommendedAction) ||
+      governanceDecisionPackage?.executionBlocked !== true ||
+      !redactSecretLikeText(governanceDecisionPackage?.reviewStatus) ||
+      !redactSecretLikeText(governanceDecisionPackage?.authorizationStatus) ||
+      !Number.isFinite(governanceDecisionPackage?.snapshotCount));
+  const governanceDecisionPackageMissing = !governanceDecisionPackage;
+  const governanceDecisionPackageFailedClosedSignal = governanceDecisionPackageRecommendedAction === "failed_closed";
+  const governanceDecisionPackageNeedsFallbackDiagnostic =
+    governanceDecisionPackageMissing ||
+    !governanceDecisionPackagePackageId ||
+    governanceDecisionPackageFailedClosedSignal ||
+    !governanceDecisionPackageExecutionBlocked ||
+    (governanceDecisionPackageMalformed && incomingGovernanceDecisionPackageDiagnostics.length === 0);
   const governanceDecisionPackageDiagnostics = sanitizeDisplayList([
-    ...fallbackGovernanceDecisionPackageDiagnostics,
-    ...(governanceDecisionPackage?.diagnostics ?? []),
+    ...incomingGovernanceDecisionPackageDiagnostics,
+    ...(governanceDecisionPackageNeedsFallbackDiagnostic ? ["GOVERNANCE_DECISION_PACKAGE_FAILED_CLOSED"] : []),
   ]);
 
   return {
@@ -93,12 +119,12 @@ export function buildProviderHandoffReadinessDebugDisplay(model: ProviderHandoff
       diagnostics: authorizationDiagnostics,
     },
     governanceDecisionPackage: {
-      packageId: redactSecretLikeText(governanceDecisionPackage?.packageId),
-      recommendedAction: redactSecretLikeText(governanceDecisionPackage?.recommendedAction) || "failed_closed",
+      packageId: governanceDecisionPackagePackageId,
+      recommendedAction: governanceDecisionPackageRecommendedAction,
       executionBlocked: true,
-      reviewStatus: redactSecretLikeText(governanceDecisionPackage?.reviewStatus) || "no_reviews",
-      authorizationStatus: redactSecretLikeText(governanceDecisionPackage?.authorizationStatus) || "not_requested",
-      snapshotCount: Number.isFinite(governanceDecisionPackage?.snapshotCount) ? Number(governanceDecisionPackage?.snapshotCount) : 0,
+      reviewStatus: governanceDecisionPackageReviewStatus,
+      authorizationStatus: governanceDecisionPackageAuthorizationStatus,
+      snapshotCount: governanceDecisionPackageSnapshotCount,
       diagnostics: governanceDecisionPackageDiagnostics,
     },
     operatorReviews: [...model.operatorReviews]
