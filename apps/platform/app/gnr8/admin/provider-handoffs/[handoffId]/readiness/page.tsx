@@ -117,6 +117,16 @@ const DEFAULT_EXECUTION_READINESS_GATE: NonNullable<ProviderHandoffReadinessDebu
   requiredConditions: [],
   diagnostics: ["EXECUTION_READINESS_GATE_CREATED"],
 };
+const DEFAULT_EXECUTION_PRECONDITIONS_LEDGER: NonNullable<ProviderHandoffReadinessDebugModel["executionPreconditionsLedger"]> = {
+  ledgerId: "",
+  overallStatus: "incomplete",
+  executionAllowed: false,
+  executionBlocked: true,
+  missingRequirements: [],
+  blockedRequirements: [],
+  requirements: [],
+  diagnostics: ["EXECUTION_PRECONDITIONS_LEDGER_CREATED"],
+};
 function normalizeGovernanceDecisionPackage(
   value: unknown,
 ): NonNullable<ProviderHandoffReadinessDebugModel["governanceDecisionPackage"]> {
@@ -153,6 +163,44 @@ function normalizeExecutionReadinessGate(
       }))
       .filter((entry) => entry.condition.length > 0),
     diagnostics: normalizeList(gate.diagnostics),
+  };
+}
+function normalizeExecutionPreconditionRequirement(value: unknown) {
+  const requirement = normalizeObject(value);
+  return {
+    requirementId: normalizeToken(requirement.requirementId),
+    category: normalizeToken(requirement.category) as "governance" | "approval" | "execution" | "provider" | "safety",
+    name: normalizeToken(requirement.name),
+    status: normalizeToken(requirement.status) as "satisfied" | "missing" | "blocked",
+    reason: normalizeToken(requirement.reason),
+  };
+}
+function normalizeExecutionPreconditionsLedger(
+  value: unknown,
+): NonNullable<ProviderHandoffReadinessDebugModel["executionPreconditionsLedger"]> {
+  const ledger = normalizeObject(value);
+  const requirements = Array.isArray(ledger.requirements)
+    ? ledger.requirements.map((entry) => normalizeExecutionPreconditionRequirement(entry)).filter((entry) => entry.requirementId.length > 0)
+    : [];
+  const missingRequirements = Array.isArray(ledger.missingRequirements)
+    ? ledger.missingRequirements
+        .map((entry) => normalizeExecutionPreconditionRequirement(entry))
+        .filter((entry) => entry.requirementId.length > 0)
+    : [];
+  const blockedRequirements = Array.isArray(ledger.blockedRequirements)
+    ? ledger.blockedRequirements
+        .map((entry) => normalizeExecutionPreconditionRequirement(entry))
+        .filter((entry) => entry.requirementId.length > 0)
+    : [];
+  return {
+    ledgerId: normalizeToken(ledger.ledgerId),
+    overallStatus: (normalizeToken(ledger.overallStatus) || "incomplete") as "incomplete" | "satisfied_but_execution_disabled" | "blocked",
+    executionAllowed: false,
+    executionBlocked: true,
+    requirements,
+    missingRequirements,
+    blockedRequirements,
+    diagnostics: normalizeList(ledger.diagnostics),
   };
 }
 
@@ -216,6 +264,7 @@ async function fetchReadinessModel(
   const governanceAuthorizationEndpoint = `${proto}://${host}/api/gnr8/admin/provider-handoffs/${encodeURIComponent(handoffId)}/authorization`;
   const governanceDecisionPackageEndpoint = `${proto}://${host}/api/gnr8/admin/provider-handoffs/${encodeURIComponent(handoffId)}/decision-package`;
   const executionReadinessGateEndpoint = `${proto}://${host}/api/gnr8/admin/provider-handoffs/${encodeURIComponent(handoffId)}/execution-readiness-gate`;
+  const executionPreconditionsEndpoint = `${proto}://${host}/api/gnr8/admin/provider-handoffs/${encodeURIComponent(handoffId)}/execution-preconditions`;
   const cookie = normalizeToken(incomingHeaders.get("cookie"));
   const requestHeaders = cookie ? { cookie } : undefined;
 
@@ -241,6 +290,7 @@ async function fetchReadinessModel(
       governanceAuthorization: DEFAULT_GOVERNANCE_AUTHORIZATION,
       governanceDecisionPackage: DEFAULT_GOVERNANCE_DECISION_PACKAGE,
       executionReadinessGate: DEFAULT_EXECUTION_READINESS_GATE,
+      executionPreconditionsLedger: DEFAULT_EXECUTION_PRECONDITIONS_LEDGER,
     };
 
     if (!response.ok) {
@@ -256,6 +306,7 @@ async function fetchReadinessModel(
     let governanceAuthorizationError: string | null = null;
     let governanceDecisionPackageError: string | null = null;
     let executionReadinessGateError: string | null = null;
+    let executionPreconditionsError: string | null = null;
     try {
       const reviewsResponse = await fetchImpl(reviewsEndpoint, { method: "GET", cache: "no-store", headers: requestHeaders });
       const reviewsPayload = (await reviewsResponse.json().catch(() => ({}))) as Record<string, unknown>;
@@ -302,6 +353,16 @@ async function fetchReadinessModel(
       executionReadinessGateError = error instanceof Error ? error.message : "Unknown fetch error";
     }
     try {
+      const preconditionsResponse = await fetchImpl(executionPreconditionsEndpoint, { method: "GET", cache: "no-store", headers: requestHeaders });
+      const preconditionsPayload = (await preconditionsResponse.json().catch(() => ({}))) as Record<string, unknown>;
+      model.executionPreconditionsLedger = normalizeExecutionPreconditionsLedger(preconditionsPayload.executionPreconditionsLedger);
+      if (!preconditionsResponse.ok) {
+        executionPreconditionsError = normalizeToken(preconditionsPayload.error) || `HTTP_${preconditionsResponse.status}`;
+      }
+    } catch (error) {
+      executionPreconditionsError = error instanceof Error ? error.message : "Unknown fetch error";
+    }
+    try {
       const timelineResponse = await fetchImpl(governanceTimelineEndpoint, { method: "GET", cache: "no-store", headers: requestHeaders });
       const timelinePayload = (await timelineResponse.json().catch(() => ({}))) as Record<string, unknown>;
       model.governanceTimeline = normalizeGovernanceTimeline(timelinePayload.snapshots);
@@ -322,6 +383,9 @@ async function fetchReadinessModel(
     }
     if (executionReadinessGateError) {
       model.diagnostics = normalizeList([...model.diagnostics, `EXECUTION_READINESS_GATE_FETCH_ERROR:${executionReadinessGateError}`]);
+    }
+    if (executionPreconditionsError) {
+      model.diagnostics = normalizeList([...model.diagnostics, `EXECUTION_PRECONDITIONS_FETCH_ERROR:${executionPreconditionsError}`]);
     }
 
     return {

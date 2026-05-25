@@ -62,6 +62,34 @@ export function buildProviderHandoffReadinessDebugDisplay(model: ProviderHandoff
         reason: redactSecretLikeText(condition.reason),
       }))
     : [];
+  const executionPreconditionsLedger = model.executionPreconditionsLedger;
+  const executionPreconditionsLedgerRequirements = Array.isArray(executionPreconditionsLedger?.requirements)
+    ? executionPreconditionsLedger.requirements.map((requirement) => ({
+        requirementId: redactSecretLikeText(requirement.requirementId),
+        category: redactSecretLikeText(requirement.category) as "governance" | "approval" | "execution" | "provider" | "safety",
+        name: redactSecretLikeText(requirement.name),
+        status: redactSecretLikeText(requirement.status) as "satisfied" | "missing" | "blocked",
+        reason: redactSecretLikeText(requirement.reason),
+      }))
+    : [];
+  const executionPreconditionsLedgerMissingRequirements = Array.isArray(executionPreconditionsLedger?.missingRequirements)
+    ? executionPreconditionsLedger.missingRequirements.map((requirement) => ({
+        requirementId: redactSecretLikeText(requirement.requirementId),
+        category: redactSecretLikeText(requirement.category) as "governance" | "approval" | "execution" | "provider" | "safety",
+        name: redactSecretLikeText(requirement.name),
+        status: redactSecretLikeText(requirement.status) as "satisfied" | "missing" | "blocked",
+        reason: redactSecretLikeText(requirement.reason),
+      }))
+    : [];
+  const executionPreconditionsLedgerBlockedRequirements = Array.isArray(executionPreconditionsLedger?.blockedRequirements)
+    ? executionPreconditionsLedger.blockedRequirements.map((requirement) => ({
+        requirementId: redactSecretLikeText(requirement.requirementId),
+        category: redactSecretLikeText(requirement.category) as "governance" | "approval" | "execution" | "provider" | "safety",
+        name: redactSecretLikeText(requirement.name),
+        status: redactSecretLikeText(requirement.status) as "satisfied" | "missing" | "blocked",
+        reason: redactSecretLikeText(requirement.reason),
+      }))
+    : [];
 
   return {
     executionBlockedLabel: "Execution blocked",
@@ -143,6 +171,17 @@ export function buildProviderHandoffReadinessDebugDisplay(model: ProviderHandoff
       blockingReasons: sanitizeDisplayList(executionReadinessGate?.blockingReasons),
       requiredConditions: executionReadinessGateRequiredConditions,
       diagnostics: sanitizeDisplayList(executionReadinessGate?.diagnostics),
+    },
+    executionPreconditionsLedger: {
+      ledgerId: redactSecretLikeText(executionPreconditionsLedger?.ledgerId),
+      overallStatus: (redactSecretLikeText(executionPreconditionsLedger?.overallStatus) ||
+        "incomplete") as "incomplete" | "satisfied_but_execution_disabled" | "blocked",
+      executionAllowed: false,
+      executionBlocked: true,
+      missingRequirements: executionPreconditionsLedgerMissingRequirements,
+      blockedRequirements: executionPreconditionsLedgerBlockedRequirements,
+      requirements: executionPreconditionsLedgerRequirements,
+      diagnostics: sanitizeDisplayList(executionPreconditionsLedger?.diagnostics),
     },
     operatorReviews: [...model.operatorReviews]
       .map((review) => ({

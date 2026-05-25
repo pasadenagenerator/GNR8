@@ -23,6 +23,8 @@ test("provider handoff readiness view source: renders form and intent-only warni
   assert.equal(combined.includes("Authorization is intent only. Execution remains blocked."), true);
   assert.equal(combined.includes("Execution Readiness Gate"), true);
   assert.equal(combined.includes("Execution gate is evaluative only. Execution remains disabled."), true);
+  assert.equal(combined.includes("Execution Preconditions Ledger"), true);
+  assert.equal(combined.includes("Preconditions are evidence only. Execution remains disabled."), true);
 });
 
 test("provider handoff readiness view source: no execution controls rendered", async () => {

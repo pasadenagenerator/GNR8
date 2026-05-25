@@ -109,6 +109,23 @@ type ExecutionReadinessGateSummary = {
   requiredConditions: ExecutionReadinessGateCondition[];
   diagnostics: string[];
 };
+type ExecutionPreconditionsLedgerRequirement = {
+  requirementId: string;
+  category: "governance" | "approval" | "execution" | "provider" | "safety";
+  name: string;
+  status: "satisfied" | "missing" | "blocked";
+  reason: string;
+};
+type ExecutionPreconditionsLedgerSummary = {
+  ledgerId: string;
+  overallStatus: "incomplete" | "satisfied_but_execution_disabled" | "blocked";
+  executionAllowed: boolean;
+  executionBlocked: boolean;
+  missingRequirements: ExecutionPreconditionsLedgerRequirement[];
+  blockedRequirements: ExecutionPreconditionsLedgerRequirement[];
+  requirements: ExecutionPreconditionsLedgerRequirement[];
+  diagnostics: string[];
+};
 
 export type ProviderHandoffReadinessDebugModel = {
   handoffId: string;
@@ -125,6 +142,7 @@ export type ProviderHandoffReadinessDebugModel = {
   governanceAuthorization?: GovernanceAuthorizationSummary | null;
   governanceDecisionPackage?: GovernanceDecisionPackageSummary | null;
   executionReadinessGate?: ExecutionReadinessGateSummary | null;
+  executionPreconditionsLedger?: ExecutionPreconditionsLedgerSummary | null;
   operatorReviews: OperatorReviewSummary[];
   operatorReviewSummary: OperatorReviewStateSummary;
   operatorReviewIntentOnly: boolean;
@@ -176,6 +194,9 @@ export function ProviderHandoffReadinessDebugView(props: {
       <section style={{ border: "1px solid #bfdbfe", borderRadius: 10, background: "#eff6ff", padding: 12, marginTop: 12 }}>
         <strong>Execution gate is evaluative only. Execution remains disabled.</strong>
       </section>
+      <section style={{ border: "1px solid #bfdbfe", borderRadius: 10, background: "#eff6ff", padding: 12, marginTop: 12 }}>
+        <strong>Preconditions are evidence only. Execution remains disabled.</strong>
+      </section>
 
       {fetchError ? (
         <section style={{ border: "1px solid #fecaca", borderRadius: 10, background: "#fff1f2", padding: 12, marginTop: 12 }}>
@@ -203,6 +224,38 @@ export function ProviderHandoffReadinessDebugView(props: {
         <Field label="authorizationStatus" value={redactSecretLikeText(display.governanceDecisionPackage.authorizationStatus)} />
         <Field label="snapshotCount" value={String(display.governanceDecisionPackage.snapshotCount)} />
         <ListField label="diagnostics" values={display.governanceDecisionPackage.diagnostics} />
+      </section>
+
+      <section style={{ border: "1px solid #dbe3ea", borderRadius: 10, background: "#ffffff", padding: 12, marginTop: 12 }}>
+        <h2 style={{ margin: "0 0 8px 0", fontSize: 16 }}>Execution Preconditions Ledger</h2>
+        <Field label="overallStatus" value={redactSecretLikeText(display.executionPreconditionsLedger.overallStatus)} />
+        <Field label="executionAllowed" value={String(Boolean(display.executionPreconditionsLedger.executionAllowed))} />
+        <Field label="executionBlocked" value={String(Boolean(display.executionPreconditionsLedger.executionBlocked))} />
+        <ListField
+          label="missingRequirements"
+          values={display.executionPreconditionsLedger.missingRequirements.map((requirement) => `${requirement.requirementId}:${requirement.status}`)}
+        />
+        <ListField
+          label="blockedRequirements"
+          values={display.executionPreconditionsLedger.blockedRequirements.map((requirement) => `${requirement.requirementId}:${requirement.status}`)}
+        />
+        <ListField label="diagnostics" values={display.executionPreconditionsLedger.diagnostics} />
+        {display.executionPreconditionsLedger.requirements.length > 0 ? (
+          display.executionPreconditionsLedger.requirements.map((requirement) => (
+            <div
+              key={requirement.requirementId}
+              style={{ border: "1px solid #e5e7eb", borderRadius: 8, padding: 10, marginBottom: 8, background: "#f9fafb" }}
+            >
+              <Field label="requirementId" value={redactSecretLikeText(requirement.requirementId)} />
+              <Field label="category" value={redactSecretLikeText(requirement.category)} />
+              <Field label="name" value={redactSecretLikeText(requirement.name)} />
+              <Field label="status" value={redactSecretLikeText(requirement.status)} />
+              <Field label="reason" value={redactSecretLikeText(requirement.reason)} />
+            </div>
+          ))
+        ) : (
+          <p style={{ margin: 0, color: "#6b7280" }}>No precondition requirements available.</p>
+        )}
       </section>
 
       <section style={{ border: "1px solid #dbe3ea", borderRadius: 10, background: "#ffffff", padding: 12, marginTop: 12 }}>
