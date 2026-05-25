@@ -275,6 +275,44 @@ function ListField(props: { label: string; values: string[] }) {
   );
 }
 
+function GroupSection(props: { title: string; children: React.ReactNode }) {
+  return (
+    <section style={{ border: "1px solid #cbd5e1", borderRadius: 12, background: "#f8fafc", padding: 14, marginTop: 14 }}>
+      <h2 style={{ margin: "0 0 10px 0", fontSize: 17 }}>{props.title}</h2>
+      {props.children}
+    </section>
+  );
+}
+
+function Panel(props: { title: string; children: React.ReactNode }) {
+  return (
+    <section style={{ border: "1px solid #dbe3ea", borderRadius: 10, background: "#ffffff", padding: 12, marginTop: 10 }}>
+      <h3 style={{ margin: "0 0 8px 0", fontSize: 15 }}>{props.title}</h3>
+      {props.children}
+    </section>
+  );
+}
+
+function CollapsiblePanel(props: { title: string; children: React.ReactNode; defaultOpen?: boolean }) {
+  return (
+    <details open={props.defaultOpen} style={{ border: "1px solid #dbe3ea", borderRadius: 10, background: "#ffffff", padding: 12, marginTop: 10 }}>
+      <summary style={{ cursor: "pointer", fontWeight: 600 }}>{props.title}</summary>
+      <div style={{ marginTop: 8 }}>{props.children}</div>
+    </details>
+  );
+}
+
+function SummaryCard(props: { title: string; lines: Array<{ label: string; value: string }> }) {
+  return (
+    <section style={{ border: "1px solid #dbe3ea", borderRadius: 10, background: "#ffffff", padding: 12 }}>
+      <h2 style={{ margin: "0 0 8px 0", fontSize: 16 }}>{props.title}</h2>
+      {props.lines.map((line) => (
+        <Field key={`${props.title}:${line.label}`} label={line.label} value={line.value} />
+      ))}
+    </section>
+  );
+}
+
 export function ProviderHandoffReadinessDebugView(props: {
   model: ProviderHandoffReadinessDebugModel;
   fetchError?: string | null;
@@ -284,6 +322,7 @@ export function ProviderHandoffReadinessDebugView(props: {
   const display = buildProviderHandoffReadinessDebugDisplay(model);
   const artifact = display.handoffArtifactSummary;
   const evidence = display.workerPickupEvidenceSummary;
+  const safetyBarrierCount = display.executionSafetyManifest.barriers.length;
 
   return (
     <main
@@ -295,32 +334,11 @@ export function ProviderHandoffReadinessDebugView(props: {
         background: "#f3f6fb",
       }}
     >
-      <h1 style={{ margin: 0, fontSize: 20 }}>Provider Handoff Pickup Readiness (Internal Debug)</h1>
+      <h1 style={{ margin: 0, fontSize: 20 }}>Provider Handoff Readiness Operator Cockpit</h1>
       <p style={{ margin: "8px 0 0 0", color: "#374151", fontWeight: 600 }}>{display.executionBlockedLabel}</p>
       <p style={{ margin: "4px 0 0 0", color: "#4b5563" }}>{display.reviewOnlyLabel}</p>
-      <section style={{ border: "1px solid #facc15", borderRadius: 10, background: "#fef9c3", padding: 12, marginTop: 12 }}>
-        <strong>Decision package is advisory only. Execution remains blocked.</strong>
-      </section>
-      <section style={{ border: "1px solid #bfdbfe", borderRadius: 10, background: "#eff6ff", padding: 12, marginTop: 12 }}>
-        <strong>Execution gate is evaluative only. Execution remains disabled.</strong>
-      </section>
-      <section style={{ border: "1px solid #bfdbfe", borderRadius: 10, background: "#eff6ff", padding: 12, marginTop: 12 }}>
-        <strong>Preconditions are evidence only. Execution remains disabled.</strong>
-      </section>
-      <section style={{ border: "1px solid #bfdbfe", borderRadius: 10, background: "#eff6ff", padding: 12, marginTop: 12 }}>
-        <strong>Remediation guidance is advisory only. Execution remains disabled.</strong>
-      </section>
-      <section style={{ border: "1px solid #bfdbfe", borderRadius: 10, background: "#eff6ff", padding: 12, marginTop: 12 }}>
-        <strong>Job plan is simulated only. Execution remains disabled.</strong>
-      </section>
-      <section style={{ border: "1px solid #bfdbfe", borderRadius: 10, background: "#eff6ff", padding: 12, marginTop: 12 }}>
-        <strong>Execution job preview is evidence only. Execution remains disabled.</strong>
-      </section>
-      <section style={{ border: "1px solid #bfdbfe", borderRadius: 10, background: "#eff6ff", padding: 12, marginTop: 12 }}>
-        <strong>Worker envelope preview is evidence only. Execution remains disabled.</strong>
-      </section>
-      <section style={{ border: "1px solid #bfdbfe", borderRadius: 10, background: "#eff6ff", padding: 12, marginTop: 12 }}>
-        <strong>Safety manifest is evidence only. Execution remains impossible.</strong>
+      <section style={{ position: "sticky", top: 8, zIndex: 10, border: "1px solid #fca5a5", borderRadius: 10, background: "#fee2e2", padding: 12, marginTop: 12 }}>
+        <strong>Execution impossible. Control-plane simulation only.</strong>
       </section>
 
       {fetchError ? (
@@ -329,74 +347,241 @@ export function ProviderHandoffReadinessDebugView(props: {
         </section>
       ) : null}
 
-      <section style={{ border: "1px solid #dbe3ea", borderRadius: 10, background: "#ffffff", padding: 12, marginTop: 12 }}>
-        <h2 style={{ margin: "0 0 8px 0", fontSize: 16 }}>Readiness</h2>
-        <Field label="handoffId" value={display.handoffId} />
-        <Field label="readinessStatus" value={display.readinessStatus} />
-        <Field label="executionBlocked" value={display.executionBlocked} />
-        <ListField label="blockedReasons" values={display.blockedReasons} />
-        <Field label="nextAllowedAction" value={display.nextAllowedAction} />
-        <Field label="correlationKey" value={display.correlationKey} />
-        <ListField label="diagnostics" values={display.diagnostics} />
+      <section style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 10, marginTop: 12 }}>
+        <SummaryCard
+          title="Execution State"
+          lines={[
+            { label: "executionBlocked", value: display.executionBlocked },
+            { label: "executionAllowed", value: String(Boolean(display.executionReadinessGate.executionAllowed)) },
+            { label: "overall execution state", value: display.executionSafetyManifest.overallStatus },
+          ]}
+        />
+        <SummaryCard
+          title="Governance State"
+          lines={[
+            { label: "review status", value: display.governanceDecisionPackage.reviewStatus },
+            { label: "authorization status", value: display.governanceDecisionPackage.authorizationStatus },
+            { label: "decision package recommendation", value: display.governanceDecisionPackage.recommendedAction },
+          ]}
+        />
+        <SummaryCard
+          title="Readiness State"
+          lines={[
+            { label: "readinessStatus", value: display.readinessStatus },
+            { label: "gateStatus", value: display.executionReadinessGate.gateStatus },
+            { label: "preconditions status", value: display.executionPreconditionsLedger.overallStatus },
+          ]}
+        />
+        <SummaryCard
+          title="Safety State"
+          lines={[
+            { label: "execution_impossible", value: String(display.executionSafetyManifest.overallStatus === "execution_impossible") },
+            { label: "active barrier count", value: String(safetyBarrierCount) },
+          ]}
+        />
       </section>
 
-      <section style={{ border: "1px solid #dbe3ea", borderRadius: 10, background: "#ffffff", padding: 12, marginTop: 12 }}>
-        <h2 style={{ margin: "0 0 8px 0", fontSize: 16 }}>Governance Decision Package</h2>
+      <GroupSection title="Governance">
+        <Panel title="Readiness">
+          <Field label="handoffId" value={display.handoffId} />
+          <Field label="readinessStatus" value={display.readinessStatus} />
+          <Field label="executionBlocked" value={display.executionBlocked} />
+          <ListField label="blockedReasons" values={display.blockedReasons} />
+          <Field label="nextAllowedAction" value={display.nextAllowedAction} />
+          <Field label="correlationKey" value={display.correlationKey} />
+          <CollapsiblePanel title="Diagnostics" defaultOpen={false}>
+            <ListField label="diagnostics" values={display.diagnostics} />
+          </CollapsiblePanel>
+        </Panel>
+
+        <Panel title="Decision Package">
         <Field label="packageId" value={redactSecretLikeText(display.governanceDecisionPackage.packageId)} />
         <Field label="recommendedAction" value={redactSecretLikeText(display.governanceDecisionPackage.recommendedAction)} />
         <Field label="executionBlocked" value={String(Boolean(display.governanceDecisionPackage.executionBlocked))} />
         <Field label="reviewStatus" value={redactSecretLikeText(display.governanceDecisionPackage.reviewStatus)} />
         <Field label="authorizationStatus" value={redactSecretLikeText(display.governanceDecisionPackage.authorizationStatus)} />
         <Field label="snapshotCount" value={String(display.governanceDecisionPackage.snapshotCount)} />
-        <ListField label="diagnostics" values={display.governanceDecisionPackage.diagnostics} />
-      </section>
+        <CollapsiblePanel title="Diagnostics" defaultOpen={false}>
+          <ListField label="diagnostics" values={display.governanceDecisionPackage.diagnostics} />
+        </CollapsiblePanel>
+        </Panel>
 
-      <section style={{ border: "1px solid #dbe3ea", borderRadius: 10, background: "#ffffff", padding: 12, marginTop: 12 }}>
-        <h2 style={{ margin: "0 0 8px 0", fontSize: 16 }}>Execution Remediation Plan</h2>
-        <Field label="overallStatus" value={redactSecretLikeText(display.executionRemediationPlan.overallStatus)} />
-        <Field label="summary" value={redactSecretLikeText(display.executionRemediationPlan.summary)} />
-        <ListField label="diagnostics" values={display.executionRemediationPlan.diagnostics} />
-        {display.executionRemediationPlan.actions.length > 0 ? (
-          display.executionRemediationPlan.actions.map((action) => (
-            <div
-              key={action.actionId}
-              style={{ border: "1px solid #e5e7eb", borderRadius: 8, padding: 10, marginBottom: 8, background: "#f9fafb" }}
-            >
-              <Field label="priority" value={redactSecretLikeText(action.priority)} />
-              <Field label="source" value={redactSecretLikeText(action.source)} />
-              <Field label="reason" value={redactSecretLikeText(action.reason)} />
-              <Field label="recommendedAction" value={redactSecretLikeText(action.recommendedAction)} />
-            </div>
-          ))
-        ) : (
-          <p style={{ margin: 0, color: "#6b7280" }}>No remediation actions required.</p>
-        )}
-      </section>
+        <Panel title="Authorization">
+          <p style={{ margin: "0 0 10px 0", color: "#4b5563" }}>Authorization is intent only. Execution remains blocked.</p>
+          <GovernanceAuthorizationIntentForm handoffId={model.handoffId} />
+          <div style={{ height: 8 }} />
+          <div style={{ border: "1px solid #e5e7eb", borderRadius: 8, padding: 10, marginBottom: 8, background: "#f9fafb" }}>
+            <Field label="authorizationStatus" value={redactSecretLikeText(display.governanceAuthorization.authorizationStatus)} />
+            <Field label="authorizationReason" value={redactSecretLikeText(display.governanceAuthorization.authorizationReason)} />
+            <Field label="intentOnly" value={String(Boolean(display.governanceAuthorization.intentOnly))} />
+            <Field label="executionBlocked" value={String(Boolean(display.governanceAuthorization.executionBlocked))} />
+            <Field label="createdAt" value={redactSecretLikeText(display.governanceAuthorization.createdAt)} />
+            <CollapsiblePanel title="Diagnostics" defaultOpen={false}>
+              <ListField label="diagnostics" values={display.governanceAuthorization.diagnostics} />
+            </CollapsiblePanel>
+          </div>
+        </Panel>
 
-      <section style={{ border: "1px solid #dbe3ea", borderRadius: 10, background: "#ffffff", padding: 12, marginTop: 12 }}>
-        <h2 style={{ margin: "0 0 8px 0", fontSize: 16 }}>Dry-run Job Plan</h2>
-        <Field label="jobCount" value={String(display.dryRunJobPlan.jobCount)} />
-        <Field label="summary" value={redactSecretLikeText(display.dryRunJobPlan.summary)} />
-        {display.dryRunJobPlan.jobs.length > 0 ? (
-          display.dryRunJobPlan.jobs.map((job) => (
-            <div
-              key={job.jobId}
-              style={{ border: "1px solid #e5e7eb", borderRadius: 8, padding: 10, marginBottom: 8, background: "#f9fafb" }}
-            >
-              <Field label="jobType" value={redactSecretLikeText(job.jobType)} />
-              <Field label="provider" value={redactSecretLikeText(job.provider)} />
-              <Field label="environment" value={redactSecretLikeText(job.environment)} />
-              <Field label="status" value={redactSecretLikeText(job.status)} />
-              <Field label="reason" value={redactSecretLikeText(job.reason)} />
-            </div>
-          ))
-        ) : (
-          <p style={{ margin: 0, color: "#6b7280" }}>No dry-run jobs available.</p>
-        )}
-      </section>
+        <Panel title="Reviews">
+          <p style={{ margin: "0 0 10px 0", color: "#4b5563" }}>Review intent only. Execution remains blocked.</p>
+          {operatorReviewFetchError ? (
+            <section style={{ border: "1px solid #fecaca", borderRadius: 10, background: "#fff1f2", padding: 12, marginBottom: 12 }}>
+              <strong>Operator review fetch error:</strong> {redactSecretLikeText(operatorReviewFetchError)}
+            </section>
+          ) : null}
+          <OperatorReviewIntentForm handoffId={model.handoffId} />
+          <div style={{ height: 8 }} />
+          <div style={{ border: "1px solid #e5e7eb", borderRadius: 8, padding: 10, marginBottom: 8, background: "#f9fafb" }}>
+            <h3 style={{ margin: "0 0 8px 0", fontSize: 14 }}>Operator Review Summary</h3>
+            <Field label="summary status" value={display.operatorReviewSummary.reviewSummaryStatus} />
+            <Field label="review count" value={String(display.operatorReviewSummary.reviewCount)} />
+            <Field label="latest reviewer" value={display.operatorReviewSummary.latestReviewer} />
+            <Field label="latest timestamp" value={display.operatorReviewSummary.latestCreatedAt} />
+            <Field label="latest reason" value={display.operatorReviewSummary.latestReason} />
+          </div>
+          {display.operatorReviews.length > 0 ? (
+            display.operatorReviews.map((review) => (
+              <div
+                key={review.reviewId}
+                style={{ border: "1px solid #e5e7eb", borderRadius: 8, padding: 10, marginBottom: 8, background: "#f9fafb" }}
+              >
+                <Field label="reviewer" value={redactSecretLikeText(review.reviewerRef)} />
+                <Field label="status" value={redactSecretLikeText(review.reviewStatus)} />
+                <Field label="reason" value={redactSecretLikeText(review.reviewReason)} />
+                <Field label="createdAt" value={redactSecretLikeText(review.createdAt)} />
+              </div>
+            ))
+          ) : (
+            <p style={{ margin: 0, color: "#6b7280" }}>No operator reviews persisted for this handoff.</p>
+          )}
+        </Panel>
 
-      <section style={{ border: "1px solid #dbe3ea", borderRadius: 10, background: "#ffffff", padding: 12, marginTop: 12 }}>
-        <h2 style={{ margin: "0 0 8px 0", fontSize: 16 }}>Execution Job Preview</h2>
+        <CollapsiblePanel title="Timelines" defaultOpen={false}>
+          <Panel title="Governance Snapshot">
+            <Field label="snapshotId" value={redactSecretLikeText(display.governanceSnapshot.snapshotId)} />
+            <Field label="handoffId" value={redactSecretLikeText(display.governanceSnapshot.handoffId)} />
+            <Field label="readinessStatus" value={redactSecretLikeText(display.governanceSnapshot.readinessStatus)} />
+            <Field label="executionBlocked" value={String(Boolean(display.governanceSnapshot.executionBlocked))} />
+            <Field label="correlationKey" value={redactSecretLikeText(display.governanceSnapshot.correlationKey)} />
+            <Field label="createdAt" value={redactSecretLikeText(display.governanceSnapshot.createdAt)} />
+            <Field label="reviewSummaryStatus" value={redactSecretLikeText(display.governanceSnapshot.reviewSummaryStatus)} />
+            <ListField label="diagnostics" values={display.governanceSnapshot.diagnostics} />
+          </Panel>
+          <Panel title="Governance Timeline">
+            {display.governanceTimeline.length > 0 ? (
+              display.governanceTimeline.map((snapshot) => (
+                <div key={snapshot.snapshotId} style={{ border: "1px solid #e5e7eb", borderRadius: 8, padding: 10, marginBottom: 8, background: "#f9fafb" }}>
+                  <Field label="snapshotId" value={snapshot.snapshotId} />
+                  <Field label="createdAt" value={snapshot.createdAt} />
+                  <Field label="reviewSummaryStatus" value={snapshot.reviewSummaryStatus} />
+                  <Field label="reviewCount" value={String(snapshot.reviewCount)} />
+                  <Field label="readinessStatus" value={snapshot.readinessStatus} />
+                  <ListField label="diagnostics" values={snapshot.diagnostics} />
+                </div>
+              ))
+            ) : (
+              <p style={{ margin: 0, color: "#6b7280" }}>No governance timeline snapshots available for this handoff.</p>
+            )}
+          </Panel>
+        </CollapsiblePanel>
+      </GroupSection>
+
+      <GroupSection title="Execution Analysis">
+        <Panel title="Execution Readiness Gate">
+          <Field label="gateStatus" value={redactSecretLikeText(display.executionReadinessGate.gateStatus)} />
+          <Field label="executionAllowed" value={String(Boolean(display.executionReadinessGate.executionAllowed))} />
+          <Field label="executionBlocked" value={String(Boolean(display.executionReadinessGate.executionBlocked))} />
+          <ListField label="blockingReasons" values={display.executionReadinessGate.blockingReasons} />
+          <CollapsiblePanel title="Diagnostics" defaultOpen={false}>
+            <ListField label="diagnostics" values={display.executionReadinessGate.diagnostics} />
+          </CollapsiblePanel>
+          {display.executionReadinessGate.requiredConditions.length > 0 ? (
+            display.executionReadinessGate.requiredConditions.map((condition) => (
+              <div key={`${condition.condition}:${condition.status}`} style={{ border: "1px solid #e5e7eb", borderRadius: 8, padding: 10, marginBottom: 8, background: "#f9fafb" }}>
+                <Field label="condition" value={redactSecretLikeText(condition.condition)} />
+                <Field label="status" value={redactSecretLikeText(condition.status)} />
+                <Field label="reason" value={redactSecretLikeText(condition.reason)} />
+              </div>
+            ))
+          ) : (
+            <p style={{ margin: 0, color: "#6b7280" }}>No required conditions available.</p>
+          )}
+        </Panel>
+
+        <Panel title="Execution Preconditions Ledger">
+          <Field label="overallStatus" value={redactSecretLikeText(display.executionPreconditionsLedger.overallStatus)} />
+          <Field label="executionAllowed" value={String(Boolean(display.executionPreconditionsLedger.executionAllowed))} />
+          <Field label="executionBlocked" value={String(Boolean(display.executionPreconditionsLedger.executionBlocked))} />
+          <ListField
+            label="missingRequirements"
+            values={display.executionPreconditionsLedger.missingRequirements.map((requirement) => `${requirement.requirementId}:${requirement.status}`)}
+          />
+          <ListField
+            label="blockedRequirements"
+            values={display.executionPreconditionsLedger.blockedRequirements.map((requirement) => `${requirement.requirementId}:${requirement.status}`)}
+          />
+          <CollapsiblePanel title="Diagnostics" defaultOpen={false}>
+            <ListField label="diagnostics" values={display.executionPreconditionsLedger.diagnostics} />
+          </CollapsiblePanel>
+          {display.executionPreconditionsLedger.requirements.length > 0 ? (
+            display.executionPreconditionsLedger.requirements.map((requirement) => (
+              <div key={requirement.requirementId} style={{ border: "1px solid #e5e7eb", borderRadius: 8, padding: 10, marginBottom: 8, background: "#f9fafb" }}>
+                <Field label="requirementId" value={redactSecretLikeText(requirement.requirementId)} />
+                <Field label="category" value={redactSecretLikeText(requirement.category)} />
+                <Field label="name" value={redactSecretLikeText(requirement.name)} />
+                <Field label="status" value={redactSecretLikeText(requirement.status)} />
+                <Field label="reason" value={redactSecretLikeText(requirement.reason)} />
+              </div>
+            ))
+          ) : (
+            <p style={{ margin: 0, color: "#6b7280" }}>No precondition requirements available.</p>
+          )}
+        </Panel>
+
+        <Panel title="Execution Remediation Plan">
+          <Field label="overallStatus" value={redactSecretLikeText(display.executionRemediationPlan.overallStatus)} />
+          <Field label="summary" value={redactSecretLikeText(display.executionRemediationPlan.summary)} />
+          <CollapsiblePanel title="Diagnostics" defaultOpen={false}>
+            <ListField label="diagnostics" values={display.executionRemediationPlan.diagnostics} />
+          </CollapsiblePanel>
+          {display.executionRemediationPlan.actions.length > 0 ? (
+            display.executionRemediationPlan.actions.map((action) => (
+              <div key={action.actionId} style={{ border: "1px solid #e5e7eb", borderRadius: 8, padding: 10, marginBottom: 8, background: "#f9fafb" }}>
+                <Field label="priority" value={redactSecretLikeText(action.priority)} />
+                <Field label="source" value={redactSecretLikeText(action.source)} />
+                <Field label="reason" value={redactSecretLikeText(action.reason)} />
+                <Field label="recommendedAction" value={redactSecretLikeText(action.recommendedAction)} />
+              </div>
+            ))
+          ) : (
+            <p style={{ margin: 0, color: "#6b7280" }}>No remediation actions required.</p>
+          )}
+        </Panel>
+      </GroupSection>
+
+      <GroupSection title="Execution Simulation">
+        <Panel title="Dry-run Job Plan">
+          <Field label="jobCount" value={String(display.dryRunJobPlan.jobCount)} />
+          <Field label="summary" value={redactSecretLikeText(display.dryRunJobPlan.summary)} />
+          <CollapsiblePanel title="Diagnostics" defaultOpen={false}>
+            <ListField label="diagnostics" values={display.dryRunJobPlan.diagnostics} />
+          </CollapsiblePanel>
+          {display.dryRunJobPlan.jobs.length > 0 ? (
+            display.dryRunJobPlan.jobs.map((job) => (
+              <div key={job.jobId} style={{ border: "1px solid #e5e7eb", borderRadius: 8, padding: 10, marginBottom: 8, background: "#f9fafb" }}>
+                <Field label="jobType" value={redactSecretLikeText(job.jobType)} />
+                <Field label="provider" value={redactSecretLikeText(job.provider)} />
+                <Field label="environment" value={redactSecretLikeText(job.environment)} />
+                <Field label="status" value={redactSecretLikeText(job.status)} />
+                <Field label="reason" value={redactSecretLikeText(job.reason)} />
+              </div>
+            ))
+          ) : (
+            <p style={{ margin: 0, color: "#6b7280" }}>No dry-run jobs available.</p>
+          )}
+        </Panel>
+
+        <Panel title="Execution Job Preview">
         <Field label="jobCount" value={String(display.executionJobPreview.jobs.length)} />
         <Field label="summary" value={redactSecretLikeText(display.executionJobPreview.summary)} />
         {display.executionJobPreview.jobs.length > 0 ? (
@@ -427,9 +612,9 @@ export function ProviderHandoffReadinessDebugView(props: {
         ) : (
           <p style={{ margin: 0, color: "#6b7280" }}>No execution job previews available.</p>
         )}
-      </section>
-      <section style={{ border: "1px solid #dbe3ea", borderRadius: 10, background: "#ffffff", padding: 12, marginTop: 12 }}>
-        <h2 style={{ margin: "0 0 8px 0", fontSize: 16 }}>Provider Worker Envelope Preview</h2>
+        </Panel>
+
+        <Panel title="Provider Worker Envelope Preview">
         <Field label="summary" value={redactSecretLikeText(display.workerEnvelopePreview.summary)} />
         <Field label="queueTarget" value={redactSecretLikeText(display.workerEnvelopePreview.envelope.queueTarget)} />
         <Field label="workerTarget" value={redactSecretLikeText(display.workerEnvelopePreview.envelope.workerTarget)} />
@@ -450,14 +635,19 @@ export function ProviderHandoffReadinessDebugView(props: {
             executionAllowed: display.workerEnvelopePreview.envelope.payload.executionAllowed,
           })}
         />
-        <ListField label="diagnostics" values={display.workerEnvelopePreview.diagnostics} />
-      </section>
+        <CollapsiblePanel title="Payload JSON Blocks" defaultOpen={false}>
+          <ListField label="diagnostics" values={display.workerEnvelopePreview.diagnostics} />
+        </CollapsiblePanel>
+        </Panel>
+      </GroupSection>
 
-      <section style={{ border: "1px solid #dbe3ea", borderRadius: 10, background: "#ffffff", padding: 12, marginTop: 12 }}>
-        <h2 style={{ margin: "0 0 8px 0", fontSize: 16 }}>Provider Execution Safety Manifest</h2>
+      <GroupSection title="Safety">
+        <Panel title="Provider Execution Safety Manifest">
         <Field label="overallStatus" value={redactSecretLikeText(display.executionSafetyManifest.overallStatus)} />
         <Field label="summary" value={redactSecretLikeText(display.executionSafetyManifest.summary)} />
-        <ListField label="diagnostics" values={display.executionSafetyManifest.diagnostics} />
+        <CollapsiblePanel title="Diagnostics" defaultOpen={false}>
+          <ListField label="diagnostics" values={display.executionSafetyManifest.diagnostics} />
+        </CollapsiblePanel>
         {display.executionSafetyManifest.barriers.length > 0 ? (
           display.executionSafetyManifest.barriers.map((barrier) => (
             <div
@@ -473,65 +663,10 @@ export function ProviderHandoffReadinessDebugView(props: {
         ) : (
           <p style={{ margin: 0, color: "#6b7280" }}>No execution safety barriers available.</p>
         )}
-      </section>
+        </Panel>
 
-      <section style={{ border: "1px solid #dbe3ea", borderRadius: 10, background: "#ffffff", padding: 12, marginTop: 12 }}>
-        <h2 style={{ margin: "0 0 8px 0", fontSize: 16 }}>Execution Preconditions Ledger</h2>
-        <Field label="overallStatus" value={redactSecretLikeText(display.executionPreconditionsLedger.overallStatus)} />
-        <Field label="executionAllowed" value={String(Boolean(display.executionPreconditionsLedger.executionAllowed))} />
-        <Field label="executionBlocked" value={String(Boolean(display.executionPreconditionsLedger.executionBlocked))} />
-        <ListField
-          label="missingRequirements"
-          values={display.executionPreconditionsLedger.missingRequirements.map((requirement) => `${requirement.requirementId}:${requirement.status}`)}
-        />
-        <ListField
-          label="blockedRequirements"
-          values={display.executionPreconditionsLedger.blockedRequirements.map((requirement) => `${requirement.requirementId}:${requirement.status}`)}
-        />
-        <ListField label="diagnostics" values={display.executionPreconditionsLedger.diagnostics} />
-        {display.executionPreconditionsLedger.requirements.length > 0 ? (
-          display.executionPreconditionsLedger.requirements.map((requirement) => (
-            <div
-              key={requirement.requirementId}
-              style={{ border: "1px solid #e5e7eb", borderRadius: 8, padding: 10, marginBottom: 8, background: "#f9fafb" }}
-            >
-              <Field label="requirementId" value={redactSecretLikeText(requirement.requirementId)} />
-              <Field label="category" value={redactSecretLikeText(requirement.category)} />
-              <Field label="name" value={redactSecretLikeText(requirement.name)} />
-              <Field label="status" value={redactSecretLikeText(requirement.status)} />
-              <Field label="reason" value={redactSecretLikeText(requirement.reason)} />
-            </div>
-          ))
-        ) : (
-          <p style={{ margin: 0, color: "#6b7280" }}>No precondition requirements available.</p>
-        )}
-      </section>
-
-      <section style={{ border: "1px solid #dbe3ea", borderRadius: 10, background: "#ffffff", padding: 12, marginTop: 12 }}>
-        <h2 style={{ margin: "0 0 8px 0", fontSize: 16 }}>Execution Readiness Gate</h2>
-        <Field label="gateStatus" value={redactSecretLikeText(display.executionReadinessGate.gateStatus)} />
-        <Field label="executionAllowed" value={String(Boolean(display.executionReadinessGate.executionAllowed))} />
-        <Field label="executionBlocked" value={String(Boolean(display.executionReadinessGate.executionBlocked))} />
-        <ListField label="blockingReasons" values={display.executionReadinessGate.blockingReasons} />
-        <ListField label="diagnostics" values={display.executionReadinessGate.diagnostics} />
-        {display.executionReadinessGate.requiredConditions.length > 0 ? (
-          display.executionReadinessGate.requiredConditions.map((condition) => (
-            <div
-              key={`${condition.condition}:${condition.status}`}
-              style={{ border: "1px solid #e5e7eb", borderRadius: 8, padding: 10, marginBottom: 8, background: "#f9fafb" }}
-            >
-              <Field label="condition" value={redactSecretLikeText(condition.condition)} />
-              <Field label="status" value={redactSecretLikeText(condition.status)} />
-              <Field label="reason" value={redactSecretLikeText(condition.reason)} />
-            </div>
-          ))
-        ) : (
-          <p style={{ margin: 0, color: "#6b7280" }}>No required conditions available.</p>
-        )}
-      </section>
-
-      <section style={{ border: "1px solid #dbe3ea", borderRadius: 10, background: "#ffffff", padding: 12, marginTop: 12 }}>
-        <h2 style={{ margin: "0 0 8px 0", fontSize: 16 }}>handoffArtifact summary</h2>
+        <CollapsiblePanel title="Payload JSON Blocks" defaultOpen={false}>
+          <Panel title="handoffArtifact summary">
         {artifact ? (
           <>
             <Field label="providerId" value={redactSecretLikeText(artifact.providerId)} />
@@ -548,61 +683,8 @@ export function ProviderHandoffReadinessDebugView(props: {
         ) : (
           <p style={{ margin: 0, color: "#6b7280" }}>No persisted handoff artifact available.</p>
         )}
-      </section>
-
-      <section style={{ border: "1px solid #dbe3ea", borderRadius: 10, background: "#ffffff", padding: 12, marginTop: 12 }}>
-        <h2 style={{ margin: "0 0 8px 0", fontSize: 16 }}>Authorization</h2>
-        <p style={{ margin: "0 0 10px 0", color: "#4b5563" }}>Authorization is intent only. Execution remains blocked.</p>
-        <GovernanceAuthorizationIntentForm handoffId={model.handoffId} />
-        <div style={{ height: 8 }} />
-        <div style={{ border: "1px solid #e5e7eb", borderRadius: 8, padding: 10, marginBottom: 8, background: "#f9fafb" }}>
-          <Field label="authorizationStatus" value={redactSecretLikeText(display.governanceAuthorization.authorizationStatus)} />
-          <Field label="authorizationReason" value={redactSecretLikeText(display.governanceAuthorization.authorizationReason)} />
-          <Field label="intentOnly" value={String(Boolean(display.governanceAuthorization.intentOnly))} />
-          <Field label="executionBlocked" value={String(Boolean(display.governanceAuthorization.executionBlocked))} />
-          <Field label="createdAt" value={redactSecretLikeText(display.governanceAuthorization.createdAt)} />
-          <ListField label="diagnostics" values={display.governanceAuthorization.diagnostics} />
-        </div>
-      </section>
-
-      <section style={{ border: "1px solid #dbe3ea", borderRadius: 10, background: "#ffffff", padding: 12, marginTop: 12 }}>
-        <h2 style={{ margin: "0 0 8px 0", fontSize: 16 }}>Operator Review</h2>
-        <p style={{ margin: "0 0 10px 0", color: "#4b5563" }}>Review intent only. Execution remains blocked.</p>
-        {operatorReviewFetchError ? (
-          <section style={{ border: "1px solid #fecaca", borderRadius: 10, background: "#fff1f2", padding: 12, marginBottom: 12 }}>
-            <strong>Operator review fetch error:</strong> {redactSecretLikeText(operatorReviewFetchError)}
-          </section>
-        ) : null}
-        <OperatorReviewIntentForm handoffId={model.handoffId} />
-        <div style={{ height: 8 }} />
-        <div style={{ border: "1px solid #e5e7eb", borderRadius: 8, padding: 10, marginBottom: 8, background: "#f9fafb" }}>
-          <h3 style={{ margin: "0 0 8px 0", fontSize: 14 }}>Operator Review Summary</h3>
-          <Field label="summary status" value={display.operatorReviewSummary.reviewSummaryStatus} />
-          <Field label="review count" value={String(display.operatorReviewSummary.reviewCount)} />
-          <Field label="latest reviewer" value={display.operatorReviewSummary.latestReviewer} />
-          <Field label="latest timestamp" value={display.operatorReviewSummary.latestCreatedAt} />
-          <Field label="latest reason" value={display.operatorReviewSummary.latestReason} />
-          <p style={{ margin: "8px 0 0 0", color: "#4b5563" }}>Review intent only. Execution remains blocked.</p>
-        </div>
-        {display.operatorReviews.length > 0 ? (
-          display.operatorReviews.map((review) => (
-            <div
-              key={review.reviewId}
-              style={{ border: "1px solid #e5e7eb", borderRadius: 8, padding: 10, marginBottom: 8, background: "#f9fafb" }}
-            >
-              <Field label="reviewer" value={redactSecretLikeText(review.reviewerRef)} />
-              <Field label="status" value={redactSecretLikeText(review.reviewStatus)} />
-              <Field label="reason" value={redactSecretLikeText(review.reviewReason)} />
-              <Field label="createdAt" value={redactSecretLikeText(review.createdAt)} />
-            </div>
-          ))
-        ) : (
-          <p style={{ margin: 0, color: "#6b7280" }}>No operator reviews persisted for this handoff.</p>
-        )}
-      </section>
-
-      <section style={{ border: "1px solid #dbe3ea", borderRadius: 10, background: "#ffffff", padding: 12, marginTop: 12 }}>
-        <h2 style={{ margin: "0 0 8px 0", fontSize: 16 }}>workerPickupEvidence summary</h2>
+          </Panel>
+          <Panel title="workerPickupEvidence summary">
         <Field label="providerRef" value={redactSecretLikeText(evidence.providerRef)} />
         <Field label="approvalStatus" value={redactSecretLikeText(evidence.approvalStatus)} />
         <Field label="readinessStatus" value={redactSecretLikeText(evidence.readinessStatus)} />
@@ -611,40 +693,9 @@ export function ProviderHandoffReadinessDebugView(props: {
         <ListField label="jobRefs" values={evidence.jobRefs} />
         <ListField label="blockedReasons" values={evidence.blockedReasons} />
         <ListField label="diagnostics" values={evidence.diagnostics} />
-      </section>
-
-      <section style={{ border: "1px solid #dbe3ea", borderRadius: 10, background: "#ffffff", padding: 12, marginTop: 12 }}>
-        <h2 style={{ margin: "0 0 8px 0", fontSize: 16 }}>Governance Snapshot</h2>
-        <Field label="snapshotId" value={redactSecretLikeText(display.governanceSnapshot.snapshotId)} />
-        <Field label="handoffId" value={redactSecretLikeText(display.governanceSnapshot.handoffId)} />
-        <Field label="readinessStatus" value={redactSecretLikeText(display.governanceSnapshot.readinessStatus)} />
-        <Field label="executionBlocked" value={String(Boolean(display.governanceSnapshot.executionBlocked))} />
-        <Field label="correlationKey" value={redactSecretLikeText(display.governanceSnapshot.correlationKey)} />
-        <Field label="createdAt" value={redactSecretLikeText(display.governanceSnapshot.createdAt)} />
-        <Field label="reviewSummaryStatus" value={redactSecretLikeText(display.governanceSnapshot.reviewSummaryStatus)} />
-        <ListField label="diagnostics" values={display.governanceSnapshot.diagnostics} />
-      </section>
-
-      <section style={{ border: "1px solid #dbe3ea", borderRadius: 10, background: "#ffffff", padding: 12, marginTop: 12 }}>
-        <h2 style={{ margin: "0 0 8px 0", fontSize: 16 }}>Governance Timeline</h2>
-        {display.governanceTimeline.length > 0 ? (
-          display.governanceTimeline.map((snapshot) => (
-            <div
-              key={snapshot.snapshotId}
-              style={{ border: "1px solid #e5e7eb", borderRadius: 8, padding: 10, marginBottom: 8, background: "#f9fafb" }}
-            >
-              <Field label="snapshotId" value={snapshot.snapshotId} />
-              <Field label="createdAt" value={snapshot.createdAt} />
-              <Field label="reviewSummaryStatus" value={snapshot.reviewSummaryStatus} />
-              <Field label="reviewCount" value={String(snapshot.reviewCount)} />
-              <Field label="readinessStatus" value={snapshot.readinessStatus} />
-              <ListField label="diagnostics" values={snapshot.diagnostics} />
-            </div>
-          ))
-        ) : (
-          <p style={{ margin: 0, color: "#6b7280" }}>No governance timeline snapshots available for this handoff.</p>
-        )}
-      </section>
+          </Panel>
+        </CollapsiblePanel>
+      </GroupSection>
     </main>
   );
 }

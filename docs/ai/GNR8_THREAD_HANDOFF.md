@@ -9,6 +9,7 @@ The active emphasis is deterministic contracts, approval/handoff safety, and no 
 Provider handoff readiness with Execution Job Shape Preview / Planned Job Materialization Contract milestone is complete and testable end-to-end from deployed UI (seed + inspection surfaces), and execution remains explicitly blocked.
 The deployed dev-seed governance loop is manually verified end-to-end including governance decision package surfaces (still control-plane only).
 Provider Execution Contract Envelope / Worker Payload Contract Preview milestone is implemented, deployed, and manually verified (still control-plane only, no execution).
+Provider Execution Safety Manifest / No-Execution Boundary Proof milestone is implemented, deployed, and manually verified (still control-plane only, no execution).
 
 Current snapshot sources:
 - `docs/ai/GNR8_CURRENT_STATE.md`
@@ -66,6 +67,7 @@ Completed readiness inspection routes:
 - `GET /api/gnr8/admin/provider-handoffs/[handoffId]/dryrun-job-plan` (read-only dry-run planned jobs simulation evidence)
 - `GET /api/gnr8/admin/provider-handoffs/[handoffId]/execution-job-preview` (read-only execution job shape preview evidence)
 - `GET /api/gnr8/admin/provider-handoffs/[handoffId]/worker-envelope-preview` (read-only provider worker envelope preview evidence)
+- `GET /api/gnr8/admin/provider-handoffs/[handoffId]/execution-safety-manifest` (read-only no-execution boundary proof evidence)
 
 Required production env flag:
 - `GNR8_ADMIN_PROVIDER_HANDOFF_READINESS_SEED_ENABLED=1`
@@ -90,12 +92,40 @@ Evidence and diagnostics milestone:
 - readiness UI displays Dry-run Job Plan section
 - readiness UI displays Execution Job Preview section
 - readiness UI displays Provider Worker Envelope Preview section
+- readiness UI displays Provider Execution Safety Manifest section
 - readiness UI displays Execution Readiness Gate section
 - readiness UI displays Execution Preconditions Ledger section
 - readiness UI displays Execution Remediation Plan section
 - runtime dry-run job plan model exists: `runtime-provider-dryrun-job-plan.ts`
 - runtime execution job preview model exists: `runtime-provider-execution-job-preview.ts`
 - runtime provider worker envelope preview model exists: `runtime-provider-worker-envelope-preview.ts`
+- runtime provider execution safety manifest model exists: `runtime-provider-execution-safety-manifest.ts`
+- provider execution safety manifest verified deployed values:
+  - `overallStatus`: `execution_impossible`
+  - `summary`: `Provider execution is impossible in this runtime: active governance, worker, queue, provider, security, and execution boundaries enforce simulation-only behavior.`
+  - diagnostics include:
+    - `EXECUTION_SAFETY_BOUNDARY_PROVEN`
+    - `EXECUTION_SAFETY_MANIFEST_CREATED`
+- provider execution safety manifest verified barriers:
+  - `governance_boundary_active`
+  - `worker_dispatch_disabled`
+  - `queue_allocation_disabled`
+  - `provider_execution_disabled`
+  - `secret_resolution_disabled`
+  - `runtime_execution_boundary_active`
+- provider execution safety manifest critical distinction:
+  - safety manifest proves no-execution boundary
+  - governance remains advisory
+  - worker dispatch is disabled
+  - queue allocation is disabled
+  - provider execution is disabled
+  - credential/secret resolution remains disabled
+  - runtime remains simulation-only
+  - `executionAllowed` remains `false`
+  - `executionBlocked` remains `true`
+- UI note:
+  - secret-related barrier IDs may be redacted because generic redaction treats `secret` as sensitive
+  - this is safe and non-blocking
 - dry-run job plan verified deployed values:
   - `jobCount`: `1`
   - `summary`: `1 simulated provider jobs generated for readiness evidence.`
@@ -303,10 +333,10 @@ Hard boundaries remain:
 
 ## F) Current Active Implementation Phase
 
-Active phase: Provider Execution Contract Envelope / Worker Payload Contract Preview milestone (deployed and verified).
+Active phase: Provider Execution Safety Manifest / No-Execution Boundary Proof milestone (deployed and verified).
 
 Practical next phase:
-1. Provider Execution Safety Manifest / No-Execution Boundary Proof.
+1. Evidence Surface Consolidation / Operator Cockpit Layout Pass.
 2. Keep execution paths in dry-run/sandbox-gated mode with explicit execution-blocked evidence (still no execution).
 
 ## G) How Next Thread Should Behave

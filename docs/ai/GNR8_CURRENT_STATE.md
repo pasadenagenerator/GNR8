@@ -4,10 +4,42 @@
 2026-05-25
 
 ## Current Phase
-Provider Execution Contract Envelope / Worker Payload Contract Preview milestone (control-plane only, deployed and verified).
+Provider Execution Safety Manifest / No-Execution Boundary Proof milestone (control-plane only, deployed and verified).
 
 ## Latest Completed Milestone
 
+- Provider Execution Safety Manifest / No-Execution Boundary Proof is implemented, deployed, and manually verified end-to-end (control-plane only).
+- Runtime model exists:
+  - `runtime-provider-execution-safety-manifest.ts`
+- Provider Execution Safety Manifest API is deployed:
+  - `GET /api/gnr8/admin/provider-handoffs/[handoffId]/execution-safety-manifest`
+- Readiness UI now includes a Provider Execution Safety Manifest section.
+- Provider Execution Safety Manifest verified deployed values:
+  - `overallStatus`: `execution_impossible`
+  - `summary`: `Provider execution is impossible in this runtime: active governance, worker, queue, provider, security, and execution boundaries enforce simulation-only behavior.`
+  - diagnostics include:
+    - `EXECUTION_SAFETY_BOUNDARY_PROVEN`
+    - `EXECUTION_SAFETY_MANIFEST_CREATED`
+- Provider Execution Safety Manifest verified barriers:
+  - `governance_boundary_active`
+  - `worker_dispatch_disabled`
+  - `queue_allocation_disabled`
+  - `provider_execution_disabled`
+  - `secret_resolution_disabled`
+  - `runtime_execution_boundary_active`
+- Provider Execution Safety Manifest critical distinction:
+  - safety manifest proves the no-execution boundary
+  - governance remains advisory
+  - worker dispatch is disabled
+  - queue allocation is disabled
+  - provider execution is disabled
+  - credential/secret resolution remains disabled
+  - runtime remains simulation-only
+  - `executionAllowed` remains `false`
+  - `executionBlocked` remains `true`
+- UI note:
+  - UI may redact secret-related barrier IDs because generic redaction treats `secret` as sensitive
+  - this is safe and non-blocking
 - Provider Execution Contract Envelope / Worker Payload Contract Preview is deployed and manually verified end-to-end (control-plane only).
 - Runtime model exists:
   - `runtime-provider-worker-envelope-preview.ts`
@@ -238,7 +270,7 @@ Provider Execution Contract Envelope / Worker Payload Contract Preview milestone
 
 ## Next Milestone
 
-- Provider Execution Safety Manifest / No-Execution Boundary Proof (still no execution).
+- Evidence Surface Consolidation / Operator Cockpit Layout Pass (still no execution).
 
 ## Latest Provider Control Plane State
 
