@@ -1,14 +1,14 @@
 # GNR8 CURRENT STATE SNAPSHOT
 
 ## Snapshot Date
-2026-05-22
+2026-05-25
 
 ## Current Phase
-Governance Snapshot Persistence + Audit Timeline milestone (control-plane only).
+Governance Authorization Intent milestone (control-plane only, deployed and verified).
 
 ## Latest Completed Milestone
 
-- Governance Snapshot Persistence + Audit Timeline is deployed and manually verified end-to-end (control-plane only).
+- Governance authorization intent is deployed and manually verified end-to-end (control-plane only).
 - Control-plane layers for provider settings, credential reference contract, provider selection/communicator, job planning, approvals, and execution handoffs are implemented.
 - Deterministic Openprovider sandbox adapter and contract/readiness boundaries are in place.
 - Explicit execution boundaries are enforced in control-plane artifacts and dry-run paths.
@@ -49,10 +49,27 @@ Governance Snapshot Persistence + Audit Timeline milestone (control-plane only).
 - Governance Timeline UI section is deployed.
 - Governance snapshot persistence table is deployed:
   - `gnr8_runtime_provider_governance_snapshots`
+- Governance authorization model exists:
+  - `runtime-provider-governance-authorization.ts`
+- Governance authorization persistence table is deployed:
+  - `gnr8_runtime_provider_governance_authorizations`
+- Governance authorization APIs are deployed:
+  - `GET /api/gnr8/admin/provider-handoffs/[handoffId]/authorization`
+  - `POST /api/gnr8/admin/provider-handoffs/[handoffId]/authorization`
+- Readiness UI now includes an Authorization section.
+- Governance authorization statuses are:
+  - `not_requested`
+  - `pending_authorization`
+  - `authorized_for_future_execution`
+  - `denied`
+- `authorized_for_future_execution` remains intent-only and does not authorize execution.
 - Verified deployed governance loop behavior:
   - readiness-test UI creates/reuses deterministic handoff
   - readiness inspection loads `handoffArtifact` and `workerPickupEvidence`
   - operator review form creates persisted review intent
+  - authorization form creates persisted authorization intent
+  - governance snapshot updates after authorization/review state changed
+  - governance timeline contains multiple snapshots
   - operator review summary is displayed from persisted reviews
   - Governance Snapshot is displayed
   - Governance Timeline is displayed
@@ -65,11 +82,13 @@ Governance Snapshot Persistence + Audit Timeline milestone (control-plane only).
     - `diagnostics`
   - `executionBlocked` remains `true`
 - Example verified values from deployed manual verification:
-  - `reviewSummaryStatus`: `pending_review`
-  - `reviewCount`: `1`
-  - `readinessStatus`: `pickup_not_ready`
+  - `authorizationStatus`: `authorized_for_future_execution`
+  - `authorizationReason`: `1234`
+  - `intentOnly`: `true`
   - `executionBlocked`: `true`
-  - snapshot reuse observed: `GOVERNANCE_SNAPSHOT_REUSED`
+  - diagnostics include:
+    - `GOVERNANCE_AUTHORIZATION_CREATED`
+    - `GOVERNANCE_AUTHORIZATION_INTENT_ONLY`
 - Future note:
   - deterministic `createdAt` may show epoch values for dev-seed artifacts
   - potential future improvement: add `snapshotCreatedAt` and `persistedAt`
@@ -81,7 +100,7 @@ Governance Snapshot Persistence + Audit Timeline milestone (control-plane only).
 
 ## Next Milestone
 
-- Governance authorization layer (intent-only first; still no execution).
+- Governance decision package / pre-execution readiness dossier (still no execution).
 
 ## Latest Provider Control Plane State
 
@@ -109,6 +128,11 @@ Governance Snapshot Persistence + Audit Timeline milestone (control-plane only).
 - operator review summary model: implemented
 - governance snapshot model: implemented
 - governance snapshot diagnostics: implemented
+- governance authorization model: implemented
+- governance authorization persistence: implemented
+- governance authorization read-only API: implemented
+- governance authorization create API (admin-only): implemented
+- governance authorization readiness UI section: implemented
 - operator review read-only readiness UI section: implemented
 - governance snapshot readiness UI section: implemented
 - operator review create readiness UI form: implemented
@@ -152,6 +176,8 @@ Routes:
   - includes deterministic `reviewSummary` projection
 - `POST /api/gnr8/admin/provider-handoffs/[handoffId]/reviews` (admin-only operator review intent creation)
 - `GET /api/gnr8/admin/provider-handoffs/[handoffId]/governance-timeline` (read-only governance timeline audit projection)
+- `GET /api/gnr8/admin/provider-handoffs/[handoffId]/authorization` (read-only governance authorization)
+- `POST /api/gnr8/admin/provider-handoffs/[handoffId]/authorization` (admin-only governance authorization intent creation)
 
 Readiness UI operator review controls:
 - Governance Snapshot section (deterministic evidence projection)
@@ -182,6 +208,7 @@ Required production env flag:
 - NO secret resolution.
 - Openprovider sandbox planning/dry-run artifacts only. No provider execution is permitted, including sandbox execution. Control-plane metadata and deterministic planning only.
 - `approved_for_future_execution` is intent-only and does not authorize execution.
+- `authorized_for_future_execution` is intent-only and does not authorize execution.
 - `executionBlocked` remains `true`.
 - governance snapshot is evidence only.
 - NO Openprovider/registrar calls.

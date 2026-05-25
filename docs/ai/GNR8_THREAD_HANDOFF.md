@@ -6,8 +6,8 @@ This is the first file every new ChatGPT/Codex thread should read.
 
 GNR8 is currently in provider/DNS control-plane hardening and migration/preview validation mode.
 The active emphasis is deterministic contracts, approval/handoff safety, and no hidden execution.
-Provider handoff readiness with Governance Snapshot Persistence + Audit Timeline milestone is complete and testable end-to-end from deployed UI (seed + inspection surfaces), and execution remains explicitly blocked.
-The deployed dev-seed governance loop is manually verified end-to-end including persistence and timeline audit surfaces (still control-plane only).
+Provider handoff readiness with Governance Authorization Intent milestone is complete and testable end-to-end from deployed UI (seed + inspection surfaces), and execution remains explicitly blocked.
+The deployed dev-seed governance loop is manually verified end-to-end including authorization intent persistence and timeline audit surfaces (still control-plane only).
 
 Current snapshot sources:
 - `docs/ai/GNR8_CURRENT_STATE.md`
@@ -57,6 +57,8 @@ Completed readiness inspection routes:
 - `POST /api/gnr8/admin/provider-handoffs/readiness-seed` (admin seed API)
 - `GET /api/gnr8/admin/provider-handoffs/[handoffId]/reviews` (read-only operator reviews)
 - `POST /api/gnr8/admin/provider-handoffs/[handoffId]/reviews` (admin-only operator review intent creation)
+- `GET /api/gnr8/admin/provider-handoffs/[handoffId]/authorization` (read-only governance authorization)
+- `POST /api/gnr8/admin/provider-handoffs/[handoffId]/authorization` (admin-only governance authorization intent creation)
 
 Required production env flag:
 - `GNR8_ADMIN_PROVIDER_HANDOFF_READINESS_SEED_ENABLED=1`
@@ -71,10 +73,18 @@ Evidence and diagnostics milestone:
 - governance snapshot combines: handoff readiness, `workerPickupEvidence`, operator `reviewSummary`, diagnostics
 - governance snapshot fields: `snapshotId`, `handoffId`, `correlationKey`, `readinessStatus`, `executionBlocked: true`, `workerPickupEvidence`, `reviewSummary`, `diagnostics`, `createdAt`
 - governance snapshot persistence table exists: `gnr8_runtime_provider_governance_snapshots`
+- governance authorization model exists: `runtime-provider-governance-authorization.ts`
+- governance authorization persistence table exists: `gnr8_runtime_provider_governance_authorizations`
 - readiness API includes `governanceSnapshot`
 - governance timeline API exists: `GET /api/gnr8/admin/provider-handoffs/[handoffId]/governance-timeline`
 - readiness UI displays Governance Snapshot section
 - readiness UI displays Governance Timeline section
+- readiness UI displays Authorization section
+- governance authorization statuses:
+  - `not_requested`
+  - `pending_authorization`
+  - `authorized_for_future_execution`
+  - `denied`
 - readiness UI keeps detailed operator review list visible
 - readiness UI includes create operator review form with:
   - status dropdown values: `pending_review`, `approved_for_future_execution`, `rejected`, `needs_changes`
@@ -86,6 +96,7 @@ Evidence and diagnostics milestone:
   - `GOVERNANCE_SNAPSHOT_AUDIT_READ`
   - `GOVERNANCE_SNAPSHOT_PERSIST_FAILED_CLOSED`
 - `approved_for_future_execution` is intent-only; it does not authorize execution
+- `authorized_for_future_execution` is intent-only; it does not authorize execution
 - `executionBlocked` remains `true`
 - governance snapshot is evidence only
 
@@ -94,6 +105,9 @@ Deployed manual verification loop (completed):
 - readiness inspection loads `handoffArtifact`
 - `workerPickupEvidence` is displayed
 - operator review form creates persisted review intent
+- authorization form creates persisted authorization intent
+- governance snapshot updated after authorization/review state changed
+- governance timeline contains multiple snapshots
 - operator review summary displays persisted review state
 - Governance Snapshot is displayed
 - Governance Timeline is displayed
@@ -107,11 +121,13 @@ Deployed manual verification loop (completed):
 - `executionBlocked` remains `true`
 
 Example verified values:
-- `reviewSummaryStatus`: `pending_review`
-- `reviewCount`: `1`
-- `readinessStatus`: `pickup_not_ready`
+- `authorizationStatus`: `authorized_for_future_execution`
+- `authorizationReason`: `1234`
+- `intentOnly`: `true`
 - `executionBlocked`: `true`
-- snapshot reuse observed: `GOVERNANCE_SNAPSHOT_REUSED`
+- diagnostics include:
+  - `GOVERNANCE_AUTHORIZATION_CREATED`
+  - `GOVERNANCE_AUTHORIZATION_INTENT_ONLY`
 
 Future note:
 - deterministic `createdAt` may show epoch values for dev-seed artifacts
@@ -132,10 +148,10 @@ Hard boundaries remain:
 
 ## F) Current Active Implementation Phase
 
-Active phase: Governance Snapshot Persistence + Audit Timeline milestone (deployed and verified).
+Active phase: Governance Authorization Intent milestone (deployed and verified).
 
 Practical next phase:
-1. Governance authorization layer (intent-only first).
+1. Governance decision package / pre-execution readiness dossier.
 2. Keep execution paths in dry-run/sandbox-gated mode with explicit execution-blocked evidence (still no execution).
 
 ## G) How Next Thread Should Behave

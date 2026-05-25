@@ -86,6 +86,15 @@ type GovernanceAuthorizationSummary = {
   createdAt?: string;
   diagnostics?: string[];
 };
+type GovernanceDecisionPackageSummary = {
+  packageId: string;
+  recommendedAction: string;
+  executionBlocked: boolean;
+  reviewStatus: string;
+  authorizationStatus: string;
+  snapshotCount: number;
+  diagnostics: string[];
+};
 
 export type ProviderHandoffReadinessDebugModel = {
   handoffId: string;
@@ -100,6 +109,7 @@ export type ProviderHandoffReadinessDebugModel = {
   governanceSnapshot?: GovernanceSnapshotSummary;
   governanceTimeline?: GovernanceTimelineSnapshotSummary[];
   governanceAuthorization?: GovernanceAuthorizationSummary | null;
+  governanceDecisionPackage?: GovernanceDecisionPackageSummary | null;
   operatorReviews: OperatorReviewSummary[];
   operatorReviewSummary: OperatorReviewStateSummary;
   operatorReviewIntentOnly: boolean;
@@ -145,6 +155,9 @@ export function ProviderHandoffReadinessDebugView(props: {
       <h1 style={{ margin: 0, fontSize: 20 }}>Provider Handoff Pickup Readiness (Internal Debug)</h1>
       <p style={{ margin: "8px 0 0 0", color: "#374151", fontWeight: 600 }}>{display.executionBlockedLabel}</p>
       <p style={{ margin: "4px 0 0 0", color: "#4b5563" }}>{display.reviewOnlyLabel}</p>
+      <section style={{ border: "1px solid #facc15", borderRadius: 10, background: "#fef9c3", padding: 12, marginTop: 12 }}>
+        <strong>Decision package is advisory only. Execution remains blocked.</strong>
+      </section>
 
       {fetchError ? (
         <section style={{ border: "1px solid #fecaca", borderRadius: 10, background: "#fff1f2", padding: 12, marginTop: 12 }}>
@@ -161,6 +174,17 @@ export function ProviderHandoffReadinessDebugView(props: {
         <Field label="nextAllowedAction" value={display.nextAllowedAction} />
         <Field label="correlationKey" value={display.correlationKey} />
         <ListField label="diagnostics" values={display.diagnostics} />
+      </section>
+
+      <section style={{ border: "1px solid #dbe3ea", borderRadius: 10, background: "#ffffff", padding: 12, marginTop: 12 }}>
+        <h2 style={{ margin: "0 0 8px 0", fontSize: 16 }}>Governance Decision Package</h2>
+        <Field label="packageId" value={redactSecretLikeText(display.governanceDecisionPackage.packageId)} />
+        <Field label="recommendedAction" value={redactSecretLikeText(display.governanceDecisionPackage.recommendedAction)} />
+        <Field label="executionBlocked" value={String(Boolean(display.governanceDecisionPackage.executionBlocked))} />
+        <Field label="reviewStatus" value={redactSecretLikeText(display.governanceDecisionPackage.reviewStatus)} />
+        <Field label="authorizationStatus" value={redactSecretLikeText(display.governanceDecisionPackage.authorizationStatus)} />
+        <Field label="snapshotCount" value={String(display.governanceDecisionPackage.snapshotCount)} />
+        <ListField label="diagnostics" values={display.governanceDecisionPackage.diagnostics} />
       </section>
 
       <section style={{ border: "1px solid #dbe3ea", borderRadius: 10, background: "#ffffff", padding: 12, marginTop: 12 }}>

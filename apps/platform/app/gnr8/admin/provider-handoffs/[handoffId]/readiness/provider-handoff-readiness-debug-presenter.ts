@@ -86,6 +86,15 @@ export function buildProviderHandoffReadinessDebugDisplay(model: ProviderHandoff
       createdAt: redactSecretLikeText(authorization?.createdAt),
       diagnostics: authorizationDiagnostics,
     },
+    governanceDecisionPackage: {
+      packageId: redactSecretLikeText(model.governanceDecisionPackage?.packageId),
+      recommendedAction: redactSecretLikeText(model.governanceDecisionPackage?.recommendedAction),
+      executionBlocked: model.governanceDecisionPackage?.executionBlocked === true,
+      reviewStatus: redactSecretLikeText(model.governanceDecisionPackage?.reviewStatus),
+      authorizationStatus: redactSecretLikeText(model.governanceDecisionPackage?.authorizationStatus),
+      snapshotCount: Number.isFinite(model.governanceDecisionPackage?.snapshotCount) ? Number(model.governanceDecisionPackage?.snapshotCount) : 0,
+      diagnostics: sanitizeDisplayList(model.governanceDecisionPackage?.diagnostics),
+    },
     operatorReviews: [...model.operatorReviews]
       .map((review) => ({
         reviewId: redactSecretLikeText(review.reviewId),

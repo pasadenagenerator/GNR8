@@ -99,6 +99,31 @@ const DEFAULT_GOVERNANCE_AUTHORIZATION: NonNullable<ProviderHandoffReadinessDebu
   createdAt: "",
   diagnostics: ["GOVERNANCE_AUTHORIZATION_INTENT_ONLY"],
 };
+const DEFAULT_GOVERNANCE_DECISION_PACKAGE: NonNullable<ProviderHandoffReadinessDebugModel["governanceDecisionPackage"]> = {
+  packageId: "",
+  recommendedAction: "failed_closed",
+  executionBlocked: true,
+  reviewStatus: "no_reviews",
+  authorizationStatus: "not_requested",
+  snapshotCount: 0,
+  diagnostics: ["GOVERNANCE_DECISION_PACKAGE_FAILED_CLOSED"],
+};
+function normalizeGovernanceDecisionPackage(
+  value: unknown,
+): NonNullable<ProviderHandoffReadinessDebugModel["governanceDecisionPackage"]> {
+  const decisionPackage = normalizeObject(value);
+  const signals = normalizeObject(decisionPackage.decisionSignals);
+  const timelineSummary = normalizeObject(decisionPackage.timelineSummary);
+  return {
+    packageId: normalizeToken(decisionPackage.packageId),
+    recommendedAction: normalizeToken(signals.recommendedAction) || "failed_closed",
+    executionBlocked: Boolean(decisionPackage.executionBlocked),
+    reviewStatus: normalizeToken(signals.reviewStatus) || "no_reviews",
+    authorizationStatus: normalizeToken(signals.authorizationStatus) || "not_requested",
+    snapshotCount: Number.isFinite(timelineSummary.snapshotCount) ? Number(timelineSummary.snapshotCount) : 0,
+    diagnostics: normalizeList(decisionPackage.diagnostics),
+  };
+}
 
 function normalizeGovernanceAuthorization(
   value: unknown,
@@ -158,6 +183,7 @@ async function fetchReadinessModel(
   const reviewsEndpoint = `${proto}://${host}/api/gnr8/admin/provider-handoffs/${encodeURIComponent(handoffId)}/reviews`;
   const governanceTimelineEndpoint = `${proto}://${host}/api/gnr8/admin/provider-handoffs/${encodeURIComponent(handoffId)}/governance-timeline`;
   const governanceAuthorizationEndpoint = `${proto}://${host}/api/gnr8/admin/provider-handoffs/${encodeURIComponent(handoffId)}/authorization`;
+  const governanceDecisionPackageEndpoint = `${proto}://${host}/api/gnr8/admin/provider-handoffs/${encodeURIComponent(handoffId)}/decision-package`;
   const cookie = normalizeToken(incomingHeaders.get("cookie"));
   const requestHeaders = cookie ? { cookie } : undefined;
 
@@ -181,6 +207,7 @@ async function fetchReadinessModel(
       operatorReviewIntentOnly: true,
       governanceTimeline: [],
       governanceAuthorization: DEFAULT_GOVERNANCE_AUTHORIZATION,
+      governanceDecisionPackage: DEFAULT_GOVERNANCE_DECISION_PACKAGE,
     };
 
     if (!response.ok) {
@@ -194,6 +221,7 @@ async function fetchReadinessModel(
     let operatorReviewFetchError: string | null = null;
     let governanceTimelineError: string | null = null;
     let governanceAuthorizationError: string | null = null;
+    let governanceDecisionPackageError: string | null = null;
     try {
       const reviewsResponse = await fetchImpl(reviewsEndpoint, { method: "GET", cache: "no-store", headers: requestHeaders });
       const reviewsPayload = (await reviewsResponse.json().catch(() => ({}))) as Record<string, unknown>;
@@ -220,6 +248,16 @@ async function fetchReadinessModel(
       governanceAuthorizationError = error instanceof Error ? error.message : "Unknown fetch error";
     }
     try {
+      const decisionPackageResponse = await fetchImpl(governanceDecisionPackageEndpoint, { method: "GET", cache: "no-store", headers: requestHeaders });
+      const decisionPackagePayload = (await decisionPackageResponse.json().catch(() => ({}))) as Record<string, unknown>;
+      model.governanceDecisionPackage = normalizeGovernanceDecisionPackage(decisionPackagePayload.decisionPackage);
+      if (!decisionPackageResponse.ok) {
+        governanceDecisionPackageError = normalizeToken(decisionPackagePayload.error) || `HTTP_${decisionPackageResponse.status}`;
+      }
+    } catch (error) {
+      governanceDecisionPackageError = error instanceof Error ? error.message : "Unknown fetch error";
+    }
+    try {
       const timelineResponse = await fetchImpl(governanceTimelineEndpoint, { method: "GET", cache: "no-store", headers: requestHeaders });
       const timelinePayload = (await timelineResponse.json().catch(() => ({}))) as Record<string, unknown>;
       model.governanceTimeline = normalizeGovernanceTimeline(timelinePayload.snapshots);
@@ -234,6 +272,9 @@ async function fetchReadinessModel(
     }
     if (governanceAuthorizationError) {
       model.diagnostics = normalizeList([...model.diagnostics, `GOVERNANCE_AUTHORIZATION_FETCH_ERROR:${governanceAuthorizationError}`]);
+    }
+    if (governanceDecisionPackageError) {
+      model.diagnostics = normalizeList([...model.diagnostics, `GOVERNANCE_DECISION_PACKAGE_FETCH_ERROR:${governanceDecisionPackageError}`]);
     }
 
     return {
@@ -259,6 +300,7 @@ async function fetchReadinessModel(
         operatorReviewIntentOnly: true,
         governanceTimeline: [],
         governanceAuthorization: DEFAULT_GOVERNANCE_AUTHORIZATION,
+        governanceDecisionPackage: DEFAULT_GOVERNANCE_DECISION_PACKAGE,
       },
       fetchError: error instanceof Error ? error.message : "Unknown fetch error",
       operatorReviewFetchError: null,

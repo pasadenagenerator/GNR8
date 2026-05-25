@@ -249,6 +249,7 @@ export function createProviderHandoffReadinessRouteHandlers(
             diagnostics: uniqueSorted([
               ...workerPickupEvidence.diagnostics,
               "PROVIDER_WORKER_PICKUP_EVIDENCE_FAILED_CLOSED:SCOPE_UNRESOLVED",
+              "GOVERNANCE_DECISION_PACKAGE_EVIDENCE_AGGREGATED",
               ...scopeResolution.diagnostics,
             ]),
           };
@@ -276,7 +277,11 @@ export function createProviderHandoffReadinessRouteHandlers(
 
         const successEvidence: RuntimeProviderWorkerPickupEvidence = {
           ...workerPickupEvidence,
-          diagnostics: uniqueSorted([...workerPickupEvidence.diagnostics, ...scopeResolution.diagnostics]),
+          diagnostics: uniqueSorted([
+            ...workerPickupEvidence.diagnostics,
+            "GOVERNANCE_DECISION_PACKAGE_EVIDENCE_AGGREGATED",
+            ...scopeResolution.diagnostics,
+          ]),
         };
         const governanceSnapshotDraft = resolvedDeps.createRuntimeProviderGovernanceSnapshot({
           handoffId: sanitizedHandoffArtifact.handoffId,
