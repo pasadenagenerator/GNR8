@@ -100,6 +100,17 @@ export function buildProviderHandoffReadinessDebugDisplay(model: ProviderHandoff
         recommendedAction: redactSecretLikeText(action.recommendedAction),
       }))
     : [];
+  const dryRunJobPlan = model.dryRunJobPlan;
+  const dryRunJobs = Array.isArray(dryRunJobPlan?.jobs)
+    ? dryRunJobPlan.jobs.map((job) => ({
+        jobId: redactSecretLikeText(job.jobId),
+        jobType: redactSecretLikeText(job.jobType) as "provider_dns_upsert" | "provider_dns_delete" | "provider_domain_attach" | "provider_unknown",
+        provider: redactSecretLikeText(job.provider),
+        environment: redactSecretLikeText(job.environment),
+        status: redactSecretLikeText(job.status) as "planned" | "simulated",
+        reason: redactSecretLikeText(job.reason),
+      }))
+    : [];
 
   return {
     executionBlockedLabel: "Execution blocked",
@@ -205,6 +216,18 @@ export function buildProviderHandoffReadinessDebugDisplay(model: ProviderHandoff
       intentOnly: true,
       actions: executionRemediationActions,
       diagnostics: sanitizeDisplayList(executionRemediationPlan?.diagnostics),
+    },
+    dryRunJobPlan: {
+      planId: redactSecretLikeText(dryRunJobPlan?.planId),
+      handoffId: redactSecretLikeText(dryRunJobPlan?.handoffId),
+      executionAllowed: false,
+      executionBlocked: true,
+      intentOnly: true,
+      jobCount: Number.isFinite(dryRunJobPlan?.jobCount) ? Number(dryRunJobPlan?.jobCount) : dryRunJobs.length,
+      jobs: dryRunJobs,
+      summary: redactSecretLikeText(dryRunJobPlan?.summary) || "No deterministic jobs could be generated.",
+      diagnostics: sanitizeDisplayList(dryRunJobPlan?.diagnostics),
+      createdAt: redactSecretLikeText(dryRunJobPlan?.createdAt),
     },
     operatorReviews: [...model.operatorReviews]
       .map((review) => ({

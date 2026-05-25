@@ -143,6 +143,25 @@ type ExecutionRemediationPlanSummary = {
   actions: ExecutionRemediationActionSummary[];
   diagnostics: string[];
 };
+type DryRunJobPlanSummary = {
+  planId: string;
+  handoffId: string;
+  executionAllowed: boolean;
+  executionBlocked: boolean;
+  intentOnly: boolean;
+  jobCount: number;
+  jobs: {
+    jobId: string;
+    jobType: "provider_dns_upsert" | "provider_dns_delete" | "provider_domain_attach" | "provider_unknown";
+    provider: string;
+    environment: string;
+    status: "planned" | "simulated";
+    reason: string;
+  }[];
+  summary: string;
+  diagnostics: string[];
+  createdAt: string;
+};
 
 export type ProviderHandoffReadinessDebugModel = {
   handoffId: string;
@@ -161,6 +180,7 @@ export type ProviderHandoffReadinessDebugModel = {
   executionReadinessGate?: ExecutionReadinessGateSummary | null;
   executionPreconditionsLedger?: ExecutionPreconditionsLedgerSummary | null;
   executionRemediationPlan?: ExecutionRemediationPlanSummary | null;
+  dryRunJobPlan?: DryRunJobPlanSummary | null;
   operatorReviews: OperatorReviewSummary[];
   operatorReviewSummary: OperatorReviewStateSummary;
   operatorReviewIntentOnly: boolean;
@@ -218,6 +238,9 @@ export function ProviderHandoffReadinessDebugView(props: {
       <section style={{ border: "1px solid #bfdbfe", borderRadius: 10, background: "#eff6ff", padding: 12, marginTop: 12 }}>
         <strong>Remediation guidance is advisory only. Execution remains disabled.</strong>
       </section>
+      <section style={{ border: "1px solid #bfdbfe", borderRadius: 10, background: "#eff6ff", padding: 12, marginTop: 12 }}>
+        <strong>Job plan is simulated only. Execution remains disabled.</strong>
+      </section>
 
       {fetchError ? (
         <section style={{ border: "1px solid #fecaca", borderRadius: 10, background: "#fff1f2", padding: 12, marginTop: 12 }}>
@@ -266,6 +289,28 @@ export function ProviderHandoffReadinessDebugView(props: {
           ))
         ) : (
           <p style={{ margin: 0, color: "#6b7280" }}>No remediation actions required.</p>
+        )}
+      </section>
+
+      <section style={{ border: "1px solid #dbe3ea", borderRadius: 10, background: "#ffffff", padding: 12, marginTop: 12 }}>
+        <h2 style={{ margin: "0 0 8px 0", fontSize: 16 }}>Dry-run Job Plan</h2>
+        <Field label="jobCount" value={String(display.dryRunJobPlan.jobCount)} />
+        <Field label="summary" value={redactSecretLikeText(display.dryRunJobPlan.summary)} />
+        {display.dryRunJobPlan.jobs.length > 0 ? (
+          display.dryRunJobPlan.jobs.map((job) => (
+            <div
+              key={job.jobId}
+              style={{ border: "1px solid #e5e7eb", borderRadius: 8, padding: 10, marginBottom: 8, background: "#f9fafb" }}
+            >
+              <Field label="jobType" value={redactSecretLikeText(job.jobType)} />
+              <Field label="provider" value={redactSecretLikeText(job.provider)} />
+              <Field label="environment" value={redactSecretLikeText(job.environment)} />
+              <Field label="status" value={redactSecretLikeText(job.status)} />
+              <Field label="reason" value={redactSecretLikeText(job.reason)} />
+            </div>
+          ))
+        ) : (
+          <p style={{ margin: 0, color: "#6b7280" }}>No dry-run jobs available.</p>
         )}
       </section>
 

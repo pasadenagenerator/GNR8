@@ -6,7 +6,7 @@ This is the first file every new ChatGPT/Codex thread should read.
 
 GNR8 is currently in provider/DNS control-plane hardening and migration/preview validation mode.
 The active emphasis is deterministic contracts, approval/handoff safety, and no hidden execution.
-Provider handoff readiness with Execution Readiness Gate + Execution Preconditions Ledger milestone is complete and testable end-to-end from deployed UI (seed + inspection surfaces), and execution remains explicitly blocked.
+Provider handoff readiness with Execution Blocker Remediation Planner / Missing Requirements Planner milestone is complete and testable end-to-end from deployed UI (seed + inspection surfaces), and execution remains explicitly blocked.
 The deployed dev-seed governance loop is manually verified end-to-end including governance decision package surfaces (still control-plane only).
 
 Current snapshot sources:
@@ -61,6 +61,7 @@ Completed readiness inspection routes:
 - `POST /api/gnr8/admin/provider-handoffs/[handoffId]/authorization` (admin-only governance authorization intent creation)
 - `GET /api/gnr8/admin/provider-handoffs/[handoffId]/execution-readiness-gate` (read-only execution readiness gate)
 - `GET /api/gnr8/admin/provider-handoffs/[handoffId]/execution-preconditions` (read-only execution preconditions ledger)
+- `GET /api/gnr8/admin/provider-handoffs/[handoffId]/execution-remediation-plan` (read-only execution blocker remediation planner)
 
 Required production env flag:
 - `GNR8_ADMIN_PROVIDER_HANDOFF_READINESS_SEED_ENABLED=1`
@@ -84,6 +85,7 @@ Evidence and diagnostics milestone:
 - readiness UI displays Authorization section
 - readiness UI displays Execution Readiness Gate section
 - readiness UI displays Execution Preconditions Ledger section
+- readiness UI displays Execution Remediation Plan section
 - governance authorization statuses:
   - `not_requested`
   - `pending_authorization`
@@ -121,11 +123,32 @@ Evidence and diagnostics milestone:
   - `blockedRequirements`:
     - `approval_status_not_blocked:blocked`
     - `execution_handoff_status_not_blocked:blocked`
+- execution remediation plan verified values:
+  - `overallStatus`: `blocked`
+  - `summary`: `Execution remains blocked because 4 remediation actions are still unresolved.`
+  - `diagnostics`:
+    - `EXECUTION_REMEDIATION_ACTIONS_GENERATED`
+    - `EXECUTION_REMEDIATION_INTENT_ONLY`
+    - `EXECUTION_REMEDIATION_PLAN_CREATED`
+  - `remediationActions`:
+    1. `critical` / `ledger`
+       - `reason`: `Approval status is blocked.`
+       - `recommendedAction`: `Review approval workflow before execution eligibility can be evaluated.`
+    2. `high` / `ledger`
+       - `reason`: `No planned jobs are present.`
+       - `recommendedAction`: `Create deterministic planned jobs before execution readiness evaluation.`
+    3. `critical` / `handoff`
+       - `reason`: `Handoff status is blocked.`
+       - `recommendedAction`: `Resolve handoff blockers and regenerate readiness evidence.`
+    4. `normal` / `gate`
+       - `reason`: `Global execution boundary is active.`
+       - `recommendedAction`: `Execution boundary intentionally active. No action required.`
 - governance conditions satisfied/passed while execution remained blocked:
   - `review_approved_for_future_execution`: satisfied/passed
   - `authorization_authorized_for_future_execution`: satisfied/passed
 - conclusion:
   - governance intent can be satisfied while execution readiness remains blocked
+  - GNR8 can now explain not only why execution is blocked, but what remediation steps remain before future execution could ever become possible.
 
 Deployed manual verification loop (completed):
 - readiness-test UI creates/reuses deterministic handoff
@@ -194,10 +217,10 @@ Hard boundaries remain:
 
 ## F) Current Active Implementation Phase
 
-Active phase: Execution Readiness Gate + Execution Preconditions Ledger milestone (deployed and verified).
+Active phase: Execution Blocker Remediation Planner / Missing Requirements Planner milestone (deployed and verified).
 
 Practical next phase:
-1. Execution Blocker Remediation Plan / Missing Requirements Planner.
+1. Provider Planned Jobs Generation / Dry-run Job Plan Builder.
 2. Keep execution paths in dry-run/sandbox-gated mode with explicit execution-blocked evidence (still no execution).
 
 ## G) How Next Thread Should Behave

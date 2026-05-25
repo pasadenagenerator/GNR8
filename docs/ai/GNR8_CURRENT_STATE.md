@@ -4,7 +4,7 @@
 2026-05-25
 
 ## Current Phase
-Execution Readiness Gate + Execution Preconditions Ledger milestone (control-plane only, deployed and verified).
+Execution Blocker Remediation Planner / Missing Requirements Planner milestone (control-plane only, deployed and verified).
 
 ## Latest Completed Milestone
 
@@ -66,12 +66,16 @@ Execution Readiness Gate + Execution Preconditions Ledger milestone (control-pla
 - Governance Decision Package / Pre-execution Readiness Dossier is deployed and manually verified.
 - Execution Readiness Gate model is deployed and manually verified.
 - Execution Preconditions Ledger is deployed and manually verified.
+- Execution Blocker Remediation Planner / Missing Requirements Planner is deployed and manually verified.
 - Execution Readiness Gate API is deployed:
   - `GET /api/gnr8/admin/provider-handoffs/[handoffId]/execution-readiness-gate`
 - Execution Preconditions Ledger API is deployed:
   - `GET /api/gnr8/admin/provider-handoffs/[handoffId]/execution-preconditions`
+- Execution Remediation Plan API is deployed:
+  - `GET /api/gnr8/admin/provider-handoffs/[handoffId]/execution-remediation-plan`
 - Readiness UI now includes an Execution Readiness Gate section.
 - Readiness UI now includes an Execution Preconditions Ledger section.
+- Readiness UI now includes an Execution Remediation Plan section.
 - Execution Readiness Gate verified deployed values:
   - `gateStatus`: `blocked`
   - `executionAllowed`: `false`
@@ -90,11 +94,33 @@ Execution Readiness Gate + Execution Preconditions Ledger milestone (control-pla
   - `blockedRequirements`:
     - `approval_status_not_blocked:blocked`
     - `execution_handoff_status_not_blocked:blocked`
+- Execution Remediation Plan verified deployed values:
+  - `overallStatus`: `blocked`
+  - `summary`: `Execution remains blocked because 4 remediation actions are still unresolved.`
+  - `diagnostics`:
+    - `EXECUTION_REMEDIATION_ACTIONS_GENERATED`
+    - `EXECUTION_REMEDIATION_INTENT_ONLY`
+    - `EXECUTION_REMEDIATION_PLAN_CREATED`
+  - `remediationActions`:
+    1. `critical` / `ledger`
+       - `reason`: `Approval status is blocked.`
+       - `recommendedAction`: `Review approval workflow before execution eligibility can be evaluated.`
+    2. `high` / `ledger`
+       - `reason`: `No planned jobs are present.`
+       - `recommendedAction`: `Create deterministic planned jobs before execution readiness evaluation.`
+    3. `critical` / `handoff`
+       - `reason`: `Handoff status is blocked.`
+       - `recommendedAction`: `Resolve handoff blockers and regenerate readiness evidence.`
+    4. `normal` / `gate`
+       - `reason`: `Global execution boundary is active.`
+       - `recommendedAction`: `Execution boundary intentionally active. No action required.`
 - Governance conditions verified as satisfied/passed while execution remained blocked:
   - `review_approved_for_future_execution`: satisfied/passed
   - `authorization_authorized_for_future_execution`: satisfied/passed
 - Conclusion:
   - governance intent can be satisfied while execution readiness remains blocked
+- Additional conclusion:
+  - GNR8 can now explain not only why execution is blocked, but what remediation steps remain before future execution could ever become possible.
 - Verified deployed flow:
   - readiness
   - operator review summary
@@ -104,6 +130,7 @@ Execution Readiness Gate + Execution Preconditions Ledger milestone (control-pla
   - governance decision package
   - execution readiness gate
   - execution preconditions ledger
+  - execution remediation plan
 - Governance Decision Package verified values:
   - `recommendedAction`: `remain_blocked`
   - `executionBlocked`: `true`
@@ -148,7 +175,7 @@ Execution Readiness Gate + Execution Preconditions Ledger milestone (control-pla
 
 ## Next Milestone
 
-- Execution Blocker Remediation Plan / Missing Requirements Planner (still no execution).
+- Provider Planned Jobs Generation / Dry-run Job Plan Builder (still no execution).
 
 ## Latest Provider Control Plane State
 
@@ -228,11 +255,13 @@ Routes:
 - `POST /api/gnr8/admin/provider-handoffs/[handoffId]/authorization` (admin-only governance authorization intent creation)
 - `GET /api/gnr8/admin/provider-handoffs/[handoffId]/execution-readiness-gate` (read-only execution readiness gate)
 - `GET /api/gnr8/admin/provider-handoffs/[handoffId]/execution-preconditions` (read-only execution preconditions ledger)
+- `GET /api/gnr8/admin/provider-handoffs/[handoffId]/execution-remediation-plan` (read-only execution blocker remediation planner)
 
 Readiness UI operator review controls:
 - Governance Snapshot section (deterministic evidence projection)
 - Execution Readiness Gate section
 - Execution Preconditions Ledger section
+- Execution Remediation Plan section
 - read-only operator review section
 - create operator review form
 - status dropdown values:

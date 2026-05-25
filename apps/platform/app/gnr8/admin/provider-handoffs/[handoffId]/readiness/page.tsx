@@ -137,6 +137,18 @@ const DEFAULT_EXECUTION_REMEDIATION_PLAN: NonNullable<ProviderHandoffReadinessDe
   actions: [],
   diagnostics: ["EXECUTION_REMEDIATION_PLAN_CREATED", "EXECUTION_REMEDIATION_ACTIONS_GENERATED", "EXECUTION_REMEDIATION_INTENT_ONLY"],
 };
+const DEFAULT_DRYRUN_JOB_PLAN: NonNullable<ProviderHandoffReadinessDebugModel["dryRunJobPlan"]> = {
+  planId: "",
+  handoffId: "",
+  executionAllowed: false,
+  executionBlocked: true,
+  intentOnly: true,
+  jobCount: 0,
+  jobs: [],
+  summary: "No deterministic jobs could be generated.",
+  diagnostics: ["PROVIDER_DRYRUN_JOB_PLAN_CREATED", "PROVIDER_DRYRUN_JOBS_GENERATED", "PROVIDER_DRYRUN_INTENT_ONLY"],
+  createdAt: "",
+};
 function normalizeGovernanceDecisionPackage(
   value: unknown,
 ): NonNullable<ProviderHandoffReadinessDebugModel["governanceDecisionPackage"]> {
@@ -240,6 +252,43 @@ function normalizeExecutionRemediationPlan(
     diagnostics: normalizeList(plan.diagnostics),
   };
 }
+function normalizeDryRunJobPlan(
+  value: unknown,
+): NonNullable<ProviderHandoffReadinessDebugModel["dryRunJobPlan"]> {
+  const plan = normalizeObject(value);
+  const jobs = Array.isArray(plan.jobs)
+    ? plan.jobs
+        .map((entry) => normalizeObject(entry))
+        .map((entry) => ({
+          jobId: normalizeToken(entry.jobId),
+          jobType: (normalizeToken(entry.jobType) || "provider_unknown") as
+            | "provider_dns_upsert"
+            | "provider_dns_delete"
+            | "provider_domain_attach"
+            | "provider_unknown",
+          provider: normalizeToken(entry.provider),
+          environment: normalizeToken(entry.environment),
+          status: (normalizeToken(entry.status) || "simulated") as "planned" | "simulated",
+          reason: normalizeToken(entry.reason),
+        }))
+        .filter((entry) => entry.jobId.length > 0)
+    : [];
+  const jobCount = Number.isFinite(plan.jobCount) ? Number(plan.jobCount) : jobs.length;
+  return {
+    planId: normalizeToken(plan.planId),
+    handoffId: normalizeToken(plan.handoffId),
+    executionAllowed: false,
+    executionBlocked: true,
+    intentOnly: true,
+    jobCount,
+    jobs,
+    summary: normalizeToken(plan.summary) || (jobCount === 0
+      ? "No deterministic jobs could be generated."
+      : `${jobCount} simulated provider jobs generated for readiness evidence.`),
+    diagnostics: normalizeList(plan.diagnostics),
+    createdAt: normalizeToken(plan.createdAt),
+  };
+}
 
 function normalizeGovernanceAuthorization(
   value: unknown,
@@ -303,6 +352,7 @@ async function fetchReadinessModel(
   const executionReadinessGateEndpoint = `${proto}://${host}/api/gnr8/admin/provider-handoffs/${encodeURIComponent(handoffId)}/execution-readiness-gate`;
   const executionPreconditionsEndpoint = `${proto}://${host}/api/gnr8/admin/provider-handoffs/${encodeURIComponent(handoffId)}/execution-preconditions`;
   const executionRemediationPlanEndpoint = `${proto}://${host}/api/gnr8/admin/provider-handoffs/${encodeURIComponent(handoffId)}/execution-remediation-plan`;
+  const dryRunJobPlanEndpoint = `${proto}://${host}/api/gnr8/admin/provider-handoffs/${encodeURIComponent(handoffId)}/dryrun-job-plan`;
   const cookie = normalizeToken(incomingHeaders.get("cookie"));
   const requestHeaders = cookie ? { cookie } : undefined;
 
@@ -330,6 +380,7 @@ async function fetchReadinessModel(
       executionReadinessGate: DEFAULT_EXECUTION_READINESS_GATE,
       executionPreconditionsLedger: DEFAULT_EXECUTION_PRECONDITIONS_LEDGER,
       executionRemediationPlan: DEFAULT_EXECUTION_REMEDIATION_PLAN,
+      dryRunJobPlan: DEFAULT_DRYRUN_JOB_PLAN,
     };
 
     if (!response.ok) {
@@ -347,6 +398,7 @@ async function fetchReadinessModel(
     let executionReadinessGateError: string | null = null;
     let executionPreconditionsError: string | null = null;
     let executionRemediationPlanError: string | null = null;
+    let dryRunJobPlanError: string | null = null;
     try {
       const reviewsResponse = await fetchImpl(reviewsEndpoint, { method: "GET", cache: "no-store", headers: requestHeaders });
       const reviewsPayload = (await reviewsResponse.json().catch(() => ({}))) as Record<string, unknown>;
@@ -413,6 +465,16 @@ async function fetchReadinessModel(
       executionRemediationPlanError = error instanceof Error ? error.message : "Unknown fetch error";
     }
     try {
+      const dryRunJobPlanResponse = await fetchImpl(dryRunJobPlanEndpoint, { method: "GET", cache: "no-store", headers: requestHeaders });
+      const dryRunJobPlanPayload = (await dryRunJobPlanResponse.json().catch(() => ({}))) as Record<string, unknown>;
+      model.dryRunJobPlan = normalizeDryRunJobPlan(dryRunJobPlanPayload.dryRunJobPlan);
+      if (!dryRunJobPlanResponse.ok) {
+        dryRunJobPlanError = normalizeToken(dryRunJobPlanPayload.error) || `HTTP_${dryRunJobPlanResponse.status}`;
+      }
+    } catch (error) {
+      dryRunJobPlanError = error instanceof Error ? error.message : "Unknown fetch error";
+    }
+    try {
       const timelineResponse = await fetchImpl(governanceTimelineEndpoint, { method: "GET", cache: "no-store", headers: requestHeaders });
       const timelinePayload = (await timelineResponse.json().catch(() => ({}))) as Record<string, unknown>;
       model.governanceTimeline = normalizeGovernanceTimeline(timelinePayload.snapshots);
@@ -439,6 +501,9 @@ async function fetchReadinessModel(
     }
     if (executionRemediationPlanError) {
       model.diagnostics = normalizeList([...model.diagnostics, `EXECUTION_REMEDIATION_PLAN_FETCH_ERROR:${executionRemediationPlanError}`]);
+    }
+    if (dryRunJobPlanError) {
+      model.diagnostics = normalizeList([...model.diagnostics, `PROVIDER_DRYRUN_JOB_PLAN_FETCH_ERROR:${dryRunJobPlanError}`]);
     }
 
     return {
@@ -468,6 +533,7 @@ async function fetchReadinessModel(
         executionReadinessGate: DEFAULT_EXECUTION_READINESS_GATE,
         executionPreconditionsLedger: DEFAULT_EXECUTION_PRECONDITIONS_LEDGER,
         executionRemediationPlan: DEFAULT_EXECUTION_REMEDIATION_PLAN,
+        dryRunJobPlan: DEFAULT_DRYRUN_JOB_PLAN,
       },
       fetchError: error instanceof Error ? error.message : "Unknown fetch error",
       operatorReviewFetchError: null,
