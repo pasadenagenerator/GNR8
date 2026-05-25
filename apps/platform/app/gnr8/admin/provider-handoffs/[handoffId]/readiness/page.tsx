@@ -188,6 +188,15 @@ const DEFAULT_WORKER_ENVELOPE_PREVIEW: NonNullable<ProviderHandoffReadinessDebug
   },
   diagnostics: ["PROVIDER_WORKER_ENVELOPE_PREVIEW_INTENT_ONLY"],
 };
+const DEFAULT_EXECUTION_SAFETY_MANIFEST: NonNullable<ProviderHandoffReadinessDebugModel["executionSafetyManifest"]> = {
+  manifestId: "",
+  executionAllowed: false,
+  executionBlocked: true,
+  overallStatus: "execution_impossible",
+  summary: "Provider execution is impossible in this runtime due to active safety boundaries.",
+  barriers: [],
+  diagnostics: ["EXECUTION_SAFETY_MANIFEST_CREATED", "EXECUTION_SAFETY_BOUNDARY_PROVEN"],
+};
 function normalizeGovernanceDecisionPackage(
   value: unknown,
 ): NonNullable<ProviderHandoffReadinessDebugModel["governanceDecisionPackage"]> {
@@ -401,6 +410,37 @@ function normalizeWorkerEnvelopePreview(
     diagnostics: normalizeList(preview.diagnostics),
   };
 }
+function normalizeExecutionSafetyManifest(
+  value: unknown,
+): NonNullable<ProviderHandoffReadinessDebugModel["executionSafetyManifest"]> {
+  const manifest = normalizeObject(value);
+  const barriers = Array.isArray(manifest.barriers)
+    ? manifest.barriers
+        .map((entry) => normalizeObject(entry))
+        .map((entry) => ({
+          barrierId: normalizeToken(entry.barrierId),
+          category: (normalizeToken(entry.category) || "execution") as
+            | "governance"
+            | "worker"
+            | "queue"
+            | "provider"
+            | "execution"
+            | "security",
+          status: "active" as const,
+          reason: normalizeToken(entry.reason),
+        }))
+        .filter((entry) => entry.barrierId.length > 0)
+    : [];
+  return {
+    manifestId: normalizeToken(manifest.manifestId),
+    executionAllowed: false,
+    executionBlocked: true,
+    overallStatus: (normalizeToken(manifest.overallStatus) || "execution_impossible") as "execution_impossible" | "execution_boundary_active",
+    summary: normalizeToken(manifest.summary) || DEFAULT_EXECUTION_SAFETY_MANIFEST.summary,
+    barriers,
+    diagnostics: normalizeList(manifest.diagnostics),
+  };
+}
 
 function normalizeGovernanceAuthorization(
   value: unknown,
@@ -467,6 +507,7 @@ async function fetchReadinessModel(
   const dryRunJobPlanEndpoint = `${proto}://${host}/api/gnr8/admin/provider-handoffs/${encodeURIComponent(handoffId)}/dryrun-job-plan`;
   const executionJobPreviewEndpoint = `${proto}://${host}/api/gnr8/admin/provider-handoffs/${encodeURIComponent(handoffId)}/execution-job-preview`;
   const workerEnvelopePreviewEndpoint = `${proto}://${host}/api/gnr8/admin/provider-handoffs/${encodeURIComponent(handoffId)}/worker-envelope-preview`;
+  const executionSafetyManifestEndpoint = `${proto}://${host}/api/gnr8/admin/provider-handoffs/${encodeURIComponent(handoffId)}/execution-safety-manifest`;
   const cookie = normalizeToken(incomingHeaders.get("cookie"));
   const requestHeaders = cookie ? { cookie } : undefined;
 
@@ -497,6 +538,7 @@ async function fetchReadinessModel(
       dryRunJobPlan: DEFAULT_DRYRUN_JOB_PLAN,
       executionJobPreview: DEFAULT_EXECUTION_JOB_PREVIEW,
       workerEnvelopePreview: DEFAULT_WORKER_ENVELOPE_PREVIEW,
+      executionSafetyManifest: DEFAULT_EXECUTION_SAFETY_MANIFEST,
     };
 
     if (!response.ok) {
@@ -517,6 +559,7 @@ async function fetchReadinessModel(
     let dryRunJobPlanError: string | null = null;
     let executionJobPreviewError: string | null = null;
     let workerEnvelopePreviewError: string | null = null;
+    let executionSafetyManifestError: string | null = null;
     try {
       const reviewsResponse = await fetchImpl(reviewsEndpoint, { method: "GET", cache: "no-store", headers: requestHeaders });
       const reviewsPayload = (await reviewsResponse.json().catch(() => ({}))) as Record<string, unknown>;
@@ -621,6 +664,20 @@ async function fetchReadinessModel(
       workerEnvelopePreviewError = error instanceof Error ? error.message : "Unknown fetch error";
     }
     try {
+      const executionSafetyManifestResponse = await fetchImpl(executionSafetyManifestEndpoint, {
+        method: "GET",
+        cache: "no-store",
+        headers: requestHeaders,
+      });
+      const executionSafetyManifestPayload = (await executionSafetyManifestResponse.json().catch(() => ({}))) as Record<string, unknown>;
+      model.executionSafetyManifest = normalizeExecutionSafetyManifest(executionSafetyManifestPayload.executionSafetyManifest);
+      if (!executionSafetyManifestResponse.ok) {
+        executionSafetyManifestError = normalizeToken(executionSafetyManifestPayload.error) || `HTTP_${executionSafetyManifestResponse.status}`;
+      }
+    } catch (error) {
+      executionSafetyManifestError = error instanceof Error ? error.message : "Unknown fetch error";
+    }
+    try {
       const timelineResponse = await fetchImpl(governanceTimelineEndpoint, { method: "GET", cache: "no-store", headers: requestHeaders });
       const timelinePayload = (await timelineResponse.json().catch(() => ({}))) as Record<string, unknown>;
       model.governanceTimeline = normalizeGovernanceTimeline(timelinePayload.snapshots);
@@ -657,6 +714,9 @@ async function fetchReadinessModel(
     if (workerEnvelopePreviewError) {
       model.diagnostics = normalizeList([...model.diagnostics, `WORKER_ENVELOPE_PREVIEW_FETCH_ERROR:${workerEnvelopePreviewError}`]);
     }
+    if (executionSafetyManifestError) {
+      model.diagnostics = normalizeList([...model.diagnostics, `EXECUTION_SAFETY_MANIFEST_FETCH_ERROR:${executionSafetyManifestError}`]);
+    }
 
     return {
       model,
@@ -688,6 +748,7 @@ async function fetchReadinessModel(
         dryRunJobPlan: DEFAULT_DRYRUN_JOB_PLAN,
         executionJobPreview: DEFAULT_EXECUTION_JOB_PREVIEW,
         workerEnvelopePreview: DEFAULT_WORKER_ENVELOPE_PREVIEW,
+        executionSafetyManifest: DEFAULT_EXECUTION_SAFETY_MANIFEST,
       },
       fetchError: error instanceof Error ? error.message : "Unknown fetch error",
       operatorReviewFetchError: null,

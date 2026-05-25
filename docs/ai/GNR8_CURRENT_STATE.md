@@ -4,10 +4,39 @@
 2026-05-25
 
 ## Current Phase
-Execution Job Shape Preview / Planned Job Materialization Contract milestone (control-plane only, deployed and verified).
+Provider Execution Contract Envelope / Worker Payload Contract Preview milestone (control-plane only, deployed and verified).
 
 ## Latest Completed Milestone
 
+- Provider Execution Contract Envelope / Worker Payload Contract Preview is deployed and manually verified end-to-end (control-plane only).
+- Runtime model exists:
+  - `runtime-provider-worker-envelope-preview.ts`
+- Worker Envelope Preview API is deployed:
+  - `GET /api/gnr8/admin/provider-handoffs/[handoffId]/worker-envelope-preview`
+- Readiness UI now includes a Provider Worker Envelope Preview section.
+- Provider Worker Envelope Preview verified deployed values:
+  - `summary`: `Deterministic provider worker envelope preview generated; execution remains disabled.`
+  - `queueTarget`: `provider-control-plane`
+  - `workerTarget`: `provider-execution-worker`
+  - `payloadVersion`: `v1`
+  - `executionIntent`: `control_plane_simulation_only`
+  - `executionBlocked`: `true`
+  - `executionAllowed`: `false`
+  - `providerId`: `openprovider`
+  - `operationKind`: `upsert_dns_record`
+  - `environment`: `sandbox`
+  - `siteId`: `dev_readiness_seed_site`
+  - `siteVersionId`: `00000000-0000-0000-0000-00000000d365`
+  - diagnostics include:
+    - `PROVIDER_WORKER_ENVELOPE_PREVIEW_INTENT_ONLY`
+- Provider Worker Envelope Preview boundary distinction:
+  - worker envelope is preview/evidence only
+  - no queue records are allocated
+  - no worker dispatch occurs
+  - no provider execution occurs
+  - no payload is sent to a runtime worker
+  - `executionAllowed` remains `false`
+  - `executionBlocked` remains `true`
 - Execution Job Shape Preview / Planned Job Materialization Contract is deployed and manually verified end-to-end (control-plane only).
 - Runtime model exists:
   - `runtime-provider-execution-job-preview.ts`
@@ -209,7 +238,7 @@ Execution Job Shape Preview / Planned Job Materialization Contract milestone (co
 
 ## Next Milestone
 
-- Provider Execution Contract Envelope / Worker Payload Contract Preview (still no execution).
+- Provider Execution Safety Manifest / No-Execution Boundary Proof (still no execution).
 
 ## Latest Provider Control Plane State
 

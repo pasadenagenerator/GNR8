@@ -133,6 +133,15 @@ export function buildProviderHandoffReadinessDebugDisplay(model: ProviderHandoff
     : [];
   const workerEnvelopePreview = model.workerEnvelopePreview;
   const workerEnvelopePayload = workerEnvelopePreview?.envelope?.payload;
+  const executionSafetyManifest = model.executionSafetyManifest;
+  const executionSafetyBarriers = Array.isArray(executionSafetyManifest?.barriers)
+    ? executionSafetyManifest.barriers.map((barrier) => ({
+        barrierId: redactSecretLikeText(barrier.barrierId),
+        category: redactSecretLikeText(barrier.category) as "governance" | "worker" | "queue" | "provider" | "execution" | "security",
+        status: "active" as const,
+        reason: redactSecretLikeText(barrier.reason),
+      }))
+    : [];
 
   return {
     executionBlockedLabel: "Execution blocked",
@@ -291,6 +300,19 @@ export function buildProviderHandoffReadinessDebugDisplay(model: ProviderHandoff
         diagnostics: sanitizeDisplayList(workerEnvelopePreview?.envelope?.diagnostics),
       },
       diagnostics: sanitizeDisplayList(workerEnvelopePreview?.diagnostics),
+    },
+    executionSafetyManifest: {
+      manifestId: redactSecretLikeText(executionSafetyManifest?.manifestId),
+      executionAllowed: false,
+      executionBlocked: true,
+      overallStatus:
+        (redactSecretLikeText(executionSafetyManifest?.overallStatus) as "execution_impossible" | "execution_boundary_active") ||
+        "execution_impossible",
+      summary:
+        redactSecretLikeText(executionSafetyManifest?.summary) ||
+        "Provider execution is impossible in this runtime due to active safety boundaries.",
+      barriers: executionSafetyBarriers,
+      diagnostics: sanitizeDisplayList(executionSafetyManifest?.diagnostics),
     },
     operatorReviews: [...model.operatorReviews]
       .map((review) => ({

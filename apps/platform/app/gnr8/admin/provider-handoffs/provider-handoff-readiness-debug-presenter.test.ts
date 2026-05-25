@@ -126,6 +126,9 @@ test("provider handoff readiness presenter: renders mocked readiness evidence", 
   assert.equal(display.governanceSnapshot.executionBlocked, true);
   assert.equal(display.executionRemediationPlan.overallStatus, "blocked");
   assert.equal(display.executionRemediationPlan.actions[0]?.priority, "critical");
+  assert.equal(display.executionSafetyManifest.executionAllowed, false);
+  assert.equal(display.executionSafetyManifest.executionBlocked, true);
+  assert.equal(display.executionSafetyManifest.overallStatus, "execution_impossible");
   assert.equal(display.hasMutationControls, false);
 });
 

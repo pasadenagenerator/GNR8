@@ -8,6 +8,7 @@ GNR8 is currently in provider/DNS control-plane hardening and migration/preview 
 The active emphasis is deterministic contracts, approval/handoff safety, and no hidden execution.
 Provider handoff readiness with Execution Job Shape Preview / Planned Job Materialization Contract milestone is complete and testable end-to-end from deployed UI (seed + inspection surfaces), and execution remains explicitly blocked.
 The deployed dev-seed governance loop is manually verified end-to-end including governance decision package surfaces (still control-plane only).
+Provider Execution Contract Envelope / Worker Payload Contract Preview milestone is implemented, deployed, and manually verified (still control-plane only, no execution).
 
 Current snapshot sources:
 - `docs/ai/GNR8_CURRENT_STATE.md`
@@ -64,6 +65,7 @@ Completed readiness inspection routes:
 - `GET /api/gnr8/admin/provider-handoffs/[handoffId]/execution-remediation-plan` (read-only execution blocker remediation planner)
 - `GET /api/gnr8/admin/provider-handoffs/[handoffId]/dryrun-job-plan` (read-only dry-run planned jobs simulation evidence)
 - `GET /api/gnr8/admin/provider-handoffs/[handoffId]/execution-job-preview` (read-only execution job shape preview evidence)
+- `GET /api/gnr8/admin/provider-handoffs/[handoffId]/worker-envelope-preview` (read-only provider worker envelope preview evidence)
 
 Required production env flag:
 - `GNR8_ADMIN_PROVIDER_HANDOFF_READINESS_SEED_ENABLED=1`
@@ -87,11 +89,13 @@ Evidence and diagnostics milestone:
 - readiness UI displays Authorization section
 - readiness UI displays Dry-run Job Plan section
 - readiness UI displays Execution Job Preview section
+- readiness UI displays Provider Worker Envelope Preview section
 - readiness UI displays Execution Readiness Gate section
 - readiness UI displays Execution Preconditions Ledger section
 - readiness UI displays Execution Remediation Plan section
 - runtime dry-run job plan model exists: `runtime-provider-dryrun-job-plan.ts`
 - runtime execution job preview model exists: `runtime-provider-execution-job-preview.ts`
+- runtime provider worker envelope preview model exists: `runtime-provider-worker-envelope-preview.ts`
 - dry-run job plan verified deployed values:
   - `jobCount`: `1`
   - `summary`: `1 simulated provider jobs generated for readiness evidence.`
@@ -133,6 +137,29 @@ Evidence and diagnostics milestone:
   - no queue records are allocated
   - no worker dispatch occurs
   - no provider calls occur
+  - `executionAllowed` remains `false`
+  - `executionBlocked` remains `true`
+- provider worker envelope preview verified deployed values:
+  - `summary`: `Deterministic provider worker envelope preview generated; execution remains disabled.`
+  - `queueTarget`: `provider-control-plane`
+  - `workerTarget`: `provider-execution-worker`
+  - `payloadVersion`: `v1`
+  - `executionIntent`: `control_plane_simulation_only`
+  - `executionBlocked`: `true`
+  - `executionAllowed`: `false`
+  - `providerId`: `openprovider`
+  - `operationKind`: `upsert_dns_record`
+  - `environment`: `sandbox`
+  - `siteId`: `dev_readiness_seed_site`
+  - `siteVersionId`: `00000000-0000-0000-0000-00000000d365`
+  - diagnostics include:
+    - `PROVIDER_WORKER_ENVELOPE_PREVIEW_INTENT_ONLY`
+- provider worker envelope preview is evidence only:
+  - worker envelope is preview/evidence only
+  - no queue records are allocated
+  - no worker dispatch occurs
+  - no provider execution occurs
+  - no payload is sent to a runtime worker
   - `executionAllowed` remains `false`
   - `executionBlocked` remains `true`
 - governance authorization statuses:
@@ -268,14 +295,18 @@ Hard boundaries remain:
 - no `plannedJobIds` mutation from execution job preview
 - no queue record allocation from execution job preview
 - no worker dispatch from execution job preview
+- no queue record allocation from worker envelope preview
+- no worker dispatch from worker envelope preview
+- no provider execution from worker envelope preview
+- no runtime worker payload send from worker envelope preview
 - Openprovider sandbox planning/dry-run artifacts only. No provider execution is permitted, including sandbox execution. Control-plane metadata and deterministic planning only.
 
 ## F) Current Active Implementation Phase
 
-Active phase: Execution Job Shape Preview / Planned Job Materialization Contract milestone (deployed and verified).
+Active phase: Provider Execution Contract Envelope / Worker Payload Contract Preview milestone (deployed and verified).
 
 Practical next phase:
-1. Provider Execution Contract Envelope / Worker Payload Contract Preview.
+1. Provider Execution Safety Manifest / No-Execution Boundary Proof.
 2. Keep execution paths in dry-run/sandbox-gated mode with explicit execution-blocked evidence (still no execution).
 
 ## G) How Next Thread Should Behave

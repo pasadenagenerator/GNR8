@@ -217,6 +217,20 @@ type WorkerEnvelopePreviewSummary = {
   };
   diagnostics: string[];
 };
+type ExecutionSafetyManifestSummary = {
+  manifestId: string;
+  executionAllowed: boolean;
+  executionBlocked: boolean;
+  overallStatus: "execution_impossible" | "execution_boundary_active";
+  summary: string;
+  barriers: {
+    barrierId: string;
+    category: "governance" | "worker" | "queue" | "provider" | "execution" | "security";
+    status: "active";
+    reason: string;
+  }[];
+  diagnostics: string[];
+};
 
 export type ProviderHandoffReadinessDebugModel = {
   handoffId: string;
@@ -238,6 +252,7 @@ export type ProviderHandoffReadinessDebugModel = {
   dryRunJobPlan?: DryRunJobPlanSummary | null;
   executionJobPreview?: ExecutionJobPreviewSummary | null;
   workerEnvelopePreview?: WorkerEnvelopePreviewSummary | null;
+  executionSafetyManifest?: ExecutionSafetyManifestSummary | null;
   operatorReviews: OperatorReviewSummary[];
   operatorReviewSummary: OperatorReviewStateSummary;
   operatorReviewIntentOnly: boolean;
@@ -303,6 +318,9 @@ export function ProviderHandoffReadinessDebugView(props: {
       </section>
       <section style={{ border: "1px solid #bfdbfe", borderRadius: 10, background: "#eff6ff", padding: 12, marginTop: 12 }}>
         <strong>Worker envelope preview is evidence only. Execution remains disabled.</strong>
+      </section>
+      <section style={{ border: "1px solid #bfdbfe", borderRadius: 10, background: "#eff6ff", padding: 12, marginTop: 12 }}>
+        <strong>Safety manifest is evidence only. Execution remains impossible.</strong>
       </section>
 
       {fetchError ? (
@@ -433,6 +451,28 @@ export function ProviderHandoffReadinessDebugView(props: {
           })}
         />
         <ListField label="diagnostics" values={display.workerEnvelopePreview.diagnostics} />
+      </section>
+
+      <section style={{ border: "1px solid #dbe3ea", borderRadius: 10, background: "#ffffff", padding: 12, marginTop: 12 }}>
+        <h2 style={{ margin: "0 0 8px 0", fontSize: 16 }}>Provider Execution Safety Manifest</h2>
+        <Field label="overallStatus" value={redactSecretLikeText(display.executionSafetyManifest.overallStatus)} />
+        <Field label="summary" value={redactSecretLikeText(display.executionSafetyManifest.summary)} />
+        <ListField label="diagnostics" values={display.executionSafetyManifest.diagnostics} />
+        {display.executionSafetyManifest.barriers.length > 0 ? (
+          display.executionSafetyManifest.barriers.map((barrier) => (
+            <div
+              key={barrier.barrierId}
+              style={{ border: "1px solid #e5e7eb", borderRadius: 8, padding: 10, marginBottom: 8, background: "#f9fafb" }}
+            >
+              <Field label="barrierId" value={redactSecretLikeText(barrier.barrierId)} />
+              <Field label="category" value={redactSecretLikeText(barrier.category)} />
+              <Field label="status" value={redactSecretLikeText(barrier.status)} />
+              <Field label="reason" value={redactSecretLikeText(barrier.reason)} />
+            </div>
+          ))
+        ) : (
+          <p style={{ margin: 0, color: "#6b7280" }}>No execution safety barriers available.</p>
+        )}
       </section>
 
       <section style={{ border: "1px solid #dbe3ea", borderRadius: 10, background: "#ffffff", padding: 12, marginTop: 12 }}>
