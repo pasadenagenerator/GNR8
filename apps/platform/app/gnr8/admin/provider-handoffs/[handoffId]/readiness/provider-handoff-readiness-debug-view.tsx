@@ -189,6 +189,34 @@ type ExecutionJobPreviewSummary = {
   }[];
   diagnostics: string[];
 };
+type WorkerEnvelopePreviewSummary = {
+  previewId: string;
+  executionAllowed: boolean;
+  executionBlocked: boolean;
+  intentOnly: boolean;
+  handoffId: string;
+  correlationKey: string;
+  summary: string;
+  envelope: {
+    queueTarget: string;
+    workerTarget: string;
+    payload: {
+      payloadVersion: "v1";
+      handoffId: string;
+      providerId: string;
+      operationKind: string;
+      environment: string;
+      siteId: string;
+      siteVersionId: string;
+      correlationKey: string;
+      executionIntent: "control_plane_simulation_only";
+      executionBlocked: true;
+      executionAllowed: false;
+    };
+    diagnostics: string[];
+  };
+  diagnostics: string[];
+};
 
 export type ProviderHandoffReadinessDebugModel = {
   handoffId: string;
@@ -209,6 +237,7 @@ export type ProviderHandoffReadinessDebugModel = {
   executionRemediationPlan?: ExecutionRemediationPlanSummary | null;
   dryRunJobPlan?: DryRunJobPlanSummary | null;
   executionJobPreview?: ExecutionJobPreviewSummary | null;
+  workerEnvelopePreview?: WorkerEnvelopePreviewSummary | null;
   operatorReviews: OperatorReviewSummary[];
   operatorReviewSummary: OperatorReviewStateSummary;
   operatorReviewIntentOnly: boolean;
@@ -271,6 +300,9 @@ export function ProviderHandoffReadinessDebugView(props: {
       </section>
       <section style={{ border: "1px solid #bfdbfe", borderRadius: 10, background: "#eff6ff", padding: 12, marginTop: 12 }}>
         <strong>Execution job preview is evidence only. Execution remains disabled.</strong>
+      </section>
+      <section style={{ border: "1px solid #bfdbfe", borderRadius: 10, background: "#eff6ff", padding: 12, marginTop: 12 }}>
+        <strong>Worker envelope preview is evidence only. Execution remains disabled.</strong>
       </section>
 
       {fetchError ? (
@@ -377,6 +409,30 @@ export function ProviderHandoffReadinessDebugView(props: {
         ) : (
           <p style={{ margin: 0, color: "#6b7280" }}>No execution job previews available.</p>
         )}
+      </section>
+      <section style={{ border: "1px solid #dbe3ea", borderRadius: 10, background: "#ffffff", padding: 12, marginTop: 12 }}>
+        <h2 style={{ margin: "0 0 8px 0", fontSize: 16 }}>Provider Worker Envelope Preview</h2>
+        <Field label="summary" value={redactSecretLikeText(display.workerEnvelopePreview.summary)} />
+        <Field label="queueTarget" value={redactSecretLikeText(display.workerEnvelopePreview.envelope.queueTarget)} />
+        <Field label="workerTarget" value={redactSecretLikeText(display.workerEnvelopePreview.envelope.workerTarget)} />
+        <Field label="payloadVersion" value={redactSecretLikeText(display.workerEnvelopePreview.envelope.payload.payloadVersion)} />
+        <Field
+          label="payload"
+          value={JSON.stringify({
+            payloadVersion: display.workerEnvelopePreview.envelope.payload.payloadVersion,
+            handoffId: display.workerEnvelopePreview.envelope.payload.handoffId,
+            providerId: display.workerEnvelopePreview.envelope.payload.providerId,
+            operationKind: display.workerEnvelopePreview.envelope.payload.operationKind,
+            environment: display.workerEnvelopePreview.envelope.payload.environment,
+            siteId: display.workerEnvelopePreview.envelope.payload.siteId,
+            siteVersionId: display.workerEnvelopePreview.envelope.payload.siteVersionId,
+            correlationKey: display.workerEnvelopePreview.envelope.payload.correlationKey,
+            executionIntent: display.workerEnvelopePreview.envelope.payload.executionIntent,
+            executionBlocked: display.workerEnvelopePreview.envelope.payload.executionBlocked,
+            executionAllowed: display.workerEnvelopePreview.envelope.payload.executionAllowed,
+          })}
+        />
+        <ListField label="diagnostics" values={display.workerEnvelopePreview.diagnostics} />
       </section>
 
       <section style={{ border: "1px solid #dbe3ea", borderRadius: 10, background: "#ffffff", padding: 12, marginTop: 12 }}>

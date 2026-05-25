@@ -160,6 +160,34 @@ const DEFAULT_EXECUTION_JOB_PREVIEW: NonNullable<ProviderHandoffReadinessDebugMo
   jobs: [],
   diagnostics: ["EXECUTION_JOB_PREVIEW_CREATED", "EXECUTION_JOB_PREVIEW_INTENT_ONLY"],
 };
+const DEFAULT_WORKER_ENVELOPE_PREVIEW: NonNullable<ProviderHandoffReadinessDebugModel["workerEnvelopePreview"]> = {
+  previewId: "",
+  executionAllowed: false,
+  executionBlocked: true,
+  intentOnly: true,
+  handoffId: "",
+  correlationKey: "",
+  summary: "Deterministic provider worker envelope preview generated; execution remains disabled.",
+  envelope: {
+    queueTarget: "provider-control-plane",
+    workerTarget: "provider-execution-worker",
+    payload: {
+      payloadVersion: "v1",
+      handoffId: "",
+      providerId: "",
+      operationKind: "",
+      environment: "",
+      siteId: "",
+      siteVersionId: "",
+      correlationKey: "",
+      executionIntent: "control_plane_simulation_only",
+      executionBlocked: true,
+      executionAllowed: false,
+    },
+    diagnostics: ["PROVIDER_WORKER_ENVELOPE_PREVIEW_CREATED"],
+  },
+  diagnostics: ["PROVIDER_WORKER_ENVELOPE_PREVIEW_INTENT_ONLY"],
+};
 function normalizeGovernanceDecisionPackage(
   value: unknown,
 ): NonNullable<ProviderHandoffReadinessDebugModel["governanceDecisionPackage"]> {
@@ -338,6 +366,41 @@ function normalizeExecutionJobPreview(
     diagnostics: normalizeList(preview.diagnostics),
   };
 }
+function normalizeWorkerEnvelopePreview(
+  value: unknown,
+): NonNullable<ProviderHandoffReadinessDebugModel["workerEnvelopePreview"]> {
+  const preview = normalizeObject(value);
+  const envelope = normalizeObject(preview.envelope);
+  const payload = normalizeObject(envelope.payload);
+  return {
+    previewId: normalizeToken(preview.previewId),
+    executionAllowed: false,
+    executionBlocked: true,
+    intentOnly: true,
+    handoffId: normalizeToken(preview.handoffId),
+    correlationKey: normalizeToken(preview.correlationKey),
+    summary: normalizeToken(preview.summary) || DEFAULT_WORKER_ENVELOPE_PREVIEW.summary,
+    envelope: {
+      queueTarget: normalizeToken(envelope.queueTarget) || "provider-control-plane",
+      workerTarget: normalizeToken(envelope.workerTarget) || "provider-execution-worker",
+      payload: {
+        payloadVersion: "v1",
+        handoffId: normalizeToken(payload.handoffId),
+        providerId: normalizeToken(payload.providerId),
+        operationKind: normalizeToken(payload.operationKind),
+        environment: normalizeToken(payload.environment),
+        siteId: normalizeToken(payload.siteId),
+        siteVersionId: normalizeToken(payload.siteVersionId),
+        correlationKey: normalizeToken(payload.correlationKey),
+        executionIntent: "control_plane_simulation_only",
+        executionBlocked: true,
+        executionAllowed: false,
+      },
+      diagnostics: normalizeList(envelope.diagnostics),
+    },
+    diagnostics: normalizeList(preview.diagnostics),
+  };
+}
 
 function normalizeGovernanceAuthorization(
   value: unknown,
@@ -403,6 +466,7 @@ async function fetchReadinessModel(
   const executionRemediationPlanEndpoint = `${proto}://${host}/api/gnr8/admin/provider-handoffs/${encodeURIComponent(handoffId)}/execution-remediation-plan`;
   const dryRunJobPlanEndpoint = `${proto}://${host}/api/gnr8/admin/provider-handoffs/${encodeURIComponent(handoffId)}/dryrun-job-plan`;
   const executionJobPreviewEndpoint = `${proto}://${host}/api/gnr8/admin/provider-handoffs/${encodeURIComponent(handoffId)}/execution-job-preview`;
+  const workerEnvelopePreviewEndpoint = `${proto}://${host}/api/gnr8/admin/provider-handoffs/${encodeURIComponent(handoffId)}/worker-envelope-preview`;
   const cookie = normalizeToken(incomingHeaders.get("cookie"));
   const requestHeaders = cookie ? { cookie } : undefined;
 
@@ -432,6 +496,7 @@ async function fetchReadinessModel(
       executionRemediationPlan: DEFAULT_EXECUTION_REMEDIATION_PLAN,
       dryRunJobPlan: DEFAULT_DRYRUN_JOB_PLAN,
       executionJobPreview: DEFAULT_EXECUTION_JOB_PREVIEW,
+      workerEnvelopePreview: DEFAULT_WORKER_ENVELOPE_PREVIEW,
     };
 
     if (!response.ok) {
@@ -451,6 +516,7 @@ async function fetchReadinessModel(
     let executionRemediationPlanError: string | null = null;
     let dryRunJobPlanError: string | null = null;
     let executionJobPreviewError: string | null = null;
+    let workerEnvelopePreviewError: string | null = null;
     try {
       const reviewsResponse = await fetchImpl(reviewsEndpoint, { method: "GET", cache: "no-store", headers: requestHeaders });
       const reviewsPayload = (await reviewsResponse.json().catch(() => ({}))) as Record<string, unknown>;
@@ -541,6 +607,20 @@ async function fetchReadinessModel(
       executionJobPreviewError = error instanceof Error ? error.message : "Unknown fetch error";
     }
     try {
+      const workerEnvelopePreviewResponse = await fetchImpl(workerEnvelopePreviewEndpoint, {
+        method: "GET",
+        cache: "no-store",
+        headers: requestHeaders,
+      });
+      const workerEnvelopePreviewPayload = (await workerEnvelopePreviewResponse.json().catch(() => ({}))) as Record<string, unknown>;
+      model.workerEnvelopePreview = normalizeWorkerEnvelopePreview(workerEnvelopePreviewPayload.workerEnvelopePreview);
+      if (!workerEnvelopePreviewResponse.ok) {
+        workerEnvelopePreviewError = normalizeToken(workerEnvelopePreviewPayload.error) || `HTTP_${workerEnvelopePreviewResponse.status}`;
+      }
+    } catch (error) {
+      workerEnvelopePreviewError = error instanceof Error ? error.message : "Unknown fetch error";
+    }
+    try {
       const timelineResponse = await fetchImpl(governanceTimelineEndpoint, { method: "GET", cache: "no-store", headers: requestHeaders });
       const timelinePayload = (await timelineResponse.json().catch(() => ({}))) as Record<string, unknown>;
       model.governanceTimeline = normalizeGovernanceTimeline(timelinePayload.snapshots);
@@ -574,6 +654,9 @@ async function fetchReadinessModel(
     if (executionJobPreviewError) {
       model.diagnostics = normalizeList([...model.diagnostics, `EXECUTION_JOB_PREVIEW_FETCH_ERROR:${executionJobPreviewError}`]);
     }
+    if (workerEnvelopePreviewError) {
+      model.diagnostics = normalizeList([...model.diagnostics, `WORKER_ENVELOPE_PREVIEW_FETCH_ERROR:${workerEnvelopePreviewError}`]);
+    }
 
     return {
       model,
@@ -604,6 +687,7 @@ async function fetchReadinessModel(
         executionRemediationPlan: DEFAULT_EXECUTION_REMEDIATION_PLAN,
         dryRunJobPlan: DEFAULT_DRYRUN_JOB_PLAN,
         executionJobPreview: DEFAULT_EXECUTION_JOB_PREVIEW,
+        workerEnvelopePreview: DEFAULT_WORKER_ENVELOPE_PREVIEW,
       },
       fetchError: error instanceof Error ? error.message : "Unknown fetch error",
       operatorReviewFetchError: null,

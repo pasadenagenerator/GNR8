@@ -4,31 +4,42 @@
 2026-05-25
 
 ## Current Phase
-Provider Planned Jobs Generation / Dry-run Job Plan Builder milestone (control-plane only, deployed and verified).
+Execution Job Shape Preview / Planned Job Materialization Contract milestone (control-plane only, deployed and verified).
 
 ## Latest Completed Milestone
 
-- Provider Planned Jobs Generation / Dry-run Job Plan Builder is deployed and manually verified end-to-end (control-plane only).
+- Execution Job Shape Preview / Planned Job Materialization Contract is deployed and manually verified end-to-end (control-plane only).
 - Runtime model exists:
-  - `runtime-provider-dryrun-job-plan.ts`
-- Dry-run job plan API is deployed:
-  - `GET /api/gnr8/admin/provider-handoffs/[handoffId]/dryrun-job-plan`
-- Readiness UI now includes a Dry-run Job Plan section.
-- Dry-run Job Plan verified deployed values:
+  - `runtime-provider-execution-job-preview.ts`
+- Execution Job Preview API is deployed:
+  - `GET /api/gnr8/admin/provider-handoffs/[handoffId]/execution-job-preview`
+- Readiness UI now includes an Execution Job Preview section.
+- Execution Job Preview verified deployed values:
   - `jobCount`: `1`
-  - `summary`: `1 simulated provider jobs generated for readiness evidence.`
+  - `summary`: `1 execution job preview artifact(s) generated; execution remains disabled.`
   - first job:
     - `jobType`: `provider_dns_upsert`
     - `provider`: `openprovider`
     - `environment`: `sandbox`
-    - `status`: `simulated`
-    - `reason`: `Deterministic simulation for operationKind=upsert_dns_record; execution remains disabled.`
-- Dry-run Job Plan boundary distinction:
-  - simulated evidence only
-  - does not create persisted execution jobs
-  - does not change `plannedJobIds`
-  - does not enqueue workers
-  - does not call providers
+    - `queueTarget`: `provider-control-plane`
+    - `workerTarget`: `provider-execution-worker`
+    - `simulatedStatus`: `preview_only`
+    - `payloadShape` includes:
+      - `providerId`: `openprovider`
+      - `operationKind`: `upsert_dns_record`
+      - `siteId`: `dev_readiness_seed_site`
+      - `siteVersionId`: `00000000-0000-0000-0000-00000000d365`
+      - `correlationKey`: `eed1514dcd76dcd5a14f7d07c59b982b550e18558090d5ee7eadb7e3ccecbd6a`
+  - diagnostics include:
+    - `EXECUTION_JOB_PREVIEW_INTENT_ONLY`
+    - `EXECUTION_JOB_PREVIEW_JOB_CREATED`
+- Execution Job Preview boundary distinction:
+  - preview evidence only
+  - no persisted execution jobs are created
+  - no `plannedJobIds` are changed
+  - no queue records are allocated
+  - no worker dispatch occurs
+  - no provider calls occur
   - `executionAllowed` remains `false`
   - `executionBlocked` remains `true`
 - Governance authorization intent is deployed and manually verified end-to-end (control-plane only).
@@ -198,7 +209,7 @@ Provider Planned Jobs Generation / Dry-run Job Plan Builder milestone (control-p
 
 ## Next Milestone
 
-- Planned Job Materialization Contract / Execution Job Shape Preview (still no execution).
+- Provider Execution Contract Envelope / Worker Payload Contract Preview (still no execution).
 
 ## Latest Provider Control Plane State
 

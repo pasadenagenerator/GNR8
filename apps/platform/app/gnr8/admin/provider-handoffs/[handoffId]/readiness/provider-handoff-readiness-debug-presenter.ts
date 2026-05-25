@@ -131,6 +131,8 @@ export function buildProviderHandoffReadinessDebugDisplay(model: ProviderHandoff
         diagnostics: sanitizeDisplayList(job.diagnostics),
       }))
     : [];
+  const workerEnvelopePreview = model.workerEnvelopePreview;
+  const workerEnvelopePayload = workerEnvelopePreview?.envelope?.payload;
 
   return {
     executionBlockedLabel: "Execution blocked",
@@ -259,6 +261,36 @@ export function buildProviderHandoffReadinessDebugDisplay(model: ProviderHandoff
       summary: redactSecretLikeText(executionJobPreview?.summary) || "No deterministic execution jobs could be previewed.",
       jobs: executionPreviewJobs,
       diagnostics: sanitizeDisplayList(executionJobPreview?.diagnostics),
+    },
+    workerEnvelopePreview: {
+      previewId: redactSecretLikeText(workerEnvelopePreview?.previewId),
+      executionAllowed: false,
+      executionBlocked: true,
+      intentOnly: true,
+      handoffId: redactSecretLikeText(workerEnvelopePreview?.handoffId),
+      correlationKey: redactSecretLikeText(workerEnvelopePreview?.correlationKey),
+      summary:
+        redactSecretLikeText(workerEnvelopePreview?.summary) ||
+        "Deterministic provider worker envelope preview generated; execution remains disabled.",
+      envelope: {
+        queueTarget: redactSecretLikeText(workerEnvelopePreview?.envelope?.queueTarget) || "provider-control-plane",
+        workerTarget: redactSecretLikeText(workerEnvelopePreview?.envelope?.workerTarget) || "provider-execution-worker",
+        payload: {
+          payloadVersion: "v1",
+          handoffId: redactSecretLikeText(workerEnvelopePayload?.handoffId),
+          providerId: redactSecretLikeText(workerEnvelopePayload?.providerId),
+          operationKind: redactSecretLikeText(workerEnvelopePayload?.operationKind),
+          environment: redactSecretLikeText(workerEnvelopePayload?.environment),
+          siteId: redactSecretLikeText(workerEnvelopePayload?.siteId),
+          siteVersionId: redactSecretLikeText(workerEnvelopePayload?.siteVersionId),
+          correlationKey: redactSecretLikeText(workerEnvelopePayload?.correlationKey),
+          executionIntent: "control_plane_simulation_only",
+          executionBlocked: true,
+          executionAllowed: false,
+        },
+        diagnostics: sanitizeDisplayList(workerEnvelopePreview?.envelope?.diagnostics),
+      },
+      diagnostics: sanitizeDisplayList(workerEnvelopePreview?.diagnostics),
     },
     operatorReviews: [...model.operatorReviews]
       .map((review) => ({
