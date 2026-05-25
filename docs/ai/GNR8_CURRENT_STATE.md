@@ -4,10 +4,37 @@
 2026-05-25
 
 ## Current Phase
-Provider Execution Safety Manifest / No-Execution Boundary Proof milestone (control-plane only, deployed and verified).
+Evidence Surface Consolidation / Operator Cockpit Layout Pass milestone (control-plane only, deployed and verified).
 
 ## Latest Completed Milestone
 
+- Evidence Surface Consolidation / Operator Cockpit Layout Pass is implemented, deployed, and manually verified end-to-end (control-plane only).
+- Readiness page has been reorganized from a linear debug page into an operator-oriented cockpit layout.
+- Cockpit layout updates:
+  - sticky summary banner:
+    - `Execution impossible. Control-plane simulation only.`
+  - top summary cards:
+    - `Execution State`
+    - `Governance State`
+    - `Readiness State`
+    - `Safety State`
+  - grouped sections:
+    - `Governance`
+    - `Execution Analysis`
+    - `Execution Simulation`
+    - `Safety`
+  - default-collapsed sections:
+    - `Timelines`
+    - `Diagnostics`
+    - `Payload JSON Blocks`
+- Critical distinction for this milestone:
+  - UI/read-model only
+  - no runtime model changes
+  - no API changes
+  - no execution behavior changes
+  - all evidence artifacts preserved
+  - no execution controls added
+  - execution remains impossible
 - Provider Execution Safety Manifest / No-Execution Boundary Proof is implemented, deployed, and manually verified end-to-end (control-plane only).
 - Runtime model exists:
   - `runtime-provider-execution-safety-manifest.ts`
@@ -259,6 +286,11 @@ Provider Execution Safety Manifest / No-Execution Boundary Proof milestone (cont
   - diagnostics include:
     - `GOVERNANCE_AUTHORIZATION_CREATED`
     - `GOVERNANCE_AUTHORIZATION_INTENT_ONLY`
+
+## Recommended Next Milestone
+
+- Operator Cockpit Evidence Status Badges / Severity System
+- remains control-plane only (no execution)
 - Future note:
   - deterministic `createdAt` may show epoch values for dev-seed artifacts
   - potential future improvement: add `snapshotCreatedAt` and `persistedAt`
@@ -270,7 +302,7 @@ Provider Execution Safety Manifest / No-Execution Boundary Proof milestone (cont
 
 ## Next Milestone
 
-- Evidence Surface Consolidation / Operator Cockpit Layout Pass (still no execution).
+- Operator Cockpit Evidence Status Badges / Severity System (still no execution).
 
 ## Latest Provider Control Plane State
 

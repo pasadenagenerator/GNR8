@@ -313,6 +313,54 @@ function SummaryCard(props: { title: string; lines: Array<{ label: string; value
   );
 }
 
+type EvidenceBadgeLevel = "critical" | "warning" | "success" | "info" | "neutral";
+
+const BADGE_THEME: Record<EvidenceBadgeLevel, { bg: string; border: string; text: string }> = {
+  critical: { bg: "#fee2e2", border: "#fca5a5", text: "#991b1b" },
+  warning: { bg: "#fef3c7", border: "#fcd34d", text: "#92400e" },
+  success: { bg: "#dcfce7", border: "#86efac", text: "#166534" },
+  info: { bg: "#dbeafe", border: "#93c5fd", text: "#1e3a8a" },
+  neutral: { bg: "#f3f4f6", border: "#d1d5db", text: "#374151" },
+};
+
+function resolveBadgeLevel(label: string, value: string): EvidenceBadgeLevel {
+  if (label === "executionBlocked" && value === "true") return "critical";
+  if ((label === "review status" || label === "authorization status") && value === "approved_for_future_execution") return "success";
+  if (label === "readinessStatus" && (value === "pickup_not_ready" || value === "blocked" || value === "execution_impossible")) return "warning";
+  if (label === "preconditions status" && (value === "blocked" || value === "execution_impossible")) return "warning";
+  if (label === "overall execution state" && value === "execution_impossible") return "success";
+  if (label === "priority" && value === "critical") return "critical";
+  if (label === "priority" && value === "high") return "warning";
+  if (label === "priority" && value === "normal") return "info";
+  if (label === "status" && (value === "blocked" || value === "failed")) return "critical";
+  if (label === "status" && value === "missing") return "warning";
+  if (label === "status" && (value === "satisfied" || value === "passed")) return "success";
+  if ((label === "status" && value === "simulated") || value === "preview_only" || value === "intent_only") return "info";
+  return "neutral";
+}
+
+function EvidenceBadge(props: { label: string; value: string }) {
+  const level = resolveBadgeLevel(props.label, props.value);
+  const theme = BADGE_THEME[level];
+  return (
+    <span
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        border: `1px solid ${theme.border}`,
+        borderRadius: 999,
+        padding: "2px 8px",
+        fontSize: 12,
+        fontWeight: 600,
+        background: theme.bg,
+        color: theme.text,
+      }}
+    >
+      {props.label}:{props.value}
+    </span>
+  );
+}
+
 export function ProviderHandoffReadinessDebugView(props: {
   model: ProviderHandoffReadinessDebugModel;
   fetchError?: string | null;
@@ -323,6 +371,30 @@ export function ProviderHandoffReadinessDebugView(props: {
   const artifact = display.handoffArtifactSummary;
   const evidence = display.workerPickupEvidenceSummary;
   const safetyBarrierCount = display.executionSafetyManifest.barriers.length;
+  const badgeEntries: Array<{ label: string; value: string }> = [
+    { label: "executionBlocked", value: display.executionBlocked },
+    { label: "review status", value: display.governanceDecisionPackage.reviewStatus },
+    { label: "authorization status", value: display.governanceDecisionPackage.authorizationStatus },
+    { label: "readinessStatus", value: display.readinessStatus },
+    { label: "preconditions status", value: display.executionPreconditionsLedger.overallStatus },
+    { label: "overall execution state", value: display.executionSafetyManifest.overallStatus },
+    ...display.executionRemediationPlan.actions.map((action) => ({ label: "priority", value: action.priority })),
+    ...display.executionReadinessGate.requiredConditions.map((condition) => ({ label: "status", value: condition.status })),
+    ...display.executionPreconditionsLedger.requirements.map((requirement) => ({ label: "status", value: requirement.status })),
+    ...display.dryRunJobPlan.jobs.map((job) => ({ label: "status", value: job.status })),
+    ...display.executionJobPreview.jobs.map((job) => ({ label: "simulatedStatus", value: job.simulatedStatus })),
+    { label: "intentOnly", value: display.governanceAuthorization.intentOnly ? "intent_only" : "not_intent_only" },
+  ];
+  const severityCounters = badgeEntries.reduce(
+    (acc, entry) => {
+      const level = resolveBadgeLevel(entry.label, entry.value);
+      if (level === "critical") acc.critical += 1;
+      if (level === "warning") acc.warning += 1;
+      if (level === "success") acc.success += 1;
+      return acc;
+    },
+    { critical: 0, warning: 0, success: 0 },
+  );
 
   return (
     <main
@@ -339,6 +411,16 @@ export function ProviderHandoffReadinessDebugView(props: {
       <p style={{ margin: "4px 0 0 0", color: "#4b5563" }}>{display.reviewOnlyLabel}</p>
       <section style={{ position: "sticky", top: 8, zIndex: 10, border: "1px solid #fca5a5", borderRadius: 10, background: "#fee2e2", padding: 12, marginTop: 12 }}>
         <strong>Execution impossible. Control-plane simulation only.</strong>
+        <div style={{ marginTop: 8, fontSize: 12, color: "#374151", display: "flex", gap: 12, flexWrap: "wrap" }}>
+          <span>Critical: {severityCounters.critical}</span>
+          <span>Warnings: {severityCounters.warning}</span>
+          <span>Success: {severityCounters.success}</span>
+        </div>
+        <div style={{ marginTop: 8, display: "flex", flexWrap: "wrap", gap: 6 }}>
+          {badgeEntries.map((entry, index) => (
+            <EvidenceBadge key={`${entry.label}:${entry.value}:${index}`} label={entry.label} value={entry.value} />
+          ))}
+        </div>
       </section>
 
       {fetchError ? (

@@ -10,6 +10,7 @@ Provider handoff readiness with Execution Job Shape Preview / Planned Job Materi
 The deployed dev-seed governance loop is manually verified end-to-end including governance decision package surfaces (still control-plane only).
 Provider Execution Contract Envelope / Worker Payload Contract Preview milestone is implemented, deployed, and manually verified (still control-plane only, no execution).
 Provider Execution Safety Manifest / No-Execution Boundary Proof milestone is implemented, deployed, and manually verified (still control-plane only, no execution).
+Evidence Surface Consolidation / Operator Cockpit Layout Pass milestone is implemented, deployed, and manually verified (UI/read-model only, still control-plane only, no execution).
 
 Current snapshot sources:
 - `docs/ai/GNR8_CURRENT_STATE.md`
@@ -73,6 +74,16 @@ Required production env flag:
 - `GNR8_ADMIN_PROVIDER_HANDOFF_READINESS_SEED_ENABLED=1`
 
 Evidence and diagnostics milestone:
+- Evidence Surface Consolidation / Operator Cockpit Layout Pass is deployed:
+  - readiness page reorganized from linear debug layout into operator-oriented cockpit layout
+  - sticky summary banner: `Execution impossible. Control-plane simulation only.`
+  - top summary cards: `Execution State`, `Governance State`, `Readiness State`, `Safety State`
+  - grouped sections: `Governance`, `Execution Analysis`, `Execution Simulation`, `Safety`
+  - default-collapsed sections: `Timelines`, `Diagnostics`, `Payload JSON Blocks`
+  - UI/read-model only, no runtime model changes, no API changes, no behavior changes
+  - all evidence artifacts preserved
+  - no execution controls added
+  - execution remains impossible
 - seed creates/reuses deterministic persisted handoff
 - readiness page shows persisted `handoffArtifact` and reconstructed deterministic `workerPickupEvidence`
 - `workerPickupEvidence.blockedReasons` is normalized with no contradictory approval/handoff/planned-job reasons; reasons are deterministic and operator-readable
@@ -307,6 +318,7 @@ Example verified values:
 Future note:
 - deterministic `createdAt` may show epoch values for dev-seed artifacts
 - potential future improvement: add `snapshotCreatedAt` and `persistedAt`
+- recommended next milestone: Operator Cockpit Evidence Status Badges / Severity System (still no execution)
 
 Hard boundaries remain:
 - no live provider execution
@@ -333,10 +345,10 @@ Hard boundaries remain:
 
 ## F) Current Active Implementation Phase
 
-Active phase: Provider Execution Safety Manifest / No-Execution Boundary Proof milestone (deployed and verified).
+Active phase: Evidence Surface Consolidation / Operator Cockpit Layout Pass milestone (deployed and verified).
 
 Practical next phase:
-1. Evidence Surface Consolidation / Operator Cockpit Layout Pass.
+1. Operator Cockpit Evidence Status Badges / Severity System.
 2. Keep execution paths in dry-run/sandbox-gated mode with explicit execution-blocked evidence (still no execution).
 
 ## G) How Next Thread Should Behave
