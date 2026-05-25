@@ -153,3 +153,61 @@ test("provider handoff readiness presenter: all authorization states remain inte
     assert.equal(display.governanceAuthorization.executionBlocked, true);
   }
 });
+
+test("provider handoff readiness presenter: missing governance decision package fails closed and remains blocked", () => {
+  const display = buildProviderHandoffReadinessDebugDisplay({
+    ...buildModel(),
+    governanceDecisionPackage: null,
+  });
+
+  assert.equal(display.governanceDecisionPackage.packageId, "");
+  assert.equal(display.governanceDecisionPackage.recommendedAction, "failed_closed");
+  assert.equal(display.governanceDecisionPackage.executionBlocked, true);
+  assert.equal(display.governanceDecisionPackage.reviewStatus, "no_reviews");
+  assert.equal(display.governanceDecisionPackage.authorizationStatus, "not_requested");
+  assert.equal(display.governanceDecisionPackage.snapshotCount, 0);
+  assert.equal(display.governanceDecisionPackage.diagnostics.includes("GOVERNANCE_DECISION_PACKAGE_FAILED_CLOSED"), true);
+});
+
+test("provider handoff readiness presenter: malformed governance decision package remains blocked", () => {
+  const display = buildProviderHandoffReadinessDebugDisplay({
+    ...buildModel(),
+    governanceDecisionPackage: {
+      packageId: "pkg_1",
+      recommendedAction: "",
+      executionBlocked: false,
+      reviewStatus: "",
+      authorizationStatus: "",
+      snapshotCount: Number.NaN,
+      diagnostics: [],
+    },
+  });
+
+  assert.equal(display.governanceDecisionPackage.executionBlocked, true);
+  assert.equal(display.governanceDecisionPackage.recommendedAction, "failed_closed");
+  assert.equal(display.governanceDecisionPackage.reviewStatus, "no_reviews");
+  assert.equal(display.governanceDecisionPackage.authorizationStatus, "not_requested");
+  assert.equal(display.governanceDecisionPackage.snapshotCount, 0);
+});
+
+test("provider handoff readiness presenter: valid governance decision package remains blocked", () => {
+  const display = buildProviderHandoffReadinessDebugDisplay({
+    ...buildModel(),
+    governanceDecisionPackage: {
+      packageId: "pkg_valid",
+      recommendedAction: "continue_review",
+      executionBlocked: true,
+      reviewStatus: "approved_for_future_execution",
+      authorizationStatus: "pending_authorization",
+      snapshotCount: 2,
+      diagnostics: ["GOVERNANCE_DECISION_PACKAGE_CREATED"],
+    },
+  });
+
+  assert.equal(display.governanceDecisionPackage.executionBlocked, true);
+  assert.equal(display.governanceDecisionPackage.recommendedAction, "continue_review");
+  assert.equal(display.governanceDecisionPackage.reviewStatus, "approved_for_future_execution");
+  assert.equal(display.governanceDecisionPackage.authorizationStatus, "pending_authorization");
+  assert.equal(display.governanceDecisionPackage.snapshotCount, 2);
+  assert.equal(display.governanceDecisionPackage.diagnostics.includes("GOVERNANCE_DECISION_PACKAGE_FAILED_CLOSED"), true);
+});

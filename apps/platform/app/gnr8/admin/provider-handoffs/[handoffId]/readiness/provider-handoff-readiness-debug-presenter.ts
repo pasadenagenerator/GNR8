@@ -22,6 +22,12 @@ export function buildProviderHandoffReadinessDebugDisplay(model: ProviderHandoff
     "GOVERNANCE_AUTHORIZATION_INTENT_ONLY",
     ...(authorization?.diagnostics ?? []),
   ]);
+  const governanceDecisionPackage = model.governanceDecisionPackage;
+  const fallbackGovernanceDecisionPackageDiagnostics = ["GOVERNANCE_DECISION_PACKAGE_FAILED_CLOSED"];
+  const governanceDecisionPackageDiagnostics = sanitizeDisplayList([
+    ...fallbackGovernanceDecisionPackageDiagnostics,
+    ...(governanceDecisionPackage?.diagnostics ?? []),
+  ]);
 
   return {
     executionBlockedLabel: "Execution blocked",
@@ -87,13 +93,13 @@ export function buildProviderHandoffReadinessDebugDisplay(model: ProviderHandoff
       diagnostics: authorizationDiagnostics,
     },
     governanceDecisionPackage: {
-      packageId: redactSecretLikeText(model.governanceDecisionPackage?.packageId),
-      recommendedAction: redactSecretLikeText(model.governanceDecisionPackage?.recommendedAction),
-      executionBlocked: model.governanceDecisionPackage?.executionBlocked === true,
-      reviewStatus: redactSecretLikeText(model.governanceDecisionPackage?.reviewStatus),
-      authorizationStatus: redactSecretLikeText(model.governanceDecisionPackage?.authorizationStatus),
-      snapshotCount: Number.isFinite(model.governanceDecisionPackage?.snapshotCount) ? Number(model.governanceDecisionPackage?.snapshotCount) : 0,
-      diagnostics: sanitizeDisplayList(model.governanceDecisionPackage?.diagnostics),
+      packageId: redactSecretLikeText(governanceDecisionPackage?.packageId),
+      recommendedAction: redactSecretLikeText(governanceDecisionPackage?.recommendedAction) || "failed_closed",
+      executionBlocked: true,
+      reviewStatus: redactSecretLikeText(governanceDecisionPackage?.reviewStatus) || "no_reviews",
+      authorizationStatus: redactSecretLikeText(governanceDecisionPackage?.authorizationStatus) || "not_requested",
+      snapshotCount: Number.isFinite(governanceDecisionPackage?.snapshotCount) ? Number(governanceDecisionPackage?.snapshotCount) : 0,
+      diagnostics: governanceDecisionPackageDiagnostics,
     },
     operatorReviews: [...model.operatorReviews]
       .map((review) => ({
