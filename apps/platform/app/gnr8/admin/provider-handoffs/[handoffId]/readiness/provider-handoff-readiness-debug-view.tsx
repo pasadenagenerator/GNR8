@@ -95,6 +95,20 @@ type GovernanceDecisionPackageSummary = {
   snapshotCount: number;
   diagnostics: string[];
 };
+type ExecutionReadinessGateCondition = {
+  condition: string;
+  status: "passed" | "failed" | "not_applicable";
+  reason: string;
+};
+type ExecutionReadinessGateSummary = {
+  gateId: string;
+  gateStatus: string;
+  executionAllowed: boolean;
+  executionBlocked: boolean;
+  blockingReasons: string[];
+  requiredConditions: ExecutionReadinessGateCondition[];
+  diagnostics: string[];
+};
 
 export type ProviderHandoffReadinessDebugModel = {
   handoffId: string;
@@ -110,6 +124,7 @@ export type ProviderHandoffReadinessDebugModel = {
   governanceTimeline?: GovernanceTimelineSnapshotSummary[];
   governanceAuthorization?: GovernanceAuthorizationSummary | null;
   governanceDecisionPackage?: GovernanceDecisionPackageSummary | null;
+  executionReadinessGate?: ExecutionReadinessGateSummary | null;
   operatorReviews: OperatorReviewSummary[];
   operatorReviewSummary: OperatorReviewStateSummary;
   operatorReviewIntentOnly: boolean;
@@ -158,6 +173,9 @@ export function ProviderHandoffReadinessDebugView(props: {
       <section style={{ border: "1px solid #facc15", borderRadius: 10, background: "#fef9c3", padding: 12, marginTop: 12 }}>
         <strong>Decision package is advisory only. Execution remains blocked.</strong>
       </section>
+      <section style={{ border: "1px solid #bfdbfe", borderRadius: 10, background: "#eff6ff", padding: 12, marginTop: 12 }}>
+        <strong>Execution gate is evaluative only. Execution remains disabled.</strong>
+      </section>
 
       {fetchError ? (
         <section style={{ border: "1px solid #fecaca", borderRadius: 10, background: "#fff1f2", padding: 12, marginTop: 12 }}>
@@ -185,6 +203,29 @@ export function ProviderHandoffReadinessDebugView(props: {
         <Field label="authorizationStatus" value={redactSecretLikeText(display.governanceDecisionPackage.authorizationStatus)} />
         <Field label="snapshotCount" value={String(display.governanceDecisionPackage.snapshotCount)} />
         <ListField label="diagnostics" values={display.governanceDecisionPackage.diagnostics} />
+      </section>
+
+      <section style={{ border: "1px solid #dbe3ea", borderRadius: 10, background: "#ffffff", padding: 12, marginTop: 12 }}>
+        <h2 style={{ margin: "0 0 8px 0", fontSize: 16 }}>Execution Readiness Gate</h2>
+        <Field label="gateStatus" value={redactSecretLikeText(display.executionReadinessGate.gateStatus)} />
+        <Field label="executionAllowed" value={String(Boolean(display.executionReadinessGate.executionAllowed))} />
+        <Field label="executionBlocked" value={String(Boolean(display.executionReadinessGate.executionBlocked))} />
+        <ListField label="blockingReasons" values={display.executionReadinessGate.blockingReasons} />
+        <ListField label="diagnostics" values={display.executionReadinessGate.diagnostics} />
+        {display.executionReadinessGate.requiredConditions.length > 0 ? (
+          display.executionReadinessGate.requiredConditions.map((condition) => (
+            <div
+              key={`${condition.condition}:${condition.status}`}
+              style={{ border: "1px solid #e5e7eb", borderRadius: 8, padding: 10, marginBottom: 8, background: "#f9fafb" }}
+            >
+              <Field label="condition" value={redactSecretLikeText(condition.condition)} />
+              <Field label="status" value={redactSecretLikeText(condition.status)} />
+              <Field label="reason" value={redactSecretLikeText(condition.reason)} />
+            </div>
+          ))
+        ) : (
+          <p style={{ margin: 0, color: "#6b7280" }}>No required conditions available.</p>
+        )}
       </section>
 
       <section style={{ border: "1px solid #dbe3ea", borderRadius: 10, background: "#ffffff", padding: 12, marginTop: 12 }}>

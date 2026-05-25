@@ -54,6 +54,14 @@ export function buildProviderHandoffReadinessDebugDisplay(model: ProviderHandoff
     ...incomingGovernanceDecisionPackageDiagnostics,
     ...(governanceDecisionPackageNeedsFallbackDiagnostic ? ["GOVERNANCE_DECISION_PACKAGE_FAILED_CLOSED"] : []),
   ]);
+  const executionReadinessGate = model.executionReadinessGate;
+  const executionReadinessGateRequiredConditions = Array.isArray(executionReadinessGate?.requiredConditions)
+    ? executionReadinessGate.requiredConditions.map((condition) => ({
+        condition: redactSecretLikeText(condition.condition),
+        status: redactSecretLikeText(condition.status),
+        reason: redactSecretLikeText(condition.reason),
+      }))
+    : [];
 
   return {
     executionBlockedLabel: "Execution blocked",
@@ -126,6 +134,15 @@ export function buildProviderHandoffReadinessDebugDisplay(model: ProviderHandoff
       authorizationStatus: governanceDecisionPackageAuthorizationStatus,
       snapshotCount: governanceDecisionPackageSnapshotCount,
       diagnostics: governanceDecisionPackageDiagnostics,
+    },
+    executionReadinessGate: {
+      gateId: redactSecretLikeText(executionReadinessGate?.gateId),
+      gateStatus: redactSecretLikeText(executionReadinessGate?.gateStatus) || "execution_disabled",
+      executionAllowed: false,
+      executionBlocked: true,
+      blockingReasons: sanitizeDisplayList(executionReadinessGate?.blockingReasons),
+      requiredConditions: executionReadinessGateRequiredConditions,
+      diagnostics: sanitizeDisplayList(executionReadinessGate?.diagnostics),
     },
     operatorReviews: [...model.operatorReviews]
       .map((review) => ({

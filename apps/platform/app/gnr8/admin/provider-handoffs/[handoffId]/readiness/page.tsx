@@ -108,6 +108,15 @@ const DEFAULT_GOVERNANCE_DECISION_PACKAGE: NonNullable<ProviderHandoffReadinessD
   snapshotCount: 0,
   diagnostics: ["GOVERNANCE_DECISION_PACKAGE_FAILED_CLOSED"],
 };
+const DEFAULT_EXECUTION_READINESS_GATE: NonNullable<ProviderHandoffReadinessDebugModel["executionReadinessGate"]> = {
+  gateId: "",
+  gateStatus: "execution_disabled",
+  executionAllowed: false,
+  executionBlocked: true,
+  blockingReasons: ["global_execution_boundary_active"],
+  requiredConditions: [],
+  diagnostics: ["EXECUTION_READINESS_GATE_CREATED"],
+};
 function normalizeGovernanceDecisionPackage(
   value: unknown,
 ): NonNullable<ProviderHandoffReadinessDebugModel["governanceDecisionPackage"]> {
@@ -122,6 +131,28 @@ function normalizeGovernanceDecisionPackage(
     authorizationStatus: normalizeToken(signals.authorizationStatus) || "not_requested",
     snapshotCount: Number.isFinite(timelineSummary.snapshotCount) ? Number(timelineSummary.snapshotCount) : 0,
     diagnostics: normalizeList(decisionPackage.diagnostics),
+  };
+}
+function normalizeExecutionReadinessGate(
+  value: unknown,
+): NonNullable<ProviderHandoffReadinessDebugModel["executionReadinessGate"]> {
+  const gate = normalizeObject(value);
+  const requiredConditionsRaw = Array.isArray(gate.requiredConditions) ? gate.requiredConditions : [];
+  return {
+    gateId: normalizeToken(gate.gateId),
+    gateStatus: normalizeToken(gate.gateStatus) || "execution_disabled",
+    executionAllowed: false,
+    executionBlocked: true,
+    blockingReasons: normalizeList(gate.blockingReasons),
+    requiredConditions: requiredConditionsRaw
+      .map((entry) => normalizeObject(entry))
+      .map((entry) => ({
+        condition: normalizeToken(entry.condition),
+        status: (normalizeToken(entry.status) || "not_applicable") as "passed" | "failed" | "not_applicable",
+        reason: normalizeToken(entry.reason),
+      }))
+      .filter((entry) => entry.condition.length > 0),
+    diagnostics: normalizeList(gate.diagnostics),
   };
 }
 
@@ -184,6 +215,7 @@ async function fetchReadinessModel(
   const governanceTimelineEndpoint = `${proto}://${host}/api/gnr8/admin/provider-handoffs/${encodeURIComponent(handoffId)}/governance-timeline`;
   const governanceAuthorizationEndpoint = `${proto}://${host}/api/gnr8/admin/provider-handoffs/${encodeURIComponent(handoffId)}/authorization`;
   const governanceDecisionPackageEndpoint = `${proto}://${host}/api/gnr8/admin/provider-handoffs/${encodeURIComponent(handoffId)}/decision-package`;
+  const executionReadinessGateEndpoint = `${proto}://${host}/api/gnr8/admin/provider-handoffs/${encodeURIComponent(handoffId)}/execution-readiness-gate`;
   const cookie = normalizeToken(incomingHeaders.get("cookie"));
   const requestHeaders = cookie ? { cookie } : undefined;
 
@@ -208,6 +240,7 @@ async function fetchReadinessModel(
       governanceTimeline: [],
       governanceAuthorization: DEFAULT_GOVERNANCE_AUTHORIZATION,
       governanceDecisionPackage: DEFAULT_GOVERNANCE_DECISION_PACKAGE,
+      executionReadinessGate: DEFAULT_EXECUTION_READINESS_GATE,
     };
 
     if (!response.ok) {
@@ -222,6 +255,7 @@ async function fetchReadinessModel(
     let governanceTimelineError: string | null = null;
     let governanceAuthorizationError: string | null = null;
     let governanceDecisionPackageError: string | null = null;
+    let executionReadinessGateError: string | null = null;
     try {
       const reviewsResponse = await fetchImpl(reviewsEndpoint, { method: "GET", cache: "no-store", headers: requestHeaders });
       const reviewsPayload = (await reviewsResponse.json().catch(() => ({}))) as Record<string, unknown>;
@@ -258,6 +292,16 @@ async function fetchReadinessModel(
       governanceDecisionPackageError = error instanceof Error ? error.message : "Unknown fetch error";
     }
     try {
+      const gateResponse = await fetchImpl(executionReadinessGateEndpoint, { method: "GET", cache: "no-store", headers: requestHeaders });
+      const gatePayload = (await gateResponse.json().catch(() => ({}))) as Record<string, unknown>;
+      model.executionReadinessGate = normalizeExecutionReadinessGate(gatePayload.executionReadinessGate);
+      if (!gateResponse.ok) {
+        executionReadinessGateError = normalizeToken(gatePayload.error) || `HTTP_${gateResponse.status}`;
+      }
+    } catch (error) {
+      executionReadinessGateError = error instanceof Error ? error.message : "Unknown fetch error";
+    }
+    try {
       const timelineResponse = await fetchImpl(governanceTimelineEndpoint, { method: "GET", cache: "no-store", headers: requestHeaders });
       const timelinePayload = (await timelineResponse.json().catch(() => ({}))) as Record<string, unknown>;
       model.governanceTimeline = normalizeGovernanceTimeline(timelinePayload.snapshots);
@@ -275,6 +319,9 @@ async function fetchReadinessModel(
     }
     if (governanceDecisionPackageError) {
       model.diagnostics = normalizeList([...model.diagnostics, `GOVERNANCE_DECISION_PACKAGE_FETCH_ERROR:${governanceDecisionPackageError}`]);
+    }
+    if (executionReadinessGateError) {
+      model.diagnostics = normalizeList([...model.diagnostics, `EXECUTION_READINESS_GATE_FETCH_ERROR:${executionReadinessGateError}`]);
     }
 
     return {
@@ -301,6 +348,7 @@ async function fetchReadinessModel(
         governanceTimeline: [],
         governanceAuthorization: DEFAULT_GOVERNANCE_AUTHORIZATION,
         governanceDecisionPackage: DEFAULT_GOVERNANCE_DECISION_PACKAGE,
+        executionReadinessGate: DEFAULT_EXECUTION_READINESS_GATE,
       },
       fetchError: error instanceof Error ? error.message : "Unknown fetch error",
       operatorReviewFetchError: null,
