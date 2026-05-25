@@ -50,6 +50,15 @@ test("provider handoff readiness view source: renders form and intent-only warni
   assert.equal(combined.includes("Execution Simulation"), true);
   assert.equal(combined.includes("Safety"), true);
   assert.equal(combined.includes("Timelines"), true);
+  assert.equal(combined.includes("State Progress Timeline"), true);
+  assert.equal(combined.includes("->"), true);
+  assert.equal(combined.includes("unchanged"), true);
+  assert.equal(combined.includes("TimelineStatusBadge"), true);
+  assert.equal(combined.includes("resolveTimelineBadgeLevel"), true);
+  assert.equal(combined.includes("pickup_not_ready"), true);
+  assert.equal(combined.includes("approved_for_future_execution"), true);
+  assert.equal(combined.includes("pending_review"), true);
+  assert.equal(combined.includes("Original evidence"), true);
   assert.equal(combined.includes("Payload JSON Blocks"), true);
   assert.equal(combined.includes("Diagnostics"), true);
   assert.equal(combined.includes("Decision Package"), true);

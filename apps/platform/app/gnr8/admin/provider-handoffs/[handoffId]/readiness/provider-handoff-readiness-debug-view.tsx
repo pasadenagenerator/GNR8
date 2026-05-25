@@ -374,6 +374,55 @@ function EvidenceStripGroup(props: { title: string; entries: Array<{ label: stri
   );
 }
 
+type TimelineBadgeLevel = "critical" | "warning" | "success" | "neutral";
+
+function resolveTimelineBadgeLevel(status: string): TimelineBadgeLevel {
+  if (status === "blocked" || status === "pickup_not_ready") return "critical";
+  if (status === "approved_for_future_execution") return "success";
+  if (status === "pending_review") return "warning";
+  return "neutral";
+}
+
+function TimelineStatusBadge(props: { value: string }) {
+  const level = resolveTimelineBadgeLevel(props.value);
+  const theme = BADGE_THEME[level];
+  return (
+    <span
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        border: `1px solid ${theme.border}`,
+        borderRadius: 999,
+        padding: "2px 8px",
+        fontSize: 11,
+        fontWeight: 700,
+        background: theme.bg,
+        color: theme.text,
+      }}
+    >
+      {props.value}
+    </span>
+  );
+}
+
+function formatTimelineChange(previous: string | number | undefined, current: string | number): string {
+  if (previous === undefined) return "created";
+  if (previous === current) return "unchanged";
+  return `${String(previous)} -> ${String(current)}`;
+}
+
+function TimelineChangeValue(props: { value: string }) {
+  if (props.value === "unchanged") {
+    return (
+      <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+        <span>unchanged</span>
+        <TimelineStatusBadge value="unchanged" />
+      </span>
+    );
+  }
+  return <span>{props.value}</span>;
+}
+
 export function ProviderHandoffReadinessDebugView(props: {
   model: ProviderHandoffReadinessDebugModel;
   fetchError?: string | null;
@@ -574,18 +623,46 @@ export function ProviderHandoffReadinessDebugView(props: {
             <Field label="reviewSummaryStatus" value={redactSecretLikeText(display.governanceSnapshot.reviewSummaryStatus)} />
             <ListField label="diagnostics" values={display.governanceSnapshot.diagnostics} />
           </Panel>
-          <Panel title="Governance Timeline">
+          <Panel title="State Progress Timeline">
             {display.governanceTimeline.length > 0 ? (
-              display.governanceTimeline.map((snapshot) => (
-                <div key={snapshot.snapshotId} style={{ border: "1px solid #e5e7eb", borderRadius: 8, padding: 10, marginBottom: 8, background: "#f9fafb" }}>
-                  <Field label="snapshotId" value={snapshot.snapshotId} />
-                  <Field label="createdAt" value={snapshot.createdAt} />
-                  <Field label="reviewSummaryStatus" value={snapshot.reviewSummaryStatus} />
-                  <Field label="reviewCount" value={String(snapshot.reviewCount)} />
-                  <Field label="readinessStatus" value={snapshot.readinessStatus} />
-                  <ListField label="diagnostics" values={snapshot.diagnostics} />
-                </div>
-              ))
+              [...display.governanceTimeline].reverse().map((snapshot, index, timeline) => {
+                const previous = timeline[index + 1];
+                const reviewSummaryChange = formatTimelineChange(previous?.reviewSummaryStatus, snapshot.reviewSummaryStatus);
+                const reviewCountChange = formatTimelineChange(previous?.reviewCount, snapshot.reviewCount);
+                const readinessChange = formatTimelineChange(previous?.readinessStatus, snapshot.readinessStatus);
+                const snapshotChange = formatTimelineChange(undefined, "created");
+                return (
+                  <div key={snapshot.snapshotId} style={{ border: "1px solid #e5e7eb", borderRadius: 8, padding: 10, marginBottom: 8, background: "#f9fafb" }}>
+                    <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", marginBottom: 6 }}>
+                      <span style={{ fontSize: 12, color: "#4b5563", fontWeight: 700 }}>{snapshot.createdAt}</span>
+                      <TimelineStatusBadge value={snapshot.reviewSummaryStatus} />
+                      <TimelineStatusBadge value={snapshot.readinessStatus} />
+                    </div>
+                    <div style={{ fontSize: 12, color: "#111827", display: "grid", gap: 4 }}>
+                      <div>
+                        <strong>review summary:</strong> <TimelineChangeValue value={reviewSummaryChange} />
+                      </div>
+                      <div>
+                        <strong>review count:</strong> <TimelineChangeValue value={reviewCountChange} />
+                      </div>
+                      <div>
+                        <strong>snapshot:</strong> <TimelineChangeValue value={snapshotChange} />
+                      </div>
+                      <div>
+                        <strong>readiness:</strong> <TimelineChangeValue value={readinessChange} />
+                      </div>
+                    </div>
+                    <CollapsiblePanel title="Original evidence" defaultOpen={false}>
+                      <Field label="snapshotId" value={snapshot.snapshotId} />
+                      <Field label="createdAt" value={snapshot.createdAt} />
+                      <Field label="reviewSummaryStatus" value={snapshot.reviewSummaryStatus} />
+                      <Field label="reviewCount" value={String(snapshot.reviewCount)} />
+                      <Field label="readinessStatus" value={snapshot.readinessStatus} />
+                      <ListField label="diagnostics" values={snapshot.diagnostics} />
+                    </CollapsiblePanel>
+                  </div>
+                );
+              })
             ) : (
               <p style={{ margin: 0, color: "#6b7280" }}>No governance timeline snapshots available for this handoff.</p>
             )}
