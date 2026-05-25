@@ -3,6 +3,7 @@ import {
   buildProviderHandoffReadinessDebugDisplay,
   redactSecretLikeText,
 } from "@/app/gnr8/admin/provider-handoffs/[handoffId]/readiness/provider-handoff-readiness-debug-presenter";
+import { GovernanceAuthorizationIntentForm } from "@/app/gnr8/admin/provider-handoffs/[handoffId]/readiness/governance-authorization-intent-form";
 import { OperatorReviewIntentForm } from "@/app/gnr8/admin/provider-handoffs/[handoffId]/readiness/operator-review-intent-form";
 
 type ProviderHandoffArtifactSummary = {
@@ -74,6 +75,17 @@ type GovernanceTimelineSnapshotSummary = {
   readinessStatus: string;
   diagnostics: string[];
 };
+type GovernanceAuthorizationSummary = {
+  authorizationId?: string;
+  handoffId?: string;
+  correlationKey?: string;
+  authorizationStatus?: string;
+  authorizationReason?: string;
+  intentOnly?: boolean;
+  executionBlocked?: boolean;
+  createdAt?: string;
+  diagnostics?: string[];
+};
 
 export type ProviderHandoffReadinessDebugModel = {
   handoffId: string;
@@ -87,6 +99,7 @@ export type ProviderHandoffReadinessDebugModel = {
   workerPickupEvidence: WorkerPickupEvidenceSummary;
   governanceSnapshot?: GovernanceSnapshotSummary;
   governanceTimeline?: GovernanceTimelineSnapshotSummary[];
+  governanceAuthorization?: GovernanceAuthorizationSummary | null;
   operatorReviews: OperatorReviewSummary[];
   operatorReviewSummary: OperatorReviewStateSummary;
   operatorReviewIntentOnly: boolean;
@@ -168,6 +181,21 @@ export function ProviderHandoffReadinessDebugView(props: {
         ) : (
           <p style={{ margin: 0, color: "#6b7280" }}>No persisted handoff artifact available.</p>
         )}
+      </section>
+
+      <section style={{ border: "1px solid #dbe3ea", borderRadius: 10, background: "#ffffff", padding: 12, marginTop: 12 }}>
+        <h2 style={{ margin: "0 0 8px 0", fontSize: 16 }}>Authorization</h2>
+        <p style={{ margin: "0 0 10px 0", color: "#4b5563" }}>Authorization is intent only. Execution remains blocked.</p>
+        <GovernanceAuthorizationIntentForm handoffId={model.handoffId} />
+        <div style={{ height: 8 }} />
+        <div style={{ border: "1px solid #e5e7eb", borderRadius: 8, padding: 10, marginBottom: 8, background: "#f9fafb" }}>
+          <Field label="authorizationStatus" value={redactSecretLikeText(display.governanceAuthorization.authorizationStatus)} />
+          <Field label="authorizationReason" value={redactSecretLikeText(display.governanceAuthorization.authorizationReason)} />
+          <Field label="intentOnly" value={String(Boolean(display.governanceAuthorization.intentOnly))} />
+          <Field label="executionBlocked" value={String(Boolean(display.governanceAuthorization.executionBlocked))} />
+          <Field label="createdAt" value={redactSecretLikeText(display.governanceAuthorization.createdAt)} />
+          <ListField label="diagnostics" values={display.governanceAuthorization.diagnostics} />
+        </div>
       </section>
 
       <section style={{ border: "1px solid #dbe3ea", borderRadius: 10, background: "#ffffff", padding: 12, marginTop: 12 }}>

@@ -88,6 +88,20 @@ function normalizeGovernanceTimeline(value: unknown): NonNullable<ProviderHandof
     .filter((snapshot) => snapshot.snapshotId && snapshot.createdAt)
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt) || b.snapshotId.localeCompare(a.snapshotId));
 }
+function normalizeGovernanceAuthorization(value: unknown): NonNullable<ProviderHandoffReadinessDebugModel["governanceAuthorization"]> {
+  const authorization = normalizeObject(value);
+  return {
+    authorizationId: normalizeToken(authorization.authorizationId),
+    handoffId: normalizeToken(authorization.handoffId),
+    correlationKey: normalizeToken(authorization.correlationKey),
+    authorizationStatus: normalizeToken(authorization.authorizationStatus),
+    authorizationReason: normalizeToken(authorization.authorizationReason),
+    intentOnly: Boolean(authorization.intentOnly),
+    executionBlocked: Boolean(authorization.executionBlocked),
+    createdAt: normalizeToken(authorization.createdAt),
+    diagnostics: normalizeList(authorization.diagnostics),
+  };
+}
 
 type ReadinessPageFetchResult = {
   model: ProviderHandoffReadinessDebugModel;
@@ -121,6 +135,7 @@ async function fetchReadinessModel(
   const endpoint = `${proto}://${host}/api/gnr8/runtime/provider-handoffs/${encodeURIComponent(handoffId)}/readiness`;
   const reviewsEndpoint = `${proto}://${host}/api/gnr8/admin/provider-handoffs/${encodeURIComponent(handoffId)}/reviews`;
   const governanceTimelineEndpoint = `${proto}://${host}/api/gnr8/admin/provider-handoffs/${encodeURIComponent(handoffId)}/governance-timeline`;
+  const governanceAuthorizationEndpoint = `${proto}://${host}/api/gnr8/admin/provider-handoffs/${encodeURIComponent(handoffId)}/authorization`;
   const cookie = normalizeToken(incomingHeaders.get("cookie"));
   const requestHeaders = cookie ? { cookie } : undefined;
 
@@ -143,6 +158,7 @@ async function fetchReadinessModel(
       operatorReviewSummary: DEFAULT_REVIEW_SUMMARY,
       operatorReviewIntentOnly: true,
       governanceTimeline: [],
+      governanceAuthorization: null,
     };
 
     if (!response.ok) {
@@ -155,6 +171,7 @@ async function fetchReadinessModel(
 
     let operatorReviewFetchError: string | null = null;
     let governanceTimelineError: string | null = null;
+    let governanceAuthorizationError: string | null = null;
     try {
       const reviewsResponse = await fetchImpl(reviewsEndpoint, { method: "GET", cache: "no-store", headers: requestHeaders });
       const reviewsPayload = (await reviewsResponse.json().catch(() => ({}))) as Record<string, unknown>;
@@ -168,6 +185,16 @@ async function fetchReadinessModel(
       operatorReviewFetchError = error instanceof Error ? error.message : "Unknown fetch error";
     }
     try {
+      const authorizationResponse = await fetchImpl(governanceAuthorizationEndpoint, { method: "GET", cache: "no-store", headers: requestHeaders });
+      const authorizationPayload = (await authorizationResponse.json().catch(() => ({}))) as Record<string, unknown>;
+      model.governanceAuthorization = normalizeGovernanceAuthorization(authorizationPayload.authorization);
+      if (!authorizationResponse.ok) {
+        governanceAuthorizationError = normalizeToken(authorizationPayload.error) || `HTTP_${authorizationResponse.status}`;
+      }
+    } catch (error) {
+      governanceAuthorizationError = error instanceof Error ? error.message : "Unknown fetch error";
+    }
+    try {
       const timelineResponse = await fetchImpl(governanceTimelineEndpoint, { method: "GET", cache: "no-store", headers: requestHeaders });
       const timelinePayload = (await timelineResponse.json().catch(() => ({}))) as Record<string, unknown>;
       model.governanceTimeline = normalizeGovernanceTimeline(timelinePayload.snapshots);
@@ -179,6 +206,9 @@ async function fetchReadinessModel(
     }
     if (governanceTimelineError) {
       model.diagnostics = normalizeList([...model.diagnostics, `GOVERNANCE_TIMELINE_FETCH_ERROR:${governanceTimelineError}`]);
+    }
+    if (governanceAuthorizationError) {
+      model.diagnostics = normalizeList([...model.diagnostics, `GOVERNANCE_AUTHORIZATION_FETCH_ERROR:${governanceAuthorizationError}`]);
     }
 
     return {
@@ -203,6 +233,7 @@ async function fetchReadinessModel(
         operatorReviewSummary: DEFAULT_REVIEW_SUMMARY,
         operatorReviewIntentOnly: true,
         governanceTimeline: [],
+        governanceAuthorization: null,
       },
       fetchError: error instanceof Error ? error.message : "Unknown fetch error",
       operatorReviewFetchError: null,

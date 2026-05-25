@@ -67,6 +67,17 @@ export function buildProviderHandoffReadinessDebugDisplay(model: ProviderHandoff
         diagnostics: sanitizeDisplayList(snapshot.diagnostics),
       }))
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt) || b.snapshotId.localeCompare(a.snapshotId)),
+    governanceAuthorization: {
+      authorizationId: redactSecretLikeText(model.governanceAuthorization?.authorizationId),
+      handoffId: redactSecretLikeText(model.governanceAuthorization?.handoffId),
+      correlationKey: redactSecretLikeText(model.governanceAuthorization?.correlationKey),
+      authorizationStatus: redactSecretLikeText(model.governanceAuthorization?.authorizationStatus),
+      authorizationReason: redactSecretLikeText(model.governanceAuthorization?.authorizationReason),
+      intentOnly: model.governanceAuthorization?.intentOnly === true,
+      executionBlocked: model.governanceAuthorization?.executionBlocked === true,
+      createdAt: redactSecretLikeText(model.governanceAuthorization?.createdAt),
+      diagnostics: sanitizeDisplayList(model.governanceAuthorization?.diagnostics),
+    },
     operatorReviews: [...model.operatorReviews]
       .map((review) => ({
         reviewId: redactSecretLikeText(review.reviewId),
