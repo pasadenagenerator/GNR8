@@ -1,13 +1,57 @@
 # GNR8 CURRENT STATE SNAPSHOT
 
 ## Snapshot Date
-2026-05-25
+2026-05-26
 
 ## Current Phase
-Operator Evidence Provenance Layer milestone (control-plane only, deployed and verified).
+Openprovider read-only domain inventory milestone (first real-provider read, deployed and verified).
 
 ## Latest Completed Milestone
 
+- Openprovider Read-only Domain Inventory Connector is implemented, deployed, and manually verified end-to-end.
+- Runtime model exists:
+  - `gnr8/runtime/providers/openprovider/openprovider-domain-inventory.ts`
+- API is deployed:
+  - `GET /api/gnr8/admin/providers/openprovider/domains`
+- Required env variables:
+  - `OPENPROVIDER_SANDBOX_USERNAME`
+  - `OPENPROVIDER_SANDBOX_PASSWORD`
+  - `OPENPROVIDER_DOMAIN_INVENTORY_ENDPOINT`
+  - `OPENPROVIDER_DOMAIN_INVENTORY_METHOD`
+- Optional env variable:
+  - `OPENPROVIDER_AUTH_ENDPOINT`
+- Deployed verified values:
+  - `provider`: `openprovider`
+  - `readOnly`: `true`
+  - `executionAllowed`: `false`
+  - `executionBlocked`: `true`
+  - `domains`: `[]`
+  - diagnostics include:
+    - `OPENPROVIDER_AUTH_STARTED`
+    - `OPENPROVIDER_AUTH_SUCCEEDED`
+    - `OPENPROVIDER_DOMAIN_INVENTORY_EMPTY`
+    - `OPENPROVIDER_DOMAIN_INVENTORY_METHOD_GET`
+    - `OPENPROVIDER_DOMAIN_INVENTORY_READ_STARTED`
+    - `OPENPROVIDER_DOMAIN_INVENTORY_READ_SUCCEEDED`
+    - `OPENPROVIDER_DOMAIN_INVENTORY_REQUEST_SHAPED`
+    - `OPENPROVIDER_READ_ONLY_BOUNDARY_CONFIRMED`
+- Conclusion:
+  - GNR8 can authenticate against Openprovider sandbox and perform read-only domain inventory access.
+  - Current sandbox account has no domains, so successful output is an empty inventory.
+- Boundary remains explicit:
+  - no provider execution
+  - no DNS writes
+  - no domain registration/update/delete
+  - no queue/Inngest/worker execution
+  - no secret persistence
+  - no secret leakage
+  - execution remains blocked
+- Recommended next milestone:
+  - Openprovider Sandbox Domain Seed / Real Domain Fixture
+  - or Openprovider Domain Inventory Admin UI
+  - still read-only
+- Success criteria:
+  - future thread bootstrap resumes from first real-provider read milestone, not only simulated control-plane evidence
 - Operator Evidence Provenance Layer is implemented, deployed, and manually verified end-to-end (control-plane only).
 - Executive Summary now includes visible provenance support so operators can trace evidence at-a-glance.
 - Evidence Sources chips are now visible for operator-facing provenance cues.
