@@ -6,7 +6,7 @@ This is the first file every new ChatGPT/Codex thread should read.
 
 GNR8 is currently in provider/DNS control-plane hardening and migration/preview validation mode.
 The active emphasis is deterministic contracts, approval/handoff safety, and no hidden execution.
-Openprovider Read-only Domain Inventory Connector milestone is complete and verified as the first real-provider read boundary (sandbox auth + read-only inventory, execution still blocked).
+Openprovider Domain Inventory Admin UI milestone is complete and verified (real provider-read UI surface with sandbox auth + read-only inventory, execution still blocked).
 Provider handoff readiness with Execution Job Shape Preview / Planned Job Materialization Contract milestone is complete and testable end-to-end from deployed UI (seed + inspection surfaces), and execution remains explicitly blocked.
 The deployed dev-seed governance loop is manually verified end-to-end including governance decision package surfaces (still control-plane only).
 Provider Execution Contract Envelope / Worker Payload Contract Preview milestone is implemented, deployed, and manually verified (still control-plane only, no execution).
@@ -78,9 +78,10 @@ Required production env flag:
 - `GNR8_ADMIN_PROVIDER_HANDOFF_READINESS_SEED_ENABLED=1`
 
 Evidence and diagnostics milestone:
-- Openprovider Read-only Domain Inventory Connector is deployed:
+- Openprovider Domain Inventory Admin UI is deployed:
   - runtime model: `gnr8/runtime/providers/openprovider/openprovider-domain-inventory.ts`
   - API: `GET /api/gnr8/admin/providers/openprovider/domains`
+  - Admin UI route: `/gnr8/admin/providers/openprovider/domains`
   - required env variables:
     - `OPENPROVIDER_SANDBOX_USERNAME`
     - `OPENPROVIDER_SANDBOX_PASSWORD`
@@ -89,11 +90,16 @@ Evidence and diagnostics milestone:
   - optional env variable:
     - `OPENPROVIDER_AUTH_ENDPOINT`
   - deployed verified values:
+    - `title`: `Openprovider Domain Inventory`
+    - `banner`: `Read-only provider boundary active`
     - `provider`: `openprovider`
-    - `readOnly`: `true`
+    - `mode`: `read only`
+    - `execution`: `blocked`
     - `executionAllowed`: `false`
     - `executionBlocked`: `true`
-    - `domains`: `[]`
+    - `domains`: `0`
+    - `inventoryStatus`: `empty`
+    - `emptyMessage`: `No domains found in current Openprovider sandbox account.`
   - diagnostics include:
     - `OPENPROVIDER_AUTH_STARTED`
     - `OPENPROVIDER_AUTH_SUCCEEDED`
@@ -104,22 +110,22 @@ Evidence and diagnostics milestone:
     - `OPENPROVIDER_DOMAIN_INVENTORY_REQUEST_SHAPED`
     - `OPENPROVIDER_READ_ONLY_BOUNDARY_CONFIRMED`
   - conclusion:
-    - GNR8 can authenticate against Openprovider sandbox and perform read-only domain inventory access.
-    - current sandbox account has no domains, so successful output is an empty inventory.
+    - GNR8 now has a real provider-read UI surface for Openprovider domain inventory.
+    - current sandbox account is empty, but auth, read boundary, API, and UI rendering are verified end-to-end.
   - boundary remains explicit:
-    - no provider execution
+    - read-only
     - no DNS writes
     - no domain registration/update/delete
     - no queue/Inngest/worker execution
-    - no secret persistence
+    - no provider execution
     - no secret leakage
-    - execution remains blocked
+    - `executionAllowed:false`
+    - `executionBlocked:true`
   - recommended next milestone:
     - Openprovider Sandbox Domain Seed / Real Domain Fixture
-    - or Openprovider Domain Inventory Admin UI
-    - still read-only
+    - or Openprovider DNS Records Read-only Connector
   - success criteria:
-    - future thread bootstrap resumes from first real-provider read milestone, not only simulated control-plane evidence
+    - future thread bootstrap resumes from real Openprovider inventory UI milestone
 - Operator Evidence Provenance Layer is deployed:
   - Executive Summary includes visible provenance support
   - Evidence Sources chips are present for provenance cues
