@@ -372,6 +372,56 @@ test("openprovider domain inventory: unsupported response shape fails closed", a
   }
 });
 
+test("openprovider domain inventory: data total zero with no list succeeds as empty", async () => {
+  const previousUsername = process.env.OPENPROVIDER_SANDBOX_USERNAME;
+  const previousPassword = process.env.OPENPROVIDER_SANDBOX_PASSWORD;
+  process.env.OPENPROVIDER_SANDBOX_USERNAME = "user";
+  process.env.OPENPROVIDER_SANDBOX_PASSWORD = "pass";
+  try {
+    const result = await readOpenproviderDomainInventory({
+      login: async () => ({ status: 200, json: { token: "t" } }),
+      fetchInventoryPage: async () => ({ status: 200, json: { code: 0, desc: "ok", data: { total: 0 } } }),
+    });
+    assert.equal(result.domains.length, 0);
+    assert.equal(result.diagnostics.includes("OPENPROVIDER_DOMAIN_INVENTORY_READ_SUCCEEDED"), true);
+    assert.equal(result.diagnostics.includes("OPENPROVIDER_DOMAIN_INVENTORY_EMPTY"), true);
+    assert.equal(result.diagnostics.includes("OPENPROVIDER_DOMAIN_INVENTORY_RESPONSE_UNSUPPORTED_SHAPE"), false);
+    assert.equal(result.readOnly, true);
+    assert.equal(result.executionAllowed, false);
+    assert.equal(result.executionBlocked, true);
+  } finally {
+    if (previousUsername === undefined) delete process.env.OPENPROVIDER_SANDBOX_USERNAME;
+    else process.env.OPENPROVIDER_SANDBOX_USERNAME = previousUsername;
+    if (previousPassword === undefined) delete process.env.OPENPROVIDER_SANDBOX_PASSWORD;
+    else process.env.OPENPROVIDER_SANDBOX_PASSWORD = previousPassword;
+  }
+});
+
+test("openprovider domain inventory: data total nonzero with no list succeeds empty with empty diagnostic", async () => {
+  const previousUsername = process.env.OPENPROVIDER_SANDBOX_USERNAME;
+  const previousPassword = process.env.OPENPROVIDER_SANDBOX_PASSWORD;
+  process.env.OPENPROVIDER_SANDBOX_USERNAME = "user";
+  process.env.OPENPROVIDER_SANDBOX_PASSWORD = "pass";
+  try {
+    const result = await readOpenproviderDomainInventory({
+      login: async () => ({ status: 200, json: { token: "t" } }),
+      fetchInventoryPage: async () => ({ status: 200, json: { code: 0, desc: "ok", data: { total: 3 } } }),
+    });
+    assert.equal(result.domains.length, 0);
+    assert.equal(result.diagnostics.includes("OPENPROVIDER_DOMAIN_INVENTORY_READ_SUCCEEDED"), true);
+    assert.equal(result.diagnostics.includes("OPENPROVIDER_DOMAIN_INVENTORY_EMPTY"), true);
+    assert.equal(result.diagnostics.includes("OPENPROVIDER_DOMAIN_INVENTORY_RESPONSE_UNSUPPORTED_SHAPE"), false);
+    assert.equal(result.readOnly, true);
+    assert.equal(result.executionAllowed, false);
+    assert.equal(result.executionBlocked, true);
+  } finally {
+    if (previousUsername === undefined) delete process.env.OPENPROVIDER_SANDBOX_USERNAME;
+    else process.env.OPENPROVIDER_SANDBOX_USERNAME = previousUsername;
+    if (previousPassword === undefined) delete process.env.OPENPROVIDER_SANDBOX_PASSWORD;
+    else process.env.OPENPROVIDER_SANDBOX_PASSWORD = previousPassword;
+  }
+});
+
 test("openprovider domain inventory: supports data array shape", async () => {
   const previousUsername = process.env.OPENPROVIDER_SANDBOX_USERNAME;
   const previousPassword = process.env.OPENPROVIDER_SANDBOX_PASSWORD;

@@ -72,6 +72,7 @@ const DIAGNOSTIC_AUTH_FAILED_CLOSED = "OPENPROVIDER_AUTH_FAILED_CLOSED";
 const DIAGNOSTIC_AUTH_TOKEN_MISSING = "OPENPROVIDER_AUTH_TOKEN_MISSING";
 const DIAGNOSTIC_REQUEST_SHAPED = "OPENPROVIDER_DOMAIN_INVENTORY_REQUEST_SHAPED";
 const DIAGNOSTIC_RESPONSE_UNSUPPORTED_SHAPE = "OPENPROVIDER_DOMAIN_INVENTORY_RESPONSE_UNSUPPORTED_SHAPE";
+const DIAGNOSTIC_EMPTY = "OPENPROVIDER_DOMAIN_INVENTORY_EMPTY";
 
 function sanitizeToken(value: unknown): string {
   return String(value ?? "").trim();
@@ -239,6 +240,7 @@ function resolveInventoryMethod(value: unknown): "GET" | "POST" {
 function normalizeInventoryResponse(payload: unknown): {
   supported: boolean;
   domains: OpenproviderDomainInventoryItem[];
+  emptyWithoutList: boolean;
 } {
   if (Array.isArray(payload)) {
     return {
@@ -247,9 +249,10 @@ function normalizeInventoryResponse(payload: unknown): {
         .map((entry) => normalizeDomainItem((entry ?? {}) as OpenproviderApiDomain))
         .filter((entry): entry is OpenproviderDomainInventoryItem => entry !== null)
         .sort((left, right) => left.domain.localeCompare(right.domain)),
+      emptyWithoutList: false,
     };
   }
-  if (!payload || typeof payload !== "object") return { supported: false, domains: [] };
+  if (!payload || typeof payload !== "object") return { supported: false, domains: [], emptyWithoutList: false };
   const root = payload as {
     data?: unknown;
     response?: { data?: { results?: unknown } | null } | null;
@@ -275,10 +278,16 @@ function normalizeInventoryResponse(payload: unknown): {
         .map((entry) => normalizeDomainItem((entry ?? {}) as OpenproviderApiDomain))
         .filter((entry): entry is OpenproviderDomainInventoryItem => entry !== null)
         .sort((left, right) => left.domain.localeCompare(right.domain)),
+      emptyWithoutList: false,
     };
   }
 
-  return { supported: false, domains: [] };
+  const dataTotal = dataObject?.total;
+  if (typeof dataTotal === "number" && Number.isFinite(dataTotal)) {
+    return { supported: true, domains: [], emptyWithoutList: true };
+  }
+
+  return { supported: false, domains: [], emptyWithoutList: false };
 }
 
 function unsupportedShapeDiagnostics(payload: unknown): string[] {
@@ -447,7 +456,11 @@ export async function readOpenproviderDomainInventory(
       executionBlocked: true,
       fetchedAt,
       domains,
-      diagnostics: uniqueSorted([...diagnostics, DIAGNOSTIC_SUCCEEDED]),
+      diagnostics: uniqueSorted([
+        ...diagnostics,
+        DIAGNOSTIC_SUCCEEDED,
+        ...(normalized.emptyWithoutList ? [DIAGNOSTIC_EMPTY] : []),
+      ]),
     };
   } catch (error) {
     const message = sanitizeDiagnostic(sanitizeToken(error instanceof Error ? error.message : error));
