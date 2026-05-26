@@ -31,6 +31,7 @@ type OpenproviderDomainInventoryDependencies = {
   fetchInventoryPage: (input: {
     endpoint: string;
     token: string;
+    method: "GET" | "POST";
   }) => Promise<OpenproviderHttpResponse>;
   now: () => string;
 };
@@ -57,6 +58,8 @@ const DIAGNOSTIC_AUTH_STARTED = "OPENPROVIDER_AUTH_STARTED";
 const DIAGNOSTIC_AUTH_SUCCEEDED = "OPENPROVIDER_AUTH_SUCCEEDED";
 const DIAGNOSTIC_AUTH_FAILED_CLOSED = "OPENPROVIDER_AUTH_FAILED_CLOSED";
 const DIAGNOSTIC_AUTH_TOKEN_MISSING = "OPENPROVIDER_AUTH_TOKEN_MISSING";
+const DIAGNOSTIC_REQUEST_SHAPED = "OPENPROVIDER_DOMAIN_INVENTORY_REQUEST_SHAPED";
+const DIAGNOSTIC_RESPONSE_UNSUPPORTED_SHAPE = "OPENPROVIDER_DOMAIN_INVENTORY_RESPONSE_UNSUPPORTED_SHAPE";
 
 function sanitizeToken(value: unknown): string {
   return String(value ?? "").trim();
@@ -154,8 +157,19 @@ function normalizeDomainItem(item: OpenproviderApiDomain): OpenproviderDomainInv
   };
 }
 
-function normalizeInventoryResponse(payload: unknown): OpenproviderDomainInventoryItem[] {
-  if (!payload || typeof payload !== "object") return [];
+function resolveInventoryMethod(value: unknown): "GET" | "POST" {
+  const method = sanitizeToken(value).toUpperCase();
+  if (method === "GET") return "GET";
+  return "POST";
+}
+
+function normalizeInventoryResponse(payload: unknown): {
+  supported: boolean;
+  domains: OpenproviderDomainInventoryItem[];
+} {
+  if (!payload || typeof payload !== "object") {
+    return { supported: false, domains: [] };
+  }
   const root = payload as {
     data?: { results?: unknown } | null;
     response?: { data?: { results?: unknown } | null } | null;
@@ -170,27 +184,37 @@ function normalizeInventoryResponse(payload: unknown): OpenproviderDomainInvento
 
   for (const candidate of candidates) {
     if (!Array.isArray(candidate)) continue;
-    return candidate
-      .map((entry) => normalizeDomainItem((entry ?? {}) as OpenproviderApiDomain))
-      .filter((entry): entry is OpenproviderDomainInventoryItem => entry !== null)
-      .sort((left, right) => left.domain.localeCompare(right.domain));
+    return {
+      supported: true,
+      domains: candidate
+        .map((entry) => normalizeDomainItem((entry ?? {}) as OpenproviderApiDomain))
+        .filter((entry): entry is OpenproviderDomainInventoryItem => entry !== null)
+        .sort((left, right) => left.domain.localeCompare(right.domain)),
+    };
   }
 
-  return [];
+  return { supported: false, domains: [] };
 }
 
 async function defaultFetchInventoryPage(input: {
   endpoint: string;
   token: string;
+  method: "GET" | "POST";
 }): Promise<OpenproviderHttpResponse> {
-  const response = await fetch(input.endpoint, {
-    method: "POST",
+  const requestInit: RequestInit = {
+    method: input.method,
     headers: {
-      "content-type": "application/json",
       authorization: `Bearer ${input.token}`,
     },
-    body: JSON.stringify({ limit: 1000, offset: 0 }),
-  });
+  };
+  if (input.method === "POST") {
+    requestInit.headers = {
+      ...requestInit.headers,
+      "content-type": "application/json",
+    };
+    requestInit.body = JSON.stringify({ limit: 1000, offset: 0 });
+  }
+  const response = await fetch(input.endpoint, requestInit);
   const json = await response.json().catch(() => null);
   return { status: response.status, json };
 }
@@ -230,6 +254,7 @@ export async function readOpenproviderDomainInventory(
   const username = sanitizeToken(process.env.OPENPROVIDER_SANDBOX_USERNAME ?? process.env.OPENPROVIDER_LIVE_USERNAME);
   const password = sanitizeToken(process.env.OPENPROVIDER_SANDBOX_PASSWORD ?? process.env.OPENPROVIDER_LIVE_PASSWORD);
   const endpoint = sanitizeToken(process.env.OPENPROVIDER_DOMAIN_INVENTORY_ENDPOINT) || DEFAULT_ENDPOINT;
+  const inventoryMethod = resolveInventoryMethod(process.env.OPENPROVIDER_DOMAIN_INVENTORY_METHOD);
   const authEndpoint = deriveAuthEndpoint(endpoint);
 
   if (!username || !password) {
@@ -283,7 +308,8 @@ export async function readOpenproviderDomainInventory(
       };
     }
 
-    const response = await resolvedDeps.fetchInventoryPage({ endpoint, token });
+    diagnostics.push(DIAGNOSTIC_REQUEST_SHAPED, `OPENPROVIDER_DOMAIN_INVENTORY_METHOD_${inventoryMethod}`);
+    const response = await resolvedDeps.fetchInventoryPage({ endpoint, token, method: inventoryMethod });
     if (response.status < 200 || response.status >= 300) {
       return {
         provider: "openprovider",
@@ -295,12 +321,29 @@ export async function readOpenproviderDomainInventory(
         diagnostics: uniqueSorted([
           ...diagnostics,
           DIAGNOSTIC_FAILED_CLOSED,
-          sanitizeDiagnostic(`OPENPROVIDER_HTTP_STATUS_${response.status}`),
+          sanitizeDiagnostic(`OPENPROVIDER_DOMAIN_INVENTORY_HTTP_STATUS_${response.status}`),
         ]),
       };
     }
 
-    const domains = normalizeInventoryResponse(response.json);
+    const normalized = normalizeInventoryResponse(response.json);
+    if (!normalized.supported) {
+      return {
+        provider: "openprovider",
+        readOnly: true,
+        executionAllowed: false,
+        executionBlocked: true,
+        fetchedAt,
+        domains: [],
+        diagnostics: uniqueSorted([
+          ...diagnostics,
+          DIAGNOSTIC_FAILED_CLOSED,
+          DIAGNOSTIC_RESPONSE_UNSUPPORTED_SHAPE,
+        ]),
+      };
+    }
+
+    const domains = normalized.domains;
     return {
       provider: "openprovider",
       readOnly: true,
