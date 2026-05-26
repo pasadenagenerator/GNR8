@@ -12,6 +12,7 @@ Provider Execution Contract Envelope / Worker Payload Contract Preview milestone
 Provider Execution Safety Manifest / No-Execution Boundary Proof milestone is implemented, deployed, and manually verified (still control-plane only, no execution).
 Evidence Surface Consolidation / Operator Cockpit Layout Pass milestone is implemented, deployed, and manually verified (UI/read-model only, still control-plane only, no execution).
 Operator Cockpit Evidence Status Badges / Severity System milestone is implemented, deployed, and manually verified (UI/read-model only, still control-plane only, no execution).
+Operator Evidence Provenance Layer milestone is implemented, deployed, and manually verified (UI/read-model only, still control-plane only, no execution).
 
 Current snapshot sources:
 - `docs/ai/GNR8_CURRENT_STATE.md`
@@ -75,6 +76,32 @@ Required production env flag:
 - `GNR8_ADMIN_PROVIDER_HANDOFF_READINESS_SEED_ENABLED=1`
 
 Evidence and diagnostics milestone:
+- Operator Evidence Provenance Layer is deployed:
+  - Executive Summary includes visible provenance support
+  - Evidence Sources chips are present for provenance cues
+  - static source mapping approach is used
+  - no runtime lineage engine
+  - no API changes
+  - no runtime changes
+  - no execution controls
+  - verified source mappings:
+    - Current Situation: `Readiness`, `Safety Manifest`
+    - Primary Blockers: `Execution Preconditions Ledger`, `Execution Readiness Gate`, `Execution Remediation Plan`
+    - Verified Positives: `Governance Decision Package`, `Execution Preconditions Ledger`, `Safety Manifest`
+  - recommended next step:
+    - `Execution Remediation Plan`
+  - conclusion:
+    - operator can now answer `How do we know this?` using visible evidence provenance
+  - boundary remains:
+    - execution impossible
+    - simulation only
+    - no provider execution
+    - no queue execution
+    - no secret resolution
+  - recommended next milestone:
+    - Operator Cockpit Completion / UI Freeze Candidate
+  - success criteria:
+    - future thread bootstrap resumes from provenance-enabled cockpit milestone
 - Operator Cockpit Evidence Status Badges / Severity System is deployed:
   - badge severity levels: `critical`, `warning`, `success`, `info`, `neutral`
   - verified counters: `Critical: 8`, `Warnings: 4`, `Success: 8`

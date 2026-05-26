@@ -4,10 +4,45 @@
 2026-05-25
 
 ## Current Phase
-Operator Cockpit Evidence Status Badges / Severity System milestone (control-plane only, deployed and verified).
+Operator Evidence Provenance Layer milestone (control-plane only, deployed and verified).
 
 ## Latest Completed Milestone
 
+- Operator Evidence Provenance Layer is implemented, deployed, and manually verified end-to-end (control-plane only).
+- Executive Summary now includes visible provenance support so operators can trace evidence at-a-glance.
+- Evidence Sources chips are now visible for operator-facing provenance cues.
+- Source mapping uses a static source mapping approach.
+- Milestone scope distinction:
+  - no runtime lineage engine
+  - no API changes
+  - no runtime changes
+  - no execution controls
+- Verified source mappings:
+  - Current Situation:
+    - `Readiness`
+    - `Safety Manifest`
+  - Primary Blockers:
+    - `Execution Preconditions Ledger`
+    - `Execution Readiness Gate`
+    - `Execution Remediation Plan`
+  - Verified Positives:
+    - `Governance Decision Package`
+    - `Execution Preconditions Ledger`
+    - `Safety Manifest`
+- Recommended next step:
+  - `Execution Remediation Plan`
+- Conclusion:
+  - operator can now answer, `How do we know this?`, using visible evidence provenance
+- Boundary remains:
+  - execution impossible
+  - simulation only
+  - no provider execution
+  - no queue execution
+  - no secret resolution
+- Recommended next milestone:
+  - Operator Cockpit Completion / UI Freeze Candidate
+- Success criteria:
+  - future thread bootstrap resumes from provenance-enabled cockpit milestone
 - Operator Cockpit Evidence Status Badges / Severity System is implemented, deployed, and manually verified end-to-end (control-plane only).
 - Evidence counters and badge levels are now visible in the Operator Cockpit for fast risk/readiness/governance/safety scanning.
 - Badge severity levels verified:
