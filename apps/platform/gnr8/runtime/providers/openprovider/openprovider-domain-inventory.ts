@@ -39,9 +39,21 @@ type OpenproviderDomainInventoryDependencies = {
 type OpenproviderApiDomain = {
   name?: unknown;
   domain?: unknown;
+  fqdn?: unknown;
+  state?: unknown;
   status?: unknown;
+  expiration_date?: unknown;
   expirationDate?: unknown;
+  expiry_date?: unknown;
   expiryDate?: unknown;
+  renew_date?: unknown;
+  name_servers?: unknown;
+  ns?: unknown;
+  domainName?: unknown;
+  extension?: unknown;
+  tld?: unknown;
+  nameServerGroup?: unknown;
+  ns_group?: unknown;
   nsGroup?: { nameServers?: unknown } | null;
   nameservers?: unknown;
   id?: unknown;
@@ -81,9 +93,46 @@ function sanitizeIsoDate(value: unknown): string {
   return parsed.toISOString();
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function safeObjectKeys(value: unknown): string[] {
+  if (!isRecord(value)) return [];
+  return uniqueSorted(Object.keys(value).map((entry) => sanitizeToken(entry)).filter(Boolean));
+}
+
+function diagnosticKeys(prefix: string, value: unknown): string {
+  const keys = safeObjectKeys(value);
+  return `${prefix}:${keys.join(",")}`;
+}
+
 function asNameservers(value: unknown): string[] {
   if (!Array.isArray(value)) return [];
   return uniqueSorted(value.map((entry) => sanitizeToken(entry)).filter(Boolean));
+}
+
+function asReadableNameserverGroup(value: unknown): string[] {
+  if (typeof value === "string") {
+    const token = sanitizeToken(value);
+    return token ? [token] : [];
+  }
+  if (Array.isArray(value)) {
+    return uniqueSorted(value.map((entry) => sanitizeToken(entry)).filter(Boolean));
+  }
+  return [];
+}
+
+function joinDomainName(name: unknown, extension: unknown): string {
+  const left = sanitizeToken(name).toLowerCase();
+  const right = sanitizeToken(extension).toLowerCase().replace(/^\./, "");
+  if (!left || !right) return "";
+  return `${left}.${right}`;
+}
+
+function asDirectDomainField(value: unknown): string {
+  if (typeof value !== "string") return "";
+  return sanitizeDomain(value);
 }
 
 function sanitizeDiagnostic(value: string): string {
@@ -141,11 +190,35 @@ function extractBearerToken(payload: unknown): string {
 }
 
 function normalizeDomainItem(item: OpenproviderApiDomain): OpenproviderDomainInventoryItem | null {
-  const domain = sanitizeDomain(item.name ?? item.domain);
+  const nestedName = isRecord(item.name) ? item.name : null;
+  const nestedDomain = isRecord(item.domain) ? item.domain : null;
+  const domain = [
+    asDirectDomainField(item.name),
+    asDirectDomainField(item.domain),
+    asDirectDomainField(item.fqdn),
+    joinDomainName(nestedName?.name, nestedName?.extension ?? nestedName?.tld),
+    joinDomainName(nestedDomain?.name, nestedDomain?.extension ?? nestedDomain?.tld),
+    asDirectDomainField(nestedName?.name),
+    asDirectDomainField(nestedDomain?.name),
+  ].find((entry) => Boolean(entry)) ?? "";
   if (!domain) return null;
-  const status = sanitizeToken(item.status) || "unknown";
-  const expiryDate = sanitizeIsoDate(item.expirationDate ?? item.expiryDate) || "unknown";
-  const nameservers = asNameservers(item.nsGroup?.nameServers ?? item.nameservers);
+  const status = sanitizeToken(item.status ?? item.state ?? nestedDomain?.status) || "unknown";
+  const expiryDate =
+    sanitizeIsoDate(
+      item.expiration_date ??
+        item.expirationDate ??
+        item.expiry_date ??
+        item.expiryDate ??
+        item.renew_date,
+    ) || "unknown";
+  const nameservers = uniqueSorted([
+    ...asNameservers(item.nameservers),
+    ...asNameservers(item.name_servers),
+    ...asNameservers(item.ns),
+    ...asNameservers(item.nsGroup?.nameServers),
+    ...asReadableNameserverGroup(item.ns_group),
+    ...asReadableNameserverGroup(item.nameServerGroup),
+  ]);
   const rawRef = sanitizeToken(item.id ?? item.handle) || undefined;
   return {
     domain,
@@ -167,19 +240,31 @@ function normalizeInventoryResponse(payload: unknown): {
   supported: boolean;
   domains: OpenproviderDomainInventoryItem[];
 } {
-  if (!payload || typeof payload !== "object") {
-    return { supported: false, domains: [] };
+  if (Array.isArray(payload)) {
+    return {
+      supported: true,
+      domains: payload
+        .map((entry) => normalizeDomainItem((entry ?? {}) as OpenproviderApiDomain))
+        .filter((entry): entry is OpenproviderDomainInventoryItem => entry !== null)
+        .sort((left, right) => left.domain.localeCompare(right.domain)),
+    };
   }
+  if (!payload || typeof payload !== "object") return { supported: false, domains: [] };
   const root = payload as {
-    data?: { results?: unknown } | null;
+    data?: unknown;
     response?: { data?: { results?: unknown } | null } | null;
     results?: unknown;
+    domains?: unknown;
   };
+  const data = root.data;
+  const dataObject = isRecord(data) ? data : null;
 
   const candidates = [
-    root.data?.results,
-    root.response?.data?.results,
+    dataObject?.results,
+    data,
     root.results,
+    root.domains,
+    root.response?.data?.results,
   ];
 
   for (const candidate of candidates) {
@@ -194,6 +279,17 @@ function normalizeInventoryResponse(payload: unknown): {
   }
 
   return { supported: false, domains: [] };
+}
+
+function unsupportedShapeDiagnostics(payload: unknown): string[] {
+  const diagnostics = [
+    DIAGNOSTIC_RESPONSE_UNSUPPORTED_SHAPE,
+    diagnosticKeys("OPENPROVIDER_DOMAIN_INVENTORY_RESPONSE_KEYS", payload),
+  ];
+  if (isRecord(payload) && isRecord(payload.data)) {
+    diagnostics.push(diagnosticKeys("OPENPROVIDER_DOMAIN_INVENTORY_DATA_KEYS", payload.data));
+  }
+  return diagnostics;
 }
 
 async function defaultFetchInventoryPage(input: {
@@ -338,7 +434,7 @@ export async function readOpenproviderDomainInventory(
         diagnostics: uniqueSorted([
           ...diagnostics,
           DIAGNOSTIC_FAILED_CLOSED,
-          DIAGNOSTIC_RESPONSE_UNSUPPORTED_SHAPE,
+          ...unsupportedShapeDiagnostics(response.json),
         ]),
       };
     }

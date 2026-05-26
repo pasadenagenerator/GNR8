@@ -355,7 +355,145 @@ test("openprovider domain inventory: unsupported response shape fails closed", a
     });
     assert.equal(result.domains.length, 0);
     assert.equal(result.diagnostics.includes("OPENPROVIDER_DOMAIN_INVENTORY_RESPONSE_UNSUPPORTED_SHAPE"), true);
+    assert.equal(
+      result.diagnostics.includes("OPENPROVIDER_DOMAIN_INVENTORY_RESPONSE_KEYS:data"),
+      true,
+    );
+    assert.equal(
+      result.diagnostics.includes("OPENPROVIDER_DOMAIN_INVENTORY_DATA_KEYS:unexpected"),
+      true,
+    );
     assert.equal(result.diagnostics.includes("OPENPROVIDER_DOMAIN_INVENTORY_READ_FAILED_CLOSED"), true);
+  } finally {
+    if (previousUsername === undefined) delete process.env.OPENPROVIDER_SANDBOX_USERNAME;
+    else process.env.OPENPROVIDER_SANDBOX_USERNAME = previousUsername;
+    if (previousPassword === undefined) delete process.env.OPENPROVIDER_SANDBOX_PASSWORD;
+    else process.env.OPENPROVIDER_SANDBOX_PASSWORD = previousPassword;
+  }
+});
+
+test("openprovider domain inventory: supports data array shape", async () => {
+  const previousUsername = process.env.OPENPROVIDER_SANDBOX_USERNAME;
+  const previousPassword = process.env.OPENPROVIDER_SANDBOX_PASSWORD;
+  process.env.OPENPROVIDER_SANDBOX_USERNAME = "user";
+  process.env.OPENPROVIDER_SANDBOX_PASSWORD = "pass";
+  try {
+    const result = await readOpenproviderDomainInventory({
+      login: async () => ({ status: 200, json: { token: "t" } }),
+      fetchInventoryPage: async () => ({
+        status: 200,
+        json: { data: [{ domain: "example-data.com", status: "ok", expiryDate: "2031-02-01" }] },
+      }),
+    });
+    assert.equal(result.diagnostics.includes("OPENPROVIDER_DOMAIN_INVENTORY_READ_SUCCEEDED"), true);
+    assert.equal(result.domains.length, 1);
+    assert.equal(result.domains[0].domain, "example-data.com");
+  } finally {
+    if (previousUsername === undefined) delete process.env.OPENPROVIDER_SANDBOX_USERNAME;
+    else process.env.OPENPROVIDER_SANDBOX_USERNAME = previousUsername;
+    if (previousPassword === undefined) delete process.env.OPENPROVIDER_SANDBOX_PASSWORD;
+    else process.env.OPENPROVIDER_SANDBOX_PASSWORD = previousPassword;
+  }
+});
+
+test("openprovider domain inventory: supports results root shape", async () => {
+  const previousUsername = process.env.OPENPROVIDER_SANDBOX_USERNAME;
+  const previousPassword = process.env.OPENPROVIDER_SANDBOX_PASSWORD;
+  process.env.OPENPROVIDER_SANDBOX_USERNAME = "user";
+  process.env.OPENPROVIDER_SANDBOX_PASSWORD = "pass";
+  try {
+    const result = await readOpenproviderDomainInventory({
+      login: async () => ({ status: 200, json: { token: "t" } }),
+      fetchInventoryPage: async () => ({
+        status: 200,
+        json: { results: [{ name: "example-results.com", state: "active", expiration_date: "2032-03-01" }] },
+      }),
+    });
+    assert.equal(result.diagnostics.includes("OPENPROVIDER_DOMAIN_INVENTORY_READ_SUCCEEDED"), true);
+    assert.equal(result.domains.length, 1);
+    assert.equal(result.domains[0].domain, "example-results.com");
+    assert.equal(result.domains[0].status, "active");
+  } finally {
+    if (previousUsername === undefined) delete process.env.OPENPROVIDER_SANDBOX_USERNAME;
+    else process.env.OPENPROVIDER_SANDBOX_USERNAME = previousUsername;
+    if (previousPassword === undefined) delete process.env.OPENPROVIDER_SANDBOX_PASSWORD;
+    else process.env.OPENPROVIDER_SANDBOX_PASSWORD = previousPassword;
+  }
+});
+
+test("openprovider domain inventory: supports root array shape", async () => {
+  const previousUsername = process.env.OPENPROVIDER_SANDBOX_USERNAME;
+  const previousPassword = process.env.OPENPROVIDER_SANDBOX_PASSWORD;
+  process.env.OPENPROVIDER_SANDBOX_USERNAME = "user";
+  process.env.OPENPROVIDER_SANDBOX_PASSWORD = "pass";
+  try {
+    const result = await readOpenproviderDomainInventory({
+      login: async () => ({ status: 200, json: { token: "t" } }),
+      fetchInventoryPage: async () => ({
+        status: 200,
+        json: [{ fqdn: "root-array.com", renew_date: "2033-04-01", ns: ["ns1.root.test", "ns2.root.test"] }],
+      }),
+    });
+    assert.equal(result.diagnostics.includes("OPENPROVIDER_DOMAIN_INVENTORY_READ_SUCCEEDED"), true);
+    assert.equal(result.domains.length, 1);
+    assert.equal(result.domains[0].domain, "root-array.com");
+    assert.deepEqual(result.domains[0].nameservers, ["ns1.root.test", "ns2.root.test"]);
+  } finally {
+    if (previousUsername === undefined) delete process.env.OPENPROVIDER_SANDBOX_USERNAME;
+    else process.env.OPENPROVIDER_SANDBOX_USERNAME = previousUsername;
+    if (previousPassword === undefined) delete process.env.OPENPROVIDER_SANDBOX_PASSWORD;
+    else process.env.OPENPROVIDER_SANDBOX_PASSWORD = previousPassword;
+  }
+});
+
+test("openprovider domain inventory: supports nested name object and domain status", async () => {
+  const previousUsername = process.env.OPENPROVIDER_SANDBOX_USERNAME;
+  const previousPassword = process.env.OPENPROVIDER_SANDBOX_PASSWORD;
+  process.env.OPENPROVIDER_SANDBOX_USERNAME = "user";
+  process.env.OPENPROVIDER_SANDBOX_PASSWORD = "pass";
+  try {
+    const result = await readOpenproviderDomainInventory({
+      login: async () => ({ status: 200, json: { token: "t" } }),
+      fetchInventoryPage: async () => ({
+        status: 200,
+        json: {
+          data: {
+            results: [
+              {
+                name: { name: "nestedname", extension: "com" },
+                domain: { status: "renewing" },
+                name_servers: ["ns1.nested.test"],
+              },
+            ],
+          },
+        },
+      }),
+    });
+    assert.equal(result.diagnostics.includes("OPENPROVIDER_DOMAIN_INVENTORY_READ_SUCCEEDED"), true);
+    assert.equal(result.domains.length, 1);
+    assert.equal(result.domains[0].domain, "nestedname.com");
+    assert.equal(result.domains[0].status, "renewing");
+    assert.deepEqual(result.domains[0].nameservers, ["ns1.nested.test"]);
+  } finally {
+    if (previousUsername === undefined) delete process.env.OPENPROVIDER_SANDBOX_USERNAME;
+    else process.env.OPENPROVIDER_SANDBOX_USERNAME = previousUsername;
+    if (previousPassword === undefined) delete process.env.OPENPROVIDER_SANDBOX_PASSWORD;
+    else process.env.OPENPROVIDER_SANDBOX_PASSWORD = previousPassword;
+  }
+});
+
+test("openprovider domain inventory: empty supported list succeeds", async () => {
+  const previousUsername = process.env.OPENPROVIDER_SANDBOX_USERNAME;
+  const previousPassword = process.env.OPENPROVIDER_SANDBOX_PASSWORD;
+  process.env.OPENPROVIDER_SANDBOX_USERNAME = "user";
+  process.env.OPENPROVIDER_SANDBOX_PASSWORD = "pass";
+  try {
+    const result = await readOpenproviderDomainInventory({
+      login: async () => ({ status: 200, json: { token: "t" } }),
+      fetchInventoryPage: async () => ({ status: 200, json: { domains: [] } }),
+    });
+    assert.equal(result.diagnostics.includes("OPENPROVIDER_DOMAIN_INVENTORY_READ_SUCCEEDED"), true);
+    assert.equal(result.domains.length, 0);
   } finally {
     if (previousUsername === undefined) delete process.env.OPENPROVIDER_SANDBOX_USERNAME;
     else process.env.OPENPROVIDER_SANDBOX_USERNAME = previousUsername;
