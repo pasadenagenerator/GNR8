@@ -42,6 +42,8 @@ test("openprovider dns record inventory: read only preserved", async () => {
     });
     assert.equal(result.diagnostics.includes("OPENPROVIDER_DNS_READ_SUCCEEDED"), true);
     assert.equal(result.diagnostics.includes("OPENPROVIDER_DNS_READ_ONLY_BOUNDARY_CONFIRMED"), true);
+    assert.equal(result.diagnostics.includes("OPENPROVIDER_AUTH_STARTED"), true);
+    assert.equal(result.diagnostics.includes("OPENPROVIDER_AUTH_SUCCEEDED"), true);
   } finally {
     if (previousUsername === undefined) delete process.env.OPENPROVIDER_SANDBOX_USERNAME;
     else process.env.OPENPROVIDER_SANDBOX_USERNAME = previousUsername;
@@ -83,6 +85,80 @@ test("openprovider dns record inventory: auth reused before domain reads", async
     });
 
     assert.deepEqual(callOrder, ["login", "domains"]);
+  } finally {
+    if (previousUsername === undefined) delete process.env.OPENPROVIDER_SANDBOX_USERNAME;
+    else process.env.OPENPROVIDER_SANDBOX_USERNAME = previousUsername;
+    if (previousPassword === undefined) delete process.env.OPENPROVIDER_SANDBOX_PASSWORD;
+    else process.env.OPENPROVIDER_SANDBOX_PASSWORD = previousPassword;
+  }
+});
+
+test("openprovider dns record inventory: auth endpoint and body match domain inventory auth flow", async () => {
+  const previousUsername = process.env.OPENPROVIDER_SANDBOX_USERNAME;
+  const previousPassword = process.env.OPENPROVIDER_SANDBOX_PASSWORD;
+  const previousAuthEndpoint = process.env.OPENPROVIDER_AUTH_ENDPOINT;
+  const previousInventoryEndpoint = process.env.OPENPROVIDER_DOMAIN_INVENTORY_ENDPOINT;
+  process.env.OPENPROVIDER_SANDBOX_USERNAME = "user";
+  process.env.OPENPROVIDER_SANDBOX_PASSWORD = "pass";
+  process.env.OPENPROVIDER_DOMAIN_INVENTORY_ENDPOINT = "http://api.sandbox.openprovider.nl:8480/v1beta/domains/search";
+  delete process.env.OPENPROVIDER_AUTH_ENDPOINT;
+
+  let seenEndpoint = "";
+  let seenUsername = "";
+  let seenPassword = "";
+  try {
+    await readOpenproviderDnsRecordInventory({
+      login: async ({ endpoint, username, password }) => {
+        seenEndpoint = endpoint;
+        seenUsername = username;
+        seenPassword = password;
+        return { status: 200, json: { data: { token: "token_2b" } } };
+      },
+      readOpenproviderDomainInventory: async () => ({
+        provider: "openprovider",
+        readOnly: true,
+        executionAllowed: false,
+        executionBlocked: true,
+        fetchedAt: "2026-05-26T00:00:00.000Z",
+        domains: [],
+        diagnostics: [],
+      }),
+    });
+
+    assert.equal(seenEndpoint, "http://api.sandbox.openprovider.nl:8480/v1beta/auth/login");
+    assert.equal(seenUsername, "user");
+    assert.equal(seenPassword, "pass");
+  } finally {
+    if (previousUsername === undefined) delete process.env.OPENPROVIDER_SANDBOX_USERNAME;
+    else process.env.OPENPROVIDER_SANDBOX_USERNAME = previousUsername;
+    if (previousPassword === undefined) delete process.env.OPENPROVIDER_SANDBOX_PASSWORD;
+    else process.env.OPENPROVIDER_SANDBOX_PASSWORD = previousPassword;
+    if (previousAuthEndpoint === undefined) delete process.env.OPENPROVIDER_AUTH_ENDPOINT;
+    else process.env.OPENPROVIDER_AUTH_ENDPOINT = previousAuthEndpoint;
+    if (previousInventoryEndpoint === undefined) delete process.env.OPENPROVIDER_DOMAIN_INVENTORY_ENDPOINT;
+    else process.env.OPENPROVIDER_DOMAIN_INVENTORY_ENDPOINT = previousInventoryEndpoint;
+  }
+});
+
+test("openprovider dns record inventory: auth failure fails closed with sanitized diagnostics", async () => {
+  const previousUsername = process.env.OPENPROVIDER_SANDBOX_USERNAME;
+  const previousPassword = process.env.OPENPROVIDER_SANDBOX_PASSWORD;
+  process.env.OPENPROVIDER_SANDBOX_USERNAME = "user";
+  process.env.OPENPROVIDER_SANDBOX_PASSWORD = "pass";
+
+  try {
+    const result = await readOpenproviderDnsRecordInventory({
+      login: async () => ({ status: 500, json: { error: "server" } }),
+      readOpenproviderDomainInventory: async () => {
+        throw new Error("domains should not be called");
+      },
+    });
+    assert.deepEqual(result.domains, []);
+    assert.equal(result.diagnostics.includes("OPENPROVIDER_AUTH_STARTED"), true);
+    assert.equal(result.diagnostics.includes("OPENPROVIDER_AUTH_SUCCEEDED"), false);
+    assert.equal(result.diagnostics.includes("OPENPROVIDER_AUTH_FAILED_CLOSED"), true);
+    assert.equal(result.diagnostics.includes("OPENPROVIDER_AUTH_HTTP_STATUS_500"), true);
+    assert.equal(result.diagnostics.includes("OPENPROVIDER_DNS_READ_FAILED_CLOSED"), true);
   } finally {
     if (previousUsername === undefined) delete process.env.OPENPROVIDER_SANDBOX_USERNAME;
     else process.env.OPENPROVIDER_SANDBOX_USERNAME = previousUsername;

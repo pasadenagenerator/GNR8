@@ -1,4 +1,10 @@
 import { readOpenproviderDomainInventory } from "@/gnr8/runtime/providers/openprovider/openprovider-domain-inventory";
+import {
+  authenticateOpenprovider,
+  defaultOpenproviderLogin,
+  sanitizeOpenproviderDiagnostic,
+  sanitizeOpenproviderToken,
+} from "@/gnr8/runtime/providers/openprovider/openprovider-auth";
 
 export type OpenproviderDnsRecordInventoryRecord = {
   name: string;
@@ -36,7 +42,7 @@ type OpenproviderDnsRecordInventoryDependencies = {
   fetchDnsRecords: (input: { endpoint: string; token: string }) => Promise<OpenproviderHttpResponse>;
 };
 
-const DEFAULT_AUTH_ENDPOINT = "https://api.openprovider.eu/v1beta/auth/login";
+const DEFAULT_DOMAIN_INVENTORY_ENDPOINT = "https://api.openprovider.eu/v1beta/domains/search";
 const DEFAULT_DNS_RECORDS_ENDPOINT_TEMPLATE = "https://api.openprovider.eu/v1beta/dns/zones/{domain}/records";
 
 const DIAGNOSTIC_STARTED = "OPENPROVIDER_DNS_READ_STARTED";
@@ -45,19 +51,11 @@ const DIAGNOSTIC_FAILED_CLOSED = "OPENPROVIDER_DNS_READ_FAILED_CLOSED";
 const DIAGNOSTIC_BOUNDARY = "OPENPROVIDER_DNS_READ_ONLY_BOUNDARY_CONFIRMED";
 
 function sanitizeToken(value: unknown): string {
-  return String(value ?? "").trim();
+  return sanitizeOpenproviderToken(value);
 }
 
 function uniqueSorted(values: readonly string[]): string[] {
   return [...new Set(values.map((value) => sanitizeToken(value)).filter(Boolean))].sort((a, b) => a.localeCompare(b));
-}
-
-function sanitizeDiagnostic(value: string): string {
-  const lowered = value.toLowerCase();
-  if (lowered.includes("password") || lowered.includes("token") || lowered.includes("secret") || lowered.includes("bearer")) {
-    return "credential_redacted";
-  }
-  return value;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -140,60 +138,9 @@ function normalizeRecordsPayload(payload: unknown): { supported: boolean; record
   return { supported: false, records: [] };
 }
 
-function extractBearerToken(payload: unknown): string {
-  if (!payload || typeof payload !== "object") return "";
-  const root = payload as {
-    token?: unknown;
-    accessToken?: unknown;
-    access_token?: unknown;
-    data?: { token?: unknown; accessToken?: unknown; access_token?: unknown } | null;
-    response?: { token?: unknown; accessToken?: unknown; access_token?: unknown; data?: { token?: unknown; accessToken?: unknown; access_token?: unknown } | null } | null;
-  };
-  const candidates = [
-    root.token,
-    root.accessToken,
-    root.access_token,
-    root.data?.token,
-    root.data?.accessToken,
-    root.data?.access_token,
-    root.response?.token,
-    root.response?.accessToken,
-    root.response?.access_token,
-    root.response?.data?.token,
-    root.response?.data?.accessToken,
-    root.response?.data?.access_token,
-  ];
-  for (const candidate of candidates) {
-    const token = sanitizeToken(candidate);
-    if (token) return token;
-  }
-  return "";
-}
-
-function deriveAuthEndpoint(): string {
-  const explicit = sanitizeToken(process.env.OPENPROVIDER_AUTH_ENDPOINT);
-  return explicit || DEFAULT_AUTH_ENDPOINT;
-}
-
 function buildDnsRecordsEndpoint(domain: string): string {
   const template = sanitizeToken(process.env.OPENPROVIDER_DNS_RECORDS_ENDPOINT_TEMPLATE) || DEFAULT_DNS_RECORDS_ENDPOINT_TEMPLATE;
   return template.replaceAll("{domain}", encodeURIComponent(domain));
-}
-
-async function defaultLogin(input: {
-  endpoint: string;
-  username: string;
-  password: string;
-}): Promise<OpenproviderHttpResponse> {
-  const response = await fetch(input.endpoint, {
-    method: "POST",
-    headers: {
-      "content-type": "application/json",
-    },
-    body: JSON.stringify({ username: input.username, password: input.password }),
-  });
-  const json = await response.json().catch(() => null);
-  return { status: response.status, json };
 }
 
 async function defaultFetchDnsRecords(input: {
@@ -215,33 +162,22 @@ export async function readOpenproviderDnsRecordInventory(
 ): Promise<OpenproviderDnsRecordInventoryResult> {
   const resolvedDeps: OpenproviderDnsRecordInventoryDependencies = {
     readOpenproviderDomainInventory,
-    login: defaultLogin,
+    login: defaultOpenproviderLogin,
     fetchDnsRecords: defaultFetchDnsRecords,
     ...deps,
   };
 
   const diagnostics: string[] = [DIAGNOSTIC_STARTED, DIAGNOSTIC_BOUNDARY];
 
-  const username = sanitizeToken(process.env.OPENPROVIDER_SANDBOX_USERNAME ?? process.env.OPENPROVIDER_LIVE_USERNAME);
-  const password = sanitizeToken(process.env.OPENPROVIDER_SANDBOX_PASSWORD ?? process.env.OPENPROVIDER_LIVE_PASSWORD);
-  if (!username || !password) {
-    return {
-      provider: "openprovider",
-      readOnly: true,
-      executionAllowed: false,
-      executionBlocked: true,
-      domains: [],
-      diagnostics: uniqueSorted([...diagnostics, DIAGNOSTIC_FAILED_CLOSED, "OPENPROVIDER_CREDENTIALS_MISSING"]),
-    };
-  }
-
   try {
-    const auth = await resolvedDeps.login({
-      endpoint: deriveAuthEndpoint(),
-      username,
-      password,
+    const inventoryEndpointForAuthDerivation =
+      sanitizeToken(process.env.OPENPROVIDER_DOMAIN_INVENTORY_ENDPOINT) || DEFAULT_DOMAIN_INVENTORY_ENDPOINT;
+    const auth = await authenticateOpenprovider({
+      login: resolvedDeps.login,
+      inventoryEndpointForAuthDerivation,
     });
-    if (auth.status < 200 || auth.status >= 300) {
+    diagnostics.push(...auth.diagnostics);
+    if (!auth.ok) {
       return {
         provider: "openprovider",
         readOnly: true,
@@ -251,22 +187,11 @@ export async function readOpenproviderDnsRecordInventory(
         diagnostics: uniqueSorted([
           ...diagnostics,
           DIAGNOSTIC_FAILED_CLOSED,
-          sanitizeDiagnostic(`OPENPROVIDER_AUTH_HTTP_STATUS_${auth.status}`),
+          "OPENPROVIDER_AUTH_FAILED_CLOSED",
         ]),
       };
     }
-
-    const token = extractBearerToken(auth.json);
-    if (!token) {
-      return {
-        provider: "openprovider",
-        readOnly: true,
-        executionAllowed: false,
-        executionBlocked: true,
-        domains: [],
-        diagnostics: uniqueSorted([...diagnostics, DIAGNOSTIC_FAILED_CLOSED, "OPENPROVIDER_AUTH_TOKEN_MISSING"]),
-      };
-    }
+    const token = auth.token;
 
     const domainInventory = await resolvedDeps.readOpenproviderDomainInventory();
     if (!Array.isArray(domainInventory.domains) || domainInventory.domains.length === 0) {
@@ -299,7 +224,7 @@ export async function readOpenproviderDnsRecordInventory(
           diagnostics: uniqueSorted([
             ...diagnostics,
             DIAGNOSTIC_FAILED_CLOSED,
-            sanitizeDiagnostic(`OPENPROVIDER_DNS_HTTP_STATUS_${response.status}`),
+            sanitizeOpenproviderDiagnostic(`OPENPROVIDER_DNS_HTTP_STATUS_${response.status}`),
           ]),
         };
       }
@@ -332,7 +257,7 @@ export async function readOpenproviderDnsRecordInventory(
       diagnostics: uniqueSorted([...diagnostics, DIAGNOSTIC_SUCCEEDED]),
     };
   } catch (error) {
-    const message = sanitizeDiagnostic(sanitizeToken(error instanceof Error ? error.message : error));
+    const message = sanitizeOpenproviderDiagnostic(sanitizeToken(error instanceof Error ? error.message : error));
     return {
       provider: "openprovider",
       readOnly: true,
