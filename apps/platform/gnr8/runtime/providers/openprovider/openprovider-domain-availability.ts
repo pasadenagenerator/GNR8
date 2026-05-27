@@ -35,6 +35,7 @@ type OpenproviderDomainAvailabilityDependencies = {
   }) => Promise<OpenproviderHttpResponse>;
   checkAvailability: (input: {
     endpoint: string;
+    method: "GET" | "POST";
     token: string;
     domain: string;
   }) => Promise<OpenproviderHttpResponse>;
@@ -143,6 +144,27 @@ function splitDomain(domain: string): { name: string; extension: string } | null
   return { name, extension };
 }
 
+function resolveAvailabilityMethod(value: unknown): "GET" | "POST" {
+  const normalized = sanitizeToken(value).toUpperCase();
+  if (normalized === "GET") return "GET";
+  if (normalized === "POST") return "POST";
+  return "POST";
+}
+
+function sanitizeEndpointPath(value: string): string {
+  try {
+    const url = new URL(value);
+    const path = sanitizeToken(url.pathname) || "/";
+    return path.startsWith("/") ? path : `/${path}`;
+  } catch {
+    const trimmed = sanitizeToken(value).trim();
+    const noQueryOrHash = trimmed.split("?")[0]?.split("#")[0] ?? "";
+    if (!noQueryOrHash) return "/";
+    const withLeadingSlash = noQueryOrHash.startsWith("/") ? noQueryOrHash : `/${noQueryOrHash}`;
+    return sanitizeToken(withLeadingSlash) || "/";
+  }
+}
+
 function coerceBoolean(value: unknown): boolean | null {
   if (typeof value === "boolean") return value;
   if (typeof value === "number") {
@@ -204,22 +226,37 @@ function normalizeAvailabilityFromPayload(payload: unknown): {
 
 async function defaultCheckAvailability(input: {
   endpoint: string;
+  method: "GET" | "POST";
   token: string;
   domain: string;
 }): Promise<OpenproviderHttpResponse> {
   const parsed = splitDomain(input.domain);
-  const body = parsed
-    ? { domains: [{ name: parsed.name, extension: parsed.extension }] }
-    : { domains: [{ domain: input.domain }] };
+  const body = parsed ? { domains: [{ name: parsed.name, extension: parsed.extension }] } : { domains: [{ domain: input.domain }] };
 
-  const response = await fetch(input.endpoint, {
-    method: "POST",
-    headers: {
-      authorization: `Bearer ${input.token}`,
-      "content-type": "application/json",
-    },
-    body: JSON.stringify(body),
-  });
+  const headers: HeadersInit = {
+    authorization: `Bearer ${input.token}`,
+  };
+  let targetEndpoint = input.endpoint;
+  const init: RequestInit = {
+    method: input.method,
+    headers,
+  };
+
+  if (input.method === "GET") {
+    const url = new URL(input.endpoint);
+    if (url.pathname.includes("/domains/check") && parsed) {
+      url.searchParams.set("name", parsed.name);
+      url.searchParams.set("extension", parsed.extension);
+    } else {
+      url.searchParams.set("domain", input.domain);
+    }
+    targetEndpoint = url.toString();
+  } else {
+    headers["content-type"] = "application/json";
+    init.body = JSON.stringify(body);
+  }
+
+  const response = await fetch(targetEndpoint, init);
   const json = await response.json().catch(() => null);
   return { status: response.status, json };
 }
@@ -239,8 +276,13 @@ export async function readOpenproviderDomainAvailability(
   const domain = normalizeDomain(domainInput);
   const diagnostics = [DIAGNOSTIC_STARTED, DIAGNOSTIC_BOUNDARY_CONFIRMED];
   const endpoint = sanitizeToken(process.env.OPENPROVIDER_DOMAIN_AVAILABILITY_ENDPOINT) || DEFAULT_ENDPOINT;
+  const availabilityMethod = resolveAvailabilityMethod(process.env.OPENPROVIDER_DOMAIN_AVAILABILITY_METHOD);
+  const endpointPathDiagnostic = sanitizeOpenproviderDiagnostic(
+    `OPENPROVIDER_AVAILABILITY_ENDPOINT_PATH:${sanitizeEndpointPath(endpoint)}`,
+  );
   const inventoryEndpointForAuthDerivation =
     sanitizeToken(process.env.OPENPROVIDER_DOMAIN_INVENTORY_ENDPOINT) || DEFAULT_DOMAIN_INVENTORY_ENDPOINT;
+  diagnostics.push(sanitizeOpenproviderDiagnostic(`OPENPROVIDER_AVAILABILITY_METHOD_${availabilityMethod}`), endpointPathDiagnostic);
 
   if (!domain) {
     return {
@@ -280,6 +322,7 @@ export async function readOpenproviderDomainAvailability(
     diagnostics.push(DIAGNOSTIC_REQUEST_SHAPED);
     const response = await resolvedDeps.checkAvailability({
       endpoint,
+      method: availabilityMethod,
       token: auth.token,
       domain,
     });

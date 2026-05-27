@@ -31,10 +31,12 @@ test("openprovider availability: available domain normalizes to available=true",
   const previousUsername = process.env.OPENPROVIDER_SANDBOX_USERNAME;
   const previousPassword = process.env.OPENPROVIDER_SANDBOX_PASSWORD;
   const previousEndpoint = process.env.OPENPROVIDER_DOMAIN_AVAILABILITY_ENDPOINT;
+  const previousMethod = process.env.OPENPROVIDER_DOMAIN_AVAILABILITY_METHOD;
   const previousInventoryEndpoint = process.env.OPENPROVIDER_DOMAIN_INVENTORY_ENDPOINT;
   process.env.OPENPROVIDER_SANDBOX_USERNAME = "user";
   process.env.OPENPROVIDER_SANDBOX_PASSWORD = "pass";
   process.env.OPENPROVIDER_DOMAIN_AVAILABILITY_ENDPOINT = "https://api.openprovider.eu/v1beta/domains/check";
+  delete process.env.OPENPROVIDER_DOMAIN_AVAILABILITY_METHOD;
   process.env.OPENPROVIDER_DOMAIN_INVENTORY_ENDPOINT = "http://api.sandbox.openprovider.nl:8480/v1beta/domains/search";
 
   try {
@@ -47,9 +49,10 @@ test("openprovider availability: available domain normalizes to available=true",
         assert.equal(password, "pass");
         return { status: 200, json: { data: { token: "token_abc" } } };
       },
-      checkAvailability: async ({ endpoint, token, domain }) => {
+      checkAvailability: async ({ endpoint, method, token, domain }) => {
         callOrder.push("availability");
         assert.equal(endpoint, "https://api.openprovider.eu/v1beta/domains/check");
+        assert.equal(method, "POST");
         assert.equal(token, "token_abc");
         assert.equal(domain, "gnr8-test.com");
         return {
@@ -70,6 +73,8 @@ test("openprovider availability: available domain normalizes to available=true",
     assert.equal(result.status, "available");
     assert.equal(result.checkedAt, "2026-05-26T00:00:00.000Z");
     assert.equal(result.diagnostics.includes("OPENPROVIDER_AVAILABILITY_REQUEST_SHAPED"), true);
+    assert.equal(result.diagnostics.includes("OPENPROVIDER_AVAILABILITY_METHOD_POST"), true);
+    assert.equal(result.diagnostics.includes("OPENPROVIDER_AVAILABILITY_ENDPOINT_PATH:/v1beta/domains/check"), true);
     assert.equal(result.diagnostics.includes("OPENPROVIDER_AVAILABILITY_SUCCEEDED"), true);
     assert.equal(result.diagnostics.includes("OPENPROVIDER_AVAILABILITY_BOUNDARY_CONFIRMED"), true);
     assert.equal(result.diagnostics.includes("OPENPROVIDER_AUTH_STARTED"), true);
@@ -81,8 +86,102 @@ test("openprovider availability: available domain normalizes to available=true",
     else process.env.OPENPROVIDER_SANDBOX_PASSWORD = previousPassword;
     if (previousEndpoint === undefined) delete process.env.OPENPROVIDER_DOMAIN_AVAILABILITY_ENDPOINT;
     else process.env.OPENPROVIDER_DOMAIN_AVAILABILITY_ENDPOINT = previousEndpoint;
+    if (previousMethod === undefined) delete process.env.OPENPROVIDER_DOMAIN_AVAILABILITY_METHOD;
+    else process.env.OPENPROVIDER_DOMAIN_AVAILABILITY_METHOD = previousMethod;
     if (previousInventoryEndpoint === undefined) delete process.env.OPENPROVIDER_DOMAIN_INVENTORY_ENDPOINT;
     else process.env.OPENPROVIDER_DOMAIN_INVENTORY_ENDPOINT = previousInventoryEndpoint;
+  }
+});
+
+test("openprovider availability: env method GET sends no body", async () => {
+  const previousUsername = process.env.OPENPROVIDER_SANDBOX_USERNAME;
+  const previousPassword = process.env.OPENPROVIDER_SANDBOX_PASSWORD;
+  const previousEndpoint = process.env.OPENPROVIDER_DOMAIN_AVAILABILITY_ENDPOINT;
+  const previousMethod = process.env.OPENPROVIDER_DOMAIN_AVAILABILITY_METHOD;
+  const previousFetch = globalThis.fetch;
+  process.env.OPENPROVIDER_SANDBOX_USERNAME = "user";
+  process.env.OPENPROVIDER_SANDBOX_PASSWORD = "pass";
+  process.env.OPENPROVIDER_DOMAIN_AVAILABILITY_METHOD = "GET";
+  process.env.OPENPROVIDER_DOMAIN_AVAILABILITY_ENDPOINT = "https://api.openprovider.eu/v1beta/domains/check?api_key=secret";
+
+  try {
+    let capturedInit: RequestInit | undefined;
+    let capturedUrl = "";
+    globalThis.fetch = (async (input: URL | RequestInfo, init?: RequestInit) => {
+      capturedUrl = String(input);
+      capturedInit = init;
+      return new Response(JSON.stringify({ data: { results: [{ available: true }] } }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    }) as typeof fetch;
+
+    const result = await readOpenproviderDomainAvailability("example.com", {
+      login: async () => ({ status: 200, json: { token: "token_xyz" } }),
+    });
+
+    assert.equal(capturedInit?.method, "GET");
+    assert.equal("body" in (capturedInit ?? {}), false);
+    assert.equal(capturedUrl.includes("name=example"), true);
+    assert.equal(capturedUrl.includes("extension=com"), true);
+    assert.equal(result.diagnostics.includes("OPENPROVIDER_AVAILABILITY_METHOD_GET"), true);
+    assert.equal(result.diagnostics.includes("OPENPROVIDER_AVAILABILITY_ENDPOINT_PATH:/v1beta/domains/check"), true);
+    assert.equal(result.diagnostics.some((entry) => entry.includes("openprovider.eu")), false);
+    assert.equal(result.diagnostics.some((entry) => entry.includes("api_key")), false);
+    assert.equal(result.status, "available");
+  } finally {
+    globalThis.fetch = previousFetch;
+    if (previousUsername === undefined) delete process.env.OPENPROVIDER_SANDBOX_USERNAME;
+    else process.env.OPENPROVIDER_SANDBOX_USERNAME = previousUsername;
+    if (previousPassword === undefined) delete process.env.OPENPROVIDER_SANDBOX_PASSWORD;
+    else process.env.OPENPROVIDER_SANDBOX_PASSWORD = previousPassword;
+    if (previousEndpoint === undefined) delete process.env.OPENPROVIDER_DOMAIN_AVAILABILITY_ENDPOINT;
+    else process.env.OPENPROVIDER_DOMAIN_AVAILABILITY_ENDPOINT = previousEndpoint;
+    if (previousMethod === undefined) delete process.env.OPENPROVIDER_DOMAIN_AVAILABILITY_METHOD;
+    else process.env.OPENPROVIDER_DOMAIN_AVAILABILITY_METHOD = previousMethod;
+  }
+});
+
+test("openprovider availability: env method POST sends body", async () => {
+  const previousUsername = process.env.OPENPROVIDER_SANDBOX_USERNAME;
+  const previousPassword = process.env.OPENPROVIDER_SANDBOX_PASSWORD;
+  const previousEndpoint = process.env.OPENPROVIDER_DOMAIN_AVAILABILITY_ENDPOINT;
+  const previousMethod = process.env.OPENPROVIDER_DOMAIN_AVAILABILITY_METHOD;
+  const previousFetch = globalThis.fetch;
+  process.env.OPENPROVIDER_SANDBOX_USERNAME = "user";
+  process.env.OPENPROVIDER_SANDBOX_PASSWORD = "pass";
+  process.env.OPENPROVIDER_DOMAIN_AVAILABILITY_METHOD = "POST";
+  process.env.OPENPROVIDER_DOMAIN_AVAILABILITY_ENDPOINT = "https://api.openprovider.eu/v1beta/domains/check";
+
+  try {
+    let capturedInit: RequestInit | undefined;
+    globalThis.fetch = (async (_input: URL | RequestInfo, init?: RequestInit) => {
+      capturedInit = init;
+      return new Response(JSON.stringify({ data: { results: [{ available: true }] } }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    }) as typeof fetch;
+
+    const result = await readOpenproviderDomainAvailability("example.com", {
+      login: async () => ({ status: 200, json: { token: "token_xyz" } }),
+    });
+
+    assert.equal(capturedInit?.method, "POST");
+    assert.equal(typeof capturedInit?.body, "string");
+    assert.equal(String(capturedInit?.body).includes("\"name\":\"example\""), true);
+    assert.equal(String(capturedInit?.body).includes("\"extension\":\"com\""), true);
+    assert.equal(result.diagnostics.includes("OPENPROVIDER_AVAILABILITY_METHOD_POST"), true);
+  } finally {
+    globalThis.fetch = previousFetch;
+    if (previousUsername === undefined) delete process.env.OPENPROVIDER_SANDBOX_USERNAME;
+    else process.env.OPENPROVIDER_SANDBOX_USERNAME = previousUsername;
+    if (previousPassword === undefined) delete process.env.OPENPROVIDER_SANDBOX_PASSWORD;
+    else process.env.OPENPROVIDER_SANDBOX_PASSWORD = previousPassword;
+    if (previousEndpoint === undefined) delete process.env.OPENPROVIDER_DOMAIN_AVAILABILITY_ENDPOINT;
+    else process.env.OPENPROVIDER_DOMAIN_AVAILABILITY_ENDPOINT = previousEndpoint;
+    if (previousMethod === undefined) delete process.env.OPENPROVIDER_DOMAIN_AVAILABILITY_METHOD;
+    else process.env.OPENPROVIDER_DOMAIN_AVAILABILITY_METHOD = previousMethod;
   }
 });
 
