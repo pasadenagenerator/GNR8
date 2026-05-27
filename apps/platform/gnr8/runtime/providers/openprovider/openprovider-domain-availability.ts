@@ -56,6 +56,26 @@ function isSensitiveValue(value: string): boolean {
   return /password|token|secret|bearer|credential|username|api[_-]?key|authorization/i.test(value);
 }
 
+function redactLabeledSecrets(input: string): string {
+  let output = input;
+
+  output = output.replace(
+    /\b(password|token|secret|credential|credentials?|username|api[_-]?key|authorization)\b\s*([:=])\s*([^\s,;]+)/gi,
+    (_match, label, separator) => `${label}${separator}[redacted]`,
+  );
+
+  output = output.replace(/\bBearer\s+([^\s,;]+)/gi, "Bearer [redacted]");
+  return output;
+}
+
+function looksLikeOpaqueSecret(value: string): boolean {
+  const compact = value.trim();
+  if (!compact) return false;
+  if (/^[A-Za-z0-9+/=_-]{24,}$/.test(compact)) return true;
+  if (/^[A-Za-z0-9-_]{12,}\.[A-Za-z0-9-_]{12,}\.[A-Za-z0-9-_]{12,}$/.test(compact)) return true;
+  return false;
+}
+
 function parseMaybeJson(value: unknown): unknown {
   if (typeof value !== "string") return value;
   const trimmed = value.trim();
@@ -70,8 +90,11 @@ function parseMaybeJson(value: unknown): unknown {
 function sanitizeProviderValue(value: unknown): string | undefined {
   const raw = sanitizeToken(value);
   if (!raw) return undefined;
-  const sanitized = sanitizeOpenproviderDiagnostic(raw);
-  if (!sanitized || isSensitiveValue(sanitized)) return "credential_redacted";
+  const trimmed = raw.trim();
+  if (looksLikeOpaqueSecret(trimmed)) return "credential_redacted";
+  const redacted = redactLabeledSecrets(trimmed);
+  const sanitized = sanitizeToken(redacted);
+  if (!sanitized) return undefined;
   return sanitized;
 }
 

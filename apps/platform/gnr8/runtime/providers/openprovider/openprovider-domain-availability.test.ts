@@ -225,7 +225,7 @@ test("openprovider availability: non-2xx includes sanitized provider summary and
   }
 });
 
-test("openprovider availability: secret-like provider desc is redacted", async () => {
+test("openprovider availability: provider desc keeps diagnostics and redacts only secret values", async () => {
   const previousUsername = process.env.OPENPROVIDER_SANDBOX_USERNAME;
   const previousPassword = process.env.OPENPROVIDER_SANDBOX_PASSWORD;
   process.env.OPENPROVIDER_SANDBOX_USERNAME = "user";
@@ -234,17 +234,84 @@ test("openprovider availability: secret-like provider desc is redacted", async (
   try {
     const result = await readOpenproviderDomainAvailability("redact-desc.com", {
       login: async () => ({ status: 200, json: { token: "token_xyz" } }),
-      checkAvailability: async () => ({
-        status: 500,
-        json: { code: "11", desc: "token bearer password secret leaked", token: "abc" },
-      }),
+      checkAvailability: async () => ({ status: 500, json: { code: "11", desc: "Invalid credentials", token: "abc" } }),
     });
 
     assert.equal(result.status, "failed_closed");
-    assert.equal(result.providerSummary?.responseDesc, "credential_redacted");
+    assert.equal(result.providerSummary?.responseDesc, "Invalid credentials");
     assert.deepEqual(result.providerSummary?.topLevelKeys, ["code", "desc"]);
     assert.equal(result.diagnostics.includes("OPENPROVIDER_AVAILABILITY_PROVIDER_CODE_11"), true);
     assert.equal(result.diagnostics.includes("OPENPROVIDER_AVAILABILITY_PROVIDER_DESC_PRESENT"), true);
+  } finally {
+    if (previousUsername === undefined) delete process.env.OPENPROVIDER_SANDBOX_USERNAME;
+    else process.env.OPENPROVIDER_SANDBOX_USERNAME = previousUsername;
+    if (previousPassword === undefined) delete process.env.OPENPROVIDER_SANDBOX_PASSWORD;
+    else process.env.OPENPROVIDER_SANDBOX_PASSWORD = previousPassword;
+  }
+});
+
+test("openprovider availability: missing token text is preserved", async () => {
+  const previousUsername = process.env.OPENPROVIDER_SANDBOX_USERNAME;
+  const previousPassword = process.env.OPENPROVIDER_SANDBOX_PASSWORD;
+  process.env.OPENPROVIDER_SANDBOX_USERNAME = "user";
+  process.env.OPENPROVIDER_SANDBOX_PASSWORD = "pass";
+
+  try {
+    const result = await readOpenproviderDomainAvailability("missing-token.com", {
+      login: async () => ({ status: 200, json: { token: "token_xyz" } }),
+      checkAvailability: async () => ({ status: 500, json: { code: "196", desc: "Missing token" } }),
+    });
+
+    assert.equal(result.providerSummary?.responseDesc, "Missing token");
+    assert.equal(result.diagnostics.includes("OPENPROVIDER_AVAILABILITY_PROVIDER_CODE_196"), true);
+  } finally {
+    if (previousUsername === undefined) delete process.env.OPENPROVIDER_SANDBOX_USERNAME;
+    else process.env.OPENPROVIDER_SANDBOX_USERNAME = previousUsername;
+    if (previousPassword === undefined) delete process.env.OPENPROVIDER_SANDBOX_PASSWORD;
+    else process.env.OPENPROVIDER_SANDBOX_PASSWORD = previousPassword;
+  }
+});
+
+test("openprovider availability: labeled and bearer secrets are redacted in provider desc", async () => {
+  const previousUsername = process.env.OPENPROVIDER_SANDBOX_USERNAME;
+  const previousPassword = process.env.OPENPROVIDER_SANDBOX_PASSWORD;
+  process.env.OPENPROVIDER_SANDBOX_USERNAME = "user";
+  process.env.OPENPROVIDER_SANDBOX_PASSWORD = "pass";
+
+  try {
+    const result = await readOpenproviderDomainAvailability("label-redaction.com", {
+      login: async () => ({ status: 200, json: { token: "token_xyz" } }),
+      checkAvailability: async () => ({
+        status: 500,
+        json: { code: "12", desc: "password=secret-value; Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9" },
+      }),
+    });
+
+    assert.equal(result.providerSummary?.responseDesc, "password=[redacted]; Bearer [redacted]");
+  } finally {
+    if (previousUsername === undefined) delete process.env.OPENPROVIDER_SANDBOX_USERNAME;
+    else process.env.OPENPROVIDER_SANDBOX_USERNAME = previousUsername;
+    if (previousPassword === undefined) delete process.env.OPENPROVIDER_SANDBOX_PASSWORD;
+    else process.env.OPENPROVIDER_SANDBOX_PASSWORD = previousPassword;
+  }
+});
+
+test("openprovider availability: opaque token-like provider desc is fully redacted", async () => {
+  const previousUsername = process.env.OPENPROVIDER_SANDBOX_USERNAME;
+  const previousPassword = process.env.OPENPROVIDER_SANDBOX_PASSWORD;
+  process.env.OPENPROVIDER_SANDBOX_USERNAME = "user";
+  process.env.OPENPROVIDER_SANDBOX_PASSWORD = "pass";
+
+  try {
+    const result = await readOpenproviderDomainAvailability("opaque-token.com", {
+      login: async () => ({ status: 200, json: { token: "token_xyz" } }),
+      checkAvailability: async () => ({
+        status: 500,
+        json: { code: "13", desc: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhYmNkZWYxMjM0NTY3ODkwIn0.aW52YWxpZHNpZ25hdHVyZTEyMzQ1Ng" },
+      }),
+    });
+
+    assert.equal(result.providerSummary?.responseDesc, "credential_redacted");
   } finally {
     if (previousUsername === undefined) delete process.env.OPENPROVIDER_SANDBOX_USERNAME;
     else process.env.OPENPROVIDER_SANDBOX_USERNAME = previousUsername;
