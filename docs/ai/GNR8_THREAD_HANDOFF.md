@@ -7,6 +7,7 @@ This is the first file every new ChatGPT/Codex thread should read.
 GNR8 is currently in provider/DNS control-plane hardening and migration/preview validation mode.
 The active emphasis is deterministic contracts, approval/handoff safety, and no hidden execution.
 Openprovider Domain Inventory Admin UI milestone is complete and verified (real provider-read UI surface with sandbox auth + read-only inventory, execution still blocked).
+Openprovider DNS Inventory Admin UI milestone is complete and verified (real provider-read UI surface with sandbox auth + read-only DNS inventory, execution still blocked).
 Openprovider DNS Records Read-only Connector milestone is complete and verified (sandbox auth + read-only DNS inventory, execution still blocked).
 Provider handoff readiness with Execution Job Shape Preview / Planned Job Materialization Contract milestone is complete and testable end-to-end from deployed UI (seed + inspection surfaces), and execution remains explicitly blocked.
 The deployed dev-seed governance loop is manually verified end-to-end including governance decision package surfaces (still control-plane only).
@@ -80,6 +81,42 @@ Required production env flag:
 - `GNR8_ADMIN_PROVIDER_HANDOFF_READINESS_SEED_ENABLED=1`
 
 Evidence and diagnostics milestone:
+- Openprovider DNS Inventory Admin UI is deployed:
+  - UI route: `/gnr8/admin/providers/openprovider/dns`
+  - backing API: `GET /api/gnr8/admin/providers/openprovider/dns`
+  - deployed verified UI values:
+    - `title`: `Openprovider DNS Inventory`
+    - `banner`: `Read-only provider boundary active`
+    - `provider`: `openprovider`
+    - `mode`: `read only`
+    - `execution`: `blocked`
+    - `domains`: `0`
+    - `records`: `0`
+    - `inventory status`: `empty`
+    - `empty message`: `No DNS records found in current Openprovider sandbox account.`
+  - diagnostics include:
+    - `OPENPROVIDER_AUTH_STARTED`
+    - `OPENPROVIDER_AUTH_SUCCEEDED`
+    - `OPENPROVIDER_DNS_READ_ONLY_BOUNDARY_CONFIRMED`
+    - `OPENPROVIDER_DNS_READ_STARTED`
+    - `OPENPROVIDER_DNS_READ_SUCCEEDED`
+  - conclusion:
+    - GNR8 now has a real provider-read UI surface for Openprovider DNS inventory.
+    - the current sandbox account has no domains, so DNS inventory is empty, but auth, read boundary, API, and UI rendering are verified end-to-end.
+  - boundary remains explicit:
+    - read-only
+    - no DNS writes
+    - no domain registration/update/delete
+    - no queue/Inngest/worker execution
+    - no provider execution
+    - no secret leakage
+    - `executionAllowed:false`
+    - `executionBlocked:true`
+  - recommended next milestone:
+    - Sandbox Domain Fixture / Seed Real Test Domain
+    - or Provider Reality Dashboard linking Domain Inventory + DNS Inventory
+  - success criteria:
+    - future thread bootstrap resumes from real Openprovider DNS Inventory UI milestone
 - Openprovider DNS Records Read-only Connector is deployed:
   - runtime model: `gnr8/runtime/providers/openprovider/openprovider-dns-record-inventory.ts`
   - shared auth helper: `gnr8/runtime/providers/openprovider/openprovider-auth.ts`

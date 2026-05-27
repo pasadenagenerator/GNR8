@@ -4,32 +4,34 @@
 2026-05-27
 
 ## Current Phase
-Openprovider DNS Records Read-only Connector milestone (implemented, deployed, and verified).
+Openprovider DNS Inventory Admin UI milestone (implemented, deployed, and verified).
 
 ## Latest Completed Milestone
 
-- Openprovider DNS Records Read-only Connector is implemented, deployed, and manually verified end-to-end.
-- Runtime model exists:
-  - `gnr8/runtime/providers/openprovider/openprovider-dns-record-inventory.ts`
-- Shared auth helper exists:
-  - `gnr8/runtime/providers/openprovider/openprovider-auth.ts`
-- API is deployed:
+- Openprovider DNS Inventory Admin UI is implemented, deployed, and manually verified end-to-end.
+- Deployed admin UI route:
+  - `/gnr8/admin/providers/openprovider/dns`
+- Backing API is deployed:
   - `GET /api/gnr8/admin/providers/openprovider/dns`
-- Deployed verified values:
+- Deployed verified UI values:
+  - `title`: `Openprovider DNS Inventory`
+  - `banner`: `Read-only provider boundary active`
   - `provider`: `openprovider`
-  - `readOnly`: `true`
-  - `executionAllowed`: `false`
-  - `executionBlocked`: `true`
-  - `domains`: `[]`
-  - diagnostics include:
-    - `OPENPROVIDER_AUTH_STARTED`
-    - `OPENPROVIDER_AUTH_SUCCEEDED`
-    - `OPENPROVIDER_DNS_READ_ONLY_BOUNDARY_CONFIRMED`
-    - `OPENPROVIDER_DNS_READ_STARTED`
-    - `OPENPROVIDER_DNS_READ_SUCCEEDED`
+  - `mode`: `read only`
+  - `execution`: `blocked`
+  - `domains`: `0`
+  - `records`: `0`
+  - `inventory status`: `empty`
+  - `empty message`: `No DNS records found in current Openprovider sandbox account.`
+- Verified diagnostics:
+  - `OPENPROVIDER_AUTH_STARTED`
+  - `OPENPROVIDER_AUTH_SUCCEEDED`
+  - `OPENPROVIDER_DNS_READ_ONLY_BOUNDARY_CONFIRMED`
+  - `OPENPROVIDER_DNS_READ_STARTED`
+  - `OPENPROVIDER_DNS_READ_SUCCEEDED`
 - Conclusion:
-  - GNR8 can now authenticate against Openprovider sandbox and perform read-only DNS inventory access.
-  - Current sandbox has no domains, so DNS inventory is empty but successful.
+  - GNR8 now has a real provider-read UI surface for Openprovider DNS inventory.
+  - The current sandbox account has no domains, so DNS inventory is empty, but auth, read boundary, API, and UI rendering are verified end-to-end.
 - Boundary remains explicit:
   - read-only
   - no DNS writes
@@ -40,10 +42,10 @@ Openprovider DNS Records Read-only Connector milestone (implemented, deployed, a
   - `executionAllowed:false`
   - `executionBlocked:true`
 - Recommended next milestone:
-  - Openprovider Provider Reality UI: DNS Inventory Page
-  - or Sandbox Domain Fixture / Seed Real Test Domain
+  - Sandbox Domain Fixture / Seed Real Test Domain
+  - or Provider Reality Dashboard linking Domain Inventory + DNS Inventory
 - Success criteria:
-  - future thread bootstrap resumes from real Openprovider DNS read-only milestone
+  - future thread bootstrap resumes from real Openprovider DNS Inventory UI milestone
 - Operator Evidence Provenance Layer is implemented, deployed, and manually verified end-to-end (control-plane only).
 - Executive Summary now includes visible provenance support so operators can trace evidence at-a-glance.
 - Evidence Sources chips are now visible for operator-facing provenance cues.
