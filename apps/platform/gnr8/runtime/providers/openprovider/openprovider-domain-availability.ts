@@ -37,6 +37,7 @@ type OpenproviderDomainAvailabilityDependencies = {
 };
 
 const DEFAULT_ENDPOINT = "https://api.openprovider.eu/v1beta/domains/check";
+const DEFAULT_DOMAIN_INVENTORY_ENDPOINT = "https://api.openprovider.eu/v1beta/domains/search";
 
 const DIAGNOSTIC_STARTED = "OPENPROVIDER_AVAILABILITY_STARTED";
 const DIAGNOSTIC_SUCCEEDED = "OPENPROVIDER_AVAILABILITY_SUCCEEDED";
@@ -163,6 +164,8 @@ export async function readOpenproviderDomainAvailability(
   const domain = normalizeDomain(domainInput);
   const diagnostics = [DIAGNOSTIC_STARTED, DIAGNOSTIC_BOUNDARY_CONFIRMED];
   const endpoint = sanitizeToken(process.env.OPENPROVIDER_DOMAIN_AVAILABILITY_ENDPOINT) || DEFAULT_ENDPOINT;
+  const inventoryEndpointForAuthDerivation =
+    sanitizeToken(process.env.OPENPROVIDER_DOMAIN_INVENTORY_ENDPOINT) || DEFAULT_DOMAIN_INVENTORY_ENDPOINT;
 
   if (!domain) {
     return {
@@ -181,7 +184,7 @@ export async function readOpenproviderDomainAvailability(
   try {
     const auth = await authenticateOpenprovider({
       login: resolvedDeps.login,
-      inventoryEndpointForAuthDerivation: endpoint,
+      inventoryEndpointForAuthDerivation,
     });
     diagnostics.push(...auth.diagnostics);
 
