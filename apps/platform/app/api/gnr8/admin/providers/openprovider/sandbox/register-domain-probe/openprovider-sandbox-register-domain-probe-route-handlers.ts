@@ -17,6 +17,13 @@ function sanitizeToken(value: unknown): string {
   return String(value ?? "").trim();
 }
 
+function parseRegistrationPeriod(input: unknown): number | null {
+  if (input === undefined) return 1;
+  if (typeof input !== "number" || !Number.isInteger(input)) return null;
+  if (input < 1 || input > 10) return null;
+  return input;
+}
+
 export function createOpenproviderSandboxRegisterDomainProbeRouteHandlers(
   deps: Partial<OpenproviderSandboxRegisterProbeRouteDependencies> = {},
 ) {
@@ -31,8 +38,9 @@ export function createOpenproviderSandboxRegisterDomainProbeRouteHandlers(
       try {
         await resolvedDeps.requireSuperadminUserId();
 
-        const body = (await request.json().catch(() => ({}))) as { domain?: unknown };
+        const body = (await request.json().catch(() => ({}))) as { domain?: unknown; period?: unknown };
         const domain = sanitizeToken(body.domain);
+        const period = parseRegistrationPeriod(body.period);
         if (!domain) {
           return Response.json(
             {
@@ -50,8 +58,25 @@ export function createOpenproviderSandboxRegisterDomainProbeRouteHandlers(
             { status: 400 },
           );
         }
+        if (period === null) {
+          return Response.json(
+            {
+              error: "Invalid request body: period must be an integer between 1 and 10",
+              provider: "openprovider",
+              adminOnly: true,
+              executionAllowed: false,
+              executionBlocked: true,
+              diagnostics: [
+                "OPENPROVIDER_SANDBOX_REGISTER_PROBE_FAILED_CLOSED",
+                "OPENPROVIDER_SANDBOX_REGISTER_PROBE_INVALID_PERIOD",
+                "OPENPROVIDER_SANDBOX_REGISTER_PROBE_BOUNDARY_CONFIRMED",
+              ],
+            },
+            { status: 400 },
+          );
+        }
 
-        const result = await resolvedDeps.runOpenproviderSandboxRegisterDomainProbe({ domain });
+        const result = await resolvedDeps.runOpenproviderSandboxRegisterDomainProbe({ domain, period });
         const status = result.success ? 200 : result.status;
         return Response.json(result, { status });
       } catch (error) {

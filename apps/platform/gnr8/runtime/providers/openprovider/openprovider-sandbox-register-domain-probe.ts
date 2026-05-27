@@ -11,6 +11,7 @@ const DIAGNOSTIC_REQUEST_SENT = "OPENPROVIDER_SANDBOX_REGISTER_PROBE_REQUEST_SEN
 const DIAGNOSTIC_SUCCEEDED = "OPENPROVIDER_SANDBOX_REGISTER_PROBE_SUCCEEDED";
 const DIAGNOSTIC_FAILED_CLOSED = "OPENPROVIDER_SANDBOX_REGISTER_PROBE_FAILED_CLOSED";
 const DIAGNOSTIC_BOUNDARY_CONFIRMED = "OPENPROVIDER_SANDBOX_REGISTER_PROBE_BOUNDARY_CONFIRMED";
+const DIAGNOSTIC_PERIOD_APPLIED = "OPENPROVIDER_SANDBOX_REGISTER_PROBE_PERIOD_APPLIED";
 
 const REQUIRED_ENV_FLAG = "OPENPROVIDER_SANDBOX_REGISTRATION_PROBE_ENABLED";
 const REQUIRED_ENV_FLAG_VALUE = "1";
@@ -129,7 +130,7 @@ async function defaultRegisterDomain(input: {
 }
 
 export async function runOpenproviderSandboxRegisterDomainProbe(
-  input: { domain: string },
+  input: { domain: string; period?: number },
   deps: Partial<OpenproviderSandboxRegisterProbeDependencies> = {},
 ): Promise<OpenproviderSandboxRegisterProbeResult> {
   const resolvedDeps: OpenproviderSandboxRegisterProbeDependencies = {
@@ -141,6 +142,7 @@ export async function runOpenproviderSandboxRegisterDomainProbe(
 
   const probedAt = resolvedDeps.now();
   const parsedDomain = parseDomain(input.domain);
+  const period = input.period ?? 1;
   const diagnostics = [DIAGNOSTIC_STARTED, DIAGNOSTIC_BOUNDARY_CONFIRMED];
 
   const failClosed = (status: number, extraDiagnostics: string[] = [], summary?: OpenproviderSandboxRegisterProbeResult["summary"]): OpenproviderSandboxRegisterProbeResult => ({
@@ -175,6 +177,9 @@ export async function runOpenproviderSandboxRegisterDomainProbe(
   if (!parsedDomain) {
     return failClosed(400, ["OPENPROVIDER_SANDBOX_REGISTER_PROBE_INVALID_DOMAIN"]);
   }
+  if (!Number.isInteger(period) || period < 1 || period > 10) {
+    return failClosed(400, ["OPENPROVIDER_SANDBOX_REGISTER_PROBE_INVALID_PERIOD"]);
+  }
 
   try {
     const auth = await authenticateOpenprovider({
@@ -186,7 +191,7 @@ export async function runOpenproviderSandboxRegisterDomainProbe(
       return failClosed(502);
     }
 
-    diagnostics.push(DIAGNOSTIC_AUTH_SUCCEEDED, DIAGNOSTIC_REQUEST_SENT);
+    diagnostics.push(DIAGNOSTIC_AUTH_SUCCEEDED, DIAGNOSTIC_PERIOD_APPLIED, DIAGNOSTIC_REQUEST_SENT);
     const response = await resolvedDeps.registerDomain({
       endpoint,
       token: auth.token,
@@ -195,6 +200,7 @@ export async function runOpenproviderSandboxRegisterDomainProbe(
           name: parsedDomain.name,
           extension: parsedDomain.extension,
         },
+        period,
       },
     });
 
