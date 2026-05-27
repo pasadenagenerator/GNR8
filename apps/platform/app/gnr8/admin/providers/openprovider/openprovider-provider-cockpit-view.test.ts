@@ -46,6 +46,7 @@ test("openprovider provider cockpit view source: summary cards do not duplicate 
 test("openprovider provider cockpit view source: required sections", async () => {
   const source = await readFile(VIEW_FILE, "utf8");
   assert.equal(source.includes("Provider Status"), true);
+  assert.equal(source.includes("Provider Surfaces"), true);
   assert.equal(source.includes("Domain Inventory"), true);
   assert.equal(source.includes("DNS Inventory"), true);
   assert.equal(source.includes("Availability Intelligence"), true);
@@ -53,6 +54,14 @@ test("openprovider provider cockpit view source: required sections", async () =>
   assert.equal(source.includes("executionAllowed"), true);
   assert.equal(source.includes("executionBlocked"), true);
   assert.equal(source.includes("Read-only boundary active"), true);
+});
+
+test("openprovider provider cockpit view source: provider surfaces links", async () => {
+  const source = await readFile(VIEW_FILE, "utf8");
+  assert.equal(source.includes('href="/gnr8/admin/providers/openprovider/domains"'), true);
+  assert.equal(source.includes('href="/gnr8/admin/providers/openprovider/dns"'), true);
+  assert.equal(source.includes(">Domain Inventory<"), true);
+  assert.equal(source.includes(">DNS Inventory<"), true);
 });
 
 test("openprovider provider cockpit view source: availability details", async () => {
@@ -76,4 +85,10 @@ test("openprovider provider cockpit view source: badge rules", async () => {
   assert.equal(source.includes('["available", "connected", "working"].includes(value)'), true);
   assert.equal(source.includes('["empty", "unknown"].includes(value)'), true);
   assert.equal(source.includes('["blocked", "failed_closed"].includes(value)'), true);
+});
+
+test("openprovider provider cockpit view source: no action buttons or forms are present", async () => {
+  const source = await readFile(VIEW_FILE, "utf8");
+  assert.equal(source.includes("<button"), false);
+  assert.equal(source.includes("<form"), false);
 });

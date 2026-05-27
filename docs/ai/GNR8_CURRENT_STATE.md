@@ -4,9 +4,61 @@
 2026-05-27
 
 ## Current Phase
-Openprovider Domain Availability Read-only Connector milestone (implemented, deployed, and verified).
+GNR8 Provider Fleet Cockpit milestone (implemented, deployed, and manually verified).
 
 ## Latest Completed Milestone
+
+- GNR8 Provider Fleet Cockpit is implemented, deployed, and manually verified.
+- Deployed admin UI route:
+  - `/gnr8/admin/providers`
+- Milestone scope distinction:
+  - UI/read-model only
+  - deterministic seeded provider registry
+  - no runtime/provider execution changes
+- Providers in seeded registry:
+  - Openprovider
+  - Realtime Register
+  - INWX
+  - Netim
+- Verified provider states:
+  - Openprovider:
+    - `status`: `connected`
+    - `mode`: `sandbox`
+    - capabilities:
+      - `domains`: `true`
+      - `dns`: `true`
+      - `availability`: `true`
+      - `registration`: `false`
+      - `execution`: `false`
+  - Realtime Register: `not_configured`
+  - INWX: `not_configured`
+  - Netim: `not_configured`
+- Verified UI values:
+  - `title`: `Provider Fleet Cockpit`
+  - `subtitle`: `Global provider control plane`
+  - `Providers`: `4`
+  - `Connected`: `1`
+  - `Read-only Capabilities`: `3`
+  - `Execution`: `blocked`
+- Boundary remains explicit:
+  - read-only
+  - no provider writes
+  - no DNS writes
+  - no registration
+  - no queue/Inngest/worker execution
+  - no provider execution
+  - no secrets
+  - no action buttons
+- Conclusion:
+  - GNR8 now has the first provider-level control tower above individual provider integrations.
+  - This is the beginning of multi-provider orchestration/readiness visibility.
+- Recommended next milestone:
+  - Provider Navigation Wiring:
+    - Agency Dashboard -> Provider Fleet Cockpit
+    - Provider Fleet Cockpit -> Openprovider Cockpit
+    - Openprovider Cockpit -> Domain Inventory / DNS Inventory / Availability
+- Success criteria:
+  - future thread bootstrap resumes from global provider fleet cockpit milestone
 
 - Openprovider Domain Availability Read-only Connector is implemented, deployed, and manually verified end-to-end.
 - Runtime model is deployed:

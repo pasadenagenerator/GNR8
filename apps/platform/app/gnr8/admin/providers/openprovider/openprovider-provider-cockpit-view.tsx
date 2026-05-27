@@ -1,3 +1,4 @@
+import Link from "next/link";
 import type { OpenproviderDnsRecordInventoryResult } from "@/gnr8/runtime/providers/openprovider/openprovider-dns-record-inventory";
 import type {
   OpenproviderDomainAvailabilityResult,
@@ -141,6 +142,18 @@ export function OpenproviderProviderCockpitView(props: { payload: CockpitPayload
         <div><strong>readOnly</strong>: true</div>
         <div><strong>environment</strong>: {props.payload.mode}</div>
         <div><strong>diagnostic count</strong>: {props.payload.diagnostics.length}</div>
+      </section>
+
+      <section style={{ border: "1px solid #dbe3ea", borderRadius: 10, background: "#ffffff", padding: 12, marginTop: 12 }}>
+        <h2 style={{ margin: "0 0 8px 0", fontSize: 16 }}>Provider Surfaces</h2>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <Link href="/gnr8/admin/providers/openprovider/domains" style={{ color: "#0f172a", textDecoration: "underline", fontWeight: 700 }}>
+            Domain Inventory
+          </Link>
+          <Link href="/gnr8/admin/providers/openprovider/dns" style={{ color: "#0f172a", textDecoration: "underline", fontWeight: 700 }}>
+            DNS Inventory
+          </Link>
+        </div>
       </section>
 
       <section style={{ border: "1px solid #dbe3ea", borderRadius: 10, background: "#ffffff", padding: 12, marginTop: 12 }}>

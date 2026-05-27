@@ -145,7 +145,15 @@ export function ProviderFleetView(props: { payload: ProviderFleetPayload }) {
           <tbody>
             {props.payload.providers.map((provider) => (
               <tr key={provider.name}>
-                <td style={{ padding: "10px 6px", borderBottom: "1px solid #f3f4f6", fontWeight: 700 }}>{provider.name}</td>
+                <td style={{ padding: "10px 6px", borderBottom: "1px solid #f3f4f6", fontWeight: 700 }}>
+                  {provider.name === "Openprovider" ? (
+                    <Link href="/gnr8/admin/providers/openprovider" style={{ color: "#0f172a", textDecoration: "underline" }}>
+                      {provider.name}
+                    </Link>
+                  ) : (
+                    provider.name
+                  )}
+                </td>
                 <td style={{ padding: "10px 6px", borderBottom: "1px solid #f3f4f6" }}>
                   <Pill label={provider.status} value={provider.status} />
                 </td>
@@ -173,3 +181,4 @@ export function ProviderFleetView(props: { payload: ProviderFleetPayload }) {
     </main>
   );
 }
+import Link from "next/link";

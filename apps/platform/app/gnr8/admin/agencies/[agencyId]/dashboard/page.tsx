@@ -209,6 +209,32 @@ export default async function SuperadminAgencyDashboardPage(props: PageProps) {
             Agency Team
           </Link>
         </div>
+        <div
+          style={{
+            marginTop: 12,
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
+            gap: 8,
+          }}
+        >
+          <Link
+            href="/gnr8/admin/providers"
+            style={{
+              border: "1px solid #cbd5e1",
+              borderRadius: 10,
+              background: "#fff",
+              padding: 12,
+              color: "#0f172a",
+              textDecoration: "none",
+              display: "block",
+            }}
+          >
+            <h3 style={{ margin: 0, fontSize: 16 }}>Provider Fleet</h3>
+            <p style={{ margin: "6px 0 0 0", color: "#334155", fontSize: 13 }}>
+              Manage provider readiness, domains, DNS and provider intelligence surfaces.
+            </p>
+          </Link>
+        </div>
       </section>
 
       <section style={{ marginTop: 12, border: "1px solid #dbe6f1", borderRadius: 12, background: "#fff", padding: 14 }}>

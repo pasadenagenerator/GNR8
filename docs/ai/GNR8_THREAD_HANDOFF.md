@@ -6,6 +6,7 @@ This is the first file every new ChatGPT/Codex thread should read.
 
 GNR8 is currently in provider/DNS control-plane hardening and migration/preview validation mode.
 The active emphasis is deterministic contracts, approval/handoff safety, and no hidden execution.
+Provider Fleet Cockpit milestone is complete and verified (global provider control plane route with deterministic seeded provider registry, UI/read-model only, execution blocked).
 Openprovider Domain Availability Read-only Connector milestone is complete and verified (real provider-read availability check with shared sandbox auth, execution still blocked).
 Openprovider Domain Inventory Admin UI milestone is complete and verified (real provider-read UI surface with sandbox auth + read-only inventory, execution still blocked).
 Openprovider DNS Inventory Admin UI milestone is complete and verified (real provider-read UI surface with sandbox auth + read-only DNS inventory, execution still blocked).
@@ -83,6 +84,56 @@ Required production env flag:
 - `GNR8_ADMIN_PROVIDER_HANDOFF_READINESS_SEED_ENABLED=1`
 
 Evidence and diagnostics milestone:
+- Provider Fleet Cockpit is deployed:
+  - UI route: `/gnr8/admin/providers`
+  - milestone scope:
+    - UI/read-model only
+    - deterministic seeded provider registry
+    - no runtime/provider execution changes
+  - providers in registry:
+    - `Openprovider`
+    - `Realtime Register`
+    - `INWX`
+    - `Netim`
+  - verified provider states:
+    - Openprovider:
+      - `status`: `connected`
+      - `mode`: `sandbox`
+      - capabilities:
+        - `domains`: `true`
+        - `dns`: `true`
+        - `availability`: `true`
+        - `registration`: `false`
+        - `execution`: `false`
+    - Realtime Register: `not_configured`
+    - INWX: `not_configured`
+    - Netim: `not_configured`
+  - verified UI values:
+    - `title`: `Provider Fleet Cockpit`
+    - `subtitle`: `Global provider control plane`
+    - `Providers`: `4`
+    - `Connected`: `1`
+    - `Read-only Capabilities`: `3`
+    - `Execution`: `blocked`
+  - boundary remains explicit:
+    - read-only
+    - no provider writes
+    - no DNS writes
+    - no registration
+    - no queue/Inngest/worker execution
+    - no provider execution
+    - no secrets
+    - no action buttons
+  - conclusion:
+    - GNR8 now has the first provider-level control tower above individual provider integrations.
+    - this is the beginning of multi-provider orchestration/readiness visibility.
+  - recommended next milestone:
+    - Provider Navigation Wiring:
+      - Agency Dashboard -> Provider Fleet Cockpit
+      - Provider Fleet Cockpit -> Openprovider Cockpit
+      - Openprovider Cockpit -> Domain Inventory / DNS Inventory / Availability
+  - success criteria:
+    - future thread bootstrap resumes from global provider fleet cockpit milestone
 - Openprovider Domain Availability Read-only Connector is deployed:
   - runtime model: `gnr8/runtime/providers/openprovider/openprovider-domain-availability.ts`
   - shared auth helper: `gnr8/runtime/providers/openprovider/openprovider-auth.ts`

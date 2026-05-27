@@ -60,6 +60,19 @@ test("provider fleet view source: read-only note", async () => {
   assert.equal(source.includes("Fleet cockpit is read-only. Provider execution remains disabled."), true);
 });
 
+test("provider fleet view source: openprovider row is linked to provider cockpit", async () => {
+  const source = await readFile(VIEW_FILE, "utf8");
+  assert.equal(source.includes('href="/gnr8/admin/providers/openprovider"'), true);
+  assert.equal(source.includes('provider.name === "Openprovider"'), true);
+});
+
+test("provider fleet view source: not configured providers remain non-navigable text", async () => {
+  const source = await readFile(VIEW_FILE, "utf8");
+  assert.equal(source.includes('href="/gnr8/admin/providers/realtime_register"'), false);
+  assert.equal(source.includes('href="/gnr8/admin/providers/inwx"'), false);
+  assert.equal(source.includes('href="/gnr8/admin/providers/netim"'), false);
+});
+
 test("provider fleet view source: no action buttons or forms are present", async () => {
   const source = await readFile(VIEW_FILE, "utf8");
   assert.equal(source.includes("<button"), false);
