@@ -6,6 +6,7 @@ This is the first file every new ChatGPT/Codex thread should read.
 
 GNR8 is currently in provider/DNS control-plane hardening and migration/preview validation mode.
 The active emphasis is deterministic contracts, approval/handoff safety, and no hidden execution.
+Openprovider Domain Availability Read-only Connector milestone is complete and verified (real provider-read availability check with shared sandbox auth, execution still blocked).
 Openprovider Domain Inventory Admin UI milestone is complete and verified (real provider-read UI surface with sandbox auth + read-only inventory, execution still blocked).
 Openprovider DNS Inventory Admin UI milestone is complete and verified (real provider-read UI surface with sandbox auth + read-only DNS inventory, execution still blocked).
 Openprovider DNS Records Read-only Connector milestone is complete and verified (sandbox auth + read-only DNS inventory, execution still blocked).
@@ -76,11 +77,55 @@ Completed readiness inspection routes:
 - `GET /api/gnr8/admin/provider-handoffs/[handoffId]/execution-safety-manifest` (read-only no-execution boundary proof evidence)
 - `GET /api/gnr8/admin/providers/openprovider/domains` (read-only Openprovider domain inventory evidence)
 - `GET /api/gnr8/admin/providers/openprovider/dns` (read-only Openprovider DNS records inventory evidence)
+- `GET /api/gnr8/admin/providers/openprovider/domain-availability?domain=<domain>` (read-only Openprovider domain availability evidence)
 
 Required production env flag:
 - `GNR8_ADMIN_PROVIDER_HANDOFF_READINESS_SEED_ENABLED=1`
 
 Evidence and diagnostics milestone:
+- Openprovider Domain Availability Read-only Connector is deployed:
+  - runtime model: `gnr8/runtime/providers/openprovider/openprovider-domain-availability.ts`
+  - shared auth helper: `gnr8/runtime/providers/openprovider/openprovider-auth.ts`
+  - API: `GET /api/gnr8/admin/providers/openprovider/domain-availability?domain=<domain>`
+  - env support:
+    - `OPENPROVIDER_DOMAIN_AVAILABILITY_ENDPOINT`
+    - `OPENPROVIDER_DOMAIN_AVAILABILITY_METHOD`
+  - deployed verified values:
+    - `provider`: `openprovider`
+    - `readOnly`: `true`
+    - `executionAllowed`: `false`
+    - `executionBlocked`: `true`
+    - `domain`: `levi-testis.com`
+    - `available`: `true`
+    - `status`: `available`
+    - `endpoint path`: `/v1beta/domains/check`
+  - diagnostics include:
+    - `OPENPROVIDER_AUTH_STARTED`
+    - `OPENPROVIDER_AUTH_SUCCEEDED`
+    - `OPENPROVIDER_AVAILABILITY_BOUNDARY_CONFIRMED`
+    - `OPENPROVIDER_AVAILABILITY_ENDPOINT_PATH:/v1beta/domains/check`
+    - `OPENPROVIDER_AVAILABILITY_METHOD_POST`
+    - `OPENPROVIDER_AVAILABILITY_REQUEST_SHAPED`
+    - `OPENPROVIDER_AVAILABILITY_STARTED`
+    - `OPENPROVIDER_AVAILABILITY_SUCCEEDED`
+  - conclusion:
+    - GNR8 can now perform real Openprovider read-only domain availability checks.
+    - this is the first directly user-facing provider intelligence capability: `is this domain available?`
+  - boundary remains explicit:
+    - read-only
+    - no registration
+    - no DNS writes
+    - no domain update/delete
+    - no queue/Inngest/worker execution
+    - no provider execution
+    - no secret leakage
+    - `executionAllowed:false`
+    - `executionBlocked:true`
+  - recommended next milestone:
+    - Openprovider Domain Availability Admin UI
+    - or Provider Reality Dashboard linking Domains + DNS + Availability
+  - success criteria:
+    - future thread bootstrap resumes from working real Openprovider availability lookup
 - Openprovider DNS Inventory Admin UI is deployed:
   - UI route: `/gnr8/admin/providers/openprovider/dns`
   - backing API: `GET /api/gnr8/admin/providers/openprovider/dns`
@@ -468,11 +513,11 @@ Hard boundaries remain:
 
 ## F) Current Active Implementation Phase
 
-Active phase: Operator Cockpit Evidence Status Badges / Severity System milestone (deployed and verified).
+Active phase: Openprovider Domain Availability Read-only Connector milestone (deployed and verified).
 
 Practical next phase:
-1. Operator Cockpit Compact Evidence Strip / Visual Polish Pass.
-2. Keep execution paths in dry-run/sandbox-gated mode with explicit execution-blocked evidence (still no execution).
+1. Openprovider Domain Availability Admin UI.
+2. Provider Reality Dashboard linking Domains + DNS + Availability.
 
 ## G) How Next Thread Should Behave
 

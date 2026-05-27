@@ -4,9 +4,55 @@
 2026-05-27
 
 ## Current Phase
-Openprovider DNS Inventory Admin UI milestone (implemented, deployed, and verified).
+Openprovider Domain Availability Read-only Connector milestone (implemented, deployed, and verified).
 
 ## Latest Completed Milestone
+
+- Openprovider Domain Availability Read-only Connector is implemented, deployed, and manually verified end-to-end.
+- Runtime model is deployed:
+  - `gnr8/runtime/providers/openprovider/openprovider-domain-availability.ts`
+- Backing API is deployed:
+  - `GET /api/gnr8/admin/providers/openprovider/domain-availability?domain=<domain>`
+- Env support is deployed:
+  - `OPENPROVIDER_DOMAIN_AVAILABILITY_ENDPOINT`
+  - `OPENPROVIDER_DOMAIN_AVAILABILITY_METHOD`
+  - shared auth via `openprovider-auth.ts`
+- Deployed verified values:
+  - `provider`: `openprovider`
+  - `readOnly`: `true`
+  - `executionAllowed`: `false`
+  - `executionBlocked`: `true`
+  - `domain`: `levi-testis.com`
+  - `available`: `true`
+  - `status`: `available`
+  - `endpoint path`: `/v1beta/domains/check`
+- Verified diagnostics:
+  - `OPENPROVIDER_AUTH_STARTED`
+  - `OPENPROVIDER_AUTH_SUCCEEDED`
+  - `OPENPROVIDER_AVAILABILITY_BOUNDARY_CONFIRMED`
+  - `OPENPROVIDER_AVAILABILITY_ENDPOINT_PATH:/v1beta/domains/check`
+  - `OPENPROVIDER_AVAILABILITY_METHOD_POST`
+  - `OPENPROVIDER_AVAILABILITY_REQUEST_SHAPED`
+  - `OPENPROVIDER_AVAILABILITY_STARTED`
+  - `OPENPROVIDER_AVAILABILITY_SUCCEEDED`
+- Conclusion:
+  - GNR8 can now perform real Openprovider read-only domain availability checks.
+  - This is the first directly user-facing provider intelligence capability: `is this domain available?`
+- Boundary remains explicit:
+  - read-only
+  - no registration
+  - no DNS writes
+  - no domain update/delete
+  - no queue/Inngest/worker execution
+  - no provider execution
+  - no secret leakage
+  - `executionAllowed:false`
+  - `executionBlocked:true`
+- Recommended next milestone:
+  - Openprovider Domain Availability Admin UI
+  - or Provider Reality Dashboard linking Domains + DNS + Availability
+- Success criteria:
+  - future thread bootstrap resumes from working real Openprovider availability lookup
 
 - Openprovider DNS Inventory Admin UI is implemented, deployed, and manually verified end-to-end.
 - Deployed admin UI route:
