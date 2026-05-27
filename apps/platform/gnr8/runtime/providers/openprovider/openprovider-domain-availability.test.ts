@@ -189,3 +189,100 @@ test("openprovider availability: auth failure fails closed before availability r
     else process.env.OPENPROVIDER_SANDBOX_PASSWORD = previousPassword;
   }
 });
+
+test("openprovider availability: non-2xx includes sanitized provider summary and provider code diagnostic", async () => {
+  const previousUsername = process.env.OPENPROVIDER_SANDBOX_USERNAME;
+  const previousPassword = process.env.OPENPROVIDER_SANDBOX_PASSWORD;
+  process.env.OPENPROVIDER_SANDBOX_USERNAME = "user";
+  process.env.OPENPROVIDER_SANDBOX_PASSWORD = "pass";
+
+  try {
+    const result = await readOpenproviderDomainAvailability("registry-down.com", {
+      login: async () => ({ status: 200, json: { token: "token_xyz" } }),
+      checkAvailability: async () => ({
+        status: 500,
+        json: { code: "10", desc: "Registry currently not reachable", meta: { trace: "x" } },
+      }),
+    });
+
+    assert.equal(result.status, "failed_closed");
+    assert.equal(result.available, "unknown");
+    assert.equal(result.readOnly, true);
+    assert.equal(result.executionAllowed, false);
+    assert.equal(result.executionBlocked, true);
+    assert.deepEqual(result.providerSummary, {
+      topLevelKeys: ["code", "desc", "meta"],
+      responseCode: "10",
+      responseDesc: "Registry currently not reachable",
+    });
+    assert.equal(result.diagnostics.includes("OPENPROVIDER_AVAILABILITY_PROVIDER_CODE_10"), true);
+    assert.equal(result.diagnostics.includes("OPENPROVIDER_AVAILABILITY_PROVIDER_DESC_PRESENT"), true);
+  } finally {
+    if (previousUsername === undefined) delete process.env.OPENPROVIDER_SANDBOX_USERNAME;
+    else process.env.OPENPROVIDER_SANDBOX_USERNAME = previousUsername;
+    if (previousPassword === undefined) delete process.env.OPENPROVIDER_SANDBOX_PASSWORD;
+    else process.env.OPENPROVIDER_SANDBOX_PASSWORD = previousPassword;
+  }
+});
+
+test("openprovider availability: secret-like provider desc is redacted", async () => {
+  const previousUsername = process.env.OPENPROVIDER_SANDBOX_USERNAME;
+  const previousPassword = process.env.OPENPROVIDER_SANDBOX_PASSWORD;
+  process.env.OPENPROVIDER_SANDBOX_USERNAME = "user";
+  process.env.OPENPROVIDER_SANDBOX_PASSWORD = "pass";
+
+  try {
+    const result = await readOpenproviderDomainAvailability("redact-desc.com", {
+      login: async () => ({ status: 200, json: { token: "token_xyz" } }),
+      checkAvailability: async () => ({
+        status: 500,
+        json: { code: "11", desc: "token bearer password secret leaked", token: "abc" },
+      }),
+    });
+
+    assert.equal(result.status, "failed_closed");
+    assert.equal(result.providerSummary?.responseDesc, "credential_redacted");
+    assert.deepEqual(result.providerSummary?.topLevelKeys, ["code", "desc"]);
+    assert.equal(result.diagnostics.includes("OPENPROVIDER_AVAILABILITY_PROVIDER_CODE_11"), true);
+    assert.equal(result.diagnostics.includes("OPENPROVIDER_AVAILABILITY_PROVIDER_DESC_PRESENT"), true);
+  } finally {
+    if (previousUsername === undefined) delete process.env.OPENPROVIDER_SANDBOX_USERNAME;
+    else process.env.OPENPROVIDER_SANDBOX_USERNAME = previousUsername;
+    if (previousPassword === undefined) delete process.env.OPENPROVIDER_SANDBOX_PASSWORD;
+    else process.env.OPENPROVIDER_SANDBOX_PASSWORD = previousPassword;
+  }
+});
+
+test("openprovider availability: malformed json string remains fail-closed and safe", async () => {
+  const previousUsername = process.env.OPENPROVIDER_SANDBOX_USERNAME;
+  const previousPassword = process.env.OPENPROVIDER_SANDBOX_PASSWORD;
+  process.env.OPENPROVIDER_SANDBOX_USERNAME = "user";
+  process.env.OPENPROVIDER_SANDBOX_PASSWORD = "pass";
+
+  try {
+    const result = await readOpenproviderDomainAvailability("bad-json.com", {
+      login: async () => ({ status: 200, json: { token: "token_xyz" } }),
+      checkAvailability: async () => ({
+        status: 500,
+        json: "{bad json",
+      }),
+    });
+
+    assert.equal(result.status, "failed_closed");
+    assert.equal(result.available, "unknown");
+    assert.equal(result.readOnly, true);
+    assert.equal(result.executionAllowed, false);
+    assert.equal(result.executionBlocked, true);
+    assert.deepEqual(result.providerSummary, {
+      topLevelKeys: [],
+      responseCode: undefined,
+      responseDesc: undefined,
+    });
+    assert.equal(result.diagnostics.includes("OPENPROVIDER_AVAILABILITY_PROVIDER_DESC_PRESENT"), false);
+  } finally {
+    if (previousUsername === undefined) delete process.env.OPENPROVIDER_SANDBOX_USERNAME;
+    else process.env.OPENPROVIDER_SANDBOX_USERNAME = previousUsername;
+    if (previousPassword === undefined) delete process.env.OPENPROVIDER_SANDBOX_PASSWORD;
+    else process.env.OPENPROVIDER_SANDBOX_PASSWORD = previousPassword;
+  }
+});

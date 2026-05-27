@@ -18,6 +18,11 @@ export type OpenproviderDomainAvailabilityResult = {
   status: OpenproviderDomainAvailabilityStatus;
   checkedAt: string;
   diagnostics: string[];
+  providerSummary?: {
+    topLevelKeys: string[];
+    responseCode?: string;
+    responseDesc?: string;
+  };
 };
 
 type OpenproviderHttpResponse = { status: number; json: unknown };
@@ -45,6 +50,53 @@ const DIAGNOSTIC_FAILED_CLOSED = "OPENPROVIDER_AVAILABILITY_FAILED_CLOSED";
 const DIAGNOSTIC_REQUEST_SHAPED = "OPENPROVIDER_AVAILABILITY_REQUEST_SHAPED";
 const DIAGNOSTIC_BOUNDARY_CONFIRMED = "OPENPROVIDER_AVAILABILITY_BOUNDARY_CONFIRMED";
 const DIAGNOSTIC_UNSUPPORTED_SHAPE = "OPENPROVIDER_AVAILABILITY_RESPONSE_UNSUPPORTED_SHAPE";
+const DIAGNOSTIC_PROVIDER_DESC_PRESENT = "OPENPROVIDER_AVAILABILITY_PROVIDER_DESC_PRESENT";
+
+function isSensitiveValue(value: string): boolean {
+  return /password|token|secret|bearer|credential|username|api[_-]?key|authorization/i.test(value);
+}
+
+function parseMaybeJson(value: unknown): unknown {
+  if (typeof value !== "string") return value;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  try {
+    return JSON.parse(trimmed);
+  } catch {
+    return null;
+  }
+}
+
+function sanitizeProviderValue(value: unknown): string | undefined {
+  const raw = sanitizeToken(value);
+  if (!raw) return undefined;
+  const sanitized = sanitizeOpenproviderDiagnostic(raw);
+  if (!sanitized || isSensitiveValue(sanitized)) return "credential_redacted";
+  return sanitized;
+}
+
+function summarizeProviderErrorPayload(payload: unknown): {
+  providerTopLevelKeys: string[];
+  providerResponseCode?: string;
+  providerResponseDesc?: string;
+} {
+  const parsed = parseMaybeJson(payload);
+  const root = parsed && typeof parsed === "object" && !Array.isArray(parsed) ? (parsed as Record<string, unknown>) : null;
+  if (!root) return { providerTopLevelKeys: [] };
+
+  const providerTopLevelKeys = Object.keys(root)
+    .map((key) => sanitizeToken(key))
+    .filter((key) => key.length > 0 && !isSensitiveValue(key))
+    .sort((a, b) => a.localeCompare(b));
+
+  const providerResponseCode = sanitizeProviderValue(root.code);
+  const providerResponseDesc = sanitizeProviderValue(root.desc);
+  return {
+    providerTopLevelKeys,
+    providerResponseCode,
+    providerResponseDesc,
+  };
+}
 
 function sanitizeToken(value: unknown): string {
   return sanitizeOpenproviderToken(value);
@@ -210,6 +262,21 @@ export async function readOpenproviderDomainAvailability(
     });
 
     if (response.status < 200 || response.status >= 300) {
+      const summary = summarizeProviderErrorPayload(response.json);
+      const diagnosticsWithProvider = [
+        ...diagnostics,
+        DIAGNOSTIC_FAILED_CLOSED,
+        sanitizeOpenproviderDiagnostic(`OPENPROVIDER_AVAILABILITY_HTTP_STATUS_${response.status}`),
+      ];
+      if (summary.providerResponseCode) {
+        diagnosticsWithProvider.push(
+          sanitizeOpenproviderDiagnostic(`OPENPROVIDER_AVAILABILITY_PROVIDER_CODE_${summary.providerResponseCode}`),
+        );
+      }
+      if (summary.providerResponseDesc) {
+        diagnosticsWithProvider.push(DIAGNOSTIC_PROVIDER_DESC_PRESENT);
+      }
+
       return {
         provider: "openprovider",
         readOnly: true,
@@ -219,11 +286,12 @@ export async function readOpenproviderDomainAvailability(
         available: "unknown",
         status: "failed_closed",
         checkedAt,
-        diagnostics: uniqueSorted([
-          ...diagnostics,
-          DIAGNOSTIC_FAILED_CLOSED,
-          sanitizeOpenproviderDiagnostic(`OPENPROVIDER_AVAILABILITY_HTTP_STATUS_${response.status}`),
-        ]),
+        diagnostics: uniqueSorted(diagnosticsWithProvider),
+        providerSummary: {
+          topLevelKeys: summary.providerTopLevelKeys,
+          responseCode: summary.providerResponseCode,
+          responseDesc: summary.providerResponseDesc,
+        },
       };
     }
 
