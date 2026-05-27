@@ -31,23 +31,22 @@ const BADGE_THEME: Record<BadgeLevel, { bg: string; border: string; text: string
   neutral: { bg: "#e5e7eb", border: "#d1d5db", text: "#1f2937" },
 };
 
-function Badge(props: { level: BadgeLevel; text: string }) {
+function Badge(props: { level: BadgeLevel }) {
   const theme = BADGE_THEME[props.level];
   return (
     <span
+      aria-hidden
       style={{
-        display: "inline-block",
+        display: "inline-flex",
+        width: 10,
+        height: 10,
+        minWidth: 10,
+        minHeight: 10,
         borderRadius: 999,
         border: `1px solid ${theme.border}`,
         background: theme.bg,
-        color: theme.text,
-        padding: "2px 10px",
-        fontSize: 12,
-        fontWeight: 700,
       }}
-    >
-      {props.text}
-    </span>
+    />
   );
 }
 
@@ -69,8 +68,8 @@ function SummaryCard(props: { label: string; value: string }) {
     <section style={{ border: "1px solid #dbe3ea", borderRadius: 10, background: "#ffffff", padding: 12 }}>
       <div style={{ color: "#6b7280", fontSize: 12, fontWeight: 700, letterSpacing: 0.2 }}>{props.label}</div>
       <div style={{ color: "#111827", fontSize: 18, fontWeight: 700, marginTop: 4, display: "flex", alignItems: "center", gap: 8 }}>
-        <span>{props.value}</span>
-        <Badge level={resolveBadgeLevel(props.value)} text={props.value} />
+        {props.value}
+        <Badge level={resolveBadgeLevel(props.value)} />
       </div>
     </section>
   );

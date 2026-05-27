@@ -181,9 +181,27 @@ function mergeDiagnostics(payloads: Array<{ diagnostics?: string[] }>): string[]
 }
 
 function deriveMode(diagnostics: string[]): "sandbox" | "live" | "unknown" {
-  const normalized = diagnostics.join(" ").toLowerCase();
-  if (normalized.includes("sandbox")) return "sandbox";
-  if (normalized.includes("live")) return "live";
+  const normalizedDiagnostics = diagnostics.join(" ").toLowerCase();
+  if (normalizedDiagnostics.includes("sandbox")) return "sandbox";
+  if (normalizedDiagnostics.includes("live")) return "live";
+
+  const endpointSignals = [
+    process.env.OPENPROVIDER_AUTH_ENDPOINT,
+    process.env.OPENPROVIDER_DOMAIN_INVENTORY_ENDPOINT,
+    process.env.OPENPROVIDER_DNS_RECORDS_ENDPOINT_TEMPLATE,
+    process.env.OPENPROVIDER_DOMAIN_AVAILABILITY_ENDPOINT,
+    process.env.OPENPROVIDER_SANDBOX_REGISTRATION_ENDPOINT,
+  ]
+    .map((value) => normalizeToken(value).toLowerCase())
+    .filter(Boolean);
+  if (endpointSignals.some((value) => value.includes("sandbox"))) return "sandbox";
+  if (endpointSignals.some((value) => value.includes("api.openprovider.eu"))) return "live";
+
+  const hasSandboxCredentials = [process.env.OPENPROVIDER_SANDBOX_USERNAME, process.env.OPENPROVIDER_SANDBOX_PASSWORD].some(
+    (value) => normalizeToken(value).length > 0,
+  );
+  if (hasSandboxCredentials) return "sandbox";
+
   return "unknown";
 }
 
