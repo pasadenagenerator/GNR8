@@ -2,19 +2,61 @@
 
 ## Status
 - Draft: canonical architecture direction
+- Milestone completed: AI Routing Evaluator Preview Model
 - Milestone completed: AI Routing Policy Registry Extraction
 - Milestone completed: AI Routing Policy Preview / Task-to-Provider Mapping Matrix UI
-- Scope: UI/read-model/docs only
-- Non-goals: no runtime AI orchestration, no live model calls, no API changes, no execution changes
+- Scope: UI/read-model/docs + deterministic preview evaluator contract
+- Non-goals: no runtime AI orchestration execution, no live model calls, no API changes, no execution changes
 
 ## Purpose
 Define the canonical AI provider routing metadata surface in Provider Fleet so future orchestration can be policy-governed, traceable, and multi-model by design.
 
 ## Canonical Evaluator Contract
 - Canonical doc: `docs/architecture/AI_ROUTING_EVALUATOR_CONTRACT.md`
-- Scope: future evaluator request/response contract only
-- Contract purpose: evaluate routing intent against provider metadata + routing policy sources
-- Current boundary: design-time/read-model only, execution blocked
+- Runtime files:
+  - `apps/platform/gnr8/runtime/providers/ai-routing-evaluator-preview.ts`
+  - `apps/platform/gnr8/runtime/providers/ai-routing-evaluator-preview.test.ts`
+- Scope: deterministic preview evaluator request/response contract
+- Contract purpose: evaluate routing intent against provider metadata + routing policy sources and return explainable blocked preview result
+- Current boundary: deterministic preview only, execution blocked
+
+## Deterministic Preview Evaluator Behavior
+- matches `taskType` against `AI_ROUTING_POLICY_PREVIEW_REGISTRY`
+- uses preferred/secondary providers from policy when matched
+- defaults to `openai` + `anthropic` fallback when unmatched
+- resolves `selectedModelFamily` from provider registry metadata
+- applies request preferences as constraints
+- always includes `execution_blocked` and `preview_only`
+- always returns `executionAllowed:false` and `executionBlocked:true`
+
+## Evaluator Input Fields
+- `taskType`
+- `inputModality`
+- `outputModality`
+- `sensitivityLevel`
+- `latencyPreference`
+- `costPreference`
+- `contextRequirement`
+- `regionPreference`
+- `fallbackAllowed`
+
+## Evaluator Output Fields
+- `selectedProviderId`
+- `selectedModelFamily`
+- `routingStrategy`
+- `fallbackProviderIds`
+- `reason`
+- `constraintsApplied`
+- `executionAllowed`
+- `executionBlocked`
+- `diagnostics`
+
+## Preview Diagnostics
+- `AI_ROUTING_EVALUATOR_PREVIEW_CREATED`
+- `AI_ROUTING_POLICY_MATCHED`
+- `AI_ROUTING_POLICY_DEFAULTED`
+- `AI_ROUTING_EXECUTION_BLOCKED`
+- `AI_ROUTING_PREVIEW_ONLY`
 
 ## UI Surface
 - Route: `/gnr8/admin/providers`
@@ -75,22 +117,26 @@ Badge mapping:
 
 ## Boundary
 - UI/read-model only
+- deterministic preview evaluator only
 - no runtime AI orchestration
 - no live model calls
 - no API changes
 - no execution
 - no secrets
 - no action buttons/forms
-- evaluator contract is design-only (no credential resolution, no provider dispatch)
+- no credential resolution
+- no provider dispatch
+- no runtime execution
+- no API endpoint yet
 
 ## Current Reality (2026-05-28)
 - Provider Fleet now visibly includes AI provider routing strategy metadata and task-to-provider policy preview through read-only matrix sections.
-- No runtime router exists.
+- Deterministic preview evaluator implementation now exists and is validated.
 - No automatic fallback execution exists.
 - No provider invocation orchestration exists.
 
 ## Conclusion
-AI routing strategy is now represented as canonical read-model data, preparing future runtime routing without implementing execution.
+GNR8 now has its first deterministic AI routing decision preview. The system can explain which provider would be selected while execution remains fully blocked.
 
 ## Recommended Next Milestone
-- Task-based AI orchestration contract wiring (still read-model first)
+- AI Routing Evaluator Preview UI

@@ -128,6 +128,12 @@ test("provider fleet view source: AI routing policy preview advisory note render
   assert.equal(source.includes("Routing policy preview is strategic only. No live AI routing is performed."), true);
 });
 
+test("provider fleet view source: AI routing evaluator preview section renders", async () => {
+  const source = await readFile(VIEW_FILE, "utf8");
+  assert.equal(source.includes("AIRoutingEvaluatorPreview"), true);
+  assert.equal(source.includes("AI Routing Evaluator Preview"), false);
+});
+
 test("provider fleet view source: AI routing readiness advisor renders", async () => {
   const source = await readFile(VIEW_FILE, "utf8");
   assert.equal(source.includes("AI Routing Readiness Advisor"), true);

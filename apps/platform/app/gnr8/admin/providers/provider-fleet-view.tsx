@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { AIRoutingEvaluatorPreview } from "@/app/gnr8/admin/providers/ai-routing-evaluator-preview";
 import { AI_ROUTING_POLICY_PREVIEW_REGISTRY } from "@/gnr8/runtime/providers/ai-routing-policy-registry";
 import { PROVIDER_CONTRACT_BY_ID } from "@/gnr8/runtime/providers/provider-contract-registry";
 
@@ -372,6 +373,8 @@ export function ProviderFleetView(props: { payload: ProviderFleetPayload }) {
           Routing policy preview is strategic only. No live AI routing is performed.
         </p>
       </section>
+
+      <AIRoutingEvaluatorPreview />
 
       <section style={{ border: "1px solid #dbe3ea", borderRadius: 10, background: "#ffffff", padding: 12, marginTop: 12 }}>
         <p style={{ margin: 0, color: "#374151", fontSize: 13 }}>Fleet cockpit is read-only. Provider execution remains disabled.</p>
