@@ -7,6 +7,7 @@ This is the first file every new ChatGPT/Codex thread should read.
 GNR8 is currently in provider/DNS control-plane hardening and migration/preview validation mode.
 The active emphasis is deterministic contracts, approval/handoff safety, and no hidden execution.
 Provider Fleet Cockpit milestone is complete and verified (global provider control plane route with deterministic seeded provider registry, UI/read-model only, execution blocked).
+Provider Navigation Wiring milestone is complete and verified (agency dashboard to provider fleet, provider fleet to Openprovider cockpit, and cockpit links into read-only provider surfaces).
 Openprovider Domain Availability Read-only Connector milestone is complete and verified (real provider-read availability check with shared sandbox auth, execution still blocked).
 Openprovider Domain Inventory Admin UI milestone is complete and verified (real provider-read UI surface with sandbox auth + read-only inventory, execution still blocked).
 Openprovider DNS Inventory Admin UI milestone is complete and verified (real provider-read UI surface with sandbox auth + read-only DNS inventory, execution still blocked).
@@ -128,12 +129,45 @@ Evidence and diagnostics milestone:
     - GNR8 now has the first provider-level control tower above individual provider integrations.
     - this is the beginning of multi-provider orchestration/readiness visibility.
   - recommended next milestone:
-    - Provider Navigation Wiring:
-      - Agency Dashboard -> Provider Fleet Cockpit
-      - Provider Fleet Cockpit -> Openprovider Cockpit
-      - Openprovider Cockpit -> Domain Inventory / DNS Inventory / Availability
+    - Provider Capability Detail Cards / Provider Readiness Explainer
+    - or Openprovider Availability UI Search Panel
   - success criteria:
     - future thread bootstrap resumes from global provider fleet cockpit milestone
+- Provider Navigation Wiring is deployed:
+  - completed navigation flow:
+    - Agency Dashboard -> `/gnr8/admin/providers`
+    - Provider Fleet Cockpit -> `/gnr8/admin/providers/openprovider`
+    - Openprovider Provider Cockpit -> `/gnr8/admin/providers/openprovider/domains`
+    - Openprovider Provider Cockpit -> `/gnr8/admin/providers/openprovider/dns`
+  - changed UI files:
+    - `app/gnr8/admin/agencies/[agencyId]/dashboard/page.tsx`
+    - `app/gnr8/admin/providers/provider-fleet-view.tsx`
+    - `app/gnr8/admin/providers/openprovider/openprovider-provider-cockpit-view.tsx`
+  - verified UX:
+    - Agency Dashboard includes Provider Fleet card
+    - Openprovider is the only navigable provider row
+    - Realtime Register, INWX, Netim remain non-linked / `not_configured`
+    - Openprovider cockpit includes Provider Surfaces section
+    - Provider Surfaces links to Domain Inventory and DNS Inventory
+    - Availability remains embedded in Openprovider cockpit
+  - boundary remains explicit:
+    - UI/navigation only
+    - no runtime changes
+    - no API changes
+    - no provider writes
+    - no DNS writes
+    - no registration
+    - no queue/Inngest/worker execution
+    - no provider execution
+    - no secret changes
+  - conclusion:
+    - provider features are no longer hidden behind manually typed admin URLs
+    - GNR8 now has a navigable provider control-plane flow from agency dashboard into provider fleet, provider cockpit, and read-only provider surfaces
+  - recommended next milestone:
+    - Provider Capability Detail Cards / Provider Readiness Explainer
+    - or Openprovider Availability UI Search Panel
+  - success criteria:
+    - future thread bootstrap resumes from navigable Provider Control Plane UX
 - Openprovider Domain Availability Read-only Connector is deployed:
   - runtime model: `gnr8/runtime/providers/openprovider/openprovider-domain-availability.ts`
   - shared auth helper: `gnr8/runtime/providers/openprovider/openprovider-auth.ts`

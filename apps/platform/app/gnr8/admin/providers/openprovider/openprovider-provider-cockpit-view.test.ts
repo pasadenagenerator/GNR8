@@ -72,6 +72,31 @@ test("openprovider provider cockpit view source: availability details", async ()
   assert.equal(source.includes("status"), true);
 });
 
+test("openprovider provider cockpit view source: availability search section exists", async () => {
+  const source = await readFile(VIEW_FILE, "utf8");
+  assert.equal(source.includes("Availability Search"), true);
+  assert.equal(source.includes("Domain name"), true);
+  assert.equal(source.includes('placeholder="example-domain.com"'), true);
+  assert.equal(source.includes("Check Availability"), true);
+});
+
+test("openprovider provider cockpit view source: query param domain is supported", async () => {
+  const source = await readFile(VIEW_FILE, "utf8");
+  assert.equal(source.includes('searchParams.get("domain")'), true);
+  assert.equal(source.includes('name="domain"'), true);
+  assert.equal(source.includes('action="/gnr8/admin/providers/openprovider"'), true);
+  assert.equal(source.includes('method="GET"'), true);
+  assert.equal(source.includes("domain-availability?domain="), true);
+});
+
+test("openprovider provider cockpit view source: availability badge rules", async () => {
+  const source = await readFile(VIEW_FILE, "utf8");
+  assert.equal(source.includes("resolveAvailabilityBadgeLevel"), true);
+  assert.equal(source.includes("if (value === true) return \"success\";"), true);
+  assert.equal(source.includes("if (value === false) return \"critical\";"), true);
+  assert.equal(source.includes("return \"warning\";"), true);
+});
+
 test("openprovider provider cockpit view source: collapsed diagnostics and raw payloads", async () => {
   const source = await readFile(VIEW_FILE, "utf8");
   assert.equal(source.includes("<details"), true);
@@ -87,8 +112,12 @@ test("openprovider provider cockpit view source: badge rules", async () => {
   assert.equal(source.includes('["blocked", "failed_closed"].includes(value)'), true);
 });
 
-test("openprovider provider cockpit view source: no action buttons or forms are present", async () => {
+test("openprovider provider cockpit view source: no mutation buttons/forms", async () => {
   const source = await readFile(VIEW_FILE, "utf8");
-  assert.equal(source.includes("<button"), false);
-  assert.equal(source.includes("<form"), false);
+  assert.equal(source.includes("<button"), true);
+  assert.equal(source.includes("<form"), true);
+  assert.equal(source.includes('method="POST"'), false);
+  assert.equal(source.includes("Register"), false);
+  assert.equal(source.includes("registration"), false);
+  assert.equal(source.includes("/api/gnr8/admin/providers/openprovider/register"), false);
 });

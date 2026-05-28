@@ -1,4 +1,8 @@
+"use client";
+
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
+import { useEffect, useMemo, useState } from "react";
 import type { OpenproviderDnsRecordInventoryResult } from "@/gnr8/runtime/providers/openprovider/openprovider-dns-record-inventory";
 import type {
   OpenproviderDomainAvailabilityResult,
@@ -64,6 +68,12 @@ function resolveBadgeLevel(value: string): BadgeLevel {
   return "neutral";
 }
 
+function resolveAvailabilityBadgeLevel(value: OpenproviderDomainAvailabilityValue | undefined): BadgeLevel {
+  if (value === true) return "success";
+  if (value === false) return "critical";
+  return "warning";
+}
+
 function SummaryCard(props: { label: string; value: string }) {
   return (
     <section style={{ border: "1px solid #dbe3ea", borderRadius: 10, background: "#ffffff", padding: 12 }}>
@@ -88,7 +98,29 @@ function renderDiagnostics(values: string[]) {
 }
 
 export function OpenproviderProviderCockpitView(props: { payload: CockpitPayload }) {
-  const availability = props.payload.availability as Partial<OpenproviderDomainAvailabilityResult>;
+  const searchParams = useSearchParams();
+  const requestedDomain = useMemo(() => (searchParams.get("domain") ?? "").trim().toLowerCase(), [searchParams]);
+  const selectedDomain = requestedDomain || "levi-testis.com";
+  const [availability, setAvailability] = useState<Partial<OpenproviderDomainAvailabilityResult>>(props.payload.availability);
+
+  useEffect(() => {
+    if (!requestedDomain) return;
+
+    let cancelled = false;
+    const endpoint = `/api/gnr8/admin/providers/openprovider/domain-availability?domain=${encodeURIComponent(requestedDomain)}`;
+
+    void fetch(endpoint, { method: "GET", cache: "no-store" })
+      .then((response) => (response.ok ? response.json() : null))
+      .then((payload) => {
+        if (cancelled || !payload || typeof payload !== "object") return;
+        setAvailability(payload as Partial<OpenproviderDomainAvailabilityResult>);
+      })
+      .catch(() => undefined);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [requestedDomain]);
 
   return (
     <main
@@ -167,9 +199,50 @@ export function OpenproviderProviderCockpitView(props: { payload: CockpitPayload
       </section>
 
       <section style={{ border: "1px solid #dbe3ea", borderRadius: 10, background: "#ffffff", padding: 12, marginTop: 12 }}>
+        <h2 style={{ margin: "0 0 8px 0", fontSize: 16 }}>Availability Search</h2>
+        <p style={{ margin: "0 0 8px 0", color: "#374151" }}>
+          Check real provider domain availability using Openprovider read-only intelligence.
+        </p>
+        <form action="/gnr8/admin/providers/openprovider" method="GET" style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <input
+            aria-label="Domain name"
+            name="domain"
+            type="text"
+            defaultValue={selectedDomain}
+            placeholder="example-domain.com"
+            style={{
+              flex: "1 1 260px",
+              border: "1px solid #d1d5db",
+              borderRadius: 8,
+              padding: "8px 10px",
+              fontSize: 14,
+            }}
+          />
+          <button
+            type="submit"
+            style={{
+              border: "1px solid #111827",
+              borderRadius: 8,
+              background: "#111827",
+              color: "#ffffff",
+              fontWeight: 700,
+              padding: "8px 12px",
+              cursor: "pointer",
+            }}
+          >
+            Check Availability
+          </button>
+        </form>
+      </section>
+
+      <section style={{ border: "1px solid #dbe3ea", borderRadius: 10, background: "#ffffff", padding: 12, marginTop: 12 }}>
         <h2 style={{ margin: "0 0 8px 0", fontSize: 16 }}>Availability Intelligence</h2>
-        <div><strong>domain</strong>: levi-testis.com</div>
+        <div><strong>domain</strong>: {String(availability.domain ?? selectedDomain)}</div>
         <div><strong>available</strong>: {String((availability.available as OpenproviderDomainAvailabilityValue | undefined) ?? "unknown")}</div>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <strong>available badge</strong>:
+          <Badge level={resolveAvailabilityBadgeLevel(availability.available as OpenproviderDomainAvailabilityValue | undefined)} />
+        </div>
         <div><strong>status</strong>: {String((availability.status as OpenproviderDomainAvailabilityStatus | undefined) ?? "failed_closed")}</div>
         <div><strong>checkedAt</strong>: {formatDate(String(availability.checkedAt ?? ""))}</div>
       </section>
