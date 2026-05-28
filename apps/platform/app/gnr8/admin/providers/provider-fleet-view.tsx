@@ -13,6 +13,19 @@ type ProviderRecord = {
   execution: "blocked";
 };
 
+type PlaceholderIdentity = {
+  providerId: "realtime_register";
+  providerType: "registrar";
+  environment: "unknown";
+};
+
+type PlaceholderContract = {
+  capabilities: Record<CapabilityKey, false>;
+  readiness: readonly ["not_configured", "control_plane_only"];
+  boundary: readonly ["execution_blocked", "read_only"];
+  identity: PlaceholderIdentity;
+};
+
 type FleetSummary = {
   providers: number;
   connected: number;
@@ -91,6 +104,42 @@ const FLEET_READINESS_ADVISOR: readonly AdvisorCard[] = [
       "normalize provider capabilities",
       "introduce provider orchestration contracts",
     ],
+  },
+];
+
+const REALTIME_REGISTER_CONTRACT: PlaceholderContract = {
+  capabilities: {
+    domains: false,
+    dns: false,
+    availability: false,
+    registration: false,
+    execution: false,
+  },
+  readiness: ["not_configured", "control_plane_only"],
+  boundary: ["execution_blocked", "read_only"],
+  identity: {
+    providerId: "realtime_register",
+    providerType: "registrar",
+    environment: "unknown",
+  },
+};
+
+const REALTIME_REGISTER_ADVISOR: readonly AdvisorCard[] = [
+  {
+    title: "Current State",
+    items: ["provider placeholder initialized", "orchestration contract compatible"],
+  },
+  {
+    title: "Current Limitations",
+    items: ["no credentials configured", "no provider APIs connected"],
+  },
+  {
+    title: "Missing Requirements",
+    items: ["provider auth layer", "provider capability normalization", "sandbox verification"],
+  },
+  {
+    title: "Recommended Next Step",
+    items: ["implement read-only provider inventory", "validate provider contract compatibility"],
   },
 ];
 
@@ -296,6 +345,64 @@ export function ProviderFleetView(props: { payload: ProviderFleetPayload }) {
         <h2 style={{ margin: "0 0 8px 0", fontSize: 16 }}>Readiness Advisor</h2>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(230px, 1fr))", gap: 10 }}>
           {FLEET_READINESS_ADVISOR.map((card) => (
+            <section key={card.title} style={{ border: "1px solid #dbe3ea", borderRadius: 10, background: "#ffffff", padding: 12 }}>
+              <h3 style={{ margin: "0 0 8px 0", fontSize: 15 }}>{card.title}</h3>
+              <ul style={{ margin: 0, paddingLeft: 18 }}>
+                {card.items.map((item) => (
+                  <li key={item} style={{ marginBottom: 6, display: "flex", alignItems: "center", gap: 8 }}>
+                    {item}
+                    <DotBadge level={resolveBadgeLevel(item)} />
+                  </li>
+                ))}
+              </ul>
+            </section>
+          ))}
+        </div>
+      </section>
+
+      <section style={{ border: "1px solid #dbe3ea", borderRadius: 10, background: "#ffffff", padding: 12, marginTop: 12 }}>
+        <h2 style={{ margin: "0 0 8px 0", fontSize: 16 }}>Realtime Register Contract Readiness</h2>
+        <p style={{ margin: "0 0 10px 0", color: "#374151", fontSize: 13 }}>
+          Placeholder provider contract in the fleet cockpit. Explicitly separate from Openprovider operational provider.
+        </p>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(230px, 1fr))", gap: 10 }}>
+          <section style={{ border: "1px solid #dbe3ea", borderRadius: 10, background: "#ffffff", padding: 12 }}>
+            <h3 style={{ margin: "0 0 8px 0", fontSize: 15 }}>Provider Identity</h3>
+            <ul style={{ margin: 0, paddingLeft: 18 }}>
+              <li>providerId: {REALTIME_REGISTER_CONTRACT.identity.providerId}</li>
+              <li>providerType: {REALTIME_REGISTER_CONTRACT.identity.providerType}</li>
+              <li>environment: {REALTIME_REGISTER_CONTRACT.identity.environment}</li>
+            </ul>
+          </section>
+          <section style={{ border: "1px solid #dbe3ea", borderRadius: 10, background: "#ffffff", padding: 12 }}>
+            <h3 style={{ margin: "0 0 8px 0", fontSize: 15 }}>Capabilities</h3>
+            <ul style={{ margin: 0, paddingLeft: 18 }}>
+              {CAPABILITY_KEYS.map((capability) => (
+                <li key={capability}>
+                  {capability}: {String(REALTIME_REGISTER_CONTRACT.capabilities[capability])}
+                </li>
+              ))}
+            </ul>
+          </section>
+          <section style={{ border: "1px solid #dbe3ea", borderRadius: 10, background: "#ffffff", padding: 12 }}>
+            <h3 style={{ margin: "0 0 8px 0", fontSize: 15 }}>Readiness</h3>
+            <ul style={{ margin: 0, paddingLeft: 18 }}>
+              {REALTIME_REGISTER_CONTRACT.readiness.map((item) => (
+                <li key={item}>{item}</li>
+              ))}
+            </ul>
+          </section>
+          <section style={{ border: "1px solid #dbe3ea", borderRadius: 10, background: "#ffffff", padding: 12 }}>
+            <h3 style={{ margin: "0 0 8px 0", fontSize: 15 }}>Boundary</h3>
+            <ul style={{ margin: 0, paddingLeft: 18 }}>
+              {REALTIME_REGISTER_CONTRACT.boundary.map((item) => (
+                <li key={item}>{item}</li>
+              ))}
+            </ul>
+          </section>
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(230px, 1fr))", gap: 10, marginTop: 10 }}>
+          {REALTIME_REGISTER_ADVISOR.map((card) => (
             <section key={card.title} style={{ border: "1px solid #dbe3ea", borderRadius: 10, background: "#ffffff", padding: 12 }}>
               <h3 style={{ margin: "0 0 8px 0", fontSize: 15 }}>{card.title}</h3>
               <ul style={{ margin: 0, paddingLeft: 18 }}>

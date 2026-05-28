@@ -4,57 +4,156 @@
 2026-05-28
 
 ## Current Phase
-GNR8 Provider Capability Explainer + Openprovider Availability Search milestone (implemented, deployed, and manually verified).
+GNR8 Second Provider Placeholder Readiness Contract milestone (Realtime Register placeholder contract/readiness surface in provider fleet cockpit; UI/read-model only; no runtime/API/provider execution changes).
 
 ## Latest Completed Milestone
 
-- Provider Capability Detail Cards / Readiness Explainer is implemented, deployed, and manually verified.
-- Openprovider Availability Search Panel (read-only GET control) is implemented, deployed, and manually verified.
+- Second Provider Placeholder Readiness Contract is completed for Realtime Register as a control-plane placeholder only.
+- Updated UI surface:
+  - `apps/platform/app/gnr8/admin/providers/provider-fleet-view.tsx`
+- Updated tests:
+  - `apps/platform/app/gnr8/admin/providers/provider-fleet-view.test.ts`
+- Realtime Register orchestration contract fields now render explicitly:
+  - Capabilities:
+    - `domains:false`
+    - `dns:false`
+    - `availability:false`
+    - `registration:false`
+    - `execution:false`
+  - Readiness:
+    - `not_configured`
+    - `control_plane_only`
+  - Boundary:
+    - `execution_blocked`
+    - `read_only`
+  - Provider Identity:
+    - `providerId: realtime_register`
+    - `providerType: registrar`
+    - `environment: unknown`
+- Realtime Register Readiness Advisor now renders:
+  - Current State:
+    - `provider placeholder initialized`
+    - `orchestration contract compatible`
+  - Current Limitations:
+    - `no credentials configured`
+    - `no provider APIs connected`
+  - Missing Requirements:
+    - `provider auth layer`
+    - `provider capability normalization`
+    - `sandbox verification`
+  - Recommended Next Step:
+    - `implement read-only provider inventory`
+    - `validate provider contract compatibility`
+- Openprovider behavior preserved unchanged:
+  - remains the only connected and linked operational provider
+  - no Realtime Register links added
+  - no provider execution controls added
+- Boundary remains explicit:
+  - UI/read-model only
+  - no runtime execution
+  - no provider APIs
+  - no writes
+  - no queue/worker execution
+- Conclusion:
+  - GNR8 now validates that provider orchestration abstractions are not Openprovider-specific.
+- Recommended next milestone:
+  - Provider Identity Registry Contract Wiring
+  - or Multi-Provider Capability Discovery Read Model
+- Success criteria:
+  - future thread bootstrap resumes from second provider placeholder contract readiness baseline
+
+- Provider Orchestration Contract Architecture Draft is completed as the first canonical architecture contract for multi-provider orchestration in GNR8.
+- New canonical architecture doc:
+  - `docs/architecture/PROVIDER_ORCHESTRATION_CONTRACT.md`
+- Contract scope:
+  - provider capability model
+  - provider readiness model
+  - provider boundary model
+  - provider execution governance model
+  - provider orchestration model
+  - canonical provider identity model
+- Current reality captured explicitly:
+  - Openprovider is reference implementation
+  - all current provider surfaces are read-only
+  - execution remains blocked
+  - no mutation orchestration exists yet
+- Future direction captured explicitly:
+  - GNR8 as provider orchestration/control-plane above multiple infrastructure providers
+  - architecture draft only (no implementation promises)
+- Boundary remains explicit:
+  - docs-only milestone
+  - no runtime changes
+  - no API changes
+  - no provider execution changes
+  - no mutation enablement
+- Conclusion:
+  - GNR8 now has the first canonical provider orchestration architecture contract.
+- Recommended next milestone:
+  - Provider Identity Registry Contract Wiring
+  - or Multi-Provider Capability Discovery Read Model
+- Success criteria:
+  - future thread bootstrap resumes from Provider Orchestration Contract architecture baseline
+
+- Provider Readiness Advisor Layer is implemented, deployed, and manually verified.
 - Updated UI surfaces:
   - `/gnr8/admin/providers`
   - `/gnr8/admin/providers/openprovider`
-- Capability explainer coverage:
-  - `domains`
-  - `dns`
-  - `availability`
-  - `registration`
-  - `execution`
-- Explainer semantics per capability:
-  - capability name
-  - current status
-  - explanation
-  - readiness level
-- Readiness states now surfaced:
-  - `sandbox_verified`
-  - `not_enabled`
-  - `control_plane_only`
-- Verified Openprovider guidance:
-  - `availability`: working / `sandbox_verified`
-  - `registration`: disabled / `not_enabled`
-  - `execution`: blocked / `control_plane_only`
-- Availability search behavior:
-  - GET-only form
-  - action: `/gnr8/admin/providers/openprovider`
-  - query param: `?domain=<domain>`
-  - default fallback: `levi-testis.com`
-- Verified search behavior:
-  - real Openprovider availability lookups are operational
-  - sandbox provider responses are visible through cockpit UI
-  - no registration/write paths were introduced
+- New section:
+  - `Readiness Advisor`
+- Advisor cards:
+  - `Current State`
+  - `Current Limitations`
+  - `Missing Requirements`
+  - `Recommended Next Step`
+- Provider Fleet guidance:
+  - one provider connected
+  - multi-provider registry initialized
+  - provider fleet navigation operational
+  - only Openprovider connected
+  - no production execution providers
+  - no orchestration layer
+  - missing provider abstraction layer
+  - missing execution governance
+  - missing multi-provider failover
+  - missing production verification
+  - recommended: connect second provider, normalize provider capabilities, introduce provider orchestration contracts
+- Openprovider guidance:
+  - availability intelligence operational
+  - DNS inventory operational
+  - domain inventory operational
+  - sandbox verified
+  - read-only boundary active
+  - registration disabled
+  - execution blocked
+  - no provider writes
+  - no live environment verification
+  - missing execution orchestration
+  - missing approval workflows
+  - missing worker/provider execution layer
+  - missing live provider verification
+  - missing mutation safety review
+  - recommended: verify live environment behavior, prepare provider execution architecture, add approval-driven registration flow
+- Preserved UI:
+  - availability search panel preserved
+  - provider surfaces links preserved
+  - capability cards preserved
+  - read-only messaging preserved
 - Boundary remains explicit:
-  - read-only only
+  - UI/read-model only
+  - no runtime changes
+  - no API changes
   - no provider writes
   - no DNS writes
   - no registration
-  - no execution
   - no queue/Inngest/worker execution
-  - no mutation POST controls
+  - no provider execution
 - Conclusion:
-  - GNR8 provider UX now includes a navigable provider control-plane flow, provider capability explanations, readiness semantics, and real provider availability intelligence search.
+  - provider UX now includes operator guidance/readiness interpretation, not only raw diagnostics and statuses
 - Recommended next milestone:
-  - Provider Readiness Advisor Layer
+  - Provider Orchestration Contract Draft
+  - or Second Provider Placeholder Readiness Contract
 - Success criteria:
-  - future thread bootstrap resumes from provider capability guidance + availability search milestone
+  - future thread bootstrap resumes from Provider Readiness Advisor milestone
 
 - Provider Navigation Wiring is implemented, deployed, and manually verified.
 - Completed navigation flow:

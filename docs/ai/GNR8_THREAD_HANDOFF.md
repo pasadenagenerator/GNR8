@@ -6,9 +6,12 @@ This is the first file every new ChatGPT/Codex thread should read.
 
 GNR8 is currently in provider/DNS control-plane hardening and migration/preview validation mode.
 The active emphasis is deterministic contracts, approval/handoff safety, and no hidden execution.
+Provider Orchestration Contract Architecture Draft milestone is complete and verified as documentation-only (first canonical multi-provider orchestration contract; no runtime/API/provider execution changes).
+Second Provider Placeholder Readiness Contract milestone is complete and verified (Realtime Register placeholder now rendered with explicit orchestration contract/readiness/boundary/identity fields and provider-specific readiness advisor text in Provider Fleet Cockpit; UI/read-model only; no runtime/API/provider execution changes).
 Provider Fleet Cockpit milestone is complete and verified (global provider control plane route with deterministic seeded provider registry, UI/read-model only, execution blocked).
 Provider Navigation Wiring milestone is complete and verified (agency dashboard to provider fleet, provider fleet to Openprovider cockpit, and cockpit links into read-only provider surfaces).
 Provider Capability Detail Cards / Readiness Explainer milestone is complete and verified (provider capability guidance layer on `/gnr8/admin/providers` and `/gnr8/admin/providers/openprovider` with status/explanation/readiness semantics for domains, dns, availability, registration, and execution).
+Provider Readiness Advisor Layer milestone is complete and verified (operator guidance/readiness interpretation layer on `/gnr8/admin/providers` and `/gnr8/admin/providers/openprovider`; UI/read-model only; execution blocked).
 Openprovider Availability Search Panel milestone is complete and verified (read-only GET availability search on `/gnr8/admin/providers/openprovider` using `?domain=<domain>` with default fallback `levi-testis.com`; real sandbox availability lookups visible in cockpit UI; no write or registration paths).
 Openprovider Domain Availability Read-only Connector milestone is complete and verified (real provider-read availability check with shared sandbox auth, execution still blocked).
 Openprovider Domain Inventory Admin UI milestone is complete and verified (real provider-read UI surface with sandbox auth + read-only inventory, execution still blocked).
@@ -24,6 +27,7 @@ Operator Evidence Provenance Layer milestone is implemented, deployed, and manua
 
 Current snapshot sources:
 - `docs/ai/GNR8_CURRENT_STATE.md`
+- `docs/architecture/PROVIDER_ORCHESTRATION_CONTRACT.md`
 - `docs/gnr8/dns-provider-control-plane-checkpoint-2026-05.md`
 - `docs/gnr8/runtime-domain-dns-readiness-baseline-2026-05.md`
 
@@ -33,6 +37,7 @@ Read these as the canonical bootstrap set:
 - `docs/ai/GNR8_THREAD_HANDOFF.md`
 - `docs/ai/GNR8_MASTER_CONTEXT_BOOTSTRAP.md`
 - `docs/ai/GNR8_CURRENT_STATE.md`
+- `docs/architecture/PROVIDER_ORCHESTRATION_CONTRACT.md`
 - `docs/ai/GNR8_TASK_EXECUTION_PROTOCOL.md`
 - `docs/ai/GNR8_COLLABORATION_PROTOCOL.md`
 - `docs/ai/GNR8_PROJECT_MAP.md`
@@ -207,6 +212,66 @@ Evidence and diagnostics milestone:
     - Provider Readiness Advisor Layer
   - success criteria:
     - future thread bootstrap resumes from provider capability guidance milestone
+- Provider Readiness Advisor Layer is deployed:
+  - updated UI surfaces:
+    - `/gnr8/admin/providers`
+    - `/gnr8/admin/providers/openprovider`
+  - new section:
+    - `Readiness Advisor`
+  - advisor cards:
+    - `Current State`
+    - `Current Limitations`
+    - `Missing Requirements`
+    - `Recommended Next Step`
+  - provider fleet guidance:
+    - one provider connected
+    - multi-provider registry initialized
+    - provider fleet navigation operational
+    - only Openprovider connected
+    - no production execution providers
+    - no orchestration layer
+    - missing provider abstraction layer
+    - missing execution governance
+    - missing multi-provider failover
+    - missing production verification
+    - recommended: connect second provider, normalize provider capabilities, introduce provider orchestration contracts
+  - Openprovider guidance:
+    - availability intelligence operational
+    - DNS inventory operational
+    - domain inventory operational
+    - sandbox verified
+    - read-only boundary active
+    - registration disabled
+    - execution blocked
+    - no provider writes
+    - no live environment verification
+    - missing execution orchestration
+    - missing approval workflows
+    - missing worker/provider execution layer
+    - missing live provider verification
+    - missing mutation safety review
+    - recommended: verify live environment behavior, prepare provider execution architecture, add approval-driven registration flow
+  - preserved UI:
+    - availability search panel preserved
+    - provider surfaces links preserved
+    - capability cards preserved
+    - read-only messaging preserved
+  - boundary remains explicit:
+    - UI/read-model only
+    - no runtime changes
+    - no API changes
+    - no provider writes
+    - no DNS writes
+    - no registration
+    - no queue/Inngest/worker execution
+    - no provider execution
+  - conclusion:
+    - provider UX now includes operator guidance/readiness interpretation, not only raw diagnostics and statuses
+  - recommended next milestone:
+    - Provider Orchestration Contract Draft
+    - or Second Provider Placeholder Readiness Contract
+  - success criteria:
+    - future thread bootstrap resumes from Provider Readiness Advisor milestone
 - Openprovider Availability Search Panel is deployed:
   - route:
     - `/gnr8/admin/providers/openprovider`
