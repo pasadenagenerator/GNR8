@@ -7,7 +7,45 @@ type BadgeLevel = "success" | "warning" | "critical" | "neutral";
 type ProviderStatus = "connected" | "not_configured";
 type ProviderMode = "sandbox" | "unknown";
 type ProviderCategory = "registrar" | "deployment" | "commerce" | "execution" | "source_control" | "ai" | "storage" | "identity";
-type CapabilityKey = "domains" | "dns" | "availability" | "registration" | "execution";
+type CapabilityKey =
+  | "domains"
+  | "dns"
+  | "availability"
+  | "registration"
+  | "execution"
+  | "deployments"
+  | "previews"
+  | "rollbacks"
+  | "environment_variables"
+  | "billing"
+  | "subscriptions"
+  | "invoices"
+  | "webhooks"
+  | "checkout"
+  | "jobs"
+  | "workflows"
+  | "retries"
+  | "schedules"
+  | "events"
+  | "repositories"
+  | "branches"
+  | "pull_requests"
+  | "commits"
+  | "model_metadata"
+  | "routing_policy"
+  | "inference"
+  | "embeddings"
+  | "multimodal"
+  | "database"
+  | "object_storage"
+  | "backups"
+  | "vector_search"
+  | "file_storage"
+  | "auth"
+  | "users"
+  | "sessions"
+  | "oauth"
+  | "sso";
 type CapabilityStatus = "working" | "disabled" | "blocked";
 type CapabilityReadiness = "sandbox_verified" | "not_enabled" | "control_plane_only";
 
@@ -56,6 +94,17 @@ const CATEGORY_ORDER: readonly ProviderCategory[] = [
   "storage",
   "identity",
 ];
+
+const CATEGORY_CAPABILITY_KEYS: Readonly<Record<ProviderCategory, readonly CapabilityKey[]>> = {
+  registrar: ["domains", "dns", "availability", "registration", "execution"],
+  deployment: ["deployments", "previews", "rollbacks", "domains", "environment_variables"],
+  commerce: ["billing", "subscriptions", "invoices", "webhooks", "checkout"],
+  execution: ["jobs", "workflows", "retries", "schedules", "events"],
+  source_control: ["repositories", "branches", "pull_requests", "webhooks", "commits"],
+  ai: ["model_metadata", "routing_policy", "inference", "embeddings", "multimodal"],
+  storage: ["database", "object_storage", "backups", "vector_search", "file_storage"],
+  identity: ["auth", "users", "sessions", "oauth", "sso"],
+};
 
 const BADGE_THEME: Record<BadgeLevel, { bg: string; border: string; text: string }> = {
   success: { bg: "#dcfce7", border: "#86efac", text: "#166534" },
@@ -209,8 +258,10 @@ function SummaryCard(props: { label: string; value: string }) {
   );
 }
 
-const CAPABILITY_KEYS: CapabilityKey[] = ["domains", "dns", "availability", "registration", "execution"];
-const CAPABILITY_LABELS: Record<CapabilityKey, string> = {
+const REGISTRAR_CAPABILITY_KEYS = ["domains", "dns", "availability", "registration", "execution"] as const satisfies readonly CapabilityKey[];
+type RegistrarCapabilityKey = (typeof REGISTRAR_CAPABILITY_KEYS)[number];
+
+const CAPABILITY_LABELS: Record<RegistrarCapabilityKey, string> = {
   domains: "Domains",
   dns: "DNS",
   availability: "Availability",
@@ -218,7 +269,7 @@ const CAPABILITY_LABELS: Record<CapabilityKey, string> = {
   execution: "Execution",
 };
 
-const CAPABILITY_STATUS_DETAILS: Record<CapabilityKey, { status: CapabilityStatus; readiness: CapabilityReadiness; explanation: string }> = {
+const CAPABILITY_STATUS_DETAILS: Record<RegistrarCapabilityKey, { status: CapabilityStatus; readiness: CapabilityReadiness; explanation: string }> = {
   domains: { status: "working", readiness: "sandbox_verified", explanation: "Real provider domain inventory reads are operational through Openprovider read-only APIs." },
   dns: { status: "working", readiness: "sandbox_verified", explanation: "Real provider DNS inventory reads are operational through Openprovider read-only APIs." },
   availability: { status: "working", readiness: "sandbox_verified", explanation: "Real provider availability lookups are operational through Openprovider read-only APIs." },
@@ -288,7 +339,7 @@ export function ProviderFleetView(props: { payload: ProviderFleetPayload }) {
                     <td style={{ padding: "10px 6px", borderBottom: "1px solid #f3f4f6" }}><Pill label={provider.mode} value={provider.mode === "sandbox"} /></td>
                     <td style={{ padding: "10px 6px", borderBottom: "1px solid #f3f4f6" }}>
                       <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-                        {CAPABILITY_KEYS.map((capability) => <Pill key={capability} label={capability} value={provider.capabilities[capability]} />)}
+                        {CATEGORY_CAPABILITY_KEYS[provider.category].map((capability) => <Pill key={capability} label={capability} value={provider.capabilities[capability]} />)}
                       </div>
                     </td>
                     <td style={{ padding: "10px 6px", borderBottom: "1px solid #f3f4f6" }}><Pill label={provider.execution} value={provider.execution} /></td>
@@ -383,7 +434,7 @@ export function ProviderFleetView(props: { payload: ProviderFleetPayload }) {
       <section style={{ border: "1px solid #dbe3ea", borderRadius: 10, background: "#ffffff", padding: 12, marginTop: 12 }}>
         <h2 style={{ margin: "0 0 8px 0", fontSize: 16 }}>Provider Capability Status</h2>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 10 }}>
-          {CAPABILITY_KEYS.map((capability) => {
+          {REGISTRAR_CAPABILITY_KEYS.map((capability) => {
             const details = CAPABILITY_STATUS_DETAILS[capability];
             return (
               <section key={capability} style={{ border: "1px solid #dbe3ea", borderRadius: 10, background: "#ffffff", padding: 12 }}>
@@ -430,7 +481,7 @@ export function ProviderFleetView(props: { payload: ProviderFleetPayload }) {
           <section style={{ border: "1px solid #dbe3ea", borderRadius: 10, background: "#ffffff", padding: 12 }}>
             <h3 style={{ margin: "0 0 8px 0", fontSize: 15 }}>Capabilities</h3>
             <ul style={{ margin: 0, paddingLeft: 18 }}>
-              {CAPABILITY_KEYS.map((capability) => (
+              {CATEGORY_CAPABILITY_KEYS[REALTIME_REGISTER_CONTRACT.providerCategory].map((capability) => (
                 <li key={capability}>{capability}: {String(REALTIME_REGISTER_CONTRACT.capabilities[capability])}</li>
               ))}
             </ul>

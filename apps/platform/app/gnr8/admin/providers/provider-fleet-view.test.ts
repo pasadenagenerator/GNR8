@@ -62,12 +62,27 @@ test("provider fleet view source: summary cards show providers connected read-on
 
 test("provider fleet view source: capability chips render", async () => {
   const source = await readFile(VIEW_FILE, "utf8");
-  assert.equal(source.includes('"domains"'), true);
-  assert.equal(source.includes('"dns"'), true);
-  assert.equal(source.includes('"availability"'), true);
-  assert.equal(source.includes('"registration"'), true);
-  assert.equal(source.includes('"execution"'), true);
-  assert.equal(source.includes("CAPABILITY_KEYS.map"), true);
+  assert.equal(source.includes('"deployments"'), true);
+  assert.equal(source.includes('"model_metadata"'), true);
+  assert.equal(source.includes('"auth"'), true);
+  assert.equal(source.includes("CATEGORY_CAPABILITY_KEYS[provider.category].map"), true);
+});
+
+test("provider fleet view source: deployment providers do not render registrar-only capability set", async () => {
+  const source = await readFile(VIEW_FILE, "utf8");
+  assert.equal(source.includes("CATEGORY_CAPABILITY_KEYS[provider.category]"), true);
+  assert.equal(source.includes('deployment: ["deployments", "previews", "rollbacks", "domains", "environment_variables"]'), true);
+});
+
+test("provider fleet view source: AI providers render AI-specific capabilities", async () => {
+  const source = await readFile(VIEW_FILE, "utf8");
+  assert.equal(source.includes('ai: ["model_metadata", "routing_policy", "inference", "embeddings", "multimodal"]'), true);
+});
+
+test("provider fleet view source: openprovider keeps registrar capabilities in status section", async () => {
+  const source = await readFile(VIEW_FILE, "utf8");
+  assert.equal(source.includes("REGISTRAR_CAPABILITY_KEYS"), true);
+  assert.equal(source.includes("Provider Capability Status"), true);
 });
 
 test("provider fleet view source: read-only note", async () => {

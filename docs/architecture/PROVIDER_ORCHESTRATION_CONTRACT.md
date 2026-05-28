@@ -67,14 +67,15 @@ Openprovider links currently modeled:
 ## Provider Capability
 Provider capability expresses what a provider can do at the contract level.
 
-Canonical capability vocabulary:
-- `domains`
-- `dns`
-- `availability`
-- `registration`
-- `transfer`
-- `renewal`
-- `execution`
+Canonical capability vocabulary is now category-aware:
+- Registrar: `domains`, `dns`, `availability`, `registration`, `execution`
+- Deployment: `deployments`, `previews`, `rollbacks`, `domains`, `environment_variables`
+- Commerce: `billing`, `subscriptions`, `invoices`, `webhooks`, `checkout`
+- Execution: `jobs`, `workflows`, `retries`, `schedules`, `events`
+- Source Control: `repositories`, `branches`, `pull_requests`, `webhooks`, `commits`
+- AI: `model_metadata`, `routing_policy`, `inference`, `embeddings`, `multimodal`
+- Storage: `database`, `object_storage`, `backups`, `vector_search`, `file_storage`
+- Identity: `auth`, `users`, `sessions`, `oauth`, `sso`
 
 Notes:
 - Capability presence does not imply execution permission.

@@ -133,6 +133,17 @@ Evidence and diagnostics milestone:
     - `cockpit`
     - `domains`
     - `dns`
+  - provider capabilities are category-aware:
+    - registrar: `domains`, `dns`, `availability`, `registration`, `execution`
+    - deployment: `deployments`, `previews`, `rollbacks`, `domains`, `environment_variables`
+    - commerce: `billing`, `subscriptions`, `invoices`, `webhooks`, `checkout`
+    - execution: `jobs`, `workflows`, `retries`, `schedules`, `events`
+    - source control: `repositories`, `branches`, `pull_requests`, `webhooks`, `commits`
+    - AI: `model_metadata`, `routing_policy`, `inference`, `embeddings`, `multimodal`
+    - storage: `database`, `object_storage`, `backups`, `vector_search`, `file_storage`
+    - identity: `auth`, `users`, `sessions`, `oauth`, `sso`
+  - summary behavior:
+    - `Read-only Capabilities` remains `3` (Openprovider operational reads only)
   - boundary remains explicit:
     - deterministic read-model registry
     - no runtime provider execution

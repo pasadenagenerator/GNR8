@@ -54,6 +54,10 @@ test("provider contract shapes include canonical contract fields", () => {
     assert.equal(typeof provider.capabilities.availability, "boolean");
     assert.equal(typeof provider.capabilities.registration, "boolean");
     assert.equal(typeof provider.capabilities.execution, "boolean");
+    assert.equal(typeof provider.capabilities.deployments, "boolean");
+    assert.equal(typeof provider.capabilities.model_metadata, "boolean");
+    assert.equal(typeof provider.capabilities.database, "boolean");
+    assert.equal(typeof provider.capabilities.auth, "boolean");
     assert.equal(Array.isArray(provider.readiness), true);
     assert.equal(Array.isArray(provider.boundaries), true);
     assert.equal(Array.isArray(provider.advisor), true);
@@ -74,11 +78,19 @@ test("all non-openprovider contracts remain placeholder read-only control-plane 
     assert.equal(provider.status, "not_configured");
     assert.deepEqual(provider.readiness, ["not_configured", "control_plane_only"]);
     assert.deepEqual(provider.boundaries, ["execution_blocked", "read_only"]);
-    assert.equal(provider.capabilities.domains, false);
-    assert.equal(provider.capabilities.dns, false);
-    assert.equal(provider.capabilities.availability, false);
-    assert.equal(provider.capabilities.registration, false);
-    assert.equal(provider.capabilities.execution, false);
+    if (provider.providerCategory === "ai") {
+      assert.equal(provider.capabilities.model_metadata, true);
+      assert.equal(provider.capabilities.routing_policy, true);
+      assert.equal(provider.capabilities.inference, false);
+      assert.equal(provider.capabilities.embeddings, false);
+      assert.equal(provider.capabilities.multimodal, false);
+    } else {
+      assert.equal(provider.capabilities.domains, false);
+      assert.equal(provider.capabilities.dns, false);
+      assert.equal(provider.capabilities.availability, false);
+      assert.equal(provider.capabilities.registration, false);
+      assert.equal(provider.capabilities.execution, false);
+    }
     assert.equal(provider.links, undefined);
   }
 });
@@ -91,6 +103,11 @@ test("ai providers include placeholder ai routing metadata while remaining execu
     assert.equal(provider.status, "not_configured");
     assert.deepEqual(provider.readiness, ["not_configured", "control_plane_only"]);
     assert.deepEqual(provider.boundaries, ["execution_blocked", "read_only"]);
+    assert.equal(provider.capabilities.model_metadata, true);
+    assert.equal(provider.capabilities.routing_policy, true);
+    assert.equal(provider.capabilities.inference, false);
+    assert.equal(provider.capabilities.embeddings, false);
+    assert.equal(provider.capabilities.multimodal, false);
     assert.notEqual(provider.aiRouting, undefined);
     assert.equal(provider.aiRouting!.modelFamilies.length > 0, true);
     assert.equal(provider.aiRouting!.strengths.length > 0, true);
@@ -136,6 +153,15 @@ test("realtime register remains placeholder contract", () => {
 test("openprovider remains the only operational provider", () => {
   const connectedProviders = PROVIDER_CONTRACT_REGISTRY.filter((provider) => provider.status === "connected");
   assert.deepEqual(connectedProviders.map((provider) => provider.providerId), ["openprovider"]);
+});
+
+test("openprovider preserves operational registrar capabilities", () => {
+  const openprovider = PROVIDER_CONTRACT_BY_ID.openprovider;
+  assert.equal(openprovider.capabilities.domains, true);
+  assert.equal(openprovider.capabilities.dns, true);
+  assert.equal(openprovider.capabilities.availability, true);
+  assert.equal(openprovider.capabilities.registration, false);
+  assert.equal(openprovider.capabilities.execution, false);
 });
 
 test("registry remains read-model only with no execution runtime exports", () => {

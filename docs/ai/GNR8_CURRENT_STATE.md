@@ -245,6 +245,16 @@ while keeping execution blocked and read-only boundaries intact.
   - `cockpit`
   - `domains`
   - `dns`
+- Provider capabilities are category-aware in Provider Fleet:
+  - registrar: `domains`, `dns`, `availability`, `registration`, `execution`
+  - deployment: `deployments`, `previews`, `rollbacks`, `domains`, `environment_variables`
+  - commerce: `billing`, `subscriptions`, `invoices`, `webhooks`, `checkout`
+  - execution: `jobs`, `workflows`, `retries`, `schedules`, `events`
+  - source control: `repositories`, `branches`, `pull_requests`, `webhooks`, `commits`
+  - AI: `model_metadata`, `routing_policy`, `inference`, `embeddings`, `multimodal`
+  - storage: `database`, `object_storage`, `backups`, `vector_search`, `file_storage`
+  - identity: `auth`, `users`, `sessions`, `oauth`, `sso`
+- Operational read-only capability count remains `3` from Openprovider (`domains`, `dns`, `availability`).
 - Current boundary remains explicit:
   - deterministic read-model registry
   - no runtime provider execution

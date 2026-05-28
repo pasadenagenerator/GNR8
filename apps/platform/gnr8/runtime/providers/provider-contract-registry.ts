@@ -39,7 +39,45 @@ export type ProviderCategory =
 
 export type ProviderEnvironment = "sandbox" | "unknown";
 export type ProviderStatus = "connected" | "not_configured";
-export type CapabilityKey = "domains" | "dns" | "availability" | "registration" | "execution";
+export type CapabilityKey =
+  | "domains"
+  | "dns"
+  | "availability"
+  | "registration"
+  | "execution"
+  | "deployments"
+  | "previews"
+  | "rollbacks"
+  | "environment_variables"
+  | "billing"
+  | "subscriptions"
+  | "invoices"
+  | "webhooks"
+  | "checkout"
+  | "jobs"
+  | "workflows"
+  | "retries"
+  | "schedules"
+  | "events"
+  | "repositories"
+  | "branches"
+  | "pull_requests"
+  | "commits"
+  | "model_metadata"
+  | "routing_policy"
+  | "inference"
+  | "embeddings"
+  | "multimodal"
+  | "database"
+  | "object_storage"
+  | "backups"
+  | "vector_search"
+  | "file_storage"
+  | "auth"
+  | "users"
+  | "sessions"
+  | "oauth"
+  | "sso";
 
 export type ProviderContractAdvisorCard = {
   title: "Current State" | "Current Limitations" | "Missing Requirements" | "Recommended Next Step";
@@ -91,6 +129,74 @@ export type ProviderContract = {
   aiRouting?: ProviderAIRoutingMetadata;
 };
 
+const CATEGORY_CAPABILITY_KEYS: Readonly<Record<ProviderCategory, readonly CapabilityKey[]>> = {
+  registrar: ["domains", "dns", "availability", "registration", "execution"],
+  deployment: ["deployments", "previews", "rollbacks", "domains", "environment_variables"],
+  commerce: ["billing", "subscriptions", "invoices", "webhooks", "checkout"],
+  execution: ["jobs", "workflows", "retries", "schedules", "events"],
+  source_control: ["repositories", "branches", "pull_requests", "webhooks", "commits"],
+  ai: ["model_metadata", "routing_policy", "inference", "embeddings", "multimodal"],
+  storage: ["database", "object_storage", "backups", "vector_search", "file_storage"],
+  identity: ["auth", "users", "sessions", "oauth", "sso"],
+};
+
+const CAPABILITY_KEYS: readonly CapabilityKey[] = [
+  "domains",
+  "dns",
+  "availability",
+  "registration",
+  "execution",
+  "deployments",
+  "previews",
+  "rollbacks",
+  "environment_variables",
+  "billing",
+  "subscriptions",
+  "invoices",
+  "webhooks",
+  "checkout",
+  "jobs",
+  "workflows",
+  "retries",
+  "schedules",
+  "events",
+  "repositories",
+  "branches",
+  "pull_requests",
+  "commits",
+  "model_metadata",
+  "routing_policy",
+  "inference",
+  "embeddings",
+  "multimodal",
+  "database",
+  "object_storage",
+  "backups",
+  "vector_search",
+  "file_storage",
+  "auth",
+  "users",
+  "sessions",
+  "oauth",
+  "sso",
+];
+
+function createCapabilities(
+  providerCategory: ProviderCategory,
+  overrides?: Partial<Record<CapabilityKey, boolean>>,
+): Readonly<Record<CapabilityKey, boolean>> {
+  const base: Record<CapabilityKey, boolean> = Object.fromEntries(
+    CAPABILITY_KEYS.map((capability) => [capability, false]),
+  ) as Record<CapabilityKey, boolean>;
+  for (const capability of CATEGORY_CAPABILITY_KEYS[providerCategory]) base[capability] = false;
+  if (overrides) {
+    for (const [capability, value] of Object.entries(overrides)) {
+      base[capability as CapabilityKey] = Boolean(value);
+    }
+  }
+  return base;
+}
+
 const DEFAULT_PLACEHOLDER_ADVISOR: readonly ProviderContractAdvisorCard[] = [
   {
     title: "Current State",
@@ -122,13 +228,7 @@ function createPlaceholderProviderContract(
     providerCategory,
     environment: "unknown",
     status: "not_configured",
-    capabilities: {
-      domains: false,
-      dns: false,
-      availability: false,
-      registration: false,
-      execution: false,
-    },
+    capabilities: createCapabilities(providerCategory),
     readiness: ["not_configured", "control_plane_only"],
     boundaries: ["execution_blocked", "read_only"],
     advisor: DEFAULT_PLACEHOLDER_ADVISOR,
@@ -143,6 +243,7 @@ const OPENPROVIDER_PROVIDER_CONTRACT: ProviderContract = {
   environment: "sandbox",
   status: "connected",
   capabilities: {
+    ...createCapabilities("registrar"),
     domains: true,
     dns: true,
     availability: true,
@@ -202,6 +303,10 @@ const GITLAB_PROVIDER_CONTRACT = createPlaceholderProviderContract("gitlab", "Gi
 
 const OPENAI_PROVIDER_CONTRACT: ProviderContract = {
   ...createPlaceholderProviderContract("openai", "OpenAI", "ai"),
+  capabilities: createCapabilities("ai", {
+    model_metadata: true,
+    routing_policy: true,
+  }),
   aiRouting: {
     modelFamilies: ["gpt-4.1", "o-series"],
     strengths: ["transformation planning", "tool orchestration", "structured reasoning"],
@@ -213,6 +318,10 @@ const OPENAI_PROVIDER_CONTRACT: ProviderContract = {
 };
 const ANTHROPIC_PROVIDER_CONTRACT: ProviderContract = {
   ...createPlaceholderProviderContract("anthropic", "Anthropic", "ai"),
+  capabilities: createCapabilities("ai", {
+    model_metadata: true,
+    routing_policy: true,
+  }),
   aiRouting: {
     modelFamilies: ["claude-3.5", "claude-3.7"],
     strengths: ["long-context analysis", "architecture review", "safety-sensitive reasoning"],
@@ -224,6 +333,10 @@ const ANTHROPIC_PROVIDER_CONTRACT: ProviderContract = {
 };
 const GEMINI_PROVIDER_CONTRACT: ProviderContract = {
   ...createPlaceholderProviderContract("gemini", "Gemini", "ai"),
+  capabilities: createCapabilities("ai", {
+    model_metadata: true,
+    routing_policy: true,
+  }),
   aiRouting: {
     modelFamilies: ["gemini-1.5", "gemini-2.0"],
     strengths: ["multimodal/context fusion", "layout understanding"],
@@ -235,6 +348,10 @@ const GEMINI_PROVIDER_CONTRACT: ProviderContract = {
 };
 const GROQ_PROVIDER_CONTRACT: ProviderContract = {
   ...createPlaceholderProviderContract("groq", "Groq", "ai"),
+  capabilities: createCapabilities("ai", {
+    model_metadata: true,
+    routing_policy: true,
+  }),
   aiRouting: {
     modelFamilies: ["llama-3", "mixtral"],
     strengths: ["ultra-fast inference", "low-latency execution"],
@@ -246,6 +363,10 @@ const GROQ_PROVIDER_CONTRACT: ProviderContract = {
 };
 const MISTRAL_PROVIDER_CONTRACT: ProviderContract = {
   ...createPlaceholderProviderContract("mistral", "Mistral", "ai"),
+  capabilities: createCapabilities("ai", {
+    model_metadata: true,
+    routing_policy: true,
+  }),
   aiRouting: {
     modelFamilies: ["mistral-large", "mixtral"],
     strengths: ["EU-hosted/open-weight flexibility"],
