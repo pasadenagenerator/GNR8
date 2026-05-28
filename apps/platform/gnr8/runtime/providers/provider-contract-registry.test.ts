@@ -83,6 +83,31 @@ test("all non-openprovider contracts remain placeholder read-only control-plane 
   }
 });
 
+test("ai providers include placeholder ai routing metadata while remaining execution blocked", () => {
+  const aiProviderIds = ["openai", "anthropic", "gemini", "groq", "mistral"] as const;
+  for (const providerId of aiProviderIds) {
+    const provider = PROVIDER_CONTRACT_BY_ID[providerId];
+    assert.equal(provider.providerCategory, "ai");
+    assert.equal(provider.status, "not_configured");
+    assert.deepEqual(provider.readiness, ["not_configured", "control_plane_only"]);
+    assert.deepEqual(provider.boundaries, ["execution_blocked", "read_only"]);
+    assert.notEqual(provider.aiRouting, undefined);
+    assert.equal(provider.aiRouting!.modelFamilies.length > 0, true);
+    assert.equal(provider.aiRouting!.strengths.length > 0, true);
+    assert.equal(provider.aiRouting!.routingHints.length > 0, true);
+    assert.equal(typeof provider.aiRouting!.latencyClass, "string");
+    assert.equal(typeof provider.aiRouting!.costClass, "string");
+    assert.equal(typeof provider.aiRouting!.contextWindowClass, "string");
+  }
+});
+
+test("non-ai providers do not expose ai routing metadata", () => {
+  for (const provider of PROVIDER_CONTRACT_REGISTRY) {
+    if (provider.providerCategory === "ai") continue;
+    assert.equal(provider.aiRouting, undefined);
+  }
+});
+
 test("registry includes all requested provider taxonomy categories", () => {
   const categories = new Set(PROVIDER_CONTRACT_REGISTRY.map((provider) => provider.providerCategory));
   assert.deepEqual([...categories].sort(), [

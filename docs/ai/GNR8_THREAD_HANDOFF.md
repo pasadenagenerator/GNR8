@@ -7,6 +7,7 @@ This is the first file every new ChatGPT/Codex thread should read.
 GNR8 is currently in provider/DNS control-plane hardening and migration/preview validation mode.
 The active emphasis is deterministic contracts, approval/handoff safety, and no hidden execution.
 Provider Contract Registry Extraction milestone is complete and verified (Provider Fleet no longer depends on inline UI provider definitions; canonical provider contract registry now drives provider fleet read-model rendering; no runtime/API/provider execution changes).
+AI Provider Routing Architecture Draft milestone is complete and verified (first canonical AI provider routing architecture + AI routing metadata scaffold for OpenAI/Anthropic/Gemini/Groq/Mistral; architecture/read-model/docs only; no runtime AI orchestration, no execution layer, no live routing implementation).
 Global Provider Taxonomy Expansion milestone is complete and verified (Provider Fleet now operates as the Global Provider Control Plane taxonomy across registrar, deployment, commerce, execution, source control, AI, storage, and identity provider categories; registry/docs/read-model only; no runtime/API/provider execution changes).
 Provider Orchestration Contract Architecture Draft milestone is complete and verified as documentation-only (first canonical multi-provider orchestration contract; no runtime/API/provider execution changes).
 Second Provider Placeholder Readiness Contract milestone is complete and verified (Realtime Register placeholder now rendered with explicit orchestration contract/readiness/boundary/identity fields and provider-specific readiness advisor text in Provider Fleet Cockpit; UI/read-model only; no runtime/API/provider execution changes).
@@ -40,6 +41,7 @@ Read these as the canonical bootstrap set:
 - `docs/ai/GNR8_MASTER_CONTEXT_BOOTSTRAP.md`
 - `docs/ai/GNR8_CURRENT_STATE.md`
 - `docs/architecture/PROVIDER_ORCHESTRATION_CONTRACT.md`
+- `docs/architecture/AI_PROVIDER_ROUTING_ARCHITECTURE.md`
 - `docs/ai/GNR8_TASK_EXECUTION_PROTOCOL.md`
 - `docs/ai/GNR8_COLLABORATION_PROTOCOL.md`
 - `docs/ai/GNR8_PROJECT_MAP.md`

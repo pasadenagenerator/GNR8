@@ -52,6 +52,30 @@ export type ProviderContractLinks = {
   dns: string;
 };
 
+export type AIModelFamily =
+  | "gpt-4.1"
+  | "o-series"
+  | "claude-3.5"
+  | "claude-3.7"
+  | "gemini-1.5"
+  | "gemini-2.0"
+  | "llama-3"
+  | "mixtral"
+  | "mistral-large";
+
+export type AIProviderLatencyClass = "ultra_low" | "low" | "medium";
+export type AIProviderCostClass = "economy" | "balanced" | "premium";
+export type AIProviderContextWindowClass = "standard" | "extended" | "long";
+
+export type ProviderAIRoutingMetadata = {
+  modelFamilies: readonly AIModelFamily[];
+  strengths: readonly string[];
+  routingHints: readonly string[];
+  latencyClass: AIProviderLatencyClass;
+  costClass: AIProviderCostClass;
+  contextWindowClass: AIProviderContextWindowClass;
+};
+
 export type ProviderContract = {
   providerId: ProviderId;
   displayName: string;
@@ -64,6 +88,7 @@ export type ProviderContract = {
   boundaries: readonly ["execution_blocked", "read_only"];
   advisor: readonly ProviderContractAdvisorCard[];
   links?: ProviderContractLinks;
+  aiRouting?: ProviderAIRoutingMetadata;
 };
 
 const DEFAULT_PLACEHOLDER_ADVISOR: readonly ProviderContractAdvisorCard[] = [
@@ -175,11 +200,61 @@ const TEMPORAL_PROVIDER_CONTRACT = createPlaceholderProviderContract("temporal",
 const GITHUB_PROVIDER_CONTRACT = createPlaceholderProviderContract("github", "GitHub", "source_control");
 const GITLAB_PROVIDER_CONTRACT = createPlaceholderProviderContract("gitlab", "GitLab", "source_control");
 
-const OPENAI_PROVIDER_CONTRACT = createPlaceholderProviderContract("openai", "OpenAI", "ai");
-const ANTHROPIC_PROVIDER_CONTRACT = createPlaceholderProviderContract("anthropic", "Anthropic", "ai");
-const GEMINI_PROVIDER_CONTRACT = createPlaceholderProviderContract("gemini", "Gemini", "ai");
-const GROQ_PROVIDER_CONTRACT = createPlaceholderProviderContract("groq", "Groq", "ai");
-const MISTRAL_PROVIDER_CONTRACT = createPlaceholderProviderContract("mistral", "Mistral", "ai");
+const OPENAI_PROVIDER_CONTRACT: ProviderContract = {
+  ...createPlaceholderProviderContract("openai", "OpenAI", "ai"),
+  aiRouting: {
+    modelFamilies: ["gpt-4.1", "o-series"],
+    strengths: ["transformation planning", "tool orchestration", "structured reasoning"],
+    routingHints: ["reasoning-heavy planning", "structured output generation", "workflow/tool calls"],
+    latencyClass: "medium",
+    costClass: "premium",
+    contextWindowClass: "extended",
+  },
+};
+const ANTHROPIC_PROVIDER_CONTRACT: ProviderContract = {
+  ...createPlaceholderProviderContract("anthropic", "Anthropic", "ai"),
+  aiRouting: {
+    modelFamilies: ["claude-3.5", "claude-3.7"],
+    strengths: ["long-context analysis", "architecture review", "safety-sensitive reasoning"],
+    routingHints: ["long document analysis", "tradeoff-heavy review", "high-safety reasoning tasks"],
+    latencyClass: "medium",
+    costClass: "premium",
+    contextWindowClass: "long",
+  },
+};
+const GEMINI_PROVIDER_CONTRACT: ProviderContract = {
+  ...createPlaceholderProviderContract("gemini", "Gemini", "ai"),
+  aiRouting: {
+    modelFamilies: ["gemini-1.5", "gemini-2.0"],
+    strengths: ["multimodal/context fusion", "layout understanding"],
+    routingHints: ["visual + text synthesis", "layout-aware interpretation", "cross-modal grounding"],
+    latencyClass: "medium",
+    costClass: "balanced",
+    contextWindowClass: "long",
+  },
+};
+const GROQ_PROVIDER_CONTRACT: ProviderContract = {
+  ...createPlaceholderProviderContract("groq", "Groq", "ai"),
+  aiRouting: {
+    modelFamilies: ["llama-3", "mixtral"],
+    strengths: ["ultra-fast inference", "low-latency execution"],
+    routingHints: ["tight-latency paths", "interactive fast-turn loops", "real-time response prioritization"],
+    latencyClass: "ultra_low",
+    costClass: "balanced",
+    contextWindowClass: "standard",
+  },
+};
+const MISTRAL_PROVIDER_CONTRACT: ProviderContract = {
+  ...createPlaceholderProviderContract("mistral", "Mistral", "ai"),
+  aiRouting: {
+    modelFamilies: ["mistral-large", "mixtral"],
+    strengths: ["EU-hosted/open-weight flexibility"],
+    routingHints: ["regional hosting constraints", "open-weight flexibility", "cost-sensitive baseline routing"],
+    latencyClass: "low",
+    costClass: "economy",
+    contextWindowClass: "extended",
+  },
+};
 
 const SUPABASE_PROVIDER_CONTRACT = createPlaceholderProviderContract("supabase", "Supabase", "storage");
 const R2_PROVIDER_CONTRACT = createPlaceholderProviderContract("r2", "R2", "storage");

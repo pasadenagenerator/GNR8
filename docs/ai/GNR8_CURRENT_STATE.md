@@ -4,9 +4,61 @@
 2026-05-28
 
 ## Current Phase
-GNR8 Provider Contract Registry Extraction milestone (provider fleet now reads canonical provider contracts from runtime registry; deterministic read-model only; no runtime/API/provider execution changes).
+GNR8 AI Provider Routing Architecture Draft milestone (canonical AI routing architecture and AI provider metadata contract scaffold; docs/read-model only; no runtime orchestration/execution changes).
 
 ## Latest Completed Milestone
+
+- AI Provider Routing Architecture Draft is completed.
+- New canonical architecture document:
+  - `docs/architecture/AI_PROVIDER_ROUTING_ARCHITECTURE.md`
+- Provider contract registry now includes AI-specific routing metadata fields:
+  - `modelFamilies`
+  - `strengths`
+  - `routingHints`
+  - `latencyClass`
+  - `costClass`
+  - `contextWindowClass`
+- AI metadata placeholders added for:
+  - `OpenAI`
+  - `Anthropic`
+  - `Gemini`
+  - `Groq`
+  - `Mistral`
+- Registry and test coverage updates:
+  - `apps/platform/gnr8/runtime/providers/provider-contract-registry.ts`
+  - `apps/platform/gnr8/runtime/providers/provider-contract-registry.test.ts`
+- Future routing concepts now documented:
+  - task-based routing
+  - fallback routing
+  - multi-provider orchestration
+  - cost-aware routing
+  - latency-aware routing
+  - capability-aware routing
+  - reasoning vs generation specialization
+- Future AI routing task classes now documented:
+  - site migration planning
+  - design reasoning
+  - code generation
+  - provider analysis
+  - orchestration planning
+  - content transformation
+  - diagnostics interpretation
+- Future AI routing governance now documented:
+  - routing policy
+  - provider failover
+  - cost ceilings
+  - execution approval
+  - auditability
+  - model traceability
+- Boundary remains explicit:
+  - no runtime AI orchestration
+  - no execution layer
+  - no live routing implementation
+  - all AI providers remain `not_configured`
+  - all AI providers remain `control_plane_only`
+  - all AI providers remain `execution_blocked`
+- Conclusion:
+  - GNR8 AI providers are evolving toward a multi-model orchestration architecture instead of single-provider dependency.
 
 - Provider Contract Registry Extraction is completed.
 - Canonical provider contract registry is now the fleet source of truth:

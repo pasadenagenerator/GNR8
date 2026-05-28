@@ -8,6 +8,12 @@
 ## Latest Milestone
 Provider Contract Registry Extraction is complete.
 
+AI Provider Routing Architecture Draft is complete (docs/read-model only):
+- `docs/architecture/AI_PROVIDER_ROUTING_ARCHITECTURE.md`
+- AI provider routing metadata scaffolded in:
+  - `apps/platform/gnr8/runtime/providers/provider-contract-registry.ts`
+  - `apps/platform/gnr8/runtime/providers/provider-contract-registry.test.ts`
+
 Canonical registry artifacts:
 - `apps/platform/gnr8/runtime/providers/provider-contract-registry.ts`
 - `apps/platform/gnr8/runtime/providers/provider-contract-registry.test.ts`
@@ -22,6 +28,7 @@ Current scope:
 - no provider APIs added
 - no writes
 - no queue/worker execution
+- no runtime AI orchestration
 
 ## Purpose
 Define the first canonical contract for how GNR8 should evolve into a multi-provider orchestration and control-plane layer across domain, DNS, availability, and execution provider surfaces.
@@ -191,6 +198,23 @@ Future orchestration direction:
 - execution governance
 - multi-provider failover
 - capability discovery
+
+AI routing concepts (future):
+- task-based routing
+- fallback routing
+- multi-provider orchestration
+- cost-aware routing
+- latency-aware routing
+- capability-aware routing
+- reasoning vs generation specialization
+
+AI routing governance (future):
+- routing policy
+- provider failover
+- cost ceilings
+- execution approval
+- auditability
+- model traceability
 
 Provider Fleet positioning:
 - Global Provider Control Plane
