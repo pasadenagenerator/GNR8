@@ -24,12 +24,17 @@ Provider Fleet UI Density / Collapsible Sections milestone is now implemented an
 - Provider Fleet Operational Snapshot is completed and validated.
 - Provider Fleet now includes a visible-by-default `Operational Snapshot` section above detailed control-plane sections with:
   - `Control Plane Status`: `Operational (read-only)`
-  - `Connected Providers`: `1 / total providers` (registry-derived ratio)
-  - `Operational Read-only Capabilities`: `3` (registry-derived read-only capabilities count)
+  - `Connected Providers`: derived from canonical registry totals (no hardcoded total where possible)
+  - `Operational Read-only Capabilities`: derived from canonical registry capabilities (no hardcoded total where possible)
   - `AI Routing Preview`: `Available` (derived from evaluator + policy preview registry presence)
   - `Execution Layer`: `Blocked` (derived from provider boundary state)
   - `Governance State`: `Preview / non-executable` (derived from provider boundary state)
   - `Recommended Next Step`: connect second real provider or introduce AI credential boundary
+- Derivation model is explicit:
+  - registry-driven
+  - boundary-driven
+  - evaluator/policy registry driven
+  - no hardcoded totals where possible
 - Preserved sections/behavior:
   - `Provider Category Summary`
   - `AI Routing Readiness Advisor`
@@ -43,6 +48,12 @@ Provider Fleet UI Density / Collapsible Sections milestone is now implemented an
   - no execution controls
   - no provider calls
   - no writes
+- Conclusion:
+  - Provider Fleet now exposes an executive operational overview above all detailed provider and AI orchestration surfaces.
+- Recommended next milestone:
+  - Provider Fleet Multi-Tenant / Environment Awareness
+- Success criteria:
+  - future bootstrap resumes from Provider Fleet Operational Snapshot milestone
 
 - AI Routing Evaluator Preview Model is completed and validated.
 - AI Routing Evaluator Preview UI is completed and validated.
