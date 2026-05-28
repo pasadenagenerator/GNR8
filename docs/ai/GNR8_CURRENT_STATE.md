@@ -4,61 +4,57 @@
 2026-05-28
 
 ## Current Phase
-GNR8 AI Provider Routing Architecture Draft milestone (canonical AI routing architecture and AI provider metadata contract scaffold; docs/read-model only; no runtime orchestration/execution changes).
+GNR8 AI Routing Policy Preview UI milestone (Provider Fleet now exposes read-only AI provider routing metadata and task-to-provider routing policy preview through visible matrix sections; UI/read-model only; no runtime/API/execution/model-call changes).
 
 ## Latest Completed Milestone
 
-- AI Provider Routing Architecture Draft is completed.
-- New canonical architecture document:
-  - `docs/architecture/AI_PROVIDER_ROUTING_ARCHITECTURE.md`
-- Provider contract registry now includes AI-specific routing metadata fields:
-  - `modelFamilies`
-  - `strengths`
-  - `routingHints`
-  - `latencyClass`
-  - `costClass`
-  - `contextWindowClass`
-- AI metadata placeholders added for:
+- AI Routing Policy Preview / Task-to-Provider Mapping Matrix UI is completed.
+- Documented UI surface:
+  - `/gnr8/admin/providers`
+- Documented sections:
+  - `AI Provider Capability Matrix`
+  - `AI Routing Policy Preview`
+- Matrix now visibly includes AI providers:
   - `OpenAI`
   - `Anthropic`
   - `Gemini`
   - `Groq`
   - `Mistral`
-- Registry and test coverage updates:
-  - `apps/platform/gnr8/runtime/providers/provider-contract-registry.ts`
-  - `apps/platform/gnr8/runtime/providers/provider-contract-registry.test.ts`
-- Future routing concepts now documented:
-  - task-based routing
-  - fallback routing
-  - multi-provider orchestration
-  - cost-aware routing
-  - latency-aware routing
-  - capability-aware routing
-  - reasoning vs generation specialization
-- Future AI routing task classes now documented:
-  - site migration planning
-  - design reasoning
-  - code generation
-  - provider analysis
-  - orchestration planning
-  - content transformation
-  - diagnostics interpretation
-- Future AI routing governance now documented:
-  - routing policy
-  - provider failover
-  - cost ceilings
-  - execution approval
-  - auditability
-  - model traceability
+- Displayed routing metadata:
+  - `model families`
+  - `strengths`
+  - `routing hints`
+  - `latency class`
+  - `cost class`
+  - `context window class`
+- Documented provider states:
+  - `not_configured`
+  - `control_plane_only`
+  - `execution_blocked`
+- Advisory note is explicit:
+  - AI routing metadata is advisory only. No model calls are performed.
+  - Routing policy preview is strategic only. No live AI routing is performed.
+- Task-based orchestration preview is now visible:
+  - `Site Migration Planning` -> preferred `OpenAI`, secondary `Anthropic`, strategy `reasoning_priority`
+  - `Long Architecture Review` -> preferred `Anthropic`, secondary `OpenAI`, strategy `context_priority`
+  - `Layout / Visual Understanding` -> preferred `Gemini`, secondary `OpenAI`, strategy `context_priority`
+  - `Fast Interactive Generation` -> preferred `Groq`, secondary `OpenAI`, strategy `latency_priority`
+  - `EU-sensitive Workloads` -> preferred `Mistral`, secondary `OpenAI`, strategy `sovereignty_priority`
+  - `Structured Tool Orchestration` -> preferred `OpenAI`, secondary `Anthropic`, strategy `orchestration_priority`
 - Boundary remains explicit:
+  - UI/read-model only
   - no runtime AI orchestration
-  - no execution layer
-  - no live routing implementation
-  - all AI providers remain `not_configured`
-  - all AI providers remain `control_plane_only`
-  - all AI providers remain `execution_blocked`
+  - no live model calls
+  - no API changes
+  - no execution
+  - no secrets
+  - no action buttons/forms
 - Conclusion:
-  - GNR8 AI providers are evolving toward a multi-model orchestration architecture instead of single-provider dependency.
+  - Provider Fleet now visibly includes AI provider routing strategy metadata and task-based routing policy preview, making it the control-plane home for future policy-driven multi-model orchestration.
+- Recommended next milestone:
+  - task-based AI orchestration contract wiring
+- Success criteria:
+  - future bootstrap resumes from Provider Fleet with visible AI provider capability matrix
 
 - Provider Contract Registry Extraction is completed.
 - Canonical provider contract registry is now the fleet source of truth:

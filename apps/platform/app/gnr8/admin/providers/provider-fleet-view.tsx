@@ -128,6 +128,52 @@ const CONTEXT_WINDOW_CLASS_LABELS = {
   extended: "extended context",
   long: "long context",
 } as const;
+
+const AI_ROUTING_POLICY_PREVIEW_ROWS = [
+  {
+    taskType: "Site Migration Planning",
+    preferredProvider: "OpenAI",
+    secondaryProvider: "Anthropic",
+    routingStrategy: "reasoning_priority",
+    reasoning: "strongest structured reasoning",
+  },
+  {
+    taskType: "Long Architecture Review",
+    preferredProvider: "Anthropic",
+    secondaryProvider: "OpenAI",
+    routingStrategy: "context_priority",
+    reasoning: "strongest long-context safety reasoning",
+  },
+  {
+    taskType: "Layout / Visual Understanding",
+    preferredProvider: "Gemini",
+    secondaryProvider: "OpenAI",
+    routingStrategy: "context_priority",
+    reasoning: "multimodal/layout strengths",
+  },
+  {
+    taskType: "Fast Interactive Generation",
+    preferredProvider: "Groq",
+    secondaryProvider: "OpenAI",
+    routingStrategy: "latency_priority",
+    reasoning: "ultra-low latency",
+  },
+  {
+    taskType: "EU-sensitive Workloads",
+    preferredProvider: "Mistral",
+    secondaryProvider: "OpenAI",
+    routingStrategy: "sovereignty_priority",
+    reasoning: "EU/open-weight flexibility",
+  },
+  {
+    taskType: "Structured Tool Orchestration",
+    preferredProvider: "OpenAI",
+    secondaryProvider: "Anthropic",
+    routingStrategy: "orchestration_priority",
+    reasoning: "strongest structured reasoning",
+  },
+] as const;
+
 const REALTIME_REGISTER_ADVISOR: readonly AdvisorCard[] = [
   {
     title: "Current State",
@@ -305,6 +351,35 @@ export function ProviderFleetView(props: { payload: ProviderFleetPayload }) {
         </table>
         <p style={{ margin: "10px 0 0 0", color: "#374151", fontSize: 13 }}>
           AI routing metadata is advisory only. No model calls are performed.
+        </p>
+      </section>
+
+      <section style={{ border: "1px solid #dbe3ea", borderRadius: 10, background: "#ffffff", padding: 12, marginTop: 12 }}>
+        <h2 style={{ margin: "0 0 8px 0", fontSize: 16 }}>AI Routing Policy Preview</h2>
+        <table style={{ width: "100%", borderCollapse: "collapse" }}>
+          <thead>
+            <tr>
+              <th style={{ textAlign: "left", padding: "8px 6px", borderBottom: "1px solid #e5e7eb" }}>Task Type</th>
+              <th style={{ textAlign: "left", padding: "8px 6px", borderBottom: "1px solid #e5e7eb" }}>Preferred Provider</th>
+              <th style={{ textAlign: "left", padding: "8px 6px", borderBottom: "1px solid #e5e7eb" }}>Secondary Provider</th>
+              <th style={{ textAlign: "left", padding: "8px 6px", borderBottom: "1px solid #e5e7eb" }}>Routing Strategy</th>
+              <th style={{ textAlign: "left", padding: "8px 6px", borderBottom: "1px solid #e5e7eb" }}>Reasoning</th>
+            </tr>
+          </thead>
+          <tbody>
+            {AI_ROUTING_POLICY_PREVIEW_ROWS.map((row) => (
+              <tr key={row.taskType}>
+                <td style={{ padding: "10px 6px", borderBottom: "1px solid #f3f4f6", fontWeight: 700 }}>{row.taskType}</td>
+                <td style={{ padding: "10px 6px", borderBottom: "1px solid #f3f4f6" }}>{row.preferredProvider}</td>
+                <td style={{ padding: "10px 6px", borderBottom: "1px solid #f3f4f6" }}>{row.secondaryProvider}</td>
+                <td style={{ padding: "10px 6px", borderBottom: "1px solid #f3f4f6" }}><Pill label={row.routingStrategy} value={row.routingStrategy} /></td>
+                <td style={{ padding: "10px 6px", borderBottom: "1px solid #f3f4f6" }}>{row.reasoning}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        <p style={{ margin: "10px 0 0 0", color: "#374151", fontSize: 13 }}>
+          Routing policy preview is strategic only. No live AI routing is performed.
         </p>
       </section>
 

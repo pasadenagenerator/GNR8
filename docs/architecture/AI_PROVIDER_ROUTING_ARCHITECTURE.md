@@ -2,90 +2,71 @@
 
 ## Status
 - Draft: canonical architecture direction
-- Scope: architecture/read-model/docs only
-- Non-goals: no runtime orchestration, no execution layer, no live routing implementation
+- Milestone completed: AI Routing Policy Preview / Task-to-Provider Mapping Matrix UI
+- Scope: UI/read-model/docs only
+- Non-goals: no runtime AI orchestration, no live model calls, no API changes, no execution changes
 
 ## Purpose
-Define the first canonical AI provider routing architecture for GNR8 so future orchestration can be policy-governed, traceable, and multi-model by design.
+Define the canonical AI provider routing metadata surface in Provider Fleet so future orchestration can be policy-governed, traceable, and multi-model by design.
 
-## Canonical AI Provider Metadata Contract
-AI providers in the registry expose routing metadata as read-model signals:
-- `modelFamilies`
-- `strengths`
-- `routingHints`
-- `latencyClass`
-- `costClass`
-- `contextWindowClass`
+## UI Surface
+- Route: `/gnr8/admin/providers`
+- Section: `AI Provider Capability Matrix`
+- Section: `AI Routing Policy Preview`
 
-Current AI providers with placeholder metadata:
+## AI Provider Capability Matrix
+Provider Fleet now exposes read-only AI routing metadata for:
 - `OpenAI`
 - `Anthropic`
 - `Gemini`
 - `Groq`
 - `Mistral`
 
-Boundary:
-- providers remain `not_configured`
-- readiness remains `control_plane_only`
-- boundaries remain `execution_blocked` + `read_only`
+Displayed routing metadata:
+- `model families`
+- `strengths`
+- `routing hints`
+- `latency class`
+- `cost class`
+- `context window class`
 
-## Provider Strength Profiles (Routing Intent Only)
-- OpenAI:
-  - transformation planning
-  - tool orchestration
-  - structured reasoning
-- Anthropic:
-  - long-context analysis
-  - architecture review
-  - safety-sensitive reasoning
-- Gemini:
-  - multimodal/context fusion
-  - layout understanding
-- Groq:
-  - ultra-fast inference
-  - low-latency execution
-- Mistral:
-  - EU-hosted/open-weight flexibility
+Provider state visibility in matrix:
+- `not_configured`
+- `control_plane_only`
+- `execution_blocked`
 
-## Future Routing Concepts
-- task-based routing
-- fallback routing
-- multi-provider orchestration
-- cost-aware routing
-- latency-aware routing
-- capability-aware routing
-- reasoning vs generation specialization
+Advisory note:
+- AI routing metadata is advisory only. No model calls are performed.
 
-## Future Routing Task Classes
-- site migration planning
-- design reasoning
-- code generation
-- provider analysis
-- orchestration planning
-- content transformation
-- diagnostics interpretation
+## AI Routing Policy Preview
+Provider Fleet now also exposes a strategic task-to-provider mapping matrix:
+- `Site Migration Planning` -> preferred `OpenAI`, secondary `Anthropic`, strategy `reasoning_priority`
+- `Long Architecture Review` -> preferred `Anthropic`, secondary `OpenAI`, strategy `context_priority`
+- `Layout / Visual Understanding` -> preferred `Gemini`, secondary `OpenAI`, strategy `context_priority`
+- `Fast Interactive Generation` -> preferred `Groq`, secondary `OpenAI`, strategy `latency_priority`
+- `EU-sensitive Workloads` -> preferred `Mistral`, secondary `OpenAI`, strategy `sovereignty_priority`
+- `Structured Tool Orchestration` -> preferred `OpenAI`, secondary `Anthropic`, strategy `orchestration_priority`
 
-## Future Governance Model
-- routing policy
-- provider failover
-- cost ceilings
-- execution approval
-- auditability
-- model traceability
+Routing policy preview advisory note:
+- Routing policy preview is strategic only. No live AI routing is performed.
 
-## Reference Routing Flow (Future)
-1. Classify task intent and required capabilities.
-2. Score candidate providers by capability fit, cost class, and latency class.
-3. Apply policy constraints (cost ceilings, approved providers, boundary checks).
-4. Select primary provider plus failover chain.
-5. Emit routing decision artifact for traceability.
-6. Require explicit execution approval before any runtime execution path.
+## Boundary
+- UI/read-model only
+- no runtime AI orchestration
+- no live model calls
+- no API changes
+- no execution
+- no secrets
+- no action buttons/forms
 
 ## Current Reality (2026-05-28)
-- AI routing metadata exists only as placeholder contract data in the provider registry.
+- Provider Fleet now visibly includes AI provider routing strategy metadata and task-to-provider policy preview through read-only matrix sections.
 - No runtime router exists.
 - No automatic fallback execution exists.
 - No provider invocation orchestration exists.
 
 ## Conclusion
-GNR8 AI providers are evolving toward a multi-model orchestration architecture instead of single-provider dependency.
+Provider Fleet now visibly includes AI provider routing strategy metadata and task-based routing policy preview, making it the control-plane home for future policy-driven multi-model orchestration.
+
+## Recommended Next Milestone
+- Task-based AI orchestration contract wiring (still read-model first)

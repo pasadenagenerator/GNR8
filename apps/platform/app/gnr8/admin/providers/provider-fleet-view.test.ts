@@ -103,6 +103,42 @@ test("provider fleet view source: AI metadata columns render", async () => {
   assert.equal(source.includes("routingHints.join"), true);
 });
 
+test("provider fleet view source: AI routing policy preview section renders", async () => {
+  const source = await readFile(VIEW_FILE, "utf8");
+  assert.equal(source.includes("AI Routing Policy Preview"), true);
+  assert.equal(source.includes("Task Type"), true);
+  assert.equal(source.includes("Preferred Provider"), true);
+  assert.equal(source.includes("Secondary Provider"), true);
+  assert.equal(source.includes("Routing Strategy"), true);
+  assert.equal(source.includes("Reasoning"), true);
+  assert.equal(source.includes("AI_ROUTING_POLICY_PREVIEW_ROWS"), true);
+});
+
+test("provider fleet view source: AI routing policy preview task mappings render", async () => {
+  const source = await readFile(VIEW_FILE, "utf8");
+  assert.equal(source.includes("Site Migration Planning"), true);
+  assert.equal(source.includes("Long Architecture Review"), true);
+  assert.equal(source.includes("Layout / Visual Understanding"), true);
+  assert.equal(source.includes("Fast Interactive Generation"), true);
+  assert.equal(source.includes("EU-sensitive Workloads"), true);
+  assert.equal(source.includes("Structured Tool Orchestration"), true);
+  assert.equal(source.includes("OpenAI"), true);
+  assert.equal(source.includes("Anthropic"), true);
+  assert.equal(source.includes("Gemini"), true);
+  assert.equal(source.includes("Groq"), true);
+  assert.equal(source.includes("Mistral"), true);
+  assert.equal(source.includes("reasoning_priority"), true);
+  assert.equal(source.includes("context_priority"), true);
+  assert.equal(source.includes("latency_priority"), true);
+  assert.equal(source.includes("sovereignty_priority"), true);
+  assert.equal(source.includes("orchestration_priority"), true);
+});
+
+test("provider fleet view source: AI routing policy preview advisory note renders", async () => {
+  const source = await readFile(VIEW_FILE, "utf8");
+  assert.equal(source.includes("Routing policy preview is strategic only. No live AI routing is performed."), true);
+});
+
 test("provider fleet view source: openprovider row is linked to provider cockpit", async () => {
   const source = await readFile(VIEW_FILE, "utf8");
   assert.equal(source.includes('href="/gnr8/admin/providers/openprovider"'), true);
@@ -122,4 +158,6 @@ test("provider fleet view source: no action buttons or forms are present", async
   assert.equal(source.includes("<form"), false);
   assert.equal(source.includes("onClick"), false);
   assert.equal(source.includes("execute"), false);
+  assert.equal(source.includes("Run Routing"), false);
+  assert.equal(source.includes("Execute Routing"), false);
 });
