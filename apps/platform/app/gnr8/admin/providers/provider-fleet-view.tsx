@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { AIRoutingEvaluatorPreview } from "@/app/gnr8/admin/providers/ai-routing-evaluator-preview";
+import { evaluateAIRoutingPreview } from "@/gnr8/runtime/providers/ai-routing-evaluator-preview";
 import { AI_ROUTING_POLICY_PREVIEW_REGISTRY } from "@/gnr8/runtime/providers/ai-routing-policy-registry";
 import { PROVIDER_CONTRACT_BY_ID } from "@/gnr8/runtime/providers/provider-contract-registry";
 
@@ -148,27 +149,28 @@ const BADGE_THEME: Record<BadgeLevel, { bg: string; border: string; text: string
 function resolveBadgeLevel(value: string | boolean): BadgeLevel {
   if (value === true) return "success";
   if (value === false) return "neutral";
-  if (value === "low latency") return "success";
-  if (value === "high cost") return "warning";
-  if (value.includes("operational")) return "success";
-  if (value.includes("verified")) return "success";
-  if (value.includes("limited")) return "warning";
-  if (value.includes("missing")) return "warning";
-  if (value.includes("disabled")) return "critical";
-  if (value === "connected") return "success";
-  if (value === "working") return "success";
-  if (value === "sandbox_verified") return "success";
-  if (value === "not_enabled") return "warning";
-  if (value === "not_configured") return "warning";
-  if (value === "blocked") return "critical";
-  if (value === "control_plane_only") return "neutral";
-  if (value === "execution_blocked") return "critical";
-  if (value === "metadata_ready") return "success";
-  if (value === "preview_ready") return "success";
-  if (value === "missing") return "warning";
-  if (value === "not_connected") return "warning";
-  if (value === "no_runtime_routing") return "critical";
-  if (value === "premium") return "warning";
+  const normalized = value.toLowerCase();
+  if (normalized === "low latency") return "success";
+  if (normalized === "high cost") return "warning";
+  if (normalized.includes("operational")) return "success";
+  if (normalized.includes("verified")) return "success";
+  if (normalized.includes("limited")) return "warning";
+  if (normalized.includes("missing")) return "warning";
+  if (normalized.includes("disabled")) return "critical";
+  if (normalized === "connected") return "success";
+  if (normalized === "working") return "success";
+  if (normalized === "sandbox_verified") return "success";
+  if (normalized === "not_enabled") return "warning";
+  if (normalized === "not_configured") return "warning";
+  if (normalized === "blocked") return "critical";
+  if (normalized === "control_plane_only") return "neutral";
+  if (normalized === "execution_blocked") return "critical";
+  if (normalized === "metadata_ready") return "success";
+  if (normalized === "preview_ready") return "success";
+  if (normalized === "missing") return "warning";
+  if (normalized === "not_connected") return "warning";
+  if (normalized === "no_runtime_routing") return "critical";
+  if (normalized === "premium") return "warning";
   return "neutral";
 }
 
@@ -364,6 +366,14 @@ function resolveProviderDisplayName(providerId: keyof typeof PROVIDER_CONTRACT_B
 
 export function ProviderFleetView(props: { payload: ProviderFleetPayload }) {
   const providersByCategory = groupProvidersByCategory(props.payload.providers);
+  const providerContracts = Object.values(PROVIDER_CONTRACT_BY_ID);
+  const allProvidersExecutionBlocked = providerContracts.every((provider) => provider.boundaries.includes("execution_blocked"));
+  const allProvidersReadOnly = providerContracts.every((provider) => provider.boundaries.includes("read_only"));
+  const evaluatorPreview = evaluateAIRoutingPreview({ taskType: AI_ROUTING_POLICY_PREVIEW_REGISTRY[0]?.taskType ?? "Site Migration Planning" });
+  const hasEvaluatorSignal = evaluatorPreview.diagnostics.includes("AI_ROUTING_EVALUATOR_PREVIEW_CREATED");
+  const hasPolicyRegistry = AI_ROUTING_POLICY_PREVIEW_REGISTRY.length > 0;
+  const aiRoutingPreviewAvailable = hasPolicyRegistry && hasEvaluatorSignal;
+  const recommendedNextStep = props.payload.summary.connected >= 2 ? "introduce AI credential boundary" : "connect second real provider";
 
   return (
     <main style={{ padding: 16, maxWidth: 1180, margin: "0 auto", fontFamily: "ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial", background: "#f3f6fb" }}>
@@ -377,6 +387,22 @@ export function ProviderFleetView(props: { payload: ProviderFleetPayload }) {
         <SummaryCard label="Connected" value={String(props.payload.summary.connected)} />
         <SummaryCard label="Read-only Capabilities" value={String(props.payload.summary.readOnlyCapabilities)} />
         <SummaryCard label="Execution" value={props.payload.summary.execution} />
+      </section>
+
+      <section style={{ border: "1px solid #dbe3ea", borderRadius: 10, background: "#ffffff", padding: 12, marginTop: 12 }}>
+        <h2 style={{ margin: "0 0 8px 0", fontSize: 16 }}>Operational Snapshot</h2>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(230px, 1fr))", gap: 10 }}>
+          <SummaryCard label="Control Plane Status" value="Operational (read-only)" />
+          <SummaryCard label="Connected Providers" value={`${props.payload.summary.connected} / ${props.payload.summary.providers}`} />
+          <SummaryCard label="Operational Read-only Capabilities" value={String(props.payload.summary.readOnlyCapabilities)} />
+          <SummaryCard label="AI Routing Preview" value={aiRoutingPreviewAvailable ? "Available" : "Unavailable"} />
+          <SummaryCard label="Execution Layer" value={allProvidersExecutionBlocked ? "Blocked" : "Mixed"} />
+          <SummaryCard label="Governance State" value={allProvidersReadOnly && allProvidersExecutionBlocked ? "Preview / non-executable" : "Mixed"} />
+          <SummaryCard
+            label="Recommended Next Step"
+            value={recommendedNextStep === "connect second real provider" ? "Connect second real provider" : "Introduce AI credential boundary"}
+          />
+        </div>
       </section>
 
       <section style={{ border: "1px solid #dbe3ea", borderRadius: 10, background: "#ffffff", padding: 12, marginTop: 12 }}>

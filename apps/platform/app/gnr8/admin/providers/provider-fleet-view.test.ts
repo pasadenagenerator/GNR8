@@ -264,6 +264,49 @@ test("provider fleet view source: provider category summary section renders", as
   assert.equal(source.includes("countPreviewCapabilities"), true);
 });
 
+test("provider fleet view source: operational snapshot renders by default", async () => {
+  const source = await readFile(VIEW_FILE, "utf8");
+  assert.equal(source.includes("Operational Snapshot"), true);
+  assert.equal(source.includes('SummaryCard label="Control Plane Status" value="Operational (read-only)"'), true);
+  assert.equal(source.includes('SummaryCard label="Connected Providers"'), true);
+  assert.equal(source.includes('SummaryCard label="Operational Read-only Capabilities"'), true);
+  assert.equal(source.includes('SummaryCard label="AI Routing Preview"'), true);
+  assert.equal(source.includes('SummaryCard label="Execution Layer"'), true);
+  assert.equal(source.includes('SummaryCard label="Governance State"'), true);
+  assert.equal(source.includes('label="Recommended Next Step"'), true);
+});
+
+test("provider fleet view source: operational snapshot connected providers count is derived", async () => {
+  const source = await readFile(VIEW_FILE, "utf8");
+  assert.equal(source.includes("`${props.payload.summary.connected} / ${props.payload.summary.providers}`"), true);
+});
+
+test("provider fleet view source: operational snapshot read-only capabilities count is derived", async () => {
+  const source = await readFile(VIEW_FILE, "utf8");
+  assert.equal(source.includes("String(props.payload.summary.readOnlyCapabilities)"), true);
+});
+
+test("provider fleet view source: operational snapshot execution layer renders blocked from provider boundaries", async () => {
+  const source = await readFile(VIEW_FILE, "utf8");
+  assert.equal(source.includes('label="Execution Layer" value={allProvidersExecutionBlocked ? "Blocked" : "Mixed"}'), true);
+  assert.equal(source.includes('provider.boundaries.includes("execution_blocked")'), true);
+});
+
+test("provider fleet view source: operational snapshot AI routing preview renders available from evaluator/policy presence", async () => {
+  const source = await readFile(VIEW_FILE, "utf8");
+  assert.equal(source.includes("evaluateAIRoutingPreview"), true);
+  assert.equal(source.includes("AI_ROUTING_POLICY_PREVIEW_REGISTRY.length > 0"), true);
+  assert.equal(source.includes('label="AI Routing Preview" value={aiRoutingPreviewAvailable ? "Available" : "Unavailable"}'), true);
+});
+
+test("provider fleet view source: no execution controls added with operational snapshot", async () => {
+  const source = await readFile(VIEW_FILE, "utf8");
+  assert.equal(source.includes("<button"), false);
+  assert.equal(source.includes("<form"), false);
+  assert.equal(source.includes("Run Execution"), false);
+  assert.equal(source.includes("Enable Execution"), false);
+});
+
 test("provider fleet view source: registrar summary shows 4 / 1 / 3 / blocked", async () => {
   const source = await readFile(VIEW_FILE, "utf8");
   assert.equal(source.includes('const totalProviders = categoryProviders.length'), true);

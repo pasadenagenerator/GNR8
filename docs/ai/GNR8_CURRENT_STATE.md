@@ -15,9 +15,34 @@ AI Routing Readiness Advisor is now part of Provider Fleet and explicitly docume
 - recommended next step,
 while keeping execution blocked and read-only boundaries intact.
 
+Provider Fleet Operational Snapshot milestone is now implemented and validated (a new visible-by-default `Operational Snapshot` section appears above detailed control-plane sections on `/gnr8/admin/providers` and summarizes control-plane status, connected providers ratio, operational read-only capabilities count, AI routing preview availability, execution layer state, governance state, and recommended next step; counts are read-model derived from canonical registry payload; execution/governance state is boundary-derived from provider contracts; AI routing preview availability is derived from evaluator/policy registry signals; UI/read-model/tests/docs only; no runtime/provider/API/write/queue/worker/model-call changes).
+
 Provider Fleet UI Density / Collapsible Sections milestone is now implemented and validated (overview-first layout on `/gnr8/admin/providers`; top summary cards, `Provider Category Summary`, and `AI Routing Readiness Advisor` remain visible by default; dense evidence sections are collapsed by default under `Provider Registry Details`, `AI Provider Capability Matrix`, `AI Routing Policy Preview`, `AI Routing Evaluator Preview`, `Provider Capability Status`, and `Realtime Register Contract Readiness`; no content removed, no behavior removed, no actions/forms/buttons added, Openprovider link preserved, evaluator preview preserved, category summary preserved; UI/read-model/tests/docs only; no runtime/provider/API/write/queue/worker/model-call changes).
 
 ## Latest Completed Milestone
+
+- Provider Fleet Operational Snapshot is completed and validated.
+- Provider Fleet now includes a visible-by-default `Operational Snapshot` section above detailed control-plane sections with:
+  - `Control Plane Status`: `Operational (read-only)`
+  - `Connected Providers`: `1 / total providers` (registry-derived ratio)
+  - `Operational Read-only Capabilities`: `3` (registry-derived read-only capabilities count)
+  - `AI Routing Preview`: `Available` (derived from evaluator + policy preview registry presence)
+  - `Execution Layer`: `Blocked` (derived from provider boundary state)
+  - `Governance State`: `Preview / non-executable` (derived from provider boundary state)
+  - `Recommended Next Step`: connect second real provider or introduce AI credential boundary
+- Preserved sections/behavior:
+  - `Provider Category Summary`
+  - `AI Routing Readiness Advisor`
+  - collapsible detailed sections
+  - Openprovider links
+  - evaluator preview
+- Boundary remains explicit:
+  - UI/read-model only
+  - no runtime changes
+  - no API changes
+  - no execution controls
+  - no provider calls
+  - no writes
 
 - AI Routing Evaluator Preview Model is completed and validated.
 - AI Routing Evaluator Preview UI is completed and validated.
