@@ -176,7 +176,26 @@ test("provider fleet view source: AI routing policy preview advisory note render
 test("provider fleet view source: AI routing evaluator preview section renders", async () => {
   const source = await readFile(VIEW_FILE, "utf8");
   assert.equal(source.includes("AIRoutingEvaluatorPreview"), true);
-  assert.equal(source.includes("AI Routing Evaluator Preview"), false);
+  assert.equal(source.includes("AI Routing Evaluator Preview"), true);
+});
+
+test("provider fleet view source: overview-first sections remain visible by default", async () => {
+  const source = await readFile(VIEW_FILE, "utf8");
+  assert.equal(source.includes('SummaryCard label="Providers"'), true);
+  assert.equal(source.includes("Provider Category Summary"), true);
+  assert.equal(source.includes("AI Routing Readiness Advisor"), true);
+});
+
+test("provider fleet view source: collapsible section labels render", async () => {
+  const source = await readFile(VIEW_FILE, "utf8");
+  assert.equal(source.includes("Provider Registry Details"), true);
+  assert.equal(source.includes("AI Provider Capability Matrix"), true);
+  assert.equal(source.includes("AI Routing Policy Preview"), true);
+  assert.equal(source.includes("AI Routing Evaluator Preview"), true);
+  assert.equal(source.includes("Provider Capability Status"), true);
+  assert.equal(source.includes("Realtime Register Contract Readiness"), true);
+  assert.equal(source.includes("<details"), true);
+  assert.equal(source.includes("<summary"), true);
 });
 
 test("provider fleet view source: AI routing readiness advisor renders", async () => {

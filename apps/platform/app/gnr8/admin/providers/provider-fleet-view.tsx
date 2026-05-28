@@ -1,4 +1,5 @@
 import Link from "next/link";
+import type { ReactNode } from "react";
 import { AIRoutingEvaluatorPreview } from "@/app/gnr8/admin/providers/ai-routing-evaluator-preview";
 import { AI_ROUTING_POLICY_PREVIEW_REGISTRY } from "@/gnr8/runtime/providers/ai-routing-policy-registry";
 import { PROVIDER_CONTRACT_BY_ID } from "@/gnr8/runtime/providers/provider-contract-registry";
@@ -289,6 +290,15 @@ function SummaryCard(props: { label: string; value: string }) {
   );
 }
 
+function CollapsibleSection(props: { title: string; children: ReactNode }) {
+  return (
+    <details style={{ border: "1px solid #dbe3ea", borderRadius: 10, background: "#ffffff", padding: 12, marginTop: 12 }}>
+      <summary style={{ cursor: "pointer", fontSize: 16, fontWeight: 700 }}>{props.title}</summary>
+      <div style={{ marginTop: 10 }}>{props.children}</div>
+    </details>
+  );
+}
+
 const REGISTRAR_CAPABILITY_KEYS = ["domains", "dns", "availability", "registration", "execution"] as const satisfies readonly CapabilityKey[];
 type RegistrarCapabilityKey = (typeof REGISTRAR_CAPABILITY_KEYS)[number];
 
@@ -394,46 +404,47 @@ export function ProviderFleetView(props: { payload: ProviderFleetPayload }) {
         </div>
       </section>
 
-      {CATEGORY_ORDER.map((category) => {
-        const categoryProviders = providersByCategory[category];
-        if (categoryProviders.length === 0) return null;
-        return (
-          <section key={category} style={{ border: "1px solid #dbe3ea", borderRadius: 10, background: "#ffffff", padding: 12, marginTop: 12 }}>
-            <h2 style={{ margin: "0 0 8px 0", fontSize: 16 }}>{CATEGORY_LABELS[category]}</h2>
-            <table style={{ width: "100%", borderCollapse: "collapse" }}>
-              <thead>
-                <tr>
-                  <th style={{ textAlign: "left", padding: "8px 6px", borderBottom: "1px solid #e5e7eb" }}>Provider</th>
-                  <th style={{ textAlign: "left", padding: "8px 6px", borderBottom: "1px solid #e5e7eb" }}>Status</th>
-                  <th style={{ textAlign: "left", padding: "8px 6px", borderBottom: "1px solid #e5e7eb" }}>Mode</th>
-                  <th style={{ textAlign: "left", padding: "8px 6px", borderBottom: "1px solid #e5e7eb" }}>Capabilities</th>
-                  <th style={{ textAlign: "left", padding: "8px 6px", borderBottom: "1px solid #e5e7eb" }}>Execution</th>
-                </tr>
-              </thead>
-              <tbody>
-                {categoryProviders.map((provider) => (
-                  <tr key={provider.name}>
-                    <td style={{ padding: "10px 6px", borderBottom: "1px solid #f3f4f6", fontWeight: 700 }}>
-                      {provider.name === "Openprovider" ? <Link href="/gnr8/admin/providers/openprovider" style={{ color: "#0f172a", textDecoration: "underline" }}>{provider.name}</Link> : provider.name}
-                    </td>
-                    <td style={{ padding: "10px 6px", borderBottom: "1px solid #f3f4f6" }}><Pill label={provider.status} value={provider.status} /></td>
-                    <td style={{ padding: "10px 6px", borderBottom: "1px solid #f3f4f6" }}><Pill label={provider.mode} value={provider.mode === "sandbox"} /></td>
-                    <td style={{ padding: "10px 6px", borderBottom: "1px solid #f3f4f6" }}>
-                      <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-                        {CATEGORY_CAPABILITY_KEYS[provider.category].map((capability) => <Pill key={capability} label={capability} value={provider.capabilities[capability]} />)}
-                      </div>
-                    </td>
-                    <td style={{ padding: "10px 6px", borderBottom: "1px solid #f3f4f6" }}><Pill label={provider.execution} value={provider.execution} /></td>
+      <CollapsibleSection title="Provider Registry Details">
+        {CATEGORY_ORDER.map((category) => {
+          const categoryProviders = providersByCategory[category];
+          if (categoryProviders.length === 0) return null;
+          return (
+            <section key={category} style={{ border: "1px solid #dbe3ea", borderRadius: 10, background: "#ffffff", padding: 12, marginTop: 12 }}>
+              <h2 style={{ margin: "0 0 8px 0", fontSize: 16 }}>{CATEGORY_LABELS[category]}</h2>
+              <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                <thead>
+                  <tr>
+                    <th style={{ textAlign: "left", padding: "8px 6px", borderBottom: "1px solid #e5e7eb" }}>Provider</th>
+                    <th style={{ textAlign: "left", padding: "8px 6px", borderBottom: "1px solid #e5e7eb" }}>Status</th>
+                    <th style={{ textAlign: "left", padding: "8px 6px", borderBottom: "1px solid #e5e7eb" }}>Mode</th>
+                    <th style={{ textAlign: "left", padding: "8px 6px", borderBottom: "1px solid #e5e7eb" }}>Capabilities</th>
+                    <th style={{ textAlign: "left", padding: "8px 6px", borderBottom: "1px solid #e5e7eb" }}>Execution</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </section>
-        );
-      })}
+                </thead>
+                <tbody>
+                  {categoryProviders.map((provider) => (
+                    <tr key={provider.name}>
+                      <td style={{ padding: "10px 6px", borderBottom: "1px solid #f3f4f6", fontWeight: 700 }}>
+                        {provider.name === "Openprovider" ? <Link href="/gnr8/admin/providers/openprovider" style={{ color: "#0f172a", textDecoration: "underline" }}>{provider.name}</Link> : provider.name}
+                      </td>
+                      <td style={{ padding: "10px 6px", borderBottom: "1px solid #f3f4f6" }}><Pill label={provider.status} value={provider.status} /></td>
+                      <td style={{ padding: "10px 6px", borderBottom: "1px solid #f3f4f6" }}><Pill label={provider.mode} value={provider.mode === "sandbox"} /></td>
+                      <td style={{ padding: "10px 6px", borderBottom: "1px solid #f3f4f6" }}>
+                        <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                          {CATEGORY_CAPABILITY_KEYS[provider.category].map((capability) => <Pill key={capability} label={capability} value={provider.capabilities[capability]} />)}
+                        </div>
+                      </td>
+                      <td style={{ padding: "10px 6px", borderBottom: "1px solid #f3f4f6" }}><Pill label={provider.execution} value={provider.execution} /></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </section>
+          );
+        })}
+      </CollapsibleSection>
 
-      <section style={{ border: "1px solid #dbe3ea", borderRadius: 10, background: "#ffffff", padding: 12, marginTop: 12 }}>
-        <h2 style={{ margin: "0 0 8px 0", fontSize: 16 }}>AI Provider Capability Matrix</h2>
+      <CollapsibleSection title="AI Provider Capability Matrix">
         <table style={{ width: "100%", borderCollapse: "collapse" }}>
           <thead>
             <tr>
@@ -475,10 +486,9 @@ export function ProviderFleetView(props: { payload: ProviderFleetPayload }) {
         <p style={{ margin: "10px 0 0 0", color: "#374151", fontSize: 13 }}>
           AI routing metadata is advisory only. No model calls are performed.
         </p>
-      </section>
+      </CollapsibleSection>
 
-      <section style={{ border: "1px solid #dbe3ea", borderRadius: 10, background: "#ffffff", padding: 12, marginTop: 12 }}>
-        <h2 style={{ margin: "0 0 8px 0", fontSize: 16 }}>AI Routing Policy Preview</h2>
+      <CollapsibleSection title="AI Routing Policy Preview">
         <table style={{ width: "100%", borderCollapse: "collapse" }}>
           <thead>
             <tr>
@@ -504,16 +514,17 @@ export function ProviderFleetView(props: { payload: ProviderFleetPayload }) {
         <p style={{ margin: "10px 0 0 0", color: "#374151", fontSize: 13 }}>
           Routing policy preview is strategic only. No live AI routing is performed.
         </p>
-      </section>
+      </CollapsibleSection>
 
-      <AIRoutingEvaluatorPreview />
+      <CollapsibleSection title="AI Routing Evaluator Preview">
+        <AIRoutingEvaluatorPreview />
+      </CollapsibleSection>
 
       <section style={{ border: "1px solid #dbe3ea", borderRadius: 10, background: "#ffffff", padding: 12, marginTop: 12 }}>
         <p style={{ margin: 0, color: "#374151", fontSize: 13 }}>Fleet cockpit is read-only. Provider execution remains disabled.</p>
       </section>
 
-      <section style={{ border: "1px solid #dbe3ea", borderRadius: 10, background: "#ffffff", padding: 12, marginTop: 12 }}>
-        <h2 style={{ margin: "0 0 8px 0", fontSize: 16 }}>Provider Capability Status</h2>
+      <CollapsibleSection title="Provider Capability Status">
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 10 }}>
           {REGISTRAR_CAPABILITY_KEYS.map((capability) => {
             const details = CAPABILITY_STATUS_DETAILS[capability];
@@ -527,7 +538,7 @@ export function ProviderFleetView(props: { payload: ProviderFleetPayload }) {
             );
           })}
         </div>
-      </section>
+      </CollapsibleSection>
 
       <section style={{ border: "1px solid #dbe3ea", borderRadius: 10, background: "#ffffff", padding: 12, marginTop: 12 }}>
         <h2 style={{ margin: "0 0 8px 0", fontSize: 16 }}>AI Routing Readiness Advisor</h2>
@@ -545,8 +556,7 @@ export function ProviderFleetView(props: { payload: ProviderFleetPayload }) {
         </div>
       </section>
 
-      <section style={{ border: "1px solid #dbe3ea", borderRadius: 10, background: "#ffffff", padding: 12, marginTop: 12 }}>
-        <h2 style={{ margin: "0 0 8px 0", fontSize: 16 }}>Realtime Register Contract Readiness</h2>
+      <CollapsibleSection title="Realtime Register Contract Readiness">
         <p style={{ margin: "0 0 10px 0", color: "#374151", fontSize: 13 }}>
           Placeholder provider contract in the fleet cockpit. Explicitly separate from Openprovider operational provider.
         </p>
@@ -592,7 +602,7 @@ export function ProviderFleetView(props: { payload: ProviderFleetPayload }) {
             </section>
           ))}
         </div>
-      </section>
+      </CollapsibleSection>
     </main>
   );
 }

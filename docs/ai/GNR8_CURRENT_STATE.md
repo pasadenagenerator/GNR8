@@ -15,6 +15,8 @@ AI Routing Readiness Advisor is now part of Provider Fleet and explicitly docume
 - recommended next step,
 while keeping execution blocked and read-only boundaries intact.
 
+Provider Fleet UI Density / Collapsible Sections milestone is now implemented and validated (overview-first layout on `/gnr8/admin/providers`; top summary cards, `Provider Category Summary`, and `AI Routing Readiness Advisor` remain visible by default; dense evidence sections are collapsed by default under `Provider Registry Details`, `AI Provider Capability Matrix`, `AI Routing Policy Preview`, `AI Routing Evaluator Preview`, `Provider Capability Status`, and `Realtime Register Contract Readiness`; no content removed, no behavior removed, no actions/forms/buttons added, Openprovider link preserved, evaluator preview preserved, category summary preserved; UI/read-model/tests/docs only; no runtime/provider/API/write/queue/worker/model-call changes).
+
 ## Latest Completed Milestone
 
 - AI Routing Evaluator Preview Model is completed and validated.
