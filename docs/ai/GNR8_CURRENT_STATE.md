@@ -202,8 +202,15 @@ while keeping execution blocked and read-only boundaries intact.
   - Deployment Providers:
     - `Vercel`
     - `Netlify`
-    - `Cloudflare`
     - `Railway`
+  - Communication Providers:
+    - `Resend`
+    - `Proton Mail`
+    - `Microsoft 365`
+  - ERP / Accounting Providers:
+    - `Pantheon`
+  - Edge Infrastructure Providers:
+    - `Cloudflare`
   - Commerce / Billing Providers:
     - `Stripe`
     - `Paddle`
@@ -248,6 +255,9 @@ while keeping execution blocked and read-only boundaries intact.
 - Provider capabilities are category-aware in Provider Fleet:
   - registrar: `domains`, `dns`, `availability`, `registration`, `execution`
   - deployment: `deployments`, `previews`, `rollbacks`, `domains`, `environment_variables`
+  - communication: `email_delivery`, `transactional_email`, `inbound_email`, `domains`, `webhooks`
+  - erp/accounting: `accounting`, `invoicing`, `bookkeeping`, `tax`, `synchronization`
+  - edge infrastructure: `dns`, `edge_compute`, `object_storage`, `cdn`, `routing`
   - commerce: `billing`, `subscriptions`, `invoices`, `webhooks`, `checkout`
   - execution: `jobs`, `workflows`, `retries`, `schedules`, `events`
   - source control: `repositories`, `branches`, `pull_requests`, `webhooks`, `commits`
@@ -267,6 +277,9 @@ while keeping execution blocked and read-only boundaries intact.
   - Provider Fleet documented as Global Provider Control Plane
   - Future orchestration direction:
     - AI provider routing
+    - communication orchestration
+    - ERP/accounting orchestration
+    - edge infrastructure orchestration
     - deployment orchestration
     - billing orchestration
     - execution governance

@@ -23,6 +23,9 @@ test("provider fleet view source: grouped provider category sections render", as
   const source = await readFile(VIEW_FILE, "utf8");
   assert.equal(source.includes("Registrar / Domain Providers"), true);
   assert.equal(source.includes("Deployment Providers"), true);
+  assert.equal(source.includes("Communication Providers"), true);
+  assert.equal(source.includes("ERP / Accounting Providers"), true);
+  assert.equal(source.includes("Edge Infrastructure Providers"), true);
   assert.equal(source.includes("Commerce / Billing Providers"), true);
   assert.equal(source.includes("Execution Providers"), true);
   assert.equal(source.includes("Source Control Providers"), true);
@@ -65,6 +68,9 @@ test("provider fleet view source: capability chips render", async () => {
   assert.equal(source.includes('"deployments"'), true);
   assert.equal(source.includes('"model_metadata"'), true);
   assert.equal(source.includes('"auth"'), true);
+  assert.equal(source.includes('"email_delivery"'), true);
+  assert.equal(source.includes('"accounting"'), true);
+  assert.equal(source.includes('"edge_compute"'), true);
   assert.equal(source.includes("CATEGORY_CAPABILITY_KEYS[provider.category].map"), true);
 });
 
@@ -77,6 +83,30 @@ test("provider fleet view source: deployment providers do not render registrar-o
 test("provider fleet view source: AI providers render AI-specific capabilities", async () => {
   const source = await readFile(VIEW_FILE, "utf8");
   assert.equal(source.includes('ai: ["model_metadata", "routing_policy", "inference", "embeddings", "multimodal"]'), true);
+});
+
+test("provider fleet view source: communication providers render communication-specific capabilities", async () => {
+  const source = await readFile(VIEW_FILE, "utf8");
+  assert.equal(
+    source.includes('communication: ["email_delivery", "transactional_email", "inbound_email", "domains", "webhooks"]'),
+    true,
+  );
+});
+
+test("provider fleet view source: erp/accounting providers render erp-specific capabilities", async () => {
+  const source = await readFile(VIEW_FILE, "utf8");
+  assert.equal(
+    source.includes('erp_accounting: ["accounting", "invoicing", "bookkeeping", "tax", "synchronization"]'),
+    true,
+  );
+});
+
+test("provider fleet view source: edge infrastructure providers render edge-specific capabilities", async () => {
+  const source = await readFile(VIEW_FILE, "utf8");
+  assert.equal(
+    source.includes('edge_infrastructure: ["dns", "edge_compute", "object_storage", "cdn", "routing"]'),
+    true,
+  );
 });
 
 test("provider fleet view source: openprovider keeps registrar capabilities in status section", async () => {

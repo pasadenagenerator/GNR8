@@ -6,10 +6,25 @@ import { PROVIDER_CONTRACT_BY_ID } from "@/gnr8/runtime/providers/provider-contr
 type BadgeLevel = "success" | "warning" | "critical" | "neutral";
 type ProviderStatus = "connected" | "not_configured";
 type ProviderMode = "sandbox" | "unknown";
-type ProviderCategory = "registrar" | "deployment" | "commerce" | "execution" | "source_control" | "ai" | "storage" | "identity";
+type ProviderCategory =
+  | "registrar"
+  | "deployment"
+  | "communication"
+  | "erp_accounting"
+  | "edge_infrastructure"
+  | "commerce"
+  | "execution"
+  | "source_control"
+  | "ai"
+  | "storage"
+  | "identity";
 type CapabilityKey =
   | "domains"
+  | "email_delivery"
+  | "transactional_email"
+  | "inbound_email"
   | "dns"
+  | "edge_compute"
   | "availability"
   | "registration"
   | "execution"
@@ -20,6 +35,11 @@ type CapabilityKey =
   | "billing"
   | "subscriptions"
   | "invoices"
+  | "accounting"
+  | "invoicing"
+  | "bookkeeping"
+  | "tax"
+  | "synchronization"
   | "webhooks"
   | "checkout"
   | "jobs"
@@ -38,6 +58,8 @@ type CapabilityKey =
   | "multimodal"
   | "database"
   | "object_storage"
+  | "cdn"
+  | "routing"
   | "backups"
   | "vector_search"
   | "file_storage"
@@ -76,6 +98,9 @@ export type ProviderFleetPayload = {
 const CATEGORY_LABELS: Record<ProviderCategory, string> = {
   registrar: "Registrar / Domain Providers",
   deployment: "Deployment Providers",
+  communication: "Communication Providers",
+  erp_accounting: "ERP / Accounting Providers",
+  edge_infrastructure: "Edge Infrastructure Providers",
   commerce: "Commerce / Billing Providers",
   execution: "Execution Providers",
   source_control: "Source Control Providers",
@@ -87,6 +112,9 @@ const CATEGORY_LABELS: Record<ProviderCategory, string> = {
 const CATEGORY_ORDER: readonly ProviderCategory[] = [
   "registrar",
   "deployment",
+  "communication",
+  "erp_accounting",
+  "edge_infrastructure",
   "commerce",
   "execution",
   "source_control",
@@ -98,6 +126,9 @@ const CATEGORY_ORDER: readonly ProviderCategory[] = [
 const CATEGORY_CAPABILITY_KEYS: Readonly<Record<ProviderCategory, readonly CapabilityKey[]>> = {
   registrar: ["domains", "dns", "availability", "registration", "execution"],
   deployment: ["deployments", "previews", "rollbacks", "domains", "environment_variables"],
+  communication: ["email_delivery", "transactional_email", "inbound_email", "domains", "webhooks"],
+  erp_accounting: ["accounting", "invoicing", "bookkeeping", "tax", "synchronization"],
+  edge_infrastructure: ["dns", "edge_compute", "object_storage", "cdn", "routing"],
   commerce: ["billing", "subscriptions", "invoices", "webhooks", "checkout"],
   execution: ["jobs", "workflows", "retries", "schedules", "events"],
   source_control: ["repositories", "branches", "pull_requests", "webhooks", "commits"],
@@ -281,6 +312,9 @@ function groupProvidersByCategory(providers: readonly ProviderRecord[]): Readonl
   const grouped: Record<ProviderCategory, ProviderRecord[]> = {
     registrar: [],
     deployment: [],
+    communication: [],
+    erp_accounting: [],
+    edge_infrastructure: [],
     commerce: [],
     execution: [],
     source_control: [],

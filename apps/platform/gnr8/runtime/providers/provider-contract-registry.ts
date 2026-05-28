@@ -7,6 +7,10 @@ export type ProviderId =
   | "netlify"
   | "cloudflare"
   | "railway"
+  | "resend"
+  | "proton_mail"
+  | "microsoft_365"
+  | "pantheon"
   | "stripe"
   | "paddle"
   | "polar"
@@ -30,6 +34,9 @@ export type ProviderId =
 export type ProviderCategory =
   | "registrar"
   | "deployment"
+  | "communication"
+  | "erp_accounting"
+  | "edge_infrastructure"
   | "commerce"
   | "execution"
   | "source_control"
@@ -41,7 +48,11 @@ export type ProviderEnvironment = "sandbox" | "unknown";
 export type ProviderStatus = "connected" | "not_configured";
 export type CapabilityKey =
   | "domains"
+  | "email_delivery"
+  | "transactional_email"
+  | "inbound_email"
   | "dns"
+  | "edge_compute"
   | "availability"
   | "registration"
   | "execution"
@@ -52,6 +63,11 @@ export type CapabilityKey =
   | "billing"
   | "subscriptions"
   | "invoices"
+  | "accounting"
+  | "invoicing"
+  | "bookkeeping"
+  | "tax"
+  | "synchronization"
   | "webhooks"
   | "checkout"
   | "jobs"
@@ -70,6 +86,8 @@ export type CapabilityKey =
   | "multimodal"
   | "database"
   | "object_storage"
+  | "cdn"
+  | "routing"
   | "backups"
   | "vector_search"
   | "file_storage"
@@ -132,6 +150,9 @@ export type ProviderContract = {
 const CATEGORY_CAPABILITY_KEYS: Readonly<Record<ProviderCategory, readonly CapabilityKey[]>> = {
   registrar: ["domains", "dns", "availability", "registration", "execution"],
   deployment: ["deployments", "previews", "rollbacks", "domains", "environment_variables"],
+  communication: ["email_delivery", "transactional_email", "inbound_email", "domains", "webhooks"],
+  erp_accounting: ["accounting", "invoicing", "bookkeeping", "tax", "synchronization"],
+  edge_infrastructure: ["dns", "edge_compute", "object_storage", "cdn", "routing"],
   commerce: ["billing", "subscriptions", "invoices", "webhooks", "checkout"],
   execution: ["jobs", "workflows", "retries", "schedules", "events"],
   source_control: ["repositories", "branches", "pull_requests", "webhooks", "commits"],
@@ -142,7 +163,11 @@ const CATEGORY_CAPABILITY_KEYS: Readonly<Record<ProviderCategory, readonly Capab
 
 const CAPABILITY_KEYS: readonly CapabilityKey[] = [
   "domains",
+  "email_delivery",
+  "transactional_email",
+  "inbound_email",
   "dns",
+  "edge_compute",
   "availability",
   "registration",
   "execution",
@@ -153,6 +178,11 @@ const CAPABILITY_KEYS: readonly CapabilityKey[] = [
   "billing",
   "subscriptions",
   "invoices",
+  "accounting",
+  "invoicing",
+  "bookkeeping",
+  "tax",
+  "synchronization",
   "webhooks",
   "checkout",
   "jobs",
@@ -171,6 +201,8 @@ const CAPABILITY_KEYS: readonly CapabilityKey[] = [
   "multimodal",
   "database",
   "object_storage",
+  "cdn",
+  "routing",
   "backups",
   "vector_search",
   "file_storage",
@@ -287,8 +319,24 @@ const NETIM_PROVIDER_CONTRACT = createPlaceholderProviderContract("netim", "Neti
 
 const VERCEL_PROVIDER_CONTRACT = createPlaceholderProviderContract("vercel", "Vercel", "deployment");
 const NETLIFY_PROVIDER_CONTRACT = createPlaceholderProviderContract("netlify", "Netlify", "deployment");
-const CLOUDFLARE_PROVIDER_CONTRACT = createPlaceholderProviderContract("cloudflare", "Cloudflare", "deployment");
+const CLOUDFLARE_PROVIDER_CONTRACT = createPlaceholderProviderContract(
+  "cloudflare",
+  "Cloudflare",
+  "edge_infrastructure",
+);
 const RAILWAY_PROVIDER_CONTRACT = createPlaceholderProviderContract("railway", "Railway", "deployment");
+const RESEND_PROVIDER_CONTRACT = createPlaceholderProviderContract("resend", "Resend", "communication");
+const PROTON_MAIL_PROVIDER_CONTRACT = createPlaceholderProviderContract(
+  "proton_mail",
+  "Proton Mail",
+  "communication",
+);
+const MICROSOFT_365_PROVIDER_CONTRACT = createPlaceholderProviderContract(
+  "microsoft_365",
+  "Microsoft 365",
+  "communication",
+);
+const PANTHEON_PROVIDER_CONTRACT = createPlaceholderProviderContract("pantheon", "Pantheon", "erp_accounting");
 
 const STRIPE_PROVIDER_CONTRACT = createPlaceholderProviderContract("stripe", "Stripe", "commerce");
 const PADDLE_PROVIDER_CONTRACT = createPlaceholderProviderContract("paddle", "Paddle", "commerce");
@@ -392,8 +440,12 @@ export const PROVIDER_CONTRACT_REGISTRY = [
   NETIM_PROVIDER_CONTRACT,
   VERCEL_PROVIDER_CONTRACT,
   NETLIFY_PROVIDER_CONTRACT,
-  CLOUDFLARE_PROVIDER_CONTRACT,
   RAILWAY_PROVIDER_CONTRACT,
+  RESEND_PROVIDER_CONTRACT,
+  PROTON_MAIL_PROVIDER_CONTRACT,
+  MICROSOFT_365_PROVIDER_CONTRACT,
+  PANTHEON_PROVIDER_CONTRACT,
+  CLOUDFLARE_PROVIDER_CONTRACT,
   STRIPE_PROVIDER_CONTRACT,
   PADDLE_PROVIDER_CONTRACT,
   POLAR_PROVIDER_CONTRACT,
@@ -422,8 +474,12 @@ export const PROVIDER_CONTRACT_BY_ID: Readonly<Record<ProviderId, ProviderContra
   netim: NETIM_PROVIDER_CONTRACT,
   vercel: VERCEL_PROVIDER_CONTRACT,
   netlify: NETLIFY_PROVIDER_CONTRACT,
-  cloudflare: CLOUDFLARE_PROVIDER_CONTRACT,
   railway: RAILWAY_PROVIDER_CONTRACT,
+  resend: RESEND_PROVIDER_CONTRACT,
+  proton_mail: PROTON_MAIL_PROVIDER_CONTRACT,
+  microsoft_365: MICROSOFT_365_PROVIDER_CONTRACT,
+  pantheon: PANTHEON_PROVIDER_CONTRACT,
+  cloudflare: CLOUDFLARE_PROVIDER_CONTRACT,
   stripe: STRIPE_PROVIDER_CONTRACT,
   paddle: PADDLE_PROVIDER_CONTRACT,
   polar: POLAR_PROVIDER_CONTRACT,

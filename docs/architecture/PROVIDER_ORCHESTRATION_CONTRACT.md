@@ -51,7 +51,10 @@ Canonical contract fields:
 
 Current providers in registry:
 - Registrar / Domain Providers: `Openprovider`, `Realtime Register`, `INWX`, `Netim`
-- Deployment Providers: `Vercel`, `Netlify`, `Cloudflare`, `Railway`
+- Deployment Providers: `Vercel`, `Netlify`, `Railway`
+- Communication Providers: `Resend`, `Proton Mail`, `Microsoft 365`
+- ERP / Accounting Providers: `Pantheon`
+- Edge Infrastructure Providers: `Cloudflare`
 - Commerce / Billing Providers: `Stripe`, `Paddle`, `Polar`
 - Execution Providers: `Inngest`, `Trigger.dev`, `Temporal`
 - Source Control Providers: `GitHub`, `GitLab`
@@ -70,6 +73,9 @@ Provider capability expresses what a provider can do at the contract level.
 Canonical capability vocabulary is now category-aware:
 - Registrar: `domains`, `dns`, `availability`, `registration`, `execution`
 - Deployment: `deployments`, `previews`, `rollbacks`, `domains`, `environment_variables`
+- Communication: `email_delivery`, `transactional_email`, `inbound_email`, `domains`, `webhooks`
+- ERP / Accounting: `accounting`, `invoicing`, `bookkeeping`, `tax`, `synchronization`
+- Edge Infrastructure: `dns`, `edge_compute`, `object_storage`, `cdn`, `routing`
 - Commerce: `billing`, `subscriptions`, `invoices`, `webhooks`, `checkout`
 - Execution: `jobs`, `workflows`, `retries`, `schedules`, `events`
 - Source Control: `repositories`, `branches`, `pull_requests`, `webhooks`, `commits`
@@ -185,6 +191,9 @@ Direction principles:
 Global provider control-plane expansion targets:
 - registrar/domain providers
 - deployment providers
+- communication providers
+- ERP/accounting providers
+- edge infrastructure providers
 - commerce/billing providers
 - execution/job providers
 - source control providers
@@ -194,6 +203,9 @@ Global provider control-plane expansion targets:
 
 Future orchestration direction:
 - AI provider routing
+- communication orchestration
+- ERP/accounting orchestration
+- edge infrastructure orchestration
 - deployment orchestration
 - billing orchestration
 - execution governance

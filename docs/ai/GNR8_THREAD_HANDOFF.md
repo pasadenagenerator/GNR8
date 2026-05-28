@@ -13,7 +13,7 @@ AI Routing Policy Preview / Task-to-Provider Mapping Matrix milestone is complet
 AI Routing Readiness Advisor milestone is complete and verified (Provider Fleet now includes `AI Routing Readiness Advisor` with explicit current state, limitations, missing requirements, and next-step guidance; badge mapping reflects success/warning/critical readiness semantics; UI/read-model only; no runtime AI routing, no live model calls, no API changes, no execution controls/forms).
 AI Routing Evaluator Preview Model milestone is complete and verified (deterministic preview evaluator implemented in `apps/platform/gnr8/runtime/providers/ai-routing-evaluator-preview.ts` with test coverage in `apps/platform/gnr8/runtime/providers/ai-routing-evaluator-preview.test.ts`; evaluator matches `taskType` against `AI_ROUTING_POLICY_PREVIEW_REGISTRY`, uses preferred/secondary providers when matched, defaults to `openai` + `anthropic` fallback when unmatched, resolves `selectedModelFamily` from provider registry metadata, applies request preferences as constraints, always emits `execution_blocked` and `preview_only` diagnostics context, and always returns `executionAllowed:false` and `executionBlocked:true`; preview evaluator tests passed and next build passed; deterministic preview only, no model calls, no credential resolution, no provider dispatch, no runtime execution, no API endpoint yet).
 AI Routing Evaluator Preview UI milestone is complete and verified (Provider Fleet now includes `AI Routing Evaluator Preview` in `apps/platform/app/gnr8/admin/providers/ai-routing-evaluator-preview.tsx`, mounted in `provider-fleet-view.tsx`, with deterministic local task selector preview for `site_migration_planning`, `long_architecture_review`, `layout_visual_understanding`, `fast_interactive_generation`, `eu_sensitive_workloads`, and `structured_tool_orchestration`; preview result includes provider/model/strategy/fallback/reason/constraints/diagnostics and execution state is always visibly blocked; advisory text explicitly states deterministic non-executable preview and no AI providers called; no runtime execution/model calls/provider dispatch/API execution layer).
-Global Provider Taxonomy Expansion milestone is complete and verified (Provider Fleet now operates as the Global Provider Control Plane taxonomy across registrar, deployment, commerce, execution, source control, AI, storage, and identity provider categories; registry/docs/read-model only; no runtime/API/provider execution changes).
+Global Provider Taxonomy Expansion milestone is complete and verified (Provider Fleet now operates as the Global Provider Control Plane taxonomy across registrar, deployment, communication, ERP/accounting, edge infrastructure, commerce, execution, source control, AI, storage, and identity provider categories; registry/docs/read-model only; no runtime/API/provider execution changes).
 Provider Orchestration Contract Architecture Draft milestone is complete and verified as documentation-only (first canonical multi-provider orchestration contract; no runtime/API/provider execution changes).
 Second Provider Placeholder Readiness Contract milestone is complete and verified (Realtime Register placeholder now rendered with explicit orchestration contract/readiness/boundary/identity fields and provider-specific readiness advisor text in Provider Fleet Cockpit; UI/read-model only; no runtime/API/provider execution changes).
 Provider Fleet Cockpit milestone is complete and verified (global provider control plane route with deterministic seeded provider registry, UI/read-model only, execution blocked).
@@ -136,6 +136,9 @@ Evidence and diagnostics milestone:
   - provider capabilities are category-aware:
     - registrar: `domains`, `dns`, `availability`, `registration`, `execution`
     - deployment: `deployments`, `previews`, `rollbacks`, `domains`, `environment_variables`
+    - communication: `email_delivery`, `transactional_email`, `inbound_email`, `domains`, `webhooks`
+    - erp/accounting: `accounting`, `invoicing`, `bookkeeping`, `tax`, `synchronization`
+    - edge infrastructure: `dns`, `edge_compute`, `object_storage`, `cdn`, `routing`
     - commerce: `billing`, `subscriptions`, `invoices`, `webhooks`, `checkout`
     - execution: `jobs`, `workflows`, `retries`, `schedules`, `events`
     - source control: `repositories`, `branches`, `pull_requests`, `webhooks`, `commits`
@@ -153,7 +156,7 @@ Evidence and diagnostics milestone:
   - conclusion:
     - Provider Fleet is no longer backed by inline UI objects. It now consumes a canonical provider contract registry, creating the foundation for multi-provider orchestration.
   - strategic direction:
-    - evolve Provider Fleet into global GNR8 provider control plane covering registrar/domain, DNS, deployment, commerce/billing, execution/job, source control, AI, storage/data, and identity providers
+    - evolve Provider Fleet into global GNR8 provider control plane covering registrar/domain, DNS, deployment, communication, ERP/accounting, edge infrastructure, commerce/billing, execution/job, source control, AI, storage/data, and identity providers
   - recommended next milestone:
     - Global Provider Taxonomy Expansion
   - success criteria:

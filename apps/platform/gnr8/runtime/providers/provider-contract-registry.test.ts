@@ -6,7 +6,7 @@ import {
 } from "@/gnr8/runtime/providers/provider-contract-registry";
 
 test("provider contract registry exports deterministic providers", () => {
-  assert.equal(PROVIDER_CONTRACT_REGISTRY.length, 27);
+  assert.equal(PROVIDER_CONTRACT_REGISTRY.length, 31);
   assert.deepEqual(
     PROVIDER_CONTRACT_REGISTRY.map((provider) => provider.providerId),
     [
@@ -16,8 +16,12 @@ test("provider contract registry exports deterministic providers", () => {
       "netim",
       "vercel",
       "netlify",
-      "cloudflare",
       "railway",
+      "resend",
+      "proton_mail",
+      "microsoft_365",
+      "pantheon",
+      "cloudflare",
       "stripe",
       "paddle",
       "polar",
@@ -130,7 +134,10 @@ test("registry includes all requested provider taxonomy categories", () => {
   assert.deepEqual([...categories].sort(), [
     "ai",
     "commerce",
+    "communication",
     "deployment",
+    "edge_infrastructure",
+    "erp_accounting",
     "execution",
     "identity",
     "registrar",
@@ -166,4 +173,43 @@ test("openprovider preserves operational registrar capabilities", () => {
 
 test("registry remains read-model only with no execution runtime exports", () => {
   assert.equal("runtimeProviderExecution" in PROVIDER_CONTRACT_BY_ID, false);
+});
+
+test("cloudflare is classified under edge infrastructure providers", () => {
+  const cloudflare = PROVIDER_CONTRACT_BY_ID.cloudflare;
+  assert.equal(cloudflare.providerCategory, "edge_infrastructure");
+  assert.equal(cloudflare.capabilities.dns, false);
+  assert.equal(cloudflare.capabilities.edge_compute, false);
+  assert.equal(cloudflare.capabilities.object_storage, false);
+  assert.equal(cloudflare.capabilities.cdn, false);
+  assert.equal(cloudflare.capabilities.routing, false);
+});
+
+test("communication providers are present with communication capability taxonomy", () => {
+  const providerIds = ["resend", "proton_mail", "microsoft_365"] as const;
+  for (const providerId of providerIds) {
+    const provider = PROVIDER_CONTRACT_BY_ID[providerId];
+    assert.equal(provider.providerCategory, "communication");
+    assert.equal(provider.capabilities.email_delivery, false);
+    assert.equal(provider.capabilities.transactional_email, false);
+    assert.equal(provider.capabilities.inbound_email, false);
+    assert.equal(provider.capabilities.domains, false);
+    assert.equal(provider.capabilities.webhooks, false);
+    assert.equal(provider.status, "not_configured");
+    assert.deepEqual(provider.readiness, ["not_configured", "control_plane_only"]);
+    assert.deepEqual(provider.boundaries, ["execution_blocked", "read_only"]);
+  }
+});
+
+test("pantheon is present under erp/accounting providers with erp capability taxonomy", () => {
+  const pantheon = PROVIDER_CONTRACT_BY_ID.pantheon;
+  assert.equal(pantheon.providerCategory, "erp_accounting");
+  assert.equal(pantheon.capabilities.accounting, false);
+  assert.equal(pantheon.capabilities.invoicing, false);
+  assert.equal(pantheon.capabilities.bookkeeping, false);
+  assert.equal(pantheon.capabilities.tax, false);
+  assert.equal(pantheon.capabilities.synchronization, false);
+  assert.equal(pantheon.status, "not_configured");
+  assert.deepEqual(pantheon.readiness, ["not_configured", "control_plane_only"]);
+  assert.deepEqual(pantheon.boundaries, ["execution_blocked", "read_only"]);
 });
