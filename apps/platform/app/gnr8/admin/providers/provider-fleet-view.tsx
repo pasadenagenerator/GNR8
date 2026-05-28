@@ -2,6 +2,8 @@ type BadgeLevel = "success" | "warning" | "critical" | "neutral";
 type ProviderStatus = "connected" | "not_configured";
 type ProviderMode = "sandbox" | "unknown";
 type CapabilityKey = "domains" | "dns" | "availability" | "registration" | "execution";
+type CapabilityStatus = "working" | "disabled" | "blocked";
+type CapabilityReadiness = "sandbox_verified" | "not_enabled" | "control_plane_only";
 
 type ProviderRecord = {
   name: "Openprovider" | "Realtime Register" | "INWX" | "Netim";
@@ -37,8 +39,12 @@ function resolveBadgeLevel(value: string | boolean): BadgeLevel {
   if (value === true) return "success";
   if (value === false) return "neutral";
   if (value === "connected") return "success";
+  if (value === "working") return "success";
+  if (value === "sandbox_verified") return "success";
+  if (value === "not_enabled") return "warning";
   if (value === "not_configured") return "warning";
   if (value === "blocked") return "critical";
+  if (value === "control_plane_only") return "critical";
   return "neutral";
 }
 
@@ -100,6 +106,44 @@ function SummaryCard(props: { label: string; value: string }) {
 }
 
 const CAPABILITY_KEYS: CapabilityKey[] = ["domains", "dns", "availability", "registration", "execution"];
+const CAPABILITY_LABELS: Record<CapabilityKey, string> = {
+  domains: "Domains",
+  dns: "DNS",
+  availability: "Availability",
+  registration: "Registration",
+  execution: "Execution",
+};
+
+const CAPABILITY_STATUS_DETAILS: Record<
+  CapabilityKey,
+  { status: CapabilityStatus; readiness: CapabilityReadiness; explanation: string }
+> = {
+  domains: {
+    status: "working",
+    readiness: "sandbox_verified",
+    explanation: "Real provider domain inventory reads are operational through Openprovider read-only APIs.",
+  },
+  dns: {
+    status: "working",
+    readiness: "sandbox_verified",
+    explanation: "Real provider DNS inventory reads are operational through Openprovider read-only APIs.",
+  },
+  availability: {
+    status: "working",
+    readiness: "sandbox_verified",
+    explanation: "Real provider availability lookups are operational through Openprovider read-only APIs.",
+  },
+  registration: {
+    status: "disabled",
+    readiness: "not_enabled",
+    explanation: "Provider registration flows are intentionally blocked by execution boundaries.",
+  },
+  execution: {
+    status: "blocked",
+    readiness: "control_plane_only",
+    explanation: "Queue, worker, and provider execution layers remain intentionally disabled.",
+  },
+};
 
 export function ProviderFleetView(props: { payload: ProviderFleetPayload }) {
   return (
@@ -177,6 +221,29 @@ export function ProviderFleetView(props: { payload: ProviderFleetPayload }) {
         <p style={{ margin: "10px 0 0 0", color: "#374151", fontSize: 13 }}>
           Fleet cockpit is read-only. Provider execution remains disabled.
         </p>
+      </section>
+
+      <section style={{ border: "1px solid #dbe3ea", borderRadius: 10, background: "#ffffff", padding: 12, marginTop: 12 }}>
+        <h2 style={{ margin: "0 0 8px 0", fontSize: 16 }}>Provider Capability Status</h2>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 10 }}>
+          {CAPABILITY_KEYS.map((capability) => {
+            const details = CAPABILITY_STATUS_DETAILS[capability];
+            return (
+              <section key={capability} style={{ border: "1px solid #dbe3ea", borderRadius: 10, background: "#ffffff", padding: 12 }}>
+                <h3 style={{ margin: "0 0 8px 0", fontSize: 15 }}>{CAPABILITY_LABELS[capability]}</h3>
+                <div style={{ marginTop: 4 }}>
+                  <strong>Status:</strong> <Pill label={details.status} value={details.status} />
+                </div>
+                <p style={{ margin: "8px 0 0 0", color: "#374151" }}>
+                  <strong>Explanation:</strong> {details.explanation}
+                </p>
+                <div style={{ marginTop: 8 }}>
+                  <strong>Readiness:</strong> <Pill label={details.readiness} value={details.readiness} />
+                </div>
+              </section>
+            );
+          })}
+        </div>
       </section>
     </main>
   );

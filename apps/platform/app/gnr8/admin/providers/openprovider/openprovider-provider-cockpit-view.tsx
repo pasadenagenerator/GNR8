@@ -15,6 +15,9 @@ type BadgeLevel = "success" | "warning" | "critical" | "neutral";
 type ProviderMode = "sandbox" | "live" | "unknown";
 type AuthStatus = "connected" | "unavailable";
 type AvailabilityStatus = "working" | "unavailable";
+type CapabilityKey = "domains" | "dns" | "availability" | "registration" | "execution";
+type CapabilityStatus = "working" | "disabled" | "blocked";
+type CapabilityReadiness = "sandbox_verified" | "not_enabled" | "control_plane_only";
 
 type CockpitPayload = {
   provider: "openprovider";
@@ -63,7 +66,10 @@ function formatDate(value: string): string {
 
 function resolveBadgeLevel(value: string): BadgeLevel {
   if (["available", "connected", "working"].includes(value)) return "success";
+  if (value === "sandbox_verified") return "success";
+  if (value === "not_enabled") return "warning";
   if (["empty", "unknown"].includes(value)) return "warning";
+  if (value === "control_plane_only") return "critical";
   if (["blocked", "failed_closed"].includes(value)) return "critical";
   return "neutral";
 }
@@ -96,6 +102,45 @@ function renderDiagnostics(values: string[]) {
     </ul>
   );
 }
+
+const CAPABILITY_KEYS: CapabilityKey[] = ["domains", "dns", "availability", "registration", "execution"];
+const CAPABILITY_LABELS: Record<CapabilityKey, string> = {
+  domains: "Domains",
+  dns: "DNS",
+  availability: "Availability",
+  registration: "Registration",
+  execution: "Execution",
+};
+const CAPABILITY_STATUS_DETAILS: Record<
+  CapabilityKey,
+  { status: CapabilityStatus; readiness: CapabilityReadiness; explanation: string }
+> = {
+  domains: {
+    status: "working",
+    readiness: "sandbox_verified",
+    explanation: "Real provider domain inventory reads are operational through Openprovider read-only APIs.",
+  },
+  dns: {
+    status: "working",
+    readiness: "sandbox_verified",
+    explanation: "Real provider DNS inventory reads are operational through Openprovider read-only APIs.",
+  },
+  availability: {
+    status: "working",
+    readiness: "sandbox_verified",
+    explanation: "Real provider availability lookups are operational through Openprovider read-only APIs.",
+  },
+  registration: {
+    status: "disabled",
+    readiness: "not_enabled",
+    explanation: "Provider registration flows are intentionally blocked by execution boundaries.",
+  },
+  execution: {
+    status: "blocked",
+    readiness: "control_plane_only",
+    explanation: "Queue, worker, and provider execution layers remain intentionally disabled.",
+  },
+};
 
 export function OpenproviderProviderCockpitView(props: { payload: CockpitPayload }) {
   const searchParams = useSearchParams();
@@ -199,40 +244,26 @@ export function OpenproviderProviderCockpitView(props: { payload: CockpitPayload
       </section>
 
       <section style={{ border: "1px solid #dbe3ea", borderRadius: 10, background: "#ffffff", padding: 12, marginTop: 12 }}>
-        <h2 style={{ margin: "0 0 8px 0", fontSize: 16 }}>Availability Search</h2>
-        <p style={{ margin: "0 0 8px 0", color: "#374151" }}>
-          Check real provider domain availability using Openprovider read-only intelligence.
-        </p>
-        <form action="/gnr8/admin/providers/openprovider" method="GET" style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-          <input
-            aria-label="Domain name"
-            name="domain"
-            type="text"
-            defaultValue={selectedDomain}
-            placeholder="example-domain.com"
-            style={{
-              flex: "1 1 260px",
-              border: "1px solid #d1d5db",
-              borderRadius: 8,
-              padding: "8px 10px",
-              fontSize: 14,
-            }}
-          />
-          <button
-            type="submit"
-            style={{
-              border: "1px solid #111827",
-              borderRadius: 8,
-              background: "#111827",
-              color: "#ffffff",
-              fontWeight: 700,
-              padding: "8px 12px",
-              cursor: "pointer",
-            }}
-          >
-            Check Availability
-          </button>
-        </form>
+        <h2 style={{ margin: "0 0 8px 0", fontSize: 16 }}>Provider Capability Status</h2>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 10 }}>
+          {CAPABILITY_KEYS.map((capability) => {
+            const details = CAPABILITY_STATUS_DETAILS[capability];
+            return (
+              <section key={capability} style={{ border: "1px solid #dbe3ea", borderRadius: 10, background: "#ffffff", padding: 12 }}>
+                <h3 style={{ margin: "0 0 8px 0", fontSize: 15 }}>{CAPABILITY_LABELS[capability]}</h3>
+                <div style={{ marginTop: 4 }}>
+                  <strong>Status:</strong> {details.status} <Badge level={resolveBadgeLevel(details.status)} />
+                </div>
+                <p style={{ margin: "8px 0 0 0", color: "#374151" }}>
+                  <strong>Explanation:</strong> {details.explanation}
+                </p>
+                <div style={{ marginTop: 8 }}>
+                  <strong>Readiness:</strong> {details.readiness} <Badge level={resolveBadgeLevel(details.readiness)} />
+                </div>
+              </section>
+            );
+          })}
+        </div>
       </section>
 
       <section style={{ border: "1px solid #dbe3ea", borderRadius: 10, background: "#ffffff", padding: 12, marginTop: 12 }}>

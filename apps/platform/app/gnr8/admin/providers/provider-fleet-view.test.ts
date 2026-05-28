@@ -79,3 +79,32 @@ test("provider fleet view source: no action buttons or forms are present", async
   assert.equal(source.includes("<form"), false);
   assert.equal(source.includes("onClick"), false);
 });
+
+test("provider fleet view source: provider capability status cards render", async () => {
+  const source = await readFile(VIEW_FILE, "utf8");
+  assert.equal(source.includes("Provider Capability Status"), true);
+  assert.equal(source.includes("Status:"), true);
+  assert.equal(source.includes("Explanation:"), true);
+  assert.equal(source.includes("Readiness:"), true);
+  assert.equal(source.includes("Availability"), true);
+  assert.equal(source.includes("Registration"), true);
+  assert.equal(source.includes("Execution"), true);
+});
+
+test("provider fleet view source: readiness and explanations render", async () => {
+  const source = await readFile(VIEW_FILE, "utf8");
+  assert.equal(source.includes("sandbox_verified"), true);
+  assert.equal(source.includes("not_enabled"), true);
+  assert.equal(source.includes("control_plane_only"), true);
+  assert.equal(source.includes("Real provider availability lookups are operational through Openprovider read-only APIs."), true);
+  assert.equal(source.includes("Provider registration flows are intentionally blocked by execution boundaries."), true);
+  assert.equal(source.includes("Queue, worker, and provider execution layers remain intentionally disabled."), true);
+});
+
+test("provider fleet view source: registration and execution capability statuses", async () => {
+  const source = await readFile(VIEW_FILE, "utf8");
+  assert.equal(source.includes('status: "disabled"'), true);
+  assert.equal(source.includes('readiness: "not_enabled"'), true);
+  assert.equal(source.includes('status: "blocked"'), true);
+  assert.equal(source.includes('readiness: "control_plane_only"'), true);
+});

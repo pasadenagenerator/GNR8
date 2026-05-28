@@ -72,20 +72,9 @@ test("openprovider provider cockpit view source: availability details", async ()
   assert.equal(source.includes("status"), true);
 });
 
-test("openprovider provider cockpit view source: availability search section exists", async () => {
-  const source = await readFile(VIEW_FILE, "utf8");
-  assert.equal(source.includes("Availability Search"), true);
-  assert.equal(source.includes("Domain name"), true);
-  assert.equal(source.includes('placeholder="example-domain.com"'), true);
-  assert.equal(source.includes("Check Availability"), true);
-});
-
 test("openprovider provider cockpit view source: query param domain is supported", async () => {
   const source = await readFile(VIEW_FILE, "utf8");
   assert.equal(source.includes('searchParams.get("domain")'), true);
-  assert.equal(source.includes('name="domain"'), true);
-  assert.equal(source.includes('action="/gnr8/admin/providers/openprovider"'), true);
-  assert.equal(source.includes('method="GET"'), true);
   assert.equal(source.includes("domain-availability?domain="), true);
 });
 
@@ -114,10 +103,39 @@ test("openprovider provider cockpit view source: badge rules", async () => {
 
 test("openprovider provider cockpit view source: no mutation buttons/forms", async () => {
   const source = await readFile(VIEW_FILE, "utf8");
-  assert.equal(source.includes("<button"), true);
-  assert.equal(source.includes("<form"), true);
+  assert.equal(source.includes("<button"), false);
+  assert.equal(source.includes("<form"), false);
   assert.equal(source.includes('method="POST"'), false);
   assert.equal(source.includes("Register"), false);
-  assert.equal(source.includes("registration"), false);
+  assert.equal(source.includes("registration"), true);
   assert.equal(source.includes("/api/gnr8/admin/providers/openprovider/register"), false);
+});
+
+test("openprovider provider cockpit view source: provider capability status cards render", async () => {
+  const source = await readFile(VIEW_FILE, "utf8");
+  assert.equal(source.includes("Provider Capability Status"), true);
+  assert.equal(source.includes("Status:"), true);
+  assert.equal(source.includes("Explanation:"), true);
+  assert.equal(source.includes("Readiness:"), true);
+  assert.equal(source.includes("Availability"), true);
+  assert.equal(source.includes("Registration"), true);
+  assert.equal(source.includes("Execution"), true);
+});
+
+test("openprovider provider cockpit view source: readiness and explanations render", async () => {
+  const source = await readFile(VIEW_FILE, "utf8");
+  assert.equal(source.includes("sandbox_verified"), true);
+  assert.equal(source.includes("not_enabled"), true);
+  assert.equal(source.includes("control_plane_only"), true);
+  assert.equal(source.includes("Real provider availability lookups are operational through Openprovider read-only APIs."), true);
+  assert.equal(source.includes("Provider registration flows are intentionally blocked by execution boundaries."), true);
+  assert.equal(source.includes("Queue, worker, and provider execution layers remain intentionally disabled."), true);
+});
+
+test("openprovider provider cockpit view source: registration and execution capability statuses", async () => {
+  const source = await readFile(VIEW_FILE, "utf8");
+  assert.equal(source.includes('status: "disabled"'), true);
+  assert.equal(source.includes('readiness: "not_enabled"'), true);
+  assert.equal(source.includes('status: "blocked"'), true);
+  assert.equal(source.includes('readiness: "control_plane_only"'), true);
 });
