@@ -6,6 +6,13 @@
 ## Current Phase
 GNR8 AI Routing Policy Preview UI milestone (Provider Fleet now exposes read-only AI provider routing metadata and task-to-provider routing policy preview through visible matrix sections; UI/read-model only; no runtime/API/execution/model-call changes).
 
+AI Routing Readiness Advisor is now part of Provider Fleet and explicitly documents:
+- current AI routing state,
+- current limitations,
+- missing requirements,
+- recommended next step,
+while keeping execution blocked and read-only boundaries intact.
+
 ## Latest Completed Milestone
 
 - AI Routing Policy Registry Extraction is completed.

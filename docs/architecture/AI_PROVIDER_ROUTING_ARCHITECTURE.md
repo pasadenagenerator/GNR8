@@ -14,6 +14,7 @@ Define the canonical AI provider routing metadata surface in Provider Fleet so f
 - Route: `/gnr8/admin/providers`
 - Section: `AI Provider Capability Matrix`
 - Section: `AI Routing Policy Preview`
+- Section: `AI Routing Readiness Advisor`
 
 ## AI Provider Capability Matrix
 Provider Fleet now exposes read-only AI routing metadata for:
@@ -51,6 +52,20 @@ Provider Fleet now also exposes a strategic task-to-provider mapping matrix from
 Routing policy preview advisory note:
 - Routing policy preview is strategic only. No live AI routing is performed.
 - Execution state for all policy rows: `preview_only`
+
+## AI Routing Readiness Advisor
+Provider Fleet includes a read-only readiness advisor that explains why routing remains non-executable.
+
+Cards:
+- `Current State`
+- `Current Limitations`
+- `Missing Requirements`
+- `Recommended Next Step`
+
+Badge mapping:
+- `metadata_ready` / `preview_ready` => success
+- `missing` / `not_connected` => warning
+- `execution_blocked` / `no_runtime_routing` => critical
 
 ## Boundary
 - UI/read-model only

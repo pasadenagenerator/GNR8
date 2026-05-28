@@ -128,6 +128,38 @@ test("provider fleet view source: AI routing policy preview advisory note render
   assert.equal(source.includes("Routing policy preview is strategic only. No live AI routing is performed."), true);
 });
 
+test("provider fleet view source: AI routing readiness advisor renders", async () => {
+  const source = await readFile(VIEW_FILE, "utf8");
+  assert.equal(source.includes("AI Routing Readiness Advisor"), true);
+  assert.equal(source.includes("Current State"), true);
+  assert.equal(source.includes("Current Limitations"), true);
+  assert.equal(source.includes("Missing Requirements"), true);
+  assert.equal(source.includes("Recommended Next Step"), true);
+});
+
+test("provider fleet view source: AI routing readiness advisor limitations and missing requirements render", async () => {
+  const source = await readFile(VIEW_FILE, "utf8");
+  assert.equal(source.includes("no runtime routing engine"), true);
+  assert.equal(source.includes("no live AI credentials connected"), true);
+  assert.equal(source.includes("no model invocation layer"), true);
+  assert.equal(source.includes("no cost governance"), true);
+  assert.equal(source.includes("routing policy evaluator"), true);
+  assert.equal(source.includes("provider credential boundary"), true);
+  assert.equal(source.includes("model execution adapter"), true);
+  assert.equal(source.includes("audit/logging model"), true);
+  assert.equal(source.includes("cost/latency guardrails"), true);
+});
+
+test("provider fleet view source: AI routing readiness advisor badge mapping states are present", async () => {
+  const source = await readFile(VIEW_FILE, "utf8");
+  assert.equal(source.includes("metadata_ready"), true);
+  assert.equal(source.includes("preview_ready"), true);
+  assert.equal(source.includes("missing"), true);
+  assert.equal(source.includes("not_connected"), true);
+  assert.equal(source.includes("execution_blocked"), true);
+  assert.equal(source.includes("no_runtime_routing"), true);
+});
+
 test("provider fleet view source: openprovider row is linked to provider cockpit", async () => {
   const source = await readFile(VIEW_FILE, "utf8");
   assert.equal(source.includes('href="/gnr8/admin/providers/openprovider"'), true);

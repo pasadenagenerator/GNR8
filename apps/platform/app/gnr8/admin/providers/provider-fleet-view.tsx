@@ -81,6 +81,11 @@ function resolveBadgeLevel(value: string | boolean): BadgeLevel {
   if (value === "blocked") return "critical";
   if (value === "control_plane_only") return "neutral";
   if (value === "execution_blocked") return "critical";
+  if (value === "metadata_ready") return "success";
+  if (value === "preview_ready") return "success";
+  if (value === "missing") return "warning";
+  if (value === "not_connected") return "warning";
+  if (value === "no_runtime_routing") return "critical";
   if (value === "premium") return "warning";
   return "neutral";
 }
@@ -90,22 +95,47 @@ type AdvisorCard = {
   items: readonly string[];
 };
 
-const FLEET_READINESS_ADVISOR: readonly AdvisorCard[] = [
+type AIRoutingAdvisorCard = {
+  title: "Current State" | "Current Limitations" | "Missing Requirements" | "Recommended Next Step";
+  items: readonly { label: string; status: string }[];
+};
+
+const AI_ROUTING_READINESS_ADVISOR: readonly AIRoutingAdvisorCard[] = [
   {
     title: "Current State",
-    items: ["one provider connected", "multi-provider registry initialized", "provider fleet navigation operational"],
+    items: [
+      { label: "AI provider metadata exists", status: "metadata_ready" },
+      { label: "routing policy preview exists", status: "preview_ready" },
+      { label: "provider mappings are registry-backed", status: "metadata_ready" },
+      { label: "no model calls are performed", status: "execution_blocked" },
+    ],
   },
   {
     title: "Current Limitations",
-    items: ["only Openprovider connected", "no production execution providers", "no orchestration layer"],
+    items: [
+      { label: "no runtime routing engine", status: "no_runtime_routing" },
+      { label: "no live AI credentials connected", status: "not_connected" },
+      { label: "no model invocation layer", status: "missing" },
+      { label: "no cost governance", status: "missing" },
+    ],
   },
   {
     title: "Missing Requirements",
-    items: ["provider abstraction layer", "execution governance", "multi-provider failover", "production verification"],
+    items: [
+      { label: "routing policy evaluator", status: "missing" },
+      { label: "provider credential boundary", status: "missing" },
+      { label: "model execution adapter", status: "missing" },
+      { label: "audit/logging model", status: "missing" },
+      { label: "cost/latency guardrails", status: "missing" },
+    ],
   },
   {
     title: "Recommended Next Step",
-    items: ["connect second provider", "normalize provider capabilities", "introduce provider orchestration contracts"],
+    items: [
+      { label: "define routing evaluator contract", status: "preview_ready" },
+      { label: "add AI provider credential reference model", status: "preview_ready" },
+      { label: "keep execution blocked until governance is ready", status: "execution_blocked" },
+    ],
   },
 ];
 
@@ -365,14 +395,14 @@ export function ProviderFleetView(props: { payload: ProviderFleetPayload }) {
       </section>
 
       <section style={{ border: "1px solid #dbe3ea", borderRadius: 10, background: "#ffffff", padding: 12, marginTop: 12 }}>
-        <h2 style={{ margin: "0 0 8px 0", fontSize: 16 }}>Readiness Advisor</h2>
+        <h2 style={{ margin: "0 0 8px 0", fontSize: 16 }}>AI Routing Readiness Advisor</h2>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(230px, 1fr))", gap: 10 }}>
-          {FLEET_READINESS_ADVISOR.map((card) => (
+          {AI_ROUTING_READINESS_ADVISOR.map((card) => (
             <section key={card.title} style={{ border: "1px solid #dbe3ea", borderRadius: 10, background: "#ffffff", padding: 12 }}>
               <h3 style={{ margin: "0 0 8px 0", fontSize: 15 }}>{card.title}</h3>
               <ul style={{ margin: 0, paddingLeft: 18 }}>
                 {card.items.map((item) => (
-                  <li key={item} style={{ marginBottom: 6, display: "flex", alignItems: "center", gap: 8 }}>{item}<DotBadge level={resolveBadgeLevel(item)} /></li>
+                  <li key={item.label} style={{ marginBottom: 6, display: "flex", alignItems: "center", gap: 8 }}>{item.label}<DotBadge level={resolveBadgeLevel(item.status)} /></li>
                 ))}
               </ul>
             </section>
