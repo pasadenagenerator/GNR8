@@ -49,6 +49,7 @@ test("openprovider provider cockpit view source: required sections", async () =>
   assert.equal(source.includes("Provider Surfaces"), true);
   assert.equal(source.includes("Domain Inventory"), true);
   assert.equal(source.includes("DNS Inventory"), true);
+  assert.equal(source.includes("Availability Search"), true);
   assert.equal(source.includes("Availability Intelligence"), true);
   assert.equal(source.includes("Safety Boundary"), true);
   assert.equal(source.includes("executionAllowed"), true);
@@ -76,6 +77,7 @@ test("openprovider provider cockpit view source: query param domain is supported
   const source = await readFile(VIEW_FILE, "utf8");
   assert.equal(source.includes('searchParams.get("domain")'), true);
   assert.equal(source.includes("domain-availability?domain="), true);
+  assert.equal(source.includes('requestedDomain || "levi-testis.com"'), true);
 });
 
 test("openprovider provider cockpit view source: availability badge rules", async () => {
@@ -101,14 +103,23 @@ test("openprovider provider cockpit view source: badge rules", async () => {
   assert.equal(source.includes('["blocked", "failed_closed"].includes(value)'), true);
 });
 
-test("openprovider provider cockpit view source: no mutation buttons/forms", async () => {
+test("openprovider provider cockpit view source: read-only availability GET form allowed; mutations forbidden", async () => {
   const source = await readFile(VIEW_FILE, "utf8");
-  assert.equal(source.includes("<button"), false);
-  assert.equal(source.includes("<form"), false);
+  assert.equal(source.includes("<form"), true);
+  assert.equal(source.includes('method="GET"'), true);
+  assert.equal(source.includes('action="/gnr8/admin/providers/openprovider"'), true);
+  assert.equal(source.includes('name="domain"'), true);
+  assert.equal(source.includes('placeholder="example-domain.com"'), true);
+  assert.equal(source.includes("Check Availability"), true);
   assert.equal(source.includes('method="POST"'), false);
   assert.equal(source.includes("Register"), false);
-  assert.equal(source.includes("registration"), true);
+  assert.equal(source.includes("Delete"), false);
+  assert.equal(source.includes("Update"), false);
+  assert.equal(source.includes("Execute"), false);
   assert.equal(source.includes("/api/gnr8/admin/providers/openprovider/register"), false);
+  assert.equal(source.includes("/api/gnr8/admin/providers/openprovider/delete"), false);
+  assert.equal(source.includes("/api/gnr8/admin/providers/openprovider/update"), false);
+  assert.equal(source.includes("/api/gnr8/admin/providers/openprovider/execute"), false);
 });
 
 test("openprovider provider cockpit view source: provider capability status cards render", async () => {

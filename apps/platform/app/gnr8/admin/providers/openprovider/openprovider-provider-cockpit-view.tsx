@@ -267,6 +267,36 @@ export function OpenproviderProviderCockpitView(props: { payload: CockpitPayload
       </section>
 
       <section style={{ border: "1px solid #dbe3ea", borderRadius: 10, background: "#ffffff", padding: 12, marginTop: 12 }}>
+        <h2 style={{ margin: "0 0 8px 0", fontSize: 16 }}>Availability Search</h2>
+        <p style={{ margin: "0 0 10px 0", color: "#374151" }}>
+          Check real provider domain availability using Openprovider read-only intelligence.
+        </p>
+        <form method="GET" action="/gnr8/admin/providers/openprovider" style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <input
+            type="text"
+            name="domain"
+            placeholder="example-domain.com"
+            defaultValue={requestedDomain}
+            style={{ border: "1px solid #d1d5db", borderRadius: 8, padding: "8px 10px", minWidth: 260 }}
+          />
+          <button
+            type="submit"
+            style={{
+              border: "1px solid #0f172a",
+              borderRadius: 8,
+              background: "#0f172a",
+              color: "#ffffff",
+              fontWeight: 700,
+              padding: "8px 12px",
+              cursor: "pointer",
+            }}
+          >
+            Check Availability
+          </button>
+        </form>
+      </section>
+
+      <section style={{ border: "1px solid #dbe3ea", borderRadius: 10, background: "#ffffff", padding: 12, marginTop: 12 }}>
         <h2 style={{ margin: "0 0 8px 0", fontSize: 16 }}>Availability Intelligence</h2>
         <div><strong>domain</strong>: {String(availability.domain ?? selectedDomain)}</div>
         <div><strong>available</strong>: {String((availability.available as OpenproviderDomainAvailabilityValue | undefined) ?? "unknown")}</div>
