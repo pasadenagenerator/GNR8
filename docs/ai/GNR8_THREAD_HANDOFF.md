@@ -8,6 +8,8 @@ GNR8 is currently in provider/DNS control-plane hardening and migration/preview 
 The active emphasis is deterministic contracts, approval/handoff safety, and no hidden execution.
 Provider Fleet Cockpit milestone is complete and verified (global provider control plane route with deterministic seeded provider registry, UI/read-model only, execution blocked).
 Provider Navigation Wiring milestone is complete and verified (agency dashboard to provider fleet, provider fleet to Openprovider cockpit, and cockpit links into read-only provider surfaces).
+Provider Capability Detail Cards / Readiness Explainer milestone is complete and verified (provider capability guidance layer on `/gnr8/admin/providers` and `/gnr8/admin/providers/openprovider` with status/explanation/readiness semantics for domains, dns, availability, registration, and execution).
+Openprovider Availability Search Panel milestone is complete and verified (read-only GET availability search on `/gnr8/admin/providers/openprovider` using `?domain=<domain>` with default fallback `levi-testis.com`; real sandbox availability lookups visible in cockpit UI; no write or registration paths).
 Openprovider Domain Availability Read-only Connector milestone is complete and verified (real provider-read availability check with shared sandbox auth, execution still blocked).
 Openprovider Domain Inventory Admin UI milestone is complete and verified (real provider-read UI surface with sandbox auth + read-only inventory, execution still blocked).
 Openprovider DNS Inventory Admin UI milestone is complete and verified (real provider-read UI surface with sandbox auth + read-only DNS inventory, execution still blocked).
@@ -168,6 +170,69 @@ Evidence and diagnostics milestone:
     - or Openprovider Availability UI Search Panel
   - success criteria:
     - future thread bootstrap resumes from navigable Provider Control Plane UX
+- Provider Capability Detail Cards / Readiness Explainer is deployed:
+  - updated UI surfaces:
+    - `/gnr8/admin/providers`
+    - `/gnr8/admin/providers/openprovider`
+  - capability explainer coverage:
+    - `domains`
+    - `dns`
+    - `availability`
+    - `registration`
+    - `execution`
+  - explainer semantics:
+    - capability name
+    - current status
+    - explanation
+    - readiness level
+  - readiness states:
+    - `sandbox_verified`
+    - `not_enabled`
+    - `control_plane_only`
+  - verified Openprovider guidance:
+    - `availability`: working / `sandbox_verified`
+    - `registration`: disabled / `not_enabled`
+    - `execution`: blocked / `control_plane_only`
+  - boundary remains explicit:
+    - read-only only
+    - no provider writes
+    - no DNS writes
+    - no registration
+    - no execution
+    - no queue/Inngest/worker execution
+    - no mutation POST controls
+  - conclusion:
+    - provider UX now includes capability explanations and readiness semantics in the provider control-plane flow
+  - recommended next milestone:
+    - Provider Readiness Advisor Layer
+  - success criteria:
+    - future thread bootstrap resumes from provider capability guidance milestone
+- Openprovider Availability Search Panel is deployed:
+  - route:
+    - `/gnr8/admin/providers/openprovider`
+  - search behavior:
+    - GET-only form
+    - action: `/gnr8/admin/providers/openprovider`
+    - query param: `?domain=<domain>`
+    - default fallback: `levi-testis.com`
+  - verified behavior:
+    - real Openprovider availability lookups operational
+    - sandbox provider responses visible through cockpit UI
+    - no registration/write paths introduced
+  - boundary remains explicit:
+    - read-only only
+    - no provider writes
+    - no DNS writes
+    - no registration
+    - no execution
+    - no queue/Inngest/worker execution
+    - no mutation POST controls
+  - conclusion:
+    - provider UX now includes real provider availability intelligence search inside cockpit flow
+  - recommended next milestone:
+    - Provider Readiness Advisor Layer
+  - success criteria:
+    - future thread bootstrap resumes from provider capability guidance + availability search milestone
 - Openprovider Domain Availability Read-only Connector is deployed:
   - runtime model: `gnr8/runtime/providers/openprovider/openprovider-domain-availability.ts`
   - shared auth helper: `gnr8/runtime/providers/openprovider/openprovider-auth.ts`

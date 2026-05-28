@@ -150,3 +150,37 @@ test("openprovider provider cockpit view source: registration and execution capa
   assert.equal(source.includes('status: "blocked"'), true);
   assert.equal(source.includes('readiness: "control_plane_only"'), true);
 });
+
+test("openprovider provider cockpit view source: readiness advisor section and cards render", async () => {
+  const source = await readFile(VIEW_FILE, "utf8");
+  assert.equal(source.includes("Readiness Advisor"), true);
+  assert.equal(source.includes("Current State"), true);
+  assert.equal(source.includes("Current Limitations"), true);
+  assert.equal(source.includes("Missing Requirements"), true);
+  assert.equal(source.includes("Recommended Next Step"), true);
+});
+
+test("openprovider provider cockpit view source: readiness advisor guidance text renders", async () => {
+  const source = await readFile(VIEW_FILE, "utf8");
+  assert.equal(source.includes("availability intelligence operational"), true);
+  assert.equal(source.includes("DNS inventory operational"), true);
+  assert.equal(source.includes("domain inventory operational"), true);
+  assert.equal(source.includes("sandbox verified"), true);
+  assert.equal(source.includes("read-only boundary active"), true);
+  assert.equal(source.includes("registration disabled"), true);
+  assert.equal(source.includes("execution blocked"), true);
+  assert.equal(source.includes("no provider writes"), true);
+  assert.equal(source.includes("execution orchestration"), true);
+  assert.equal(source.includes("mutation safety review"), true);
+  assert.equal(source.includes("verify live environment behavior"), true);
+  assert.equal(source.includes("add approval-driven registration flow"), true);
+});
+
+test("openprovider provider cockpit view source: readiness advisor badge mapping for guidance values", async () => {
+  const source = await readFile(VIEW_FILE, "utf8");
+  assert.equal(source.includes('value.includes("operational")'), true);
+  assert.equal(source.includes('value.includes("verified")'), true);
+  assert.equal(source.includes('value.includes("limited")'), true);
+  assert.equal(source.includes('value.includes("missing")'), true);
+  assert.equal(source.includes('value.includes("disabled")'), true);
+});

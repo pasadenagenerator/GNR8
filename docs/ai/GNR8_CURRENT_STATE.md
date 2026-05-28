@@ -1,12 +1,60 @@
 # GNR8 CURRENT STATE SNAPSHOT
 
 ## Snapshot Date
-2026-05-27
+2026-05-28
 
 ## Current Phase
-GNR8 Provider Navigation Wiring milestone (implemented, deployed, and manually verified).
+GNR8 Provider Capability Explainer + Openprovider Availability Search milestone (implemented, deployed, and manually verified).
 
 ## Latest Completed Milestone
+
+- Provider Capability Detail Cards / Readiness Explainer is implemented, deployed, and manually verified.
+- Openprovider Availability Search Panel (read-only GET control) is implemented, deployed, and manually verified.
+- Updated UI surfaces:
+  - `/gnr8/admin/providers`
+  - `/gnr8/admin/providers/openprovider`
+- Capability explainer coverage:
+  - `domains`
+  - `dns`
+  - `availability`
+  - `registration`
+  - `execution`
+- Explainer semantics per capability:
+  - capability name
+  - current status
+  - explanation
+  - readiness level
+- Readiness states now surfaced:
+  - `sandbox_verified`
+  - `not_enabled`
+  - `control_plane_only`
+- Verified Openprovider guidance:
+  - `availability`: working / `sandbox_verified`
+  - `registration`: disabled / `not_enabled`
+  - `execution`: blocked / `control_plane_only`
+- Availability search behavior:
+  - GET-only form
+  - action: `/gnr8/admin/providers/openprovider`
+  - query param: `?domain=<domain>`
+  - default fallback: `levi-testis.com`
+- Verified search behavior:
+  - real Openprovider availability lookups are operational
+  - sandbox provider responses are visible through cockpit UI
+  - no registration/write paths were introduced
+- Boundary remains explicit:
+  - read-only only
+  - no provider writes
+  - no DNS writes
+  - no registration
+  - no execution
+  - no queue/Inngest/worker execution
+  - no mutation POST controls
+- Conclusion:
+  - GNR8 provider UX now includes a navigable provider control-plane flow, provider capability explanations, readiness semantics, and real provider availability intelligence search.
+- Recommended next milestone:
+  - Provider Readiness Advisor Layer
+- Success criteria:
+  - future thread bootstrap resumes from provider capability guidance + availability search milestone
 
 - Provider Navigation Wiring is implemented, deployed, and manually verified.
 - Completed navigation flow:

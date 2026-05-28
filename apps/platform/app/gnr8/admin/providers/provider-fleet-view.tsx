@@ -38,6 +38,11 @@ const BADGE_THEME: Record<BadgeLevel, { bg: string; border: string; text: string
 function resolveBadgeLevel(value: string | boolean): BadgeLevel {
   if (value === true) return "success";
   if (value === false) return "neutral";
+  if (value.includes("operational")) return "success";
+  if (value.includes("verified")) return "success";
+  if (value.includes("limited")) return "warning";
+  if (value.includes("missing")) return "warning";
+  if (value.includes("disabled")) return "critical";
   if (value === "connected") return "success";
   if (value === "working") return "success";
   if (value === "sandbox_verified") return "success";
@@ -47,6 +52,47 @@ function resolveBadgeLevel(value: string | boolean): BadgeLevel {
   if (value === "control_plane_only") return "critical";
   return "neutral";
 }
+
+type AdvisorCard = {
+  title: "Current State" | "Current Limitations" | "Missing Requirements" | "Recommended Next Step";
+  items: readonly string[];
+};
+
+const FLEET_READINESS_ADVISOR: readonly AdvisorCard[] = [
+  {
+    title: "Current State",
+    items: [
+      "one provider connected",
+      "multi-provider registry initialized",
+      "provider fleet navigation operational",
+    ],
+  },
+  {
+    title: "Current Limitations",
+    items: [
+      "only Openprovider connected",
+      "no production execution providers",
+      "no orchestration layer",
+    ],
+  },
+  {
+    title: "Missing Requirements",
+    items: [
+      "provider abstraction layer",
+      "execution governance",
+      "multi-provider failover",
+      "production verification",
+    ],
+  },
+  {
+    title: "Recommended Next Step",
+    items: [
+      "connect second provider",
+      "normalize provider capabilities",
+      "introduce provider orchestration contracts",
+    ],
+  },
+];
 
 function DotBadge(props: { level: BadgeLevel }) {
   const theme = BADGE_THEME[props.level];
@@ -243,6 +289,25 @@ export function ProviderFleetView(props: { payload: ProviderFleetPayload }) {
               </section>
             );
           })}
+        </div>
+      </section>
+
+      <section style={{ border: "1px solid #dbe3ea", borderRadius: 10, background: "#ffffff", padding: 12, marginTop: 12 }}>
+        <h2 style={{ margin: "0 0 8px 0", fontSize: 16 }}>Readiness Advisor</h2>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(230px, 1fr))", gap: 10 }}>
+          {FLEET_READINESS_ADVISOR.map((card) => (
+            <section key={card.title} style={{ border: "1px solid #dbe3ea", borderRadius: 10, background: "#ffffff", padding: 12 }}>
+              <h3 style={{ margin: "0 0 8px 0", fontSize: 15 }}>{card.title}</h3>
+              <ul style={{ margin: 0, paddingLeft: 18 }}>
+                {card.items.map((item) => (
+                  <li key={item} style={{ marginBottom: 6, display: "flex", alignItems: "center", gap: 8 }}>
+                    {item}
+                    <DotBadge level={resolveBadgeLevel(item)} />
+                  </li>
+                ))}
+              </ul>
+            </section>
+          ))}
         </div>
       </section>
     </main>

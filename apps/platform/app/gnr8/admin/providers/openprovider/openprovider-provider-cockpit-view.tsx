@@ -66,6 +66,11 @@ function formatDate(value: string): string {
 
 function resolveBadgeLevel(value: string): BadgeLevel {
   if (["available", "connected", "working"].includes(value)) return "success";
+  if (value.includes("operational")) return "success";
+  if (value.includes("verified")) return "success";
+  if (value.includes("limited")) return "warning";
+  if (value.includes("missing")) return "warning";
+  if (value.includes("disabled")) return "critical";
   if (value === "sandbox_verified") return "success";
   if (value === "not_enabled") return "warning";
   if (["empty", "unknown"].includes(value)) return "warning";
@@ -73,6 +78,51 @@ function resolveBadgeLevel(value: string): BadgeLevel {
   if (["blocked", "failed_closed"].includes(value)) return "critical";
   return "neutral";
 }
+
+type AdvisorCard = {
+  title: "Current State" | "Current Limitations" | "Missing Requirements" | "Recommended Next Step";
+  items: readonly string[];
+};
+
+const OPENPROVIDER_READINESS_ADVISOR: readonly AdvisorCard[] = [
+  {
+    title: "Current State",
+    items: [
+      "availability intelligence operational",
+      "DNS inventory operational",
+      "domain inventory operational",
+      "sandbox verified",
+      "read-only boundary active",
+    ],
+  },
+  {
+    title: "Current Limitations",
+    items: [
+      "registration disabled",
+      "execution blocked",
+      "no provider writes",
+      "no live environment verification",
+    ],
+  },
+  {
+    title: "Missing Requirements",
+    items: [
+      "execution orchestration",
+      "approval workflows",
+      "worker/provider execution layer",
+      "live provider verification",
+      "mutation safety review",
+    ],
+  },
+  {
+    title: "Recommended Next Step",
+    items: [
+      "verify live environment behavior",
+      "prepare provider execution architecture",
+      "add approval-driven registration flow",
+    ],
+  },
+];
 
 function resolveAvailabilityBadgeLevel(value: OpenproviderDomainAvailabilityValue | undefined): BadgeLevel {
   if (value === true) return "success";
@@ -263,6 +313,25 @@ export function OpenproviderProviderCockpitView(props: { payload: CockpitPayload
               </section>
             );
           })}
+        </div>
+      </section>
+
+      <section style={{ border: "1px solid #dbe3ea", borderRadius: 10, background: "#ffffff", padding: 12, marginTop: 12 }}>
+        <h2 style={{ margin: "0 0 8px 0", fontSize: 16 }}>Readiness Advisor</h2>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(230px, 1fr))", gap: 10 }}>
+          {OPENPROVIDER_READINESS_ADVISOR.map((card) => (
+            <section key={card.title} style={{ border: "1px solid #dbe3ea", borderRadius: 10, background: "#ffffff", padding: 12 }}>
+              <h3 style={{ margin: "0 0 8px 0", fontSize: 15 }}>{card.title}</h3>
+              <ul style={{ margin: 0, paddingLeft: 18 }}>
+                {card.items.map((item) => (
+                  <li key={item} style={{ marginBottom: 6, display: "flex", alignItems: "center", gap: 8 }}>
+                    {item}
+                    <Badge level={resolveBadgeLevel(item)} />
+                  </li>
+                ))}
+              </ul>
+            </section>
+          ))}
         </div>
       </section>
 

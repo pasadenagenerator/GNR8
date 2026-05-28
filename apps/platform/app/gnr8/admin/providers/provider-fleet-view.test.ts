@@ -108,3 +108,34 @@ test("provider fleet view source: registration and execution capability statuses
   assert.equal(source.includes('status: "blocked"'), true);
   assert.equal(source.includes('readiness: "control_plane_only"'), true);
 });
+
+test("provider fleet view source: readiness advisor section and cards render", async () => {
+  const source = await readFile(VIEW_FILE, "utf8");
+  assert.equal(source.includes("Readiness Advisor"), true);
+  assert.equal(source.includes("Current State"), true);
+  assert.equal(source.includes("Current Limitations"), true);
+  assert.equal(source.includes("Missing Requirements"), true);
+  assert.equal(source.includes("Recommended Next Step"), true);
+});
+
+test("provider fleet view source: readiness advisor guidance text renders", async () => {
+  const source = await readFile(VIEW_FILE, "utf8");
+  assert.equal(source.includes("one provider connected"), true);
+  assert.equal(source.includes("multi-provider registry initialized"), true);
+  assert.equal(source.includes("provider fleet navigation operational"), true);
+  assert.equal(source.includes("only Openprovider connected"), true);
+  assert.equal(source.includes("no production execution providers"), true);
+  assert.equal(source.includes("provider abstraction layer"), true);
+  assert.equal(source.includes("production verification"), true);
+  assert.equal(source.includes("connect second provider"), true);
+  assert.equal(source.includes("introduce provider orchestration contracts"), true);
+});
+
+test("provider fleet view source: readiness advisor badge mapping for guidance values", async () => {
+  const source = await readFile(VIEW_FILE, "utf8");
+  assert.equal(source.includes('value.includes("operational")'), true);
+  assert.equal(source.includes('value.includes("verified")'), true);
+  assert.equal(source.includes('value.includes("limited")'), true);
+  assert.equal(source.includes('value.includes("missing")'), true);
+  assert.equal(source.includes('value.includes("disabled")'), true);
+});
