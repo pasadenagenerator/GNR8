@@ -233,3 +233,57 @@ test("provider fleet view source: no action buttons or forms are present", async
   assert.equal(source.includes("Run Routing"), false);
   assert.equal(source.includes("Execute Routing"), false);
 });
+
+test("provider fleet view source: provider category summary section renders", async () => {
+  const source = await readFile(VIEW_FILE, "utf8");
+  assert.equal(source.includes("Provider Category Summary"), true);
+  assert.equal(source.includes("Total Providers:"), true);
+  assert.equal(source.includes("Connected Providers:"), true);
+  assert.equal(source.includes("Preview Capabilities:"), true);
+  assert.equal(source.includes("Execution Status:"), true);
+  assert.equal(source.includes("resolveCategoryExecutionStatus"), true);
+  assert.equal(source.includes("countPreviewCapabilities"), true);
+});
+
+test("provider fleet view source: registrar summary shows 4 / 1 / 3 / blocked", async () => {
+  const source = await readFile(VIEW_FILE, "utf8");
+  assert.equal(source.includes('const totalProviders = categoryProviders.length'), true);
+  assert.equal(source.includes('const connectedProviders = categoryProviders.filter((provider) => provider.status === "connected").length'), true);
+  assert.equal(source.includes('const previewCapabilities = countPreviewCapabilities(categoryProviders, category)'), true);
+  assert.equal(source.includes('const executionStatus = resolveCategoryExecutionStatus(categoryProviders)'), true);
+  assert.equal(source.includes("Registrar / Domain Providers"), true);
+  assert.equal(source.includes("domains"), true);
+  assert.equal(source.includes("dns"), true);
+  assert.equal(source.includes("availability"), true);
+  assert.equal(source.includes("executionStatus"), true);
+});
+
+test("provider fleet view source: AI summary shows 5 / 0 / 10 / blocked", async () => {
+  const source = await readFile(VIEW_FILE, "utf8");
+  assert.equal(source.includes("AI Providers"), true);
+  assert.equal(source.includes('"model_metadata"'), true);
+  assert.equal(source.includes('"routing_policy"'), true);
+  assert.equal(source.includes("Preview Capabilities:"), true);
+  assert.equal(source.includes('if (hasEnabled) return "enabled"'), true);
+  assert.equal(source.includes('return "blocked"'), true);
+});
+
+test("provider fleet view source: communication summary shows 3 / 0 / 0 / blocked", async () => {
+  const source = await readFile(VIEW_FILE, "utf8");
+  assert.equal(source.includes("Communication Providers"), true);
+  assert.equal(
+    source.includes('communication: ["email_delivery", "transactional_email", "inbound_email", "domains", "webhooks"]'),
+    true,
+  );
+  assert.equal(source.includes("resolveCategoryExecutionStatus"), true);
+});
+
+test("provider fleet view source: erp summary shows 1 / 0 / 0 / blocked", async () => {
+  const source = await readFile(VIEW_FILE, "utf8");
+  assert.equal(source.includes("ERP / Accounting Providers"), true);
+  assert.equal(
+    source.includes('erp_accounting: ["accounting", "invoicing", "bookkeeping", "tax", "synchronization"]'),
+    true,
+  );
+  assert.equal(source.includes("countPreviewCapabilities"), true);
+});

@@ -77,7 +77,7 @@ type ProviderRecord = {
   status: ProviderStatus;
   mode: ProviderMode;
   capabilities: Record<CapabilityKey, boolean>;
-  execution: "blocked";
+  execution: "blocked" | "mixed" | "enabled";
 };
 
 type FleetSummary = {
@@ -326,6 +326,28 @@ function groupProvidersByCategory(providers: readonly ProviderRecord[]): Readonl
   return grouped;
 }
 
+type CategoryExecutionStatus = "blocked" | "mixed" | "enabled";
+
+function resolveCategoryExecutionStatus(categoryProviders: readonly ProviderRecord[]): CategoryExecutionStatus {
+  if (categoryProviders.length === 0) return "blocked";
+  const hasEnabled = categoryProviders.some((provider) => provider.execution === "enabled");
+  const hasBlocked = categoryProviders.some((provider) => provider.execution === "blocked");
+  const hasMixed = categoryProviders.some((provider) => provider.execution === "mixed");
+  if (hasEnabled && (hasBlocked || hasMixed)) return "mixed";
+  if (hasEnabled) return "enabled";
+  if (hasMixed) return "mixed";
+  return "blocked";
+}
+
+function countPreviewCapabilities(categoryProviders: readonly ProviderRecord[], category: ProviderCategory): number {
+  return categoryProviders.reduce(
+    (count, provider) =>
+      count +
+      CATEGORY_CAPABILITY_KEYS[category].reduce((innerCount, capability) => innerCount + Number(provider.capabilities[capability]), 0),
+    0,
+  );
+}
+
 function resolveProviderDisplayName(providerId: keyof typeof PROVIDER_CONTRACT_BY_ID): string {
   return PROVIDER_CONTRACT_BY_ID[providerId]?.displayName ?? providerId;
 }
@@ -345,6 +367,31 @@ export function ProviderFleetView(props: { payload: ProviderFleetPayload }) {
         <SummaryCard label="Connected" value={String(props.payload.summary.connected)} />
         <SummaryCard label="Read-only Capabilities" value={String(props.payload.summary.readOnlyCapabilities)} />
         <SummaryCard label="Execution" value={props.payload.summary.execution} />
+      </section>
+
+      <section style={{ border: "1px solid #dbe3ea", borderRadius: 10, background: "#ffffff", padding: 12, marginTop: 12 }}>
+        <h2 style={{ margin: "0 0 8px 0", fontSize: 16 }}>Provider Category Summary</h2>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(230px, 1fr))", gap: 10 }}>
+          {CATEGORY_ORDER.map((category) => {
+            const categoryProviders = providersByCategory[category];
+            if (categoryProviders.length === 0) return null;
+            const totalProviders = categoryProviders.length;
+            const connectedProviders = categoryProviders.filter((provider) => provider.status === "connected").length;
+            const previewCapabilities = countPreviewCapabilities(categoryProviders, category);
+            const executionStatus = resolveCategoryExecutionStatus(categoryProviders);
+            return (
+              <section key={`summary-${category}`} style={{ border: "1px solid #dbe3ea", borderRadius: 10, background: "#ffffff", padding: 12 }}>
+                <h3 style={{ margin: "0 0 8px 0", fontSize: 15 }}>{CATEGORY_LABELS[category]}</h3>
+                <div style={{ display: "grid", gap: 6 }}>
+                  <div><strong>Total Providers:</strong> {totalProviders}</div>
+                  <div><strong>Connected Providers:</strong> {connectedProviders}</div>
+                  <div><strong>Preview Capabilities:</strong> {previewCapabilities}</div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 6 }}><strong>Execution Status:</strong> <Pill label={executionStatus} value={executionStatus} /></div>
+                </div>
+              </section>
+            );
+          })}
+        </div>
       </section>
 
       {CATEGORY_ORDER.map((category) => {

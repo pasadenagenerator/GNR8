@@ -6,6 +6,8 @@
 ## Current Phase
 GNR8 AI Routing Evaluator Preview Model milestone (deterministic AI routing decision preview is implemented and validated; explainable provider selection is available as blocked preview output; no runtime/API/execution/model-call changes).
 
+Provider Fleet Category Summary Cards milestone is now implemented and validated (Provider Fleet now includes a `Provider Category Summary` section with category-level operator cards for total providers, connected providers, preview/read-model capabilities count, and execution status across the global provider taxonomy; current execution state remains blocked; UI/read-model/docs only; no runtime/provider/API/write/queue/worker/model-call changes).
+
 AI Routing Readiness Advisor is now part of Provider Fleet and explicitly documents:
 - current AI routing state,
 - current limitations,
