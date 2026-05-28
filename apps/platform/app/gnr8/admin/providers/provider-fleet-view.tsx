@@ -1,3 +1,6 @@
+import Link from "next/link";
+import { PROVIDER_CONTRACT_BY_ID } from "@/gnr8/runtime/providers/provider-contract-registry";
+
 type BadgeLevel = "success" | "warning" | "critical" | "neutral";
 type ProviderStatus = "connected" | "not_configured";
 type ProviderMode = "sandbox" | "unknown";
@@ -11,19 +14,6 @@ type ProviderRecord = {
   mode: ProviderMode;
   capabilities: Record<CapabilityKey, boolean>;
   execution: "blocked";
-};
-
-type PlaceholderIdentity = {
-  providerId: "realtime_register";
-  providerType: "registrar";
-  environment: "unknown";
-};
-
-type PlaceholderContract = {
-  capabilities: Record<CapabilityKey, false>;
-  readiness: readonly ["not_configured", "control_plane_only"];
-  boundary: readonly ["execution_blocked", "read_only"];
-  identity: PlaceholderIdentity;
 };
 
 type FleetSummary = {
@@ -107,22 +97,7 @@ const FLEET_READINESS_ADVISOR: readonly AdvisorCard[] = [
   },
 ];
 
-const REALTIME_REGISTER_CONTRACT: PlaceholderContract = {
-  capabilities: {
-    domains: false,
-    dns: false,
-    availability: false,
-    registration: false,
-    execution: false,
-  },
-  readiness: ["not_configured", "control_plane_only"],
-  boundary: ["execution_blocked", "read_only"],
-  identity: {
-    providerId: "realtime_register",
-    providerType: "registrar",
-    environment: "unknown",
-  },
-};
+const REALTIME_REGISTER_CONTRACT = PROVIDER_CONTRACT_BY_ID.realtime_register;
 
 const REALTIME_REGISTER_ADVISOR: readonly AdvisorCard[] = [
   {
@@ -369,9 +344,9 @@ export function ProviderFleetView(props: { payload: ProviderFleetPayload }) {
           <section style={{ border: "1px solid #dbe3ea", borderRadius: 10, background: "#ffffff", padding: 12 }}>
             <h3 style={{ margin: "0 0 8px 0", fontSize: 15 }}>Provider Identity</h3>
             <ul style={{ margin: 0, paddingLeft: 18 }}>
-              <li>providerId: {REALTIME_REGISTER_CONTRACT.identity.providerId}</li>
-              <li>providerType: {REALTIME_REGISTER_CONTRACT.identity.providerType}</li>
-              <li>environment: {REALTIME_REGISTER_CONTRACT.identity.environment}</li>
+              <li>providerId: {REALTIME_REGISTER_CONTRACT.providerId}</li>
+              <li>providerType: {REALTIME_REGISTER_CONTRACT.providerType}</li>
+              <li>environment: {REALTIME_REGISTER_CONTRACT.environment}</li>
             </ul>
           </section>
           <section style={{ border: "1px solid #dbe3ea", borderRadius: 10, background: "#ffffff", padding: 12 }}>
@@ -395,7 +370,7 @@ export function ProviderFleetView(props: { payload: ProviderFleetPayload }) {
           <section style={{ border: "1px solid #dbe3ea", borderRadius: 10, background: "#ffffff", padding: 12 }}>
             <h3 style={{ margin: "0 0 8px 0", fontSize: 15 }}>Boundary</h3>
             <ul style={{ margin: 0, paddingLeft: 18 }}>
-              {REALTIME_REGISTER_CONTRACT.boundary.map((item) => (
+              {REALTIME_REGISTER_CONTRACT.boundaries.map((item) => (
                 <li key={item}>{item}</li>
               ))}
             </ul>
@@ -420,4 +395,3 @@ export function ProviderFleetView(props: { payload: ProviderFleetPayload }) {
     </main>
   );
 }
-import Link from "next/link";

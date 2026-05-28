@@ -11,38 +11,31 @@ test("provider fleet view source: renders title and subtitle", async () => {
   assert.equal(source.includes("Global provider control plane"), true);
 });
 
-test("provider fleet page source: renders all four providers", async () => {
+test("provider fleet page source: consumes canonical provider contract registry", async () => {
   const source = await readFile(PAGE_FILE, "utf8");
-  assert.equal(source.includes('name: "Openprovider"'), true);
-  assert.equal(source.includes('name: "Realtime Register"'), true);
-  assert.equal(source.includes('name: "INWX"'), true);
-  assert.equal(source.includes('name: "Netim"'), true);
+  assert.equal(source.includes("PROVIDER_CONTRACT_REGISTRY"), true);
+  assert.equal(source.includes("displayName"), true);
+  assert.equal(source.includes("environment"), true);
 });
 
-test("provider fleet page source: openprovider is connected", async () => {
-  const source = await readFile(PAGE_FILE, "utf8");
-  assert.equal(source.includes('name: "Openprovider"'), true);
-  assert.equal(source.includes('status: "connected"'), true);
-  assert.equal(source.includes('mode: "sandbox"'), true);
+test("provider fleet view source: realtime register contract consumed from registry", async () => {
+  const source = await readFile(VIEW_FILE, "utf8");
+  assert.equal(source.includes("PROVIDER_CONTRACT_BY_ID.realtime_register"), true);
+  assert.equal(source.includes("providerId:"), true);
+  assert.equal(source.includes("providerType:"), true);
+  assert.equal(source.includes("environment:"), true);
 });
 
-test("provider fleet page source: other providers are not_configured", async () => {
-  const source = await readFile(PAGE_FILE, "utf8");
-  const matchCount = source.match(/status: "not_configured"/g)?.length ?? 0;
-  assert.equal(matchCount, 3);
-});
-
-test("provider fleet view source: summary cards show 4 / 1 / 3 / blocked", async () => {
+test("provider fleet view source: summary cards show providers connected read-only and execution", async () => {
   const source = await readFile(VIEW_FILE, "utf8");
   const pageSource = await readFile(PAGE_FILE, "utf8");
   assert.equal(source.includes('SummaryCard label="Providers"'), true);
   assert.equal(source.includes('SummaryCard label="Connected"'), true);
   assert.equal(source.includes('SummaryCard label="Read-only Capabilities"'), true);
   assert.equal(source.includes('SummaryCard label="Execution"'), true);
-  assert.equal(pageSource.includes("providers: 4"), true);
-  assert.equal(pageSource.includes("connected: 1"), true);
-  assert.equal(pageSource.includes("readOnlyCapabilities: 3"), true);
-  assert.equal(pageSource.includes('execution: "blocked"'), true);
+  assert.equal(pageSource.includes("providers: PROVIDER_CONTRACT_REGISTRY.length"), true);
+  assert.equal(pageSource.includes("connected: PROVIDER_CONTRACT_REGISTRY.filter"), true);
+  assert.equal(pageSource.includes("readOnlyCapabilities: PROVIDER_CONTRACT_REGISTRY.reduce"), true);
 });
 
 test("provider fleet view source: capability chips render", async () => {
@@ -144,25 +137,20 @@ test("provider fleet view source: realtime register contract panel renders orche
   const source = await readFile(VIEW_FILE, "utf8");
   assert.equal(source.includes("Realtime Register Contract Readiness"), true);
   assert.equal(source.includes("Provider Identity"), true);
-  assert.equal(source.includes('providerId: "realtime_register"'), true);
-  assert.equal(source.includes('providerType: "registrar"'), true);
-  assert.equal(source.includes('environment: "unknown"'), true);
   assert.equal(source.includes("Capabilities"), true);
-  assert.equal(source.includes("domains: false"), true);
-  assert.equal(source.includes("dns: false"), true);
-  assert.equal(source.includes("availability: false"), true);
-  assert.equal(source.includes("registration: false"), true);
-  assert.equal(source.includes("execution: false"), true);
+  assert.equal(source.includes("domains:"), true);
+  assert.equal(source.includes("dns:"), true);
+  assert.equal(source.includes("availability:"), true);
+  assert.equal(source.includes("registration:"), true);
+  assert.equal(source.includes("execution:"), true);
 });
 
 test("provider fleet view source: realtime register readiness and boundary states render", async () => {
   const source = await readFile(VIEW_FILE, "utf8");
-  assert.equal(source.includes('readiness: ["not_configured", "control_plane_only"]'), true);
-  assert.equal(source.includes('boundary: ["execution_blocked", "read_only"]'), true);
   assert.equal(source.includes("not_configured"), true);
   assert.equal(source.includes("control_plane_only"), true);
-  assert.equal(source.includes("execution_blocked"), true);
-  assert.equal(source.includes("read_only"), true);
+  assert.equal(source.includes("Boundar"), true);
+  assert.equal(source.includes("REALTIME_REGISTER_CONTRACT.boundaries.map"), true);
 });
 
 test("provider fleet view source: realtime register readiness advisor text renders", async () => {
