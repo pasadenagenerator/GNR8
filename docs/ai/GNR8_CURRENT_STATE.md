@@ -15,6 +15,64 @@ while keeping execution blocked and read-only boundaries intact.
 
 ## Latest Completed Milestone
 
+- AI Routing Evaluator Contract Draft is completed.
+- New canonical architecture doc:
+  - `docs/architecture/AI_ROUTING_EVALUATOR_CONTRACT.md`
+- Existing architecture doc updated:
+  - `docs/architecture/AI_PROVIDER_ROUTING_ARCHITECTURE.md`
+- Contract now defines future evaluator inputs:
+  - `taskType`
+  - `inputModality`
+  - `outputModality`
+  - `sensitivityLevel`
+  - `latencyPreference`
+  - `costPreference`
+  - `contextRequirement`
+  - `regionPreference`
+  - `fallbackAllowed`
+- Contract now defines future evaluator outputs:
+  - `selectedProviderId`
+  - `selectedModelFamily`
+  - `routingStrategy`
+  - `fallbackProviderIds`
+  - `reason`
+  - `constraintsApplied`
+  - `executionAllowed`
+  - `executionBlocked`
+- Policy sources documented:
+  - `apps/platform/gnr8/runtime/providers/provider-contract-registry.ts`
+  - `apps/platform/gnr8/runtime/providers/ai-routing-policy-registry.ts`
+  - future credential/readiness registry
+  - future governance settings
+- Safety boundary is explicit:
+  - design-only evaluator contract
+  - no model calls
+  - no credential resolution
+  - no runtime execution
+  - no provider dispatch
+- Governance extensions documented for future implementation:
+  - cost ceilings
+  - model allowlist/denylist
+  - tenant policy
+  - audit trail
+  - operator approval
+  - failover rules
+- Design example is now canonicalized:
+  - input `site_migration_planning`
+  - output provider `openai`
+  - fallback `[anthropic]`
+  - strategy `reasoning_priority`
+  - `executionAllowed: false`
+  - `executionBlocked: true`
+- Boundary remains explicit:
+  - docs/read-model architecture milestone only
+  - no runtime routing
+  - no live model calls
+  - no AI execution
+  - no API changes
+- Conclusion:
+  - GNR8 now has a canonical contract for future AI routing evaluation before runtime evaluator implementation.
+
 - AI Routing Policy Registry Extraction is completed.
 - Canonical registry for AI routing policy preview rows is now the source of truth:
   - `apps/platform/gnr8/runtime/providers/ai-routing-policy-registry.ts`

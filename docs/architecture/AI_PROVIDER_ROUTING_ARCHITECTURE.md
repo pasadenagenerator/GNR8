@@ -10,6 +10,12 @@
 ## Purpose
 Define the canonical AI provider routing metadata surface in Provider Fleet so future orchestration can be policy-governed, traceable, and multi-model by design.
 
+## Canonical Evaluator Contract
+- Canonical doc: `docs/architecture/AI_ROUTING_EVALUATOR_CONTRACT.md`
+- Scope: future evaluator request/response contract only
+- Contract purpose: evaluate routing intent against provider metadata + routing policy sources
+- Current boundary: design-time/read-model only, execution blocked
+
 ## UI Surface
 - Route: `/gnr8/admin/providers`
 - Section: `AI Provider Capability Matrix`
@@ -75,6 +81,7 @@ Badge mapping:
 - no execution
 - no secrets
 - no action buttons/forms
+- evaluator contract is design-only (no credential resolution, no provider dispatch)
 
 ## Current Reality (2026-05-28)
 - Provider Fleet now visibly includes AI provider routing strategy metadata and task-to-provider policy preview through read-only matrix sections.
