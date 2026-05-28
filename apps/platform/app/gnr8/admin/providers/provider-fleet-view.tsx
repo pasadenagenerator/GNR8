@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { AI_ROUTING_POLICY_PREVIEW_REGISTRY } from "@/gnr8/runtime/providers/ai-routing-policy-registry";
 import { PROVIDER_CONTRACT_BY_ID } from "@/gnr8/runtime/providers/provider-contract-registry";
 
 type BadgeLevel = "success" | "warning" | "critical" | "neutral";
@@ -129,51 +130,6 @@ const CONTEXT_WINDOW_CLASS_LABELS = {
   long: "long context",
 } as const;
 
-const AI_ROUTING_POLICY_PREVIEW_ROWS = [
-  {
-    taskType: "Site Migration Planning",
-    preferredProvider: "OpenAI",
-    secondaryProvider: "Anthropic",
-    routingStrategy: "reasoning_priority",
-    reasoning: "strongest structured reasoning",
-  },
-  {
-    taskType: "Long Architecture Review",
-    preferredProvider: "Anthropic",
-    secondaryProvider: "OpenAI",
-    routingStrategy: "context_priority",
-    reasoning: "strongest long-context safety reasoning",
-  },
-  {
-    taskType: "Layout / Visual Understanding",
-    preferredProvider: "Gemini",
-    secondaryProvider: "OpenAI",
-    routingStrategy: "context_priority",
-    reasoning: "multimodal/layout strengths",
-  },
-  {
-    taskType: "Fast Interactive Generation",
-    preferredProvider: "Groq",
-    secondaryProvider: "OpenAI",
-    routingStrategy: "latency_priority",
-    reasoning: "ultra-low latency",
-  },
-  {
-    taskType: "EU-sensitive Workloads",
-    preferredProvider: "Mistral",
-    secondaryProvider: "OpenAI",
-    routingStrategy: "sovereignty_priority",
-    reasoning: "EU/open-weight flexibility",
-  },
-  {
-    taskType: "Structured Tool Orchestration",
-    preferredProvider: "OpenAI",
-    secondaryProvider: "Anthropic",
-    routingStrategy: "orchestration_priority",
-    reasoning: "strongest structured reasoning",
-  },
-] as const;
-
 const REALTIME_REGISTER_ADVISOR: readonly AdvisorCard[] = [
   {
     title: "Current State",
@@ -252,6 +208,10 @@ function groupProvidersByCategory(providers: readonly ProviderRecord[]): Readonl
   };
   for (const provider of providers) grouped[provider.category].push(provider);
   return grouped;
+}
+
+function resolveProviderDisplayName(providerId: keyof typeof PROVIDER_CONTRACT_BY_ID): string {
+  return PROVIDER_CONTRACT_BY_ID[providerId]?.displayName ?? providerId;
 }
 
 export function ProviderFleetView(props: { payload: ProviderFleetPayload }) {
@@ -367,11 +327,11 @@ export function ProviderFleetView(props: { payload: ProviderFleetPayload }) {
             </tr>
           </thead>
           <tbody>
-            {AI_ROUTING_POLICY_PREVIEW_ROWS.map((row) => (
+            {AI_ROUTING_POLICY_PREVIEW_REGISTRY.map((row) => (
               <tr key={row.taskType}>
                 <td style={{ padding: "10px 6px", borderBottom: "1px solid #f3f4f6", fontWeight: 700 }}>{row.taskType}</td>
-                <td style={{ padding: "10px 6px", borderBottom: "1px solid #f3f4f6" }}>{row.preferredProvider}</td>
-                <td style={{ padding: "10px 6px", borderBottom: "1px solid #f3f4f6" }}>{row.secondaryProvider}</td>
+                <td style={{ padding: "10px 6px", borderBottom: "1px solid #f3f4f6" }}>{resolveProviderDisplayName(row.preferredProviderId)}</td>
+                <td style={{ padding: "10px 6px", borderBottom: "1px solid #f3f4f6" }}>{resolveProviderDisplayName(row.secondaryProviderId)}</td>
                 <td style={{ padding: "10px 6px", borderBottom: "1px solid #f3f4f6" }}><Pill label={row.routingStrategy} value={row.routingStrategy} /></td>
                 <td style={{ padding: "10px 6px", borderBottom: "1px solid #f3f4f6" }}>{row.reasoning}</td>
               </tr>

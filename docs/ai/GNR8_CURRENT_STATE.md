@@ -8,6 +8,34 @@ GNR8 AI Routing Policy Preview UI milestone (Provider Fleet now exposes read-onl
 
 ## Latest Completed Milestone
 
+- AI Routing Policy Registry Extraction is completed.
+- Canonical registry for AI routing policy preview rows is now the source of truth:
+  - `apps/platform/gnr8/runtime/providers/ai-routing-policy-registry.ts`
+- Registry test coverage is explicit:
+  - `apps/platform/gnr8/runtime/providers/ai-routing-policy-registry.test.ts`
+- Provider Fleet UI now consumes routing policy preview from registry:
+  - `apps/platform/app/gnr8/admin/providers/provider-fleet-view.tsx`
+- Registry rows include canonical fields:
+  - `taskType`
+  - `preferredProviderId`
+  - `secondaryProviderId`
+  - `routingStrategy`
+  - `reasoning`
+  - `executionState`
+- Execution state remains explicit and deterministic:
+  - all rows are `preview_only`
+- Provider name display resolution is registry-backed where possible:
+  - `provider-contract-registry` display names are used for preferred/secondary provider columns
+- Boundary remains explicit:
+  - UI/read-model only
+  - no runtime AI routing
+  - no live model calls
+  - no API changes
+  - no execution
+  - no action buttons/forms
+- Conclusion:
+  - AI routing strategy is now represented as canonical read-model data, preparing future runtime routing without implementing execution.
+
 - AI Routing Policy Preview / Task-to-Provider Mapping Matrix UI is completed.
 - Documented UI surface:
   - `/gnr8/admin/providers`

@@ -2,6 +2,7 @@
 
 ## Status
 - Draft: canonical architecture direction
+- Milestone completed: AI Routing Policy Registry Extraction
 - Milestone completed: AI Routing Policy Preview / Task-to-Provider Mapping Matrix UI
 - Scope: UI/read-model/docs only
 - Non-goals: no runtime AI orchestration, no live model calls, no API changes, no execution changes
@@ -39,7 +40,7 @@ Advisory note:
 - AI routing metadata is advisory only. No model calls are performed.
 
 ## AI Routing Policy Preview
-Provider Fleet now also exposes a strategic task-to-provider mapping matrix:
+Provider Fleet now also exposes a strategic task-to-provider mapping matrix from canonical read-model registry data:
 - `Site Migration Planning` -> preferred `OpenAI`, secondary `Anthropic`, strategy `reasoning_priority`
 - `Long Architecture Review` -> preferred `Anthropic`, secondary `OpenAI`, strategy `context_priority`
 - `Layout / Visual Understanding` -> preferred `Gemini`, secondary `OpenAI`, strategy `context_priority`
@@ -49,6 +50,7 @@ Provider Fleet now also exposes a strategic task-to-provider mapping matrix:
 
 Routing policy preview advisory note:
 - Routing policy preview is strategic only. No live AI routing is performed.
+- Execution state for all policy rows: `preview_only`
 
 ## Boundary
 - UI/read-model only
@@ -66,7 +68,7 @@ Routing policy preview advisory note:
 - No provider invocation orchestration exists.
 
 ## Conclusion
-Provider Fleet now visibly includes AI provider routing strategy metadata and task-based routing policy preview, making it the control-plane home for future policy-driven multi-model orchestration.
+AI routing strategy is now represented as canonical read-model data, preparing future runtime routing without implementing execution.
 
 ## Recommended Next Milestone
 - Task-based AI orchestration contract wiring (still read-model first)

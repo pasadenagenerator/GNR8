@@ -111,27 +111,16 @@ test("provider fleet view source: AI routing policy preview section renders", as
   assert.equal(source.includes("Secondary Provider"), true);
   assert.equal(source.includes("Routing Strategy"), true);
   assert.equal(source.includes("Reasoning"), true);
-  assert.equal(source.includes("AI_ROUTING_POLICY_PREVIEW_ROWS"), true);
+  assert.equal(source.includes("AI_ROUTING_POLICY_PREVIEW_REGISTRY"), true);
+  assert.equal(source.includes("resolveProviderDisplayName"), true);
 });
 
 test("provider fleet view source: AI routing policy preview task mappings render", async () => {
   const source = await readFile(VIEW_FILE, "utf8");
-  assert.equal(source.includes("Site Migration Planning"), true);
-  assert.equal(source.includes("Long Architecture Review"), true);
-  assert.equal(source.includes("Layout / Visual Understanding"), true);
-  assert.equal(source.includes("Fast Interactive Generation"), true);
-  assert.equal(source.includes("EU-sensitive Workloads"), true);
-  assert.equal(source.includes("Structured Tool Orchestration"), true);
-  assert.equal(source.includes("OpenAI"), true);
-  assert.equal(source.includes("Anthropic"), true);
-  assert.equal(source.includes("Gemini"), true);
-  assert.equal(source.includes("Groq"), true);
-  assert.equal(source.includes("Mistral"), true);
-  assert.equal(source.includes("reasoning_priority"), true);
-  assert.equal(source.includes("context_priority"), true);
-  assert.equal(source.includes("latency_priority"), true);
-  assert.equal(source.includes("sovereignty_priority"), true);
-  assert.equal(source.includes("orchestration_priority"), true);
+  assert.equal(source.includes("preferredProviderId"), true);
+  assert.equal(source.includes("secondaryProviderId"), true);
+  assert.equal(source.includes("row.routingStrategy"), true);
+  assert.equal(source.includes("executionState"), false);
 });
 
 test("provider fleet view source: AI routing policy preview advisory note renders", async () => {
