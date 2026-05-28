@@ -6,6 +6,8 @@ This is the first file every new ChatGPT/Codex thread should read.
 
 GNR8 is currently in provider/DNS control-plane hardening and migration/preview validation mode.
 The active emphasis is deterministic contracts, approval/handoff safety, and no hidden execution.
+Provider Contract Registry Extraction milestone is complete and verified (Provider Fleet no longer depends on inline UI provider definitions; canonical provider contract registry now drives provider fleet read-model rendering; no runtime/API/provider execution changes).
+Global Provider Taxonomy Expansion milestone is complete and verified (Provider Fleet now operates as the Global Provider Control Plane taxonomy across registrar, deployment, commerce, execution, source control, AI, storage, and identity provider categories; registry/docs/read-model only; no runtime/API/provider execution changes).
 Provider Orchestration Contract Architecture Draft milestone is complete and verified as documentation-only (first canonical multi-provider orchestration contract; no runtime/API/provider execution changes).
 Second Provider Placeholder Readiness Contract milestone is complete and verified (Realtime Register placeholder now rendered with explicit orchestration contract/readiness/boundary/identity fields and provider-specific readiness advisor text in Provider Fleet Cockpit; UI/read-model only; no runtime/API/provider execution changes).
 Provider Fleet Cockpit milestone is complete and verified (global provider control plane route with deterministic seeded provider registry, UI/read-model only, execution blocked).
@@ -92,6 +94,49 @@ Required production env flag:
 - `GNR8_ADMIN_PROVIDER_HANDOFF_READINESS_SEED_ENABLED=1`
 
 Evidence and diagnostics milestone:
+- Provider Contract Registry Extraction is deployed:
+  - canonical registry file:
+    - `apps/platform/gnr8/runtime/providers/provider-contract-registry.ts`
+  - canonical registry test:
+    - `apps/platform/gnr8/runtime/providers/provider-contract-registry.test.ts`
+  - current UI consumers:
+    - `apps/platform/app/gnr8/admin/providers/page.tsx`
+    - `apps/platform/app/gnr8/admin/providers/provider-fleet-view.tsx`
+  - current providers in registry:
+    - `Openprovider`
+    - `Realtime Register`
+    - `INWX`
+    - `Netim`
+  - canonical contract fields:
+    - `providerId`
+    - `displayName`
+    - `providerType`
+    - `providerCategory`
+    - `environment`
+    - `status`
+    - `capabilities`
+    - `readiness`
+    - `boundaries`
+    - `advisor`
+    - `links`
+  - Openprovider links:
+    - `cockpit`
+    - `domains`
+    - `dns`
+  - boundary remains explicit:
+    - deterministic read-model registry
+    - no runtime provider execution
+    - no provider APIs added
+    - no writes
+    - no queue/worker execution
+  - conclusion:
+    - Provider Fleet is no longer backed by inline UI objects. It now consumes a canonical provider contract registry, creating the foundation for multi-provider orchestration.
+  - strategic direction:
+    - evolve Provider Fleet into global GNR8 provider control plane covering registrar/domain, DNS, deployment, commerce/billing, execution/job, source control, AI, storage/data, and identity providers
+  - recommended next milestone:
+    - Global Provider Taxonomy Expansion
+  - success criteria:
+    - future thread bootstrap resumes from registry-backed provider fleet, not hardcoded UI provider definitions
 - Provider Fleet Cockpit is deployed:
   - UI route: `/gnr8/admin/providers`
   - milestone scope:

@@ -5,8 +5,57 @@
 - Scope: documentation and contract language only
 - Non-goals: no runtime changes, no API changes, no provider execution changes
 
+## Latest Milestone
+Provider Contract Registry Extraction is complete.
+
+Canonical registry artifacts:
+- `apps/platform/gnr8/runtime/providers/provider-contract-registry.ts`
+- `apps/platform/gnr8/runtime/providers/provider-contract-registry.test.ts`
+
+Current UI consumers:
+- `apps/platform/app/gnr8/admin/providers/page.tsx`
+- `apps/platform/app/gnr8/admin/providers/provider-fleet-view.tsx`
+
+Current scope:
+- deterministic read-model registry
+- no runtime provider execution
+- no provider APIs added
+- no writes
+- no queue/worker execution
+
 ## Purpose
 Define the first canonical contract for how GNR8 should evolve into a multi-provider orchestration and control-plane layer across domain, DNS, availability, and execution provider surfaces.
+
+## Canonical Provider Contract Registry
+Provider Fleet must consume canonical provider contracts from a runtime registry, not inline UI objects.
+
+Canonical contract fields:
+- `providerId`
+- `displayName`
+- `providerType`
+- `providerCategory`
+- `environment`
+- `status`
+- `capabilities`
+- `readiness`
+- `boundaries`
+- `advisor`
+- `links`
+
+Current providers in registry:
+- Registrar / Domain Providers: `Openprovider`, `Realtime Register`, `INWX`, `Netim`
+- Deployment Providers: `Vercel`, `Netlify`, `Cloudflare`, `Railway`
+- Commerce / Billing Providers: `Stripe`, `Paddle`, `Polar`
+- Execution Providers: `Inngest`, `Trigger.dev`, `Temporal`
+- Source Control Providers: `GitHub`, `GitLab`
+- AI Providers: `OpenAI`, `Anthropic`, `Gemini`, `Groq`, `Mistral`
+- Storage / Data Providers: `Supabase`, `R2`, `S3`
+- Identity Providers: `Clerk`, `Auth0`, `Supabase Auth`
+
+Openprovider links currently modeled:
+- `cockpit`
+- `domains`
+- `dns`
 
 ## Provider Capability
 Provider capability expresses what a provider can do at the contract level.
@@ -113,6 +162,7 @@ Identity semantics:
 - Execution remains blocked.
 - No mutation orchestration exists yet.
 - Multi-provider routing/failover abstraction is not implemented yet.
+- Provider Fleet now reads provider contracts from canonical registry data, not inline UI definitions.
 
 ## Future Direction
 GNR8 should evolve into a provider orchestration and control-plane layer above multiple infrastructure providers.
@@ -123,5 +173,32 @@ Direction principles:
 - Approval-governed execution
 - Deterministic routing and failover behavior
 - Auditability by default
+
+Global provider control-plane expansion targets:
+- registrar/domain providers
+- deployment providers
+- commerce/billing providers
+- execution/job providers
+- source control providers
+- AI providers
+- storage/data providers
+- identity providers
+
+Future orchestration direction:
+- AI provider routing
+- deployment orchestration
+- billing orchestration
+- execution governance
+- multi-provider failover
+- capability discovery
+
+Provider Fleet positioning:
+- Global Provider Control Plane
+
+Recommended next milestone:
+- Global Provider Taxonomy Expansion
+
+Conclusion:
+- Provider Fleet is no longer backed by inline UI objects. It now consumes a canonical provider contract registry, creating the foundation for multi-provider orchestration.
 
 This document is an architecture draft and does not promise implementation timelines.

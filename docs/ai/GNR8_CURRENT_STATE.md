@@ -4,9 +4,91 @@
 2026-05-28
 
 ## Current Phase
-GNR8 Second Provider Placeholder Readiness Contract milestone (Realtime Register placeholder contract/readiness surface in provider fleet cockpit; UI/read-model only; no runtime/API/provider execution changes).
+GNR8 Provider Contract Registry Extraction milestone (provider fleet now reads canonical provider contracts from runtime registry; deterministic read-model only; no runtime/API/provider execution changes).
 
 ## Latest Completed Milestone
+
+- Provider Contract Registry Extraction is completed.
+- Canonical provider contract registry is now the fleet source of truth:
+  - `apps/platform/gnr8/runtime/providers/provider-contract-registry.ts`
+- Registry contract test coverage is now explicit:
+  - `apps/platform/gnr8/runtime/providers/provider-contract-registry.test.ts`
+- Provider Fleet UI now consumes registry contracts (no inline provider objects):
+  - `apps/platform/app/gnr8/admin/providers/page.tsx`
+  - `apps/platform/app/gnr8/admin/providers/provider-fleet-view.tsx`
+- Providers currently represented in registry:
+  - Registrar / Domain Providers:
+    - `Openprovider`
+    - `Realtime Register`
+    - `INWX`
+    - `Netim`
+  - Deployment Providers:
+    - `Vercel`
+    - `Netlify`
+    - `Cloudflare`
+    - `Railway`
+  - Commerce / Billing Providers:
+    - `Stripe`
+    - `Paddle`
+    - `Polar`
+  - Execution Providers:
+    - `Inngest`
+    - `Trigger.dev`
+    - `Temporal`
+  - Source Control Providers:
+    - `GitHub`
+    - `GitLab`
+  - AI Providers:
+    - `OpenAI`
+    - `Anthropic`
+    - `Gemini`
+    - `Groq`
+    - `Mistral`
+  - Storage / Data Providers:
+    - `Supabase`
+    - `R2`
+    - `S3`
+  - Identity Providers:
+    - `Clerk`
+    - `Auth0`
+    - `Supabase Auth`
+- Canonical provider contract fields in registry:
+  - `providerId`
+  - `displayName`
+  - `providerType`
+  - `providerCategory`
+  - `environment`
+  - `status`
+  - `capabilities`
+  - `readiness`
+  - `boundaries`
+  - `advisor`
+  - `links`
+- Openprovider links currently modeled:
+  - `cockpit`
+  - `domains`
+  - `dns`
+- Current boundary remains explicit:
+  - deterministic read-model registry
+  - no runtime provider execution
+  - no provider APIs added
+  - no writes
+  - no queue/worker execution
+- Conclusion:
+  - Provider Fleet is no longer backed by inline UI objects. It now consumes a canonical provider contract registry, creating the foundation for multi-provider orchestration.
+- Strategic direction:
+  - Provider Fleet documented as Global Provider Control Plane
+  - Future orchestration direction:
+    - AI provider routing
+    - deployment orchestration
+    - billing orchestration
+    - execution governance
+    - multi-provider failover
+    - capability discovery
+- Recommended next milestone:
+  - Global Provider Taxonomy Expansion
+- Success criteria:
+  - future thread bootstrap resumes from registry-backed provider fleet, not hardcoded UI provider definitions
 
 - Second Provider Placeholder Readiness Contract is completed for Realtime Register as a control-plane placeholder only.
 - Updated UI surface:

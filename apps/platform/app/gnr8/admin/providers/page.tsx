@@ -24,6 +24,7 @@ const PROVIDER_FLEET_PAYLOAD = {
   },
   providers: PROVIDER_CONTRACT_REGISTRY.map((provider) => ({
     name: provider.displayName,
+    category: provider.providerCategory,
     status: provider.status,
     mode: provider.environment,
     capabilities: provider.capabilities,
