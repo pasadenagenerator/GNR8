@@ -65,6 +65,8 @@ const BADGE_THEME: Record<BadgeLevel, { bg: string; border: string; text: string
 function resolveBadgeLevel(value: string | boolean): BadgeLevel {
   if (value === true) return "success";
   if (value === false) return "neutral";
+  if (value === "low latency") return "success";
+  if (value === "high cost") return "warning";
   if (value.includes("operational")) return "success";
   if (value.includes("verified")) return "success";
   if (value.includes("limited")) return "warning";
@@ -76,7 +78,9 @@ function resolveBadgeLevel(value: string | boolean): BadgeLevel {
   if (value === "not_enabled") return "warning";
   if (value === "not_configured") return "warning";
   if (value === "blocked") return "critical";
-  if (value === "control_plane_only") return "critical";
+  if (value === "control_plane_only") return "neutral";
+  if (value === "execution_blocked") return "critical";
+  if (value === "premium") return "warning";
   return "neutral";
 }
 
@@ -105,6 +109,25 @@ const FLEET_READINESS_ADVISOR: readonly AdvisorCard[] = [
 ];
 
 const REALTIME_REGISTER_CONTRACT = PROVIDER_CONTRACT_BY_ID.realtime_register;
+const AI_PROVIDER_CAPABILITY_ROWS = Object.values(PROVIDER_CONTRACT_BY_ID).filter((provider) => provider.providerCategory === "ai");
+
+const LATENCY_CLASS_LABELS = {
+  ultra_low: "ultra low latency",
+  low: "low latency",
+  medium: "medium latency",
+} as const;
+
+const COST_CLASS_LABELS = {
+  economy: "low cost",
+  balanced: "balanced cost",
+  premium: "high cost",
+} as const;
+
+const CONTEXT_WINDOW_CLASS_LABELS = {
+  standard: "standard context",
+  extended: "extended context",
+  long: "long context",
+} as const;
 const REALTIME_REGISTER_ADVISOR: readonly AdvisorCard[] = [
   {
     title: "Current State",
@@ -239,6 +262,51 @@ export function ProviderFleetView(props: { payload: ProviderFleetPayload }) {
           </section>
         );
       })}
+
+      <section style={{ border: "1px solid #dbe3ea", borderRadius: 10, background: "#ffffff", padding: 12, marginTop: 12 }}>
+        <h2 style={{ margin: "0 0 8px 0", fontSize: 16 }}>AI Provider Capability Matrix</h2>
+        <table style={{ width: "100%", borderCollapse: "collapse" }}>
+          <thead>
+            <tr>
+              <th style={{ textAlign: "left", padding: "8px 6px", borderBottom: "1px solid #e5e7eb" }}>Provider</th>
+              <th style={{ textAlign: "left", padding: "8px 6px", borderBottom: "1px solid #e5e7eb" }}>Status</th>
+              <th style={{ textAlign: "left", padding: "8px 6px", borderBottom: "1px solid #e5e7eb" }}>Model Families</th>
+              <th style={{ textAlign: "left", padding: "8px 6px", borderBottom: "1px solid #e5e7eb" }}>Strengths</th>
+              <th style={{ textAlign: "left", padding: "8px 6px", borderBottom: "1px solid #e5e7eb" }}>Routing Hints</th>
+              <th style={{ textAlign: "left", padding: "8px 6px", borderBottom: "1px solid #e5e7eb" }}>Latency</th>
+              <th style={{ textAlign: "left", padding: "8px 6px", borderBottom: "1px solid #e5e7eb" }}>Cost</th>
+              <th style={{ textAlign: "left", padding: "8px 6px", borderBottom: "1px solid #e5e7eb" }}>Context</th>
+            </tr>
+          </thead>
+          <tbody>
+            {AI_PROVIDER_CAPABILITY_ROWS.map((provider) => (
+              <tr key={provider.providerId}>
+                <td style={{ padding: "10px 6px", borderBottom: "1px solid #f3f4f6", fontWeight: 700 }}>{provider.displayName}</td>
+                <td style={{ padding: "10px 6px", borderBottom: "1px solid #f3f4f6" }}>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                    <Pill label={provider.status} value={provider.status} />
+                    <Pill label={provider.readiness[1]} value={provider.readiness[1]} />
+                    <Pill label={provider.boundaries[0]} value={provider.boundaries[0]} />
+                  </div>
+                </td>
+                <td style={{ padding: "10px 6px", borderBottom: "1px solid #f3f4f6" }}>{provider.aiRouting?.modelFamilies.join(", ") ?? "n/a"}</td>
+                <td style={{ padding: "10px 6px", borderBottom: "1px solid #f3f4f6" }}>{provider.aiRouting?.strengths.join(", ") ?? "n/a"}</td>
+                <td style={{ padding: "10px 6px", borderBottom: "1px solid #f3f4f6" }}>{provider.aiRouting?.routingHints.join(", ") ?? "n/a"}</td>
+                <td style={{ padding: "10px 6px", borderBottom: "1px solid #f3f4f6" }}>
+                  <Pill label={provider.aiRouting ? LATENCY_CLASS_LABELS[provider.aiRouting.latencyClass] : "n/a"} value={provider.aiRouting ? LATENCY_CLASS_LABELS[provider.aiRouting.latencyClass] : "n/a"} />
+                </td>
+                <td style={{ padding: "10px 6px", borderBottom: "1px solid #f3f4f6" }}>
+                  <Pill label={provider.aiRouting ? COST_CLASS_LABELS[provider.aiRouting.costClass] : "n/a"} value={provider.aiRouting ? COST_CLASS_LABELS[provider.aiRouting.costClass] : "n/a"} />
+                </td>
+                <td style={{ padding: "10px 6px", borderBottom: "1px solid #f3f4f6" }}>{provider.aiRouting ? CONTEXT_WINDOW_CLASS_LABELS[provider.aiRouting.contextWindowClass] : "n/a"}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        <p style={{ margin: "10px 0 0 0", color: "#374151", fontSize: 13 }}>
+          AI routing metadata is advisory only. No model calls are performed.
+        </p>
+      </section>
 
       <section style={{ border: "1px solid #dbe3ea", borderRadius: 10, background: "#ffffff", padding: 12, marginTop: 12 }}>
         <p style={{ margin: 0, color: "#374151", fontSize: 13 }}>Fleet cockpit is read-only. Provider execution remains disabled.</p>

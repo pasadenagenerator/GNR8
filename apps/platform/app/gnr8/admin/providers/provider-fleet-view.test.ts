@@ -75,6 +75,34 @@ test("provider fleet view source: read-only note", async () => {
   assert.equal(source.includes("Fleet cockpit is read-only. Provider execution remains disabled."), true);
 });
 
+test("provider fleet view source: AI Provider Capability Matrix renders", async () => {
+  const source = await readFile(VIEW_FILE, "utf8");
+  assert.equal(source.includes("AI Provider Capability Matrix"), true);
+  assert.equal(source.includes("provider.providerCategory === \"ai\""), true);
+  assert.equal(source.includes("AI routing metadata is advisory only. No model calls are performed."), true);
+});
+
+test("provider fleet view source: AI provider rows render for all configured AI providers", async () => {
+  const source = await readFile(VIEW_FILE, "utf8");
+  assert.equal(source.includes("AI_PROVIDER_CAPABILITY_ROWS"), true);
+  assert.equal(source.includes("provider.providerCategory === \"ai\""), true);
+  assert.equal(source.includes("provider.displayName"), true);
+  assert.equal(source.includes("provider.aiRouting?.modelFamilies"), true);
+});
+
+test("provider fleet view source: AI metadata columns render", async () => {
+  const source = await readFile(VIEW_FILE, "utf8");
+  assert.equal(source.includes("Model Families"), true);
+  assert.equal(source.includes("Strengths"), true);
+  assert.equal(source.includes("Routing Hints"), true);
+  assert.equal(source.includes("Latency"), true);
+  assert.equal(source.includes("Cost"), true);
+  assert.equal(source.includes("Context"), true);
+  assert.equal(source.includes("modelFamilies.join"), true);
+  assert.equal(source.includes("strengths.join"), true);
+  assert.equal(source.includes("routingHints.join"), true);
+});
+
 test("provider fleet view source: openprovider row is linked to provider cockpit", async () => {
   const source = await readFile(VIEW_FILE, "utf8");
   assert.equal(source.includes('href="/gnr8/admin/providers/openprovider"'), true);
