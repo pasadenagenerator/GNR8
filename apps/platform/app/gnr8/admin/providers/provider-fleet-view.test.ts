@@ -276,6 +276,45 @@ test("provider fleet view source: operational snapshot renders by default", asyn
   assert.equal(source.includes('label="Recommended Next Step"'), true);
 });
 
+test("provider fleet view source: governance chain preview renders", async () => {
+  const source = await readFile(VIEW_FILE, "utf8");
+  assert.equal(source.includes("Provider Execution Governance Chain Preview"), true);
+  assert.equal(source.includes("PROVIDER_EXECUTION_GOVERNANCE_CHAIN_PREVIEW"), true);
+});
+
+test("provider fleet view source: governance chain preview renders all six stages", async () => {
+  const source = await readFile(VIEW_FILE, "utf8");
+  assert.equal(source.includes('name: "Provider Contract"'), true);
+  assert.equal(source.includes('name: "Credential Reference"'), true);
+  assert.equal(source.includes('name: "Secret Resolution"'), true);
+  assert.equal(source.includes('name: "Authorization Context"'), true);
+  assert.equal(source.includes('name: "Execution Approval"'), true);
+  assert.equal(source.includes('name: "Execution"'), true);
+  assert.equal(source.includes("modeled"), true);
+  assert.equal(source.includes("previewed"), true);
+  assert.equal(source.includes("design_only_disabled"), true);
+  assert.equal(source.includes("design_only_not_issued"), true);
+  assert.equal(source.includes("design_only_not_requested"), true);
+  assert.equal(source.includes("resolveGovernanceStageBadgeLevel"), true);
+});
+
+test("provider fleet view source: governance chain advisory note renders", async () => {
+  const source = await readFile(VIEW_FILE, "utf8");
+  assert.equal(
+    source.includes(
+      "This chain is a governance preview only. No secrets, approvals, authorization contexts, or executions are created.",
+    ),
+    true,
+  );
+});
+
+test("provider fleet view source: governance chain execution stage remains blocked", async () => {
+  const source = await readFile(VIEW_FILE, "utf8");
+  assert.equal(source.includes('name: "Execution"'), true);
+  assert.equal(source.includes('state: "blocked"'), true);
+  assert.equal(source.includes("Provider execution remains intentionally blocked."), true);
+});
+
 test("provider fleet view source: operational snapshot connected providers count is derived", async () => {
   const source = await readFile(VIEW_FILE, "utf8");
   assert.equal(source.includes("`${props.payload.summary.connected} / ${props.payload.summary.providers}`"), true);
@@ -305,6 +344,9 @@ test("provider fleet view source: no execution controls added with operational s
   assert.equal(source.includes("<form"), false);
   assert.equal(source.includes("Run Execution"), false);
   assert.equal(source.includes("Enable Execution"), false);
+  assert.equal(source.includes("Request Approval"), false);
+  assert.equal(source.includes("Resolve Secret"), false);
+  assert.equal(source.includes("Issue Authorization Context"), false);
 });
 
 test("provider fleet view source: environment awareness preview section renders", async () => {

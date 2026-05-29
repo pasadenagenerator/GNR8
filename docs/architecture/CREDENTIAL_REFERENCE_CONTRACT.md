@@ -56,6 +56,21 @@ Explicitly:
 - credential reference != secret
 - credential reference != authorization
 
+## Secret Resolution Architecture Alignment
+Canonical secret resolution architecture is defined in:
+- `docs/architecture/SECRET_RESOLUTION_ARCHITECTURE.md`
+
+Canonical authorization context contract is defined in:
+- `docs/architecture/AUTHORIZATION_CONTEXT_CONTRACT.md`
+
+Contract alignment rules:
+- Credential Reference stays metadata-only.
+- Secret resolution is a separate future control-plane concern.
+- Any future resolver consumes approved references and returns temporary authorization context only.
+- Authorization context shape/lifecycle/safety requirements must follow the canonical authorization context contract.
+- No raw secret exposure is allowed.
+- Authorization context does not imply mutation permission.
+
 ## Future Integration Points
 This contract is the canonical architecture anchor for future integration with:
 - Provider Fleet
@@ -63,6 +78,7 @@ This contract is the canonical architecture anchor for future integration with:
 - Credential Boundary Preview
 - Credential Boundary Advisor
 - Credential Reference Registry Preview
+- Secret Resolution Architecture
 - Future Secret Manager
 - Future Execution Plane
 

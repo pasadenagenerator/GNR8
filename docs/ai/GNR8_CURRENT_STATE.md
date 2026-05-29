@@ -1,7 +1,161 @@
 # GNR8 CURRENT STATE SNAPSHOT
 
 ## Snapshot Date
-2026-05-28
+2026-05-29
+
+## Canonical Execution Approval Contract Baseline (2026-05-29)
+
+Execution Approval Contract Draft is now defined as canonical architecture documentation:
+- `docs/architecture/EXECUTION_APPROVAL_CONTRACT.md`
+
+Purpose and boundary are explicit:
+- execution approval is a governed authorization decision allowing a specific operation to proceed
+- approval required, provider-bound, environment-bound, capability-bound, operation-bound, time-bound, auditable, revocable
+- approval != execution
+- approval != authorization context
+- approval != secret resolution
+- design/docs only
+- no runtime changes
+- no database changes
+- no APIs
+- no provider execution
+- no writes
+
+Canonical execution approval fields are documented as:
+- `approvalId`
+- `approvalType`
+- `providerId`
+- `providerCategory`
+- `environmentScope`
+- `operationKind`
+- `requestedCapability`
+- `authorizationContextId`
+- `correlationKey`
+- `reason`
+- `requestedBy`
+- `approvedBy`
+- `approvedAt`
+- `expiresAt`
+- `executionAllowed`
+- `executionBlocked`
+- `diagnostics`
+
+Canonical execution approval types are documented as:
+- `manual`
+- `policy`
+- `system`
+- `emergency`
+
+Canonical execution approval lifecycle states are documented as:
+- `requested`
+- `reviewed`
+- `approved`
+- `rejected`
+- `expired`
+- `revoked`
+- `executed`
+
+## Canonical Authorization Context Contract Baseline (2026-05-29)
+
+Authorization Context Contract Draft is now defined as canonical architecture documentation:
+- `docs/architecture/AUTHORIZATION_CONTEXT_CONTRACT.md`
+
+Purpose and boundary are explicit:
+- authorization context is a temporary, scoped, redacted provider access context
+- produced by future secret resolution
+- does not expose raw secrets
+- does not itself authorize mutation unless governance separately allows execution
+- authorization context != secret
+- authorization context != provider execution
+- authorization context != mutation approval
+- authorization context != permanent credential
+- design/docs only
+- no runtime changes
+- no database changes
+- no APIs
+- no secret storage
+- no secret resolution
+- no provider execution
+- no writes
+
+Canonical authorization context fields are documented as:
+- `authorizationContextId`
+- `credentialReferenceId`
+- `providerId`
+- `providerCategory`
+- `environmentScope`
+- `bindingScope`
+- `allowedCapabilities`
+- `allowedOperationKinds`
+- `expiresAt`
+- `issuedAt`
+- `issuedBy`
+- `correlationKey`
+- `redactedEvidence`
+- `executionAllowed`
+- `executionBlocked`
+- `diagnostics`
+
+Canonical authorization context lifecycle states are documented as:
+- `requested`
+- `validated`
+- `issued`
+- `expired`
+- `revoked`
+- `rejected`
+
+## Canonical Secret Resolution Architecture Baseline (2026-05-29)
+
+Secret Resolution Architecture Draft is now defined as canonical architecture documentation:
+- `docs/architecture/SECRET_RESOLUTION_ARCHITECTURE.md`
+
+Purpose and boundary are explicit:
+- secret resolution converts an approved credential reference into a temporary provider authorization context
+- credential reference != secret
+- secret resolution != credential storage
+- secret resolution != provider execution
+- authorization context != permission to mutate
+- design/docs only
+- no runtime changes
+- no database changes
+- no APIs
+- no secret storage
+- no secret resolution
+- no provider authorization context creation
+- no provider execution
+
+Future canonical resolver inputs are documented as:
+- `credentialReferenceId`
+- `providerId`
+- `bindingScope`
+- `ownerScope`
+- `environmentScope`
+- `requestedCapability`
+- `requestedOperationKind`
+- `correlationKey`
+- `approvalContext`
+
+Future canonical resolver outputs are documented as:
+- `authorizationContextId`
+- `providerId`
+- `environmentScope`
+- `allowedCapabilities`
+- `expiresAt`
+- `redactedEvidence`
+- `executionAllowed`
+- `executionBlocked`
+- `diagnostics`
+
+Required future safety controls are documented as:
+- approval required
+- scope matching
+- provider/capability matching
+- environment matching
+- audit trail
+- redaction
+- TTL / expiry
+- least privilege
+- no raw secret exposure
 
 ## Canonical Credential Contract Baseline (2026-05-29)
 
@@ -65,6 +219,8 @@ Provider Fleet Environment Awareness Preview milestone is now implemented and va
 Provider Credential Boundary Preview milestone is now implemented and validated (Provider Fleet now includes a visible-by-default `Provider Credential Boundary Preview` section with summary cards for providers requiring credentials, configured credential references, missing credential references, secret resolution state, and binding required; compact per-category credential breakdown is included for total/configured/missing/secret-resolution-disabled counts; canonical provider contracts now include `credentialBoundary` metadata with `credentialsRequired`, `credentialStatus`, `secretResolution`, and `bindingRequired`; current expected mapping: Openprovider `configured_reference_only`, placeholders `missing`, and `secretResolution:disabled` for all providers; advisory note explicitly states read-only preview and no secrets stored/resolved/exposed; UI/read-model/tests/docs only; no runtime/provider/API/write/queue/worker/model-call changes).
 
 Provider Credential Boundary Advisor milestone is now implemented and validated (Provider Fleet now includes visible-by-default `Provider Credential Boundary Advisor` governance cards for `Current State`, `Current Limitations`, `Missing Requirements`, and `Recommended Next Step`; explicit badge semantics are preserved for modeled/available `success`, missing/required `warning`, and disabled/blocked `critical`; advisory note explicitly states credential governance is preview-only and no secrets are stored/resolved/exposed; UI/read-model/tests/docs only; no credential storage/secret management/secret resolution/provider execution/writes).
+
+Provider Execution Governance Chain Preview milestone is now implemented and validated (Provider Fleet now includes a visible-by-default `Provider Execution Governance Chain Preview` section that renders the full six-stage future governance sequence: `Provider Contract` (`modeled`), `Credential Reference` (`previewed`), `Secret Resolution` (`design_only_disabled`), `Authorization Context` (`design_only_not_issued`), `Execution Approval` (`design_only_not_requested`), and `Execution` (`blocked`); badge mapping is explicit as success/warning/critical by stage state; advisory note explicitly states governance preview only and that no secrets, approvals, authorization contexts, or executions are created; UI/read-model/tests/docs only; no runtime/provider/API/write/queue/worker/model-call changes).
 
 ## Latest Completed Milestone
 

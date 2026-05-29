@@ -76,6 +76,13 @@ type CapabilityKey =
   | "sso";
 type CapabilityStatus = "working" | "disabled" | "blocked";
 type CapabilityReadiness = "sandbox_verified" | "not_enabled" | "control_plane_only";
+type ProviderExecutionGovernanceState =
+  | "modeled"
+  | "previewed"
+  | "design_only_disabled"
+  | "design_only_not_issued"
+  | "design_only_not_requested"
+  | "blocked";
 
 type ProviderRecord = {
   name: string;
@@ -183,6 +190,12 @@ function resolveBadgeLevel(value: string | boolean): BadgeLevel {
   return "neutral";
 }
 
+function resolveGovernanceStageBadgeLevel(state: ProviderExecutionGovernanceState): BadgeLevel {
+  if (state === "modeled" || state === "previewed") return "success";
+  if (state === "blocked") return "critical";
+  return "warning";
+}
+
 type AdvisorCard = {
   title: "Current State" | "Current Limitations" | "Missing Requirements" | "Recommended Next Step";
   items: readonly string[];
@@ -196,6 +209,19 @@ type AIRoutingAdvisorCard = {
 type CredentialBoundaryAdvisorCard = {
   title: "Current State" | "Current Limitations" | "Missing Requirements" | "Recommended Next Step";
   items: readonly { label: string; status: "success" | "warning" | "critical" }[];
+};
+
+type ProviderExecutionGovernanceStage = {
+  order: 1 | 2 | 3 | 4 | 5 | 6;
+  name:
+    | "Provider Contract"
+    | "Credential Reference"
+    | "Secret Resolution"
+    | "Authorization Context"
+    | "Execution Approval"
+    | "Execution";
+  state: ProviderExecutionGovernanceState;
+  description: string;
 };
 
 const PROVIDER_CREDENTIAL_BOUNDARY_ADVISOR: readonly CredentialBoundaryAdvisorCard[] = [
@@ -274,6 +300,45 @@ const AI_ROUTING_READINESS_ADVISOR: readonly AIRoutingAdvisorCard[] = [
       { label: "add AI provider credential reference model", status: "preview_ready" },
       { label: "keep execution blocked until governance is ready", status: "execution_blocked" },
     ],
+  },
+];
+
+const PROVIDER_EXECUTION_GOVERNANCE_CHAIN_PREVIEW: readonly ProviderExecutionGovernanceStage[] = [
+  {
+    order: 1,
+    name: "Provider Contract",
+    state: "modeled",
+    description: "Provider capabilities, readiness, boundaries, environment scope and credential boundary are modeled.",
+  },
+  {
+    order: 2,
+    name: "Credential Reference",
+    state: "previewed",
+    description: "Credential references are represented as metadata only; no secrets are stored.",
+  },
+  {
+    order: 3,
+    name: "Secret Resolution",
+    state: "design_only_disabled",
+    description: "Secret resolution architecture exists, but no secrets are resolved.",
+  },
+  {
+    order: 4,
+    name: "Authorization Context",
+    state: "design_only_not_issued",
+    description: "Authorization context contract exists, but no contexts are issued.",
+  },
+  {
+    order: 5,
+    name: "Execution Approval",
+    state: "design_only_not_requested",
+    description: "Execution approval contract exists, but no approvals are requested or granted.",
+  },
+  {
+    order: 6,
+    name: "Execution",
+    state: "blocked",
+    description: "Provider execution remains intentionally blocked.",
   },
 ];
 
@@ -632,6 +697,46 @@ export function ProviderFleetView(props: { payload: ProviderFleetPayload }) {
         </div>
         <p style={{ margin: "10px 0 0 0", color: "#374151", fontSize: 13 }}>
           Credential governance is preview-only. No secrets are stored, resolved, or exposed.
+        </p>
+      </section>
+
+      <section style={{ border: "1px solid #dbe3ea", borderRadius: 10, background: "#ffffff", padding: 12, marginTop: 12 }}>
+        <h2 style={{ margin: "0 0 8px 0", fontSize: 16 }}>Provider Execution Governance Chain Preview</h2>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(230px, 1fr))", gap: 10 }}>
+          {PROVIDER_EXECUTION_GOVERNANCE_CHAIN_PREVIEW.map((stage) => {
+            const badgeLevel = resolveGovernanceStageBadgeLevel(stage.state);
+            const theme = BADGE_THEME[badgeLevel];
+            return (
+              <section key={stage.name} style={{ border: "1px solid #dbe3ea", borderRadius: 10, background: "#ffffff", padding: 12 }}>
+                <h3 style={{ margin: "0 0 8px 0", fontSize: 15 }}>{stage.order}. {stage.name}</h3>
+                <div style={{ marginTop: 4, display: "flex", alignItems: "center", gap: 6 }}>
+                  <strong>State:</strong>
+                  <span
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: 6,
+                      borderRadius: 999,
+                      border: `1px solid ${theme.border}`,
+                      background: theme.bg,
+                      color: theme.text,
+                      fontSize: 12,
+                      lineHeight: "16px",
+                      padding: "3px 8px",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    {stage.state}
+                    <DotBadge level={badgeLevel} />
+                  </span>
+                </div>
+                <p style={{ margin: "8px 0 0 0", color: "#374151" }}><strong>Description:</strong> {stage.description}</p>
+              </section>
+            );
+          })}
+        </div>
+        <p style={{ margin: "10px 0 0 0", color: "#374151", fontSize: 13 }}>
+          This chain is a governance preview only. No secrets, approvals, authorization contexts, or executions are created.
         </p>
       </section>
 

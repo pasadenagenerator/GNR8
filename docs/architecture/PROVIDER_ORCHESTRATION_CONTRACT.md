@@ -23,6 +23,38 @@ Alignment rules:
   - no secret resolution
   - no execution enablement
 
+## Canonical Secret Resolution Architecture
+Secret resolution architecture is now canonicalized in:
+- `docs/architecture/SECRET_RESOLUTION_ARCHITECTURE.md`
+
+## Canonical Authorization Context Contract
+Authorization context architecture is now canonicalized in:
+- `docs/architecture/AUTHORIZATION_CONTEXT_CONTRACT.md`
+
+## Canonical Execution Approval Contract
+Execution approval architecture is now canonicalized in:
+- `docs/architecture/EXECUTION_APPROVAL_CONTRACT.md`
+
+Alignment rules:
+- authorization context is temporary, scoped, and redacted provider access context
+- authorization context != secret
+- authorization context != provider execution
+- authorization context != mutation approval
+- authorization context != permanent credential
+- authorization context must carry explicit execution gating (`executionAllowed`, `executionBlocked`)
+- authorization context lifecycle is explicit (`requested`, `validated`, `issued`, `expired`, `revoked`, `rejected`)
+
+Alignment rules:
+- secret resolution is future architecture only
+- credential reference != secret
+- secret resolution != provider execution
+- authorization context != permission to mutate
+- future resolver outputs must include explicit execution gating (`executionAllowed`, `executionBlocked`)
+- execution approval is a governed authorization decision, not execution itself
+- execution approval != authorization context
+- execution approval != secret resolution
+- approval must be provider-bound, environment-bound, capability-bound, operation-bound, and time-bound
+
 ## Latest Milestone
 Provider Contract Registry Extraction is complete.
 
@@ -57,6 +89,24 @@ Provider Credential Boundary Advisor is implemented in Provider Fleet (UI/read-m
   - no secret resolution
   - no provider execution
   - no writes
+
+Provider Execution Governance Chain Preview is implemented in Provider Fleet (UI/read-model/docs only):
+- visible-by-default governance sequence section:
+  - `Provider Execution Governance Chain Preview`
+- stages and states:
+  - `Provider Contract` -> `modeled`
+  - `Credential Reference` -> `previewed`
+  - `Secret Resolution` -> `design_only_disabled`
+  - `Authorization Context` -> `design_only_not_issued`
+  - `Execution Approval` -> `design_only_not_requested`
+  - `Execution` -> `blocked`
+- badge mapping:
+  - `modeled` / `previewed` -> success
+  - `design_only_disabled` / `design_only_not_issued` / `design_only_not_requested` -> warning
+  - `blocked` -> critical
+- advisory boundary note:
+  - This chain is governance preview only.
+  - No secrets, approvals, authorization contexts, or executions are created.
 
 Current scope:
 - deterministic read-model registry
@@ -185,6 +235,7 @@ Future execution governance is approval-driven and evidence-first.
 Required governance concepts:
 - Approval flow:
   - explicit operator and governance checkpoints before any mutation-capable execution
+  - canonical approval contract fields and lifecycle must be satisfied before execution is allowed
 - Execution plans:
   - deterministic, inspectable plan artifacts before execution intent
 - Dry-run/simulation:
@@ -258,49 +309,3 @@ Global provider control-plane expansion targets:
 - deployment providers
 - communication providers
 - ERP/accounting providers
-- edge infrastructure providers
-- commerce/billing providers
-- execution/job providers
-- source control providers
-- AI providers
-- storage/data providers
-- identity providers
-
-Future orchestration direction:
-- AI provider routing
-- communication orchestration
-- ERP/accounting orchestration
-- edge infrastructure orchestration
-- deployment orchestration
-- billing orchestration
-- execution governance
-- multi-provider failover
-- capability discovery
-
-AI routing concepts (future):
-- task-based routing
-- fallback routing
-- multi-provider orchestration
-- cost-aware routing
-- latency-aware routing
-- capability-aware routing
-- reasoning vs generation specialization
-
-AI routing governance (future):
-- routing policy
-- provider failover
-- cost ceilings
-- execution approval
-- auditability
-- model traceability
-
-Provider Fleet positioning:
-- Global Provider Control Plane
-
-Recommended next milestone:
-- Global Provider Taxonomy Expansion
-
-Conclusion:
-- Provider Fleet is no longer backed by inline UI objects. It now consumes a canonical provider contract registry, creating the foundation for multi-provider orchestration.
-
-This document is an architecture draft and does not promise implementation timelines.
