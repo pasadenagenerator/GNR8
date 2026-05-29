@@ -345,6 +345,40 @@ test("provider fleet view source: environment awareness advisory note renders", 
   );
 });
 
+test("provider fleet view source: credential boundary preview section renders by default", async () => {
+  const source = await readFile(VIEW_FILE, "utf8");
+  assert.equal(source.includes("Provider Credential Boundary Preview"), true);
+  assert.equal(source.includes('SummaryCard label="Providers requiring credentials"'), true);
+  assert.equal(source.includes('SummaryCard label="Configured credential references"'), true);
+  assert.equal(source.includes('SummaryCard label="Missing credential references"'), true);
+  assert.equal(source.includes('SummaryCard label="Secret resolution"'), true);
+  assert.equal(source.includes('SummaryCard label="Binding required" value="Global"'), true);
+});
+
+test("provider fleet view source: credential boundary category breakdown renders", async () => {
+  const source = await readFile(VIEW_FILE, "utf8");
+  assert.equal(source.includes("Configured References:"), true);
+  assert.equal(source.includes("Missing References:"), true);
+  assert.equal(source.includes("Secret Resolution Disabled:"), true);
+  assert.equal(source.includes("categoryContracts.length"), true);
+});
+
+test("provider fleet view source: credential boundary advisory note renders", async () => {
+  const source = await readFile(VIEW_FILE, "utf8");
+  assert.equal(
+    source.includes("Credential boundary preview is read-only. No secrets are stored, resolved, or exposed."),
+    true,
+  );
+});
+
+test("provider fleet view source: secret-like values are not exposed", async () => {
+  const source = await readFile(VIEW_FILE, "utf8");
+  assert.equal(source.includes("apiKey"), false);
+  assert.equal(source.includes("secretKey"), false);
+  assert.equal(source.includes("clientSecret"), false);
+  assert.equal(source.includes("PRIVATE_KEY"), false);
+});
+
 test("provider fleet view source: registrar summary shows 4 / 1 / 3 / blocked", async () => {
   const source = await readFile(VIEW_FILE, "utf8");
   assert.equal(source.includes('const totalProviders = categoryProviders.length'), true);

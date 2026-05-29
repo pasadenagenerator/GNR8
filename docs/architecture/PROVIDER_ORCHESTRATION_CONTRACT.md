@@ -30,6 +30,7 @@ Current scope:
 - no queue/worker execution
 - no runtime AI orchestration
 - environment-awareness preview metadata in provider contracts (`environmentScope`, `bindingScope`)
+- credential boundary preview metadata in provider contracts (`credentialBoundary`)
 
 ## Purpose
 Define the first canonical contract for how GNR8 should evolve into a multi-provider orchestration and control-plane layer across domain, DNS, availability, and execution provider surfaces.
@@ -50,7 +51,22 @@ Canonical contract fields:
 - `readiness`
 - `boundaries`
 - `advisor`
+- `credentialBoundary`
 - `links`
+
+Credential boundary preview model (control-plane only):
+- `credentialBoundary.credentialsRequired`: `boolean`
+- `credentialBoundary.credentialStatus`: `not_required` | `missing` | `configured_reference_only`
+- `credentialBoundary.secretResolution`: `disabled`
+- `credentialBoundary.bindingRequired`: `none` | `global` | `agency` | `project` | `environment`
+- current expected mapping:
+  - Openprovider: `credentialsRequired:true`, `credentialStatus:configured_reference_only`, `secretResolution:disabled`, `bindingRequired:global`
+  - placeholder providers: `credentialsRequired:true`, `credentialStatus:missing`, `secretResolution:disabled`, `bindingRequired:global`
+- governance boundary:
+  - read-model only preview
+  - no secrets stored
+  - no secret resolution
+  - no provider execution
 
 Environment awareness preview model (control-plane only):
 - `environmentScope`: `global` | `sandbox` | `preview` | `staging` | `production`

@@ -67,6 +67,25 @@ test("provider contract shapes include canonical contract fields", () => {
     assert.equal(Array.isArray(provider.readiness), true);
     assert.equal(Array.isArray(provider.boundaries), true);
     assert.equal(Array.isArray(provider.advisor), true);
+    assert.equal(typeof provider.credentialBoundary.credentialsRequired, "boolean");
+    assert.equal(typeof provider.credentialBoundary.credentialStatus, "string");
+    assert.equal(provider.credentialBoundary.secretResolution, "disabled");
+    assert.equal(typeof provider.credentialBoundary.bindingRequired, "string");
+  }
+});
+
+test("credential boundary preview values are deterministic and read-model only", () => {
+  assert.equal(PROVIDER_CONTRACT_BY_ID.openprovider.credentialBoundary.credentialsRequired, true);
+  assert.equal(PROVIDER_CONTRACT_BY_ID.openprovider.credentialBoundary.credentialStatus, "configured_reference_only");
+  assert.equal(PROVIDER_CONTRACT_BY_ID.openprovider.credentialBoundary.secretResolution, "disabled");
+  assert.equal(PROVIDER_CONTRACT_BY_ID.openprovider.credentialBoundary.bindingRequired, "global");
+
+  for (const provider of PROVIDER_CONTRACT_REGISTRY) {
+    assert.equal(provider.credentialBoundary.secretResolution, "disabled");
+    assert.equal(provider.credentialBoundary.credentialsRequired, true);
+    if (provider.providerId === "openprovider") continue;
+    assert.equal(provider.credentialBoundary.credentialStatus, "missing");
+    assert.equal(provider.credentialBoundary.bindingRequired, "global");
   }
 });
 

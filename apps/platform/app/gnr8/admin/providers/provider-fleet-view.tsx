@@ -10,6 +10,7 @@ type ProviderStatus = "connected" | "not_configured";
 type ProviderMode = "sandbox" | "unknown";
 type ProviderEnvironmentScope = "global" | "sandbox" | "preview" | "staging" | "production";
 type ProviderBindingScope = "global" | "agency" | "project" | "environment";
+type ProviderCredentialBindingScope = "none" | "global" | "agency" | "project" | "environment";
 type ProviderCategory =
   | "registrar"
   | "deployment"
@@ -377,6 +378,13 @@ const ENVIRONMENT_SCOPE_ORDER: readonly ProviderEnvironmentScope[] = [
 ];
 
 const BINDING_SCOPE_ORDER: readonly ProviderBindingScope[] = ["global", "agency", "project", "environment"];
+const CREDENTIAL_BINDING_SCOPE_ORDER: readonly ProviderCredentialBindingScope[] = [
+  "none",
+  "global",
+  "agency",
+  "project",
+  "environment",
+];
 
 export function ProviderFleetView(props: { payload: ProviderFleetPayload }) {
   const providersByCategory = groupProvidersByCategory(props.payload.providers);
@@ -388,6 +396,25 @@ export function ProviderFleetView(props: { payload: ProviderFleetPayload }) {
   const bindingScopeCounts = BINDING_SCOPE_ORDER.reduce(
     (counts, scope) => ({ ...counts, [scope]: providerContracts.filter((provider) => provider.bindingScope === scope).length }),
     {} as Record<ProviderBindingScope, number>,
+  );
+  const providersRequiringCredentials = providerContracts.filter(
+    (provider) => provider.credentialBoundary.credentialsRequired,
+  ).length;
+  const configuredCredentialReferences = providerContracts.filter(
+    (provider) => provider.credentialBoundary.credentialStatus === "configured_reference_only",
+  ).length;
+  const missingCredentialReferences = providerContracts.filter(
+    (provider) => provider.credentialBoundary.credentialStatus === "missing",
+  ).length;
+  const allSecretResolutionDisabled = providerContracts.every(
+    (provider) => provider.credentialBoundary.secretResolution === "disabled",
+  );
+  const credentialBindingScopeCounts = CREDENTIAL_BINDING_SCOPE_ORDER.reduce(
+    (counts, scope) => ({
+      ...counts,
+      [scope]: providerContracts.filter((provider) => provider.credentialBoundary.bindingRequired === scope).length,
+    }),
+    {} as Record<ProviderCredentialBindingScope, number>,
   );
   const allProvidersExecutionBlocked = providerContracts.every((provider) => provider.boundaries.includes("execution_blocked"));
   const allProvidersReadOnly = providerContracts.every((provider) => provider.boundaries.includes("read_only"));
@@ -478,6 +505,50 @@ export function ProviderFleetView(props: { payload: ProviderFleetPayload }) {
         </div>
         <p style={{ margin: "10px 0 0 0", color: "#374151", fontSize: 13 }}>
           Environment awareness is a governance preview only. No tenant credentials are managed. No provider execution is performed.
+        </p>
+      </section>
+
+      <section style={{ border: "1px solid #dbe3ea", borderRadius: 10, background: "#ffffff", padding: 12, marginTop: 12 }}>
+        <h2 style={{ margin: "0 0 8px 0", fontSize: 16 }}>Provider Credential Boundary Preview</h2>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: 10 }}>
+          <SummaryCard label="Providers requiring credentials" value={String(providersRequiringCredentials)} />
+          <SummaryCard label="Configured credential references" value={String(configuredCredentialReferences)} />
+          <SummaryCard label="Missing credential references" value={String(missingCredentialReferences)} />
+          <SummaryCard label="Secret resolution" value={allSecretResolutionDisabled ? "Disabled" : "Mixed"} />
+          <SummaryCard label="Binding required" value="Global" />
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(230px, 1fr))", gap: 10, marginTop: 10 }}>
+          {CATEGORY_ORDER.map((category) => {
+            const categoryContracts = providerContracts.filter((provider) => provider.providerCategory === category);
+            if (categoryContracts.length === 0) return null;
+            const configuredReferences = categoryContracts.filter(
+              (provider) => provider.credentialBoundary.credentialStatus === "configured_reference_only",
+            ).length;
+            const missingReferences = categoryContracts.filter(
+              (provider) => provider.credentialBoundary.credentialStatus === "missing",
+            ).length;
+            const secretResolutionDisabled = categoryContracts.filter(
+              (provider) => provider.credentialBoundary.secretResolution === "disabled",
+            ).length;
+            return (
+              <section key={`credential-${category}`} style={{ border: "1px solid #dbe3ea", borderRadius: 10, background: "#ffffff", padding: 12 }}>
+                <h3 style={{ margin: "0 0 8px 0", fontSize: 15 }}>{CATEGORY_LABELS[category]}</h3>
+                <div style={{ display: "grid", gap: 6 }}>
+                  <div><strong>Total Providers:</strong> {categoryContracts.length}</div>
+                  <div><strong>Configured References:</strong> {configuredReferences}</div>
+                  <div><strong>Missing References:</strong> {missingReferences}</div>
+                  <div><strong>Secret Resolution Disabled:</strong> {secretResolutionDisabled}</div>
+                </div>
+              </section>
+            );
+          })}
+        </div>
+        <div style={{ marginTop: 10 }}>
+          <strong>Binding required:</strong>{" "}
+          {CREDENTIAL_BINDING_SCOPE_ORDER.map((scope) => `${scope}: ${credentialBindingScopeCounts[scope]}`).join(" | ")}
+        </div>
+        <p style={{ margin: "10px 0 0 0", color: "#374151", fontSize: 13 }}>
+          Credential boundary preview is read-only. No secrets are stored, resolved, or exposed.
         </p>
       </section>
 

@@ -48,6 +48,9 @@ export type ProviderEnvironment = "sandbox" | "unknown";
 export type ProviderStatus = "connected" | "not_configured";
 export type ProviderEnvironmentScope = "global" | "sandbox" | "preview" | "staging" | "production";
 export type ProviderBindingScope = "global" | "agency" | "project" | "environment";
+export type ProviderCredentialStatus = "not_required" | "missing" | "configured_reference_only";
+export type ProviderSecretResolutionState = "disabled";
+export type ProviderCredentialBindingScope = "none" | "global" | "agency" | "project" | "environment";
 export type CapabilityKey =
   | "domains"
   | "email_delivery"
@@ -147,6 +150,12 @@ export type ProviderContract = {
   readiness: readonly ["not_configured" | "sandbox_verified", "control_plane_only" | "sandbox_verified"];
   boundaries: readonly ["execution_blocked", "read_only"];
   advisor: readonly ProviderContractAdvisorCard[];
+  credentialBoundary: {
+    credentialsRequired: boolean;
+    credentialStatus: ProviderCredentialStatus;
+    secretResolution: ProviderSecretResolutionState;
+    bindingRequired: ProviderCredentialBindingScope;
+  };
   links?: ProviderContractLinks;
   aiRouting?: ProviderAIRoutingMetadata;
 };
@@ -270,6 +279,12 @@ function createPlaceholderProviderContract(
     readiness: ["not_configured", "control_plane_only"],
     boundaries: ["execution_blocked", "read_only"],
     advisor: DEFAULT_PLACEHOLDER_ADVISOR,
+    credentialBoundary: {
+      credentialsRequired: true,
+      credentialStatus: "missing",
+      secretResolution: "disabled",
+      bindingRequired: "global",
+    },
   };
 }
 
@@ -292,6 +307,12 @@ const OPENPROVIDER_PROVIDER_CONTRACT: ProviderContract = {
   },
   readiness: ["sandbox_verified", "sandbox_verified"],
   boundaries: ["execution_blocked", "read_only"],
+  credentialBoundary: {
+    credentialsRequired: true,
+    credentialStatus: "configured_reference_only",
+    secretResolution: "disabled",
+    bindingRequired: "global",
+  },
   advisor: [
     {
       title: "Current State",
