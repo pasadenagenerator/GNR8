@@ -581,6 +581,46 @@ export function ProviderFleetView(props: { payload: ProviderFleetPayload }) {
       </section>
 
       <section style={{ border: "1px solid #dbe3ea", borderRadius: 10, background: "#ffffff", padding: 12, marginTop: 12 }}>
+        <h2 style={{ margin: "0 0 8px 0", fontSize: 16 }}>Provider Execution Governance Chain Preview</h2>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(230px, 1fr))", gap: 10 }}>
+          {PROVIDER_EXECUTION_GOVERNANCE_CHAIN_PREVIEW.map((stage) => {
+            const badgeLevel = resolveGovernanceStageBadgeLevel(stage.state);
+            const theme = BADGE_THEME[badgeLevel];
+            return (
+              <section key={stage.name} style={{ border: "1px solid #dbe3ea", borderRadius: 10, background: "#ffffff", padding: 12 }}>
+                <h3 style={{ margin: "0 0 8px 0", fontSize: 15 }}>{stage.order}. {stage.name}</h3>
+                <div style={{ marginTop: 4, display: "flex", alignItems: "center", gap: 6 }}>
+                  <strong>State:</strong>
+                  <span
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: 6,
+                      borderRadius: 999,
+                      border: `1px solid ${theme.border}`,
+                      background: theme.bg,
+                      color: theme.text,
+                      fontSize: 12,
+                      lineHeight: "16px",
+                      padding: "3px 8px",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    {stage.state}
+                    <DotBadge level={badgeLevel} />
+                  </span>
+                </div>
+                <p style={{ margin: "8px 0 0 0", color: "#374151" }}><strong>Description:</strong> {stage.description}</p>
+              </section>
+            );
+          })}
+        </div>
+        <p style={{ margin: "10px 0 0 0", color: "#374151", fontSize: 13 }}>
+          This chain is a governance preview only. No secrets, approvals, authorization contexts, or executions are created.
+        </p>
+      </section>
+
+      <section style={{ border: "1px solid #dbe3ea", borderRadius: 10, background: "#ffffff", padding: 12, marginTop: 12 }}>
         <h2 style={{ margin: "0 0 8px 0", fontSize: 16 }}>Provider Category Summary</h2>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(230px, 1fr))", gap: 10 }}>
           {CATEGORY_ORDER.map((category) => {
@@ -701,98 +741,19 @@ export function ProviderFleetView(props: { payload: ProviderFleetPayload }) {
       </section>
 
       <section style={{ border: "1px solid #dbe3ea", borderRadius: 10, background: "#ffffff", padding: 12, marginTop: 12 }}>
-        <h2 style={{ margin: "0 0 8px 0", fontSize: 16 }}>Provider Execution Governance Chain Preview</h2>
+        <h2 style={{ margin: "0 0 8px 0", fontSize: 16 }}>AI Routing Readiness Advisor</h2>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(230px, 1fr))", gap: 10 }}>
-          {PROVIDER_EXECUTION_GOVERNANCE_CHAIN_PREVIEW.map((stage) => {
-            const badgeLevel = resolveGovernanceStageBadgeLevel(stage.state);
-            const theme = BADGE_THEME[badgeLevel];
-            return (
-              <section key={stage.name} style={{ border: "1px solid #dbe3ea", borderRadius: 10, background: "#ffffff", padding: 12 }}>
-                <h3 style={{ margin: "0 0 8px 0", fontSize: 15 }}>{stage.order}. {stage.name}</h3>
-                <div style={{ marginTop: 4, display: "flex", alignItems: "center", gap: 6 }}>
-                  <strong>State:</strong>
-                  <span
-                    style={{
-                      display: "inline-flex",
-                      alignItems: "center",
-                      gap: 6,
-                      borderRadius: 999,
-                      border: `1px solid ${theme.border}`,
-                      background: theme.bg,
-                      color: theme.text,
-                      fontSize: 12,
-                      lineHeight: "16px",
-                      padding: "3px 8px",
-                      whiteSpace: "nowrap",
-                    }}
-                  >
-                    {stage.state}
-                    <DotBadge level={badgeLevel} />
-                  </span>
-                </div>
-                <p style={{ margin: "8px 0 0 0", color: "#374151" }}><strong>Description:</strong> {stage.description}</p>
-              </section>
-            );
-          })}
+          {AI_ROUTING_READINESS_ADVISOR.map((card) => (
+            <section key={card.title} style={{ border: "1px solid #dbe3ea", borderRadius: 10, background: "#ffffff", padding: 12 }}>
+              <h3 style={{ margin: "0 0 8px 0", fontSize: 15 }}>{card.title}</h3>
+              <ul style={{ margin: 0, paddingLeft: 18 }}>
+                {card.items.map((item) => (
+                  <li key={item.label} style={{ marginBottom: 6, display: "flex", alignItems: "center", gap: 8 }}>{item.label}<DotBadge level={resolveBadgeLevel(item.status)} /></li>
+                ))}
+              </ul>
+            </section>
+          ))}
         </div>
-        <p style={{ margin: "10px 0 0 0", color: "#374151", fontSize: 13 }}>
-          This chain is a governance preview only. No secrets, approvals, authorization contexts, or executions are created.
-        </p>
-      </section>
-
-      <section style={{ border: "1px solid #dbe3ea", borderRadius: 10, background: "#ffffff", padding: 12, marginTop: 12 }}>
-        <h2 style={{ margin: "0 0 8px 0", fontSize: 16 }}>Credential Reference Registry Preview</h2>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: 10 }}>
-          <SummaryCard label="Total references" value={String(CREDENTIAL_REFERENCE_REGISTRY_PREVIEW.length)} />
-          <SummaryCard label="Configured references" value={String(configuredCredentialReferencePreviewCount)} />
-          <SummaryCard label="Missing references" value={String(missingCredentialReferencePreviewCount)} />
-          <SummaryCard label="Secret resolution disabled count" value={String(secretResolutionDisabledReferencePreviewCount)} />
-          <SummaryCard label="Execution blocked count" value={String(executionBlockedReferencePreviewCount)} />
-        </div>
-        <table style={{ width: "100%", borderCollapse: "collapse", marginTop: 10 }}>
-          <thead>
-            <tr>
-              <th style={{ textAlign: "left", padding: "8px 6px", borderBottom: "1px solid #e5e7eb" }}>Provider</th>
-              <th style={{ textAlign: "left", padding: "8px 6px", borderBottom: "1px solid #e5e7eb" }}>Binding scope</th>
-              <th style={{ textAlign: "left", padding: "8px 6px", borderBottom: "1px solid #e5e7eb" }}>Environment scope</th>
-              <th style={{ textAlign: "left", padding: "8px 6px", borderBottom: "1px solid #e5e7eb" }}>Secret type</th>
-              <th style={{ textAlign: "left", padding: "8px 6px", borderBottom: "1px solid #e5e7eb" }}>Status</th>
-              <th style={{ textAlign: "left", padding: "8px 6px", borderBottom: "1px solid #e5e7eb" }}>Resolution state</th>
-              <th style={{ textAlign: "left", padding: "8px 6px", borderBottom: "1px solid #e5e7eb" }}>Execution</th>
-            </tr>
-          </thead>
-          <tbody>
-            {CREDENTIAL_REFERENCE_REGISTRY_PREVIEW.map((reference) => (
-              <tr key={reference.credentialReferenceId}>
-                <td style={{ padding: "10px 6px", borderBottom: "1px solid #f3f4f6", fontWeight: 700 }}>
-                  {resolveProviderDisplayName(reference.providerId)}
-                </td>
-                <td style={{ padding: "10px 6px", borderBottom: "1px solid #f3f4f6" }}>
-                  <Pill label={reference.bindingScope} value={reference.bindingScope} />
-                </td>
-                <td style={{ padding: "10px 6px", borderBottom: "1px solid #f3f4f6" }}>
-                  <Pill label={reference.environmentScope} value={reference.environmentScope} />
-                </td>
-                <td style={{ padding: "10px 6px", borderBottom: "1px solid #f3f4f6" }}>{reference.secretType}</td>
-                <td style={{ padding: "10px 6px", borderBottom: "1px solid #f3f4f6" }}>
-                  <Pill label={reference.status} value={reference.status} />
-                </td>
-                <td style={{ padding: "10px 6px", borderBottom: "1px solid #f3f4f6" }}>
-                  <Pill label={reference.resolutionState} value={reference.resolutionState} />
-                </td>
-                <td style={{ padding: "10px 6px", borderBottom: "1px solid #f3f4f6" }}>
-                  <Pill
-                    label={reference.executionBlocked ? "blocked" : "enabled"}
-                    value={reference.executionBlocked ? "blocked" : "enabled"}
-                  />
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        <p style={{ margin: "10px 0 0 0", color: "#374151", fontSize: 13 }}>
-          Credential references are metadata only. No secrets are stored, resolved, or exposed.
-        </p>
       </section>
 
       <CollapsibleSection title="Provider Registry Details">
@@ -911,6 +872,60 @@ export function ProviderFleetView(props: { payload: ProviderFleetPayload }) {
         <AIRoutingEvaluatorPreview />
       </CollapsibleSection>
 
+      <CollapsibleSection title="Credential Reference Registry Preview">
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: 10 }}>
+          <SummaryCard label="Total references" value={String(CREDENTIAL_REFERENCE_REGISTRY_PREVIEW.length)} />
+          <SummaryCard label="Configured references" value={String(configuredCredentialReferencePreviewCount)} />
+          <SummaryCard label="Missing references" value={String(missingCredentialReferencePreviewCount)} />
+          <SummaryCard label="Secret resolution disabled count" value={String(secretResolutionDisabledReferencePreviewCount)} />
+          <SummaryCard label="Execution blocked count" value={String(executionBlockedReferencePreviewCount)} />
+        </div>
+        <table style={{ width: "100%", borderCollapse: "collapse", marginTop: 10 }}>
+          <thead>
+            <tr>
+              <th style={{ textAlign: "left", padding: "8px 6px", borderBottom: "1px solid #e5e7eb" }}>Provider</th>
+              <th style={{ textAlign: "left", padding: "8px 6px", borderBottom: "1px solid #e5e7eb" }}>Binding scope</th>
+              <th style={{ textAlign: "left", padding: "8px 6px", borderBottom: "1px solid #e5e7eb" }}>Environment scope</th>
+              <th style={{ textAlign: "left", padding: "8px 6px", borderBottom: "1px solid #e5e7eb" }}>Secret type</th>
+              <th style={{ textAlign: "left", padding: "8px 6px", borderBottom: "1px solid #e5e7eb" }}>Status</th>
+              <th style={{ textAlign: "left", padding: "8px 6px", borderBottom: "1px solid #e5e7eb" }}>Resolution state</th>
+              <th style={{ textAlign: "left", padding: "8px 6px", borderBottom: "1px solid #e5e7eb" }}>Execution</th>
+            </tr>
+          </thead>
+          <tbody>
+            {CREDENTIAL_REFERENCE_REGISTRY_PREVIEW.map((reference) => (
+              <tr key={reference.credentialReferenceId}>
+                <td style={{ padding: "10px 6px", borderBottom: "1px solid #f3f4f6", fontWeight: 700 }}>
+                  {resolveProviderDisplayName(reference.providerId)}
+                </td>
+                <td style={{ padding: "10px 6px", borderBottom: "1px solid #f3f4f6" }}>
+                  <Pill label={reference.bindingScope} value={reference.bindingScope} />
+                </td>
+                <td style={{ padding: "10px 6px", borderBottom: "1px solid #f3f4f6" }}>
+                  <Pill label={reference.environmentScope} value={reference.environmentScope} />
+                </td>
+                <td style={{ padding: "10px 6px", borderBottom: "1px solid #f3f4f6" }}>{reference.secretType}</td>
+                <td style={{ padding: "10px 6px", borderBottom: "1px solid #f3f4f6" }}>
+                  <Pill label={reference.status} value={reference.status} />
+                </td>
+                <td style={{ padding: "10px 6px", borderBottom: "1px solid #f3f4f6" }}>
+                  <Pill label={reference.resolutionState} value={reference.resolutionState} />
+                </td>
+                <td style={{ padding: "10px 6px", borderBottom: "1px solid #f3f4f6" }}>
+                  <Pill
+                    label={reference.executionBlocked ? "blocked" : "enabled"}
+                    value={reference.executionBlocked ? "blocked" : "enabled"}
+                  />
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        <p style={{ margin: "10px 0 0 0", color: "#374151", fontSize: 13 }}>
+          Credential references are metadata only. No secrets are stored, resolved, or exposed.
+        </p>
+      </CollapsibleSection>
+
       <section style={{ border: "1px solid #dbe3ea", borderRadius: 10, background: "#ffffff", padding: 12, marginTop: 12 }}>
         <p style={{ margin: 0, color: "#374151", fontSize: 13 }}>Fleet cockpit is read-only. Provider execution remains disabled.</p>
       </section>
@@ -930,22 +945,6 @@ export function ProviderFleetView(props: { payload: ProviderFleetPayload }) {
           })}
         </div>
       </CollapsibleSection>
-
-      <section style={{ border: "1px solid #dbe3ea", borderRadius: 10, background: "#ffffff", padding: 12, marginTop: 12 }}>
-        <h2 style={{ margin: "0 0 8px 0", fontSize: 16 }}>AI Routing Readiness Advisor</h2>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(230px, 1fr))", gap: 10 }}>
-          {AI_ROUTING_READINESS_ADVISOR.map((card) => (
-            <section key={card.title} style={{ border: "1px solid #dbe3ea", borderRadius: 10, background: "#ffffff", padding: 12 }}>
-              <h3 style={{ margin: "0 0 8px 0", fontSize: 15 }}>{card.title}</h3>
-              <ul style={{ margin: 0, paddingLeft: 18 }}>
-                {card.items.map((item) => (
-                  <li key={item.label} style={{ marginBottom: 6, display: "flex", alignItems: "center", gap: 8 }}>{item.label}<DotBadge level={resolveBadgeLevel(item.status)} /></li>
-                ))}
-              </ul>
-            </section>
-          ))}
-        </div>
-      </section>
 
       <CollapsibleSection title="Realtime Register Contract Readiness">
         <p style={{ margin: "0 0 10px 0", color: "#374151", fontSize: 13 }}>

@@ -5,6 +5,16 @@ import { readFile } from "node:fs/promises";
 const VIEW_FILE = new URL("./provider-fleet-view.tsx", import.meta.url);
 const PAGE_FILE = new URL("./page.tsx", import.meta.url);
 
+function assertStrictSectionOrder(source: string, labels: readonly string[]) {
+  let previousIndex = -1;
+  for (const label of labels) {
+    const index = source.indexOf(label);
+    assert.notEqual(index, -1, `missing section label: ${label}`);
+    assert.equal(index > previousIndex, true, `section out of order: ${label}`);
+    previousIndex = index;
+  }
+}
+
 test("provider fleet view source: renders title and subtitle", async () => {
   const source = await readFile(VIEW_FILE, "utf8");
   assert.equal(source.includes("Provider Fleet Cockpit"), true);
@@ -192,10 +202,37 @@ test("provider fleet view source: collapsible section labels render", async () =
   assert.equal(source.includes("AI Provider Capability Matrix"), true);
   assert.equal(source.includes("AI Routing Policy Preview"), true);
   assert.equal(source.includes("AI Routing Evaluator Preview"), true);
+  assert.equal(source.includes("Credential Reference Registry Preview"), true);
   assert.equal(source.includes("Provider Capability Status"), true);
   assert.equal(source.includes("Realtime Register Contract Readiness"), true);
   assert.equal(source.includes("<details"), true);
   assert.equal(source.includes("<summary"), true);
+});
+
+test("provider fleet view source: visible governance-first section order is deterministic", async () => {
+  const source = await readFile(VIEW_FILE, "utf8");
+  assertStrictSectionOrder(source, [
+    "Operational Snapshot",
+    "Provider Execution Governance Chain Preview",
+    "Provider Category Summary",
+    "Environment Awareness Preview",
+    "Provider Credential Boundary Preview",
+    "Provider Credential Boundary Advisor",
+    "AI Routing Readiness Advisor",
+  ]);
+});
+
+test("provider fleet view source: collapsible section order is deterministic", async () => {
+  const source = await readFile(VIEW_FILE, "utf8");
+  assertStrictSectionOrder(source, [
+    'CollapsibleSection title="Provider Registry Details"',
+    'CollapsibleSection title="AI Provider Capability Matrix"',
+    'CollapsibleSection title="AI Routing Policy Preview"',
+    'CollapsibleSection title="AI Routing Evaluator Preview"',
+    'CollapsibleSection title="Credential Reference Registry Preview"',
+    'CollapsibleSection title="Provider Capability Status"',
+    'CollapsibleSection title="Realtime Register Contract Readiness"',
+  ]);
 });
 
 test("provider fleet view source: AI routing readiness advisor renders", async () => {
