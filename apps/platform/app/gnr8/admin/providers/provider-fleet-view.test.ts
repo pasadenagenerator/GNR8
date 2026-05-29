@@ -307,6 +307,44 @@ test("provider fleet view source: no execution controls added with operational s
   assert.equal(source.includes("Enable Execution"), false);
 });
 
+test("provider fleet view source: environment awareness preview section renders", async () => {
+  const source = await readFile(VIEW_FILE, "utf8");
+  assert.equal(source.includes("Environment Awareness Preview"), true);
+  assert.equal(source.includes("Environment Scopes"), true);
+  assert.equal(source.includes("Binding Scopes"), true);
+});
+
+test("provider fleet view source: openprovider contributes to sandbox environment scope summary", async () => {
+  const source = await readFile(VIEW_FILE, "utf8");
+  assert.equal(source.includes("provider.environmentScope === scope"), true);
+  assert.equal(source.includes('"sandbox"'), true);
+});
+
+test("provider fleet view source: placeholder providers contribute to global environment scope summary", async () => {
+  const source = await readFile(VIEW_FILE, "utf8");
+  assert.equal(source.includes('"global"'), true);
+  assert.equal(source.includes("environmentScopeCounts[scope]"), true);
+  assert.equal(source.includes("scope} providers"), true);
+});
+
+test("provider fleet view source: binding scope summary renders all supported scopes", async () => {
+  const source = await readFile(VIEW_FILE, "utf8");
+  assert.equal(source.includes('"agency"'), true);
+  assert.equal(source.includes('"project"'), true);
+  assert.equal(source.includes('"environment"'), true);
+  assert.equal(source.includes("provider.bindingScope === scope"), true);
+});
+
+test("provider fleet view source: environment awareness advisory note renders", async () => {
+  const source = await readFile(VIEW_FILE, "utf8");
+  assert.equal(
+    source.includes(
+      "Environment awareness is a governance preview only. No tenant credentials are managed. No provider execution is performed.",
+    ),
+    true,
+  );
+});
+
 test("provider fleet view source: registrar summary shows 4 / 1 / 3 / blocked", async () => {
   const source = await readFile(VIEW_FILE, "utf8");
   assert.equal(source.includes('const totalProviders = categoryProviders.length'), true);

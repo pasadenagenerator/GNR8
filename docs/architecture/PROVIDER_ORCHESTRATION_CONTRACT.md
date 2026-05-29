@@ -29,6 +29,7 @@ Current scope:
 - no writes
 - no queue/worker execution
 - no runtime AI orchestration
+- environment-awareness preview metadata in provider contracts (`environmentScope`, `bindingScope`)
 
 ## Purpose
 Define the first canonical contract for how GNR8 should evolve into a multi-provider orchestration and control-plane layer across domain, DNS, availability, and execution provider surfaces.
@@ -42,12 +43,24 @@ Canonical contract fields:
 - `providerType`
 - `providerCategory`
 - `environment`
+- `environmentScope`
+- `bindingScope`
 - `status`
 - `capabilities`
 - `readiness`
 - `boundaries`
 - `advisor`
 - `links`
+
+Environment awareness preview model (control-plane only):
+- `environmentScope`: `global` | `sandbox` | `preview` | `staging` | `production`
+- `bindingScope`: `global` | `agency` | `project` | `environment`
+- current expected mapping:
+  - Openprovider: `environmentScope: sandbox`, `bindingScope: global`
+  - placeholder providers: `environmentScope: global`, `bindingScope: global`
+- governance boundary:
+  - no tenant credential management
+  - no provider execution
 
 Current providers in registry:
 - Registrar / Domain Providers: `Openprovider`, `Realtime Register`, `INWX`, `Netim`

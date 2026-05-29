@@ -46,6 +46,8 @@ export type ProviderCategory =
 
 export type ProviderEnvironment = "sandbox" | "unknown";
 export type ProviderStatus = "connected" | "not_configured";
+export type ProviderEnvironmentScope = "global" | "sandbox" | "preview" | "staging" | "production";
+export type ProviderBindingScope = "global" | "agency" | "project" | "environment";
 export type CapabilityKey =
   | "domains"
   | "email_delivery"
@@ -138,6 +140,8 @@ export type ProviderContract = {
   providerType: "registrar";
   providerCategory: ProviderCategory;
   environment: ProviderEnvironment;
+  environmentScope: ProviderEnvironmentScope;
+  bindingScope: ProviderBindingScope;
   status: ProviderStatus;
   capabilities: Readonly<Record<CapabilityKey, boolean>>;
   readiness: readonly ["not_configured" | "sandbox_verified", "control_plane_only" | "sandbox_verified"];
@@ -259,6 +263,8 @@ function createPlaceholderProviderContract(
     providerType: "registrar",
     providerCategory,
     environment: "unknown",
+    environmentScope: "global",
+    bindingScope: "global",
     status: "not_configured",
     capabilities: createCapabilities(providerCategory),
     readiness: ["not_configured", "control_plane_only"],
@@ -273,6 +279,8 @@ const OPENPROVIDER_PROVIDER_CONTRACT: ProviderContract = {
   providerType: "registrar",
   providerCategory: "registrar",
   environment: "sandbox",
+  environmentScope: "sandbox",
+  bindingScope: "global",
   status: "connected",
   capabilities: {
     ...createCapabilities("registrar"),

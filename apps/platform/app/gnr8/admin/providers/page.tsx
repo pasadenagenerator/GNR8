@@ -27,6 +27,8 @@ const PROVIDER_FLEET_PAYLOAD = {
     category: provider.providerCategory,
     status: provider.status,
     mode: provider.environment,
+    environmentScope: provider.environmentScope,
+    bindingScope: provider.bindingScope,
     capabilities: provider.capabilities,
     execution: "blocked" as const,
   })),

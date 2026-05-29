@@ -8,6 +8,8 @@ import { PROVIDER_CONTRACT_BY_ID } from "@/gnr8/runtime/providers/provider-contr
 type BadgeLevel = "success" | "warning" | "critical" | "neutral";
 type ProviderStatus = "connected" | "not_configured";
 type ProviderMode = "sandbox" | "unknown";
+type ProviderEnvironmentScope = "global" | "sandbox" | "preview" | "staging" | "production";
+type ProviderBindingScope = "global" | "agency" | "project" | "environment";
 type ProviderCategory =
   | "registrar"
   | "deployment"
@@ -78,6 +80,8 @@ type ProviderRecord = {
   category: ProviderCategory;
   status: ProviderStatus;
   mode: ProviderMode;
+  environmentScope: ProviderEnvironmentScope;
+  bindingScope: ProviderBindingScope;
   capabilities: Record<CapabilityKey, boolean>;
   execution: "blocked" | "mixed" | "enabled";
 };
@@ -364,9 +368,27 @@ function resolveProviderDisplayName(providerId: keyof typeof PROVIDER_CONTRACT_B
   return PROVIDER_CONTRACT_BY_ID[providerId]?.displayName ?? providerId;
 }
 
+const ENVIRONMENT_SCOPE_ORDER: readonly ProviderEnvironmentScope[] = [
+  "global",
+  "sandbox",
+  "preview",
+  "staging",
+  "production",
+];
+
+const BINDING_SCOPE_ORDER: readonly ProviderBindingScope[] = ["global", "agency", "project", "environment"];
+
 export function ProviderFleetView(props: { payload: ProviderFleetPayload }) {
   const providersByCategory = groupProvidersByCategory(props.payload.providers);
   const providerContracts = Object.values(PROVIDER_CONTRACT_BY_ID);
+  const environmentScopeCounts = ENVIRONMENT_SCOPE_ORDER.reduce(
+    (counts, scope) => ({ ...counts, [scope]: providerContracts.filter((provider) => provider.environmentScope === scope).length }),
+    {} as Record<ProviderEnvironmentScope, number>,
+  );
+  const bindingScopeCounts = BINDING_SCOPE_ORDER.reduce(
+    (counts, scope) => ({ ...counts, [scope]: providerContracts.filter((provider) => provider.bindingScope === scope).length }),
+    {} as Record<ProviderBindingScope, number>,
+  );
   const allProvidersExecutionBlocked = providerContracts.every((provider) => provider.boundaries.includes("execution_blocked"));
   const allProvidersReadOnly = providerContracts.every((provider) => provider.boundaries.includes("read_only"));
   const evaluatorPreview = evaluateAIRoutingPreview({ taskType: AI_ROUTING_POLICY_PREVIEW_REGISTRY[0]?.taskType ?? "Site Migration Planning" });
@@ -428,6 +450,35 @@ export function ProviderFleetView(props: { payload: ProviderFleetPayload }) {
             );
           })}
         </div>
+      </section>
+
+      <section style={{ border: "1px solid #dbe3ea", borderRadius: 10, background: "#ffffff", padding: 12, marginTop: 12 }}>
+        <h2 style={{ margin: "0 0 8px 0", fontSize: 16 }}>Environment Awareness Preview</h2>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 10 }}>
+          <section style={{ border: "1px solid #dbe3ea", borderRadius: 10, background: "#ffffff", padding: 12 }}>
+            <h3 style={{ margin: "0 0 8px 0", fontSize: 15 }}>Environment Scopes</h3>
+            <ul style={{ margin: 0, paddingLeft: 18 }}>
+              {ENVIRONMENT_SCOPE_ORDER.map((scope) => (
+                <li key={scope}>
+                  {scope} providers: {environmentScopeCounts[scope]}
+                </li>
+              ))}
+            </ul>
+          </section>
+          <section style={{ border: "1px solid #dbe3ea", borderRadius: 10, background: "#ffffff", padding: 12 }}>
+            <h3 style={{ margin: "0 0 8px 0", fontSize: 15 }}>Binding Scopes</h3>
+            <ul style={{ margin: 0, paddingLeft: 18 }}>
+              {BINDING_SCOPE_ORDER.map((scope) => (
+                <li key={scope}>
+                  {scope}: {bindingScopeCounts[scope]}
+                </li>
+              ))}
+            </ul>
+          </section>
+        </div>
+        <p style={{ margin: "10px 0 0 0", color: "#374151", fontSize: 13 }}>
+          Environment awareness is a governance preview only. No tenant credentials are managed. No provider execution is performed.
+        </p>
       </section>
 
       <CollapsibleSection title="Provider Registry Details">

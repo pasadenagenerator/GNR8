@@ -52,6 +52,8 @@ test("provider contract shapes include canonical contract fields", () => {
     assert.equal(typeof provider.providerType, "string");
     assert.equal(typeof provider.providerCategory, "string");
     assert.equal(typeof provider.environment, "string");
+    assert.equal(typeof provider.environmentScope, "string");
+    assert.equal(typeof provider.bindingScope, "string");
     assert.equal(typeof provider.status, "string");
     assert.equal(typeof provider.capabilities.domains, "boolean");
     assert.equal(typeof provider.capabilities.dns, "boolean");
@@ -160,6 +162,20 @@ test("realtime register remains placeholder contract", () => {
 test("openprovider remains the only operational provider", () => {
   const connectedProviders = PROVIDER_CONTRACT_REGISTRY.filter((provider) => provider.status === "connected");
   assert.deepEqual(connectedProviders.map((provider) => provider.providerId), ["openprovider"]);
+});
+
+test("environment scope metadata is deterministic and preview-safe", () => {
+  assert.equal(PROVIDER_CONTRACT_BY_ID.openprovider.environmentScope, "sandbox");
+  for (const provider of PROVIDER_CONTRACT_REGISTRY) {
+    if (provider.providerId === "openprovider") continue;
+    assert.equal(provider.environmentScope, "global");
+  }
+});
+
+test("binding scope metadata defaults to global for current fleet contracts", () => {
+  for (const provider of PROVIDER_CONTRACT_REGISTRY) {
+    assert.equal(provider.bindingScope, "global");
+  }
 });
 
 test("openprovider preserves operational registrar capabilities", () => {
