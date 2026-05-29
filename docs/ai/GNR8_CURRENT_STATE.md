@@ -3,6 +3,38 @@
 ## Snapshot Date
 2026-05-29
 
+## Content & Experience Governance Parent Architecture Baseline (2026-05-29)
+
+Content & Experience Governance Architecture Draft is now defined as canonical parent architecture documentation:
+- `docs/architecture/CONTENT_EXPERIENCE_GOVERNANCE_ARCHITECTURE.md`
+
+Purpose and boundary are explicit:
+- GNR8 manages websites as operational systems
+- website != page collection
+- website == governed digital experience
+- architecture/docs only
+- no runtime changes
+- no APIs
+- no UI
+- no editor implementation
+
+Canonical architecture layers are documented as:
+- `Content Layer`
+- `Design Layer`
+- `Experience Layer`
+- `Editing Layer`
+- `Publish Layer`
+
+Canonical website representation is documented as:
+- `Website -> Content, Design, Experience, Business Logic, Operations, Governance`
+
+Future child architecture responsibilities are now anchored as:
+- Canonical Content Model
+- Canonical Design Model
+- AI Editor Architecture
+- Versioning & Rollback Architecture
+- Publish Governance Architecture
+
 ## Canonical Execution Approval Contract Baseline (2026-05-29)
 
 Execution Approval Contract Draft is now defined as canonical architecture documentation:
@@ -199,7 +231,7 @@ Credential Reference Registry Preview milestone is now implemented and validated
 - no writes
 
 ## Current Phase
-GNR8 AI Routing Evaluator Preview Model milestone (deterministic AI routing decision preview is implemented and validated; explainable provider selection is available as blocked preview output; no runtime/API/execution/model-call changes).
+Provider Governance Cockpit v1 / Section Ordering Pass milestone (Provider Fleet has been consolidated into a coherent governance-first cockpit on `/gnr8/admin/providers`; UI/read-model only; no runtime/API changes; no provider execution; no writes; no secret resolution; no AI model calls).
 
 Provider Fleet Category Summary Cards milestone is now implemented and validated (Provider Fleet now includes a `Provider Category Summary` section with category-level operator cards for total providers, connected providers, preview/read-model capabilities count, and execution status across the global provider taxonomy; current execution state remains blocked; UI/read-model/docs only; no runtime/provider/API/write/queue/worker/model-call changes).
 
@@ -223,6 +255,40 @@ Provider Credential Boundary Advisor milestone is now implemented and validated 
 Provider Execution Governance Chain Preview milestone is now implemented and validated (Provider Fleet now includes a visible-by-default `Provider Execution Governance Chain Preview` section that renders the full six-stage future governance sequence: `Provider Contract` (`modeled`), `Credential Reference` (`previewed`), `Secret Resolution` (`design_only_disabled`), `Authorization Context` (`design_only_not_issued`), `Execution Approval` (`design_only_not_requested`), and `Execution` (`blocked`); badge mapping is explicit as success/warning/critical by stage state; advisory note explicitly states governance preview only and that no secrets, approvals, authorization contexts, or executions are created; UI/read-model/tests/docs only; no runtime/provider/API/write/queue/worker/model-call changes).
 
 ## Latest Completed Milestone
+
+- Provider Governance Cockpit v1 / Section Ordering Pass is completed and validated.
+- Provider Fleet now reads as a coherent governance-first cockpit rather than an accumulated list of provider surfaces.
+- UI surface:
+  - `/gnr8/admin/providers`
+- Visible-by-default order is canonicalized as:
+  - `Operational Snapshot`
+  - `Provider Execution Governance Chain Preview`
+  - `Provider Category Summary`
+  - `Environment Awareness Preview`
+  - `Provider Credential Boundary Preview`
+  - `Provider Credential Boundary Advisor`
+  - `AI Routing Readiness Advisor`
+- Collapsible detail order is canonicalized as:
+  - `Provider Registry Details`
+  - `AI Provider Capability Matrix`
+  - `AI Routing Policy Preview`
+  - `AI Routing Evaluator Preview`
+  - `Credential Reference Registry Preview`
+  - `Provider Capability Status`
+  - `Realtime Register Contract Readiness`
+- Preserved boundaries:
+  - UI/read-model only
+  - no runtime/API changes
+  - no provider execution
+  - no writes
+  - no secret resolution
+  - no AI model calls
+- Recommended next milestone options:
+  - Founder Docs Canonical Repo Commit
+  - AI Credential Boundary Preview
+  - Second Real Provider Read-only Connector
+- Success criteria:
+  - future bootstrap resumes from Provider Governance Cockpit v1 as the canonical Provider Fleet UX baseline
 
 - Credential Reference Registry Preview is completed and validated.
 - Provider Fleet now includes a collapsible `Credential Reference Registry Preview` section with:
