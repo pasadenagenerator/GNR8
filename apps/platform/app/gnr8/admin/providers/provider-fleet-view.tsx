@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import { AIRoutingEvaluatorPreview } from "@/app/gnr8/admin/providers/ai-routing-evaluator-preview";
 import { evaluateAIRoutingPreview } from "@/gnr8/runtime/providers/ai-routing-evaluator-preview";
 import { AI_ROUTING_POLICY_PREVIEW_REGISTRY } from "@/gnr8/runtime/providers/ai-routing-policy-registry";
+import { CREDENTIAL_REFERENCE_REGISTRY_PREVIEW } from "@/gnr8/runtime/providers/credential-reference-registry-preview";
 import { PROVIDER_CONTRACT_BY_ID } from "@/gnr8/runtime/providers/provider-contract-registry";
 
 type BadgeLevel = "success" | "warning" | "critical" | "neutral";
@@ -465,6 +466,18 @@ export function ProviderFleetView(props: { payload: ProviderFleetPayload }) {
     {} as Record<ProviderCredentialBindingScope, number>,
   );
   const allProvidersExecutionBlocked = providerContracts.every((provider) => provider.boundaries.includes("execution_blocked"));
+  const configuredCredentialReferencePreviewCount = CREDENTIAL_REFERENCE_REGISTRY_PREVIEW.filter(
+    (reference) => reference.status === "configured_reference_only",
+  ).length;
+  const missingCredentialReferencePreviewCount = CREDENTIAL_REFERENCE_REGISTRY_PREVIEW.filter(
+    (reference) => reference.status === "missing",
+  ).length;
+  const secretResolutionDisabledReferencePreviewCount = CREDENTIAL_REFERENCE_REGISTRY_PREVIEW.filter(
+    (reference) => reference.resolutionState === "disabled",
+  ).length;
+  const executionBlockedReferencePreviewCount = CREDENTIAL_REFERENCE_REGISTRY_PREVIEW.filter(
+    (reference) => reference.executionBlocked,
+  ).length;
   const allProvidersReadOnly = providerContracts.every((provider) => provider.boundaries.includes("read_only"));
   const evaluatorPreview = evaluateAIRoutingPreview({ taskType: AI_ROUTING_POLICY_PREVIEW_REGISTRY[0]?.taskType ?? "Site Migration Planning" });
   const hasEvaluatorSignal = evaluatorPreview.diagnostics.includes("AI_ROUTING_EVALUATOR_PREVIEW_CREATED");
@@ -619,6 +632,61 @@ export function ProviderFleetView(props: { payload: ProviderFleetPayload }) {
         </div>
         <p style={{ margin: "10px 0 0 0", color: "#374151", fontSize: 13 }}>
           Credential governance is preview-only. No secrets are stored, resolved, or exposed.
+        </p>
+      </section>
+
+      <section style={{ border: "1px solid #dbe3ea", borderRadius: 10, background: "#ffffff", padding: 12, marginTop: 12 }}>
+        <h2 style={{ margin: "0 0 8px 0", fontSize: 16 }}>Credential Reference Registry Preview</h2>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: 10 }}>
+          <SummaryCard label="Total references" value={String(CREDENTIAL_REFERENCE_REGISTRY_PREVIEW.length)} />
+          <SummaryCard label="Configured references" value={String(configuredCredentialReferencePreviewCount)} />
+          <SummaryCard label="Missing references" value={String(missingCredentialReferencePreviewCount)} />
+          <SummaryCard label="Secret resolution disabled count" value={String(secretResolutionDisabledReferencePreviewCount)} />
+          <SummaryCard label="Execution blocked count" value={String(executionBlockedReferencePreviewCount)} />
+        </div>
+        <table style={{ width: "100%", borderCollapse: "collapse", marginTop: 10 }}>
+          <thead>
+            <tr>
+              <th style={{ textAlign: "left", padding: "8px 6px", borderBottom: "1px solid #e5e7eb" }}>Provider</th>
+              <th style={{ textAlign: "left", padding: "8px 6px", borderBottom: "1px solid #e5e7eb" }}>Binding scope</th>
+              <th style={{ textAlign: "left", padding: "8px 6px", borderBottom: "1px solid #e5e7eb" }}>Environment scope</th>
+              <th style={{ textAlign: "left", padding: "8px 6px", borderBottom: "1px solid #e5e7eb" }}>Secret type</th>
+              <th style={{ textAlign: "left", padding: "8px 6px", borderBottom: "1px solid #e5e7eb" }}>Status</th>
+              <th style={{ textAlign: "left", padding: "8px 6px", borderBottom: "1px solid #e5e7eb" }}>Resolution state</th>
+              <th style={{ textAlign: "left", padding: "8px 6px", borderBottom: "1px solid #e5e7eb" }}>Execution</th>
+            </tr>
+          </thead>
+          <tbody>
+            {CREDENTIAL_REFERENCE_REGISTRY_PREVIEW.map((reference) => (
+              <tr key={reference.credentialReferenceId}>
+                <td style={{ padding: "10px 6px", borderBottom: "1px solid #f3f4f6", fontWeight: 700 }}>
+                  {resolveProviderDisplayName(reference.providerId)}
+                </td>
+                <td style={{ padding: "10px 6px", borderBottom: "1px solid #f3f4f6" }}>
+                  <Pill label={reference.bindingScope} value={reference.bindingScope} />
+                </td>
+                <td style={{ padding: "10px 6px", borderBottom: "1px solid #f3f4f6" }}>
+                  <Pill label={reference.environmentScope} value={reference.environmentScope} />
+                </td>
+                <td style={{ padding: "10px 6px", borderBottom: "1px solid #f3f4f6" }}>{reference.secretType}</td>
+                <td style={{ padding: "10px 6px", borderBottom: "1px solid #f3f4f6" }}>
+                  <Pill label={reference.status} value={reference.status} />
+                </td>
+                <td style={{ padding: "10px 6px", borderBottom: "1px solid #f3f4f6" }}>
+                  <Pill label={reference.resolutionState} value={reference.resolutionState} />
+                </td>
+                <td style={{ padding: "10px 6px", borderBottom: "1px solid #f3f4f6" }}>
+                  <Pill
+                    label={reference.executionBlocked ? "blocked" : "enabled"}
+                    value={reference.executionBlocked ? "blocked" : "enabled"}
+                  />
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        <p style={{ margin: "10px 0 0 0", color: "#374151", fontSize: 13 }}>
+          Credential references are metadata only. No secrets are stored, resolved, or exposed.
         </p>
       </section>
 

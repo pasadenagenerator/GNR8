@@ -5,6 +5,24 @@
 - Scope: documentation and contract language only
 - Non-goals: no runtime changes, no API changes, no provider execution changes
 
+## Canonical Credential Reference Contract
+Credential reference architecture is now canonicalized in:
+- `docs/architecture/CREDENTIAL_REFERENCE_CONTRACT.md`
+
+Alignment rules:
+- Credential Reference is metadata only and contains no secrets.
+- Credential Reference is not credential material, not secret material, and not authorization.
+- Credential reference states are canonicalized as:
+  - `missing`
+  - `configured_reference_only`
+  - `resolution_disabled`
+  - `resolution_ready`
+  - `execution_blocked`
+- Provider orchestration must treat credential reference as design-only at this stage:
+  - no credential storage
+  - no secret resolution
+  - no execution enablement
+
 ## Latest Milestone
 Provider Contract Registry Extraction is complete.
 

@@ -3,6 +3,47 @@
 ## Snapshot Date
 2026-05-28
 
+## Canonical Credential Contract Baseline (2026-05-29)
+
+Credential Reference Contract Draft is now defined as canonical architecture documentation:
+- `docs/architecture/CREDENTIAL_REFERENCE_CONTRACT.md`
+
+Boundary remains explicit:
+- design/docs only
+- no runtime changes
+- no database changes
+- no APIs
+- no secret storage
+- no secret resolution
+- no provider execution
+
+Canonical credential reference states are now fixed as:
+- `missing`
+- `configured_reference_only`
+- `resolution_disabled`
+- `resolution_ready`
+- `execution_blocked`
+
+Credential Reference Registry Preview milestone is now implemented and validated as read-model/UI/docs only:
+- runtime registry: `apps/platform/gnr8/runtime/providers/credential-reference-registry-preview.ts`
+- runtime tests: `apps/platform/gnr8/runtime/providers/credential-reference-registry-preview.test.ts`
+- provider fleet UI section: `Credential Reference Registry Preview`
+- provider fleet tests: `apps/platform/app/gnr8/admin/providers/provider-fleet-view.test.ts`
+- deterministic preview references:
+  - Openprovider sandbox reference (`configured_reference_only`)
+  - OpenAI placeholder reference (`missing`)
+  - Resend placeholder reference (`missing`)
+- deterministic boundaries:
+  - `resolutionState` is `disabled` for all references
+  - `executionBlocked` is `true` for all references
+  - advisory note states metadata-only with no secrets stored/resolved/exposed
+- no database changes
+- no APIs
+- no secret storage
+- no secret resolution
+- no provider execution
+- no writes
+
 ## Current Phase
 GNR8 AI Routing Evaluator Preview Model milestone (deterministic AI routing decision preview is implemented and validated; explainable provider selection is available as blocked preview output; no runtime/API/execution/model-call changes).
 
@@ -26,6 +67,32 @@ Provider Credential Boundary Preview milestone is now implemented and validated 
 Provider Credential Boundary Advisor milestone is now implemented and validated (Provider Fleet now includes visible-by-default `Provider Credential Boundary Advisor` governance cards for `Current State`, `Current Limitations`, `Missing Requirements`, and `Recommended Next Step`; explicit badge semantics are preserved for modeled/available `success`, missing/required `warning`, and disabled/blocked `critical`; advisory note explicitly states credential governance is preview-only and no secrets are stored/resolved/exposed; UI/read-model/tests/docs only; no credential storage/secret management/secret resolution/provider execution/writes).
 
 ## Latest Completed Milestone
+
+- Credential Reference Registry Preview is completed and validated.
+- Provider Fleet now includes a visible-by-default `Credential Reference Registry Preview` section with:
+  - `Total references`
+  - `Configured references`
+  - `Missing references`
+  - `Secret resolution disabled count`
+  - `Execution blocked count`
+- Provider Fleet now renders a registry preview table with:
+  - `Provider`
+  - `Binding scope`
+  - `Environment scope`
+  - `Secret type`
+  - `Status`
+  - `Resolution state`
+  - `Execution`
+- Advisory note is explicit:
+  - `Credential references are metadata only. No secrets are stored, resolved, or exposed.`
+- Boundary remains explicit:
+  - read-model/UI/docs only
+  - no database changes
+  - no APIs
+  - no secret storage
+  - no secret resolution
+  - no provider execution
+  - no writes
 
 - Provider Fleet Operational Snapshot is completed and validated.
 - Provider Fleet now includes a visible-by-default `Operational Snapshot` section above detailed control-plane sections with:

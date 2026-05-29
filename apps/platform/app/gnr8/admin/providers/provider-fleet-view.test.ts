@@ -320,6 +320,42 @@ test("provider fleet view source: openprovider contributes to sandbox environmen
   assert.equal(source.includes('"sandbox"'), true);
 });
 
+test("provider fleet view source: credential reference registry preview summary renders", async () => {
+  const source = await readFile(VIEW_FILE, "utf8");
+  assert.equal(source.includes("Credential Reference Registry Preview"), true);
+  assert.equal(source.includes('SummaryCard label="Total references"'), true);
+  assert.equal(source.includes('SummaryCard label="Configured references"'), true);
+  assert.equal(source.includes('SummaryCard label="Missing references"'), true);
+  assert.equal(source.includes('SummaryCard label="Secret resolution disabled count"'), true);
+  assert.equal(source.includes('SummaryCard label="Execution blocked count"'), true);
+  assert.equal(source.includes("CREDENTIAL_REFERENCE_REGISTRY_PREVIEW"), true);
+});
+
+test("provider fleet view source: credential reference registry preview table renders", async () => {
+  const source = await readFile(VIEW_FILE, "utf8");
+  assert.equal(source.includes("Binding scope"), true);
+  assert.equal(source.includes("Environment scope"), true);
+  assert.equal(source.includes("Secret type"), true);
+  assert.equal(source.includes("Resolution state"), true);
+  assert.equal(source.includes("reference.secretType"), true);
+  assert.equal(source.includes("reference.resolutionState"), true);
+  assert.equal(source.includes("reference.executionBlocked ? \"blocked\" : \"enabled\""), true);
+});
+
+test("provider fleet view source: credential reference registry advisory note renders", async () => {
+  const source = await readFile(VIEW_FILE, "utf8");
+  assert.equal(source.includes("Credential references are metadata only. No secrets are stored, resolved, or exposed."), true);
+});
+
+test("provider fleet view source: no execution controls added with credential reference registry preview", async () => {
+  const source = await readFile(VIEW_FILE, "utf8");
+  assert.equal(source.includes("<button"), false);
+  assert.equal(source.includes("<form"), false);
+  assert.equal(source.includes("Enable Credential Resolution"), false);
+  assert.equal(source.includes("Resolve Secrets"), false);
+  assert.equal(source.includes("Run Provider Execution"), false);
+});
+
 test("provider fleet view source: provider credential boundary advisor section renders", async () => {
   const source = await readFile(VIEW_FILE, "utf8");
   assert.equal(source.includes("Provider Credential Boundary Advisor"), true);
