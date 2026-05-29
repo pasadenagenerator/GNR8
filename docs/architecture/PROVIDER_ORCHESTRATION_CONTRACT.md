@@ -22,6 +22,24 @@ Current UI consumers:
 - `apps/platform/app/gnr8/admin/providers/page.tsx`
 - `apps/platform/app/gnr8/admin/providers/provider-fleet-view.tsx`
 
+Provider Credential Boundary Advisor is implemented in Provider Fleet (UI/read-model/docs only):
+- visible-by-default governance advisory section:
+  - `Provider Credential Boundary Advisor`
+- advisory cards:
+  - `Current State`
+  - `Current Limitations`
+  - `Missing Requirements`
+  - `Recommended Next Step`
+- advisory boundary note:
+  - Credential governance is preview-only.
+  - No secrets are stored, resolved, or exposed.
+- governance guarantees preserved:
+  - no credential storage
+  - no secret management
+  - no secret resolution
+  - no provider execution
+  - no writes
+
 Current scope:
 - deterministic read-model registry
 - no runtime provider execution

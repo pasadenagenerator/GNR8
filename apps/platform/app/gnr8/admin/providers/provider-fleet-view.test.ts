@@ -320,6 +320,70 @@ test("provider fleet view source: openprovider contributes to sandbox environmen
   assert.equal(source.includes('"sandbox"'), true);
 });
 
+test("provider fleet view source: provider credential boundary advisor section renders", async () => {
+  const source = await readFile(VIEW_FILE, "utf8");
+  assert.equal(source.includes("Provider Credential Boundary Advisor"), true);
+  assert.equal(source.includes("PROVIDER_CREDENTIAL_BOUNDARY_ADVISOR"), true);
+});
+
+test("provider fleet view source: provider credential boundary advisor renders all four cards", async () => {
+  const source = await readFile(VIEW_FILE, "utf8");
+  assert.equal(source.includes("Current State"), true);
+  assert.equal(source.includes("Current Limitations"), true);
+  assert.equal(source.includes("Missing Requirements"), true);
+  assert.equal(source.includes("Recommended Next Step"), true);
+});
+
+test("provider fleet view source: provider credential boundary advisor note renders", async () => {
+  const source = await readFile(VIEW_FILE, "utf8");
+  assert.equal(source.includes("Credential governance is preview-only. No secrets are stored, resolved, or exposed."), true);
+});
+
+test("provider fleet view source: provider credential boundary advisor expected state text renders", async () => {
+  const source = await readFile(VIEW_FILE, "utf8");
+  assert.equal(source.includes("credential references modeled"), true);
+  assert.equal(source.includes("credential boundary preview available"), true);
+  assert.equal(source.includes("secret resolution disabled"), true);
+  assert.equal(source.includes("provider execution blocked"), true);
+});
+
+test("provider fleet view source: provider credential boundary advisor limitations and requirements render", async () => {
+  const source = await readFile(VIEW_FILE, "utf8");
+  assert.equal(source.includes("no secret manager"), true);
+  assert.equal(source.includes("no credential resolver"), true);
+  assert.equal(source.includes("no execution adapters"), true);
+  assert.equal(source.includes("no tenant credential bindings"), true);
+  assert.equal(source.includes("credential reference contract"), true);
+  assert.equal(source.includes("credential reference registry"), true);
+  assert.equal(source.includes("secret resolution architecture"), true);
+  assert.equal(source.includes("audit trail model"), true);
+  assert.equal(source.includes("approval governance"), true);
+});
+
+test("provider fleet view source: provider credential boundary advisor next steps render", async () => {
+  const source = await readFile(VIEW_FILE, "utf8");
+  assert.equal(source.includes("define credential reference contract"), true);
+  assert.equal(source.includes("keep execution blocked"), true);
+  assert.equal(source.includes("introduce secret manager abstraction"), true);
+  assert.equal(source.includes("preserve credential/provider separation"), true);
+});
+
+test("provider fleet view source: provider credential boundary advisor badge mappings are represented", async () => {
+  const source = await readFile(VIEW_FILE, "utf8");
+  assert.equal(source.includes('normalized.includes("modeled")'), true);
+  assert.equal(source.includes('normalized.includes("available")'), true);
+  assert.equal(source.includes('normalized.includes("required")'), true);
+  assert.equal(source.includes('normalized.includes("disabled")'), true);
+  assert.equal(source.includes('normalized === "blocked"'), true);
+});
+
+test("provider fleet view source: no secret values are exposed", async () => {
+  const source = await readFile(VIEW_FILE, "utf8");
+  assert.equal(source.includes("apiKey"), false);
+  assert.equal(source.includes("secretKey"), false);
+  assert.equal(source.includes("clientSecret"), false);
+});
+
 test("provider fleet view source: placeholder providers contribute to global environment scope summary", async () => {
   const source = await readFile(VIEW_FILE, "utf8");
   assert.equal(source.includes('"global"'), true);

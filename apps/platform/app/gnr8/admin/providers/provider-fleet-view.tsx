@@ -155,6 +155,9 @@ function resolveBadgeLevel(value: string | boolean): BadgeLevel {
   if (value === true) return "success";
   if (value === false) return "neutral";
   const normalized = value.toLowerCase();
+  if (normalized.includes("modeled")) return "success";
+  if (normalized.includes("available")) return "success";
+  if (normalized.includes("required")) return "warning";
   if (normalized === "low latency") return "success";
   if (normalized === "high cost") return "warning";
   if (normalized.includes("operational")) return "success";
@@ -188,6 +191,51 @@ type AIRoutingAdvisorCard = {
   title: "Current State" | "Current Limitations" | "Missing Requirements" | "Recommended Next Step";
   items: readonly { label: string; status: string }[];
 };
+
+type CredentialBoundaryAdvisorCard = {
+  title: "Current State" | "Current Limitations" | "Missing Requirements" | "Recommended Next Step";
+  items: readonly { label: string; status: "success" | "warning" | "critical" }[];
+};
+
+const PROVIDER_CREDENTIAL_BOUNDARY_ADVISOR: readonly CredentialBoundaryAdvisorCard[] = [
+  {
+    title: "Current State",
+    items: [
+      { label: "credential references modeled", status: "success" },
+      { label: "credential boundary preview available", status: "success" },
+      { label: "secret resolution disabled", status: "critical" },
+      { label: "provider execution blocked", status: "critical" },
+    ],
+  },
+  {
+    title: "Current Limitations",
+    items: [
+      { label: "no secret manager", status: "warning" },
+      { label: "no credential resolver", status: "warning" },
+      { label: "no execution adapters", status: "warning" },
+      { label: "no tenant credential bindings", status: "warning" },
+    ],
+  },
+  {
+    title: "Missing Requirements",
+    items: [
+      { label: "credential reference contract", status: "warning" },
+      { label: "credential reference registry", status: "warning" },
+      { label: "secret resolution architecture", status: "warning" },
+      { label: "audit trail model", status: "warning" },
+      { label: "approval governance", status: "warning" },
+    ],
+  },
+  {
+    title: "Recommended Next Step",
+    items: [
+      { label: "define credential reference contract", status: "warning" },
+      { label: "keep execution blocked", status: "critical" },
+      { label: "introduce secret manager abstraction", status: "warning" },
+      { label: "preserve credential/provider separation", status: "warning" },
+    ],
+  },
+];
 
 const AI_ROUTING_READINESS_ADVISOR: readonly AIRoutingAdvisorCard[] = [
   {
@@ -549,6 +597,28 @@ export function ProviderFleetView(props: { payload: ProviderFleetPayload }) {
         </div>
         <p style={{ margin: "10px 0 0 0", color: "#374151", fontSize: 13 }}>
           Credential boundary preview is read-only. No secrets are stored, resolved, or exposed.
+        </p>
+      </section>
+
+      <section style={{ border: "1px solid #dbe3ea", borderRadius: 10, background: "#ffffff", padding: 12, marginTop: 12 }}>
+        <h2 style={{ margin: "0 0 8px 0", fontSize: 16 }}>Provider Credential Boundary Advisor</h2>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(230px, 1fr))", gap: 10 }}>
+          {PROVIDER_CREDENTIAL_BOUNDARY_ADVISOR.map((card) => (
+            <section key={card.title} style={{ border: "1px solid #dbe3ea", borderRadius: 10, background: "#ffffff", padding: 12 }}>
+              <h3 style={{ margin: "0 0 8px 0", fontSize: 15 }}>{card.title}</h3>
+              <ul style={{ margin: 0, paddingLeft: 18 }}>
+                {card.items.map((item) => (
+                  <li key={item.label} style={{ marginBottom: 6, display: "flex", alignItems: "center", gap: 8 }}>
+                    {item.label}
+                    <DotBadge level={item.status} />
+                  </li>
+                ))}
+              </ul>
+            </section>
+          ))}
+        </div>
+        <p style={{ margin: "10px 0 0 0", color: "#374151", fontSize: 13 }}>
+          Credential governance is preview-only. No secrets are stored, resolved, or exposed.
         </p>
       </section>
 
