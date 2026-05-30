@@ -1,7 +1,859 @@
 # GNR8 CURRENT STATE SNAPSHOT
 
 ## Snapshot Date
-2026-05-29
+2026-05-30
+
+## Twin Runtime Types and Deterministic Builder Milestone (2026-05-30)
+
+Milestone is complete and implemented:
+- `apps/platform/gnr8/runtime/twin/twin-types.ts`
+- `apps/platform/gnr8/runtime/twin/twin-builder.ts`
+- `apps/platform/gnr8/runtime/twin/twin-builder.test.ts`
+
+Implemented types:
+- `TwinIdentity`
+- `TwinStatus` (`building`, `ready`, `stale`, `failed`)
+- `TwinSnapshot`
+- `TwinMetadata`
+- `WebsiteDigitalTwin`
+- `TwinViewerPayload`
+
+Implemented functions:
+- `buildWebsiteDigitalTwin(input)`
+- `toTwinViewerPayload(twin)`
+
+Implemented deterministic behavior:
+- `twinId` derived from `siteId + siteVersionId + environmentScope`
+- controlled timestamps via `nowIso` or `clock`
+- `ready` status for valid input
+- deterministic throw for missing `siteId`/`siteVersionId`
+
+Implemented diagnostics:
+- `TWIN_BUILD_STARTED`
+- `TWIN_IDENTITY_CREATED`
+- `TWIN_SNAPSHOT_CREATED`
+- `TWIN_BUILD_SUCCEEDED`
+
+Explicit boundaries remain:
+- no DB persistence yet
+- no API yet
+- no UI yet
+- no scoring
+- no recommendations
+- no AI
+- no optimization
+- no publish execution
+
+Validation:
+- twin-builder tests passed
+- next build passed
+
+Conclusion:
+- GNR8 now has the first runtime Website Digital Twin object and deterministic builder while remaining persistence/API/UI-free.
+
+Recommended next milestone:
+- Twin In-Memory Store / Read-Model Store
+
+## Twin Runtime Contract Baseline (2026-05-30)
+
+Twin Runtime Contract is now defined as the canonical first operational implementation contract:
+- `docs/architecture/TWIN_RUNTIME_CONTRACT.md`
+
+Purpose and boundary are explicit:
+- smallest runtime contract for first operational Website Digital Twin
+- documentation/runtime-contract baseline now backed by first implemented runtime types/builder
+- no APIs
+- no database changes
+- no UI implementation
+- no store implementation yet
+
+Canonical identity fields are documented as:
+- `twinId`
+- `siteId`
+- `siteVersionId`
+- `workspaceId`
+- `environmentScope`
+- `status`
+- `createdAt`
+- `updatedAt`
+
+Canonical status states are documented as:
+- `building`
+- `ready`
+- `stale`
+- `failed`
+
+Canonical snapshot fields are documented as:
+- `contentState`
+- `designState`
+- `experienceState`
+- `governanceState`
+- `operationalState`
+
+Canonical metadata fields are documented as:
+- `sourceImportId`
+- `sourceSiteVersionId`
+- `sourceModels`
+- `generatedAt`
+- `generatedBy`
+- `diagnostics`
+
+Canonical v1 storage rules are documented as:
+- twin exists per site version
+- twin v1 immutable once generated
+- new site version creates new twin
+- stale allowed without destructive overwrite
+- failed generation returns diagnostics
+
+Canonical viewer payload for Workspace Overview is documented as:
+- `identity`
+- `status`
+- `snapshot`
+- `metadata`
+- `diagnostics`
+
+Out-of-scope boundary is explicit:
+- Website Health scoring
+- Content/Design/Experience scoring
+- AI recommendations
+- optimization opportunities
+- proposal generation
+- publish execution
+- runtime observation engine
+- runtime optimization engine
+
+Implementation readiness target is explicit:
+- TypeScript twin runtime types
+- deterministic twin builder
+- in-memory or read-model store
+- workspace overview viewer surface
+- tests proving twin generation from existing site/version fixtures
+
+## First Operational Twin Roadmap Baseline (2026-05-30)
+
+First Operational Twin Roadmap Draft is now defined as canonical implementation-slice documentation:
+- `docs/architecture/FIRST_OPERATIONAL_TWIN_ROADMAP.md`
+
+Purpose and boundary are explicit:
+- shortest path from architecture to first visible runtime Twin
+- documentation only
+- no runtime changes
+- no UI implementation
+- no APIs
+- no database changes
+
+Target outcome is explicit:
+- website can be imported and represented as a Twin
+- Twin is visible in Workspace Overview
+
+Required runtime components for this first slice are documented as:
+- `Twin Identity`
+- `Twin Snapshot`
+- `Twin Builder`
+- `Twin Store`
+- `Twin Viewer`
+- `Workspace Overview Integration`
+
+Canonical inputs are documented as:
+- `Import Pipeline`
+- `Canonical Models`
+- `Site Version`
+- `Provider State`
+
+Canonical outputs are documented as:
+- `Twin Snapshot`
+- `Twin Metadata`
+- `Twin State Summary`
+
+Out-of-scope boundary is explicit:
+- scoring
+- recommendations
+- optimization
+- AI editing
+- publish automation
+
+Success criteria are explicit:
+- website imported
+- twin generated
+- twin stored
+- twin displayed
+
+Dependencies are explicit:
+- Phase A
+- Phase B
+- Phase C
+
+Risks are explicit:
+- model incompleteness
+- state synchronization
+- version drift
+
+## Twin Observation Architecture Baseline (2026-05-30)
+
+Twin Observation Architecture Draft is now defined as canonical architecture documentation:
+- `docs/architecture/TWIN_OBSERVATION_ARCHITECTURE.md`
+
+Purpose and boundary are explicit:
+- observation converts raw signals into operational understanding
+- architecture/docs only
+- no runtime changes
+- no UI implementation
+- no APIs
+- no database changes
+
+Canonical observation inputs are documented as:
+- `Content Signals`
+- `Design Signals`
+- `Experience Signals`
+- `Governance Signals`
+- `Operational Signals`
+
+Canonical observation types are documented as:
+- `Warning`
+- `Risk`
+- `Insight`
+- `Recommendation`
+- `Optimization Opportunity`
+- `Proposal Candidate`
+
+Canonical observation flow is documented as:
+- `Signals -> Observations`
+- `Observations -> Insights`
+- `Insights -> Recommendations`
+- `Recommendations -> Optimization Opportunities`
+- `Optimization Opportunities -> Proposal Candidates`
+
+Canonical observation severity levels are documented as:
+- `informational`
+- `low`
+- `medium`
+- `high`
+- `critical`
+
+Canonical governance sequencing is documented as:
+- `evidence before observation`
+- `observation before recommendation`
+- `recommendation before proposal`
+- `proposal before mutation`
+
+AI boundary is explicit:
+- AI may assist interpretation
+- AI may assist recommendation generation
+- AI may not bypass governance
+
+Current state is explicit:
+- architecture only
+- no observation runtime
+- no recommendation runtime
+
+Future integration points are anchored as:
+- Twin Generation
+- Website Intelligence
+- Digital Twin
+- Workspace Overview
+- AI Editor
+
+Success condition is explicit:
+- GNR8 gains the canonical observation layer that transforms website evidence into actionable intelligence
+
+## Twin Optimization Architecture Baseline (2026-05-30)
+
+Twin Optimization Architecture Draft is now defined as canonical architecture documentation:
+- `docs/architecture/TWIN_OPTIMIZATION_ARCHITECTURE.md`
+
+Purpose and boundary are explicit:
+- optimization converts understanding into improvement opportunities
+- architecture/docs only
+- no runtime changes
+- no UI implementation
+- no APIs
+- no database changes
+
+Canonical optimization inputs are documented as:
+- `Observations`
+- `Insights`
+- `Recommendations`
+- `Website Goals`
+- `Governance Constraints`
+- `Provider Constraints`
+
+Canonical optimization types are documented as:
+- `Content Optimization`
+- `Design Optimization`
+- `Experience Optimization`
+- `Governance Optimization`
+- `Operational Optimization`
+
+Canonical optimization opportunity structure is documented as:
+- `Identity`
+- `Description`
+- `Expected Impact`
+- `Confidence`
+- `Priority`
+- `Source Observation`
+
+Canonical prioritization dimensions are documented as:
+- `Impact`
+- `Effort`
+- `Risk`
+- `Confidence`
+- `Governance Compatibility`
+
+Canonical optimization progression is documented as:
+- `Optimization Opportunity -> Proposal Candidate`
+
+Canonical governance sequencing is documented as:
+- `understand before optimize`
+- `optimize before propose`
+- `proposal before mutation`
+- `approval before publish`
+
+AI boundary is explicit:
+- AI may assist optimization generation
+- AI may assist prioritization
+- AI may not directly execute changes
+
+Current state is explicit:
+- architecture only
+- no optimization runtime
+- no prioritization engine
+
+Future integration points are anchored as:
+- Twin Observation
+- Digital Twin
+- AI Editor
+- Governance
+- Website Evolution Lifecycle
+
+Success condition is explicit:
+- GNR8 gains the canonical optimization architecture behind website evolution
+
+## Twin Generation Architecture Baseline (2026-05-30)
+
+Twin Generation Architecture Draft is now defined as canonical architecture documentation:
+- `docs/architecture/TWIN_GENERATION_ARCHITECTURE.md`
+
+Purpose and boundary are explicit:
+- defines how websites are transformed into Website Digital Twins
+- architecture/docs only
+- no runtime changes
+- no UI implementation
+- no APIs
+- no database changes
+
+Canonical twin generation inputs are documented as:
+- `Import Pipeline Output`
+- `Content Model`
+- `Design Model`
+- `Experience Model`
+- `Provider State`
+- `Governance State`
+- `Environment State`
+
+Canonical twin generation stages are documented as:
+- `Import`
+- `Evidence Extraction`
+- `Model Construction`
+- `Signal Generation`
+- `Observation Generation`
+- `Scoring`
+- `Recommendation Generation`
+- `Twin Assembly`
+
+Canonical Twin components produced are documented as:
+- `Content State`
+- `Design State`
+- `Experience State`
+- `Governance State`
+- `Operational State`
+- `Intelligence State`
+
+Canonical signal families are documented as:
+- `Content Signals`
+- `Design Signals`
+- `Experience Signals`
+- `Governance Signals`
+- `Operational Signals`
+
+Canonical observation families are documented as:
+- `Warnings`
+- `Risks`
+- `Insights`
+- `Recommendations`
+- `Optimization Opportunities`
+- `Proposal Candidates`
+
+Canonical Twin refresh model is documented as:
+- `Initial Generation`
+- `Manual Refresh`
+- `Scheduled Refresh`
+- `Event-driven Refresh`
+
+Canonical governance sequencing is documented as:
+- `evidence before observation`
+- `observation before recommendation`
+- `recommendation before proposal`
+- `proposal before mutation`
+
+AI boundary is explicit:
+- AI may assist signal generation
+- AI may assist interpretation
+- AI may assist recommendations
+- AI does not directly mutate the Twin
+- AI does not bypass governance
+
+Current state is explicit:
+- no twin generation runtime implemented
+- no scoring engine implemented
+- no observation engine implemented
+- no recommendation runtime implemented
+
+Future integration points are anchored as:
+- Import Pipeline
+- Twin Observation Architecture
+- Digital Twin Architecture
+- Website Intelligence Architecture
+- Workspace UI
+- AI Editor Architecture
+- Website Evolution Lifecycle
+
+Success condition is explicit:
+- GNR8 gains the canonical architecture describing how websites become Digital Twins
+
+## Website Digital Twin Architecture Baseline (2026-05-30)
+
+Website Digital Twin Architecture Draft is now defined as canonical architecture documentation:
+- `docs/architecture/DIGITAL_TWIN_ARCHITECTURE.md`
+
+Purpose and boundary are explicit:
+- the Website Digital Twin is the continuously updated operational representation of a website inside GNR8
+- the twin is not HTML
+- the twin is not the deployed frontend
+- the twin is the operational understanding of the website
+- architecture/docs only
+- no runtime changes
+- no UI implementation
+- no APIs
+- no database changes
+
+Canonical core twin domains are documented as:
+- `Content State`
+- `Design State`
+- `Experience State`
+- `Governance State`
+- `Operational State`
+- `Intelligence State`
+
+Canonical twin identity fields are documented as:
+- `twinId`
+- `siteId`
+- `workspaceId`
+- `environmentScope`
+- `versionId`
+- `status`
+- `updatedAt`
+
+Canonical twin relationships are documented as:
+- `Digital Twin -> Content Model`
+- `Digital Twin -> Design Model`
+- `Digital Twin -> Experience Model`
+- `Digital Twin -> Workspace`
+- `Digital Twin -> Intelligence Layer`
+- `Digital Twin -> Governance Layer`
+- `Digital Twin -> Operations Layer`
+
+Canonical twin observations are documented as:
+- `Warnings`
+- `Risks`
+- `Insights`
+- `Recommendations`
+- `Optimization Opportunities`
+- `Proposal Candidates`
+
+Canonical twin score surfaces are documented as:
+- `Website Health`
+- `Content Score`
+- `Design Score`
+- `Experience Score`
+- `Governance Score`
+- `Operations Score`
+
+AI boundary is explicit:
+- AI consumes Twin observations
+- AI generates recommendations
+- AI generates proposal candidates
+- AI cannot bypass governance
+- AI cannot publish directly
+
+Workspace relationship is explicit:
+- Website Overview represents the Website Digital Twin
+- Overview is the primary visualization of the Twin
+
+Canonical twin governance principles are documented as:
+- `evidence before observation`
+- `observation before recommendation`
+- `recommendation before proposal`
+- `proposal before mutation`
+- `approval before publish`
+- `audit before execution`
+
+Current state is explicit:
+- no twin runtime is implemented
+- no scoring engine is implemented
+- no recommendation engine is implemented
+- no observation engine is implemented
+- no recommendation runtime is implemented
+
+Future integration points are anchored as:
+- Twin Observation Architecture
+- Website Intelligence Architecture
+- Workspace UI Concept
+- Workspace Wireframes
+- Content Model
+- Design Model
+- Experience Model
+- Provider Governance
+- Website Evolution Lifecycle
+
+Success condition is explicit:
+- GNR8 gains the canonical Website Digital Twin architecture that becomes the central object of the Website Operating System
+
+## Website Intelligence Architecture Baseline (2026-05-30)
+
+Website Intelligence Architecture Draft is now defined as canonical architecture documentation:
+- `docs/architecture/WEBSITE_INTELLIGENCE_ARCHITECTURE.md`
+
+Purpose and boundary are explicit:
+- Website Intelligence is the observation and understanding layer of GNR8
+- foundation behind the Website Overview Digital Twin
+- architecture/docs only
+- no runtime changes
+- no UI implementation
+- no APIs
+- no database changes
+
+Canonical intelligence domains are documented as:
+- `Content Health`
+- `Design Health`
+- `Experience Health`
+- `Governance Health`
+- `Operational Health`
+
+Canonical intelligence signals are documented as:
+- `Content Signals`
+- `Design Signals`
+- `Experience Signals`
+- `Governance Signals`
+- `Operational Signals`
+
+Canonical score surfaces are documented as:
+- `Website Health`
+- `Content Score`
+- `Design Score`
+- `Experience Score`
+- `Governance Score`
+- `Operations Score`
+
+Canonical recommendation progression is documented as:
+- `Observation`
+- `Recommendation`
+- `Optimization Opportunity`
+- `Proposal Candidate`
+
+AI boundary is explicit:
+- AI may generate recommendations
+- AI may not directly publish changes
+
+Current state is explicit:
+- no scoring engine is implemented
+- no recommendation engine is implemented
+
+Success condition is explicit:
+- GNR8 gains the intelligence foundation behind the Website Digital Twin
+
+## Workspace Wireframes v1 Baseline (2026-05-30)
+
+Workspace Wireframes v1 Draft is now defined as canonical product wireframe documentation:
+- `docs/product/WORKSPACE_WIREFRAMES_V1.md`
+
+Purpose and boundary are explicit:
+- first structural wireframe specification for GNR8 Workspace
+- screen structure and information hierarchy only
+- documentation only
+- no runtime changes
+- no UI implementation
+- no APIs
+- no database changes
+
+Canonical workspace screen set is documented as:
+- `Website Overview`
+- `Content Workspace`
+- `Design Workspace`
+- `Experience Workspace`
+- `Governance Workspace`
+- `AI Workspace`
+- `Operations Workspace`
+
+For each workspace screen, canonical wireframe fields are documented as:
+- `Purpose`
+- `Primary Objects`
+- `Information Hierarchy`
+- `Left Navigation`
+- `Center Area`
+- `Right Context Panel`
+- `Actions`
+- `AI Surfaces`
+
+Wireframe governance and AI boundaries are explicit:
+- proposal-first and approval-aware workspace structure
+- AI is governed and assistive
+- AI cannot publish directly
+
+Success condition is explicit:
+- GNR8 gains the first complete workspace screen blueprint before visual design begins
+
+## Workspace UI Concept Architecture Baseline (2026-05-30)
+
+Workspace UI Concept Architecture Draft is now defined as canonical architecture documentation:
+- `docs/architecture/WORKSPACE_UI_CONCEPT_ARCHITECTURE.md`
+
+Purpose and boundary are explicit:
+- workspace is the primary operating environment of a website
+- users do not manage pages
+- users manage website evolution
+- architecture/docs only
+- no runtime changes
+- no APIs
+- no UI implementation
+- no database changes
+
+Canonical core philosophy is documented as:
+- `Website-first`
+- `Governance-first`
+- `AI-assisted`
+- `Version-aware`
+- `Lifecycle-aware`
+
+Canonical primary workspace areas are documented as:
+- `Overview`
+- `Content`
+- `Design`
+- `Experience`
+- `AI`
+- `Governance`
+- `Operations`
+
+Canonical overview concept and surfaces are documented as:
+- `Overview = homepage of workspace`
+- `Overview = Digital Twin of the Website`
+- `Website Health`
+- `Website Status`
+- `Recent Activity`
+- `Pending Proposals`
+- `Pending Approvals`
+- `Latest Publish`
+- `Optimization Opportunities`
+- `AI Recommendations`
+- `Environment Status`
+- `Provider Status`
+
+Canonical boundaries for AI, governance, and operations are documented as:
+- AI is a governed editor and not a chatbot
+- AI suggestions enter proposal workflows
+- AI cannot publish directly
+- Governance includes `Proposals`, `Versions`, `Approvals`, `Publishing`, `Rollback`, `Audit Trail`
+- Operations includes `Providers`, `Environments`, `Credentials`, `Deployments`, `Execution Governance`
+
+Success condition is explicit:
+- GNR8 gains the conceptual product blueprint required before creating and validating Workspace wireframe specifications
+
+## Website Evolution Lifecycle Architecture Baseline (2026-05-30)
+
+Website Evolution Lifecycle Architecture Draft is now defined as canonical architecture documentation:
+- `docs/architecture/WEBSITE_EVOLUTION_LIFECYCLE_ARCHITECTURE.md`
+
+Purpose and boundary are explicit:
+- GNR8 manages continuous website evolution
+- a website is never finished
+- lifecycle stages are governed
+- architecture/docs only
+- no runtime changes
+- no APIs
+- no UI
+- no database changes
+
+Canonical lifecycle stages are documented as:
+- `Import`
+- `Modeling`
+- `Editing`
+- `Proposal Review`
+- `Approval`
+- `Version Creation`
+- `Publishing`
+- `Observation`
+- `Optimization`
+- `Evolution`
+
+Canonical lifecycle relationships are documented as:
+- `Import -> Content/Design/Experience Models`
+- `Models -> Workspace`
+- `Workspace -> Editing`
+- `Editing -> Proposals`
+- `Proposals -> Approvals`
+- `Approvals -> Versions`
+- `Versions -> Publishing`
+- `Publishing -> Observation`
+- `Observation -> Optimization`
+- `Optimization -> New Editing Cycle`
+
+Canonical lifecycle governance principles are documented as:
+- `understand before change`
+- `proposal before mutation`
+- `approval before publish`
+- `version before overwrite`
+- `rollback before risk`
+- `observe before optimize`
+
+AI participation boundaries are explicit:
+- AI may assist every stage
+- AI may not bypass governance
+- AI may not bypass approval
+- AI may not publish directly
+
+Current state and architecture boundary are explicit:
+- lifecycle runtime is not implemented
+- observation layer is not implemented
+- optimization layer is not implemented
+
+Future integration points are now anchored as:
+- Import Pipeline
+- Content Model
+- Design Model
+- Experience Model
+- AI Editor
+- Versioning & Rollback
+- Publish Governance
+- Provider Governance
+- Workspace Architecture
+
+## Experience Workspace Architecture Baseline (2026-05-30)
+
+Experience Workspace Architecture Draft is now defined as canonical architecture documentation:
+- `docs/architecture/EXPERIENCE_WORKSPACE_ARCHITECTURE.md`
+
+Purpose and boundary are explicit:
+- workspace is the operational home of a website
+- users manage website evolution through the workspace
+- architecture/docs only
+- no runtime changes
+- no APIs
+- no UI
+- no editor implementation
+- no database changes
+
+Canonical workspace areas are documented as:
+- `Overview`
+- `Content`
+- `Design`
+- `Experience`
+- `AI`
+- `Governance`
+- `Operations`
+
+Canonical workspace responsibilities are documented as:
+- `view state`
+- `edit state`
+- `review proposals`
+- `approve changes`
+- `publish versions`
+- `rollback versions`
+- `audit history`
+
+Canonical workspace identity fields are documented as:
+- `workspaceId`
+- `siteId`
+- `ownerScope`
+- `environmentScope`
+- `status`
+
+Canonical workspace relationships are documented as:
+- `Workspace -> Content Model`
+- `Workspace -> Design Model`
+- `Workspace -> Experience Model`
+- `Workspace -> AI (Governed Editor)`
+- `Workspace -> Governance`
+- `Workspace -> Operations`
+
+Current state and architecture boundary are explicit:
+- no workspace runtime implemented
+- no workspace UI implemented
+
+Future integration points are now anchored as:
+- Canonical Content Model
+- Canonical Design Model
+- Canonical Experience Model
+- AI Editor Architecture
+- Versioning & Rollback
+- Publish Governance
+- Provider Governance
+
+## Workspace Information Architecture Baseline (2026-05-30)
+
+Workspace Information Architecture Draft is now defined as canonical architecture documentation:
+- `docs/architecture/WORKSPACE_INFORMATION_ARCHITECTURE.md`
+
+Purpose and boundary are explicit:
+- define how users navigate and understand websites inside GNR8
+- architecture/docs only
+- no runtime changes
+- no UI implementation
+- no editor implementation
+- no APIs
+- no database changes
+
+Canonical primary workspace areas are documented as:
+- `Overview`
+- `Content`
+- `Design`
+- `Experience`
+- `AI`
+- `Governance`
+- `Operations`
+
+Canonical navigation model is documented as:
+- `Global Navigation`
+- `Workspace Navigation`
+- `Context Navigation`
+
+Canonical workspace homepage areas are documented as:
+- `Website Health`
+- `Website Status`
+- `Recent Activity`
+- `Pending Proposals`
+- `Pending Approvals`
+- `Latest Publish`
+- `Optimization Opportunities`
+- `AI Recommendations`
+- `Environment Status`
+- `Provider Status`
+
+Canonical information domains by area are documented as:
+- Content: `Pages`, `Collections`, `Products`, `Media`, `SEO`
+- Design: `Themes`, `Tokens`, `Components`, `Templates`, `Layouts`
+- Experience: `Journeys`, `Funnels`, `Navigation`, `Personalization`
+- Governance: `Proposals`, `Versions`, `Approvals`, `Publishing`, `Rollback`, `Audit Trail`
+- AI: `Governed Editing`, `Suggestions`, `Proposal Queue`, `Optimization Opportunities`, `Recommendation History`
+- Operations: `Providers`, `Environments`, `Credentials`, `Deployments`, `Execution Governance`
+
+Current state and architecture boundary are explicit:
+- no workspace runtime implemented
+- no workspace UI implemented
+- no editor implementation
+- no API implementation
+- no database implementation
+
+Success condition is explicit:
+- GNR8 gains the conceptual product blueprint required before creating and validating Workspace wireframe specifications
 
 ## Content & Experience Governance Parent Architecture Baseline (2026-05-29)
 
@@ -19,6 +871,7 @@ Purpose and boundary are explicit:
 - no editor implementation
 
 Canonical architecture layers are documented as:
+- `Workspace Layer`
 - `Content Layer`
 - `Design Layer`
 - `Experience Layer`
@@ -26,14 +879,446 @@ Canonical architecture layers are documented as:
 - `Publish Layer`
 
 Canonical website representation is documented as:
-- `Website -> Content, Design, Experience, Business Logic, Operations, Governance`
+- `Website -> Workspace, Content, Design, Experience, Business Logic, Operations, Governance`
 
 Future child architecture responsibilities are now anchored as:
+- Experience Workspace Architecture
 - Canonical Content Model
 - Canonical Design Model
 - AI Editor Architecture
 - Versioning & Rollback Architecture
 - Publish Governance Architecture
+
+## Canonical Content Model Architecture Baseline (2026-05-30)
+
+Canonical Content Model Architecture Draft is now defined as canonical architecture documentation:
+- `docs/architecture/CANONICAL_CONTENT_MODEL.md`
+
+Purpose and boundary are explicit:
+- content in GNR8 is not page HTML
+- content is structured, governed, versionable website knowledge
+- architecture/docs only
+- no runtime changes
+- no APIs
+- no UI
+- no editor implementation
+- no database changes
+
+Canonical core content entities are documented as:
+- `Site`
+- `Page`
+- `Section`
+- `Content Block`
+- `Collection`
+- `Collection Item`
+- `Media Asset`
+- `Product`
+- `SEO Metadata`
+- `Navigation Label`
+- `Translation Variant`
+
+Canonical content identity fields are documented as:
+- `contentId`
+- `contentType`
+- `stableKey`
+- `source`
+- `ownerScope`
+- `locale`
+- `versionId`
+- `status`
+
+Canonical governance principles are documented as:
+- `content before layout`
+- `identity before mutation`
+- `version before publish`
+- `rollback before overwrite`
+- `AI suggestions before AI mutations`
+
+Current state and architecture boundary are explicit:
+- no canonical content model runtime implemented yet
+- no editor implemented yet
+- no content DB schema implemented yet
+
+Future integration points are now anchored as:
+- Canonical Design Model
+- AI Editor Architecture
+- Versioning & Rollback Architecture
+- Publish Governance Architecture
+- Import Pipeline
+- Preview Renderer
+
+## Canonical Design Model Architecture Baseline (2026-05-30)
+
+Canonical Design Model Architecture Draft is now defined as canonical architecture documentation:
+- `docs/architecture/CANONICAL_DESIGN_MODEL.md`
+
+Purpose and boundary are explicit:
+- design in GNR8 is not page HTML
+- design is reusable experience structure
+- architecture/docs only
+- no runtime changes
+- no APIs
+- no UI
+- no editor implementation
+- no database changes
+
+Canonical core design entities are documented as:
+- `Design System`
+- `Theme`
+- `Token`
+- `Component`
+- `Component Variant`
+- `Section Template`
+- `Layout`
+- `Template`
+- `Brand Profile`
+
+Canonical design responsibilities are documented as:
+- `visual language`
+- `spacing`
+- `typography`
+- `colors`
+- `layout`
+- `components`
+- `responsiveness`
+- `accessibility`
+
+Canonical design identity fields are documented as:
+- `designId`
+- `designType`
+- `stableKey`
+- `ownerScope`
+- `versionId`
+- `status`
+
+Canonical governance principles are documented as:
+- `design before rendering`
+- `tokens before CSS`
+- `components before pages`
+- `version before publish`
+- `rollback before overwrite`
+
+Current state and architecture boundary are explicit:
+- no canonical design model runtime implemented
+- no editor implemented
+- no design database schema implemented
+
+Future integration points are now anchored as:
+- Canonical Content Model
+- AI Editor Architecture
+- Versioning & Rollback Architecture
+- Publish Governance Architecture
+- Import Pipeline
+- Preview Renderer
+
+## Canonical Experience Model Architecture Baseline (2026-05-30)
+
+Canonical Experience Model Architecture Draft is now defined as canonical architecture documentation:
+- `docs/architecture/CANONICAL_EXPERIENCE_MODEL.md`
+
+Purpose and boundary are explicit:
+- experience in GNR8 is not content
+- experience in GNR8 is not design
+- experience defines how users move through a digital system
+- architecture/docs only
+- no runtime changes
+- no APIs
+- no UI
+- no editor implementation
+- no database changes
+
+Canonical core experience entities are documented as:
+- `Experience`
+- `Journey`
+- `Step`
+- `Intent`
+- `Goal`
+- `Conversion Point`
+- `Interaction`
+- `Personalization Rule`
+- `Trigger`
+- `Outcome`
+
+Canonical experience types are documented as:
+- `marketing journey`
+- `lead generation journey`
+- `commerce journey`
+- `onboarding journey`
+- `support journey`
+- `account journey`
+
+Canonical experience identity fields are documented as:
+- `experienceId`
+- `experienceType`
+- `stableKey`
+- `ownerScope`
+- `versionId`
+- `status`
+
+Canonical governance principles are documented as:
+- `intent before flow`
+- `journey before page`
+- `outcome before interaction`
+- `version before publish`
+- `rollback before overwrite`
+
+Current state and architecture boundary are explicit:
+- no experience runtime implemented
+- no journey engine implemented
+- no personalization engine implemented
+
+Future integration points are now anchored as:
+- Canonical Content Model
+- Canonical Design Model
+- AI Editor Architecture
+- Versioning & Rollback Architecture
+- Publish Governance Architecture
+- AI Optimization Layer
+
+## AI Editor Architecture Baseline (2026-05-30)
+
+AI Editor Architecture Draft is now defined as canonical architecture documentation:
+- `docs/architecture/AI_EDITOR_ARCHITECTURE.md`
+
+Purpose and boundary are explicit:
+- editing is a governed operation
+- editing is not direct mutation
+- editing produces proposed changes
+- architecture/docs only
+- no runtime changes
+- no APIs
+- no UI
+- no editor implementation
+- no database changes
+
+Canonical editor types are documented as:
+- `Human Editor`
+- `AI Editor`
+- `Collaborative Editor`
+- `Automated Editor`
+
+Canonical editing targets are documented as:
+- `Content Model`
+- `Design Model`
+- `Experience Model`
+
+Canonical editing operations are documented as:
+- `create`
+- `modify`
+- `remove`
+- `transform`
+- `optimize`
+- `translate`
+- `personalize`
+
+Canonical editing proposal model fields are documented as:
+- `proposalId`
+- `editorType`
+- `targetModel`
+- `targetEntity`
+- `reason`
+- `proposedChanges`
+- `status`
+
+Canonical proposal lifecycle states are documented as:
+- `draft`
+- `generated`
+- `reviewed`
+- `approved`
+- `rejected`
+- `versioned`
+- `superseded`
+
+Canonical governance principles are documented as:
+- `proposal before mutation`
+- `approval before publish`
+- `version before overwrite`
+- `rollback before mutation`
+- `audit before execution`
+
+Current state and architecture boundary are explicit:
+- no editor runtime implemented
+- no proposal engine implemented
+- no approval workflow implemented
+
+Future integration points are now anchored as:
+- Canonical Content Model
+- Canonical Design Model
+- Canonical Experience Model
+- Versioning & Rollback Architecture
+- Publish Governance Architecture
+- AI Routing Architecture
+
+## Versioning & Rollback Architecture Baseline (2026-05-30)
+
+Versioning & Rollback Architecture Draft is now defined as canonical architecture documentation:
+- `docs/architecture/VERSIONING_ROLLBACK_ARCHITECTURE.md`
+
+Purpose and boundary are explicit:
+- versioning protects governed website evolution
+- rollback is a first-class safety mechanism
+- architecture/docs only
+- no runtime changes
+- no APIs
+- no UI
+- no database changes
+- no editor implementation
+
+Canonical versioned models are documented as:
+- `Content Model`
+- `Design Model`
+- `Experience Model`
+- `Editing Proposals`
+- `Publish Artifacts`
+
+Canonical version identity fields are documented as:
+- `versionId`
+- `entityId`
+- `entityType`
+- `modelType`
+- `createdAt`
+- `createdBy`
+- `source`
+- `reason`
+- `parentVersionId`
+- `status`
+
+Canonical change set fields are documented as:
+- `changeSetId`
+- `versionId`
+- `targetModel`
+- `targetEntities`
+- `changes`
+- `reason`
+- `createdBy`
+- `reviewStatus`
+
+Canonical rollback fields are documented as:
+- `rollbackId`
+- `fromVersionId`
+- `toVersionId`
+- `scope`
+- `reason`
+- `requestedBy`
+- `approvedBy`
+- `status`
+
+Canonical version lifecycle states are documented as:
+- `draft`
+- `proposed`
+- `reviewed`
+- `approved`
+- `published`
+- `superseded`
+- `rolled_back`
+- `archived`
+
+Canonical rollback lifecycle states are documented as:
+- `requested`
+- `validated`
+- `approved`
+- `executed`
+- `failed`
+- `cancelled`
+
+Canonical governance principles are documented as:
+- `version before publish`
+- `rollback before mutation`
+- `diff before approval`
+- `audit before execution`
+- `no destructive overwrite`
+
+Canonical AI editing relationship is documented as:
+- AI proposals create change sets
+- change sets create versions
+- versions can be reviewed, published, or rolled back
+
+Current state and architecture boundary are explicit:
+- no versioning runtime implemented
+- no rollback runtime implemented
+
+Future integration points are now anchored as:
+- Canonical Content Model
+- Canonical Design Model
+- Canonical Experience Model
+- AI Editor Architecture
+- Publish Governance Architecture
+- Preview Renderer
+- Execution Governance
+
+## Publish Governance Architecture Baseline (2026-05-30)
+
+Publish Governance Architecture Draft is now defined as canonical architecture documentation:
+- `docs/architecture/PUBLISH_GOVERNANCE_ARCHITECTURE.md`
+
+Purpose and boundary are explicit:
+- publishing is governed promotion of approved versions into an environment
+- publish is not direct mutation
+- architecture/docs only
+- no runtime changes
+- no APIs
+- no UI
+- no database changes
+- no publish implementation
+
+Canonical publish targets are documented as:
+- `preview`
+- `staging`
+- `production`
+
+Canonical publish inputs are documented as:
+- `approved version`
+- `approved change set`
+- `approval evidence`
+- `target environment`
+- `rollback target`
+- `publish reason`
+
+Canonical publish plan fields are documented as:
+- `publishPlanId`
+- `targetEnvironment`
+- `includedVersions`
+- `includedChangeSets`
+- `riskLevel`
+- `rollbackPlanId`
+- `approvalId`
+- `executionAllowed`
+- `executionBlocked`
+
+Canonical publish lifecycle states are documented as:
+- `draft`
+- `validated`
+- `approved`
+- `queued`
+- `executed`
+- `failed`
+- `rolled_back`
+
+Canonical environment promotion path is documented as:
+- `preview -> staging -> production`
+
+Canonical governance principles are documented as:
+- `approval before publish`
+- `rollback plan before publish`
+- `environment before execution`
+- `diff before promotion`
+- `audit before mutation`
+
+Canonical AI editing relationship is documented as:
+- AI suggestions do not publish directly
+- AI proposals must become approved versions before publish
+
+Current state and architecture boundary are explicit:
+- no publish runtime implemented
+- no environment promotion runtime implemented
+
+Future integration points are now anchored as:
+- Versioning & Rollback Architecture
+- AI Editor Architecture
+- Execution Approval Contract
+- Provider Execution Governance
+- Preview Renderer
+- Deployment Providers
 
 ## Canonical Execution Approval Contract Baseline (2026-05-29)
 
