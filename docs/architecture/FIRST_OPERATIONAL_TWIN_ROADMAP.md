@@ -4,8 +4,9 @@
 - Milestone update: Twin Runtime Types and Deterministic Builder completed (2026-05-30)
 - Milestone update: Twin In-Memory Store and Read-Model Repository completed (2026-05-30)
 - Milestone update: Twin Viewer Read-Model Helper completed (2026-05-30)
+- Milestone update: Workspace Overview Twin Preview UI completed (2026-05-30)
 - Scope: roadmap + completion checkpoint
-- Non-goals unchanged: no APIs, no UI implementation, no database changes
+- Non-goals unchanged: no APIs, no database changes, no UI editing/actions/forms/publish/AI/scoring/recommendations
 
 Completed in runtime:
 - `apps/platform/gnr8/runtime/twin/twin-types.ts`
@@ -82,6 +83,47 @@ Canonical first-operational outputs:
 - twin stored
 - twin displayed
 
+Completed UI runtime route:
+- `/gnr8/admin/twin-preview`
+
+Completed runtime chain:
+- `buildWebsiteDigitalTwin()`
+- `InMemoryTwinStore`
+- `getTwinBySiteVersion()`
+- `createTwinOverview()`
+- browser-rendered read-only preview
+
+Verified deployed values:
+- `title`: `Website Digital Twin Runtime Preview`
+- `subtitle`: `Read-only validation surface`
+- `status`: `ready`
+- `environmentScope`: `preview`
+- `contentSummary`: `deterministic_content_read_model`
+- `designSummary`: `deterministic_design_read_model`
+- `experienceSummary`: `deterministic_experience_read_model`
+- `governanceSummary`: `deterministic_governance_read_model`
+- `operationalSummary`: `deterministic_operational_read_model`
+
+Verified diagnostics:
+- `TWIN_BUILD_STARTED`
+- `TWIN_IDENTITY_CREATED`
+- `TWIN_SNAPSHOT_CREATED`
+- `TWIN_BUILD_SUCCEEDED`
+- `TWIN_STORE_SAVE_SUCCEEDED`
+- `TWIN_STORE_GET_SUCCEEDED`
+- `TWIN_STORE_LIST_SUCCEEDED`
+- `TWIN_OVERVIEW_CREATED`
+
+Preview boundaries:
+- read-only validation surface
+- no editing
+- no actions
+- no forms
+- no publish
+- no AI
+- no scoring
+- no recommendations
+
 Milestone validation:
 - twin-builder tests passed
 - twin-store tests passed
@@ -127,7 +169,7 @@ Current completion checkpoint:
 - persistence/API/UI still intentionally not implemented
 
 Recommended next milestone:
-- Workspace Overview Twin Preview UI
+- Twin Preview Navigation Wiring
 
 ## Related Canonical Documents
 - `docs/architecture/TWIN_RUNTIME_CONTRACT.md`

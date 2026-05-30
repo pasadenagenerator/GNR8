@@ -3,6 +3,55 @@
 ## Snapshot Date
 2026-05-30
 
+## Workspace Overview Twin Preview UI Milestone (2026-05-30)
+
+Milestone is complete and documented:
+- route: `/gnr8/admin/twin-preview`
+
+Runtime chain:
+- `buildWebsiteDigitalTwin()`
+- `InMemoryTwinStore`
+- `getTwinBySiteVersion()`
+- `createTwinOverview()`
+- browser-rendered read-only preview
+
+Verified deployed values:
+- `title`: `Website Digital Twin Runtime Preview`
+- `subtitle`: `Read-only validation surface`
+- `status`: `ready`
+- `environmentScope`: `preview`
+- `contentSummary`: `deterministic_content_read_model`
+- `designSummary`: `deterministic_design_read_model`
+- `experienceSummary`: `deterministic_experience_read_model`
+- `governanceSummary`: `deterministic_governance_read_model`
+- `operationalSummary`: `deterministic_operational_read_model`
+
+Verified diagnostics:
+- `TWIN_BUILD_STARTED`
+- `TWIN_IDENTITY_CREATED`
+- `TWIN_SNAPSHOT_CREATED`
+- `TWIN_BUILD_SUCCEEDED`
+- `TWIN_STORE_SAVE_SUCCEEDED`
+- `TWIN_STORE_GET_SUCCEEDED`
+- `TWIN_STORE_LIST_SUCCEEDED`
+- `TWIN_OVERVIEW_CREATED`
+
+Explicit boundaries remain:
+- read-only validation surface
+- no editing
+- no actions
+- no forms
+- no publish
+- no AI
+- no scoring
+- no recommendations
+
+Conclusion:
+- GNR8 now has the first browser-visible Website Digital Twin runtime surface.
+
+Recommended next milestone:
+- Twin Preview Navigation Wiring
+
 ## Twin Viewer Read-Model Helper Milestone (2026-05-30)
 
 Milestone is complete and implemented:

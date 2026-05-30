@@ -2,8 +2,8 @@
 
 ## Status
 - Draft: canonical architecture direction
-- Scope: architecture + first implemented runtime twin baseline
-- Non-goals: no runtime changes outside twin types/builder/store baseline, no APIs, no UI implementation, no database changes
+- Scope: architecture + first implemented runtime twin baseline + first browser-visible runtime surface
+- Non-goals: no runtime changes outside twin types/builder/store/viewer/preview surface baseline, no APIs, no database changes
 
 ## Purpose
 The Website Digital Twin is the continuously updated operational representation of a website inside GNR8.
@@ -168,9 +168,37 @@ Twin viewer read-model helper baseline confirmed:
 - validation: twin-viewer tests passed, next build passed
 - boundaries unchanged: no Workspace UI yet, no React, no database, no API, no AI, no optimization, no scoring, no recommendations
 
-First operational next step:
-- Workspace Overview Twin Preview UI
-- then project viewer integration against the existing runtime contract
+Workspace Overview Twin Preview UI milestone confirmed:
+- route: `/gnr8/admin/twin-preview`
+- runtime chain: `buildWebsiteDigitalTwin()` -> `InMemoryTwinStore` -> `getTwinBySiteVersion()` -> `createTwinOverview()` -> browser-rendered read-only preview
+- verified deployed values:
+  - `title`: `Website Digital Twin Runtime Preview`
+  - `subtitle`: `Read-only validation surface`
+  - `status`: `ready`
+  - `environmentScope`: `preview`
+  - `contentSummary`: `deterministic_content_read_model`
+  - `designSummary`: `deterministic_design_read_model`
+  - `experienceSummary`: `deterministic_experience_read_model`
+  - `governanceSummary`: `deterministic_governance_read_model`
+  - `operationalSummary`: `deterministic_operational_read_model`
+- diagnostics:
+  - `TWIN_BUILD_STARTED`
+  - `TWIN_IDENTITY_CREATED`
+  - `TWIN_SNAPSHOT_CREATED`
+  - `TWIN_BUILD_SUCCEEDED`
+  - `TWIN_STORE_SAVE_SUCCEEDED`
+  - `TWIN_STORE_GET_SUCCEEDED`
+  - `TWIN_STORE_LIST_SUCCEEDED`
+  - `TWIN_OVERVIEW_CREATED`
+- boundaries:
+  - read-only validation surface
+  - no editing
+  - no actions
+  - no forms
+  - no publish
+  - no AI
+  - no scoring
+  - no recommendations
 
 ## Future Integration Points
 This architecture anchors future integration with:
@@ -193,6 +221,10 @@ GNR8 gains the canonical Website Digital Twin architecture that becomes the cent
 First operational success checkpoint:
 - GNR8 now has the first runtime Twin Repository layer capable of storing and retrieving Website Digital Twins in memory while remaining persistence/API/UI-free.
 - GNR8 now has a Workspace-ready Twin Overview read-model capable of presenting Website Digital Twin state before UI implementation.
+- GNR8 now has the first browser-visible Website Digital Twin runtime surface.
+
+Recommended next milestone:
+- Twin Preview Navigation Wiring
 
 ## Related Canonical Documents
 - `docs/architecture/TWIN_RUNTIME_CONTRACT.md`

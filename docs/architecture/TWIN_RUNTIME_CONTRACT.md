@@ -2,8 +2,13 @@
 
 ## Status
 - Canonical: first operational runtime contract and implemented v1 runtime slice
-- Scope: documentation + implemented runtime types/builder/store only
-- Non-goals: no DB persistence, no APIs, no UI implementation, no scoring/recommendations/AI/optimization/publish execution
+- Scope: documentation + implemented runtime types/builder/store/viewer/preview UI surface
+- Non-goals: no DB persistence, no APIs beyond preview surface, no editing/actions/forms/publish UI, no scoring/recommendations/AI/optimization/publish execution
+
+Implemented milestone (2026-05-30):
+- Workspace Overview Twin Preview UI
+- route:
+  - `/gnr8/admin/twin-preview`
 
 Implemented milestone (2026-05-30):
 - Twin Runtime Types and Deterministic Builder
@@ -120,6 +125,13 @@ Implemented in `apps/platform/gnr8/runtime/twin/twin-builder.ts`:
 Implemented in `apps/platform/gnr8/runtime/twin/twin-viewer.ts`:
 - `createTwinOverview(twin)`
 
+Runtime chain to browser-visible preview:
+- `buildWebsiteDigitalTwin()`
+- `InMemoryTwinStore`
+- `getTwinBySiteVersion()`
+- `createTwinOverview()`
+- browser-rendered read-only preview
+
 ## Implemented Twin Viewer Read-Model
 Implemented in `apps/platform/gnr8/runtime/twin/twin-viewer.ts`:
 - `TwinOverview`
@@ -183,11 +195,35 @@ Builder diagnostics sequence:
 - `TWIN_SNAPSHOT_CREATED`
 - `TWIN_BUILD_SUCCEEDED`
 
+Preview/runtime diagnostics sequence includes:
+- `TWIN_BUILD_STARTED`
+- `TWIN_IDENTITY_CREATED`
+- `TWIN_SNAPSHOT_CREATED`
+- `TWIN_BUILD_SUCCEEDED`
+- `TWIN_STORE_SAVE_SUCCEEDED`
+- `TWIN_STORE_GET_SUCCEEDED`
+- `TWIN_STORE_LIST_SUCCEEDED`
+- `TWIN_OVERVIEW_CREATED`
+
+Verified deployed preview values:
+- `title`: `Website Digital Twin Runtime Preview`
+- `subtitle`: `Read-only validation surface`
+- `status`: `ready`
+- `environmentScope`: `preview`
+- `contentSummary`: `deterministic_content_read_model`
+- `designSummary`: `deterministic_design_read_model`
+- `experienceSummary`: `deterministic_experience_read_model`
+- `governanceSummary`: `deterministic_governance_read_model`
+- `operationalSummary`: `deterministic_operational_read_model`
+
 ## Runtime Boundaries (Still Explicit)
 - no DB persistence yet
 - no Supabase
 - no API yet
-- no UI yet
+- no editing
+- no actions
+- no forms
+- no publish
 - no scoring
 - no recommendations
 - no AI
@@ -218,6 +254,12 @@ Future implementation targets anchored by this contract:
 - Twin Viewer
 - Workspace Overview
 - Import Pipeline
+
+Current milestone conclusion:
+- GNR8 now has the first browser-visible Website Digital Twin runtime surface.
+
+Recommended next milestone:
+- Twin Preview Navigation Wiring
 - Canonical Models
 - Site Version runtime
 

@@ -177,9 +177,41 @@ Operations
 ```
 
 ## Current State
-Architecture only.
+Architecture baseline plus first browser-visible Twin preview surface milestone.
 
-Twin Viewer Read-Model Helper milestone is complete and ready for Workspace UI consumption:
+Workspace Overview Twin Preview UI milestone is complete and verified:
+- route: `/gnr8/admin/twin-preview`
+- runtime chain: `buildWebsiteDigitalTwin()` -> `InMemoryTwinStore` -> `getTwinBySiteVersion()` -> `createTwinOverview()` -> browser-rendered read-only preview
+- verified deployed values:
+  - `title`: `Website Digital Twin Runtime Preview`
+  - `subtitle`: `Read-only validation surface`
+  - `status`: `ready`
+  - `environmentScope`: `preview`
+  - `contentSummary`: `deterministic_content_read_model`
+  - `designSummary`: `deterministic_design_read_model`
+  - `experienceSummary`: `deterministic_experience_read_model`
+  - `governanceSummary`: `deterministic_governance_read_model`
+  - `operationalSummary`: `deterministic_operational_read_model`
+- diagnostics:
+  - `TWIN_BUILD_STARTED`
+  - `TWIN_IDENTITY_CREATED`
+  - `TWIN_SNAPSHOT_CREATED`
+  - `TWIN_BUILD_SUCCEEDED`
+  - `TWIN_STORE_SAVE_SUCCEEDED`
+  - `TWIN_STORE_GET_SUCCEEDED`
+  - `TWIN_STORE_LIST_SUCCEEDED`
+  - `TWIN_OVERVIEW_CREATED`
+- boundaries:
+  - read-only validation surface
+  - no editing
+  - no actions
+  - no forms
+  - no publish
+  - no AI
+  - no scoring
+  - no recommendations
+
+Twin Viewer Read-Model Helper milestone remains the runtime foundation for this preview:
 - runtime files: `apps/platform/gnr8/runtime/twin/twin-viewer.ts`, `apps/platform/gnr8/runtime/twin/twin-viewer.test.ts`
 - implemented type: `TwinOverview`
 - implemented function: `createTwinOverview(twin)`
@@ -188,12 +220,17 @@ Twin Viewer Read-Model Helper milestone is complete and ready for Workspace UI c
 - validation: twin-viewer tests passed, next build passed
 
 Explicitly:
-- no UI implementation
 - no runtime changes
 - no API implementation
 - no database changes
-- no React implementation for Workspace Twin surfaces yet
+- no editing/action/form/publish capabilities in the Twin preview surface
 - no scoring/recommendations/optimization/AI runtime in Overview read-model
+
+Conclusion:
+- GNR8 now has the first browser-visible Website Digital Twin runtime surface.
+
+Recommended next milestone:
+- Twin Preview Navigation Wiring
 
 ## Success Condition
 GNR8 gains the conceptual product blueprint required before creating and validating Workspace wireframe specifications.
