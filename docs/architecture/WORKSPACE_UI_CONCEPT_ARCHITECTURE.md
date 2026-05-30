@@ -179,11 +179,21 @@ Operations
 ## Current State
 Architecture only.
 
+Twin Viewer Read-Model Helper milestone is complete and ready for Workspace UI consumption:
+- runtime files: `apps/platform/gnr8/runtime/twin/twin-viewer.ts`, `apps/platform/gnr8/runtime/twin/twin-viewer.test.ts`
+- implemented type: `TwinOverview`
+- implemented function: `createTwinOverview(twin)`
+- mapped fields: `twinId`, `siteId`, `siteVersionId`, `workspaceId`, `environmentScope`, `status`, `contentSummary`, `designSummary`, `experienceSummary`, `governanceSummary`, `operationalSummary`, `lastUpdated`, `diagnostics`
+- diagnostic: `TWIN_OVERVIEW_CREATED`
+- validation: twin-viewer tests passed, next build passed
+
 Explicitly:
 - no UI implementation
 - no runtime changes
 - no API implementation
 - no database changes
+- no React implementation for Workspace Twin surfaces yet
+- no scoring/recommendations/optimization/AI runtime in Overview read-model
 
 ## Success Condition
 GNR8 gains the conceptual product blueprint required before creating and validating Workspace wireframe specifications.

@@ -2,7 +2,7 @@
 
 ## Status
 - Canonical: first operational runtime contract and implemented v1 runtime slice
-- Scope: documentation + implemented runtime types/builder only
+- Scope: documentation + implemented runtime types/builder/store only
 - Non-goals: no DB persistence, no APIs, no UI implementation, no scoring/recommendations/AI/optimization/publish execution
 
 Implemented milestone (2026-05-30):
@@ -11,6 +11,18 @@ Implemented milestone (2026-05-30):
   - `apps/platform/gnr8/runtime/twin/twin-types.ts`
   - `apps/platform/gnr8/runtime/twin/twin-builder.ts`
   - `apps/platform/gnr8/runtime/twin/twin-builder.test.ts`
+
+Implemented milestone (2026-05-30):
+- Twin In-Memory Store and Read-Model Repository
+- runtime files:
+  - `apps/platform/gnr8/runtime/twin/twin-store.ts`
+  - `apps/platform/gnr8/runtime/twin/twin-store.test.ts`
+
+Implemented milestone (2026-05-30):
+- Twin Viewer Read-Model Helper
+- runtime files:
+  - `apps/platform/gnr8/runtime/twin/twin-viewer.ts`
+  - `apps/platform/gnr8/runtime/twin/twin-viewer.test.ts`
 
 ## Purpose
 Define the smallest runtime contract required for the first operational Website Digital Twin.
@@ -105,6 +117,58 @@ Implemented in `apps/platform/gnr8/runtime/twin/twin-builder.ts`:
 - `buildWebsiteDigitalTwin(input)`
 - `toTwinViewerPayload(twin)`
 
+Implemented in `apps/platform/gnr8/runtime/twin/twin-viewer.ts`:
+- `createTwinOverview(twin)`
+
+## Implemented Twin Viewer Read-Model
+Implemented in `apps/platform/gnr8/runtime/twin/twin-viewer.ts`:
+- `TwinOverview`
+
+Mapped fields:
+- `twinId`
+- `siteId`
+- `siteVersionId`
+- `workspaceId`
+- `environmentScope`
+- `status`
+- `contentSummary`
+- `designSummary`
+- `experienceSummary`
+- `governanceSummary`
+- `operationalSummary`
+- `lastUpdated`
+- `diagnostics`
+
+Viewer diagnostics:
+- `TWIN_OVERVIEW_CREATED`
+
+## Implemented Twin Store Interface
+Implemented in `apps/platform/gnr8/runtime/twin/twin-store.ts`:
+- `TwinStore`
+
+Methods:
+- `saveTwin(twin)`
+- `getTwin(twinId)`
+- `getTwinBySiteVersion(siteVersionId)`
+- `listTwins()`
+- `clear()`
+
+## Implemented Twin Store Implementation
+Implemented in `apps/platform/gnr8/runtime/twin/twin-store.ts`:
+- `InMemoryTwinStore`
+
+Implemented behavior:
+- map-based storage
+- latest twin per `siteVersionId` tracking
+- multiple twins supported
+- twin payloads are not mutated
+- runtime-memory only
+
+Store diagnostics:
+- `TWIN_STORE_SAVE_SUCCEEDED`
+- `TWIN_STORE_GET_SUCCEEDED`
+- `TWIN_STORE_LIST_SUCCEEDED`
+
 ## Deterministic Builder Behavior
 Implemented deterministic behavior:
 - `twinId` is derived from `siteId + siteVersionId + environmentScope`
@@ -121,6 +185,7 @@ Builder diagnostics sequence:
 
 ## Runtime Boundaries (Still Explicit)
 - no DB persistence yet
+- no Supabase
 - no API yet
 - no UI yet
 - no scoring
@@ -131,6 +196,8 @@ Builder diagnostics sequence:
 
 ## Validation
 - `twin-builder` tests passed (`apps/platform/gnr8/runtime/twin/twin-builder.test.ts`)
+- `twin-store` tests passed (`apps/platform/gnr8/runtime/twin/twin-store.test.ts`)
+- `twin-viewer` tests passed (`apps/platform/gnr8/runtime/twin/twin-viewer.test.ts`)
 - `next build` passed (`apps/platform`)
 
 ## Out of Scope
@@ -156,12 +223,12 @@ Future implementation targets anchored by this contract:
 
 ## Success Criteria
 Future bootstrap resumes from the implemented twin runtime types and deterministic builder, then proceeds to:
-- Twin In-Memory Store / Read-Model Store
-- workspace overview viewer surface
+- Twin Builder + InMemoryTwinStore + TwinOverview read-model
+- Workspace Overview Twin Preview UI
 - tests proving twin generation from existing site/version fixtures
 
 ## Success
-GNR8 now has the first runtime Website Digital Twin object and deterministic builder while remaining persistence/API/UI-free.
+GNR8 now has a Workspace-ready Twin Overview read-model capable of presenting Website Digital Twin state before UI implementation, while remaining persistence/API/UI-free.
 
 ## Related Canonical Documents
 - `docs/architecture/FIRST_OPERATIONAL_TWIN_ROADMAP.md`

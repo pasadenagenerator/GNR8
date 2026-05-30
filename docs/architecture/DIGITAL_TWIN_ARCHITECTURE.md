@@ -3,7 +3,7 @@
 ## Status
 - Draft: canonical architecture direction
 - Scope: architecture + first implemented runtime twin baseline
-- Non-goals: no runtime changes outside twin types/builder baseline, no APIs, no UI implementation, no database changes
+- Non-goals: no runtime changes outside twin types/builder/store baseline, no APIs, no UI implementation, no database changes
 
 ## Purpose
 The Website Digital Twin is the continuously updated operational representation of a website inside GNR8.
@@ -135,6 +135,8 @@ Explicitly:
 - twin runtime types implemented (`apps/platform/gnr8/runtime/twin/twin-types.ts`)
 - deterministic twin builder implemented (`apps/platform/gnr8/runtime/twin/twin-builder.ts`)
 - twin-builder tests implemented and passing (`apps/platform/gnr8/runtime/twin/twin-builder.test.ts`)
+- twin in-memory store implemented (`apps/platform/gnr8/runtime/twin/twin-store.ts`)
+- twin-store tests implemented and passing (`apps/platform/gnr8/runtime/twin/twin-store.test.ts`)
 - no scoring engine implemented
 - no observation engine implemented
 - no recommendation engine implemented
@@ -149,9 +151,26 @@ Deterministic builder baseline confirmed:
 - deterministic throw for missing `siteId`/`siteVersionId`
 - diagnostics: `TWIN_BUILD_STARTED`, `TWIN_IDENTITY_CREATED`, `TWIN_SNAPSHOT_CREATED`, `TWIN_BUILD_SUCCEEDED`
 
+Twin store baseline confirmed:
+- interface: `TwinStore`
+- implementation: `InMemoryTwinStore`
+- methods: `saveTwin(twin)`, `getTwin(twinId)`, `getTwinBySiteVersion(siteVersionId)`, `listTwins()`, `clear()`
+- diagnostics: `TWIN_STORE_SAVE_SUCCEEDED`, `TWIN_STORE_GET_SUCCEEDED`, `TWIN_STORE_LIST_SUCCEEDED`
+- behavior: map-based storage, latest twin per `siteVersionId` tracking, multiple twins supported, twin payloads are not mutated, runtime-memory only
+- boundaries: no database, no Supabase, no persistence, no API routes, no Workspace UI, no scoring, no recommendations, no AI
+
+Twin viewer read-model helper baseline confirmed:
+- runtime files: `apps/platform/gnr8/runtime/twin/twin-viewer.ts`, `apps/platform/gnr8/runtime/twin/twin-viewer.test.ts`
+- implemented type: `TwinOverview`
+- implemented function: `createTwinOverview(twin)`
+- mapped fields: `twinId`, `siteId`, `siteVersionId`, `workspaceId`, `environmentScope`, `status`, `contentSummary`, `designSummary`, `experienceSummary`, `governanceSummary`, `operationalSummary`, `lastUpdated`, `diagnostics`
+- diagnostics: `TWIN_OVERVIEW_CREATED`
+- validation: twin-viewer tests passed, next build passed
+- boundaries unchanged: no Workspace UI yet, no React, no database, no API, no AI, no optimization, no scoring, no recommendations
+
 First operational next step:
-- implement Twin In-Memory Store / Read-Model Store
-- then project viewer/store integration against the existing runtime contract
+- Workspace Overview Twin Preview UI
+- then project viewer integration against the existing runtime contract
 
 ## Future Integration Points
 This architecture anchors future integration with:
@@ -172,7 +191,8 @@ This architecture anchors future integration with:
 GNR8 gains the canonical Website Digital Twin architecture that becomes the central object of the Website Operating System.
 
 First operational success checkpoint:
-- GNR8 now has the first runtime Website Digital Twin object and deterministic builder while remaining persistence/API/UI-free.
+- GNR8 now has the first runtime Twin Repository layer capable of storing and retrieving Website Digital Twins in memory while remaining persistence/API/UI-free.
+- GNR8 now has a Workspace-ready Twin Overview read-model capable of presenting Website Digital Twin state before UI implementation.
 
 ## Related Canonical Documents
 - `docs/architecture/TWIN_RUNTIME_CONTRACT.md`

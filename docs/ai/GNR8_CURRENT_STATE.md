@@ -3,6 +3,107 @@
 ## Snapshot Date
 2026-05-30
 
+## Twin Viewer Read-Model Helper Milestone (2026-05-30)
+
+Milestone is complete and implemented:
+- `apps/platform/gnr8/runtime/twin/twin-viewer.ts`
+- `apps/platform/gnr8/runtime/twin/twin-viewer.test.ts`
+
+Implemented type:
+- `TwinOverview`
+
+Implemented function:
+- `createTwinOverview(twin)`
+
+Mapped fields:
+- `twinId`
+- `siteId`
+- `siteVersionId`
+- `workspaceId`
+- `environmentScope`
+- `status`
+- `contentSummary`
+- `designSummary`
+- `experienceSummary`
+- `governanceSummary`
+- `operationalSummary`
+- `lastUpdated`
+- `diagnostics`
+
+Implemented diagnostic:
+- `TWIN_OVERVIEW_CREATED`
+
+Explicit boundaries remain:
+- no Workspace UI yet
+- no React
+- no database
+- no API
+- no AI
+- no optimization
+- no scoring
+- no recommendations
+
+Validation:
+- twin-viewer tests passed
+- next build passed
+
+Conclusion:
+- GNR8 now has a Workspace-ready Twin Overview read-model capable of presenting Website Digital Twin state before UI implementation.
+
+Recommended next milestone:
+- Workspace Overview Twin Preview UI
+
+## Twin In-Memory Store and Read-Model Repository Milestone (2026-05-30)
+
+Milestone is complete and implemented:
+- `apps/platform/gnr8/runtime/twin/twin-store.ts`
+- `apps/platform/gnr8/runtime/twin/twin-store.test.ts`
+
+Implemented interface:
+- `TwinStore`
+
+Methods:
+- `saveTwin(twin)`
+- `getTwin(twinId)`
+- `getTwinBySiteVersion(siteVersionId)`
+- `listTwins()`
+- `clear()`
+
+Implemented implementation:
+- `InMemoryTwinStore`
+
+Implemented diagnostics:
+- `TWIN_STORE_SAVE_SUCCEEDED`
+- `TWIN_STORE_GET_SUCCEEDED`
+- `TWIN_STORE_LIST_SUCCEEDED`
+
+Implemented behavior:
+- map-based storage
+- latest twin per `siteVersionId` tracking
+- multiple twins supported
+- twin payloads are not mutated
+- runtime-memory only
+
+Explicit boundaries remain:
+- no database
+- no Supabase
+- no persistence
+- no API routes
+- no Workspace UI
+- no scoring
+- no recommendations
+- no AI
+
+Validation:
+- twin-store tests passed
+- next build passed
+
+Conclusion:
+- GNR8 now has the first runtime Twin Repository layer capable of storing and retrieving Website Digital Twins in memory.
+
+Recommended next milestone:
+- Workspace Overview Twin Preview UI
+
 ## Twin Runtime Types and Deterministic Builder Milestone (2026-05-30)
 
 Milestone is complete and implemented:
@@ -52,7 +153,7 @@ Conclusion:
 - GNR8 now has the first runtime Website Digital Twin object and deterministic builder while remaining persistence/API/UI-free.
 
 Recommended next milestone:
-- Twin In-Memory Store / Read-Model Store
+- Workspace Overview Twin Preview UI
 
 ## Twin Runtime Contract Baseline (2026-05-30)
 
@@ -65,7 +166,7 @@ Purpose and boundary are explicit:
 - no APIs
 - no database changes
 - no UI implementation
-- no store implementation yet
+- no Workspace UI implementation yet
 
 Canonical identity fields are documented as:
 - `twinId`

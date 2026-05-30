@@ -2,6 +2,8 @@
 
 ## Status
 - Milestone update: Twin Runtime Types and Deterministic Builder completed (2026-05-30)
+- Milestone update: Twin In-Memory Store and Read-Model Repository completed (2026-05-30)
+- Milestone update: Twin Viewer Read-Model Helper completed (2026-05-30)
 - Scope: roadmap + completion checkpoint
 - Non-goals unchanged: no APIs, no UI implementation, no database changes
 
@@ -9,6 +11,10 @@ Completed in runtime:
 - `apps/platform/gnr8/runtime/twin/twin-types.ts`
 - `apps/platform/gnr8/runtime/twin/twin-builder.ts`
 - `apps/platform/gnr8/runtime/twin/twin-builder.test.ts`
+- `apps/platform/gnr8/runtime/twin/twin-store.ts`
+- `apps/platform/gnr8/runtime/twin/twin-store.test.ts`
+- `apps/platform/gnr8/runtime/twin/twin-viewer.ts`
+- `apps/platform/gnr8/runtime/twin/twin-viewer.test.ts`
 
 ## Purpose
 Define the shortest path from architecture to the first visible Website Digital Twin inside GNR8.
@@ -78,6 +84,8 @@ Canonical first-operational outputs:
 
 Milestone validation:
 - twin-builder tests passed
+- twin-store tests passed
+- twin-viewer tests passed
 - next build passed
 
 Implementation readiness checkpoint from this roadmap + contract:
@@ -109,10 +117,17 @@ GNR8 gains the first operational runtime representation of a website.
 Current completion checkpoint:
 - first runtime Website Digital Twin object implemented
 - deterministic builder implemented
+- first runtime TwinStore repository implemented (`TwinStore`, `InMemoryTwinStore`)
+- first Workspace-ready Twin Overview read-model helper implemented (`TwinOverview`, `createTwinOverview(twin)`)
+- store methods implemented: `saveTwin(twin)`, `getTwin(twinId)`, `getTwinBySiteVersion(siteVersionId)`, `listTwins()`, `clear()`
+- store behavior verified: map-based storage, latest per-siteVersion tracking, multiple twins supported, payloads not mutated, runtime-memory only
+- store diagnostics implemented: `TWIN_STORE_SAVE_SUCCEEDED`, `TWIN_STORE_GET_SUCCEEDED`, `TWIN_STORE_LIST_SUCCEEDED`
+- TwinOverview mapped fields: `twinId`, `siteId`, `siteVersionId`, `workspaceId`, `environmentScope`, `status`, `contentSummary`, `designSummary`, `experienceSummary`, `governanceSummary`, `operationalSummary`, `lastUpdated`, `diagnostics`
+- twin-viewer diagnostic implemented: `TWIN_OVERVIEW_CREATED`
 - persistence/API/UI still intentionally not implemented
 
 Recommended next milestone:
-- Twin In-Memory Store / Read-Model Store
+- Workspace Overview Twin Preview UI
 
 ## Related Canonical Documents
 - `docs/architecture/TWIN_RUNTIME_CONTRACT.md`
