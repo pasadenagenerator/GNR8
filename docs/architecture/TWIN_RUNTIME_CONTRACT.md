@@ -17,6 +17,11 @@ Implemented milestone (2026-05-31):
 - source:
   - `fixtureId`: `real-site-01`
 
+Implemented milestone (2026-05-31):
+- Workspace Overview Bundled Stable Import Snapshot
+- fixture:
+  - `apps/platform/gnr8/runtime/twin/fixtures/stable-import-snapshot.ts`
+
 Implemented milestone (2026-05-30):
 - Twin Runtime Types and Deterministic Builder
 - runtime files:
@@ -235,6 +240,34 @@ Verified real-site preview values (hydrated from imported model evidence when pr
 - `governanceSummary`: `sourceImportId=import_real-site-01_c167859409d8; sourceSiteVersionId=site_version_real-site-01_072929becae7; readOnly=true`
 - `operationalSummary`: `environmentScope=preview; providerState=preview/runtime-only`
 
+Verified deployed Workspace Overview fallback snapshot values (bundled stable import snapshot path):
+- `selectedSource`: `bundled_stable_import_snapshot`
+- `fallbackReason`: `none`
+- `pages`: `18`
+- `sections`: `74`
+- `detectedTitle`: `GNR8 Validation Site`
+- `homepagePath`: `index.html`
+- `assets`: `133`
+- `navigationEvidence`: `available`
+- `homepageDetected`: `true`
+- `environmentScope`: `preview`
+- `providerState`: `preview/runtime-only`
+
+Workspace Overview source resolution order:
+1. stable artifact on filesystem
+2. imported-url snapshot directory
+3. bundled stable import snapshot fixture
+4. fallback `No imported site available.`
+
+Verified diagnostics for bundled stable import snapshot selection:
+- `WORKSPACE_OVERVIEW_IMPORT_SOURCE_SEARCH_STARTED`
+- `WORKSPACE_OVERVIEW_STABLE_ARTIFACT_CHECKED`
+- `WORKSPACE_OVERVIEW_STABLE_ARTIFACT_MISSING`
+- `WORKSPACE_OVERVIEW_IMPORTED_URL_SNAPSHOT_DIRECTORY_CHECKED`
+- `WORKSPACE_OVERVIEW_IMPORTED_URL_SNAPSHOT_COUNT_0`
+- `WORKSPACE_OVERVIEW_BUNDLED_STABLE_SNAPSHOT_CHECKED`
+- `WORKSPACE_OVERVIEW_BUNDLED_STABLE_SNAPSHOT_SELECTED`
+
 Builder input supports optional read-model evidence summary:
 - `sourceEvidenceSummary.pageCount`
 - `sourceEvidenceSummary.sectionCount`
@@ -296,11 +329,10 @@ Future implementation targets anchored by this contract:
 Current milestone conclusion:
 - GNR8 now has the first browser-visible Website Digital Twin runtime surface.
 - Digital Twin snapshots now contain imported-site evidence instead of placeholder-only summaries.
+- Workspace Overview is now useful in deployed environments even without local validation snapshot files.
 
 Recommended next milestone:
-- Workspace Navigation Wiring
-- Canonical Models
-- Site Version runtime
+- Real Imported Runtime Evidence Persistence Path
 
 ## Success Criteria
 Future bootstrap resumes from the implemented twin runtime types and deterministic builder, then proceeds to:

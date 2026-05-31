@@ -240,6 +240,44 @@ Twin Snapshot Hydration from Imported Site Model milestone confirmed:
   - no scoring
   - no recommendations
 
+Workspace Overview Bundled Stable Import Snapshot milestone confirmed:
+- fixture:
+  - `apps/platform/gnr8/runtime/twin/fixtures/stable-import-snapshot.ts`
+- source resolution order:
+  1. stable artifact on filesystem
+  2. imported-url snapshot directory
+  3. bundled stable import snapshot fixture
+  4. fallback `No imported site available.`
+- verified deployed values:
+  - `selectedSource`: `bundled_stable_import_snapshot`
+  - `fallbackReason`: `none`
+  - `pages`: `18`
+  - `sections`: `74`
+  - `detectedTitle`: `GNR8 Validation Site`
+  - `homepagePath`: `index.html`
+  - `assets`: `133`
+  - `navigationEvidence`: `available`
+  - `homepageDetected`: `true`
+  - `environmentScope`: `preview`
+  - `providerState`: `preview/runtime-only`
+- diagnostics:
+  - `WORKSPACE_OVERVIEW_IMPORT_SOURCE_SEARCH_STARTED`
+  - `WORKSPACE_OVERVIEW_STABLE_ARTIFACT_CHECKED`
+  - `WORKSPACE_OVERVIEW_STABLE_ARTIFACT_MISSING`
+  - `WORKSPACE_OVERVIEW_IMPORTED_URL_SNAPSHOT_DIRECTORY_CHECKED`
+  - `WORKSPACE_OVERVIEW_IMPORTED_URL_SNAPSHOT_COUNT_0`
+  - `WORKSPACE_OVERVIEW_BUNDLED_STABLE_SNAPSHOT_CHECKED`
+  - `WORKSPACE_OVERVIEW_BUNDLED_STABLE_SNAPSHOT_SELECTED`
+- preserved boundaries:
+  - read-only
+  - no DB/schema changes
+  - no API
+  - no AI
+  - no scoring
+  - no recommendations
+  - no editing
+  - no publishing
+
 ## Future Integration Points
 This architecture anchors future integration with:
 - Twin Runtime Contract
@@ -263,9 +301,10 @@ First operational success checkpoint:
 - GNR8 now has a Workspace-ready Twin Overview read-model capable of presenting Website Digital Twin state before UI implementation.
 - GNR8 now has the first browser-visible Website Digital Twin runtime surface.
 - Digital Twin snapshots now contain imported-site evidence instead of placeholder-only summaries.
+- Workspace Overview is now useful in deployed environments even without local validation snapshot files.
 
 Recommended next milestone:
-- Workspace Navigation Wiring
+- Real Imported Runtime Evidence Persistence Path
 
 ## Related Canonical Documents
 - `docs/architecture/TWIN_RUNTIME_CONTRACT.md`

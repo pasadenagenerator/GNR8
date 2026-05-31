@@ -2,6 +2,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { createImportManifest } from "@/gnr8/import/import-manifest";
 import { importStaticSite } from "@/gnr8/import/runtime/import-static-site";
+import type { RuntimeImportProvenanceSummary } from "@/gnr8/runtime/types";
 import {
   STABLE_IMPORT_SNAPSHOT_FIXTURE,
   type StableImportSnapshotFixture,
@@ -71,7 +72,7 @@ function toTwinIdentityFromImport(input: {
 
 type ImportedSnapshotSelection = {
   snapshotId: string;
-  source: "stable_validation_artifact" | "latest_imported_snapshot" | "bundled_stable_import_snapshot";
+  source: "persisted_runtime_import_evidence" | "stable_validation_artifact" | "latest_imported_snapshot" | "bundled_stable_import_snapshot";
 } & (
   | {
       snapshotRootDirAbs: string;
@@ -97,6 +98,72 @@ type ImportedSnapshotResolution = {
   diagnostics: string[];
 };
 
+type PersistedRuntimeEvidenceCandidate = {
+  siteVersionId: string;
+  snapshotId: string;
+  snapshotRootDirAbs: string;
+  updatedAt: string | null;
+};
+
+function toText(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const normalized = value.trim();
+  return normalized.length > 0 ? normalized : null;
+}
+
+function toPersistedRuntimeEvidenceCandidate(input: {
+  siteVersionId: unknown;
+  importProvenanceSummary: unknown;
+  updatedAt: unknown;
+}): PersistedRuntimeEvidenceCandidate | null {
+  const siteVersionId = toText(input.siteVersionId);
+  if (!siteVersionId) return null;
+  const summary = (input.importProvenanceSummary ?? null) as RuntimeImportProvenanceSummary | null;
+  if (!summary || summary.kind !== "runtime_import_provenance_summary_v1") return null;
+  const executionIdentity = summary.executionIdentity ?? null;
+  if (!executionIdentity) return null;
+  const snapshotId = toText(executionIdentity.snapshotId);
+  const snapshotRootDirAbs =
+    toText(executionIdentity.snapshotStableRootDirAbs) ?? toText(executionIdentity.snapshotRunRootDirAbs);
+  if (!snapshotId || !snapshotRootDirAbs) return null;
+  return {
+    siteVersionId,
+    snapshotId,
+    snapshotRootDirAbs,
+    updatedAt: toText(input.updatedAt),
+  };
+}
+
+async function listPersistedRuntimeEvidenceCandidates(): Promise<PersistedRuntimeEvidenceCandidate[]> {
+  let supabase: any = null;
+  try {
+    const mod = await import("@/src/supabase/service-role-server");
+    supabase = mod.getSupabaseServiceRoleClient();
+  } catch {
+    supabase = null;
+  }
+  if (!supabase) return [];
+  try {
+    const result = await supabase
+      .from("gnr8_runtime_site_versions")
+      .select("id,import_provenance_summary,updated_at")
+      .order("updated_at", { ascending: false })
+      .limit(50);
+    if (result.error || !Array.isArray(result.data)) return [];
+    return (result.data as Array<{ id: unknown; import_provenance_summary: unknown; updated_at: unknown }>)
+      .map((row: { id: unknown; import_provenance_summary: unknown; updated_at: unknown }) =>
+        toPersistedRuntimeEvidenceCandidate({
+          siteVersionId: row.id,
+          importProvenanceSummary: row.import_provenance_summary,
+          updatedAt: row.updated_at,
+        }),
+      )
+      .filter((entry: PersistedRuntimeEvidenceCandidate | null): entry is PersistedRuntimeEvidenceCandidate => entry != null);
+  } catch {
+    return [];
+  }
+}
+
 function toProjectRelativePath(absPath: string): string | null {
   const cwd = process.cwd();
   const relative = path.relative(cwd, absPath);
@@ -108,12 +175,47 @@ async function resolveImportedSnapshotWithDiagnostics(input?: {
   snapshotsRootDirAbs?: string;
   betaRunsRootDirAbs?: string;
   bundledSnapshotFixture?: StableImportSnapshotFixture | null;
+  persistedRuntimeEvidenceCandidates?: PersistedRuntimeEvidenceCandidate[] | null;
 }): Promise<ImportedSnapshotResolution> {
   const snapshotsRootDirAbs = input?.snapshotsRootDirAbs ?? DEFAULT_IMPORT_SNAPSHOTS_ROOT;
   const betaRunsRootDirAbs = input?.betaRunsRootDirAbs ?? DEFAULT_BETA_RUNS_ROOT;
   const bundledSnapshotFixture =
     input && "bundledSnapshotFixture" in input ? input.bundledSnapshotFixture : STABLE_IMPORT_SNAPSHOT_FIXTURE;
   const diagnostics: string[] = ["WORKSPACE_OVERVIEW_IMPORT_SOURCE_SEARCH_STARTED"];
+  diagnostics.push("WORKSPACE_OVERVIEW_PERSISTED_RUNTIME_EVIDENCE_CHECKED");
+  const persistedCandidates =
+    input && "persistedRuntimeEvidenceCandidates" in input
+      ? input.persistedRuntimeEvidenceCandidates ?? []
+      : await listPersistedRuntimeEvidenceCandidates();
+  const persistedSorted = [...persistedCandidates].sort((a, b) => {
+    const aTime = a.updatedAt ? Date.parse(a.updatedAt) : 0;
+    const bTime = b.updatedAt ? Date.parse(b.updatedAt) : 0;
+    return bTime - aTime;
+  });
+  for (const candidate of persistedSorted) {
+    try {
+      await fs.access(path.join(candidate.snapshotRootDirAbs, "index.html"));
+      diagnostics.push("WORKSPACE_OVERVIEW_PERSISTED_RUNTIME_EVIDENCE_SELECTED");
+      return {
+        selectedSnapshot: {
+          snapshotId: candidate.snapshotId,
+          snapshotRootDirAbs: candidate.snapshotRootDirAbs,
+          source: "persisted_runtime_import_evidence",
+          bundledSnapshot: null,
+        },
+        importSourceDiagnostics: {
+          selectedSource: "persisted_runtime_import_evidence",
+          stableArtifactPath: null,
+          importedUrlSnapshotDirectory: toProjectRelativePath(snapshotsRootDirAbs),
+          importedUrlSnapshotCount: 0,
+          fallbackReason: null,
+        },
+        diagnostics,
+      };
+    } catch {
+      continue;
+    }
+  }
 
   let stableSnapshotId: string | null = null;
   try {
@@ -282,6 +384,7 @@ export async function resolveImportedSnapshot(input?: {
   snapshotsRootDirAbs?: string;
   betaRunsRootDirAbs?: string;
   bundledSnapshotFixture?: StableImportSnapshotFixture | null;
+  persistedRuntimeEvidenceCandidates?: PersistedRuntimeEvidenceCandidate[] | null;
 }): Promise<ImportedSnapshotSelection | null> {
   const resolution = await resolveImportedSnapshotWithDiagnostics(input);
   return resolution.selectedSnapshot;
@@ -291,6 +394,7 @@ export async function buildWorkspaceOverviewModel(input?: {
   snapshotsRootDirAbs?: string;
   betaRunsRootDirAbs?: string;
   bundledSnapshotFixture?: StableImportSnapshotFixture | null;
+  persistedRuntimeEvidenceCandidates?: PersistedRuntimeEvidenceCandidate[] | null;
 }) {
   const resolution = await resolveImportedSnapshotWithDiagnostics(input);
   const selectedSnapshot = resolution.selectedSnapshot;

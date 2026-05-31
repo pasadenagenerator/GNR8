@@ -19,6 +19,7 @@ test("workspace overview source: uses imported runtime twin chain", async () => 
   const source = await readFile(MODEL_FILE, "utf8");
   assert.equal(source.includes("resolveImportedSnapshot"), true);
   assert.equal(source.includes("imported-url-site-"), true);
+  assert.equal(source.includes("persisted_runtime_import_evidence"), true);
   assert.equal(source.includes("bundled_stable_import_snapshot"), true);
   assert.equal(source.includes("buildWebsiteDigitalTwin"), true);
   assert.equal(source.includes("InMemoryTwinStore"), true);
@@ -148,6 +149,35 @@ test("workspace overview source resolution: uses stable validation artifact when
   assert.equal(selected?.source, "stable_validation_artifact");
 });
 
+test("workspace overview source resolution: selects persisted runtime import evidence first when available", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "workspace-overview-persisted-"));
+  const snapshotsRoot = path.join(root, "snapshots");
+  const persistedSnapshotId = "imported-url-site-persisted1234567890";
+  const persistedSnapshotRoot = path.join(snapshotsRoot, persistedSnapshotId);
+  const latestSnapshotId = "imported-url-site-latest1234567890";
+  await mkdir(persistedSnapshotRoot, { recursive: true });
+  await writeFile(path.join(persistedSnapshotRoot, "index.html"), "<html><title>persisted</title></html>", "utf8");
+  await mkdir(path.join(snapshotsRoot, latestSnapshotId), { recursive: true });
+  await writeFile(path.join(snapshotsRoot, latestSnapshotId, "index.html"), "<html><title>latest</title></html>", "utf8");
+
+  const model = await buildWorkspaceOverviewModel({
+    snapshotsRootDirAbs: snapshotsRoot,
+    persistedRuntimeEvidenceCandidates: [
+      {
+        siteVersionId: "11111111-1111-4111-8111-111111111111",
+        snapshotId: persistedSnapshotId,
+        snapshotRootDirAbs: persistedSnapshotRoot,
+        updatedAt: new Date().toISOString(),
+      },
+    ],
+  });
+  assert.equal(model.sourceId, persistedSnapshotId);
+  assert.equal(model.sourceKind, "persisted_runtime_import_evidence");
+  assert.equal(model.importSourceDiagnostics.selectedSource, "persisted_runtime_import_evidence");
+  assert.equal(model.diagnostics.includes("WORKSPACE_OVERVIEW_PERSISTED_RUNTIME_EVIDENCE_CHECKED"), true);
+  assert.equal(model.diagnostics.includes("WORKSPACE_OVERVIEW_PERSISTED_RUNTIME_EVIDENCE_SELECTED"), true);
+});
+
 test("workspace overview model fallback: no imported site available when no snapshots exist", async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), "workspace-overview-empty-"));
   const snapshotsRoot = path.join(root, "snapshots");
@@ -170,6 +200,8 @@ test("workspace overview model fallback: no imported site available when no snap
   assert.equal(model.importSourceDiagnostics.importedUrlSnapshotCount, 0);
   assert.equal(model.importSourceDiagnostics.fallbackReason !== null, true);
   assert.equal(model.diagnostics.includes("WORKSPACE_OVERVIEW_IMPORT_SOURCE_SEARCH_STARTED"), true);
+  assert.equal(model.diagnostics.includes("WORKSPACE_OVERVIEW_PERSISTED_RUNTIME_EVIDENCE_CHECKED"), true);
+  assert.equal(model.diagnostics.includes("WORKSPACE_OVERVIEW_PERSISTED_RUNTIME_EVIDENCE_SELECTED"), false);
   assert.equal(model.diagnostics.includes("WORKSPACE_OVERVIEW_STABLE_ARTIFACT_CHECKED"), true);
   assert.equal(model.diagnostics.includes("WORKSPACE_OVERVIEW_STABLE_ARTIFACT_MISSING"), true);
   assert.equal(model.diagnostics.includes("WORKSPACE_OVERVIEW_IMPORTED_URL_SNAPSHOT_DIRECTORY_CHECKED"), true);

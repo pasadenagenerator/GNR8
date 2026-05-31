@@ -2,6 +2,7 @@
 
 ## Status
 - Milestone update: Workspace Navigation Wiring v1 completed (2026-05-31)
+- Milestone update: Workspace Overview Bundled Stable Import Snapshot completed (2026-05-31)
 - Milestone update: Twin Runtime Types and Deterministic Builder completed (2026-05-30)
 - Milestone update: Twin In-Memory Store and Read-Model Repository completed (2026-05-30)
 - Milestone update: Twin Viewer Read-Model Helper completed (2026-05-30)
@@ -217,11 +218,50 @@ Workspace Navigation Wiring v1 completion checkpoint:
   - admin test suite passed (`148/148`)
   - next build passed
 
+Workspace Overview Bundled Stable Import Snapshot completion checkpoint:
+- fixture:
+  - `apps/platform/gnr8/runtime/twin/fixtures/stable-import-snapshot.ts`
+- source resolution order:
+  1. stable artifact on filesystem
+  2. imported-url snapshot directory
+  3. bundled stable import snapshot fixture
+  4. fallback `No imported site available.`
+- verified deployed values:
+  - `selectedSource`: `bundled_stable_import_snapshot`
+  - `fallbackReason`: `none`
+  - `pages`: `18`
+  - `sections`: `74`
+  - `detectedTitle`: `GNR8 Validation Site`
+  - `homepagePath`: `index.html`
+  - `assets`: `133`
+  - `navigationEvidence`: `available`
+  - `homepageDetected`: `true`
+  - `environmentScope`: `preview`
+  - `providerState`: `preview/runtime-only`
+- diagnostics:
+  - `WORKSPACE_OVERVIEW_IMPORT_SOURCE_SEARCH_STARTED`
+  - `WORKSPACE_OVERVIEW_STABLE_ARTIFACT_CHECKED`
+  - `WORKSPACE_OVERVIEW_STABLE_ARTIFACT_MISSING`
+  - `WORKSPACE_OVERVIEW_IMPORTED_URL_SNAPSHOT_DIRECTORY_CHECKED`
+  - `WORKSPACE_OVERVIEW_IMPORTED_URL_SNAPSHOT_COUNT_0`
+  - `WORKSPACE_OVERVIEW_BUNDLED_STABLE_SNAPSHOT_CHECKED`
+  - `WORKSPACE_OVERVIEW_BUNDLED_STABLE_SNAPSHOT_SELECTED`
+- preserved boundaries:
+  - read-only
+  - no DB/schema changes
+  - no API
+  - no AI
+  - no scoring
+  - no recommendations
+  - no editing
+  - no publishing
+
 Conclusion:
 - Website OS runtime surfaces are now discoverable through navigation instead of requiring direct URL knowledge.
+- Workspace Overview is now useful in deployed environments even without local validation snapshot files.
 
 Recommended next milestone:
-- Real Imported Site Workspace Overview Runtime
+- Real Imported Runtime Evidence Persistence Path
 
 ## Related Canonical Documents
 - `docs/architecture/TWIN_RUNTIME_CONTRACT.md`

@@ -3,6 +3,56 @@
 ## Snapshot Date
 2026-05-31
 
+## Workspace Overview Bundled Stable Import Snapshot Milestone (2026-05-31)
+
+Milestone is complete and documented:
+- fixture:
+  - `apps/platform/gnr8/runtime/twin/fixtures/stable-import-snapshot.ts`
+
+Workspace Overview source resolution order:
+1. stable artifact on filesystem
+2. imported-url snapshot directory
+3. bundled stable import snapshot fixture
+4. fallback `No imported site available.`
+
+Verified deployed values:
+- `selectedSource`: `bundled_stable_import_snapshot`
+- `fallbackReason`: `none`
+- `pages`: `18`
+- `sections`: `74`
+- `detectedTitle`: `GNR8 Validation Site`
+- `homepagePath`: `index.html`
+- `assets`: `133`
+- `navigationEvidence`: `available`
+- `homepageDetected`: `true`
+- `environmentScope`: `preview`
+- `providerState`: `preview/runtime-only`
+
+Verified diagnostics:
+- `WORKSPACE_OVERVIEW_IMPORT_SOURCE_SEARCH_STARTED`
+- `WORKSPACE_OVERVIEW_STABLE_ARTIFACT_CHECKED`
+- `WORKSPACE_OVERVIEW_STABLE_ARTIFACT_MISSING`
+- `WORKSPACE_OVERVIEW_IMPORTED_URL_SNAPSHOT_DIRECTORY_CHECKED`
+- `WORKSPACE_OVERVIEW_IMPORTED_URL_SNAPSHOT_COUNT_0`
+- `WORKSPACE_OVERVIEW_BUNDLED_STABLE_SNAPSHOT_CHECKED`
+- `WORKSPACE_OVERVIEW_BUNDLED_STABLE_SNAPSHOT_SELECTED`
+
+Explicit boundaries remain:
+- read-only
+- no DB/schema changes
+- no API
+- no AI
+- no scoring
+- no recommendations
+- no editing
+- no publishing
+
+Conclusion:
+- Workspace Overview is now useful in deployed environments even without local validation snapshot files.
+
+Recommended next milestone:
+- Real Imported Runtime Evidence Persistence Path
+
 ## Workspace Navigation Wiring v1 Milestone (2026-05-31)
 
 Milestone is complete and documented:
