@@ -25,7 +25,7 @@ export default async function WorkspaceOverviewPage() {
       <section style={{ marginTop: 28 }}>
         <h2 style={{ marginBottom: 12 }}>Twin Source</h2>
         <p style={{ margin: 0 }}>
-          real-site-01 → buildWebsiteDigitalTwin() → InMemoryTwinStore → createTwinOverview()
+          {model.sourceId ?? "No imported site available."} → buildWebsiteDigitalTwin() → InMemoryTwinStore → createTwinOverview()
         </p>
       </section>
 

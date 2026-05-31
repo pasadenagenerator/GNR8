@@ -1,6 +1,7 @@
 # First Operational Twin Roadmap
 
 ## Status
+- Milestone update: Workspace Navigation Wiring v1 completed (2026-05-31)
 - Milestone update: Twin Runtime Types and Deterministic Builder completed (2026-05-30)
 - Milestone update: Twin In-Memory Store and Read-Model Repository completed (2026-05-30)
 - Milestone update: Twin Viewer Read-Model Helper completed (2026-05-30)
@@ -193,11 +194,34 @@ Current completion checkpoint:
 - persistence/API/UI still intentionally not implemented
 - Twin Snapshot Hydration from Imported Site Model completed and verified as read-only runtime validation from imported fixture `real-site-01`
 
+Workspace Navigation Wiring v1 completion checkpoint:
+- connected surfaces:
+  - `/gnr8/admin/providers`
+  - `/gnr8/admin/workspace-overview`
+  - `/gnr8/admin/twin-preview`
+  - `/gnr8/admin/twin-preview-real`
+- navigation sections:
+  - `Website OS`
+  - `Validation Surfaces`
+  - `Website OS Navigation`
+- preserved boundaries:
+  - UI/navigation only
+  - read-only links only
+  - no runtime changes
+  - no API changes
+  - no database changes
+  - no provider changes
+  - no Twin changes
+  - no forms/actions/editing/publish/AI controls
+- validation:
+  - admin test suite passed (`148/148`)
+  - next build passed
+
 Conclusion:
-- Digital Twin snapshots now contain imported-site evidence instead of placeholder-only summaries.
+- Website OS runtime surfaces are now discoverable through navigation instead of requiring direct URL knowledge.
 
 Recommended next milestone:
-- Workspace Navigation Wiring
+- Real Imported Site Workspace Overview Runtime
 
 ## Related Canonical Documents
 - `docs/architecture/TWIN_RUNTIME_CONTRACT.md`

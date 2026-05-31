@@ -3,6 +3,40 @@
 ## Snapshot Date
 2026-05-31
 
+## Workspace Navigation Wiring v1 Milestone (2026-05-31)
+
+Milestone is complete and documented:
+- connected surfaces:
+  - `/gnr8/admin/providers`
+  - `/gnr8/admin/workspace-overview`
+  - `/gnr8/admin/twin-preview`
+  - `/gnr8/admin/twin-preview-real`
+
+Navigation sections:
+- `Website OS`
+- `Validation Surfaces`
+- `Website OS Navigation`
+
+Preserved boundaries:
+- UI/navigation only
+- read-only links only
+- no runtime changes
+- no API changes
+- no database changes
+- no Twin changes
+- no Provider changes
+- no forms/actions/editing/publish/AI controls
+
+Validation:
+- admin test suite passed (`148/148`)
+- next build passed
+
+Conclusion:
+- Website OS runtime surfaces are now discoverable through navigation instead of requiring direct URL knowledge.
+
+Recommended next milestone:
+- Real Imported Site Workspace Overview Runtime
+
 ## Twin Snapshot Hydration from Imported Site Model Milestone (2026-05-31)
 
 Milestone is complete and documented:

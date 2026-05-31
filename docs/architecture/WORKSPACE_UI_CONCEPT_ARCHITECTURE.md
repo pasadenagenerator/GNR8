@@ -177,7 +177,7 @@ Operations
 ```
 
 ## Current State
-Architecture baseline plus first browser-visible Twin preview surface milestone.
+Architecture baseline plus first browser-visible Twin preview surface milestone and completed Workspace Navigation Wiring v1 milestone.
 
 Workspace Overview Twin Preview UI milestone is complete and verified:
 - route: `/gnr8/admin/twin-preview`
@@ -229,8 +229,34 @@ Explicitly:
 Conclusion:
 - GNR8 now has the first browser-visible Website Digital Twin runtime surface.
 
+Workspace Navigation Wiring v1 milestone is complete and verified:
+- connected surfaces:
+  - `/gnr8/admin/providers`
+  - `/gnr8/admin/workspace-overview`
+  - `/gnr8/admin/twin-preview`
+  - `/gnr8/admin/twin-preview-real`
+- navigation sections:
+  - `Website OS`
+  - `Validation Surfaces`
+  - `Website OS Navigation`
+- preserved boundaries:
+  - UI/navigation only
+  - read-only links only
+  - no runtime changes
+  - no API changes
+  - no database changes
+  - no provider changes
+  - no Twin changes
+  - no forms/actions/editing/publish/AI controls
+- validation:
+  - admin test suite passed (`148/148`)
+  - next build passed
+
+Conclusion:
+- Website OS runtime surfaces are now discoverable through navigation instead of requiring direct URL knowledge.
+
 Recommended next milestone:
-- Twin Preview Navigation Wiring
+- Real Imported Site Workspace Overview Runtime
 
 ## Success Condition
 GNR8 gains the conceptual product blueprint required before creating and validating Workspace wireframe specifications.
