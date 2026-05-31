@@ -96,6 +96,10 @@ type ImportSourceDiagnostics = {
   persistedEvidenceReason: string | null;
   persistedEvidenceSiteVersionId: string | null;
   persistedEvidenceImportId: string | null;
+  persistedEvidenceShapeStatus: "unchecked" | "unavailable" | "valid" | "invalid";
+  persistedEvidenceMissingFields: string[];
+  persistedEvidenceAvailableFields: string[];
+  persistedEvidenceSourceKind: string | null;
 };
 
 type ImportedSnapshotResolution = {
@@ -110,6 +114,14 @@ type PersistedRuntimeEvidenceCandidate = {
   snapshotRootDirAbs: string;
   importId: string | null;
   updatedAt: string | null;
+  importProvenanceSummary?: RuntimeImportProvenanceSummary | null;
+  sourceEvidenceSummary?: {
+    pageCount?: number;
+    sectionCount?: number;
+    assetCount?: number;
+    detectedTitle?: string;
+    detectedHomepagePath?: string;
+  } | null;
 };
 
 type PersistedRuntimeEvidenceScanResult = {
@@ -146,6 +158,50 @@ function toPersistedRuntimeEvidenceCandidate(input: {
     snapshotRootDirAbs,
     importId,
     updatedAt: toText(input.updatedAt),
+    importProvenanceSummary: summary,
+    sourceEvidenceSummary: null,
+  };
+}
+
+const REQUIRED_PERSISTED_EVIDENCE_FIELDS = [
+  "siteVersionId",
+  "importId_or_sourceImportId",
+  "pageCount",
+  "sectionCount",
+  "assetCount",
+  "detectedTitle",
+  "detectedHomepagePath",
+] as const;
+
+function toPersistedEvidenceShapeDiagnostics(candidate: PersistedRuntimeEvidenceCandidate): {
+  shapeStatus: "valid" | "invalid";
+  missingFields: string[];
+  availableFields: string[];
+  sourceKind: string | null;
+} {
+  const available = new Set<string>();
+  available.add("siteVersionId");
+  if (candidate.importId) available.add("importId");
+  const sourceImportId = toText((candidate.importProvenanceSummary as { sourceImportId?: unknown } | null)?.sourceImportId);
+  if (sourceImportId) available.add("sourceImportId");
+  const summary = candidate.sourceEvidenceSummary;
+  if (typeof summary?.pageCount === "number") available.add("pageCount");
+  if (typeof summary?.sectionCount === "number") available.add("sectionCount");
+  if (typeof summary?.assetCount === "number") available.add("assetCount");
+  if (toText(summary?.detectedTitle) != null) available.add("detectedTitle");
+  if (toText(summary?.detectedHomepagePath) != null) available.add("detectedHomepagePath");
+
+  const missing = REQUIRED_PERSISTED_EVIDENCE_FIELDS.filter((field) => {
+    if (field === "importId_or_sourceImportId") return !(available.has("importId") || available.has("sourceImportId"));
+    return !available.has(field);
+  });
+  const topLevelSafeFields = Object.keys(candidate.importProvenanceSummary ?? {}).sort();
+  for (const field of available) topLevelSafeFields.push(field);
+  return {
+    shapeStatus: missing.length === 0 ? "valid" : "invalid",
+    missingFields: missing,
+    availableFields: [...new Set(topLevelSafeFields)].sort(),
+    sourceKind: toText((candidate.importProvenanceSummary as { kind?: unknown } | null)?.kind),
   };
 }
 
@@ -214,6 +270,10 @@ async function resolveImportedSnapshotWithDiagnostics(input?: {
   let persistedEvidenceReason: string | null = null;
   let persistedEvidenceSiteVersionId: string | null = null;
   let persistedEvidenceImportId: string | null = null;
+  let persistedEvidenceShapeStatus: "unchecked" | "unavailable" | "valid" | "invalid" = "unchecked";
+  let persistedEvidenceMissingFields: string[] = [];
+  let persistedEvidenceAvailableFields: string[] = [];
+  let persistedEvidenceSourceKind: string | null = null;
   const persistedSorted = [...persistedCandidates].sort((a, b) => {
     const aTime = a.updatedAt ? Date.parse(a.updatedAt) : 0;
     const bTime = b.updatedAt ? Date.parse(b.updatedAt) : 0;
@@ -221,12 +281,33 @@ async function resolveImportedSnapshotWithDiagnostics(input?: {
   });
   if (!persistedEvidenceAvailable) {
     persistedEvidenceReason = "persisted_runtime_evidence_unavailable";
+    persistedEvidenceShapeStatus = "unavailable";
     diagnostics.push("WORKSPACE_OVERVIEW_PERSISTED_RUNTIME_EVIDENCE_UNAVAILABLE");
   } else if (persistedScanResult.invalidCount > 0 && persistedCandidates.length === 0) {
     persistedEvidenceReason = "persisted_runtime_evidence_invalid";
+    persistedEvidenceShapeStatus = "invalid";
+    persistedEvidenceMissingFields = [...REQUIRED_PERSISTED_EVIDENCE_FIELDS];
     diagnostics.push("WORKSPACE_OVERVIEW_PERSISTED_RUNTIME_EVIDENCE_INVALID");
   }
+  diagnostics.push("WORKSPACE_OVERVIEW_PERSISTED_RUNTIME_EVIDENCE_SHAPE_CHECKED");
   for (const candidate of persistedSorted) {
+    const shape = toPersistedEvidenceShapeDiagnostics(candidate);
+    persistedEvidenceShapeStatus = shape.shapeStatus;
+    persistedEvidenceMissingFields = shape.missingFields;
+    persistedEvidenceAvailableFields = shape.availableFields;
+    persistedEvidenceSourceKind = shape.sourceKind;
+    diagnostics.push(
+      shape.shapeStatus === "valid"
+        ? "WORKSPACE_OVERVIEW_PERSISTED_RUNTIME_EVIDENCE_SHAPE_VALID"
+        : "WORKSPACE_OVERVIEW_PERSISTED_RUNTIME_EVIDENCE_SHAPE_INVALID",
+    );
+    if (shape.shapeStatus !== "valid") {
+      persistedEvidenceReason = "persisted_runtime_evidence_invalid";
+      diagnostics.push("WORKSPACE_OVERVIEW_PERSISTED_RUNTIME_EVIDENCE_INVALID");
+      persistedEvidenceSiteVersionId = candidate.siteVersionId;
+      persistedEvidenceImportId = candidate.importId;
+      continue;
+    }
     try {
       await fs.access(path.join(candidate.snapshotRootDirAbs, "index.html"));
       persistedEvidenceSelected = true;
@@ -253,6 +334,10 @@ async function resolveImportedSnapshotWithDiagnostics(input?: {
           persistedEvidenceReason,
           persistedEvidenceSiteVersionId,
           persistedEvidenceImportId,
+          persistedEvidenceShapeStatus,
+          persistedEvidenceMissingFields,
+          persistedEvidenceAvailableFields,
+          persistedEvidenceSourceKind,
         },
         diagnostics,
       };
@@ -316,6 +401,10 @@ async function resolveImportedSnapshotWithDiagnostics(input?: {
           persistedEvidenceReason,
           persistedEvidenceSiteVersionId,
           persistedEvidenceImportId,
+          persistedEvidenceShapeStatus,
+          persistedEvidenceMissingFields,
+          persistedEvidenceAvailableFields,
+          persistedEvidenceSourceKind,
         },
         diagnostics,
       };
@@ -362,6 +451,10 @@ async function resolveImportedSnapshotWithDiagnostics(input?: {
             persistedEvidenceReason,
             persistedEvidenceSiteVersionId,
             persistedEvidenceImportId,
+            persistedEvidenceShapeStatus,
+            persistedEvidenceMissingFields,
+            persistedEvidenceAvailableFields,
+            persistedEvidenceSourceKind,
           },
           diagnostics,
         };
@@ -392,6 +485,10 @@ async function resolveImportedSnapshotWithDiagnostics(input?: {
           persistedEvidenceReason,
           persistedEvidenceSiteVersionId,
           persistedEvidenceImportId,
+          persistedEvidenceShapeStatus,
+          persistedEvidenceMissingFields,
+          persistedEvidenceAvailableFields,
+          persistedEvidenceSourceKind,
         },
         diagnostics,
       };
@@ -413,6 +510,10 @@ async function resolveImportedSnapshotWithDiagnostics(input?: {
         persistedEvidenceReason,
         persistedEvidenceSiteVersionId,
         persistedEvidenceImportId,
+        persistedEvidenceShapeStatus,
+        persistedEvidenceMissingFields,
+        persistedEvidenceAvailableFields,
+        persistedEvidenceSourceKind,
       },
       diagnostics,
     };
@@ -440,6 +541,10 @@ async function resolveImportedSnapshotWithDiagnostics(input?: {
           persistedEvidenceReason,
           persistedEvidenceSiteVersionId,
           persistedEvidenceImportId,
+          persistedEvidenceShapeStatus,
+          persistedEvidenceMissingFields,
+          persistedEvidenceAvailableFields,
+          persistedEvidenceSourceKind,
         },
         diagnostics,
       };
@@ -460,6 +565,10 @@ async function resolveImportedSnapshotWithDiagnostics(input?: {
         persistedEvidenceReason,
         persistedEvidenceSiteVersionId,
         persistedEvidenceImportId,
+        persistedEvidenceShapeStatus,
+        persistedEvidenceMissingFields,
+        persistedEvidenceAvailableFields,
+        persistedEvidenceSourceKind,
       },
       diagnostics,
     };

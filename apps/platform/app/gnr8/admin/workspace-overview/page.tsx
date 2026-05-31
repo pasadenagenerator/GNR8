@@ -101,6 +101,22 @@ export default async function WorkspaceOverviewPage() {
           <dd>{model.importSourceDiagnostics.persistedEvidenceSiteVersionId ?? "n/a"}</dd>
           <dt>persistedEvidenceImportId</dt>
           <dd>{model.importSourceDiagnostics.persistedEvidenceImportId ?? "n/a"}</dd>
+          <dt>persistedEvidenceShapeStatus</dt>
+          <dd>{model.importSourceDiagnostics.persistedEvidenceShapeStatus}</dd>
+          <dt>persistedEvidenceMissingFields</dt>
+          <dd>
+            {model.importSourceDiagnostics.persistedEvidenceMissingFields.length > 0
+              ? model.importSourceDiagnostics.persistedEvidenceMissingFields.join(", ")
+              : "n/a"}
+          </dd>
+          <dt>persistedEvidenceAvailableFields</dt>
+          <dd>
+            {model.importSourceDiagnostics.persistedEvidenceAvailableFields.length > 0
+              ? model.importSourceDiagnostics.persistedEvidenceAvailableFields.join(", ")
+              : "n/a"}
+          </dd>
+          <dt>persistedEvidenceSourceKind</dt>
+          <dd>{model.importSourceDiagnostics.persistedEvidenceSourceKind ?? "n/a"}</dd>
         </dl>
       </section>
 
