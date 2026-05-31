@@ -196,6 +196,7 @@ test("workspace overview source resolution: selects persisted runtime import evi
   assert.equal(model.importSourceDiagnostics.persistedEvidenceAvailable, true);
   assert.equal(model.importSourceDiagnostics.persistedEvidenceSelected, true);
   assert.equal(model.importSourceDiagnostics.persistedEvidenceReason, "persisted_runtime_evidence_selected");
+  assert.equal(model.importSourceDiagnostics.fallbackReason, "none");
   assert.equal(model.importSourceDiagnostics.persistedEvidenceSiteVersionId, "11111111-1111-4111-8111-111111111111");
   assert.equal(model.importSourceDiagnostics.persistedEvidenceImportId, "run-valid-001");
   assert.equal(model.importSourceDiagnostics.persistedEvidenceShapeStatus, "valid");
@@ -203,10 +204,68 @@ test("workspace overview source resolution: selects persisted runtime import evi
   assert.equal(model.importSourceDiagnostics.persistedEvidenceAvailableFields.includes("siteVersionId"), true);
   assert.equal(model.importSourceDiagnostics.persistedEvidenceAvailableFields.includes("pageCount"), true);
   assert.equal(model.importSourceDiagnostics.persistedEvidenceSourceKind, null);
+  assert.equal(model.overview.operationalSummary.includes("providerState=persisted/runtime-import-evidence"), true);
   assert.equal(model.diagnostics.includes("WORKSPACE_OVERVIEW_PERSISTED_RUNTIME_EVIDENCE_CHECKED"), true);
+  assert.equal(model.diagnostics.includes("WORKSPACE_OVERVIEW_PERSISTED_RUNTIME_EVIDENCE_ADAPTER_STARTED"), true);
+  assert.equal(model.diagnostics.includes("WORKSPACE_OVERVIEW_PERSISTED_RUNTIME_EVIDENCE_ADAPTER_SUCCEEDED"), true);
   assert.equal(model.diagnostics.includes("WORKSPACE_OVERVIEW_PERSISTED_RUNTIME_EVIDENCE_SHAPE_CHECKED"), true);
   assert.equal(model.diagnostics.includes("WORKSPACE_OVERVIEW_PERSISTED_RUNTIME_EVIDENCE_SHAPE_VALID"), true);
   assert.equal(model.diagnostics.includes("WORKSPACE_OVERVIEW_PERSISTED_RUNTIME_EVIDENCE_SELECTED"), true);
+});
+
+test("workspace overview source resolution: adapter derives persisted summary from runtime_import_provenance_summary_v1", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "workspace-overview-persisted-adapter-"));
+  const snapshotsRoot = path.join(root, "snapshots");
+  const persistedSnapshotId = "imported-url-site-runtime-evidence1234567890";
+  const persistedSnapshotRoot = path.join(snapshotsRoot, persistedSnapshotId);
+  await mkdir(persistedSnapshotRoot, { recursive: true });
+  await writeFile(path.join(persistedSnapshotRoot, "index.html"), "<html><title>persisted adapter</title></html>", "utf8");
+
+  const model = await buildWorkspaceOverviewModel({
+    snapshotsRootDirAbs: snapshotsRoot,
+    persistedRuntimeEvidenceCandidates: [
+      {
+        siteVersionId: "33333333-3333-4333-8333-333333333333",
+        snapshotId: persistedSnapshotId,
+        snapshotRootDirAbs: persistedSnapshotRoot,
+        importId: null,
+        updatedAt: new Date().toISOString(),
+        importProvenanceSummary: {
+          kind: "runtime_import_provenance_summary_v1",
+          executionIdentity: {
+            importId: "run-adapter-001",
+            siteVersionId: "33333333-3333-4333-8333-333333333333",
+          },
+          siteTree: {
+            pageCount: 4,
+            detectedHomepagePath: "/home",
+          },
+          semanticImport: {
+            sectionCount: 8,
+            detectedTitle: "Adapter Title",
+          },
+          captureEvidence: {
+            assetCount: 10,
+          },
+        } as any,
+      },
+    ],
+  });
+
+  assert.equal(model.sourceKind, "persisted_runtime_import_evidence");
+  assert.equal(model.importSourceDiagnostics.selectedSource, "persisted_runtime_import_evidence");
+  assert.equal(model.importSourceDiagnostics.persistedEvidenceSelected, true);
+  assert.equal(model.importSourceDiagnostics.persistedEvidenceReason, "persisted_runtime_evidence_selected");
+  assert.equal(model.importSourceDiagnostics.persistedEvidenceShapeStatus, "valid");
+  assert.equal(model.importSourceDiagnostics.persistedEvidenceImportId, "run-adapter-001");
+  assert.equal(model.importSourceDiagnostics.persistedEvidenceSiteVersionId, "33333333-3333-4333-8333-333333333333");
+  assert.equal(model.importSourceDiagnostics.persistedEvidenceSourceKind, "runtime_import_provenance_summary_v1");
+  assert.equal(model.diagnostics.includes("WORKSPACE_OVERVIEW_PERSISTED_RUNTIME_EVIDENCE_ADAPTER_STARTED"), true);
+  assert.equal(model.diagnostics.includes("WORKSPACE_OVERVIEW_PERSISTED_RUNTIME_EVIDENCE_ADAPTER_SUCCEEDED"), true);
+  assert.equal(model.overview.contentSummary.includes("pages=4"), true);
+  assert.equal(model.overview.contentSummary.includes("sections=8"), true);
+  assert.equal(model.overview.designSummary.includes("assets=10"), true);
+  assert.equal(model.overview.experienceSummary.includes("homepageDetected="), true);
 });
 
 test("workspace overview model fallback: no imported site available when no snapshots exist", async () => {
@@ -328,6 +387,7 @@ test("workspace overview model: persisted evidence invalid reason rendered and b
   assert.equal(model.importSourceDiagnostics.persistedEvidenceAvailableFields.includes("importId"), true);
   assert.equal(model.importSourceDiagnostics.persistedEvidenceSourceKind, null);
   assert.equal(model.diagnostics.includes("WORKSPACE_OVERVIEW_PERSISTED_RUNTIME_EVIDENCE_INVALID"), true);
+  assert.equal(model.diagnostics.includes("WORKSPACE_OVERVIEW_PERSISTED_RUNTIME_EVIDENCE_ADAPTER_FAILED"), true);
   assert.equal(model.diagnostics.includes("WORKSPACE_OVERVIEW_PERSISTED_RUNTIME_EVIDENCE_SHAPE_CHECKED"), true);
   assert.equal(model.diagnostics.includes("WORKSPACE_OVERVIEW_PERSISTED_RUNTIME_EVIDENCE_SHAPE_INVALID"), true);
   assert.equal(model.diagnostics.includes("WORKSPACE_OVERVIEW_PERSISTED_RUNTIME_EVIDENCE_SELECTED"), false);

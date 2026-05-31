@@ -104,6 +104,7 @@ type ImportSourceDiagnostics = {
 
 type ImportedSnapshotResolution = {
   selectedSnapshot: ImportedSnapshotSelection | null;
+  selectedPersistedRuntimeEvidence: AdaptedPersistedRuntimeEvidence | null;
   importSourceDiagnostics: ImportSourceDiagnostics;
   diagnostics: string[];
 };
@@ -122,6 +123,21 @@ type PersistedRuntimeEvidenceCandidate = {
     detectedTitle?: string;
     detectedHomepagePath?: string;
   } | null;
+};
+
+type SourceEvidenceSummary = {
+  pageCount: number;
+  sectionCount: number;
+  assetCount: number;
+  detectedTitle: string;
+  detectedHomepagePath: string;
+  providerStateSummary: string;
+};
+
+type AdaptedPersistedRuntimeEvidence = {
+  sourceSiteVersionId: string;
+  sourceImportId: string;
+  sourceEvidenceSummary: SourceEvidenceSummary;
 };
 
 type PersistedRuntimeEvidenceScanResult = {
@@ -202,6 +218,98 @@ function toPersistedEvidenceShapeDiagnostics(candidate: PersistedRuntimeEvidence
     missingFields: missing,
     availableFields: [...new Set(topLevelSafeFields)].sort(),
     sourceKind: toText((candidate.importProvenanceSummary as { kind?: unknown } | null)?.kind),
+  };
+}
+
+function toPositiveCount(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0 ? Math.floor(value) : null;
+}
+
+function pickFirstText(...values: unknown[]): string | null {
+  for (const value of values) {
+    const normalized = toText(value);
+    if (normalized) return normalized;
+  }
+  return null;
+}
+
+function toRuntimeEvidenceSummaryFromPersistedCandidate(
+  candidate: PersistedRuntimeEvidenceCandidate,
+): AdaptedPersistedRuntimeEvidence | null {
+  const direct = candidate.sourceEvidenceSummary;
+  const summary = candidate.importProvenanceSummary as Record<string, unknown> | null;
+  const executionIdentity = (summary?.executionIdentity ?? null) as Record<string, unknown> | null;
+  const semanticImport = (summary?.semanticImport ?? null) as Record<string, unknown> | null;
+  const siteTree = (summary?.siteTree ?? null) as Record<string, unknown> | null;
+  const multipageImport = (summary?.multipageImport ?? null) as Record<string, unknown> | null;
+  const captureEvidence = (summary?.captureEvidence ?? null) as Record<string, unknown> | null;
+  const renderedCapture = (summary?.renderedCapture ?? null) as Record<string, unknown> | null;
+
+  const sourceImportId = pickFirstText(candidate.importId, summary?.importId, executionIdentity?.importId, summary?.sourceImportId);
+  const sourceSiteVersionId = pickFirstText(candidate.siteVersionId, summary?.siteVersionId, executionIdentity?.siteVersionId);
+  const pageCount = [
+    toPositiveCount(direct?.pageCount),
+    toPositiveCount(siteTree?.pageCount),
+    toPositiveCount((siteTree?.pages as unknown[] | undefined)?.length),
+    toPositiveCount(multipageImport?.pageCount),
+    toPositiveCount((multipageImport?.pages as unknown[] | undefined)?.length),
+  ].find((value): value is number => value != null);
+  const sectionCount = [
+    toPositiveCount(direct?.sectionCount),
+    toPositiveCount(semanticImport?.sectionCount),
+    toPositiveCount(siteTree?.sectionCount),
+    toPositiveCount((siteTree?.sections as unknown[] | undefined)?.length),
+    toPositiveCount((semanticImport?.sections as unknown[] | undefined)?.length),
+  ].find((value): value is number => value != null);
+  const assetCount = [
+    toPositiveCount(direct?.assetCount),
+    toPositiveCount(captureEvidence?.assetCount),
+    toPositiveCount(renderedCapture?.assetCount),
+    toPositiveCount((captureEvidence?.assets as unknown[] | undefined)?.length),
+    toPositiveCount((renderedCapture?.assets as unknown[] | undefined)?.length),
+  ].find((value): value is number => value != null);
+  const detectedTitle = pickFirstText(
+    direct?.detectedTitle,
+    semanticImport?.detectedTitle,
+    siteTree?.detectedTitle,
+    renderedCapture?.detectedTitle,
+    semanticImport?.title,
+    siteTree?.title,
+    renderedCapture?.title,
+    "unknown",
+  );
+  const detectedHomepagePath = pickFirstText(
+    direct?.detectedHomepagePath,
+    siteTree?.detectedHomepagePath,
+    multipageImport?.detectedHomepagePath,
+    siteTree?.homepagePath,
+    multipageImport?.homepagePath,
+    "index.html",
+  );
+
+  if (
+    !sourceImportId ||
+    !sourceSiteVersionId ||
+    pageCount == null ||
+    sectionCount == null ||
+    assetCount == null ||
+    !detectedTitle ||
+    !detectedHomepagePath
+  ) {
+    return null;
+  }
+
+  return {
+    sourceSiteVersionId,
+    sourceImportId,
+    sourceEvidenceSummary: {
+      pageCount,
+      sectionCount,
+      assetCount,
+      detectedTitle,
+      detectedHomepagePath,
+      providerStateSummary: "persisted/runtime-import-evidence",
+    },
   };
 }
 
@@ -291,6 +399,16 @@ async function resolveImportedSnapshotWithDiagnostics(input?: {
   }
   diagnostics.push("WORKSPACE_OVERVIEW_PERSISTED_RUNTIME_EVIDENCE_SHAPE_CHECKED");
   for (const candidate of persistedSorted) {
+    diagnostics.push("WORKSPACE_OVERVIEW_PERSISTED_RUNTIME_EVIDENCE_ADAPTER_STARTED");
+    const adapted = toRuntimeEvidenceSummaryFromPersistedCandidate(candidate);
+    if (adapted) {
+      candidate.siteVersionId = adapted.sourceSiteVersionId;
+      candidate.importId = adapted.sourceImportId;
+      candidate.sourceEvidenceSummary = adapted.sourceEvidenceSummary;
+      diagnostics.push("WORKSPACE_OVERVIEW_PERSISTED_RUNTIME_EVIDENCE_ADAPTER_SUCCEEDED");
+    } else {
+      diagnostics.push("WORKSPACE_OVERVIEW_PERSISTED_RUNTIME_EVIDENCE_ADAPTER_FAILED");
+    }
     const shape = toPersistedEvidenceShapeDiagnostics(candidate);
     persistedEvidenceShapeStatus = shape.shapeStatus;
     persistedEvidenceMissingFields = shape.missingFields;
@@ -322,12 +440,13 @@ async function resolveImportedSnapshotWithDiagnostics(input?: {
           source: "persisted_runtime_import_evidence",
           bundledSnapshot: null,
         },
+        selectedPersistedRuntimeEvidence: adapted,
         importSourceDiagnostics: {
           selectedSource: "persisted_runtime_import_evidence",
           stableArtifactPath: null,
           importedUrlSnapshotDirectory: toProjectRelativePath(snapshotsRootDirAbs),
           importedUrlSnapshotCount: 0,
-          fallbackReason: null,
+          fallbackReason: "none",
           persistedEvidenceChecked: true,
           persistedEvidenceAvailable,
           persistedEvidenceSelected,
@@ -389,6 +508,7 @@ async function resolveImportedSnapshotWithDiagnostics(input?: {
           source: "stable_validation_artifact",
           bundledSnapshot: null,
         },
+        selectedPersistedRuntimeEvidence: null,
         importSourceDiagnostics: {
           selectedSource: "stable_validation_artifact",
           stableArtifactPath: toProjectRelativePath(stableRoot),
@@ -439,6 +559,7 @@ async function resolveImportedSnapshotWithDiagnostics(input?: {
           source: "latest_imported_snapshot",
           bundledSnapshot: null,
         },
+          selectedPersistedRuntimeEvidence: null,
           importSourceDiagnostics: {
             selectedSource: "latest_imported_snapshot",
             stableArtifactPath: stableRoot ? toProjectRelativePath(stableRoot) : null,
@@ -473,6 +594,7 @@ async function resolveImportedSnapshotWithDiagnostics(input?: {
           source: "bundled_stable_import_snapshot",
           bundledSnapshot: bundledSnapshotFixture,
         },
+        selectedPersistedRuntimeEvidence: null,
         importSourceDiagnostics: {
           selectedSource: "bundled_stable_import_snapshot",
           stableArtifactPath: stableRoot ? toProjectRelativePath(stableRoot) : null,
@@ -498,6 +620,7 @@ async function resolveImportedSnapshotWithDiagnostics(input?: {
     diagnostics.push("WORKSPACE_OVERVIEW_FALLBACK_MODEL_CREATED");
     return {
       selectedSnapshot: null,
+      selectedPersistedRuntimeEvidence: null,
       importSourceDiagnostics: {
         selectedSource: "none",
         stableArtifactPath: stableRoot ? toProjectRelativePath(stableRoot) : null,
@@ -529,6 +652,7 @@ async function resolveImportedSnapshotWithDiagnostics(input?: {
           source: "bundled_stable_import_snapshot",
           bundledSnapshot: bundledSnapshotFixture,
         },
+        selectedPersistedRuntimeEvidence: null,
         importSourceDiagnostics: {
           selectedSource: "bundled_stable_import_snapshot",
           stableArtifactPath: stableRoot ? toProjectRelativePath(stableRoot) : null,
@@ -553,6 +677,7 @@ async function resolveImportedSnapshotWithDiagnostics(input?: {
     diagnostics.push("WORKSPACE_OVERVIEW_FALLBACK_MODEL_CREATED");
     return {
       selectedSnapshot: null,
+      selectedPersistedRuntimeEvidence: null,
       importSourceDiagnostics: {
         selectedSource: "none",
         stableArtifactPath: stableRoot ? toProjectRelativePath(stableRoot) : null,
@@ -669,6 +794,43 @@ export async function buildWorkspaceOverviewModel(input?: {
   }
 
   const requestId = `workspace-overview-${selectedSnapshot.snapshotId}`;
+  if (selectedSnapshot.source === "persisted_runtime_import_evidence" && resolution.selectedPersistedRuntimeEvidence) {
+    const persisted = resolution.selectedPersistedRuntimeEvidence;
+    const twin = buildWebsiteDigitalTwin({
+      siteId: `site_${selectedSnapshot.snapshotId}`,
+      siteVersionId: persisted.sourceSiteVersionId,
+      workspaceId: "workspace_website_os_runtime_overview",
+      environmentScope: "preview",
+      sourceImportId: persisted.sourceImportId,
+      sourceModels: ["import_manifest", "raw_dom_snapshot", "asset_registry", "import_diagnostics"],
+      sourceEvidenceSummary: persisted.sourceEvidenceSummary,
+      generatedBy: "workspace_overview_runtime_v0",
+      nowIso: new Date().toISOString(),
+    });
+    const store = new InMemoryTwinStore();
+    store.saveTwin(twin);
+    const storedTwin = store.getTwinBySiteVersion(persisted.sourceSiteVersionId);
+    if (!storedTwin) {
+      throw new Error("WORKSPACE_OVERVIEW_RUNTIME_INVARIANT: stored persisted twin missing for site version");
+    }
+    const overview = createTwinOverview(storedTwin);
+    const diagnostics = [
+      ...resolution.diagnostics,
+      ...storedTwin.diagnostics,
+      ...storedTwin.metadata.diagnostics,
+      ...store.diagnostics,
+      ...overview.diagnostics,
+    ];
+    return {
+      sourceId: selectedSnapshot.snapshotId,
+      sourcePath: selectedSnapshot.snapshotRootDirAbs,
+      sourceKind: selectedSnapshot.source,
+      importSourceDiagnostics: resolution.importSourceDiagnostics,
+      overview,
+      diagnostics,
+    };
+  }
+
   if (!selectedSnapshot.snapshotRootDirAbs) {
     throw new Error("WORKSPACE_OVERVIEW_RUNTIME_INVARIANT: filesystem source selected without snapshot root");
   }
