@@ -2,6 +2,10 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { createImportManifest } from "@/gnr8/import/import-manifest";
 import { importStaticSite } from "@/gnr8/import/runtime/import-static-site";
+import {
+  STABLE_IMPORT_SNAPSHOT_FIXTURE,
+  type StableImportSnapshotFixture,
+} from "@/gnr8/runtime/twin/fixtures/stable-import-snapshot";
 import { buildWebsiteDigitalTwin } from "@/gnr8/runtime/twin/twin-builder";
 import { InMemoryTwinStore } from "@/gnr8/runtime/twin/twin-store";
 import { createTwinOverview } from "@/gnr8/runtime/twin/twin-viewer";
@@ -67,9 +71,17 @@ function toTwinIdentityFromImport(input: {
 
 type ImportedSnapshotSelection = {
   snapshotId: string;
-  snapshotRootDirAbs: string;
-  source: "stable_validation_artifact" | "latest_imported_snapshot";
-};
+  source: "stable_validation_artifact" | "latest_imported_snapshot" | "bundled_stable_import_snapshot";
+} & (
+  | {
+      snapshotRootDirAbs: string;
+      bundledSnapshot: null;
+    }
+  | {
+      snapshotRootDirAbs: null;
+      bundledSnapshot: StableImportSnapshotFixture;
+    }
+);
 
 type ImportSourceDiagnostics = {
   selectedSource: ImportedSnapshotSelection["source"] | "none";
@@ -95,9 +107,12 @@ function toProjectRelativePath(absPath: string): string | null {
 async function resolveImportedSnapshotWithDiagnostics(input?: {
   snapshotsRootDirAbs?: string;
   betaRunsRootDirAbs?: string;
+  bundledSnapshotFixture?: StableImportSnapshotFixture | null;
 }): Promise<ImportedSnapshotResolution> {
   const snapshotsRootDirAbs = input?.snapshotsRootDirAbs ?? DEFAULT_IMPORT_SNAPSHOTS_ROOT;
   const betaRunsRootDirAbs = input?.betaRunsRootDirAbs ?? DEFAULT_BETA_RUNS_ROOT;
+  const bundledSnapshotFixture =
+    input && "bundledSnapshotFixture" in input ? input.bundledSnapshotFixture : STABLE_IMPORT_SNAPSHOT_FIXTURE;
   const diagnostics: string[] = ["WORKSPACE_OVERVIEW_IMPORT_SOURCE_SEARCH_STARTED"];
 
   let stableSnapshotId: string | null = null;
@@ -135,6 +150,7 @@ async function resolveImportedSnapshotWithDiagnostics(input?: {
           snapshotId: stableSnapshotId as string,
           snapshotRootDirAbs: stableRoot,
           source: "stable_validation_artifact",
+          bundledSnapshot: null,
         },
         importSourceDiagnostics: {
           selectedSource: "stable_validation_artifact",
@@ -170,11 +186,12 @@ async function resolveImportedSnapshotWithDiagnostics(input?: {
       try {
         await fs.access(path.join(snapshot.snapshotRootDirAbs, "index.html"));
         return {
-          selectedSnapshot: {
-            snapshotId: snapshot.snapshotId,
-            snapshotRootDirAbs: snapshot.snapshotRootDirAbs,
-            source: "latest_imported_snapshot",
-          },
+        selectedSnapshot: {
+          snapshotId: snapshot.snapshotId,
+          snapshotRootDirAbs: snapshot.snapshotRootDirAbs,
+          source: "latest_imported_snapshot",
+          bundledSnapshot: null,
+        },
           importSourceDiagnostics: {
             selectedSource: "latest_imported_snapshot",
             stableArtifactPath: stableRoot ? toProjectRelativePath(stableRoot) : null,
@@ -187,6 +204,27 @@ async function resolveImportedSnapshotWithDiagnostics(input?: {
       } catch {
         continue;
       }
+    }
+
+    diagnostics.push("WORKSPACE_OVERVIEW_BUNDLED_STABLE_SNAPSHOT_CHECKED");
+    if (bundledSnapshotFixture) {
+      diagnostics.push("WORKSPACE_OVERVIEW_BUNDLED_STABLE_SNAPSHOT_SELECTED");
+      return {
+        selectedSnapshot: {
+          snapshotId: bundledSnapshotFixture.fixtureId,
+          snapshotRootDirAbs: null,
+          source: "bundled_stable_import_snapshot",
+          bundledSnapshot: bundledSnapshotFixture,
+        },
+        importSourceDiagnostics: {
+          selectedSource: "bundled_stable_import_snapshot",
+          stableArtifactPath: stableRoot ? toProjectRelativePath(stableRoot) : null,
+          importedUrlSnapshotDirectory: toProjectRelativePath(snapshotsRootDirAbs),
+          importedUrlSnapshotCount: importedSnapshotDirs.length,
+          fallbackReason: "none",
+        },
+        diagnostics,
+      };
     }
 
     diagnostics.push("WORKSPACE_OVERVIEW_SELECTED_SOURCE_NONE");
@@ -204,6 +242,26 @@ async function resolveImportedSnapshotWithDiagnostics(input?: {
     };
   } catch {
     diagnostics.push("WORKSPACE_OVERVIEW_IMPORTED_URL_SNAPSHOT_COUNT_0");
+    diagnostics.push("WORKSPACE_OVERVIEW_BUNDLED_STABLE_SNAPSHOT_CHECKED");
+    if (bundledSnapshotFixture) {
+      diagnostics.push("WORKSPACE_OVERVIEW_BUNDLED_STABLE_SNAPSHOT_SELECTED");
+      return {
+        selectedSnapshot: {
+          snapshotId: bundledSnapshotFixture.fixtureId,
+          snapshotRootDirAbs: null,
+          source: "bundled_stable_import_snapshot",
+          bundledSnapshot: bundledSnapshotFixture,
+        },
+        importSourceDiagnostics: {
+          selectedSource: "bundled_stable_import_snapshot",
+          stableArtifactPath: stableRoot ? toProjectRelativePath(stableRoot) : null,
+          importedUrlSnapshotDirectory: toProjectRelativePath(snapshotsRootDirAbs),
+          importedUrlSnapshotCount: 0,
+          fallbackReason: "none",
+        },
+        diagnostics,
+      };
+    }
     diagnostics.push("WORKSPACE_OVERVIEW_SELECTED_SOURCE_NONE");
     diagnostics.push("WORKSPACE_OVERVIEW_FALLBACK_MODEL_CREATED");
     return {
@@ -223,6 +281,7 @@ async function resolveImportedSnapshotWithDiagnostics(input?: {
 export async function resolveImportedSnapshot(input?: {
   snapshotsRootDirAbs?: string;
   betaRunsRootDirAbs?: string;
+  bundledSnapshotFixture?: StableImportSnapshotFixture | null;
 }): Promise<ImportedSnapshotSelection | null> {
   const resolution = await resolveImportedSnapshotWithDiagnostics(input);
   return resolution.selectedSnapshot;
@@ -231,6 +290,7 @@ export async function resolveImportedSnapshot(input?: {
 export async function buildWorkspaceOverviewModel(input?: {
   snapshotsRootDirAbs?: string;
   betaRunsRootDirAbs?: string;
+  bundledSnapshotFixture?: StableImportSnapshotFixture | null;
 }) {
   const resolution = await resolveImportedSnapshotWithDiagnostics(input);
   const selectedSnapshot = resolution.selectedSnapshot;
@@ -261,7 +321,58 @@ export async function buildWorkspaceOverviewModel(input?: {
     };
   }
 
+  if (selectedSnapshot.source === "bundled_stable_import_snapshot") {
+    const bundledSnapshot = selectedSnapshot.bundledSnapshot;
+    if (!bundledSnapshot) {
+      throw new Error("WORKSPACE_OVERVIEW_RUNTIME_INVARIANT: bundled source selected without bundled snapshot");
+    }
+    const requestId = `workspace-overview-${bundledSnapshot.fixtureId}`;
+    const twin = buildWebsiteDigitalTwin({
+      siteId: `site_${bundledSnapshot.fixtureId}`,
+      siteVersionId: bundledSnapshot.sourceSiteVersionId,
+      workspaceId: "workspace_website_os_runtime_overview",
+      environmentScope: "preview",
+      sourceImportId: bundledSnapshot.sourceImportId,
+      sourceModels: ["import_manifest", "raw_dom_snapshot", "asset_registry", "import_diagnostics"],
+      sourceEvidenceSummary: {
+        pageCount: bundledSnapshot.pageCount,
+        sectionCount: bundledSnapshot.sectionCount,
+        assetCount: bundledSnapshot.assetCount,
+        detectedTitle: bundledSnapshot.detectedTitle,
+        detectedHomepagePath: bundledSnapshot.detectedHomepagePath,
+        providerStateSummary: bundledSnapshot.providerStateSummary,
+      },
+      generatedBy: "workspace_overview_runtime_v0",
+      nowIso: new Date().toISOString(),
+    });
+    const store = new InMemoryTwinStore();
+    store.saveTwin(twin);
+    const storedTwin = store.getTwinBySiteVersion(bundledSnapshot.sourceSiteVersionId);
+    if (!storedTwin) {
+      throw new Error("WORKSPACE_OVERVIEW_RUNTIME_INVARIANT: stored bundled twin missing for site version");
+    }
+    const overview = createTwinOverview(storedTwin);
+    const diagnostics = [
+      ...resolution.diagnostics,
+      ...storedTwin.diagnostics,
+      ...storedTwin.metadata.diagnostics,
+      ...store.diagnostics,
+      ...overview.diagnostics,
+    ];
+    return {
+      sourceId: bundledSnapshot.fixtureId,
+      sourcePath: null,
+      sourceKind: selectedSnapshot.source,
+      importSourceDiagnostics: resolution.importSourceDiagnostics,
+      overview,
+      diagnostics,
+    };
+  }
+
   const requestId = `workspace-overview-${selectedSnapshot.snapshotId}`;
+  if (!selectedSnapshot.snapshotRootDirAbs) {
+    throw new Error("WORKSPACE_OVERVIEW_RUNTIME_INVARIANT: filesystem source selected without snapshot root");
+  }
 
   const importOutput = await importStaticSite({
     rootDir: selectedSnapshot.snapshotRootDirAbs,
@@ -304,7 +415,13 @@ export async function buildWorkspaceOverviewModel(input?: {
   }
 
   const overview = createTwinOverview(storedTwin);
-  const diagnostics = [...storedTwin.diagnostics, ...storedTwin.metadata.diagnostics, ...store.diagnostics, ...overview.diagnostics];
+  const diagnostics = [
+    ...resolution.diagnostics,
+    ...storedTwin.diagnostics,
+    ...storedTwin.metadata.diagnostics,
+    ...store.diagnostics,
+    ...overview.diagnostics,
+  ];
 
   return {
     sourceId: selectedSnapshot.snapshotId,

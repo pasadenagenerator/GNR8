@@ -19,6 +19,7 @@ test("workspace overview source: uses imported runtime twin chain", async () => 
   const source = await readFile(MODEL_FILE, "utf8");
   assert.equal(source.includes("resolveImportedSnapshot"), true);
   assert.equal(source.includes("imported-url-site-"), true);
+  assert.equal(source.includes("bundled_stable_import_snapshot"), true);
   assert.equal(source.includes("buildWebsiteDigitalTwin"), true);
   assert.equal(source.includes("InMemoryTwinStore"), true);
   assert.equal(source.includes("createTwinOverview"), true);
@@ -34,7 +35,10 @@ test("workspace overview model: twin overview and diagnostics render data from i
     return;
   }
 
-  assert.equal(model.sourceId.startsWith("imported-url-site-"), true);
+  assert.equal(
+    model.sourceId.startsWith("imported-url-site-") || model.sourceKind === "bundled_stable_import_snapshot",
+    true,
+  );
   assert.equal(typeof model.overview.siteVersionId, "string");
   assert.equal(model.overview.siteVersionId.length > 0, true);
   assert.equal(typeof model.overview.contentSummary, "string");
@@ -154,6 +158,7 @@ test("workspace overview model fallback: no imported site available when no snap
   const model = await buildWorkspaceOverviewModel({
     snapshotsRootDirAbs: snapshotsRoot,
     betaRunsRootDirAbs: betaRunsRoot,
+    bundledSnapshotFixture: null,
   });
   assert.equal(model.sourceId, null);
   assert.equal(model.overview.contentSummary, "No imported site available.");
@@ -169,7 +174,33 @@ test("workspace overview model fallback: no imported site available when no snap
   assert.equal(model.diagnostics.includes("WORKSPACE_OVERVIEW_STABLE_ARTIFACT_MISSING"), true);
   assert.equal(model.diagnostics.includes("WORKSPACE_OVERVIEW_IMPORTED_URL_SNAPSHOT_DIRECTORY_CHECKED"), true);
   assert.equal(model.diagnostics.includes("WORKSPACE_OVERVIEW_IMPORTED_URL_SNAPSHOT_COUNT_0"), true);
+  assert.equal(model.diagnostics.includes("WORKSPACE_OVERVIEW_BUNDLED_STABLE_SNAPSHOT_CHECKED"), true);
+  assert.equal(model.diagnostics.includes("WORKSPACE_OVERVIEW_BUNDLED_STABLE_SNAPSHOT_SELECTED"), false);
   assert.equal(model.diagnostics.includes("WORKSPACE_OVERVIEW_SELECTED_SOURCE_NONE"), true);
   assert.equal(model.diagnostics.includes("WORKSPACE_OVERVIEW_FALLBACK_MODEL_CREATED"), true);
   assert.equal(model.diagnostics.includes("WORKSPACE_OVERVIEW_NO_IMPORTED_SITE_AVAILABLE"), true);
+});
+
+test("workspace overview model: bundled stable snapshot is used when filesystem snapshots are unavailable", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "workspace-overview-bundled-"));
+  const snapshotsRoot = path.join(root, "snapshots");
+  const betaRunsRoot = path.join(root, "beta-runs");
+  await mkdir(snapshotsRoot, { recursive: true });
+  await mkdir(betaRunsRoot, { recursive: true });
+
+  const model = await buildWorkspaceOverviewModel({
+    snapshotsRootDirAbs: snapshotsRoot,
+    betaRunsRootDirAbs: betaRunsRoot,
+  });
+
+  assert.equal(model.sourceKind, "bundled_stable_import_snapshot");
+  assert.equal(model.sourcePath, null);
+  assert.equal(model.importSourceDiagnostics.selectedSource, "bundled_stable_import_snapshot");
+  assert.equal(model.importSourceDiagnostics.fallbackReason, "none");
+  assert.equal(model.diagnostics.includes("WORKSPACE_OVERVIEW_BUNDLED_STABLE_SNAPSHOT_CHECKED"), true);
+  assert.equal(model.diagnostics.includes("WORKSPACE_OVERVIEW_BUNDLED_STABLE_SNAPSHOT_SELECTED"), true);
+  assert.equal(model.overview.contentSummary.includes("pages="), true);
+  assert.equal(model.overview.designSummary.includes("assets="), true);
+  assert.equal(model.overview.experienceSummary.includes("homepageDetected="), true);
+  assert.equal(model.overview.operationalSummary.includes("providerState=preview/runtime-only"), true);
 });
