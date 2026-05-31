@@ -71,89 +71,169 @@ type ImportedSnapshotSelection = {
   source: "stable_validation_artifact" | "latest_imported_snapshot";
 };
 
-export async function resolveImportedSnapshot(input?: {
+type ImportSourceDiagnostics = {
+  selectedSource: ImportedSnapshotSelection["source"] | "none";
+  stableArtifactPath: string | null;
+  importedUrlSnapshotDirectory: string | null;
+  importedUrlSnapshotCount: number;
+  fallbackReason: string | null;
+};
+
+type ImportedSnapshotResolution = {
+  selectedSnapshot: ImportedSnapshotSelection | null;
+  importSourceDiagnostics: ImportSourceDiagnostics;
+  diagnostics: string[];
+};
+
+function toProjectRelativePath(absPath: string): string | null {
+  const cwd = process.cwd();
+  const relative = path.relative(cwd, absPath);
+  if (!relative || relative.startsWith("..")) return null;
+  return relative;
+}
+
+async function resolveImportedSnapshotWithDiagnostics(input?: {
   snapshotsRootDirAbs?: string;
   betaRunsRootDirAbs?: string;
-}): Promise<ImportedSnapshotSelection | null> {
+}): Promise<ImportedSnapshotResolution> {
   const snapshotsRootDirAbs = input?.snapshotsRootDirAbs ?? DEFAULT_IMPORT_SNAPSHOTS_ROOT;
   const betaRunsRootDirAbs = input?.betaRunsRootDirAbs ?? DEFAULT_BETA_RUNS_ROOT;
+  const diagnostics: string[] = ["WORKSPACE_OVERVIEW_IMPORT_SOURCE_SEARCH_STARTED"];
 
-  const stableSnapshotId = await (async () => {
-    try {
-      const betaRunDirs = await fs.readdir(betaRunsRootDirAbs, { withFileTypes: true });
-      for (const dirent of betaRunDirs) {
-        if (!dirent.isDirectory()) continue;
-        const summaryPath = path.join(betaRunsRootDirAbs, dirent.name, "beta-migration-summary.json");
-        try {
-          const parsed = JSON.parse(await fs.readFile(summaryPath, "utf8")) as {
-            previewStatus?: string;
-            simulationStatus?: string;
-            snapshotKey?: string;
-          };
-          const snapshotKey = String(parsed.snapshotKey ?? "").trim();
-          if (snapshotKey.startsWith("imported-url-site-") && parsed.previewStatus === "passed" && parsed.simulationStatus === "executed") {
-            return snapshotKey;
-          }
-        } catch {
-          continue;
+  let stableSnapshotId: string | null = null;
+  try {
+    const betaRunDirs = await fs.readdir(betaRunsRootDirAbs, { withFileTypes: true });
+    for (const dirent of betaRunDirs) {
+      if (!dirent.isDirectory()) continue;
+      const summaryPath = path.join(betaRunsRootDirAbs, dirent.name, "beta-migration-summary.json");
+      try {
+        const parsed = JSON.parse(await fs.readFile(summaryPath, "utf8")) as {
+          previewStatus?: string;
+          simulationStatus?: string;
+          snapshotKey?: string;
+        };
+        const snapshotKey = String(parsed.snapshotKey ?? "").trim();
+        if (snapshotKey.startsWith("imported-url-site-") && parsed.previewStatus === "passed" && parsed.simulationStatus === "executed") {
+          stableSnapshotId = snapshotKey;
+          break;
         }
+      } catch {
+        continue;
       }
-      return null;
-    } catch {
-      return null;
     }
-  })();
+  } catch {
+    stableSnapshotId = null;
+  }
 
-  if (stableSnapshotId) {
-    const stableRoot = path.join(snapshotsRootDirAbs, stableSnapshotId);
+  const stableRoot = stableSnapshotId ? path.join(snapshotsRootDirAbs, stableSnapshotId) : null;
+  diagnostics.push("WORKSPACE_OVERVIEW_STABLE_ARTIFACT_CHECKED");
+  if (stableRoot) {
     try {
       await fs.access(path.join(stableRoot, "index.html"));
       return {
-        snapshotId: stableSnapshotId,
-        snapshotRootDirAbs: stableRoot,
-        source: "stable_validation_artifact",
+        selectedSnapshot: {
+          snapshotId: stableSnapshotId as string,
+          snapshotRootDirAbs: stableRoot,
+          source: "stable_validation_artifact",
+        },
+        importSourceDiagnostics: {
+          selectedSource: "stable_validation_artifact",
+          stableArtifactPath: toProjectRelativePath(stableRoot),
+          importedUrlSnapshotDirectory: toProjectRelativePath(snapshotsRootDirAbs),
+          importedUrlSnapshotCount: 0,
+          fallbackReason: null,
+        },
+        diagnostics,
       };
     } catch {
-      // fall through to latest snapshot fallback
+      diagnostics.push("WORKSPACE_OVERVIEW_STABLE_ARTIFACT_MISSING");
     }
+  } else {
+    diagnostics.push("WORKSPACE_OVERVIEW_STABLE_ARTIFACT_MISSING");
   }
 
+  diagnostics.push("WORKSPACE_OVERVIEW_IMPORTED_URL_SNAPSHOT_DIRECTORY_CHECKED");
   try {
     const dirEntries = await fs.readdir(snapshotsRootDirAbs, { withFileTypes: true });
+    const importedSnapshotDirs = dirEntries.filter((entry) => entry.isDirectory() && entry.name.startsWith("imported-url-site-"));
+    diagnostics.push(`WORKSPACE_OVERVIEW_IMPORTED_URL_SNAPSHOT_COUNT_${importedSnapshotDirs.length}`);
+
     const snapshots = await Promise.all(
-      dirEntries
-        .filter((entry) => entry.isDirectory() && entry.name.startsWith("imported-url-site-"))
-        .map(async (entry) => {
-          const snapshotRootDirAbs = path.join(snapshotsRootDirAbs, entry.name);
-          const stat = await fs.stat(snapshotRootDirAbs);
-          return { snapshotId: entry.name, snapshotRootDirAbs, mtimeMs: stat.mtimeMs };
-        }),
+      importedSnapshotDirs.map(async (entry) => {
+        const snapshotRootDirAbs = path.join(snapshotsRootDirAbs, entry.name);
+        const stat = await fs.stat(snapshotRootDirAbs);
+        return { snapshotId: entry.name, snapshotRootDirAbs, mtimeMs: stat.mtimeMs };
+      }),
     );
     const sortedByNewest = snapshots.sort((a, b) => b.mtimeMs - a.mtimeMs);
     for (const snapshot of sortedByNewest) {
       try {
         await fs.access(path.join(snapshot.snapshotRootDirAbs, "index.html"));
         return {
-          snapshotId: snapshot.snapshotId,
-          snapshotRootDirAbs: snapshot.snapshotRootDirAbs,
-          source: "latest_imported_snapshot",
+          selectedSnapshot: {
+            snapshotId: snapshot.snapshotId,
+            snapshotRootDirAbs: snapshot.snapshotRootDirAbs,
+            source: "latest_imported_snapshot",
+          },
+          importSourceDiagnostics: {
+            selectedSource: "latest_imported_snapshot",
+            stableArtifactPath: stableRoot ? toProjectRelativePath(stableRoot) : null,
+            importedUrlSnapshotDirectory: toProjectRelativePath(snapshotsRootDirAbs),
+            importedUrlSnapshotCount: importedSnapshotDirs.length,
+            fallbackReason: null,
+          },
+          diagnostics,
         };
       } catch {
         continue;
       }
     }
-  } catch {
-    return null;
-  }
 
-  return null;
+    diagnostics.push("WORKSPACE_OVERVIEW_SELECTED_SOURCE_NONE");
+    diagnostics.push("WORKSPACE_OVERVIEW_FALLBACK_MODEL_CREATED");
+    return {
+      selectedSnapshot: null,
+      importSourceDiagnostics: {
+        selectedSource: "none",
+        stableArtifactPath: stableRoot ? toProjectRelativePath(stableRoot) : null,
+        importedUrlSnapshotDirectory: toProjectRelativePath(snapshotsRootDirAbs),
+        importedUrlSnapshotCount: importedSnapshotDirs.length,
+        fallbackReason: "no_imported_snapshot_with_index_html",
+      },
+      diagnostics,
+    };
+  } catch {
+    diagnostics.push("WORKSPACE_OVERVIEW_IMPORTED_URL_SNAPSHOT_COUNT_0");
+    diagnostics.push("WORKSPACE_OVERVIEW_SELECTED_SOURCE_NONE");
+    diagnostics.push("WORKSPACE_OVERVIEW_FALLBACK_MODEL_CREATED");
+    return {
+      selectedSnapshot: null,
+      importSourceDiagnostics: {
+        selectedSource: "none",
+        stableArtifactPath: stableRoot ? toProjectRelativePath(stableRoot) : null,
+        importedUrlSnapshotDirectory: toProjectRelativePath(snapshotsRootDirAbs),
+        importedUrlSnapshotCount: 0,
+        fallbackReason: "snapshot_directory_unavailable",
+      },
+      diagnostics,
+    };
+  }
+}
+
+export async function resolveImportedSnapshot(input?: {
+  snapshotsRootDirAbs?: string;
+  betaRunsRootDirAbs?: string;
+}): Promise<ImportedSnapshotSelection | null> {
+  const resolution = await resolveImportedSnapshotWithDiagnostics(input);
+  return resolution.selectedSnapshot;
 }
 
 export async function buildWorkspaceOverviewModel(input?: {
   snapshotsRootDirAbs?: string;
   betaRunsRootDirAbs?: string;
 }) {
-  const selectedSnapshot = await resolveImportedSnapshot(input);
+  const resolution = await resolveImportedSnapshotWithDiagnostics(input);
+  const selectedSnapshot = resolution.selectedSnapshot;
 
   if (!selectedSnapshot) {
     const nowIso = new Date().toISOString();
@@ -161,6 +241,7 @@ export async function buildWorkspaceOverviewModel(input?: {
       sourceId: null,
       sourcePath: null,
       sourceKind: "missing_imported_snapshot" as const,
+      importSourceDiagnostics: resolution.importSourceDiagnostics,
       overview: {
         twinId: "twin_missing_import",
         siteId: "site_missing_import",
@@ -176,7 +257,7 @@ export async function buildWorkspaceOverviewModel(input?: {
         lastUpdated: nowIso,
         diagnostics: [],
       },
-      diagnostics: ["WORKSPACE_OVERVIEW_NO_IMPORTED_SITE_AVAILABLE"],
+      diagnostics: [...resolution.diagnostics, "WORKSPACE_OVERVIEW_NO_IMPORTED_SITE_AVAILABLE"],
     };
   }
 
@@ -229,6 +310,7 @@ export async function buildWorkspaceOverviewModel(input?: {
     sourceId: selectedSnapshot.snapshotId,
     sourcePath: selectedSnapshot.snapshotRootDirAbs,
     sourceKind: selectedSnapshot.source,
+    importSourceDiagnostics: resolution.importSourceDiagnostics,
     overview,
     diagnostics,
   };

@@ -78,6 +78,12 @@ test("workspace overview page source: renders required sections", async () => {
   assert.equal(source.includes("Operations"), true);
 
   assert.equal(source.includes("Diagnostics"), true);
+  assert.equal(source.includes("Import Source Diagnostics"), true);
+  assert.equal(source.includes("selectedSource"), true);
+  assert.equal(source.includes("stableArtifactPath"), true);
+  assert.equal(source.includes("importedUrlSnapshotDirectory"), true);
+  assert.equal(source.includes("importedUrlSnapshotCount"), true);
+  assert.equal(source.includes("fallbackReason"), true);
 
   assert.equal(source.includes("Provider Governance Status"), true);
   assert.equal(source.includes("Execution Layer:"), true);
@@ -155,4 +161,15 @@ test("workspace overview model fallback: no imported site available when no snap
   assert.equal(model.overview.experienceSummary, "No imported site available.");
   assert.equal(model.overview.governanceSummary, "No imported site available.");
   assert.equal(model.overview.operationalSummary, "No imported site available.");
+  assert.equal(model.importSourceDiagnostics.selectedSource, "none");
+  assert.equal(model.importSourceDiagnostics.importedUrlSnapshotCount, 0);
+  assert.equal(model.importSourceDiagnostics.fallbackReason !== null, true);
+  assert.equal(model.diagnostics.includes("WORKSPACE_OVERVIEW_IMPORT_SOURCE_SEARCH_STARTED"), true);
+  assert.equal(model.diagnostics.includes("WORKSPACE_OVERVIEW_STABLE_ARTIFACT_CHECKED"), true);
+  assert.equal(model.diagnostics.includes("WORKSPACE_OVERVIEW_STABLE_ARTIFACT_MISSING"), true);
+  assert.equal(model.diagnostics.includes("WORKSPACE_OVERVIEW_IMPORTED_URL_SNAPSHOT_DIRECTORY_CHECKED"), true);
+  assert.equal(model.diagnostics.includes("WORKSPACE_OVERVIEW_IMPORTED_URL_SNAPSHOT_COUNT_0"), true);
+  assert.equal(model.diagnostics.includes("WORKSPACE_OVERVIEW_SELECTED_SOURCE_NONE"), true);
+  assert.equal(model.diagnostics.includes("WORKSPACE_OVERVIEW_FALLBACK_MODEL_CREATED"), true);
+  assert.equal(model.diagnostics.includes("WORKSPACE_OVERVIEW_NO_IMPORTED_SITE_AVAILABLE"), true);
 });

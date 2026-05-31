@@ -77,6 +77,22 @@ export default async function WorkspaceOverviewPage() {
       </section>
 
       <section style={{ marginTop: 28 }}>
+        <h2 style={{ marginBottom: 12 }}>Import Source Diagnostics</h2>
+        <dl>
+          <dt>selectedSource</dt>
+          <dd>{model.importSourceDiagnostics.selectedSource}</dd>
+          <dt>stableArtifactPath</dt>
+          <dd>{model.importSourceDiagnostics.stableArtifactPath ?? "n/a"}</dd>
+          <dt>importedUrlSnapshotDirectory</dt>
+          <dd>{model.importSourceDiagnostics.importedUrlSnapshotDirectory ?? "n/a"}</dd>
+          <dt>importedUrlSnapshotCount</dt>
+          <dd>{model.importSourceDiagnostics.importedUrlSnapshotCount}</dd>
+          <dt>fallbackReason</dt>
+          <dd>{model.importSourceDiagnostics.fallbackReason ?? "n/a"}</dd>
+        </dl>
+      </section>
+
+      <section style={{ marginTop: 28 }}>
         <h2 style={{ marginBottom: 12 }}>Validation Surfaces</h2>
         <ul>
           <li><Link href="/gnr8/admin/twin-preview">Twin Preview</Link></li>
