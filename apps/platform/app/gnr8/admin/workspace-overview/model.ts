@@ -7,6 +7,41 @@ import { readValidationFixtureSpec, validationFixtureDirAbs } from "@/gnr8/valid
 
 export const WORKSPACE_OVERVIEW_FIXTURE_ID = "real-site-01" as const;
 
+function countSemanticSections(html: string): number {
+  const matches = html.match(/<(section|main|article|nav|aside)\b/gi);
+  return matches ? matches.length : 0;
+}
+
+function extractDetectedTitle(html: string): string {
+  const titleMatch = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
+  if (!titleMatch) return "unknown";
+  const title = titleMatch[1]?.replace(/\s+/g, " ").trim();
+  return title && title.length > 0 ? title : "unknown";
+}
+
+function toSourceEvidenceSummary(input: {
+  importManifest: ReturnType<typeof createImportManifest>;
+  importOutput: Awaited<ReturnType<typeof importStaticSite>>;
+}) {
+  const pageCount = input.importManifest.dom.documentCount;
+  const sectionCount = input.importOutput.rawDomSnapshot.documents.reduce(
+    (sum, document) => sum + countSemanticSections(document.text),
+    0,
+  );
+  const assetCount = input.importManifest.assets.totalAssets;
+  const detectedTitle = extractDetectedTitle(input.importOutput.rawDomSnapshot.documents[0]?.text ?? "");
+  const detectedHomepagePath = input.importManifest.entryHtmlPath ?? "unknown";
+
+  return {
+    pageCount,
+    sectionCount,
+    assetCount,
+    detectedTitle,
+    detectedHomepagePath,
+    providerStateSummary: "preview/runtime-only",
+  } as const;
+}
+
 function toTwinIdentityFromImport(input: {
   fixtureId: string;
   inputSpecSha256: string;
@@ -55,6 +90,10 @@ export async function buildWorkspaceOverviewModel() {
     environmentScope: "preview",
     sourceImportId: twinIdentity.sourceImportId,
     sourceModels: ["import_manifest", "raw_dom_snapshot", "asset_registry", "import_diagnostics"],
+    sourceEvidenceSummary: toSourceEvidenceSummary({
+      importManifest,
+      importOutput,
+    }),
     generatedBy: "workspace_overview_runtime_v0",
   });
 

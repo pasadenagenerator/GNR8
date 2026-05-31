@@ -23,11 +23,11 @@ Verified values:
 - `sourceImportId`: `import_real-site-01_c167859409d8`
 - `status`: `ready`
 - `environmentScope`: `preview`
-- `contentSummary`: `deterministic_content_read_model`
-- `designSummary`: `deterministic_design_read_model`
-- `experienceSummary`: `deterministic_experience_read_model`
-- `governanceSummary`: `deterministic_governance_read_model`
-- `operationalSummary`: `deterministic_operational_read_model`
+- `contentSummary`: `pages=1; sections=1; detectedTitle=Example Domain; homepagePath=index.html`
+- `designSummary`: `assets=0; layoutEvidence=unknown`
+- `experienceSummary`: `navigationEvidence=available; homepageDetected=true`
+- `governanceSummary`: `sourceImportId=import_real-site-01_c167859409d8; sourceSiteVersionId=site_version_real-site-01_072929becae7; readOnly=true`
+- `operationalSummary`: `environmentScope=preview; providerState=preview/runtime-only`
 
 Verified diagnostics:
 - `TWIN_BUILD_STARTED`
@@ -50,6 +50,7 @@ Explicit boundaries remain:
 
 Conclusion:
 - GNR8 now proves that an imported real-site fixture can become a visible Website Digital Twin runtime surface.
+- Twin runtime now hydrates snapshot summaries from imported read-model evidence when available, while preserving deterministic placeholder fallback when evidence is omitted.
 
 Recommended next milestone:
 - Twin Preview Navigation Wiring

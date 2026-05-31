@@ -46,6 +46,41 @@ test("twin builder: snapshot has all five state buckets", () => {
   assert.equal(!!twin.snapshot.operationalState, true);
 });
 
+test("twin builder: hydrates snapshot from source evidence summary", () => {
+  const twin = buildWebsiteDigitalTwin({
+    ...buildInput(),
+    sourceEvidenceSummary: {
+      pageCount: 3,
+      sectionCount: 9,
+      assetCount: 12,
+      detectedTitle: "Imported Example Site",
+      detectedHomepagePath: "/",
+      providerStateSummary: "preview/runtime-only",
+    },
+  });
+
+  assert.equal(
+    twin.snapshot.contentState.summary,
+    "pages=3; sections=9; detectedTitle=Imported Example Site; homepagePath=/",
+  );
+  assert.equal(twin.snapshot.designState.summary, "assets=12; layoutEvidence=available");
+  assert.equal(twin.snapshot.experienceState.summary, "navigationEvidence=available; homepageDetected=true");
+  assert.equal(
+    twin.snapshot.governanceState.summary,
+    "sourceImportId=import_001; sourceSiteVersionId=sv_456; readOnly=true",
+  );
+  assert.equal(twin.snapshot.operationalState.summary, "environmentScope=preview; providerState=preview/runtime-only");
+});
+
+test("twin builder: preserves deterministic placeholders when evidence is missing", () => {
+  const twin = buildWebsiteDigitalTwin(buildInput());
+  assert.equal(twin.snapshot.contentState.summary, "deterministic_content_read_model");
+  assert.equal(twin.snapshot.designState.summary, "deterministic_design_read_model");
+  assert.equal(twin.snapshot.experienceState.summary, "deterministic_experience_read_model");
+  assert.equal(twin.snapshot.governanceState.summary, "deterministic_governance_read_model");
+  assert.equal(twin.snapshot.operationalState.summary, "deterministic_operational_read_model");
+});
+
 test("twin builder: metadata includes source values", () => {
   const twin = buildWebsiteDigitalTwin(buildInput());
 

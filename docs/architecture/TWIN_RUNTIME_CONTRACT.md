@@ -223,17 +223,28 @@ Verified deployed preview values:
 - `governanceSummary`: `deterministic_governance_read_model`
 - `operationalSummary`: `deterministic_operational_read_model`
 
-Verified real-site preview values:
+Verified real-site preview values (hydrated from imported model evidence when provided to builder):
 - `title`: `Website Digital Twin Runtime Preview (Real Site)`
 - `sourceSiteVersionId`: `site_version_real-site-01_072929becae7`
 - `sourceImportId`: `import_real-site-01_c167859409d8`
 - `status`: `ready`
 - `environmentScope`: `preview`
-- `contentSummary`: `deterministic_content_read_model`
-- `designSummary`: `deterministic_design_read_model`
-- `experienceSummary`: `deterministic_experience_read_model`
-- `governanceSummary`: `deterministic_governance_read_model`
-- `operationalSummary`: `deterministic_operational_read_model`
+- `contentSummary`: `pages=1; sections=1; detectedTitle=Example Domain; homepagePath=index.html`
+- `designSummary`: `assets=0; layoutEvidence=unknown`
+- `experienceSummary`: `navigationEvidence=available; homepageDetected=true`
+- `governanceSummary`: `sourceImportId=import_real-site-01_c167859409d8; sourceSiteVersionId=site_version_real-site-01_072929becae7; readOnly=true`
+- `operationalSummary`: `environmentScope=preview; providerState=preview/runtime-only`
+
+Builder input supports optional read-model evidence summary:
+- `sourceEvidenceSummary.pageCount`
+- `sourceEvidenceSummary.sectionCount`
+- `sourceEvidenceSummary.assetCount`
+- `sourceEvidenceSummary.detectedTitle`
+- `sourceEvidenceSummary.detectedHomepagePath`
+- `sourceEvidenceSummary.providerStateSummary` (optional)
+
+Fallback rule:
+- if `sourceEvidenceSummary` is omitted, deterministic placeholder summaries remain unchanged
 
 ## Runtime Boundaries (Still Explicit)
 - no DB persistence yet

@@ -8,6 +8,14 @@ export type BuildWebsiteDigitalTwinInput = {
   environmentScope: string;
   sourceImportId?: string;
   sourceModels?: string[];
+  sourceEvidenceSummary?: {
+    pageCount: number;
+    sectionCount: number;
+    assetCount: number;
+    detectedTitle: string;
+    detectedHomepagePath: string;
+    providerStateSummary?: string;
+  };
   generatedBy?: string;
   nowIso?: string;
   clock?: () => string;
@@ -34,33 +42,86 @@ function resolveGeneratedAt(input: BuildWebsiteDigitalTwinInput): string {
   return new Date().toISOString();
 }
 
-function buildSnapshot(sourceModels: string[]): TwinSnapshot {
+function sanitizeCount(value: number): number {
+  if (!Number.isFinite(value)) return 0;
+  return Math.max(0, Math.floor(value));
+}
+
+function normalizeEvidenceText(value: string | undefined): string {
+  const normalized = normalizeToken(value);
+  return normalized.length > 0 ? normalized : "unknown";
+}
+
+function buildSnapshot(sourceModels: string[], input: BuildWebsiteDigitalTwinInput): TwinSnapshot {
   const sourceModelCount = sourceModels.length;
+  const evidence = input.sourceEvidenceSummary;
+  if (!evidence) {
+    return {
+      contentState: {
+        bucket: "content",
+        summary: "deterministic_content_read_model",
+        sourceModelCount,
+      },
+      designState: {
+        bucket: "design",
+        summary: "deterministic_design_read_model",
+        sourceModelCount,
+      },
+      experienceState: {
+        bucket: "experience",
+        summary: "deterministic_experience_read_model",
+        sourceModelCount,
+      },
+      governanceState: {
+        bucket: "governance",
+        summary: "deterministic_governance_read_model",
+        sourceModelCount,
+      },
+      operationalState: {
+        bucket: "operational",
+        summary: "deterministic_operational_read_model",
+        sourceModelCount,
+      },
+    };
+  }
+
+  const pageCount = sanitizeCount(evidence.pageCount);
+  const sectionCount = sanitizeCount(evidence.sectionCount);
+  const assetCount = sanitizeCount(evidence.assetCount);
+  const detectedTitle = normalizeEvidenceText(evidence.detectedTitle);
+  const homepagePath = normalizeEvidenceText(evidence.detectedHomepagePath);
+  const hasLayoutEvidence = assetCount > 0;
+  const hasNavigationEvidence = pageCount > 1 || homepagePath !== "unknown";
+  const providerState = normalizeEvidenceText(evidence.providerStateSummary);
+  const sourceImportId = normalizeToken(input.sourceImportId) || "unknown";
+  const sourceSiteVersionId = normalizeToken(input.siteVersionId) || "unknown";
+  const environmentScope = normalizeToken(input.environmentScope) || "unknown";
+  const homepageDetected = homepagePath !== "unknown";
 
   return {
     contentState: {
       bucket: "content",
-      summary: "deterministic_content_read_model",
+      summary: `pages=${pageCount}; sections=${sectionCount}; detectedTitle=${detectedTitle}; homepagePath=${homepagePath}`,
       sourceModelCount,
     },
     designState: {
       bucket: "design",
-      summary: "deterministic_design_read_model",
+      summary: `assets=${assetCount}; layoutEvidence=${hasLayoutEvidence ? "available" : "unknown"}`,
       sourceModelCount,
     },
     experienceState: {
       bucket: "experience",
-      summary: "deterministic_experience_read_model",
+      summary: `navigationEvidence=${hasNavigationEvidence ? "available" : "unknown"}; homepageDetected=${homepageDetected}`,
       sourceModelCount,
     },
     governanceState: {
       bucket: "governance",
-      summary: "deterministic_governance_read_model",
+      summary: `sourceImportId=${sourceImportId}; sourceSiteVersionId=${sourceSiteVersionId}; readOnly=true`,
       sourceModelCount,
     },
     operationalState: {
       bucket: "operational",
-      summary: "deterministic_operational_read_model",
+      summary: `environmentScope=${environmentScope}; providerState=${providerState}`,
       sourceModelCount,
     },
   };
@@ -84,7 +145,7 @@ export function buildWebsiteDigitalTwin(input: BuildWebsiteDigitalTwinInput): We
   const twinId = deterministicId("twin", twinIdSeed);
   const sourceModels = [...(input.sourceModels ?? [])].map((entry) => String(entry)).sort();
   const diagnostics = [...BUILD_DIAGNOSTICS];
-  const snapshot = buildSnapshot(sourceModels);
+  const snapshot = buildSnapshot(sourceModels, input);
 
   return {
     identity: {

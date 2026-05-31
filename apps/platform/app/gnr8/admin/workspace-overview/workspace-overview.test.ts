@@ -34,6 +34,21 @@ test("workspace overview model: twin overview and diagnostics render data", asyn
   assert.equal(typeof model.overview.governanceSummary, "string");
   assert.equal(typeof model.overview.operationalSummary, "string");
   assert.equal(model.diagnostics.includes("TWIN_OVERVIEW_CREATED"), true);
+  assert.equal(model.overview.contentSummary.includes("pages="), true);
+  assert.equal(model.overview.contentSummary.includes("deterministic_content_read_model"), false);
+  assert.equal(model.overview.designSummary.includes("assets="), true);
+  assert.equal(model.overview.experienceSummary.includes("homepageDetected="), true);
+  assert.equal(model.overview.governanceSummary.includes("readOnly=true"), true);
+  assert.equal(model.overview.operationalSummary.includes("providerState=preview/runtime-only"), true);
+});
+
+test("workspace overview model: no scoring recommendation or ai fields added", async () => {
+  const model = await buildWorkspaceOverviewModel();
+  const flat = JSON.stringify(model);
+  assert.equal(flat.includes("scoring"), false);
+  assert.equal(flat.includes("recommendations"), false);
+  assert.equal(flat.includes("optimization"), false);
+  assert.equal(flat.includes("aiOutput"), false);
 });
 
 test("workspace overview page source: renders required sections", async () => {
