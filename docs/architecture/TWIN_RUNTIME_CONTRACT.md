@@ -11,6 +11,13 @@ Implemented milestone (2026-05-30):
   - `/gnr8/admin/twin-preview`
 
 Implemented milestone (2026-05-30):
+- Real Site Twin Preview
+- route:
+  - `/gnr8/admin/twin-preview-real`
+- source:
+  - `fixtureId`: `real-site-01`
+
+Implemented milestone (2026-05-30):
 - Twin Runtime Types and Deterministic Builder
 - runtime files:
   - `apps/platform/gnr8/runtime/twin/twin-types.ts`
@@ -216,6 +223,18 @@ Verified deployed preview values:
 - `governanceSummary`: `deterministic_governance_read_model`
 - `operationalSummary`: `deterministic_operational_read_model`
 
+Verified real-site preview values:
+- `title`: `Website Digital Twin Runtime Preview (Real Site)`
+- `sourceSiteVersionId`: `site_version_real-site-01_072929becae7`
+- `sourceImportId`: `import_real-site-01_c167859409d8`
+- `status`: `ready`
+- `environmentScope`: `preview`
+- `contentSummary`: `deterministic_content_read_model`
+- `designSummary`: `deterministic_design_read_model`
+- `experienceSummary`: `deterministic_experience_read_model`
+- `governanceSummary`: `deterministic_governance_read_model`
+- `operationalSummary`: `deterministic_operational_read_model`
+
 ## Runtime Boundaries (Still Explicit)
 - no DB persistence yet
 - no Supabase
@@ -257,6 +276,7 @@ Future implementation targets anchored by this contract:
 
 Current milestone conclusion:
 - GNR8 now has the first browser-visible Website Digital Twin runtime surface.
+- GNR8 now proves that an imported real-site fixture can become a visible Website Digital Twin runtime surface.
 
 Recommended next milestone:
 - Twin Preview Navigation Wiring

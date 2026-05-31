@@ -200,6 +200,39 @@ Workspace Overview Twin Preview UI milestone confirmed:
   - no scoring
   - no recommendations
 
+Real Site Twin Preview milestone confirmed:
+- route: `/gnr8/admin/twin-preview-real`
+- source:
+  - `fixtureId`: `real-site-01`
+- runtime chain: `buildWebsiteDigitalTwin()` -> `InMemoryTwinStore` -> `getTwinBySiteVersion()` -> `createTwinOverview()` -> browser-rendered read-only preview
+- verified values:
+  - `title`: `Website Digital Twin Runtime Preview (Real Site)`
+  - `sourceSiteVersionId`: `site_version_real-site-01_072929becae7`
+  - `sourceImportId`: `import_real-site-01_c167859409d8`
+  - `status`: `ready`
+  - `environmentScope`: `preview`
+  - `contentSummary`: `deterministic_content_read_model`
+  - `designSummary`: `deterministic_design_read_model`
+  - `experienceSummary`: `deterministic_experience_read_model`
+  - `governanceSummary`: `deterministic_governance_read_model`
+  - `operationalSummary`: `deterministic_operational_read_model`
+- diagnostics:
+  - `TWIN_BUILD_STARTED`
+  - `TWIN_IDENTITY_CREATED`
+  - `TWIN_SNAPSHOT_CREATED`
+  - `TWIN_BUILD_SUCCEEDED`
+  - `TWIN_STORE_SAVE_SUCCEEDED`
+  - `TWIN_STORE_GET_SUCCEEDED`
+  - `TWIN_STORE_LIST_SUCCEEDED`
+  - `TWIN_OVERVIEW_CREATED`
+- boundaries:
+  - read-only validation surface
+  - no editing
+  - no publish
+  - no AI
+  - no scoring
+  - no recommendations
+
 ## Future Integration Points
 This architecture anchors future integration with:
 - Twin Runtime Contract
@@ -222,6 +255,7 @@ First operational success checkpoint:
 - GNR8 now has the first runtime Twin Repository layer capable of storing and retrieving Website Digital Twins in memory while remaining persistence/API/UI-free.
 - GNR8 now has a Workspace-ready Twin Overview read-model capable of presenting Website Digital Twin state before UI implementation.
 - GNR8 now has the first browser-visible Website Digital Twin runtime surface.
+- GNR8 now proves that an imported real-site fixture can become a visible Website Digital Twin runtime surface.
 
 Recommended next milestone:
 - Twin Preview Navigation Wiring

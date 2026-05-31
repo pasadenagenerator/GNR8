@@ -85,6 +85,10 @@ Canonical first-operational outputs:
 
 Completed UI runtime route:
 - `/gnr8/admin/twin-preview`
+- `/gnr8/admin/twin-preview-real`
+
+Completed real-site source:
+- `fixtureId`: `real-site-01`
 
 Completed runtime chain:
 - `buildWebsiteDigitalTwin()`
@@ -96,6 +100,18 @@ Completed runtime chain:
 Verified deployed values:
 - `title`: `Website Digital Twin Runtime Preview`
 - `subtitle`: `Read-only validation surface`
+- `status`: `ready`
+- `environmentScope`: `preview`
+- `contentSummary`: `deterministic_content_read_model`
+- `designSummary`: `deterministic_design_read_model`
+- `experienceSummary`: `deterministic_experience_read_model`
+- `governanceSummary`: `deterministic_governance_read_model`
+- `operationalSummary`: `deterministic_operational_read_model`
+
+Verified real-site preview values:
+- `title`: `Website Digital Twin Runtime Preview (Real Site)`
+- `sourceSiteVersionId`: `site_version_real-site-01_072929becae7`
+- `sourceImportId`: `import_real-site-01_c167859409d8`
 - `status`: `ready`
 - `environmentScope`: `preview`
 - `contentSummary`: `deterministic_content_read_model`
@@ -167,6 +183,10 @@ Current completion checkpoint:
 - TwinOverview mapped fields: `twinId`, `siteId`, `siteVersionId`, `workspaceId`, `environmentScope`, `status`, `contentSummary`, `designSummary`, `experienceSummary`, `governanceSummary`, `operationalSummary`, `lastUpdated`, `diagnostics`
 - twin-viewer diagnostic implemented: `TWIN_OVERVIEW_CREATED`
 - persistence/API/UI still intentionally not implemented
+- Real Site Twin Preview completed and verified as read-only runtime validation from imported fixture `real-site-01`
+
+Conclusion:
+- GNR8 now proves that an imported real-site fixture can become a visible Website Digital Twin runtime surface.
 
 Recommended next milestone:
 - Twin Preview Navigation Wiring
