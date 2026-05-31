@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { buildWebsiteDigitalTwin } from "@/gnr8/runtime/twin/twin-builder";
 import type { BuildWebsiteDigitalTwinInput } from "@/gnr8/runtime/twin/twin-builder";
 import { InMemoryTwinStore } from "@/gnr8/runtime/twin/twin-store";
@@ -79,6 +80,15 @@ export default function TwinPreviewPage() {
           <dt>operationalSummary</dt>
           <dd>{overview.operationalSummary}</dd>
         </dl>
+      </section>
+
+      <section style={{ marginTop: 28 }}>
+        <h2 style={{ marginBottom: 12 }}>Website OS Navigation</h2>
+        <ul>
+          <li><Link href="/gnr8/admin/workspace-overview">Workspace Overview</Link></li>
+          <li><Link href="/gnr8/admin/twin-preview-real">Real Site Twin Preview</Link></li>
+          <li><Link href="/gnr8/admin/providers">Provider Governance Cockpit</Link></li>
+        </ul>
       </section>
 
       <section style={{ marginTop: 28 }}>

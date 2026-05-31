@@ -565,6 +565,15 @@ export function ProviderFleetView(props: { payload: ProviderFleetPayload }) {
       </section>
 
       <section style={{ border: "1px solid #dbe3ea", borderRadius: 10, background: "#ffffff", padding: 12, marginTop: 12 }}>
+        <h2 style={{ margin: "0 0 8px 0", fontSize: 16 }}>Website OS</h2>
+        <ul style={{ margin: 0, paddingLeft: 20, display: "grid", gap: 6 }}>
+          <li><Link href="/gnr8/admin/workspace-overview">Workspace Overview</Link></li>
+          <li><Link href="/gnr8/admin/twin-preview">Twin Preview</Link></li>
+          <li><Link href="/gnr8/admin/twin-preview-real">Real Site Twin Preview</Link></li>
+        </ul>
+      </section>
+
+      <section style={{ border: "1px solid #dbe3ea", borderRadius: 10, background: "#ffffff", padding: 12, marginTop: 12 }}>
         <h2 style={{ margin: "0 0 8px 0", fontSize: 16 }}>Operational Snapshot</h2>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(230px, 1fr))", gap: 10 }}>
           <SummaryCard label="Control Plane Status" value="Operational (read-only)" />

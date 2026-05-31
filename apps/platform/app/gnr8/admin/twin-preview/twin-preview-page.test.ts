@@ -34,6 +34,14 @@ test("twin preview page source: renders runtime preview heading", async () => {
   assert.equal(source.includes("Read-only validation surface"), true);
 });
 
+test("twin preview page source: website os navigation links render", async () => {
+  const source = await readFile(PAGE_FILE, "utf8");
+  assert.equal(source.includes("Website OS Navigation"), true);
+  assert.equal(source.includes('href="/gnr8/admin/workspace-overview"'), true);
+  assert.equal(source.includes('href="/gnr8/admin/twin-preview-real"'), true);
+  assert.equal(source.includes('href="/gnr8/admin/providers"'), true);
+});
+
 test("twin preview page source: contains no action controls", async () => {
   const source = await readFile(PAGE_FILE, "utf8");
   assert.equal(source.includes("<button"), false);

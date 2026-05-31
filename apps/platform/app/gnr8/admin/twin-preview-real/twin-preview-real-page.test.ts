@@ -54,6 +54,14 @@ test("twin preview real page renders explicit real-site banner and fields", asyn
   assert.equal(source.includes("model.fixtureId"), true);
 });
 
+test("twin preview real page source: website os navigation links render", async () => {
+  const source = await readFile(PAGE_FILE, "utf8");
+  assert.equal(source.includes("Website OS Navigation"), true);
+  assert.equal(source.includes('href="/gnr8/admin/workspace-overview"'), true);
+  assert.equal(source.includes('href="/gnr8/admin/twin-preview"'), true);
+  assert.equal(source.includes('href="/gnr8/admin/providers"'), true);
+});
+
 test("twin preview real page source: contains no action controls and no AI/scoring/recommendations", async () => {
   const source = await readFile(PAGE_FILE, "utf8");
   assert.equal(source.includes("<button"), false);

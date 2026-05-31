@@ -10,8 +10,8 @@ Implemented milestone (2026-05-30):
 - route:
   - `/gnr8/admin/twin-preview`
 
-Implemented milestone (2026-05-30):
-- Real Site Twin Preview
+Implemented milestone (2026-05-31):
+- Twin Snapshot Hydration from Imported Site Model
 - route:
   - `/gnr8/admin/twin-preview-real`
 - source:
@@ -217,11 +217,11 @@ Verified deployed preview values:
 - `subtitle`: `Read-only validation surface`
 - `status`: `ready`
 - `environmentScope`: `preview`
-- `contentSummary`: `deterministic_content_read_model`
-- `designSummary`: `deterministic_design_read_model`
-- `experienceSummary`: `deterministic_experience_read_model`
-- `governanceSummary`: `deterministic_governance_read_model`
-- `operationalSummary`: `deterministic_operational_read_model`
+- `contentSummary`: `pages=1; sections=8; detectedTitle=Northstar Widgets — Simple Marketing Site; homepagePath=index.html`
+- `designSummary`: `assets=5; layoutEvidence=available`
+- `experienceSummary`: `navigationEvidence=available; homepageDetected=true`
+- `governanceSummary`: `sourceImportId=import_real-site-01_c167859409d8; sourceSiteVersionId=site_version_real-site-01_072929becae7; readOnly=true`
+- `operationalSummary`: `environmentScope=preview; providerState=preview/runtime-only`
 
 Verified real-site preview values (hydrated from imported model evidence when provided to builder):
 - `title`: `Website Digital Twin Runtime Preview (Real Site)`
@@ -229,8 +229,8 @@ Verified real-site preview values (hydrated from imported model evidence when pr
 - `sourceImportId`: `import_real-site-01_c167859409d8`
 - `status`: `ready`
 - `environmentScope`: `preview`
-- `contentSummary`: `pages=1; sections=1; detectedTitle=Example Domain; homepagePath=index.html`
-- `designSummary`: `assets=0; layoutEvidence=unknown`
+- `contentSummary`: `pages=1; sections=8; detectedTitle=Northstar Widgets — Simple Marketing Site; homepagePath=index.html`
+- `designSummary`: `assets=5; layoutEvidence=available`
 - `experienceSummary`: `navigationEvidence=available; homepageDetected=true`
 - `governanceSummary`: `sourceImportId=import_real-site-01_c167859409d8; sourceSiteVersionId=site_version_real-site-01_072929becae7; readOnly=true`
 - `operationalSummary`: `environmentScope=preview; providerState=preview/runtime-only`
@@ -242,6 +242,14 @@ Builder input supports optional read-model evidence summary:
 - `sourceEvidenceSummary.detectedTitle`
 - `sourceEvidenceSummary.detectedHomepagePath`
 - `sourceEvidenceSummary.providerStateSummary` (optional)
+
+Implemented evidence fields:
+- `pageCount`
+- `sectionCount`
+- `assetCount`
+- `detectedTitle`
+- `detectedHomepagePath`
+- `providerStateSummary`
 
 Fallback rule:
 - if `sourceEvidenceSummary` is omitted, deterministic placeholder summaries remain unchanged
@@ -287,10 +295,10 @@ Future implementation targets anchored by this contract:
 
 Current milestone conclusion:
 - GNR8 now has the first browser-visible Website Digital Twin runtime surface.
-- GNR8 now proves that an imported real-site fixture can become a visible Website Digital Twin runtime surface.
+- Digital Twin snapshots now contain imported-site evidence instead of placeholder-only summaries.
 
 Recommended next milestone:
-- Twin Preview Navigation Wiring
+- Workspace Navigation Wiring
 - Canonical Models
 - Site Version runtime
 

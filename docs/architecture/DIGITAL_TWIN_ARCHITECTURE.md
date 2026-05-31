@@ -176,11 +176,11 @@ Workspace Overview Twin Preview UI milestone confirmed:
   - `subtitle`: `Read-only validation surface`
   - `status`: `ready`
   - `environmentScope`: `preview`
-  - `contentSummary`: `deterministic_content_read_model`
-  - `designSummary`: `deterministic_design_read_model`
-  - `experienceSummary`: `deterministic_experience_read_model`
-  - `governanceSummary`: `deterministic_governance_read_model`
-  - `operationalSummary`: `deterministic_operational_read_model`
+  - `contentSummary`: `pages=1; sections=8; detectedTitle=Northstar Widgets — Simple Marketing Site; homepagePath=index.html`
+  - `designSummary`: `assets=5; layoutEvidence=available`
+  - `experienceSummary`: `navigationEvidence=available; homepageDetected=true`
+  - `governanceSummary`: `sourceImportId=import_real-site-01_c167859409d8; sourceSiteVersionId=site_version_real-site-01_072929becae7; readOnly=true`
+  - `operationalSummary`: `environmentScope=preview; providerState=preview/runtime-only`
 - diagnostics:
   - `TWIN_BUILD_STARTED`
   - `TWIN_IDENTITY_CREATED`
@@ -200,7 +200,7 @@ Workspace Overview Twin Preview UI milestone confirmed:
   - no scoring
   - no recommendations
 
-Real Site Twin Preview milestone confirmed:
+Twin Snapshot Hydration from Imported Site Model milestone confirmed:
 - route: `/gnr8/admin/twin-preview-real`
 - source:
   - `fixtureId`: `real-site-01`
@@ -211,11 +211,18 @@ Real Site Twin Preview milestone confirmed:
   - `sourceImportId`: `import_real-site-01_c167859409d8`
   - `status`: `ready`
   - `environmentScope`: `preview`
-  - `contentSummary`: `deterministic_content_read_model`
-  - `designSummary`: `deterministic_design_read_model`
-  - `experienceSummary`: `deterministic_experience_read_model`
-  - `governanceSummary`: `deterministic_governance_read_model`
-  - `operationalSummary`: `deterministic_operational_read_model`
+  - `contentSummary`: `pages=1; sections=8; detectedTitle=Northstar Widgets — Simple Marketing Site; homepagePath=index.html`
+  - `designSummary`: `assets=5; layoutEvidence=available`
+  - `experienceSummary`: `navigationEvidence=available; homepageDetected=true`
+  - `governanceSummary`: `sourceImportId=import_real-site-01_c167859409d8; sourceSiteVersionId=site_version_real-site-01_072929becae7; readOnly=true`
+  - `operationalSummary`: `environmentScope=preview; providerState=preview/runtime-only`
+- implemented evidence fields:
+  - `pageCount`
+  - `sectionCount`
+  - `assetCount`
+  - `detectedTitle`
+  - `detectedHomepagePath`
+  - `providerStateSummary`
 - diagnostics:
   - `TWIN_BUILD_STARTED`
   - `TWIN_IDENTITY_CREATED`
@@ -255,10 +262,10 @@ First operational success checkpoint:
 - GNR8 now has the first runtime Twin Repository layer capable of storing and retrieving Website Digital Twins in memory while remaining persistence/API/UI-free.
 - GNR8 now has a Workspace-ready Twin Overview read-model capable of presenting Website Digital Twin state before UI implementation.
 - GNR8 now has the first browser-visible Website Digital Twin runtime surface.
-- GNR8 now proves that an imported real-site fixture can become a visible Website Digital Twin runtime surface.
+- Digital Twin snapshots now contain imported-site evidence instead of placeholder-only summaries.
 
 Recommended next milestone:
-- Twin Preview Navigation Wiring
+- Workspace Navigation Wiring
 
 ## Related Canonical Documents
 - `docs/architecture/TWIN_RUNTIME_CONTRACT.md`

@@ -280,6 +280,14 @@ test("provider fleet view source: not configured providers remain non-navigable 
   assert.equal(source.includes('href="/gnr8/admin/providers/netim"'), false);
 });
 
+test("provider fleet view source: website os navigation links render", async () => {
+  const source = await readFile(VIEW_FILE, "utf8");
+  assert.equal(source.includes("Website OS"), true);
+  assert.equal(source.includes('href="/gnr8/admin/workspace-overview"'), true);
+  assert.equal(source.includes('href="/gnr8/admin/twin-preview"'), true);
+  assert.equal(source.includes('href="/gnr8/admin/twin-preview-real"'), true);
+});
+
 test("provider fleet view source: no action buttons or forms are present", async () => {
   const source = await readFile(VIEW_FILE, "utf8");
   assert.equal(source.includes("<button"), false);

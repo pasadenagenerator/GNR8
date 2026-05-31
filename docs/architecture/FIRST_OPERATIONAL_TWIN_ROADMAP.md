@@ -102,11 +102,11 @@ Verified deployed values:
 - `subtitle`: `Read-only validation surface`
 - `status`: `ready`
 - `environmentScope`: `preview`
-- `contentSummary`: `deterministic_content_read_model`
-- `designSummary`: `deterministic_design_read_model`
-- `experienceSummary`: `deterministic_experience_read_model`
-- `governanceSummary`: `deterministic_governance_read_model`
-- `operationalSummary`: `deterministic_operational_read_model`
+- `contentSummary`: `pages=1; sections=8; detectedTitle=Northstar Widgets — Simple Marketing Site; homepagePath=index.html`
+- `designSummary`: `assets=5; layoutEvidence=available`
+- `experienceSummary`: `navigationEvidence=available; homepageDetected=true`
+- `governanceSummary`: `sourceImportId=import_real-site-01_c167859409d8; sourceSiteVersionId=site_version_real-site-01_072929becae7; readOnly=true`
+- `operationalSummary`: `environmentScope=preview; providerState=preview/runtime-only`
 
 Verified real-site preview values:
 - `title`: `Website Digital Twin Runtime Preview (Real Site)`
@@ -114,11 +114,19 @@ Verified real-site preview values:
 - `sourceImportId`: `import_real-site-01_c167859409d8`
 - `status`: `ready`
 - `environmentScope`: `preview`
-- `contentSummary`: `deterministic_content_read_model`
-- `designSummary`: `deterministic_design_read_model`
-- `experienceSummary`: `deterministic_experience_read_model`
-- `governanceSummary`: `deterministic_governance_read_model`
-- `operationalSummary`: `deterministic_operational_read_model`
+- `contentSummary`: `pages=1; sections=8; detectedTitle=Northstar Widgets — Simple Marketing Site; homepagePath=index.html`
+- `designSummary`: `assets=5; layoutEvidence=available`
+- `experienceSummary`: `navigationEvidence=available; homepageDetected=true`
+- `governanceSummary`: `sourceImportId=import_real-site-01_c167859409d8; sourceSiteVersionId=site_version_real-site-01_072929becae7; readOnly=true`
+- `operationalSummary`: `environmentScope=preview; providerState=preview/runtime-only`
+
+Implemented evidence fields:
+- `pageCount`
+- `sectionCount`
+- `assetCount`
+- `detectedTitle`
+- `detectedHomepagePath`
+- `providerStateSummary`
 
 Verified diagnostics:
 - `TWIN_BUILD_STARTED`
@@ -183,13 +191,13 @@ Current completion checkpoint:
 - TwinOverview mapped fields: `twinId`, `siteId`, `siteVersionId`, `workspaceId`, `environmentScope`, `status`, `contentSummary`, `designSummary`, `experienceSummary`, `governanceSummary`, `operationalSummary`, `lastUpdated`, `diagnostics`
 - twin-viewer diagnostic implemented: `TWIN_OVERVIEW_CREATED`
 - persistence/API/UI still intentionally not implemented
-- Real Site Twin Preview completed and verified as read-only runtime validation from imported fixture `real-site-01`
+- Twin Snapshot Hydration from Imported Site Model completed and verified as read-only runtime validation from imported fixture `real-site-01`
 
 Conclusion:
-- GNR8 now proves that an imported real-site fixture can become a visible Website Digital Twin runtime surface.
+- Digital Twin snapshots now contain imported-site evidence instead of placeholder-only summaries.
 
 Recommended next milestone:
-- Twin Preview Navigation Wiring
+- Workspace Navigation Wiring
 
 ## Related Canonical Documents
 - `docs/architecture/TWIN_RUNTIME_CONTRACT.md`

@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { buildWorkspaceOverviewModel } from "./model";
 
 export const runtime = "nodejs";
@@ -72,6 +73,15 @@ export default async function WorkspaceOverviewPage() {
           {model.diagnostics.map((entry) => (
             <li key={entry}>{entry}</li>
           ))}
+        </ul>
+      </section>
+
+      <section style={{ marginTop: 28 }}>
+        <h2 style={{ marginBottom: 12 }}>Validation Surfaces</h2>
+        <ul>
+          <li><Link href="/gnr8/admin/twin-preview">Twin Preview</Link></li>
+          <li><Link href="/gnr8/admin/twin-preview-real">Real Site Twin Preview</Link></li>
+          <li><Link href="/gnr8/admin/providers">Provider Governance Cockpit</Link></li>
         </ul>
       </section>
 

@@ -90,3 +90,11 @@ test("workspace overview page source: contains no action controls", async () => 
   assert.equal(source.includes("<textarea"), false);
   assert.equal(source.includes("<select"), false);
 });
+
+test("workspace overview page source: validation surfaces navigation links render", async () => {
+  const source = await readFile(PAGE_FILE, "utf8");
+  assert.equal(source.includes("Validation Surfaces"), true);
+  assert.equal(source.includes('href="/gnr8/admin/twin-preview"'), true);
+  assert.equal(source.includes('href="/gnr8/admin/twin-preview-real"'), true);
+  assert.equal(source.includes('href="/gnr8/admin/providers"'), true);
+});

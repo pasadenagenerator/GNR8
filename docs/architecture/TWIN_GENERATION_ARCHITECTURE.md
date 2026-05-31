@@ -108,8 +108,8 @@ Explicitly:
 - no observation engine implemented
 - no recommendation runtime implemented
 
-Documentation milestone recorded (2026-05-30):
-- Real Site Twin Preview
+Documentation milestone recorded (2026-05-31):
+- Twin Snapshot Hydration from Imported Site Model
 - route: `/gnr8/admin/twin-preview-real`
 - source: `fixtureId=real-site-01`
 - documented runtime chain:
@@ -125,11 +125,18 @@ Documentation milestone recorded (2026-05-30):
   - `sourceImportId`: `import_real-site-01_c167859409d8`
   - `status`: `ready`
   - `environmentScope`: `preview`
-  - `contentSummary`: `deterministic_content_read_model`
-  - `designSummary`: `deterministic_design_read_model`
-  - `experienceSummary`: `deterministic_experience_read_model`
-  - `governanceSummary`: `deterministic_governance_read_model`
-  - `operationalSummary`: `deterministic_operational_read_model`
+  - `contentSummary`: `pages=1; sections=8; detectedTitle=Northstar Widgets — Simple Marketing Site; homepagePath=index.html`
+  - `designSummary`: `assets=5; layoutEvidence=available`
+  - `experienceSummary`: `navigationEvidence=available; homepageDetected=true`
+  - `governanceSummary`: `sourceImportId=import_real-site-01_c167859409d8; sourceSiteVersionId=site_version_real-site-01_072929becae7; readOnly=true`
+  - `operationalSummary`: `environmentScope=preview; providerState=preview/runtime-only`
+- documented implemented evidence fields:
+  - `pageCount`
+  - `sectionCount`
+  - `assetCount`
+  - `detectedTitle`
+  - `detectedHomepagePath`
+  - `providerStateSummary`
 - documented diagnostics:
   - `TWIN_BUILD_STARTED`
   - `TWIN_IDENTITY_CREATED`
@@ -146,6 +153,7 @@ Documentation milestone recorded (2026-05-30):
   - no AI
   - no scoring
   - no recommendations
+  - no optimization
 
 ## Future Integration Points
 This architecture anchors future integration with:

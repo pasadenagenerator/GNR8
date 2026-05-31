@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { buildRealSiteTwinPreviewModel } from "./model";
 
 export const runtime = "nodejs";
@@ -63,6 +64,15 @@ export default async function TwinPreviewRealPage() {
           <dt>operationalSummary</dt>
           <dd>{model.overview.operationalSummary}</dd>
         </dl>
+      </section>
+
+      <section style={{ marginTop: 28 }}>
+        <h2 style={{ marginBottom: 12 }}>Website OS Navigation</h2>
+        <ul>
+          <li><Link href="/gnr8/admin/workspace-overview">Workspace Overview</Link></li>
+          <li><Link href="/gnr8/admin/twin-preview">Twin Preview</Link></li>
+          <li><Link href="/gnr8/admin/providers">Provider Governance Cockpit</Link></li>
+        </ul>
       </section>
 
       <section style={{ marginTop: 28 }}>
