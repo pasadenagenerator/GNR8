@@ -89,6 +89,18 @@ export default async function WorkspaceOverviewPage() {
           <dd>{model.importSourceDiagnostics.importedUrlSnapshotCount}</dd>
           <dt>fallbackReason</dt>
           <dd>{model.importSourceDiagnostics.fallbackReason ?? "n/a"}</dd>
+          <dt>persistedEvidenceChecked</dt>
+          <dd>{String(model.importSourceDiagnostics.persistedEvidenceChecked)}</dd>
+          <dt>persistedEvidenceAvailable</dt>
+          <dd>{String(model.importSourceDiagnostics.persistedEvidenceAvailable)}</dd>
+          <dt>persistedEvidenceSelected</dt>
+          <dd>{String(model.importSourceDiagnostics.persistedEvidenceSelected)}</dd>
+          <dt>persistedEvidenceReason</dt>
+          <dd>{model.importSourceDiagnostics.persistedEvidenceReason ?? "n/a"}</dd>
+          <dt>persistedEvidenceSiteVersionId</dt>
+          <dd>{model.importSourceDiagnostics.persistedEvidenceSiteVersionId ?? "n/a"}</dd>
+          <dt>persistedEvidenceImportId</dt>
+          <dd>{model.importSourceDiagnostics.persistedEvidenceImportId ?? "n/a"}</dd>
         </dl>
       </section>
 

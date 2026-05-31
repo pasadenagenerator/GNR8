@@ -89,6 +89,12 @@ test("workspace overview page source: renders required sections", async () => {
   assert.equal(source.includes("importedUrlSnapshotDirectory"), true);
   assert.equal(source.includes("importedUrlSnapshotCount"), true);
   assert.equal(source.includes("fallbackReason"), true);
+  assert.equal(source.includes("persistedEvidenceChecked"), true);
+  assert.equal(source.includes("persistedEvidenceAvailable"), true);
+  assert.equal(source.includes("persistedEvidenceSelected"), true);
+  assert.equal(source.includes("persistedEvidenceReason"), true);
+  assert.equal(source.includes("persistedEvidenceSiteVersionId"), true);
+  assert.equal(source.includes("persistedEvidenceImportId"), true);
 
   assert.equal(source.includes("Provider Governance Status"), true);
   assert.equal(source.includes("Execution Layer:"), true);
@@ -167,6 +173,7 @@ test("workspace overview source resolution: selects persisted runtime import evi
         siteVersionId: "11111111-1111-4111-8111-111111111111",
         snapshotId: persistedSnapshotId,
         snapshotRootDirAbs: persistedSnapshotRoot,
+        importId: null,
         updatedAt: new Date().toISOString(),
       },
     ],
@@ -174,6 +181,12 @@ test("workspace overview source resolution: selects persisted runtime import evi
   assert.equal(model.sourceId, persistedSnapshotId);
   assert.equal(model.sourceKind, "persisted_runtime_import_evidence");
   assert.equal(model.importSourceDiagnostics.selectedSource, "persisted_runtime_import_evidence");
+  assert.equal(model.importSourceDiagnostics.persistedEvidenceChecked, true);
+  assert.equal(model.importSourceDiagnostics.persistedEvidenceAvailable, true);
+  assert.equal(model.importSourceDiagnostics.persistedEvidenceSelected, true);
+  assert.equal(model.importSourceDiagnostics.persistedEvidenceReason, "persisted_runtime_evidence_selected");
+  assert.equal(model.importSourceDiagnostics.persistedEvidenceSiteVersionId, "11111111-1111-4111-8111-111111111111");
+  assert.equal(model.importSourceDiagnostics.persistedEvidenceImportId, null);
   assert.equal(model.diagnostics.includes("WORKSPACE_OVERVIEW_PERSISTED_RUNTIME_EVIDENCE_CHECKED"), true);
   assert.equal(model.diagnostics.includes("WORKSPACE_OVERVIEW_PERSISTED_RUNTIME_EVIDENCE_SELECTED"), true);
 });
@@ -199,8 +212,16 @@ test("workspace overview model fallback: no imported site available when no snap
   assert.equal(model.importSourceDiagnostics.selectedSource, "none");
   assert.equal(model.importSourceDiagnostics.importedUrlSnapshotCount, 0);
   assert.equal(model.importSourceDiagnostics.fallbackReason !== null, true);
+  assert.equal(model.importSourceDiagnostics.persistedEvidenceChecked, true);
+  assert.equal(model.importSourceDiagnostics.persistedEvidenceAvailable, false);
+  assert.equal(model.importSourceDiagnostics.persistedEvidenceSelected, false);
+  assert.equal(model.importSourceDiagnostics.persistedEvidenceReason, "persisted_runtime_evidence_unavailable");
+  assert.equal(model.importSourceDiagnostics.persistedEvidenceSiteVersionId, null);
+  assert.equal(model.importSourceDiagnostics.persistedEvidenceImportId, null);
   assert.equal(model.diagnostics.includes("WORKSPACE_OVERVIEW_IMPORT_SOURCE_SEARCH_STARTED"), true);
   assert.equal(model.diagnostics.includes("WORKSPACE_OVERVIEW_PERSISTED_RUNTIME_EVIDENCE_CHECKED"), true);
+  assert.equal(model.diagnostics.includes("WORKSPACE_OVERVIEW_PERSISTED_RUNTIME_EVIDENCE_UNAVAILABLE"), true);
+  assert.equal(model.diagnostics.includes("WORKSPACE_OVERVIEW_PERSISTED_RUNTIME_EVIDENCE_INVALID"), false);
   assert.equal(model.diagnostics.includes("WORKSPACE_OVERVIEW_PERSISTED_RUNTIME_EVIDENCE_SELECTED"), false);
   assert.equal(model.diagnostics.includes("WORKSPACE_OVERVIEW_STABLE_ARTIFACT_CHECKED"), true);
   assert.equal(model.diagnostics.includes("WORKSPACE_OVERVIEW_STABLE_ARTIFACT_MISSING"), true);
@@ -229,10 +250,48 @@ test("workspace overview model: bundled stable snapshot is used when filesystem 
   assert.equal(model.sourcePath, null);
   assert.equal(model.importSourceDiagnostics.selectedSource, "bundled_stable_import_snapshot");
   assert.equal(model.importSourceDiagnostics.fallbackReason, "none");
+  assert.equal(model.importSourceDiagnostics.persistedEvidenceChecked, true);
+  assert.equal(model.importSourceDiagnostics.persistedEvidenceAvailable, false);
+  assert.equal(model.importSourceDiagnostics.persistedEvidenceSelected, false);
+  assert.equal(model.importSourceDiagnostics.persistedEvidenceReason, "persisted_runtime_evidence_unavailable");
   assert.equal(model.diagnostics.includes("WORKSPACE_OVERVIEW_BUNDLED_STABLE_SNAPSHOT_CHECKED"), true);
   assert.equal(model.diagnostics.includes("WORKSPACE_OVERVIEW_BUNDLED_STABLE_SNAPSHOT_SELECTED"), true);
   assert.equal(model.overview.contentSummary.includes("pages="), true);
   assert.equal(model.overview.designSummary.includes("assets="), true);
   assert.equal(model.overview.experienceSummary.includes("homepageDetected="), true);
   assert.equal(model.overview.operationalSummary.includes("providerState=preview/runtime-only"), true);
+});
+
+test("workspace overview model: persisted evidence invalid reason rendered and bundled fallback selected", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "workspace-overview-persisted-invalid-"));
+  const snapshotsRoot = path.join(root, "snapshots");
+  const betaRunsRoot = path.join(root, "beta-runs");
+  await mkdir(snapshotsRoot, { recursive: true });
+  await mkdir(betaRunsRoot, { recursive: true });
+
+  const model = await buildWorkspaceOverviewModel({
+    snapshotsRootDirAbs: snapshotsRoot,
+    betaRunsRootDirAbs: betaRunsRoot,
+    persistedRuntimeEvidenceCandidates: [
+      {
+        siteVersionId: "22222222-2222-4222-8222-222222222222",
+        snapshotId: "imported-url-site-missing-evidence",
+        snapshotRootDirAbs: path.join(root, "missing-snapshot-root"),
+        importId: "run-invalid-001",
+        updatedAt: new Date().toISOString(),
+      },
+    ],
+  });
+
+  assert.equal(model.sourceKind, "bundled_stable_import_snapshot");
+  assert.equal(model.importSourceDiagnostics.selectedSource, "bundled_stable_import_snapshot");
+  assert.equal(model.importSourceDiagnostics.persistedEvidenceChecked, true);
+  assert.equal(model.importSourceDiagnostics.persistedEvidenceAvailable, true);
+  assert.equal(model.importSourceDiagnostics.persistedEvidenceSelected, false);
+  assert.equal(model.importSourceDiagnostics.persistedEvidenceReason, "persisted_runtime_evidence_invalid");
+  assert.equal(model.importSourceDiagnostics.persistedEvidenceSiteVersionId, "22222222-2222-4222-8222-222222222222");
+  assert.equal(model.importSourceDiagnostics.persistedEvidenceImportId, "run-invalid-001");
+  assert.equal(model.diagnostics.includes("WORKSPACE_OVERVIEW_PERSISTED_RUNTIME_EVIDENCE_INVALID"), true);
+  assert.equal(model.diagnostics.includes("WORKSPACE_OVERVIEW_PERSISTED_RUNTIME_EVIDENCE_SELECTED"), false);
+  assert.equal(model.diagnostics.includes("WORKSPACE_OVERVIEW_BUNDLED_STABLE_SNAPSHOT_SELECTED"), true);
 });

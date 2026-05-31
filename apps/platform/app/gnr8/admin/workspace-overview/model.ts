@@ -90,6 +90,12 @@ type ImportSourceDiagnostics = {
   importedUrlSnapshotDirectory: string | null;
   importedUrlSnapshotCount: number;
   fallbackReason: string | null;
+  persistedEvidenceChecked: boolean;
+  persistedEvidenceAvailable: boolean;
+  persistedEvidenceSelected: boolean;
+  persistedEvidenceReason: string | null;
+  persistedEvidenceSiteVersionId: string | null;
+  persistedEvidenceImportId: string | null;
 };
 
 type ImportedSnapshotResolution = {
@@ -102,7 +108,14 @@ type PersistedRuntimeEvidenceCandidate = {
   siteVersionId: string;
   snapshotId: string;
   snapshotRootDirAbs: string;
+  importId: string | null;
   updatedAt: string | null;
+};
+
+type PersistedRuntimeEvidenceScanResult = {
+  availableCount: number;
+  invalidCount: number;
+  candidates: PersistedRuntimeEvidenceCandidate[];
 };
 
 function toText(value: unknown): string | null {
@@ -125,16 +138,18 @@ function toPersistedRuntimeEvidenceCandidate(input: {
   const snapshotId = toText(executionIdentity.snapshotId);
   const snapshotRootDirAbs =
     toText(executionIdentity.snapshotStableRootDirAbs) ?? toText(executionIdentity.snapshotRunRootDirAbs);
+  const importId = toText(executionIdentity.snapshotRunId);
   if (!snapshotId || !snapshotRootDirAbs) return null;
   return {
     siteVersionId,
     snapshotId,
     snapshotRootDirAbs,
+    importId,
     updatedAt: toText(input.updatedAt),
   };
 }
 
-async function listPersistedRuntimeEvidenceCandidates(): Promise<PersistedRuntimeEvidenceCandidate[]> {
+async function listPersistedRuntimeEvidenceCandidates(): Promise<PersistedRuntimeEvidenceScanResult> {
   let supabase: any = null;
   try {
     const mod = await import("@/src/supabase/service-role-server");
@@ -142,15 +157,16 @@ async function listPersistedRuntimeEvidenceCandidates(): Promise<PersistedRuntim
   } catch {
     supabase = null;
   }
-  if (!supabase) return [];
+  if (!supabase) return { availableCount: 0, invalidCount: 0, candidates: [] };
   try {
     const result = await supabase
       .from("gnr8_runtime_site_versions")
       .select("id,import_provenance_summary,updated_at")
       .order("updated_at", { ascending: false })
       .limit(50);
-    if (result.error || !Array.isArray(result.data)) return [];
-    return (result.data as Array<{ id: unknown; import_provenance_summary: unknown; updated_at: unknown }>)
+    if (result.error || !Array.isArray(result.data)) return { availableCount: 0, invalidCount: 0, candidates: [] };
+    const rows = result.data as Array<{ id: unknown; import_provenance_summary: unknown; updated_at: unknown }>;
+    const candidates = rows
       .map((row: { id: unknown; import_provenance_summary: unknown; updated_at: unknown }) =>
         toPersistedRuntimeEvidenceCandidate({
           siteVersionId: row.id,
@@ -159,8 +175,9 @@ async function listPersistedRuntimeEvidenceCandidates(): Promise<PersistedRuntim
         }),
       )
       .filter((entry: PersistedRuntimeEvidenceCandidate | null): entry is PersistedRuntimeEvidenceCandidate => entry != null);
+    return { availableCount: rows.length, invalidCount: rows.length - candidates.length, candidates };
   } catch {
-    return [];
+    return { availableCount: 0, invalidCount: 0, candidates: [] };
   }
 }
 
@@ -183,18 +200,39 @@ async function resolveImportedSnapshotWithDiagnostics(input?: {
     input && "bundledSnapshotFixture" in input ? input.bundledSnapshotFixture : STABLE_IMPORT_SNAPSHOT_FIXTURE;
   const diagnostics: string[] = ["WORKSPACE_OVERVIEW_IMPORT_SOURCE_SEARCH_STARTED"];
   diagnostics.push("WORKSPACE_OVERVIEW_PERSISTED_RUNTIME_EVIDENCE_CHECKED");
-  const persistedCandidates =
+  const persistedScanResult =
     input && "persistedRuntimeEvidenceCandidates" in input
-      ? input.persistedRuntimeEvidenceCandidates ?? []
+      ? {
+          availableCount: (input.persistedRuntimeEvidenceCandidates ?? []).length,
+          invalidCount: 0,
+          candidates: input.persistedRuntimeEvidenceCandidates ?? [],
+        }
       : await listPersistedRuntimeEvidenceCandidates();
+  const persistedCandidates = persistedScanResult.candidates;
+  const persistedEvidenceAvailable = persistedScanResult.availableCount > 0;
+  let persistedEvidenceSelected = false;
+  let persistedEvidenceReason: string | null = null;
+  let persistedEvidenceSiteVersionId: string | null = null;
+  let persistedEvidenceImportId: string | null = null;
   const persistedSorted = [...persistedCandidates].sort((a, b) => {
     const aTime = a.updatedAt ? Date.parse(a.updatedAt) : 0;
     const bTime = b.updatedAt ? Date.parse(b.updatedAt) : 0;
     return bTime - aTime;
   });
+  if (!persistedEvidenceAvailable) {
+    persistedEvidenceReason = "persisted_runtime_evidence_unavailable";
+    diagnostics.push("WORKSPACE_OVERVIEW_PERSISTED_RUNTIME_EVIDENCE_UNAVAILABLE");
+  } else if (persistedScanResult.invalidCount > 0 && persistedCandidates.length === 0) {
+    persistedEvidenceReason = "persisted_runtime_evidence_invalid";
+    diagnostics.push("WORKSPACE_OVERVIEW_PERSISTED_RUNTIME_EVIDENCE_INVALID");
+  }
   for (const candidate of persistedSorted) {
     try {
       await fs.access(path.join(candidate.snapshotRootDirAbs, "index.html"));
+      persistedEvidenceSelected = true;
+      persistedEvidenceReason = "persisted_runtime_evidence_selected";
+      persistedEvidenceSiteVersionId = candidate.siteVersionId;
+      persistedEvidenceImportId = candidate.importId;
       diagnostics.push("WORKSPACE_OVERVIEW_PERSISTED_RUNTIME_EVIDENCE_SELECTED");
       return {
         selectedSnapshot: {
@@ -209,12 +247,24 @@ async function resolveImportedSnapshotWithDiagnostics(input?: {
           importedUrlSnapshotDirectory: toProjectRelativePath(snapshotsRootDirAbs),
           importedUrlSnapshotCount: 0,
           fallbackReason: null,
+          persistedEvidenceChecked: true,
+          persistedEvidenceAvailable,
+          persistedEvidenceSelected,
+          persistedEvidenceReason,
+          persistedEvidenceSiteVersionId,
+          persistedEvidenceImportId,
         },
         diagnostics,
       };
     } catch {
+      persistedEvidenceSiteVersionId = candidate.siteVersionId;
+      persistedEvidenceImportId = candidate.importId;
       continue;
     }
+  }
+  if (persistedEvidenceAvailable && !persistedEvidenceSelected && persistedEvidenceReason == null) {
+    persistedEvidenceReason = "persisted_runtime_evidence_invalid";
+    diagnostics.push("WORKSPACE_OVERVIEW_PERSISTED_RUNTIME_EVIDENCE_INVALID");
   }
 
   let stableSnapshotId: string | null = null;
@@ -260,6 +310,12 @@ async function resolveImportedSnapshotWithDiagnostics(input?: {
           importedUrlSnapshotDirectory: toProjectRelativePath(snapshotsRootDirAbs),
           importedUrlSnapshotCount: 0,
           fallbackReason: null,
+          persistedEvidenceChecked: true,
+          persistedEvidenceAvailable,
+          persistedEvidenceSelected,
+          persistedEvidenceReason,
+          persistedEvidenceSiteVersionId,
+          persistedEvidenceImportId,
         },
         diagnostics,
       };
@@ -300,6 +356,12 @@ async function resolveImportedSnapshotWithDiagnostics(input?: {
             importedUrlSnapshotDirectory: toProjectRelativePath(snapshotsRootDirAbs),
             importedUrlSnapshotCount: importedSnapshotDirs.length,
             fallbackReason: null,
+            persistedEvidenceChecked: true,
+            persistedEvidenceAvailable,
+            persistedEvidenceSelected,
+            persistedEvidenceReason,
+            persistedEvidenceSiteVersionId,
+            persistedEvidenceImportId,
           },
           diagnostics,
         };
@@ -324,6 +386,12 @@ async function resolveImportedSnapshotWithDiagnostics(input?: {
           importedUrlSnapshotDirectory: toProjectRelativePath(snapshotsRootDirAbs),
           importedUrlSnapshotCount: importedSnapshotDirs.length,
           fallbackReason: "none",
+          persistedEvidenceChecked: true,
+          persistedEvidenceAvailable,
+          persistedEvidenceSelected,
+          persistedEvidenceReason,
+          persistedEvidenceSiteVersionId,
+          persistedEvidenceImportId,
         },
         diagnostics,
       };
@@ -339,6 +407,12 @@ async function resolveImportedSnapshotWithDiagnostics(input?: {
         importedUrlSnapshotDirectory: toProjectRelativePath(snapshotsRootDirAbs),
         importedUrlSnapshotCount: importedSnapshotDirs.length,
         fallbackReason: "no_imported_snapshot_with_index_html",
+        persistedEvidenceChecked: true,
+        persistedEvidenceAvailable,
+        persistedEvidenceSelected,
+        persistedEvidenceReason,
+        persistedEvidenceSiteVersionId,
+        persistedEvidenceImportId,
       },
       diagnostics,
     };
@@ -360,6 +434,12 @@ async function resolveImportedSnapshotWithDiagnostics(input?: {
           importedUrlSnapshotDirectory: toProjectRelativePath(snapshotsRootDirAbs),
           importedUrlSnapshotCount: 0,
           fallbackReason: "none",
+          persistedEvidenceChecked: true,
+          persistedEvidenceAvailable,
+          persistedEvidenceSelected,
+          persistedEvidenceReason,
+          persistedEvidenceSiteVersionId,
+          persistedEvidenceImportId,
         },
         diagnostics,
       };
@@ -374,6 +454,12 @@ async function resolveImportedSnapshotWithDiagnostics(input?: {
         importedUrlSnapshotDirectory: toProjectRelativePath(snapshotsRootDirAbs),
         importedUrlSnapshotCount: 0,
         fallbackReason: "snapshot_directory_unavailable",
+        persistedEvidenceChecked: true,
+        persistedEvidenceAvailable,
+        persistedEvidenceSelected,
+        persistedEvidenceReason,
+        persistedEvidenceSiteVersionId,
+        persistedEvidenceImportId,
       },
       diagnostics,
     };
