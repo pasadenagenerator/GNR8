@@ -3,6 +3,47 @@
 ## Snapshot Date
 2026-06-01
 
+## Twin Observation Runtime v1 Milestone (2026-06-01)
+
+Milestone is complete and documented.
+
+Runtime files:
+- `apps/platform/gnr8/runtime/twin/twin-observations.ts`
+- `apps/platform/gnr8/runtime/twin/twin-observations.test.ts`
+
+Implemented function:
+- `generateTwinObservations(twin)`
+
+Implemented deterministic observation rules:
+- `Small Site Footprint`
+- `No Asset Evidence Detected`
+- `Homepage Successfully Identified`
+- `Read-Only Runtime Validation`
+
+Verified deployed observations for `Transporti Maver`:
+- `Small Site Footprint`
+- `No Asset Evidence Detected`
+- `Homepage Successfully Identified`
+- `Read-Only Runtime Validation`
+
+Diagnostics:
+- `TWIN_OBSERVATIONS_STARTED`
+- `TWIN_OBSERVATIONS_COMPLETED`
+
+Preserved boundaries:
+- no AI model calls
+- no recommendations
+- no optimization engine
+- no editing
+- no publishing
+- read-only deterministic observations only
+
+Conclusion:
+- Workspace Overview now displays deterministic Website OS observations derived from persisted Migration OS evidence.
+
+Recommended next milestone:
+- Twin Recommendation Runtime v1
+
 ## Persisted Migration OS Evidence -> Website OS Workspace Overview Milestone (2026-06-01)
 
 Milestone is complete and documented.

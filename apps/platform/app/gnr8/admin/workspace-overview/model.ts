@@ -8,6 +8,7 @@ import {
   type StableImportSnapshotFixture,
 } from "@/gnr8/runtime/twin/fixtures/stable-import-snapshot";
 import { buildWebsiteDigitalTwin } from "@/gnr8/runtime/twin/twin-builder";
+import { generateTwinInsights, TWIN_INSIGHT_DIAGNOSTICS } from "@/gnr8/runtime/twin/twin-insights";
 import { generateTwinObservations, TWIN_OBSERVATION_DIAGNOSTICS } from "@/gnr8/runtime/twin/twin-observations";
 import { InMemoryTwinStore } from "@/gnr8/runtime/twin/twin-store";
 import { createTwinOverview } from "@/gnr8/runtime/twin/twin-viewer";
@@ -849,6 +850,7 @@ export async function buildWorkspaceOverviewModel(input?: {
       sourceKind: "missing_imported_snapshot" as const,
       importSourceDiagnostics: resolution.importSourceDiagnostics,
       observations: [],
+      insights: [],
       overview: {
         twinId: "twin_missing_import",
         siteId: "site_missing_import",
@@ -902,6 +904,9 @@ export async function buildWorkspaceOverviewModel(input?: {
     const observationsDiagnostics: string[] = [TWIN_OBSERVATION_DIAGNOSTICS.STARTED];
     const observations = generateTwinObservations(storedTwin);
     observationsDiagnostics.push(TWIN_OBSERVATION_DIAGNOSTICS.COMPLETED);
+    const insightsDiagnostics: string[] = [TWIN_INSIGHT_DIAGNOSTICS.STARTED];
+    const insights = generateTwinInsights(observations);
+    insightsDiagnostics.push(TWIN_INSIGHT_DIAGNOSTICS.COMPLETED);
     const diagnostics = [
       ...resolution.diagnostics,
       ...storedTwin.diagnostics,
@@ -909,6 +914,7 @@ export async function buildWorkspaceOverviewModel(input?: {
       ...store.diagnostics,
       ...overview.diagnostics,
       ...observationsDiagnostics,
+      ...insightsDiagnostics,
     ];
     return {
       sourceId: bundledSnapshot.fixtureId,
@@ -916,6 +922,7 @@ export async function buildWorkspaceOverviewModel(input?: {
       sourceKind: selectedSnapshot.source,
       importSourceDiagnostics: resolution.importSourceDiagnostics,
       observations,
+      insights,
       overview,
       diagnostics,
     };
@@ -945,6 +952,9 @@ export async function buildWorkspaceOverviewModel(input?: {
     const observationsDiagnostics: string[] = [TWIN_OBSERVATION_DIAGNOSTICS.STARTED];
     const observations = generateTwinObservations(storedTwin);
     observationsDiagnostics.push(TWIN_OBSERVATION_DIAGNOSTICS.COMPLETED);
+    const insightsDiagnostics: string[] = [TWIN_INSIGHT_DIAGNOSTICS.STARTED];
+    const insights = generateTwinInsights(observations);
+    insightsDiagnostics.push(TWIN_INSIGHT_DIAGNOSTICS.COMPLETED);
     const diagnostics = [
       ...resolution.diagnostics,
       ...storedTwin.diagnostics,
@@ -952,6 +962,7 @@ export async function buildWorkspaceOverviewModel(input?: {
       ...store.diagnostics,
       ...overview.diagnostics,
       ...observationsDiagnostics,
+      ...insightsDiagnostics,
     ];
     return {
       sourceId: selectedSnapshot.snapshotId,
@@ -959,6 +970,7 @@ export async function buildWorkspaceOverviewModel(input?: {
       sourceKind: selectedSnapshot.source,
       importSourceDiagnostics: resolution.importSourceDiagnostics,
       observations,
+      insights,
       overview,
       diagnostics,
     };
@@ -1012,6 +1024,9 @@ export async function buildWorkspaceOverviewModel(input?: {
   const observationsDiagnostics: string[] = [TWIN_OBSERVATION_DIAGNOSTICS.STARTED];
   const observations = generateTwinObservations(storedTwin);
   observationsDiagnostics.push(TWIN_OBSERVATION_DIAGNOSTICS.COMPLETED);
+  const insightsDiagnostics: string[] = [TWIN_INSIGHT_DIAGNOSTICS.STARTED];
+  const insights = generateTwinInsights(observations);
+  insightsDiagnostics.push(TWIN_INSIGHT_DIAGNOSTICS.COMPLETED);
   const diagnostics = [
     ...resolution.diagnostics,
     ...storedTwin.diagnostics,
@@ -1019,6 +1034,7 @@ export async function buildWorkspaceOverviewModel(input?: {
     ...store.diagnostics,
     ...overview.diagnostics,
     ...observationsDiagnostics,
+    ...insightsDiagnostics,
   ];
 
   return {
@@ -1027,6 +1043,7 @@ export async function buildWorkspaceOverviewModel(input?: {
     sourceKind: selectedSnapshot.source,
     importSourceDiagnostics: resolution.importSourceDiagnostics,
     observations,
+    insights,
     overview,
     diagnostics,
   };

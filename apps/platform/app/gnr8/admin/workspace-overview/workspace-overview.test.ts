@@ -48,10 +48,13 @@ test("workspace overview model: twin overview and diagnostics render data from i
   assert.equal(typeof model.overview.governanceSummary, "string");
   assert.equal(typeof model.overview.operationalSummary, "string");
   assert.equal(Array.isArray(model.observations), true);
+  assert.equal(Array.isArray(model.insights), true);
   assert.equal(model.observations.length > 0 || model.sourceId === null, true);
   assert.equal(model.diagnostics.includes("TWIN_OVERVIEW_CREATED"), true);
   assert.equal(model.diagnostics.includes("TWIN_OBSERVATIONS_STARTED"), model.sourceId !== null);
   assert.equal(model.diagnostics.includes("TWIN_OBSERVATIONS_COMPLETED"), model.sourceId !== null);
+  assert.equal(model.diagnostics.includes("TWIN_INSIGHTS_STARTED"), model.sourceId !== null);
+  assert.equal(model.diagnostics.includes("TWIN_INSIGHTS_COMPLETED"), model.sourceId !== null);
   assert.equal(model.overview.contentSummary.includes("pages="), true);
   assert.equal(model.overview.contentSummary.includes("deterministic_content_read_model"), false);
   assert.equal(model.overview.designSummary.includes("assets="), true);
@@ -74,9 +77,11 @@ test("workspace overview model: observations include read-only runtime validatio
   const model = await buildWorkspaceOverviewModel();
   if (model.sourceId === null) {
     assert.deepEqual(model.observations, []);
+    assert.deepEqual(model.insights, []);
     return;
   }
   assert.equal(model.observations.some((entry) => entry.title === "Read-Only Runtime Validation"), true);
+  assert.equal(model.insights.some((entry) => entry.title === "Governance Boundary Enforced"), true);
 });
 
 test("workspace overview page source: renders required sections", async () => {
@@ -100,6 +105,11 @@ test("workspace overview page source: renders required sections", async () => {
   assert.equal(source.includes("observation.severity"), true);
   assert.equal(source.includes("observation.title"), true);
   assert.equal(source.includes("observation.summary"), true);
+  assert.equal(source.includes("Insights"), true);
+  assert.equal(source.includes("insight.severity"), true);
+  assert.equal(source.includes("insight.title"), true);
+  assert.equal(source.includes("insight.summary"), true);
+  assert.equal(source.includes("Supporting observations:"), true);
 
   assert.equal(source.includes("Validation Surfaces"), true);
   assert.equal(source.includes("Provider Governance Snapshot"), true);

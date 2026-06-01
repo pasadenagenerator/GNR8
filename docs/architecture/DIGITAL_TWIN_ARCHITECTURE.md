@@ -278,6 +278,33 @@ Workspace Overview Bundled Stable Import Snapshot milestone confirmed:
   - no editing
   - no publishing
 
+Twin Observation Runtime v1 milestone confirmed (`2026-06-01`):
+- runtime files:
+  - `apps/platform/gnr8/runtime/twin/twin-observations.ts`
+  - `apps/platform/gnr8/runtime/twin/twin-observations.test.ts`
+- implemented function:
+  - `generateTwinObservations(twin)`
+- implemented deterministic observation rules:
+  - `Small Site Footprint`
+  - `No Asset Evidence Detected`
+  - `Homepage Successfully Identified`
+  - `Read-Only Runtime Validation`
+- verified deployed observations for `Transporti Maver`:
+  - `Small Site Footprint`
+  - `No Asset Evidence Detected`
+  - `Homepage Successfully Identified`
+  - `Read-Only Runtime Validation`
+- diagnostics:
+  - `TWIN_OBSERVATIONS_STARTED`
+  - `TWIN_OBSERVATIONS_COMPLETED`
+- preserved boundaries:
+  - no AI model calls
+  - no recommendations
+  - no optimization engine
+  - no editing
+  - no publishing
+  - read-only deterministic observations only
+
 Persisted Migration OS Evidence -> Website OS Workspace Overview milestone confirmed:
 - completion date:
   - `2026-06-01`
@@ -331,8 +358,7 @@ First operational success checkpoint:
 - Workspace Overview is now useful in deployed environments even without local validation snapshot files.
 
 Recommended next milestone:
-- Workspace Overview Operator UX Cleanup
-- followed by: Twin Observation Runtime v1
+- Twin Recommendation Runtime v1
 
 ## Related Canonical Documents
 - `docs/architecture/TWIN_RUNTIME_CONTRACT.md`

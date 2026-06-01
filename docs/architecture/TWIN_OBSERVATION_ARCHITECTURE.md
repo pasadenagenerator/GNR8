@@ -73,11 +73,38 @@ The observation layer follows these principles:
 - proposal before mutation
 
 ## Current State
-Architecture only.
+Architecture plus first deterministic observation runtime milestone.
 
 Explicitly:
-- no observation runtime
-- no recommendation runtime
+- recommendation runtime not implemented
+- Twin Observation Runtime v1 completed (`2026-06-01`)
+
+Twin Observation Runtime v1 milestone confirmed:
+- runtime files:
+  - `apps/platform/gnr8/runtime/twin/twin-observations.ts`
+  - `apps/platform/gnr8/runtime/twin/twin-observations.test.ts`
+- implemented function:
+  - `generateTwinObservations(twin)`
+- implemented deterministic observation rules:
+  - `Small Site Footprint`
+  - `No Asset Evidence Detected`
+  - `Homepage Successfully Identified`
+  - `Read-Only Runtime Validation`
+- verified deployed observations for `Transporti Maver`:
+  - `Small Site Footprint`
+  - `No Asset Evidence Detected`
+  - `Homepage Successfully Identified`
+  - `Read-Only Runtime Validation`
+- diagnostics:
+  - `TWIN_OBSERVATIONS_STARTED`
+  - `TWIN_OBSERVATIONS_COMPLETED`
+- preserved boundaries:
+  - no AI model calls
+  - no recommendations
+  - no optimization engine
+  - no editing
+  - no publishing
+  - read-only deterministic observations only
 
 ## Future Integration Points
 This architecture anchors future integration with:
@@ -90,6 +117,12 @@ This architecture anchors future integration with:
 
 ## Success Condition
 GNR8 gains the canonical observation layer that transforms website evidence into actionable intelligence.
+
+Current runtime conclusion:
+- Workspace Overview now displays deterministic Website OS observations derived from persisted Migration OS evidence.
+
+Recommended next milestone:
+- Twin Recommendation Runtime v1
 
 ## Related Canonical Documents
 - `docs/architecture/TWIN_GENERATION_ARCHITECTURE.md`
