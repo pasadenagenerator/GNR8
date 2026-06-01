@@ -120,6 +120,33 @@ export default async function WorkspaceOverviewPage() {
       </section>
 
       <section style={{ marginTop: 16 }}>
+        <h2 style={{ marginBottom: 10 }}>Approval Records</h2>
+        <div style={{ display: "grid", gap: 10 }}>
+          {model.proposalApprovalRecords.map((record) => (
+            <article key={record.approvalId} style={CARD_STYLE}>
+              <h3 style={{ marginTop: 0, marginBottom: 6 }}>{record.proposalTitle}</h3>
+              <p style={{ marginTop: 0, marginBottom: 4 }}>approvalStatus: {record.approvalStatus}</p>
+              <p style={{ marginTop: 0, marginBottom: 4 }}>decision: {record.decision}</p>
+              <p style={{ marginTop: 0, marginBottom: 4 }}>requiredApprovals: {record.requiredApprovals}</p>
+              <p style={{ marginTop: 0, marginBottom: 4 }}>receivedApprovals: {record.receivedApprovals}</p>
+              <p style={{ marginTop: 0, marginBottom: 8 }}>approvalComplete: {String(record.approvalComplete)}</p>
+              <p style={{ marginTop: 0, marginBottom: 6 }}><strong>Permissions</strong></p>
+              <p style={{ marginTop: 0, marginBottom: 4 }}>executionAllowed: {String(record.executionAllowed)}</p>
+              <p style={{ marginTop: 0, marginBottom: 4 }}>mutationAllowed: {String(record.mutationAllowed)}</p>
+              <p style={{ marginTop: 0, marginBottom: 4 }}>publishingAllowed: {String(record.publishingAllowed)}</p>
+              <p style={{ marginTop: 0, marginBottom: 8 }}>
+                providerExecutionAllowed: {String(record.providerExecutionAllowed)}
+              </p>
+              <p style={{ marginTop: 0, marginBottom: 4 }}><strong>Governance</strong></p>
+              <p style={{ marginTop: 0, marginBottom: 8 }}>governanceState: {record.governanceState}</p>
+              <p style={{ marginTop: 0, marginBottom: 4 }}><strong>Summary</strong></p>
+              <p style={{ margin: 0 }}>{record.summary}</p>
+            </article>
+          ))}
+        </div>
+      </section>
+
+      <section style={{ marginTop: 16 }}>
         <h2 style={{ marginBottom: 10 }}>Execution Plan (Read-only Preview)</h2>
         <div style={{ display: "grid", gap: 10 }}>
           {model.executionPlanPreviews.map((preview) => (

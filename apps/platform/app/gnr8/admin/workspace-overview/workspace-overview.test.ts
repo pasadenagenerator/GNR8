@@ -54,6 +54,7 @@ test("workspace overview model: twin overview and diagnostics render data from i
   assert.equal(Array.isArray(model.optimizationScores), true);
   assert.equal(Array.isArray(model.proposalCandidates), true);
   assert.equal(Array.isArray(model.approvalPreviews), true);
+  assert.equal(Array.isArray(model.proposalApprovalRecords), true);
   assert.equal(Array.isArray(model.executionPlanPreviews), true);
   assert.equal(Array.isArray(model.executionArtifactPreviews), true);
   assert.equal(model.observations.length > 0 || model.sourceId === null, true);
@@ -72,6 +73,8 @@ test("workspace overview model: twin overview and diagnostics render data from i
   assert.equal(model.diagnostics.includes("TWIN_PROPOSAL_CANDIDATES_COMPLETED"), model.sourceId !== null);
   assert.equal(model.diagnostics.includes("TWIN_APPROVAL_PREVIEW_STARTED"), model.sourceId !== null);
   assert.equal(model.diagnostics.includes("TWIN_APPROVAL_PREVIEW_COMPLETED"), model.sourceId !== null);
+  assert.equal(model.diagnostics.includes("TWIN_PROPOSAL_APPROVAL_STARTED"), model.sourceId !== null);
+  assert.equal(model.diagnostics.includes("TWIN_PROPOSAL_APPROVAL_COMPLETED"), model.sourceId !== null);
   assert.equal(model.diagnostics.includes("TWIN_EXECUTION_PLAN_PREVIEW_STARTED"), model.sourceId !== null);
   assert.equal(model.diagnostics.includes("TWIN_EXECUTION_PLAN_PREVIEW_COMPLETED"), model.sourceId !== null);
   assert.equal(model.diagnostics.includes("TWIN_EXECUTION_ARTIFACT_PREVIEW_STARTED"), model.sourceId !== null);
@@ -113,6 +116,20 @@ test("workspace overview model: proposal candidates are present and remain read-
   assert.equal(model.approvalPreviews.every((entry) => entry.publishingPermission === false), true);
   assert.equal(model.approvalPreviews.every((entry) => entry.providerPermission === false), true);
   assert.equal(model.approvalPreviews.every((entry) => entry.governanceState === "preview_non_executable"), true);
+  assert.equal(model.proposalApprovalRecords.length, model.proposalCandidates.length);
+  assert.equal(model.proposalApprovalRecords.every((entry) => entry.approvalStatus === "approval_required"), true);
+  assert.equal(model.proposalApprovalRecords.every((entry) => entry.decision === "not_requested"), true);
+  assert.equal(model.proposalApprovalRecords.every((entry) => entry.requiredApprovals === 1), true);
+  assert.equal(model.proposalApprovalRecords.every((entry) => entry.receivedApprovals === 0), true);
+  assert.equal(model.proposalApprovalRecords.every((entry) => entry.approvalComplete === false), true);
+  assert.equal(model.proposalApprovalRecords.every((entry) => entry.executionAllowed === false), true);
+  assert.equal(model.proposalApprovalRecords.every((entry) => entry.mutationAllowed === false), true);
+  assert.equal(model.proposalApprovalRecords.every((entry) => entry.publishingAllowed === false), true);
+  assert.equal(model.proposalApprovalRecords.every((entry) => entry.providerExecutionAllowed === false), true);
+  assert.equal(
+    model.proposalApprovalRecords.every((entry) => entry.governanceState === "approval_required_preview_only"),
+    true,
+  );
   assert.equal(model.executionPlanPreviews.length, model.approvalPreviews.length);
   assert.equal(model.executionPlanPreviews.every((entry) => entry.executionState === "preview_only"), true);
   assert.equal(model.executionPlanPreviews.every((entry) => entry.executionBlocked === true), true);
@@ -145,6 +162,7 @@ test("workspace overview model: observations include read-only runtime validatio
     assert.deepEqual(model.optimizationScores, []);
     assert.deepEqual(model.proposalCandidates, []);
     assert.deepEqual(model.approvalPreviews, []);
+    assert.deepEqual(model.proposalApprovalRecords, []);
     assert.deepEqual(model.executionPlanPreviews, []);
     assert.deepEqual(model.executionArtifactPreviews, []);
     return;
@@ -193,6 +211,7 @@ test("workspace overview page source: renders required sections", async () => {
   assert.equal(source.includes("Operations"), true);
   assert.equal(source.includes("Planning Candidates"), true);
   assert.equal(source.includes("Governance Review Preview"), true);
+  assert.equal(source.includes("Approval Records"), true);
   assert.equal(source.includes("Execution Plan (Read-only Preview)"), true);
   assert.equal(source.includes("Execution Artifacts (Preview)"), true);
   assert.equal(source.includes("preview.proposalTitle"), true);
@@ -204,6 +223,19 @@ test("workspace overview page source: renders required sections", async () => {
   assert.equal(source.includes("preview.mutationPermission"), true);
   assert.equal(source.includes("preview.publishingPermission"), true);
   assert.equal(source.includes("preview.providerPermission"), true);
+  assert.equal(source.includes("record.proposalTitle"), true);
+  assert.equal(source.includes("record.approvalStatus"), true);
+  assert.equal(source.includes("record.decision"), true);
+  assert.equal(source.includes("record.requiredApprovals"), true);
+  assert.equal(source.includes("record.receivedApprovals"), true);
+  assert.equal(source.includes("record.approvalComplete"), true);
+  assert.equal(source.includes("record.executionAllowed"), true);
+  assert.equal(source.includes("record.mutationAllowed"), true);
+  assert.equal(source.includes("record.publishingAllowed"), true);
+  assert.equal(source.includes("record.providerExecutionAllowed"), true);
+  assert.equal(source.includes("record.governanceState"), true);
+  assert.equal(source.includes("record.summary"), true);
+  assert.equal(source.includes("Governance"), true);
   assert.equal(source.includes("Governance State Path"), true);
   assert.equal(source.includes("proposal_candidate"), true);
   assert.equal(source.includes("approval_review"), true);
@@ -312,14 +344,17 @@ test("workspace overview page source: contains no action controls", async () => 
   assert.equal(source.includes("<select"), false);
   assert.equal(source.includes("Approve"), false);
   assert.equal(source.includes("Reject"), false);
+  assert.equal(source.includes("Request Approval"), false);
   assert.equal(source.includes("Execute"), false);
   assert.equal(source.includes("execution button"), false);
   assert.equal(source.includes("Publish"), false);
   assert.equal(source.includes("publish button"), false);
   assert.equal(source.includes("provider actions"), false);
   assert.equal(source.includes("Provider Actions"), false);
+  assert.equal(source.includes("provider controls"), false);
   assert.equal(source.includes("approve button"), false);
   assert.equal(source.includes("reject button"), false);
+  assert.equal(source.includes("request approval button"), false);
   assert.equal(source.includes("Generate"), false);
   assert.equal(source.includes("generate button"), false);
   assert.equal(source.includes("AI control"), false);
