@@ -123,6 +123,27 @@ Explicitly:
 - no versioning runtime implemented
 - no rollback runtime implemented
 
+Website OS Proposal Candidate Runtime v1 completion dependency confirmed (`2026-06-01`):
+- completed deterministic upstream runtime milestones:
+  - Observation Runtime v1
+  - Insight Runtime v1
+  - Recommendation Runtime v1
+  - Optimization Runtime v1
+  - Optimization Scoring Runtime v1
+  - Proposal Candidate Runtime v1
+- Proposal Candidate Runtime v1 files:
+  - `apps/platform/gnr8/runtime/twin/twin-proposal-candidates.ts`
+  - `apps/platform/gnr8/runtime/twin/twin-proposal-candidates.test.ts`
+- function:
+  - `generateTwinProposalCandidates(input)`
+- editor boundary remains unchanged:
+  - read-only proposal candidates only
+  - no approval workflow yet
+  - no content/design mutation
+  - no publishing
+  - no provider execution
+  - no AI model calls in this runtime slice
+
 ## Future Integration Points
 This architecture anchors future integration with:
 - Experience Workspace Architecture

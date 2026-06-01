@@ -212,6 +212,48 @@ Checkpoint outcome:
 - GNR8 has the first operational runtime representation of a website visible in Workspace Overview.
 
 Latest completed canonical runtime milestone (2026-06-01):
+- `Website OS Proposal Candidate Runtime v1`
+- runtime files:
+  - `apps/platform/gnr8/runtime/twin/twin-proposal-candidates.ts`
+  - `apps/platform/gnr8/runtime/twin/twin-proposal-candidates.test.ts`
+- implemented function:
+  - `generateTwinProposalCandidates(input)`
+- proposal candidate fields:
+  - `proposalId`
+  - `status`
+  - `executionState`
+  - `title`
+  - `summary`
+  - `priority`
+  - `expectedImpact`
+  - `expectedEffort`
+  - `risk`
+  - `optimizationRank`
+  - `optimizationScore`
+  - `sourceOpportunityId`
+  - `supportingRecommendations`
+  - `reason`
+  - `boundaries`
+- verified deployed Proposal Candidates for `Transporti Maver`:
+  - `#1 Improve Homepage Conversion Flow status=proposal_candidate executionState=blocked rank=1 score=390`
+  - `#2 Improve Homepage Quality and Messaging status=proposal_candidate executionState=blocked rank=2 score=340`
+  - `#3 Maintain Read-Only Validation Mode status=proposal_candidate executionState=blocked rank=3 score=320`
+- top-rank selection behavior:
+  - generated from top-ranked optimization opportunities
+  - default limit: `3`
+  - `Design Evidence Collection` remains an optimization opportunity and is not promoted in Runtime v1 because it is ranked `#4`
+- preserved boundaries:
+  - read-only
+  - non-executable
+  - no content mutation
+  - no design mutation
+  - no publishing
+  - no provider execution
+  - no approval workflow yet
+  - no AI model calls
+- conclusion:
+  - Workspace Overview now displays read-only, non-executable Proposal Candidates derived from ranked Optimization Opportunities.
+
 - `Optimization Scoring Runtime v1`
 - runtime files:
   - `apps/platform/gnr8/runtime/twin/twin-optimization-scoring.ts`
@@ -243,7 +285,7 @@ Latest completed canonical runtime milestone (2026-06-01):
 - conclusion:
   - Workspace Overview now displays deterministic ranked optimization opportunities derived from optimization scoring.
 
-- `Persisted Migration OS Evidence -> Digital Twin -> Observation Runtime -> Insight Runtime -> Recommendation Runtime -> Optimization Runtime -> Optimization Scoring Runtime -> Workspace Overview`
+- `Persisted Migration OS Evidence -> Digital Twin -> Observation Runtime -> Insight Runtime -> Recommendation Runtime -> Optimization Runtime -> Optimization Scoring Runtime -> Proposal Candidate Runtime -> Workspace Overview`
 - verified runtime chain:
   - Persisted Migration OS runtime evidence
   - `buildWebsiteDigitalTwin()`
@@ -252,6 +294,7 @@ Latest completed canonical runtime milestone (2026-06-01):
   - `generateTwinRecommendations(insights)`
   - `generateTwinOptimizationOpportunities(recommendations)`
   - `scoreOptimizationOpportunities(opportunities)`
+  - `generateTwinProposalCandidates(input)`
   - Workspace Overview UI
 - verified deployed runtime values:
   - `selectedSource`: `persisted_runtime_import_evidence`
@@ -272,4 +315,5 @@ Latest completed canonical runtime milestone (2026-06-01):
   - future bootstrap resumes from `Persisted Migration OS Evidence -> Website OS Workspace Overview` as completed.
 
 Recommended next milestone:
-- Proposal Candidate Runtime v1
+- Proposal Candidate Operator UX Cleanup v1
+- followed by: Proposal Approval Preview Runtime v1

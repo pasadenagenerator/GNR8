@@ -10,6 +10,65 @@
 - Recommendation Runtime v1 completed.
 - Optimization Runtime v1 completed.
 - Optimization Scoring Runtime v1 completed.
+- Proposal Candidate Runtime v1 completed.
+
+## Proposal Candidate Runtime v1 Milestone (2026-06-01)
+
+Milestone is complete and documented.
+
+Runtime files:
+- `apps/platform/gnr8/runtime/twin/twin-proposal-candidates.ts`
+- `apps/platform/gnr8/runtime/twin/twin-proposal-candidates.test.ts`
+
+Implemented function:
+- `generateTwinProposalCandidates(input)`
+
+Proposal Candidate fields:
+- `proposalId`
+- `status`
+- `executionState`
+- `title`
+- `summary`
+- `priority`
+- `expectedImpact`
+- `expectedEffort`
+- `risk`
+- `optimizationRank`
+- `optimizationScore`
+- `sourceOpportunityId`
+- `supportingRecommendations`
+- `reason`
+- `boundaries`
+
+Verified deployed Proposal Candidates for `Transporti Maver`:
+- `#1 Improve Homepage Conversion Flow status=proposal_candidate executionState=blocked rank=1 score=390`
+- `#2 Improve Homepage Quality and Messaging status=proposal_candidate executionState=blocked rank=2 score=340`
+- `#3 Maintain Read-Only Validation Mode status=proposal_candidate executionState=blocked rank=3 score=320`
+
+Top-rank selection behavior:
+- Proposal Candidate Runtime v1 generates candidates from top-ranked optimization opportunities.
+- default limit: `3`
+- `Design Evidence Collection` remains an optimization opportunity and is not promoted to Proposal Candidate Runtime v1 because it is ranked `#4`.
+
+Preserved boundaries:
+- read-only
+- non-executable
+- no content mutation
+- no design mutation
+- no publishing
+- no provider execution
+- no approval workflow yet
+- no AI model calls
+
+Architecture chain:
+- `Persisted Migration OS Evidence -> Digital Twin -> Observation Runtime -> Insight Runtime -> Recommendation Runtime -> Optimization Runtime -> Optimization Scoring Runtime -> Proposal Candidate Runtime -> Workspace Overview`
+
+Conclusion:
+- Workspace Overview now displays read-only, non-executable Proposal Candidates derived from ranked Optimization Opportunities.
+
+Recommended next milestone:
+- Proposal Candidate Operator UX Cleanup v1
+- followed by: Proposal Approval Preview Runtime v1
 
 ## Optimization Scoring Runtime v1 Milestone (2026-06-01)
 

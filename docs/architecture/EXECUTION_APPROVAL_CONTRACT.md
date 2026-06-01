@@ -68,5 +68,22 @@ Explicitly:
 - no approvals exist
 - no execution is enabled
 
+Website OS Proposal Candidate Runtime v1 dependency checkpoint (`2026-06-01`):
+- runtime files:
+  - `apps/platform/gnr8/runtime/twin/twin-proposal-candidates.ts`
+  - `apps/platform/gnr8/runtime/twin/twin-proposal-candidates.test.ts`
+- function:
+  - `generateTwinProposalCandidates(input)`
+- current proposal candidate execution state:
+  - all candidates are `executionState=blocked`
+- verified deployed Proposal Candidates for `Transporti Maver`:
+  - `#1 Improve Homepage Conversion Flow status=proposal_candidate executionState=blocked rank=1 score=390`
+  - `#2 Improve Homepage Quality and Messaging status=proposal_candidate executionState=blocked rank=2 score=340`
+  - `#3 Maintain Read-Only Validation Mode status=proposal_candidate executionState=blocked rank=3 score=320`
+- preserved execution boundary:
+  - non-executable read-only candidates only
+  - no provider execution
+  - no approval workflow yet
+
 ## Success Condition
 GNR8 has a complete governance chain from provider contract to execution approval before implementing execution.

@@ -252,16 +252,57 @@ Twin Recommendation Runtime v1 milestone confirmed (`2026-06-01`):
   - no proposal generation
   - no editing
   - no publishing
-  - deterministic read-only recommendations only
+- deterministic read-only recommendations only
+
+Proposal Candidate Runtime v1 milestone confirmed (`2026-06-01`):
+- runtime files:
+  - `apps/platform/gnr8/runtime/twin/twin-proposal-candidates.ts`
+  - `apps/platform/gnr8/runtime/twin/twin-proposal-candidates.test.ts`
+- implemented function:
+  - `generateTwinProposalCandidates(input)`
+- proposal candidate fields:
+  - `proposalId`
+  - `status`
+  - `executionState`
+  - `title`
+  - `summary`
+  - `priority`
+  - `expectedImpact`
+  - `expectedEffort`
+  - `risk`
+  - `optimizationRank`
+  - `optimizationScore`
+  - `sourceOpportunityId`
+  - `supportingRecommendations`
+  - `reason`
+  - `boundaries`
+- verified deployed Proposal Candidates for `Transporti Maver`:
+  - `#1 Improve Homepage Conversion Flow status=proposal_candidate executionState=blocked rank=1 score=390`
+  - `#2 Improve Homepage Quality and Messaging status=proposal_candidate executionState=blocked rank=2 score=340`
+  - `#3 Maintain Read-Only Validation Mode status=proposal_candidate executionState=blocked rank=3 score=320`
+- top-rank selection behavior:
+  - generated from top-ranked optimization opportunities
+  - default limit: `3`
+  - `Design Evidence Collection` remains an optimization opportunity and is not promoted in Proposal Candidate Runtime v1 because it is ranked `#4`
+- preserved boundaries:
+  - read-only
+  - non-executable
+  - no content mutation
+  - no design mutation
+  - no publishing
+  - no provider execution
+  - no approval workflow yet
+  - no AI model calls
 
 ## Success Condition
 GNR8 gains the intelligence foundation behind the Website Digital Twin.
 
 Current runtime conclusion:
-- Workspace Overview now displays deterministic ranked optimization opportunities derived from optimization scoring.
+- Workspace Overview now displays read-only, non-executable Proposal Candidates derived from ranked Optimization Opportunities.
 
 Recommended next milestone:
-- Proposal Candidate Runtime v1
+- Proposal Candidate Operator UX Cleanup v1
+- followed by: Proposal Approval Preview Runtime v1
 
 ## Related Canonical Documents
 - `docs/architecture/TWIN_GENERATION_ARCHITECTURE.md`

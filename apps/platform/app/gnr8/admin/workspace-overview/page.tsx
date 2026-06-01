@@ -70,65 +70,24 @@ export default async function WorkspaceOverviewPage() {
       </section>
 
       <section style={{ marginTop: 16 }}>
-        <h2 style={{ marginBottom: 10 }}>Observations</h2>
+        <h2 style={{ marginBottom: 10 }}>Proposal Candidates</h2>
         <div style={{ display: "grid", gap: 10 }}>
-          {model.observations.map((observation) => (
-            <article key={observation.observationId} style={CARD_STYLE}>
-              <p style={{ marginTop: 0, marginBottom: 6 }}><strong>{observation.severity}</strong></p>
-              <h3 style={{ marginTop: 0, marginBottom: 6 }}>{observation.title}</h3>
-              <p style={{ margin: 0 }}>{observation.summary}</p>
-            </article>
-          ))}
-        </div>
-      </section>
-
-      <section style={{ marginTop: 16 }}>
-        <h2 style={{ marginBottom: 10 }}>Insights</h2>
-        <div style={{ display: "grid", gap: 10 }}>
-          {model.insights.map((insight) => (
-            <article key={insight.insightId} style={CARD_STYLE}>
-              <p style={{ marginTop: 0, marginBottom: 6 }}><strong>{insight.severity}</strong></p>
-              <h3 style={{ marginTop: 0, marginBottom: 6 }}>{insight.title}</h3>
-              <p style={{ margin: 0 }}>{insight.summary}</p>
-              <p style={{ marginTop: 8, marginBottom: 0, color: "#4b5563" }}>
-                Supporting observations: {insight.supportingObservations.length}
-              </p>
-            </article>
-          ))}
-        </div>
-      </section>
-
-      <section style={{ marginTop: 16 }}>
-        <h2 style={{ marginBottom: 10 }}>Recommendations</h2>
-        <div style={{ display: "grid", gap: 10 }}>
-          {model.recommendations.map((recommendation) => (
-            <article key={recommendation.recommendationId} style={CARD_STYLE}>
-              <p style={{ marginTop: 0, marginBottom: 6 }}><strong>{recommendation.priority}</strong></p>
-              <h3 style={{ marginTop: 0, marginBottom: 6 }}>{recommendation.title}</h3>
-              <p style={{ margin: 0 }}>{recommendation.summary}</p>
-              <p style={{ marginTop: 8, marginBottom: 0, color: "#4b5563" }}>
-                Supporting insights: {recommendation.supportingInsights.length}
-              </p>
-            </article>
-          ))}
-        </div>
-      </section>
-
-      <section style={{ marginTop: 16 }}>
-        <h2 style={{ marginBottom: 10 }}>Optimization Opportunities</h2>
-        <div style={{ display: "grid", gap: 10 }}>
-          {model.optimizationOpportunities.map((opportunity) => (
-            <article key={opportunity.opportunityId} style={CARD_STYLE}>
+          {model.proposalCandidates.map((proposal) => (
+            <article key={proposal.proposalId} style={CARD_STYLE}>
+              <h3 style={{ marginTop: 0, marginBottom: 6 }}>{proposal.title}</h3>
+              <p style={{ marginTop: 0, marginBottom: 4 }}>status: {proposal.status}</p>
+              <p style={{ marginTop: 0, marginBottom: 4 }}>executionState: {proposal.executionState}</p>
+              <p style={{ marginTop: 0, marginBottom: 4 }}>optimizationRank: {proposal.optimizationRank}</p>
+              <p style={{ marginTop: 0, marginBottom: 4 }}>optimizationScore: {proposal.optimizationScore}</p>
+              <p style={{ marginTop: 0, marginBottom: 4 }}>priority: {proposal.priority}</p>
+              <p style={{ marginTop: 0, marginBottom: 4 }}>expectedImpact: {proposal.expectedImpact}</p>
+              <p style={{ marginTop: 0, marginBottom: 4 }}>expectedEffort: {proposal.expectedEffort}</p>
+              <p style={{ marginTop: 0, marginBottom: 8 }}>risk: {proposal.risk}</p>
               <p style={{ marginTop: 0, marginBottom: 6 }}>
-                <strong>{opportunity.priority}</strong>
+                <strong>Summary:</strong> {proposal.summary}
               </p>
-              <h3 style={{ marginTop: 0, marginBottom: 6 }}>{opportunity.title}</h3>
-              <p style={{ margin: 0 }}>{opportunity.summary}</p>
-              <p style={{ marginTop: 8, marginBottom: 0, color: "#4b5563" }}>
-                impact={opportunity.impact}; effort={opportunity.effort}
-              </p>
-              <p style={{ marginTop: 6, marginBottom: 0, color: "#4b5563" }}>
-                Supporting recommendations: {opportunity.supportingRecommendations.length}
+              <p style={{ margin: 0, color: "#4b5563" }}>
+                <strong>Reason:</strong> {proposal.reason}
               </p>
             </article>
           ))}
@@ -142,41 +101,16 @@ export default async function WorkspaceOverviewPage() {
             const opportunity = model.optimizationOpportunities.find((entry) => entry.opportunityId === score.opportunityId);
             return (
               <article key={score.opportunityId} style={CARD_STYLE}>
-                <h3 style={{ marginTop: 0, marginBottom: 6 }}>
-                  #{score.rank} {opportunity?.title ?? score.opportunityId}
-                </h3>
                 <p style={{ marginTop: 0, marginBottom: 6 }}>
-                  <strong>totalScore={score.totalScore}</strong>
+                  <strong>#{score.rank}</strong> {opportunity?.title ?? score.opportunityId}
                 </p>
+                <p style={{ marginTop: 0, marginBottom: 6 }}>totalScore: {score.totalScore}</p>
                 <p style={{ margin: 0, color: "#4b5563" }}>
-                  impactScore={score.impactScore}; effortScore={score.effortScore}; confidenceScore={score.confidenceScore};
-                  evidenceQualityScore={score.evidenceQualityScore}
+                  impact / effort / confidence: {score.impactScore} / {score.effortScore} / {score.confidenceScore}
                 </p>
               </article>
             );
           })}
-        </div>
-      </section>
-
-      <section style={{ marginTop: 16 }}>
-        <h2 style={{ marginBottom: 10 }}>Proposal Candidates</h2>
-        <div style={{ display: "grid", gap: 10 }}>
-          {model.proposalCandidates.map((proposal) => (
-            <article key={proposal.proposalId} style={CARD_STYLE}>
-              <h3 style={{ marginTop: 0, marginBottom: 6 }}>{proposal.title}</h3>
-              <p style={{ marginTop: 0, marginBottom: 6 }}>
-                status={proposal.status}; executionState={proposal.executionState}
-              </p>
-              <p style={{ marginTop: 0, marginBottom: 6 }}>
-                priority={proposal.priority}; rank={proposal.optimizationRank}; score={proposal.optimizationScore}
-              </p>
-              <p style={{ marginTop: 0, marginBottom: 6 }}>
-                expectedImpact={proposal.expectedImpact}; expectedEffort={proposal.expectedEffort}; risk={proposal.risk}
-              </p>
-              <p style={{ marginTop: 0, marginBottom: 6 }}>{proposal.summary}</p>
-              <p style={{ margin: 0, color: "#4b5563" }}>{proposal.reason}</p>
-            </article>
-          ))}
         </div>
       </section>
 
@@ -214,8 +148,67 @@ export default async function WorkspaceOverviewPage() {
 
       <section style={{ marginTop: 16 }}>
         <details>
-          <summary style={{ cursor: "pointer", fontWeight: 600 }}>Debug Diagnostics</summary>
+          <summary style={{ cursor: "pointer", fontWeight: 600 }}>Advanced Runtime Analysis</summary>
           <div style={{ marginTop: 10 }}>
+            <h3 style={{ marginBottom: 8 }}>Observations</h3>
+            <div style={{ display: "grid", gap: 10 }}>
+              {model.observations.map((observation) => (
+                <article key={observation.observationId} style={CARD_STYLE}>
+                  <p style={{ marginTop: 0, marginBottom: 6 }}><strong>{observation.severity}</strong></p>
+                  <h4 style={{ marginTop: 0, marginBottom: 6 }}>{observation.title}</h4>
+                  <p style={{ margin: 0 }}>{observation.summary}</p>
+                </article>
+              ))}
+            </div>
+
+            <h3 style={{ marginTop: 12, marginBottom: 8 }}>Insights</h3>
+            <div style={{ display: "grid", gap: 10 }}>
+              {model.insights.map((insight) => (
+                <article key={insight.insightId} style={CARD_STYLE}>
+                  <p style={{ marginTop: 0, marginBottom: 6 }}><strong>{insight.severity}</strong></p>
+                  <h4 style={{ marginTop: 0, marginBottom: 6 }}>{insight.title}</h4>
+                  <p style={{ margin: 0 }}>{insight.summary}</p>
+                  <p style={{ marginTop: 8, marginBottom: 0, color: "#4b5563" }}>
+                    Supporting observations: {insight.supportingObservations.length}
+                  </p>
+                </article>
+              ))}
+            </div>
+
+            <h3 style={{ marginTop: 12, marginBottom: 8 }}>Recommendations</h3>
+            <div style={{ display: "grid", gap: 10 }}>
+              {model.recommendations.map((recommendation) => (
+                <article key={recommendation.recommendationId} style={CARD_STYLE}>
+                  <p style={{ marginTop: 0, marginBottom: 6 }}><strong>{recommendation.priority}</strong></p>
+                  <h4 style={{ marginTop: 0, marginBottom: 6 }}>{recommendation.title}</h4>
+                  <p style={{ margin: 0 }}>{recommendation.summary}</p>
+                  <p style={{ marginTop: 8, marginBottom: 0, color: "#4b5563" }}>
+                    Supporting insights: {recommendation.supportingInsights.length}
+                  </p>
+                </article>
+              ))}
+            </div>
+
+            <h3 style={{ marginTop: 12, marginBottom: 8 }}>Optimization Opportunities</h3>
+            <div style={{ display: "grid", gap: 10 }}>
+              {model.optimizationOpportunities.map((opportunity) => (
+                <article key={opportunity.opportunityId} style={CARD_STYLE}>
+                  <p style={{ marginTop: 0, marginBottom: 6 }}>
+                    <strong>{opportunity.priority}</strong>
+                  </p>
+                  <h4 style={{ marginTop: 0, marginBottom: 6 }}>{opportunity.title}</h4>
+                  <p style={{ margin: 0 }}>{opportunity.summary}</p>
+                  <p style={{ marginTop: 8, marginBottom: 0, color: "#4b5563" }}>
+                    impact={opportunity.impact}; effort={opportunity.effort}
+                  </p>
+                  <p style={{ marginTop: 6, marginBottom: 0, color: "#4b5563" }}>
+                    Supporting recommendations: {opportunity.supportingRecommendations.length}
+                  </p>
+                </article>
+              ))}
+            </div>
+
+            <h3 style={{ marginTop: 12, marginBottom: 8 }}>Debug Diagnostics</h3>
             <h3 style={{ marginTop: 0, marginBottom: 8 }}>Twin Source</h3>
             <p style={{ marginTop: 0 }}>
               {model.sourceId ?? "No imported site available."} → buildWebsiteDigitalTwin() → InMemoryTwinStore → createTwinOverview()

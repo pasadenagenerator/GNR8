@@ -153,6 +153,28 @@ test("workspace overview page source: renders required sections", async () => {
   assert.equal(source.includes("Experience"), true);
   assert.equal(source.includes("Governance"), true);
   assert.equal(source.includes("Operations"), true);
+  assert.equal(source.includes("Proposal Candidates"), true);
+  assert.equal(source.includes("proposal.title"), true);
+  assert.equal(source.includes("proposal.status"), true);
+  assert.equal(source.includes("proposal.executionState"), true);
+  assert.equal(source.includes("proposal.priority"), true);
+  assert.equal(source.includes("proposal.optimizationRank"), true);
+  assert.equal(source.includes("proposal.optimizationScore"), true);
+  assert.equal(source.includes("proposal.expectedImpact"), true);
+  assert.equal(source.includes("proposal.expectedEffort"), true);
+  assert.equal(source.includes("proposal.risk"), true);
+  assert.equal(source.includes("proposal.summary"), true);
+  assert.equal(source.includes("proposal.reason"), true);
+  assert.equal(source.includes("Summary:"), true);
+  assert.equal(source.includes("Reason:"), true);
+  assert.equal(source.includes("Optimization Ranking"), true);
+  assert.equal(source.includes("score.rank"), true);
+  assert.equal(source.includes("score.totalScore"), true);
+  assert.equal(source.includes("impact / effort / confidence:"), true);
+
+  assert.equal(source.includes("Validation Surfaces"), true);
+  assert.equal(source.includes("Provider Governance Snapshot"), true);
+  assert.equal(source.includes("Advanced Runtime Analysis"), true);
   assert.equal(source.includes("Observations"), true);
   assert.equal(source.includes("observation.severity"), true);
   assert.equal(source.includes("observation.title"), true);
@@ -174,30 +196,11 @@ test("workspace overview page source: renders required sections", async () => {
   assert.equal(source.includes("opportunity.title"), true);
   assert.equal(source.includes("opportunity.summary"), true);
   assert.equal(source.includes("Supporting recommendations:"), true);
-  assert.equal(source.includes("Optimization Ranking"), true);
-  assert.equal(source.includes("score.rank"), true);
-  assert.equal(source.includes("score.totalScore"), true);
-  assert.equal(source.includes("impactScore="), true);
-  assert.equal(source.includes("effortScore="), true);
-  assert.equal(source.includes("confidenceScore="), true);
-  assert.equal(source.includes("evidenceQualityScore="), true);
-  assert.equal(source.includes("Proposal Candidates"), true);
-  assert.equal(source.includes("proposal.status"), true);
-  assert.equal(source.includes("proposal.executionState"), true);
-  assert.equal(source.includes("proposal.priority"), true);
-  assert.equal(source.includes("proposal.optimizationRank"), true);
-  assert.equal(source.includes("proposal.optimizationScore"), true);
-  assert.equal(source.includes("proposal.expectedImpact"), true);
-  assert.equal(source.includes("proposal.expectedEffort"), true);
-  assert.equal(source.includes("proposal.risk"), true);
-  assert.equal(source.includes("proposal.summary"), true);
-  assert.equal(source.includes("proposal.reason"), true);
-
-  assert.equal(source.includes("Validation Surfaces"), true);
-  assert.equal(source.includes("Provider Governance Snapshot"), true);
   assert.equal(source.includes("Debug Diagnostics"), true);
   assert.equal(source.includes("<details>"), true);
   assert.equal(source.includes("<summary"), true);
+  assert.equal(source.includes("<details open"), false);
+  assert.equal(source.includes("evidenceQualityScore="), false);
   assert.equal(source.includes("Diagnostics list"), true);
   assert.equal(source.includes("Import Source Diagnostics"), true);
   assert.equal(source.includes("Persisted Evidence Diagnostics"), true);
@@ -238,9 +241,22 @@ test("workspace overview page source: contains no action controls", async () => 
   assert.equal(source.includes("Approve"), false);
   assert.equal(source.includes("Reject"), false);
   assert.equal(source.includes("Execute"), false);
+  assert.equal(source.includes("Publish"), false);
   assert.equal(source.includes("AI control"), false);
   assert.equal(source.includes("optimization engine"), false);
   assert.equal(source.includes("proposal engine"), false);
+});
+
+test("workspace overview page source: proposal candidates are prioritized over advanced runtime analysis", async () => {
+  const source = await readFile(PAGE_FILE, "utf8");
+  const proposalCandidatesIndex = source.indexOf("Proposal Candidates");
+  const observationsIndex = source.indexOf("Observations");
+  const advancedAnalysisIndex = source.indexOf("Advanced Runtime Analysis");
+  assert.equal(proposalCandidatesIndex > -1, true);
+  assert.equal(observationsIndex > -1, true);
+  assert.equal(advancedAnalysisIndex > -1, true);
+  assert.equal(proposalCandidatesIndex < observationsIndex, true);
+  assert.equal(proposalCandidatesIndex < advancedAnalysisIndex, true);
 });
 
 test("workspace overview page source: validation surfaces navigation links render", async () => {
