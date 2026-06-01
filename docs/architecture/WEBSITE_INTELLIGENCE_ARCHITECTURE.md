@@ -339,14 +339,59 @@ Execution Artifact Preview Runtime v1 milestone confirmed (`2026-06-01`):
   - no mutation execution
   - no AI model calls
 
+Proposal Approval Runtime v1 milestone confirmed (`2026-06-01`):
+- runtime files:
+  - `apps/platform/gnr8/runtime/twin/twin-proposal-approval.ts`
+  - `apps/platform/gnr8/runtime/twin/twin-proposal-approval.test.ts`
+- implemented function:
+  - `generateTwinProposalApprovalRecords({ proposalCandidates, approvalPreviews })`
+- approval record fields:
+  - `approvalId`
+  - `proposalId`
+  - `proposalTitle`
+  - `approvalStatus`
+  - `decision`
+  - `requiredApprovals`
+  - `receivedApprovals`
+  - `approvalComplete`
+  - `executionAllowed`
+  - `mutationAllowed`
+  - `publishingAllowed`
+  - `providerExecutionAllowed`
+  - `governanceState`
+  - `summary`
+- verified deployed approval records for `Transporti Maver`:
+  - `approvalStatus`: `approval_required`
+  - `decision`: `not_requested`
+  - `requiredApprovals`: `1`
+  - `receivedApprovals`: `0`
+  - `approvalComplete`: `false`
+  - `executionAllowed`: `false`
+  - `mutationAllowed`: `false`
+  - `publishingAllowed`: `false`
+  - `providerExecutionAllowed`: `false`
+  - `governanceState`: `approval_required_preview_only`
+- diagnostics:
+  - `TWIN_PROPOSAL_APPROVAL_STARTED`
+  - `TWIN_PROPOSAL_APPROVAL_COMPLETED`
+- preserved boundaries:
+  - no approval workflow
+  - no approve/reject controls
+  - no request approval controls
+  - no execution
+  - no provider execution
+  - no publishing
+  - no mutation execution
+  - no AI model calls
+
 ## Success Condition
 GNR8 gains the intelligence foundation behind the Website Digital Twin.
 
 Current runtime conclusion:
-- Workspace Overview now displays deterministic, read-only Execution Artifact Preview artifacts derived from Execution Plan Preview artifacts.
+- Workspace Planning Console now displays deterministic read-only Approval Records derived from Proposal Candidates and Approval Preview artifacts.
 
 Recommended next milestone:
-- Workspace Planning Console UX Cleanup v1
+- Approval Record Operator UX Cleanup v1
 
 ## Related Canonical Documents
 - `docs/architecture/TWIN_GENERATION_ARCHITECTURE.md`

@@ -212,56 +212,56 @@ Checkpoint outcome:
 - GNR8 has the first operational runtime representation of a website visible in Workspace Overview.
 
 Latest completed canonical runtime milestone (2026-06-01):
-- `Execution Artifact Preview Runtime v1`
+- `Proposal Approval Runtime v1`
 - completion date:
   - `2026-06-01`
 - runtime files:
-  - `apps/platform/gnr8/runtime/twin/twin-execution-artifact-preview.ts`
-  - `apps/platform/gnr8/runtime/twin/twin-execution-artifact-preview.test.ts`
+  - `apps/platform/gnr8/runtime/twin/twin-proposal-approval.ts`
+  - `apps/platform/gnr8/runtime/twin/twin-proposal-approval.test.ts`
 - implemented function:
-  - `generateTwinExecutionArtifactPreviews(executionPlanPreviews)`
-- verified deployed Execution Artifact Preview artifacts for `Transporti Maver`:
-  1. `Improve Homepage Conversion Flow`
-     - `artifactType`: `conversion_improvement_plan`
-     - affected areas:
-       - `homepage`
-       - `primary_conversion_path`
-     - planned outputs:
-       - `conversion_review_document`
-       - `conversion_improvement_plan`
-  2. `Improve Homepage Quality and Messaging`
-     - `artifactType`: `content_improvement_plan`
-     - affected areas:
-       - `homepage_hero`
-       - `homepage_messaging`
-     - planned outputs:
-       - `messaging_review_document`
-       - `content_improvement_plan`
-  3. `Maintain Read-Only Validation Mode`
-     - `artifactType`: `validation_continuation_plan`
-     - affected areas:
-       - `runtime_governance`
-     - planned outputs:
-       - `validation_status_report`
-- governance values:
-  - `executionState`: `preview_only`
-  - `mutationBlocked`: `true`
-  - `governanceState`: `preview_non_executable`
+  - `generateTwinProposalApprovalRecords({ proposalCandidates, approvalPreviews })`
+- approval record fields:
+  - `approvalId`
+  - `proposalId`
+  - `proposalTitle`
+  - `approvalStatus`
+  - `decision`
+  - `requiredApprovals`
+  - `receivedApprovals`
+  - `approvalComplete`
+  - `executionAllowed`
+  - `mutationAllowed`
+  - `publishingAllowed`
+  - `providerExecutionAllowed`
+  - `governanceState`
+  - `summary`
+- verified deployed approval records for `Transporti Maver`:
+  - `approvalStatus`: `approval_required`
+  - `decision`: `not_requested`
+  - `requiredApprovals`: `1`
+  - `receivedApprovals`: `0`
+  - `approvalComplete`: `false`
+  - `executionAllowed`: `false`
+  - `mutationAllowed`: `false`
+  - `publishingAllowed`: `false`
+  - `providerExecutionAllowed`: `false`
+  - `governanceState`: `approval_required_preview_only`
 - diagnostics:
-  - `TWIN_EXECUTION_ARTIFACT_PREVIEW_STARTED`
-  - `TWIN_EXECUTION_ARTIFACT_PREVIEW_COMPLETED`
+  - `TWIN_PROPOSAL_APPROVAL_STARTED`
+  - `TWIN_PROPOSAL_APPROVAL_COMPLETED`
 - preserved boundaries:
-  - no execution
-  - no artifact generation
   - no approval workflow
+  - no approve/reject controls
+  - no request approval controls
+  - no execution
   - no provider execution
   - no publishing
   - no mutation execution
   - no AI model calls
 - conclusion:
-  - Workspace Overview now displays deterministic, read-only Execution Artifact Preview artifacts derived from Execution Plan Preview artifacts.
+  - Workspace Planning Console now displays deterministic read-only Approval Records derived from Proposal Candidates and Approval Preview artifacts.
 - architecture chain:
-  - `Persisted Migration OS Evidence -> Digital Twin -> Observation Runtime -> Insight Runtime -> Recommendation Runtime -> Optimization Runtime -> Optimization Scoring Runtime -> Proposal Candidate Runtime -> Proposal Approval Preview Runtime -> Execution Plan Preview Runtime -> Execution Artifact Preview Runtime -> Workspace Overview`
+  - `Persisted Migration OS Evidence -> Digital Twin -> Observation Runtime -> Insight Runtime -> Recommendation Runtime -> Optimization Runtime -> Optimization Scoring Runtime -> Proposal Candidate Runtime -> Proposal Approval Preview Runtime -> Proposal Approval Runtime -> Execution Plan Preview Runtime -> Execution Artifact Preview Runtime -> Workspace Planning Console`
 
 - `Proposal Candidate Operator UX Cleanup v1`
 - completion date:
@@ -406,4 +406,4 @@ Latest completed canonical runtime milestone (2026-06-01):
   - future bootstrap resumes from `Persisted Migration OS Evidence -> Website OS Workspace Overview` as completed.
 
 Recommended next milestone:
-- Workspace Planning Console UX Cleanup v1
+- Approval Record Operator UX Cleanup v1

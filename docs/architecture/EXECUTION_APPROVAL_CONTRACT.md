@@ -65,8 +65,53 @@ Canonical lifecycle states:
 Design only.
 
 Explicitly:
-- no approvals exist
+- no executable approvals exist
 - no execution is enabled
+
+Proposal Approval Runtime v1 dependency checkpoint (`2026-06-01`):
+- runtime files:
+  - `apps/platform/gnr8/runtime/twin/twin-proposal-approval.ts`
+  - `apps/platform/gnr8/runtime/twin/twin-proposal-approval.test.ts`
+- function:
+  - `generateTwinProposalApprovalRecords({ proposalCandidates, approvalPreviews })`
+- approval record fields:
+  - `approvalId`
+  - `proposalId`
+  - `proposalTitle`
+  - `approvalStatus`
+  - `decision`
+  - `requiredApprovals`
+  - `receivedApprovals`
+  - `approvalComplete`
+  - `executionAllowed`
+  - `mutationAllowed`
+  - `publishingAllowed`
+  - `providerExecutionAllowed`
+  - `governanceState`
+  - `summary`
+- verified deployed approval records for `Transporti Maver`:
+  - `approvalStatus`: `approval_required`
+  - `decision`: `not_requested`
+  - `requiredApprovals`: `1`
+  - `receivedApprovals`: `0`
+  - `approvalComplete`: `false`
+  - `executionAllowed`: `false`
+  - `mutationAllowed`: `false`
+  - `publishingAllowed`: `false`
+  - `providerExecutionAllowed`: `false`
+  - `governanceState`: `approval_required_preview_only`
+- diagnostics:
+  - `TWIN_PROPOSAL_APPROVAL_STARTED`
+  - `TWIN_PROPOSAL_APPROVAL_COMPLETED`
+- preserved execution boundary:
+  - no approval workflow
+  - no approve/reject controls
+  - no request approval controls
+  - no execution
+  - no provider execution
+  - no publishing
+  - no mutation execution
+  - no AI model calls
 
 Website OS Proposal Candidate Runtime v1 dependency checkpoint (`2026-06-01`):
 - runtime files:

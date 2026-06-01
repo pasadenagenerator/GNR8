@@ -11,8 +11,71 @@
 - Optimization Runtime v1 completed.
 - Optimization Scoring Runtime v1 completed.
 - Proposal Candidate Runtime v1 completed.
+- Proposal Approval Runtime v1 completed.
 - Execution Artifact Preview Runtime v1 completed.
 - Proposal Candidate Operator UX Cleanup v1 completed.
+
+## Proposal Approval Runtime v1 Milestone (2026-06-01)
+
+Milestone is complete and documented.
+
+Runtime files:
+- `apps/platform/gnr8/runtime/twin/twin-proposal-approval.ts`
+- `apps/platform/gnr8/runtime/twin/twin-proposal-approval.test.ts`
+
+Implemented function:
+- `generateTwinProposalApprovalRecords({ proposalCandidates, approvalPreviews })`
+
+Approval Record fields:
+- `approvalId`
+- `proposalId`
+- `proposalTitle`
+- `approvalStatus`
+- `decision`
+- `requiredApprovals`
+- `receivedApprovals`
+- `approvalComplete`
+- `executionAllowed`
+- `mutationAllowed`
+- `publishingAllowed`
+- `providerExecutionAllowed`
+- `governanceState`
+- `summary`
+
+Verified deployed approval records for `Transporti Maver`:
+- `approvalStatus`: `approval_required`
+- `decision`: `not_requested`
+- `requiredApprovals`: `1`
+- `receivedApprovals`: `0`
+- `approvalComplete`: `false`
+- `executionAllowed`: `false`
+- `mutationAllowed`: `false`
+- `publishingAllowed`: `false`
+- `providerExecutionAllowed`: `false`
+- `governanceState`: `approval_required_preview_only`
+
+Diagnostics:
+- `TWIN_PROPOSAL_APPROVAL_STARTED`
+- `TWIN_PROPOSAL_APPROVAL_COMPLETED`
+
+Preserved boundaries:
+- no approval workflow
+- no approve/reject controls
+- no request approval controls
+- no execution
+- no provider execution
+- no publishing
+- no mutation execution
+- no AI model calls
+
+Architecture chain:
+- `Persisted Migration OS Evidence -> Digital Twin -> Observation Runtime -> Insight Runtime -> Recommendation Runtime -> Optimization Runtime -> Optimization Scoring Runtime -> Proposal Candidate Runtime -> Proposal Approval Preview Runtime -> Proposal Approval Runtime -> Execution Plan Preview Runtime -> Execution Artifact Preview Runtime -> Workspace Planning Console`
+
+Conclusion:
+- Workspace Planning Console now displays deterministic read-only Approval Records derived from Proposal Candidates and Approval Preview artifacts.
+
+Recommended next milestone:
+- Approval Record Operator UX Cleanup v1
 
 ## Execution Artifact Preview Runtime v1 Milestone (2026-06-01)
 
@@ -68,7 +131,7 @@ Preserved boundaries:
 - no AI model calls
 
 Architecture chain:
-- `Persisted Migration OS Evidence -> Digital Twin -> Observation Runtime -> Insight Runtime -> Recommendation Runtime -> Optimization Runtime -> Optimization Scoring Runtime -> Proposal Candidate Runtime -> Proposal Approval Preview Runtime -> Execution Plan Preview Runtime -> Execution Artifact Preview Runtime -> Workspace Overview`
+- `Persisted Migration OS Evidence -> Digital Twin -> Observation Runtime -> Insight Runtime -> Recommendation Runtime -> Optimization Runtime -> Optimization Scoring Runtime -> Proposal Candidate Runtime -> Proposal Approval Preview Runtime -> Proposal Approval Runtime -> Execution Plan Preview Runtime -> Execution Artifact Preview Runtime -> Workspace Planning Console`
 
 Conclusion:
 - Workspace Overview now displays deterministic, read-only Execution Artifact Preview artifacts derived from Execution Plan Preview artifacts.

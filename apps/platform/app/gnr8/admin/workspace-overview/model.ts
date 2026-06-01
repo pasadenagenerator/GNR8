@@ -35,6 +35,10 @@ import {
   TWIN_PROPOSAL_APPROVAL_DIAGNOSTICS,
 } from "@/gnr8/runtime/twin/twin-proposal-approval";
 import {
+  generateTwinApprovalStateRecords,
+  TWIN_APPROVAL_STATE_DIAGNOSTICS,
+} from "@/gnr8/runtime/twin/twin-approval-state";
+import {
   generateTwinExecutionPlanPreviews,
   TWIN_EXECUTION_PLAN_PREVIEW_DIAGNOSTICS,
 } from "@/gnr8/runtime/twin/twin-execution-plan-preview";
@@ -889,6 +893,7 @@ export async function buildWorkspaceOverviewModel(input?: {
       proposalCandidates: [],
       approvalPreviews: [],
       proposalApprovalRecords: [],
+      approvalStates: [],
       executionPlanPreviews: [],
       executionArtifactPreviews: [],
       overview: {
@@ -971,6 +976,9 @@ export async function buildWorkspaceOverviewModel(input?: {
       approvalPreviews,
     });
     proposalApprovalDiagnostics.push(TWIN_PROPOSAL_APPROVAL_DIAGNOSTICS.COMPLETED);
+    const approvalStateDiagnostics: string[] = [TWIN_APPROVAL_STATE_DIAGNOSTICS.STARTED];
+    const approvalStates = generateTwinApprovalStateRecords(proposalApprovalRecords);
+    approvalStateDiagnostics.push(TWIN_APPROVAL_STATE_DIAGNOSTICS.COMPLETED);
     const executionPlanPreviewDiagnostics: string[] = [TWIN_EXECUTION_PLAN_PREVIEW_DIAGNOSTICS.STARTED];
     const executionPlanPreviews = generateTwinExecutionPlanPreviews(approvalPreviews);
     executionPlanPreviewDiagnostics.push(TWIN_EXECUTION_PLAN_PREVIEW_DIAGNOSTICS.COMPLETED);
@@ -991,6 +999,7 @@ export async function buildWorkspaceOverviewModel(input?: {
       ...proposalCandidatesDiagnostics,
       ...approvalPreviewDiagnostics,
       ...proposalApprovalDiagnostics,
+      ...approvalStateDiagnostics,
       ...executionPlanPreviewDiagnostics,
       ...executionArtifactPreviewDiagnostics,
     ];
@@ -1007,6 +1016,7 @@ export async function buildWorkspaceOverviewModel(input?: {
       proposalCandidates,
       approvalPreviews,
       proposalApprovalRecords,
+      approvalStates,
       executionPlanPreviews,
       executionArtifactPreviews,
       overview,
@@ -1065,6 +1075,9 @@ export async function buildWorkspaceOverviewModel(input?: {
       approvalPreviews,
     });
     proposalApprovalDiagnostics.push(TWIN_PROPOSAL_APPROVAL_DIAGNOSTICS.COMPLETED);
+    const approvalStateDiagnostics: string[] = [TWIN_APPROVAL_STATE_DIAGNOSTICS.STARTED];
+    const approvalStates = generateTwinApprovalStateRecords(proposalApprovalRecords);
+    approvalStateDiagnostics.push(TWIN_APPROVAL_STATE_DIAGNOSTICS.COMPLETED);
     const executionPlanPreviewDiagnostics: string[] = [TWIN_EXECUTION_PLAN_PREVIEW_DIAGNOSTICS.STARTED];
     const executionPlanPreviews = generateTwinExecutionPlanPreviews(approvalPreviews);
     executionPlanPreviewDiagnostics.push(TWIN_EXECUTION_PLAN_PREVIEW_DIAGNOSTICS.COMPLETED);
@@ -1085,6 +1098,7 @@ export async function buildWorkspaceOverviewModel(input?: {
       ...proposalCandidatesDiagnostics,
       ...approvalPreviewDiagnostics,
       ...proposalApprovalDiagnostics,
+      ...approvalStateDiagnostics,
       ...executionPlanPreviewDiagnostics,
       ...executionArtifactPreviewDiagnostics,
     ];
@@ -1101,6 +1115,7 @@ export async function buildWorkspaceOverviewModel(input?: {
       proposalCandidates,
       approvalPreviews,
       proposalApprovalRecords,
+      approvalStates,
       executionPlanPreviews,
       executionArtifactPreviews,
       overview,
@@ -1183,6 +1198,9 @@ export async function buildWorkspaceOverviewModel(input?: {
     approvalPreviews,
   });
   proposalApprovalDiagnostics.push(TWIN_PROPOSAL_APPROVAL_DIAGNOSTICS.COMPLETED);
+  const approvalStateDiagnostics: string[] = [TWIN_APPROVAL_STATE_DIAGNOSTICS.STARTED];
+  const approvalStates = generateTwinApprovalStateRecords(proposalApprovalRecords);
+  approvalStateDiagnostics.push(TWIN_APPROVAL_STATE_DIAGNOSTICS.COMPLETED);
   const executionPlanPreviewDiagnostics: string[] = [TWIN_EXECUTION_PLAN_PREVIEW_DIAGNOSTICS.STARTED];
   const executionPlanPreviews = generateTwinExecutionPlanPreviews(approvalPreviews);
   executionPlanPreviewDiagnostics.push(TWIN_EXECUTION_PLAN_PREVIEW_DIAGNOSTICS.COMPLETED);
@@ -1203,6 +1221,7 @@ export async function buildWorkspaceOverviewModel(input?: {
     ...proposalCandidatesDiagnostics,
     ...approvalPreviewDiagnostics,
     ...proposalApprovalDiagnostics,
+    ...approvalStateDiagnostics,
     ...executionPlanPreviewDiagnostics,
     ...executionArtifactPreviewDiagnostics,
   ];
@@ -1220,6 +1239,7 @@ export async function buildWorkspaceOverviewModel(input?: {
     proposalCandidates,
     approvalPreviews,
     proposalApprovalRecords,
+    approvalStates,
     executionPlanPreviews,
     executionArtifactPreviews,
     overview,
