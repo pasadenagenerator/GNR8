@@ -100,6 +100,7 @@ type ImportSourceDiagnostics = {
   persistedEvidenceMissingFields: string[];
   persistedEvidenceAvailableFields: string[];
   persistedEvidenceSourceKind: string | null;
+  persistedEvidenceBranchDiagnostics: PersistedEvidenceBranchDiagnostics;
 };
 
 type ImportedSnapshotResolution = {
@@ -145,6 +146,82 @@ type PersistedRuntimeEvidenceScanResult = {
   invalidCount: number;
   candidates: PersistedRuntimeEvidenceCandidate[];
 };
+
+type PersistedEvidenceBranchName =
+  | "siteTree"
+  | "semanticImport"
+  | "multipageImport"
+  | "captureEvidence"
+  | "renderedCapture";
+
+type PersistedEvidenceBranchType = "object" | "array" | "string" | "number" | "boolean" | "null";
+
+type PersistedEvidenceBranchDiagnostic = {
+  present: boolean;
+  type: PersistedEvidenceBranchType;
+  keys: string[];
+  itemCount: number | null;
+};
+
+type PersistedEvidenceBranchDiagnostics = Record<PersistedEvidenceBranchName, PersistedEvidenceBranchDiagnostic>;
+
+function toPersistedEvidenceBranchType(value: unknown): PersistedEvidenceBranchType {
+  if (value === null || value === undefined) return "null";
+  if (Array.isArray(value)) return "array";
+  if (typeof value === "object") return "object";
+  if (typeof value === "string") return "string";
+  if (typeof value === "number") return "number";
+  if (typeof value === "boolean") return "boolean";
+  return "null";
+}
+
+function toPersistedEvidenceBranchDiagnostic(value: unknown): PersistedEvidenceBranchDiagnostic {
+  const present = value !== undefined;
+  const type = toPersistedEvidenceBranchType(value);
+  if (type === "object" && value && !Array.isArray(value)) {
+    return {
+      present,
+      type,
+      keys: Object.keys(value as Record<string, unknown>).sort(),
+      itemCount: null,
+    };
+  }
+  if (type === "array") {
+    return {
+      present,
+      type,
+      keys: [],
+      itemCount: (value as unknown[]).length,
+    };
+  }
+  return {
+    present,
+    type,
+    keys: [],
+    itemCount: null,
+  };
+}
+
+function toEmptyPersistedEvidenceBranchDiagnostics(): PersistedEvidenceBranchDiagnostics {
+  return {
+    siteTree: toPersistedEvidenceBranchDiagnostic(undefined),
+    semanticImport: toPersistedEvidenceBranchDiagnostic(undefined),
+    multipageImport: toPersistedEvidenceBranchDiagnostic(undefined),
+    captureEvidence: toPersistedEvidenceBranchDiagnostic(undefined),
+    renderedCapture: toPersistedEvidenceBranchDiagnostic(undefined),
+  };
+}
+
+function toPersistedEvidenceBranchDiagnostics(candidate: PersistedRuntimeEvidenceCandidate): PersistedEvidenceBranchDiagnostics {
+  const summary = candidate.importProvenanceSummary as Record<string, unknown> | null;
+  return {
+    siteTree: toPersistedEvidenceBranchDiagnostic(summary?.siteTree),
+    semanticImport: toPersistedEvidenceBranchDiagnostic(summary?.semanticImport),
+    multipageImport: toPersistedEvidenceBranchDiagnostic(summary?.multipageImport),
+    captureEvidence: toPersistedEvidenceBranchDiagnostic(summary?.captureEvidence),
+    renderedCapture: toPersistedEvidenceBranchDiagnostic(summary?.renderedCapture),
+  };
+}
 
 function toText(value: unknown): string | null {
   if (typeof value !== "string") return null;
@@ -382,6 +459,7 @@ async function resolveImportedSnapshotWithDiagnostics(input?: {
   let persistedEvidenceMissingFields: string[] = [];
   let persistedEvidenceAvailableFields: string[] = [];
   let persistedEvidenceSourceKind: string | null = null;
+  let persistedEvidenceBranchDiagnostics = toEmptyPersistedEvidenceBranchDiagnostics();
   const persistedSorted = [...persistedCandidates].sort((a, b) => {
     const aTime = a.updatedAt ? Date.parse(a.updatedAt) : 0;
     const bTime = b.updatedAt ? Date.parse(b.updatedAt) : 0;
@@ -410,6 +488,8 @@ async function resolveImportedSnapshotWithDiagnostics(input?: {
       diagnostics.push("WORKSPACE_OVERVIEW_PERSISTED_RUNTIME_EVIDENCE_ADAPTER_FAILED");
     }
     const shape = toPersistedEvidenceShapeDiagnostics(candidate);
+    persistedEvidenceBranchDiagnostics = toPersistedEvidenceBranchDiagnostics(candidate);
+    diagnostics.push("WORKSPACE_OVERVIEW_PERSISTED_RUNTIME_EVIDENCE_BRANCH_DIAGNOSTICS_CREATED");
     persistedEvidenceShapeStatus = shape.shapeStatus;
     persistedEvidenceMissingFields = shape.missingFields;
     persistedEvidenceAvailableFields = shape.availableFields;
@@ -457,6 +537,7 @@ async function resolveImportedSnapshotWithDiagnostics(input?: {
           persistedEvidenceMissingFields,
           persistedEvidenceAvailableFields,
           persistedEvidenceSourceKind,
+          persistedEvidenceBranchDiagnostics,
         },
         diagnostics,
       };
@@ -525,6 +606,7 @@ async function resolveImportedSnapshotWithDiagnostics(input?: {
           persistedEvidenceMissingFields,
           persistedEvidenceAvailableFields,
           persistedEvidenceSourceKind,
+          persistedEvidenceBranchDiagnostics,
         },
         diagnostics,
       };
@@ -576,6 +658,7 @@ async function resolveImportedSnapshotWithDiagnostics(input?: {
             persistedEvidenceMissingFields,
             persistedEvidenceAvailableFields,
             persistedEvidenceSourceKind,
+            persistedEvidenceBranchDiagnostics,
           },
           diagnostics,
         };
@@ -611,6 +694,7 @@ async function resolveImportedSnapshotWithDiagnostics(input?: {
           persistedEvidenceMissingFields,
           persistedEvidenceAvailableFields,
           persistedEvidenceSourceKind,
+          persistedEvidenceBranchDiagnostics,
         },
         diagnostics,
       };
@@ -637,6 +721,7 @@ async function resolveImportedSnapshotWithDiagnostics(input?: {
         persistedEvidenceMissingFields,
         persistedEvidenceAvailableFields,
         persistedEvidenceSourceKind,
+        persistedEvidenceBranchDiagnostics,
       },
       diagnostics,
     };
@@ -669,6 +754,7 @@ async function resolveImportedSnapshotWithDiagnostics(input?: {
           persistedEvidenceMissingFields,
           persistedEvidenceAvailableFields,
           persistedEvidenceSourceKind,
+          persistedEvidenceBranchDiagnostics,
         },
         diagnostics,
       };
@@ -694,6 +780,7 @@ async function resolveImportedSnapshotWithDiagnostics(input?: {
         persistedEvidenceMissingFields,
         persistedEvidenceAvailableFields,
         persistedEvidenceSourceKind,
+        persistedEvidenceBranchDiagnostics,
       },
       diagnostics,
     };

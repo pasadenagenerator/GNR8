@@ -117,6 +117,18 @@ export default async function WorkspaceOverviewPage() {
           </dd>
           <dt>persistedEvidenceSourceKind</dt>
           <dd>{model.importSourceDiagnostics.persistedEvidenceSourceKind ?? "n/a"}</dd>
+          <dt>persistedEvidenceBranchDiagnostics</dt>
+          <dd>
+            <ul style={{ margin: 0, paddingLeft: 16 }}>
+              {Object.entries(model.importSourceDiagnostics.persistedEvidenceBranchDiagnostics).map(([branch, diagnostic]) => (
+                <li key={branch}>
+                  {branch}: present={String(diagnostic.present)}; type={diagnostic.type}
+                  {diagnostic.keys.length > 0 ? `; keys=${diagnostic.keys.join(",")}` : ""}
+                  {diagnostic.itemCount != null ? `; itemCount=${diagnostic.itemCount}` : ""}
+                </li>
+              ))}
+            </ul>
+          </dd>
         </dl>
       </section>
 

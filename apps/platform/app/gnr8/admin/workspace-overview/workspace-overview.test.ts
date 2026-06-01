@@ -99,6 +99,7 @@ test("workspace overview page source: renders required sections", async () => {
   assert.equal(source.includes("persistedEvidenceMissingFields"), true);
   assert.equal(source.includes("persistedEvidenceAvailableFields"), true);
   assert.equal(source.includes("persistedEvidenceSourceKind"), true);
+  assert.equal(source.includes("persistedEvidenceBranchDiagnostics"), true);
 
   assert.equal(source.includes("Provider Governance Status"), true);
   assert.equal(source.includes("Execution Layer:"), true);
@@ -260,8 +261,23 @@ test("workspace overview source resolution: adapter derives persisted summary fr
   assert.equal(model.importSourceDiagnostics.persistedEvidenceImportId, "run-adapter-001");
   assert.equal(model.importSourceDiagnostics.persistedEvidenceSiteVersionId, "33333333-3333-4333-8333-333333333333");
   assert.equal(model.importSourceDiagnostics.persistedEvidenceSourceKind, "runtime_import_provenance_summary_v1");
+  assert.equal(model.importSourceDiagnostics.persistedEvidenceBranchDiagnostics.siteTree.present, true);
+  assert.equal(model.importSourceDiagnostics.persistedEvidenceBranchDiagnostics.siteTree.type, "object");
+  assert.equal(
+    model.importSourceDiagnostics.persistedEvidenceBranchDiagnostics.siteTree.keys.includes("detectedHomepagePath"),
+    true,
+  );
+  assert.equal(model.importSourceDiagnostics.persistedEvidenceBranchDiagnostics.semanticImport.present, true);
+  assert.equal(model.importSourceDiagnostics.persistedEvidenceBranchDiagnostics.semanticImport.type, "object");
+  assert.equal(model.importSourceDiagnostics.persistedEvidenceBranchDiagnostics.multipageImport.present, false);
+  assert.equal(model.importSourceDiagnostics.persistedEvidenceBranchDiagnostics.captureEvidence.present, true);
+  assert.equal(model.importSourceDiagnostics.persistedEvidenceBranchDiagnostics.renderedCapture.present, false);
   assert.equal(model.diagnostics.includes("WORKSPACE_OVERVIEW_PERSISTED_RUNTIME_EVIDENCE_ADAPTER_STARTED"), true);
   assert.equal(model.diagnostics.includes("WORKSPACE_OVERVIEW_PERSISTED_RUNTIME_EVIDENCE_ADAPTER_SUCCEEDED"), true);
+  assert.equal(
+    model.diagnostics.includes("WORKSPACE_OVERVIEW_PERSISTED_RUNTIME_EVIDENCE_BRANCH_DIAGNOSTICS_CREATED"),
+    true,
+  );
   assert.equal(model.overview.contentSummary.includes("pages=4"), true);
   assert.equal(model.overview.contentSummary.includes("sections=8"), true);
   assert.equal(model.overview.designSummary.includes("assets=10"), true);
@@ -299,6 +315,8 @@ test("workspace overview model fallback: no imported site available when no snap
   assert.deepEqual(model.importSourceDiagnostics.persistedEvidenceMissingFields, []);
   assert.deepEqual(model.importSourceDiagnostics.persistedEvidenceAvailableFields, []);
   assert.equal(model.importSourceDiagnostics.persistedEvidenceSourceKind, null);
+  assert.equal(model.importSourceDiagnostics.persistedEvidenceBranchDiagnostics.siteTree.present, false);
+  assert.equal(model.importSourceDiagnostics.persistedEvidenceBranchDiagnostics.siteTree.type, "null");
   assert.equal(model.diagnostics.includes("WORKSPACE_OVERVIEW_IMPORT_SOURCE_SEARCH_STARTED"), true);
   assert.equal(model.diagnostics.includes("WORKSPACE_OVERVIEW_PERSISTED_RUNTIME_EVIDENCE_CHECKED"), true);
   assert.equal(model.diagnostics.includes("WORKSPACE_OVERVIEW_PERSISTED_RUNTIME_EVIDENCE_UNAVAILABLE"), true);
@@ -386,6 +404,7 @@ test("workspace overview model: persisted evidence invalid reason rendered and b
   assert.equal(model.importSourceDiagnostics.persistedEvidenceAvailableFields.includes("siteVersionId"), true);
   assert.equal(model.importSourceDiagnostics.persistedEvidenceAvailableFields.includes("importId"), true);
   assert.equal(model.importSourceDiagnostics.persistedEvidenceSourceKind, null);
+  assert.equal(model.importSourceDiagnostics.persistedEvidenceBranchDiagnostics.siteTree.present, false);
   assert.equal(model.diagnostics.includes("WORKSPACE_OVERVIEW_PERSISTED_RUNTIME_EVIDENCE_INVALID"), true);
   assert.equal(model.diagnostics.includes("WORKSPACE_OVERVIEW_PERSISTED_RUNTIME_EVIDENCE_ADAPTER_FAILED"), true);
   assert.equal(model.diagnostics.includes("WORKSPACE_OVERVIEW_PERSISTED_RUNTIME_EVIDENCE_SHAPE_CHECKED"), true);
@@ -397,4 +416,53 @@ test("workspace overview model: persisted evidence invalid reason rendered and b
   assert.equal(flat.includes("importProvenanceSummary"), false);
   assert.equal(flat.includes("secret"), false);
   assert.equal(flat.includes("credential"), false);
+});
+
+test("workspace overview model: adapter failure falls back to bundled snapshot with safe branch diagnostics", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "workspace-overview-persisted-adapter-failure-"));
+  const snapshotsRoot = path.join(root, "snapshots");
+  const betaRunsRoot = path.join(root, "beta-runs");
+  await mkdir(snapshotsRoot, { recursive: true });
+  await mkdir(betaRunsRoot, { recursive: true });
+
+  const model = await buildWorkspaceOverviewModel({
+    snapshotsRootDirAbs: snapshotsRoot,
+    betaRunsRootDirAbs: betaRunsRoot,
+    persistedRuntimeEvidenceCandidates: [
+      {
+        siteVersionId: "44444444-4444-4444-8444-444444444444",
+        snapshotId: "imported-url-site-adapter-failure",
+        snapshotRootDirAbs: path.join(root, "missing-runtime-snapshot-root"),
+        importId: null,
+        updatedAt: new Date().toISOString(),
+        importProvenanceSummary: {
+          kind: "runtime_import_provenance_summary_v1",
+          siteTree: ["secret-nested-value"],
+          semanticImport: "credential-nested-value",
+          multipageImport: null,
+          captureEvidence: 5,
+          renderedCapture: false,
+        } as any,
+      },
+    ],
+  });
+
+  assert.equal(model.sourceKind, "bundled_stable_import_snapshot");
+  assert.equal(model.importSourceDiagnostics.selectedSource, "bundled_stable_import_snapshot");
+  assert.equal(model.diagnostics.includes("WORKSPACE_OVERVIEW_PERSISTED_RUNTIME_EVIDENCE_ADAPTER_FAILED"), true);
+  assert.equal(
+    model.diagnostics.includes("WORKSPACE_OVERVIEW_PERSISTED_RUNTIME_EVIDENCE_BRANCH_DIAGNOSTICS_CREATED"),
+    true,
+  );
+  assert.equal(model.importSourceDiagnostics.persistedEvidenceBranchDiagnostics.siteTree.present, true);
+  assert.equal(model.importSourceDiagnostics.persistedEvidenceBranchDiagnostics.siteTree.type, "array");
+  assert.equal(model.importSourceDiagnostics.persistedEvidenceBranchDiagnostics.siteTree.itemCount, 1);
+  assert.deepEqual(model.importSourceDiagnostics.persistedEvidenceBranchDiagnostics.siteTree.keys, []);
+  assert.equal(model.importSourceDiagnostics.persistedEvidenceBranchDiagnostics.semanticImport.type, "string");
+  assert.equal(model.importSourceDiagnostics.persistedEvidenceBranchDiagnostics.multipageImport.type, "null");
+  assert.equal(model.importSourceDiagnostics.persistedEvidenceBranchDiagnostics.captureEvidence.type, "number");
+  assert.equal(model.importSourceDiagnostics.persistedEvidenceBranchDiagnostics.renderedCapture.type, "boolean");
+  const flat = JSON.stringify(model);
+  assert.equal(flat.includes("secret-nested-value"), false);
+  assert.equal(flat.includes("credential-nested-value"), false);
 });
