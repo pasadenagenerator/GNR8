@@ -278,6 +278,33 @@ Workspace Overview Bundled Stable Import Snapshot milestone confirmed:
   - no editing
   - no publishing
 
+Persisted Migration OS Evidence -> Website OS Workspace Overview milestone confirmed:
+- completion date:
+  - `2026-06-01`
+- verified runtime chain:
+  - Persisted Migration OS runtime evidence
+  - Workspace Overview resolver
+  - Runtime Evidence Adapter
+  - `buildWebsiteDigitalTwin()`
+  - `InMemoryTwinStore`
+  - `createTwinOverview()`
+  - Workspace Overview UI
+- verified deployed runtime values:
+  - `selectedSource`: `persisted_runtime_import_evidence`
+  - `persistedEvidenceSelected`: `true`
+  - `persistedEvidenceReason`: `persisted_runtime_evidence_selected`
+  - `persistedEvidenceShapeStatus`: `valid`
+  - `providerState`: `persisted/runtime-import-evidence`
+- verified imported site:
+  - `title`: `Transporti Maver d.o.o.`
+  - `siteVersionId`: `88253466-783e-4484-8b68-df6c83b8a11c`
+  - `importId`: `maver-reimport-1778654629704-63c7fcad`
+  - evidence-derived summaries: `pages=2`, `sections=1`, `homepagePath=index.html`
+- successful diagnostics:
+  - `WORKSPACE_OVERVIEW_PERSISTED_RUNTIME_EVIDENCE_ADAPTER_SUCCEEDED`
+  - `WORKSPACE_OVERVIEW_PERSISTED_RUNTIME_EVIDENCE_SHAPE_VALID`
+  - `WORKSPACE_OVERVIEW_PERSISTED_RUNTIME_EVIDENCE_SELECTED`
+
 ## Future Integration Points
 This architecture anchors future integration with:
 - Twin Runtime Contract
@@ -304,7 +331,8 @@ First operational success checkpoint:
 - Workspace Overview is now useful in deployed environments even without local validation snapshot files.
 
 Recommended next milestone:
-- Real Imported Runtime Evidence Persistence Path
+- Workspace Overview Operator UX Cleanup
+- followed by: Twin Observation Runtime v1
 
 ## Related Canonical Documents
 - `docs/architecture/TWIN_RUNTIME_CONTRACT.md`

@@ -70,6 +70,7 @@ test("workspace overview page source: renders required sections", async () => {
 
   assert.equal(source.includes("Website Workspace Overview"), true);
   assert.equal(source.includes("Website Operating System Runtime v0"), true);
+  assert.equal(source.includes("Overview"), true);
 
   assert.equal(source.includes("Twin Status"), true);
   assert.equal(source.includes("Environment Scope"), true);
@@ -82,8 +83,15 @@ test("workspace overview page source: renders required sections", async () => {
   assert.equal(source.includes("Governance"), true);
   assert.equal(source.includes("Operations"), true);
 
-  assert.equal(source.includes("Diagnostics"), true);
+  assert.equal(source.includes("Validation Surfaces"), true);
+  assert.equal(source.includes("Provider Governance Snapshot"), true);
+  assert.equal(source.includes("Debug Diagnostics"), true);
+  assert.equal(source.includes("<details>"), true);
+  assert.equal(source.includes("<summary"), true);
+  assert.equal(source.includes("Diagnostics list"), true);
   assert.equal(source.includes("Import Source Diagnostics"), true);
+  assert.equal(source.includes("Persisted Evidence Diagnostics"), true);
+  assert.equal(source.includes("Branch Diagnostics"), true);
   assert.equal(source.includes("selectedSource"), true);
   assert.equal(source.includes("stableArtifactPath"), true);
   assert.equal(source.includes("importedUrlSnapshotDirectory"), true);
@@ -99,13 +107,10 @@ test("workspace overview page source: renders required sections", async () => {
   assert.equal(source.includes("persistedEvidenceMissingFields"), true);
   assert.equal(source.includes("persistedEvidenceAvailableFields"), true);
   assert.equal(source.includes("persistedEvidenceSourceKind"), true);
-  assert.equal(source.includes("persistedEvidenceBranchDiagnostics"), true);
 
   assert.equal(source.includes("Provider Governance Status"), true);
-  assert.equal(source.includes("Execution Layer:"), true);
-  assert.equal(source.includes("Blocked"), true);
-  assert.equal(source.includes("Governance State:"), true);
-  assert.equal(source.includes("Preview / non-executable"), true);
+  assert.equal(source.includes("Execution Layer: Blocked"), true);
+  assert.equal(source.includes("Governance State: Preview / non-executable"), true);
 
   assert.equal(source.includes("Read-only Workspace Runtime Preview"), true);
   assert.equal(source.includes("No editing available."), true);
@@ -128,6 +133,15 @@ test("workspace overview page source: validation surfaces navigation links rende
   assert.equal(source.includes('href="/gnr8/admin/twin-preview"'), true);
   assert.equal(source.includes('href="/gnr8/admin/twin-preview-real"'), true);
   assert.equal(source.includes('href="/gnr8/admin/providers"'), true);
+});
+
+test("workspace overview page source: contains no edit publish or ai action controls", async () => {
+  const source = await readFile(PAGE_FILE, "utf8");
+  assert.equal(source.includes("No editing available."), true);
+  assert.equal(source.includes("No AI actions available."), true);
+  assert.equal(source.includes("No publishing available."), true);
+  assert.equal(source.includes("Publish"), false);
+  assert.equal(source.includes("Edit"), false);
 });
 
 test("workspace overview source resolution: uses stable validation artifact when available", async () => {

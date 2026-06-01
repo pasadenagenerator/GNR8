@@ -1,7 +1,49 @@
 # GNR8 CURRENT STATE SNAPSHOT
 
 ## Snapshot Date
-2026-05-31
+2026-06-01
+
+## Persisted Migration OS Evidence -> Website OS Workspace Overview Milestone (2026-06-01)
+
+Milestone is complete and documented.
+
+Verified runtime chain:
+- Persisted Migration OS runtime evidence
+- Workspace Overview resolver
+- Runtime Evidence Adapter
+- `buildWebsiteDigitalTwin()`
+- `InMemoryTwinStore`
+- `createTwinOverview()`
+- Workspace Overview UI
+
+Verified deployed runtime values:
+- `selectedSource`: `persisted_runtime_import_evidence`
+- `persistedEvidenceSelected`: `true`
+- `persistedEvidenceReason`: `persisted_runtime_evidence_selected`
+- `persistedEvidenceShapeStatus`: `valid`
+- `providerState`: `persisted/runtime-import-evidence`
+
+Verified imported site:
+- `title`: `Transporti Maver d.o.o.`
+- `siteVersionId`: `88253466-783e-4484-8b68-df6c83b8a11c`
+- `importId`: `maver-reimport-1778654629704-63c7fcad`
+- evidence-derived summaries: `pages=2`, `sections=1`, `homepagePath=index.html`
+
+Successful diagnostics:
+- `WORKSPACE_OVERVIEW_PERSISTED_RUNTIME_EVIDENCE_ADAPTER_SUCCEEDED`
+- `WORKSPACE_OVERVIEW_PERSISTED_RUNTIME_EVIDENCE_SHAPE_VALID`
+- `WORKSPACE_OVERVIEW_PERSISTED_RUNTIME_EVIDENCE_SELECTED`
+
+State clarification:
+- Website OS no longer depends exclusively on fixtures.
+- Workspace Overview can hydrate from persisted Migration OS evidence.
+
+Conclusion:
+- Future bootstrap resumes from `Persisted Migration OS Evidence -> Website OS Workspace Overview` as a completed canonical runtime milestone.
+
+Recommended next milestone:
+- Workspace Overview Operator UX Cleanup
+- followed by: Twin Observation Runtime v1
 
 ## Workspace Overview Bundled Stable Import Snapshot Milestone (2026-05-31)
 

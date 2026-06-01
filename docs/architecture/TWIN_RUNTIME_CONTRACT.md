@@ -22,6 +22,9 @@ Implemented milestone (2026-05-31):
 - fixture:
   - `apps/platform/gnr8/runtime/twin/fixtures/stable-import-snapshot.ts`
 
+Implemented milestone (2026-06-01):
+- Persisted Migration OS Evidence -> Website OS Workspace Overview
+
 Implemented milestone (2026-05-30):
 - Twin Runtime Types and Deterministic Builder
 - runtime files:
@@ -259,6 +262,32 @@ Workspace Overview source resolution order:
 3. bundled stable import snapshot fixture
 4. fallback `No imported site available.`
 
+Verified deployed Workspace Overview persisted runtime evidence values:
+- `selectedSource`: `persisted_runtime_import_evidence`
+- `persistedEvidenceSelected`: `true`
+- `persistedEvidenceReason`: `persisted_runtime_evidence_selected`
+- `persistedEvidenceShapeStatus`: `valid`
+- `providerState`: `persisted/runtime-import-evidence`
+- imported site:
+  - `title`: `Transporti Maver d.o.o.`
+  - `siteVersionId`: `88253466-783e-4484-8b68-df6c83b8a11c`
+  - `importId`: `maver-reimport-1778654629704-63c7fcad`
+  - evidence-derived summaries: `pages=2`, `sections=1`, `homepagePath=index.html`
+
+Verified runtime chain for persisted evidence hydration:
+- Persisted Migration OS runtime evidence
+- Workspace Overview resolver
+- Runtime Evidence Adapter
+- `buildWebsiteDigitalTwin()`
+- `InMemoryTwinStore`
+- `createTwinOverview()`
+- Workspace Overview UI
+
+Verified diagnostics for persisted evidence path:
+- `WORKSPACE_OVERVIEW_PERSISTED_RUNTIME_EVIDENCE_ADAPTER_SUCCEEDED`
+- `WORKSPACE_OVERVIEW_PERSISTED_RUNTIME_EVIDENCE_SHAPE_VALID`
+- `WORKSPACE_OVERVIEW_PERSISTED_RUNTIME_EVIDENCE_SELECTED`
+
 Verified diagnostics for bundled stable import snapshot selection:
 - `WORKSPACE_OVERVIEW_IMPORT_SOURCE_SEARCH_STARTED`
 - `WORKSPACE_OVERVIEW_STABLE_ARTIFACT_CHECKED`
@@ -332,7 +361,8 @@ Current milestone conclusion:
 - Workspace Overview is now useful in deployed environments even without local validation snapshot files.
 
 Recommended next milestone:
-- Real Imported Runtime Evidence Persistence Path
+- Workspace Overview Operator UX Cleanup
+- followed by: Twin Observation Runtime v1
 
 ## Success Criteria
 Future bootstrap resumes from the implemented twin runtime types and deterministic builder, then proceeds to:

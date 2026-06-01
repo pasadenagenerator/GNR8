@@ -210,3 +210,35 @@ Checkpoint dependency path:
 
 Checkpoint outcome:
 - GNR8 has the first operational runtime representation of a website visible in Workspace Overview.
+
+Latest completed canonical runtime milestone (2026-06-01):
+- `Persisted Migration OS Evidence -> Website OS Workspace Overview`
+- verified runtime chain:
+  - Persisted Migration OS runtime evidence
+  - Workspace Overview resolver
+  - Runtime Evidence Adapter
+  - `buildWebsiteDigitalTwin()`
+  - `InMemoryTwinStore`
+  - `createTwinOverview()`
+  - Workspace Overview UI
+- verified deployed runtime values:
+  - `selectedSource`: `persisted_runtime_import_evidence`
+  - `persistedEvidenceSelected`: `true`
+  - `persistedEvidenceReason`: `persisted_runtime_evidence_selected`
+  - `persistedEvidenceShapeStatus`: `valid`
+  - `providerState`: `persisted/runtime-import-evidence`
+- verified imported site:
+  - `title`: `Transporti Maver d.o.o.`
+  - `siteVersionId`: `88253466-783e-4484-8b68-df6c83b8a11c`
+  - `importId`: `maver-reimport-1778654629704-63c7fcad`
+  - evidence-derived summaries: `pages=2`, `sections=1`, `homepagePath=index.html`
+- successful diagnostics:
+  - `WORKSPACE_OVERVIEW_PERSISTED_RUNTIME_EVIDENCE_ADAPTER_SUCCEEDED`
+  - `WORKSPACE_OVERVIEW_PERSISTED_RUNTIME_EVIDENCE_SHAPE_VALID`
+  - `WORKSPACE_OVERVIEW_PERSISTED_RUNTIME_EVIDENCE_SELECTED`
+- bootstrap state:
+  - future bootstrap resumes from `Persisted Migration OS Evidence -> Website OS Workspace Overview` as completed.
+
+Recommended next milestone:
+- Workspace Overview Operator UX Cleanup
+- followed by: Twin Observation Runtime v1
