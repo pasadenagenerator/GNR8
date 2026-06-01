@@ -136,6 +136,29 @@ export default async function WorkspaceOverviewPage() {
       </section>
 
       <section style={{ marginTop: 16 }}>
+        <h2 style={{ marginBottom: 10 }}>Optimization Ranking</h2>
+        <div style={{ display: "grid", gap: 10 }}>
+          {model.optimizationScores.map((score) => {
+            const opportunity = model.optimizationOpportunities.find((entry) => entry.opportunityId === score.opportunityId);
+            return (
+              <article key={score.opportunityId} style={CARD_STYLE}>
+                <h3 style={{ marginTop: 0, marginBottom: 6 }}>
+                  #{score.rank} {opportunity?.title ?? score.opportunityId}
+                </h3>
+                <p style={{ marginTop: 0, marginBottom: 6 }}>
+                  <strong>totalScore={score.totalScore}</strong>
+                </p>
+                <p style={{ margin: 0, color: "#4b5563" }}>
+                  impactScore={score.impactScore}; effortScore={score.effortScore}; confidenceScore={score.confidenceScore};
+                  evidenceQualityScore={score.evidenceQualityScore}
+                </p>
+              </article>
+            );
+          })}
+        </div>
+      </section>
+
+      <section style={{ marginTop: 16 }}>
         <h2 style={{ marginBottom: 10 }}>Validation Surfaces</h2>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 10 }}>
           <article style={CARD_STYLE}>

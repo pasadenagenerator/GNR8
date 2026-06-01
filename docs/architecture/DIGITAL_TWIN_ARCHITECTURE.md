@@ -141,7 +141,7 @@ Explicitly:
 - no observation engine implemented
 - no recommendation engine implemented
 - no recommendation runtime implemented
-- no optimization runtime implemented
+- no optimization engine implemented
 - no prioritization engine implemented
 
 Deterministic builder baseline confirmed:
@@ -310,6 +310,43 @@ Twin Recommendation Runtime v1 milestone confirmed (`2026-06-01`):
   - no publishing
   - deterministic read-only recommendations only
 
+Twin Optimization Runtime v1 milestone confirmed (`2026-06-01`):
+- runtime files:
+  - `apps/platform/gnr8/runtime/twin/twin-optimizations.ts`
+  - `apps/platform/gnr8/runtime/twin/twin-optimizations.test.ts`
+- implemented function:
+  - `generateTwinOptimizationOpportunities(recommendations)`
+- implemented deterministic optimization opportunities:
+  - `Homepage Quality Improvement`
+  - `Homepage Conversion Review`
+  - `Design Evidence Collection`
+  - `Validation Stability Preservation`
+- verified deployed optimization opportunities for `Transporti Maver`:
+  - `HIGH`: `Homepage Quality Improvement`
+  - `HIGH`: `Homepage Conversion Review`
+  - `MEDIUM`: `Design Evidence Collection`
+  - `LOW`: `Validation Stability Preservation`
+- recommendation-to-optimization mapping:
+  - `Prioritize Core Page Quality` -> `Homepage Quality Improvement`
+  - `Evaluate Homepage Conversion Flow` -> `Homepage Conversion Review`
+  - `Collect Additional Design Evidence` -> `Design Evidence Collection`
+  - `Maintain Read-Only Validation Mode` -> `Validation Stability Preservation`
+- diagnostics:
+  - `TWIN_OPTIMIZATIONS_STARTED`
+  - `TWIN_OPTIMIZATIONS_COMPLETED`
+- optimization fields:
+  - `impact`
+  - `effort`
+  - `priority`
+  - `supportingRecommendations`
+- preserved boundaries:
+  - no AI model calls
+  - no optimization engine
+  - no mutation execution
+  - no editing
+  - no publishing
+  - deterministic read-only optimization opportunities only
+
 Persisted Migration OS Evidence -> Website OS Workspace Overview milestone confirmed:
 - completion date:
   - `2026-06-01`
@@ -319,6 +356,7 @@ Persisted Migration OS Evidence -> Website OS Workspace Overview milestone confi
   - `generateTwinObservations(twin)`
   - `generateTwinInsights(observations)`
   - `generateTwinRecommendations(insights)`
+  - `generateTwinOptimizationOpportunities(recommendations)`
   - Workspace Overview UI
 - verified deployed runtime values:
   - `selectedSource`: `persisted_runtime_import_evidence`
@@ -362,7 +400,7 @@ First operational success checkpoint:
 - Workspace Overview is now useful in deployed environments even without local validation snapshot files.
 
 Recommended next milestone:
-- Twin Optimization Runtime v1
+- Optimization Scoring Runtime v1
 
 ## Related Canonical Documents
 - `docs/architecture/TWIN_RUNTIME_CONTRACT.md`

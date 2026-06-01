@@ -18,6 +18,10 @@ import {
   generateTwinOptimizationOpportunities,
   TWIN_OPTIMIZATION_DIAGNOSTICS,
 } from "@/gnr8/runtime/twin/twin-optimizations";
+import {
+  scoreOptimizationOpportunities,
+  TWIN_OPTIMIZATION_SCORING_DIAGNOSTICS,
+} from "@/gnr8/runtime/twin/twin-optimization-scoring";
 import { InMemoryTwinStore } from "@/gnr8/runtime/twin/twin-store";
 import { createTwinOverview } from "@/gnr8/runtime/twin/twin-viewer";
 
@@ -861,6 +865,7 @@ export async function buildWorkspaceOverviewModel(input?: {
       insights: [],
       recommendations: [],
       optimizationOpportunities: [],
+      optimizationScores: [],
       overview: {
         twinId: "twin_missing_import",
         siteId: "site_missing_import",
@@ -923,6 +928,9 @@ export async function buildWorkspaceOverviewModel(input?: {
     const optimizationDiagnostics: string[] = [TWIN_OPTIMIZATION_DIAGNOSTICS.STARTED];
     const optimizationOpportunities = generateTwinOptimizationOpportunities(recommendations);
     optimizationDiagnostics.push(TWIN_OPTIMIZATION_DIAGNOSTICS.COMPLETED);
+    const optimizationScoringDiagnostics: string[] = [TWIN_OPTIMIZATION_SCORING_DIAGNOSTICS.STARTED];
+    const optimizationScores = scoreOptimizationOpportunities(optimizationOpportunities);
+    optimizationScoringDiagnostics.push(TWIN_OPTIMIZATION_SCORING_DIAGNOSTICS.COMPLETED);
     const diagnostics = [
       ...resolution.diagnostics,
       ...storedTwin.diagnostics,
@@ -933,6 +941,7 @@ export async function buildWorkspaceOverviewModel(input?: {
       ...insightsDiagnostics,
       ...recommendationDiagnostics,
       ...optimizationDiagnostics,
+      ...optimizationScoringDiagnostics,
     ];
     return {
       sourceId: bundledSnapshot.fixtureId,
@@ -943,6 +952,7 @@ export async function buildWorkspaceOverviewModel(input?: {
       insights,
       recommendations,
       optimizationOpportunities,
+      optimizationScores,
       overview,
       diagnostics,
     };
@@ -981,6 +991,9 @@ export async function buildWorkspaceOverviewModel(input?: {
     const optimizationDiagnostics: string[] = [TWIN_OPTIMIZATION_DIAGNOSTICS.STARTED];
     const optimizationOpportunities = generateTwinOptimizationOpportunities(recommendations);
     optimizationDiagnostics.push(TWIN_OPTIMIZATION_DIAGNOSTICS.COMPLETED);
+    const optimizationScoringDiagnostics: string[] = [TWIN_OPTIMIZATION_SCORING_DIAGNOSTICS.STARTED];
+    const optimizationScores = scoreOptimizationOpportunities(optimizationOpportunities);
+    optimizationScoringDiagnostics.push(TWIN_OPTIMIZATION_SCORING_DIAGNOSTICS.COMPLETED);
     const diagnostics = [
       ...resolution.diagnostics,
       ...storedTwin.diagnostics,
@@ -991,6 +1004,7 @@ export async function buildWorkspaceOverviewModel(input?: {
       ...insightsDiagnostics,
       ...recommendationDiagnostics,
       ...optimizationDiagnostics,
+      ...optimizationScoringDiagnostics,
     ];
     return {
       sourceId: selectedSnapshot.snapshotId,
@@ -1001,6 +1015,7 @@ export async function buildWorkspaceOverviewModel(input?: {
       insights,
       recommendations,
       optimizationOpportunities,
+      optimizationScores,
       overview,
       diagnostics,
     };
@@ -1063,6 +1078,9 @@ export async function buildWorkspaceOverviewModel(input?: {
   const optimizationDiagnostics: string[] = [TWIN_OPTIMIZATION_DIAGNOSTICS.STARTED];
   const optimizationOpportunities = generateTwinOptimizationOpportunities(recommendations);
   optimizationDiagnostics.push(TWIN_OPTIMIZATION_DIAGNOSTICS.COMPLETED);
+  const optimizationScoringDiagnostics: string[] = [TWIN_OPTIMIZATION_SCORING_DIAGNOSTICS.STARTED];
+  const optimizationScores = scoreOptimizationOpportunities(optimizationOpportunities);
+  optimizationScoringDiagnostics.push(TWIN_OPTIMIZATION_SCORING_DIAGNOSTICS.COMPLETED);
   const diagnostics = [
     ...resolution.diagnostics,
     ...storedTwin.diagnostics,
@@ -1073,6 +1091,7 @@ export async function buildWorkspaceOverviewModel(input?: {
     ...insightsDiagnostics,
     ...recommendationDiagnostics,
     ...optimizationDiagnostics,
+    ...optimizationScoringDiagnostics,
   ];
 
   return {
@@ -1084,6 +1103,7 @@ export async function buildWorkspaceOverviewModel(input?: {
     insights,
     recommendations,
     optimizationOpportunities,
+    optimizationScores,
     overview,
     diagnostics,
   };

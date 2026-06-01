@@ -73,12 +73,45 @@ The observation layer follows these principles:
 - proposal before mutation
 
 ## Current State
-Architecture plus deterministic observation, insight, and recommendation runtime milestones.
+Architecture plus deterministic observation, insight, recommendation, and optimization runtime milestones.
 
 Explicitly:
 - Twin Observation Runtime v1 completed (`2026-06-01`)
 - Twin Insight Runtime v1 completed (`2026-06-01`)
 - Twin Recommendation Runtime v1 completed (`2026-06-01`)
+- Twin Optimization Runtime v1 completed (`2026-06-01`)
+
+Twin Optimization Runtime v1 milestone confirmed (`2026-06-01`):
+- runtime files:
+  - `apps/platform/gnr8/runtime/twin/twin-optimizations.ts`
+  - `apps/platform/gnr8/runtime/twin/twin-optimizations.test.ts`
+- implemented function:
+  - `generateTwinOptimizationOpportunities(recommendations)`
+- implemented deterministic optimization opportunities:
+  - `Homepage Quality Improvement`
+  - `Homepage Conversion Review`
+  - `Design Evidence Collection`
+  - `Validation Stability Preservation`
+- recommendation-to-optimization mapping:
+  - `Prioritize Core Page Quality` -> `Homepage Quality Improvement`
+  - `Evaluate Homepage Conversion Flow` -> `Homepage Conversion Review`
+  - `Collect Additional Design Evidence` -> `Design Evidence Collection`
+  - `Maintain Read-Only Validation Mode` -> `Validation Stability Preservation`
+- diagnostics:
+  - `TWIN_OPTIMIZATIONS_STARTED`
+  - `TWIN_OPTIMIZATIONS_COMPLETED`
+- optimization fields:
+  - `impact`
+  - `effort`
+  - `priority`
+  - `supportingRecommendations`
+- preserved boundaries:
+  - no AI model calls
+  - no optimization engine
+  - no mutation execution
+  - no editing
+  - no publishing
+  - deterministic read-only optimization opportunities only
 
 Twin Recommendation Runtime v1 milestone confirmed (`2026-06-01`):
 - runtime files:
@@ -125,10 +158,10 @@ This architecture anchors future integration with:
 GNR8 gains the canonical observation layer that transforms website evidence into actionable intelligence.
 
 Current runtime conclusion:
-- Workspace Overview now displays deterministic Website OS recommendations derived from deterministic insights.
+- Workspace Overview now displays deterministic optimization opportunities derived from deterministic recommendations.
 
 Recommended next milestone:
-- Twin Optimization Runtime v1
+- Optimization Scoring Runtime v1
 
 ## Related Canonical Documents
 - `docs/architecture/TWIN_GENERATION_ARCHITECTURE.md`

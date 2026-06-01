@@ -51,6 +51,7 @@ test("workspace overview model: twin overview and diagnostics render data from i
   assert.equal(Array.isArray(model.insights), true);
   assert.equal(Array.isArray(model.recommendations), true);
   assert.equal(Array.isArray(model.optimizationOpportunities), true);
+  assert.equal(Array.isArray(model.optimizationScores), true);
   assert.equal(model.observations.length > 0 || model.sourceId === null, true);
   assert.equal(model.diagnostics.includes("TWIN_OVERVIEW_CREATED"), true);
   assert.equal(model.diagnostics.includes("TWIN_OBSERVATIONS_STARTED"), model.sourceId !== null);
@@ -61,6 +62,8 @@ test("workspace overview model: twin overview and diagnostics render data from i
   assert.equal(model.diagnostics.includes("TWIN_RECOMMENDATIONS_COMPLETED"), model.sourceId !== null);
   assert.equal(model.diagnostics.includes("TWIN_OPTIMIZATIONS_STARTED"), model.sourceId !== null);
   assert.equal(model.diagnostics.includes("TWIN_OPTIMIZATIONS_COMPLETED"), model.sourceId !== null);
+  assert.equal(model.diagnostics.includes("TWIN_OPTIMIZATION_SCORING_STARTED"), model.sourceId !== null);
+  assert.equal(model.diagnostics.includes("TWIN_OPTIMIZATION_SCORING_COMPLETED"), model.sourceId !== null);
   assert.equal(model.overview.contentSummary.includes("pages="), true);
   assert.equal(model.overview.contentSummary.includes("deterministic_content_read_model"), false);
   assert.equal(model.overview.designSummary.includes("assets="), true);
@@ -69,14 +72,16 @@ test("workspace overview model: twin overview and diagnostics render data from i
   assert.equal(model.overview.operationalSummary.includes("providerState=preview/runtime-only"), true);
 });
 
-test("workspace overview model: recommendations present and no scoring optimization proposal or ai fields added", async () => {
+test("workspace overview model: recommendations and deterministic scoring are present with no proposal or ai fields", async () => {
   const model = await buildWorkspaceOverviewModel();
   const flat = JSON.stringify(model);
-  assert.equal(flat.includes("scoring"), false);
+  assert.equal(Array.isArray(model.optimizationScores), true);
+  assert.equal(flat.includes("optimizationScores"), true);
   assert.equal(Array.isArray(model.recommendations), true);
   assert.equal(Array.isArray(model.optimizationOpportunities), true);
   assert.equal(model.recommendations.some((entry) => entry.title === "Maintain Read-Only Validation Mode"), model.sourceId !== null);
   assert.equal(model.optimizationOpportunities.some((entry) => entry.title === "Validation Stability Preservation"), model.sourceId !== null);
+  assert.equal(model.optimizationScores.length, model.optimizationOpportunities.length);
   assert.equal(flat.includes("proposal"), false);
   assert.equal(flat.includes("aiOutput"), false);
 });
@@ -88,12 +93,31 @@ test("workspace overview model: observations include read-only runtime validatio
     assert.deepEqual(model.insights, []);
     assert.deepEqual(model.recommendations, []);
     assert.deepEqual(model.optimizationOpportunities, []);
+    assert.deepEqual(model.optimizationScores, []);
     return;
   }
   assert.equal(model.observations.some((entry) => entry.title === "Read-Only Runtime Validation"), true);
   assert.equal(model.insights.some((entry) => entry.title === "Governance Boundary Enforced"), true);
   assert.equal(model.recommendations.some((entry) => entry.title === "Maintain Read-Only Validation Mode"), true);
   assert.equal(model.optimizationOpportunities.some((entry) => entry.title === "Validation Stability Preservation"), true);
+  assert.equal(model.optimizationScores.some((entry) => entry.opportunityId === "opt_validation_stability_preservation"), true);
+});
+
+test("workspace overview model: optimization ranking order is deterministic", async () => {
+  const model = await buildWorkspaceOverviewModel();
+  if (model.sourceId === null) {
+    assert.deepEqual(model.optimizationScores, []);
+    return;
+  }
+  assert.equal(model.optimizationScores.length, model.optimizationOpportunities.length);
+  assert.deepEqual(
+    [...model.optimizationScores].sort((a, b) => b.totalScore - a.totalScore || a.opportunityId.localeCompare(b.opportunityId)),
+    model.optimizationScores,
+  );
+  assert.deepEqual(
+    model.optimizationScores.map((entry) => entry.rank),
+    model.optimizationScores.map((_, index) => index + 1),
+  );
 });
 
 test("workspace overview page source: renders required sections", async () => {
@@ -134,6 +158,13 @@ test("workspace overview page source: renders required sections", async () => {
   assert.equal(source.includes("opportunity.title"), true);
   assert.equal(source.includes("opportunity.summary"), true);
   assert.equal(source.includes("Supporting recommendations:"), true);
+  assert.equal(source.includes("Optimization Ranking"), true);
+  assert.equal(source.includes("score.rank"), true);
+  assert.equal(source.includes("score.totalScore"), true);
+  assert.equal(source.includes("impactScore="), true);
+  assert.equal(source.includes("effortScore="), true);
+  assert.equal(source.includes("confidenceScore="), true);
+  assert.equal(source.includes("evidenceQualityScore="), true);
 
   assert.equal(source.includes("Validation Surfaces"), true);
   assert.equal(source.includes("Provider Governance Snapshot"), true);

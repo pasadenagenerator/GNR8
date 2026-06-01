@@ -212,47 +212,53 @@ Checkpoint outcome:
 - GNR8 has the first operational runtime representation of a website visible in Workspace Overview.
 
 Latest completed canonical runtime milestone (2026-06-01):
-- `Twin Recommendation Runtime v1`
+- `Twin Optimization Runtime v1`
 - runtime files:
-  - `apps/platform/gnr8/runtime/twin/twin-recommendations.ts`
-  - `apps/platform/gnr8/runtime/twin/twin-recommendations.test.ts`
+  - `apps/platform/gnr8/runtime/twin/twin-optimizations.ts`
+  - `apps/platform/gnr8/runtime/twin/twin-optimizations.test.ts`
 - implemented function:
-  - `generateTwinRecommendations(insights)`
-- implemented deterministic recommendation rules:
-  - `Prioritize Core Page Quality`
-  - `Evaluate Homepage Conversion Flow`
-  - `Collect Additional Design Evidence`
-  - `Maintain Read-Only Validation Mode`
-- verified deployed recommendations for `Transporti Maver`:
-  - `Prioritize Core Page Quality`
-  - `Evaluate Homepage Conversion Flow`
-  - `Collect Additional Design Evidence`
-  - `Maintain Read-Only Validation Mode`
-- insight-to-recommendation relationships:
-  - `Focused Website Footprint` -> `Prioritize Core Page Quality`
-  - `Primary Entry Experience Detected` -> `Evaluate Homepage Conversion Flow`
-  - `Limited Design Evidence Available` -> `Collect Additional Design Evidence`
-  - `Governance Boundary Enforced` -> `Maintain Read-Only Validation Mode`
+  - `generateTwinOptimizationOpportunities(recommendations)`
+- implemented deterministic optimization opportunities:
+  - `Homepage Quality Improvement`
+  - `Homepage Conversion Review`
+  - `Design Evidence Collection`
+  - `Validation Stability Preservation`
+- verified deployed optimization opportunities for `Transporti Maver`:
+  - `HIGH`: `Homepage Quality Improvement`
+  - `HIGH`: `Homepage Conversion Review`
+  - `MEDIUM`: `Design Evidence Collection`
+  - `LOW`: `Validation Stability Preservation`
+- recommendation-to-optimization mapping:
+  - `Prioritize Core Page Quality` -> `Homepage Quality Improvement`
+  - `Evaluate Homepage Conversion Flow` -> `Homepage Conversion Review`
+  - `Collect Additional Design Evidence` -> `Design Evidence Collection`
+  - `Maintain Read-Only Validation Mode` -> `Validation Stability Preservation`
 - diagnostics:
-  - `TWIN_RECOMMENDATIONS_STARTED`
-  - `TWIN_RECOMMENDATIONS_COMPLETED`
+  - `TWIN_OPTIMIZATIONS_STARTED`
+  - `TWIN_OPTIMIZATIONS_COMPLETED`
+- optimization fields:
+  - `impact`
+  - `effort`
+  - `priority`
+  - `supportingRecommendations`
 - preserved boundaries:
   - no AI model calls
   - no optimization engine
-  - no proposal generation
+  - no mutation execution
   - no editing
   - no publishing
-  - deterministic read-only recommendations only
+  - deterministic read-only optimization opportunities only
 - conclusion:
-  - Workspace Overview now displays deterministic Website OS recommendations derived from deterministic insights.
+  - Workspace Overview now displays deterministic optimization opportunities derived from deterministic recommendations.
 
-- `Persisted Migration OS Evidence -> Digital Twin -> Observation Runtime -> Insight Runtime -> Recommendation Runtime -> Workspace Overview`
+- `Persisted Migration OS Evidence -> Digital Twin -> Observation Runtime -> Insight Runtime -> Recommendation Runtime -> Optimization Runtime -> Workspace Overview`
 - verified runtime chain:
   - Persisted Migration OS runtime evidence
   - `buildWebsiteDigitalTwin()`
   - `generateTwinObservations(twin)`
   - `generateTwinInsights(observations)`
   - `generateTwinRecommendations(insights)`
+  - `generateTwinOptimizationOpportunities(recommendations)`
   - Workspace Overview UI
 - verified deployed runtime values:
   - `selectedSource`: `persisted_runtime_import_evidence`
@@ -273,4 +279,4 @@ Latest completed canonical runtime milestone (2026-06-01):
   - future bootstrap resumes from `Persisted Migration OS Evidence -> Website OS Workspace Overview` as completed.
 
 Recommended next milestone:
-- Twin Optimization Runtime v1
+- Optimization Scoring Runtime v1
