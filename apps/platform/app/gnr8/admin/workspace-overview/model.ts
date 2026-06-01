@@ -545,46 +545,39 @@ async function resolveImportedSnapshotWithDiagnostics(input?: {
       persistedEvidenceImportId = candidate.importId;
       continue;
     }
-    try {
-      await fs.access(path.join(candidate.snapshotRootDirAbs, "index.html"));
-      persistedEvidenceSelected = true;
-      persistedEvidenceReason = "persisted_runtime_evidence_selected";
-      persistedEvidenceSiteVersionId = candidate.siteVersionId;
-      persistedEvidenceImportId = candidate.importId;
-      diagnostics.push("WORKSPACE_OVERVIEW_PERSISTED_RUNTIME_EVIDENCE_SELECTED");
-      return {
-        selectedSnapshot: {
-          snapshotId: candidate.snapshotId,
-          snapshotRootDirAbs: candidate.snapshotRootDirAbs,
-          source: "persisted_runtime_import_evidence",
-          bundledSnapshot: null,
-        },
-        selectedPersistedRuntimeEvidence: adapted,
-        importSourceDiagnostics: {
-          selectedSource: "persisted_runtime_import_evidence",
-          stableArtifactPath: null,
-          importedUrlSnapshotDirectory: toProjectRelativePath(snapshotsRootDirAbs),
-          importedUrlSnapshotCount: 0,
-          fallbackReason: "none",
-          persistedEvidenceChecked: true,
-          persistedEvidenceAvailable,
-          persistedEvidenceSelected,
-          persistedEvidenceReason,
-          persistedEvidenceSiteVersionId,
-          persistedEvidenceImportId,
-          persistedEvidenceShapeStatus,
-          persistedEvidenceMissingFields,
-          persistedEvidenceAvailableFields,
-          persistedEvidenceSourceKind,
-          persistedEvidenceBranchDiagnostics,
-        },
-        diagnostics,
-      };
-    } catch {
-      persistedEvidenceSiteVersionId = candidate.siteVersionId;
-      persistedEvidenceImportId = candidate.importId;
-      continue;
-    }
+    persistedEvidenceSelected = true;
+    persistedEvidenceReason = "persisted_runtime_evidence_selected";
+    persistedEvidenceSiteVersionId = candidate.siteVersionId;
+    persistedEvidenceImportId = candidate.importId;
+    diagnostics.push("WORKSPACE_OVERVIEW_PERSISTED_RUNTIME_EVIDENCE_SELECTED");
+    return {
+      selectedSnapshot: {
+        snapshotId: candidate.snapshotId,
+        snapshotRootDirAbs: candidate.snapshotRootDirAbs,
+        source: "persisted_runtime_import_evidence",
+        bundledSnapshot: null,
+      },
+      selectedPersistedRuntimeEvidence: adapted,
+      importSourceDiagnostics: {
+        selectedSource: "persisted_runtime_import_evidence",
+        stableArtifactPath: null,
+        importedUrlSnapshotDirectory: toProjectRelativePath(snapshotsRootDirAbs),
+        importedUrlSnapshotCount: 0,
+        fallbackReason: "none",
+        persistedEvidenceChecked: true,
+        persistedEvidenceAvailable,
+        persistedEvidenceSelected,
+        persistedEvidenceReason,
+        persistedEvidenceSiteVersionId,
+        persistedEvidenceImportId,
+        persistedEvidenceShapeStatus,
+        persistedEvidenceMissingFields,
+        persistedEvidenceAvailableFields,
+        persistedEvidenceSourceKind,
+        persistedEvidenceBranchDiagnostics,
+      },
+      diagnostics,
+    };
   }
   if (persistedEvidenceAvailable && !persistedEvidenceSelected && persistedEvidenceReason == null) {
     persistedEvidenceReason = "persisted_runtime_evidence_invalid";

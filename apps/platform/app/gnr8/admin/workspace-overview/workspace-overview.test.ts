@@ -167,7 +167,6 @@ test("workspace overview source resolution: selects persisted runtime import evi
   const persistedSnapshotRoot = path.join(snapshotsRoot, persistedSnapshotId);
   const latestSnapshotId = "imported-url-site-latest1234567890";
   await mkdir(persistedSnapshotRoot, { recursive: true });
-  await writeFile(path.join(persistedSnapshotRoot, "index.html"), "<html><title>persisted</title></html>", "utf8");
   await mkdir(path.join(snapshotsRoot, latestSnapshotId), { recursive: true });
   await writeFile(path.join(snapshotsRoot, latestSnapshotId, "index.html"), "<html><title>latest</title></html>", "utf8");
 
@@ -212,6 +211,9 @@ test("workspace overview source resolution: selects persisted runtime import evi
   assert.equal(model.diagnostics.includes("WORKSPACE_OVERVIEW_PERSISTED_RUNTIME_EVIDENCE_SHAPE_CHECKED"), true);
   assert.equal(model.diagnostics.includes("WORKSPACE_OVERVIEW_PERSISTED_RUNTIME_EVIDENCE_SHAPE_VALID"), true);
   assert.equal(model.diagnostics.includes("WORKSPACE_OVERVIEW_PERSISTED_RUNTIME_EVIDENCE_SELECTED"), true);
+  assert.equal(model.diagnostics.includes("WORKSPACE_OVERVIEW_STABLE_ARTIFACT_CHECKED"), false);
+  assert.equal(model.diagnostics.includes("WORKSPACE_OVERVIEW_IMPORTED_URL_SNAPSHOT_DIRECTORY_CHECKED"), false);
+  assert.equal(model.diagnostics.includes("WORKSPACE_OVERVIEW_BUNDLED_STABLE_SNAPSHOT_CHECKED"), false);
 });
 
 test("workspace overview source resolution: adapter derives persisted summary from runtime_import_provenance_summary_v1", async () => {
@@ -220,7 +222,6 @@ test("workspace overview source resolution: adapter derives persisted summary fr
   const persistedSnapshotId = "imported-url-site-runtime-evidence1234567890";
   const persistedSnapshotRoot = path.join(snapshotsRoot, persistedSnapshotId);
   await mkdir(persistedSnapshotRoot, { recursive: true });
-  await writeFile(path.join(persistedSnapshotRoot, "index.html"), "<html><title>persisted adapter</title></html>", "utf8");
 
   const model = await buildWorkspaceOverviewModel({
     snapshotsRootDirAbs: snapshotsRoot,
@@ -297,6 +298,9 @@ test("workspace overview source resolution: adapter derives persisted summary fr
     model.diagnostics.includes("WORKSPACE_OVERVIEW_PERSISTED_RUNTIME_EVIDENCE_BRANCH_DIAGNOSTICS_CREATED"),
     true,
   );
+  assert.equal(model.diagnostics.includes("WORKSPACE_OVERVIEW_STABLE_ARTIFACT_CHECKED"), false);
+  assert.equal(model.diagnostics.includes("WORKSPACE_OVERVIEW_IMPORTED_URL_SNAPSHOT_DIRECTORY_CHECKED"), false);
+  assert.equal(model.diagnostics.includes("WORKSPACE_OVERVIEW_BUNDLED_STABLE_SNAPSHOT_CHECKED"), false);
   assert.equal(model.overview.contentSummary.includes("pages=4"), true);
   assert.equal(model.overview.contentSummary.includes("sections=3"), true);
   assert.equal(model.overview.designSummary.includes("assets=2"), true);
