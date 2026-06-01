@@ -30,6 +30,10 @@ import {
   generateTwinApprovalPreviews,
   TWIN_APPROVAL_PREVIEW_DIAGNOSTICS,
 } from "@/gnr8/runtime/twin/twin-approval-preview";
+import {
+  generateTwinExecutionPlanPreviews,
+  TWIN_EXECUTION_PLAN_PREVIEW_DIAGNOSTICS,
+} from "@/gnr8/runtime/twin/twin-execution-plan-preview";
 import { InMemoryTwinStore } from "@/gnr8/runtime/twin/twin-store";
 import { createTwinOverview } from "@/gnr8/runtime/twin/twin-viewer";
 
@@ -876,6 +880,7 @@ export async function buildWorkspaceOverviewModel(input?: {
       optimizationScores: [],
       proposalCandidates: [],
       approvalPreviews: [],
+      executionPlanPreviews: [],
       overview: {
         twinId: "twin_missing_import",
         siteId: "site_missing_import",
@@ -950,6 +955,9 @@ export async function buildWorkspaceOverviewModel(input?: {
     const approvalPreviewDiagnostics: string[] = [TWIN_APPROVAL_PREVIEW_DIAGNOSTICS.STARTED];
     const approvalPreviews = generateTwinApprovalPreviews(proposalCandidates);
     approvalPreviewDiagnostics.push(TWIN_APPROVAL_PREVIEW_DIAGNOSTICS.COMPLETED);
+    const executionPlanPreviewDiagnostics: string[] = [TWIN_EXECUTION_PLAN_PREVIEW_DIAGNOSTICS.STARTED];
+    const executionPlanPreviews = generateTwinExecutionPlanPreviews(approvalPreviews);
+    executionPlanPreviewDiagnostics.push(TWIN_EXECUTION_PLAN_PREVIEW_DIAGNOSTICS.COMPLETED);
     const diagnostics = [
       ...resolution.diagnostics,
       ...storedTwin.diagnostics,
@@ -963,6 +971,7 @@ export async function buildWorkspaceOverviewModel(input?: {
       ...optimizationScoringDiagnostics,
       ...proposalCandidatesDiagnostics,
       ...approvalPreviewDiagnostics,
+      ...executionPlanPreviewDiagnostics,
     ];
     return {
       sourceId: bundledSnapshot.fixtureId,
@@ -976,6 +985,7 @@ export async function buildWorkspaceOverviewModel(input?: {
       optimizationScores,
       proposalCandidates,
       approvalPreviews,
+      executionPlanPreviews,
       overview,
       diagnostics,
     };
@@ -1026,6 +1036,9 @@ export async function buildWorkspaceOverviewModel(input?: {
     const approvalPreviewDiagnostics: string[] = [TWIN_APPROVAL_PREVIEW_DIAGNOSTICS.STARTED];
     const approvalPreviews = generateTwinApprovalPreviews(proposalCandidates);
     approvalPreviewDiagnostics.push(TWIN_APPROVAL_PREVIEW_DIAGNOSTICS.COMPLETED);
+    const executionPlanPreviewDiagnostics: string[] = [TWIN_EXECUTION_PLAN_PREVIEW_DIAGNOSTICS.STARTED];
+    const executionPlanPreviews = generateTwinExecutionPlanPreviews(approvalPreviews);
+    executionPlanPreviewDiagnostics.push(TWIN_EXECUTION_PLAN_PREVIEW_DIAGNOSTICS.COMPLETED);
     const diagnostics = [
       ...resolution.diagnostics,
       ...storedTwin.diagnostics,
@@ -1039,6 +1052,7 @@ export async function buildWorkspaceOverviewModel(input?: {
       ...optimizationScoringDiagnostics,
       ...proposalCandidatesDiagnostics,
       ...approvalPreviewDiagnostics,
+      ...executionPlanPreviewDiagnostics,
     ];
     return {
       sourceId: selectedSnapshot.snapshotId,
@@ -1052,6 +1066,7 @@ export async function buildWorkspaceOverviewModel(input?: {
       optimizationScores,
       proposalCandidates,
       approvalPreviews,
+      executionPlanPreviews,
       overview,
       diagnostics,
     };
@@ -1126,6 +1141,9 @@ export async function buildWorkspaceOverviewModel(input?: {
   const approvalPreviewDiagnostics: string[] = [TWIN_APPROVAL_PREVIEW_DIAGNOSTICS.STARTED];
   const approvalPreviews = generateTwinApprovalPreviews(proposalCandidates);
   approvalPreviewDiagnostics.push(TWIN_APPROVAL_PREVIEW_DIAGNOSTICS.COMPLETED);
+  const executionPlanPreviewDiagnostics: string[] = [TWIN_EXECUTION_PLAN_PREVIEW_DIAGNOSTICS.STARTED];
+  const executionPlanPreviews = generateTwinExecutionPlanPreviews(approvalPreviews);
+  executionPlanPreviewDiagnostics.push(TWIN_EXECUTION_PLAN_PREVIEW_DIAGNOSTICS.COMPLETED);
   const diagnostics = [
     ...resolution.diagnostics,
     ...storedTwin.diagnostics,
@@ -1139,6 +1157,7 @@ export async function buildWorkspaceOverviewModel(input?: {
     ...optimizationScoringDiagnostics,
     ...proposalCandidatesDiagnostics,
     ...approvalPreviewDiagnostics,
+    ...executionPlanPreviewDiagnostics,
   ];
 
   return {
@@ -1153,6 +1172,7 @@ export async function buildWorkspaceOverviewModel(input?: {
     optimizationScores,
     proposalCandidates,
     approvalPreviews,
+    executionPlanPreviews,
     overview,
     diagnostics,
   };

@@ -120,6 +120,34 @@ export default async function WorkspaceOverviewPage() {
       </section>
 
       <section style={{ marginTop: 16 }}>
+        <h2 style={{ marginBottom: 10 }}>Execution Plan Preview</h2>
+        <div style={{ display: "grid", gap: 10 }}>
+          {model.executionPlanPreviews.map((preview) => (
+            <article key={preview.planId} style={CARD_STYLE}>
+              <h3 style={{ marginTop: 0, marginBottom: 6 }}>{preview.proposalTitle}</h3>
+              <p style={{ marginTop: 0, marginBottom: 4 }}>executionState: {preview.executionState}</p>
+              <p style={{ marginTop: 0, marginBottom: 8 }}>governanceState: {preview.governanceState}</p>
+              <p style={{ marginTop: 0, marginBottom: 6 }}><strong>Execution Permissions</strong></p>
+              <p style={{ marginTop: 0, marginBottom: 4 }}>executionBlocked: {String(preview.executionBlocked)}</p>
+              <p style={{ marginTop: 0, marginBottom: 4 }}>
+                providerExecutionAllowed: {String(preview.providerExecutionAllowed)}
+              </p>
+              <p style={{ marginTop: 0, marginBottom: 4 }}>publishingAllowed: {String(preview.publishingAllowed)}</p>
+              <p style={{ marginTop: 0, marginBottom: 8 }}>mutationAllowed: {String(preview.mutationAllowed)}</p>
+              <p style={{ marginTop: 0, marginBottom: 6 }}><strong>Planned Actions</strong></p>
+              <ul style={{ marginTop: 0, marginBottom: 8 }}>
+                {preview.plannedActions.map((plannedAction) => (
+                  <li key={plannedAction}>{plannedAction}</li>
+                ))}
+              </ul>
+              <p style={{ marginTop: 0, marginBottom: 4 }}><strong>Summary</strong></p>
+              <p style={{ margin: 0 }}>{preview.summary}</p>
+            </article>
+          ))}
+        </div>
+      </section>
+
+      <section style={{ marginTop: 16 }}>
         <h2 style={{ marginBottom: 10 }}>Optimization Ranking</h2>
         <div style={{ display: "grid", gap: 10 }}>
           {model.optimizationScores.map((score) => {
