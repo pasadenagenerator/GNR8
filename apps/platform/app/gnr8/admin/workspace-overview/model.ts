@@ -535,7 +535,7 @@ async function resolveImportedSnapshotWithDiagnostics(input?: {
         ? "WORKSPACE_OVERVIEW_PERSISTED_RUNTIME_EVIDENCE_SHAPE_VALID"
         : "WORKSPACE_OVERVIEW_PERSISTED_RUNTIME_EVIDENCE_SHAPE_INVALID",
     );
-    if (shape.shapeStatus !== "valid") {
+    if (shape.shapeStatus !== "valid" || !adapted) {
       persistedEvidenceReason = "persisted_runtime_evidence_invalid";
       if (!invalidDiagnosticLogged) {
         diagnostics.push("WORKSPACE_OVERVIEW_PERSISTED_RUNTIME_EVIDENCE_INVALID");

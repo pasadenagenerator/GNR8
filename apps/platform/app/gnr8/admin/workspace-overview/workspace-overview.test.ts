@@ -307,6 +307,75 @@ test("workspace overview source resolution: adapter derives persisted summary fr
   assert.equal(model.overview.experienceSummary.includes("homepageDetected="), true);
 });
 
+test("workspace overview source resolution: first valid persisted candidate short-circuits later invalid candidates and fallback checks", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "workspace-overview-persisted-short-circuit-"));
+  const snapshotsRoot = path.join(root, "snapshots");
+  const validSnapshotId = "imported-url-site-persisted-valid-short-circuit";
+  const validSnapshotRoot = path.join(snapshotsRoot, validSnapshotId);
+  await mkdir(validSnapshotRoot, { recursive: true });
+
+  const now = Date.now();
+  const model = await buildWorkspaceOverviewModel({
+    snapshotsRootDirAbs: snapshotsRoot,
+    persistedRuntimeEvidenceCandidates: [
+      {
+        siteVersionId: "66666666-6666-4666-8666-666666666666",
+        snapshotId: validSnapshotId,
+        snapshotRootDirAbs: validSnapshotRoot,
+        importId: null,
+        updatedAt: new Date(now).toISOString(),
+        importProvenanceSummary: {
+          kind: "runtime_import_provenance_summary_v1",
+          executionIdentity: {
+            importId: "run-short-circuit-valid-001",
+            siteVersionId: "66666666-6666-4666-8666-666666666666",
+          },
+          siteTree: {
+            summary: {
+              pageCount: 2,
+              detectedHomepagePath: "/",
+            },
+            tree: {
+              id: "home",
+              children: [{ id: "about" }],
+            },
+          },
+          semanticImport: {
+            title: "Short Circuit Valid",
+            sections: [{ id: "hero" }],
+            assets: [],
+          },
+        } as any,
+      },
+      {
+        siteVersionId: "77777777-7777-4777-8777-777777777777",
+        snapshotId: "imported-url-site-persisted-invalid-later",
+        snapshotRootDirAbs: path.join(root, "missing-invalid-later"),
+        importId: "run-short-circuit-invalid-001",
+        updatedAt: new Date(now - 5000).toISOString(),
+      },
+    ],
+  });
+
+  assert.equal(model.sourceId, validSnapshotId);
+  assert.equal(model.sourceKind, "persisted_runtime_import_evidence");
+  assert.equal(model.importSourceDiagnostics.selectedSource, "persisted_runtime_import_evidence");
+  assert.equal(model.importSourceDiagnostics.persistedEvidenceSelected, true);
+  assert.equal(model.importSourceDiagnostics.persistedEvidenceReason, "persisted_runtime_evidence_selected");
+  assert.equal(model.importSourceDiagnostics.persistedEvidenceShapeStatus, "valid");
+  assert.equal(model.importSourceDiagnostics.fallbackReason, "none");
+  assert.equal(model.importSourceDiagnostics.persistedEvidenceImportId, "run-short-circuit-valid-001");
+  assert.equal(model.importSourceDiagnostics.persistedEvidenceSiteVersionId, "66666666-6666-4666-8666-666666666666");
+
+  assert.equal(model.diagnostics.includes("WORKSPACE_OVERVIEW_PERSISTED_RUNTIME_EVIDENCE_ADAPTER_SUCCEEDED"), true);
+  assert.equal(model.diagnostics.includes("WORKSPACE_OVERVIEW_PERSISTED_RUNTIME_EVIDENCE_SHAPE_VALID"), true);
+  assert.equal(model.diagnostics.includes("WORKSPACE_OVERVIEW_PERSISTED_RUNTIME_EVIDENCE_SELECTED"), true);
+
+  assert.equal(model.diagnostics.includes("WORKSPACE_OVERVIEW_PERSISTED_RUNTIME_EVIDENCE_INVALID"), false);
+  assert.equal(model.diagnostics.includes("WORKSPACE_OVERVIEW_STABLE_ARTIFACT_CHECKED"), false);
+  assert.equal(model.diagnostics.includes("WORKSPACE_OVERVIEW_BUNDLED_STABLE_SNAPSHOT_SELECTED"), false);
+});
+
 test("workspace overview model fallback: no imported site available when no snapshots exist", async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), "workspace-overview-empty-"));
   const snapshotsRoot = path.join(root, "snapshots");
