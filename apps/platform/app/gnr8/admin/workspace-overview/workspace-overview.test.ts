@@ -177,24 +177,24 @@ test("workspace overview model: optimization ranking order is deterministic", as
 test("workspace overview page source: renders required sections", async () => {
   const source = await readFile(PAGE_FILE, "utf8");
 
-  assert.equal(source.includes("Website Workspace Overview"), true);
-  assert.equal(source.includes("Website Operating System Runtime v0"), true);
-  assert.equal(source.includes("Overview"), true);
+  assert.equal(source.includes("Website OS Planning Console"), true);
+  assert.equal(source.includes("Operator Workspace Console · Read-only Runtime Preview"), true);
+  assert.equal(source.includes("Workspace Snapshot"), true);
 
-  assert.equal(source.includes("Twin Status"), true);
-  assert.equal(source.includes("Environment Scope"), true);
-  assert.equal(source.includes("Site Version"), true);
-  assert.equal(source.includes("Last Updated"), true);
+  assert.equal(source.includes("Planning State"), true);
+  assert.equal(source.includes("Scope"), true);
+  assert.equal(source.includes("Workspace Version"), true);
+  assert.equal(source.includes("Snapshot Updated"), true);
 
   assert.equal(source.includes("Content"), true);
   assert.equal(source.includes("Design"), true);
   assert.equal(source.includes("Experience"), true);
   assert.equal(source.includes("Governance"), true);
   assert.equal(source.includes("Operations"), true);
-  assert.equal(source.includes("Proposal Candidates"), true);
-  assert.equal(source.includes("Approval Preview"), true);
-  assert.equal(source.includes("Execution Plan Preview"), true);
-  assert.equal(source.includes("Execution Artifact Preview"), true);
+  assert.equal(source.includes("Planning Candidates"), true);
+  assert.equal(source.includes("Governance Review Preview"), true);
+  assert.equal(source.includes("Execution Plan (Read-only Preview)"), true);
+  assert.equal(source.includes("Execution Artifacts (Preview)"), true);
   assert.equal(source.includes("preview.proposalTitle"), true);
   assert.equal(source.includes("preview.currentState"), true);
   assert.equal(source.includes("preview.requiredApprovals"), true);
@@ -204,7 +204,7 @@ test("workspace overview page source: renders required sections", async () => {
   assert.equal(source.includes("preview.mutationPermission"), true);
   assert.equal(source.includes("preview.publishingPermission"), true);
   assert.equal(source.includes("preview.providerPermission"), true);
-  assert.equal(source.includes("Future State Path"), true);
+  assert.equal(source.includes("Governance State Path"), true);
   assert.equal(source.includes("proposal_candidate"), true);
   assert.equal(source.includes("approval_review"), true);
   assert.equal(source.includes("execution_plan"), true);
@@ -212,7 +212,7 @@ test("workspace overview page source: renders required sections", async () => {
   assert.equal(source.includes("Summary"), true);
   assert.equal(source.includes("preview.executionState"), true);
   assert.equal(source.includes("preview.governanceState"), true);
-  assert.equal(source.includes("Execution Permissions"), true);
+  assert.equal(source.includes("Execution Gates"), true);
   assert.equal(source.includes("preview.executionBlocked"), true);
   assert.equal(source.includes("preview.providerExecutionAllowed"), true);
   assert.equal(source.includes("preview.publishingAllowed"), true);
@@ -239,14 +239,14 @@ test("workspace overview page source: renders required sections", async () => {
   assert.equal(source.includes("proposal.reason"), true);
   assert.equal(source.includes("Summary:"), true);
   assert.equal(source.includes("Reason:"), true);
-  assert.equal(source.includes("Optimization Ranking"), true);
+  assert.equal(source.includes("Opportunity Ranking"), true);
   assert.equal(source.includes("score.rank"), true);
   assert.equal(source.includes("score.totalScore"), true);
   assert.equal(source.includes("impact / effort / confidence:"), true);
 
-  assert.equal(source.includes("Validation Surfaces"), true);
+  assert.equal(source.includes("Operator Navigation Surfaces"), true);
   assert.equal(source.includes("Provider Governance Snapshot"), true);
-  assert.equal(source.includes("Advanced Runtime Analysis"), true);
+  assert.equal(source.includes("Runtime Evidence & Diagnostics"), true);
   assert.equal(source.includes("Observations"), true);
   assert.equal(source.includes("observation.severity"), true);
   assert.equal(source.includes("observation.title"), true);
@@ -268,12 +268,12 @@ test("workspace overview page source: renders required sections", async () => {
   assert.equal(source.includes("opportunity.title"), true);
   assert.equal(source.includes("opportunity.summary"), true);
   assert.equal(source.includes("Supporting recommendations:"), true);
-  assert.equal(source.includes("Debug Diagnostics"), true);
+  assert.equal(source.includes("Diagnostics"), true);
   assert.equal(source.includes("<details>"), true);
   assert.equal(source.includes("<summary"), true);
   assert.equal(source.includes("<details open"), false);
   assert.equal(source.includes("evidenceQualityScore="), false);
-  assert.equal(source.includes("Diagnostics list"), true);
+  assert.equal(source.includes("Diagnostics List"), true);
   assert.equal(source.includes("Import Source Diagnostics"), true);
   assert.equal(source.includes("Persisted Evidence Diagnostics"), true);
   assert.equal(source.includes("Branch Diagnostics"), true);
@@ -293,11 +293,11 @@ test("workspace overview page source: renders required sections", async () => {
   assert.equal(source.includes("persistedEvidenceAvailableFields"), true);
   assert.equal(source.includes("persistedEvidenceSourceKind"), true);
 
-  assert.equal(source.includes("Provider Governance Status"), true);
+  assert.equal(source.includes("Provider Governance State"), true);
   assert.equal(source.includes("Execution Layer: Blocked"), true);
   assert.equal(source.includes("Governance State: Preview / non-executable"), true);
 
-  assert.equal(source.includes("Read-only Workspace Runtime Preview"), true);
+  assert.equal(source.includes("Read-only Planning Console Preview"), true);
   assert.equal(source.includes("No editing available."), true);
   assert.equal(source.includes("No AI actions available."), true);
   assert.equal(source.includes("No publishing available."), true);
@@ -329,9 +329,9 @@ test("workspace overview page source: contains no action controls", async () => 
 
 test("workspace overview page source: proposal candidates are prioritized over advanced runtime analysis", async () => {
   const source = await readFile(PAGE_FILE, "utf8");
-  const proposalCandidatesIndex = source.indexOf("Proposal Candidates");
+  const proposalCandidatesIndex = source.indexOf("Planning Candidates");
   const observationsIndex = source.indexOf("Observations");
-  const advancedAnalysisIndex = source.indexOf("Advanced Runtime Analysis");
+  const advancedAnalysisIndex = source.indexOf("Runtime Evidence & Diagnostics");
   assert.equal(proposalCandidatesIndex > -1, true);
   assert.equal(observationsIndex > -1, true);
   assert.equal(advancedAnalysisIndex > -1, true);
@@ -341,7 +341,7 @@ test("workspace overview page source: proposal candidates are prioritized over a
 
 test("workspace overview page source: validation surfaces navigation links render", async () => {
   const source = await readFile(PAGE_FILE, "utf8");
-  assert.equal(source.includes("Validation Surfaces"), true);
+  assert.equal(source.includes("Operator Navigation Surfaces"), true);
   assert.equal(source.includes('href="/gnr8/admin/twin-preview"'), true);
   assert.equal(source.includes('href="/gnr8/admin/twin-preview-real"'), true);
   assert.equal(source.includes('href="/gnr8/admin/providers"'), true);

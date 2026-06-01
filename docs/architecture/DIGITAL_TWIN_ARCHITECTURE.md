@@ -405,41 +405,45 @@ Optimization Scoring Runtime v1 milestone confirmed (`2026-06-01`):
   - no publishing
   - deterministic scoring only
 
-Execution Plan Preview Runtime v1 milestone confirmed (`2026-06-01`):
+Execution Artifact Preview Runtime v1 milestone confirmed (`2026-06-01`):
 - runtime files:
-  - `apps/platform/gnr8/runtime/twin/twin-execution-plan-preview.ts`
-  - `apps/platform/gnr8/runtime/twin/twin-execution-plan-preview.test.ts`
+  - `apps/platform/gnr8/runtime/twin/twin-execution-artifact-preview.ts`
+  - `apps/platform/gnr8/runtime/twin/twin-execution-artifact-preview.test.ts`
 - implemented function:
-  - `generateTwinExecutionPlanPreviews(approvalPreviews)`
-- verified deployed Execution Plan Preview artifacts for `Transporti Maver`:
+  - `generateTwinExecutionArtifactPreviews(executionPlanPreviews)`
+- verified deployed Execution Artifact Preview artifacts for `Transporti Maver`:
   1. `Improve Homepage Conversion Flow`
-     - `executionState`: `preview_only`
-     - planned actions:
-       - `analyze_homepage_conversion_flow`
-       - `identify_primary_conversion_path`
-       - `prepare_conversion_improvement_plan`
+     - `artifactType`: `conversion_improvement_plan`
+     - affected areas:
+       - `homepage`
+       - `primary_conversion_path`
+     - planned outputs:
+       - `conversion_review_document`
+       - `conversion_improvement_plan`
   2. `Improve Homepage Quality and Messaging`
-     - `executionState`: `preview_only`
-     - planned actions:
-       - `analyze_homepage_content`
-       - `identify_messaging_improvements`
-       - `prepare_content_improvement_plan`
+     - `artifactType`: `content_improvement_plan`
+     - affected areas:
+       - `homepage_hero`
+       - `homepage_messaging`
+     - planned outputs:
+       - `messaging_review_document`
+       - `content_improvement_plan`
   3. `Maintain Read-Only Validation Mode`
-     - `executionState`: `preview_only`
-     - planned actions:
-       - `maintain_read_only_runtime`
-       - `continue_validation_observation`
+     - `artifactType`: `validation_continuation_plan`
+     - affected areas:
+       - `runtime_governance`
+     - planned outputs:
+       - `validation_status_report`
 - governance values:
-  - `executionBlocked`: `true`
-  - `providerExecutionAllowed`: `false`
-  - `publishingAllowed`: `false`
-  - `mutationAllowed`: `false`
+  - `executionState`: `preview_only`
+  - `mutationBlocked`: `true`
   - `governanceState`: `preview_non_executable`
 - diagnostics:
-  - `TWIN_EXECUTION_PLAN_PREVIEW_STARTED`
-  - `TWIN_EXECUTION_PLAN_PREVIEW_COMPLETED`
+  - `TWIN_EXECUTION_ARTIFACT_PREVIEW_STARTED`
+  - `TWIN_EXECUTION_ARTIFACT_PREVIEW_COMPLETED`
 - preserved boundaries:
   - no execution
+  - no artifact generation
   - no approval workflow
   - no provider execution
   - no publishing
@@ -501,10 +505,10 @@ First operational success checkpoint:
 - GNR8 now has the first browser-visible Website Digital Twin runtime surface.
 - Digital Twin snapshots now contain imported-site evidence instead of placeholder-only summaries.
 - Workspace Overview is now useful in deployed environments even without local validation snapshot files.
-- Workspace Overview now displays deterministic, read-only Execution Plan Preview artifacts derived from Approval Preview artifacts.
+- Workspace Overview now displays deterministic, read-only Execution Artifact Preview artifacts derived from Execution Plan Preview artifacts.
 
 Recommended next milestone:
-- Execution Artifact Preview Runtime v1
+- Workspace Planning Console UX Cleanup v1
 
 ## Related Canonical Documents
 - `docs/architecture/TWIN_RUNTIME_CONTRACT.md`

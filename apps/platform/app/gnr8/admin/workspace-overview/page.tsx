@@ -18,27 +18,27 @@ export default async function WorkspaceOverviewPage() {
   return (
     <main style={{ maxWidth: 960, margin: "0 auto", padding: "24px 20px", fontFamily: "ui-sans-serif, system-ui" }}>
       <header>
-        <h1 style={{ margin: 0 }}>Website Workspace Overview</h1>
-        <p style={{ marginTop: 6, color: "#4b5563" }}>Website Operating System Runtime v0</p>
+        <h1 style={{ margin: 0 }}>Website OS Planning Console</h1>
+        <p style={{ marginTop: 6, color: "#4b5563" }}>Operator Workspace Console · Read-only Runtime Preview</p>
       </header>
 
       <section style={{ marginTop: 20 }}>
-        <h2 style={{ marginBottom: 10 }}>Overview</h2>
+        <h2 style={{ marginBottom: 10 }}>Workspace Snapshot</h2>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 12 }}>
           <article style={CARD_STYLE}>
-            <h3 style={{ marginTop: 0, marginBottom: 8 }}>Twin Status</h3>
+            <h3 style={{ marginTop: 0, marginBottom: 8 }}>Planning State</h3>
             <p style={{ margin: 0 }}>{model.overview.status}</p>
           </article>
           <article style={CARD_STYLE}>
-            <h3 style={{ marginTop: 0, marginBottom: 8 }}>Environment Scope</h3>
+            <h3 style={{ marginTop: 0, marginBottom: 8 }}>Scope</h3>
             <p style={{ margin: 0 }}>{model.overview.environmentScope}</p>
           </article>
           <article style={CARD_STYLE}>
-            <h3 style={{ marginTop: 0, marginBottom: 8 }}>Site Version</h3>
+            <h3 style={{ marginTop: 0, marginBottom: 8 }}>Workspace Version</h3>
             <p style={{ margin: 0 }}>{model.overview.siteVersionId}</p>
           </article>
           <article style={CARD_STYLE}>
-            <h3 style={{ marginTop: 0, marginBottom: 8 }}>Last Updated</h3>
+            <h3 style={{ marginTop: 0, marginBottom: 8 }}>Snapshot Updated</h3>
             <p style={{ margin: 0 }}>{model.overview.lastUpdated}</p>
           </article>
         </div>
@@ -70,7 +70,7 @@ export default async function WorkspaceOverviewPage() {
       </section>
 
       <section style={{ marginTop: 16 }}>
-        <h2 style={{ marginBottom: 10 }}>Proposal Candidates</h2>
+        <h2 style={{ marginBottom: 10 }}>Planning Candidates</h2>
         <div style={{ display: "grid", gap: 10 }}>
           {model.proposalCandidates.map((proposal) => (
             <article key={proposal.proposalId} style={CARD_STYLE}>
@@ -95,7 +95,7 @@ export default async function WorkspaceOverviewPage() {
       </section>
 
       <section style={{ marginTop: 16 }}>
-        <h2 style={{ marginBottom: 10 }}>Approval Preview</h2>
+        <h2 style={{ marginBottom: 10 }}>Governance Review Preview</h2>
         <div style={{ display: "grid", gap: 10 }}>
           {model.approvalPreviews.map((preview) => (
             <article key={preview.previewId} style={CARD_STYLE}>
@@ -108,7 +108,7 @@ export default async function WorkspaceOverviewPage() {
               <p style={{ marginTop: 0, marginBottom: 4 }}>mutationPermission: {String(preview.mutationPermission)}</p>
               <p style={{ marginTop: 0, marginBottom: 4 }}>publishingPermission: {String(preview.publishingPermission)}</p>
               <p style={{ marginTop: 0, marginBottom: 8 }}>providerPermission: {String(preview.providerPermission)}</p>
-              <p style={{ marginTop: 0, marginBottom: 6 }}><strong>Future State Path</strong></p>
+              <p style={{ marginTop: 0, marginBottom: 6 }}><strong>Governance State Path</strong></p>
               <p style={{ marginTop: 0, marginBottom: 8 }}>
                 proposal_candidate {"\u2192"} approval_review {"\u2192"} approved {"\u2192"} execution_plan {"\u2192"} execution_blocked
               </p>
@@ -120,14 +120,14 @@ export default async function WorkspaceOverviewPage() {
       </section>
 
       <section style={{ marginTop: 16 }}>
-        <h2 style={{ marginBottom: 10 }}>Execution Plan Preview</h2>
+        <h2 style={{ marginBottom: 10 }}>Execution Plan (Read-only Preview)</h2>
         <div style={{ display: "grid", gap: 10 }}>
           {model.executionPlanPreviews.map((preview) => (
             <article key={preview.planId} style={CARD_STYLE}>
               <h3 style={{ marginTop: 0, marginBottom: 6 }}>{preview.proposalTitle}</h3>
               <p style={{ marginTop: 0, marginBottom: 4 }}>executionState: {preview.executionState}</p>
               <p style={{ marginTop: 0, marginBottom: 8 }}>governanceState: {preview.governanceState}</p>
-              <p style={{ marginTop: 0, marginBottom: 6 }}><strong>Execution Permissions</strong></p>
+              <p style={{ marginTop: 0, marginBottom: 6 }}><strong>Execution Gates</strong></p>
               <p style={{ marginTop: 0, marginBottom: 4 }}>executionBlocked: {String(preview.executionBlocked)}</p>
               <p style={{ marginTop: 0, marginBottom: 4 }}>
                 providerExecutionAllowed: {String(preview.providerExecutionAllowed)}
@@ -148,7 +148,7 @@ export default async function WorkspaceOverviewPage() {
       </section>
 
       <section style={{ marginTop: 16 }}>
-        <h2 style={{ marginBottom: 10 }}>Execution Artifact Preview</h2>
+        <h2 style={{ marginBottom: 10 }}>Execution Artifacts (Preview)</h2>
         <div style={{ display: "grid", gap: 10 }}>
           {model.executionArtifactPreviews.map((preview) => (
             <article key={preview.artifactId} style={CARD_STYLE}>
@@ -176,7 +176,7 @@ export default async function WorkspaceOverviewPage() {
       </section>
 
       <section style={{ marginTop: 16 }}>
-        <h2 style={{ marginBottom: 10 }}>Optimization Ranking</h2>
+        <h2 style={{ marginBottom: 10 }}>Opportunity Ranking</h2>
         <div style={{ display: "grid", gap: 10 }}>
           {model.optimizationScores.map((score) => {
             const opportunity = model.optimizationOpportunities.find((entry) => entry.opportunityId === score.opportunityId);
@@ -196,7 +196,7 @@ export default async function WorkspaceOverviewPage() {
       </section>
 
       <section style={{ marginTop: 16 }}>
-        <h2 style={{ marginBottom: 10 }}>Validation Surfaces</h2>
+        <h2 style={{ marginBottom: 10 }}>Operator Navigation Surfaces</h2>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 10 }}>
           <article style={CARD_STYLE}>
             <Link href="/gnr8/admin/twin-preview">Twin Preview</Link>
@@ -213,15 +213,15 @@ export default async function WorkspaceOverviewPage() {
       <section style={{ marginTop: 16 }}>
         <h2 style={{ marginBottom: 10 }}>Provider Governance Snapshot</h2>
         <article style={CARD_STYLE}>
-          <p style={{ margin: 0 }}><strong>Provider Governance Status</strong></p>
+          <p style={{ margin: 0 }}><strong>Provider Governance State</strong></p>
           <p style={{ marginTop: 8, marginBottom: 0 }}>Execution Layer: Blocked</p>
           <p style={{ marginTop: 6, marginBottom: 0 }}>Governance State: Preview / non-executable</p>
         </article>
       </section>
 
       <section style={{ marginTop: 16 }}>
-        <h2 style={{ marginBottom: 10 }}>Explicit Boundaries</h2>
-        <p style={{ margin: 0 }}>Read-only Workspace Runtime Preview</p>
+        <h2 style={{ marginBottom: 10 }}>Operational Boundaries</h2>
+        <p style={{ margin: 0 }}>Read-only Planning Console Preview</p>
         <p style={{ marginTop: 6, marginBottom: 0 }}>No editing available.</p>
         <p style={{ marginTop: 6, marginBottom: 0 }}>No AI actions available.</p>
         <p style={{ marginTop: 6, marginBottom: 0 }}>No publishing available.</p>
@@ -229,7 +229,7 @@ export default async function WorkspaceOverviewPage() {
 
       <section style={{ marginTop: 16 }}>
         <details>
-          <summary style={{ cursor: "pointer", fontWeight: 600 }}>Advanced Runtime Analysis</summary>
+          <summary style={{ cursor: "pointer", fontWeight: 600 }}>Runtime Evidence & Diagnostics</summary>
           <div style={{ marginTop: 10 }}>
             <h3 style={{ marginBottom: 8 }}>Observations</h3>
             <div style={{ display: "grid", gap: 10 }}>
@@ -289,13 +289,13 @@ export default async function WorkspaceOverviewPage() {
               ))}
             </div>
 
-            <h3 style={{ marginTop: 12, marginBottom: 8 }}>Debug Diagnostics</h3>
+            <h3 style={{ marginTop: 12, marginBottom: 8 }}>Diagnostics</h3>
             <h3 style={{ marginTop: 0, marginBottom: 8 }}>Twin Source</h3>
             <p style={{ marginTop: 0 }}>
               {model.sourceId ?? "No imported site available."} → buildWebsiteDigitalTwin() → InMemoryTwinStore → createTwinOverview()
             </p>
 
-            <h3 style={{ marginBottom: 8 }}>Diagnostics list</h3>
+            <h3 style={{ marginBottom: 8 }}>Diagnostics List</h3>
             <ul>
               {model.diagnostics.map((entry) => (
                 <li key={entry}>{entry}</li>
