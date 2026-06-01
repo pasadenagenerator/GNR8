@@ -47,7 +47,11 @@ test("workspace overview model: twin overview and diagnostics render data from i
   assert.equal(typeof model.overview.experienceSummary, "string");
   assert.equal(typeof model.overview.governanceSummary, "string");
   assert.equal(typeof model.overview.operationalSummary, "string");
+  assert.equal(Array.isArray(model.observations), true);
+  assert.equal(model.observations.length > 0 || model.sourceId === null, true);
   assert.equal(model.diagnostics.includes("TWIN_OVERVIEW_CREATED"), true);
+  assert.equal(model.diagnostics.includes("TWIN_OBSERVATIONS_STARTED"), model.sourceId !== null);
+  assert.equal(model.diagnostics.includes("TWIN_OBSERVATIONS_COMPLETED"), model.sourceId !== null);
   assert.equal(model.overview.contentSummary.includes("pages="), true);
   assert.equal(model.overview.contentSummary.includes("deterministic_content_read_model"), false);
   assert.equal(model.overview.designSummary.includes("assets="), true);
@@ -61,8 +65,18 @@ test("workspace overview model: no scoring recommendation or ai fields added", a
   const flat = JSON.stringify(model);
   assert.equal(flat.includes("scoring"), false);
   assert.equal(flat.includes("recommendations"), false);
+  assert.equal(flat.includes("recommendation"), false);
   assert.equal(flat.includes("optimization"), false);
   assert.equal(flat.includes("aiOutput"), false);
+});
+
+test("workspace overview model: observations include read-only runtime validation", async () => {
+  const model = await buildWorkspaceOverviewModel();
+  if (model.sourceId === null) {
+    assert.deepEqual(model.observations, []);
+    return;
+  }
+  assert.equal(model.observations.some((entry) => entry.title === "Read-Only Runtime Validation"), true);
 });
 
 test("workspace overview page source: renders required sections", async () => {
@@ -82,6 +96,10 @@ test("workspace overview page source: renders required sections", async () => {
   assert.equal(source.includes("Experience"), true);
   assert.equal(source.includes("Governance"), true);
   assert.equal(source.includes("Operations"), true);
+  assert.equal(source.includes("Observations"), true);
+  assert.equal(source.includes("observation.severity"), true);
+  assert.equal(source.includes("observation.title"), true);
+  assert.equal(source.includes("observation.summary"), true);
 
   assert.equal(source.includes("Validation Surfaces"), true);
   assert.equal(source.includes("Provider Governance Snapshot"), true);
@@ -125,6 +143,8 @@ test("workspace overview page source: contains no action controls", async () => 
   assert.equal(source.includes("<input"), false);
   assert.equal(source.includes("<textarea"), false);
   assert.equal(source.includes("<select"), false);
+  assert.equal(source.includes("recommendation"), false);
+  assert.equal(source.includes("Recommend"), false);
 });
 
 test("workspace overview page source: validation surfaces navigation links render", async () => {

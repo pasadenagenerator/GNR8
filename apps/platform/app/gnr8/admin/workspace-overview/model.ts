@@ -8,6 +8,7 @@ import {
   type StableImportSnapshotFixture,
 } from "@/gnr8/runtime/twin/fixtures/stable-import-snapshot";
 import { buildWebsiteDigitalTwin } from "@/gnr8/runtime/twin/twin-builder";
+import { generateTwinObservations, TWIN_OBSERVATION_DIAGNOSTICS } from "@/gnr8/runtime/twin/twin-observations";
 import { InMemoryTwinStore } from "@/gnr8/runtime/twin/twin-store";
 import { createTwinOverview } from "@/gnr8/runtime/twin/twin-viewer";
 
@@ -847,6 +848,7 @@ export async function buildWorkspaceOverviewModel(input?: {
       sourcePath: null,
       sourceKind: "missing_imported_snapshot" as const,
       importSourceDiagnostics: resolution.importSourceDiagnostics,
+      observations: [],
       overview: {
         twinId: "twin_missing_import",
         siteId: "site_missing_import",
@@ -897,18 +899,23 @@ export async function buildWorkspaceOverviewModel(input?: {
       throw new Error("WORKSPACE_OVERVIEW_RUNTIME_INVARIANT: stored bundled twin missing for site version");
     }
     const overview = createTwinOverview(storedTwin);
+    const observationsDiagnostics: string[] = [TWIN_OBSERVATION_DIAGNOSTICS.STARTED];
+    const observations = generateTwinObservations(storedTwin);
+    observationsDiagnostics.push(TWIN_OBSERVATION_DIAGNOSTICS.COMPLETED);
     const diagnostics = [
       ...resolution.diagnostics,
       ...storedTwin.diagnostics,
       ...storedTwin.metadata.diagnostics,
       ...store.diagnostics,
       ...overview.diagnostics,
+      ...observationsDiagnostics,
     ];
     return {
       sourceId: bundledSnapshot.fixtureId,
       sourcePath: null,
       sourceKind: selectedSnapshot.source,
       importSourceDiagnostics: resolution.importSourceDiagnostics,
+      observations,
       overview,
       diagnostics,
     };
@@ -935,18 +942,23 @@ export async function buildWorkspaceOverviewModel(input?: {
       throw new Error("WORKSPACE_OVERVIEW_RUNTIME_INVARIANT: stored persisted twin missing for site version");
     }
     const overview = createTwinOverview(storedTwin);
+    const observationsDiagnostics: string[] = [TWIN_OBSERVATION_DIAGNOSTICS.STARTED];
+    const observations = generateTwinObservations(storedTwin);
+    observationsDiagnostics.push(TWIN_OBSERVATION_DIAGNOSTICS.COMPLETED);
     const diagnostics = [
       ...resolution.diagnostics,
       ...storedTwin.diagnostics,
       ...storedTwin.metadata.diagnostics,
       ...store.diagnostics,
       ...overview.diagnostics,
+      ...observationsDiagnostics,
     ];
     return {
       sourceId: selectedSnapshot.snapshotId,
       sourcePath: selectedSnapshot.snapshotRootDirAbs,
       sourceKind: selectedSnapshot.source,
       importSourceDiagnostics: resolution.importSourceDiagnostics,
+      observations,
       overview,
       diagnostics,
     };
@@ -997,12 +1009,16 @@ export async function buildWorkspaceOverviewModel(input?: {
   }
 
   const overview = createTwinOverview(storedTwin);
+  const observationsDiagnostics: string[] = [TWIN_OBSERVATION_DIAGNOSTICS.STARTED];
+  const observations = generateTwinObservations(storedTwin);
+  observationsDiagnostics.push(TWIN_OBSERVATION_DIAGNOSTICS.COMPLETED);
   const diagnostics = [
     ...resolution.diagnostics,
     ...storedTwin.diagnostics,
     ...storedTwin.metadata.diagnostics,
     ...store.diagnostics,
     ...overview.diagnostics,
+    ...observationsDiagnostics,
   ];
 
   return {
@@ -1010,6 +1026,7 @@ export async function buildWorkspaceOverviewModel(input?: {
     sourcePath: selectedSnapshot.snapshotRootDirAbs,
     sourceKind: selectedSnapshot.source,
     importSourceDiagnostics: resolution.importSourceDiagnostics,
+    observations,
     overview,
     diagnostics,
   };

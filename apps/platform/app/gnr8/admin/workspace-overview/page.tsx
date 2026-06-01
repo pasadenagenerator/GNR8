@@ -70,6 +70,19 @@ export default async function WorkspaceOverviewPage() {
       </section>
 
       <section style={{ marginTop: 16 }}>
+        <h2 style={{ marginBottom: 10 }}>Observations</h2>
+        <div style={{ display: "grid", gap: 10 }}>
+          {model.observations.map((observation) => (
+            <article key={observation.observationId} style={CARD_STYLE}>
+              <p style={{ marginTop: 0, marginBottom: 6 }}><strong>{observation.severity}</strong></p>
+              <h3 style={{ marginTop: 0, marginBottom: 6 }}>{observation.title}</h3>
+              <p style={{ margin: 0 }}>{observation.summary}</p>
+            </article>
+          ))}
+        </div>
+      </section>
+
+      <section style={{ marginTop: 16 }}>
         <h2 style={{ marginBottom: 10 }}>Validation Surfaces</h2>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 10 }}>
           <article style={CARD_STYLE}>
