@@ -11,6 +11,61 @@
 - Optimization Runtime v1 completed.
 - Optimization Scoring Runtime v1 completed.
 - Proposal Candidate Runtime v1 completed.
+- Proposal Candidate Operator UX Cleanup v1 completed.
+
+## Proposal Candidate Operator UX Cleanup v1 Milestone (2026-06-01)
+
+Milestone is complete and documented.
+
+Workspace Overview hierarchy is now:
+- Overview
+- Proposal Candidates
+- Optimization Ranking
+- Validation Surfaces
+- Provider Governance Snapshot
+- Explicit Boundaries
+- Advanced Runtime Analysis
+
+Operator-first behavior:
+- `Proposal Candidates` is now the primary operator-facing section.
+- `Advanced Runtime Analysis` is collapsed by default.
+- `Advanced Runtime Analysis` contains:
+  - `Observations`
+  - `Insights`
+  - `Recommendations`
+  - `Optimization Opportunities`
+  - `Debug Diagnostics`
+  - `Twin Source chain`
+
+Visible operator-facing deployed sections for `Transporti Maver`:
+- `Proposal Candidates`
+- `Optimization Ranking`
+- `Provider Governance Snapshot`
+- `Explicit Boundaries`
+
+Preserved boundaries:
+- no runtime logic changes
+- no proposal generation changes
+- no approval workflow
+- no API changes
+- no database changes
+- no execution controls
+- no approve/reject controls
+- no publish controls
+- no AI action controls
+
+Validation:
+- workspace overview tests passed
+- next build passed
+
+Conclusion:
+- Workspace Overview now behaves as an operator-first Website OS console rather than a runtime/debug transcript.
+
+Recommended next milestone:
+- Proposal Approval Preview Runtime v1
+
+Success criteria:
+- Future bootstrap resumes from Proposal Candidate Operator UX Cleanup v1 as the canonical Workspace Overview UX baseline.
 
 ## Proposal Candidate Runtime v1 Milestone (2026-06-01)
 

@@ -95,6 +95,31 @@ export default async function WorkspaceOverviewPage() {
       </section>
 
       <section style={{ marginTop: 16 }}>
+        <h2 style={{ marginBottom: 10 }}>Approval Preview</h2>
+        <div style={{ display: "grid", gap: 10 }}>
+          {model.approvalPreviews.map((preview) => (
+            <article key={preview.previewId} style={CARD_STYLE}>
+              <h3 style={{ marginTop: 0, marginBottom: 6 }}>{preview.proposalTitle}</h3>
+              <p style={{ marginTop: 0, marginBottom: 4 }}>currentState: {preview.currentState}</p>
+              <p style={{ marginTop: 0, marginBottom: 4 }}>requiredApprovals: {preview.requiredApprovals}</p>
+              <p style={{ marginTop: 0, marginBottom: 8 }}>governanceState: {preview.governanceState}</p>
+              <p style={{ marginTop: 0, marginBottom: 6 }}><strong>Permissions</strong></p>
+              <p style={{ marginTop: 0, marginBottom: 4 }}>executionPermission: {String(preview.executionPermission)}</p>
+              <p style={{ marginTop: 0, marginBottom: 4 }}>mutationPermission: {String(preview.mutationPermission)}</p>
+              <p style={{ marginTop: 0, marginBottom: 4 }}>publishingPermission: {String(preview.publishingPermission)}</p>
+              <p style={{ marginTop: 0, marginBottom: 8 }}>providerPermission: {String(preview.providerPermission)}</p>
+              <p style={{ marginTop: 0, marginBottom: 6 }}><strong>Future State Path</strong></p>
+              <p style={{ marginTop: 0, marginBottom: 8 }}>
+                proposal_candidate {"\u2192"} approval_review {"\u2192"} approved {"\u2192"} execution_plan {"\u2192"} execution_blocked
+              </p>
+              <p style={{ marginTop: 0, marginBottom: 4 }}><strong>Summary</strong></p>
+              <p style={{ margin: 0 }}>{preview.summary}</p>
+            </article>
+          ))}
+        </div>
+      </section>
+
+      <section style={{ marginTop: 16 }}>
         <h2 style={{ marginBottom: 10 }}>Optimization Ranking</h2>
         <div style={{ display: "grid", gap: 10 }}>
           {model.optimizationScores.map((score) => {

@@ -212,6 +212,44 @@ Checkpoint outcome:
 - GNR8 has the first operational runtime representation of a website visible in Workspace Overview.
 
 Latest completed canonical runtime milestone (2026-06-01):
+- `Proposal Candidate Operator UX Cleanup v1`
+- completion date:
+  - `2026-06-01`
+- Workspace Overview hierarchy:
+  - `Overview`
+  - `Proposal Candidates`
+  - `Optimization Ranking`
+  - `Validation Surfaces`
+  - `Provider Governance Snapshot`
+  - `Explicit Boundaries`
+  - `Advanced Runtime Analysis`
+- operator-facing behavior:
+  - `Proposal Candidates` is the primary operator-facing section.
+  - `Advanced Runtime Analysis` is collapsed by default.
+  - `Advanced Runtime Analysis` includes `Observations`, `Insights`, `Recommendations`, `Optimization Opportunities`, `Debug Diagnostics`, and `Twin Source chain`.
+- visible operator-facing deployed sections for `Transporti Maver`:
+  - `Proposal Candidates`
+  - `Optimization Ranking`
+  - `Provider Governance Snapshot`
+  - `Explicit Boundaries`
+- preserved boundaries:
+  - no runtime logic changes
+  - no proposal generation changes
+  - no approval workflow
+  - no API changes
+  - no database changes
+  - no execution controls
+  - no approve/reject controls
+  - no publish controls
+  - no AI action controls
+- validation:
+  - workspace overview tests passed
+  - next build passed
+- conclusion:
+  - Workspace Overview now behaves as an operator-first Website OS console rather than a runtime/debug transcript.
+- success criteria:
+  - future bootstrap resumes from Proposal Candidate Operator UX Cleanup v1 as the canonical Workspace Overview UX baseline.
+
 - `Website OS Proposal Candidate Runtime v1`
 - runtime files:
   - `apps/platform/gnr8/runtime/twin/twin-proposal-candidates.ts`
@@ -315,5 +353,4 @@ Latest completed canonical runtime milestone (2026-06-01):
   - future bootstrap resumes from `Persisted Migration OS Evidence -> Website OS Workspace Overview` as completed.
 
 Recommended next milestone:
-- Proposal Candidate Operator UX Cleanup v1
-- followed by: Proposal Approval Preview Runtime v1
+- Proposal Approval Preview Runtime v1

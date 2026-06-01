@@ -255,8 +255,44 @@ Workspace Navigation Wiring v1 milestone is complete and verified:
 Conclusion:
 - Website OS runtime surfaces are now discoverable through navigation instead of requiring direct URL knowledge.
 
+Proposal Candidate Operator UX Cleanup v1 milestone is complete and verified (`2026-06-01`):
+- Workspace Overview hierarchy:
+  - `Overview`
+  - `Proposal Candidates`
+  - `Optimization Ranking`
+  - `Validation Surfaces`
+  - `Provider Governance Snapshot`
+  - `Explicit Boundaries`
+  - `Advanced Runtime Analysis`
+- operator-first behavior:
+  - `Proposal Candidates` is now the primary operator-facing section.
+  - `Advanced Runtime Analysis` is collapsed by default.
+  - `Advanced Runtime Analysis` contains `Observations`, `Insights`, `Recommendations`, `Optimization Opportunities`, `Debug Diagnostics`, and `Twin Source chain`.
+- visible operator-facing deployed sections for `Transporti Maver`:
+  - `Proposal Candidates`
+  - `Optimization Ranking`
+  - `Provider Governance Snapshot`
+  - `Explicit Boundaries`
+- preserved boundaries:
+  - no runtime logic changes
+  - no proposal generation changes
+  - no approval workflow
+  - no API changes
+  - no database changes
+  - no execution controls
+  - no approve/reject controls
+  - no publish controls
+  - no AI action controls
+- validation:
+  - workspace overview tests passed
+  - next build passed
+- conclusion:
+  - Workspace Overview now behaves as an operator-first Website OS console rather than a runtime/debug transcript.
+- success criteria:
+  - Future bootstrap resumes from Proposal Candidate Operator UX Cleanup v1 as the canonical Workspace Overview UX baseline.
+
 Recommended next milestone:
-- Real Imported Site Workspace Overview Runtime
+- Proposal Approval Preview Runtime v1
 
 ## Success Condition
 GNR8 gains the conceptual product blueprint required before creating and validating Workspace wireframe specifications.
