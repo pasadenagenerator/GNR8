@@ -212,46 +212,38 @@ Checkpoint outcome:
 - GNR8 has the first operational runtime representation of a website visible in Workspace Overview.
 
 Latest completed canonical runtime milestone (2026-06-01):
-- `Twin Optimization Runtime v1`
+- `Optimization Scoring Runtime v1`
 - runtime files:
-  - `apps/platform/gnr8/runtime/twin/twin-optimizations.ts`
-  - `apps/platform/gnr8/runtime/twin/twin-optimizations.test.ts`
+  - `apps/platform/gnr8/runtime/twin/twin-optimization-scoring.ts`
+  - `apps/platform/gnr8/runtime/twin/twin-optimization-scoring.test.ts`
 - implemented function:
-  - `generateTwinOptimizationOpportunities(recommendations)`
-- implemented deterministic optimization opportunities:
-  - `Homepage Quality Improvement`
-  - `Homepage Conversion Review`
-  - `Design Evidence Collection`
-  - `Validation Stability Preservation`
-- verified deployed optimization opportunities for `Transporti Maver`:
-  - `HIGH`: `Homepage Quality Improvement`
-  - `HIGH`: `Homepage Conversion Review`
-  - `MEDIUM`: `Design Evidence Collection`
-  - `LOW`: `Validation Stability Preservation`
-- recommendation-to-optimization mapping:
-  - `Prioritize Core Page Quality` -> `Homepage Quality Improvement`
-  - `Evaluate Homepage Conversion Flow` -> `Homepage Conversion Review`
-  - `Collect Additional Design Evidence` -> `Design Evidence Collection`
-  - `Maintain Read-Only Validation Mode` -> `Validation Stability Preservation`
+  - `scoreOptimizationOpportunities(opportunities)`
+- scoring fields:
+  - `impactScore`
+  - `effortScore`
+  - `confidenceScore`
+  - `evidenceQualityScore`
+  - `totalScore`
+  - `rank`
+- verified deployed ranking for `Transporti Maver`:
+  - `#1 Homepage Conversion Review totalScore=390`
+  - `#2 Homepage Quality Improvement totalScore=340`
+  - `#3 Validation Stability Preservation totalScore=320`
+  - `#4 Design Evidence Collection totalScore=270`
 - diagnostics:
-  - `TWIN_OPTIMIZATIONS_STARTED`
-  - `TWIN_OPTIMIZATIONS_COMPLETED`
-- optimization fields:
-  - `impact`
-  - `effort`
-  - `priority`
-  - `supportingRecommendations`
+  - `TWIN_OPTIMIZATION_SCORING_STARTED`
+  - `TWIN_OPTIMIZATION_SCORING_COMPLETED`
 - preserved boundaries:
   - no AI model calls
-  - no optimization engine
-  - no mutation execution
+  - no proposal generation
+  - no optimization execution
   - no editing
   - no publishing
-  - deterministic read-only optimization opportunities only
+  - deterministic scoring only
 - conclusion:
-  - Workspace Overview now displays deterministic optimization opportunities derived from deterministic recommendations.
+  - Workspace Overview now displays deterministic ranked optimization opportunities derived from optimization scoring.
 
-- `Persisted Migration OS Evidence -> Digital Twin -> Observation Runtime -> Insight Runtime -> Recommendation Runtime -> Optimization Runtime -> Workspace Overview`
+- `Persisted Migration OS Evidence -> Digital Twin -> Observation Runtime -> Insight Runtime -> Recommendation Runtime -> Optimization Runtime -> Optimization Scoring Runtime -> Workspace Overview`
 - verified runtime chain:
   - Persisted Migration OS runtime evidence
   - `buildWebsiteDigitalTwin()`
@@ -259,6 +251,7 @@ Latest completed canonical runtime milestone (2026-06-01):
   - `generateTwinInsights(observations)`
   - `generateTwinRecommendations(insights)`
   - `generateTwinOptimizationOpportunities(recommendations)`
+  - `scoreOptimizationOpportunities(opportunities)`
   - Workspace Overview UI
 - verified deployed runtime values:
   - `selectedSource`: `persisted_runtime_import_evidence`
@@ -279,4 +272,4 @@ Latest completed canonical runtime milestone (2026-06-01):
   - future bootstrap resumes from `Persisted Migration OS Evidence -> Website OS Workspace Overview` as completed.
 
 Recommended next milestone:
-- Optimization Scoring Runtime v1
+- Proposal Candidate Runtime v1

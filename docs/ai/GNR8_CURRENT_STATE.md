@@ -9,6 +9,67 @@
 - Insight Runtime v1 completed.
 - Recommendation Runtime v1 completed.
 - Optimization Runtime v1 completed.
+- Optimization Scoring Runtime v1 completed.
+
+## Optimization Scoring Runtime v1 Milestone (2026-06-01)
+
+Milestone is complete and documented.
+
+Runtime files:
+- `apps/platform/gnr8/runtime/twin/twin-optimization-scoring.ts`
+- `apps/platform/gnr8/runtime/twin/twin-optimization-scoring.test.ts`
+
+Implemented function:
+- `scoreOptimizationOpportunities(opportunities)`
+
+Scoring fields:
+- `impactScore`
+- `effortScore`
+- `confidenceScore`
+- `evidenceQualityScore`
+- `totalScore`
+- `rank`
+
+Scoring mappings:
+- Impact:
+  - `high=100`
+  - `medium=60`
+  - `low=20`
+- Effort:
+  - `low=100`
+  - `medium=60`
+  - `high=20`
+- Confidence:
+  - `default=100`
+- Evidence Quality:
+  - `Homepage Conversion Review=90`
+  - `Homepage Quality Improvement=80`
+  - `Design Evidence Collection=50`
+  - `Validation Stability Preservation=100`
+
+Verified deployed ranking for `Transporti Maver`:
+- `#1 Homepage Conversion Review totalScore=390`
+- `#2 Homepage Quality Improvement totalScore=340`
+- `#3 Validation Stability Preservation totalScore=320`
+- `#4 Design Evidence Collection totalScore=270`
+
+Diagnostics:
+- `TWIN_OPTIMIZATION_SCORING_STARTED`
+- `TWIN_OPTIMIZATION_SCORING_COMPLETED`
+
+Preserved boundaries:
+- no AI model calls
+- no proposal generation
+- no optimization execution
+- no editing
+- no publishing
+- deterministic scoring only
+
+Conclusion:
+- Workspace Overview now displays deterministic ranked optimization opportunities derived from optimization scoring.
+
+Recommended next milestone:
+- Proposal Candidate Runtime v1
 
 ## Twin Optimization Runtime v1 Milestone (2026-06-01)
 
@@ -61,7 +122,7 @@ Conclusion:
 - Workspace Overview now displays deterministic optimization opportunities derived from deterministic recommendations.
 
 Recommended next milestone:
-- Optimization Scoring Runtime v1
+- Proposal Candidate Runtime v1
 
 ## Twin Recommendation Runtime v1 Milestone (2026-06-01)
 
@@ -108,7 +169,7 @@ Conclusion:
 - Workspace Overview now displays deterministic Website OS recommendations derived from deterministic insights.
 
 Recommended next milestone:
-- Optimization Scoring Runtime v1
+- Proposal Candidate Runtime v1
 
 ## Persisted Migration OS Evidence -> Website OS Workspace Overview Milestone (2026-06-01)
 
@@ -121,6 +182,7 @@ Verified runtime chain:
 - `generateTwinInsights(observations)`
 - `generateTwinRecommendations(insights)`
 - `generateTwinOptimizationOpportunities(recommendations)`
+- `scoreOptimizationOpportunities(opportunities)`
 - Workspace Overview UI
 
 Verified deployed runtime values:
@@ -150,7 +212,7 @@ Conclusion:
 
 Recommended next milestone:
 - Workspace Overview Operator UX Cleanup
-- followed by: Optimization Scoring Runtime v1
+- followed by: Proposal Candidate Runtime v1
 
 ## Workspace Overview Bundled Stable Import Snapshot Milestone (2026-05-31)
 

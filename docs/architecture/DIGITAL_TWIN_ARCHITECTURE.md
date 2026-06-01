@@ -347,6 +347,40 @@ Twin Optimization Runtime v1 milestone confirmed (`2026-06-01`):
   - no publishing
   - deterministic read-only optimization opportunities only
 
+Optimization Scoring Runtime v1 milestone confirmed (`2026-06-01`):
+- runtime files:
+  - `apps/platform/gnr8/runtime/twin/twin-optimization-scoring.ts`
+  - `apps/platform/gnr8/runtime/twin/twin-optimization-scoring.test.ts`
+- implemented function:
+  - `scoreOptimizationOpportunities(opportunities)`
+- scoring fields:
+  - `impactScore`
+  - `effortScore`
+  - `confidenceScore`
+  - `evidenceQualityScore`
+  - `totalScore`
+  - `rank`
+- scoring mappings:
+  - impact: `high=100`, `medium=60`, `low=20`
+  - effort: `low=100`, `medium=60`, `high=20`
+  - confidence: `default=100`
+  - evidence quality: `Homepage Conversion Review=90`, `Homepage Quality Improvement=80`, `Design Evidence Collection=50`, `Validation Stability Preservation=100`
+- verified deployed ranking for `Transporti Maver`:
+  - `#1 Homepage Conversion Review totalScore=390`
+  - `#2 Homepage Quality Improvement totalScore=340`
+  - `#3 Validation Stability Preservation totalScore=320`
+  - `#4 Design Evidence Collection totalScore=270`
+- diagnostics:
+  - `TWIN_OPTIMIZATION_SCORING_STARTED`
+  - `TWIN_OPTIMIZATION_SCORING_COMPLETED`
+- preserved boundaries:
+  - no AI model calls
+  - no proposal generation
+  - no optimization execution
+  - no editing
+  - no publishing
+  - deterministic scoring only
+
 Persisted Migration OS Evidence -> Website OS Workspace Overview milestone confirmed:
 - completion date:
   - `2026-06-01`
@@ -398,9 +432,10 @@ First operational success checkpoint:
 - GNR8 now has the first browser-visible Website Digital Twin runtime surface.
 - Digital Twin snapshots now contain imported-site evidence instead of placeholder-only summaries.
 - Workspace Overview is now useful in deployed environments even without local validation snapshot files.
+- Workspace Overview now displays deterministic ranked optimization opportunities derived from optimization scoring.
 
 Recommended next milestone:
-- Optimization Scoring Runtime v1
+- Proposal Candidate Runtime v1
 
 ## Related Canonical Documents
 - `docs/architecture/TWIN_RUNTIME_CONTRACT.md`

@@ -73,13 +73,14 @@ The observation layer follows these principles:
 - proposal before mutation
 
 ## Current State
-Architecture plus deterministic observation, insight, recommendation, and optimization runtime milestones.
+Architecture plus deterministic observation, insight, recommendation, optimization, and optimization scoring runtime milestones.
 
 Explicitly:
 - Twin Observation Runtime v1 completed (`2026-06-01`)
 - Twin Insight Runtime v1 completed (`2026-06-01`)
 - Twin Recommendation Runtime v1 completed (`2026-06-01`)
 - Twin Optimization Runtime v1 completed (`2026-06-01`)
+- Optimization Scoring Runtime v1 completed (`2026-06-01`)
 
 Twin Optimization Runtime v1 milestone confirmed (`2026-06-01`):
 - runtime files:
@@ -112,6 +113,30 @@ Twin Optimization Runtime v1 milestone confirmed (`2026-06-01`):
   - no editing
   - no publishing
   - deterministic read-only optimization opportunities only
+
+Optimization Scoring Runtime v1 milestone confirmed (`2026-06-01`):
+- runtime files:
+  - `apps/platform/gnr8/runtime/twin/twin-optimization-scoring.ts`
+  - `apps/platform/gnr8/runtime/twin/twin-optimization-scoring.test.ts`
+- implemented function:
+  - `scoreOptimizationOpportunities(opportunities)`
+- scoring fields:
+  - `impactScore`
+  - `effortScore`
+  - `confidenceScore`
+  - `evidenceQualityScore`
+  - `totalScore`
+  - `rank`
+- diagnostics:
+  - `TWIN_OPTIMIZATION_SCORING_STARTED`
+  - `TWIN_OPTIMIZATION_SCORING_COMPLETED`
+- preserved boundaries:
+  - no AI model calls
+  - no proposal generation
+  - no optimization execution
+  - no editing
+  - no publishing
+  - deterministic scoring only
 
 Twin Recommendation Runtime v1 milestone confirmed (`2026-06-01`):
 - runtime files:
@@ -158,10 +183,10 @@ This architecture anchors future integration with:
 GNR8 gains the canonical observation layer that transforms website evidence into actionable intelligence.
 
 Current runtime conclusion:
-- Workspace Overview now displays deterministic optimization opportunities derived from deterministic recommendations.
+- Workspace Overview now displays deterministic ranked optimization opportunities derived from optimization scoring.
 
 Recommended next milestone:
-- Optimization Scoring Runtime v1
+- Proposal Candidate Runtime v1
 
 ## Related Canonical Documents
 - `docs/architecture/TWIN_GENERATION_ARCHITECTURE.md`

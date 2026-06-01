@@ -52,6 +52,7 @@ test("workspace overview model: twin overview and diagnostics render data from i
   assert.equal(Array.isArray(model.recommendations), true);
   assert.equal(Array.isArray(model.optimizationOpportunities), true);
   assert.equal(Array.isArray(model.optimizationScores), true);
+  assert.equal(Array.isArray(model.proposalCandidates), true);
   assert.equal(model.observations.length > 0 || model.sourceId === null, true);
   assert.equal(model.diagnostics.includes("TWIN_OVERVIEW_CREATED"), true);
   assert.equal(model.diagnostics.includes("TWIN_OBSERVATIONS_STARTED"), model.sourceId !== null);
@@ -64,6 +65,8 @@ test("workspace overview model: twin overview and diagnostics render data from i
   assert.equal(model.diagnostics.includes("TWIN_OPTIMIZATIONS_COMPLETED"), model.sourceId !== null);
   assert.equal(model.diagnostics.includes("TWIN_OPTIMIZATION_SCORING_STARTED"), model.sourceId !== null);
   assert.equal(model.diagnostics.includes("TWIN_OPTIMIZATION_SCORING_COMPLETED"), model.sourceId !== null);
+  assert.equal(model.diagnostics.includes("TWIN_PROPOSAL_CANDIDATES_STARTED"), model.sourceId !== null);
+  assert.equal(model.diagnostics.includes("TWIN_PROPOSAL_CANDIDATES_COMPLETED"), model.sourceId !== null);
   assert.equal(model.overview.contentSummary.includes("pages="), true);
   assert.equal(model.overview.contentSummary.includes("deterministic_content_read_model"), false);
   assert.equal(model.overview.designSummary.includes("assets="), true);
@@ -72,17 +75,28 @@ test("workspace overview model: twin overview and diagnostics render data from i
   assert.equal(model.overview.operationalSummary.includes("providerState=preview/runtime-only"), true);
 });
 
-test("workspace overview model: recommendations and deterministic scoring are present with no proposal or ai fields", async () => {
+test("workspace overview model: proposal candidates are present and remain read-only/non-executable", async () => {
   const model = await buildWorkspaceOverviewModel();
   const flat = JSON.stringify(model);
   assert.equal(Array.isArray(model.optimizationScores), true);
   assert.equal(flat.includes("optimizationScores"), true);
   assert.equal(Array.isArray(model.recommendations), true);
   assert.equal(Array.isArray(model.optimizationOpportunities), true);
+  assert.equal(Array.isArray(model.proposalCandidates), true);
   assert.equal(model.recommendations.some((entry) => entry.title === "Maintain Read-Only Validation Mode"), model.sourceId !== null);
   assert.equal(model.optimizationOpportunities.some((entry) => entry.title === "Validation Stability Preservation"), model.sourceId !== null);
   assert.equal(model.optimizationScores.length, model.optimizationOpportunities.length);
-  assert.equal(flat.includes("proposal"), false);
+  assert.equal(model.proposalCandidates.length <= 3, true);
+  assert.equal(model.proposalCandidates.every((entry) => entry.status === "proposal_candidate"), true);
+  assert.equal(model.proposalCandidates.every((entry) => entry.executionState === "blocked"), true);
+  assert.equal(
+    model.proposalCandidates.every((entry) =>
+      ["read_only", "non_executable", "no_content_mutation", "no_design_mutation", "no_publish", "no_provider_execution"].every(
+        (boundary) => entry.boundaries.includes(boundary),
+      ),
+    ),
+    true,
+  );
   assert.equal(flat.includes("aiOutput"), false);
 });
 
@@ -94,6 +108,7 @@ test("workspace overview model: observations include read-only runtime validatio
     assert.deepEqual(model.recommendations, []);
     assert.deepEqual(model.optimizationOpportunities, []);
     assert.deepEqual(model.optimizationScores, []);
+    assert.deepEqual(model.proposalCandidates, []);
     return;
   }
   assert.equal(model.observations.some((entry) => entry.title === "Read-Only Runtime Validation"), true);
@@ -101,6 +116,7 @@ test("workspace overview model: observations include read-only runtime validatio
   assert.equal(model.recommendations.some((entry) => entry.title === "Maintain Read-Only Validation Mode"), true);
   assert.equal(model.optimizationOpportunities.some((entry) => entry.title === "Validation Stability Preservation"), true);
   assert.equal(model.optimizationScores.some((entry) => entry.opportunityId === "opt_validation_stability_preservation"), true);
+  assert.equal(model.proposalCandidates.some((entry) => entry.title === "Maintain Read-Only Validation Mode"), true);
 });
 
 test("workspace overview model: optimization ranking order is deterministic", async () => {
@@ -165,6 +181,17 @@ test("workspace overview page source: renders required sections", async () => {
   assert.equal(source.includes("effortScore="), true);
   assert.equal(source.includes("confidenceScore="), true);
   assert.equal(source.includes("evidenceQualityScore="), true);
+  assert.equal(source.includes("Proposal Candidates"), true);
+  assert.equal(source.includes("proposal.status"), true);
+  assert.equal(source.includes("proposal.executionState"), true);
+  assert.equal(source.includes("proposal.priority"), true);
+  assert.equal(source.includes("proposal.optimizationRank"), true);
+  assert.equal(source.includes("proposal.optimizationScore"), true);
+  assert.equal(source.includes("proposal.expectedImpact"), true);
+  assert.equal(source.includes("proposal.expectedEffort"), true);
+  assert.equal(source.includes("proposal.risk"), true);
+  assert.equal(source.includes("proposal.summary"), true);
+  assert.equal(source.includes("proposal.reason"), true);
 
   assert.equal(source.includes("Validation Surfaces"), true);
   assert.equal(source.includes("Provider Governance Snapshot"), true);
@@ -208,7 +235,9 @@ test("workspace overview page source: contains no action controls", async () => 
   assert.equal(source.includes("<input"), false);
   assert.equal(source.includes("<textarea"), false);
   assert.equal(source.includes("<select"), false);
-  assert.equal(source.includes("Proposal"), false);
+  assert.equal(source.includes("Approve"), false);
+  assert.equal(source.includes("Reject"), false);
+  assert.equal(source.includes("Execute"), false);
   assert.equal(source.includes("AI control"), false);
   assert.equal(source.includes("optimization engine"), false);
   assert.equal(source.includes("proposal engine"), false);

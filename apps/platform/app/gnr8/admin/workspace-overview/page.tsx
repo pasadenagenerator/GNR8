@@ -159,6 +159,28 @@ export default async function WorkspaceOverviewPage() {
       </section>
 
       <section style={{ marginTop: 16 }}>
+        <h2 style={{ marginBottom: 10 }}>Proposal Candidates</h2>
+        <div style={{ display: "grid", gap: 10 }}>
+          {model.proposalCandidates.map((proposal) => (
+            <article key={proposal.proposalId} style={CARD_STYLE}>
+              <h3 style={{ marginTop: 0, marginBottom: 6 }}>{proposal.title}</h3>
+              <p style={{ marginTop: 0, marginBottom: 6 }}>
+                status={proposal.status}; executionState={proposal.executionState}
+              </p>
+              <p style={{ marginTop: 0, marginBottom: 6 }}>
+                priority={proposal.priority}; rank={proposal.optimizationRank}; score={proposal.optimizationScore}
+              </p>
+              <p style={{ marginTop: 0, marginBottom: 6 }}>
+                expectedImpact={proposal.expectedImpact}; expectedEffort={proposal.expectedEffort}; risk={proposal.risk}
+              </p>
+              <p style={{ marginTop: 0, marginBottom: 6 }}>{proposal.summary}</p>
+              <p style={{ margin: 0, color: "#4b5563" }}>{proposal.reason}</p>
+            </article>
+          ))}
+        </div>
+      </section>
+
+      <section style={{ marginTop: 16 }}>
         <h2 style={{ marginBottom: 10 }}>Validation Surfaces</h2>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 10 }}>
           <article style={CARD_STYLE}>
