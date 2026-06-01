@@ -238,15 +238,33 @@ test("workspace overview source resolution: adapter derives persisted summary fr
             siteVersionId: "33333333-3333-4333-8333-333333333333",
           },
           siteTree: {
-            pageCount: 4,
-            detectedHomepagePath: "/home",
+            summary: {
+              pageCount: 4,
+              detectedHomepagePath: "/home",
+            },
+            tree: {
+              id: "home",
+              children: [{ id: "about" }, { id: "contact" }],
+            },
           },
           semanticImport: {
-            sectionCount: 8,
-            detectedTitle: "Adapter Title",
+            title: "Adapter Title",
+            sections: [{ id: "hero" }, { id: "features" }, { id: "faq" }],
+            assets: [{ path: "/logo.svg" }, { path: "/hero.jpg" }],
+            navigation: [{ href: "/home" }],
           },
-          captureEvidence: {
-            assetCount: 10,
+          multipageImport: {
+            summary: {
+              pageCount: 6,
+              detectedHomepagePath: "/landing",
+            },
+            tree: {
+              id: "landing",
+              children: [{ id: "pricing" }],
+            },
+          },
+          renderedCapture: {
+            screenshots: [{ path: "home.png" }, { path: "about.png" }],
           },
         } as any,
       },
@@ -265,13 +283,14 @@ test("workspace overview source resolution: adapter derives persisted summary fr
   assert.equal(model.importSourceDiagnostics.persistedEvidenceBranchDiagnostics.siteTree.type, "object");
   assert.equal(
     model.importSourceDiagnostics.persistedEvidenceBranchDiagnostics.siteTree.keys.includes("detectedHomepagePath"),
-    true,
+    false,
   );
+  assert.equal(model.importSourceDiagnostics.persistedEvidenceBranchDiagnostics.siteTree.keys.includes("summary"), true);
+  assert.equal(model.importSourceDiagnostics.persistedEvidenceBranchDiagnostics.siteTree.keys.includes("tree"), true);
   assert.equal(model.importSourceDiagnostics.persistedEvidenceBranchDiagnostics.semanticImport.present, true);
   assert.equal(model.importSourceDiagnostics.persistedEvidenceBranchDiagnostics.semanticImport.type, "object");
-  assert.equal(model.importSourceDiagnostics.persistedEvidenceBranchDiagnostics.multipageImport.present, false);
-  assert.equal(model.importSourceDiagnostics.persistedEvidenceBranchDiagnostics.captureEvidence.present, true);
-  assert.equal(model.importSourceDiagnostics.persistedEvidenceBranchDiagnostics.renderedCapture.present, false);
+  assert.equal(model.importSourceDiagnostics.persistedEvidenceBranchDiagnostics.multipageImport.present, true);
+  assert.equal(model.importSourceDiagnostics.persistedEvidenceBranchDiagnostics.renderedCapture.present, true);
   assert.equal(model.diagnostics.includes("WORKSPACE_OVERVIEW_PERSISTED_RUNTIME_EVIDENCE_ADAPTER_STARTED"), true);
   assert.equal(model.diagnostics.includes("WORKSPACE_OVERVIEW_PERSISTED_RUNTIME_EVIDENCE_ADAPTER_SUCCEEDED"), true);
   assert.equal(
@@ -279,8 +298,8 @@ test("workspace overview source resolution: adapter derives persisted summary fr
     true,
   );
   assert.equal(model.overview.contentSummary.includes("pages=4"), true);
-  assert.equal(model.overview.contentSummary.includes("sections=8"), true);
-  assert.equal(model.overview.designSummary.includes("assets=10"), true);
+  assert.equal(model.overview.contentSummary.includes("sections=3"), true);
+  assert.equal(model.overview.designSummary.includes("assets=2"), true);
   assert.equal(model.overview.experienceSummary.includes("homepageDetected="), true);
 });
 
@@ -444,6 +463,21 @@ test("workspace overview model: adapter failure falls back to bundled snapshot w
           renderedCapture: false,
         } as any,
       },
+      {
+        siteVersionId: "55555555-5555-4555-8555-555555555555",
+        snapshotId: "imported-url-site-adapter-failure-2",
+        snapshotRootDirAbs: path.join(root, "missing-runtime-snapshot-root-2"),
+        importId: null,
+        updatedAt: new Date(Date.now() - 5000).toISOString(),
+        importProvenanceSummary: {
+          kind: "runtime_import_provenance_summary_v1",
+          siteTree: [],
+          semanticImport: "",
+          multipageImport: 0,
+          captureEvidence: null,
+          renderedCapture: true,
+        } as any,
+      },
     ],
   });
 
@@ -456,12 +490,20 @@ test("workspace overview model: adapter failure falls back to bundled snapshot w
   );
   assert.equal(model.importSourceDiagnostics.persistedEvidenceBranchDiagnostics.siteTree.present, true);
   assert.equal(model.importSourceDiagnostics.persistedEvidenceBranchDiagnostics.siteTree.type, "array");
-  assert.equal(model.importSourceDiagnostics.persistedEvidenceBranchDiagnostics.siteTree.itemCount, 1);
+  assert.equal(model.importSourceDiagnostics.persistedEvidenceBranchDiagnostics.siteTree.itemCount, 0);
   assert.deepEqual(model.importSourceDiagnostics.persistedEvidenceBranchDiagnostics.siteTree.keys, []);
   assert.equal(model.importSourceDiagnostics.persistedEvidenceBranchDiagnostics.semanticImport.type, "string");
-  assert.equal(model.importSourceDiagnostics.persistedEvidenceBranchDiagnostics.multipageImport.type, "null");
-  assert.equal(model.importSourceDiagnostics.persistedEvidenceBranchDiagnostics.captureEvidence.type, "number");
+  assert.equal(model.importSourceDiagnostics.persistedEvidenceBranchDiagnostics.multipageImport.type, "number");
+  assert.equal(model.importSourceDiagnostics.persistedEvidenceBranchDiagnostics.captureEvidence.type, "null");
   assert.equal(model.importSourceDiagnostics.persistedEvidenceBranchDiagnostics.renderedCapture.type, "boolean");
+  assert.equal(
+    model.diagnostics.filter((entry) => entry === "WORKSPACE_OVERVIEW_PERSISTED_RUNTIME_EVIDENCE_ADAPTER_FAILED").length,
+    1,
+  );
+  assert.equal(
+    model.diagnostics.filter((entry) => entry === "WORKSPACE_OVERVIEW_PERSISTED_RUNTIME_EVIDENCE_INVALID").length,
+    1,
+  );
   const flat = JSON.stringify(model);
   assert.equal(flat.includes("secret-nested-value"), false);
   assert.equal(flat.includes("credential-nested-value"), false);

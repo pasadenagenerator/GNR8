@@ -302,6 +302,29 @@ function toPositiveCount(value: unknown): number | null {
   return typeof value === "number" && Number.isFinite(value) && value >= 0 ? Math.floor(value) : null;
 }
 
+function toRecord(value: unknown): Record<string, unknown> | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  return value as Record<string, unknown>;
+}
+
+function toArray(value: unknown): unknown[] | null {
+  return Array.isArray(value) ? value : null;
+}
+
+function countTreeNodes(value: unknown): number {
+  const stack = [value];
+  let count = 0;
+  while (stack.length > 0) {
+    const node = stack.pop();
+    if (!node || typeof node !== "object") continue;
+    const record = node as Record<string, unknown>;
+    count += 1;
+    const children = toArray(record.children) ?? toArray(record.nodes) ?? toArray(record.pages) ?? [];
+    for (const child of children) stack.push(child);
+  }
+  return count;
+}
+
 function pickFirstText(...values: unknown[]): string | null {
   for (const value of values) {
     const normalized = toText(value);
@@ -316,47 +339,55 @@ function toRuntimeEvidenceSummaryFromPersistedCandidate(
   const direct = candidate.sourceEvidenceSummary;
   const summary = candidate.importProvenanceSummary as Record<string, unknown> | null;
   const executionIdentity = (summary?.executionIdentity ?? null) as Record<string, unknown> | null;
-  const semanticImport = (summary?.semanticImport ?? null) as Record<string, unknown> | null;
-  const siteTree = (summary?.siteTree ?? null) as Record<string, unknown> | null;
-  const multipageImport = (summary?.multipageImport ?? null) as Record<string, unknown> | null;
-  const captureEvidence = (summary?.captureEvidence ?? null) as Record<string, unknown> | null;
-  const renderedCapture = (summary?.renderedCapture ?? null) as Record<string, unknown> | null;
+  const semanticImport = toRecord(summary?.semanticImport);
+  const siteTree = toRecord(summary?.siteTree);
+  const multipageImport = toRecord(summary?.multipageImport);
+  const captureEvidence = toRecord(summary?.captureEvidence);
+  const renderedCapture = toRecord(summary?.renderedCapture);
+  const siteTreeSummary = toRecord(siteTree?.summary);
+  const multipageImportSummary = toRecord(multipageImport?.summary);
 
   const sourceImportId = pickFirstText(candidate.importId, summary?.importId, executionIdentity?.importId, summary?.sourceImportId);
   const sourceSiteVersionId = pickFirstText(candidate.siteVersionId, summary?.siteVersionId, executionIdentity?.siteVersionId);
   const pageCount = [
     toPositiveCount(direct?.pageCount),
+    toPositiveCount(siteTreeSummary?.pageCount),
     toPositiveCount(siteTree?.pageCount),
-    toPositiveCount((siteTree?.pages as unknown[] | undefined)?.length),
+    toPositiveCount(multipageImportSummary?.pageCount),
     toPositiveCount(multipageImport?.pageCount),
-    toPositiveCount((multipageImport?.pages as unknown[] | undefined)?.length),
+    toPositiveCount(countTreeNodes(siteTree?.tree)),
+    toPositiveCount(countTreeNodes(multipageImport?.tree)),
   ].find((value): value is number => value != null);
   const sectionCount = [
     toPositiveCount(direct?.sectionCount),
+    toPositiveCount(toArray(semanticImport?.sections)?.length),
     toPositiveCount(semanticImport?.sectionCount),
-    toPositiveCount(siteTree?.sectionCount),
-    toPositiveCount((siteTree?.sections as unknown[] | undefined)?.length),
-    toPositiveCount((semanticImport?.sections as unknown[] | undefined)?.length),
+    toPositiveCount(countTreeNodes(siteTree?.tree)),
   ].find((value): value is number => value != null);
   const assetCount = [
     toPositiveCount(direct?.assetCount),
+    toPositiveCount(toArray(semanticImport?.assets)?.length),
+    toPositiveCount(toArray(captureEvidence?.screenshotPaths)?.length),
+    toPositiveCount(toArray(renderedCapture?.screenshots)?.length),
     toPositiveCount(captureEvidence?.assetCount),
     toPositiveCount(renderedCapture?.assetCount),
-    toPositiveCount((captureEvidence?.assets as unknown[] | undefined)?.length),
-    toPositiveCount((renderedCapture?.assets as unknown[] | undefined)?.length),
   ].find((value): value is number => value != null);
   const detectedTitle = pickFirstText(
     direct?.detectedTitle,
+    semanticImport?.title,
     semanticImport?.detectedTitle,
     siteTree?.detectedTitle,
     renderedCapture?.detectedTitle,
-    semanticImport?.title,
     siteTree?.title,
     renderedCapture?.title,
-    "unknown",
+    "GNR8 Imported Site",
   );
   const detectedHomepagePath = pickFirstText(
     direct?.detectedHomepagePath,
+    siteTreeSummary?.detectedHomepagePath,
+    siteTreeSummary?.homepagePath,
+    multipageImportSummary?.detectedHomepagePath,
+    multipageImportSummary?.homepagePath,
     siteTree?.detectedHomepagePath,
     multipageImport?.detectedHomepagePath,
     siteTree?.homepagePath,
@@ -476,6 +507,8 @@ async function resolveImportedSnapshotWithDiagnostics(input?: {
     diagnostics.push("WORKSPACE_OVERVIEW_PERSISTED_RUNTIME_EVIDENCE_INVALID");
   }
   diagnostics.push("WORKSPACE_OVERVIEW_PERSISTED_RUNTIME_EVIDENCE_SHAPE_CHECKED");
+  let invalidDiagnosticLogged = false;
+  let adapterFailedDiagnosticLogged = false;
   for (const candidate of persistedSorted) {
     diagnostics.push("WORKSPACE_OVERVIEW_PERSISTED_RUNTIME_EVIDENCE_ADAPTER_STARTED");
     const adapted = toRuntimeEvidenceSummaryFromPersistedCandidate(candidate);
@@ -485,7 +518,10 @@ async function resolveImportedSnapshotWithDiagnostics(input?: {
       candidate.sourceEvidenceSummary = adapted.sourceEvidenceSummary;
       diagnostics.push("WORKSPACE_OVERVIEW_PERSISTED_RUNTIME_EVIDENCE_ADAPTER_SUCCEEDED");
     } else {
-      diagnostics.push("WORKSPACE_OVERVIEW_PERSISTED_RUNTIME_EVIDENCE_ADAPTER_FAILED");
+      if (!adapterFailedDiagnosticLogged) {
+        diagnostics.push("WORKSPACE_OVERVIEW_PERSISTED_RUNTIME_EVIDENCE_ADAPTER_FAILED");
+        adapterFailedDiagnosticLogged = true;
+      }
     }
     const shape = toPersistedEvidenceShapeDiagnostics(candidate);
     persistedEvidenceBranchDiagnostics = toPersistedEvidenceBranchDiagnostics(candidate);
@@ -501,7 +537,10 @@ async function resolveImportedSnapshotWithDiagnostics(input?: {
     );
     if (shape.shapeStatus !== "valid") {
       persistedEvidenceReason = "persisted_runtime_evidence_invalid";
-      diagnostics.push("WORKSPACE_OVERVIEW_PERSISTED_RUNTIME_EVIDENCE_INVALID");
+      if (!invalidDiagnosticLogged) {
+        diagnostics.push("WORKSPACE_OVERVIEW_PERSISTED_RUNTIME_EVIDENCE_INVALID");
+        invalidDiagnosticLogged = true;
+      }
       persistedEvidenceSiteVersionId = candidate.siteVersionId;
       persistedEvidenceImportId = candidate.importId;
       continue;
@@ -549,7 +588,9 @@ async function resolveImportedSnapshotWithDiagnostics(input?: {
   }
   if (persistedEvidenceAvailable && !persistedEvidenceSelected && persistedEvidenceReason == null) {
     persistedEvidenceReason = "persisted_runtime_evidence_invalid";
-    diagnostics.push("WORKSPACE_OVERVIEW_PERSISTED_RUNTIME_EVIDENCE_INVALID");
+    if (!invalidDiagnosticLogged) {
+      diagnostics.push("WORKSPACE_OVERVIEW_PERSISTED_RUNTIME_EVIDENCE_INVALID");
+    }
   }
 
   let stableSnapshotId: string | null = null;
