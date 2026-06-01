@@ -7,53 +7,54 @@
 
 - Observation Runtime v1 completed.
 - Insight Runtime v1 completed.
+- Recommendation Runtime v1 completed.
 
-## Twin Insight Runtime v1 Milestone (2026-06-01)
+## Twin Recommendation Runtime v1 Milestone (2026-06-01)
 
 Milestone is complete and documented.
 
 Runtime files:
-- `apps/platform/gnr8/runtime/twin/twin-insights.ts`
-- `apps/platform/gnr8/runtime/twin/twin-insights.test.ts`
+- `apps/platform/gnr8/runtime/twin/twin-recommendations.ts`
+- `apps/platform/gnr8/runtime/twin/twin-recommendations.test.ts`
 
 Implemented function:
-- `generateTwinInsights(observations)`
+- `generateTwinRecommendations(insights)`
 
-Implemented deterministic insight rules:
-- `Focused Website Footprint`
-- `Primary Entry Experience Detected`
-- `Limited Design Evidence Available`
-- `Governance Boundary Enforced`
+Implemented deterministic recommendation rules:
+- `Prioritize Core Page Quality`
+- `Evaluate Homepage Conversion Flow`
+- `Collect Additional Design Evidence`
+- `Maintain Read-Only Validation Mode`
 
-Verified deployed insights for `Transporti Maver`:
-- `Focused Website Footprint`
-- `Primary Entry Experience Detected`
-- `Limited Design Evidence Available`
-- `Governance Boundary Enforced`
+Verified deployed recommendations for `Transporti Maver`:
+- `Prioritize Core Page Quality`
+- `Evaluate Homepage Conversion Flow`
+- `Collect Additional Design Evidence`
+- `Maintain Read-Only Validation Mode`
 
-Supporting observation relationships:
-- `Focused Website Footprint` <- `Small Site Footprint`
-- `Primary Entry Experience Detected` <- `Small Site Footprint` + `Homepage Successfully Identified`
-- `Limited Design Evidence Available` <- `No Asset Evidence Detected`
-- `Governance Boundary Enforced` <- `Read-Only Runtime Validation`
+Insight-to-recommendation relationships:
+- `Focused Website Footprint` -> `Prioritize Core Page Quality`
+- `Primary Entry Experience Detected` -> `Evaluate Homepage Conversion Flow`
+- `Limited Design Evidence Available` -> `Collect Additional Design Evidence`
+- `Governance Boundary Enforced` -> `Maintain Read-Only Validation Mode`
 
 Diagnostics:
-- `TWIN_INSIGHTS_STARTED`
-- `TWIN_INSIGHTS_COMPLETED`
+- `TWIN_RECOMMENDATIONS_STARTED`
+- `TWIN_RECOMMENDATIONS_COMPLETED`
 
 Preserved boundaries:
 - no AI model calls
-- no recommendations
 - no optimization engine
+- no proposal generation
 - no editing
 - no publishing
-- deterministic read-only insights only
+- deterministic read-only recommendations only
 
 Conclusion:
-- Workspace Overview now displays deterministic Website OS insights derived from deterministic observations.
+- Workspace Overview now displays deterministic Website OS recommendations derived from deterministic insights.
 
 Recommended next milestone:
-- Twin Recommendation Runtime v1
+- Twin Optimization Runtime v1
 
 ## Persisted Migration OS Evidence -> Website OS Workspace Overview Milestone (2026-06-01)
 
@@ -64,6 +65,7 @@ Verified runtime chain:
 - `buildWebsiteDigitalTwin()`
 - `generateTwinObservations(twin)`
 - `generateTwinInsights(observations)`
+- `generateTwinRecommendations(insights)`
 - Workspace Overview UI
 
 Verified deployed runtime values:
@@ -93,7 +95,7 @@ Conclusion:
 
 Recommended next milestone:
 - Workspace Overview Operator UX Cleanup
-- followed by: Twin Recommendation Runtime v1
+- followed by: Twin Optimization Runtime v1
 
 ## Workspace Overview Bundled Stable Import Snapshot Milestone (2026-05-31)
 

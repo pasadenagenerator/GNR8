@@ -14,6 +14,10 @@ import {
   generateTwinRecommendations,
   TWIN_RECOMMENDATION_DIAGNOSTICS,
 } from "@/gnr8/runtime/twin/twin-recommendations";
+import {
+  generateTwinOptimizationOpportunities,
+  TWIN_OPTIMIZATION_DIAGNOSTICS,
+} from "@/gnr8/runtime/twin/twin-optimizations";
 import { InMemoryTwinStore } from "@/gnr8/runtime/twin/twin-store";
 import { createTwinOverview } from "@/gnr8/runtime/twin/twin-viewer";
 
@@ -856,6 +860,7 @@ export async function buildWorkspaceOverviewModel(input?: {
       observations: [],
       insights: [],
       recommendations: [],
+      optimizationOpportunities: [],
       overview: {
         twinId: "twin_missing_import",
         siteId: "site_missing_import",
@@ -915,6 +920,9 @@ export async function buildWorkspaceOverviewModel(input?: {
     const recommendationDiagnostics: string[] = [TWIN_RECOMMENDATION_DIAGNOSTICS.STARTED];
     const recommendations = generateTwinRecommendations(insights);
     recommendationDiagnostics.push(TWIN_RECOMMENDATION_DIAGNOSTICS.COMPLETED);
+    const optimizationDiagnostics: string[] = [TWIN_OPTIMIZATION_DIAGNOSTICS.STARTED];
+    const optimizationOpportunities = generateTwinOptimizationOpportunities(recommendations);
+    optimizationDiagnostics.push(TWIN_OPTIMIZATION_DIAGNOSTICS.COMPLETED);
     const diagnostics = [
       ...resolution.diagnostics,
       ...storedTwin.diagnostics,
@@ -924,6 +932,7 @@ export async function buildWorkspaceOverviewModel(input?: {
       ...observationsDiagnostics,
       ...insightsDiagnostics,
       ...recommendationDiagnostics,
+      ...optimizationDiagnostics,
     ];
     return {
       sourceId: bundledSnapshot.fixtureId,
@@ -933,6 +942,7 @@ export async function buildWorkspaceOverviewModel(input?: {
       observations,
       insights,
       recommendations,
+      optimizationOpportunities,
       overview,
       diagnostics,
     };
@@ -968,6 +978,9 @@ export async function buildWorkspaceOverviewModel(input?: {
     const recommendationDiagnostics: string[] = [TWIN_RECOMMENDATION_DIAGNOSTICS.STARTED];
     const recommendations = generateTwinRecommendations(insights);
     recommendationDiagnostics.push(TWIN_RECOMMENDATION_DIAGNOSTICS.COMPLETED);
+    const optimizationDiagnostics: string[] = [TWIN_OPTIMIZATION_DIAGNOSTICS.STARTED];
+    const optimizationOpportunities = generateTwinOptimizationOpportunities(recommendations);
+    optimizationDiagnostics.push(TWIN_OPTIMIZATION_DIAGNOSTICS.COMPLETED);
     const diagnostics = [
       ...resolution.diagnostics,
       ...storedTwin.diagnostics,
@@ -977,6 +990,7 @@ export async function buildWorkspaceOverviewModel(input?: {
       ...observationsDiagnostics,
       ...insightsDiagnostics,
       ...recommendationDiagnostics,
+      ...optimizationDiagnostics,
     ];
     return {
       sourceId: selectedSnapshot.snapshotId,
@@ -986,6 +1000,7 @@ export async function buildWorkspaceOverviewModel(input?: {
       observations,
       insights,
       recommendations,
+      optimizationOpportunities,
       overview,
       diagnostics,
     };
@@ -1045,6 +1060,9 @@ export async function buildWorkspaceOverviewModel(input?: {
   const recommendationDiagnostics: string[] = [TWIN_RECOMMENDATION_DIAGNOSTICS.STARTED];
   const recommendations = generateTwinRecommendations(insights);
   recommendationDiagnostics.push(TWIN_RECOMMENDATION_DIAGNOSTICS.COMPLETED);
+  const optimizationDiagnostics: string[] = [TWIN_OPTIMIZATION_DIAGNOSTICS.STARTED];
+  const optimizationOpportunities = generateTwinOptimizationOpportunities(recommendations);
+  optimizationDiagnostics.push(TWIN_OPTIMIZATION_DIAGNOSTICS.COMPLETED);
   const diagnostics = [
     ...resolution.diagnostics,
     ...storedTwin.diagnostics,
@@ -1054,6 +1072,7 @@ export async function buildWorkspaceOverviewModel(input?: {
     ...observationsDiagnostics,
     ...insightsDiagnostics,
     ...recommendationDiagnostics,
+    ...optimizationDiagnostics,
   ];
 
   return {
@@ -1064,6 +1083,7 @@ export async function buildWorkspaceOverviewModel(input?: {
     observations,
     insights,
     recommendations,
+    optimizationOpportunities,
     overview,
     diagnostics,
   };
