@@ -103,7 +103,7 @@ Execution boundary for this slice:
   - score surfaces update reproducibly and are queryable in workspace
 - Blocked By: Phase C twin identity/state + evidence pipeline.
 - Risk Level: High.
-- Current State: first deterministic observation runtime milestone is complete (`Twin Observation Runtime v1`), with recommendation/optimization progression still pending.
+- Current State: first deterministic observation runtime milestone and first deterministic insight runtime milestone are complete (`Twin Observation Runtime v1`, `Twin Insight Runtime v1`), with recommendation/optimization progression still pending.
 - Implementation Priority: P1.
 
 ## Phase E: Optimization Engine
@@ -212,43 +212,46 @@ Checkpoint outcome:
 - GNR8 has the first operational runtime representation of a website visible in Workspace Overview.
 
 Latest completed canonical runtime milestone (2026-06-01):
-- `Twin Observation Runtime v1`
+- `Twin Insight Runtime v1`
 - runtime files:
-  - `apps/platform/gnr8/runtime/twin/twin-observations.ts`
-  - `apps/platform/gnr8/runtime/twin/twin-observations.test.ts`
+  - `apps/platform/gnr8/runtime/twin/twin-insights.ts`
+  - `apps/platform/gnr8/runtime/twin/twin-insights.test.ts`
 - implemented function:
-  - `generateTwinObservations(twin)`
-- implemented deterministic observation rules:
-  - `Small Site Footprint`
-  - `No Asset Evidence Detected`
-  - `Homepage Successfully Identified`
-  - `Read-Only Runtime Validation`
-- verified deployed observations for `Transporti Maver`:
-  - `Small Site Footprint`
-  - `No Asset Evidence Detected`
-  - `Homepage Successfully Identified`
-  - `Read-Only Runtime Validation`
+  - `generateTwinInsights(observations)`
+- implemented deterministic insight rules:
+  - `Focused Website Footprint`
+  - `Primary Entry Experience Detected`
+  - `Limited Design Evidence Available`
+  - `Governance Boundary Enforced`
+- verified deployed insights for `Transporti Maver`:
+  - `Focused Website Footprint`
+  - `Primary Entry Experience Detected`
+  - `Limited Design Evidence Available`
+  - `Governance Boundary Enforced`
+- supporting observation relationships:
+  - `Focused Website Footprint` <- `Small Site Footprint`
+  - `Primary Entry Experience Detected` <- `Small Site Footprint` + `Homepage Successfully Identified`
+  - `Limited Design Evidence Available` <- `No Asset Evidence Detected`
+  - `Governance Boundary Enforced` <- `Read-Only Runtime Validation`
 - diagnostics:
-  - `TWIN_OBSERVATIONS_STARTED`
-  - `TWIN_OBSERVATIONS_COMPLETED`
+  - `TWIN_INSIGHTS_STARTED`
+  - `TWIN_INSIGHTS_COMPLETED`
 - preserved boundaries:
   - no AI model calls
   - no recommendations
   - no optimization engine
   - no editing
   - no publishing
-  - read-only deterministic observations only
+  - deterministic read-only insights only
 - conclusion:
-  - Workspace Overview now displays deterministic Website OS observations derived from persisted Migration OS evidence.
+  - Workspace Overview now displays deterministic Website OS insights derived from deterministic observations.
 
-- `Persisted Migration OS Evidence -> Website OS Workspace Overview`
+- `Persisted Migration OS Evidence -> Digital Twin -> Observation Runtime -> Insight Runtime -> Workspace Overview`
 - verified runtime chain:
   - Persisted Migration OS runtime evidence
-  - Workspace Overview resolver
-  - Runtime Evidence Adapter
   - `buildWebsiteDigitalTwin()`
-  - `InMemoryTwinStore`
-  - `createTwinOverview()`
+  - `generateTwinObservations(twin)`
+  - `generateTwinInsights(observations)`
   - Workspace Overview UI
 - verified deployed runtime values:
   - `selectedSource`: `persisted_runtime_import_evidence`

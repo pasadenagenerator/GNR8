@@ -10,6 +10,10 @@ import {
 import { buildWebsiteDigitalTwin } from "@/gnr8/runtime/twin/twin-builder";
 import { generateTwinInsights, TWIN_INSIGHT_DIAGNOSTICS } from "@/gnr8/runtime/twin/twin-insights";
 import { generateTwinObservations, TWIN_OBSERVATION_DIAGNOSTICS } from "@/gnr8/runtime/twin/twin-observations";
+import {
+  generateTwinRecommendations,
+  TWIN_RECOMMENDATION_DIAGNOSTICS,
+} from "@/gnr8/runtime/twin/twin-recommendations";
 import { InMemoryTwinStore } from "@/gnr8/runtime/twin/twin-store";
 import { createTwinOverview } from "@/gnr8/runtime/twin/twin-viewer";
 
@@ -851,6 +855,7 @@ export async function buildWorkspaceOverviewModel(input?: {
       importSourceDiagnostics: resolution.importSourceDiagnostics,
       observations: [],
       insights: [],
+      recommendations: [],
       overview: {
         twinId: "twin_missing_import",
         siteId: "site_missing_import",
@@ -907,6 +912,9 @@ export async function buildWorkspaceOverviewModel(input?: {
     const insightsDiagnostics: string[] = [TWIN_INSIGHT_DIAGNOSTICS.STARTED];
     const insights = generateTwinInsights(observations);
     insightsDiagnostics.push(TWIN_INSIGHT_DIAGNOSTICS.COMPLETED);
+    const recommendationDiagnostics: string[] = [TWIN_RECOMMENDATION_DIAGNOSTICS.STARTED];
+    const recommendations = generateTwinRecommendations(insights);
+    recommendationDiagnostics.push(TWIN_RECOMMENDATION_DIAGNOSTICS.COMPLETED);
     const diagnostics = [
       ...resolution.diagnostics,
       ...storedTwin.diagnostics,
@@ -915,6 +923,7 @@ export async function buildWorkspaceOverviewModel(input?: {
       ...overview.diagnostics,
       ...observationsDiagnostics,
       ...insightsDiagnostics,
+      ...recommendationDiagnostics,
     ];
     return {
       sourceId: bundledSnapshot.fixtureId,
@@ -923,6 +932,7 @@ export async function buildWorkspaceOverviewModel(input?: {
       importSourceDiagnostics: resolution.importSourceDiagnostics,
       observations,
       insights,
+      recommendations,
       overview,
       diagnostics,
     };
@@ -955,6 +965,9 @@ export async function buildWorkspaceOverviewModel(input?: {
     const insightsDiagnostics: string[] = [TWIN_INSIGHT_DIAGNOSTICS.STARTED];
     const insights = generateTwinInsights(observations);
     insightsDiagnostics.push(TWIN_INSIGHT_DIAGNOSTICS.COMPLETED);
+    const recommendationDiagnostics: string[] = [TWIN_RECOMMENDATION_DIAGNOSTICS.STARTED];
+    const recommendations = generateTwinRecommendations(insights);
+    recommendationDiagnostics.push(TWIN_RECOMMENDATION_DIAGNOSTICS.COMPLETED);
     const diagnostics = [
       ...resolution.diagnostics,
       ...storedTwin.diagnostics,
@@ -963,6 +976,7 @@ export async function buildWorkspaceOverviewModel(input?: {
       ...overview.diagnostics,
       ...observationsDiagnostics,
       ...insightsDiagnostics,
+      ...recommendationDiagnostics,
     ];
     return {
       sourceId: selectedSnapshot.snapshotId,
@@ -971,6 +985,7 @@ export async function buildWorkspaceOverviewModel(input?: {
       importSourceDiagnostics: resolution.importSourceDiagnostics,
       observations,
       insights,
+      recommendations,
       overview,
       diagnostics,
     };
@@ -1027,6 +1042,9 @@ export async function buildWorkspaceOverviewModel(input?: {
   const insightsDiagnostics: string[] = [TWIN_INSIGHT_DIAGNOSTICS.STARTED];
   const insights = generateTwinInsights(observations);
   insightsDiagnostics.push(TWIN_INSIGHT_DIAGNOSTICS.COMPLETED);
+  const recommendationDiagnostics: string[] = [TWIN_RECOMMENDATION_DIAGNOSTICS.STARTED];
+  const recommendations = generateTwinRecommendations(insights);
+  recommendationDiagnostics.push(TWIN_RECOMMENDATION_DIAGNOSTICS.COMPLETED);
   const diagnostics = [
     ...resolution.diagnostics,
     ...storedTwin.diagnostics,
@@ -1035,6 +1053,7 @@ export async function buildWorkspaceOverviewModel(input?: {
     ...overview.diagnostics,
     ...observationsDiagnostics,
     ...insightsDiagnostics,
+    ...recommendationDiagnostics,
   ];
 
   return {
@@ -1044,6 +1063,7 @@ export async function buildWorkspaceOverviewModel(input?: {
     importSourceDiagnostics: resolution.importSourceDiagnostics,
     observations,
     insights,
+    recommendations,
     overview,
     diagnostics,
   };

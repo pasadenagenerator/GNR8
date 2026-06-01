@@ -99,6 +99,22 @@ export default async function WorkspaceOverviewPage() {
       </section>
 
       <section style={{ marginTop: 16 }}>
+        <h2 style={{ marginBottom: 10 }}>Recommendations</h2>
+        <div style={{ display: "grid", gap: 10 }}>
+          {model.recommendations.map((recommendation) => (
+            <article key={recommendation.recommendationId} style={CARD_STYLE}>
+              <p style={{ marginTop: 0, marginBottom: 6 }}><strong>{recommendation.priority}</strong></p>
+              <h3 style={{ marginTop: 0, marginBottom: 6 }}>{recommendation.title}</h3>
+              <p style={{ margin: 0 }}>{recommendation.summary}</p>
+              <p style={{ marginTop: 8, marginBottom: 0, color: "#4b5563" }}>
+                Supporting insights: {recommendation.supportingInsights.length}
+              </p>
+            </article>
+          ))}
+        </div>
+      </section>
+
+      <section style={{ marginTop: 16 }}>
         <h2 style={{ marginBottom: 10 }}>Validation Surfaces</h2>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 10 }}>
           <article style={CARD_STYLE}>

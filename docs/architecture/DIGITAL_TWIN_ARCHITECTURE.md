@@ -278,43 +278,46 @@ Workspace Overview Bundled Stable Import Snapshot milestone confirmed:
   - no editing
   - no publishing
 
-Twin Observation Runtime v1 milestone confirmed (`2026-06-01`):
+Twin Insight Runtime v1 milestone confirmed (`2026-06-01`):
 - runtime files:
-  - `apps/platform/gnr8/runtime/twin/twin-observations.ts`
-  - `apps/platform/gnr8/runtime/twin/twin-observations.test.ts`
+  - `apps/platform/gnr8/runtime/twin/twin-insights.ts`
+  - `apps/platform/gnr8/runtime/twin/twin-insights.test.ts`
 - implemented function:
-  - `generateTwinObservations(twin)`
-- implemented deterministic observation rules:
-  - `Small Site Footprint`
-  - `No Asset Evidence Detected`
-  - `Homepage Successfully Identified`
-  - `Read-Only Runtime Validation`
-- verified deployed observations for `Transporti Maver`:
-  - `Small Site Footprint`
-  - `No Asset Evidence Detected`
-  - `Homepage Successfully Identified`
-  - `Read-Only Runtime Validation`
+  - `generateTwinInsights(observations)`
+- implemented deterministic insight rules:
+  - `Focused Website Footprint`
+  - `Primary Entry Experience Detected`
+  - `Limited Design Evidence Available`
+  - `Governance Boundary Enforced`
+- verified deployed insights for `Transporti Maver`:
+  - `Focused Website Footprint`
+  - `Primary Entry Experience Detected`
+  - `Limited Design Evidence Available`
+  - `Governance Boundary Enforced`
+- supporting observation relationships:
+  - `Focused Website Footprint` <- `Small Site Footprint`
+  - `Primary Entry Experience Detected` <- `Small Site Footprint` + `Homepage Successfully Identified`
+  - `Limited Design Evidence Available` <- `No Asset Evidence Detected`
+  - `Governance Boundary Enforced` <- `Read-Only Runtime Validation`
 - diagnostics:
-  - `TWIN_OBSERVATIONS_STARTED`
-  - `TWIN_OBSERVATIONS_COMPLETED`
+  - `TWIN_INSIGHTS_STARTED`
+  - `TWIN_INSIGHTS_COMPLETED`
 - preserved boundaries:
   - no AI model calls
   - no recommendations
   - no optimization engine
   - no editing
   - no publishing
-  - read-only deterministic observations only
+  - deterministic read-only insights only
 
 Persisted Migration OS Evidence -> Website OS Workspace Overview milestone confirmed:
 - completion date:
   - `2026-06-01`
 - verified runtime chain:
   - Persisted Migration OS runtime evidence
-  - Workspace Overview resolver
-  - Runtime Evidence Adapter
   - `buildWebsiteDigitalTwin()`
-  - `InMemoryTwinStore`
-  - `createTwinOverview()`
+  - `generateTwinObservations(twin)`
+  - `generateTwinInsights(observations)`
   - Workspace Overview UI
 - verified deployed runtime values:
   - `selectedSource`: `persisted_runtime_import_evidence`

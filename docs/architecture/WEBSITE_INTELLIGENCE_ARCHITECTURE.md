@@ -134,7 +134,7 @@ Canonical optimization and prioritization are defined in:
 - `docs/architecture/TWIN_OPTIMIZATION_ARCHITECTURE.md`
 
 ## Current State
-Architecture plus first deterministic observation runtime milestone.
+Architecture plus first deterministic observation runtime milestone and first deterministic insight runtime milestone.
 
 Explicitly:
 - no scoring engine
@@ -148,38 +148,43 @@ Explicitly:
 - no APIs
 - no database changes
 
-Twin Observation Runtime v1 milestone confirmed (`2026-06-01`):
+Twin Insight Runtime v1 milestone confirmed (`2026-06-01`):
 - runtime files:
-  - `apps/platform/gnr8/runtime/twin/twin-observations.ts`
-  - `apps/platform/gnr8/runtime/twin/twin-observations.test.ts`
+  - `apps/platform/gnr8/runtime/twin/twin-insights.ts`
+  - `apps/platform/gnr8/runtime/twin/twin-insights.test.ts`
 - implemented function:
-  - `generateTwinObservations(twin)`
-- implemented deterministic observation rules:
-  - `Small Site Footprint`
-  - `No Asset Evidence Detected`
-  - `Homepage Successfully Identified`
-  - `Read-Only Runtime Validation`
-- verified deployed observations for `Transporti Maver`:
-  - `Small Site Footprint`
-  - `No Asset Evidence Detected`
-  - `Homepage Successfully Identified`
-  - `Read-Only Runtime Validation`
+  - `generateTwinInsights(observations)`
+- implemented deterministic insight rules:
+  - `Focused Website Footprint`
+  - `Primary Entry Experience Detected`
+  - `Limited Design Evidence Available`
+  - `Governance Boundary Enforced`
+- verified deployed insights for `Transporti Maver`:
+  - `Focused Website Footprint`
+  - `Primary Entry Experience Detected`
+  - `Limited Design Evidence Available`
+  - `Governance Boundary Enforced`
+- supporting observation relationships:
+  - `Focused Website Footprint` <- `Small Site Footprint`
+  - `Primary Entry Experience Detected` <- `Small Site Footprint` + `Homepage Successfully Identified`
+  - `Limited Design Evidence Available` <- `No Asset Evidence Detected`
+  - `Governance Boundary Enforced` <- `Read-Only Runtime Validation`
 - diagnostics:
-  - `TWIN_OBSERVATIONS_STARTED`
-  - `TWIN_OBSERVATIONS_COMPLETED`
+  - `TWIN_INSIGHTS_STARTED`
+  - `TWIN_INSIGHTS_COMPLETED`
 - preserved boundaries:
   - no AI model calls
   - no recommendations
   - no optimization engine
   - no editing
   - no publishing
-  - read-only deterministic observations only
+  - deterministic read-only insights only
 
 ## Success Condition
 GNR8 gains the intelligence foundation behind the Website Digital Twin.
 
 Current runtime conclusion:
-- Workspace Overview now displays deterministic Website OS observations derived from persisted Migration OS evidence.
+- Workspace Overview now displays deterministic Website OS insights derived from deterministic observations.
 
 Recommended next milestone:
 - Twin Recommendation Runtime v1
