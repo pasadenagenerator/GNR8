@@ -55,6 +55,7 @@ test("workspace overview model: twin overview and diagnostics render data from i
   assert.equal(Array.isArray(model.proposalCandidates), true);
   assert.equal(Array.isArray(model.approvalPreviews), true);
   assert.equal(Array.isArray(model.executionPlanPreviews), true);
+  assert.equal(Array.isArray(model.executionArtifactPreviews), true);
   assert.equal(model.observations.length > 0 || model.sourceId === null, true);
   assert.equal(model.diagnostics.includes("TWIN_OVERVIEW_CREATED"), true);
   assert.equal(model.diagnostics.includes("TWIN_OBSERVATIONS_STARTED"), model.sourceId !== null);
@@ -73,6 +74,8 @@ test("workspace overview model: twin overview and diagnostics render data from i
   assert.equal(model.diagnostics.includes("TWIN_APPROVAL_PREVIEW_COMPLETED"), model.sourceId !== null);
   assert.equal(model.diagnostics.includes("TWIN_EXECUTION_PLAN_PREVIEW_STARTED"), model.sourceId !== null);
   assert.equal(model.diagnostics.includes("TWIN_EXECUTION_PLAN_PREVIEW_COMPLETED"), model.sourceId !== null);
+  assert.equal(model.diagnostics.includes("TWIN_EXECUTION_ARTIFACT_PREVIEW_STARTED"), model.sourceId !== null);
+  assert.equal(model.diagnostics.includes("TWIN_EXECUTION_ARTIFACT_PREVIEW_COMPLETED"), model.sourceId !== null);
   assert.equal(model.overview.contentSummary.includes("pages="), true);
   assert.equal(model.overview.contentSummary.includes("deterministic_content_read_model"), false);
   assert.equal(model.overview.designSummary.includes("assets="), true);
@@ -117,6 +120,10 @@ test("workspace overview model: proposal candidates are present and remain read-
   assert.equal(model.executionPlanPreviews.every((entry) => entry.publishingAllowed === false), true);
   assert.equal(model.executionPlanPreviews.every((entry) => entry.mutationAllowed === false), true);
   assert.equal(model.executionPlanPreviews.every((entry) => entry.governanceState === "preview_non_executable"), true);
+  assert.equal(model.executionArtifactPreviews.length, model.executionPlanPreviews.length);
+  assert.equal(model.executionArtifactPreviews.every((entry) => entry.executionState === "preview_only"), true);
+  assert.equal(model.executionArtifactPreviews.every((entry) => entry.mutationBlocked === true), true);
+  assert.equal(model.executionArtifactPreviews.every((entry) => entry.governanceState === "preview_non_executable"), true);
   assert.equal(
     model.proposalCandidates.every((entry) =>
       ["read_only", "non_executable", "no_content_mutation", "no_design_mutation", "no_publish", "no_provider_execution"].every(
@@ -139,6 +146,7 @@ test("workspace overview model: observations include read-only runtime validatio
     assert.deepEqual(model.proposalCandidates, []);
     assert.deepEqual(model.approvalPreviews, []);
     assert.deepEqual(model.executionPlanPreviews, []);
+    assert.deepEqual(model.executionArtifactPreviews, []);
     return;
   }
   assert.equal(model.observations.some((entry) => entry.title === "Read-Only Runtime Validation"), true);
@@ -186,6 +194,7 @@ test("workspace overview page source: renders required sections", async () => {
   assert.equal(source.includes("Proposal Candidates"), true);
   assert.equal(source.includes("Approval Preview"), true);
   assert.equal(source.includes("Execution Plan Preview"), true);
+  assert.equal(source.includes("Execution Artifact Preview"), true);
   assert.equal(source.includes("preview.proposalTitle"), true);
   assert.equal(source.includes("preview.currentState"), true);
   assert.equal(source.includes("preview.requiredApprovals"), true);
@@ -212,6 +221,11 @@ test("workspace overview page source: renders required sections", async () => {
   assert.equal(source.includes("preview.plannedActions.map"), true);
   assert.equal(source.includes("plannedAction"), true);
   assert.equal(source.includes("preview.summary"), true);
+  assert.equal(source.includes("preview.artifactType"), true);
+  assert.equal(source.includes("preview.affectedAreas.map"), true);
+  assert.equal(source.includes("preview.plannedOutputs.map"), true);
+  assert.equal(source.includes("Affected Areas"), true);
+  assert.equal(source.includes("Planned Outputs"), true);
   assert.equal(source.includes("proposal.title"), true);
   assert.equal(source.includes("proposal.status"), true);
   assert.equal(source.includes("proposal.executionState"), true);
@@ -303,8 +317,11 @@ test("workspace overview page source: contains no action controls", async () => 
   assert.equal(source.includes("Publish"), false);
   assert.equal(source.includes("publish button"), false);
   assert.equal(source.includes("provider actions"), false);
+  assert.equal(source.includes("Provider Actions"), false);
   assert.equal(source.includes("approve button"), false);
   assert.equal(source.includes("reject button"), false);
+  assert.equal(source.includes("Generate"), false);
+  assert.equal(source.includes("generate button"), false);
   assert.equal(source.includes("AI control"), false);
   assert.equal(source.includes("optimization engine"), false);
   assert.equal(source.includes("proposal engine"), false);

@@ -405,6 +405,47 @@ Optimization Scoring Runtime v1 milestone confirmed (`2026-06-01`):
   - no publishing
   - deterministic scoring only
 
+Execution Plan Preview Runtime v1 milestone confirmed (`2026-06-01`):
+- runtime files:
+  - `apps/platform/gnr8/runtime/twin/twin-execution-plan-preview.ts`
+  - `apps/platform/gnr8/runtime/twin/twin-execution-plan-preview.test.ts`
+- implemented function:
+  - `generateTwinExecutionPlanPreviews(approvalPreviews)`
+- verified deployed Execution Plan Preview artifacts for `Transporti Maver`:
+  1. `Improve Homepage Conversion Flow`
+     - `executionState`: `preview_only`
+     - planned actions:
+       - `analyze_homepage_conversion_flow`
+       - `identify_primary_conversion_path`
+       - `prepare_conversion_improvement_plan`
+  2. `Improve Homepage Quality and Messaging`
+     - `executionState`: `preview_only`
+     - planned actions:
+       - `analyze_homepage_content`
+       - `identify_messaging_improvements`
+       - `prepare_content_improvement_plan`
+  3. `Maintain Read-Only Validation Mode`
+     - `executionState`: `preview_only`
+     - planned actions:
+       - `maintain_read_only_runtime`
+       - `continue_validation_observation`
+- governance values:
+  - `executionBlocked`: `true`
+  - `providerExecutionAllowed`: `false`
+  - `publishingAllowed`: `false`
+  - `mutationAllowed`: `false`
+  - `governanceState`: `preview_non_executable`
+- diagnostics:
+  - `TWIN_EXECUTION_PLAN_PREVIEW_STARTED`
+  - `TWIN_EXECUTION_PLAN_PREVIEW_COMPLETED`
+- preserved boundaries:
+  - no execution
+  - no approval workflow
+  - no provider execution
+  - no publishing
+  - no mutation execution
+  - no AI model calls
+
 Persisted Migration OS Evidence -> Website OS Workspace Overview milestone confirmed:
 - completion date:
   - `2026-06-01`
@@ -415,6 +456,10 @@ Persisted Migration OS Evidence -> Website OS Workspace Overview milestone confi
   - `generateTwinInsights(observations)`
   - `generateTwinRecommendations(insights)`
   - `generateTwinOptimizationOpportunities(recommendations)`
+  - `scoreOptimizationOpportunities(opportunities)`
+  - `generateTwinProposalCandidates(input)`
+  - `generateTwinProposalApprovalPreviews(candidates)`
+  - `generateTwinExecutionPlanPreviews(approvalPreviews)`
   - Workspace Overview UI
 - verified deployed runtime values:
   - `selectedSource`: `persisted_runtime_import_evidence`
@@ -456,11 +501,10 @@ First operational success checkpoint:
 - GNR8 now has the first browser-visible Website Digital Twin runtime surface.
 - Digital Twin snapshots now contain imported-site evidence instead of placeholder-only summaries.
 - Workspace Overview is now useful in deployed environments even without local validation snapshot files.
-- Workspace Overview now displays read-only, non-executable Proposal Candidates derived from ranked Optimization Opportunities.
+- Workspace Overview now displays deterministic, read-only Execution Plan Preview artifacts derived from Approval Preview artifacts.
 
 Recommended next milestone:
-- Proposal Candidate Operator UX Cleanup v1
-- followed by: Proposal Approval Preview Runtime v1
+- Execution Artifact Preview Runtime v1
 
 ## Related Canonical Documents
 - `docs/architecture/TWIN_RUNTIME_CONTRACT.md`

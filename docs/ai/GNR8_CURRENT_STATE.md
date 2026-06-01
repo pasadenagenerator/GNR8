@@ -11,7 +11,66 @@
 - Optimization Runtime v1 completed.
 - Optimization Scoring Runtime v1 completed.
 - Proposal Candidate Runtime v1 completed.
+- Execution Plan Preview Runtime v1 completed.
 - Proposal Candidate Operator UX Cleanup v1 completed.
+
+## Execution Plan Preview Runtime v1 Milestone (2026-06-01)
+
+Milestone is complete and documented.
+
+Runtime files:
+- `apps/platform/gnr8/runtime/twin/twin-execution-plan-preview.ts`
+- `apps/platform/gnr8/runtime/twin/twin-execution-plan-preview.test.ts`
+
+Implemented function:
+- `generateTwinExecutionPlanPreviews(approvalPreviews)`
+
+Verified deployed Execution Plan Preview artifacts for `Transporti Maver`:
+1. `Improve Homepage Conversion Flow`
+   - `executionState`: `preview_only`
+   - planned actions:
+     - `analyze_homepage_conversion_flow`
+     - `identify_primary_conversion_path`
+     - `prepare_conversion_improvement_plan`
+2. `Improve Homepage Quality and Messaging`
+   - `executionState`: `preview_only`
+   - planned actions:
+     - `analyze_homepage_content`
+     - `identify_messaging_improvements`
+     - `prepare_content_improvement_plan`
+3. `Maintain Read-Only Validation Mode`
+   - `executionState`: `preview_only`
+   - planned actions:
+     - `maintain_read_only_runtime`
+     - `continue_validation_observation`
+
+Governance values:
+- `executionBlocked`: `true`
+- `providerExecutionAllowed`: `false`
+- `publishingAllowed`: `false`
+- `mutationAllowed`: `false`
+- `governanceState`: `preview_non_executable`
+
+Diagnostics:
+- `TWIN_EXECUTION_PLAN_PREVIEW_STARTED`
+- `TWIN_EXECUTION_PLAN_PREVIEW_COMPLETED`
+
+Preserved boundaries:
+- no execution
+- no approval workflow
+- no provider execution
+- no publishing
+- no mutation execution
+- no AI model calls
+
+Architecture chain:
+- `Persisted Migration OS Evidence -> Digital Twin -> Observation Runtime -> Insight Runtime -> Recommendation Runtime -> Optimization Runtime -> Optimization Scoring Runtime -> Proposal Candidate Runtime -> Proposal Approval Preview Runtime -> Execution Plan Preview Runtime -> Workspace Overview`
+
+Conclusion:
+- Workspace Overview now displays deterministic, read-only Execution Plan Preview artifacts derived from Approval Preview artifacts.
+
+Recommended next milestone:
+- Execution Artifact Preview Runtime v1
 
 ## Proposal Candidate Operator UX Cleanup v1 Milestone (2026-06-01)
 

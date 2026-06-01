@@ -85,5 +85,46 @@ Website OS Proposal Candidate Runtime v1 dependency checkpoint (`2026-06-01`):
   - no provider execution
   - no approval workflow yet
 
+Execution Plan Preview Runtime v1 dependency checkpoint (`2026-06-01`):
+- runtime files:
+  - `apps/platform/gnr8/runtime/twin/twin-execution-plan-preview.ts`
+  - `apps/platform/gnr8/runtime/twin/twin-execution-plan-preview.test.ts`
+- function:
+  - `generateTwinExecutionPlanPreviews(approvalPreviews)`
+- verified deployed Execution Plan Preview artifacts for `Transporti Maver`:
+  1. `Improve Homepage Conversion Flow`
+     - `executionState`: `preview_only`
+     - planned actions:
+       - `analyze_homepage_conversion_flow`
+       - `identify_primary_conversion_path`
+       - `prepare_conversion_improvement_plan`
+  2. `Improve Homepage Quality and Messaging`
+     - `executionState`: `preview_only`
+     - planned actions:
+       - `analyze_homepage_content`
+       - `identify_messaging_improvements`
+       - `prepare_content_improvement_plan`
+  3. `Maintain Read-Only Validation Mode`
+     - `executionState`: `preview_only`
+     - planned actions:
+       - `maintain_read_only_runtime`
+       - `continue_validation_observation`
+- governance values:
+  - `executionBlocked`: `true`
+  - `providerExecutionAllowed`: `false`
+  - `publishingAllowed`: `false`
+  - `mutationAllowed`: `false`
+  - `governanceState`: `preview_non_executable`
+- diagnostics:
+  - `TWIN_EXECUTION_PLAN_PREVIEW_STARTED`
+  - `TWIN_EXECUTION_PLAN_PREVIEW_COMPLETED`
+- preserved execution boundary:
+  - no execution
+  - no approval workflow
+  - no provider execution
+  - no publishing
+  - no mutation execution
+  - no AI model calls
+
 ## Success Condition
 GNR8 has a complete governance chain from provider contract to execution approval before implementing execution.
