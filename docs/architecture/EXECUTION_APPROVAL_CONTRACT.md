@@ -119,6 +119,68 @@ Approval State Runtime v1 dependency checkpoint (`2026-06-01`):
   - no AI model calls
   - read-only deterministic state modeling only
 
+Approval Queue Preview Runtime v1 dependency checkpoint (`2026-06-02`):
+- completion date:
+  - `2026-06-02`
+- runtime files:
+  - `apps/platform/gnr8/runtime/twin/twin-approval-queue-preview.ts`
+  - `apps/platform/gnr8/runtime/twin/twin-approval-queue-preview.test.ts`
+- function:
+  - `generateTwinApprovalQueueItems(approvalStates, proposalCandidates)`
+- approval queue item fields:
+  - `queueId`
+  - `proposalId`
+  - `proposalTitle`
+  - `approvalState`
+  - `queueRank`
+  - `queuePriority`
+  - `optimizationScore`
+  - `governanceState`
+  - `executionAllowed`
+  - `mutationAllowed`
+  - `publishingAllowed`
+  - `providerExecutionAllowed`
+  - `summary`
+- verified deployed Approval Queue for `Transporti Maver`:
+  - `#1 Improve Homepage Conversion Flow`
+    - `queuePriority`: `high`
+    - `optimizationScore`: `390`
+    - `approvalState`: `pending_review`
+  - `#2 Improve Homepage Quality and Messaging`
+    - `queuePriority`: `medium`
+    - `optimizationScore`: `340`
+    - `approvalState`: `pending_review`
+  - `#3 Maintain Read-Only Validation Mode`
+    - `queuePriority`: `medium`
+    - `optimizationScore`: `320`
+    - `approvalState`: `pending_review`
+- governance values:
+  - `executionAllowed`: `false`
+  - `mutationAllowed`: `false`
+  - `publishingAllowed`: `false`
+  - `providerExecutionAllowed`: `false`
+  - `governanceState`: `approval_queue_preview_only`
+- diagnostics:
+  - `TWIN_APPROVAL_QUEUE_PREVIEW_STARTED`
+  - `TWIN_APPROVAL_QUEUE_PREVIEW_COMPLETED`
+- preserved execution boundary:
+  - no approval workflow
+  - no approval state changes
+  - no approve action
+  - no reject action
+  - no review action
+  - no request approval action
+  - no execution
+  - no publishing
+  - no provider execution
+  - no mutation execution
+  - no AI model calls
+  - read-only deterministic queue preview only
+- conclusion:
+  - Workspace Planning Console now displays a deterministic Approval Queue derived from Approval State records and ranked Proposal Candidates.
+- recommended next milestone:
+  - `Execution Readiness Runtime v1`
+
 Website OS Proposal Candidate Runtime v1 dependency checkpoint (`2026-06-01`):
 - runtime files:
   - `apps/platform/gnr8/runtime/twin/twin-proposal-candidates.ts`

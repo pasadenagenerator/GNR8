@@ -211,7 +211,70 @@ Checkpoint dependency path:
 Checkpoint outcome:
 - GNR8 has the first operational runtime representation of a website visible in Workspace Overview.
 
-Latest completed canonical runtime milestone (2026-06-01):
+Latest completed canonical runtime milestone (2026-06-02):
+- `Approval Queue Preview Runtime v1`
+- completion date:
+  - `2026-06-02`
+- runtime files:
+  - `apps/platform/gnr8/runtime/twin/twin-approval-queue-preview.ts`
+  - `apps/platform/gnr8/runtime/twin/twin-approval-queue-preview.test.ts`
+- implemented function:
+  - `generateTwinApprovalQueueItems(approvalStates, proposalCandidates)`
+- approval queue item fields:
+  - `queueId`
+  - `proposalId`
+  - `proposalTitle`
+  - `approvalState`
+  - `queueRank`
+  - `queuePriority`
+  - `optimizationScore`
+  - `governanceState`
+  - `executionAllowed`
+  - `mutationAllowed`
+  - `publishingAllowed`
+  - `providerExecutionAllowed`
+  - `summary`
+- verified deployed Approval Queue for `Transporti Maver`:
+  - `#1 Improve Homepage Conversion Flow`
+    - `queuePriority`: `high`
+    - `optimizationScore`: `390`
+    - `approvalState`: `pending_review`
+  - `#2 Improve Homepage Quality and Messaging`
+    - `queuePriority`: `medium`
+    - `optimizationScore`: `340`
+    - `approvalState`: `pending_review`
+  - `#3 Maintain Read-Only Validation Mode`
+    - `queuePriority`: `medium`
+    - `optimizationScore`: `320`
+    - `approvalState`: `pending_review`
+- governance values:
+  - `executionAllowed`: `false`
+  - `mutationAllowed`: `false`
+  - `publishingAllowed`: `false`
+  - `providerExecutionAllowed`: `false`
+  - `governanceState`: `approval_queue_preview_only`
+- diagnostics:
+  - `TWIN_APPROVAL_QUEUE_PREVIEW_STARTED`
+  - `TWIN_APPROVAL_QUEUE_PREVIEW_COMPLETED`
+- preserved boundaries:
+  - no approval workflow
+  - no approval state changes
+  - no approve action
+  - no reject action
+  - no review action
+  - no request approval action
+  - no execution
+  - no publishing
+  - no provider execution
+  - no mutation execution
+  - no AI model calls
+  - read-only deterministic queue preview only
+- conclusion:
+  - Workspace Planning Console now displays a deterministic Approval Queue derived from Approval State records and ranked Proposal Candidates.
+- architecture chain:
+  - `Persisted Migration OS Evidence -> Digital Twin -> Observation Runtime -> Insight Runtime -> Recommendation Runtime -> Optimization Runtime -> Optimization Scoring Runtime -> Proposal Candidate Runtime -> Proposal Approval Preview Runtime -> Proposal Approval Runtime -> Approval State Runtime -> Approval Queue Preview Runtime -> Execution Plan Preview Runtime -> Execution Artifact Preview Runtime -> Workspace Planning Console`
+
+Prior completed canonical runtime dependency:
 - `Approval State Runtime v1`
 - completion date:
   - `2026-06-01`
@@ -268,7 +331,7 @@ Latest completed canonical runtime milestone (2026-06-01):
   - Workspace Planning Console now displays deterministic Approval State records derived from Proposal Approval Records.
   - Approval governance modeling now exists independently from approval workflow execution.
 - architecture chain:
-  - `Persisted Migration OS Evidence -> Digital Twin -> Observation Runtime -> Insight Runtime -> Recommendation Runtime -> Optimization Runtime -> Optimization Scoring Runtime -> Proposal Candidate Runtime -> Proposal Approval Preview Runtime -> Proposal Approval Runtime -> Approval State Runtime -> Execution Plan Preview Runtime -> Execution Artifact Preview Runtime -> Workspace Planning Console`
+  - `Persisted Migration OS Evidence -> Digital Twin -> Observation Runtime -> Insight Runtime -> Recommendation Runtime -> Optimization Runtime -> Optimization Scoring Runtime -> Proposal Candidate Runtime -> Proposal Approval Preview Runtime -> Proposal Approval Runtime -> Approval State Runtime -> Approval Queue Preview Runtime -> Execution Plan Preview Runtime -> Execution Artifact Preview Runtime -> Workspace Planning Console`
 
 - `Proposal Candidate Operator UX Cleanup v1`
 - completion date:
@@ -381,7 +444,7 @@ Latest completed canonical runtime milestone (2026-06-01):
 - conclusion:
   - Workspace Overview now displays deterministic ranked optimization opportunities derived from optimization scoring.
 
-- `Persisted Migration OS Evidence -> Digital Twin -> Observation Runtime -> Insight Runtime -> Recommendation Runtime -> Optimization Runtime -> Optimization Scoring Runtime -> Proposal Candidate Runtime -> Proposal Approval Preview Runtime -> Execution Plan Preview Runtime -> Workspace Overview`
+- `Persisted Migration OS Evidence -> Digital Twin -> Observation Runtime -> Insight Runtime -> Recommendation Runtime -> Optimization Runtime -> Optimization Scoring Runtime -> Proposal Candidate Runtime -> Proposal Approval Preview Runtime -> Proposal Approval Runtime -> Approval State Runtime -> Approval Queue Preview Runtime -> Execution Plan Preview Runtime -> Execution Artifact Preview Runtime -> Workspace Planning Console`
 - verified runtime chain:
   - Persisted Migration OS runtime evidence
   - `buildWebsiteDigitalTwin()`
@@ -413,4 +476,4 @@ Latest completed canonical runtime milestone (2026-06-01):
   - future bootstrap resumes from `Persisted Migration OS Evidence -> Website OS Workspace Overview` as completed.
 
 Recommended next milestone:
-- Approval Queue Preview Runtime v1
+- Execution Readiness Runtime v1

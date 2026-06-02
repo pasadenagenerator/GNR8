@@ -283,7 +283,7 @@ Website OS Proposal Candidate Runtime v1 milestone confirmed (`2026-06-01`):
   - no approval workflow yet
   - no AI model calls
 - architecture chain now confirmed:
-  - `Persisted Migration OS Evidence -> Digital Twin -> Observation Runtime -> Insight Runtime -> Recommendation Runtime -> Optimization Runtime -> Optimization Scoring Runtime -> Proposal Candidate Runtime -> Workspace Overview`
+  - `Persisted Migration OS Evidence -> Digital Twin -> Observation Runtime -> Insight Runtime -> Recommendation Runtime -> Optimization Runtime -> Optimization Scoring Runtime -> Proposal Candidate Runtime -> Proposal Approval Preview Runtime -> Proposal Approval Runtime -> Approval State Runtime -> Approval Queue Preview Runtime -> Execution Plan Preview Runtime -> Execution Artifact Preview Runtime -> Workspace Planning Console`
 - diagnostics:
   - `WORKSPACE_OVERVIEW_IMPORT_SOURCE_SEARCH_STARTED`
   - `WORKSPACE_OVERVIEW_STABLE_ARTIFACT_CHECKED`
@@ -532,7 +532,67 @@ Website OS Approval State Runtime v1 milestone confirmed (`2026-06-01`):
   - no AI model calls
   - read-only deterministic state modeling only
 - architecture chain now confirmed:
-  - `Persisted Migration OS Evidence -> Digital Twin -> Observation Runtime -> Insight Runtime -> Recommendation Runtime -> Optimization Runtime -> Optimization Scoring Runtime -> Proposal Candidate Runtime -> Proposal Approval Preview Runtime -> Proposal Approval Runtime -> Approval State Runtime -> Execution Plan Preview Runtime -> Execution Artifact Preview Runtime -> Workspace Planning Console`
+  - `Persisted Migration OS Evidence -> Digital Twin -> Observation Runtime -> Insight Runtime -> Recommendation Runtime -> Optimization Runtime -> Optimization Scoring Runtime -> Proposal Candidate Runtime -> Proposal Approval Preview Runtime -> Proposal Approval Runtime -> Approval State Runtime -> Approval Queue Preview Runtime -> Execution Plan Preview Runtime -> Execution Artifact Preview Runtime -> Workspace Planning Console`
+
+Website OS Approval Queue Preview Runtime v1 milestone confirmed (`2026-06-02`):
+- completion date:
+  - `2026-06-02`
+- runtime files:
+  - `apps/platform/gnr8/runtime/twin/twin-approval-queue-preview.ts`
+  - `apps/platform/gnr8/runtime/twin/twin-approval-queue-preview.test.ts`
+- implemented function:
+  - `generateTwinApprovalQueueItems(approvalStates, proposalCandidates)`
+- approval queue item fields:
+  - `queueId`
+  - `proposalId`
+  - `proposalTitle`
+  - `approvalState`
+  - `queueRank`
+  - `queuePriority`
+  - `optimizationScore`
+  - `governanceState`
+  - `executionAllowed`
+  - `mutationAllowed`
+  - `publishingAllowed`
+  - `providerExecutionAllowed`
+  - `summary`
+- verified deployed Approval Queue for `Transporti Maver`:
+  - `#1 Improve Homepage Conversion Flow`
+    - `queuePriority`: `high`
+    - `optimizationScore`: `390`
+    - `approvalState`: `pending_review`
+  - `#2 Improve Homepage Quality and Messaging`
+    - `queuePriority`: `medium`
+    - `optimizationScore`: `340`
+    - `approvalState`: `pending_review`
+  - `#3 Maintain Read-Only Validation Mode`
+    - `queuePriority`: `medium`
+    - `optimizationScore`: `320`
+    - `approvalState`: `pending_review`
+- governance values:
+  - `executionAllowed`: `false`
+  - `mutationAllowed`: `false`
+  - `publishingAllowed`: `false`
+  - `providerExecutionAllowed`: `false`
+  - `governanceState`: `approval_queue_preview_only`
+- diagnostics:
+  - `TWIN_APPROVAL_QUEUE_PREVIEW_STARTED`
+  - `TWIN_APPROVAL_QUEUE_PREVIEW_COMPLETED`
+- preserved boundaries:
+  - no approval workflow
+  - no approval state changes
+  - no approve action
+  - no reject action
+  - no review action
+  - no request approval action
+  - no execution
+  - no publishing
+  - no provider execution
+  - no mutation execution
+  - no AI model calls
+  - read-only deterministic queue preview only
+- architecture chain now confirmed:
+  - `Persisted Migration OS Evidence -> Digital Twin -> Observation Runtime -> Insight Runtime -> Recommendation Runtime -> Optimization Runtime -> Optimization Scoring Runtime -> Proposal Candidate Runtime -> Proposal Approval Preview Runtime -> Proposal Approval Runtime -> Approval State Runtime -> Approval Queue Preview Runtime -> Execution Plan Preview Runtime -> Execution Artifact Preview Runtime -> Workspace Planning Console`
 
 ## Future Integration Points
 This architecture anchors future integration with:
@@ -558,11 +618,10 @@ First operational success checkpoint:
 - GNR8 now has the first browser-visible Website Digital Twin runtime surface.
 - Digital Twin snapshots now contain imported-site evidence instead of placeholder-only summaries.
 - Workspace Overview is now useful in deployed environments even without local validation snapshot files.
-- Workspace Planning Console now displays deterministic Approval State records derived from Proposal Approval Records.
-- Approval governance modeling now exists independently from approval workflow execution.
+- Workspace Planning Console now displays a deterministic Approval Queue derived from Approval State records and ranked Proposal Candidates.
 
 Recommended next milestone:
-- Approval Queue Preview Runtime v1
+- Execution Readiness Runtime v1
 
 ## Related Canonical Documents
 - `docs/architecture/TWIN_RUNTIME_CONTRACT.md`

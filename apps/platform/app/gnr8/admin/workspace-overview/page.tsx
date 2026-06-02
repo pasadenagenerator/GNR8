@@ -199,6 +199,35 @@ export default async function WorkspaceOverviewPage() {
       </section>
 
       <section style={{ marginTop: 16 }}>
+        <h2 style={{ marginBottom: 10 }}>Execution Readiness</h2>
+        <div style={{ display: "grid", gap: 10 }}>
+          {model.executionReadinessRecords.map((record) => (
+            <article key={record.readinessId} style={CARD_STYLE}>
+              <h3 style={{ marginTop: 0, marginBottom: 6 }}>{record.proposalTitle}</h3>
+              <p style={{ marginTop: 0, marginBottom: 4 }}>readinessState: {record.readinessState}</p>
+              <p style={{ marginTop: 0, marginBottom: 8 }}>readinessScore: {record.readinessScore}</p>
+              <p style={{ marginTop: 0, marginBottom: 6 }}><strong>Requirements Met</strong></p>
+              <ul style={{ marginTop: 0, marginBottom: 8 }}>
+                {record.requirementsMet.map((requirement) => (
+                  <li key={requirement}>{requirement}</li>
+                ))}
+              </ul>
+              <p style={{ marginTop: 0, marginBottom: 6 }}><strong>Requirements Missing</strong></p>
+              <ul style={{ marginTop: 0, marginBottom: 8 }}>
+                {record.requirementsMissing.map((requirement) => (
+                  <li key={requirement}>{requirement}</li>
+                ))}
+              </ul>
+              <p style={{ marginTop: 0, marginBottom: 4 }}><strong>Governance</strong></p>
+              <p style={{ marginTop: 0, marginBottom: 8 }}>governanceState: {record.governanceState}</p>
+              <p style={{ marginTop: 0, marginBottom: 4 }}><strong>Summary</strong></p>
+              <p style={{ margin: 0 }}>{record.summary}</p>
+            </article>
+          ))}
+        </div>
+      </section>
+
+      <section style={{ marginTop: 16 }}>
         <h2 style={{ marginBottom: 10 }}>Execution Plan Preview</h2>
         <div style={{ display: "grid", gap: 10 }}>
           {model.executionPlanPreviews.map((preview) => (
