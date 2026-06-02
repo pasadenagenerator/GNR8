@@ -54,6 +54,10 @@ import {
   generateTwinExecutionReadinessRecords,
   TWIN_EXECUTION_READINESS_DIAGNOSTICS,
 } from "@/gnr8/runtime/twin/twin-execution-readiness";
+import {
+  generateTwinExecutionPackagePreviews,
+  TWIN_EXECUTION_PACKAGE_PREVIEW_DIAGNOSTICS,
+} from "@/gnr8/runtime/twin/twin-execution-package-preview";
 import { InMemoryTwinStore } from "@/gnr8/runtime/twin/twin-store";
 import { createTwinOverview } from "@/gnr8/runtime/twin/twin-viewer";
 
@@ -906,6 +910,7 @@ export async function buildWorkspaceOverviewModel(input?: {
       executionPlanPreviews: [],
       executionArtifactPreviews: [],
       executionReadinessRecords: [],
+      executionPackagePreviews: [],
       overview: {
         twinId: "twin_missing_import",
         siteId: "site_missing_import",
@@ -1005,6 +1010,13 @@ export async function buildWorkspaceOverviewModel(input?: {
       executionArtifactPreviews,
     });
     executionReadinessDiagnostics.push(TWIN_EXECUTION_READINESS_DIAGNOSTICS.COMPLETED);
+    const executionPackagePreviewDiagnostics: string[] = [TWIN_EXECUTION_PACKAGE_PREVIEW_DIAGNOSTICS.STARTED];
+    const executionPackagePreviews = generateTwinExecutionPackagePreviews({
+      readinessRecords: executionReadinessRecords,
+      executionPlanPreviews,
+      executionArtifactPreviews,
+    });
+    executionPackagePreviewDiagnostics.push(TWIN_EXECUTION_PACKAGE_PREVIEW_DIAGNOSTICS.COMPLETED);
     const diagnostics = [
       ...resolution.diagnostics,
       ...storedTwin.diagnostics,
@@ -1024,6 +1036,7 @@ export async function buildWorkspaceOverviewModel(input?: {
       ...executionPlanPreviewDiagnostics,
       ...executionArtifactPreviewDiagnostics,
       ...executionReadinessDiagnostics,
+      ...executionPackagePreviewDiagnostics,
     ];
     return {
       sourceId: bundledSnapshot.fixtureId,
@@ -1043,6 +1056,7 @@ export async function buildWorkspaceOverviewModel(input?: {
       executionPlanPreviews,
       executionArtifactPreviews,
       executionReadinessRecords,
+      executionPackagePreviews,
       overview,
       diagnostics,
     };
@@ -1118,6 +1132,13 @@ export async function buildWorkspaceOverviewModel(input?: {
       executionArtifactPreviews,
     });
     executionReadinessDiagnostics.push(TWIN_EXECUTION_READINESS_DIAGNOSTICS.COMPLETED);
+    const executionPackagePreviewDiagnostics: string[] = [TWIN_EXECUTION_PACKAGE_PREVIEW_DIAGNOSTICS.STARTED];
+    const executionPackagePreviews = generateTwinExecutionPackagePreviews({
+      readinessRecords: executionReadinessRecords,
+      executionPlanPreviews,
+      executionArtifactPreviews,
+    });
+    executionPackagePreviewDiagnostics.push(TWIN_EXECUTION_PACKAGE_PREVIEW_DIAGNOSTICS.COMPLETED);
     const diagnostics = [
       ...resolution.diagnostics,
       ...storedTwin.diagnostics,
@@ -1137,6 +1158,7 @@ export async function buildWorkspaceOverviewModel(input?: {
       ...executionPlanPreviewDiagnostics,
       ...executionArtifactPreviewDiagnostics,
       ...executionReadinessDiagnostics,
+      ...executionPackagePreviewDiagnostics,
     ];
     return {
       sourceId: selectedSnapshot.snapshotId,
@@ -1156,6 +1178,7 @@ export async function buildWorkspaceOverviewModel(input?: {
       executionPlanPreviews,
       executionArtifactPreviews,
       executionReadinessRecords,
+      executionPackagePreviews,
       overview,
       diagnostics,
     };
@@ -1255,6 +1278,13 @@ export async function buildWorkspaceOverviewModel(input?: {
     executionArtifactPreviews,
   });
   executionReadinessDiagnostics.push(TWIN_EXECUTION_READINESS_DIAGNOSTICS.COMPLETED);
+  const executionPackagePreviewDiagnostics: string[] = [TWIN_EXECUTION_PACKAGE_PREVIEW_DIAGNOSTICS.STARTED];
+  const executionPackagePreviews = generateTwinExecutionPackagePreviews({
+    readinessRecords: executionReadinessRecords,
+    executionPlanPreviews,
+    executionArtifactPreviews,
+  });
+  executionPackagePreviewDiagnostics.push(TWIN_EXECUTION_PACKAGE_PREVIEW_DIAGNOSTICS.COMPLETED);
   const diagnostics = [
     ...resolution.diagnostics,
     ...storedTwin.diagnostics,
@@ -1274,6 +1304,7 @@ export async function buildWorkspaceOverviewModel(input?: {
     ...executionPlanPreviewDiagnostics,
     ...executionArtifactPreviewDiagnostics,
     ...executionReadinessDiagnostics,
+    ...executionPackagePreviewDiagnostics,
   ];
 
   return {
@@ -1294,6 +1325,7 @@ export async function buildWorkspaceOverviewModel(input?: {
     executionPlanPreviews,
     executionArtifactPreviews,
     executionReadinessRecords,
+    executionPackagePreviews,
     overview,
     diagnostics,
   };

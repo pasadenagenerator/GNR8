@@ -228,6 +228,36 @@ export default async function WorkspaceOverviewPage() {
       </section>
 
       <section style={{ marginTop: 16 }}>
+        <h2 style={{ marginBottom: 10 }}>Execution Package Preview</h2>
+        <div style={{ display: "grid", gap: 10 }}>
+          {model.executionPackagePreviews.map((preview) => (
+            <article key={preview.packageId} style={CARD_STYLE}>
+              <h3 style={{ marginTop: 0, marginBottom: 6 }}>{preview.proposalTitle}</h3>
+              <p style={{ marginTop: 0, marginBottom: 4 }}>packageState: {preview.packageState}</p>
+              <p style={{ marginTop: 0, marginBottom: 4 }}>readinessState: {preview.readinessState}</p>
+              <p style={{ marginTop: 0, marginBottom: 8 }}>readinessScore: {preview.readinessScore}</p>
+              <p style={{ marginTop: 0, marginBottom: 6 }}><strong>Included Plans</strong></p>
+              <ul style={{ marginTop: 0, marginBottom: 8 }}>
+                {preview.includedPlans.map((includedPlan) => (
+                  <li key={includedPlan}>{includedPlan}</li>
+                ))}
+              </ul>
+              <p style={{ marginTop: 0, marginBottom: 6 }}><strong>Included Artifacts</strong></p>
+              <ul style={{ marginTop: 0, marginBottom: 8 }}>
+                {preview.includedArtifacts.map((includedArtifact) => (
+                  <li key={includedArtifact}>{includedArtifact}</li>
+                ))}
+              </ul>
+              <p style={{ marginTop: 0, marginBottom: 4 }}><strong>Governance</strong></p>
+              <p style={{ marginTop: 0, marginBottom: 8 }}>governanceState: {preview.governanceState}</p>
+              <p style={{ marginTop: 0, marginBottom: 4 }}><strong>Summary</strong></p>
+              <p style={{ margin: 0 }}>{preview.summary}</p>
+            </article>
+          ))}
+        </div>
+      </section>
+
+      <section style={{ marginTop: 16 }}>
         <h2 style={{ marginBottom: 10 }}>Execution Plan Preview</h2>
         <div style={{ display: "grid", gap: 10 }}>
           {model.executionPlanPreviews.map((preview) => (

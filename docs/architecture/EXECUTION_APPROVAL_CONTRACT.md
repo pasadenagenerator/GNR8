@@ -179,7 +179,76 @@ Approval Queue Preview Runtime v1 dependency checkpoint (`2026-06-02`):
 - conclusion:
   - Workspace Planning Console now displays a deterministic Approval Queue derived from Approval State records and ranked Proposal Candidates.
 - recommended next milestone:
-  - `Execution Readiness Runtime v1`
+  - `Execution Readiness Runtime v1` is now completed.
+
+Execution Readiness Runtime v1 dependency checkpoint (`2026-06-02`):
+- completion date:
+  - `2026-06-02`
+- runtime files:
+  - `apps/platform/gnr8/runtime/twin/twin-execution-readiness.ts`
+  - `apps/platform/gnr8/runtime/twin/twin-execution-readiness.test.ts`
+- function:
+  - `generateTwinExecutionReadinessRecords({ approvalQueueItems, executionPlanPreviews, executionArtifactPreviews })`
+- Execution Readiness model fields:
+  - `readinessId`
+  - `proposalId`
+  - `proposalTitle`
+  - `readinessState`
+  - `readinessScore`
+  - `requirementsMet`
+  - `requirementsMissing`
+  - `executionAllowed`
+  - `mutationAllowed`
+  - `publishingAllowed`
+  - `providerExecutionAllowed`
+  - `governanceState`
+  - `summary`
+- readiness states:
+  - `not_ready`
+  - `partially_ready`
+  - `ready_for_future_planning`
+- verified deployed Transporti Maver readiness records:
+  - `Improve Homepage Conversion Flow`
+    - `readinessState`: `partially_ready`
+    - `readinessScore`: `60`
+    - `requirementsMet`: `homepage_detected`, `approval_queue_ranked`, `execution_plan_available`
+    - `requirementsMissing`: `conversion_baseline`, `design_evidence`
+  - `Improve Homepage Quality and Messaging`
+    - `readinessState`: `ready_for_future_planning`
+    - `readinessScore`: `80`
+    - `requirementsMet`: `homepage_detected`, `messaging_surface_identified`, `execution_plan_available`, `artifact_preview_available`
+    - `requirementsMissing`: `design_evidence`
+  - `Maintain Read-Only Validation Mode`
+    - `readinessState`: `ready_for_future_planning`
+    - `readinessScore`: `100`
+    - `requirementsMet`: `governance_boundary_present`, `validation_runtime_active`, `execution_plan_available`, `artifact_preview_available`
+    - `requirementsMissing`: `none`
+- governance values:
+  - `executionAllowed`: `false`
+  - `mutationAllowed`: `false`
+  - `publishingAllowed`: `false`
+  - `providerExecutionAllowed`: `false`
+  - `governanceState`: `execution_readiness_preview_only`
+- diagnostics:
+  - `TWIN_EXECUTION_READINESS_STARTED`
+  - `TWIN_EXECUTION_READINESS_COMPLETED`
+- preserved execution boundary:
+  - no execution
+  - no execution planning execution
+  - no publishing
+  - no provider execution
+  - no mutation execution
+  - no approval actions
+  - no workflow execution
+  - no AI model calls
+  - deterministic read-only readiness modeling only
+- architecture chain:
+  - `Persisted Migration OS Evidence -> Digital Twin -> Observation Runtime -> Insight Runtime -> Recommendation Runtime -> Optimization Runtime -> Optimization Scoring Runtime -> Proposal Candidate Runtime -> Proposal Approval Preview Runtime -> Proposal Approval Runtime -> Approval State Runtime -> Approval Queue Preview Runtime -> Execution Readiness Runtime -> Execution Plan Preview Runtime -> Execution Artifact Preview Runtime -> Workspace Planning Console`
+- conclusion:
+  - Workspace Planning Console now displays deterministic Execution Readiness records derived from Approval Queue items, Execution Plan Preview artifacts, and Execution Artifact Preview artifacts.
+  - Execution readiness modeling remains governance-blocked and non-executable.
+- recommended next milestone:
+  - `Execution Package Preview Runtime v1`
 
 Website OS Proposal Candidate Runtime v1 dependency checkpoint (`2026-06-01`):
 - runtime files:
