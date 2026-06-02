@@ -63,6 +63,7 @@ test("workspace overview model: twin overview and diagnostics render data from i
   assert.equal(Array.isArray(model.executionPackagePreviews), true);
   assert.equal(Array.isArray(model.executionPackageReadinessRecords), true);
   assert.equal(Array.isArray(model.executionContractPreviews), true);
+  assert.equal(Array.isArray(model.executionContractReadinessRecords), true);
   assert.equal(model.observations.length > 0 || model.sourceId === null, true);
   assert.equal(model.diagnostics.includes("TWIN_OVERVIEW_CREATED"), true);
   assert.equal(model.diagnostics.includes("TWIN_OBSERVATIONS_STARTED"), model.sourceId !== null);
@@ -97,6 +98,8 @@ test("workspace overview model: twin overview and diagnostics render data from i
   assert.equal(model.diagnostics.includes("TWIN_EXECUTION_PACKAGE_READINESS_COMPLETED"), model.sourceId !== null);
   assert.equal(model.diagnostics.includes("TWIN_EXECUTION_CONTRACT_PREVIEW_STARTED"), model.sourceId !== null);
   assert.equal(model.diagnostics.includes("TWIN_EXECUTION_CONTRACT_PREVIEW_COMPLETED"), model.sourceId !== null);
+  assert.equal(model.diagnostics.includes("TWIN_EXECUTION_CONTRACT_READINESS_STARTED"), model.sourceId !== null);
+  assert.equal(model.diagnostics.includes("TWIN_EXECUTION_CONTRACT_READINESS_COMPLETED"), model.sourceId !== null);
   assert.equal(model.overview.contentSummary.includes("pages="), true);
   assert.equal(model.overview.contentSummary.includes("deterministic_content_read_model"), false);
   assert.equal(model.overview.designSummary.includes("assets="), true);
@@ -236,6 +239,20 @@ test("workspace overview model: proposal candidates are present and remain read-
     model.executionContractPreviews.every((entry) => entry.governanceState === "execution_contract_preview_only"),
     true,
   );
+  assert.equal(model.executionContractReadinessRecords.length, model.executionContractPreviews.length);
+  assert.equal(model.executionContractReadinessRecords.every((entry) => entry.executionAllowed === false), true);
+  assert.equal(model.executionContractReadinessRecords.every((entry) => entry.mutationAllowed === false), true);
+  assert.equal(model.executionContractReadinessRecords.every((entry) => entry.publishingAllowed === false), true);
+  assert.equal(
+    model.executionContractReadinessRecords.every((entry) => entry.providerExecutionAllowed === false),
+    true,
+  );
+  assert.equal(
+    model.executionContractReadinessRecords.every(
+      (entry) => entry.governanceState === "execution_contract_readiness_preview_only",
+    ),
+    true,
+  );
   const readinessByTitle = new Map(model.executionReadinessRecords.map((entry) => [entry.proposalTitle, entry]));
   const packagePreviewByTitle = new Map(model.executionPackagePreviews.map((entry) => [entry.proposalTitle, entry]));
   const packageReadinessByTitle = new Map(
@@ -243,6 +260,9 @@ test("workspace overview model: proposal candidates are present and remain read-
   );
   const contractPreviewByTitle = new Map(
     model.executionContractPreviews.map((entry) => [entry.proposalTitle, entry]),
+  );
+  const contractReadinessByTitle = new Map(
+    model.executionContractReadinessRecords.map((entry) => [entry.proposalTitle, entry]),
   );
   const conversionReadiness = readinessByTitle.get("Improve Homepage Conversion Flow");
   if (conversionReadiness) {
@@ -281,6 +301,16 @@ test("workspace overview model: proposal candidates are present and remain read-
       "missing_design_evidence",
       "governance_execution_blocked",
     ]);
+    const contractReadiness = contractReadinessByTitle.get("Improve Homepage Conversion Flow");
+    assert.equal(contractReadiness?.contractPreviewId, contractPreview?.contractPreviewId);
+    assert.equal(contractReadiness?.readinessState, "not_ready");
+    assert.equal(contractReadiness?.readinessScore, 70);
+    assert.deepEqual(contractReadiness?.requirementsMet, [
+      "contract_preview_present",
+      "contract_scope_defined",
+      "execution_package_available",
+    ]);
+    assert.deepEqual(contractReadiness?.requirementsMissing, ["conversion_baseline", "design_evidence"]);
   }
   const messagingReadiness = readinessByTitle.get("Improve Homepage Quality and Messaging");
   if (messagingReadiness) {
@@ -316,6 +346,17 @@ test("workspace overview model: proposal candidates are present and remain read-
     assert.deepEqual(contractPreview?.contractScope, ["homepage_hero", "homepage_messaging"]);
     assert.deepEqual(contractPreview?.requiredInputs, ["design_evidence"]);
     assert.deepEqual(contractPreview?.blockedReasons, ["missing_design_evidence", "governance_execution_blocked"]);
+    const contractReadiness = contractReadinessByTitle.get("Improve Homepage Quality and Messaging");
+    assert.equal(contractReadiness?.contractPreviewId, contractPreview?.contractPreviewId);
+    assert.equal(contractReadiness?.readinessState, "nearly_ready");
+    assert.equal(contractReadiness?.readinessScore, 90);
+    assert.deepEqual(contractReadiness?.requirementsMet, [
+      "contract_preview_present",
+      "contract_scope_defined",
+      "content_plan_available",
+      "execution_package_available",
+    ]);
+    assert.deepEqual(contractReadiness?.requirementsMissing, ["design_evidence"]);
   }
   const validationReadiness = readinessByTitle.get("Maintain Read-Only Validation Mode");
   assert.equal(validationReadiness != null, model.sourceId !== null);
@@ -346,6 +387,16 @@ test("workspace overview model: proposal candidates are present and remain read-
     assert.deepEqual(contractPreview?.contractScope, ["runtime_governance"]);
     assert.deepEqual(contractPreview?.requiredInputs, []);
     assert.deepEqual(contractPreview?.blockedReasons, ["governance_execution_blocked"]);
+    const contractReadiness = contractReadinessByTitle.get("Maintain Read-Only Validation Mode");
+    assert.equal(contractReadiness?.contractPreviewId, contractPreview?.contractPreviewId);
+    assert.equal(contractReadiness?.readinessState, "ready");
+    assert.equal(contractReadiness?.readinessScore, 100);
+    assert.deepEqual(contractReadiness?.requirementsMet, [
+      "contract_preview_present",
+      "governance_boundary_present",
+      "validation_runtime_active",
+    ]);
+    assert.deepEqual(contractReadiness?.requirementsMissing, []);
   }
   assert.equal(
     model.proposalCandidates.every((entry) =>
@@ -377,6 +428,7 @@ test("workspace overview model: observations include read-only runtime validatio
     assert.deepEqual(model.executionPackagePreviews, []);
     assert.deepEqual(model.executionPackageReadinessRecords, []);
     assert.deepEqual(model.executionContractPreviews, []);
+    assert.deepEqual(model.executionContractReadinessRecords, []);
     return;
   }
   assert.equal(model.observations.some((entry) => entry.title === "Read-Only Runtime Validation"), true);
@@ -430,6 +482,7 @@ test("workspace overview page source: renders required sections", async () => {
   assert.equal(source.includes("Execution Package Preview"), true);
   assert.equal(source.includes("Execution Package Readiness"), true);
   assert.equal(source.includes("Execution Contract Preview"), true);
+  assert.equal(source.includes("Execution Contract Readiness"), true);
   assert.equal(source.includes("Execution Plan Preview"), true);
   assert.equal(source.includes("Execution Artifact Preview"), true);
   assert.equal(source.includes("preview.proposalTitle"), true);
@@ -514,6 +567,19 @@ test("workspace overview page source: renders required sections", async () => {
   assert.equal(source.includes("Contract Scope"), true);
   assert.equal(source.includes("Required Inputs"), true);
   assert.equal(source.includes("Blocked Reasons"), true);
+  assert.equal(source.includes("model.executionContractReadinessRecords.map"), true);
+  assert.equal(source.includes("readinessRecord.contractPreviewId"), true);
+  assert.equal(source.includes("readinessRecord.proposalTitle"), true);
+  assert.equal(source.includes("readinessRecord.readinessState"), true);
+  assert.equal(source.includes("readinessRecord.readinessScore"), true);
+  assert.equal(source.includes("readinessRecord.requirementsMet.map"), true);
+  assert.equal(source.includes("readinessRecord.requirementsMissing.map"), true);
+  assert.equal(source.includes("readinessRecord.executionAllowed"), true);
+  assert.equal(source.includes("readinessRecord.mutationAllowed"), true);
+  assert.equal(source.includes("readinessRecord.publishingAllowed"), true);
+  assert.equal(source.includes("readinessRecord.providerExecutionAllowed"), true);
+  assert.equal(source.includes("readinessRecord.governanceState"), true);
+  assert.equal(source.includes("readinessRecord.summary"), true);
   assert.equal(source.includes("Governance"), true);
   assert.equal(source.includes("Governance State Path"), true);
   assert.equal(source.includes("proposal_candidate"), true);
@@ -664,6 +730,7 @@ test("workspace overview page source: planning sections render in runtime order"
   const executionPackageIndex = source.indexOf("Execution Package Preview");
   const executionPackageReadinessIndex = source.indexOf("Execution Package Readiness");
   const executionContractPreviewIndex = source.indexOf("Execution Contract Preview");
+  const executionContractReadinessIndex = source.indexOf("Execution Contract Readiness");
   const executionPlanIndex = source.indexOf("Execution Plan Preview");
   const executionArtifactIndex = source.indexOf("Execution Artifact Preview");
   const opportunityRankingIndex = source.indexOf("Opportunity Ranking");
@@ -677,7 +744,8 @@ test("workspace overview page source: planning sections render in runtime order"
   assert.equal(executionPackageIndex > executionReadinessIndex, true);
   assert.equal(executionPackageReadinessIndex > executionPackageIndex, true);
   assert.equal(executionContractPreviewIndex > executionPackageReadinessIndex, true);
-  assert.equal(executionPlanIndex > executionContractPreviewIndex, true);
+  assert.equal(executionContractReadinessIndex > executionContractPreviewIndex, true);
+  assert.equal(executionPlanIndex > executionContractReadinessIndex, true);
   assert.equal(executionArtifactIndex > executionPlanIndex, true);
   assert.equal(opportunityRankingIndex > executionArtifactIndex, true);
 });

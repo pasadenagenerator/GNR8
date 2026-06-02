@@ -283,7 +283,7 @@ Website OS Proposal Candidate Runtime v1 milestone confirmed (`2026-06-01`):
   - no approval workflow yet
   - no AI model calls
 - architecture chain now confirmed:
-  - `Persisted Migration OS Evidence -> Digital Twin -> Observation Runtime -> Insight Runtime -> Recommendation Runtime -> Optimization Runtime -> Optimization Scoring Runtime -> Proposal Candidate Runtime -> Proposal Approval Preview Runtime -> Proposal Approval Runtime -> Approval State Runtime -> Approval Queue Preview Runtime -> Execution Readiness Runtime -> Execution Package Preview Runtime -> Execution Package Readiness Runtime -> Execution Plan Preview Runtime -> Execution Artifact Preview Runtime -> Workspace Planning Console`
+  - `Observation Runtime → Insight Runtime → Recommendation Runtime → Optimization Runtime → Optimization Scoring Runtime → Proposal Candidate Runtime → Proposal Approval Preview Runtime → Proposal Approval Runtime → Approval State Runtime → Approval Queue Preview Runtime → Execution Readiness Runtime → Execution Package Preview Runtime → Execution Package Readiness Runtime → Execution Contract Preview Runtime → Execution Plan Preview Runtime → Execution Artifact Preview Runtime → Workspace Planning Console`
 - diagnostics:
   - `WORKSPACE_OVERVIEW_IMPORT_SOURCE_SEARCH_STARTED`
   - `WORKSPACE_OVERVIEW_STABLE_ARTIFACT_CHECKED`
@@ -532,7 +532,7 @@ Website OS Approval State Runtime v1 milestone confirmed (`2026-06-01`):
   - no AI model calls
   - read-only deterministic state modeling only
 - architecture chain now confirmed:
-  - `Persisted Migration OS Evidence -> Digital Twin -> Observation Runtime -> Insight Runtime -> Recommendation Runtime -> Optimization Runtime -> Optimization Scoring Runtime -> Proposal Candidate Runtime -> Proposal Approval Preview Runtime -> Proposal Approval Runtime -> Approval State Runtime -> Approval Queue Preview Runtime -> Execution Readiness Runtime -> Execution Package Preview Runtime -> Execution Package Readiness Runtime -> Execution Plan Preview Runtime -> Execution Artifact Preview Runtime -> Workspace Planning Console`
+  - `Observation Runtime → Insight Runtime → Recommendation Runtime → Optimization Runtime → Optimization Scoring Runtime → Proposal Candidate Runtime → Proposal Approval Preview Runtime → Proposal Approval Runtime → Approval State Runtime → Approval Queue Preview Runtime → Execution Readiness Runtime → Execution Package Preview Runtime → Execution Package Readiness Runtime → Execution Contract Preview Runtime → Execution Plan Preview Runtime → Execution Artifact Preview Runtime → Workspace Planning Console`
 
 Website OS Approval Queue Preview Runtime v1 milestone confirmed (`2026-06-02`):
 - completion date:
@@ -592,7 +592,7 @@ Website OS Approval Queue Preview Runtime v1 milestone confirmed (`2026-06-02`):
   - no AI model calls
   - read-only deterministic queue preview only
 - architecture chain now confirmed:
-  - `Persisted Migration OS Evidence -> Digital Twin -> Observation Runtime -> Insight Runtime -> Recommendation Runtime -> Optimization Runtime -> Optimization Scoring Runtime -> Proposal Candidate Runtime -> Proposal Approval Preview Runtime -> Proposal Approval Runtime -> Approval State Runtime -> Approval Queue Preview Runtime -> Execution Readiness Runtime -> Execution Package Preview Runtime -> Execution Package Readiness Runtime -> Execution Plan Preview Runtime -> Execution Artifact Preview Runtime -> Workspace Planning Console`
+  - `Observation Runtime → Insight Runtime → Recommendation Runtime → Optimization Runtime → Optimization Scoring Runtime → Proposal Candidate Runtime → Proposal Approval Preview Runtime → Proposal Approval Runtime → Approval State Runtime → Approval Queue Preview Runtime → Execution Readiness Runtime → Execution Package Preview Runtime → Execution Package Readiness Runtime → Execution Contract Preview Runtime → Execution Plan Preview Runtime → Execution Artifact Preview Runtime → Workspace Planning Console`
 
 Website OS Execution Readiness Runtime v1 milestone confirmed (`2026-06-02`):
 - completion date:
@@ -656,7 +656,7 @@ Website OS Execution Readiness Runtime v1 milestone confirmed (`2026-06-02`):
   - no AI model calls
   - deterministic read-only readiness modeling only
 - architecture chain now confirmed:
-  - `Persisted Migration OS Evidence -> Digital Twin -> Observation Runtime -> Insight Runtime -> Recommendation Runtime -> Optimization Runtime -> Optimization Scoring Runtime -> Proposal Candidate Runtime -> Proposal Approval Preview Runtime -> Proposal Approval Runtime -> Approval State Runtime -> Approval Queue Preview Runtime -> Execution Readiness Runtime -> Execution Package Preview Runtime -> Execution Package Readiness Runtime -> Execution Plan Preview Runtime -> Execution Artifact Preview Runtime -> Workspace Planning Console`
+  - `Observation Runtime → Insight Runtime → Recommendation Runtime → Optimization Runtime → Optimization Scoring Runtime → Proposal Candidate Runtime → Proposal Approval Preview Runtime → Proposal Approval Runtime → Approval State Runtime → Approval Queue Preview Runtime → Execution Readiness Runtime → Execution Package Preview Runtime → Execution Package Readiness Runtime → Execution Contract Preview Runtime → Execution Plan Preview Runtime → Execution Artifact Preview Runtime → Workspace Planning Console`
 
 Website OS Execution Package Preview Runtime v1 milestone confirmed (`2026-06-02`):
 - completion date:
@@ -723,7 +723,7 @@ Website OS Execution Package Preview Runtime v1 milestone confirmed (`2026-06-02
   - no AI model calls
   - deterministic read-only package preview only
 - architecture chain now confirmed:
-  - `Persisted Migration OS Evidence -> Digital Twin -> Observation Runtime -> Insight Runtime -> Recommendation Runtime -> Optimization Runtime -> Optimization Scoring Runtime -> Proposal Candidate Runtime -> Proposal Approval Preview Runtime -> Proposal Approval Runtime -> Approval State Runtime -> Approval Queue Preview Runtime -> Execution Readiness Runtime -> Execution Package Preview Runtime -> Execution Package Readiness Runtime -> Execution Plan Preview Runtime -> Execution Artifact Preview Runtime -> Workspace Planning Console`
+  - `Observation Runtime → Insight Runtime → Recommendation Runtime → Optimization Runtime → Optimization Scoring Runtime → Proposal Candidate Runtime → Proposal Approval Preview Runtime → Proposal Approval Runtime → Approval State Runtime → Approval Queue Preview Runtime → Execution Readiness Runtime → Execution Package Preview Runtime → Execution Package Readiness Runtime → Execution Contract Preview Runtime → Execution Plan Preview Runtime → Execution Artifact Preview Runtime → Workspace Planning Console`
 
 Website OS Execution Package Readiness Runtime v1 milestone confirmed (`2026-06-02`):
 - completion date:
@@ -787,7 +787,54 @@ Website OS Execution Package Readiness Runtime v1 milestone confirmed (`2026-06-
   - no AI model calls
   - deterministic read-only package readiness modeling only
 - architecture chain now confirmed:
-  - `Persisted Migration OS Evidence -> Digital Twin -> Observation Runtime -> Insight Runtime -> Recommendation Runtime -> Optimization Runtime -> Optimization Scoring Runtime -> Proposal Candidate Runtime -> Proposal Approval Preview Runtime -> Proposal Approval Runtime -> Approval State Runtime -> Approval Queue Preview Runtime -> Execution Readiness Runtime -> Execution Package Preview Runtime -> Execution Package Readiness Runtime -> Execution Plan Preview Runtime -> Execution Artifact Preview Runtime -> Workspace Planning Console`
+  - `Observation Runtime → Insight Runtime → Recommendation Runtime → Optimization Runtime → Optimization Scoring Runtime → Proposal Candidate Runtime → Proposal Approval Preview Runtime → Proposal Approval Runtime → Approval State Runtime → Approval Queue Preview Runtime → Execution Readiness Runtime → Execution Package Preview Runtime → Execution Package Readiness Runtime → Execution Contract Preview Runtime → Execution Plan Preview Runtime → Execution Artifact Preview Runtime → Workspace Planning Console`
+
+Website OS Execution Contract Preview Runtime v1 milestone confirmed (`2026-06-02`):
+- completion date:
+  - `2026-06-02`
+- runtime files:
+  - `apps/platform/gnr8/runtime/twin/twin-execution-contract-preview.ts`
+  - `apps/platform/gnr8/runtime/twin/twin-execution-contract-preview.test.ts`
+- implemented function:
+  - `generateTwinExecutionContractPreviews(packageReadinessRecords)`
+- model:
+  - `TwinExecutionContractPreview`
+- contract preview states:
+  - `contract_preview_ready`
+  - `contract_preview_incomplete`
+  - `contract_preview_blocked`
+- verified deployed Transporti Maver execution contract previews:
+  - `Improve Homepage Conversion Flow`
+    - `contractPreviewState`: `contract_preview_incomplete`
+    - `readinessScore`: `70`
+    - `contractType`: `conversion_execution_contract`
+  - `Improve Homepage Quality and Messaging`
+    - `contractPreviewState`: `contract_preview_ready`
+    - `readinessScore`: `90`
+    - `contractType`: `content_execution_contract`
+  - `Maintain Read-Only Validation Mode`
+    - `contractPreviewState`: `contract_preview_ready`
+    - `readinessScore`: `100`
+    - `contractType`: `governance_validation_contract`
+- governance values:
+  - `executionAllowed`: `false`
+  - `mutationAllowed`: `false`
+  - `publishingAllowed`: `false`
+  - `providerExecutionAllowed`: `false`
+  - `governanceState`: `execution_contract_preview_only`
+- diagnostics:
+  - `TWIN_EXECUTION_CONTRACT_PREVIEW_STARTED`
+  - `TWIN_EXECUTION_CONTRACT_PREVIEW_COMPLETED`
+- preserved boundaries:
+  - no execution
+  - no approval workflow
+  - no mutation execution
+  - no publishing
+  - no provider execution
+  - no AI model calls
+  - deterministic preview modeling only
+- architecture chain now confirmed:
+  - `Observation Runtime → Insight Runtime → Recommendation Runtime → Optimization Runtime → Optimization Scoring Runtime → Proposal Candidate Runtime → Proposal Approval Preview Runtime → Proposal Approval Runtime → Approval State Runtime → Approval Queue Preview Runtime → Execution Readiness Runtime → Execution Package Preview Runtime → Execution Package Readiness Runtime → Execution Contract Preview Runtime → Execution Plan Preview Runtime → Execution Artifact Preview Runtime → Workspace Planning Console`
 
 ## Future Integration Points
 This architecture anchors future integration with:
@@ -813,11 +860,11 @@ First operational success checkpoint:
 - GNR8 now has the first browser-visible Website Digital Twin runtime surface.
 - Digital Twin snapshots now contain imported-site evidence instead of placeholder-only summaries.
 - Workspace Overview is now useful in deployed environments even without local validation snapshot files.
-- Workspace Planning Console now displays deterministic Execution Package Readiness records derived from Execution Package Preview records.
-- Execution package readiness remains governance-blocked and non-executable.
+- Workspace Planning Console now displays deterministic Execution Contract Preview artifacts derived from Execution Package Readiness Runtime records.
+- Execution contract preview remains governance-blocked and non-executable.
 
 Recommended next milestone:
-- Execution Contract Preview Runtime v1
+- Execution Contract Readiness Runtime v1
 
 ## Related Canonical Documents
 - `docs/architecture/TWIN_RUNTIME_CONTRACT.md`
