@@ -299,6 +299,57 @@ export default async function WorkspaceOverviewPage() {
       </section>
 
       <section style={{ marginTop: 16 }}>
+        <h2 style={{ marginBottom: 10 }}>Execution Contract Preview</h2>
+        <div style={{ display: "grid", gap: 10 }}>
+          {model.executionContractPreviews.map((contractPreview) => (
+            <article key={contractPreview.contractPreviewId} style={CARD_STYLE}>
+              <h3 style={{ marginTop: 0, marginBottom: 6 }}>{contractPreview.proposalTitle}</h3>
+              <p style={{ marginTop: 0, marginBottom: 4 }}>
+                contractPreviewState: {contractPreview.contractPreviewState}
+              </p>
+              <p style={{ marginTop: 0, marginBottom: 4 }}>readinessState: {contractPreview.readinessState}</p>
+              <p style={{ marginTop: 0, marginBottom: 4 }}>readinessScore: {contractPreview.readinessScore}</p>
+              <p style={{ marginTop: 0, marginBottom: 8 }}>contractType: {contractPreview.contractType}</p>
+              <p style={{ marginTop: 0, marginBottom: 6 }}><strong>Contract Scope</strong></p>
+              <ul style={{ marginTop: 0, marginBottom: 8 }}>
+                {contractPreview.contractScope.map((scope) => (
+                  <li key={scope}>{scope}</li>
+                ))}
+              </ul>
+              <p style={{ marginTop: 0, marginBottom: 6 }}><strong>Required Inputs</strong></p>
+              <ul style={{ marginTop: 0, marginBottom: 8 }}>
+                {contractPreview.requiredInputs.map((requiredInput) => (
+                  <li key={requiredInput}>{requiredInput}</li>
+                ))}
+              </ul>
+              <p style={{ marginTop: 0, marginBottom: 6 }}><strong>Blocked Reasons</strong></p>
+              <ul style={{ marginTop: 0, marginBottom: 8 }}>
+                {contractPreview.blockedReasons.map((blockedReason) => (
+                  <li key={blockedReason}>{blockedReason}</li>
+                ))}
+              </ul>
+              <p style={{ marginTop: 0, marginBottom: 4 }}><strong>Governance</strong></p>
+              <p style={{ marginTop: 0, marginBottom: 4 }}>
+                executionAllowed: {String(contractPreview.executionAllowed)}
+              </p>
+              <p style={{ marginTop: 0, marginBottom: 4 }}>
+                mutationAllowed: {String(contractPreview.mutationAllowed)}
+              </p>
+              <p style={{ marginTop: 0, marginBottom: 4 }}>
+                publishingAllowed: {String(contractPreview.publishingAllowed)}
+              </p>
+              <p style={{ marginTop: 0, marginBottom: 4 }}>
+                providerExecutionAllowed: {String(contractPreview.providerExecutionAllowed)}
+              </p>
+              <p style={{ marginTop: 0, marginBottom: 8 }}>governanceState: {contractPreview.governanceState}</p>
+              <p style={{ marginTop: 0, marginBottom: 4 }}><strong>Summary</strong></p>
+              <p style={{ margin: 0 }}>{contractPreview.summary}</p>
+            </article>
+          ))}
+        </div>
+      </section>
+
+      <section style={{ marginTop: 16 }}>
         <h2 style={{ marginBottom: 10 }}>Execution Plan Preview</h2>
         <div style={{ display: "grid", gap: 10 }}>
           {model.executionPlanPreviews.map((preview) => (

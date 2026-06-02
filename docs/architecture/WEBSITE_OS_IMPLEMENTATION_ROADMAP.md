@@ -212,6 +212,76 @@ Checkpoint outcome:
 - GNR8 has the first operational runtime representation of a website visible in Workspace Overview.
 
 Latest completed canonical runtime milestone (2026-06-02):
+- `Execution Package Readiness Runtime v1`
+- completion date:
+  - `2026-06-02`
+- runtime files:
+  - `apps/platform/gnr8/runtime/twin/twin-execution-package-readiness.ts`
+  - `apps/platform/gnr8/runtime/twin/twin-execution-package-readiness.test.ts`
+- implemented function:
+  - `generateTwinExecutionPackageReadinessRecords(packagePreviews)`
+- Execution Package Readiness model fields:
+  - `packageId`
+  - `proposalId`
+  - `proposalTitle`
+  - `readinessState`
+  - `readinessScore`
+  - `requirementsMet`
+  - `requirementsMissing`
+  - `executionAllowed`
+  - `mutationAllowed`
+  - `publishingAllowed`
+  - `providerExecutionAllowed`
+  - `governanceState`
+  - `summary`
+- readiness states:
+  - `incomplete`
+  - `nearly_ready`
+  - `ready`
+- verified deployed Transporti Maver package readiness records:
+  - `Improve Homepage Conversion Flow`
+    - `readinessState`: `incomplete`
+    - `readinessScore`: `70`
+    - `requirementsMet`: `execution_package_present`, `planning_artifacts_present`, `homepage_detected`
+    - `requirementsMissing`: `conversion_baseline`, `design_evidence`
+  - `Improve Homepage Quality and Messaging`
+    - `readinessState`: `nearly_ready`
+    - `readinessScore`: `90`
+    - `requirementsMet`: `execution_package_present`, `planning_artifacts_present`, `messaging_surface_identified`, `homepage_detected`
+    - `requirementsMissing`: `design_evidence`
+  - `Maintain Read-Only Validation Mode`
+    - `readinessState`: `ready`
+    - `readinessScore`: `100`
+    - `requirementsMet`: `execution_package_present`, `governance_boundary_present`, `validation_runtime_active`
+    - `requirementsMissing`: `none`
+- governance values:
+  - `executionAllowed`: `false`
+  - `mutationAllowed`: `false`
+  - `publishingAllowed`: `false`
+  - `providerExecutionAllowed`: `false`
+  - `governanceState`: `execution_package_readiness_preview_only`
+- diagnostics:
+  - `TWIN_EXECUTION_PACKAGE_READINESS_STARTED`
+  - `TWIN_EXECUTION_PACKAGE_READINESS_COMPLETED`
+- preserved boundaries:
+  - no execution
+  - no workflow
+  - no approvals
+  - no artifact generation
+  - no publishing
+  - no provider execution
+  - no mutation execution
+  - no AI model calls
+  - deterministic read-only package readiness modeling only
+- conclusion:
+  - Workspace Planning Console now displays deterministic Execution Package Readiness records derived from Execution Package Preview records.
+  - Execution package readiness remains governance-blocked and non-executable.
+- architecture chain:
+  - `Persisted Migration OS Evidence -> Digital Twin -> Observation Runtime -> Insight Runtime -> Recommendation Runtime -> Optimization Runtime -> Optimization Scoring Runtime -> Proposal Candidate Runtime -> Proposal Approval Preview Runtime -> Proposal Approval Runtime -> Approval State Runtime -> Approval Queue Preview Runtime -> Execution Readiness Runtime -> Execution Package Preview Runtime -> Execution Package Readiness Runtime -> Execution Plan Preview Runtime -> Execution Artifact Preview Runtime -> Workspace Planning Console`
+- recommended next milestone:
+  - `Execution Contract Preview Runtime v1`
+
+Prior completed canonical runtime dependency:
 - `Execution Package Preview Runtime v1`
 - completion date:
   - `2026-06-02`
@@ -280,7 +350,7 @@ Latest completed canonical runtime milestone (2026-06-02):
   - Workspace Planning Console now displays deterministic Execution Package Preview records assembled from Execution Readiness, Execution Plan Preview, and Execution Artifact Preview runtime layers.
   - Execution package modeling remains governance-blocked and non-executable.
 - architecture chain:
-  - `Persisted Migration OS Evidence -> Digital Twin -> Observation Runtime -> Insight Runtime -> Recommendation Runtime -> Optimization Runtime -> Optimization Scoring Runtime -> Proposal Candidate Runtime -> Proposal Approval Preview Runtime -> Proposal Approval Runtime -> Approval State Runtime -> Approval Queue Preview Runtime -> Execution Readiness Runtime -> Execution Package Preview Runtime -> Execution Plan Preview Runtime -> Execution Artifact Preview Runtime -> Workspace Planning Console`
+  - `Persisted Migration OS Evidence -> Digital Twin -> Observation Runtime -> Insight Runtime -> Recommendation Runtime -> Optimization Runtime -> Optimization Scoring Runtime -> Proposal Candidate Runtime -> Proposal Approval Preview Runtime -> Proposal Approval Runtime -> Approval State Runtime -> Approval Queue Preview Runtime -> Execution Readiness Runtime -> Execution Package Preview Runtime -> Execution Package Readiness Runtime -> Execution Plan Preview Runtime -> Execution Artifact Preview Runtime -> Workspace Planning Console`
 
 Prior completed canonical runtime dependency:
 - `Execution Readiness Runtime v1`
@@ -348,7 +418,7 @@ Prior completed canonical runtime dependency:
   - Workspace Planning Console now displays deterministic Execution Readiness records derived from Approval Queue items, Execution Plan Preview artifacts, and Execution Artifact Preview artifacts.
   - Execution readiness modeling remains governance-blocked and non-executable.
 - architecture chain:
-  - `Persisted Migration OS Evidence -> Digital Twin -> Observation Runtime -> Insight Runtime -> Recommendation Runtime -> Optimization Runtime -> Optimization Scoring Runtime -> Proposal Candidate Runtime -> Proposal Approval Preview Runtime -> Proposal Approval Runtime -> Approval State Runtime -> Approval Queue Preview Runtime -> Execution Readiness Runtime -> Execution Package Preview Runtime -> Execution Plan Preview Runtime -> Execution Artifact Preview Runtime -> Workspace Planning Console`
+  - `Persisted Migration OS Evidence -> Digital Twin -> Observation Runtime -> Insight Runtime -> Recommendation Runtime -> Optimization Runtime -> Optimization Scoring Runtime -> Proposal Candidate Runtime -> Proposal Approval Preview Runtime -> Proposal Approval Runtime -> Approval State Runtime -> Approval Queue Preview Runtime -> Execution Readiness Runtime -> Execution Package Preview Runtime -> Execution Package Readiness Runtime -> Execution Plan Preview Runtime -> Execution Artifact Preview Runtime -> Workspace Planning Console`
 
 Prior completed canonical runtime dependency:
 - `Approval Queue Preview Runtime v1`
@@ -411,7 +481,7 @@ Prior completed canonical runtime dependency:
 - conclusion:
   - Workspace Planning Console now displays a deterministic Approval Queue derived from Approval State records and ranked Proposal Candidates.
 - architecture chain:
-  - `Persisted Migration OS Evidence -> Digital Twin -> Observation Runtime -> Insight Runtime -> Recommendation Runtime -> Optimization Runtime -> Optimization Scoring Runtime -> Proposal Candidate Runtime -> Proposal Approval Preview Runtime -> Proposal Approval Runtime -> Approval State Runtime -> Approval Queue Preview Runtime -> Execution Readiness Runtime -> Execution Package Preview Runtime -> Execution Plan Preview Runtime -> Execution Artifact Preview Runtime -> Workspace Planning Console`
+  - `Persisted Migration OS Evidence -> Digital Twin -> Observation Runtime -> Insight Runtime -> Recommendation Runtime -> Optimization Runtime -> Optimization Scoring Runtime -> Proposal Candidate Runtime -> Proposal Approval Preview Runtime -> Proposal Approval Runtime -> Approval State Runtime -> Approval Queue Preview Runtime -> Execution Readiness Runtime -> Execution Package Preview Runtime -> Execution Package Readiness Runtime -> Execution Plan Preview Runtime -> Execution Artifact Preview Runtime -> Workspace Planning Console`
 
 Earlier completed canonical runtime dependency:
 - `Approval State Runtime v1`
@@ -470,7 +540,7 @@ Earlier completed canonical runtime dependency:
   - Workspace Planning Console now displays deterministic Approval State records derived from Proposal Approval Records.
   - Approval governance modeling now exists independently from approval workflow execution.
 - architecture chain:
-  - `Persisted Migration OS Evidence -> Digital Twin -> Observation Runtime -> Insight Runtime -> Recommendation Runtime -> Optimization Runtime -> Optimization Scoring Runtime -> Proposal Candidate Runtime -> Proposal Approval Preview Runtime -> Proposal Approval Runtime -> Approval State Runtime -> Approval Queue Preview Runtime -> Execution Readiness Runtime -> Execution Package Preview Runtime -> Execution Plan Preview Runtime -> Execution Artifact Preview Runtime -> Workspace Planning Console`
+  - `Persisted Migration OS Evidence -> Digital Twin -> Observation Runtime -> Insight Runtime -> Recommendation Runtime -> Optimization Runtime -> Optimization Scoring Runtime -> Proposal Candidate Runtime -> Proposal Approval Preview Runtime -> Proposal Approval Runtime -> Approval State Runtime -> Approval Queue Preview Runtime -> Execution Readiness Runtime -> Execution Package Preview Runtime -> Execution Package Readiness Runtime -> Execution Plan Preview Runtime -> Execution Artifact Preview Runtime -> Workspace Planning Console`
 
 - `Proposal Candidate Operator UX Cleanup v1`
 - completion date:
@@ -583,7 +653,7 @@ Earlier completed canonical runtime dependency:
 - conclusion:
   - Workspace Overview now displays deterministic ranked optimization opportunities derived from optimization scoring.
 
-- `Persisted Migration OS Evidence -> Digital Twin -> Observation Runtime -> Insight Runtime -> Recommendation Runtime -> Optimization Runtime -> Optimization Scoring Runtime -> Proposal Candidate Runtime -> Proposal Approval Preview Runtime -> Proposal Approval Runtime -> Approval State Runtime -> Approval Queue Preview Runtime -> Execution Readiness Runtime -> Execution Package Preview Runtime -> Execution Plan Preview Runtime -> Execution Artifact Preview Runtime -> Workspace Planning Console`
+- `Persisted Migration OS Evidence -> Digital Twin -> Observation Runtime -> Insight Runtime -> Recommendation Runtime -> Optimization Runtime -> Optimization Scoring Runtime -> Proposal Candidate Runtime -> Proposal Approval Preview Runtime -> Proposal Approval Runtime -> Approval State Runtime -> Approval Queue Preview Runtime -> Execution Readiness Runtime -> Execution Package Preview Runtime -> Execution Package Readiness Runtime -> Execution Plan Preview Runtime -> Execution Artifact Preview Runtime -> Workspace Planning Console`
 - verified runtime chain:
   - Persisted Migration OS runtime evidence
   - `buildWebsiteDigitalTwin()`
@@ -599,6 +669,7 @@ Earlier completed canonical runtime dependency:
   - `generateTwinExecutionArtifactPreviews(executionPlanPreviews)`
   - `generateTwinExecutionReadinessRecords({ approvalQueueItems, executionPlanPreviews, executionArtifactPreviews })`
   - `generateTwinExecutionPackagePreviews({ readinessRecords, executionPlanPreviews, executionArtifactPreviews })`
+  - `generateTwinExecutionPackageReadinessRecords(packagePreviews)`
   - Workspace Planning Console
 - verified deployed runtime values:
   - `selectedSource`: `persisted_runtime_import_evidence`
@@ -619,4 +690,4 @@ Earlier completed canonical runtime dependency:
   - future bootstrap resumes from `Persisted Migration OS Evidence -> Website OS Workspace Overview` as completed.
 
 Recommended next milestone:
-- Execution Package Readiness Runtime v1
+- Execution Contract Preview Runtime v1
