@@ -243,12 +243,84 @@ Execution Readiness Runtime v1 dependency checkpoint (`2026-06-02`):
   - no AI model calls
   - deterministic read-only readiness modeling only
 - architecture chain:
-  - `Persisted Migration OS Evidence -> Digital Twin -> Observation Runtime -> Insight Runtime -> Recommendation Runtime -> Optimization Runtime -> Optimization Scoring Runtime -> Proposal Candidate Runtime -> Proposal Approval Preview Runtime -> Proposal Approval Runtime -> Approval State Runtime -> Approval Queue Preview Runtime -> Execution Readiness Runtime -> Execution Plan Preview Runtime -> Execution Artifact Preview Runtime -> Workspace Planning Console`
+  - `Persisted Migration OS Evidence -> Digital Twin -> Observation Runtime -> Insight Runtime -> Recommendation Runtime -> Optimization Runtime -> Optimization Scoring Runtime -> Proposal Candidate Runtime -> Proposal Approval Preview Runtime -> Proposal Approval Runtime -> Approval State Runtime -> Approval Queue Preview Runtime -> Execution Readiness Runtime -> Execution Package Preview Runtime -> Execution Plan Preview Runtime -> Execution Artifact Preview Runtime -> Workspace Planning Console`
 - conclusion:
   - Workspace Planning Console now displays deterministic Execution Readiness records derived from Approval Queue items, Execution Plan Preview artifacts, and Execution Artifact Preview artifacts.
   - Execution readiness modeling remains governance-blocked and non-executable.
 - recommended next milestone:
-  - `Execution Package Preview Runtime v1`
+  - `Execution Package Preview Runtime v1` is now completed.
+
+Execution Package Preview Runtime v1 dependency checkpoint (`2026-06-02`):
+- completion date:
+  - `2026-06-02`
+- runtime files:
+  - `apps/platform/gnr8/runtime/twin/twin-execution-package-preview.ts`
+  - `apps/platform/gnr8/runtime/twin/twin-execution-package-preview.test.ts`
+- function:
+  - `generateTwinExecutionPackagePreviews({ readinessRecords, executionPlanPreviews, executionArtifactPreviews })`
+- Execution Package Preview model fields:
+  - `packageId`
+  - `proposalId`
+  - `proposalTitle`
+  - `packageState`
+  - `readinessState`
+  - `readinessScore`
+  - `includedArtifacts`
+  - `includedPlans`
+  - `executionAllowed`
+  - `mutationAllowed`
+  - `publishingAllowed`
+  - `providerExecutionAllowed`
+  - `governanceState`
+  - `summary`
+- package states:
+  - `preview_ready`
+  - `preview_incomplete`
+- verified deployed Transporti Maver package previews:
+  - `Improve Homepage Conversion Flow`
+    - `packageState`: `preview_ready`
+    - `readinessState`: `partially_ready`
+    - `readinessScore`: `60`
+    - `includedPlans`: `analyze_homepage_conversion_flow`, `identify_primary_conversion_path`, `prepare_conversion_improvement_plan`
+    - `includedArtifacts`: `conversion_review_document`, `conversion_improvement_plan`
+  - `Improve Homepage Quality and Messaging`
+    - `packageState`: `preview_ready`
+    - `readinessState`: `ready_for_future_planning`
+    - `readinessScore`: `80`
+    - `includedPlans`: `analyze_homepage_content`, `identify_messaging_improvements`, `prepare_content_improvement_plan`
+    - `includedArtifacts`: `messaging_review_document`, `content_improvement_plan`
+  - `Maintain Read-Only Validation Mode`
+    - `packageState`: `preview_ready`
+    - `readinessState`: `ready_for_future_planning`
+    - `readinessScore`: `100`
+    - `includedPlans`: `maintain_read_only_runtime`, `continue_validation_observation`
+    - `includedArtifacts`: `validation_status_report`
+- governance values:
+  - `executionAllowed`: `false`
+  - `mutationAllowed`: `false`
+  - `publishingAllowed`: `false`
+  - `providerExecutionAllowed`: `false`
+  - `governanceState`: `execution_package_preview_only`
+- diagnostics:
+  - `TWIN_EXECUTION_PACKAGE_PREVIEW_STARTED`
+  - `TWIN_EXECUTION_PACKAGE_PREVIEW_COMPLETED`
+- preserved execution boundary:
+  - no execution
+  - no artifact generation
+  - no approval workflow
+  - no approval state changes
+  - no publishing
+  - no provider execution
+  - no mutation execution
+  - no AI model calls
+  - deterministic read-only package preview only
+- architecture chain:
+  - `Persisted Migration OS Evidence -> Digital Twin -> Observation Runtime -> Insight Runtime -> Recommendation Runtime -> Optimization Runtime -> Optimization Scoring Runtime -> Proposal Candidate Runtime -> Proposal Approval Preview Runtime -> Proposal Approval Runtime -> Approval State Runtime -> Approval Queue Preview Runtime -> Execution Readiness Runtime -> Execution Package Preview Runtime -> Execution Plan Preview Runtime -> Execution Artifact Preview Runtime -> Workspace Planning Console`
+- conclusion:
+  - Workspace Planning Console now displays deterministic Execution Package Preview records assembled from Execution Readiness, Execution Plan Preview, and Execution Artifact Preview runtime layers.
+  - Execution package modeling remains governance-blocked and non-executable.
+- recommended next milestone:
+  - `Execution Package Readiness Runtime v1`
 
 Website OS Proposal Candidate Runtime v1 dependency checkpoint (`2026-06-01`):
 - runtime files:
