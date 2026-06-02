@@ -74,6 +74,14 @@ import {
   generateTwinExecutionBundlePreviews,
   TWIN_EXECUTION_BUNDLE_PREVIEW_DIAGNOSTICS,
 } from "@/gnr8/runtime/twin/twin-execution-bundle-preview";
+import {
+  generateTwinExecutionBundleReadinessRecords,
+  TWIN_EXECUTION_BUNDLE_READINESS_DIAGNOSTICS,
+} from "@/gnr8/runtime/twin/twin-execution-bundle-readiness";
+import {
+  generateTwinExecutionAuthorizationPreviewRecords,
+  TWIN_EXECUTION_AUTHORIZATION_PREVIEW_DIAGNOSTICS,
+} from "@/gnr8/runtime/twin/twin-execution-authorization-preview";
 import { InMemoryTwinStore } from "@/gnr8/runtime/twin/twin-store";
 import { createTwinOverview } from "@/gnr8/runtime/twin/twin-viewer";
 
@@ -931,6 +939,8 @@ export async function buildWorkspaceOverviewModel(input?: {
       executionContractPreviews: [],
       executionContractReadinessRecords: [],
       executionBundlePreviews: [],
+      executionBundleReadinessRecords: [],
+      executionAuthorizationPreviews: [],
       overview: {
         twinId: "twin_missing_import",
         siteId: "site_missing_import",
@@ -1061,6 +1071,18 @@ export async function buildWorkspaceOverviewModel(input?: {
     const executionBundlePreviews =
       generateTwinExecutionBundlePreviews(executionContractReadinessRecords);
     executionBundlePreviewDiagnostics.push(TWIN_EXECUTION_BUNDLE_PREVIEW_DIAGNOSTICS.COMPLETED);
+    const executionBundleReadinessDiagnostics: string[] = [
+      TWIN_EXECUTION_BUNDLE_READINESS_DIAGNOSTICS.STARTED,
+    ];
+    const executionBundleReadinessRecords =
+      generateTwinExecutionBundleReadinessRecords(executionBundlePreviews);
+    executionBundleReadinessDiagnostics.push(TWIN_EXECUTION_BUNDLE_READINESS_DIAGNOSTICS.COMPLETED);
+    const executionAuthorizationPreviewDiagnostics: string[] = [
+      TWIN_EXECUTION_AUTHORIZATION_PREVIEW_DIAGNOSTICS.STARTED,
+    ];
+    const executionAuthorizationPreviews =
+      generateTwinExecutionAuthorizationPreviewRecords(executionBundleReadinessRecords);
+    executionAuthorizationPreviewDiagnostics.push(TWIN_EXECUTION_AUTHORIZATION_PREVIEW_DIAGNOSTICS.COMPLETED);
     const diagnostics = [
       ...resolution.diagnostics,
       ...storedTwin.diagnostics,
@@ -1085,6 +1107,8 @@ export async function buildWorkspaceOverviewModel(input?: {
       ...executionContractPreviewDiagnostics,
       ...executionContractReadinessDiagnostics,
       ...executionBundlePreviewDiagnostics,
+      ...executionBundleReadinessDiagnostics,
+      ...executionAuthorizationPreviewDiagnostics,
     ];
     return {
       sourceId: bundledSnapshot.fixtureId,
@@ -1109,6 +1133,8 @@ export async function buildWorkspaceOverviewModel(input?: {
       executionContractPreviews,
       executionContractReadinessRecords,
       executionBundlePreviews,
+      executionBundleReadinessRecords,
+      executionAuthorizationPreviews,
       overview,
       diagnostics,
     };
@@ -1215,6 +1241,18 @@ export async function buildWorkspaceOverviewModel(input?: {
     const executionBundlePreviews =
       generateTwinExecutionBundlePreviews(executionContractReadinessRecords);
     executionBundlePreviewDiagnostics.push(TWIN_EXECUTION_BUNDLE_PREVIEW_DIAGNOSTICS.COMPLETED);
+    const executionBundleReadinessDiagnostics: string[] = [
+      TWIN_EXECUTION_BUNDLE_READINESS_DIAGNOSTICS.STARTED,
+    ];
+    const executionBundleReadinessRecords =
+      generateTwinExecutionBundleReadinessRecords(executionBundlePreviews);
+    executionBundleReadinessDiagnostics.push(TWIN_EXECUTION_BUNDLE_READINESS_DIAGNOSTICS.COMPLETED);
+    const executionAuthorizationPreviewDiagnostics: string[] = [
+      TWIN_EXECUTION_AUTHORIZATION_PREVIEW_DIAGNOSTICS.STARTED,
+    ];
+    const executionAuthorizationPreviews =
+      generateTwinExecutionAuthorizationPreviewRecords(executionBundleReadinessRecords);
+    executionAuthorizationPreviewDiagnostics.push(TWIN_EXECUTION_AUTHORIZATION_PREVIEW_DIAGNOSTICS.COMPLETED);
     const diagnostics = [
       ...resolution.diagnostics,
       ...storedTwin.diagnostics,
@@ -1239,6 +1277,8 @@ export async function buildWorkspaceOverviewModel(input?: {
       ...executionContractPreviewDiagnostics,
       ...executionContractReadinessDiagnostics,
       ...executionBundlePreviewDiagnostics,
+      ...executionBundleReadinessDiagnostics,
+      ...executionAuthorizationPreviewDiagnostics,
     ];
     return {
       sourceId: selectedSnapshot.snapshotId,
@@ -1263,6 +1303,8 @@ export async function buildWorkspaceOverviewModel(input?: {
       executionContractPreviews,
       executionContractReadinessRecords,
       executionBundlePreviews,
+      executionBundleReadinessRecords,
+      executionAuthorizationPreviews,
       overview,
       diagnostics,
     };
@@ -1393,6 +1435,18 @@ export async function buildWorkspaceOverviewModel(input?: {
   const executionBundlePreviews =
     generateTwinExecutionBundlePreviews(executionContractReadinessRecords);
   executionBundlePreviewDiagnostics.push(TWIN_EXECUTION_BUNDLE_PREVIEW_DIAGNOSTICS.COMPLETED);
+  const executionBundleReadinessDiagnostics: string[] = [
+    TWIN_EXECUTION_BUNDLE_READINESS_DIAGNOSTICS.STARTED,
+  ];
+  const executionBundleReadinessRecords =
+    generateTwinExecutionBundleReadinessRecords(executionBundlePreviews);
+  executionBundleReadinessDiagnostics.push(TWIN_EXECUTION_BUNDLE_READINESS_DIAGNOSTICS.COMPLETED);
+  const executionAuthorizationPreviewDiagnostics: string[] = [
+    TWIN_EXECUTION_AUTHORIZATION_PREVIEW_DIAGNOSTICS.STARTED,
+  ];
+  const executionAuthorizationPreviews =
+    generateTwinExecutionAuthorizationPreviewRecords(executionBundleReadinessRecords);
+  executionAuthorizationPreviewDiagnostics.push(TWIN_EXECUTION_AUTHORIZATION_PREVIEW_DIAGNOSTICS.COMPLETED);
   const diagnostics = [
     ...resolution.diagnostics,
     ...storedTwin.diagnostics,
@@ -1417,6 +1471,8 @@ export async function buildWorkspaceOverviewModel(input?: {
     ...executionContractPreviewDiagnostics,
     ...executionContractReadinessDiagnostics,
     ...executionBundlePreviewDiagnostics,
+    ...executionBundleReadinessDiagnostics,
+    ...executionAuthorizationPreviewDiagnostics,
   ];
 
   return {
@@ -1442,6 +1498,8 @@ export async function buildWorkspaceOverviewModel(input?: {
     executionContractPreviews,
     executionContractReadinessRecords,
     executionBundlePreviews,
+    executionBundleReadinessRecords,
+    executionAuthorizationPreviews,
     overview,
     diagnostics,
   };
