@@ -70,6 +70,10 @@ import {
   generateTwinExecutionContractReadinessRecords,
   TWIN_EXECUTION_CONTRACT_READINESS_DIAGNOSTICS,
 } from "@/gnr8/runtime/twin/twin-execution-contract-readiness";
+import {
+  generateTwinExecutionBundlePreviews,
+  TWIN_EXECUTION_BUNDLE_PREVIEW_DIAGNOSTICS,
+} from "@/gnr8/runtime/twin/twin-execution-bundle-preview";
 import { InMemoryTwinStore } from "@/gnr8/runtime/twin/twin-store";
 import { createTwinOverview } from "@/gnr8/runtime/twin/twin-viewer";
 
@@ -926,6 +930,7 @@ export async function buildWorkspaceOverviewModel(input?: {
       executionPackageReadinessRecords: [],
       executionContractPreviews: [],
       executionContractReadinessRecords: [],
+      executionBundlePreviews: [],
       overview: {
         twinId: "twin_missing_import",
         siteId: "site_missing_import",
@@ -1050,6 +1055,12 @@ export async function buildWorkspaceOverviewModel(input?: {
     const executionContractReadinessRecords =
       generateTwinExecutionContractReadinessRecords(executionContractPreviews);
     executionContractReadinessDiagnostics.push(TWIN_EXECUTION_CONTRACT_READINESS_DIAGNOSTICS.COMPLETED);
+    const executionBundlePreviewDiagnostics: string[] = [
+      TWIN_EXECUTION_BUNDLE_PREVIEW_DIAGNOSTICS.STARTED,
+    ];
+    const executionBundlePreviews =
+      generateTwinExecutionBundlePreviews(executionContractReadinessRecords);
+    executionBundlePreviewDiagnostics.push(TWIN_EXECUTION_BUNDLE_PREVIEW_DIAGNOSTICS.COMPLETED);
     const diagnostics = [
       ...resolution.diagnostics,
       ...storedTwin.diagnostics,
@@ -1073,6 +1084,7 @@ export async function buildWorkspaceOverviewModel(input?: {
       ...executionPackageReadinessDiagnostics,
       ...executionContractPreviewDiagnostics,
       ...executionContractReadinessDiagnostics,
+      ...executionBundlePreviewDiagnostics,
     ];
     return {
       sourceId: bundledSnapshot.fixtureId,
@@ -1096,6 +1108,7 @@ export async function buildWorkspaceOverviewModel(input?: {
       executionPackageReadinessRecords,
       executionContractPreviews,
       executionContractReadinessRecords,
+      executionBundlePreviews,
       overview,
       diagnostics,
     };
@@ -1196,6 +1209,12 @@ export async function buildWorkspaceOverviewModel(input?: {
     const executionContractReadinessRecords =
       generateTwinExecutionContractReadinessRecords(executionContractPreviews);
     executionContractReadinessDiagnostics.push(TWIN_EXECUTION_CONTRACT_READINESS_DIAGNOSTICS.COMPLETED);
+    const executionBundlePreviewDiagnostics: string[] = [
+      TWIN_EXECUTION_BUNDLE_PREVIEW_DIAGNOSTICS.STARTED,
+    ];
+    const executionBundlePreviews =
+      generateTwinExecutionBundlePreviews(executionContractReadinessRecords);
+    executionBundlePreviewDiagnostics.push(TWIN_EXECUTION_BUNDLE_PREVIEW_DIAGNOSTICS.COMPLETED);
     const diagnostics = [
       ...resolution.diagnostics,
       ...storedTwin.diagnostics,
@@ -1219,6 +1238,7 @@ export async function buildWorkspaceOverviewModel(input?: {
       ...executionPackageReadinessDiagnostics,
       ...executionContractPreviewDiagnostics,
       ...executionContractReadinessDiagnostics,
+      ...executionBundlePreviewDiagnostics,
     ];
     return {
       sourceId: selectedSnapshot.snapshotId,
@@ -1242,6 +1262,7 @@ export async function buildWorkspaceOverviewModel(input?: {
       executionPackageReadinessRecords,
       executionContractPreviews,
       executionContractReadinessRecords,
+      executionBundlePreviews,
       overview,
       diagnostics,
     };
@@ -1366,6 +1387,12 @@ export async function buildWorkspaceOverviewModel(input?: {
   const executionContractReadinessRecords =
     generateTwinExecutionContractReadinessRecords(executionContractPreviews);
   executionContractReadinessDiagnostics.push(TWIN_EXECUTION_CONTRACT_READINESS_DIAGNOSTICS.COMPLETED);
+  const executionBundlePreviewDiagnostics: string[] = [
+    TWIN_EXECUTION_BUNDLE_PREVIEW_DIAGNOSTICS.STARTED,
+  ];
+  const executionBundlePreviews =
+    generateTwinExecutionBundlePreviews(executionContractReadinessRecords);
+  executionBundlePreviewDiagnostics.push(TWIN_EXECUTION_BUNDLE_PREVIEW_DIAGNOSTICS.COMPLETED);
   const diagnostics = [
     ...resolution.diagnostics,
     ...storedTwin.diagnostics,
@@ -1389,6 +1416,7 @@ export async function buildWorkspaceOverviewModel(input?: {
     ...executionPackageReadinessDiagnostics,
     ...executionContractPreviewDiagnostics,
     ...executionContractReadinessDiagnostics,
+    ...executionBundlePreviewDiagnostics,
   ];
 
   return {
@@ -1413,6 +1441,7 @@ export async function buildWorkspaceOverviewModel(input?: {
     executionPackageReadinessRecords,
     executionContractPreviews,
     executionContractReadinessRecords,
+    executionBundlePreviews,
     overview,
     diagnostics,
   };

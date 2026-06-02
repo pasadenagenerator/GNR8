@@ -391,6 +391,48 @@ export default async function WorkspaceOverviewPage() {
       </section>
 
       <section style={{ marginTop: 16 }}>
+        <h2 style={{ marginBottom: 10 }}>Execution Bundle Preview</h2>
+        <div style={{ display: "grid", gap: 10 }}>
+          {model.executionBundlePreviews.map((bundlePreview) => (
+            <article key={bundlePreview.bundleId} style={CARD_STYLE}>
+              <h3 style={{ marginTop: 0, marginBottom: 6 }}>{bundlePreview.proposalTitle}</h3>
+              <p style={{ marginTop: 0, marginBottom: 4 }}>bundleState: {bundlePreview.bundleState}</p>
+              <p style={{ marginTop: 0, marginBottom: 4 }}>readinessState: {bundlePreview.readinessState}</p>
+              <p style={{ marginTop: 0, marginBottom: 8 }}>readinessScore: {bundlePreview.readinessScore}</p>
+              <p style={{ marginTop: 0, marginBottom: 6 }}><strong>Included Components</strong></p>
+              <ul style={{ marginTop: 0, marginBottom: 8 }}>
+                {bundlePreview.includedComponents.map((component) => (
+                  <li key={component}>{component}</li>
+                ))}
+              </ul>
+              <p style={{ marginTop: 0, marginBottom: 6 }}><strong>Missing Components</strong></p>
+              <ul style={{ marginTop: 0, marginBottom: 8 }}>
+                {bundlePreview.missingComponents.map((component) => (
+                  <li key={component}>{component}</li>
+                ))}
+              </ul>
+              <p style={{ marginTop: 0, marginBottom: 4 }}><strong>Governance</strong></p>
+              <p style={{ marginTop: 0, marginBottom: 4 }}>
+                executionAllowed: {String(bundlePreview.executionAllowed)}
+              </p>
+              <p style={{ marginTop: 0, marginBottom: 4 }}>
+                mutationAllowed: {String(bundlePreview.mutationAllowed)}
+              </p>
+              <p style={{ marginTop: 0, marginBottom: 4 }}>
+                publishingAllowed: {String(bundlePreview.publishingAllowed)}
+              </p>
+              <p style={{ marginTop: 0, marginBottom: 4 }}>
+                providerExecutionAllowed: {String(bundlePreview.providerExecutionAllowed)}
+              </p>
+              <p style={{ marginTop: 0, marginBottom: 8 }}>governanceState: {bundlePreview.governanceState}</p>
+              <p style={{ marginTop: 0, marginBottom: 4 }}><strong>Summary</strong></p>
+              <p style={{ margin: 0 }}>{bundlePreview.summary}</p>
+            </article>
+          ))}
+        </div>
+      </section>
+
+      <section style={{ marginTop: 16 }}>
         <h2 style={{ marginBottom: 10 }}>Execution Plan Preview</h2>
         <div style={{ display: "grid", gap: 10 }}>
           {model.executionPlanPreviews.map((preview) => (
