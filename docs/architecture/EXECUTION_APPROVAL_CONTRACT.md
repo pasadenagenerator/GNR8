@@ -68,18 +68,25 @@ Explicitly:
 - no executable approvals exist
 - no execution is enabled
 
-Proposal Approval Runtime v1 dependency checkpoint (`2026-06-01`):
+Approval State Runtime v1 dependency checkpoint (`2026-06-01`):
 - runtime files:
-  - `apps/platform/gnr8/runtime/twin/twin-proposal-approval.ts`
-  - `apps/platform/gnr8/runtime/twin/twin-proposal-approval.test.ts`
+  - `apps/platform/gnr8/runtime/twin/twin-approval-state.ts`
+  - `apps/platform/gnr8/runtime/twin/twin-approval-state.test.ts`
 - function:
-  - `generateTwinProposalApprovalRecords({ proposalCandidates, approvalPreviews })`
-- approval record fields:
+  - `generateTwinApprovalStateRecords(approvalRecords)`
+- approval state model:
+  - `TwinApprovalState`
+  - `approval_required`
+  - `pending_review`
+  - `ready_for_future_approval`
+- current runtime emission:
+  - `pending_review` only
+  - future state support exists through typing/contracts only
+- approval state record fields:
   - `approvalId`
   - `proposalId`
   - `proposalTitle`
-  - `approvalStatus`
-  - `decision`
+  - `approvalState`
   - `requiredApprovals`
   - `receivedApprovals`
   - `approvalComplete`
@@ -89,29 +96,28 @@ Proposal Approval Runtime v1 dependency checkpoint (`2026-06-01`):
   - `providerExecutionAllowed`
   - `governanceState`
   - `summary`
-- verified deployed approval records for `Transporti Maver`:
-  - `approvalStatus`: `approval_required`
-  - `decision`: `not_requested`
+- verified deployed approval state records for `Transporti Maver`:
+  - `proposalTitle`: `Improve Homepage Conversion Flow`
+  - `approvalState`: `pending_review`
   - `requiredApprovals`: `1`
   - `receivedApprovals`: `0`
   - `approvalComplete`: `false`
-  - `executionAllowed`: `false`
-  - `mutationAllowed`: `false`
-  - `publishingAllowed`: `false`
-  - `providerExecutionAllowed`: `false`
-  - `governanceState`: `approval_required_preview_only`
+  - `governanceState`: `approval_state_preview_only`
+  - all deployed approval state records currently share identical `governanceState`
 - diagnostics:
-  - `TWIN_PROPOSAL_APPROVAL_STARTED`
-  - `TWIN_PROPOSAL_APPROVAL_COMPLETED`
+  - `TWIN_APPROVAL_STATE_STARTED`
+  - `TWIN_APPROVAL_STATE_COMPLETED`
 - preserved execution boundary:
   - no approval workflow
-  - no approve/reject controls
-  - no request approval controls
+  - no approve action
+  - no reject action
+  - no request-review action
   - no execution
   - no provider execution
   - no publishing
   - no mutation execution
   - no AI model calls
+  - read-only deterministic state modeling only
 
 Website OS Proposal Candidate Runtime v1 dependency checkpoint (`2026-06-01`):
 - runtime files:

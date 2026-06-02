@@ -481,18 +481,25 @@ Persisted Migration OS Evidence -> Website OS Workspace Overview milestone confi
   - `WORKSPACE_OVERVIEW_PERSISTED_RUNTIME_EVIDENCE_SHAPE_VALID`
   - `WORKSPACE_OVERVIEW_PERSISTED_RUNTIME_EVIDENCE_SELECTED`
 
-Website OS Proposal Approval Runtime v1 milestone confirmed (`2026-06-01`):
+Website OS Approval State Runtime v1 milestone confirmed (`2026-06-01`):
 - runtime files:
-  - `apps/platform/gnr8/runtime/twin/twin-proposal-approval.ts`
-  - `apps/platform/gnr8/runtime/twin/twin-proposal-approval.test.ts`
+  - `apps/platform/gnr8/runtime/twin/twin-approval-state.ts`
+  - `apps/platform/gnr8/runtime/twin/twin-approval-state.test.ts`
 - implemented function:
-  - `generateTwinProposalApprovalRecords({ proposalCandidates, approvalPreviews })`
-- approval record fields:
+  - `generateTwinApprovalStateRecords(approvalRecords)`
+- approval state model:
+  - `TwinApprovalState`
+  - `approval_required`
+  - `pending_review`
+  - `ready_for_future_approval`
+- current runtime emission:
+  - `pending_review` only
+  - future state support exists through typing/contracts only
+- approval state record fields:
   - `approvalId`
   - `proposalId`
   - `proposalTitle`
-  - `approvalStatus`
-  - `decision`
+  - `approvalState`
   - `requiredApprovals`
   - `receivedApprovals`
   - `approvalComplete`
@@ -502,31 +509,30 @@ Website OS Proposal Approval Runtime v1 milestone confirmed (`2026-06-01`):
   - `providerExecutionAllowed`
   - `governanceState`
   - `summary`
-- verified deployed approval records for `Transporti Maver`:
-  - `approvalStatus`: `approval_required`
-  - `decision`: `not_requested`
+- verified deployed approval state records for `Transporti Maver`:
+  - `proposalTitle`: `Improve Homepage Conversion Flow`
+  - `approvalState`: `pending_review`
   - `requiredApprovals`: `1`
   - `receivedApprovals`: `0`
   - `approvalComplete`: `false`
-  - `executionAllowed`: `false`
-  - `mutationAllowed`: `false`
-  - `publishingAllowed`: `false`
-  - `providerExecutionAllowed`: `false`
-  - `governanceState`: `approval_required_preview_only`
+  - `governanceState`: `approval_state_preview_only`
+  - all deployed approval state records currently share identical `governanceState`
 - diagnostics:
-  - `TWIN_PROPOSAL_APPROVAL_STARTED`
-  - `TWIN_PROPOSAL_APPROVAL_COMPLETED`
+  - `TWIN_APPROVAL_STATE_STARTED`
+  - `TWIN_APPROVAL_STATE_COMPLETED`
 - preserved boundaries:
   - no approval workflow
-  - no approve/reject controls
-  - no request approval controls
+  - no approve action
+  - no reject action
+  - no request-review action
   - no execution
   - no provider execution
   - no publishing
   - no mutation execution
   - no AI model calls
+  - read-only deterministic state modeling only
 - architecture chain now confirmed:
-  - `Persisted Migration OS Evidence -> Digital Twin -> Observation Runtime -> Insight Runtime -> Recommendation Runtime -> Optimization Runtime -> Optimization Scoring Runtime -> Proposal Candidate Runtime -> Proposal Approval Preview Runtime -> Proposal Approval Runtime -> Execution Plan Preview Runtime -> Execution Artifact Preview Runtime -> Workspace Planning Console`
+  - `Persisted Migration OS Evidence -> Digital Twin -> Observation Runtime -> Insight Runtime -> Recommendation Runtime -> Optimization Runtime -> Optimization Scoring Runtime -> Proposal Candidate Runtime -> Proposal Approval Preview Runtime -> Proposal Approval Runtime -> Approval State Runtime -> Execution Plan Preview Runtime -> Execution Artifact Preview Runtime -> Workspace Planning Console`
 
 ## Future Integration Points
 This architecture anchors future integration with:
@@ -552,10 +558,11 @@ First operational success checkpoint:
 - GNR8 now has the first browser-visible Website Digital Twin runtime surface.
 - Digital Twin snapshots now contain imported-site evidence instead of placeholder-only summaries.
 - Workspace Overview is now useful in deployed environments even without local validation snapshot files.
-- Workspace Planning Console now displays deterministic read-only Approval Records derived from Proposal Candidates and Approval Preview artifacts.
+- Workspace Planning Console now displays deterministic Approval State records derived from Proposal Approval Records.
+- Approval governance modeling now exists independently from approval workflow execution.
 
 Recommended next milestone:
-- Approval Record Operator UX Cleanup v1
+- Approval Queue Preview Runtime v1
 
 ## Related Canonical Documents
 - `docs/architecture/TWIN_RUNTIME_CONTRACT.md`

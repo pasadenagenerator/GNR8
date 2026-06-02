@@ -56,6 +56,7 @@ test("workspace overview model: twin overview and diagnostics render data from i
   assert.equal(Array.isArray(model.approvalPreviews), true);
   assert.equal(Array.isArray(model.proposalApprovalRecords), true);
   assert.equal(Array.isArray(model.approvalStates), true);
+  assert.equal(Array.isArray(model.approvalQueueItems), true);
   assert.equal(Array.isArray(model.executionPlanPreviews), true);
   assert.equal(Array.isArray(model.executionArtifactPreviews), true);
   assert.equal(model.observations.length > 0 || model.sourceId === null, true);
@@ -78,6 +79,8 @@ test("workspace overview model: twin overview and diagnostics render data from i
   assert.equal(model.diagnostics.includes("TWIN_PROPOSAL_APPROVAL_COMPLETED"), model.sourceId !== null);
   assert.equal(model.diagnostics.includes("TWIN_APPROVAL_STATE_STARTED"), model.sourceId !== null);
   assert.equal(model.diagnostics.includes("TWIN_APPROVAL_STATE_COMPLETED"), model.sourceId !== null);
+  assert.equal(model.diagnostics.includes("TWIN_APPROVAL_QUEUE_PREVIEW_STARTED"), model.sourceId !== null);
+  assert.equal(model.diagnostics.includes("TWIN_APPROVAL_QUEUE_PREVIEW_COMPLETED"), model.sourceId !== null);
   assert.equal(model.diagnostics.includes("TWIN_EXECUTION_PLAN_PREVIEW_STARTED"), model.sourceId !== null);
   assert.equal(model.diagnostics.includes("TWIN_EXECUTION_PLAN_PREVIEW_COMPLETED"), model.sourceId !== null);
   assert.equal(model.diagnostics.includes("TWIN_EXECUTION_ARTIFACT_PREVIEW_STARTED"), model.sourceId !== null);
@@ -143,6 +146,35 @@ test("workspace overview model: proposal candidates are present and remain read-
   assert.equal(model.approvalStates.every((entry) => entry.publishingAllowed === false), true);
   assert.equal(model.approvalStates.every((entry) => entry.providerExecutionAllowed === false), true);
   assert.equal(model.approvalStates.every((entry) => entry.governanceState === "approval_state_preview_only"), true);
+  assert.equal(model.approvalQueueItems.length, model.approvalStates.length);
+  assert.deepEqual(
+    [...model.approvalQueueItems].sort((a, b) => b.optimizationScore - a.optimizationScore || a.proposalId.localeCompare(b.proposalId)),
+    model.approvalQueueItems,
+  );
+  assert.deepEqual(
+    model.approvalQueueItems.map((entry) => entry.queueRank),
+    model.approvalQueueItems.map((_, index) => index + 1),
+  );
+  assert.equal(
+    model.approvalQueueItems.every((entry) => ["high", "medium", "low"].includes(entry.queuePriority)),
+    true,
+  );
+  assert.equal(
+    model.approvalQueueItems.every((entry) =>
+      entry.optimizationScore >= 350
+        ? entry.queuePriority === "high"
+        : entry.optimizationScore >= 300
+          ? entry.queuePriority === "medium"
+          : entry.queuePriority === "low",
+    ),
+    true,
+  );
+  assert.equal(model.approvalQueueItems.every((entry) => entry.approvalState === "pending_review"), true);
+  assert.equal(model.approvalQueueItems.every((entry) => entry.executionAllowed === false), true);
+  assert.equal(model.approvalQueueItems.every((entry) => entry.mutationAllowed === false), true);
+  assert.equal(model.approvalQueueItems.every((entry) => entry.publishingAllowed === false), true);
+  assert.equal(model.approvalQueueItems.every((entry) => entry.providerExecutionAllowed === false), true);
+  assert.equal(model.approvalQueueItems.every((entry) => entry.governanceState === "approval_queue_preview_only"), true);
   assert.equal(model.executionPlanPreviews.length, model.approvalPreviews.length);
   assert.equal(model.executionPlanPreviews.every((entry) => entry.executionState === "preview_only"), true);
   assert.equal(model.executionPlanPreviews.every((entry) => entry.executionBlocked === true), true);
@@ -177,6 +209,7 @@ test("workspace overview model: observations include read-only runtime validatio
     assert.deepEqual(model.approvalPreviews, []);
     assert.deepEqual(model.proposalApprovalRecords, []);
     assert.deepEqual(model.approvalStates, []);
+    assert.deepEqual(model.approvalQueueItems, []);
     assert.deepEqual(model.executionPlanPreviews, []);
     assert.deepEqual(model.executionArtifactPreviews, []);
     return;
@@ -227,6 +260,7 @@ test("workspace overview page source: renders required sections", async () => {
   assert.equal(source.includes("Governance Review Preview"), true);
   assert.equal(source.includes("Approval Records"), true);
   assert.equal(source.includes("Approval States"), true);
+  assert.equal(source.includes("Approval Queue"), true);
   assert.equal(source.includes("Execution Plan Preview"), true);
   assert.equal(source.includes("Execution Artifact Preview"), true);
   assert.equal(source.includes("preview.proposalTitle"), true);
@@ -251,6 +285,17 @@ test("workspace overview page source: renders required sections", async () => {
   assert.equal(source.includes("record.governanceState"), true);
   assert.equal(source.includes("record.summary"), true);
   assert.equal(source.includes("record.approvalState"), true);
+  assert.equal(source.includes("queueItem.proposalTitle"), true);
+  assert.equal(source.includes("queueItem.queueRank"), true);
+  assert.equal(source.includes("queueItem.queuePriority"), true);
+  assert.equal(source.includes("queueItem.optimizationScore"), true);
+  assert.equal(source.includes("queueItem.approvalState"), true);
+  assert.equal(source.includes("queueItem.executionAllowed"), true);
+  assert.equal(source.includes("queueItem.mutationAllowed"), true);
+  assert.equal(source.includes("queueItem.publishingAllowed"), true);
+  assert.equal(source.includes("queueItem.providerExecutionAllowed"), true);
+  assert.equal(source.includes("queueItem.governanceState"), true);
+  assert.equal(source.includes("queueItem.summary"), true);
   assert.equal(source.includes("Governance"), true);
   assert.equal(source.includes("Governance State Path"), true);
   assert.equal(source.includes("proposal_candidate"), true);
@@ -388,6 +433,27 @@ test("workspace overview page source: proposal candidates are prioritized over a
   assert.equal(advancedAnalysisIndex > -1, true);
   assert.equal(proposalCandidatesIndex < observationsIndex, true);
   assert.equal(proposalCandidatesIndex < advancedAnalysisIndex, true);
+});
+
+test("workspace overview page source: planning sections render in runtime order", async () => {
+  const source = await readFile(PAGE_FILE, "utf8");
+  const planningCandidatesIndex = source.indexOf("Planning Candidates");
+  const governancePreviewIndex = source.indexOf("Governance Review Preview");
+  const approvalRecordsIndex = source.indexOf("Approval Records");
+  const approvalStatesIndex = source.indexOf("Approval States");
+  const approvalQueueIndex = source.indexOf("Approval Queue");
+  const executionPlanIndex = source.indexOf("Execution Plan Preview");
+  const executionArtifactIndex = source.indexOf("Execution Artifact Preview");
+  const opportunityRankingIndex = source.indexOf("Opportunity Ranking");
+
+  assert.equal(planningCandidatesIndex > -1, true);
+  assert.equal(governancePreviewIndex > planningCandidatesIndex, true);
+  assert.equal(approvalRecordsIndex > governancePreviewIndex, true);
+  assert.equal(approvalStatesIndex > approvalRecordsIndex, true);
+  assert.equal(approvalQueueIndex > approvalStatesIndex, true);
+  assert.equal(executionPlanIndex > approvalQueueIndex, true);
+  assert.equal(executionArtifactIndex > executionPlanIndex, true);
+  assert.equal(opportunityRankingIndex > executionArtifactIndex, true);
 });
 
 test("workspace overview page source: validation surfaces navigation links render", async () => {

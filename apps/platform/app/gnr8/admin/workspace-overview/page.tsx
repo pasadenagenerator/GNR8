@@ -173,6 +173,32 @@ export default async function WorkspaceOverviewPage() {
       </section>
 
       <section style={{ marginTop: 16 }}>
+        <h2 style={{ marginBottom: 10 }}>Approval Queue</h2>
+        <div style={{ display: "grid", gap: 10 }}>
+          {model.approvalQueueItems.map((queueItem) => (
+            <article key={queueItem.queueId} style={CARD_STYLE}>
+              <h3 style={{ marginTop: 0, marginBottom: 6 }}>{queueItem.proposalTitle}</h3>
+              <p style={{ marginTop: 0, marginBottom: 4 }}>queueRank: {queueItem.queueRank}</p>
+              <p style={{ marginTop: 0, marginBottom: 4 }}>queuePriority: {queueItem.queuePriority}</p>
+              <p style={{ marginTop: 0, marginBottom: 4 }}>optimizationScore: {queueItem.optimizationScore}</p>
+              <p style={{ marginTop: 0, marginBottom: 8 }}>approvalState: {queueItem.approvalState}</p>
+              <p style={{ marginTop: 0, marginBottom: 6 }}><strong>Permissions</strong></p>
+              <p style={{ marginTop: 0, marginBottom: 4 }}>executionAllowed: {String(queueItem.executionAllowed)}</p>
+              <p style={{ marginTop: 0, marginBottom: 4 }}>mutationAllowed: {String(queueItem.mutationAllowed)}</p>
+              <p style={{ marginTop: 0, marginBottom: 4 }}>publishingAllowed: {String(queueItem.publishingAllowed)}</p>
+              <p style={{ marginTop: 0, marginBottom: 8 }}>
+                providerExecutionAllowed: {String(queueItem.providerExecutionAllowed)}
+              </p>
+              <p style={{ marginTop: 0, marginBottom: 4 }}><strong>Governance</strong></p>
+              <p style={{ marginTop: 0, marginBottom: 8 }}>governanceState: {queueItem.governanceState}</p>
+              <p style={{ marginTop: 0, marginBottom: 4 }}><strong>Summary</strong></p>
+              <p style={{ margin: 0 }}>{queueItem.summary}</p>
+            </article>
+          ))}
+        </div>
+      </section>
+
+      <section style={{ marginTop: 16 }}>
         <h2 style={{ marginBottom: 10 }}>Execution Plan Preview</h2>
         <div style={{ display: "grid", gap: 10 }}>
           {model.executionPlanPreviews.map((preview) => (
