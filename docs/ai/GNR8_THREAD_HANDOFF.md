@@ -2,10 +2,54 @@
 
 This is the first file every new ChatGPT/Codex thread should read.
 
+## Current Active Track: Migration Platform MVP Buildout
+
+Website OS branch status:
+- Closed/frozen/paused.
+- Do not continue Website OS runtime expansion unless explicitly requested.
+
+Latest completed milestone:
+- Migration Runtime Foundation Phase 3 — Durable Batch Migration Model.
+
+Dedicated progress doc:
+- `docs/ai/MIGRATION_RUNTIME_PROGRESS.md`
+
+Current completed chain:
+- Production Migration Gap Analysis
+- CMS Reality Check
+- CMS Slot Materialization
+- Renderer Reality Check
+- Migration MVP Renderer E2E Readiness Test
+- Durable Migration Job Store
+- Durable Migration Runtime Wiring
+- Durable Batch Migration Model
+
+Current critical path:
+- Import
+- CMS
+- Renderer
+- Durable Jobs
+- Durable Batches
+- Batch Execution
+- Command Center
+- Hosting
+- Billing
+
+Next recommended milestone:
+- Phase 4 — Batch Execution Runtime.
+
+Explicit exclusions still in force:
+- no Website OS runtime expansion
+- no provider execution
+- no DNS execution
+- no billing automation yet
+- no queue/worker unless Phase 4 explicitly introduces it
+- no autonomous execution
+
 ## A) Current Project State
 
-GNR8 is currently in migration-first planning and production migration gap analysis preparation mode.
-The active emphasis is website migration, renderer, CMS, hosting, domains, billing, deterministic contracts, approval/handoff safety, and no hidden execution.
+GNR8 is currently in Migration Platform MVP Buildout mode.
+The active emphasis is website migration, renderer, CMS, durable jobs, durable batches, hosting, domains, billing, deterministic contracts, approval/handoff safety, and no hidden execution.
 Bootstrap runtime state (`2026-06-03`): Observation Runtime v1 completed; Insight Runtime v1 completed; Recommendation Runtime v1 completed; Optimization Runtime v1 completed; Optimization Scoring Runtime v1 completed; Proposal Candidate Runtime v1 completed; Proposal Approval Runtime v1 completed; Approval State Runtime v1 completed; Approval Queue Preview Runtime v1 completed; Execution Readiness Runtime v1 completed; Execution Package Preview Runtime v1 completed; Execution Package Readiness Runtime v1 completed; Execution Contract Preview Runtime v1 completed; Execution Authorization Readiness Runtime v1 completed; Execution Authorization Package Runtime v1 completed; Execution Plan Readiness Runtime v1 completed; Execution Candidate Runtime v1 completed; Execution Candidate Readiness Runtime v1 completed; Execution Candidate Package Runtime v1 completed; Execution Candidate Authorization Runtime v1 completed; Execution Candidate Authorization Readiness Runtime v1 completed; Execution Candidate Authorization Package Runtime v1 completed.
 Completed:
 - Execution Candidate Runtime v1
@@ -22,9 +66,9 @@ Dedicated pause note:
 - Website OS runtime expansion is intentionally paused.
 - Future continuation point: Execution Artifact Runtime family.
 - Execution Artifact Runtime family is not currently part of the migration-critical path.
-Next strategic planning activity:
-- GNR8 Production Migration Gap Analysis.
-- Documentation only; no implementation tasks, roadmap phases, runtime milestones, or executable work are introduced by this handoff note.
+Next migration platform milestone:
+- Phase 4 — Batch Execution Runtime.
+- Phase 3 is durable state/model/API only; batch execution does not exist yet.
 Current completed runtime chain:
 - `Proposal Approval Queue → Execution Readiness Execution Package → Execution Contract Execution Contract Readiness → Execution Bundle Execution Bundle Readiness → Execution Authorization Execution Authorization Readiness Execution Authorization Package → Execution Intent Execution Intent Readiness → Execution Plan Execution Plan Readiness → Execution Candidate Execution Candidate Readiness Execution Candidate Package → Execution Candidate Authorization Execution Candidate Authorization Readiness Execution Candidate Authorization Package`
 Candidate Authorization Family completed. Governance graph expanded. Execution remains blocked. Website OS remains read-only.

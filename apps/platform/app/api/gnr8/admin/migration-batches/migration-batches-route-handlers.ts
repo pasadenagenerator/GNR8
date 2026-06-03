@@ -4,6 +4,16 @@ import {
   type MigrationBatchStoreRuntime,
 } from "@/gnr8/migration-factory/migration-batch-store-runtime";
 import {
+  createMigrationFactoryRuntime,
+  MigrationFactoryRuntimeConfigurationError,
+  type MigrationFactoryRuntime,
+} from "@/gnr8/migration-factory/migration-factory-runtime";
+import {
+  MIGRATION_BATCH_EXECUTION_POLICIES,
+  MigrationBatchExecutor,
+  type MigrationBatchExecutionPolicy,
+} from "@/gnr8/migration-factory/migration-batch-executor";
+import {
   serializeMigrationBatch,
   serializeMigrationBatchJob,
   serializeMigrationBatchListItem,
@@ -37,6 +47,12 @@ type AddMigrationBatchJobBody = {
   metadata?: unknown;
 };
 
+type RunMigrationBatchBody = {
+  agencyId?: string | null;
+  policy?: string;
+  maxJobs?: unknown;
+};
+
 type RequireSuperadminUserId = () => Promise<string>;
 type RequireAgencyActionContext = (input: {
   action: "run_migration";
@@ -47,6 +63,7 @@ type MigrationBatchesRouteDeps = {
   requireSuperadminUserId: RequireSuperadminUserId;
   requireAgencyActionContext: RequireAgencyActionContext;
   createMigrationBatchStoreRuntime: typeof createMigrationBatchStoreRuntime;
+  createMigrationFactoryRuntime: typeof createMigrationFactoryRuntime;
 };
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -88,12 +105,33 @@ function optionalBatchStatus(value: unknown): MigrationBatchStatus | undefined {
   return normalized as MigrationBatchStatus;
 }
 
+function optionalExecutionPolicy(value: unknown): MigrationBatchExecutionPolicy | undefined {
+  const normalized = token(value);
+  if (!normalized) return undefined;
+  if (!MIGRATION_BATCH_EXECUTION_POLICIES.includes(normalized as MigrationBatchExecutionPolicy)) {
+    throw new Error("400|policy must be stop_on_failure or continue_on_failure");
+  }
+  return normalized as MigrationBatchExecutionPolicy;
+}
+
+function optionalMaxJobs(value: unknown): number | null {
+  if (value === null || value === undefined || value === "") return null;
+  const normalized = Number(value);
+  if (!Number.isInteger(normalized) || normalized <= 0) {
+    throw new Error("400|maxJobs must be a positive integer");
+  }
+  return normalized;
+}
+
 async function parseJsonBody<T>(request: Request): Promise<T | null> {
   return (await request.json().catch(() => null)) as T | null;
 }
 
 function mapAdminError(error: unknown): { status: number; message: string } {
-  if (error instanceof MigrationBatchStoreRuntimeConfigurationError) {
+  if (
+    error instanceof MigrationBatchStoreRuntimeConfigurationError ||
+    error instanceof MigrationFactoryRuntimeConfigurationError
+  ) {
     return { status: 503, message: error.message };
   }
 
@@ -153,11 +191,22 @@ async function requireDurableBatchRuntime(
   return runtime;
 }
 
+async function requireDurableMigrationFactoryRuntime(
+  createRuntime: typeof createMigrationFactoryRuntime,
+): Promise<MigrationFactoryRuntime> {
+  const runtime = await createRuntime({ mode: "durable" });
+  if (!runtime.durable) {
+    throw new Error("503|Durable migration batch execution route requires durable migration job storage");
+  }
+  return runtime;
+}
+
 export function createMigrationBatchesRouteHandlers(deps: Partial<MigrationBatchesRouteDeps> = {}) {
   const resolvedDeps: MigrationBatchesRouteDeps = {
     requireSuperadminUserId: defaultRequireSuperadminUserId,
     requireAgencyActionContext: defaultRequireAgencyActionContext,
     createMigrationBatchStoreRuntime,
+    createMigrationFactoryRuntime,
     ...deps,
   };
 
@@ -326,6 +375,48 @@ export function createMigrationBatchesRouteHandlers(deps: Partial<MigrationBatch
         const runtime = await requireDurableBatchRuntime(resolvedDeps.createMigrationBatchStoreRuntime);
         const removed = await runtime.store.removeJobFromBatch(normalizedBatchId, normalizedJobId);
         return Response.json({ removed });
+      } catch (error) {
+        const mapped = mapAdminError(error);
+        return Response.json({ error: mapped.message }, { status: mapped.status });
+      }
+    },
+
+    async RUN(request: Request, context: { params: Promise<{ batchId: string }> }): Promise<Response> {
+      try {
+        const body = await parseJsonBody<RunMigrationBatchBody>(request);
+        if (!body) return Response.json({ error: "Invalid JSON body" }, { status: 400 });
+
+        await requireAdminMigrationAccess({ agencyId: body.agencyId });
+
+        const { batchId } = await context.params;
+        const normalizedBatchId = token(batchId);
+        if (!normalizedBatchId) return Response.json({ error: "batchId is required" }, { status: 400 });
+
+        const [batchRuntime, migrationRuntime] = await Promise.all([
+          requireDurableBatchRuntime(resolvedDeps.createMigrationBatchStoreRuntime),
+          requireDurableMigrationFactoryRuntime(resolvedDeps.createMigrationFactoryRuntime),
+        ]);
+
+        const executor = new MigrationBatchExecutor({
+          batchStore: batchRuntime.store,
+          migrationFactory: migrationRuntime.factory,
+        });
+        const execution = await executor.execute({
+          batchId: normalizedBatchId,
+          policy: optionalExecutionPolicy(body.policy),
+          maxJobs: optionalMaxJobs(body.maxJobs),
+        });
+
+        return Response.json({
+          ...execution,
+          store: {
+            batch: runtimeOptions(batchRuntime),
+            jobs: {
+              durable: migrationRuntime.durable,
+              storeKind: migrationRuntime.storeKind,
+            },
+          },
+        });
       } catch (error) {
         const mapped = mapAdminError(error);
         return Response.json({ error: mapped.message }, { status: mapped.status });

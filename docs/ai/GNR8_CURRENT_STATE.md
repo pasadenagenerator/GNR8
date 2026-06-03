@@ -3,6 +3,37 @@
 ## Snapshot Date
 2026-06-03
 
+## Migration Platform MVP Buildout
+
+Website OS runtime expansion remains paused.
+
+Current critical path is migration-first:
+- Import
+- CMS
+- Renderer
+- Durable Jobs
+- Durable Batches
+- Batch Execution
+- Command Center
+- Hosting
+- Billing
+
+Migration Runtime Foundation is completed through Phase 3.
+
+Completed capabilities:
+- CMS slot materialization
+- CMS public render proof
+- MVP renderer path validated
+- durable migration job store
+- durable migration job admin runtime
+- durable migration batch model
+
+Remaining critical path:
+- Phase 4: Batch Execution Runtime
+- Phase 5: Command Center integration
+- Hosting hardening
+- Billing
+
 ## Bootstrap Runtime State (2026-06-03)
 
 - Observation Runtime v1 completed.
@@ -61,10 +92,10 @@ Migration-first reprioritization:
 - Future continuation point is the Execution Artifact Runtime family.
 - The Execution Artifact Runtime family is not currently part of the migration-critical path.
 
-Next strategic planning activity:
-- GNR8 Production Migration Gap Analysis
-- This is documentation only.
-- No implementation tasks, roadmap phases, runtime milestones, or executable work are introduced by this note.
+Current migration platform continuation:
+- Phase 4: Batch Execution Runtime.
+- Website OS runtime expansion remains paused.
+- Execution Artifact Runtime family remains outside the migration-critical path.
 
 ## Execution Candidate Authorization Family v1 Milestone (2026-06-03)
 
@@ -136,8 +167,9 @@ Future continuation:
 - Status: paused.
 - Not currently part of the migration-critical path.
 
-Next strategic planning activity:
-- GNR8 Production Migration Gap Analysis.
+Current migration platform continuation:
+- Phase 4: Batch Execution Runtime.
+- Website OS runtime expansion remains paused.
 
 ## Execution Candidate Runtime Family v1 Milestone (2026-06-03)
 

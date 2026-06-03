@@ -9,6 +9,7 @@ import { getSuperadminPool } from "@/src/superadmin/db";
 const MISSING_JOBS_TABLE_MESSAGE = `relation "public.gnr8_migration_jobs" does not exist`;
 const MISSING_BATCHES_TABLE_MESSAGE = `relation "public.gnr8_migration_batches" does not exist`;
 const MISSING_BATCH_JOBS_TABLE_MESSAGE = `relation "public.gnr8_migration_batch_jobs" does not exist`;
+const MISSING_BATCH_EVENTS_TABLE_MESSAGE = `relation "public.gnr8_migration_batch_events" does not exist`;
 const MISSING_DB_CONFIG_MESSAGE = `Invalid database configuration: {"sourceEnvVar":"DATABASE_URL","protocol":null,"hostname":null,"reasonCode":"MISSING"}`;
 
 function createClock(): () => string {
@@ -25,6 +26,7 @@ async function getBatchStoreDbSkipReason(): Promise<string | null> {
     await getSuperadminPool().query(`select 1 from public.gnr8_migration_jobs limit 1`);
     await getSuperadminPool().query(`select 1 from public.gnr8_migration_batches limit 1`);
     await getSuperadminPool().query(`select 1 from public.gnr8_migration_batch_jobs limit 1`);
+    await getSuperadminPool().query(`select 1 from public.gnr8_migration_batch_events limit 1`);
     return null;
   } catch (error) {
     if (!(error instanceof Error)) throw error;
@@ -34,7 +36,8 @@ async function getBatchStoreDbSkipReason(): Promise<string | null> {
     if (
       error.message.includes(MISSING_JOBS_TABLE_MESSAGE) ||
       error.message.includes(MISSING_BATCHES_TABLE_MESSAGE) ||
-      error.message.includes(MISSING_BATCH_JOBS_TABLE_MESSAGE)
+      error.message.includes(MISSING_BATCH_JOBS_TABLE_MESSAGE) ||
+      error.message.includes(MISSING_BATCH_EVENTS_TABLE_MESSAGE)
     ) {
       return "Skipping DB-backed migration batch store tests: migration batch/job tables are not available.";
     }
@@ -150,6 +153,31 @@ test("postgres migration batch store: durable batch membership and summary deriv
     const afterRemove = await batchStore.getBatchSummary(batchId);
     assert.equal(afterRemove?.totalJobs, 2);
     assert.equal(afterRemove?.progressPercent, 50);
+
+    const running = await batchStore.updateBatchStatus({
+      batchId,
+      status: "running",
+      diagnostics: { test: "status-running" },
+    });
+    assert.equal(running.status, "running");
+    assert.ok(running.startedAt);
+    assert.equal(running.completedAt, null);
+    assert.equal(running.failedAt, null);
+    assert.deepEqual(running.diagnostics, { test: "status-running" });
+
+    const event = await batchStore.appendBatchEvent({
+      batchId,
+      eventType: "BATCH_EXECUTION_STARTED",
+      message: "DB-backed batch execution event",
+      jobId: jobIds[0],
+      details: { test: "batch-event" },
+    });
+    assert.equal(event.batchId, batchId);
+    assert.equal(event.jobId, jobIds[0]);
+    assert.equal(event.eventType, "BATCH_EXECUTION_STARTED");
+    assert.deepEqual(event.details, { test: "batch-event" });
+    const events = await batchStore.listBatchEvents(batchId);
+    assert.deepEqual(events.map((item) => item.eventType), ["BATCH_EXECUTION_STARTED"]);
   } finally {
     await cleanup({ batchIds: [batchId], jobIds });
   }

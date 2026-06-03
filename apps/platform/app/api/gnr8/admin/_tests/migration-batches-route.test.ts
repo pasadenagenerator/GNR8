@@ -4,22 +4,29 @@ import test, { type TestContext } from "node:test";
 
 import { createMigrationBatchesRouteHandlers } from "@/app/api/gnr8/admin/migration-batches/migration-batches-route-handlers";
 import { createMigrationBatchStoreRuntime } from "@/gnr8/migration-factory/migration-batch-store-runtime";
+import { MigrationFactory } from "@/gnr8/migration-factory/migration-factory";
+import { MigrationFactoryRuntimeConfigurationError } from "@/gnr8/migration-factory/migration-factory-runtime";
 import type { MigrationBatchStore } from "@/gnr8/migration-factory/migration-batch-store";
 import type {
   AddMigrationJobToBatchInput,
+  AppendMigrationBatchEventInput,
   CreateMigrationBatchInput,
   MigrationBatch,
+  MigrationBatchEvent,
   MigrationBatchJob,
   MigrationBatchJobSummary,
   MigrationBatchSummary,
   MigrationBatchWithSummary,
+  UpdateMigrationBatchStatusInput,
 } from "@/gnr8/migration-factory/migration-batch-types";
+import type { MigrationExecutionReport } from "@/gnr8/migration-factory/migration-job-types";
 import { PostgresMigrationJobStore } from "@/gnr8/migration-factory/postgres-migration-job-store";
 
 const TEST_AGENCY_ID = "00000000-0000-4000-8000-000000000001";
 const MISSING_JOBS_TABLE_MESSAGE = `relation "public.gnr8_migration_jobs" does not exist`;
 const MISSING_BATCHES_TABLE_MESSAGE = `relation "public.gnr8_migration_batches" does not exist`;
 const MISSING_BATCH_JOBS_TABLE_MESSAGE = `relation "public.gnr8_migration_batch_jobs" does not exist`;
+const MISSING_BATCH_EVENTS_TABLE_MESSAGE = `relation "public.gnr8_migration_batch_events" does not exist`;
 const MISSING_DB_CONFIG_MESSAGE = `Invalid database configuration: {"sourceEnvVar":"DATABASE_URL","protocol":null,"hostname":null,"reasonCode":"MISSING"}`;
 
 type FakeJob = {
@@ -67,6 +74,7 @@ class FakeMigrationBatchStore implements MigrationBatchStore {
   private readonly batches = new Map<string, MigrationBatch>();
   private readonly memberships = new Map<string, MigrationBatchJob>();
   private readonly jobs = new Map<string, FakeJob>();
+  private readonly events: MigrationBatchEvent[] = [];
   private readonly now: () => string;
 
   constructor(now: () => string) {
@@ -181,6 +189,53 @@ class FakeMigrationBatchStore implements MigrationBatchStore {
     };
   }
 
+  async updateBatchStatus(input: UpdateMigrationBatchStatusInput): Promise<MigrationBatch> {
+    const current = this.batches.get(input.batchId);
+    if (!current) throw new Error(`Migration batch not found: ${input.batchId}`);
+    const timestamp = this.now();
+    const next: MigrationBatch = {
+      ...current,
+      status: input.status,
+      updatedAt: timestamp,
+      startedAt: input.status === "running" ? current.startedAt ?? timestamp : current.startedAt,
+      completedAt: input.status === "completed" ? timestamp : input.status === "running" || input.status === "paused" || input.status === "failed" || input.status === "partially_failed" ? null : current.completedAt,
+      failedAt: input.status === "failed" || input.status === "partially_failed" ? timestamp : input.status === "running" || input.status === "paused" || input.status === "completed" ? null : current.failedAt,
+      diagnostics: input.diagnostics ?? current.diagnostics,
+    };
+    this.batches.set(input.batchId, next);
+    return next;
+  }
+
+  async appendBatchEvent(input: AppendMigrationBatchEventInput): Promise<MigrationBatchEvent> {
+    if (!this.batches.has(input.batchId)) throw new Error(`Migration batch not found: ${input.batchId}`);
+    const event: MigrationBatchEvent = {
+      id: `event_${this.events.length + 1}`,
+      batchId: input.batchId,
+      eventType: input.eventType,
+      message: input.message,
+      jobId: input.jobId ?? null,
+      details: input.details ?? {},
+      createdAt: this.now(),
+    };
+    this.events.push(event);
+    return event;
+  }
+
+  async listBatchEvents(batchId: string): Promise<MigrationBatchEvent[]> {
+    return this.events.filter((event) => event.batchId === batchId);
+  }
+
+  setJobStatus(jobId: string, status: FakeJob["status"]): void {
+    const job = this.jobs.get(jobId);
+    if (!job) throw new Error(`Migration job not found: ${jobId}`);
+    this.jobs.set(jobId, {
+      ...job,
+      status,
+      updatedAt: this.now(),
+      latestEventAt: this.now(),
+    });
+  }
+
   private countBatchJobs(batchId: string): number {
     return Array.from(this.memberships.values()).filter((membership) => membership.batchId === batchId).length;
   }
@@ -200,12 +255,27 @@ class FakeMigrationBatchStore implements MigrationBatchStore {
   }
 }
 
+function completedReport(jobId: string): MigrationExecutionReport {
+  const timestamp = "2026-06-03T12:00:00.000Z";
+  return {
+    jobId,
+    finalState: "COMPLETED",
+    completedStages: [],
+    stageDiagnostics: [],
+    startedAt: timestamp,
+    endedAt: timestamp,
+    durationMs: 0,
+    outputs: {},
+  };
+}
+
 async function getRouteDbSkipReason(): Promise<string | null> {
   try {
     const { getSuperadminPool } = await import("@/src/superadmin/db");
     await getSuperadminPool().query(`select 1 from public.gnr8_migration_jobs limit 1`);
     await getSuperadminPool().query(`select 1 from public.gnr8_migration_batches limit 1`);
     await getSuperadminPool().query(`select 1 from public.gnr8_migration_batch_jobs limit 1`);
+    await getSuperadminPool().query(`select 1 from public.gnr8_migration_batch_events limit 1`);
     return null;
   } catch (error) {
     if (!(error instanceof Error)) throw error;
@@ -215,7 +285,8 @@ async function getRouteDbSkipReason(): Promise<string | null> {
     if (
       error.message.includes(MISSING_JOBS_TABLE_MESSAGE) ||
       error.message.includes(MISSING_BATCHES_TABLE_MESSAGE) ||
-      error.message.includes(MISSING_BATCH_JOBS_TABLE_MESSAGE)
+      error.message.includes(MISSING_BATCH_JOBS_TABLE_MESSAGE) ||
+      error.message.includes(MISSING_BATCH_EVENTS_TABLE_MESSAGE)
     ) {
       return "Skipping DB-backed migration batch route test: migration batch/job tables are not available.";
     }
@@ -344,6 +415,93 @@ test("durable migration batches admin route refuses non-durable fallback", async
   assert.match(payload.error, /requires durable storage/);
 });
 
+test("durable migration batches admin run route executes through durable migration runtime", async () => {
+  const now = createClock();
+  const store = new FakeMigrationBatchStore(now);
+  store.seedJob({
+    jobId: "job-run-route-1",
+    siteId: "site-run-route-1",
+    siteVersionId: null,
+    sourceUrl: "https://run-route-1.example.com",
+    status: "PENDING",
+    latestEventAt: null,
+  });
+  await store.createBatch({ batchId: "batch-run-route", name: "Run route batch" });
+  await store.addJobToBatch({ batchId: "batch-run-route", jobId: "job-run-route-1" });
+
+  const resumed: string[] = [];
+  const handlers = createMigrationBatchesRouteHandlers({
+    requireSuperadminUserId: async () => "superadmin-1",
+    createMigrationBatchStoreRuntime: async () => ({
+      store,
+      durable: true,
+      storeKind: "postgres",
+    }),
+    createMigrationFactoryRuntime: async () => ({
+      factory: {
+        resumeMigrationJob: async (jobId: string) => {
+          resumed.push(jobId);
+          store.setJobStatus(jobId, "COMPLETED");
+          return completedReport(jobId);
+        },
+      },
+      store: {},
+      durable: true,
+      storeKind: "postgres",
+    }) as never,
+  });
+
+  const response = await handlers.RUN(jsonRequest({ policy: "stop_on_failure", maxJobs: 1 }), batchContext("batch-run-route"));
+  assert.equal(response.status, 200);
+  const payload = await response.json() as {
+    batchId: string;
+    nextStatus: string;
+    attemptedJobs: number;
+    completedJobs: number;
+    store: { batch: { durable: boolean; storeKind: string }; jobs: { durable: boolean; storeKind: string } };
+  };
+  assert.equal(payload.batchId, "batch-run-route");
+  assert.equal(payload.nextStatus, "completed");
+  assert.equal(payload.attemptedJobs, 1);
+  assert.equal(payload.completedJobs, 1);
+  assert.deepEqual(resumed, ["job-run-route-1"]);
+  assert.deepEqual(payload.store.batch, { durable: true, storeKind: "postgres" });
+  assert.deepEqual(payload.store.jobs, { durable: true, storeKind: "postgres" });
+
+  const events = await store.listBatchEvents("batch-run-route");
+  assert.deepEqual(events.map((event) => event.eventType), [
+    "BATCH_EXECUTION_STARTED",
+    "BATCH_JOB_STARTED",
+    "BATCH_JOB_COMPLETED",
+    "BATCH_EXECUTION_COMPLETED",
+  ]);
+});
+
+test("durable migration batches admin run route fails closed when durable migration runtime is missing", async () => {
+  const now = createClock();
+  const store = new FakeMigrationBatchStore(now);
+  await store.createBatch({ batchId: "batch-run-route-missing-db", name: "Missing DB batch" });
+
+  const handlers = createMigrationBatchesRouteHandlers({
+    requireSuperadminUserId: async () => "superadmin-1",
+    createMigrationBatchStoreRuntime: async () => ({
+      store,
+      durable: true,
+      storeKind: "postgres",
+    }),
+    createMigrationFactoryRuntime: async () => {
+      throw new MigrationFactoryRuntimeConfigurationError(
+        "Durable migration runtime requires DATABASE_URL; refusing to fall back to in-memory migration job storage.",
+      );
+    },
+  });
+
+  const response = await handlers.RUN(jsonRequest({}), batchContext("batch-run-route-missing-db"));
+  assert.equal(response.status, 503);
+  const payload = await response.json() as { error: string };
+  assert.match(payload.error, /requires DATABASE_URL/);
+});
+
 test("durable migration batches admin route creates and attaches through real Postgres store when DB is available", async (t: TestContext) => {
   const skipReason = await getRouteDbSkipReason();
   if (skipReason) {
@@ -392,6 +550,81 @@ test("durable migration batches admin route creates and attaches through real Po
     assert.equal(readPayload.batch.jobCounts.pendingJobs, 1);
     assert.equal(readPayload.batch.jobCounts.progressPercent, 0);
     assert.deepEqual(readPayload.batch.jobSummaries.map((job) => [job.jobId, job.jobStatus]), [[jobId, "PENDING"]]);
+  } finally {
+    await cleanupDb({ batchId, jobId });
+  }
+});
+
+test("durable migration batches admin run route executes with real Postgres stores when DB is available", async (t: TestContext) => {
+  const skipReason = await getRouteDbSkipReason();
+  if (skipReason) {
+    t.skip(skipReason);
+    return;
+  }
+
+  const batchId = `migration_batch_route_run_db_${randomUUID()}`;
+  const jobId = `migration_batch_route_run_job_db_${randomUUID()}`;
+  const now = createClock();
+  const jobStore = new PostgresMigrationJobStore({ now });
+  const factory = new MigrationFactory({
+    store: jobStore,
+    now,
+    stageRunner: {
+      runStage: async (_job, stage, context) => {
+        const startedAt = context.now();
+        const endedAt = context.now();
+        return {
+          stage,
+          status: "SUCCEEDED",
+          startedAt,
+          endedAt,
+          diagnostics: [],
+          outputRefs: { ref: `${jobId}:${stage}` },
+        };
+      },
+    },
+  });
+  const handlers = createMigrationBatchesRouteHandlers({
+    requireSuperadminUserId: async () => "superadmin-1",
+    createMigrationBatchStoreRuntime,
+    createMigrationFactoryRuntime: async () => ({
+      factory,
+      store: jobStore,
+      durable: true,
+      storeKind: "postgres",
+    }),
+  });
+
+  try {
+    await factory.startMigrationJob({
+      jobId,
+      siteId: `site_route_batch_run_db_${randomUUID()}`,
+      sourceUrl: `https://route-batch-run-db-${randomUUID()}.example.com`,
+    });
+
+    const createResponse = await handlers.POST(jsonRequest({
+      batchId,
+      name: "Route DB run batch",
+    }));
+    assert.equal(createResponse.status, 201);
+
+    const attachResponse = await handlers.ADD_JOB(jsonRequest({ jobId }), batchContext(batchId));
+    assert.equal(attachResponse.status, 201);
+
+    const runResponse = await handlers.RUN(jsonRequest({ policy: "stop_on_failure" }), batchContext(batchId));
+    assert.equal(runResponse.status, 200);
+    const runPayload = await runResponse.json() as {
+      nextStatus: string;
+      attemptedJobs: number;
+      completedJobs: number;
+      failedJobs: number;
+      jobResults: Array<{ jobId: string; finalState: string }>;
+    };
+    assert.equal(runPayload.nextStatus, "completed");
+    assert.equal(runPayload.attemptedJobs, 1);
+    assert.equal(runPayload.completedJobs, 1);
+    assert.equal(runPayload.failedJobs, 0);
+    assert.deepEqual(runPayload.jobResults.map((result) => [result.jobId, result.finalState]), [[jobId, "COMPLETED"]]);
   } finally {
     await cleanupDb({ batchId, jobId });
   }

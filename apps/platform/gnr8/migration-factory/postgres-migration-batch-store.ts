@@ -3,16 +3,21 @@ import { randomUUID } from "node:crypto";
 import type { Pool, PoolClient } from "pg";
 
 import {
+  MIGRATION_BATCH_EVENT_TYPES,
   MIGRATION_BATCH_STATUSES,
   type AddMigrationJobToBatchInput,
+  type AppendMigrationBatchEventInput,
   type CreateMigrationBatchInput,
   type MigrationBatch,
+  type MigrationBatchEvent,
+  type MigrationBatchEventType,
   type MigrationBatchJob,
   type MigrationBatchJobSummary,
   type MigrationBatchJsonObject,
   type MigrationBatchStatus,
   type MigrationBatchSummary,
   type MigrationBatchWithSummary,
+  type UpdateMigrationBatchStatusInput,
 } from "@/gnr8/migration-factory/migration-batch-types";
 import type { MigrationBatchStore } from "@/gnr8/migration-factory/migration-batch-store";
 import type { MigrationJobState } from "@/gnr8/migration-factory/migration-job-types";
@@ -68,6 +73,16 @@ type MigrationBatchSummaryCountRow = {
   latest_event_at: Date | string | null;
 };
 
+type MigrationBatchEventRow = {
+  id: string;
+  batch_id: string;
+  event_type: MigrationBatchEventType;
+  message: string;
+  job_id: string | null;
+  details: MigrationBatchJsonObject | null;
+  created_at: Date | string;
+};
+
 type MigrationJobLookupRow = {
   id: string;
   site_id: string;
@@ -103,6 +118,13 @@ function normalizeStatus(status: MigrationBatchStatus | undefined): MigrationBat
     throw new Error(`Unknown migration batch status: ${normalized}`);
   }
   return normalized;
+}
+
+function normalizeEventType(eventType: MigrationBatchEventType): MigrationBatchEventType {
+  if (!MIGRATION_BATCH_EVENT_TYPES.includes(eventType)) {
+    throw new Error(`Unknown migration batch event type: ${eventType}`);
+  }
+  return eventType;
 }
 
 function progressPercent(totalJobs: number, completedJobs: number): number {
@@ -171,6 +193,18 @@ function summaryFromRow(row: MigrationBatchSummaryCountRow): MigrationBatchSumma
     pausedJobs: Number(row.paused_jobs),
     progressPercent: progressPercent(totalJobs, completedJobs),
     latestEventAt: coerceIso(row.latest_event_at),
+  };
+}
+
+function batchEventFromRow(row: MigrationBatchEventRow): MigrationBatchEvent {
+  return {
+    id: row.id,
+    batchId: row.batch_id,
+    eventType: row.event_type,
+    message: row.message,
+    jobId: row.job_id,
+    details: jsonObject(row.details),
+    createdAt: coerceIso(row.created_at) ?? new Date(0).toISOString(),
   };
 }
 
@@ -476,6 +510,138 @@ export class PostgresMigrationBatchStore implements MigrationBatchStore {
       paused_jobs: 0,
       latest_event_at: null,
     });
+  }
+
+  async updateBatchStatus(input: UpdateMigrationBatchStatusInput): Promise<MigrationBatch> {
+    const batchId = normalizeOptionalText(input.batchId);
+    if (!batchId) throw new Error("Migration batch id is required");
+    const status = normalizeStatus(input.status);
+    const timestamp = this.now();
+
+    const res = await this.client.query<MigrationBatchRow>(
+      `
+      update public.gnr8_migration_batches
+      set
+        status = $2::text,
+        updated_at = $3::timestamptz,
+        started_at = case
+          when $2::text = 'running' then coalesce(started_at, $3::timestamptz)
+          else started_at
+        end,
+        completed_at = case
+          when $2::text = 'completed' then $3::timestamptz
+          when $2::text in ('running', 'failed', 'partially_failed', 'paused') then null
+          else completed_at
+        end,
+        failed_at = case
+          when $2::text in ('failed', 'partially_failed') then $3::timestamptz
+          when $2::text in ('running', 'completed', 'paused') then null
+          else failed_at
+        end,
+        diagnostics = case
+          when $4::jsonb is null then diagnostics
+          else $4::jsonb
+        end
+      where id = $1::text
+      returning
+        id,
+        organization_id,
+        agency_id,
+        client_id,
+        name,
+        description,
+        status,
+        created_by,
+        created_at,
+        updated_at,
+        started_at,
+        completed_at,
+        failed_at,
+        metadata,
+        diagnostics
+      `,
+      [batchId, status, timestamp, input.diagnostics ? jsonParam(input.diagnostics) : null],
+    );
+
+    const row = res.rows[0];
+    if (!row) throw new Error(`Migration batch not found: ${batchId}`);
+    return batchFromRow(row);
+  }
+
+  async appendBatchEvent(input: AppendMigrationBatchEventInput): Promise<MigrationBatchEvent> {
+    const batchId = normalizeOptionalText(input.batchId);
+    if (!batchId) throw new Error("Migration batch id is required");
+    const eventType = normalizeEventType(input.eventType);
+    const message = normalizeOptionalText(input.message);
+    if (!message) throw new Error("Migration batch event message is required");
+    const eventId = deterministicId("migration_batch_event", `${batchId}:${eventType}:${input.jobId ?? ""}:${this.now()}:${randomUUID()}`);
+    const createdAt = this.now();
+
+    const res = await this.client.query<MigrationBatchEventRow>(
+      `
+      insert into public.gnr8_migration_batch_events (
+        id,
+        batch_id,
+        event_type,
+        message,
+        job_id,
+        details,
+        created_at
+      )
+      values (
+        $1::text,
+        $2::text,
+        $3::text,
+        $4::text,
+        $5::text,
+        $6::jsonb,
+        $7::timestamptz
+      )
+      returning
+        id,
+        batch_id,
+        event_type,
+        message,
+        job_id,
+        details,
+        created_at
+      `,
+      [
+        eventId,
+        batchId,
+        eventType,
+        message,
+        normalizeOptionalText(input.jobId),
+        jsonParam(input.details),
+        createdAt,
+      ],
+    );
+
+    await this.touchBatch(batchId);
+
+    const row = res.rows[0];
+    if (!row) throw new Error(`Migration batch event was not persisted: ${batchId}`);
+    return batchEventFromRow(row);
+  }
+
+  async listBatchEvents(batchId: string): Promise<MigrationBatchEvent[]> {
+    const res = await this.client.query<MigrationBatchEventRow>(
+      `
+      select
+        id,
+        batch_id,
+        event_type,
+        message,
+        job_id,
+        details,
+        created_at
+      from public.gnr8_migration_batch_events
+      where batch_id = $1::text
+      order by created_at asc, id asc
+      `,
+      [batchId],
+    );
+    return res.rows.map(batchEventFromRow);
   }
 
   private async getMigrationJobForMembership(jobId: string): Promise<MigrationJobLookupRow | null> {

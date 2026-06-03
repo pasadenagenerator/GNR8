@@ -63,6 +63,29 @@ export type MigrationBatchSummary = {
   latestEventAt: string | null;
 };
 
+export const MIGRATION_BATCH_EVENT_TYPES = [
+  "BATCH_EXECUTION_STARTED",
+  "BATCH_JOB_STARTED",
+  "BATCH_JOB_COMPLETED",
+  "BATCH_JOB_FAILED",
+  "BATCH_EXECUTION_COMPLETED",
+  "BATCH_EXECUTION_PARTIALLY_FAILED",
+  "BATCH_EXECUTION_FAILED",
+  "BATCH_EXECUTION_PAUSED_BY_LIMIT",
+] as const;
+
+export type MigrationBatchEventType = (typeof MIGRATION_BATCH_EVENT_TYPES)[number];
+
+export type MigrationBatchEvent = {
+  id: string;
+  batchId: string;
+  eventType: MigrationBatchEventType;
+  message: string;
+  jobId: string | null;
+  details: MigrationBatchJsonObject;
+  createdAt: string;
+};
+
 export type MigrationBatchWithSummary = MigrationBatch & {
   summary: MigrationBatchSummary;
 };
@@ -88,4 +111,18 @@ export type AddMigrationJobToBatchInput = {
   sourceUrl?: string | null;
   position?: number | null;
   metadata?: MigrationBatchJsonObject;
+};
+
+export type UpdateMigrationBatchStatusInput = {
+  batchId: string;
+  status: MigrationBatchStatus;
+  diagnostics?: MigrationBatchJsonObject;
+};
+
+export type AppendMigrationBatchEventInput = {
+  batchId: string;
+  eventType: MigrationBatchEventType;
+  message: string;
+  jobId?: string | null;
+  details?: MigrationBatchJsonObject;
 };
