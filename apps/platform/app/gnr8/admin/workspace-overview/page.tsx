@@ -672,6 +672,53 @@ export default async function WorkspaceOverviewPage() {
       </section>
 
       <section style={{ marginTop: 16 }}>
+        <h2 style={{ marginBottom: 10 }}>Execution Intent Readiness</h2>
+        <div style={{ display: "grid", gap: 10 }}>
+          {model.executionIntentReadinessRecords.map((intentReadinessRecord) => (
+            <article key={intentReadinessRecord.proposalId} style={CARD_STYLE}>
+              <h3 style={{ marginTop: 0, marginBottom: 6 }}>{intentReadinessRecord.proposalTitle}</h3>
+              <p style={{ marginTop: 0, marginBottom: 4 }}>
+                readinessState: {intentReadinessRecord.readinessState}
+              </p>
+              <p style={{ marginTop: 0, marginBottom: 8 }}>
+                readinessScore: {intentReadinessRecord.readinessScore}
+              </p>
+              <p style={{ marginTop: 0, marginBottom: 6 }}><strong>Requirements Met</strong></p>
+              <ul style={{ marginTop: 0, marginBottom: 8 }}>
+                {intentReadinessRecord.requirementsMet.map((requirement) => (
+                  <li key={requirement}>{requirement}</li>
+                ))}
+              </ul>
+              <p style={{ marginTop: 0, marginBottom: 6 }}><strong>Requirements Missing</strong></p>
+              <ul style={{ marginTop: 0, marginBottom: 8 }}>
+                {intentReadinessRecord.requirementsMissing.map((requirement) => (
+                  <li key={requirement}>{requirement}</li>
+                ))}
+              </ul>
+              <p style={{ marginTop: 0, marginBottom: 4 }}><strong>Governance</strong></p>
+              <p style={{ marginTop: 0, marginBottom: 4 }}>
+                executionAllowed: {String(intentReadinessRecord.executionAllowed)}
+              </p>
+              <p style={{ marginTop: 0, marginBottom: 4 }}>
+                mutationAllowed: {String(intentReadinessRecord.mutationAllowed)}
+              </p>
+              <p style={{ marginTop: 0, marginBottom: 4 }}>
+                publishingAllowed: {String(intentReadinessRecord.publishingAllowed)}
+              </p>
+              <p style={{ marginTop: 0, marginBottom: 4 }}>
+                providerExecutionAllowed: {String(intentReadinessRecord.providerExecutionAllowed)}
+              </p>
+              <p style={{ marginTop: 0, marginBottom: 8 }}>
+                governanceState: {intentReadinessRecord.governanceState}
+              </p>
+              <p style={{ marginTop: 0, marginBottom: 4 }}><strong>Summary</strong></p>
+              <p style={{ margin: 0 }}>{intentReadinessRecord.summary}</p>
+            </article>
+          ))}
+        </div>
+      </section>
+
+      <section style={{ marginTop: 16 }}>
         <h2 style={{ marginBottom: 10 }}>Execution Plan Preview</h2>
         <div style={{ display: "grid", gap: 10 }}>
           {model.executionPlanPreviews.map((preview) => (
