@@ -188,9 +188,10 @@ test("postgres migration job store: create/load and stage/event payload roundtri
         primaryDocumentRef: "file:///snapshot/index.html",
       },
     });
+    const eventTimestamp = now();
     await store.appendExecutionEvent(ids.jobId, {
       type: "STAGE_SUCCEEDED",
-      timestamp: now(),
+      timestamp: eventTimestamp,
       stage: "SNAPSHOT",
       message: "Stage SNAPSHOT succeeded",
       details: { snapshotRef: "snapshot://one" },
@@ -212,7 +213,7 @@ test("postgres migration job store: create/load and stage/event payload roundtri
     assert.deepEqual(loaded?.executionEvents, [
       {
         type: "STAGE_SUCCEEDED",
-        timestamp: "2026-06-03T12:00:04.000Z",
+        timestamp: eventTimestamp,
         stage: "SNAPSHOT",
         message: "Stage SNAPSHOT succeeded",
         details: { snapshotRef: "snapshot://one" },

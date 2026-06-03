@@ -7,8 +7,7 @@ import type {
 } from "@/gnr8/migration-factory/migration-job-types";
 import type { MigrationJobStore } from "@/gnr8/migration-factory/migration-job-store";
 import { canRunStage, computeJobStateFromStages, createInitialStageStates, getFirstNonSucceededStage, getStageIndex, MIGRATION_STAGE_ORDER } from "@/gnr8/migration-factory/migration-stage-machine";
-import { executeMigrationFactoryActivation } from "@/gnr8/migration-factory/migration-factory-activation";
-import { DefaultMigrationStageRunner, type MigrationStageRunner } from "@/gnr8/migration-factory/migration-stage-runner";
+import type { MigrationStageRunner } from "@/gnr8/migration-factory/migration-stage-runner";
 
 type MigrationFactoryOptions = {
   store?: MigrationJobStore;
@@ -20,7 +19,9 @@ type MigrationFactoryOptions = {
 export class MigrationFactory {
   private readonly store: MigrationJobStore;
 
-  private readonly stageRunner: MigrationStageRunner;
+  private readonly stageRunner: MigrationStageRunner | null;
+
+  private defaultStageRunner: MigrationStageRunner | null = null;
 
   private readonly now: () => string;
 
@@ -29,9 +30,14 @@ export class MigrationFactory {
   constructor(options: MigrationFactoryOptions) {
     if (!options.store) throw new Error("MigrationFactory requires a store");
     this.store = options.store;
-    this.stageRunner = options.stageRunner ?? new DefaultMigrationStageRunner();
+    this.stageRunner = options.stageRunner ?? null;
     this.now = options.now ?? (() => new Date().toISOString());
-    this.activationExecutor = options.activationExecutor ?? executeMigrationFactoryActivation;
+    this.activationExecutor =
+      options.activationExecutor ??
+      (async (input) => {
+        const { executeMigrationFactoryActivation } = await import("@/gnr8/migration-factory/migration-factory-activation");
+        return executeMigrationFactoryActivation(input);
+      });
   }
 
   async startMigrationJob(input: StartMigrationJobInput): Promise<MigrationJob> {
@@ -211,6 +217,7 @@ export class MigrationFactory {
 
     const startIndex = getStageIndex(startStage);
     if (startIndex < 0) throw new Error(`Unknown start stage: ${startStage}`);
+    const stageRunner = await this.getStageRunner();
 
     for (let i = startIndex; i < MIGRATION_STAGE_ORDER.length; i += 1) {
       const stage = MIGRATION_STAGE_ORDER[i];
@@ -255,7 +262,7 @@ export class MigrationFactory {
         message: `Stage ${stage} started`,
       });
 
-      const runResult = await this.stageRunner.runStage(await this.requireJob(jobId), stage, { now: this.now });
+      const runResult = await stageRunner.runStage(await this.requireJob(jobId), stage, { now: this.now });
 
       if (runResult.status === "SUCCEEDED") {
         await this.store.updateStageState(jobId, stage, {
@@ -404,5 +411,14 @@ export class MigrationFactory {
     const job = await this.store.getJob(jobId);
     if (!job) throw new Error(`Migration job not found: ${jobId}`);
     return job;
+  }
+
+  private async getStageRunner(): Promise<MigrationStageRunner> {
+    if (this.stageRunner) return this.stageRunner;
+    if (!this.defaultStageRunner) {
+      const { DefaultMigrationStageRunner } = await import("@/gnr8/migration-factory/migration-stage-runner");
+      this.defaultStageRunner = new DefaultMigrationStageRunner();
+    }
+    return this.defaultStageRunner;
   }
 }
