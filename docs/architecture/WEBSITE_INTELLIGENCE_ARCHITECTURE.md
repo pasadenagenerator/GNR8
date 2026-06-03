@@ -826,15 +826,64 @@ Execution Authorization Package Runtime v1 milestone confirmed (`2026-06-03`):
 - architecture chain:
   - `Proposal Candidate → Proposal Approval Preview → Proposal Approval → Approval State → Approval Queue → Execution Readiness → Execution Package Preview → Execution Package Readiness → Execution Contract Preview → Execution Contract Readiness → Execution Bundle Preview → Execution Bundle Readiness → Execution Authorization Preview → Execution Authorization Readiness → Execution Authorization Package → Execution Plan Preview`
 
+Execution Plan Readiness Runtime v1 milestone confirmed (`2026-06-03`):
+- completion date:
+  - `2026-06-03`
+- runtime files:
+  - `apps/platform/gnr8/runtime/twin/twin-execution-plan-readiness.ts`
+- implemented function:
+  - `buildExecutionPlanReadinessRecords(...)`
+- emitted records:
+  - `executionPlanReadinessRecords`
+- model fields:
+  - `readinessState`
+  - `readinessScore`
+  - `requirementsMet`
+  - `requirementsMissing`
+  - `executionPlanPresent`
+  - `planningArtifactsPresent`
+  - `executionAllowed`
+  - `mutationAllowed`
+  - `publishingAllowed`
+  - `providerExecutionAllowed`
+  - `governanceState`
+- governance state:
+  - `execution_plan_readiness_preview_only`
+- verified Maver output:
+  - `Homepage Conversion Flow`
+    - `readinessState`: `incomplete`
+    - `readinessScore`: `80`
+  - `Homepage Quality & Messaging`
+    - `readinessState`: `nearly_ready`
+    - `readinessScore`: `90`
+  - `Validation Runtime`
+    - `readinessState`: `ready`
+    - `readinessScore`: `100`
+- governance values:
+  - `executionAllowed`: `false`
+  - `mutationAllowed`: `false`
+  - `publishingAllowed`: `false`
+  - `providerExecutionAllowed`: `false`
+- preserved boundaries:
+  - no execution
+  - no approval workflow
+  - no mutation execution
+  - no publishing
+  - no provider execution
+  - no AI model calls
+  - deterministic read-only plan readiness modeling only
+- architecture chain:
+  - `Planning Candidates → Governance Review → Approval Records → Approval States → Approval Queue → Execution Readiness → Execution Package Preview → Execution Package Readiness → Execution Contract Preview → Execution Contract Readiness → Execution Bundle Preview → Execution Bundle Readiness → Execution Authorization Preview → Execution Authorization Readiness → Execution Authorization Package → Execution Intent → Execution Intent Readiness → Execution Plan Preview → Execution Plan Readiness → Execution Artifact Preview`
+
 ## Success Condition
 GNR8 gains the intelligence foundation behind the Website Digital Twin.
 
 Current runtime conclusion:
-- Workspace Planning Console now exposes deterministic read-only Execution Authorization Package records derived from Execution Authorization Preview and Execution Authorization Readiness records.
+- Workspace Overview now exposes deterministic read-only Execution Plan Readiness records derived from Execution Plan Preview and planning artifact presence.
 - No execution capability exists.
 
 Recommended next milestone:
-- Execution Intent Runtime v1
+- Execution Candidate Runtime v1
 
 ## Related Canonical Documents
 - `docs/architecture/TWIN_GENERATION_ARCHITECTURE.md`

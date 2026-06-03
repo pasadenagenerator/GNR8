@@ -970,6 +970,43 @@ Execution Authorization Package Runtime v1 milestone confirmed (`2026-06-03`):
 - architecture chain:
   - `Proposal Candidate → Proposal Approval Preview → Proposal Approval → Approval State → Approval Queue → Execution Readiness → Execution Package Preview → Execution Package Readiness → Execution Contract Preview → Execution Contract Readiness → Execution Bundle Preview → Execution Bundle Readiness → Execution Authorization Preview → Execution Authorization Readiness → Execution Authorization Package → Execution Plan Preview`
 
+Execution Plan Readiness Runtime v1 milestone confirmed (`2026-06-03`):
+- completion date:
+  - `2026-06-03`
+- runtime file:
+  - `apps/platform/gnr8/runtime/twin/twin-execution-plan-readiness.ts`
+- implemented function:
+  - `buildExecutionPlanReadinessRecords(...)`
+- emitted records:
+  - `executionPlanReadinessRecords`
+- deterministic derivation rules:
+  - records are derived from existing planning candidates, governance review state, approval records/states/queue, execution intent readiness, execution plan preview output, and planning artifact presence
+  - `executionPlanPresent` is true only when the deterministic Execution Plan Preview layer has a matching proposal plan
+  - `planningArtifactsPresent` is true only when the required preview-only planning artifacts are present for the proposal
+  - `readinessState` is derived from met and missing requirements, not from operator action or provider state
+  - `readinessScore` is computed from deterministic requirements and remains advisory only
+  - missing requirements keep the record incomplete or nearly ready without unlocking execution
+- governance boundaries:
+  - `executionAllowed=false`
+  - `mutationAllowed=false`
+  - `publishingAllowed=false`
+  - `providerExecutionAllowed=false`
+  - `governanceState=execution_plan_readiness_preview_only`
+  - readiness is not approval, authorization, mutation permission, provider handoff, publishing permission, or AI execution
+  - no queue, worker, provider, publish, mutation, or AI action may be started from readiness records
+- verified Maver output:
+  - `Homepage Conversion Flow`
+    - `readinessState`: `incomplete`
+    - `readinessScore`: `80`
+  - `Homepage Quality & Messaging`
+    - `readinessState`: `nearly_ready`
+    - `readinessScore`: `90`
+  - `Validation Runtime`
+    - `readinessState`: `ready`
+    - `readinessScore`: `100`
+- runtime chain:
+  - `Planning Candidates → Governance Review → Approval Records → Approval States → Approval Queue → Execution Readiness → Execution Package Preview → Execution Package Readiness → Execution Contract Preview → Execution Contract Readiness → Execution Bundle Preview → Execution Bundle Readiness → Execution Authorization Preview → Execution Authorization Readiness → Execution Authorization Package → Execution Intent → Execution Intent Readiness → Execution Plan Preview → Execution Plan Readiness → Execution Artifact Preview`
+
 ## Future Integration Points
 This architecture anchors future integration with:
 - Twin Runtime Contract
@@ -995,10 +1032,11 @@ First operational success checkpoint:
 - Digital Twin snapshots now contain imported-site evidence instead of placeholder-only summaries.
 - Workspace Overview is now useful in deployed environments even without local validation snapshot files.
 - Workspace Planning Console now exposes deterministic read-only Execution Authorization Package records derived from Execution Authorization Preview and Execution Authorization Readiness records.
+- Workspace Overview now exposes deterministic read-only Execution Plan Readiness records derived from Execution Plan Preview and planning artifact presence.
 - No execution capability exists.
 
 Recommended next milestone:
-- Execution Intent Runtime v1
+- Execution Candidate Runtime v1
 
 ## Related Canonical Documents
 - `docs/architecture/TWIN_RUNTIME_CONTRACT.md`

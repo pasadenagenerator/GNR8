@@ -20,8 +20,76 @@
 - Execution Contract Preview Runtime v1 completed.
 - Execution Authorization Readiness Runtime v1 completed.
 - Execution Authorization Package Runtime v1 completed.
+- Execution Plan Readiness Runtime v1 completed.
 - Execution Artifact Preview Runtime v1 completed.
 - Proposal Candidate Operator UX Cleanup v1 completed.
+
+## Execution Plan Readiness Runtime v1 Milestone (2026-06-03)
+
+Milestone is complete and documented.
+
+Runtime file:
+- `apps/platform/gnr8/runtime/twin/twin-execution-plan-readiness.ts`
+
+Implemented function:
+- `buildExecutionPlanReadinessRecords(...)`
+
+Emitted records:
+- `executionPlanReadinessRecords`
+
+Record fields:
+- `readinessState`
+- `readinessScore`
+- `requirementsMet`
+- `requirementsMissing`
+- `executionPlanPresent`
+- `planningArtifactsPresent`
+- `executionAllowed`
+- `mutationAllowed`
+- `publishingAllowed`
+- `providerExecutionAllowed`
+- `governanceState`
+
+Verified Maver output:
+1. `Homepage Conversion Flow`
+   - `readinessState`: `incomplete`
+   - `readinessScore`: `80`
+2. `Homepage Quality & Messaging`
+   - `readinessState`: `nearly_ready`
+   - `readinessScore`: `90`
+3. `Validation Runtime`
+   - `readinessState`: `ready`
+   - `readinessScore`: `100`
+
+Governance lock:
+- `executionAllowed=false`
+- `mutationAllowed=false`
+- `publishingAllowed=false`
+- `providerExecutionAllowed=false`
+- `governanceState=execution_plan_readiness_preview_only`
+
+Preserved boundaries:
+- no execution
+- no approval workflow
+- no mutation execution
+- no publishing
+- no provider execution
+- no queues or workers
+- no API changes
+- no database schema changes
+- no UI changes
+- no AI model calls
+- deterministic read-only plan readiness modeling only
+
+Current architecture chain:
+- `Planning Candidates → Governance Review → Approval Records → Approval States → Approval Queue → Execution Readiness → Execution Package Preview → Execution Package Readiness → Execution Contract Preview → Execution Contract Readiness → Execution Bundle Preview → Execution Bundle Readiness → Execution Authorization Preview → Execution Authorization Readiness → Execution Authorization Package → Execution Intent → Execution Intent Readiness → Execution Plan Preview → Execution Plan Readiness → Execution Artifact Preview`
+
+Conclusion:
+- Workspace Overview now exposes deterministic read-only Execution Plan Readiness records derived from Execution Plan Preview and planning artifact presence.
+- No execution capability exists.
+
+Current recommended next step:
+- Execution Candidate Runtime v1
 
 ## Execution Authorization Package Runtime v1 Milestone (2026-06-03)
 
@@ -109,8 +177,8 @@ Conclusion:
 - Workspace Planning Console now exposes deterministic read-only Execution Authorization Package records derived from Execution Authorization Preview and Execution Authorization Readiness records.
 - No execution capability exists.
 
-Recommended next milestone:
-- Execution Intent Runtime v1
+Next dependency milestone now completed:
+- Execution Plan Readiness Runtime v1
 
 ## Execution Authorization Readiness Runtime v1 Milestone (2026-06-03)
 

@@ -801,6 +801,71 @@ export default async function WorkspaceOverviewPage() {
       </section>
 
       <section style={{ marginTop: 16 }}>
+        <h2 style={{ marginBottom: 10 }}>Execution Candidate</h2>
+        <div style={{ display: "grid", gap: 10 }}>
+          {model.executionCandidateRecords.map((candidateRecord) => (
+            <article key={candidateRecord.candidateId} style={CARD_STYLE}>
+              <h3 style={{ marginTop: 0, marginBottom: 6 }}>{candidateRecord.proposalTitle}</h3>
+              <p style={{ marginTop: 0, marginBottom: 4 }}>
+                candidateState: {candidateRecord.candidateState}
+              </p>
+              <p style={{ marginTop: 0, marginBottom: 4 }}>
+                readinessState: {candidateRecord.readinessState}
+              </p>
+              <p style={{ marginTop: 0, marginBottom: 4 }}>
+                readinessScore: {candidateRecord.readinessScore}
+              </p>
+              <p style={{ marginTop: 0, marginBottom: 8 }}>
+                candidateType: {candidateRecord.candidateType}
+              </p>
+              <p style={{ marginTop: 0, marginBottom: 6 }}><strong>Candidate Scope</strong></p>
+              <ul style={{ marginTop: 0, marginBottom: 8 }}>
+                {candidateRecord.candidateScope.map((scope) => (
+                  <li key={scope}>{scope}</li>
+                ))}
+              </ul>
+              <p style={{ marginTop: 0, marginBottom: 6 }}><strong>Candidate Artifacts</strong></p>
+              <ul style={{ marginTop: 0, marginBottom: 8 }}>
+                {candidateRecord.candidateArtifacts.map((artifact) => (
+                  <li key={artifact}>{artifact}</li>
+                ))}
+              </ul>
+              <p style={{ marginTop: 0, marginBottom: 6 }}><strong>Candidate Requirements</strong></p>
+              <ul style={{ marginTop: 0, marginBottom: 8 }}>
+                {candidateRecord.candidateRequirements.map((requirement) => (
+                  <li key={requirement}>{requirement}</li>
+                ))}
+              </ul>
+              <p style={{ marginTop: 0, marginBottom: 6 }}><strong>Blocked Reasons</strong></p>
+              <ul style={{ marginTop: 0, marginBottom: 8 }}>
+                {candidateRecord.blockedReasons.map((blockedReason) => (
+                  <li key={blockedReason}>{blockedReason}</li>
+                ))}
+              </ul>
+              <p style={{ marginTop: 0, marginBottom: 4 }}><strong>Governance</strong></p>
+              <p style={{ marginTop: 0, marginBottom: 4 }}>
+                executionAllowed: {String(candidateRecord.executionAllowed)}
+              </p>
+              <p style={{ marginTop: 0, marginBottom: 4 }}>
+                mutationAllowed: {String(candidateRecord.mutationAllowed)}
+              </p>
+              <p style={{ marginTop: 0, marginBottom: 4 }}>
+                publishingAllowed: {String(candidateRecord.publishingAllowed)}
+              </p>
+              <p style={{ marginTop: 0, marginBottom: 4 }}>
+                providerExecutionAllowed: {String(candidateRecord.providerExecutionAllowed)}
+              </p>
+              <p style={{ marginTop: 0, marginBottom: 8 }}>
+                governanceState: {candidateRecord.governanceState}
+              </p>
+              <p style={{ marginTop: 0, marginBottom: 4 }}><strong>Summary</strong></p>
+              <p style={{ margin: 0 }}>{candidateRecord.summary}</p>
+            </article>
+          ))}
+        </div>
+      </section>
+
+      <section style={{ marginTop: 16 }}>
         <h2 style={{ marginBottom: 10 }}>Execution Artifact Preview</h2>
         <div style={{ display: "grid", gap: 10 }}>
           {model.executionArtifactPreviews.map((preview) => (
