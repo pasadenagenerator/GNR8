@@ -10,6 +10,9 @@ import {
   resolveRequestHost,
   resolvePublicRuntimeMode,
 } from "@/src/public-site/public-runtime-render";
+import { materializeCmsContentSlotsForScopedImport } from "@/gnr8/site/scoped-import-pipeline";
+import { planBatchDraftUpserts } from "@/app/api/gnr8/clients/[clientId]/sites/[siteId]/content/overrides/batch/batch-overrides-route-helpers";
+import type { ContentOverride, ContentSlot } from "@/gnr8/runtime/content-binding";
 
 type ResolutionLogPayload = {
   runtimeResolutionMode: string;
@@ -40,6 +43,25 @@ async function captureResolutionLog(run: () => Promise<Response>): Promise<{ res
     const response = await run();
     assert.ok(payload, "expected structured resolution diagnostics log");
     return { response, payload };
+  } finally {
+    console.info = originalInfo;
+  }
+}
+
+async function captureConsoleInfo(run: () => Promise<Response>): Promise<{
+  response: Response;
+  entries: Array<{ message: string; args: unknown[] }>;
+}> {
+  const originalInfo = console.info;
+  const entries: Array<{ message: string; args: unknown[] }> = [];
+
+  console.info = (...args: unknown[]) => {
+    entries.push({ message: String(args[0] ?? ""), args });
+  };
+
+  try {
+    const response = await run();
+    return { response, entries };
   } finally {
     console.info = originalInfo;
   }
@@ -214,6 +236,195 @@ test("public runtime domain hit: applies published content overrides and ignores
     const html = await response.text();
     assert.match(html, /Published title/);
     assert.ok(!html.includes("Old title"));
+  } finally {
+    restoreDeps();
+  }
+});
+
+test("migration MVP readiness: imported raw template renders published CMS override on active domain without artifact fallback", async () => {
+  const siteId = "site_migration_mvp";
+  const siteVersionId = "11111111-1111-4111-8111-111111111111";
+  const domain = "migration-mvp.example.com";
+  const rawImportedHtml =
+    '<!doctype html><html><head><title>Migration MVP</title></head><body><main data-render-source="raw-imported-template"><section><h1>Imported Hero Title</h1><p>Imported raw template body remains here.</p></section></main></body></html>';
+  const artifactFallbackHtml =
+    '<!doctype html><html><body><main data-render-source="artifact-only-fallback"><h1>Artifact Fallback Hero</h1><p>ARTIFACT_FALLBACK_SHOULD_NOT_RENDER</p></main></body></html>';
+
+  const persistedSlots: ContentSlot[] = [];
+  const materialized = await materializeCmsContentSlotsForScopedImport({
+    siteId,
+    siteVersionId,
+    html: rawImportedHtml,
+    semanticImport: {
+      sourceMode: "raw_html_only",
+      captureMode: "raw_html_only",
+      title: "Migration MVP",
+      language: "en",
+      navigation: [],
+      hero: {
+        title: "Imported Hero Title",
+        subtitle: null,
+        cta: null,
+        image: null,
+        confidence: 0.9,
+        diagnostics: [],
+      },
+      sections: [],
+      assets: {
+        images: [],
+        groupedByRole: {
+          logo: [],
+          hero_image: [],
+          gallery_image: [],
+          service_image: [],
+          testimonial_avatar: [],
+          content_image: [],
+          icon: [],
+          unknown: [],
+        },
+        knownAssets: [],
+      },
+      diagnostics: [],
+    } as never,
+    persistContentSlots: async (input) => {
+      persistedSlots.splice(
+        0,
+        persistedSlots.length,
+        ...input.slots.map((slot, index) => ({
+          id: `slot-${index + 1}`,
+          ...slot,
+        })),
+      );
+      return input.slots.length;
+    },
+  });
+  const titleSlot = persistedSlots.find((slot) => slot.slotKey === "hero.title");
+  assert.ok(titleSlot, "expected raw import to materialize editable hero title slot");
+
+  const draftPlan = planBatchDraftUpserts({
+    slots: persistedSlots.map((slot) => ({ slotKey: slot.slotKey, slotType: slot.slotType })),
+    overrides: [{ slotKey: "hero.title", status: "draft", value: "Published Migration MVP Hero" }],
+  });
+  assert.equal(draftPlan.valid.length, 1);
+
+  const draftOverrides = new Map<string, ContentOverride>();
+  const publishedOverrides = new Map<string, ContentOverride>();
+  const saveDraft = (override: { slotKey: string; valueType: ContentOverride["valueType"]; valueJson: unknown }) => {
+    draftOverrides.set(override.slotKey, {
+      id: `draft-${override.slotKey}`,
+      siteId,
+      siteVersionId,
+      slotKey: override.slotKey,
+      valueType: override.valueType,
+      valueJson: override.valueJson,
+      status: "draft",
+    });
+  };
+  const publishDrafts = () => {
+    for (const override of draftOverrides.values()) {
+      publishedOverrides.set(override.slotKey, {
+        ...override,
+        id: `published-${override.slotKey}`,
+        status: "published",
+      });
+    }
+  };
+
+  saveDraft(draftPlan.valid[0]!);
+  publishDrafts();
+  saveDraft({
+    slotKey: "hero.title",
+    valueType: "text",
+    valueJson: { value: "Draft Migration MVP Hero" },
+  });
+
+  const activeSite = {
+    versionState: "PUBLISHED",
+    activeSiteVersionId: siteVersionId,
+    activeArtifactId: "artifact_fallback_mvp",
+    domainBindingStatus: "active",
+    rawTemplateArtifactType: "raw_imported_site",
+  };
+  let artifactFallbackCalls = 0;
+  const overrideListCalls: Array<{ siteVersionId: string; status: string }> = [];
+  const restoreDeps = __setPublicRuntimeRenderDependenciesForTest({
+    resolveRawTemplateSiteForDomainAndPath: async (input) => {
+      assert.equal(input.host, domain);
+      assert.equal(input.path, "/");
+      assert.equal(activeSite.versionState, "PUBLISHED");
+      assert.equal(activeSite.activeSiteVersionId, siteVersionId);
+      assert.equal(activeSite.domainBindingStatus, "active");
+      assert.equal(activeSite.rawTemplateArtifactType, "raw_imported_site");
+      return {
+        outcome: "raw_template_hit",
+        host: domain,
+        siteId,
+        siteVersionId,
+        domain,
+        bindingId: "domain_binding_migration_mvp",
+        status: "active",
+        normalizedPath: "/",
+        resolvedFilePath: "index.html",
+        html: rawImportedHtml,
+      } as never;
+    },
+    resolveActiveArtifactForHostAndPathWithDiagnostics: async () => {
+      artifactFallbackCalls += 1;
+      return {
+        outcome: "artifact_hit",
+        host: domain,
+        path: "/",
+        normalizedPath: "/",
+        siteId,
+        siteResolution: "host_match",
+        hostBindingId: "domain_binding_migration_mvp",
+        hostBindingKind: "canonical",
+        hostBindingStatus: "ACTIVE",
+        activeSiteVersionId: siteVersionId,
+        artifactId: activeSite.activeArtifactId,
+        artifact: {} as never,
+        html: artifactFallbackHtml,
+        resolvedPath: "/",
+      } as never;
+    },
+    listContentSlots: async (requestedSiteVersionId) => {
+      assert.equal(requestedSiteVersionId, siteVersionId);
+      return persistedSlots as never;
+    },
+    listContentOverrides: async ({ siteVersionId: requestedSiteVersionId, status }) => {
+      overrideListCalls.push({ siteVersionId: requestedSiteVersionId, status });
+      assert.equal(requestedSiteVersionId, siteVersionId);
+      assert.equal(status, "published");
+      return [...publishedOverrides.values()] as never;
+    },
+  });
+
+  try {
+    const { response, entries } = await captureConsoleInfo(() => renderPublicPathResponse({ host: domain, path: "/" }));
+    assert.equal(response.status, 200);
+    const html = await response.text();
+
+    assert.match(html, /Published Migration MVP Hero/);
+    assert.doesNotMatch(html, /Draft Migration MVP Hero/);
+    assert.match(html, /data-render-source="raw-imported-template"/);
+    assert.doesNotMatch(html, /ARTIFACT_FALLBACK_SHOULD_NOT_RENDER/);
+    assert.doesNotMatch(html, /data-render-source="artifact-only-fallback"/);
+    assert.equal(artifactFallbackCalls, 0);
+    assert.deepEqual(overrideListCalls, [{ siteVersionId, status: "published" }]);
+    assert.equal(materialized.persistedSlotCount, materialized.inferredSlotCount);
+    assert.ok(materialized.diagnostics.includes("CMS_SLOT_PERSISTENCE_COMPLETED"));
+    assert.equal(
+      entries.some((entry) => entry.message.includes("PUBLIC_DOMAIN_RAW_TEMPLATE_SELECTED")),
+      true,
+    );
+    assert.equal(
+      entries.some(
+        (entry) =>
+          entry.message.includes("[gnr8.public-runtime.resolution]") ||
+          entry.message.includes("PUBLIC_ARTIFACT_FALLBACK_SELECTED"),
+      ),
+      false,
+    );
   } finally {
     restoreDeps();
   }
