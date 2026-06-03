@@ -212,6 +212,51 @@ Checkpoint outcome:
 - GNR8 has the first operational runtime representation of a website visible in Workspace Overview.
 
 Latest completed canonical runtime milestone (2026-06-03):
+- `Execution Candidate Authorization Runtime v1`
+- `Execution Candidate Authorization Readiness Runtime v1`
+- `Execution Candidate Authorization Package Runtime v1`
+- status:
+  - COMPLETE
+- completion date:
+  - `2026-06-03`
+- completion note:
+  - Candidate Authorization Family completed.
+- runtime files:
+  - `apps/platform/gnr8/runtime/twin/twin-execution-candidate-authorization.ts`
+  - `apps/platform/gnr8/runtime/twin/twin-execution-candidate-authorization-readiness.ts`
+  - `apps/platform/gnr8/runtime/twin/twin-execution-candidate-authorization-package.ts`
+- implementation summary:
+  - candidate authorization preview records model candidate authorization status without enabling execution
+  - candidate authorization readiness records evaluate authorization presence and required authorization evidence
+  - candidate authorization package records assemble preview-only authorization components into package-ready or package-incomplete structures
+  - governance remains locked with `executionAllowed=false`, `mutationAllowed=false`, `publishingAllowed=false`, and `providerExecutionAllowed=false`
+  - governance states are `execution_candidate_authorization_preview_only`, `execution_candidate_authorization_readiness_preview_only`, and `execution_candidate_authorization_package_preview_only`
+- verified Maver output:
+  - `Homepage Conversion Flow`: `Authorization=blocked`, `Authorization Readiness=incomplete`, `Authorization Package=package_incomplete`
+  - `Homepage Quality & Messaging`: `Authorization=authorization_ready_preview`, `Authorization Readiness=nearly_ready`, `Authorization Package=package_ready`
+  - `Validation Runtime`: `Authorization=authorization_ready_preview`, `Authorization Readiness=ready`, `Authorization Package=package_ready`
+- preserved boundaries:
+  - no runtime execution
+  - no approval workflow
+  - no APIs
+  - no database schema changes
+  - no UI changes
+  - no queues, workers, provider execution, publishing, mutations, or AI actions
+  - documentation closure only
+- architecture chain:
+  - `Proposal → Approval → Approval State → Approval Queue → Execution Readiness → Execution Package Preview → Execution Package Readiness → Execution Contract Preview → Execution Contract Readiness → Execution Bundle Preview → Execution Bundle Readiness → Execution Authorization Preview → Execution Authorization Readiness → Execution Authorization Package → Execution Intent → Execution Intent Readiness → Execution Plan Preview → Execution Plan Readiness → Execution Candidate → Execution Candidate Readiness → Execution Candidate Package → Execution Candidate Authorization → Execution Candidate Authorization Readiness → Execution Candidate Authorization Package`
+- conclusion:
+  - Execution Candidate Authorization Family completed successfully.
+  - Governance graph extended.
+  - All governance boundaries preserved.
+  - Execution remains blocked.
+  - Mutation remains blocked.
+  - Publishing remains blocked.
+  - Provider execution remains blocked.
+- recommended next milestone:
+  - `Execution Artifact Readiness Runtime v1`
+
+Prior completed canonical runtime milestone:
 - `Execution Candidate Runtime v1`
 - `Execution Candidate Readiness Runtime v1`
 - `Execution Candidate Package Runtime v1`
@@ -243,8 +288,8 @@ Latest completed canonical runtime milestone (2026-06-03):
   - documentation closure only
 - architecture chain:
   - `Proposal → Approval → Approval State → Approval Queue → Execution Readiness → Execution Package Preview → Execution Package Readiness → Execution Contract Preview → Execution Contract Readiness → Execution Bundle Preview → Execution Bundle Readiness → Execution Authorization Preview → Execution Authorization Readiness → Execution Authorization Package → Execution Intent → Execution Intent Readiness → Execution Plan Preview → Execution Plan Readiness → Execution Candidate → Execution Candidate Readiness → Execution Candidate Package`
-- recommended next milestone:
-  - `Execution Candidate Authorization Runtime v1`
+- next dependency milestone now completed:
+  - `Execution Candidate Authorization Family`
 
 Prior completed canonical runtime dependency:
 - `Execution Authorization Package Runtime v1`
@@ -863,4 +908,4 @@ Earlier completed canonical runtime dependency:
   - future bootstrap resumes from `Persisted Migration OS Evidence -> Website OS Workspace Overview` as completed.
 
 Recommended next milestone:
-- Execution Candidate Authorization Runtime v1
+- Execution Artifact Readiness Runtime v1

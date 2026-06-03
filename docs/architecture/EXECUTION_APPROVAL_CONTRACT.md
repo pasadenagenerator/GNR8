@@ -722,8 +722,84 @@ Execution Candidate Runtime family v1 dependency checkpoint (`2026-06-03`):
 - conclusion:
   - Candidate records, readiness validation, and package aggregation remain deterministic preview-only contract layers.
   - No execution capability exists.
-- recommended next milestone:
+- next dependency milestone now completed:
+  - `Execution Candidate Authorization Family`
+
+## Candidate Authorization
+
+Candidate Authorization records the governance-only authorization family that follows Execution Candidate package assembly.
+
+Candidate Authorization Preview:
+- purpose:
+  - model whether an Execution Candidate has the required authorization evidence for future execution consideration
+- fields:
+  - `authorizationState`
+  - `authorizationType`
+  - `requiredAuthorizations`
+  - `authorizationPresent`
+  - `authorizationRequirementsPresent`
+  - `blockedReasons`
+- governance state:
+  - `execution_candidate_authorization_preview_only`
+
+Candidate Authorization Readiness:
+- purpose:
+  - evaluate candidate authorization presence and required authorization completeness
+- fields:
+  - `authorizationPresent`
+  - `authorizationRequirementsPresent`
+  - `blockedReasons`
+  - `requiredAuthorizations`
+- governance state:
+  - `execution_candidate_authorization_readiness_preview_only`
+
+Candidate Authorization Package:
+- purpose:
+  - assemble the authorization preview and readiness outputs into a non-executable package
+- fields:
+  - `packageState`
+  - `includedComponents`
+  - `missingComponents`
+  - `authorizationState`
+  - `authorizationType`
+  - `blockedReasons`
+- governance state:
+  - `execution_candidate_authorization_package_preview_only`
+
+Shared governance constraints:
+- `preview-only`
+- `read-only`
+- `non-executable`
+- `governance-only`
+- all execution flags remain false:
+  - `executionAllowed=false`
+  - `mutationAllowed=false`
+  - `publishingAllowed=false`
+  - `providerExecutionAllowed=false`
+- no execution
+- no mutation
+- no publishing
+- no provider execution
+
+Candidate Authorization Family completion (`2026-06-03`):
+- completed milestones:
   - `Execution Candidate Authorization Runtime v1`
+  - `Execution Candidate Authorization Readiness Runtime v1`
+  - `Execution Candidate Authorization Package Runtime v1`
+- runtime files:
+  - `apps/platform/gnr8/runtime/twin/twin-execution-candidate-authorization.ts`
+  - `apps/platform/gnr8/runtime/twin/twin-execution-candidate-authorization-readiness.ts`
+  - `apps/platform/gnr8/runtime/twin/twin-execution-candidate-authorization-package.ts`
+- conclusion:
+  - Execution Candidate Authorization Family completed successfully.
+  - Governance graph extended.
+  - All governance boundaries preserved.
+  - Execution remains blocked.
+  - Mutation remains blocked.
+  - Publishing remains blocked.
+  - Provider execution remains blocked.
+- next recommended milestone:
+  - `Execution Artifact Readiness Runtime v1`
 
 Website OS Proposal Candidate Runtime v1 dependency checkpoint (`2026-06-01`):
 - runtime files:

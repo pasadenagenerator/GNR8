@@ -928,18 +928,61 @@ Execution Candidate Runtime family v1 milestone confirmed (`2026-06-03`):
 - architecture chain:
   - `Planning Candidates → Governance Review → Approval Records → Approval States → Approval Queue → Execution Readiness → Execution Package Preview → Execution Package Readiness → Execution Contract Preview → Execution Contract Readiness → Execution Bundle Preview → Execution Bundle Readiness → Execution Authorization Preview → Execution Authorization Readiness → Execution Authorization Package → Execution Intent → Execution Intent Readiness → Execution Plan Preview → Execution Plan Readiness → Execution Candidate → Execution Candidate Readiness → Execution Candidate Package`
 
+Execution Candidate Authorization Family milestone confirmed (`2026-06-03`):
+- completed milestones:
+  - `Execution Candidate Authorization Runtime v1`
+  - `Execution Candidate Authorization Readiness Runtime v1`
+  - `Execution Candidate Authorization Package Runtime v1`
+- Website OS Runtime Chain:
+  - `Execution Candidate → Execution Candidate Readiness → Execution Candidate Package → Execution Candidate Authorization → Execution Candidate Authorization Readiness → Execution Candidate Authorization Package`
+- documented layers:
+  - Candidate authorization preview layer
+  - Candidate authorization readiness evaluation
+  - Candidate authorization package assembly
+  - Governance-only visibility model
+- runtime outputs:
+  - `authorizationState`
+  - `authorizationType`
+  - `authorizationPresent`
+  - `authorizationRequirementsPresent`
+  - `packageState`
+  - `includedComponents`
+  - `missingComponents`
+- governance states:
+  - `execution_candidate_authorization_preview_only`
+  - `execution_candidate_authorization_readiness_preview_only`
+  - `execution_candidate_authorization_package_preview_only`
+- governance constraints:
+  - `executionAllowed=false`
+  - `mutationAllowed=false`
+  - `publishingAllowed=false`
+  - `providerExecutionAllowed=false`
+- preserved boundaries:
+  - no execution
+  - no mutation
+  - no publishing
+  - no provider execution
+- conclusion:
+  - Execution Candidate Authorization Family completed successfully.
+  - Governance graph extended.
+  - All governance boundaries preserved.
+  - Execution remains blocked.
+  - Mutation remains blocked.
+  - Publishing remains blocked.
+  - Provider execution remains blocked.
+
 ## Success Condition
 GNR8 gains the intelligence foundation behind the Website Digital Twin.
 
 Current runtime conclusion:
-- Website OS now supports deterministic preview-only candidate generation, candidate qualification evaluation, and candidate package assembly.
+- Website OS now supports deterministic preview-only candidate generation, candidate qualification evaluation, candidate package assembly, candidate authorization preview, candidate authorization readiness evaluation, and candidate authorization package assembly.
 - No execution capability exists.
 - No mutation capability exists.
 - No provider execution capability exists.
 - No publishing capability exists.
 
 Recommended next milestone:
-- Execution Candidate Authorization Runtime v1
+- Execution Artifact Readiness Runtime v1
 
 ## Related Canonical Documents
 - `docs/architecture/TWIN_GENERATION_ARCHITECTURE.md`

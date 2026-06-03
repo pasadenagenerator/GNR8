@@ -24,8 +24,79 @@
 - Execution Candidate Runtime v1 completed.
 - Execution Candidate Readiness Runtime v1 completed.
 - Execution Candidate Package Runtime v1 completed.
+- Execution Candidate Authorization Runtime v1 completed.
+- Execution Candidate Authorization Readiness Runtime v1 completed.
+- Execution Candidate Authorization Package Runtime v1 completed.
 - Execution Artifact Preview Runtime v1 completed.
 - Proposal Candidate Operator UX Cleanup v1 completed.
+
+## Execution Candidate Authorization Family v1 Milestone (2026-06-03)
+
+Execution Candidate Authorization Family completed.
+
+Completed milestones:
+- Execution Candidate Authorization Runtime v1
+- Execution Candidate Authorization Readiness Runtime v1
+- Execution Candidate Authorization Package Runtime v1
+
+Runtime files:
+- `apps/platform/gnr8/runtime/twin/twin-execution-candidate-authorization.ts`
+- `apps/platform/gnr8/runtime/twin/twin-execution-candidate-authorization-readiness.ts`
+- `apps/platform/gnr8/runtime/twin/twin-execution-candidate-authorization-package.ts`
+
+Readiness outputs:
+- `authorizationPresent`
+- `authorizationRequirementsPresent`
+- `blockedReasons`
+- `readinessState`
+- `readinessScore`
+
+Package outputs:
+- `packageState`
+- `includedComponents`
+- `missingComponents`
+- `authorizationState`
+- `authorizationType`
+
+Governance states:
+- `execution_candidate_authorization_preview_only`
+- `execution_candidate_authorization_readiness_preview_only`
+- `execution_candidate_authorization_package_preview_only`
+
+Maver verified outputs:
+1. `Homepage Conversion Flow`
+   - `Authorization`: `blocked`
+   - `Authorization Readiness`: `incomplete`
+   - `Authorization Package`: `package_incomplete`
+2. `Homepage Quality & Messaging`
+   - `Authorization`: `authorization_ready_preview`
+   - `Authorization Readiness`: `nearly_ready`
+   - `Authorization Package`: `package_ready`
+3. `Validation Runtime`
+   - `Authorization`: `authorization_ready_preview`
+   - `Authorization Readiness`: `ready`
+   - `Authorization Package`: `package_ready`
+
+Current architecture chain:
+- `Proposal → Approval → Approval State → Approval Queue → Execution Readiness → Execution Package Preview → Execution Package Readiness → Execution Contract Preview → Execution Contract Readiness → Execution Bundle Preview → Execution Bundle Readiness → Execution Authorization Preview → Execution Authorization Readiness → Execution Authorization Package → Execution Intent → Execution Intent Readiness → Execution Plan Preview → Execution Plan Readiness → Execution Candidate → Execution Candidate Readiness → Execution Candidate Package → Execution Candidate Authorization → Execution Candidate Authorization Readiness → Execution Candidate Authorization Package`
+
+Preserved boundaries:
+- No execution introduced.
+- No mutation introduced.
+- No publishing introduced.
+- No provider execution introduced.
+
+Conclusion:
+- Execution Candidate Authorization Family completed successfully.
+- Governance graph extended.
+- All governance boundaries preserved.
+- Execution remains blocked.
+- Mutation remains blocked.
+- Publishing remains blocked.
+- Provider execution remains blocked.
+
+Current recommended milestone:
+- Execution Artifact Readiness Runtime v1
 
 ## Execution Candidate Runtime Family v1 Milestone (2026-06-03)
 
@@ -89,7 +160,7 @@ Current architecture chain:
 - `Proposal → Approval → Approval State → Approval Queue → Execution Readiness → Execution Package Preview → Execution Package Readiness → Execution Contract Preview → Execution Contract Readiness → Execution Bundle Preview → Execution Bundle Readiness → Execution Authorization Preview → Execution Authorization Readiness → Execution Authorization Package → Execution Intent → Execution Intent Readiness → Execution Plan Preview → Execution Plan Readiness → Execution Candidate → Execution Candidate Readiness → Execution Candidate Package`
 
 Current recommended milestone:
-- Execution Candidate Authorization Runtime v1
+- Execution Artifact Readiness Runtime v1
 
 ## Execution Plan Readiness Runtime v1 Milestone (2026-06-03)
 
@@ -155,8 +226,8 @@ Conclusion:
 - Workspace Overview now exposes deterministic read-only Execution Plan Readiness records derived from Execution Plan Preview and planning artifact presence.
 - No execution capability exists.
 
-Current recommended next step:
-- Execution Candidate Authorization Runtime v1
+Next dependency milestone now completed:
+- Execution Candidate Authorization Family
 
 ## Execution Authorization Package Runtime v1 Milestone (2026-06-03)
 

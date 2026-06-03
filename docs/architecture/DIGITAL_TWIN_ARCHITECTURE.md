@@ -1049,6 +1049,52 @@ Execution Candidate Runtime family v1 milestone confirmed (`2026-06-03`):
   - no queues
   - no workers
 
+Execution Candidate Authorization Family Completed: 2026-06-03
+- completed milestones:
+  - `Execution Candidate Authorization Runtime v1`
+  - `Execution Candidate Authorization Readiness Runtime v1`
+  - `Execution Candidate Authorization Package Runtime v1`
+- runtime files:
+  - `apps/platform/gnr8/runtime/twin/twin-execution-candidate-authorization.ts`
+  - `apps/platform/gnr8/runtime/twin/twin-execution-candidate-authorization-readiness.ts`
+  - `apps/platform/gnr8/runtime/twin/twin-execution-candidate-authorization-package.ts`
+- deterministic outputs:
+  - `authorizationState`
+  - `authorizationType`
+  - `authorizationPresent`
+  - `authorizationRequirementsPresent`
+  - `packageState`
+  - `includedComponents`
+  - `missingComponents`
+  - `blockedReasons`
+  - `readinessState`
+  - `readinessScore`
+- governance states:
+  - `execution_candidate_authorization_preview_only`
+  - `execution_candidate_authorization_readiness_preview_only`
+  - `execution_candidate_authorization_package_preview_only`
+- Maver verification results:
+  - `Homepage Conversion Flow`: authorization blocked; readiness incomplete; package incomplete
+  - `Homepage Quality & Messaging`: authorization ready preview; readiness nearly ready; package ready
+  - `Validation Runtime`: authorization ready preview; readiness ready; package ready
+- governance boundaries:
+  - `executionAllowed=false`
+  - `mutationAllowed=false`
+  - `publishingAllowed=false`
+  - `providerExecutionAllowed=false`
+  - no execution
+  - no mutation
+  - no publishing
+  - no provider execution
+- conclusion:
+  - Execution Candidate Authorization Family completed successfully.
+  - Governance graph extended.
+  - All governance boundaries preserved.
+  - Execution remains blocked.
+  - Mutation remains blocked.
+  - Publishing remains blocked.
+  - Provider execution remains blocked.
+
 ## Future Integration Points
 This architecture anchors future integration with:
 - Twin Runtime Contract
@@ -1074,14 +1120,14 @@ First operational success checkpoint:
 - Digital Twin snapshots now contain imported-site evidence instead of placeholder-only summaries.
 - Workspace Overview is now useful in deployed environments even without local validation snapshot files.
 - Workspace Planning Console now exposes deterministic read-only Execution Authorization Package records derived from Execution Authorization Preview and Execution Authorization Readiness records.
-- Website OS now supports deterministic preview-only Execution Candidate, Execution Candidate Readiness, and Execution Candidate Package records.
+- Website OS now supports deterministic preview-only Execution Candidate, Execution Candidate Readiness, Execution Candidate Package, Execution Candidate Authorization, Execution Candidate Authorization Readiness, and Execution Candidate Authorization Package records.
 - No execution capability exists.
 - No mutation capability exists.
 - No provider execution capability exists.
 - No publishing capability exists.
 
 Recommended next milestone:
-- Execution Candidate Authorization Runtime v1
+- Execution Artifact Readiness Runtime v1
 
 ## Related Canonical Documents
 - `docs/architecture/TWIN_RUNTIME_CONTRACT.md`
