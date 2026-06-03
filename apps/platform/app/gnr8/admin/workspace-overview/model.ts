@@ -90,6 +90,10 @@ import {
   generateTwinExecutionAuthorizationPackageRecords,
   TWIN_EXECUTION_AUTHORIZATION_PACKAGE_DIAGNOSTICS,
 } from "@/gnr8/runtime/twin/twin-execution-authorization-package";
+import {
+  generateTwinExecutionIntentRecords,
+  TWIN_EXECUTION_INTENT_DIAGNOSTICS,
+} from "@/gnr8/runtime/twin/twin-execution-intent";
 import { InMemoryTwinStore } from "@/gnr8/runtime/twin/twin-store";
 import { createTwinOverview } from "@/gnr8/runtime/twin/twin-viewer";
 
@@ -951,6 +955,7 @@ export async function buildWorkspaceOverviewModel(input?: {
       executionAuthorizationPreviews: [],
       executionAuthorizationReadinessRecords: [],
       executionAuthorizationPackageRecords: [],
+      executionIntentRecords: [],
       overview: {
         twinId: "twin_missing_import",
         siteId: "site_missing_import",
@@ -1112,6 +1117,12 @@ export async function buildWorkspaceOverviewModel(input?: {
     executionAuthorizationPackageDiagnostics.push(
       TWIN_EXECUTION_AUTHORIZATION_PACKAGE_DIAGNOSTICS.COMPLETED,
     );
+    const executionIntentDiagnostics: string[] = [
+      TWIN_EXECUTION_INTENT_DIAGNOSTICS.STARTED,
+    ];
+    const executionIntentRecords =
+      generateTwinExecutionIntentRecords(executionAuthorizationPackageRecords);
+    executionIntentDiagnostics.push(TWIN_EXECUTION_INTENT_DIAGNOSTICS.COMPLETED);
     const diagnostics = [
       ...resolution.diagnostics,
       ...storedTwin.diagnostics,
@@ -1131,6 +1142,7 @@ export async function buildWorkspaceOverviewModel(input?: {
       ...executionAuthorizationPreviewDiagnostics,
       ...executionAuthorizationReadinessDiagnostics,
       ...executionAuthorizationPackageDiagnostics,
+      ...executionIntentDiagnostics,
       ...executionPlanPreviewDiagnostics,
       ...executionArtifactPreviewDiagnostics,
       ...executionReadinessDiagnostics,
@@ -1168,6 +1180,7 @@ export async function buildWorkspaceOverviewModel(input?: {
       executionAuthorizationPreviews,
       executionAuthorizationReadinessRecords,
       executionAuthorizationPackageRecords,
+      executionIntentRecords,
       overview,
       diagnostics,
     };
@@ -1305,6 +1318,12 @@ export async function buildWorkspaceOverviewModel(input?: {
     executionAuthorizationPackageDiagnostics.push(
       TWIN_EXECUTION_AUTHORIZATION_PACKAGE_DIAGNOSTICS.COMPLETED,
     );
+    const executionIntentDiagnostics: string[] = [
+      TWIN_EXECUTION_INTENT_DIAGNOSTICS.STARTED,
+    ];
+    const executionIntentRecords =
+      generateTwinExecutionIntentRecords(executionAuthorizationPackageRecords);
+    executionIntentDiagnostics.push(TWIN_EXECUTION_INTENT_DIAGNOSTICS.COMPLETED);
     const diagnostics = [
       ...resolution.diagnostics,
       ...storedTwin.diagnostics,
@@ -1324,6 +1343,7 @@ export async function buildWorkspaceOverviewModel(input?: {
       ...executionAuthorizationPreviewDiagnostics,
       ...executionAuthorizationReadinessDiagnostics,
       ...executionAuthorizationPackageDiagnostics,
+      ...executionIntentDiagnostics,
       ...executionPlanPreviewDiagnostics,
       ...executionArtifactPreviewDiagnostics,
       ...executionReadinessDiagnostics,
@@ -1361,6 +1381,7 @@ export async function buildWorkspaceOverviewModel(input?: {
       executionAuthorizationPreviews,
       executionAuthorizationReadinessRecords,
       executionAuthorizationPackageRecords,
+      executionIntentRecords,
       overview,
       diagnostics,
     };
@@ -1522,6 +1543,12 @@ export async function buildWorkspaceOverviewModel(input?: {
   executionAuthorizationPackageDiagnostics.push(
     TWIN_EXECUTION_AUTHORIZATION_PACKAGE_DIAGNOSTICS.COMPLETED,
   );
+  const executionIntentDiagnostics: string[] = [
+    TWIN_EXECUTION_INTENT_DIAGNOSTICS.STARTED,
+  ];
+  const executionIntentRecords =
+    generateTwinExecutionIntentRecords(executionAuthorizationPackageRecords);
+  executionIntentDiagnostics.push(TWIN_EXECUTION_INTENT_DIAGNOSTICS.COMPLETED);
   const diagnostics = [
     ...resolution.diagnostics,
     ...storedTwin.diagnostics,
@@ -1541,6 +1568,7 @@ export async function buildWorkspaceOverviewModel(input?: {
     ...executionAuthorizationPreviewDiagnostics,
     ...executionAuthorizationReadinessDiagnostics,
     ...executionAuthorizationPackageDiagnostics,
+    ...executionIntentDiagnostics,
     ...executionPlanPreviewDiagnostics,
     ...executionArtifactPreviewDiagnostics,
     ...executionReadinessDiagnostics,
@@ -1579,6 +1607,7 @@ export async function buildWorkspaceOverviewModel(input?: {
     executionAuthorizationPreviews,
     executionAuthorizationReadinessRecords,
     executionAuthorizationPackageRecords,
+    executionIntentRecords,
     overview,
     diagnostics,
   };

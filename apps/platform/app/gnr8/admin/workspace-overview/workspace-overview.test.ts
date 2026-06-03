@@ -69,6 +69,7 @@ test("workspace overview model: twin overview and diagnostics render data from i
   assert.equal(Array.isArray(model.executionAuthorizationPreviews), true);
   assert.equal(Array.isArray(model.executionAuthorizationReadinessRecords), true);
   assert.equal(Array.isArray(model.executionAuthorizationPackageRecords), true);
+  assert.equal(Array.isArray(model.executionIntentRecords), true);
   assert.equal(model.observations.length > 0 || model.sourceId === null, true);
   assert.equal(model.diagnostics.includes("TWIN_OVERVIEW_CREATED"), true);
   assert.equal(model.diagnostics.includes("TWIN_OBSERVATIONS_STARTED"), model.sourceId !== null);
@@ -115,6 +116,8 @@ test("workspace overview model: twin overview and diagnostics render data from i
   assert.equal(model.diagnostics.includes("TWIN_EXECUTION_AUTHORIZATION_READINESS_COMPLETED"), model.sourceId !== null);
   assert.equal(model.diagnostics.includes("TWIN_EXECUTION_AUTHORIZATION_PACKAGE_STARTED"), model.sourceId !== null);
   assert.equal(model.diagnostics.includes("TWIN_EXECUTION_AUTHORIZATION_PACKAGE_COMPLETED"), model.sourceId !== null);
+  assert.equal(model.diagnostics.includes("TWIN_EXECUTION_INTENT_STARTED"), model.sourceId !== null);
+  assert.equal(model.diagnostics.includes("TWIN_EXECUTION_INTENT_COMPLETED"), model.sourceId !== null);
   assert.equal(
     model.diagnostics.indexOf("TWIN_EXECUTION_AUTHORIZATION_READINESS_STARTED") >
       model.diagnostics.indexOf("TWIN_EXECUTION_AUTHORIZATION_PREVIEW_COMPLETED"),
@@ -126,8 +129,13 @@ test("workspace overview model: twin overview and diagnostics render data from i
     model.sourceId !== null,
   );
   assert.equal(
-    model.diagnostics.indexOf("TWIN_EXECUTION_PLAN_PREVIEW_STARTED") >
+    model.diagnostics.indexOf("TWIN_EXECUTION_INTENT_STARTED") >
       model.diagnostics.indexOf("TWIN_EXECUTION_AUTHORIZATION_PACKAGE_COMPLETED"),
+    model.sourceId !== null,
+  );
+  assert.equal(
+    model.diagnostics.indexOf("TWIN_EXECUTION_PLAN_PREVIEW_STARTED") >
+      model.diagnostics.indexOf("TWIN_EXECUTION_INTENT_COMPLETED"),
     model.sourceId !== null,
   );
   assert.equal(model.overview.contentSummary.includes("pages="), true);
@@ -348,6 +356,15 @@ test("workspace overview model: proposal candidates are present and remain read-
     ),
     true,
   );
+  assert.equal(model.executionIntentRecords.length, model.executionAuthorizationPackageRecords.length);
+  assert.equal(model.executionIntentRecords.every((entry) => entry.executionAllowed === false), true);
+  assert.equal(model.executionIntentRecords.every((entry) => entry.mutationAllowed === false), true);
+  assert.equal(model.executionIntentRecords.every((entry) => entry.publishingAllowed === false), true);
+  assert.equal(model.executionIntentRecords.every((entry) => entry.providerExecutionAllowed === false), true);
+  assert.equal(
+    model.executionIntentRecords.every((entry) => entry.governanceState === "execution_intent_preview_only"),
+    true,
+  );
   const readinessByTitle = new Map(model.executionReadinessRecords.map((entry) => [entry.proposalTitle, entry]));
   const packagePreviewByTitle = new Map(model.executionPackagePreviews.map((entry) => [entry.proposalTitle, entry]));
   const packageReadinessByTitle = new Map(
@@ -374,6 +391,7 @@ test("workspace overview model: proposal candidates are present and remain read-
   const authorizationPackageByTitle = new Map(
     model.executionAuthorizationPackageRecords.map((entry) => [entry.proposalTitle, entry]),
   );
+  const executionIntentByTitle = new Map(model.executionIntentRecords.map((entry) => [entry.proposalTitle, entry]));
   const conversionReadiness = readinessByTitle.get("Improve Homepage Conversion Flow");
   if (conversionReadiness) {
     assert.equal(conversionReadiness.readinessState, "partially_ready");
@@ -476,6 +494,20 @@ test("workspace overview model: proposal candidates are present and remain read-
       "authorization_readiness",
     ]);
     assert.deepEqual(authorizationPackage?.missingComponents, ["conversion_baseline", "design_evidence"]);
+    const executionIntent = executionIntentByTitle.get("Improve Homepage Conversion Flow");
+    assert.equal(executionIntent?.intentState, "intent_blocked");
+    assert.equal(executionIntent?.readinessState, authorizationPackage?.readinessState);
+    assert.equal(executionIntent?.readinessScore, authorizationPackage?.readinessScore);
+    assert.equal(executionIntent?.intentType, "conversion_improvement_intent");
+    assert.deepEqual(executionIntent?.intendedActions, [
+      "review_conversion_path",
+      "prepare_homepage_conversion_changes",
+    ]);
+    assert.deepEqual(executionIntent?.blockedReasons, [
+      "missing_conversion_baseline",
+      "missing_design_evidence",
+      "governance_execution_blocked",
+    ]);
   }
   const messagingReadiness = readinessByTitle.get("Improve Homepage Quality and Messaging");
   if (messagingReadiness) {
@@ -574,6 +606,19 @@ test("workspace overview model: proposal candidates are present and remain read-
       "authorization_requirements",
     ]);
     assert.deepEqual(authorizationPackage?.missingComponents, ["design_evidence"]);
+    const executionIntent = executionIntentByTitle.get("Improve Homepage Quality and Messaging");
+    assert.equal(executionIntent?.intentState, "intent_ready_preview");
+    assert.equal(executionIntent?.readinessState, authorizationPackage?.readinessState);
+    assert.equal(executionIntent?.readinessScore, authorizationPackage?.readinessScore);
+    assert.equal(executionIntent?.intentType, "content_improvement_intent");
+    assert.deepEqual(executionIntent?.intendedActions, [
+      "review_homepage_messaging",
+      "prepare_homepage_copy_improvements",
+    ]);
+    assert.deepEqual(executionIntent?.blockedReasons, [
+      "missing_design_evidence",
+      "governance_execution_blocked",
+    ]);
   }
   const validationReadiness = readinessByTitle.get("Maintain Read-Only Validation Mode");
   assert.equal(validationReadiness != null, model.sourceId !== null);
@@ -662,6 +707,16 @@ test("workspace overview model: proposal candidates are present and remain read-
       "authorization_requirements",
     ]);
     assert.deepEqual(authorizationPackage?.missingComponents, []);
+    const executionIntent = executionIntentByTitle.get("Maintain Read-Only Validation Mode");
+    assert.equal(executionIntent?.intentState, "intent_ready_preview");
+    assert.equal(executionIntent?.readinessState, authorizationPackage?.readinessState);
+    assert.equal(executionIntent?.readinessScore, authorizationPackage?.readinessScore);
+    assert.equal(executionIntent?.intentType, "governance_validation_intent");
+    assert.deepEqual(executionIntent?.intendedActions, [
+      "maintain_read_only_runtime",
+      "continue_governance_validation",
+    ]);
+    assert.deepEqual(executionIntent?.blockedReasons, ["governance_execution_blocked"]);
   }
   assert.equal(
     model.proposalCandidates.every((entry) =>
@@ -699,6 +754,7 @@ test("workspace overview model: observations include read-only runtime validatio
     assert.deepEqual(model.executionAuthorizationPreviews, []);
     assert.deepEqual(model.executionAuthorizationReadinessRecords, []);
     assert.deepEqual(model.executionAuthorizationPackageRecords, []);
+    assert.deepEqual(model.executionIntentRecords, []);
     return;
   }
   assert.equal(model.observations.some((entry) => entry.title === "Read-Only Runtime Validation"), true);
@@ -758,6 +814,7 @@ test("workspace overview page source: renders required sections", async () => {
   assert.equal(source.includes("Execution Authorization Preview"), true);
   assert.equal(source.includes("Execution Authorization Readiness"), true);
   assert.equal(source.includes("Execution Authorization Package"), true);
+  assert.equal(source.includes("Execution Intent"), true);
   assert.equal(source.includes("Execution Plan Preview"), true);
   assert.equal(source.includes("Execution Artifact Preview"), true);
   assert.equal(source.includes("preview.proposalTitle"), true);
@@ -896,6 +953,22 @@ test("workspace overview page source: renders required sections", async () => {
   assert.equal(source.includes("authorizationPackage.providerExecutionAllowed"), true);
   assert.equal(source.includes("authorizationPackage.governanceState"), true);
   assert.equal(source.includes("authorizationPackage.summary"), true);
+  assert.equal(source.includes("model.executionIntentRecords.map"), true);
+  assert.equal(source.includes("intentRecord.proposalId"), true);
+  assert.equal(source.includes("intentRecord.proposalTitle"), true);
+  assert.equal(source.includes("intentRecord.intentState"), true);
+  assert.equal(source.includes("intentRecord.readinessState"), true);
+  assert.equal(source.includes("intentRecord.readinessScore"), true);
+  assert.equal(source.includes("intentRecord.intentType"), true);
+  assert.equal(source.includes("intentRecord.intendedActions.map"), true);
+  assert.equal(source.includes("intentRecord.blockedReasons.map"), true);
+  assert.equal(source.includes("intentRecord.executionAllowed"), true);
+  assert.equal(source.includes("intentRecord.mutationAllowed"), true);
+  assert.equal(source.includes("intentRecord.publishingAllowed"), true);
+  assert.equal(source.includes("intentRecord.providerExecutionAllowed"), true);
+  assert.equal(source.includes("intentRecord.governanceState"), true);
+  assert.equal(source.includes("intentRecord.summary"), true);
+  assert.equal(source.includes("Intended Actions"), true);
   assert.equal(source.includes("model.executionContractPreviews.map"), true);
   assert.equal(source.includes("contractPreview.contractPreviewId"), true);
   assert.equal(source.includes("contractPreview.proposalTitle"), true);
@@ -1087,6 +1160,7 @@ test("workspace overview page source: planning sections render in runtime order"
   const executionAuthorizationPreviewIndex = source.indexOf("Execution Authorization Preview");
   const executionAuthorizationReadinessIndex = source.indexOf("Execution Authorization Readiness");
   const executionAuthorizationPackageIndex = source.indexOf("Execution Authorization Package");
+  const executionIntentIndex = source.indexOf("Execution Intent");
   const executionPlanIndex = source.indexOf("Execution Plan Preview");
   const executionArtifactIndex = source.indexOf("Execution Artifact Preview");
   const opportunityRankingIndex = source.indexOf("Opportunity Ranking");
@@ -1106,7 +1180,8 @@ test("workspace overview page source: planning sections render in runtime order"
   assert.equal(executionAuthorizationPreviewIndex > executionBundleReadinessIndex, true);
   assert.equal(executionAuthorizationReadinessIndex > executionAuthorizationPreviewIndex, true);
   assert.equal(executionAuthorizationPackageIndex > executionAuthorizationReadinessIndex, true);
-  assert.equal(executionPlanIndex > executionAuthorizationPackageIndex, true);
+  assert.equal(executionIntentIndex > executionAuthorizationPackageIndex, true);
+  assert.equal(executionPlanIndex > executionIntentIndex, true);
   assert.equal(executionArtifactIndex > executionPlanIndex, true);
   assert.equal(opportunityRankingIndex > executionArtifactIndex, true);
 });

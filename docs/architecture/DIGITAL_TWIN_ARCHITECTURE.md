@@ -896,7 +896,79 @@ Execution Authorization Readiness Runtime v1 milestone confirmed (`2026-06-03`):
   - no AI model calls
   - read-only deterministic runtime only
 - architecture chain:
-  - `Proposal Candidate → Proposal Approval Preview → Proposal Approval → Approval State → Approval Queue → Execution Readiness → Execution Package Preview → Execution Package Readiness → Execution Contract Preview → Execution Contract Readiness → Execution Bundle Preview → Execution Bundle Readiness → Execution Authorization Preview → Execution Authorization Readiness → Execution Plan Preview`
+  - `Proposal Candidate → Proposal Approval Preview → Proposal Approval → Approval State → Approval Queue → Execution Readiness → Execution Package Preview → Execution Package Readiness → Execution Contract Preview → Execution Contract Readiness → Execution Bundle Preview → Execution Bundle Readiness → Execution Authorization Preview → Execution Authorization Readiness → Execution Authorization Package → Execution Plan Preview`
+
+Execution Authorization Package Runtime v1 milestone confirmed (`2026-06-03`):
+- completion date:
+  - `2026-06-03`
+- runtime files:
+  - `apps/platform/gnr8/runtime/twin/twin-execution-authorization-package.ts`
+  - `apps/platform/gnr8/runtime/twin/twin-execution-authorization-package.test.ts`
+- implemented function:
+  - `generateTwinExecutionAuthorizationPackageRecords(authorizationPreviews, authorizationReadinessRecords)`
+- model:
+  - `TwinExecutionAuthorizationPackageRecord`
+- model fields:
+  - `proposalId`
+  - `proposalTitle`
+  - `packageState`
+  - `readinessState`
+  - `readinessScore`
+  - `authorizationType`
+  - `includedComponents`
+  - `missingComponents`
+  - `executionAllowed`
+  - `mutationAllowed`
+  - `publishingAllowed`
+  - `providerExecutionAllowed`
+  - `governanceState`
+  - `summary`
+- package states:
+  - `package_incomplete`
+  - `package_ready`
+- verified deployed Transporti Maver execution authorization package records:
+  - `Improve Homepage Conversion Flow`
+    - `packageState`: `package_incomplete`
+    - `readinessState`: `not_ready`
+    - `readinessScore`: `85`
+    - `authorizationType`: `conversion_authorization`
+    - `missingComponents`: `conversion_baseline`, `design_evidence`
+  - `Improve Homepage Quality and Messaging`
+    - `packageState`: `package_ready`
+    - `readinessState`: `nearly_ready`
+    - `readinessScore`: `95`
+    - `authorizationType`: `content_authorization`
+    - `missingComponents`: `design_evidence`
+  - `Maintain Read-Only Validation Mode`
+    - `packageState`: `package_ready`
+    - `readinessState`: `ready`
+    - `readinessScore`: `100`
+    - `authorizationType`: `governance_validation_authorization`
+    - `missingComponents`: `[]`
+- governance values:
+  - `executionAllowed`: `false`
+  - `mutationAllowed`: `false`
+  - `publishingAllowed`: `false`
+  - `providerExecutionAllowed`: `false`
+  - `governanceState`: `execution_authorization_package_preview_only`
+- diagnostics:
+  - `TWIN_EXECUTION_AUTHORIZATION_PACKAGE_STARTED`
+  - `TWIN_EXECUTION_AUTHORIZATION_PACKAGE_COMPLETED`
+- preserved boundaries:
+  - no authorization workflow
+  - no approval workflow
+  - no execution workflow
+  - no operator actions
+  - no publishing
+  - no provider execution
+  - no mutations
+  - no AI model calls
+  - no background jobs
+  - no API routes
+  - no database schema changes
+  - read-only deterministic package modeling only
+- architecture chain:
+  - `Proposal Candidate → Proposal Approval Preview → Proposal Approval → Approval State → Approval Queue → Execution Readiness → Execution Package Preview → Execution Package Readiness → Execution Contract Preview → Execution Contract Readiness → Execution Bundle Preview → Execution Bundle Readiness → Execution Authorization Preview → Execution Authorization Readiness → Execution Authorization Package → Execution Plan Preview`
 
 ## Future Integration Points
 This architecture anchors future integration with:
@@ -922,11 +994,11 @@ First operational success checkpoint:
 - GNR8 now has the first browser-visible Website Digital Twin runtime surface.
 - Digital Twin snapshots now contain imported-site evidence instead of placeholder-only summaries.
 - Workspace Overview is now useful in deployed environments even without local validation snapshot files.
-- Workspace Planning Console now exposes deterministic read-only Execution Authorization Readiness records derived from Execution Authorization Preview records.
+- Workspace Planning Console now exposes deterministic read-only Execution Authorization Package records derived from Execution Authorization Preview and Execution Authorization Readiness records.
 - No execution capability exists.
 
 Recommended next milestone:
-- Execution Authorization Package Runtime v1
+- Execution Intent Runtime v1
 
 ## Related Canonical Documents
 - `docs/architecture/TWIN_RUNTIME_CONTRACT.md`
