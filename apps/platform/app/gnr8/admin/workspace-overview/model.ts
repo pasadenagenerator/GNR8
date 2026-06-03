@@ -98,6 +98,11 @@ import {
   generateTwinExecutionIntentReadinessRecords,
   TWIN_EXECUTION_INTENT_READINESS_DIAGNOSTICS,
 } from "@/gnr8/runtime/twin/twin-execution-intent-readiness";
+import {
+  generateExecutionPlanReadinessRecords,
+  hasExecutionPlanReadinessFallbackApplied,
+  TWIN_EXECUTION_PLAN_READINESS_DIAGNOSTICS,
+} from "@/gnr8/runtime/twin/twin-execution-plan-readiness";
 import { InMemoryTwinStore } from "@/gnr8/runtime/twin/twin-store";
 import { createTwinOverview } from "@/gnr8/runtime/twin/twin-viewer";
 
@@ -948,6 +953,7 @@ export async function buildWorkspaceOverviewModel(input?: {
       approvalStates: [],
       approvalQueueItems: [],
       executionPlanPreviews: [],
+      executionPlanReadinessRecords: [],
       executionArtifactPreviews: [],
       executionReadinessRecords: [],
       executionPackagePreviews: [],
@@ -1050,6 +1056,11 @@ export async function buildWorkspaceOverviewModel(input?: {
     const executionPlanPreviewDiagnostics: string[] = [TWIN_EXECUTION_PLAN_PREVIEW_DIAGNOSTICS.STARTED];
     const executionPlanPreviews = generateTwinExecutionPlanPreviews(approvalPreviews);
     executionPlanPreviewDiagnostics.push(TWIN_EXECUTION_PLAN_PREVIEW_DIAGNOSTICS.COMPLETED);
+    const executionPlanReadinessRecords = generateExecutionPlanReadinessRecords(executionPlanPreviews);
+    const executionPlanReadinessDiagnostics: string[] = [TWIN_EXECUTION_PLAN_READINESS_DIAGNOSTICS.CREATED];
+    if (hasExecutionPlanReadinessFallbackApplied(executionPlanReadinessRecords)) {
+      executionPlanReadinessDiagnostics.push(TWIN_EXECUTION_PLAN_READINESS_DIAGNOSTICS.FALLBACK_APPLIED);
+    }
     const executionArtifactPreviewDiagnostics: string[] = [TWIN_EXECUTION_ARTIFACT_PREVIEW_DIAGNOSTICS.STARTED];
     const executionArtifactPreviews = generateTwinExecutionArtifactPreviews(executionPlanPreviews);
     executionArtifactPreviewDiagnostics.push(TWIN_EXECUTION_ARTIFACT_PREVIEW_DIAGNOSTICS.COMPLETED);
@@ -1156,6 +1167,7 @@ export async function buildWorkspaceOverviewModel(input?: {
       ...executionIntentDiagnostics,
       ...executionIntentReadinessDiagnostics,
       ...executionPlanPreviewDiagnostics,
+      ...executionPlanReadinessDiagnostics,
       ...executionArtifactPreviewDiagnostics,
       ...executionReadinessDiagnostics,
       ...executionPackagePreviewDiagnostics,
@@ -1181,6 +1193,7 @@ export async function buildWorkspaceOverviewModel(input?: {
       approvalStates,
       approvalQueueItems,
       executionPlanPreviews,
+      executionPlanReadinessRecords,
       executionArtifactPreviews,
       executionReadinessRecords,
       executionPackagePreviews,
@@ -1259,6 +1272,11 @@ export async function buildWorkspaceOverviewModel(input?: {
     const executionPlanPreviewDiagnostics: string[] = [TWIN_EXECUTION_PLAN_PREVIEW_DIAGNOSTICS.STARTED];
     const executionPlanPreviews = generateTwinExecutionPlanPreviews(approvalPreviews);
     executionPlanPreviewDiagnostics.push(TWIN_EXECUTION_PLAN_PREVIEW_DIAGNOSTICS.COMPLETED);
+    const executionPlanReadinessRecords = generateExecutionPlanReadinessRecords(executionPlanPreviews);
+    const executionPlanReadinessDiagnostics: string[] = [TWIN_EXECUTION_PLAN_READINESS_DIAGNOSTICS.CREATED];
+    if (hasExecutionPlanReadinessFallbackApplied(executionPlanReadinessRecords)) {
+      executionPlanReadinessDiagnostics.push(TWIN_EXECUTION_PLAN_READINESS_DIAGNOSTICS.FALLBACK_APPLIED);
+    }
     const executionArtifactPreviewDiagnostics: string[] = [TWIN_EXECUTION_ARTIFACT_PREVIEW_DIAGNOSTICS.STARTED];
     const executionArtifactPreviews = generateTwinExecutionArtifactPreviews(executionPlanPreviews);
     executionArtifactPreviewDiagnostics.push(TWIN_EXECUTION_ARTIFACT_PREVIEW_DIAGNOSTICS.COMPLETED);
@@ -1365,6 +1383,7 @@ export async function buildWorkspaceOverviewModel(input?: {
       ...executionIntentDiagnostics,
       ...executionIntentReadinessDiagnostics,
       ...executionPlanPreviewDiagnostics,
+      ...executionPlanReadinessDiagnostics,
       ...executionArtifactPreviewDiagnostics,
       ...executionReadinessDiagnostics,
       ...executionPackagePreviewDiagnostics,
@@ -1390,6 +1409,7 @@ export async function buildWorkspaceOverviewModel(input?: {
       approvalStates,
       approvalQueueItems,
       executionPlanPreviews,
+      executionPlanReadinessRecords,
       executionArtifactPreviews,
       executionReadinessRecords,
       executionPackagePreviews,
@@ -1492,6 +1512,11 @@ export async function buildWorkspaceOverviewModel(input?: {
   const executionPlanPreviewDiagnostics: string[] = [TWIN_EXECUTION_PLAN_PREVIEW_DIAGNOSTICS.STARTED];
   const executionPlanPreviews = generateTwinExecutionPlanPreviews(approvalPreviews);
   executionPlanPreviewDiagnostics.push(TWIN_EXECUTION_PLAN_PREVIEW_DIAGNOSTICS.COMPLETED);
+  const executionPlanReadinessRecords = generateExecutionPlanReadinessRecords(executionPlanPreviews);
+  const executionPlanReadinessDiagnostics: string[] = [TWIN_EXECUTION_PLAN_READINESS_DIAGNOSTICS.CREATED];
+  if (hasExecutionPlanReadinessFallbackApplied(executionPlanReadinessRecords)) {
+    executionPlanReadinessDiagnostics.push(TWIN_EXECUTION_PLAN_READINESS_DIAGNOSTICS.FALLBACK_APPLIED);
+  }
   const executionArtifactPreviewDiagnostics: string[] = [TWIN_EXECUTION_ARTIFACT_PREVIEW_DIAGNOSTICS.STARTED];
   const executionArtifactPreviews = generateTwinExecutionArtifactPreviews(executionPlanPreviews);
   executionArtifactPreviewDiagnostics.push(TWIN_EXECUTION_ARTIFACT_PREVIEW_DIAGNOSTICS.COMPLETED);
@@ -1598,6 +1623,7 @@ export async function buildWorkspaceOverviewModel(input?: {
     ...executionIntentDiagnostics,
     ...executionIntentReadinessDiagnostics,
     ...executionPlanPreviewDiagnostics,
+    ...executionPlanReadinessDiagnostics,
     ...executionArtifactPreviewDiagnostics,
     ...executionReadinessDiagnostics,
     ...executionPackagePreviewDiagnostics,
@@ -1624,6 +1650,7 @@ export async function buildWorkspaceOverviewModel(input?: {
     approvalStates,
     approvalQueueItems,
     executionPlanPreviews,
+    executionPlanReadinessRecords,
     executionArtifactPreviews,
     executionReadinessRecords,
     executionPackagePreviews,

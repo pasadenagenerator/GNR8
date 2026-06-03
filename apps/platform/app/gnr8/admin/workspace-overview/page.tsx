@@ -747,6 +747,60 @@ export default async function WorkspaceOverviewPage() {
       </section>
 
       <section style={{ marginTop: 16 }}>
+        <h2 style={{ marginBottom: 10 }}>Execution Plan Readiness</h2>
+        <div style={{ display: "grid", gap: 10 }}>
+          {model.executionPlanReadinessRecords.map((planReadinessRecord) => (
+            <article key={planReadinessRecord.proposalId} style={CARD_STYLE}>
+              <h3 style={{ marginTop: 0, marginBottom: 6 }}>{planReadinessRecord.proposalTitle}</h3>
+              <p style={{ marginTop: 0, marginBottom: 4 }}>
+                readinessState: {planReadinessRecord.readinessState}
+              </p>
+              <p style={{ marginTop: 0, marginBottom: 8 }}>
+                readinessScore: {planReadinessRecord.readinessScore}
+              </p>
+              <p style={{ marginTop: 0, marginBottom: 6 }}><strong>Requirements Met</strong></p>
+              <ul style={{ marginTop: 0, marginBottom: 8 }}>
+                {planReadinessRecord.requirementsMet.map((requirement) => (
+                  <li key={requirement}>{requirement}</li>
+                ))}
+              </ul>
+              <p style={{ marginTop: 0, marginBottom: 6 }}><strong>Requirements Missing</strong></p>
+              <ul style={{ marginTop: 0, marginBottom: 8 }}>
+                {planReadinessRecord.requirementsMissing.map((requirement) => (
+                  <li key={requirement}>{requirement}</li>
+                ))}
+              </ul>
+              <p style={{ marginTop: 0, marginBottom: 4 }}><strong>Planning Evidence</strong></p>
+              <p style={{ marginTop: 0, marginBottom: 4 }}>
+                executionPlanPresent: {String(planReadinessRecord.executionPlanPresent)}
+              </p>
+              <p style={{ marginTop: 0, marginBottom: 8 }}>
+                planningArtifactsPresent: {String(planReadinessRecord.planningArtifactsPresent)}
+              </p>
+              <p style={{ marginTop: 0, marginBottom: 4 }}><strong>Governance</strong></p>
+              <p style={{ marginTop: 0, marginBottom: 4 }}>
+                executionAllowed: {String(planReadinessRecord.executionAllowed)}
+              </p>
+              <p style={{ marginTop: 0, marginBottom: 4 }}>
+                mutationAllowed: {String(planReadinessRecord.mutationAllowed)}
+              </p>
+              <p style={{ marginTop: 0, marginBottom: 4 }}>
+                publishingAllowed: {String(planReadinessRecord.publishingAllowed)}
+              </p>
+              <p style={{ marginTop: 0, marginBottom: 4 }}>
+                providerExecutionAllowed: {String(planReadinessRecord.providerExecutionAllowed)}
+              </p>
+              <p style={{ marginTop: 0, marginBottom: 8 }}>
+                governanceState: {planReadinessRecord.governanceState}
+              </p>
+              <p style={{ marginTop: 0, marginBottom: 4 }}><strong>Summary</strong></p>
+              <p style={{ margin: 0 }}>{planReadinessRecord.summary}</p>
+            </article>
+          ))}
+        </div>
+      </section>
+
+      <section style={{ marginTop: 16 }}>
         <h2 style={{ marginBottom: 10 }}>Execution Artifact Preview</h2>
         <div style={{ display: "grid", gap: 10 }}>
           {model.executionArtifactPreviews.map((preview) => (
