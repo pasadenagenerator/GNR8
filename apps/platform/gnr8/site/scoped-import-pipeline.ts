@@ -12,7 +12,7 @@ import type { RenderOutput } from '@/gnr8/migration/render-output-model'
 import type { PreviewDocument } from '@/gnr8/migration/preview-document-model'
 import { importHtmlToPage } from '@/gnr8/importer/html-to-page'
 import { migrateImportedPageToCanonicalDraft } from '@/gnr8/runtime/migration-factory'
-import { buildDeterministicArtifactBundle } from '@/gnr8/runtime/artifact-builder'
+import type { buildDeterministicArtifactBundle as buildDeterministicArtifactBundleType } from '@/gnr8/runtime/artifact-builder'
 import { deterministicId, normalizePagePath } from '@/gnr8/runtime/deterministic'
 import {
   bindArtifactToVersion,
@@ -1422,7 +1422,7 @@ export type ScopedImportPipelineDependencies = {
   createSiteVersionFromMigration: typeof createSiteVersionFromMigration
   setSiteVersionImportProvenanceSummary: typeof setSiteVersionImportProvenanceSummary
   getSiteVersion: typeof getSiteVersion
-  buildDeterministicArtifactBundle: typeof buildDeterministicArtifactBundle
+  buildDeterministicArtifactBundle: typeof buildDeterministicArtifactBundleType
   createArtifact: typeof createArtifact
   bindArtifactToVersion: typeof bindArtifactToVersion
   persistRawImportedSiteArtifact: typeof persistRawImportedSiteArtifact
@@ -1431,7 +1431,10 @@ export type ScopedImportPipelineDependencies = {
   migrateImportedPageToCanonicalDraft: typeof migrateImportedPageToCanonicalDraft
 }
 
-function defaultDependencies(): ScopedImportPipelineDependencies {
+async function defaultDependencies(overrides: Partial<ScopedImportPipelineDependencies> = {}): Promise<ScopedImportPipelineDependencies> {
+  const buildDeterministicArtifactBundle =
+    overrides.buildDeterministicArtifactBundle ?? (await import('@/gnr8/runtime/artifact-builder')).buildDeterministicArtifactBundle
+
   return {
     importStaticSite,
     createImportManifest,
@@ -1439,13 +1442,14 @@ function defaultDependencies(): ScopedImportPipelineDependencies {
     createSiteVersionFromMigration,
     setSiteVersionImportProvenanceSummary,
     getSiteVersion,
-    buildDeterministicArtifactBundle,
     createArtifact,
     bindArtifactToVersion,
     persistRawImportedSiteArtifact,
     upsertContentSlots,
     importHtmlToPage,
     migrateImportedPageToCanonicalDraft,
+    ...overrides,
+    buildDeterministicArtifactBundle,
   }
 }
 
@@ -1611,7 +1615,7 @@ export async function runScopedImportPipeline(input: {
   }
   deps?: Partial<ScopedImportPipelineDependencies>
 }): Promise<ScopedImportPipelineOutcome> {
-  const deps = { ...defaultDependencies(), ...(input.deps ?? {}) }
+  const deps = await defaultDependencies(input.deps)
   const fallbackToLegacy = input.fallbackToLegacyOnPipelineFailure ?? true
   let assetsDirPath: string | null = null
   try {
