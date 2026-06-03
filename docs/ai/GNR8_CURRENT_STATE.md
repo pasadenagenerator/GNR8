@@ -1,9 +1,9 @@
 # GNR8 CURRENT STATE SNAPSHOT
 
 ## Snapshot Date
-2026-06-02
+2026-06-03
 
-## Bootstrap Runtime State (2026-06-02)
+## Bootstrap Runtime State (2026-06-03)
 
 - Observation Runtime v1 completed.
 - Insight Runtime v1 completed.
@@ -18,8 +18,88 @@
 - Execution Package Preview Runtime v1 completed.
 - Execution Package Readiness Runtime v1 completed.
 - Execution Contract Preview Runtime v1 completed.
+- Execution Authorization Readiness Runtime v1 completed.
 - Execution Artifact Preview Runtime v1 completed.
 - Proposal Candidate Operator UX Cleanup v1 completed.
+
+## Execution Authorization Readiness Runtime v1 Milestone (2026-06-03)
+
+Milestone is complete and documented.
+
+Runtime files:
+- `apps/platform/gnr8/runtime/twin/twin-execution-authorization-readiness.ts`
+- `apps/platform/gnr8/runtime/twin/twin-execution-authorization-readiness.test.ts`
+
+Implemented function:
+- `generateTwinExecutionAuthorizationReadinessRecords(authorizationPreviews)`
+
+Model:
+- `TwinExecutionAuthorizationReadinessRecord`
+
+Model fields:
+- `proposalId`
+- `proposalTitle`
+- `readinessState`
+- `readinessScore`
+- `requirementsMet`
+- `requirementsMissing`
+- `executionAllowed`
+- `mutationAllowed`
+- `publishingAllowed`
+- `providerExecutionAllowed`
+- `governanceState`
+- `summary`
+
+Readiness states:
+- `not_ready`
+- `nearly_ready`
+- `ready`
+
+Verified deployed Transporti Maver execution authorization readiness records:
+1. `Improve Homepage Conversion Flow`
+   - `readinessState`: `not_ready`
+   - `readinessScore`: `85`
+   - `requirementsMissing`: `conversion_baseline`, `design_evidence`
+2. `Improve Homepage Quality and Messaging`
+   - `readinessState`: `nearly_ready`
+   - `readinessScore`: `95`
+   - `requirementsMissing`: `design_evidence`
+3. `Maintain Read-Only Validation Mode`
+   - `readinessState`: `ready`
+   - `readinessScore`: `100`
+   - `requirementsMissing`: `[]`
+
+Governance values:
+- `executionAllowed`: `false`
+- `mutationAllowed`: `false`
+- `publishingAllowed`: `false`
+- `providerExecutionAllowed`: `false`
+- `governanceState`: `execution_authorization_readiness_preview_only`
+
+Diagnostics:
+- `TWIN_EXECUTION_AUTHORIZATION_READINESS_STARTED`
+- `TWIN_EXECUTION_AUTHORIZATION_READINESS_COMPLETED`
+
+Preserved boundaries:
+- no authorization workflow
+- no approval workflow
+- no execution workflow
+- no operator actions
+- no publishing
+- no provider execution
+- no mutations
+- no AI model calls
+- read-only deterministic runtime only
+
+Architecture chain:
+- `Proposal Candidate → Proposal Approval Preview → Proposal Approval → Approval State → Approval Queue → Execution Readiness → Execution Package Preview → Execution Package Readiness → Execution Contract Preview → Execution Contract Readiness → Execution Bundle Preview → Execution Bundle Readiness → Execution Authorization Preview → Execution Authorization Readiness → Execution Plan Preview`
+
+Conclusion:
+- Workspace Planning Console now exposes deterministic read-only Execution Authorization Readiness records derived from Execution Authorization Preview records.
+- No execution capability exists.
+
+Recommended next milestone:
+- Execution Authorization Package Runtime v1
 
 ## Execution Contract Preview Runtime v1 Milestone (2026-06-02)
 

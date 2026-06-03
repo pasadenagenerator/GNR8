@@ -68,6 +68,7 @@ test("workspace overview model: twin overview and diagnostics render data from i
   assert.equal(Array.isArray(model.executionBundleReadinessRecords), true);
   assert.equal(Array.isArray(model.executionAuthorizationPreviews), true);
   assert.equal(Array.isArray(model.executionAuthorizationReadinessRecords), true);
+  assert.equal(Array.isArray(model.executionAuthorizationPackageRecords), true);
   assert.equal(model.observations.length > 0 || model.sourceId === null, true);
   assert.equal(model.diagnostics.includes("TWIN_OVERVIEW_CREATED"), true);
   assert.equal(model.diagnostics.includes("TWIN_OBSERVATIONS_STARTED"), model.sourceId !== null);
@@ -112,14 +113,21 @@ test("workspace overview model: twin overview and diagnostics render data from i
   assert.equal(model.diagnostics.includes("TWIN_EXECUTION_AUTHORIZATION_PREVIEW_COMPLETED"), model.sourceId !== null);
   assert.equal(model.diagnostics.includes("TWIN_EXECUTION_AUTHORIZATION_READINESS_STARTED"), model.sourceId !== null);
   assert.equal(model.diagnostics.includes("TWIN_EXECUTION_AUTHORIZATION_READINESS_COMPLETED"), model.sourceId !== null);
+  assert.equal(model.diagnostics.includes("TWIN_EXECUTION_AUTHORIZATION_PACKAGE_STARTED"), model.sourceId !== null);
+  assert.equal(model.diagnostics.includes("TWIN_EXECUTION_AUTHORIZATION_PACKAGE_COMPLETED"), model.sourceId !== null);
   assert.equal(
     model.diagnostics.indexOf("TWIN_EXECUTION_AUTHORIZATION_READINESS_STARTED") >
       model.diagnostics.indexOf("TWIN_EXECUTION_AUTHORIZATION_PREVIEW_COMPLETED"),
     model.sourceId !== null,
   );
   assert.equal(
-    model.diagnostics.indexOf("TWIN_EXECUTION_PLAN_PREVIEW_STARTED") >
+    model.diagnostics.indexOf("TWIN_EXECUTION_AUTHORIZATION_PACKAGE_STARTED") >
       model.diagnostics.indexOf("TWIN_EXECUTION_AUTHORIZATION_READINESS_COMPLETED"),
+    model.sourceId !== null,
+  );
+  assert.equal(
+    model.diagnostics.indexOf("TWIN_EXECUTION_PLAN_PREVIEW_STARTED") >
+      model.diagnostics.indexOf("TWIN_EXECUTION_AUTHORIZATION_PACKAGE_COMPLETED"),
     model.sourceId !== null,
   );
   assert.equal(model.overview.contentSummary.includes("pages="), true);
@@ -326,6 +334,20 @@ test("workspace overview model: proposal candidates are present and remain read-
     ),
     true,
   );
+  assert.equal(model.executionAuthorizationPackageRecords.length, model.executionAuthorizationReadinessRecords.length);
+  assert.equal(model.executionAuthorizationPackageRecords.every((entry) => entry.executionAllowed === false), true);
+  assert.equal(model.executionAuthorizationPackageRecords.every((entry) => entry.mutationAllowed === false), true);
+  assert.equal(model.executionAuthorizationPackageRecords.every((entry) => entry.publishingAllowed === false), true);
+  assert.equal(
+    model.executionAuthorizationPackageRecords.every((entry) => entry.providerExecutionAllowed === false),
+    true,
+  );
+  assert.equal(
+    model.executionAuthorizationPackageRecords.every(
+      (entry) => entry.governanceState === "execution_authorization_package_preview_only",
+    ),
+    true,
+  );
   const readinessByTitle = new Map(model.executionReadinessRecords.map((entry) => [entry.proposalTitle, entry]));
   const packagePreviewByTitle = new Map(model.executionPackagePreviews.map((entry) => [entry.proposalTitle, entry]));
   const packageReadinessByTitle = new Map(
@@ -348,6 +370,9 @@ test("workspace overview model: proposal candidates are present and remain read-
   );
   const authorizationReadinessByTitle = new Map(
     model.executionAuthorizationReadinessRecords.map((entry) => [entry.proposalTitle, entry]),
+  );
+  const authorizationPackageByTitle = new Map(
+    model.executionAuthorizationPackageRecords.map((entry) => [entry.proposalTitle, entry]),
   );
   const conversionReadiness = readinessByTitle.get("Improve Homepage Conversion Flow");
   if (conversionReadiness) {
@@ -441,6 +466,16 @@ test("workspace overview model: proposal candidates are present and remain read-
       "authorization_scope_defined",
     ]);
     assert.deepEqual(authorizationReadiness?.requirementsMissing, ["conversion_baseline", "design_evidence"]);
+    const authorizationPackage = authorizationPackageByTitle.get("Improve Homepage Conversion Flow");
+    assert.equal(authorizationPackage?.packageState, "package_incomplete");
+    assert.equal(authorizationPackage?.readinessState, authorizationReadiness?.readinessState);
+    assert.equal(authorizationPackage?.readinessScore, authorizationReadiness?.readinessScore);
+    assert.equal(authorizationPackage?.authorizationType, authorizationPreview?.authorizationType);
+    assert.deepEqual(authorizationPackage?.includedComponents, [
+      "authorization_preview",
+      "authorization_readiness",
+    ]);
+    assert.deepEqual(authorizationPackage?.missingComponents, ["conversion_baseline", "design_evidence"]);
   }
   const messagingReadiness = readinessByTitle.get("Improve Homepage Quality and Messaging");
   if (messagingReadiness) {
@@ -528,6 +563,17 @@ test("workspace overview model: proposal candidates are present and remain read-
       "authorization_package_available",
     ]);
     assert.deepEqual(authorizationReadiness?.requirementsMissing, ["design_evidence"]);
+    const authorizationPackage = authorizationPackageByTitle.get("Improve Homepage Quality and Messaging");
+    assert.equal(authorizationPackage?.packageState, "package_ready");
+    assert.equal(authorizationPackage?.readinessState, authorizationReadiness?.readinessState);
+    assert.equal(authorizationPackage?.readinessScore, authorizationReadiness?.readinessScore);
+    assert.equal(authorizationPackage?.authorizationType, authorizationPreview?.authorizationType);
+    assert.deepEqual(authorizationPackage?.includedComponents, [
+      "authorization_preview",
+      "authorization_readiness",
+      "authorization_requirements",
+    ]);
+    assert.deepEqual(authorizationPackage?.missingComponents, ["design_evidence"]);
   }
   const validationReadiness = readinessByTitle.get("Maintain Read-Only Validation Mode");
   assert.equal(validationReadiness != null, model.sourceId !== null);
@@ -605,6 +651,17 @@ test("workspace overview model: proposal candidates are present and remain read-
       "validation_runtime_active",
     ]);
     assert.deepEqual(authorizationReadiness?.requirementsMissing, []);
+    const authorizationPackage = authorizationPackageByTitle.get("Maintain Read-Only Validation Mode");
+    assert.equal(authorizationPackage?.packageState, "package_ready");
+    assert.equal(authorizationPackage?.readinessState, authorizationReadiness?.readinessState);
+    assert.equal(authorizationPackage?.readinessScore, authorizationReadiness?.readinessScore);
+    assert.equal(authorizationPackage?.authorizationType, authorizationPreview?.authorizationType);
+    assert.deepEqual(authorizationPackage?.includedComponents, [
+      "authorization_preview",
+      "authorization_readiness",
+      "authorization_requirements",
+    ]);
+    assert.deepEqual(authorizationPackage?.missingComponents, []);
   }
   assert.equal(
     model.proposalCandidates.every((entry) =>
@@ -641,6 +698,7 @@ test("workspace overview model: observations include read-only runtime validatio
     assert.deepEqual(model.executionBundleReadinessRecords, []);
     assert.deepEqual(model.executionAuthorizationPreviews, []);
     assert.deepEqual(model.executionAuthorizationReadinessRecords, []);
+    assert.deepEqual(model.executionAuthorizationPackageRecords, []);
     return;
   }
   assert.equal(model.observations.some((entry) => entry.title === "Read-Only Runtime Validation"), true);
@@ -699,6 +757,7 @@ test("workspace overview page source: renders required sections", async () => {
   assert.equal(source.includes("Execution Bundle Readiness"), true);
   assert.equal(source.includes("Execution Authorization Preview"), true);
   assert.equal(source.includes("Execution Authorization Readiness"), true);
+  assert.equal(source.includes("Execution Authorization Package"), true);
   assert.equal(source.includes("Execution Plan Preview"), true);
   assert.equal(source.includes("Execution Artifact Preview"), true);
   assert.equal(source.includes("preview.proposalTitle"), true);
@@ -822,6 +881,21 @@ test("workspace overview page source: renders required sections", async () => {
   assert.equal(source.includes("authorizationReadiness.providerExecutionAllowed"), true);
   assert.equal(source.includes("authorizationReadiness.governanceState"), true);
   assert.equal(source.includes("authorizationReadiness.summary"), true);
+  assert.equal(source.includes("model.executionAuthorizationPackageRecords.map"), true);
+  assert.equal(source.includes("authorizationPackage.proposalId"), true);
+  assert.equal(source.includes("authorizationPackage.proposalTitle"), true);
+  assert.equal(source.includes("authorizationPackage.packageState"), true);
+  assert.equal(source.includes("authorizationPackage.readinessState"), true);
+  assert.equal(source.includes("authorizationPackage.readinessScore"), true);
+  assert.equal(source.includes("authorizationPackage.authorizationType"), true);
+  assert.equal(source.includes("authorizationPackage.includedComponents.map"), true);
+  assert.equal(source.includes("authorizationPackage.missingComponents.map"), true);
+  assert.equal(source.includes("authorizationPackage.executionAllowed"), true);
+  assert.equal(source.includes("authorizationPackage.mutationAllowed"), true);
+  assert.equal(source.includes("authorizationPackage.publishingAllowed"), true);
+  assert.equal(source.includes("authorizationPackage.providerExecutionAllowed"), true);
+  assert.equal(source.includes("authorizationPackage.governanceState"), true);
+  assert.equal(source.includes("authorizationPackage.summary"), true);
   assert.equal(source.includes("model.executionContractPreviews.map"), true);
   assert.equal(source.includes("contractPreview.contractPreviewId"), true);
   assert.equal(source.includes("contractPreview.proposalTitle"), true);
@@ -1012,6 +1086,7 @@ test("workspace overview page source: planning sections render in runtime order"
   const executionBundleReadinessIndex = source.indexOf("Execution Bundle Readiness");
   const executionAuthorizationPreviewIndex = source.indexOf("Execution Authorization Preview");
   const executionAuthorizationReadinessIndex = source.indexOf("Execution Authorization Readiness");
+  const executionAuthorizationPackageIndex = source.indexOf("Execution Authorization Package");
   const executionPlanIndex = source.indexOf("Execution Plan Preview");
   const executionArtifactIndex = source.indexOf("Execution Artifact Preview");
   const opportunityRankingIndex = source.indexOf("Opportunity Ranking");
@@ -1030,7 +1105,8 @@ test("workspace overview page source: planning sections render in runtime order"
   assert.equal(executionBundleReadinessIndex > executionBundleIndex, true);
   assert.equal(executionAuthorizationPreviewIndex > executionBundleReadinessIndex, true);
   assert.equal(executionAuthorizationReadinessIndex > executionAuthorizationPreviewIndex, true);
-  assert.equal(executionPlanIndex > executionAuthorizationReadinessIndex, true);
+  assert.equal(executionAuthorizationPackageIndex > executionAuthorizationReadinessIndex, true);
+  assert.equal(executionPlanIndex > executionAuthorizationPackageIndex, true);
   assert.equal(executionArtifactIndex > executionPlanIndex, true);
   assert.equal(opportunityRankingIndex > executionArtifactIndex, true);
 });

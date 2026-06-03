@@ -86,6 +86,10 @@ import {
   generateTwinExecutionAuthorizationReadinessRecords,
   TWIN_EXECUTION_AUTHORIZATION_READINESS_DIAGNOSTICS,
 } from "@/gnr8/runtime/twin/twin-execution-authorization-readiness";
+import {
+  generateTwinExecutionAuthorizationPackageRecords,
+  TWIN_EXECUTION_AUTHORIZATION_PACKAGE_DIAGNOSTICS,
+} from "@/gnr8/runtime/twin/twin-execution-authorization-package";
 import { InMemoryTwinStore } from "@/gnr8/runtime/twin/twin-store";
 import { createTwinOverview } from "@/gnr8/runtime/twin/twin-viewer";
 
@@ -946,6 +950,7 @@ export async function buildWorkspaceOverviewModel(input?: {
       executionBundleReadinessRecords: [],
       executionAuthorizationPreviews: [],
       executionAuthorizationReadinessRecords: [],
+      executionAuthorizationPackageRecords: [],
       overview: {
         twinId: "twin_missing_import",
         siteId: "site_missing_import",
@@ -1096,6 +1101,17 @@ export async function buildWorkspaceOverviewModel(input?: {
     executionAuthorizationReadinessDiagnostics.push(
       TWIN_EXECUTION_AUTHORIZATION_READINESS_DIAGNOSTICS.COMPLETED,
     );
+    const executionAuthorizationPackageDiagnostics: string[] = [
+      TWIN_EXECUTION_AUTHORIZATION_PACKAGE_DIAGNOSTICS.STARTED,
+    ];
+    const executionAuthorizationPackageRecords =
+      generateTwinExecutionAuthorizationPackageRecords(
+        executionAuthorizationPreviews,
+        executionAuthorizationReadinessRecords,
+      );
+    executionAuthorizationPackageDiagnostics.push(
+      TWIN_EXECUTION_AUTHORIZATION_PACKAGE_DIAGNOSTICS.COMPLETED,
+    );
     const diagnostics = [
       ...resolution.diagnostics,
       ...storedTwin.diagnostics,
@@ -1114,6 +1130,7 @@ export async function buildWorkspaceOverviewModel(input?: {
       ...approvalQueuePreviewDiagnostics,
       ...executionAuthorizationPreviewDiagnostics,
       ...executionAuthorizationReadinessDiagnostics,
+      ...executionAuthorizationPackageDiagnostics,
       ...executionPlanPreviewDiagnostics,
       ...executionArtifactPreviewDiagnostics,
       ...executionReadinessDiagnostics,
@@ -1150,6 +1167,7 @@ export async function buildWorkspaceOverviewModel(input?: {
       executionBundleReadinessRecords,
       executionAuthorizationPreviews,
       executionAuthorizationReadinessRecords,
+      executionAuthorizationPackageRecords,
       overview,
       diagnostics,
     };
@@ -1276,6 +1294,17 @@ export async function buildWorkspaceOverviewModel(input?: {
     executionAuthorizationReadinessDiagnostics.push(
       TWIN_EXECUTION_AUTHORIZATION_READINESS_DIAGNOSTICS.COMPLETED,
     );
+    const executionAuthorizationPackageDiagnostics: string[] = [
+      TWIN_EXECUTION_AUTHORIZATION_PACKAGE_DIAGNOSTICS.STARTED,
+    ];
+    const executionAuthorizationPackageRecords =
+      generateTwinExecutionAuthorizationPackageRecords(
+        executionAuthorizationPreviews,
+        executionAuthorizationReadinessRecords,
+      );
+    executionAuthorizationPackageDiagnostics.push(
+      TWIN_EXECUTION_AUTHORIZATION_PACKAGE_DIAGNOSTICS.COMPLETED,
+    );
     const diagnostics = [
       ...resolution.diagnostics,
       ...storedTwin.diagnostics,
@@ -1294,6 +1323,7 @@ export async function buildWorkspaceOverviewModel(input?: {
       ...approvalQueuePreviewDiagnostics,
       ...executionAuthorizationPreviewDiagnostics,
       ...executionAuthorizationReadinessDiagnostics,
+      ...executionAuthorizationPackageDiagnostics,
       ...executionPlanPreviewDiagnostics,
       ...executionArtifactPreviewDiagnostics,
       ...executionReadinessDiagnostics,
@@ -1330,6 +1360,7 @@ export async function buildWorkspaceOverviewModel(input?: {
       executionBundleReadinessRecords,
       executionAuthorizationPreviews,
       executionAuthorizationReadinessRecords,
+      executionAuthorizationPackageRecords,
       overview,
       diagnostics,
     };
@@ -1480,6 +1511,17 @@ export async function buildWorkspaceOverviewModel(input?: {
   executionAuthorizationReadinessDiagnostics.push(
     TWIN_EXECUTION_AUTHORIZATION_READINESS_DIAGNOSTICS.COMPLETED,
   );
+  const executionAuthorizationPackageDiagnostics: string[] = [
+    TWIN_EXECUTION_AUTHORIZATION_PACKAGE_DIAGNOSTICS.STARTED,
+  ];
+  const executionAuthorizationPackageRecords =
+    generateTwinExecutionAuthorizationPackageRecords(
+      executionAuthorizationPreviews,
+      executionAuthorizationReadinessRecords,
+    );
+  executionAuthorizationPackageDiagnostics.push(
+    TWIN_EXECUTION_AUTHORIZATION_PACKAGE_DIAGNOSTICS.COMPLETED,
+  );
   const diagnostics = [
     ...resolution.diagnostics,
     ...storedTwin.diagnostics,
@@ -1498,6 +1540,7 @@ export async function buildWorkspaceOverviewModel(input?: {
     ...approvalQueuePreviewDiagnostics,
     ...executionAuthorizationPreviewDiagnostics,
     ...executionAuthorizationReadinessDiagnostics,
+    ...executionAuthorizationPackageDiagnostics,
     ...executionPlanPreviewDiagnostics,
     ...executionArtifactPreviewDiagnostics,
     ...executionReadinessDiagnostics,
@@ -1535,6 +1578,7 @@ export async function buildWorkspaceOverviewModel(input?: {
     executionBundleReadinessRecords,
     executionAuthorizationPreviews,
     executionAuthorizationReadinessRecords,
+    executionAuthorizationPackageRecords,
     overview,
     diagnostics,
   };

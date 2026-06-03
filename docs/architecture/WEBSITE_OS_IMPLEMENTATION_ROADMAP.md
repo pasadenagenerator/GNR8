@@ -211,7 +211,75 @@ Checkpoint dependency path:
 Checkpoint outcome:
 - GNR8 has the first operational runtime representation of a website visible in Workspace Overview.
 
-Latest completed canonical runtime milestone (2026-06-02):
+Latest completed canonical runtime milestone (2026-06-03):
+- `Execution Authorization Readiness Runtime v1`
+- completion date:
+  - `2026-06-03`
+- runtime files:
+  - `apps/platform/gnr8/runtime/twin/twin-execution-authorization-readiness.ts`
+  - `apps/platform/gnr8/runtime/twin/twin-execution-authorization-readiness.test.ts`
+- implemented function:
+  - `generateTwinExecutionAuthorizationReadinessRecords(authorizationPreviews)`
+- model:
+  - `TwinExecutionAuthorizationReadinessRecord`
+- model fields:
+  - `proposalId`
+  - `proposalTitle`
+  - `readinessState`
+  - `readinessScore`
+  - `requirementsMet`
+  - `requirementsMissing`
+  - `executionAllowed`
+  - `mutationAllowed`
+  - `publishingAllowed`
+  - `providerExecutionAllowed`
+  - `governanceState`
+  - `summary`
+- readiness states:
+  - `not_ready`
+  - `nearly_ready`
+  - `ready`
+- verified deployed Transporti Maver execution authorization readiness records:
+  - `Improve Homepage Conversion Flow`
+    - `readinessState`: `not_ready`
+    - `readinessScore`: `85`
+    - `requirementsMissing`: `conversion_baseline`, `design_evidence`
+  - `Improve Homepage Quality and Messaging`
+    - `readinessState`: `nearly_ready`
+    - `readinessScore`: `95`
+    - `requirementsMissing`: `design_evidence`
+  - `Maintain Read-Only Validation Mode`
+    - `readinessState`: `ready`
+    - `readinessScore`: `100`
+    - `requirementsMissing`: `[]`
+- governance values:
+  - `executionAllowed`: `false`
+  - `mutationAllowed`: `false`
+  - `publishingAllowed`: `false`
+  - `providerExecutionAllowed`: `false`
+  - `governanceState`: `execution_authorization_readiness_preview_only`
+- diagnostics:
+  - `TWIN_EXECUTION_AUTHORIZATION_READINESS_STARTED`
+  - `TWIN_EXECUTION_AUTHORIZATION_READINESS_COMPLETED`
+- preserved boundaries:
+  - no authorization workflow
+  - no approval workflow
+  - no execution workflow
+  - no operator actions
+  - no publishing
+  - no provider execution
+  - no mutations
+  - no AI model calls
+  - read-only deterministic runtime only
+- conclusion:
+  - Workspace Planning Console now exposes deterministic read-only Execution Authorization Readiness records derived from Execution Authorization Preview records.
+  - No execution capability exists.
+- architecture chain:
+  - `Proposal Candidate → Proposal Approval Preview → Proposal Approval → Approval State → Approval Queue → Execution Readiness → Execution Package Preview → Execution Package Readiness → Execution Contract Preview → Execution Contract Readiness → Execution Bundle Preview → Execution Bundle Readiness → Execution Authorization Preview → Execution Authorization Readiness → Execution Plan Preview`
+- recommended next milestone:
+  - `Execution Authorization Package Runtime v1`
+
+Prior completed canonical runtime dependency:
 - `Execution Contract Preview Runtime v1`
 - completion date:
   - `2026-06-02`
@@ -706,7 +774,7 @@ Earlier completed canonical runtime dependency:
 - conclusion:
   - Workspace Overview now displays deterministic ranked optimization opportunities derived from optimization scoring.
 
-- `Observation Runtime → Insight Runtime → Recommendation Runtime → Optimization Runtime → Optimization Scoring Runtime → Proposal Candidate Runtime → Proposal Approval Preview Runtime → Proposal Approval Runtime → Approval State Runtime → Approval Queue Preview Runtime → Execution Readiness Runtime → Execution Package Preview Runtime → Execution Package Readiness Runtime → Execution Contract Preview Runtime → Execution Plan Preview Runtime → Execution Artifact Preview Runtime → Workspace Planning Console`
+- `Proposal Candidate → Proposal Approval Preview → Proposal Approval → Approval State → Approval Queue → Execution Readiness → Execution Package Preview → Execution Package Readiness → Execution Contract Preview → Execution Contract Readiness → Execution Bundle Preview → Execution Bundle Readiness → Execution Authorization Preview → Execution Authorization Readiness → Execution Plan Preview`
 - verified runtime chain:
   - Persisted Migration OS runtime evidence
   - `buildWebsiteDigitalTwin()`
@@ -724,6 +792,11 @@ Earlier completed canonical runtime dependency:
   - `generateTwinExecutionPackagePreviews({ readinessRecords, executionPlanPreviews, executionArtifactPreviews })`
   - `generateTwinExecutionPackageReadinessRecords(packagePreviews)`
   - `generateTwinExecutionContractPreviews(packageReadinessRecords)`
+  - `generateTwinExecutionContractReadinessRecords(contractPreviews)`
+  - `generateTwinExecutionBundlePreviews(contractReadinessRecords)`
+  - `generateTwinExecutionBundleReadinessRecords(bundlePreviews)`
+  - `generateTwinExecutionAuthorizationPreviewRecords(bundleReadinessRecords)`
+  - `generateTwinExecutionAuthorizationReadinessRecords(authorizationPreviews)`
   - Workspace Planning Console
 - verified deployed runtime values:
   - `selectedSource`: `persisted_runtime_import_evidence`
@@ -744,4 +817,4 @@ Earlier completed canonical runtime dependency:
   - future bootstrap resumes from `Persisted Migration OS Evidence -> Website OS Workspace Overview` as completed.
 
 Recommended next milestone:
-- Execution Contract Readiness Runtime v1
+- Execution Authorization Package Runtime v1

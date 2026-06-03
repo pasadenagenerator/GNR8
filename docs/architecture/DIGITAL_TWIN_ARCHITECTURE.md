@@ -836,6 +836,68 @@ Website OS Execution Contract Preview Runtime v1 milestone confirmed (`2026-06-0
 - architecture chain now confirmed:
   - `Observation Runtime → Insight Runtime → Recommendation Runtime → Optimization Runtime → Optimization Scoring Runtime → Proposal Candidate Runtime → Proposal Approval Preview Runtime → Proposal Approval Runtime → Approval State Runtime → Approval Queue Preview Runtime → Execution Readiness Runtime → Execution Package Preview Runtime → Execution Package Readiness Runtime → Execution Contract Preview Runtime → Execution Plan Preview Runtime → Execution Artifact Preview Runtime → Workspace Planning Console`
 
+Execution Authorization Readiness Runtime v1 milestone confirmed (`2026-06-03`):
+- completion date:
+  - `2026-06-03`
+- runtime files:
+  - `apps/platform/gnr8/runtime/twin/twin-execution-authorization-readiness.ts`
+  - `apps/platform/gnr8/runtime/twin/twin-execution-authorization-readiness.test.ts`
+- implemented function:
+  - `generateTwinExecutionAuthorizationReadinessRecords(authorizationPreviews)`
+- model:
+  - `TwinExecutionAuthorizationReadinessRecord`
+- model fields:
+  - `proposalId`
+  - `proposalTitle`
+  - `readinessState`
+  - `readinessScore`
+  - `requirementsMet`
+  - `requirementsMissing`
+  - `executionAllowed`
+  - `mutationAllowed`
+  - `publishingAllowed`
+  - `providerExecutionAllowed`
+  - `governanceState`
+  - `summary`
+- readiness states:
+  - `not_ready`
+  - `nearly_ready`
+  - `ready`
+- verified deployed Transporti Maver execution authorization readiness records:
+  - `Improve Homepage Conversion Flow`
+    - `readinessState`: `not_ready`
+    - `readinessScore`: `85`
+    - `requirementsMissing`: `conversion_baseline`, `design_evidence`
+  - `Improve Homepage Quality and Messaging`
+    - `readinessState`: `nearly_ready`
+    - `readinessScore`: `95`
+    - `requirementsMissing`: `design_evidence`
+  - `Maintain Read-Only Validation Mode`
+    - `readinessState`: `ready`
+    - `readinessScore`: `100`
+    - `requirementsMissing`: `[]`
+- governance values:
+  - `executionAllowed`: `false`
+  - `mutationAllowed`: `false`
+  - `publishingAllowed`: `false`
+  - `providerExecutionAllowed`: `false`
+  - `governanceState`: `execution_authorization_readiness_preview_only`
+- diagnostics:
+  - `TWIN_EXECUTION_AUTHORIZATION_READINESS_STARTED`
+  - `TWIN_EXECUTION_AUTHORIZATION_READINESS_COMPLETED`
+- preserved boundaries:
+  - no authorization workflow
+  - no approval workflow
+  - no execution workflow
+  - no operator actions
+  - no publishing
+  - no provider execution
+  - no mutations
+  - no AI model calls
+  - read-only deterministic runtime only
+- architecture chain:
+  - `Proposal Candidate → Proposal Approval Preview → Proposal Approval → Approval State → Approval Queue → Execution Readiness → Execution Package Preview → Execution Package Readiness → Execution Contract Preview → Execution Contract Readiness → Execution Bundle Preview → Execution Bundle Readiness → Execution Authorization Preview → Execution Authorization Readiness → Execution Plan Preview`
+
 ## Future Integration Points
 This architecture anchors future integration with:
 - Twin Runtime Contract
@@ -860,11 +922,11 @@ First operational success checkpoint:
 - GNR8 now has the first browser-visible Website Digital Twin runtime surface.
 - Digital Twin snapshots now contain imported-site evidence instead of placeholder-only summaries.
 - Workspace Overview is now useful in deployed environments even without local validation snapshot files.
-- Workspace Planning Console now displays deterministic Execution Contract Preview artifacts derived from Execution Package Readiness Runtime records.
-- Execution contract preview remains governance-blocked and non-executable.
+- Workspace Planning Console now exposes deterministic read-only Execution Authorization Readiness records derived from Execution Authorization Preview records.
+- No execution capability exists.
 
 Recommended next milestone:
-- Execution Contract Readiness Runtime v1
+- Execution Authorization Package Runtime v1
 
 ## Related Canonical Documents
 - `docs/architecture/TWIN_RUNTIME_CONTRACT.md`
