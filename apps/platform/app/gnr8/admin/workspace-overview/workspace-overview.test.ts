@@ -60,6 +60,7 @@ test("workspace overview model: twin overview and diagnostics render data from i
   assert.equal(Array.isArray(model.executionPlanPreviews), true);
   assert.equal(Array.isArray(model.executionPlanReadinessRecords), true);
   assert.equal(Array.isArray(model.executionCandidateRecords), true);
+  assert.equal(Array.isArray(model.executionCandidateReadinessRecords), true);
   assert.equal(Array.isArray(model.executionArtifactPreviews), true);
   assert.equal(Array.isArray(model.executionReadinessRecords), true);
   assert.equal(Array.isArray(model.executionPackagePreviews), true);
@@ -100,6 +101,8 @@ test("workspace overview model: twin overview and diagnostics render data from i
   assert.equal(model.diagnostics.includes("TWIN_EXECUTION_PLAN_READINESS_CREATED"), model.sourceId !== null);
   assert.equal(model.diagnostics.includes("TWIN_EXECUTION_CANDIDATE_STARTED"), model.sourceId !== null);
   assert.equal(model.diagnostics.includes("TWIN_EXECUTION_CANDIDATE_COMPLETED"), model.sourceId !== null);
+  assert.equal(model.diagnostics.includes("TWIN_EXECUTION_CANDIDATE_READINESS_STARTED"), model.sourceId !== null);
+  assert.equal(model.diagnostics.includes("TWIN_EXECUTION_CANDIDATE_READINESS_COMPLETED"), model.sourceId !== null);
   assert.equal(model.diagnostics.includes("TWIN_EXECUTION_ARTIFACT_PREVIEW_STARTED"), model.sourceId !== null);
   assert.equal(model.diagnostics.includes("TWIN_EXECUTION_ARTIFACT_PREVIEW_COMPLETED"), model.sourceId !== null);
   assert.equal(model.diagnostics.includes("TWIN_EXECUTION_READINESS_STARTED"), model.sourceId !== null);
@@ -158,6 +161,11 @@ test("workspace overview model: twin overview and diagnostics render data from i
   );
   assert.equal(
     model.diagnostics.indexOf("TWIN_EXECUTION_ARTIFACT_PREVIEW_STARTED") >
+      model.diagnostics.indexOf("TWIN_EXECUTION_CANDIDATE_READINESS_COMPLETED"),
+    model.sourceId !== null,
+  );
+  assert.equal(
+    model.diagnostics.indexOf("TWIN_EXECUTION_CANDIDATE_READINESS_STARTED") >
       model.diagnostics.indexOf("TWIN_EXECUTION_CANDIDATE_COMPLETED"),
     model.sourceId !== null,
   );
@@ -289,6 +297,26 @@ test("workspace overview model: proposal candidates are present and remain read-
   );
   assert.equal(
     model.executionCandidateRecords.every((entry) => entry.blockedReasons.includes("governance_execution_blocked")),
+    true,
+  );
+  assert.equal(model.executionCandidateReadinessRecords.length, model.executionCandidateRecords.length);
+  assert.equal(model.executionCandidateReadinessRecords.every((entry) => entry.executionAllowed === false), true);
+  assert.equal(model.executionCandidateReadinessRecords.every((entry) => entry.mutationAllowed === false), true);
+  assert.equal(model.executionCandidateReadinessRecords.every((entry) => entry.publishingAllowed === false), true);
+  assert.equal(
+    model.executionCandidateReadinessRecords.every((entry) => entry.providerExecutionAllowed === false),
+    true,
+  );
+  assert.equal(
+    model.executionCandidateReadinessRecords.every(
+      (entry) => entry.governanceState === "execution_candidate_readiness_preview_only",
+    ),
+    true,
+  );
+  assert.equal(
+    model.executionCandidateReadinessRecords.every((entry) =>
+      entry.blockedReasons.includes("governance_execution_blocked"),
+    ),
     true,
   );
   assert.equal(model.executionArtifactPreviews.length, model.executionPlanPreviews.length);
@@ -442,6 +470,9 @@ test("workspace overview model: proposal candidates are present and remain read-
   const executionCandidateByTitle = new Map(
     model.executionCandidateRecords.map((entry) => [entry.proposalTitle, entry]),
   );
+  const executionCandidateReadinessByTitle = new Map(
+    model.executionCandidateReadinessRecords.map((entry) => [entry.proposalTitle, entry]),
+  );
   const packagePreviewByTitle = new Map(model.executionPackagePreviews.map((entry) => [entry.proposalTitle, entry]));
   const packageReadinessByTitle = new Map(
     model.executionPackageReadinessRecords.map((entry) => [entry.proposalTitle, entry]),
@@ -511,6 +542,22 @@ test("workspace overview model: proposal candidates are present and remain read-
     assert.equal(executionCandidate?.publishingAllowed, false);
     assert.equal(executionCandidate?.providerExecutionAllowed, false);
     assert.equal(executionCandidate?.governanceState, "execution_candidate_preview_only");
+    const candidateReadiness = executionCandidateReadinessByTitle.get("Improve Homepage Conversion Flow");
+    assert.equal(candidateReadiness?.readinessState, "incomplete");
+    assert.equal(candidateReadiness?.readinessScore, 85);
+    assert.deepEqual(candidateReadiness?.requirementsMet, [
+      "execution_plan_present",
+      "planning_artifacts_present",
+      "conversion_plan_defined",
+    ]);
+    assert.deepEqual(candidateReadiness?.requirementsMissing, ["conversion_baseline", "design_evidence"]);
+    assert.equal(candidateReadiness?.candidatePresent, true);
+    assert.equal(candidateReadiness?.candidateArtifactsPresent, true);
+    assert.equal(candidateReadiness?.executionAllowed, false);
+    assert.equal(candidateReadiness?.mutationAllowed, false);
+    assert.equal(candidateReadiness?.publishingAllowed, false);
+    assert.equal(candidateReadiness?.providerExecutionAllowed, false);
+    assert.equal(candidateReadiness?.governanceState, "execution_candidate_readiness_preview_only");
     const packagePreview = packagePreviewByTitle.get("Improve Homepage Conversion Flow");
     assert.equal(packagePreview?.packageState, "preview_ready");
     assert.equal(packagePreview?.readinessState, conversionReadiness.readinessState);
@@ -663,6 +710,23 @@ test("workspace overview model: proposal candidates are present and remain read-
       "missing_design_evidence",
       "governance_execution_blocked",
     ]);
+    const candidateReadiness = executionCandidateReadinessByTitle.get("Improve Homepage Quality and Messaging");
+    assert.equal(candidateReadiness?.readinessState, "nearly_ready");
+    assert.equal(candidateReadiness?.readinessScore, 95);
+    assert.deepEqual(candidateReadiness?.requirementsMet, [
+      "execution_plan_present",
+      "planning_artifacts_present",
+      "content_plan_defined",
+      "homepage_messaging_scope_defined",
+    ]);
+    assert.deepEqual(candidateReadiness?.requirementsMissing, ["design_evidence"]);
+    assert.equal(candidateReadiness?.candidatePresent, true);
+    assert.equal(candidateReadiness?.candidateArtifactsPresent, true);
+    assert.equal(candidateReadiness?.executionAllowed, false);
+    assert.equal(candidateReadiness?.mutationAllowed, false);
+    assert.equal(candidateReadiness?.publishingAllowed, false);
+    assert.equal(candidateReadiness?.providerExecutionAllowed, false);
+    assert.equal(candidateReadiness?.governanceState, "execution_candidate_readiness_preview_only");
     const packagePreview = packagePreviewByTitle.get("Improve Homepage Quality and Messaging");
     assert.equal(packagePreview?.packageState, "preview_ready");
     assert.equal(packagePreview?.readinessState, messagingReadiness.readinessState);
@@ -801,6 +865,23 @@ test("workspace overview model: proposal candidates are present and remain read-
     assert.deepEqual(executionCandidate?.candidateScope, ["runtime_governance"]);
     assert.deepEqual(executionCandidate?.candidateArtifacts, ["validation_status_report"]);
     assert.deepEqual(executionCandidate?.blockedReasons, ["governance_execution_blocked"]);
+    const candidateReadiness = executionCandidateReadinessByTitle.get("Maintain Read-Only Validation Mode");
+    assert.equal(candidateReadiness?.readinessState, "ready");
+    assert.equal(candidateReadiness?.readinessScore, 100);
+    assert.deepEqual(candidateReadiness?.requirementsMet, [
+      "execution_plan_present",
+      "planning_artifacts_present",
+      "governance_boundary_present",
+      "validation_runtime_active",
+    ]);
+    assert.deepEqual(candidateReadiness?.requirementsMissing, []);
+    assert.equal(candidateReadiness?.candidatePresent, true);
+    assert.equal(candidateReadiness?.candidateArtifactsPresent, true);
+    assert.equal(candidateReadiness?.executionAllowed, false);
+    assert.equal(candidateReadiness?.mutationAllowed, false);
+    assert.equal(candidateReadiness?.publishingAllowed, false);
+    assert.equal(candidateReadiness?.providerExecutionAllowed, false);
+    assert.equal(candidateReadiness?.governanceState, "execution_candidate_readiness_preview_only");
     const packagePreview = packagePreviewByTitle.get("Maintain Read-Only Validation Mode");
     assert.equal(packagePreview?.packageState, "preview_ready");
     assert.equal(packagePreview?.readinessState, validationReadiness.readinessState);
@@ -929,6 +1010,7 @@ test("workspace overview model: observations include read-only runtime validatio
     assert.deepEqual(model.executionPlanPreviews, []);
     assert.deepEqual(model.executionPlanReadinessRecords, []);
     assert.deepEqual(model.executionCandidateRecords, []);
+    assert.deepEqual(model.executionCandidateReadinessRecords, []);
     assert.deepEqual(model.executionArtifactPreviews, []);
     assert.deepEqual(model.executionReadinessRecords, []);
     assert.deepEqual(model.executionPackagePreviews, []);
@@ -1006,6 +1088,7 @@ test("workspace overview page source: renders required sections", async () => {
   assert.equal(source.includes("Execution Plan Preview"), true);
   assert.equal(source.includes("Execution Plan Readiness"), true);
   assert.equal(source.includes("Execution Candidate"), true);
+  assert.equal(source.includes("Execution Candidate Readiness"), true);
   assert.equal(source.includes("Execution Artifact Preview"), true);
   assert.equal(source.includes("preview.proposalTitle"), true);
   assert.equal(source.includes("preview.currentState"), true);
@@ -1258,6 +1341,11 @@ test("workspace overview page source: renders required sections", async () => {
   assert.equal(source.includes("Candidate Scope"), true);
   assert.equal(source.includes("Candidate Artifacts"), true);
   assert.equal(source.includes("Candidate Requirements"), true);
+  assert.equal(source.includes("model.executionCandidateReadinessRecords.map"), true);
+  assert.equal(source.includes("readinessRecord.candidateId"), true);
+  assert.equal(source.includes("readinessRecord.candidatePresent"), true);
+  assert.equal(source.includes("readinessRecord.candidateArtifactsPresent"), true);
+  assert.equal(source.includes("readinessRecord.blockedReasons.map"), true);
   assert.equal(source.includes("preview.artifactType"), true);
   assert.equal(source.includes("preview.affectedAreas.map"), true);
   assert.equal(source.includes("preview.plannedOutputs.map"), true);
@@ -1404,6 +1492,7 @@ test("workspace overview page source: planning sections render in runtime order"
   const executionPlanIndex = source.indexOf("Execution Plan Preview");
   const executionPlanReadinessIndex = source.indexOf("Execution Plan Readiness");
   const executionCandidateIndex = source.indexOf("Execution Candidate");
+  const executionCandidateReadinessIndex = source.indexOf("Execution Candidate Readiness");
   const executionArtifactIndex = source.indexOf("Execution Artifact Preview");
   const opportunityRankingIndex = source.indexOf("Opportunity Ranking");
 
@@ -1427,7 +1516,8 @@ test("workspace overview page source: planning sections render in runtime order"
   assert.equal(executionPlanIndex > executionIntentReadinessIndex, true);
   assert.equal(executionPlanReadinessIndex > executionPlanIndex, true);
   assert.equal(executionCandidateIndex > executionPlanReadinessIndex, true);
-  assert.equal(executionArtifactIndex > executionCandidateIndex, true);
+  assert.equal(executionCandidateReadinessIndex > executionCandidateIndex, true);
+  assert.equal(executionArtifactIndex > executionCandidateReadinessIndex, true);
   assert.equal(opportunityRankingIndex > executionArtifactIndex, true);
   assert.equal(opportunityRankingIndex > executionCandidateIndex, true);
 });
