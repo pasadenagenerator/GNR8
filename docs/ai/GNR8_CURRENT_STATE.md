@@ -27,8 +27,44 @@
 - Execution Candidate Authorization Runtime v1 completed.
 - Execution Candidate Authorization Readiness Runtime v1 completed.
 - Execution Candidate Authorization Package Runtime v1 completed.
-- Execution Artifact Preview Runtime v1 completed.
 - Proposal Candidate Operator UX Cleanup v1 completed.
+
+## Website OS Candidate Authorization Branch Closure (2026-06-03)
+
+Website OS Candidate Authorization branch is complete.
+
+Completed Website OS runtime chain:
+- Execution Candidate Runtime v1
+- Execution Candidate Readiness Runtime v1
+- Execution Candidate Package Runtime v1
+- Execution Candidate Authorization Runtime v1
+- Execution Candidate Authorization Readiness Runtime v1
+- Execution Candidate Authorization Package Runtime v1
+
+Latest completed Website OS milestone:
+- Execution Candidate Authorization Package Runtime v1
+
+Website OS runtime expansion status:
+- PAUSED
+
+Governance remains:
+- read-only
+- non-executable
+- no mutations
+- no publishing
+- no provider execution
+- no AI actions
+
+Migration-first reprioritization:
+- Website OS runtime expansion is intentionally paused.
+- The current business objective is production migration across website migration, renderer, CMS, hosting, domains, and billing.
+- Future continuation point is the Execution Artifact Runtime family.
+- The Execution Artifact Runtime family is not currently part of the migration-critical path.
+
+Next strategic planning activity:
+- GNR8 Production Migration Gap Analysis
+- This is documentation only.
+- No implementation tasks, roadmap phases, runtime milestones, or executable work are introduced by this note.
 
 ## Execution Candidate Authorization Family v1 Milestone (2026-06-03)
 
@@ -95,8 +131,13 @@ Conclusion:
 - Publishing remains blocked.
 - Provider execution remains blocked.
 
-Current recommended milestone:
-- Execution Artifact Readiness Runtime v1
+Future continuation:
+- Execution Artifact Runtime family
+- Status: paused.
+- Not currently part of the migration-critical path.
+
+Next strategic planning activity:
+- GNR8 Production Migration Gap Analysis.
 
 ## Execution Candidate Runtime Family v1 Milestone (2026-06-03)
 
@@ -159,8 +200,10 @@ Preserved boundaries:
 Current architecture chain:
 - `Proposal → Approval → Approval State → Approval Queue → Execution Readiness → Execution Package Preview → Execution Package Readiness → Execution Contract Preview → Execution Contract Readiness → Execution Bundle Preview → Execution Bundle Readiness → Execution Authorization Preview → Execution Authorization Readiness → Execution Authorization Package → Execution Intent → Execution Intent Readiness → Execution Plan Preview → Execution Plan Readiness → Execution Candidate → Execution Candidate Readiness → Execution Candidate Package`
 
-Current recommended milestone:
-- Execution Artifact Readiness Runtime v1
+Future continuation:
+- Execution Artifact Runtime family.
+- Status: paused.
+- Not currently part of the migration-critical path.
 
 ## Execution Plan Readiness Runtime v1 Milestone (2026-06-03)
 

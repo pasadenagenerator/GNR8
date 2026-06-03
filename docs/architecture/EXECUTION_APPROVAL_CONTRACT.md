@@ -766,6 +766,13 @@ Candidate Authorization Package:
 - governance state:
   - `execution_candidate_authorization_package_preview_only`
 
+Authorization package structures:
+- `package_incomplete`
+- `package_ready`
+- included components are advisory preview-only authorization components
+- missing components are advisory preview-only blockers
+- package records do not grant approval, authorization context, execution authority, mutation authority, publishing authority, or provider execution authority
+
 Shared governance constraints:
 - `preview-only`
 - `read-only`
@@ -780,6 +787,13 @@ Shared governance constraints:
 - no mutation
 - no publishing
 - no provider execution
+- no AI actions
+
+Contract boundary closure:
+- Candidate Authorization Family outputs are recorded here as documentation-only governance artifacts.
+- No new Execution Approval contract types are introduced.
+- No new Execution Approval lifecycle states are introduced.
+- Candidate Authorization output does not change the canonical approval types or lifecycle states in this contract.
 
 Candidate Authorization Family completion (`2026-06-03`):
 - completed milestones:
@@ -798,8 +812,13 @@ Candidate Authorization Family completion (`2026-06-03`):
   - Mutation remains blocked.
   - Publishing remains blocked.
   - Provider execution remains blocked.
-- next recommended milestone:
-  - `Execution Artifact Readiness Runtime v1`
+- Website OS runtime expansion is paused.
+- future continuation point:
+  - `Execution Artifact Runtime family`
+- migration-critical path:
+  - not active
+- next strategic planning activity:
+  - `GNR8 Production Migration Gap Analysis`
 
 Website OS Proposal Candidate Runtime v1 dependency checkpoint (`2026-06-01`):
 - runtime files:

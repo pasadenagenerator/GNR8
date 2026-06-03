@@ -971,6 +971,15 @@ Execution Candidate Authorization Family milestone confirmed (`2026-06-03`):
   - Publishing remains blocked.
   - Provider execution remains blocked.
 
+Candidate Authorization completion note:
+- Website OS Candidate Authorization branch is complete.
+- Website OS runtime chain currently ends at `Execution Candidate Authorization Package Runtime v1`.
+- Future artifact governance branch remains deferred.
+- Website OS runtime expansion is intentionally paused under migration-first reprioritization.
+- The Execution Artifact Runtime family is the future continuation point, but it is not active and is not currently part of the migration-critical path.
+- Next strategic planning activity is GNR8 Production Migration Gap Analysis.
+- This note is documentation only and introduces no implementation tasks, roadmap phases, runtime milestones, schema changes, APIs, UI, provider execution, publishing flows, or AI actions.
+
 ## Success Condition
 GNR8 gains the intelligence foundation behind the Website Digital Twin.
 
@@ -981,8 +990,13 @@ Current runtime conclusion:
 - No provider execution capability exists.
 - No publishing capability exists.
 
-Recommended next milestone:
-- Execution Artifact Readiness Runtime v1
+Future continuation:
+- Execution Artifact Runtime family.
+- Status: paused.
+- Not currently part of the migration-critical path.
+
+Next strategic planning activity:
+- GNR8 Production Migration Gap Analysis.
 
 ## Related Canonical Documents
 - `docs/architecture/TWIN_GENERATION_ARCHITECTURE.md`

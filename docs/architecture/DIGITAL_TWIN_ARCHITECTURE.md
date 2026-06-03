@@ -1095,6 +1095,41 @@ Execution Candidate Authorization Family Completed: 2026-06-03
   - Publishing remains blocked.
   - Provider execution remains blocked.
 
+## Website OS Runtime Branch Status
+
+Website OS Candidate Authorization branch is completed as of `2026-06-03`.
+
+Completed Runtime Chain:
+- `Execution Candidate Runtime v1`
+- `Execution Candidate Readiness Runtime v1`
+- `Execution Candidate Package Runtime v1`
+- `Execution Candidate Authorization Runtime v1`
+- `Execution Candidate Authorization Readiness Runtime v1`
+- `Execution Candidate Authorization Package Runtime v1`
+
+Current terminal Website OS runtime milestone:
+- `Execution Candidate Authorization Package Runtime v1`
+
+Governance remains:
+- read-only
+- non-executable
+- no mutations
+- no publishing
+- no provider execution
+- no AI actions
+
+Future Runtime Chain (paused):
+- `Execution Artifact Runtime family`
+
+Pause rationale:
+- Migration-first reprioritization.
+- The current business objective is production migration across website migration, renderer, CMS, hosting, domains, and billing.
+- The Execution Artifact Runtime family is not currently part of the migration-critical path.
+
+Next strategic planning activity:
+- GNR8 Production Migration Gap Analysis.
+- This is documentation only and does not introduce runtime tasks, roadmap phases, or new Website OS milestones.
+
 ## Future Integration Points
 This architecture anchors future integration with:
 - Twin Runtime Contract
@@ -1126,8 +1161,13 @@ First operational success checkpoint:
 - No provider execution capability exists.
 - No publishing capability exists.
 
-Recommended next milestone:
-- Execution Artifact Readiness Runtime v1
+Future continuation:
+- Execution Artifact Runtime family.
+- Status: paused.
+- Not currently part of the migration-critical path.
+
+Next strategic planning activity:
+- GNR8 Production Migration Gap Analysis.
 
 ## Related Canonical Documents
 - `docs/architecture/TWIN_RUNTIME_CONTRACT.md`

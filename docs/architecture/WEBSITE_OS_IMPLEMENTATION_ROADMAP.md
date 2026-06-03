@@ -211,6 +211,53 @@ Checkpoint dependency path:
 Checkpoint outcome:
 - GNR8 has the first operational runtime representation of a website visible in Workspace Overview.
 
+## Website OS Runtime Expansion
+
+STATUS: PAUSED
+
+Completion date:
+- `2026-06-03`
+
+Completed Website OS Candidate Authorization runtime chain:
+- `Execution Candidate Runtime v1`
+- `Execution Candidate Readiness Runtime v1`
+- `Execution Candidate Package Runtime v1`
+- `Execution Candidate Authorization Runtime v1`
+- `Execution Candidate Authorization Readiness Runtime v1`
+- `Execution Candidate Authorization Package Runtime v1`
+
+Current terminal Website OS milestone:
+- `Execution Candidate Authorization Package Runtime v1`
+
+Reason:
+- Migration-first reprioritization.
+
+Current business objective:
+- website migration
+- renderer
+- CMS
+- hosting
+- domains
+- billing
+
+Future continuation:
+- Execution Artifact Runtime family.
+- Not active.
+- Not currently part of the migration-critical path.
+
+Governance remains:
+- read-only
+- non-executable
+- no mutations
+- no publishing
+- no provider execution
+- no AI actions
+
+Next strategic planning activity:
+- GNR8 Production Migration Gap Analysis.
+- Documentation only.
+- No implementation tasks, roadmap phases, runtime milestones, executable work, schemas, APIs, UI, workers, queues, provider integrations, or publishing flows are introduced by this note.
+
 Latest completed canonical runtime milestone (2026-06-03):
 - `Execution Candidate Authorization Runtime v1`
 - `Execution Candidate Authorization Readiness Runtime v1`
@@ -253,8 +300,10 @@ Latest completed canonical runtime milestone (2026-06-03):
   - Mutation remains blocked.
   - Publishing remains blocked.
   - Provider execution remains blocked.
-- recommended next milestone:
-  - `Execution Artifact Readiness Runtime v1`
+- future continuation:
+  - `Execution Artifact Runtime family`
+  - status: paused
+  - not currently part of the migration-critical path
 
 Prior completed canonical runtime milestone:
 - `Execution Candidate Runtime v1`
@@ -907,5 +956,10 @@ Earlier completed canonical runtime dependency:
 - bootstrap state:
   - future bootstrap resumes from `Persisted Migration OS Evidence -> Website OS Workspace Overview` as completed.
 
-Recommended next milestone:
-- Execution Artifact Readiness Runtime v1
+Future continuation:
+- Execution Artifact Runtime family.
+- Status: paused.
+- Not currently part of the migration-critical path.
+
+Next strategic planning activity:
+- GNR8 Production Migration Gap Analysis.
