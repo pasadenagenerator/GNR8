@@ -1100,6 +1100,68 @@ export default async function WorkspaceOverviewPage() {
       </section>
 
       <section style={{ marginTop: 16 }}>
+        <h2 style={{ marginBottom: 10 }}>Execution Candidate Authorization Package</h2>
+        <div style={{ display: "grid", gap: 10 }}>
+          {model.executionCandidateAuthorizationPackageRecords.map((authorizationPackageRecord) => (
+            <article key={authorizationPackageRecord.proposalId} style={CARD_STYLE}>
+              <p style={{ marginTop: 0, marginBottom: 4 }}>
+                proposalId: {authorizationPackageRecord.proposalId}
+              </p>
+              <p style={{ marginTop: 0, marginBottom: 4 }}>
+                packageState: {authorizationPackageRecord.packageState}
+              </p>
+              <p style={{ marginTop: 0, marginBottom: 4 }}>
+                readinessState: {authorizationPackageRecord.readinessState}
+              </p>
+              <p style={{ marginTop: 0, marginBottom: 4 }}>
+                readinessScore: {authorizationPackageRecord.readinessScore}
+              </p>
+              <p style={{ marginTop: 0, marginBottom: 8 }}>
+                authorizationType: {authorizationPackageRecord.authorizationType}
+              </p>
+              <p style={{ marginTop: 0, marginBottom: 6 }}><strong>Included Components</strong></p>
+              <ul style={{ marginTop: 0, marginBottom: 8 }}>
+                {authorizationPackageRecord.includedComponents.map((component) => (
+                  <li key={component}>{component}</li>
+                ))}
+              </ul>
+              <p style={{ marginTop: 0, marginBottom: 6 }}><strong>Missing Components</strong></p>
+              <ul style={{ marginTop: 0, marginBottom: 8 }}>
+                {authorizationPackageRecord.missingComponents.map((component) => (
+                  <li key={component}>{component}</li>
+                ))}
+              </ul>
+              <p style={{ marginTop: 0, marginBottom: 6 }}><strong>Blocked Reasons</strong></p>
+              <ul style={{ marginTop: 0, marginBottom: 8 }}>
+                {authorizationPackageRecord.blockedReasons.map((blockedReason) => (
+                  <li key={blockedReason}>{blockedReason}</li>
+                ))}
+              </ul>
+              <p style={{ marginTop: 0, marginBottom: 4 }}><strong>Governance</strong></p>
+              <p style={{ marginTop: 0, marginBottom: 8 }}>
+                governanceState: {authorizationPackageRecord.governanceState}
+              </p>
+              <p style={{ marginTop: 0, marginBottom: 6 }}><strong>Permissions</strong></p>
+              <p style={{ marginTop: 0, marginBottom: 4 }}>
+                executionAllowed: {String(authorizationPackageRecord.executionAllowed)}
+              </p>
+              <p style={{ marginTop: 0, marginBottom: 4 }}>
+                mutationAllowed: {String(authorizationPackageRecord.mutationAllowed)}
+              </p>
+              <p style={{ marginTop: 0, marginBottom: 4 }}>
+                publishingAllowed: {String(authorizationPackageRecord.publishingAllowed)}
+              </p>
+              <p style={{ marginTop: 0, marginBottom: 8 }}>
+                providerExecutionAllowed: {String(authorizationPackageRecord.providerExecutionAllowed)}
+              </p>
+              <p style={{ marginTop: 0, marginBottom: 4 }}><strong>Summary</strong></p>
+              <p style={{ margin: 0 }}>{authorizationPackageRecord.summary}</p>
+            </article>
+          ))}
+        </div>
+      </section>
+
+      <section style={{ marginTop: 16 }}>
         <h2 style={{ marginBottom: 10 }}>Execution Artifact Preview</h2>
         <div style={{ display: "grid", gap: 10 }}>
           {model.executionArtifactPreviews.map((preview) => (
