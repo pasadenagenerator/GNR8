@@ -638,7 +638,92 @@ Execution Plan Readiness Runtime v1 dependency checkpoint (`2026-06-03`):
   - Workspace Overview now exposes deterministic read-only Execution Plan Readiness records derived from Execution Plan Preview and planning artifact presence.
   - No execution capability exists.
 - recommended next milestone:
+  - `Execution Candidate Runtime v1` is now completed.
+
+Execution Candidate Runtime family v1 dependency checkpoint (`2026-06-03`):
+- completion date:
+  - `2026-06-03`
+- completed milestones:
   - `Execution Candidate Runtime v1`
+  - `Execution Candidate Readiness Runtime v1`
+  - `Execution Candidate Package Runtime v1`
+- runtime files:
+  - `apps/platform/gnr8/runtime/twin/twin-execution-candidate.ts`
+  - `apps/platform/gnr8/runtime/twin/twin-execution-candidate-readiness.ts`
+  - `apps/platform/gnr8/runtime/twin/twin-execution-candidate-package.ts`
+- Candidate layer contract structure:
+  - Execution Candidate:
+    - required evidence:
+      - `execution_plan_present`
+      - `planning_artifacts_present`
+    - optional evidence:
+      - `conversion_baseline`
+      - `design_evidence`
+    - output fields:
+      - `candidateState`
+      - `readinessState`
+      - `readinessScore`
+      - `candidateType`
+      - `candidateScope`
+      - `candidateArtifacts`
+      - `candidateRequirements`
+      - `blockedReasons`
+  - Execution Candidate Readiness:
+    - validation layer for candidate qualification
+    - output fields:
+      - `readinessState`
+      - `readinessScore`
+      - `candidatePresent`
+      - `candidateArtifactsPresent`
+      - `requirementsMet`
+      - `requirementsMissing`
+  - Execution Candidate Package:
+    - aggregated candidate package structure
+    - output fields:
+      - `packageState`
+      - `readinessState`
+      - `readinessScore`
+      - `candidateType`
+      - `includedComponents`
+      - `missingComponents`
+- verified Maver output:
+  - `Homepage Conversion Flow`
+    - `Candidate`: `blocked_candidate`
+    - `Candidate Readiness`: `incomplete`
+    - `Candidate Package`: `package_incomplete`
+  - `Homepage Quality & Messaging`
+    - `Candidate`: `candidate_ready_preview`
+    - `Candidate Readiness`: `nearly_ready`
+    - `Candidate Package`: `package_ready`
+  - `Validation Runtime`
+    - `Candidate`: `candidate_ready_preview`
+    - `Candidate Readiness`: `ready`
+    - `Candidate Package`: `package_ready`
+- governance states:
+  - `execution_candidate_preview_only`
+  - `execution_candidate_readiness_preview_only`
+  - `execution_candidate_package_preview_only`
+- governance constraints:
+  - `executionAllowed=false`
+  - `mutationAllowed=false`
+  - `publishingAllowed=false`
+  - `providerExecutionAllowed=false`
+- preserved execution boundary:
+  - no execution
+  - no mutations
+  - no publishing
+  - no provider execution
+  - no AI actions
+  - no jobs
+  - no queues
+  - no workers
+- architecture chain:
+  - `Proposal → Approval → Approval State → Approval Queue → Execution Readiness → Execution Package Preview → Execution Package Readiness → Execution Contract Preview → Execution Contract Readiness → Execution Bundle Preview → Execution Bundle Readiness → Execution Authorization Preview → Execution Authorization Readiness → Execution Authorization Package → Execution Intent → Execution Intent Readiness → Execution Plan Preview → Execution Plan Readiness → Execution Candidate → Execution Candidate Readiness → Execution Candidate Package`
+- conclusion:
+  - Candidate records, readiness validation, and package aggregation remain deterministic preview-only contract layers.
+  - No execution capability exists.
+- recommended next milestone:
+  - `Execution Candidate Authorization Runtime v1`
 
 Website OS Proposal Candidate Runtime v1 dependency checkpoint (`2026-06-01`):
 - runtime files:

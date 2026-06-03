@@ -875,15 +875,71 @@ Execution Plan Readiness Runtime v1 milestone confirmed (`2026-06-03`):
 - architecture chain:
   - `Planning Candidates → Governance Review → Approval Records → Approval States → Approval Queue → Execution Readiness → Execution Package Preview → Execution Package Readiness → Execution Contract Preview → Execution Contract Readiness → Execution Bundle Preview → Execution Bundle Readiness → Execution Authorization Preview → Execution Authorization Readiness → Execution Authorization Package → Execution Intent → Execution Intent Readiness → Execution Plan Preview → Execution Plan Readiness → Execution Artifact Preview`
 
+Execution Candidate Runtime family v1 milestone confirmed (`2026-06-03`):
+- completed milestones:
+  - `Execution Candidate Runtime v1`
+  - `Execution Candidate Readiness Runtime v1`
+  - `Execution Candidate Package Runtime v1`
+- runtime files:
+  - `apps/platform/gnr8/runtime/twin/twin-execution-candidate.ts`
+  - `apps/platform/gnr8/runtime/twin/twin-execution-candidate-readiness.ts`
+  - `apps/platform/gnr8/runtime/twin/twin-execution-candidate-package.ts`
+- Execution Candidate output fields:
+  - `candidateState`
+  - `readinessState`
+  - `readinessScore`
+  - `candidateType`
+  - `candidateScope`
+  - `candidateArtifacts`
+  - `candidateRequirements`
+  - `blockedReasons`
+- Execution Candidate Readiness output fields:
+  - `readinessState`
+  - `readinessScore`
+  - `candidatePresent`
+  - `candidateArtifactsPresent`
+  - `requirementsMet`
+  - `requirementsMissing`
+- Execution Candidate Package output fields:
+  - `packageState`
+  - `readinessState`
+  - `readinessScore`
+  - `candidateType`
+  - `includedComponents`
+  - `missingComponents`
+- governance states:
+  - `execution_candidate_preview_only`
+  - `execution_candidate_readiness_preview_only`
+  - `execution_candidate_package_preview_only`
+- governance values:
+  - `executionAllowed=false`
+  - `mutationAllowed=false`
+  - `publishingAllowed=false`
+  - `providerExecutionAllowed=false`
+- preserved boundaries:
+  - no execution
+  - no mutations
+  - no publishing
+  - no provider execution
+  - no AI actions
+  - no jobs
+  - no queues
+  - no workers
+- architecture chain:
+  - `Planning Candidates → Governance Review → Approval Records → Approval States → Approval Queue → Execution Readiness → Execution Package Preview → Execution Package Readiness → Execution Contract Preview → Execution Contract Readiness → Execution Bundle Preview → Execution Bundle Readiness → Execution Authorization Preview → Execution Authorization Readiness → Execution Authorization Package → Execution Intent → Execution Intent Readiness → Execution Plan Preview → Execution Plan Readiness → Execution Candidate → Execution Candidate Readiness → Execution Candidate Package`
+
 ## Success Condition
 GNR8 gains the intelligence foundation behind the Website Digital Twin.
 
 Current runtime conclusion:
-- Workspace Overview now exposes deterministic read-only Execution Plan Readiness records derived from Execution Plan Preview and planning artifact presence.
+- Website OS now supports deterministic preview-only candidate generation, candidate qualification evaluation, and candidate package assembly.
 - No execution capability exists.
+- No mutation capability exists.
+- No provider execution capability exists.
+- No publishing capability exists.
 
 Recommended next milestone:
-- Execution Candidate Runtime v1
+- Execution Candidate Authorization Runtime v1
 
 ## Related Canonical Documents
 - `docs/architecture/TWIN_GENERATION_ARCHITECTURE.md`

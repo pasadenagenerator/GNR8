@@ -1007,6 +1007,48 @@ Execution Plan Readiness Runtime v1 milestone confirmed (`2026-06-03`):
 - runtime chain:
   - `Planning Candidates → Governance Review → Approval Records → Approval States → Approval Queue → Execution Readiness → Execution Package Preview → Execution Package Readiness → Execution Contract Preview → Execution Contract Readiness → Execution Bundle Preview → Execution Bundle Readiness → Execution Authorization Preview → Execution Authorization Readiness → Execution Authorization Package → Execution Intent → Execution Intent Readiness → Execution Plan Preview → Execution Plan Readiness → Execution Artifact Preview`
 
+Execution Candidate Runtime family v1 milestone confirmed (`2026-06-03`):
+- completed milestones:
+  - `Execution Candidate Runtime v1`
+  - `Execution Candidate Readiness Runtime v1`
+  - `Execution Candidate Package Runtime v1`
+- runtime files:
+  - `apps/platform/gnr8/runtime/twin/twin-execution-candidate.ts`
+  - `apps/platform/gnr8/runtime/twin/twin-execution-candidate-readiness.ts`
+  - `apps/platform/gnr8/runtime/twin/twin-execution-candidate-package.ts`
+- canonical runtime chain:
+  - `Proposal → Approval → Approval State → Approval Queue → Execution Readiness → Execution Package Preview → Execution Package Readiness → Execution Contract Preview → Execution Contract Readiness → Execution Bundle Preview → Execution Bundle Readiness → Execution Authorization Preview → Execution Authorization Readiness → Execution Authorization Package → Execution Intent → Execution Intent Readiness → Execution Plan Preview → Execution Plan Readiness → Execution Candidate → Execution Candidate Readiness → Execution Candidate Package`
+- verified Maver output:
+  - `Homepage Conversion Flow`
+    - `Candidate`: `blocked_candidate`
+    - `Candidate Readiness`: `incomplete`
+    - `Candidate Package`: `package_incomplete`
+  - `Homepage Quality & Messaging`
+    - `Candidate`: `candidate_ready_preview`
+    - `Candidate Readiness`: `nearly_ready`
+    - `Candidate Package`: `package_ready`
+  - `Validation Runtime`
+    - `Candidate`: `candidate_ready_preview`
+    - `Candidate Readiness`: `ready`
+    - `Candidate Package`: `package_ready`
+- governance states:
+  - `execution_candidate_preview_only`
+  - `execution_candidate_readiness_preview_only`
+  - `execution_candidate_package_preview_only`
+- governance boundaries:
+  - `executionAllowed=false`
+  - `mutationAllowed=false`
+  - `publishingAllowed=false`
+  - `providerExecutionAllowed=false`
+  - no execution
+  - no mutations
+  - no publishing
+  - no provider execution
+  - no AI actions
+  - no jobs
+  - no queues
+  - no workers
+
 ## Future Integration Points
 This architecture anchors future integration with:
 - Twin Runtime Contract
@@ -1032,11 +1074,14 @@ First operational success checkpoint:
 - Digital Twin snapshots now contain imported-site evidence instead of placeholder-only summaries.
 - Workspace Overview is now useful in deployed environments even without local validation snapshot files.
 - Workspace Planning Console now exposes deterministic read-only Execution Authorization Package records derived from Execution Authorization Preview and Execution Authorization Readiness records.
-- Workspace Overview now exposes deterministic read-only Execution Plan Readiness records derived from Execution Plan Preview and planning artifact presence.
+- Website OS now supports deterministic preview-only Execution Candidate, Execution Candidate Readiness, and Execution Candidate Package records.
 - No execution capability exists.
+- No mutation capability exists.
+- No provider execution capability exists.
+- No publishing capability exists.
 
 Recommended next milestone:
-- Execution Candidate Runtime v1
+- Execution Candidate Authorization Runtime v1
 
 ## Related Canonical Documents
 - `docs/architecture/TWIN_RUNTIME_CONTRACT.md`

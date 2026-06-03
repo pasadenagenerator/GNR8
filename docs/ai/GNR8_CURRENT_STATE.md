@@ -21,8 +21,75 @@
 - Execution Authorization Readiness Runtime v1 completed.
 - Execution Authorization Package Runtime v1 completed.
 - Execution Plan Readiness Runtime v1 completed.
+- Execution Candidate Runtime v1 completed.
+- Execution Candidate Readiness Runtime v1 completed.
+- Execution Candidate Package Runtime v1 completed.
 - Execution Artifact Preview Runtime v1 completed.
 - Proposal Candidate Operator UX Cleanup v1 completed.
+
+## Execution Candidate Runtime Family v1 Milestone (2026-06-03)
+
+Milestone family is complete and documented.
+
+Completed milestones:
+- Execution Candidate Runtime v1
+- Execution Candidate Readiness Runtime v1
+- Execution Candidate Package Runtime v1
+
+Runtime files:
+- `apps/platform/gnr8/runtime/twin/twin-execution-candidate.ts`
+- `apps/platform/gnr8/runtime/twin/twin-execution-candidate-readiness.ts`
+- `apps/platform/gnr8/runtime/twin/twin-execution-candidate-package.ts`
+
+Runtime summary:
+- Website OS now supports deterministic preview-only candidate generation, candidate qualification evaluation, and candidate package assembly.
+- All runtime outputs remain governance blocked.
+- No execution capability exists.
+- No mutation capability exists.
+- No provider execution capability exists.
+- No publishing capability exists.
+
+Verified Maver output:
+1. `Homepage Conversion Flow`
+   - `Candidate`: `blocked_candidate`
+   - `Candidate Readiness`: `incomplete`
+   - `Candidate Package`: `package_incomplete`
+2. `Homepage Quality & Messaging`
+   - `Candidate`: `candidate_ready_preview`
+   - `Candidate Readiness`: `nearly_ready`
+   - `Candidate Package`: `package_ready`
+3. `Validation Runtime`
+   - `Candidate`: `candidate_ready_preview`
+   - `Candidate Readiness`: `ready`
+   - `Candidate Package`: `package_ready`
+
+Governance lock:
+- `executionAllowed=false`
+- `mutationAllowed=false`
+- `publishingAllowed=false`
+- `providerExecutionAllowed=false`
+- `governanceState=execution_candidate_preview_only`
+- `governanceState=execution_candidate_readiness_preview_only`
+- `governanceState=execution_candidate_package_preview_only`
+
+Preserved boundaries:
+- no execution
+- no mutations
+- no publishing
+- no provider execution
+- no AI actions
+- no jobs
+- no queues
+- no workers
+- no API changes
+- no database schema changes
+- no UI changes
+
+Current architecture chain:
+- `Proposal → Approval → Approval State → Approval Queue → Execution Readiness → Execution Package Preview → Execution Package Readiness → Execution Contract Preview → Execution Contract Readiness → Execution Bundle Preview → Execution Bundle Readiness → Execution Authorization Preview → Execution Authorization Readiness → Execution Authorization Package → Execution Intent → Execution Intent Readiness → Execution Plan Preview → Execution Plan Readiness → Execution Candidate → Execution Candidate Readiness → Execution Candidate Package`
+
+Current recommended milestone:
+- Execution Candidate Authorization Runtime v1
 
 ## Execution Plan Readiness Runtime v1 Milestone (2026-06-03)
 
@@ -81,7 +148,7 @@ Preserved boundaries:
 - no AI model calls
 - deterministic read-only plan readiness modeling only
 
-Current architecture chain:
+Plan Readiness architecture chain:
 - `Planning Candidates → Governance Review → Approval Records → Approval States → Approval Queue → Execution Readiness → Execution Package Preview → Execution Package Readiness → Execution Contract Preview → Execution Contract Readiness → Execution Bundle Preview → Execution Bundle Readiness → Execution Authorization Preview → Execution Authorization Readiness → Execution Authorization Package → Execution Intent → Execution Intent Readiness → Execution Plan Preview → Execution Plan Readiness → Execution Artifact Preview`
 
 Conclusion:
@@ -89,7 +156,7 @@ Conclusion:
 - No execution capability exists.
 
 Current recommended next step:
-- Execution Candidate Runtime v1
+- Execution Candidate Authorization Runtime v1
 
 ## Execution Authorization Package Runtime v1 Milestone (2026-06-03)
 

@@ -212,26 +212,27 @@ Checkpoint outcome:
 - GNR8 has the first operational runtime representation of a website visible in Workspace Overview.
 
 Latest completed canonical runtime milestone (2026-06-03):
-- `Execution Plan Readiness Runtime v1`
+- `Execution Candidate Runtime v1`
+- `Execution Candidate Readiness Runtime v1`
+- `Execution Candidate Package Runtime v1`
 - status:
   - COMPLETE
 - completion date:
   - `2026-06-03`
-- runtime file:
-  - `apps/platform/gnr8/runtime/twin/twin-execution-plan-readiness.ts`
-- implemented function:
-  - `buildExecutionPlanReadinessRecords(...)`
-- emitted records:
-  - `executionPlanReadinessRecords`
+- runtime files:
+  - `apps/platform/gnr8/runtime/twin/twin-execution-candidate.ts`
+  - `apps/platform/gnr8/runtime/twin/twin-execution-candidate-readiness.ts`
+  - `apps/platform/gnr8/runtime/twin/twin-execution-candidate-package.ts`
 - implementation summary:
-  - deterministic read-only readiness records now evaluate whether each Execution Plan Preview has its required planning artifacts and execution plan presence
-  - records expose `readinessState`, `readinessScore`, `requirementsMet`, `requirementsMissing`, `executionPlanPresent`, and `planningArtifactsPresent`
+  - deterministic read-only candidate records now assemble preview-only execution candidates from existing planning and readiness evidence
+  - candidate qualification records evaluate candidate presence, artifact presence, met requirements, and missing requirements
+  - candidate package records aggregate candidate components into package-ready or package-incomplete preview structures
   - governance remains locked with `executionAllowed=false`, `mutationAllowed=false`, `publishingAllowed=false`, and `providerExecutionAllowed=false`
-  - `governanceState` is `execution_plan_readiness_preview_only`
+  - governance states are `execution_candidate_preview_only`, `execution_candidate_readiness_preview_only`, and `execution_candidate_package_preview_only`
 - verified Maver output:
-  - `Homepage Conversion Flow`: `readinessState=incomplete`, `readinessScore=80`
-  - `Homepage Quality & Messaging`: `readinessState=nearly_ready`, `readinessScore=90`
-  - `Validation Runtime`: `readinessState=ready`, `readinessScore=100`
+  - `Homepage Conversion Flow`: `Candidate=blocked_candidate`, `Candidate Readiness=incomplete`, `Candidate Package=package_incomplete`
+  - `Homepage Quality & Messaging`: `Candidate=candidate_ready_preview`, `Candidate Readiness=nearly_ready`, `Candidate Package=package_ready`
+  - `Validation Runtime`: `Candidate=candidate_ready_preview`, `Candidate Readiness=ready`, `Candidate Package=package_ready`
 - preserved boundaries:
   - no runtime execution
   - no approval workflow
@@ -241,9 +242,9 @@ Latest completed canonical runtime milestone (2026-06-03):
   - no queues, workers, provider execution, publishing, mutations, or AI actions
   - documentation closure only
 - architecture chain:
-  - `Planning Candidates → Governance Review → Approval Records → Approval States → Approval Queue → Execution Readiness → Execution Package Preview → Execution Package Readiness → Execution Contract Preview → Execution Contract Readiness → Execution Bundle Preview → Execution Bundle Readiness → Execution Authorization Preview → Execution Authorization Readiness → Execution Authorization Package → Execution Intent → Execution Intent Readiness → Execution Plan Preview → Execution Plan Readiness → Execution Artifact Preview`
+  - `Proposal → Approval → Approval State → Approval Queue → Execution Readiness → Execution Package Preview → Execution Package Readiness → Execution Contract Preview → Execution Contract Readiness → Execution Bundle Preview → Execution Bundle Readiness → Execution Authorization Preview → Execution Authorization Readiness → Execution Authorization Package → Execution Intent → Execution Intent Readiness → Execution Plan Preview → Execution Plan Readiness → Execution Candidate → Execution Candidate Readiness → Execution Candidate Package`
 - recommended next milestone:
-  - `Execution Candidate Runtime v1`
+  - `Execution Candidate Authorization Runtime v1`
 
 Prior completed canonical runtime dependency:
 - `Execution Authorization Package Runtime v1`
@@ -862,4 +863,4 @@ Earlier completed canonical runtime dependency:
   - future bootstrap resumes from `Persisted Migration OS Evidence -> Website OS Workspace Overview` as completed.
 
 Recommended next milestone:
-- Execution Candidate Runtime v1
+- Execution Candidate Authorization Runtime v1
