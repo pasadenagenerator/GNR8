@@ -21,6 +21,7 @@ import {
   getSiteVersion,
   persistRawImportedSiteArtifact,
   setSiteVersionImportProvenanceSummary,
+  upsertContentSlots,
 } from '@/gnr8/runtime/runtime-store'
 import {
   RENDERER_COMPATIBILITY_VERSION,
@@ -41,6 +42,7 @@ import { discoverMultipageImportTree, summarizeMultipageImportTree } from '@/gnr
 import { buildSafeSiteTreeFromSeedPage, normalizeRoutePath, type SiteTree } from '@/gnr8/site-tree'
 import { buildFamilyHandoffModel, summarizeTemplateFamilies, type FamilyHandoffModel } from '@/gnr8/family-mode'
 import { runSemanticImportEngine, type SemanticImportResult } from '@/gnr8/import-semantic/semantic-import-engine'
+import { inferContentSlotsFromSemanticImport } from '@/gnr8/runtime/content-binding'
 
 const SECTION_INTENT_BY_SEMANTIC_TYPE: Record<string, string> = {
   header: 'header_nav',
@@ -1265,6 +1267,7 @@ export type ScopedImportPipelineSuccess = {
     styleCta: string
     styleDiagnostics: string[]
     importFidelityScore: RuntimeImportProvenanceSummary['importFidelityScore']
+    cmsContentSlots: ScopedImportCmsSlotMaterializationResult
     artifactGenerated: boolean
     writePath: {
       createdVersionId: string
@@ -1423,6 +1426,7 @@ export type ScopedImportPipelineDependencies = {
   createArtifact: typeof createArtifact
   bindArtifactToVersion: typeof bindArtifactToVersion
   persistRawImportedSiteArtifact: typeof persistRawImportedSiteArtifact
+  upsertContentSlots: typeof upsertContentSlots
   importHtmlToPage: typeof importHtmlToPage
   migrateImportedPageToCanonicalDraft: typeof migrateImportedPageToCanonicalDraft
 }
@@ -1439,8 +1443,102 @@ function defaultDependencies(): ScopedImportPipelineDependencies {
     createArtifact,
     bindArtifactToVersion,
     persistRawImportedSiteArtifact,
+    upsertContentSlots,
     importHtmlToPage,
     migrateImportedPageToCanonicalDraft,
+  }
+}
+
+export type ScopedImportCmsSlotMaterializationResult = {
+  diagnostics: string[]
+  inferredSlotCount: number
+  persistedSlotCount: number
+  skippedSlotCount: number
+  persistenceFailed: boolean
+  errorMessage: string | null
+}
+
+function uniqueSlotsByKey<T extends { slotKey: string }>(slots: T[]): T[] {
+  const byKey = new Map<string, T>()
+  for (const slot of slots) {
+    const key = normalizeText(slot.slotKey)
+    if (!key || byKey.has(key)) continue
+    byKey.set(key, slot)
+  }
+  return [...byKey.values()].sort((left, right) => left.slotKey.localeCompare(right.slotKey))
+}
+
+export async function materializeCmsContentSlotsForScopedImport(input: {
+  siteId: string
+  siteVersionId: string
+  html: string
+  semanticImport: SemanticImportResult | null
+  persistContentSlots?: typeof upsertContentSlots
+}): Promise<ScopedImportCmsSlotMaterializationResult> {
+  const diagnostics: string[] = []
+  const html = String(input.html ?? '')
+  const persistContentSlots = input.persistContentSlots ?? upsertContentSlots
+
+  if (!normalizeText(html) || !input.semanticImport) {
+    diagnostics.push('CMS_SLOT_INFERENCE_SKIPPED')
+    return {
+      diagnostics,
+      inferredSlotCount: 0,
+      persistedSlotCount: 0,
+      skippedSlotCount: 0,
+      persistenceFailed: false,
+      errorMessage: null,
+    }
+  }
+
+  diagnostics.push('CMS_SLOT_INFERENCE_STARTED')
+  const inferred = inferContentSlotsFromSemanticImport({
+    siteId: input.siteId,
+    siteVersionId: input.siteVersionId,
+    html,
+    semanticImport: input.semanticImport,
+  })
+  const slots = uniqueSlotsByKey(inferred.slots)
+  diagnostics.push(...inferred.diagnostics)
+  diagnostics.push('CMS_SLOT_INFERENCE_COMPLETED')
+
+  if (slots.length === 0) {
+    return {
+      diagnostics,
+      inferredSlotCount: 0,
+      persistedSlotCount: 0,
+      skippedSlotCount: 0,
+      persistenceFailed: false,
+      errorMessage: null,
+    }
+  }
+
+  diagnostics.push('CMS_SLOT_PERSISTENCE_STARTED')
+  try {
+    const persistedSlotCount = await persistContentSlots({
+      siteId: input.siteId,
+      siteVersionId: input.siteVersionId,
+      slots,
+    })
+    diagnostics.push('CMS_SLOT_PERSISTENCE_COMPLETED')
+    return {
+      diagnostics,
+      inferredSlotCount: slots.length,
+      persistedSlotCount,
+      skippedSlotCount: Math.max(0, slots.length - persistedSlotCount),
+      persistenceFailed: false,
+      errorMessage: null,
+    }
+  } catch (error) {
+    diagnostics.push('CMS_SLOT_PERSISTENCE_FAILED')
+    return {
+      diagnostics,
+      inferredSlotCount: slots.length,
+      persistedSlotCount: 0,
+      skippedSlotCount: slots.length,
+      persistenceFailed: true,
+      errorMessage: error instanceof Error ? error.message : String(error),
+    }
   }
 }
 
@@ -1683,6 +1781,30 @@ export async function runScopedImportPipeline(input: {
       artifactId: rawImportArtifact.artifactId,
     })
 
+    const rawEntryHtml = (() => {
+      try {
+        return fs.readFileSync(input.snapshot.entryHtmlPathAbs, 'utf8')
+      } catch {
+        return ''
+      }
+    })()
+    const cmsContentSlots = await materializeCmsContentSlotsForScopedImport({
+      siteId: migrated.siteId,
+      siteVersionId: migrated.siteVersionId,
+      html: rawEntryHtml,
+      semanticImport: importProvenanceSummary.semanticImport ?? resolveSemanticImportForSnapshot(input.snapshot),
+      persistContentSlots: deps.upsertContentSlots,
+    })
+    console.info('[scoped-import] CMS_SLOT_MATERIALIZATION_COMPLETED', {
+      siteId: migrated.siteId,
+      siteVersionId: migrated.siteVersionId,
+      inferredSlotCount: cmsContentSlots.inferredSlotCount,
+      persistedSlotCount: cmsContentSlots.persistedSlotCount,
+      skippedSlotCount: cmsContentSlots.skippedSlotCount,
+      persistenceFailed: cmsContentSlots.persistenceFailed,
+      diagnostics: cmsContentSlots.diagnostics,
+    })
+
     const siteVersion = await deps.getSiteVersion(migrated.siteVersionId)
     if (!siteVersion) {
       throw new Error('Pipeline succeeded but created site version could not be loaded for artifact generation.')
@@ -1811,6 +1933,7 @@ export async function runScopedImportPipeline(input: {
       previewDocument,
       reporting: {
         ...reporting,
+        cmsContentSlots,
         artifactGenerated: true,
         writePath: writePathDiagnostics,
       },

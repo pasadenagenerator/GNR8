@@ -399,6 +399,8 @@ export async function POST(req: Request, ctx: { params: Promise<Params> }) {
       structuredHtmlLength,
       rawHtmlLength,
     })
+    const cmsContentSlots = imported.mode === 'pipeline' ? imported.reporting.cmsContentSlots : null
+    const cmsDiagnostics = cmsContentSlots?.diagnostics ?? []
 
     return NextResponse.json(
       {
@@ -414,7 +416,8 @@ export async function POST(req: Request, ctx: { params: Promise<Params> }) {
         previewMode: preview.previewMode,
         htmlLength: preview.htmlLength,
         appliedTransformationsCount: preview.appliedTransformationsCount,
-        diagnostics: [...new Set([...preview.diagnostics, ...diagnostics])],
+        diagnostics: [...new Set([...preview.diagnostics, ...diagnostics, ...cmsDiagnostics])],
+        contentSlotMaterialization: cmsContentSlots,
         siteName: siteNameResolution.resolvedName,
         siteNameSource: siteNameResolution.source,
         preview,
@@ -448,6 +451,7 @@ export async function POST(req: Request, ctx: { params: Promise<Params> }) {
           computedStyleSampleCount:
             imported.mode === 'pipeline' ? imported.reporting.computedStyleSampleCount : imported.diagnostics.computedStyleSampleCount,
           importDiagnosticCodes: imported.mode === 'pipeline' ? imported.reporting.importDiagnosticCodes : imported.diagnostics.importDiagnosticCodes,
+          cmsContentSlots,
           fallbackReason: imported.mode === 'legacy_fallback' ? imported.fallbackReason : null,
           diagnostics:
             imported.mode === 'legacy_fallback'
@@ -459,6 +463,7 @@ export async function POST(req: Request, ctx: { params: Promise<Params> }) {
                       ...(pipelineMode === 'degraded_html_fallback'
                         ? ['SITE_IMPORT_FALLBACK_ACTIVATED', 'SITE_IMPORT_FALLBACK_REASON', 'SITE_IMPORT_PIPELINE_CONTINUED_WITH_RAW_HTML']
                         : []),
+                      ...cmsDiagnostics,
                     ]),
                   ].sort((a, b) => a.localeCompare(b)),
                   writePath: imported.diagnostics.writePath,
@@ -471,6 +476,7 @@ export async function POST(req: Request, ctx: { params: Promise<Params> }) {
                       ...(pipelineMode === 'degraded_html_fallback'
                         ? ['SITE_IMPORT_FALLBACK_ACTIVATED', 'SITE_IMPORT_FALLBACK_REASON', 'SITE_IMPORT_PIPELINE_CONTINUED_WITH_RAW_HTML']
                         : []),
+                      ...cmsDiagnostics,
                     ]),
                   ].sort((a, b) => a.localeCompare(b)),
                   writePath: imported.reporting.writePath,

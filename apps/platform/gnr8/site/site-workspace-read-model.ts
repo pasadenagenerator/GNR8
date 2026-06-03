@@ -2330,6 +2330,9 @@ export async function getSiteWorkspaceReadModelForPage(input: {
   ].filter((value): value is string => Boolean(value)))]
   if (contentSlotCount === 0 && bootstrapStatus === 'completed') {
     createDiagnostics.push('CONTENT_SLOTS_EMPTY')
+    if (rawImportArtifactFound) {
+      createDiagnostics.push('RAW_IMPORT_CONTENT_SLOT_MATERIALIZATION_EMPTY')
+    }
   }
 
   return {

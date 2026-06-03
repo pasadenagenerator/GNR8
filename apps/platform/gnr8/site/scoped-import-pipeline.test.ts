@@ -4,7 +4,13 @@ import os from 'node:os'
 import path from 'node:path'
 import test from 'node:test'
 
-import { __scopedImportPipelineTestUtils, runScopedImportPipeline } from '@/gnr8/site/scoped-import-pipeline'
+import {
+  __scopedImportPipelineTestUtils,
+  materializeCmsContentSlotsForScopedImport,
+  runScopedImportPipeline,
+} from '@/gnr8/site/scoped-import-pipeline'
+import { applyContentOverridesToRawHtml, type ContentOverride, type ContentSlot } from '@/gnr8/runtime/content-binding'
+import { planBatchDraftUpserts } from '@/app/api/gnr8/clients/[clientId]/sites/[siteId]/content/overrides/batch/batch-overrides-route-helpers'
 
 function createSuccessPipelineFixture() {
   const preparedSite = {
@@ -249,6 +255,258 @@ function createSuccessPipelineFixture() {
     ],
   } as any
 }
+
+test('canonical scoped import materializes CMS content slots after raw import artifact persistence', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'scoped-pipeline-cms-slots-'))
+  const entryAbs = path.resolve(root, 'index.html')
+  fs.writeFileSync(
+    entryAbs,
+    '<!doctype html><html><body><main><section><h1>Original Hero</h1><p>Original subtitle</p><a href="/book">Book now</a></section></main></body></html>',
+    'utf8',
+  )
+  fs.mkdirSync(path.join(root, 'assets'))
+
+  const pipeline = createSuccessPipelineFixture()
+  let linkedArtifactId: string | null = null
+  let persistedSlots: Array<Omit<ContentSlot, 'id' | 'createdAt' | 'updatedAt'>> = []
+
+  const outcome = await runScopedImportPipeline({
+    snapshot: {
+      snapshotRootDirAbs: root,
+      entryHtmlPathAbs: entryAbs,
+      assetsDirAbs: path.join(root, 'assets'),
+      sourceUrl: 'https://cms-slots.example/',
+      captureMode: 'raw_html_only',
+      sourceMode: 'raw_html_fallback',
+      sourceSelection: {
+        sourceMode: 'raw_html_fallback',
+        fidelityStatus: 'degraded_import',
+        selectedSourceHtmlPathAbs: entryAbs,
+        renderedDomQuality: {
+          quality: 'strong',
+          bodyTextLength: 80,
+          meaningfulNodeCount: 6,
+          sectionCandidateCount: 1,
+          hasHeading: true,
+          reason: 'cms_slots_fixture',
+        },
+        degraded: false,
+      },
+      renderedCapture: {
+        status: 'unavailable',
+        documents: [],
+        screenshots: [],
+        computedStyleSamples: [],
+        diagnostics: [],
+      },
+      importDiagnostics: {
+        issues: [],
+      },
+      fetchManifest: [],
+      semanticImport: {
+        sourceMode: 'raw_html_only',
+        hero: {
+          title: 'Original Hero',
+          subtitle: 'Original subtitle',
+          cta: { label: 'Book now', url: '/book' },
+          image: null,
+        },
+        sections: [],
+        assets: {
+          images: [],
+          links: [],
+          groupedByRole: {
+            logo: [],
+            hero_image: [],
+            gallery_image: [],
+            service_image: [],
+            testimonial_avatar: [],
+            content_image: [],
+            icon: [],
+            unknown: [],
+          },
+        },
+        diagnostics: [],
+      },
+    } as any,
+    sourceUrl: 'https://cms-slots.example/',
+    actor: 'test:cms-slots',
+    deps: {
+      importStaticSite: async () => ({ status: 'ok', documentMeta: { source: { kind: 'single-entry-html' } } }) as any,
+      createImportManifest: () => ({ status: 'success' }) as any,
+      runLinearMigrationPipeline: () => pipeline as any,
+      createSiteVersionFromMigration: async () => ({ siteId: 'runtime-site-cms', siteVersionId: '11111111-1111-4111-8111-111111111111', versionNo: 1 }),
+      setSiteVersionImportProvenanceSummary: async () => ({ affectedRows: 1 }),
+      getSiteVersion: async () =>
+        ({
+          id: '11111111-1111-4111-8111-111111111111',
+          siteId: 'runtime-site-cms',
+          versionNo: 1,
+          state: 'DRAFT',
+          source: 'migration',
+          actor: 'test',
+          createdAt: new Date().toISOString(),
+          rendererCompatibilityVersion: 'gnr8-renderer-v1',
+          artifactId: linkedArtifactId,
+          importProvenanceSummary: { kind: 'runtime_import_provenance_summary_v1' },
+          pages: [],
+        }) as any,
+      buildDeterministicArtifactBundle: () =>
+        ({
+          siteId: 'runtime-site-cms',
+          siteVersionId: '11111111-1111-4111-8111-111111111111',
+          rendererCompatibilityVersion: 'gnr8-renderer-v1',
+          bundleSha256: 'bundle-sha',
+          htmlByPath: { '/': '<!doctype html><html><body>preview</body></html>' },
+          compiledTokenStyles: ':root{}',
+          assetFingerprintMap: {},
+          manifest: {},
+        }) as any,
+      createArtifact: async () => ({ artifactId: '22222222-2222-4222-8222-222222222222' }),
+      bindArtifactToVersion: async (input) => {
+        linkedArtifactId = input.artifactId
+        return { affectedRows: 1 }
+      },
+      persistRawImportedSiteArtifact: async () =>
+        ({
+          artifactId: 'raw-artifact-1',
+          artifactType: 'raw_imported_site',
+          entryHtmlPath: 'index.html',
+          assetBasePath: '.',
+          fileMap: {},
+          fileCount: 1,
+        }) as any,
+      upsertContentSlots: async (input) => {
+        persistedSlots = input.slots
+        return input.slots.length
+      },
+      importHtmlToPage: () => ({}) as any,
+      migrateImportedPageToCanonicalDraft: async () => ({ siteId: 'legacy-site', siteVersionId: 'legacy-version', versionNo: 1 }),
+    },
+  })
+
+  assert.equal(outcome.mode, 'pipeline')
+  assert.equal(outcome.reporting.cmsContentSlots.inferredSlotCount > 0, true)
+  assert.equal(outcome.reporting.cmsContentSlots.persistedSlotCount, outcome.reporting.cmsContentSlots.inferredSlotCount)
+  assert.ok(outcome.reporting.cmsContentSlots.diagnostics.includes('CMS_SLOT_INFERENCE_STARTED'))
+  assert.ok(outcome.reporting.cmsContentSlots.diagnostics.includes('CMS_SLOT_PERSISTENCE_COMPLETED'))
+  assert.ok(persistedSlots.some((slot) => slot.slotKey === 'hero.title'))
+})
+
+test('CMS slot materialization is idempotent and preserves draft and published overrides', async () => {
+  const html = '<!doctype html><html><body><h1>Original Hero</h1><p>Original subtitle</p></body></html>'
+  const semanticImport = {
+    sourceMode: 'raw_html_only',
+    hero: { title: 'Original Hero', subtitle: 'Original subtitle', cta: null, image: null },
+    sections: [],
+    assets: {
+      images: [],
+      links: [],
+      groupedByRole: {
+        logo: [],
+        hero_image: [],
+        gallery_image: [],
+        service_image: [],
+        testimonial_avatar: [],
+        content_image: [],
+        icon: [],
+        unknown: [],
+      },
+    },
+    diagnostics: [],
+  } as any
+  const slots = new Map<string, Omit<ContentSlot, 'id' | 'createdAt' | 'updatedAt'>>()
+  const overrides = new Map<string, ContentOverride>([
+    ['hero.title:draft', {
+      id: 'draft-1',
+      siteId: 'site-cms',
+      siteVersionId: '33333333-3333-4333-8333-333333333333',
+      slotKey: 'hero.title',
+      valueType: 'text',
+      valueJson: { value: 'Draft Hero' },
+      status: 'draft',
+    }],
+    ['hero.title:published', {
+      id: 'published-1',
+      siteId: 'site-cms',
+      siteVersionId: '33333333-3333-4333-8333-333333333333',
+      slotKey: 'hero.title',
+      valueType: 'text',
+      valueJson: { value: 'Published Hero' },
+      status: 'published',
+    }],
+  ])
+  const persistContentSlots = async (input: {
+    slots: Array<Omit<ContentSlot, 'id' | 'createdAt' | 'updatedAt'>>
+  }) => {
+    for (const slot of input.slots) slots.set(slot.slotKey, slot)
+    return input.slots.length
+  }
+
+  const first = await materializeCmsContentSlotsForScopedImport({
+    siteId: 'site-cms',
+    siteVersionId: '33333333-3333-4333-8333-333333333333',
+    html,
+    semanticImport,
+    persistContentSlots: persistContentSlots as any,
+  })
+  const countAfterFirst = slots.size
+  const second = await materializeCmsContentSlotsForScopedImport({
+    siteId: 'site-cms',
+    siteVersionId: '33333333-3333-4333-8333-333333333333',
+    html,
+    semanticImport,
+    persistContentSlots: persistContentSlots as any,
+  })
+
+  assert.equal(first.inferredSlotCount > 0, true)
+  assert.equal(second.inferredSlotCount, first.inferredSlotCount)
+  assert.equal(slots.size, countAfterFirst)
+  assert.deepEqual(overrides.get('hero.title:draft')?.valueJson, { value: 'Draft Hero' })
+  assert.deepEqual(overrides.get('hero.title:published')?.valueJson, { value: 'Published Hero' })
+})
+
+test('import-created slots support draft save planning, publish promotion, and raw render override application', () => {
+  const html = '<!doctype html><html><body><h1>Original Hero</h1></body></html>'
+  const slot: ContentSlot = {
+    id: 'slot-hero-title',
+    siteId: 'site-cms',
+    siteVersionId: '44444444-4444-4444-8444-444444444444',
+    slotKey: 'hero.title',
+    slotType: 'text',
+    sourceSelector: 'html > body:nth-of-type(1) > h1:nth-of-type(1)',
+    sourceText: 'Original Hero',
+    sourceAssetPath: null,
+    confidence: 0.9,
+    diagnostics: { inferredFrom: 'hero.title' },
+  }
+  const plan = planBatchDraftUpserts({
+    slots: [{ slotKey: slot.slotKey, slotType: slot.slotType }],
+    overrides: [{ slotKey: slot.slotKey, value: 'Published Hero', status: 'draft' }],
+  })
+  const draftOverride: ContentOverride = {
+    id: 'draft-hero-title',
+    siteId: slot.siteId,
+    siteVersionId: slot.siteVersionId,
+    slotKey: slot.slotKey,
+    valueType: slot.slotType,
+    valueJson: plan.valid[0]?.valueJson,
+    status: 'draft',
+  }
+  const publishedOverride: ContentOverride = { ...draftOverride, id: 'published-hero-title', status: 'published' }
+  const rendered = applyContentOverridesToRawHtml({
+    html,
+    slots: [slot],
+    overrides: [publishedOverride],
+  })
+
+  assert.equal(plan.valid.length, 1)
+  assert.equal(draftOverride.status, 'draft')
+  assert.equal(publishedOverride.status, 'published')
+  assert.equal(rendered.appliedCount, 1)
+  assert.match(rendered.html, /Published Hero/)
+  assert.ok(!rendered.html.includes('Original Hero'))
+})
 
 test('scoped pipeline import uses pipeline path, maps consolidated sections, and links artifact', async () => {
   const pipeline = createSuccessPipelineFixture()
