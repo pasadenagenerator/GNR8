@@ -8,7 +8,7 @@ import {
 import { createRuntimeDomainReadinessReport } from "@/gnr8/runtime/readiness/runtime-domain-readiness";
 import { createRuntimeSiteReadinessReport } from "@/gnr8/runtime/readiness/runtime-site-readiness";
 import { resolveRuntimeSiteVersion } from "@/gnr8/runtime/resolution/runtime-resolution";
-import type { RuntimeDomainHostBinding, RuntimeSiteResolutionBinding } from "@/gnr8/runtime/runtime-store";
+import type { RuntimeDomainHostBinding, RuntimeHostBinding, RuntimeSiteResolutionBinding } from "@/gnr8/runtime/runtime-store";
 import type { CanonicalSiteVersionSnapshot, RuntimeArtifact } from "@/gnr8/runtime/types";
 
 const activeVersionId = "11111111-1111-4111-8111-111111111111";
@@ -66,6 +66,20 @@ function domainRows(siteId = "site_1"): RuntimeDomainHostBinding[] {
       vercelDomainId: "vercel_domain_1",
       createdAt: "2026-05-31T10:00:00.000Z",
       updatedAt: "2026-06-01T11:00:00.000Z",
+    },
+  ];
+}
+
+function hostRows(siteId = "site_1"): RuntimeHostBinding[] {
+  return [
+    {
+      id: "host_1",
+      siteId,
+      host: "maver.app.pasadenagenerator.com",
+      status: "ACTIVE",
+      bindingKind: "shadow",
+      createdAt: "2026-06-01T10:45:00.000Z",
+      updatedAt: "2026-06-01T10:45:00.000Z",
     },
   ];
 }
@@ -230,6 +244,10 @@ function deps(input: {
       recordRuntimeSiteId(siteId);
       return domainRows(siteId);
     },
+    listHostBindingsForSite: async (siteId) => {
+      recordRuntimeSiteId(siteId);
+      return hostRows(siteId);
+    },
     listPreviouslyPublishedVersions: async (siteId) => {
       recordRuntimeSiteId(siteId);
       return [
@@ -322,6 +340,7 @@ test("hosting operations read model: opens the exact ownership site id emitted b
   assert.equal(model.runtime.activeVersion?.id, activeVersionId);
   assert.equal(model.runtime.activeArtifact?.id, activeArtifactId);
   assert.equal(model.domains[0]?.host, "www.example.com");
+  assert.equal(model.workingDomains[0]?.hostname, "maver.app.pasadenagenerator.com");
   assert.equal(model.assets.counts.htmlPaths, 2);
 });
 
@@ -345,6 +364,8 @@ test("hosting operations read model: keeps truly unknown ids not found", async (
   assert.equal(model.site.expectedIdentifier, "ownership_site_id_or_runtime_site_id");
   assert.deepEqual(runtimeSiteIdsSeen, []);
   assert.equal(model.runtime.activeVersion, null);
+  assert.equal(model.workingDomains.length, 0);
+  assert.equal(model.customDomains.length, 0);
   assert.equal(model.domains.length, 0);
   assert.deepEqual(model.diagnostics.codes, ["HOSTING_OPERATIONS_SITE_NOT_FOUND"]);
 });
@@ -352,6 +373,15 @@ test("hosting operations read model: keeps truly unknown ids not found", async (
 test("hosting operations read model: exposes domain visibility and readiness aggregation", async () => {
   const model = await getHostingOperationsReadModel("site_1", deps());
 
+  assert.equal(model.workingDomains.length, 1);
+  assert.equal(model.workingDomains[0]?.hostname, "maver.app.pasadenagenerator.com");
+  assert.equal(model.workingDomains[0]?.bindingKind, "shadow");
+  assert.equal(model.workingDomains[0]?.status, "ACTIVE");
+  assert.equal(model.workingDomains[0]?.active, true);
+  assert.equal(model.workingDomains[0]?.source, "runtime_host_binding");
+  assert.equal(model.customDomains.length, 1);
+  assert.equal(model.customDomains[0]?.hostname, "www.example.com");
+  assert.equal(model.customDomains[0]?.source, "runtime_domain_host_binding");
   assert.equal(model.domains.length, 1);
   assert.equal(model.domains[0]?.host, "www.example.com");
   assert.equal(model.domains[0]?.verified, true);
@@ -361,9 +391,46 @@ test("hosting operations read model: exposes domain visibility and readiness agg
   assert.equal(model.readiness.site?.hasActivePointer, true);
   assert.equal(model.readiness.domains?.hasActiveDomainBinding, true);
   assert.equal(model.readinessDrilldown.site.state, "ready");
+  assert.equal(model.domainOperations.workingDomains[0]?.hostname, "maver.app.pasadenagenerator.com");
+  assert.equal(model.domainOperations.workingDomains[0]?.bindingKind, "shadow");
+  assert.equal(model.domainOperations.customDomains[0]?.hostname, "www.example.com");
   assert.equal(model.domainOperations.domains[0]?.hostname, "www.example.com");
   assert.equal(model.domainOperations.domains[0]?.verificationStatus, "verified");
   assert.equal(model.domainOperations.domains[0]?.dnsInstructions[0]?.value, "cname.vercel-dns.com");
+});
+
+test("hosting operations read model: working domain remains visible when custom domain is absent", async () => {
+  const model = await getHostingOperationsReadModel("site_1", {
+    ...deps(),
+    getRuntimeSiteDomainReadinessBinding: async (siteId) => ({
+      siteId,
+      canonicalSlug: "maver",
+      primaryHost: "maver.source.test",
+      internalPreviewHost: "maver.app.pasadenagenerator.com",
+      customDomains: [],
+      activeDomainBindingHost: "maver.app.pasadenagenerator.com",
+      domainBindingCandidates: [
+        {
+          host: "maver.app.pasadenagenerator.com",
+          source: "runtime_host_binding",
+          status: "ACTIVE",
+          isInternalHost: true,
+          isActive: true,
+        },
+      ],
+    }),
+    listDomainHostBindingsForSite: async () => [],
+  });
+
+  assert.equal(model.workingDomains[0]?.hostname, "maver.app.pasadenagenerator.com");
+  assert.equal(model.workingDomains[0]?.bindingKind, "shadow");
+  assert.equal(model.customDomains.length, 0);
+  assert.equal(model.domainOperations.customDomains.length, 0);
+  assert.equal(model.domainOperations.domains.length, 0);
+  assert.equal(model.readiness.domains?.hasInternalHost, true);
+  assert.equal(model.readiness.domains?.hasCustomDomain, false);
+  assert.equal(model.readiness.warnings.includes("missing_custom_domain"), true);
+  assert.equal(model.readinessDrilldown.domains.warnings.some((finding) => finding.code === "missing_custom_domain"), true);
 });
 
 test("hosting operations read model: exposes rollback candidates excluding active version", async () => {

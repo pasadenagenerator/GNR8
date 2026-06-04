@@ -1,4 +1,4 @@
-import type { RuntimeDomainHostBinding } from "@/gnr8/runtime/runtime-store";
+import type { RuntimeDomainHostBinding, RuntimeHostBinding } from "@/gnr8/runtime/runtime-store";
 
 export type HostingDomainOperationsDnsInstruction = {
   recordType: string;
@@ -11,6 +11,7 @@ export type HostingDomainOperationsDomain = {
   id: string;
   hostname: string;
   status: RuntimeDomainHostBinding["status"];
+  source: "runtime_domain_host_binding";
   verificationStatus: "pending" | "verifying" | "verified" | "failed";
   active: boolean;
   lastCheckedAt: string | null;
@@ -24,7 +25,20 @@ export type HostingDomainOperationsDomain = {
   };
 };
 
+export type HostingDomainOperationsWorkingDomain = {
+  id: string;
+  hostname: string;
+  bindingKind: RuntimeHostBinding["bindingKind"];
+  status: RuntimeHostBinding["status"];
+  active: boolean;
+  source: "runtime_host_binding";
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type HostingDomainOperationsReadModel = {
+  workingDomains: HostingDomainOperationsWorkingDomain[];
+  customDomains: HostingDomainOperationsDomain[];
   domains: HostingDomainOperationsDomain[];
 };
 
@@ -93,23 +107,38 @@ function mapDnsInstructions(binding: RuntimeDomainHostBinding): HostingDomainOpe
 
 export function createHostingDomainOperationsReadModel(input: {
   domains: readonly RuntimeDomainHostBinding[];
+  workingDomains?: readonly RuntimeHostBinding[];
 }): HostingDomainOperationsReadModel {
+  const customDomains = input.domains.map((binding) => ({
+    id: binding.id,
+    hostname: binding.domain,
+    status: binding.status,
+    source: "runtime_domain_host_binding" as const,
+    verificationStatus: verificationStatusFor(binding.status),
+    active: binding.status === "active",
+    lastCheckedAt: binding.lastCheckedAt,
+    lastError: lastErrorFor(binding),
+    verificationReason: verificationReasonFor(binding),
+    dnsInstructions: mapDnsInstructions(binding),
+    diagnostics: {
+      lastDomainCheck: binding.lastCheckedAt,
+      lastVerificationResult: binding.status,
+      verificationDiagnostics: diagnosticsFor(binding),
+    },
+  }));
+
   return {
-    domains: input.domains.map((binding) => ({
+    workingDomains: (input.workingDomains ?? []).map((binding) => ({
       id: binding.id,
-      hostname: binding.domain,
+      hostname: binding.host,
+      bindingKind: binding.bindingKind,
       status: binding.status,
-      verificationStatus: verificationStatusFor(binding.status),
-      active: binding.status === "active",
-      lastCheckedAt: binding.lastCheckedAt,
-      lastError: lastErrorFor(binding),
-      verificationReason: verificationReasonFor(binding),
-      dnsInstructions: mapDnsInstructions(binding),
-      diagnostics: {
-        lastDomainCheck: binding.lastCheckedAt,
-        lastVerificationResult: binding.status,
-        verificationDiagnostics: diagnosticsFor(binding),
-      },
+      active: binding.status === "ACTIVE",
+      source: "runtime_host_binding",
+      createdAt: binding.createdAt,
+      updatedAt: binding.updatedAt,
     })),
+    customDomains,
+    domains: customDomains,
   };
 }

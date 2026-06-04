@@ -26,9 +26,11 @@ import {
   getRuntimeSiteResolutionBinding,
   getSiteVersion,
   listDomainHostBindingsForSite,
+  listHostBindingsForSite,
   listPreviouslyPublishedVersions,
   resolveRuntimeHostingOperationsSiteIdentity,
   type RuntimeDomainHostBinding,
+  type RuntimeHostBinding,
   type RuntimeHostingOperationsSiteIdentity,
   type RuntimeSiteResolutionBinding,
 } from "@/gnr8/runtime/runtime-store";
@@ -100,6 +102,35 @@ export type HostingOperationsReadModel = {
       isActive: boolean;
     }>;
   };
+  workingDomains: Array<{
+    id: string;
+    hostname: string;
+    bindingKind: RuntimeHostBinding["bindingKind"];
+    status: RuntimeHostBinding["status"];
+    active: boolean;
+    source: "runtime_host_binding";
+    createdAt: string;
+    updatedAt: string;
+  }>;
+  customDomains: Array<{
+    id: string;
+    hostname: string;
+    status: RuntimeDomainHostBinding["status"];
+    verified: boolean;
+    active: boolean;
+    source: "runtime_domain_host_binding";
+    lastCheckedAt: string | null;
+    siteVersionId: string;
+    verificationType: RuntimeDomainHostBinding["verificationType"];
+    verificationHost: string | null;
+    dnsRecordType: RuntimeDomainHostBinding["dnsRecordType"];
+    dnsRecordHost: string | null;
+    dnsRecordValue: string | null;
+    dnsRecordPurpose: RuntimeDomainHostBinding["dnsRecordPurpose"];
+    dnsInstructions: RuntimeDomainHostBinding["dnsInstructions"];
+    createdAt: string;
+    updatedAt: string;
+  }>;
   domains: Array<{
     id: string;
     host: string;
@@ -161,6 +192,7 @@ export type HostingOperationsReadModelDependencies = {
   getRuntimeSiteResolutionBinding: typeof getRuntimeSiteResolutionBinding;
   getRuntimeSiteDomainReadinessBinding: typeof getRuntimeSiteDomainReadinessBinding;
   listDomainHostBindingsForSite: typeof listDomainHostBindingsForSite;
+  listHostBindingsForSite: typeof listHostBindingsForSite;
   listPreviouslyPublishedVersions: typeof listPreviouslyPublishedVersions;
   getSiteVersion: typeof getSiteVersion;
   getArtifactById: typeof getArtifactById;
@@ -177,6 +209,7 @@ const DEFAULT_DEPS: HostingOperationsReadModelDependencies = {
   getRuntimeSiteResolutionBinding,
   getRuntimeSiteDomainReadinessBinding,
   listDomainHostBindingsForSite,
+  listHostBindingsForSite,
   listPreviouslyPublishedVersions,
   getSiteVersion,
   getArtifactById,
@@ -390,6 +423,8 @@ export async function getHostingOperationsReadModel(
         lastPublish: null,
         history: [],
       },
+      workingDomains: [],
+      customDomains: [],
       domains: [],
       readiness: {
         state: "blocked",
@@ -403,7 +438,7 @@ export async function getHostingOperationsReadModel(
         domainReadiness: null,
         siteFallbackBlockers: ["hosting_operations_site_not_found"],
       }),
-      domainOperations: createHostingDomainOperationsReadModel({ domains: [] }),
+      domainOperations: createHostingDomainOperationsReadModel({ domains: [], workingDomains: [] }),
       assets: {
         artifactId: null,
         artifactType: "none",
@@ -435,10 +470,11 @@ export async function getHostingOperationsReadModel(
     };
   }
 
-  const [binding, domainBinding, domainRows, activePointer, rollbackRefs] = await Promise.all([
+  const [binding, domainBinding, domainRows, workingDomainRows, activePointer, rollbackRefs] = await Promise.all([
     resolvedDeps.getRuntimeSiteResolutionBinding(runtimeSiteId),
     resolvedDeps.getRuntimeSiteDomainReadinessBinding(runtimeSiteId),
     resolvedDeps.listDomainHostBindingsForSite({ siteId: runtimeSiteId }),
+    resolvedDeps.listHostBindingsForSite(runtimeSiteId),
     resolvedDeps.getActivePointerForSite(runtimeSiteId),
     resolvedDeps.listPreviouslyPublishedVersions(runtimeSiteId),
   ]);
@@ -517,6 +553,36 @@ export async function getHostingOperationsReadModel(
   ]);
   const latestFailures = uniqueSorted([...assets.diagnostics.failures, ...assets.diagnostics.codes.filter((code) => code.toLowerCase().includes("fail"))]);
 
+  const workingDomains = workingDomainRows.map((bindingRow) => ({
+    id: bindingRow.id,
+    hostname: bindingRow.host,
+    bindingKind: bindingRow.bindingKind,
+    status: bindingRow.status,
+    active: bindingRow.status === "ACTIVE",
+    source: "runtime_host_binding" as const,
+    createdAt: bindingRow.createdAt,
+    updatedAt: bindingRow.updatedAt,
+  }));
+  const customDomains = domainRows.map((bindingRow) => ({
+    id: bindingRow.id,
+    hostname: bindingRow.domain,
+    status: bindingRow.status,
+    verified: bindingRow.status === "active",
+    active: bindingRow.status === "active",
+    source: "runtime_domain_host_binding" as const,
+    lastCheckedAt: bindingRow.lastCheckedAt,
+    siteVersionId: bindingRow.siteVersionId,
+    verificationType: bindingRow.verificationType,
+    verificationHost: bindingRow.verificationHost,
+    dnsRecordType: bindingRow.dnsRecordType,
+    dnsRecordHost: bindingRow.dnsRecordHost,
+    dnsRecordValue: bindingRow.dnsRecordValue,
+    dnsRecordPurpose: bindingRow.dnsRecordPurpose,
+    dnsInstructions: bindingRow.dnsInstructions,
+    createdAt: bindingRow.createdAt,
+    updatedAt: bindingRow.updatedAt,
+  }));
+
   return {
     site: {
       siteId: requestedSiteId,
@@ -534,6 +600,8 @@ export async function getHostingOperationsReadModel(
       resolution,
     },
     publish,
+    workingDomains,
+    customDomains,
     domains: domainRows.map((bindingRow) => ({
       id: bindingRow.id,
       host: bindingRow.domain,
@@ -553,7 +621,7 @@ export async function getHostingOperationsReadModel(
     })),
     readiness: combineReadiness({ siteReadiness, domainReadiness }),
     readinessDrilldown: createHostingReadinessDrilldown({ siteReadiness, domainReadiness }),
-    domainOperations: createHostingDomainOperationsReadModel({ domains: domainRows }),
+    domainOperations: createHostingDomainOperationsReadModel({ domains: domainRows, workingDomains: workingDomainRows }),
     assets,
     diagnostics: {
       latestRuntimeDiagnostics: {

@@ -65,6 +65,9 @@ test("hosting readiness drilldown: warnings surfaced with deterministic domain r
     drilldown.domains.warnings.map((finding) => finding.code),
     ["missing_custom_domain", "missing_active_domain_binding", "missing_internal_host"],
   );
-  assert.equal(drilldown.domains.warnings[0]?.suggestedRemediation, "Attach and verify a custom domain.");
+  assert.equal(
+    drilldown.domains.warnings[0]?.suggestedRemediation,
+    "The site is reachable through its internal working domain, but no external customer domain is attached.",
+  );
   assert.equal(drilldown.domains.warnings[1]?.suggestedRemediation, "Verify domain binding activation.");
 });

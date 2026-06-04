@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { createHostingDomainOperationsReadModel } from "@/gnr8/runtime/hosting-operations/hosting-domain-operations-read-model";
-import type { RuntimeDomainHostBinding } from "@/gnr8/runtime/runtime-store";
+import type { RuntimeDomainHostBinding, RuntimeHostBinding } from "@/gnr8/runtime/runtime-store";
 
 function domain(input?: Partial<RuntimeDomainHostBinding>): RuntimeDomainHostBinding {
   return {
@@ -43,10 +43,40 @@ function domain(input?: Partial<RuntimeDomainHostBinding>): RuntimeDomainHostBin
   };
 }
 
+function workingDomain(input?: Partial<RuntimeHostBinding>): RuntimeHostBinding {
+  return {
+    id: "host_1",
+    siteId: "site_1",
+    host: "maver.app.pasadenagenerator.com",
+    status: "ACTIVE",
+    bindingKind: "shadow",
+    createdAt: "2026-06-01T09:00:00.000Z",
+    updatedAt: "2026-06-01T10:05:00.000Z",
+    ...input,
+  };
+}
+
+test("hosting domain operations read model: working domains load separately from custom domains", () => {
+  const model = createHostingDomainOperationsReadModel({
+    workingDomains: [workingDomain()],
+    domains: [],
+  });
+
+  assert.equal(model.workingDomains[0]?.hostname, "maver.app.pasadenagenerator.com");
+  assert.equal(model.workingDomains[0]?.bindingKind, "shadow");
+  assert.equal(model.workingDomains[0]?.status, "ACTIVE");
+  assert.equal(model.workingDomains[0]?.active, true);
+  assert.equal(model.workingDomains[0]?.source, "runtime_host_binding");
+  assert.equal(model.customDomains.length, 0);
+  assert.equal(model.domains.length, 0);
+});
+
 test("hosting domain operations read model: domain metadata and verification status load", () => {
   const model = createHostingDomainOperationsReadModel({ domains: [domain()] });
 
   assert.equal(model.domains[0]?.hostname, "www.example.com");
+  assert.equal(model.domains[0]?.source, "runtime_domain_host_binding");
+  assert.equal(model.customDomains[0]?.hostname, "www.example.com");
   assert.equal(model.domains[0]?.status, "verifying");
   assert.equal(model.domains[0]?.verificationStatus, "verifying");
   assert.equal(model.domains[0]?.active, false);

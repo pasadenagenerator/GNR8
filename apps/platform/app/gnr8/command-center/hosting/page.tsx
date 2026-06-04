@@ -44,7 +44,7 @@ export default async function CommandCenterHostingPage() {
                   <th style={{ padding: "8px 6px" }}>Site</th>
                   <th style={{ padding: "8px 6px" }}>Status</th>
                   <th style={{ padding: "8px 6px" }}>Active Version</th>
-                  <th style={{ padding: "8px 6px" }}>Domain</th>
+                  <th style={{ padding: "8px 6px" }}>Working Domain</th>
                   <th style={{ padding: "8px 6px" }}>Latest Runtime State</th>
                   <th style={{ padding: "8px 6px" }}>Open</th>
                 </tr>

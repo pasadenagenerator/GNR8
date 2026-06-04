@@ -139,53 +139,79 @@ export default async function CommandCenterHostingSitePage(props: {
 
       {section(
         "Domain Operations",
-        model.domainOperations.domains.length === 0 ? (
-          <p style={{ margin: 0, fontSize: 14, color: "#475569" }}>No domains are attached.</p>
-        ) : (
-          <div style={{ display: "grid", gap: 14 }}>
-            {model.domainOperations.domains.map((domain) => (
-              <article key={domain.id} style={{ border: "1px solid #e5e7eb", borderRadius: 8, padding: 12, display: "grid", gap: 12 }}>
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: 10 }}>
-                  {metric("Hostname", domain.hostname)}
-                  {metric("Status", domain.status)}
-                  {metric("Active", domain.active ? "yes" : "no")}
-                  {metric("Last Checked", domain.lastCheckedAt)}
-                  {metric("Last Error", domain.lastError)}
-                </div>
-                <div style={{ display: "grid", gap: 8 }}>
-                  <h3 style={{ margin: 0, fontSize: 15, color: "#0f172a" }}>DNS Instructions</h3>
-                  {domain.dnsInstructions.length === 0 ? (
-                    <p style={{ margin: 0, fontSize: 13, color: "#475569" }}>No DNS instructions are persisted.</p>
-                  ) : (
-                    <div style={{ overflowX: "auto" }}>
-                      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
-                        <thead>
-                          <tr style={{ textAlign: "left", borderBottom: "1px solid #e5e7eb", color: "#475569" }}>
-                            <th style={{ padding: "8px 6px" }}>Type</th>
-                            <th style={{ padding: "8px 6px" }}>Host</th>
-                            <th style={{ padding: "8px 6px" }}>Value</th>
-                            <th style={{ padding: "8px 6px" }}>Expected Status</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {domain.dnsInstructions.map((instruction) => (
-                            <tr key={`${instruction.recordType}-${instruction.host}-${instruction.value}`} style={{ borderBottom: "1px solid #f1f5f9" }}>
-                              <td style={{ padding: "9px 6px", fontWeight: 700 }}>{instruction.recordType}</td>
-                              <td style={{ padding: "9px 6px", fontFamily: "monospace" }}>{instruction.host}</td>
-                              <td style={{ padding: "9px 6px", fontFamily: "monospace", wordBreak: "break-word" }}>{instruction.value}</td>
-                              <td style={{ padding: "9px 6px" }}>{instruction.expectedStatus}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
+        <div style={{ display: "grid", gap: 16 }}>
+          <div style={{ display: "grid", gap: 8 }}>
+            <h3 style={{ margin: 0, fontSize: 15, color: "#0f172a" }}>Internal / Working Domains</h3>
+            {model.domainOperations.workingDomains.length === 0 ? (
+              <p style={{ margin: 0, fontSize: 14, color: "#475569" }}>No internal working domain is attached.</p>
+            ) : (
+              <div style={{ display: "grid", gap: 10 }}>
+                {model.domainOperations.workingDomains.map((domain) => (
+                  <article key={domain.id} style={{ border: "1px solid #e5e7eb", borderRadius: 8, padding: 12 }}>
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: 10 }}>
+                      {metric("Hostname", domain.hostname)}
+                      {metric("Binding Kind", domain.bindingKind)}
+                      {metric("Status", domain.status)}
+                      {metric("Active", domain.active ? "yes" : "no")}
+                      {metric("Source", domain.source)}
                     </div>
-                  )}
-                </div>
-                <HostingDomainRecheckButton siteId={model.site.requestedSiteId} domainId={domain.id} />
-              </article>
-            ))}
+                  </article>
+                ))}
+              </div>
+            )}
           </div>
-        ),
+
+          <div style={{ display: "grid", gap: 8 }}>
+            <h3 style={{ margin: 0, fontSize: 15, color: "#0f172a" }}>External / Custom Domains</h3>
+            {model.domainOperations.customDomains.length === 0 ? (
+              <p style={{ margin: 0, fontSize: 14, color: "#475569" }}>No external custom domain is attached.</p>
+            ) : (
+              <div style={{ display: "grid", gap: 14 }}>
+                {model.domainOperations.customDomains.map((domain) => (
+                  <article key={domain.id} style={{ border: "1px solid #e5e7eb", borderRadius: 8, padding: 12, display: "grid", gap: 12 }}>
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: 10 }}>
+                      {metric("Hostname", domain.hostname)}
+                      {metric("Status", domain.status)}
+                      {metric("Active", domain.active ? "yes" : "no")}
+                      {metric("Last Checked", domain.lastCheckedAt)}
+                      {metric("Last Error", domain.lastError)}
+                    </div>
+                    <div style={{ display: "grid", gap: 8 }}>
+                      <h3 style={{ margin: 0, fontSize: 15, color: "#0f172a" }}>DNS Instructions</h3>
+                      {domain.dnsInstructions.length === 0 ? (
+                        <p style={{ margin: 0, fontSize: 13, color: "#475569" }}>No DNS instructions are persisted.</p>
+                      ) : (
+                        <div style={{ overflowX: "auto" }}>
+                          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+                            <thead>
+                              <tr style={{ textAlign: "left", borderBottom: "1px solid #e5e7eb", color: "#475569" }}>
+                                <th style={{ padding: "8px 6px" }}>Type</th>
+                                <th style={{ padding: "8px 6px" }}>Host</th>
+                                <th style={{ padding: "8px 6px" }}>Value</th>
+                                <th style={{ padding: "8px 6px" }}>Expected Status</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {domain.dnsInstructions.map((instruction) => (
+                                <tr key={`${instruction.recordType}-${instruction.host}-${instruction.value}`} style={{ borderBottom: "1px solid #f1f5f9" }}>
+                                  <td style={{ padding: "9px 6px", fontWeight: 700 }}>{instruction.recordType}</td>
+                                  <td style={{ padding: "9px 6px", fontFamily: "monospace" }}>{instruction.host}</td>
+                                  <td style={{ padding: "9px 6px", fontFamily: "monospace", wordBreak: "break-word" }}>{instruction.value}</td>
+                                  <td style={{ padding: "9px 6px" }}>{instruction.expectedStatus}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                    </div>
+                    <HostingDomainRecheckButton siteId={model.site.requestedSiteId} domainId={domain.id} />
+                  </article>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>,
       )}
 
       {section(

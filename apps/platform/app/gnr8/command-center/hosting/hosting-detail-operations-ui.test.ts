@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 const DETAIL_PAGE_FILE = new URL("./[siteId]/page.tsx", import.meta.url);
+const OVERVIEW_PAGE_FILE = new URL("./page.tsx", import.meta.url);
 const RECHECK_BUTTON_FILE = new URL("./[siteId]/hosting-domain-recheck-button.tsx", import.meta.url);
 
 test("hosting detail operations UI: drilldown renders", async () => {
@@ -19,6 +20,13 @@ test("hosting detail operations UI: domain section and dns instructions render",
   const source = await readFile(DETAIL_PAGE_FILE, "utf8");
 
   assert.equal(source.includes("Domain Operations"), true);
+  assert.equal(source.includes("Internal / Working Domains"), true);
+  assert.equal(source.includes("External / Custom Domains"), true);
+  assert.equal(source.includes("No external custom domain is attached."), true);
+  assert.equal(source.includes("No domains are attached."), false);
+  assert.equal(source.includes("model.domainOperations.workingDomains"), true);
+  assert.equal(source.includes("model.domainOperations.customDomains"), true);
+  assert.equal(source.includes("Binding Kind"), true);
   assert.equal(source.includes("DNS Instructions"), true);
   assert.equal(source.includes("Expected Status"), true);
   assert.equal(source.includes("domain.dnsInstructions.map"), true);
@@ -40,4 +48,10 @@ test("hosting detail operations UI: diagnostics render existing domain evidence"
   assert.equal(source.includes("Last Domain Check"), true);
   assert.equal(source.includes("Last Verification Result"), true);
   assert.equal(source.includes("Verification Diagnostics"), true);
+});
+
+test("hosting overview UI: domain column identifies working domain", async () => {
+  const source = await readFile(OVERVIEW_PAGE_FILE, "utf8");
+
+  assert.equal(source.includes("Working Domain"), true);
 });

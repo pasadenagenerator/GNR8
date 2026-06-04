@@ -77,7 +77,7 @@ const DOMAIN_FINDINGS: Record<string, FindingDefinition> = {
   missing_custom_domain: {
     description: "No custom domain is attached.",
     affectedObject: "custom_domain",
-    suggestedRemediation: "Attach and verify a custom domain.",
+    suggestedRemediation: "The site is reachable through its internal working domain, but no external customer domain is attached.",
   },
   missing_active_domain_binding: {
     description: "No active domain binding is available.",
