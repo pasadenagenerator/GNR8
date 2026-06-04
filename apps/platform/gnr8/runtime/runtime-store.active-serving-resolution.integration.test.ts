@@ -17,6 +17,7 @@ import {
 import { getSuperadminPool } from "@/src/superadmin/db";
 
 const TEST_SITE_PREFIX = "test_active_serving_resolver";
+type RuntimeArtifactGovernance = Parameters<typeof createArtifact>[0]["artifactGovernance"];
 
 function assertTestSiteId(siteId: string): void {
   assert.match(siteId, /^test_active_serving_resolver_[a-z0-9_]+$/);
@@ -54,6 +55,7 @@ async function seedVersionArtifacts(input: {
   siteId: string;
   siteVersionId: string;
   label: string;
+  artifactGovernance?: RuntimeArtifactGovernance;
 }): Promise<{ artifactId: string }> {
   const artifact = await createArtifact({
     siteId: input.siteId,
@@ -66,13 +68,13 @@ async function seedVersionArtifacts(input: {
     manifest: { label: input.label },
     publishStage: "production",
     shadowRestricted: false,
-    artifactGovernance: {
+    artifactGovernance: input.artifactGovernance ?? {
       pageGateState: [],
       pageRolloutPolicyState: [],
-      pageEnforcementState: { shadow: [], canary: [], production: [] },
+      pageEnforcementState: { shadow: ["ALLOW"], canary: ["ALLOW"], production: ["ALLOW"] },
       siteGateState: "passed",
       siteRolloutPolicyState: "production_ready",
-      siteEnforcementState: { shadow: "passed", canary: "passed", production: "passed" },
+      siteEnforcementState: { shadow: "ALLOW", canary: "ALLOW", production: "ALLOW" },
       publishStage: "production",
     },
   });
@@ -104,6 +106,18 @@ async function seedVersionArtifacts(input: {
     },
   });
   return artifact;
+}
+
+function artifactGovernanceDeniedForProduction(): RuntimeArtifactGovernance {
+  return {
+    pageGateState: [],
+    pageRolloutPolicyState: [],
+    pageEnforcementState: { shadow: ["ALLOW"], canary: ["ALLOW"], production: ["REVIEW_ONLY"] },
+    siteGateState: "passed",
+    siteRolloutPolicyState: "production_ready",
+    siteEnforcementState: { shadow: "ALLOW", canary: "ALLOW", production: "REVIEW_ONLY" },
+    publishStage: "production",
+  };
 }
 
 test("active serving resolver keeps internal and custom domains on the site active pointer", async (t) => {
@@ -188,10 +202,16 @@ test("active serving resolver keeps internal and custom domains on the site acti
       host: customDomain,
       path: "/",
     });
-    assert.equal(internalArtifactAfterRollback.outcome, "artifact_hit");
-    assert.equal(customArtifactAfterRollback.outcome, "artifact_hit");
+    if (internalArtifactAfterRollback.outcome !== "artifact_hit") {
+      assert.fail(`expected internal artifact_hit, got ${internalArtifactAfterRollback.outcome}`);
+    }
+    if (customArtifactAfterRollback.outcome !== "artifact_hit") {
+      assert.fail(`expected custom artifact_hit, got ${customArtifactAfterRollback.outcome}`);
+    }
     assert.equal(internalArtifactAfterRollback.activeSiteVersionId, v1);
     assert.equal(customArtifactAfterRollback.activeSiteVersionId, v1);
+    assert.match(internalArtifactAfterRollback.html, /artifact:v1/);
+    assert.match(customArtifactAfterRollback.html, /artifact:v1/);
     assert.equal(customArtifactAfterRollback.legacyDomainSiteVersionId, v2);
 
     await switchActivePointer({ siteId, siteVersionId: v2, artifactId: artifactV2.artifactId });
@@ -209,6 +229,73 @@ test("active serving resolver keeps internal and custom domains on the site acti
     });
     assert.equal(customAfterBindingActivationFailureShape.outcome, "raw_template_hit");
     assert.equal(customAfterBindingActivationFailureShape.siteVersionId, v1);
+  } finally {
+    await cleanRuntimeSite(siteId);
+  }
+});
+
+test("raw-template success remains distinct from artifact fallback diagnostics", async (t) => {
+  if (!process.env.DATABASE_URL) {
+    t.skip("DATABASE_URL is required for runtime-store active serving integration coverage");
+    return;
+  }
+
+  const runId = randomUUID().replaceAll("-", "_").slice(0, 16);
+  const siteId = `${TEST_SITE_PREFIX}_${runId}`;
+  const sourceHost = `${siteId}.source.example.test`;
+  const customDomain = `${siteId}.custom.example.test`;
+  const siteVersionId = randomUUID();
+
+  assertTestSiteId(siteId);
+  await ensureRuntimeTables();
+  await cleanRuntimeSite(siteId);
+
+  try {
+    await getSuperadminPool().query(
+      `
+      insert into public.gnr8_runtime_sites (id, source_url, source_host)
+      values ($1::text, $2::text, $3::text)
+      `,
+      [siteId, `https://${sourceHost}/`, sourceHost],
+    );
+    await seedSiteVersion({ siteId, siteVersionId, versionNo: 1, state: "PUBLISHED" });
+    const artifact = await seedVersionArtifacts({
+      siteId,
+      siteVersionId,
+      label: "raw-only",
+      artifactGovernance: artifactGovernanceDeniedForProduction(),
+    });
+    await switchActivePointer({ siteId, siteVersionId, artifactId: artifact.artifactId });
+    await upsertDomainHostBinding({
+      siteId,
+      siteVersionId,
+      domain: customDomain,
+      status: "active",
+      domainType: "subdomain",
+      dnsRecordType: "cname",
+      dnsRecordHost: customDomain,
+      dnsRecordValue: "cname.vercel-dns.com",
+      dnsRecordPurpose: "routing",
+    });
+
+    const rawResolution = await resolveRawTemplateSiteForDomainAndPath({ host: customDomain, path: "/" });
+    if (rawResolution.outcome !== "raw_template_hit") {
+      assert.fail(`expected raw_template_hit, got ${rawResolution.outcome}`);
+    }
+    assert.equal(rawResolution.siteVersionId, siteVersionId);
+    assert.equal(rawResolution.activeArtifactId, artifact.artifactId);
+    assert.match(rawResolution.html, /raw:raw-only/);
+
+    const artifactResolution = await resolveActiveArtifactForHostAndPathWithDiagnostics({
+      host: customDomain,
+      path: "/",
+    });
+    if (artifactResolution.outcome !== "artifact_miss") {
+      assert.fail(`expected artifact_miss, got ${artifactResolution.outcome}`);
+    }
+    assert.equal(artifactResolution.reasonCode, "artifact_stage_denied");
+    assert.equal(artifactResolution.activeSiteVersionId, siteVersionId);
+    assert.equal(artifactResolution.artifactId, artifact.artifactId);
   } finally {
     await cleanRuntimeSite(siteId);
   }
