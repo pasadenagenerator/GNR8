@@ -6,9 +6,9 @@ Track migration-first MVP runtime progress separately from Website OS work.
 
 ## Current Status
 
-Migration Runtime Foundation is completed through Phase 4B.
+Migration Runtime + Command Center MVP is operational and smoke-tested through Phase 5A.
 
-Phase 4B adds durable batch execution observability. Execution remains operator-driven. Queue/worker orchestration and unattended execution do not exist yet.
+Phase 5A adds Command Center migration batch list/detail UI, batch summary, diagnostics, failure reporting, timeline visibility, and operator run/resume controls. Execution remains operator-driven. Queue/worker orchestration and unattended execution do not exist yet.
 
 Website OS runtime expansion remains paused.
 
@@ -214,23 +214,71 @@ Remaining gaps:
 - leasing/heartbeat
 - advanced operational metrics
 
+### Phase 5A — Command Center Integration MVP
+
+Goal:
+- Integrate durable migration batches and batch observability into Command Center operator surfaces.
+
+Completed:
+- migration batch list page
+- migration batch detail page
+- batch summary
+- diagnostics
+- failure surface
+- timeline surface
+- run control
+- resume control
+- service layer
+- view model layer
+
+Production smoke-test routes:
+- `/gnr8/command-center/migration-batches`
+- `/gnr8/command-center/migration-batches/migration_batch_smoke_test_demo_v1`
+
+Production smoke-test observations:
+- batch loaded successfully
+- summary rendered
+- diagnostics rendered
+- failures rendered
+- timeline rendered
+- completed jobs rendered
+- pending jobs rendered
+- failed jobs rendered
+
+Verification:
+- automated tests passed
+- production smoke test passed
+- DB connection pressure fix validated
+- EMAXCONNSESSION issue resolved through composed server read path
+
+Execution model:
+- Execution remains operator-driven.
+- Queue/worker orchestration is not implemented.
+- Retry scheduling is not implemented.
+- Unattended orchestration is not implemented.
+
+Remaining gaps:
+- job detail page
+- stage diagnostics explorer
+- advanced batch filters
+- hosting hardening
+- billing foundation
+
 ## Current Remaining Work
 
-### Phase 5 — Command Center Integration
+### Near-term
 
-Expected scope:
-- integrate batch APIs into Command Center
-- integrate observability APIs
-- operator batch dashboard
-- batch detail views
-- execution timeline views
-- failure drilldown views
-- retry/resume controls
+- Hosting Hardening Reality Check
+- Billing Reality Check
+
+### Optional Runtime UX
+
+- Job detail page
+- Stage diagnostics explorer
+- Advanced batch filters
 
 ### Later
 
-- hosting hardening
-- billing foundation
 - DNS/domain onboarding hardening
 
 ## Explicitly Paused

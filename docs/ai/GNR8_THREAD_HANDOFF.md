@@ -9,7 +9,11 @@ Website OS branch status:
 - Do not continue Website OS runtime expansion unless explicitly requested.
 
 Latest completed milestone:
-- Phase 4B — Batch Execution Observability.
+- Phase 5A — Command Center Integration MVP.
+
+Production smoke-test:
+- completed successfully.
+- verified batch list, batch detail, timeline, diagnostics, failures, and run/resume controls.
 
 Dedicated progress doc:
 - `docs/ai/MIGRATION_RUNTIME_PROGRESS.md`
@@ -25,6 +29,7 @@ Current completed chain:
 - Durable Batch Migration Model
 - Operator Driven Batch Execution
 - Batch Execution Observability
+- Command Center Integration MVP
 
 Latest completed migration capabilities:
 - `MigrationBatchExecutor`
@@ -37,7 +42,14 @@ Latest completed migration capabilities:
 - observability API
 - failure reporting
 - diagnostics surfaces
+- Command Center migration batch section
+- migration batch list page
+- migration batch detail page
+- batch summary surface
+- batch timeline surface
+- run/resume controls
 - real Postgres verification
+- production smoke-test verification
 
 Completed migration-first chain:
 - Import
@@ -47,14 +59,15 @@ Completed migration-first chain:
 - Durable Batches
 - Batch Execution
 - Batch Execution Observability
+- Command Center Integration
 
 Current critical path:
-- Phase 5 — Command Center Integration Reality Check
-- Hosting hardening
+- Hosting Hardening Reality Check
+- Phase 5B — Job Detail + Stage Diagnostics UI (optional)
 - Billing
 
 Next recommended milestone:
-- Phase 5 — Command Center Integration Reality Check.
+- Hosting Hardening Reality Check.
 
 Explicit exclusions still in force:
 - no Website OS runtime expansion
@@ -85,8 +98,9 @@ Dedicated pause note:
 - Future continuation point: Execution Artifact Runtime family.
 - Execution Artifact Runtime family is not currently part of the migration-critical path.
 Next migration platform milestone:
-- Phase 5 — Command Center Integration Reality Check.
-- Phase 4B completed durable batch execution observability; execution remains operator-driven and queue/worker orchestration does not exist yet.
+- Hosting Hardening Reality Check.
+- Optional: Phase 5B — Job Detail + Stage Diagnostics UI.
+- Phase 5A completed Command Center integration for migration batches; execution remains operator-driven and queue/worker orchestration does not exist yet.
 Current completed runtime chain:
 - `Proposal Approval Queue → Execution Readiness Execution Package → Execution Contract Execution Contract Readiness → Execution Bundle Execution Bundle Readiness → Execution Authorization Execution Authorization Readiness Execution Authorization Package → Execution Intent Execution Intent Readiness → Execution Plan Execution Plan Readiness → Execution Candidate Execution Candidate Readiness Execution Candidate Package → Execution Candidate Authorization Execution Candidate Authorization Readiness Execution Candidate Authorization Package`
 Candidate Authorization Family completed. Governance graph expanded. Execution remains blocked. Website OS remains read-only.

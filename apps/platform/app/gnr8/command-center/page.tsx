@@ -74,6 +74,16 @@ export default async function CommandCenterOverviewPage() {
           </article>
 
           <article style={{ border: "1px solid #dbe6f1", borderRadius: 10, padding: 12 }}>
+            <h3 style={{ marginTop: 0, marginBottom: 8, fontSize: 16 }}>Hosting</h3>
+            <p style={{ margin: 0, fontSize: 13, color: "#475569" }}>
+              Active runtime pointers, domains, readiness, assets, diagnostics, and rollback candidates.
+            </p>
+            <Link href="/gnr8/command-center/hosting" style={{ display: "inline-flex", marginTop: 10, fontSize: 13 }}>
+              Open Hosting
+            </Link>
+          </article>
+
+          <article style={{ border: "1px solid #dbe6f1", borderRadius: 10, padding: 12 }}>
             <h3 style={{ marginTop: 0, marginBottom: 8, fontSize: 16 }}>Agencies</h3>
             <p style={{ margin: 0, fontSize: 13, color: "#475569" }}>
               Agency provisioning and admin-view action entry points.

@@ -15,9 +15,10 @@ Completed migration-first chain:
 - Durable Batches
 - Batch Execution
 - Batch Execution Observability
+- Command Center Integration
 
-Migration Runtime Foundation is completed through Phase 4B.
-Phase 4B — Batch Execution Observability is complete.
+Migration Runtime + Command Center MVP is operational and smoke-tested.
+Phase 5A — Command Center Integration MVP is complete.
 
 Completed capabilities:
 - CMS slot materialization
@@ -34,16 +35,34 @@ Completed capabilities:
 - batch execution timeline model
 - failure reporting
 - diagnostics surfaces
+- Command Center migration batch section
+- migration batch list page
+- migration batch detail page
+- batch summary surface
+- batch diagnostics surface
+- batch failure surface
+- batch timeline surface
+- Run Batch control
+- Resume Batch control
+- migration batch service layer
+- migration batch view model layer
 
 Current migration runtime capabilities:
 - durable jobs
 - durable batches
 - batch execution
-- execution events
-- execution observability
-- execution timeline
-- failure reporting
-- diagnostics surfaces
+- batch observability
+- batch diagnostics
+- batch failure reporting
+- Command Center integration
+- operator batch controls
+
+Production smoke test:
+- `/gnr8/command-center/migration-batches` loaded successfully.
+- `/gnr8/command-center/migration-batches/migration_batch_smoke_test_demo_v1` loaded successfully.
+- summary, diagnostics, failures, timeline, completed jobs, pending jobs, and failed jobs rendered.
+- DB connection pressure fix validated.
+- EMAXCONNSESSION issue resolved through composed server read path.
 
 Execution boundary:
 - execution remains operator-driven
@@ -51,8 +70,8 @@ Execution boundary:
 - unattended orchestration does not exist yet
 
 Remaining critical path:
-- Phase 5: Command Center Integration
-- Hosting hardening
+- Hosting Hardening Reality Check
+- Phase 5B — Job Detail + Stage Diagnostics UI (optional)
 - Billing
 
 ## Bootstrap Runtime State (2026-06-03)
@@ -114,7 +133,7 @@ Migration-first reprioritization:
 - The Execution Artifact Runtime family is not currently part of the migration-critical path.
 
 Current migration platform continuation:
-- Phase 5: Command Center Integration.
+- Hosting Hardening Reality Check.
 - Website OS runtime expansion remains paused.
 - Execution Artifact Runtime family remains outside the migration-critical path.
 
@@ -189,7 +208,7 @@ Future continuation:
 - Not currently part of the migration-critical path.
 
 Current migration platform continuation:
-- Phase 5: Command Center Integration.
+- Hosting Hardening Reality Check.
 - Website OS runtime expansion remains paused.
 
 ## Execution Candidate Runtime Family v1 Milestone (2026-06-03)
