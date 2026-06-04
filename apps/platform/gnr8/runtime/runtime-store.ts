@@ -1808,6 +1808,113 @@ export async function getRuntimeSiteResolutionBinding(siteId: string): Promise<R
   }
 }
 
+export type RuntimeHostingOperationsSiteIdentity =
+  | {
+      requestedSiteId: string;
+      runtimeSiteId: string;
+      lookupMode: "runtime_site_id" | "ownership_site_id";
+      expectedIdentifier: "ownership_site_id_or_runtime_site_id";
+    }
+  | {
+      requestedSiteId: string;
+      runtimeSiteId: null;
+      lookupMode: "not_found";
+      expectedIdentifier: "ownership_site_id_or_runtime_site_id";
+    };
+
+export async function resolveRuntimeHostingOperationsSiteIdentity(
+  siteId: string,
+): Promise<RuntimeHostingOperationsSiteIdentity> {
+  await ensureRuntimeTables();
+  const requestedSiteId = String(siteId ?? "").trim();
+  if (!requestedSiteId) {
+    return {
+      requestedSiteId,
+      runtimeSiteId: null,
+      lookupMode: "not_found",
+      expectedIdentifier: "ownership_site_id_or_runtime_site_id",
+    };
+  }
+
+  const client = await getSuperadminPool().connect();
+  try {
+    const directSite = await client.query<{ runtime_site_id: string }>(
+      `
+      select id::text as runtime_site_id
+      from public.gnr8_runtime_sites
+      where id = $1::text
+      limit 1
+      `,
+      [requestedSiteId],
+    );
+    const directRow = directSite.rows[0];
+    if (directRow) {
+      return {
+        requestedSiteId,
+        runtimeSiteId: directRow.runtime_site_id,
+        lookupMode: "runtime_site_id",
+        expectedIdentifier: "ownership_site_id_or_runtime_site_id",
+      };
+    }
+
+    const ownershipColumn = await client.query<{ exists: boolean }>(
+      `
+      select exists (
+        select 1
+        from information_schema.columns
+        where table_schema = 'public'
+          and table_name = 'gnr8_runtime_site_versions'
+          and column_name = 'ownership_site_id'
+      ) as exists
+      `,
+    );
+
+    if (!ownershipColumn.rows[0]?.exists) {
+      return {
+        requestedSiteId,
+        runtimeSiteId: null,
+        lookupMode: "not_found",
+        expectedIdentifier: "ownership_site_id_or_runtime_site_id",
+      };
+    }
+
+    const ownershipSite = await client.query<{ runtime_site_id: string }>(
+      `
+      select site_id::text as runtime_site_id
+      from public.gnr8_runtime_site_versions
+      where ownership_site_id::text = $1::text
+      order by
+        case when state = 'PUBLISHED' then 0 else 1 end,
+        version_no desc,
+        updated_at desc,
+        created_at desc,
+        id::text desc
+      limit 1
+      `,
+      [requestedSiteId],
+    );
+
+    const row = ownershipSite.rows[0];
+    if (!row) {
+      return {
+        requestedSiteId,
+        runtimeSiteId: null,
+        lookupMode: "not_found",
+        expectedIdentifier: "ownership_site_id_or_runtime_site_id",
+      };
+    }
+
+    return {
+      requestedSiteId,
+      runtimeSiteId: row.runtime_site_id,
+      lookupMode: "ownership_site_id",
+      expectedIdentifier: "ownership_site_id_or_runtime_site_id",
+    };
+  } finally {
+    client.release();
+  }
+}
+
 export async function getRuntimeSiteDomainReadinessBinding(siteId: string): Promise<RuntimeSiteDomainReadinessBinding | null> {
   await ensureRuntimeTables();
   const client = await getSuperadminPool().connect();

@@ -41,6 +41,20 @@ export default async function CommandCenterHostingSitePage(props: {
       <section style={{ border: "1px solid #fecaca", borderRadius: 12, background: "#fff1f2", padding: 14 }}>
         <h1 style={{ marginTop: 0, marginBottom: 8, fontSize: 24 }}>Hosting Site Not Found</h1>
         <p style={{ marginTop: 0, color: "#7f1d1d" }}>{text(siteId)}</p>
+        <dl style={{ display: "grid", gap: 4, margin: "0 0 12px", color: "#7f1d1d", fontSize: 13 }}>
+          <div>
+            <dt style={{ display: "inline", fontWeight: 700 }}>requestedSiteId: </dt>
+            <dd style={{ display: "inline", margin: 0 }}>{text(model.site.requestedSiteId)}</dd>
+          </div>
+          <div>
+            <dt style={{ display: "inline", fontWeight: 700 }}>lookupMode: </dt>
+            <dd style={{ display: "inline", margin: 0 }}>{text(model.site.lookupMode)}</dd>
+          </div>
+          <div>
+            <dt style={{ display: "inline", fontWeight: 700 }}>available identifier type expected: </dt>
+            <dd style={{ display: "inline", margin: 0 }}>{text(model.site.expectedIdentifier)}</dd>
+          </div>
+        </dl>
         <Link href="/gnr8/command-center/hosting" style={{ color: "#1d4ed8" }}>
           Back to Hosting
         </Link>

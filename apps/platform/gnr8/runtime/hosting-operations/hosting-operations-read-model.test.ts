@@ -15,10 +15,12 @@ const activeVersionId = "11111111-1111-4111-8111-111111111111";
 const rollbackVersionId = "22222222-2222-4222-8222-222222222222";
 const activeArtifactId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const rollbackArtifactId = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+const overviewOwnershipSiteId = "91fb0854-9b84-4c4b-aff4-777043ab6451";
+const runtimeHostingSiteId = "runtime_site_91fb0854";
 
-function siteBinding(): RuntimeSiteResolutionBinding {
+function siteBinding(siteId = "site_1"): RuntimeSiteResolutionBinding {
   return {
-    siteId: "site_1",
+    siteId,
     canonicalSlug: "maver",
     activeSiteVersionId: activeVersionId,
     latestImportedSiteVersionId: activeVersionId,
@@ -43,11 +45,11 @@ function siteBinding(): RuntimeSiteResolutionBinding {
   };
 }
 
-function domainRows(): RuntimeDomainHostBinding[] {
+function domainRows(siteId = "site_1"): RuntimeDomainHostBinding[] {
   return [
     {
       id: "domain_1",
-      siteId: "site_1",
+      siteId,
       siteVersionId: activeVersionId,
       domain: "www.example.com",
       status: "active",
@@ -70,6 +72,7 @@ function domainRows(): RuntimeDomainHostBinding[] {
 
 function siteVersion(input: {
   id: string;
+  siteId?: string;
   versionNo: number;
   state: CanonicalSiteVersionSnapshot["state"];
   artifactId: string;
@@ -77,7 +80,7 @@ function siteVersion(input: {
 }): CanonicalSiteVersionSnapshot {
   return {
     id: input.id,
-    siteId: "site_1",
+    siteId: input.siteId ?? "site_1",
     versionNo: input.versionNo,
     state: input.state,
     source: "migration",
@@ -136,10 +139,10 @@ function siteVersion(input: {
   };
 }
 
-function runtimeArtifact(): RuntimeArtifact {
+function runtimeArtifact(siteId = "site_1"): RuntimeArtifact {
   return {
     id: activeArtifactId,
-    siteId: "site_1",
+    siteId,
     siteVersionId: activeVersionId,
     rendererCompatibilityVersion: "gnr8-renderer-v1",
     htmlByPath: { "/": "<html></html>", "/about": "<html></html>" },
@@ -162,42 +165,83 @@ function runtimeArtifact(): RuntimeArtifact {
   };
 }
 
-function deps(): Partial<HostingOperationsReadModelDependencies> {
+function deps(input: {
+  requestedSiteId?: string;
+  runtimeSiteId?: string | null;
+  lookupMode?: "runtime_site_id" | "ownership_site_id" | "not_found";
+  runtimeSiteIdsSeen?: string[];
+} = {}): Partial<HostingOperationsReadModelDependencies> {
+  const runtimeSiteId = input.runtimeSiteId === undefined ? input.requestedSiteId ?? "site_1" : input.runtimeSiteId;
+  const lookupMode = input.lookupMode ?? (runtimeSiteId ? "runtime_site_id" : "not_found");
+  const recordRuntimeSiteId = (siteId: string) => {
+    input.runtimeSiteIdsSeen?.push(siteId);
+  };
+
   return {
-    getRuntimeSiteResolutionBinding: async () => siteBinding(),
-    getRuntimeSiteDomainReadinessBinding: async () => ({
-      siteId: "site_1",
-      canonicalSlug: "maver",
-      primaryHost: "maver.source.test",
-      internalPreviewHost: "maver.preview.test",
-      customDomains: ["www.example.com"],
-      activeDomainBindingHost: "www.example.com",
-      domainBindingCandidates: [
-        {
-          host: "maver.preview.test",
-          source: "runtime_host_binding",
-          status: "ACTIVE",
-          isInternalHost: true,
-          isActive: true,
-        },
-        {
-          host: "www.example.com",
-          source: "runtime_domain_binding",
-          status: "active",
-          isInternalHost: false,
-          isActive: true,
-        },
-      ],
-    }),
-    listDomainHostBindingsForSite: async () => domainRows(),
-    listPreviouslyPublishedVersions: async () => [
-      { id: activeVersionId, artifactId: activeArtifactId },
-      { id: rollbackVersionId, artifactId: rollbackArtifactId },
-    ],
+    resolveRuntimeHostingOperationsSiteIdentity: async (siteId) => {
+      if (!runtimeSiteId) {
+        return {
+          requestedSiteId: siteId,
+          runtimeSiteId: null,
+          lookupMode: "not_found",
+          expectedIdentifier: "ownership_site_id_or_runtime_site_id",
+        };
+      }
+
+      return {
+        requestedSiteId: siteId,
+        runtimeSiteId,
+        lookupMode: lookupMode === "not_found" ? "runtime_site_id" : lookupMode,
+        expectedIdentifier: "ownership_site_id_or_runtime_site_id",
+      };
+    },
+    getRuntimeSiteResolutionBinding: async (siteId) => {
+      recordRuntimeSiteId(siteId);
+      return siteBinding(siteId);
+    },
+    getRuntimeSiteDomainReadinessBinding: async (siteId) => {
+      recordRuntimeSiteId(siteId);
+      return {
+        siteId,
+        canonicalSlug: "maver",
+        primaryHost: "maver.source.test",
+        internalPreviewHost: "maver.preview.test",
+        customDomains: ["www.example.com"],
+        activeDomainBindingHost: "www.example.com",
+        domainBindingCandidates: [
+          {
+            host: "maver.preview.test",
+            source: "runtime_host_binding",
+            status: "ACTIVE",
+            isInternalHost: true,
+            isActive: true,
+          },
+          {
+            host: "www.example.com",
+            source: "runtime_domain_binding",
+            status: "active",
+            isInternalHost: false,
+            isActive: true,
+          },
+        ],
+      };
+    },
+    listDomainHostBindingsForSite: async ({ siteId }) => {
+      recordRuntimeSiteId(siteId);
+      return domainRows(siteId);
+    },
+    listPreviouslyPublishedVersions: async (siteId) => {
+      recordRuntimeSiteId(siteId);
+      return [
+        { id: activeVersionId, artifactId: activeArtifactId },
+        { id: rollbackVersionId, artifactId: rollbackArtifactId },
+      ];
+    },
     getSiteVersion: async (siteVersionId) =>
       siteVersionId === activeVersionId
         ? siteVersion({
             id: activeVersionId,
+            siteId: runtimeSiteId ?? "site_1",
             versionNo: 2,
             state: "PUBLISHED",
             artifactId: activeArtifactId,
@@ -205,16 +249,17 @@ function deps(): Partial<HostingOperationsReadModelDependencies> {
           })
         : siteVersion({
             id: rollbackVersionId,
+            siteId: runtimeSiteId ?? "site_1",
             versionNo: 1,
             state: "ARCHIVED",
             artifactId: rollbackArtifactId,
             createdAt: "2026-05-30T10:00:00.000Z",
           }),
-    getArtifactById: async () => runtimeArtifact(),
+    getArtifactById: async () => runtimeArtifact(runtimeSiteId ?? "site_1"),
     getRawImportedSiteArtifact: async () => ({
       id: "raw_1",
       artifactType: "raw_imported_site",
-      siteId: "site_1",
+      siteId: runtimeSiteId ?? "site_1",
       siteVersionId: activeVersionId,
       entryHtmlPath: "index.html",
       assetBasePath: "assets",
@@ -232,7 +277,10 @@ function deps(): Partial<HostingOperationsReadModelDependencies> {
       createdAt: "2026-06-01T10:20:00.000Z",
     }),
     getRawTemplateSiteArtifact: async () => null,
-    getActivePointerForSite: async () => ({ siteVersionId: activeVersionId, artifactId: activeArtifactId }),
+    getActivePointerForSite: async (siteId) => {
+      recordRuntimeSiteId(siteId);
+      return { siteVersionId: activeVersionId, artifactId: activeArtifactId };
+    },
     createRuntimeSiteReadinessReport,
     createRuntimeDomainReadinessReport,
     resolveRuntimeSiteVersion,
@@ -242,11 +290,63 @@ function deps(): Partial<HostingOperationsReadModelDependencies> {
 test("hosting operations read model: resolves active version and artifact", async () => {
   const model = await getHostingOperationsReadModel("site_1", deps());
 
+  assert.equal(model.site.siteId, "site_1");
+  assert.equal(model.site.runtimeSiteId, "site_1");
+  assert.equal(model.site.lookupMode, "runtime_site_id");
   assert.equal(model.runtime.activeVersion?.id, activeVersionId);
   assert.equal(model.runtime.activeVersion?.versionNo, 2);
   assert.equal(model.runtime.activeArtifact?.id, activeArtifactId);
   assert.equal(model.runtime.activeArtifact?.artifactType, "runtime_artifact");
   assert.equal(model.runtime.activePointer?.artifactId, activeArtifactId);
+});
+
+test("hosting operations read model: opens the exact ownership site id emitted by the overview", async () => {
+  const runtimeSiteIdsSeen: string[] = [];
+
+  const model = await getHostingOperationsReadModel(
+    overviewOwnershipSiteId,
+    deps({
+      requestedSiteId: overviewOwnershipSiteId,
+      runtimeSiteId: runtimeHostingSiteId,
+      lookupMode: "ownership_site_id",
+      runtimeSiteIdsSeen,
+    }),
+  );
+
+  assert.equal(model.site.found, true);
+  assert.equal(model.site.siteId, overviewOwnershipSiteId);
+  assert.equal(model.site.requestedSiteId, overviewOwnershipSiteId);
+  assert.equal(model.site.runtimeSiteId, runtimeHostingSiteId);
+  assert.equal(model.site.lookupMode, "ownership_site_id");
+  assert.deepEqual([...new Set(runtimeSiteIdsSeen)], [runtimeHostingSiteId]);
+  assert.equal(model.runtime.activeVersion?.id, activeVersionId);
+  assert.equal(model.runtime.activeArtifact?.id, activeArtifactId);
+  assert.equal(model.domains[0]?.host, "www.example.com");
+  assert.equal(model.assets.counts.htmlPaths, 2);
+});
+
+test("hosting operations read model: keeps truly unknown ids not found", async () => {
+  const runtimeSiteIdsSeen: string[] = [];
+
+  const model = await getHostingOperationsReadModel(
+    "unknown_site_id",
+    deps({
+      requestedSiteId: "unknown_site_id",
+      runtimeSiteId: null,
+      lookupMode: "not_found",
+      runtimeSiteIdsSeen,
+    }),
+  );
+
+  assert.equal(model.site.found, false);
+  assert.equal(model.site.siteId, "unknown_site_id");
+  assert.equal(model.site.runtimeSiteId, null);
+  assert.equal(model.site.lookupMode, "not_found");
+  assert.equal(model.site.expectedIdentifier, "ownership_site_id_or_runtime_site_id");
+  assert.deepEqual(runtimeSiteIdsSeen, []);
+  assert.equal(model.runtime.activeVersion, null);
+  assert.equal(model.domains.length, 0);
+  assert.deepEqual(model.diagnostics.codes, ["HOSTING_OPERATIONS_SITE_NOT_FOUND"]);
 });
 
 test("hosting operations read model: exposes domain visibility and readiness aggregation", async () => {

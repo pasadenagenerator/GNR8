@@ -19,7 +19,9 @@ import {
   getSiteVersion,
   listDomainHostBindingsForSite,
   listPreviouslyPublishedVersions,
+  resolveRuntimeHostingOperationsSiteIdentity,
   type RuntimeDomainHostBinding,
+  type RuntimeHostingOperationsSiteIdentity,
   type RuntimeSiteResolutionBinding,
 } from "@/gnr8/runtime/runtime-store";
 import type {
@@ -44,8 +46,12 @@ export type HostingOperationsReadiness = {
 export type HostingOperationsReadModel = {
   site: {
     siteId: string;
+    requestedSiteId: string;
+    runtimeSiteId: string | null;
     canonicalSlug: string | null;
     found: boolean;
+    lookupMode: RuntimeHostingOperationsSiteIdentity["lookupMode"];
+    expectedIdentifier: RuntimeHostingOperationsSiteIdentity["expectedIdentifier"];
   };
   runtime: {
     activeVersion: {
@@ -149,6 +155,7 @@ export type HostingOperationsReadModelDependencies = {
   getRawTemplateSiteArtifact: typeof getRawTemplateSiteArtifact;
   getRawImportedSiteArtifact: typeof getRawImportedSiteArtifact;
   getActivePointerForSite: typeof getActivePointerForSite;
+  resolveRuntimeHostingOperationsSiteIdentity: typeof resolveRuntimeHostingOperationsSiteIdentity;
   createRuntimeSiteReadinessReport: typeof createRuntimeSiteReadinessReport;
   createRuntimeDomainReadinessReport: typeof createRuntimeDomainReadinessReport;
   resolveRuntimeSiteVersion: typeof resolveRuntimeSiteVersion;
@@ -164,6 +171,7 @@ const DEFAULT_DEPS: HostingOperationsReadModelDependencies = {
   getRawTemplateSiteArtifact,
   getRawImportedSiteArtifact,
   getActivePointerForSite,
+  resolveRuntimeHostingOperationsSiteIdentity,
   createRuntimeSiteReadinessReport,
   createRuntimeDomainReadinessReport,
   resolveRuntimeSiteVersion,
@@ -345,13 +353,76 @@ export async function getHostingOperationsReadModel(
   deps: Partial<HostingOperationsReadModelDependencies> = {},
 ): Promise<HostingOperationsReadModel> {
   const resolvedDeps = { ...DEFAULT_DEPS, ...deps };
-  const normalizedSiteId = String(siteId ?? "").trim();
+  const requestedSiteId = String(siteId ?? "").trim();
+  const siteIdentity = await resolvedDeps.resolveRuntimeHostingOperationsSiteIdentity(requestedSiteId);
+  const runtimeSiteId = siteIdentity.runtimeSiteId;
+
+  if (!runtimeSiteId) {
+    return {
+      site: {
+        siteId: requestedSiteId,
+        requestedSiteId,
+        runtimeSiteId: null,
+        canonicalSlug: null,
+        found: false,
+        lookupMode: siteIdentity.lookupMode,
+        expectedIdentifier: siteIdentity.expectedIdentifier,
+      },
+      runtime: {
+        activeVersion: null,
+        activeArtifact: null,
+        activePointer: null,
+        resolution: null,
+      },
+      publish: {
+        lastPublish: null,
+        history: [],
+      },
+      domains: [],
+      readiness: {
+        state: "blocked",
+        blockers: ["hosting_operations_site_not_found"],
+        warnings: [],
+        site: null,
+        domains: null,
+      },
+      assets: {
+        artifactId: null,
+        artifactType: "none",
+        counts: {
+          htmlPaths: 0,
+          fingerprintedAssets: 0,
+          rawFiles: 0,
+          persistedAssets: 0,
+          externalFallbackAssets: 0,
+        },
+        diagnostics: {
+          healthy: false,
+          codes: ["HOSTING_OPERATIONS_SITE_NOT_FOUND"],
+          warnings: [],
+          failures: ["HOSTING_OPERATIONS_SITE_NOT_FOUND"],
+        },
+      },
+      diagnostics: {
+        latestRuntimeDiagnostics: {
+          resolution: null,
+          importProvenanceSummary: null,
+          artifactGovernance: null,
+          rawImportMetadata: null,
+        },
+        latestFailures: ["HOSTING_OPERATIONS_SITE_NOT_FOUND"],
+        codes: ["HOSTING_OPERATIONS_SITE_NOT_FOUND"],
+      },
+      rollbackCandidates: [],
+    };
+  }
+
   const [binding, domainBinding, domainRows, activePointer, rollbackRefs] = await Promise.all([
-    resolvedDeps.getRuntimeSiteResolutionBinding(normalizedSiteId),
-    resolvedDeps.getRuntimeSiteDomainReadinessBinding(normalizedSiteId),
-    resolvedDeps.listDomainHostBindingsForSite({ siteId: normalizedSiteId }),
-    resolvedDeps.getActivePointerForSite(normalizedSiteId),
-    resolvedDeps.listPreviouslyPublishedVersions(normalizedSiteId),
+    resolvedDeps.getRuntimeSiteResolutionBinding(runtimeSiteId),
+    resolvedDeps.getRuntimeSiteDomainReadinessBinding(runtimeSiteId),
+    resolvedDeps.listDomainHostBindingsForSite({ siteId: runtimeSiteId }),
+    resolvedDeps.getActivePointerForSite(runtimeSiteId),
+    resolvedDeps.listPreviouslyPublishedVersions(runtimeSiteId),
   ]);
 
   const resolution =
@@ -360,7 +431,7 @@ export async function getHostingOperationsReadModel(
           strategy: "active",
           binding: {
             siteId: binding.siteId,
-            canonicalSlug: binding.canonicalSlug ?? normalizedSiteId,
+            canonicalSlug: binding.canonicalSlug ?? runtimeSiteId,
             activeSiteVersionId: binding.activeSiteVersionId,
             latestImportedSiteVersionId: binding.latestImportedSiteVersionId,
             publishedSiteVersionId: binding.publishedSiteVersionId,
@@ -430,9 +501,13 @@ export async function getHostingOperationsReadModel(
 
   return {
     site: {
-      siteId: normalizedSiteId,
+      siteId: requestedSiteId,
+      requestedSiteId,
+      runtimeSiteId,
       canonicalSlug: binding?.canonicalSlug ?? domainBinding?.canonicalSlug ?? null,
       found: Boolean(binding),
+      lookupMode: siteIdentity.lookupMode,
+      expectedIdentifier: siteIdentity.expectedIdentifier,
     },
     runtime: {
       activeVersion: mapActiveVersion(activeVersion),

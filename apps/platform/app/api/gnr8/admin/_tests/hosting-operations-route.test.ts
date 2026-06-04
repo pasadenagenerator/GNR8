@@ -8,8 +8,12 @@ function readModel(input?: Partial<HostingOperationsReadModel>): HostingOperatio
   return {
     site: {
       siteId: "site_1",
+      requestedSiteId: "site_1",
+      runtimeSiteId: "site_1",
       canonicalSlug: "maver",
       found: true,
+      lookupMode: "runtime_site_id",
+      expectedIdentifier: "ownership_site_id_or_runtime_site_id",
     },
     runtime: {
       activeVersion: {
@@ -150,8 +154,12 @@ test("hosting operations route: returns 404 when read model has no site", async 
       readModel({
         site: {
           siteId: "missing",
+          requestedSiteId: "missing",
+          runtimeSiteId: null,
           canonicalSlug: null,
           found: false,
+          lookupMode: "not_found",
+          expectedIdentifier: "ownership_site_id_or_runtime_site_id",
         },
       }),
   });
@@ -161,28 +169,45 @@ test("hosting operations route: returns 404 when read model has no site", async 
   });
 
   assert.equal(response.status, 404);
-  const body = (await response.json()) as { error: string; site: { found: boolean } };
+  const body = (await response.json()) as { error: string; site: { found: boolean; requestedSiteId: string; lookupMode: string; expectedIdentifier: string } };
   assert.equal(body.error, "Hosting operations site not found");
   assert.equal(body.site.found, false);
+  assert.equal(body.site.requestedSiteId, "missing");
+  assert.equal(body.site.lookupMode, "not_found");
+  assert.equal(body.site.expectedIdentifier, "ownership_site_id_or_runtime_site_id");
 });
 
-test("hosting operations route: returns read-only hosting payload", async () => {
+test("hosting operations route: returns read-only hosting payload for overview-emitted site id", async () => {
   let requestedSiteId = "";
+  const overviewSiteId = "91fb0854-9b84-4c4b-aff4-777043ab6451";
   const handlers = createHostingOperationsRouteHandlers({
     requireSuperadminUserId: async () => "superadmin_1",
     getHostingOperationsReadModel: async (siteId) => {
       requestedSiteId = siteId;
-      return readModel();
+      return readModel({
+        site: {
+          siteId: overviewSiteId,
+          requestedSiteId: overviewSiteId,
+          runtimeSiteId: "runtime_site_91fb0854",
+          canonicalSlug: "maver",
+          found: true,
+          lookupMode: "ownership_site_id",
+          expectedIdentifier: "ownership_site_id_or_runtime_site_id",
+        },
+      });
     },
   });
 
-  const response = await handlers.GET(new Request("http://localhost/api/gnr8/admin/hosting-operations/site_1"), {
-    params: Promise.resolve({ siteId: "site_1" }),
+  const response = await handlers.GET(new Request(`http://localhost/api/gnr8/admin/hosting-operations/${overviewSiteId}`), {
+    params: Promise.resolve({ siteId: overviewSiteId }),
   });
 
   assert.equal(response.status, 200);
-  assert.equal(requestedSiteId, "site_1");
+  assert.equal(requestedSiteId, overviewSiteId);
   const body = (await response.json()) as HostingOperationsReadModel;
+  assert.equal(body.site.siteId, overviewSiteId);
+  assert.equal(body.site.runtimeSiteId, "runtime_site_91fb0854");
+  assert.equal(body.site.lookupMode, "ownership_site_id");
   assert.equal(body.runtime.activeVersion?.id, "version_1");
   assert.equal(body.domains[0]?.verified, true);
   assert.equal(body.readiness.state, "ready");
