@@ -125,6 +125,9 @@ export type HostingOperationsReadModel = {
     source: "runtime_domain_host_binding";
     lastCheckedAt: string | null;
     siteVersionId: string;
+    legacyDomainSiteVersionId?: string;
+    activePointerSiteVersionId?: string | null;
+    diagnostics?: string[];
     verificationType: RuntimeDomainHostBinding["verificationType"];
     verificationHost: string | null;
     dnsRecordType: RuntimeDomainHostBinding["dnsRecordType"];
@@ -142,6 +145,9 @@ export type HostingOperationsReadModel = {
     verified: boolean;
     lastCheckedAt: string | null;
     siteVersionId: string;
+    legacyDomainSiteVersionId?: string;
+    activePointerSiteVersionId?: string | null;
+    diagnostics?: string[];
     verificationType: RuntimeDomainHostBinding["verificationType"];
     verificationHost: string | null;
     dnsRecordType: RuntimeDomainHostBinding["dnsRecordType"];
@@ -398,6 +404,15 @@ function mapActiveVersion(version: CanonicalSiteVersionSnapshot | null): Hosting
   };
 }
 
+function domainVersionDiagnostics(input: {
+  domainSiteVersionId: string;
+  activePointerSiteVersionId: string | null;
+}): string[] {
+  if (!input.activePointerSiteVersionId) return [];
+  if (input.domainSiteVersionId === input.activePointerSiteVersionId) return [];
+  return ["CUSTOM_DOMAIN_VERSION_DIVERGENCE_DETECTED"];
+}
+
 export async function getHostingOperationsReadModel(
   siteId: string,
   deps: Partial<HostingOperationsReadModelDependencies> = {},
@@ -564,9 +579,18 @@ export async function getHostingOperationsReadModel(
     rawArtifact,
     importProvenanceSummary: activeVersion?.importProvenanceSummary ?? null,
   });
+  const customDomainVersionDiagnostics = uniqueSorted(
+    domainRows.flatMap((bindingRow) =>
+      domainVersionDiagnostics({
+        domainSiteVersionId: bindingRow.siteVersionId,
+        activePointerSiteVersionId: activePointer?.siteVersionId ?? null,
+      }),
+    ),
+  );
   const codes = uniqueSorted([
     ...(resolution?.diagnostics.code ? [resolution.diagnostics.code] : []),
     ...assets.diagnostics.codes,
+    ...customDomainVersionDiagnostics,
   ]);
   const latestFailures = uniqueSorted([...assets.diagnostics.failures, ...assets.diagnostics.codes.filter((code) => code.toLowerCase().includes("fail"))]);
 
@@ -581,6 +605,10 @@ export async function getHostingOperationsReadModel(
     updatedAt: bindingRow.updatedAt,
   }));
   const customDomains = domainRows.map((bindingRow) => ({
+    diagnostics: domainVersionDiagnostics({
+      domainSiteVersionId: bindingRow.siteVersionId,
+      activePointerSiteVersionId: activePointer?.siteVersionId ?? null,
+    }),
     id: bindingRow.id,
     hostname: bindingRow.domain,
     status: bindingRow.status,
@@ -589,6 +617,8 @@ export async function getHostingOperationsReadModel(
     source: "runtime_domain_host_binding" as const,
     lastCheckedAt: bindingRow.lastCheckedAt,
     siteVersionId: bindingRow.siteVersionId,
+    legacyDomainSiteVersionId: bindingRow.siteVersionId,
+    activePointerSiteVersionId: activePointer?.siteVersionId ?? null,
     verificationType: bindingRow.verificationType,
     verificationHost: bindingRow.verificationHost,
     dnsRecordType: bindingRow.dnsRecordType,
@@ -619,13 +649,16 @@ export async function getHostingOperationsReadModel(
     publish,
     workingDomains,
     customDomains,
-    domains: domainRows.map((bindingRow) => ({
+    domains: customDomains.map((bindingRow) => ({
       id: bindingRow.id,
-      host: bindingRow.domain,
+      host: bindingRow.hostname,
       status: bindingRow.status,
-      verified: bindingRow.status === "active",
+      verified: bindingRow.verified,
       lastCheckedAt: bindingRow.lastCheckedAt,
       siteVersionId: bindingRow.siteVersionId,
+      legacyDomainSiteVersionId: bindingRow.legacyDomainSiteVersionId,
+      activePointerSiteVersionId: bindingRow.activePointerSiteVersionId,
+      diagnostics: bindingRow.diagnostics,
       verificationType: bindingRow.verificationType,
       verificationHost: bindingRow.verificationHost,
       dnsRecordType: bindingRow.dnsRecordType,
@@ -636,7 +669,15 @@ export async function getHostingOperationsReadModel(
       createdAt: bindingRow.createdAt,
       updatedAt: bindingRow.updatedAt,
     })),
-    readiness: combineReadiness({ siteReadiness, domainReadiness }),
+    readiness: (() => {
+      const combined = combineReadiness({ siteReadiness, domainReadiness });
+      if (!customDomainVersionDiagnostics.includes("CUSTOM_DOMAIN_VERSION_DIVERGENCE_DETECTED")) return combined;
+      return {
+        ...combined,
+        state: combined.state === "blocked" ? "blocked" : "ready_with_warnings",
+        warnings: uniqueSorted([...combined.warnings, "CUSTOM_DOMAIN_VERSION_DIVERGENCE_DETECTED"]),
+      };
+    })(),
     readinessDrilldown: createHostingReadinessDrilldown({ siteReadiness, domainReadiness }),
     domainOperations: createHostingDomainOperationsReadModel({ domains: domainRows, workingDomains: workingDomainRows }),
     assetDiagnostics,

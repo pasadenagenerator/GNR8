@@ -6,7 +6,7 @@ Track migration-first MVP runtime progress separately from Website OS work.
 
 ## Current Status
 
-Migration Runtime + Command Center MVP is operational and smoke-tested through Phase 6C-A2.
+Migration Runtime + Command Center MVP is operational and smoke-tested through Phase 6C-B.
 
 Phase 5A adds Command Center migration batch list/detail UI, batch summary, diagnostics, failure reporting, timeline visibility, and operator run/resume controls. Execution remains operator-driven. Queue/worker orchestration and unattended execution do not exist yet.
 
@@ -18,11 +18,13 @@ Phase 6C-A adds Readiness & Domain Operations MVP surfaces for runtime readiness
 
 Phase 6C-A2 separates internal/working domains from external/custom domains so operators can distinguish platform working URLs from customer-owned domains.
 
+Phase 6C-B completes Asset Diagnostics Drilldown, including asset diagnostics summary, severity classification, remediation guidance, and empty-state handling on hosting detail.
+
 Website OS runtime expansion remains paused.
 
 ## Critical Path
 
-Import -> CMS -> Renderer -> Durable Jobs -> Durable Batches -> Batch Execution -> Batch Execution Observability -> Command Center -> Hosting Operations -> Asset Diagnostics Drilldown -> Billing
+Import -> CMS -> Renderer -> Durable Jobs -> Durable Batches -> Batch Execution -> Batch Execution Observability -> Command Center -> Hosting Operations -> Hosting Hardening Reality Check Refresh -> Billing
 
 ## Completed Reality Checks
 
@@ -384,19 +386,57 @@ Explicit exclusions:
 - Rollback UI remains intentionally excluded.
 - Hosting Operations remains read-only.
 
+### Phase 6C-B — Asset Diagnostics Drilldown
+
+Goal:
+- Extend Hosting Operations detail visibility with asset diagnostics drilldown for operator review.
+
+Implementation summary:
+- Documented asset diagnostics summary visibility on hosting detail.
+- Documented severity classification for asset diagnostics.
+- Documented remediation guidance for asset diagnostics findings.
+- Documented empty-state handling when no asset diagnostics are present.
+- Kept Asset Diagnostics Drilldown inside the read-only Hosting Operations surface.
+
+Production verification:
+- `/gnr8/command-center/hosting` loaded successfully.
+- `/gnr8/command-center/hosting/[siteId]` loaded successfully.
+- Hosting detail rendered asset diagnostics summary successfully.
+- Severity classification rendered successfully.
+- Remediation guidance rendered successfully.
+- Empty-state handling rendered successfully.
+- Production asset diagnostics drilldown smoke verification completed successfully.
+
+Explicit exclusions:
+- No runtime code changes in this documentation checkpoint.
+- No migrations.
+- No tests.
+- No publish workflow controls.
+- No rollback workflow UI.
+- No DNS execution.
+- No provider execution.
+- No CDN/object storage strategy changes.
+- No synthetic monitoring.
+- No provider execution automation.
+
 ## Current State
 
-Hosting Operations MVP is complete through:
+Hosting Operations state:
+
+Completed:
 - Phase 6A
 - Phase 6B
 - Phase 6C-A
 - Phase 6C-A2
+- Phase 6C-B
+
+Hosting Operations MVP complete.
 
 ## Current Remaining Work
 
 ### Near-term
 
-- Phase 6C-B — Asset Diagnostics Drilldown
+- Hosting Hardening Reality Check Refresh
 - Billing Reality Check
 
 ### Optional Runtime UX
@@ -413,9 +453,10 @@ Hosting Operations MVP is complete through:
 
 - rollback workflow
 - publish workflow controls
-- CDN/object-storage strategy
+- CDN/object storage strategy
 - synthetic monitoring
 - provider execution automation
+- advanced hosting hardening
 
 ## Explicitly Paused
 

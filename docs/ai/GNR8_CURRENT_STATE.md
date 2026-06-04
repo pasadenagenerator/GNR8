@@ -23,6 +23,7 @@ Phase 6A — Hosting Operations MVP is complete.
 Phase 6B — Hosting Operations Workflow Review is complete.
 Phase 6C-A — Readiness & Domain Operations MVP is complete.
 Phase 6C-A2 — Internal vs Custom Domain Visibility is complete.
+Phase 6C-B — Asset Diagnostics Drilldown is complete.
 
 Completed capabilities:
 - CMS slot materialization
@@ -65,6 +66,10 @@ Completed capabilities:
 - domain recheck workflow
 - asset diagnostics visibility
 - asset diagnostics summary
+- asset diagnostics drilldown
+- asset diagnostics severity classification
+- asset diagnostics remediation guidance
+- asset diagnostics empty-state handling
 - runtime diagnostics visibility
 
 Current migration runtime capabilities:
@@ -91,18 +96,22 @@ Current migration runtime capabilities:
 - domain recheck workflow visibility
 - asset diagnostics visibility
 - asset diagnostics summary visibility
+- asset diagnostics drilldown visibility
+- asset diagnostics severity classification visibility
+- asset diagnostics remediation guidance visibility
+- asset diagnostics empty-state handling
 - runtime diagnostics visibility
 
 Hosting Operations now exposes:
 - Hosting Overview
 - Hosting Detail
-- runtime readiness
-- readiness drilldown
-- internal/working domains
-- external/custom domains
-- DNS instruction visibility
-- domain recheck workflow
-- asset diagnostics summary
+- Runtime Readiness
+- Readiness Drilldown
+- Internal / Working Domains
+- External / Custom Domains
+- DNS visibility
+- Domain recheck workflow
+- Asset Diagnostics Drilldown
 
 Production smoke test:
 - `/gnr8/command-center/migration-batches` loaded successfully.
@@ -111,10 +120,12 @@ Production smoke test:
 - `/gnr8/command-center/hosting/[siteId]` loaded successfully.
 - summary, diagnostics, failures, timeline, completed jobs, pending jobs, and failed jobs rendered.
 - Active Version, Active Artifact, Publish Timestamp, Runtime Readiness, Domain Readiness, Readiness Drilldown, Internal/Working Domains, External/Custom Domains, DNS Instructions, Domain Recheck, Asset Diagnostics Summary, and Runtime Diagnostics rendered.
+- hosting detail page now renders asset diagnostics summary, severity classification, remediation guidance, and empty-state handling.
 - DB connection pressure fix validated.
 - EMAXCONNSESSION issue resolved through composed server read path.
 - production hosting smoke test completed successfully.
 - production readiness and domain operations smoke verification completed successfully.
+- production asset diagnostics drilldown smoke verification completed successfully.
 
 Execution boundary:
 - execution remains operator-driven
@@ -128,9 +139,14 @@ Execution boundary:
 - unattended orchestration does not exist yet
 
 Remaining critical path:
-- Phase 6C-B — Asset Diagnostics Drilldown
 - Phase 5B — Job Detail + Stage Diagnostics UI (optional)
 - Billing
+
+Current Hosting Operations status:
+- Hosting Operations MVP is functionally complete.
+
+Next recommended milestone:
+- Hosting Hardening Reality Check Refresh
 
 ## Bootstrap Runtime State (2026-06-03)
 

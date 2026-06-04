@@ -455,8 +455,19 @@ export async function renderPublicPathResponse(input: {
       domain: rawTemplateResolution.domain,
       siteId: rawTemplateResolution.siteId,
       siteVersionId: rawTemplateResolution.siteVersionId,
+      legacyDomainSiteVersionId: rawTemplateResolution.legacyDomainSiteVersionId ?? null,
+      activePointerSiteVersionId: rawTemplateResolution.activePointerSiteVersionId ?? rawTemplateResolution.siteVersionId,
       resolvedFilePath: rawTemplateResolution.resolvedFilePath,
     });
+    for (const diagnostic of rawTemplateResolution.diagnostics ?? []) {
+      if (diagnostic.code === "CUSTOM_DOMAIN_VERSION_DIVERGENCE_DETECTED") {
+        logPublicDomainDiagnostic("CUSTOM_DOMAIN_VERSION_DIVERGENCE_DETECTED", {
+          domain: diagnostic.domain,
+          legacyDomainSiteVersionId: diagnostic.legacyDomainSiteVersionId,
+          activePointerSiteVersionId: diagnostic.activePointerSiteVersionId,
+        });
+      }
+    }
     console.info("[gnr8.content-runtime] CONTENT_RUNTIME_OVERRIDES_LOAD_STARTED", {
       host: normalizedHost,
       domain: rawTemplateResolution.domain,
@@ -581,6 +592,16 @@ export async function renderPublicPathResponse(input: {
         },
       });
     }
+    const requestEndedAt = Date.now();
+    await recordRuntimeUsage({
+      siteId: rawTemplateResolution.siteId,
+      artifactId: rawTemplateResolution.activeArtifactId ?? null,
+      requestCount: 1,
+      bandwidthBytes: utf8ByteLength(html),
+      computeMs: Math.max(0, requestEndedAt - requestStartedAt),
+      periodStart: new Date(requestStartedAt),
+      periodEnd: new Date(requestEndedAt),
+    });
     return htmlResponse({ html });
   }
 
@@ -632,6 +653,15 @@ export async function renderPublicPathResponse(input: {
   }
 
   if (artifactResolution.outcome === "artifact_hit") {
+    for (const diagnostic of artifactResolution.diagnostics ?? []) {
+      if (diagnostic.code === "CUSTOM_DOMAIN_VERSION_DIVERGENCE_DETECTED") {
+        logPublicDomainDiagnostic("CUSTOM_DOMAIN_VERSION_DIVERGENCE_DETECTED", {
+          domain: diagnostic.domain,
+          legacyDomainSiteVersionId: diagnostic.legacyDomainSiteVersionId,
+          activePointerSiteVersionId: diagnostic.activePointerSiteVersionId,
+        });
+      }
+    }
     const requestEndedAt = Date.now();
     const computeMs = Math.max(0, requestEndedAt - requestStartedAt);
     const bandwidthBytes = utf8ByteLength(artifactResolution.html);

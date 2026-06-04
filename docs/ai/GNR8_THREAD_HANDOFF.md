@@ -9,7 +9,7 @@ Website OS branch status:
 - Do not continue Website OS runtime expansion unless explicitly requested.
 
 Latest completed milestone:
-- Phase 6C-A2 — Internal vs Custom Domain Visibility.
+- Phase 6C-B — Asset Diagnostics Drilldown.
 
 Production smoke-test:
 - completed successfully.
@@ -17,6 +17,7 @@ Production smoke-test:
 - verified `/gnr8/command-center/hosting`.
 - verified `/gnr8/command-center/hosting/[siteId]`.
 - verified hosting overview, hosting detail, active version, active artifact, publish timestamp, runtime readiness, readiness drilldown, internal/working domains, external/custom domains, DNS instruction visibility, domain recheck workflow, asset diagnostics summary, and runtime diagnostics.
+- verified asset diagnostics drilldown summary, severity classification, remediation guidance, and empty-state handling on hosting detail.
 
 Dedicated progress doc:
 - `docs/ai/MIGRATION_RUNTIME_PROGRESS.md`
@@ -37,6 +38,7 @@ Current completed chain:
 - Hosting Operations Workflow Review
 - Readiness & Domain Operations MVP
 - Internal vs Custom Domain Visibility
+- Asset Diagnostics Drilldown
 
 Latest completed migration capabilities:
 - `MigrationBatchExecutor`
@@ -71,6 +73,10 @@ Latest completed migration capabilities:
 - domain recheck workflow visibility
 - asset diagnostics visibility
 - asset diagnostics summary visibility
+- asset diagnostics drilldown visibility
+- asset diagnostics severity classification
+- asset diagnostics remediation guidance
+- asset diagnostics empty-state handling
 - runtime diagnostics visibility
 - ownership site ID to runtime site ID detail resolution
 
@@ -85,23 +91,25 @@ Completed migration-first chain:
 - Command Center Integration
 - Hosting Operations
 
-Phase 6C-A / 6C-A2 completion notes:
+Phase 6C-A / 6C-A2 / 6C-B completion notes:
 - Readiness drilldown and domain operations are operational in Hosting Operations.
 - Internal/working domains and external/custom domains are separated for operator visibility.
 - DNS instructions and domain recheck workflow are visible without introducing DNS execution.
+- Asset Diagnostics Drilldown is operational on hosting detail.
+- Asset diagnostics now expose summary, severity classification, remediation guidance, and empty-state handling.
 - Production hosting smoke verification passed for the hosting overview and hosting detail routes.
+- Production asset diagnostics drilldown smoke verification passed.
 - Publish workflow remains read-only from Hosting Operations.
 - Rollback UI remains intentionally excluded.
 - No DNS/provider execution was introduced.
 - Website OS remains frozen.
 
 Current critical path:
-- Phase 6C-B — Asset Diagnostics Drilldown
 - Phase 5B — Job Detail + Stage Diagnostics UI (optional)
 - Billing
 
 Next recommended milestone:
-- Phase 6C-B — Asset Diagnostics Drilldown.
+- Hosting Hardening Reality Check Refresh.
 
 Explicit exclusions still in force:
 - no Website OS runtime expansion
@@ -132,13 +140,15 @@ Dedicated pause note:
 - Future continuation point: Execution Artifact Runtime family.
 - Execution Artifact Runtime family is not currently part of the migration-critical path.
 Next migration platform milestone:
-- Phase 6C-B — Asset Diagnostics Drilldown.
+- Hosting Hardening Reality Check Refresh.
 - Optional: Phase 5B — Job Detail + Stage Diagnostics UI.
 - Phase 5A completed Command Center integration for migration batches; execution remains operator-driven and queue/worker orchestration does not exist yet.
 - Phase 6A completed read-only hosting operations observability for Command Center; hosting overview/detail are operational and production smoke-tested.
 - Phase 6B completed Hosting Operations workflow review.
 - Phase 6C-A completed Readiness & Domain Operations MVP.
 - Phase 6C-A2 completed Internal vs Custom Domain Visibility.
+- Phase 6C-B completed Asset Diagnostics Drilldown, including severity and remediation model visibility.
+- Hosting Operations MVP is functionally complete.
 Current completed runtime chain:
 - `Proposal Approval Queue → Execution Readiness Execution Package → Execution Contract Execution Contract Readiness → Execution Bundle Execution Bundle Readiness → Execution Authorization Execution Authorization Readiness Execution Authorization Package → Execution Intent Execution Intent Readiness → Execution Plan Execution Plan Readiness → Execution Candidate Execution Candidate Readiness Execution Candidate Package → Execution Candidate Authorization Execution Candidate Authorization Readiness Execution Candidate Authorization Package`
 Candidate Authorization Family completed. Governance graph expanded. Execution remains blocked. Website OS remains read-only.

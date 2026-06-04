@@ -1546,9 +1546,11 @@ export type RuntimeDomainSiteResolution =
       host: string;
       siteId: string;
       siteVersionId: string;
+      legacyDomainSiteVersionId: string;
       domain: string;
       status: RuntimeDomainHostBindingStatus;
       bindingId: string;
+      diagnostics: RuntimeActiveServingDiagnostic[];
     }
   | {
       outcome: "domain_miss";
@@ -1591,6 +1593,63 @@ export type RuntimeSiteResolutionBinding = {
   previewSiteVersionId?: string;
   candidateSiteVersions: RuntimeSiteResolutionCandidate[];
 };
+
+export type RuntimeActiveServingDiagnostic = {
+  code: "CUSTOM_DOMAIN_VERSION_DIVERGENCE_DETECTED";
+  domain: string;
+  legacyDomainSiteVersionId: string;
+  activePointerSiteVersionId: string;
+};
+
+type RuntimeActiveServingResolutionKind = "host_match" | "domain_match" | "fallback_latest_site";
+
+export type RuntimeActiveServingMissReasonCode = "no_runtime_site" | "no_active_pointer" | "active_artifact_missing";
+
+export type RuntimeActiveServingArtifactResolution =
+  | {
+      outcome: "active_serving_hit";
+      host: string;
+      path: string;
+      normalizedPath: string;
+      siteId: string;
+      ownershipSiteId?: string | null;
+      siteResolution: RuntimeActiveServingResolutionKind;
+      sourceUrl: string;
+      sourceHost: string | null;
+      hostBindingId: string | null;
+      hostBindingKind: string | null;
+      hostBindingStatus: RuntimeHostBindingStatus | null;
+      domain: string | null;
+      domainBindingId: string | null;
+      domainBindingStatus: RuntimeDomainHostBindingStatus | null;
+      legacyDomainSiteVersionId: string | null;
+      activeSiteVersionId: string;
+      artifactId: string;
+      artifact: RuntimeArtifact;
+      diagnostics: RuntimeActiveServingDiagnostic[];
+    }
+  | {
+      outcome: "active_serving_miss";
+      host: string;
+      path: string;
+      normalizedPath: string;
+      siteId: string | null;
+      ownershipSiteId?: string | null;
+      siteResolution: RuntimeActiveServingResolutionKind | "none";
+      sourceUrl: string | null;
+      sourceHost: string | null;
+      hostBindingId: string | null;
+      hostBindingKind: string | null;
+      hostBindingStatus: RuntimeHostBindingStatus | null;
+      domain: string | null;
+      domainBindingId: string | null;
+      domainBindingStatus: RuntimeDomainHostBindingStatus | null;
+      legacyDomainSiteVersionId: string | null;
+      activeSiteVersionId: string | null;
+      artifactId: string | null;
+      reasonCode: RuntimeActiveServingMissReasonCode;
+      diagnostics: RuntimeActiveServingDiagnostic[];
+    };
 
 type RuntimeSiteResolutionBindingVersionRow = {
   id: string;
@@ -1964,52 +2023,256 @@ export async function getRuntimeSiteDomainReadinessBinding(siteId: string): Prom
   }
 }
 
-export async function resolveDomainSiteVersionForHost(input: { host?: string | null }): Promise<RuntimeDomainSiteResolution> {
+function buildCustomDomainVersionDivergenceDiagnostics(input: {
+  domain: string | null;
+  legacyDomainSiteVersionId: string | null;
+  activePointerSiteVersionId: string | null;
+}): RuntimeActiveServingDiagnostic[] {
+  const domain = String(input.domain ?? "").trim();
+  const legacyDomainSiteVersionId = String(input.legacyDomainSiteVersionId ?? "").trim();
+  const activePointerSiteVersionId = String(input.activePointerSiteVersionId ?? "").trim();
+  if (!domain || !legacyDomainSiteVersionId || !activePointerSiteVersionId) return [];
+  if (legacyDomainSiteVersionId === activePointerSiteVersionId) return [];
+  return [
+    {
+      code: "CUSTOM_DOMAIN_VERSION_DIVERGENCE_DETECTED",
+      domain,
+      legacyDomainSiteVersionId,
+      activePointerSiteVersionId,
+    },
+  ];
+}
+
+export async function resolveActiveServingArtifactForHostAndPath(input: {
+  host?: string | null;
+  path: string;
+}): Promise<RuntimeActiveServingArtifactResolution> {
   await ensureRuntimeTables();
   const client = await getSuperadminPool().connect();
   try {
-    const host = normalizeRuntimeDomain(String(input.host ?? ""));
-    const result = await client.query<{
-      id: string;
+    const host = normalizeRuntimeHost(String(input.host ?? ""));
+    const normalizedPath = normalizePagePath(input.path);
+
+    const pointerRes = await client.query<{
       site_id: string;
-      site_version_id: string;
-      domain: string;
-      status: RuntimeDomainHostBindingStatus;
+      ownership_site_id: string | null;
+      site_resolution: RuntimeActiveServingResolutionKind;
+      source_url: string | null;
+      source_host: string | null;
+      host_binding_id: string | null;
+      host_binding_kind: string | null;
+      host_binding_status: RuntimeHostBindingStatus | null;
+      domain: string | null;
+      domain_binding_id: string | null;
+      domain_binding_status: RuntimeDomainHostBindingStatus | null;
+      legacy_domain_site_version_id: string | null;
+      active_site_version_id: string | null;
+      artifact_id: string | null;
     }>(
       `
+      with host_site as (
+        select
+          b.id::text as host_binding_id,
+          b.site_id::text as site_id,
+          b.binding_kind::text as host_binding_kind,
+          b.status::text as host_binding_status
+        from public.gnr8_runtime_host_bindings b
+        where lower(b.host) = $1::text
+          and b.status = 'ACTIVE'
+        order by b.updated_at desc, b.created_at desc
+        limit 1
+      ), domain_site as (
+        select
+          d.id::text as domain_binding_id,
+          d.site_id::text as site_id,
+          d.site_version_id::text as legacy_domain_site_version_id,
+          d.domain::text as domain,
+          d.status::text as domain_binding_status
+        from public.gnr8_runtime_domain_host_bindings d
+        where lower(d.domain) = $1::text
+          and d.status = 'active'
+        order by d.updated_at desc, d.created_at desc
+        limit 1
+      ), fallback_site as (
+        select id::text as site_id from public.gnr8_runtime_sites order by created_at desc limit 1
+      ), resolved_site as (
+        select
+          site_id,
+          'host_match'::text as site_resolution,
+          host_binding_id,
+          host_binding_kind,
+          host_binding_status,
+          null::text as domain,
+          null::text as domain_binding_id,
+          null::text as domain_binding_status,
+          null::text as legacy_domain_site_version_id
+        from host_site
+        union all
+        select
+          site_id,
+          'domain_match'::text as site_resolution,
+          null::text as host_binding_id,
+          null::text as host_binding_kind,
+          null::text as host_binding_status,
+          domain,
+          domain_binding_id,
+          domain_binding_status,
+          legacy_domain_site_version_id
+        from domain_site
+        where not exists (select 1 from host_site)
+        union all
+        select
+          site_id,
+          'fallback_latest_site'::text as site_resolution,
+          null::text as host_binding_id,
+          null::text as host_binding_kind,
+          null::text as host_binding_status,
+          null::text as domain,
+          null::text as domain_binding_id,
+          null::text as domain_binding_status,
+          null::text as legacy_domain_site_version_id
+        from fallback_site
+        where not exists (select 1 from host_site)
+          and not exists (select 1 from domain_site)
+      )
       select
-        id::text as id,
-        site_id::text as site_id,
-        site_version_id::text as site_version_id,
-        domain::text as domain,
-        status::text as status
-      from public.gnr8_runtime_domain_host_bindings
-      where lower(domain) = $1::text and status = 'active'
-      order by updated_at desc, created_at desc
+        s.site_id::text as site_id,
+        s.site_resolution::text as site_resolution,
+        s.host_binding_id::text as host_binding_id,
+        s.host_binding_kind::text as host_binding_kind,
+        s.host_binding_status::text as host_binding_status,
+        s.domain::text as domain,
+        s.domain_binding_id::text as domain_binding_id,
+        s.domain_binding_status::text as domain_binding_status,
+        s.legacy_domain_site_version_id::text as legacy_domain_site_version_id,
+        rs.source_url::text as source_url,
+        rs.source_host::text as source_host,
+        sv.ownership_site_id::text as ownership_site_id,
+        p.active_site_version_id::text as active_site_version_id,
+        p.active_artifact_id::text as artifact_id
+      from resolved_site s
+      join public.gnr8_runtime_sites rs on rs.id = s.site_id
+      left join public.gnr8_runtime_active_pointers p on p.site_id = s.site_id
+      left join public.gnr8_runtime_site_versions sv on sv.id = p.active_site_version_id
       limit 1
       `,
       [host],
     );
-    const row = result.rows[0];
-    if (!row) {
+
+    const pointerRow = pointerRes.rows[0];
+    if (!pointerRow) {
       return {
-        outcome: "domain_miss",
+        outcome: "active_serving_miss",
         host,
-        reasonCode: "domain_not_found",
+        path: input.path,
+        normalizedPath,
+        siteId: null,
+        ownershipSiteId: null,
+        siteResolution: "none",
+        sourceUrl: null,
+        sourceHost: null,
+        hostBindingId: null,
+        hostBindingKind: null,
+        hostBindingStatus: null,
+        domain: null,
+        domainBindingId: null,
+        domainBindingStatus: null,
+        legacyDomainSiteVersionId: null,
+        activeSiteVersionId: null,
+        artifactId: null,
+        reasonCode: "no_runtime_site",
+        diagnostics: [],
       };
     }
-    return {
-      outcome: "domain_hit",
+
+    const diagnostics = buildCustomDomainVersionDivergenceDiagnostics({
+      domain: pointerRow.domain,
+      legacyDomainSiteVersionId: pointerRow.legacy_domain_site_version_id,
+      activePointerSiteVersionId: pointerRow.active_site_version_id,
+    });
+    const base = {
       host,
-      siteId: row.site_id,
-      siteVersionId: row.site_version_id,
-      domain: row.domain,
-      status: row.status,
-      bindingId: row.id,
+      path: input.path,
+      normalizedPath,
+      siteId: pointerRow.site_id,
+      ownershipSiteId: pointerRow.ownership_site_id,
+      siteResolution: pointerRow.site_resolution,
+      sourceUrl: pointerRow.source_url,
+      sourceHost: pointerRow.source_host,
+      hostBindingId: pointerRow.host_binding_id,
+      hostBindingKind: pointerRow.host_binding_kind,
+      hostBindingStatus: pointerRow.host_binding_status,
+      domain: pointerRow.domain,
+      domainBindingId: pointerRow.domain_binding_id,
+      domainBindingStatus: pointerRow.domain_binding_status,
+      legacyDomainSiteVersionId: pointerRow.legacy_domain_site_version_id,
+      activeSiteVersionId: pointerRow.active_site_version_id,
+      artifactId: pointerRow.artifact_id,
+      diagnostics,
+    };
+
+    if (!pointerRow.active_site_version_id || !pointerRow.artifact_id) {
+      return {
+        ...base,
+        outcome: "active_serving_miss",
+        reasonCode: "no_active_pointer",
+      };
+    }
+
+    const artifact = await getArtifactByIdWithClient(client, pointerRow.artifact_id);
+    if (!artifact) {
+      return {
+        ...base,
+        outcome: "active_serving_miss",
+        activeSiteVersionId: pointerRow.active_site_version_id,
+        artifactId: pointerRow.artifact_id,
+        reasonCode: "active_artifact_missing",
+      };
+    }
+
+    return {
+      ...base,
+      outcome: "active_serving_hit",
+      sourceUrl: pointerRow.source_url ?? "",
+      activeSiteVersionId: pointerRow.active_site_version_id,
+      artifactId: pointerRow.artifact_id,
+      artifact,
     };
   } finally {
     client.release();
   }
+}
+
+export async function resolveDomainSiteVersionForHost(input: { host?: string | null }): Promise<RuntimeDomainSiteResolution> {
+  const resolved = await resolveActiveServingArtifactForHostAndPath({
+    host: input.host,
+    path: "/",
+  });
+  if (resolved.siteResolution !== "domain_match" || !resolved.domain || !resolved.domainBindingId || !resolved.domainBindingStatus) {
+    return {
+      outcome: "domain_miss",
+      host: normalizeRuntimeDomain(String(input.host ?? "")),
+      reasonCode: "domain_not_found",
+    };
+  }
+  if (!resolved.siteId || !resolved.activeSiteVersionId || !resolved.legacyDomainSiteVersionId) {
+    return {
+      outcome: "domain_miss",
+      host: resolved.host,
+      reasonCode: "domain_not_found",
+    };
+  }
+  return {
+    outcome: "domain_hit",
+    host: resolved.host,
+    siteId: resolved.siteId,
+    siteVersionId: resolved.activeSiteVersionId,
+    legacyDomainSiteVersionId: resolved.legacyDomainSiteVersionId,
+    domain: resolved.domain,
+    status: resolved.domainBindingStatus,
+    bindingId: resolved.domainBindingId,
+    diagnostics: resolved.diagnostics,
+  };
 }
 
 export type RawTemplateDomainResolution =
@@ -2021,6 +2284,10 @@ export type RawTemplateDomainResolution =
       domain: string;
       bindingId: string;
       status: RuntimeDomainHostBindingStatus;
+      legacyDomainSiteVersionId: string | null;
+      activePointerSiteVersionId: string;
+      activeArtifactId: string;
+      diagnostics: RuntimeActiveServingDiagnostic[];
       normalizedPath: string;
       resolvedFilePath: string;
       html: string;
@@ -2034,6 +2301,10 @@ export type RawTemplateDomainResolution =
       domain: string | null;
       bindingId: string | null;
       status: RuntimeDomainHostBindingStatus | null;
+      legacyDomainSiteVersionId: string | null;
+      activePointerSiteVersionId: string | null;
+      activeArtifactId: string | null;
+      diagnostics: RuntimeActiveServingDiagnostic[];
       reasonCode: "domain_not_found" | "raw_template_site_not_found" | "raw_template_html_not_found";
     };
 
@@ -2064,9 +2335,9 @@ export async function resolveRawTemplateSiteForDomainAndPath(input: {
   host?: string | null;
   path: string;
 }): Promise<RawTemplateDomainResolution> {
-  const siteResolution = await resolveDomainSiteVersionForHost({ host: input.host });
+  const siteResolution = await resolveActiveServingArtifactForHostAndPath({ host: input.host, path: input.path });
   const normalizedPath = normalizePagePath(input.path);
-  if (siteResolution.outcome === "domain_miss") {
+  if (siteResolution.siteResolution !== "domain_match") {
     return {
       outcome: "raw_template_miss",
       host: siteResolution.host,
@@ -2076,21 +2347,49 @@ export async function resolveRawTemplateSiteForDomainAndPath(input: {
       domain: null,
       bindingId: null,
       status: null,
+      legacyDomainSiteVersionId: null,
+      activePointerSiteVersionId: null,
+      activeArtifactId: null,
+      diagnostics: [],
       reasonCode: "domain_not_found",
     };
   }
 
-  const artifact = (await getRawImportedSiteArtifact(siteResolution.siteVersionId)) ?? (await getRawTemplateSiteArtifact(siteResolution.siteVersionId));
+  const activeSiteVersionId = siteResolution.activeSiteVersionId;
+  const activeArtifactId = siteResolution.artifactId;
+  if (!activeSiteVersionId || !activeArtifactId || !siteResolution.domain || !siteResolution.domainBindingId || !siteResolution.domainBindingStatus) {
+    return {
+      outcome: "raw_template_miss",
+      host: siteResolution.host,
+      normalizedPath,
+      siteId: siteResolution.siteId,
+      siteVersionId: activeSiteVersionId ?? null,
+      domain: siteResolution.domain,
+      bindingId: siteResolution.domainBindingId,
+      status: siteResolution.domainBindingStatus,
+      legacyDomainSiteVersionId: siteResolution.legacyDomainSiteVersionId,
+      activePointerSiteVersionId: activeSiteVersionId ?? null,
+      activeArtifactId,
+      diagnostics: siteResolution.diagnostics,
+      reasonCode: "raw_template_site_not_found",
+    };
+  }
+
+  const artifact = (await getRawImportedSiteArtifact(activeSiteVersionId)) ?? (await getRawTemplateSiteArtifact(activeSiteVersionId));
   if (!artifact || artifact.siteId !== siteResolution.siteId) {
     return {
       outcome: "raw_template_miss",
       host: siteResolution.host,
       normalizedPath,
       siteId: siteResolution.siteId,
-      siteVersionId: siteResolution.siteVersionId,
+      siteVersionId: activeSiteVersionId,
       domain: siteResolution.domain,
-      bindingId: siteResolution.bindingId,
-      status: siteResolution.status,
+      bindingId: siteResolution.domainBindingId,
+      status: siteResolution.domainBindingStatus,
+      legacyDomainSiteVersionId: siteResolution.legacyDomainSiteVersionId,
+      activePointerSiteVersionId: activeSiteVersionId,
+      activeArtifactId,
+      diagnostics: siteResolution.diagnostics,
       reasonCode: "raw_template_site_not_found",
     };
   }
@@ -2109,8 +2408,12 @@ export async function resolveRawTemplateSiteForDomainAndPath(input: {
       siteId: artifact.siteId,
       siteVersionId: artifact.siteVersionId,
       domain: siteResolution.domain,
-      bindingId: siteResolution.bindingId,
-      status: siteResolution.status,
+      bindingId: siteResolution.domainBindingId,
+      status: siteResolution.domainBindingStatus,
+      legacyDomainSiteVersionId: siteResolution.legacyDomainSiteVersionId,
+      activePointerSiteVersionId: activeSiteVersionId,
+      activeArtifactId,
+      diagnostics: siteResolution.diagnostics,
       reasonCode: "raw_template_html_not_found",
     };
   }
@@ -2127,8 +2430,12 @@ export async function resolveRawTemplateSiteForDomainAndPath(input: {
       siteId: artifact.siteId,
       siteVersionId: artifact.siteVersionId,
       domain: siteResolution.domain,
-      bindingId: siteResolution.bindingId,
-      status: siteResolution.status,
+      bindingId: siteResolution.domainBindingId,
+      status: siteResolution.domainBindingStatus,
+      legacyDomainSiteVersionId: siteResolution.legacyDomainSiteVersionId,
+      activePointerSiteVersionId: activeSiteVersionId,
+      activeArtifactId,
+      diagnostics: siteResolution.diagnostics,
       reasonCode: "raw_template_html_not_found",
     };
   }
@@ -2139,8 +2446,12 @@ export async function resolveRawTemplateSiteForDomainAndPath(input: {
     siteId: artifact.siteId,
     siteVersionId: artifact.siteVersionId,
     domain: siteResolution.domain,
-    bindingId: siteResolution.bindingId,
-    status: siteResolution.status,
+    bindingId: siteResolution.domainBindingId,
+    status: siteResolution.domainBindingStatus,
+    legacyDomainSiteVersionId: siteResolution.legacyDomainSiteVersionId,
+    activePointerSiteVersionId: activeSiteVersionId,
+    activeArtifactId,
+    diagnostics: siteResolution.diagnostics,
     normalizedPath,
     resolvedFilePath,
     html: htmlAsset.bytes.toString("utf8"),
@@ -2524,10 +2835,15 @@ export type PublicRuntimeArtifactResolution =
       normalizedPath: string;
       siteId: string;
       ownershipSiteId?: string | null;
-      siteResolution: "host_match" | "fallback_latest_site";
+      siteResolution: RuntimeActiveServingResolutionKind;
       hostBindingId: string | null;
       hostBindingKind: string | null;
       hostBindingStatus: RuntimeHostBindingStatus | null;
+      domain: string | null;
+      domainBindingId: string | null;
+      domainBindingStatus: RuntimeDomainHostBindingStatus | null;
+      legacyDomainSiteVersionId: string | null;
+      diagnostics: RuntimeActiveServingDiagnostic[];
       activeSiteVersionId: string;
       artifactId: string;
       artifact: RuntimeArtifact;
@@ -2541,10 +2857,15 @@ export type PublicRuntimeArtifactResolution =
       normalizedPath: string;
       siteId: string | null;
       ownershipSiteId?: string | null;
-      siteResolution: "host_match" | "fallback_latest_site" | "none";
+      siteResolution: RuntimeActiveServingResolutionKind | "none";
       hostBindingId: string | null;
       hostBindingKind: string | null;
       hostBindingStatus: RuntimeHostBindingStatus | null;
+      domain: string | null;
+      domainBindingId: string | null;
+      domainBindingStatus: RuntimeDomainHostBindingStatus | null;
+      legacyDomainSiteVersionId: string | null;
+      diagnostics: RuntimeActiveServingDiagnostic[];
       activeSiteVersionId: string | null;
       artifactId: string | null;
       reasonCode: PublicRuntimeArtifactMissReasonCode;
@@ -2555,7 +2876,7 @@ export type RuntimeSiteResolutionForHost =
       outcome: "site_hit";
       host: string;
       siteId: string;
-      siteResolution: "host_match" | "fallback_latest_site";
+      siteResolution: RuntimeActiveServingResolutionKind;
       hostBindingId: string | null;
       hostBindingKind: string | null;
       hostBindingStatus: RuntimeHostBindingStatus | null;
@@ -2571,280 +2892,129 @@ export type RuntimeSiteResolutionForHost =
 export async function resolveRuntimeSiteForHost(input: {
   host?: string | null;
 }): Promise<RuntimeSiteResolutionForHost> {
-  await ensureRuntimeTables();
-  const client = await getSuperadminPool().connect();
-  try {
-    const host = normalizeRuntimeHost(String(input.host ?? ""));
-    const res = await client.query<{
-      site_id: string;
-      site_resolution: "host_match" | "fallback_latest_site";
-      host_binding_id: string | null;
-      host_binding_kind: string | null;
-      host_binding_status: RuntimeHostBindingStatus | null;
-      source_url: string | null;
-      source_host: string | null;
-    }>(
-      `
-      with candidate_site as (
-        select
-          b.id::text as host_binding_id,
-          b.site_id::text as site_id,
-          b.binding_kind::text as host_binding_kind,
-          b.status::text as host_binding_status
-        from public.gnr8_runtime_host_bindings b
-        where lower(b.host) = $1::text
-          and b.status = 'ACTIVE'
-        order by b.updated_at desc, b.created_at desc
-        limit 1
-      ), fallback_site as (
-        select id::text as site_id from public.gnr8_runtime_sites order by created_at desc limit 1
-      ), resolved_site as (
-        select
-          site_id,
-          'host_match'::text as site_resolution,
-          host_binding_id,
-          host_binding_kind,
-          host_binding_status
-        from candidate_site
-        union all
-        select
-          site_id,
-          'fallback_latest_site'::text as site_resolution,
-          null::text as host_binding_id,
-          null::text as host_binding_kind,
-          null::text as host_binding_status
-        from fallback_site
-        where not exists (select 1 from candidate_site)
-      )
-      select
-        s.site_id::text as site_id,
-        s.site_resolution::text as site_resolution,
-        s.host_binding_id::text as host_binding_id,
-        s.host_binding_kind::text as host_binding_kind,
-        s.host_binding_status::text as host_binding_status,
-        rs.source_url::text as source_url,
-        rs.source_host::text as source_host
-      from resolved_site s
-      join public.gnr8_runtime_sites rs on rs.id = s.site_id
-      limit 1
-      `,
-      [host],
-    );
-
-    const row = res.rows[0];
-    if (!row) return { outcome: "site_miss", host, reasonCode: "no_runtime_site" };
-    if (!row.source_url || !row.source_url.trim()) return { outcome: "site_miss", host, reasonCode: "missing_source_url" };
-    return {
-      outcome: "site_hit",
-      host,
-      siteId: row.site_id,
-      siteResolution: row.site_resolution,
-      hostBindingId: row.host_binding_id,
-      hostBindingKind: row.host_binding_kind,
-      hostBindingStatus: row.host_binding_status,
-      sourceUrl: row.source_url,
-      sourceHost: row.source_host,
-    };
-  } finally {
-    client.release();
+  const resolved = await resolveActiveServingArtifactForHostAndPath({ host: input.host, path: "/" });
+  if (!resolved.siteId || resolved.siteResolution === "none") {
+    return { outcome: "site_miss", host: resolved.host, reasonCode: "no_runtime_site" };
   }
+  if (!resolved.sourceUrl || !resolved.sourceUrl.trim()) {
+    return { outcome: "site_miss", host: resolved.host, reasonCode: "missing_source_url" };
+  }
+  return {
+    outcome: "site_hit",
+    host: resolved.host,
+    siteId: resolved.siteId,
+    siteResolution: resolved.siteResolution,
+    hostBindingId: resolved.hostBindingId,
+    hostBindingKind: resolved.hostBindingKind,
+    hostBindingStatus: resolved.hostBindingStatus,
+    sourceUrl: resolved.sourceUrl,
+    sourceHost: resolved.sourceHost,
+  };
 }
 
 export async function resolveActiveArtifactForHostAndPathWithDiagnostics(input: {
   host?: string | null;
   path: string;
 }): Promise<PublicRuntimeArtifactResolution> {
-  await ensureRuntimeTables();
-  const client = await getSuperadminPool().connect();
-  try {
-    const host = normalizeRuntimeHost(String(input.host ?? ""));
-    const normalizedPath = normalizePagePath(input.path);
-
-    const pointerRes = await client.query<{
-      site_id: string;
-      ownership_site_id: string | null;
-      site_resolution: "host_match" | "fallback_latest_site";
-      host_binding_id: string | null;
-      host_binding_kind: string | null;
-      host_binding_status: RuntimeHostBindingStatus | null;
-      active_site_version_id: string | null;
-      artifact_id: string | null;
-    }>(
-      `
-      with candidate_site as (
-        select
-          b.id::text as host_binding_id,
-          b.site_id::text as site_id,
-          b.binding_kind::text as host_binding_kind,
-          b.status::text as host_binding_status
-        from public.gnr8_runtime_host_bindings b
-        where lower(b.host) = $1::text
-          and b.status = 'ACTIVE'
-        order by b.updated_at desc, b.created_at desc
-        limit 1
-      ), fallback_site as (
-        select id::text as site_id from public.gnr8_runtime_sites order by created_at desc limit 1
-      ), resolved_site as (
-        select
-          site_id,
-          'host_match'::text as site_resolution,
-          host_binding_id,
-          host_binding_kind,
-          host_binding_status
-        from candidate_site
-        union all
-        select
-          site_id,
-          'fallback_latest_site'::text as site_resolution,
-          null::text as host_binding_id,
-          null::text as host_binding_kind,
-          null::text as host_binding_status
-        from fallback_site
-        where not exists (select 1 from candidate_site)
-      )
-      select
-        s.site_id::text as site_id,
-        s.site_resolution::text as site_resolution,
-        s.host_binding_id::text as host_binding_id,
-        s.host_binding_kind::text as host_binding_kind,
-        s.host_binding_status::text as host_binding_status,
-        sv.ownership_site_id::text as ownership_site_id,
-        p.active_site_version_id::text as active_site_version_id,
-        p.active_artifact_id::text as artifact_id
-      from resolved_site s
-      left join public.gnr8_runtime_active_pointers p on p.site_id = s.site_id
-      left join public.gnr8_runtime_site_versions sv on sv.id = p.active_site_version_id
-      limit 1
-      `,
-      [host],
-    );
-
-    const pointerRow = pointerRes.rows[0];
-    if (!pointerRow) {
-      return {
-        outcome: "artifact_miss",
-        host,
-        path: input.path,
-        normalizedPath,
-        siteId: null,
-        ownershipSiteId: null,
-        siteResolution: "none",
-        hostBindingId: null,
-        hostBindingKind: null,
-        hostBindingStatus: null,
-        activeSiteVersionId: null,
-        artifactId: null,
-        reasonCode: "no_runtime_site",
-      };
-    }
-    const siteId = pointerRow.site_id;
-    const ownershipSiteId = pointerRow.ownership_site_id;
-    const siteResolution = pointerRow.site_resolution;
-    const hostBindingId = pointerRow.host_binding_id;
-    const hostBindingKind = pointerRow.host_binding_kind;
-    const hostBindingStatus = pointerRow.host_binding_status;
-    const activeSiteVersionId = pointerRow.active_site_version_id;
-    const artifactId = pointerRow.artifact_id;
-    if (!artifactId || !activeSiteVersionId) {
-      return {
-        outcome: "artifact_miss",
-        host,
-        path: input.path,
-        normalizedPath,
-        siteId,
-        ownershipSiteId,
-        siteResolution,
-        hostBindingId,
-        hostBindingKind,
-        hostBindingStatus,
-        activeSiteVersionId: activeSiteVersionId ?? null,
-        artifactId: artifactId ?? null,
-        reasonCode: "no_active_pointer",
-      };
-    }
-
-    const artifact = await getArtifactByIdWithClient(client, artifactId);
-    if (!artifact) {
-      return {
-        outcome: "artifact_miss",
-        host,
-        path: input.path,
-        normalizedPath,
-        siteId,
-        ownershipSiteId,
-        siteResolution,
-        hostBindingId,
-        hostBindingKind,
-        hostBindingStatus,
-        activeSiteVersionId,
-        artifactId,
-        reasonCode: "active_artifact_missing",
-      };
-    }
-
-    const servingStage = resolveServingStageFromBindingKind(hostBindingKind);
-    const servingEligibility = evaluateRuntimeArtifactServingEligibility({
-      artifact,
-      servingStage,
-    });
-    if (!servingEligibility.allow) {
-      return {
-        outcome: "artifact_miss",
-        host,
-        path: input.path,
-        normalizedPath,
-        siteId,
-        ownershipSiteId,
-        siteResolution,
-        hostBindingId,
-        hostBindingKind,
-        hostBindingStatus,
-        activeSiteVersionId,
-        artifactId,
-        reasonCode: "artifact_stage_denied",
-      };
-    }
-
-    const resolvedPath = artifact.htmlByPath[normalizedPath] ? normalizedPath : "/";
-    const html = artifact.htmlByPath[resolvedPath];
-    if (!html) {
-      return {
-        outcome: "artifact_miss",
-        host,
-        path: input.path,
-        normalizedPath,
-        siteId,
-        ownershipSiteId,
-        siteResolution,
-        hostBindingId,
-        hostBindingKind,
-        hostBindingStatus,
-        activeSiteVersionId,
-        artifactId,
-        reasonCode: "artifact_path_missing",
-      };
-    }
-
+  const resolved = await resolveActiveServingArtifactForHostAndPath(input);
+  if (resolved.outcome === "active_serving_miss") {
     return {
-      outcome: "artifact_hit",
-      host,
+      outcome: "artifact_miss",
+      host: resolved.host,
       path: input.path,
-      normalizedPath,
-      siteId,
-      ownershipSiteId,
-      siteResolution,
-      hostBindingId,
-      hostBindingKind,
-      hostBindingStatus,
-      activeSiteVersionId,
-      artifactId,
-      artifact,
-      html,
-      resolvedPath,
+      normalizedPath: resolved.normalizedPath,
+      siteId: resolved.siteId,
+      ownershipSiteId: resolved.ownershipSiteId,
+      siteResolution: resolved.siteResolution,
+      hostBindingId: resolved.hostBindingId,
+      hostBindingKind: resolved.hostBindingKind,
+      hostBindingStatus: resolved.hostBindingStatus,
+      domain: resolved.domain,
+      domainBindingId: resolved.domainBindingId,
+      domainBindingStatus: resolved.domainBindingStatus,
+      legacyDomainSiteVersionId: resolved.legacyDomainSiteVersionId,
+      diagnostics: resolved.diagnostics,
+      activeSiteVersionId: resolved.activeSiteVersionId,
+      artifactId: resolved.artifactId,
+      reasonCode: resolved.reasonCode,
     };
-  } finally {
-    client.release();
   }
+
+  const servingStage = resolveServingStageFromBindingKind(resolved.hostBindingKind);
+  const servingEligibility = evaluateRuntimeArtifactServingEligibility({
+    artifact: resolved.artifact,
+    servingStage,
+  });
+  if (!servingEligibility.allow) {
+    return {
+      outcome: "artifact_miss",
+      host: resolved.host,
+      path: input.path,
+      normalizedPath: resolved.normalizedPath,
+      siteId: resolved.siteId,
+      ownershipSiteId: resolved.ownershipSiteId,
+      siteResolution: resolved.siteResolution,
+      hostBindingId: resolved.hostBindingId,
+      hostBindingKind: resolved.hostBindingKind,
+      hostBindingStatus: resolved.hostBindingStatus,
+      domain: resolved.domain,
+      domainBindingId: resolved.domainBindingId,
+      domainBindingStatus: resolved.domainBindingStatus,
+      legacyDomainSiteVersionId: resolved.legacyDomainSiteVersionId,
+      diagnostics: resolved.diagnostics,
+      activeSiteVersionId: resolved.activeSiteVersionId,
+      artifactId: resolved.artifactId,
+      reasonCode: "artifact_stage_denied",
+    };
+  }
+
+  const resolvedPath = resolved.artifact.htmlByPath[resolved.normalizedPath] ? resolved.normalizedPath : "/";
+  const html = resolved.artifact.htmlByPath[resolvedPath];
+  if (!html) {
+    return {
+      outcome: "artifact_miss",
+      host: resolved.host,
+      path: input.path,
+      normalizedPath: resolved.normalizedPath,
+      siteId: resolved.siteId,
+      ownershipSiteId: resolved.ownershipSiteId,
+      siteResolution: resolved.siteResolution,
+      hostBindingId: resolved.hostBindingId,
+      hostBindingKind: resolved.hostBindingKind,
+      hostBindingStatus: resolved.hostBindingStatus,
+      domain: resolved.domain,
+      domainBindingId: resolved.domainBindingId,
+      domainBindingStatus: resolved.domainBindingStatus,
+      legacyDomainSiteVersionId: resolved.legacyDomainSiteVersionId,
+      diagnostics: resolved.diagnostics,
+      activeSiteVersionId: resolved.activeSiteVersionId,
+      artifactId: resolved.artifactId,
+      reasonCode: "artifact_path_missing",
+    };
+  }
+
+  return {
+    outcome: "artifact_hit",
+    host: resolved.host,
+    path: input.path,
+    normalizedPath: resolved.normalizedPath,
+    siteId: resolved.siteId,
+    ownershipSiteId: resolved.ownershipSiteId,
+    siteResolution: resolved.siteResolution,
+    hostBindingId: resolved.hostBindingId,
+    hostBindingKind: resolved.hostBindingKind,
+    hostBindingStatus: resolved.hostBindingStatus,
+    domain: resolved.domain,
+    domainBindingId: resolved.domainBindingId,
+    domainBindingStatus: resolved.domainBindingStatus,
+    legacyDomainSiteVersionId: resolved.legacyDomainSiteVersionId,
+    diagnostics: resolved.diagnostics,
+    activeSiteVersionId: resolved.activeSiteVersionId,
+    artifactId: resolved.artifactId,
+    artifact: resolved.artifact,
+    html,
+    resolvedPath,
+  };
 }
 
 export async function listPreviouslyPublishedVersions(siteId: string): Promise<Array<{ id: string; artifactId: string }>> {

@@ -400,6 +400,24 @@ test("hosting operations read model: exposes domain visibility and readiness agg
   assert.equal(model.domainOperations.domains[0]?.dnsInstructions[0]?.value, "cname.vercel-dns.com");
 });
 
+test("hosting operations read model: warns when legacy custom-domain version diverges from active pointer", async () => {
+  const model = await getHostingOperationsReadModel("site_1", {
+    ...deps(),
+    listDomainHostBindingsForSite: async ({ siteId }) =>
+      domainRows(siteId).map((row) => ({
+        ...row,
+        siteVersionId: rollbackVersionId,
+      })),
+  });
+
+  assert.equal(model.customDomains[0]?.legacyDomainSiteVersionId, rollbackVersionId);
+  assert.equal(model.customDomains[0]?.activePointerSiteVersionId, activeVersionId);
+  assert.deepEqual(model.customDomains[0]?.diagnostics, ["CUSTOM_DOMAIN_VERSION_DIVERGENCE_DETECTED"]);
+  assert.equal(model.readiness.state, "ready_with_warnings");
+  assert.equal(model.readiness.warnings.includes("CUSTOM_DOMAIN_VERSION_DIVERGENCE_DETECTED"), true);
+  assert.equal(model.diagnostics.codes.includes("CUSTOM_DOMAIN_VERSION_DIVERGENCE_DETECTED"), true);
+});
+
 test("hosting operations read model: working domain remains visible when custom domain is absent", async () => {
   const model = await getHostingOperationsReadModel("site_1", {
     ...deps(),

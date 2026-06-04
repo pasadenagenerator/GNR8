@@ -146,6 +146,17 @@ test("public runtime artifact hit: serves artifact HTML with artifact-only diagn
 });
 
 test("public runtime domain hit: serves raw template HTML and rewrites /assets URLs", async () => {
+  const usageCalls: Array<{ siteId: string; artifactId?: string | null; requestCount?: number }> = [];
+  const restoreUsageDeps = __setPublicRuntimeUsageDependenciesForTest({
+    persistRuntimeUsageEvent: async (usage) => {
+      usageCalls.push({
+        siteId: String(usage.siteId ?? ""),
+        artifactId: usage.artifactId ?? null,
+        requestCount: usage.requestCount,
+      });
+      return { status: "written" };
+    },
+  });
   const restoreDeps = __setPublicRuntimeRenderDependenciesForTest({
     resolveRawTemplateSiteForDomainAndPath: async () =>
       ({
@@ -156,6 +167,10 @@ test("public runtime domain hit: serves raw template HTML and rewrites /assets U
         domain: "beauty-clinic.example.com",
         bindingId: "domain_binding_1",
         status: "active",
+        legacyDomainSiteVersionId: "sv_raw_1",
+        activePointerSiteVersionId: "sv_raw_1",
+        activeArtifactId: "artifact_raw_1",
+        diagnostics: [],
         normalizedPath: "/",
         resolvedFilePath: "nested/page.html",
         html: "<!doctype html><html><head><link rel=\"stylesheet\" href=\"/assets/main.css\" /><link rel=\"stylesheet\" href=\"../assets/nested.css\" /><style>.hero{background-image:url('./assets/bg.jpg')}</style></head><body style=\"background-image:url('../assets/body-bg.jpg')\"><img src=\"/assets/hero.jpg\" /><script src=\"./assets/app.js\"></script></body></html>",
@@ -178,8 +193,10 @@ test("public runtime domain hit: serves raw template HTML and rewrites /assets U
     assert.match(html, /\/api\/gnr8\/runtime\/preview-assets\/site_raw_1\/sv_raw_1\/nested\/assets\/app\.js/);
     assert.match(html, /\/api\/gnr8\/runtime\/preview-assets\/site_raw_1\/sv_raw_1\/nested\/assets\/bg\.jpg/);
     assert.match(html, /\/api\/gnr8\/runtime\/preview-assets\/site_raw_1\/sv_raw_1\/assets\/body-bg\.jpg/);
+    assert.deepEqual(usageCalls, [{ siteId: "site_raw_1", artifactId: "artifact_raw_1", requestCount: 1 }]);
   } finally {
     restoreDeps();
+    restoreUsageDeps();
   }
 });
 
@@ -392,7 +409,7 @@ test("migration MVP readiness: imported raw template renders published CMS overr
       return persistedSlots as never;
     },
     listContentOverrides: async ({ siteVersionId: requestedSiteVersionId, status }) => {
-      overrideListCalls.push({ siteVersionId: requestedSiteVersionId, status });
+      overrideListCalls.push({ siteVersionId: requestedSiteVersionId, status: String(status ?? "") });
       assert.equal(requestedSiteVersionId, siteVersionId);
       assert.equal(status, "published");
       return [...publishedOverrides.values()] as never;
