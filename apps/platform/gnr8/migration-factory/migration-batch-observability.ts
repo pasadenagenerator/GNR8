@@ -123,6 +123,10 @@ type BuildMigrationBatchObservabilityInput = {
   jobStore: MigrationJobStore;
   batchId: string;
   now?: () => string;
+  batch?: MigrationBatch;
+  jobSummaries?: MigrationBatchJobSummary[];
+  batchEvents?: MigrationBatchEvent[];
+  jobs?: Array<MigrationJob | null>;
 };
 
 type InternalTimelineEntry = MigrationBatchTimelineEntry & {
@@ -557,14 +561,16 @@ export async function buildMigrationBatchObservability(
   const batchId = String(input.batchId ?? "").trim();
   if (!batchId) throw new Error("400|batchId is required");
 
-  const batch = await input.batchStore.getBatch(batchId);
+  const batch = input.batch ?? await input.batchStore.getBatch(batchId);
   if (!batch) return null;
 
-  const [jobSummaries, batchEvents] = await Promise.all([
-    input.batchStore.listBatchJobs(batchId),
-    input.batchStore.listBatchEvents(batchId),
-  ]);
-  const jobs = await Promise.all(jobSummaries.map((job) => input.jobStore.getJob(job.jobId)));
+  const [jobSummaries, batchEvents] = input.jobSummaries && input.batchEvents
+    ? [input.jobSummaries, input.batchEvents]
+    : await Promise.all([
+      input.batchStore.listBatchJobs(batchId),
+      input.batchStore.listBatchEvents(batchId),
+    ]);
+  const jobs = input.jobs ?? await Promise.all(jobSummaries.map((job) => input.jobStore.getJob(job.jobId)));
 
   const batchTimeline = buildBatchTimelineEntries(batchEvents);
   const timeline = visibleTimeline([
