@@ -534,6 +534,34 @@ export type RuntimeHostBinding = {
   updatedAt: string;
 };
 
+export type RuntimeSiteSummary = {
+  id: string;
+  sourceUrl: string;
+  sourceHost: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type RuntimeOwnershipSiteSummary = {
+  id: string;
+  name: string | null;
+  status: string | null;
+  domain: string | null;
+  orgId: string | null;
+  agencyId: string | null;
+};
+
+export type RuntimeSiteVersionOwnershipSnapshot = {
+  id: string;
+  siteId: string;
+  versionNo: number;
+  state: SiteVersionState;
+  artifactId: string | null;
+  ownershipSiteId: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type RuntimeDomainHostBindingStatus = "pending" | "verifying" | "active" | "failed";
 export type RuntimeDomainVerificationType = "cname" | "txt";
 export type RuntimeDomainType = "apex_domain" | "subdomain" | "wildcard_domain" | "unknown";
@@ -998,6 +1026,182 @@ export async function bindHostToSite(input: {
   });
 }
 
+export async function getRuntimeSiteSummary(siteId: string): Promise<RuntimeSiteSummary | null> {
+  await ensureRuntimeTables();
+  const client = await getSuperadminPool().connect();
+  try {
+    const res = await client.query<{
+      id: string;
+      source_url: string;
+      source_host: string | null;
+      created_at: string;
+      updated_at: string;
+    }>(
+      `
+      select
+        id::text as id,
+        source_url::text as source_url,
+        source_host::text as source_host,
+        created_at::text as created_at,
+        updated_at::text as updated_at
+      from public.gnr8_runtime_sites
+      where id = $1::text
+      limit 1
+      `,
+      [siteId],
+    );
+    const row = res.rows[0];
+    if (!row) return null;
+    return {
+      id: row.id,
+      sourceUrl: row.source_url,
+      sourceHost: row.source_host,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+    };
+  } finally {
+    client.release();
+  }
+}
+
+export async function getOwnershipSiteSummary(ownershipSiteId: string): Promise<RuntimeOwnershipSiteSummary | null> {
+  await ensureRuntimeTables();
+  const client = await getSuperadminPool().connect();
+  try {
+    const res = await client.query<{
+      id: string;
+      name: string | null;
+      status: string | null;
+      domain: string | null;
+      org_id: string | null;
+      agency_id: string | null;
+    }>(
+      `
+      select
+        id::text as id,
+        name::text as name,
+        status::text as status,
+        domain::text as domain,
+        org_id::text as org_id,
+        agency_id::text as agency_id
+      from public.sites
+      where id = $1::uuid
+      limit 1
+      `,
+      [ownershipSiteId],
+    );
+    const row = res.rows[0];
+    if (!row) return null;
+    return {
+      id: row.id,
+      name: row.name,
+      status: row.status,
+      domain: row.domain,
+      orgId: row.org_id,
+      agencyId: row.agency_id,
+    };
+  } finally {
+    client.release();
+  }
+}
+
+export async function getRuntimeSiteVersionOwnershipSnapshot(
+  siteVersionId: string,
+): Promise<RuntimeSiteVersionOwnershipSnapshot | null> {
+  await ensureRuntimeTables();
+  const client = await getSuperadminPool().connect();
+  try {
+    const res = await client.query<{
+      id: string;
+      site_id: string;
+      version_no: number;
+      state: SiteVersionState;
+      artifact_id: string | null;
+      ownership_site_id: string | null;
+      created_at: string;
+      updated_at: string;
+    }>(
+      `
+      select
+        id::text as id,
+        site_id::text as site_id,
+        version_no::int as version_no,
+        state::text as state,
+        artifact_id::text as artifact_id,
+        ownership_site_id::text as ownership_site_id,
+        created_at::text as created_at,
+        updated_at::text as updated_at
+      from public.gnr8_runtime_site_versions
+      where id = $1::uuid
+      limit 1
+      `,
+      [siteVersionId],
+    );
+    const row = res.rows[0];
+    if (!row) return null;
+    return {
+      id: row.id,
+      siteId: row.site_id,
+      versionNo: row.version_no,
+      state: row.state,
+      artifactId: row.artifact_id,
+      ownershipSiteId: row.ownership_site_id,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+    };
+  } finally {
+    client.release();
+  }
+}
+
+export async function getActiveHostBindingForHost(host: string): Promise<RuntimeHostBinding | null> {
+  await ensureRuntimeTables();
+  const normalizedHost = normalizeRuntimeHost(host);
+  if (!normalizedHost) return null;
+  const client = await getSuperadminPool().connect();
+  try {
+    const res = await client.query<{
+      id: string;
+      site_id: string;
+      host: string;
+      status: RuntimeHostBindingStatus;
+      binding_kind: string;
+      created_at: string;
+      updated_at: string;
+    }>(
+      `
+      select
+        id::text as id,
+        site_id::text as site_id,
+        host::text as host,
+        status::text as status,
+        binding_kind::text as binding_kind,
+        created_at::text as created_at,
+        updated_at::text as updated_at
+      from public.gnr8_runtime_host_bindings
+      where lower(host) = $1::text
+        and status = 'ACTIVE'
+      order by updated_at desc, created_at desc
+      limit 1
+      `,
+      [normalizedHost],
+    );
+    const row = res.rows[0];
+    if (!row) return null;
+    return {
+      id: row.id,
+      siteId: row.site_id,
+      host: row.host,
+      status: row.status,
+      bindingKind: row.binding_kind,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+    };
+  } finally {
+    client.release();
+  }
+}
+
 export async function listHostBindingsForSite(siteId: string): Promise<RuntimeHostBinding[]> {
   await ensureRuntimeTables();
   const client = await getSuperadminPool().connect();
@@ -1039,6 +1243,193 @@ export async function listHostBindingsForSite(siteId: string): Promise<RuntimeHo
   } finally {
     client.release();
   }
+}
+
+export async function linkRuntimeSiteVersionOwnershipIfAllowed(input: {
+  siteVersionId: string;
+  ownershipSiteId: string;
+}): Promise<RuntimeSiteVersionOwnershipSnapshot> {
+  return withTx(async (client) => {
+    const res = await client.query<{
+      id: string;
+      site_id: string;
+      version_no: number;
+      state: SiteVersionState;
+      artifact_id: string | null;
+      ownership_site_id: string | null;
+      created_at: string;
+      updated_at: string;
+    }>(
+      `
+      update public.gnr8_runtime_site_versions
+      set ownership_site_id = $2::uuid, updated_at = now()
+      where id = $1::uuid
+        and (ownership_site_id is null or ownership_site_id = $2::uuid)
+      returning
+        id::text as id,
+        site_id::text as site_id,
+        version_no::int as version_no,
+        state::text as state,
+        artifact_id::text as artifact_id,
+        ownership_site_id::text as ownership_site_id,
+        created_at::text as created_at,
+        updated_at::text as updated_at
+      `,
+      [input.siteVersionId, input.ownershipSiteId],
+    );
+    const row = res.rows[0];
+    if (!row) throw new Error("Runtime site version ownership link denied");
+    return {
+      id: row.id,
+      siteId: row.site_id,
+      versionNo: row.version_no,
+      state: row.state,
+      artifactId: row.artifact_id,
+      ownershipSiteId: row.ownership_site_id,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+    };
+  });
+}
+
+export async function transferRuntimeHostBinding(input: {
+  host: string;
+  fromSiteId: string;
+  toSiteId: string;
+  bindingKind?: RuntimeHostBindingKind | string | null;
+}): Promise<{
+  host: string;
+  fromSiteId: string;
+  toSiteId: string;
+  transferred: boolean;
+  previousBinding: RuntimeHostBinding | null;
+  newBinding: RuntimeHostBinding;
+}> {
+  return withTx(async (client) => {
+    const normalizedHost = normalizeRuntimeHost(input.host);
+    if (!normalizedHost) throw new Error("Invalid host");
+
+    const siteRes = await client.query<{ id: string }>(
+      `select id::text as id from public.gnr8_runtime_sites where id = $1::text limit 1`,
+      [input.toSiteId],
+    );
+    if (!siteRes.rows[0]) throw new Error("Target runtime site not found");
+
+    const activeRes = await client.query<{
+      id: string;
+      site_id: string;
+      host: string;
+      status: RuntimeHostBindingStatus;
+      binding_kind: string;
+      created_at: string;
+      updated_at: string;
+    }>(
+      `
+      select
+        id::text as id,
+        site_id::text as site_id,
+        host::text as host,
+        status::text as status,
+        binding_kind::text as binding_kind,
+        created_at::text as created_at,
+        updated_at::text as updated_at
+      from public.gnr8_runtime_host_bindings
+      where lower(host) = $1::text
+        and status = 'ACTIVE'
+      order by updated_at desc, created_at desc
+      limit 1
+      `,
+      [normalizedHost],
+    );
+    const activeRow = activeRes.rows[0];
+    if (!activeRow) throw new Error("Active runtime host binding not found");
+    if (activeRow.site_id !== input.fromSiteId && activeRow.site_id !== input.toSiteId) {
+      throw new Error("Active runtime host binding source mismatch");
+    }
+
+    const previousBinding: RuntimeHostBinding = {
+      id: activeRow.id,
+      siteId: activeRow.site_id,
+      host: activeRow.host,
+      status: activeRow.status,
+      bindingKind: activeRow.binding_kind,
+      createdAt: activeRow.created_at,
+      updatedAt: activeRow.updated_at,
+    };
+    const bindingKind = String(input.bindingKind ?? activeRow.binding_kind ?? "shadow").trim() || "shadow";
+
+    if (activeRow.site_id !== input.toSiteId) {
+      await client.query(
+        `
+        update public.gnr8_runtime_host_bindings
+        set status = 'INACTIVE', updated_at = now()
+        where lower(host) = $1::text
+          and status = 'ACTIVE'
+          and site_id <> $2::text
+        `,
+        [normalizedHost, input.toSiteId],
+      );
+    }
+
+    await client.query(
+      `
+      insert into public.gnr8_runtime_host_bindings (site_id, host, status, binding_kind)
+      values ($1::text, $2::text, 'ACTIVE', $3::text)
+      on conflict (site_id, host)
+      do update set
+        status = 'ACTIVE',
+        binding_kind = excluded.binding_kind,
+        updated_at = now()
+      `,
+      [input.toSiteId, normalizedHost, bindingKind],
+    );
+
+    const newRes = await client.query<{
+      id: string;
+      site_id: string;
+      host: string;
+      status: RuntimeHostBindingStatus;
+      binding_kind: string;
+      created_at: string;
+      updated_at: string;
+    }>(
+      `
+      select
+        id::text as id,
+        site_id::text as site_id,
+        host::text as host,
+        status::text as status,
+        binding_kind::text as binding_kind,
+        created_at::text as created_at,
+        updated_at::text as updated_at
+      from public.gnr8_runtime_host_bindings
+      where lower(host) = $1::text
+        and site_id = $2::text
+        and status = 'ACTIVE'
+      limit 1
+      `,
+      [normalizedHost, input.toSiteId],
+    );
+    const newRow = newRes.rows[0];
+    if (!newRow) throw new Error("Runtime host binding transfer verification failed");
+
+    return {
+      host: normalizedHost,
+      fromSiteId: input.fromSiteId,
+      toSiteId: input.toSiteId,
+      transferred: activeRow.site_id !== input.toSiteId,
+      previousBinding,
+      newBinding: {
+        id: newRow.id,
+        siteId: newRow.site_id,
+        host: newRow.host,
+        status: newRow.status,
+        bindingKind: newRow.binding_kind,
+        createdAt: newRow.created_at,
+        updatedAt: newRow.updated_at,
+      },
+    };
+  });
 }
 
 export async function upsertDomainHostBinding(input: {
