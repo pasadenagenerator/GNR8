@@ -6,17 +6,23 @@ Track migration-first MVP runtime progress separately from Website OS work.
 
 ## Current Status
 
-Migration Runtime + Command Center MVP is operational and smoke-tested through Phase 6A.
+Migration Runtime + Command Center MVP is operational and smoke-tested through Phase 6C-A2.
 
 Phase 5A adds Command Center migration batch list/detail UI, batch summary, diagnostics, failure reporting, timeline visibility, and operator run/resume controls. Execution remains operator-driven. Queue/worker orchestration and unattended execution do not exist yet.
 
-Phase 6A adds read-only Hosting Operations observability for Command Center, including hosting overview/detail surfaces, readiness reporting, diagnostics reporting, rollback visibility, and production smoke verification. Hosting execution remains read-only.
+Phase 6A adds read-only Hosting Operations observability for Command Center, including hosting overview/detail surfaces, readiness reporting, diagnostics reporting, and production smoke verification. Hosting execution remains read-only.
+
+Phase 6B completes Hosting Operations Workflow Review.
+
+Phase 6C-A adds Readiness & Domain Operations MVP surfaces for runtime readiness drilldown, domain operations visibility, DNS instruction visibility, domain recheck workflow visibility, and asset diagnostics summary.
+
+Phase 6C-A2 separates internal/working domains from external/custom domains so operators can distinguish platform working URLs from customer-owned domains.
 
 Website OS runtime expansion remains paused.
 
 ## Critical Path
 
-Import -> CMS -> Renderer -> Durable Jobs -> Durable Batches -> Batch Execution -> Batch Execution Observability -> Command Center -> Hosting Operations -> Billing
+Import -> CMS -> Renderer -> Durable Jobs -> Durable Batches -> Batch Execution -> Batch Execution Observability -> Command Center -> Hosting Operations -> Asset Diagnostics Drilldown -> Billing
 
 ## Completed Reality Checks
 
@@ -279,7 +285,6 @@ Completed:
 - Runtime readiness visibility
 - Domain readiness visibility
 - Asset diagnostics visibility
-- Rollback candidate visibility
 - Runtime diagnostics visibility
 
 Production smoke-test routes:
@@ -295,7 +300,6 @@ Verified:
 - active version visibility
 - active artifact visibility
 - readiness reporting
-- rollback reporting
 - diagnostics reporting
 
 Fix included:
@@ -304,18 +308,95 @@ Fix included:
 Execution boundary:
 - READ ONLY.
 - No publish execution.
-- No rollback execution.
+- No rollback workflow UI.
 - No DNS execution.
 - No domain execution.
 
 Next milestone:
 - Phase 6B — Hosting Operations Workflow Review
 
+### Phase 6B — Hosting Operations Workflow Review
+
+Goal:
+- Review Hosting Operations workflow coverage after the Phase 6A observability MVP.
+
+Completed:
+- Confirmed Hosting Operations remains an operator visibility surface.
+- Confirmed publish workflow remains read-only from Hosting Operations.
+- Confirmed rollback workflow UI remains excluded.
+- Confirmed no DNS/provider execution belongs in the current Hosting Operations surface.
+
+Execution boundary:
+- READ ONLY.
+- No publish execution.
+- No rollback workflow UI.
+- No DNS execution.
+- No provider execution.
+
+### Phase 6C-A — Readiness & Domain Operations MVP
+
+Goal:
+- Extend Hosting Operations with readiness and domain operations visibility for operator review.
+
+Implementation summary:
+- Added runtime readiness drilldown visibility.
+- Added domain operations visibility.
+- Added DNS instruction visibility.
+- Added domain recheck workflow visibility.
+- Added asset diagnostics summary visibility.
+- Kept Hosting Operations as a read-only operational surface.
+
+Production verification:
+- `/gnr8/command-center/hosting` loaded successfully.
+- `/gnr8/command-center/hosting/[siteId]` loaded successfully.
+- Hosting Overview and Hosting Detail rendered successfully.
+- Runtime readiness, readiness drilldown, DNS instructions, domain recheck workflow, and asset diagnostics summary rendered successfully.
+
+Explicit exclusions:
+- No publish workflow controls.
+- No rollback workflow UI.
+- No DNS execution.
+- No provider execution.
+- No runtime mutation.
+- No migration, schema, or test changes in this documentation checkpoint.
+
+### Phase 6C-A2 — Internal vs Custom Domain Visibility
+
+Goal:
+- Separate internal/working domains from external/custom domains in Hosting Operations visibility.
+
+Implementation summary:
+- Documented internal/working domain visibility as distinct from external/custom domain visibility.
+- Clarified that working domains are platform/internal reachability surfaces.
+- Clarified that custom domains are customer-owned external domain surfaces.
+- Kept DNS instructions and domain recheck workflow visible without adding provider execution.
+
+Production verification:
+- `/gnr8/command-center/hosting` loaded successfully.
+- `/gnr8/command-center/hosting/[siteId]` loaded successfully.
+- Internal/working domains and external/custom domains rendered as separate operator-visible concepts.
+- Production readiness and domain operations smoke verification completed successfully.
+
+Explicit exclusions:
+- No DNS/provider execution was introduced.
+- No custom domain automation was introduced.
+- No publish workflow controls were introduced.
+- Rollback UI remains intentionally excluded.
+- Hosting Operations remains read-only.
+
+## Current State
+
+Hosting Operations MVP is complete through:
+- Phase 6A
+- Phase 6B
+- Phase 6C-A
+- Phase 6C-A2
+
 ## Current Remaining Work
 
 ### Near-term
 
-- Phase 6B — Hosting Operations Workflow Review
+- Phase 6C-B — Asset Diagnostics Drilldown
 - Billing Reality Check
 
 ### Optional Runtime UX
@@ -327,6 +408,14 @@ Next milestone:
 ### Later
 
 - DNS/domain onboarding hardening
+
+### Deferred
+
+- rollback workflow
+- publish workflow controls
+- CDN/object-storage strategy
+- synthetic monitoring
+- provider execution automation
 
 ## Explicitly Paused
 

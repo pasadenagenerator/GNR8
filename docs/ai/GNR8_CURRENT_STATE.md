@@ -16,9 +16,13 @@ Completed migration-first chain:
 - Batch Execution
 - Batch Execution Observability
 - Command Center Integration
+- Hosting Operations
 
 Migration Runtime + Command Center MVP is operational and smoke-tested.
 Phase 6A — Hosting Operations MVP is complete.
+Phase 6B — Hosting Operations Workflow Review is complete.
+Phase 6C-A — Readiness & Domain Operations MVP is complete.
+Phase 6C-A2 — Internal vs Custom Domain Visibility is complete.
 
 Completed capabilities:
 - CMS slot materialization
@@ -54,8 +58,13 @@ Completed capabilities:
 - publish history visibility
 - runtime readiness visibility
 - domain readiness visibility
+- readiness drilldown
+- internal/working domain visibility
+- external/custom domain visibility
+- DNS instruction visibility
+- domain recheck workflow
 - asset diagnostics visibility
-- rollback candidate visibility
+- asset diagnostics summary
 - runtime diagnostics visibility
 
 Current migration runtime capabilities:
@@ -75,9 +84,25 @@ Current migration runtime capabilities:
 - publish history visibility
 - runtime readiness visibility
 - domain readiness visibility
+- readiness drilldown visibility
+- internal/working domain visibility
+- external/custom domain visibility
+- DNS instruction visibility
+- domain recheck workflow visibility
 - asset diagnostics visibility
-- rollback candidate visibility
+- asset diagnostics summary visibility
 - runtime diagnostics visibility
+
+Hosting Operations now exposes:
+- Hosting Overview
+- Hosting Detail
+- runtime readiness
+- readiness drilldown
+- internal/working domains
+- external/custom domains
+- DNS instruction visibility
+- domain recheck workflow
+- asset diagnostics summary
 
 Production smoke test:
 - `/gnr8/command-center/migration-batches` loaded successfully.
@@ -85,22 +110,25 @@ Production smoke test:
 - `/gnr8/command-center/hosting` loaded successfully.
 - `/gnr8/command-center/hosting/[siteId]` loaded successfully.
 - summary, diagnostics, failures, timeline, completed jobs, pending jobs, and failed jobs rendered.
-- Active Version, Active Artifact, Publish Timestamp, Runtime Readiness, Domain Readiness, Asset Diagnostics, Rollback Candidates, and Runtime Diagnostics rendered.
+- Active Version, Active Artifact, Publish Timestamp, Runtime Readiness, Domain Readiness, Readiness Drilldown, Internal/Working Domains, External/Custom Domains, DNS Instructions, Domain Recheck, Asset Diagnostics Summary, and Runtime Diagnostics rendered.
 - DB connection pressure fix validated.
 - EMAXCONNSESSION issue resolved through composed server read path.
 - production hosting smoke test completed successfully.
+- production readiness and domain operations smoke verification completed successfully.
 
 Execution boundary:
 - execution remains operator-driven
 - hosting execution remains read-only
 - no publish execution controls added
-- no rollback execution controls added
+- publish workflow remains read-only from Hosting Operations
+- rollback UI remains intentionally excluded
 - no domain execution controls added
+- no DNS/provider execution was introduced
 - queue/worker orchestration does not exist yet
 - unattended orchestration does not exist yet
 
 Remaining critical path:
-- Phase 6B — Hosting Operations Workflow Review
+- Phase 6C-B — Asset Diagnostics Drilldown
 - Phase 5B — Job Detail + Stage Diagnostics UI (optional)
 - Billing
 

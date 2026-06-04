@@ -367,6 +367,7 @@ test("hosting operations read model: keeps truly unknown ids not found", async (
   assert.equal(model.workingDomains.length, 0);
   assert.equal(model.customDomains.length, 0);
   assert.equal(model.domains.length, 0);
+  assert.deepEqual(model.assetDiagnostics.summary, { total: 0, critical: 0, warning: 0, info: 0 });
   assert.deepEqual(model.diagnostics.codes, ["HOSTING_OPERATIONS_SITE_NOT_FOUND"]);
 });
 
@@ -451,5 +452,8 @@ test("hosting operations read model: aggregates asset diagnostics", async () => 
   assert.equal(model.assets.counts.persistedAssets, 1);
   assert.equal(model.assets.counts.externalFallbackAssets, 1);
   assert.deepEqual(model.assets.diagnostics.codes, ["ASSET_FALLBACK_WARN", "RAW_IMPORT_WARN"]);
+  assert.equal(model.assetDiagnostics.summary.total, 2);
+  assert.equal(model.assetDiagnostics.summary.warning, 2);
+  assert.equal(model.assetDiagnostics.entries.some((entry) => entry.diagnosticCode === "external_fallback"), true);
   assert.equal(model.diagnostics.latestFailures.includes("CAPTURE_WARN_PAGE"), true);
 });

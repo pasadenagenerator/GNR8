@@ -50,6 +50,17 @@ test("hosting detail operations UI: diagnostics render existing domain evidence"
   assert.equal(source.includes("Verification Diagnostics"), true);
 });
 
+test("hosting detail operations UI: asset diagnostics drilldown renders", async () => {
+  const source = await readFile(DETAIL_PAGE_FILE, "utf8");
+
+  assert.equal(source.includes("Asset Diagnostics Drilldown"), true);
+  assert.equal(source.includes("Total Diagnostics"), true);
+  assert.equal(source.includes("Diagnostic Code"), true);
+  assert.equal(source.includes("model.assetDiagnostics.summary.critical"), true);
+  assert.equal(source.includes("model.assetDiagnostics.entries"), true);
+  assert.equal(source.includes("No asset diagnostics are currently reported."), true);
+});
+
 test("hosting overview UI: domain column identifies working domain", async () => {
   const source = await readFile(OVERVIEW_PAGE_FILE, "utf8");
 

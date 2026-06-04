@@ -16,6 +16,10 @@ import {
   createHostingReadinessDrilldown,
   type HostingReadinessDrilldown,
 } from "@/gnr8/runtime/hosting-operations/hosting-readiness-drilldown";
+import {
+  createHostingAssetDiagnosticsReadModel,
+  type HostingAssetDiagnosticsReadModel,
+} from "@/gnr8/runtime/hosting-operations/hosting-asset-diagnostics-read-model";
 import { resolveRuntimeSiteVersion, type RuntimeResolutionResult } from "@/gnr8/runtime/resolution/runtime-resolution";
 import {
   getActivePointerForSite,
@@ -151,6 +155,7 @@ export type HostingOperationsReadModel = {
   readiness: HostingOperationsReadiness;
   readinessDrilldown: HostingReadinessDrilldown;
   domainOperations: HostingDomainOperationsReadModel;
+  assetDiagnostics: HostingAssetDiagnosticsReadModel;
   assets: {
     artifactId: string | null;
     artifactType: "runtime_artifact" | "raw_imported_site" | "raw_template_site" | "none";
@@ -439,6 +444,12 @@ export async function getHostingOperationsReadModel(
         siteFallbackBlockers: ["hosting_operations_site_not_found"],
       }),
       domainOperations: createHostingDomainOperationsReadModel({ domains: [], workingDomains: [] }),
+      assetDiagnostics: createHostingAssetDiagnosticsReadModel({
+        activeVersion: null,
+        runtimeArtifact: null,
+        rawArtifact: null,
+        importProvenanceSummary: null,
+      }),
       assets: {
         artifactId: null,
         artifactType: "none",
@@ -547,6 +558,12 @@ export async function getHostingOperationsReadModel(
     rawArtifact,
     importProvenanceSummary: activeVersion?.importProvenanceSummary ?? null,
   });
+  const assetDiagnostics = createHostingAssetDiagnosticsReadModel({
+    activeVersion,
+    runtimeArtifact,
+    rawArtifact,
+    importProvenanceSummary: activeVersion?.importProvenanceSummary ?? null,
+  });
   const codes = uniqueSorted([
     ...(resolution?.diagnostics.code ? [resolution.diagnostics.code] : []),
     ...assets.diagnostics.codes,
@@ -622,6 +639,7 @@ export async function getHostingOperationsReadModel(
     readiness: combineReadiness({ siteReadiness, domainReadiness }),
     readinessDrilldown: createHostingReadinessDrilldown({ siteReadiness, domainReadiness }),
     domainOperations: createHostingDomainOperationsReadModel({ domains: domainRows, workingDomains: workingDomainRows }),
+    assetDiagnostics,
     assets,
     diagnostics: {
       latestRuntimeDiagnostics: {

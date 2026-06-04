@@ -2,6 +2,7 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 
 import { HostingDomainRecheckButton } from "@/app/gnr8/command-center/hosting/[siteId]/hosting-domain-recheck-button";
+import type { HostingAssetDiagnosticEntry } from "@/gnr8/runtime/hosting-operations/hosting-asset-diagnostics-read-model";
 import type { HostingReadinessFinding } from "@/gnr8/runtime/hosting-operations/hosting-readiness-drilldown";
 import { getHostingOperationsReadModel } from "@/gnr8/runtime/hosting-operations/hosting-operations-read-model";
 
@@ -55,6 +56,44 @@ function findingsTable(findings: readonly HostingReadinessFinding[]) {
               <td style={{ padding: "9px 6px" }}>{finding.description}</td>
               <td style={{ padding: "9px 6px" }}>{finding.affectedObject}</td>
               <td style={{ padding: "9px 6px" }}>{text(finding.suggestedRemediation)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function assetDiagnosticsTable(entries: readonly HostingAssetDiagnosticEntry[]) {
+  if (entries.length === 0) {
+    return <p style={{ margin: 0, fontSize: 13, color: "#475569" }}>No asset diagnostics are currently reported.</p>;
+  }
+
+  return (
+    <div style={{ overflowX: "auto" }}>
+      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+        <thead>
+          <tr style={{ textAlign: "left", borderBottom: "1px solid #e5e7eb", color: "#475569" }}>
+            <th style={{ padding: "8px 6px" }}>Path</th>
+            <th style={{ padding: "8px 6px" }}>Severity</th>
+            <th style={{ padding: "8px 6px" }}>Diagnostic Code</th>
+            <th style={{ padding: "8px 6px" }}>Reason</th>
+            <th style={{ padding: "8px 6px" }}>Source</th>
+            <th style={{ padding: "8px 6px" }}>Remediation</th>
+          </tr>
+        </thead>
+        <tbody>
+          {entries.map((diagnostic) => (
+            <tr
+              key={`${diagnostic.assetPath}-${diagnostic.diagnosticCode}-${diagnostic.source}`}
+              style={{ borderBottom: "1px solid #f1f5f9" }}
+            >
+              <td style={{ padding: "9px 6px", fontFamily: "monospace", wordBreak: "break-word" }}>{diagnostic.assetPath}</td>
+              <td style={{ padding: "9px 6px", fontWeight: 800 }}>{diagnostic.severity}</td>
+              <td style={{ padding: "9px 6px", fontFamily: "monospace", fontWeight: 700 }}>{diagnostic.diagnosticCode}</td>
+              <td style={{ padding: "9px 6px" }}>{diagnostic.reason}</td>
+              <td style={{ padding: "9px 6px" }}>{diagnostic.source}</td>
+              <td style={{ padding: "9px 6px" }}>{diagnostic.remediation}</td>
             </tr>
           ))}
         </tbody>
@@ -245,6 +284,19 @@ export default async function CommandCenterHostingSitePage(props: {
           <p style={{ margin: 0, fontSize: 13, color: "#374151" }}>
             <strong>Diagnostics:</strong> {list(model.assets.diagnostics.codes)}
           </p>
+        </div>,
+      )}
+
+      {section(
+        "Asset Diagnostics Drilldown",
+        <div style={{ display: "grid", gap: 10 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 10 }}>
+            {metric("Total Diagnostics", model.assetDiagnostics.summary.total)}
+            {metric("Critical", model.assetDiagnostics.summary.critical)}
+            {metric("Warning", model.assetDiagnostics.summary.warning)}
+            {metric("Info", model.assetDiagnostics.summary.info)}
+          </div>
+          {assetDiagnosticsTable(model.assetDiagnostics.entries)}
         </div>,
       )}
 

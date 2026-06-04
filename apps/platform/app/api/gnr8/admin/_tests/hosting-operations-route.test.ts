@@ -200,6 +200,15 @@ function readModel(input?: Partial<HostingOperationsReadModel>): HostingOperatio
         },
       ],
     },
+    assetDiagnostics: {
+      summary: {
+        total: 0,
+        critical: 0,
+        warning: 0,
+        info: 0,
+      },
+      entries: [],
+    },
     assets: {
       artifactId: "artifact_1",
       artifactType: "runtime_artifact",
@@ -341,5 +350,6 @@ test("hosting operations route: returns read-only hosting payload for overview-e
   assert.equal(body.domains[0]?.verified, true);
   assert.equal(body.readiness.state, "ready");
   assert.equal(body.domainOperations.domains[0]?.dnsInstructions[0]?.recordType, "CNAME");
+  assert.equal(body.assetDiagnostics.summary.total, 0);
   assert.equal(body.rollbackCandidates[0]?.siteVersionId, "version_0");
 });
