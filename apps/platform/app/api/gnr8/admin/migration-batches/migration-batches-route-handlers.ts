@@ -13,6 +13,7 @@ import {
   MigrationBatchExecutor,
   type MigrationBatchExecutionPolicy,
 } from "@/gnr8/migration-factory/migration-batch-executor";
+import { buildMigrationBatchObservability } from "@/gnr8/migration-factory/migration-batch-observability";
 import {
   serializeMigrationBatch,
   serializeMigrationBatchJob,
@@ -409,6 +410,78 @@ export function createMigrationBatchesRouteHandlers(deps: Partial<MigrationBatch
 
         return Response.json({
           ...execution,
+          store: {
+            batch: runtimeOptions(batchRuntime),
+            jobs: {
+              durable: migrationRuntime.durable,
+              storeKind: migrationRuntime.storeKind,
+            },
+          },
+        });
+      } catch (error) {
+        const mapped = mapAdminError(error);
+        return Response.json({ error: mapped.message }, { status: mapped.status });
+      }
+    },
+
+    async OBSERVABILITY(_request: Request, context: { params: Promise<{ batchId: string }> }): Promise<Response> {
+      try {
+        await requireAdminMigrationAccess();
+        const { batchId } = await context.params;
+        const normalizedBatchId = token(batchId);
+        if (!normalizedBatchId) return Response.json({ error: "batchId is required" }, { status: 400 });
+
+        const [batchRuntime, migrationRuntime] = await Promise.all([
+          requireDurableBatchRuntime(resolvedDeps.createMigrationBatchStoreRuntime),
+          requireDurableMigrationFactoryRuntime(resolvedDeps.createMigrationFactoryRuntime),
+        ]);
+
+        const observability = await buildMigrationBatchObservability({
+          batchStore: batchRuntime.store,
+          jobStore: migrationRuntime.store,
+          batchId: normalizedBatchId,
+        });
+        if (!observability) return Response.json({ error: "Migration batch not found" }, { status: 404 });
+
+        return Response.json({
+          observability,
+          store: {
+            batch: runtimeOptions(batchRuntime),
+            jobs: {
+              durable: migrationRuntime.durable,
+              storeKind: migrationRuntime.storeKind,
+            },
+          },
+        });
+      } catch (error) {
+        const mapped = mapAdminError(error);
+        return Response.json({ error: mapped.message }, { status: mapped.status });
+      }
+    },
+
+    async TIMELINE(_request: Request, context: { params: Promise<{ batchId: string }> }): Promise<Response> {
+      try {
+        await requireAdminMigrationAccess();
+        const { batchId } = await context.params;
+        const normalizedBatchId = token(batchId);
+        if (!normalizedBatchId) return Response.json({ error: "batchId is required" }, { status: 400 });
+
+        const [batchRuntime, migrationRuntime] = await Promise.all([
+          requireDurableBatchRuntime(resolvedDeps.createMigrationBatchStoreRuntime),
+          requireDurableMigrationFactoryRuntime(resolvedDeps.createMigrationFactoryRuntime),
+        ]);
+
+        const observability = await buildMigrationBatchObservability({
+          batchStore: batchRuntime.store,
+          jobStore: migrationRuntime.store,
+          batchId: normalizedBatchId,
+        });
+        if (!observability) return Response.json({ error: "Migration batch not found" }, { status: 404 });
+
+        return Response.json({
+          batchId: observability.batch.batchId,
+          timeline: observability.timeline,
+          latestEventAt: observability.summary.latestEventAt,
           store: {
             batch: runtimeOptions(batchRuntime),
             jobs: {

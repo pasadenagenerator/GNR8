@@ -9,7 +9,7 @@ Website OS branch status:
 - Do not continue Website OS runtime expansion unless explicitly requested.
 
 Latest completed milestone:
-- Migration Runtime Foundation Phase 3 — Durable Batch Migration Model.
+- Phase 4A — Operator Driven Batch Execution.
 
 Dedicated progress doc:
 - `docs/ai/MIGRATION_RUNTIME_PROGRESS.md`
@@ -23,6 +23,14 @@ Current completed chain:
 - Durable Migration Job Store
 - Durable Migration Runtime Wiring
 - Durable Batch Migration Model
+- Operator Driven Batch Execution
+
+Latest completed migration capabilities:
+- `MigrationBatchExecutor`
+- batch run/resume routes
+- execution policies
+- batch event persistence
+- real Postgres verification
 
 Current critical path:
 - Import
@@ -31,19 +39,20 @@ Current critical path:
 - Durable Jobs
 - Durable Batches
 - Batch Execution
+- Batch Execution Observability
 - Command Center
 - Hosting
 - Billing
 
 Next recommended milestone:
-- Phase 4 — Batch Execution Runtime.
+- Phase 4B — Batch Execution Observability.
 
 Explicit exclusions still in force:
 - no Website OS runtime expansion
 - no provider execution
 - no DNS execution
 - no billing automation yet
-- no queue/worker unless Phase 4 explicitly introduces it
+- no queue/worker unless a future phase explicitly introduces it
 - no autonomous execution
 
 ## A) Current Project State
@@ -67,8 +76,8 @@ Dedicated pause note:
 - Future continuation point: Execution Artifact Runtime family.
 - Execution Artifact Runtime family is not currently part of the migration-critical path.
 Next migration platform milestone:
-- Phase 4 — Batch Execution Runtime.
-- Phase 3 is durable state/model/API only; batch execution does not exist yet.
+- Phase 4B — Batch Execution Observability.
+- Phase 4A introduced operator-driven sequential batch execution only; queue/worker orchestration does not exist yet.
 Current completed runtime chain:
 - `Proposal Approval Queue → Execution Readiness Execution Package → Execution Contract Execution Contract Readiness → Execution Bundle Execution Bundle Readiness → Execution Authorization Execution Authorization Readiness Execution Authorization Package → Execution Intent Execution Intent Readiness → Execution Plan Execution Plan Readiness → Execution Candidate Execution Candidate Readiness Execution Candidate Package → Execution Candidate Authorization Execution Candidate Authorization Readiness Execution Candidate Authorization Package`
 Candidate Authorization Family completed. Governance graph expanded. Execution remains blocked. Website OS remains read-only.

@@ -6,6 +6,7 @@ import { createMigrationBatchesRouteHandlers } from "@/app/api/gnr8/admin/migrat
 import { createMigrationBatchStoreRuntime } from "@/gnr8/migration-factory/migration-batch-store-runtime";
 import { MigrationFactory } from "@/gnr8/migration-factory/migration-factory";
 import { MigrationFactoryRuntimeConfigurationError } from "@/gnr8/migration-factory/migration-factory-runtime";
+import { InMemoryMigrationJobStore } from "@/gnr8/migration-factory/migration-job-store";
 import type { MigrationBatchStore } from "@/gnr8/migration-factory/migration-batch-store";
 import type {
   AddMigrationJobToBatchInput,
@@ -502,6 +503,214 @@ test("durable migration batches admin run route fails closed when durable migrat
   assert.match(payload.error, /requires DATABASE_URL/);
 });
 
+test("durable migration batches admin observability route returns stable durable read model", async () => {
+  const now = createClock();
+  const batchStore = new FakeMigrationBatchStore(now);
+  const jobStore = new InMemoryMigrationJobStore({ now });
+  await batchStore.createBatch({
+    batchId: "batch-observability-route",
+    name: "Observability route batch",
+    status: "failed",
+    diagnostics: { skippedJobs: 1 },
+  });
+  batchStore.seedJob({
+    jobId: "job-observability-complete",
+    siteId: "site-observability-complete",
+    siteVersionId: null,
+    sourceUrl: "https://observability-complete.example.com",
+    status: "COMPLETED",
+    latestEventAt: "2026-06-03T12:10:00.000Z",
+  });
+  batchStore.seedJob({
+    jobId: "job-observability-failed",
+    siteId: "site-observability-failed",
+    siteVersionId: null,
+    sourceUrl: "https://observability-failed.example.com",
+    status: "FAILED",
+    latestEventAt: "2026-06-03T12:11:00.000Z",
+  });
+  await batchStore.addJobToBatch({ batchId: "batch-observability-route", jobId: "job-observability-complete" });
+  await batchStore.addJobToBatch({ batchId: "batch-observability-route", jobId: "job-observability-failed" });
+
+  await jobStore.createJob({
+    jobId: "job-observability-complete",
+    siteId: "site-observability-complete",
+    sourceUrl: "https://observability-complete.example.com",
+  });
+  await jobStore.updateJob("job-observability-complete", {
+    overallState: "COMPLETED",
+    currentStage: null,
+  });
+  await jobStore.createJob({
+    jobId: "job-observability-failed",
+    siteId: "site-observability-failed",
+    sourceUrl: "https://observability-failed.example.com",
+  });
+  await jobStore.updateStageState("job-observability-failed", "INTAKE", {
+    state: "FAILED",
+    startedAt: "2026-06-03T12:11:00.000Z",
+    endedAt: "2026-06-03T12:11:01.000Z",
+    attempts: 1,
+    diagnostics: [{
+      code: "INTAKE_FAILED",
+      message: "Could not read source URL",
+      level: "ERROR",
+    }],
+    error: {
+      code: "INTAKE_FAILED",
+      message: "Source URL returned 500",
+    },
+  });
+  await jobStore.updateJob("job-observability-failed", {
+    overallState: "FAILED",
+    currentStage: "INTAKE",
+    lastError: {
+      code: "INTAKE_FAILED",
+      message: "Source URL returned 500",
+    },
+  });
+  await jobStore.appendExecutionEvent("job-observability-failed", {
+    type: "JOB_FAILED",
+    timestamp: "2026-06-03T12:11:01.000Z",
+    stage: "INTAKE",
+    message: "Migration job failed at stage INTAKE",
+  });
+
+  await batchStore.appendBatchEvent({
+    batchId: "batch-observability-route",
+    eventType: "BATCH_EXECUTION_STARTED",
+    message: "Migration batch execution started",
+  });
+  await batchStore.appendBatchEvent({
+    batchId: "batch-observability-route",
+    eventType: "BATCH_JOB_STARTED",
+    message: "Migration batch job execution started",
+    jobId: "job-observability-complete",
+  });
+  await batchStore.appendBatchEvent({
+    batchId: "batch-observability-route",
+    eventType: "BATCH_JOB_COMPLETED",
+    message: "Migration batch job completed",
+    jobId: "job-observability-complete",
+  });
+  await batchStore.appendBatchEvent({
+    batchId: "batch-observability-route",
+    eventType: "BATCH_JOB_STARTED",
+    message: "Migration batch job execution started",
+    jobId: "job-observability-failed",
+  });
+  await batchStore.appendBatchEvent({
+    batchId: "batch-observability-route",
+    eventType: "BATCH_JOB_FAILED",
+    message: "Source URL returned 500",
+    jobId: "job-observability-failed",
+  });
+  await batchStore.appendBatchEvent({
+    batchId: "batch-observability-route",
+    eventType: "BATCH_EXECUTION_FAILED",
+    message: "Migration batch execution failed",
+  });
+
+  const handlers = createMigrationBatchesRouteHandlers({
+    requireSuperadminUserId: async () => "superadmin-1",
+    createMigrationBatchStoreRuntime: async () => ({
+      store: batchStore,
+      durable: true,
+      storeKind: "postgres",
+    }),
+    createMigrationFactoryRuntime: async () => ({
+      factory: {},
+      store: jobStore,
+      durable: true,
+      storeKind: "postgres",
+    }) as never,
+  });
+
+  const response = await handlers.OBSERVABILITY(
+    new Request("https://admin.test/observability"),
+    batchContext("batch-observability-route"),
+  );
+  assert.equal(response.status, 200);
+  const payload = await response.json() as {
+    observability: {
+      summary: {
+        totalJobs: number;
+        completedJobs: number;
+        failedJobs: number;
+        skippedJobs: number;
+        firstFailureJobId: string | null;
+      };
+      timeline: Array<{ eventType: string; jobId: string | null }>;
+      diagnostics: { executionCount: number; lastExecutionDurationMs: number | null };
+      failures: { failedJobIds: string[]; latestFailure: { jobId: string; latestReason: string | null } | null };
+    };
+    store: { batch: { durable: boolean; storeKind: string }; jobs: { durable: boolean; storeKind: string } };
+  };
+  assert.equal(payload.observability.summary.totalJobs, 2);
+  assert.equal(payload.observability.summary.completedJobs, 1);
+  assert.equal(payload.observability.summary.failedJobs, 1);
+  assert.equal(payload.observability.summary.skippedJobs, 1);
+  assert.equal(payload.observability.summary.firstFailureJobId, "job-observability-failed");
+  assert.deepEqual(payload.observability.timeline.map((entry) => [entry.eventType, entry.jobId]), [
+    ["execution_started", null],
+    ["job_started", "job-observability-complete"],
+    ["job_completed", "job-observability-complete"],
+    ["job_started", "job-observability-failed"],
+    ["job_failed", "job-observability-failed"],
+    ["execution_failed", null],
+  ]);
+  assert.equal(payload.observability.diagnostics.executionCount, 1);
+  assert.ok(payload.observability.diagnostics.lastExecutionDurationMs !== null);
+  assert.deepEqual(payload.observability.failures.failedJobIds, ["job-observability-failed"]);
+  assert.equal(payload.observability.failures.latestFailure?.latestReason, "Source URL returned 500");
+  assert.deepEqual(payload.store.batch, { durable: true, storeKind: "postgres" });
+  assert.deepEqual(payload.store.jobs, { durable: true, storeKind: "postgres" });
+
+  const timelineResponse = await handlers.TIMELINE(
+    new Request("https://admin.test/timeline"),
+    batchContext("batch-observability-route"),
+  );
+  assert.equal(timelineResponse.status, 200);
+  const timelinePayload = await timelineResponse.json() as { batchId: string; timeline: Array<{ eventType: string }> };
+  assert.equal(timelinePayload.batchId, "batch-observability-route");
+  assert.deepEqual(timelinePayload.timeline.map((entry) => entry.eventType), [
+    "execution_started",
+    "job_started",
+    "job_completed",
+    "job_started",
+    "job_failed",
+    "execution_failed",
+  ]);
+});
+
+test("durable migration batches admin observability route fails closed when durable migration runtime is missing", async () => {
+  const now = createClock();
+  const store = new FakeMigrationBatchStore(now);
+  await store.createBatch({ batchId: "batch-observability-missing-db", name: "Missing DB observability batch" });
+
+  const handlers = createMigrationBatchesRouteHandlers({
+    requireSuperadminUserId: async () => "superadmin-1",
+    createMigrationBatchStoreRuntime: async () => ({
+      store,
+      durable: true,
+      storeKind: "postgres",
+    }),
+    createMigrationFactoryRuntime: async () => {
+      throw new MigrationFactoryRuntimeConfigurationError(
+        "Durable migration runtime requires DATABASE_URL; refusing to fall back to in-memory migration job storage.",
+      );
+    },
+  });
+
+  const response = await handlers.OBSERVABILITY(
+    new Request("https://admin.test/observability"),
+    batchContext("batch-observability-missing-db"),
+  );
+  assert.equal(response.status, 503);
+  const payload = await response.json() as { error: string };
+  assert.match(payload.error, /requires DATABASE_URL/);
+});
+
 test("durable migration batches admin route creates and attaches through real Postgres store when DB is available", async (t: TestContext) => {
   const skipReason = await getRouteDbSkipReason();
   if (skipReason) {
@@ -625,6 +834,107 @@ test("durable migration batches admin run route executes with real Postgres stor
     assert.equal(runPayload.completedJobs, 1);
     assert.equal(runPayload.failedJobs, 0);
     assert.deepEqual(runPayload.jobResults.map((result) => [result.jobId, result.finalState]), [[jobId, "COMPLETED"]]);
+  } finally {
+    await cleanupDb({ batchId, jobId });
+  }
+});
+
+test("durable migration batches admin observability route reads real Postgres execution state when DB is available", async (t: TestContext) => {
+  const skipReason = await getRouteDbSkipReason();
+  if (skipReason) {
+    t.skip(skipReason);
+    return;
+  }
+
+  const batchId = `migration_batch_route_observability_db_${randomUUID()}`;
+  const jobId = `migration_batch_route_observability_job_db_${randomUUID()}`;
+  const now = createClock();
+  const jobStore = new PostgresMigrationJobStore({ now });
+  const factory = new MigrationFactory({
+    store: jobStore,
+    now,
+    stageRunner: {
+      runStage: async (_job, stage, context) => {
+        const startedAt = context.now();
+        const endedAt = context.now();
+        return {
+          stage,
+          status: "SUCCEEDED",
+          startedAt,
+          endedAt,
+          diagnostics: [],
+          outputRefs: { ref: `${jobId}:${stage}` },
+        };
+      },
+    },
+  });
+  const handlers = createMigrationBatchesRouteHandlers({
+    requireSuperadminUserId: async () => "superadmin-1",
+    createMigrationBatchStoreRuntime,
+    createMigrationFactoryRuntime: async () => ({
+      factory,
+      store: jobStore,
+      durable: true,
+      storeKind: "postgres",
+    }),
+  });
+
+  try {
+    await factory.startMigrationJob({
+      jobId,
+      siteId: `site_route_batch_observability_db_${randomUUID()}`,
+      sourceUrl: `https://route-batch-observability-db-${randomUUID()}.example.com`,
+    });
+
+    const createResponse = await handlers.POST(jsonRequest({
+      batchId,
+      name: "Route DB observability batch",
+    }));
+    assert.equal(createResponse.status, 201);
+
+    const attachResponse = await handlers.ADD_JOB(jsonRequest({ jobId }), batchContext(batchId));
+    assert.equal(attachResponse.status, 201);
+
+    const runResponse = await handlers.RUN(jsonRequest({ policy: "stop_on_failure" }), batchContext(batchId));
+    assert.equal(runResponse.status, 200);
+
+    const observabilityResponse = await handlers.OBSERVABILITY(
+      new Request("https://admin.test/observability"),
+      batchContext(batchId),
+    );
+    assert.equal(observabilityResponse.status, 200);
+    const payload = await observabilityResponse.json() as {
+      observability: {
+        summary: {
+          totalJobs: number;
+          completedJobs: number;
+          failedJobs: number;
+          lastExecutedJobId: string | null;
+          lastCompletedJobId: string | null;
+        };
+        timeline: Array<{ eventType: string; jobId: string | null }>;
+        diagnostics: { executionCount: number; completedJobs: string[]; lastExecutionDurationMs: number | null };
+        failures: { failedJobIds: string[] };
+      };
+      store: { batch: { durable: boolean; storeKind: string }; jobs: { durable: boolean; storeKind: string } };
+    };
+    assert.equal(payload.observability.summary.totalJobs, 1);
+    assert.equal(payload.observability.summary.completedJobs, 1);
+    assert.equal(payload.observability.summary.failedJobs, 0);
+    assert.equal(payload.observability.summary.lastExecutedJobId, jobId);
+    assert.equal(payload.observability.summary.lastCompletedJobId, jobId);
+    assert.deepEqual(payload.observability.timeline.map((entry) => [entry.eventType, entry.jobId]), [
+      ["execution_started", null],
+      ["job_started", jobId],
+      ["job_completed", jobId],
+      ["execution_completed", null],
+    ]);
+    assert.equal(payload.observability.diagnostics.executionCount, 1);
+    assert.deepEqual(payload.observability.diagnostics.completedJobs, [jobId]);
+    assert.ok(payload.observability.diagnostics.lastExecutionDurationMs !== null);
+    assert.deepEqual(payload.observability.failures.failedJobIds, []);
+    assert.deepEqual(payload.store.batch, { durable: true, storeKind: "postgres" });
+    assert.deepEqual(payload.store.jobs, { durable: true, storeKind: "postgres" });
   } finally {
     await cleanupDb({ batchId, jobId });
   }

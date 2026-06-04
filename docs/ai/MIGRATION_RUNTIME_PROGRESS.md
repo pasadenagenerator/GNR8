@@ -6,15 +6,15 @@ Track migration-first MVP runtime progress separately from Website OS work.
 
 ## Current Status
 
-Migration Runtime Foundation is completed through Phase 3.
+Migration Runtime Foundation is completed through Phase 4A.
 
-Phase 3 is durable state, model, and admin API only. Batch execution does not exist yet.
+Phase 4A adds operator-driven sequential batch execution. Queue/worker orchestration and unattended execution do not exist yet.
 
 Website OS runtime expansion remains paused.
 
 ## Critical Path
 
-Import -> CMS -> Renderer -> Durable Jobs -> Durable Batches -> Batch Execution -> Command Center -> Hosting -> Billing
+Import -> CMS -> Renderer -> Durable Jobs -> Durable Batches -> Batch Execution -> Batch Execution Observability -> Command Center -> Hosting -> Billing
 
 ## Completed Reality Checks
 
@@ -145,19 +145,55 @@ Remaining gaps:
 - It does not add queue or worker behavior.
 - It does not introduce provider execution, DNS execution, billing automation, or autonomous execution.
 
+### Phase 4A — Operator Driven Batch Execution
+
+Goal:
+- Execute durable migration batches through operator-triggered sequential run/resume APIs.
+
+Completed:
+- `MigrationBatchExecutor`
+- sequential execution
+- durable batch execution
+- run/resume APIs
+- execution events
+- status transitions
+- `stop_on_failure`
+- `continue_on_failure`
+- `maxJobs` support
+- completed-job skipping
+- durable batch event persistence
+
+Execution model:
+- Batch execution is operator-driven and sequential.
+- Execution is durable through persisted batch/job states and batch events.
+- Queue/worker orchestration is not implemented.
+- Unattended orchestration is not implemented.
+
+Verification:
+- local tests passed
+- real Postgres tests passed (7/7)
+
+Remaining gaps:
+- execution timeline visibility
+- batch diagnostics surface
+- operator observability
+- Command Center integration
+- queue/worker orchestration
+- retry scheduling
+- leases/heartbeat
+
 ## Current Remaining Work
 
-### Phase 4 — Batch Execution Runtime
+### Phase 4B — Batch Execution Observability
 
 Expected scope:
-- batch start/resume semantics
-- controlled queue/worker model
-- job pickup
-- retry policy
-- leasing/heartbeat if needed
-- no provider execution
+- execution timelines
+- failure summaries
+- batch diagnostics
+- operator visibility
+- batch execution audit surfaces
 
-### Phase 5 — Command Center Integration
+### Command Center Integration
 
 Expected scope:
 - operator UI for batches
