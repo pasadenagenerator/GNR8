@@ -18,7 +18,7 @@ Completed migration-first chain:
 - Command Center Integration
 
 Migration Runtime + Command Center MVP is operational and smoke-tested.
-Phase 5A — Command Center Integration MVP is complete.
+Phase 6A — Hosting Operations MVP is complete.
 
 Completed capabilities:
 - CMS slot materialization
@@ -46,6 +46,17 @@ Completed capabilities:
 - Resume Batch control
 - migration batch service layer
 - migration batch view model layer
+- Hosting Operations
+- hosting overview page
+- hosting detail page
+- active version visibility
+- active artifact visibility
+- publish history visibility
+- runtime readiness visibility
+- domain readiness visibility
+- asset diagnostics visibility
+- rollback candidate visibility
+- runtime diagnostics visibility
 
 Current migration runtime capabilities:
 - durable jobs
@@ -56,21 +67,40 @@ Current migration runtime capabilities:
 - batch failure reporting
 - Command Center integration
 - operator batch controls
+- Hosting Operations observability
+- hosting overview visibility
+- hosting detail visibility
+- active version visibility
+- active artifact visibility
+- publish history visibility
+- runtime readiness visibility
+- domain readiness visibility
+- asset diagnostics visibility
+- rollback candidate visibility
+- runtime diagnostics visibility
 
 Production smoke test:
 - `/gnr8/command-center/migration-batches` loaded successfully.
 - `/gnr8/command-center/migration-batches/migration_batch_smoke_test_demo_v1` loaded successfully.
+- `/gnr8/command-center/hosting` loaded successfully.
+- `/gnr8/command-center/hosting/[siteId]` loaded successfully.
 - summary, diagnostics, failures, timeline, completed jobs, pending jobs, and failed jobs rendered.
+- Active Version, Active Artifact, Publish Timestamp, Runtime Readiness, Domain Readiness, Asset Diagnostics, Rollback Candidates, and Runtime Diagnostics rendered.
 - DB connection pressure fix validated.
 - EMAXCONNSESSION issue resolved through composed server read path.
+- production hosting smoke test completed successfully.
 
 Execution boundary:
 - execution remains operator-driven
+- hosting execution remains read-only
+- no publish execution controls added
+- no rollback execution controls added
+- no domain execution controls added
 - queue/worker orchestration does not exist yet
 - unattended orchestration does not exist yet
 
 Remaining critical path:
-- Hosting Hardening Reality Check
+- Phase 6B — Hosting Operations Workflow Review
 - Phase 5B — Job Detail + Stage Diagnostics UI (optional)
 - Billing
 

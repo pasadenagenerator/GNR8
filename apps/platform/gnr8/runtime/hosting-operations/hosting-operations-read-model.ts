@@ -8,6 +8,14 @@ import {
   createRuntimeSiteReadinessReport,
   type RuntimeSiteReadinessReport,
 } from "@/gnr8/runtime/readiness/runtime-site-readiness";
+import {
+  createHostingDomainOperationsReadModel,
+  type HostingDomainOperationsReadModel,
+} from "@/gnr8/runtime/hosting-operations/hosting-domain-operations-read-model";
+import {
+  createHostingReadinessDrilldown,
+  type HostingReadinessDrilldown,
+} from "@/gnr8/runtime/hosting-operations/hosting-readiness-drilldown";
 import { resolveRuntimeSiteVersion, type RuntimeResolutionResult } from "@/gnr8/runtime/resolution/runtime-resolution";
 import {
   getActivePointerForSite,
@@ -103,11 +111,15 @@ export type HostingOperationsReadModel = {
     verificationHost: string | null;
     dnsRecordType: RuntimeDomainHostBinding["dnsRecordType"];
     dnsRecordHost: string | null;
+    dnsRecordValue: string | null;
     dnsRecordPurpose: RuntimeDomainHostBinding["dnsRecordPurpose"];
+    dnsInstructions: RuntimeDomainHostBinding["dnsInstructions"];
     createdAt: string;
     updatedAt: string;
   }>;
   readiness: HostingOperationsReadiness;
+  readinessDrilldown: HostingReadinessDrilldown;
+  domainOperations: HostingDomainOperationsReadModel;
   assets: {
     artifactId: string | null;
     artifactType: "runtime_artifact" | "raw_imported_site" | "raw_template_site" | "none";
@@ -382,10 +394,16 @@ export async function getHostingOperationsReadModel(
       readiness: {
         state: "blocked",
         blockers: ["hosting_operations_site_not_found"],
-        warnings: [],
-        site: null,
-        domains: null,
-      },
+      warnings: [],
+      site: null,
+      domains: null,
+    },
+      readinessDrilldown: createHostingReadinessDrilldown({
+        siteReadiness: null,
+        domainReadiness: null,
+        siteFallbackBlockers: ["hosting_operations_site_not_found"],
+      }),
+      domainOperations: createHostingDomainOperationsReadModel({ domains: [] }),
       assets: {
         artifactId: null,
         artifactType: "none",
@@ -527,11 +545,15 @@ export async function getHostingOperationsReadModel(
       verificationHost: bindingRow.verificationHost,
       dnsRecordType: bindingRow.dnsRecordType,
       dnsRecordHost: bindingRow.dnsRecordHost,
+      dnsRecordValue: bindingRow.dnsRecordValue,
       dnsRecordPurpose: bindingRow.dnsRecordPurpose,
+      dnsInstructions: bindingRow.dnsInstructions,
       createdAt: bindingRow.createdAt,
       updatedAt: bindingRow.updatedAt,
     })),
     readiness: combineReadiness({ siteReadiness, domainReadiness }),
+    readinessDrilldown: createHostingReadinessDrilldown({ siteReadiness, domainReadiness }),
+    domainOperations: createHostingDomainOperationsReadModel({ domains: domainRows }),
     assets,
     diagnostics: {
       latestRuntimeDiagnostics: {

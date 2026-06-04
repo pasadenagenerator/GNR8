@@ -6,15 +6,17 @@ Track migration-first MVP runtime progress separately from Website OS work.
 
 ## Current Status
 
-Migration Runtime + Command Center MVP is operational and smoke-tested through Phase 5A.
+Migration Runtime + Command Center MVP is operational and smoke-tested through Phase 6A.
 
 Phase 5A adds Command Center migration batch list/detail UI, batch summary, diagnostics, failure reporting, timeline visibility, and operator run/resume controls. Execution remains operator-driven. Queue/worker orchestration and unattended execution do not exist yet.
+
+Phase 6A adds read-only Hosting Operations observability for Command Center, including hosting overview/detail surfaces, readiness reporting, diagnostics reporting, rollback visibility, and production smoke verification. Hosting execution remains read-only.
 
 Website OS runtime expansion remains paused.
 
 ## Critical Path
 
-Import -> CMS -> Renderer -> Durable Jobs -> Durable Batches -> Batch Execution -> Batch Execution Observability -> Command Center -> Hosting -> Billing
+Import -> CMS -> Renderer -> Durable Jobs -> Durable Batches -> Batch Execution -> Batch Execution Observability -> Command Center -> Hosting Operations -> Billing
 
 ## Completed Reality Checks
 
@@ -264,11 +266,56 @@ Remaining gaps:
 - hosting hardening
 - billing foundation
 
+### Phase 6A — Hosting Operations MVP
+
+Goal:
+- Add read-only hosting operations observability to Command Center.
+
+Completed:
+- Hosting read model
+- Hosting API
+- Hosting overview UI
+- Hosting detail UI
+- Runtime readiness visibility
+- Domain readiness visibility
+- Asset diagnostics visibility
+- Rollback candidate visibility
+- Runtime diagnostics visibility
+
+Production smoke-test routes:
+- `/gnr8/command-center/hosting`
+- `/gnr8/command-center/hosting/[siteId]`
+
+Verification:
+- Production smoke test passed.
+
+Verified:
+- hosting overview route
+- hosting detail route
+- active version visibility
+- active artifact visibility
+- readiness reporting
+- rollback reporting
+- diagnostics reporting
+
+Fix included:
+- ownership site ID -> runtime site ID resolution.
+
+Execution boundary:
+- READ ONLY.
+- No publish execution.
+- No rollback execution.
+- No DNS execution.
+- No domain execution.
+
+Next milestone:
+- Phase 6B — Hosting Operations Workflow Review
+
 ## Current Remaining Work
 
 ### Near-term
 
-- Hosting Hardening Reality Check
+- Phase 6B — Hosting Operations Workflow Review
 - Billing Reality Check
 
 ### Optional Runtime UX

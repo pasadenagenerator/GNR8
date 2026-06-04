@@ -59,7 +59,17 @@ function readModel(input?: Partial<HostingOperationsReadModel>): HostingOperatio
         verificationHost: "_verify",
         dnsRecordType: "cname",
         dnsRecordHost: "www",
+        dnsRecordValue: "cname.vercel-dns.com",
         dnsRecordPurpose: "routing",
+        dnsInstructions: [
+          {
+            type: "cname",
+            host: "www",
+            value: "cname.vercel-dns.com",
+            purpose: "routing",
+            source: "inferred",
+          },
+        ],
         createdAt: "2026-06-01T09:00:00.000Z",
         updatedAt: "2026-06-01T10:05:00.000Z",
       },
@@ -70,6 +80,45 @@ function readModel(input?: Partial<HostingOperationsReadModel>): HostingOperatio
       warnings: [],
       site: null,
       domains: null,
+    },
+    readinessDrilldown: {
+      site: {
+        state: "ready",
+        blockers: [],
+        warnings: [],
+      },
+      domains: {
+        state: "ready",
+        blockers: [],
+        warnings: [],
+      },
+    },
+    domainOperations: {
+      domains: [
+        {
+          id: "domain_1",
+          hostname: "www.example.com",
+          status: "active",
+          verificationStatus: "verified",
+          active: true,
+          lastCheckedAt: "2026-06-01T10:05:00.000Z",
+          lastError: null,
+          verificationReason: "domain_binding_active",
+          dnsInstructions: [
+            {
+              recordType: "CNAME",
+              host: "www",
+              value: "cname.vercel-dns.com",
+              expectedStatus: "routing_required",
+            },
+          ],
+          diagnostics: {
+            lastDomainCheck: "2026-06-01T10:05:00.000Z",
+            lastVerificationResult: "active",
+            verificationDiagnostics: ["DOMAIN_STATUS_CHECKED", "DNS_INSTRUCTIONS_PRESENT", "DOMAIN_BINDING_ACTIVE"],
+          },
+        },
+      ],
     },
     assets: {
       artifactId: "artifact_1",
@@ -211,5 +260,6 @@ test("hosting operations route: returns read-only hosting payload for overview-e
   assert.equal(body.runtime.activeVersion?.id, "version_1");
   assert.equal(body.domains[0]?.verified, true);
   assert.equal(body.readiness.state, "ready");
+  assert.equal(body.domainOperations.domains[0]?.dnsInstructions[0]?.recordType, "CNAME");
   assert.equal(body.rollbackCandidates[0]?.siteVersionId, "version_0");
 });

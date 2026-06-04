@@ -355,10 +355,15 @@ test("hosting operations read model: exposes domain visibility and readiness agg
   assert.equal(model.domains.length, 1);
   assert.equal(model.domains[0]?.host, "www.example.com");
   assert.equal(model.domains[0]?.verified, true);
+  assert.equal(model.domains[0]?.dnsRecordValue, "cname.vercel-dns.com");
   assert.equal(model.readiness.state, "ready");
   assert.deepEqual(model.readiness.blockers, []);
   assert.equal(model.readiness.site?.hasActivePointer, true);
   assert.equal(model.readiness.domains?.hasActiveDomainBinding, true);
+  assert.equal(model.readinessDrilldown.site.state, "ready");
+  assert.equal(model.domainOperations.domains[0]?.hostname, "www.example.com");
+  assert.equal(model.domainOperations.domains[0]?.verificationStatus, "verified");
+  assert.equal(model.domainOperations.domains[0]?.dnsInstructions[0]?.value, "cname.vercel-dns.com");
 });
 
 test("hosting operations read model: exposes rollback candidates excluding active version", async () => {

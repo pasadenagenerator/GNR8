@@ -9,11 +9,12 @@ Website OS branch status:
 - Do not continue Website OS runtime expansion unless explicitly requested.
 
 Latest completed milestone:
-- Phase 5A — Command Center Integration MVP.
+- Phase 6A — Hosting Operations MVP.
 
 Production smoke-test:
 - completed successfully.
 - verified batch list, batch detail, timeline, diagnostics, failures, and run/resume controls.
+- verified hosting overview, hosting detail, active version, active artifact, publish timestamp, runtime readiness, domain readiness, asset diagnostics, rollback candidates, and runtime diagnostics.
 
 Dedicated progress doc:
 - `docs/ai/MIGRATION_RUNTIME_PROGRESS.md`
@@ -30,6 +31,7 @@ Current completed chain:
 - Operator Driven Batch Execution
 - Batch Execution Observability
 - Command Center Integration MVP
+- Hosting Operations MVP
 
 Latest completed migration capabilities:
 - `MigrationBatchExecutor`
@@ -50,6 +52,17 @@ Latest completed migration capabilities:
 - run/resume controls
 - real Postgres verification
 - production smoke-test verification
+- hosting overview page
+- hosting detail page
+- active version visibility
+- active artifact visibility
+- publish history visibility
+- runtime readiness visibility
+- domain readiness visibility
+- asset diagnostics visibility
+- rollback candidate visibility
+- runtime diagnostics visibility
+- ownership site ID to runtime site ID detail resolution
 
 Completed migration-first chain:
 - Import
@@ -60,14 +73,24 @@ Completed migration-first chain:
 - Batch Execution
 - Batch Execution Observability
 - Command Center Integration
+- Hosting Operations
+
+Phase 6A completion notes:
+- Production hosting observability surface verified.
+- Hosting overview and hosting detail pages are operational.
+- Hosting detail ID resolution bug fixed: ownership site ID -> runtime site ID mapping.
+- Execution remains read-only.
+- No hosting publish, rollback, DNS, or domain execution controls were introduced.
+- No runtime behavior changes.
+- Website OS remains frozen.
 
 Current critical path:
-- Hosting Hardening Reality Check
+- Phase 6B — Hosting Operations Workflow Review
 - Phase 5B — Job Detail + Stage Diagnostics UI (optional)
 - Billing
 
 Next recommended milestone:
-- Hosting Hardening Reality Check.
+- Phase 6B — Hosting Operations Workflow Review.
 
 Explicit exclusions still in force:
 - no Website OS runtime expansion
@@ -98,9 +121,10 @@ Dedicated pause note:
 - Future continuation point: Execution Artifact Runtime family.
 - Execution Artifact Runtime family is not currently part of the migration-critical path.
 Next migration platform milestone:
-- Hosting Hardening Reality Check.
+- Phase 6B — Hosting Operations Workflow Review.
 - Optional: Phase 5B — Job Detail + Stage Diagnostics UI.
 - Phase 5A completed Command Center integration for migration batches; execution remains operator-driven and queue/worker orchestration does not exist yet.
+- Phase 6A completed read-only hosting operations observability for Command Center; hosting overview/detail are operational and production smoke-tested.
 Current completed runtime chain:
 - `Proposal Approval Queue → Execution Readiness Execution Package → Execution Contract Execution Contract Readiness → Execution Bundle Execution Bundle Readiness → Execution Authorization Execution Authorization Readiness Execution Authorization Package → Execution Intent Execution Intent Readiness → Execution Plan Execution Plan Readiness → Execution Candidate Execution Candidate Readiness Execution Candidate Package → Execution Candidate Authorization Execution Candidate Authorization Readiness Execution Candidate Authorization Package`
 Candidate Authorization Family completed. Governance graph expanded. Execution remains blocked. Website OS remains read-only.

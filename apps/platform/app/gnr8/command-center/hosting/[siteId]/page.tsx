@@ -1,6 +1,8 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 
+import { HostingDomainRecheckButton } from "@/app/gnr8/command-center/hosting/[siteId]/hosting-domain-recheck-button";
+import type { HostingReadinessFinding } from "@/gnr8/runtime/hosting-operations/hosting-readiness-drilldown";
 import { getHostingOperationsReadModel } from "@/gnr8/runtime/hosting-operations/hosting-operations-read-model";
 
 function text(value: unknown): string {
@@ -27,6 +29,37 @@ function section(title: string, children: ReactNode) {
       <h2 style={{ marginTop: 0, marginBottom: 10, fontSize: 20, color: "#0f172a" }}>{title}</h2>
       {children}
     </section>
+  );
+}
+
+function findingsTable(findings: readonly HostingReadinessFinding[]) {
+  if (findings.length === 0) {
+    return <p style={{ margin: 0, fontSize: 13, color: "#475569" }}>None.</p>;
+  }
+
+  return (
+    <div style={{ overflowX: "auto" }}>
+      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+        <thead>
+          <tr style={{ textAlign: "left", borderBottom: "1px solid #e5e7eb", color: "#475569" }}>
+            <th style={{ padding: "8px 6px" }}>Code</th>
+            <th style={{ padding: "8px 6px" }}>Description</th>
+            <th style={{ padding: "8px 6px" }}>Affected</th>
+            <th style={{ padding: "8px 6px" }}>Remediation</th>
+          </tr>
+        </thead>
+        <tbody>
+          {findings.map((finding) => (
+            <tr key={`${finding.severity}-${finding.code}`} style={{ borderBottom: "1px solid #f1f5f9" }}>
+              <td style={{ padding: "9px 6px", fontFamily: "monospace", fontWeight: 700 }}>{finding.code}</td>
+              <td style={{ padding: "9px 6px" }}>{finding.description}</td>
+              <td style={{ padding: "9px 6px" }}>{finding.affectedObject}</td>
+              <td style={{ padding: "9px 6px" }}>{text(finding.suggestedRemediation)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   );
 }
 
@@ -81,33 +114,76 @@ export default async function CommandCenterHostingSitePage(props: {
       </section>
 
       {section(
-        "Domains",
-        model.domains.length === 0 ? (
+        "Readiness Drilldown",
+        <div style={{ display: "grid", gap: 16 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 10 }}>
+            {metric("Site Readiness", model.readinessDrilldown.site.state)}
+            {metric("Domain Readiness", model.readinessDrilldown.domains.state)}
+          </div>
+          <div style={{ display: "grid", gap: 8 }}>
+            <h3 style={{ margin: 0, fontSize: 15, color: "#0f172a" }}>Site Readiness</h3>
+            <h4 style={{ margin: "4px 0 0", fontSize: 13, color: "#7f1d1d" }}>Blockers</h4>
+            {findingsTable(model.readinessDrilldown.site.blockers)}
+            <h4 style={{ margin: "4px 0 0", fontSize: 13, color: "#92400e" }}>Warnings</h4>
+            {findingsTable(model.readinessDrilldown.site.warnings)}
+          </div>
+          <div style={{ display: "grid", gap: 8 }}>
+            <h3 style={{ margin: 0, fontSize: 15, color: "#0f172a" }}>Domain Readiness</h3>
+            <h4 style={{ margin: "4px 0 0", fontSize: 13, color: "#7f1d1d" }}>Blockers</h4>
+            {findingsTable(model.readinessDrilldown.domains.blockers)}
+            <h4 style={{ margin: "4px 0 0", fontSize: 13, color: "#92400e" }}>Warnings</h4>
+            {findingsTable(model.readinessDrilldown.domains.warnings)}
+          </div>
+        </div>,
+      )}
+
+      {section(
+        "Domain Operations",
+        model.domainOperations.domains.length === 0 ? (
           <p style={{ margin: 0, fontSize: 14, color: "#475569" }}>No domains are attached.</p>
         ) : (
-          <div style={{ overflowX: "auto" }}>
-            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
-              <thead>
-                <tr style={{ textAlign: "left", borderBottom: "1px solid #e5e7eb", color: "#475569" }}>
-                  <th style={{ padding: "8px 6px" }}>Host</th>
-                  <th style={{ padding: "8px 6px" }}>Status</th>
-                  <th style={{ padding: "8px 6px" }}>Verified</th>
-                  <th style={{ padding: "8px 6px" }}>Last Checked</th>
-                  <th style={{ padding: "8px 6px" }}>DNS</th>
-                </tr>
-              </thead>
-              <tbody>
-                {model.domains.map((domain) => (
-                  <tr key={domain.id} style={{ borderBottom: "1px solid #f1f5f9" }}>
-                    <td style={{ padding: "9px 6px", fontWeight: 700 }}>{domain.host}</td>
-                    <td style={{ padding: "9px 6px" }}>{domain.status}</td>
-                    <td style={{ padding: "9px 6px" }}>{domain.verified ? "yes" : "no"}</td>
-                    <td style={{ padding: "9px 6px" }}>{text(domain.lastCheckedAt)}</td>
-                    <td style={{ padding: "9px 6px" }}>{text(domain.dnsRecordType)} {text(domain.dnsRecordHost)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <div style={{ display: "grid", gap: 14 }}>
+            {model.domainOperations.domains.map((domain) => (
+              <article key={domain.id} style={{ border: "1px solid #e5e7eb", borderRadius: 8, padding: 12, display: "grid", gap: 12 }}>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: 10 }}>
+                  {metric("Hostname", domain.hostname)}
+                  {metric("Status", domain.status)}
+                  {metric("Active", domain.active ? "yes" : "no")}
+                  {metric("Last Checked", domain.lastCheckedAt)}
+                  {metric("Last Error", domain.lastError)}
+                </div>
+                <div style={{ display: "grid", gap: 8 }}>
+                  <h3 style={{ margin: 0, fontSize: 15, color: "#0f172a" }}>DNS Instructions</h3>
+                  {domain.dnsInstructions.length === 0 ? (
+                    <p style={{ margin: 0, fontSize: 13, color: "#475569" }}>No DNS instructions are persisted.</p>
+                  ) : (
+                    <div style={{ overflowX: "auto" }}>
+                      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+                        <thead>
+                          <tr style={{ textAlign: "left", borderBottom: "1px solid #e5e7eb", color: "#475569" }}>
+                            <th style={{ padding: "8px 6px" }}>Type</th>
+                            <th style={{ padding: "8px 6px" }}>Host</th>
+                            <th style={{ padding: "8px 6px" }}>Value</th>
+                            <th style={{ padding: "8px 6px" }}>Expected Status</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {domain.dnsInstructions.map((instruction) => (
+                            <tr key={`${instruction.recordType}-${instruction.host}-${instruction.value}`} style={{ borderBottom: "1px solid #f1f5f9" }}>
+                              <td style={{ padding: "9px 6px", fontWeight: 700 }}>{instruction.recordType}</td>
+                              <td style={{ padding: "9px 6px", fontFamily: "monospace" }}>{instruction.host}</td>
+                              <td style={{ padding: "9px 6px", fontFamily: "monospace", wordBreak: "break-word" }}>{instruction.value}</td>
+                              <td style={{ padding: "9px 6px" }}>{instruction.expectedStatus}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+                <HostingDomainRecheckButton siteId={model.site.requestedSiteId} domainId={domain.id} />
+              </article>
+            ))}
           </div>
         ),
       )}
@@ -147,36 +223,6 @@ export default async function CommandCenterHostingSitePage(props: {
       )}
 
       {section(
-        "Rollback",
-        model.rollbackCandidates.length === 0 ? (
-          <p style={{ margin: 0, fontSize: 14, color: "#475569" }}>No rollback candidates are available.</p>
-        ) : (
-          <div style={{ overflowX: "auto" }}>
-            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
-              <thead>
-                <tr style={{ textAlign: "left", borderBottom: "1px solid #e5e7eb", color: "#475569" }}>
-                  <th style={{ padding: "8px 6px" }}>Version</th>
-                  <th style={{ padding: "8px 6px" }}>Artifact</th>
-                  <th style={{ padding: "8px 6px" }}>Published</th>
-                  <th style={{ padding: "8px 6px" }}>State</th>
-                </tr>
-              </thead>
-              <tbody>
-                {model.rollbackCandidates.map((candidate) => (
-                  <tr key={candidate.siteVersionId} style={{ borderBottom: "1px solid #f1f5f9" }}>
-                    <td style={{ padding: "9px 6px" }}>v{text(candidate.versionNo)}</td>
-                    <td style={{ padding: "9px 6px", fontFamily: "monospace" }}>{candidate.artifactId}</td>
-                    <td style={{ padding: "9px 6px" }}>{text(candidate.publishedAt)}</td>
-                    <td style={{ padding: "9px 6px" }}>{text(candidate.state)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        ),
-      )}
-
-      {section(
         "Diagnostics",
         <div style={{ display: "grid", gap: 8, fontSize: 13, color: "#374151" }}>
           <p style={{ margin: 0 }}>
@@ -189,6 +235,22 @@ export default async function CommandCenterHostingSitePage(props: {
           <p style={{ margin: 0 }}>
             <strong>Codes:</strong> {list(model.diagnostics.codes)}
           </p>
+          {model.domainOperations.domains.map((domain) => (
+            <div key={domain.id} style={{ borderTop: "1px solid #e5e7eb", marginTop: 4, paddingTop: 8, display: "grid", gap: 4 }}>
+              <p style={{ margin: 0 }}>
+                <strong>{domain.hostname}</strong>
+              </p>
+              <p style={{ margin: 0 }}>
+                <strong>Last Domain Check:</strong> {text(domain.diagnostics.lastDomainCheck)}
+              </p>
+              <p style={{ margin: 0 }}>
+                <strong>Last Verification Result:</strong> {text(domain.diagnostics.lastVerificationResult)}
+              </p>
+              <p style={{ margin: 0 }}>
+                <strong>Verification Diagnostics:</strong> {list(domain.diagnostics.verificationDiagnostics)}
+              </p>
+            </div>
+          ))}
         </div>,
       )}
     </>
