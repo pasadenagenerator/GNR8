@@ -7,7 +7,7 @@
 
 Website OS runtime expansion remains paused.
 
-Current critical path is migration-first:
+Completed migration-first chain:
 - Import
 - CMS
 - Renderer
@@ -15,12 +15,9 @@ Current critical path is migration-first:
 - Durable Batches
 - Batch Execution
 - Batch Execution Observability
-- Command Center
-- Hosting
-- Billing
 
-Migration Runtime Foundation is completed through Phase 4A.
-Phase 4A — Operator Driven Batch Execution is complete.
+Migration Runtime Foundation is completed through Phase 4B.
+Phase 4B — Batch Execution Observability is complete.
 
 Completed capabilities:
 - CMS slot materialization
@@ -32,17 +29,29 @@ Completed capabilities:
 - operator-driven sequential batch execution
 - durable batch execution events
 - batch status transitions
+- batch observability read model
+- batch execution summary model
+- batch execution timeline model
+- failure reporting
+- diagnostics surfaces
 
 Current migration runtime capabilities:
 - durable jobs
 - durable batches
-- operator-driven sequential batch execution
-- batch execution events
-- batch status transitions
+- batch execution
+- execution events
+- execution observability
+- execution timeline
+- failure reporting
+- diagnostics surfaces
+
+Execution boundary:
+- execution remains operator-driven
+- queue/worker orchestration does not exist yet
+- unattended orchestration does not exist yet
 
 Remaining critical path:
-- Phase 4B: Batch Execution Observability
-- Command Center integration
+- Phase 5: Command Center Integration
 - Hosting hardening
 - Billing
 
@@ -105,7 +114,7 @@ Migration-first reprioritization:
 - The Execution Artifact Runtime family is not currently part of the migration-critical path.
 
 Current migration platform continuation:
-- Phase 4B: Batch Execution Observability.
+- Phase 5: Command Center Integration.
 - Website OS runtime expansion remains paused.
 - Execution Artifact Runtime family remains outside the migration-critical path.
 
@@ -180,7 +189,7 @@ Future continuation:
 - Not currently part of the migration-critical path.
 
 Current migration platform continuation:
-- Phase 4B: Batch Execution Observability.
+- Phase 5: Command Center Integration.
 - Website OS runtime expansion remains paused.
 
 ## Execution Candidate Runtime Family v1 Milestone (2026-06-03)

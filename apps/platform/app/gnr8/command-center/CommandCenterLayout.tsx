@@ -13,11 +13,12 @@ type Props = {
   children: ReactNode;
 };
 
-type TabKey = "overview" | "sites" | "agencies";
+type TabKey = "overview" | "sites" | "migration-batches" | "agencies";
 
 const TABS: WorkspaceTabInput[] = [
   { key: "overview", href: "/gnr8/command-center", label: "Overview" },
   { key: "sites", href: "/gnr8/command-center/sites", label: "Sites" },
+  { key: "migration-batches", href: "/gnr8/command-center/migration-batches", label: "Migration Batches" },
   { key: "agencies", href: "/gnr8/command-center/agencies", label: "Agencies" },
 ];
 
@@ -43,10 +44,18 @@ const COMMAND_CENTER_SHORTCUTS: WorkspaceShortcut[] = [
     description: "Review migration and operations status",
     icon: "S",
   },
+  {
+    id: "open-migration-batches",
+    label: "Open Migration Batches",
+    href: "/gnr8/command-center/migration-batches",
+    description: "Inspect durable migration batch execution",
+    icon: "B",
+  },
 ];
 
 function resolveActiveTab(pathname: string): TabKey {
   if (pathname.startsWith("/gnr8/command-center/sites")) return "sites";
+  if (pathname.startsWith("/gnr8/command-center/migration-batches")) return "migration-batches";
   if (pathname.startsWith("/gnr8/command-center/agencies")) return "agencies";
   return "overview";
 }
@@ -58,6 +67,10 @@ function buildCommandCenterBreadcrumbs(activeTab: TabKey): WorkspaceBreadcrumbIt
 
   if (activeTab === "agencies") {
     return [{ label: "Command Center", href: "/gnr8/command-center" }, { label: "Agencies" }];
+  }
+
+  if (activeTab === "migration-batches") {
+    return [{ label: "Command Center", href: "/gnr8/command-center" }, { label: "Migration Batches" }];
   }
 
   return [{ label: "Command Center", href: "/gnr8/command-center" }, { label: "Overview" }];
@@ -112,6 +125,12 @@ export default function CommandCenterLayout(props: Props) {
         routes: [
           { id: "route-command-center", label: "Command Center", href: "/gnr8/command-center", sublabel: "Key route" },
           { id: "route-command-center-sites", label: "Command Center Sites", href: "/gnr8/command-center/sites", sublabel: "Key route" },
+          {
+            id: "route-command-center-migration-batches",
+            label: "Command Center Migration Batches",
+            href: "/gnr8/command-center/migration-batches",
+            sublabel: "Key route",
+          },
           {
             id: "route-command-center-agencies",
             label: "Command Center Agencies",

@@ -6,9 +6,9 @@ Track migration-first MVP runtime progress separately from Website OS work.
 
 ## Current Status
 
-Migration Runtime Foundation is completed through Phase 4A.
+Migration Runtime Foundation is completed through Phase 4B.
 
-Phase 4A adds operator-driven sequential batch execution. Queue/worker orchestration and unattended execution do not exist yet.
+Phase 4B adds durable batch execution observability. Execution remains operator-driven. Queue/worker orchestration and unattended execution do not exist yet.
 
 Website OS runtime expansion remains paused.
 
@@ -182,24 +182,50 @@ Remaining gaps:
 - retry scheduling
 - leases/heartbeat
 
-## Current Remaining Work
-
 ### Phase 4B — Batch Execution Observability
 
-Expected scope:
-- execution timelines
-- failure summaries
-- batch diagnostics
-- operator visibility
-- batch execution audit surfaces
+Goal:
+- Add durable read surfaces for operator visibility into batch execution state.
 
-### Command Center Integration
+Completed:
+- observability read model
+- batch execution summary
+- execution timeline
+- failure surface
+- diagnostics surface
+- observability API
+- timeline API
+
+Verification:
+- local tests passed (8/8)
+- real Postgres verification passed (1/1)
+
+Execution model:
+- Execution remains operator-driven.
+- Queue/worker orchestration is not implemented.
+- Unattended orchestration is not implemented.
+
+Remaining gaps:
+- Command Center integration
+- operator UI
+- batch execution dashboard
+- retry controls
+- queue/worker orchestration
+- leasing/heartbeat
+- advanced operational metrics
+
+## Current Remaining Work
+
+### Phase 5 — Command Center Integration
 
 Expected scope:
-- operator UI for batches
-- batch/job detail views
-- progress and failure surfaces
-- controlled retry/resume actions
+- integrate batch APIs into Command Center
+- integrate observability APIs
+- operator batch dashboard
+- batch detail views
+- execution timeline views
+- failure drilldown views
+- retry/resume controls
 
 ### Later
 
