@@ -3,10 +3,16 @@ import { randomUUID } from "node:crypto";
 import test, { type TestContext } from "node:test";
 
 import { createMigrationBatchesRouteHandlers } from "@/app/api/gnr8/admin/migration-batches/migration-batches-route-handlers";
+import { createMigrationBatchSmokeTestSeedRouteHandlers } from "@/app/api/gnr8/admin/migration-batches/seed-smoke-test/seed-smoke-test-route-handlers";
+import { normalizeMigrationBatchDetailPayload } from "@/app/gnr8/command-center/_lib/migration-batches-view-model";
+import {
+  MIGRATION_BATCH_SMOKE_TEST_SEED_BATCH_ID,
+  MIGRATION_BATCH_SMOKE_TEST_SEED_JOB_IDS,
+} from "@/gnr8/migration-factory/migration-batch-smoke-test-seed";
 import { createMigrationBatchStoreRuntime } from "@/gnr8/migration-factory/migration-batch-store-runtime";
 import { MigrationFactory } from "@/gnr8/migration-factory/migration-factory";
 import { MigrationFactoryRuntimeConfigurationError } from "@/gnr8/migration-factory/migration-factory-runtime";
-import { InMemoryMigrationJobStore } from "@/gnr8/migration-factory/migration-job-store";
+import { InMemoryMigrationJobStore, type MigrationJobStore } from "@/gnr8/migration-factory/migration-job-store";
 import type { MigrationBatchStore } from "@/gnr8/migration-factory/migration-batch-store";
 import type {
   AddMigrationJobToBatchInput,
@@ -77,9 +83,11 @@ class FakeMigrationBatchStore implements MigrationBatchStore {
   private readonly jobs = new Map<string, FakeJob>();
   private readonly events: MigrationBatchEvent[] = [];
   private readonly now: () => string;
+  private readonly externalJobStore: MigrationJobStore | null;
 
-  constructor(now: () => string) {
+  constructor(now: () => string, externalJobStore?: MigrationJobStore) {
     this.now = now;
+    this.externalJobStore = externalJobStore ?? null;
   }
 
   seedJob(job: Omit<FakeJob, "createdAt" | "updatedAt"> & { createdAt?: string; updatedAt?: string }): void {
@@ -133,7 +141,7 @@ class FakeMigrationBatchStore implements MigrationBatchStore {
 
   async addJobToBatch(input: AddMigrationJobToBatchInput): Promise<MigrationBatchJob> {
     if (!this.batches.has(input.batchId)) throw new Error(`Migration batch not found: ${input.batchId}`);
-    const job = this.jobs.get(input.jobId);
+    const job = await this.getMembershipJob(input.jobId);
     if (!job) throw new Error(`Migration job not found: ${input.jobId}`);
 
     const key = `${input.batchId}:${input.jobId}`;
@@ -157,11 +165,11 @@ class FakeMigrationBatchStore implements MigrationBatchStore {
   }
 
   async listBatchJobs(batchId: string): Promise<MigrationBatchJobSummary[]> {
-    return Array.from(this.memberships.values())
+    const summaries = await Promise.all(Array.from(this.memberships.values())
       .filter((membership) => membership.batchId === batchId)
       .sort((a, b) => a.position - b.position || a.addedAt.localeCompare(b.addedAt) || a.jobId.localeCompare(b.jobId))
-      .map((membership) => {
-        const job = this.jobs.get(membership.jobId);
+      .map(async (membership) => {
+        const job = await this.getMembershipJob(membership.jobId);
         assert.ok(job);
         return {
           ...membership,
@@ -170,7 +178,8 @@ class FakeMigrationBatchStore implements MigrationBatchStore {
           jobUpdatedAt: job.updatedAt,
           latestEventAt: job.latestEventAt,
         };
-      });
+      }));
+    return summaries;
   }
 
   async getBatchSummary(batchId: string): Promise<MigrationBatchSummary | null> {
@@ -239,6 +248,28 @@ class FakeMigrationBatchStore implements MigrationBatchStore {
 
   private countBatchJobs(batchId: string): number {
     return Array.from(this.memberships.values()).filter((membership) => membership.batchId === batchId).length;
+  }
+
+  private async getMembershipJob(jobId: string): Promise<FakeJob | null> {
+    const fake = this.jobs.get(jobId);
+    if (fake) return fake;
+    const external = await this.externalJobStore?.getJob(jobId);
+    if (!external) return null;
+    const latestEventAt = external.executionEvents
+      .map((event) => event.timestamp)
+      .filter(Boolean)
+      .sort()
+      .at(-1) ?? null;
+    return {
+      jobId: external.jobId,
+      siteId: external.siteId,
+      siteVersionId: null,
+      sourceUrl: external.sourceUrl,
+      status: external.overallState,
+      createdAt: external.createdAt,
+      updatedAt: external.updatedAt,
+      latestEventAt,
+    };
   }
 
   private emptySummary(batchId: string): MigrationBatchSummary {
@@ -709,6 +740,217 @@ test("durable migration batches admin observability route fails closed when dura
   assert.equal(response.status, 503);
   const payload = await response.json() as { error: string };
   assert.match(payload.error, /requires DATABASE_URL/);
+});
+
+test("migration batch smoke-test seed route rejects anonymous requests", async () => {
+  const handlers = createMigrationBatchSmokeTestSeedRouteHandlers({
+    requireSuperadminUserId: async () => {
+      throw new Error("Unauthorized");
+    },
+  });
+
+  const response = await handlers.POST(new Request("https://admin.test/api/gnr8/admin/migration-batches/seed-smoke-test", { method: "POST" }));
+  assert.equal(response.status, 401);
+  const payload = await response.json() as { ok: boolean; adminOnly: boolean; externalExecutionBlocked: boolean };
+  assert.equal(payload.ok, false);
+  assert.equal(payload.adminOnly, true);
+  assert.equal(payload.externalExecutionBlocked, true);
+});
+
+test("migration batch smoke-test seed route fails closed outside development or staging without explicit flag", async () => {
+  let seedCalled = false;
+  const now = createClock();
+  const jobStore = new InMemoryMigrationJobStore({ now });
+  const batchStore = new FakeMigrationBatchStore(now, jobStore);
+  const handlers = createMigrationBatchSmokeTestSeedRouteHandlers({
+    requireSuperadminUserId: async () => "superadmin-1",
+    getNodeEnv: () => "production",
+    getDeploymentEnv: () => "production",
+    isExplicitlyEnabled: () => false,
+    createMigrationBatchStoreRuntime: async () => ({
+      store: batchStore,
+      durable: true,
+      storeKind: "postgres",
+    }),
+    createMigrationFactoryRuntime: async () => ({
+      factory: new MigrationFactory({ store: jobStore, now }),
+      store: jobStore,
+      durable: true,
+      storeKind: "postgres",
+    }),
+    createMigrationBatchSmokeTestSeed: async (input) => {
+      seedCalled = true;
+      return {
+        batchId: input.createdBy ?? "unexpected",
+        batchUrl: "/unexpected",
+        jobIds: [],
+        status: "created",
+        created: { batch: false, jobs: [], memberships: [], batchEvents: 0 },
+        reused: { batch: false, jobs: [], memberships: [] },
+        executionBlocked: true,
+      };
+    },
+  });
+
+  const response = await handlers.POST(new Request("https://admin.test/api/gnr8/admin/migration-batches/seed-smoke-test", { method: "POST" }));
+  assert.equal(response.status, 403);
+  assert.equal(seedCalled, false);
+  const payload = await response.json() as { ok: boolean; requiredEnvFlag: string };
+  assert.equal(payload.ok, false);
+  assert.equal(payload.requiredEnvFlag, "GNR8_ADMIN_MIGRATION_BATCH_SMOKE_SEED_ENABLED=1");
+});
+
+test("migration batch smoke-test seed route creates bounded demo data for Command Center read surfaces", async () => {
+  const now = createClock();
+  const jobStore = new InMemoryMigrationJobStore({ now });
+  const batchStore = new FakeMigrationBatchStore(now, jobStore);
+  const runtimeDeps = {
+    createMigrationBatchStoreRuntime: async () => ({
+      store: batchStore,
+      durable: true,
+      storeKind: "postgres" as const,
+    }),
+    createMigrationFactoryRuntime: async () => ({
+      factory: new MigrationFactory({ store: jobStore, now }),
+      store: jobStore,
+      durable: true,
+      storeKind: "postgres" as const,
+    }),
+  };
+
+  const seedHandlers = createMigrationBatchSmokeTestSeedRouteHandlers({
+    requireSuperadminUserId: async () => "superadmin-1",
+    getNodeEnv: () => "production",
+    getDeploymentEnv: () => "staging",
+    isExplicitlyEnabled: () => false,
+    ...runtimeDeps,
+  });
+
+  const firstSeedResponse = await seedHandlers.POST(
+    new Request("https://admin.test/api/gnr8/admin/migration-batches/seed-smoke-test", { method: "POST" }),
+  );
+  assert.equal(firstSeedResponse.status, 200);
+  const firstSeed = await firstSeedResponse.json() as {
+    batchId: string;
+    batchUrl: string;
+    jobIds: string[];
+    status: string;
+    created: { batch: boolean; jobs: string[]; memberships: string[]; batchEvents: number };
+    executionBlocked: boolean;
+    externalExecutionBlocked: boolean;
+  };
+  assert.equal(firstSeed.batchId, MIGRATION_BATCH_SMOKE_TEST_SEED_BATCH_ID);
+  assert.equal(firstSeed.batchUrl, `/gnr8/command-center/migration-batches/${MIGRATION_BATCH_SMOKE_TEST_SEED_BATCH_ID}`);
+  assert.deepEqual(firstSeed.jobIds, [...MIGRATION_BATCH_SMOKE_TEST_SEED_JOB_IDS]);
+  assert.equal(firstSeed.status, "created");
+  assert.equal(firstSeed.created.batch, true);
+  assert.equal(firstSeed.created.jobs.length, 3);
+  assert.equal(firstSeed.created.memberships.length, 3);
+  assert.equal(firstSeed.created.batchEvents, 6);
+  assert.equal(firstSeed.executionBlocked, true);
+  assert.equal(firstSeed.externalExecutionBlocked, true);
+
+  const secondSeedResponse = await seedHandlers.POST(
+    new Request("https://admin.test/api/gnr8/admin/migration-batches/seed-smoke-test", { method: "POST" }),
+  );
+  assert.equal(secondSeedResponse.status, 200);
+  const secondSeed = await secondSeedResponse.json() as {
+    batchId: string;
+    status: string;
+    created: { batch: boolean; jobs: string[]; memberships: string[]; batchEvents: number };
+    reused: { batch: boolean; jobs: string[]; memberships: string[] };
+  };
+  assert.equal(secondSeed.batchId, MIGRATION_BATCH_SMOKE_TEST_SEED_BATCH_ID);
+  assert.equal(secondSeed.status, "reused");
+  assert.equal(secondSeed.created.batch, false);
+  assert.deepEqual(secondSeed.created.jobs, []);
+  assert.deepEqual(secondSeed.created.memberships, []);
+  assert.equal(secondSeed.created.batchEvents, 0);
+  assert.equal(secondSeed.reused.batch, true);
+  assert.deepEqual(secondSeed.reused.jobs, [...MIGRATION_BATCH_SMOKE_TEST_SEED_JOB_IDS]);
+
+  const batchHandlers = createMigrationBatchesRouteHandlers({
+    requireSuperadminUserId: async () => "superadmin-1",
+    requireAgencyActionContext: async () => ({
+      userId: "superadmin-1",
+      agencyId: TEST_AGENCY_ID,
+      role: "superadmin",
+      actorMode: "admin_view",
+    }),
+    ...runtimeDeps,
+  });
+
+  const listResponse = await batchHandlers.LIST(new Request("https://admin.test/api/gnr8/admin/migration-batches"));
+  assert.equal(listResponse.status, 200);
+  const listPayload = await listResponse.json() as {
+    batches: Array<{ batchId: string; summary: { totalJobs: number; completedJobs: number; failedJobs: number; pendingJobs: number } }>;
+  };
+  const seededListBatch = listPayload.batches.find((batch) => batch.batchId === MIGRATION_BATCH_SMOKE_TEST_SEED_BATCH_ID);
+  assert.ok(seededListBatch);
+  assert.equal(seededListBatch.summary.totalJobs, 3);
+  assert.equal(seededListBatch.summary.completedJobs, 1);
+  assert.equal(seededListBatch.summary.pendingJobs, 1);
+  assert.equal(seededListBatch.summary.failedJobs, 1);
+
+  const detailResponse = await batchHandlers.GET(
+    new Request("https://admin.test/api/gnr8/admin/migration-batches/demo"),
+    batchContext(MIGRATION_BATCH_SMOKE_TEST_SEED_BATCH_ID),
+  );
+  assert.equal(detailResponse.status, 200);
+  const detailPayload = await detailResponse.json();
+
+  const observabilityResponse = await batchHandlers.OBSERVABILITY(
+    new Request("https://admin.test/api/gnr8/admin/migration-batches/demo/observability"),
+    batchContext(MIGRATION_BATCH_SMOKE_TEST_SEED_BATCH_ID),
+  );
+  assert.equal(observabilityResponse.status, 200);
+  const observabilityPayload = await observabilityResponse.json() as {
+    observability: {
+      summary: { totalJobs: number; firstFailureJobId: string | null; firstFailureReason: string | null };
+      diagnostics: { currentlyRunnableJobs: string[]; completedJobs: string[]; lastExecutionDurationMs: number | null };
+      failures: { failedJobIds: string[]; latestFailure: { jobId: string; latestReason: string | null } | null };
+      timeline: Array<{ eventType: string; jobId: string | null }>;
+    };
+  };
+  assert.equal(observabilityPayload.observability.summary.totalJobs, 3);
+  assert.equal(observabilityPayload.observability.summary.firstFailureJobId, "migration_job_smoke_failed_v1");
+  assert.match(observabilityPayload.observability.summary.firstFailureReason ?? "", /snapshot intentionally blocked/);
+  assert.deepEqual(observabilityPayload.observability.diagnostics.currentlyRunnableJobs.sort(), [
+    "migration_job_smoke_failed_v1",
+    "migration_job_smoke_pending_v1",
+  ]);
+  assert.deepEqual(observabilityPayload.observability.diagnostics.completedJobs, ["migration_job_smoke_completed_v1"]);
+  assert.ok(observabilityPayload.observability.diagnostics.lastExecutionDurationMs !== null);
+  assert.deepEqual(observabilityPayload.observability.failures.failedJobIds, ["migration_job_smoke_failed_v1"]);
+  assert.equal(observabilityPayload.observability.failures.latestFailure?.jobId, "migration_job_smoke_failed_v1");
+
+  const timelineResponse = await batchHandlers.TIMELINE(
+    new Request("https://admin.test/api/gnr8/admin/migration-batches/demo/timeline"),
+    batchContext(MIGRATION_BATCH_SMOKE_TEST_SEED_BATCH_ID),
+  );
+  assert.equal(timelineResponse.status, 200);
+  const timelinePayload = await timelineResponse.json() as { timeline: Array<{ eventType: string; jobId: string | null }> };
+  assert.deepEqual(timelinePayload.timeline.map((entry) => [entry.eventType, entry.jobId]), [
+    ["execution_started", null],
+    ["job_started", "migration_job_smoke_completed_v1"],
+    ["job_completed", "migration_job_smoke_completed_v1"],
+    ["job_started", "migration_job_smoke_failed_v1"],
+    ["job_failed", "migration_job_smoke_failed_v1"],
+    ["execution_partially_failed", null],
+  ]);
+
+  const viewModel = normalizeMigrationBatchDetailPayload({
+    batchPayload: detailPayload,
+    observabilityPayload,
+    timelinePayload,
+  });
+  assert.equal(viewModel.fetchError, null);
+  assert.equal(viewModel.batch?.batchId, MIGRATION_BATCH_SMOKE_TEST_SEED_BATCH_ID);
+  assert.equal(viewModel.batch?.summary.totalJobs, 3);
+  assert.equal(viewModel.batch?.summary.firstFailureJobId, "migration_job_smoke_failed_v1");
+  assert.equal(viewModel.batch?.diagnostics.currentlyRunnableJobs.includes("migration_job_smoke_pending_v1"), true);
+  assert.equal(viewModel.batch?.failures.failedJobIds.includes("migration_job_smoke_failed_v1"), true);
+  assert.equal(viewModel.batch?.timeline.some((entry) => entry.eventType === "job_failed"), true);
 });
 
 test("durable migration batches admin route creates and attaches through real Postgres store when DB is available", async (t: TestContext) => {
