@@ -5,6 +5,7 @@ import {
   getRawImportedSiteArtifact,
   getRawTemplateSiteAsset,
   resolveDomainSiteVersionForHost,
+  resolveRawTemplateSiteForDomainAndPath,
 } from "@/gnr8/runtime/runtime-store";
 import { createRuntimeCorrelationKey, normalizeRuntimeDomain, normalizeRuntimeHost, normalizeRuntimePath } from "@/gnr8/runtime/identity/runtime-identity";
 import { resolveAssetMediaType, rewriteRawTemplateCssForRuntime } from "@/src/public-site/raw-template-runtime";
@@ -18,6 +19,7 @@ type PreviewAssetRouteDependencies = {
   getRawTemplateSiteArtifact: typeof getRawTemplateSiteArtifact;
   getRawImportedSiteArtifact: typeof getRawImportedSiteArtifact;
   getRawTemplateSiteAsset: typeof getRawTemplateSiteAsset;
+  resolveRawTemplateSiteForDomainAndPath: typeof resolveRawTemplateSiteForDomainAndPath;
   parseAgencyActionContextError: typeof parseAgencyActionContextError;
 };
 
@@ -28,6 +30,7 @@ const defaultDependencies: PreviewAssetRouteDependencies = {
   getRawTemplateSiteArtifact,
   getRawImportedSiteArtifact,
   getRawTemplateSiteAsset,
+  resolveRawTemplateSiteForDomainAndPath,
   parseAgencyActionContextError,
 };
 
@@ -195,19 +198,29 @@ export function createPreviewAssetsRouteHandlers(overrides: Partial<PreviewAsset
           reasonCode: "request_received",
         });
         const debugMode = new URL(req.url).searchParams.get("__debug") === "1";
-        const publicDomainResolution = await deps.resolveDomainSiteVersionForHost({ host: requestHost });
+        const publicRawTemplateResolution = await deps.resolveRawTemplateSiteForDomainAndPath({ host: requestHost, path: "/" });
+        const isPublicRawTemplateAssetRequest =
+          publicRawTemplateResolution.outcome === "raw_template_hit" &&
+          publicRawTemplateResolution.siteId === siteId &&
+          publicRawTemplateResolution.siteVersionId === siteVersionId;
+        const mismatchedPublicRawTemplateAssetRequest =
+          publicRawTemplateResolution.outcome === "raw_template_hit" && !isPublicRawTemplateAssetRequest;
+
+        const publicDomainResolution = isPublicRawTemplateAssetRequest
+          ? null
+          : await deps.resolveDomainSiteVersionForHost({ host: requestHost });
         const isPublicDomainAssetRequest =
-          publicDomainResolution.outcome === "domain_hit" &&
+          publicDomainResolution?.outcome === "domain_hit" &&
           publicDomainResolution.siteId === siteId &&
           publicDomainResolution.siteVersionId === siteVersionId;
         const mismatchedPublicDomainAssetRequest =
-          publicDomainResolution.outcome === "domain_hit" && !isPublicDomainAssetRequest;
+          publicDomainResolution?.outcome === "domain_hit" && !isPublicDomainAssetRequest;
 
-        if (mismatchedPublicDomainAssetRequest) {
+        if (mismatchedPublicRawTemplateAssetRequest || mismatchedPublicDomainAssetRequest) {
           return new Response("forbidden", { status: 403, headers: { "content-type": "text/plain; charset=utf-8" } });
         }
 
-        if (!isPublicDomainAssetRequest) {
+        if (!isPublicRawTemplateAssetRequest && !isPublicDomainAssetRequest) {
           const agencyId = await deps.resolveAgencyIdForSiteVersion(siteVersionId);
           if (!agencyId) {
             return new Response("forbidden", { status: 403, headers: { "content-type": "text/plain; charset=utf-8" } });
@@ -484,7 +497,11 @@ export function createPreviewAssetsRouteHandlers(overrides: Partial<PreviewAsset
           headers["x-gnr8-debug-site-id"] = siteId;
           headers["x-gnr8-debug-version-id"] = siteVersionId;
           headers["x-gnr8-debug-binding"] =
-            publicDomainResolution.outcome === "domain_hit" ? publicDomainResolution.status : "dashboard_auth";
+            publicRawTemplateResolution.outcome === "raw_template_hit"
+              ? `${publicRawTemplateResolution.matchKind}:${publicRawTemplateResolution.status}`
+              : publicDomainResolution?.outcome === "domain_hit"
+                ? publicDomainResolution.status
+                : "dashboard_auth";
         }
 
         return new Response(responseBody, {

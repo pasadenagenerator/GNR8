@@ -541,6 +541,50 @@ function createDeps(state: FakeState): ImportedRuntimeReconciliationDependencies
         resolvedPath: "/",
       } as Awaited<ReturnType<ImportedRuntimeReconciliationDependencies["resolveActiveArtifactForHostAndPathWithDiagnostics"]>>;
     },
+    resolveRawTemplateSiteForDomainAndPath: async (input) => {
+      const binding =
+        state.hostBinding?.host.toLowerCase() === String(input.host ?? "").toLowerCase() && state.hostBinding.status === "ACTIVE"
+          ? state.hostBinding
+          : null;
+      const activePointer = binding ? state.activePointers.get(binding.siteId) : null;
+      const raw = activePointer ? state.rawArtifacts.get(activePointer.siteVersionId) : null;
+      const entry = raw ? raw.fileMap[raw.entryHtmlPath] : null;
+      if (!binding || !activePointer || !raw || !entry) {
+        return {
+          outcome: "raw_template_miss",
+          host: String(input.host ?? ""),
+          normalizedPath: "/",
+          siteId: binding?.siteId ?? null,
+          siteVersionId: activePointer?.siteVersionId ?? null,
+          domain: null,
+          bindingId: binding?.id ?? null,
+          status: binding?.status ?? null,
+          legacyDomainSiteVersionId: null,
+          activePointerSiteVersionId: activePointer?.siteVersionId ?? null,
+          activeArtifactId: activePointer?.artifactId ?? null,
+          diagnostics: [{ code: "raw_template_miss" }],
+          reasonCode: "raw_template_site_not_found",
+        } as Awaited<ReturnType<ImportedRuntimeReconciliationDependencies["resolveRawTemplateSiteForDomainAndPath"]>>;
+      }
+      return {
+        outcome: "raw_template_hit",
+        host: String(input.host ?? ""),
+        siteId: raw.siteId,
+        siteVersionId: raw.siteVersionId,
+        siteResolution: "host_match",
+        matchKind: "host_match",
+        domain: null,
+        bindingId: binding.id,
+        status: binding.status,
+        legacyDomainSiteVersionId: null,
+        activePointerSiteVersionId: activePointer.siteVersionId,
+        activeArtifactId: activePointer.artifactId,
+        diagnostics: [{ code: "host_match_raw_template_selected" }],
+        normalizedPath: "/",
+        resolvedFilePath: raw.entryHtmlPath,
+        html: "<html><head><title>Transporti Maver d.o.o.</title></head><body>imported raw Maver</body></html>",
+      } as Awaited<ReturnType<ImportedRuntimeReconciliationDependencies["resolveRawTemplateSiteForDomainAndPath"]>>;
+    },
   };
 }
 
@@ -777,7 +821,11 @@ test("reconcile imported runtime apply verifies final host runtime site active p
   assert.equal(result.verification.targetHostRuntimeSiteId, IMPORTED_SITE_ID);
   assert.equal(result.verification.activePointer?.siteVersionId, IMPORTED_VERSION_ID);
   assert.equal(result.verification.rawArtifactId, "raw-artifact-imported");
-  assert.equal(result.verification.publicRuntimeWouldServeImportedRawTemplatePath, true);
+  assert.equal(result.verification.rawTemplatePublicServing.outcome, "raw_template_hit");
+  assert.equal(result.verification.rawTemplatePublicServing.matchKind, "host_match");
+  assert.equal(result.verification.rawTemplatePublicServing.resolvedFilePath, "index.html");
+  assert.equal(result.verification.rawTemplatePublicServing.htmlTitle, "Transporti Maver d.o.o.");
+  assert.match(result.verification.rawTemplatePublicServing.htmlFingerprint ?? "", /imported raw Maver/);
 });
 
 test("reconcile imported runtime Maver-like fixture applies successfully through publish after governance reconciliation", async () => {
@@ -800,6 +848,8 @@ test("reconcile imported runtime Maver-like fixture applies successfully through
   assert.equal(result.governanceReconciliation?.affectedRows, 1);
   assert.equal(result.publishResult.siteVersionId, IMPORTED_VERSION_ID);
   assert.equal(result.verification.targetHostRuntimeSiteId, IMPORTED_SITE_ID);
+  assert.equal(result.verification.rawTemplatePublicServing.outcome, "raw_template_hit");
+  assert.equal(result.verification.rawTemplatePublicServing.matchKind, "host_match");
 });
 
 test("reconcile imported runtime apply leaves old runtime site active pointer intact", async () => {

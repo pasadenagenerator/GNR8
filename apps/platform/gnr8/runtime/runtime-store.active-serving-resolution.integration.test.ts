@@ -300,3 +300,69 @@ test("raw-template success remains distinct from artifact fallback diagnostics",
     await cleanRuntimeSite(siteId);
   }
 });
+
+test("active host binding serves active raw imported template and inactive host does not", async (t) => {
+  if (!process.env.DATABASE_URL) {
+    t.skip("DATABASE_URL is required for runtime-store active host raw-template integration coverage");
+    return;
+  }
+
+  const runId = randomUUID().replaceAll("-", "_").slice(0, 16);
+  const siteId = `${TEST_SITE_PREFIX}_${runId}`;
+  const sourceHost = `${siteId}.source.example.test`;
+  const activeHost = `${siteId}.app.pasadenagenerator.com`;
+  const inactiveHost = `${siteId}-inactive.app.pasadenagenerator.com`;
+  const v1 = randomUUID();
+  const v2 = randomUUID();
+
+  assertTestSiteId(siteId);
+  await ensureRuntimeTables();
+  await cleanRuntimeSite(siteId);
+
+  try {
+    await getSuperadminPool().query(
+      `
+      insert into public.gnr8_runtime_sites (id, source_url, source_host)
+      values ($1::text, $2::text, $3::text)
+      `,
+      [siteId, `https://${sourceHost}/`, sourceHost],
+    );
+    await getSuperadminPool().query(
+      `
+      insert into public.gnr8_runtime_host_bindings (site_id, host, status, binding_kind)
+      values
+        ($1::text, $2::text, 'ACTIVE', 'canonical'),
+        ($1::text, $3::text, 'INACTIVE', 'canonical')
+      `,
+      [siteId, activeHost, inactiveHost],
+    );
+    await seedSiteVersion({ siteId, siteVersionId: v1, versionNo: 1, state: "ARCHIVED" });
+    await seedSiteVersion({ siteId, siteVersionId: v2, versionNo: 2, state: "PUBLISHED" });
+    const artifactV1 = await seedVersionArtifacts({ siteId, siteVersionId: v1, label: "arbitrary-old" });
+    const artifactV2 = await seedVersionArtifacts({ siteId, siteVersionId: v2, label: "maver-active" });
+
+    await switchActivePointer({ siteId, siteVersionId: v2, artifactId: artifactV2.artifactId });
+
+    const activeRaw = await resolveRawTemplateSiteForDomainAndPath({ host: activeHost, path: "/" });
+    assert.equal(activeRaw.outcome, "raw_template_hit");
+    assert.equal(activeRaw.siteResolution, "host_match");
+    assert.equal(activeRaw.matchKind, "host_match");
+    assert.equal(activeRaw.siteVersionId, v2);
+    assert.equal(activeRaw.activePointerSiteVersionId, v2);
+    assert.equal(activeRaw.resolvedFilePath, "index.html");
+    assert.match(activeRaw.html, /raw:maver-active/);
+    assert.equal(activeRaw.diagnostics.some((diagnostic) => diagnostic.code === "host_match_raw_template_selected"), true);
+
+    await switchActivePointer({ siteId, siteVersionId: v1, artifactId: artifactV1.artifactId });
+    const activeRawAfterPointerSwitch = await resolveRawTemplateSiteForDomainAndPath({ host: activeHost, path: "/" });
+    assert.equal(activeRawAfterPointerSwitch.outcome, "raw_template_hit");
+    assert.equal(activeRawAfterPointerSwitch.siteVersionId, v1);
+    assert.match(activeRawAfterPointerSwitch.html, /raw:arbitrary-old/);
+
+    const inactiveRaw = await resolveRawTemplateSiteForDomainAndPath({ host: inactiveHost, path: "/" });
+    assert.equal(inactiveRaw.outcome, "raw_template_miss");
+    assert.equal(inactiveRaw.reasonCode, "domain_not_found");
+  } finally {
+    await cleanRuntimeSite(siteId);
+  }
+});

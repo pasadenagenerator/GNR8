@@ -200,6 +200,65 @@ test("public runtime domain hit: serves raw template HTML and rewrites /assets U
   }
 });
 
+test("public runtime host match serves raw imported Maver HTML before recovered artifact fallback", async () => {
+  const restoreUsageDeps = __setPublicRuntimeUsageDependenciesForTest({
+    persistRuntimeUsageEvent: async () => ({ status: "written" }),
+  });
+  const restoreDeps = __setPublicRuntimeRenderDependenciesForTest({
+    resolveRawTemplateSiteForDomainAndPath: async () =>
+      ({
+        outcome: "raw_template_hit",
+        host: "maver.app.pasadenagenerator.com",
+        siteId: "site_maver",
+        siteVersionId: "sv_maver_active",
+        siteResolution: "host_match",
+        matchKind: "host_match",
+        domain: null,
+        bindingId: "host_binding_maver",
+        status: "ACTIVE",
+        legacyDomainSiteVersionId: null,
+        activePointerSiteVersionId: "sv_maver_active",
+        activeArtifactId: "artifact_maver_runtime",
+        diagnostics: [{ code: "host_match_raw_template_selected" }],
+        normalizedPath: "/",
+        resolvedFilePath: "index.html",
+        html: "<!doctype html><html><head><title>Transporti Maver d.o.o.</title><link rel=\"stylesheet\" href=\"assets/main.css\" /></head><body><h1>Maver raw imported site</h1></body></html>",
+      }) as never,
+    resolveActiveArtifactForHostAndPathWithDiagnostics: async () =>
+      ({
+        outcome: "artifact_hit",
+        host: "maver.app.pasadenagenerator.com",
+        path: "/",
+        normalizedPath: "/",
+        siteId: "site_maver",
+        siteResolution: "host_match",
+        hostBindingId: "host_binding_maver",
+        hostBindingKind: "canonical",
+        hostBindingStatus: "ACTIVE",
+        activeSiteVersionId: "sv_maver_active",
+        artifactId: "artifact_maver_runtime",
+        artifact: {} as never,
+        html: "<!doctype html><html><head><title>Recovered raw-block fallback</title></head><body>poor transformed runtime artifact</body></html>",
+        resolvedPath: "/",
+      }) as never,
+    listContentSlots: async () => [],
+    listContentOverrides: async () => [],
+  });
+
+  try {
+    const response = await renderPublicPathResponse({ host: "maver.app.pasadenagenerator.com", path: "/" });
+    assert.equal(response.status, 200);
+    const html = await response.text();
+    assert.match(html, /<title>Transporti Maver d\.o\.o\.<\/title>/);
+    assert.match(html, /Maver raw imported site/);
+    assert.match(html, /\/api\/gnr8\/runtime\/preview-assets\/site_maver\/sv_maver_active\/assets\/main\.css/);
+    assert.ok(!html.includes("poor transformed runtime artifact"));
+  } finally {
+    restoreDeps();
+    restoreUsageDeps();
+  }
+});
+
 test("public runtime domain hit: applies published content overrides and ignores draft status", async () => {
   const restoreDeps = __setPublicRuntimeRenderDependenciesForTest({
     resolveRawTemplateSiteForDomainAndPath: async () =>

@@ -12,6 +12,7 @@ import {
   linkRuntimeSiteVersionOwnershipIfAllowed,
   materializePageMigrationGovernanceForSiteVersion,
   resolveActiveArtifactForHostAndPathWithDiagnostics,
+  resolveRawTemplateSiteForDomainAndPath,
   transferRuntimeHostBinding,
   type RuntimeStoreDbClient,
   type RuntimeHostBinding,
@@ -163,7 +164,13 @@ export type ImportedRuntimeReconciliationApplyResult = {
     rawFileCount: number;
     rawEntryHtmlPath: string | null;
     rawEntryAssetExists: boolean;
-    publicRuntimeWouldServeImportedRawTemplatePath: boolean;
+    rawTemplatePublicServing: {
+      outcome: "raw_template_hit" | "raw_template_miss";
+      matchKind: "host_match" | "domain_match" | null;
+      resolvedFilePath: string | null;
+      htmlTitle: string | null;
+      htmlFingerprint: string | null;
+    };
     oldRuntimeSiteActivePointerUnchanged: boolean;
   };
 };
@@ -185,6 +192,7 @@ export type ImportedRuntimeReconciliationDependencies = {
   publishApprovedSiteVersion: PublishApprovedSiteVersion;
   transferRuntimeHostBinding: typeof transferRuntimeHostBinding;
   resolveActiveArtifactForHostAndPathWithDiagnostics: typeof resolveActiveArtifactForHostAndPathWithDiagnostics;
+  resolveRawTemplateSiteForDomainAndPath: typeof resolveRawTemplateSiteForDomainAndPath;
 };
 
 const DEFAULT_DEPS: ImportedRuntimeReconciliationDependencies = {
@@ -207,6 +215,7 @@ const DEFAULT_DEPS: ImportedRuntimeReconciliationDependencies = {
   },
   transferRuntimeHostBinding,
   resolveActiveArtifactForHostAndPathWithDiagnostics,
+  resolveRawTemplateSiteForDomainAndPath,
 };
 
 export function createImportedRuntimeReconciliationDbDependencies(
@@ -236,6 +245,7 @@ export function createImportedRuntimeReconciliationDbDependencies(
     transferRuntimeHostBinding: (input) => transferRuntimeHostBinding({ ...input, dbClient }),
     resolveActiveArtifactForHostAndPathWithDiagnostics: (input) =>
       resolveActiveArtifactForHostAndPathWithDiagnostics({ ...input, dbClient }),
+    resolveRawTemplateSiteForDomainAndPath: (input) => resolveRawTemplateSiteForDomainAndPath({ ...input, dbClient }),
   };
 }
 
@@ -249,6 +259,23 @@ function normalizeHost(value: unknown): string {
 
 function rawFileCount(artifact: RawSiteArtifact | null): number {
   return Object.keys(artifact?.fileMap ?? {}).length;
+}
+
+function extractHtmlTitle(html: string): string | null {
+  const match = String(html ?? "").match(/<title\b[^>]*>([\s\S]*?)<\/title>/i);
+  const title = token(match?.[1]?.replace(/<[^>]*>/g, " ").replace(/\s+/g, " "));
+  return title || null;
+}
+
+function fingerprintHtml(html: string): string | null {
+  const fingerprint = token(
+    String(html ?? "")
+      .replace(/<script\b[\s\S]*?<\/script>/gi, " ")
+      .replace(/<style\b[\s\S]*?<\/style>/gi, " ")
+      .replace(/<[^>]*>/g, " ")
+      .replace(/\s+/g, " "),
+  ).slice(0, 160);
+  return fingerprint || null;
 }
 
 function artifactSummary(rawArtifact: RawSiteArtifact | null, runtimeArtifact: RuntimeArtifact | null) {
@@ -831,6 +858,10 @@ export async function applyImportedRuntimeReconciliation(
     host: plan.proposedHostBindingTransfer.host,
     path: "/",
   });
+  const publicRawTemplateResolution = await resolvedDeps.resolveRawTemplateSiteForDomainAndPath({
+    host: plan.proposedHostBindingTransfer.host,
+    path: "/",
+  });
   const oldRuntimeSiteActivePointerAfter =
     oldRuntimeSiteId && oldRuntimeSiteId !== plan.importedRuntimeSiteId
       ? await resolvedDeps.getActivePointerForSite(oldRuntimeSiteId)
@@ -852,12 +883,22 @@ export async function applyImportedRuntimeReconciliation(
     rawFileCount: rawFileCount(rawArtifact),
     rawEntryHtmlPath: rawArtifact?.entryHtmlPath ?? null,
     rawEntryAssetExists: Boolean(rawEntryAsset),
-    publicRuntimeWouldServeImportedRawTemplatePath:
-      verifiedHostBinding?.siteId === plan.importedRuntimeSiteId &&
-      activePointer?.siteVersionId === plan.importedSiteVersionId &&
-      Boolean(rawArtifact) &&
-      rawFileCount(rawArtifact) > 0 &&
-      Boolean(rawEntryAsset),
+    rawTemplatePublicServing:
+      publicRawTemplateResolution.outcome === "raw_template_hit"
+        ? {
+            outcome: publicRawTemplateResolution.outcome,
+            matchKind: publicRawTemplateResolution.matchKind,
+            resolvedFilePath: publicRawTemplateResolution.resolvedFilePath,
+            htmlTitle: extractHtmlTitle(publicRawTemplateResolution.html),
+            htmlFingerprint: fingerprintHtml(publicRawTemplateResolution.html),
+          }
+        : {
+            outcome: publicRawTemplateResolution.outcome,
+            matchKind: null,
+            resolvedFilePath: null,
+            htmlTitle: null,
+            htmlFingerprint: null,
+          },
     oldRuntimeSiteActivePointerUnchanged,
   };
 
@@ -866,6 +907,9 @@ export async function applyImportedRuntimeReconciliation(
     verification.activePointer?.siteVersionId === plan.importedSiteVersionId ? null : "active_pointer_not_imported_version",
     verification.rawArtifactId ? null : "raw_artifact_missing_after_apply",
     verification.rawEntryAssetExists ? null : "raw_entry_asset_missing_after_apply",
+    verification.rawTemplatePublicServing.outcome === "raw_template_hit" ? null : "public_runtime_raw_template_not_selected",
+    verification.rawTemplatePublicServing.matchKind ? null : "public_runtime_raw_template_match_kind_missing",
+    verification.rawTemplatePublicServing.resolvedFilePath === "index.html" ? null : "public_runtime_raw_template_index_not_selected",
     verification.oldRuntimeSiteActivePointerUnchanged ? null : "old_runtime_site_active_pointer_changed",
   ].filter((value): value is string => Boolean(value));
 

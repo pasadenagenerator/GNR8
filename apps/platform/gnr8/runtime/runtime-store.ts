@@ -2672,19 +2672,23 @@ export async function resolveDomainSiteVersionForHost(input: { host?: string | n
   };
 }
 
+type RawTemplateMissReasonCode = "domain_not_found" | "raw_template_site_not_found" | "raw_template_html_not_found";
+
 export type RawTemplateDomainResolution =
   | {
       outcome: "raw_template_hit";
       host: string;
       siteId: string;
       siteVersionId: string;
-      domain: string;
+      siteResolution: Extract<RuntimeActiveServingResolutionKind, "domain_match" | "host_match">;
+      matchKind: Extract<RuntimeActiveServingResolutionKind, "domain_match" | "host_match">;
+      domain: string | null;
       bindingId: string;
-      status: RuntimeDomainHostBindingStatus;
+      status: RuntimeDomainHostBindingStatus | RuntimeHostBindingStatus;
       legacyDomainSiteVersionId: string | null;
       activePointerSiteVersionId: string;
       activeArtifactId: string;
-      diagnostics: RuntimeActiveServingDiagnostic[];
+      diagnostics: RawTemplateServingDiagnostic[];
       normalizedPath: string;
       resolvedFilePath: string;
       html: string;
@@ -2697,12 +2701,28 @@ export type RawTemplateDomainResolution =
       siteVersionId: string | null;
       domain: string | null;
       bindingId: string | null;
-      status: RuntimeDomainHostBindingStatus | null;
+      status: RuntimeDomainHostBindingStatus | RuntimeHostBindingStatus | null;
       legacyDomainSiteVersionId: string | null;
       activePointerSiteVersionId: string | null;
       activeArtifactId: string | null;
-      diagnostics: RuntimeActiveServingDiagnostic[];
-      reasonCode: "domain_not_found" | "raw_template_site_not_found" | "raw_template_html_not_found";
+      diagnostics: RawTemplateServingDiagnostic[];
+      reasonCode: RawTemplateMissReasonCode;
+    };
+
+type RawTemplateServingDiagnostic =
+  | RuntimeActiveServingDiagnostic
+  | {
+      code:
+        | "raw_template_domain_match"
+        | "raw_template_host_match"
+        | "raw_template_miss"
+        | "host_match_raw_template_selected";
+      host: string;
+      siteId: string | null;
+      siteVersionId: string | null;
+      siteResolution: RuntimeActiveServingResolutionKind | "none";
+      reasonCode?: RawTemplateMissReasonCode;
+      resolvedFilePath?: string;
     };
 
 function buildRawTemplateHtmlPathCandidates(input: {
@@ -2731,10 +2751,29 @@ function buildRawTemplateHtmlPathCandidates(input: {
 export async function resolveRawTemplateSiteForDomainAndPath(input: {
   host?: string | null;
   path: string;
+  dbClient?: RuntimeStoreDbClient;
 }): Promise<RawTemplateDomainResolution> {
-  const siteResolution = await resolveActiveServingArtifactForHostAndPath({ host: input.host, path: input.path });
+  const siteResolution = await resolveActiveServingArtifactForHostAndPath({
+    host: input.host,
+    path: input.path,
+    dbClient: input.dbClient,
+  });
   const normalizedPath = normalizePagePath(input.path);
-  if (siteResolution.siteResolution !== "domain_match") {
+  const missDiagnostics = (reasonCode: RawTemplateMissReasonCode): RawTemplateServingDiagnostic[] => [
+    {
+      code: "raw_template_miss",
+      host: siteResolution.host,
+      siteId: siteResolution.siteId ?? null,
+      siteVersionId: siteResolution.activeSiteVersionId ?? null,
+      siteResolution: siteResolution.siteResolution,
+      reasonCode,
+    },
+  ];
+  const activeMatchKind =
+    siteResolution.siteResolution === "domain_match" || siteResolution.siteResolution === "host_match"
+      ? siteResolution.siteResolution
+      : null;
+  if (!activeMatchKind) {
     return {
       outcome: "raw_template_miss",
       host: siteResolution.host,
@@ -2747,14 +2786,17 @@ export async function resolveRawTemplateSiteForDomainAndPath(input: {
       legacyDomainSiteVersionId: null,
       activePointerSiteVersionId: null,
       activeArtifactId: null,
-      diagnostics: [],
+      diagnostics: missDiagnostics("domain_not_found"),
       reasonCode: "domain_not_found",
     };
   }
 
   const activeSiteVersionId = siteResolution.activeSiteVersionId;
   const activeArtifactId = siteResolution.artifactId;
-  if (!activeSiteVersionId || !activeArtifactId || !siteResolution.domain || !siteResolution.domainBindingId || !siteResolution.domainBindingStatus) {
+  const bindingId = activeMatchKind === "domain_match" ? siteResolution.domainBindingId : siteResolution.hostBindingId;
+  const bindingStatus = activeMatchKind === "domain_match" ? siteResolution.domainBindingStatus : siteResolution.hostBindingStatus;
+  const bindingIsActive = activeMatchKind === "domain_match" ? bindingStatus === "active" : bindingStatus === "ACTIVE";
+  if (!activeSiteVersionId || !activeArtifactId || !bindingId || !bindingStatus || !bindingIsActive) {
     return {
       outcome: "raw_template_miss",
       host: siteResolution.host,
@@ -2762,17 +2804,19 @@ export async function resolveRawTemplateSiteForDomainAndPath(input: {
       siteId: siteResolution.siteId,
       siteVersionId: activeSiteVersionId ?? null,
       domain: siteResolution.domain,
-      bindingId: siteResolution.domainBindingId,
-      status: siteResolution.domainBindingStatus,
+      bindingId,
+      status: bindingStatus,
       legacyDomainSiteVersionId: siteResolution.legacyDomainSiteVersionId,
       activePointerSiteVersionId: activeSiteVersionId ?? null,
       activeArtifactId,
-      diagnostics: siteResolution.diagnostics,
+      diagnostics: [...siteResolution.diagnostics, ...missDiagnostics("raw_template_site_not_found")],
       reasonCode: "raw_template_site_not_found",
     };
   }
 
-  const artifact = (await getRawImportedSiteArtifact(activeSiteVersionId)) ?? (await getRawTemplateSiteArtifact(activeSiteVersionId));
+  const artifact =
+    (await getRawImportedSiteArtifact(activeSiteVersionId, { dbClient: input.dbClient })) ??
+    (await getRawTemplateSiteArtifact(activeSiteVersionId, { dbClient: input.dbClient }));
   if (!artifact || artifact.siteId !== siteResolution.siteId) {
     return {
       outcome: "raw_template_miss",
@@ -2781,12 +2825,12 @@ export async function resolveRawTemplateSiteForDomainAndPath(input: {
       siteId: siteResolution.siteId,
       siteVersionId: activeSiteVersionId,
       domain: siteResolution.domain,
-      bindingId: siteResolution.domainBindingId,
-      status: siteResolution.domainBindingStatus,
+      bindingId,
+      status: bindingStatus,
       legacyDomainSiteVersionId: siteResolution.legacyDomainSiteVersionId,
       activePointerSiteVersionId: activeSiteVersionId,
       activeArtifactId,
-      diagnostics: siteResolution.diagnostics,
+      diagnostics: [...siteResolution.diagnostics, ...missDiagnostics("raw_template_site_not_found")],
       reasonCode: "raw_template_site_not_found",
     };
   }
@@ -2805,12 +2849,12 @@ export async function resolveRawTemplateSiteForDomainAndPath(input: {
       siteId: artifact.siteId,
       siteVersionId: artifact.siteVersionId,
       domain: siteResolution.domain,
-      bindingId: siteResolution.domainBindingId,
-      status: siteResolution.domainBindingStatus,
+      bindingId,
+      status: bindingStatus,
       legacyDomainSiteVersionId: siteResolution.legacyDomainSiteVersionId,
       activePointerSiteVersionId: activeSiteVersionId,
       activeArtifactId,
-      diagnostics: siteResolution.diagnostics,
+      diagnostics: [...siteResolution.diagnostics, ...missDiagnostics("raw_template_html_not_found")],
       reasonCode: "raw_template_html_not_found",
     };
   }
@@ -2818,6 +2862,8 @@ export async function resolveRawTemplateSiteForDomainAndPath(input: {
   const htmlAsset = await getRawTemplateSiteAsset({
     siteVersionId: artifact.siteVersionId,
     filePath: resolvedFilePath,
+    artifactId: artifact.id,
+    dbClient: input.dbClient,
   });
   if (!htmlAsset) {
     return {
@@ -2827,14 +2873,36 @@ export async function resolveRawTemplateSiteForDomainAndPath(input: {
       siteId: artifact.siteId,
       siteVersionId: artifact.siteVersionId,
       domain: siteResolution.domain,
-      bindingId: siteResolution.domainBindingId,
-      status: siteResolution.domainBindingStatus,
+      bindingId,
+      status: bindingStatus,
       legacyDomainSiteVersionId: siteResolution.legacyDomainSiteVersionId,
       activePointerSiteVersionId: activeSiteVersionId,
       activeArtifactId,
-      diagnostics: siteResolution.diagnostics,
+      diagnostics: [...siteResolution.diagnostics, ...missDiagnostics("raw_template_html_not_found")],
       reasonCode: "raw_template_html_not_found",
     };
+  }
+
+  const rawMatchDiagnostics: RawTemplateServingDiagnostic[] = [
+    ...siteResolution.diagnostics,
+    {
+      code: activeMatchKind === "domain_match" ? "raw_template_domain_match" : "raw_template_host_match",
+      host: siteResolution.host,
+      siteId: artifact.siteId,
+      siteVersionId: artifact.siteVersionId,
+      siteResolution: activeMatchKind,
+      resolvedFilePath,
+    },
+  ];
+  if (activeMatchKind === "host_match") {
+    rawMatchDiagnostics.push({
+      code: "host_match_raw_template_selected",
+      host: siteResolution.host,
+      siteId: artifact.siteId,
+      siteVersionId: artifact.siteVersionId,
+      siteResolution: activeMatchKind,
+      resolvedFilePath,
+    });
   }
 
   return {
@@ -2842,13 +2910,15 @@ export async function resolveRawTemplateSiteForDomainAndPath(input: {
     host: siteResolution.host,
     siteId: artifact.siteId,
     siteVersionId: artifact.siteVersionId,
+    siteResolution: activeMatchKind,
+    matchKind: activeMatchKind,
     domain: siteResolution.domain,
-    bindingId: siteResolution.domainBindingId,
-    status: siteResolution.domainBindingStatus,
+    bindingId,
+    status: bindingStatus,
     legacyDomainSiteVersionId: siteResolution.legacyDomainSiteVersionId,
     activePointerSiteVersionId: activeSiteVersionId,
     activeArtifactId,
-    diagnostics: siteResolution.diagnostics,
+    diagnostics: rawMatchDiagnostics,
     normalizedPath,
     resolvedFilePath,
     html: htmlAsset.bytes.toString("utf8"),

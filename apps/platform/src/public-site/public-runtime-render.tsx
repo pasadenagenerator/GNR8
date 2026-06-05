@@ -453,12 +453,26 @@ export async function renderPublicPathResponse(input: {
       host: normalizedHost,
       rawHost,
       domain: rawTemplateResolution.domain,
+      matchKind: rawTemplateResolution.matchKind,
       siteId: rawTemplateResolution.siteId,
       siteVersionId: rawTemplateResolution.siteVersionId,
       legacyDomainSiteVersionId: rawTemplateResolution.legacyDomainSiteVersionId ?? null,
       activePointerSiteVersionId: rawTemplateResolution.activePointerSiteVersionId ?? rawTemplateResolution.siteVersionId,
       resolvedFilePath: rawTemplateResolution.resolvedFilePath,
     });
+    logPublicDomainDiagnostic(
+      rawTemplateResolution.matchKind === "host_match" ? "HOST_MATCH_RAW_TEMPLATE_SELECTED" : "RAW_TEMPLATE_DOMAIN_MATCH",
+      {
+        host: normalizedHost,
+        rawHost,
+        domain: rawTemplateResolution.domain,
+        bindingId: rawTemplateResolution.bindingId,
+        status: rawTemplateResolution.status,
+        siteId: rawTemplateResolution.siteId,
+        siteVersionId: rawTemplateResolution.siteVersionId,
+        resolvedFilePath: rawTemplateResolution.resolvedFilePath,
+      },
+    );
     for (const diagnostic of rawTemplateResolution.diagnostics ?? []) {
       if (diagnostic.code === "CUSTOM_DOMAIN_VERSION_DIVERGENCE_DETECTED") {
         logPublicDomainDiagnostic("CUSTOM_DOMAIN_VERSION_DIVERGENCE_DETECTED", {

@@ -1,7 +1,31 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { createPreviewAssetsRouteHandlers } from "@/app/api/gnr8/runtime/preview-assets/[siteId]/[siteVersionId]/[...assetPath]/preview-assets-route-handlers";
+import { createPreviewAssetsRouteHandlers as createPreviewAssetsRouteHandlersBase } from "@/app/api/gnr8/runtime/preview-assets/[siteId]/[siteVersionId]/[...assetPath]/preview-assets-route-handlers";
+
+type PreviewAssetRouteOverrides = Parameters<typeof createPreviewAssetsRouteHandlersBase>[0];
+
+function createPreviewAssetsRouteHandlers(overrides: PreviewAssetRouteOverrides = {}) {
+  return createPreviewAssetsRouteHandlersBase({
+    resolveRawTemplateSiteForDomainAndPath: async ({ host }) =>
+      ({
+        outcome: "raw_template_miss",
+        host: String(host ?? ""),
+        normalizedPath: "/",
+        siteId: null,
+        siteVersionId: null,
+        domain: null,
+        bindingId: null,
+        status: null,
+        legacyDomainSiteVersionId: null,
+        activePointerSiteVersionId: null,
+        activeArtifactId: null,
+        diagnostics: [],
+        reasonCode: "domain_not_found",
+      }) as never,
+    ...overrides,
+  });
+}
 
 function getParams() {
   return Promise.resolve({
@@ -64,6 +88,126 @@ test("custom-domain asset request is allowed without dashboard auth when host ma
     await response.text(),
     ".hero{background:url('/api/gnr8/runtime/preview-assets/site_1/sv_1/assets/bg.jpg');}",
   );
+  assert.equal(authCalls, 0);
+});
+
+test("active host-binding raw asset request is allowed without dashboard auth for same active site/version", async () => {
+  let authCalls = 0;
+  const handlers = createPreviewAssetsRouteHandlers({
+    resolveRawTemplateSiteForDomainAndPath: async () =>
+      ({
+        outcome: "raw_template_hit",
+        host: "maver.app.pasadenagenerator.com",
+        siteId: "site_1",
+        siteVersionId: "sv_1",
+        siteResolution: "host_match",
+        matchKind: "host_match",
+        domain: null,
+        bindingId: "host_binding_1",
+        status: "ACTIVE",
+        legacyDomainSiteVersionId: null,
+        activePointerSiteVersionId: "sv_1",
+        activeArtifactId: "runtime_artifact_1",
+        diagnostics: [{ code: "host_match_raw_template_selected" }],
+        normalizedPath: "/",
+        resolvedFilePath: "index.html",
+        html: "<html><head><title>Transporti Maver d.o.o.</title></head></html>",
+      }) as never,
+    resolveDomainSiteVersionForHost: async () =>
+      ({
+        outcome: "domain_miss",
+        host: "maver.app.pasadenagenerator.com",
+        reasonCode: "domain_not_found",
+      }) as never,
+    resolveAgencyIdForSiteVersion: async () => "agency_1",
+    requireAgencyActionContext: async () => {
+      authCalls += 1;
+      return { actorMode: "agency_member", agencyId: "agency_1" } as never;
+    },
+    getRawImportedSiteArtifact: async () =>
+      ({
+        id: "artifact_imported_1",
+        artifactType: "raw_imported_site",
+        siteId: "site_1",
+        siteVersionId: "sv_1",
+        entryHtmlPath: "index.html",
+        assetBasePath: ".",
+        fileMap: {},
+        metadata: {
+          sourceUrl: "https://maver.si",
+          finalUrl: "https://maver.si",
+          htmlByteLength: 123,
+          diagnostics: { codes: [] },
+          assetSummary: { persistedAssetCount: 1, externalFallbackAssetCount: 0 },
+        },
+        createdAt: "2026-06-05T00:00:00.000Z",
+      }) as never,
+    getRawTemplateSiteArtifact: async () => null,
+    getRawTemplateSiteAsset: async () =>
+      ({
+        mediaType: "text/css; charset=utf-8",
+        sizeBytes: 16,
+        sha256: "abc",
+        bytes: Buffer.from("body{margin:0}", "utf8"),
+      }) as never,
+  });
+
+  const response = await handlers.GET(
+    new Request("https://maver.app.pasadenagenerator.com/api/gnr8/runtime/preview-assets/site_1/sv_1/assets/main.css", {
+      headers: { host: "maver.app.pasadenagenerator.com" },
+    }),
+    { params: getParams() },
+  );
+
+  assert.equal(response.status, 200);
+  assert.equal(await response.text(), "body{margin:0}");
+  assert.equal(authCalls, 0);
+});
+
+test("active host-binding raw asset request is forbidden for wrong site/version", async () => {
+  let authCalls = 0;
+  const handlers = createPreviewAssetsRouteHandlers({
+    resolveRawTemplateSiteForDomainAndPath: async () =>
+      ({
+        outcome: "raw_template_hit",
+        host: "maver.app.pasadenagenerator.com",
+        siteId: "site_active",
+        siteVersionId: "sv_active",
+        siteResolution: "host_match",
+        matchKind: "host_match",
+        domain: null,
+        bindingId: "host_binding_1",
+        status: "ACTIVE",
+        legacyDomainSiteVersionId: null,
+        activePointerSiteVersionId: "sv_active",
+        activeArtifactId: "runtime_artifact_1",
+        diagnostics: [{ code: "host_match_raw_template_selected" }],
+        normalizedPath: "/",
+        resolvedFilePath: "index.html",
+        html: "<html></html>",
+      }) as never,
+    resolveDomainSiteVersionForHost: async () =>
+      ({
+        outcome: "domain_miss",
+        host: "maver.app.pasadenagenerator.com",
+        reasonCode: "domain_not_found",
+      }) as never,
+    resolveAgencyIdForSiteVersion: async () => "agency_1",
+    requireAgencyActionContext: async () => {
+      authCalls += 1;
+      return { actorMode: "agency_member", agencyId: "agency_1" } as never;
+    },
+  });
+
+  const response = await handlers.GET(
+    new Request("https://maver.app.pasadenagenerator.com/api/gnr8/runtime/preview-assets/site_1/sv_1/assets/main.css", {
+      headers: { host: "maver.app.pasadenagenerator.com" },
+    }),
+    { params: getParams() },
+  );
+
+  assert.equal(response.status, 403);
+  assert.equal(await response.text(), "forbidden");
   assert.equal(authCalls, 0);
 });
 
