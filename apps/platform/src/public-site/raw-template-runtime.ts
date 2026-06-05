@@ -288,10 +288,10 @@ export function injectMonoOsmapPublicFallback(html: string): RawTemplateRuntimeR
   });
 
   for (const container of containers) {
-    const module = findAncestorElement(container, (element) => {
+    const osmapModule = findAncestorElement(container, (element) => {
       return (element.tagName || "").toLowerCase() === "div" && hasClasses(element, ["module", "map", "osmap"]);
     });
-    if (!module) continue;
+    if (!osmapModule) continue;
 
     const address = attrValue(container, "data-address");
     if (!address) continue;
@@ -301,7 +301,7 @@ export function injectMonoOsmapPublicFallback(html: string): RawTemplateRuntimeR
 
     replacements.push({
       ...range,
-      moduleId: attrValue(module, "id") || "unknown",
+      moduleId: attrValue(osmapModule, "id") || "unknown",
       address,
       replacement: buildOsmapFallbackContainer({ address }),
     });
