@@ -1,7 +1,13 @@
 import path from "node:path";
+import { parse } from "parse5";
+import type { DefaultTreeAdapterMap } from "parse5";
 
 const CSS_URL_PATTERN = /url\(\s*(['"]?)([^"')]+)\1\s*\)/gi;
 const ASSET_ROUTE_PREFIX = "/api/gnr8/runtime/preview-assets";
+const OSMAP_FALLBACK_TYPE = "osm_link_card";
+
+type Node = DefaultTreeAdapterMap["node"];
+type Element = DefaultTreeAdapterMap["element"];
 
 type RewriteContext = {
   siteId: string;
@@ -14,6 +20,18 @@ type RuntimeDebugContext = {
   siteVersionId: string;
   bindingStatus: string;
   details?: Record<string, unknown>;
+};
+
+export type RawTemplateRuntimeDiagnostic = {
+  code: "OSMAP_JSON_ENDPOINT_UNAVAILABLE" | "OSMAP_PUBLIC_FALLBACK_INJECTED";
+  moduleId: string;
+  address: string;
+  fallbackType: typeof OSMAP_FALLBACK_TYPE;
+};
+
+export type RawTemplateRuntimeRewriteResult = {
+  html: string;
+  diagnostics: RawTemplateRuntimeDiagnostic[];
 };
 
 function normalizeTemplatePath(value: string): string {
@@ -185,6 +203,136 @@ function escapeHtml(value: string): string {
     .replaceAll("'", "&#39;");
 }
 
+function asElement(node: Node | null | undefined): Element | null {
+  if (!node || typeof (node as any).tagName !== "string") return null;
+  return node as Element;
+}
+
+function childrenOf(node: Node | null | undefined): Node[] {
+  if (!node || !Array.isArray((node as any).childNodes)) return [];
+  return (node as any).childNodes as Node[];
+}
+
+function attrValue(node: Element, name: string): string {
+  const attrs = Array.isArray((node as any).attrs) ? ((node as any).attrs as Array<{ name: string; value: string }>) : [];
+  const hit = attrs.find((entry) => entry.name.toLowerCase() === name.toLowerCase());
+  return String(hit?.value ?? "").trim();
+}
+
+function classList(node: Element): Set<string> {
+  return new Set(
+    attrValue(node, "class")
+      .split(/\s+/)
+      .map((value) => value.trim())
+      .filter(Boolean),
+  );
+}
+
+function hasClasses(node: Element, classes: string[]): boolean {
+  const values = classList(node);
+  return classes.every((className) => values.has(className));
+}
+
+function findAncestorElement(node: Element, predicate: (element: Element) => boolean): Element | null {
+  let current: Node | null = (node as any).parentNode ?? null;
+  while (current) {
+    const element = asElement(current);
+    if (element && predicate(element)) return element;
+    current = (current as any).parentNode ?? null;
+  }
+  return null;
+}
+
+function collectElements(root: Node, predicate: (element: Element) => boolean): Element[] {
+  const out: Element[] = [];
+  const walk = (node: Node) => {
+    const element = asElement(node);
+    if (element && predicate(element)) out.push(element);
+    for (const child of childrenOf(node)) walk(child);
+  };
+  walk(root);
+  return out;
+}
+
+function sourceRange(node: Element): { startOffset: number; endOffset: number } | null {
+  const location = (node as any).sourceCodeLocation as { startOffset?: number; endOffset?: number } | undefined;
+  const startOffset = Number(location?.startOffset);
+  const endOffset = Number(location?.endOffset);
+  if (!Number.isInteger(startOffset) || !Number.isInteger(endOffset) || startOffset < 0 || endOffset <= startOffset) return null;
+  return { startOffset, endOffset };
+}
+
+function buildOsmapFallbackContainer(input: { address: string }): string {
+  const escapedAddress = escapeHtml(input.address);
+  const href = `https://www.openstreetmap.org/search?query=${encodeURIComponent(input.address)}`;
+  return `<div class="map-container gnr8-osmap-fallback" data-address="${escapedAddress}" data-gnr8-osmap-fallback="${OSMAP_FALLBACK_TYPE}" style="min-height:260px;display:grid;place-items:center;padding:18px;border:1px solid #cbd5e1;background:#f8fafc;color:#0f172a;font-family:system-ui,-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;text-align:center;box-sizing:border-box"><div style="display:grid;gap:10px;max-width:520px"><strong style="font-size:18px;line-height:1.25">Location</strong><span style="font-size:15px;line-height:1.45">${escapedAddress}</span><a href="${href}" target="_blank" rel="noopener noreferrer" style="display:inline-flex;justify-content:center;justify-self:center;padding:9px 13px;border-radius:6px;background:#0f172a;color:#ffffff;text-decoration:none;font-weight:700">Open in OpenStreetMap</a></div></div>`;
+}
+
+export function injectMonoOsmapPublicFallback(html: string): RawTemplateRuntimeRewriteResult {
+  const source = String(html ?? "");
+  if (!source || !/osmap/i.test(source) || !/map-container/i.test(source) || !/data-address/i.test(source)) {
+    return { html: source, diagnostics: [] };
+  }
+
+  const root = parse(source, { sourceCodeLocationInfo: true }) as unknown as Node;
+  const replacements: Array<{
+    startOffset: number;
+    endOffset: number;
+    moduleId: string;
+    address: string;
+    replacement: string;
+  }> = [];
+
+  const containers = collectElements(root, (element) => {
+    return (element.tagName || "").toLowerCase() === "div" && hasClasses(element, ["map-container"]) && Boolean(attrValue(element, "data-address"));
+  });
+
+  for (const container of containers) {
+    const module = findAncestorElement(container, (element) => {
+      return (element.tagName || "").toLowerCase() === "div" && hasClasses(element, ["module", "map", "osmap"]);
+    });
+    if (!module) continue;
+
+    const address = attrValue(container, "data-address");
+    if (!address) continue;
+
+    const range = sourceRange(container);
+    if (!range) continue;
+
+    replacements.push({
+      ...range,
+      moduleId: attrValue(module, "id") || "unknown",
+      address,
+      replacement: buildOsmapFallbackContainer({ address }),
+    });
+  }
+
+  if (replacements.length === 0) return { html: source, diagnostics: [] };
+
+  const sorted = replacements.sort((left, right) => right.startOffset - left.startOffset);
+  let rewritten = source;
+  for (const replacement of sorted) {
+    rewritten = `${rewritten.slice(0, replacement.startOffset)}${replacement.replacement}${rewritten.slice(replacement.endOffset)}`;
+  }
+
+  const diagnostics = replacements.flatMap((replacement): RawTemplateRuntimeDiagnostic[] => [
+    {
+      code: "OSMAP_JSON_ENDPOINT_UNAVAILABLE",
+      moduleId: replacement.moduleId,
+      address: replacement.address,
+      fallbackType: OSMAP_FALLBACK_TYPE,
+    },
+    {
+      code: "OSMAP_PUBLIC_FALLBACK_INJECTED",
+      moduleId: replacement.moduleId,
+      address: replacement.address,
+      fallbackType: OSMAP_FALLBACK_TYPE,
+    },
+  ]);
+
+  return { html: rewritten, diagnostics };
+}
+
 export function injectRuntimeDebugPanel(input: { html: string; debug: RuntimeDebugContext }): string {
   const detailRows = Object.entries(input.debug.details ?? {})
     .map(([key, value]) => `<div>${escapeHtml(key)}: ${escapeHtml(typeof value === "string" ? value : JSON.stringify(value))}</div>`)
@@ -204,6 +352,15 @@ export function rewriteRawTemplateHtmlForRuntime(input: {
   siteVersionId: string;
   resolvedFilePath: string;
 }): string {
+  return rewriteRawTemplateHtmlForRuntimeWithDiagnostics(input).html;
+}
+
+export function rewriteRawTemplateHtmlForRuntimeWithDiagnostics(input: {
+  html: string;
+  siteId: string;
+  siteVersionId: string;
+  resolvedFilePath: string;
+}): RawTemplateRuntimeRewriteResult {
   const context: RewriteContext = {
     siteId: input.siteId,
     siteVersionId: input.siteVersionId,
@@ -214,7 +371,7 @@ export function rewriteRawTemplateHtmlForRuntime(input: {
   rewritten = rewriteInlineStyleAttributes(rewritten, context);
   rewritten = rewriteStyleTagBlocks(rewritten, context);
   rewritten = injectBaseTag(rewritten);
-  return rewritten;
+  return injectMonoOsmapPublicFallback(rewritten);
 }
 
 export function rewriteRawTemplateCssForRuntime(input: {

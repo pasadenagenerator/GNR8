@@ -10,6 +10,7 @@ import {
   resolveRequestHost,
   resolvePublicRuntimeMode,
 } from "@/src/public-site/public-runtime-render";
+import { injectMonoOsmapPublicFallback } from "@/src/public-site/raw-template-runtime";
 import { materializeCmsContentSlotsForScopedImport } from "@/gnr8/site/scoped-import-pipeline";
 import { planBatchDraftUpserts } from "@/app/api/gnr8/clients/[clientId]/sites/[siteId]/content/overrides/batch/batch-overrides-route-helpers";
 import type { ContentOverride, ContentSlot } from "@/gnr8/runtime/content-binding";
@@ -256,6 +257,108 @@ test("public runtime host match serves raw imported Maver HTML before recovered 
   } finally {
     restoreDeps();
     restoreUsageDeps();
+  }
+});
+
+test("Mono osmap public fallback rewrites Maver-style map container to safe OSM link card", () => {
+  const source =
+    '<!doctype html><html><body><div id="m4482" class="module map osmap" data-url="?m=m4482" data-req-lazy="mapbox-gl,leaflet,osmap"><div class="map-container cookieconsent-optin-marketing" data-address="Dolenjska cesta 328 Lavrica 1291 Slovenia" data-zoom="16"></div></div></body></html>';
+
+  const result = injectMonoOsmapPublicFallback(source);
+
+  assert.match(result.html, /class="map-container gnr8-osmap-fallback"/);
+  assert.match(result.html, /data-address="Dolenjska cesta 328 Lavrica 1291 Slovenia"/);
+  assert.match(result.html, /https:\/\/www\.openstreetmap\.org\/search\?query=Dolenjska%20cesta%20328%20Lavrica%201291%20Slovenia/);
+  assert.match(result.html, /Open in OpenStreetMap/);
+  assert.equal(result.html.includes("cookieconsent-optin-marketing"), false);
+  assert.deepEqual(
+    result.diagnostics.map((diagnostic) => diagnostic.code),
+    ["OSMAP_JSON_ENDPOINT_UNAVAILABLE", "OSMAP_PUBLIC_FALLBACK_INJECTED"],
+  );
+  assert.equal(result.diagnostics[0]?.moduleId, "m4482");
+  assert.equal(result.diagnostics[0]?.address, "Dolenjska cesta 328 Lavrica 1291 Slovenia");
+  assert.equal(result.diagnostics[0]?.fallbackType, "osm_link_card");
+});
+
+test("Mono osmap public fallback leaves non-map HTML unchanged", () => {
+  const source = '<!doctype html><html><body><main><h1>No map here</h1><p>Original content.</p></main></body></html>';
+  const result = injectMonoOsmapPublicFallback(source);
+
+  assert.equal(result.html, source);
+  assert.deepEqual(result.diagnostics, []);
+});
+
+test("Mono osmap public fallback skips missing data-address without invalid fallback", () => {
+  const source =
+    '<!doctype html><html><body><div id="m4482" class="module map osmap"><div class="map-container" data-zoom="16"></div></div></body></html>';
+  const result = injectMonoOsmapPublicFallback(source);
+
+  assert.equal(result.html, source);
+  assert.doesNotMatch(result.html, /openstreetmap\.org\/search\?query=/);
+  assert.deepEqual(result.diagnostics, []);
+});
+
+test("Mono osmap public fallback escapes visible address and URL-encodes href safely", () => {
+  const source =
+    '<!doctype html><html><body><div id="map-danger" class="module map osmap"><div class="map-container" data-address="&quot;&gt;&lt;script&gt;alert(1)&lt;/script&gt; &amp; Lavrica"></div></div></body></html>';
+  const result = injectMonoOsmapPublicFallback(source);
+
+  assert.match(result.html, /data-address="&quot;&gt;&lt;script&gt;alert\(1\)&lt;\/script&gt; &amp; Lavrica"/);
+  assert.match(result.html, /%22%3E%3Cscript%3Ealert\(1\)%3C%2Fscript%3E%20%26%20Lavrica/);
+  assert.doesNotMatch(result.html, /<script>alert\(1\)<\/script>/);
+  assert.equal(result.diagnostics[0]?.moduleId, "map-danger");
+});
+
+test("public raw-template rendering injects Mono osmap fallback diagnostics", async () => {
+  const restoreDeps = __setPublicRuntimeRenderDependenciesForTest({
+    resolveRawTemplateSiteForDomainAndPath: async () =>
+      ({
+        outcome: "raw_template_hit",
+        host: "maver.app.pasadenagenerator.com",
+        siteId: "site_maver",
+        siteVersionId: "sv_maver_active",
+        siteResolution: "host_match",
+        matchKind: "host_match",
+        domain: null,
+        bindingId: "host_binding_maver",
+        status: "ACTIVE",
+        normalizedPath: "/",
+        resolvedFilePath: "index.html",
+        html: '<!doctype html><html><body><div id="m4482" class="module map osmap" data-url="?m=m4482" data-req-lazy="mapbox-gl,leaflet,osmap"><div class="map-container cookieconsent-optin-marketing" data-address="Dolenjska cesta 328 Lavrica 1291 Slovenia" data-zoom="16"></div></div></body></html>',
+      }) as never,
+    resolveActiveArtifactForHostAndPathWithDiagnostics: async () => {
+      throw new Error("artifact resolver should not run when raw template domain hit succeeds");
+    },
+    listContentSlots: async () => [],
+    listContentOverrides: async () => [],
+  });
+
+  try {
+    const { response, entries } = await captureConsoleInfo(() =>
+      renderPublicPathResponse({ host: "maver.app.pasadenagenerator.com", path: "/" }),
+    );
+    assert.equal(response.status, 200);
+    const html = await response.text();
+
+    assert.match(html, /data-gnr8-osmap-fallback="osm_link_card"/);
+    assert.match(html, /Open in OpenStreetMap/);
+    assert.match(html, /data-url="\?m=m4482"/);
+    assert.equal(
+      entries.some(
+        (entry) =>
+          entry.message.includes("OSMAP_JSON_ENDPOINT_UNAVAILABLE") &&
+          JSON.stringify(entry.args).includes("m4482") &&
+          JSON.stringify(entry.args).includes("Dolenjska cesta 328 Lavrica 1291 Slovenia") &&
+          JSON.stringify(entry.args).includes("osm_link_card"),
+      ),
+      true,
+    );
+    assert.equal(
+      entries.some((entry) => entry.message.includes("OSMAP_PUBLIC_FALLBACK_INJECTED")),
+      true,
+    );
+  } finally {
+    restoreDeps();
   }
 });
 

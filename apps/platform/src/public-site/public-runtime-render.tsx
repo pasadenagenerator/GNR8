@@ -8,7 +8,7 @@ import {
 } from "@/gnr8/runtime/runtime-store";
 import { persistRuntimeUsageEvent } from "@/gnr8/runtime/runtime-usage-event-logger";
 import { applyContentOverridesToRawHtml } from "@/src/public-site/content-override-runtime";
-import { injectRuntimeDebugPanel, rewriteRawTemplateHtmlForRuntime } from "@/src/public-site/raw-template-runtime";
+import { injectRuntimeDebugPanel, rewriteRawTemplateHtmlForRuntimeWithDiagnostics } from "@/src/public-site/raw-template-runtime";
 
 export type Gnr8PublicRuntimeMode = "artifact-only";
 
@@ -575,12 +575,25 @@ export async function renderPublicPathResponse(input: {
         });
       }
     }
-    let html = rewriteRawTemplateHtmlForRuntime({
+    const rewrittenRawTemplate = rewriteRawTemplateHtmlForRuntimeWithDiagnostics({
       html: patched.html,
       siteId: rawTemplateResolution.siteId,
       siteVersionId: rawTemplateResolution.siteVersionId,
       resolvedFilePath: rawTemplateResolution.resolvedFilePath,
     });
+    for (const diagnostic of rewrittenRawTemplate.diagnostics) {
+      logPublicDomainDiagnostic(diagnostic.code, {
+        host: normalizedHost,
+        rawHost,
+        domain: rawTemplateResolution.domain,
+        siteId: rawTemplateResolution.siteId,
+        siteVersionId: rawTemplateResolution.siteVersionId,
+        moduleId: diagnostic.moduleId,
+        address: diagnostic.address,
+        fallbackType: diagnostic.fallbackType,
+      });
+    }
+    let html = rewrittenRawTemplate.html;
     if (input.debugMode) {
       html = injectRuntimeDebugPanel({
         html,
