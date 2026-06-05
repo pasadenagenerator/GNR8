@@ -14,7 +14,14 @@ import type {
   RuntimeSiteSummary,
   RuntimeSiteVersionOwnershipSnapshot,
 } from "@/gnr8/runtime/runtime-store";
-import type { RawImportedSiteArtifact, RuntimeArtifact, SiteVersionState } from "@/gnr8/runtime/types";
+import type {
+  CanonicalSiteVersionSnapshot,
+  PageMigrationGovernanceSnapshot,
+  RawImportedSiteArtifact,
+  RuntimeArtifact,
+  RuntimeImportProvenanceSummary,
+  SiteVersionState,
+} from "@/gnr8/runtime/types";
 
 const OWNERSHIP_SITE_ID = "00000000-0000-4000-8000-000000000001";
 const OTHER_OWNERSHIP_SITE_ID = "00000000-0000-4000-8000-000000000099";
@@ -28,15 +35,19 @@ type FakeState = {
   ownershipSites: Map<string, RuntimeOwnershipSiteSummary>;
   runtimeSites: Map<string, RuntimeSiteSummary>;
   versions: Map<string, RuntimeSiteVersionOwnershipSnapshot>;
+  siteVersions: Map<string, CanonicalSiteVersionSnapshot>;
   hostBinding: RuntimeHostBinding | null;
   activePointers: Map<string, { siteVersionId: string; artifactId: string }>;
   runtimeArtifacts: Map<string, RuntimeArtifact>;
   rawArtifacts: Map<string, RawImportedSiteArtifact>;
+  publishFails: boolean;
   writes: {
     ownershipLinks: number;
+    governanceMaterializations: number;
     transitions: Array<{ from: SiteVersionState; to: SiteVersionState }>;
     publishes: number;
     transfers: number;
+    publishEnforcementChecked: boolean;
   };
 };
 
@@ -66,11 +77,11 @@ function runtimeArtifact(input: { id: string; siteId: string; siteVersionId: str
   };
 }
 
-function rawArtifact(fileCount = 374): RawImportedSiteArtifact {
+function rawArtifact(fileCount = 374, overrides: { omitEntryFile?: boolean } = {}): RawImportedSiteArtifact {
   const fileMap: RawImportedSiteArtifact["fileMap"] = {
-    "index.html": { path: "index.html", mediaType: "text/html", sizeBytes: 27, sha256: "sha-index" },
+    ...(overrides.omitEntryFile ? {} : { "index.html": { path: "index.html", mediaType: "text/html", sizeBytes: 27, sha256: "sha-index" } }),
   };
-  for (let i = 1; i < fileCount; i += 1) {
+  for (let i = Object.keys(fileMap).length; i < fileCount; i += 1) {
     const path = `assets/file-${i}.css`;
     fileMap[path] = { path, mediaType: "text/css", sizeBytes: 10, sha256: `sha-${i}` };
   }
@@ -93,11 +104,120 @@ function rawArtifact(fileCount = 374): RawImportedSiteArtifact {
   };
 }
 
+function importProvenanceSummary(): RuntimeImportProvenanceSummary {
+  return {
+    kind: "runtime_import_provenance_summary_v1",
+    sourceMode: "rendered_dom",
+    importFidelityStatus: "high_fidelity_import",
+    renderedCaptureStatus: "available",
+    renderedDomQuality: "strong",
+    screenshotCount: 2,
+    computedStyleSampleCount: 24,
+    renderedCapture: {
+      used: true,
+      status: "available",
+      quality: "strong",
+      domLength: 12000,
+      nodeCount: 240,
+      styleSampleCount: 24,
+      styleCoverage: 0.95,
+      screenshots: { viewport: true, fullPage: true },
+      execution: {
+        runtimeKind: "nodejs",
+        environmentSupported: true,
+        browserPackageAvailable: true,
+        browserBinaryAvailable: true,
+        environmentStatus: "supported",
+        failureCategory: "none",
+        failureCode: null,
+        browserLaunch: "succeeded",
+        navigation: "succeeded",
+        dom: "captured",
+        screenshot: "captured",
+        styleSampling: "captured",
+      },
+    },
+    importDiagnosticCodes: [],
+    captureEvidence: {
+      selectedSourceHtmlPath: "index.html",
+      responseHtmlPath: "index.html",
+      entryHtmlPath: "index.html",
+      renderedCaptureManifestPath: "capture/manifest.json",
+      acquisitionEvidencePath: "capture/evidence.json",
+      renderedDomPath: "capture/dom.html",
+      computedStylesPath: "capture/styles.json",
+      renderedViewportScreenshotPath: "capture/viewport.png",
+      renderedFullpageScreenshotPath: "capture/fullpage.png",
+      screenshotPaths: ["capture/viewport.png", "capture/fullpage.png"],
+    },
+    styleSignals: null,
+  };
+}
+
+function pageGovernance(): PageMigrationGovernanceSnapshot {
+  return {
+    pageStructuralConfidence: 1,
+    weakSectionIds: [],
+    structuralAnomalies: [],
+    pageMigrationGate: {
+      state: "PRODUCTION_CANDIDATE",
+      score: 1,
+      reasons: ["fixture_governance"],
+      weakSectionIds: [],
+      anomalySummary: [],
+      recommendedAction: "PRODUCTION_ELIGIBLE",
+    },
+    pageRolloutPolicy: {
+      state: "CANARY_ALLOWED",
+      reasons: ["fixture_governance"],
+      recommendedNextStep: "CANARY_REVIEW",
+      requiresOperatorReview: false,
+      allowsShadow: true,
+      allowsCanary: true,
+      allowsProductionConsideration: true,
+      recommendsAiRemediation: false,
+    },
+    pageEnforcement: {
+      SHADOW: {
+        targetStage: "SHADOW",
+        decision: "ALLOW",
+        reasons: ["fixture_governance"],
+        blockingReasons: [],
+        recommendedNextStep: "PROCEED_WITH_SHADOW",
+        requiresOperatorReview: false,
+        enforcementSourceState: { pageMigrationGateState: "PRODUCTION_CANDIDATE", pageRolloutPolicyState: "CANARY_ALLOWED" },
+      },
+      CANARY: {
+        targetStage: "CANARY",
+        decision: "ALLOW",
+        reasons: ["fixture_governance"],
+        blockingReasons: [],
+        recommendedNextStep: "PROCEED_WITH_CANARY",
+        requiresOperatorReview: false,
+        enforcementSourceState: { pageMigrationGateState: "PRODUCTION_CANDIDATE", pageRolloutPolicyState: "CANARY_ALLOWED" },
+      },
+      PRODUCTION: {
+        targetStage: "PRODUCTION",
+        decision: "ALLOW",
+        reasons: ["fixture_governance"],
+        blockingReasons: [],
+        recommendedNextStep: "PROCEED_WITH_PRODUCTION",
+        requiresOperatorReview: false,
+        enforcementSourceState: { pageMigrationGateState: "PRODUCTION_CANDIDATE", pageRolloutPolicyState: "CANARY_ALLOWED" },
+      },
+    },
+  };
+}
+
 function createState(overrides: {
   ownershipSiteMissing?: boolean;
   importedOwnershipSiteId?: string | null;
   importedState?: SiteVersionState;
   rawEvidenceMissing?: boolean;
+  rawEntryMissing?: boolean;
+  rawFileCount?: number;
+  pageGovernance?: PageMigrationGovernanceSnapshot | null;
+  publishFails?: boolean;
 } = {}): FakeState {
   const importedRuntimeArtifact = runtimeArtifact({
     id: "runtime-artifact-imported-existing",
@@ -120,6 +240,37 @@ function createState(overrides: {
       agencyId: "agency-1",
     });
   }
+
+  const importedSiteVersion: CanonicalSiteVersionSnapshot = {
+    id: IMPORTED_VERSION_ID,
+    siteId: IMPORTED_SITE_ID,
+    versionNo: 1,
+    state: overrides.importedState ?? "DRAFT",
+    source: "migration",
+    actor: "importer",
+    createdAt: "2026-06-01T00:00:00.000Z",
+    rendererCompatibilityVersion: "gnr8-renderer-v1",
+    artifactId: importedRuntimeArtifact.id,
+    importProvenanceSummary: importProvenanceSummary(),
+    pages: [
+      {
+        id: "page-version-imported-root",
+        siteVersionId: IMPORTED_VERSION_ID,
+        pageId: "page-imported-root",
+        path: "/",
+        title: "Maver",
+        structureModel: { sections: [{ id: "hero", type: "hero", order: 0 }] },
+        contentModel: { sectionProps: { hero: { title: "Maver" } } },
+        styleTokens: { "color.background": "#fff", "color.text": "#111", "spacing.section": "48px" },
+        assetGraph: [],
+        semanticSignals: [{ label: "pipeline.prepared_site_model", confidence: 0.95, source: "migration" }],
+        migrationGovernance: overrides.pageGovernance === undefined ? null : overrides.pageGovernance,
+        source: "migration",
+        actor: "importer",
+        createdAt: "2026-06-01T00:00:00.000Z",
+      },
+    ],
+  };
 
   return {
     ownershipSites,
@@ -173,6 +324,7 @@ function createState(overrides: {
         },
       ],
     ]),
+    siteVersions: new Map([[IMPORTED_VERSION_ID, importedSiteVersion]]),
     hostBinding: {
       id: "host-binding-old",
       siteId: OLD_SITE_ID,
@@ -187,8 +339,11 @@ function createState(overrides: {
       [importedRuntimeArtifact.id, importedRuntimeArtifact],
       [oldRuntimeArtifact.id, oldRuntimeArtifact],
     ]),
-    rawArtifacts: overrides.rawEvidenceMissing ? new Map() : new Map([[IMPORTED_VERSION_ID, rawArtifact()]]),
-    writes: { ownershipLinks: 0, transitions: [], publishes: 0, transfers: 0 },
+    rawArtifacts: overrides.rawEvidenceMissing
+      ? new Map()
+      : new Map([[IMPORTED_VERSION_ID, rawArtifact(overrides.rawFileCount ?? 374, { omitEntryFile: overrides.rawEntryMissing })]]),
+    publishFails: Boolean(overrides.publishFails),
+    writes: { ownershipLinks: 0, governanceMaterializations: 0, transitions: [], publishes: 0, transfers: 0, publishEnforcementChecked: false },
   };
 }
 
@@ -203,6 +358,7 @@ function createDeps(state: FakeState): ImportedRuntimeReconciliationDependencies
         : null,
     getActivePointerForSite: async (siteId) => state.activePointers.get(siteId) ?? null,
     getArtifactById: async (artifactId) => state.runtimeArtifacts.get(artifactId) ?? null,
+    getSiteVersion: async (siteVersionId) => state.siteVersions.get(siteVersionId) ?? null,
     getRawImportedSiteArtifact: async (siteVersionId) => state.rawArtifacts.get(siteVersionId) ?? null,
     getRawTemplateSiteArtifact: async () => null,
     getRawTemplateSiteAsset: async (input) => {
@@ -220,11 +376,26 @@ function createDeps(state: FakeState): ImportedRuntimeReconciliationDependencies
       version.ownershipSiteId = input.ownershipSiteId;
       return version;
     },
+    materializePageMigrationGovernanceForSiteVersion: async (input) => {
+      state.writes.governanceMaterializations += 1;
+      const siteVersion = state.siteVersions.get(input.siteVersionId);
+      if (!siteVersion) throw new Error("SiteVersion not found");
+      let affectedRows = 0;
+      for (const page of siteVersion.pages) {
+        const governance = input.governanceByPageId[page.pageId];
+        if (!governance) continue;
+        page.migrationGovernance = governance;
+        affectedRows += 1;
+      }
+      return { affectedRows, pageIds: Object.keys(input.governanceByPageId).sort() };
+    },
     transitionSiteVersionState: async (input) => {
       const version = state.versions.get(input.siteVersionId);
       if (!version) throw new Error("SiteVersion not found");
       state.writes.transitions.push({ from: version.state, to: input.nextState });
       version.state = input.nextState;
+      const siteVersion = state.siteVersions.get(input.siteVersionId);
+      if (siteVersion) siteVersion.state = input.nextState;
       return { previousState: state.writes.transitions.at(-1)!.from, nextState: input.nextState };
     },
     publishApprovedSiteVersion: async (input) => {
@@ -234,11 +405,23 @@ function createDeps(state: FakeState): ImportedRuntimeReconciliationDependencies
       if (version.state !== "APPROVED" && version.state !== "PUBLISHED") {
         throw new Error(`SiteVersion must be APPROVED before publish (current: ${version.state})`);
       }
+      state.writes.publishEnforcementChecked = true;
+      const siteVersion = state.siteVersions.get(input.siteVersionId);
+      if (!siteVersion?.pages.some((page) => page.migrationGovernance)) {
+        throw new Error("publish-enforcement requires page migration governance on site version pages");
+      }
+      if (state.publishFails) {
+        throw new Error("publish_failed_after_governance_check");
+      }
       const artifactId = "runtime-artifact-imported-published";
       const artifact = runtimeArtifact({ id: artifactId, siteId: version.siteId, siteVersionId: version.id });
       state.runtimeArtifacts.set(artifactId, artifact);
       version.artifactId = artifactId;
       version.state = "PUBLISHED";
+      if (siteVersion) {
+        siteVersion.artifactId = artifactId;
+        siteVersion.state = "PUBLISHED";
+      }
       state.activePointers.set(version.siteId, { siteVersionId: version.id, artifactId });
       return {
         siteId: version.siteId,
@@ -352,7 +535,36 @@ test("reconcile imported runtime dry-run returns plan and performs no writes", a
   ]);
   assert.equal(plan.proposedHostBindingTransfer.action, "transfer");
   assert.equal(plan.blockers.length, 0);
-  assert.deepEqual(state.writes, { ownershipLinks: 0, transitions: [], publishes: 0, transfers: 0 });
+  assert.equal(plan.publishGovernanceReadiness.status, "missing_reconstructable");
+  assert.equal(plan.publishGovernanceReadiness.action, "materialize_before_publish");
+  assert.deepEqual(state.writes, {
+    ownershipLinks: 0,
+    governanceMaterializations: 0,
+    transitions: [],
+    publishes: 0,
+    transfers: 0,
+    publishEnforcementChecked: false,
+  });
+});
+
+test("reconcile imported runtime dry-run detects missing page migration governance as reconstructable from raw evidence", async () => {
+  const state = createState();
+  const plan = await createImportedRuntimeReconciliationPlan(input(), createDeps(state));
+
+  assert.equal(plan.publishGovernanceReadiness.status, "missing_reconstructable");
+  assert.equal(plan.publishGovernanceReadiness.canReconstruct, true);
+  assert.equal(plan.publishGovernanceReadiness.pagesMissingGovernance[0]?.missingFields.includes("pageMigrationGate"), true);
+  assert.equal(plan.warnings.some((warning) => warning.includes("apply will materialize")), true);
+  assert.equal(plan.blockers.length, 0);
+});
+
+test("reconcile imported runtime dry-run reports ready when page migration governance already exists", async () => {
+  const state = createState({ pageGovernance: pageGovernance() });
+  const plan = await createImportedRuntimeReconciliationPlan(input(), createDeps(state));
+
+  assert.equal(plan.publishGovernanceReadiness.status, "ready");
+  assert.equal(plan.publishGovernanceReadiness.action, "none");
+  assert.equal(plan.warnings.some((warning) => warning.includes("materialize")), false);
 });
 
 test("reconcile imported runtime dry-run detects missing ownership site", async () => {
@@ -375,7 +587,18 @@ test("reconcile imported runtime dry-run detects missing raw artifact evidence",
   const plan = await createImportedRuntimeReconciliationPlan(input(), createDeps(state));
 
   assert.equal(plan.blockers.some((blocker) => blocker.code === "RAW_ARTIFACT_EVIDENCE_MISSING"), true);
+  assert.equal(plan.blockers.some((blocker) => blocker.code === "PUBLISH_GOVERNANCE_RECONSTRUCTION_EVIDENCE_INSUFFICIENT"), true);
   assert.equal(plan.importedRawFileCount, 0);
+});
+
+test("reconcile imported runtime dry-run blocks missing governance when raw entry evidence is insufficient", async () => {
+  const state = createState({ rawEntryMissing: true });
+  const plan = await createImportedRuntimeReconciliationPlan(input(), createDeps(state));
+
+  assert.equal(plan.publishGovernanceReadiness.status, "missing_blocked");
+  assert.equal(plan.publishGovernanceReadiness.canReconstruct, false);
+  assert.equal(plan.publishGovernanceReadiness.diagnostics.includes("raw_entry_html_asset_missing"), true);
+  assert.equal(plan.blockers.some((blocker) => blocker.code === "PUBLISH_GOVERNANCE_RECONSTRUCTION_EVIDENCE_INSUFFICIENT"), true);
 });
 
 test("reconcile imported runtime apply links ownership", async () => {
@@ -389,6 +612,39 @@ test("reconcile imported runtime apply links ownership", async () => {
   assert.equal(state.versions.get(IMPORTED_VERSION_ID)?.ownershipSiteId, OWNERSHIP_SITE_ID);
 });
 
+test("reconcile imported runtime apply reconstructs page migration governance only when evidence exists", async () => {
+  const state = createState();
+  const result = await applyImportedRuntimeReconciliation(
+    input({ mode: "apply", apply: true, confirm: IMPORTED_RUNTIME_RECONCILIATION_CONFIRM }),
+    createDeps(state),
+  );
+
+  const governance = state.siteVersions.get(IMPORTED_VERSION_ID)?.pages[0]?.migrationGovernance;
+  assert.equal(state.writes.governanceMaterializations, 1);
+  assert.equal(result.governanceReconciliation?.affectedRows, 1);
+  assert.equal(governance?.pageMigrationGate.state, "PRODUCTION_CANDIDATE");
+  assert.equal(governance?.pageEnforcement.PRODUCTION.decision, "ALLOW");
+});
+
+test("reconcile imported runtime apply fails before lifecycle mutation when governance evidence is insufficient", async () => {
+  const state = createState({ rawEntryMissing: true });
+
+  await assert.rejects(
+    () =>
+      applyImportedRuntimeReconciliation(
+        input({ mode: "apply", apply: true, confirm: IMPORTED_RUNTIME_RECONCILIATION_CONFIRM }),
+        createDeps(state),
+      ),
+    /RECONCILIATION_BLOCKED/,
+  );
+
+  assert.equal(state.writes.governanceMaterializations, 0);
+  assert.equal(state.writes.ownershipLinks, 0);
+  assert.deepEqual(state.writes.transitions, []);
+  assert.equal(state.writes.publishes, 0);
+  assert.equal(state.writes.transfers, 0);
+});
+
 test("reconcile imported runtime apply publishes imported version using publish activation", async () => {
   const state = createState();
   const result = await applyImportedRuntimeReconciliation(
@@ -397,8 +653,37 @@ test("reconcile imported runtime apply publishes imported version using publish 
   );
 
   assert.equal(state.writes.publishes, 1);
+  assert.equal(state.writes.publishEnforcementChecked, true);
   assert.equal(result.publishResult.siteVersionId, IMPORTED_VERSION_ID);
   assert.equal(state.versions.get(IMPORTED_VERSION_ID)?.state, "PUBLISHED");
+});
+
+test("reconcile imported runtime apply does not bypass publish enforcement", async () => {
+  const state = createState();
+  await applyImportedRuntimeReconciliation(
+    input({ mode: "apply", apply: true, confirm: IMPORTED_RUNTIME_RECONCILIATION_CONFIRM }),
+    createDeps(state),
+  );
+
+  assert.equal(state.writes.publishEnforcementChecked, true);
+  assert.equal(state.siteVersions.get(IMPORTED_VERSION_ID)?.pages[0]?.migrationGovernance?.pageEnforcement.PRODUCTION.decision, "ALLOW");
+});
+
+test("reconcile imported runtime apply does not transfer host if publish fails", async () => {
+  const state = createState({ publishFails: true });
+
+  await assert.rejects(
+    () =>
+      applyImportedRuntimeReconciliation(
+        input({ mode: "apply", apply: true, confirm: IMPORTED_RUNTIME_RECONCILIATION_CONFIRM }),
+        createDeps(state),
+      ),
+    /publish_failed_after_governance_check/,
+  );
+
+  assert.equal(state.writes.publishEnforcementChecked, true);
+  assert.equal(state.writes.transfers, 0);
+  assert.equal(state.hostBinding?.siteId, OLD_SITE_ID);
 });
 
 test("reconcile imported runtime apply transfers host binding", async () => {
@@ -425,6 +710,28 @@ test("reconcile imported runtime apply verifies final host runtime site active p
   assert.equal(result.verification.activePointer?.siteVersionId, IMPORTED_VERSION_ID);
   assert.equal(result.verification.rawArtifactId, "raw-artifact-imported");
   assert.equal(result.verification.publicRuntimeWouldServeImportedRawTemplatePath, true);
+});
+
+test("reconcile imported runtime Maver-like fixture applies successfully through publish after governance reconciliation", async () => {
+  const state = createState({ rawFileCount: 374, pageGovernance: null });
+  const result = await applyImportedRuntimeReconciliation(
+    input({
+      mode: "apply",
+      apply: true,
+      confirm: IMPORTED_RUNTIME_RECONCILIATION_CONFIRM,
+      ownershipSiteId: OWNERSHIP_SITE_ID,
+      importedSiteVersionId: IMPORTED_VERSION_ID,
+      targetHost: TARGET_HOST,
+    }),
+    createDeps(state),
+  );
+
+  assert.equal(result.ok, true);
+  assert.equal(result.plan.importedRawFileCount, 374);
+  assert.equal(result.plan.publishGovernanceReadiness.status, "missing_reconstructable");
+  assert.equal(result.governanceReconciliation?.affectedRows, 1);
+  assert.equal(result.publishResult.siteVersionId, IMPORTED_VERSION_ID);
+  assert.equal(result.verification.targetHostRuntimeSiteId, IMPORTED_SITE_ID);
 });
 
 test("reconcile imported runtime apply leaves old runtime site active pointer intact", async () => {

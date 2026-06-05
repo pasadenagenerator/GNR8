@@ -13,6 +13,7 @@ import { evaluateRuntimeArtifactServingEligibility } from "@/gnr8/runtime/publis
 import type {
   CanonicalPageVersionInput,
   CanonicalPageVersionSnapshot,
+  PageMigrationGovernanceSnapshot,
   RuntimeImportProvenanceSummary,
   CanonicalSiteMigrationInput,
   CanonicalSiteVersionSnapshot,
@@ -2931,6 +2932,63 @@ export async function setSiteVersionImportProvenanceSummary(input: {
       throw new Error(`Runtime site version not found for provenance write: ${input.siteVersionId}`);
     }
     return { affectedRows: updated.rowCount ?? 0 };
+  });
+}
+
+export async function materializePageMigrationGovernanceForSiteVersion(input: {
+  siteVersionId: string;
+  governanceByPageId: Record<string, PageMigrationGovernanceSnapshot>;
+  actor: string;
+  details?: Record<string, unknown>;
+}): Promise<{ affectedRows: number; pageIds: string[] }> {
+  const pageIds = Object.keys(input.governanceByPageId)
+    .map((value) => String(value).trim())
+    .filter((value) => value.length > 0)
+    .sort((a, b) => a.localeCompare(b));
+
+  if (pageIds.length === 0) return { affectedRows: 0, pageIds: [] };
+
+  return withTx(async (client) => {
+    let affectedRows = 0;
+    for (const pageId of pageIds) {
+      const updated = await client.query<{ page_id: string }>(
+        `
+        update public.gnr8_runtime_page_versions
+        set migration_governance = $3::jsonb
+        where site_version_id = $1::uuid
+          and page_id = $2::text
+        returning page_id::text as page_id
+        `,
+        [input.siteVersionId, pageId, JSON.stringify(input.governanceByPageId[pageId])],
+      );
+      affectedRows += updated.rowCount ?? 0;
+    }
+
+    const current = await client.query<{ state: string }>(
+      `select state::text as state from public.gnr8_runtime_site_versions where id = $1::uuid limit 1`,
+      [input.siteVersionId],
+    );
+    const state = current.rows[0]?.state ?? "DRAFT";
+    await client.query(
+      `
+      insert into public.gnr8_runtime_version_audit (site_version_id, from_state, to_state, actor, source, details)
+      values ($1::uuid, $2::text, $2::text, $3::text, 'manual', $4::jsonb)
+      `,
+      [
+        input.siteVersionId,
+        state,
+        input.actor,
+        JSON.stringify({
+          workflow: "reconcile_imported_runtime",
+          action: "materialize_page_migration_governance",
+          pageIds,
+          affectedRows,
+          ...(input.details ?? {}),
+        }),
+      ],
+    );
+
+    return { affectedRows, pageIds };
   });
 }
 

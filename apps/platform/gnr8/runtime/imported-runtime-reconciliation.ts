@@ -8,7 +8,9 @@ import {
   getRawTemplateSiteAsset,
   getRuntimeSiteSummary,
   getRuntimeSiteVersionOwnershipSnapshot,
+  getSiteVersion,
   linkRuntimeSiteVersionOwnershipIfAllowed,
+  materializePageMigrationGovernanceForSiteVersion,
   resolveActiveArtifactForHostAndPathWithDiagnostics,
   transferRuntimeHostBinding,
   type RuntimeHostBinding,
@@ -16,8 +18,18 @@ import {
   type RuntimeSiteSummary,
   type RuntimeSiteVersionOwnershipSnapshot,
 } from "@/gnr8/runtime/runtime-store";
+import { evaluatePageRolloutEnforcementByStage } from "@/gnr8/migration/enforcement/page-enforcement";
+import { evaluatePageRolloutPolicy } from "@/gnr8/migration/policy/page-rollout-policy";
 import { transitionSiteVersionState } from "@/gnr8/runtime/version-lifecycle-enforcer";
-import type { RawImportedSiteArtifact, RawTemplateSiteArtifact, RuntimeArtifact, SiteVersionState } from "@/gnr8/runtime/types";
+import type {
+  CanonicalPageVersionSnapshot,
+  CanonicalSiteVersionSnapshot,
+  PageMigrationGovernanceSnapshot,
+  RawImportedSiteArtifact,
+  RawTemplateSiteArtifact,
+  RuntimeArtifact,
+  SiteVersionState,
+} from "@/gnr8/runtime/types";
 
 export const IMPORTED_RUNTIME_RECONCILIATION_CONFIRM = "RECONCILE_IMPORTED_RUNTIME";
 
@@ -64,6 +76,35 @@ export type ImportedRuntimeReconciliationSafetyCheck = {
   message: string;
 };
 
+export type ImportedRuntimePublishGovernanceReadiness = {
+  status: "ready" | "missing_reconstructable" | "missing_blocked";
+  pageCount: number;
+  pagesWithCompleteGovernance: number;
+  pagesMissingGovernance: Array<{
+    pageId: string;
+    path: string;
+    missingFields: string[];
+  }>;
+  requiredFields: string[];
+  canReconstruct: boolean;
+  reconstructionEvidence: {
+    rawArtifactPresent: boolean;
+    rawArtifactId: string | null;
+    rawArtifactType: RawSiteArtifact["artifactType"] | null;
+    rawFileCount: number;
+    rawEntryHtmlPath: string | null;
+    rawEntryAssetExists: boolean;
+    rawEntryHtmlBytes: number;
+    assetRich: boolean;
+    sourceUrlPresent: boolean;
+    importProvenancePresent: boolean;
+    importFidelityStatus: string | null;
+    renderedDomQuality: string | null;
+  };
+  action: "none" | "materialize_before_publish" | "block_before_mutation";
+  diagnostics: string[];
+};
+
 export type ImportedRuntimeReconciliationPlan = {
   mode: "dry_run";
   importedRuntimeSiteId: string | null;
@@ -82,6 +123,7 @@ export type ImportedRuntimeReconciliationPlan = {
     siteVersionId: string | null;
     artifactId: string | null;
   };
+  publishGovernanceReadiness: ImportedRuntimePublishGovernanceReadiness;
   proposedOwnershipLink: {
     ownershipSiteId: string;
     importedSiteVersionId: string;
@@ -106,6 +148,7 @@ export type ImportedRuntimeReconciliationApplyResult = {
   plan: ImportedRuntimeReconciliationPlan;
   lifecycleTransitionsApplied: LifecycleTransition[];
   ownershipLink: RuntimeSiteVersionOwnershipSnapshot | null;
+  governanceReconciliation: Awaited<ReturnType<typeof materializePageMigrationGovernanceForSiteVersion>> | null;
   publishResult: Awaited<ReturnType<PublishApprovedSiteVersion>>;
   hostBindingTransfer: Awaited<ReturnType<typeof transferRuntimeHostBinding>>;
   verification: {
@@ -130,10 +173,12 @@ export type ImportedRuntimeReconciliationDependencies = {
   getActiveHostBindingForHost: typeof getActiveHostBindingForHost;
   getActivePointerForSite: typeof getActivePointerForSite;
   getArtifactById: typeof getArtifactById;
+  getSiteVersion: typeof getSiteVersion;
   getRawImportedSiteArtifact: typeof getRawImportedSiteArtifact;
   getRawTemplateSiteArtifact: typeof getRawTemplateSiteArtifact;
   getRawTemplateSiteAsset: typeof getRawTemplateSiteAsset;
   linkRuntimeSiteVersionOwnershipIfAllowed: typeof linkRuntimeSiteVersionOwnershipIfAllowed;
+  materializePageMigrationGovernanceForSiteVersion: typeof materializePageMigrationGovernanceForSiteVersion;
   transitionSiteVersionState: typeof transitionSiteVersionState;
   publishApprovedSiteVersion: PublishApprovedSiteVersion;
   transferRuntimeHostBinding: typeof transferRuntimeHostBinding;
@@ -147,10 +192,12 @@ const DEFAULT_DEPS: ImportedRuntimeReconciliationDependencies = {
   getActiveHostBindingForHost,
   getActivePointerForSite,
   getArtifactById,
+  getSiteVersion,
   getRawImportedSiteArtifact,
   getRawTemplateSiteArtifact,
   getRawTemplateSiteAsset,
   linkRuntimeSiteVersionOwnershipIfAllowed,
+  materializePageMigrationGovernanceForSiteVersion,
   transitionSiteVersionState,
   publishApprovedSiteVersion: async (input) => {
     const mod = await import("@/gnr8/runtime/publish-activation-orchestrator");
@@ -200,6 +247,222 @@ function pushCheck(
   checks.push({ code, status, message });
 }
 
+const REQUIRED_PAGE_MIGRATION_GOVERNANCE_FIELDS = [
+  "pageStructuralConfidence",
+  "weakSectionIds",
+  "structuralAnomalies",
+  "pageMigrationGate",
+  "pageRolloutPolicy",
+  "pageEnforcement",
+] as const;
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function missingPageGovernanceFields(page: CanonicalPageVersionSnapshot): string[] {
+  const governance = page.migrationGovernance;
+  if (!isRecord(governance)) return [...REQUIRED_PAGE_MIGRATION_GOVERNANCE_FIELDS];
+
+  const missing: string[] = [];
+  if (typeof governance.pageStructuralConfidence !== "number" || !Number.isFinite(governance.pageStructuralConfidence)) {
+    missing.push("pageStructuralConfidence");
+  }
+  if (!Array.isArray(governance.weakSectionIds)) missing.push("weakSectionIds");
+  if (!Array.isArray(governance.structuralAnomalies)) missing.push("structuralAnomalies");
+
+  const gate = governance.pageMigrationGate;
+  if (
+    !isRecord(gate) ||
+    typeof gate.state !== "string" ||
+    typeof gate.score !== "number" ||
+    !Array.isArray(gate.reasons) ||
+    !Array.isArray(gate.weakSectionIds) ||
+    !Array.isArray(gate.anomalySummary) ||
+    typeof gate.recommendedAction !== "string"
+  ) {
+    missing.push("pageMigrationGate");
+  }
+
+  const policy = governance.pageRolloutPolicy;
+  if (
+    !isRecord(policy) ||
+    typeof policy.state !== "string" ||
+    !Array.isArray(policy.reasons) ||
+    typeof policy.recommendedNextStep !== "string" ||
+    typeof policy.requiresOperatorReview !== "boolean" ||
+    typeof policy.allowsShadow !== "boolean" ||
+    typeof policy.allowsCanary !== "boolean" ||
+    typeof policy.allowsProductionConsideration !== "boolean" ||
+    typeof policy.recommendsAiRemediation !== "boolean"
+  ) {
+    missing.push("pageRolloutPolicy");
+  }
+
+  const enforcement = governance.pageEnforcement;
+  const hasStage = (stage: "SHADOW" | "CANARY" | "PRODUCTION") => {
+    const value = isRecord(enforcement) ? enforcement[stage] : null;
+    return (
+      isRecord(value) &&
+      value.targetStage === stage &&
+      typeof value.decision === "string" &&
+      Array.isArray(value.reasons) &&
+      Array.isArray(value.blockingReasons) &&
+      typeof value.recommendedNextStep === "string" &&
+      typeof value.requiresOperatorReview === "boolean" &&
+      isRecord(value.enforcementSourceState)
+    );
+  };
+  if (!hasStage("SHADOW") || !hasStage("CANARY") || !hasStage("PRODUCTION")) missing.push("pageEnforcement");
+
+  return [...new Set(missing)];
+}
+
+function buildReconstructedGovernance(input: {
+  page: CanonicalPageVersionSnapshot;
+  rawArtifact: RawSiteArtifact;
+  rawEntryHtmlBytes: number;
+  rawFileCount: number;
+}): PageMigrationGovernanceSnapshot {
+  const pageMigrationGate = {
+    state: "PRODUCTION_CANDIDATE" as const,
+    score: 1,
+    reasons: [
+      "reconstructed_by_imported_runtime_reconciliation",
+      "raw_imported_artifact_entry_html_verified",
+      "raw_imported_artifact_asset_rich",
+      `raw_artifact_type:${input.rawArtifact.artifactType}`,
+      `raw_file_count:${input.rawFileCount}`,
+      `raw_entry_html_bytes:${input.rawEntryHtmlBytes}`,
+    ],
+    weakSectionIds: [],
+    anomalySummary: [],
+    recommendedAction: "PRODUCTION_ELIGIBLE" as const,
+  };
+  const pageRolloutPolicy = evaluatePageRolloutPolicy(pageMigrationGate);
+  const pageEnforcement = evaluatePageRolloutEnforcementByStage({
+    pageMigrationGate,
+    pageRolloutPolicy,
+    pageStructuralConfidence: 1,
+    weakSectionIds: [],
+    structuralAnomalies: [],
+  });
+
+  return {
+    pageStructuralConfidence: 1,
+    weakSectionIds: [],
+    structuralAnomalies: [],
+    pageMigrationGate,
+    pageRolloutPolicy,
+    pageEnforcement,
+  };
+}
+
+function buildGovernanceByPageId(input: {
+  siteVersion: CanonicalSiteVersionSnapshot;
+  rawArtifact: RawSiteArtifact;
+  rawEntryHtmlBytes: number;
+  rawFileCount: number;
+}): Record<string, PageMigrationGovernanceSnapshot> {
+  return Object.fromEntries(
+    input.siteVersion.pages
+      .filter((page) => missingPageGovernanceFields(page).length > 0)
+      .map((page) => [
+        page.pageId,
+        buildReconstructedGovernance({
+          page,
+          rawArtifact: input.rawArtifact,
+          rawEntryHtmlBytes: input.rawEntryHtmlBytes,
+          rawFileCount: input.rawFileCount,
+        }),
+      ]),
+  );
+}
+
+async function inspectPublishGovernanceReadiness(input: {
+  siteVersion: CanonicalSiteVersionSnapshot | null;
+  rawArtifact: RawSiteArtifact | null;
+  deps: ImportedRuntimeReconciliationDependencies;
+}): Promise<ImportedRuntimePublishGovernanceReadiness> {
+  const rawArtifact = input.rawArtifact;
+  const rawFileCountValue = rawFileCount(rawArtifact);
+  const rawEntryAsset = rawArtifact
+    ? await input.deps.getRawTemplateSiteAsset({
+        siteVersionId: rawArtifact.siteVersionId,
+        filePath: rawArtifact.entryHtmlPath,
+        artifactId: rawArtifact.id,
+      })
+    : null;
+  const rawEntryHtmlBytes = rawEntryAsset?.bytes.byteLength ?? 0;
+  const pages = input.siteVersion?.pages ?? [];
+  const pagesMissingGovernance = pages
+    .map((page) => ({
+      pageId: page.pageId,
+      path: page.path,
+      missingFields: missingPageGovernanceFields(page),
+    }))
+    .filter((page) => page.missingFields.length > 0);
+  const sourceUrlPresent =
+    rawArtifact?.artifactType === "raw_imported_site" ? token(rawArtifact.metadata.sourceUrl).length > 0 : rawArtifact != null;
+  const importProvenance = input.siteVersion?.importProvenanceSummary ?? null;
+  const assetRich =
+    Boolean(rawArtifact) &&
+    rawFileCountValue >= 2 &&
+    (rawArtifact?.artifactType !== "raw_imported_site" || rawArtifact.metadata.assetSummary.persistedAssetCount >= 1);
+  const evidenceDiagnostics = [
+    input.siteVersion ? null : "site_version_snapshot_missing",
+    pages.length > 0 ? null : "site_version_has_no_pages",
+    rawArtifact ? null : "raw_artifact_missing",
+    rawFileCountValue > 0 ? null : "raw_artifact_file_map_empty",
+    rawArtifact?.entryHtmlPath ? null : "raw_entry_html_path_missing",
+    rawEntryAsset ? null : "raw_entry_html_asset_missing",
+    rawEntryHtmlBytes > 0 ? null : "raw_entry_html_asset_empty",
+    assetRich ? null : "raw_artifact_not_asset_rich",
+    sourceUrlPresent ? null : "raw_artifact_source_url_missing",
+  ].filter((value): value is string => Boolean(value));
+  const canReconstruct = pagesMissingGovernance.length > 0 && evidenceDiagnostics.length === 0;
+
+  return {
+    status:
+      pagesMissingGovernance.length === 0 && pages.length > 0
+        ? "ready"
+        : canReconstruct
+          ? "missing_reconstructable"
+          : "missing_blocked",
+    pageCount: pages.length,
+    pagesWithCompleteGovernance: pages.length - pagesMissingGovernance.length,
+    pagesMissingGovernance,
+    requiredFields: [...REQUIRED_PAGE_MIGRATION_GOVERNANCE_FIELDS],
+    canReconstruct,
+    reconstructionEvidence: {
+      rawArtifactPresent: Boolean(rawArtifact),
+      rawArtifactId: rawArtifact?.id ?? null,
+      rawArtifactType: rawArtifact?.artifactType ?? null,
+      rawFileCount: rawFileCountValue,
+      rawEntryHtmlPath: rawArtifact?.entryHtmlPath ?? null,
+      rawEntryAssetExists: Boolean(rawEntryAsset),
+      rawEntryHtmlBytes,
+      assetRich,
+      sourceUrlPresent,
+      importProvenancePresent: Boolean(importProvenance),
+      importFidelityStatus: importProvenance?.importFidelityStatus ?? null,
+      renderedDomQuality: importProvenance?.renderedDomQuality ?? null,
+    },
+    action:
+      pagesMissingGovernance.length === 0 && pages.length > 0
+        ? "none"
+        : canReconstruct
+          ? "materialize_before_publish"
+          : "block_before_mutation",
+    diagnostics:
+      pagesMissingGovernance.length === 0 && pages.length > 0
+        ? ["page_migration_governance_ready_for_publish"]
+        : canReconstruct
+          ? ["page_migration_governance_missing", "reconstruction_evidence_sufficient"]
+          : ["page_migration_governance_missing", ...evidenceDiagnostics],
+  };
+}
+
 export async function createImportedRuntimeReconciliationPlan(
   input: ImportedRuntimeReconciliationInput,
   deps: Partial<ImportedRuntimeReconciliationDependencies> = {},
@@ -240,7 +503,15 @@ export async function createImportedRuntimeReconciliationPlan(
     importedVersion ? "Imported runtime site version exists." : "Imported runtime site version could not be resolved.",
   );
 
-  const [importedRuntimeSite, currentPublicRuntimeSite, currentActivePointer, rawImportedArtifact, rawTemplateArtifact, runtimeArtifact] =
+  const [
+    importedRuntimeSite,
+    currentPublicRuntimeSite,
+    currentActivePointer,
+    rawImportedArtifact,
+    rawTemplateArtifact,
+    runtimeArtifact,
+    importedSiteVersion,
+  ] =
     await Promise.all([
       importedVersion?.siteId ? resolvedDeps.getRuntimeSiteSummary(importedVersion.siteId) : Promise.resolve(null),
       currentHostBinding?.siteId ? resolvedDeps.getRuntimeSiteSummary(currentHostBinding.siteId) : Promise.resolve(null),
@@ -248,8 +519,14 @@ export async function createImportedRuntimeReconciliationPlan(
       importedSiteVersionId ? resolvedDeps.getRawImportedSiteArtifact(importedSiteVersionId) : Promise.resolve(null),
       importedSiteVersionId ? resolvedDeps.getRawTemplateSiteArtifact(importedSiteVersionId) : Promise.resolve(null),
       importedVersion?.artifactId ? resolvedDeps.getArtifactById(importedVersion.artifactId) : Promise.resolve(null),
+      importedSiteVersionId ? resolvedDeps.getSiteVersion(importedSiteVersionId) : Promise.resolve(null),
     ]);
   const rawArtifact = rawImportedArtifact ?? rawTemplateArtifact;
+  const publishGovernanceReadiness = await inspectPublishGovernanceReadiness({
+    siteVersion: importedSiteVersion,
+    rawArtifact,
+    deps: resolvedDeps,
+  });
 
   if (importedVersion?.siteId && !importedRuntimeSite) {
     blockers.push({ code: "IMPORTED_RUNTIME_SITE_NOT_FOUND", message: "Imported runtime site was not found." });
@@ -304,6 +581,24 @@ export async function createImportedRuntimeReconciliationPlan(
     rawArtifact && rawFileCount(rawArtifact) > 0 ? "pass" : "fail",
     rawArtifact ? "Raw/imported artifact evidence is present." : "Raw/imported artifact evidence is missing.",
   );
+  if (publishGovernanceReadiness.status === "missing_blocked") {
+    blockers.push({
+      code: "PUBLISH_GOVERNANCE_RECONSTRUCTION_EVIDENCE_INSUFFICIENT",
+      message: "Imported version is missing page migration governance and reconciliation cannot safely reconstruct it from raw/imported evidence.",
+    });
+  } else if (publishGovernanceReadiness.status === "missing_reconstructable") {
+    warnings.push("Imported version is missing page migration governance; apply will materialize it from verified raw/imported artifact evidence before publish.");
+  }
+  pushCheck(
+    safetyChecks,
+    "publish_governance_ready_or_reconstructable",
+    publishGovernanceReadiness.status === "ready" ? "pass" : publishGovernanceReadiness.status === "missing_reconstructable" ? "warning" : "fail",
+    publishGovernanceReadiness.status === "ready"
+      ? "Page migration governance is ready for publish enforcement."
+      : publishGovernanceReadiness.status === "missing_reconstructable"
+        ? "Page migration governance is missing but can be materialized before publish from verified raw/imported evidence."
+        : "Page migration governance is missing and cannot be safely reconstructed.",
+  );
   pushCheck(
     safetyChecks,
     "custom_domain_bindings_not_mutated",
@@ -346,6 +641,7 @@ export async function createImportedRuntimeReconciliationPlan(
       siteVersionId: currentActivePointer?.siteVersionId ?? null,
       artifactId: currentActivePointer?.artifactId ?? null,
     },
+    publishGovernanceReadiness,
     proposedOwnershipLink,
     proposedLifecycleTransitions: lifecycleTransitionsFrom(importedVersion?.state ?? null),
     proposedHostBindingTransfer,
@@ -381,6 +677,71 @@ export async function applyImportedRuntimeReconciliation(
     oldRuntimeSiteId && oldRuntimeSiteId !== plan.importedRuntimeSiteId
       ? await resolvedDeps.getActivePointerForSite(oldRuntimeSiteId)
       : null;
+
+  let governanceReconciliation: ImportedRuntimeReconciliationApplyResult["governanceReconciliation"] = null;
+  if (plan.publishGovernanceReadiness.status === "missing_reconstructable") {
+    const [siteVersion, rawImportedArtifact, rawTemplateArtifact] = await Promise.all([
+      resolvedDeps.getSiteVersion(plan.importedSiteVersionId),
+      resolvedDeps.getRawImportedSiteArtifact(plan.importedSiteVersionId),
+      resolvedDeps.getRawTemplateSiteArtifact(plan.importedSiteVersionId),
+    ]);
+    const rawArtifact = rawImportedArtifact ?? rawTemplateArtifact;
+    const rawEntryAsset = rawArtifact
+      ? await resolvedDeps.getRawTemplateSiteAsset({
+          siteVersionId: rawArtifact.siteVersionId,
+          filePath: rawArtifact.entryHtmlPath,
+          artifactId: rawArtifact.id,
+        })
+      : null;
+    const readiness = await inspectPublishGovernanceReadiness({ siteVersion, rawArtifact, deps: resolvedDeps });
+    if (readiness.status !== "missing_reconstructable" || !siteVersion || !rawArtifact || !rawEntryAsset) {
+      throw new Error(
+        `RECONCILIATION_BLOCKED:${JSON.stringify({
+          blockers: [
+            {
+              code: "PUBLISH_GOVERNANCE_RECONSTRUCTION_EVIDENCE_INSUFFICIENT",
+              message: "Page migration governance reconstruction evidence changed before apply mutation.",
+            },
+          ],
+          publishGovernanceReadiness: readiness,
+        })}`,
+      );
+    }
+
+    const governanceByPageId = buildGovernanceByPageId({
+      siteVersion,
+      rawArtifact,
+      rawEntryHtmlBytes: rawEntryAsset.bytes.byteLength,
+      rawFileCount: rawFileCount(rawArtifact),
+    });
+    governanceReconciliation = await resolvedDeps.materializePageMigrationGovernanceForSiteVersion({
+      siteVersionId: plan.importedSiteVersionId,
+      actor,
+      governanceByPageId,
+      details: {
+        targetHost: plan.proposedHostBindingTransfer.host,
+        ownershipSiteId: plan.proposedOwnershipLink.ownershipSiteId,
+        rawArtifactId: rawArtifact.id,
+        rawArtifactType: rawArtifact.artifactType,
+        rawFileCount: rawFileCount(rawArtifact),
+        rawEntryHtmlPath: rawArtifact.entryHtmlPath,
+        diagnostics: readiness.diagnostics,
+      },
+    });
+    if (governanceReconciliation.affectedRows < Object.keys(governanceByPageId).length) {
+      throw new Error(
+        `RECONCILIATION_BLOCKED:${JSON.stringify({
+          blockers: [
+            {
+              code: "PUBLISH_GOVERNANCE_MATERIALIZATION_INCOMPLETE",
+              message: "Page migration governance materialization did not update every missing page.",
+            },
+          ],
+          governanceReconciliation,
+        })}`,
+      );
+    }
+  }
 
   const ownershipLink =
     plan.proposedOwnershipLink.action === "link"
@@ -486,6 +847,7 @@ export async function applyImportedRuntimeReconciliation(
     plan,
     lifecycleTransitionsApplied,
     ownershipLink,
+    governanceReconciliation,
     publishResult,
     hostBindingTransfer,
     verification,
