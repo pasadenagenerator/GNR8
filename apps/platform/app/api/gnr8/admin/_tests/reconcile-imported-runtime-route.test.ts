@@ -4,10 +4,12 @@ import test from "node:test";
 import { createReconcileImportedRuntimeRouteHandlers } from "@/app/api/gnr8/admin/hosting-operations/reconcile-imported-runtime/reconcile-imported-runtime-route-handlers";
 import {
   applyImportedRuntimeReconciliation,
+  createImportedRuntimeReconciliationDbDependencies,
   createImportedRuntimeReconciliationPlan,
   IMPORTED_RUNTIME_RECONCILIATION_CONFIRM,
   type ImportedRuntimeReconciliationDependencies,
 } from "@/gnr8/runtime/imported-runtime-reconciliation";
+import type { RuntimeStoreDbClient } from "@/gnr8/runtime/runtime-store";
 import type {
   RuntimeHostBinding,
   RuntimeOwnershipSiteSummary,
@@ -515,6 +517,13 @@ function input(overrides: Record<string, unknown> = {}) {
   };
 }
 
+function createFakeDbClient(): RuntimeStoreDbClient {
+  return {
+    query: async () => ({ rows: [], rowCount: 0, command: "SELECT", oid: 0, fields: [] }),
+    release: () => undefined,
+  } as unknown as RuntimeStoreDbClient;
+}
+
 test("reconcile imported runtime dry-run returns plan and performs no writes", async () => {
   const state = createState();
   const plan = await createImportedRuntimeReconciliationPlan(input(), createDeps(state));
@@ -753,6 +762,8 @@ test("reconcile imported runtime route apply requires confirm string", async () 
     requireSuperadminUserId: async () => "superadmin_1",
     createImportedRuntimeReconciliationPlan,
     applyImportedRuntimeReconciliation,
+    withSuperadminClient: async (fn) => fn(createFakeDbClient()),
+    createImportedRuntimeReconciliationDbDependencies,
     reconciliationDeps: createDeps(createState()),
   });
   const response = await handlers.POST(
@@ -765,6 +776,86 @@ test("reconcile imported runtime route apply requires confirm string", async () 
   assert.equal(response.status, 400);
   const body = (await response.json()) as { error: string };
   assert.equal(body.error, "CONFIRMATION_REQUIRED");
+});
+
+test("reconcile imported runtime route apply checks out one shared superadmin client", async () => {
+  const state = createState();
+  const sharedClient = createFakeDbClient();
+  let checkoutCount = 0;
+  let releaseCount = 0;
+  let dbDepsFactoryCalls = 0;
+  const seenClients: RuntimeStoreDbClient[] = [];
+
+  const handlers = createReconcileImportedRuntimeRouteHandlers({
+    requireSuperadminUserId: async () => "superadmin_1",
+    createImportedRuntimeReconciliationPlan,
+    applyImportedRuntimeReconciliation,
+    withSuperadminClient: async (fn) => {
+      checkoutCount += 1;
+      try {
+        return await fn(sharedClient);
+      } finally {
+        releaseCount += 1;
+      }
+    },
+    createImportedRuntimeReconciliationDbDependencies: (dbClient) => {
+      dbDepsFactoryCalls += 1;
+      seenClients.push(dbClient);
+      return createDeps(state);
+    },
+  });
+
+  const response = await handlers.POST(
+    new Request("http://localhost/api/gnr8/admin/hosting-operations/reconcile-imported-runtime", {
+      method: "POST",
+      body: JSON.stringify(input({ mode: "apply", apply: true, confirm: IMPORTED_RUNTIME_RECONCILIATION_CONFIRM })),
+    }),
+  );
+
+  assert.equal(response.status, 200);
+  assert.equal(checkoutCount, 1);
+  assert.equal(releaseCount, 1);
+  assert.equal(dbDepsFactoryCalls, 1);
+  assert.deepEqual(seenClients, [sharedClient]);
+  assert.equal(state.writes.publishes, 1);
+  assert.equal(state.writes.publishEnforcementChecked, true);
+  assert.equal(state.writes.transfers, 1);
+});
+
+test("reconcile imported runtime route apply releases shared client when publish fails before host transfer", async () => {
+  const state = createState({ publishFails: true });
+  const sharedClient = createFakeDbClient();
+  let releaseCount = 0;
+
+  const handlers = createReconcileImportedRuntimeRouteHandlers({
+    requireSuperadminUserId: async () => "superadmin_1",
+    createImportedRuntimeReconciliationPlan,
+    applyImportedRuntimeReconciliation,
+    withSuperadminClient: async (fn) => {
+      try {
+        return await fn(sharedClient);
+      } finally {
+        releaseCount += 1;
+      }
+    },
+    createImportedRuntimeReconciliationDbDependencies: (dbClient) => {
+      assert.equal(dbClient, sharedClient);
+      return createDeps(state);
+    },
+  });
+
+  const response = await handlers.POST(
+    new Request("http://localhost/api/gnr8/admin/hosting-operations/reconcile-imported-runtime", {
+      method: "POST",
+      body: JSON.stringify(input({ mode: "apply", apply: true, confirm: IMPORTED_RUNTIME_RECONCILIATION_CONFIRM })),
+    }),
+  );
+
+  assert.equal(response.status, 400);
+  assert.equal(releaseCount, 1);
+  assert.equal(state.writes.publishEnforcementChecked, true);
+  assert.equal(state.writes.transfers, 0);
+  assert.equal(state.hostBinding?.siteId, OLD_SITE_ID);
 });
 
 test("reconcile imported runtime route is superadmin-only", async () => {

@@ -27,12 +27,15 @@ import type {
 } from "@/gnr8/runtime/types";
 import type { ContentOverride, ContentOverrideStatus, ContentSlot, ContentSlotType } from "@/gnr8/runtime/content-binding";
 
+export type RuntimeStoreDbClient = PoolClient;
+export type RuntimeStoreDbOptions = { dbClient?: RuntimeStoreDbClient };
+
 let tablesReady: Promise<void> | null = null;
 
-export async function ensureRuntimeTables(): Promise<void> {
+export async function ensureRuntimeTables(options: RuntimeStoreDbOptions = {}): Promise<void> {
   if (!tablesReady) {
     tablesReady = (async () => {
-      const client = await getSuperadminPool().connect();
+      const client = options.dbClient ?? (await getSuperadminPool().connect());
       try {
         await client.query(`
           create table if not exists public.gnr8_runtime_sites (
@@ -465,7 +468,7 @@ export async function ensureRuntimeTables(): Promise<void> {
           on conflict (site_id, host) do nothing
         `);
       } finally {
-        client.release();
+        if (!options.dbClient) client.release();
       }
     })();
   }
@@ -598,9 +601,24 @@ export type RuntimeDomainHostBinding = {
   updatedAt: string;
 };
 
-async function withTx<T>(fn: (client: PoolClient) => Promise<T>): Promise<T> {
-  await ensureRuntimeTables();
+async function withRuntimeClient<T>(
+  options: RuntimeStoreDbOptions | undefined,
+  fn: (client: RuntimeStoreDbClient) => Promise<T>,
+): Promise<T> {
+  await ensureRuntimeTables(options);
+  if (options?.dbClient) return fn(options.dbClient);
+
   const client = await getSuperadminPool().connect();
+  try {
+    return await fn(client);
+  } finally {
+    client.release();
+  }
+}
+
+async function withTx<T>(fn: (client: PoolClient) => Promise<T>, options: RuntimeStoreDbOptions = {}): Promise<T> {
+  await ensureRuntimeTables(options);
+  const client = options.dbClient ?? (await getSuperadminPool().connect());
   try {
     await client.query("begin");
     const out = await fn(client);
@@ -610,7 +628,7 @@ async function withTx<T>(fn: (client: PoolClient) => Promise<T>): Promise<T> {
     await client.query("rollback");
     throw error;
   } finally {
-    client.release();
+    if (!options.dbClient) client.release();
   }
 }
 
@@ -1027,10 +1045,8 @@ export async function bindHostToSite(input: {
   });
 }
 
-export async function getRuntimeSiteSummary(siteId: string): Promise<RuntimeSiteSummary | null> {
-  await ensureRuntimeTables();
-  const client = await getSuperadminPool().connect();
-  try {
+export async function getRuntimeSiteSummary(siteId: string, options: RuntimeStoreDbOptions = {}): Promise<RuntimeSiteSummary | null> {
+  return withRuntimeClient(options, async (client) => {
     const res = await client.query<{
       id: string;
       source_url: string;
@@ -1060,15 +1076,14 @@ export async function getRuntimeSiteSummary(siteId: string): Promise<RuntimeSite
       createdAt: row.created_at,
       updatedAt: row.updated_at,
     };
-  } finally {
-    client.release();
-  }
+  });
 }
 
-export async function getOwnershipSiteSummary(ownershipSiteId: string): Promise<RuntimeOwnershipSiteSummary | null> {
-  await ensureRuntimeTables();
-  const client = await getSuperadminPool().connect();
-  try {
+export async function getOwnershipSiteSummary(
+  ownershipSiteId: string,
+  options: RuntimeStoreDbOptions = {},
+): Promise<RuntimeOwnershipSiteSummary | null> {
+  return withRuntimeClient(options, async (client) => {
     const res = await client.query<{
       id: string;
       name: string | null;
@@ -1101,17 +1116,14 @@ export async function getOwnershipSiteSummary(ownershipSiteId: string): Promise<
       orgId: row.org_id,
       agencyId: row.agency_id,
     };
-  } finally {
-    client.release();
-  }
+  });
 }
 
 export async function getRuntimeSiteVersionOwnershipSnapshot(
   siteVersionId: string,
+  options: RuntimeStoreDbOptions = {},
 ): Promise<RuntimeSiteVersionOwnershipSnapshot | null> {
-  await ensureRuntimeTables();
-  const client = await getSuperadminPool().connect();
-  try {
+  return withRuntimeClient(options, async (client) => {
     const res = await client.query<{
       id: string;
       site_id: string;
@@ -1150,17 +1162,13 @@ export async function getRuntimeSiteVersionOwnershipSnapshot(
       createdAt: row.created_at,
       updatedAt: row.updated_at,
     };
-  } finally {
-    client.release();
-  }
+  });
 }
 
-export async function getActiveHostBindingForHost(host: string): Promise<RuntimeHostBinding | null> {
-  await ensureRuntimeTables();
+export async function getActiveHostBindingForHost(host: string, options: RuntimeStoreDbOptions = {}): Promise<RuntimeHostBinding | null> {
   const normalizedHost = normalizeRuntimeHost(host);
   if (!normalizedHost) return null;
-  const client = await getSuperadminPool().connect();
-  try {
+  return withRuntimeClient(options, async (client) => {
     const res = await client.query<{
       id: string;
       site_id: string;
@@ -1198,9 +1206,7 @@ export async function getActiveHostBindingForHost(host: string): Promise<Runtime
       createdAt: row.created_at,
       updatedAt: row.updated_at,
     };
-  } finally {
-    client.release();
-  }
+  });
 }
 
 export async function listHostBindingsForSite(siteId: string): Promise<RuntimeHostBinding[]> {
@@ -1249,6 +1255,7 @@ export async function listHostBindingsForSite(siteId: string): Promise<RuntimeHo
 export async function linkRuntimeSiteVersionOwnershipIfAllowed(input: {
   siteVersionId: string;
   ownershipSiteId: string;
+  dbClient?: RuntimeStoreDbClient;
 }): Promise<RuntimeSiteVersionOwnershipSnapshot> {
   return withTx(async (client) => {
     const res = await client.query<{
@@ -1290,7 +1297,7 @@ export async function linkRuntimeSiteVersionOwnershipIfAllowed(input: {
       createdAt: row.created_at,
       updatedAt: row.updated_at,
     };
-  });
+  }, { dbClient: input.dbClient });
 }
 
 export async function transferRuntimeHostBinding(input: {
@@ -1298,6 +1305,7 @@ export async function transferRuntimeHostBinding(input: {
   fromSiteId: string;
   toSiteId: string;
   bindingKind?: RuntimeHostBindingKind | string | null;
+  dbClient?: RuntimeStoreDbClient;
 }): Promise<{
   host: string;
   fromSiteId: string;
@@ -1430,7 +1438,7 @@ export async function transferRuntimeHostBinding(input: {
         updatedAt: newRow.updated_at,
       },
     };
-  });
+  }, { dbClient: input.dbClient });
 }
 
 export async function upsertDomainHostBinding(input: {
@@ -2438,10 +2446,9 @@ function buildCustomDomainVersionDivergenceDiagnostics(input: {
 export async function resolveActiveServingArtifactForHostAndPath(input: {
   host?: string | null;
   path: string;
+  dbClient?: RuntimeStoreDbClient;
 }): Promise<RuntimeActiveServingArtifactResolution> {
-  await ensureRuntimeTables();
-  const client = await getSuperadminPool().connect();
-  try {
+  return withRuntimeClient({ dbClient: input.dbClient }, async (client) => {
     const host = normalizeRuntimeHost(String(input.host ?? ""));
     const normalizedPath = normalizePagePath(input.path);
 
@@ -2630,9 +2637,7 @@ export async function resolveActiveServingArtifactForHostAndPath(input: {
       artifactId: pointerRow.artifact_id,
       artifact,
     };
-  } finally {
-    client.release();
-  }
+  });
 }
 
 export async function resolveDomainSiteVersionForHost(input: { host?: string | null }): Promise<RuntimeDomainSiteResolution> {
@@ -2850,10 +2855,9 @@ export async function resolveRawTemplateSiteForDomainAndPath(input: {
   };
 }
 
-export async function getSiteVersion(siteVersionId: string): Promise<CanonicalSiteVersionSnapshot | null> {
-  await ensureRuntimeTables();
-  const pool = getSuperadminPool();
-  const res = await pool.query<SiteVersionRow>(
+export async function getSiteVersion(siteVersionId: string, options: RuntimeStoreDbOptions = {}): Promise<CanonicalSiteVersionSnapshot | null> {
+  return withRuntimeClient(options, async (client) => {
+    const res = await client.query<SiteVersionRow>(
       `
       select
         id::text as id,
@@ -2875,7 +2879,7 @@ export async function getSiteVersion(siteVersionId: string): Promise<CanonicalSi
     const row = res.rows[0];
     if (!row) return null;
 
-    const pages = await pool.query<PageVersionRow>(
+    const pages = await client.query<PageVersionRow>(
       `
       select
         id::text as id,
@@ -2912,6 +2916,7 @@ export async function getSiteVersion(siteVersionId: string): Promise<CanonicalSi
       artifactId: row.artifact_id,
       pages: pages.rows.map(mapPageVersionRow),
     };
+  });
 }
 
 export async function setSiteVersionImportProvenanceSummary(input: {
@@ -2940,6 +2945,7 @@ export async function materializePageMigrationGovernanceForSiteVersion(input: {
   governanceByPageId: Record<string, PageMigrationGovernanceSnapshot>;
   actor: string;
   details?: Record<string, unknown>;
+  dbClient?: RuntimeStoreDbClient;
 }): Promise<{ affectedRows: number; pageIds: string[] }> {
   const pageIds = Object.keys(input.governanceByPageId)
     .map((value) => String(value).trim())
@@ -2989,7 +2995,7 @@ export async function materializePageMigrationGovernanceForSiteVersion(input: {
     );
 
     return { affectedRows, pageIds };
-  });
+  }, { dbClient: input.dbClient });
 }
 
 export async function setSiteVersionState(input: {
@@ -2999,6 +3005,7 @@ export async function setSiteVersionState(input: {
   actor: string;
   source: string;
   details?: Record<string, unknown>;
+  dbClient?: RuntimeStoreDbClient;
 }): Promise<void> {
   await withTx(async (client) => {
     const read = await client.query<{ state: SiteVersionState }>(
@@ -3034,7 +3041,7 @@ export async function setSiteVersionState(input: {
         JSON.stringify(input.details ?? {}),
       ],
     );
-  });
+  }, { dbClient: input.dbClient });
 }
 
 export async function createArtifact(input: {
@@ -3049,6 +3056,7 @@ export async function createArtifact(input: {
   publishStage: RuntimeArtifact["publishStage"];
   shadowRestricted: boolean;
   artifactGovernance: RuntimeArtifact["artifactGovernance"];
+  dbClient?: RuntimeStoreDbClient;
 }): Promise<{ artifactId: string }> {
   return withTx(async (client) => {
     const existing = await client.query<{ id: string }>(
@@ -3092,13 +3100,14 @@ export async function createArtifact(input: {
     );
 
     return { artifactId: insert.rows[0]!.id };
-  });
+  }, { dbClient: input.dbClient });
 }
 
 export async function bindArtifactToVersion(input: {
   siteVersionId: string;
   artifactId: string;
   rendererCompatibilityVersion: string;
+  dbClient?: RuntimeStoreDbClient;
 }): Promise<{ affectedRows: number }> {
   return withTx(async (client) => {
     const updated = await client.query<{ id: string }>(
@@ -3114,13 +3123,14 @@ export async function bindArtifactToVersion(input: {
       throw new Error(`Runtime site version not found for artifact bind: ${input.siteVersionId}`);
     }
     return { affectedRows: updated.rowCount ?? 0 };
-  });
+  }, { dbClient: input.dbClient });
 }
 
 export async function switchActivePointer(input: {
   siteId: string;
   siteVersionId: string;
   artifactId: string;
+  dbClient?: RuntimeStoreDbClient;
 }): Promise<{
   switched: boolean;
   previousActivePointer: { siteVersionId: string; artifactId: string } | null;
@@ -3167,7 +3177,7 @@ export async function switchActivePointer(input: {
       switched: true,
       previousActivePointer,
     };
-  });
+  }, { dbClient: input.dbClient });
 }
 
 export async function getPublishedVersionForSite(siteId: string): Promise<{ id: string; artifactId: string } | null> {
@@ -3192,11 +3202,11 @@ export async function getPublishedVersionForSite(siteId: string): Promise<{ id: 
   }
 }
 
-export async function getArtifactById(artifactId: string): Promise<RuntimeArtifact | null> {
-  await ensureRuntimeTables();
-  const pool = getSuperadminPool();
-  return getArtifactByIdWithClient(pool, artifactId);
+export async function getArtifactById(artifactId: string, options: RuntimeStoreDbOptions = {}): Promise<RuntimeArtifact | null> {
+  return withRuntimeClient(options, (client) => getArtifactByIdWithClient(client, artifactId));
 }
+
+type QueryableClient = Pick<PoolClient, "query">;
 
 async function getArtifactByIdWithClient(client: QueryableClient, artifactId: string): Promise<RuntimeArtifact | null> {
   const res = await client.query<{
@@ -3254,8 +3264,6 @@ async function getArtifactByIdWithClient(client: QueryableClient, artifactId: st
     createdAt: row.created_at,
   };
 }
-
-type QueryableClient = Pick<PoolClient, "query">;
 
 export async function resolveActiveArtifactForHostAndPath(input: {
   host?: string | null;
@@ -3364,6 +3372,7 @@ export async function resolveRuntimeSiteForHost(input: {
 export async function resolveActiveArtifactForHostAndPathWithDiagnostics(input: {
   host?: string | null;
   path: string;
+  dbClient?: RuntimeStoreDbClient;
 }): Promise<PublicRuntimeArtifactResolution> {
   const resolved = await resolveActiveServingArtifactForHostAndPath(input);
   if (resolved.outcome === "active_serving_miss") {
@@ -3486,7 +3495,12 @@ export async function listPreviouslyPublishedVersions(siteId: string): Promise<A
   }
 }
 
-export async function archivePublishedVersionsExcept(input: { siteId: string; keepSiteVersionId: string; actor: string }): Promise<void> {
+export async function archivePublishedVersionsExcept(input: {
+  siteId: string;
+  keepSiteVersionId: string;
+  actor: string;
+  dbClient?: RuntimeStoreDbClient;
+}): Promise<void> {
   await withTx(async (client) => {
     const rows = await client.query<{ id: string }>(
       `
@@ -3510,21 +3524,17 @@ export async function archivePublishedVersionsExcept(input: { siteId: string; ke
         [row.id, input.actor, JSON.stringify({ autoArchivedByPublish: input.keepSiteVersionId })],
       );
     }
-  });
+  }, { dbClient: input.dbClient });
 }
 
-export async function getVersionState(siteVersionId: string): Promise<SiteVersionState | null> {
-  await ensureRuntimeTables();
-  const client = await getSuperadminPool().connect();
-  try {
+export async function getVersionState(siteVersionId: string, options: RuntimeStoreDbOptions = {}): Promise<SiteVersionState | null> {
+  return withRuntimeClient(options, async (client) => {
     const res = await client.query<{ state: SiteVersionState }>(
       `select state::text as state from public.gnr8_runtime_site_versions where id = $1::uuid limit 1`,
       [siteVersionId],
     );
     return res.rows[0]?.state ?? null;
-  } finally {
-    client.release();
-  }
+  });
 }
 
 export async function getSiteVersionArtifactBinding(siteVersionId: string): Promise<{ siteId: string; artifactId: string | null } | null> {
@@ -3544,10 +3554,12 @@ export async function getSiteVersionArtifactBinding(siteVersionId: string): Prom
   return { siteId: row.site_id, artifactId: row.artifact_id };
 }
 
-export async function getRawTemplateSiteArtifact(siteVersionId: string): Promise<RawTemplateSiteArtifact | null> {
-  await ensureRuntimeTables();
-  const pool = getSuperadminPool();
-  const result = await pool.query<RawTemplateArtifactRow>(
+export async function getRawTemplateSiteArtifact(
+  siteVersionId: string,
+  options: RuntimeStoreDbOptions = {},
+): Promise<RawTemplateSiteArtifact | null> {
+  return withRuntimeClient(options, async (client) => {
+    const result = await client.query<RawTemplateArtifactRow>(
       `
       select
         id::text as id,
@@ -3581,12 +3593,15 @@ export async function getRawTemplateSiteArtifact(siteVersionId: string): Promise
     fileMap: parseRawTemplateFileMap(row.file_map),
     createdAt: row.created_at,
   };
+  });
 }
 
-export async function getRawImportedSiteArtifact(siteVersionId: string): Promise<RawImportedSiteArtifact | null> {
-  await ensureRuntimeTables();
-  const pool = getSuperadminPool();
-  const result = await pool.query<RawTemplateArtifactRow>(
+export async function getRawImportedSiteArtifact(
+  siteVersionId: string,
+  options: RuntimeStoreDbOptions = {},
+): Promise<RawImportedSiteArtifact | null> {
+  return withRuntimeClient(options, async (client) => {
+    const result = await client.query<RawTemplateArtifactRow>(
       `
       select
         id::text as id,
@@ -3621,18 +3636,19 @@ export async function getRawImportedSiteArtifact(siteVersionId: string): Promise
     metadata: parseRawImportedSiteArtifactMetadata(row.metadata_json),
     createdAt: row.created_at,
   };
+  });
 }
 
 export async function getRawTemplateSiteAsset(input: {
   siteVersionId: string;
   filePath: string;
   artifactId?: string | null;
+  dbClient?: RuntimeStoreDbClient;
 }): Promise<{ mediaType: string; sizeBytes: number; sha256: string; bytes: Buffer } | null> {
-  await ensureRuntimeTables();
   const normalizedFilePath = normalizeRawTemplateFilePath(input.filePath);
   if (!normalizedFilePath) return null;
-  const pool = getSuperadminPool();
   const artifactId = String(input.artifactId ?? "").trim();
+  return withRuntimeClient({ dbClient: input.dbClient }, async (client) => {
     console.info("[preview-runtime] RAW_IMPORT_ASSET_DB_COLUMN_MAPPING_USED", {
       table: "public.gnr8_runtime_raw_template_artifact_files",
       filePathColumn: "file_path",
@@ -3644,7 +3660,7 @@ export async function getRawTemplateSiteAsset(input: {
       filePath: normalizedFilePath,
     });
     const row = artifactId
-      ? await pool.query<RawTemplateArtifactFileRow>(
+      ? await client.query<RawTemplateArtifactFileRow>(
           `
           select
             f.media_type::text as media_type,
@@ -3658,7 +3674,7 @@ export async function getRawTemplateSiteAsset(input: {
           `,
           [artifactId, normalizedFilePath],
         )
-      : await pool.query<RawTemplateArtifactFileRow>(
+      : await client.query<RawTemplateArtifactFileRow>(
           `
           select
             f.media_type::text as media_type,
@@ -3697,6 +3713,7 @@ export async function getRawTemplateSiteAsset(input: {
       sha256: hit.sha256,
       bytes,
     };
+  });
 }
 
 export async function persistRawImportedSiteArtifact(input: {
@@ -3769,10 +3786,11 @@ export async function persistRawImportedSiteArtifact(input: {
   });
 }
 
-export async function getActivePointerForSite(siteId: string): Promise<{ siteVersionId: string; artifactId: string } | null> {
-  await ensureRuntimeTables();
-  const client = await getSuperadminPool().connect();
-  try {
+export async function getActivePointerForSite(
+  siteId: string,
+  options: RuntimeStoreDbOptions = {},
+): Promise<{ siteVersionId: string; artifactId: string } | null> {
+  return withRuntimeClient(options, async (client) => {
     const res = await client.query<{ active_site_version_id: string; active_artifact_id: string }>(
       `
       select
@@ -3790,9 +3808,7 @@ export async function getActivePointerForSite(siteId: string): Promise<{ siteVer
       siteVersionId: row.active_site_version_id,
       artifactId: row.active_artifact_id,
     };
-  } finally {
-    client.release();
-  }
+  });
 }
 
 export async function upsertMigrationActivationLineage(input: {
@@ -3965,6 +3981,7 @@ export async function recordPublishActivationAudit(input: {
   actor: string;
   source: "migration" | "ai" | "manual";
   details: Record<string, unknown>;
+  dbClient?: RuntimeStoreDbClient;
 }): Promise<void> {
   await withTx(async (client) => {
     const stateRes = await client.query<{ state: SiteVersionState }>(
@@ -3981,7 +3998,7 @@ export async function recordPublishActivationAudit(input: {
       `,
       [input.siteVersionId, current, input.actor, input.source, JSON.stringify(input.details)],
     );
-  });
+  }, { dbClient: input.dbClient });
 }
 
 export async function saveFormSubmission(input: VersionScopedFormSubmission): Promise<{ submissionId: string; createdAt: string }> {

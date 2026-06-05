@@ -1,16 +1,21 @@
 import {
   applyImportedRuntimeReconciliation,
+  createImportedRuntimeReconciliationDbDependencies,
   createImportedRuntimeReconciliationPlan,
   IMPORTED_RUNTIME_RECONCILIATION_CONFIRM,
   type ImportedRuntimeReconciliationDependencies,
   type ImportedRuntimeReconciliationInput,
 } from "@/gnr8/runtime/imported-runtime-reconciliation";
+import { withSuperadminClient } from "@/src/superadmin/db";
 import { requireSuperadminUserId } from "@/src/superadmin/require-superadmin-user-id";
+import type { RuntimeStoreDbClient } from "@/gnr8/runtime/runtime-store";
 
 export type ReconcileImportedRuntimeRouteDependencies = {
   requireSuperadminUserId: typeof requireSuperadminUserId;
   createImportedRuntimeReconciliationPlan: typeof createImportedRuntimeReconciliationPlan;
   applyImportedRuntimeReconciliation: typeof applyImportedRuntimeReconciliation;
+  withSuperadminClient: typeof withSuperadminClient;
+  createImportedRuntimeReconciliationDbDependencies: (dbClient: RuntimeStoreDbClient) => Partial<ImportedRuntimeReconciliationDependencies>;
   reconciliationDeps?: Partial<ImportedRuntimeReconciliationDependencies>;
 };
 
@@ -57,6 +62,8 @@ export function createReconcileImportedRuntimeRouteHandlers(deps: Partial<Reconc
     requireSuperadminUserId,
     createImportedRuntimeReconciliationPlan,
     applyImportedRuntimeReconciliation,
+    withSuperadminClient,
+    createImportedRuntimeReconciliationDbDependencies,
     ...deps,
   };
 
@@ -76,13 +83,20 @@ export function createReconcileImportedRuntimeRouteHandlers(deps: Partial<Reconc
           actor: token(body.actor) || `superadmin:${superadminUserId}`,
         };
 
-        if (mode === "apply") {
-          const result = await resolvedDeps.applyImportedRuntimeReconciliation(input, resolvedDeps.reconciliationDeps);
-          return Response.json(result);
-        }
+        return await resolvedDeps.withSuperadminClient(async (dbClient) => {
+          const reconciliationDeps = {
+            ...resolvedDeps.createImportedRuntimeReconciliationDbDependencies(dbClient),
+            ...(resolvedDeps.reconciliationDeps ?? {}),
+          };
 
-        const plan = await resolvedDeps.createImportedRuntimeReconciliationPlan(input, resolvedDeps.reconciliationDeps);
-        return Response.json({ ok: true, mode: "dry_run", plan });
+          if (mode === "apply") {
+            const result = await resolvedDeps.applyImportedRuntimeReconciliation(input, reconciliationDeps);
+            return Response.json(result);
+          }
+
+          const plan = await resolvedDeps.createImportedRuntimeReconciliationPlan(input, reconciliationDeps);
+          return Response.json({ ok: true, mode: "dry_run", plan });
+        });
       } catch (error) {
         const mapped = mapAdminError(error);
         return Response.json(mapped.body, { status: mapped.status });

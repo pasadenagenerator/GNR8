@@ -13,6 +13,7 @@ import {
   materializePageMigrationGovernanceForSiteVersion,
   resolveActiveArtifactForHostAndPathWithDiagnostics,
   transferRuntimeHostBinding,
+  type RuntimeStoreDbClient,
   type RuntimeHostBinding,
   type RuntimeOwnershipSiteSummary,
   type RuntimeSiteSummary,
@@ -40,6 +41,7 @@ type PublishApprovedSiteVersion = (input: {
   siteVersionId: string;
   actor: string;
   stage?: "shadow" | "canary" | "production";
+  dbClient?: RuntimeStoreDbClient;
 }) => Promise<{
   siteId: string;
   siteVersionId: string;
@@ -206,6 +208,36 @@ const DEFAULT_DEPS: ImportedRuntimeReconciliationDependencies = {
   transferRuntimeHostBinding,
   resolveActiveArtifactForHostAndPathWithDiagnostics,
 };
+
+export function createImportedRuntimeReconciliationDbDependencies(
+  dbClient: RuntimeStoreDbClient,
+): Partial<ImportedRuntimeReconciliationDependencies> {
+  return {
+    getOwnershipSiteSummary: (ownershipSiteId) => getOwnershipSiteSummary(ownershipSiteId, { dbClient }),
+    getRuntimeSiteSummary: (siteId) => getRuntimeSiteSummary(siteId, { dbClient }),
+    getRuntimeSiteVersionOwnershipSnapshot: (siteVersionId) =>
+      getRuntimeSiteVersionOwnershipSnapshot(siteVersionId, { dbClient }),
+    getActiveHostBindingForHost: (host) => getActiveHostBindingForHost(host, { dbClient }),
+    getActivePointerForSite: (siteId) => getActivePointerForSite(siteId, { dbClient }),
+    getArtifactById: (artifactId) => getArtifactById(artifactId, { dbClient }),
+    getSiteVersion: (siteVersionId) => getSiteVersion(siteVersionId, { dbClient }),
+    getRawImportedSiteArtifact: (siteVersionId) => getRawImportedSiteArtifact(siteVersionId, { dbClient }),
+    getRawTemplateSiteArtifact: (siteVersionId) => getRawTemplateSiteArtifact(siteVersionId, { dbClient }),
+    getRawTemplateSiteAsset: (input) => getRawTemplateSiteAsset({ ...input, dbClient }),
+    linkRuntimeSiteVersionOwnershipIfAllowed: (input) =>
+      linkRuntimeSiteVersionOwnershipIfAllowed({ ...input, dbClient }),
+    materializePageMigrationGovernanceForSiteVersion: (input) =>
+      materializePageMigrationGovernanceForSiteVersion({ ...input, dbClient }),
+    transitionSiteVersionState: (input) => transitionSiteVersionState({ ...input, dbClient }),
+    publishApprovedSiteVersion: async (input) => {
+      const mod = await import("@/gnr8/runtime/publish-activation-orchestrator");
+      return mod.publishApprovedSiteVersion({ ...input, dbClient });
+    },
+    transferRuntimeHostBinding: (input) => transferRuntimeHostBinding({ ...input, dbClient }),
+    resolveActiveArtifactForHostAndPathWithDiagnostics: (input) =>
+      resolveActiveArtifactForHostAndPathWithDiagnostics({ ...input, dbClient }),
+  };
+}
 
 function token(value: unknown): string {
   return String(value ?? "").trim();

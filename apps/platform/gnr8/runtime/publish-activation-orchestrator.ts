@@ -16,6 +16,7 @@ import {
   recordPublishActivationAudit,
   getSiteVersion,
   switchActivePointer,
+  type RuntimeStoreDbClient,
 } from "@/gnr8/runtime/runtime-store";
 import { transitionSiteVersionState } from "@/gnr8/runtime/version-lifecycle-enforcer";
 
@@ -33,8 +34,10 @@ export async function executeMigrationPublishActivation(input: {
   expectedRendererCompatibilityVersion: string;
   expectedPublishStage: "shadow" | "canary" | "production";
   actor: string;
+  dbClient?: RuntimeStoreDbClient;
 }) {
-  const storedArtifact = await getArtifactById(input.artifactId);
+  const dbOptions = { dbClient: input.dbClient };
+  const storedArtifact = await getArtifactById(input.artifactId, dbOptions);
   const candidateValidation = evaluatePublishActivationCandidate({
     candidateRef: input.candidateRef,
     candidateState: input.candidateState,
@@ -58,7 +61,7 @@ export async function executeMigrationPublishActivation(input: {
     });
   }
 
-  const activePointer = await getActivePointerForSite(input.siteId);
+  const activePointer = await getActivePointerForSite(input.siteId, dbOptions);
   const pointerReadiness = evaluatePointerSwitchReadiness({
     targetSiteVersionId: input.siteVersionId,
     targetArtifactId: input.artifactId,
@@ -79,6 +82,7 @@ export async function executeMigrationPublishActivation(input: {
         previousActivePointer: noopPointer,
         newActivePointer: noopPointer,
       },
+      dbClient: input.dbClient,
     });
     return {
       switched: false,
@@ -94,6 +98,7 @@ export async function executeMigrationPublishActivation(input: {
       siteId: input.siteId,
       siteVersionId: input.siteVersionId,
       artifactId: input.artifactId,
+      dbClient: input.dbClient,
     });
   } catch (error) {
     throwPublishActivationFailure("PUBLISH_POINTER_SWITCH_FAILED", "active pointer switch failed", {
@@ -104,7 +109,7 @@ export async function executeMigrationPublishActivation(input: {
     });
   }
 
-  const activePointerAfterSwitch = await getActivePointerForSite(input.siteId);
+  const activePointerAfterSwitch = await getActivePointerForSite(input.siteId, dbOptions);
   assertPublishSafety({
     siteId: input.siteId,
     siteVersionId: input.siteVersionId,
@@ -126,6 +131,7 @@ export async function executeMigrationPublishActivation(input: {
       previousActivePointer: pointerSwitchResult.previousActivePointer,
       newActivePointer: activePointerAfterSwitch,
     },
+    dbClient: input.dbClient,
   });
 
   return {
@@ -136,8 +142,14 @@ export async function executeMigrationPublishActivation(input: {
   };
 }
 
-export async function publishApprovedSiteVersion(input: { siteVersionId: string; actor: string; stage?: "shadow" | "canary" | "production" }) {
-  const siteVersion = await getSiteVersion(input.siteVersionId);
+export async function publishApprovedSiteVersion(input: {
+  siteVersionId: string;
+  actor: string;
+  stage?: "shadow" | "canary" | "production";
+  dbClient?: RuntimeStoreDbClient;
+}) {
+  const dbOptions = { dbClient: input.dbClient };
+  const siteVersion = await getSiteVersion(input.siteVersionId, dbOptions);
   if (!siteVersion) throw new Error("SiteVersion not found");
   if (siteVersion.state !== "APPROVED" && siteVersion.state !== "PUBLISHED") {
     throw new Error(`SiteVersion must be APPROVED before publish (current: ${siteVersion.state})`);
@@ -151,7 +163,7 @@ export async function publishApprovedSiteVersion(input: { siteVersionId: string;
       });
     }
 
-    const storedArtifact = await getArtifactById(siteVersion.artifactId);
+    const storedArtifact = await getArtifactById(siteVersion.artifactId, dbOptions);
     const resolvedPublishStage = input.stage ?? storedArtifact?.publishStage ?? "production";
     const candidateValidation = evaluatePublishActivationCandidate({
       candidateRef: `runtime-site-version:${siteVersion.id}`,
@@ -175,7 +187,7 @@ export async function publishApprovedSiteVersion(input: { siteVersionId: string;
       });
     }
 
-    const activePointer = await getActivePointerForSite(siteVersion.siteId);
+    const activePointer = await getActivePointerForSite(siteVersion.siteId, dbOptions);
     const pointerReadiness = evaluatePointerSwitchReadiness({
       targetSiteVersionId: siteVersion.id,
       targetArtifactId: siteVersion.artifactId,
@@ -201,6 +213,7 @@ export async function publishApprovedSiteVersion(input: { siteVersionId: string;
         siteId: siteVersion.siteId,
         siteVersionId: siteVersion.id,
         artifactId: siteVersion.artifactId,
+        dbClient: input.dbClient,
       });
     } catch (error) {
       throwPublishActivationFailure("PUBLISH_POINTER_SWITCH_FAILED", "active pointer switch failed", {
@@ -268,16 +281,18 @@ export async function publishApprovedSiteVersion(input: { siteVersionId: string;
     publishStage,
     shadowRestricted: enforcement.shadowRestricted,
     artifactGovernance: enforcement.artifactGovernance,
+    dbClient: input.dbClient,
   });
 
   await bindArtifactToVersion({
     siteVersionId: siteVersion.id,
     artifactId: artifact.artifactId,
     rendererCompatibilityVersion: artifactBundle.rendererCompatibilityVersion,
+    dbClient: input.dbClient,
   });
 
-  const storedArtifact = await getArtifactById(artifact.artifactId);
-  const activePointer = await getActivePointerForSite(siteVersion.siteId);
+  const storedArtifact = await getArtifactById(artifact.artifactId, dbOptions);
+  const activePointer = await getActivePointerForSite(siteVersion.siteId, dbOptions);
   const candidateValidation = evaluatePublishActivationCandidate({
     candidateRef: `runtime-site-version:${siteVersion.id}`,
     candidateState: "READY_FOR_SHADOW_BIND",
@@ -309,6 +324,7 @@ export async function publishApprovedSiteVersion(input: { siteVersionId: string;
       siteId: siteVersion.siteId,
       siteVersionId: siteVersion.id,
       artifactId: artifact.artifactId,
+      dbClient: input.dbClient,
     });
   } catch (error) {
     throwPublishActivationFailure("PUBLISH_POINTER_SWITCH_FAILED", "active pointer switch failed", {
@@ -319,7 +335,7 @@ export async function publishApprovedSiteVersion(input: { siteVersionId: string;
     });
   }
 
-  const activePointerAfterSwitch = await getActivePointerForSite(siteVersion.siteId);
+  const activePointerAfterSwitch = await getActivePointerForSite(siteVersion.siteId, dbOptions);
   assertPublishSafety({
     siteId: siteVersion.siteId,
     siteVersionId: siteVersion.id,
@@ -340,12 +356,14 @@ export async function publishApprovedSiteVersion(input: { siteVersionId: string;
       previousActivePointer: pointerSwitchResult.previousActivePointer,
       pointerOutcome,
     },
+    dbClient: input.dbClient,
   });
 
   await archivePublishedVersionsExcept({
     siteId: siteVersion.siteId,
     keepSiteVersionId: siteVersion.id,
     actor: input.actor,
+    dbClient: input.dbClient,
   });
 
   return {
