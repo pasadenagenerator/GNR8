@@ -15,6 +15,7 @@ import {
   getArtifactById,
   recordPublishActivationAudit,
   getSiteVersion,
+  refreshArtifactForVersionPublishCandidate,
   switchActivePointer,
   type RuntimeStoreDbClient,
 } from "@/gnr8/runtime/runtime-store";
@@ -163,8 +164,56 @@ export async function publishApprovedSiteVersion(input: {
       });
     }
 
-    const storedArtifact = await getArtifactById(siteVersion.artifactId, dbOptions);
+    let storedArtifact = await getArtifactById(siteVersion.artifactId, dbOptions);
     const resolvedPublishStage = input.stage ?? storedArtifact?.publishStage ?? "production";
+    if (input.stage && storedArtifact) {
+      const enforcement = evaluatePublishEnforcement({
+        siteVersion,
+        stage: resolvedPublishStage,
+      });
+      if (enforcement.adapter.decision === "DENY") {
+        throw new Error(`publish_enforcement_denied:${JSON.stringify(enforcement.adapter)}`);
+      }
+      if (enforcement.adapter.decision === "REVIEW_ONLY" && resolvedPublishStage !== "shadow") {
+        throw new Error(`publish_enforcement_review_only_shadow_required:${JSON.stringify(enforcement.adapter)}`);
+      }
+
+      const artifactBundle = buildDeterministicArtifactBundle({
+        siteVersion,
+        renderMode: "PUBLISH",
+      });
+      const integrity = runRenderIntegrityGate({
+        siteVersion,
+        htmlByPath: artifactBundle.htmlByPath,
+        assetFingerprintMap: artifactBundle.assetFingerprintMap,
+      });
+      if (!integrity.ok) {
+        const msg = integrity.issues.map((issue) => `${issue.code}:${issue.message}`).join("; ");
+        throw new Error(`render-integrity-gate failed: ${msg}`);
+      }
+
+      await refreshArtifactForVersionPublishCandidate({
+        siteId: siteVersion.siteId,
+        siteVersionId: siteVersion.id,
+        artifactId: siteVersion.artifactId,
+        rendererCompatibilityVersion: artifactBundle.rendererCompatibilityVersion,
+        bundleSha256: artifactBundle.bundleSha256,
+        htmlByPath: artifactBundle.htmlByPath,
+        compiledTokenStyles: artifactBundle.compiledTokenStyles,
+        assetFingerprintMap: artifactBundle.assetFingerprintMap,
+        manifest: {
+          ...artifactBundle.manifest,
+          publishStage: resolvedPublishStage,
+          shadowRestricted: enforcement.shadowRestricted,
+          enforcementDecision: enforcement.adapter.decision,
+        },
+        publishStage: resolvedPublishStage,
+        shadowRestricted: enforcement.shadowRestricted,
+        artifactGovernance: enforcement.artifactGovernance,
+        dbClient: input.dbClient,
+      });
+      storedArtifact = await getArtifactById(siteVersion.artifactId, dbOptions);
+    }
     const candidateValidation = evaluatePublishActivationCandidate({
       candidateRef: `runtime-site-version:${siteVersion.id}`,
       candidateState: "READY_FOR_SHADOW_BIND",
@@ -288,6 +337,26 @@ export async function publishApprovedSiteVersion(input: {
     siteVersionId: siteVersion.id,
     artifactId: artifact.artifactId,
     rendererCompatibilityVersion: artifactBundle.rendererCompatibilityVersion,
+    dbClient: input.dbClient,
+  });
+  await refreshArtifactForVersionPublishCandidate({
+    siteId: siteVersion.siteId,
+    siteVersionId: siteVersion.id,
+    artifactId: artifact.artifactId,
+    rendererCompatibilityVersion: artifactBundle.rendererCompatibilityVersion,
+    bundleSha256: artifactBundle.bundleSha256,
+    htmlByPath: artifactBundle.htmlByPath,
+    compiledTokenStyles: artifactBundle.compiledTokenStyles,
+    assetFingerprintMap: artifactBundle.assetFingerprintMap,
+    manifest: {
+      ...artifactBundle.manifest,
+      publishStage,
+      shadowRestricted: enforcement.shadowRestricted,
+      enforcementDecision: enforcement.adapter.decision,
+    },
+    publishStage,
+    shadowRestricted: enforcement.shadowRestricted,
+    artifactGovernance: enforcement.artifactGovernance,
     dbClient: input.dbClient,
   });
 

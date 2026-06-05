@@ -52,6 +52,23 @@ function mapAdminError(error: unknown): { status: number; body: Record<string, u
         body: { ok: false, error: "RECONCILIATION_VERIFICATION_FAILED", ...(JSON.parse(payload) as Record<string, unknown>) },
       };
     }
+    if (error.message.startsWith("PUBLISH_")) {
+      const separator = error.message.indexOf(":");
+      const code = separator >= 0 ? error.message.slice(0, separator) : error.message;
+      const payloadRaw = separator >= 0 ? error.message.slice(separator + 1) : "";
+      const payload = payloadRaw?.trim().startsWith("{")
+        ? (JSON.parse(payloadRaw) as { message?: string; details?: Record<string, unknown> })
+        : {};
+      return {
+        status: 409,
+        body: {
+          ok: false,
+          error: code,
+          message: payload.message ?? "Publish activation denied",
+          details: payload.details ?? {},
+        },
+      };
+    }
     return { status: 400, body: { ok: false, error: error.message } };
   }
   return { status: 500, body: { ok: false, error: "Internal server error" } };

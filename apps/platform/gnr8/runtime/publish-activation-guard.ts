@@ -68,6 +68,19 @@ function hasRequiredGovernance(governance: RuntimeArtifact["artifactGovernance"]
   );
 }
 
+function lineageDetail(input: {
+  field: string;
+  candidate: unknown;
+  expected: unknown;
+}): { field: string; candidate: unknown; expected: unknown; matches: boolean } {
+  return {
+    field: input.field,
+    candidate: input.candidate,
+    expected: input.expected,
+    matches: input.candidate === input.expected,
+  };
+}
+
 export function evaluatePublishActivationCandidate(input: {
   candidateRef: string | null | undefined;
   candidateState: string | null | undefined;
@@ -163,20 +176,34 @@ export function evaluatePublishActivationCandidate(input: {
     };
   }
 
-  const lineageMatches =
-    input.artifactId === input.expectedArtifactId &&
-    input.siteVersionId === input.expectedSiteVersionId &&
-    artifact.id === input.expectedArtifactId &&
-    artifact.siteId === input.expectedSiteId &&
-    artifact.siteVersionId === input.expectedSiteVersionId &&
-    artifact.rendererCompatibilityVersion === input.expectedRendererCompatibilityVersion &&
-    artifact.publishStage === input.expectedPublishStage &&
-    artifact.artifactGovernance.publishStage === input.expectedPublishStage &&
-    manifestSiteId === input.expectedSiteId &&
-    manifestSiteVersionId === input.expectedSiteVersionId &&
-    manifestRendererCompatibilityVersion === input.expectedRendererCompatibilityVersion;
+  const lineageDetails = [
+    lineageDetail({ field: "candidateArtifactId", candidate: input.artifactId, expected: input.expectedArtifactId }),
+    lineageDetail({ field: "candidateSiteVersionId", candidate: input.siteVersionId, expected: input.expectedSiteVersionId }),
+    lineageDetail({ field: "artifactId", candidate: artifact.id, expected: input.expectedArtifactId }),
+    lineageDetail({ field: "artifactSiteId", candidate: artifact.siteId, expected: input.expectedSiteId }),
+    lineageDetail({ field: "artifactSiteVersionId", candidate: artifact.siteVersionId, expected: input.expectedSiteVersionId }),
+    lineageDetail({
+      field: "artifactRendererCompatibilityVersion",
+      candidate: artifact.rendererCompatibilityVersion,
+      expected: input.expectedRendererCompatibilityVersion,
+    }),
+    lineageDetail({ field: "artifactPublishStage", candidate: artifact.publishStage, expected: input.expectedPublishStage }),
+    lineageDetail({
+      field: "artifactGovernancePublishStage",
+      candidate: artifact.artifactGovernance.publishStage,
+      expected: input.expectedPublishStage,
+    }),
+    lineageDetail({ field: "manifestSiteId", candidate: manifestSiteId, expected: input.expectedSiteId }),
+    lineageDetail({ field: "manifestSiteVersionId", candidate: manifestSiteVersionId, expected: input.expectedSiteVersionId }),
+    lineageDetail({
+      field: "manifestRendererCompatibilityVersion",
+      candidate: manifestRendererCompatibilityVersion,
+      expected: input.expectedRendererCompatibilityVersion,
+    }),
+  ];
+  const mismatchFields = lineageDetails.filter((detail) => !detail.matches).map((detail) => detail.field);
 
-  if (!lineageMatches) {
+  if (mismatchFields.length > 0) {
     return {
       ok: false,
       code: "PUBLISH_LINEAGE_MISMATCH",
@@ -187,6 +214,8 @@ export function evaluatePublishActivationCandidate(input: {
         candidateSiteVersionId: input.siteVersionId,
         expectedSiteVersionId: input.expectedSiteVersionId,
         artifactSiteVersionId: artifact.siteVersionId,
+        mismatchFields,
+        lineageDetails,
       },
     };
   }

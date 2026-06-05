@@ -141,7 +141,9 @@ export async function POST(req: Request, ctx: { params: Promise<{ siteVersionId:
       );
     }
     if (message.startsWith("PUBLISH_")) {
-      const [code, payloadRaw] = message.split(":", 2);
+      const separator = message.indexOf(":");
+      const code = separator >= 0 ? message.slice(0, separator) : message;
+      const payloadRaw = separator >= 0 ? message.slice(separator + 1) : "";
       const payload = payloadRaw ? (JSON.parse(payloadRaw) as { message?: string; details?: Record<string, unknown> }) : {};
       return NextResponse.json(
         {

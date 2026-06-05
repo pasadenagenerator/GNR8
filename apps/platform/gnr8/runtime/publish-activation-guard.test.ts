@@ -64,6 +64,39 @@ test("publish activation guard passes for valid candidate/artifact lineage", () 
   assert.deepEqual(result, { ok: true });
 });
 
+test("publish activation guard passes for Maver-like imported artifact when production lineage is complete", () => {
+  const artifact = makeArtifact();
+  artifact.id = "63556056-8c1a-4629-abb7-4e73accc48d0";
+  artifact.siteId = "site_7c77126de646f746b3bd";
+  artifact.siteVersionId = "88253466-783e-4484-8b68-df6c83b8a11c";
+  artifact.publishStage = "production";
+  artifact.artifactGovernance.publishStage = "production";
+  artifact.artifactGovernance.pageEnforcementState.production = ["ALLOW"];
+  artifact.artifactGovernance.siteEnforcementState.production = "ALLOW";
+  artifact.manifest = {
+    ...artifact.manifest,
+    siteId: artifact.siteId,
+    siteVersionId: artifact.siteVersionId,
+    publishStage: "production",
+  };
+
+  const result = evaluatePublishActivationCandidate({
+    candidateRef: `runtime-site-version:${artifact.siteVersionId}`,
+    candidateState: "READY_FOR_SHADOW_BIND",
+    shadowEligibilityState: "ALLOWED",
+    artifactId: artifact.id,
+    siteVersionId: artifact.siteVersionId,
+    expectedSiteId: artifact.siteId,
+    expectedSiteVersionId: artifact.siteVersionId,
+    expectedArtifactId: artifact.id,
+    expectedRendererCompatibilityVersion: artifact.rendererCompatibilityVersion,
+    expectedPublishStage: "production",
+    artifact,
+  });
+
+  assert.deepEqual(result, { ok: true });
+});
+
 test("publish activation guard denies missing governance payload", () => {
   const artifact = makeArtifact();
   artifact.artifactGovernance.pageGateState = [];
@@ -103,6 +136,29 @@ test("publish activation guard denies lineage mismatch", () => {
   assert.equal(result.ok, false);
   if (result.ok) return;
   assert.equal(result.code, "PUBLISH_LINEAGE_MISMATCH");
+});
+
+test("publish activation guard reports the actual mismatched lineage field", () => {
+  const artifact = makeArtifact();
+  const result = evaluatePublishActivationCandidate({
+    candidateRef: "/tmp/shadow-bind-ready.json",
+    candidateState: "READY_FOR_SHADOW_BIND",
+    shadowEligibilityState: "ALLOWED",
+    artifactId: artifact.id,
+    siteVersionId: artifact.siteVersionId,
+    expectedSiteId: artifact.siteId,
+    expectedSiteVersionId: artifact.siteVersionId,
+    expectedArtifactId: artifact.id,
+    expectedRendererCompatibilityVersion: artifact.rendererCompatibilityVersion,
+    expectedPublishStage: "production",
+    artifact,
+  });
+
+  assert.equal(result.ok, false);
+  if (result.ok) return;
+  assert.equal(result.code, "PUBLISH_LINEAGE_MISMATCH");
+  assert.deepEqual(result.details?.mismatchFields, ["artifactPublishStage", "artifactGovernancePublishStage"]);
+  assert.match(JSON.stringify(result.details?.lineageDetails), /artifactPublishStage/);
 });
 
 test("pointer switch readiness returns explicit idempotent safe no-op", () => {

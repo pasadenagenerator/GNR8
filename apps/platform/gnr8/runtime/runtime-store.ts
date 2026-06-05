@@ -3103,6 +3103,71 @@ export async function createArtifact(input: {
   }, { dbClient: input.dbClient });
 }
 
+export async function refreshArtifactForVersionPublishCandidate(input: {
+  siteId: string;
+  siteVersionId: string;
+  artifactId: string;
+  rendererCompatibilityVersion: string;
+  bundleSha256: string;
+  htmlByPath: Record<string, string>;
+  compiledTokenStyles: string;
+  assetFingerprintMap: Record<string, string>;
+  manifest: Record<string, unknown>;
+  publishStage: RuntimeArtifact["publishStage"];
+  shadowRestricted: boolean;
+  artifactGovernance: RuntimeArtifact["artifactGovernance"];
+  dbClient?: RuntimeStoreDbClient;
+}): Promise<{ affectedRows: number }> {
+  return withTx(async (client) => {
+    const updated = await client.query<{ id: string }>(
+      `
+      update public.gnr8_runtime_artifacts
+      set
+        renderer_compatibility_version = $4::text,
+        bundle_sha256 = $5::text,
+        html_by_path = $6::jsonb,
+        compiled_token_styles = $7::text,
+        asset_fingerprint_map = $8::jsonb,
+        manifest = $9::jsonb,
+        publish_stage = $10::text,
+        shadow_restricted = $11::boolean,
+        artifact_governance = $12::jsonb
+      where id = $1::uuid
+        and site_id = $2::text
+        and site_version_id = $3::uuid
+      returning id::text as id
+      `,
+      [
+        input.artifactId,
+        input.siteId,
+        input.siteVersionId,
+        input.rendererCompatibilityVersion,
+        input.bundleSha256,
+        JSON.stringify(input.htmlByPath),
+        input.compiledTokenStyles,
+        JSON.stringify(input.assetFingerprintMap),
+        JSON.stringify(input.manifest),
+        input.publishStage,
+        input.shadowRestricted,
+        JSON.stringify(input.artifactGovernance),
+      ],
+    );
+    if (!updated.rows[0]) {
+      throw new Error(
+        `PUBLISH_LINEAGE_MISMATCH:${JSON.stringify({
+          message: "Bound artifact could not be refreshed because its site/version lineage does not match the publish candidate.",
+          details: {
+            artifactId: input.artifactId,
+            expectedSiteId: input.siteId,
+            expectedSiteVersionId: input.siteVersionId,
+          },
+        })}`,
+      );
+    }
+    return { affectedRows: updated.rowCount ?? 0 };
+  }, { dbClient: input.dbClient });
+}
+
 export async function bindArtifactToVersion(input: {
   siteVersionId: string;
   artifactId: string;

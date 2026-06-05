@@ -9,6 +9,7 @@ import {
   IMPORTED_RUNTIME_RECONCILIATION_CONFIRM,
   type ImportedRuntimeReconciliationDependencies,
 } from "@/gnr8/runtime/imported-runtime-reconciliation";
+import { evaluatePublishActivationCandidate } from "@/gnr8/runtime/publish-activation-guard";
 import type { RuntimeStoreDbClient } from "@/gnr8/runtime/runtime-store";
 import type {
   RuntimeHostBinding,
@@ -43,6 +44,7 @@ type FakeState = {
   runtimeArtifacts: Map<string, RuntimeArtifact>;
   rawArtifacts: Map<string, RawImportedSiteArtifact>;
   publishFails: boolean;
+  publishLineageMismatch: boolean;
   writes: {
     ownershipLinks: number;
     governanceMaterializations: number;
@@ -53,7 +55,8 @@ type FakeState = {
   };
 };
 
-function runtimeArtifact(input: { id: string; siteId: string; siteVersionId: string }): RuntimeArtifact {
+function runtimeArtifact(input: { id: string; siteId: string; siteVersionId: string; publishStage?: "shadow" | "canary" | "production" }): RuntimeArtifact {
+  const publishStage = input.publishStage ?? "production";
   return {
     id: input.id,
     siteId: input.siteId,
@@ -62,17 +65,23 @@ function runtimeArtifact(input: { id: string; siteId: string; siteVersionId: str
     htmlByPath: { "/": "<html>runtime artifact</html>" },
     compiledTokenStyles: "",
     assetFingerprintMap: {},
-    manifest: {},
-    publishStage: "production",
+    manifest: {
+      siteId: input.siteId,
+      siteVersionId: input.siteVersionId,
+      rendererCompatibilityVersion: "gnr8-renderer-v1",
+      paths: ["/"],
+      publishStage,
+    },
+    publishStage,
     shadowRestricted: false,
     artifactGovernance: {
-      pageGateState: [],
-      pageRolloutPolicyState: [],
-      pageEnforcementState: { shadow: [], canary: [], production: [] },
+      pageGateState: ["PRODUCTION_CANDIDATE"],
+      pageRolloutPolicyState: ["CANARY_ALLOWED"],
+      pageEnforcementState: { shadow: ["ALLOW"], canary: ["ALLOW"], production: ["ALLOW"] },
       siteGateState: "passed",
       siteRolloutPolicyState: "passed",
       siteEnforcementState: { shadow: "ALLOW", canary: "ALLOW", production: "ALLOW" },
-      publishStage: "production",
+      publishStage,
     },
     bundleSha256: "sha",
     createdAt: "2026-06-01T00:00:00.000Z",
@@ -220,6 +229,7 @@ function createState(overrides: {
   rawFileCount?: number;
   pageGovernance?: PageMigrationGovernanceSnapshot | null;
   publishFails?: boolean;
+  publishLineageMismatch?: boolean;
 } = {}): FakeState {
   const importedRuntimeArtifact = runtimeArtifact({
     id: "runtime-artifact-imported-existing",
@@ -345,6 +355,7 @@ function createState(overrides: {
       ? new Map()
       : new Map([[IMPORTED_VERSION_ID, rawArtifact(overrides.rawFileCount ?? 374, { omitEntryFile: overrides.rawEntryMissing })]]),
     publishFails: Boolean(overrides.publishFails),
+    publishLineageMismatch: Boolean(overrides.publishLineageMismatch),
     writes: { ownershipLinks: 0, governanceMaterializations: 0, transitions: [], publishes: 0, transfers: 0, publishEnforcementChecked: false },
   };
 }
@@ -415,8 +426,34 @@ function createDeps(state: FakeState): ImportedRuntimeReconciliationDependencies
       if (state.publishFails) {
         throw new Error("publish_failed_after_governance_check");
       }
-      const artifactId = "runtime-artifact-imported-published";
-      const artifact = runtimeArtifact({ id: artifactId, siteId: version.siteId, siteVersionId: version.id });
+      const artifactId = version.artifactId ?? "runtime-artifact-imported-published";
+      const artifact = runtimeArtifact({
+        id: artifactId,
+        siteId: state.publishLineageMismatch ? "site_wrong_lineage" : version.siteId,
+        siteVersionId: version.id,
+        publishStage: "production",
+      });
+      const candidateValidation = evaluatePublishActivationCandidate({
+        candidateRef: `runtime-site-version:${version.id}`,
+        candidateState: "READY_FOR_SHADOW_BIND",
+        shadowEligibilityState: "ALLOWED",
+        artifactId,
+        siteVersionId: version.id,
+        expectedSiteId: version.siteId,
+        expectedSiteVersionId: version.id,
+        expectedArtifactId: artifactId,
+        expectedRendererCompatibilityVersion: "gnr8-renderer-v1",
+        expectedPublishStage: "production",
+        artifact,
+      });
+      if (!candidateValidation.ok) {
+        throw new Error(
+          `${candidateValidation.code}:${JSON.stringify({
+            message: candidateValidation.message,
+            details: candidateValidation.details ?? {},
+          })}`,
+        );
+      }
       state.runtimeArtifacts.set(artifactId, artifact);
       version.artifactId = artifactId;
       version.state = "PUBLISHED";
@@ -695,6 +732,28 @@ test("reconcile imported runtime apply does not transfer host if publish fails",
   assert.equal(state.hostBinding?.siteId, OLD_SITE_ID);
 });
 
+test("reconcile imported runtime apply does not transfer host if publish lineage guard fails", async () => {
+  const state = createState({ publishLineageMismatch: true });
+
+  await assert.rejects(
+    () =>
+      applyImportedRuntimeReconciliation(
+        input({ mode: "apply", apply: true, confirm: IMPORTED_RUNTIME_RECONCILIATION_CONFIRM }),
+        createDeps(state),
+      ),
+    (error: unknown) => {
+      assert(error instanceof Error);
+      assert.match(error.message, /^PUBLISH_LINEAGE_MISMATCH:/);
+      assert.match(error.message, /artifactSiteId/);
+      return true;
+    },
+  );
+
+  assert.equal(state.writes.publishEnforcementChecked, true);
+  assert.equal(state.writes.transfers, 0);
+  assert.equal(state.hostBinding?.siteId, OLD_SITE_ID);
+});
+
 test("reconcile imported runtime apply transfers host binding", async () => {
   const state = createState();
   const result = await applyImportedRuntimeReconciliation(
@@ -856,6 +915,30 @@ test("reconcile imported runtime route apply releases shared client when publish
   assert.equal(state.writes.publishEnforcementChecked, true);
   assert.equal(state.writes.transfers, 0);
   assert.equal(state.hostBinding?.siteId, OLD_SITE_ID);
+});
+
+test("reconcile imported runtime route returns publish lineage mismatch details", async () => {
+  const state = createState({ publishLineageMismatch: true });
+  const handlers = createReconcileImportedRuntimeRouteHandlers({
+    requireSuperadminUserId: async () => "superadmin_1",
+    createImportedRuntimeReconciliationPlan,
+    applyImportedRuntimeReconciliation,
+    withSuperadminClient: async (fn) => fn(createFakeDbClient()),
+    createImportedRuntimeReconciliationDbDependencies: () => createDeps(state),
+  });
+
+  const response = await handlers.POST(
+    new Request("http://localhost/api/gnr8/admin/hosting-operations/reconcile-imported-runtime", {
+      method: "POST",
+      body: JSON.stringify(input({ mode: "apply", apply: true, confirm: IMPORTED_RUNTIME_RECONCILIATION_CONFIRM })),
+    }),
+  );
+
+  assert.equal(response.status, 409);
+  const body = (await response.json()) as { error: string; details: { mismatchFields?: string[] } };
+  assert.equal(body.error, "PUBLISH_LINEAGE_MISMATCH");
+  assert.deepEqual(body.details.mismatchFields, ["artifactSiteId", "manifestSiteId"]);
+  assert.equal(state.writes.transfers, 0);
 });
 
 test("reconcile imported runtime route is superadmin-only", async () => {
