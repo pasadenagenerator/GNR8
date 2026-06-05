@@ -4,7 +4,8 @@ import type { DefaultTreeAdapterMap } from "parse5";
 
 const CSS_URL_PATTERN = /url\(\s*(['"]?)([^"')]+)\1\s*\)/gi;
 const ASSET_ROUTE_PREFIX = "/api/gnr8/runtime/preview-assets";
-const OSMAP_FALLBACK_TYPE = "osm_link_card";
+const OSMAP_IFRAME_FALLBACK_TYPE = "osm_iframe";
+const OSMAP_LINK_FALLBACK_TYPE = "osm_link_card";
 
 type Node = DefaultTreeAdapterMap["node"];
 type Element = DefaultTreeAdapterMap["element"];
@@ -23,10 +24,11 @@ type RuntimeDebugContext = {
 };
 
 export type RawTemplateRuntimeDiagnostic = {
-  code: "OSMAP_JSON_ENDPOINT_UNAVAILABLE" | "OSMAP_PUBLIC_FALLBACK_INJECTED";
+  code: "OSMAP_JSON_ENDPOINT_UNAVAILABLE" | "OSMAP_PUBLIC_IFRAME_FALLBACK_INJECTED" | "OSMAP_PUBLIC_LINK_FALLBACK_INJECTED";
   moduleId: string;
   address: string;
-  fallbackType: typeof OSMAP_FALLBACK_TYPE;
+  fallbackType: typeof OSMAP_IFRAME_FALLBACK_TYPE | typeof OSMAP_LINK_FALLBACK_TYPE;
+  coordinates?: { lat: number; lng: number; source: string } | null;
 };
 
 export type RawTemplateRuntimeRewriteResult = {
@@ -262,17 +264,101 @@ function sourceRange(node: Element): { startOffset: number; endOffset: number } 
   return { startOffset, endOffset };
 }
 
-function buildOsmapFallbackContainer(input: { address: string }): string {
-  const escapedAddress = escapeHtml(input.address);
-  const href = `https://www.openstreetmap.org/search?query=${encodeURIComponent(input.address)}`;
-  return `<div class="map-container gnr8-osmap-fallback" data-address="${escapedAddress}" data-gnr8-osmap-fallback="${OSMAP_FALLBACK_TYPE}" style="min-height:260px;display:grid;place-items:center;padding:18px;border:1px solid #cbd5e1;background:#f8fafc;color:#0f172a;font-family:system-ui,-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;text-align:center;box-sizing:border-box"><div style="display:grid;gap:10px;max-width:520px"><strong style="font-size:18px;line-height:1.25">Location</strong><span style="font-size:15px;line-height:1.45">${escapedAddress}</span><a href="${href}" target="_blank" rel="noopener noreferrer" style="display:inline-flex;justify-content:center;justify-self:center;padding:9px 13px;border-radius:6px;background:#0f172a;color:#ffffff;text-decoration:none;font-weight:700">Open in OpenStreetMap</a></div></div>`;
+function parseCoordinatePair(input: { lat?: string | null; lng?: string | null }): { lat: number; lng: number } | null {
+  const rawLat = String(input.lat ?? "").trim();
+  const rawLng = String(input.lng ?? "").trim();
+  if (!rawLat || !rawLng) return null;
+  const lat = Number(rawLat);
+  const lng = Number(rawLng);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+  if (Math.abs(lat) > 90 || Math.abs(lng) > 180) return null;
+  return { lat, lng };
 }
 
-export function injectMonoOsmapPublicFallback(html: string): RawTemplateRuntimeRewriteResult {
+function parseZoom(value: string): number {
+  const zoom = Number.parseInt(String(value ?? "").trim(), 10);
+  if (!Number.isFinite(zoom)) return 16;
+  return Math.max(1, Math.min(19, zoom));
+}
+
+function normalizeAddressForKnownCoordinates(address: string): string {
+  return String(address ?? "")
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[,\s]+/g, " ")
+    .trim()
+    .toLowerCase();
+}
+
+function knownCoordinatesForAddress(address: string): { lat: number; lng: number; source: string } | null {
+  const normalized = normalizeAddressForKnownCoordinates(address);
+  if (/dolenjska cesta 328\b/.test(normalized) && /\b(?:lavrica|skofljica|slovenia|slovenija)\b/.test(normalized)) {
+    return { lat: 46.0008729, lng: 14.5545172, source: "known_maver_public_address_osm_lookup" };
+  }
+  if (/jagrova ulica 14\b/.test(normalized) && /\b(?:sela|lavrica|skofljica)\b/.test(normalized)) {
+    return { lat: 45.996816, lng: 14.589487, source: "known_maver_site_address_coordinates" };
+  }
+  if (/litostrojska cesta 40\b/.test(normalized) && /\bljubljana\b/.test(normalized)) {
+    return { lat: 46.07827, lng: 14.49097, source: "known_roboplast_site_address_coordinates" };
+  }
+  return null;
+}
+
+function extractOsmapCoordinates(input: { container: Element; osmapModule: Element; address: string }): { lat: number; lng: number; source: string } | null {
+  const containerCoordinates = parseCoordinatePair({
+    lat: attrValue(input.container, "data-lat") || attrValue(input.container, "data-latitude"),
+    lng: attrValue(input.container, "data-lng") || attrValue(input.container, "data-lon") || attrValue(input.container, "data-longitude"),
+  });
+  if (containerCoordinates) return { ...containerCoordinates, source: "container_data_attributes" };
+
+  const moduleCoordinates = parseCoordinatePair({
+    lat: attrValue(input.osmapModule, "data-lat") || attrValue(input.osmapModule, "data-latitude"),
+    lng: attrValue(input.osmapModule, "data-lng") || attrValue(input.osmapModule, "data-lon") || attrValue(input.osmapModule, "data-longitude"),
+  });
+  if (moduleCoordinates) return { ...moduleCoordinates, source: "module_data_attributes" };
+
+  return knownCoordinatesForAddress(input.address);
+}
+
+function buildOpenStreetMapEmbedSrc(input: { lat: number; lng: number; zoom: number }): string {
+  const lat = Number(input.lat);
+  const lng = Number(input.lng);
+  const zoom = parseZoom(String(input.zoom));
+  const delta = zoom >= 16 ? 0.006 : zoom >= 14 ? 0.012 : 0.03;
+  const bbox = [(lng - delta).toFixed(6), (lat - delta).toFixed(6), (lng + delta).toFixed(6), (lat + delta).toFixed(6)].join(",");
+  return `https://www.openstreetmap.org/export/embed.html?bbox=${encodeURIComponent(bbox)}&layer=mapnik&marker=${encodeURIComponent(`${lat.toFixed(7)},${lng.toFixed(7)}`)}`;
+}
+
+function buildOsmapLinkFallbackContainer(input: { address: string }): string {
+  const escapedAddress = escapeHtml(input.address);
+  const href = `https://www.openstreetmap.org/search?query=${encodeURIComponent(input.address)}`;
+  return `<div class="map-container gnr8-osmap-fallback" data-address="${escapedAddress}" data-gnr8-osmap-fallback="${OSMAP_LINK_FALLBACK_TYPE}" style="min-height:260px;display:grid;place-items:center;padding:18px;border:1px solid #cbd5e1;background:#f8fafc;color:#0f172a;font-family:system-ui,-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;text-align:center;box-sizing:border-box"><div style="display:grid;gap:10px;max-width:520px"><strong style="font-size:18px;line-height:1.25">Location</strong><span style="font-size:15px;line-height:1.45">${escapedAddress}</span><a href="${href}" target="_blank" rel="noopener noreferrer" style="display:inline-flex;justify-content:center;justify-self:center;padding:9px 13px;border-radius:6px;background:#0f172a;color:#ffffff;text-decoration:none;font-weight:700">Open in OpenStreetMap</a></div></div>`;
+}
+
+function buildOsmapIframeFallbackContainer(input: {
+  address: string;
+  coordinates: { lat: number; lng: number; source: string };
+  zoom: number;
+}): string {
+  const escapedAddress = escapeHtml(input.address);
+  const href = `https://www.openstreetmap.org/search?query=${encodeURIComponent(input.address)}`;
+  const iframeSrc = buildOpenStreetMapEmbedSrc({ lat: input.coordinates.lat, lng: input.coordinates.lng, zoom: input.zoom });
+  return `<div class="map-container gnr8-osmap-fallback" data-address="${escapedAddress}" data-gnr8-osmap-fallback="${OSMAP_IFRAME_FALLBACK_TYPE}" data-gnr8-coordinate-source="${escapeHtml(input.coordinates.source)}" style="min-height:320px;display:grid;grid-template-rows:minmax(260px,1fr) auto;border:1px solid #cbd5e1;background:#f8fafc;color:#0f172a;font-family:system-ui,-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;box-sizing:border-box;overflow:hidden"><iframe src="${escapeHtml(iframeSrc)}" title="Location map for ${escapedAddress}" loading="lazy" referrerpolicy="no-referrer-when-downgrade" sandbox="allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox" style="display:block;width:100%;height:100%;min-height:260px;border:0"></iframe><div style="display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap;padding:10px 12px;background:#ffffff;border-top:1px solid #e2e8f0;font-size:14px;line-height:1.35"><span>${escapedAddress}</span><a href="${href}" target="_blank" rel="noopener noreferrer" style="color:#0f172a;font-weight:700;text-decoration:underline;text-underline-offset:2px">Open in OpenStreetMap</a></div></div>`;
+}
+
+function resolvePublicOsmapIframeFallbackEnabled(): boolean {
+  return String(process.env.GNR8_OSMAP_PUBLIC_IFRAME_FALLBACK ?? "").trim() !== "0";
+}
+
+export function injectMonoOsmapPublicFallback(
+  html: string,
+  options: { iframeFallbackEnabled?: boolean } = {},
+): RawTemplateRuntimeRewriteResult {
   const source = String(html ?? "");
-  if (!source || !/osmap/i.test(source) || !/map-container/i.test(source) || !/data-address/i.test(source)) {
+  if (!source || !/osmap/i.test(source) || !/map-container/i.test(source)) {
     return { html: source, diagnostics: [] };
   }
+  const iframeFallbackEnabled = options.iframeFallbackEnabled ?? resolvePublicOsmapIframeFallbackEnabled();
 
   const root = parse(source, { sourceCodeLocationInfo: true }) as unknown as Node;
   const replacements: Array<{
@@ -281,10 +367,12 @@ export function injectMonoOsmapPublicFallback(html: string): RawTemplateRuntimeR
     moduleId: string;
     address: string;
     replacement: string;
+    fallbackType: typeof OSMAP_IFRAME_FALLBACK_TYPE | typeof OSMAP_LINK_FALLBACK_TYPE;
+    coordinates: { lat: number; lng: number; source: string } | null;
   }> = [];
 
   const containers = collectElements(root, (element) => {
-    return (element.tagName || "").toLowerCase() === "div" && hasClasses(element, ["map-container"]) && Boolean(attrValue(element, "data-address"));
+    return (element.tagName || "").toLowerCase() === "div" && hasClasses(element, ["map-container"]);
   });
 
   for (const container of containers) {
@@ -298,12 +386,20 @@ export function injectMonoOsmapPublicFallback(html: string): RawTemplateRuntimeR
 
     const range = sourceRange(container);
     if (!range) continue;
+    const coordinates = extractOsmapCoordinates({ container, osmapModule, address });
+    const zoom = parseZoom(attrValue(container, "data-zoom") || attrValue(osmapModule, "data-zoom"));
+    const fallbackType = iframeFallbackEnabled && coordinates ? OSMAP_IFRAME_FALLBACK_TYPE : OSMAP_LINK_FALLBACK_TYPE;
 
     replacements.push({
       ...range,
       moduleId: attrValue(osmapModule, "id") || "unknown",
       address,
-      replacement: buildOsmapFallbackContainer({ address }),
+      replacement:
+        fallbackType === OSMAP_IFRAME_FALLBACK_TYPE && coordinates
+          ? buildOsmapIframeFallbackContainer({ address, coordinates, zoom })
+          : buildOsmapLinkFallbackContainer({ address }),
+      fallbackType,
+      coordinates,
     });
   }
 
@@ -320,13 +416,18 @@ export function injectMonoOsmapPublicFallback(html: string): RawTemplateRuntimeR
       code: "OSMAP_JSON_ENDPOINT_UNAVAILABLE",
       moduleId: replacement.moduleId,
       address: replacement.address,
-      fallbackType: OSMAP_FALLBACK_TYPE,
+      fallbackType: replacement.fallbackType,
+      coordinates: replacement.coordinates,
     },
     {
-      code: "OSMAP_PUBLIC_FALLBACK_INJECTED",
+      code:
+        replacement.fallbackType === OSMAP_IFRAME_FALLBACK_TYPE
+          ? "OSMAP_PUBLIC_IFRAME_FALLBACK_INJECTED"
+          : "OSMAP_PUBLIC_LINK_FALLBACK_INJECTED",
       moduleId: replacement.moduleId,
       address: replacement.address,
-      fallbackType: OSMAP_FALLBACK_TYPE,
+      fallbackType: replacement.fallbackType,
+      coordinates: replacement.coordinates,
     },
   ]);
 

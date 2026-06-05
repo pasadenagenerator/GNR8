@@ -260,7 +260,7 @@ test("public runtime host match serves raw imported Maver HTML before recovered 
   }
 });
 
-test("Mono osmap public fallback rewrites Maver-style map container to safe OSM link card", () => {
+test("Mono osmap public fallback rewrites Maver-style map container to safe OSM iframe fallback", () => {
   const source =
     '<!doctype html><html><body><div id="m4482" class="module map osmap" data-url="?m=m4482" data-req-lazy="mapbox-gl,leaflet,osmap"><div class="map-container cookieconsent-optin-marketing" data-address="Dolenjska cesta 328 Lavrica 1291 Slovenia" data-zoom="16"></div></div></body></html>';
 
@@ -268,15 +268,52 @@ test("Mono osmap public fallback rewrites Maver-style map container to safe OSM 
 
   assert.match(result.html, /class="map-container gnr8-osmap-fallback"/);
   assert.match(result.html, /data-address="Dolenjska cesta 328 Lavrica 1291 Slovenia"/);
+  assert.match(result.html, /data-gnr8-osmap-fallback="osm_iframe"/);
+  assert.match(result.html, /data-gnr8-coordinate-source="known_maver_public_address_osm_lookup"/);
+  assert.match(result.html, /<iframe /);
+  assert.match(result.html, /https:\/\/www\.openstreetmap\.org\/export\/embed\.html\?bbox=/);
+  assert.match(result.html, /marker=46\.0008729%2C14\.5545172/);
   assert.match(result.html, /https:\/\/www\.openstreetmap\.org\/search\?query=Dolenjska%20cesta%20328%20Lavrica%201291%20Slovenia/);
   assert.match(result.html, /Open in OpenStreetMap/);
   assert.equal(result.html.includes("cookieconsent-optin-marketing"), false);
   assert.deepEqual(
     result.diagnostics.map((diagnostic) => diagnostic.code),
-    ["OSMAP_JSON_ENDPOINT_UNAVAILABLE", "OSMAP_PUBLIC_FALLBACK_INJECTED"],
+    ["OSMAP_JSON_ENDPOINT_UNAVAILABLE", "OSMAP_PUBLIC_IFRAME_FALLBACK_INJECTED"],
   );
   assert.equal(result.diagnostics[0]?.moduleId, "m4482");
   assert.equal(result.diagnostics[0]?.address, "Dolenjska cesta 328 Lavrica 1291 Slovenia");
+  assert.equal(result.diagnostics[0]?.fallbackType, "osm_iframe");
+  assert.deepEqual(result.diagnostics[0]?.coordinates, {
+    lat: 46.0008729,
+    lng: 14.5545172,
+    source: "known_maver_public_address_osm_lookup",
+  });
+});
+
+test("Mono osmap public fallback uses explicit coordinates before known address coordinates", () => {
+  const source =
+    '<!doctype html><html><body><div id="m4482" class="module map osmap"><div class="map-container" data-address="Dolenjska cesta 328 Lavrica 1291 Slovenia" data-lat="45.1" data-lng="14.2" data-zoom="13"></div></div></body></html>';
+
+  const result = injectMonoOsmapPublicFallback(source);
+
+  assert.match(result.html, /data-gnr8-osmap-fallback="osm_iframe"/);
+  assert.match(result.html, /marker=45\.1000000%2C14\.2000000/);
+  assert.equal(result.diagnostics[0]?.coordinates?.source, "container_data_attributes");
+});
+
+test("Mono osmap public fallback keeps safe link card when iframe mode is disabled", () => {
+  const source =
+    '<!doctype html><html><body><div id="m4482" class="module map osmap" data-url="?m=m4482"><div class="map-container" data-address="Dolenjska cesta 328 Lavrica 1291 Slovenia" data-zoom="16"></div></div></body></html>';
+
+  const result = injectMonoOsmapPublicFallback(source, { iframeFallbackEnabled: false });
+
+  assert.match(result.html, /data-gnr8-osmap-fallback="osm_link_card"/);
+  assert.doesNotMatch(result.html, /<iframe /);
+  assert.match(result.html, /Open in OpenStreetMap/);
+  assert.deepEqual(
+    result.diagnostics.map((diagnostic) => diagnostic.code),
+    ["OSMAP_JSON_ENDPOINT_UNAVAILABLE", "OSMAP_PUBLIC_LINK_FALLBACK_INJECTED"],
+  );
   assert.equal(result.diagnostics[0]?.fallbackType, "osm_link_card");
 });
 
@@ -288,12 +325,13 @@ test("Mono osmap public fallback leaves non-map HTML unchanged", () => {
   assert.deepEqual(result.diagnostics, []);
 });
 
-test("Mono osmap public fallback skips missing data-address without invalid fallback", () => {
+test("Mono osmap public fallback skips missing data-address without invalid iframe or link", () => {
   const source =
     '<!doctype html><html><body><div id="m4482" class="module map osmap"><div class="map-container" data-zoom="16"></div></div></body></html>';
   const result = injectMonoOsmapPublicFallback(source);
 
   assert.equal(result.html, source);
+  assert.doesNotMatch(result.html, /<iframe /);
   assert.doesNotMatch(result.html, /openstreetmap\.org\/search\?query=/);
   assert.deepEqual(result.diagnostics, []);
 });
@@ -306,7 +344,10 @@ test("Mono osmap public fallback escapes visible address and URL-encodes href sa
   assert.match(result.html, /data-address="&quot;&gt;&lt;script&gt;alert\(1\)&lt;\/script&gt; &amp; Lavrica"/);
   assert.match(result.html, /%22%3E%3Cscript%3Ealert\(1\)%3C%2Fscript%3E%20%26%20Lavrica/);
   assert.doesNotMatch(result.html, /<script>alert\(1\)<\/script>/);
+  assert.doesNotMatch(result.html, /<iframe /);
+  assert.doesNotMatch(result.html, /<script\b/);
   assert.equal(result.diagnostics[0]?.moduleId, "map-danger");
+  assert.equal(result.diagnostics[0]?.fallbackType, "osm_link_card");
 });
 
 test("public raw-template rendering injects Mono osmap fallback diagnostics", async () => {
@@ -340,21 +381,22 @@ test("public raw-template rendering injects Mono osmap fallback diagnostics", as
     assert.equal(response.status, 200);
     const html = await response.text();
 
-    assert.match(html, /data-gnr8-osmap-fallback="osm_link_card"/);
+    assert.match(html, /data-gnr8-osmap-fallback="osm_iframe"/);
+    assert.match(html, /openstreetmap\.org\/export\/embed\.html/);
     assert.match(html, /Open in OpenStreetMap/);
     assert.match(html, /data-url="\?m=m4482"/);
     assert.equal(
       entries.some(
         (entry) =>
           entry.message.includes("OSMAP_JSON_ENDPOINT_UNAVAILABLE") &&
-          JSON.stringify(entry.args).includes("m4482") &&
-          JSON.stringify(entry.args).includes("Dolenjska cesta 328 Lavrica 1291 Slovenia") &&
-          JSON.stringify(entry.args).includes("osm_link_card"),
+            JSON.stringify(entry.args).includes("m4482") &&
+            JSON.stringify(entry.args).includes("Dolenjska cesta 328 Lavrica 1291 Slovenia") &&
+            JSON.stringify(entry.args).includes("osm_iframe"),
       ),
       true,
     );
     assert.equal(
-      entries.some((entry) => entry.message.includes("OSMAP_PUBLIC_FALLBACK_INJECTED")),
+      entries.some((entry) => entry.message.includes("OSMAP_PUBLIC_IFRAME_FALLBACK_INJECTED")),
       true,
     );
   } finally {
