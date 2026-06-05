@@ -6,7 +6,7 @@ Track migration-first MVP runtime progress separately from Website OS work.
 
 ## Current Status
 
-Migration Runtime + Command Center MVP is operational and smoke-tested through Phase 6C-B.
+Migration Runtime + Command Center MVP is operational and smoke-tested through Phase 6.
 
 Phase 5A adds Command Center migration batch list/detail UI, batch summary, diagnostics, failure reporting, timeline visibility, and operator run/resume controls. Execution remains operator-driven. Queue/worker orchestration and unattended execution do not exist yet.
 
@@ -20,11 +20,17 @@ Phase 6C-A2 separates internal/working domains from external/custom domains so o
 
 Phase 6C-B completes Asset Diagnostics Drilldown, including asset diagnostics summary, severity classification, remediation guidance, and empty-state handling on hosting detail.
 
+Phase 6C completes Hosting Hardening, Active Serving Consistency, Imported Runtime Reconciliation, Governance Reconciliation, Publish Lineage Reconciliation, and Host-Binding Raw Template Serving.
+
+Phase 6D completes Mono Map Compatibility Restoration and Maver Production Validation.
+
+Phase 6 is COMPLETE.
+
 Website OS runtime expansion remains paused.
 
 ## Critical Path
 
-Import -> CMS -> Renderer -> Durable Jobs -> Durable Batches -> Batch Execution -> Batch Execution Observability -> Command Center -> Hosting Operations -> Hosting Hardening Reality Check Refresh -> Billing
+Import -> CMS -> Renderer -> Durable Jobs -> Durable Batches -> Batch Execution -> Batch Execution Observability -> Command Center -> Hosting Operations -> Hosting Hardening -> Phase 7B Multi-Page Import MVP -> Billing
 
 ## Completed Reality Checks
 
@@ -419,6 +425,57 @@ Explicit exclusions:
 - No synthetic monitoring.
 - No provider execution automation.
 
+### Phase 6 Final Completion — Hosting Operations + Hosting Hardening
+
+Goal:
+- Close the full Phase 6 track after production validation.
+
+Phase 6C completion summary:
+- Hosting Hardening completed.
+- Active Serving Consistency completed.
+- Canonical Active Serving Resolution completed.
+- Imported Runtime Reconciliation completed.
+- Governance Reconciliation completed.
+- Publish Lineage Reconciliation completed.
+- Host-Binding Raw Template Serving completed.
+- Raw imported production serving completed.
+
+Phase 6D completion summary:
+- Mono Map Compatibility Restoration completed.
+- Compatibility-based runtime adaptation validated in production.
+- OpenStreetMap compatibility fallback validated.
+- Maver Production Validation completed.
+
+Production Maver validation summary:
+- Maver (`transportimaver.si`) successfully serves through the GNR8 runtime.
+- Active pointer resolution validated.
+- Host binding resolution validated.
+- Raw imported artifact serving validated.
+- Governance enforcement validated.
+- Publish activation validated.
+- Imported runtime reconciliation validated.
+- Asset serving validated.
+- Compatibility rendering validated.
+- OpenStreetMap compatibility fallback validated.
+- Result: pixel-perfect production clone successfully served through GNR8 runtime.
+
+Provider Architecture decision summary:
+- Canonical provider architecture has three provider classes: Infrastructure Providers, Runtime Service Providers, and Compatibility Providers.
+- Compatibility Providers convert source-system functionality into GNR8-native blocks rendered through approved runtime providers.
+- Mono Map compatibility uses the compatibility provider path: Mono Map -> extract address/coords -> generate GNR8 Map Block -> render through Leaflet/OpenStreetMap Runtime Provider.
+
+Execution boundary:
+- Hosting Operations remains read-only.
+- No DNS/provider execution was introduced.
+- No rollback workflow UI was introduced.
+- No autonomous execution was introduced.
+
+Status:
+- Phase 6 COMPLETE.
+
+Next milestone:
+- Phase 7B — Multi-Page Import MVP
+
 ## Current State
 
 Hosting Operations state:
@@ -429,14 +486,18 @@ Completed:
 - Phase 6C-A
 - Phase 6C-A2
 - Phase 6C-B
+- Phase 6C
+- Phase 6D
 
 Hosting Operations MVP complete.
+Hosting Hardening complete.
+Phase 6 complete.
 
 ## Current Remaining Work
 
 ### Near-term
 
-- Hosting Hardening Reality Check Refresh
+- Phase 7B — Multi-Page Import MVP
 - Billing Reality Check
 
 ### Optional Runtime UX

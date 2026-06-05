@@ -2,14 +2,15 @@
 
 This is the first file every new ChatGPT/Codex thread should read.
 
-## Current Active Track: Migration Platform MVP Buildout
+## Current Active Track: Phase 7B — Multi-Page Import MVP
 
 Website OS branch status:
 - Closed/frozen/paused.
 - Do not continue Website OS runtime expansion unless explicitly requested.
 
 Latest completed milestone:
-- Phase 6C-B — Asset Diagnostics Drilldown.
+- Phase 6 — Hosting Operations + Hosting Hardening.
+- Status: COMPLETE.
 
 Production smoke-test:
 - completed successfully.
@@ -18,6 +19,8 @@ Production smoke-test:
 - verified `/gnr8/command-center/hosting/[siteId]`.
 - verified hosting overview, hosting detail, active version, active artifact, publish timestamp, runtime readiness, readiness drilldown, internal/working domains, external/custom domains, DNS instruction visibility, domain recheck workflow, asset diagnostics summary, and runtime diagnostics.
 - verified asset diagnostics drilldown summary, severity classification, remediation guidance, and empty-state handling on hosting detail.
+- verified Maver (`transportimaver.si`) production serving through the GNR8 runtime.
+- verified active pointer resolution, host binding resolution, raw imported artifact serving, governance enforcement, publish activation, asset serving, compatibility rendering, and OpenStreetMap compatibility fallback.
 
 Dedicated progress doc:
 - `docs/ai/MIGRATION_RUNTIME_PROGRESS.md`
@@ -35,10 +38,18 @@ Current completed chain:
 - Batch Execution Observability
 - Command Center Integration MVP
 - Hosting Operations MVP
+- Hosting Hardening
 - Hosting Operations Workflow Review
 - Readiness & Domain Operations MVP
 - Internal vs Custom Domain Visibility
 - Asset Diagnostics Drilldown
+- Active Serving Consistency
+- Imported Runtime Reconciliation
+- Governance Reconciliation
+- Publish Lineage Reconciliation
+- Host-Binding Raw Template Serving
+- Mono Map Compatibility Restoration
+- Maver Production Validation
 
 Latest completed migration capabilities:
 - `MigrationBatchExecutor`
@@ -79,6 +90,12 @@ Latest completed migration capabilities:
 - asset diagnostics empty-state handling
 - runtime diagnostics visibility
 - ownership site ID to runtime site ID detail resolution
+- Hosting Operations
+- Asset Diagnostics
+- Active Serving Consistency
+- Imported Runtime Reconciliation
+- Production Validation
+- Mono Compatibility Validation
 
 Completed migration-first chain:
 - Import
@@ -90,8 +107,22 @@ Completed migration-first chain:
 - Batch Execution Observability
 - Command Center Integration
 - Hosting Operations
+- Hosting Hardening
+- Imported Runtime Reconciliation
+- Governance Reconciliation
+- Publish Lineage Reconciliation
+- Host-Binding Raw Template Serving
+- Mono Map Compatibility Restoration
+- Maver Production Validation
 
-Phase 6C-A / 6C-A2 / 6C-B completion notes:
+Phase 6 completion notes:
+- Phase 6 is COMPLETE.
+- Hosting Operations MVP is complete.
+- Hosting Hardening is complete.
+- Canonical Active Serving Resolution is complete.
+- Imported Runtime Reconciliation is complete.
+- Raw imported production serving is complete.
+- Compatibility-based runtime adaptation has been validated in production.
 - Readiness drilldown and domain operations are operational in Hosting Operations.
 - Internal/working domains and external/custom domains are separated for operator visibility.
 - DNS instructions and domain recheck workflow are visible without introducing DNS execution.
@@ -99,17 +130,19 @@ Phase 6C-A / 6C-A2 / 6C-B completion notes:
 - Asset diagnostics now expose summary, severity classification, remediation guidance, and empty-state handling.
 - Production hosting smoke verification passed for the hosting overview and hosting detail routes.
 - Production asset diagnostics drilldown smoke verification passed.
+- Maver (`transportimaver.si`) successfully serves through the GNR8 runtime as a pixel-perfect production clone.
+- Mono compatibility validation restored map rendering through the Leaflet/OpenStreetMap runtime provider.
 - Publish workflow remains read-only from Hosting Operations.
 - Rollback UI remains intentionally excluded.
 - No DNS/provider execution was introduced.
 - Website OS remains frozen.
 
 Current critical path:
-- Phase 5B — Job Detail + Stage Diagnostics UI (optional)
+- Phase 7B — Multi-Page Import MVP
 - Billing
 
 Next recommended milestone:
-- Hosting Hardening Reality Check Refresh.
+- Phase 7B — Multi-Page Import MVP.
 
 Explicit exclusions still in force:
 - no Website OS runtime expansion
@@ -140,8 +173,7 @@ Dedicated pause note:
 - Future continuation point: Execution Artifact Runtime family.
 - Execution Artifact Runtime family is not currently part of the migration-critical path.
 Next migration platform milestone:
-- Hosting Hardening Reality Check Refresh.
-- Optional: Phase 5B — Job Detail + Stage Diagnostics UI.
+- Phase 7B — Multi-Page Import MVP.
 - Phase 5A completed Command Center integration for migration batches; execution remains operator-driven and queue/worker orchestration does not exist yet.
 - Phase 6A completed read-only hosting operations observability for Command Center; hosting overview/detail are operational and production smoke-tested.
 - Phase 6B completed Hosting Operations workflow review.
@@ -149,6 +181,7 @@ Next migration platform milestone:
 - Phase 6C-A2 completed Internal vs Custom Domain Visibility.
 - Phase 6C-B completed Asset Diagnostics Drilldown, including severity and remediation model visibility.
 - Hosting Operations MVP is functionally complete.
+- Phase 6 completed Hosting Operations, Hosting Hardening, Active Serving Consistency, Imported Runtime Reconciliation, Production Validation, and Mono Compatibility Validation.
 Current completed runtime chain:
 - `Proposal Approval Queue → Execution Readiness Execution Package → Execution Contract Execution Contract Readiness → Execution Bundle Execution Bundle Readiness → Execution Authorization Execution Authorization Readiness Execution Authorization Package → Execution Intent Execution Intent Readiness → Execution Plan Execution Plan Readiness → Execution Candidate Execution Candidate Readiness Execution Candidate Package → Execution Candidate Authorization Execution Candidate Authorization Readiness Execution Candidate Authorization Package`
 Candidate Authorization Family completed. Governance graph expanded. Execution remains blocked. Website OS remains read-only.

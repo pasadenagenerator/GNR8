@@ -1,7 +1,7 @@
 # GNR8 CURRENT STATE SNAPSHOT
 
 ## Snapshot Date
-2026-06-04
+2026-06-05
 
 ## Migration Platform MVP Buildout
 
@@ -19,11 +19,18 @@ Completed migration-first chain:
 - Hosting Operations
 
 Migration Runtime + Command Center MVP is operational and smoke-tested.
+Phase 6 is COMPLETE.
 Phase 6A — Hosting Operations MVP is complete.
 Phase 6B — Hosting Operations Workflow Review is complete.
 Phase 6C-A — Readiness & Domain Operations MVP is complete.
 Phase 6C-A2 — Internal vs Custom Domain Visibility is complete.
 Phase 6C-B — Asset Diagnostics Drilldown is complete.
+Hosting Operations MVP is complete.
+Hosting Hardening is complete.
+Imported Runtime Reconciliation is complete.
+Canonical Active Serving Resolution is complete.
+Raw imported production serving is complete.
+Compatibility-based runtime adaptation has been validated in production.
 
 Completed capabilities:
 - CMS slot materialization
@@ -71,6 +78,13 @@ Completed capabilities:
 - asset diagnostics remediation guidance
 - asset diagnostics empty-state handling
 - runtime diagnostics visibility
+- Active Serving Consistency
+- Imported Runtime Reconciliation
+- Governance Reconciliation
+- Publish Lineage Reconciliation
+- Host-Binding Raw Template Serving
+- Mono Map Compatibility Restoration
+- Maver Production Validation
 
 Current migration runtime capabilities:
 - durable jobs
@@ -101,6 +115,11 @@ Current migration runtime capabilities:
 - asset diagnostics remediation guidance visibility
 - asset diagnostics empty-state handling
 - runtime diagnostics visibility
+- canonical active serving resolution
+- raw imported production serving
+- imported runtime reconciliation
+- compatibility-based runtime adaptation
+- OpenStreetMap compatibility fallback
 
 Hosting Operations now exposes:
 - Hosting Overview
@@ -112,6 +131,39 @@ Hosting Operations now exposes:
 - DNS visibility
 - Domain recheck workflow
 - Asset Diagnostics Drilldown
+
+## Production Validation
+
+Maver (`transportimaver.si`) successfully serves through the GNR8 runtime.
+
+Validated:
+- active pointer resolution
+- host binding resolution
+- raw imported artifact serving
+- governance enforcement
+- publish activation
+- imported runtime reconciliation
+- asset serving
+- compatibility rendering
+- OpenStreetMap compatibility fallback
+
+Result:
+- Pixel-perfect production clone successfully served through GNR8 runtime.
+
+## Provider Architecture
+
+Canonical provider architecture:
+1. Infrastructure Providers
+2. Runtime Service Providers
+3. Compatibility Providers
+
+Compatibility Providers convert source-system functionality into GNR8-native blocks rendered through approved runtime providers.
+
+Example:
+- Mono Map
+- extract address/coords
+- generate GNR8 Map Block
+- render through Leaflet/OpenStreetMap Runtime Provider
 
 Production smoke test:
 - `/gnr8/command-center/migration-batches` loaded successfully.
@@ -126,6 +178,8 @@ Production smoke test:
 - production hosting smoke test completed successfully.
 - production readiness and domain operations smoke verification completed successfully.
 - production asset diagnostics drilldown smoke verification completed successfully.
+- Maver production validation completed successfully for `transportimaver.si`.
+- compatibility rendering and OpenStreetMap fallback validated in production.
 
 Execution boundary:
 - execution remains operator-driven
@@ -139,14 +193,16 @@ Execution boundary:
 - unattended orchestration does not exist yet
 
 Remaining critical path:
-- Phase 5B — Job Detail + Stage Diagnostics UI (optional)
+- Phase 7B — Multi-Page Import MVP
 - Billing
 
 Current Hosting Operations status:
 - Hosting Operations MVP is functionally complete.
+- Hosting Hardening is complete.
+- Phase 6 is complete.
 
 Next recommended milestone:
-- Hosting Hardening Reality Check Refresh
+- Phase 7B — Multi-Page Import MVP
 
 ## Bootstrap Runtime State (2026-06-03)
 
@@ -207,7 +263,7 @@ Migration-first reprioritization:
 - The Execution Artifact Runtime family is not currently part of the migration-critical path.
 
 Current migration platform continuation:
-- Hosting Hardening Reality Check.
+- Phase 7B — Multi-Page Import MVP.
 - Website OS runtime expansion remains paused.
 - Execution Artifact Runtime family remains outside the migration-critical path.
 
