@@ -9,6 +9,7 @@ import {
   setUnifiedRenderPreviewDependenciesForTest,
 } from '@/gnr8/runtime/unified-render-preview'
 import type { SemanticImportResult } from '@/gnr8/import-semantic/semantic-import-engine'
+import type { RuntimeImportProvenanceSummary } from '@/gnr8/runtime/types'
 
 function fixtureSemanticImport(): SemanticImportResult {
   return {
@@ -42,6 +43,68 @@ function fixtureSemanticImport(): SemanticImportResult {
     },
     diagnostics: [],
   }
+}
+
+function fixtureMultiPageAssemblyProvenance(): RuntimeImportProvenanceSummary {
+  return {
+    multiPageDiscovery: {
+      summary: {
+        enabled: true,
+        discoveredPageCount: 2,
+        skippedLinkCount: 0,
+        routeCandidateCount: 2,
+        manifestRef: 'importProvenanceSummary.multiPageDiscovery.manifest',
+        diagnostics: [],
+        rawArtifactAssembly: {
+          enabled: true,
+          assembledPageCount: 2,
+          excludedPageCount: 0,
+          routeMapRef: 'importProvenanceSummary.multiPageDiscovery.rawArtifactAssembly.routeMap',
+          diagnostics: [],
+        },
+      },
+      manifest: null,
+      acquisition: null,
+      rawArtifactAssembly: {
+        kind: 'multi_page_raw_artifact_assembly_manifest_v1',
+        enabled: true,
+        seedUrl: 'https://example.com',
+        normalizedSeedUrl: 'https://example.com/',
+        assembledPageCount: 2,
+        excludedPageCount: 0,
+        failedPageCount: 0,
+        routeMap: [
+          {
+            routePath: '/about',
+            sourceUrl: 'https://example.com/about',
+            finalUrl: 'https://example.com/about',
+            rawFilePath: 'pages/about/index.html',
+            bodySha256: 'sha-about',
+            byteSize: 100,
+            status: 'assembled',
+          },
+          {
+            routePath: '/services/item',
+            sourceUrl: 'https://example.com/services/item',
+            finalUrl: 'https://example.com/services/item',
+            rawFilePath: 'pages/services/item/index.html',
+            bodySha256: 'sha-services-item',
+            byteSize: 100,
+            status: 'assembled',
+          },
+        ],
+        htmlPathMap: {
+          '/about': 'pages/about/index.html',
+          '/services/item': 'pages/services/item/index.html',
+        },
+        excludedPages: [],
+        failedPages: [],
+        manifestPath: null,
+        diagnostics: [],
+        generatedAt: '2026-06-06T00:00:00.000Z',
+      },
+    },
+  } as unknown as RuntimeImportProvenanceSummary
 }
 
 test('preview path resolver falls back to canonical root path when requested path is missing', () => {
@@ -349,6 +412,245 @@ test('raw template preview does not emit duplicated preview-assets prefix when s
   assert.equal(rewritten.includes('/api/gnr8/runtime/preview-assets/site-maver/sv-maver/uploads/7xhKQCOl/767x0_2560x0/IMG.jpg'), true)
 })
 
+test('raw template preview route-map serving resolves /about to assembled child HTML and rewrites child assets', async () => {
+  const requestedAssets: string[] = []
+  const restore = setUnifiedRenderPreviewDependenciesForTest({
+    getPoolStatus: () => ({ totalCount: 1, idleCount: 1, waitingCount: 0 }),
+    getSiteVersion: async () =>
+      ({
+        id: 'sv-multi',
+        siteId: 'site-multi',
+        rendererCompatibilityVersion: 'gnr8-renderer-v1',
+        pages: [],
+        importProvenanceSummary: fixtureMultiPageAssemblyProvenance(),
+      }) as any,
+    getRawImportedSiteArtifact: async () =>
+      ({
+        artifactType: 'raw_imported_site',
+        siteId: 'site-multi',
+        siteVersionId: 'sv-multi',
+        entryHtmlPath: 'index.html',
+        assetBasePath: '/',
+        fileMap: {
+          'index.html': { mediaType: 'text/html', sizeBytes: 30, sha256: 'sha-home' },
+          'pages/about/index.html': { mediaType: 'text/html', sizeBytes: 30, sha256: 'sha-about' },
+          'pages/about/assets/about.css': { mediaType: 'text/css', sizeBytes: 30, sha256: 'sha-css' },
+        },
+        metadata: {
+          sourceUrl: 'https://example.com',
+          finalUrl: 'https://example.com/',
+          htmlByteLength: 30,
+          multiPage: {
+            enabled: true,
+            pageCount: 3,
+            routeMapRef: 'importProvenanceSummary.multiPageDiscovery.rawArtifactAssembly.routeMap',
+          },
+          diagnostics: { codes: [] },
+          assetSummary: { persistedAssetCount: 3, externalFallbackAssetCount: 0 },
+        },
+      }) as any,
+    getRawTemplateSiteArtifact: async () => null,
+    getRawTemplateSiteAsset: async (input) => {
+      requestedAssets.push(input.filePath)
+      if (input.filePath === 'pages/about/index.html') {
+        return {
+          bytes: Buffer.from(
+            '<!doctype html><html><head><link rel="stylesheet" href="./assets/about.css"></head><body><h1>About child</h1></body></html>',
+          ),
+          sizeBytes: 124,
+          mediaType: 'text/html',
+        } as any
+      }
+      if (input.filePath === 'index.html') {
+        return { bytes: Buffer.from('<html><body><h1>Home</h1></body></html>'), sizeBytes: 39, mediaType: 'text/html' } as any
+      }
+      return null
+    },
+    listContentSlots: async () => [],
+    listContentOverrides: async () => [],
+  })
+
+  try {
+    const preview = await renderSiteVersionPreview({
+      siteVersionId: 'sv-multi',
+      path: '/about/',
+      mode: 'raw_template_preview',
+      requestCorrelationKey: 'req-route-about',
+    })
+
+    assert.deepEqual(requestedAssets, ['pages/about/index.html'])
+    assert.equal(preview.path, '/about')
+    assert.match(preview.html, /About child/)
+    assert.doesNotMatch(preview.html, /<h1>Home<\/h1>/)
+    assert.equal(
+      preview.html.includes('/api/gnr8/runtime/preview-assets/site-multi/sv-multi/pages/about/assets/about.css'),
+      true,
+    )
+    assert.equal(preview.previewRuntimeSummary.previewDiagnostics.includes('MULTIPAGE_ROUTE_MAP_SELECTED'), true)
+    assert.equal(preview.previewRuntimeSummary.previewDiagnostics.includes('RAW_TEMPLATE_PREVIEW_RENDERED'), true)
+  } finally {
+    restore()
+  }
+})
+
+test('raw template preview route-map serving returns explicit miss instead of serving root', async () => {
+  let rawTemplateAssetLookupCount = 0
+  const restore = setUnifiedRenderPreviewDependenciesForTest({
+    getPoolStatus: () => ({ totalCount: 1, idleCount: 1, waitingCount: 0 }),
+    getSiteVersion: async () =>
+      ({
+        id: 'sv-missing-route',
+        siteId: 'site-missing-route',
+        rendererCompatibilityVersion: 'gnr8-renderer-v1',
+        pages: [],
+        importProvenanceSummary: fixtureMultiPageAssemblyProvenance(),
+      }) as any,
+    getRawImportedSiteArtifact: async () =>
+      ({
+        artifactType: 'raw_imported_site',
+        siteId: 'site-missing-route',
+        siteVersionId: 'sv-missing-route',
+        entryHtmlPath: 'index.html',
+        assetBasePath: '/',
+        fileMap: {
+          'index.html': { mediaType: 'text/html', sizeBytes: 30, sha256: 'sha-home' },
+          'pages/about/index.html': { mediaType: 'text/html', sizeBytes: 30, sha256: 'sha-about' },
+        },
+        metadata: { assetSummary: { persistedAssetCount: 2, externalFallbackAssetCount: 0 } },
+      }) as any,
+    getRawTemplateSiteArtifact: async () => null,
+    getRawTemplateSiteAsset: async () => {
+      rawTemplateAssetLookupCount += 1
+      return { bytes: Buffer.from('<html><body><h1>Home</h1></body></html>'), sizeBytes: 39, mediaType: 'text/html' } as any
+    },
+    listContentSlots: async () => [],
+    listContentOverrides: async () => [],
+  })
+
+  try {
+    await assert.rejects(
+      () =>
+        renderSiteVersionPreview({
+          siteVersionId: 'sv-missing-route',
+          path: '/missing',
+          mode: 'raw_template_preview',
+          requestCorrelationKey: 'req-route-miss',
+        }),
+      (error: unknown) =>
+        error instanceof SiteVersionPreviewUnavailableError &&
+        error.code === 'PREVIEW_PATH_NOT_FOUND' &&
+        /route-map path not found/.test(error.message),
+    )
+    assert.equal(rawTemplateAssetLookupCount, 0)
+  } finally {
+    restore()
+  }
+})
+
+test('raw template preview route-map serving reports missing assembled file before reading entry HTML', async () => {
+  let rawTemplateAssetLookupCount = 0
+  const restore = setUnifiedRenderPreviewDependenciesForTest({
+    getPoolStatus: () => ({ totalCount: 1, idleCount: 1, waitingCount: 0 }),
+    getSiteVersion: async () =>
+      ({
+        id: 'sv-missing-file',
+        siteId: 'site-missing-file',
+        rendererCompatibilityVersion: 'gnr8-renderer-v1',
+        pages: [],
+        importProvenanceSummary: fixtureMultiPageAssemblyProvenance(),
+      }) as any,
+    getRawImportedSiteArtifact: async () =>
+      ({
+        artifactType: 'raw_imported_site',
+        siteId: 'site-missing-file',
+        siteVersionId: 'sv-missing-file',
+        entryHtmlPath: 'index.html',
+        assetBasePath: '/',
+        fileMap: {
+          'index.html': { mediaType: 'text/html', sizeBytes: 30, sha256: 'sha-home' },
+        },
+        metadata: { assetSummary: { persistedAssetCount: 1, externalFallbackAssetCount: 0 } },
+      }) as any,
+    getRawTemplateSiteArtifact: async () => null,
+    getRawTemplateSiteAsset: async () => {
+      rawTemplateAssetLookupCount += 1
+      return { bytes: Buffer.from('<html><body><h1>Home</h1></body></html>'), sizeBytes: 39, mediaType: 'text/html' } as any
+    },
+    listContentSlots: async () => [],
+    listContentOverrides: async () => [],
+  })
+
+  try {
+    await assert.rejects(
+      () =>
+        renderSiteVersionPreview({
+          siteVersionId: 'sv-missing-file',
+          path: '/about',
+          mode: 'raw_template_preview',
+          requestCorrelationKey: 'req-route-file-missing',
+        }),
+      (error: unknown) =>
+        error instanceof SiteVersionPreviewUnavailableError &&
+        error.code === 'PREVIEW_PATH_NOT_FOUND' &&
+        /route-map file missing/.test(error.message),
+    )
+    assert.equal(rawTemplateAssetLookupCount, 0)
+  } finally {
+    restore()
+  }
+})
+
+test('raw template route-map child selection remains disabled outside controlled raw template preview mode', async () => {
+  const requestedAssets: string[] = []
+  const restore = setUnifiedRenderPreviewDependenciesForTest({
+    getPoolStatus: () => ({ totalCount: 1, idleCount: 1, waitingCount: 0 }),
+    getSiteVersion: async () =>
+      ({
+        id: 'sv-disabled',
+        siteId: 'site-disabled',
+        rendererCompatibilityVersion: 'gnr8-renderer-v1',
+        pages: [],
+        importProvenanceSummary: fixtureMultiPageAssemblyProvenance(),
+      }) as any,
+    getRawImportedSiteArtifact: async () =>
+      ({
+        artifactType: 'raw_imported_site',
+        siteId: 'site-disabled',
+        siteVersionId: 'sv-disabled',
+        entryHtmlPath: 'index.html',
+        assetBasePath: '/',
+        fileMap: {
+          'index.html': { mediaType: 'text/html', sizeBytes: 30, sha256: 'sha-home' },
+          'pages/about/index.html': { mediaType: 'text/html', sizeBytes: 30, sha256: 'sha-about' },
+        },
+        metadata: { assetSummary: { persistedAssetCount: 2, externalFallbackAssetCount: 0 } },
+      }) as any,
+    getRawTemplateSiteArtifact: async () => null,
+    getRawTemplateSiteAsset: async (input) => {
+      requestedAssets.push(input.filePath)
+      return { bytes: Buffer.from('<html><body><h1>Home</h1></body></html>'), sizeBytes: 39, mediaType: 'text/html' } as any
+    },
+    listContentSlots: async () => [],
+    listContentOverrides: async () => [],
+  })
+
+  try {
+    const preview = await renderSiteVersionPreview({
+      siteVersionId: 'sv-disabled',
+      path: '/about',
+      mode: 'transformed',
+      requestCorrelationKey: 'req-route-disabled',
+    })
+
+    assert.deepEqual(requestedAssets, ['index.html'])
+    assert.match(preview.html, /<h1>Home<\/h1>/)
+    assert.equal(preview.previewRuntimeSummary.previewDiagnostics.includes('MULTIPAGE_ROUTE_MAP_DISABLED'), true)
+    assert.equal(preview.previewRuntimeSummary.previewDiagnostics.includes('MULTIPAGE_ROUTE_MAP_SELECTED'), false)
+  } finally {
+    restore()
+  }
+})
+
 test('preview override selection merges by slot with draft precedence and published fallback', () => {
   const selected = __unifiedRenderPreviewTestUtils.selectPreviewOverridesByVersion({
     siteVersionId: 'sv-2',
@@ -395,7 +697,7 @@ test('preview override selection merges by slot with draft precedence and publis
   })
 
   assert.equal(selected.length, 2)
-  const bySlot = Object.fromEntries(selected.map((override) => [override.slotKey, override]))
+  const bySlot: Record<string, any> = Object.fromEntries(selected.map((override) => [override.slotKey, override]))
   assert.equal(bySlot['hero.title']?.valueJson?.value, 'correct version draft')
   assert.equal(bySlot['hero.subtitle']?.valueJson?.value, 'published subtitle')
 })

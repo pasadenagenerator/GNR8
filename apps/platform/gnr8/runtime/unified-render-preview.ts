@@ -3,6 +3,11 @@ import path from 'node:path'
 import { normalizePagePath } from '@/gnr8/runtime/deterministic'
 import { createRuntimeCorrelationKey } from '@/gnr8/runtime/identity/runtime-identity'
 import {
+  RAW_TEMPLATE_ROUTE_MAP_DIAGNOSTIC,
+  resolveRawTemplateRouteMapFile,
+  type RawTemplateRouteMapResolution,
+} from '@/gnr8/runtime/raw-template-route-map-resolver'
+import {
   getArtifactById,
   listContentOverrides,
   listContentSlots,
@@ -537,6 +542,7 @@ function buildRawTemplatePreviewRuntimeSummary(input: {
   fileCount: number
   persistedAssetCount?: number
   externalFallbackAssetCount?: number
+  routeMapDiagnostics?: string[]
 }): PreviewRuntimeSummary {
   const base = input.baseSummary ?? defaultPreviewRuntimeSummary()
   const baseDiagnostics = (base.previewDiagnostics ?? []).filter(
@@ -566,8 +572,37 @@ function buildRawTemplatePreviewRuntimeSummary(input: {
       ...baseDiagnostics,
       PREVIEW_RUNTIME_DIAGNOSTIC.RAW_TEMPLATE_PREVIEW_SELECTED,
       PREVIEW_RUNTIME_DIAGNOSTIC.RAW_TEMPLATE_PREVIEW_RENDERED,
+      ...(input.routeMapDiagnostics ?? []),
     ]),
   }
+}
+
+function logRawTemplateRouteMapResolution(input: {
+  resolution: RawTemplateRouteMapResolution
+  siteId: string
+  entryHtmlPath: string
+}): void {
+  console.info(`[preview-runtime] ${input.resolution.diagnosticCode}`, {
+    siteId: input.siteId,
+    siteVersionId: input.resolution.siteVersionId,
+    requestedPath: input.resolution.requestedPath,
+    routePath: input.resolution.routePath,
+    rawFilePath:
+      input.resolution.outcome === 'selected' || input.resolution.outcome === 'file_missing'
+        ? input.resolution.rawFilePath
+        : null,
+    sourceUrl:
+      input.resolution.outcome === 'selected' || input.resolution.outcome === 'file_missing'
+        ? input.resolution.sourceUrl
+        : null,
+    finalUrl:
+      input.resolution.outcome === 'selected' || input.resolution.outcome === 'file_missing'
+        ? input.resolution.finalUrl
+        : null,
+    entryHtmlPath: input.entryHtmlPath,
+    reasonCode: input.resolution.outcome === 'disabled' ? input.resolution.reasonCode : null,
+    routeMapSelected: input.resolution.diagnosticCode === RAW_TEMPLATE_ROUTE_MAP_DIAGNOSTIC.MULTIPAGE_ROUTE_MAP_SELECTED,
+  })
 }
 
 function selectPreviewOverridesByVersion(input: {
@@ -584,8 +619,10 @@ function selectPreviewOverridesByVersion(input: {
 }
 
 async function renderRawTemplateSiteVersionPreview(input: {
+  siteVersion: CanonicalSiteVersionSnapshot
   siteVersionId: string
   requestedPath: string
+  routeMapServingEnabled: boolean
   previewTruth: RenderedCapturePreviewTruth
   fallbackSummary?: PreviewRuntimeSummary | null
   context: PreviewReadContext
@@ -605,14 +642,40 @@ async function renderRawTemplateSiteVersionPreview(input: {
       loader: () => previewReadDependencies.getRawTemplateSiteArtifact(input.siteVersionId),
     }))
   if (!artifact) return null
+  const routeMapResolution = resolveRawTemplateRouteMapFile({
+    siteVersionId: artifact.siteVersionId,
+    requestedPath: input.requestedPath,
+    entryHtmlPath: artifact.entryHtmlPath,
+    fileMap: artifact.fileMap,
+    importProvenanceSummary: input.siteVersion.importProvenanceSummary,
+    routeMapServingEnabled: input.routeMapServingEnabled,
+  })
+  logRawTemplateRouteMapResolution({
+    resolution: routeMapResolution,
+    siteId: artifact.siteId,
+    entryHtmlPath: artifact.entryHtmlPath,
+  })
+  if (input.routeMapServingEnabled && routeMapResolution.outcome === 'miss') {
+    throw new SiteVersionPreviewUnavailableError({
+      code: 'PREVIEW_PATH_NOT_FOUND',
+      message: `Raw template route-map path not found: ${routeMapResolution.routePath}`,
+    })
+  }
+  if (input.routeMapServingEnabled && routeMapResolution.outcome === 'file_missing') {
+    throw new SiteVersionPreviewUnavailableError({
+      code: 'PREVIEW_PATH_NOT_FOUND',
+      message: `Raw template route-map file missing: ${routeMapResolution.rawFilePath}`,
+    })
+  }
+  const selectedHtmlPath = routeMapResolution.outcome === 'selected' ? routeMapResolution.rawFilePath : artifact.entryHtmlPath
   const entryAsset = await cacheLookup({
     context: input.context,
     cache: input.context.rawTemplateAssetByKey,
-    key: `${input.siteVersionId}:${artifact.entryHtmlPath}`,
+    key: `${input.siteVersionId}:${selectedHtmlPath}`,
     loader: () =>
       previewReadDependencies.getRawTemplateSiteAsset({
         siteVersionId: input.siteVersionId,
-        filePath: artifact.entryHtmlPath,
+        filePath: selectedHtmlPath,
       }),
   })
   if (!entryAsset) {
@@ -626,7 +689,7 @@ async function renderRawTemplateSiteVersionPreview(input: {
     html: entryAsset.bytes.toString('utf8'),
     siteId: artifact.siteId,
     siteVersionId: artifact.siteVersionId,
-    entryHtmlPath: artifact.entryHtmlPath,
+    entryHtmlPath: selectedHtmlPath,
     fileMapPaths: new Set(Object.keys(artifact.fileMap ?? {})),
   })
   const slots = await cacheLookup({
@@ -738,12 +801,16 @@ async function renderRawTemplateSiteVersionPreview(input: {
     fileCount: Object.keys(artifact.fileMap).length,
     persistedAssetCount: importedArtifact?.metadata.assetSummary.persistedAssetCount,
     externalFallbackAssetCount: importedArtifact?.metadata.assetSummary.externalFallbackAssetCount,
+    routeMapDiagnostics: [routeMapResolution.diagnosticCode],
   })
   console.info('[preview-runtime] RAW_TEMPLATE_PREVIEW_SELECTED', {
     siteId: artifact.siteId,
     siteVersionId: artifact.siteVersionId,
     requestedPath: normalizePagePath(input.requestedPath),
     entryHtmlPath: artifact.entryHtmlPath,
+    resolvedFilePath: selectedHtmlPath,
+    routePath: routeMapResolution.routePath,
+    routeMapDiagnostic: routeMapResolution.diagnosticCode,
     fileCount: Object.keys(artifact.fileMap).length,
   })
   if (importedArtifact) {
@@ -752,6 +819,9 @@ async function renderRawTemplateSiteVersionPreview(input: {
       siteVersionId: artifact.siteVersionId,
       requestedPath: normalizePagePath(input.requestedPath),
       entryHtmlPath: artifact.entryHtmlPath,
+      resolvedFilePath: selectedHtmlPath,
+      routePath: routeMapResolution.routePath,
+      routeMapDiagnostic: routeMapResolution.diagnosticCode,
       persistedAssetCount: importedArtifact.metadata.assetSummary.persistedAssetCount,
       externalFallbackAssetCount: importedArtifact.metadata.assetSummary.externalFallbackAssetCount,
     })
@@ -760,6 +830,8 @@ async function renderRawTemplateSiteVersionPreview(input: {
     siteId: artifact.siteId,
     siteVersionId: artifact.siteVersionId,
     requestedPath: normalizePagePath(input.requestedPath),
+    routePath: routeMapResolution.routePath,
+    rawFilePath: selectedHtmlPath,
     bytes: entryAsset.sizeBytes,
   })
   return {
@@ -767,7 +839,7 @@ async function renderRawTemplateSiteVersionPreview(input: {
       preview: {
         siteId: artifact.siteId,
         siteVersionId: artifact.siteVersionId,
-        path: normalizePagePath(input.requestedPath),
+        path: routeMapResolution.outcome === 'selected' ? routeMapResolution.routePath : normalizePagePath(input.requestedPath),
         rendererCompatibilityVersion: 'gnr8-renderer-v1',
         html: patched.html,
         source: 'raw_template_site',
@@ -1102,8 +1174,10 @@ export async function renderSiteVersionPreview(input: {
   try {
     if (mode !== 'debug') {
       const rawTemplatePreview = await renderRawTemplateSiteVersionPreview({
+        siteVersion,
         siteVersionId: input.siteVersionId,
         requestedPath,
+        routeMapServingEnabled: mode === 'raw_template_preview',
         previewTruth,
         context,
       })
