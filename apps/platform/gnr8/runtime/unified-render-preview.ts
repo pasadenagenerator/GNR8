@@ -4,7 +4,9 @@ import { normalizePagePath } from '@/gnr8/runtime/deterministic'
 import { createRuntimeCorrelationKey } from '@/gnr8/runtime/identity/runtime-identity'
 import {
   RAW_TEMPLATE_ROUTE_MAP_DIAGNOSTIC,
+  normalizeRawTemplateRouteMapPath,
   resolveRawTemplateRouteMapFile,
+  routeMapFromProvenance,
   type RawTemplateRouteMapResolution,
 } from '@/gnr8/runtime/raw-template-route-map-resolver'
 import {
@@ -20,8 +22,9 @@ import {
 import { getSuperadminPool } from '@/src/superadmin/db'
 import { applyContentOverridesToRawHtml } from '@/src/public-site/content-override-runtime'
 import type { ContentOverride } from '@/gnr8/runtime/content-binding'
-import type { CanonicalSiteVersionSnapshot } from '@/gnr8/runtime/types'
-import { normalizeSiteVersionPreviewMode, type SiteVersionPreviewMode } from '@/gnr8/site/site-preview-contract'
+import type { CanonicalSiteVersionSnapshot, RuntimeImportProvenanceSummary } from '@/gnr8/runtime/types'
+import { buildSiteVersionPreviewUrl, normalizeSiteVersionPreviewMode, type SiteVersionPreviewMode } from '@/gnr8/site/site-preview-contract'
+import { normalizeInternalHref, normalizeSeedUrl } from '@/gnr8/multipage-import/normalization/route-normalization'
 import { PREVIEW_RUNTIME_DIAGNOSTIC } from '@/gnr8/preview-runtime/preview-runtime-diagnostics'
 import type { PreviewRuntimeMode, PreviewRuntimeSummary } from '@/gnr8/preview-runtime/preview-runtime-types'
 import {
@@ -302,6 +305,235 @@ function normalizeTemplateAssetPath(value: string): string | null {
   return segments.join('/')
 }
 
+export const MULTIPAGE_LINK_REWRITE_DIAGNOSTIC = {
+  MULTIPAGE_LINK_REWRITE_STARTED: 'MULTIPAGE_LINK_REWRITE_STARTED',
+  MULTIPAGE_LINK_REWRITTEN: 'MULTIPAGE_LINK_REWRITTEN',
+  MULTIPAGE_LINK_SKIPPED_EXTERNAL: 'MULTIPAGE_LINK_SKIPPED_EXTERNAL',
+  MULTIPAGE_LINK_SKIPPED_UNSUPPORTED_SCHEME: 'MULTIPAGE_LINK_SKIPPED_UNSUPPORTED_SCHEME',
+  MULTIPAGE_LINK_SKIPPED_HASH_ONLY: 'MULTIPAGE_LINK_SKIPPED_HASH_ONLY',
+  MULTIPAGE_LINK_SKIPPED_ASSET: 'MULTIPAGE_LINK_SKIPPED_ASSET',
+  MULTIPAGE_LINK_SKIPPED_ROUTE_NOT_IMPORTED: 'MULTIPAGE_LINK_SKIPPED_ROUTE_NOT_IMPORTED',
+  MULTIPAGE_LINK_REWRITE_COMPLETED: 'MULTIPAGE_LINK_REWRITE_COMPLETED',
+} as const
+
+type MultiPageLinkRewriteCounts = {
+  rewritten: number
+  skippedExternal: number
+  skippedUnsupported: number
+  skippedRouteMissing: number
+  skippedAsset: number
+  skippedHashOnly: number
+}
+
+type MultiPageLinkRewriteResult = {
+  html: string
+  diagnostics: string[]
+  counts: MultiPageLinkRewriteCounts
+}
+
+function defaultMultiPageLinkRewriteCounts(): MultiPageLinkRewriteCounts {
+  return {
+    rewritten: 0,
+    skippedExternal: 0,
+    skippedUnsupported: 0,
+    skippedRouteMissing: 0,
+    skippedAsset: 0,
+    skippedHashOnly: 0,
+  }
+}
+
+function escapeHtmlAttribute(value: string): string {
+  return String(value ?? '')
+    .replaceAll('&', '&amp;')
+    .replaceAll('"', '&quot;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+}
+
+function firstUsableSeedUrl(provenance: RuntimeImportProvenanceSummary | null | undefined): string | null {
+  const assembly = provenance?.multiPageDiscovery?.rawArtifactAssembly ?? null
+  const looseProvenance = provenance as unknown as { sourceUrl?: unknown; finalUrl?: unknown } | null | undefined
+  const candidates = [
+    assembly?.normalizedSeedUrl,
+    assembly?.seedUrl,
+    looseProvenance?.sourceUrl,
+    looseProvenance?.finalUrl,
+  ]
+  for (const candidate of candidates) {
+    const raw = String(candidate ?? '').trim()
+    if (raw && normalizeSeedUrl(raw)) return raw
+  }
+  return null
+}
+
+function currentPageUrlForRoute(input: {
+  seedUrl: string
+  resolution: RawTemplateRouteMapResolution
+}): string {
+  if (input.resolution.outcome === 'selected') {
+    const direct = input.resolution.finalUrl ?? input.resolution.sourceUrl
+    if (direct && normalizeSeedUrl(direct)) return direct
+  }
+  try {
+    return new URL(input.resolution.routePath, input.seedUrl).toString()
+  } catch {
+    return input.seedUrl
+  }
+}
+
+function hasAttribute(tag: string, attrName: string): boolean {
+  return new RegExp(`\\s${attrName}(?:\\s*=|\\s|>|/)`, 'i').test(tag)
+}
+
+function appendAnchorRewriteAttributes(input: {
+  tag: string
+  originalHref: string
+}): string {
+  const marker = hasAttribute(input.tag, 'data-gnr8-multipage-link') ? '' : ' data-gnr8-multipage-link="rewritten"'
+  const original = hasAttribute(input.tag, 'data-gnr8-original-href')
+    ? ''
+    : ` data-gnr8-original-href="${escapeHtmlAttribute(input.originalHref)}"`
+  if (!marker && !original) return input.tag
+  return input.tag.replace(/\s*\/?>$/, (suffix) => {
+    const slash = suffix.includes('/') ? ' /' : ''
+    return `${marker}${original}${slash}>`
+  })
+}
+
+function rewriteRawTemplateMultiPageLinks(input: {
+  html: string
+  siteId: string
+  siteVersionId: string
+  importProvenanceSummary?: RuntimeImportProvenanceSummary | null
+  routeMapServingEnabled: boolean
+  routeMapResolution: RawTemplateRouteMapResolution
+}): MultiPageLinkRewriteResult {
+  const counts = defaultMultiPageLinkRewriteCounts()
+  const diagnostics = new Set<string>()
+  const routeMap = routeMapFromProvenance(input.importProvenanceSummary)
+  const seedUrl = firstUsableSeedUrl(input.importProvenanceSummary)
+  if (!input.routeMapServingEnabled || routeMap.length === 0 || !seedUrl || input.routeMapResolution.outcome !== 'selected') {
+    return { html: input.html, diagnostics: [], counts }
+  }
+
+  diagnostics.add(MULTIPAGE_LINK_REWRITE_DIAGNOSTIC.MULTIPAGE_LINK_REWRITE_STARTED)
+  const seed = normalizeSeedUrl(seedUrl)
+  if (!seed) return { html: input.html, diagnostics: [], counts }
+  const currentPageUrl = currentPageUrlForRoute({ seedUrl: seed.url, resolution: input.routeMapResolution })
+  const importedRoutes = new Set<string>(['/'])
+  for (const entry of routeMap) importedRoutes.add(normalizeRawTemplateRouteMapPath(entry.routePath))
+
+  console.info('[preview-runtime] MULTIPAGE_LINK_REWRITE_STARTED', {
+    siteId: input.siteId,
+    siteVersionId: input.siteVersionId,
+    routePath: input.routeMapResolution.routePath,
+    routeCount: importedRoutes.size,
+  })
+
+  const emitSkipped = (code: string, href: string, routePath?: string) => {
+    console.info(`[preview-runtime] ${code}`, {
+      siteId: input.siteId,
+      siteVersionId: input.siteVersionId,
+      href,
+      routePath: routePath ?? null,
+    })
+  }
+
+  const html = input.html.replace(/<a\b[^>]*\bhref\s*=\s*(["'])(.*?)\1[^>]*>/gi, (tag: string, quote: string, rawHref: string) => {
+    const href = String(rawHref ?? '').trim()
+    if (!href) {
+      counts.skippedUnsupported += 1
+      diagnostics.add(MULTIPAGE_LINK_REWRITE_DIAGNOSTIC.MULTIPAGE_LINK_SKIPPED_UNSUPPORTED_SCHEME)
+      emitSkipped(MULTIPAGE_LINK_REWRITE_DIAGNOSTIC.MULTIPAGE_LINK_SKIPPED_UNSUPPORTED_SCHEME, href)
+      return tag
+    }
+    if (href.startsWith('#')) {
+      counts.skippedHashOnly += 1
+      diagnostics.add(MULTIPAGE_LINK_REWRITE_DIAGNOSTIC.MULTIPAGE_LINK_SKIPPED_HASH_ONLY)
+      emitSkipped(MULTIPAGE_LINK_REWRITE_DIAGNOSTIC.MULTIPAGE_LINK_SKIPPED_HASH_ONLY, href)
+      return tag
+    }
+    if (hasAttribute(tag, 'download')) {
+      counts.skippedAsset += 1
+      diagnostics.add(MULTIPAGE_LINK_REWRITE_DIAGNOSTIC.MULTIPAGE_LINK_SKIPPED_ASSET)
+      emitSkipped(MULTIPAGE_LINK_REWRITE_DIAGNOSTIC.MULTIPAGE_LINK_SKIPPED_ASSET, href)
+      return tag
+    }
+    let rawUrl: URL | null = null
+    try {
+      rawUrl = new URL(href, currentPageUrl)
+    } catch {
+      rawUrl = null
+    }
+
+    const normalized = normalizeInternalHref({
+      href,
+      currentPageUrl,
+      canonicalHost: seed.canonicalHost,
+    })
+    if ('skip' in normalized) {
+      if (normalized.skip === 'external_host') {
+        counts.skippedExternal += 1
+        diagnostics.add(MULTIPAGE_LINK_REWRITE_DIAGNOSTIC.MULTIPAGE_LINK_SKIPPED_EXTERNAL)
+        emitSkipped(MULTIPAGE_LINK_REWRITE_DIAGNOSTIC.MULTIPAGE_LINK_SKIPPED_EXTERNAL, href)
+      } else if (normalized.skip === 'hash_only') {
+        counts.skippedHashOnly += 1
+        diagnostics.add(MULTIPAGE_LINK_REWRITE_DIAGNOSTIC.MULTIPAGE_LINK_SKIPPED_HASH_ONLY)
+        emitSkipped(MULTIPAGE_LINK_REWRITE_DIAGNOSTIC.MULTIPAGE_LINK_SKIPPED_HASH_ONLY, href)
+      } else if (normalized.skip === 'asset_link') {
+        counts.skippedAsset += 1
+        diagnostics.add(MULTIPAGE_LINK_REWRITE_DIAGNOSTIC.MULTIPAGE_LINK_SKIPPED_ASSET)
+        emitSkipped(MULTIPAGE_LINK_REWRITE_DIAGNOSTIC.MULTIPAGE_LINK_SKIPPED_ASSET, href)
+      } else {
+        counts.skippedUnsupported += 1
+        diagnostics.add(MULTIPAGE_LINK_REWRITE_DIAGNOSTIC.MULTIPAGE_LINK_SKIPPED_UNSUPPORTED_SCHEME)
+        emitSkipped(MULTIPAGE_LINK_REWRITE_DIAGNOSTIC.MULTIPAGE_LINK_SKIPPED_UNSUPPORTED_SCHEME, href)
+      }
+      return tag
+    }
+    if (rawUrl?.search) {
+      counts.skippedUnsupported += 1
+      diagnostics.add(MULTIPAGE_LINK_REWRITE_DIAGNOSTIC.MULTIPAGE_LINK_SKIPPED_UNSUPPORTED_SCHEME)
+      emitSkipped(MULTIPAGE_LINK_REWRITE_DIAGNOSTIC.MULTIPAGE_LINK_SKIPPED_UNSUPPORTED_SCHEME, href, normalizeRawTemplateRouteMapPath(normalized.normalized.path))
+      return tag
+    }
+
+    const routePath = normalizeRawTemplateRouteMapPath(normalized.normalized.path)
+    if (!importedRoutes.has(routePath)) {
+      counts.skippedRouteMissing += 1
+      diagnostics.add(MULTIPAGE_LINK_REWRITE_DIAGNOSTIC.MULTIPAGE_LINK_SKIPPED_ROUTE_NOT_IMPORTED)
+      emitSkipped(MULTIPAGE_LINK_REWRITE_DIAGNOSTIC.MULTIPAGE_LINK_SKIPPED_ROUTE_NOT_IMPORTED, href, routePath)
+      return tag
+    }
+
+    const rewrittenHref = buildSiteVersionPreviewUrl({
+      siteVersionId: input.siteVersionId,
+      mode: 'raw_template_preview',
+      path: routePath,
+    })
+    counts.rewritten += 1
+    diagnostics.add(MULTIPAGE_LINK_REWRITE_DIAGNOSTIC.MULTIPAGE_LINK_REWRITTEN)
+    console.info('[preview-runtime] MULTIPAGE_LINK_REWRITTEN', {
+      siteId: input.siteId,
+      siteVersionId: input.siteVersionId,
+      href,
+      routePath,
+      rewrittenHref,
+    })
+    const withHref = tag.replace(/\bhref\s*=\s*(["'])(.*?)\1/i, `href=${quote}${escapeHtmlAttribute(rewrittenHref)}${quote}`)
+    return appendAnchorRewriteAttributes({ tag: withHref, originalHref: href })
+  })
+
+  diagnostics.add(MULTIPAGE_LINK_REWRITE_DIAGNOSTIC.MULTIPAGE_LINK_REWRITE_COMPLETED)
+  console.info('[preview-runtime] MULTIPAGE_LINK_REWRITE_COMPLETED', {
+    siteId: input.siteId,
+    siteVersionId: input.siteVersionId,
+    routePath: input.routeMapResolution.routePath,
+    ...counts,
+  })
+  return { html, diagnostics: [...diagnostics].sort((a, b) => a.localeCompare(b)), counts }
+}
+
 function rewriteRawTemplateAssetReferences(input: {
   html: string
   siteId: string
@@ -423,10 +655,16 @@ function rewriteRawTemplateAssetReferences(input: {
       .join(', ')
 
   return input.html
-    .replace(
-      /\b(href|src|poster)\s*=\s*(["'])(.*?)\2/gi,
-      (_full, attr: string, quote: string, value: string) => `${attr}=${quote}${rewriteReference(value)}${quote}`,
-    )
+    .replace(/<([a-zA-Z][^\s/>]*)(\s[^>]*)?>/g, (full: string, tagName: string) => {
+      const normalizedTagName = String(tagName ?? '').toLowerCase()
+      return full.replace(
+        /\b(href|src|poster)\s*=\s*(["'])(.*?)\2/gi,
+        (attrFull: string, attr: string, quote: string, value: string) => {
+          if (normalizedTagName === 'a' && String(attr).toLowerCase() === 'href') return attrFull
+          return `${attr}=${quote}${rewriteReference(value)}${quote}`
+        },
+      )
+    })
     .replace(
       /\bsrcset\s*=\s*(["'])(.*?)\1/gi,
       (_full, quote: string, value: string) => `srcset=${quote}${rewriteSrcset(value)}${quote}`,
@@ -685,13 +923,22 @@ async function renderRawTemplateSiteVersionPreview(input: {
     })
   }
 
-  const html = rewriteRawTemplateAssetReferences({
+  let html = rewriteRawTemplateAssetReferences({
     html: entryAsset.bytes.toString('utf8'),
     siteId: artifact.siteId,
     siteVersionId: artifact.siteVersionId,
     entryHtmlPath: selectedHtmlPath,
     fileMapPaths: new Set(Object.keys(artifact.fileMap ?? {})),
   })
+  const linkRewrite = rewriteRawTemplateMultiPageLinks({
+    html,
+    siteId: artifact.siteId,
+    siteVersionId: artifact.siteVersionId,
+    importProvenanceSummary: input.siteVersion.importProvenanceSummary,
+    routeMapServingEnabled: input.routeMapServingEnabled,
+    routeMapResolution,
+  })
+  html = linkRewrite.html
   const slots = await cacheLookup({
     context: input.context,
     cache: input.context.slotsBySiteVersionId,
@@ -801,7 +1048,7 @@ async function renderRawTemplateSiteVersionPreview(input: {
     fileCount: Object.keys(artifact.fileMap).length,
     persistedAssetCount: importedArtifact?.metadata.assetSummary.persistedAssetCount,
     externalFallbackAssetCount: importedArtifact?.metadata.assetSummary.externalFallbackAssetCount,
-    routeMapDiagnostics: [routeMapResolution.diagnosticCode],
+    routeMapDiagnostics: [routeMapResolution.diagnosticCode, ...linkRewrite.diagnostics],
   })
   console.info('[preview-runtime] RAW_TEMPLATE_PREVIEW_SELECTED', {
     siteId: artifact.siteId,
@@ -1285,6 +1532,7 @@ export const __unifiedRenderPreviewTestUtils = {
   resolveSemanticFallbackPreview,
   resolveRenderedCapturePreviewTruth,
   rewriteRawTemplateAssetReferences,
+  rewriteRawTemplateMultiPageLinks,
   selectPreviewOverridesByVersion,
   createPreviewReadContext,
   cacheLookup,

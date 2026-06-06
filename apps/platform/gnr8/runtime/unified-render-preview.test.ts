@@ -412,6 +412,123 @@ test('raw template preview does not emit duplicated preview-assets prefix when s
   assert.equal(rewritten.includes('/api/gnr8/runtime/preview-assets/site-maver/sv-maver/uploads/7xhKQCOl/767x0_2560x0/IMG.jpg'), true)
 })
 
+test('raw template asset rewrite preserves anchor hrefs for navigation rewrite', () => {
+  const html = '<html><head><link rel="stylesheet" href="/assets/site.css"></head><body><a href="/about">About</a><img src="/uploads/logo.png"></body></html>'
+  const rewritten = __unifiedRenderPreviewTestUtils.rewriteRawTemplateAssetReferences({
+    html,
+    siteId: 'site-nav',
+    siteVersionId: 'sv-nav',
+    entryHtmlPath: 'index.html',
+    fileMapPaths: new Set(['assets/site.css', 'uploads/logo.png']),
+  })
+  assert.equal(rewritten.includes('<a href="/about">About</a>'), true)
+  assert.equal(rewritten.includes('/api/gnr8/runtime/preview-assets/site-nav/sv-nav/assets/site.css'), true)
+  assert.equal(rewritten.includes('/api/gnr8/runtime/preview-assets/site-nav/sv-nav/uploads/logo.png'), true)
+})
+
+test('raw template multipage link rewrite normalizes routes and emits deterministic counts', () => {
+  const logs: Array<{ code: string; payload: Record<string, unknown> }> = []
+  const originalInfo = console.info
+  console.info = ((message?: unknown, payload?: unknown) => {
+    const code = String(message ?? '')
+    if (code.includes('MULTIPAGE_LINK_')) {
+      logs.push({
+        code,
+        payload: (payload && typeof payload === 'object' ? (payload as Record<string, unknown>) : {}) ?? {},
+      })
+    }
+  }) as typeof console.info
+  try {
+    const html = [
+      '<html><body>',
+      '<a class="nav" href="/about">About</a>',
+      '<a href="https://example.com/about/">Absolute</a>',
+      '<a href="about/index.html" aria-label="About relative">Relative</a>',
+      '<a href="/services/item">Nested</a>',
+      '<a href="/">Home</a>',
+      '<a href="https://outside.test/about">External</a>',
+      '<a href="mailto:hello@example.com">Mail</a>',
+      '<a href="tel:+15551212">Tel</a>',
+      '<a href="sms:+15551212">Sms</a>',
+      '<a href="#section">Hash</a>',
+      '<a href="javascript:void(0)">JS</a>',
+      '<a href="/files/menu.pdf">PDF</a>',
+      '<a href="/download" download>Download</a>',
+      '<a href="/missing">Missing</a>',
+      '<a href="/about?tab=team">Query</a>',
+      '</body></html>',
+    ].join('')
+    const result = __unifiedRenderPreviewTestUtils.rewriteRawTemplateMultiPageLinks({
+      html,
+      siteId: 'site-nav',
+      siteVersionId: 'sv-nav',
+      importProvenanceSummary: fixtureMultiPageAssemblyProvenance(),
+      routeMapServingEnabled: true,
+      routeMapResolution: {
+        outcome: 'selected',
+        diagnosticCode: 'MULTIPAGE_ROUTE_MAP_ROOT_SELECTED',
+        siteVersionId: 'sv-nav',
+        requestedPath: '/',
+        routePath: '/',
+        rawFilePath: 'index.html',
+        sourceUrl: null,
+        finalUrl: null,
+      },
+    })
+
+    assert.equal(result.counts.rewritten, 5)
+    assert.equal(result.counts.skippedExternal, 1)
+    assert.equal(result.counts.skippedUnsupported, 5)
+    assert.equal(result.counts.skippedHashOnly, 1)
+    assert.equal(result.counts.skippedAsset, 2)
+    assert.equal(result.counts.skippedRouteMissing, 1)
+    assert.equal(result.html.includes('<a class="nav" href="/api/gnr8/runtime/versions/sv-nav/preview?mode=raw_template_preview&amp;path=%2Fabout" data-gnr8-multipage-link="rewritten" data-gnr8-original-href="/about">About</a>'), true)
+    assert.equal(result.html.includes('href="/api/gnr8/runtime/versions/sv-nav/preview?mode=raw_template_preview&amp;path=%2Fservices%2Fitem"'), true)
+    assert.equal(result.html.includes('href="/api/gnr8/runtime/versions/sv-nav/preview?mode=raw_template_preview&amp;path=%2F"'), true)
+    assert.equal(result.html.includes('<a href="https://outside.test/about">External</a>'), true)
+    assert.equal(result.html.includes('<a href="/missing">Missing</a>'), true)
+    assert.equal(result.html.includes('aria-label="About relative"'), true)
+    assert.equal(result.html.includes('>Relative</a>'), true)
+    assert.deepEqual(result.diagnostics, [
+      'MULTIPAGE_LINK_REWRITE_COMPLETED',
+      'MULTIPAGE_LINK_REWRITE_STARTED',
+      'MULTIPAGE_LINK_REWRITTEN',
+      'MULTIPAGE_LINK_SKIPPED_ASSET',
+      'MULTIPAGE_LINK_SKIPPED_EXTERNAL',
+      'MULTIPAGE_LINK_SKIPPED_HASH_ONLY',
+      'MULTIPAGE_LINK_SKIPPED_ROUTE_NOT_IMPORTED',
+      'MULTIPAGE_LINK_SKIPPED_UNSUPPORTED_SCHEME',
+    ])
+  } finally {
+    console.info = originalInfo
+  }
+  const completed = logs.find((entry) => entry.code.includes('MULTIPAGE_LINK_REWRITE_COMPLETED'))
+  assert.equal(completed?.payload.rewritten, 5)
+  assert.equal(completed?.payload.skippedRouteMissing, 1)
+})
+
+test('raw template multipage link rewrite remains disabled outside controlled route-map preview', () => {
+  const html = '<html><body><a href="/about">About</a></body></html>'
+  const result = __unifiedRenderPreviewTestUtils.rewriteRawTemplateMultiPageLinks({
+    html,
+    siteId: 'site-nav',
+    siteVersionId: 'sv-nav',
+    importProvenanceSummary: fixtureMultiPageAssemblyProvenance(),
+    routeMapServingEnabled: false,
+    routeMapResolution: {
+      outcome: 'disabled',
+      diagnosticCode: 'MULTIPAGE_ROUTE_MAP_DISABLED',
+      siteVersionId: 'sv-nav',
+      requestedPath: '/about',
+      routePath: '/about',
+      reasonCode: 'explicit_option_disabled',
+    },
+  })
+  assert.equal(result.html, html)
+  assert.deepEqual(result.diagnostics, [])
+  assert.equal(result.counts.rewritten, 0)
+})
+
 test('raw template preview route-map serving resolves /about to assembled child HTML and rewrites child assets', async () => {
   const requestedAssets: string[] = []
   const restore = setUnifiedRenderPreviewDependenciesForTest({
@@ -455,9 +572,9 @@ test('raw template preview route-map serving resolves /about to assembled child 
       if (input.filePath === 'pages/about/index.html') {
         return {
           bytes: Buffer.from(
-            '<!doctype html><html><head><link rel="stylesheet" href="./assets/about.css"></head><body><h1>About child</h1></body></html>',
+            '<!doctype html><html><head><link rel="stylesheet" href="./assets/about.css"></head><body><nav><a href="/">Home</a><a href="/services/item">Service</a><a href="/missing">Missing</a><a href="https://outside.test">Outside</a></nav><h1>About child</h1></body></html>',
           ),
-          sizeBytes: 124,
+          sizeBytes: 224,
           mediaType: 'text/html',
         } as any
       }
@@ -486,6 +603,19 @@ test('raw template preview route-map serving resolves /about to assembled child 
       preview.html.includes('/api/gnr8/runtime/preview-assets/site-multi/sv-multi/pages/about/assets/about.css'),
       true,
     )
+    assert.equal(
+      preview.html.includes('/api/gnr8/runtime/versions/sv-multi/preview?mode=raw_template_preview&amp;path=%2Fservices%2Fitem'),
+      true,
+    )
+    assert.equal(
+      preview.html.includes('/api/gnr8/runtime/versions/sv-multi/preview?mode=raw_template_preview&amp;path=%2F'),
+      true,
+    )
+    assert.equal(preview.html.includes('<a href="/missing">Missing</a>'), true)
+    assert.equal(preview.html.includes('<a href="https://outside.test">Outside</a>'), true)
+    assert.equal(preview.previewRuntimeSummary.previewDiagnostics.includes('MULTIPAGE_LINK_REWRITTEN'), true)
+    assert.equal(preview.previewRuntimeSummary.previewDiagnostics.includes('MULTIPAGE_LINK_SKIPPED_ROUTE_NOT_IMPORTED'), true)
+    assert.equal(preview.previewRuntimeSummary.previewDiagnostics.includes('MULTIPAGE_LINK_SKIPPED_EXTERNAL'), true)
     assert.equal(preview.previewRuntimeSummary.previewDiagnostics.includes('MULTIPAGE_ROUTE_MAP_SELECTED'), true)
     assert.equal(preview.previewRuntimeSummary.previewDiagnostics.includes('RAW_TEMPLATE_PREVIEW_RENDERED'), true)
   } finally {
@@ -628,7 +758,7 @@ test('raw template route-map child selection remains disabled outside controlled
     getRawTemplateSiteArtifact: async () => null,
     getRawTemplateSiteAsset: async (input) => {
       requestedAssets.push(input.filePath)
-      return { bytes: Buffer.from('<html><body><h1>Home</h1></body></html>'), sizeBytes: 39, mediaType: 'text/html' } as any
+      return { bytes: Buffer.from('<html><body><a href="/about">About</a><h1>Home</h1></body></html>'), sizeBytes: 66, mediaType: 'text/html' } as any
     },
     listContentSlots: async () => [],
     listContentOverrides: async () => [],
@@ -644,6 +774,8 @@ test('raw template route-map child selection remains disabled outside controlled
 
     assert.deepEqual(requestedAssets, ['index.html'])
     assert.match(preview.html, /<h1>Home<\/h1>/)
+    assert.equal(preview.html.includes('<a href="/about">About</a>'), true)
+    assert.equal(preview.html.includes('data-gnr8-multipage-link="rewritten"'), false)
     assert.equal(preview.previewRuntimeSummary.previewDiagnostics.includes('MULTIPAGE_ROUTE_MAP_DISABLED'), true)
     assert.equal(preview.previewRuntimeSummary.previewDiagnostics.includes('MULTIPAGE_ROUTE_MAP_SELECTED'), false)
   } finally {

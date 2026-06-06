@@ -26,9 +26,11 @@ export function normalizeSiteVersionPreviewMode(value: unknown): SiteVersionPrev
 export function buildSiteVersionPreviewUrl(input: {
   siteVersionId: string
   mode: SiteVersionPreviewMode
+  path?: string | null
 }): string {
   const params = new URLSearchParams()
   params.set('mode', input.mode)
+  if (input.path) params.set('path', input.path)
   return `/api/gnr8/runtime/versions/${encodeURIComponent(input.siteVersionId)}/preview?${params.toString()}`
 }
 

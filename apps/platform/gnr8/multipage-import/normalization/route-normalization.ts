@@ -81,6 +81,7 @@ function isUnsupportedScheme(rawHref: string): boolean {
   return (
     normalized.startsWith('mailto:') ||
     normalized.startsWith('tel:') ||
+    normalized.startsWith('sms:') ||
     normalized.startsWith('javascript:') ||
     normalized.startsWith('data:')
   )

@@ -96,7 +96,7 @@ function normalizeRawFilePath(value: string): string {
     .join("/");
 }
 
-function routeMapFromProvenance(
+export function routeMapFromProvenance(
   provenance: RuntimeImportProvenanceSummary | null | undefined,
 ): MultiPageRawArtifactAssemblyRouteEntry[] {
   const assembly = provenance?.multiPageDiscovery?.rawArtifactAssembly ?? null;

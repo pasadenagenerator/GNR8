@@ -36,6 +36,14 @@ test('buildSiteVersionPreviewUrl keeps transformed/debug paths explicit', () => 
     }),
     '/api/gnr8/runtime/versions/8ce51f31-92ff-4ef4-a543-e1177dfe780d/preview?mode=raw_template_preview',
   )
+  assert.equal(
+    buildSiteVersionPreviewUrl({
+      siteVersionId: '8ce51f31-92ff-4ef4-a543-e1177dfe780d',
+      mode: 'raw_template_preview',
+      path: '/about',
+    }),
+    '/api/gnr8/runtime/versions/8ce51f31-92ff-4ef4-a543-e1177dfe780d/preview?mode=raw_template_preview&path=%2Fabout',
+  )
 })
 
 test('resolveSiteWorkspacePreview prefers transformed preview as primary source', () => {
