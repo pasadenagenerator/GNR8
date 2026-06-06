@@ -6,7 +6,7 @@ Track migration-first MVP runtime progress separately from Website OS work.
 
 ## Current Status
 
-Migration Runtime + Command Center MVP is operational and smoke-tested through Phase 6.
+Migration Runtime + Command Center MVP is operational and smoke-tested through Phase 7B.
 
 Phase 5A adds Command Center migration batch list/detail UI, batch summary, diagnostics, failure reporting, timeline visibility, and operator run/resume controls. Execution remains operator-driven. Queue/worker orchestration and unattended execution do not exist yet.
 
@@ -26,11 +26,17 @@ Phase 6D completes Mono Map Compatibility Restoration and Maver Production Valid
 
 Phase 6 is COMPLETE.
 
+Phase 7B completes static Multi-Page Import MVP validation, including discovery integration, controlled child-page acquisition, route-map assembly, controlled route-map preview, internal link rewriting, validation, real website smoke testing, operator visibility, and operator validation completion.
+
+Phase 7B is COMPLETE.
+Phase 7B classification is SUCCESSFUL.
+Phase 7B operator classification is A. Operator Ready.
+
 Website OS runtime expansion remains paused.
 
 ## Critical Path
 
-Import -> CMS -> Renderer -> Durable Jobs -> Durable Batches -> Batch Execution -> Batch Execution Observability -> Command Center -> Hosting Operations -> Hosting Hardening -> Phase 7B Multi-Page Import MVP -> Billing
+Import -> CMS -> Renderer -> Durable Jobs -> Durable Batches -> Batch Execution -> Batch Execution Observability -> Command Center -> Hosting Operations -> Hosting Hardening -> Multi-Page Import MVP -> Phase 7C Discovery Expansion -> Billing
 
 ## Completed Reality Checks
 
@@ -473,8 +479,91 @@ Execution boundary:
 Status:
 - Phase 6 COMPLETE.
 
-Next milestone:
+Next milestone at Phase 6 closure:
 - Phase 7B — Multi-Page Import MVP
+
+### Phase 7B — Multi-Page Import MVP
+
+Goal:
+- Move GNR8 from single-page import validation to static multi-page website import validation.
+
+Scope boundary:
+- Static websites only.
+- No dynamic content.
+- No commerce.
+- No CMS expansion.
+- No public production multi-page activation.
+- No sitemap or robots discovery yet.
+
+Completed:
+- 7B-1 Discovery Integration.
+- 7B-2 HTML Acquisition.
+- 7B-3 Raw Artifact Assembly.
+- 7B-4 Controlled Route-Map Preview.
+- 7B-5 Internal Link Rewriting.
+- 7B-6 Validation Engine.
+- 7B-7 Real Website Smoke Testing.
+- 7B-8 Operator Visibility.
+- 7B-9 Operator Verification.
+- 7B-10 Operator Validation Completion.
+
+Implementation summary:
+- Added discovery-only integration with `multiPageDiscovery`, route candidate discovery, and manifest persistence in provenance.
+- Added controlled child-page acquisition with acquisition manifest, acquisition diagnostics, and fetched-page evidence persistence.
+- Added deterministic route-map assembly with multi-page raw artifact evidence, `routeMap` persistence, and `htmlPathMap` persistence.
+- Added preview-only route-map resolver with nested route support, explicit route misses, and route-map diagnostics.
+- Added controlled preview link rewriting with route-aware navigation, route normalization reuse, and deterministic diagnostics.
+- Added multi-page preview validation with readiness classification, warnings, blockers, route validation, and link validation.
+- Added Multi-Page Import operator summary, route tables, discovery/acquisition/assembly visibility, and validation visibility.
+- Completed validation status alignment, recommendation generation, warning/blocker visibility, operator-readable diagnostics, and developer diagnostics isolation.
+
+Readiness statuses:
+- ready
+- ready_with_warnings
+- blocked
+
+Real website validation:
+- Viroidoc: discovery successful, acquisition successful, assembly successful, preview successful.
+- Paul Graham: discovery successful, acquisition successful, assembly successful, route-limit warnings surfaced correctly.
+
+Finding resolved:
+- Initial assembly blocker from apex/www canonical-host mismatch was discovered and fixed.
+
+Capabilities proven:
+- internal page discovery
+- multi-page acquisition
+- route-map assembly
+- child-page preview rendering
+- internal navigation rewriting
+- route validation
+- operator diagnostics
+- static website import readiness evaluation
+
+Operator readiness:
+- Operators can determine import readiness, remaining warnings, blockers, and next actions without provenance JSON, debug endpoints, or database inspection.
+
+Explicitly not included:
+- sitemap.xml discovery
+- robots.txt discovery
+- canonical URL expansion
+- dynamic content import
+- CMS page-scoped materialization
+- commerce import
+- compatibility-provider extraction
+- public production multi-page serving
+- automatic publish activation
+
+Status:
+- Phase 7B COMPLETE.
+- Classification: SUCCESSFUL.
+- Operator Classification: A. Operator Ready.
+
+Next milestone:
+- Phase 7C — Discovery Expansion.
+- Static websites only.
+- No dynamic content.
+- No commerce.
+- No compatibility-provider work yet.
 
 ## Current State
 
@@ -488,16 +577,18 @@ Completed:
 - Phase 6C-B
 - Phase 6C
 - Phase 6D
+- Phase 7B
 
 Hosting Operations MVP complete.
 Hosting Hardening complete.
 Phase 6 complete.
+Phase 7B complete.
 
 ## Current Remaining Work
 
 ### Near-term
 
-- Phase 7B — Multi-Page Import MVP
+- Phase 7C — Discovery Expansion
 - Billing Reality Check
 
 ### Optional Runtime UX

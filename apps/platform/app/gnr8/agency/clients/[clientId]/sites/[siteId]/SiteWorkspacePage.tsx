@@ -305,6 +305,8 @@ function renderMultiPageImportOperatorContent(readModel: Awaited<ReturnType<type
   const hasMultiPageSignal =
     readModel.overview.rawImportArtifactFound ||
     summary.overview.discovery.discoveredRoutes > 0 ||
+    summary.overview.sitemapDiscovery.sitemapCount > 0 ||
+    summary.overview.sitemapDiscovery.discoveredUrlCount > 0 ||
     summary.overview.acquisition.fetchedPages > 0 ||
     summary.overview.assembly.assembledPages > 0 ||
     summary.routes.length > 0
@@ -316,10 +318,20 @@ function renderMultiPageImportOperatorContent(readModel: Awaited<ReturnType<type
       <div style={{ marginTop: 10, display: 'grid', gap: 12 }}>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           {renderMetric('Discovery', `routes ${summary.overview.discovery.discoveredRoutes} / skipped ${summary.overview.discovery.skippedLinks}`)}
+          {renderMetric(
+            'Sitemap Discovery',
+            `sitemaps ${summary.overview.sitemapDiscovery.sitemapCount} / urls ${summary.overview.sitemapDiscovery.discoveredUrlCount} / skipped ${summary.overview.sitemapDiscovery.skippedUrlCount}`,
+          )}
           {renderMetric('Acquisition', `fetched ${summary.overview.acquisition.fetchedPages} / failed ${summary.overview.acquisition.failedPages}`)}
           {renderMetric('Assembly', `assembled ${summary.overview.assembly.assembledPages} / excluded ${summary.overview.assembly.excludedPages}`)}
           {renderMetric('Validation', summary.overview.validation.status)}
         </div>
+
+        {summary.overview.sitemapDiscovery.warnings.length > 0 ? (
+          <div style={{ border: '1px solid #fde68a', borderRadius: 8, background: '#fffbeb', padding: '8px 10px', color: '#92400e', fontSize: 12 }}>
+            <strong style={{ color: '#78350f' }}>Sitemap Discovery:</strong> {summary.overview.sitemapDiscovery.warnings.join(' ')}
+          </div>
+        ) : null}
 
         <div style={{ border: '1px solid #e2e8f0', borderRadius: 8, background: '#f8fafc', padding: '8px 10px', color: '#334155', fontSize: 12 }}>
           <strong style={{ color: '#0f172a' }}>Recommendation:</strong> {summary.overview.validation.recommendation}

@@ -25,6 +25,20 @@ function createFetcher(pages: PageMap): (url: string) => Promise<{ url: string; 
   }
 }
 
+function createSitemapFetcher(sitemaps: PageMap): (url: string) => Promise<{ url: string; body: string; contentType: string | null } | null> {
+  return async (url) => {
+    const parsed = new URL(url)
+    const normalizedPath = parsed.pathname.replace(/\/+$/, '') || '/'
+    const body = sitemaps[normalizedPath]
+    if (!body) return null
+    return {
+      url,
+      body,
+      contentType: 'application/xml',
+    }
+  }
+}
+
 const FIXTURE_PAGES: PageMap = {
   '/': page(
     'Home',
@@ -232,4 +246,160 @@ test('summary projection surfaces multipage truth counts', async () => {
   assert.equal(summary.templateFamilyExtraction.enabled, true)
   assert.ok(summary.templateFamilyExtraction.familyCount >= 1)
   assert.ok(Array.isArray(summary.diagnostics))
+})
+
+test('sitemap.xml discovery adds hidden route candidates', async () => {
+  const tree = await discoverMultipageImportTree(
+    {
+      siteId: 'site_sitemap',
+      seedUrl: 'https://example.com/',
+      limits: { maxRoutes: 10, maxDepth: 1, maxLinksPerPage: 10, maxSitemaps: 2, maxUrlsFromSitemaps: 10 },
+    },
+    {
+      fetchPage: createFetcher({
+        '/': page('Home', '<main><p>No navigation to hidden page.</p></main>'),
+        '/hidden': page('Hidden', '<main>Hidden sitemap page</main>'),
+      }),
+      fetchSitemap: createSitemapFetcher({
+        '/sitemap.xml': `<?xml version="1.0"?><urlset><url><loc>https://example.com/hidden</loc></url></urlset>`,
+      }),
+    },
+  )
+
+  const hidden = tree.routes.find((route) => route.normalizedPath === '/hidden')
+  assert.equal(hidden?.discoverySource, 'sitemap_like')
+  assert.equal(tree.sitemapDiscovery.fetchedSitemapUrls.length, 1)
+  assert.equal(tree.sitemapDiscovery.urlCount, 1)
+  assert.ok(tree.diagnostics.some((entry) => entry.startsWith('SITEMAP_URL_DISCOVERED:/hidden')))
+})
+
+test('sitemap_index.xml discovery traverses nested same-site sitemaps', async () => {
+  const tree = await discoverMultipageImportTree(
+    {
+      siteId: 'site_sitemap_index',
+      seedUrl: 'https://example.com/',
+      limits: { maxRoutes: 10, maxDepth: 1, maxLinksPerPage: 10, maxSitemaps: 4, maxUrlsFromSitemaps: 10, maxNestedSitemaps: 2 },
+    },
+    {
+      fetchPage: createFetcher({
+        '/': page('Home', '<main>Home</main>'),
+        '/from-index': page('From Index', '<main>Nested</main>'),
+      }),
+      fetchSitemap: createSitemapFetcher({
+        '/sitemap_index.xml': `<?xml version="1.0"?><sitemapindex><sitemap><loc>https://example.com/nested.xml</loc></sitemap></sitemapindex>`,
+        '/nested.xml': `<?xml version="1.0"?><urlset><url><loc>https://example.com/from-index</loc></url></urlset>`,
+      }),
+    },
+  )
+
+  assert.ok(tree.routes.some((route) => route.normalizedPath === '/from-index'))
+  assert.equal(tree.sitemapDiscovery.nestedSitemapCount, 1)
+  assert.ok(tree.diagnostics.some((entry) => entry.startsWith('SITEMAP_NESTED_DISCOVERY_STARTED')))
+  assert.ok(tree.diagnostics.some((entry) => entry.startsWith('SITEMAP_NESTED_DISCOVERY_SUCCEEDED')))
+})
+
+test('sitemap discovery dedupes seed and link-discovered routes', async () => {
+  const tree = await discoverMultipageImportTree(
+    {
+      siteId: 'site_sitemap_dupe',
+      seedUrl: 'https://example.com/',
+      limits: { maxRoutes: 10, maxDepth: 1, maxLinksPerPage: 10, maxSitemaps: 2, maxUrlsFromSitemaps: 10 },
+    },
+    {
+      fetchPage: createFetcher({
+        '/': page('Home', '<main><a href="/about">About</a></main>'),
+        '/about': page('About', '<main>About</main>'),
+        '/hidden': page('Hidden', '<main>Hidden</main>'),
+      }),
+      fetchSitemap: createSitemapFetcher({
+        '/sitemap.xml': `<?xml version="1.0"?><urlset>
+          <url><loc>https://example.com/</loc></url>
+          <url><loc>https://example.com/about</loc></url>
+          <url><loc>https://example.com/about/</loc></url>
+          <url><loc>https://example.com/hidden</loc></url>
+        </urlset>`,
+      }),
+    },
+  )
+
+  assert.equal(tree.routes.filter((route) => route.normalizedPath === '/').length, 1)
+  assert.equal(tree.routes.filter((route) => route.normalizedPath === '/about').length, 1)
+  assert.equal(tree.routes.filter((route) => route.normalizedPath === '/hidden').length, 1)
+  assert.ok(tree.diagnostics.some((entry) => entry.startsWith('MULTIPAGE_ROUTE_DUPLICATE_SKIPPED:/about')))
+})
+
+test('sitemap discovery allows apex/www equivalence and rejects sibling domains', async () => {
+  const tree = await discoverMultipageImportTree(
+    {
+      siteId: 'site_sitemap_hosts',
+      seedUrl: 'https://www.example.com/',
+      limits: { maxRoutes: 10, maxDepth: 1, maxLinksPerPage: 10, maxSitemaps: 2, maxUrlsFromSitemaps: 10 },
+    },
+    {
+      fetchPage: createFetcher({
+        '/': page('Home', '<main>Home</main>'),
+        '/apex': page('Apex', '<main>Apex</main>'),
+      }),
+      fetchSitemap: createSitemapFetcher({
+        '/sitemap.xml': `<?xml version="1.0"?><urlset>
+          <url><loc>https://example.com/apex</loc></url>
+          <url><loc>https://shop.example.com/sibling</loc></url>
+        </urlset>`,
+      }),
+    },
+  )
+
+  assert.ok(tree.routes.some((route) => route.normalizedPath === '/apex'))
+  assert.ok(!tree.routes.some((route) => route.url.includes('shop.example.com')))
+  assert.ok(tree.sitemapDiscovery.skippedUrls.some((entry) => entry.reason === 'external_host'))
+})
+
+test('malformed sitemap records deterministic failure without blocking discovery', async () => {
+  const tree = await discoverMultipageImportTree(
+    {
+      siteId: 'site_sitemap_malformed',
+      seedUrl: 'https://example.com/',
+      limits: { maxRoutes: 10, maxDepth: 1, maxLinksPerPage: 10, maxSitemaps: 2, maxUrlsFromSitemaps: 10 },
+    },
+    {
+      fetchPage: createFetcher({ '/': page('Home', '<main><a href="/about">About</a></main>'), '/about': page('About', '<main>About</main>') }),
+      fetchSitemap: createSitemapFetcher({ '/sitemap.xml': `<not-a-sitemap><loc>https://example.com/ignored</loc></not-a-sitemap>` }),
+    },
+  )
+
+  assert.ok(tree.routes.some((route) => route.normalizedPath === '/about'))
+  assert.equal(tree.sitemapDiscovery.urlCount, 0)
+  assert.ok(tree.sitemapDiscovery.diagnostics.some((entry) => entry.startsWith('SITEMAP_DISCOVERY_FAILED')))
+})
+
+test('sitemap discovery enforces URL and nested sitemap limits', async () => {
+  const tree = await discoverMultipageImportTree(
+    {
+      siteId: 'site_sitemap_limits',
+      seedUrl: 'https://example.com/',
+      limits: { maxRoutes: 10, maxDepth: 1, maxLinksPerPage: 10, maxSitemaps: 4, maxUrlsFromSitemaps: 1, maxNestedSitemaps: 1 },
+    },
+    {
+      fetchPage: createFetcher({
+        '/': page('Home', '<main>Home</main>'),
+        '/one': page('One', '<main>One</main>'),
+        '/two': page('Two', '<main>Two</main>'),
+      }),
+      fetchSitemap: createSitemapFetcher({
+        '/sitemap_index.xml': `<?xml version="1.0"?><sitemapindex>
+          <sitemap><loc>https://example.com/a.xml</loc></sitemap>
+          <sitemap><loc>https://example.com/b.xml</loc></sitemap>
+        </sitemapindex>`,
+        '/a.xml': `<?xml version="1.0"?><urlset>
+          <url><loc>https://example.com/one</loc></url>
+          <url><loc>https://example.com/two</loc></url>
+        </urlset>`,
+      }),
+    },
+  )
+
+  assert.equal(tree.sitemapDiscovery.nestedSitemapCount, 1)
+  assert.equal(tree.sitemapDiscovery.urlCount, 1)
+  assert.ok(tree.sitemapDiscovery.skippedUrlCount >= 1)
+  assert.ok(tree.sitemapDiscovery.diagnostics.some((entry) => entry.startsWith('SITEMAP_LIMIT_REACHED')))
 })

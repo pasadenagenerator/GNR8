@@ -24,6 +24,40 @@ export type MultipageImportLimits = {
   maxDepth: number
   maxLinksPerPage: number
   maxTemplateLinksPerRoute: number
+  maxSitemaps: number
+  maxUrlsFromSitemaps: number
+  maxNestedSitemaps: number
+}
+
+export type SitemapDiscoverySkippedUrl = {
+  originalUrl: string | null
+  normalizedUrl: string | null
+  normalizedRoutePath: string | null
+  sourceSitemapUrl: string
+  reason: string
+}
+
+export type SitemapDiscoveryDiscoveredUrl = {
+  originalUrl: string
+  normalizedUrl: string
+  normalizedRoutePath: string
+  sourceSitemapUrl: string
+}
+
+export type SitemapDiscoveryEvidence = {
+  attemptedSitemapUrls: string[]
+  fetchedSitemapUrls: string[]
+  nestedSitemapCount: number
+  urlCount: number
+  skippedUrlCount: number
+  discoveredUrls: SitemapDiscoveryDiscoveredUrl[]
+  skippedUrls: SitemapDiscoverySkippedUrl[]
+  limitsApplied: {
+    maxSitemaps: number
+    maxUrlsFromSitemaps: number
+    maxNestedSitemaps: number
+  }
+  diagnostics: string[]
 }
 
 export type RouteNode = {
@@ -92,6 +126,7 @@ export type MultipageImportTree = {
   pageRelationships: PageRelationship[]
   templateFamilyExtraction: SiteTemplateFamilyExtraction | null
   limits: MultipageImportLimits
+  sitemapDiscovery: SitemapDiscoveryEvidence
   depthLimitHit: boolean
   routeLimitHit: boolean
   diagnostics: string[]
@@ -105,6 +140,7 @@ export type MultipageImportSummary = {
   footerNavigationCount: number
   sharedRegionCount: number
   templateFamilyExtraction: TemplateFamilyExtractionSummary
+  sitemapDiscovery: SitemapDiscoveryEvidence
   depthLimitHit: boolean
   routeLimitHit: boolean
   diagnostics: string[]
@@ -116,8 +152,15 @@ export type PageFetchResult = {
   title: string | null
 }
 
+export type SitemapFetchResult = {
+  url: string
+  body: string
+  contentType: string | null
+}
+
 export type MultipageDiscoveryDependencies = {
   fetchPage: (url: string) => Promise<PageFetchResult | null>
+  fetchSitemap?: (url: string) => Promise<SitemapFetchResult | null>
 }
 
 export type MultipageDiscoveryInput = {

@@ -69,9 +69,26 @@ export type MultiPageDiscoveryManifest = {
     maxDepth: number;
     maxLinksPerPage: number;
     maxTemplateLinksPerRoute: number;
+    maxSitemaps?: number;
+    maxUrlsFromSitemaps?: number;
+    maxNestedSitemaps?: number;
   };
   diagnostics: string[];
   generatedAt: string;
+};
+
+export type MultiPageSitemapDiscoverySummary = {
+  attemptedSitemapUrls: string[];
+  fetchedSitemapUrls: string[];
+  nestedSitemapCount: number;
+  urlCount: number;
+  skippedUrlCount: number;
+  limitsApplied: {
+    maxSitemaps: number;
+    maxUrlsFromSitemaps: number;
+    maxNestedSitemaps: number;
+  };
+  diagnostics: string[];
 };
 
 export type MultiPageHtmlAcquisitionStatus = "fetched" | "failed" | "skipped";
@@ -280,6 +297,7 @@ export type RuntimeImportProvenanceSummary = {
   multiPageDiscovery?: {
     summary: MultiPageDiscoverySummary;
     manifest: MultiPageDiscoveryManifest | null;
+    sitemapDiscovery?: MultiPageSitemapDiscoverySummary | null;
     acquisition?: MultiPageHtmlAcquisitionManifest | null;
     rawArtifactAssembly?: MultiPageRawArtifactAssemblyManifest | null;
   } | null;

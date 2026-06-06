@@ -1,7 +1,7 @@
 # GNR8 CURRENT STATE SNAPSHOT
 
 ## Snapshot Date
-2026-06-05
+2026-06-06
 
 ## Migration Platform MVP Buildout
 
@@ -17,9 +17,14 @@ Completed migration-first chain:
 - Batch Execution Observability
 - Command Center Integration
 - Hosting Operations
+- Hosting Hardening
+- Multi-Page Import MVP
 
 Migration Runtime + Command Center MVP is operational and smoke-tested.
 Phase 6 is COMPLETE.
+Phase 7B — Multi-Page Import MVP is COMPLETE.
+Phase 7B classification is SUCCESSFUL.
+Phase 7B operator classification is A. Operator Ready.
 Phase 6A — Hosting Operations MVP is complete.
 Phase 6B — Hosting Operations Workflow Review is complete.
 Phase 6C-A — Readiness & Domain Operations MVP is complete.
@@ -85,6 +90,14 @@ Completed capabilities:
 - Host-Binding Raw Template Serving
 - Mono Map Compatibility Restoration
 - Maver Production Validation
+- Multi-Page Discovery Integration
+- Multi-Page HTML Acquisition
+- Multi-Page Raw Artifact Assembly
+- Controlled Route-Map Preview
+- Internal Link Rewriting
+- Multi-Page Validation Engine
+- Multi-Page Operator Visibility
+- Multi-Page Operator Validation Completion
 
 Current migration runtime capabilities:
 - durable jobs
@@ -120,6 +133,15 @@ Current migration runtime capabilities:
 - imported runtime reconciliation
 - compatibility-based runtime adaptation
 - OpenStreetMap compatibility fallback
+- internal page discovery
+- multi-page acquisition
+- route-map assembly
+- child-page preview rendering
+- internal navigation rewriting
+- route validation
+- link validation
+- operator diagnostics
+- static website import readiness evaluation
 
 Hosting Operations now exposes:
 - Hosting Overview
@@ -131,6 +153,50 @@ Hosting Operations now exposes:
 - DNS visibility
 - Domain recheck workflow
 - Asset Diagnostics Drilldown
+
+## Phase 7B Multi-Page Import MVP
+
+Status:
+- COMPLETE.
+
+Classification:
+- SUCCESSFUL.
+
+Operator classification:
+- A. Operator Ready.
+
+Delivered:
+- Discovery-only integration with `multiPageDiscovery`, route candidate discovery, and manifest persistence in provenance.
+- Controlled child-page acquisition with acquisition manifest, diagnostics, and fetched-page evidence persistence.
+- Deterministic route-map assembly with multi-page raw artifact evidence, `routeMap` persistence, and `htmlPathMap` persistence.
+- Preview-only route-map resolver with nested route support, explicit route misses, and route-map diagnostics.
+- Controlled preview link rewriting with route-aware navigation, route normalization reuse, and deterministic diagnostics.
+- Multi-page preview validation with readiness classification, route validation, link validation, warnings, and blockers.
+- Operator summary, route tables, discovery visibility, acquisition visibility, assembly visibility, and validation visibility.
+- Operator-readable validation status alignment, recommendations, warning/blocker visibility, diagnostics, and developer diagnostics isolation.
+
+Validation statuses:
+- ready
+- ready_with_warnings
+- blocked
+
+Real website validation:
+- Viroidoc: discovery successful, acquisition successful, assembly successful, preview successful.
+- Paul Graham: discovery successful, acquisition successful, assembly successful, route-limit warnings surfaced correctly.
+
+Phase 7B finding resolved:
+- Initial assembly blocker from apex/www canonical-host mismatch was discovered and fixed.
+
+Explicitly not included in Phase 7B:
+- sitemap.xml discovery
+- robots.txt discovery
+- canonical URL expansion
+- dynamic content import
+- CMS page-scoped materialization
+- commerce import
+- compatibility-provider extraction
+- public production multi-page serving
+- automatic publish activation
 
 ## Production Validation
 
@@ -193,16 +259,23 @@ Execution boundary:
 - unattended orchestration does not exist yet
 
 Remaining critical path:
-- Phase 7B — Multi-Page Import MVP
+- Phase 7C — Discovery Expansion
 - Billing
 
 Current Hosting Operations status:
 - Hosting Operations MVP is functionally complete.
 - Hosting Hardening is complete.
 - Phase 6 is complete.
+- Phase 7B is complete.
 
 Next recommended milestone:
-- Phase 7B — Multi-Page Import MVP
+- Phase 7C — Discovery Expansion
+
+Phase 7C boundary:
+- Static websites only.
+- No dynamic content.
+- No commerce.
+- No compatibility-provider work yet.
 
 ## Bootstrap Runtime State (2026-06-03)
 
@@ -263,7 +336,8 @@ Migration-first reprioritization:
 - The Execution Artifact Runtime family is not currently part of the migration-critical path.
 
 Current migration platform continuation:
-- Phase 7B — Multi-Page Import MVP.
+- Phase 7C — Discovery Expansion.
+- Phase 7B — Multi-Page Import MVP is complete.
 - Website OS runtime expansion remains paused.
 - Execution Artifact Runtime family remains outside the migration-critical path.
 
@@ -338,7 +412,8 @@ Future continuation:
 - Not currently part of the migration-critical path.
 
 Current migration platform continuation:
-- Hosting Hardening Reality Check.
+- Phase 7C — Discovery Expansion.
+- Phase 7B — Multi-Page Import MVP is complete.
 - Website OS runtime expansion remains paused.
 
 ## Execution Candidate Runtime Family v1 Milestone (2026-06-03)

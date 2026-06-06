@@ -2,15 +2,17 @@
 
 This is the first file every new ChatGPT/Codex thread should read.
 
-## Current Active Track: Phase 7B — Multi-Page Import MVP
+## Current Active Track: Phase 7C — Discovery Expansion
 
 Website OS branch status:
 - Closed/frozen/paused.
 - Do not continue Website OS runtime expansion unless explicitly requested.
 
 Latest completed milestone:
-- Phase 6 — Hosting Operations + Hosting Hardening.
+- Phase 7B — Multi-Page Import MVP.
 - Status: COMPLETE.
+- Classification: SUCCESSFUL.
+- Operator Classification: A. Operator Ready.
 
 Production smoke-test:
 - completed successfully.
@@ -21,6 +23,12 @@ Production smoke-test:
 - verified asset diagnostics drilldown summary, severity classification, remediation guidance, and empty-state handling on hosting detail.
 - verified Maver (`transportimaver.si`) production serving through the GNR8 runtime.
 - verified active pointer resolution, host binding resolution, raw imported artifact serving, governance enforcement, publish activation, asset serving, compatibility rendering, and OpenStreetMap compatibility fallback.
+
+Phase 7B real website validation:
+- Viroidoc discovery, acquisition, assembly, and preview completed successfully.
+- Paul Graham discovery, acquisition, and assembly completed successfully.
+- Paul Graham route-limit warnings surfaced correctly.
+- Initial apex/www canonical-host mismatch assembly blocker was discovered and fixed.
 
 Dedicated progress doc:
 - `docs/ai/MIGRATION_RUNTIME_PROGRESS.md`
@@ -50,6 +58,7 @@ Current completed chain:
 - Host-Binding Raw Template Serving
 - Mono Map Compatibility Restoration
 - Maver Production Validation
+- Multi-Page Import MVP
 
 Latest completed migration capabilities:
 - `MigrationBatchExecutor`
@@ -96,6 +105,26 @@ Latest completed migration capabilities:
 - Imported Runtime Reconciliation
 - Production Validation
 - Mono Compatibility Validation
+- multi-page discovery integration
+- route candidate discovery
+- multi-page acquisition
+- acquisition diagnostics
+- fetched-page evidence persistence
+- deterministic route-map assembly
+- routeMap persistence
+- htmlPathMap persistence
+- preview-only route-map resolver
+- nested route preview support
+- explicit route misses
+- internal link rewriting
+- route-aware navigation
+- multi-page preview validation
+- readiness classification
+- route validation
+- link validation
+- operator summary
+- route tables
+- operator-readable warnings, blockers, recommendations, and diagnostics
 
 Completed migration-first chain:
 - Import
@@ -114,6 +143,7 @@ Completed migration-first chain:
 - Host-Binding Raw Template Serving
 - Mono Map Compatibility Restoration
 - Maver Production Validation
+- Multi-Page Import MVP
 
 Phase 6 completion notes:
 - Phase 6 is COMPLETE.
@@ -137,12 +167,26 @@ Phase 6 completion notes:
 - No DNS/provider execution was introduced.
 - Website OS remains frozen.
 
+Phase 7B completion notes:
+- Phase 7B is COMPLETE.
+- Phase 7B moved GNR8 from single-page import validation to static multi-page website import validation.
+- Scope remained intentionally limited to static websites.
+- Discovery-only integration identifies internal page candidates from a seed page.
+- Controlled acquisition fetches discovered child pages and preserves evidence.
+- Raw artifact assembly creates a durable deterministic multi-page route structure.
+- Controlled preview renders child routes from assembled route maps.
+- Internal link rewriting enables imported navigation inside controlled preview mode.
+- Validation classifies preview readiness as `ready`, `ready_with_warnings`, or `blocked`.
+- Operators can determine import readiness, remaining warnings, blockers, and next actions without provenance JSON, debug endpoints, or database inspection.
+- Public production multi-page serving was not activated.
+- Automatic publish activation was not added.
+
 Current critical path:
-- Phase 7B — Multi-Page Import MVP
+- Phase 7C — Discovery Expansion
 - Billing
 
 Next recommended milestone:
-- Phase 7B — Multi-Page Import MVP.
+- Phase 7C — Discovery Expansion.
 
 Explicit exclusions still in force:
 - no Website OS runtime expansion
@@ -151,6 +195,11 @@ Explicit exclusions still in force:
 - no billing automation yet
 - no queue/worker unless a future phase explicitly introduces it
 - no autonomous execution
+- no dynamic content import
+- no commerce import
+- no compatibility-provider extraction
+- no public production multi-page serving
+- no automatic publish activation
 
 ## A) Current Project State
 
@@ -173,7 +222,7 @@ Dedicated pause note:
 - Future continuation point: Execution Artifact Runtime family.
 - Execution Artifact Runtime family is not currently part of the migration-critical path.
 Next migration platform milestone:
-- Phase 7B — Multi-Page Import MVP.
+- Phase 7C — Discovery Expansion.
 - Phase 5A completed Command Center integration for migration batches; execution remains operator-driven and queue/worker orchestration does not exist yet.
 - Phase 6A completed read-only hosting operations observability for Command Center; hosting overview/detail are operational and production smoke-tested.
 - Phase 6B completed Hosting Operations workflow review.
@@ -182,6 +231,7 @@ Next migration platform milestone:
 - Phase 6C-B completed Asset Diagnostics Drilldown, including severity and remediation model visibility.
 - Hosting Operations MVP is functionally complete.
 - Phase 6 completed Hosting Operations, Hosting Hardening, Active Serving Consistency, Imported Runtime Reconciliation, Production Validation, and Mono Compatibility Validation.
+- Phase 7B completed static multi-page import validation and is Operator Ready.
 Current completed runtime chain:
 - `Proposal Approval Queue → Execution Readiness Execution Package → Execution Contract Execution Contract Readiness → Execution Bundle Execution Bundle Readiness → Execution Authorization Execution Authorization Readiness Execution Authorization Package → Execution Intent Execution Intent Readiness → Execution Plan Execution Plan Readiness → Execution Candidate Execution Candidate Readiness Execution Candidate Package → Execution Candidate Authorization Execution Candidate Authorization Readiness Execution Candidate Authorization Package`
 Candidate Authorization Family completed. Governance graph expanded. Execution remains blocked. Website OS remains read-only.
@@ -1074,11 +1124,20 @@ Hard boundaries remain:
 
 ## F) Current Active Implementation Phase
 
-Active phase: Openprovider Domain Availability Read-only Connector milestone (deployed and verified).
+Active phase: Phase 7C — Discovery Expansion.
 
 Practical next phase:
-1. Openprovider Domain Availability Admin UI.
-2. Provider Reality Dashboard linking Domains + DNS + Availability.
+1. sitemap.xml discovery.
+2. robots.txt discovery.
+3. canonical URL discovery.
+4. larger site-tree generation.
+5. improved route acquisition coverage.
+
+Phase 7C boundary:
+- Static websites only.
+- No dynamic content.
+- No commerce.
+- No compatibility-provider work yet.
 
 ## G) How Next Thread Should Behave
 

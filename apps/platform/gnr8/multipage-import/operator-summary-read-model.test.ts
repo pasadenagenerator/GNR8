@@ -26,6 +26,12 @@ function provenance(input?: {
     rawFilePath: string
   }>
   excludedPageCount?: number
+  sitemapDiscovery?: {
+    fetchedSitemapUrls: string[]
+    urlCount: number
+    skippedUrlCount: number
+    diagnostics: string[]
+  }
 }) {
   const routeCandidates = input?.routeCandidates ?? ['/']
   const acquisitionPages = input?.acquisitionPages ?? []
@@ -60,6 +66,7 @@ function provenance(input?: {
         skippedLinks: Array.from({ length: input?.skippedLinkCount ?? 0 }, (_, index) => ({ originalHref: `#skip-${index}` })),
         diagnostics: ['DISCOVERY_MANIFEST_DIAG'],
       },
+      sitemapDiscovery: input?.sitemapDiscovery ?? null,
       acquisition: {
         kind: 'multi_page_html_acquisition_manifest_v1',
         pages: acquisitionPages.map((page) => ({
@@ -100,6 +107,7 @@ test('multi-page operator summary returns a safe empty summary', () => {
   const summary = buildMultiPageImportOperatorSummary()
 
   assert.deepEqual(summary.overview.discovery, { discoveredRoutes: 0, skippedLinks: 0 })
+  assert.deepEqual(summary.overview.sitemapDiscovery, { sitemapCount: 0, discoveredUrlCount: 0, skippedUrlCount: 0, warnings: [] })
   assert.deepEqual(summary.overview.acquisition, { fetchedPages: 0, failedPages: 0 })
   assert.deepEqual(summary.overview.assembly, { assembledPages: 0, excludedPages: 0 })
   assert.equal(summary.overview.validation.status, 'not_run')
@@ -107,6 +115,29 @@ test('multi-page operator summary returns a safe empty summary', () => {
   assert.deepEqual(summary.routes, [])
   assert.equal(summary.validation.warnings, 0)
   assert.equal(summary.validation.blockers, 0)
+})
+
+test('multi-page operator summary displays sitemap discovery evidence', () => {
+  const summary = buildMultiPageImportOperatorSummary({
+    importProvenanceSummary: provenance({
+      routeCandidates: ['/hidden'],
+      sitemapDiscovery: {
+        fetchedSitemapUrls: ['https://example.com/sitemap.xml'],
+        urlCount: 1,
+        skippedUrlCount: 2,
+        diagnostics: ['SITEMAP_DISCOVERY_SUCCEEDED:1', 'SITEMAP_URL_SKIPPED:external_host:https://external.example/page'],
+      },
+    }),
+  })
+
+  assert.deepEqual(summary.overview.sitemapDiscovery, {
+    sitemapCount: 1,
+    discoveredUrlCount: 1,
+    skippedUrlCount: 2,
+    warnings: ['Some sitemap URLs were outside the current import scope or were not valid page routes.'],
+  })
+  assert.equal(summary.diagnostics.find((group) => group.group === 'Sitemap Discovery')?.count, 2)
+  assert.equal(summary.validation.warningSamples.includes('Some sitemap URLs were outside the current import scope or were not valid page routes.'), true)
 })
 
 test('multi-page operator summary displays discovery-only imports', () => {

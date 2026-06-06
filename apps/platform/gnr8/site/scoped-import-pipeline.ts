@@ -36,6 +36,7 @@ import {
   type MultiPageDiscoveryManifest,
   type MultiPageDiscoverySourceContext,
   type MultiPageDiscoverySummary,
+  type MultiPageSitemapDiscoverySummary,
   type MultiPageRawArtifactAssemblyManifest,
   type MultiPageRawArtifactAssemblyRouteEntry,
   type MultiPageRawArtifactAssemblySummary,
@@ -49,7 +50,7 @@ import {
   styleSignalsToStyleTokens,
   type StyleSignalModel,
 } from '@/gnr8/style-signals'
-import { discoverMultipageImportTree, summarizeMultipageImportTree, type MultipageImportLimits } from '@/gnr8/multipage-import'
+import { discoverMultipageImportTree, discoverSitemapUrls, summarizeMultipageImportTree, type MultipageImportLimits } from '@/gnr8/multipage-import'
 import { evaluateMultipageSameSiteUrl, normalizeInternalHref, normalizeSeedUrl } from '@/gnr8/multipage-import/normalization/route-normalization'
 import { buildSafeSiteTreeFromSeedPage, normalizeRoutePath, type SiteTree } from '@/gnr8/site-tree'
 import { buildFamilyHandoffModel, summarizeTemplateFamilies, type FamilyHandoffModel } from '@/gnr8/family-mode'
@@ -111,6 +112,9 @@ const DEFAULT_SCOPED_DISCOVERY_LIMITS: MultipageImportLimits = {
   maxDepth: 1,
   maxLinksPerPage: 120,
   maxTemplateLinksPerRoute: 25,
+  maxSitemaps: 6,
+  maxUrlsFromSitemaps: 120,
+  maxNestedSitemaps: 4,
 }
 
 const DEFAULT_SCOPED_HTML_ACQUISITION_LIMITS = {
@@ -127,6 +131,22 @@ function disabledMultiPageDiscoverySummary(diagnostics: string[] = []): MultiPag
     routeCandidateCount: 0,
     manifestRef: null,
     diagnostics,
+  }
+}
+
+function emptyMultiPageSitemapDiscoverySummary(limits: MultipageImportLimits): MultiPageSitemapDiscoverySummary {
+  return {
+    attemptedSitemapUrls: [],
+    fetchedSitemapUrls: [],
+    nestedSitemapCount: 0,
+    urlCount: 0,
+    skippedUrlCount: 0,
+    limitsApplied: {
+      maxSitemaps: limits.maxSitemaps,
+      maxUrlsFromSitemaps: limits.maxUrlsFromSitemaps,
+      maxNestedSitemaps: limits.maxNestedSitemaps,
+    },
+    diagnostics: [],
   }
 }
 
@@ -165,6 +185,9 @@ function resolveMultiPageDiscoveryOption(option: ScopedMultiPageDiscoveryOption 
       maxDepth: Math.max(1, Math.floor(rawLimits?.maxDepth ?? DEFAULT_SCOPED_DISCOVERY_LIMITS.maxDepth)),
       maxLinksPerPage: Math.max(1, Math.floor(rawLimits?.maxLinksPerPage ?? DEFAULT_SCOPED_DISCOVERY_LIMITS.maxLinksPerPage)),
       maxTemplateLinksPerRoute: Math.max(1, Math.floor(rawLimits?.maxTemplateLinksPerRoute ?? DEFAULT_SCOPED_DISCOVERY_LIMITS.maxTemplateLinksPerRoute)),
+      maxSitemaps: Math.max(1, Math.floor(rawLimits?.maxSitemaps ?? DEFAULT_SCOPED_DISCOVERY_LIMITS.maxSitemaps)),
+      maxUrlsFromSitemaps: Math.max(1, Math.floor(rawLimits?.maxUrlsFromSitemaps ?? DEFAULT_SCOPED_DISCOVERY_LIMITS.maxUrlsFromSitemaps)),
+      maxNestedSitemaps: Math.max(0, Math.floor(rawLimits?.maxNestedSitemaps ?? DEFAULT_SCOPED_DISCOVERY_LIMITS.maxNestedSitemaps)),
     },
     htmlAcquisitionLimits: {
       maxPages: Math.max(1, Math.floor(rawHtmlLimits?.maxPages ?? DEFAULT_SCOPED_HTML_ACQUISITION_LIMITS.maxPages)),
@@ -897,6 +920,57 @@ function buildDiscoveryLinkEntry(input: {
   }
 }
 
+function summarizeSitemapDiscoveryForProvenance(input: {
+  attemptedSitemapUrls: string[]
+  fetchedSitemapUrls: string[]
+  nestedSitemapCount: number
+  urlCount: number
+  skippedUrlCount: number
+  limitsApplied: {
+    maxSitemaps: number
+    maxUrlsFromSitemaps: number
+    maxNestedSitemaps: number
+  }
+  diagnostics: string[]
+}): MultiPageSitemapDiscoverySummary {
+  return {
+    attemptedSitemapUrls: input.attemptedSitemapUrls.slice().sort((a, b) => a.localeCompare(b)),
+    fetchedSitemapUrls: input.fetchedSitemapUrls.slice().sort((a, b) => a.localeCompare(b)),
+    nestedSitemapCount: Math.max(0, Math.floor(input.nestedSitemapCount)),
+    urlCount: Math.max(0, Math.floor(input.urlCount)),
+    skippedUrlCount: Math.max(0, Math.floor(input.skippedUrlCount)),
+    limitsApplied: {
+      maxSitemaps: Math.max(1, Math.floor(input.limitsApplied.maxSitemaps)),
+      maxUrlsFromSitemaps: Math.max(1, Math.floor(input.limitsApplied.maxUrlsFromSitemaps)),
+      maxNestedSitemaps: Math.max(0, Math.floor(input.limitsApplied.maxNestedSitemaps)),
+    },
+    diagnostics: uniqueSorted(input.diagnostics),
+  }
+}
+
+async function fetchScopedSitemap(url: string): Promise<{ url: string; body: string; contentType: string | null } | null> {
+  const controller = typeof AbortController === 'function' ? new AbortController() : null
+  const timeout = controller ? setTimeout(() => controller.abort(), 8_000) : null
+  try {
+    const response = await fetch(url, {
+      redirect: 'follow',
+      signal: controller?.signal,
+    })
+    if (!response.ok) return null
+    const body = await response.text()
+    if (!body.trim()) return null
+    return {
+      url: response.url || url,
+      body,
+      contentType: response.headers.get('content-type'),
+    }
+  } catch {
+    return null
+  } finally {
+    if (timeout) clearTimeout(timeout)
+  }
+}
+
 function disabledHtmlAcquisitionSummary(diagnostics: string[] = []): MultiPageHtmlAcquisitionSummary {
   return {
     enabled: false,
@@ -1585,6 +1659,7 @@ async function buildScopedMultiPageDiscovery(input: {
 }): Promise<{
   summary: MultiPageDiscoverySummary
   manifest: MultiPageDiscoveryManifest | null
+  sitemapDiscovery?: MultiPageSitemapDiscoverySummary | null
   acquisition?: MultiPageHtmlAcquisitionManifest | null
   rawArtifactAssembly?: MultiPageRawArtifactAssemblyManifest | null
 }> {
@@ -1625,6 +1700,9 @@ async function buildScopedMultiPageDiscovery(input: {
         maxDepth: option.limits.maxDepth,
         maxLinksPerPage: option.limits.maxLinksPerPage,
         maxTemplateLinksPerRoute: option.limits.maxTemplateLinksPerRoute,
+        maxSitemaps: option.limits.maxSitemaps,
+        maxUrlsFromSitemaps: option.limits.maxUrlsFromSitemaps,
+        maxNestedSitemaps: option.limits.maxNestedSitemaps,
       },
       diagnostics: uniqueSorted(diagnostics),
       generatedAt,
@@ -1649,6 +1727,7 @@ async function buildScopedMultiPageDiscovery(input: {
         ...(assembly.summary.enabled ? { rawArtifactAssembly: assembly.summary } : {}),
       },
       manifest,
+      sitemapDiscovery: null,
       acquisition: acquisition.manifest,
       rawArtifactAssembly: assembly.manifest,
     }
@@ -1675,6 +1754,15 @@ async function buildScopedMultiPageDiscovery(input: {
   )
   diagnostics.push(...tree.diagnostics)
   if (childFetchesSkipped.size > 0) diagnostics.push(`MULTIPAGE_DISCOVERY_ONLY_CHILD_FETCH_SKIPPED:${childFetchesSkipped.size}`)
+
+  const sitemapDiscoveryEvidence = await discoverSitemapUrls({
+    seedUrl: normalizedSeed.url,
+    canonicalHost: normalizedSeed.canonicalHost,
+    limits: option.limits,
+    fetchSitemap: fetchScopedSitemap,
+  })
+  const sitemapDiscovery = summarizeSitemapDiscoveryForProvenance(sitemapDiscoveryEvidence)
+  diagnostics.push(...sitemapDiscovery.diagnostics)
 
   const discoveredByRoute = new Map<string, MultiPageDiscoveryLinkEntry>()
   const skippedLinks: MultiPageDiscoveryLinkEntry[] = []
@@ -1845,6 +1933,94 @@ async function buildScopedMultiPageDiscovery(input: {
     )
   }
 
+  for (const sitemapUrl of sitemapDiscoveryEvidence.discoveredUrls) {
+    normalizedUrls.push({
+      originalHref: sitemapUrl.originalUrl,
+      absoluteUrl: sitemapUrl.originalUrl,
+      normalizedUrl: sitemapUrl.normalizedUrl,
+      normalizedRoutePath: sitemapUrl.normalizedRoutePath,
+      changed: sitemapUrl.originalUrl !== sitemapUrl.normalizedUrl,
+    })
+
+    if (sitemapUrl.normalizedRoutePath === normalizedSeed.path) {
+      skippedLinks.push(
+        buildDiscoveryLinkEntry({
+          href: sitemapUrl.originalUrl,
+          absoluteUrl: sitemapUrl.originalUrl,
+          normalizedUrl: sitemapUrl.normalizedUrl,
+          normalizedRoutePath: sitemapUrl.normalizedRoutePath,
+          sourceContext: 'unknown',
+          sourceClassification: 'anchor',
+          status: 'skipped',
+          skippedReason: 'seed_route',
+        }),
+      )
+      continue
+    }
+
+    if (discoveredByRoute.size >= option.limits.maxRoutes) {
+      skippedLinks.push(
+        buildDiscoveryLinkEntry({
+          href: sitemapUrl.originalUrl,
+          absoluteUrl: sitemapUrl.originalUrl,
+          normalizedUrl: sitemapUrl.normalizedUrl,
+          normalizedRoutePath: sitemapUrl.normalizedRoutePath,
+          sourceContext: 'unknown',
+          sourceClassification: 'anchor',
+          status: 'skipped',
+          skippedReason: 'route_limit',
+        }),
+      )
+      diagnostics.push(`SITEMAP_LIMIT_REACHED:maxDiscoveredUrls:${option.limits.maxRoutes}`)
+      continue
+    }
+
+    if (discoveredByRoute.has(sitemapUrl.normalizedRoutePath)) {
+      skippedLinks.push(
+        buildDiscoveryLinkEntry({
+          href: sitemapUrl.originalUrl,
+          absoluteUrl: sitemapUrl.originalUrl,
+          normalizedUrl: sitemapUrl.normalizedUrl,
+          normalizedRoutePath: sitemapUrl.normalizedRoutePath,
+          sourceContext: 'unknown',
+          sourceClassification: 'anchor',
+          status: 'skipped',
+          skippedReason: 'duplicate_route',
+        }),
+      )
+      continue
+    }
+
+    discoveredByRoute.set(
+      sitemapUrl.normalizedRoutePath,
+      buildDiscoveryLinkEntry({
+        href: sitemapUrl.originalUrl,
+        absoluteUrl: sitemapUrl.originalUrl,
+        normalizedUrl: sitemapUrl.normalizedUrl,
+        normalizedRoutePath: sitemapUrl.normalizedRoutePath,
+        sourceContext: 'unknown',
+        sourceClassification: 'anchor',
+        status: 'discovered',
+        skippedReason: null,
+      }),
+    )
+  }
+
+  for (const skippedSitemapUrl of sitemapDiscoveryEvidence.skippedUrls) {
+    skippedLinks.push(
+      buildDiscoveryLinkEntry({
+        href: skippedSitemapUrl.originalUrl ?? '',
+        absoluteUrl: skippedSitemapUrl.originalUrl,
+        normalizedUrl: skippedSitemapUrl.normalizedUrl,
+        normalizedRoutePath: skippedSitemapUrl.normalizedRoutePath,
+        sourceContext: 'unknown',
+        sourceClassification: 'anchor',
+        status: 'skipped',
+        skippedReason: `sitemap_${skippedSitemapUrl.reason}`,
+      }),
+    )
+  }
+
   const discoveredPages = [...discoveredByRoute.values()].sort((a, b) =>
     String(a.normalizedRoutePath ?? '').localeCompare(String(b.normalizedRoutePath ?? '')),
   )
@@ -1871,6 +2047,9 @@ async function buildScopedMultiPageDiscovery(input: {
       maxDepth: option.limits.maxDepth,
       maxLinksPerPage: option.limits.maxLinksPerPage,
       maxTemplateLinksPerRoute: option.limits.maxTemplateLinksPerRoute,
+      maxSitemaps: option.limits.maxSitemaps,
+      maxUrlsFromSitemaps: option.limits.maxUrlsFromSitemaps,
+      maxNestedSitemaps: option.limits.maxNestedSitemaps,
     },
     diagnostics: uniqueSorted(diagnostics),
     generatedAt,
@@ -1915,6 +2094,7 @@ async function buildScopedMultiPageDiscovery(input: {
       ...(assembly.summary.enabled ? { rawArtifactAssembly: assembly.summary } : {}),
     },
     manifest,
+    sitemapDiscovery,
     acquisition: acquisition.manifest,
     rawArtifactAssembly: assembly.manifest,
   }
@@ -1969,6 +2149,7 @@ async function buildMultipageImportFromPreparedSite(input: {
           highConfidenceFamilyCount: 0,
           diagnostics: [],
         },
+        sitemapDiscovery: emptyMultiPageSitemapDiscoverySummary(DEFAULT_SCOPED_DISCOVERY_LIMITS),
         depthLimitHit: false,
         routeLimitHit: false,
         diagnostics: ['MULTIPAGE_DISCOVERY_PARTIAL:no_prepared_documents'],
@@ -1999,6 +2180,9 @@ async function buildMultipageImportFromPreparedSite(input: {
         maxDepth: 3,
         maxLinksPerPage: 120,
         maxTemplateLinksPerRoute: 30,
+        maxSitemaps: 6,
+        maxUrlsFromSitemaps: 120,
+        maxNestedSitemaps: 4,
       },
       discoveredAt: null,
     },
@@ -2031,6 +2215,7 @@ async function buildImportProvenanceSummary(input: {
   multiPageDiscovery: {
     summary: MultiPageDiscoverySummary
     manifest: MultiPageDiscoveryManifest | null
+    sitemapDiscovery?: MultiPageSitemapDiscoverySummary | null
     acquisition?: MultiPageHtmlAcquisitionManifest | null
     rawArtifactAssembly?: MultiPageRawArtifactAssemblyManifest | null
   } | null
@@ -2083,6 +2268,7 @@ async function buildImportProvenanceSummary(input: {
       : []),
     ...(persistedCaptureEvidence.persisted ? ['RENDERED_CAPTURE_PERSISTED'] : []),
     ...(semanticImport?.diagnostics.map((diag) => normalizeText(diag.code)).filter(Boolean) ?? []),
+    ...(input.multiPageDiscovery?.sitemapDiscovery?.diagnostics ?? []),
     ...(input.multiPageDiscovery?.summary.htmlAcquisition?.diagnostics ?? []),
     ...(input.multiPageDiscovery?.summary.rawArtifactAssembly?.diagnostics ?? []),
   ])
@@ -2201,6 +2387,7 @@ async function buildImportProvenanceSummary(input: {
       ? {
           summary: input.multiPageDiscovery.summary,
           manifest: input.multiPageDiscovery.manifest,
+          sitemapDiscovery: input.multiPageDiscovery.sitemapDiscovery ?? null,
           acquisition: input.multiPageDiscovery.acquisition ?? null,
           rawArtifactAssembly: input.multiPageDiscovery.rawArtifactAssembly ?? null,
         }

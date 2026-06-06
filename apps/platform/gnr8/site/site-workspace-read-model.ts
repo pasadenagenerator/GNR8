@@ -1321,6 +1321,32 @@ function parseImportProvenanceSummary(value: unknown): RuntimeImportProvenanceSu
                 : [],
             }
           })(),
+          sitemapDiscovery: (() => {
+            const sitemapRaw =
+              multipageSummaryRaw && isRecord((multipageSummaryRaw as Record<string, unknown>).sitemapDiscovery)
+                ? ((multipageSummaryRaw as Record<string, unknown>).sitemapDiscovery as Record<string, unknown>)
+                : null
+            const limitsRaw = sitemapRaw && isRecord(sitemapRaw.limitsApplied) ? sitemapRaw.limitsApplied : {}
+            return {
+              attemptedSitemapUrls: Array.isArray(sitemapRaw?.attemptedSitemapUrls)
+                ? [...new Set(sitemapRaw.attemptedSitemapUrls.map((entry) => normalizeText(entry)).filter(Boolean))].sort((a, b) => a.localeCompare(b))
+                : [],
+              fetchedSitemapUrls: Array.isArray(sitemapRaw?.fetchedSitemapUrls)
+                ? [...new Set(sitemapRaw.fetchedSitemapUrls.map((entry) => normalizeText(entry)).filter(Boolean))].sort((a, b) => a.localeCompare(b))
+                : [],
+              nestedSitemapCount: Number.isFinite(Number(sitemapRaw?.nestedSitemapCount)) ? Math.max(0, Math.floor(Number(sitemapRaw?.nestedSitemapCount))) : 0,
+              urlCount: Number.isFinite(Number(sitemapRaw?.urlCount)) ? Math.max(0, Math.floor(Number(sitemapRaw?.urlCount))) : 0,
+              skippedUrlCount: Number.isFinite(Number(sitemapRaw?.skippedUrlCount)) ? Math.max(0, Math.floor(Number(sitemapRaw?.skippedUrlCount))) : 0,
+              limitsApplied: {
+                maxSitemaps: Number.isFinite(Number(limitsRaw.maxSitemaps)) ? Math.max(1, Math.floor(Number(limitsRaw.maxSitemaps))) : 0,
+                maxUrlsFromSitemaps: Number.isFinite(Number(limitsRaw.maxUrlsFromSitemaps)) ? Math.max(1, Math.floor(Number(limitsRaw.maxUrlsFromSitemaps))) : 0,
+                maxNestedSitemaps: Number.isFinite(Number(limitsRaw.maxNestedSitemaps)) ? Math.max(0, Math.floor(Number(limitsRaw.maxNestedSitemaps))) : 0,
+              },
+              diagnostics: Array.isArray(sitemapRaw?.diagnostics)
+                ? [...new Set(sitemapRaw.diagnostics.map((entry) => normalizeText(entry)).filter(Boolean))].sort((a, b) => a.localeCompare(b))
+                : [],
+            }
+          })(),
           depthLimitHit: Boolean(multipageSummaryRaw.depthLimitHit),
           routeLimitHit: Boolean(multipageSummaryRaw.routeLimitHit),
           diagnostics: Array.isArray(multipageSummaryRaw.diagnostics)

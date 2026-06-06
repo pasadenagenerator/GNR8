@@ -7,7 +7,7 @@ import type {
   MultiPagePreviewValidationStatus,
 } from '@/gnr8/runtime/multipage-preview-validation'
 
-type DiagnosticGroupName = 'Discovery' | 'Acquisition' | 'Assembly' | 'Preview' | 'Validation'
+type DiagnosticGroupName = 'Discovery' | 'Sitemap Discovery' | 'Acquisition' | 'Assembly' | 'Preview' | 'Validation'
 
 export type MultiPageImportOperatorRouteStatus = 'assembled' | 'fetched' | 'failed' | 'skipped' | 'missing'
 
@@ -30,6 +30,12 @@ export type MultiPageImportOperatorSummary = {
     discovery: {
       discoveredRoutes: number
       skippedLinks: number
+    }
+    sitemapDiscovery: {
+      sitemapCount: number
+      discoveredUrlCount: number
+      skippedUrlCount: number
+      warnings: string[]
     }
     acquisition: {
       fetchedPages: number
@@ -176,6 +182,12 @@ function translateDiagnostic(value: string): string | null {
       return 'Some links reference pages outside the current import scope.'
     case 'MULTIPAGE_ASSET_LINK_SKIPPED':
       return 'Some links point to files or assets and were not imported as pages.'
+    case 'SITEMAP_DISCOVERY_FAILED':
+      return 'Sitemap discovery encountered a malformed or unavailable sitemap.'
+    case 'SITEMAP_URL_SKIPPED':
+      return 'Some sitemap URLs were outside the current import scope or were not valid page routes.'
+    case 'SITEMAP_LIMIT_REACHED':
+      return 'A sitemap discovery limit prevented importing additional sitemap URLs.'
     case 'MULTIPAGE_PREVIEW_ROUTE_MISSING_FILE':
       return 'A preview route is missing its raw HTML file.'
     case 'MULTIPAGE_PREVIEW_ROUTE_RESOLVER_MISS':
@@ -255,6 +267,7 @@ export function buildMultiPageImportOperatorSummary(input: BuildInput = {}): Mul
   const discoveryContainer = isRecord(provenance.multiPageDiscovery) ? provenance.multiPageDiscovery : {}
   const discoverySummary = isRecord(discoveryContainer.summary) ? discoveryContainer.summary : {}
   const discoveryManifest = isRecord(discoveryContainer.manifest) ? discoveryContainer.manifest : {}
+  const sitemapDiscovery = isRecord(discoveryContainer.sitemapDiscovery) ? discoveryContainer.sitemapDiscovery : {}
   const acquisition = isRecord(discoveryContainer.acquisition) ? discoveryContainer.acquisition : null
   const acquisitionSummary = isRecord(acquisition?.summary)
     ? acquisition.summary
@@ -277,6 +290,17 @@ export function buildMultiPageImportOperatorSummary(input: BuildInput = {}): Mul
     nonNegativeInt(discoverySummary.skippedLinkCount),
     Array.isArray(discoveryManifest.skippedLinks) ? discoveryManifest.skippedLinks.length : 0,
   )
+  const sitemapDiagnostics = textList(sitemapDiscovery.diagnostics)
+  const sitemapWarnings = uniqueSorted(sitemapDiagnostics.map(translateDiagnostic).filter((entry): entry is string => Boolean(entry)))
+  const sitemapOverview = {
+    sitemapCount: Math.max(
+      nonNegativeInt(sitemapDiscovery.sitemapCount),
+      Array.isArray(sitemapDiscovery.fetchedSitemapUrls) ? sitemapDiscovery.fetchedSitemapUrls.length : 0,
+    ),
+    discoveredUrlCount: Math.max(nonNegativeInt(sitemapDiscovery.discoveredUrlCount), nonNegativeInt(sitemapDiscovery.urlCount)),
+    skippedUrlCount: nonNegativeInt(sitemapDiscovery.skippedUrlCount),
+    warnings: sitemapWarnings.slice(0, 5),
+  }
 
   const acquisitionPages = Array.isArray(acquisition?.pages) ? acquisition.pages : []
   const fetchedPages = Math.max(
@@ -344,6 +368,7 @@ export function buildMultiPageImportOperatorSummary(input: BuildInput = {}): Mul
   const rawDiagnostics = uniqueSorted(
     textList(discoverySummary.diagnostics)
       .concat(textList(discoveryManifest.diagnostics))
+      .concat(sitemapDiagnostics)
       .concat(textList(acquisitionSummary.diagnostics))
       .concat(textList(acquisition?.diagnostics))
       .concat(acquisitionPages.flatMap((page) => (isRecord(page) ? textList(page.diagnostics) : [])))
@@ -397,6 +422,7 @@ export function buildMultiPageImportOperatorSummary(input: BuildInput = {}): Mul
         discoveredRoutes,
         skippedLinks,
       },
+      sitemapDiscovery: sitemapOverview,
       acquisition: {
         fetchedPages,
         failedPages,
@@ -423,6 +449,7 @@ export function buildMultiPageImportOperatorSummary(input: BuildInput = {}): Mul
     },
     diagnostics: [
       diagnosticGroup('Discovery', textList(discoverySummary.diagnostics).concat(textList(discoveryManifest.diagnostics))),
+      diagnosticGroup('Sitemap Discovery', sitemapDiagnostics),
       diagnosticGroup('Acquisition', textList(acquisitionSummary.diagnostics).concat(textList(acquisition?.diagnostics))),
       diagnosticGroup('Assembly', textList(assemblySummary.diagnostics).concat(textList(assembly?.diagnostics))),
       diagnosticGroup('Preview', previewDiagnostics.concat(validationLinkDiagnostics)),

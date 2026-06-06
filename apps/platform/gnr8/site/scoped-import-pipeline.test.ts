@@ -741,7 +741,7 @@ test('scoped pipeline import uses pipeline path, maps consolidated sections, and
   assert.ok(createInput.pages[0].structureModel.sections.length > 1, 'expected consolidated sections to persist into runtime structure model')
 })
 
-test('scoped pipeline import can persist seed-only multi-page discovery manifest', async () => {
+test('scoped pipeline import can persist seed-only multi-page discovery manifest', async (t) => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'scoped-pipeline-multipage-discovery-'))
   const entryAbs = path.resolve(root, 'index.html')
   const assetsDir = path.resolve(root, 'assets')
@@ -773,6 +773,24 @@ test('scoped pipeline import can persist seed-only multi-page discovery manifest
   let artifactInput: any = null
   let rawImportFilePaths: string[] = []
   let linkedArtifactId: string | null = null
+  const originalFetch = globalThis.fetch
+  t.after(() => {
+    globalThis.fetch = originalFetch
+  })
+  globalThis.fetch = (async (url: RequestInfo | URL) => {
+    const requestUrl = String(url)
+    if (requestUrl === 'https://example.com/sitemap.xml') {
+      return new Response(
+        `<?xml version="1.0" encoding="UTF-8"?>
+        <urlset>
+          <url><loc>https://example.com/sitemap-only</loc></url>
+          <url><loc>https://external.example.net/sitemap-page</loc></url>
+        </urlset>`,
+        { status: 200, headers: { 'content-type': 'application/xml' } },
+      )
+    }
+    return new Response('', { status: 404 })
+  }) as typeof fetch
 
   const outcome = await runScopedImportPipeline({
     snapshot: {
@@ -826,7 +844,7 @@ test('scoped pipeline import can persist seed-only multi-page discovery manifest
     multiPageDiscovery: {
       enabled: true,
       generatedAt: '2026-06-06T00:00:00.000Z',
-      limits: { maxRoutes: 10, maxDepth: 1, maxLinksPerPage: 20, maxTemplateLinksPerRoute: 10 },
+      limits: { maxRoutes: 10, maxDepth: 1, maxLinksPerPage: 20, maxTemplateLinksPerRoute: 10, maxSitemaps: 2, maxUrlsFromSitemaps: 10, maxNestedSitemaps: 1 },
     },
     deps: {
       importStaticSite: async () => ({ status: 'ok', documentMeta: { source: { kind: 'single-entry-html' } } }) as any,
@@ -892,17 +910,21 @@ test('scoped pipeline import can persist seed-only multi-page discovery manifest
 
   assert.equal(outcome.mode, 'pipeline')
   assert.equal(outcome.reporting.multiPageDiscovery.enabled, true)
-  assert.equal(outcome.reporting.multiPageDiscovery.discoveredPageCount, 3)
-  assert.equal(outcome.reporting.multiPageDiscovery.routeCandidateCount, 3)
+  assert.equal(outcome.reporting.multiPageDiscovery.discoveredPageCount, 4)
+  assert.equal(outcome.reporting.multiPageDiscovery.routeCandidateCount, 4)
   assert.equal(outcome.reporting.multiPageDiscovery.manifestRef, 'importProvenanceSummary.multiPageDiscovery.manifest')
 
   const persistedDiscovery = persistedImportSummary.importProvenanceSummary.multiPageDiscovery
   const manifest = persistedDiscovery.manifest
-  assert.equal(persistedDiscovery.summary.discoveredPageCount, 3)
-  assert.deepEqual(manifest.routeCandidates, ['/about', '/contact', '/services'])
+  assert.equal(persistedDiscovery.summary.discoveredPageCount, 4)
+  assert.deepEqual(manifest.routeCandidates, ['/about', '/contact', '/services', '/sitemap-only'])
   assert.equal(manifest.normalizedSeedRoute, '/')
   assert.equal(manifest.generatedAt, '2026-06-06T00:00:00.000Z')
+  assert.equal(manifest.limitsApplied.maxSitemaps, 2)
+  assert.equal(manifest.limitsApplied.maxUrlsFromSitemaps, 10)
+  assert.equal(manifest.limitsApplied.maxNestedSitemaps, 1)
   assert.equal(manifest.discoveredPages.some((entry: any) => entry.normalizedRoutePath === '/about' && entry.sourceContext === 'header'), true)
+  assert.equal(manifest.discoveredPages.some((entry: any) => entry.normalizedRoutePath === '/sitemap-only' && entry.originalHref === 'https://example.com/sitemap-only'), true)
   assert.equal(manifest.normalizedUrls.some((entry: any) => entry.originalHref === '/about/' && entry.normalizedUrl === 'https://example.com/about'), true)
   assert.equal(manifest.normalizedUrls.some((entry: any) => entry.originalHref === '/about/index.html' && entry.normalizedRoutePath === '/about'), true)
   assert.equal(manifest.skippedLinks.some((entry: any) => entry.originalHref === 'https://external.example.net/page' && entry.skippedReason === 'external_host'), true)
@@ -916,8 +938,15 @@ test('scoped pipeline import can persist seed-only multi-page discovery manifest
   assert.equal(manifest.skippedLinks.some((entry: any) => entry.sourceClassification === 'form_action' && entry.skippedReason === 'form_action'), true)
   assert.equal(manifest.diagnostics.some((entry: string) => entry.startsWith('MULTIPAGE_IMPORT_STARTED')), true)
   assert.equal(manifest.diagnostics.some((entry: string) => entry.startsWith('MULTIPAGE_DISCOVERY_ONLY_CHILD_FETCH_SKIPPED')), true)
+  assert.equal(manifest.diagnostics.some((entry: string) => entry.startsWith('SITEMAP_DISCOVERY_STARTED')), true)
+  assert.equal(manifest.diagnostics.some((entry: string) => entry.startsWith('SITEMAP_DISCOVERY_SUCCEEDED')), true)
+  assert.equal(manifest.diagnostics.some((entry: string) => entry.startsWith('SITEMAP_URL_DISCOVERED:/sitemap-only')), true)
+  assert.deepEqual(persistedDiscovery.sitemapDiscovery.fetchedSitemapUrls, ['https://example.com/sitemap.xml'])
+  assert.equal(persistedDiscovery.sitemapDiscovery.urlCount, 1)
+  assert.equal(persistedDiscovery.sitemapDiscovery.skippedUrlCount, 1)
+  assert.equal(persistedDiscovery.sitemapDiscovery.limitsApplied.maxSitemaps, 2)
   assert.deepEqual(Object.keys(artifactInput.htmlByPath), ['/'])
-  assert.equal(rawImportFilePaths.some((filePath) => /(^|\/)(about|contact|services)(\/index)?\.html$/.test(filePath)), false)
+  assert.equal(rawImportFilePaths.some((filePath) => /(^|\/)(about|contact|services|sitemap-only)(\/index)?\.html$/.test(filePath)), false)
 })
 
 test('scoped pipeline multi-page HTML acquisition fetches child evidence without public serving changes', async () => {

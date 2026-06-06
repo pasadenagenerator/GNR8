@@ -8,6 +8,7 @@ import { diagnosticEntry, sortDiagnostics } from '../diagnostics/multipage-diagn
 import { buildNavigationTrees } from '../navigation/navigation-tree'
 import { normalizeInternalHref, normalizeSeedUrl, parentPath } from '../normalization/route-normalization'
 import { inferSharedRegions, type PageRegionSignals } from '../shared-regions/shared-region-detection'
+import { discoverSitemapUrls } from './sitemap-discovery'
 import { inferRouteFamilies } from './template-families'
 import type { RouteTemplateSignals } from '@/gnr8/template-families'
 import type {
@@ -20,6 +21,7 @@ import type {
   NavigationVisibility,
   PageFetchResult,
   RouteNode,
+  SitemapDiscoveryEvidence,
 } from '../types/contracts'
 
 type ExtractedLink = {
@@ -53,6 +55,9 @@ const DEFAULT_LIMITS: MultipageImportLimits = {
   maxDepth: 3,
   maxLinksPerPage: 120,
   maxTemplateLinksPerRoute: 25,
+  maxSitemaps: 6,
+  maxUrlsFromSitemaps: 120,
+  maxNestedSitemaps: 4,
 }
 
 function stableId(prefix: string, parts: string[]): string {
@@ -66,6 +71,27 @@ function mergeLimits(limits: Partial<MultipageImportLimits> | undefined): Multip
     maxDepth: Math.max(0, Math.floor(limits?.maxDepth ?? DEFAULT_LIMITS.maxDepth)),
     maxLinksPerPage: Math.max(1, Math.floor(limits?.maxLinksPerPage ?? DEFAULT_LIMITS.maxLinksPerPage)),
     maxTemplateLinksPerRoute: Math.max(1, Math.floor(limits?.maxTemplateLinksPerRoute ?? DEFAULT_LIMITS.maxTemplateLinksPerRoute)),
+    maxSitemaps: Math.max(1, Math.floor(limits?.maxSitemaps ?? DEFAULT_LIMITS.maxSitemaps)),
+    maxUrlsFromSitemaps: Math.max(1, Math.floor(limits?.maxUrlsFromSitemaps ?? DEFAULT_LIMITS.maxUrlsFromSitemaps)),
+    maxNestedSitemaps: Math.max(0, Math.floor(limits?.maxNestedSitemaps ?? DEFAULT_LIMITS.maxNestedSitemaps)),
+  }
+}
+
+function emptySitemapDiscoveryEvidence(limits: MultipageImportLimits, diagnostics: string[] = []): SitemapDiscoveryEvidence {
+  return {
+    attemptedSitemapUrls: [],
+    fetchedSitemapUrls: [],
+    nestedSitemapCount: 0,
+    urlCount: 0,
+    skippedUrlCount: 0,
+    discoveredUrls: [],
+    skippedUrls: [],
+    limitsApplied: {
+      maxSitemaps: limits.maxSitemaps,
+      maxUrlsFromSitemaps: limits.maxUrlsFromSitemaps,
+      maxNestedSitemaps: limits.maxNestedSitemaps,
+    },
+    diagnostics: sortDiagnostics(diagnostics),
   }
 }
 
@@ -307,6 +333,7 @@ export async function discoverMultipageImportTree(
       pageRelationships: [],
       templateFamilyExtraction: null,
       limits,
+      sitemapDiscovery: emptySitemapDiscoveryEvidence(limits, ['SITEMAP_DISCOVERY_NOT_FOUND:invalid_seed']),
       depthLimitHit: false,
       routeLimitHit: false,
       diagnostics: sortDiagnostics(diagnostics),
@@ -371,6 +398,31 @@ export async function discoverMultipageImportTree(
     visibilityHint: 'unknown',
   })
   if (seed.route) queue.push({ path: seed.route.path, depth: 0 })
+
+  const sitemapDiscovery = await discoverSitemapUrls({
+    seedUrl: normalizedSeed.url,
+    canonicalHost: normalizedSeed.canonicalHost,
+    limits,
+    fetchSitemap: deps.fetchSitemap,
+  })
+  diagnostics.push(...sitemapDiscovery.diagnostics)
+  for (const sitemapUrl of sitemapDiscovery.discoveredUrls) {
+    if (sitemapUrl.normalizedRoutePath === normalizedSeed.path) {
+      diagnostics.push(diagnosticEntry('SITEMAP_URL_SKIPPED', `seed_route:${sitemapUrl.normalizedRoutePath}`))
+      continue
+    }
+    const added = addRoute({
+      path: sitemapUrl.normalizedRoutePath,
+      url: sitemapUrl.normalizedUrl,
+      depth: 1,
+      title: null,
+      source: 'sitemap_like',
+      visibilityHint: 'discovered_only',
+    })
+    if (added.accepted && added.route) {
+      queue.push({ path: added.route.path, depth: 1 })
+    }
+  }
 
   while (queue.length > 0) {
     const current = queue.shift()
@@ -535,6 +587,7 @@ export async function discoverMultipageImportTree(
     pageRelationships: familyResult.pageRelationships,
     templateFamilyExtraction: familyResult.templateFamilyExtraction,
     limits,
+    sitemapDiscovery,
     depthLimitHit,
     routeLimitHit,
     diagnostics: sortDiagnostics(diagnostics),
@@ -564,6 +617,7 @@ export function summarizeMultipageImportTree(tree: MultipageImportTree): Multipa
     footerNavigationCount: countItems(footerTree?.items ?? []),
     sharedRegionCount: tree.sharedRegions.length,
     templateFamilyExtraction: summarizeTemplateFamilyExtraction(tree.templateFamilyExtraction),
+    sitemapDiscovery: tree.sitemapDiscovery,
     depthLimitHit: tree.depthLimitHit,
     routeLimitHit: tree.routeLimitHit,
     diagnostics: tree.diagnostics.slice(),
@@ -584,6 +638,21 @@ export async function discoverMultipageImportTreeWithFetch(input: MultipageDisco
           url: response.url || url,
           html,
           title: toTitleFromHtml(html),
+        }
+      } catch {
+        return null
+      }
+    },
+    fetchSitemap: async (url) => {
+      try {
+        const response = await fetch(url, { redirect: 'follow' })
+        if (!response.ok) return null
+        const body = await response.text()
+        if (!body.trim()) return null
+        return {
+          url: response.url || url,
+          body,
+          contentType: response.headers.get('content-type'),
         }
       } catch {
         return null
