@@ -50,7 +50,7 @@ import {
   type StyleSignalModel,
 } from '@/gnr8/style-signals'
 import { discoverMultipageImportTree, summarizeMultipageImportTree, type MultipageImportLimits } from '@/gnr8/multipage-import'
-import { normalizeInternalHref, normalizeSeedUrl } from '@/gnr8/multipage-import/normalization/route-normalization'
+import { evaluateMultipageSameSiteUrl, normalizeInternalHref, normalizeSeedUrl } from '@/gnr8/multipage-import/normalization/route-normalization'
 import { buildSafeSiteTreeFromSeedPage, normalizeRoutePath, type SiteTree } from '@/gnr8/site-tree'
 import { buildFamilyHandoffModel, summarizeTemplateFamilies, type FamilyHandoffModel } from '@/gnr8/family-mode'
 import { runSemanticImportEngine, type SemanticImportResult } from '@/gnr8/import-semantic/semantic-import-engine'
@@ -933,12 +933,18 @@ function isHtmlContentType(value: string | null): boolean {
   return normalized ? normalized.includes('text/html') || normalized.includes('application/xhtml+xml') : false
 }
 
-function isSameOriginUrl(candidateUrl: string, seedUrl: string): boolean {
-  try {
-    return new URL(candidateUrl).origin === new URL(seedUrl).origin
-  } catch {
-    return false
-  }
+function multipageHostDiagnosticDetail(input: {
+  seedHost: string | null
+  normalizedHost: string | null
+  finalHost: string | null
+  routePath: string | null
+}): string {
+  return [
+    `seedHost=${input.seedHost ?? ''}`,
+    `normalizedHost=${input.normalizedHost ?? ''}`,
+    `finalHost=${input.finalHost ?? ''}`,
+    `routePath=${input.routePath ?? ''}`,
+  ].join(';')
 }
 
 function acquisitionBodyFilename(input: { normalizedRoutePath: string | null; bodySha256: string }): string {
@@ -1168,21 +1174,37 @@ async function acquireScopedMultiPageHtml(input: {
       )
       continue
     }
-    if (!isSameOriginUrl(normalizedUrl, normalizedSeed.url)) {
+    const candidateSameSite = evaluateMultipageSameSiteUrl({
+      candidateUrl: normalizedUrl,
+      seedUrl: normalizedSeed.url,
+      evidenceUrls: [candidate.absoluteUrl, candidate.normalizedUrl],
+    })
+    if (!candidateSameSite.accepted) {
+      const detail = multipageHostDiagnosticDetail(candidateSameSite)
       pages.push(
         buildSkippedAcquisitionEntry({
           discoveryEntry: candidate,
           skippedReason: 'non_same_origin_candidate',
-          diagnostics: ['MULTIPAGE_HTML_FETCH_SKIPPED'],
+          diagnostics: ['MULTIPAGE_HTML_FETCH_SKIPPED', `MULTIPAGE_FINAL_URL_REJECTED_CROSS_ORIGIN:${detail}`],
         }),
       )
+      diagnostics.push(`MULTIPAGE_FINAL_URL_REJECTED_CROSS_ORIGIN:${detail}`)
       continue
+    }
+    if (candidateSameSite.canonicalHostEquivalent) {
+      const detail = multipageHostDiagnosticDetail(candidateSameSite)
+      diagnostics.push(`MULTIPAGE_CANONICAL_HOST_EQUIVALENCE_APPLIED:${detail}`)
     }
 
     try {
       const response = await fetchWithTimeout(normalizedUrl, input.option.htmlAcquisitionLimits.requestTimeoutMs)
       const finalUrl = normalizeText(response.url) || normalizedUrl
       const finalNormalized = normalizeSeedUrl(finalUrl)
+      const finalSameSite = evaluateMultipageSameSiteUrl({
+        candidateUrl: finalUrl,
+        seedUrl: normalizedSeed.url,
+        evidenceUrls: [normalizedUrl, finalUrl],
+      })
       const redirected = Boolean(response.redirected || finalUrl !== normalizedUrl)
       const contentType = normalizeHtmlContentType(response.headers.get('content-type'))
       const common = {
@@ -1198,20 +1220,29 @@ async function acquireScopedMultiPageHtml(input: {
         redirectCount: redirected ? 1 : 0,
       }
 
-      if (!finalNormalized || finalNormalized.canonicalHost !== normalizedSeed.canonicalHost || !isSameOriginUrl(finalNormalized.url, normalizedSeed.url)) {
+      if (!finalNormalized || !finalSameSite.accepted) {
+        const detail = multipageHostDiagnosticDetail(finalSameSite)
         diagnostics.push('MULTIPAGE_HTML_FETCH_FAILED')
+        diagnostics.push(`MULTIPAGE_FINAL_URL_REJECTED_CROSS_ORIGIN:${detail}`)
         pages.push({
           ...common,
           status: 'failed',
           byteSize: 0,
           bodySha256: null,
           bodyPath: null,
-          diagnostics: ['MULTIPAGE_HTML_FETCH_FAILED'],
+          diagnostics: ['MULTIPAGE_HTML_FETCH_FAILED', `MULTIPAGE_FINAL_URL_REJECTED_CROSS_ORIGIN:${detail}`],
           skippedReason: null,
           failureReason: 'final_url_external_origin',
         })
         continue
       }
+      const finalCanonicalDiagnostics = finalSameSite.canonicalHostEquivalent
+        ? [
+            `MULTIPAGE_CANONICAL_HOST_EQUIVALENCE_APPLIED:${multipageHostDiagnosticDetail(finalSameSite)}`,
+            `MULTIPAGE_FINAL_URL_ACCEPTED_CANONICAL_HOST:${multipageHostDiagnosticDetail(finalSameSite)}`,
+          ]
+        : []
+      diagnostics.push(...finalCanonicalDiagnostics)
 
       if (response.status < 200 || response.status >= 300) {
         diagnostics.push('MULTIPAGE_HTML_FETCH_FAILED')
@@ -1286,7 +1317,7 @@ async function acquireScopedMultiPageHtml(input: {
         byteSize: bytes.byteLength,
         bodySha256,
         bodyPath: resolveEvidencePathIfExists(bodyPath),
-        diagnostics: ['MULTIPAGE_HTML_FETCH_SUCCEEDED'],
+        diagnostics: ['MULTIPAGE_HTML_FETCH_SUCCEEDED', ...finalCanonicalDiagnostics],
         skippedReason: null,
         failureReason: null,
       })
@@ -1410,10 +1441,26 @@ async function assembleScopedMultiPageRawArtifactPages(input: {
         diagnostics.push('MULTIPAGE_RAW_PAGE_SKIPPED')
         continue
       }
-      if (!page.finalUrl || !isSameOriginUrl(page.finalUrl, normalizedSeed.url)) {
+      const finalSameSite = page.finalUrl
+        ? evaluateMultipageSameSiteUrl({
+            candidateUrl: page.finalUrl,
+            seedUrl: normalizedSeed.url,
+            evidenceUrls: [page.normalizedUrl, page.finalUrl],
+          })
+        : null
+      if (!finalSameSite?.accepted) {
+        const detail = multipageHostDiagnosticDetail(
+          finalSameSite ?? { seedHost: null, normalizedHost: normalizedSeed.canonicalHost, finalHost: null, routePath: page.finalNormalizedRoutePath ?? page.normalizedRoutePath },
+        )
         excludedPages.push(buildRawAssemblyExcludedEntry({ page, reason: 'final_url_not_same_origin' }))
+        diagnostics.push(`MULTIPAGE_FINAL_URL_REJECTED_CROSS_ORIGIN:${detail}`)
         diagnostics.push('MULTIPAGE_RAW_PAGE_SKIPPED')
         continue
+      }
+      if (finalSameSite.canonicalHostEquivalent) {
+        const detail = multipageHostDiagnosticDetail(finalSameSite)
+        diagnostics.push(`MULTIPAGE_CANONICAL_HOST_EQUIVALENCE_APPLIED:${detail}`)
+        diagnostics.push(`MULTIPAGE_FINAL_URL_ACCEPTED_CANONICAL_HOST:${detail}`)
       }
       const routePath = normalizeRawAssemblyRoutePath(page.finalNormalizedRoutePath ?? page.normalizedRoutePath)
       if (!routePath) {
@@ -1483,7 +1530,7 @@ async function assembleScopedMultiPageRawArtifactPages(input: {
       assembledByRoute.set(routePath, {
         routePath,
         sourceUrl: page.normalizedUrl ?? page.originalHref,
-        finalUrl: page.finalUrl,
+        finalUrl: page.finalUrl ?? page.normalizedUrl ?? page.originalHref,
         rawFilePath,
         bodySha256,
         byteSize: bodyBytes.byteLength,

@@ -13,6 +13,9 @@ export type MultipageDiagnosticCode =
   | 'MULTIPAGE_TEMPLATE_FAMILY_INFERRED'
   | 'MULTIPAGE_DISCOVERY_DEGRADED'
   | 'MULTIPAGE_DISCOVERY_PARTIAL'
+  | 'MULTIPAGE_CANONICAL_HOST_EQUIVALENCE_APPLIED'
+  | 'MULTIPAGE_FINAL_URL_ACCEPTED_CANONICAL_HOST'
+  | 'MULTIPAGE_FINAL_URL_REJECTED_CROSS_ORIGIN'
 
 function cleanPart(value: string | null | undefined): string {
   return String(value ?? '').trim().replace(/\s+/g, ' ')

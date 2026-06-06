@@ -1,0 +1,252 @@
+import assert from 'node:assert/strict'
+import test from 'node:test'
+
+import {
+  buildMultiPageImportOperatorSummary,
+  exampleViroidocMultiPageImportOperatorSummary,
+} from '@/gnr8/multipage-import/operator-summary-read-model'
+
+function provenance(input?: {
+  routeCandidates?: string[]
+  skippedLinkCount?: number
+  acquisitionPages?: Array<{
+    originalHref: string
+    normalizedUrl?: string | null
+    finalUrl?: string | null
+    normalizedRoutePath: string
+    finalNormalizedRoutePath?: string | null
+    status: 'fetched' | 'failed' | 'skipped'
+    bodyPath?: string | null
+    diagnostics?: string[]
+  }>
+  routeMap?: Array<{
+    routePath: string
+    sourceUrl: string
+    finalUrl: string
+    rawFilePath: string
+  }>
+  excludedPageCount?: number
+}) {
+  const routeCandidates = input?.routeCandidates ?? ['/']
+  const acquisitionPages = input?.acquisitionPages ?? []
+  const routeMap = input?.routeMap ?? []
+  return {
+    kind: 'runtime_import_provenance_summary_v1',
+    multiPageDiscovery: {
+      summary: {
+        enabled: true,
+        discoveredPageCount: routeCandidates.length,
+        skippedLinkCount: input?.skippedLinkCount ?? 0,
+        routeCandidateCount: routeCandidates.length,
+        diagnostics: ['DISCOVERY_SUMMARY_DIAG'],
+        htmlAcquisition: {
+          enabled: acquisitionPages.length > 0,
+          fetchedPageCount: acquisitionPages.filter((page) => page.status === 'fetched').length,
+          failedPageCount: acquisitionPages.filter((page) => page.status === 'failed').length,
+          skippedPageCount: acquisitionPages.filter((page) => page.status === 'skipped').length,
+          diagnostics: ['ACQUISITION_SUMMARY_DIAG'],
+        },
+        rawArtifactAssembly: {
+          enabled: routeMap.length > 0,
+          assembledPageCount: routeMap.length,
+          excludedPageCount: input?.excludedPageCount ?? 0,
+          diagnostics: ['ASSEMBLY_SUMMARY_DIAG'],
+        },
+      },
+      manifest: {
+        kind: 'multi_page_discovery_manifest_v1',
+        routeCandidates,
+        discoveredPages: routeCandidates.map((routePath) => ({ normalizedRoutePath: routePath })),
+        skippedLinks: Array.from({ length: input?.skippedLinkCount ?? 0 }, (_, index) => ({ originalHref: `#skip-${index}` })),
+        diagnostics: ['DISCOVERY_MANIFEST_DIAG'],
+      },
+      acquisition: {
+        kind: 'multi_page_html_acquisition_manifest_v1',
+        pages: acquisitionPages.map((page) => ({
+          originalHref: page.originalHref,
+          normalizedUrl: page.normalizedUrl ?? page.originalHref,
+          finalUrl: page.finalUrl ?? page.normalizedUrl ?? page.originalHref,
+          normalizedRoutePath: page.normalizedRoutePath,
+          finalNormalizedRoutePath: page.finalNormalizedRoutePath ?? page.normalizedRoutePath,
+          status: page.status,
+          bodyPath: page.bodyPath ?? null,
+          diagnostics: page.diagnostics ?? [],
+        })),
+        summary: {
+          fetchedPageCount: acquisitionPages.filter((page) => page.status === 'fetched').length,
+          failedPageCount: acquisitionPages.filter((page) => page.status === 'failed').length,
+          skippedPageCount: acquisitionPages.filter((page) => page.status === 'skipped').length,
+        },
+        diagnostics: ['ACQUISITION_MANIFEST_DIAG'],
+      },
+      rawArtifactAssembly: {
+        kind: 'multi_page_raw_artifact_assembly_manifest_v1',
+        assembledPageCount: routeMap.length,
+        excludedPageCount: input?.excludedPageCount ?? 0,
+        routeMap: routeMap.map((route) => ({
+          ...route,
+          bodySha256: `sha-${route.routePath}`,
+          byteSize: 100,
+          status: 'assembled',
+        })),
+        excludedPages: Array.from({ length: input?.excludedPageCount ?? 0 }, (_, index) => ({ reason: `excluded-${index}` })),
+        diagnostics: ['ASSEMBLY_MANIFEST_DIAG'],
+      },
+    },
+  }
+}
+
+test('multi-page operator summary returns a safe empty summary', () => {
+  const summary = buildMultiPageImportOperatorSummary()
+
+  assert.deepEqual(summary.overview.discovery, { discoveredRoutes: 0, skippedLinks: 0 })
+  assert.deepEqual(summary.overview.acquisition, { fetchedPages: 0, failedPages: 0 })
+  assert.deepEqual(summary.overview.assembly, { assembledPages: 0, excludedPages: 0 })
+  assert.equal(summary.overview.validation.status, 'not_run')
+  assert.deepEqual(summary.routes, [])
+  assert.equal(summary.validation.warnings, 0)
+  assert.equal(summary.validation.blockers, 0)
+})
+
+test('multi-page operator summary displays discovery-only imports', () => {
+  const summary = buildMultiPageImportOperatorSummary({
+    importProvenanceSummary: provenance({
+      routeCandidates: ['/people', '/', '/blog'],
+      skippedLinkCount: 29,
+    }),
+  })
+
+  assert.equal(summary.overview.discovery.discoveredRoutes, 3)
+  assert.equal(summary.overview.discovery.skippedLinks, 29)
+  assert.deepEqual(
+    summary.routes.map((route) => `${route.routePath}:${route.status}`),
+    ['/:missing', '/blog:missing', '/people:missing'],
+  )
+  assert.equal(summary.diagnostics.find((group) => group.group === 'Discovery')?.count, 2)
+})
+
+test('multi-page operator summary displays acquisition-only imports', () => {
+  const summary = buildMultiPageImportOperatorSummary({
+    importProvenanceSummary: provenance({
+      routeCandidates: ['/', '/about', '/missing'],
+      acquisitionPages: [
+        { originalHref: 'https://example.com/about', normalizedRoutePath: '/about', status: 'fetched', bodyPath: 'pages/about/index.html' },
+        { originalHref: 'https://example.com/missing', normalizedRoutePath: '/missing', status: 'failed' },
+      ],
+    }),
+  })
+
+  assert.equal(summary.overview.acquisition.fetchedPages, 1)
+  assert.equal(summary.overview.acquisition.failedPages, 1)
+  assert.deepEqual(
+    summary.routes.map((route) => `${route.routePath}:${route.status}:${route.rawFilePath ?? 'none'}`),
+    ['/:missing:none', '/about:fetched:pages/about/index.html', '/missing:failed:none'],
+  )
+})
+
+test('multi-page operator summary displays assembled route maps', () => {
+  const summary = buildMultiPageImportOperatorSummary({
+    importProvenanceSummary: provenance({
+      routeCandidates: ['/', '/people', '/missing'],
+      routeMap: [
+        { routePath: '/people', sourceUrl: 'https://example.com/people', finalUrl: 'https://example.com/people', rawFilePath: 'pages/people/index.html' },
+        { routePath: '/', sourceUrl: 'https://example.com/', finalUrl: 'https://example.com/', rawFilePath: 'index.html' },
+      ],
+      excludedPageCount: 1,
+    }),
+  })
+
+  assert.equal(summary.overview.assembly.assembledPages, 2)
+  assert.equal(summary.overview.assembly.excludedPages, 1)
+  assert.deepEqual(
+    summary.routes.map((route) => `${route.routePath}:${route.status}:${route.sourceUrl ?? 'none'}:${route.rawFilePath ?? 'none'}`),
+    [
+      '/:assembled:https://example.com/:index.html',
+      '/missing:missing:none:none',
+      '/people:assembled:https://example.com/people:pages/people/index.html',
+    ],
+  )
+})
+
+test('multi-page operator summary displays validation status and accurate warning/blocker counts', () => {
+  const summary = buildMultiPageImportOperatorSummary({
+    importProvenanceSummary: provenance({ routeCandidates: ['/', '/about'] }),
+    previewValidation: {
+      status: 'ready_with_warnings',
+      summary: {
+        discoveredRoutes: 2,
+        fetchedPages: 2,
+        assembledPages: 2,
+        validPreviewRoutes: 1,
+        missingPreviewRoutes: 1,
+        rewrittenLinks: 3,
+        skippedLinks: 4,
+      },
+      warnings: ['missing_file:/about:pages/about/index.html', 'missing_link_routes:/missing'],
+      blockers: ['root_file_missing'],
+      diagnostics: ['MULTIPAGE_PREVIEW_VALIDATION_READY_WITH_WARNINGS'],
+      links: [{ status: 'skipped_route_missing', count: 1, sampleMissingRoutes: ['/missing'], diagnostics: ['MULTIPAGE_LINK_SKIPPED_ROUTE_NOT_IMPORTED'] }],
+    },
+    previewDiagnostics: ['RAW_TEMPLATE_PREVIEW_RENDERED'],
+  })
+
+  assert.equal(summary.overview.validation.status, 'ready_with_warnings')
+  assert.deepEqual(summary.validation, {
+    validPreviewRoutes: 1,
+    missingPreviewRoutes: 1,
+    rewrittenLinks: 3,
+    skippedLinks: 4,
+    warnings: 2,
+    blockers: 1,
+    warningSamples: ['missing_file:/about:pages/about/index.html', 'missing_link_routes:/missing'],
+    blockerSamples: ['root_file_missing'],
+  })
+  assert.equal(summary.diagnostics.find((group) => group.group === 'Preview')?.count, 2)
+  assert.equal(summary.diagnostics.find((group) => group.group === 'Validation')?.count, 4)
+})
+
+test('multi-page operator summary infers validation status from preview diagnostics when payload is absent', () => {
+  const summary = buildMultiPageImportOperatorSummary({
+    importProvenanceSummary: provenance({ routeCandidates: ['/', '/about'] }),
+    previewDiagnostics: ['MULTIPAGE_PREVIEW_VALIDATION_READY_WITH_WARNINGS'],
+  })
+
+  assert.equal(summary.overview.validation.status, 'ready_with_warnings')
+  assert.equal(summary.validation.warnings, 0)
+  assert.equal(summary.validation.blockers, 0)
+})
+
+test('multi-page operator route table generation is deterministic', () => {
+  const input = {
+    importProvenanceSummary: provenance({
+      routeCandidates: ['/z', '/a', '/', '/a'],
+      acquisitionPages: [
+        { originalHref: 'https://example.com/z', normalizedRoutePath: '/z', status: 'fetched', bodyPath: 'pages/z/index.html' },
+      ],
+      routeMap: [
+        { routePath: '/a', sourceUrl: 'https://example.com/a', finalUrl: 'https://example.com/a', rawFilePath: 'pages/a/index.html' },
+      ],
+    }),
+  }
+
+  const first = buildMultiPageImportOperatorSummary(input)
+  const second = buildMultiPageImportOperatorSummary(input)
+
+  assert.deepEqual(first.routes, second.routes)
+  assert.deepEqual(
+    first.routes.map((route) => `${route.routePath}:${route.status}`),
+    ['/:missing', '/a:assembled', '/z:fetched'],
+  )
+})
+
+test('example Viroidoc operator summary renders the smoke counts', () => {
+  const summary = exampleViroidocMultiPageImportOperatorSummary()
+
+  assert.equal(summary.overview.discovery.discoveredRoutes, 10)
+  assert.equal(summary.overview.discovery.skippedLinks, 29)
+  assert.equal(summary.overview.acquisition.fetchedPages, 10)
+  assert.equal(summary.overview.acquisition.failedPages, 0)
+  assert.equal(summary.overview.assembly.assembledPages, 10)
+  assert.equal(summary.overview.assembly.excludedPages, 29)
+  assert.equal(summary.overview.validation.status, 'ready_with_warnings')
+})

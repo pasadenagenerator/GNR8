@@ -129,6 +129,8 @@ function renderOverviewContent(props: {
         )
       })()}
 
+      {renderMultiPageImportOperatorContent(readModel)}
+
       <section style={sectionCardStyle()}>
         <h3 style={{ margin: 0, fontSize: 15, color: '#0f172a' }}>Pipeline Summary</h3>
         <div style={{ marginTop: 10, display: 'grid', gap: 6, fontSize: 13, color: '#334155' }}>
@@ -258,6 +260,107 @@ function quickActionStyle(): CSSProperties {
     fontWeight: 600,
     background: '#fff',
   }
+}
+
+function compactMetricStyle(): CSSProperties {
+  return {
+    border: '1px solid #e2e8f0',
+    borderRadius: 8,
+    padding: 10,
+    background: '#f8fafc',
+    minWidth: 150,
+  }
+}
+
+function renderMetric(label: string, value: string | number): ReactNode {
+  return (
+    <div style={compactMetricStyle()}>
+      <div style={{ color: '#64748b', fontSize: 11, fontWeight: 700, textTransform: 'uppercase' }}>{label}</div>
+      <div style={{ color: '#0f172a', fontSize: 18, fontWeight: 800, marginTop: 4 }}>{value}</div>
+    </div>
+  )
+}
+
+function renderMultiPageImportOperatorContent(readModel: Awaited<ReturnType<typeof getSiteWorkspaceReadModelForPage>>): ReactNode {
+  if (!readModel) return null
+  const summary = readModel.multiPageImport
+  const hasMultiPageSignal =
+    readModel.overview.rawImportArtifactFound ||
+    summary.overview.discovery.discoveredRoutes > 0 ||
+    summary.overview.acquisition.fetchedPages > 0 ||
+    summary.overview.assembly.assembledPages > 0 ||
+    summary.routes.length > 0
+  if (!hasMultiPageSignal) return null
+
+  return (
+    <section style={sectionCardStyle()}>
+      <h3 style={{ margin: 0, fontSize: 15, color: '#0f172a' }}>Multi-Page Import</h3>
+      <div style={{ marginTop: 10, display: 'grid', gap: 12 }}>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          {renderMetric('Discovery', `routes ${summary.overview.discovery.discoveredRoutes} / skipped ${summary.overview.discovery.skippedLinks}`)}
+          {renderMetric('Acquisition', `fetched ${summary.overview.acquisition.fetchedPages} / failed ${summary.overview.acquisition.failedPages}`)}
+          {renderMetric('Assembly', `assembled ${summary.overview.assembly.assembledPages} / excluded ${summary.overview.assembly.excludedPages}`)}
+          {renderMetric('Validation', summary.overview.validation.status)}
+        </div>
+
+        <div style={{ overflowX: 'auto', border: '1px solid #e2e8f0', borderRadius: 8 }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+            <thead>
+              <tr style={{ background: '#f8fafc', color: '#475569', textAlign: 'left' }}>
+                {['Route', 'Status', 'Source URL', 'Final URL', 'Raw File'].map((heading) => (
+                  <th key={heading} style={{ padding: '8px 10px', borderBottom: '1px solid #e2e8f0', whiteSpace: 'nowrap' }}>
+                    {heading}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {summary.routes.length > 0 ? (
+                summary.routes.map((route) => (
+                  <tr key={`${route.routePath}:${route.status}:${route.rawFilePath ?? 'none'}`}>
+                    <td style={{ padding: '8px 10px', borderBottom: '1px solid #eef2f7', color: '#0f172a', fontWeight: 700 }}>{route.routePath}</td>
+                    <td style={{ padding: '8px 10px', borderBottom: '1px solid #eef2f7', color: route.status === 'assembled' ? '#166534' : route.status === 'missing' || route.status === 'failed' ? '#991b1b' : '#334155' }}>
+                      {route.status}
+                    </td>
+                    <td style={{ padding: '8px 10px', borderBottom: '1px solid #eef2f7', color: '#334155' }}>{route.sourceUrl ?? 'n/a'}</td>
+                    <td style={{ padding: '8px 10px', borderBottom: '1px solid #eef2f7', color: '#334155' }}>{route.finalUrl ?? 'n/a'}</td>
+                    <td style={{ padding: '8px 10px', borderBottom: '1px solid #eef2f7', color: '#334155' }}>{route.rawFilePath ?? 'n/a'}</td>
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td colSpan={5} style={{ padding: '10px', color: '#64748b' }}>
+                    No multi-page routes have been captured for this site version.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        <div style={{ display: 'grid', gap: 8, fontSize: 12, color: '#334155' }}>
+          <div style={{ fontWeight: 700, color: '#0f172a' }}>Validation Summary</div>
+          <div>
+            valid preview routes: {summary.validation.validPreviewRoutes} · missing preview routes: {summary.validation.missingPreviewRoutes} · rewritten links:{' '}
+            {summary.validation.rewrittenLinks} · skipped links: {summary.validation.skippedLinks} · warnings: {summary.validation.warnings} · blockers:{' '}
+            {summary.validation.blockers}
+          </div>
+          {summary.validation.warningSamples.length > 0 ? <div>Warning samples: {summary.validation.warningSamples.join(' · ')}</div> : null}
+          {summary.validation.blockerSamples.length > 0 ? <div>Blocker samples: {summary.validation.blockerSamples.join(' · ')}</div> : null}
+        </div>
+
+        <div style={{ display: 'grid', gap: 6, fontSize: 12, color: '#334155' }}>
+          <div style={{ fontWeight: 700, color: '#0f172a' }}>Diagnostics Summary</div>
+          {summary.diagnostics.map((group) => (
+            <div key={group.group}>
+              <strong>{group.group}:</strong> {group.count}
+              {group.samples.length > 0 ? ` · ${group.samples.join(' · ')}` : ''}
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  )
 }
 
 function renderStructureContent(readModel: Awaited<ReturnType<typeof getSiteWorkspaceReadModelForPage>>): ReactNode {

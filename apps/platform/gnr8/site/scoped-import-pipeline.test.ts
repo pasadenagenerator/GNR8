@@ -1403,6 +1403,180 @@ test('scoped pipeline raw multi-page assembly creates deterministic raw artifact
   }
 })
 
+test('scoped pipeline raw assembly keeps acquisition-accepted apex/www canonical final URLs', async () => {
+  const aboutHtml = '<!doctype html><html><body><h1>About canonical host</h1></body></html>'
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'scoped-pipeline-multipage-canonical-host-'))
+  const entryAbs = path.resolve(root, 'index.html')
+  const assetsDir = path.resolve(root, 'assets')
+  fs.mkdirSync(assetsDir)
+  fs.writeFileSync(
+    entryAbs,
+    '<!doctype html><html><body><nav><a href="https://example.com/about">About</a></nav></body></html>',
+    'utf8',
+  )
+
+  const originalFetch = globalThis.fetch
+  globalThis.fetch = (async (url: string | URL | Request) => {
+    const requestedUrl = typeof url === 'string' ? url : url instanceof URL ? url.toString() : url.url
+    assert.equal(requestedUrl, 'https://example.com/about')
+    const response = new Response(aboutHtml, {
+      status: 200,
+      headers: { 'content-type': 'text/html; charset=utf-8' },
+    })
+    Object.defineProperty(response, 'url', { value: 'https://www.example.com/about' })
+    Object.defineProperty(response, 'redirected', { value: true })
+    return response
+  }) as typeof fetch
+
+  try {
+    const pipeline = createSuccessPipelineFixture()
+    let createInput: any = null
+    let persistedImportSummary: any = null
+    let linkedArtifactId: string | null = null
+    let rawImportRows: Array<{ path: string; bytes: Buffer; sha256: string }> = []
+
+    const outcome = await runScopedImportPipeline({
+      snapshot: {
+        snapshotRootDirAbs: root,
+        snapshotStableRootDirAbs: root,
+        snapshotId: 'snapshot-canonical-host',
+        snapshotRunId: 'snapshot-run-canonical-host',
+        requestId: 'request-canonical-host',
+        entryHtmlPathAbs: entryAbs,
+        assetsDirAbs: assetsDir,
+        sourceUrl: 'https://www.example.com/',
+        normalizedUrl: 'https://www.example.com/',
+        captureMode: 'raw_html_only',
+        sourceMode: 'raw_html_fallback',
+        sourceSelection: {
+          sourceMode: 'raw_html_fallback',
+          fidelityStatus: 'degraded_import',
+          selectedSourceHtmlPathAbs: entryAbs,
+          renderedDomQuality: {
+            quality: 'strong',
+            bodyTextLength: 80,
+            meaningfulNodeCount: 6,
+            sectionCandidateCount: 1,
+            hasHeading: true,
+            reason: 'canonical_host_fixture',
+          },
+          rawHtmlQuality: {
+            quality: 'strong',
+            bodyTextLength: 80,
+            meaningfulNodeCount: 6,
+            sectionCandidateCount: 1,
+            hasHeading: true,
+            reason: 'canonical_host_fixture',
+          },
+          degraded: false,
+        },
+        renderedCapture: {
+          status: 'unavailable',
+          documents: [],
+          screenshots: [],
+          computedStyleSamples: [],
+          diagnostics: [],
+        },
+        renderedCaptureReliability: { job: null, workerHealth: null },
+        importDiagnostics: { summary: { infoCount: 0, warningCount: 0, errorCount: 0, fatalCount: 0 }, issues: [] },
+        fetchManifest: [],
+        importIntake: { ok: true, rawHtmlAvailable: true, htmlByteLength: fs.statSync(entryAbs).size },
+      } as any,
+      sourceUrl: 'https://www.example.com/',
+      actor: 'test:multi-page-canonical-host',
+      multiPageDiscovery: {
+        enabled: true,
+        acquireHtml: true,
+        assembleRawArtifactPages: true,
+        generatedAt: '2026-06-06T00:00:00.000Z',
+        limits: { maxRoutes: 10, maxDepth: 1, maxLinksPerPage: 20, maxTemplateLinksPerRoute: 10 },
+        htmlAcquisitionLimits: { maxPages: 10, maxBytesPerPage: 20_000, requestTimeoutMs: 5_000 },
+      },
+      deps: {
+        importStaticSite: async () => ({ status: 'ok', documentMeta: { source: { kind: 'single-entry-html' } } }) as any,
+        createImportManifest: () => ({ status: 'success' }) as any,
+        runLinearMigrationPipeline: () => pipeline as any,
+        createSiteVersionFromMigration: async (input) => {
+          createInput = input
+          return { siteId: 'runtime-site-canonical-host', siteVersionId: 'site-version-canonical-host', versionNo: 1 }
+        },
+        setSiteVersionImportProvenanceSummary: async (input) => {
+          persistedImportSummary = input
+          return { affectedRows: 1 }
+        },
+        getSiteVersion: async () =>
+          ({
+            id: 'site-version-canonical-host',
+            siteId: 'runtime-site-canonical-host',
+            versionNo: 1,
+            state: 'DRAFT',
+            source: 'migration',
+            actor: 'test',
+            createdAt: '2026-06-06T00:00:00.000Z',
+            rendererCompatibilityVersion: 'gnr8-renderer-v1',
+            artifactId: linkedArtifactId,
+            importProvenanceSummary: createInput?.importProvenanceSummary ?? null,
+            pages: [],
+          }) as any,
+        buildDeterministicArtifactBundle: () =>
+          ({
+            siteId: 'runtime-site-canonical-host',
+            siteVersionId: 'site-version-canonical-host',
+            rendererCompatibilityVersion: 'gnr8-renderer-v1',
+            bundleSha256: 'bundle-sha',
+            htmlByPath: { '/': '<!doctype html><html><body>preview only</body></html>' },
+            compiledTokenStyles: ':root{}',
+            assetFingerprintMap: {},
+            manifest: {},
+          }) as any,
+        createArtifact: async () => ({ artifactId: 'artifact-canonical-host' }),
+        bindArtifactToVersion: async (input) => {
+          linkedArtifactId = input.artifactId
+          return { affectedRows: 1 }
+        },
+        persistRawImportedSiteArtifact: async (input) => {
+          rawImportRows = input.fileRows.map((row: { path: string; bytes: Buffer; sha256: string }) => ({
+            path: row.path,
+            bytes: row.bytes,
+            sha256: row.sha256,
+          }))
+          return {
+            artifactId: 'raw-artifact-canonical-host',
+            artifactType: 'raw_imported_site',
+            entryHtmlPath: 'index.html',
+            assetBasePath: '.',
+            fileMap: {},
+            fileCount: input.fileRows.length,
+          } as any
+        },
+        upsertContentSlots: async () => 0,
+        importHtmlToPage: () => ({}) as any,
+        migrateImportedPageToCanonicalDraft: async () => ({ siteId: 'legacy-site', siteVersionId: 'legacy-version', versionNo: 1 }),
+      },
+    })
+
+    const discovery = persistedImportSummary.importProvenanceSummary.multiPageDiscovery.manifest
+    const acquisition = persistedImportSummary.importProvenanceSummary.multiPageDiscovery.acquisition
+    const assembly = persistedImportSummary.importProvenanceSummary.multiPageDiscovery.rawArtifactAssembly
+
+    assert.equal(outcome.mode, 'pipeline')
+    assert.equal(outcome.reporting.multiPageDiscovery.discoveredPageCount, 1)
+    assert.equal(acquisition.summary.fetchedPageCount, 1)
+    assert.equal(acquisition.pages[0].normalizedUrl, 'https://example.com/about')
+    assert.equal(acquisition.pages[0].finalUrl, 'https://www.example.com/about')
+    assert.equal(assembly.assembledPageCount, 1)
+    assert.equal(assembly.excludedPageCount, 0)
+    assert.deepEqual(assembly.htmlPathMap, { '/about': 'pages/about/index.html' })
+    assert.deepEqual(discovery.routeCandidates, ['/about'])
+    assert.equal(assembly.excludedPages.some((entry: any) => entry.reason === 'final_url_not_same_origin'), false)
+    assert.ok(acquisition.diagnostics.some((entry: string) => entry.startsWith('MULTIPAGE_FINAL_URL_ACCEPTED_CANONICAL_HOST')))
+    assert.ok(assembly.diagnostics.some((entry: string) => entry.startsWith('MULTIPAGE_FINAL_URL_ACCEPTED_CANONICAL_HOST')))
+    assert.equal(rawImportRows.some((row) => row.path === 'pages/about/index.html' && row.bytes.toString('utf8') === aboutHtml), true)
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+})
+
 test('scoped pipeline rejects HTML acquisition when multi-page discovery is not enabled', async () => {
   const pipeline = createSuccessPipelineFixture()
   await assert.rejects(

@@ -6,6 +6,10 @@ import { normalizePreviewRuntimeMode, type PreviewRuntimeSummary } from '@/gnr8/
 import type { RuntimeImportProvenanceSummary } from '@/gnr8/runtime/types'
 import type { StyleSignalModel } from '@/gnr8/style-signals'
 import type { SemanticImportResult } from '@/gnr8/import-semantic/semantic-import-engine'
+import {
+  buildMultiPageImportOperatorSummary,
+  type MultiPageImportOperatorSummary,
+} from '@/gnr8/multipage-import/operator-summary-read-model'
 import { getSupabaseServerClientReadOnly } from '@/src/auth/supabase-server-read-only'
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
@@ -222,6 +226,7 @@ export type SiteWorkspaceReadModel = {
       selectedHasArtifactId: boolean
     }
   }
+  multiPageImport: MultiPageImportOperatorSummary
   actions: {
     currentStatus: 'idle' | 'running' | 'completed' | 'failed'
     lastAction: {
@@ -2233,6 +2238,7 @@ export async function getSiteWorkspaceReadModelForPage(input: {
   const selectedRuntimeArtifactId = toTextOrNull(selectedRuntimeRow?.artifact_id)
   let transformedPreviewAvailable = Boolean(selectedRuntimeArtifactId)
   let previewRuntimeSummary: PreviewRuntimeSummary | null = null
+  let multiPagePreviewValidationPayload: unknown = null
   if (selectedRuntimeSiteVersionId) {
     const artifactResult = await supabase
       .from('gnr8_runtime_artifacts')
@@ -2249,6 +2255,7 @@ export async function getSiteWorkspaceReadModelForPage(input: {
         const manifest = isRecord(artifactRow.manifest) ? artifactRow.manifest : null
         const summaryFromManifest = parsePreviewRuntimeSummary(manifest?.previewRuntimeSummary)
         if (summaryFromManifest) previewRuntimeSummary = summaryFromManifest
+        multiPagePreviewValidationPayload = manifest?.multiPagePreviewValidation ?? null
       }
     }
   }
@@ -2263,6 +2270,11 @@ export async function getSiteWorkspaceReadModelForPage(input: {
   })
   const previewAlignmentDiagnostics = selectedRuntimeRow && importFidelity.sourceMode === 'rendered_dom' ? ['PRIMARY_RENDERED_RUN_ALIGNED_TO_PREVIEW'] : []
   const resolvedPreviewDiagnostics = [...new Set([...resolvedPreview.diagnostics, ...previewAlignmentDiagnostics])].sort((a, b) => a.localeCompare(b))
+  const multiPageImportOperatorSummary = buildMultiPageImportOperatorSummary({
+    importProvenanceSummary: selectedRuntimeRow?.import_provenance_summary ?? null,
+    previewValidation: multiPagePreviewValidationPayload,
+    previewDiagnostics: resolvedPreview.previewRuntimeSummary?.previewDiagnostics ?? resolvedPreviewDiagnostics,
+  })
   const diagnosticsSummary = Array.from(
     new Set([
       ...structureRows.flatMap((row) => row.keyDiagnostics),
@@ -2390,6 +2402,7 @@ export async function getSiteWorkspaceReadModelForPage(input: {
         selectedHasArtifactId: Boolean(selectedRuntimeArtifactId),
       },
     },
+    multiPageImport: multiPageImportOperatorSummary,
     actions: {
       currentStatus: normalizedSiteActions.find((action) => action.status === 'running')?.status ?? (lastAction?.status ?? 'idle'),
       lastAction: {

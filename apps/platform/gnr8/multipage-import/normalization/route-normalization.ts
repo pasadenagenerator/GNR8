@@ -45,11 +45,162 @@ export type NormalizationSkipReason =
   | 'hash_only'
   | 'asset_link'
 
-function normalizeHost(hostname: string): string {
+export function normalizeMultipageHost(hostname: string): string {
   const raw = String(hostname ?? '').trim().toLowerCase()
   if (!raw) return ''
   if (raw.startsWith('www.')) return raw.slice(4)
   return raw
+}
+
+function parseHttpUrl(value: string): URL | null {
+  try {
+    const parsed = new URL(value)
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return null
+    return parsed
+  } catch {
+    return null
+  }
+}
+
+export type MultipageSameSiteUrlEvaluation = {
+  accepted: boolean
+  exactOrigin: boolean
+  canonicalHostEquivalent: boolean
+  reason:
+    | 'same_origin'
+    | 'canonical_host_equivalent'
+    | 'invalid_url'
+    | 'unsupported_scheme'
+    | 'different_scheme'
+    | 'different_port'
+    | 'different_canonical_host'
+    | 'missing_seed_host_evidence'
+    | 'missing_redirect_evidence'
+  seedHost: string | null
+  normalizedHost: string | null
+  finalHost: string | null
+  routePath: string | null
+}
+
+export function evaluateMultipageSameSiteUrl(input: {
+  candidateUrl: string
+  seedUrl: string
+  evidenceUrls?: Array<string | null | undefined>
+}): MultipageSameSiteUrlEvaluation {
+  const candidate = parseHttpUrl(input.candidateUrl)
+  const seed = parseHttpUrl(input.seedUrl)
+  if (!candidate || !seed) {
+    return {
+      accepted: false,
+      exactOrigin: false,
+      canonicalHostEquivalent: false,
+      reason: 'invalid_url',
+      seedHost: seed?.hostname.toLowerCase() ?? null,
+      normalizedHost: seed ? normalizeMultipageHost(seed.hostname) : null,
+      finalHost: candidate?.hostname.toLowerCase() ?? null,
+      routePath: candidate ? normalizePath(candidate.pathname) : null,
+    }
+  }
+
+  const seedHost = seed.hostname.toLowerCase()
+  const normalizedHost = normalizeMultipageHost(seed.hostname)
+  const finalHost = candidate.hostname.toLowerCase()
+  const routePath = normalizePath(candidate.pathname)
+  if (candidate.origin === seed.origin) {
+    return {
+      accepted: true,
+      exactOrigin: true,
+      canonicalHostEquivalent: false,
+      reason: 'same_origin',
+      seedHost,
+      normalizedHost,
+      finalHost,
+      routePath,
+    }
+  }
+
+  if (candidate.protocol !== seed.protocol) {
+    return {
+      accepted: false,
+      exactOrigin: false,
+      canonicalHostEquivalent: false,
+      reason: 'different_scheme',
+      seedHost,
+      normalizedHost,
+      finalHost,
+      routePath,
+    }
+  }
+  if (candidate.port !== seed.port) {
+    return {
+      accepted: false,
+      exactOrigin: false,
+      canonicalHostEquivalent: false,
+      reason: 'different_port',
+      seedHost,
+      normalizedHost,
+      finalHost,
+      routePath,
+    }
+  }
+
+  const candidateCanonicalHost = normalizeMultipageHost(candidate.hostname)
+  if (candidateCanonicalHost !== normalizedHost) {
+    return {
+      accepted: false,
+      exactOrigin: false,
+      canonicalHostEquivalent: false,
+      reason: 'different_canonical_host',
+      seedHost,
+      normalizedHost,
+      finalHost,
+      routePath,
+    }
+  }
+
+  const seedFamilyHosts = new Set([seedHost, normalizedHost, normalizedHost ? `www.${normalizedHost}` : ''])
+  if (!seedFamilyHosts.has(finalHost)) {
+    return {
+      accepted: false,
+      exactOrigin: false,
+      canonicalHostEquivalent: false,
+      reason: 'missing_seed_host_evidence',
+      seedHost,
+      normalizedHost,
+      finalHost,
+      routePath,
+    }
+  }
+
+  const evidenceHosts = new Set(
+    (input.evidenceUrls ?? [])
+      .map((value) => (value ? parseHttpUrl(value) : null))
+      .filter((value): value is URL => Boolean(value))
+      .map((value) => value.hostname.toLowerCase()),
+  )
+  if (evidenceHosts.size > 0 && !evidenceHosts.has(finalHost) && !evidenceHosts.has(normalizedHost)) {
+    return {
+      accepted: false,
+      exactOrigin: false,
+      canonicalHostEquivalent: false,
+      reason: 'missing_redirect_evidence',
+      seedHost,
+      normalizedHost,
+      finalHost,
+      routePath,
+    }
+  }
+
+  return {
+    accepted: true,
+    exactOrigin: false,
+    canonicalHostEquivalent: true,
+    reason: 'canonical_host_equivalent',
+    seedHost,
+    normalizedHost,
+    finalHost,
+    routePath,
+  }
 }
 
 function normalizePath(rawPath: string): string {
@@ -91,7 +242,7 @@ export function normalizeSeedUrl(seedUrl: string): NormalizedUrl | null {
   try {
     const parsed = new URL(seedUrl)
     if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return null
-    const canonicalHost = normalizeHost(parsed.hostname)
+    const canonicalHost = normalizeMultipageHost(parsed.hostname)
     const normalizedPath = normalizePath(parsed.pathname)
     parsed.hostname = canonicalHost
     parsed.hash = ''
@@ -128,7 +279,7 @@ export function normalizeInternalHref(input: {
     return { skip: 'unsupported_scheme' }
   }
 
-  const host = normalizeHost(resolved.hostname)
+  const host = normalizeMultipageHost(resolved.hostname)
   if (host !== input.canonicalHost) return { skip: 'external_host' }
 
   const normalizedPath = normalizePath(resolved.pathname)
