@@ -482,6 +482,7 @@ test('raw template multipage link rewrite normalizes routes and emits determinis
     assert.equal(result.counts.skippedHashOnly, 1)
     assert.equal(result.counts.skippedAsset, 2)
     assert.equal(result.counts.skippedRouteMissing, 1)
+    assert.deepEqual(result.missingRouteSamples, ['/missing'])
     assert.equal(result.html.includes('<a class="nav" href="/api/gnr8/runtime/versions/sv-nav/preview?mode=raw_template_preview&amp;path=%2Fabout" data-gnr8-multipage-link="rewritten" data-gnr8-original-href="/about">About</a>'), true)
     assert.equal(result.html.includes('href="/api/gnr8/runtime/versions/sv-nav/preview?mode=raw_template_preview&amp;path=%2Fservices%2Fitem"'), true)
     assert.equal(result.html.includes('href="/api/gnr8/runtime/versions/sv-nav/preview?mode=raw_template_preview&amp;path=%2F"'), true)
@@ -531,6 +532,8 @@ test('raw template multipage link rewrite remains disabled outside controlled ro
 
 test('raw template preview route-map serving resolves /about to assembled child HTML and rewrites child assets', async () => {
   const requestedAssets: string[] = []
+  let listContentSlotsCount = 0
+  const overrideStatusLookups: string[] = []
   const restore = setUnifiedRenderPreviewDependenciesForTest({
     getPoolStatus: () => ({ totalCount: 1, idleCount: 1, waitingCount: 0 }),
     getSiteVersion: async () =>
@@ -583,8 +586,14 @@ test('raw template preview route-map serving resolves /about to assembled child 
       }
       return null
     },
-    listContentSlots: async () => [],
-    listContentOverrides: async () => [],
+    listContentSlots: async () => {
+      listContentSlotsCount += 1
+      return []
+    },
+    listContentOverrides: async (input) => {
+      overrideStatusLookups.push(input.status)
+      return []
+    },
   })
 
   try {
@@ -596,6 +605,8 @@ test('raw template preview route-map serving resolves /about to assembled child 
     })
 
     assert.deepEqual(requestedAssets, ['pages/about/index.html'])
+    assert.equal(listContentSlotsCount, 1)
+    assert.deepEqual(overrideStatusLookups, ['draft', 'published'])
     assert.equal(preview.path, '/about')
     assert.match(preview.html, /About child/)
     assert.doesNotMatch(preview.html, /<h1>Home<\/h1>/)
@@ -617,7 +628,16 @@ test('raw template preview route-map serving resolves /about to assembled child 
     assert.equal(preview.previewRuntimeSummary.previewDiagnostics.includes('MULTIPAGE_LINK_SKIPPED_ROUTE_NOT_IMPORTED'), true)
     assert.equal(preview.previewRuntimeSummary.previewDiagnostics.includes('MULTIPAGE_LINK_SKIPPED_EXTERNAL'), true)
     assert.equal(preview.previewRuntimeSummary.previewDiagnostics.includes('MULTIPAGE_ROUTE_MAP_SELECTED'), true)
+    assert.equal(preview.previewRuntimeSummary.previewDiagnostics.includes('MULTIPAGE_PREVIEW_VALIDATION_READY_WITH_WARNINGS'), true)
     assert.equal(preview.previewRuntimeSummary.previewDiagnostics.includes('RAW_TEMPLATE_PREVIEW_RENDERED'), true)
+    assert.equal(preview.multiPagePreviewValidation?.status, 'ready_with_warnings')
+    assert.equal(preview.multiPagePreviewValidation?.summary.validPreviewRoutes, 2)
+    assert.equal(preview.multiPagePreviewValidation?.summary.missingPreviewRoutes, 1)
+    assert.equal(preview.multiPagePreviewValidation?.summary.rewrittenLinks, 2)
+    assert.deepEqual(
+      preview.multiPagePreviewValidation?.links.find((link) => link.status === 'skipped_route_missing')?.sampleMissingRoutes,
+      ['/missing'],
+    )
   } finally {
     restore()
   }

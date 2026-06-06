@@ -115,6 +115,90 @@ test("preview route: __debug=content granted renders debug panel", async () => {
   }
 });
 
+test("preview route: __debug=multipage_validation returns operator JSON payload", async () => {
+  const restoreDeps = setPreviewRouteDependenciesForTest({
+    resolveAgencyIdForSiteVersion: async () => "agency_1",
+    requireAgencyActionContext: async () => ({ agencyId: "agency_1" }) as never,
+    renderSiteVersionPreview: async () =>
+      ({
+        html: "<!doctype html><html><body><h1>Preview Site</h1></body></html>",
+        siteId: "site_preview_1",
+        siteVersionId: "sv_preview_1",
+        path: "/about",
+        source: "raw_template_site",
+        previewMode: "raw_template_preview",
+        previewRuntimeSummary: {
+          rendererContractAvailable: false,
+          finalSiteModelAvailable: false,
+          renderedWithFallback: false,
+          matchedPageId: null,
+          contentResolutionApplied: false,
+          resolvedContentCount: 0,
+          unresolvedContentCount: 0,
+          contentResolutionDegraded: false,
+          contentResolutionDiagnostics: [],
+          previewDiagnostics: ["MULTIPAGE_PREVIEW_VALIDATION_READY_WITH_WARNINGS"],
+          familyRenderUsed: false,
+          familyRenderMode: null,
+          familyRenderFamilyId: null,
+          familyRenderFallbackToPage: false,
+          familyRenderDiagnosticsCount: 0,
+        },
+        renderedCaptureUsed: false,
+        domSize: 0,
+        fallbackUsed: false,
+        multiPagePreviewValidation: {
+          status: "ready_with_warnings",
+          summary: {
+            discoveredRoutes: 2,
+            fetchedPages: 2,
+            assembledPages: 2,
+            validPreviewRoutes: 2,
+            missingPreviewRoutes: 1,
+            rewrittenLinks: 3,
+            skippedLinks: 1,
+          },
+          routes: [
+            { routePath: "/", rawFilePath: "index.html", sourceUrl: null, status: "valid", diagnostics: [] },
+            {
+              routePath: "/missing",
+              rawFilePath: "pages/missing/index.html",
+              sourceUrl: "https://example.com/missing",
+              status: "missing_file",
+              diagnostics: ["MULTIPAGE_PREVIEW_ROUTE_MISSING_FILE"],
+            },
+          ],
+          links: [
+            {
+              status: "skipped_route_missing",
+              count: 1,
+              sampleMissingRoutes: ["/missing"],
+              diagnostics: ["MULTIPAGE_LINK_SKIPPED_ROUTE_NOT_IMPORTED"],
+            },
+          ],
+          blockers: [],
+          warnings: ["missing_link_routes:/missing"],
+          diagnostics: ["MULTIPAGE_PREVIEW_VALIDATION_READY_WITH_WARNINGS"],
+        },
+      }) as never,
+    canShowContentDebug: async () => false,
+  });
+  try {
+    const response = await GET(
+      new Request("https://app.pasadenagenerator.com/api/gnr8/runtime/versions/sv_preview_1/preview?mode=raw_template_preview&path=%2Fabout&__debug=multipage_validation"),
+      { params: Promise.resolve({ siteVersionId: "sv_preview_1" }) },
+    );
+    const payload = await response.json();
+    assert.equal(response.status, 200);
+    assert.equal(response.headers.get("content-type"), "application/json; charset=utf-8");
+    assert.equal(payload.multiPagePreviewValidation.status, "ready_with_warnings");
+    assert.equal(payload.multiPagePreviewValidation.summary.missingPreviewRoutes, 1);
+    assert.deepEqual(payload.multiPagePreviewValidation.links[0].sampleMissingRoutes, ["/missing"]);
+  } finally {
+    restoreDeps();
+  }
+});
+
 test("preview route: transformed final output normalizes double-prefixed preview-assets URLs only", async () => {
   const restoreDeps = setPreviewRouteDependenciesForTest({
     resolveAgencyIdForSiteVersion: async () => "agency_1",

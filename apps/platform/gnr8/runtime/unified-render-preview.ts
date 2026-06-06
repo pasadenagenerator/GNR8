@@ -23,6 +23,10 @@ import { getSuperadminPool } from '@/src/superadmin/db'
 import { applyContentOverridesToRawHtml } from '@/src/public-site/content-override-runtime'
 import type { ContentOverride } from '@/gnr8/runtime/content-binding'
 import type { CanonicalSiteVersionSnapshot, RuntimeImportProvenanceSummary } from '@/gnr8/runtime/types'
+import {
+  validateMultiPagePreview,
+  type MultiPagePreviewValidation,
+} from '@/gnr8/runtime/multipage-preview-validation'
 import { buildSiteVersionPreviewUrl, normalizeSiteVersionPreviewMode, type SiteVersionPreviewMode } from '@/gnr8/site/site-preview-contract'
 import { normalizeInternalHref, normalizeSeedUrl } from '@/gnr8/multipage-import/normalization/route-normalization'
 import { PREVIEW_RUNTIME_DIAGNOSTIC } from '@/gnr8/preview-runtime/preview-runtime-diagnostics'
@@ -71,6 +75,7 @@ type ResolvedSiteVersionPreview = {
     skippedDiagnostics: Array<{ slotKey: string; reason: string }>
     slotKeys: string[]
   }
+  multiPagePreviewValidation?: MultiPagePreviewValidation
 }
 
 export class SiteVersionPreviewUnavailableError extends Error {
@@ -329,6 +334,7 @@ type MultiPageLinkRewriteResult = {
   html: string
   diagnostics: string[]
   counts: MultiPageLinkRewriteCounts
+  missingRouteSamples: string[]
 }
 
 function defaultMultiPageLinkRewriteCounts(): MultiPageLinkRewriteCounts {
@@ -410,15 +416,16 @@ function rewriteRawTemplateMultiPageLinks(input: {
 }): MultiPageLinkRewriteResult {
   const counts = defaultMultiPageLinkRewriteCounts()
   const diagnostics = new Set<string>()
+  const missingRouteSamples = new Set<string>()
   const routeMap = routeMapFromProvenance(input.importProvenanceSummary)
   const seedUrl = firstUsableSeedUrl(input.importProvenanceSummary)
   if (!input.routeMapServingEnabled || routeMap.length === 0 || !seedUrl || input.routeMapResolution.outcome !== 'selected') {
-    return { html: input.html, diagnostics: [], counts }
+    return { html: input.html, diagnostics: [], counts, missingRouteSamples: [] }
   }
 
   diagnostics.add(MULTIPAGE_LINK_REWRITE_DIAGNOSTIC.MULTIPAGE_LINK_REWRITE_STARTED)
   const seed = normalizeSeedUrl(seedUrl)
-  if (!seed) return { html: input.html, diagnostics: [], counts }
+  if (!seed) return { html: input.html, diagnostics: [], counts, missingRouteSamples: [] }
   const currentPageUrl = currentPageUrlForRoute({ seedUrl: seed.url, resolution: input.routeMapResolution })
   const importedRoutes = new Set<string>(['/'])
   for (const entry of routeMap) importedRoutes.add(normalizeRawTemplateRouteMapPath(entry.routePath))
@@ -501,6 +508,7 @@ function rewriteRawTemplateMultiPageLinks(input: {
     const routePath = normalizeRawTemplateRouteMapPath(normalized.normalized.path)
     if (!importedRoutes.has(routePath)) {
       counts.skippedRouteMissing += 1
+      missingRouteSamples.add(routePath)
       diagnostics.add(MULTIPAGE_LINK_REWRITE_DIAGNOSTIC.MULTIPAGE_LINK_SKIPPED_ROUTE_NOT_IMPORTED)
       emitSkipped(MULTIPAGE_LINK_REWRITE_DIAGNOSTIC.MULTIPAGE_LINK_SKIPPED_ROUTE_NOT_IMPORTED, href, routePath)
       return tag
@@ -531,7 +539,12 @@ function rewriteRawTemplateMultiPageLinks(input: {
     routePath: input.routeMapResolution.routePath,
     ...counts,
   })
-  return { html, diagnostics: [...diagnostics].sort((a, b) => a.localeCompare(b)), counts }
+  return {
+    html,
+    diagnostics: [...diagnostics].sort((a, b) => a.localeCompare(b)),
+    counts,
+    missingRouteSamples: [...missingRouteSamples].sort((a, b) => a.localeCompare(b)).slice(0, 10),
+  }
 }
 
 function rewriteRawTemplateAssetReferences(input: {
@@ -1043,12 +1056,29 @@ async function renderRawTemplateSiteVersionPreview(input: {
       })
     }
   }
+  const multiPagePreviewValidation = validateMultiPagePreview({
+    siteId: artifact.siteId,
+    siteVersionId: artifact.siteVersionId,
+    entryHtmlPath: artifact.entryHtmlPath,
+    fileMap: artifact.fileMap,
+    importProvenanceSummary: input.siteVersion.importProvenanceSummary,
+    multiPagePreviewRequested: input.routeMapServingEnabled,
+    linkRewriteSummary: {
+      ...linkRewrite.counts,
+      missingRouteSamples: linkRewrite.missingRouteSamples,
+      diagnostics: linkRewrite.diagnostics,
+    },
+  })
   const summary = buildRawTemplatePreviewRuntimeSummary({
     baseSummary: input.fallbackSummary,
     fileCount: Object.keys(artifact.fileMap).length,
     persistedAssetCount: importedArtifact?.metadata.assetSummary.persistedAssetCount,
     externalFallbackAssetCount: importedArtifact?.metadata.assetSummary.externalFallbackAssetCount,
-    routeMapDiagnostics: [routeMapResolution.diagnosticCode, ...linkRewrite.diagnostics],
+    routeMapDiagnostics: [
+      routeMapResolution.diagnosticCode,
+      ...linkRewrite.diagnostics,
+      ...multiPagePreviewValidation.diagnostics,
+    ],
   })
   console.info('[preview-runtime] RAW_TEMPLATE_PREVIEW_SELECTED', {
     siteId: artifact.siteId,
@@ -1092,6 +1122,7 @@ async function renderRawTemplateSiteVersionPreview(input: {
         source: 'raw_template_site',
         previewMode: 'raw_template_preview',
         previewRuntimeSummary: summary,
+        multiPagePreviewValidation,
       },
       previewTruth: input.previewTruth,
       fallbackUsedOverride: false,

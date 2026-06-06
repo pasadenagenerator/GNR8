@@ -833,6 +833,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ siteVersionId: 
     }).correlationKey;
     const contentDebugRequested = url.searchParams.get("__debug") === "content";
     const galleryRuntimeDiagnosticRequested = url.searchParams.get("__debug") === "gallery_runtime";
+    const multipageValidationRequested = url.searchParams.get("__debug") === "multipage_validation";
     const runtimeIsolationEnabled = galleryRuntimeDiagnosticRequested || mode === "transformed";
     let contentDebugMode = false;
     if (contentDebugRequested) {
@@ -867,6 +868,27 @@ export async function GET(req: Request, ctx: { params: Promise<{ siteVersionId: 
       normalizedPath: previewIdentity.path,
       correlationKey: previewIdentity.correlationKey,
     });
+    if (multipageValidationRequested) {
+      return new Response(
+        JSON.stringify({
+          ok: true,
+          siteId: preview.siteId,
+          siteVersionId: preview.siteVersionId,
+          path: preview.path,
+          previewMode: preview.previewMode,
+          source: preview.source,
+          multiPagePreviewValidation: preview.multiPagePreviewValidation ?? null,
+          previewDiagnostics: preview.previewRuntimeSummary.previewDiagnostics,
+        }),
+        {
+          status: 200,
+          headers: {
+            "content-type": "application/json; charset=utf-8",
+            "cache-control": "no-store",
+          },
+        },
+      );
+    }
     const htmlWithOptionalDebug = contentDebugMode
       ? previewRouteDependencies.injectRuntimeDebugPanel({
           html: preview.html,
@@ -965,6 +987,9 @@ export async function GET(req: Request, ctx: { params: Promise<{ siteVersionId: 
         "x-gnr8-preview-persisted-asset-count": String(preview.previewRuntimeSummary.persistedAssetCount ?? 0),
         "x-gnr8-preview-external-fallback-asset-count": String(preview.previewRuntimeSummary.externalFallbackAssetCount ?? 0),
         "x-gnr8-preview-diagnostics": preview.previewRuntimeSummary.previewDiagnostics.join(","),
+        "x-gnr8-multipage-preview-validation-status": preview.multiPagePreviewValidation?.status ?? "",
+        "x-gnr8-multipage-preview-valid-routes": String(preview.multiPagePreviewValidation?.summary.validPreviewRoutes ?? 0),
+        "x-gnr8-multipage-preview-missing-routes": String(preview.multiPagePreviewValidation?.summary.missingPreviewRoutes ?? 0),
         "x-gnr8-family-render-used": preview.previewRuntimeSummary.familyRenderUsed ? "true" : "false",
         "x-gnr8-family-render-mode": preview.previewRuntimeSummary.familyRenderMode ?? "",
         "x-gnr8-family-render-family-id": preview.previewRuntimeSummary.familyRenderFamilyId ?? "",
