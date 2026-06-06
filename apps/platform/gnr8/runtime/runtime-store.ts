@@ -718,6 +718,14 @@ function parseRawImportedSiteArtifactMetadata(value: unknown): RawImportedSiteAr
     sourceUrl: String(record.sourceUrl ?? "").trim(),
     finalUrl: String(record.finalUrl ?? "").trim() || null,
     htmlByteLength: Math.max(0, Math.floor(Number(record.htmlByteLength ?? 0) || 0)),
+    multiPage:
+      record.multiPage && typeof record.multiPage === "object" && !Array.isArray(record.multiPage)
+        ? {
+            enabled: (record.multiPage as Record<string, unknown>).enabled === true,
+            pageCount: Math.max(0, Math.floor(Number((record.multiPage as Record<string, unknown>).pageCount ?? 0) || 0)),
+            routeMapRef: String((record.multiPage as Record<string, unknown>).routeMapRef ?? "").trim(),
+          }
+        : undefined,
     diagnostics: {
       codes: Array.isArray(diagnostics.codes)
         ? diagnostics.codes.map((value) => String(value ?? "").trim()).filter(Boolean)

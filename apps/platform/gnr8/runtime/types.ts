@@ -124,6 +124,52 @@ export type MultiPageHtmlAcquisitionSummary = {
   diagnostics: string[];
 };
 
+export type MultiPageRawArtifactAssemblyRouteEntry = {
+  routePath: string;
+  sourceUrl: string;
+  finalUrl: string;
+  rawFilePath: string;
+  bodySha256: string;
+  byteSize: number;
+  status: "assembled";
+};
+
+export type MultiPageRawArtifactAssemblyExcludedEntry = {
+  routePath: string | null;
+  sourceUrl: string | null;
+  finalUrl: string | null;
+  rawFilePath: string | null;
+  bodySha256: string | null;
+  byteSize: number;
+  status: "excluded";
+  reason: string;
+};
+
+export type MultiPageRawArtifactAssemblyManifest = {
+  kind: "multi_page_raw_artifact_assembly_manifest_v1";
+  enabled: true;
+  seedUrl: string;
+  normalizedSeedUrl: string | null;
+  assembledPageCount: number;
+  excludedPageCount: number;
+  failedPageCount: number;
+  routeMap: MultiPageRawArtifactAssemblyRouteEntry[];
+  htmlPathMap: Record<string, string>;
+  excludedPages: MultiPageRawArtifactAssemblyExcludedEntry[];
+  failedPages: MultiPageHtmlAcquisitionPageEntry[];
+  manifestPath: string | null;
+  diagnostics: string[];
+  generatedAt: string;
+};
+
+export type MultiPageRawArtifactAssemblySummary = {
+  enabled: boolean;
+  assembledPageCount: number;
+  excludedPageCount: number;
+  routeMapRef: string | null;
+  diagnostics: string[];
+};
+
 export type MultiPageDiscoverySummary = {
   enabled: boolean;
   discoveredPageCount: number;
@@ -132,6 +178,7 @@ export type MultiPageDiscoverySummary = {
   manifestRef: string | null;
   diagnostics: string[];
   htmlAcquisition?: MultiPageHtmlAcquisitionSummary;
+  rawArtifactAssembly?: MultiPageRawArtifactAssemblySummary;
 };
 
 export type RuntimeImportProvenanceSummary = {
@@ -234,6 +281,7 @@ export type RuntimeImportProvenanceSummary = {
     summary: MultiPageDiscoverySummary;
     manifest: MultiPageDiscoveryManifest | null;
     acquisition?: MultiPageHtmlAcquisitionManifest | null;
+    rawArtifactAssembly?: MultiPageRawArtifactAssemblyManifest | null;
   } | null;
   siteTree?: {
     summary: SiteTreeSummary;
@@ -378,6 +426,11 @@ export type RawImportedSiteArtifactMetadata = {
   sourceUrl: string;
   finalUrl: string | null;
   htmlByteLength: number;
+  multiPage?: {
+    enabled: boolean;
+    pageCount: number;
+    routeMapRef: string;
+  };
   diagnostics: RawImportedSiteArtifactDiagnostics;
   assetSummary: {
     persistedAssetCount: number;

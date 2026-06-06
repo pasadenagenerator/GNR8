@@ -36,6 +36,9 @@ import {
   type MultiPageDiscoveryManifest,
   type MultiPageDiscoverySourceContext,
   type MultiPageDiscoverySummary,
+  type MultiPageRawArtifactAssemblyManifest,
+  type MultiPageRawArtifactAssemblyRouteEntry,
+  type MultiPageRawArtifactAssemblySummary,
   type RuntimeImportProvenanceSummary,
 } from '@/gnr8/runtime/types'
 import type { UrlSinglePageImportSnapshot } from '@/gnr8/validation/runtime/url-single-page-import'
@@ -93,6 +96,7 @@ export type ScopedMultiPageDiscoveryOption =
   | {
       enabled?: boolean
       acquireHtml?: boolean
+      assembleRawArtifactPages?: boolean
       limits?: Partial<MultipageImportLimits>
       htmlAcquisitionLimits?: {
         maxPages?: number
@@ -129,6 +133,7 @@ function disabledMultiPageDiscoverySummary(diagnostics: string[] = []): MultiPag
 function resolveMultiPageDiscoveryOption(option: ScopedMultiPageDiscoveryOption | undefined): {
   enabled: boolean
   acquireHtml: boolean
+  assembleRawArtifactPages: boolean
   limits: MultipageImportLimits
   htmlAcquisitionLimits: {
     maxPages: number
@@ -141,12 +146,20 @@ function resolveMultiPageDiscoveryOption(option: ScopedMultiPageDiscoveryOption 
   const rawHtmlLimits = typeof option === 'object' && option ? option.htmlAcquisitionLimits : undefined
   const enabled = option === true || (typeof option === 'object' && option?.enabled === true)
   const acquireHtml = typeof option === 'object' && option?.acquireHtml === true
+  const assembleRawArtifactPages = typeof option === 'object' && option?.assembleRawArtifactPages === true
   if (acquireHtml && !enabled) {
     throw new Error('Multi-page HTML acquisition requires multiPageDiscovery.enabled=true.')
+  }
+  if (assembleRawArtifactPages && !enabled) {
+    throw new Error('Multi-page raw artifact assembly requires multiPageDiscovery.enabled=true.')
+  }
+  if (assembleRawArtifactPages && !acquireHtml) {
+    throw new Error('Multi-page raw artifact assembly requires multiPageDiscovery.acquireHtml=true.')
   }
   return {
     enabled,
     acquireHtml,
+    assembleRawArtifactPages,
     limits: {
       maxRoutes: Math.max(1, Math.floor(rawLimits?.maxRoutes ?? DEFAULT_SCOPED_DISCOVERY_LIMITS.maxRoutes)),
       maxDepth: Math.max(1, Math.floor(rawLimits?.maxDepth ?? DEFAULT_SCOPED_DISCOVERY_LIMITS.maxDepth)),
@@ -895,6 +908,16 @@ function disabledHtmlAcquisitionSummary(diagnostics: string[] = []): MultiPageHt
   }
 }
 
+function disabledRawArtifactAssemblySummary(diagnostics: string[] = []): MultiPageRawArtifactAssemblySummary {
+  return {
+    enabled: false,
+    assembledPageCount: 0,
+    excludedPageCount: 0,
+    routeMapRef: null,
+    diagnostics,
+  }
+}
+
 function htmlBodyAppearsHtml(body: string): boolean {
   const sample = body.slice(0, 4096).trim().toLowerCase()
   return sample.startsWith('<!doctype html') || sample.startsWith('<html') || sample.includes('<html') || sample.includes('<body')
@@ -928,6 +951,60 @@ function acquisitionBodyFilename(input: { normalizedRoutePath: string | null; bo
         .replace(/^-+|-+$/g, '')
         .toLowerCase() || 'page'
   return `${routeSlug}-${input.bodySha256.slice(0, 12)}.html`
+}
+
+function normalizeRawAssemblyRoutePath(value: string | null): string | null {
+  const raw = normalizeText(value)
+  if (!raw) return null
+  const normalized = normalizeRoutePath(raw)
+  if (!normalized || normalized.includes('..') || normalized.includes('\\')) return null
+  if (!normalized.startsWith('/')) return null
+  return normalized
+}
+
+function rawAssemblyFilePathForRoute(routePath: string): string | null {
+  const normalized = normalizeRawAssemblyRoutePath(routePath)
+  if (!normalized || normalized === '/') return null
+  const segments = normalized
+    .replace(/^\/+|\/+$/g, '')
+    .split('/')
+    .map((segment) =>
+      segment
+        .trim()
+        .toLowerCase()
+        .replace(/\.html?$/i, '')
+        .replace(/[^a-z0-9._-]+/g, '-')
+        .replace(/^-+|-+$/g, ''),
+    )
+    .filter(Boolean)
+  if (segments.length === 0 || segments.some((segment) => segment === '.' || segment === '..')) return null
+  return `pages/${segments.join('/')}/index.html`
+}
+
+function resolveRawAssemblyDestination(input: {
+  snapshotRootDirAbs: string
+  preferredRawFilePath: string
+  bodySha256: string
+}): string {
+  const preferredAbs = path.resolve(input.snapshotRootDirAbs, input.preferredRawFilePath)
+  const snapshotRoot = path.resolve(input.snapshotRootDirAbs)
+  if (!preferredAbs.startsWith(`${snapshotRoot}${path.sep}`)) {
+    throw new Error('MULTIPAGE_RAW_ASSEMBLY_DESTINATION_OUTSIDE_SNAPSHOT')
+  }
+  if (!fs.existsSync(preferredAbs)) return input.preferredRawFilePath
+  try {
+    const existing = fs.readFileSync(preferredAbs)
+    const existingSha = crypto.createHash('sha256').update(existing).digest('hex')
+    if (existingSha === input.bodySha256) return input.preferredRawFilePath
+  } catch {
+    // Fall through to a deterministic collision-safe filename.
+  }
+  const extPath = input.preferredRawFilePath.replace(/\/index\.html$/i, `/index-${input.bodySha256.slice(0, 12)}.html`)
+  const extAbs = path.resolve(input.snapshotRootDirAbs, extPath)
+  if (!extAbs.startsWith(`${snapshotRoot}${path.sep}`)) {
+    throw new Error('MULTIPAGE_RAW_ASSEMBLY_DESTINATION_OUTSIDE_SNAPSHOT')
+  }
+  return extPath
 }
 
 async function readResponseBytesWithLimit(response: Response, maxBytes: number): Promise<{ bytes: Buffer; truncated: boolean }> {
@@ -1275,11 +1352,195 @@ async function acquireScopedMultiPageHtml(input: {
   }
 }
 
+function buildRawAssemblyExcludedEntry(input: {
+  page: MultiPageHtmlAcquisitionPageEntry
+  reason: string
+  routePath?: string | null
+  rawFilePath?: string | null
+}): MultiPageRawArtifactAssemblyManifest['excludedPages'][number] {
+  return {
+    routePath: input.routePath ?? input.page.finalNormalizedRoutePath ?? input.page.normalizedRoutePath ?? null,
+    sourceUrl: input.page.normalizedUrl,
+    finalUrl: input.page.finalUrl,
+    rawFilePath: input.rawFilePath ?? null,
+    bodySha256: input.page.bodySha256,
+    byteSize: input.page.byteSize,
+    status: 'excluded',
+    reason: input.reason,
+  }
+}
+
+async function assembleScopedMultiPageRawArtifactPages(input: {
+  sourceUrl: string
+  snapshot: UrlSinglePageImportSnapshot
+  acquisition: MultiPageHtmlAcquisitionManifest | null
+  option: ReturnType<typeof resolveMultiPageDiscoveryOption>
+}): Promise<{ summary: MultiPageRawArtifactAssemblySummary; manifest: MultiPageRawArtifactAssemblyManifest | null }> {
+  if (!input.option.assembleRawArtifactPages) return { summary: disabledRawArtifactAssemblySummary(), manifest: null }
+
+  const diagnostics: string[] = ['MULTIPAGE_RAW_ASSEMBLY_STARTED']
+  const generatedAt = input.option.generatedAt ?? new Date().toISOString()
+  const normalizedSeed = normalizeSeedUrl(input.sourceUrl)
+  const routeMapRef = 'importProvenanceSummary.multiPageDiscovery.rawArtifactAssembly.routeMap'
+  const manifestDir = path.resolve(input.snapshot.snapshotRootDirAbs, 'multipage-raw-artifact-assembly')
+  const manifestPath = path.resolve(manifestDir, 'manifest.json')
+  const assembledByRoute = new Map<string, MultiPageRawArtifactAssemblyRouteEntry>()
+  const excludedPages: MultiPageRawArtifactAssemblyManifest['excludedPages'] = []
+  const failedPages: MultiPageHtmlAcquisitionPageEntry[] = []
+
+  if (!normalizedSeed || !input.acquisition) {
+    diagnostics.push('MULTIPAGE_RAW_PAGE_SKIPPED')
+  } else {
+    const candidates = input.acquisition.pages
+      .slice()
+      .sort((left, right) =>
+        `${left.finalNormalizedRoutePath ?? left.normalizedRoutePath ?? ''}|${left.finalUrl ?? ''}|${left.normalizedUrl ?? ''}|${left.bodySha256 ?? ''}`.localeCompare(
+          `${right.finalNormalizedRoutePath ?? right.normalizedRoutePath ?? ''}|${right.finalUrl ?? ''}|${right.normalizedUrl ?? ''}|${right.bodySha256 ?? ''}`,
+        ),
+      )
+
+    for (const page of candidates) {
+      if (page.status === 'failed') {
+        failedPages.push(page)
+        diagnostics.push('MULTIPAGE_RAW_PAGE_SKIPPED')
+        continue
+      }
+      if (page.status !== 'fetched') {
+        excludedPages.push(buildRawAssemblyExcludedEntry({ page, reason: page.skippedReason ? `acquisition_${page.skippedReason}` : 'acquisition_skipped' }))
+        diagnostics.push('MULTIPAGE_RAW_PAGE_SKIPPED')
+        continue
+      }
+      if (!page.finalUrl || !isSameOriginUrl(page.finalUrl, normalizedSeed.url)) {
+        excludedPages.push(buildRawAssemblyExcludedEntry({ page, reason: 'final_url_not_same_origin' }))
+        diagnostics.push('MULTIPAGE_RAW_PAGE_SKIPPED')
+        continue
+      }
+      const routePath = normalizeRawAssemblyRoutePath(page.finalNormalizedRoutePath ?? page.normalizedRoutePath)
+      if (!routePath) {
+        excludedPages.push(buildRawAssemblyExcludedEntry({ page, reason: 'invalid_route_path' }))
+        diagnostics.push('MULTIPAGE_RAW_PAGE_SKIPPED')
+        continue
+      }
+      if (routePath === '/') {
+        excludedPages.push(buildRawAssemblyExcludedEntry({ page, reason: 'seed_route_not_overwritten', routePath }))
+        diagnostics.push('MULTIPAGE_RAW_PAGE_SKIPPED')
+        continue
+      }
+      if (!page.bodyPath || !page.bodySha256) {
+        excludedPages.push(buildRawAssemblyExcludedEntry({ page, reason: 'missing_body_path_or_sha', routePath }))
+        diagnostics.push('MULTIPAGE_RAW_PAGE_SKIPPED')
+        continue
+      }
+      if (!isHtmlContentType(page.contentType) && page.contentType) {
+        excludedPages.push(buildRawAssemblyExcludedEntry({ page, reason: 'non_html_content_type', routePath }))
+        diagnostics.push('MULTIPAGE_RAW_PAGE_SKIPPED')
+        continue
+      }
+
+      let bodyBytes: Buffer
+      try {
+        bodyBytes = fs.readFileSync(page.bodyPath)
+      } catch {
+        excludedPages.push(buildRawAssemblyExcludedEntry({ page, reason: 'body_path_missing', routePath }))
+        diagnostics.push('MULTIPAGE_RAW_PAGE_SKIPPED')
+        continue
+      }
+      const bodySha256 = crypto.createHash('sha256').update(bodyBytes).digest('hex')
+      if (bodySha256 !== page.bodySha256) {
+        excludedPages.push(buildRawAssemblyExcludedEntry({ page, reason: 'body_sha256_mismatch', routePath }))
+        diagnostics.push('MULTIPAGE_RAW_PAGE_SKIPPED')
+        continue
+      }
+      if (!htmlBodyAppearsHtml(bodyBytes.toString('utf8'))) {
+        excludedPages.push(buildRawAssemblyExcludedEntry({ page, reason: 'body_not_html', routePath }))
+        diagnostics.push('MULTIPAGE_RAW_PAGE_SKIPPED')
+        continue
+      }
+      if (assembledByRoute.has(routePath)) {
+        excludedPages.push(buildRawAssemblyExcludedEntry({ page, reason: 'duplicate_route', routePath }))
+        diagnostics.push('MULTIPAGE_RAW_ROUTE_DUPLICATE')
+        diagnostics.push('MULTIPAGE_RAW_PAGE_SKIPPED')
+        continue
+      }
+
+      const preferredRawFilePath = rawAssemblyFilePathForRoute(routePath)
+      if (!preferredRawFilePath) {
+        excludedPages.push(buildRawAssemblyExcludedEntry({ page, reason: 'invalid_raw_file_path', routePath }))
+        diagnostics.push('MULTIPAGE_RAW_PAGE_SKIPPED')
+        continue
+      }
+      const rawFilePath = resolveRawAssemblyDestination({
+        snapshotRootDirAbs: input.snapshot.snapshotRootDirAbs,
+        preferredRawFilePath,
+        bodySha256,
+      })
+      const rawFilePathAbs = path.resolve(input.snapshot.snapshotRootDirAbs, rawFilePath)
+      fs.mkdirSync(path.dirname(rawFilePathAbs), { recursive: true })
+      if (!fs.existsSync(rawFilePathAbs) || crypto.createHash('sha256').update(fs.readFileSync(rawFilePathAbs)).digest('hex') !== bodySha256) {
+        fs.writeFileSync(rawFilePathAbs, bodyBytes)
+      }
+
+      assembledByRoute.set(routePath, {
+        routePath,
+        sourceUrl: page.normalizedUrl ?? page.originalHref,
+        finalUrl: page.finalUrl,
+        rawFilePath,
+        bodySha256,
+        byteSize: bodyBytes.byteLength,
+        status: 'assembled',
+      })
+      diagnostics.push('MULTIPAGE_RAW_PAGE_ASSEMBLED')
+    }
+  }
+
+  const routeMap = [...assembledByRoute.values()].sort((left, right) => left.routePath.localeCompare(right.routePath))
+  const htmlPathMap = Object.fromEntries(routeMap.map((entry) => [entry.routePath, entry.rawFilePath]))
+  const manifestWithoutPath = {
+    kind: 'multi_page_raw_artifact_assembly_manifest_v1' as const,
+    enabled: true as const,
+    seedUrl: input.sourceUrl,
+    normalizedSeedUrl: normalizedSeed?.url ?? null,
+    assembledPageCount: routeMap.length,
+    excludedPageCount: excludedPages.length,
+    failedPageCount: failedPages.length,
+    routeMap,
+    htmlPathMap,
+    excludedPages: excludedPages.sort((left, right) => `${left.routePath ?? ''}|${left.reason}|${left.sourceUrl ?? ''}`.localeCompare(`${right.routePath ?? ''}|${right.reason}|${right.sourceUrl ?? ''}`)),
+    failedPages: failedPages.sort((left, right) => `${left.normalizedRoutePath ?? ''}|${left.originalHref}`.localeCompare(`${right.normalizedRoutePath ?? ''}|${right.originalHref}`)),
+    manifestPath: null,
+    diagnostics: [] as string[],
+    generatedAt,
+  }
+  fs.mkdirSync(manifestDir, { recursive: true })
+  const manifest: MultiPageRawArtifactAssemblyManifest = {
+    ...manifestWithoutPath,
+    manifestPath: manifestPath,
+    diagnostics: uniqueSorted([...diagnostics, 'MULTIPAGE_RAW_ASSEMBLY_MANIFEST_PERSISTED', 'MULTIPAGE_RAW_ASSEMBLY_COMPLETED']),
+  }
+  fs.writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, 'utf8')
+
+  return {
+    summary: {
+      enabled: true,
+      assembledPageCount: manifest.assembledPageCount,
+      excludedPageCount: manifest.excludedPageCount,
+      routeMapRef,
+      diagnostics: manifest.diagnostics.slice(),
+    },
+    manifest,
+  }
+}
+
 async function buildScopedMultiPageDiscovery(input: {
   option?: ScopedMultiPageDiscoveryOption
   sourceUrl: string
   snapshot: UrlSinglePageImportSnapshot
-}): Promise<{ summary: MultiPageDiscoverySummary; manifest: MultiPageDiscoveryManifest | null; acquisition?: MultiPageHtmlAcquisitionManifest | null }> {
+}): Promise<{
+  summary: MultiPageDiscoverySummary
+  manifest: MultiPageDiscoveryManifest | null
+  acquisition?: MultiPageHtmlAcquisitionManifest | null
+  rawArtifactAssembly?: MultiPageRawArtifactAssemblyManifest | null
+}> {
   const option = resolveMultiPageDiscoveryOption(input.option)
   if (!option.enabled) return { summary: disabledMultiPageDiscoverySummary(), manifest: null }
 
@@ -1327,14 +1588,22 @@ async function buildScopedMultiPageDiscovery(input: {
       discovery: { summary: { ...disabledMultiPageDiscoverySummary(manifest.diagnostics), enabled: true }, manifest },
       option,
     })
+    const assembly = await assembleScopedMultiPageRawArtifactPages({
+      sourceUrl: input.sourceUrl,
+      snapshot: input.snapshot,
+      acquisition: acquisition.manifest,
+      option,
+    })
     return {
       summary: {
         ...disabledMultiPageDiscoverySummary(manifest.diagnostics),
         enabled: true,
         ...(acquisition.summary.enabled ? { htmlAcquisition: acquisition.summary } : {}),
+        ...(assembly.summary.enabled ? { rawArtifactAssembly: assembly.summary } : {}),
       },
       manifest,
       acquisition: acquisition.manifest,
+      rawArtifactAssembly: assembly.manifest,
     }
   }
 
@@ -1580,15 +1849,27 @@ async function buildScopedMultiPageDiscovery(input: {
     discovery: discoveryResult,
     option,
   })
+  const assembly = await assembleScopedMultiPageRawArtifactPages({
+    sourceUrl: input.sourceUrl,
+    snapshot: input.snapshot,
+    acquisition: acquisition.manifest,
+    option,
+  })
 
   return {
     summary: {
       ...discoveryResult.summary,
-      diagnostics: uniqueSorted([...discoveryResult.summary.diagnostics, ...(acquisition.summary.enabled ? acquisition.summary.diagnostics : [])]),
+      diagnostics: uniqueSorted([
+        ...discoveryResult.summary.diagnostics,
+        ...(acquisition.summary.enabled ? acquisition.summary.diagnostics : []),
+        ...(assembly.summary.enabled ? assembly.summary.diagnostics : []),
+      ]),
       ...(acquisition.summary.enabled ? { htmlAcquisition: acquisition.summary } : {}),
+      ...(assembly.summary.enabled ? { rawArtifactAssembly: assembly.summary } : {}),
     },
     manifest,
     acquisition: acquisition.manifest,
+    rawArtifactAssembly: assembly.manifest,
   }
 }
 
@@ -1700,7 +1981,12 @@ async function buildImportProvenanceSummary(input: {
   snapshot: UrlSinglePageImportSnapshot
   styleSignals: StyleSignalModel
   preparedSite: PreparedSiteModel | null
-  multiPageDiscovery: { summary: MultiPageDiscoverySummary; manifest: MultiPageDiscoveryManifest | null; acquisition?: MultiPageHtmlAcquisitionManifest | null } | null
+  multiPageDiscovery: {
+    summary: MultiPageDiscoverySummary
+    manifest: MultiPageDiscoveryManifest | null
+    acquisition?: MultiPageHtmlAcquisitionManifest | null
+    rawArtifactAssembly?: MultiPageRawArtifactAssemblyManifest | null
+  } | null
 }): Promise<RuntimeImportProvenanceSummary> {
   const { snapshot, styleSignals, preparedSite } = input
   const semanticImport = resolveSemanticImportForSnapshot(snapshot)
@@ -1751,6 +2037,7 @@ async function buildImportProvenanceSummary(input: {
     ...(persistedCaptureEvidence.persisted ? ['RENDERED_CAPTURE_PERSISTED'] : []),
     ...(semanticImport?.diagnostics.map((diag) => normalizeText(diag.code)).filter(Boolean) ?? []),
     ...(input.multiPageDiscovery?.summary.htmlAcquisition?.diagnostics ?? []),
+    ...(input.multiPageDiscovery?.summary.rawArtifactAssembly?.diagnostics ?? []),
   ])
 
   const multipageImport = await buildMultipageImportFromPreparedSite({
@@ -1868,6 +2155,7 @@ async function buildImportProvenanceSummary(input: {
           summary: input.multiPageDiscovery.summary,
           manifest: input.multiPageDiscovery.manifest,
           acquisition: input.multiPageDiscovery.acquisition ?? null,
+          rawArtifactAssembly: input.multiPageDiscovery.rawArtifactAssembly ?? null,
         }
       : null,
     siteTree: {
@@ -1897,6 +2185,7 @@ function summarizeProvenancePayload(summary: RuntimeImportProvenanceSummary): Re
     multipageImport: summary.multipageImport?.summary ?? null,
     multiPageDiscovery: summary.multiPageDiscovery?.summary ?? null,
     multiPageHtmlAcquisition: summary.multiPageDiscovery?.summary.htmlAcquisition ?? null,
+    multiPageRawArtifactAssembly: summary.multiPageDiscovery?.summary.rawArtifactAssembly ?? null,
     siteTree: summary.siteTree?.summary ?? null,
     templateFamilies: summary.templateFamilies?.summary ?? null,
   }
@@ -2577,6 +2866,20 @@ export async function runScopedImportPipeline(input: {
   ) {
     throw new Error('Multi-page HTML acquisition requires multiPageDiscovery.enabled=true.')
   }
+  if (
+    typeof input.multiPageDiscovery === 'object' &&
+    input.multiPageDiscovery?.assembleRawArtifactPages === true &&
+    input.multiPageDiscovery.enabled !== true
+  ) {
+    throw new Error('Multi-page raw artifact assembly requires multiPageDiscovery.enabled=true.')
+  }
+  if (
+    typeof input.multiPageDiscovery === 'object' &&
+    input.multiPageDiscovery?.assembleRawArtifactPages === true &&
+    input.multiPageDiscovery.acquireHtml !== true
+  ) {
+    throw new Error('Multi-page raw artifact assembly requires multiPageDiscovery.acquireHtml=true.')
+  }
   const deps = await defaultDependencies(input.deps)
   const fallbackToLegacy = input.fallbackToLegacyOnPipelineFailure ?? true
   let assetsDirPath: string | null = null
@@ -2716,6 +3019,7 @@ export async function runScopedImportPipeline(input: {
     })
     const persistedFileRows = collectRawImportFiles(input.snapshot.snapshotRootDirAbs)
     const unresolvedExternalAssets = input.snapshot.fetchManifest.filter((entry) => entry.fetchStatus !== 'fetched' && Boolean(entry.resolvedUrl))
+    const rawAssemblySummary = importProvenanceSummary.multiPageDiscovery?.summary.rawArtifactAssembly ?? null
     const rawImportArtifact = await deps.persistRawImportedSiteArtifact({
       siteId: migrated.siteId,
       siteVersionId: migrated.siteVersionId,
@@ -2733,8 +3037,18 @@ export async function runScopedImportPipeline(input: {
             'RAW_IMPORT_ASSET_PERSIST_COMPLETED',
             'RAW_IMPORT_ARTIFACT_PERSIST_COMPLETED',
             ...(unresolvedExternalAssets.length > 0 ? ['RAW_IMPORT_ASSET_EXTERNAL_FALLBACK_USED'] : []),
+            ...(rawAssemblySummary?.enabled ? rawAssemblySummary.diagnostics : []),
           ],
         },
+        ...(rawAssemblySummary?.enabled
+          ? {
+              multiPage: {
+                enabled: true,
+                pageCount: rawAssemblySummary.assembledPageCount + 1,
+                routeMapRef: rawAssemblySummary.routeMapRef ?? 'importProvenanceSummary.multiPageDiscovery.rawArtifactAssembly.routeMap',
+              },
+            }
+          : {}),
         assetSummary: {
           persistedAssetCount: persistedFileRows.length,
           externalFallbackAssetCount: unresolvedExternalAssets.length,

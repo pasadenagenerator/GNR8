@@ -1108,8 +1108,10 @@ test('scoped pipeline multi-page HTML acquisition fetches child evidence without
     assert.equal(outcome.reporting.multiPageDiscovery.htmlAcquisition?.failedPageCount, 1)
     assert.equal(outcome.reporting.multiPageDiscovery.htmlAcquisition?.manifestRef, 'importProvenanceSummary.multiPageDiscovery.acquisition')
     assert.ok(outcome.reporting.multiPageDiscovery.htmlAcquisition?.skippedPageCount ?? 0 >= 4)
+    assert.equal(outcome.reporting.multiPageDiscovery.rawArtifactAssembly, undefined)
 
     const acquisition = persistedImportSummary.importProvenanceSummary.multiPageDiscovery.acquisition
+    assert.equal(persistedImportSummary.importProvenanceSummary.multiPageDiscovery.rawArtifactAssembly ?? null, null)
     assert.equal(acquisition.kind, 'multi_page_html_acquisition_manifest_v1')
     assert.equal(acquisition.summary.fetchedPageCount, 2)
     assert.equal(acquisition.summary.failedPageCount, 1)
@@ -1149,6 +1151,253 @@ test('scoped pipeline multi-page HTML acquisition fetches child evidence without
     assert.deepEqual(Object.keys(artifactInput.htmlByPath), ['/'])
     assert.equal(rawImportFilePaths.some((filePath) => filePath.startsWith('multipage-html-acquisition/pages/about-')), true)
     assert.equal(rawImportFilePaths.some((filePath) => filePath.startsWith('multipage-html-acquisition/pages/redirect-')), true)
+  } finally {
+    await new Promise<void>((resolve) => server.close(() => resolve()))
+  }
+})
+
+test('scoped pipeline raw multi-page assembly creates deterministic raw artifact evidence without public serving changes', async () => {
+  const aboutHtml = '<!doctype html><html><body><h1>About</h1></body></html>'
+  const contactHtml = '<!doctype html><html><body><h1>Contact</h1></body></html>'
+  const rootHtml = '<!doctype html><html><body><h1>Seed</h1></body></html>'
+  const server = http.createServer((req, res) => {
+    const url = req.url ?? '/'
+    if (url === '/about') {
+      res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' })
+      res.end(aboutHtml)
+      return
+    }
+    if (url === '/company') {
+      res.writeHead(302, { location: '/about' })
+      res.end('')
+      return
+    }
+    if (url === '/contact') {
+      res.writeHead(200, { 'content-type': 'text/html' })
+      res.end(contactHtml)
+      return
+    }
+    if (url === '/home') {
+      res.writeHead(302, { location: '/' })
+      res.end('')
+      return
+    }
+    if (url === '/broken') {
+      res.writeHead(500, { 'content-type': 'text/html' })
+      res.end('<!doctype html><html><body>broken</body></html>')
+      return
+    }
+    if (url === '/data') {
+      res.writeHead(200, { 'content-type': 'application/json' })
+      res.end('{"ok":true}')
+      return
+    }
+    res.writeHead(200, { 'content-type': 'text/html' })
+    res.end(rootHtml)
+  })
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
+  const address = server.address()
+  assert.ok(address && typeof address === 'object')
+  const sourceUrl = `http://127.0.0.1:${address.port}/`
+
+  try {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'scoped-pipeline-multipage-raw-assembly-'))
+    const entryAbs = path.resolve(root, 'index.html')
+    const assetsDir = path.resolve(root, 'assets')
+    fs.mkdirSync(assetsDir)
+    fs.writeFileSync(
+      entryAbs,
+      `<!doctype html><html><body>
+        <header><nav>
+          <a href="/about">About</a>
+          <a href="/company">Company</a>
+          <a href="/contact">Contact</a>
+          <a href="/home">Home Redirect</a>
+          <a href="/broken">Broken</a>
+          <a href="/data">Data</a>
+        </nav></header>
+      </body></html>`,
+      'utf8',
+    )
+
+    const pipeline = createSuccessPipelineFixture()
+    let createInput: any = null
+    let persistedImportSummary: any = null
+    let artifactInput: any = null
+    let rawImportRows: Array<{ path: string; bytes: Buffer; sha256: string }> = []
+    let rawImportMetadata: any = null
+    let linkedArtifactId: string | null = null
+    let upsertSlotCallCount = 0
+
+    const outcome = await runScopedImportPipeline({
+      snapshot: {
+        snapshotRootDirAbs: root,
+        snapshotStableRootDirAbs: root,
+        snapshotId: 'snapshot-raw-assembly',
+        snapshotRunId: 'snapshot-run-raw-assembly',
+        requestId: 'request-raw-assembly',
+        entryHtmlPathAbs: entryAbs,
+        assetsDirAbs: assetsDir,
+        sourceUrl,
+        normalizedUrl: sourceUrl,
+        captureMode: 'raw_html_only',
+        sourceMode: 'raw_html_fallback',
+        sourceSelection: {
+          sourceMode: 'raw_html_fallback',
+          fidelityStatus: 'degraded_import',
+          selectedSourceHtmlPathAbs: entryAbs,
+          renderedDomQuality: {
+            quality: 'strong',
+            bodyTextLength: 120,
+            meaningfulNodeCount: 12,
+            sectionCandidateCount: 2,
+            hasHeading: true,
+            reason: 'raw_assembly_fixture',
+          },
+          rawHtmlQuality: {
+            quality: 'strong',
+            bodyTextLength: 120,
+            meaningfulNodeCount: 12,
+            sectionCandidateCount: 2,
+            hasHeading: true,
+            reason: 'raw_assembly_fixture',
+          },
+          degraded: false,
+        },
+        renderedCapture: {
+          status: 'unavailable',
+          documents: [],
+          screenshots: [],
+          computedStyleSamples: [],
+          diagnostics: [],
+        },
+        renderedCaptureReliability: { job: null, workerHealth: null },
+        importDiagnostics: { summary: { infoCount: 0, warningCount: 0, errorCount: 0, fatalCount: 0 }, issues: [] },
+        fetchManifest: [],
+        importIntake: { ok: true, rawHtmlAvailable: true, htmlByteLength: fs.statSync(entryAbs).size },
+      } as any,
+      sourceUrl,
+      actor: 'test:multi-page-raw-assembly',
+      multiPageDiscovery: {
+        enabled: true,
+        acquireHtml: true,
+        assembleRawArtifactPages: true,
+        generatedAt: '2026-06-06T00:00:00.000Z',
+        limits: { maxRoutes: 10, maxDepth: 1, maxLinksPerPage: 20, maxTemplateLinksPerRoute: 10 },
+        htmlAcquisitionLimits: { maxPages: 10, maxBytesPerPage: 20_000, requestTimeoutMs: 5_000 },
+      },
+      deps: {
+        importStaticSite: async () => ({ status: 'ok', documentMeta: { source: { kind: 'single-entry-html' } } }) as any,
+        createImportManifest: () => ({ status: 'success' }) as any,
+        runLinearMigrationPipeline: () => pipeline as any,
+        createSiteVersionFromMigration: async (input) => {
+          createInput = input
+          return { siteId: 'runtime-site-raw-assembly', siteVersionId: 'site-version-raw-assembly', versionNo: 5 }
+        },
+        setSiteVersionImportProvenanceSummary: async (input) => {
+          persistedImportSummary = input
+          return { affectedRows: 1 }
+        },
+        getSiteVersion: async () =>
+          ({
+            id: 'site-version-raw-assembly',
+            siteId: 'runtime-site-raw-assembly',
+            versionNo: 5,
+            state: 'DRAFT',
+            source: 'migration',
+            actor: 'test',
+            createdAt: '2026-06-06T00:00:00.000Z',
+            rendererCompatibilityVersion: 'gnr8-renderer-v1',
+            artifactId: linkedArtifactId,
+            importProvenanceSummary: createInput?.importProvenanceSummary ?? null,
+            pages: [],
+          }) as any,
+        buildDeterministicArtifactBundle: () =>
+          ({
+            siteId: 'runtime-site-raw-assembly',
+            siteVersionId: 'site-version-raw-assembly',
+            rendererCompatibilityVersion: 'gnr8-renderer-v1',
+            bundleSha256: 'bundle-sha',
+            htmlByPath: { '/': '<!doctype html><html><body>preview only</body></html>' },
+            compiledTokenStyles: ':root{}',
+            assetFingerprintMap: {},
+            manifest: {},
+          }) as any,
+        createArtifact: async (input) => {
+          artifactInput = input
+          return { artifactId: 'artifact-raw-assembly' }
+        },
+        bindArtifactToVersion: async (input) => {
+          linkedArtifactId = input.artifactId
+          return { affectedRows: 1 }
+        },
+        persistRawImportedSiteArtifact: async (input) => {
+          rawImportRows = input.fileRows.map((row: { path: string; bytes: Buffer; sha256: string }) => ({
+            path: row.path,
+            bytes: row.bytes,
+            sha256: row.sha256,
+          }))
+          rawImportMetadata = input.metadata
+          return {
+            artifactId: 'raw-artifact-raw-assembly',
+            artifactType: 'raw_imported_site',
+            entryHtmlPath: 'index.html',
+            assetBasePath: '.',
+            fileMap: {},
+            fileCount: input.fileRows.length,
+          } as any
+        },
+        upsertContentSlots: async () => {
+          upsertSlotCallCount += 1
+          return 0
+        },
+        importHtmlToPage: () => ({}) as any,
+        migrateImportedPageToCanonicalDraft: async () => ({ siteId: 'legacy-site', siteVersionId: 'legacy-version', versionNo: 1 }),
+      },
+    })
+
+    assert.equal(outcome.mode, 'pipeline')
+    assert.equal(outcome.reporting.multiPageDiscovery.rawArtifactAssembly?.enabled, true)
+    assert.equal(outcome.reporting.multiPageDiscovery.rawArtifactAssembly?.assembledPageCount, 2)
+    assert.equal(outcome.reporting.multiPageDiscovery.rawArtifactAssembly?.excludedPageCount, 3)
+    assert.equal(
+      outcome.reporting.multiPageDiscovery.rawArtifactAssembly?.routeMapRef,
+      'importProvenanceSummary.multiPageDiscovery.rawArtifactAssembly.routeMap',
+    )
+    assert.deepEqual(Object.keys(artifactInput.htmlByPath), ['/'])
+    assert.equal(upsertSlotCallCount, 1)
+
+    const assembly = persistedImportSummary.importProvenanceSummary.multiPageDiscovery.rawArtifactAssembly
+    assert.equal(assembly.kind, 'multi_page_raw_artifact_assembly_manifest_v1')
+    assert.equal(assembly.generatedAt, '2026-06-06T00:00:00.000Z')
+    assert.deepEqual(assembly.htmlPathMap, {
+      '/about': 'pages/about/index.html',
+      '/contact': 'pages/contact/index.html',
+    })
+    assert.equal(assembly.routeMap.length, 2)
+    assert.equal(assembly.routeMap.find((entry: any) => entry.routePath === '/about').rawFilePath, 'pages/about/index.html')
+    assert.equal(assembly.routeMap.find((entry: any) => entry.routePath === '/about').bodySha256, crypto.createHash('sha256').update(aboutHtml).digest('hex'))
+    assert.equal(assembly.routeMap.find((entry: any) => entry.routePath === '/contact').byteSize, Buffer.byteLength(contactHtml))
+    assert.equal(assembly.excludedPages.some((entry: any) => entry.routePath === '/about' && entry.reason === 'duplicate_route'), true)
+    assert.equal(assembly.excludedPages.some((entry: any) => entry.routePath === '/' && entry.reason === 'seed_route_not_overwritten'), true)
+    assert.equal(assembly.excludedPages.some((entry: any) => entry.routePath === '/data' && entry.reason === 'acquisition_non_html_content_type'), true)
+    assert.equal(assembly.failedPages.some((entry: any) => entry.normalizedRoutePath === '/broken' && entry.failureReason === 'non_2xx_status'), true)
+    assert.ok(assembly.diagnostics.includes('MULTIPAGE_RAW_ASSEMBLY_STARTED'))
+    assert.ok(assembly.diagnostics.includes('MULTIPAGE_RAW_PAGE_ASSEMBLED'))
+    assert.ok(assembly.diagnostics.includes('MULTIPAGE_RAW_PAGE_SKIPPED'))
+    assert.ok(assembly.diagnostics.includes('MULTIPAGE_RAW_ROUTE_DUPLICATE'))
+    assert.ok(assembly.diagnostics.includes('MULTIPAGE_RAW_ASSEMBLY_MANIFEST_PERSISTED'))
+    assert.ok(assembly.diagnostics.includes('MULTIPAGE_RAW_ASSEMBLY_COMPLETED'))
+
+    assert.equal(fs.readFileSync(entryAbs, 'utf8').includes('Home Redirect'), true)
+    assert.equal(rawImportRows.some((row) => row.path === 'pages/about/index.html' && row.bytes.toString('utf8') === aboutHtml), true)
+    assert.equal(rawImportRows.some((row) => row.path === 'pages/contact/index.html' && row.bytes.toString('utf8') === contactHtml), true)
+    assert.equal(rawImportRows.some((row) => row.path === 'multipage-raw-artifact-assembly/manifest.json'), true)
+    assert.equal(rawImportMetadata.multiPage.enabled, true)
+    assert.equal(rawImportMetadata.multiPage.pageCount, 3)
+    assert.equal(rawImportMetadata.multiPage.routeMapRef, 'importProvenanceSummary.multiPageDiscovery.rawArtifactAssembly.routeMap')
+    assert.ok(rawImportMetadata.diagnostics.codes.includes('MULTIPAGE_RAW_ASSEMBLY_COMPLETED'))
+    assert.ok(persistedImportSummary.importProvenanceSummary.importDiagnosticCodes.includes('MULTIPAGE_RAW_ASSEMBLY_COMPLETED'))
   } finally {
     await new Promise<void>((resolve) => server.close(() => resolve()))
   }
@@ -1196,6 +1445,62 @@ test('scoped pipeline rejects HTML acquisition when multi-page discovery is not 
       },
     }),
     /HTML acquisition requires multiPageDiscovery\.enabled=true/,
+  )
+})
+
+test('scoped pipeline rejects raw artifact assembly unless discovery and HTML acquisition are enabled', async () => {
+  const pipeline = createSuccessPipelineFixture()
+  const baseInput = {
+    snapshot: {
+      snapshotRootDirAbs: '/tmp/snapshot',
+      entryHtmlPathAbs: '/tmp/snapshot/index.html',
+      assetsDirAbs: '/tmp/snapshot/assets',
+      sourceMode: 'raw_html_fallback',
+      sourceSelection: {
+        sourceMode: 'raw_html_fallback',
+        fidelityStatus: 'degraded_import',
+        selectedSourceHtmlPathAbs: '/tmp/snapshot/index.html',
+        renderedDomQuality: {
+          quality: 'weak',
+          bodyTextLength: 80,
+          meaningfulNodeCount: 8,
+          sectionCandidateCount: 1,
+          hasHeading: true,
+          reason: 'assembly_requires_acquisition',
+        },
+        degraded: true,
+      },
+      renderedCapture: {
+        status: 'unavailable',
+        screenshots: [],
+        computedStyleSamples: [],
+      },
+      importDiagnostics: {
+        issues: [],
+      },
+    } as any,
+    sourceUrl: 'https://example.com/',
+    actor: 'test:assembly-requires-acquisition',
+    deps: {
+      importStaticSite: async () => ({ status: 'ok', documentMeta: { source: { kind: 'single-entry-html' } } }) as any,
+      createImportManifest: () => ({ status: 'success' }) as any,
+      runLinearMigrationPipeline: () => pipeline as any,
+    },
+  }
+
+  await assert.rejects(
+    runScopedImportPipeline({
+      ...baseInput,
+      multiPageDiscovery: { assembleRawArtifactPages: true },
+    }),
+    /raw artifact assembly requires multiPageDiscovery\.enabled=true/,
+  )
+  await assert.rejects(
+    runScopedImportPipeline({
+      ...baseInput,
+      multiPageDiscovery: { enabled: true, assembleRawArtifactPages: true },
+    }),
+    /raw artifact assembly requires multiPageDiscovery\.acquireHtml=true/,
   )
 })
 
