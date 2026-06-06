@@ -34,11 +34,17 @@ type Body = {
     | boolean
     | {
         enabled?: boolean
+        acquireHtml?: boolean
         limits?: {
           maxRoutes?: number
           maxDepth?: number
           maxLinksPerPage?: number
           maxTemplateLinksPerRoute?: number
+        }
+        htmlAcquisitionLimits?: {
+          maxPages?: number
+          maxBytesPerPage?: number
+          requestTimeoutMs?: number
         }
       }
 }

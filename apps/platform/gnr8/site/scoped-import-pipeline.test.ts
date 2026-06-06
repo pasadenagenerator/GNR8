@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict'
+import crypto from 'node:crypto'
 import fs from 'node:fs'
+import http from 'node:http'
 import os from 'node:os'
 import path from 'node:path'
 import test from 'node:test'
@@ -916,6 +918,285 @@ test('scoped pipeline import can persist seed-only multi-page discovery manifest
   assert.equal(manifest.diagnostics.some((entry: string) => entry.startsWith('MULTIPAGE_DISCOVERY_ONLY_CHILD_FETCH_SKIPPED')), true)
   assert.deepEqual(Object.keys(artifactInput.htmlByPath), ['/'])
   assert.equal(rawImportFilePaths.some((filePath) => /(^|\/)(about|contact|services)(\/index)?\.html$/.test(filePath)), false)
+})
+
+test('scoped pipeline multi-page HTML acquisition fetches child evidence without public serving changes', async () => {
+  const server = http.createServer((req, res) => {
+    const url = req.url ?? '/'
+    if (url === '/about') {
+      res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' })
+      res.end('<!doctype html><html><body><h1>About</h1></body></html>')
+      return
+    }
+    if (url === '/final') {
+      res.writeHead(200, { 'content-type': 'text/html' })
+      res.end('<!doctype html><html><body><h1>Redirected</h1></body></html>')
+      return
+    }
+    if (url === '/redirect') {
+      res.writeHead(302, { location: '/final' })
+      res.end('')
+      return
+    }
+    if (url === '/broken') {
+      res.writeHead(503, { 'content-type': 'text/html' })
+      res.end('<!doctype html><html><body>unavailable</body></html>')
+      return
+    }
+    if (url === '/data') {
+      res.writeHead(200, { 'content-type': 'application/json' })
+      res.end('{"ok":true}')
+      return
+    }
+    res.writeHead(200, { 'content-type': 'text/html' })
+    res.end('<!doctype html><html><body>seed</body></html>')
+  })
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
+  const address = server.address()
+  assert.ok(address && typeof address === 'object')
+  const sourceUrl = `http://127.0.0.1:${address.port}/`
+
+  try {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'scoped-pipeline-multipage-acquisition-'))
+    const entryAbs = path.resolve(root, 'index.html')
+    const assetsDir = path.resolve(root, 'assets')
+    fs.mkdirSync(assetsDir)
+    fs.writeFileSync(
+      entryAbs,
+      `<!doctype html><html><body>
+        <header><nav>
+          <a href="/about">About</a>
+          <a href="/redirect">Redirect</a>
+          <a href="/broken">Broken</a>
+          <a href="/data">Data</a>
+          <a href="https://external.example.net/page">External</a>
+          <a href="/login">Login</a>
+          <a href="/search?q=private">Search</a>
+        </nav></header>
+      </body></html>`,
+      'utf8',
+    )
+
+    const pipeline = createSuccessPipelineFixture()
+    let createInput: any = null
+    let persistedImportSummary: any = null
+    let artifactInput: any = null
+    let rawImportFilePaths: string[] = []
+    let linkedArtifactId: string | null = null
+
+    const outcome = await runScopedImportPipeline({
+      snapshot: {
+        snapshotRootDirAbs: root,
+        snapshotStableRootDirAbs: root,
+        snapshotId: 'snapshot-acquisition',
+        snapshotRunId: 'snapshot-run-acquisition',
+        requestId: 'request-acquisition',
+        entryHtmlPathAbs: entryAbs,
+        assetsDirAbs: assetsDir,
+        sourceUrl,
+        normalizedUrl: sourceUrl,
+        captureMode: 'raw_html_only',
+        sourceMode: 'raw_html_fallback',
+        sourceSelection: {
+          sourceMode: 'raw_html_fallback',
+          fidelityStatus: 'degraded_import',
+          selectedSourceHtmlPathAbs: entryAbs,
+          renderedDomQuality: {
+            quality: 'strong',
+            bodyTextLength: 120,
+            meaningfulNodeCount: 12,
+            sectionCandidateCount: 2,
+            hasHeading: true,
+            reason: 'acquisition_fixture',
+          },
+          rawHtmlQuality: {
+            quality: 'strong',
+            bodyTextLength: 120,
+            meaningfulNodeCount: 12,
+            sectionCandidateCount: 2,
+            hasHeading: true,
+            reason: 'acquisition_fixture',
+          },
+          degraded: false,
+        },
+        renderedCapture: {
+          status: 'unavailable',
+          documents: [],
+          screenshots: [],
+          computedStyleSamples: [],
+          diagnostics: [],
+        },
+        renderedCaptureReliability: { job: null, workerHealth: null },
+        importDiagnostics: { summary: { infoCount: 0, warningCount: 0, errorCount: 0, fatalCount: 0 }, issues: [] },
+        fetchManifest: [],
+        importIntake: { ok: true, rawHtmlAvailable: true, htmlByteLength: fs.statSync(entryAbs).size },
+      } as any,
+      sourceUrl,
+      actor: 'test:multi-page-acquisition',
+      multiPageDiscovery: {
+        enabled: true,
+        acquireHtml: true,
+        generatedAt: '2026-06-06T00:00:00.000Z',
+        limits: { maxRoutes: 10, maxDepth: 1, maxLinksPerPage: 20, maxTemplateLinksPerRoute: 10 },
+        htmlAcquisitionLimits: { maxPages: 10, maxBytesPerPage: 20_000, requestTimeoutMs: 5_000 },
+      },
+      deps: {
+        importStaticSite: async () => ({ status: 'ok', documentMeta: { source: { kind: 'single-entry-html' } } }) as any,
+        createImportManifest: () => ({ status: 'success' }) as any,
+        runLinearMigrationPipeline: () => pipeline as any,
+        createSiteVersionFromMigration: async (input) => {
+          createInput = input
+          return { siteId: 'runtime-site-acquisition', siteVersionId: 'site-version-acquisition', versionNo: 4 }
+        },
+        setSiteVersionImportProvenanceSummary: async (input) => {
+          persistedImportSummary = input
+          return { affectedRows: 1 }
+        },
+        getSiteVersion: async () =>
+          ({
+            id: 'site-version-acquisition',
+            siteId: 'runtime-site-acquisition',
+            versionNo: 4,
+            state: 'DRAFT',
+            source: 'migration',
+            actor: 'test',
+            createdAt: '2026-06-06T00:00:00.000Z',
+            rendererCompatibilityVersion: 'gnr8-renderer-v1',
+            artifactId: linkedArtifactId,
+            importProvenanceSummary: createInput?.importProvenanceSummary ?? null,
+            pages: [],
+          }) as any,
+        buildDeterministicArtifactBundle: () =>
+          ({
+            siteId: 'runtime-site-acquisition',
+            siteVersionId: 'site-version-acquisition',
+            rendererCompatibilityVersion: 'gnr8-renderer-v1',
+            bundleSha256: 'bundle-sha',
+            htmlByPath: { '/': '<!doctype html><html><body>preview only</body></html>' },
+            compiledTokenStyles: ':root{}',
+            assetFingerprintMap: {},
+            manifest: {},
+          }) as any,
+        createArtifact: async (input) => {
+          artifactInput = input
+          return { artifactId: 'artifact-acquisition' }
+        },
+        bindArtifactToVersion: async (input) => {
+          linkedArtifactId = input.artifactId
+          return { affectedRows: 1 }
+        },
+        persistRawImportedSiteArtifact: async (input) => {
+          rawImportFilePaths = input.fileRows.map((row: { path: string }) => row.path)
+          return {
+            artifactId: 'raw-artifact-acquisition',
+            artifactType: 'raw_imported_site',
+            entryHtmlPath: 'index.html',
+            assetBasePath: '.',
+            fileMap: {},
+            fileCount: input.fileRows.length,
+          } as any
+        },
+        upsertContentSlots: async () => 0,
+        importHtmlToPage: () => ({}) as any,
+        migrateImportedPageToCanonicalDraft: async () => ({ siteId: 'legacy-site', siteVersionId: 'legacy-version', versionNo: 1 }),
+      },
+    })
+
+    assert.equal(outcome.mode, 'pipeline')
+    assert.equal(outcome.reporting.multiPageDiscovery.htmlAcquisition?.enabled, true)
+    assert.equal(outcome.reporting.multiPageDiscovery.htmlAcquisition?.fetchedPageCount, 2)
+    assert.equal(outcome.reporting.multiPageDiscovery.htmlAcquisition?.failedPageCount, 1)
+    assert.equal(outcome.reporting.multiPageDiscovery.htmlAcquisition?.manifestRef, 'importProvenanceSummary.multiPageDiscovery.acquisition')
+    assert.ok(outcome.reporting.multiPageDiscovery.htmlAcquisition?.skippedPageCount ?? 0 >= 4)
+
+    const acquisition = persistedImportSummary.importProvenanceSummary.multiPageDiscovery.acquisition
+    assert.equal(acquisition.kind, 'multi_page_html_acquisition_manifest_v1')
+    assert.equal(acquisition.summary.fetchedPageCount, 2)
+    assert.equal(acquisition.summary.failedPageCount, 1)
+    assert.ok(acquisition.diagnostics.includes('MULTIPAGE_HTML_ACQUISITION_STARTED'))
+    assert.ok(acquisition.diagnostics.includes('MULTIPAGE_HTML_FETCH_SUCCEEDED'))
+    assert.ok(acquisition.diagnostics.includes('MULTIPAGE_HTML_FETCH_FAILED'))
+    assert.ok(acquisition.diagnostics.includes('MULTIPAGE_HTML_FETCH_SKIPPED'))
+    assert.ok(acquisition.diagnostics.includes('MULTIPAGE_HTML_ACQUISITION_MANIFEST_PERSISTED'))
+
+    const about = acquisition.pages.find((entry: any) => entry.normalizedRoutePath === '/about')
+    assert.equal(about.status, 'fetched')
+    assert.equal(about.httpStatusCode, 200)
+    assert.match(about.contentType, /text\/html/)
+    assert.equal(about.byteSize, Buffer.byteLength('<!doctype html><html><body><h1>About</h1></body></html>'))
+    assert.equal(about.bodySha256, crypto.createHash('sha256').update('<!doctype html><html><body><h1>About</h1></body></html>').digest('hex'))
+    assert.match(about.bodyPath, /multipage-html-acquisition\/pages\/about-/)
+
+    const redirected = acquisition.pages.find((entry: any) => entry.normalizedRoutePath === '/redirect')
+    assert.equal(redirected.status, 'fetched')
+    assert.equal(redirected.redirected, true)
+    assert.equal(redirected.redirectCount, 1)
+    assert.equal(redirected.finalNormalizedRoutePath, '/final')
+
+    const broken = acquisition.pages.find((entry: any) => entry.normalizedRoutePath === '/broken')
+    assert.equal(broken.status, 'failed')
+    assert.equal(broken.httpStatusCode, 503)
+    assert.equal(broken.failureReason, 'non_2xx_status')
+
+    const data = acquisition.pages.find((entry: any) => entry.normalizedRoutePath === '/data')
+    assert.equal(data.status, 'skipped')
+    assert.equal(data.skippedReason, 'non_html_content_type')
+    assert.equal(data.contentType, 'application/json')
+
+    assert.equal(acquisition.pages.some((entry: any) => entry.originalHref === 'https://external.example.net/page' && entry.skippedReason === 'discovery_external_host'), true)
+    assert.equal(acquisition.pages.some((entry: any) => entry.originalHref === '/login' && entry.skippedReason === 'discovery_auth_path'), true)
+    assert.equal(acquisition.pages.some((entry: any) => entry.originalHref === '/search?q=private' && entry.skippedReason === 'discovery_unsafe_query_state'), true)
+    assert.deepEqual(Object.keys(artifactInput.htmlByPath), ['/'])
+    assert.equal(rawImportFilePaths.some((filePath) => filePath.startsWith('multipage-html-acquisition/pages/about-')), true)
+    assert.equal(rawImportFilePaths.some((filePath) => filePath.startsWith('multipage-html-acquisition/pages/redirect-')), true)
+  } finally {
+    await new Promise<void>((resolve) => server.close(() => resolve()))
+  }
+})
+
+test('scoped pipeline rejects HTML acquisition when multi-page discovery is not enabled', async () => {
+  const pipeline = createSuccessPipelineFixture()
+  await assert.rejects(
+    runScopedImportPipeline({
+      snapshot: {
+        snapshotRootDirAbs: '/tmp/snapshot',
+        entryHtmlPathAbs: '/tmp/snapshot/index.html',
+        assetsDirAbs: '/tmp/snapshot/assets',
+        sourceMode: 'raw_html_fallback',
+        sourceSelection: {
+          sourceMode: 'raw_html_fallback',
+          fidelityStatus: 'degraded_import',
+          selectedSourceHtmlPathAbs: '/tmp/snapshot/index.html',
+          renderedDomQuality: {
+            quality: 'weak',
+            bodyTextLength: 80,
+            meaningfulNodeCount: 8,
+            sectionCandidateCount: 1,
+            hasHeading: true,
+            reason: 'acquisition_requires_discovery',
+          },
+          degraded: true,
+        },
+        renderedCapture: {
+          status: 'unavailable',
+          screenshots: [],
+          computedStyleSamples: [],
+        },
+        importDiagnostics: {
+          issues: [],
+        },
+      } as any,
+      sourceUrl: 'https://example.com/',
+      actor: 'test:acquisition-requires-discovery',
+      multiPageDiscovery: { acquireHtml: true },
+      deps: {
+        importStaticSite: async () => ({ status: 'ok', documentMeta: { source: { kind: 'single-entry-html' } } }) as any,
+        createImportManifest: () => ({ status: 'success' }) as any,
+        runLinearMigrationPipeline: () => pipeline as any,
+      },
+    }),
+    /HTML acquisition requires multiPageDiscovery\.enabled=true/,
+  )
 })
 
 test('scoped pipeline import resolves nested snapshot entry and assets paths relative to snapshot root', async () => {

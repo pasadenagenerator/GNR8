@@ -74,6 +74,56 @@ export type MultiPageDiscoveryManifest = {
   generatedAt: string;
 };
 
+export type MultiPageHtmlAcquisitionStatus = "fetched" | "failed" | "skipped";
+
+export type MultiPageHtmlAcquisitionPageEntry = {
+  originalHref: string;
+  normalizedUrl: string | null;
+  finalUrl: string | null;
+  normalizedRoutePath: string | null;
+  finalNormalizedRoutePath: string | null;
+  depth: number;
+  status: MultiPageHtmlAcquisitionStatus;
+  httpStatusCode: number | null;
+  contentType: string | null;
+  byteSize: number;
+  bodySha256: string | null;
+  bodyPath: string | null;
+  redirected: boolean;
+  redirectCount: number;
+  diagnostics: string[];
+  skippedReason: string | null;
+  failureReason: string | null;
+};
+
+export type MultiPageHtmlAcquisitionManifest = {
+  kind: "multi_page_html_acquisition_manifest_v1";
+  seedUrl: string;
+  normalizedSeedUrl: string | null;
+  pages: MultiPageHtmlAcquisitionPageEntry[];
+  limitsApplied: {
+    maxPages: number;
+    maxBytesPerPage: number;
+    requestTimeoutMs: number;
+  };
+  summary: {
+    fetchedPageCount: number;
+    failedPageCount: number;
+    skippedPageCount: number;
+  };
+  diagnostics: string[];
+  generatedAt: string;
+};
+
+export type MultiPageHtmlAcquisitionSummary = {
+  enabled: boolean;
+  fetchedPageCount: number;
+  failedPageCount: number;
+  skippedPageCount: number;
+  manifestRef: string | null;
+  diagnostics: string[];
+};
+
 export type MultiPageDiscoverySummary = {
   enabled: boolean;
   discoveredPageCount: number;
@@ -81,6 +131,7 @@ export type MultiPageDiscoverySummary = {
   routeCandidateCount: number;
   manifestRef: string | null;
   diagnostics: string[];
+  htmlAcquisition?: MultiPageHtmlAcquisitionSummary;
 };
 
 export type RuntimeImportProvenanceSummary = {
@@ -182,6 +233,7 @@ export type RuntimeImportProvenanceSummary = {
   multiPageDiscovery?: {
     summary: MultiPageDiscoverySummary;
     manifest: MultiPageDiscoveryManifest | null;
+    acquisition?: MultiPageHtmlAcquisitionManifest | null;
   } | null;
   siteTree?: {
     summary: SiteTreeSummary;

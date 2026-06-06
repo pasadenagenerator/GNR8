@@ -29,6 +29,9 @@ import {
   type ImportFidelityScore,
   type CanonicalPageVersionInput,
   type CanonicalSiteMigrationInput,
+  type MultiPageHtmlAcquisitionManifest,
+  type MultiPageHtmlAcquisitionPageEntry,
+  type MultiPageHtmlAcquisitionSummary,
   type MultiPageDiscoveryLinkEntry,
   type MultiPageDiscoveryManifest,
   type MultiPageDiscoverySourceContext,
@@ -89,7 +92,13 @@ export type ScopedMultiPageDiscoveryOption =
   | boolean
   | {
       enabled?: boolean
+      acquireHtml?: boolean
       limits?: Partial<MultipageImportLimits>
+      htmlAcquisitionLimits?: {
+        maxPages?: number
+        maxBytesPerPage?: number
+        requestTimeoutMs?: number
+      }
       generatedAt?: string
     }
 
@@ -98,6 +107,12 @@ const DEFAULT_SCOPED_DISCOVERY_LIMITS: MultipageImportLimits = {
   maxDepth: 1,
   maxLinksPerPage: 120,
   maxTemplateLinksPerRoute: 25,
+}
+
+const DEFAULT_SCOPED_HTML_ACQUISITION_LIMITS = {
+  maxPages: 20,
+  maxBytesPerPage: 1_000_000,
+  requestTimeoutMs: 8_000,
 }
 
 function disabledMultiPageDiscoverySummary(diagnostics: string[] = []): MultiPageDiscoverySummary {
@@ -113,17 +128,35 @@ function disabledMultiPageDiscoverySummary(diagnostics: string[] = []): MultiPag
 
 function resolveMultiPageDiscoveryOption(option: ScopedMultiPageDiscoveryOption | undefined): {
   enabled: boolean
+  acquireHtml: boolean
   limits: MultipageImportLimits
+  htmlAcquisitionLimits: {
+    maxPages: number
+    maxBytesPerPage: number
+    requestTimeoutMs: number
+  }
   generatedAt: string | null
 } {
   const rawLimits = typeof option === 'object' && option ? option.limits : undefined
+  const rawHtmlLimits = typeof option === 'object' && option ? option.htmlAcquisitionLimits : undefined
+  const enabled = option === true || (typeof option === 'object' && option?.enabled === true)
+  const acquireHtml = typeof option === 'object' && option?.acquireHtml === true
+  if (acquireHtml && !enabled) {
+    throw new Error('Multi-page HTML acquisition requires multiPageDiscovery.enabled=true.')
+  }
   return {
-    enabled: option === true || (typeof option === 'object' && option?.enabled === true),
+    enabled,
+    acquireHtml,
     limits: {
       maxRoutes: Math.max(1, Math.floor(rawLimits?.maxRoutes ?? DEFAULT_SCOPED_DISCOVERY_LIMITS.maxRoutes)),
       maxDepth: Math.max(1, Math.floor(rawLimits?.maxDepth ?? DEFAULT_SCOPED_DISCOVERY_LIMITS.maxDepth)),
       maxLinksPerPage: Math.max(1, Math.floor(rawLimits?.maxLinksPerPage ?? DEFAULT_SCOPED_DISCOVERY_LIMITS.maxLinksPerPage)),
       maxTemplateLinksPerRoute: Math.max(1, Math.floor(rawLimits?.maxTemplateLinksPerRoute ?? DEFAULT_SCOPED_DISCOVERY_LIMITS.maxTemplateLinksPerRoute)),
+    },
+    htmlAcquisitionLimits: {
+      maxPages: Math.max(1, Math.floor(rawHtmlLimits?.maxPages ?? DEFAULT_SCOPED_HTML_ACQUISITION_LIMITS.maxPages)),
+      maxBytesPerPage: Math.max(1_024, Math.floor(rawHtmlLimits?.maxBytesPerPage ?? DEFAULT_SCOPED_HTML_ACQUISITION_LIMITS.maxBytesPerPage)),
+      requestTimeoutMs: Math.max(250, Math.floor(rawHtmlLimits?.requestTimeoutMs ?? DEFAULT_SCOPED_HTML_ACQUISITION_LIMITS.requestTimeoutMs)),
     },
     generatedAt: typeof option === 'object' && option?.generatedAt ? normalizeText(option.generatedAt) || null : null,
   }
@@ -851,11 +884,402 @@ function buildDiscoveryLinkEntry(input: {
   }
 }
 
+function disabledHtmlAcquisitionSummary(diagnostics: string[] = []): MultiPageHtmlAcquisitionSummary {
+  return {
+    enabled: false,
+    fetchedPageCount: 0,
+    failedPageCount: 0,
+    skippedPageCount: 0,
+    manifestRef: null,
+    diagnostics,
+  }
+}
+
+function htmlBodyAppearsHtml(body: string): boolean {
+  const sample = body.slice(0, 4096).trim().toLowerCase()
+  return sample.startsWith('<!doctype html') || sample.startsWith('<html') || sample.includes('<html') || sample.includes('<body')
+}
+
+function normalizeHtmlContentType(value: string | null): string | null {
+  const normalized = normalizeText(value).toLowerCase()
+  return normalized || null
+}
+
+function isHtmlContentType(value: string | null): boolean {
+  const normalized = normalizeHtmlContentType(value)
+  return normalized ? normalized.includes('text/html') || normalized.includes('application/xhtml+xml') : false
+}
+
+function isSameOriginUrl(candidateUrl: string, seedUrl: string): boolean {
+  try {
+    return new URL(candidateUrl).origin === new URL(seedUrl).origin
+  } catch {
+    return false
+  }
+}
+
+function acquisitionBodyFilename(input: { normalizedRoutePath: string | null; bodySha256: string }): string {
+  const route = normalizeText(input.normalizedRoutePath ?? '/')
+  const routeSlug = route === '/'
+    ? 'root'
+    : route
+        .replace(/^\/+|\/+$/g, '')
+        .replace(/[^a-z0-9]+/gi, '-')
+        .replace(/^-+|-+$/g, '')
+        .toLowerCase() || 'page'
+  return `${routeSlug}-${input.bodySha256.slice(0, 12)}.html`
+}
+
+async function readResponseBytesWithLimit(response: Response, maxBytes: number): Promise<{ bytes: Buffer; truncated: boolean }> {
+  if (!response.body) {
+    const bytes = Buffer.from(await response.arrayBuffer())
+    return { bytes: bytes.subarray(0, maxBytes + 1), truncated: bytes.byteLength > maxBytes }
+  }
+
+  const reader = response.body.getReader()
+  const chunks: Buffer[] = []
+  let total = 0
+  let truncated = false
+  try {
+    while (true) {
+      const next = await reader.read()
+      if (next.done) break
+      const chunk = Buffer.from(next.value)
+      total += chunk.byteLength
+      chunks.push(chunk)
+      if (total > maxBytes) {
+        truncated = true
+        try {
+          await reader.cancel()
+        } catch {
+          // The response is already over the configured limit.
+        }
+        break
+      }
+    }
+  } finally {
+    try {
+      reader.releaseLock()
+    } catch {
+      // Some runtimes release the lock after cancel automatically.
+    }
+  }
+  return { bytes: Buffer.concat(chunks).subarray(0, maxBytes + 1), truncated }
+}
+
+async function fetchWithTimeout(url: string, timeoutMs: number): Promise<Response> {
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), timeoutMs)
+  try {
+    return await fetch(url, {
+      redirect: 'follow',
+      signal: controller.signal,
+      headers: {
+        accept: 'text/html,application/xhtml+xml;q=0.9,*/*;q=0.1',
+      },
+    })
+  } finally {
+    clearTimeout(timeout)
+  }
+}
+
+function buildSkippedAcquisitionEntry(input: {
+  discoveryEntry: MultiPageDiscoveryLinkEntry
+  skippedReason: string
+  diagnostics: string[]
+}): MultiPageHtmlAcquisitionPageEntry {
+  return {
+    originalHref: input.discoveryEntry.originalHref,
+    normalizedUrl: input.discoveryEntry.normalizedUrl,
+    finalUrl: null,
+    normalizedRoutePath: input.discoveryEntry.normalizedRoutePath,
+    finalNormalizedRoutePath: null,
+    depth: input.discoveryEntry.depth,
+    status: 'skipped',
+    httpStatusCode: null,
+    contentType: null,
+    byteSize: 0,
+    bodySha256: null,
+    bodyPath: null,
+    redirected: false,
+    redirectCount: 0,
+    diagnostics: input.diagnostics,
+    skippedReason: input.skippedReason,
+    failureReason: null,
+  }
+}
+
+async function acquireScopedMultiPageHtml(input: {
+  sourceUrl: string
+  snapshot: UrlSinglePageImportSnapshot
+  discovery: { summary: MultiPageDiscoverySummary; manifest: MultiPageDiscoveryManifest | null }
+  option: ReturnType<typeof resolveMultiPageDiscoveryOption>
+}): Promise<{ summary: MultiPageHtmlAcquisitionSummary; manifest: MultiPageHtmlAcquisitionManifest | null }> {
+  if (!input.option.acquireHtml) return { summary: disabledHtmlAcquisitionSummary(), manifest: null }
+
+  const diagnostics: string[] = ['MULTIPAGE_HTML_ACQUISITION_STARTED']
+  const generatedAt = input.option.generatedAt ?? new Date().toISOString()
+  const normalizedSeed = normalizeSeedUrl(input.sourceUrl)
+  const manifestRef = 'importProvenanceSummary.multiPageDiscovery.acquisition'
+  const pages: MultiPageHtmlAcquisitionPageEntry[] = []
+
+  if (!normalizedSeed || !input.discovery.manifest) {
+    diagnostics.push(!normalizedSeed ? 'MULTIPAGE_HTML_FETCH_SKIPPED:invalid_seed' : 'MULTIPAGE_HTML_FETCH_SKIPPED:no_discovery_manifest')
+    const manifest: MultiPageHtmlAcquisitionManifest = {
+      kind: 'multi_page_html_acquisition_manifest_v1',
+      seedUrl: input.sourceUrl,
+      normalizedSeedUrl: normalizedSeed?.url ?? null,
+      pages,
+      limitsApplied: input.option.htmlAcquisitionLimits,
+      summary: { fetchedPageCount: 0, failedPageCount: 0, skippedPageCount: 0 },
+      diagnostics: uniqueSorted([...diagnostics, 'MULTIPAGE_HTML_ACQUISITION_MANIFEST_PERSISTED']),
+      generatedAt,
+    }
+    return {
+      summary: {
+        enabled: true,
+        fetchedPageCount: 0,
+        failedPageCount: 0,
+        skippedPageCount: 0,
+        manifestRef,
+        diagnostics: manifest.diagnostics.slice(),
+      },
+      manifest,
+    }
+  }
+
+  const acquisitionDir = path.resolve(input.snapshot.snapshotRootDirAbs, 'multipage-html-acquisition')
+  const pagesDir = path.resolve(acquisitionDir, 'pages')
+  fs.mkdirSync(pagesDir, { recursive: true })
+
+  const candidates = input.discovery.manifest.discoveredPages
+    .filter((entry) => entry.status === 'discovered' && normalizeText(entry.normalizedUrl))
+    .sort((left, right) => String(left.normalizedRoutePath ?? '').localeCompare(String(right.normalizedRoutePath ?? '')))
+  const boundedCandidates = candidates.slice(0, input.option.htmlAcquisitionLimits.maxPages)
+  const overflowCandidates = candidates.slice(input.option.htmlAcquisitionLimits.maxPages)
+
+  for (const skipped of input.discovery.manifest.skippedLinks) {
+    pages.push(
+      buildSkippedAcquisitionEntry({
+        discoveryEntry: skipped,
+        skippedReason: `discovery_${skipped.skippedReason ?? 'skipped'}`,
+        diagnostics: ['MULTIPAGE_HTML_FETCH_SKIPPED'],
+      }),
+    )
+  }
+
+  for (const overflow of overflowCandidates) {
+    diagnostics.push('MULTIPAGE_HTML_ACQUISITION_LIMIT_REACHED')
+    pages.push(
+      buildSkippedAcquisitionEntry({
+        discoveryEntry: overflow,
+        skippedReason: 'acquisition_page_limit',
+        diagnostics: ['MULTIPAGE_HTML_FETCH_SKIPPED', 'MULTIPAGE_HTML_ACQUISITION_LIMIT_REACHED'],
+      }),
+    )
+  }
+
+  for (const candidate of boundedCandidates) {
+    const normalizedUrl = normalizeText(candidate.normalizedUrl)
+    if (!normalizedUrl) {
+      pages.push(
+        buildSkippedAcquisitionEntry({
+          discoveryEntry: candidate,
+          skippedReason: 'missing_normalized_url',
+          diagnostics: ['MULTIPAGE_HTML_FETCH_SKIPPED'],
+        }),
+      )
+      continue
+    }
+    if (!isSameOriginUrl(normalizedUrl, normalizedSeed.url)) {
+      pages.push(
+        buildSkippedAcquisitionEntry({
+          discoveryEntry: candidate,
+          skippedReason: 'non_same_origin_candidate',
+          diagnostics: ['MULTIPAGE_HTML_FETCH_SKIPPED'],
+        }),
+      )
+      continue
+    }
+
+    try {
+      const response = await fetchWithTimeout(normalizedUrl, input.option.htmlAcquisitionLimits.requestTimeoutMs)
+      const finalUrl = normalizeText(response.url) || normalizedUrl
+      const finalNormalized = normalizeSeedUrl(finalUrl)
+      const redirected = Boolean(response.redirected || finalUrl !== normalizedUrl)
+      const contentType = normalizeHtmlContentType(response.headers.get('content-type'))
+      const common = {
+        originalHref: candidate.originalHref,
+        normalizedUrl,
+        finalUrl,
+        normalizedRoutePath: candidate.normalizedRoutePath,
+        finalNormalizedRoutePath: finalNormalized?.path ?? null,
+        depth: candidate.depth,
+        httpStatusCode: response.status,
+        contentType,
+        redirected,
+        redirectCount: redirected ? 1 : 0,
+      }
+
+      if (!finalNormalized || finalNormalized.canonicalHost !== normalizedSeed.canonicalHost || !isSameOriginUrl(finalNormalized.url, normalizedSeed.url)) {
+        diagnostics.push('MULTIPAGE_HTML_FETCH_FAILED')
+        pages.push({
+          ...common,
+          status: 'failed',
+          byteSize: 0,
+          bodySha256: null,
+          bodyPath: null,
+          diagnostics: ['MULTIPAGE_HTML_FETCH_FAILED'],
+          skippedReason: null,
+          failureReason: 'final_url_external_origin',
+        })
+        continue
+      }
+
+      if (response.status < 200 || response.status >= 300) {
+        diagnostics.push('MULTIPAGE_HTML_FETCH_FAILED')
+        pages.push({
+          ...common,
+          status: 'failed',
+          byteSize: 0,
+          bodySha256: null,
+          bodyPath: null,
+          diagnostics: ['MULTIPAGE_HTML_FETCH_FAILED'],
+          skippedReason: null,
+          failureReason: 'non_2xx_status',
+        })
+        continue
+      }
+
+      const { bytes, truncated } = await readResponseBytesWithLimit(response, input.option.htmlAcquisitionLimits.maxBytesPerPage)
+      if (truncated) {
+        diagnostics.push('MULTIPAGE_HTML_FETCH_SKIPPED')
+        pages.push({
+          ...common,
+          status: 'skipped',
+          byteSize: bytes.byteLength,
+          bodySha256: null,
+          bodyPath: null,
+          diagnostics: ['MULTIPAGE_HTML_FETCH_SKIPPED'],
+          skippedReason: 'max_bytes_per_page_exceeded',
+          failureReason: null,
+        })
+        continue
+      }
+
+      const body = bytes.toString('utf8')
+      const appearsHtml = htmlBodyAppearsHtml(body)
+      if (!bytes.byteLength || !normalizeText(body)) {
+        diagnostics.push('MULTIPAGE_HTML_FETCH_FAILED')
+        pages.push({
+          ...common,
+          status: 'failed',
+          byteSize: bytes.byteLength,
+          bodySha256: null,
+          bodyPath: null,
+          diagnostics: ['MULTIPAGE_HTML_FETCH_FAILED'],
+          skippedReason: null,
+          failureReason: 'empty_body',
+        })
+        continue
+      }
+
+      if (!isHtmlContentType(contentType) && (contentType || !appearsHtml)) {
+        diagnostics.push('MULTIPAGE_HTML_FETCH_SKIPPED')
+        pages.push({
+          ...common,
+          status: 'skipped',
+          byteSize: bytes.byteLength,
+          bodySha256: null,
+          bodyPath: null,
+          diagnostics: ['MULTIPAGE_HTML_FETCH_SKIPPED'],
+          skippedReason: contentType ? 'non_html_content_type' : 'body_not_html',
+          failureReason: null,
+        })
+        continue
+      }
+
+      const bodySha256 = crypto.createHash('sha256').update(bytes).digest('hex')
+      const bodyPath = path.resolve(pagesDir, acquisitionBodyFilename({ normalizedRoutePath: candidate.normalizedRoutePath, bodySha256 }))
+      fs.writeFileSync(bodyPath, body, 'utf8')
+      diagnostics.push('MULTIPAGE_HTML_FETCH_SUCCEEDED')
+      pages.push({
+        ...common,
+        status: 'fetched',
+        byteSize: bytes.byteLength,
+        bodySha256,
+        bodyPath: resolveEvidencePathIfExists(bodyPath),
+        diagnostics: ['MULTIPAGE_HTML_FETCH_SUCCEEDED'],
+        skippedReason: null,
+        failureReason: null,
+      })
+    } catch (error) {
+      diagnostics.push('MULTIPAGE_HTML_FETCH_FAILED')
+      pages.push({
+        originalHref: candidate.originalHref,
+        normalizedUrl,
+        finalUrl: null,
+        normalizedRoutePath: candidate.normalizedRoutePath,
+        finalNormalizedRoutePath: null,
+        depth: candidate.depth,
+        status: 'failed',
+        httpStatusCode: null,
+        contentType: null,
+        byteSize: 0,
+        bodySha256: null,
+        bodyPath: null,
+        redirected: false,
+        redirectCount: 0,
+        diagnostics: ['MULTIPAGE_HTML_FETCH_FAILED'],
+        skippedReason: null,
+        failureReason: error instanceof Error && error.name === 'AbortError' ? 'request_timeout' : 'fetch_error',
+      })
+    }
+  }
+
+  const sortedPages = pages.sort((left, right) =>
+    `${left.normalizedRoutePath ?? ''}|${left.originalHref}|${left.status}`.localeCompare(
+      `${right.normalizedRoutePath ?? ''}|${right.originalHref}|${right.status}`,
+    ),
+  )
+  const fetchedPageCount = sortedPages.filter((entry) => entry.status === 'fetched').length
+  const failedPageCount = sortedPages.filter((entry) => entry.status === 'failed').length
+  const skippedPageCount = sortedPages.filter((entry) => entry.status === 'skipped').length
+  const manifest: MultiPageHtmlAcquisitionManifest = {
+    kind: 'multi_page_html_acquisition_manifest_v1',
+    seedUrl: input.sourceUrl,
+    normalizedSeedUrl: normalizedSeed.url,
+    pages: sortedPages,
+    limitsApplied: input.option.htmlAcquisitionLimits,
+    summary: {
+      fetchedPageCount,
+      failedPageCount,
+      skippedPageCount,
+    },
+    diagnostics: uniqueSorted([...diagnostics, 'MULTIPAGE_HTML_ACQUISITION_MANIFEST_PERSISTED']),
+    generatedAt,
+  }
+
+  fs.writeFileSync(path.resolve(acquisitionDir, 'manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`, 'utf8')
+
+  return {
+    summary: {
+      enabled: true,
+      fetchedPageCount,
+      failedPageCount,
+      skippedPageCount,
+      manifestRef,
+      diagnostics: manifest.diagnostics.slice(),
+    },
+    manifest,
+  }
+}
+
 async function buildScopedMultiPageDiscovery(input: {
   option?: ScopedMultiPageDiscoveryOption
   sourceUrl: string
   snapshot: UrlSinglePageImportSnapshot
-}): Promise<{ summary: MultiPageDiscoverySummary; manifest: MultiPageDiscoveryManifest | null }> {
+}): Promise<{ summary: MultiPageDiscoverySummary; manifest: MultiPageDiscoveryManifest | null; acquisition?: MultiPageHtmlAcquisitionManifest | null }> {
   const option = resolveMultiPageDiscoveryOption(input.option)
   if (!option.enabled) return { summary: disabledMultiPageDiscoverySummary(), manifest: null }
 
@@ -897,7 +1321,21 @@ async function buildScopedMultiPageDiscovery(input: {
       diagnostics: uniqueSorted(diagnostics),
       generatedAt,
     }
-    return { summary: { ...disabledMultiPageDiscoverySummary(manifest.diagnostics), enabled: true }, manifest }
+    const acquisition = await acquireScopedMultiPageHtml({
+      sourceUrl: input.sourceUrl,
+      snapshot: input.snapshot,
+      discovery: { summary: { ...disabledMultiPageDiscoverySummary(manifest.diagnostics), enabled: true }, manifest },
+      option,
+    })
+    return {
+      summary: {
+        ...disabledMultiPageDiscoverySummary(manifest.diagnostics),
+        enabled: true,
+        ...(acquisition.summary.enabled ? { htmlAcquisition: acquisition.summary } : {}),
+      },
+      manifest,
+      acquisition: acquisition.manifest,
+    }
   }
 
   const childFetchesSkipped = new Set<string>()
@@ -1125,7 +1563,7 @@ async function buildScopedMultiPageDiscovery(input: {
   const manifestRef = 'importProvenanceSummary.multiPageDiscovery.manifest'
   manifest.diagnostics = uniqueSorted([...manifest.diagnostics, 'MULTIPAGE_DISCOVERY_MANIFEST_PERSISTED_TO_PROVENANCE'])
 
-  return {
+  const discoveryResult = {
     summary: {
       enabled: true,
       discoveredPageCount: discoveredPages.length,
@@ -1135,6 +1573,22 @@ async function buildScopedMultiPageDiscovery(input: {
       diagnostics: manifest.diagnostics.slice(),
     },
     manifest,
+  }
+  const acquisition = await acquireScopedMultiPageHtml({
+    sourceUrl: input.sourceUrl,
+    snapshot: input.snapshot,
+    discovery: discoveryResult,
+    option,
+  })
+
+  return {
+    summary: {
+      ...discoveryResult.summary,
+      diagnostics: uniqueSorted([...discoveryResult.summary.diagnostics, ...(acquisition.summary.enabled ? acquisition.summary.diagnostics : [])]),
+      ...(acquisition.summary.enabled ? { htmlAcquisition: acquisition.summary } : {}),
+    },
+    manifest,
+    acquisition: acquisition.manifest,
   }
 }
 
@@ -1246,7 +1700,7 @@ async function buildImportProvenanceSummary(input: {
   snapshot: UrlSinglePageImportSnapshot
   styleSignals: StyleSignalModel
   preparedSite: PreparedSiteModel | null
-  multiPageDiscovery: { summary: MultiPageDiscoverySummary; manifest: MultiPageDiscoveryManifest | null } | null
+  multiPageDiscovery: { summary: MultiPageDiscoverySummary; manifest: MultiPageDiscoveryManifest | null; acquisition?: MultiPageHtmlAcquisitionManifest | null } | null
 }): Promise<RuntimeImportProvenanceSummary> {
   const { snapshot, styleSignals, preparedSite } = input
   const semanticImport = resolveSemanticImportForSnapshot(snapshot)
@@ -1296,6 +1750,7 @@ async function buildImportProvenanceSummary(input: {
       : []),
     ...(persistedCaptureEvidence.persisted ? ['RENDERED_CAPTURE_PERSISTED'] : []),
     ...(semanticImport?.diagnostics.map((diag) => normalizeText(diag.code)).filter(Boolean) ?? []),
+    ...(input.multiPageDiscovery?.summary.htmlAcquisition?.diagnostics ?? []),
   ])
 
   const multipageImport = await buildMultipageImportFromPreparedSite({
@@ -1408,7 +1863,13 @@ async function buildImportProvenanceSummary(input: {
     styleSignals,
     semanticImport,
     multipageImport,
-    multiPageDiscovery: input.multiPageDiscovery,
+    multiPageDiscovery: input.multiPageDiscovery
+      ? {
+          summary: input.multiPageDiscovery.summary,
+          manifest: input.multiPageDiscovery.manifest,
+          acquisition: input.multiPageDiscovery.acquisition ?? null,
+        }
+      : null,
     siteTree: {
       summary: siteTreeSummary,
       tree: siteTreeSeed.tree,
@@ -1435,6 +1896,7 @@ function summarizeProvenancePayload(summary: RuntimeImportProvenanceSummary): Re
     semanticImportSectionCount: summary.semanticImport?.sections.length ?? 0,
     multipageImport: summary.multipageImport?.summary ?? null,
     multiPageDiscovery: summary.multiPageDiscovery?.summary ?? null,
+    multiPageHtmlAcquisition: summary.multiPageDiscovery?.summary.htmlAcquisition ?? null,
     siteTree: summary.siteTree?.summary ?? null,
     templateFamilies: summary.templateFamilies?.summary ?? null,
   }
@@ -2108,6 +2570,13 @@ export async function runScopedImportPipeline(input: {
   multiPageDiscovery?: ScopedMultiPageDiscoveryOption
   deps?: Partial<ScopedImportPipelineDependencies>
 }): Promise<ScopedImportPipelineOutcome> {
+  if (
+    typeof input.multiPageDiscovery === 'object' &&
+    input.multiPageDiscovery?.acquireHtml === true &&
+    input.multiPageDiscovery.enabled !== true
+  ) {
+    throw new Error('Multi-page HTML acquisition requires multiPageDiscovery.enabled=true.')
+  }
   const deps = await defaultDependencies(input.deps)
   const fallbackToLegacy = input.fallbackToLegacyOnPipelineFailure ?? true
   let assetsDirPath: string | null = null
