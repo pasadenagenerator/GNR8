@@ -41,6 +41,7 @@ export type MultiPageImportOperatorSummary = {
     }
     validation: {
       status: MultiPagePreviewValidationStatus | 'not_run'
+      recommendation: string
     }
   }
   routes: MultiPageImportOperatorRouteRow[]
@@ -85,6 +86,10 @@ function nonNegativeInt(value: unknown): number {
 function textList(value: unknown): string[] {
   if (!Array.isArray(value)) return []
   return [...new Set(value.map((entry) => text(entry)).filter(Boolean))].sort((a, b) => a.localeCompare(b))
+}
+
+function uniqueSorted(values: string[]): string[] {
+  return [...new Set(values.map((entry) => text(entry)).filter(Boolean))].sort((a, b) => a.localeCompare(b))
 }
 
 function diagnosticGroup(group: DiagnosticGroupName, values: string[]): MultiPageImportOperatorDiagnosticGroup {
@@ -145,6 +150,87 @@ function statusFromPreviewDiagnostics(diagnostics: string[]): MultiPagePreviewVa
   return null
 }
 
+function diagnosticCode(value: string): string {
+  return text(value).split(':')[0]?.toUpperCase() ?? ''
+}
+
+function listLabel(values: string[], fallback: string): string {
+  const normalized = uniqueSorted(values).slice(0, 5)
+  return normalized.length > 0 ? normalized.join(', ') : fallback
+}
+
+function translateDiagnostic(value: string): string | null {
+  const code = diagnosticCode(value)
+  switch (code) {
+    case 'MULTIPAGE_CANONICAL_HOST_EQUIVALENCE_APPLIED':
+      return 'The www and apex domain variants were treated as the same website.'
+    case 'MULTIPAGE_LINK_SKIPPED_ROUTE_NOT_IMPORTED':
+      return 'Some links point to pages that were not included in this import.'
+    case 'MULTIPAGE_HTML_ACQUISITION_LIMIT_REACHED':
+      return 'The page acquisition limit was reached.'
+    case 'MULTIPAGE_ROUTE_LIMIT_REACHED':
+      return 'The route limit prevented importing additional pages.'
+    case 'MULTIPAGE_DEPTH_LIMIT_REACHED':
+      return 'The discovery depth limit prevented importing additional pages.'
+    case 'MULTIPAGE_EXTERNAL_LINK_SKIPPED':
+      return 'Some links reference pages outside the current import scope.'
+    case 'MULTIPAGE_ASSET_LINK_SKIPPED':
+      return 'Some links point to files or assets and were not imported as pages.'
+    case 'MULTIPAGE_PREVIEW_ROUTE_MISSING_FILE':
+      return 'A preview route is missing its raw HTML file.'
+    case 'MULTIPAGE_PREVIEW_ROUTE_RESOLVER_MISS':
+      return 'A preview route could not be resolved from the assembled route map.'
+    default:
+      return null
+  }
+}
+
+function translateRuntimeWarning(value: string): string {
+  const normalized = text(value)
+  const [kind, ...parts] = normalized.split(':')
+  const first = text(parts[0])
+  const second = text(parts[1])
+  if (kind === 'missing_file') {
+    return `A preview route is missing its raw HTML file: ${first || 'unknown route'}${second ? ` (${second})` : ''}.`
+  }
+  if (kind === 'resolver_miss') return `A preview route could not be resolved: ${first || 'unknown route'}.`
+  if (kind === 'duplicate_route') return `A duplicate route was found and only one copy can be previewed: ${first || 'unknown route'}.`
+  if (kind === 'missing_link_routes') {
+    const routes = first.split('|').map((entry) => text(entry)).filter(Boolean)
+    return `Some links point to pages that were not included in this import: ${listLabel(routes, first || 'one or more routes')}.`
+  }
+  if (kind === 'acquisition_failed_pages') {
+    const count = nonNegativeInt(first)
+    return count === 1 ? '1 page could not be fetched during acquisition.' : `${count} pages could not be fetched during acquisition.`
+  }
+  return translateDiagnostic(normalized) ?? normalized
+}
+
+function translateRuntimeBlocker(value: string): string {
+  const normalized = text(value)
+  switch (normalized) {
+    case 'no_route_map_for_requested_multi_page_preview':
+      return 'No assembled route map is available for this multi-page preview.'
+    case 'root_file_missing':
+      return 'The imported homepage HTML file is missing.'
+    case 'all_child_routes_missing':
+      return 'All assembled child routes are missing or unavailable.'
+    case 'route_resolver_failed_for_all_routes':
+      return 'The preview route resolver could not resolve the assembled routes.'
+    default:
+      return translateRuntimeWarning(normalized)
+  }
+}
+
+function recommendationForStatus(status: MultiPagePreviewValidationStatus | 'not_run'): string {
+  if (status === 'ready') return 'All discovered and assembled routes are previewable. No operator action is required before manual review.'
+  if (status === 'ready_with_warnings') {
+    return 'The multi-page preview is usable, but some links or routes need review. Consider increasing import limits or accepting the current scope.'
+  }
+  if (status === 'blocked') return 'The multi-page preview is blocked. Resolve the blockers below before continuing.'
+  return 'Multi-page validation has not run yet.'
+}
+
 function routeStatusFromAcquisition(value: unknown): MultiPageImportOperatorRouteStatus {
   const status = text(value) as MultiPageHtmlAcquisitionStatus
   if (status === 'fetched' || status === 'failed' || status === 'skipped') return status
@@ -154,12 +240,13 @@ function routeStatusFromAcquisition(value: unknown): MultiPageImportOperatorRout
 function routeFromAssembly(entry: Record<string, unknown>): MultiPageImportOperatorRouteRow | null {
   const routePath = normalizeRoutePath(entry.routePath)
   if (!routePath) return null
+  const rawFilePath = textOrNull(entry.rawFilePath)
   return {
     routePath,
-    status: 'assembled',
+    status: rawFilePath ? 'assembled' : 'missing',
     sourceUrl: textOrNull(entry.sourceUrl),
     finalUrl: textOrNull(entry.finalUrl),
-    rawFilePath: textOrNull(entry.rawFilePath),
+    rawFilePath,
   }
 }
 
@@ -245,10 +332,64 @@ export function buildMultiPageImportOperatorSummary(input: BuildInput = {}): Mul
 
   const routes = [...routesByPath.values()].sort(compareRouteRows)
   const previewDiagnostics = textList(input.previewDiagnostics)
-  const validationStatus = previewValidation?.status ?? statusFromPreviewDiagnostics(previewDiagnostics) ?? 'not_run'
-  const validationWarnings = previewValidation?.warnings ?? []
-  const validationBlockers = previewValidation?.blockers ?? []
+  const assemblyEnabled = text((assembly as Record<string, unknown> | null)?.enabled) === 'true' || Boolean((assemblySummary as Record<string, unknown>).enabled)
+  const assembledRouteRows = routes.filter((route) => route.status === 'assembled')
+  const missingAssembledRouteRows = routes.filter((route) => route.status === 'missing' && routeMap.some((entry) => normalizeRoutePath(entry.routePath) === route.routePath))
+  const hasRouteMapEvidence = routeMap.length > 0 || assembledPages > 0
+  const allRouteMapEntriesMissing = routeMap.length > 0 && assembledRouteRows.length === 0
+  const inferredBlockers = uniqueSorted([
+    assemblyEnabled && routeMap.length === 0 ? 'No assembled route map is available for this multi-page preview.' : '',
+    allRouteMapEntriesMissing ? 'All assembled child routes are missing or unavailable.' : '',
+  ])
+  const rawDiagnostics = uniqueSorted(
+    textList(discoverySummary.diagnostics)
+      .concat(textList(discoveryManifest.diagnostics))
+      .concat(textList(acquisitionSummary.diagnostics))
+      .concat(textList(acquisition?.diagnostics))
+      .concat(acquisitionPages.flatMap((page) => (isRecord(page) ? textList(page.diagnostics) : [])))
+      .concat(textList(assemblySummary.diagnostics))
+      .concat(textList(assembly?.diagnostics))
+      .concat(previewDiagnostics)
+      .concat(previewValidation?.diagnostics ?? []),
+  )
+  const routeLimitSamples = Array.isArray(discoveryManifest.skippedLinks)
+    ? discoveryManifest.skippedLinks
+        .filter((entry) => isRecord(entry) && text(entry.skippedReason) === 'route_limit')
+        .map((entry) => normalizeRoutePath((entry as Record<string, unknown>).normalizedRoutePath ?? (entry as Record<string, unknown>).absoluteUrl ?? (entry as Record<string, unknown>).originalHref))
+    : []
+  const acquisitionLimitSamples = acquisitionPages
+    .filter((page) => isRecord(page) && text(page.skippedReason) === 'acquisition_page_limit')
+    .map((page) => normalizeRoutePath((page as Record<string, unknown>).finalNormalizedRoutePath ?? (page as Record<string, unknown>).normalizedRoutePath))
+  const diagnosticWarnings = rawDiagnostics.map(translateDiagnostic).filter((entry): entry is string => Boolean(entry))
+  const routeWarnings = uniqueSorted([
+    missingAssembledRouteRows.length > 0
+      ? `A preview route is missing its raw HTML file: ${listLabel(missingAssembledRouteRows.map((route) => route.routePath), 'one or more routes')}.`
+      : '',
+    routeLimitSamples.length > 0
+      ? `The route limit prevented importing additional pages. Sample skipped routes: ${listLabel(routeLimitSamples, 'one or more routes')}.`
+      : '',
+    acquisitionLimitSamples.length > 0
+      ? `The page acquisition limit was reached. Sample skipped routes: ${listLabel(acquisitionLimitSamples, 'one or more routes')}.`
+      : '',
+    skippedLinks > 0 ? 'Some links reference pages outside the current import scope.' : '',
+    excludedPages > 0 ? 'Some fetched pages were excluded from the assembled preview routes.' : '',
+  ])
+  const validationWarnings = uniqueSorted((previewValidation?.warnings ?? []).map(translateRuntimeWarning).concat(diagnosticWarnings, routeWarnings))
+  const validationBlockers = uniqueSorted((previewValidation?.blockers ?? []).map(translateRuntimeBlocker).concat(inferredBlockers))
+  const diagnosticStatus = statusFromPreviewDiagnostics(previewDiagnostics.concat(previewValidation?.diagnostics ?? []))
+  const validationStatus =
+    previewValidation?.status ??
+    diagnosticStatus ??
+    (validationBlockers.length > 0
+      ? 'blocked'
+      : hasRouteMapEvidence
+        ? validationWarnings.length > 0 || missingAssembledRouteRows.length > 0
+          ? 'ready_with_warnings'
+          : 'ready'
+        : 'not_run')
   const validationLinkDiagnostics = previewValidation?.links.flatMap((link) => textList((link as Record<string, unknown>).diagnostics)) ?? []
+  const validPreviewRoutes = previewValidation?.summary.validPreviewRoutes ?? assembledRouteRows.length
+  const missingPreviewRoutes = previewValidation?.summary.missingPreviewRoutes ?? missingAssembledRouteRows.length
 
   return {
     overview: {
@@ -266,14 +407,15 @@ export function buildMultiPageImportOperatorSummary(input: BuildInput = {}): Mul
       },
       validation: {
         status: validationStatus,
+        recommendation: recommendationForStatus(validationStatus),
       },
     },
     routes,
     validation: {
-      validPreviewRoutes: previewValidation?.summary.validPreviewRoutes ?? 0,
-      missingPreviewRoutes: previewValidation?.summary.missingPreviewRoutes ?? 0,
+      validPreviewRoutes,
+      missingPreviewRoutes,
       rewrittenLinks: previewValidation?.summary.rewrittenLinks ?? 0,
-      skippedLinks: previewValidation?.summary.skippedLinks ?? 0,
+      skippedLinks: previewValidation?.summary.skippedLinks ?? skippedLinks,
       warnings: validationWarnings.length,
       blockers: validationBlockers.length,
       warningSamples: validationWarnings.slice(0, 5),

@@ -103,6 +103,7 @@ test('multi-page operator summary returns a safe empty summary', () => {
   assert.deepEqual(summary.overview.acquisition, { fetchedPages: 0, failedPages: 0 })
   assert.deepEqual(summary.overview.assembly, { assembledPages: 0, excludedPages: 0 })
   assert.equal(summary.overview.validation.status, 'not_run')
+  assert.equal(summary.overview.validation.recommendation, 'Multi-page validation has not run yet.')
   assert.deepEqual(summary.routes, [])
   assert.equal(summary.validation.warnings, 0)
   assert.equal(summary.validation.blockers, 0)
@@ -122,6 +123,8 @@ test('multi-page operator summary displays discovery-only imports', () => {
     summary.routes.map((route) => `${route.routePath}:${route.status}`),
     ['/:missing', '/blog:missing', '/people:missing'],
   )
+  assert.equal(summary.overview.validation.status, 'not_run')
+  assert.match(summary.overview.validation.recommendation, /has not run/)
   assert.equal(summary.diagnostics.find((group) => group.group === 'Discovery')?.count, 2)
 })
 
@@ -142,6 +145,7 @@ test('multi-page operator summary displays acquisition-only imports', () => {
     summary.routes.map((route) => `${route.routePath}:${route.status}:${route.rawFilePath ?? 'none'}`),
     ['/:missing:none', '/about:fetched:pages/about/index.html', '/missing:failed:none'],
   )
+  assert.equal(summary.overview.validation.status, 'not_run')
 })
 
 test('multi-page operator summary displays assembled route maps', () => {
@@ -166,6 +170,54 @@ test('multi-page operator summary displays assembled route maps', () => {
       '/people:assembled:https://example.com/people:pages/people/index.html',
     ],
   )
+  assert.notEqual(summary.overview.validation.status, 'not_run')
+})
+
+test('multi-page operator summary infers ready from assembled route-map evidence', () => {
+  const summary = buildMultiPageImportOperatorSummary({
+    importProvenanceSummary: provenance({
+      routeCandidates: ['/about'],
+      routeMap: [
+        { routePath: '/about', sourceUrl: 'https://example.com/about', finalUrl: 'https://example.com/about', rawFilePath: 'multipage/about.html' },
+      ],
+    }),
+  })
+
+  assert.equal(summary.overview.validation.status, 'ready')
+  assert.equal(summary.validation.validPreviewRoutes, 1)
+  assert.equal(summary.validation.missingPreviewRoutes, 0)
+  assert.equal(summary.overview.validation.recommendation, 'All discovered and assembled routes are previewable. No operator action is required before manual review.')
+})
+
+test('multi-page operator summary respects ready preview validation payloads', () => {
+  const summary = buildMultiPageImportOperatorSummary({
+    importProvenanceSummary: provenance({
+      routeCandidates: ['/about'],
+      routeMap: [
+        { routePath: '/about', sourceUrl: 'https://example.com/about', finalUrl: 'https://example.com/about', rawFilePath: 'multipage/about.html' },
+      ],
+    }),
+    previewValidation: {
+      status: 'ready',
+      summary: {
+        discoveredRoutes: 1,
+        fetchedPages: 1,
+        assembledPages: 1,
+        validPreviewRoutes: 1,
+        missingPreviewRoutes: 0,
+        rewrittenLinks: 2,
+        skippedLinks: 0,
+      },
+      warnings: [],
+      blockers: [],
+      diagnostics: ['MULTIPAGE_PREVIEW_VALIDATION_READY'],
+      links: [],
+    },
+  })
+
+  assert.equal(summary.overview.validation.status, 'ready')
+  assert.equal(summary.validation.warnings, 0)
+  assert.equal(summary.validation.blockers, 0)
 })
 
 test('multi-page operator summary displays validation status and accurate warning/blocker counts', () => {
@@ -198,11 +250,15 @@ test('multi-page operator summary displays validation status and accurate warnin
     skippedLinks: 4,
     warnings: 2,
     blockers: 1,
-    warningSamples: ['missing_file:/about:pages/about/index.html', 'missing_link_routes:/missing'],
-    blockerSamples: ['root_file_missing'],
+    warningSamples: [
+      'A preview route is missing its raw HTML file: /about (pages/about/index.html).',
+      'Some links point to pages that were not included in this import: /missing.',
+    ],
+    blockerSamples: ['The imported homepage HTML file is missing.'],
   })
   assert.equal(summary.diagnostics.find((group) => group.group === 'Preview')?.count, 2)
   assert.equal(summary.diagnostics.find((group) => group.group === 'Validation')?.count, 4)
+  assert.match(summary.overview.validation.recommendation, /usable/)
 })
 
 test('multi-page operator summary infers validation status from preview diagnostics when payload is absent', () => {
@@ -214,6 +270,87 @@ test('multi-page operator summary infers validation status from preview diagnost
   assert.equal(summary.overview.validation.status, 'ready_with_warnings')
   assert.equal(summary.validation.warnings, 0)
   assert.equal(summary.validation.blockers, 0)
+})
+
+test('multi-page operator summary blocks when assembly ran without a route map', () => {
+  const input = provenance({ routeCandidates: ['/', '/about'] }) as any
+  input.multiPageDiscovery.summary.rawArtifactAssembly.enabled = true
+  input.multiPageDiscovery.rawArtifactAssembly.enabled = true
+
+  const summary = buildMultiPageImportOperatorSummary({ importProvenanceSummary: input })
+
+  assert.equal(summary.overview.validation.status, 'blocked')
+  assert.equal(summary.validation.blockers, 1)
+  assert.deepEqual(summary.validation.blockerSamples, ['No assembled route map is available for this multi-page preview.'])
+  assert.equal(summary.overview.validation.recommendation, 'The multi-page preview is blocked. Resolve the blockers below before continuing.')
+})
+
+test('multi-page operator summary blocks when every assembled route file is missing', () => {
+  const input = provenance({
+    routeCandidates: ['/about'],
+    routeMap: [
+      { routePath: '/about', sourceUrl: 'https://example.com/about', finalUrl: 'https://example.com/about', rawFilePath: 'multipage/about.html' },
+    ],
+  }) as any
+  input.multiPageDiscovery.rawArtifactAssembly.routeMap[0].rawFilePath = null
+
+  const summary = buildMultiPageImportOperatorSummary({ importProvenanceSummary: input })
+
+  assert.equal(summary.overview.validation.status, 'blocked')
+  assert.equal(summary.validation.missingPreviewRoutes, 1)
+  assert.equal(summary.validation.blockerSamples.includes('All assembled child routes are missing or unavailable.'), true)
+})
+
+test('multi-page operator summary translates common diagnostics into operator text', () => {
+  const input = provenance({
+    routeCandidates: ['/about'],
+    routeMap: [
+      { routePath: '/about', sourceUrl: 'https://www.example.com/about', finalUrl: 'https://example.com/about', rawFilePath: 'multipage/about.html' },
+    ],
+  }) as any
+  input.multiPageDiscovery.acquisition.diagnostics = [
+    'MULTIPAGE_CANONICAL_HOST_EQUIVALENCE_APPLIED:seed=example.com',
+    'MULTIPAGE_HTML_ACQUISITION_LIMIT_REACHED',
+  ]
+
+  const summary = buildMultiPageImportOperatorSummary({
+    importProvenanceSummary: input,
+    previewDiagnostics: ['MULTIPAGE_LINK_SKIPPED_ROUTE_NOT_IMPORTED'],
+  })
+
+  assert.equal(summary.validation.warningSamples.includes('The www and apex domain variants were treated as the same website.'), true)
+  assert.equal(summary.validation.warningSamples.includes('The page acquisition limit was reached.'), true)
+  assert.equal(summary.validation.warningSamples.includes('Some links point to pages that were not included in this import.'), true)
+})
+
+test('multi-page operator summary recommendation text is deterministic by status', () => {
+  const ready = buildMultiPageImportOperatorSummary({
+    importProvenanceSummary: provenance({
+      routeCandidates: ['/about'],
+      routeMap: [
+        { routePath: '/about', sourceUrl: 'https://example.com/about', finalUrl: 'https://example.com/about', rawFilePath: 'multipage/about.html' },
+      ],
+    }),
+  })
+  const warned = buildMultiPageImportOperatorSummary({
+    importProvenanceSummary: provenance({
+      routeCandidates: ['/about'],
+      skippedLinkCount: 1,
+      routeMap: [
+        { routePath: '/about', sourceUrl: 'https://example.com/about', finalUrl: 'https://example.com/about', rawFilePath: 'multipage/about.html' },
+      ],
+    }),
+  })
+  const blocked = buildMultiPageImportOperatorSummary({
+    previewDiagnostics: ['MULTIPAGE_PREVIEW_VALIDATION_BLOCKED'],
+  })
+
+  assert.equal(ready.overview.validation.recommendation, 'All discovered and assembled routes are previewable. No operator action is required before manual review.')
+  assert.equal(
+    warned.overview.validation.recommendation,
+    'The multi-page preview is usable, but some links or routes need review. Consider increasing import limits or accepting the current scope.',
+  )
+  assert.equal(blocked.overview.validation.recommendation, 'The multi-page preview is blocked. Resolve the blockers below before continuing.')
 })
 
 test('multi-page operator route table generation is deterministic', () => {
@@ -249,4 +386,49 @@ test('example Viroidoc operator summary renders the smoke counts', () => {
   assert.equal(summary.overview.assembly.assembledPages, 10)
   assert.equal(summary.overview.assembly.excludedPages, 29)
   assert.equal(summary.overview.validation.status, 'ready_with_warnings')
+  assert.equal(summary.validation.blockers, 0)
+  assert.equal(summary.validation.warningSamples.some((sample) => sample.includes('not included in this import')), true)
+})
+
+test('Viroidoc-like persisted read model infers ready_with_warnings without preview payload', () => {
+  const summary = buildMultiPageImportOperatorSummary({
+    importProvenanceSummary: provenance({
+      routeCandidates: ['/about', '/contact'],
+      skippedLinkCount: 3,
+      routeMap: [
+        { routePath: '/about', sourceUrl: 'https://www.viroidoc.eu/about', finalUrl: 'https://viroidoc.eu/about', rawFilePath: 'multipage/about.html' },
+        { routePath: '/contact', sourceUrl: 'https://www.viroidoc.eu/contact', finalUrl: 'https://viroidoc.eu/contact', rawFilePath: 'multipage/contact.html' },
+      ],
+    }),
+    previewDiagnostics: ['MULTIPAGE_LINK_SKIPPED_ROUTE_NOT_IMPORTED'],
+  })
+
+  assert.equal(summary.overview.validation.status, 'ready_with_warnings')
+  assert.equal(summary.validation.blockers, 0)
+  assert.equal(summary.validation.warningSamples.some((sample) => sample.includes('not included in this import')), true)
+})
+
+test('Paul-Graham-like route-limit summary explains the limit in operator wording', () => {
+  const input = provenance({
+    routeCandidates: ['/articles', '/rss'],
+    routeMap: [
+      { routePath: '/articles', sourceUrl: 'https://www.paulgraham.com/articles.html', finalUrl: 'https://www.paulgraham.com/articles.html', rawFilePath: 'multipage/articles.html' },
+      { routePath: '/rss', sourceUrl: 'https://www.paulgraham.com/rss.html', finalUrl: 'https://www.paulgraham.com/rss.html', rawFilePath: 'multipage/rss.html' },
+    ],
+  }) as any
+  input.multiPageDiscovery.manifest.diagnostics = ['MULTIPAGE_ROUTE_LIMIT_REACHED:20']
+  input.multiPageDiscovery.manifest.skippedLinks = [
+    {
+      originalHref: 'https://www.paulgraham.com/greatwork.html',
+      absoluteUrl: 'https://www.paulgraham.com/greatwork.html',
+      normalizedRoutePath: '/greatwork',
+      skippedReason: 'route_limit',
+    },
+  ]
+
+  const summary = buildMultiPageImportOperatorSummary({ importProvenanceSummary: input })
+
+  assert.equal(summary.overview.validation.status, 'ready_with_warnings')
+  assert.equal(summary.validation.warningSamples.some((sample) => sample.includes('route limit prevented importing additional pages')), true)
+  assert.equal(summary.validation.warningSamples.some((sample) => sample.includes('/greatwork')), true)
 })

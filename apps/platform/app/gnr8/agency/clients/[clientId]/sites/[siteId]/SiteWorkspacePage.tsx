@@ -281,6 +281,24 @@ function renderMetric(label: string, value: string | number): ReactNode {
   )
 }
 
+function renderMessageList(title: string, items: string[], tone: 'warning' | 'blocker'): ReactNode {
+  if (items.length === 0) return null
+  const colors =
+    tone === 'blocker'
+      ? { border: '#fecaca', background: '#fff5f5', text: '#7f1d1d' }
+      : { border: '#fde68a', background: '#fffbeb', text: '#78350f' }
+  return (
+    <div style={{ border: `1px solid ${colors.border}`, borderRadius: 8, background: colors.background, padding: '8px 10px' }}>
+      <div style={{ fontSize: 12, fontWeight: 800, color: colors.text }}>{title}</div>
+      <ul style={{ margin: '6px 0 0', paddingLeft: 18, color: colors.text, fontSize: 12 }}>
+        {items.map((item) => (
+          <li key={item}>{item}</li>
+        ))}
+      </ul>
+    </div>
+  )
+}
+
 function renderMultiPageImportOperatorContent(readModel: Awaited<ReturnType<typeof getSiteWorkspaceReadModelForPage>>): ReactNode {
   if (!readModel) return null
   const summary = readModel.multiPageImport
@@ -301,6 +319,10 @@ function renderMultiPageImportOperatorContent(readModel: Awaited<ReturnType<type
           {renderMetric('Acquisition', `fetched ${summary.overview.acquisition.fetchedPages} / failed ${summary.overview.acquisition.failedPages}`)}
           {renderMetric('Assembly', `assembled ${summary.overview.assembly.assembledPages} / excluded ${summary.overview.assembly.excludedPages}`)}
           {renderMetric('Validation', summary.overview.validation.status)}
+        </div>
+
+        <div style={{ border: '1px solid #e2e8f0', borderRadius: 8, background: '#f8fafc', padding: '8px 10px', color: '#334155', fontSize: 12 }}>
+          <strong style={{ color: '#0f172a' }}>Recommendation:</strong> {summary.overview.validation.recommendation}
         </div>
 
         <div style={{ overflowX: 'auto', border: '1px solid #e2e8f0', borderRadius: 8 }}>
@@ -345,19 +367,24 @@ function renderMultiPageImportOperatorContent(readModel: Awaited<ReturnType<type
             {summary.validation.rewrittenLinks} · skipped links: {summary.validation.skippedLinks} · warnings: {summary.validation.warnings} · blockers:{' '}
             {summary.validation.blockers}
           </div>
-          {summary.validation.warningSamples.length > 0 ? <div>Warning samples: {summary.validation.warningSamples.join(' · ')}</div> : null}
-          {summary.validation.blockerSamples.length > 0 ? <div>Blocker samples: {summary.validation.blockerSamples.join(' · ')}</div> : null}
+          {renderMessageList('Warnings', summary.validation.warningSamples, 'warning')}
+          {renderMessageList('Blockers', summary.validation.blockerSamples, 'blocker')}
         </div>
 
-        <div style={{ display: 'grid', gap: 6, fontSize: 12, color: '#334155' }}>
-          <div style={{ fontWeight: 700, color: '#0f172a' }}>Diagnostics Summary</div>
-          {summary.diagnostics.map((group) => (
-            <div key={group.group}>
-              <strong>{group.group}:</strong> {group.count}
-              {group.samples.length > 0 ? ` · ${group.samples.join(' · ')}` : ''}
+        <details style={{ display: 'grid', gap: 6, fontSize: 12, color: '#334155' }}>
+          <summary style={{ cursor: 'pointer', color: '#0f172a', fontWeight: 700 }}>Show developer diagnostics</summary>
+          <div style={{ marginTop: 6, display: 'grid', gap: 6 }}>
+            {summary.diagnostics.map((group) => (
+              <div key={group.group}>
+                <strong>{group.group}:</strong> {group.count}
+                {group.samples.length > 0 ? ` · ${group.samples.join(' · ')}` : ''}
+              </div>
+            ))}
+            <div style={{ color: '#64748b' }}>
+              Raw diagnostic codes are retained for debugging; operator warnings and blockers above are the primary readiness surface.
             </div>
-          ))}
-        </div>
+          </div>
+        </details>
       </div>
     </section>
   )
