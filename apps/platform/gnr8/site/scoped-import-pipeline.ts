@@ -36,6 +36,7 @@ import {
   type MultiPageDiscoveryManifest,
   type MultiPageDiscoverySourceContext,
   type MultiPageDiscoverySummary,
+  type MultiPageRobotsDiscoverySummary,
   type MultiPageSitemapDiscoverySummary,
   type MultiPageRawArtifactAssemblyManifest,
   type MultiPageRawArtifactAssemblyRouteEntry,
@@ -50,8 +51,16 @@ import {
   styleSignalsToStyleTokens,
   type StyleSignalModel,
 } from '@/gnr8/style-signals'
-import { discoverMultipageImportTree, discoverSitemapUrls, summarizeMultipageImportTree, type MultipageImportLimits } from '@/gnr8/multipage-import'
-import { evaluateMultipageSameSiteUrl, normalizeInternalHref, normalizeSeedUrl } from '@/gnr8/multipage-import/normalization/route-normalization'
+import {
+  applyRobotsRouteGovernance,
+  discoverMultipageImportTree,
+  discoverRobotsTxt,
+  discoverSitemapUrls,
+  summarizeMultipageImportTree,
+  type MultipageImportLimits,
+  type SitemapDiscoveryEvidence,
+} from '@/gnr8/multipage-import'
+import { evaluateMultipageSameSiteUrl, normalizeInternalHref, normalizeMultipageHost, normalizeSeedUrl } from '@/gnr8/multipage-import/normalization/route-normalization'
 import { buildSafeSiteTreeFromSeedPage, normalizeRoutePath, type SiteTree } from '@/gnr8/site-tree'
 import { buildFamilyHandoffModel, summarizeTemplateFamilies, type FamilyHandoffModel } from '@/gnr8/family-mode'
 import { runSemanticImportEngine, type SemanticImportResult } from '@/gnr8/import-semantic/semantic-import-engine'
@@ -141,12 +150,60 @@ function emptyMultiPageSitemapDiscoverySummary(limits: MultipageImportLimits): M
     nestedSitemapCount: 0,
     urlCount: 0,
     skippedUrlCount: 0,
+    discoveredUrls: [],
+    skippedUrls: [],
     limitsApplied: {
       maxSitemaps: limits.maxSitemaps,
       maxUrlsFromSitemaps: limits.maxUrlsFromSitemaps,
       maxNestedSitemaps: limits.maxNestedSitemaps,
     },
     diagnostics: [],
+  }
+}
+
+function emptySitemapDiscoveryEvidence(limits: MultipageImportLimits): SitemapDiscoveryEvidence {
+  return {
+    attemptedSitemapUrls: [],
+    fetchedSitemapUrls: [],
+    nestedSitemapCount: 0,
+    urlCount: 0,
+    skippedUrlCount: 0,
+    discoveredUrls: [],
+    skippedUrls: [],
+    limitsApplied: {
+      maxSitemaps: limits.maxSitemaps,
+      maxUrlsFromSitemaps: limits.maxUrlsFromSitemaps,
+      maxNestedSitemaps: limits.maxNestedSitemaps,
+    },
+    diagnostics: [],
+  }
+}
+
+function sameSitemapLocation(left: string, right: string): boolean {
+  try {
+    const leftUrl = new URL(left)
+    const rightUrl = new URL(right)
+    leftUrl.hostname = normalizeMultipageHost(leftUrl.hostname)
+    rightUrl.hostname = normalizeMultipageHost(rightUrl.hostname)
+    leftUrl.hash = ''
+    rightUrl.hash = ''
+    leftUrl.search = ''
+    rightUrl.search = ''
+    return leftUrl.toString() === rightUrl.toString()
+  } catch {
+    return left === right
+  }
+}
+
+function emptyMultiPageRobotsDiscoverySummary(diagnostics: string[] = []): MultiPageRobotsDiscoverySummary {
+  return {
+    robotsUrl: null,
+    fetchedState: 'invalid_seed',
+    sitemapDeclarations: [],
+    allowRules: [],
+    disallowRules: [],
+    routeGovernanceSummary: { allowed: 0, disallowed: 0, unknown: 0 },
+    diagnostics: uniqueSorted(diagnostics),
   }
 }
 
@@ -926,6 +983,8 @@ function summarizeSitemapDiscoveryForProvenance(input: {
   nestedSitemapCount: number
   urlCount: number
   skippedUrlCount: number
+  discoveredUrls: SitemapDiscoveryEvidence['discoveredUrls']
+  skippedUrls: SitemapDiscoveryEvidence['skippedUrls']
   limitsApplied: {
     maxSitemaps: number
     maxUrlsFromSitemaps: number
@@ -939,6 +998,12 @@ function summarizeSitemapDiscoveryForProvenance(input: {
     nestedSitemapCount: Math.max(0, Math.floor(input.nestedSitemapCount)),
     urlCount: Math.max(0, Math.floor(input.urlCount)),
     skippedUrlCount: Math.max(0, Math.floor(input.skippedUrlCount)),
+    discoveredUrls: input.discoveredUrls.slice().sort((a, b) =>
+      `${a.normalizedRoutePath}|${a.originalUrl}`.localeCompare(`${b.normalizedRoutePath}|${b.originalUrl}`),
+    ),
+    skippedUrls: input.skippedUrls.slice().sort((a, b) =>
+      `${a.reason}|${a.normalizedRoutePath ?? ''}|${a.originalUrl ?? ''}`.localeCompare(`${b.reason}|${b.normalizedRoutePath ?? ''}|${b.originalUrl ?? ''}`),
+    ),
     limitsApplied: {
       maxSitemaps: Math.max(1, Math.floor(input.limitsApplied.maxSitemaps)),
       maxUrlsFromSitemaps: Math.max(1, Math.floor(input.limitsApplied.maxUrlsFromSitemaps)),
@@ -948,7 +1013,54 @@ function summarizeSitemapDiscoveryForProvenance(input: {
   }
 }
 
+function summarizeRobotsDiscoveryForProvenance(input: {
+  robotsUrl: string | null
+  fetchedState: MultiPageRobotsDiscoverySummary['fetchedState']
+  sitemapDeclarations: string[]
+  allowRules: Array<{ userAgent: string; path: string }>
+  disallowRules: Array<{ userAgent: string; path: string }>
+  routeGovernanceSummary: { allowed: number; disallowed: number; unknown: number }
+  diagnostics: string[]
+}): MultiPageRobotsDiscoverySummary {
+  return {
+    robotsUrl: input.robotsUrl,
+    fetchedState: input.fetchedState,
+    sitemapDeclarations: input.sitemapDeclarations.slice().sort((a, b) => a.localeCompare(b)),
+    allowRules: input.allowRules.slice().sort((a, b) => `${a.userAgent}|${a.path}`.localeCompare(`${b.userAgent}|${b.path}`)),
+    disallowRules: input.disallowRules.slice().sort((a, b) => `${a.userAgent}|${a.path}`.localeCompare(`${b.userAgent}|${b.path}`)),
+    routeGovernanceSummary: {
+      allowed: Math.max(0, Math.floor(input.routeGovernanceSummary.allowed)),
+      disallowed: Math.max(0, Math.floor(input.routeGovernanceSummary.disallowed)),
+      unknown: Math.max(0, Math.floor(input.routeGovernanceSummary.unknown)),
+    },
+    diagnostics: uniqueSorted(input.diagnostics),
+  }
+}
+
 async function fetchScopedSitemap(url: string): Promise<{ url: string; body: string; contentType: string | null } | null> {
+  const controller = typeof AbortController === 'function' ? new AbortController() : null
+  const timeout = controller ? setTimeout(() => controller.abort(), 8_000) : null
+  try {
+    const response = await fetch(url, {
+      redirect: 'follow',
+      signal: controller?.signal,
+    })
+    if (!response.ok) return null
+    const body = await response.text()
+    if (!body.trim()) return null
+    return {
+      url: response.url || url,
+      body,
+      contentType: response.headers.get('content-type'),
+    }
+  } catch {
+    return null
+  } finally {
+    if (timeout) clearTimeout(timeout)
+  }
+}
+
+async function fetchScopedRobots(url: string): Promise<{ url: string; body: string; contentType: string | null } | null> {
   const controller = typeof AbortController === 'function' ? new AbortController() : null
   const timeout = controller ? setTimeout(() => controller.abort(), 8_000) : null
   try {
@@ -1659,6 +1771,7 @@ async function buildScopedMultiPageDiscovery(input: {
 }): Promise<{
   summary: MultiPageDiscoverySummary
   manifest: MultiPageDiscoveryManifest | null
+  robotsDiscovery?: MultiPageRobotsDiscoverySummary | null
   sitemapDiscovery?: MultiPageSitemapDiscoverySummary | null
   acquisition?: MultiPageHtmlAcquisitionManifest | null
   rawArtifactAssembly?: MultiPageRawArtifactAssemblyManifest | null
@@ -1727,6 +1840,7 @@ async function buildScopedMultiPageDiscovery(input: {
         ...(assembly.summary.enabled ? { rawArtifactAssembly: assembly.summary } : {}),
       },
       manifest,
+      robotsDiscovery: emptyMultiPageRobotsDiscoverySummary(['ROBOTS_DISCOVERY_FAILED:invalid_seed']),
       sitemapDiscovery: null,
       acquisition: acquisition.manifest,
       rawArtifactAssembly: assembly.manifest,
@@ -1750,17 +1864,43 @@ async function buildScopedMultiPageDiscovery(input: {
         childFetchesSkipped.add(url)
         return null
       },
+      fetchRobots: fetchScopedRobots,
     },
   )
   diagnostics.push(...tree.diagnostics)
   if (childFetchesSkipped.size > 0) diagnostics.push(`MULTIPAGE_DISCOVERY_ONLY_CHILD_FETCH_SKIPPED:${childFetchesSkipped.size}`)
 
-  const sitemapDiscoveryEvidence = await discoverSitemapUrls({
+  let robotsDiscoveryInitial = await discoverRobotsTxt({
+    seedUrl: normalizedSeed.url,
+    canonicalHost: normalizedSeed.canonicalHost,
+    fetchRobots: fetchScopedRobots,
+  })
+  diagnostics.push(...robotsDiscoveryInitial.diagnostics)
+
+  let sitemapDiscoveryEvidence = await discoverSitemapUrls({
     seedUrl: normalizedSeed.url,
     canonicalHost: normalizedSeed.canonicalHost,
     limits: option.limits,
     fetchSitemap: fetchScopedSitemap,
+    initialSitemapUrls: robotsDiscoveryInitial.sitemapDeclarations,
   })
+  const missingRobotsSitemaps = robotsDiscoveryInitial.sitemapDeclarations.filter(
+    (url) => !sitemapDiscoveryEvidence.fetchedSitemapUrls.some((fetchedUrl) => sameSitemapLocation(url, fetchedUrl)),
+  )
+  if (missingRobotsSitemaps.length > 0) {
+    const missingDiagnostics = missingRobotsSitemaps.map((url) => `ROBOTS_SITEMAP_DECLARATION_MISSING:${url}`)
+    robotsDiscoveryInitial = {
+      ...robotsDiscoveryInitial,
+      diagnostics: uniqueSorted([...robotsDiscoveryInitial.diagnostics, ...missingDiagnostics]),
+    }
+    sitemapDiscoveryEvidence = {
+      ...sitemapDiscoveryEvidence,
+      diagnostics: uniqueSorted([
+        ...sitemapDiscoveryEvidence.diagnostics,
+        ...missingDiagnostics,
+      ]),
+    }
+  }
   const sitemapDiscovery = summarizeSitemapDiscoveryForProvenance(sitemapDiscoveryEvidence)
   diagnostics.push(...sitemapDiscovery.diagnostics)
 
@@ -2025,6 +2165,21 @@ async function buildScopedMultiPageDiscovery(input: {
     String(a.normalizedRoutePath ?? '').localeCompare(String(b.normalizedRoutePath ?? '')),
   )
   const routeCandidates = discoveredPages.map((entry) => String(entry.normalizedRoutePath ?? '')).filter(Boolean)
+  const robotsDiscoveryEvidence = applyRobotsRouteGovernance(
+    robotsDiscoveryInitial,
+    discoveredPages.map((entry) => ({
+      routePath: String(entry.normalizedRoutePath ?? ''),
+      normalizedUrl: entry.normalizedUrl,
+    })),
+  )
+  const robotsDiscovery = summarizeRobotsDiscoveryForProvenance(robotsDiscoveryEvidence)
+  diagnostics.push(...robotsDiscovery.diagnostics)
+  const routeGovernance = robotsDiscoveryEvidence.routeGovernance.map((entry) => ({
+    routePath: entry.routePath,
+    normalizedUrl: entry.normalizedUrl,
+    status: entry.status,
+    matchedRule: entry.matchedRule,
+  }))
   const sortedSkippedLinks = skippedLinks.sort((a, b) =>
     `${a.skippedReason ?? ''}|${a.originalHref}|${a.absoluteUrl ?? ''}`.localeCompare(`${b.skippedReason ?? ''}|${b.originalHref}|${b.absoluteUrl ?? ''}`),
   )
@@ -2037,6 +2192,7 @@ async function buildScopedMultiPageDiscovery(input: {
     discoveredPages,
     skippedLinks: sortedSkippedLinks,
     routeCandidates,
+    routeGovernance,
     normalizedUrls: normalizedUrls.sort((a, b) => `${a.normalizedRoutePath ?? ''}|${a.originalHref}`.localeCompare(`${b.normalizedRoutePath ?? ''}|${b.originalHref}`)),
     depth: {
       seedDepth: 0,
@@ -2094,6 +2250,7 @@ async function buildScopedMultiPageDiscovery(input: {
       ...(assembly.summary.enabled ? { rawArtifactAssembly: assembly.summary } : {}),
     },
     manifest,
+    robotsDiscovery,
     sitemapDiscovery,
     acquisition: acquisition.manifest,
     rawArtifactAssembly: assembly.manifest,
@@ -2149,7 +2306,17 @@ async function buildMultipageImportFromPreparedSite(input: {
           highConfidenceFamilyCount: 0,
           diagnostics: [],
         },
-        sitemapDiscovery: emptyMultiPageSitemapDiscoverySummary(DEFAULT_SCOPED_DISCOVERY_LIMITS),
+        robotsDiscovery: {
+          robotsUrl: null,
+          fetchedState: 'unavailable',
+          sitemapDeclarations: [],
+          allowRules: [],
+          disallowRules: [],
+          routeGovernance: [],
+          routeGovernanceSummary: { allowed: 0, disallowed: 0, unknown: 0 },
+          diagnostics: ['ROBOTS_DISCOVERY_NOT_FOUND:prepared_site_unavailable'],
+        },
+        sitemapDiscovery: emptySitemapDiscoveryEvidence(DEFAULT_SCOPED_DISCOVERY_LIMITS),
         depthLimitHit: false,
         routeLimitHit: false,
         diagnostics: ['MULTIPAGE_DISCOVERY_PARTIAL:no_prepared_documents'],
@@ -2215,6 +2382,7 @@ async function buildImportProvenanceSummary(input: {
   multiPageDiscovery: {
     summary: MultiPageDiscoverySummary
     manifest: MultiPageDiscoveryManifest | null
+    robotsDiscovery?: MultiPageRobotsDiscoverySummary | null
     sitemapDiscovery?: MultiPageSitemapDiscoverySummary | null
     acquisition?: MultiPageHtmlAcquisitionManifest | null
     rawArtifactAssembly?: MultiPageRawArtifactAssemblyManifest | null
@@ -2268,6 +2436,7 @@ async function buildImportProvenanceSummary(input: {
       : []),
     ...(persistedCaptureEvidence.persisted ? ['RENDERED_CAPTURE_PERSISTED'] : []),
     ...(semanticImport?.diagnostics.map((diag) => normalizeText(diag.code)).filter(Boolean) ?? []),
+    ...(input.multiPageDiscovery?.robotsDiscovery?.diagnostics ?? []),
     ...(input.multiPageDiscovery?.sitemapDiscovery?.diagnostics ?? []),
     ...(input.multiPageDiscovery?.summary.htmlAcquisition?.diagnostics ?? []),
     ...(input.multiPageDiscovery?.summary.rawArtifactAssembly?.diagnostics ?? []),
@@ -2387,6 +2556,7 @@ async function buildImportProvenanceSummary(input: {
       ? {
           summary: input.multiPageDiscovery.summary,
           manifest: input.multiPageDiscovery.manifest,
+          robotsDiscovery: input.multiPageDiscovery.robotsDiscovery ?? null,
           sitemapDiscovery: input.multiPageDiscovery.sitemapDiscovery ?? null,
           acquisition: input.multiPageDiscovery.acquisition ?? null,
           rawArtifactAssembly: input.multiPageDiscovery.rawArtifactAssembly ?? null,

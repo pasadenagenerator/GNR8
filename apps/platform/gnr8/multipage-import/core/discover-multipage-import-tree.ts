@@ -6,8 +6,9 @@ import { summarizeTemplateFamilyExtraction } from '@/gnr8/template-families'
 import { classifyNavigationVisibility, classifyPageRole } from '../classification/page-classification'
 import { diagnosticEntry, sortDiagnostics } from '../diagnostics/multipage-diagnostics'
 import { buildNavigationTrees } from '../navigation/navigation-tree'
-import { normalizeInternalHref, normalizeSeedUrl, parentPath } from '../normalization/route-normalization'
+import { normalizeInternalHref, normalizeMultipageHost, normalizeSeedUrl, parentPath } from '../normalization/route-normalization'
 import { inferSharedRegions, type PageRegionSignals } from '../shared-regions/shared-region-detection'
+import { applyRobotsRouteGovernance, discoverRobotsTxt } from './robots-discovery'
 import { discoverSitemapUrls } from './sitemap-discovery'
 import { inferRouteFamilies } from './template-families'
 import type { RouteTemplateSignals } from '@/gnr8/template-families'
@@ -21,6 +22,7 @@ import type {
   NavigationVisibility,
   PageFetchResult,
   RouteNode,
+  RobotsDiscoveryEvidence,
   SitemapDiscoveryEvidence,
 } from '../types/contracts'
 
@@ -92,6 +94,35 @@ function emptySitemapDiscoveryEvidence(limits: MultipageImportLimits, diagnostic
       maxNestedSitemaps: limits.maxNestedSitemaps,
     },
     diagnostics: sortDiagnostics(diagnostics),
+  }
+}
+
+function emptyRobotsDiscoveryEvidence(diagnostics: string[] = []): RobotsDiscoveryEvidence {
+  return {
+    robotsUrl: null,
+    fetchedState: 'invalid_seed',
+    sitemapDeclarations: [],
+    allowRules: [],
+    disallowRules: [],
+    routeGovernance: [],
+    routeGovernanceSummary: { allowed: 0, disallowed: 0, unknown: 0 },
+    diagnostics: sortDiagnostics(diagnostics),
+  }
+}
+
+function sameSitemapLocation(left: string, right: string): boolean {
+  try {
+    const leftUrl = new URL(left)
+    const rightUrl = new URL(right)
+    leftUrl.hostname = normalizeMultipageHost(leftUrl.hostname)
+    rightUrl.hostname = normalizeMultipageHost(rightUrl.hostname)
+    leftUrl.hash = ''
+    rightUrl.hash = ''
+    leftUrl.search = ''
+    rightUrl.search = ''
+    return leftUrl.toString() === rightUrl.toString()
+  } catch {
+    return left === right
   }
 }
 
@@ -333,6 +364,7 @@ export async function discoverMultipageImportTree(
       pageRelationships: [],
       templateFamilyExtraction: null,
       limits,
+      robotsDiscovery: emptyRobotsDiscoveryEvidence(['ROBOTS_DISCOVERY_FAILED:invalid_seed']),
       sitemapDiscovery: emptySitemapDiscoveryEvidence(limits, ['SITEMAP_DISCOVERY_NOT_FOUND:invalid_seed']),
       depthLimitHit: false,
       routeLimitHit: false,
@@ -399,13 +431,38 @@ export async function discoverMultipageImportTree(
   })
   if (seed.route) queue.push({ path: seed.route.path, depth: 0 })
 
-  const sitemapDiscovery = await discoverSitemapUrls({
+  let robotsDiscoveryInitial = await discoverRobotsTxt({
+    seedUrl: normalizedSeed.url,
+    canonicalHost: normalizedSeed.canonicalHost,
+    fetchRobots: deps.fetchRobots,
+  })
+  diagnostics.push(...robotsDiscoveryInitial.diagnostics)
+
+  let sitemapDiscovery = await discoverSitemapUrls({
     seedUrl: normalizedSeed.url,
     canonicalHost: normalizedSeed.canonicalHost,
     limits,
     fetchSitemap: deps.fetchSitemap,
+    initialSitemapUrls: robotsDiscoveryInitial.sitemapDeclarations,
   })
   diagnostics.push(...sitemapDiscovery.diagnostics)
+  const missingRobotsSitemaps = robotsDiscoveryInitial.sitemapDeclarations.filter(
+    (url) => !sitemapDiscovery.fetchedSitemapUrls.some((fetchedUrl) => sameSitemapLocation(url, fetchedUrl)),
+  )
+  if (missingRobotsSitemaps.length > 0) {
+    const missingDiagnostics = missingRobotsSitemaps.map((url) => diagnosticEntry('ROBOTS_SITEMAP_DECLARATION_MISSING', url))
+    robotsDiscoveryInitial = {
+      ...robotsDiscoveryInitial,
+      diagnostics: sortDiagnostics([...robotsDiscoveryInitial.diagnostics, ...missingDiagnostics]),
+    }
+    sitemapDiscovery = {
+      ...sitemapDiscovery,
+      diagnostics: sortDiagnostics([
+        ...sitemapDiscovery.diagnostics,
+        ...missingDiagnostics,
+      ]),
+    }
+  }
   for (const sitemapUrl of sitemapDiscovery.discoveredUrls) {
     if (sitemapUrl.normalizedRoutePath === normalizedSeed.path) {
       diagnostics.push(diagnosticEntry('SITEMAP_URL_SKIPPED', `seed_route:${sitemapUrl.normalizedRoutePath}`))
@@ -545,6 +602,16 @@ export async function discoverMultipageImportTree(
     }
   })
 
+  const robotsDiscovery = applyRobotsRouteGovernance(
+    robotsDiscoveryInitial,
+    nodes.map((node) => ({ routePath: node.path, normalizedUrl: node.url })),
+  )
+  diagnostics.push(...robotsDiscovery.diagnostics)
+
+  for (const node of nodes) {
+    node.robotsGovernance = robotsDiscovery.routeGovernance.find((entry) => entry.routePath === node.path)?.status ?? 'unknown'
+  }
+
   const navigationTrees = buildNavigationTrees(nodes)
   diagnostics.push(diagnosticEntry('MULTIPAGE_NAV_TREE_BUILT', `${navigationTrees.length}`))
 
@@ -587,6 +654,7 @@ export async function discoverMultipageImportTree(
     pageRelationships: familyResult.pageRelationships,
     templateFamilyExtraction: familyResult.templateFamilyExtraction,
     limits,
+    robotsDiscovery,
     sitemapDiscovery,
     depthLimitHit,
     routeLimitHit,
@@ -617,6 +685,7 @@ export function summarizeMultipageImportTree(tree: MultipageImportTree): Multipa
     footerNavigationCount: countItems(footerTree?.items ?? []),
     sharedRegionCount: tree.sharedRegions.length,
     templateFamilyExtraction: summarizeTemplateFamilyExtraction(tree.templateFamilyExtraction),
+    robotsDiscovery: tree.robotsDiscovery,
     sitemapDiscovery: tree.sitemapDiscovery,
     depthLimitHit: tree.depthLimitHit,
     routeLimitHit: tree.routeLimitHit,
@@ -644,6 +713,21 @@ export async function discoverMultipageImportTreeWithFetch(input: MultipageDisco
       }
     },
     fetchSitemap: async (url) => {
+      try {
+        const response = await fetch(url, { redirect: 'follow' })
+        if (!response.ok) return null
+        const body = await response.text()
+        if (!body.trim()) return null
+        return {
+          url: response.url || url,
+          body,
+          contentType: response.headers.get('content-type'),
+        }
+      } catch {
+        return null
+      }
+    },
+    fetchRobots: async (url) => {
       try {
         const response = await fetch(url, { redirect: 'follow' })
         if (!response.ok) return null

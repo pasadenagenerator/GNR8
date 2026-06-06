@@ -359,6 +359,21 @@ function normalizeText(value: unknown): string {
   return String(value ?? '').trim()
 }
 
+function normalizeRobotsFetchedState(value: unknown): 'fetched' | 'not_found' | 'failed' | 'unavailable' | 'invalid_seed' | 'parse_failed' {
+  const normalized = normalizeText(value)
+  if (
+    normalized === 'fetched' ||
+    normalized === 'not_found' ||
+    normalized === 'failed' ||
+    normalized === 'unavailable' ||
+    normalized === 'invalid_seed' ||
+    normalized === 'parse_failed'
+  ) {
+    return normalized
+  }
+  return 'unavailable'
+}
+
 function shortId(value: string): string {
   if (value.length <= 8) return value
   return `${value.slice(0, 8)}...`
@@ -1321,6 +1336,31 @@ function parseImportProvenanceSummary(value: unknown): RuntimeImportProvenanceSu
                 : [],
             }
           })(),
+          robotsDiscovery: (() => {
+            const robotsRaw =
+              multipageSummaryRaw && isRecord((multipageSummaryRaw as Record<string, unknown>).robotsDiscovery)
+                ? ((multipageSummaryRaw as Record<string, unknown>).robotsDiscovery as Record<string, unknown>)
+                : null
+            const governanceRaw = robotsRaw && isRecord(robotsRaw.routeGovernanceSummary) ? robotsRaw.routeGovernanceSummary : {}
+            return {
+              robotsUrl: toTextOrNull(robotsRaw?.robotsUrl),
+              fetchedState: normalizeRobotsFetchedState(robotsRaw?.fetchedState),
+              sitemapDeclarations: Array.isArray(robotsRaw?.sitemapDeclarations)
+                ? [...new Set(robotsRaw.sitemapDeclarations.map((entry) => normalizeText(entry)).filter(Boolean))].sort((a, b) => a.localeCompare(b))
+                : [],
+              allowRules: Array.isArray(robotsRaw?.allowRules) ? robotsRaw.allowRules : [],
+              disallowRules: Array.isArray(robotsRaw?.disallowRules) ? robotsRaw.disallowRules : [],
+              routeGovernance: Array.isArray(robotsRaw?.routeGovernance) ? robotsRaw.routeGovernance : [],
+              routeGovernanceSummary: {
+                allowed: Number.isFinite(Number(governanceRaw.allowed)) ? Math.max(0, Math.floor(Number(governanceRaw.allowed))) : 0,
+                disallowed: Number.isFinite(Number(governanceRaw.disallowed)) ? Math.max(0, Math.floor(Number(governanceRaw.disallowed))) : 0,
+                unknown: Number.isFinite(Number(governanceRaw.unknown)) ? Math.max(0, Math.floor(Number(governanceRaw.unknown))) : 0,
+              },
+              diagnostics: Array.isArray(robotsRaw?.diagnostics)
+                ? [...new Set(robotsRaw.diagnostics.map((entry) => normalizeText(entry)).filter(Boolean))].sort((a, b) => a.localeCompare(b))
+                : [],
+            }
+          })(),
           sitemapDiscovery: (() => {
             const sitemapRaw =
               multipageSummaryRaw && isRecord((multipageSummaryRaw as Record<string, unknown>).sitemapDiscovery)
@@ -1337,6 +1377,8 @@ function parseImportProvenanceSummary(value: unknown): RuntimeImportProvenanceSu
               nestedSitemapCount: Number.isFinite(Number(sitemapRaw?.nestedSitemapCount)) ? Math.max(0, Math.floor(Number(sitemapRaw?.nestedSitemapCount))) : 0,
               urlCount: Number.isFinite(Number(sitemapRaw?.urlCount)) ? Math.max(0, Math.floor(Number(sitemapRaw?.urlCount))) : 0,
               skippedUrlCount: Number.isFinite(Number(sitemapRaw?.skippedUrlCount)) ? Math.max(0, Math.floor(Number(sitemapRaw?.skippedUrlCount))) : 0,
+              discoveredUrls: Array.isArray(sitemapRaw?.discoveredUrls) ? sitemapRaw.discoveredUrls : [],
+              skippedUrls: Array.isArray(sitemapRaw?.skippedUrls) ? sitemapRaw.skippedUrls : [],
               limitsApplied: {
                 maxSitemaps: Number.isFinite(Number(limitsRaw.maxSitemaps)) ? Math.max(1, Math.floor(Number(limitsRaw.maxSitemaps))) : 0,
                 maxUrlsFromSitemaps: Number.isFinite(Number(limitsRaw.maxUrlsFromSitemaps)) ? Math.max(1, Math.floor(Number(limitsRaw.maxUrlsFromSitemaps))) : 0,

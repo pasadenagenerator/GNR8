@@ -7,7 +7,7 @@ import type {
   MultiPagePreviewValidationStatus,
 } from '@/gnr8/runtime/multipage-preview-validation'
 
-type DiagnosticGroupName = 'Discovery' | 'Sitemap Discovery' | 'Acquisition' | 'Assembly' | 'Preview' | 'Validation'
+type DiagnosticGroupName = 'Discovery' | 'Robots Discovery' | 'Sitemap Discovery' | 'Acquisition' | 'Assembly' | 'Preview' | 'Validation'
 
 export type MultiPageImportOperatorRouteStatus = 'assembled' | 'fetched' | 'failed' | 'skipped' | 'missing'
 
@@ -35,6 +35,14 @@ export type MultiPageImportOperatorSummary = {
       sitemapCount: number
       discoveredUrlCount: number
       skippedUrlCount: number
+      warnings: string[]
+    }
+    robotsDiscovery: {
+      status: string
+      sitemapDeclarationCount: number
+      allowedRoutes: number
+      disallowedRoutes: number
+      unknownRoutes: number
       warnings: string[]
     }
     acquisition: {
@@ -188,6 +196,12 @@ function translateDiagnostic(value: string): string | null {
       return 'Some sitemap URLs were outside the current import scope or were not valid page routes.'
     case 'SITEMAP_LIMIT_REACHED':
       return 'A sitemap discovery limit prevented importing additional sitemap URLs.'
+    case 'ROBOTS_DISCOVERY_FAILED':
+      return 'Robots discovery encountered a parsing or fetch failure.'
+    case 'ROBOTS_SITEMAP_DECLARATION_MISSING':
+      return 'Robots references a sitemap that could not be fetched.'
+    case 'ROBOTS_ROUTE_DISALLOWED':
+      return 'Some discovered routes are marked disallowed by robots.txt.'
     case 'MULTIPAGE_PREVIEW_ROUTE_MISSING_FILE':
       return 'A preview route is missing its raw HTML file.'
     case 'MULTIPAGE_PREVIEW_ROUTE_RESOLVER_MISS':
@@ -268,6 +282,7 @@ export function buildMultiPageImportOperatorSummary(input: BuildInput = {}): Mul
   const discoverySummary = isRecord(discoveryContainer.summary) ? discoveryContainer.summary : {}
   const discoveryManifest = isRecord(discoveryContainer.manifest) ? discoveryContainer.manifest : {}
   const sitemapDiscovery = isRecord(discoveryContainer.sitemapDiscovery) ? discoveryContainer.sitemapDiscovery : {}
+  const robotsDiscovery = isRecord(discoveryContainer.robotsDiscovery) ? discoveryContainer.robotsDiscovery : {}
   const acquisition = isRecord(discoveryContainer.acquisition) ? discoveryContainer.acquisition : null
   const acquisitionSummary = isRecord(acquisition?.summary)
     ? acquisition.summary
@@ -300,6 +315,30 @@ export function buildMultiPageImportOperatorSummary(input: BuildInput = {}): Mul
     discoveredUrlCount: Math.max(nonNegativeInt(sitemapDiscovery.discoveredUrlCount), nonNegativeInt(sitemapDiscovery.urlCount)),
     skippedUrlCount: nonNegativeInt(sitemapDiscovery.skippedUrlCount),
     warnings: sitemapWarnings.slice(0, 5),
+  }
+  const robotsDiagnostics = textList(robotsDiscovery.diagnostics)
+  const robotsWarnings = uniqueSorted(robotsDiagnostics.map(translateDiagnostic).filter((entry): entry is string => Boolean(entry)))
+  const robotsRouteGovernanceSummary = isRecord(robotsDiscovery.routeGovernanceSummary) ? robotsDiscovery.routeGovernanceSummary : {}
+  const manifestRouteGovernance = Array.isArray(discoveryManifest.routeGovernance) ? discoveryManifest.routeGovernance.filter(isRecord) : []
+  const robotsOverview = {
+    status: text(robotsDiscovery.fetchedState) || 'unknown',
+    sitemapDeclarationCount: Math.max(
+      nonNegativeInt(robotsDiscovery.sitemapDeclarationCount),
+      Array.isArray(robotsDiscovery.sitemapDeclarations) ? robotsDiscovery.sitemapDeclarations.length : 0,
+    ),
+    allowedRoutes: Math.max(
+      nonNegativeInt(robotsRouteGovernanceSummary.allowed),
+      manifestRouteGovernance.filter((entry) => text(entry.status) === 'allowed').length,
+    ),
+    disallowedRoutes: Math.max(
+      nonNegativeInt(robotsRouteGovernanceSummary.disallowed),
+      manifestRouteGovernance.filter((entry) => text(entry.status) === 'disallowed').length,
+    ),
+    unknownRoutes: Math.max(
+      nonNegativeInt(robotsRouteGovernanceSummary.unknown),
+      manifestRouteGovernance.filter((entry) => text(entry.status) === 'unknown').length,
+    ),
+    warnings: robotsWarnings.slice(0, 5),
   }
 
   const acquisitionPages = Array.isArray(acquisition?.pages) ? acquisition.pages : []
@@ -368,6 +407,7 @@ export function buildMultiPageImportOperatorSummary(input: BuildInput = {}): Mul
   const rawDiagnostics = uniqueSorted(
     textList(discoverySummary.diagnostics)
       .concat(textList(discoveryManifest.diagnostics))
+      .concat(robotsDiagnostics)
       .concat(sitemapDiagnostics)
       .concat(textList(acquisitionSummary.diagnostics))
       .concat(textList(acquisition?.diagnostics))
@@ -423,6 +463,7 @@ export function buildMultiPageImportOperatorSummary(input: BuildInput = {}): Mul
         skippedLinks,
       },
       sitemapDiscovery: sitemapOverview,
+      robotsDiscovery: robotsOverview,
       acquisition: {
         fetchedPages,
         failedPages,
@@ -449,6 +490,7 @@ export function buildMultiPageImportOperatorSummary(input: BuildInput = {}): Mul
     },
     diagnostics: [
       diagnosticGroup('Discovery', textList(discoverySummary.diagnostics).concat(textList(discoveryManifest.diagnostics))),
+      diagnosticGroup('Robots Discovery', robotsDiagnostics),
       diagnosticGroup('Sitemap Discovery', sitemapDiagnostics),
       diagnosticGroup('Acquisition', textList(acquisitionSummary.diagnostics).concat(textList(acquisition?.diagnostics))),
       diagnosticGroup('Assembly', textList(assemblySummary.diagnostics).concat(textList(assembly?.diagnostics))),

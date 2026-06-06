@@ -39,6 +39,20 @@ function createSitemapFetcher(sitemaps: PageMap): (url: string) => Promise<{ url
   }
 }
 
+function createRobotsFetcher(robotsByPath: PageMap): (url: string) => Promise<{ url: string; body: string; contentType: string | null } | null> {
+  return async (url) => {
+    const parsed = new URL(url)
+    const normalizedPath = parsed.pathname.replace(/\/+$/, '') || '/'
+    const body = robotsByPath[normalizedPath]
+    if (!body) return null
+    return {
+      url,
+      body,
+      contentType: 'text/plain',
+    }
+  }
+}
+
 const FIXTURE_PAGES: PageMap = {
   '/': page(
     'Home',
@@ -229,7 +243,7 @@ test('same input repeats identical multipage tree', async () => {
     { fetchPage: createFetcher(FIXTURE_PAGES) },
   )
 
-  assert.equal(stableStringify(first as unknown as Record<string, unknown>), stableStringify(second as unknown as Record<string, unknown>))
+  assert.equal(stableStringify(first as any), stableStringify(second as any))
 })
 
 test('summary projection surfaces multipage truth counts', async () => {
@@ -402,4 +416,126 @@ test('sitemap discovery enforces URL and nested sitemap limits', async () => {
   assert.equal(tree.sitemapDiscovery.urlCount, 1)
   assert.ok(tree.sitemapDiscovery.skippedUrlCount >= 1)
   assert.ok(tree.sitemapDiscovery.diagnostics.some((entry) => entry.startsWith('SITEMAP_LIMIT_REACHED')))
+})
+
+test('robots.txt discovery adds declared sitemap candidates and persists evidence', async () => {
+  const tree = await discoverMultipageImportTree(
+    {
+      siteId: 'site_robots_sitemap',
+      seedUrl: 'https://example.com/',
+      limits: { maxRoutes: 10, maxDepth: 1, maxLinksPerPage: 10, maxSitemaps: 4, maxUrlsFromSitemaps: 10, maxNestedSitemaps: 1 },
+    },
+    {
+      fetchPage: createFetcher({
+        '/': page('Home', '<main>No visible hidden link.</main>'),
+        '/from-robots': page('From Robots', '<main>Declared only</main>'),
+      }),
+      fetchRobots: createRobotsFetcher({
+        '/robots.txt': `
+          User-agent: *
+          Allow: /
+          Sitemap: https://example.com/robots-sitemap.xml
+        `,
+      }),
+      fetchSitemap: createSitemapFetcher({
+        '/robots-sitemap.xml': `<?xml version="1.0"?><urlset><url><loc>https://example.com/from-robots</loc></url></urlset>`,
+      }),
+    },
+  )
+  const summary = summarizeMultipageImportTree(tree)
+
+  assert.equal(tree.robotsDiscovery.fetchedState, 'fetched')
+  assert.deepEqual(tree.robotsDiscovery.sitemapDeclarations, ['https://example.com/robots-sitemap.xml'])
+  assert.equal(tree.sitemapDiscovery.fetchedSitemapUrls.includes('https://example.com/robots-sitemap.xml'), true)
+  assert.ok(tree.routes.some((route) => route.normalizedPath === '/from-robots'))
+  assert.equal(summary.robotsDiscovery.routeGovernanceSummary.allowed, tree.routes.length)
+  assert.ok(tree.diagnostics.some((entry) => entry.startsWith('ROBOTS_SITEMAP_DECLARATION_FOUND')))
+})
+
+test('robots.txt missing records unknown route governance without blocking discovery', async () => {
+  const tree = await discoverMultipageImportTree(
+    { siteId: 'site_robots_missing', seedUrl: 'https://example.com/' },
+    {
+      fetchPage: createFetcher({ '/': page('Home', '<main><a href="/about">About</a></main>'), '/about': page('About', '<main>About</main>') }),
+      fetchRobots: createRobotsFetcher({}),
+    },
+  )
+
+  assert.equal(tree.robotsDiscovery.fetchedState, 'not_found')
+  assert.equal(tree.robotsDiscovery.routeGovernanceSummary.unknown, tree.routes.length)
+  assert.ok(tree.routes.some((route) => route.normalizedPath === '/about'))
+  assert.ok(tree.robotsDiscovery.diagnostics.some((entry) => entry.startsWith('ROBOTS_DISCOVERY_NOT_FOUND')))
+})
+
+test('robots.txt supports multiple sitemap declarations', async () => {
+  const tree = await discoverMultipageImportTree(
+    {
+      siteId: 'site_robots_multiple_sitemaps',
+      seedUrl: 'https://example.com/',
+      limits: { maxRoutes: 10, maxDepth: 1, maxLinksPerPage: 10, maxSitemaps: 5, maxUrlsFromSitemaps: 10, maxNestedSitemaps: 1 },
+    },
+    {
+      fetchPage: createFetcher({ '/': page('Home', '<main>Home</main>'), '/one': page('One', '<main>One</main>'), '/two': page('Two', '<main>Two</main>') }),
+      fetchRobots: createRobotsFetcher({
+        '/robots.txt': `
+          User-agent: *
+          Sitemap: https://example.com/one.xml
+          Sitemap: https://example.com/two.xml
+        `,
+      }),
+      fetchSitemap: createSitemapFetcher({
+        '/one.xml': `<?xml version="1.0"?><urlset><url><loc>https://example.com/one</loc></url></urlset>`,
+        '/two.xml': `<?xml version="1.0"?><urlset><url><loc>https://example.com/two</loc></url></urlset>`,
+      }),
+    },
+  )
+
+  assert.deepEqual(tree.robotsDiscovery.sitemapDeclarations, ['https://example.com/one.xml', 'https://example.com/two.xml'])
+  assert.ok(tree.routes.some((route) => route.normalizedPath === '/one'))
+  assert.ok(tree.routes.some((route) => route.normalizedPath === '/two'))
+})
+
+test('robots.txt allow and disallow rules classify route governance', async () => {
+  const tree = await discoverMultipageImportTree(
+    { siteId: 'site_robots_rules', seedUrl: 'https://example.com/', limits: { maxRoutes: 10, maxDepth: 1, maxLinksPerPage: 10 } },
+    {
+      fetchPage: createFetcher({
+        '/': page('Home', '<main><a href="/private">Private</a><a href="/private/public">Public Exception</a><a href="/open">Open</a></main>'),
+        '/private': page('Private', '<main>Private</main>'),
+        '/private/public': page('Public', '<main>Public</main>'),
+        '/open': page('Open', '<main>Open</main>'),
+      }),
+      fetchRobots: createRobotsFetcher({
+        '/robots.txt': `
+          User-agent: *
+          Disallow: /private
+          Allow: /private/public
+        `,
+      }),
+    },
+  )
+
+  const governance = new Map(tree.robotsDiscovery.routeGovernance.map((entry) => [entry.routePath, entry.status]))
+  assert.equal(governance.get('/private'), 'disallowed')
+  assert.equal(governance.get('/private/public'), 'allowed')
+  assert.equal(governance.get('/open'), 'allowed')
+  assert.equal(tree.routes.find((route) => route.normalizedPath === '/private')?.robotsGovernance, 'disallowed')
+  assert.equal(tree.robotsDiscovery.routeGovernanceSummary.disallowed, 1)
+  assert.ok(tree.robotsDiscovery.diagnostics.some((entry) => entry.startsWith('ROBOTS_ROUTE_DISALLOWED:/private')))
+  assert.ok(tree.robotsDiscovery.diagnostics.some((entry) => entry.startsWith('ROBOTS_RULES_APPLIED')))
+})
+
+test('malformed robots.txt records parse failure and unknown governance', async () => {
+  const tree = await discoverMultipageImportTree(
+    { siteId: 'site_robots_malformed', seedUrl: 'https://example.com/' },
+    {
+      fetchPage: createFetcher({ '/': page('Home', '<main><a href="/about">About</a></main>'), '/about': page('About', '<main>About</main>') }),
+      fetchRobots: createRobotsFetcher({ '/robots.txt': `<html><body>not robots directives</body></html>` }),
+    },
+  )
+
+  assert.equal(tree.robotsDiscovery.fetchedState, 'parse_failed')
+  assert.equal(tree.robotsDiscovery.routeGovernanceSummary.unknown, tree.routes.length)
+  assert.ok(tree.robotsDiscovery.diagnostics.some((entry) => entry.startsWith('ROBOTS_DISCOVERY_FAILED')))
+  assert.ok(tree.routes.some((route) => route.normalizedPath === '/about'))
 })

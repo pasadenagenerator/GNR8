@@ -3,7 +3,7 @@ import type { PageEnforcementByStage } from "@/gnr8/migration/enforcement/page-e
 import type { PageMigrationGateResult } from "@/gnr8/migration/quality-gates/page-quality-gate";
 import type { PageRolloutPolicyResult } from "@/gnr8/migration/policy/page-rollout-policy";
 import type { StyleSignalModel } from "@/gnr8/style-signals";
-import type { MultipageImportSummary, MultipageImportTree } from "@/gnr8/multipage-import";
+import type { MultipageImportSummary, MultipageImportTree, SitemapDiscoveryEvidence } from "@/gnr8/multipage-import";
 import type { SiteTree, SiteTreeSummary } from "@/gnr8/site-tree";
 import type { FamilyHandoffModel, TemplateFamiliesSummary } from "@/gnr8/family-mode";
 import type { SemanticImportCaptureMode, SemanticImportResult } from "@/gnr8/import-semantic/semantic-import-engine";
@@ -53,6 +53,16 @@ export type MultiPageDiscoveryManifest = {
   discoveredPages: MultiPageDiscoveryLinkEntry[];
   skippedLinks: MultiPageDiscoveryLinkEntry[];
   routeCandidates: string[];
+  routeGovernance?: Array<{
+    routePath: string;
+    normalizedUrl: string | null;
+    status: "allowed" | "disallowed" | "unknown";
+    matchedRule: {
+      directive: "allow" | "disallow";
+      userAgent: string;
+      path: string;
+    } | null;
+  }>;
   normalizedUrls: Array<{
     originalHref: string;
     absoluteUrl: string | null;
@@ -77,16 +87,24 @@ export type MultiPageDiscoveryManifest = {
   generatedAt: string;
 };
 
-export type MultiPageSitemapDiscoverySummary = {
-  attemptedSitemapUrls: string[];
-  fetchedSitemapUrls: string[];
-  nestedSitemapCount: number;
-  urlCount: number;
-  skippedUrlCount: number;
-  limitsApplied: {
-    maxSitemaps: number;
-    maxUrlsFromSitemaps: number;
-    maxNestedSitemaps: number;
+export type MultiPageSitemapDiscoverySummary = SitemapDiscoveryEvidence;
+
+export type MultiPageRobotsDiscoverySummary = {
+  robotsUrl: string | null;
+  fetchedState: "fetched" | "not_found" | "failed" | "unavailable" | "invalid_seed" | "parse_failed";
+  sitemapDeclarations: string[];
+  allowRules: Array<{
+    userAgent: string;
+    path: string;
+  }>;
+  disallowRules: Array<{
+    userAgent: string;
+    path: string;
+  }>;
+  routeGovernanceSummary: {
+    allowed: number;
+    disallowed: number;
+    unknown: number;
   };
   diagnostics: string[];
 };
@@ -297,6 +315,7 @@ export type RuntimeImportProvenanceSummary = {
   multiPageDiscovery?: {
     summary: MultiPageDiscoverySummary;
     manifest: MultiPageDiscoveryManifest | null;
+    robotsDiscovery?: MultiPageRobotsDiscoverySummary | null;
     sitemapDiscovery?: MultiPageSitemapDiscoverySummary | null;
     acquisition?: MultiPageHtmlAcquisitionManifest | null;
     rawArtifactAssembly?: MultiPageRawArtifactAssemblyManifest | null;

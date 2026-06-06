@@ -60,6 +60,47 @@ export type SitemapDiscoveryEvidence = {
   diagnostics: string[]
 }
 
+export type RobotsFetchResult = {
+  url: string
+  body: string
+  contentType: string | null
+}
+
+export type RobotsDiscoveryFetchedState = 'fetched' | 'not_found' | 'failed' | 'unavailable' | 'invalid_seed' | 'parse_failed'
+
+export type RobotsDiscoveryRule = {
+  userAgent: string
+  path: string
+}
+
+export type RobotsRouteGovernanceStatus = 'allowed' | 'disallowed' | 'unknown'
+
+export type RobotsRouteGovernanceEntry = {
+  routePath: string
+  normalizedUrl: string | null
+  status: RobotsRouteGovernanceStatus
+  matchedRule: {
+    directive: 'allow' | 'disallow'
+    userAgent: string
+    path: string
+  } | null
+}
+
+export type RobotsDiscoveryEvidence = {
+  robotsUrl: string | null
+  fetchedState: RobotsDiscoveryFetchedState
+  sitemapDeclarations: string[]
+  allowRules: RobotsDiscoveryRule[]
+  disallowRules: RobotsDiscoveryRule[]
+  routeGovernance: RobotsRouteGovernanceEntry[]
+  routeGovernanceSummary: {
+    allowed: number
+    disallowed: number
+    unknown: number
+  }
+  diagnostics: string[]
+}
+
 export type RouteNode = {
   routeId: string
   url: string
@@ -73,6 +114,7 @@ export type RouteNode = {
   title: string | null
   isPrimaryCandidate: boolean
   isHtmlPageCandidate: boolean
+  robotsGovernance?: RobotsRouteGovernanceStatus
 }
 
 export type NavigationTreeItem = {
@@ -126,6 +168,7 @@ export type MultipageImportTree = {
   pageRelationships: PageRelationship[]
   templateFamilyExtraction: SiteTemplateFamilyExtraction | null
   limits: MultipageImportLimits
+  robotsDiscovery: RobotsDiscoveryEvidence
   sitemapDiscovery: SitemapDiscoveryEvidence
   depthLimitHit: boolean
   routeLimitHit: boolean
@@ -140,6 +183,7 @@ export type MultipageImportSummary = {
   footerNavigationCount: number
   sharedRegionCount: number
   templateFamilyExtraction: TemplateFamilyExtractionSummary
+  robotsDiscovery: RobotsDiscoveryEvidence
   sitemapDiscovery: SitemapDiscoveryEvidence
   depthLimitHit: boolean
   routeLimitHit: boolean
@@ -161,6 +205,7 @@ export type SitemapFetchResult = {
 export type MultipageDiscoveryDependencies = {
   fetchPage: (url: string) => Promise<PageFetchResult | null>
   fetchSitemap?: (url: string) => Promise<SitemapFetchResult | null>
+  fetchRobots?: (url: string) => Promise<RobotsFetchResult | null>
 }
 
 export type MultipageDiscoveryInput = {

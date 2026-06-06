@@ -32,6 +32,16 @@ function provenance(input?: {
     skippedUrlCount: number
     diagnostics: string[]
   }
+  robotsDiscovery?: {
+    fetchedState: string
+    sitemapDeclarations: string[]
+    routeGovernanceSummary: {
+      allowed: number
+      disallowed: number
+      unknown: number
+    }
+    diagnostics: string[]
+  }
 }) {
   const routeCandidates = input?.routeCandidates ?? ['/']
   const acquisitionPages = input?.acquisitionPages ?? []
@@ -66,6 +76,7 @@ function provenance(input?: {
         skippedLinks: Array.from({ length: input?.skippedLinkCount ?? 0 }, (_, index) => ({ originalHref: `#skip-${index}` })),
         diagnostics: ['DISCOVERY_MANIFEST_DIAG'],
       },
+      robotsDiscovery: input?.robotsDiscovery ?? null,
       sitemapDiscovery: input?.sitemapDiscovery ?? null,
       acquisition: {
         kind: 'multi_page_html_acquisition_manifest_v1',
@@ -108,6 +119,14 @@ test('multi-page operator summary returns a safe empty summary', () => {
 
   assert.deepEqual(summary.overview.discovery, { discoveredRoutes: 0, skippedLinks: 0 })
   assert.deepEqual(summary.overview.sitemapDiscovery, { sitemapCount: 0, discoveredUrlCount: 0, skippedUrlCount: 0, warnings: [] })
+  assert.deepEqual(summary.overview.robotsDiscovery, {
+    status: 'unknown',
+    sitemapDeclarationCount: 0,
+    allowedRoutes: 0,
+    disallowedRoutes: 0,
+    unknownRoutes: 0,
+    warnings: [],
+  })
   assert.deepEqual(summary.overview.acquisition, { fetchedPages: 0, failedPages: 0 })
   assert.deepEqual(summary.overview.assembly, { assembledPages: 0, excludedPages: 0 })
   assert.equal(summary.overview.validation.status, 'not_run')
@@ -115,6 +134,39 @@ test('multi-page operator summary returns a safe empty summary', () => {
   assert.deepEqual(summary.routes, [])
   assert.equal(summary.validation.warnings, 0)
   assert.equal(summary.validation.blockers, 0)
+})
+
+test('multi-page operator summary displays robots discovery evidence', () => {
+  const summary = buildMultiPageImportOperatorSummary({
+    importProvenanceSummary: provenance({
+      routeCandidates: ['/about', '/private'],
+      robotsDiscovery: {
+        fetchedState: 'fetched',
+        sitemapDeclarations: ['https://example.com/sitemap.xml', 'https://example.com/news.xml'],
+        routeGovernanceSummary: { allowed: 1, disallowed: 1, unknown: 0 },
+        diagnostics: [
+          'ROBOTS_DISCOVERY_SUCCEEDED:1:1:2',
+          'ROBOTS_SITEMAP_DECLARATION_FOUND:https://example.com/sitemap.xml',
+          'ROBOTS_SITEMAP_DECLARATION_MISSING:https://example.com/news.xml',
+          'ROBOTS_ROUTE_DISALLOWED:/private',
+        ],
+      },
+    }),
+  })
+
+  assert.deepEqual(summary.overview.robotsDiscovery, {
+    status: 'fetched',
+    sitemapDeclarationCount: 2,
+    allowedRoutes: 1,
+    disallowedRoutes: 1,
+    unknownRoutes: 0,
+    warnings: [
+      'Robots references a sitemap that could not be fetched.',
+      'Some discovered routes are marked disallowed by robots.txt.',
+    ],
+  })
+  assert.equal(summary.diagnostics.find((group) => group.group === 'Robots Discovery')?.count, 4)
+  assert.equal(summary.validation.warningSamples.includes('Some discovered routes are marked disallowed by robots.txt.'), true)
 })
 
 test('multi-page operator summary displays sitemap discovery evidence', () => {

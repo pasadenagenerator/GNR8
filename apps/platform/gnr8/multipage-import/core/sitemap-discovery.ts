@@ -85,6 +85,7 @@ export async function discoverSitemapUrls(input: {
   canonicalHost: string
   limits: MultipageImportLimits
   fetchSitemap?: SitemapFetch
+  initialSitemapUrls?: string[]
 }): Promise<SitemapDiscoveryEvidence> {
   const diagnostics: string[] = [diagnosticEntry('SITEMAP_DISCOVERY_STARTED', input.seedUrl)]
   const attempted = new Set<string>()
@@ -120,10 +121,26 @@ export async function discoverSitemapUrls(input: {
     }
   }
 
-  const queue: SitemapQueueEntry[] = SITEMAP_PATHS.map((pathname) => ({
-    url: new URL(pathname, normalizedSeed.url).toString(),
-    nestedDepth: 0,
-  }))
+  const queue: SitemapQueueEntry[] = []
+  for (const sitemapUrl of input.initialSitemapUrls ?? []) {
+    const normalized = normalizeSitemapFetchUrl({
+      href: sitemapUrl,
+      currentSitemapUrl: normalizedSeed.url,
+      canonicalHost: input.canonicalHost,
+    })
+    if ('skip' in normalized) {
+      recordSkipped(skippedUrl({ originalUrl: sitemapUrl, sourceSitemapUrl: normalizedSeed.url, reason: normalized.skip }))
+      diagnostics.push(diagnosticEntry('SITEMAP_URL_SKIPPED', `${normalized.skip}:${sitemapUrl}`))
+      continue
+    }
+    queue.push({ url: normalized.url, nestedDepth: 0 })
+  }
+  for (const pathname of SITEMAP_PATHS) {
+    queue.push({
+      url: new URL(pathname, normalizedSeed.url).toString(),
+      nestedDepth: 0,
+    })
+  }
 
   while (queue.length > 0) {
     const next = queue.shift()
