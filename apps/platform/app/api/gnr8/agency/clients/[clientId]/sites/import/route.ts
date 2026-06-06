@@ -30,6 +30,17 @@ type Body = {
   siteName?: string
   agencyId?: string
   adminView?: boolean
+  multiPageDiscovery?:
+    | boolean
+    | {
+        enabled?: boolean
+        limits?: {
+          maxRoutes?: number
+          maxDepth?: number
+          maxLinksPerPage?: number
+          maxTemplateLinksPerRoute?: number
+        }
+      }
 }
 
 
@@ -357,6 +368,7 @@ export async function POST(req: Request, ctx: { params: Promise<Params> }) {
         siteId: preallocatedIdentity.siteId,
         siteVersionId: preallocatedIdentity.siteVersionId,
       },
+      multiPageDiscovery: body.multiPageDiscovery,
     })
 
     const ownershipSiteId = await resolveOrCreateOwnershipSiteId({
@@ -401,6 +413,7 @@ export async function POST(req: Request, ctx: { params: Promise<Params> }) {
     })
     const cmsContentSlots = imported.mode === 'pipeline' ? imported.reporting.cmsContentSlots : null
     const cmsDiagnostics = cmsContentSlots?.diagnostics ?? []
+    const multiPageDiscovery = imported.mode === 'pipeline' ? imported.reporting.multiPageDiscovery : imported.diagnostics.multiPageDiscovery
 
     return NextResponse.json(
       {
@@ -418,6 +431,7 @@ export async function POST(req: Request, ctx: { params: Promise<Params> }) {
         appliedTransformationsCount: preview.appliedTransformationsCount,
         diagnostics: [...new Set([...preview.diagnostics, ...diagnostics, ...cmsDiagnostics])],
         contentSlotMaterialization: cmsContentSlots,
+        ...(multiPageDiscovery.enabled ? { multiPageDiscovery } : {}),
         siteName: siteNameResolution.resolvedName,
         siteNameSource: siteNameResolution.source,
         preview,
@@ -451,6 +465,7 @@ export async function POST(req: Request, ctx: { params: Promise<Params> }) {
           computedStyleSampleCount:
             imported.mode === 'pipeline' ? imported.reporting.computedStyleSampleCount : imported.diagnostics.computedStyleSampleCount,
           importDiagnosticCodes: imported.mode === 'pipeline' ? imported.reporting.importDiagnosticCodes : imported.diagnostics.importDiagnosticCodes,
+          ...(multiPageDiscovery.enabled ? { multiPageDiscovery } : {}),
           cmsContentSlots,
           fallbackReason: imported.mode === 'legacy_fallback' ? imported.fallbackReason : null,
           diagnostics:

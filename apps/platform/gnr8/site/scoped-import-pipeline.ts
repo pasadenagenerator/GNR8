@@ -2,6 +2,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import crypto from 'node:crypto'
 
+import { parse } from 'parse5'
 import { createImportManifest } from '@/gnr8/import/import-manifest'
 import { importStaticSite } from '@/gnr8/import/runtime/import-static-site'
 import { runLinearMigrationPipeline } from '@/gnr8/migration/runtime/run-linear-migration-pipeline'
@@ -28,6 +29,10 @@ import {
   type ImportFidelityScore,
   type CanonicalPageVersionInput,
   type CanonicalSiteMigrationInput,
+  type MultiPageDiscoveryLinkEntry,
+  type MultiPageDiscoveryManifest,
+  type MultiPageDiscoverySourceContext,
+  type MultiPageDiscoverySummary,
   type RuntimeImportProvenanceSummary,
 } from '@/gnr8/runtime/types'
 import type { UrlSinglePageImportSnapshot } from '@/gnr8/validation/runtime/url-single-page-import'
@@ -38,7 +43,8 @@ import {
   styleSignalsToStyleTokens,
   type StyleSignalModel,
 } from '@/gnr8/style-signals'
-import { discoverMultipageImportTree, summarizeMultipageImportTree } from '@/gnr8/multipage-import'
+import { discoverMultipageImportTree, summarizeMultipageImportTree, type MultipageImportLimits } from '@/gnr8/multipage-import'
+import { normalizeInternalHref, normalizeSeedUrl } from '@/gnr8/multipage-import/normalization/route-normalization'
 import { buildSafeSiteTreeFromSeedPage, normalizeRoutePath, type SiteTree } from '@/gnr8/site-tree'
 import { buildFamilyHandoffModel, summarizeTemplateFamilies, type FamilyHandoffModel } from '@/gnr8/family-mode'
 import { runSemanticImportEngine, type SemanticImportResult } from '@/gnr8/import-semantic/semantic-import-engine'
@@ -77,6 +83,50 @@ function normalizeDiagnosticDetails(details: unknown): Record<string, unknown> |
 
 function uniqueSorted(values: string[]): string[] {
   return [...new Set(values.filter(Boolean))].sort((a, b) => a.localeCompare(b))
+}
+
+export type ScopedMultiPageDiscoveryOption =
+  | boolean
+  | {
+      enabled?: boolean
+      limits?: Partial<MultipageImportLimits>
+      generatedAt?: string
+    }
+
+const DEFAULT_SCOPED_DISCOVERY_LIMITS: MultipageImportLimits = {
+  maxRoutes: 60,
+  maxDepth: 1,
+  maxLinksPerPage: 120,
+  maxTemplateLinksPerRoute: 25,
+}
+
+function disabledMultiPageDiscoverySummary(diagnostics: string[] = []): MultiPageDiscoverySummary {
+  return {
+    enabled: false,
+    discoveredPageCount: 0,
+    skippedLinkCount: 0,
+    routeCandidateCount: 0,
+    manifestRef: null,
+    diagnostics,
+  }
+}
+
+function resolveMultiPageDiscoveryOption(option: ScopedMultiPageDiscoveryOption | undefined): {
+  enabled: boolean
+  limits: MultipageImportLimits
+  generatedAt: string | null
+} {
+  const rawLimits = typeof option === 'object' && option ? option.limits : undefined
+  return {
+    enabled: option === true || (typeof option === 'object' && option?.enabled === true),
+    limits: {
+      maxRoutes: Math.max(1, Math.floor(rawLimits?.maxRoutes ?? DEFAULT_SCOPED_DISCOVERY_LIMITS.maxRoutes)),
+      maxDepth: Math.max(1, Math.floor(rawLimits?.maxDepth ?? DEFAULT_SCOPED_DISCOVERY_LIMITS.maxDepth)),
+      maxLinksPerPage: Math.max(1, Math.floor(rawLimits?.maxLinksPerPage ?? DEFAULT_SCOPED_DISCOVERY_LIMITS.maxLinksPerPage)),
+      maxTemplateLinksPerRoute: Math.max(1, Math.floor(rawLimits?.maxTemplateLinksPerRoute ?? DEFAULT_SCOPED_DISCOVERY_LIMITS.maxTemplateLinksPerRoute)),
+    },
+    generatedAt: typeof option === 'object' && option?.generatedAt ? normalizeText(option.generatedAt) || null : null,
+  }
 }
 
 function toCoverage(input: { sampleCount: number; expectedCount?: number }): number {
@@ -651,6 +701,443 @@ function persistTemplateFamiliesPayload(input: {
   }
 }
 
+function collectNodeAttrs(node: unknown): Record<string, string> {
+  const attrs = ((node as { attrs?: Array<{ name: string; value: string }> })?.attrs ?? []) as Array<{ name: string; value: string }>
+  const out: Record<string, string> = {}
+  for (const attr of attrs) out[attr.name.toLowerCase()] = String(attr.value ?? '')
+  return out
+}
+
+function getNodeName(node: unknown): string {
+  return String((node as { nodeName?: string })?.nodeName ?? '').toLowerCase()
+}
+
+function classifySeedLinkContext(ancestorNames: string[], attrs: Record<string, string>): MultiPageDiscoverySourceContext {
+  const pathHint = ancestorNames.join('/')
+  const classHint = `${attrs.class ?? ''} ${attrs.id ?? ''} ${attrs['aria-label'] ?? ''}`.toLowerCase()
+  if (pathHint.includes('/header') || classHint.includes('header')) return 'header'
+  if (pathHint.includes('/footer') || classHint.includes('footer')) return 'footer'
+  if (pathHint.includes('/nav') || classHint.includes('nav')) return 'nav'
+  if (pathHint.includes('/main') || pathHint.includes('/section') || pathHint.includes('/article') || pathHint.includes('/body')) return 'body'
+  return 'unknown'
+}
+
+function collectSeedDiscoveryRefs(seedHtml: string): Array<{
+  href: string
+  sourceContext: MultiPageDiscoverySourceContext
+  sourceClassification: 'anchor' | 'form_action'
+  download: boolean
+}> {
+  const document = parse(seedHtml)
+  const out: Array<{
+    href: string
+    sourceContext: MultiPageDiscoverySourceContext
+    sourceClassification: 'anchor' | 'form_action'
+    download: boolean
+  }> = []
+
+  const walk = (node: unknown, ancestors: string[]): void => {
+    const name = getNodeName(node)
+    const attrs = collectNodeAttrs(node)
+    const nextAncestors = name && name !== '#text' && name !== '#comment' ? [...ancestors, name] : ancestors
+
+    if (name === 'a') {
+      const href = normalizeText(attrs.href)
+      if (href) {
+        out.push({
+          href,
+          sourceContext: classifySeedLinkContext(nextAncestors, attrs),
+          sourceClassification: 'anchor',
+          download: Object.prototype.hasOwnProperty.call(attrs, 'download'),
+        })
+      }
+    }
+
+    if (name === 'form') {
+      const action = normalizeText(attrs.action)
+      if (action) {
+        out.push({
+          href: action,
+          sourceContext: classifySeedLinkContext(nextAncestors, attrs),
+          sourceClassification: 'form_action',
+          download: false,
+        })
+      }
+    }
+
+    for (const child of ((node as { childNodes?: unknown[] }).childNodes ?? []) as unknown[]) {
+      walk(child, nextAncestors)
+    }
+  }
+
+  walk(document, [])
+  return out
+}
+
+function resolveAbsoluteUrl(href: string, baseUrl: string): string | null {
+  try {
+    return new URL(href, baseUrl).toString()
+  } catch {
+    return null
+  }
+}
+
+function mapNormalizationSkipReason(href: string, reason: string): string {
+  const lower = href.trim().toLowerCase()
+  if (reason === 'unsupported_scheme' && lower.startsWith('mailto:')) return 'mailto'
+  if (reason === 'unsupported_scheme' && lower.startsWith('tel:')) return 'tel'
+  return reason
+}
+
+function isDiscoveryAuthPath(pathname: string): boolean {
+  return /(^|\/)(login|log-in|signin|sign-in|signup|sign-up|auth|account|checkout)(\/|$)/i.test(pathname)
+}
+
+function hasUnsafeDiscoveryQueryState(searchParams: URLSearchParams): boolean {
+  const entries = [...searchParams.keys()]
+  if (entries.length === 0) return false
+  const benign = new Set([
+    'utm_source',
+    'utm_medium',
+    'utm_campaign',
+    'utm_term',
+    'utm_content',
+    'gclid',
+    'fbclid',
+    'msclkid',
+    'ref',
+    'source',
+  ])
+  return entries.length > 4 || entries.some((key) => !benign.has(key.toLowerCase()))
+}
+
+function resolveDiscoveryPreNormalizationSkip(input: {
+  absoluteUrl: string | null
+  canonicalHost: string
+}): string | null {
+  if (!input.absoluteUrl) return null
+  try {
+    const parsed = new URL(input.absoluteUrl)
+    const normalized = normalizeSeedUrl(input.absoluteUrl)
+    if (!normalized || normalized.canonicalHost !== input.canonicalHost) return null
+    if (isDiscoveryAuthPath(normalized.path)) return 'auth_path'
+    if (hasUnsafeDiscoveryQueryState(parsed.searchParams)) return 'unsafe_query_state'
+    return null
+  } catch {
+    return null
+  }
+}
+
+function buildDiscoveryLinkEntry(input: {
+  href: string
+  absoluteUrl: string | null
+  normalizedUrl: string | null
+  normalizedRoutePath: string | null
+  sourceContext: MultiPageDiscoverySourceContext
+  sourceClassification: 'anchor' | 'form_action'
+  status: 'discovered' | 'skipped'
+  skippedReason: string | null
+}): MultiPageDiscoveryLinkEntry {
+  return {
+    originalHref: input.href,
+    absoluteUrl: input.absoluteUrl,
+    normalizedUrl: input.normalizedUrl,
+    normalizedRoutePath: input.normalizedRoutePath,
+    depth: 1,
+    sourceContext: input.sourceContext,
+    sourceClassification: input.sourceClassification,
+    status: input.status,
+    skippedReason: input.skippedReason,
+  }
+}
+
+async function buildScopedMultiPageDiscovery(input: {
+  option?: ScopedMultiPageDiscoveryOption
+  sourceUrl: string
+  snapshot: UrlSinglePageImportSnapshot
+}): Promise<{ summary: MultiPageDiscoverySummary; manifest: MultiPageDiscoveryManifest | null }> {
+  const option = resolveMultiPageDiscoveryOption(input.option)
+  if (!option.enabled) return { summary: disabledMultiPageDiscoverySummary(), manifest: null }
+
+  const diagnostics: string[] = ['MULTIPAGE_DISCOVERY_ONLY_STARTED']
+  const generatedAt = option.generatedAt ?? new Date().toISOString()
+  const normalizedSeed = normalizeSeedUrl(input.sourceUrl)
+  const seedHtml = (() => {
+    const selectedSource = normalizeText(input.snapshot.sourceSelection?.selectedSourceHtmlPathAbs)
+    const candidates = uniqueSorted([selectedSource, input.snapshot.entryHtmlPathAbs])
+    for (const candidate of candidates) {
+      try {
+        const html = fs.readFileSync(candidate, 'utf8')
+        if (html.trim()) return html
+      } catch {
+        // Try the next available seed source.
+      }
+    }
+    return ''
+  })()
+
+  if (!normalizedSeed || !seedHtml.trim()) {
+    diagnostics.push(!normalizedSeed ? 'MULTIPAGE_DISCOVERY_DEGRADED:invalid_seed' : 'MULTIPAGE_DISCOVERY_DEGRADED:empty_seed_html')
+    const manifest: MultiPageDiscoveryManifest = {
+      kind: 'multi_page_discovery_manifest_v1',
+      seedUrl: input.sourceUrl,
+      normalizedSeedUrl: normalizedSeed?.url ?? null,
+      normalizedSeedRoute: normalizedSeed?.path ?? null,
+      discoveredPages: [],
+      skippedLinks: [],
+      routeCandidates: [],
+      normalizedUrls: [],
+      depth: { seedDepth: 0, maxDiscoveredDepth: 0 },
+      limitsApplied: {
+        maxDiscoveredUrls: option.limits.maxRoutes,
+        maxDepth: option.limits.maxDepth,
+        maxLinksPerPage: option.limits.maxLinksPerPage,
+        maxTemplateLinksPerRoute: option.limits.maxTemplateLinksPerRoute,
+      },
+      diagnostics: uniqueSorted(diagnostics),
+      generatedAt,
+    }
+    return { summary: { ...disabledMultiPageDiscoverySummary(manifest.diagnostics), enabled: true }, manifest }
+  }
+
+  const childFetchesSkipped = new Set<string>()
+  const tree = await discoverMultipageImportTree(
+    {
+      siteId: deterministicId('site', input.sourceUrl),
+      seedUrl: input.sourceUrl,
+      limits: option.limits,
+      discoveredAt: generatedAt,
+    },
+    {
+      fetchPage: async (url) => {
+        const normalized = normalizeSeedUrl(url)
+        if (normalized?.url === normalizedSeed.url) {
+          return { url: normalizedSeed.url, html: seedHtml, title: null }
+        }
+        childFetchesSkipped.add(url)
+        return null
+      },
+    },
+  )
+  diagnostics.push(...tree.diagnostics)
+  if (childFetchesSkipped.size > 0) diagnostics.push(`MULTIPAGE_DISCOVERY_ONLY_CHILD_FETCH_SKIPPED:${childFetchesSkipped.size}`)
+
+  const discoveredByRoute = new Map<string, MultiPageDiscoveryLinkEntry>()
+  const skippedLinks: MultiPageDiscoveryLinkEntry[] = []
+  const normalizedUrls: MultiPageDiscoveryManifest['normalizedUrls'] = []
+
+  const refs = collectSeedDiscoveryRefs(seedHtml)
+  const boundedRefs = refs.slice(0, option.limits.maxLinksPerPage)
+  const overflowRefs = refs.slice(option.limits.maxLinksPerPage)
+
+  for (const ref of boundedRefs) {
+    const absoluteUrl = resolveAbsoluteUrl(ref.href, normalizedSeed.url)
+    if (ref.sourceClassification === 'form_action') {
+      skippedLinks.push(
+        buildDiscoveryLinkEntry({
+          href: ref.href,
+          absoluteUrl,
+          normalizedUrl: null,
+          normalizedRoutePath: null,
+          sourceContext: ref.sourceContext,
+          sourceClassification: ref.sourceClassification,
+          status: 'skipped',
+          skippedReason: 'form_action',
+        }),
+      )
+      continue
+    }
+    if (ref.download) {
+      skippedLinks.push(
+        buildDiscoveryLinkEntry({
+          href: ref.href,
+          absoluteUrl,
+          normalizedUrl: null,
+          normalizedRoutePath: null,
+          sourceContext: ref.sourceContext,
+          sourceClassification: ref.sourceClassification,
+          status: 'skipped',
+          skippedReason: 'download',
+        }),
+      )
+      continue
+    }
+
+    const preNormalizationSkip = resolveDiscoveryPreNormalizationSkip({
+      absoluteUrl,
+      canonicalHost: normalizedSeed.canonicalHost,
+    })
+    if (preNormalizationSkip) {
+      skippedLinks.push(
+        buildDiscoveryLinkEntry({
+          href: ref.href,
+          absoluteUrl,
+          normalizedUrl: null,
+          normalizedRoutePath: null,
+          sourceContext: ref.sourceContext,
+          sourceClassification: ref.sourceClassification,
+          status: 'skipped',
+          skippedReason: preNormalizationSkip,
+        }),
+      )
+      continue
+    }
+
+    const normalized = normalizeInternalHref({
+      href: ref.href,
+      currentPageUrl: normalizedSeed.url,
+      canonicalHost: normalizedSeed.canonicalHost,
+    })
+
+    if ('skip' in normalized) {
+      skippedLinks.push(
+        buildDiscoveryLinkEntry({
+          href: ref.href,
+          absoluteUrl,
+          normalizedUrl: null,
+          normalizedRoutePath: null,
+          sourceContext: ref.sourceContext,
+          sourceClassification: ref.sourceClassification,
+          status: 'skipped',
+          skippedReason: mapNormalizationSkipReason(ref.href, normalized.skip),
+        }),
+      )
+      continue
+    }
+
+    normalizedUrls.push({
+      originalHref: ref.href,
+      absoluteUrl,
+      normalizedUrl: normalized.normalized.url,
+      normalizedRoutePath: normalized.normalized.path,
+      changed: absoluteUrl !== normalized.normalized.url,
+    })
+
+    if (normalized.normalized.path === normalizedSeed.path) {
+      skippedLinks.push(
+        buildDiscoveryLinkEntry({
+          href: ref.href,
+          absoluteUrl,
+          normalizedUrl: normalized.normalized.url,
+          normalizedRoutePath: normalized.normalized.path,
+          sourceContext: ref.sourceContext,
+          sourceClassification: ref.sourceClassification,
+          status: 'skipped',
+          skippedReason: 'seed_route',
+        }),
+      )
+      continue
+    }
+
+    if (discoveredByRoute.size >= option.limits.maxRoutes) {
+      skippedLinks.push(
+        buildDiscoveryLinkEntry({
+          href: ref.href,
+          absoluteUrl,
+          normalizedUrl: normalized.normalized.url,
+          normalizedRoutePath: normalized.normalized.path,
+          sourceContext: ref.sourceContext,
+          sourceClassification: ref.sourceClassification,
+          status: 'skipped',
+          skippedReason: 'route_limit',
+        }),
+      )
+      continue
+    }
+
+    if (discoveredByRoute.has(normalized.normalized.path)) {
+      skippedLinks.push(
+        buildDiscoveryLinkEntry({
+          href: ref.href,
+          absoluteUrl,
+          normalizedUrl: normalized.normalized.url,
+          normalizedRoutePath: normalized.normalized.path,
+          sourceContext: ref.sourceContext,
+          sourceClassification: ref.sourceClassification,
+          status: 'skipped',
+          skippedReason: 'duplicate_route',
+        }),
+      )
+      continue
+    }
+
+    discoveredByRoute.set(
+      normalized.normalized.path,
+      buildDiscoveryLinkEntry({
+        href: ref.href,
+        absoluteUrl,
+        normalizedUrl: normalized.normalized.url,
+        normalizedRoutePath: normalized.normalized.path,
+        sourceContext: ref.sourceContext,
+        sourceClassification: ref.sourceClassification,
+        status: 'discovered',
+        skippedReason: null,
+      }),
+    )
+  }
+
+  for (const ref of overflowRefs) {
+    skippedLinks.push(
+      buildDiscoveryLinkEntry({
+        href: ref.href,
+        absoluteUrl: resolveAbsoluteUrl(ref.href, normalizedSeed.url),
+        normalizedUrl: null,
+        normalizedRoutePath: null,
+        sourceContext: ref.sourceContext,
+        sourceClassification: ref.sourceClassification,
+        status: 'skipped',
+        skippedReason: 'max_links_per_page',
+      }),
+    )
+  }
+
+  const discoveredPages = [...discoveredByRoute.values()].sort((a, b) =>
+    String(a.normalizedRoutePath ?? '').localeCompare(String(b.normalizedRoutePath ?? '')),
+  )
+  const routeCandidates = discoveredPages.map((entry) => String(entry.normalizedRoutePath ?? '')).filter(Boolean)
+  const sortedSkippedLinks = skippedLinks.sort((a, b) =>
+    `${a.skippedReason ?? ''}|${a.originalHref}|${a.absoluteUrl ?? ''}`.localeCompare(`${b.skippedReason ?? ''}|${b.originalHref}|${b.absoluteUrl ?? ''}`),
+  )
+
+  const manifest: MultiPageDiscoveryManifest = {
+    kind: 'multi_page_discovery_manifest_v1',
+    seedUrl: input.sourceUrl,
+    normalizedSeedUrl: normalizedSeed.url,
+    normalizedSeedRoute: normalizedSeed.path,
+    discoveredPages,
+    skippedLinks: sortedSkippedLinks,
+    routeCandidates,
+    normalizedUrls: normalizedUrls.sort((a, b) => `${a.normalizedRoutePath ?? ''}|${a.originalHref}`.localeCompare(`${b.normalizedRoutePath ?? ''}|${b.originalHref}`)),
+    depth: {
+      seedDepth: 0,
+      maxDiscoveredDepth: discoveredPages.length > 0 ? 1 : 0,
+    },
+    limitsApplied: {
+      maxDiscoveredUrls: option.limits.maxRoutes,
+      maxDepth: option.limits.maxDepth,
+      maxLinksPerPage: option.limits.maxLinksPerPage,
+      maxTemplateLinksPerRoute: option.limits.maxTemplateLinksPerRoute,
+    },
+    diagnostics: uniqueSorted(diagnostics),
+    generatedAt,
+  }
+
+  const manifestRef = 'importProvenanceSummary.multiPageDiscovery.manifest'
+  manifest.diagnostics = uniqueSorted([...manifest.diagnostics, 'MULTIPAGE_DISCOVERY_MANIFEST_PERSISTED_TO_PROVENANCE'])
+
+  return {
+    summary: {
+      enabled: true,
+      discoveredPageCount: discoveredPages.length,
+      skippedLinkCount: sortedSkippedLinks.length,
+      routeCandidateCount: routeCandidates.length,
+      manifestRef,
+      diagnostics: manifest.diagnostics.slice(),
+    },
+    manifest,
+  }
+}
+
 function derivePageSectionsByPathFromPreparedSite(preparedSite: PreparedSiteModel | null): Record<string, Array<{
   kind: string
   order: number
@@ -759,6 +1246,7 @@ async function buildImportProvenanceSummary(input: {
   snapshot: UrlSinglePageImportSnapshot
   styleSignals: StyleSignalModel
   preparedSite: PreparedSiteModel | null
+  multiPageDiscovery: { summary: MultiPageDiscoverySummary; manifest: MultiPageDiscoveryManifest | null } | null
 }): Promise<RuntimeImportProvenanceSummary> {
   const { snapshot, styleSignals, preparedSite } = input
   const semanticImport = resolveSemanticImportForSnapshot(snapshot)
@@ -920,6 +1408,7 @@ async function buildImportProvenanceSummary(input: {
     styleSignals,
     semanticImport,
     multipageImport,
+    multiPageDiscovery: input.multiPageDiscovery,
     siteTree: {
       summary: siteTreeSummary,
       tree: siteTreeSeed.tree,
@@ -945,6 +1434,7 @@ function summarizeProvenancePayload(summary: RuntimeImportProvenanceSummary): Re
     importDiagnosticCodeCount: Array.isArray(summary.importDiagnosticCodes) ? summary.importDiagnosticCodes.length : 0,
     semanticImportSectionCount: summary.semanticImport?.sections.length ?? 0,
     multipageImport: summary.multipageImport?.summary ?? null,
+    multiPageDiscovery: summary.multiPageDiscovery?.summary ?? null,
     siteTree: summary.siteTree?.summary ?? null,
     templateFamilies: summary.templateFamilies?.summary ?? null,
   }
@@ -1267,6 +1757,7 @@ export type ScopedImportPipelineSuccess = {
     styleCta: string
     styleDiagnostics: string[]
     importFidelityScore: RuntimeImportProvenanceSummary['importFidelityScore']
+    multiPageDiscovery: MultiPageDiscoverySummary
     cmsContentSlots: ScopedImportCmsSlotMaterializationResult
     artifactGenerated: boolean
     writePath: {
@@ -1317,6 +1808,7 @@ export type ScopedImportPipelineFallback = {
     styleCta: string
     styleDiagnostics: string[]
     importFidelityScore: RuntimeImportProvenanceSummary['importFidelityScore']
+    multiPageDiscovery: MultiPageDiscoverySummary
     writePath: {
       createdVersionId: string
       provenancePayloadBeforeWrite: Record<string, unknown> | null
@@ -1613,6 +2105,7 @@ export async function runScopedImportPipeline(input: {
     siteId: string
     siteVersionId: string
   }
+  multiPageDiscovery?: ScopedMultiPageDiscoveryOption
   deps?: Partial<ScopedImportPipelineDependencies>
 }): Promise<ScopedImportPipelineOutcome> {
   const deps = await defaultDependencies(input.deps)
@@ -1671,11 +2164,17 @@ export async function runScopedImportPipeline(input: {
       quality: input.snapshot.sourceSelection.renderedDomQuality.quality,
     },
   })
+  const multiPageDiscovery = await buildScopedMultiPageDiscovery({
+    option: input.multiPageDiscovery,
+    sourceUrl: input.sourceUrl,
+    snapshot: input.snapshot,
+  })
   const importProvenanceSummary = await buildImportProvenanceSummary({
     sourceUrl: input.sourceUrl,
     snapshot: input.snapshot,
     styleSignals,
     preparedSite,
+    multiPageDiscovery: multiPageDiscovery.summary.enabled ? multiPageDiscovery : null,
   })
 
   if (pipelineResult.status === 'success' && preparedSite) {
@@ -1937,6 +2436,7 @@ export async function runScopedImportPipeline(input: {
       previewDocument,
       reporting: {
         ...reporting,
+        multiPageDiscovery: multiPageDiscovery.summary,
         cmsContentSlots,
         artifactGenerated: true,
         writePath: writePathDiagnostics,
@@ -2090,6 +2590,7 @@ export async function runScopedImportPipeline(input: {
       styleCta: `${styleSignals.cta.styleHint}/${styleSignals.cta.prominence}`,
       styleDiagnostics: styleSignals.diagnostics.map((diag) => diag.code),
       importFidelityScore: importProvenanceSummary.importFidelityScore ?? null,
+      multiPageDiscovery: multiPageDiscovery.summary,
       writePath: fallbackWritePath,
     },
   }

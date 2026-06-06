@@ -29,6 +29,60 @@ export type ImportFidelityScore = {
   fidelityLevel: "low" | "medium" | "high";
 };
 
+export type MultiPageDiscoverySourceContext = "nav" | "header" | "footer" | "body" | "unknown";
+
+export type MultiPageDiscoveryLinkStatus = "discovered" | "skipped";
+
+export type MultiPageDiscoveryLinkEntry = {
+  originalHref: string;
+  absoluteUrl: string | null;
+  normalizedUrl: string | null;
+  normalizedRoutePath: string | null;
+  depth: number;
+  sourceContext: MultiPageDiscoverySourceContext;
+  sourceClassification: "anchor" | "form_action";
+  status: MultiPageDiscoveryLinkStatus;
+  skippedReason: string | null;
+};
+
+export type MultiPageDiscoveryManifest = {
+  kind: "multi_page_discovery_manifest_v1";
+  seedUrl: string;
+  normalizedSeedUrl: string | null;
+  normalizedSeedRoute: string | null;
+  discoveredPages: MultiPageDiscoveryLinkEntry[];
+  skippedLinks: MultiPageDiscoveryLinkEntry[];
+  routeCandidates: string[];
+  normalizedUrls: Array<{
+    originalHref: string;
+    absoluteUrl: string | null;
+    normalizedUrl: string | null;
+    normalizedRoutePath: string | null;
+    changed: boolean;
+  }>;
+  depth: {
+    seedDepth: number;
+    maxDiscoveredDepth: number;
+  };
+  limitsApplied: {
+    maxDiscoveredUrls: number;
+    maxDepth: number;
+    maxLinksPerPage: number;
+    maxTemplateLinksPerRoute: number;
+  };
+  diagnostics: string[];
+  generatedAt: string;
+};
+
+export type MultiPageDiscoverySummary = {
+  enabled: boolean;
+  discoveredPageCount: number;
+  skippedLinkCount: number;
+  routeCandidateCount: number;
+  manifestRef: string | null;
+  diagnostics: string[];
+};
+
 export type RuntimeImportProvenanceSummary = {
   kind: "runtime_import_provenance_summary_v1";
   executionIdentity?: {
@@ -124,6 +178,10 @@ export type RuntimeImportProvenanceSummary = {
   multipageImport?: {
     summary: MultipageImportSummary;
     tree: MultipageImportTree | null;
+  } | null;
+  multiPageDiscovery?: {
+    summary: MultiPageDiscoverySummary;
+    manifest: MultiPageDiscoveryManifest | null;
   } | null;
   siteTree?: {
     summary: SiteTreeSummary;

@@ -681,6 +681,8 @@ test('scoped pipeline import uses pipeline path, maps consolidated sections, and
   assert.equal(legacyMigrateCalls, 0)
   assert.ok(createInput)
   assert.equal(createInput.importProvenanceSummary.sourceMode, 'rendered_dom')
+  assert.equal(createInput.importProvenanceSummary.multiPageDiscovery ?? null, null)
+  assert.equal(outcome.reporting.multiPageDiscovery.enabled, false)
   assert.equal(createInput.importProvenanceSummary.importFidelityStatus, 'high_fidelity_import')
   assert.equal(createInput.importProvenanceSummary.screenshotCount, 2)
   assert.equal(createInput.importProvenanceSummary.computedStyleSampleCount, 3)
@@ -735,6 +737,185 @@ test('scoped pipeline import uses pipeline path, maps consolidated sections, and
   assert.equal(outcome.reporting.writePath.verificationRead.artifactId, 'artifact-1')
   assert.equal(outcome.reporting.writePath.verificationRead.hasImportProvenanceSummary, true)
   assert.ok(createInput.pages[0].structureModel.sections.length > 1, 'expected consolidated sections to persist into runtime structure model')
+})
+
+test('scoped pipeline import can persist seed-only multi-page discovery manifest', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'scoped-pipeline-multipage-discovery-'))
+  const entryAbs = path.resolve(root, 'index.html')
+  const assetsDir = path.resolve(root, 'assets')
+  fs.mkdirSync(assetsDir)
+  fs.writeFileSync(
+    entryAbs,
+    `<!doctype html><html><head><title>Discovery</title></head><body>
+      <header><nav>
+        <a href="/about/">About</a>
+        <a href="/about/index.html">About Duplicate</a>
+        <a href="https://www.example.com/services?utm_source=nav">Services</a>
+        <a href="https://external.example.net/page">External</a>
+        <a href="mailto:hello@example.com">Mail</a>
+        <a href="tel:+1234567">Phone</a>
+        <a href="#top">Top</a>
+        <a href="/guide.pdf" download>Guide</a>
+        <a href="/assets/archive.zip">Archive</a>
+        <a href="/login">Login</a>
+        <a href="/search?q=private">Search</a>
+      </nav></header>
+      <main><a href="/contact/index.html">Contact</a><form action="/lead"><button>Lead</button></form></main>
+    </body></html>`,
+    'utf8',
+  )
+
+  const pipeline = createSuccessPipelineFixture()
+  let createInput: any = null
+  let persistedImportSummary: any = null
+  let artifactInput: any = null
+  let rawImportFilePaths: string[] = []
+  let linkedArtifactId: string | null = null
+
+  const outcome = await runScopedImportPipeline({
+    snapshot: {
+      snapshotRootDirAbs: root,
+      snapshotStableRootDirAbs: root,
+      snapshotId: 'snapshot-discovery',
+      snapshotRunId: 'snapshot-run-discovery',
+      requestId: 'request-discovery',
+      entryHtmlPathAbs: entryAbs,
+      assetsDirAbs: assetsDir,
+      sourceUrl: 'https://www.example.com/index.html',
+      normalizedUrl: 'https://example.com/',
+      captureMode: 'raw_html_only',
+      sourceMode: 'raw_html_fallback',
+      sourceSelection: {
+        sourceMode: 'raw_html_fallback',
+        fidelityStatus: 'degraded_import',
+        selectedSourceHtmlPathAbs: entryAbs,
+        renderedDomQuality: {
+          quality: 'strong',
+          bodyTextLength: 120,
+          meaningfulNodeCount: 12,
+          sectionCandidateCount: 2,
+          hasHeading: true,
+          reason: 'discovery_fixture',
+        },
+        rawHtmlQuality: {
+          quality: 'strong',
+          bodyTextLength: 120,
+          meaningfulNodeCount: 12,
+          sectionCandidateCount: 2,
+          hasHeading: true,
+          reason: 'discovery_fixture',
+        },
+        degraded: false,
+      },
+      renderedCapture: {
+        status: 'unavailable',
+        documents: [],
+        screenshots: [],
+        computedStyleSamples: [],
+        diagnostics: [],
+      },
+      renderedCaptureReliability: { job: null, workerHealth: null },
+      importDiagnostics: { summary: { infoCount: 0, warningCount: 0, errorCount: 0, fatalCount: 0 }, issues: [] },
+      fetchManifest: [],
+      importIntake: { ok: true, rawHtmlAvailable: true, htmlByteLength: fs.statSync(entryAbs).size },
+    } as any,
+    sourceUrl: 'https://www.example.com/index.html',
+    actor: 'test:multi-page-discovery',
+    multiPageDiscovery: {
+      enabled: true,
+      generatedAt: '2026-06-06T00:00:00.000Z',
+      limits: { maxRoutes: 10, maxDepth: 1, maxLinksPerPage: 20, maxTemplateLinksPerRoute: 10 },
+    },
+    deps: {
+      importStaticSite: async () => ({ status: 'ok', documentMeta: { source: { kind: 'single-entry-html' } } }) as any,
+      createImportManifest: () => ({ status: 'success' }) as any,
+      runLinearMigrationPipeline: () => pipeline as any,
+      createSiteVersionFromMigration: async (input) => {
+        createInput = input
+        return { siteId: 'runtime-site-discovery', siteVersionId: 'site-version-discovery', versionNo: 3 }
+      },
+      setSiteVersionImportProvenanceSummary: async (input) => {
+        persistedImportSummary = input
+        return { affectedRows: 1 }
+      },
+      getSiteVersion: async () =>
+        ({
+          id: 'site-version-discovery',
+          siteId: 'runtime-site-discovery',
+          versionNo: 3,
+          state: 'DRAFT',
+          source: 'migration',
+          actor: 'test',
+          createdAt: '2026-06-06T00:00:00.000Z',
+          rendererCompatibilityVersion: 'gnr8-renderer-v1',
+          artifactId: linkedArtifactId,
+          importProvenanceSummary: createInput?.importProvenanceSummary ?? null,
+          pages: [],
+        }) as any,
+      buildDeterministicArtifactBundle: () =>
+        ({
+          siteId: 'runtime-site-discovery',
+          siteVersionId: 'site-version-discovery',
+          rendererCompatibilityVersion: 'gnr8-renderer-v1',
+          bundleSha256: 'bundle-sha',
+          htmlByPath: { '/': '<!doctype html><html><body>preview only</body></html>' },
+          compiledTokenStyles: ':root{}',
+          assetFingerprintMap: {},
+          manifest: {},
+        }) as any,
+      createArtifact: async (input) => {
+        artifactInput = input
+        return { artifactId: 'artifact-discovery' }
+      },
+      bindArtifactToVersion: async (input) => {
+        linkedArtifactId = input.artifactId
+        return { affectedRows: 1 }
+      },
+      persistRawImportedSiteArtifact: async (input) => {
+        rawImportFilePaths = input.fileRows.map((row: { path: string }) => row.path)
+        return {
+          artifactId: 'raw-artifact-discovery',
+          artifactType: 'raw_imported_site',
+          entryHtmlPath: 'index.html',
+          assetBasePath: '.',
+          fileMap: {},
+          fileCount: input.fileRows.length,
+        } as any
+      },
+      upsertContentSlots: async () => 0,
+      importHtmlToPage: () => ({}) as any,
+      migrateImportedPageToCanonicalDraft: async () => ({ siteId: 'legacy-site', siteVersionId: 'legacy-version', versionNo: 1 }),
+    },
+  })
+
+  assert.equal(outcome.mode, 'pipeline')
+  assert.equal(outcome.reporting.multiPageDiscovery.enabled, true)
+  assert.equal(outcome.reporting.multiPageDiscovery.discoveredPageCount, 3)
+  assert.equal(outcome.reporting.multiPageDiscovery.routeCandidateCount, 3)
+  assert.equal(outcome.reporting.multiPageDiscovery.manifestRef, 'importProvenanceSummary.multiPageDiscovery.manifest')
+
+  const persistedDiscovery = persistedImportSummary.importProvenanceSummary.multiPageDiscovery
+  const manifest = persistedDiscovery.manifest
+  assert.equal(persistedDiscovery.summary.discoveredPageCount, 3)
+  assert.deepEqual(manifest.routeCandidates, ['/about', '/contact', '/services'])
+  assert.equal(manifest.normalizedSeedRoute, '/')
+  assert.equal(manifest.generatedAt, '2026-06-06T00:00:00.000Z')
+  assert.equal(manifest.discoveredPages.some((entry: any) => entry.normalizedRoutePath === '/about' && entry.sourceContext === 'header'), true)
+  assert.equal(manifest.normalizedUrls.some((entry: any) => entry.originalHref === '/about/' && entry.normalizedUrl === 'https://example.com/about'), true)
+  assert.equal(manifest.normalizedUrls.some((entry: any) => entry.originalHref === '/about/index.html' && entry.normalizedRoutePath === '/about'), true)
+  assert.equal(manifest.skippedLinks.some((entry: any) => entry.originalHref === 'https://external.example.net/page' && entry.skippedReason === 'external_host'), true)
+  assert.equal(manifest.skippedLinks.some((entry: any) => entry.originalHref === 'mailto:hello@example.com' && entry.skippedReason === 'mailto'), true)
+  assert.equal(manifest.skippedLinks.some((entry: any) => entry.originalHref === 'tel:+1234567' && entry.skippedReason === 'tel'), true)
+  assert.equal(manifest.skippedLinks.some((entry: any) => entry.originalHref === '#top' && entry.skippedReason === 'hash_only'), true)
+  assert.equal(manifest.skippedLinks.some((entry: any) => entry.originalHref === '/guide.pdf' && entry.skippedReason === 'download'), true)
+  assert.equal(manifest.skippedLinks.some((entry: any) => entry.originalHref === '/assets/archive.zip' && entry.skippedReason === 'asset_link'), true)
+  assert.equal(manifest.skippedLinks.some((entry: any) => entry.originalHref === '/login' && entry.skippedReason === 'auth_path'), true)
+  assert.equal(manifest.skippedLinks.some((entry: any) => entry.originalHref === '/search?q=private' && entry.skippedReason === 'unsafe_query_state'), true)
+  assert.equal(manifest.skippedLinks.some((entry: any) => entry.sourceClassification === 'form_action' && entry.skippedReason === 'form_action'), true)
+  assert.equal(manifest.diagnostics.some((entry: string) => entry.startsWith('MULTIPAGE_IMPORT_STARTED')), true)
+  assert.equal(manifest.diagnostics.some((entry: string) => entry.startsWith('MULTIPAGE_DISCOVERY_ONLY_CHILD_FETCH_SKIPPED')), true)
+  assert.deepEqual(Object.keys(artifactInput.htmlByPath), ['/'])
+  assert.equal(rawImportFilePaths.some((filePath) => /(^|\/)(about|contact|services)(\/index)?\.html$/.test(filePath)), false)
 })
 
 test('scoped pipeline import resolves nested snapshot entry and assets paths relative to snapshot root', async () => {
