@@ -943,6 +943,12 @@ test('scoped pipeline import can persist seed-only multi-page discovery manifest
   const manifest = persistedDiscovery.manifest
   assert.equal(persistedDiscovery.summary.discoveredPageCount, 5)
   assert.deepEqual(manifest.routeCandidates, ['/about', '/contact', '/robots-only', '/services', '/sitemap-only'])
+  assert.ok(manifest.routePriorityBalancing)
+  assert.equal(manifest.routePriorityBalancing.selectedRouteCount, 5)
+  assert.equal(manifest.routePriorityBalancing.excludedRouteCount, 0)
+  assert.equal(manifest.routePriorityBalancing.tiers.some((tier: any) => tier.tier === 'tier_1_navigation' && tier.selectedCount >= 3), true)
+  assert.equal(manifest.diagnostics.some((entry: string) => entry.startsWith('DISCOVERY_PRIORITY_BALANCING_STARTED')), true)
+  assert.equal(manifest.diagnostics.some((entry: string) => entry.startsWith('DISCOVERY_PRIORITY_BUDGET_APPLIED')), true)
   assert.equal(manifest.normalizedSeedRoute, '/')
   assert.equal(manifest.generatedAt, '2026-06-06T00:00:00.000Z')
   assert.equal(manifest.limitsApplied.maxSitemaps, 4)

@@ -70,6 +70,7 @@ function provenance(input?: {
     }
     diagnostics: string[]
   }
+  routePriorityBalancing?: Record<string, unknown>
 }) {
   const routeCandidates = input?.routeCandidates ?? ['/']
   const acquisitionPages = input?.acquisitionPages ?? []
@@ -102,6 +103,7 @@ function provenance(input?: {
         routeCandidates,
         discoveredPages: routeCandidates.map((routePath) => ({ normalizedRoutePath: routePath })),
         skippedLinks: Array.from({ length: input?.skippedLinkCount ?? 0 }, (_, index) => ({ originalHref: `#skip-${index}` })),
+        routePriorityBalancing: input?.routePriorityBalancing,
         diagnostics: ['DISCOVERY_MANIFEST_DIAG'],
       },
       canonicalDiscovery: input?.canonicalDiscovery ?? null,
@@ -165,6 +167,13 @@ test('multi-page operator summary returns a safe empty summary', () => {
     allowedRoutes: 0,
     disallowedRoutes: 0,
     unknownRoutes: 0,
+    warnings: [],
+  })
+  assert.deepEqual(summary.overview.discoveryPriorityBalancing, {
+    routeLimitHit: false,
+    selectedRouteCount: 0,
+    excludedRouteCount: 0,
+    tiers: [],
     warnings: [],
   })
   assert.deepEqual(summary.overview.acquisition, { fetchedPages: 0, failedPages: 0 })
@@ -671,4 +680,44 @@ test('Paul-Graham-like route-limit summary explains the limit in operator wordin
   assert.equal(summary.overview.validation.status, 'ready_with_warnings')
   assert.equal(summary.validation.warningSamples.some((sample) => sample.includes('route limit prevented importing additional pages')), true)
   assert.equal(summary.validation.warningSamples.some((sample) => sample.includes('/greatwork')), true)
+})
+
+test('multi-page operator summary displays discovery priority balancing evidence', () => {
+  const summary = buildMultiPageImportOperatorSummary({
+    importProvenanceSummary: provenance({
+      routeCandidates: ['/about', '/contact', '/blog/post-001'],
+      routePriorityBalancing: {
+        maxRoutes: 3,
+        routeLimitHit: true,
+        selectedRouteCount: 3,
+        excludedRouteCount: 2,
+        tiers: [
+          { tier: 'tier_1_navigation', candidateCount: 2, selectedCount: 2, excludedCount: 0 },
+          { tier: 'tier_2_canonical', candidateCount: 0, selectedCount: 0, excludedCount: 0 },
+          { tier: 'tier_3_shallow', candidateCount: 1, selectedCount: 1, excludedCount: 0 },
+          { tier: 'tier_4_deep', candidateCount: 2, selectedCount: 0, excludedCount: 2 },
+        ],
+        assignments: [
+          { routePath: '/about', tier: 'tier_1_navigation', selected: true },
+          { routePath: '/contact', tier: 'tier_1_navigation', selected: true },
+          { routePath: '/blog/post-001', tier: 'tier_4_deep', selected: false },
+        ],
+        diagnostics: [
+          'DISCOVERY_PRIORITY_BUDGET_APPLIED:3:2:3',
+          'DISCOVERY_PRIORITY_ROUTE_EXCLUDED:/blog/post-002:tier_4_deep:route_limit',
+        ],
+      },
+    }),
+  })
+
+  assert.equal(summary.overview.discoveryPriorityBalancing.routeLimitHit, true)
+  assert.equal(summary.overview.discoveryPriorityBalancing.selectedRouteCount, 3)
+  assert.equal(summary.overview.discoveryPriorityBalancing.excludedRouteCount, 2)
+  assert.deepEqual(summary.overview.discoveryPriorityBalancing.tiers.map((tier) => [tier.tier, tier.selectedCount, tier.excludedCount]), [
+    ['tier_1_navigation', 2, 0],
+    ['tier_2_canonical', 0, 0],
+    ['tier_3_shallow', 1, 0],
+    ['tier_4_deep', 0, 2],
+  ])
+  assert.equal(summary.validation.warningSamples.some((sample) => sample.includes('Priority balancing excluded lower-priority routes')), true)
 })

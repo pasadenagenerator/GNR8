@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import { stableStringify } from '../../migration/runtime/diagnostics'
-import { discoverMultipageImportTree, summarizeMultipageImportTree } from '../index'
+import { balanceRoutePriorityCandidates, discoverMultipageImportTree, summarizeMultipageImportTree } from '../index'
 
 type PageMap = Record<string, string>
 
@@ -181,6 +181,85 @@ test('route limit and depth limit are enforced', async () => {
     { fetchPage: createFetcher(FIXTURE_PAGES) },
   )
   assert.equal(depthLimited.depthLimitHit, true)
+})
+
+test('priority balancing keeps seed-visible navigation when sitemap content exhausts the route budget', async () => {
+  const sitemapPosts = Array.from({ length: 30 }, (_, index) => `<url><loc>https://example.com/blog/post-${String(index + 1).padStart(3, '0')}</loc></url>`).join('')
+  const tree = await discoverMultipageImportTree(
+    {
+      siteId: 'site_sitemap_heavy',
+      seedUrl: 'https://example.com/',
+      limits: { maxRoutes: 6, maxDepth: 1, maxLinksPerPage: 20, maxTemplateLinksPerRoute: 10, maxSitemaps: 2, maxUrlsFromSitemaps: 30, maxNestedSitemaps: 0 },
+    },
+    {
+      fetchPage: createFetcher({
+        '/': page(
+          'Home',
+          `
+            <header><nav>
+              <a href="/about">About</a>
+              <a href="/contact">Contact</a>
+              <a href="/services">Services</a>
+              <a href="/team">Team</a>
+              <a href="/projects">Projects</a>
+            </nav></header>
+          `,
+        ),
+      }),
+      fetchSitemap: createSitemapFetcher({
+        '/sitemap.xml': `<?xml version="1.0"?><urlset>${sitemapPosts}</urlset>`,
+      }),
+    },
+  )
+
+  const routePaths = tree.routes.map((route) => route.normalizedPath)
+  const balancing = tree.routePriorityBalancing
+  assert.ok(balancing)
+  assert.deepEqual(routePaths, ['/', '/about', '/contact', '/projects', '/services', '/team'])
+  assert.equal(tree.routeLimitHit, true)
+  assert.equal(balancing.routeLimitHit, true)
+  assert.equal(balancing.tiers.find((tier) => tier.tier === 'tier_1_navigation')?.selectedCount, 6)
+  assert.ok((balancing.tiers.find((tier) => tier.tier === 'tier_4_deep')?.excludedCount ?? 0) > 0)
+  assert.ok(tree.diagnostics.some((entry) => entry.startsWith('DISCOVERY_PRIORITY_ROUTE_EXCLUDED:/blog/post-')))
+})
+
+test('priority balancing is deterministic for navigation-heavy sites under budget exhaustion', async () => {
+  const navLinks = ['/zeta', '/about', '/team', '/services', '/contact', '/projects']
+    .map((route) => `<a href="${route}">${route}</a>`)
+    .join('')
+  const first = await discoverMultipageImportTree(
+    { siteId: 'site_nav_heavy', seedUrl: 'https://example.com/', limits: { maxRoutes: 4, maxDepth: 1, maxLinksPerPage: 20, maxTemplateLinksPerRoute: 10 } },
+    { fetchPage: createFetcher({ '/': page('Home', `<header><nav>${navLinks}</nav></header>`) }) },
+  )
+  const second = await discoverMultipageImportTree(
+    { siteId: 'site_nav_heavy', seedUrl: 'https://example.com/', limits: { maxRoutes: 4, maxDepth: 1, maxLinksPerPage: 20, maxTemplateLinksPerRoute: 10 } },
+    { fetchPage: createFetcher({ '/': page('Home', `<header><nav>${navLinks}</nav></header>`) }) },
+  )
+
+  assert.deepEqual(first.routes.map((route) => route.normalizedPath), ['/', '/about', '/contact', '/projects'])
+  assert.deepEqual(second.routes.map((route) => route.normalizedPath), first.routes.map((route) => route.normalizedPath))
+  assert.ok(first.routePriorityBalancing)
+  assert.equal(first.routePriorityBalancing.tiers.find((tier) => tier.tier === 'tier_1_navigation')?.excludedCount, 3)
+})
+
+test('priority balancing ranks mixed navigation canonical shallow and deep sitemap routes deterministically', () => {
+  const result = balanceRoutePriorityCandidates({
+    maxRoutes: 5,
+    candidates: [
+      { routePath: '/blog/post-003', depth: 1, source: 'sitemap', sourceContext: 'unknown', value: '/blog/post-003' },
+      { routePath: '/about', depth: 1, source: 'navigation', sourceContext: 'header', value: '/about' },
+      { routePath: '/company', depth: 1, source: 'canonical', sourceContext: 'unknown', value: '/company' },
+      { routePath: '/services', depth: 1, source: 'sitemap', sourceContext: 'unknown', value: '/services' },
+      { routePath: '/blog/post-001', depth: 1, source: 'sitemap', sourceContext: 'unknown', value: '/blog/post-001' },
+      { routePath: '/contact', depth: 1, source: 'navigation', sourceContext: 'footer', value: '/contact' },
+      { routePath: '/projects', depth: 1, source: 'sitemap', sourceContext: 'unknown', value: '/projects' },
+    ],
+  })
+
+  assert.deepEqual(result.selected.map((candidate) => candidate.routePath), ['/about', '/contact', '/company', '/projects', '/services'])
+  assert.deepEqual(result.excluded.map((candidate) => candidate.routePath), ['/blog/post-001', '/blog/post-003'])
+  assert.equal(result.evidence.tiers.find((tier) => tier.tier === 'tier_2_canonical')?.selectedCount, 1)
+  assert.equal(result.evidence.tiers.find((tier) => tier.tier === 'tier_4_deep')?.excludedCount, 2)
 })
 
 test('page role classification covers homepage/contact/legal/blog/article/listing/detail', async () => {

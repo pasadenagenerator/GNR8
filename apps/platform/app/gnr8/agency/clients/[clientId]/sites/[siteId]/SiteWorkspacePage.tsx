@@ -281,6 +281,18 @@ function renderMetric(label: string, value: string | number): ReactNode {
   )
 }
 
+type DiscoveryPriorityTierOperatorRow = {
+  tier: string
+  candidateCount: number
+  selectedCount: number
+  excludedCount: number
+}
+
+function formatDiscoveryPriorityTier(row: DiscoveryPriorityTierOperatorRow): string {
+  const tierLabel = row.tier.replace('tier_', 'T').replace('_', ' ')
+  return `${tierLabel} ${row.selectedCount}/${row.candidateCount} selected, ${row.excludedCount} excluded`
+}
+
 function renderMessageList(title: string, items: string[], tone: 'warning' | 'blocker'): ReactNode {
   if (items.length === 0) return null
   const colors =
@@ -302,6 +314,8 @@ function renderMessageList(title: string, items: string[], tone: 'warning' | 'bl
 function renderMultiPageImportOperatorContent(readModel: Awaited<ReturnType<typeof getSiteWorkspaceReadModelForPage>>): ReactNode {
   if (!readModel) return null
   const summary = readModel.multiPageImport
+  const priorityBalance = summary.overview.discoveryPriorityBalancing
+  const priorityTierRows: DiscoveryPriorityTierOperatorRow[] = priorityBalance.tiers
   const hasMultiPageSignal =
     readModel.overview.rawImportArtifactFound ||
     summary.overview.discovery.discoveredRoutes > 0 ||
@@ -309,6 +323,8 @@ function renderMultiPageImportOperatorContent(readModel: Awaited<ReturnType<type
     summary.overview.sitemapDiscovery.discoveredUrlCount > 0 ||
     summary.overview.canonicalDiscovery.canonicalUrlCount > 0 ||
     summary.overview.canonicalDiscovery.hreflangGroupCount > 0 ||
+    priorityBalance.selectedRouteCount > 0 ||
+    priorityBalance.excludedRouteCount > 0 ||
     summary.overview.acquisition.fetchedPages > 0 ||
     summary.overview.assembly.assembledPages > 0 ||
     summary.routes.length > 0
@@ -328,6 +344,10 @@ function renderMultiPageImportOperatorContent(readModel: Awaited<ReturnType<type
             'Canonical Discovery',
             `canonicals ${summary.overview.canonicalDiscovery.canonicalUrlCount} / conflicts ${summary.overview.canonicalDiscovery.conflictCount} / duplicates ${summary.overview.canonicalDiscovery.duplicateRouteCount} / hreflang ${summary.overview.canonicalDiscovery.hreflangGroupCount}`,
           )}
+          {renderMetric(
+            'Priority Balance',
+            `selected ${priorityBalance.selectedRouteCount} / excluded ${priorityBalance.excludedRouteCount}`,
+          )}
           {renderMetric('Acquisition', `fetched ${summary.overview.acquisition.fetchedPages} / failed ${summary.overview.acquisition.failedPages}`)}
           {renderMetric('Assembly', `assembled ${summary.overview.assembly.assembledPages} / excluded ${summary.overview.assembly.excludedPages}`)}
           {renderMetric('Validation', summary.overview.validation.status)}
@@ -342,6 +362,13 @@ function renderMultiPageImportOperatorContent(readModel: Awaited<ReturnType<type
         {summary.overview.canonicalDiscovery.warnings.length > 0 ? (
           <div style={{ border: '1px solid #fde68a', borderRadius: 8, background: '#fffbeb', padding: '8px 10px', color: '#92400e', fontSize: 12 }}>
             <strong style={{ color: '#78350f' }}>Canonical Discovery:</strong> {summary.overview.canonicalDiscovery.warnings.join(' ')}
+          </div>
+        ) : null}
+
+        {priorityTierRows.length > 0 ? (
+          <div style={{ border: '1px solid #e2e8f0', borderRadius: 8, background: '#f8fafc', padding: '8px 10px', color: '#334155', fontSize: 12 }}>
+            <strong style={{ color: '#0f172a' }}>Priority Balance:</strong>{' '}
+            {priorityTierRows.map(formatDiscoveryPriorityTier).join(' | ')}
           </div>
         ) : null}
 
