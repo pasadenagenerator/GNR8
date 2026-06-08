@@ -17,7 +17,7 @@ import {
   ResolveCurrentAgencyError,
 } from '@/src/auth/resolve-current-agency'
 import { canPerformAction } from '@/src/auth/rbac'
-import { buildMultiPageRawTemplatePreviewLinks } from '@/gnr8/site/site-multipage-preview-links'
+import { buildMultiPageRawTemplatePreviewDiagnostics, buildMultiPageRawTemplatePreviewLinks } from '@/gnr8/site/site-multipage-preview-links'
 import { hasMultiPageImportOperatorSignal } from '@/gnr8/site/site-multipage-operator-signal'
 
 type SearchParams = {
@@ -615,6 +615,11 @@ function renderPreviewContent(readModel: Awaited<ReturnType<typeof getSiteWorksp
               : 'canonical'
   const familyRenderModeLabel = readModel.preview.familyRenderMode ?? 'unavailable'
   const familyRenderDiagnostics = readModel.preview.familyRenderDiagnostics
+  const rawPreviewDiagnostics = buildMultiPageRawTemplatePreviewDiagnostics({
+    siteVersionId: readModel.pipeline.latestRuntimeSiteVersionId,
+    routes: readModel.multiPageImport.routes,
+    rawTemplatePreviewEvidence: readModel.preview.previewRuntimeSummary?.rawTemplatePreviewEvidence ?? null,
+  })
 
   return (
     <section style={sectionCardStyle()}>
@@ -661,13 +666,25 @@ function renderPreviewContent(readModel: Awaited<ReturnType<typeof getSiteWorksp
           {readModel.preview.previewRuntimeSummary.semanticCtaCount ?? 0}
         </p>
       ) : null}
-      {readModel.preview.previewRuntimeSummary?.rawTemplatePreviewEvidence ? (
+      {rawPreviewDiagnostics ? (
         <div style={{ margin: '8px 0 0', border: '1px solid #e2e8f0', borderRadius: 8, padding: 10, background: '#f8fafc' }}>
           <div style={{ margin: 0, color: '#0f172a', fontSize: 12, fontWeight: 700 }}>Preview Diagnostics</div>
           <div style={{ marginTop: 6, display: 'grid', gap: 4, color: '#334155', fontSize: 12 }}>
-            <div>selected route: {readModel.preview.previewRuntimeSummary.rawTemplatePreviewEvidence.selectedRoutePath}</div>
-            <div>selected raw file: {readModel.preview.previewRuntimeSummary.rawTemplatePreviewEvidence.selectedRawFilePath}</div>
-            <div>rewritten links count: {readModel.preview.previewRuntimeSummary.rawTemplatePreviewEvidence.rewrittenLinkCount}</div>
+            <div>evidence source: {rawPreviewDiagnostics.evidenceSource}</div>
+            <div>selectedRoutePath: {rawPreviewDiagnostics.selectedRoutePath ?? 'n/a'}</div>
+            <div>selectedRawFilePath: {rawPreviewDiagnostics.selectedRawFilePath ?? 'n/a'}</div>
+            <div>htmlByteLengthBeforeRewrite: {rawPreviewDiagnostics.htmlByteLengthBeforeRewrite ?? 'n/a'}</div>
+            <div>htmlByteLengthAfterRewrite: {rawPreviewDiagnostics.htmlByteLengthAfterRewrite ?? 'n/a'}</div>
+            <div>rewrittenLinkCount: {rawPreviewDiagnostics.rewrittenLinkCount ?? 'n/a'}</div>
+            {rawPreviewDiagnostics.links.length > 0 ? (
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 4 }}>
+                {rawPreviewDiagnostics.links.map((link) => (
+                  <a key={`${link.label}:${link.routePath}`} href={link.href} target='_blank' rel='noreferrer' style={quickActionStyle()}>
+                    {link.label}
+                  </a>
+                ))}
+              </div>
+            ) : null}
           </div>
         </div>
       ) : null}

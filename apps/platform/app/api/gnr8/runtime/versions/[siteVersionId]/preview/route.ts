@@ -2,6 +2,7 @@ import { PreviewDbBackpressureError, SiteVersionPreviewUnavailableError } from "
 import { parseAgencyActionContextError } from "@/app/api/gnr8/agency/_lib/agency-action-access";
 import { createRuntimeCorrelationKey, createRuntimePreviewIdentity } from "@/gnr8/runtime/identity/runtime-identity";
 import { previewRouteDependencies } from "./preview-route-dependencies";
+import { rawTemplatePreviewTraceHeaders } from "./preview-route-trace-headers";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -968,6 +969,11 @@ export async function GET(req: Request, ctx: { params: Promise<{ siteVersionId: 
         correlationKey,
       });
     }
+    const rawTraceHeaders = rawTemplatePreviewTraceHeaders({
+      previewMode: preview.previewMode,
+      previewRuntimeSummary: preview.previewRuntimeSummary,
+      rawTemplatePreviewEvidence: preview.rawTemplatePreviewEvidence ?? null,
+    });
 
     return new Response(html, {
       status: 200,
@@ -987,9 +993,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ siteVersionId: 
         "x-gnr8-preview-content-resolution-diagnostics": preview.previewRuntimeSummary.contentResolutionDiagnostics.join(","),
         "x-gnr8-preview-persisted-asset-count": String(preview.previewRuntimeSummary.persistedAssetCount ?? 0),
         "x-gnr8-preview-external-fallback-asset-count": String(preview.previewRuntimeSummary.externalFallbackAssetCount ?? 0),
-        "x-gnr8-preview-selected-route": preview.previewRuntimeSummary.rawTemplatePreviewEvidence?.selectedRoutePath ?? "",
-        "x-gnr8-preview-selected-raw-file": preview.previewRuntimeSummary.rawTemplatePreviewEvidence?.selectedRawFilePath ?? "",
-        "x-gnr8-preview-rewritten-links-count": String(preview.previewRuntimeSummary.rawTemplatePreviewEvidence?.rewrittenLinkCount ?? 0),
+        ...rawTraceHeaders,
         "x-gnr8-preview-diagnostics": preview.previewRuntimeSummary.previewDiagnostics.join(","),
         "x-gnr8-multipage-preview-validation-status": preview.multiPagePreviewValidation?.status ?? "",
         "x-gnr8-multipage-preview-valid-routes": String(preview.multiPagePreviewValidation?.summary.validPreviewRoutes ?? 0),
