@@ -60,6 +60,59 @@ export type SitemapDiscoveryEvidence = {
   diagnostics: string[]
 }
 
+export type CanonicalSameSiteStatus = 'same_site' | 'external_site' | 'invalid_url' | 'unsupported_scheme'
+
+export type CanonicalEquivalenceStatus = 'same_route' | 'different_route' | 'not_same_site' | 'invalid_url'
+
+export type CanonicalDiscoveryEntry = {
+  pageUrl: string
+  pageRoutePath: string
+  canonicalUrl: string | null
+  normalizedCanonicalRoutePath: string | null
+  sameSite: boolean
+  sameSiteStatus: CanonicalSameSiteStatus
+  canonicalEquivalenceStatus: CanonicalEquivalenceStatus
+}
+
+export type HreflangDiscoveryEntry = {
+  pageUrl: string
+  pageRoutePath: string
+  hreflang: string
+  url: string | null
+  normalizedRoutePath: string | null
+  sameSite: boolean
+  sameSiteStatus: CanonicalSameSiteStatus
+}
+
+export type CanonicalDiscoveryDuplicate = {
+  normalizedCanonicalRoutePath: string
+  pageRoutePaths: string[]
+  pageUrls: string[]
+  canonicalUrls: string[]
+}
+
+export type CanonicalDiscoveryConflict = {
+  pageUrl: string
+  pageRoutePath: string
+  canonicalUrls: string[]
+  normalizedCanonicalRoutePaths: string[]
+  reason: string
+}
+
+export type HreflangDiscoveryGroup = {
+  pageRoutePath: string
+  entries: HreflangDiscoveryEntry[]
+}
+
+export type CanonicalDiscoveryEvidence = {
+  canonicalEntries: CanonicalDiscoveryEntry[]
+  alternateLanguageEntries: HreflangDiscoveryEntry[]
+  duplicates: CanonicalDiscoveryDuplicate[]
+  conflicts: CanonicalDiscoveryConflict[]
+  hreflangGroups: HreflangDiscoveryGroup[]
+  diagnostics: string[]
+}
+
 export type RobotsFetchResult = {
   url: string
   body: string
@@ -168,6 +221,7 @@ export type MultipageImportTree = {
   pageRelationships: PageRelationship[]
   templateFamilyExtraction: SiteTemplateFamilyExtraction | null
   limits: MultipageImportLimits
+  canonicalDiscovery: CanonicalDiscoveryEvidence
   robotsDiscovery: RobotsDiscoveryEvidence
   sitemapDiscovery: SitemapDiscoveryEvidence
   depthLimitHit: boolean
@@ -183,6 +237,7 @@ export type MultipageImportSummary = {
   footerNavigationCount: number
   sharedRegionCount: number
   templateFamilyExtraction: TemplateFamilyExtractionSummary
+  canonicalDiscovery: CanonicalDiscoveryEvidence
   robotsDiscovery: RobotsDiscoveryEvidence
   sitemapDiscovery: SitemapDiscoveryEvidence
   depthLimitHit: boolean

@@ -748,7 +748,11 @@ test('scoped pipeline import can persist seed-only multi-page discovery manifest
   fs.mkdirSync(assetsDir)
   fs.writeFileSync(
     entryAbs,
-    `<!doctype html><html><head><title>Discovery</title></head><body>
+    `<!doctype html><html><head><title>Discovery</title>
+      <link rel="canonical" href="https://example.com/">
+      <link rel="alternate" hreflang="en" href="https://example.com/">
+      <link rel="alternate" hreflang="sl" href="https://example.com/sl/">
+    </head><body>
       <header><nav>
         <a href="/about/">About</a>
         <a href="/about/index.html">About Duplicate</a>
@@ -967,6 +971,14 @@ test('scoped pipeline import can persist seed-only multi-page discovery manifest
   assert.equal(manifest.diagnostics.some((entry: string) => entry.startsWith('SITEMAP_URL_DISCOVERED:/sitemap-only')), true)
   assert.equal(manifest.diagnostics.some((entry: string) => entry.startsWith('ROBOTS_DISCOVERY_SUCCEEDED')), true)
   assert.equal(manifest.diagnostics.some((entry: string) => entry.startsWith('ROBOTS_ROUTE_DISALLOWED:/contact')), true)
+  assert.equal(persistedDiscovery.canonicalDiscovery.canonicalEntries.length, 1)
+  assert.equal(persistedDiscovery.canonicalDiscovery.canonicalEntries[0].pageRoutePath, '/')
+  assert.equal(persistedDiscovery.canonicalDiscovery.canonicalEntries[0].normalizedCanonicalRoutePath, '/')
+  assert.equal(persistedDiscovery.canonicalDiscovery.canonicalEntries[0].canonicalEquivalenceStatus, 'same_route')
+  assert.equal(persistedDiscovery.canonicalDiscovery.alternateLanguageEntries.length, 2)
+  assert.equal(persistedDiscovery.canonicalDiscovery.hreflangGroups.length, 1)
+  assert.equal(persistedDiscovery.canonicalDiscovery.diagnostics.some((entry: string) => entry.startsWith('CANONICAL_DISCOVERY_FOUND')), true)
+  assert.equal(persistedDiscovery.canonicalDiscovery.diagnostics.some((entry: string) => entry.startsWith('HREFLANG_DISCOVERY_FOUND')), true)
   assert.deepEqual(persistedDiscovery.robotsDiscovery.sitemapDeclarations, ['https://example.com/missing-sitemap.xml', 'https://example.com/robots-sitemap.xml'])
   assert.equal(persistedDiscovery.robotsDiscovery.routeGovernanceSummary.disallowed, 1)
   assert.equal(persistedDiscovery.robotsDiscovery.diagnostics.some((entry: string) => entry.startsWith('ROBOTS_SITEMAP_DECLARATION_MISSING')), true)

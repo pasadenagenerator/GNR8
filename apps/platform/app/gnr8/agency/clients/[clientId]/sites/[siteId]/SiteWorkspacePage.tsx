@@ -307,6 +307,8 @@ function renderMultiPageImportOperatorContent(readModel: Awaited<ReturnType<type
     summary.overview.discovery.discoveredRoutes > 0 ||
     summary.overview.sitemapDiscovery.sitemapCount > 0 ||
     summary.overview.sitemapDiscovery.discoveredUrlCount > 0 ||
+    summary.overview.canonicalDiscovery.canonicalUrlCount > 0 ||
+    summary.overview.canonicalDiscovery.hreflangGroupCount > 0 ||
     summary.overview.acquisition.fetchedPages > 0 ||
     summary.overview.assembly.assembledPages > 0 ||
     summary.routes.length > 0
@@ -322,6 +324,10 @@ function renderMultiPageImportOperatorContent(readModel: Awaited<ReturnType<type
             'Sitemap Discovery',
             `sitemaps ${summary.overview.sitemapDiscovery.sitemapCount} / urls ${summary.overview.sitemapDiscovery.discoveredUrlCount} / skipped ${summary.overview.sitemapDiscovery.skippedUrlCount}`,
           )}
+          {renderMetric(
+            'Canonical Discovery',
+            `canonicals ${summary.overview.canonicalDiscovery.canonicalUrlCount} / conflicts ${summary.overview.canonicalDiscovery.conflictCount} / duplicates ${summary.overview.canonicalDiscovery.duplicateRouteCount} / hreflang ${summary.overview.canonicalDiscovery.hreflangGroupCount}`,
+          )}
           {renderMetric('Acquisition', `fetched ${summary.overview.acquisition.fetchedPages} / failed ${summary.overview.acquisition.failedPages}`)}
           {renderMetric('Assembly', `assembled ${summary.overview.assembly.assembledPages} / excluded ${summary.overview.assembly.excludedPages}`)}
           {renderMetric('Validation', summary.overview.validation.status)}
@@ -330,6 +336,12 @@ function renderMultiPageImportOperatorContent(readModel: Awaited<ReturnType<type
         {summary.overview.sitemapDiscovery.warnings.length > 0 ? (
           <div style={{ border: '1px solid #fde68a', borderRadius: 8, background: '#fffbeb', padding: '8px 10px', color: '#92400e', fontSize: 12 }}>
             <strong style={{ color: '#78350f' }}>Sitemap Discovery:</strong> {summary.overview.sitemapDiscovery.warnings.join(' ')}
+          </div>
+        ) : null}
+
+        {summary.overview.canonicalDiscovery.warnings.length > 0 ? (
+          <div style={{ border: '1px solid #fde68a', borderRadius: 8, background: '#fffbeb', padding: '8px 10px', color: '#92400e', fontSize: 12 }}>
+            <strong style={{ color: '#78350f' }}>Canonical Discovery:</strong> {summary.overview.canonicalDiscovery.warnings.join(' ')}
           </div>
         ) : null}
 

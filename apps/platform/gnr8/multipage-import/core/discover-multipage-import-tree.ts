@@ -8,6 +8,7 @@ import { diagnosticEntry, sortDiagnostics } from '../diagnostics/multipage-diagn
 import { buildNavigationTrees } from '../navigation/navigation-tree'
 import { normalizeInternalHref, normalizeMultipageHost, normalizeSeedUrl, parentPath } from '../normalization/route-normalization'
 import { inferSharedRegions, type PageRegionSignals } from '../shared-regions/shared-region-detection'
+import { buildCanonicalDiscoveryEvidence, emptyCanonicalDiscoveryEvidence } from './canonical-discovery'
 import { applyRobotsRouteGovernance, discoverRobotsTxt } from './robots-discovery'
 import { discoverSitemapUrls } from './sitemap-discovery'
 import { inferRouteFamilies } from './template-families'
@@ -364,6 +365,7 @@ export async function discoverMultipageImportTree(
       pageRelationships: [],
       templateFamilyExtraction: null,
       limits,
+      canonicalDiscovery: emptyCanonicalDiscoveryEvidence(['CANONICAL_DISCOVERY_STARTED:0']),
       robotsDiscovery: emptyRobotsDiscoveryEvidence(['ROBOTS_DISCOVERY_FAILED:invalid_seed']),
       sitemapDiscovery: emptySitemapDiscoveryEvidence(limits, ['SITEMAP_DISCOVERY_NOT_FOUND:invalid_seed']),
       depthLimitHit: false,
@@ -374,6 +376,7 @@ export async function discoverMultipageImportTree(
 
   const discovered = new Map<string, DiscoveredRouteState>()
   const pageSignals: PageSignals[] = []
+  const canonicalDiscoveryPages: Array<{ pageUrl: string; pageRoutePath: string; html: string }> = []
   const queue: Array<{ path: string; depth: number }> = []
   const routePathCounts = new Map<string, number>()
   const sourceGroups = new Map<string, number>()
@@ -500,6 +503,11 @@ export async function discoverMultipageImportTree(
     }
 
     currentRoute.title = currentRoute.title ?? fetched.title ?? toTitleFromHtml(fetched.html)
+    canonicalDiscoveryPages.push({
+      pageUrl: fetched.url || currentRoute.url,
+      pageRoutePath: currentRoute.path,
+      html: fetched.html,
+    })
 
     const extracted = extractLinksAndSignals({
       html: fetched.html,
@@ -561,6 +569,11 @@ export async function discoverMultipageImportTree(
   }
 
   const sortedStates = [...discovered.values()].sort((a, b) => a.path.localeCompare(b.path))
+  const canonicalDiscovery = buildCanonicalDiscoveryEvidence({
+    seedCanonicalHost: normalizedSeed.canonicalHost,
+    pages: canonicalDiscoveryPages,
+  })
+  diagnostics.push(...canonicalDiscovery.diagnostics)
 
   const nodes: RouteNode[] = sortedStates.map((state) => {
     const visibilityState = summarizeVisibility(state.visibilityHints)
@@ -654,6 +667,7 @@ export async function discoverMultipageImportTree(
     pageRelationships: familyResult.pageRelationships,
     templateFamilyExtraction: familyResult.templateFamilyExtraction,
     limits,
+    canonicalDiscovery,
     robotsDiscovery,
     sitemapDiscovery,
     depthLimitHit,
@@ -685,6 +699,7 @@ export function summarizeMultipageImportTree(tree: MultipageImportTree): Multipa
     footerNavigationCount: countItems(footerTree?.items ?? []),
     sharedRegionCount: tree.sharedRegions.length,
     templateFamilyExtraction: summarizeTemplateFamilyExtraction(tree.templateFamilyExtraction),
+    canonicalDiscovery: tree.canonicalDiscovery,
     robotsDiscovery: tree.robotsDiscovery,
     sitemapDiscovery: tree.sitemapDiscovery,
     depthLimitHit: tree.depthLimitHit,

@@ -32,6 +32,14 @@ function provenance(input?: {
     skippedUrlCount: number
     diagnostics: string[]
   }
+  canonicalDiscovery?: {
+    canonicalEntries: Array<Record<string, unknown>>
+    alternateLanguageEntries: Array<Record<string, unknown>>
+    duplicates: Array<Record<string, unknown>>
+    conflicts: Array<Record<string, unknown>>
+    hreflangGroups: Array<Record<string, unknown>>
+    diagnostics: string[]
+  }
   robotsDiscovery?: {
     fetchedState: string
     sitemapDeclarations: string[]
@@ -76,6 +84,7 @@ function provenance(input?: {
         skippedLinks: Array.from({ length: input?.skippedLinkCount ?? 0 }, (_, index) => ({ originalHref: `#skip-${index}` })),
         diagnostics: ['DISCOVERY_MANIFEST_DIAG'],
       },
+      canonicalDiscovery: input?.canonicalDiscovery ?? null,
       robotsDiscovery: input?.robotsDiscovery ?? null,
       sitemapDiscovery: input?.sitemapDiscovery ?? null,
       acquisition: {
@@ -119,6 +128,7 @@ test('multi-page operator summary returns a safe empty summary', () => {
 
   assert.deepEqual(summary.overview.discovery, { discoveredRoutes: 0, skippedLinks: 0 })
   assert.deepEqual(summary.overview.sitemapDiscovery, { sitemapCount: 0, discoveredUrlCount: 0, skippedUrlCount: 0, warnings: [] })
+  assert.deepEqual(summary.overview.canonicalDiscovery, { canonicalUrlCount: 0, conflictCount: 0, duplicateRouteCount: 0, hreflangGroupCount: 0, warnings: [] })
   assert.deepEqual(summary.overview.robotsDiscovery, {
     status: 'unknown',
     sitemapDeclarationCount: 0,
@@ -134,6 +144,47 @@ test('multi-page operator summary returns a safe empty summary', () => {
   assert.deepEqual(summary.routes, [])
   assert.equal(summary.validation.warnings, 0)
   assert.equal(summary.validation.blockers, 0)
+})
+
+test('multi-page operator summary displays canonical discovery evidence', () => {
+  const summary = buildMultiPageImportOperatorSummary({
+    importProvenanceSummary: provenance({
+      routeCandidates: ['/about', '/about-copy'],
+      canonicalDiscovery: {
+        canonicalEntries: [
+          { pageRoutePath: '/about', canonicalUrl: 'https://example.com/about', normalizedCanonicalRoutePath: '/about' },
+          { pageRoutePath: '/about-copy', canonicalUrl: 'https://example.com/about', normalizedCanonicalRoutePath: '/about' },
+        ],
+        alternateLanguageEntries: [
+          { pageRoutePath: '/about', hreflang: 'en', url: 'https://example.com/about', normalizedRoutePath: '/about' },
+          { pageRoutePath: '/about', hreflang: 'sl', url: 'https://example.com/sl/about', normalizedRoutePath: '/sl/about' },
+        ],
+        duplicates: [{ normalizedCanonicalRoutePath: '/about', pageRoutePaths: ['/about', '/about-copy'] }],
+        conflicts: [{ pageRoutePath: '/about-copy', normalizedCanonicalRoutePaths: ['/about', '/company'] }],
+        hreflangGroups: [{ pageRoutePath: '/about', entries: [] }],
+        diagnostics: [
+          'CANONICAL_DISCOVERY_FOUND:/about:/about',
+          'CANONICAL_DISCOVERY_DUPLICATE:/about:/about|/about-copy',
+          'CANONICAL_DISCOVERY_CONFLICT:/about-copy:/about|/company',
+          'HREFLANG_DISCOVERY_FOUND:/about:sl:/sl/about',
+        ],
+      },
+    }),
+  })
+
+  assert.deepEqual(summary.overview.canonicalDiscovery, {
+    canonicalUrlCount: 2,
+    conflictCount: 1,
+    duplicateRouteCount: 1,
+    hreflangGroupCount: 1,
+    warnings: [
+      'Multiple discovered pages point to the same canonical route.',
+      'Some pages declare conflicting canonical URLs.',
+    ],
+  })
+  assert.equal(summary.diagnostics.find((group) => group.group === 'Canonical Discovery')?.count, 4)
+  assert.equal(summary.validation.warningSamples.includes('Multiple discovered pages point to the same canonical route.'), true)
+  assert.equal(summary.validation.warningSamples.includes('Some pages declare conflicting canonical URLs.'), true)
 })
 
 test('multi-page operator summary displays robots discovery evidence', () => {

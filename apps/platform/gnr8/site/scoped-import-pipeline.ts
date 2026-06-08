@@ -36,6 +36,7 @@ import {
   type MultiPageDiscoveryManifest,
   type MultiPageDiscoverySourceContext,
   type MultiPageDiscoverySummary,
+  type MultiPageCanonicalDiscoverySummary,
   type MultiPageRobotsDiscoverySummary,
   type MultiPageSitemapDiscoverySummary,
   type MultiPageRawArtifactAssemblyManifest,
@@ -54,6 +55,7 @@ import {
 import {
   applyRobotsRouteGovernance,
   discoverMultipageImportTree,
+  emptyCanonicalDiscoveryEvidence,
   discoverRobotsTxt,
   discoverSitemapUrls,
   summarizeMultipageImportTree,
@@ -1771,6 +1773,7 @@ async function buildScopedMultiPageDiscovery(input: {
 }): Promise<{
   summary: MultiPageDiscoverySummary
   manifest: MultiPageDiscoveryManifest | null
+  canonicalDiscovery?: MultiPageCanonicalDiscoverySummary | null
   robotsDiscovery?: MultiPageRobotsDiscoverySummary | null
   sitemapDiscovery?: MultiPageSitemapDiscoverySummary | null
   acquisition?: MultiPageHtmlAcquisitionManifest | null
@@ -1840,6 +1843,7 @@ async function buildScopedMultiPageDiscovery(input: {
         ...(assembly.summary.enabled ? { rawArtifactAssembly: assembly.summary } : {}),
       },
       manifest,
+      canonicalDiscovery: null,
       robotsDiscovery: emptyMultiPageRobotsDiscoverySummary(['ROBOTS_DISCOVERY_FAILED:invalid_seed']),
       sitemapDiscovery: null,
       acquisition: acquisition.manifest,
@@ -1868,6 +1872,7 @@ async function buildScopedMultiPageDiscovery(input: {
     },
   )
   diagnostics.push(...tree.diagnostics)
+  const canonicalDiscovery = tree.canonicalDiscovery
   if (childFetchesSkipped.size > 0) diagnostics.push(`MULTIPAGE_DISCOVERY_ONLY_CHILD_FETCH_SKIPPED:${childFetchesSkipped.size}`)
 
   let robotsDiscoveryInitial = await discoverRobotsTxt({
@@ -2250,6 +2255,7 @@ async function buildScopedMultiPageDiscovery(input: {
       ...(assembly.summary.enabled ? { rawArtifactAssembly: assembly.summary } : {}),
     },
     manifest,
+    canonicalDiscovery,
     robotsDiscovery,
     sitemapDiscovery,
     acquisition: acquisition.manifest,
@@ -2306,6 +2312,7 @@ async function buildMultipageImportFromPreparedSite(input: {
           highConfidenceFamilyCount: 0,
           diagnostics: [],
         },
+        canonicalDiscovery: emptyCanonicalDiscoveryEvidence(['CANONICAL_DISCOVERY_STARTED:0']),
         robotsDiscovery: {
           robotsUrl: null,
           fetchedState: 'unavailable',
@@ -2382,6 +2389,7 @@ async function buildImportProvenanceSummary(input: {
   multiPageDiscovery: {
     summary: MultiPageDiscoverySummary
     manifest: MultiPageDiscoveryManifest | null
+    canonicalDiscovery?: MultiPageCanonicalDiscoverySummary | null
     robotsDiscovery?: MultiPageRobotsDiscoverySummary | null
     sitemapDiscovery?: MultiPageSitemapDiscoverySummary | null
     acquisition?: MultiPageHtmlAcquisitionManifest | null
@@ -2436,6 +2444,7 @@ async function buildImportProvenanceSummary(input: {
       : []),
     ...(persistedCaptureEvidence.persisted ? ['RENDERED_CAPTURE_PERSISTED'] : []),
     ...(semanticImport?.diagnostics.map((diag) => normalizeText(diag.code)).filter(Boolean) ?? []),
+    ...(input.multiPageDiscovery?.canonicalDiscovery?.diagnostics ?? []),
     ...(input.multiPageDiscovery?.robotsDiscovery?.diagnostics ?? []),
     ...(input.multiPageDiscovery?.sitemapDiscovery?.diagnostics ?? []),
     ...(input.multiPageDiscovery?.summary.htmlAcquisition?.diagnostics ?? []),
@@ -2556,6 +2565,7 @@ async function buildImportProvenanceSummary(input: {
       ? {
           summary: input.multiPageDiscovery.summary,
           manifest: input.multiPageDiscovery.manifest,
+          canonicalDiscovery: input.multiPageDiscovery.canonicalDiscovery ?? null,
           robotsDiscovery: input.multiPageDiscovery.robotsDiscovery ?? null,
           sitemapDiscovery: input.multiPageDiscovery.sitemapDiscovery ?? null,
           acquisition: input.multiPageDiscovery.acquisition ?? null,

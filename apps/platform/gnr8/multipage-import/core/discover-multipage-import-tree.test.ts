@@ -10,6 +10,10 @@ function page(title: string, body: string): string {
   return `<!doctype html><html><head><title>${title}</title></head><body>${body}</body></html>`
 }
 
+function pageWithHead(title: string, head: string, body: string): string {
+  return `<!doctype html><html><head><title>${title}</title>${head}</head><body>${body}</body></html>`
+}
+
 function createFetcher(pages: PageMap): (url: string) => Promise<{ url: string; html: string; title: string | null } | null> {
   return async (url) => {
     const parsed = new URL(url)
@@ -260,6 +264,72 @@ test('summary projection surfaces multipage truth counts', async () => {
   assert.equal(summary.templateFamilyExtraction.enabled, true)
   assert.ok(summary.templateFamilyExtraction.familyCount >= 1)
   assert.ok(Array.isArray(summary.diagnostics))
+})
+
+test('canonical discovery captures same-route and different-route canonicals', async () => {
+  const tree = await discoverMultipageImportTree(
+    { siteId: 'site_canonical_routes', seedUrl: 'https://example.com/', limits: { maxRoutes: 10, maxDepth: 1, maxLinksPerPage: 10 } },
+    {
+      fetchPage: createFetcher({
+        '/': pageWithHead('Home', '<link rel="canonical" href="https://www.example.com/">', '<main><a href="/about">About</a></main>'),
+        '/about': pageWithHead('About', '<link rel="canonical" href="/company">', '<main>About</main>'),
+      }),
+    },
+  )
+
+  const byPage = new Map(tree.canonicalDiscovery.canonicalEntries.map((entry) => [entry.pageRoutePath, entry]))
+  assert.equal(byPage.get('/')?.normalizedCanonicalRoutePath, '/')
+  assert.equal(byPage.get('/')?.sameSite, true)
+  assert.equal(byPage.get('/')?.canonicalEquivalenceStatus, 'same_route')
+  assert.equal(byPage.get('/about')?.normalizedCanonicalRoutePath, '/company')
+  assert.equal(byPage.get('/about')?.canonicalEquivalenceStatus, 'different_route')
+  assert.ok(tree.canonicalDiscovery.diagnostics.some((entry) => entry.startsWith('CANONICAL_DISCOVERY_FOUND:/:/')))
+  assert.ok(tree.canonicalDiscovery.diagnostics.some((entry) => entry.startsWith('CANONICAL_ROUTE_EQUIVALENT:/')))
+  assert.ok(tree.canonicalDiscovery.diagnostics.some((entry) => entry.startsWith('CANONICAL_ROUTE_DIFFERENT:/about:/company')))
+})
+
+test('canonical discovery records duplicate canonical targets and conflicting canonicals', async () => {
+  const tree = await discoverMultipageImportTree(
+    { siteId: 'site_canonical_duplicates', seedUrl: 'https://example.com/', limits: { maxRoutes: 10, maxDepth: 1, maxLinksPerPage: 10 } },
+    {
+      fetchPage: createFetcher({
+        '/': page('Home', '<main><a href="/about">About</a><a href="/about-copy">About Copy</a><a href="/conflict">Conflict</a></main>'),
+        '/about': pageWithHead('About', '<link rel="canonical" href="/about">', '<main>About</main>'),
+        '/about-copy': pageWithHead('About Copy', '<link rel="canonical" href="/about">', '<main>About copy</main>'),
+        '/conflict': pageWithHead('Conflict', '<link rel="canonical" href="/one"><link rel="canonical" href="/two">', '<main>Conflict</main>'),
+      }),
+    },
+  )
+
+  assert.deepEqual(tree.canonicalDiscovery.duplicates.map((entry) => entry.normalizedCanonicalRoutePath), ['/about'])
+  assert.deepEqual(tree.canonicalDiscovery.duplicates[0]?.pageRoutePaths, ['/about', '/about-copy'])
+  assert.deepEqual(tree.canonicalDiscovery.conflicts.map((entry) => entry.pageRoutePath), ['/conflict'])
+  assert.deepEqual(tree.canonicalDiscovery.conflicts[0]?.normalizedCanonicalRoutePaths, ['/one', '/two'])
+  assert.ok(tree.diagnostics.some((entry) => entry.startsWith('CANONICAL_DISCOVERY_DUPLICATE:/about:/about|/about-copy')))
+  assert.ok(tree.diagnostics.some((entry) => entry.startsWith('CANONICAL_DISCOVERY_CONFLICT:/conflict:/one|/two')))
+})
+
+test('canonical discovery captures hreflang variants and summary provenance shape', async () => {
+  const tree = await discoverMultipageImportTree(
+    { siteId: 'site_hreflang', seedUrl: 'https://example.com/', limits: { maxRoutes: 10, maxDepth: 1, maxLinksPerPage: 10 } },
+    {
+      fetchPage: createFetcher({
+        '/': pageWithHead(
+          'Home',
+          '<link rel="alternate" hreflang="en" href="/"><link rel="alternate" hreflang="sl" href="/sl/"><link rel="alternate" hreflang="x-default" href="https://external.example/">',
+          '<main>Home</main>',
+        ),
+      }),
+    },
+  )
+  const summary = summarizeMultipageImportTree(tree)
+
+  assert.equal(tree.canonicalDiscovery.alternateLanguageEntries.length, 3)
+  assert.equal(tree.canonicalDiscovery.alternateLanguageEntries.find((entry) => entry.hreflang === 'sl')?.normalizedRoutePath, '/sl')
+  assert.equal(tree.canonicalDiscovery.alternateLanguageEntries.find((entry) => entry.hreflang === 'x-default')?.sameSite, false)
+  assert.equal(tree.canonicalDiscovery.hreflangGroups.length, 1)
+  assert.equal(summary.canonicalDiscovery.alternateLanguageEntries.length, 3)
+  assert.ok(tree.canonicalDiscovery.diagnostics.some((entry) => entry.startsWith('HREFLANG_DISCOVERY_FOUND:/:sl:/sl')))
 })
 
 test('sitemap.xml discovery adds hidden route candidates', async () => {

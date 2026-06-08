@@ -7,7 +7,7 @@ import type {
   MultiPagePreviewValidationStatus,
 } from '@/gnr8/runtime/multipage-preview-validation'
 
-type DiagnosticGroupName = 'Discovery' | 'Robots Discovery' | 'Sitemap Discovery' | 'Acquisition' | 'Assembly' | 'Preview' | 'Validation'
+type DiagnosticGroupName = 'Discovery' | 'Canonical Discovery' | 'Robots Discovery' | 'Sitemap Discovery' | 'Acquisition' | 'Assembly' | 'Preview' | 'Validation'
 
 export type MultiPageImportOperatorRouteStatus = 'assembled' | 'fetched' | 'failed' | 'skipped' | 'missing'
 
@@ -35,6 +35,13 @@ export type MultiPageImportOperatorSummary = {
       sitemapCount: number
       discoveredUrlCount: number
       skippedUrlCount: number
+      warnings: string[]
+    }
+    canonicalDiscovery: {
+      canonicalUrlCount: number
+      conflictCount: number
+      duplicateRouteCount: number
+      hreflangGroupCount: number
       warnings: string[]
     }
     robotsDiscovery: {
@@ -196,6 +203,12 @@ function translateDiagnostic(value: string): string | null {
       return 'Some sitemap URLs were outside the current import scope or were not valid page routes.'
     case 'SITEMAP_LIMIT_REACHED':
       return 'A sitemap discovery limit prevented importing additional sitemap URLs.'
+    case 'CANONICAL_DISCOVERY_CONFLICT':
+      return 'Some pages declare conflicting canonical URLs.'
+    case 'CANONICAL_DISCOVERY_DUPLICATE':
+      return 'Multiple discovered pages point to the same canonical route.'
+    case 'CANONICAL_ROUTE_DIFFERENT':
+      return 'Some pages declare a canonical route different from their discovered route.'
     case 'ROBOTS_DISCOVERY_FAILED':
       return 'Robots discovery encountered a parsing or fetch failure.'
     case 'ROBOTS_SITEMAP_DECLARATION_MISSING':
@@ -281,6 +294,7 @@ export function buildMultiPageImportOperatorSummary(input: BuildInput = {}): Mul
   const discoveryContainer = isRecord(provenance.multiPageDiscovery) ? provenance.multiPageDiscovery : {}
   const discoverySummary = isRecord(discoveryContainer.summary) ? discoveryContainer.summary : {}
   const discoveryManifest = isRecord(discoveryContainer.manifest) ? discoveryContainer.manifest : {}
+  const canonicalDiscovery = isRecord(discoveryContainer.canonicalDiscovery) ? discoveryContainer.canonicalDiscovery : {}
   const sitemapDiscovery = isRecord(discoveryContainer.sitemapDiscovery) ? discoveryContainer.sitemapDiscovery : {}
   const robotsDiscovery = isRecord(discoveryContainer.robotsDiscovery) ? discoveryContainer.robotsDiscovery : {}
   const acquisition = isRecord(discoveryContainer.acquisition) ? discoveryContainer.acquisition : null
@@ -315,6 +329,19 @@ export function buildMultiPageImportOperatorSummary(input: BuildInput = {}): Mul
     discoveredUrlCount: Math.max(nonNegativeInt(sitemapDiscovery.discoveredUrlCount), nonNegativeInt(sitemapDiscovery.urlCount)),
     skippedUrlCount: nonNegativeInt(sitemapDiscovery.skippedUrlCount),
     warnings: sitemapWarnings.slice(0, 5),
+  }
+  const canonicalDiagnostics = textList(canonicalDiscovery.diagnostics)
+  const canonicalWarnings = uniqueSorted(canonicalDiagnostics.map(translateDiagnostic).filter((entry): entry is string => Boolean(entry)))
+  const canonicalEntries = Array.isArray(canonicalDiscovery.canonicalEntries) ? canonicalDiscovery.canonicalEntries : []
+  const canonicalConflicts = Array.isArray(canonicalDiscovery.conflicts) ? canonicalDiscovery.conflicts : []
+  const canonicalDuplicates = Array.isArray(canonicalDiscovery.duplicates) ? canonicalDiscovery.duplicates : []
+  const hreflangGroups = Array.isArray(canonicalDiscovery.hreflangGroups) ? canonicalDiscovery.hreflangGroups : []
+  const canonicalOverview = {
+    canonicalUrlCount: Math.max(nonNegativeInt(canonicalDiscovery.canonicalUrlCount), canonicalEntries.length),
+    conflictCount: Math.max(nonNegativeInt(canonicalDiscovery.conflictCount), canonicalConflicts.length),
+    duplicateRouteCount: Math.max(nonNegativeInt(canonicalDiscovery.duplicateRouteCount), canonicalDuplicates.length),
+    hreflangGroupCount: Math.max(nonNegativeInt(canonicalDiscovery.hreflangGroupCount), hreflangGroups.length),
+    warnings: canonicalWarnings.slice(0, 5),
   }
   const robotsDiagnostics = textList(robotsDiscovery.diagnostics)
   const robotsWarnings = uniqueSorted(robotsDiagnostics.map(translateDiagnostic).filter((entry): entry is string => Boolean(entry)))
@@ -407,6 +434,7 @@ export function buildMultiPageImportOperatorSummary(input: BuildInput = {}): Mul
   const rawDiagnostics = uniqueSorted(
     textList(discoverySummary.diagnostics)
       .concat(textList(discoveryManifest.diagnostics))
+      .concat(canonicalDiagnostics)
       .concat(robotsDiagnostics)
       .concat(sitemapDiagnostics)
       .concat(textList(acquisitionSummary.diagnostics))
@@ -463,6 +491,7 @@ export function buildMultiPageImportOperatorSummary(input: BuildInput = {}): Mul
         skippedLinks,
       },
       sitemapDiscovery: sitemapOverview,
+      canonicalDiscovery: canonicalOverview,
       robotsDiscovery: robotsOverview,
       acquisition: {
         fetchedPages,
@@ -490,6 +519,7 @@ export function buildMultiPageImportOperatorSummary(input: BuildInput = {}): Mul
     },
     diagnostics: [
       diagnosticGroup('Discovery', textList(discoverySummary.diagnostics).concat(textList(discoveryManifest.diagnostics))),
+      diagnosticGroup('Canonical Discovery', canonicalDiagnostics),
       diagnosticGroup('Robots Discovery', robotsDiagnostics),
       diagnosticGroup('Sitemap Discovery', sitemapDiagnostics),
       diagnosticGroup('Acquisition', textList(acquisitionSummary.diagnostics).concat(textList(acquisition?.diagnostics))),
