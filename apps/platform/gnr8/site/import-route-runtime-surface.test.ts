@@ -22,6 +22,12 @@ test('scoped import API route is pinned to nodejs runtime surface', () => {
   assert.match(routeSource, /RUNTIME_IMPORT_IDENTITY_PREALLOCATION_FAILED/)
 })
 
+test('scoped import API route does not publish or activate imported runtime versions', () => {
+  const routeSource = readFileFromWorkspace('app/api/gnr8/agency/clients/[clientId]/sites/import/route.ts')
+  assert.doesNotMatch(routeSource, /publishSiteVersion|activateSiteVersion|setActiveSiteVersion|\/publish|\/approve/)
+  assert.doesNotMatch(routeSource, /state:\s*['"]PUBLISHED['"]|state\s*=\s*['"]PUBLISHED['"]/)
+})
+
 test('runtime migrate URL API route is pinned to nodejs runtime surface', () => {
   const routeSource = readFileFromWorkspace('app/api/gnr8/runtime/migrate/url/route.ts')
   assert.match(routeSource, /export const runtime = ['"]nodejs['"]/)

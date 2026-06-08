@@ -6,7 +6,7 @@ Track migration-first MVP runtime progress separately from Website OS work.
 
 ## Current Status
 
-Migration Runtime + Command Center MVP is operational and smoke-tested through Phase 7B.
+Migration Runtime + Command Center MVP is operational and smoke-tested through Phase 7C.
 
 Phase 5A adds Command Center migration batch list/detail UI, batch summary, diagnostics, failure reporting, timeline visibility, and operator run/resume controls. Execution remains operator-driven. Queue/worker orchestration and unattended execution do not exist yet.
 
@@ -32,11 +32,18 @@ Phase 7B is COMPLETE.
 Phase 7B classification is SUCCESSFUL.
 Phase 7B operator classification is A. Operator Ready.
 
+Phase 7C completes Discovery Expansion, including sitemap discovery integration, robots discovery, canonical discovery, redirect / alias discovery, discovery quality validation, and discovery priority balancing.
+
+Phase 7C is COMPLETE.
+Phase 7C classification is A/B successful.
+Phase 7C has no architectural blockers.
+Discovery expansion is operational.
+
 Website OS runtime expansion remains paused.
 
 ## Critical Path
 
-Import -> CMS -> Renderer -> Durable Jobs -> Durable Batches -> Batch Execution -> Batch Execution Observability -> Command Center -> Hosting Operations -> Hosting Hardening -> Multi-Page Import MVP -> Phase 7C Discovery Expansion -> Billing
+Import -> CMS -> Renderer -> Durable Jobs -> Durable Batches -> Batch Execution -> Batch Execution Observability -> Command Center -> Hosting Operations -> Hosting Hardening -> Multi-Page Import MVP -> Discovery Expansion -> Phase 7D Multi-Page Import UI Entry -> Billing
 
 ## Completed Reality Checks
 
@@ -558,12 +565,64 @@ Status:
 - Classification: SUCCESSFUL.
 - Operator Classification: A. Operator Ready.
 
-Next milestone:
+Follow-on milestone now completed:
 - Phase 7C — Discovery Expansion.
 - Static websites only.
 - No dynamic content.
 - No commerce.
 - No compatibility-provider work yet.
+
+### Phase 7C — Discovery Expansion
+
+Goal:
+- Expand static multi-page discovery beyond seed-page links while preserving operator evidence and route-budget safety.
+
+Completed:
+- 7C-1 Sitemap Discovery Integration.
+- 7C-2 Robots Discovery.
+- 7C-3 Canonical Discovery.
+- 7C-4 Redirect / Alias Discovery.
+- 7C-5 Discovery Quality Validation.
+- 7C-6 Discovery Priority Balancing.
+
+Implementation summary:
+- Added `sitemap.xml` discovery, `sitemap_index.xml` discovery, nested sitemap traversal, sitemap provenance, and sitemap operator visibility.
+- Added `robots.txt` parsing, sitemap declarations, allow/disallow evidence, route governance evidence, and operator visibility.
+- Added canonical URL extraction, hreflang extraction, canonical conflict detection, canonical provenance, and operator visibility.
+- Added redirect evidence, alias groups, route collision evidence, redirect provenance, and operator visibility.
+- Validated discovery quality against Viroidoc, MDN, GOV.UK, Paul Graham, and Slovenia.info.
+- Added tiered route prioritization, seed-visible navigation protection, route-budget balancing, sitemap-heavy site protection, and operator diagnostics.
+
+Key real-world outcome:
+- Top-level navigation remains represented even under route limits on sitemap-heavy sites.
+
+Explicitly not yet implemented:
+- dynamic route discovery
+- authenticated/private areas
+- JavaScript click-path crawling
+- e-commerce discovery
+- CMS page materialization
+- production multi-page serving
+- dynamic content extraction
+
+Status:
+- Phase 7C COMPLETE.
+- Classification: A/B successful.
+- No architectural blockers.
+- Discovery expansion operational.
+
+Next active phase:
+- PHASE 7D — MULTI-PAGE IMPORT UI ENTRY.
+
+Phase 7D scope:
+- expose multi-page import through UI
+- discovery controls
+- acquisition controls
+- assembly controls
+- operator workflow
+- no public activation changes
+- no CMS changes
+- no commerce work
 
 ## Current State
 
@@ -578,17 +637,19 @@ Completed:
 - Phase 6C
 - Phase 6D
 - Phase 7B
+- Phase 7C
 
 Hosting Operations MVP complete.
 Hosting Hardening complete.
 Phase 6 complete.
 Phase 7B complete.
+Phase 7C complete.
 
 ## Current Remaining Work
 
 ### Near-term
 
-- Phase 7C — Discovery Expansion
+- Phase 7D — Multi-Page Import UI Entry
 - Billing Reality Check
 
 ### Optional Runtime UX

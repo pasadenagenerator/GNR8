@@ -2,17 +2,18 @@
 
 This is the first file every new ChatGPT/Codex thread should read.
 
-## Current Active Track: Phase 7C — Discovery Expansion
+## Current Active Track: Phase 7D — Multi-Page Import UI Entry
 
 Website OS branch status:
 - Closed/frozen/paused.
 - Do not continue Website OS runtime expansion unless explicitly requested.
 
 Latest completed milestone:
-- Phase 7B — Multi-Page Import MVP.
+- Phase 7C — Discovery Expansion.
 - Status: COMPLETE.
-- Classification: SUCCESSFUL.
-- Operator Classification: A. Operator Ready.
+- Classification: A/B successful.
+- No architectural blockers.
+- Discovery expansion operational.
 
 Production smoke-test:
 - completed successfully.
@@ -29,6 +30,15 @@ Phase 7B real website validation:
 - Paul Graham discovery, acquisition, and assembly completed successfully.
 - Paul Graham route-limit warnings surfaced correctly.
 - Initial apex/www canonical-host mismatch assembly blocker was discovered and fixed.
+
+Phase 7C real website validation:
+- Viroidoc validation completed.
+- MDN validation completed.
+- GOV.UK validation completed.
+- Paul Graham validation completed.
+- Slovenia.info validation completed.
+- Discovery quality assessment completed.
+- Top-level navigation remains represented even under route limits on sitemap-heavy sites.
 
 Dedicated progress doc:
 - `docs/ai/MIGRATION_RUNTIME_PROGRESS.md`
@@ -59,6 +69,7 @@ Current completed chain:
 - Mono Map Compatibility Restoration
 - Maver Production Validation
 - Multi-Page Import MVP
+- Discovery Expansion
 
 Latest completed migration capabilities:
 - `MigrationBatchExecutor`
@@ -125,6 +136,27 @@ Latest completed migration capabilities:
 - operator summary
 - route tables
 - operator-readable warnings, blockers, recommendations, and diagnostics
+- sitemap.xml discovery
+- sitemap_index.xml discovery
+- nested sitemap traversal
+- sitemap provenance
+- sitemap operator visibility
+- robots.txt parsing
+- sitemap declarations
+- allow/disallow evidence
+- route governance evidence
+- canonical URL extraction
+- hreflang extraction
+- canonical conflict detection
+- canonical provenance
+- redirect evidence
+- alias groups
+- route collision evidence
+- redirect provenance
+- tiered route prioritization
+- seed-visible navigation protection
+- route-budget balancing
+- sitemap-heavy site protection
 
 Completed migration-first chain:
 - Import
@@ -144,6 +176,7 @@ Completed migration-first chain:
 - Mono Map Compatibility Restoration
 - Maver Production Validation
 - Multi-Page Import MVP
+- Discovery Expansion
 
 Phase 6 completion notes:
 - Phase 6 is COMPLETE.
@@ -181,12 +214,25 @@ Phase 7B completion notes:
 - Public production multi-page serving was not activated.
 - Automatic publish activation was not added.
 
+Phase 7C completion notes:
+- Phase 7C is COMPLETE.
+- Phase 7C classification is A/B successful.
+- No architectural blockers were found.
+- Discovery expansion is operational.
+- Sitemap discovery now covers `sitemap.xml`, `sitemap_index.xml`, nested sitemap traversal, sitemap provenance, and sitemap operator visibility.
+- Robots discovery now covers `robots.txt` parsing, sitemap declarations, allow/disallow evidence, route governance evidence, and operator visibility.
+- Canonical discovery now covers canonical URL extraction, hreflang extraction, canonical conflict detection, canonical provenance, and operator visibility.
+- Redirect / Alias discovery now covers redirect evidence, alias groups, route collision evidence, redirect provenance, and operator visibility.
+- Discovery quality validation covered Viroidoc, MDN, GOV.UK, Paul Graham, Slovenia.info, and discovery quality assessment.
+- Discovery priority balancing now covers tiered route prioritization, seed-visible navigation protection, route-budget balancing, sitemap-heavy site protection, and operator diagnostics.
+- Key real-world outcome: top-level navigation remains represented even under route limits on sitemap-heavy sites.
+
 Current critical path:
-- Phase 7C — Discovery Expansion
+- Phase 7D — Multi-Page Import UI Entry
 - Billing
 
 Next recommended milestone:
-- Phase 7C — Discovery Expansion.
+- Phase 7D — Multi-Page Import UI Entry.
 
 Explicit exclusions still in force:
 - no Website OS runtime expansion
@@ -195,10 +241,14 @@ Explicit exclusions still in force:
 - no billing automation yet
 - no queue/worker unless a future phase explicitly introduces it
 - no autonomous execution
-- no dynamic content import
-- no commerce import
+- no dynamic route discovery
+- no authenticated/private areas
+- no JavaScript click-path crawling
+- no e-commerce discovery
+- no CMS page materialization
 - no compatibility-provider extraction
 - no public production multi-page serving
+- no dynamic content extraction
 - no automatic publish activation
 
 ## A) Current Project State
@@ -222,7 +272,7 @@ Dedicated pause note:
 - Future continuation point: Execution Artifact Runtime family.
 - Execution Artifact Runtime family is not currently part of the migration-critical path.
 Next migration platform milestone:
-- Phase 7C — Discovery Expansion.
+- Phase 7D — Multi-Page Import UI Entry.
 - Phase 5A completed Command Center integration for migration batches; execution remains operator-driven and queue/worker orchestration does not exist yet.
 - Phase 6A completed read-only hosting operations observability for Command Center; hosting overview/detail are operational and production smoke-tested.
 - Phase 6B completed Hosting Operations workflow review.
@@ -232,6 +282,7 @@ Next migration platform milestone:
 - Hosting Operations MVP is functionally complete.
 - Phase 6 completed Hosting Operations, Hosting Hardening, Active Serving Consistency, Imported Runtime Reconciliation, Production Validation, and Mono Compatibility Validation.
 - Phase 7B completed static multi-page import validation and is Operator Ready.
+- Phase 7C completed Discovery Expansion and is operational.
 Current completed runtime chain:
 - `Proposal Approval Queue → Execution Readiness Execution Package → Execution Contract Execution Contract Readiness → Execution Bundle Execution Bundle Readiness → Execution Authorization Execution Authorization Readiness Execution Authorization Package → Execution Intent Execution Intent Readiness → Execution Plan Execution Plan Readiness → Execution Candidate Execution Candidate Readiness Execution Candidate Package → Execution Candidate Authorization Execution Candidate Authorization Readiness Execution Candidate Authorization Package`
 Candidate Authorization Family completed. Governance graph expanded. Execution remains blocked. Website OS remains read-only.
@@ -1124,20 +1175,19 @@ Hard boundaries remain:
 
 ## F) Current Active Implementation Phase
 
-Active phase: Phase 7C — Discovery Expansion.
+Active phase: Phase 7D — Multi-Page Import UI Entry.
 
 Practical next phase:
-1. sitemap.xml discovery.
-2. robots.txt discovery.
-3. canonical URL discovery.
-4. larger site-tree generation.
-5. improved route acquisition coverage.
+1. Expose multi-page import through UI.
+2. Add discovery controls.
+3. Add acquisition controls.
+4. Add assembly controls.
+5. Preserve operator workflow.
 
-Phase 7C boundary:
-- Static websites only.
-- No dynamic content.
-- No commerce.
-- No compatibility-provider work yet.
+Phase 7D boundary:
+- No public activation changes.
+- No CMS changes.
+- No commerce work.
 
 ## G) How Next Thread Should Behave
 

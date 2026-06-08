@@ -1,7 +1,7 @@
 # GNR8 CURRENT STATE SNAPSHOT
 
 ## Snapshot Date
-2026-06-06
+2026-06-08
 
 ## Migration Platform MVP Buildout
 
@@ -19,12 +19,17 @@ Completed migration-first chain:
 - Hosting Operations
 - Hosting Hardening
 - Multi-Page Import MVP
+- Discovery Expansion
 
 Migration Runtime + Command Center MVP is operational and smoke-tested.
 Phase 6 is COMPLETE.
 Phase 7B — Multi-Page Import MVP is COMPLETE.
 Phase 7B classification is SUCCESSFUL.
 Phase 7B operator classification is A. Operator Ready.
+Phase 7C — Discovery Expansion is COMPLETE.
+Phase 7C classification is A/B successful.
+Phase 7C has no architectural blockers.
+Discovery expansion is operational.
 Phase 6A — Hosting Operations MVP is complete.
 Phase 6B — Hosting Operations Workflow Review is complete.
 Phase 6C-A — Readiness & Domain Operations MVP is complete.
@@ -98,6 +103,12 @@ Completed capabilities:
 - Multi-Page Validation Engine
 - Multi-Page Operator Visibility
 - Multi-Page Operator Validation Completion
+- Sitemap Discovery Integration
+- Robots Discovery
+- Canonical Discovery
+- Redirect / Alias Discovery
+- Discovery Quality Validation
+- Discovery Priority Balancing
 
 Current migration runtime capabilities:
 - durable jobs
@@ -142,6 +153,27 @@ Current migration runtime capabilities:
 - link validation
 - operator diagnostics
 - static website import readiness evaluation
+- sitemap.xml discovery
+- sitemap_index.xml discovery
+- nested sitemap traversal
+- sitemap provenance
+- sitemap operator visibility
+- robots.txt parsing
+- sitemap declarations from robots.txt
+- allow/disallow evidence
+- route governance evidence
+- canonical URL extraction
+- hreflang extraction
+- canonical conflict detection
+- canonical provenance
+- redirect evidence
+- alias groups
+- route collision evidence
+- redirect provenance
+- tiered route prioritization
+- seed-visible navigation protection
+- route-budget balancing
+- sitemap-heavy site protection
 
 Hosting Operations now exposes:
 - Hosting Overview
@@ -197,6 +229,49 @@ Explicitly not included in Phase 7B:
 - compatibility-provider extraction
 - public production multi-page serving
 - automatic publish activation
+
+## Phase 7C Discovery Expansion
+
+Status:
+- COMPLETE.
+
+Classification:
+- A/B successful.
+- No architectural blockers.
+- Discovery expansion operational.
+
+Delivered:
+- 7C-1 Sitemap Discovery Integration: `sitemap.xml` discovery, `sitemap_index.xml` discovery, nested sitemap traversal, sitemap provenance, and sitemap operator visibility.
+- 7C-2 Robots Discovery: `robots.txt` parsing, sitemap declarations, allow/disallow evidence, route governance evidence, and operator visibility.
+- 7C-3 Canonical Discovery: canonical URL extraction, hreflang extraction, canonical conflict detection, canonical provenance, and operator visibility.
+- 7C-4 Redirect / Alias Discovery: redirect evidence, alias groups, route collision evidence, redirect provenance, and operator visibility.
+- 7C-5 Discovery Quality Validation: Viroidoc validation, MDN validation, GOV.UK validation, Paul Graham validation, Slovenia.info validation, and discovery quality assessment.
+- 7C-6 Discovery Priority Balancing: tiered route prioritization, seed-visible navigation protection, route-budget balancing, sitemap-heavy site protection, and operator diagnostics.
+
+Key real-world outcome:
+- Top-level navigation remains represented even under route limits on sitemap-heavy sites.
+
+Explicitly not yet implemented:
+- dynamic route discovery
+- authenticated/private areas
+- JavaScript click-path crawling
+- e-commerce discovery
+- CMS page materialization
+- production multi-page serving
+- dynamic content extraction
+
+Next active phase:
+- PHASE 7D — MULTI-PAGE IMPORT UI ENTRY.
+
+Phase 7D scope:
+- expose multi-page import through UI
+- discovery controls
+- acquisition controls
+- assembly controls
+- operator workflow
+- no public activation changes
+- no CMS changes
+- no commerce work
 
 ## Production Validation
 
@@ -259,7 +334,7 @@ Execution boundary:
 - unattended orchestration does not exist yet
 
 Remaining critical path:
-- Phase 7C — Discovery Expansion
+- Phase 7D — Multi-Page Import UI Entry
 - Billing
 
 Current Hosting Operations status:
@@ -267,15 +342,18 @@ Current Hosting Operations status:
 - Hosting Hardening is complete.
 - Phase 6 is complete.
 - Phase 7B is complete.
+- Phase 7C is complete.
 
 Next recommended milestone:
-- Phase 7C — Discovery Expansion
+- Phase 7D — Multi-Page Import UI Entry
 
-Phase 7C boundary:
-- Static websites only.
-- No dynamic content.
-- No commerce.
-- No compatibility-provider work yet.
+Phase 7D boundary:
+- Expose multi-page import through UI.
+- Add discovery, acquisition, and assembly controls.
+- Preserve operator workflow.
+- No public activation changes.
+- No CMS changes.
+- No commerce work.
 
 ## Bootstrap Runtime State (2026-06-03)
 
@@ -336,8 +414,9 @@ Migration-first reprioritization:
 - The Execution Artifact Runtime family is not currently part of the migration-critical path.
 
 Current migration platform continuation:
-- Phase 7C — Discovery Expansion.
+- Phase 7D — Multi-Page Import UI Entry.
 - Phase 7B — Multi-Page Import MVP is complete.
+- Phase 7C — Discovery Expansion is complete.
 - Website OS runtime expansion remains paused.
 - Execution Artifact Runtime family remains outside the migration-critical path.
 
@@ -412,8 +491,9 @@ Future continuation:
 - Not currently part of the migration-critical path.
 
 Current migration platform continuation:
-- Phase 7C — Discovery Expansion.
+- Phase 7D — Multi-Page Import UI Entry.
 - Phase 7B — Multi-Page Import MVP is complete.
+- Phase 7C — Discovery Expansion is complete.
 - Website OS runtime expansion remains paused.
 
 ## Execution Candidate Runtime Family v1 Milestone (2026-06-03)

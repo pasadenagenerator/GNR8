@@ -35,11 +35,15 @@ type Body = {
     | {
         enabled?: boolean
         acquireHtml?: boolean
+        assembleRawArtifactPages?: boolean
         limits?: {
           maxRoutes?: number
           maxDepth?: number
           maxLinksPerPage?: number
           maxTemplateLinksPerRoute?: number
+          maxSitemaps?: number
+          maxUrlsFromSitemaps?: number
+          maxNestedSitemaps?: number
         }
         htmlAcquisitionLimits?: {
           maxPages?: number

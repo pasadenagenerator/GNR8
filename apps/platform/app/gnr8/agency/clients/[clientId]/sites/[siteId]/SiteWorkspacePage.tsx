@@ -17,6 +17,8 @@ import {
   ResolveCurrentAgencyError,
 } from '@/src/auth/resolve-current-agency'
 import { canPerformAction } from '@/src/auth/rbac'
+import { buildMultiPageRawTemplatePreviewLinks } from '@/gnr8/site/site-multipage-preview-links'
+import { hasMultiPageImportOperatorSignal } from '@/gnr8/site/site-multipage-operator-signal'
 
 type SearchParams = {
   agency?: string
@@ -314,20 +316,25 @@ function renderMessageList(title: string, items: string[], tone: 'warning' | 'bl
 function renderMultiPageImportOperatorContent(readModel: Awaited<ReturnType<typeof getSiteWorkspaceReadModelForPage>>): ReactNode {
   if (!readModel) return null
   const summary = readModel.multiPageImport
+  const previewLinks = buildMultiPageRawTemplatePreviewLinks({
+    siteVersionId: readModel.pipeline.latestRuntimeSiteVersionId,
+    routes: summary.routes,
+  })
   const priorityBalance = summary.overview.discoveryPriorityBalancing
   const priorityTierRows: DiscoveryPriorityTierOperatorRow[] = priorityBalance.tiers
-  const hasMultiPageSignal =
-    readModel.overview.rawImportArtifactFound ||
-    summary.overview.discovery.discoveredRoutes > 0 ||
-    summary.overview.sitemapDiscovery.sitemapCount > 0 ||
-    summary.overview.sitemapDiscovery.discoveredUrlCount > 0 ||
-    summary.overview.canonicalDiscovery.canonicalUrlCount > 0 ||
-    summary.overview.canonicalDiscovery.hreflangGroupCount > 0 ||
-    priorityBalance.selectedRouteCount > 0 ||
-    priorityBalance.excludedRouteCount > 0 ||
-    summary.overview.acquisition.fetchedPages > 0 ||
-    summary.overview.assembly.assembledPages > 0 ||
-    summary.routes.length > 0
+  const hasMultiPageSignal = hasMultiPageImportOperatorSignal({
+    rawImportArtifactFound: readModel.overview.rawImportArtifactFound,
+    discoveredRoutes: summary.overview.discovery.discoveredRoutes,
+    sitemapCount: summary.overview.sitemapDiscovery.sitemapCount,
+    sitemapDiscoveredUrlCount: summary.overview.sitemapDiscovery.discoveredUrlCount,
+    canonicalUrlCount: summary.overview.canonicalDiscovery.canonicalUrlCount,
+    hreflangGroupCount: summary.overview.canonicalDiscovery.hreflangGroupCount,
+    prioritySelectedRouteCount: priorityBalance.selectedRouteCount,
+    priorityExcludedRouteCount: priorityBalance.excludedRouteCount,
+    fetchedPages: summary.overview.acquisition.fetchedPages,
+    assembledPages: summary.overview.assembly.assembledPages,
+    routeCount: summary.routes.length,
+  })
   if (!hasMultiPageSignal) return null
 
   return (
@@ -375,6 +382,16 @@ function renderMultiPageImportOperatorContent(readModel: Awaited<ReturnType<type
         <div style={{ border: '1px solid #e2e8f0', borderRadius: 8, background: '#f8fafc', padding: '8px 10px', color: '#334155', fontSize: 12 }}>
           <strong style={{ color: '#0f172a' }}>Recommendation:</strong> {summary.overview.validation.recommendation}
         </div>
+
+        {previewLinks.length > 0 ? (
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            {previewLinks.map((link) => (
+              <a key={`${link.label}:${link.routePath}`} href={link.href} target='_blank' rel='noreferrer' style={quickActionStyle()}>
+                {link.label}
+              </a>
+            ))}
+          </div>
+        ) : null}
 
         <div style={{ overflowX: 'auto', border: '1px solid #e2e8f0', borderRadius: 8 }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
