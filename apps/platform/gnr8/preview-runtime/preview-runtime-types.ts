@@ -35,6 +35,13 @@ export type PreviewRuntimeSummary = {
   semanticCtaCount?: number;
   persistedAssetCount?: number;
   externalFallbackAssetCount?: number;
+  rawTemplatePreviewEvidence?: {
+    selectedRoutePath: string;
+    selectedRawFilePath: string;
+    htmlByteLengthBeforeRewrite: number;
+    htmlByteLengthAfterRewrite: number;
+    rewrittenLinkCount: number;
+  };
 };
 
 export type PreviewRuntimePreparationResult = {

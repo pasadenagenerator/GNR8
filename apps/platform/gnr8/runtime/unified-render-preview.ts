@@ -50,6 +50,8 @@ type RenderedCapturePreviewTruth = {
   screenshotCount: number
 }
 
+type RawTemplatePreviewEvidence = NonNullable<PreviewRuntimeSummary['rawTemplatePreviewEvidence']>
+
 type ResolvedSiteVersionPreview = {
   siteId: string
   siteVersionId: string
@@ -76,6 +78,7 @@ type ResolvedSiteVersionPreview = {
     slotKeys: string[]
   }
   multiPagePreviewValidation?: MultiPagePreviewValidation
+  rawTemplatePreviewEvidence?: RawTemplatePreviewEvidence
 }
 
 export class SiteVersionPreviewUnavailableError extends Error {
@@ -323,6 +326,16 @@ export const MULTIPAGE_LINK_REWRITE_DIAGNOSTIC = {
 
 export const MULTIPAGE_PREVIEW_ISOLATION_DIAGNOSTIC = {
   MULTIPAGE_PREVIEW_PAGE_ISOLATED: 'MULTIPAGE_PREVIEW_PAGE_ISOLATED',
+} as const
+
+export const RAW_TEMPLATE_PREVIEW_EVIDENCE_DIAGNOSTIC = {
+  PREVIEW_ROOT_ROUTE_SELECTED: 'PREVIEW_ROOT_ROUTE_SELECTED',
+  PREVIEW_ROUTE_MAP_ENTRY_SELECTED: 'PREVIEW_ROUTE_MAP_ENTRY_SELECTED',
+  PREVIEW_RAW_FILE_SELECTED: 'PREVIEW_RAW_FILE_SELECTED',
+  PREVIEW_HTML_BYTES_READ: 'PREVIEW_HTML_BYTES_READ',
+  PREVIEW_LINK_REWRITE_STARTED: 'PREVIEW_LINK_REWRITE_STARTED',
+  PREVIEW_LINK_REWRITE_COMPLETED: 'PREVIEW_LINK_REWRITE_COMPLETED',
+  PREVIEW_LINKS_REWRITTEN_COUNT: 'PREVIEW_LINKS_REWRITTEN_COUNT',
 } as const
 
 type MultiPageLinkRewriteCounts = {
@@ -798,6 +811,7 @@ function buildRawTemplatePreviewRuntimeSummary(input: {
   persistedAssetCount?: number
   externalFallbackAssetCount?: number
   routeMapDiagnostics?: string[]
+  rawTemplatePreviewEvidence?: RawTemplatePreviewEvidence
 }): PreviewRuntimeSummary {
   const base = input.baseSummary ?? defaultPreviewRuntimeSummary()
   const baseDiagnostics = (base.previewDiagnostics ?? []).filter(
@@ -829,6 +843,7 @@ function buildRawTemplatePreviewRuntimeSummary(input: {
       PREVIEW_RUNTIME_DIAGNOSTIC.RAW_TEMPLATE_PREVIEW_RENDERED,
       ...(input.routeMapDiagnostics ?? []),
     ]),
+    rawTemplatePreviewEvidence: input.rawTemplatePreviewEvidence,
   }
 }
 
@@ -923,6 +938,33 @@ async function renderRawTemplateSiteVersionPreview(input: {
     })
   }
   const selectedHtmlPath = routeMapResolution.outcome === 'selected' ? routeMapResolution.rawFilePath : artifact.entryHtmlPath
+  const selectedRoutePath = routeMapResolution.outcome === 'selected' ? routeMapResolution.routePath : normalizePagePath(input.requestedPath)
+  if (routeMapResolution.outcome === 'selected') {
+    if (routeMapResolution.routePath === '/') {
+      console.info(`[preview-runtime] ${RAW_TEMPLATE_PREVIEW_EVIDENCE_DIAGNOSTIC.PREVIEW_ROOT_ROUTE_SELECTED}`, {
+        siteId: artifact.siteId,
+        siteVersionId: artifact.siteVersionId,
+        requestedPath: normalizePagePath(input.requestedPath),
+        selectedRoutePath,
+        selectedRawFilePath: selectedHtmlPath,
+      })
+    }
+    console.info(`[preview-runtime] ${RAW_TEMPLATE_PREVIEW_EVIDENCE_DIAGNOSTIC.PREVIEW_ROUTE_MAP_ENTRY_SELECTED}`, {
+      siteId: artifact.siteId,
+      siteVersionId: artifact.siteVersionId,
+      requestedPath: normalizePagePath(input.requestedPath),
+      selectedRoutePath,
+      selectedRawFilePath: selectedHtmlPath,
+      routeMapDiagnostic: routeMapResolution.diagnosticCode,
+    })
+  }
+  console.info(`[preview-runtime] ${RAW_TEMPLATE_PREVIEW_EVIDENCE_DIAGNOSTIC.PREVIEW_RAW_FILE_SELECTED}`, {
+    siteId: artifact.siteId,
+    siteVersionId: artifact.siteVersionId,
+    requestedPath: normalizePagePath(input.requestedPath),
+    selectedRoutePath,
+    selectedRawFilePath: selectedHtmlPath,
+  })
   const entryAsset = await cacheLookup({
     context: input.context,
     cache: input.context.rawTemplateAssetByKey,
@@ -940,12 +982,29 @@ async function renderRawTemplateSiteVersionPreview(input: {
     })
   }
 
+  const rawHtml = entryAsset.bytes.toString('utf8')
+  const htmlByteLengthBeforeRewrite = Buffer.byteLength(rawHtml)
+  console.info(`[preview-runtime] ${RAW_TEMPLATE_PREVIEW_EVIDENCE_DIAGNOSTIC.PREVIEW_HTML_BYTES_READ}`, {
+    siteId: artifact.siteId,
+    siteVersionId: artifact.siteVersionId,
+    selectedRoutePath,
+    selectedRawFilePath: selectedHtmlPath,
+    htmlByteLengthBeforeRewrite,
+    reportedSizeBytes: entryAsset.sizeBytes,
+  })
   let html = rewriteRawTemplateAssetReferences({
-    html: entryAsset.bytes.toString('utf8'),
+    html: rawHtml,
     siteId: artifact.siteId,
     siteVersionId: artifact.siteVersionId,
     entryHtmlPath: selectedHtmlPath,
     fileMapPaths: new Set(Object.keys(artifact.fileMap ?? {})),
+  })
+  console.info(`[preview-runtime] ${RAW_TEMPLATE_PREVIEW_EVIDENCE_DIAGNOSTIC.PREVIEW_LINK_REWRITE_STARTED}`, {
+    siteId: artifact.siteId,
+    siteVersionId: artifact.siteVersionId,
+    selectedRoutePath,
+    selectedRawFilePath: selectedHtmlPath,
+    htmlByteLengthBeforeRewrite,
   })
   const linkRewrite = rewriteRawTemplateMultiPageLinks({
     html,
@@ -956,6 +1015,25 @@ async function renderRawTemplateSiteVersionPreview(input: {
     routeMapResolution,
   })
   html = linkRewrite.html
+  const rawTemplatePreviewEvidence: RawTemplatePreviewEvidence = {
+    selectedRoutePath,
+    selectedRawFilePath: selectedHtmlPath,
+    htmlByteLengthBeforeRewrite,
+    htmlByteLengthAfterRewrite: Buffer.byteLength(html),
+    rewrittenLinkCount: linkRewrite.counts.rewritten,
+  }
+  console.info(`[preview-runtime] ${RAW_TEMPLATE_PREVIEW_EVIDENCE_DIAGNOSTIC.PREVIEW_LINK_REWRITE_COMPLETED}`, {
+    siteId: artifact.siteId,
+    siteVersionId: artifact.siteVersionId,
+    ...rawTemplatePreviewEvidence,
+  })
+  console.info(`[preview-runtime] ${RAW_TEMPLATE_PREVIEW_EVIDENCE_DIAGNOSTIC.PREVIEW_LINKS_REWRITTEN_COUNT}`, {
+    siteId: artifact.siteId,
+    siteVersionId: artifact.siteVersionId,
+    selectedRoutePath,
+    selectedRawFilePath: selectedHtmlPath,
+    rewrittenLinkCount: linkRewrite.counts.rewritten,
+  })
   const slots = await cacheLookup({
     context: input.context,
     cache: input.context.slotsBySiteVersionId,
@@ -1081,9 +1159,21 @@ async function renderRawTemplateSiteVersionPreview(input: {
     routeMapDiagnostics: [
       routeMapResolution.diagnosticCode,
       MULTIPAGE_PREVIEW_ISOLATION_DIAGNOSTIC.MULTIPAGE_PREVIEW_PAGE_ISOLATED,
+      ...(routeMapResolution.outcome === 'selected' && routeMapResolution.routePath === '/'
+        ? [RAW_TEMPLATE_PREVIEW_EVIDENCE_DIAGNOSTIC.PREVIEW_ROOT_ROUTE_SELECTED]
+        : []),
+      ...(routeMapResolution.outcome === 'selected'
+        ? [RAW_TEMPLATE_PREVIEW_EVIDENCE_DIAGNOSTIC.PREVIEW_ROUTE_MAP_ENTRY_SELECTED]
+        : []),
+      RAW_TEMPLATE_PREVIEW_EVIDENCE_DIAGNOSTIC.PREVIEW_RAW_FILE_SELECTED,
+      RAW_TEMPLATE_PREVIEW_EVIDENCE_DIAGNOSTIC.PREVIEW_HTML_BYTES_READ,
+      RAW_TEMPLATE_PREVIEW_EVIDENCE_DIAGNOSTIC.PREVIEW_LINK_REWRITE_STARTED,
+      RAW_TEMPLATE_PREVIEW_EVIDENCE_DIAGNOSTIC.PREVIEW_LINK_REWRITE_COMPLETED,
+      RAW_TEMPLATE_PREVIEW_EVIDENCE_DIAGNOSTIC.PREVIEW_LINKS_REWRITTEN_COUNT,
       ...linkRewrite.diagnostics,
       ...multiPagePreviewValidation.diagnostics,
     ],
+    rawTemplatePreviewEvidence,
   })
   console.info('[preview-runtime] RAW_TEMPLATE_PREVIEW_SELECTED', {
     siteId: artifact.siteId,
@@ -1135,6 +1225,7 @@ async function renderRawTemplateSiteVersionPreview(input: {
         previewMode: 'raw_template_preview',
         previewRuntimeSummary: summary,
         multiPagePreviewValidation,
+        rawTemplatePreviewEvidence,
       },
       previewTruth: input.previewTruth,
       fallbackUsedOverride: false,

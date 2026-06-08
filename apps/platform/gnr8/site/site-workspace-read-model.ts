@@ -1977,6 +1977,25 @@ function parsePreviewRuntimeSummary(value: unknown): PreviewRuntimeSummary | nul
     : []
   const familyRenderUsed = familyRenderMode === 'family_primary' || familyRenderMode === 'hybrid_family_page'
   const familyRenderFallbackToPage = familyRenderMode === 'page_fallback' ? true : Boolean(value.familyRenderFallbackToPage)
+  const rawTemplateEvidence = isRecord(value.rawTemplatePreviewEvidence) ? value.rawTemplatePreviewEvidence : null
+  const parsedRawTemplateEvidence =
+    rawTemplateEvidence &&
+    normalizeText(rawTemplateEvidence.selectedRoutePath) &&
+    normalizeText(rawTemplateEvidence.selectedRawFilePath)
+      ? {
+          selectedRoutePath: normalizeText(rawTemplateEvidence.selectedRoutePath),
+          selectedRawFilePath: normalizeText(rawTemplateEvidence.selectedRawFilePath),
+          htmlByteLengthBeforeRewrite: Number.isFinite(Number(rawTemplateEvidence.htmlByteLengthBeforeRewrite))
+            ? Number(rawTemplateEvidence.htmlByteLengthBeforeRewrite)
+            : 0,
+          htmlByteLengthAfterRewrite: Number.isFinite(Number(rawTemplateEvidence.htmlByteLengthAfterRewrite))
+            ? Number(rawTemplateEvidence.htmlByteLengthAfterRewrite)
+            : 0,
+          rewrittenLinkCount: Number.isFinite(Number(rawTemplateEvidence.rewrittenLinkCount))
+            ? Number(rawTemplateEvidence.rewrittenLinkCount)
+            : 0,
+        }
+      : undefined
 
   return {
     previewMode: mode,
@@ -2003,6 +2022,7 @@ function parsePreviewRuntimeSummary(value: unknown): PreviewRuntimeSummary | nul
     semanticCtaCount: Number.isFinite(Number(value.semanticCtaCount)) ? Number(value.semanticCtaCount) : undefined,
     persistedAssetCount: Number.isFinite(Number(value.persistedAssetCount)) ? Number(value.persistedAssetCount) : undefined,
     externalFallbackAssetCount: Number.isFinite(Number(value.externalFallbackAssetCount)) ? Number(value.externalFallbackAssetCount) : undefined,
+    rawTemplatePreviewEvidence: parsedRawTemplateEvidence,
   }
 }
 

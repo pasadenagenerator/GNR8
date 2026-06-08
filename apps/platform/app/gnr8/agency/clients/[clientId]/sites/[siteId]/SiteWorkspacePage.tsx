@@ -661,6 +661,16 @@ function renderPreviewContent(readModel: Awaited<ReturnType<typeof getSiteWorksp
           {readModel.preview.previewRuntimeSummary.semanticCtaCount ?? 0}
         </p>
       ) : null}
+      {readModel.preview.previewRuntimeSummary?.rawTemplatePreviewEvidence ? (
+        <div style={{ margin: '8px 0 0', border: '1px solid #e2e8f0', borderRadius: 8, padding: 10, background: '#f8fafc' }}>
+          <div style={{ margin: 0, color: '#0f172a', fontSize: 12, fontWeight: 700 }}>Preview Diagnostics</div>
+          <div style={{ marginTop: 6, display: 'grid', gap: 4, color: '#334155', fontSize: 12 }}>
+            <div>selected route: {readModel.preview.previewRuntimeSummary.rawTemplatePreviewEvidence.selectedRoutePath}</div>
+            <div>selected raw file: {readModel.preview.previewRuntimeSummary.rawTemplatePreviewEvidence.selectedRawFilePath}</div>
+            <div>rewritten links count: {readModel.preview.previewRuntimeSummary.rawTemplatePreviewEvidence.rewrittenLinkCount}</div>
+          </div>
+        </div>
+      ) : null}
       <div style={{ margin: '8px 0 0', border: '1px solid #e2e8f0', borderRadius: 8, padding: 10, background: '#f8fafc' }}>
         <div style={{ margin: 0, color: '#0f172a', fontSize: 12, fontWeight: 700 }}>Family Render</div>
         <div style={{ marginTop: 6, display: 'grid', gap: 4, color: '#334155', fontSize: 12 }}>

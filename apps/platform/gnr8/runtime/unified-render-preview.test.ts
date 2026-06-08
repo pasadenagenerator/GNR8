@@ -112,10 +112,7 @@ function fixtureViroidocLikeMultiPageAssemblyProvenance(): RuntimeImportProvenan
     ['/', 'pages/root/index.html'],
     ['/project', 'pages/project/index.html'],
     ['/people', 'pages/people/index.html'],
-    ['/blog', 'pages/blog/index.html'],
     ['/news', 'pages/news/index.html'],
-    ['/learn', 'pages/learn/index.html'],
-    ['/subscribe', 'pages/subscribe/index.html'],
   ] as const
   return {
     multiPageDiscovery: {
@@ -735,10 +732,7 @@ test('raw template preview serves one Viroidoc-like assembled page per requested
     ].join(''),
     'pages/project/index.html': '<!doctype html><html><body><main>PROJECT_MARKER</main></body></html>',
     'pages/people/index.html': '<!doctype html><html><body><main>PEOPLE_MARKER</main></body></html>',
-    'pages/blog/index.html': '<!doctype html><html><body><main>BLOG_MARKER</main></body></html>',
     'pages/news/index.html': '<!doctype html><html><body><main>NEWS_MARKER</main></body></html>',
-    'pages/learn/index.html': '<!doctype html><html><body><main>LEARN_MARKER</main></body></html>',
-    'pages/subscribe/index.html': '<!doctype html><html><body><main>SUBSCRIBE_MARKER</main></body></html>',
   }
   const fileMap = Object.fromEntries(
     Object.entries(htmlByFilePath).map(([filePath, html]) => [
@@ -780,10 +774,10 @@ test('raw template preview serves one Viroidoc-like assembled page per requested
 
   try {
     const expectations = [
-      ['/', 'ROOT_MARKER', ['PROJECT_MARKER', 'PEOPLE_MARKER', 'BLOG_MARKER']],
-      ['/project', 'PROJECT_MARKER', ['ROOT_MARKER', 'PEOPLE_MARKER', 'BLOG_MARKER']],
-      ['/people', 'PEOPLE_MARKER', ['ROOT_MARKER', 'PROJECT_MARKER', 'BLOG_MARKER']],
-      ['/blog', 'BLOG_MARKER', ['ROOT_MARKER', 'PROJECT_MARKER', 'PEOPLE_MARKER']],
+      ['/', 'ROOT_MARKER', ['PROJECT_MARKER', 'PEOPLE_MARKER', 'NEWS_MARKER']],
+      ['/project', 'PROJECT_MARKER', ['ROOT_MARKER', 'PEOPLE_MARKER', 'NEWS_MARKER']],
+      ['/people', 'PEOPLE_MARKER', ['ROOT_MARKER', 'PROJECT_MARKER', 'NEWS_MARKER']],
+      ['/news', 'NEWS_MARKER', ['ROOT_MARKER', 'PROJECT_MARKER', 'PEOPLE_MARKER']],
     ] as const
 
     for (const [routePath, expectedMarker, absentMarkers] of expectations) {
@@ -799,10 +793,17 @@ test('raw template preview serves one Viroidoc-like assembled page per requested
       for (const absentMarker of absentMarkers) assert.equal(preview.html.includes(absentMarker), false)
       assert.equal(preview.html.includes('assembled/all-pages.html'), false)
       assert.equal(preview.previewRuntimeSummary.previewDiagnostics.includes('MULTIPAGE_PREVIEW_PAGE_ISOLATED'), true)
-      assert.equal(preview.multiPagePreviewValidation?.summary.validPreviewRoutes, 7)
+      assert.equal(preview.multiPagePreviewValidation?.summary.validPreviewRoutes, 4)
       assert.equal(preview.multiPagePreviewValidation?.summary.missingPreviewRoutes, 0)
+      assert.equal(preview.rawTemplatePreviewEvidence?.selectedRoutePath, routePath)
+      assert.equal(preview.rawTemplatePreviewEvidence?.selectedRawFilePath, routePath === '/' ? 'pages/root/index.html' : `pages${routePath}/index.html`)
       if (routePath === '/') {
         assert.equal(countOccurrences(preview.html, 'ROOT_MARKER'), 1)
+        assert.equal(preview.rawTemplatePreviewEvidence?.selectedRoutePath, '/')
+        assert.equal(preview.rawTemplatePreviewEvidence?.selectedRawFilePath, 'pages/root/index.html')
+        assert.equal(preview.rawTemplatePreviewEvidence?.htmlByteLengthBeforeRewrite, Buffer.byteLength(htmlByFilePath['pages/root/index.html']))
+        assert.equal((preview.rawTemplatePreviewEvidence?.htmlByteLengthAfterRewrite ?? 0) > 0, true)
+        assert.equal((preview.rawTemplatePreviewEvidence?.rewrittenLinkCount ?? 0) > 0, true)
         assert.equal(
           preview.html.includes('/api/gnr8/runtime/versions/sv-viroidoc/preview?mode=raw_template_preview&amp;path=%2Fproject'),
           true,
@@ -815,8 +816,16 @@ test('raw template preview serves one Viroidoc-like assembled page per requested
           preview.html.includes('/api/gnr8/runtime/versions/sv-viroidoc/preview?mode=raw_template_preview&amp;path=%2Fnews'),
           true,
         )
+        assert.equal(preview.html.includes('data-gnr8-multipage-link="rewritten"'), true)
         assert.equal(preview.previewRuntimeSummary.previewDiagnostics.includes('MULTIPAGE_LINK_REWRITTEN'), true)
         assert.equal(preview.previewRuntimeSummary.previewDiagnostics.includes('MULTIPAGE_ROUTE_MAP_ROOT_SELECTED'), true)
+        assert.equal(preview.previewRuntimeSummary.previewDiagnostics.includes('PREVIEW_ROOT_ROUTE_SELECTED'), true)
+        assert.equal(preview.previewRuntimeSummary.previewDiagnostics.includes('PREVIEW_ROUTE_MAP_ENTRY_SELECTED'), true)
+        assert.equal(preview.previewRuntimeSummary.previewDiagnostics.includes('PREVIEW_RAW_FILE_SELECTED'), true)
+        assert.equal(preview.previewRuntimeSummary.previewDiagnostics.includes('PREVIEW_HTML_BYTES_READ'), true)
+        assert.equal(preview.previewRuntimeSummary.previewDiagnostics.includes('PREVIEW_LINK_REWRITE_STARTED'), true)
+        assert.equal(preview.previewRuntimeSummary.previewDiagnostics.includes('PREVIEW_LINK_REWRITE_COMPLETED'), true)
+        assert.equal(preview.previewRuntimeSummary.previewDiagnostics.includes('PREVIEW_LINKS_REWRITTEN_COUNT'), true)
       }
     }
 
@@ -824,7 +833,7 @@ test('raw template preview serves one Viroidoc-like assembled page per requested
       'pages/root/index.html',
       'pages/project/index.html',
       'pages/people/index.html',
-      'pages/blog/index.html',
+      'pages/news/index.html',
     ])
   } finally {
     restore()

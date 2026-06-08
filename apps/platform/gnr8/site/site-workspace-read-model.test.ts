@@ -1439,6 +1439,13 @@ test('preview runtime summary parser accepts raw template preview mode', () => {
     contentResolutionDiagnostics: [],
     persistedAssetCount: 4,
     externalFallbackAssetCount: 2,
+    rawTemplatePreviewEvidence: {
+      selectedRoutePath: '/',
+      selectedRawFilePath: 'pages/root/index.html',
+      htmlByteLengthBeforeRewrite: 128,
+      htmlByteLengthAfterRewrite: 256,
+      rewrittenLinkCount: 3,
+    },
     previewDiagnostics: ['RAW_TEMPLATE_PREVIEW_SELECTED', 'RAW_TEMPLATE_PREVIEW_RENDERED'],
   })
 
@@ -1447,6 +1454,13 @@ test('preview runtime summary parser accepts raw template preview mode', () => {
   assert.equal(parsed?.resolvedContentCount, 5)
   assert.equal(parsed?.persistedAssetCount, 4)
   assert.equal(parsed?.externalFallbackAssetCount, 2)
+  assert.deepEqual(parsed?.rawTemplatePreviewEvidence, {
+    selectedRoutePath: '/',
+    selectedRawFilePath: 'pages/root/index.html',
+    htmlByteLengthBeforeRewrite: 128,
+    htmlByteLengthAfterRewrite: 256,
+    rewrittenLinkCount: 3,
+  })
 })
 
 test('preview runtime summary parser safely handles legacy rows with no family fields', () => {
