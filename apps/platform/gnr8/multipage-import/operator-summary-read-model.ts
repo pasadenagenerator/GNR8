@@ -64,6 +64,18 @@ export type MultiPageImportOperatorSummary = {
       unknownRoutes: number
       warnings: string[]
     }
+    discoveryPriorityBalancing: {
+      routeLimitHit: boolean
+      selectedRouteCount: number
+      excludedRouteCount: number
+      tiers: Array<{
+        tier: string
+        candidateCount: number
+        selectedCount: number
+        excludedCount: number
+      }>
+      warnings: string[]
+    }
     acquisition: {
       fetchedPages: number
       failedPages: number
@@ -215,6 +227,10 @@ function translateDiagnostic(value: string): string | null {
       return 'Some sitemap URLs were outside the current import scope or were not valid page routes.'
     case 'SITEMAP_LIMIT_REACHED':
       return 'A sitemap discovery limit prevented importing additional sitemap URLs.'
+    case 'DISCOVERY_PRIORITY_ROUTE_EXCLUDED':
+      return 'Priority balancing excluded lower-priority routes after the route limit was reached.'
+    case 'DISCOVERY_PRIORITY_BUDGET_APPLIED':
+      return 'Discovery route candidates were balanced by priority tier before import.'
     case 'CANONICAL_DISCOVERY_CONFLICT':
       return 'Some pages declare conflicting canonical URLs.'
     case 'CANONICAL_DISCOVERY_DUPLICATE':
@@ -416,6 +432,25 @@ export function buildMultiPageImportOperatorSummary(input: BuildInput = {}): Mul
     ),
     warnings: robotsWarnings.slice(0, 5),
   }
+  const priorityBalancing = isRecord(discoveryManifest.routePriorityBalancing) ? discoveryManifest.routePriorityBalancing : {}
+  const priorityDiagnostics = textList(priorityBalancing.diagnostics)
+  const priorityWarnings = uniqueSorted(priorityDiagnostics.map(translateDiagnostic).filter((entry): entry is string => Boolean(entry)))
+  const priorityTiers = Array.isArray(priorityBalancing.tiers) ? priorityBalancing.tiers.filter(isRecord) : []
+  const priorityAssignments = Array.isArray(priorityBalancing.assignments) ? priorityBalancing.assignments.filter(isRecord) : []
+  const discoveryPriorityBalancingOverview = {
+    routeLimitHit: Boolean(priorityBalancing.routeLimitHit),
+    selectedRouteCount: Math.max(nonNegativeInt(priorityBalancing.selectedRouteCount), priorityAssignments.filter((entry) => entry.selected === true).length),
+    excludedRouteCount: Math.max(nonNegativeInt(priorityBalancing.excludedRouteCount), priorityAssignments.filter((entry) => entry.selected === false).length),
+    tiers: priorityTiers
+      .map((tier) => ({
+        tier: text(tier.tier),
+        candidateCount: nonNegativeInt(tier.candidateCount),
+        selectedCount: nonNegativeInt(tier.selectedCount),
+        excludedCount: nonNegativeInt(tier.excludedCount),
+      }))
+      .filter((tier) => tier.tier),
+    warnings: priorityWarnings.slice(0, 5),
+  }
 
   const acquisitionPages = Array.isArray(acquisition?.pages) ? acquisition.pages : []
   const fetchedPages = Math.max(
@@ -488,6 +523,7 @@ export function buildMultiPageImportOperatorSummary(input: BuildInput = {}): Mul
       .concat(aliasDiagnostics)
       .concat(robotsDiagnostics)
       .concat(sitemapDiagnostics)
+      .concat(priorityDiagnostics)
       .concat(textList(acquisitionSummary.diagnostics))
       .concat(textList(acquisition?.diagnostics))
       .concat(acquisitionPages.flatMap((page) => (isRecord(page) ? textList(page.diagnostics) : [])))
@@ -545,6 +581,7 @@ export function buildMultiPageImportOperatorSummary(input: BuildInput = {}): Mul
       canonicalDiscovery: canonicalOverview,
       redirectAliasDiscovery: redirectAliasOverview,
       robotsDiscovery: robotsOverview,
+      discoveryPriorityBalancing: discoveryPriorityBalancingOverview,
       acquisition: {
         fetchedPages,
         failedPages,

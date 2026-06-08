@@ -19,6 +19,36 @@ export type NavigationVisibility = 'header' | 'footer' | 'utility' | 'discovered
 
 export type DiscoverySource = 'seed' | 'header_nav' | 'footer_nav' | 'body_link' | 'sitemap_like' | 'other'
 
+export type RoutePriorityTier = 'tier_1_navigation' | 'tier_2_canonical' | 'tier_3_shallow' | 'tier_4_deep'
+
+export type RoutePrioritySource = 'seed' | 'navigation' | 'canonical' | 'alias_canonical' | 'robots_sitemap' | 'sitemap' | 'link'
+
+export type RoutePriorityAssignment = {
+  routePath: string
+  tier: RoutePriorityTier
+  source: RoutePrioritySource
+  reason: string
+  selected: boolean
+  excludedReason: string | null
+}
+
+export type RoutePriorityTierSummary = {
+  tier: RoutePriorityTier
+  candidateCount: number
+  selectedCount: number
+  excludedCount: number
+}
+
+export type RoutePriorityBalancingEvidence = {
+  maxRoutes: number
+  routeLimitHit: boolean
+  selectedRouteCount: number
+  excludedRouteCount: number
+  tiers: RoutePriorityTierSummary[]
+  assignments: RoutePriorityAssignment[]
+  diagnostics: string[]
+}
+
 export type MultipageImportLimits = {
   maxRoutes: number
   maxDepth: number
@@ -283,6 +313,7 @@ export type MultipageImportTree = {
   aliasDiscovery: AliasDiscoveryEvidence
   robotsDiscovery: RobotsDiscoveryEvidence
   sitemapDiscovery: SitemapDiscoveryEvidence
+  routePriorityBalancing?: RoutePriorityBalancingEvidence
   depthLimitHit: boolean
   routeLimitHit: boolean
   diagnostics: string[]
@@ -301,6 +332,7 @@ export type MultipageImportSummary = {
   aliasDiscovery: AliasDiscoveryEvidence
   robotsDiscovery: RobotsDiscoveryEvidence
   sitemapDiscovery: SitemapDiscoveryEvidence
+  routePriorityBalancing?: RoutePriorityBalancingEvidence
   depthLimitHit: boolean
   routeLimitHit: boolean
   diagnostics: string[]

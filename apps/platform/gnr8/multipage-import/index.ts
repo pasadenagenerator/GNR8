@@ -17,6 +17,11 @@ export type {
   RobotsFetchResult,
   RobotsRouteGovernanceEntry,
   RobotsRouteGovernanceStatus,
+  RoutePriorityAssignment,
+  RoutePriorityBalancingEvidence,
+  RoutePrioritySource,
+  RoutePriorityTier,
+  RoutePriorityTierSummary,
   SitemapDiscoveryEvidence,
   SitemapFetchResult,
 } from './types/contracts'
@@ -26,6 +31,7 @@ export { emptyCanonicalDiscoveryEvidence } from './core/canonical-discovery'
 export { buildRedirectAliasDiscoveryEvidence, emptyAliasDiscoveryEvidence, emptyRedirectDiscoveryEvidence } from './core/redirect-alias-discovery'
 export { applyRobotsRouteGovernance, discoverRobotsTxt } from './core/robots-discovery'
 export { discoverSitemapUrls } from './core/sitemap-discovery'
+export { balanceRoutePriorityCandidates, type RoutePriorityCandidate } from './core/route-priority-balancing'
 export {
   buildMultiPageImportOperatorSummary,
   exampleViroidocMultiPageImportOperatorSummary,

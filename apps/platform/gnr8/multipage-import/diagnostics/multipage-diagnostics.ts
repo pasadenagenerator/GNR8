@@ -52,6 +52,11 @@ export type MultipageDiagnosticCode =
   | 'ALIAS_ROUTE_COLLISION'
   | 'ALIAS_CANONICAL_ROUTE_SELECTED'
   | 'ALIAS_DISCOVERY_COMPLETED'
+  | 'DISCOVERY_PRIORITY_BALANCING_STARTED'
+  | 'DISCOVERY_PRIORITY_TIER_ASSIGNED'
+  | 'DISCOVERY_PRIORITY_BUDGET_APPLIED'
+  | 'DISCOVERY_PRIORITY_ROUTE_EXCLUDED'
+  | 'DISCOVERY_PRIORITY_BALANCING_COMPLETED'
 
 function cleanPart(value: string | null | undefined): string {
   return String(value ?? '').trim().replace(/\s+/g, ' ')

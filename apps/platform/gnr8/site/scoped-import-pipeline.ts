@@ -56,6 +56,7 @@ import {
 } from '@/gnr8/style-signals'
 import {
   applyRobotsRouteGovernance,
+  balanceRoutePriorityCandidates,
   buildRedirectAliasDiscoveryEvidence,
   discoverMultipageImportTree,
   emptyAliasDiscoveryEvidence,
@@ -65,6 +66,7 @@ import {
   discoverSitemapUrls,
   summarizeMultipageImportTree,
   type MultipageImportLimits,
+  type RoutePriorityCandidate,
   type SitemapDiscoveryEvidence,
 } from '@/gnr8/multipage-import'
 import { evaluateMultipageSameSiteUrl, normalizeInternalHref, normalizeMultipageHost, normalizeSeedUrl } from '@/gnr8/multipage-import/normalization/route-normalization'
@@ -1919,6 +1921,7 @@ async function buildScopedMultiPageDiscovery(input: {
   diagnostics.push(...sitemapDiscovery.diagnostics)
 
   const discoveredByRoute = new Map<string, MultiPageDiscoveryLinkEntry>()
+  const prioritySourceByRoute = new Map<string, RoutePriorityCandidate<MultiPageDiscoveryLinkEntry>['source']>()
   const skippedLinks: MultiPageDiscoveryLinkEntry[] = []
   const normalizedUrls: MultiPageDiscoveryManifest['normalizedUrls'] = []
 
@@ -2025,22 +2028,6 @@ async function buildScopedMultiPageDiscovery(input: {
       continue
     }
 
-    if (discoveredByRoute.size >= option.limits.maxRoutes) {
-      skippedLinks.push(
-        buildDiscoveryLinkEntry({
-          href: ref.href,
-          absoluteUrl,
-          normalizedUrl: normalized.normalized.url,
-          normalizedRoutePath: normalized.normalized.path,
-          sourceContext: ref.sourceContext,
-          sourceClassification: ref.sourceClassification,
-          status: 'skipped',
-          skippedReason: 'route_limit',
-        }),
-      )
-      continue
-    }
-
     if (discoveredByRoute.has(normalized.normalized.path)) {
       skippedLinks.push(
         buildDiscoveryLinkEntry({
@@ -2057,9 +2044,7 @@ async function buildScopedMultiPageDiscovery(input: {
       continue
     }
 
-    discoveredByRoute.set(
-      normalized.normalized.path,
-      buildDiscoveryLinkEntry({
+    const entry = buildDiscoveryLinkEntry({
         href: ref.href,
         absoluteUrl,
         normalizedUrl: normalized.normalized.url,
@@ -2068,7 +2053,13 @@ async function buildScopedMultiPageDiscovery(input: {
         sourceClassification: ref.sourceClassification,
         status: 'discovered',
         skippedReason: null,
-      }),
+    })
+    discoveredByRoute.set(normalized.normalized.path, entry)
+    prioritySourceByRoute.set(
+      normalized.normalized.path,
+      ref.sourceContext === 'header' || ref.sourceContext === 'footer' || ref.sourceContext === 'nav' || ref.sourceContext === 'body'
+        ? 'navigation'
+        : 'link',
     )
   }
 
@@ -2112,23 +2103,6 @@ async function buildScopedMultiPageDiscovery(input: {
       continue
     }
 
-    if (discoveredByRoute.size >= option.limits.maxRoutes) {
-      skippedLinks.push(
-        buildDiscoveryLinkEntry({
-          href: sitemapUrl.originalUrl,
-          absoluteUrl: sitemapUrl.originalUrl,
-          normalizedUrl: sitemapUrl.normalizedUrl,
-          normalizedRoutePath: sitemapUrl.normalizedRoutePath,
-          sourceContext: 'unknown',
-          sourceClassification: 'anchor',
-          status: 'skipped',
-          skippedReason: 'route_limit',
-        }),
-      )
-      diagnostics.push(`SITEMAP_LIMIT_REACHED:maxDiscoveredUrls:${option.limits.maxRoutes}`)
-      continue
-    }
-
     if (discoveredByRoute.has(sitemapUrl.normalizedRoutePath)) {
       skippedLinks.push(
         buildDiscoveryLinkEntry({
@@ -2145,9 +2119,7 @@ async function buildScopedMultiPageDiscovery(input: {
       continue
     }
 
-    discoveredByRoute.set(
-      sitemapUrl.normalizedRoutePath,
-      buildDiscoveryLinkEntry({
+    const entry = buildDiscoveryLinkEntry({
         href: sitemapUrl.originalUrl,
         absoluteUrl: sitemapUrl.originalUrl,
         normalizedUrl: sitemapUrl.normalizedUrl,
@@ -2156,8 +2128,37 @@ async function buildScopedMultiPageDiscovery(input: {
         sourceClassification: 'anchor',
         status: 'discovered',
         skippedReason: null,
-      }),
-    )
+    })
+    discoveredByRoute.set(sitemapUrl.normalizedRoutePath, entry)
+    prioritySourceByRoute.set(sitemapUrl.normalizedRoutePath, 'sitemap')
+  }
+
+  for (const canonical of canonicalDiscovery.canonicalEntries) {
+    const rawCanonicalRoute = normalizeText(canonical.normalizedCanonicalRoutePath)
+    if (!rawCanonicalRoute) continue
+    const canonicalRoute = normalizeRoutePath(rawCanonicalRoute)
+    const canonicalUrl = normalizeText(canonical.canonicalUrl)
+    if (!canonicalRoute || canonicalRoute === normalizedSeed.path || !canonicalUrl) continue
+    if (discoveredByRoute.has(canonicalRoute)) continue
+    const entry = buildDiscoveryLinkEntry({
+      href: canonicalUrl,
+      absoluteUrl: canonicalUrl,
+      normalizedUrl: canonicalUrl,
+      normalizedRoutePath: canonicalRoute,
+      sourceContext: 'unknown',
+      sourceClassification: 'anchor',
+      status: 'discovered',
+      skippedReason: null,
+    })
+    discoveredByRoute.set(canonicalRoute, entry)
+    prioritySourceByRoute.set(canonicalRoute, 'canonical')
+    normalizedUrls.push({
+      originalHref: canonicalUrl,
+      absoluteUrl: canonicalUrl,
+      normalizedUrl: canonicalUrl,
+      normalizedRoutePath: canonicalRoute,
+      changed: false,
+    })
   }
 
   for (const skippedSitemapUrl of sitemapDiscoveryEvidence.skippedUrls) {
@@ -2175,7 +2176,28 @@ async function buildScopedMultiPageDiscovery(input: {
     )
   }
 
-  const discoveredPages = [...discoveredByRoute.values()].sort((a, b) =>
+  const priorityCandidates: Array<RoutePriorityCandidate<MultiPageDiscoveryLinkEntry>> = [...discoveredByRoute.values()].map((entry) => ({
+    routePath: String(entry.normalizedRoutePath ?? ''),
+    depth: entry.depth,
+    source: prioritySourceByRoute.get(String(entry.normalizedRoutePath ?? '')) ?? 'link',
+    sourceContext: entry.sourceContext,
+    value: entry,
+  }))
+  const routePriorityBalancing = balanceRoutePriorityCandidates({
+    candidates: priorityCandidates,
+    maxRoutes: option.limits.maxRoutes,
+  })
+  diagnostics.push(...routePriorityBalancing.evidence.diagnostics)
+  for (const excluded of routePriorityBalancing.excluded) {
+    const entry = excluded.value
+    skippedLinks.push({
+      ...entry,
+      status: 'skipped',
+      skippedReason: 'route_limit',
+    })
+  }
+
+  const discoveredPages = routePriorityBalancing.selected.map((candidate) => candidate.value).sort((a, b) =>
     String(a.normalizedRoutePath ?? '').localeCompare(String(b.normalizedRoutePath ?? '')),
   )
   const routeCandidates = discoveredPages.map((entry) => String(entry.normalizedRoutePath ?? '')).filter(Boolean)
@@ -2206,6 +2228,7 @@ async function buildScopedMultiPageDiscovery(input: {
     discoveredPages,
     skippedLinks: sortedSkippedLinks,
     routeCandidates,
+    routePriorityBalancing: routePriorityBalancing.evidence,
     routeGovernance,
     normalizedUrls: normalizedUrls.sort((a, b) => `${a.normalizedRoutePath ?? ''}|${a.originalHref}`.localeCompare(`${b.normalizedRoutePath ?? ''}|${b.originalHref}`)),
     depth: {

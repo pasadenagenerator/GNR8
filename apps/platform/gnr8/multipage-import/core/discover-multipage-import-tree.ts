@@ -17,6 +17,7 @@ import {
   type RedirectAliasObservedUrl,
 } from './redirect-alias-discovery'
 import { applyRobotsRouteGovernance, discoverRobotsTxt } from './robots-discovery'
+import { balanceRoutePriorityCandidates, type RoutePriorityCandidate } from './route-priority-balancing'
 import { discoverSitemapUrls } from './sitemap-discovery'
 import { inferRouteFamilies } from './template-families'
 import type { RouteTemplateSignals } from '@/gnr8/template-families'
@@ -356,6 +357,32 @@ function summarizeVisibility(hints: Set<NavigationVisibility>): {
   }
 }
 
+function priorityCandidateForRoute(route: DiscoveredRouteState): RoutePriorityCandidate<DiscoveredRouteState> {
+  const visibility = route.visibilityHints.has('header')
+    ? 'header'
+    : route.visibilityHints.has('footer')
+      ? 'footer'
+      : route.discoveredBy.has('body_link')
+        ? 'body'
+        : route.visibilityHints.has('utility')
+          ? 'nav'
+          : 'unknown'
+  const source = route.discoveredBy.has('seed')
+    ? 'seed'
+    : route.discoveredBy.has('header_nav') || route.discoveredBy.has('footer_nav') || route.discoveredBy.has('body_link')
+      ? 'navigation'
+      : route.discoveredBy.has('sitemap_like')
+        ? 'sitemap'
+        : 'link'
+  return {
+    routePath: route.path,
+    depth: route.depth,
+    source,
+    sourceContext: visibility,
+    value: route,
+  }
+}
+
 export async function discoverMultipageImportTree(
   input: MultipageDiscoveryInput,
   deps: MultipageDiscoveryDependencies,
@@ -366,6 +393,10 @@ export async function discoverMultipageImportTree(
   const normalizedSeed = normalizeSeedUrl(input.seedUrl)
   if (!normalizedSeed) {
     diagnostics.push(diagnosticEntry('MULTIPAGE_DISCOVERY_DEGRADED', 'invalid_seed'))
+    const routePriorityBalancing = balanceRoutePriorityCandidates({
+      candidates: [],
+      maxRoutes: limits.maxRoutes,
+    }).evidence
     return {
       siteId: input.siteId,
       seedUrl: input.seedUrl,
@@ -389,9 +420,10 @@ export async function discoverMultipageImportTree(
       aliasDiscovery: emptyAliasDiscoveryEvidence(['ALIAS_DISCOVERY_STARTED:0', 'ALIAS_DISCOVERY_COMPLETED:0']),
       robotsDiscovery: emptyRobotsDiscoveryEvidence(['ROBOTS_DISCOVERY_FAILED:invalid_seed']),
       sitemapDiscovery: emptySitemapDiscoveryEvidence(limits, ['SITEMAP_DISCOVERY_NOT_FOUND:invalid_seed']),
+      routePriorityBalancing,
       depthLimitHit: false,
       routeLimitHit: false,
-      diagnostics: sortDiagnostics(diagnostics),
+      diagnostics: sortDiagnostics([...diagnostics, ...routePriorityBalancing.diagnostics]),
     }
   }
 
@@ -422,12 +454,6 @@ export async function discoverMultipageImportTree(
       if (!existing.title && entry.title) existing.title = entry.title
       diagnostics.push(diagnosticEntry('MULTIPAGE_ROUTE_DUPLICATE_SKIPPED', entry.path))
       return { accepted: false, route: existing }
-    }
-
-    if (discovered.size >= limits.maxRoutes) {
-      routeLimitHit = true
-      diagnostics.push(diagnosticEntry('MULTIPAGE_ROUTE_LIMIT_REACHED', `${limits.maxRoutes}`))
-      return { accepted: false, route: null }
     }
 
     const routeId = stableId('route', [entry.path])
@@ -599,7 +625,18 @@ export async function discoverMultipageImportTree(
     }
   }
 
-  for (const route of discovered.values()) {
+  const routePriorityBalancingResult = balanceRoutePriorityCandidates({
+    candidates: [...discovered.values()].map(priorityCandidateForRoute),
+    maxRoutes: limits.maxRoutes,
+  })
+  diagnostics.push(...routePriorityBalancingResult.evidence.diagnostics)
+  if (routePriorityBalancingResult.evidence.routeLimitHit) {
+    routeLimitHit = true
+    diagnostics.push(diagnosticEntry('MULTIPAGE_ROUTE_LIMIT_REACHED', `${limits.maxRoutes}`))
+  }
+  const selectedDiscovered = new Map(routePriorityBalancingResult.selected.map((candidate) => [candidate.value.path, candidate.value]))
+
+  for (const route of selectedDiscovered.values()) {
     const key = route.path.split('/').slice(0, 2).join('/') || '/'
     routePathCounts.set(key, (routePathCounts.get(key) ?? 0) + 1)
 
@@ -608,7 +645,7 @@ export async function discoverMultipageImportTree(
     }
   }
 
-  const sortedStates = [...discovered.values()].sort((a, b) => a.path.localeCompare(b.path))
+  const sortedStates = [...selectedDiscovered.values()].sort((a, b) => a.path.localeCompare(b.path))
   const canonicalDiscovery = buildCanonicalDiscoveryEvidence({
     seedCanonicalHost: normalizedSeed.canonicalHost,
     pages: canonicalDiscoveryPages,
@@ -644,7 +681,7 @@ export async function discoverMultipageImportTree(
     diagnostics.push(diagnosticEntry('MULTIPAGE_ROUTE_CLASSIFIED', `${state.path}:${pageRole}:${navigationVisibility}`))
 
     const parent = parentPath(state.path)
-    const parentRouteId = parent ? discovered.get(parent)?.routeId ?? null : null
+    const parentRouteId = parent ? selectedDiscovered.get(parent)?.routeId ?? null : null
 
     return {
       routeId: state.routeId,
@@ -719,6 +756,7 @@ export async function discoverMultipageImportTree(
     aliasDiscovery,
     robotsDiscovery,
     sitemapDiscovery,
+    routePriorityBalancing: routePriorityBalancingResult.evidence,
     depthLimitHit,
     routeLimitHit,
     diagnostics: sortDiagnostics(diagnostics),
@@ -753,6 +791,7 @@ export function summarizeMultipageImportTree(tree: MultipageImportTree): Multipa
     aliasDiscovery: tree.aliasDiscovery,
     robotsDiscovery: tree.robotsDiscovery,
     sitemapDiscovery: tree.sitemapDiscovery,
+    routePriorityBalancing: tree.routePriorityBalancing,
     depthLimitHit: tree.depthLimitHit,
     routeLimitHit: tree.routeLimitHit,
     diagnostics: tree.diagnostics.slice(),
