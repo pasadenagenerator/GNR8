@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { mapRuntimeSiteResolutionBindingRows } from "@/gnr8/runtime/runtime-store";
+import { __runtimeStoreTestUtils, mapRuntimeSiteResolutionBindingRows } from "@/gnr8/runtime/runtime-store";
 
 function buildBindingRows() {
   return [
@@ -38,6 +38,30 @@ test("runtime-store resolution binding mapper: active pointer present", () => {
     versionRows: buildBindingRows(),
   });
   assert.equal(binding.activeSiteVersionId, "sv_3");
+});
+
+test("runtime-store page version preflight rejects duplicate normalized routes before db insert", () => {
+  const page = {
+    pageId: "page_about",
+    path: "/about",
+    title: "About",
+    structureModel: { sections: [] },
+    contentModel: { sectionProps: {} },
+    styleTokens: {},
+    assetGraph: [],
+    semanticSignals: [],
+    source: "migration" as const,
+    actor: "test",
+  };
+
+  assert.throws(
+    () =>
+      __runtimeStoreTestUtils.assertNoDuplicateRuntimePageVersions([
+        page,
+        { ...page, pageId: "page_about_alias", path: "/about/index.html" },
+      ]),
+    /MULTIPAGE_PAGE_VERSION_DUPLICATE:routePath=\/about/,
+  );
 });
 
 test("runtime-store resolution binding mapper: published candidate present", () => {

@@ -276,6 +276,19 @@ export type RuntimeImportProvenanceSummary = {
     };
   };
   importDiagnosticCodes: string[];
+  pageVersionDeduplication?: {
+    kind: "runtime_page_version_deduplication_v1";
+    duplicateCount: number;
+    diagnostics: string[];
+    entries: Array<{
+      routePath: string;
+      pageId: string | null;
+      selectedSourceUrl: string | null;
+      duplicateSourceUrls: string[];
+      duplicateSourcePaths: string[];
+      duplicatePageIds: string[];
+    }>;
+  } | null;
   captureEvidence: {
     selectedSourceHtmlPath: string | null;
     responseHtmlPath: string | null;

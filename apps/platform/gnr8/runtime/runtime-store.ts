@@ -804,9 +804,55 @@ function mapPageVersionRow(row: PageVersionRow): CanonicalPageVersionSnapshot {
   };
 }
 
+function normalizeRuntimePageVersionIdentityPath(value: string): string {
+  const trimmed = String(value ?? "").trim();
+  if (!trimmed || trimmed === "/") return "/";
+  let next = trimmed.startsWith("/") ? trimmed : `/${trimmed}`;
+  next = next.replace(/\/{2,}/g, "/");
+  next = next.replace(/\/index\.html?$/i, "/");
+  if (next !== "/") next = next.replace(/\/+$/g, "");
+  return next || "/";
+}
+
+function assertNoDuplicateRuntimePageVersions(pages: CanonicalPageVersionInput[]): void {
+  const byPageId = new Map<string, CanonicalPageVersionInput>();
+  const byRoute = new Map<string, CanonicalPageVersionInput>();
+
+  for (const page of pages) {
+    const pageId = String(page.pageId ?? "").trim();
+    const routePath = normalizeRuntimePageVersionIdentityPath(page.path);
+    const pageIdDuplicate = pageId ? byPageId.get(pageId) : null;
+    if (pageIdDuplicate) {
+      throw new Error(
+        [
+          "MULTIPAGE_PAGE_VERSION_DUPLICATE",
+          `pageId=${pageId}`,
+          `routePath=${routePath}`,
+          `firstRoutePath=${normalizeRuntimePageVersionIdentityPath(pageIdDuplicate.path)}`,
+        ].join(":"),
+      );
+    }
+    const routeDuplicate = byRoute.get(routePath);
+    if (routeDuplicate) {
+      throw new Error(
+        [
+          "MULTIPAGE_PAGE_VERSION_DUPLICATE",
+          `routePath=${routePath}`,
+          `pageId=${pageId || "unknown"}`,
+          `firstPageId=${routeDuplicate.pageId}`,
+        ].join(":"),
+      );
+    }
+    if (pageId) byPageId.set(pageId, page);
+    byRoute.set(routePath, page);
+  }
+}
+
 export async function createSiteVersionFromMigration(
   input: CanonicalSiteMigrationInput & { rendererCompatibilityVersion: string; siteVersionId?: string },
 ): Promise<{ siteId: string; siteVersionId: string; versionNo: number }> {
+  assertNoDuplicateRuntimePageVersions(input.pages);
+
   return withTx(async (client) => {
     const sourceHost = (() => {
       try {
@@ -4769,3 +4815,8 @@ export async function hydratePageVersionFromInput(input: CanonicalPageVersionInp
     path: normalizePagePath(input.path),
   };
 }
+
+export const __runtimeStoreTestUtils = {
+  assertNoDuplicateRuntimePageVersions,
+  normalizeRuntimePageVersionIdentityPath,
+};

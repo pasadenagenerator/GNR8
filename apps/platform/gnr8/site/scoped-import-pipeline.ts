@@ -493,12 +493,12 @@ function inferPagePathFromSourcePath(sourcePath: string): string {
   if (!normalized || normalized === 'index.html') return '/'
   if (normalized.endsWith('/index.html')) {
     const withoutIndex = normalized.slice(0, -'/index.html'.length)
-    return normalizePagePath(`/${withoutIndex}`)
+    return normalizeRoutePath(`/${withoutIndex}`)
   }
   if (normalized.endsWith('.html') || normalized.endsWith('.htm')) {
-    return normalizePagePath(`/${normalized.replace(/\.html?$/i, '')}`)
+    return normalizeRoutePath(`/${normalized.replace(/\.html?$/i, '')}`)
   }
-  return normalizePagePath(`/${normalized}`)
+  return normalizeRoutePath(`/${normalized}`)
 }
 
 function shouldForceCanonicalHomePath(input: {
@@ -723,6 +723,125 @@ function computeImportFidelityScore(input: {
     layoutScore: Number(layoutScore.toFixed(3)),
     overallScore,
     fidelityLevel: overallScore >= 0.74 ? 'high' : overallScore >= 0.5 ? 'medium' : 'low',
+  }
+}
+
+type RuntimePageVersionDeduplicationEntry = NonNullable<RuntimeImportProvenanceSummary['pageVersionDeduplication']>['entries'][number]
+
+type CanonicalPageCandidate = {
+  page: CanonicalPageVersionInput
+  routePath: string
+  sourcePath: string
+  sourceUrl: string | null
+  isEntryDocument: boolean
+}
+
+function sourceUrlForCanonicalPage(input: { sourceUrl: string; pagePath: string; sourcePath: string }): string | null {
+  try {
+    if (input.pagePath === '/') return input.sourceUrl
+    const parsed = new URL(input.sourceUrl)
+    parsed.hash = ''
+    parsed.search = ''
+    parsed.pathname = normalizeRoutePath(input.pagePath)
+    return parsed.toString()
+  } catch {
+    return normalizeText(input.sourcePath) || null
+  }
+}
+
+function canonicalPageCandidateSortKey(candidate: CanonicalPageCandidate): string {
+  const exactRouteSource = candidate.sourceUrl?.endsWith(candidate.routePath === '/' ? '/' : candidate.routePath) ? 0 : 1
+  const indexAlias = /\/index\.html?$/i.test(candidate.sourcePath) ? 1 : 0
+  const entryRank = candidate.isEntryDocument ? 0 : 1
+  return [
+    String(entryRank),
+    String(exactRouteSource),
+    String(indexAlias),
+    candidate.sourceUrl ?? '',
+    candidate.sourcePath,
+    candidate.page.pageId,
+  ].join('|')
+}
+
+function dedupeCanonicalPageCandidates(candidates: CanonicalPageCandidate[]): {
+  pages: CanonicalPageVersionInput[]
+  deduplication: RuntimeImportProvenanceSummary['pageVersionDeduplication']
+} {
+  const byRoute = new Map<string, CanonicalPageCandidate[]>()
+  for (const candidate of candidates) {
+    const routePath = normalizeRoutePath(candidate.routePath)
+    const normalizedCandidate = {
+      ...candidate,
+      routePath,
+      page: {
+        ...candidate.page,
+        path: routePath,
+      },
+    }
+    const existing = byRoute.get(routePath) ?? []
+    existing.push(normalizedCandidate)
+    byRoute.set(routePath, existing)
+  }
+
+  const selected: CanonicalPageVersionInput[] = []
+  const entries: RuntimePageVersionDeduplicationEntry[] = []
+
+  for (const routePath of [...byRoute.keys()].sort((left, right) => left.localeCompare(right))) {
+    const group = (byRoute.get(routePath) ?? []).sort((left, right) => canonicalPageCandidateSortKey(left).localeCompare(canonicalPageCandidateSortKey(right)))
+    const winner = group[0]
+    if (!winner) continue
+    selected.push(winner.page)
+    if (group.length <= 1) continue
+
+    entries.push({
+      routePath,
+      pageId: winner.page.pageId,
+      selectedSourceUrl: winner.sourceUrl,
+      duplicateSourceUrls: uniqueSorted(group.map((candidate) => candidate.sourceUrl ?? '').filter(Boolean)),
+      duplicateSourcePaths: uniqueSorted(group.map((candidate) => candidate.sourcePath)),
+      duplicatePageIds: uniqueSorted(group.map((candidate) => candidate.page.pageId)),
+    })
+  }
+
+  const diagnostics = entries.length > 0
+    ? [
+        'MULTIPAGE_PAGE_VERSION_DUPLICATE_DEDUPED',
+        ...entries.map((entry) =>
+          [
+            'MULTIPAGE_PAGE_VERSION_DUPLICATE_DEDUPED',
+            entry.routePath,
+            `pageId=${entry.pageId ?? 'unknown'}`,
+            `selectedSourceUrl=${entry.selectedSourceUrl ?? 'unknown'}`,
+            `duplicateSourceUrls=${entry.duplicateSourceUrls.join(',') || 'unknown'}`,
+          ].join(':'),
+        ),
+      ]
+    : []
+  return {
+    pages: selected.sort((left, right) => left.path.localeCompare(right.path)),
+    deduplication: entries.length > 0
+      ? {
+          kind: 'runtime_page_version_deduplication_v1',
+          duplicateCount: entries.reduce((count, entry) => count + Math.max(0, entry.duplicateSourcePaths.length - 1), 0),
+          diagnostics,
+          entries,
+        }
+      : null,
+  }
+}
+
+function applyPageVersionDeduplicationToProvenance(input: {
+  summary: RuntimeImportProvenanceSummary
+  deduplication: RuntimeImportProvenanceSummary['pageVersionDeduplication']
+}): RuntimeImportProvenanceSummary {
+  if (!input.deduplication || input.deduplication.entries.length === 0) return input.summary
+  return {
+    ...input.summary,
+    importDiagnosticCodes: uniqueSorted([
+      ...input.summary.importDiagnosticCodes,
+      ...input.deduplication.diagnostics,
+    ]),
+    pageVersionDeduplication: input.deduplication,
   }
 }
 
@@ -2668,6 +2787,13 @@ function summarizeProvenancePayload(summary: RuntimeImportProvenanceSummary): Re
     screenshotCount: summary.screenshotCount,
     computedStyleSampleCount: summary.computedStyleSampleCount,
     importDiagnosticCodeCount: Array.isArray(summary.importDiagnosticCodes) ? summary.importDiagnosticCodes.length : 0,
+    pageVersionDeduplication: summary.pageVersionDeduplication
+      ? {
+          duplicateCount: summary.pageVersionDeduplication.duplicateCount,
+          entryCount: summary.pageVersionDeduplication.entries.length,
+          diagnostics: summary.pageVersionDeduplication.diagnostics,
+        }
+      : null,
     semanticImportSectionCount: summary.semanticImport?.sections.length ?? 0,
     multipageImport: summary.multipageImport?.summary ?? null,
     multiPageDiscovery: summary.multiPageDiscovery?.summary ?? null,
@@ -2721,7 +2847,7 @@ function buildCanonicalMigrationInputFromPipeline(input: {
   snapshot: UrlSinglePageImportSnapshot
   styleSignals: StyleSignalModel
   siteId?: string
-}): CanonicalSiteMigrationInput {
+}): CanonicalSiteMigrationInput & { pageVersionDeduplication: RuntimeImportProvenanceSummary['pageVersionDeduplication'] } {
   const entrySourcePath = input.preparedSite.source.entryHtmlPath ?? input.preparedSite.documents[0]?.path ?? '/'
   const entryPagePath = inferPagePathFromSourcePath(entrySourcePath)
   const siteId = normalizeText(input.siteId) || resolveSiteId(input.sourceUrl, entryPagePath)
@@ -2739,7 +2865,7 @@ function buildCanonicalMigrationInputFromPipeline(input: {
     ...styleSignalsToStyleTokens(input.styleSignals),
   }
 
-  const pages: CanonicalPageVersionInput[] = input.preparedSite.documents
+  const candidates: CanonicalPageCandidate[] = input.preparedSite.documents
     .slice()
     .sort((a, b) => a.path.localeCompare(b.path))
     .map((doc) => {
@@ -2828,7 +2954,7 @@ function buildCanonicalMigrationInputFromPipeline(input: {
             },
           ]
 
-      return {
+      const page: CanonicalPageVersionInput = {
         pageId,
         path: pagePath,
         title: pickTitleFromSemantic(doc.semantic?.page.pageType ?? null, doc.path),
@@ -2875,13 +3001,26 @@ function buildCanonicalMigrationInputFromPipeline(input: {
         source: 'migration',
         actor: input.actor,
       }
+      return {
+        page,
+        routePath: pagePath,
+        sourcePath: doc.path,
+        sourceUrl: sourceUrlForCanonicalPage({
+          sourceUrl: input.sourceUrl,
+          pagePath,
+          sourcePath: doc.path,
+        }),
+        isEntryDocument: Boolean(doc.isEntry),
+      }
     })
+  const { pages, deduplication } = dedupeCanonicalPageCandidates(candidates)
 
   return {
     siteId,
     sourceUrl: input.sourceUrl,
     actor: input.actor,
     pages,
+    pageVersionDeduplication: deduplication,
   }
 }
 
@@ -3428,7 +3567,7 @@ export async function runScopedImportPipeline(input: {
     sourceUrl: input.sourceUrl,
     snapshot: input.snapshot,
   })
-  const importProvenanceSummary = await buildImportProvenanceSummary({
+  let importProvenanceSummary = await buildImportProvenanceSummary({
     sourceUrl: input.sourceUrl,
     snapshot: input.snapshot,
     styleSignals,
@@ -3465,9 +3604,16 @@ export async function runScopedImportPipeline(input: {
       styleSignals,
       siteId: input.runtimeIdentity?.siteId,
     })
+    importProvenanceSummary = applyPageVersionDeduplicationToProvenance({
+      summary: importProvenanceSummary,
+      deduplication: canonicalInput.pageVersionDeduplication,
+    })
 
     const migrated = await deps.createSiteVersionFromMigration({
-      ...canonicalInput,
+      siteId: canonicalInput.siteId,
+      sourceUrl: canonicalInput.sourceUrl,
+      actor: canonicalInput.actor,
+      pages: canonicalInput.pages,
       rendererCompatibilityVersion: RENDERER_COMPATIBILITY_VERSION,
       importProvenanceSummary,
       siteVersionId: input.runtimeIdentity?.siteVersionId,

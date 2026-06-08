@@ -266,6 +266,92 @@ function createSuccessPipelineFixture() {
   } as any
 }
 
+function cloneForTest<T>(value: T): T {
+  return JSON.parse(JSON.stringify(value)) as T
+}
+
+function createCanonicalTestSnapshot(rootDirAbs = '/tmp/snapshot-root'): any {
+  return {
+    snapshotRootDirAbs: rootDirAbs,
+    entryHtmlPathAbs: path.resolve(rootDirAbs, 'index.html'),
+    assetsDirAbs: path.resolve(rootDirAbs, 'assets'),
+    sourceMode: 'rendered_dom',
+    sourceSelection: {
+      sourceMode: 'rendered_dom',
+      fidelityStatus: 'high_fidelity_import',
+      selectedSourceHtmlPathAbs: path.resolve(rootDirAbs, 'index.html'),
+      renderedDomQuality: {
+        quality: 'strong',
+        bodyTextLength: 320,
+        meaningfulNodeCount: 42,
+        sectionCandidateCount: 4,
+        hasHeading: true,
+        reason: 'test_fixture',
+      },
+      degraded: false,
+    },
+    renderedCapture: { status: 'available', documents: [], screenshots: [], computedStyleSamples: [] },
+    renderedCaptureReliability: { job: null, workerHealth: null },
+    importDiagnostics: { issues: [] },
+    fetchManifest: [],
+    sourceUrl: 'https://example.com/',
+  }
+}
+
+function createCanonicalTestStyleSignals(): any {
+  return {
+    sourceMode: 'html_css_inference',
+    provenance: { computedStyle: { coverage: 0 }, fallbackUsed: true },
+    colors: { backgroundTone: 'neutral', primaryAccent: null },
+    typography: { headingCategory: 'sans', bodyCategory: 'sans' },
+    spacing: { rhythm: 'balanced', layoutDensity: 'balanced', sectionSpacingHint: 'balanced' },
+    surfaces: { radiusHint: 'balanced', shadowHint: 'subtle' },
+    cta: { styleHint: 'unknown', prominence: 'unknown' },
+    componentProfiles: { buttonStyle: 'unknown', cardStyle: 'unknown', sectionContrast: 'unknown' },
+    visualToneHint: 'neutral',
+    diagnostics: [],
+  }
+}
+
+function createPipelineWithDocumentPaths(paths: string[]): any {
+  const pipeline = createSuccessPipelineFixture()
+  const structureStage = pipeline.stages.find((stage: any) => stage.stageId === 'structure_preparation')
+  const layoutStage = pipeline.stages.find((stage: any) => stage.stageId === 'layout_preparation')
+  const baseDoc = structureStage.output.preparedSite.documents[0]
+  structureStage.output.preparedSite.source = {
+    ...structureStage.output.preparedSite.source,
+    entryHtmlPath: 'index.html',
+    htmlFilePaths: ['index.html', ...paths],
+  }
+  structureStage.output.preparedSite.documents = [
+    cloneForTest(baseDoc),
+    ...paths.map((docPath, index) => ({
+      ...cloneForTest(baseDoc),
+      id: `doc-${index + 1}`,
+      path: docPath,
+      isEntry: false,
+      originalKind: 'html_file',
+      fidelity: {
+        ...baseDoc.fidelity,
+        title: `About ${index + 1}`,
+        metaDescription: `About source ${docPath}`,
+      },
+      semantic: {
+        ...baseDoc.semantic,
+        page: {
+          ...baseDoc.semantic.page,
+          pageType: 'about',
+        },
+      },
+    })),
+  ]
+  layoutStage.output.layoutModel.pages = structureStage.output.preparedSite.documents.map((doc: any) => ({
+    sourceDocumentId: doc.id,
+    blocks: [],
+  }))
+  return pipeline
+}
+
 test('canonical scoped import materializes CMS content slots after raw import artifact persistence', async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'scoped-pipeline-cms-slots-'))
   const entryAbs = path.resolve(root, 'index.html')
@@ -2646,6 +2732,157 @@ test('canonical input uses semantic import sections when prepared semantic secti
   assert.equal(sections.length, 2)
   assert.equal(sections[0]?.type, 'hero')
   assert.equal(sections[1]?.type, 'content')
+})
+
+test('canonical input dedupes /about, /about/, and /about/index.html into one page version', () => {
+  const pipeline = createPipelineWithDocumentPaths(['about.html', 'about/', 'about/index.html'])
+  const preparedSite = pipeline.stages.find((stage: any) => stage.stageId === 'structure_preparation').output.preparedSite
+
+  const canonical = __scopedImportPipelineTestUtils.buildCanonicalMigrationInputFromPipeline({
+    sourceUrl: 'https://example.com/',
+    actor: 'test',
+    preparedSite,
+    layoutModel: { pages: [] } as any,
+    snapshot: createCanonicalTestSnapshot(),
+    styleSignals: createCanonicalTestStyleSignals(),
+  })
+
+  assert.equal(canonical.pages.filter((page) => page.path === '/about').length, 1)
+  assert.equal(canonical.pages.some((page) => page.path === '/about/'), false)
+  assert.equal(canonical.pages.some((page) => page.path === '/about/index.html'), false)
+  assert.equal(canonical.pageVersionDeduplication?.diagnostics.includes('MULTIPAGE_PAGE_VERSION_DUPLICATE_DEDUPED'), true)
+  assert.deepEqual(canonical.pageVersionDeduplication?.entries[0]?.duplicateSourcePaths, ['about.html', 'about/', 'about/index.html'])
+})
+
+test('canonical input dedupes sitemap and link candidates for the same normalized route', () => {
+  const pipeline = createPipelineWithDocumentPaths(['services.html', 'services/index.html'])
+  const preparedSite = pipeline.stages.find((stage: any) => stage.stageId === 'structure_preparation').output.preparedSite
+
+  const canonical = __scopedImportPipelineTestUtils.buildCanonicalMigrationInputFromPipeline({
+    sourceUrl: 'https://example.com/',
+    actor: 'test',
+    preparedSite,
+    layoutModel: { pages: [] } as any,
+    snapshot: createCanonicalTestSnapshot(),
+    styleSignals: createCanonicalTestStyleSignals(),
+  })
+
+  assert.equal(canonical.pages.filter((page) => page.path === '/services').length, 1)
+  assert.equal(canonical.pageVersionDeduplication?.entries.some((entry) => entry.routePath === '/services'), true)
+})
+
+test('canonical input dedupes canonical alias documents and keeps duplicate provenance evidence', () => {
+  const pipeline = createPipelineWithDocumentPaths(['contact.html', 'contact/'])
+  const preparedSite = pipeline.stages.find((stage: any) => stage.stageId === 'structure_preparation').output.preparedSite
+
+  const canonical = __scopedImportPipelineTestUtils.buildCanonicalMigrationInputFromPipeline({
+    sourceUrl: 'https://example.com/',
+    actor: 'test',
+    preparedSite,
+    layoutModel: { pages: [] } as any,
+    snapshot: createCanonicalTestSnapshot(),
+    styleSignals: createCanonicalTestStyleSignals(),
+  })
+
+  const entry = canonical.pageVersionDeduplication?.entries.find((item) => item.routePath === '/contact')
+  assert.equal(canonical.pages.filter((page) => page.path === '/contact').length, 1)
+  assert.ok(entry)
+  assert.deepEqual(entry.duplicateSourceUrls, ['https://example.com/contact'])
+  assert.deepEqual(entry.duplicateSourcePaths, ['contact.html', 'contact/'])
+  assert.equal(entry.selectedSourceUrl, 'https://example.com/contact')
+})
+
+test('scoped pipeline dedupes duplicate prepared pages before runtime page version creation and persists diagnostics', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'scoped-pipeline-page-version-dedupe-'))
+  fs.mkdirSync(path.resolve(root, 'assets'))
+  fs.writeFileSync(path.resolve(root, 'index.html'), '<!doctype html><html><body><h1>Home</h1></body></html>', 'utf8')
+
+  const pipeline = createPipelineWithDocumentPaths(['about.html', 'about/index.html'])
+  let createInput: any = null
+  let provenanceInput: any = null
+  let linkedArtifactId: string | null = null
+
+  const outcome = await runScopedImportPipeline({
+    snapshot: createCanonicalTestSnapshot(root),
+    sourceUrl: 'https://example.com/',
+    actor: 'test:scoped-import',
+    deps: {
+      importStaticSite: async () => ({ status: 'ok', documentMeta: { source: { kind: 'single-entry-html' } } }) as any,
+      createImportManifest: () => ({ status: 'success' }) as any,
+      runLinearMigrationPipeline: () => pipeline as any,
+      createSiteVersionFromMigration: async (input) => {
+        createInput = input
+        return { siteId: input.siteId, siteVersionId: 'site-version-deduped', versionNo: 1 }
+      },
+      setSiteVersionImportProvenanceSummary: async (input) => {
+        provenanceInput = input
+        return { affectedRows: 1 }
+      },
+      getSiteVersion: async () =>
+        ({
+          id: 'site-version-deduped',
+          siteId: createInput.siteId,
+          versionNo: 1,
+          state: 'DRAFT',
+          source: 'migration',
+          actor: 'test',
+          createdAt: new Date().toISOString(),
+          rendererCompatibilityVersion: 'gnr8-renderer-v1',
+          artifactId: linkedArtifactId,
+          importProvenanceSummary: provenanceInput?.importProvenanceSummary ?? createInput?.importProvenanceSummary ?? null,
+          pages: createInput.pages.map((page: any, index: number) => ({
+            id: `page-version-${index}`,
+            siteVersionId: 'site-version-deduped',
+            pageId: page.pageId,
+            path: page.path,
+            title: page.title,
+            structureModel: page.structureModel,
+            contentModel: page.contentModel,
+            styleTokens: page.styleTokens,
+            assetGraph: page.assetGraph,
+            semanticSignals: page.semanticSignals,
+            source: page.source,
+            actor: page.actor,
+            createdAt: new Date().toISOString(),
+          })),
+        }) as any,
+      buildDeterministicArtifactBundle: () =>
+        ({
+          siteId: createInput.siteId,
+          siteVersionId: 'site-version-deduped',
+          rendererCompatibilityVersion: 'gnr8-renderer-v1',
+          bundleSha256: 'bundle-sha',
+          htmlByPath: Object.fromEntries(createInput.pages.map((page: any) => [page.path, '<!doctype html><html><body>preview</body></html>'])),
+          compiledTokenStyles: ':root{}',
+          assetFingerprintMap: {},
+          manifest: {},
+        }) as any,
+      createArtifact: async () => ({ artifactId: 'artifact-deduped' }),
+      bindArtifactToVersion: async (input) => {
+        linkedArtifactId = input.artifactId
+        return { affectedRows: 1 }
+      },
+      persistRawImportedSiteArtifact: async () =>
+        ({
+          artifactId: 'raw-artifact-deduped',
+          artifactType: 'raw_imported_site',
+          entryHtmlPath: 'index.html',
+          assetBasePath: '.',
+          fileMap: {},
+          fileCount: 1,
+        }) as any,
+      upsertContentSlots: async () => 0,
+      importHtmlToPage: () => ({} as any),
+      migrateImportedPageToCanonicalDraft: async () => ({ siteId: 'legacy-site', siteVersionId: 'legacy-version', versionNo: 1 }),
+    },
+  })
+
+  assert.equal(outcome.mode, 'pipeline')
+  assert.equal(createInput.pages.filter((page: any) => page.path === '/about').length, 1)
+  assert.equal(createInput.pages.some((page: any) => page.path === '/about/index.html'), false)
+  assert.ok(createInput.importProvenanceSummary.importDiagnosticCodes.includes('MULTIPAGE_PAGE_VERSION_DUPLICATE_DEDUPED'))
+  assert.ok(provenanceInput.importProvenanceSummary.importDiagnosticCodes.includes('MULTIPAGE_PAGE_VERSION_DUPLICATE_DEDUPED'))
+  assert.deepEqual(provenanceInput.importProvenanceSummary.pageVersionDeduplication.entries[0].duplicateSourcePaths, ['about.html', 'about/index.html'])
 })
 
 test('canonical input preserves inferred nested entry path when raw_html_only semantic forcing is not active', () => {
