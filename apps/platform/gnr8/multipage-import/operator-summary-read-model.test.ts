@@ -40,6 +40,26 @@ function provenance(input?: {
     hreflangGroups: Array<Record<string, unknown>>
     diagnostics: string[]
   }
+  redirectDiscovery?: {
+    redirectEntries: Array<Record<string, unknown>>
+    crossOriginRedirects: Array<Record<string, unknown>>
+    counts: {
+      redirectCount: number
+      crossOriginRedirectCount: number
+      canonicalHostRedirectCount: number
+    }
+    diagnostics: string[]
+  }
+  aliasDiscovery?: {
+    aliasGroups: Array<Record<string, unknown>>
+    routeCollisions: Array<Record<string, unknown>>
+    conflicts: Array<Record<string, unknown>>
+    counts: {
+      aliasGroupCount: number
+      routeCollisionCount: number
+    }
+    diagnostics: string[]
+  }
   robotsDiscovery?: {
     fetchedState: string
     sitemapDeclarations: string[]
@@ -85,6 +105,8 @@ function provenance(input?: {
         diagnostics: ['DISCOVERY_MANIFEST_DIAG'],
       },
       canonicalDiscovery: input?.canonicalDiscovery ?? null,
+      redirectDiscovery: input?.redirectDiscovery ?? null,
+      aliasDiscovery: input?.aliasDiscovery ?? null,
       robotsDiscovery: input?.robotsDiscovery ?? null,
       sitemapDiscovery: input?.sitemapDiscovery ?? null,
       acquisition: {
@@ -129,6 +151,14 @@ test('multi-page operator summary returns a safe empty summary', () => {
   assert.deepEqual(summary.overview.discovery, { discoveredRoutes: 0, skippedLinks: 0 })
   assert.deepEqual(summary.overview.sitemapDiscovery, { sitemapCount: 0, discoveredUrlCount: 0, skippedUrlCount: 0, warnings: [] })
   assert.deepEqual(summary.overview.canonicalDiscovery, { canonicalUrlCount: 0, conflictCount: 0, duplicateRouteCount: 0, hreflangGroupCount: 0, warnings: [] })
+  assert.deepEqual(summary.overview.redirectAliasDiscovery, {
+    redirectCount: 0,
+    aliasGroupCount: 0,
+    crossOriginRedirectCount: 0,
+    routeCollisionCount: 0,
+    aliasGroupSamples: [],
+    warnings: [],
+  })
   assert.deepEqual(summary.overview.robotsDiscovery, {
     status: 'unknown',
     sitemapDeclarationCount: 0,
@@ -185,6 +215,82 @@ test('multi-page operator summary displays canonical discovery evidence', () => 
   assert.equal(summary.diagnostics.find((group) => group.group === 'Canonical Discovery')?.count, 4)
   assert.equal(summary.validation.warningSamples.includes('Multiple discovered pages point to the same canonical route.'), true)
   assert.equal(summary.validation.warningSamples.includes('Some pages declare conflicting canonical URLs.'), true)
+})
+
+test('multi-page operator summary displays redirect and alias evidence', () => {
+  const summary = buildMultiPageImportOperatorSummary({
+    importProvenanceSummary: provenance({
+      routeCandidates: ['/about'],
+      redirectDiscovery: {
+        redirectEntries: [
+          {
+            originalUrl: 'http://www.example.com/about',
+            finalUrl: 'https://example.com/about',
+            classification: 'canonical_host_redirect',
+          },
+          {
+            originalUrl: 'https://example.com/old',
+            finalUrl: 'https://external.example/new',
+            classification: 'cross_origin_redirect',
+          },
+        ],
+        crossOriginRedirects: [
+          {
+            originalUrl: 'https://example.com/old',
+            finalUrl: 'https://external.example/new',
+            classification: 'cross_origin_redirect',
+          },
+        ],
+        counts: { redirectCount: 2, crossOriginRedirectCount: 1, canonicalHostRedirectCount: 1 },
+        diagnostics: [
+          'REDIRECT_DISCOVERY_CANONICAL_HOST:http://www.example.com/about->https://example.com/about',
+          'REDIRECT_DISCOVERY_CROSS_ORIGIN:https://example.com/old->https://external.example/new',
+        ],
+      },
+      aliasDiscovery: {
+        aliasGroups: [
+          {
+            canonicalRoute: '/about',
+            aliases: ['https://example.com/about', 'https://example.com/about/', 'https://example.com/about/index.html'],
+            sources: ['link', 'sitemap', 'canonical'],
+          },
+        ],
+        routeCollisions: [
+          {
+            canonicalRoute: '/about',
+            sourceRoutes: ['/about-copy', '/about'],
+            aliases: ['https://example.com/about-copy', 'https://example.com/about'],
+            sources: ['canonical'],
+          },
+        ],
+        conflicts: [],
+        counts: { aliasGroupCount: 1, routeCollisionCount: 1 },
+        diagnostics: ['ALIAS_GROUP_CREATED:/about:3', 'ALIAS_ROUTE_COLLISION:/about:/about-copy|/about'],
+      },
+    }),
+  })
+
+  assert.deepEqual(summary.overview.redirectAliasDiscovery, {
+    redirectCount: 2,
+    aliasGroupCount: 1,
+    crossOriginRedirectCount: 1,
+    routeCollisionCount: 1,
+    aliasGroupSamples: [
+      {
+        canonicalRoute: '/about',
+        aliases: ['https://example.com/about', 'https://example.com/about/', 'https://example.com/about/index.html'],
+        sources: ['canonical', 'link', 'sitemap'],
+      },
+    ],
+    warnings: [
+      'Multiple discovered URL identities collapse onto the same canonical route.',
+      'Some discovered URLs redirect between canonical host or scheme variants.',
+      'Some discovered URLs redirect outside the current website.',
+    ],
+  })
+  assert.equal(summary.diagnostics.find((group) => group.group === 'Redirect Discovery')?.count, 2)
+  assert.equal(summary.diagnostics.find((group) => group.group === 'Alias Discovery')?.count, 2)
+  assert.equal(summary.validation.warningSamples.includes('Some discovered URLs redirect outside the current website.'), true)
 })
 
 test('multi-page operator summary displays robots discovery evidence', () => {

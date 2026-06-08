@@ -113,6 +113,63 @@ export type CanonicalDiscoveryEvidence = {
   diagnostics: string[]
 }
 
+export type RedirectDiscoveryClassification =
+  | 'same_route_redirect'
+  | 'route_changed_redirect'
+  | 'cross_origin_redirect'
+  | 'canonical_host_redirect'
+
+export type RedirectDiscoveryEntry = {
+  originalUrl: string
+  finalUrl: string
+  statusCodes: number[]
+  redirectCount: number
+  sameSite: boolean
+  normalizedSourceRoute: string | null
+  normalizedFinalRoute: string | null
+  classification: RedirectDiscoveryClassification
+  diagnostics: string[]
+}
+
+export type RedirectDiscoveryEvidence = {
+  redirectEntries: RedirectDiscoveryEntry[]
+  crossOriginRedirects: RedirectDiscoveryEntry[]
+  counts: {
+    redirectCount: number
+    crossOriginRedirectCount: number
+    canonicalHostRedirectCount: number
+  }
+  diagnostics: string[]
+}
+
+export type AliasDiscoverySource = 'seed' | 'link' | 'sitemap' | 'canonical' | 'acquisition' | 'redirect'
+
+export type AliasDiscoveryGroup = {
+  canonicalRoute: string
+  aliases: string[]
+  sources: AliasDiscoverySource[]
+  diagnostics: string[]
+}
+
+export type AliasRouteCollision = {
+  canonicalRoute: string
+  sourceRoutes: string[]
+  aliases: string[]
+  sources: AliasDiscoverySource[]
+  reason: string
+}
+
+export type AliasDiscoveryEvidence = {
+  aliasGroups: AliasDiscoveryGroup[]
+  routeCollisions: AliasRouteCollision[]
+  conflicts: AliasRouteCollision[]
+  counts: {
+    aliasGroupCount: number
+    routeCollisionCount: number
+  }
+  diagnostics: string[]
+}
+
 export type RobotsFetchResult = {
   url: string
   body: string
@@ -222,6 +279,8 @@ export type MultipageImportTree = {
   templateFamilyExtraction: SiteTemplateFamilyExtraction | null
   limits: MultipageImportLimits
   canonicalDiscovery: CanonicalDiscoveryEvidence
+  redirectDiscovery: RedirectDiscoveryEvidence
+  aliasDiscovery: AliasDiscoveryEvidence
   robotsDiscovery: RobotsDiscoveryEvidence
   sitemapDiscovery: SitemapDiscoveryEvidence
   depthLimitHit: boolean
@@ -238,6 +297,8 @@ export type MultipageImportSummary = {
   sharedRegionCount: number
   templateFamilyExtraction: TemplateFamilyExtractionSummary
   canonicalDiscovery: CanonicalDiscoveryEvidence
+  redirectDiscovery: RedirectDiscoveryEvidence
+  aliasDiscovery: AliasDiscoveryEvidence
   robotsDiscovery: RobotsDiscoveryEvidence
   sitemapDiscovery: SitemapDiscoveryEvidence
   depthLimitHit: boolean

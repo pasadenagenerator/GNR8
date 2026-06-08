@@ -1352,6 +1352,44 @@ function parseImportProvenanceSummary(value: unknown): RuntimeImportProvenanceSu
                 : [],
             }
           })(),
+          redirectDiscovery: (() => {
+            const redirectRaw =
+              multipageSummaryRaw && isRecord((multipageSummaryRaw as Record<string, unknown>).redirectDiscovery)
+                ? ((multipageSummaryRaw as Record<string, unknown>).redirectDiscovery as Record<string, unknown>)
+                : null
+            const countsRaw = redirectRaw && isRecord(redirectRaw.counts) ? redirectRaw.counts : {}
+            return {
+              redirectEntries: Array.isArray(redirectRaw?.redirectEntries) ? redirectRaw.redirectEntries : [],
+              crossOriginRedirects: Array.isArray(redirectRaw?.crossOriginRedirects) ? redirectRaw.crossOriginRedirects : [],
+              counts: {
+                redirectCount: Number.isFinite(Number(countsRaw.redirectCount)) ? Math.max(0, Math.floor(Number(countsRaw.redirectCount))) : 0,
+                crossOriginRedirectCount: Number.isFinite(Number(countsRaw.crossOriginRedirectCount)) ? Math.max(0, Math.floor(Number(countsRaw.crossOriginRedirectCount))) : 0,
+                canonicalHostRedirectCount: Number.isFinite(Number(countsRaw.canonicalHostRedirectCount)) ? Math.max(0, Math.floor(Number(countsRaw.canonicalHostRedirectCount))) : 0,
+              },
+              diagnostics: Array.isArray(redirectRaw?.diagnostics)
+                ? [...new Set(redirectRaw.diagnostics.map((entry) => normalizeText(entry)).filter(Boolean))].sort((a, b) => a.localeCompare(b))
+                : [],
+            }
+          })(),
+          aliasDiscovery: (() => {
+            const aliasRaw =
+              multipageSummaryRaw && isRecord((multipageSummaryRaw as Record<string, unknown>).aliasDiscovery)
+                ? ((multipageSummaryRaw as Record<string, unknown>).aliasDiscovery as Record<string, unknown>)
+                : null
+            const countsRaw = aliasRaw && isRecord(aliasRaw.counts) ? aliasRaw.counts : {}
+            return {
+              aliasGroups: Array.isArray(aliasRaw?.aliasGroups) ? aliasRaw.aliasGroups : [],
+              routeCollisions: Array.isArray(aliasRaw?.routeCollisions) ? aliasRaw.routeCollisions : [],
+              conflicts: Array.isArray(aliasRaw?.conflicts) ? aliasRaw.conflicts : [],
+              counts: {
+                aliasGroupCount: Number.isFinite(Number(countsRaw.aliasGroupCount)) ? Math.max(0, Math.floor(Number(countsRaw.aliasGroupCount))) : 0,
+                routeCollisionCount: Number.isFinite(Number(countsRaw.routeCollisionCount)) ? Math.max(0, Math.floor(Number(countsRaw.routeCollisionCount))) : 0,
+              },
+              diagnostics: Array.isArray(aliasRaw?.diagnostics)
+                ? [...new Set(aliasRaw.diagnostics.map((entry) => normalizeText(entry)).filter(Boolean))].sort((a, b) => a.localeCompare(b))
+                : [],
+            }
+          })(),
           robotsDiscovery: (() => {
             const robotsRaw =
               multipageSummaryRaw && isRecord((multipageSummaryRaw as Record<string, unknown>).robotsDiscovery)

@@ -7,7 +7,7 @@ import type {
   MultiPagePreviewValidationStatus,
 } from '@/gnr8/runtime/multipage-preview-validation'
 
-type DiagnosticGroupName = 'Discovery' | 'Canonical Discovery' | 'Robots Discovery' | 'Sitemap Discovery' | 'Acquisition' | 'Assembly' | 'Preview' | 'Validation'
+type DiagnosticGroupName = 'Discovery' | 'Canonical Discovery' | 'Redirect Discovery' | 'Alias Discovery' | 'Robots Discovery' | 'Sitemap Discovery' | 'Acquisition' | 'Assembly' | 'Preview' | 'Validation'
 
 export type MultiPageImportOperatorRouteStatus = 'assembled' | 'fetched' | 'failed' | 'skipped' | 'missing'
 
@@ -42,6 +42,18 @@ export type MultiPageImportOperatorSummary = {
       conflictCount: number
       duplicateRouteCount: number
       hreflangGroupCount: number
+      warnings: string[]
+    }
+    redirectAliasDiscovery: {
+      redirectCount: number
+      aliasGroupCount: number
+      crossOriginRedirectCount: number
+      routeCollisionCount: number
+      aliasGroupSamples: Array<{
+        canonicalRoute: string
+        aliases: string[]
+        sources: string[]
+      }>
       warnings: string[]
     }
     robotsDiscovery: {
@@ -209,6 +221,14 @@ function translateDiagnostic(value: string): string | null {
       return 'Multiple discovered pages point to the same canonical route.'
     case 'CANONICAL_ROUTE_DIFFERENT':
       return 'Some pages declare a canonical route different from their discovered route.'
+    case 'REDIRECT_DISCOVERY_CROSS_ORIGIN':
+      return 'Some discovered URLs redirect outside the current website.'
+    case 'REDIRECT_DISCOVERY_CANONICAL_HOST':
+      return 'Some discovered URLs redirect between canonical host or scheme variants.'
+    case 'ALIAS_ROUTE_COLLISION':
+      return 'Multiple discovered URL identities collapse onto the same canonical route.'
+    case 'ALIAS_CANONICAL_ROUTE_SELECTED':
+      return 'Canonical URL evidence selected a different route identity for at least one discovered URL.'
     case 'ROBOTS_DISCOVERY_FAILED':
       return 'Robots discovery encountered a parsing or fetch failure.'
     case 'ROBOTS_SITEMAP_DECLARATION_MISSING':
@@ -295,6 +315,8 @@ export function buildMultiPageImportOperatorSummary(input: BuildInput = {}): Mul
   const discoverySummary = isRecord(discoveryContainer.summary) ? discoveryContainer.summary : {}
   const discoveryManifest = isRecord(discoveryContainer.manifest) ? discoveryContainer.manifest : {}
   const canonicalDiscovery = isRecord(discoveryContainer.canonicalDiscovery) ? discoveryContainer.canonicalDiscovery : {}
+  const redirectDiscovery = isRecord(discoveryContainer.redirectDiscovery) ? discoveryContainer.redirectDiscovery : {}
+  const aliasDiscovery = isRecord(discoveryContainer.aliasDiscovery) ? discoveryContainer.aliasDiscovery : {}
   const sitemapDiscovery = isRecord(discoveryContainer.sitemapDiscovery) ? discoveryContainer.sitemapDiscovery : {}
   const robotsDiscovery = isRecord(discoveryContainer.robotsDiscovery) ? discoveryContainer.robotsDiscovery : {}
   const acquisition = isRecord(discoveryContainer.acquisition) ? discoveryContainer.acquisition : null
@@ -342,6 +364,33 @@ export function buildMultiPageImportOperatorSummary(input: BuildInput = {}): Mul
     duplicateRouteCount: Math.max(nonNegativeInt(canonicalDiscovery.duplicateRouteCount), canonicalDuplicates.length),
     hreflangGroupCount: Math.max(nonNegativeInt(canonicalDiscovery.hreflangGroupCount), hreflangGroups.length),
     warnings: canonicalWarnings.slice(0, 5),
+  }
+  const redirectDiagnostics = textList(redirectDiscovery.diagnostics)
+  const aliasDiagnostics = textList(aliasDiscovery.diagnostics)
+  const redirectAliasWarnings = uniqueSorted(
+    redirectDiagnostics.concat(aliasDiagnostics).map(translateDiagnostic).filter((entry): entry is string => Boolean(entry)),
+  )
+  const redirectCounts = isRecord(redirectDiscovery.counts) ? redirectDiscovery.counts : {}
+  const aliasCounts = isRecord(aliasDiscovery.counts) ? aliasDiscovery.counts : {}
+  const redirectEntries = Array.isArray(redirectDiscovery.redirectEntries) ? redirectDiscovery.redirectEntries : []
+  const crossOriginRedirects = Array.isArray(redirectDiscovery.crossOriginRedirects) ? redirectDiscovery.crossOriginRedirects : []
+  const aliasGroups = Array.isArray(aliasDiscovery.aliasGroups) ? aliasDiscovery.aliasGroups.filter(isRecord) : []
+  const routeCollisions = Array.isArray(aliasDiscovery.routeCollisions) ? aliasDiscovery.routeCollisions : []
+  const redirectAliasOverview = {
+    redirectCount: Math.max(nonNegativeInt(redirectCounts.redirectCount), redirectEntries.length),
+    aliasGroupCount: Math.max(nonNegativeInt(aliasCounts.aliasGroupCount), aliasGroups.length),
+    crossOriginRedirectCount: Math.max(nonNegativeInt(redirectCounts.crossOriginRedirectCount), crossOriginRedirects.length),
+    routeCollisionCount: Math.max(nonNegativeInt(aliasCounts.routeCollisionCount), routeCollisions.length),
+    aliasGroupSamples: aliasGroups
+      .slice()
+      .sort((left, right) => text(left.canonicalRoute).localeCompare(text(right.canonicalRoute)))
+      .slice(0, 3)
+      .map((group) => ({
+        canonicalRoute: normalizeRoutePath(group.canonicalRoute),
+        aliases: textList(group.aliases).slice(0, 5),
+        sources: textList(group.sources).slice(0, 5),
+      })),
+    warnings: redirectAliasWarnings.slice(0, 5),
   }
   const robotsDiagnostics = textList(robotsDiscovery.diagnostics)
   const robotsWarnings = uniqueSorted(robotsDiagnostics.map(translateDiagnostic).filter((entry): entry is string => Boolean(entry)))
@@ -435,6 +484,8 @@ export function buildMultiPageImportOperatorSummary(input: BuildInput = {}): Mul
     textList(discoverySummary.diagnostics)
       .concat(textList(discoveryManifest.diagnostics))
       .concat(canonicalDiagnostics)
+      .concat(redirectDiagnostics)
+      .concat(aliasDiagnostics)
       .concat(robotsDiagnostics)
       .concat(sitemapDiagnostics)
       .concat(textList(acquisitionSummary.diagnostics))
@@ -492,6 +543,7 @@ export function buildMultiPageImportOperatorSummary(input: BuildInput = {}): Mul
       },
       sitemapDiscovery: sitemapOverview,
       canonicalDiscovery: canonicalOverview,
+      redirectAliasDiscovery: redirectAliasOverview,
       robotsDiscovery: robotsOverview,
       acquisition: {
         fetchedPages,
@@ -520,6 +572,8 @@ export function buildMultiPageImportOperatorSummary(input: BuildInput = {}): Mul
     diagnostics: [
       diagnosticGroup('Discovery', textList(discoverySummary.diagnostics).concat(textList(discoveryManifest.diagnostics))),
       diagnosticGroup('Canonical Discovery', canonicalDiagnostics),
+      diagnosticGroup('Redirect Discovery', redirectDiagnostics),
+      diagnosticGroup('Alias Discovery', aliasDiagnostics),
       diagnosticGroup('Robots Discovery', robotsDiagnostics),
       diagnosticGroup('Sitemap Discovery', sitemapDiagnostics),
       diagnosticGroup('Acquisition', textList(acquisitionSummary.diagnostics).concat(textList(acquisition?.diagnostics))),

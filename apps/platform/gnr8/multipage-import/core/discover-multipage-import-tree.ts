@@ -9,6 +9,13 @@ import { buildNavigationTrees } from '../navigation/navigation-tree'
 import { normalizeInternalHref, normalizeMultipageHost, normalizeSeedUrl, parentPath } from '../normalization/route-normalization'
 import { inferSharedRegions, type PageRegionSignals } from '../shared-regions/shared-region-detection'
 import { buildCanonicalDiscoveryEvidence, emptyCanonicalDiscoveryEvidence } from './canonical-discovery'
+import {
+  buildRedirectAliasDiscoveryEvidence,
+  emptyAliasDiscoveryEvidence,
+  emptyRedirectDiscoveryEvidence,
+  type RedirectAliasObservedRedirect,
+  type RedirectAliasObservedUrl,
+} from './redirect-alias-discovery'
 import { applyRobotsRouteGovernance, discoverRobotsTxt } from './robots-discovery'
 import { discoverSitemapUrls } from './sitemap-discovery'
 import { inferRouteFamilies } from './template-families'
@@ -124,6 +131,18 @@ function sameSitemapLocation(left: string, right: string): boolean {
     return leftUrl.toString() === rightUrl.toString()
   } catch {
     return left === right
+  }
+}
+
+function absoluteObservedUrl(href: string, baseUrl: string): string | null {
+  try {
+    const parsed = new URL(href, baseUrl)
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return null
+    parsed.hash = ''
+    parsed.search = ''
+    return parsed.toString()
+  } catch {
+    return null
   }
 }
 
@@ -366,6 +385,8 @@ export async function discoverMultipageImportTree(
       templateFamilyExtraction: null,
       limits,
       canonicalDiscovery: emptyCanonicalDiscoveryEvidence(['CANONICAL_DISCOVERY_STARTED:0']),
+      redirectDiscovery: emptyRedirectDiscoveryEvidence(['REDIRECT_DISCOVERY_STARTED:0']),
+      aliasDiscovery: emptyAliasDiscoveryEvidence(['ALIAS_DISCOVERY_STARTED:0', 'ALIAS_DISCOVERY_COMPLETED:0']),
       robotsDiscovery: emptyRobotsDiscoveryEvidence(['ROBOTS_DISCOVERY_FAILED:invalid_seed']),
       sitemapDiscovery: emptySitemapDiscoveryEvidence(limits, ['SITEMAP_DISCOVERY_NOT_FOUND:invalid_seed']),
       depthLimitHit: false,
@@ -377,6 +398,8 @@ export async function discoverMultipageImportTree(
   const discovered = new Map<string, DiscoveredRouteState>()
   const pageSignals: PageSignals[] = []
   const canonicalDiscoveryPages: Array<{ pageUrl: string; pageRoutePath: string; html: string }> = []
+  const observedAliasUrls: RedirectAliasObservedUrl[] = []
+  const observedRedirects: RedirectAliasObservedRedirect[] = []
   const queue: Array<{ path: string; depth: number }> = []
   const routePathCounts = new Map<string, number>()
   const sourceGroups = new Map<string, number>()
@@ -432,6 +455,7 @@ export async function discoverMultipageImportTree(
     source: 'seed',
     visibilityHint: 'unknown',
   })
+  observedAliasUrls.push({ url: input.seedUrl, routePath: normalizedSeed.path, source: 'seed' })
   if (seed.route) queue.push({ path: seed.route.path, depth: 0 })
 
   let robotsDiscoveryInitial = await discoverRobotsTxt({
@@ -467,6 +491,8 @@ export async function discoverMultipageImportTree(
     }
   }
   for (const sitemapUrl of sitemapDiscovery.discoveredUrls) {
+    observedAliasUrls.push({ url: sitemapUrl.originalUrl, routePath: sitemapUrl.normalizedRoutePath, source: 'sitemap' })
+    observedAliasUrls.push({ url: sitemapUrl.normalizedUrl, routePath: sitemapUrl.normalizedRoutePath, source: 'sitemap' })
     if (sitemapUrl.normalizedRoutePath === normalizedSeed.path) {
       diagnostics.push(diagnosticEntry('SITEMAP_URL_SKIPPED', `seed_route:${sitemapUrl.normalizedRoutePath}`))
       continue
@@ -503,6 +529,14 @@ export async function discoverMultipageImportTree(
     }
 
     currentRoute.title = currentRoute.title ?? fetched.title ?? toTitleFromHtml(fetched.html)
+    if (fetched.url && fetched.url !== currentRoute.url) {
+      observedRedirects.push({
+        originalUrl: currentRoute.url,
+        finalUrl: fetched.url,
+        redirectCount: 1,
+      })
+    }
+    observedAliasUrls.push({ url: fetched.url || currentRoute.url, routePath: currentRoute.path, source: 'acquisition' })
     canonicalDiscoveryPages.push({
       pageUrl: fetched.url || currentRoute.url,
       pageRoutePath: currentRoute.path,
@@ -532,6 +566,12 @@ export async function discoverMultipageImportTree(
         if (normalized.skip === 'asset_link') diagnostics.push(diagnosticEntry('MULTIPAGE_ASSET_LINK_SKIPPED', link.href))
         continue
       }
+
+      observedAliasUrls.push({
+        url: absoluteObservedUrl(link.href, currentRoute.url) ?? normalized.normalized.url,
+        routePath: normalized.normalized.path,
+        source: 'link',
+      })
 
       const groupKey = normalized.normalized.path.split('/').slice(0, 2).join('/') || '/'
       const templateCount = (templateCapCounts.get(groupKey) ?? 0) + 1
@@ -574,6 +614,13 @@ export async function discoverMultipageImportTree(
     pages: canonicalDiscoveryPages,
   })
   diagnostics.push(...canonicalDiscovery.diagnostics)
+  const { redirectDiscovery, aliasDiscovery } = buildRedirectAliasDiscoveryEvidence({
+    seedUrl: normalizedSeed.url,
+    observedUrls: observedAliasUrls,
+    observedRedirects,
+    canonicalDiscovery,
+  })
+  diagnostics.push(...redirectDiscovery.diagnostics, ...aliasDiscovery.diagnostics)
 
   const nodes: RouteNode[] = sortedStates.map((state) => {
     const visibilityState = summarizeVisibility(state.visibilityHints)
@@ -668,6 +715,8 @@ export async function discoverMultipageImportTree(
     templateFamilyExtraction: familyResult.templateFamilyExtraction,
     limits,
     canonicalDiscovery,
+    redirectDiscovery,
+    aliasDiscovery,
     robotsDiscovery,
     sitemapDiscovery,
     depthLimitHit,
@@ -700,6 +749,8 @@ export function summarizeMultipageImportTree(tree: MultipageImportTree): Multipa
     sharedRegionCount: tree.sharedRegions.length,
     templateFamilyExtraction: summarizeTemplateFamilyExtraction(tree.templateFamilyExtraction),
     canonicalDiscovery: tree.canonicalDiscovery,
+    redirectDiscovery: tree.redirectDiscovery,
+    aliasDiscovery: tree.aliasDiscovery,
     robotsDiscovery: tree.robotsDiscovery,
     sitemapDiscovery: tree.sitemapDiscovery,
     depthLimitHit: tree.depthLimitHit,

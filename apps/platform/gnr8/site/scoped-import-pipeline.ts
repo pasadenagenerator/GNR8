@@ -36,7 +36,9 @@ import {
   type MultiPageDiscoveryManifest,
   type MultiPageDiscoverySourceContext,
   type MultiPageDiscoverySummary,
+  type MultiPageAliasDiscoverySummary,
   type MultiPageCanonicalDiscoverySummary,
+  type MultiPageRedirectDiscoverySummary,
   type MultiPageRobotsDiscoverySummary,
   type MultiPageSitemapDiscoverySummary,
   type MultiPageRawArtifactAssemblyManifest,
@@ -54,8 +56,11 @@ import {
 } from '@/gnr8/style-signals'
 import {
   applyRobotsRouteGovernance,
+  buildRedirectAliasDiscoveryEvidence,
   discoverMultipageImportTree,
+  emptyAliasDiscoveryEvidence,
   emptyCanonicalDiscoveryEvidence,
+  emptyRedirectDiscoveryEvidence,
   discoverRobotsTxt,
   discoverSitemapUrls,
   summarizeMultipageImportTree,
@@ -1774,6 +1779,8 @@ async function buildScopedMultiPageDiscovery(input: {
   summary: MultiPageDiscoverySummary
   manifest: MultiPageDiscoveryManifest | null
   canonicalDiscovery?: MultiPageCanonicalDiscoverySummary | null
+  redirectDiscovery?: MultiPageRedirectDiscoverySummary | null
+  aliasDiscovery?: MultiPageAliasDiscoverySummary | null
   robotsDiscovery?: MultiPageRobotsDiscoverySummary | null
   sitemapDiscovery?: MultiPageSitemapDiscoverySummary | null
   acquisition?: MultiPageHtmlAcquisitionManifest | null
@@ -1844,6 +1851,8 @@ async function buildScopedMultiPageDiscovery(input: {
       },
       manifest,
       canonicalDiscovery: null,
+      redirectDiscovery: emptyRedirectDiscoveryEvidence(['REDIRECT_DISCOVERY_STARTED:0']),
+      aliasDiscovery: emptyAliasDiscoveryEvidence(['ALIAS_DISCOVERY_STARTED:0', 'ALIAS_DISCOVERY_COMPLETED:0']),
       robotsDiscovery: emptyMultiPageRobotsDiscoverySummary(['ROBOTS_DISCOVERY_FAILED:invalid_seed']),
       sitemapDiscovery: null,
       acquisition: acquisition.manifest,
@@ -2236,6 +2245,35 @@ async function buildScopedMultiPageDiscovery(input: {
     discovery: discoveryResult,
     option,
   })
+  const observedUrls = [
+    { url: normalizedSeed.url, routePath: normalizedSeed.path, source: 'seed' as const },
+    ...manifest.normalizedUrls.flatMap((entry) => [
+      { url: entry.absoluteUrl, routePath: entry.normalizedRoutePath, source: entry.originalHref === entry.absoluteUrl ? 'link' as const : 'link' as const },
+      { url: entry.normalizedUrl, routePath: entry.normalizedRoutePath, source: 'link' as const },
+    ]),
+    ...sitemapDiscoveryEvidence.discoveredUrls.flatMap((entry) => [
+      { url: entry.originalUrl, routePath: entry.normalizedRoutePath, source: 'sitemap' as const },
+      { url: entry.normalizedUrl, routePath: entry.normalizedRoutePath, source: 'sitemap' as const },
+    ]),
+    ...(acquisition.manifest?.pages ?? []).flatMap((page) => [
+      { url: page.normalizedUrl, routePath: page.normalizedRoutePath, source: 'acquisition' as const },
+      { url: page.finalUrl, routePath: page.finalNormalizedRoutePath ?? page.normalizedRoutePath, source: 'acquisition' as const },
+    ]),
+  ]
+  const observedRedirects = (acquisition.manifest?.pages ?? [])
+    .filter((page) => page.redirected || (page.normalizedUrl && page.finalUrl && page.normalizedUrl !== page.finalUrl))
+    .map((page) => ({
+      originalUrl: page.normalizedUrl,
+      finalUrl: page.finalUrl,
+      redirectCount: page.redirectCount,
+      statusCodes: [page.httpStatusCode],
+    }))
+  const { redirectDiscovery, aliasDiscovery } = buildRedirectAliasDiscoveryEvidence({
+    seedUrl: normalizedSeed.url,
+    observedUrls,
+    observedRedirects,
+    canonicalDiscovery,
+  })
   const assembly = await assembleScopedMultiPageRawArtifactPages({
     sourceUrl: input.sourceUrl,
     snapshot: input.snapshot,
@@ -2250,12 +2288,16 @@ async function buildScopedMultiPageDiscovery(input: {
         ...discoveryResult.summary.diagnostics,
         ...(acquisition.summary.enabled ? acquisition.summary.diagnostics : []),
         ...(assembly.summary.enabled ? assembly.summary.diagnostics : []),
+        ...redirectDiscovery.diagnostics,
+        ...aliasDiscovery.diagnostics,
       ]),
       ...(acquisition.summary.enabled ? { htmlAcquisition: acquisition.summary } : {}),
       ...(assembly.summary.enabled ? { rawArtifactAssembly: assembly.summary } : {}),
     },
     manifest,
     canonicalDiscovery,
+    redirectDiscovery,
+    aliasDiscovery,
     robotsDiscovery,
     sitemapDiscovery,
     acquisition: acquisition.manifest,
@@ -2313,6 +2355,8 @@ async function buildMultipageImportFromPreparedSite(input: {
           diagnostics: [],
         },
         canonicalDiscovery: emptyCanonicalDiscoveryEvidence(['CANONICAL_DISCOVERY_STARTED:0']),
+        redirectDiscovery: emptyRedirectDiscoveryEvidence(['REDIRECT_DISCOVERY_STARTED:0']),
+        aliasDiscovery: emptyAliasDiscoveryEvidence(['ALIAS_DISCOVERY_STARTED:0', 'ALIAS_DISCOVERY_COMPLETED:0']),
         robotsDiscovery: {
           robotsUrl: null,
           fetchedState: 'unavailable',
@@ -2390,6 +2434,8 @@ async function buildImportProvenanceSummary(input: {
     summary: MultiPageDiscoverySummary
     manifest: MultiPageDiscoveryManifest | null
     canonicalDiscovery?: MultiPageCanonicalDiscoverySummary | null
+    redirectDiscovery?: MultiPageRedirectDiscoverySummary | null
+    aliasDiscovery?: MultiPageAliasDiscoverySummary | null
     robotsDiscovery?: MultiPageRobotsDiscoverySummary | null
     sitemapDiscovery?: MultiPageSitemapDiscoverySummary | null
     acquisition?: MultiPageHtmlAcquisitionManifest | null
@@ -2445,6 +2491,8 @@ async function buildImportProvenanceSummary(input: {
     ...(persistedCaptureEvidence.persisted ? ['RENDERED_CAPTURE_PERSISTED'] : []),
     ...(semanticImport?.diagnostics.map((diag) => normalizeText(diag.code)).filter(Boolean) ?? []),
     ...(input.multiPageDiscovery?.canonicalDiscovery?.diagnostics ?? []),
+    ...(input.multiPageDiscovery?.redirectDiscovery?.diagnostics ?? []),
+    ...(input.multiPageDiscovery?.aliasDiscovery?.diagnostics ?? []),
     ...(input.multiPageDiscovery?.robotsDiscovery?.diagnostics ?? []),
     ...(input.multiPageDiscovery?.sitemapDiscovery?.diagnostics ?? []),
     ...(input.multiPageDiscovery?.summary.htmlAcquisition?.diagnostics ?? []),
@@ -2566,6 +2614,8 @@ async function buildImportProvenanceSummary(input: {
           summary: input.multiPageDiscovery.summary,
           manifest: input.multiPageDiscovery.manifest,
           canonicalDiscovery: input.multiPageDiscovery.canonicalDiscovery ?? null,
+          redirectDiscovery: input.multiPageDiscovery.redirectDiscovery ?? null,
+          aliasDiscovery: input.multiPageDiscovery.aliasDiscovery ?? null,
           robotsDiscovery: input.multiPageDiscovery.robotsDiscovery ?? null,
           sitemapDiscovery: input.multiPageDiscovery.sitemapDiscovery ?? null,
           acquisition: input.multiPageDiscovery.acquisition ?? null,

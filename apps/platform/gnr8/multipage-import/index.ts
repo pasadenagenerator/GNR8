@@ -10,7 +10,9 @@ export type {
   MultipageDiscoveryInput,
   MultipageDiscoveryDependencies,
   PageFetchResult,
+  AliasDiscoveryEvidence,
   CanonicalDiscoveryEvidence,
+  RedirectDiscoveryEvidence,
   RobotsDiscoveryEvidence,
   RobotsFetchResult,
   RobotsRouteGovernanceEntry,
@@ -21,6 +23,7 @@ export type {
 
 export { discoverMultipageImportTree, discoverMultipageImportTreeWithFetch, summarizeMultipageImportTree } from './core/discover-multipage-import-tree'
 export { emptyCanonicalDiscoveryEvidence } from './core/canonical-discovery'
+export { buildRedirectAliasDiscoveryEvidence, emptyAliasDiscoveryEvidence, emptyRedirectDiscoveryEvidence } from './core/redirect-alias-discovery'
 export { applyRobotsRouteGovernance, discoverRobotsTxt } from './core/robots-discovery'
 export { discoverSitemapUrls } from './core/sitemap-discovery'
 export {

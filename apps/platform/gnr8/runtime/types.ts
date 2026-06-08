@@ -3,7 +3,7 @@ import type { PageEnforcementByStage } from "@/gnr8/migration/enforcement/page-e
 import type { PageMigrationGateResult } from "@/gnr8/migration/quality-gates/page-quality-gate";
 import type { PageRolloutPolicyResult } from "@/gnr8/migration/policy/page-rollout-policy";
 import type { StyleSignalModel } from "@/gnr8/style-signals";
-import type { CanonicalDiscoveryEvidence, MultipageImportSummary, MultipageImportTree, SitemapDiscoveryEvidence } from "@/gnr8/multipage-import";
+import type { AliasDiscoveryEvidence, CanonicalDiscoveryEvidence, MultipageImportSummary, MultipageImportTree, RedirectDiscoveryEvidence, SitemapDiscoveryEvidence } from "@/gnr8/multipage-import";
 import type { SiteTree, SiteTreeSummary } from "@/gnr8/site-tree";
 import type { FamilyHandoffModel, TemplateFamiliesSummary } from "@/gnr8/family-mode";
 import type { SemanticImportCaptureMode, SemanticImportResult } from "@/gnr8/import-semantic/semantic-import-engine";
@@ -90,6 +90,10 @@ export type MultiPageDiscoveryManifest = {
 export type MultiPageSitemapDiscoverySummary = SitemapDiscoveryEvidence;
 
 export type MultiPageCanonicalDiscoverySummary = CanonicalDiscoveryEvidence;
+
+export type MultiPageRedirectDiscoverySummary = RedirectDiscoveryEvidence;
+
+export type MultiPageAliasDiscoverySummary = AliasDiscoveryEvidence;
 
 export type MultiPageRobotsDiscoverySummary = {
   robotsUrl: string | null;
@@ -318,6 +322,8 @@ export type RuntimeImportProvenanceSummary = {
     summary: MultiPageDiscoverySummary;
     manifest: MultiPageDiscoveryManifest | null;
     canonicalDiscovery?: MultiPageCanonicalDiscoverySummary | null;
+    redirectDiscovery?: MultiPageRedirectDiscoverySummary | null;
+    aliasDiscovery?: MultiPageAliasDiscoverySummary | null;
     robotsDiscovery?: MultiPageRobotsDiscoverySummary | null;
     sitemapDiscovery?: MultiPageSitemapDiscoverySummary | null;
     acquisition?: MultiPageHtmlAcquisitionManifest | null;

@@ -332,6 +332,79 @@ test('canonical discovery captures hreflang variants and summary provenance shap
   assert.ok(tree.canonicalDiscovery.diagnostics.some((entry) => entry.startsWith('HREFLANG_DISCOVERY_FOUND:/:sl:/sl')))
 })
 
+test('alias discovery groups trailing slash, index html, sitemap/link duplicates, and canonical aliases', async () => {
+  const tree = await discoverMultipageImportTree(
+    {
+      siteId: 'site_alias_groups',
+      seedUrl: 'https://example.com/',
+      limits: { maxRoutes: 10, maxDepth: 1, maxLinksPerPage: 10, maxSitemaps: 2, maxUrlsFromSitemaps: 10 },
+    },
+    {
+      fetchPage: createFetcher({
+        '/': page('Home', '<main><a href="/about">About</a><a href="/about/">About slash</a><a href="/about/index.html">About index</a><a href="/about-copy">About Copy</a></main>'),
+        '/about': pageWithHead('About', '<link rel="canonical" href="https://example.com/about/">', '<main>About</main>'),
+        '/about-copy': pageWithHead('About Copy', '<link rel="canonical" href="/about">', '<main>About copy</main>'),
+      }),
+      fetchSitemap: createSitemapFetcher({
+        '/sitemap.xml': `<?xml version="1.0"?><urlset>
+          <url><loc>https://example.com/about/</loc></url>
+          <url><loc>https://example.com/about/index.html</loc></url>
+        </urlset>`,
+      }),
+    },
+  )
+  const summary = summarizeMultipageImportTree(tree)
+  const about = tree.aliasDiscovery.aliasGroups.find((entry) => entry.canonicalRoute === '/about')
+
+  assert.ok(about)
+  assert.deepEqual(about?.aliases, [
+    'https://example.com/about',
+    'https://example.com/about-copy',
+    'https://example.com/about/',
+    'https://example.com/about/index.html',
+  ])
+  assert.deepEqual(about?.sources, ['acquisition', 'canonical', 'link', 'sitemap'])
+  assert.equal(tree.aliasDiscovery.counts.aliasGroupCount >= 1, true)
+  assert.equal(tree.aliasDiscovery.routeCollisions.some((entry) => entry.canonicalRoute === '/about'), true)
+  assert.equal(summary.aliasDiscovery.aliasGroups.some((entry) => entry.canonicalRoute === '/about'), true)
+  assert.ok(tree.diagnostics.some((entry) => entry.startsWith('ALIAS_GROUP_CREATED:/about')))
+  assert.ok(tree.diagnostics.some((entry) => entry.startsWith('ALIAS_ROUTE_COLLISION:/about')))
+})
+
+test('redirect discovery records http to https, route changes, and cross-origin redirects', async () => {
+  const fetchPage = async (url: string): Promise<{ url: string; html: string; title: string | null } | null> => {
+    const parsed = new URL(url)
+    const normalizedPath = parsed.pathname.replace(/\/+$/, '') || '/'
+    if (normalizedPath === '/') {
+      return {
+        url,
+        html: page('Home', '<main><a href="http://example.com/secure">Secure</a><a href="https://www.example.com/www">WWW</a><a href="/old">Old</a><a href="/external">External</a></main>'),
+        title: null,
+      }
+    }
+    if (normalizedPath === '/secure') return { url: 'https://example.com/secure', html: page('Secure', '<main>Secure</main>'), title: null }
+    if (normalizedPath === '/www') return { url: 'https://example.com/www', html: page('WWW', '<main>WWW</main>'), title: null }
+    if (normalizedPath === '/old') return { url: 'https://example.com/new', html: page('New', '<main>New</main>'), title: null }
+    if (normalizedPath === '/external') return { url: 'https://elsewhere.example/external', html: page('External', '<main>External</main>'), title: null }
+    return null
+  }
+
+  const tree = await discoverMultipageImportTree(
+    { siteId: 'site_redirects', seedUrl: 'http://example.com/', limits: { maxRoutes: 10, maxDepth: 1, maxLinksPerPage: 10 } },
+    { fetchPage },
+  )
+  const bySource = new Map(tree.redirectDiscovery.redirectEntries.map((entry) => [entry.normalizedSourceRoute, entry]))
+
+  assert.equal(bySource.get('/secure')?.classification, 'canonical_host_redirect')
+  assert.equal(bySource.get('/old')?.classification, 'route_changed_redirect')
+  assert.equal(bySource.get('/external')?.classification, 'cross_origin_redirect')
+  assert.equal(bySource.get('/external')?.sameSite, false)
+  assert.equal(tree.redirectDiscovery.counts.redirectCount, 3)
+  assert.equal(tree.redirectDiscovery.counts.crossOriginRedirectCount, 1)
+  assert.ok(tree.diagnostics.some((entry) => entry.startsWith('REDIRECT_DISCOVERY_CANONICAL_HOST')))
+  assert.ok(tree.diagnostics.some((entry) => entry.startsWith('REDIRECT_DISCOVERY_CROSS_ORIGIN')))
+})
+
 test('sitemap.xml discovery adds hidden route candidates', async () => {
   const tree = await discoverMultipageImportTree(
     {
