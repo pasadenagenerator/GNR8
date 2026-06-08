@@ -692,6 +692,44 @@ test('import provenance summary is parsed when persisted on runtime site version
   assert.equal(parsed?.siteTree?.summary.candidatePageCount, 3)
 })
 
+test('import provenance parser defaults discovery evidence for stale multipage summaries', () => {
+  const parsed = __siteWorkspaceReadModelTestUtils.parseImportProvenanceSummary({
+    ...runtimeSummaryFixture({
+      requestId: 'stale-multipage-summary',
+      sourceMode: 'raw_html_fallback',
+      renderedCaptureStatus: 'failed',
+      renderedDomQuality: 'unusable',
+      nodeCount: 0,
+      screenshotCount: 0,
+    }),
+    multipageImport: {
+      summary: {
+        enabled: true,
+        routeCount: 3,
+        pageCount: 3,
+        primaryNavigationCount: 0,
+        footerNavigationCount: 0,
+        sharedRegionCount: 0,
+        depthLimitHit: false,
+        routeLimitHit: false,
+        diagnostics: [],
+      },
+      tree: null,
+    },
+  })
+
+  assert.deepEqual(parsed?.multipageImport?.summary.canonicalDiscovery, {
+    canonicalEntries: [],
+    alternateLanguageEntries: [],
+    duplicates: [],
+    conflicts: [],
+    hreflangGroups: [],
+    diagnostics: [],
+  })
+  assert.equal(parsed?.multipageImport?.summary.robotsDiscovery.fetchedState, 'unavailable')
+  assert.deepEqual(parsed?.multipageImport?.summary.sitemapDiscovery.discoveredUrls, [])
+})
+
 test('import provenance parser preserves capture job + worker health timeout truth', () => {
   const parsed = __siteWorkspaceReadModelTestUtils.parseImportProvenanceSummary({
     kind: 'runtime_import_provenance_summary_v1',

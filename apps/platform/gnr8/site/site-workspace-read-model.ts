@@ -1336,6 +1336,22 @@ function parseImportProvenanceSummary(value: unknown): RuntimeImportProvenanceSu
                 : [],
             }
           })(),
+          canonicalDiscovery: (() => {
+            const canonicalRaw =
+              multipageSummaryRaw && isRecord((multipageSummaryRaw as Record<string, unknown>).canonicalDiscovery)
+                ? ((multipageSummaryRaw as Record<string, unknown>).canonicalDiscovery as Record<string, unknown>)
+                : null
+            return {
+              canonicalEntries: Array.isArray(canonicalRaw?.canonicalEntries) ? canonicalRaw.canonicalEntries : [],
+              alternateLanguageEntries: Array.isArray(canonicalRaw?.alternateLanguageEntries) ? canonicalRaw.alternateLanguageEntries : [],
+              duplicates: Array.isArray(canonicalRaw?.duplicates) ? canonicalRaw.duplicates : [],
+              conflicts: Array.isArray(canonicalRaw?.conflicts) ? canonicalRaw.conflicts : [],
+              hreflangGroups: Array.isArray(canonicalRaw?.hreflangGroups) ? canonicalRaw.hreflangGroups : [],
+              diagnostics: Array.isArray(canonicalRaw?.diagnostics)
+                ? [...new Set(canonicalRaw.diagnostics.map((entry) => normalizeText(entry)).filter(Boolean))].sort((a, b) => a.localeCompare(b))
+                : [],
+            }
+          })(),
           robotsDiscovery: (() => {
             const robotsRaw =
               multipageSummaryRaw && isRecord((multipageSummaryRaw as Record<string, unknown>).robotsDiscovery)
