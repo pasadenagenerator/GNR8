@@ -107,6 +107,80 @@ function fixtureMultiPageAssemblyProvenance(): RuntimeImportProvenanceSummary {
   } as unknown as RuntimeImportProvenanceSummary
 }
 
+function fixtureViroidocLikeMultiPageAssemblyProvenance(): RuntimeImportProvenanceSummary {
+  const routes = [
+    ['/', 'pages/root/index.html'],
+    ['/project', 'pages/project/index.html'],
+    ['/people', 'pages/people/index.html'],
+    ['/blog', 'pages/blog/index.html'],
+    ['/news', 'pages/news/index.html'],
+    ['/learn', 'pages/learn/index.html'],
+    ['/subscribe', 'pages/subscribe/index.html'],
+  ] as const
+  return {
+    multiPageDiscovery: {
+      summary: {
+        enabled: true,
+        discoveredPageCount: routes.length,
+        skippedLinkCount: 0,
+        routeCandidateCount: routes.length,
+        manifestRef: 'importProvenanceSummary.multiPageDiscovery.manifest',
+        diagnostics: [],
+        htmlAcquisition: {
+          enabled: true,
+          fetchedPageCount: routes.length,
+          failedPageCount: 0,
+          skippedPageCount: 0,
+          manifestRef: 'importProvenanceSummary.multiPageDiscovery.acquisition',
+          diagnostics: [],
+        },
+        rawArtifactAssembly: {
+          enabled: true,
+          assembledPageCount: routes.length,
+          excludedPageCount: 0,
+          routeMapRef: 'importProvenanceSummary.multiPageDiscovery.rawArtifactAssembly.routeMap',
+          diagnostics: [],
+        },
+      },
+      manifest: {
+        routeCandidates: routes.map(([routePath]) => routePath),
+      },
+      acquisition: {
+        summary: { fetchedPageCount: routes.length, failedPageCount: 0, skippedPageCount: 0 },
+        pages: [],
+      },
+      rawArtifactAssembly: {
+        kind: 'multi_page_raw_artifact_assembly_manifest_v1',
+        enabled: true,
+        seedUrl: 'https://www.viroidoc.eu/',
+        normalizedSeedUrl: 'https://www.viroidoc.eu/',
+        assembledPageCount: routes.length,
+        excludedPageCount: 0,
+        failedPageCount: 0,
+        routeMap: routes.map(([routePath, rawFilePath]) => ({
+          routePath,
+          sourceUrl: `https://www.viroidoc.eu${routePath === '/' ? '/' : routePath}`,
+          finalUrl: `https://www.viroidoc.eu${routePath === '/' ? '/' : routePath}`,
+          rawFilePath,
+          bodySha256: `sha-${routePath}`,
+          byteSize: 100,
+          status: 'assembled' as const,
+        })),
+        htmlPathMap: Object.fromEntries(routes),
+        excludedPages: [],
+        failedPages: [],
+        manifestPath: null,
+        diagnostics: [],
+        generatedAt: '2026-06-08T00:00:00.000Z',
+      },
+    },
+  } as unknown as RuntimeImportProvenanceSummary
+}
+
+function countOccurrences(value: string, marker: string): number {
+  return value.split(marker).length - 1
+}
+
 test('preview path resolver falls back to canonical root path when requested path is missing', () => {
   const resolved = __unifiedRenderPreviewTestUtils.resolveHtmlForPath({
     htmlByPath: {
@@ -638,6 +712,120 @@ test('raw template preview route-map serving resolves /about to assembled child 
       preview.multiPagePreviewValidation?.links.find((link) => link.status === 'skipped_route_missing')?.sampleMissingRoutes,
       ['/missing'],
     )
+  } finally {
+    restore()
+  }
+})
+
+test('raw template preview serves one Viroidoc-like assembled page per requested route', async () => {
+  const requestedAssets: string[] = []
+  const provenance = fixtureViroidocLikeMultiPageAssemblyProvenance()
+  const htmlByFilePath: Record<string, string> = {
+    'assembled/all-pages.html': [
+      '<html><body>',
+      '<main>ROOT_MARKER ROOT_MARKER ROOT_MARKER</main>',
+      '<main>PROJECT_MARKER PEOPLE_MARKER BLOG_MARKER</main>',
+      '</body></html>',
+    ].join(''),
+    'pages/root/index.html': [
+      '<!doctype html><html><body>',
+      '<nav><a href="/project">Project</a><a href="/people">People</a><a href="/news">News</a></nav>',
+      '<main>ROOT_MARKER</main>',
+      '</body></html>',
+    ].join(''),
+    'pages/project/index.html': '<!doctype html><html><body><main>PROJECT_MARKER</main></body></html>',
+    'pages/people/index.html': '<!doctype html><html><body><main>PEOPLE_MARKER</main></body></html>',
+    'pages/blog/index.html': '<!doctype html><html><body><main>BLOG_MARKER</main></body></html>',
+    'pages/news/index.html': '<!doctype html><html><body><main>NEWS_MARKER</main></body></html>',
+    'pages/learn/index.html': '<!doctype html><html><body><main>LEARN_MARKER</main></body></html>',
+    'pages/subscribe/index.html': '<!doctype html><html><body><main>SUBSCRIBE_MARKER</main></body></html>',
+  }
+  const fileMap = Object.fromEntries(
+    Object.entries(htmlByFilePath).map(([filePath, html]) => [
+      filePath,
+      { mediaType: 'text/html', sizeBytes: html.length, sha256: `sha-${filePath}` },
+    ]),
+  )
+  const restore = setUnifiedRenderPreviewDependenciesForTest({
+    getPoolStatus: () => ({ totalCount: 1, idleCount: 1, waitingCount: 0 }),
+    getSiteVersion: async () =>
+      ({
+        id: 'sv-viroidoc',
+        siteId: 'site-viroidoc',
+        rendererCompatibilityVersion: 'gnr8-renderer-v1',
+        pages: [],
+        importProvenanceSummary: provenance,
+      }) as any,
+    getRawImportedSiteArtifact: async () =>
+      ({
+        artifactType: 'raw_imported_site',
+        siteId: 'site-viroidoc',
+        siteVersionId: 'sv-viroidoc',
+        entryHtmlPath: 'assembled/all-pages.html',
+        assetBasePath: '/',
+        fileMap,
+        metadata: {
+          assetSummary: { persistedAssetCount: Object.keys(fileMap).length, externalFallbackAssetCount: 0 },
+        },
+      }) as any,
+    getRawTemplateSiteArtifact: async () => null,
+    getRawTemplateSiteAsset: async (input) => {
+      requestedAssets.push(input.filePath)
+      const html = htmlByFilePath[input.filePath]
+      return html ? ({ bytes: Buffer.from(html), sizeBytes: html.length, mediaType: 'text/html' } as any) : null
+    },
+    listContentSlots: async () => [],
+    listContentOverrides: async () => [],
+  })
+
+  try {
+    const expectations = [
+      ['/', 'ROOT_MARKER', ['PROJECT_MARKER', 'PEOPLE_MARKER', 'BLOG_MARKER']],
+      ['/project', 'PROJECT_MARKER', ['ROOT_MARKER', 'PEOPLE_MARKER', 'BLOG_MARKER']],
+      ['/people', 'PEOPLE_MARKER', ['ROOT_MARKER', 'PROJECT_MARKER', 'BLOG_MARKER']],
+      ['/blog', 'BLOG_MARKER', ['ROOT_MARKER', 'PROJECT_MARKER', 'PEOPLE_MARKER']],
+    ] as const
+
+    for (const [routePath, expectedMarker, absentMarkers] of expectations) {
+      const preview = await renderSiteVersionPreview({
+        siteVersionId: 'sv-viroidoc',
+        path: routePath,
+        mode: 'raw_template_preview',
+        requestCorrelationKey: `req-viroidoc-${routePath}`,
+      })
+
+      assert.equal(preview.path, routePath)
+      assert.equal(preview.html.includes(expectedMarker), true)
+      for (const absentMarker of absentMarkers) assert.equal(preview.html.includes(absentMarker), false)
+      assert.equal(preview.html.includes('assembled/all-pages.html'), false)
+      assert.equal(preview.previewRuntimeSummary.previewDiagnostics.includes('MULTIPAGE_PREVIEW_PAGE_ISOLATED'), true)
+      assert.equal(preview.multiPagePreviewValidation?.summary.validPreviewRoutes, 7)
+      assert.equal(preview.multiPagePreviewValidation?.summary.missingPreviewRoutes, 0)
+      if (routePath === '/') {
+        assert.equal(countOccurrences(preview.html, 'ROOT_MARKER'), 1)
+        assert.equal(
+          preview.html.includes('/api/gnr8/runtime/versions/sv-viroidoc/preview?mode=raw_template_preview&amp;path=%2Fproject'),
+          true,
+        )
+        assert.equal(
+          preview.html.includes('/api/gnr8/runtime/versions/sv-viroidoc/preview?mode=raw_template_preview&amp;path=%2Fpeople'),
+          true,
+        )
+        assert.equal(
+          preview.html.includes('/api/gnr8/runtime/versions/sv-viroidoc/preview?mode=raw_template_preview&amp;path=%2Fnews'),
+          true,
+        )
+        assert.equal(preview.previewRuntimeSummary.previewDiagnostics.includes('MULTIPAGE_LINK_REWRITTEN'), true)
+        assert.equal(preview.previewRuntimeSummary.previewDiagnostics.includes('MULTIPAGE_ROUTE_MAP_ROOT_SELECTED'), true)
+      }
+    }
+
+    assert.deepEqual(requestedAssets, [
+      'pages/root/index.html',
+      'pages/project/index.html',
+      'pages/people/index.html',
+      'pages/blog/index.html',
+    ])
   } finally {
     restore()
   }

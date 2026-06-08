@@ -428,6 +428,57 @@ test('multi-page operator summary displays assembled route maps', () => {
   assert.notEqual(summary.overview.validation.status, 'not_run')
 })
 
+test('multi-page operator summary upgrades validated root entry instead of showing skipped seed route', () => {
+  const summary = buildMultiPageImportOperatorSummary({
+    importProvenanceSummary: provenance({
+      routeCandidates: ['/', '/project'],
+      acquisitionPages: [
+        {
+          originalHref: 'https://example.com/',
+          normalizedRoutePath: '/',
+          status: 'skipped',
+          skippedReason: 'acquisition_discovery_seed_route',
+        },
+        {
+          originalHref: 'https://example.com/project',
+          normalizedRoutePath: '/project',
+          status: 'fetched',
+          bodyPath: 'pages/project/index.html',
+        },
+      ],
+      routeMap: [
+        { routePath: '/project', sourceUrl: 'https://example.com/project', finalUrl: 'https://example.com/project', rawFilePath: 'pages/project/index.html' },
+      ],
+    }),
+    previewValidation: {
+      status: 'ready',
+      summary: {
+        discoveredRoutes: 2,
+        fetchedPages: 2,
+        assembledPages: 2,
+        validPreviewRoutes: 2,
+        missingPreviewRoutes: 0,
+        rewrittenLinks: 3,
+        skippedLinks: 0,
+      },
+      routes: [
+        { routePath: '/', rawFilePath: 'pages/root/index.html', sourceUrl: 'https://example.com/', status: 'valid', diagnostics: [] },
+        { routePath: '/project', rawFilePath: 'pages/project/index.html', sourceUrl: 'https://example.com/project', status: 'valid', diagnostics: [] },
+      ],
+      links: [],
+      warnings: [],
+      blockers: [],
+      diagnostics: ['MULTIPAGE_PREVIEW_VALIDATION_READY'],
+    },
+  })
+
+  const root = summary.routes.find((route) => route.routePath === '/')
+  assert.equal(root?.status, 'assembled')
+  assert.equal(root?.rawFilePath, 'pages/root/index.html')
+  assert.equal(root?.selectionReason, 'root_entry')
+  assert.equal(root?.skippedReason, null)
+})
+
 test('multi-page operator summary infers ready from assembled route-map evidence', () => {
   const summary = buildMultiPageImportOperatorSummary({
     importProvenanceSummary: provenance({

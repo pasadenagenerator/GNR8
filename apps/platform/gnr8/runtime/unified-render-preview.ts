@@ -321,6 +321,10 @@ export const MULTIPAGE_LINK_REWRITE_DIAGNOSTIC = {
   MULTIPAGE_LINK_REWRITE_COMPLETED: 'MULTIPAGE_LINK_REWRITE_COMPLETED',
 } as const
 
+export const MULTIPAGE_PREVIEW_ISOLATION_DIAGNOSTIC = {
+  MULTIPAGE_PREVIEW_PAGE_ISOLATED: 'MULTIPAGE_PREVIEW_PAGE_ISOLATED',
+} as const
+
 type MultiPageLinkRewriteCounts = {
   rewritten: number
   skippedExternal: number
@@ -1076,6 +1080,7 @@ async function renderRawTemplateSiteVersionPreview(input: {
     externalFallbackAssetCount: importedArtifact?.metadata.assetSummary.externalFallbackAssetCount,
     routeMapDiagnostics: [
       routeMapResolution.diagnosticCode,
+      MULTIPAGE_PREVIEW_ISOLATION_DIAGNOSTIC.MULTIPAGE_PREVIEW_PAGE_ISOLATED,
       ...linkRewrite.diagnostics,
       ...multiPagePreviewValidation.diagnostics,
     ],
@@ -1110,6 +1115,13 @@ async function renderRawTemplateSiteVersionPreview(input: {
     routePath: routeMapResolution.routePath,
     rawFilePath: selectedHtmlPath,
     bytes: entryAsset.sizeBytes,
+  })
+  console.info('[preview-runtime] MULTIPAGE_PREVIEW_PAGE_ISOLATED', {
+    siteId: artifact.siteId,
+    siteVersionId: artifact.siteVersionId,
+    requestedPath: normalizePagePath(input.requestedPath),
+    routePath: routeMapResolution.routePath,
+    rawFilePath: selectedHtmlPath,
   })
   return {
     ...withPreviewTruth({

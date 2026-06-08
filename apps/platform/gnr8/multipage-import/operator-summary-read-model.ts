@@ -575,6 +575,23 @@ export function buildMultiPageImportOperatorSummary(input: BuildInput = {}): Mul
     })
   }
 
+  const previewRootRoute = previewValidation?.routes.find((route) => normalizeRoutePath(route.routePath) === '/' && route.status === 'valid') ?? null
+  if (previewRootRoute?.rawFilePath) {
+    const existingRoot = routesByPath.get('/') ?? null
+    if (!existingRoot || existingRoot.status !== 'assembled') {
+      routesByPath.set('/', {
+        routePath: '/',
+        status: 'assembled',
+        priorityTier: existingRoot?.priorityTier ?? null,
+        selectionReason: existingRoot?.selectionReason ?? 'root_entry',
+        skippedReason: null,
+        sourceUrl: existingRoot?.sourceUrl ?? previewRootRoute.sourceUrl ?? null,
+        finalUrl: existingRoot?.finalUrl ?? previewRootRoute.sourceUrl ?? null,
+        rawFilePath: previewRootRoute.rawFilePath,
+      })
+    }
+  }
+
   const routes = [...routesByPath.values()].sort((left, right) => compareRouteRows(left, right, routeOrder))
   const previewDiagnostics = textList(input.previewDiagnostics)
   const assemblyEnabled = text((assembly as Record<string, unknown> | null)?.enabled) === 'true' || Boolean((assemblySummary as Record<string, unknown>).enabled)

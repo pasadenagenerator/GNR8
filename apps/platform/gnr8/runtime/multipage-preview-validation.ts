@@ -153,12 +153,29 @@ export function validateMultiPagePreview(input: {
   const routeMap = Array.isArray(assembly?.routeMap) ? assembly.routeMap : []
   const routeMapServingEnabled = Boolean(assembly?.enabled && routeMap.length > 0)
 
-  const rootRawFilePath = normalizeRawFilePath(input.entryHtmlPath) || 'index.html'
-  const rootExists = fileExists({ fileMap: input.fileMap, rawFilePath: rootRawFilePath })
+  const rootResolution = routeMapServingEnabled
+    ? resolveRawTemplateRouteMapFile({
+        siteVersionId: input.siteVersionId,
+        requestedPath: '/',
+        entryHtmlPath: input.entryHtmlPath,
+        fileMap: input.fileMap,
+        importProvenanceSummary: provenance,
+        routeMapServingEnabled,
+      })
+    : null
+  const rootRawFilePath = normalizeRawFilePath(
+    rootResolution && (rootResolution.outcome === 'selected' || rootResolution.outcome === 'file_missing')
+      ? rootResolution.rawFilePath
+      : input.entryHtmlPath,
+  ) || 'index.html'
+  const rootExists = rootResolution?.outcome === 'selected' || fileExists({ fileMap: input.fileMap, rawFilePath: rootRawFilePath })
   routes.push({
     routePath: '/',
     rawFilePath: rootRawFilePath,
-    sourceUrl: assembly?.normalizedSeedUrl ?? assembly?.seedUrl ?? null,
+    sourceUrl:
+      rootResolution && (rootResolution.outcome === 'selected' || rootResolution.outcome === 'file_missing')
+        ? rootResolution.sourceUrl
+        : assembly?.normalizedSeedUrl ?? assembly?.seedUrl ?? null,
     status: rootExists ? 'valid' : 'missing_file',
     diagnostics: [
       rootExists
@@ -182,6 +199,7 @@ export function validateMultiPagePreview(input: {
   const seenRoutes = new Set<string>(['/'])
   for (const entry of routeMap) {
     const routePath = normalizeRawTemplateRouteMapPath(entry.routePath)
+    if (routePath === '/') continue
     const rawFilePath = normalizeRawFilePath(entry.rawFilePath)
     const entryDiagnostics: string[] = []
     let status: MultiPagePreviewRouteValidationStatus = 'valid'

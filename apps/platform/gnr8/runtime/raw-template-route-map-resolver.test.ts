@@ -94,6 +94,39 @@ test("raw template route-map resolver selects root entry HTML", () => {
   assert.equal(resolved.rawFilePath, "index.html");
 });
 
+test("raw template route-map resolver prefers assembled root route file when present", () => {
+  const resolved = resolveRawTemplateRouteMapFile({
+    siteVersionId: "sv-route",
+    requestedPath: "/",
+    entryHtmlPath: "assembled-preview.html",
+    fileMap: fileMap(["assembled-preview.html", "pages/root/index.html"]),
+    importProvenanceSummary: {
+      multiPageDiscovery: {
+        rawArtifactAssembly: {
+          enabled: true,
+          routeMap: [
+            {
+              routePath: "/",
+              sourceUrl: "https://example.com/",
+              finalUrl: "https://example.com/",
+              rawFilePath: "pages/root/index.html",
+              bodySha256: "sha-root",
+              byteSize: 100,
+              status: "assembled",
+            },
+          ],
+        },
+      },
+    } as unknown as RuntimeImportProvenanceSummary,
+    routeMapServingEnabled: true,
+  });
+
+  assert.equal(resolved.outcome, "selected");
+  assert.equal(resolved.diagnosticCode, RAW_TEMPLATE_ROUTE_MAP_DIAGNOSTIC.MULTIPAGE_ROUTE_MAP_ROOT_SELECTED);
+  assert.equal(resolved.rawFilePath, "pages/root/index.html");
+  assert.equal(resolved.sourceUrl, "https://example.com/");
+});
+
 test("raw template route-map resolver selects child routes with trailing slash normalization", () => {
   for (const requestedPath of ["/about", "/about/", "/about/index.html"]) {
     const resolved = resolveRawTemplateRouteMapFile({

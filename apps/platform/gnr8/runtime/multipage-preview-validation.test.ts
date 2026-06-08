@@ -106,13 +106,14 @@ function provenance(input?: {
 function validate(input?: {
   provenance?: RuntimeImportProvenanceSummary | null
   paths?: string[]
+  entryHtmlPath?: string
   multiPagePreviewRequested?: boolean
   linkRewriteSummary?: MultiPagePreviewLinkRewriteValidationSummary
 }) {
   return validateMultiPagePreview({
     siteId: 'site-validation',
     siteVersionId: 'sv-validation',
-    entryHtmlPath: 'index.html',
+    entryHtmlPath: input?.entryHtmlPath ?? 'index.html',
     fileMap: fileMap(input?.paths ?? ['index.html', 'pages/about/index.html', 'pages/contact/index.html']),
     importProvenanceSummary: Object.prototype.hasOwnProperty.call(input ?? {}, 'provenance') ? input?.provenance ?? null : provenance(),
     multiPagePreviewRequested: input?.multiPagePreviewRequested ?? true,
@@ -143,6 +144,27 @@ test('multi-page preview validation is ready when all routes resolve', () => {
   assert.equal(result.summary.skippedLinks, 0)
   assert.equal(result.routes.every((route) => route.status === 'valid'), true)
   assert.equal(result.diagnostics.includes(MULTIPAGE_PREVIEW_VALIDATION_DIAGNOSTIC.MULTIPAGE_PREVIEW_VALIDATION_READY), true)
+})
+
+test('multi-page preview validation uses assembled root route file when present', () => {
+  const result = validate({
+    paths: ['assembled/all-pages.html', 'pages/root/index.html', 'pages/project/index.html'],
+    entryHtmlPath: 'assembled/all-pages.html',
+    provenance: provenance({
+      routeMap: [
+        { routePath: '/', rawFilePath: 'pages/root/index.html', sourceUrl: 'https://example.com/' },
+        { routePath: '/project', rawFilePath: 'pages/project/index.html', sourceUrl: 'https://example.com/project' },
+      ],
+    }),
+  })
+
+  assert.equal(result.status, 'ready')
+  assert.equal(result.summary.validPreviewRoutes, 2)
+  assert.equal(result.summary.missingPreviewRoutes, 0)
+  assert.equal(result.routes.length, 2)
+  assert.equal(result.routes.find((route) => route.routePath === '/')?.rawFilePath, 'pages/root/index.html')
+  assert.equal(result.routes.find((route) => route.routePath === '/')?.status, 'valid')
+  assert.equal(result.routes.find((route) => route.routePath === '/project')?.status, 'valid')
 })
 
 test('multi-page preview validation is ready_with_warnings for missing files, failed acquisition, and missing links', () => {

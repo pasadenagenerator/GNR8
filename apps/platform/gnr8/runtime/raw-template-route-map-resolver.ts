@@ -125,8 +125,15 @@ export function resolveRawTemplateRouteMapFile(input: {
     };
   }
 
+  const byRoute = new Map<string, MultiPageRawArtifactAssemblyRouteEntry>();
+  for (const entry of routeMap) {
+    const routePath = normalizeRawTemplateRouteMapPath(entry.routePath);
+    if (!byRoute.has(routePath)) byRoute.set(routePath, entry);
+  }
+
   if (requestedPath === "/") {
-    const rawFilePath = normalizeRawFilePath(input.entryHtmlPath) || "index.html";
+    const rootEntry = byRoute.get("/") ?? null;
+    const rawFilePath = normalizeRawFilePath(rootEntry?.rawFilePath ?? input.entryHtmlPath) || "index.html";
     if (!input.fileMap[rawFilePath]) {
       return {
         outcome: "file_missing",
@@ -135,8 +142,8 @@ export function resolveRawTemplateRouteMapFile(input: {
         requestedPath,
         routePath: "/",
         rawFilePath,
-        sourceUrl: null,
-        finalUrl: null,
+        sourceUrl: rootEntry?.sourceUrl ?? null,
+        finalUrl: rootEntry?.finalUrl ?? null,
       };
     }
     return {
@@ -146,16 +153,11 @@ export function resolveRawTemplateRouteMapFile(input: {
       requestedPath,
       routePath: "/",
       rawFilePath,
-      sourceUrl: null,
-      finalUrl: null,
+      sourceUrl: rootEntry?.sourceUrl ?? null,
+      finalUrl: rootEntry?.finalUrl ?? null,
     };
   }
 
-  const byRoute = new Map<string, MultiPageRawArtifactAssemblyRouteEntry>();
-  for (const entry of routeMap) {
-    const routePath = normalizeRawTemplateRouteMapPath(entry.routePath);
-    if (!byRoute.has(routePath)) byRoute.set(routePath, entry);
-  }
   const entry = byRoute.get(requestedPath) ?? null;
   if (!entry) {
     return {
