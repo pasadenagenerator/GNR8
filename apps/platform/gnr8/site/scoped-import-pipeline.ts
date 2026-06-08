@@ -1451,32 +1451,27 @@ async function acquireScopedMultiPageHtml(input: {
 
   const candidates = input.discovery.manifest.discoveredPages
     .filter((entry) => entry.status === 'discovered' && normalizeText(entry.normalizedUrl))
-    .sort((left, right) => String(left.normalizedRoutePath ?? '').localeCompare(String(right.normalizedRoutePath ?? '')))
-  const boundedCandidates = candidates.slice(0, input.option.htmlAcquisitionLimits.maxPages)
-  const overflowCandidates = candidates.slice(input.option.htmlAcquisitionLimits.maxPages)
+  const skippedDiscoveryPages = input.discovery.manifest.skippedLinks.map((skipped) =>
+    buildSkippedAcquisitionEntry({
+      discoveryEntry: skipped,
+      skippedReason: `discovery_${skipped.skippedReason ?? 'skipped'}`,
+      diagnostics: ['MULTIPAGE_HTML_FETCH_SKIPPED'],
+    }),
+  )
 
-  for (const skipped of input.discovery.manifest.skippedLinks) {
-    pages.push(
-      buildSkippedAcquisitionEntry({
-        discoveryEntry: skipped,
-        skippedReason: `discovery_${skipped.skippedReason ?? 'skipped'}`,
-        diagnostics: ['MULTIPAGE_HTML_FETCH_SKIPPED'],
-      }),
-    )
-  }
+  for (const [candidateIndex, candidate] of candidates.entries()) {
+    if (candidateIndex >= input.option.htmlAcquisitionLimits.maxPages) {
+      diagnostics.push('MULTIPAGE_HTML_ACQUISITION_LIMIT_REACHED')
+      pages.push(
+        buildSkippedAcquisitionEntry({
+          discoveryEntry: candidate,
+          skippedReason: 'acquisition_page_limit',
+          diagnostics: ['MULTIPAGE_HTML_FETCH_SKIPPED', 'MULTIPAGE_HTML_ACQUISITION_LIMIT_REACHED'],
+        }),
+      )
+      continue
+    }
 
-  for (const overflow of overflowCandidates) {
-    diagnostics.push('MULTIPAGE_HTML_ACQUISITION_LIMIT_REACHED')
-    pages.push(
-      buildSkippedAcquisitionEntry({
-        discoveryEntry: overflow,
-        skippedReason: 'acquisition_page_limit',
-        diagnostics: ['MULTIPAGE_HTML_FETCH_SKIPPED', 'MULTIPAGE_HTML_ACQUISITION_LIMIT_REACHED'],
-      }),
-    )
-  }
-
-  for (const candidate of boundedCandidates) {
     const normalizedUrl = normalizeText(candidate.normalizedUrl)
     if (!normalizedUrl) {
       pages.push(
@@ -1658,12 +1653,9 @@ async function acquireScopedMultiPageHtml(input: {
       })
     }
   }
+  pages.push(...skippedDiscoveryPages)
 
-  const sortedPages = pages.sort((left, right) =>
-    `${left.normalizedRoutePath ?? ''}|${left.originalHref}|${left.status}`.localeCompare(
-      `${right.normalizedRoutePath ?? ''}|${right.originalHref}|${right.status}`,
-    ),
-  )
+  const sortedPages = pages
   const fetchedPageCount = sortedPages.filter((entry) => entry.status === 'fetched').length
   const failedPageCount = sortedPages.filter((entry) => entry.status === 'failed').length
   const skippedPageCount = sortedPages.filter((entry) => entry.status === 'skipped').length
@@ -1736,13 +1728,7 @@ async function assembleScopedMultiPageRawArtifactPages(input: {
   if (!normalizedSeed || !input.acquisition) {
     diagnostics.push('MULTIPAGE_RAW_PAGE_SKIPPED')
   } else {
-    const candidates = input.acquisition.pages
-      .slice()
-      .sort((left, right) =>
-        `${left.finalNormalizedRoutePath ?? left.normalizedRoutePath ?? ''}|${left.finalUrl ?? ''}|${left.normalizedUrl ?? ''}|${left.bodySha256 ?? ''}`.localeCompare(
-          `${right.finalNormalizedRoutePath ?? right.normalizedRoutePath ?? ''}|${right.finalUrl ?? ''}|${right.normalizedUrl ?? ''}|${right.bodySha256 ?? ''}`,
-        ),
-      )
+    const candidates = input.acquisition.pages.slice()
 
     for (const page of candidates) {
       if (page.status === 'failed') {
@@ -1854,7 +1840,7 @@ async function assembleScopedMultiPageRawArtifactPages(input: {
     }
   }
 
-  const routeMap = [...assembledByRoute.values()].sort((left, right) => left.routePath.localeCompare(right.routePath))
+  const routeMap = [...assembledByRoute.values()]
   const htmlPathMap = Object.fromEntries(routeMap.map((entry) => [entry.routePath, entry.rawFilePath]))
   const manifestWithoutPath = {
     kind: 'multi_page_raw_artifact_assembly_manifest_v1' as const,
@@ -2316,9 +2302,7 @@ async function buildScopedMultiPageDiscovery(input: {
     })
   }
 
-  const discoveredPages = routePriorityBalancing.selected.map((candidate) => candidate.value).sort((a, b) =>
-    String(a.normalizedRoutePath ?? '').localeCompare(String(b.normalizedRoutePath ?? '')),
-  )
+  const discoveredPages = routePriorityBalancing.selected.map((candidate) => candidate.value)
   const routeCandidates = discoveredPages.map((entry) => String(entry.normalizedRoutePath ?? '')).filter(Boolean)
   const robotsDiscoveryEvidence = applyRobotsRouteGovernance(
     robotsDiscoveryInitial,

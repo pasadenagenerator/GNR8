@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict'
+import fs from 'node:fs'
+import path from 'node:path'
 import test from 'node:test'
 
 import {
@@ -18,6 +20,8 @@ function provenance(input?: {
     status: 'fetched' | 'failed' | 'skipped'
     bodyPath?: string | null
     diagnostics?: string[]
+    skippedReason?: string | null
+    failureReason?: string | null
   }>
   routeMap?: Array<{
     routePath: string
@@ -122,6 +126,8 @@ function provenance(input?: {
           status: page.status,
           bodyPath: page.bodyPath ?? null,
           diagnostics: page.diagnostics ?? [],
+          skippedReason: page.skippedReason ?? null,
+          failureReason: page.failureReason ?? null,
         })),
         summary: {
           fetchedPageCount: acquisitionPages.filter((page) => page.status === 'fetched').length,
@@ -623,6 +629,91 @@ test('multi-page operator route table generation is deterministic', () => {
     first.routes.map((route) => `${route.routePath}:${route.status}`),
     ['/:missing', '/a:assembled', '/z:fetched'],
   )
+})
+
+test('multi-page operator route table preserves priority order and explains skipped routes', () => {
+  const routePriorityBalancing = {
+    maxRoutes: 60,
+    routeLimitHit: false,
+    selectedRouteCount: 4,
+    excludedRouteCount: 1,
+    tiers: [
+      { tier: 'tier_1_navigation', candidateCount: 3, selectedCount: 3, excludedCount: 0 },
+      { tier: 'tier_2_canonical', candidateCount: 0, selectedCount: 0, excludedCount: 0 },
+      { tier: 'tier_3_shallow', candidateCount: 0, selectedCount: 0, excludedCount: 0 },
+      { tier: 'tier_4_deep', candidateCount: 2, selectedCount: 1, excludedCount: 1 },
+    ],
+    assignments: [
+      { routePath: '/blog', tier: 'tier_1_navigation', reason: 'header_navigation', selected: true, excludedReason: null },
+      { routePath: '/people', tier: 'tier_1_navigation', reason: 'header_navigation', selected: true, excludedReason: null },
+      { routePath: '/project', tier: 'tier_1_navigation', reason: 'header_navigation', selected: true, excludedReason: null },
+      { routePath: '/b/article-001', tier: 'tier_4_deep', reason: 'deep_content_tree', selected: true, excludedReason: null },
+      { routePath: '/b/article-002', tier: 'tier_4_deep', reason: 'deep_content_tree', selected: false, excludedReason: 'route_limit' },
+    ],
+    diagnostics: ['DISCOVERY_PRIORITY_BUDGET_APPLIED:4:1:60'],
+  }
+  const summary = buildMultiPageImportOperatorSummary({
+    importProvenanceSummary: provenance({
+      routeCandidates: ['/blog', '/people', '/project', '/b/article-001'],
+      routePriorityBalancing,
+      acquisitionPages: [
+        { originalHref: 'https://example.com/blog', normalizedRoutePath: '/blog', status: 'fetched', bodyPath: 'pages/blog.html' },
+        { originalHref: 'https://example.com/people', normalizedRoutePath: '/people', status: 'fetched', bodyPath: 'pages/people.html' },
+        { originalHref: 'https://example.com/project', normalizedRoutePath: '/project', status: 'fetched', bodyPath: 'pages/project.html' },
+        { originalHref: 'https://example.com/b/article-001', normalizedRoutePath: '/b/article-001', status: 'skipped', skippedReason: 'acquisition_page_limit' },
+      ],
+      routeMap: [
+        { routePath: '/blog', sourceUrl: 'https://example.com/blog', finalUrl: 'https://example.com/blog', rawFilePath: 'pages/blog/index.html' },
+        { routePath: '/people', sourceUrl: 'https://example.com/people', finalUrl: 'https://example.com/people', rawFilePath: 'pages/people/index.html' },
+        { routePath: '/project', sourceUrl: 'https://example.com/project', finalUrl: 'https://example.com/project', rawFilePath: 'pages/project/index.html' },
+      ],
+    }),
+  })
+
+  assert.deepEqual(
+    summary.routes.map((route) => `${route.routePath}:${route.priorityTier}:${route.status}:${route.skippedReason ?? route.selectionReason ?? 'none'}`),
+    [
+      '/blog:tier_1_navigation:assembled:header_navigation',
+      '/people:tier_1_navigation:assembled:header_navigation',
+      '/project:tier_1_navigation:assembled:header_navigation',
+      '/b/article-001:tier_4_deep:skipped:acquisition_page_limit',
+      '/b/article-002:tier_4_deep:skipped:route_limit',
+    ],
+  )
+})
+
+test('multi-page developer diagnostics are sampled for collapsed UI display', () => {
+  const diagnostics = Array.from({ length: 12 }, (_, index) => `MULTIPAGE_HTML_FETCH_SKIPPED:${index}`)
+  const summary = buildMultiPageImportOperatorSummary({
+    importProvenanceSummary: provenance({
+      routeCandidates: ['/blog'],
+      acquisitionPages: [
+        {
+          originalHref: 'https://example.com/blog',
+          normalizedRoutePath: '/blog',
+          status: 'fetched',
+          bodyPath: 'pages/blog.html',
+          diagnostics,
+        },
+      ],
+    }),
+  })
+
+  const acquisitionDiagnostics = summary.diagnostics.find((group) => group.group === 'Acquisition')
+  assert.equal((acquisitionDiagnostics?.count ?? 0) > 5, true)
+  assert.equal(acquisitionDiagnostics?.samples.length, 5)
+  assert.equal(summary.validation.warningSamples.length <= 5, true)
+})
+
+test('Site Workspace keeps raw multi-page diagnostics behind collapsed developer details', () => {
+  const source = fs.readFileSync(
+    path.resolve(path.dirname(new URL(import.meta.url).pathname), '../../app/gnr8/agency/clients/[clientId]/sites/[siteId]/SiteWorkspacePage.tsx'),
+    'utf8',
+  )
+
+  assert.equal(source.includes('<details'), true)
+  assert.equal(source.includes('Show developer diagnostics'), true)
+  assert.equal(source.includes('operator warnings and blockers above are the primary readiness surface'), true)
 })
 
 test('example Viroidoc operator summary renders the smoke counts', () => {

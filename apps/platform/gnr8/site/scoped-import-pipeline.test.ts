@@ -1029,7 +1029,7 @@ test('scoped pipeline import can persist seed-only multi-page discovery manifest
   const persistedDiscovery = persistedImportSummary.importProvenanceSummary.multiPageDiscovery
   const manifest = persistedDiscovery.manifest
   assert.equal(persistedDiscovery.summary.discoveredPageCount, 5)
-  assert.deepEqual(manifest.routeCandidates, ['/about', '/contact', '/robots-only', '/services', '/sitemap-only'])
+  assert.deepEqual(manifest.routeCandidates, ['/about', '/contact', '/services', '/robots-only', '/sitemap-only'])
   assert.ok(manifest.routePriorityBalancing)
   assert.equal(manifest.routePriorityBalancing.selectedRouteCount, 5)
   assert.equal(manifest.routePriorityBalancing.excludedRouteCount, 0)
@@ -1561,6 +1561,196 @@ test('scoped pipeline raw multi-page assembly creates deterministic raw artifact
     assert.equal(rawImportMetadata.multiPage.routeMapRef, 'importProvenanceSummary.multiPageDiscovery.rawArtifactAssembly.routeMap')
     assert.ok(rawImportMetadata.diagnostics.codes.includes('MULTIPAGE_RAW_ASSEMBLY_COMPLETED'))
     assert.ok(persistedImportSummary.importProvenanceSummary.importDiagnosticCodes.includes('MULTIPAGE_RAW_ASSEMBLY_COMPLETED'))
+  } finally {
+    await new Promise<void>((resolve) => server.close(() => resolve()))
+  }
+})
+
+test('scoped pipeline uses priority-balanced route order for Viroidoc-like acquisition and assembly budgets', async () => {
+  const topLevelRoutes = ['/blog', '/people', '/project', '/learn', '/news', '/subscribe']
+  const articleRoutes = Array.from({ length: 25 }, (_, index) => `/b/article-${String(index + 1).padStart(2, '0')}`)
+  const server = http.createServer((req, res) => {
+    const url = req.url ?? '/'
+    if (url === '/robots.txt') {
+      res.writeHead(200, { 'content-type': 'text/plain; charset=utf-8' })
+      res.end(`User-agent: *\nAllow: /\nSitemap: http://127.0.0.1:${(server.address() as any)?.port}/sitemap.xml\n`)
+      return
+    }
+    if (url === '/sitemap.xml') {
+      res.writeHead(200, { 'content-type': 'application/xml; charset=utf-8' })
+      res.end(
+        `<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">${articleRoutes
+          .map((routePath) => `<url><loc>http://127.0.0.1:${(server.address() as any)?.port}${routePath}</loc></url>`)
+          .join('')}</urlset>`,
+      )
+      return
+    }
+    const routePath = url.split('?')[0] ?? '/'
+    if (routePath === '/' || topLevelRoutes.includes(routePath) || articleRoutes.includes(routePath)) {
+      res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' })
+      res.end(`<!doctype html><html><body><h1>${routePath}</h1></body></html>`)
+      return
+    }
+    res.writeHead(404, { 'content-type': 'text/plain' })
+    res.end('not found')
+  })
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
+  const address = server.address()
+  assert.ok(address && typeof address === 'object')
+  const sourceUrl = `http://127.0.0.1:${address.port}/`
+
+  try {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'scoped-pipeline-viroidoc-priority-'))
+    const entryAbs = path.resolve(root, 'index.html')
+    const assetsDir = path.resolve(root, 'assets')
+    fs.mkdirSync(assetsDir)
+    fs.writeFileSync(
+      entryAbs,
+      `<!doctype html><html><body><header><nav>${topLevelRoutes
+        .map((routePath) => `<a href="${routePath}">${routePath}</a>`)
+        .join('')}</nav></header></body></html>`,
+      'utf8',
+    )
+
+    const pipeline = createSuccessPipelineFixture()
+    let createInput: any = null
+    let persistedImportSummary: any = null
+    let linkedArtifactId: string | null = null
+
+    await runScopedImportPipeline({
+      snapshot: {
+        snapshotRootDirAbs: root,
+        snapshotStableRootDirAbs: root,
+        snapshotId: 'snapshot-viroidoc-priority',
+        snapshotRunId: 'snapshot-run-viroidoc-priority',
+        requestId: 'request-viroidoc-priority',
+        entryHtmlPathAbs: entryAbs,
+        assetsDirAbs: assetsDir,
+        sourceUrl,
+        normalizedUrl: sourceUrl,
+        captureMode: 'raw_html_only',
+        sourceMode: 'raw_html_fallback',
+        sourceSelection: {
+          sourceMode: 'raw_html_fallback',
+          fidelityStatus: 'degraded_import',
+          selectedSourceHtmlPathAbs: entryAbs,
+          renderedDomQuality: {
+            quality: 'strong',
+            bodyTextLength: 120,
+            meaningfulNodeCount: 12,
+            sectionCandidateCount: 2,
+            hasHeading: true,
+            reason: 'viroidoc_priority_fixture',
+          },
+          rawHtmlQuality: {
+            quality: 'strong',
+            bodyTextLength: 120,
+            meaningfulNodeCount: 12,
+            sectionCandidateCount: 2,
+            hasHeading: true,
+            reason: 'viroidoc_priority_fixture',
+          },
+          degraded: false,
+        },
+        renderedCapture: {
+          status: 'unavailable',
+          documents: [],
+          screenshots: [],
+          computedStyleSamples: [],
+          diagnostics: [],
+        },
+        renderedCaptureReliability: { job: null, workerHealth: null },
+        importDiagnostics: { summary: { infoCount: 0, warningCount: 0, errorCount: 0, fatalCount: 0 }, issues: [] },
+        fetchManifest: [],
+        importIntake: { ok: true, rawHtmlAvailable: true, htmlByteLength: fs.statSync(entryAbs).size },
+      } as any,
+      sourceUrl,
+      actor: 'test:viroidoc-priority',
+      multiPageDiscovery: {
+        enabled: true,
+        acquireHtml: true,
+        assembleRawArtifactPages: true,
+        generatedAt: '2026-06-06T00:00:00.000Z',
+        limits: { maxRoutes: 60, maxDepth: 2, maxLinksPerPage: 150, maxTemplateLinksPerRoute: 30, maxSitemaps: 5, maxUrlsFromSitemaps: 100, maxNestedSitemaps: 5 },
+        htmlAcquisitionLimits: { maxPages: 20, maxBytesPerPage: 20_000, requestTimeoutMs: 5_000 },
+      },
+      deps: {
+        importStaticSite: async () => ({ status: 'ok', documentMeta: { source: { kind: 'single-entry-html' } } }) as any,
+        createImportManifest: () => ({ status: 'success' }) as any,
+        runLinearMigrationPipeline: () => pipeline as any,
+        createSiteVersionFromMigration: async (input) => {
+          createInput = input
+          return { siteId: 'runtime-site-viroidoc-priority', siteVersionId: 'site-version-viroidoc-priority', versionNo: 1 }
+        },
+        setSiteVersionImportProvenanceSummary: async (input) => {
+          persistedImportSummary = input
+          return { affectedRows: 1 }
+        },
+        getSiteVersion: async () =>
+          ({
+            id: 'site-version-viroidoc-priority',
+            siteId: 'runtime-site-viroidoc-priority',
+            versionNo: 1,
+            state: 'DRAFT',
+            source: 'migration',
+            actor: 'test',
+            createdAt: '2026-06-06T00:00:00.000Z',
+            rendererCompatibilityVersion: 'gnr8-renderer-v1',
+            artifactId: linkedArtifactId,
+            importProvenanceSummary: createInput?.importProvenanceSummary ?? null,
+            pages: [],
+          }) as any,
+        buildDeterministicArtifactBundle: () =>
+          ({
+            siteId: 'runtime-site-viroidoc-priority',
+            siteVersionId: 'site-version-viroidoc-priority',
+            rendererCompatibilityVersion: 'gnr8-renderer-v1',
+            bundleSha256: 'bundle-sha',
+            htmlByPath: { '/': '<!doctype html><html><body>preview only</body></html>' },
+            compiledTokenStyles: ':root{}',
+            assetFingerprintMap: {},
+            manifest: {},
+          }) as any,
+        createArtifact: async () => ({ artifactId: 'artifact-viroidoc-priority' }),
+        bindArtifactToVersion: async (input) => {
+          linkedArtifactId = input.artifactId
+          return { affectedRows: 1 }
+        },
+        persistRawImportedSiteArtifact: async (input) =>
+          ({
+            artifactId: 'raw-artifact-viroidoc-priority',
+            artifactType: 'raw_imported_site',
+            entryHtmlPath: 'index.html',
+            assetBasePath: '.',
+            fileMap: {},
+            fileCount: input.fileRows.length,
+          }) as any,
+        upsertContentSlots: async () => 0,
+        importHtmlToPage: () => ({}) as any,
+        migrateImportedPageToCanonicalDraft: async () => ({ siteId: 'legacy-site', siteVersionId: 'legacy-version', versionNo: 1 }),
+      },
+    })
+
+    const multiPage = persistedImportSummary.importProvenanceSummary.multiPageDiscovery
+    const acquiredRoutes = multiPage.acquisition.pages
+      .filter((entry: any) => entry.status === 'fetched')
+      .map((entry: any) => entry.finalNormalizedRoutePath ?? entry.normalizedRoutePath)
+    const assembledRoutes = multiPage.rawArtifactAssembly.routeMap.map((entry: any) => entry.routePath)
+    const skippedTopLevelRoutes = multiPage.acquisition.pages
+      .filter((entry: any) => topLevelRoutes.includes(entry.normalizedRoutePath) && entry.status !== 'fetched')
+      .map((entry: any) => `${entry.normalizedRoutePath}:${entry.skippedReason ?? entry.failureReason ?? 'unknown'}`)
+
+    for (const routePath of ['/blog', '/people', '/project', '/learn', '/news']) {
+      assert.equal(acquiredRoutes.includes(routePath), true, `${routePath} should be acquired`)
+      assert.equal(assembledRoutes.includes(routePath), true, `${routePath} should be assembled`)
+    }
+    assert.deepEqual(skippedTopLevelRoutes, [])
+
+    const firstArticleAcquisitionIndex = acquiredRoutes.findIndex((routePath: string) => routePath.startsWith('/b/'))
+    const lastRequiredTopLevelIndex = Math.max(...['/blog', '/people', '/project', '/learn', '/news'].map((routePath) => acquiredRoutes.indexOf(routePath)))
+    assert.equal(firstArticleAcquisitionIndex > lastRequiredTopLevelIndex, true)
+    assert.deepEqual(multiPage.manifest.routeCandidates.slice(0, topLevelRoutes.length), ['/blog', '/learn', '/news', '/people', '/project', '/subscribe'])
+    assert.equal(multiPage.acquisition.pages.some((entry: any) => entry.normalizedRoutePath === '/b/article-15' && entry.skippedReason === 'acquisition_page_limit'), true)
   } finally {
     await new Promise<void>((resolve) => server.close(() => resolve()))
   }

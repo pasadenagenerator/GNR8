@@ -14,6 +14,9 @@ export type MultiPageImportOperatorRouteStatus = 'assembled' | 'fetched' | 'fail
 export type MultiPageImportOperatorRouteRow = {
   routePath: string
   status: MultiPageImportOperatorRouteStatus
+  priorityTier: string | null
+  selectionReason: string | null
+  skippedReason: string | null
   sourceUrl: string | null
   finalUrl: string | null
   rawFilePath: string | null
@@ -153,9 +156,24 @@ function normalizeRoutePath(value: unknown): string {
   return `/${pathOnly.replace(/^\/+/, '').replace(/\/+$/, '')}` || '/'
 }
 
-function compareRouteRows(left: MultiPageImportOperatorRouteRow, right: MultiPageImportOperatorRouteRow): number {
+function routeDepth(routePath: string): number {
+  const normalized = normalizeRoutePath(routePath)
+  if (normalized === '/') return 0
+  return normalized.split('/').filter(Boolean).length
+}
+
+function compareRouteRows(
+  left: MultiPageImportOperatorRouteRow,
+  right: MultiPageImportOperatorRouteRow,
+  routeOrder?: Map<string, number>,
+): number {
+  const leftOrder = routeOrder?.get(left.routePath) ?? Number.MAX_SAFE_INTEGER
+  const rightOrder = routeOrder?.get(right.routePath) ?? Number.MAX_SAFE_INTEGER
+  if (leftOrder !== rightOrder) return leftOrder - rightOrder
   if (left.routePath === '/' && right.routePath !== '/') return -1
   if (right.routePath === '/' && left.routePath !== '/') return 1
+  const depthDelta = routeDepth(left.routePath) - routeDepth(right.routePath)
+  if (depthDelta !== 0) return depthDelta
   const routeDelta = left.routePath.localeCompare(right.routePath)
   if (routeDelta !== 0) return routeDelta
   const statusDelta = left.status.localeCompare(right.status)
@@ -312,13 +330,19 @@ function routeStatusFromAcquisition(value: unknown): MultiPageImportOperatorRout
   return 'missing'
 }
 
-function routeFromAssembly(entry: Record<string, unknown>): MultiPageImportOperatorRouteRow | null {
+function routeFromAssembly(
+  entry: Record<string, unknown>,
+  priorityAssignment?: Record<string, unknown>,
+): MultiPageImportOperatorRouteRow | null {
   const routePath = normalizeRoutePath(entry.routePath)
   if (!routePath) return null
   const rawFilePath = textOrNull(entry.rawFilePath)
   return {
     routePath,
     status: rawFilePath ? 'assembled' : 'missing',
+    priorityTier: textOrNull(priorityAssignment?.tier),
+    selectionReason: textOrNull(priorityAssignment?.reason),
+    skippedReason: null,
     sourceUrl: textOrNull(entry.sourceUrl),
     finalUrl: textOrNull(entry.finalUrl),
     rawFilePath,
@@ -437,6 +461,14 @@ export function buildMultiPageImportOperatorSummary(input: BuildInput = {}): Mul
   const priorityWarnings = uniqueSorted(priorityDiagnostics.map(translateDiagnostic).filter((entry): entry is string => Boolean(entry)))
   const priorityTiers = Array.isArray(priorityBalancing.tiers) ? priorityBalancing.tiers.filter(isRecord) : []
   const priorityAssignments = Array.isArray(priorityBalancing.assignments) ? priorityBalancing.assignments.filter(isRecord) : []
+  const priorityAssignmentByRoute = new Map<string, Record<string, unknown>>()
+  const routeOrder = new Map<string, number>()
+  priorityAssignments.forEach((assignment, index) => {
+    const routePath = normalizeRoutePath(assignment.routePath)
+    if (!routePath) return
+    if (!priorityAssignmentByRoute.has(routePath)) priorityAssignmentByRoute.set(routePath, assignment)
+    if (!routeOrder.has(routePath)) routeOrder.set(routePath, index)
+  })
   const discoveryPriorityBalancingOverview = {
     routeLimitHit: Boolean(priorityBalancing.routeLimitHit),
     selectedRouteCount: Math.max(nonNegativeInt(priorityBalancing.selectedRouteCount), priorityAssignments.filter((entry) => entry.selected === true).length),
@@ -465,46 +497,85 @@ export function buildMultiPageImportOperatorSummary(input: BuildInput = {}): Mul
   const routeMap = Array.isArray(assembly?.routeMap)
     ? assembly.routeMap.filter(isRecord)
     : []
+  const excludedAssemblyPages = Array.isArray(assembly?.excludedPages) ? assembly.excludedPages.filter(isRecord) : []
+  const assemblyExcludedByRoute = new Map<string, Record<string, unknown>>()
+  for (const page of excludedAssemblyPages) {
+    const routePath = normalizeRoutePath(page.routePath)
+    if (!routePath || assemblyExcludedByRoute.has(routePath)) continue
+    assemblyExcludedByRoute.set(routePath, page)
+  }
   const assembledPages = Math.max(nonNegativeInt(assemblySummary.assembledPageCount), routeMap.length)
   const excludedPages = Math.max(
     nonNegativeInt(assemblySummary.excludedPageCount),
-    Array.isArray(assembly?.excludedPages) ? assembly.excludedPages.length : 0,
+    excludedAssemblyPages.length,
   )
 
   const routesByPath = new Map<string, MultiPageImportOperatorRouteRow>()
   for (const entry of routeMap) {
-    const row = routeFromAssembly(entry)
+    const routePath = normalizeRoutePath(entry.routePath)
+    const row = routeFromAssembly(entry, priorityAssignmentByRoute.get(routePath))
     if (row) routesByPath.set(row.routePath, row)
+  }
+
+  const routeCandidates = Array.isArray(discoveryManifest.routeCandidates)
+    ? discoveryManifest.routeCandidates.map((candidate) => normalizeRoutePath(candidate)).filter(Boolean)
+    : []
+  if (priorityAssignments.length > 0) {
+    routeCandidates.forEach((routePath, index) => {
+      if (!routeOrder.has(routePath)) routeOrder.set(routePath, priorityAssignments.length + index)
+    })
   }
 
   for (const page of acquisitionPages) {
     if (!isRecord(page)) continue
     const routePath = normalizeRoutePath(page.finalNormalizedRoutePath ?? page.normalizedRoutePath)
     if (routesByPath.has(routePath)) continue
+    const priorityAssignment = priorityAssignmentByRoute.get(routePath)
+    const assemblyExcluded = assemblyExcludedByRoute.get(routePath)
     routesByPath.set(routePath, {
       routePath,
-      status: routeStatusFromAcquisition(page.status),
+      status: assemblyExcluded ? 'skipped' : routeStatusFromAcquisition(page.status),
+      priorityTier: textOrNull(priorityAssignment?.tier),
+      selectionReason: textOrNull(priorityAssignment?.reason),
+      skippedReason: textOrNull(assemblyExcluded?.reason) ?? textOrNull(page.skippedReason) ?? textOrNull(page.failureReason),
       sourceUrl: textOrNull(page.normalizedUrl ?? page.originalHref),
       finalUrl: textOrNull(page.finalUrl),
       rawFilePath: textOrNull(page.bodyPath),
     })
   }
 
-  const routeCandidates = Array.isArray(discoveryManifest.routeCandidates)
-    ? discoveryManifest.routeCandidates.map((candidate) => normalizeRoutePath(candidate)).filter(Boolean)
-    : []
   for (const routePath of routeCandidates) {
     if (routesByPath.has(routePath)) continue
+    const priorityAssignment = priorityAssignmentByRoute.get(routePath)
     routesByPath.set(routePath, {
       routePath,
       status: 'missing',
+      priorityTier: textOrNull(priorityAssignment?.tier),
+      selectionReason: textOrNull(priorityAssignment?.reason),
+      skippedReason: textOrNull(priorityAssignment?.excludedReason),
       sourceUrl: null,
       finalUrl: null,
       rawFilePath: null,
     })
   }
 
-  const routes = [...routesByPath.values()].sort(compareRouteRows)
+  for (const assignment of priorityAssignments) {
+    if (assignment.selected === true) continue
+    const routePath = normalizeRoutePath(assignment.routePath)
+    if (!routePath || routesByPath.has(routePath)) continue
+    routesByPath.set(routePath, {
+      routePath,
+      status: 'skipped',
+      priorityTier: textOrNull(assignment.tier),
+      selectionReason: textOrNull(assignment.reason),
+      skippedReason: textOrNull(assignment.excludedReason) ?? 'route_limit',
+      sourceUrl: null,
+      finalUrl: null,
+      rawFilePath: null,
+    })
+  }
+
+  const routes = [...routesByPath.values()].sort((left, right) => compareRouteRows(left, right, routeOrder))
   const previewDiagnostics = textList(input.previewDiagnostics)
   const assemblyEnabled = text((assembly as Record<string, unknown> | null)?.enabled) === 'true' || Boolean((assemblySummary as Record<string, unknown>).enabled)
   const assembledRouteRows = routes.filter((route) => route.status === 'assembled')
@@ -613,7 +684,12 @@ export function buildMultiPageImportOperatorSummary(input: BuildInput = {}): Mul
       diagnosticGroup('Alias Discovery', aliasDiagnostics),
       diagnosticGroup('Robots Discovery', robotsDiagnostics),
       diagnosticGroup('Sitemap Discovery', sitemapDiagnostics),
-      diagnosticGroup('Acquisition', textList(acquisitionSummary.diagnostics).concat(textList(acquisition?.diagnostics))),
+      diagnosticGroup(
+        'Acquisition',
+        textList(acquisitionSummary.diagnostics)
+          .concat(textList(acquisition?.diagnostics))
+          .concat(acquisitionPages.flatMap((page) => (isRecord(page) ? textList(page.diagnostics) : []))),
+      ),
       diagnosticGroup('Assembly', textList(assemblySummary.diagnostics).concat(textList(assembly?.diagnostics))),
       diagnosticGroup('Preview', previewDiagnostics.concat(validationLinkDiagnostics)),
       diagnosticGroup('Validation', (previewValidation?.diagnostics ?? []).concat(validationWarnings, validationBlockers)),

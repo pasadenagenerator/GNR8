@@ -397,7 +397,7 @@ function renderMultiPageImportOperatorContent(readModel: Awaited<ReturnType<type
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
             <thead>
               <tr style={{ background: '#f8fafc', color: '#475569', textAlign: 'left' }}>
-                {['Route', 'Status', 'Source URL', 'Final URL', 'Raw File'].map((heading) => (
+                {['Route', 'Priority', 'Status', 'Reason', 'Source URL', 'Final URL', 'Raw File'].map((heading) => (
                   <th key={heading} style={{ padding: '8px 10px', borderBottom: '1px solid #e2e8f0', whiteSpace: 'nowrap' }}>
                     {heading}
                   </th>
@@ -409,8 +409,14 @@ function renderMultiPageImportOperatorContent(readModel: Awaited<ReturnType<type
                 summary.routes.map((route) => (
                   <tr key={`${route.routePath}:${route.status}:${route.rawFilePath ?? 'none'}`}>
                     <td style={{ padding: '8px 10px', borderBottom: '1px solid #eef2f7', color: '#0f172a', fontWeight: 700 }}>{route.routePath}</td>
+                    <td style={{ padding: '8px 10px', borderBottom: '1px solid #eef2f7', color: '#334155' }}>
+                      {route.priorityTier ? route.priorityTier.replace('tier_', 'T').replace('_', ' ') : 'n/a'}
+                    </td>
                     <td style={{ padding: '8px 10px', borderBottom: '1px solid #eef2f7', color: route.status === 'assembled' ? '#166534' : route.status === 'missing' || route.status === 'failed' ? '#991b1b' : '#334155' }}>
                       {route.status}
+                    </td>
+                    <td style={{ padding: '8px 10px', borderBottom: '1px solid #eef2f7', color: '#334155' }}>
+                      {route.skippedReason ?? route.selectionReason ?? 'n/a'}
                     </td>
                     <td style={{ padding: '8px 10px', borderBottom: '1px solid #eef2f7', color: '#334155' }}>{route.sourceUrl ?? 'n/a'}</td>
                     <td style={{ padding: '8px 10px', borderBottom: '1px solid #eef2f7', color: '#334155' }}>{route.finalUrl ?? 'n/a'}</td>
@@ -419,7 +425,7 @@ function renderMultiPageImportOperatorContent(readModel: Awaited<ReturnType<type
                 ))
               ) : (
                 <tr>
-                  <td colSpan={5} style={{ padding: '10px', color: '#64748b' }}>
+                  <td colSpan={7} style={{ padding: '10px', color: '#64748b' }}>
                     No multi-page routes have been captured for this site version.
                   </td>
                 </tr>
