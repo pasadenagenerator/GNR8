@@ -4,7 +4,7 @@ import type { PoolClient } from "pg";
 
 import { getSuperadminPool } from "@/src/superadmin/db";
 
-import { normalizePagePath } from "@/gnr8/runtime/deterministic";
+import { normalizePagePath, stableStringify } from "@/gnr8/runtime/deterministic";
 import {
   normalizeRuntimeDomain as normalizeRuntimeDomainIdentity,
   normalizeRuntimeHost as normalizeRuntimeHostIdentity,
@@ -814,45 +814,280 @@ function normalizeRuntimePageVersionIdentityPath(value: string): string {
   return next || "/";
 }
 
-function assertNoDuplicateRuntimePageVersions(pages: CanonicalPageVersionInput[]): void {
-  const byPageId = new Map<string, CanonicalPageVersionInput>();
-  const byRoute = new Map<string, CanonicalPageVersionInput>();
+type RuntimePageVersionDeduplicationEntry = NonNullable<RuntimeImportProvenanceSummary["pageVersionDeduplication"]>["entries"][number];
 
-  for (const page of pages) {
-    const pageId = String(page.pageId ?? "").trim();
+function uniqueSortedStrings(values: Array<string | null | undefined>): string[] {
+  return [...new Set(values.map((value) => String(value ?? "").trim()).filter(Boolean))].sort((left, right) => left.localeCompare(right));
+}
+
+function sourceUrlForRuntimePage(input: { sourceUrl: string; routePath: string }): string | null {
+  try {
+    const parsed = new URL(input.sourceUrl);
+    parsed.pathname = normalizeRuntimePageVersionIdentityPath(input.routePath);
+    parsed.search = "";
+    parsed.hash = "";
+    return parsed.toString();
+  } catch {
+    return null;
+  }
+}
+
+function runtimePageVersionSortKey(input: { page: CanonicalPageVersionInput; sourceUrl: string }): string {
+  const routePath = normalizeRuntimePageVersionIdentityPath(input.page.path);
+  return [
+    routePath,
+    String(input.page.pageId ?? "").trim(),
+    String(input.page.title ?? "").trim(),
+    input.page.source,
+    input.page.actor,
+    stableStringify(input.page.structureModel),
+    stableStringify(input.page.contentModel),
+  ].join("|");
+}
+
+function buildRuntimePageVersionDuplicateEntry(input: {
+  siteVersionId: string | null;
+  sourceUrl: string;
+  pages: CanonicalPageVersionInput[];
+  winner: CanonicalPageVersionInput;
+}): RuntimePageVersionDeduplicationEntry {
+  const routePaths = uniqueSortedStrings(input.pages.map((page) => normalizeRuntimePageVersionIdentityPath(page.path)));
+  const selectedRoutePath = normalizeRuntimePageVersionIdentityPath(input.winner.path);
+  const sourceUrls = uniqueSortedStrings(
+    input.pages.map((page) => sourceUrlForRuntimePage({ sourceUrl: input.sourceUrl, routePath: normalizeRuntimePageVersionIdentityPath(page.path) })),
+  );
+  return {
+    siteVersionId: input.siteVersionId,
+    routePath: selectedRoutePath,
+    duplicateRoutePaths: routePaths,
+    pageId: String(input.winner.pageId ?? "").trim() || null,
+    selectedSourceUrl: sourceUrlForRuntimePage({ sourceUrl: input.sourceUrl, routePath: selectedRoutePath }),
+    duplicateSourceUrls: sourceUrls,
+    duplicateSourcePaths: [],
+    duplicatePageIds: uniqueSortedStrings(input.pages.map((page) => page.pageId)),
+  };
+}
+
+function buildRuntimePageVersionExistingConflictEntry(input: {
+  siteVersionId: string;
+  sourceUrl: string;
+  pageId: string;
+  incomingRoutePath: string;
+  existingRoutePath: string;
+}): RuntimePageVersionDeduplicationEntry {
+  const selectedRoutePath = normalizeRuntimePageVersionIdentityPath(input.incomingRoutePath);
+  const existingRoutePath = normalizeRuntimePageVersionIdentityPath(input.existingRoutePath);
+  return {
+    siteVersionId: input.siteVersionId,
+    routePath: selectedRoutePath,
+    duplicateRoutePaths: uniqueSortedStrings([selectedRoutePath, existingRoutePath]),
+    pageId: input.pageId,
+    selectedSourceUrl: sourceUrlForRuntimePage({ sourceUrl: input.sourceUrl, routePath: selectedRoutePath }),
+    duplicateSourceUrls: uniqueSortedStrings([
+      sourceUrlForRuntimePage({ sourceUrl: input.sourceUrl, routePath: selectedRoutePath }),
+      sourceUrlForRuntimePage({ sourceUrl: input.sourceUrl, routePath: existingRoutePath }),
+    ]),
+    duplicateSourcePaths: [],
+    duplicatePageIds: [input.pageId],
+  };
+}
+
+function runtimePageVersionDuplicateDiagnostic(entry: RuntimePageVersionDeduplicationEntry): string {
+  return [
+    "MULTIPAGE_PAGE_VERSION_DUPLICATE_DEDUPED",
+    `siteVersionId=${entry.siteVersionId ?? "unknown"}`,
+    `pageId=${entry.pageId ?? "unknown"}`,
+    `routePath=${entry.routePath}`,
+    `selectedSourceUrl=${entry.selectedSourceUrl ?? "unknown"}`,
+    `duplicateSourceUrls=${entry.duplicateSourceUrls.join(",") || "unknown"}`,
+    `sourceDocumentPaths=${entry.duplicateSourcePaths.join(",") || "unknown"}`,
+  ].join(":");
+}
+
+function mergeRuntimePageVersionDeduplication(input: {
+  summary: RuntimeImportProvenanceSummary | null | undefined;
+  entries: RuntimePageVersionDeduplicationEntry[];
+}): RuntimeImportProvenanceSummary | null | undefined {
+  if (!input.summary || input.entries.length === 0) return input.summary;
+
+  const existing = input.summary.pageVersionDeduplication ?? null;
+  const existingEntries = existing?.entries ?? [];
+  const entries = [...existingEntries, ...input.entries];
+  const diagnostics = uniqueSortedStrings([
+    ...(existing?.diagnostics ?? []),
+    "MULTIPAGE_PAGE_VERSION_DUPLICATE_DEDUPED",
+    ...input.entries.map(runtimePageVersionDuplicateDiagnostic),
+  ]);
+  const duplicateCount = Math.max(0, existing?.duplicateCount ?? 0) + input.entries.reduce((count, entry) => {
+    const duplicatePageIdCount = Math.max(0, entry.duplicatePageIds.length - 1);
+    const duplicateRouteCount = Math.max(0, (entry.duplicateRoutePaths ?? []).length - 1);
+    const duplicateSourceCount = Math.max(0, entry.duplicateSourceUrls.length - 1);
+    return count + Math.max(1, duplicatePageIdCount, duplicateRouteCount, duplicateSourceCount);
+  }, 0);
+
+  const nextSummary: RuntimeImportProvenanceSummary = {
+    ...input.summary,
+    importDiagnosticCodes: uniqueSortedStrings([...input.summary.importDiagnosticCodes, "MULTIPAGE_PAGE_VERSION_DUPLICATE_DEDUPED"]),
+    pageVersionDeduplication: {
+      kind: "runtime_page_version_deduplication_v1",
+      duplicateCount,
+      diagnostics,
+      entries,
+    },
+  };
+  Object.assign(input.summary, nextSummary);
+  return input.summary;
+}
+
+function buildRuntimePageVersionDuplicateError(input: {
+  siteVersionId: string | null;
+  sourceUrl: string;
+  pageId: string;
+  pages: CanonicalPageVersionInput[];
+}): Error {
+  const routePaths = uniqueSortedStrings(input.pages.map((page) => normalizeRuntimePageVersionIdentityPath(page.path)));
+  const sourceUrls = uniqueSortedStrings(input.pages.map((page) => sourceUrlForRuntimePage({ sourceUrl: input.sourceUrl, routePath: page.path })));
+  return new Error(
+    [
+      "MULTIPAGE_PAGE_VERSION_DUPLICATE",
+      `siteVersionId=${input.siteVersionId ?? "unknown"}`,
+      `pageId=${input.pageId || "unknown"}`,
+      `routePath=${routePaths[0] ?? "unknown"}`,
+      `duplicateRoutePaths=${routePaths.join(",") || "unknown"}`,
+      `duplicateSourceUrls=${sourceUrls.join(",") || "unknown"}`,
+      "sourceDocumentPaths=unknown",
+    ].join(":"),
+  );
+}
+
+function canonicalizeRuntimePageVersionsForInsert(input: {
+  siteVersionId: string | null;
+  sourceUrl: string;
+  pages: CanonicalPageVersionInput[];
+  importProvenanceSummary?: RuntimeImportProvenanceSummary | null;
+}): {
+  pages: CanonicalPageVersionInput[];
+  importProvenanceSummary?: RuntimeImportProvenanceSummary | null;
+  deduplicationEntries: RuntimePageVersionDeduplicationEntry[];
+} {
+  const deduplicationEntries: RuntimePageVersionDeduplicationEntry[] = [];
+  const byRoute = new Map<string, CanonicalPageVersionInput[]>();
+  for (const page of input.pages) {
     const routePath = normalizeRuntimePageVersionIdentityPath(page.path);
-    const pageIdDuplicate = pageId ? byPageId.get(pageId) : null;
-    if (pageIdDuplicate) {
-      throw new Error(
-        [
-          "MULTIPAGE_PAGE_VERSION_DUPLICATE",
-          `pageId=${pageId}`,
-          `routePath=${routePath}`,
-          `firstRoutePath=${normalizeRuntimePageVersionIdentityPath(pageIdDuplicate.path)}`,
-        ].join(":"),
+    const normalizedPage = {
+      ...page,
+      path: routePath,
+    };
+    byRoute.set(routePath, [...(byRoute.get(routePath) ?? []), normalizedPage]);
+  }
+
+  const routeDeduped: CanonicalPageVersionInput[] = [];
+  for (const routePath of [...byRoute.keys()].sort((left, right) => left.localeCompare(right))) {
+    const group = (byRoute.get(routePath) ?? []).sort((left, right) =>
+      runtimePageVersionSortKey({ page: left, sourceUrl: input.sourceUrl }).localeCompare(
+        runtimePageVersionSortKey({ page: right, sourceUrl: input.sourceUrl }),
+      ),
+    );
+    const winner = group[0];
+    if (!winner) continue;
+    routeDeduped.push(winner);
+    if (group.length > 1) {
+      deduplicationEntries.push(
+        buildRuntimePageVersionDuplicateEntry({
+          siteVersionId: input.siteVersionId,
+          sourceUrl: input.sourceUrl,
+          pages: group,
+          winner,
+        }),
       );
     }
-    const routeDuplicate = byRoute.get(routePath);
-    if (routeDuplicate) {
-      throw new Error(
-        [
-          "MULTIPAGE_PAGE_VERSION_DUPLICATE",
-          `routePath=${routePath}`,
-          `pageId=${pageId || "unknown"}`,
-          `firstPageId=${routeDuplicate.pageId}`,
-        ].join(":"),
+  }
+
+  const byPageId = new Map<string, CanonicalPageVersionInput[]>();
+  for (const page of routeDeduped) {
+    const pageId = String(page.pageId ?? "").trim();
+    if (!pageId) {
+      throw buildRuntimePageVersionDuplicateError({
+        siteVersionId: input.siteVersionId,
+        sourceUrl: input.sourceUrl,
+        pageId,
+        pages: [page],
+      });
+    }
+    byPageId.set(pageId, [...(byPageId.get(pageId) ?? []), page]);
+  }
+
+  const pageIdDeduped: CanonicalPageVersionInput[] = [];
+  for (const pageId of [...byPageId.keys()].sort((left, right) => left.localeCompare(right))) {
+    const group = (byPageId.get(pageId) ?? []).sort((left, right) =>
+      runtimePageVersionSortKey({ page: left, sourceUrl: input.sourceUrl }).localeCompare(
+        runtimePageVersionSortKey({ page: right, sourceUrl: input.sourceUrl }),
+      ),
+    );
+    const winner = group[0];
+    if (!winner) continue;
+    pageIdDeduped.push(winner);
+    if (group.length > 1) {
+      deduplicationEntries.push(
+        buildRuntimePageVersionDuplicateEntry({
+          siteVersionId: input.siteVersionId,
+          sourceUrl: input.sourceUrl,
+          pages: group,
+          winner,
+        }),
       );
     }
-    if (pageId) byPageId.set(pageId, page);
-    byRoute.set(routePath, page);
+  }
+
+  const seenFinalPageIds = new Set<string>();
+  for (const page of pageIdDeduped) {
+    const pageId = String(page.pageId ?? "").trim();
+    if (seenFinalPageIds.has(pageId)) {
+      throw buildRuntimePageVersionDuplicateError({
+        siteVersionId: input.siteVersionId,
+        sourceUrl: input.sourceUrl,
+        pageId,
+        pages: pageIdDeduped.filter((candidate) => String(candidate.pageId ?? "").trim() === pageId),
+      });
+    }
+    seenFinalPageIds.add(pageId);
+  }
+
+  const nextImportProvenanceSummary = mergeRuntimePageVersionDeduplication({
+    summary: input.importProvenanceSummary,
+    entries: deduplicationEntries,
+  });
+  return {
+    pages: pageIdDeduped.sort((left, right) => normalizeRuntimePageVersionIdentityPath(left.path).localeCompare(normalizeRuntimePageVersionIdentityPath(right.path))),
+    importProvenanceSummary: nextImportProvenanceSummary,
+    deduplicationEntries,
+  };
+}
+
+function assertNoDuplicateRuntimePageVersions(pages: CanonicalPageVersionInput[]): void {
+  const deduped = canonicalizeRuntimePageVersionsForInsert({
+    siteVersionId: null,
+    sourceUrl: "https://invalid.local/",
+    pages,
+  });
+  if (deduped.deduplicationEntries.length > 0) {
+    const entry = deduped.deduplicationEntries[0]!;
+    throw new Error(
+      [
+        "MULTIPAGE_PAGE_VERSION_DUPLICATE",
+        `routePath=${entry.routePath}`,
+        `pageId=${entry.pageId ?? "unknown"}`,
+        `duplicateRoutePaths=${entry.duplicateRoutePaths?.join(",") || "unknown"}`,
+        `duplicateSourceUrls=${entry.duplicateSourceUrls.join(",") || "unknown"}`,
+        "sourceDocumentPaths=unknown",
+      ].join(":"),
+    );
   }
 }
 
 export async function createSiteVersionFromMigration(
   input: CanonicalSiteMigrationInput & { rendererCompatibilityVersion: string; siteVersionId?: string },
 ): Promise<{ siteId: string; siteVersionId: string; versionNo: number }> {
-  assertNoDuplicateRuntimePageVersions(input.pages);
-
   return withTx(async (client) => {
     const sourceHost = (() => {
       try {
@@ -931,14 +1166,64 @@ export async function createSiteVersionFromMigration(
       siteVersionId = siteVersionInsert.rows[0]!.id;
     }
 
-    for (const page of input.pages) {
+    const canonicalizedPageVersions = canonicalizeRuntimePageVersionsForInsert({
+      siteVersionId,
+      sourceUrl: input.sourceUrl,
+      pages: input.pages,
+      importProvenanceSummary: input.importProvenanceSummary,
+    });
+    const canonicalizedPageById = new Map(canonicalizedPageVersions.pages.map((page) => [page.pageId, page]));
+    const canonicalizedPageIds = [...canonicalizedPageById.keys()];
+    const existingPageVersionConflicts = canonicalizedPageIds.length > 0
+      ? await client.query<{ page_id: string; path: string }>(
+          `
+          select page_id::text as page_id, path::text as path
+          from public.gnr8_runtime_page_versions
+          where site_version_id = $1::uuid
+            and page_id = any($2::text[])
+          order by page_id asc, path asc
+          `,
+          [siteVersionId, canonicalizedPageIds],
+        )
+      : { rows: [] };
+    const existingConflictEntries = existingPageVersionConflicts.rows.flatMap((row) => {
+      const incoming = canonicalizedPageById.get(row.page_id);
+      if (!incoming) return [];
+      return [
+        buildRuntimePageVersionExistingConflictEntry({
+          siteVersionId,
+          sourceUrl: input.sourceUrl,
+          pageId: row.page_id,
+          incomingRoutePath: incoming.path,
+          existingRoutePath: row.path,
+        }),
+      ];
+    });
+    const importProvenanceSummaryForWrite = mergeRuntimePageVersionDeduplication({
+      summary: canonicalizedPageVersions.importProvenanceSummary,
+      entries: existingConflictEntries,
+    });
+    if ((canonicalizedPageVersions.deduplicationEntries.length > 0 || existingConflictEntries.length > 0) && importProvenanceSummaryForWrite) {
+      await client.query(
+        `
+        update public.gnr8_runtime_site_versions
+        set import_provenance_summary = $2::jsonb, updated_at = now()
+        where id = $1::uuid
+        `,
+        [siteVersionId, JSON.stringify(importProvenanceSummaryForWrite)],
+      );
+    }
+
+    for (const page of canonicalizedPageVersions.pages) {
       const path = normalizePagePath(page.path);
       await client.query(
         `
         insert into public.gnr8_runtime_pages (id, site_id, path, title)
         values ($1::text, $2::text, $3::text, $4::text)
         on conflict (id)
-        do update set title = excluded.title
+        do update set
+          path = excluded.path,
+          title = excluded.title
         `,
         [page.pageId, input.siteId, path, page.title],
       );
@@ -960,6 +1245,18 @@ export async function createSiteVersionFromMigration(
           actor
         )
         values ($1::uuid, $2::text, $3::text, $4::text, $5::jsonb, $6::jsonb, $7::jsonb, $8::jsonb, $9::jsonb, $10::jsonb, $11::text, $12::text)
+        on conflict (site_version_id, page_id)
+        do update set
+          path = excluded.path,
+          title = excluded.title,
+          structure_model = excluded.structure_model,
+          content_model = excluded.content_model,
+          style_tokens = excluded.style_tokens,
+          asset_graph = excluded.asset_graph,
+          semantic_signals = excluded.semantic_signals,
+          migration_governance = excluded.migration_governance,
+          source = excluded.source,
+          actor = excluded.actor
         `,
         [
           siteVersionId,
@@ -4818,5 +5115,6 @@ export async function hydratePageVersionFromInput(input: CanonicalPageVersionInp
 
 export const __runtimeStoreTestUtils = {
   assertNoDuplicateRuntimePageVersions,
+  canonicalizeRuntimePageVersionsForInsert,
   normalizeRuntimePageVersionIdentityPath,
 };

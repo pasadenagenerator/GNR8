@@ -281,7 +281,9 @@ export type RuntimeImportProvenanceSummary = {
     duplicateCount: number;
     diagnostics: string[];
     entries: Array<{
+      siteVersionId?: string | null;
       routePath: string;
+      duplicateRoutePaths?: string[];
       pageId: string | null;
       selectedSourceUrl: string | null;
       duplicateSourceUrls: string[];

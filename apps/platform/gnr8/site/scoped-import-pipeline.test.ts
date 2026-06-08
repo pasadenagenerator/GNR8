@@ -11,6 +11,7 @@ import {
   materializeCmsContentSlotsForScopedImport,
   runScopedImportPipeline,
 } from '@/gnr8/site/scoped-import-pipeline'
+import { __runtimeStoreTestUtils } from '@/gnr8/runtime/runtime-store'
 import { applyContentOverridesToRawHtml, type ContentOverride, type ContentSlot } from '@/gnr8/runtime/content-binding'
 import { planBatchDraftUpserts } from '@/app/api/gnr8/clients/[clientId]/sites/[siteId]/content/overrides/batch/batch-overrides-route-helpers'
 
@@ -2883,6 +2884,114 @@ test('scoped pipeline dedupes duplicate prepared pages before runtime page versi
   assert.ok(createInput.importProvenanceSummary.importDiagnosticCodes.includes('MULTIPAGE_PAGE_VERSION_DUPLICATE_DEDUPED'))
   assert.ok(provenanceInput.importProvenanceSummary.importDiagnosticCodes.includes('MULTIPAGE_PAGE_VERSION_DUPLICATE_DEDUPED'))
   assert.deepEqual(provenanceInput.importProvenanceSummary.pageVersionDeduplication.entries[0].duplicateSourcePaths, ['about.html', 'about/index.html'])
+})
+
+test('scoped import write path survives duplicate pageIds at runtime-store boundary and preserves provenance evidence', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'scoped-pipeline-runtime-pageid-dedupe-'))
+  fs.mkdirSync(path.resolve(root, 'assets'))
+  fs.writeFileSync(path.resolve(root, 'index.html'), '<!doctype html><html><body><h1>Home</h1></body></html>', 'utf8')
+
+  const pipeline = createPipelineWithDocumentPaths(['about.html', 'team.html'])
+  let createInputBeforeBoundaryDedupe: any = null
+  let createInputAfterBoundaryDedupe: any = null
+  let provenanceInput: any = null
+  let linkedArtifactId: string | null = null
+
+  const outcome = await runScopedImportPipeline({
+    snapshot: createCanonicalTestSnapshot(root),
+    sourceUrl: 'https://example.com/',
+    actor: 'test:scoped-import',
+    deps: {
+      importStaticSite: async () => ({ status: 'ok', documentMeta: { source: { kind: 'single-entry-html' } } }) as any,
+      createImportManifest: () => ({ status: 'success' }) as any,
+      runLinearMigrationPipeline: () => pipeline as any,
+      createSiteVersionFromMigration: async (input) => {
+        const nonHomePages = input.pages.filter((page) => page.path !== '/')
+        const sharedPageId = nonHomePages[0]?.pageId ?? 'page_shared'
+        const pagesWithDuplicatePageId = input.pages.map((page) => (page.path === '/' ? page : { ...page, pageId: sharedPageId }))
+        createInputBeforeBoundaryDedupe = { ...input, pages: pagesWithDuplicatePageId }
+        const canonicalized = __runtimeStoreTestUtils.canonicalizeRuntimePageVersionsForInsert({
+          siteVersionId: 'site-version-runtime-deduped',
+          sourceUrl: input.sourceUrl,
+          pages: pagesWithDuplicatePageId,
+          importProvenanceSummary: input.importProvenanceSummary,
+        })
+        createInputAfterBoundaryDedupe = { ...input, pages: canonicalized.pages, importProvenanceSummary: canonicalized.importProvenanceSummary }
+        return { siteId: input.siteId, siteVersionId: 'site-version-runtime-deduped', versionNo: 1 }
+      },
+      setSiteVersionImportProvenanceSummary: async (input) => {
+        provenanceInput = input
+        return { affectedRows: 1 }
+      },
+      getSiteVersion: async () =>
+        ({
+          id: 'site-version-runtime-deduped',
+          siteId: createInputAfterBoundaryDedupe.siteId,
+          versionNo: 1,
+          state: 'DRAFT',
+          source: 'migration',
+          actor: 'test',
+          createdAt: new Date().toISOString(),
+          rendererCompatibilityVersion: 'gnr8-renderer-v1',
+          artifactId: linkedArtifactId,
+          importProvenanceSummary: provenanceInput?.importProvenanceSummary ?? createInputAfterBoundaryDedupe?.importProvenanceSummary ?? null,
+          pages: createInputAfterBoundaryDedupe.pages.map((page: any, index: number) => ({
+            id: `page-version-runtime-deduped-${index}`,
+            siteVersionId: 'site-version-runtime-deduped',
+            pageId: page.pageId,
+            path: page.path,
+            title: page.title,
+            structureModel: page.structureModel,
+            contentModel: page.contentModel,
+            styleTokens: page.styleTokens,
+            assetGraph: page.assetGraph,
+            semanticSignals: page.semanticSignals,
+            source: page.source,
+            actor: page.actor,
+            createdAt: new Date().toISOString(),
+          })),
+        }) as any,
+      buildDeterministicArtifactBundle: () =>
+        ({
+          siteId: createInputAfterBoundaryDedupe.siteId,
+          siteVersionId: 'site-version-runtime-deduped',
+          rendererCompatibilityVersion: 'gnr8-renderer-v1',
+          bundleSha256: 'bundle-sha',
+          htmlByPath: Object.fromEntries(createInputAfterBoundaryDedupe.pages.map((page: any) => [page.path, '<!doctype html><html><body>preview</body></html>'])),
+          compiledTokenStyles: ':root{}',
+          assetFingerprintMap: {},
+          manifest: {},
+        }) as any,
+      createArtifact: async () => ({ artifactId: 'artifact-runtime-deduped' }),
+      bindArtifactToVersion: async (input) => {
+        linkedArtifactId = input.artifactId
+        return { affectedRows: 1 }
+      },
+      persistRawImportedSiteArtifact: async () =>
+        ({
+          artifactId: 'raw-artifact-runtime-deduped',
+          artifactType: 'raw_imported_site',
+          entryHtmlPath: 'index.html',
+          assetBasePath: '.',
+          fileMap: {},
+          fileCount: 1,
+        }) as any,
+      upsertContentSlots: async () => 0,
+      importHtmlToPage: () => ({} as any),
+      migrateImportedPageToCanonicalDraft: async () => ({ siteId: 'legacy-site', siteVersionId: 'legacy-version', versionNo: 1 }),
+    },
+  })
+
+  assert.equal(outcome.mode, 'pipeline')
+  assert.equal(createInputBeforeBoundaryDedupe.pages.filter((page: any) => page.pageId === createInputBeforeBoundaryDedupe.pages.find((page: any) => page.path === '/about')?.pageId).length, 2)
+  assert.equal(createInputAfterBoundaryDedupe.pages.filter((page: any) => page.path === '/about' || page.path === '/team').length, 1)
+  assert.equal(new Set(createInputAfterBoundaryDedupe.pages.map((page: any) => page.pageId)).size, createInputAfterBoundaryDedupe.pages.length)
+  assert.ok(provenanceInput.importProvenanceSummary.importDiagnosticCodes.includes('MULTIPAGE_PAGE_VERSION_DUPLICATE_DEDUPED'))
+  const entry = provenanceInput.importProvenanceSummary.pageVersionDeduplication.entries.find((item: any) => item.pageId === createInputBeforeBoundaryDedupe.pages.find((page: any) => page.path === '/about')?.pageId)
+  assert.ok(entry)
+  assert.equal(entry.siteVersionId, 'site-version-runtime-deduped')
+  assert.deepEqual(entry.duplicateRoutePaths, ['/about', '/team'])
+  assert.deepEqual(entry.duplicateSourceUrls, ['https://example.com/about', 'https://example.com/team'])
 })
 
 test('canonical input preserves inferred nested entry path when raw_html_only semantic forcing is not active', () => {

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { __runtimeStoreTestUtils, mapRuntimeSiteResolutionBindingRows } from "@/gnr8/runtime/runtime-store";
+import type { CanonicalPageVersionInput, RuntimeImportProvenanceSummary } from "@/gnr8/runtime/types";
 
 function buildBindingRows() {
   return [
@@ -62,6 +63,99 @@ test("runtime-store page version preflight rejects duplicate normalized routes b
       ]),
     /MULTIPAGE_PAGE_VERSION_DUPLICATE:routePath=\/about/,
   );
+});
+
+test("runtime-store DB-boundary dedupes duplicate pageId candidates before page-version insert", () => {
+  const pages: CanonicalPageVersionInput[] = [
+    {
+      pageId: "page_shared",
+      path: "/team",
+      title: "Team",
+      structureModel: { sections: [{ id: "team-section", type: "content", order: 0 }] },
+      contentModel: { sectionProps: { "team-section": { heading: "Team" } } },
+      styleTokens: {},
+      assetGraph: [],
+      semanticSignals: [],
+      source: "migration" as const,
+      actor: "test",
+    },
+    {
+      pageId: "page_shared",
+      path: "/about",
+      title: "About",
+      structureModel: { sections: [{ id: "about-section", type: "content", order: 0 }] },
+      contentModel: { sectionProps: { "about-section": { heading: "About" } } },
+      styleTokens: {},
+      assetGraph: [],
+      semanticSignals: [],
+      source: "migration" as const,
+      actor: "test",
+    },
+  ];
+  const provenance: RuntimeImportProvenanceSummary = {
+    kind: "runtime_import_provenance_summary_v1",
+    sourceMode: "rendered_dom",
+    importFidelityStatus: "high_fidelity_import",
+    renderedCaptureStatus: "available",
+    renderedDomQuality: "strong",
+    screenshotCount: 0,
+    computedStyleSampleCount: 0,
+    renderedCapture: {
+      used: true,
+      status: "available",
+      quality: "strong",
+      domLength: 1,
+      nodeCount: 1,
+      styleSampleCount: 0,
+      styleCoverage: 0,
+      screenshots: { viewport: false, fullPage: false },
+      execution: {
+        runtimeKind: "nodejs",
+        environmentSupported: true,
+        browserPackageAvailable: true,
+        browserBinaryAvailable: true,
+        environmentStatus: "supported",
+        failureCategory: "none",
+        failureCode: null,
+        browserLaunch: "succeeded",
+        navigation: "succeeded",
+        dom: "captured",
+        screenshot: "none",
+        styleSampling: "not_attempted",
+      },
+    },
+    importDiagnosticCodes: [],
+    captureEvidence: {
+      selectedSourceHtmlPath: null,
+      responseHtmlPath: null,
+      entryHtmlPath: null,
+      renderedCaptureManifestPath: null,
+      acquisitionEvidencePath: null,
+      renderedDomPath: null,
+      computedStylesPath: null,
+      renderedViewportScreenshotPath: null,
+      renderedFullpageScreenshotPath: null,
+      screenshotPaths: [],
+    },
+    styleSignals: null,
+  };
+
+  const canonicalized = __runtimeStoreTestUtils.canonicalizeRuntimePageVersionsForInsert({
+    siteVersionId: "11111111-1111-4111-8111-111111111111",
+    sourceUrl: "https://example.com/",
+    pages,
+    importProvenanceSummary: provenance,
+  });
+
+  assert.equal(canonicalized.pages.length, 1);
+  assert.equal(canonicalized.pages[0]?.pageId, "page_shared");
+  assert.equal(canonicalized.pages[0]?.path, "/about");
+  assert.equal(canonicalized.deduplicationEntries.length, 1);
+  assert.equal(provenance.importDiagnosticCodes.includes("MULTIPAGE_PAGE_VERSION_DUPLICATE_DEDUPED"), true);
+  assert.equal(provenance.pageVersionDeduplication?.diagnostics.includes("MULTIPAGE_PAGE_VERSION_DUPLICATE_DEDUPED"), true);
+  assert.equal(provenance.pageVersionDeduplication?.entries[0]?.siteVersionId, "11111111-1111-4111-8111-111111111111");
+  assert.deepEqual(provenance.pageVersionDeduplication?.entries[0]?.duplicateRoutePaths, ["/about", "/team"]);
+  assert.deepEqual(provenance.pageVersionDeduplication?.entries[0]?.duplicateSourceUrls, ["https://example.com/about", "https://example.com/team"]);
 });
 
 test("runtime-store resolution binding mapper: published candidate present", () => {
