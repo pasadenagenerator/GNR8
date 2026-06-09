@@ -858,48 +858,92 @@ export function extractStyleSignalModel(input: {
 }
 
 export function styleSignalsToSemanticLabels(model: StyleSignalModel): string[] {
+  const colors = model.colors ?? {
+    backgroundTone: 'unknown',
+    primaryAccent: null,
+    secondaryAccent: null,
+  }
+  const typography = model.typography ?? {
+    headingCategory: 'unknown',
+    bodyCategory: 'unknown',
+  }
+  const spacing = model.spacing ?? {
+    rhythm: 'unknown',
+    layoutDensity: 'unknown',
+  }
+  const cta = model.cta ?? {
+    styleHint: 'unknown',
+    prominence: 'unknown',
+  }
+  const surfaces = model.surfaces ?? {
+    radiusHint: 'unknown',
+    shadowHint: 'unknown',
+  }
+  const diagnostics = Array.isArray(model.diagnostics) ? model.diagnostics : []
   return uniqueSorted([
     `style.source_mode:${model.sourceMode}`,
-    `style.background_tone:${model.colors.backgroundTone}`,
-    `style.primary_accent:${model.colors.primaryAccent ?? 'none'}`,
-    `style.secondary_accent:${model.colors.secondaryAccent ?? 'none'}`,
-    `style.typography.heading_category:${model.typography.headingCategory}`,
-    `style.typography.body_category:${model.typography.bodyCategory}`,
-    `style.spacing.rhythm:${model.spacing.rhythm}`,
-    `style.spacing.density:${model.spacing.layoutDensity}`,
-    `style.cta.style:${model.cta.styleHint}`,
-    `style.cta.prominence:${model.cta.prominence}`,
-    `style.surfaces.radius:${model.surfaces.radiusHint}`,
-    `style.surfaces.shadow:${model.surfaces.shadowHint}`,
+    `style.background_tone:${colors.backgroundTone}`,
+    `style.primary_accent:${colors.primaryAccent ?? 'none'}`,
+    `style.secondary_accent:${colors.secondaryAccent ?? 'none'}`,
+    `style.typography.heading_category:${typography.headingCategory}`,
+    `style.typography.body_category:${typography.bodyCategory}`,
+    `style.spacing.rhythm:${spacing.rhythm}`,
+    `style.spacing.density:${spacing.layoutDensity}`,
+    `style.cta.style:${cta.styleHint}`,
+    `style.cta.prominence:${cta.prominence}`,
+    `style.surfaces.radius:${surfaces.radiusHint}`,
+    `style.surfaces.shadow:${surfaces.shadowHint}`,
     `style.component.button:${model.componentProfiles?.buttonStyle ?? 'unknown'}`,
     `style.component.card:${model.componentProfiles?.cardStyle ?? 'unknown'}`,
     `style.component.section_contrast:${model.componentProfiles?.sectionContrast ?? 'unknown'}`,
-    `style.visual_tone:${model.visualToneHint}`,
-    ...model.diagnostics.map((diag) => `style.diagnostic:${diag.code}`),
+    `style.visual_tone:${model.visualToneHint ?? 'unknown'}`,
+    ...diagnostics.map((diag) => `style.diagnostic:${diag.code}`),
   ])
 }
 
 export function styleSignalsToStyleTokens(model: StyleSignalModel): Record<string, string> {
+  const colors = model.colors ?? {
+    backgroundTone: 'unknown',
+    primaryAccent: null,
+    secondaryAccent: null,
+    ctaColorHint: null,
+  }
+  const typography = model.typography ?? {
+    headingFontFamily: null,
+    bodyFontFamily: null,
+  }
+  const spacing = model.spacing ?? {
+    sectionSpacingHint: 'unknown',
+  }
+  const surfaces = model.surfaces ?? {
+    radiusHint: 'unknown',
+  }
   const spacingToken =
-    model.spacing.sectionSpacingHint === 'airy'
+    spacing.sectionSpacingHint === 'airy'
       ? '64px'
-      : model.spacing.sectionSpacingHint === 'tight'
+      : spacing.sectionSpacingHint === 'tight'
       ? '32px'
       : '48px'
   const radiusToken =
-    model.surfaces.radiusHint === 'rounded'
+    surfaces.radiusHint === 'rounded'
       ? '12px'
-      : model.surfaces.radiusHint === 'sharp'
+      : surfaces.radiusHint === 'sharp'
       ? '2px'
       : '8px'
 
-  return {
-    'color.background': model.colors.backgroundTone === 'dark' ? '#111827' : '#ffffff',
-    'color.text': model.colors.backgroundTone === 'dark' ? '#f8fafc' : '#111111',
-    'color.accent.primary': model.colors.primaryAccent ?? '#2563eb',
-    'color.accent.secondary': model.colors.secondaryAccent ?? (model.colors.primaryAccent ?? '#1d4ed8'),
-    'color.cta': model.colors.ctaColorHint ?? (model.colors.primaryAccent ?? '#2563eb'),
+  const tokens: Record<string, string> = {
+    'color.background': colors.backgroundTone === 'dark' ? '#111827' : '#ffffff',
+    'color.text': colors.backgroundTone === 'dark' ? '#f8fafc' : '#111111',
+    'color.accent.primary': colors.primaryAccent ?? '#2563eb',
+    'color.accent.secondary': colors.secondaryAccent ?? (colors.primaryAccent ?? '#1d4ed8'),
+    'color.cta': colors.ctaColorHint ?? (colors.primaryAccent ?? '#2563eb'),
     'spacing.section': spacingToken,
     'radius.component': radiusToken,
   }
+  if (typography.headingFontFamily) tokens['typography.heading.fontFamily'] = typography.headingFontFamily
+  if (typography.bodyFontFamily) tokens['typography.body.fontFamily'] = typography.bodyFontFamily
+  tokens['typography.heading.source'] = typography.headingFontFamily
+    ? (model.provenance?.computedStyle?.used ? 'computed_style' : 'html_css_inference')
+    : 'fallback_missing'
+  return tokens
 }

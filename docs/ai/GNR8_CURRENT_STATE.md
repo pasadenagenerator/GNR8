@@ -1,7 +1,7 @@
 # GNR8 CURRENT STATE SNAPSHOT
 
 ## Snapshot Date
-2026-06-08
+2026-06-09
 
 ## Migration Platform MVP Buildout
 
@@ -30,6 +30,8 @@ Phase 7C — Discovery Expansion is COMPLETE.
 Phase 7C classification is A/B successful.
 Phase 7C has no architectural blockers.
 Discovery expansion is operational.
+Phase 7D — Multi-Page Raw Preview Correctness + Observability is COMPLETE through 7D-9.
+Phase 7D has no runtime behavior changes outstanding.
 Phase 6A — Hosting Operations MVP is complete.
 Phase 6B — Hosting Operations Workflow Review is complete.
 Phase 6C-A — Readiness & Domain Operations MVP is complete.
@@ -109,6 +111,11 @@ Completed capabilities:
 - Redirect / Alias Discovery
 - Discovery Quality Validation
 - Discovery Priority Balancing
+- Multi-Page Raw Preview Correctness
+- Multi-Page Raw Preview Observability
+- Raw Multi-Page Route Inspection
+- Raw Preview Route Coverage Verification
+- Raw/Transformed Preview Boundary Clarification
 
 Current migration runtime capabilities:
 - durable jobs
@@ -174,6 +181,13 @@ Current migration runtime capabilities:
 - seed-visible navigation protection
 - route-budget balancing
 - sitemap-heavy site protection
+- raw multi-page preview route correctness
+- raw multi-page preview observability
+- deterministic siteVersionId reuse verification
+- raw preview route coverage verification
+- raw preview link rewrite verification
+- root route assembly as `root_entry` from `index.html`
+- raw multi-page preview links separated from transformed preview
 
 Hosting Operations now exposes:
 - Hosting Overview
@@ -261,17 +275,34 @@ Explicitly not yet implemented:
 - dynamic content extraction
 
 Next active phase:
-- PHASE 7D — MULTI-PAGE IMPORT UI ENTRY.
+- PHASE 7E — TRANSFORMED PREVIEW QUALITY / RAW-TO-TRANSFORMED BRIDGE.
 
-Phase 7D scope:
-- expose multi-page import through UI
-- discovery controls
-- acquisition controls
-- assembly controls
-- operator workflow
-- no public activation changes
-- no CMS changes
-- no commerce work
+## Phase 7D Multi-Page Raw Preview Correctness + Observability
+
+Status:
+- COMPLETE through 7D-9.
+
+Production Viroidoc verification:
+- latest import run: `client-site-import-1780996748493`
+- siteVersionId reused deterministically: `e9257245-0256-4291-9989-66a33ee6741e`
+- artifactId: `f44a3f28-5635-4237-b73a-a33af993c73d`
+- acquired pages: 20
+- valid preview routes: 21
+- missing preview routes: 0
+- rewritten links: 39
+
+Confirmed behavior:
+- The root route is assembled as `root_entry` using `index.html`.
+- Raw multi-page preview links are separated from transformed preview.
+- Transformed preview remains semantic/fallback.
+- Transformed preview is not the source of truth for route-level inspection.
+
+Boundary:
+- No runtime behavior changed.
+- No import logic changed.
+- No public activation changes.
+- No CMS changes.
+- No commerce work.
 
 ## Production Validation
 
@@ -334,7 +365,7 @@ Execution boundary:
 - unattended orchestration does not exist yet
 
 Remaining critical path:
-- Phase 7D — Multi-Page Import UI Entry
+- Phase 7E — Transformed Preview Quality / Raw-to-Transformed Bridge
 - Billing
 
 Current Hosting Operations status:
@@ -343,17 +374,15 @@ Current Hosting Operations status:
 - Phase 6 is complete.
 - Phase 7B is complete.
 - Phase 7C is complete.
+- Phase 7D is complete through 7D-9.
 
 Next recommended milestone:
-- Phase 7D — Multi-Page Import UI Entry
+- Phase 7E — Transformed Preview Quality / Raw-to-Transformed Bridge
 
-Phase 7D boundary:
-- Expose multi-page import through UI.
-- Add discovery, acquisition, and assembly controls.
-- Preserve operator workflow.
-- No public activation changes.
-- No CMS changes.
-- No commerce work.
+Phase 7E recommended focus:
+- Improve transformed preview quality.
+- Bridge raw multi-page route truth into transformed preview semantics.
+- Preserve raw preview as the source of truth for route-level inspection until transformed parity is explicitly proven.
 
 ## Bootstrap Runtime State (2026-06-03)
 
@@ -414,9 +443,10 @@ Migration-first reprioritization:
 - The Execution Artifact Runtime family is not currently part of the migration-critical path.
 
 Current migration platform continuation:
-- Phase 7D — Multi-Page Import UI Entry.
 - Phase 7B — Multi-Page Import MVP is complete.
 - Phase 7C — Discovery Expansion is complete.
+- Phase 7D — Multi-Page Raw Preview Correctness + Observability is complete through 7D-9.
+- Phase 7E — Transformed Preview Quality / Raw-to-Transformed Bridge is the next recommended phase.
 - Website OS runtime expansion remains paused.
 - Execution Artifact Runtime family remains outside the migration-critical path.
 
@@ -491,9 +521,10 @@ Future continuation:
 - Not currently part of the migration-critical path.
 
 Current migration platform continuation:
-- Phase 7D — Multi-Page Import UI Entry.
 - Phase 7B — Multi-Page Import MVP is complete.
 - Phase 7C — Discovery Expansion is complete.
+- Phase 7D — Multi-Page Raw Preview Correctness + Observability is complete through 7D-9.
+- Phase 7E — Transformed Preview Quality / Raw-to-Transformed Bridge is the next recommended phase.
 - Website OS runtime expansion remains paused.
 
 ## Execution Candidate Runtime Family v1 Milestone (2026-06-03)

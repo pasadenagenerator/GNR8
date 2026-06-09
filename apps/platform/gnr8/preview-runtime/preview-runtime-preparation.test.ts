@@ -472,3 +472,178 @@ test("family render mode is surfaced when deterministic family truth exists", ()
     [...new Set(prepared.summary.familyRenderDiagnostics)].sort((a, b) => a.localeCompare(b)),
   );
 });
+
+function transformedPage(input: {
+  siteVersionId: string;
+  pageId: string;
+  path: string;
+  title: string;
+  sections: Array<{ id: string; type: string; order: number; props: Record<string, unknown> }>;
+  headingFontFamily?: string;
+}) {
+  return {
+    id: `pv-${input.pageId}`,
+    siteVersionId: input.siteVersionId,
+    pageId: input.pageId,
+    path: input.path,
+    title: input.title,
+    structureModel: {
+      sections: input.sections.map((section) => ({
+        id: section.id,
+        type: section.type,
+        order: section.order,
+      })),
+    },
+    contentModel: {
+      sectionProps: Object.fromEntries(input.sections.map((section) => [section.id, section.props])),
+    },
+    styleTokens: {
+      ...(input.headingFontFamily
+        ? {
+            "typography.heading.fontFamily": input.headingFontFamily,
+            "typography.body.fontFamily": "Inter",
+            "typography.heading.source": "computed_style",
+          }
+        : {}),
+    },
+    assetGraph: [],
+    semanticSignals: [],
+    source: "migration",
+    actor: "test",
+    createdAt: "2026-06-09T00:00:00.000Z",
+  } as any;
+}
+
+function viroidocLikeTransformedSiteVersion() {
+  const siteVersionId = "sv-viroidoc-transformed";
+  const homeIntro = {
+    heading: "Advanced Research on Viroid Pathogenesis",
+    body: "We investigate viroids, plant disease mechanisms, and host-pathogen interactions.",
+  };
+  const latestNews = {
+    heading: "Latest News",
+    items: [
+      { title: "Paper accepted", body: "Research update" },
+      { title: "Conference talk", body: "Lab update" },
+    ],
+  };
+  return {
+    id: siteVersionId,
+    siteId: "site-viroidoc-transformed",
+    versionNo: 1,
+    state: "DRAFT",
+    source: "migration",
+    actor: "test",
+    createdAt: "2026-06-09T00:00:00.000Z",
+    rendererCompatibilityVersion: "gnr8-renderer-v1",
+    artifactId: null,
+    importProvenanceSummary: {
+      renderedCapture: { status: "available", nodeCount: 20, domLength: 2000 },
+      screenshotCount: 1,
+      multiPageDiscovery: {
+        rawArtifactAssembly: {
+          routeMap: [
+            { routePath: "/", rawFilePath: "pages/root/index.html" },
+            { routePath: "/news", rawFilePath: "pages/news/index.html" },
+            { routePath: "/blog", rawFilePath: "pages/blog/index.html" },
+            { routePath: "/project", rawFilePath: "pages/project/index.html" },
+          ],
+        },
+      },
+    },
+    pages: [
+      transformedPage({
+        siteVersionId,
+        pageId: "page-home",
+        path: "/",
+        title: "Home",
+        headingFontFamily: "Source Serif 4",
+        sections: [
+          { id: "home-intro-a", type: "hero", order: 0, props: homeIntro },
+          { id: "home-intro-b", type: "hero", order: 1, props: homeIntro },
+          { id: "home-intro-c", type: "hero", order: 2, props: homeIntro },
+          { id: "home-latest-news", type: "latest-news", order: 3, props: latestNews },
+        ],
+      }),
+      transformedPage({
+        siteVersionId,
+        pageId: "page-news",
+        path: "/news",
+        title: "News",
+        headingFontFamily: "Source Serif 4",
+        sections: [
+          { id: "news-home-intro-a", type: "hero", order: 0, props: homeIntro },
+          { id: "news-home-intro-b", type: "hero", order: 1, props: homeIntro },
+          { id: "news-listing", type: "news-listing", order: 2, props: { heading: "Full News Listing", items: latestNews.items } },
+        ],
+      }),
+      transformedPage({
+        siteVersionId,
+        pageId: "page-blog",
+        path: "/blog",
+        title: "Blog",
+        headingFontFamily: "Source Serif 4",
+        sections: [
+          { id: "blog-home-intro-a", type: "hero", order: 0, props: homeIntro },
+          { id: "blog-home-intro-b", type: "hero", order: 1, props: homeIntro },
+          { id: "blog-listing", type: "blog-listing", order: 2, props: { heading: "Blog Posts", items: latestNews.items } },
+        ],
+      }),
+      transformedPage({
+        siteVersionId,
+        pageId: "page-project",
+        path: "/project",
+        title: "Project",
+        headingFontFamily: "Source Serif 4",
+        sections: [
+          { id: "project-hero", type: "hero", order: 0, props: { heading: "Project", body: "Project page content only." } },
+          { id: "project-body", type: "content", order: 1, props: { heading: "Research Goals", body: "Project-specific material." } },
+        ],
+      }),
+    ],
+  } as any;
+}
+
+test("Viroidoc-like transformed home removes repeated intro blocks before latest news and preserves heading font evidence", () => {
+  const prepared = preparePreviewRuntime({
+    siteVersion: viroidocLikeTransformedSiteVersion(),
+    routePath: "/",
+  });
+  const home = prepared.finalSiteModel?.pages.find((page) => page.path === "/");
+  assert.deepEqual(home?.sections.map((section) => section.id), ["home-intro-a", "home-latest-news"]);
+
+  const assembly = prepared.summary.transformedAssemblyDiagnostics;
+  assert.equal(assembly?.selectedRoutePath, "/");
+  assert.equal(assembly?.selectedSourceRawFile, "pages/root/index.html");
+  assert.equal(assembly?.semanticSectionCount, 4);
+  assert.equal(assembly?.listingDetection.detected, true);
+  assert.equal(assembly?.listingDetection.sectionId, "home-latest-news");
+  assert.deepEqual(assembly?.removedDuplicateSectionIds, ["home-intro-b", "home-intro-c"]);
+  assert.equal(assembly?.repeatedSectionFingerprints[0]?.count, 3);
+  assert.equal(assembly?.headingStyleSource.source, "computed_style");
+  assert.equal(assembly?.headingStyleSource.headingFontFamily, "Source Serif 4");
+
+  const typographyTokens = Object.values(prepared.reactRenderSiteModel?.theme.tokenGroups.typography.tokens ?? {});
+  const headingToken = typographyTokens.find((token) => token.role === "heading");
+  assert.equal(headingToken?.family, "Source Serif 4");
+});
+
+test("Viroidoc-like transformed news/blog remove repeated home intro blocks while project remains isolated", () => {
+  const siteVersion = viroidocLikeTransformedSiteVersion();
+  const newsPrepared = preparePreviewRuntime({ siteVersion, routePath: "/news" });
+  const news = newsPrepared.finalSiteModel?.pages.find((page) => page.path === "/news");
+  assert.deepEqual(news?.sections.map((section) => section.id), ["news-home-intro-a", "news-listing"]);
+  assert.deepEqual(newsPrepared.summary.transformedAssemblyDiagnostics?.removedDuplicateSectionIds, ["news-home-intro-b"]);
+  assert.equal(newsPrepared.summary.transformedAssemblyDiagnostics?.listingDetection.sectionId, "news-listing");
+
+  const blogPrepared = preparePreviewRuntime({ siteVersion, routePath: "/blog" });
+  const blog = blogPrepared.finalSiteModel?.pages.find((page) => page.path === "/blog");
+  assert.deepEqual(blog?.sections.map((section) => section.id), ["blog-home-intro-a", "blog-listing"]);
+  assert.deepEqual(blogPrepared.summary.transformedAssemblyDiagnostics?.removedDuplicateSectionIds, ["blog-home-intro-b"]);
+
+  const projectPrepared = preparePreviewRuntime({ siteVersion, routePath: "/project" });
+  const project = projectPrepared.finalSiteModel?.pages.find((page) => page.path === "/project");
+  assert.deepEqual(project?.sections.map((section) => section.id), ["project-hero", "project-body"]);
+  assert.equal(projectPrepared.summary.transformedAssemblyDiagnostics?.listingDetection.detected, false);
+  assert.deepEqual(projectPrepared.summary.transformedAssemblyDiagnostics?.removedDuplicateSectionIds, []);
+});

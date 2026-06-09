@@ -1,4 +1,4 @@
-import type { CSSProperties, ReactNode } from "react";
+import React, { type CSSProperties, type ReactNode } from "react";
 
 import type { ReactRenderTheme } from "@/gnr8/renderer-contract";
 
@@ -68,18 +68,53 @@ function buildThemeCssVariables(theme: ReactRenderTheme): CSSProperties {
   return vars as CSSProperties;
 }
 
+function findTypographyTokenId(theme: ReactRenderTheme, role: "heading" | "body"): string | null {
+  const typographyTokens = (theme.tokenGroups.typography?.tokens ?? {}) as Record<string, unknown>;
+  const exact = Object.keys(typographyTokens)
+    .sort((a, b) => stringCmp(a, b))
+    .find((tokenId) => {
+      const token = typographyTokens[tokenId];
+      return Boolean(token && typeof token === "object" && (token as Record<string, unknown>).role === role);
+    });
+  if (exact) return exact;
+  return Object.keys(typographyTokens)
+    .sort((a, b) => stringCmp(a, b))
+    .find((tokenId) => sanitizeTokenKey(tokenId).includes(role)) ?? null;
+}
+
+function buildScopedTypographyCss(theme: ReactRenderTheme): string {
+  const headingTokenId = findTypographyTokenId(theme, "heading");
+  const bodyTokenId = findTypographyTokenId(theme, "body");
+  const rules: string[] = [];
+  if (bodyTokenId) {
+    const key = sanitizeTokenKey(bodyTokenId);
+    rules.push(
+      `[data-gnr8-theme-boundary="site"] { font-family: var(--gnr8-typography-${key}-family); font-size: var(--gnr8-typography-${key}-size-px); line-height: var(--gnr8-typography-${key}-line-height); }`,
+    );
+  }
+  if (headingTokenId) {
+    const key = sanitizeTokenKey(headingTokenId);
+    rules.push(
+      `[data-gnr8-theme-boundary="site"] :where(h1,h2,h3,h4,h5,h6) { font-family: var(--gnr8-typography-${key}-family); font-weight: var(--gnr8-typography-${key}-weight); line-height: var(--gnr8-typography-${key}-line-height); letter-spacing: var(--gnr8-typography-${key}-letter-spacing); }`,
+    );
+  }
+  return rules.join("\n");
+}
+
 export type ThemeProviderProps = {
   theme: ReactRenderTheme;
   children: ReactNode;
 };
 
 export function ThemeBoundaryProvider({ theme, children }: ThemeProviderProps) {
+  const typographyCss = buildScopedTypographyCss(theme);
   return (
     <div
       data-gnr8-theme-boundary="site"
       data-gnr8-theme-semantic-keys={Object.keys(theme.semanticTokens).sort((a, b) => stringCmp(a, b)).join(",")}
       style={buildThemeCssVariables(theme)}
     >
+      {typographyCss ? <style>{typographyCss}</style> : null}
       {children}
     </div>
   );

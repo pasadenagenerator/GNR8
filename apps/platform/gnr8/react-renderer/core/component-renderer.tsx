@@ -1,4 +1,4 @@
-import type { ReactElement } from "react";
+import React, { type ReactElement } from "react";
 
 import type { ReactRenderComponent, ReactRenderPage, ReactRenderSection } from "@/gnr8/renderer-contract";
 import { RenderGeneric } from "@/gnr8/react-renderer/components/RenderGeneric";

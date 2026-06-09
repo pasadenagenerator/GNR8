@@ -1,3 +1,4 @@
+import React from "react";
 import { resolveMediaFromSlot } from "@/gnr8/react-renderer/core/slot-utils";
 import type { RenderComponentImplementationProps } from "@/gnr8/react-renderer/types/renderer-runtime-types";
 

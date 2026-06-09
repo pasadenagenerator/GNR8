@@ -2,18 +2,18 @@
 
 This is the first file every new ChatGPT/Codex thread should read.
 
-## Current Active Track: Phase 7D — Multi-Page Import UI Entry
+## Current Active Track: Phase 7E — Transformed Preview Quality / Raw-to-Transformed Bridge
 
 Website OS branch status:
 - Closed/frozen/paused.
 - Do not continue Website OS runtime expansion unless explicitly requested.
 
 Latest completed milestone:
-- Phase 7C — Discovery Expansion.
+- Phase 7D — Multi-Page Raw Preview Correctness + Observability.
 - Status: COMPLETE.
-- Classification: A/B successful.
-- No architectural blockers.
-- Discovery expansion operational.
+- Complete through 7D-9.
+- No runtime behavior changes introduced.
+- No import logic changes introduced.
 
 Production smoke-test:
 - completed successfully.
@@ -39,6 +39,18 @@ Phase 7C real website validation:
 - Slovenia.info validation completed.
 - Discovery quality assessment completed.
 - Top-level navigation remains represented even under route limits on sitemap-heavy sites.
+
+Phase 7D production Viroidoc verification:
+- latest import run: `client-site-import-1780996748493`
+- siteVersionId reused deterministically: `e9257245-0256-4291-9989-66a33ee6741e`
+- artifactId: `f44a3f28-5635-4237-b73a-a33af993c73d`
+- acquired pages: 20
+- valid preview routes: 21
+- missing preview routes: 0
+- rewritten links: 39
+- root route is assembled as `root_entry` using `index.html`
+- raw multi-page preview links are separated from transformed preview
+- transformed preview remains semantic/fallback and is not the source of truth for route-level inspection
 
 Dedicated progress doc:
 - `docs/ai/MIGRATION_RUNTIME_PROGRESS.md`
@@ -70,6 +82,7 @@ Current completed chain:
 - Maver Production Validation
 - Multi-Page Import MVP
 - Discovery Expansion
+- Multi-Page Raw Preview Correctness + Observability
 
 Latest completed migration capabilities:
 - `MigrationBatchExecutor`
@@ -157,6 +170,13 @@ Latest completed migration capabilities:
 - seed-visible navigation protection
 - route-budget balancing
 - sitemap-heavy site protection
+- raw multi-page preview route correctness
+- raw multi-page preview observability
+- deterministic siteVersionId reuse verification
+- raw preview route coverage verification
+- raw preview link rewrite verification
+- root route assembly as `root_entry` from `index.html`
+- raw/transformed preview boundary clarification
 
 Completed migration-first chain:
 - Import
@@ -177,6 +197,7 @@ Completed migration-first chain:
 - Maver Production Validation
 - Multi-Page Import MVP
 - Discovery Expansion
+- Multi-Page Raw Preview Correctness + Observability
 
 Phase 6 completion notes:
 - Phase 6 is COMPLETE.
@@ -227,12 +248,28 @@ Phase 7C completion notes:
 - Discovery priority balancing now covers tiered route prioritization, seed-visible navigation protection, route-budget balancing, sitemap-heavy site protection, and operator diagnostics.
 - Key real-world outcome: top-level navigation remains represented even under route limits on sitemap-heavy sites.
 
+Phase 7D completion notes:
+- Phase 7D is COMPLETE through 7D-9.
+- Phase 7D final checkpoint validated multi-page raw preview correctness and observability in production.
+- Latest Viroidoc import run: `client-site-import-1780996748493`.
+- Deterministic siteVersionId reuse verified: `e9257245-0256-4291-9989-66a33ee6741e`.
+- Verified artifactId: `f44a3f28-5635-4237-b73a-a33af993c73d`.
+- Viroidoc acquired 20 pages.
+- Viroidoc produced 21 valid preview routes.
+- Viroidoc produced 0 missing preview routes.
+- Viroidoc rewrote 39 links.
+- Root route assembly is `root_entry` using `index.html`.
+- Raw multi-page preview links are separated from transformed preview.
+- Transformed preview remains semantic/fallback and is not the source of truth for route-level inspection.
+- No runtime behavior was changed.
+- No import logic was changed.
+
 Current critical path:
-- Phase 7D — Multi-Page Import UI Entry
+- Phase 7E — Transformed Preview Quality / Raw-to-Transformed Bridge
 - Billing
 
 Next recommended milestone:
-- Phase 7D — Multi-Page Import UI Entry.
+- Phase 7E — Transformed Preview Quality / Raw-to-Transformed Bridge.
 
 Explicit exclusions still in force:
 - no Website OS runtime expansion
@@ -272,7 +309,7 @@ Dedicated pause note:
 - Future continuation point: Execution Artifact Runtime family.
 - Execution Artifact Runtime family is not currently part of the migration-critical path.
 Next migration platform milestone:
-- Phase 7D — Multi-Page Import UI Entry.
+- Phase 7E — Transformed Preview Quality / Raw-to-Transformed Bridge.
 - Phase 5A completed Command Center integration for migration batches; execution remains operator-driven and queue/worker orchestration does not exist yet.
 - Phase 6A completed read-only hosting operations observability for Command Center; hosting overview/detail are operational and production smoke-tested.
 - Phase 6B completed Hosting Operations workflow review.
@@ -1175,16 +1212,18 @@ Hard boundaries remain:
 
 ## F) Current Active Implementation Phase
 
-Active phase: Phase 7D — Multi-Page Import UI Entry.
+Active phase: Phase 7E — Transformed Preview Quality / Raw-to-Transformed Bridge.
 
 Practical next phase:
-1. Expose multi-page import through UI.
-2. Add discovery controls.
-3. Add acquisition controls.
-4. Add assembly controls.
-5. Preserve operator workflow.
+1. Improve transformed preview quality.
+2. Bridge raw multi-page route truth into transformed preview semantics.
+3. Preserve raw preview as the source of truth for route-level inspection until transformed parity is explicitly proven.
+4. Keep raw multi-page preview links separated from transformed preview.
+5. Preserve operator workflow and observability.
 
-Phase 7D boundary:
+Phase 7E boundary:
+- Raw route-level inspection remains anchored to raw preview evidence.
+- Transformed preview remains semantic/fallback until parity is explicitly proven.
 - No public activation changes.
 - No CMS changes.
 - No commerce work.

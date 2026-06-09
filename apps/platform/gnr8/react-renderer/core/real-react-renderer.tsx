@@ -1,4 +1,4 @@
-import type { ReactElement } from "react";
+import React, { type ReactElement } from "react";
 
 import { resolveReactRenderSiteContent } from "@/gnr8/content-resolution";
 import type { ReactRenderComponent, ReactRenderPage, ReactRenderSiteModel, RenderDiagnostic } from "@/gnr8/renderer-contract";

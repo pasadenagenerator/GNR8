@@ -42,6 +42,22 @@ export type PreviewRuntimeSummary = {
     htmlByteLengthAfterRewrite: number;
     rewrittenLinkCount: number;
   };
+  transformedAssemblyDiagnostics?: {
+    selectedRoutePath: string;
+    selectedSourceRawFile: string | null;
+    semanticSectionCount: number;
+    repeatedSectionFingerprints: Array<{ fingerprint: string; count: number; sectionIds: string[] }>;
+    sharedHeaderFooterSectionCount: number;
+    listingDetection: { detected: boolean; sectionId: string | null; reason: string | null };
+    finalSectionOrder: Array<{ sectionId: string; type: string; order: number }>;
+    removedDuplicateSectionIds: string[];
+    headingStyleSource: {
+      source: string;
+      headingFontFamily: string | null;
+      bodyFontFamily: string | null;
+      routePath: string;
+    };
+  };
 };
 
 export type PreviewRuntimePreparationResult = {

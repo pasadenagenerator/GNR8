@@ -1,4 +1,4 @@
-import { Fragment, type ReactElement, type ReactNode } from "react";
+import React, { Fragment, type ReactElement, type ReactNode } from "react";
 
 import type { ReactRenderBoundValue, ReactRenderSlotValue } from "@/gnr8/renderer-contract";
 

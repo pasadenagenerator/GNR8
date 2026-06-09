@@ -19,6 +19,22 @@ function normalizeText(value: unknown): string {
   return String(value ?? "").trim();
 }
 
+type TransformedAssemblyDiagnostics = NonNullable<PreviewRuntimeSummary["transformedAssemblyDiagnostics"]>;
+
+type RuntimeSectionProjection = {
+  section: Record<string, unknown>;
+  sectionId: string;
+  sectionType: string;
+  order: number;
+  props: Record<string, unknown>;
+  fingerprint: string;
+};
+
+type RuntimePageProjection = {
+  sections: RuntimeSectionProjection[];
+  diagnostics: TransformedAssemblyDiagnostics;
+};
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
@@ -132,6 +148,176 @@ function pickSectionSlotValues(sectionProps: Record<string, unknown>): {
   );
 }
 
+function normalizeFingerprintText(value: unknown): string {
+  return normalizeText(value)
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 220);
+}
+
+function sectionTextForFingerprint(sectionProps: Record<string, unknown>): string {
+  const htmlSummary = isRecord(sectionProps.htmlSummary) ? sectionProps.htmlSummary : null;
+  return [
+    pickValue(sectionProps, ["heading", "headline", "title", "heroTitle"]),
+    pickValue(sectionProps, ["body", "description", "text", "copy", "subtitle", "heroBody"]),
+    normalizeText(htmlSummary?.extractedText),
+  ]
+    .filter(Boolean)
+    .join(" ");
+}
+
+function fingerprintSection(input: {
+  sectionType: string;
+  sectionProps: Record<string, unknown>;
+}): string {
+  const type = normalizeText(input.sectionType).toLowerCase() || "content";
+  const text = normalizeFingerprintText(sectionTextForFingerprint(input.sectionProps));
+  return `${type}:${text || "empty"}`;
+}
+
+function isSharedRegionSection(section: RuntimeSectionProjection): boolean {
+  const type = section.sectionType.toLowerCase();
+  return type.includes("header") || type.includes("navigation") || type.includes("footer");
+}
+
+function listingDetectionReason(section: RuntimeSectionProjection, routePath: string): string | null {
+  const type = section.sectionType.toLowerCase();
+  const text = normalizeFingerprintText(sectionTextForFingerprint(section.props));
+  if (/\b(news|blog|listing|latest)\b/.test(type)) return `type:${type}`;
+  if (/\b(latest news|news listing|full news|all news|blog|articles|publications|posts)\b/.test(text)) return "text:listing_terms";
+  const itemCount = Array.isArray(section.props.items) ? section.props.items.length : 0;
+  const cardsCount = Array.isArray(section.props.cards) ? section.props.cards.length : 0;
+  if ((routePath === "/news" || routePath === "/blog") && Math.max(itemCount, cardsCount) >= 2) return "route_listing_items";
+  return null;
+}
+
+function isIntroLikeBeforeListing(section: RuntimeSectionProjection): boolean {
+  const type = section.sectionType.toLowerCase();
+  if (isSharedRegionSection(section)) return false;
+  if (type.includes("hero") || type.includes("intro") || type.includes("content")) return true;
+  const text = normalizeFingerprintText(sectionTextForFingerprint(section.props));
+  return text.length > 0 && text.length <= 220;
+}
+
+function resolveSelectedRawFile(input: {
+  siteVersion: PreviewRuntimePreparationInput["siteVersion"];
+  routePath: string;
+}): string | null {
+  const routeMap = input.siteVersion.importProvenanceSummary?.multiPageDiscovery?.rawArtifactAssembly?.routeMap ?? [];
+  const match = routeMap.find((entry) => normalizePagePath(entry.routePath) === input.routePath);
+  if (match?.rawFilePath) return match.rawFilePath;
+  if (input.routePath === "/") {
+    const entryPath = input.siteVersion.importProvenanceSummary?.captureEvidence?.entryHtmlPath ?? null;
+    return normalizeText(entryPath) || null;
+  }
+  return null;
+}
+
+function resolveHeadingStyleSource(input: {
+  page: PreviewRuntimePreparationInput["siteVersion"]["pages"][number];
+  routePath: string;
+}): TransformedAssemblyDiagnostics["headingStyleSource"] {
+  const styleTokens = input.page.styleTokens ?? {};
+  const headingFontFamily = normalizeText(styleTokens["typography.heading.fontFamily"]) || null;
+  const bodyFontFamily = normalizeText(styleTokens["typography.body.fontFamily"]) || null;
+  const source = normalizeText(styleTokens["typography.heading.source"]) || (headingFontFamily ? "style_token" : "fallback_missing");
+  return {
+    source,
+    headingFontFamily,
+    bodyFontFamily,
+    routePath: input.routePath,
+  };
+}
+
+function projectRuntimePageSections(input: {
+  page: PreviewRuntimePreparationInput["siteVersion"]["pages"][number];
+  siteVersion: PreviewRuntimePreparationInput["siteVersion"];
+}): RuntimePageProjection {
+  const routePath = normalizePagePath(input.page.path);
+  const structure = isRecord(input.page.structureModel) ? input.page.structureModel : {};
+  const rawSections = Array.isArray((structure as { sections?: unknown }).sections) ? (structure as { sections: unknown[] }).sections : [];
+  const content = isRecord(input.page.contentModel) ? input.page.contentModel : {};
+  const sectionPropsById = isRecord((content as { sectionProps?: unknown }).sectionProps)
+    ? ((content as { sectionProps: Record<string, unknown> }).sectionProps)
+    : {};
+
+  const projected = rawSections
+    .map((section, index): RuntimeSectionProjection => {
+      const sectionRecord = isRecord(section) ? section : {};
+      const sectionId = normalizeText(sectionRecord.id) || deterministicId("final_section", `${input.page.pageId}:${index}`);
+      const sectionType = toSectionType(sectionRecord);
+      const rawSectionProps = sectionPropsById[sectionId];
+      const props = isRecord(rawSectionProps) ? rawSectionProps : {};
+      const order = Number.isFinite(Number(sectionRecord.order)) ? Number(sectionRecord.order) : index;
+      return {
+        section: sectionRecord,
+        sectionId,
+        sectionType,
+        order,
+        props,
+        fingerprint: fingerprintSection({ sectionType, sectionProps: props }),
+      };
+    })
+    .sort((a, b) => a.order - b.order || a.sectionId.localeCompare(b.sectionId));
+
+  const fingerprintGroups = new Map<string, RuntimeSectionProjection[]>();
+  for (const section of projected) {
+    if (section.fingerprint.endsWith(":empty")) continue;
+    fingerprintGroups.set(section.fingerprint, [...(fingerprintGroups.get(section.fingerprint) ?? []), section]);
+  }
+  const repeatedSectionFingerprints = [...fingerprintGroups.entries()]
+    .filter(([, sections]) => sections.length > 1)
+    .sort((a, b) => a[0].localeCompare(b[0]))
+    .map(([fingerprint, sections]) => ({
+      fingerprint,
+      count: sections.length,
+      sectionIds: sections.map((section) => section.sectionId).sort((a, b) => a.localeCompare(b)),
+    }));
+
+  const listing = projected
+    .map((section, index) => ({ section, index, reason: listingDetectionReason(section, routePath) }))
+    .find((entry) => entry.reason != null);
+
+  const removedDuplicateSectionIds = new Set<string>();
+  if (listing) {
+    const seenIntroFingerprints = new Set<string>();
+    for (const section of projected.slice(0, listing.index)) {
+      if (!isIntroLikeBeforeListing(section)) continue;
+      if (!repeatedSectionFingerprints.some((entry) => entry.fingerprint === section.fingerprint)) continue;
+      if (seenIntroFingerprints.has(section.fingerprint)) {
+        removedDuplicateSectionIds.add(section.sectionId);
+        continue;
+      }
+      seenIntroFingerprints.add(section.fingerprint);
+    }
+  }
+
+  const sections = projected.filter((section) => !removedDuplicateSectionIds.has(section.sectionId));
+  const diagnostics: TransformedAssemblyDiagnostics = {
+    selectedRoutePath: routePath,
+    selectedSourceRawFile: resolveSelectedRawFile({ siteVersion: input.siteVersion, routePath }),
+    semanticSectionCount: rawSections.length,
+    repeatedSectionFingerprints,
+    sharedHeaderFooterSectionCount: projected.filter(isSharedRegionSection).length,
+    listingDetection: {
+      detected: Boolean(listing),
+      sectionId: listing?.section.sectionId ?? null,
+      reason: listing?.reason ?? null,
+    },
+    finalSectionOrder: sections.map((section) => ({
+      sectionId: section.sectionId,
+      type: section.sectionType,
+      order: section.order,
+    })),
+    removedDuplicateSectionIds: [...removedDuplicateSectionIds].sort((a, b) => a.localeCompare(b)),
+    headingStyleSource: resolveHeadingStyleSource({ page: input.page, routePath }),
+  };
+
+  return { sections, diagnostics };
+}
+
 function slotKeysForKind(kind: FinalSiteModel["pages"][number]["sections"][number]["components"][number]["kind"]): string[] {
   switch (kind) {
     case "hero":
@@ -184,24 +370,24 @@ function mapPageToFinalPage(input: {
   page: CanonicalPageVersionSnapshot;
   siteId: string;
   pageOrder: number;
+  siteVersion: PreviewRuntimePreparationInput["siteVersion"];
+  projection?: RuntimePageProjection;
 }): FinalSiteModel["pages"][number] {
-  const structure = isRecord(input.page.structureModel) ? input.page.structureModel : {};
-  const sections = Array.isArray((structure as { sections?: unknown }).sections) ? (structure as { sections: unknown[] }).sections : [];
-  const content = isRecord(input.page.contentModel) ? input.page.contentModel : {};
-  const sectionPropsById = isRecord((content as { sectionProps?: unknown }).sectionProps)
-    ? ((content as { sectionProps: Record<string, unknown> }).sectionProps)
-    : {};
+  const projected =
+    input.projection ??
+    projectRuntimePageSections({
+      page: input.page,
+      siteVersion: input.siteVersion,
+    });
 
-  const finalSections: FinalSiteModel["pages"][number]["sections"] = sections
+  const finalSections: FinalSiteModel["pages"][number]["sections"] = projected.sections
     .map((section, index) => {
-      const sectionRecord = isRecord(section) ? section : {};
-      const sectionId = normalizeText(sectionRecord.id) || deterministicId("final_section", `${input.page.pageId}:${index}`);
-      const sectionType = toSectionType(sectionRecord);
+      const sectionId = section.sectionId;
+      const sectionType = section.sectionType;
       const componentKind = inferComponentKind(sectionType);
       const componentId = deterministicId("final_component", `${sectionId}:primary`);
 
-      const rawSectionProps = sectionPropsById[sectionId];
-      const sectionProps = isRecord(rawSectionProps) ? rawSectionProps : {};
+      const sectionProps = section.props;
       const slotValues = pickSectionSlotValues(sectionProps);
       const slotKeys = slotKeysForKind(componentKind);
       const slots = slotKeys.map((slotKey) => ({
@@ -241,7 +427,7 @@ function mapPageToFinalPage(input: {
         pageId: input.page.pageId,
         semanticRole: inferSemanticRole(sectionType),
         layoutRole: inferLayoutRole(sectionType),
-        order: Number.isFinite(Number(sectionRecord.order)) ? Number(sectionRecord.order) : index,
+        order: Number.isFinite(section.order) ? section.order : index,
         components: [
           {
             id: componentId,
@@ -259,6 +445,9 @@ function mapPageToFinalPage(input: {
                 sectionType,
                 resolvedSlotValues,
                 resolvedContentById,
+                transformedAssembly: {
+                  fingerprint: section.fingerprint,
+                },
               },
             },
             provenance: {
@@ -307,20 +496,31 @@ function mapPageToFinalPage(input: {
   };
 }
 
-function buildFinalSiteModelFromRuntimeSiteVersion(input: PreviewRuntimePreparationInput): FinalSiteModel | null {
+function buildFinalSiteModelFromRuntimeSiteVersion(input: PreviewRuntimePreparationInput): {
+  finalSiteModel: FinalSiteModel | null;
+  transformedAssemblyDiagnosticsByRoute: Record<string, TransformedAssemblyDiagnostics>;
+} {
+  const transformedAssemblyDiagnosticsByRoute: Record<string, TransformedAssemblyDiagnostics> = {};
   const pages = [...input.siteVersion.pages]
     .sort((a, b) => normalizePagePath(a.path).localeCompare(normalizePagePath(b.path)) || a.pageId.localeCompare(b.pageId))
-    .map((page, index) =>
-      mapPageToFinalPage({
+    .map((page, index) => {
+      const projection = projectRuntimePageSections({
+        page,
+        siteVersion: input.siteVersion,
+      });
+      transformedAssemblyDiagnosticsByRoute[normalizePagePath(page.path)] = projection.diagnostics;
+      return mapPageToFinalPage({
         page,
         siteId: input.siteVersion.siteId,
         pageOrder: index,
-      }),
-    );
+        siteVersion: input.siteVersion,
+        projection,
+      });
+    });
 
-  if (pages.length === 0) return null;
+  if (pages.length === 0) return { finalSiteModel: null, transformedAssemblyDiagnosticsByRoute };
   const totalSections = pages.reduce((sum, page) => sum + page.sections.length, 0);
-  if (totalSections === 0) return null;
+  if (totalSections === 0) return { finalSiteModel: null, transformedAssemblyDiagnosticsByRoute };
 
   const sortedRoutes = pages
     .map((page, index) => ({
@@ -338,7 +538,14 @@ function buildFinalSiteModelFromRuntimeSiteVersion(input: PreviewRuntimePreparat
   const primaryBackground = pages[0]?.title ? "#ffffff" : "#f8fafc";
   const primaryText = "#111827";
 
+  const firstPageStyleTokens = input.siteVersion.pages
+    .slice()
+    .sort((a, b) => normalizePagePath(a.path).localeCompare(normalizePagePath(b.path)) || a.pageId.localeCompare(b.pageId))[0]?.styleTokens ?? {};
+  const headingFamily = normalizeText(firstPageStyleTokens["typography.heading.fontFamily"]);
+  const bodyFamily = normalizeText(firstPageStyleTokens["typography.body.fontFamily"]) || headingFamily;
+
   return {
+    finalSiteModel: {
     site: {
       id: input.siteVersion.siteId,
       locale: "en",
@@ -387,7 +594,50 @@ function buildFinalSiteModelFromRuntimeSiteVersion(input: PreviewRuntimePreparat
           ],
         },
       ],
-      typography: [],
+      typography: [
+        ...(headingFamily
+          ? [
+              {
+                id: deterministicId("typography", "heading"),
+                role: "heading",
+                family: headingFamily,
+                weight: 700,
+                sizePx: 42,
+                lineHeight: 1.12,
+                letterSpacing: 0,
+                provenance: [
+                  {
+                    source: "import" as const,
+                    sourceId: input.siteVersion.id,
+                    rationale: "Heading typography projected from transformed preview style tokens.",
+                    confidence: 0.9,
+                  },
+                ],
+              },
+            ]
+          : []),
+        ...(bodyFamily
+          ? [
+              {
+                id: deterministicId("typography", "body"),
+                role: "body",
+                family: bodyFamily,
+                weight: 400,
+                sizePx: 16,
+                lineHeight: 1.55,
+                letterSpacing: 0,
+                provenance: [
+                  {
+                    source: "import" as const,
+                    sourceId: input.siteVersion.id,
+                    rationale: "Body typography projected from transformed preview style tokens.",
+                    confidence: 0.85,
+                  },
+                ],
+              },
+            ]
+          : []),
+      ],
       spacing: [],
       surface: {
         radiusScalePx: [0, 4, 8, 12],
@@ -431,6 +681,8 @@ function buildFinalSiteModelFromRuntimeSiteVersion(input: PreviewRuntimePreparat
     reusableComponents: [],
     diagnostics: [],
     conflicts: [],
+    },
+    transformedAssemblyDiagnosticsByRoute,
   };
 }
 
@@ -441,6 +693,7 @@ function toSummary(input: {
   rendererResult: PreviewRuntimePreparationResult["rendererResult"];
   diagnostics: string[];
   familyRender: FamilyRenderPreparationResult | null;
+  transformedAssemblyDiagnostics?: TransformedAssemblyDiagnostics | null;
 }): PreviewRuntimeSummary {
   const familyRenderDiagnostics = diagnosticsCodes(input.familyRender?.diagnostics ?? []);
   const familyRenderMode = input.familyRender?.selectedMode ?? "page_fallback";
@@ -462,6 +715,7 @@ function toSummary(input: {
     contentResolutionDegraded: Boolean(input.rendererResult?.contentResolutionDegraded),
     contentResolutionDiagnostics: [...new Set(input.rendererResult?.contentResolutionDiagnostics ?? [])].sort((a, b) => a.localeCompare(b)),
     previewDiagnostics: input.diagnostics,
+    ...(input.transformedAssemblyDiagnostics ? { transformedAssemblyDiagnostics: input.transformedAssemblyDiagnostics } : {}),
   };
 }
 
@@ -487,7 +741,9 @@ function hasRenderedCaptureAvailable(input: PreviewRuntimePreparationInput): boo
 export function preparePreviewRuntime(input: PreviewRuntimePreparationInput): PreviewRuntimePreparationResult {
   const diagnostics: string[] = [PREVIEW_RUNTIME_DIAGNOSTIC.PREPARATION_STARTED];
   const routePath = normalizePagePath(input.routePath);
-  let finalSiteModel = buildFinalSiteModelFromRuntimeSiteVersion(input);
+  const runtimeProjection = buildFinalSiteModelFromRuntimeSiteVersion(input);
+  let finalSiteModel = runtimeProjection.finalSiteModel;
+  const transformedAssemblyDiagnostics = runtimeProjection.transformedAssemblyDiagnosticsByRoute[routePath] ?? null;
   let familyRenderPreparation: FamilyRenderPreparationResult | null = null;
 
   if (finalSiteModel) {
@@ -609,6 +865,7 @@ export function preparePreviewRuntime(input: PreviewRuntimePreparationInput): Pr
     rendererResult: prepared.rendererResult,
     diagnostics: prepared.diagnostics,
     familyRender: familyRenderPreparation,
+    transformedAssemblyDiagnostics,
   });
 
   return prepared;

@@ -1,4 +1,4 @@
-import type { ReactElement } from "react";
+import React, { type ReactElement } from "react";
 
 import type { ReactRenderGlobalRegion, RenderDiagnostic } from "@/gnr8/renderer-contract";
 import { RenderNotFound } from "@/gnr8/react-renderer/components/RenderNotFound";

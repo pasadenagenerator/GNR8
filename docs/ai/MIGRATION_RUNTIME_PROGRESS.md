@@ -6,7 +6,7 @@ Track migration-first MVP runtime progress separately from Website OS work.
 
 ## Current Status
 
-Migration Runtime + Command Center MVP is operational and smoke-tested through Phase 7C.
+Migration Runtime + Command Center MVP is operational and smoke-tested through Phase 7D.
 
 Phase 5A adds Command Center migration batch list/detail UI, batch summary, diagnostics, failure reporting, timeline visibility, and operator run/resume controls. Execution remains operator-driven. Queue/worker orchestration and unattended execution do not exist yet.
 
@@ -39,11 +39,17 @@ Phase 7C classification is A/B successful.
 Phase 7C has no architectural blockers.
 Discovery expansion is operational.
 
+Phase 7D completes Multi-Page Raw Preview Correctness + Observability through 7D-9, including production Viroidoc verification, deterministic siteVersionId reuse verification, raw preview route coverage verification, raw link rewrite verification, root route assembly verification, and raw/transformed preview boundary clarification.
+
+Phase 7D is COMPLETE through 7D-9.
+Phase 7D introduced no runtime behavior changes.
+Phase 7D introduced no import logic changes.
+
 Website OS runtime expansion remains paused.
 
 ## Critical Path
 
-Import -> CMS -> Renderer -> Durable Jobs -> Durable Batches -> Batch Execution -> Batch Execution Observability -> Command Center -> Hosting Operations -> Hosting Hardening -> Multi-Page Import MVP -> Discovery Expansion -> Phase 7D Multi-Page Import UI Entry -> Billing
+Import -> CMS -> Renderer -> Durable Jobs -> Durable Batches -> Batch Execution -> Batch Execution Observability -> Command Center -> Hosting Operations -> Hosting Hardening -> Multi-Page Import MVP -> Discovery Expansion -> Multi-Page Raw Preview Correctness + Observability -> Phase 7E Transformed Preview Quality / Raw-to-Transformed Bridge -> Billing
 
 ## Completed Reality Checks
 
@@ -612,17 +618,49 @@ Status:
 - Discovery expansion operational.
 
 Next active phase:
-- PHASE 7D — MULTI-PAGE IMPORT UI ENTRY.
+- PHASE 7E — TRANSFORMED PREVIEW QUALITY / RAW-TO-TRANSFORMED BRIDGE.
 
-Phase 7D scope:
-- expose multi-page import through UI
-- discovery controls
-- acquisition controls
-- assembly controls
-- operator workflow
-- no public activation changes
-- no CMS changes
-- no commerce work
+### Phase 7D — Multi-Page Raw Preview Correctness + Observability
+
+Goal:
+- Finalize raw multi-page preview correctness and observability so route-level inspection is anchored to raw preview evidence, not transformed preview fallback.
+
+Completed:
+- 7D-1 through 7D-9.
+- Production Viroidoc raw preview verification.
+- Deterministic siteVersionId reuse verification.
+- Raw preview route coverage verification.
+- Raw preview link rewrite verification.
+- Root route assembly verification.
+- Raw/transformed preview boundary clarification.
+
+Production Viroidoc verification:
+- latest import run: `client-site-import-1780996748493`
+- siteVersionId reused deterministically: `e9257245-0256-4291-9989-66a33ee6741e`
+- artifactId: `f44a3f28-5635-4237-b73a-a33af993c73d`
+- acquired pages: 20
+- valid preview routes: 21
+- missing preview routes: 0
+- rewritten links: 39
+
+Confirmed behavior:
+- The root route is assembled as `root_entry` using `index.html`.
+- Raw multi-page preview links are separated from transformed preview.
+- Transformed preview remains semantic/fallback.
+- Transformed preview is not the source of truth for route-level inspection.
+
+Boundary:
+- No runtime behavior changed.
+- No import logic changed.
+- No public activation changes.
+- No CMS changes.
+- No commerce work.
+
+Status:
+- Phase 7D COMPLETE through 7D-9.
+
+Next recommended phase:
+- Phase 7E — Transformed Preview Quality / Raw-to-Transformed Bridge.
 
 ## Current State
 
@@ -638,18 +676,20 @@ Completed:
 - Phase 6D
 - Phase 7B
 - Phase 7C
+- Phase 7D
 
 Hosting Operations MVP complete.
 Hosting Hardening complete.
 Phase 6 complete.
 Phase 7B complete.
 Phase 7C complete.
+Phase 7D complete through 7D-9.
 
 ## Current Remaining Work
 
 ### Near-term
 
-- Phase 7D — Multi-Page Import UI Entry
+- Phase 7E — Transformed Preview Quality / Raw-to-Transformed Bridge
 - Billing Reality Check
 
 ### Optional Runtime UX
