@@ -17,3 +17,19 @@ test('Site Workspace preview view exposes raw-template Preview Diagnostics contr
   assert.equal(source.includes('rawPreviewDiagnostics.links.map'), true)
   assert.equal(source.includes('link.href'), true)
 })
+
+test('Site Workspace labels import version metadata and preview modes distinctly', async () => {
+  const source = await readFile(PAGE_FILE, 'utf8')
+
+  assert.equal(source.includes('Latest Import Run ID'), true)
+  assert.equal(source.includes('Latest Import siteVersionId'), true)
+  assert.equal(source.includes('Latest Import artifactId'), true)
+  assert.equal(source.includes('Selected Workspace siteVersionId'), true)
+  assert.equal(source.includes('Transformed Preview'), true)
+  assert.equal(source.includes('Raw Multi-Page Preview'), true)
+  assert.equal(source.includes('Public/Published Preview'), true)
+  assert.equal(source.includes('Root Raw Multi-Page Preview URL'), true)
+  assert.equal(source.includes('First Child Raw Multi-Page Preview URL'), true)
+  assert.equal(source.includes('Preview Mode Warning'), true)
+  assert.equal(source.includes('Open Public/Published Preview'), true)
+})

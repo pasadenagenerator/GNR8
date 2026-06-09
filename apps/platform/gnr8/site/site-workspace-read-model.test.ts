@@ -534,6 +534,59 @@ test('same-import arbitration diagnostics include read-model alignment when rend
   assert.ok(selection.diagnostics.includes('PRIMARY_RENDERED_RUN_ALIGNED_TO_READMODEL'))
 })
 
+test('version visibility exposes latest import metadata when selected workspace version is older', () => {
+  const visibility = __siteWorkspaceReadModelTestUtils.buildRuntimeVersionVisibility({
+    latestImportRow: {
+      id: 'latest-import-version',
+      site_id: 'runtime-site-latest',
+      ownership_site_id: SITE_ID,
+      state: 'DRAFT',
+      version_no: 12,
+      import_provenance_summary: runtimeSummaryFixture({
+        requestId: 'client-site-import-20260609',
+        sourceMode: 'raw_html_fallback',
+        renderedCaptureStatus: 'failed',
+        renderedDomQuality: 'unusable',
+        nodeCount: 0,
+        screenshotCount: 0,
+      }),
+      artifact_id: 'latest-artifact',
+      created_at: '2026-06-09T08:00:00.000Z',
+      updated_at: '2026-06-09T08:01:00.000Z',
+    } as any,
+    selectedWorkspaceRow: {
+      id: 'older-transformed-version',
+      site_id: 'runtime-site-older',
+      ownership_site_id: SITE_ID,
+      state: 'DRAFT',
+      version_no: 11,
+      import_provenance_summary: runtimeSummaryFixture({
+        requestId: 'client-site-import-20260608',
+        sourceMode: 'rendered_dom',
+        renderedCaptureStatus: 'available',
+        renderedDomQuality: 'strong',
+        nodeCount: 80,
+        screenshotCount: 2,
+      }),
+      artifact_id: 'older-artifact',
+      created_at: '2026-06-08T08:00:00.000Z',
+      updated_at: '2026-06-08T08:01:00.000Z',
+    } as any,
+    latestImportArtifactId: 'latest-artifact',
+    selectedArtifactId: 'older-artifact',
+  })
+
+  assert.equal(visibility.latestImportRunId, 'client-site-import-20260609')
+  assert.equal(visibility.latestImportSiteVersionId, 'latest-import-version')
+  assert.equal(visibility.latestImportArtifactId, 'latest-artifact')
+  assert.equal(visibility.latestImportCreatedAt, '2026-06-09T08:00:00.000Z')
+  assert.equal(visibility.latestImportUpdatedAt, '2026-06-09T08:01:00.000Z')
+  assert.equal(visibility.selectedWorkspaceSiteVersionId, 'older-transformed-version')
+  assert.equal(visibility.selectedWorkspaceArtifactId, 'older-artifact')
+  assert.equal(visibility.selectedMatchesLatestImport, false)
+  assert.equal(visibility.selectionLabel, 'transformed_preview_selected_older_runtime')
+})
+
 test('import fidelity signals are parsed from semantic signal labels', () => {
   const parsed = __siteWorkspaceReadModelTestUtils.parseImportFidelitySignals([
     {

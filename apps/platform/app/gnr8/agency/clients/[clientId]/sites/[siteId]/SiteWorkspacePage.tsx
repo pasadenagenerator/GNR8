@@ -17,7 +17,11 @@ import {
   ResolveCurrentAgencyError,
 } from '@/src/auth/resolve-current-agency'
 import { canPerformAction } from '@/src/auth/rbac'
-import { buildMultiPageRawTemplatePreviewDiagnostics, buildMultiPageRawTemplatePreviewLinks } from '@/gnr8/site/site-multipage-preview-links'
+import {
+  buildMultiPageRawTemplatePreviewDiagnostics,
+  buildMultiPageRawTemplatePreviewLinks,
+  buildPreviewModeGuardrailWarning,
+} from '@/gnr8/site/site-multipage-preview-links'
 import { hasMultiPageImportOperatorSignal } from '@/gnr8/site/site-multipage-operator-signal'
 
 type SearchParams = {
@@ -82,6 +86,16 @@ function renderOverviewContent(props: {
           Status: <strong>{readModel.overview.statusLabel.replace('_', ' ')}</strong>
           {readModel.pipeline.latestRunAt ? ` · Last run: ${new Date(readModel.pipeline.latestRunAt).toLocaleString()}` : ''}
         </p>
+        <div style={{ marginTop: 10, display: 'grid', gap: 4, color: '#334155', fontSize: 12 }}>
+          <div>Latest Import Run ID: {readModel.pipeline.importVersion.latestImportRunId ?? 'n/a'}</div>
+          <div>Latest Import siteVersionId: {readModel.pipeline.importVersion.latestImportSiteVersionId ?? 'n/a'}</div>
+          <div>Latest Import artifactId: {readModel.pipeline.importVersion.latestImportArtifactId ?? 'n/a'}</div>
+          <div>Latest Import createdAt: {formatTimestamp(readModel.pipeline.importVersion.latestImportCreatedAt)}</div>
+          <div>Latest Import updatedAt: {formatTimestamp(readModel.pipeline.importVersion.latestImportUpdatedAt)}</div>
+          <div>Selected Workspace siteVersionId: {readModel.pipeline.importVersion.selectedWorkspaceSiteVersionId ?? 'n/a'}</div>
+          <div>Selected Workspace artifactId: {readModel.pipeline.importVersion.selectedWorkspaceArtifactId ?? 'n/a'}</div>
+          <div>Workspace Version Selection: {readModel.pipeline.importVersion.selectionLabel}</div>
+        </div>
       </section>
 
       <section style={sectionCardStyle()}>
@@ -283,6 +297,10 @@ function renderMetric(label: string, value: string | number): ReactNode {
   )
 }
 
+function formatTimestamp(value: string | null): string {
+  return value ? new Date(value).toLocaleString() : 'n/a'
+}
+
 type DiscoveryPriorityTierOperatorRow = {
   tier: string
   candidateCount: number
@@ -316,9 +334,14 @@ function renderMessageList(title: string, items: string[], tone: 'warning' | 'bl
 function renderMultiPageImportOperatorContent(readModel: Awaited<ReturnType<typeof getSiteWorkspaceReadModelForPage>>): ReactNode {
   if (!readModel) return null
   const summary = readModel.multiPageImport
+  const rawPreviewSiteVersionId = readModel.pipeline.importVersion.latestImportSiteVersionId ?? readModel.pipeline.latestRuntimeSiteVersionId
   const previewLinks = buildMultiPageRawTemplatePreviewLinks({
-    siteVersionId: readModel.pipeline.latestRuntimeSiteVersionId,
+    siteVersionId: rawPreviewSiteVersionId,
     routes: summary.routes,
+  })
+  const previewModeGuardrailWarning = buildPreviewModeGuardrailWarning({
+    workspacePreviewUrl: readModel.preview.previewUrl,
+    rawPreviewLinks: previewLinks,
   })
   const priorityBalance = summary.overview.discoveryPriorityBalancing
   const priorityTierRows: DiscoveryPriorityTierOperatorRow[] = priorityBalance.tiers
@@ -360,6 +383,18 @@ function renderMultiPageImportOperatorContent(readModel: Awaited<ReturnType<type
           {renderMetric('Validation', summary.overview.validation.status)}
         </div>
 
+        <div style={{ border: '1px solid #e2e8f0', borderRadius: 8, background: '#f8fafc', padding: '8px 10px', color: '#334155', fontSize: 12 }}>
+          <strong style={{ color: '#0f172a' }}>Raw Multi-Page Preview Version:</strong>{' '}
+          selected siteVersionId {rawPreviewSiteVersionId ?? 'n/a'} · latest import run {readModel.pipeline.importVersion.latestImportRunId ?? 'n/a'} · artifact{' '}
+          {readModel.pipeline.importVersion.latestImportArtifactId ?? 'n/a'}
+        </div>
+
+        {previewModeGuardrailWarning ? (
+          <div style={{ border: '1px solid #fde68a', borderRadius: 8, background: '#fffbeb', padding: '8px 10px', color: '#92400e', fontSize: 12 }}>
+            <strong style={{ color: '#78350f' }}>Preview Mode Warning:</strong> {previewModeGuardrailWarning.message}
+          </div>
+        ) : null}
+
         {summary.overview.sitemapDiscovery.warnings.length > 0 ? (
           <div style={{ border: '1px solid #fde68a', borderRadius: 8, background: '#fffbeb', padding: '8px 10px', color: '#92400e', fontSize: 12 }}>
             <strong style={{ color: '#78350f' }}>Sitemap Discovery:</strong> {summary.overview.sitemapDiscovery.warnings.join(' ')}
@@ -384,12 +419,21 @@ function renderMultiPageImportOperatorContent(readModel: Awaited<ReturnType<type
         </div>
 
         {previewLinks.length > 0 ? (
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            {previewLinks.map((link) => (
-              <a key={`${link.label}:${link.routePath}`} href={link.href} target='_blank' rel='noreferrer' style={quickActionStyle()}>
-                {link.label}
-              </a>
-            ))}
+          <div style={{ display: 'grid', gap: 8 }}>
+            <div style={{ display: 'grid', gap: 4, fontSize: 12, color: '#334155' }}>
+              {previewLinks.map((link, index) => (
+                <div key={`${link.label}:${link.routePath}:url`}>
+                  {index === 0 ? 'Root Raw Multi-Page Preview URL' : 'First Child Raw Multi-Page Preview URL'}: {link.href}
+                </div>
+              ))}
+            </div>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              {previewLinks.map((link) => (
+                <a key={`${link.label}:${link.routePath}`} href={link.href} target='_blank' rel='noreferrer' style={quickActionStyle()}>
+                  {link.label}
+                </a>
+              ))}
+            </div>
           </div>
         ) : null}
 
@@ -615,8 +659,17 @@ function renderPreviewContent(readModel: Awaited<ReturnType<typeof getSiteWorksp
               : 'canonical'
   const familyRenderModeLabel = readModel.preview.familyRenderMode ?? 'unavailable'
   const familyRenderDiagnostics = readModel.preview.familyRenderDiagnostics
+  const rawPreviewSiteVersionId = readModel.pipeline.importVersion.latestImportSiteVersionId ?? readModel.pipeline.latestRuntimeSiteVersionId
+  const rawPreviewLinks = buildMultiPageRawTemplatePreviewLinks({
+    siteVersionId: rawPreviewSiteVersionId,
+    routes: readModel.multiPageImport.routes,
+  })
+  const previewModeGuardrailWarning = buildPreviewModeGuardrailWarning({
+    workspacePreviewUrl: readModel.preview.previewUrl,
+    rawPreviewLinks,
+  })
   const rawPreviewDiagnostics = buildMultiPageRawTemplatePreviewDiagnostics({
-    siteVersionId: readModel.pipeline.latestRuntimeSiteVersionId,
+    siteVersionId: rawPreviewSiteVersionId,
     routes: readModel.multiPageImport.routes,
     rawTemplatePreviewEvidence: readModel.preview.previewRuntimeSummary?.rawTemplatePreviewEvidence ?? null,
   })
@@ -636,6 +689,54 @@ function renderPreviewContent(readModel: Awaited<ReturnType<typeof getSiteWorksp
       <p style={{ margin: '6px 0 0', color: '#334155', fontSize: 12 }}>
         Preview mode: <strong>{previewModeLabel}</strong>
       </p>
+      <div style={{ margin: '8px 0 0', border: '1px solid #e2e8f0', borderRadius: 8, padding: 10, background: '#f8fafc' }}>
+        <div style={{ margin: 0, color: '#0f172a', fontSize: 12, fontWeight: 700 }}>Transformed Preview</div>
+        <div style={{ marginTop: 6, display: 'grid', gap: 4, color: '#334155', fontSize: 12 }}>
+          <div>Mode: transformed</div>
+          <div>Selected Workspace siteVersionId: {readModel.pipeline.importVersion.selectedWorkspaceSiteVersionId ?? 'n/a'}</div>
+          <div>Selected Workspace artifactId: {readModel.pipeline.importVersion.selectedWorkspaceArtifactId ?? 'n/a'}</div>
+          <div>URL: {readModel.preview.transformedPreviewUrl ?? readModel.preview.previewUrl ?? 'n/a'}</div>
+        </div>
+      </div>
+      <div style={{ margin: '8px 0 0', border: '1px solid #e2e8f0', borderRadius: 8, padding: 10, background: '#f8fafc' }}>
+        <div style={{ margin: 0, color: '#0f172a', fontSize: 12, fontWeight: 700 }}>Raw Multi-Page Preview</div>
+        <div style={{ marginTop: 6, display: 'grid', gap: 4, color: '#334155', fontSize: 12 }}>
+          <div>Mode: raw_template_preview</div>
+          <div>Latest Import siteVersionId: {rawPreviewSiteVersionId ?? 'n/a'}</div>
+          <div>Latest Import artifactId: {readModel.pipeline.importVersion.latestImportArtifactId ?? 'n/a'}</div>
+          {rawPreviewLinks.length > 0 ? (
+            rawPreviewLinks.map((link, index) => (
+              <div key={`${link.label}:${link.routePath}:preview-mode-url`}>
+                {index === 0 ? 'Root Raw Multi-Page Preview URL' : 'First Child Raw Multi-Page Preview URL'}: {link.href}
+              </div>
+            ))
+          ) : (
+            <div>URL: n/a</div>
+          )}
+        </div>
+      </div>
+      <div style={{ margin: '8px 0 0', border: '1px solid #e2e8f0', borderRadius: 8, padding: 10, background: '#f8fafc' }}>
+        <div style={{ margin: 0, color: '#0f172a', fontSize: 12, fontWeight: 700 }}>Public/Published Preview</div>
+        <div style={{ marginTop: 6, display: 'grid', gap: 4, color: '#334155', fontSize: 12 }}>
+          <div>Mode: public_published</div>
+          <div>URL: {readModel.preview.liveUrl ?? 'n/a'}</div>
+        </div>
+      </div>
+      {previewModeGuardrailWarning ? (
+        <div
+          style={{
+            marginTop: 8,
+            border: '1px solid #fcd34d',
+            background: '#fffbeb',
+            color: '#92400e',
+            borderRadius: 8,
+            padding: '8px 10px',
+            fontSize: 12,
+          }}
+        >
+          <strong style={{ color: '#78350f' }}>Preview Mode Warning:</strong> {previewModeGuardrailWarning.message}
+        </div>
+      ) : null}
       {readModel.pipeline.sourceMode === 'raw_html_fallback' ? (
         <div
           style={{
@@ -727,7 +828,7 @@ function renderPreviewContent(readModel: Awaited<ReturnType<typeof getSiteWorksp
             ) : null}
             {readModel.preview.liveUrl ? (
               <a href={readModel.preview.liveUrl} target='_blank' rel='noreferrer' style={quickActionStyle()}>
-                Open Live Domain
+                Open Public/Published Preview
               </a>
             ) : null}
           </div>

@@ -1,7 +1,12 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import { buildMultiPageRawTemplatePreviewDiagnostics, buildMultiPageRawTemplatePreviewLinks } from '@/gnr8/site/site-multipage-preview-links'
+import {
+  buildMultiPageRawTemplatePreviewDiagnostics,
+  buildMultiPageRawTemplatePreviewLinks,
+  buildPreviewModeGuardrailWarning,
+  isTransformedPreviewUrl,
+} from '@/gnr8/site/site-multipage-preview-links'
 
 test('multi-page raw preview links include root and first child controlled routes', () => {
   const links = buildMultiPageRawTemplatePreviewLinks({
@@ -98,4 +103,43 @@ test('multi-page raw preview diagnostics falls back to route-map expected live t
   assert.equal(diagnostics?.htmlByteLengthAfterRewrite, null)
   assert.equal(diagnostics?.rewrittenLinkCount, null)
   assert.equal(diagnostics?.links.some((link) => link.label === 'Open Root Raw Preview' && link.href.includes('mode=raw_template_preview')), true)
+})
+
+test('multi-page raw preview links use the supplied latest siteVersionId', () => {
+  const links = buildMultiPageRawTemplatePreviewLinks({
+    siteVersionId: 'latest-site-version-id',
+    routes: [
+      { routePath: '/', status: 'assembled' },
+      { routePath: '/about', status: 'assembled' },
+    ],
+  })
+
+  assert.equal(links.every((link) => link.href.includes('/versions/latest-site-version-id/preview?')), true)
+  assert.equal(links.every((link) => link.href.includes('mode=raw_template_preview')), true)
+  assert.equal(links.some((link) => link.href.includes('/versions/older-site-version-id/preview?')), false)
+})
+
+test('transformed preview URL is not treated as raw multi-page preview', () => {
+  const transformedUrl = '/api/gnr8/runtime/versions/e9257245-0256-4291-9989-66a33ee6741e/preview?mode=transformed'
+  const rawLinks = buildMultiPageRawTemplatePreviewLinks({
+    siteVersionId: 'latest-site-version-id',
+    routes: [{ routePath: '/', status: 'assembled' }],
+  })
+
+  assert.equal(isTransformedPreviewUrl(transformedUrl), true)
+  assert.equal(rawLinks[0]?.href.includes('mode=raw_template_preview'), true)
+  assert.equal(rawLinks[0]?.href.includes('mode=transformed'), false)
+})
+
+test('guardrail warns when transformed workspace preview coexists with raw multi-page routes', () => {
+  const warning = buildPreviewModeGuardrailWarning({
+    workspacePreviewUrl: '/api/gnr8/runtime/versions/e9257245-0256-4291-9989-66a33ee6741e/preview?mode=transformed',
+    rawPreviewLinks: buildMultiPageRawTemplatePreviewLinks({
+      siteVersionId: 'latest-site-version-id',
+      routes: [{ routePath: '/', status: 'assembled' }],
+    }),
+  })
+
+  assert.equal(warning?.code, 'TRANSFORMED_PREVIEW_WITH_RAW_MULTIPAGE_ROUTES')
+  assert.match(warning?.message ?? '', /transformed while raw multi-page preview routes exist/i)
 })

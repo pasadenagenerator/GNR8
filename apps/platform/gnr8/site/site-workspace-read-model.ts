@@ -225,6 +225,21 @@ export type SiteWorkspaceReadModel = {
       selectedHasImportProvenanceSummary: boolean
       selectedHasArtifactId: boolean
     }
+    importVersion: {
+      latestImportRunId: string | null
+      latestImportSiteVersionId: string | null
+      latestImportRuntimeSiteId: string | null
+      latestImportArtifactId: string | null
+      latestImportCreatedAt: string | null
+      latestImportUpdatedAt: string | null
+      selectedWorkspaceSiteVersionId: string | null
+      selectedWorkspaceRuntimeSiteId: string | null
+      selectedWorkspaceArtifactId: string | null
+      selectedWorkspaceCreatedAt: string | null
+      selectedWorkspaceUpdatedAt: string | null
+      selectedMatchesLatestImport: boolean
+      selectionLabel: 'latest_import_selected' | 'variant_selected' | 'transformed_preview_selected_older_runtime' | 'no_runtime_version'
+    }
   }
   multiPageImport: MultiPageImportOperatorSummary
   actions: {
@@ -537,6 +552,55 @@ function deriveRuntimeRowWaveKey(input: { row: RuntimeVersionRow; summary: Runti
 
   const ownershipSiteId = normalizeText(input.row.ownership_site_id)
   return ownershipSiteId ? `ownership-site:${ownershipSiteId}` : `row:${normalizeText(input.row.id) || 'unknown'}`
+}
+
+function deriveRuntimeImportRunId(summary: RuntimeImportProvenanceSummary | null): string | null {
+  const requestId = toTextOrNull(summary?.executionIdentity?.requestId)
+  if (requestId) return requestId
+
+  const snapshotRunId = toTextOrNull(summary?.executionIdentity?.snapshotRunId)
+  if (snapshotRunId) return snapshotRunId
+
+  return toTextOrNull(summary?.executionIdentity?.snapshotId)
+}
+
+function buildRuntimeVersionVisibility(input: {
+  latestImportRow: RuntimeVersionRow | null
+  selectedWorkspaceRow: RuntimeVersionRow | null
+  selectedArtifactId: string | null
+  latestImportArtifactId: string | null
+  selectedVariantId?: string | null
+}): SiteWorkspaceReadModel['pipeline']['importVersion'] {
+  const latestSummary = parseImportProvenanceSummary(input.latestImportRow?.import_provenance_summary ?? null)
+  const latestImportSiteVersionId = toTextOrNull(input.latestImportRow?.id)
+  const selectedWorkspaceSiteVersionId = toTextOrNull(input.selectedWorkspaceRow?.id)
+  const selectedMatchesLatestImport =
+    latestImportSiteVersionId != null &&
+    selectedWorkspaceSiteVersionId != null &&
+    latestImportSiteVersionId === selectedWorkspaceSiteVersionId
+  const hasSelectedVariant = Boolean(toTextOrNull(input.selectedVariantId))
+
+  return {
+    latestImportRunId: deriveRuntimeImportRunId(latestSummary),
+    latestImportSiteVersionId,
+    latestImportRuntimeSiteId: toTextOrNull(input.latestImportRow?.site_id),
+    latestImportArtifactId: input.latestImportArtifactId,
+    latestImportCreatedAt: toIsoOrNull(input.latestImportRow?.created_at),
+    latestImportUpdatedAt: toIsoOrNull(input.latestImportRow?.updated_at),
+    selectedWorkspaceSiteVersionId,
+    selectedWorkspaceRuntimeSiteId: toTextOrNull(input.selectedWorkspaceRow?.site_id),
+    selectedWorkspaceArtifactId: input.selectedArtifactId,
+    selectedWorkspaceCreatedAt: toIsoOrNull(input.selectedWorkspaceRow?.created_at),
+    selectedWorkspaceUpdatedAt: toIsoOrNull(input.selectedWorkspaceRow?.updated_at),
+    selectedMatchesLatestImport,
+    selectionLabel: !selectedWorkspaceSiteVersionId
+      ? 'no_runtime_version'
+      : hasSelectedVariant
+        ? 'variant_selected'
+        : selectedMatchesLatestImport
+          ? 'latest_import_selected'
+          : 'transformed_preview_selected_older_runtime',
+  }
 }
 
 function scoreRuntimeRowForRenderedArbitration(summary: RuntimeImportProvenanceSummary | null): {
@@ -2222,6 +2286,8 @@ export async function getSiteWorkspaceReadModelForPage(input: {
 
   const runtimeArbitration = selectPrimaryRuntimeVersionRow(runtimeRows)
   const latestRuntimeRow = runtimeArbitration.selected
+  const latestImportRuntimeRow = runtimeArbitration.latest ?? latestRuntimeRow
+  const latestImportRuntimeSiteVersionId = toTextOrNull(latestImportRuntimeRow?.id)
   const runtimeArbitrationDiagnostics = [...new Set(runtimeArbitration.diagnostics)].sort((a, b) => a.localeCompare(b))
   const runtimeSnapshot: RuntimeSnapshot | null = latestRuntimeRow
     ? {
@@ -2377,10 +2443,12 @@ export async function getSiteWorkspaceReadModelForPage(input: {
   const importFidelityDegraded = importFidelity.importFidelityStatus === 'degraded_import' || importFidelity.importFidelityStatus === 'capture_failed'
 
   const lastAction = normalizedSiteActions[0] ?? null
-  const selectedRuntimeArtifactId = toTextOrNull(selectedRuntimeRow?.artifact_id)
+  let selectedRuntimeArtifactId = toTextOrNull(selectedRuntimeRow?.artifact_id)
+  let latestImportArtifactId = toTextOrNull(latestImportRuntimeRow?.artifact_id)
   let transformedPreviewAvailable = Boolean(selectedRuntimeArtifactId)
   let previewRuntimeSummary: PreviewRuntimeSummary | null = null
-  let multiPagePreviewValidationPayload: unknown = null
+  let selectedArtifactManifest: Record<string, unknown> | null = null
+  let latestImportPreviewValidationPayload: unknown = null
   if (selectedRuntimeSiteVersionId) {
     const artifactResult = await supabase
       .from('gnr8_runtime_artifacts')
@@ -2391,13 +2459,35 @@ export async function getSiteWorkspaceReadModelForPage(input: {
 
     if (!artifactResult.error && Array.isArray(artifactResult.data) && artifactResult.data.length > 0) {
       const artifactRow = artifactResult.data[0] as RuntimeArtifactRow
-      if (toTextOrNull(artifactRow.id)) {
+      const artifactId = toTextOrNull(artifactRow.id)
+      if (artifactId) {
+        selectedRuntimeArtifactId = selectedRuntimeArtifactId ?? artifactId
         const htmlByPath = isRecord(artifactRow.html_by_path) ? artifactRow.html_by_path : null
         if (htmlByPath != null && Object.keys(htmlByPath).length > 0) transformedPreviewAvailable = true
         const manifest = isRecord(artifactRow.manifest) ? artifactRow.manifest : null
+        selectedArtifactManifest = manifest
         const summaryFromManifest = parsePreviewRuntimeSummary(manifest?.previewRuntimeSummary)
         if (summaryFromManifest) previewRuntimeSummary = summaryFromManifest
-        multiPagePreviewValidationPayload = manifest?.multiPagePreviewValidation ?? null
+      }
+    }
+  }
+  if (latestImportRuntimeSiteVersionId) {
+    if (latestImportRuntimeSiteVersionId === selectedRuntimeSiteVersionId && selectedArtifactManifest) {
+      latestImportArtifactId = latestImportArtifactId ?? selectedRuntimeArtifactId
+      latestImportPreviewValidationPayload = selectedArtifactManifest.multiPagePreviewValidation ?? null
+    } else {
+      const artifactResult = await supabase
+        .from('gnr8_runtime_artifacts')
+        .select('id,site_version_id,html_by_path,manifest')
+        .eq('site_version_id', latestImportRuntimeSiteVersionId)
+        .order('created_at', { ascending: false })
+        .limit(1)
+
+      if (!artifactResult.error && Array.isArray(artifactResult.data) && artifactResult.data.length > 0) {
+        const artifactRow = artifactResult.data[0] as RuntimeArtifactRow
+        latestImportArtifactId = latestImportArtifactId ?? toTextOrNull(artifactRow.id)
+        const manifest = isRecord(artifactRow.manifest) ? artifactRow.manifest : null
+        latestImportPreviewValidationPayload = manifest?.multiPagePreviewValidation ?? null
       }
     }
   }
@@ -2413,8 +2503,8 @@ export async function getSiteWorkspaceReadModelForPage(input: {
   const previewAlignmentDiagnostics = selectedRuntimeRow && importFidelity.sourceMode === 'rendered_dom' ? ['PRIMARY_RENDERED_RUN_ALIGNED_TO_PREVIEW'] : []
   const resolvedPreviewDiagnostics = [...new Set([...resolvedPreview.diagnostics, ...previewAlignmentDiagnostics])].sort((a, b) => a.localeCompare(b))
   const multiPageImportOperatorSummary = buildMultiPageImportOperatorSummary({
-    importProvenanceSummary: selectedRuntimeRow?.import_provenance_summary ?? null,
-    previewValidation: multiPagePreviewValidationPayload,
+    importProvenanceSummary: latestImportRuntimeRow?.import_provenance_summary ?? null,
+    previewValidation: latestImportPreviewValidationPayload,
     previewDiagnostics: resolvedPreview.previewRuntimeSummary?.previewDiagnostics ?? resolvedPreviewDiagnostics,
   })
   const diagnosticsSummary = Array.from(
@@ -2431,18 +2521,22 @@ export async function getSiteWorkspaceReadModelForPage(input: {
   const previewUrl = resolvedPreview.mainPreviewUrl
   let rawTemplateArtifact: RawTemplateArtifactRow | null = null
   let contentSlotCount = 0
-  if (selectedRuntimeSiteVersionId) {
+  if (latestImportRuntimeSiteVersionId || selectedRuntimeSiteVersionId) {
     const [rawArtifactResult, slotCountResult] = await Promise.all([
-      supabase
-        .from('gnr8_runtime_raw_template_artifacts')
-        .select('id,artifact_type,site_id,site_version_id,entry_html_path,asset_base_path,file_map,metadata_json')
-        .eq('site_version_id', selectedRuntimeSiteVersionId)
-        .limit(1)
-        .maybeSingle(),
-      supabase
-        .from('gnr8_content_slots')
-        .select('id', { count: 'exact', head: true })
-        .eq('site_version_id', selectedRuntimeSiteVersionId),
+      latestImportRuntimeSiteVersionId
+        ? supabase
+            .from('gnr8_runtime_raw_template_artifacts')
+            .select('id,artifact_type,site_id,site_version_id,entry_html_path,asset_base_path,file_map,metadata_json')
+            .eq('site_version_id', latestImportRuntimeSiteVersionId)
+            .limit(1)
+            .maybeSingle()
+        : Promise.resolve({ error: null, data: null }),
+      selectedRuntimeSiteVersionId
+        ? supabase
+            .from('gnr8_content_slots')
+            .select('id', { count: 'exact', head: true })
+            .eq('site_version_id', selectedRuntimeSiteVersionId)
+        : Promise.resolve({ error: null, count: 0 }),
     ])
     if (!rawArtifactResult.error && rawArtifactResult.data) {
       rawTemplateArtifact = rawArtifactResult.data as RawTemplateArtifactRow
@@ -2543,6 +2637,13 @@ export async function getSiteWorkspaceReadModelForPage(input: {
         selectedHasImportProvenanceSummary: parseImportProvenanceSummary(selectedRuntimeRow?.import_provenance_summary ?? null) != null,
         selectedHasArtifactId: Boolean(selectedRuntimeArtifactId),
       },
+      importVersion: buildRuntimeVersionVisibility({
+        latestImportRow: latestImportRuntimeRow,
+        selectedWorkspaceRow: selectedRuntimeRow,
+        selectedArtifactId: selectedRuntimeArtifactId,
+        latestImportArtifactId,
+        selectedVariantId: selectedVariant?.id ?? null,
+      }),
     },
     multiPageImport: multiPageImportOperatorSummary,
     actions: {
@@ -2672,4 +2773,6 @@ export const __siteWorkspaceReadModelTestUtils = {
   selectPrimaryRuntimeVersionRow,
   compareRuntimeVersionRows,
   resolveLatestRuntimeVersionRow,
+  deriveRuntimeImportRunId,
+  buildRuntimeVersionVisibility,
 }

@@ -22,6 +22,11 @@ export type MultiPageRawTemplatePreviewDiagnostics = {
   evidenceSource: 'persisted_raw_template_preview' | 'route_map_expected_live_preview'
 }
 
+export type PreviewModeGuardrailWarning = {
+  code: 'TRANSFORMED_PREVIEW_WITH_RAW_MULTIPAGE_ROUTES'
+  message: string
+}
+
 export type RawTemplatePreviewEvidenceInput = {
   selectedRoutePath: string
   selectedRawFilePath: string
@@ -123,5 +128,29 @@ export function buildMultiPageRawTemplatePreviewDiagnostics(input: {
     htmlByteLengthAfterRewrite: null,
     rewrittenLinkCount: null,
     evidenceSource: 'route_map_expected_live_preview',
+  }
+}
+
+export function isTransformedPreviewUrl(value: string | null | undefined): boolean {
+  const raw = String(value ?? '').trim()
+  if (!raw) return false
+  try {
+    const parsed = raw.startsWith('/') ? new URL(raw, 'https://gnr8.local') : new URL(raw)
+    return parsed.searchParams.get('mode') === 'transformed'
+  } catch {
+    return raw.includes('mode=transformed')
+  }
+}
+
+export function buildPreviewModeGuardrailWarning(input: {
+  workspacePreviewUrl: string | null
+  rawPreviewLinks: MultiPageRawTemplatePreviewLink[]
+}): PreviewModeGuardrailWarning | null {
+  if (!isTransformedPreviewUrl(input.workspacePreviewUrl)) return null
+  if (input.rawPreviewLinks.length === 0) return null
+  return {
+    code: 'TRANSFORMED_PREVIEW_WITH_RAW_MULTIPAGE_ROUTES',
+    message:
+      'Site Workspace preview URL is transformed while raw multi-page preview routes exist. Use Raw Multi-Page Preview links for imported page-route inspection.',
   }
 }
