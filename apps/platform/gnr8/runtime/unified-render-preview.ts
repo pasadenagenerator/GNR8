@@ -389,7 +389,35 @@ export const TRANSFORMED_PREVIEW_DIAGNOSTIC = {
   TRANSFORMED_PREVIEW_ARTIFACT_CACHE_MISS: 'TRANSFORMED_PREVIEW_ARTIFACT_CACHE_MISS',
   TRANSFORMED_PREVIEW_HOME_ROUTE_SELECTED: 'TRANSFORMED_PREVIEW_HOME_ROUTE_SELECTED',
   TRANSFORMED_PREVIEW_RAW_RESOLUTION_SKIPPED: 'TRANSFORMED_PREVIEW_RAW_RESOLUTION_SKIPPED',
+  TRANSFORMED_PREVIEW_DIAGNOSTIC_CONTENT_BLOCKED: 'TRANSFORMED_PREVIEW_DIAGNOSTIC_CONTENT_BLOCKED',
+  TRANSFORMED_PREVIEW_RAW_ROUTE_FALLBACK_USED: 'TRANSFORMED_PREVIEW_RAW_ROUTE_FALLBACK_USED',
+  TRANSFORMED_PREVIEW_DIAGNOSTIC_FALLBACK_UNAVAILABLE: 'TRANSFORMED_PREVIEW_DIAGNOSTIC_FALLBACK_UNAVAILABLE',
 } as const
+
+class TransformedPreviewDiagnosticContentError extends Error {
+  readonly code = TRANSFORMED_PREVIEW_DIAGNOSTIC.TRANSFORMED_PREVIEW_DIAGNOSTIC_CONTENT_BLOCKED
+  readonly siteId: string
+  readonly siteVersionId: string
+  readonly requestedPath: string
+  readonly resolvedPath: string
+  readonly matchedPatterns: string[]
+
+  constructor(input: {
+    siteId: string
+    siteVersionId: string
+    requestedPath: string
+    resolvedPath: string
+    matchedPatterns: string[]
+  }) {
+    super('Transformed preview output contained diagnostic recovery content.')
+    this.name = 'TransformedPreviewDiagnosticContentError'
+    this.siteId = input.siteId
+    this.siteVersionId = input.siteVersionId
+    this.requestedPath = input.requestedPath
+    this.resolvedPath = input.resolvedPath
+    this.matchedPatterns = input.matchedPatterns
+  }
+}
 
 type MultiPageLinkRewriteCounts = {
   rewritten: number
@@ -1378,6 +1406,65 @@ function disableTransformedPreviewAuthoredScripts(html: string): string {
   })
 }
 
+const TRANSFORMED_PREVIEW_VISIBLE_DIAGNOSTIC_PATTERNS: Array<{ label: string; pattern: RegExp }> = [
+  { label: 'Recovered Section', pattern: /\bRecovered\s+Section\b/i },
+  { label: 'Recovered from:', pattern: /\bRecovered\s+from\s*:/i },
+  { label: 'raw-block:', pattern: /\braw-block\s*:/i },
+  { label: 'CAPTURE_DRIVEN_', pattern: /\bCAPTURE_DRIVEN_[A-Z0-9_]+\b/i },
+  { label: 'dominant_candidate=', pattern: /\bdominant_candidate\s*=/i },
+  { label: 'runner_up=', pattern: /\brunner_up\s*=/i },
+  { label: 'avg_child_elements=', pattern: /\bavg_child_elements\s*=/i },
+  { label: 'layout_runner_up=', pattern: /\blayout_runner_up\s*=/i },
+  { label: 'layout_score=', pattern: /\blayout_score\s*=/i },
+  { label: '/tmp/gnr8/validation/', pattern: /\/tmp\/gnr8\/validation\//i },
+]
+
+function decodeBasicHtmlEntities(value: string): string {
+  return String(value ?? '')
+    .replace(/&#(\d+);/g, (_match, code: string) => {
+      const parsed = Number(code)
+      return Number.isFinite(parsed) && parsed >= 0 && parsed <= 0x10ffff ? String.fromCodePoint(parsed) : ''
+    })
+    .replace(/&#x([0-9a-f]+);/gi, (_match, code: string) => {
+      const parsed = Number.parseInt(code, 16)
+      return Number.isFinite(parsed) && parsed >= 0 && parsed <= 0x10ffff ? String.fromCodePoint(parsed) : ''
+    })
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&amp;/gi, '&')
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;/gi, "'")
+}
+
+function extractVisiblePreviewText(html: string): string {
+  const bodyMatch = String(html ?? '').match(/<body\b[^>]*>([\s\S]*?)<\/body>/i)
+  let visible = bodyMatch ? bodyMatch[1] ?? '' : String(html ?? '')
+  visible = visible
+    .replace(/<!--[\s\S]*?-->/g, ' ')
+    .replace(/<head\b[\s\S]*?<\/head>/gi, ' ')
+    .replace(/<script\b[\s\S]*?<\/script>/gi, ' ')
+    .replace(/<style\b[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<template\b[\s\S]*?<\/template>/gi, ' ')
+    .replace(/<noscript\b[\s\S]*?<\/noscript>/gi, ' ')
+    .replace(/<svg\b[\s\S]*?<\/svg>/gi, ' ')
+    .replace(/<([a-z0-9:-]+)\b(?=[^>]*(?:\shidden\b|\baria-hidden\s*=\s*["']?true["']?|\bstyle\s*=\s*["'][^"']*display\s*:\s*none))[^>]*>[\s\S]*?<\/\1>/gi, ' ')
+    .replace(/<[^>]+>/g, ' ')
+  return decodeBasicHtmlEntities(visible).replace(/\s+/g, ' ').trim()
+}
+
+function detectTransformedPreviewVisibleDiagnosticContent(html: string): { blocked: boolean; matchedPatterns: string[]; visibleText: string } {
+  const visibleText = extractVisiblePreviewText(html)
+  const matchedPatterns = TRANSFORMED_PREVIEW_VISIBLE_DIAGNOSTIC_PATTERNS
+    .filter((entry) => entry.pattern.test(visibleText))
+    .map((entry) => entry.label)
+  return {
+    blocked: matchedPatterns.length > 0,
+    matchedPatterns,
+    visibleText,
+  }
+}
+
 function annotateTransformedPreviewHtml(input: { html: string; summary: PreviewRuntimeSummary }): string {
   const attributes = transformedPreviewDiagnosticAttributes(input.summary)
   const serialized = serializeAttributes(attributes)
@@ -1521,6 +1608,24 @@ async function renderTransformedSiteVersionPreview(input: {
     requestedPath: input.requestedPath,
     selectedPath: resolved.resolvedPath,
   })
+  const diagnosticContent = detectTransformedPreviewVisibleDiagnosticContent(resolved.html)
+  if (diagnosticContent.blocked) {
+    console.warn(`[gnr8.runtime.preview] ${TRANSFORMED_PREVIEW_DIAGNOSTIC.TRANSFORMED_PREVIEW_DIAGNOSTIC_CONTENT_BLOCKED}`, {
+      requestCorrelationKey: input.context.requestCorrelationKey,
+      siteId: artifact.siteId,
+      siteVersionId: artifact.siteVersionId,
+      requestedPath: input.requestedPath,
+      selectedPath: resolved.resolvedPath,
+      matchedPatterns: diagnosticContent.matchedPatterns,
+    })
+    throw new TransformedPreviewDiagnosticContentError({
+      siteId: artifact.siteId,
+      siteVersionId: artifact.siteVersionId,
+      requestedPath: input.requestedPath,
+      resolvedPath: resolved.resolvedPath,
+      matchedPatterns: diagnosticContent.matchedPatterns,
+    })
+  }
 
   return {
     ...withPreviewTruth({
@@ -1541,6 +1646,86 @@ async function renderTransformedSiteVersionPreview(input: {
       },
       fallbackUsedOverride: false,
     }),
+  }
+}
+
+async function resolveTransformedDiagnosticContentFallback(input: {
+  diagnosticError: TransformedPreviewDiagnosticContentError
+  siteVersion: CanonicalSiteVersionSnapshot
+  requestedPath: string
+  previewTruth: RenderedCapturePreviewTruth
+  fallbackSummary?: PreviewRuntimeSummary | null
+  context: PreviewReadContext
+}): Promise<ResolvedSiteVersionPreview | null> {
+  const blockedDiagnostics = [
+    TRANSFORMED_PREVIEW_DIAGNOSTIC.TRANSFORMED_PREVIEW_DIAGNOSTIC_CONTENT_BLOCKED,
+    ...input.diagnosticError.matchedPatterns.map((pattern) => `blocked_pattern=${pattern}`),
+  ]
+  try {
+    const rawPreview = await renderRawTemplateSiteVersionPreview({
+      siteVersion: input.siteVersion,
+      siteVersionId: input.siteVersion.id,
+      requestedPath: input.requestedPath,
+      routeMapServingEnabled: true,
+      previewTruth: input.previewTruth,
+      fallbackSummary: input.fallbackSummary,
+      context: input.context,
+    })
+    if (!rawPreview) {
+      console.warn(`[gnr8.runtime.preview] ${TRANSFORMED_PREVIEW_DIAGNOSTIC.TRANSFORMED_PREVIEW_DIAGNOSTIC_FALLBACK_UNAVAILABLE}`, {
+        requestCorrelationKey: input.context.requestCorrelationKey,
+        siteId: input.siteVersion.siteId,
+        siteVersionId: input.siteVersion.id,
+        requestedPath: input.requestedPath,
+        reasonCode: 'RAW_ROUTE_PREVIEW_UNAVAILABLE',
+      })
+      return null
+    }
+    const rawDiagnosticContent = detectTransformedPreviewVisibleDiagnosticContent(rawPreview.html)
+    if (rawDiagnosticContent.blocked) {
+      console.warn(`[gnr8.runtime.preview] ${TRANSFORMED_PREVIEW_DIAGNOSTIC.TRANSFORMED_PREVIEW_DIAGNOSTIC_FALLBACK_UNAVAILABLE}`, {
+        requestCorrelationKey: input.context.requestCorrelationKey,
+        siteId: input.siteVersion.siteId,
+        siteVersionId: input.siteVersion.id,
+        requestedPath: input.requestedPath,
+        reasonCode: 'RAW_ROUTE_PREVIEW_CONTAINED_DIAGNOSTIC_CONTENT',
+        matchedPatterns: rawDiagnosticContent.matchedPatterns,
+      })
+      return null
+    }
+    console.info(`[gnr8.runtime.preview] ${TRANSFORMED_PREVIEW_DIAGNOSTIC.TRANSFORMED_PREVIEW_RAW_ROUTE_FALLBACK_USED}`, {
+      requestCorrelationKey: input.context.requestCorrelationKey,
+      siteId: input.siteVersion.siteId,
+      siteVersionId: input.siteVersion.id,
+      requestedPath: input.requestedPath,
+      selectedPath: rawPreview.path,
+      blockedTransformedPath: input.diagnosticError.resolvedPath,
+    })
+    return {
+      ...rawPreview,
+      fallbackUsed: true,
+      previewRuntimeSummary: {
+        ...rawPreview.previewRuntimeSummary,
+        previewDiagnostics: withSortedDiagnostics([
+          ...(input.fallbackSummary?.previewDiagnostics ?? []),
+          ...rawPreview.previewRuntimeSummary.previewDiagnostics,
+          ...blockedDiagnostics,
+          TRANSFORMED_PREVIEW_DIAGNOSTIC.TRANSFORMED_PREVIEW_RAW_ROUTE_FALLBACK_USED,
+        ]),
+      },
+    }
+  } catch (error) {
+    if (error instanceof SiteVersionPreviewUnavailableError) {
+      console.warn(`[gnr8.runtime.preview] ${TRANSFORMED_PREVIEW_DIAGNOSTIC.TRANSFORMED_PREVIEW_DIAGNOSTIC_FALLBACK_UNAVAILABLE}`, {
+        requestCorrelationKey: input.context.requestCorrelationKey,
+        siteId: input.siteVersion.siteId,
+        siteVersionId: input.siteVersion.id,
+        requestedPath: input.requestedPath,
+        reasonCode: error.code,
+      })
+      return null
+    }
+    throw error
   }
 }
 
@@ -1743,7 +1928,10 @@ export async function renderSiteVersionPreview(input: {
           context,
         })
       } catch (error) {
-        if (!(error instanceof SiteVersionPreviewUnavailableError) || error.code !== 'TRANSFORMED_ARTIFACT_NOT_AVAILABLE') {
+        if (error instanceof TransformedPreviewDiagnosticContentError) {
+          // Continue into the site-version path so transformed diagnostic output can use
+          // an explicit raw route fallback instead of broadening normal artifact hits.
+        } else if (!(error instanceof SiteVersionPreviewUnavailableError) || error.code !== 'TRANSFORMED_ARTIFACT_NOT_AVAILABLE') {
           throw error
         }
       }
@@ -1839,6 +2027,21 @@ export async function renderSiteVersionPreview(input: {
           context,
         })
       } catch (error) {
+        if (error instanceof TransformedPreviewDiagnosticContentError) {
+          const fallback = await resolveTransformedDiagnosticContentFallback({
+            diagnosticError: error,
+            siteVersion,
+            requestedPath,
+            previewTruth,
+            fallbackSummary,
+            context,
+          })
+          if (fallback) return fallback
+          throw new SiteVersionPreviewUnavailableError({
+            code: 'TRANSFORMED_ARTIFACT_NOT_AVAILABLE',
+            message: 'Transformed preview output was blocked because it contained diagnostic recovery content.',
+          })
+        }
         if (error instanceof SiteVersionPreviewUnavailableError && error.code === 'TRANSFORMED_ARTIFACT_NOT_AVAILABLE') {
           return renderDebugSiteVersionPreview({
             siteVersion,
@@ -1913,6 +2116,7 @@ export async function renderSiteVersionPreview(input: {
 
 export const __unifiedRenderPreviewTestUtils = {
   resolveHtmlForPath,
+  detectTransformedPreviewVisibleDiagnosticContent,
   resolveSemanticFallbackPreview,
   resolveRenderedCapturePreviewTruth,
   rewriteRawTemplateAssetReferences,

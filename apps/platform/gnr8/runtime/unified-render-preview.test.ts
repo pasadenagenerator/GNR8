@@ -178,6 +178,21 @@ function countOccurrences(value: string, marker: string): number {
   return value.split(marker).length - 1
 }
 
+const transformedDiagnosticContentMarkers = [
+  'Recovered Section',
+  'raw-block:',
+  'Recovered from:',
+  'CAPTURE_DRIVEN_',
+  'dominant_candidate=',
+  '/tmp/gnr8/validation/',
+] as const
+
+function assertNoTransformedDiagnosticContent(html: string): void {
+  for (const marker of transformedDiagnosticContentMarkers) {
+    assert.equal(html.includes(marker), false, `preview html must not contain ${marker}`)
+  }
+}
+
 test('preview path resolver falls back to canonical root path when requested path is missing', () => {
   const resolved = __unifiedRenderPreviewTestUtils.resolveHtmlForPath({
     htmlByPath: {
@@ -195,6 +210,22 @@ test('preview path resolver falls back to canonical root path when requested pat
 
   assert.equal(resolved.resolvedPath, '/')
   assert.equal(resolved.html, '<html>home</html>')
+})
+
+test('transformed preview diagnostic detector blocks visible recovery text but ignores operator metadata', () => {
+  const visible = __unifiedRenderPreviewTestUtils.detectTransformedPreviewVisibleDiagnosticContent(
+    '<html><head><meta name="x" content="Recovered Section raw-block:/tmp/gnr8/validation/"></head><body><main><h1>Recovered Section 1</h1><p>raw-block:html&gt;body CAPTURE_DRIVEN_CTA_LIFT_APPLIED dominant_candidate=cta:0.61 runner_up=hero:0.39</p></main></body></html>',
+  )
+  assert.equal(visible.blocked, true)
+  assert.equal(visible.matchedPatterns.includes('Recovered Section'), true)
+  assert.equal(visible.matchedPatterns.includes('raw-block:'), true)
+  assert.equal(visible.matchedPatterns.includes('CAPTURE_DRIVEN_'), true)
+  assert.equal(visible.matchedPatterns.includes('dominant_candidate='), true)
+
+  const metadataOnly = __unifiedRenderPreviewTestUtils.detectTransformedPreviewVisibleDiagnosticContent(
+    '<html><head><meta name="x" content="Recovered Section raw-block:/tmp/gnr8/validation/"></head><body><main><h1>Actual Site</h1><section hidden>Recovered Section raw-block:</section><script>console.log("dominant_candidate=")</script></main></body></html>',
+  )
+  assert.equal(metadataOnly.blocked, false)
 })
 
 test('preview path resolver throws PREVIEW_PATH_NOT_FOUND only when neither requested nor root path exist', () => {
@@ -1427,6 +1458,267 @@ test('transformed preview isolates /news and / while disabling page-authored scr
     getRawTemplateSiteAsset: 0,
     listContentSlots: 0,
     listContentOverrides: 0,
+  })
+})
+
+test('transformed preview blocks Viroidoc-style recovery diagnostics and falls back to matching raw routes', async () => {
+  const provenance = fixtureViroidocLikeMultiPageAssemblyProvenance()
+  const rawHtmlByFilePath: Record<string, string> = {
+    'pages/root/index.html': [
+      '<!doctype html><html><body>',
+      '<nav><a href="/news">News</a></nav>',
+      '<main><h1>VIROIDOC_HOME_VALID</h1><p>Research home content.</p></main>',
+      '</body></html>',
+    ].join(''),
+    'pages/project/index.html': '<!doctype html><html><body><main>Project content</main></body></html>',
+    'pages/people/index.html': '<!doctype html><html><body><main>People content</main></body></html>',
+    'pages/news/index.html': '<!doctype html><html><body><main><h1>VIROIDOC_NEWS_VALID</h1><p>News route content.</p></main></body></html>',
+  }
+  const fileMap = Object.fromEntries(
+    Object.entries(rawHtmlByFilePath).map(([filePath, html]) => [
+      filePath,
+      { mediaType: 'text/html', sizeBytes: html.length, sha256: `sha-${filePath}` },
+    ]),
+  )
+  const transformedDiagnosticHtmlByPath: Record<string, string> = {
+    '/': [
+      '<!doctype html><html><head><title>home</title></head><body><main>',
+      '<h1>home</h1>',
+      '<p>raw-block:html&gt;body&gt;div:nth-of-type(1):0</p>',
+      '<p>Recovered from: /tmp/gnr8/validation/url-import-snapshots/imported-url-site/runs/a/index.html</p>',
+      '<h2>Recovered Section 1</h2>',
+      '<p>CAPTURE_DRIVEN_CTA_LIFT_APPLIED dominant_candidate=cta:0.61 runner_up=hero:0.39 avg_child_elements=3 layout_runner_up=grid layout_score=stack:0.44</p>',
+      '</main></body></html>',
+    ].join(''),
+    '/news': [
+      '<!doctype html><html><head><title>news</title></head><body><main>',
+      '<h1>Recovered Section 2</h1>',
+      '<p>raw-block:html&gt;body&gt;div:nth-of-type(2):0</p>',
+      '<p>Recovered from: /tmp/gnr8/validation/url-import-snapshots/imported-url-site/runs/a/news.html</p>',
+      '<p>CAPTURE_DRIVEN_SECTION_GROUPING_LIFT dominant_candidate=content:0.52 runner_up=hero:0.40</p>',
+      '</main></body></html>',
+    ].join(''),
+  }
+  const calls = {
+    getSiteVersion: 0,
+    getRawImportedSiteArtifact: 0,
+    getRawTemplateSiteArtifact: 0,
+    getRawTemplateSiteAsset: 0,
+    listContentSlots: 0,
+    listContentOverrides: 0,
+    getSiteVersionArtifactBinding: 0,
+    getArtifactById: 0,
+  }
+  const requestedAssets: string[] = []
+  const restore = setUnifiedRenderPreviewDependenciesForTest({
+    getPoolStatus: () => ({ totalCount: 1, idleCount: 1, waitingCount: 0 }),
+    getSiteVersion: async () => {
+      calls.getSiteVersion += 1
+      return {
+        id: 'sv-viroidoc-diagnostic',
+        siteId: 'site-viroidoc-diagnostic',
+        rendererCompatibilityVersion: 'gnr8-renderer-v1',
+        pages: [],
+        importProvenanceSummary: {
+          ...provenance,
+          renderedCapture: { status: 'available', nodeCount: 100, domLength: 10000 },
+          screenshotCount: 1,
+        },
+      } as any
+    },
+    getRawImportedSiteArtifact: async () => {
+      calls.getRawImportedSiteArtifact += 1
+      return {
+        artifactType: 'raw_imported_site',
+        siteId: 'site-viroidoc-diagnostic',
+        siteVersionId: 'sv-viroidoc-diagnostic',
+        entryHtmlPath: 'pages/root/index.html',
+        assetBasePath: '/',
+        fileMap,
+        metadata: {
+          assetSummary: { persistedAssetCount: Object.keys(fileMap).length, externalFallbackAssetCount: 0 },
+        },
+      } as any
+    },
+    getRawTemplateSiteArtifact: async () => {
+      calls.getRawTemplateSiteArtifact += 1
+      return null
+    },
+    getRawTemplateSiteAsset: async (input) => {
+      calls.getRawTemplateSiteAsset += 1
+      requestedAssets.push(input.filePath)
+      const html = rawHtmlByFilePath[input.filePath]
+      return html ? ({ bytes: Buffer.from(html), sizeBytes: html.length, mediaType: 'text/html' } as any) : null
+    },
+    listContentSlots: async () => {
+      calls.listContentSlots += 1
+      return []
+    },
+    listContentOverrides: async () => {
+      calls.listContentOverrides += 1
+      return []
+    },
+    getSiteVersionArtifactBinding: async () => {
+      calls.getSiteVersionArtifactBinding += 1
+      return { siteId: 'site-viroidoc-diagnostic', artifactId: 'artifact-viroidoc-diagnostic' }
+    },
+    getArtifactById: async () => {
+      calls.getArtifactById += 1
+      return {
+        id: 'artifact-viroidoc-diagnostic',
+        siteId: 'site-viroidoc-diagnostic',
+        siteVersionId: 'sv-viroidoc-diagnostic',
+        rendererCompatibilityVersion: 'gnr8-renderer-v1',
+        htmlByPath: transformedDiagnosticHtmlByPath,
+        bundleSha256: 'x',
+        compiledTokenStyles: '',
+        assetFingerprintMap: {},
+        manifest: {},
+        publishStage: 'production',
+        shadowRestricted: false,
+        artifactGovernance: {},
+      } as any
+    },
+  })
+
+  try {
+    const sequence = [
+      ['/news', 'VIROIDOC_NEWS_VALID', 'VIROIDOC_HOME_VALID'],
+      ['/', 'VIROIDOC_HOME_VALID', 'VIROIDOC_NEWS_VALID'],
+      ['/news', 'VIROIDOC_NEWS_VALID', 'VIROIDOC_HOME_VALID'],
+      ['/', 'VIROIDOC_HOME_VALID', 'VIROIDOC_NEWS_VALID'],
+    ] as const
+    for (const [routePath, expectedMarker, absentMarker] of sequence) {
+      const preview = await renderSiteVersionPreview({
+        siteVersionId: 'sv-viroidoc-diagnostic',
+        path: routePath,
+        mode: 'transformed',
+        requestCorrelationKey: `req-viroidoc-diagnostic-${routePath}-${calls.getSiteVersionArtifactBinding}`,
+      })
+      assert.equal(preview.source, 'raw_template_site')
+      assert.equal(preview.fallbackUsed, true)
+      assert.equal(preview.path, routePath)
+      assert.equal(preview.html.includes(expectedMarker), true)
+      assert.equal(preview.html.includes(absentMarker), false)
+      assertNoTransformedDiagnosticContent(preview.html)
+      assert.equal(
+        preview.previewRuntimeSummary.previewDiagnostics.includes('TRANSFORMED_PREVIEW_DIAGNOSTIC_CONTENT_BLOCKED'),
+        true,
+      )
+      assert.equal(
+        preview.previewRuntimeSummary.previewDiagnostics.includes('TRANSFORMED_PREVIEW_RAW_ROUTE_FALLBACK_USED'),
+        true,
+      )
+      assert.equal(preview.previewRuntimeSummary.previewDiagnostics.includes('MULTIPAGE_PREVIEW_PAGE_ISOLATED'), true)
+      assert.equal(preview.rawTemplatePreviewEvidence?.selectedRoutePath, routePath)
+    }
+  } finally {
+    restore()
+  }
+
+  assert.deepEqual(requestedAssets, [
+    'pages/news/index.html',
+    'pages/root/index.html',
+    'pages/news/index.html',
+    'pages/root/index.html',
+  ])
+  assert.deepEqual(calls, {
+    getSiteVersion: 4,
+    getRawImportedSiteArtifact: 4,
+    getRawTemplateSiteArtifact: 0,
+    getRawTemplateSiteAsset: 4,
+    listContentSlots: 4,
+    listContentOverrides: 8,
+    getSiteVersionArtifactBinding: 4,
+    getArtifactById: 4,
+  })
+})
+
+test('transformed diagnostic-only output fails cleanly when no raw route fallback exists', async () => {
+  const calls = {
+    getSiteVersion: 0,
+    getRawImportedSiteArtifact: 0,
+    getRawTemplateSiteArtifact: 0,
+    getRawTemplateSiteAsset: 0,
+    getSiteVersionArtifactBinding: 0,
+    getArtifactById: 0,
+  }
+  const restore = setUnifiedRenderPreviewDependenciesForTest({
+    getPoolStatus: () => ({ totalCount: 1, idleCount: 1, waitingCount: 0 }),
+    getSiteVersion: async () => {
+      calls.getSiteVersion += 1
+      return {
+        id: 'sv-diagnostic-no-raw',
+        siteId: 'site-diagnostic-no-raw',
+        rendererCompatibilityVersion: 'gnr8-renderer-v1',
+        pages: [],
+        importProvenanceSummary: null,
+      } as any
+    },
+    getRawImportedSiteArtifact: async () => {
+      calls.getRawImportedSiteArtifact += 1
+      return null
+    },
+    getRawTemplateSiteArtifact: async () => {
+      calls.getRawTemplateSiteArtifact += 1
+      return null
+    },
+    getRawTemplateSiteAsset: async () => {
+      calls.getRawTemplateSiteAsset += 1
+      return null
+    },
+    listContentSlots: async () => [],
+    listContentOverrides: async () => [],
+    getSiteVersionArtifactBinding: async () => {
+      calls.getSiteVersionArtifactBinding += 1
+      return { siteId: 'site-diagnostic-no-raw', artifactId: 'artifact-diagnostic-no-raw' }
+    },
+    getArtifactById: async () => {
+      calls.getArtifactById += 1
+      return {
+        id: 'artifact-diagnostic-no-raw',
+        siteId: 'site-diagnostic-no-raw',
+        siteVersionId: 'sv-diagnostic-no-raw',
+        rendererCompatibilityVersion: 'gnr8-renderer-v1',
+        htmlByPath: {
+          '/': '<html><body><main><h1>Recovered Section 1</h1><p>raw-block:html&gt;body</p><p>Recovered from: /tmp/gnr8/validation/url-import-snapshots/run/index.html</p></main></body></html>',
+        },
+        bundleSha256: 'x',
+        compiledTokenStyles: '',
+        assetFingerprintMap: {},
+        manifest: {},
+        publishStage: 'production',
+        shadowRestricted: false,
+        artifactGovernance: {},
+      } as any
+    },
+  })
+
+  try {
+    await assert.rejects(
+      () =>
+        renderSiteVersionPreview({
+          siteVersionId: 'sv-diagnostic-no-raw',
+          path: '/',
+          mode: 'transformed',
+          requestCorrelationKey: 'req-diagnostic-no-raw',
+        }),
+      (error: unknown) =>
+        error instanceof SiteVersionPreviewUnavailableError &&
+        error.code === 'TRANSFORMED_ARTIFACT_NOT_AVAILABLE' &&
+        /diagnostic recovery content/.test(error.message),
+    )
+  } finally {
+    restore()
+  }
+
+  assert.deepEqual(calls, {
+    getSiteVersion: 1,
+    getRawImportedSiteArtifact: 1,
+    getRawTemplateSiteArtifact: 1,
+    getRawTemplateSiteAsset: 0,
+    getSiteVersionArtifactBinding: 1,
+    getArtifactById: 1,
   })
 })
 
