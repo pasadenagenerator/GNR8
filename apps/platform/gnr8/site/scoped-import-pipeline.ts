@@ -74,6 +74,7 @@ import { buildSafeSiteTreeFromSeedPage, normalizeRoutePath, type SiteTree } from
 import { buildFamilyHandoffModel, summarizeTemplateFamilies, type FamilyHandoffModel } from '@/gnr8/family-mode'
 import { runSemanticImportEngine, type SemanticImportResult } from '@/gnr8/import-semantic/semantic-import-engine'
 import { inferContentSlotsFromSemanticImport } from '@/gnr8/runtime/content-binding'
+import { validateLatestRawMultiPagePreviewEvidence } from '@/gnr8/runtime/multipage-preview-validation'
 
 const SECTION_INTENT_BY_SEMANTIC_TYPE: Record<string, string> = {
   header: 'header_nav',
@@ -3683,6 +3684,71 @@ export async function runScopedImportPipeline(input: {
       siteVersionId: migrated.siteVersionId,
       artifactId: rawImportArtifact.artifactId,
     })
+    const rawPreviewValidationResult = rawAssemblySummary?.enabled
+      ? (() => {
+          const capturedAt = new Date().toISOString()
+          try {
+            return validateLatestRawMultiPagePreviewEvidence({
+              siteId: migrated.siteId,
+              siteVersionId: migrated.siteVersionId,
+              artifactId: rawImportArtifact.artifactId,
+              entryHtmlPath: importInput.entryHtmlPath,
+              fileMap: Object.fromEntries(
+                persistedFileRows.map((row) => [
+                  row.path,
+                  {
+                    path: row.path,
+                    mediaType: row.mediaType,
+                    sizeBytes: row.sizeBytes,
+                    sha256: row.sha256,
+                  },
+                ]),
+              ),
+              rawFileBytesByPath: Object.fromEntries(persistedFileRows.map((row) => [row.path, row.bytes])),
+              importProvenanceSummary,
+              capturedAt,
+            })
+          } catch (error) {
+            const message = error instanceof Error ? error.message : String(error)
+            console.warn('[scoped-import] RAW_PREVIEW_VALIDATION_EVIDENCE_BLOCKED', {
+              siteId: migrated.siteId,
+              siteVersionId: migrated.siteVersionId,
+              artifactId: rawImportArtifact.artifactId,
+              error: message,
+            })
+            return {
+              evidence: {
+                kind: 'raw_multi_page_preview_validation_evidence_v1' as const,
+                capturedAt,
+                siteVersionId: migrated.siteVersionId,
+                artifactId: rawImportArtifact.artifactId,
+                routePath: null,
+                selectedRawFilePath: null,
+                validationStatus: 'blocked' as const,
+                responseStatus: null,
+                responseBytes: null,
+                htmlBytesAfterRewrite: null,
+                rewrittenLinksCount: null,
+                routeEvidence: [],
+                warnings: ['raw_preview_validation_exception'],
+                blockers: [`raw_preview_validation_exception:${message}`],
+                diagnostics: ['RAW_PREVIEW_VALIDATION_EVIDENCE_BLOCKED'],
+              },
+              previewValidation: null,
+            }
+          }
+        })()
+      : null
+    if (rawPreviewValidationResult) {
+      console.info('[scoped-import] RAW_PREVIEW_VALIDATION_EVIDENCE_READY', {
+        siteId: migrated.siteId,
+        siteVersionId: migrated.siteVersionId,
+        artifactId: rawImportArtifact.artifactId,
+        validationStatus: rawPreviewValidationResult.evidence.validationStatus,
+        routeCount: rawPreviewValidationResult.evidence.routeEvidence.length,
+        rewrittenLinksCount: rawPreviewValidationResult.previewValidation?.summary.rewrittenLinks ?? null,
+      })
+    }
 
     const rawEntryHtml = (() => {
       try {
@@ -3753,6 +3819,20 @@ export async function runScopedImportPipeline(input: {
       manifest: {
         ...artifactBundle.manifest,
         sourceKind: 'scoped_pipeline_import',
+        ...(rawPreviewValidationResult
+          ? {
+              latestRawPreviewValidationEvidence: rawPreviewValidationResult.evidence,
+              rawPreviewValidationEvidence: rawPreviewValidationResult.evidence,
+              ...(rawPreviewValidationResult.previewValidation
+                ? {
+                    multiPagePreviewValidation: {
+                      ...rawPreviewValidationResult.previewValidation,
+                      rawPreviewValidationEvidence: rawPreviewValidationResult.evidence,
+                    },
+                  }
+                : {}),
+            }
+          : {}),
       },
       publishStage: 'shadow',
       shadowRestricted: false,

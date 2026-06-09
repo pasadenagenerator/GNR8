@@ -1,8 +1,11 @@
 import {
   RAW_TEMPLATE_ROUTE_MAP_DIAGNOSTIC,
   normalizeRawTemplateRouteMapPath,
+  routeMapFromProvenance,
   resolveRawTemplateRouteMapFile,
 } from '@/gnr8/runtime/raw-template-route-map-resolver'
+import { buildSiteVersionPreviewUrl } from '@/gnr8/site/site-preview-contract'
+import { normalizeInternalHref, normalizeSeedUrl } from '@/gnr8/multipage-import/normalization/route-normalization'
 import type {
   RawTemplateSiteFileMeta,
   RuntimeImportProvenanceSummary,
@@ -17,7 +20,12 @@ export const MULTIPAGE_PREVIEW_VALIDATION_DIAGNOSTIC = {
   MULTIPAGE_PREVIEW_VALIDATION_READY: 'MULTIPAGE_PREVIEW_VALIDATION_READY',
   MULTIPAGE_PREVIEW_VALIDATION_READY_WITH_WARNINGS: 'MULTIPAGE_PREVIEW_VALIDATION_READY_WITH_WARNINGS',
   MULTIPAGE_PREVIEW_VALIDATION_BLOCKED: 'MULTIPAGE_PREVIEW_VALIDATION_BLOCKED',
+  RAW_PREVIEW_VALIDATION_EVIDENCE_READY: 'RAW_PREVIEW_VALIDATION_EVIDENCE_READY',
+  RAW_PREVIEW_VALIDATION_EVIDENCE_READY_WITH_WARNINGS: 'RAW_PREVIEW_VALIDATION_EVIDENCE_READY_WITH_WARNINGS',
+  RAW_PREVIEW_VALIDATION_EVIDENCE_BLOCKED: 'RAW_PREVIEW_VALIDATION_EVIDENCE_BLOCKED',
 } as const
+
+const RAW_PREVIEW_VALIDATION_ROUTE_CAP = 8
 
 export type MultiPagePreviewValidationStatus = 'ready' | 'ready_with_warnings' | 'blocked'
 
@@ -78,6 +86,46 @@ export type MultiPagePreviewValidation = {
   diagnostics: string[]
 }
 
+export type RawMultiPagePreviewValidationRouteEvidence = {
+  capturedAt: string
+  siteVersionId: string
+  artifactId: string
+  routePath: string
+  selectedRawFilePath: string | null
+  validationStatus: MultiPagePreviewRouteValidationStatus
+  responseStatus: number | null
+  responseBytes: number | null
+  htmlBytesAfterRewrite: number | null
+  rewrittenLinksCount: number | null
+  missingRoute: string | null
+  blockers: string[]
+  warnings: string[]
+  diagnostics: string[]
+}
+
+export type LatestRawMultiPagePreviewValidationEvidence = {
+  kind: 'raw_multi_page_preview_validation_evidence_v1'
+  capturedAt: string
+  siteVersionId: string
+  artifactId: string
+  routePath: string | null
+  selectedRawFilePath: string | null
+  validationStatus: MultiPagePreviewValidationStatus
+  responseStatus: number | null
+  responseBytes: number | null
+  htmlBytesAfterRewrite: number | null
+  rewrittenLinksCount: number | null
+  routeEvidence: RawMultiPagePreviewValidationRouteEvidence[]
+  warnings: string[]
+  blockers: string[]
+  diagnostics: string[]
+}
+
+export type LatestRawMultiPagePreviewValidationResult = {
+  evidence: LatestRawMultiPagePreviewValidationEvidence
+  previewValidation: MultiPagePreviewValidation | null
+}
+
 function normalizeRawFilePath(value: string): string {
   return String(value ?? '')
     .trim()
@@ -92,6 +140,247 @@ function normalizeRawFilePath(value: string): string {
 function fileExists(input: { fileMap: Record<string, RawTemplateSiteFileMeta>; rawFilePath: string }): boolean {
   const rawFilePath = normalizeRawFilePath(input.rawFilePath)
   return Boolean(rawFilePath && input.fileMap[rawFilePath])
+}
+
+function firstUsableSeedUrl(provenance: RuntimeImportProvenanceSummary | null | undefined): string | null {
+  const assembly = provenance?.multiPageDiscovery?.rawArtifactAssembly ?? null
+  const looseProvenance = provenance as unknown as { sourceUrl?: unknown; finalUrl?: unknown } | null | undefined
+  const candidates = [
+    assembly?.normalizedSeedUrl,
+    assembly?.seedUrl,
+    looseProvenance?.sourceUrl,
+    looseProvenance?.finalUrl,
+  ]
+  for (const candidate of candidates) {
+    const raw = String(candidate ?? '').trim()
+    if (raw && normalizeSeedUrl(raw)) return raw
+  }
+  return null
+}
+
+function currentPageUrlForRoute(input: { seedUrl: string; routePath: string; sourceUrl?: string | null; finalUrl?: string | null }): string {
+  const direct = input.finalUrl ?? input.sourceUrl ?? null
+  if (direct && normalizeSeedUrl(direct)) return direct
+  try {
+    return new URL(input.routePath, input.seedUrl).toString()
+  } catch {
+    return input.seedUrl
+  }
+}
+
+function routeDepth(routePath: string): number {
+  const normalized = normalizeRawTemplateRouteMapPath(routePath)
+  if (normalized === '/') return 0
+  return normalized.split('/').filter(Boolean).length
+}
+
+function selectedRawValidationRoutes(provenance: RuntimeImportProvenanceSummary | null | undefined): {
+  routePaths: string[]
+  warnings: string[]
+} {
+  const routeMap = routeMapFromProvenance(provenance)
+  const assembledRoutes = new Set(routeMap.map((entry) => normalizeRawTemplateRouteMapPath(entry.routePath)))
+  const ordered: string[] = ['/']
+  const add = (routePath: string) => {
+    const normalized = normalizeRawTemplateRouteMapPath(routePath)
+    if (normalized !== '/' && !assembledRoutes.has(normalized)) return
+    if (!ordered.includes(normalized)) ordered.push(normalized)
+  }
+  const firstChild = routeMap.map((entry) => normalizeRawTemplateRouteMapPath(entry.routePath)).find((routePath) => routePath !== '/') ?? null
+  if (firstChild) add(firstChild)
+
+  const assignments = provenance?.multiPageDiscovery?.manifest?.routePriorityBalancing?.assignments ?? []
+  const tierOneRoutes = assignments
+    .filter((assignment) => assignment.tier === 'tier_1_navigation' && assignment.selected)
+    .map((assignment) => normalizeRawTemplateRouteMapPath(assignment.routePath))
+    .filter((routePath) => routePath !== '/' && assembledRoutes.has(routePath))
+  const uniqueTierOneRoutes = [...new Set(tierOneRoutes)]
+  const warnings: string[] = []
+  if (uniqueTierOneRoutes.length > 0) {
+    const mergedCount = new Set([...ordered, ...uniqueTierOneRoutes]).size
+    if (mergedCount <= RAW_PREVIEW_VALIDATION_ROUTE_CAP) {
+      for (const routePath of uniqueTierOneRoutes) add(routePath)
+    } else {
+      warnings.push(`tier_1_route_validation_cap:${uniqueTierOneRoutes.length}:${RAW_PREVIEW_VALIDATION_ROUTE_CAP}`)
+    }
+  }
+
+  if (ordered.length === 1 && routeMap.length > 0) {
+    const shallowChildren = routeMap
+      .map((entry) => normalizeRawTemplateRouteMapPath(entry.routePath))
+      .filter((routePath) => routePath !== '/' && routeDepth(routePath) === 1)
+    if (shallowChildren.length + ordered.length <= RAW_PREVIEW_VALIDATION_ROUTE_CAP) {
+      for (const routePath of shallowChildren) add(routePath)
+    }
+  }
+
+  return { routePaths: ordered.slice(0, RAW_PREVIEW_VALIDATION_ROUTE_CAP), warnings }
+}
+
+function countRawPreviewRewrittenLinks(input: {
+  html: string
+  siteVersionId: string
+  routePath: string
+  sourceUrl: string | null
+  finalUrl: string | null
+  importProvenanceSummary?: RuntimeImportProvenanceSummary | null
+}): {
+  html: string
+  summary: MultiPagePreviewLinkRewriteValidationSummary
+  canCount: boolean
+} {
+  const routeMap = routeMapFromProvenance(input.importProvenanceSummary)
+  const seedUrl = firstUsableSeedUrl(input.importProvenanceSummary)
+  const emptySummary: MultiPagePreviewLinkRewriteValidationSummary = {
+    rewritten: 0,
+    skippedExternal: 0,
+    skippedUnsupported: 0,
+    skippedRouteMissing: 0,
+    skippedAsset: 0,
+    skippedHashOnly: 0,
+    missingRouteSamples: [],
+    diagnostics: [],
+  }
+  if (routeMap.length === 0 || !seedUrl) {
+    return {
+      html: input.html,
+      summary: {
+        ...emptySummary,
+        diagnostics: ['RAW_PREVIEW_LINK_REWRITE_COUNT_BLOCKED_NO_ROUTE_MAP_OR_SEED'],
+      },
+      canCount: false,
+    }
+  }
+
+  const seed = normalizeSeedUrl(seedUrl)
+  if (!seed) {
+    return {
+      html: input.html,
+      summary: {
+        ...emptySummary,
+        diagnostics: ['RAW_PREVIEW_LINK_REWRITE_COUNT_BLOCKED_INVALID_SEED'],
+      },
+      canCount: false,
+    }
+  }
+
+  const importedRoutes = new Set<string>(['/'])
+  for (const entry of routeMap) importedRoutes.add(normalizeRawTemplateRouteMapPath(entry.routePath))
+  const missingRouteSamples = new Set<string>()
+  const diagnostics = new Set<string>(['MULTIPAGE_LINK_REWRITE_STARTED'])
+  const summary = { ...emptySummary }
+  const currentPageUrl = currentPageUrlForRoute({
+    seedUrl: seed.url,
+    routePath: input.routePath,
+    sourceUrl: input.sourceUrl,
+    finalUrl: input.finalUrl,
+  })
+  const html = input.html.replace(/<a\b[^>]*\bhref\s*=\s*(["'])(.*?)\1[^>]*>/gi, (tag: string, quote: string, rawHref: string) => {
+    const href = String(rawHref ?? '').trim()
+    if (!href) {
+      summary.skippedUnsupported += 1
+      diagnostics.add('MULTIPAGE_LINK_SKIPPED_UNSUPPORTED_SCHEME')
+      return tag
+    }
+    if (href.startsWith('#')) {
+      summary.skippedHashOnly += 1
+      diagnostics.add('MULTIPAGE_LINK_SKIPPED_HASH_ONLY')
+      return tag
+    }
+    if (new RegExp('\\sdownload(?:\\s*=|\\s|>|/)', 'i').test(tag)) {
+      summary.skippedAsset += 1
+      diagnostics.add('MULTIPAGE_LINK_SKIPPED_ASSET')
+      return tag
+    }
+
+    let rawUrl: URL | null = null
+    try {
+      rawUrl = new URL(href, currentPageUrl)
+    } catch {
+      rawUrl = null
+    }
+
+    const normalized = normalizeInternalHref({
+      href,
+      currentPageUrl,
+      canonicalHost: seed.canonicalHost,
+    })
+    if ('skip' in normalized) {
+      if (normalized.skip === 'external_host') {
+        summary.skippedExternal += 1
+        diagnostics.add('MULTIPAGE_LINK_SKIPPED_EXTERNAL')
+      } else if (normalized.skip === 'hash_only') {
+        summary.skippedHashOnly += 1
+        diagnostics.add('MULTIPAGE_LINK_SKIPPED_HASH_ONLY')
+      } else if (normalized.skip === 'asset_link') {
+        summary.skippedAsset += 1
+        diagnostics.add('MULTIPAGE_LINK_SKIPPED_ASSET')
+      } else {
+        summary.skippedUnsupported += 1
+        diagnostics.add('MULTIPAGE_LINK_SKIPPED_UNSUPPORTED_SCHEME')
+      }
+      return tag
+    }
+    const routePath = normalizeRawTemplateRouteMapPath(normalized.normalized.path)
+    if (rawUrl?.search) {
+      summary.skippedUnsupported += 1
+      diagnostics.add('MULTIPAGE_LINK_SKIPPED_UNSUPPORTED_SCHEME')
+      return tag
+    }
+    if (!importedRoutes.has(routePath)) {
+      summary.skippedRouteMissing += 1
+      missingRouteSamples.add(routePath)
+      diagnostics.add('MULTIPAGE_LINK_SKIPPED_ROUTE_NOT_IMPORTED')
+      return tag
+    }
+    const rewrittenHref = buildSiteVersionPreviewUrl({
+      siteVersionId: input.siteVersionId,
+      mode: 'raw_template_preview',
+      path: routePath,
+    })
+    summary.rewritten += 1
+    diagnostics.add('MULTIPAGE_LINK_REWRITTEN')
+    return tag.replace(/\bhref\s*=\s*(["'])(.*?)\1/i, `href=${quote}${rewrittenHref}${quote}`)
+  })
+  diagnostics.add('MULTIPAGE_LINK_REWRITE_COMPLETED')
+  return {
+    html,
+    summary: {
+      ...summary,
+      missingRouteSamples: [...missingRouteSamples].sort((a, b) => a.localeCompare(b)).slice(0, 10),
+      diagnostics: [...diagnostics].sort((a, b) => a.localeCompare(b)),
+    },
+    canCount: true,
+  }
+}
+
+function mergeLinkSummaries(summaries: MultiPagePreviewLinkRewriteValidationSummary[]): MultiPagePreviewLinkRewriteValidationSummary | null {
+  if (summaries.length === 0) return null
+  const missingRouteSamples = new Set<string>()
+  const diagnostics = new Set<string>()
+  const merged: MultiPagePreviewLinkRewriteValidationSummary = {
+    rewritten: 0,
+    skippedExternal: 0,
+    skippedUnsupported: 0,
+    skippedRouteMissing: 0,
+    skippedAsset: 0,
+    skippedHashOnly: 0,
+    missingRouteSamples: [],
+    diagnostics: [],
+  }
+  for (const summary of summaries) {
+    merged.rewritten += summary.rewritten
+    merged.skippedExternal += summary.skippedExternal
+    merged.skippedUnsupported += summary.skippedUnsupported
+    merged.skippedRouteMissing += summary.skippedRouteMissing
+    merged.skippedAsset += summary.skippedAsset
+    merged.skippedHashOnly += summary.skippedHashOnly
+    for (const sample of summary.missingRouteSamples ?? []) missingRouteSamples.add(sample)
+    for (const diagnostic of summary.diagnostics ?? []) diagnostics.add(diagnostic)
+  }
+  merged.missingRouteSamples = [...missingRouteSamples].sort((a, b) => a.localeCompare(b)).slice(0, 10)
+  merged.diagnostics = [...diagnostics].sort((a, b) => a.localeCompare(b))
+  return merged
 }
 
 function countFetchedPages(provenance: RuntimeImportProvenanceSummary | null | undefined): number {
@@ -332,4 +621,173 @@ export function validateMultiPagePreview(input: {
   })
 
   return validation
+}
+
+export function validateLatestRawMultiPagePreviewEvidence(input: {
+  siteId: string
+  siteVersionId: string
+  artifactId: string
+  entryHtmlPath: string
+  fileMap: Record<string, RawTemplateSiteFileMeta>
+  rawFileBytesByPath: Record<string, Uint8Array | string>
+  importProvenanceSummary?: RuntimeImportProvenanceSummary | null
+  capturedAt?: string
+}): LatestRawMultiPagePreviewValidationResult {
+  const capturedAt = input.capturedAt ?? new Date().toISOString()
+  const provenance = input.importProvenanceSummary ?? null
+  const assembly = provenance?.multiPageDiscovery?.rawArtifactAssembly ?? null
+  const routeMap = routeMapFromProvenance(provenance)
+  const routeMapServingEnabled = Boolean(assembly?.enabled && routeMap.length > 0)
+  const selectedRoutes = selectedRawValidationRoutes(provenance)
+  const warnings = new Set<string>(selectedRoutes.warnings)
+  const blockers = new Set<string>()
+  const diagnostics = new Set<string>([
+    MULTIPAGE_PREVIEW_VALIDATION_DIAGNOSTIC.MULTIPAGE_PREVIEW_VALIDATION_STARTED,
+  ])
+  if (!routeMapServingEnabled) blockers.add('raw_route_map_unavailable')
+
+  const routeEvidence: RawMultiPagePreviewValidationRouteEvidence[] = []
+  const linkSummaries: MultiPagePreviewLinkRewriteValidationSummary[] = []
+
+  for (const routePath of selectedRoutes.routePaths) {
+    const resolution = resolveRawTemplateRouteMapFile({
+      siteVersionId: input.siteVersionId,
+      requestedPath: routePath,
+      entryHtmlPath: input.entryHtmlPath,
+      fileMap: input.fileMap,
+      importProvenanceSummary: provenance,
+      routeMapServingEnabled,
+    })
+    const routeWarnings: string[] = []
+    const routeBlockers: string[] = []
+    const routeDiagnostics = new Set<string>([resolution.diagnosticCode])
+    let selectedRawFilePath: string | null = null
+    let validationStatus: MultiPagePreviewRouteValidationStatus = 'valid'
+    let responseStatus: number | null = 200
+    let responseBytes: number | null = null
+    let htmlBytesAfterRewrite: number | null = null
+    let rewrittenLinksCount: number | null = null
+    let missingRoute: string | null = null
+
+    if (resolution.outcome === 'selected' || resolution.outcome === 'file_missing') {
+      selectedRawFilePath = normalizeRawFilePath(resolution.rawFilePath)
+    }
+    if (resolution.outcome === 'miss' || resolution.outcome === 'disabled') {
+      validationStatus = 'resolver_miss'
+      responseStatus = null
+      missingRoute = routePath
+      routeWarnings.push(`resolver_miss:${routePath}`)
+      routeDiagnostics.add(MULTIPAGE_PREVIEW_VALIDATION_DIAGNOSTIC.MULTIPAGE_PREVIEW_ROUTE_RESOLVER_MISS)
+    } else if (resolution.outcome === 'file_missing' || !selectedRawFilePath || !input.fileMap[selectedRawFilePath]) {
+      validationStatus = 'missing_file'
+      responseStatus = 404
+      routeBlockers.push(`missing_file:${routePath}:${selectedRawFilePath ?? 'unknown'}`)
+      routeDiagnostics.add(MULTIPAGE_PREVIEW_VALIDATION_DIAGNOSTIC.MULTIPAGE_PREVIEW_ROUTE_MISSING_FILE)
+    } else {
+      const rawBytes = input.rawFileBytesByPath[selectedRawFilePath] ?? null
+      const rawHtml = typeof rawBytes === 'string' ? rawBytes : rawBytes ? Buffer.from(rawBytes).toString('utf8') : null
+      if (rawHtml == null) {
+        validationStatus = 'missing_file'
+        responseStatus = 404
+        routeBlockers.push(`missing_file:${routePath}:${selectedRawFilePath}`)
+        routeDiagnostics.add(MULTIPAGE_PREVIEW_VALIDATION_DIAGNOSTIC.MULTIPAGE_PREVIEW_ROUTE_MISSING_FILE)
+      } else {
+        responseBytes = Buffer.byteLength(rawHtml)
+        const linkRewrite = countRawPreviewRewrittenLinks({
+          html: rawHtml,
+          siteVersionId: input.siteVersionId,
+          routePath,
+          sourceUrl: resolution.sourceUrl,
+          finalUrl: resolution.finalUrl,
+          importProvenanceSummary: provenance,
+        })
+        htmlBytesAfterRewrite = Buffer.byteLength(linkRewrite.html)
+        if (linkRewrite.canCount) {
+          rewrittenLinksCount = linkRewrite.summary.rewritten
+          linkSummaries.push(linkRewrite.summary)
+        } else {
+          routeWarnings.push(`link_rewrite_count_unavailable:${routePath}`)
+        }
+        for (const diagnostic of linkRewrite.summary.diagnostics ?? []) routeDiagnostics.add(diagnostic)
+        routeDiagnostics.add(MULTIPAGE_PREVIEW_VALIDATION_DIAGNOSTIC.MULTIPAGE_PREVIEW_ROUTE_VALID)
+      }
+    }
+
+    for (const warning of routeWarnings) warnings.add(warning)
+    for (const blocker of routeBlockers) blockers.add(blocker)
+    for (const diagnostic of routeDiagnostics) diagnostics.add(diagnostic)
+    routeEvidence.push({
+      capturedAt,
+      siteVersionId: input.siteVersionId,
+      artifactId: input.artifactId,
+      routePath,
+      selectedRawFilePath,
+      validationStatus,
+      responseStatus,
+      responseBytes,
+      htmlBytesAfterRewrite,
+      rewrittenLinksCount,
+      missingRoute,
+      blockers: [...new Set(routeBlockers)].sort((a, b) => a.localeCompare(b)),
+      warnings: [...new Set(routeWarnings)].sort((a, b) => a.localeCompare(b)),
+      diagnostics: [...routeDiagnostics].sort((a, b) => a.localeCompare(b)),
+    })
+  }
+
+  const mergedLinkSummary = mergeLinkSummaries(linkSummaries)
+  if (!mergedLinkSummary) warnings.add('raw_preview_link_rewrite_counts_unavailable')
+  const previewValidation = mergedLinkSummary
+    ? validateMultiPagePreview({
+        siteId: input.siteId,
+        siteVersionId: input.siteVersionId,
+        entryHtmlPath: input.entryHtmlPath,
+        fileMap: input.fileMap,
+        importProvenanceSummary: provenance,
+        multiPagePreviewRequested: true,
+        linkRewriteSummary: mergedLinkSummary,
+      })
+    : null
+  if (previewValidation) {
+    for (const warning of previewValidation.warnings) warnings.add(warning)
+    for (const blocker of previewValidation.blockers) blockers.add(blocker)
+    for (const diagnostic of previewValidation.diagnostics) diagnostics.add(diagnostic)
+  }
+
+  const uniqueWarnings = [...warnings].sort((a, b) => a.localeCompare(b))
+  const uniqueBlockers = [...blockers].sort((a, b) => a.localeCompare(b))
+  const validationStatus: MultiPagePreviewValidationStatus =
+    uniqueBlockers.length > 0
+      ? 'blocked'
+      : uniqueWarnings.length > 0
+        ? 'ready_with_warnings'
+        : 'ready'
+  diagnostics.add(
+    validationStatus === 'ready'
+      ? MULTIPAGE_PREVIEW_VALIDATION_DIAGNOSTIC.RAW_PREVIEW_VALIDATION_EVIDENCE_READY
+      : validationStatus === 'ready_with_warnings'
+        ? MULTIPAGE_PREVIEW_VALIDATION_DIAGNOSTIC.RAW_PREVIEW_VALIDATION_EVIDENCE_READY_WITH_WARNINGS
+        : MULTIPAGE_PREVIEW_VALIDATION_DIAGNOSTIC.RAW_PREVIEW_VALIDATION_EVIDENCE_BLOCKED,
+  )
+  const primary = routeEvidence.find((entry) => entry.routePath === '/') ?? routeEvidence[0] ?? null
+
+  return {
+    evidence: {
+      kind: 'raw_multi_page_preview_validation_evidence_v1',
+      capturedAt,
+      siteVersionId: input.siteVersionId,
+      artifactId: input.artifactId,
+      routePath: primary?.routePath ?? null,
+      selectedRawFilePath: primary?.selectedRawFilePath ?? null,
+      validationStatus,
+      responseStatus: primary?.responseStatus ?? null,
+      responseBytes: primary?.responseBytes ?? null,
+      htmlBytesAfterRewrite: primary?.htmlBytesAfterRewrite ?? null,
+      rewrittenLinksCount: primary?.rewrittenLinksCount ?? null,
+      routeEvidence,
+      warnings: uniqueWarnings,
+      blockers: uniqueBlockers,
+      diagnostics: [...diagnostics].sort((a, b) => a.localeCompare(b)),
+    },
+    previewValidation,
+  }
 }

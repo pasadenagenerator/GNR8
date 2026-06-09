@@ -1588,7 +1588,11 @@ test('scoped pipeline uses priority-balanced route order for Viroidoc-like acqui
     const routePath = url.split('?')[0] ?? '/'
     if (routePath === '/' || topLevelRoutes.includes(routePath) || articleRoutes.includes(routePath)) {
       res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' })
-      res.end(`<!doctype html><html><body><h1>${routePath}</h1></body></html>`)
+      res.end(
+        `<!doctype html><html><body><header><nav>${topLevelRoutes
+          .map((childRoute) => `<a href="${childRoute}">${childRoute}</a>`)
+          .join('')}</nav></header><h1>${routePath}</h1></body></html>`,
+      )
       return
     }
     res.writeHead(404, { 'content-type': 'text/plain' })
@@ -1616,6 +1620,7 @@ test('scoped pipeline uses priority-balanced route order for Viroidoc-like acqui
     let createInput: any = null
     let persistedImportSummary: any = null
     let linkedArtifactId: string | null = null
+    let artifactManifest: any = null
 
     await runScopedImportPipeline({
       snapshot: {
@@ -1711,7 +1716,10 @@ test('scoped pipeline uses priority-balanced route order for Viroidoc-like acqui
             assetFingerprintMap: {},
             manifest: {},
           }) as any,
-        createArtifact: async () => ({ artifactId: 'artifact-viroidoc-priority' }),
+        createArtifact: async (input) => {
+          artifactManifest = input.manifest
+          return { artifactId: 'artifact-viroidoc-priority' }
+        },
         bindArtifactToVersion: async (input) => {
           linkedArtifactId = input.artifactId
           return { affectedRows: 1 }
@@ -1751,6 +1759,14 @@ test('scoped pipeline uses priority-balanced route order for Viroidoc-like acqui
     assert.equal(firstArticleAcquisitionIndex > lastRequiredTopLevelIndex, true)
     assert.deepEqual(multiPage.manifest.routeCandidates.slice(0, topLevelRoutes.length), ['/blog', '/learn', '/news', '/people', '/project', '/subscribe'])
     assert.equal(multiPage.acquisition.pages.some((entry: any) => entry.normalizedRoutePath === '/b/article-15' && entry.skippedReason === 'acquisition_page_limit'), true)
+    assert.equal(artifactManifest?.latestRawPreviewValidationEvidence?.siteVersionId, 'site-version-viroidoc-priority')
+    assert.equal(artifactManifest?.latestRawPreviewValidationEvidence?.artifactId, 'raw-artifact-viroidoc-priority')
+    assert.equal(artifactManifest?.multiPagePreviewValidation?.summary.rewrittenLinks > 0, true)
+    for (const routePath of ['/', '/project', '/people', '/news']) {
+      const evidence = artifactManifest.latestRawPreviewValidationEvidence.routeEvidence.find((entry: any) => entry.routePath === routePath)
+      assert.equal(evidence?.validationStatus, 'valid', `${routePath} should have raw validation evidence`)
+      assert.equal(evidence?.rewrittenLinksCount > 0, true, `${routePath} should capture rewritten links`)
+    }
   } finally {
     await new Promise<void>((resolve) => server.close(() => resolve()))
   }

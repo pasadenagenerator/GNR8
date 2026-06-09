@@ -620,6 +620,90 @@ test('latest raw preview validation evidence parses persisted validation evidenc
   })
 })
 
+test('latest raw preview validation evidence parses route-level raw validation evidence', () => {
+  const evidence = __siteWorkspaceReadModelTestUtils.resolveLatestRawPreviewValidationEvidence({
+    latestImportSiteVersionId: 'latest-import-version',
+    latestImportManifest: {
+      latestRawPreviewValidationEvidence: {
+        capturedAt: '2026-06-09T09:10:11.000Z',
+        siteVersionId: 'latest-import-version',
+        artifactId: 'raw-artifact-latest',
+        routePath: '/',
+        selectedRawFilePath: 'index.html',
+        validationStatus: 'ready',
+        rewrittenLinksCount: 3,
+        responseStatus: 200,
+        responseBytes: 4096,
+        htmlBytesAfterRewrite: 4200,
+        routeEvidence: [
+          {
+            capturedAt: '2026-06-09T09:10:11.000Z',
+            siteVersionId: 'latest-import-version',
+            artifactId: 'raw-artifact-latest',
+            routePath: '/',
+            selectedRawFilePath: 'index.html',
+            validationStatus: 'valid',
+            rewrittenLinksCount: 3,
+            responseStatus: 200,
+            responseBytes: 4096,
+            htmlBytesAfterRewrite: 4200,
+          },
+          {
+            capturedAt: '2026-06-09T09:10:11.000Z',
+            siteVersionId: 'latest-import-version',
+            artifactId: 'raw-artifact-latest',
+            routePath: '/project',
+            selectedRawFilePath: 'pages/project/index.html',
+            validationStatus: 'valid',
+            rewrittenLinksCount: 2,
+            responseStatus: 200,
+            responseBytes: 2048,
+            htmlBytesAfterRewrite: 2100,
+          },
+        ],
+        warnings: ['route_warning_sample'],
+      },
+    },
+  })
+
+  assert.equal(evidence?.artifactId, 'raw-artifact-latest')
+  assert.equal(evidence?.validationStatus, 'ready')
+  assert.equal(evidence?.htmlBytesAfterRewrite, 4200)
+  assert.equal(evidence?.routeEvidence?.length, 2)
+  assert.equal(evidence?.routeEvidence?.find((route) => route.routePath === '/project')?.rewrittenLinksCount, 2)
+  assert.deepEqual(evidence?.warnings, ['route_warning_sample'])
+})
+
+test('latest raw preview validation evidence rejects stale route-level raw evidence', () => {
+  const evidence = __siteWorkspaceReadModelTestUtils.resolveLatestRawPreviewValidationEvidence({
+    latestImportSiteVersionId: 'latest-import-version',
+    latestImportManifest: {
+      latestRawPreviewValidationEvidence: {
+        capturedAt: '2026-06-09T09:10:11.000Z',
+        siteVersionId: 'latest-import-version',
+        routePath: '/',
+        selectedRawFilePath: 'index.html',
+        routeEvidence: [
+          {
+            siteVersionId: 'older-version',
+            routePath: '/stale',
+            selectedRawFilePath: 'pages/stale/index.html',
+            rewrittenLinksCount: 9,
+          },
+          {
+            siteVersionId: 'latest-import-version',
+            routePath: '/project',
+            selectedRawFilePath: 'pages/project/index.html',
+            rewrittenLinksCount: 2,
+          },
+        ],
+      },
+    },
+  })
+
+  assert.deepEqual(evidence?.routeEvidence?.map((route) => route.routePath), ['/project'])
+})
+
 test('latest raw preview validation evidence is absent without persisted raw evidence', () => {
   const evidence = __siteWorkspaceReadModelTestUtils.resolveLatestRawPreviewValidationEvidence({
     latestImportSiteVersionId: 'latest-import-version',

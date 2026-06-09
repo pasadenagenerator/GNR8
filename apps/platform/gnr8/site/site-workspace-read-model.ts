@@ -55,12 +55,36 @@ type RuntimeArtifactRow = {
 export type SiteWorkspaceRawPreviewValidationEvidence = {
   capturedAt: string | null
   siteVersionId: string | null
+  artifactId?: string | null
   routePath: string | null
   selectedRawFilePath: string | null
+  validationStatus?: string | null
   rewrittenLinksCount: number | null
   responseStatus: number | null
   responseBytes: number | null
+  htmlBytesAfterRewrite?: number | null
+  routeEvidence?: SiteWorkspaceRawPreviewValidationRouteEvidence[]
+  warnings?: string[]
+  blockers?: string[]
+  diagnostics?: string[]
   evidenceSource: 'persisted_preview_validation'
+}
+
+export type SiteWorkspaceRawPreviewValidationRouteEvidence = {
+  capturedAt: string | null
+  siteVersionId: string | null
+  artifactId: string | null
+  routePath: string | null
+  selectedRawFilePath: string | null
+  validationStatus: string | null
+  rewrittenLinksCount: number | null
+  responseStatus: number | null
+  responseBytes: number | null
+  htmlBytesAfterRewrite: number | null
+  missingRoute: string | null
+  warnings: string[]
+  blockers: string[]
+  diagnostics: string[]
 }
 
 type RuntimeDomainHostBindingRow = {
@@ -2117,6 +2141,12 @@ function firstRecord(...values: unknown[]): Record<string, unknown> | null {
   return values.find(isRecord) ?? null
 }
 
+function textArray(value: unknown): string[] {
+  return Array.isArray(value)
+    ? [...new Set(value.map((entry) => normalizeText(entry)).filter(Boolean))].sort((a, b) => a.localeCompare(b))
+    : []
+}
+
 function parseRawPreviewValidationEvidence(input: {
   manifest: Record<string, unknown> | null
   expectedSiteVersionId?: string | null
@@ -2153,12 +2183,56 @@ function parseRawPreviewValidationEvidence(input: {
   const response = isRecord(explicitEvidence.response) ? explicitEvidence.response : null
   const http = isRecord(explicitEvidence.http) ? explicitEvidence.http : null
   const summary = isRecord(previewValidation?.summary) ? previewValidation.summary : null
+  const routeEvidence = Array.isArray(explicitEvidence.routeEvidence)
+    ? explicitEvidence.routeEvidence
+        .filter(isRecord)
+        .map((route): SiteWorkspaceRawPreviewValidationRouteEvidence | null => {
+          const routeSiteVersionId = toTextOrNull(route.siteVersionId) ?? evidenceSiteVersionId ?? expectedSiteVersionId
+          if (routeSiteVersionId && expectedSiteVersionId && routeSiteVersionId !== expectedSiteVersionId) return null
+          const routeResponse = isRecord(route.response) ? route.response : null
+          const routeHttp = isRecord(route.http) ? route.http : null
+          return {
+            capturedAt: toIsoOrNull(route.capturedAt) ?? toIsoOrNull(route.capturedAtIso),
+            siteVersionId: routeSiteVersionId,
+            artifactId: toTextOrNull(route.artifactId) ?? toTextOrNull(explicitEvidence.artifactId),
+            routePath: toTextOrNull(route.routePath) ?? toTextOrNull(route.selectedRoutePath),
+            selectedRawFilePath: toTextOrNull(route.selectedRawFilePath) ?? toTextOrNull(route.rawFilePath),
+            validationStatus: toTextOrNull(route.validationStatus) ?? toTextOrNull(route.status),
+            rewrittenLinksCount:
+              nonNegativeIntegerOrNull(route.rewrittenLinksCount) ??
+              nonNegativeIntegerOrNull(route.rewrittenLinkCount),
+            responseStatus:
+              nonNegativeIntegerOrNull(route.responseStatus) ??
+              nonNegativeIntegerOrNull(route.statusCode) ??
+              nonNegativeIntegerOrNull(routeResponse?.status) ??
+              nonNegativeIntegerOrNull(routeHttp?.status),
+            responseBytes:
+              nonNegativeIntegerOrNull(route.responseBytes) ??
+              nonNegativeIntegerOrNull(route.responseByteLength) ??
+              nonNegativeIntegerOrNull(routeResponse?.bytes) ??
+              nonNegativeIntegerOrNull(routeResponse?.byteLength) ??
+              nonNegativeIntegerOrNull(routeHttp?.bytes) ??
+              nonNegativeIntegerOrNull(routeHttp?.byteLength),
+            htmlBytesAfterRewrite:
+              nonNegativeIntegerOrNull(route.htmlBytesAfterRewrite) ??
+              nonNegativeIntegerOrNull(route.htmlByteLengthAfterRewrite),
+            missingRoute: toTextOrNull(route.missingRoute),
+            warnings: textArray(route.warnings),
+            blockers: textArray(route.blockers),
+            diagnostics: textArray(route.diagnostics),
+          }
+        })
+        .filter((route): route is SiteWorkspaceRawPreviewValidationRouteEvidence => Boolean(route))
+    : []
+  const validationStatus = toTextOrNull(explicitEvidence.validationStatus)
 
   return {
     capturedAt: toIsoOrNull(explicitEvidence.capturedAt) ?? toIsoOrNull(explicitEvidence.capturedAtIso),
     siteVersionId: evidenceSiteVersionId ?? expectedSiteVersionId,
+    ...(toTextOrNull(explicitEvidence.artifactId) ? { artifactId: toTextOrNull(explicitEvidence.artifactId) } : {}),
     routePath: toTextOrNull(explicitEvidence.routePath) ?? toTextOrNull(explicitEvidence.selectedRoutePath),
     selectedRawFilePath: toTextOrNull(explicitEvidence.selectedRawFilePath) ?? toTextOrNull(explicitEvidence.rawFilePath),
+    ...(validationStatus ? { validationStatus } : {}),
     rewrittenLinksCount:
       nonNegativeIntegerOrNull(explicitEvidence.rewrittenLinksCount) ??
       nonNegativeIntegerOrNull(explicitEvidence.rewrittenLinkCount) ??
@@ -2175,6 +2249,17 @@ function parseRawPreviewValidationEvidence(input: {
       nonNegativeIntegerOrNull(response?.byteLength) ??
       nonNegativeIntegerOrNull(http?.bytes) ??
       nonNegativeIntegerOrNull(http?.byteLength),
+    ...(nonNegativeIntegerOrNull(explicitEvidence.htmlBytesAfterRewrite) != null || nonNegativeIntegerOrNull(explicitEvidence.htmlByteLengthAfterRewrite) != null
+      ? {
+          htmlBytesAfterRewrite:
+            nonNegativeIntegerOrNull(explicitEvidence.htmlBytesAfterRewrite) ??
+            nonNegativeIntegerOrNull(explicitEvidence.htmlByteLengthAfterRewrite),
+        }
+      : {}),
+    ...(routeEvidence.length > 0 ? { routeEvidence } : {}),
+    ...(textArray(explicitEvidence.warnings).length > 0 ? { warnings: textArray(explicitEvidence.warnings) } : {}),
+    ...(textArray(explicitEvidence.blockers).length > 0 ? { blockers: textArray(explicitEvidence.blockers) } : {}),
+    ...(textArray(explicitEvidence.diagnostics).length > 0 ? { diagnostics: textArray(explicitEvidence.diagnostics) } : {}),
     evidenceSource: 'persisted_preview_validation',
   }
 }

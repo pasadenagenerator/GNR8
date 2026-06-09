@@ -774,11 +774,46 @@ function renderPreviewContent(readModel: Awaited<ReturnType<typeof getSiteWorksp
           <div style={{ marginTop: 6, display: 'grid', gap: 4, color: '#334155', fontSize: 12 }}>
             <div>capturedAt: {formatTimestamp(latestRawPreviewValidationEvidence.capturedAt)}</div>
             <div>siteVersionId: {latestRawPreviewValidationEvidence.siteVersionId ?? 'n/a'}</div>
+            <div>artifactId: {latestRawPreviewValidationEvidence.artifactId ?? 'n/a'}</div>
+            <div>validationStatus: {latestRawPreviewValidationEvidence.validationStatus ?? 'n/a'}</div>
             <div>routePath: {latestRawPreviewValidationEvidence.routePath ?? 'n/a'}</div>
             <div>selectedRawFilePath: {latestRawPreviewValidationEvidence.selectedRawFilePath ?? 'n/a'}</div>
             <div>rewrittenLinksCount: {latestRawPreviewValidationEvidence.rewrittenLinksCount ?? 'n/a'}</div>
             <div>responseStatus: {latestRawPreviewValidationEvidence.responseStatus ?? 'n/a'}</div>
             <div>responseBytes: {latestRawPreviewValidationEvidence.responseBytes ?? 'n/a'}</div>
+            <div>htmlBytesAfterRewrite: {latestRawPreviewValidationEvidence.htmlBytesAfterRewrite ?? 'n/a'}</div>
+            {(latestRawPreviewValidationEvidence.warnings?.length ?? 0) > 0 ? (
+              <div>warning diagnostics: {latestRawPreviewValidationEvidence.warnings?.slice(0, 3).join(' · ')}</div>
+            ) : null}
+            {(latestRawPreviewValidationEvidence.blockers?.length ?? 0) > 0 ? (
+              <div>blocker diagnostics: {latestRawPreviewValidationEvidence.blockers?.slice(0, 3).join(' · ')}</div>
+            ) : null}
+            {(latestRawPreviewValidationEvidence.routeEvidence?.length ?? 0) > 0 ? (
+              <div style={{ marginTop: 6, overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+                  <thead>
+                    <tr style={{ color: '#475569' }}>
+                      <th style={{ textAlign: 'left', padding: '4px 6px', borderBottom: '1px solid #e2e8f0' }}>route</th>
+                      <th style={{ textAlign: 'left', padding: '4px 6px', borderBottom: '1px solid #e2e8f0' }}>status</th>
+                      <th style={{ textAlign: 'left', padding: '4px 6px', borderBottom: '1px solid #e2e8f0' }}>raw file</th>
+                      <th style={{ textAlign: 'right', padding: '4px 6px', borderBottom: '1px solid #e2e8f0' }}>rewritten links</th>
+                      <th style={{ textAlign: 'right', padding: '4px 6px', borderBottom: '1px solid #e2e8f0' }}>bytes</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {latestRawPreviewValidationEvidence.routeEvidence?.map((route) => (
+                      <tr key={`${route.routePath}:${route.selectedRawFilePath}:raw-validation`}>
+                        <td style={{ padding: '4px 6px', borderBottom: '1px solid #e2e8f0' }}>{route.routePath ?? 'n/a'}</td>
+                        <td style={{ padding: '4px 6px', borderBottom: '1px solid #e2e8f0' }}>{route.validationStatus ?? 'n/a'}</td>
+                        <td style={{ padding: '4px 6px', borderBottom: '1px solid #e2e8f0' }}>{route.selectedRawFilePath ?? 'n/a'}</td>
+                        <td style={{ padding: '4px 6px', borderBottom: '1px solid #e2e8f0', textAlign: 'right' }}>{route.rewrittenLinksCount ?? 'n/a'}</td>
+                        <td style={{ padding: '4px 6px', borderBottom: '1px solid #e2e8f0', textAlign: 'right' }}>{route.responseBytes ?? route.htmlBytesAfterRewrite ?? 'n/a'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : null}
             <div>evidence source: {latestRawPreviewValidationEvidence.evidenceSource}</div>
           </div>
         ) : (

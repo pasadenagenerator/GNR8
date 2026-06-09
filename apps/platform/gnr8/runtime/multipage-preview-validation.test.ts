@@ -3,6 +3,7 @@ import test from 'node:test'
 
 import {
   MULTIPAGE_PREVIEW_VALIDATION_DIAGNOSTIC,
+  validateLatestRawMultiPagePreviewEvidence,
   validateMultiPagePreview,
   type MultiPagePreviewLinkRewriteValidationSummary,
 } from '@/gnr8/runtime/multipage-preview-validation'
@@ -250,5 +251,64 @@ test('multi-page preview validation status rules are deterministic', () => {
   assert.deepEqual(
     first.links.find((link) => link.status === 'skipped_route_missing')?.sampleMissingRoutes,
     ['/a', '/z'],
+  )
+})
+
+test('latest raw preview validation uses route-map resolution for root and selected tier one routes', () => {
+  const html = [
+    '<!doctype html><html><body><nav>',
+    '<a href="/project">Project</a>',
+    '<a href="/people">People</a>',
+    '<a href="/news">News</a>',
+    '</nav></body></html>',
+  ].join('')
+  const rawFileBytesByPath = {
+    'index.html': html,
+    'pages/project/index.html': html,
+    'pages/people/index.html': html,
+    'pages/news/index.html': html,
+  }
+  const rawProvenance = provenance({
+    routeMap: [
+      { routePath: '/project', rawFilePath: 'pages/project/index.html', sourceUrl: 'https://example.com/project' },
+      { routePath: '/people', rawFilePath: 'pages/people/index.html', sourceUrl: 'https://example.com/people' },
+      { routePath: '/news', rawFilePath: 'pages/news/index.html', sourceUrl: 'https://example.com/news' },
+    ],
+  })
+  rawProvenance.multiPageDiscovery!.manifest!.routePriorityBalancing = {
+    maxRoutes: 8,
+    routeLimitHit: false,
+    selectedRouteCount: 3,
+    excludedRouteCount: 0,
+    tiers: [{ tier: 'tier_1_navigation', candidateCount: 3, selectedCount: 3, excludedCount: 0 }],
+    assignments: [
+      { routePath: '/project', tier: 'tier_1_navigation', source: 'navigation', reason: 'header_navigation', selected: true, excludedReason: null },
+      { routePath: '/people', tier: 'tier_1_navigation', source: 'navigation', reason: 'header_navigation', selected: true, excludedReason: null },
+      { routePath: '/news', tier: 'tier_1_navigation', source: 'navigation', reason: 'header_navigation', selected: true, excludedReason: null },
+    ],
+    diagnostics: [],
+  }
+  const result = validateLatestRawMultiPagePreviewEvidence({
+    siteId: 'site-validation',
+    siteVersionId: 'sv-validation',
+    artifactId: 'artifact-validation',
+    entryHtmlPath: 'index.html',
+    fileMap: fileMap(Object.keys(rawFileBytesByPath)),
+    rawFileBytesByPath,
+    capturedAt: '2026-06-09T10:00:00.000Z',
+    importProvenanceSummary: rawProvenance,
+  })
+
+  assert.equal(result.previewValidation?.status, 'ready')
+  assert.equal(result.previewValidation?.summary.rewrittenLinks, 12)
+  assert.deepEqual(result.evidence.routeEvidence.map((route) => route.routePath), ['/', '/project', '/people', '/news'])
+  for (const routePath of ['/', '/project', '/people', '/news']) {
+    const evidence = result.evidence.routeEvidence.find((route) => route.routePath === routePath)
+    assert.equal(evidence?.validationStatus, 'valid')
+    assert.equal(evidence?.rewrittenLinksCount, 3)
+  }
+  assert.equal(
+    result.evidence.routeEvidence.find((route) => route.routePath === '/project')?.selectedRawFilePath,
+    'pages/project/index.html',
   )
 })
