@@ -4023,10 +4023,12 @@ export async function getVersionState(siteVersionId: string, options: RuntimeSto
   });
 }
 
-export async function getSiteVersionArtifactBinding(siteVersionId: string): Promise<{ siteId: string; artifactId: string | null } | null> {
-  await ensureRuntimeTables();
-  const pool = getSuperadminPool();
-  const res = await pool.query<{ site_id: string; artifact_id: string | null }>(
+export async function getSiteVersionArtifactBinding(
+  siteVersionId: string,
+  options: RuntimeStoreDbOptions = {},
+): Promise<{ siteId: string; artifactId: string | null } | null> {
+  return withRuntimeClient(options, async (client) => {
+    const res = await client.query<{ site_id: string; artifact_id: string | null }>(
       `
       select site_id::text as site_id, artifact_id::text as artifact_id
       from public.gnr8_runtime_site_versions
@@ -4035,9 +4037,10 @@ export async function getSiteVersionArtifactBinding(siteVersionId: string): Prom
       `,
       [siteVersionId],
     );
-  const row = res.rows[0];
-  if (!row) return null;
-  return { siteId: row.site_id, artifactId: row.artifact_id };
+    const row = res.rows[0];
+    if (!row) return null;
+    return { siteId: row.site_id, artifactId: row.artifact_id };
+  });
 }
 
 export async function getRawTemplateSiteArtifact(
@@ -4567,10 +4570,9 @@ export async function upsertContentSlots(input: {
   });
 }
 
-export async function listContentSlots(siteVersionId: string): Promise<ContentSlot[]> {
-  await ensureRuntimeTables();
-  const pool = getSuperadminPool();
-  const res = await pool.query<any>(
+export async function listContentSlots(siteVersionId: string, options: RuntimeStoreDbOptions = {}): Promise<ContentSlot[]> {
+  return withRuntimeClient(options, async (client) => {
+    const res = await client.query<any>(
       `
       select id::text, site_id::text, site_version_id::text, slot_key::text, slot_type::text, source_selector::text, source_text::text, source_asset_path::text, confidence::text, diagnostics, created_at::text, updated_at::text
       from public.gnr8_content_slots
@@ -4579,29 +4581,30 @@ export async function listContentSlots(siteVersionId: string): Promise<ContentSl
       `,
       [siteVersionId],
     );
-  return res.rows.map((row: any) => ({
-    id: row.id,
-    siteId: row.site_id,
-    siteVersionId: row.site_version_id,
-    slotKey: row.slot_key,
-    slotType: row.slot_type as ContentSlotType,
-    sourceSelector: row.source_selector ?? null,
-    sourceText: row.source_text ?? null,
-    sourceAssetPath: row.source_asset_path ?? null,
-    confidence: Number(row.confidence ?? 0),
-    diagnostics: (row.diagnostics ?? null) as Record<string, unknown> | null,
-    createdAt: row.created_at,
-    updatedAt: row.updated_at,
-  }));
+    return res.rows.map((row: any) => ({
+      id: row.id,
+      siteId: row.site_id,
+      siteVersionId: row.site_version_id,
+      slotKey: row.slot_key,
+      slotType: row.slot_type as ContentSlotType,
+      sourceSelector: row.source_selector ?? null,
+      sourceText: row.source_text ?? null,
+      sourceAssetPath: row.source_asset_path ?? null,
+      confidence: Number(row.confidence ?? 0),
+      diagnostics: (row.diagnostics ?? null) as Record<string, unknown> | null,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+    }));
+  });
 }
 
 export async function listContentOverrides(input: {
   siteVersionId: string;
   status?: ContentOverrideStatus;
+  dbClient?: RuntimeStoreDbClient;
 }): Promise<ContentOverride[]> {
-  await ensureRuntimeTables();
-  const pool = getSuperadminPool();
-  const res = await pool.query<any>(
+  return withRuntimeClient({ dbClient: input.dbClient }, async (client) => {
+    const res = await client.query<any>(
       `
       select id::text, site_id::text, site_version_id::text, slot_key::text, value_type::text, value_json, status::text, created_at::text, updated_at::text
       from public.gnr8_content_overrides
@@ -4611,17 +4614,18 @@ export async function listContentOverrides(input: {
       `,
       [input.siteVersionId, input.status ?? null],
     );
-  return res.rows.map((row: any) => ({
-    id: row.id,
-    siteId: row.site_id,
-    siteVersionId: row.site_version_id,
-    slotKey: row.slot_key,
-    valueType: row.value_type as ContentSlotType,
-    valueJson: row.value_json,
-    status: row.status as ContentOverrideStatus,
-    createdAt: row.created_at,
-    updatedAt: row.updated_at,
-  }));
+    return res.rows.map((row: any) => ({
+      id: row.id,
+      siteId: row.site_id,
+      siteVersionId: row.site_version_id,
+      slotKey: row.slot_key,
+      valueType: row.value_type as ContentSlotType,
+      valueJson: row.value_json,
+      status: row.status as ContentOverrideStatus,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+    }));
+  });
 }
 
 export type ContentOverrideHistoryAction = "draft_saved" | "content_published" | "rollback_applied";

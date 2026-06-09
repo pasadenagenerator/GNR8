@@ -18,6 +18,7 @@ import {
   getRawTemplateSiteAsset,
   getSiteVersion,
   getSiteVersionArtifactBinding,
+  type RuntimeStoreDbClient,
 } from '@/gnr8/runtime/runtime-store'
 import { getSuperadminPool } from '@/src/superadmin/db'
 import { applyContentOverridesToRawHtml } from '@/src/public-site/content-override-runtime'
@@ -123,6 +124,8 @@ type PreviewReadDependencies = {
   getRawTemplateSiteAsset: typeof getRawTemplateSiteAsset
   listContentSlots: typeof listContentSlots
   listContentOverrides: typeof listContentOverrides
+  acquireRuntimeDbClient: () => Promise<RuntimeStoreDbClient>
+  requestScopedDbClientEnabled: boolean
 }
 
 const defaultPreviewReadDependencies: PreviewReadDependencies = {
@@ -142,6 +145,8 @@ const defaultPreviewReadDependencies: PreviewReadDependencies = {
   getRawTemplateSiteAsset,
   listContentSlots,
   listContentOverrides,
+  acquireRuntimeDbClient: () => getSuperadminPool().connect(),
+  requestScopedDbClientEnabled: true,
 }
 
 let previewReadDependencies: PreviewReadDependencies = defaultPreviewReadDependencies
@@ -151,6 +156,11 @@ export function setUnifiedRenderPreviewDependenciesForTest(overrides: Partial<Pr
   previewReadDependencies = {
     ...previewReadDependencies,
     ...overrides,
+    requestScopedDbClientEnabled:
+      overrides.requestScopedDbClientEnabled ??
+      (Object.prototype.hasOwnProperty.call(overrides, 'acquireRuntimeDbClient')
+        ? previewReadDependencies.requestScopedDbClientEnabled
+        : false),
   }
   return () => {
     previewReadDependencies = previous
@@ -161,6 +171,7 @@ type PreviewReadContext = {
   requestCorrelationKey: string
   queryCount: number
   uniqueLookupCount: number
+  dbClient: RuntimeStoreDbClient | null
   siteVersionById: Map<string, Promise<CanonicalSiteVersionSnapshot | null>>
   artifactBindingBySiteVersionId: Map<string, Promise<{ siteId: string; artifactId: string | null } | null>>
   artifactById: Map<string, Promise<Awaited<ReturnType<typeof getArtifactById>>>>
@@ -178,6 +189,7 @@ function createPreviewReadContext(requestCorrelationKey: string): PreviewReadCon
     requestCorrelationKey,
     queryCount: 0,
     uniqueLookupCount: 0,
+    dbClient: null,
     siteVersionById: new Map(),
     artifactBindingBySiteVersionId: new Map(),
     artifactById: new Map(),
@@ -194,9 +206,32 @@ function cacheLookup<T>(input: {
   cache: Map<string, Promise<T>>
   key: string
   loader: () => Promise<T>
+  diagnostics?: {
+    hitEvent?: string
+    missEvent?: string
+    resource: string
+  }
 }): Promise<T> {
   const existing = input.cache.get(input.key)
-  if (existing) return existing
+  if (existing) {
+    if (input.diagnostics?.hitEvent) {
+      console.info(`[gnr8.runtime.preview] ${input.diagnostics.hitEvent}`, {
+        requestCorrelationKey: input.context.requestCorrelationKey,
+        resource: input.diagnostics.resource,
+        queryCount: input.context.queryCount,
+        uniqueLookupCount: input.context.uniqueLookupCount,
+      })
+    }
+    return existing
+  }
+  if (input.diagnostics?.missEvent) {
+    console.info(`[gnr8.runtime.preview] ${input.diagnostics.missEvent}`, {
+      requestCorrelationKey: input.context.requestCorrelationKey,
+      resource: input.diagnostics.resource,
+      queryCount: input.context.queryCount,
+      uniqueLookupCount: input.context.uniqueLookupCount + 1,
+    })
+  }
   input.context.uniqueLookupCount += 1
   const created = (async () => {
     input.context.queryCount += 1
@@ -344,6 +379,16 @@ export const RAW_TEMPLATE_PREVIEW_EVIDENCE_DIAGNOSTIC = {
   PREVIEW_LINK_REWRITE_STARTED: 'PREVIEW_LINK_REWRITE_STARTED',
   PREVIEW_LINK_REWRITE_COMPLETED: 'PREVIEW_LINK_REWRITE_COMPLETED',
   PREVIEW_LINKS_REWRITTEN_COUNT: 'PREVIEW_LINKS_REWRITTEN_COUNT',
+} as const
+
+export const TRANSFORMED_PREVIEW_DIAGNOSTIC = {
+  TRANSFORMED_PREVIEW_DB_READ_STARTED: 'TRANSFORMED_PREVIEW_DB_READ_STARTED',
+  TRANSFORMED_PREVIEW_DB_READ_COMPLETED: 'TRANSFORMED_PREVIEW_DB_READ_COMPLETED',
+  TRANSFORMED_PREVIEW_DB_READ_COUNT: 'TRANSFORMED_PREVIEW_DB_READ_COUNT',
+  TRANSFORMED_PREVIEW_ARTIFACT_CACHE_HIT: 'TRANSFORMED_PREVIEW_ARTIFACT_CACHE_HIT',
+  TRANSFORMED_PREVIEW_ARTIFACT_CACHE_MISS: 'TRANSFORMED_PREVIEW_ARTIFACT_CACHE_MISS',
+  TRANSFORMED_PREVIEW_HOME_ROUTE_SELECTED: 'TRANSFORMED_PREVIEW_HOME_ROUTE_SELECTED',
+  TRANSFORMED_PREVIEW_RAW_RESOLUTION_SKIPPED: 'TRANSFORMED_PREVIEW_RAW_RESOLUTION_SKIPPED',
 } as const
 
 type MultiPageLinkRewriteCounts = {
@@ -901,7 +946,7 @@ async function renderRawTemplateSiteVersionPreview(input: {
     context: input.context,
     cache: input.context.rawImportedArtifactBySiteVersionId,
     key: input.siteVersionId,
-    loader: () => previewReadDependencies.getRawImportedSiteArtifact(input.siteVersionId),
+    loader: () => previewReadDependencies.getRawImportedSiteArtifact(input.siteVersionId, { dbClient: input.context.dbClient ?? undefined }),
   })
   const artifact =
     importedArtifact ??
@@ -909,7 +954,7 @@ async function renderRawTemplateSiteVersionPreview(input: {
       context: input.context,
       cache: input.context.rawTemplateArtifactBySiteVersionId,
       key: input.siteVersionId,
-      loader: () => previewReadDependencies.getRawTemplateSiteArtifact(input.siteVersionId),
+      loader: () => previewReadDependencies.getRawTemplateSiteArtifact(input.siteVersionId, { dbClient: input.context.dbClient ?? undefined }),
     }))
   if (!artifact) return null
   const routeMapResolution = resolveRawTemplateRouteMapFile({
@@ -973,6 +1018,7 @@ async function renderRawTemplateSiteVersionPreview(input: {
       previewReadDependencies.getRawTemplateSiteAsset({
         siteVersionId: input.siteVersionId,
         filePath: selectedHtmlPath,
+        dbClient: input.context.dbClient ?? undefined,
       }),
   })
   if (!entryAsset) {
@@ -1038,7 +1084,7 @@ async function renderRawTemplateSiteVersionPreview(input: {
     context: input.context,
     cache: input.context.slotsBySiteVersionId,
     key: artifact.siteVersionId,
-    loader: () => previewReadDependencies.listContentSlots(artifact.siteVersionId),
+    loader: () => previewReadDependencies.listContentSlots(artifact.siteVersionId, { dbClient: input.context.dbClient ?? undefined }),
   })
   console.info('[gnr8.content-runtime] CONTENT_PREVIEW_OVERRIDES_LOAD_STARTED', {
     siteVersionId: artifact.siteVersionId,
@@ -1047,13 +1093,21 @@ async function renderRawTemplateSiteVersionPreview(input: {
     context: input.context,
     cache: input.context.overridesBySiteVersionAndStatus,
     key: `${artifact.siteVersionId}:draft`,
-    loader: () => previewReadDependencies.listContentOverrides({ siteVersionId: artifact.siteVersionId, status: 'draft' }),
+    loader: () => previewReadDependencies.listContentOverrides({
+      siteVersionId: artifact.siteVersionId,
+      status: 'draft',
+      dbClient: input.context.dbClient ?? undefined,
+    }),
   })
   const publishedOverrides = await cacheLookup({
     context: input.context,
     cache: input.context.overridesBySiteVersionAndStatus,
     key: `${artifact.siteVersionId}:published`,
-    loader: () => previewReadDependencies.listContentOverrides({ siteVersionId: artifact.siteVersionId, status: 'published' }),
+    loader: () => previewReadDependencies.listContentOverrides({
+      siteVersionId: artifact.siteVersionId,
+      status: 'published',
+      dbClient: input.context.dbClient ?? undefined,
+    }),
   })
   console.info('[gnr8.content-runtime] CONTENT_PREVIEW_OVERRIDES_LOADED', {
     siteVersionId: artifact.siteVersionId,
@@ -1355,18 +1409,59 @@ function annotateTransformedPreviewHtml(input: { html: string; summary: PreviewR
   return html
 }
 
+function transformedPreviewSummaryFromArtifactManifest(input: {
+  artifactManifest: Record<string, unknown>
+  requestedPath: string
+  resolvedPath: string
+  fallbackSummary?: PreviewRuntimeSummary | null
+}): PreviewRuntimeSummary {
+  const base = input.fallbackSummary ?? defaultPreviewRuntimeSummary()
+  const manifestDiagnostics =
+    input.artifactManifest &&
+    typeof input.artifactManifest === 'object' &&
+    !Array.isArray(input.artifactManifest) &&
+    'transformedAssemblyDiagnosticsByRoute' in input.artifactManifest
+      ? (input.artifactManifest as { transformedAssemblyDiagnosticsByRoute?: unknown }).transformedAssemblyDiagnosticsByRoute
+      : null
+  const byRoute =
+    manifestDiagnostics && typeof manifestDiagnostics === 'object' && !Array.isArray(manifestDiagnostics)
+      ? (manifestDiagnostics as Record<string, unknown>)
+      : {}
+  const candidate = byRoute[input.resolvedPath] ?? byRoute[normalizePagePath(input.requestedPath)] ?? null
+  const transformedAssemblyDiagnostics =
+    candidate && typeof candidate === 'object' && !Array.isArray(candidate)
+      ? (candidate as PreviewRuntimeSummary['transformedAssemblyDiagnostics'])
+      : undefined
+  return {
+    ...base,
+    previewMode: base.previewMode === 'fallback_preview' ? 'react_preview_degraded' : base.previewMode,
+    renderedWithFallback: false,
+    previewDiagnostics: withSortedDiagnostics([
+      ...(base.previewDiagnostics ?? []).filter((entry) => entry !== PREVIEW_RUNTIME_DIAGNOSTIC.FALLBACK_RENDER_SELECTED),
+      TRANSFORMED_PREVIEW_DIAGNOSTIC.TRANSFORMED_PREVIEW_RAW_RESOLUTION_SKIPPED,
+      ...(input.resolvedPath === '/' ? [TRANSFORMED_PREVIEW_DIAGNOSTIC.TRANSFORMED_PREVIEW_HOME_ROUTE_SELECTED] : []),
+    ]),
+    ...(transformedAssemblyDiagnostics ? { transformedAssemblyDiagnostics } : {}),
+  }
+}
+
 async function renderTransformedSiteVersionPreview(input: {
   siteVersionId: string
   requestedPath: string
   fallbackSummary?: PreviewRuntimeSummary | null
-  previewTruth: RenderedCapturePreviewTruth
+  previewTruth?: RenderedCapturePreviewTruth
   context: PreviewReadContext
 }): Promise<ResolvedSiteVersionPreview> {
   const binding = await cacheLookup({
     context: input.context,
     cache: input.context.artifactBindingBySiteVersionId,
     key: input.siteVersionId,
-    loader: () => previewReadDependencies.getSiteVersionArtifactBinding(input.siteVersionId),
+    loader: () => previewReadDependencies.getSiteVersionArtifactBinding(input.siteVersionId, { dbClient: input.context.dbClient ?? undefined }),
+    diagnostics: {
+      hitEvent: TRANSFORMED_PREVIEW_DIAGNOSTIC.TRANSFORMED_PREVIEW_ARTIFACT_CACHE_HIT,
+      missEvent: TRANSFORMED_PREVIEW_DIAGNOSTIC.TRANSFORMED_PREVIEW_ARTIFACT_CACHE_MISS,
+      resource: 'site_version_artifact_binding',
+    },
   })
   if (!binding || !binding.artifactId) {
     throw new SiteVersionPreviewUnavailableError({
@@ -1379,7 +1474,12 @@ async function renderTransformedSiteVersionPreview(input: {
     context: input.context,
     cache: input.context.artifactById,
     key: binding.artifactId,
-    loader: () => previewReadDependencies.getArtifactById(binding.artifactId!),
+    loader: () => previewReadDependencies.getArtifactById(binding.artifactId!, { dbClient: input.context.dbClient ?? undefined }),
+    diagnostics: {
+      hitEvent: TRANSFORMED_PREVIEW_DIAGNOSTIC.TRANSFORMED_PREVIEW_ARTIFACT_CACHE_HIT,
+      missEvent: TRANSFORMED_PREVIEW_DIAGNOSTIC.TRANSFORMED_PREVIEW_ARTIFACT_CACHE_MISS,
+      resource: 'runtime_artifact',
+    },
   })
   if (!artifact) {
     throw new SiteVersionPreviewUnavailableError({
@@ -1388,8 +1488,6 @@ async function renderTransformedSiteVersionPreview(input: {
     })
   }
 
-  const previewRuntimeSummary = input.fallbackSummary ?? defaultPreviewRuntimeSummary()
-
   const resolved = resolveHtmlForPath({
     htmlByPath: artifact.htmlByPath,
     requestedPath: input.requestedPath,
@@ -1397,9 +1495,31 @@ async function renderTransformedSiteVersionPreview(input: {
       siteId: artifact.siteId,
       runtimeSiteId: artifact.siteId,
       runtimeSiteVersionId: artifact.siteVersionId,
-      matchedPageId: previewRuntimeSummary.matchedPageId,
-      unresolvedPathsCount: previewRuntimeSummary.unresolvedContentCount,
+      matchedPageId: input.fallbackSummary?.matchedPageId ?? null,
+      unresolvedPathsCount: input.fallbackSummary?.unresolvedContentCount ?? 0,
     },
+  })
+  const previewRuntimeSummary = transformedPreviewSummaryFromArtifactManifest({
+    artifactManifest: artifact.manifest,
+    requestedPath: input.requestedPath,
+    resolvedPath: resolved.resolvedPath,
+    fallbackSummary: input.fallbackSummary,
+  })
+  if (resolved.resolvedPath === '/') {
+    console.info(`[gnr8.runtime.preview] ${TRANSFORMED_PREVIEW_DIAGNOSTIC.TRANSFORMED_PREVIEW_HOME_ROUTE_SELECTED}`, {
+      requestCorrelationKey: input.context.requestCorrelationKey,
+      siteId: artifact.siteId,
+      siteVersionId: artifact.siteVersionId,
+      requestedPath: input.requestedPath,
+      selectedPath: resolved.resolvedPath,
+    })
+  }
+  console.info(`[gnr8.runtime.preview] ${TRANSFORMED_PREVIEW_DIAGNOSTIC.TRANSFORMED_PREVIEW_RAW_RESOLUTION_SKIPPED}`, {
+    requestCorrelationKey: input.context.requestCorrelationKey,
+    siteId: artifact.siteId,
+    siteVersionId: artifact.siteVersionId,
+    requestedPath: input.requestedPath,
+    selectedPath: resolved.resolvedPath,
   })
 
   return {
@@ -1414,8 +1534,12 @@ async function renderTransformedSiteVersionPreview(input: {
         previewMode: previewRuntimeSummary.previewMode,
         previewRuntimeSummary,
       },
-      previewTruth: input.previewTruth,
-      fallbackUsedOverride: !input.previewTruth.renderedCaptureUsed,
+      previewTruth: input.previewTruth ?? {
+        renderedCaptureUsed: false,
+        domSize: 0,
+        screenshotCount: 0,
+      },
+      fallbackUsedOverride: false,
     }),
   }
 }
@@ -1574,6 +1698,8 @@ export async function renderSiteVersionPreview(input: {
       mode: String(input.mode ?? 'none'),
     })
   const context = createPreviewReadContext(requestCorrelationKey)
+  const requestedPath = normalizePagePath(input.path ?? '/')
+  const mode: SiteVersionPreviewMode = normalizeSiteVersionPreviewMode(input.mode)
   const poolAtStart = previewReadDependencies.getPoolStatus()
   console.info('[gnr8.runtime.preview] PREVIEW_DB_QUERY_BATCH_STARTED', {
     requestCorrelationKey,
@@ -1599,9 +1725,29 @@ export async function renderSiteVersionPreview(input: {
     })
   }
 
-  const requestedPath = normalizePagePath(input.path ?? '/')
-  const mode: SiteVersionPreviewMode = normalizeSiteVersionPreviewMode(input.mode)
   try {
+    if (previewReadDependencies.requestScopedDbClientEnabled) {
+      context.dbClient = await previewReadDependencies.acquireRuntimeDbClient()
+    }
+    if (mode === 'transformed') {
+      console.info(`[gnr8.runtime.preview] ${TRANSFORMED_PREVIEW_DIAGNOSTIC.TRANSFORMED_PREVIEW_DB_READ_STARTED}`, {
+        requestCorrelationKey,
+        queryCount: context.queryCount,
+        uniqueLookupCount: context.uniqueLookupCount,
+        requestedPath,
+      })
+      try {
+        return await renderTransformedSiteVersionPreview({
+          siteVersionId: input.siteVersionId,
+          requestedPath,
+          context,
+        })
+      } catch (error) {
+        if (!(error instanceof SiteVersionPreviewUnavailableError) || error.code !== 'TRANSFORMED_ARTIFACT_NOT_AVAILABLE') {
+          throw error
+        }
+      }
+    }
     console.info('[gnr8.runtime.preview] PREVIEW_DB_POOL_STATUS', {
       requestCorrelationKey,
       queryCount: context.queryCount,
@@ -1615,7 +1761,7 @@ export async function renderSiteVersionPreview(input: {
       context,
       cache: context.siteVersionById,
       key: input.siteVersionId,
-      loader: () => previewReadDependencies.getSiteVersion(input.siteVersionId),
+      loader: () => previewReadDependencies.getSiteVersion(input.siteVersionId, { dbClient: context.dbClient ?? undefined }),
     })
   if (!siteVersion) {
     throw new SiteVersionPreviewUnavailableError({
@@ -1732,7 +1878,28 @@ export async function renderSiteVersionPreview(input: {
     throw error
   }
   } finally {
+    if (context.dbClient) {
+      context.dbClient.release()
+      context.dbClient = null
+    }
     const poolAtEnd = previewReadDependencies.getPoolStatus()
+    if (mode === 'transformed') {
+      console.info(`[gnr8.runtime.preview] ${TRANSFORMED_PREVIEW_DIAGNOSTIC.TRANSFORMED_PREVIEW_DB_READ_COUNT}`, {
+        requestCorrelationKey,
+        queryCount: context.queryCount,
+        uniqueLookupCount: context.uniqueLookupCount,
+        requestedPath,
+      })
+      console.info(`[gnr8.runtime.preview] ${TRANSFORMED_PREVIEW_DIAGNOSTIC.TRANSFORMED_PREVIEW_DB_READ_COMPLETED}`, {
+        requestCorrelationKey,
+        queryCount: context.queryCount,
+        uniqueLookupCount: context.uniqueLookupCount,
+        requestedPath,
+        poolTotalCount: poolAtEnd.totalCount,
+        poolIdleCount: poolAtEnd.idleCount,
+        poolWaitingCount: poolAtEnd.waitingCount,
+      })
+    }
     console.info('[gnr8.runtime.preview] PREVIEW_DB_QUERY_BATCH_COMPLETED', {
       requestCorrelationKey,
       queryCount: context.queryCount,

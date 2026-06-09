@@ -1263,19 +1263,29 @@ test('transformed preview isolates /news and / while disabling page-authored scr
     },
   } as any
   const rawLookupCalls = {
+    getSiteVersion: 0,
+    getSiteVersionArtifactBinding: 0,
+    getArtifactById: 0,
     getRawImportedSiteArtifact: 0,
+    getRawTemplateSiteArtifact: 0,
     getRawTemplateSiteAsset: 0,
     listContentSlots: 0,
     listContentOverrides: 0,
   }
   const restore = setUnifiedRenderPreviewDependenciesForTest({
     getPoolStatus: () => ({ totalCount: 1, idleCount: 1, waitingCount: 0 }),
-    getSiteVersion: async () => siteVersion,
+    getSiteVersion: async () => {
+      rawLookupCalls.getSiteVersion += 1
+      return siteVersion
+    },
     getRawImportedSiteArtifact: async () => {
       rawLookupCalls.getRawImportedSiteArtifact += 1
       return null
     },
-    getRawTemplateSiteArtifact: async () => null,
+    getRawTemplateSiteArtifact: async () => {
+      rawLookupCalls.getRawTemplateSiteArtifact += 1
+      return null
+    },
     getRawTemplateSiteAsset: async () => {
       rawLookupCalls.getRawTemplateSiteAsset += 1
       return null
@@ -1288,9 +1298,13 @@ test('transformed preview isolates /news and / while disabling page-authored scr
       rawLookupCalls.listContentOverrides += 1
       return []
     },
-    getSiteVersionArtifactBinding: async () => ({ siteId: 'site-transformed-nav', artifactId: 'artifact-transformed-nav' }),
-    getArtifactById: async () =>
-      ({
+    getSiteVersionArtifactBinding: async () => {
+      rawLookupCalls.getSiteVersionArtifactBinding += 1
+      return { siteId: 'site-transformed-nav', artifactId: 'artifact-transformed-nav' }
+    },
+    getArtifactById: async () => {
+      rawLookupCalls.getArtifactById += 1
+      return {
         id: 'artifact-transformed-nav',
         siteId: 'site-transformed-nav',
         siteVersionId: 'sv-transformed-nav',
@@ -1303,11 +1317,59 @@ test('transformed preview isolates /news and / while disabling page-authored scr
         bundleSha256: 'x',
         compiledTokenStyles: '',
         assetFingerprintMap: {},
-        manifest: {},
+        manifest: {
+          transformedAssemblyDiagnosticsByRoute: {
+            '/': {
+              selectedRoutePath: '/',
+              selectedSourceRawFile: 'pages/root/index.html',
+              semanticSectionCount: 3,
+              transformedRouteSectionCountBeforeHydration: 2,
+              duplicateRemovalCount: 1,
+              clientHydrationMode: 'idempotent',
+              repeatedSectionFingerprints: [],
+              sharedHeaderFooterSectionCount: 0,
+              listingDetection: { detected: false, sectionId: null, reason: 'not_listing_route' },
+              finalSectionOrder: [
+                { sectionId: 'home-intro-a', type: 'hero', order: 0 },
+                { sectionId: 'home-listing', type: 'latest-news', order: 2 },
+              ],
+              removedDuplicateSectionIds: ['home-intro-b'],
+              headingStyleSource: {
+                source: 'computed_style',
+                headingFontFamily: 'Source Serif 4',
+                bodyFontFamily: 'Inter',
+                routePath: '/',
+              },
+            },
+            '/news': {
+              selectedRoutePath: '/news',
+              selectedSourceRawFile: 'pages/news/index.html',
+              semanticSectionCount: 3,
+              transformedRouteSectionCountBeforeHydration: 2,
+              duplicateRemovalCount: 1,
+              clientHydrationMode: 'idempotent',
+              repeatedSectionFingerprints: [],
+              sharedHeaderFooterSectionCount: 0,
+              listingDetection: { detected: true, sectionId: 'news-listing', reason: 'route_listing_items' },
+              finalSectionOrder: [
+                { sectionId: 'news-intro-a', type: 'hero', order: 0 },
+                { sectionId: 'news-listing', type: 'news-listing', order: 2 },
+              ],
+              removedDuplicateSectionIds: ['news-intro-b'],
+              headingStyleSource: {
+                source: 'computed_style',
+                headingFontFamily: 'Source Serif 4',
+                bodyFontFamily: 'Inter',
+                routePath: '/news',
+              },
+            },
+          },
+        },
         publishStage: 'production',
         shadowRestricted: false,
         artifactGovernance: {},
-      }) as any,
+      } as any
+    },
   })
 
   try {
@@ -1323,23 +1385,45 @@ test('transformed preview isolates /news and / while disabling page-authored scr
       mode: 'transformed',
       requestCorrelationKey: 'req-transformed-home',
     })
+    const newsPreviewAgain = await renderSiteVersionPreview({
+      siteVersionId: 'sv-transformed-nav',
+      path: '/news',
+      mode: 'transformed',
+      requestCorrelationKey: 'req-transformed-news-again',
+    })
+    const homePreviewAgain = await renderSiteVersionPreview({
+      siteVersionId: 'sv-transformed-nav',
+      path: '/',
+      mode: 'transformed',
+      requestCorrelationKey: 'req-transformed-home-again',
+    })
 
     assert.equal(newsPreview.path, '/news')
     assert.equal(homePreview.path, '/')
+    assert.equal(newsPreviewAgain.path, '/news')
+    assert.equal(homePreviewAgain.path, '/')
     assert.equal(countOccurrences(newsPreview.html, 'NEWS_LISTING'), 1)
     assert.equal(newsPreview.html.includes('<section>HOME_INTRO</section>'), false)
+    assert.equal(countOccurrences(homePreview.html, '<section>HOME_INTRO</section>'), 1)
+    assert.equal(countOccurrences(homePreviewAgain.html, '<section>HOME_INTRO</section>'), 1)
     assert.match(newsPreview.html, /type="application\/gnr8-disabled-preview-script"/)
     assert.match(homePreview.html, /data-gnr8-client-hydration-mode="idempotent"/)
     assert.equal(newsPreview.previewRuntimeSummary.transformedAssemblyDiagnostics?.selectedRoutePath, '/news')
     assert.equal(newsPreview.previewRuntimeSummary.transformedAssemblyDiagnostics?.selectedSourceRawFile, 'pages/news/index.html')
     assert.equal(newsPreview.previewRuntimeSummary.transformedAssemblyDiagnostics?.transformedRouteSectionCountBeforeHydration, 2)
     assert.equal(newsPreview.previewRuntimeSummary.transformedAssemblyDiagnostics?.duplicateRemovalCount, 1)
+    assert.equal(homePreview.previewRuntimeSummary.previewDiagnostics.includes('TRANSFORMED_PREVIEW_HOME_ROUTE_SELECTED'), true)
+    assert.equal(homePreview.previewRuntimeSummary.previewDiagnostics.includes('TRANSFORMED_PREVIEW_RAW_RESOLUTION_SKIPPED'), true)
   } finally {
     restore()
   }
 
   assert.deepEqual(rawLookupCalls, {
+    getSiteVersion: 0,
+    getSiteVersionArtifactBinding: 4,
+    getArtifactById: 4,
     getRawImportedSiteArtifact: 0,
+    getRawTemplateSiteArtifact: 0,
     getRawTemplateSiteAsset: 0,
     listContentSlots: 0,
     listContentOverrides: 0,
@@ -1396,6 +1480,82 @@ test('transformed preview annotation is idempotent for repeated hydration helper
   assert.equal(countOccurrences(twice, 'gnr8-transformed-preview-diagnostics'), 1)
   assert.equal(countOccurrences(twice, 'application/gnr8-disabled-preview-script'), 1)
   assert.equal(countOccurrences(twice, '<section>NEWS_LISTING</section>'), 1)
+})
+
+test('transformed preview artifact path uses request-scoped db client and bypasses raw/content lookups', async () => {
+  let acquireCount = 0
+  let releaseCount = 0
+  const fakeClient = {
+    release: () => {
+      releaseCount += 1
+    },
+  } as any
+  const seenDbClients: unknown[] = []
+  const restore = setUnifiedRenderPreviewDependenciesForTest({
+    requestScopedDbClientEnabled: true,
+    acquireRuntimeDbClient: async () => {
+      acquireCount += 1
+      return fakeClient
+    },
+    getPoolStatus: () => ({ totalCount: 1, idleCount: 1, waitingCount: 0 }),
+    getSiteVersion: async () => {
+      throw new Error('site version lookup should not run for transformed artifact hit')
+    },
+    getSiteVersionArtifactBinding: async (_siteVersionId: string, options?: any) => {
+      seenDbClients.push(options?.dbClient)
+      return { siteId: 'site-scoped-client', artifactId: 'artifact-scoped-client' }
+    },
+    getArtifactById: async (_artifactId: string, options?: any) => {
+      seenDbClients.push(options?.dbClient)
+      return {
+        id: 'artifact-scoped-client',
+        siteId: 'site-scoped-client',
+        siteVersionId: 'sv-scoped-client',
+        rendererCompatibilityVersion: 'gnr8-renderer-v1',
+        htmlByPath: { '/': '<html><head></head><body><main>Home</main></body></html>' },
+        bundleSha256: 'x',
+        compiledTokenStyles: '',
+        assetFingerprintMap: {},
+        manifest: {},
+        publishStage: 'production',
+        shadowRestricted: false,
+        artifactGovernance: {},
+      } as any
+    },
+    getRawImportedSiteArtifact: async () => {
+      throw new Error('raw imported artifact lookup should not run in transformed mode')
+    },
+    getRawTemplateSiteArtifact: async () => {
+      throw new Error('raw template artifact lookup should not run in transformed mode')
+    },
+    getRawTemplateSiteAsset: async () => {
+      throw new Error('raw template asset lookup should not run in transformed mode')
+    },
+    listContentSlots: async () => {
+      throw new Error('content slot lookup should not run in transformed mode')
+    },
+    listContentOverrides: async () => {
+      throw new Error('content override lookup should not run in transformed mode')
+    },
+  })
+
+  try {
+    const preview = await renderSiteVersionPreview({
+      siteVersionId: 'sv-scoped-client',
+      path: '/',
+      mode: 'transformed',
+      requestCorrelationKey: 'req-scoped-client',
+    })
+
+    assert.equal(preview.source, 'transformed_artifact')
+    assert.equal(preview.path, '/')
+    assert.equal(acquireCount, 1)
+    assert.equal(releaseCount, 1)
+    assert.deepEqual(seenDbClients, [fakeClient, fakeClient])
+    assert.equal(preview.previewRuntimeSummary.previewDiagnostics.includes('TRANSFORMED_PREVIEW_RAW_RESOLUTION_SKIPPED'), true)
+  } finally {
+    restore()
+  }
 })
 
 test('transformed preview reuses request-local cache and keeps query count bounded per request', async () => {
@@ -1484,7 +1644,7 @@ test('transformed preview reuses request-local cache and keeps query count bound
     restore()
   }
 
-  assert.equal(calls.getSiteVersion, 20)
+  assert.equal(calls.getSiteVersion, 0)
   assert.equal(calls.getRawImportedSiteArtifact, 0)
   assert.equal(calls.getRawTemplateSiteArtifact, 0)
   assert.equal(calls.getRawTemplateSiteAsset, 0)
