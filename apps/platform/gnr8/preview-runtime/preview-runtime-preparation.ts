@@ -299,6 +299,9 @@ function projectRuntimePageSections(input: {
     selectedRoutePath: routePath,
     selectedSourceRawFile: resolveSelectedRawFile({ siteVersion: input.siteVersion, routePath }),
     semanticSectionCount: rawSections.length,
+    transformedRouteSectionCountBeforeHydration: sections.length,
+    duplicateRemovalCount: removedDuplicateSectionIds.size,
+    clientHydrationMode: "idempotent",
     repeatedSectionFingerprints,
     sharedHeaderFooterSectionCount: projected.filter(isSharedRegionSection).length,
     listingDetection: {

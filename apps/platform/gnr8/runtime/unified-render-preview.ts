@@ -298,6 +298,14 @@ function resolveHtmlForPath(input: {
   })
 }
 
+function escapeHtmlAttribute(value: string): string {
+  return String(value ?? '')
+    .replaceAll('&', '&amp;')
+    .replaceAll('"', '&quot;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+}
+
 function withSortedDiagnostics(diagnostics: string[]): string[] {
   return [...new Set(diagnostics.filter((value) => value.trim().length > 0))].sort((a, b) => a.localeCompare(b))
 }
@@ -363,14 +371,6 @@ function defaultMultiPageLinkRewriteCounts(): MultiPageLinkRewriteCounts {
     skippedAsset: 0,
     skippedHashOnly: 0,
   }
-}
-
-function escapeHtmlAttribute(value: string): string {
-  return String(value ?? '')
-    .replaceAll('&', '&amp;')
-    .replaceAll('"', '&quot;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
 }
 
 function firstUsableSeedUrl(provenance: RuntimeImportProvenanceSummary | null | undefined): string | null {
@@ -1295,6 +1295,66 @@ function resolveSemanticFallbackPreview(input: {
   })
 }
 
+function transformedPreviewDiagnosticAttributes(summary: PreviewRuntimeSummary): Record<string, string> {
+  const diagnostics = summary.transformedAssemblyDiagnostics
+  return {
+    'data-gnr8-transformed-preview': '1',
+    'data-gnr8-selected-route-path': diagnostics?.selectedRoutePath ?? '',
+    'data-gnr8-selected-raw-file-path': diagnostics?.selectedSourceRawFile ?? '',
+    'data-gnr8-transformed-route-section-count-before-hydration': String(
+      diagnostics?.transformedRouteSectionCountBeforeHydration ?? 0,
+    ),
+    'data-gnr8-duplicate-removal-count': String(diagnostics?.duplicateRemovalCount ?? 0),
+    'data-gnr8-client-hydration-mode': diagnostics?.clientHydrationMode ?? 'disabled',
+  }
+}
+
+function serializeAttributes(attributes: Record<string, string>): string {
+  return Object.entries(attributes)
+    .map(([key, value]) => `${key}="${escapeHtmlAttribute(value)}"`)
+    .join(' ')
+}
+
+function disableTransformedPreviewAuthoredScripts(html: string): string {
+  return html.replace(/<script\b(?![^>]*\bdata-gnr8-preview-runtime\b)([^>]*)>/gi, (tag, attributes: string) => {
+    if (/\btype\s*=\s*(['"])application\/gnr8-disabled-preview-script\1/i.test(tag)) return tag
+    return `<script type="application/gnr8-disabled-preview-script" data-gnr8-disabled-preview-script="transformed" data-gnr8-original-script-attrs="${escapeHtmlAttribute(
+      String(attributes ?? '').trim(),
+    )}">`
+  })
+}
+
+function annotateTransformedPreviewHtml(input: { html: string; summary: PreviewRuntimeSummary }): string {
+  const attributes = transformedPreviewDiagnosticAttributes(input.summary)
+  const serialized = serializeAttributes(attributes)
+  let html = disableTransformedPreviewAuthoredScripts(input.html)
+  if (/<body\b/i.test(html)) {
+    html = html.replace(/<body\b([^>]*)>/i, (tag, bodyAttributes: string) => {
+      const current = String(bodyAttributes ?? '')
+      const additions = Object.entries(attributes)
+        .filter(([key]) => !new RegExp(`\\b${key}\\s*=`, 'i').test(current))
+        .map(([key, value]) => `${key}="${escapeHtmlAttribute(value)}"`)
+        .join(' ')
+      return additions ? `<body${current} ${additions}>` : tag
+    })
+  } else {
+    html = `<body ${serialized}>${html}</body>`
+  }
+  const marker = `<meta name="gnr8-transformed-preview-diagnostics" content="${escapeHtmlAttribute(
+    JSON.stringify({
+      selectedRoutePath: attributes['data-gnr8-selected-route-path'],
+      selectedRawFilePath: attributes['data-gnr8-selected-raw-file-path'],
+      transformedRouteSectionCountBeforeHydration: Number(attributes['data-gnr8-transformed-route-section-count-before-hydration']),
+      duplicateRemovalCount: Number(attributes['data-gnr8-duplicate-removal-count']),
+      clientHydrationMode: attributes['data-gnr8-client-hydration-mode'],
+    }),
+  )}" />`
+  if (/<head\b[^>]*>/i.test(html) && !/name=["']gnr8-transformed-preview-diagnostics["']/i.test(html)) {
+    return html.replace(/<head\b([^>]*)>/i, (tag) => `${tag}${marker}`)
+  }
+  return html
+}
+
 async function renderTransformedSiteVersionPreview(input: {
   siteVersionId: string
   requestedPath: string
@@ -1349,7 +1409,7 @@ async function renderTransformedSiteVersionPreview(input: {
         siteVersionId: artifact.siteVersionId,
         path: resolved.resolvedPath,
         rendererCompatibilityVersion: artifact.rendererCompatibilityVersion,
-        html: resolved.html,
+        html: annotateTransformedPreviewHtml({ html: resolved.html, summary: previewRuntimeSummary }),
         source: 'transformed_artifact',
         previewMode: previewRuntimeSummary.previewMode,
         previewRuntimeSummary,
@@ -1409,6 +1469,7 @@ function wrapReactPreviewHtml(input: {
   routePath: string
   summary: PreviewRuntimeSummary
 }): string {
+  const attrs = serializeAttributes(transformedPreviewDiagnosticAttributes(input.summary))
   return [
     '<!doctype html>',
     '<html lang="en">',
@@ -1421,7 +1482,7 @@ function wrapReactPreviewHtml(input: {
     '</head>',
     `<body data-gnr8-preview-mode="${input.summary.previewMode}" data-gnr8-route-path="${input.routePath}" data-gnr8-rendered-with-fallback="${
       input.summary.renderedWithFallback ? 'true' : 'false'
-    }">`,
+    }" ${attrs}>`,
     input.renderedSiteHtml,
     '</body>',
     '</html>',
@@ -1450,8 +1511,30 @@ async function renderReactRuntimeSiteVersionPreview(input: {
     }
   }
 
-  const reactDomServer = await import('react-dom/server')
-  const renderedSite = reactDomServer.renderToStaticMarkup(preparation.renderedSiteElement)
+  let renderedSite: string
+  try {
+    const reactDomServer = await import('react-dom/server')
+    renderedSite = reactDomServer.renderToStaticMarkup(preparation.renderedSiteElement)
+  } catch (error) {
+    console.warn('[gnr8.runtime.preview] REACT_PREVIEW_STATIC_RENDER_UNAVAILABLE', {
+      siteVersionId: input.siteVersion.id,
+      requestedPath: input.requestedPath,
+      reasonCode: 'REACT_DOM_SERVER_IMPORT_FAILED',
+      error: error instanceof Error ? error.message : String(error),
+    })
+    return {
+      preview: null,
+      fallbackSummary: {
+        ...preparation.summary,
+        previewMode: 'react_preview_degraded',
+        renderedWithFallback: false,
+        previewDiagnostics: withSortedDiagnostics([
+          ...preparation.summary.previewDiagnostics,
+          PREVIEW_RUNTIME_DIAGNOSTIC.RENDERER_RUNTIME_FAILED,
+        ]),
+      },
+    }
+  }
 
   return {
     preview: withPreviewTruth({
@@ -1553,7 +1636,7 @@ export async function renderSiteVersionPreview(input: {
   })
 
   try {
-    if (mode !== 'debug') {
+    if (mode !== 'debug' && mode !== 'transformed') {
       const rawTemplatePreview = await renderRawTemplateSiteVersionPreview({
         siteVersion,
         siteVersionId: input.siteVersionId,
@@ -1667,6 +1750,7 @@ export const __unifiedRenderPreviewTestUtils = {
   resolveRenderedCapturePreviewTruth,
   rewriteRawTemplateAssetReferences,
   rewriteRawTemplateMultiPageLinks,
+  annotateTransformedPreviewHtml,
   selectPreviewOverridesByVersion,
   createPreviewReadContext,
   cacheLookup,

@@ -1072,6 +1072,8 @@ test('raw template preview route-map serving reports missing assembled file befo
 
 test('raw template route-map child selection remains disabled outside controlled raw template preview mode', async () => {
   const requestedAssets: string[] = []
+  let transformedBindingLookupCount = 0
+  let transformedArtifactLookupCount = 0
   const restore = setUnifiedRenderPreviewDependenciesForTest({
     getPoolStatus: () => ({ totalCount: 1, idleCount: 1, waitingCount: 0 }),
     getSiteVersion: async () =>
@@ -1102,6 +1104,30 @@ test('raw template route-map child selection remains disabled outside controlled
     },
     listContentSlots: async () => [],
     listContentOverrides: async () => [],
+    getSiteVersionArtifactBinding: async () => {
+      transformedBindingLookupCount += 1
+      return { siteId: 'site-disabled', artifactId: 'artifact-disabled' }
+    },
+    getArtifactById: async () => {
+      transformedArtifactLookupCount += 1
+      return {
+        id: 'artifact-disabled',
+        siteId: 'site-disabled',
+        siteVersionId: 'sv-disabled',
+        rendererCompatibilityVersion: 'gnr8-renderer-v1',
+        htmlByPath: {
+          '/': '<html><body><h1>Transformed Home</h1></body></html>',
+          '/about': '<html><body><h1>Transformed About</h1><a href="/about">About</a></body></html>',
+        },
+        bundleSha256: 'x',
+        compiledTokenStyles: '',
+        assetFingerprintMap: {},
+        manifest: {},
+        publishStage: 'production',
+        shadowRestricted: false,
+        artifactGovernance: {},
+      } as any
+    },
   })
 
   try {
@@ -1112,11 +1138,13 @@ test('raw template route-map child selection remains disabled outside controlled
       requestCorrelationKey: 'req-route-disabled',
     })
 
-    assert.deepEqual(requestedAssets, ['index.html'])
-    assert.match(preview.html, /<h1>Home<\/h1>/)
+    assert.deepEqual(requestedAssets, [])
+    assert.equal(transformedBindingLookupCount, 1)
+    assert.equal(transformedArtifactLookupCount, 1)
+    assert.match(preview.html, /<h1>Transformed About<\/h1>/)
     assert.equal(preview.html.includes('<a href="/about">About</a>'), true)
     assert.equal(preview.html.includes('data-gnr8-multipage-link="rewritten"'), false)
-    assert.equal(preview.previewRuntimeSummary.previewDiagnostics.includes('MULTIPAGE_ROUTE_MAP_DISABLED'), true)
+    assert.equal(preview.source, 'transformed_artifact')
     assert.equal(preview.previewRuntimeSummary.previewDiagnostics.includes('MULTIPAGE_ROUTE_MAP_SELECTED'), false)
   } finally {
     restore()
@@ -1172,6 +1200,202 @@ test('preview override selection merges by slot with draft precedence and publis
   const bySlot: Record<string, any> = Object.fromEntries(selected.map((override) => [override.slotKey, override]))
   assert.equal(bySlot['hero.title']?.valueJson?.value, 'correct version draft')
   assert.equal(bySlot['hero.subtitle']?.valueJson?.value, 'published subtitle')
+})
+
+test('transformed preview isolates /news and / while disabling page-authored script reinjection', async () => {
+  const siteVersion = {
+    id: 'sv-transformed-nav',
+    siteId: 'site-transformed-nav',
+    rendererCompatibilityVersion: 'gnr8-renderer-v1',
+    pages: [
+      {
+        pageId: 'page-home',
+        path: '/',
+        title: 'Home',
+        structureModel: {
+          sections: [
+            { id: 'home-intro-a', type: 'hero', order: 0 },
+            { id: 'home-intro-b', type: 'hero', order: 1 },
+            { id: 'home-listing', type: 'latest-news', order: 2 },
+          ],
+        },
+        contentModel: {
+          sectionProps: {
+            'home-intro-a': { heading: 'HOME_INTRO', body: 'Research overview' },
+            'home-intro-b': { heading: 'HOME_INTRO', body: 'Research overview' },
+            'home-listing': { heading: 'Latest News', items: [{ title: 'One' }, { title: 'Two' }] },
+          },
+        },
+        styleTokens: {},
+      },
+      {
+        pageId: 'page-news',
+        path: '/news',
+        title: 'News',
+        structureModel: {
+          sections: [
+            { id: 'news-intro-a', type: 'hero', order: 0 },
+            { id: 'news-intro-b', type: 'hero', order: 1 },
+            { id: 'news-listing', type: 'news-listing', order: 2 },
+          ],
+        },
+        contentModel: {
+          sectionProps: {
+            'news-intro-a': { heading: 'HOME_INTRO', body: 'Research overview' },
+            'news-intro-b': { heading: 'HOME_INTRO', body: 'Research overview' },
+            'news-listing': { heading: 'NEWS_LISTING', items: [{ title: 'One' }, { title: 'Two' }] },
+          },
+        },
+        styleTokens: {},
+      },
+    ],
+    importProvenanceSummary: {
+      renderedCapture: { status: 'available', nodeCount: 10, domLength: 1000 },
+      screenshotCount: 1,
+      multiPageDiscovery: {
+        rawArtifactAssembly: {
+          routeMap: [
+            { routePath: '/', rawFilePath: 'pages/root/index.html' },
+            { routePath: '/news', rawFilePath: 'pages/news/index.html' },
+          ],
+        },
+      },
+    },
+  } as any
+  const rawLookupCalls = {
+    getRawImportedSiteArtifact: 0,
+    getRawTemplateSiteAsset: 0,
+    listContentSlots: 0,
+    listContentOverrides: 0,
+  }
+  const restore = setUnifiedRenderPreviewDependenciesForTest({
+    getPoolStatus: () => ({ totalCount: 1, idleCount: 1, waitingCount: 0 }),
+    getSiteVersion: async () => siteVersion,
+    getRawImportedSiteArtifact: async () => {
+      rawLookupCalls.getRawImportedSiteArtifact += 1
+      return null
+    },
+    getRawTemplateSiteArtifact: async () => null,
+    getRawTemplateSiteAsset: async () => {
+      rawLookupCalls.getRawTemplateSiteAsset += 1
+      return null
+    },
+    listContentSlots: async () => {
+      rawLookupCalls.listContentSlots += 1
+      return []
+    },
+    listContentOverrides: async () => {
+      rawLookupCalls.listContentOverrides += 1
+      return []
+    },
+    getSiteVersionArtifactBinding: async () => ({ siteId: 'site-transformed-nav', artifactId: 'artifact-transformed-nav' }),
+    getArtifactById: async () =>
+      ({
+        id: 'artifact-transformed-nav',
+        siteId: 'site-transformed-nav',
+        siteVersionId: 'sv-transformed-nav',
+        rendererCompatibilityVersion: 'gnr8-renderer-v1',
+        htmlByPath: {
+          '/': '<!doctype html><html><head></head><body><main><section>HOME_INTRO</section><section>Latest News</section></main><script src="/assets/home.js"></script></body></html>',
+          '/news':
+            '<!doctype html><html><head></head><body><main><section>NEWS_LISTING</section></main><script>window.__appendHomeIntro=true</script></body></html>',
+        },
+        bundleSha256: 'x',
+        compiledTokenStyles: '',
+        assetFingerprintMap: {},
+        manifest: {},
+        publishStage: 'production',
+        shadowRestricted: false,
+        artifactGovernance: {},
+      }) as any,
+  })
+
+  try {
+    const newsPreview = await renderSiteVersionPreview({
+      siteVersionId: 'sv-transformed-nav',
+      path: '/news',
+      mode: 'transformed',
+      requestCorrelationKey: 'req-transformed-news',
+    })
+    const homePreview = await renderSiteVersionPreview({
+      siteVersionId: 'sv-transformed-nav',
+      path: '/',
+      mode: 'transformed',
+      requestCorrelationKey: 'req-transformed-home',
+    })
+
+    assert.equal(newsPreview.path, '/news')
+    assert.equal(homePreview.path, '/')
+    assert.equal(countOccurrences(newsPreview.html, 'NEWS_LISTING'), 1)
+    assert.equal(newsPreview.html.includes('<section>HOME_INTRO</section>'), false)
+    assert.match(newsPreview.html, /type="application\/gnr8-disabled-preview-script"/)
+    assert.match(homePreview.html, /data-gnr8-client-hydration-mode="idempotent"/)
+    assert.equal(newsPreview.previewRuntimeSummary.transformedAssemblyDiagnostics?.selectedRoutePath, '/news')
+    assert.equal(newsPreview.previewRuntimeSummary.transformedAssemblyDiagnostics?.selectedSourceRawFile, 'pages/news/index.html')
+    assert.equal(newsPreview.previewRuntimeSummary.transformedAssemblyDiagnostics?.transformedRouteSectionCountBeforeHydration, 2)
+    assert.equal(newsPreview.previewRuntimeSummary.transformedAssemblyDiagnostics?.duplicateRemovalCount, 1)
+  } finally {
+    restore()
+  }
+
+  assert.deepEqual(rawLookupCalls, {
+    getRawImportedSiteArtifact: 0,
+    getRawTemplateSiteAsset: 0,
+    listContentSlots: 0,
+    listContentOverrides: 0,
+  })
+})
+
+test('transformed preview annotation is idempotent for repeated hydration helper calls', () => {
+  const summary = {
+    previewMode: 'react_preview_degraded',
+    rendererContractAvailable: true,
+    finalSiteModelAvailable: true,
+    familyRenderUsed: false,
+    familyRenderFamilyId: null,
+    familyRenderMode: 'page_fallback',
+    familyRenderFallbackToPage: true,
+    familyRenderDiagnosticsCount: 0,
+    familyRenderDiagnostics: [],
+    renderedWithFallback: false,
+    matchedPageId: 'page-news',
+    contentResolutionApplied: true,
+    resolvedContentCount: 2,
+    unresolvedContentCount: 0,
+    contentResolutionDegraded: false,
+    contentResolutionDiagnostics: [],
+    previewDiagnostics: [],
+    transformedAssemblyDiagnostics: {
+      selectedRoutePath: '/news',
+      selectedSourceRawFile: 'pages/news/index.html',
+      semanticSectionCount: 3,
+      transformedRouteSectionCountBeforeHydration: 2,
+      duplicateRemovalCount: 1,
+      clientHydrationMode: 'idempotent',
+      repeatedSectionFingerprints: [],
+      sharedHeaderFooterSectionCount: 0,
+      listingDetection: { detected: true, sectionId: 'news-listing', reason: 'route_listing_items' },
+      finalSectionOrder: [
+        { sectionId: 'news-intro-a', type: 'hero', order: 0 },
+        { sectionId: 'news-listing', type: 'news-listing', order: 2 },
+      ],
+      removedDuplicateSectionIds: ['news-intro-b'],
+      headingStyleSource: {
+        source: 'computed_style',
+        headingFontFamily: 'Source Serif 4',
+        bodyFontFamily: 'Inter',
+        routePath: '/news',
+      },
+    },
+  } as any
+  const input = '<html><head></head><body><main><section>NEWS_LISTING</section></main><script src="/assets/site.js"></script></body></html>'
+  const once = __unifiedRenderPreviewTestUtils.annotateTransformedPreviewHtml({ html: input, summary })
+  const twice = __unifiedRenderPreviewTestUtils.annotateTransformedPreviewHtml({ html: once, summary })
+
+  assert.equal(countOccurrences(twice, 'data-gnr8-transformed-preview="1"'), 1)
+  assert.equal(countOccurrences(twice, 'gnr8-transformed-preview-diagnostics'), 1)
+  assert.equal(countOccurrences(twice, 'application/gnr8-disabled-preview-script'), 1)
+  assert.equal(countOccurrences(twice, '<section>NEWS_LISTING</section>'), 1)
 })
 
 test('transformed preview reuses request-local cache and keeps query count bounded per request', async () => {
@@ -1261,13 +1485,13 @@ test('transformed preview reuses request-local cache and keeps query count bound
   }
 
   assert.equal(calls.getSiteVersion, 20)
-  assert.equal(calls.getRawImportedSiteArtifact, 20)
+  assert.equal(calls.getRawImportedSiteArtifact, 0)
   assert.equal(calls.getRawTemplateSiteArtifact, 0)
-  assert.equal(calls.getRawTemplateSiteAsset, 20)
-  assert.equal(calls.listContentSlots, 20)
-  assert.equal(calls.listContentOverrides, 40)
-  assert.equal(calls.getSiteVersionArtifactBinding, 0)
-  assert.equal(calls.getArtifactById, 0)
+  assert.equal(calls.getRawTemplateSiteAsset, 0)
+  assert.equal(calls.listContentSlots, 0)
+  assert.equal(calls.listContentOverrides, 0)
+  assert.equal(calls.getSiteVersionArtifactBinding, 20)
+  assert.equal(calls.getArtifactById, 20)
 })
 
 test('transformed preview blocks under high pool waiting count with deterministic backpressure error', async () => {

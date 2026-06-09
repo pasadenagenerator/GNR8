@@ -46,6 +46,9 @@ export type PreviewRuntimeSummary = {
     selectedRoutePath: string;
     selectedSourceRawFile: string | null;
     semanticSectionCount: number;
+    transformedRouteSectionCountBeforeHydration: number;
+    duplicateRemovalCount: number;
+    clientHydrationMode: "disabled" | "passive" | "idempotent";
     repeatedSectionFingerprints: Array<{ fingerprint: string; count: number; sectionIds: string[] }>;
     sharedHeaderFooterSectionCount: number;
     listingDetection: { detected: boolean; sectionId: string | null; reason: string | null };

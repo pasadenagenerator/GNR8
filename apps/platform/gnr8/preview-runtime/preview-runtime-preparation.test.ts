@@ -616,6 +616,9 @@ test("Viroidoc-like transformed home removes repeated intro blocks before latest
   assert.equal(assembly?.selectedRoutePath, "/");
   assert.equal(assembly?.selectedSourceRawFile, "pages/root/index.html");
   assert.equal(assembly?.semanticSectionCount, 4);
+  assert.equal(assembly?.transformedRouteSectionCountBeforeHydration, 2);
+  assert.equal(assembly?.duplicateRemovalCount, 2);
+  assert.equal(assembly?.clientHydrationMode, "idempotent");
   assert.equal(assembly?.listingDetection.detected, true);
   assert.equal(assembly?.listingDetection.sectionId, "home-latest-news");
   assert.deepEqual(assembly?.removedDuplicateSectionIds, ["home-intro-b", "home-intro-c"]);
@@ -646,4 +649,17 @@ test("Viroidoc-like transformed news/blog remove repeated home intro blocks whil
   assert.deepEqual(project?.sections.map((section) => section.id), ["project-hero", "project-body"]);
   assert.equal(projectPrepared.summary.transformedAssemblyDiagnostics?.listingDetection.detected, false);
   assert.deepEqual(projectPrepared.summary.transformedAssemblyDiagnostics?.removedDuplicateSectionIds, []);
+});
+
+test("Viroidoc-like transformed preparation is idempotent across repeated route preparation", () => {
+  const siteVersion = viroidocLikeTransformedSiteVersion();
+  const first = preparePreviewRuntime({ siteVersion, routePath: "/news" });
+  const second = preparePreviewRuntime({ siteVersion, routePath: "/news" });
+  const firstNews = first.finalSiteModel?.pages.find((page) => page.path === "/news");
+  const secondNews = second.finalSiteModel?.pages.find((page) => page.path === "/news");
+
+  assert.deepEqual(firstNews?.sections.map((section) => section.id), ["news-home-intro-a", "news-listing"]);
+  assert.deepEqual(secondNews?.sections.map((section) => section.id), ["news-home-intro-a", "news-listing"]);
+  assert.equal(firstNews?.sections.length, secondNews?.sections.length);
+  assert.deepEqual(first.summary.transformedAssemblyDiagnostics, second.summary.transformedAssemblyDiagnostics);
 });
