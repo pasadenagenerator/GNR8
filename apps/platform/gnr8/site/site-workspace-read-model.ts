@@ -52,6 +52,17 @@ type RuntimeArtifactRow = {
   manifest: unknown
 }
 
+export type SiteWorkspaceRawPreviewValidationEvidence = {
+  capturedAt: string | null
+  siteVersionId: string | null
+  routePath: string | null
+  selectedRawFilePath: string | null
+  rewrittenLinksCount: number | null
+  responseStatus: number | null
+  responseBytes: number | null
+  evidenceSource: 'persisted_preview_validation'
+}
+
 type RuntimeDomainHostBindingRow = {
   id: string | null
   site_id: string | null
@@ -338,6 +349,7 @@ export type SiteWorkspaceReadModel = {
     familyRenderDiagnosticsCount: number
     familyRenderDiagnostics: string[]
     previewRuntimeSummary: PreviewRuntimeSummary | null
+    latestRawPreviewValidationEvidence: SiteWorkspaceRawPreviewValidationEvidence | null
     liveUrl: string | null
     selectedVariantLabel: string | null
     diagnostics: string[]
@@ -487,6 +499,17 @@ function toIsoOrNull(value: unknown): string | null {
   const date = new Date(String(value))
   if (Number.isNaN(date.getTime())) return null
   return date.toISOString()
+}
+
+function finiteNumberOrNull(value: unknown): number | null {
+  const numeric = Number(value)
+  return Number.isFinite(numeric) ? numeric : null
+}
+
+function nonNegativeIntegerOrNull(value: unknown): number | null {
+  const numeric = finiteNumberOrNull(value)
+  if (numeric == null) return null
+  return Math.max(0, Math.floor(numeric))
 }
 
 function toHttpsUrlOrNull(value: string | null | undefined): string | null {
@@ -2090,6 +2113,84 @@ function parsePreviewRuntimeSummary(value: unknown): PreviewRuntimeSummary | nul
   }
 }
 
+function firstRecord(...values: unknown[]): Record<string, unknown> | null {
+  return values.find(isRecord) ?? null
+}
+
+function parseRawPreviewValidationEvidence(input: {
+  manifest: Record<string, unknown> | null
+  expectedSiteVersionId?: string | null
+  previewValidation?: unknown
+}): SiteWorkspaceRawPreviewValidationEvidence | null {
+  const manifest = input.manifest
+  if (!manifest) return null
+
+  const previewValidation = isRecord(input.previewValidation)
+    ? input.previewValidation
+    : isRecord(manifest.multiPagePreviewValidation)
+      ? manifest.multiPagePreviewValidation
+      : null
+  const previewValidationEvidence = firstRecord(
+    previewValidation?.rawPreviewValidationEvidence,
+    previewValidation?.rawTemplatePreviewValidationEvidence,
+    previewValidation?.previewValidationEvidence,
+    previewValidation?.evidence,
+  )
+  const explicitEvidence = firstRecord(
+    manifest.latestRawPreviewValidationEvidence,
+    manifest.rawPreviewValidationEvidence,
+    manifest.rawTemplatePreviewValidationEvidence,
+    isRecord(manifest.previewValidationEvidence) ? manifest.previewValidationEvidence.rawPreviewValidationEvidence : null,
+    isRecord(manifest.rawPreviewValidation) ? manifest.rawPreviewValidation.evidence : null,
+    previewValidationEvidence,
+  )
+  if (!explicitEvidence) return null
+
+  const evidenceSiteVersionId = toTextOrNull(explicitEvidence.siteVersionId)
+  const expectedSiteVersionId = toTextOrNull(input.expectedSiteVersionId)
+  if (evidenceSiteVersionId && expectedSiteVersionId && evidenceSiteVersionId !== expectedSiteVersionId) return null
+
+  const response = isRecord(explicitEvidence.response) ? explicitEvidence.response : null
+  const http = isRecord(explicitEvidence.http) ? explicitEvidence.http : null
+  const summary = isRecord(previewValidation?.summary) ? previewValidation.summary : null
+
+  return {
+    capturedAt: toIsoOrNull(explicitEvidence.capturedAt) ?? toIsoOrNull(explicitEvidence.capturedAtIso),
+    siteVersionId: evidenceSiteVersionId ?? expectedSiteVersionId,
+    routePath: toTextOrNull(explicitEvidence.routePath) ?? toTextOrNull(explicitEvidence.selectedRoutePath),
+    selectedRawFilePath: toTextOrNull(explicitEvidence.selectedRawFilePath) ?? toTextOrNull(explicitEvidence.rawFilePath),
+    rewrittenLinksCount:
+      nonNegativeIntegerOrNull(explicitEvidence.rewrittenLinksCount) ??
+      nonNegativeIntegerOrNull(explicitEvidence.rewrittenLinkCount) ??
+      nonNegativeIntegerOrNull(summary?.rewrittenLinks),
+    responseStatus:
+      nonNegativeIntegerOrNull(explicitEvidence.responseStatus) ??
+      nonNegativeIntegerOrNull(explicitEvidence.statusCode) ??
+      nonNegativeIntegerOrNull(response?.status) ??
+      nonNegativeIntegerOrNull(http?.status),
+    responseBytes:
+      nonNegativeIntegerOrNull(explicitEvidence.responseBytes) ??
+      nonNegativeIntegerOrNull(explicitEvidence.responseByteLength) ??
+      nonNegativeIntegerOrNull(response?.bytes) ??
+      nonNegativeIntegerOrNull(response?.byteLength) ??
+      nonNegativeIntegerOrNull(http?.bytes) ??
+      nonNegativeIntegerOrNull(http?.byteLength),
+    evidenceSource: 'persisted_preview_validation',
+  }
+}
+
+function resolveLatestRawPreviewValidationEvidence(input: {
+  latestImportSiteVersionId: string | null
+  latestImportManifest: Record<string, unknown> | null
+  latestImportPreviewValidation?: unknown
+}): SiteWorkspaceRawPreviewValidationEvidence | null {
+  return parseRawPreviewValidationEvidence({
+    manifest: input.latestImportManifest,
+    expectedSiteVersionId: input.latestImportSiteVersionId,
+    previewValidation: input.latestImportPreviewValidation,
+  })
+}
+
 export function resolveSelectedRuntimeVersionIdForWorkspace(input: {
   latestRuntimeSiteVersionId: string | null
   availableRuntimeSiteVersionIds?: string[] | null
@@ -2448,6 +2549,7 @@ export async function getSiteWorkspaceReadModelForPage(input: {
   let transformedPreviewAvailable = Boolean(selectedRuntimeArtifactId)
   let previewRuntimeSummary: PreviewRuntimeSummary | null = null
   let selectedArtifactManifest: Record<string, unknown> | null = null
+  let latestImportArtifactManifest: Record<string, unknown> | null = null
   let latestImportPreviewValidationPayload: unknown = null
   if (selectedRuntimeSiteVersionId) {
     const artifactResult = await supabase
@@ -2474,6 +2576,7 @@ export async function getSiteWorkspaceReadModelForPage(input: {
   if (latestImportRuntimeSiteVersionId) {
     if (latestImportRuntimeSiteVersionId === selectedRuntimeSiteVersionId && selectedArtifactManifest) {
       latestImportArtifactId = latestImportArtifactId ?? selectedRuntimeArtifactId
+      latestImportArtifactManifest = selectedArtifactManifest
       latestImportPreviewValidationPayload = selectedArtifactManifest.multiPagePreviewValidation ?? null
     } else {
       const artifactResult = await supabase
@@ -2487,10 +2590,16 @@ export async function getSiteWorkspaceReadModelForPage(input: {
         const artifactRow = artifactResult.data[0] as RuntimeArtifactRow
         latestImportArtifactId = latestImportArtifactId ?? toTextOrNull(artifactRow.id)
         const manifest = isRecord(artifactRow.manifest) ? artifactRow.manifest : null
+        latestImportArtifactManifest = manifest
         latestImportPreviewValidationPayload = manifest?.multiPagePreviewValidation ?? null
       }
     }
   }
+  const latestRawPreviewValidationEvidence = resolveLatestRawPreviewValidationEvidence({
+    latestImportSiteVersionId: latestImportRuntimeSiteVersionId,
+    latestImportManifest: latestImportArtifactManifest,
+    latestImportPreviewValidation: latestImportPreviewValidationPayload,
+  })
 
   const debugPreviewAvailable = Boolean(selectedRuntimeSiteVersionId) && pageRows.length > 0
   const resolvedPreview = resolveSiteWorkspacePreview({
@@ -2751,6 +2860,7 @@ export async function getSiteWorkspaceReadModelForPage(input: {
       familyRenderDiagnosticsCount: resolvedPreview.familyRenderDiagnosticsCount,
       familyRenderDiagnostics: resolvedPreview.familyRenderDiagnostics,
       previewRuntimeSummary: resolvedPreview.previewRuntimeSummary,
+      latestRawPreviewValidationEvidence,
       liveUrl: toHttpsUrlOrNull(site.domain),
       selectedVariantLabel: selectedVariant?.label ?? null,
       diagnostics: resolvedPreviewDiagnostics,
@@ -2775,4 +2885,6 @@ export const __siteWorkspaceReadModelTestUtils = {
   resolveLatestRuntimeVersionRow,
   deriveRuntimeImportRunId,
   buildRuntimeVersionVisibility,
+  parseRawPreviewValidationEvidence,
+  resolveLatestRawPreviewValidationEvidence,
 }

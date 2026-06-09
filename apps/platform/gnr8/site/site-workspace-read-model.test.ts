@@ -587,6 +587,144 @@ test('version visibility exposes latest import metadata when selected workspace 
   assert.equal(visibility.selectionLabel, 'transformed_preview_selected_older_runtime')
 })
 
+test('latest raw preview validation evidence parses persisted validation evidence', () => {
+  const evidence = __siteWorkspaceReadModelTestUtils.resolveLatestRawPreviewValidationEvidence({
+    latestImportSiteVersionId: 'latest-import-version',
+    latestImportManifest: {
+      multiPagePreviewValidation: {
+        status: 'ready',
+        summary: {
+          rewrittenLinks: 7,
+        },
+        rawPreviewValidationEvidence: {
+          capturedAt: '2026-06-09T09:10:11.000Z',
+          siteVersionId: 'latest-import-version',
+          routePath: '/about',
+          selectedRawFilePath: 'pages/about/index.html',
+          responseStatus: 200,
+          responseBytes: 4096,
+        },
+      },
+    },
+  })
+
+  assert.deepEqual(evidence, {
+    capturedAt: '2026-06-09T09:10:11.000Z',
+    siteVersionId: 'latest-import-version',
+    routePath: '/about',
+    selectedRawFilePath: 'pages/about/index.html',
+    rewrittenLinksCount: 7,
+    responseStatus: 200,
+    responseBytes: 4096,
+    evidenceSource: 'persisted_preview_validation',
+  })
+})
+
+test('latest raw preview validation evidence is absent without persisted raw evidence', () => {
+  const evidence = __siteWorkspaceReadModelTestUtils.resolveLatestRawPreviewValidationEvidence({
+    latestImportSiteVersionId: 'latest-import-version',
+    latestImportManifest: {
+      multiPagePreviewValidation: {
+        status: 'ready',
+        summary: {
+          rewrittenLinks: 7,
+        },
+      },
+      previewRuntimeSummary: {
+        previewMode: 'transformed',
+        rawTemplatePreviewEvidence: {
+          selectedRoutePath: '/',
+          selectedRawFilePath: 'stale/index.html',
+          rewrittenLinkCount: 99,
+        },
+      },
+    },
+  })
+
+  assert.equal(evidence, null)
+})
+
+test('latest raw preview validation evidence rejects stale transformed preview evidence', () => {
+  const evidence = __siteWorkspaceReadModelTestUtils.parseRawPreviewValidationEvidence({
+    expectedSiteVersionId: 'latest-import-version',
+    manifest: {
+      latestRawPreviewValidationEvidence: {
+        capturedAt: '2026-06-08T09:10:11.000Z',
+        siteVersionId: 'older-transformed-version',
+        routePath: '/',
+        selectedRawFilePath: 'pages/root/index.html',
+        rewrittenLinksCount: 12,
+        responseStatus: 200,
+        responseBytes: 2048,
+      },
+    },
+  })
+
+  assert.equal(evidence, null)
+})
+
+test('latest raw preview validation evidence follows latest import when selected preview diverges', () => {
+  const visibility = __siteWorkspaceReadModelTestUtils.buildRuntimeVersionVisibility({
+    latestImportRow: {
+      id: 'latest-import-version',
+      site_id: 'runtime-site-latest',
+      ownership_site_id: SITE_ID,
+      state: 'DRAFT',
+      version_no: 12,
+      import_provenance_summary: runtimeSummaryFixture({
+        requestId: 'client-site-import-20260609',
+        sourceMode: 'raw_html_fallback',
+        renderedCaptureStatus: 'failed',
+        renderedDomQuality: 'unusable',
+        nodeCount: 0,
+        screenshotCount: 0,
+      }),
+      artifact_id: 'latest-artifact',
+      created_at: '2026-06-09T08:00:00.000Z',
+      updated_at: '2026-06-09T08:01:00.000Z',
+    } as any,
+    selectedWorkspaceRow: {
+      id: 'older-transformed-version',
+      site_id: 'runtime-site-older',
+      ownership_site_id: SITE_ID,
+      state: 'DRAFT',
+      version_no: 11,
+      import_provenance_summary: runtimeSummaryFixture({
+        requestId: 'client-site-import-20260608',
+        sourceMode: 'rendered_dom',
+        renderedCaptureStatus: 'available',
+        renderedDomQuality: 'strong',
+        nodeCount: 80,
+        screenshotCount: 2,
+      }),
+      artifact_id: 'older-artifact',
+      created_at: '2026-06-08T08:00:00.000Z',
+      updated_at: '2026-06-08T08:01:00.000Z',
+    } as any,
+    latestImportArtifactId: 'latest-artifact',
+    selectedArtifactId: 'older-artifact',
+  })
+  const evidence = __siteWorkspaceReadModelTestUtils.resolveLatestRawPreviewValidationEvidence({
+    latestImportSiteVersionId: visibility.latestImportSiteVersionId,
+    latestImportManifest: {
+      latestRawPreviewValidationEvidence: {
+        capturedAt: '2026-06-09T09:10:11.000Z',
+        siteVersionId: 'latest-import-version',
+        routePath: '/',
+        selectedRawFilePath: 'pages/root/index.html',
+        rewrittenLinksCount: 3,
+        responseStatus: 200,
+        responseBytes: 8192,
+      },
+    },
+  })
+
+  assert.equal(visibility.selectedWorkspaceSiteVersionId, 'older-transformed-version')
+  assert.equal(visibility.selectedMatchesLatestImport, false)
+  assert.equal(evidence?.siteVersionId, 'latest-import-version')
+  assert.equal(evidence?.selectedRawFilePath, 'pages/root/index.html')
+})
+
 test('import fidelity signals are parsed from semantic signal labels', () => {
   const parsed = __siteWorkspaceReadModelTestUtils.parseImportFidelitySignals([
     {

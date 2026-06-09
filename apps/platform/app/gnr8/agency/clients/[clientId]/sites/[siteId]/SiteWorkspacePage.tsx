@@ -673,6 +673,7 @@ function renderPreviewContent(readModel: Awaited<ReturnType<typeof getSiteWorksp
     routes: readModel.multiPageImport.routes,
     rawTemplatePreviewEvidence: readModel.preview.previewRuntimeSummary?.rawTemplatePreviewEvidence ?? null,
   })
+  const latestRawPreviewValidationEvidence = readModel.preview.latestRawPreviewValidationEvidence
 
   return (
     <section style={sectionCardStyle()}>
@@ -767,6 +768,23 @@ function renderPreviewContent(readModel: Awaited<ReturnType<typeof getSiteWorksp
           {readModel.preview.previewRuntimeSummary.semanticCtaCount ?? 0}
         </p>
       ) : null}
+      <div style={{ margin: '8px 0 0', border: '1px solid #e2e8f0', borderRadius: 8, padding: 10, background: '#f8fafc' }}>
+        <div style={{ margin: 0, color: '#0f172a', fontSize: 12, fontWeight: 700 }}>Latest Raw Preview Validation</div>
+        {latestRawPreviewValidationEvidence ? (
+          <div style={{ marginTop: 6, display: 'grid', gap: 4, color: '#334155', fontSize: 12 }}>
+            <div>capturedAt: {formatTimestamp(latestRawPreviewValidationEvidence.capturedAt)}</div>
+            <div>siteVersionId: {latestRawPreviewValidationEvidence.siteVersionId ?? 'n/a'}</div>
+            <div>routePath: {latestRawPreviewValidationEvidence.routePath ?? 'n/a'}</div>
+            <div>selectedRawFilePath: {latestRawPreviewValidationEvidence.selectedRawFilePath ?? 'n/a'}</div>
+            <div>rewrittenLinksCount: {latestRawPreviewValidationEvidence.rewrittenLinksCount ?? 'n/a'}</div>
+            <div>responseStatus: {latestRawPreviewValidationEvidence.responseStatus ?? 'n/a'}</div>
+            <div>responseBytes: {latestRawPreviewValidationEvidence.responseBytes ?? 'n/a'}</div>
+            <div>evidence source: {latestRawPreviewValidationEvidence.evidenceSource}</div>
+          </div>
+        ) : (
+          <div style={{ marginTop: 6, color: '#64748b', fontSize: 12 }}>No raw preview validation evidence captured.</div>
+        )}
+      </div>
       {rawPreviewDiagnostics ? (
         <div style={{ margin: '8px 0 0', border: '1px solid #e2e8f0', borderRadius: 8, padding: 10, background: '#f8fafc' }}>
           <div style={{ margin: 0, color: '#0f172a', fontSize: 12, fontWeight: 700 }}>Preview Diagnostics</div>
