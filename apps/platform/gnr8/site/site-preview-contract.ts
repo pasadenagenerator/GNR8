@@ -38,6 +38,7 @@ export type SiteWorkspacePreviewResolution = {
   status: SiteWorkspacePreviewReadiness
   sourceType: SitePreviewType | null
   mainPreviewUrl: string | null
+  rawImportedPreviewUrl: string | null
   transformedPreviewUrl: string | null
   debugPreviewUrl: string | null
   previewMode: PreviewRuntimeMode | null
@@ -75,14 +76,44 @@ export function resolveSiteWorkspacePreview(input: {
   siteVersionId: string | null
   transformedPreviewAvailable: boolean
   debugPreviewAvailable: boolean
+  rawImportedPreviewAvailable?: boolean
+  rawImportedPreviewSiteVersionId?: string | null
   importCaptured: boolean
   previewRuntimeSummary?: PreviewRuntimeSummary | null
 }): SiteWorkspacePreviewResolution {
   const summary = input.previewRuntimeSummary ?? null
   const familyTruth = resolveFamilyRenderTruth(summary)
   const modeDiagnostic = summary ? `Preview runtime mode: ${summary.previewMode}.` : null
+  const rawImportedPreviewUrl = input.rawImportedPreviewAvailable && input.rawImportedPreviewSiteVersionId
+    ? buildSiteVersionPreviewUrl({ siteVersionId: input.rawImportedPreviewSiteVersionId, mode: 'raw_template_preview', path: '/' })
+    : null
 
   if (!input.siteVersionId) {
+    if (rawImportedPreviewUrl) {
+      console.info('[site-preview] SITE_PREVIEW_RENDERED_TRUTH_SELECTED', {
+        siteVersionId: null,
+        rawImportedPreviewSiteVersionId: input.rawImportedPreviewSiteVersionId,
+        selectedSourceType: 'raw_imported',
+        transformedPreviewAvailable: input.transformedPreviewAvailable,
+        debugPreviewAvailable: input.debugPreviewAvailable,
+        previewMode: summary?.previewMode ?? null,
+      })
+      return {
+        status: 'preview_available',
+        sourceType: 'raw_imported',
+        mainPreviewUrl: rawImportedPreviewUrl,
+        rawImportedPreviewUrl,
+        transformedPreviewUrl: null,
+        debugPreviewUrl: null,
+        previewMode: summary?.previewMode ?? null,
+        previewRuntimeSummary: summary,
+        ...familyTruth,
+        diagnostics: [
+          'Raw imported multi-page preview is available and selected as the primary Site Workspace preview source.',
+          ...(modeDiagnostic ? [modeDiagnostic] : []),
+        ],
+      }
+    }
     console.warn('[site-preview] SITE_PREVIEW_RENDERED_TRUTH_MISSING', {
       siteVersionId: null,
       transformedPreviewAvailable: input.transformedPreviewAvailable,
@@ -94,6 +125,7 @@ export function resolveSiteWorkspacePreview(input: {
       status: input.importCaptured ? 'import_captured_not_transformed' : 'preview_unavailable',
       sourceType: null,
       mainPreviewUrl: null,
+      rawImportedPreviewUrl: null,
       transformedPreviewUrl: null,
       debugPreviewUrl: null,
       previewMode: summary?.previewMode ?? null,
@@ -115,6 +147,33 @@ export function resolveSiteWorkspacePreview(input: {
     ? buildSiteVersionPreviewUrl({ siteVersionId: input.siteVersionId, mode: 'debug' })
     : null
 
+  if (rawImportedPreviewUrl) {
+    console.info('[site-preview] SITE_PREVIEW_RENDERED_TRUTH_SELECTED', {
+      siteVersionId: input.siteVersionId,
+      rawImportedPreviewSiteVersionId: input.rawImportedPreviewSiteVersionId,
+      selectedSourceType: 'raw_imported',
+      transformedPreviewAvailable: input.transformedPreviewAvailable,
+      debugPreviewAvailable: Boolean(debugPreviewUrl),
+      previewMode: summary?.previewMode ?? null,
+    })
+    return {
+      status: 'preview_available',
+      sourceType: 'raw_imported',
+      mainPreviewUrl: rawImportedPreviewUrl,
+      rawImportedPreviewUrl,
+      transformedPreviewUrl,
+      debugPreviewUrl,
+      previewMode: summary?.previewMode ?? null,
+      previewRuntimeSummary: summary,
+      ...familyTruth,
+      diagnostics: [
+        'Raw imported multi-page preview is available and selected as the primary Site Workspace preview source.',
+        ...(transformedPreviewUrl ? ['GNR8 transformed preview remains available as an experimental/debug preview.'] : []),
+        ...(modeDiagnostic ? [modeDiagnostic] : []),
+      ],
+    }
+  }
+
   if (transformedPreviewUrl) {
     console.info('[site-preview] SITE_PREVIEW_RENDERED_TRUTH_SELECTED', {
       siteVersionId: input.siteVersionId,
@@ -127,6 +186,7 @@ export function resolveSiteWorkspacePreview(input: {
       status: 'preview_available',
       sourceType: 'transformed',
       mainPreviewUrl: transformedPreviewUrl,
+      rawImportedPreviewUrl: null,
       transformedPreviewUrl,
       debugPreviewUrl,
       previewMode: summary?.previewMode ?? null,
@@ -151,6 +211,7 @@ export function resolveSiteWorkspacePreview(input: {
       status: 'debug_only_artifact_available',
       sourceType: 'debug_inspect',
       mainPreviewUrl: null,
+      rawImportedPreviewUrl: null,
       transformedPreviewUrl: null,
       debugPreviewUrl,
       previewMode: summary?.previewMode ?? null,
@@ -174,6 +235,7 @@ export function resolveSiteWorkspacePreview(input: {
     status: input.importCaptured ? 'import_captured_not_transformed' : 'preview_unavailable',
     sourceType: null,
     mainPreviewUrl: null,
+    rawImportedPreviewUrl: null,
     transformedPreviewUrl: null,
     debugPreviewUrl: null,
     previewMode: summary?.previewMode ?? null,

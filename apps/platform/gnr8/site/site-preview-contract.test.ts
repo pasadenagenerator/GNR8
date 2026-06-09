@@ -46,7 +46,51 @@ test('buildSiteVersionPreviewUrl keeps transformed/debug paths explicit', () => 
   )
 })
 
-test('resolveSiteWorkspacePreview prefers transformed preview as primary source', () => {
+test('resolveSiteWorkspacePreview uses raw imported preview as primary when raw multi-page artifact exists', () => {
+  const resolved = resolveSiteWorkspacePreview({
+    siteVersionId: 'sv-viroidoc-transformed',
+    transformedPreviewAvailable: true,
+    debugPreviewAvailable: true,
+    rawImportedPreviewAvailable: true,
+    rawImportedPreviewSiteVersionId: 'sv-viroidoc-import',
+    importCaptured: true,
+    previewRuntimeSummary: {
+      previewMode: 'react_preview_degraded',
+      rendererContractAvailable: true,
+      finalSiteModelAvailable: true,
+      familyRenderUsed: true,
+      familyRenderFamilyId: 'family_marketing_root',
+      familyRenderMode: 'hybrid_family_page',
+      familyRenderFallbackToPage: false,
+      familyRenderDiagnosticsCount: 1,
+      familyRenderDiagnostics: ['FAMILY_RENDER_MODE_SELECTED'],
+      renderedWithFallback: true,
+      matchedPageId: 'page-home',
+      contentResolutionApplied: true,
+      resolvedContentCount: 12,
+      unresolvedContentCount: 2,
+      contentResolutionDegraded: true,
+      contentResolutionDiagnostics: ['CONTENT_RESOLUTION_DEGRADED'],
+      previewDiagnostics: ['PREVIEW_REAL_REACT_RENDER_DEGRADED'],
+    },
+  })
+
+  assert.equal(resolved.status, 'preview_available')
+  assert.equal(resolved.sourceType, 'raw_imported')
+  assert.equal(
+    resolved.mainPreviewUrl,
+    '/api/gnr8/runtime/versions/sv-viroidoc-import/preview?mode=raw_template_preview&path=%2F',
+  )
+  assert.equal(resolved.mainPreviewUrl, resolved.rawImportedPreviewUrl)
+  assert.equal(
+    resolved.transformedPreviewUrl,
+    '/api/gnr8/runtime/versions/sv-viroidoc-transformed/preview?mode=transformed',
+  )
+  assert.notEqual(resolved.mainPreviewUrl, resolved.transformedPreviewUrl)
+  assert.match(resolved.diagnostics.join(' '), /experimental\/debug preview/i)
+})
+
+test('resolveSiteWorkspacePreview uses transformed preview as primary when no raw imported preview exists', () => {
   const resolved = resolveSiteWorkspacePreview({
     siteVersionId: '8ce51f31-92ff-4ef4-a543-e1177dfe780d',
     transformedPreviewAvailable: true,
@@ -84,6 +128,7 @@ test('resolveSiteWorkspacePreview prefers transformed preview as primary source'
   assert.equal(resolved.familyRenderDiagnosticsCount, 1)
   assert.deepEqual(resolved.familyRenderDiagnostics, ['FAMILY_RENDER_MODE_SELECTED'])
   assert.equal(resolved.mainPreviewUrl, resolved.transformedPreviewUrl)
+  assert.equal(resolved.rawImportedPreviewUrl, null)
   assert.ok(resolved.debugPreviewUrl)
 })
 

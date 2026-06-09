@@ -363,6 +363,7 @@ export type SiteWorkspaceReadModel = {
     readiness: SiteWorkspacePreviewReadiness
     sourceType: SitePreviewType | null
     previewUrl: string | null
+    rawImportedPreviewUrl: string | null
     transformedPreviewUrl: string | null
     debugPreviewUrl: string | null
     previewMode: PreviewRuntimeSummary['previewMode'] | null
@@ -2686,33 +2687,6 @@ export async function getSiteWorkspaceReadModelForPage(input: {
     latestImportPreviewValidation: latestImportPreviewValidationPayload,
   })
 
-  const debugPreviewAvailable = Boolean(selectedRuntimeSiteVersionId) && pageRows.length > 0
-  const resolvedPreview = resolveSiteWorkspacePreview({
-    siteVersionId: selectedRuntimeSiteVersionId,
-    transformedPreviewAvailable,
-    debugPreviewAvailable,
-    importCaptured: Boolean(selectedRuntimeSiteVersionId),
-    previewRuntimeSummary,
-  })
-  const previewAlignmentDiagnostics = selectedRuntimeRow && importFidelity.sourceMode === 'rendered_dom' ? ['PRIMARY_RENDERED_RUN_ALIGNED_TO_PREVIEW'] : []
-  const resolvedPreviewDiagnostics = [...new Set([...resolvedPreview.diagnostics, ...previewAlignmentDiagnostics])].sort((a, b) => a.localeCompare(b))
-  const multiPageImportOperatorSummary = buildMultiPageImportOperatorSummary({
-    importProvenanceSummary: latestImportRuntimeRow?.import_provenance_summary ?? null,
-    previewValidation: latestImportPreviewValidationPayload,
-    previewDiagnostics: resolvedPreview.previewRuntimeSummary?.previewDiagnostics ?? resolvedPreviewDiagnostics,
-  })
-  const diagnosticsSummary = Array.from(
-    new Set([
-      ...structureRows.flatMap((row) => row.keyDiagnostics),
-      ...(lastAction?.diagnostics ?? []),
-      ...importFidelity.importDiagnosticCodes,
-      ...runtimeArbitrationDiagnostics,
-      ...previewAlignmentDiagnostics,
-      ...(selectedVariant ? [`variant:${selectedVariant.label}`] : []),
-      ...resolvedPreviewDiagnostics,
-    ]),
-  ).slice(0, 8)
-  const previewUrl = resolvedPreview.mainPreviewUrl
   let rawTemplateArtifact: RawTemplateArtifactRow | null = null
   let contentSlotCount = 0
   if (latestImportRuntimeSiteVersionId || selectedRuntimeSiteVersionId) {
@@ -2743,6 +2717,40 @@ export async function getSiteWorkspaceReadModelForPage(input: {
   const rawImportArtifactFound = normalizeText(rawTemplateArtifact?.artifact_type) === 'raw_imported_site'
   const rawTemplateEntryHtmlFound = Boolean(toTextOrNull(rawTemplateArtifact?.entry_html_path))
   const rawTemplateFileMapCount = isRecord(rawTemplateArtifact?.file_map) ? Object.keys(rawTemplateArtifact!.file_map as Record<string, unknown>).length : 0
+  const rawImportedPreviewAvailable = Boolean(latestImportRuntimeSiteVersionId)
+    && rawImportArtifactFound
+    && rawTemplateEntryHtmlFound
+    && rawTemplateFileMapCount > 0
+
+  const debugPreviewAvailable = Boolean(selectedRuntimeSiteVersionId) && pageRows.length > 0
+  const resolvedPreview = resolveSiteWorkspacePreview({
+    siteVersionId: selectedRuntimeSiteVersionId,
+    transformedPreviewAvailable,
+    debugPreviewAvailable,
+    rawImportedPreviewAvailable,
+    rawImportedPreviewSiteVersionId: latestImportRuntimeSiteVersionId,
+    importCaptured: Boolean(selectedRuntimeSiteVersionId),
+    previewRuntimeSummary,
+  })
+  const previewAlignmentDiagnostics = selectedRuntimeRow && importFidelity.sourceMode === 'rendered_dom' ? ['PRIMARY_RENDERED_RUN_ALIGNED_TO_PREVIEW'] : []
+  const resolvedPreviewDiagnostics = [...new Set([...resolvedPreview.diagnostics, ...previewAlignmentDiagnostics])].sort((a, b) => a.localeCompare(b))
+  const multiPageImportOperatorSummary = buildMultiPageImportOperatorSummary({
+    importProvenanceSummary: latestImportRuntimeRow?.import_provenance_summary ?? null,
+    previewValidation: latestImportPreviewValidationPayload,
+    previewDiagnostics: resolvedPreview.previewRuntimeSummary?.previewDiagnostics ?? resolvedPreviewDiagnostics,
+  })
+  const diagnosticsSummary = Array.from(
+    new Set([
+      ...structureRows.flatMap((row) => row.keyDiagnostics),
+      ...(lastAction?.diagnostics ?? []),
+      ...importFidelity.importDiagnosticCodes,
+      ...runtimeArbitrationDiagnostics,
+      ...previewAlignmentDiagnostics,
+      ...(selectedVariant ? [`variant:${selectedVariant.label}`] : []),
+      ...resolvedPreviewDiagnostics,
+    ]),
+  ).slice(0, 8)
+  const previewUrl = resolvedPreview.mainPreviewUrl
   const rawImportMetadata =
     rawTemplateArtifact?.metadata_json && typeof rawTemplateArtifact.metadata_json === 'object' && !Array.isArray(rawTemplateArtifact.metadata_json)
       ? (rawTemplateArtifact.metadata_json as Record<string, unknown>)
@@ -2935,6 +2943,7 @@ export async function getSiteWorkspaceReadModelForPage(input: {
       readiness: resolvedPreview.status,
       sourceType: resolvedPreview.sourceType,
       previewUrl,
+      rawImportedPreviewUrl: resolvedPreview.rawImportedPreviewUrl,
       transformedPreviewUrl: resolvedPreview.transformedPreviewUrl,
       debugPreviewUrl: resolvedPreview.debugPreviewUrl,
       previewMode: resolvedPreview.previewMode,

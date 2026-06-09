@@ -883,6 +883,7 @@ test('raw template preview rewrites latest Viroidoc-style menu anchors without m
     ['/people', 'pages/people/index.html'],
     ['/news', 'pages/news/index.html'],
     ['/learn', 'pages/learn/index.html'],
+    ['/blog', 'pages/blog/index.html'],
   ] as const
   const baseProvenance = fixtureViroidocLikeMultiPageAssemblyProvenance()
   const provenance = {
@@ -912,6 +913,7 @@ test('raw template preview rewrites latest Viroidoc-style menu anchors without m
     '<a href="/people" data-track-event="click" data-track-action="internal_link_clicked">People</a>',
     '<a href="/news" data-track-event="click" data-track-action="internal_link_clicked">News</a>',
     '<a href="/learn" data-track-event="click" data-track-action="internal_link_clicked">Learn</a>',
+    '<a href="/blog" data-track-event="click" data-track-action="internal_link_clicked">Blog</a>',
     '</nav>',
     `<main>${keyText}</main>`,
     '</body></html>',
@@ -922,6 +924,7 @@ test('raw template preview rewrites latest Viroidoc-style menu anchors without m
     'pages/people/index.html': '<!doctype html><html><body><main>People page content</main></body></html>',
     'pages/news/index.html': '<!doctype html><html><body><main>News page content</main></body></html>',
     'pages/learn/index.html': '<!doctype html><html><body><main>Learn page content</main></body></html>',
+    'pages/blog/index.html': '<!doctype html><html><body><main>Blog page content</main></body></html>',
   }
   const fileMap = Object.fromEntries(
     Object.entries(htmlByFilePath).map(([filePath, html]) => [
@@ -972,31 +975,37 @@ test('raw template preview rewrites latest Viroidoc-style menu anchors without m
     assert.equal(rootPreview.rawTemplatePreviewEvidence?.selectedRawFilePath, 'index.html')
     assert.equal(rootPreview.rawTemplatePreviewEvidence?.htmlByteLengthBeforeRewrite, Buffer.byteLength(rootHtml))
     assert.equal((rootPreview.rawTemplatePreviewEvidence?.htmlByteLengthAfterRewrite ?? 0) > Buffer.byteLength(rootHtml), true)
-    assert.equal(rootPreview.rawTemplatePreviewEvidence?.rewrittenLinkCount, 4)
+    assert.equal(rootPreview.rawTemplatePreviewEvidence?.rewrittenLinkCount, 5)
     assert.equal(countOccurrences(rootPreview.html, keyText), 1)
     assert.equal(rootPreview.html.includes('href="/project" data-track-event'), false)
-    assert.equal(
-      rootPreview.html.includes('/api/gnr8/runtime/versions/sv-viroidoc-live-shape/preview?mode=raw_template_preview&amp;path=%2Fproject'),
-      true,
-    )
-    assert.equal(rootPreview.html.includes('data-gnr8-original-href="/project"'), true)
+    for (const [routePath] of routeEntries) {
+      assert.equal(
+        rootPreview.html.includes(`/api/gnr8/runtime/versions/sv-viroidoc-live-shape/preview?mode=raw_template_preview&amp;path=%2F${routePath.slice(1)}`),
+        true,
+      )
+      assert.equal(rootPreview.html.includes(`data-gnr8-original-href="${routePath}"`), true)
+    }
+    assertNoTransformedDiagnosticContent(rootPreview.html)
 
-    const projectPreview = await renderSiteVersionPreview({
-      siteVersionId: 'sv-viroidoc-live-shape',
-      path: '/project',
-      mode: 'raw_template_preview',
-      requestCorrelationKey: 'req-viroidoc-live-shape-project',
-    })
-    assert.equal(projectPreview.path, '/project')
-    assert.equal(projectPreview.rawTemplatePreviewEvidence?.selectedRoutePath, '/project')
-    assert.equal(projectPreview.rawTemplatePreviewEvidence?.selectedRawFilePath, 'pages/project/index.html')
-    assert.equal(projectPreview.html.includes('Project page content'), true)
-    assert.equal(projectPreview.html.includes(keyText), false)
+    for (const [routePath, rawFilePath] of routeEntries) {
+      const childPreview = await renderSiteVersionPreview({
+        siteVersionId: 'sv-viroidoc-live-shape',
+        path: routePath,
+        mode: 'raw_template_preview',
+        requestCorrelationKey: `req-viroidoc-live-shape-${routePath.slice(1)}`,
+      })
+      assert.equal(childPreview.path, routePath)
+      assert.equal(childPreview.rawTemplatePreviewEvidence?.selectedRoutePath, routePath)
+      assert.equal(childPreview.rawTemplatePreviewEvidence?.selectedRawFilePath, rawFilePath)
+      assert.equal(childPreview.html.includes(`${routePath.slice(1)[0]?.toUpperCase()}${routePath.slice(2)} page content`), true)
+      assert.equal(childPreview.html.includes(keyText), false)
+      assertNoTransformedDiagnosticContent(childPreview.html)
+    }
   } finally {
     restore()
   }
 
-  assert.deepEqual(requestedAssets, ['index.html', 'pages/project/index.html'])
+  assert.deepEqual(requestedAssets, ['index.html', ...routeEntries.map(([, rawFilePath]) => rawFilePath)])
 })
 
 test('raw template preview route-map serving returns explicit miss instead of serving root', async () => {

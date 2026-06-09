@@ -52,6 +52,25 @@ test('multi-page raw preview links use first assembled child path', () => {
   )
 })
 
+test('Viroidoc-like raw menu routes stay on controlled raw preview URLs', () => {
+  const routes = ['/', '/project', '/people', '/news', '/learn', '/blog']
+  const links = routes.map((routePath) => ({
+    routePath,
+    href: buildMultiPageRawTemplatePreviewLinks({
+      siteVersionId: 'sv-viroidoc-menu',
+      routes: [{ routePath, status: 'assembled' }],
+    }).find((link) => link.routePath === routePath || (routePath === '/' && link.routePath === '/'))?.href,
+  }))
+
+  assert.deepEqual(links.map((link) => link.routePath), routes)
+  for (const link of links) {
+    assert.equal(typeof link.href, 'string')
+    assert.match(link.href ?? '', /^\/api\/gnr8\/runtime\/versions\/sv-viroidoc-menu\/preview\?/)
+    assert.match(link.href ?? '', /mode=raw_template_preview/)
+    assert.doesNotMatch(link.href ?? '', /mode=transformed|publish|activate|production|public/)
+  }
+})
+
 test('multi-page raw preview links skip public production URLs', () => {
   const links = buildMultiPageRawTemplatePreviewLinks({
     siteVersionId: 'site-version-1',

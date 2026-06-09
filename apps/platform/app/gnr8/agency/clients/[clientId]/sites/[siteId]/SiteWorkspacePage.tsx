@@ -657,6 +657,12 @@ function renderPreviewContent(readModel: Awaited<ReturnType<typeof getSiteWorksp
             : contentRecoveryModeActive
               ? 'content recovery'
               : 'canonical'
+  const primaryPreviewLabel = readModel.preview.sourceType === 'raw_imported'
+    ? 'Open Original Preview'
+    : 'Open Preview'
+  const showExperimentalTransformedPreview =
+    Boolean(readModel.preview.transformedPreviewUrl)
+    && readModel.preview.transformedPreviewUrl !== readModel.preview.previewUrl
   const familyRenderModeLabel = readModel.preview.familyRenderMode ?? 'unavailable'
   const familyRenderDiagnostics = readModel.preview.familyRenderDiagnostics
   const rawPreviewSiteVersionId = readModel.pipeline.importVersion.latestImportSiteVersionId ?? readModel.pipeline.latestRuntimeSiteVersionId
@@ -679,7 +685,7 @@ function renderPreviewContent(readModel: Awaited<ReturnType<typeof getSiteWorksp
     <section style={sectionCardStyle()}>
       <h2 style={{ margin: 0, fontSize: 18, color: '#0f172a' }}>Preview View</h2>
       <p style={{ margin: '8px 0 0', color: '#475569', fontSize: 13 }}>
-        Transformed preview is the primary user-facing preview. Debug/inspect preview remains available as an operator surface.
+        Original imported-site preview is the primary migration preview. GNR8 transformed preview remains available as an experimental debug surface.
       </p>
       <p style={{ margin: '6px 0 0', color: '#334155', fontSize: 12 }}>
         Status: <strong>{readinessLabel}</strong>
@@ -691,7 +697,7 @@ function renderPreviewContent(readModel: Awaited<ReturnType<typeof getSiteWorksp
         Preview mode: <strong>{previewModeLabel}</strong>
       </p>
       <div style={{ margin: '8px 0 0', border: '1px solid #e2e8f0', borderRadius: 8, padding: 10, background: '#f8fafc' }}>
-        <div style={{ margin: 0, color: '#0f172a', fontSize: 12, fontWeight: 700 }}>Transformed Preview</div>
+        <div style={{ margin: 0, color: '#0f172a', fontSize: 12, fontWeight: 700 }}>GNR8 Transformed Preview (experimental)</div>
         <div style={{ marginTop: 6, display: 'grid', gap: 4, color: '#334155', fontSize: 12 }}>
           <div>Mode: transformed</div>
           <div>Selected Workspace siteVersionId: {readModel.pipeline.importVersion.selectedWorkspaceSiteVersionId ?? 'n/a'}</div>
@@ -700,7 +706,7 @@ function renderPreviewContent(readModel: Awaited<ReturnType<typeof getSiteWorksp
         </div>
       </div>
       <div style={{ margin: '8px 0 0', border: '1px solid #e2e8f0', borderRadius: 8, padding: 10, background: '#f8fafc' }}>
-        <div style={{ margin: 0, color: '#0f172a', fontSize: 12, fontWeight: 700 }}>Raw Multi-Page Preview</div>
+        <div style={{ margin: 0, color: '#0f172a', fontSize: 12, fontWeight: 700 }}>Raw Imported Preview</div>
         <div style={{ marginTop: 6, display: 'grid', gap: 4, color: '#334155', fontSize: 12 }}>
           <div>Mode: raw_template_preview</div>
           <div>Latest Import siteVersionId: {rawPreviewSiteVersionId ?? 'n/a'}</div>
@@ -872,8 +878,13 @@ function renderPreviewContent(readModel: Awaited<ReturnType<typeof getSiteWorksp
         <div style={{ marginTop: 10, display: 'grid', gap: 10 }}>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             <a href={readModel.preview.previewUrl} target='_blank' rel='noreferrer' style={quickActionStyle()}>
-              Open Transformed Preview
+              {primaryPreviewLabel}
             </a>
+            {showExperimentalTransformedPreview && readModel.preview.transformedPreviewUrl ? (
+              <a href={readModel.preview.transformedPreviewUrl} target='_blank' rel='noreferrer' style={quickActionStyle()}>
+                Open GNR8 Transformed Preview (experimental)
+              </a>
+            ) : null}
             {readModel.preview.debugPreviewUrl ? (
               <a href={readModel.preview.debugPreviewUrl} target='_blank' rel='noreferrer' style={quickActionStyle()}>
                 Open Debug Preview
