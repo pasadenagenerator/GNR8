@@ -438,8 +438,8 @@ function renderMultiPageImportOperatorContent(readModel: Awaited<ReturnType<type
           <div style={{ fontWeight: 700, color: '#0f172a' }}>Validation Summary</div>
           <div>
             valid preview routes: {summary.validation.validPreviewRoutes} · missing preview routes: {summary.validation.missingPreviewRoutes} · rewritten links:{' '}
-            {summary.validation.rewrittenLinks} · skipped links: {summary.validation.skippedLinks} · warnings: {summary.validation.warnings} · blockers:{' '}
-            {summary.validation.blockers}
+            {summary.validation.rewrittenLinksEvidenceSource === 'preview_validation' ? summary.validation.rewrittenLinks : 'not captured live'} · skipped links:{' '}
+            {summary.validation.skippedLinks} · warnings: {summary.validation.warnings} · blockers: {summary.validation.blockers}
           </div>
           {renderMessageList('Warnings', summary.validation.warningSamples, 'warning')}
           {renderMessageList('Blockers', summary.validation.blockerSamples, 'blocker')}

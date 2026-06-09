@@ -187,6 +187,8 @@ test('multi-page operator summary returns a safe empty summary', () => {
   assert.equal(summary.overview.validation.status, 'not_run')
   assert.equal(summary.overview.validation.recommendation, 'Multi-page validation has not run yet.')
   assert.deepEqual(summary.routes, [])
+  assert.equal(summary.validation.rewrittenLinks, null)
+  assert.equal(summary.validation.rewrittenLinksEvidenceSource, 'not_captured')
   assert.equal(summary.validation.warnings, 0)
   assert.equal(summary.validation.blockers, 0)
 })
@@ -492,6 +494,8 @@ test('multi-page operator summary infers ready from assembled route-map evidence
   assert.equal(summary.overview.validation.status, 'ready')
   assert.equal(summary.validation.validPreviewRoutes, 1)
   assert.equal(summary.validation.missingPreviewRoutes, 0)
+  assert.equal(summary.validation.rewrittenLinks, null)
+  assert.equal(summary.validation.rewrittenLinksEvidenceSource, 'not_captured')
   assert.equal(summary.overview.validation.recommendation, 'All discovered and assembled routes are previewable. No operator action is required before manual review.')
 })
 
@@ -522,6 +526,8 @@ test('multi-page operator summary respects ready preview validation payloads', (
   })
 
   assert.equal(summary.overview.validation.status, 'ready')
+  assert.equal(summary.validation.rewrittenLinks, 2)
+  assert.equal(summary.validation.rewrittenLinksEvidenceSource, 'preview_validation')
   assert.equal(summary.validation.warnings, 0)
   assert.equal(summary.validation.blockers, 0)
 })
@@ -553,6 +559,7 @@ test('multi-page operator summary displays validation status and accurate warnin
     validPreviewRoutes: 1,
     missingPreviewRoutes: 1,
     rewrittenLinks: 3,
+    rewrittenLinksEvidenceSource: 'preview_validation',
     skippedLinks: 4,
     warnings: 2,
     blockers: 1,

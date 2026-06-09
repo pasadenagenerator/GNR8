@@ -96,7 +96,8 @@ export type MultiPageImportOperatorSummary = {
   validation: {
     validPreviewRoutes: number
     missingPreviewRoutes: number
-    rewrittenLinks: number
+    rewrittenLinks: number | null
+    rewrittenLinksEvidenceSource: 'preview_validation' | 'not_captured'
     skippedLinks: number
     warnings: number
     blockers: number
@@ -687,7 +688,8 @@ export function buildMultiPageImportOperatorSummary(input: BuildInput = {}): Mul
     validation: {
       validPreviewRoutes,
       missingPreviewRoutes,
-      rewrittenLinks: previewValidation?.summary.rewrittenLinks ?? 0,
+      rewrittenLinks: previewValidation ? previewValidation.summary.rewrittenLinks : null,
+      rewrittenLinksEvidenceSource: previewValidation ? 'preview_validation' : 'not_captured',
       skippedLinks: previewValidation?.summary.skippedLinks ?? skippedLinks,
       warnings: validationWarnings.length,
       blockers: validationBlockers.length,
