@@ -16,6 +16,7 @@ import {
 } from "@/gnr8/renderer-family-mode";
 
 function normalizeText(value: unknown): string {
+  if (typeof value !== "string" && typeof value !== "number" && typeof value !== "boolean") return "";
   return String(value ?? "").trim();
 }
 
@@ -44,7 +45,20 @@ function toSectionType(section: Record<string, unknown>): string {
   return sectionType || "content";
 }
 
-function inferComponentKind(sectionType: string): FinalSiteModel["pages"][number]["sections"][number]["components"][number]["kind"] {
+function hasRenderableSlotValue(value: unknown): boolean {
+  if (value === null || value === undefined) return false;
+  if (typeof value === "string") return value.trim().length > 0;
+  if (typeof value === "number" || typeof value === "boolean") return true;
+  if (Array.isArray(value)) return value.length > 0;
+  if (!isRecord(value)) return false;
+  return Object.values(value).some((entry) => hasRenderableSlotValue(entry));
+}
+
+function inferComponentKind(input: {
+  sectionType: string;
+  sectionProps: Record<string, unknown>;
+}): FinalSiteModel["pages"][number]["sections"][number]["components"][number]["kind"] {
+  const { sectionType, sectionProps } = input;
   if (sectionType.includes("hero")) return "hero";
   if (sectionType.includes("faq")) return "faq";
   if (sectionType.includes("pricing")) return "pricing";
@@ -55,7 +69,18 @@ function inferComponentKind(sectionType: string): FinalSiteModel["pages"][number
   if (sectionType.includes("footer")) return "footer_block";
   if (sectionType.includes("heading") || sectionType.includes("title")) return "section_heading";
   if (sectionType.includes("card")) return "card_grid";
-  return "generic";
+  if (/\b(news|blog|listing|latest|article|post|publication)s?\b/.test(sectionType.replace(/[_-]+/g, " "))) return "card_grid";
+
+  const slotValues = pickSectionSlotValues(sectionProps);
+  if (hasRenderableSlotValue(slotValues.items) || hasRenderableSlotValue(slotValues.cards)) return "card_grid";
+  if (hasRenderableSlotValue(slotValues["cta.label"]) || hasRenderableSlotValue(slotValues["cta.href"])) return "cta_group";
+  if (hasRenderableSlotValue(slotValues.image) && !hasRenderableSlotValue(slotValues.heading) && !hasRenderableSlotValue(slotValues.body)) {
+    return "image";
+  }
+  if (hasRenderableSlotValue(slotValues.body)) return "rich_text";
+  if (hasRenderableSlotValue(slotValues.heading)) return "section_heading";
+
+  return "rich_text";
 }
 
 function inferLayoutRole(sectionType: string): string {
@@ -86,6 +111,98 @@ function pickValue(input: Record<string, unknown>, keys: string[]): string | nul
   return null;
 }
 
+function pickImageValue(input: Record<string, unknown>, keys: string[]): { src: string; alt: string | null } | null {
+  for (const key of keys) {
+    const direct = input[key];
+    const directText = normalizeText(direct);
+    if (directText) return { src: directText, alt: null };
+    if (isRecord(direct)) {
+      const src = normalizeText(direct.src ?? direct.assetRef ?? direct.url);
+      const alt = normalizeText(direct.alt ?? direct.altText ?? direct.caption);
+      if (src || alt) return { src, alt: alt || null };
+    }
+
+    const lowerKey = Object.keys(input).find((candidate) => candidate.toLowerCase() === key.toLowerCase());
+    if (!lowerKey) continue;
+    const viaLower = input[lowerKey];
+    const viaLowerText = normalizeText(viaLower);
+    if (viaLowerText) return { src: viaLowerText, alt: null };
+    if (isRecord(viaLower)) {
+      const src = normalizeText(viaLower.src ?? viaLower.assetRef ?? viaLower.url);
+      const alt = normalizeText(viaLower.alt ?? viaLower.altText ?? viaLower.caption);
+      if (src || alt) return { src, alt: alt || null };
+    }
+  }
+  return null;
+}
+
+function pickRecord(input: Record<string, unknown>, keys: string[]): Record<string, unknown> | null {
+  for (const key of keys) {
+    const direct = input[key];
+    if (isRecord(direct)) return direct;
+    const lowerKey = Object.keys(input).find((candidate) => candidate.toLowerCase() === key.toLowerCase());
+    if (!lowerKey) continue;
+    const viaLower = input[lowerKey];
+    if (isRecord(viaLower)) return viaLower;
+  }
+  return null;
+}
+
+function pickSectionProps(input: {
+  sectionRecord: Record<string, unknown>;
+  sectionPropsById: Record<string, unknown>;
+  sectionId: string;
+}): Record<string, unknown> {
+  const explicitProps = input.sectionPropsById[input.sectionId];
+  if (isRecord(explicitProps)) return explicitProps;
+
+  const nestedProps = pickRecord(input.sectionRecord, ["props", "content", "data", "resolvedProps", "semanticProps"]);
+  if (nestedProps) return nestedProps;
+
+  const directKeys = [
+    "heading",
+    "headline",
+    "title",
+    "heroTitle",
+    "body",
+    "description",
+    "text",
+    "copy",
+    "subtitle",
+    "heroBody",
+    "image",
+    "imageSrc",
+    "media",
+    "heroImage",
+    "ctaLabel",
+    "buttonLabel",
+    "label",
+    "primaryCtaLabel",
+    "ctaHref",
+    "buttonUrl",
+    "href",
+    "url",
+    "link",
+    "items",
+    "cards",
+    "features",
+    "gallery",
+    "images",
+    "plans",
+    "faq",
+    "faqs",
+    "links",
+    "question",
+    "answer",
+    "htmlSummary",
+  ];
+  return Object.fromEntries(
+    directKeys
+      .map((key) => [key, input.sectionRecord[key]] as const)
+      .filter(([, value]) => hasRenderableSlotValue(value)),
+  );
+}
+
 function pickSectionSlotValues(sectionProps: Record<string, unknown>): {
   [key: string]: unknown;
 } {
@@ -99,7 +216,8 @@ function pickSectionSlotValues(sectionProps: Record<string, unknown>): {
   const heading = pickValue(sectionProps, ["heading", "headline", "title", "heroTitle"]) ?? null;
   const body =
     pickValue(sectionProps, ["body", "description", "text", "copy", "subtitle", "heroBody"]) ?? (textFromSummary || null);
-  const image = pickValue(sectionProps, ["image", "imageSrc", "media", "heroImage"]) ?? firstImageFromSummary ?? null;
+  const image = pickImageValue(sectionProps, ["image", "imageSrc", "media", "heroImage"]) ??
+    (firstImageFromSummary ? { src: firstImageFromSummary, alt: null } : null);
   const ctaLabel = pickValue(sectionProps, ["ctaLabel", "buttonLabel", "label", "primaryCtaLabel"]) ?? null;
   const ctaHref = pickValue(sectionProps, ["ctaHref", "buttonUrl", "href", "url", "link", "primaryCtaHref"]) ?? null;
   const quote = pickValue(sectionProps, ["quote", "testimonialQuote"]) ?? null;
@@ -134,7 +252,7 @@ function pickSectionSlotValues(sectionProps: Record<string, unknown>): {
     Object.entries({
       heading,
       body,
-      image: image ? { src: image, alt: heading ?? "Section image" } : null,
+      image: image ? { src: image.src, alt: image.alt ?? heading ?? "Section image" } : null,
       "cta.label": ctaLabel,
       "cta.href": ctaHref,
       quote,
@@ -248,8 +366,7 @@ function projectRuntimePageSections(input: {
       const sectionRecord = isRecord(section) ? section : {};
       const sectionId = normalizeText(sectionRecord.id) || deterministicId("final_section", `${input.page.pageId}:${index}`);
       const sectionType = toSectionType(sectionRecord);
-      const rawSectionProps = sectionPropsById[sectionId];
-      const props = isRecord(rawSectionProps) ? rawSectionProps : {};
+      const props = pickSectionProps({ sectionRecord, sectionPropsById, sectionId });
       const order = Number.isFinite(Number(sectionRecord.order)) ? Number(sectionRecord.order) : index;
       return {
         section: sectionRecord,
@@ -350,6 +467,23 @@ function slotKeysForKind(kind: FinalSiteModel["pages"][number]["sections"][numbe
   }
 }
 
+function slotKeysWithResolvedValues(input: {
+  kind: FinalSiteModel["pages"][number]["sections"][number]["components"][number]["kind"];
+  slotValues: Record<string, unknown>;
+}): string[] {
+  const keys = slotKeysForKind(input.kind).filter((slotKey) => hasRenderableSlotValue(input.slotValues[slotKey]));
+
+  if (input.kind === "rich_text" && hasRenderableSlotValue(input.slotValues.heading) && !keys.includes("heading")) {
+    keys.unshift("heading");
+  }
+
+  if (keys.length > 0) return keys;
+
+  return ["heading", "body", "items", "image", "cta.label", "cta.href"].filter((slotKey) =>
+    hasRenderableSlotValue(input.slotValues[slotKey]),
+  );
+}
+
 function toValueType(slotKey: string): "text" | "rich_text" | "image" | "url" | "list" {
   if (slotKey === "image") return "image";
   if (slotKey === "cta.href") return "url";
@@ -387,12 +521,13 @@ function mapPageToFinalPage(input: {
     .map((section, index) => {
       const sectionId = section.sectionId;
       const sectionType = section.sectionType;
-      const componentKind = inferComponentKind(sectionType);
+      const sectionProps = section.props;
+      const componentKind = inferComponentKind({ sectionType, sectionProps });
       const componentId = deterministicId("final_component", `${sectionId}:primary`);
 
-      const sectionProps = section.props;
       const slotValues = pickSectionSlotValues(sectionProps);
-      const slotKeys = slotKeysForKind(componentKind);
+      const slotKeys = slotKeysWithResolvedValues({ kind: componentKind, slotValues });
+      if (slotKeys.length === 0) return null;
       const slots = slotKeys.map((slotKey) => ({
         key: slotKey,
         valueType: toValueType(slotKey),
@@ -401,12 +536,12 @@ function mapPageToFinalPage(input: {
       const resolvedSlotValues = Object.fromEntries(
         slotKeys
           .map((slotKey) => [slotKey, slotValues[slotKey]] as const)
-          .filter((entry): entry is readonly [string, unknown] => entry[1] != null),
+          .filter((entry): entry is readonly [string, unknown] => hasRenderableSlotValue(entry[1])),
       );
       const contentBindings = slotKeys
         .map((slotKey) => {
           const value = slotValues[slotKey];
-          if (!value) return null;
+          if (!hasRenderableSlotValue(value)) return null;
           const contentId = deterministicId("content", `${componentId}:${slotKey}:${stringifyDeterministic(value)}`);
           return {
             id: deterministicId("binding", `${componentId}:${slotKey}`),
@@ -422,7 +557,7 @@ function mapPageToFinalPage(input: {
       const resolvedContentById = Object.fromEntries(
         contentBindings
           .map((binding) => [binding.contentId, slotValues[binding.slotPath.split(".").slice(1).join(".")]])
-          .filter((entry): entry is [string, unknown] => entry[1] != null),
+          .filter((entry): entry is [string, unknown] => hasRenderableSlotValue(entry[1])),
       );
 
       return {
@@ -476,6 +611,7 @@ function mapPageToFinalPage(input: {
         },
       } as FinalSiteModel["pages"][number]["sections"][number];
     })
+    .filter((section): section is FinalSiteModel["pages"][number]["sections"][number] => section != null)
     .sort((a, b) => a.order - b.order || a.id.localeCompare(b.id));
 
   return {

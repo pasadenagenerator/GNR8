@@ -663,3 +663,47 @@ test("Viroidoc-like transformed preparation is idempotent across repeated route 
   assert.equal(firstNews?.sections.length, secondNews?.sections.length);
   assert.deepEqual(first.summary.transformedAssemblyDiagnostics, second.summary.transformedAssemblyDiagnostics);
 });
+
+test("Viroidoc-like transformed home/news hydrate final components without visible missing or generic debug text", () => {
+  const siteVersion = viroidocLikeTransformedSiteVersion();
+
+  for (const [routePath, expectedText] of [
+    ["/", "Latest News"],
+    ["/news", "Full News Listing"],
+  ] as const) {
+    const prepared = preparePreviewRuntime({ siteVersion, routePath });
+    assert.ok(prepared.renderedSiteElement);
+    const renderedElement = prepared.renderedSiteElement as { props?: { siteModel?: { pages?: any[] } } };
+    const userFacingModelText = JSON.stringify(
+      renderedElement.props?.siteModel?.pages?.flatMap((page) =>
+        (page.sections ?? []).flatMap((section: any) =>
+          (section.components ?? []).map((component: any) => ({
+            renderKind: component.renderKind,
+            props: component.props,
+            slots: Object.fromEntries(
+              Object.entries(component.slots ?? {}).map(([slotKey, slotValue]) => [
+                slotKey,
+                (slotValue as { resolvedValue?: unknown }).resolvedValue ?? null,
+              ]),
+            ),
+          })),
+        ),
+      ) ?? [],
+    );
+
+    assert.equal(userFacingModelText.includes(expectedText), true);
+    assert.equal(userFacingModelText.includes("[missing:"), false);
+    assert.equal(userFacingModelText.includes("Missing media for final_component_"), false);
+    assert.equal(userFacingModelText.includes("Generic component fallback"), false);
+    assert.equal(userFacingModelText.includes("fallbackReason"), false);
+    assert.equal(userFacingModelText.includes("render.generic"), false);
+    assert.equal(prepared.rendererResult?.unresolvedContentCount, 0);
+    assert.equal(prepared.rendererResult?.renderedWithFallback, false);
+
+    const page = prepared.finalSiteModel?.pages.find((entry) => entry.path === routePath);
+    assert.ok(page);
+    const componentKinds = page.sections.flatMap((section) => section.components.map((component) => component.kind));
+    assert.equal(componentKinds.includes("generic"), false);
+    assert.equal(page.sections.every((section) => section.contentBindings.every((binding) => binding.contentId.length > 0)), true);
+  }
+});

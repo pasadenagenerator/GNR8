@@ -182,6 +182,11 @@ const transformedDiagnosticContentMarkers = [
   'Recovered Section',
   'raw-block:',
   'Recovered from:',
+  '[missing:',
+  'Missing media for final_component_',
+  'Generic component fallback',
+  'fallbackReason',
+  'render.generic',
   'CAPTURE_DRIVEN_',
   'dominant_candidate=',
   '/tmp/gnr8/validation/',
@@ -1485,6 +1490,8 @@ test('transformed preview blocks Viroidoc-style recovery diagnostics and falls b
       '<!doctype html><html><head><title>home</title></head><body><main>',
       '<h1>home</h1>',
       '<p>raw-block:html&gt;body&gt;div:nth-of-type(1):0</p>',
+      '<h2>[missing:final_component_home.heading]</h2>',
+      '<p>Generic component fallback</p><p>fallbackReason:generic_component_kind</p>',
       '<p>Recovered from: /tmp/gnr8/validation/url-import-snapshots/imported-url-site/runs/a/index.html</p>',
       '<h2>Recovered Section 1</h2>',
       '<p>CAPTURE_DRIVEN_CTA_LIFT_APPLIED dominant_candidate=cta:0.61 runner_up=hero:0.39 avg_child_elements=3 layout_runner_up=grid layout_score=stack:0.44</p>',
@@ -1494,6 +1501,7 @@ test('transformed preview blocks Viroidoc-style recovery diagnostics and falls b
       '<!doctype html><html><head><title>news</title></head><body><main>',
       '<h1>Recovered Section 2</h1>',
       '<p>raw-block:html&gt;body&gt;div:nth-of-type(2):0</p>',
+      '<p>[missing:final_component_news.body]</p><p>Missing media for final_component_news.image</p><p>render.generic</p>',
       '<p>Recovered from: /tmp/gnr8/validation/url-import-snapshots/imported-url-site/runs/a/news.html</p>',
       '<p>CAPTURE_DRIVEN_SECTION_GROUPING_LIFT dominant_candidate=content:0.52 runner_up=hero:0.40</p>',
       '</main></body></html>',
@@ -1609,6 +1617,7 @@ test('transformed preview blocks Viroidoc-style recovery diagnostics and falls b
         preview.previewRuntimeSummary.previewDiagnostics.includes('TRANSFORMED_PREVIEW_RAW_ROUTE_FALLBACK_USED'),
         true,
       )
+      assert.equal(preview.previewRuntimeSummary.previewDiagnostics.includes('blocked_pattern=[missing:'), true)
       assert.equal(preview.previewRuntimeSummary.previewDiagnostics.includes('MULTIPAGE_PREVIEW_PAGE_ISOLATED'), true)
       assert.equal(preview.rawTemplatePreviewEvidence?.selectedRoutePath, routePath)
     }
