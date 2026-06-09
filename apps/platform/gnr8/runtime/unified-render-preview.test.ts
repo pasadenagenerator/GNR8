@@ -712,8 +712,8 @@ test('raw template preview route-map serving resolves /about to assembled child 
     })
 
     assert.deepEqual(requestedAssets, ['pages/about/index.html'])
-    assert.equal(listContentSlotsCount, 1)
-    assert.deepEqual(overrideStatusLookups, ['draft', 'published'])
+    assert.equal(listContentSlotsCount, 0)
+    assert.deepEqual(overrideStatusLookups, [])
     assert.equal(preview.path, '/about')
     assert.match(preview.html, /About child/)
     assert.doesNotMatch(preview.html, /<h1>Home<\/h1>/)
@@ -832,6 +832,7 @@ test('raw template preview serves one Viroidoc-like assembled page per requested
       assert.equal(preview.multiPagePreviewValidation?.summary.validPreviewRoutes, 4)
       assert.equal(preview.multiPagePreviewValidation?.summary.missingPreviewRoutes, 0)
       assert.equal(preview.rawTemplatePreviewEvidence?.selectedRoutePath, routePath)
+      assert.equal(preview.rawTemplatePreviewEvidence?.disabledScriptCount, 0)
       assert.equal(preview.rawTemplatePreviewEvidence?.selectedRawFilePath, routePath === '/' ? 'pages/root/index.html' : `pages${routePath}/index.html`)
       if (routePath === '/') {
         assert.equal(countOccurrences(preview.html, 'ROOT_MARKER'), 1)
@@ -874,6 +875,174 @@ test('raw template preview serves one Viroidoc-like assembled page per requested
   } finally {
     restore()
   }
+})
+
+test('raw template preview neutralizes Viroidoc-like scripts and keeps repeated navigation bounded', async () => {
+  const provenance = fixtureViroidocLikeMultiPageAssemblyProvenance()
+  const rawHtmlByFilePath: Record<string, string> = {
+    'pages/root/index.html': [
+      '<!doctype html><html><head><link rel="stylesheet" href="assets/site.css"></head><body>',
+      '<nav><a href="/news">News</a></nav>',
+      '<main><section id="home-intro">HOME_INTRO</section></main>',
+      '<script src="/assets/home.js"></script>',
+      '</body></html>',
+    ].join(''),
+    'pages/project/index.html': '<!doctype html><html><body><main>Project</main></body></html>',
+    'pages/people/index.html': '<!doctype html><html><body><main>People</main></body></html>',
+    'pages/news/index.html': [
+      '<!doctype html><html><head><link rel="stylesheet" href="assets/site.css"></head><body>',
+      '<nav><a href="/">Home</a></nav>',
+      '<main><section id="news-listing">NEWS_LISTING</section></main>',
+      '<script>document.body.insertAdjacentHTML("afterbegin","HOME_INTRO")</script>',
+      '<script type="application/ld+json">{"name":"News"}</script>',
+      '</body></html>',
+    ].join(''),
+  }
+  const fileMap = Object.fromEntries(
+    Object.entries(rawHtmlByFilePath).map(([filePath, html]) => [
+      filePath,
+      { mediaType: 'text/html', sizeBytes: html.length, sha256: `sha-${filePath}` },
+    ]),
+  )
+  Object.assign(fileMap, {
+    'assets/site.css': { mediaType: 'text/css', sizeBytes: 10, sha256: 'sha-css' },
+  })
+
+  let acquireCount = 0
+  let releaseCount = 0
+  const fakeClient = { release: () => { releaseCount += 1 } } as any
+  const calls = {
+    getSiteVersion: 0,
+    getRawImportedSiteArtifact: 0,
+    getRawTemplateSiteArtifact: 0,
+    getRawTemplateSiteAsset: 0,
+    listContentSlots: 0,
+    listContentOverrides: 0,
+  }
+  const restore = setUnifiedRenderPreviewDependenciesForTest({
+    requestScopedDbClientEnabled: true,
+    acquireRuntimeDbClient: async () => {
+      acquireCount += 1
+      return fakeClient
+    },
+    getPoolStatus: () => ({ totalCount: 1, idleCount: 1, waitingCount: 0 }),
+    getSiteVersion: async () => {
+      calls.getSiteVersion += 1
+      return {
+        id: 'sv-viroidoc-raw-stable',
+        siteId: 'site-viroidoc-raw-stable',
+        rendererCompatibilityVersion: 'gnr8-renderer-v1',
+        pages: [],
+        importProvenanceSummary: provenance,
+      } as any
+    },
+    getRawImportedSiteArtifact: async () => {
+      calls.getRawImportedSiteArtifact += 1
+      return {
+        artifactType: 'raw_imported_site',
+        siteId: 'site-viroidoc-raw-stable',
+        siteVersionId: 'sv-viroidoc-raw-stable',
+        entryHtmlPath: 'pages/root/index.html',
+        assetBasePath: '/',
+        fileMap,
+        metadata: { assetSummary: { persistedAssetCount: Object.keys(fileMap).length, externalFallbackAssetCount: 0 } },
+      } as any
+    },
+    getRawTemplateSiteArtifact: async () => {
+      calls.getRawTemplateSiteArtifact += 1
+      return null
+    },
+    getRawTemplateSiteAsset: async (input) => {
+      calls.getRawTemplateSiteAsset += 1
+      const html = rawHtmlByFilePath[input.filePath]
+      return html ? ({ bytes: Buffer.from(html), sizeBytes: html.length, mediaType: 'text/html' } as any) : null
+    },
+    listContentSlots: async () => {
+      calls.listContentSlots += 1
+      return []
+    },
+    listContentOverrides: async () => {
+      calls.listContentOverrides += 1
+      return []
+    },
+  })
+
+  try {
+    const sequence = [
+      ['/news', 'NEWS_LISTING', '<section id="home-intro">HOME_INTRO</section>', 2],
+      ['/', 'HOME_INTRO', 'NEWS_LISTING', 1],
+      ['/news', 'NEWS_LISTING', '<section id="home-intro">HOME_INTRO</section>', 2],
+      ['/', 'HOME_INTRO', 'NEWS_LISTING', 1],
+    ] as const
+    const htmlByRoute: Record<string, string[]> = { '/': [], '/news': [] }
+
+    for (const [routePath, expectedMarker, absentMarker, disabledScriptCount] of sequence) {
+      const preview = await renderSiteVersionPreview({
+        siteVersionId: 'sv-viroidoc-raw-stable',
+        path: routePath,
+        mode: 'raw_template_preview',
+        requestCorrelationKey: `req-viroidoc-raw-stable-${routePath}-${htmlByRoute[routePath].length}`,
+      })
+      htmlByRoute[routePath].push(preview.html)
+
+      assert.equal(preview.source, 'raw_template_site')
+      assert.equal(preview.path, routePath)
+      assert.equal(preview.html.includes(expectedMarker), true)
+      assert.equal(preview.html.includes(absentMarker), false)
+      assert.equal(countOccurrences(preview.html, '<section id="home-intro">HOME_INTRO</section>'), routePath === '/' ? 1 : 0)
+      assert.equal(countOccurrences(preview.html, '<section id="news-listing">NEWS_LISTING</section>'), routePath === '/news' ? 1 : 0)
+      assert.equal(/<script\b(?![^>]*\btype=["']application\/gnr8-disabled-script["'])/i.test(preview.html), false)
+      assert.equal(preview.rawTemplatePreviewEvidence?.disabledScriptCount, disabledScriptCount)
+      assert.equal(preview.previewRuntimeSummary.previewDiagnostics.includes('RAW_PREVIEW_SCRIPTS_DISABLED'), true)
+      assert.equal(preview.rawTemplatePreviewEvidence?.dbClientAcquisitionCount, 1)
+      assert.equal((preview.rawTemplatePreviewEvidence?.dbReadCount ?? 99) <= 3, true)
+    }
+
+    assert.equal(htmlByRoute['/news'][0], htmlByRoute['/news'][1])
+    assert.equal(htmlByRoute['/'][0], htmlByRoute['/'][1])
+  } finally {
+    restore()
+  }
+
+  assert.equal(acquireCount, 4)
+  assert.equal(releaseCount, 4)
+  assert.deepEqual(calls, {
+    getSiteVersion: 4,
+    getRawImportedSiteArtifact: 4,
+    getRawTemplateSiteArtifact: 0,
+    getRawTemplateSiteAsset: 4,
+    listContentSlots: 0,
+    listContentOverrides: 0,
+  })
+})
+
+test('raw template preview resolves root and child CSS/font URLs through the same file-map-aware base logic', () => {
+  const fileMapPaths = new Set(['assets/site.css', 'fonts/heading.woff2'])
+  const root = __unifiedRenderPreviewTestUtils.rewriteRawTemplateAssetReferencesWithCounts({
+    html: '<!doctype html><html><head><link rel="stylesheet" href="assets/site.css"><style>@font-face{font-family:Heading;src:url("fonts/heading.woff2")}</style></head><body><h1>Home</h1></body></html>',
+    siteId: 'site-fonts',
+    siteVersionId: 'sv-fonts',
+    entryHtmlPath: 'index.html',
+    fileMapPaths,
+  })
+  const child = __unifiedRenderPreviewTestUtils.rewriteRawTemplateAssetReferencesWithCounts({
+    html: '<!doctype html><html><head><link rel="stylesheet" href="assets/site.css"><style>@font-face{font-family:Heading;src:url("fonts/heading.woff2")}</style></head><body><h1>News</h1></body></html>',
+    siteId: 'site-fonts',
+    siteVersionId: 'sv-fonts',
+    entryHtmlPath: 'pages/news/index.html',
+    fileMapPaths,
+  })
+
+  const stylesheet = '/api/gnr8/runtime/preview-assets/site-fonts/sv-fonts/assets/site.css'
+  const font = '/api/gnr8/runtime/preview-assets/site-fonts/sv-fonts/fonts/heading.woff2'
+  assert.equal(root.html.includes(stylesheet), true)
+  assert.equal(child.html.includes(stylesheet), true)
+  assert.equal(root.html.includes(font), true)
+  assert.equal(child.html.includes(font), true)
+  assert.equal(root.html.includes('/pages/news/assets/site.css'), false)
+  assert.equal(child.html.includes('/pages/news/assets/site.css'), false)
+  assert.equal(root.rewrittenAssetCount, 2)
+  assert.equal(child.rewrittenAssetCount, 2)
 })
 
 test('raw template preview rewrites latest Viroidoc-style menu anchors without multiplying root content', async () => {
@@ -1645,8 +1814,8 @@ test('transformed preview blocks Viroidoc-style recovery diagnostics and falls b
     getRawImportedSiteArtifact: 4,
     getRawTemplateSiteArtifact: 0,
     getRawTemplateSiteAsset: 4,
-    listContentSlots: 4,
-    listContentOverrides: 8,
+    listContentSlots: 0,
+    listContentOverrides: 0,
     getSiteVersionArtifactBinding: 4,
     getArtifactById: 4,
   })

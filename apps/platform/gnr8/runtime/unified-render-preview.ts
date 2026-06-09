@@ -21,7 +21,6 @@ import {
   type RuntimeStoreDbClient,
 } from '@/gnr8/runtime/runtime-store'
 import { getSuperadminPool } from '@/src/superadmin/db'
-import { applyContentOverridesToRawHtml } from '@/src/public-site/content-override-runtime'
 import type { ContentOverride } from '@/gnr8/runtime/content-binding'
 import type { CanonicalSiteVersionSnapshot, RuntimeImportProvenanceSummary } from '@/gnr8/runtime/types'
 import {
@@ -379,6 +378,7 @@ export const RAW_TEMPLATE_PREVIEW_EVIDENCE_DIAGNOSTIC = {
   PREVIEW_LINK_REWRITE_STARTED: 'PREVIEW_LINK_REWRITE_STARTED',
   PREVIEW_LINK_REWRITE_COMPLETED: 'PREVIEW_LINK_REWRITE_COMPLETED',
   PREVIEW_LINKS_REWRITTEN_COUNT: 'PREVIEW_LINKS_REWRITTEN_COUNT',
+  RAW_PREVIEW_SCRIPTS_DISABLED: 'RAW_PREVIEW_SCRIPTS_DISABLED',
 } as const
 
 export const TRANSFORMED_PREVIEW_DIAGNOSTIC = {
@@ -644,6 +644,16 @@ function rewriteRawTemplateAssetReferences(input: {
   entryHtmlPath: string
   fileMapPaths?: ReadonlySet<string>
 }): string {
+  return rewriteRawTemplateAssetReferencesWithCounts(input).html
+}
+
+function rewriteRawTemplateAssetReferencesWithCounts(input: {
+  html: string
+  siteId: string
+  siteVersionId: string
+  entryHtmlPath: string
+  fileMapPaths?: ReadonlySet<string>
+}): { html: string; rewrittenAssetCount: number } {
   const assetRoot = `/api/gnr8/runtime/preview-assets/${encodeURIComponent(input.siteId)}/${encodeURIComponent(input.siteVersionId)}`
   const entryDir = path.posix.dirname(input.entryHtmlPath)
   const baseDir = entryDir === '.' ? '' : entryDir
@@ -654,6 +664,7 @@ function rewriteRawTemplateAssetReferences(input: {
   })
   const cssUrlPattern = /url\(\s*(['"]?)([^"')]+)\1\s*\)/gi
   const duplicatePreviewPrefixPattern = new RegExp(`^${assetRoot.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}/api/gnr8/runtime/preview-assets/`, 'i')
+  let rewrittenAssetCount = 0
 
   const emitCssAssetRewriteApplied = (originalUrl: string, rewrittenUrl: string, sourceType: 'inline_style' | 'style_block' | 'stylesheet' | 'script_detected') => {
     console.info('[preview-runtime] PREVIEW_CSS_ASSET_REWRITE_APPLIED', {
@@ -683,26 +694,39 @@ function rewriteRawTemplateAssetReferences(input: {
       if (!originalUrl) return full
       const lower = originalUrl.toLowerCase()
       if (
-        !lower.startsWith('/uploads/') ||
-        lower.startsWith('/api/gnr8/runtime/preview-assets/')
+        originalUrl.startsWith('#') ||
+        lower.startsWith('http://') ||
+        lower.startsWith('https://') ||
+        lower.startsWith('//') ||
+        lower.startsWith('data:') ||
+        lower.startsWith('mailto:') ||
+        lower.startsWith('tel:')
       ) {
-        if (lower.startsWith('/api/gnr8/runtime/preview-assets/')) {
-          emitCssAssetRewriteSkipped(originalUrl, 'already_rewritten', sourceType)
-        }
+        return full
+      }
+      if (lower.startsWith('/api/gnr8/runtime/preview-assets/')) {
+        emitCssAssetRewriteSkipped(originalUrl, 'already_rewritten', sourceType)
         return full
       }
       const [pathname, suffix = ''] = originalUrl.split(/(?=[?#])/)
-      const normalized = normalizeTemplateAssetPath(pathname)
+      const normalizedCandidates = originalUrl.startsWith('/')
+        ? [normalizeTemplateAssetPath(pathname)].filter((candidate): candidate is string => Boolean(candidate))
+        : [
+            normalizeTemplateAssetPath(path.posix.join('/', baseDir, pathname)),
+            normalizeTemplateAssetPath(pathname),
+          ].filter((candidate): candidate is string => Boolean(candidate))
+      const existingCandidate =
+        input.fileMapPaths && normalizedCandidates.length > 0
+          ? normalizedCandidates.find((candidate) => input.fileMapPaths!.has(candidate)) ?? null
+          : null
+      const normalized = existingCandidate ?? (input.fileMapPaths ? null : normalizedCandidates[0] ?? null)
       if (!normalized) {
-        emitCssAssetRewriteSkipped(originalUrl, 'invalid_path', sourceType)
-        return full
-      }
-      if (input.fileMapPaths && !input.fileMapPaths.has(normalized)) {
-        emitCssAssetRewriteSkipped(originalUrl, 'file_map_path_not_found', sourceType)
+        emitCssAssetRewriteSkipped(originalUrl, input.fileMapPaths ? 'file_map_path_not_found' : 'invalid_path', sourceType)
         return full
       }
       const rewrittenUrl = `${assetRoot}/${normalized}${suffix}`
       emitCssAssetRewriteApplied(originalUrl, rewrittenUrl, sourceType)
+      rewrittenAssetCount += 1
       const safeQuote = quote || ''
       return `url(${safeQuote}${rewrittenUrl}${safeQuote})`
     })
@@ -729,7 +753,10 @@ function rewriteRawTemplateAssetReferences(input: {
       }
       const [pathname, suffix = ''] = ref.split(/(?=[?#])/)
       const normalized = normalizeTemplateAssetPath(pathname)
-      return normalized ? `${assetRoot}/${normalized}${suffix}` : ref
+      if (!normalized) return ref
+      const rewritten = `${assetRoot}/${normalized}${suffix}`
+      if (rewritten !== ref) rewrittenAssetCount += 1
+      return rewritten
     }
     const [pathname, queryHash = ''] = ref.split(/(?=[?#])/)
     const joined = path.posix.join('/', baseDir, pathname)
@@ -742,7 +769,9 @@ function rewriteRawTemplateAssetReferences(input: {
         : null
     const normalized = existingCandidate ?? normalizedJoined ?? normalizedRootLike
     if (!normalized) return ref
-    return `${assetRoot}/${normalized}${queryHash}`
+    const rewritten = `${assetRoot}/${normalized}${queryHash}`
+    if (rewritten !== ref) rewrittenAssetCount += 1
+    return rewritten
   }
 
   const rewriteSrcset = (srcset: string): string =>
@@ -757,7 +786,7 @@ function rewriteRawTemplateAssetReferences(input: {
       })
       .join(', ')
 
-  return input.html
+  const html = input.html
     .replace(/<([a-zA-Z][^\s/>]*)(\s[^>]*)?>/g, (full: string, tagName: string) => {
       const normalizedTagName = String(tagName ?? '').toLowerCase()
       return full.replace(
@@ -786,6 +815,19 @@ function rewriteRawTemplateAssetReferences(input: {
       }
       return full
     })
+  return { html, rewrittenAssetCount }
+}
+
+function neutralizeRawPreviewScripts(html: string): { html: string; disabledScriptCount: number } {
+  let disabledScriptCount = 0
+  const neutralized = String(html ?? '').replace(/<script\b([^>]*)>([\s\S]*?)<\/script>/gi, (full, attributes: string, body: string) => {
+    if (/\btype\s*=\s*(['"])application\/gnr8-disabled-script\1/i.test(full)) return full
+    disabledScriptCount += 1
+    return `<script type="application/gnr8-disabled-script" data-gnr8-disabled-preview-script="raw" data-gnr8-original-script-attrs="${escapeHtmlAttribute(
+      String(attributes ?? '').trim(),
+    )}">${body}</script>`
+  })
+  return { html: neutralized, disabledScriptCount }
 }
 
 function resolveRenderedCapturePreviewTruth(importSummary: unknown): RenderedCapturePreviewTruth {
@@ -1066,13 +1108,14 @@ async function renderRawTemplateSiteVersionPreview(input: {
     htmlByteLengthBeforeRewrite,
     reportedSizeBytes: entryAsset.sizeBytes,
   })
-  let html = rewriteRawTemplateAssetReferences({
+  const assetRewrite = rewriteRawTemplateAssetReferencesWithCounts({
     html: rawHtml,
     siteId: artifact.siteId,
     siteVersionId: artifact.siteVersionId,
     entryHtmlPath: selectedHtmlPath,
     fileMapPaths: new Set(Object.keys(artifact.fileMap ?? {})),
   })
+  let html = assetRewrite.html
   console.info(`[preview-runtime] ${RAW_TEMPLATE_PREVIEW_EVIDENCE_DIAGNOSTIC.PREVIEW_LINK_REWRITE_STARTED}`, {
     siteId: artifact.siteId,
     siteVersionId: artifact.siteVersionId,
@@ -1089,13 +1132,26 @@ async function renderRawTemplateSiteVersionPreview(input: {
     routeMapResolution,
   })
   html = linkRewrite.html
+  const scriptNeutralization = neutralizeRawPreviewScripts(html)
+  html = scriptNeutralization.html
   const rawTemplatePreviewEvidence: RawTemplatePreviewEvidence = {
     selectedRoutePath,
     selectedRawFilePath: selectedHtmlPath,
     htmlByteLengthBeforeRewrite,
     htmlByteLengthAfterRewrite: Buffer.byteLength(html),
     rewrittenLinkCount: linkRewrite.counts.rewritten,
+    rewrittenAssetCount: assetRewrite.rewrittenAssetCount,
+    disabledScriptCount: scriptNeutralization.disabledScriptCount,
+    dbReadCount: input.context.queryCount,
+    dbClientAcquisitionCount: input.context.dbClient ? 1 : 0,
   }
+  console.info(`[preview-runtime] ${RAW_TEMPLATE_PREVIEW_EVIDENCE_DIAGNOSTIC.RAW_PREVIEW_SCRIPTS_DISABLED}`, {
+    siteId: artifact.siteId,
+    siteVersionId: artifact.siteVersionId,
+    selectedRoutePath,
+    selectedRawFilePath: selectedHtmlPath,
+    rawPreviewDisabledScriptCount: scriptNeutralization.disabledScriptCount,
+  })
   console.info(`[preview-runtime] ${RAW_TEMPLATE_PREVIEW_EVIDENCE_DIAGNOSTIC.PREVIEW_LINK_REWRITE_COMPLETED}`, {
     siteId: artifact.siteId,
     siteVersionId: artifact.siteVersionId,
@@ -1108,118 +1164,6 @@ async function renderRawTemplateSiteVersionPreview(input: {
     selectedRawFilePath: selectedHtmlPath,
     rewrittenLinkCount: linkRewrite.counts.rewritten,
   })
-  const slots = await cacheLookup({
-    context: input.context,
-    cache: input.context.slotsBySiteVersionId,
-    key: artifact.siteVersionId,
-    loader: () => previewReadDependencies.listContentSlots(artifact.siteVersionId, { dbClient: input.context.dbClient ?? undefined }),
-  })
-  console.info('[gnr8.content-runtime] CONTENT_PREVIEW_OVERRIDES_LOAD_STARTED', {
-    siteVersionId: artifact.siteVersionId,
-  })
-  const draftOverrides = await cacheLookup({
-    context: input.context,
-    cache: input.context.overridesBySiteVersionAndStatus,
-    key: `${artifact.siteVersionId}:draft`,
-    loader: () => previewReadDependencies.listContentOverrides({
-      siteVersionId: artifact.siteVersionId,
-      status: 'draft',
-      dbClient: input.context.dbClient ?? undefined,
-    }),
-  })
-  const publishedOverrides = await cacheLookup({
-    context: input.context,
-    cache: input.context.overridesBySiteVersionAndStatus,
-    key: `${artifact.siteVersionId}:published`,
-    loader: () => previewReadDependencies.listContentOverrides({
-      siteVersionId: artifact.siteVersionId,
-      status: 'published',
-      dbClient: input.context.dbClient ?? undefined,
-    }),
-  })
-  console.info('[gnr8.content-runtime] CONTENT_PREVIEW_OVERRIDES_LOADED', {
-    siteVersionId: artifact.siteVersionId,
-    draftCount: draftOverrides.length,
-    publishedCount: publishedOverrides.length,
-    slotKeys: slots.map((slot) => slot.slotKey),
-  })
-  const sameVersionDraftOverrides = draftOverrides.filter((override) => override.siteVersionId === artifact.siteVersionId)
-  const sameVersionPublishedOverrides = publishedOverrides.filter((override) => override.siteVersionId === artifact.siteVersionId)
-  if (sameVersionDraftOverrides.length !== draftOverrides.length || sameVersionPublishedOverrides.length !== publishedOverrides.length) {
-    console.info('[gnr8.content-runtime] CONTENT_RUNTIME_VERSION_MISMATCH_BLOCKED', {
-      siteId: artifact.siteId,
-      expectedSiteVersionId: artifact.siteVersionId,
-      blockedCount:
-        (draftOverrides.length - sameVersionDraftOverrides.length) +
-        (publishedOverrides.length - sameVersionPublishedOverrides.length),
-      mode: 'preview',
-    })
-  }
-  console.info('[gnr8.content-runtime] CONTENT_RUNTIME_VERSION_RESOLVED', {
-    siteId: artifact.siteId,
-    siteVersionId: artifact.siteVersionId,
-    mode: 'preview',
-  })
-  const selectedOverrides = selectPreviewOverridesByVersion({
-    siteVersionId: artifact.siteVersionId,
-    draftOverrides,
-    publishedOverrides,
-  })
-  console.info('[gnr8.content-runtime] CONTENT_PREVIEW_OVERRIDES_APPLY_STARTED', {
-    siteVersionId: artifact.siteVersionId,
-    draftCount: sameVersionDraftOverrides.length,
-    publishedCount: sameVersionPublishedOverrides.length,
-    mergedOverrideCount: selectedOverrides.length,
-    slotKeys: selectedOverrides.map((override) => override.slotKey),
-  })
-  if (selectedOverrides.length === 0) {
-    console.info('[gnr8.content-runtime] CONTENT_PREVIEW_OVERRIDES_EMPTY', {
-      siteVersionId: artifact.siteVersionId,
-      draftCount: sameVersionDraftOverrides.length,
-      publishedCount: sameVersionPublishedOverrides.length,
-      mergedOverrideCount: 0,
-      slotKeys: [],
-    })
-  }
-  const patched = applyContentOverridesToRawHtml({
-    html,
-    slots,
-    overrides: selectedOverrides,
-  })
-  console.info('[gnr8.content-runtime] CONTENT_PREVIEW_OVERRIDES_APPLIED', {
-    siteVersionId: artifact.siteVersionId,
-    draftCount: sameVersionDraftOverrides.length,
-    publishedCount: sameVersionPublishedOverrides.length,
-    mergedOverrideCount: selectedOverrides.length,
-    appliedCount: patched.appliedCount,
-    skippedCount: patched.skippedCount,
-    slotKeys: selectedOverrides.map((override) => override.slotKey),
-  })
-  if (selectedOverrides.length > 0 && patched.appliedCount === 0) {
-    const selectorBySlot = new Map(slots.map((slot) => [slot.slotKey, slot.sourceSelector]))
-    console.error('[gnr8.content-runtime] CONTENT_OVERRIDE_APPLY_FAILED', {
-      siteVersionId: artifact.siteVersionId,
-      slotKeys: selectedOverrides.map((override) => override.slotKey),
-      selectors: selectedOverrides.map((override) => selectorBySlot.get(override.slotKey) ?? null),
-      htmlLength: html.length,
-      mergedOverrideCount: selectedOverrides.length,
-      appliedCount: patched.appliedCount,
-    })
-  }
-  for (const skipped of patched.skippedDiagnostics) {
-    if (skipped.reason === 'selector_missing') {
-      console.info('[gnr8.content-runtime] CONTENT_PREVIEW_OVERRIDE_SELECTOR_MISSING', {
-        siteVersionId: artifact.siteVersionId,
-        slotKeys: [skipped.slotKey],
-      })
-    }
-    if (skipped.reason === 'value_empty') {
-      console.info('[gnr8.content-runtime] CONTENT_PREVIEW_OVERRIDE_VALUE_EMPTY', {
-        siteVersionId: artifact.siteVersionId,
-        slotKeys: [skipped.slotKey],
-      })
-    }
-  }
   const multiPagePreviewValidation = validateMultiPagePreview({
     siteId: artifact.siteId,
     siteVersionId: artifact.siteVersionId,
@@ -1252,6 +1196,7 @@ async function renderRawTemplateSiteVersionPreview(input: {
       RAW_TEMPLATE_PREVIEW_EVIDENCE_DIAGNOSTIC.PREVIEW_LINK_REWRITE_STARTED,
       RAW_TEMPLATE_PREVIEW_EVIDENCE_DIAGNOSTIC.PREVIEW_LINK_REWRITE_COMPLETED,
       RAW_TEMPLATE_PREVIEW_EVIDENCE_DIAGNOSTIC.PREVIEW_LINKS_REWRITTEN_COUNT,
+      RAW_TEMPLATE_PREVIEW_EVIDENCE_DIAGNOSTIC.RAW_PREVIEW_SCRIPTS_DISABLED,
       ...linkRewrite.diagnostics,
       ...multiPagePreviewValidation.diagnostics,
     ],
@@ -1302,7 +1247,7 @@ async function renderRawTemplateSiteVersionPreview(input: {
         siteVersionId: artifact.siteVersionId,
         path: routeMapResolution.outcome === 'selected' ? routeMapResolution.routePath : normalizePagePath(input.requestedPath),
         rendererCompatibilityVersion: 'gnr8-renderer-v1',
-        html: patched.html,
+        html,
         source: 'raw_template_site',
         previewMode: 'raw_template_preview',
         previewRuntimeSummary: summary,
@@ -1316,13 +1261,13 @@ async function renderRawTemplateSiteVersionPreview(input: {
     contentDebug: {
       siteVersionId: artifact.siteVersionId,
       rawTemplateArtifactFound: true,
-      draftOverrideCount: sameVersionDraftOverrides.length,
-      publishedOverrideCount: sameVersionPublishedOverrides.length,
-      mergedOverrideCount: selectedOverrides.length,
-      appliedCount: patched.appliedCount,
-      skippedCount: patched.skippedCount,
-      skippedDiagnostics: patched.skippedDiagnostics,
-      slotKeys: selectedOverrides.map((override) => override.slotKey).slice(0, 10),
+      draftOverrideCount: 0,
+      publishedOverrideCount: 0,
+      mergedOverrideCount: 0,
+      appliedCount: 0,
+      skippedCount: 0,
+      skippedDiagnostics: [],
+      slotKeys: [],
     },
   }
 }
@@ -2125,7 +2070,9 @@ export const __unifiedRenderPreviewTestUtils = {
   resolveSemanticFallbackPreview,
   resolveRenderedCapturePreviewTruth,
   rewriteRawTemplateAssetReferences,
+  rewriteRawTemplateAssetReferencesWithCounts,
   rewriteRawTemplateMultiPageLinks,
+  neutralizeRawPreviewScripts,
   annotateTransformedPreviewHtml,
   selectPreviewOverridesByVersion,
   createPreviewReadContext,

@@ -1720,6 +1720,10 @@ test('preview runtime summary parser accepts raw template preview mode', () => {
       htmlByteLengthBeforeRewrite: 128,
       htmlByteLengthAfterRewrite: 256,
       rewrittenLinkCount: 3,
+      rewrittenAssetCount: 2,
+      disabledScriptCount: 4,
+      dbReadCount: 3,
+      dbClientAcquisitionCount: 1,
     },
     previewDiagnostics: ['RAW_TEMPLATE_PREVIEW_SELECTED', 'RAW_TEMPLATE_PREVIEW_RENDERED'],
   })
@@ -1735,6 +1739,10 @@ test('preview runtime summary parser accepts raw template preview mode', () => {
     htmlByteLengthBeforeRewrite: 128,
     htmlByteLengthAfterRewrite: 256,
     rewrittenLinkCount: 3,
+    rewrittenAssetCount: 2,
+    disabledScriptCount: 4,
+    dbReadCount: 3,
+    dbClientAcquisitionCount: 1,
   })
 })
 

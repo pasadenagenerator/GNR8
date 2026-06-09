@@ -2106,6 +2106,18 @@ function parsePreviewRuntimeSummary(value: unknown): PreviewRuntimeSummary | nul
           rewrittenLinkCount: Number.isFinite(Number(rawTemplateEvidence.rewrittenLinkCount))
             ? Number(rawTemplateEvidence.rewrittenLinkCount)
             : 0,
+          rewrittenAssetCount: Number.isFinite(Number(rawTemplateEvidence.rewrittenAssetCount))
+            ? Number(rawTemplateEvidence.rewrittenAssetCount)
+            : undefined,
+          disabledScriptCount: Number.isFinite(Number(rawTemplateEvidence.disabledScriptCount))
+            ? Number(rawTemplateEvidence.disabledScriptCount)
+            : undefined,
+          dbReadCount: Number.isFinite(Number(rawTemplateEvidence.dbReadCount))
+            ? Number(rawTemplateEvidence.dbReadCount)
+            : undefined,
+          dbClientAcquisitionCount: Number.isFinite(Number(rawTemplateEvidence.dbClientAcquisitionCount))
+            ? Number(rawTemplateEvidence.dbClientAcquisitionCount)
+            : undefined,
         }
       : undefined
 

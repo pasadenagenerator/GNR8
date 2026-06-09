@@ -41,6 +41,10 @@ export type PreviewRuntimeSummary = {
     htmlByteLengthBeforeRewrite: number;
     htmlByteLengthAfterRewrite: number;
     rewrittenLinkCount: number;
+    rewrittenAssetCount?: number;
+    disabledScriptCount?: number;
+    dbReadCount?: number;
+    dbClientAcquisitionCount?: number;
   };
   transformedAssemblyDiagnostics?: {
     selectedRoutePath: string;

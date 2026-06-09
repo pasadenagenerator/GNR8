@@ -14,6 +14,10 @@ test('preview route trace headers expose raw-template preview evidence', () => {
         selectedRoutePath: '/',
         selectedRawFilePath: 'pages/root/index.html',
         rewrittenLinkCount: 3,
+        rewrittenAssetCount: 2,
+        disabledScriptCount: 4,
+        dbReadCount: 3,
+        dbClientAcquisitionCount: 1,
       },
     },
   })
@@ -21,6 +25,10 @@ test('preview route trace headers expose raw-template preview evidence', () => {
   assert.equal(headers['x-gnr8-preview-selected-route'], '/')
   assert.equal(headers['x-gnr8-preview-selected-raw-file'], 'pages/root/index.html')
   assert.equal(headers['x-gnr8-preview-rewritten-links-count'], '3')
+  assert.equal(headers['x-gnr8-preview-rewritten-assets-count'], '2')
+  assert.equal(headers['x-gnr8-preview-disabled-scripts-count'], '4')
+  assert.equal(headers['x-gnr8-preview-db-read-count'], '3')
+  assert.equal(headers['x-gnr8-preview-db-client-acquisition-count'], '1')
 })
 
 test('preview route trace headers fall back to top-level raw-template evidence', () => {
@@ -51,6 +59,7 @@ test('preview route trace headers do not expose raw-template evidence for transf
   assert.equal(headers['x-gnr8-preview-selected-route'], '')
   assert.equal(headers['x-gnr8-preview-selected-raw-file'], '')
   assert.equal(headers['x-gnr8-preview-rewritten-links-count'], '0')
+  assert.equal(headers['x-gnr8-preview-disabled-scripts-count'], '0')
 })
 
 test('preview route HTML response uses raw-template trace header helper', async () => {
