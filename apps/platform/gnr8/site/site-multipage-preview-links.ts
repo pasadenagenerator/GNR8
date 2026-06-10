@@ -23,6 +23,7 @@ export type MultiPageRawTemplatePreviewDiagnostics = {
   fontFamilyDongleDetected: boolean | null
   rawPreviewAssetRewriteEvidence?: RawTemplatePreviewEvidenceInput['rawPreviewAssetRewriteEvidence']
   rawPreviewAssetGraphEvidence?: RawTemplatePreviewEvidenceInput['rawPreviewAssetGraphEvidence']
+  rawPreviewScriptPolicyEvidence?: RawTemplatePreviewEvidenceInput['rawPreviewScriptPolicyEvidence']
   evidenceSource: 'persisted_raw_template_preview' | 'route_map_expected_live_preview'
 }
 
@@ -188,6 +189,19 @@ export type RawTemplatePreviewEvidenceInput = {
     missingStylesheetRefs: string[]
     cssOrderChanged: boolean
   }
+  rawPreviewScriptPolicyEvidence?: {
+    totalScriptsFound: number
+    scriptsPreserved: number
+    scriptsBlocked: number
+    scriptsRewrittenToControlledPreviewAssetUrls: number
+    scriptsExternalPreserved: number
+    scriptsBlockedByReason: Record<string, number>
+    topBlockedRefs: string[]
+    galleryCandidateScriptsDetected: boolean
+    mapCandidateScriptsDetected: boolean
+    formCandidateScriptsDetected: boolean
+    lazyloadCandidateScriptsDetected: boolean
+  }
 }
 
 function normalizeRoutePath(value: unknown): string {
@@ -266,6 +280,7 @@ export function buildMultiPageRawTemplatePreviewDiagnostics(input: {
       fontFamilyDongleDetected: evidence.rawPreviewAssetRewriteEvidence?.fontFamilyDongleDetected ?? null,
       rawPreviewAssetRewriteEvidence: evidence.rawPreviewAssetRewriteEvidence,
       rawPreviewAssetGraphEvidence: evidence.rawPreviewAssetGraphEvidence,
+      rawPreviewScriptPolicyEvidence: evidence.rawPreviewScriptPolicyEvidence,
       evidenceSource: 'persisted_raw_template_preview',
     }
   }

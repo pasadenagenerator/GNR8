@@ -351,6 +351,54 @@ test('raw template preview rewrites local asset references to preview-assets rou
   )
 })
 
+test('raw preview script policy preserves local and widget scripts while blocking tracking and destructive injection', () => {
+  const html = [
+    '<!doctype html><html><body>',
+    '<script src="/assets/gallery.js?ver=1#main"></script>',
+    '<script src="../js/lazyload.js"></script>',
+    '<script src="https://www.maver.si/js/contact-form.js?x=1"></script>',
+    '<script src="https://cdn.jsdelivr.net/npm/swiper@11/swiper-bundle.min.js"></script>',
+    '<script src="https://maps.googleapis.com/maps/api/js?key=demo&callback=initMap"></script>',
+    '<script src="https://www.googletagmanager.com/gtag/js?id=G-123"></script>',
+    '<script>document.body.insertAdjacentHTML("afterbegin","<main>HOME_INTRO</main>")</script>',
+    '<script>window.top.location = "https://outside.example/"</script>',
+    '</body></html>',
+  ].join('')
+  const rewritten = __unifiedRenderPreviewTestUtils.rewriteRawTemplateAssetReferencesWithCounts({
+    html,
+    siteId: 'site-maver-scripts',
+    siteVersionId: 'sv-maver-scripts',
+    entryHtmlPath: 'pages/about/index.html',
+    fileMapPaths: new Set([
+      'assets/gallery.js',
+      'pages/js/lazyload.js',
+      'js/contact-form.js',
+    ]),
+  })
+  const policy = __unifiedRenderPreviewTestUtils.applyRawPreviewScriptPolicy(rewritten.html)
+  const evidence = policy.rawPreviewScriptPolicyEvidence
+
+  assert.equal(policy.html.includes('/api/gnr8/runtime/preview-assets/site-maver-scripts/sv-maver-scripts/assets/gallery.js?ver=1#main'), true)
+  assert.equal(policy.html.includes('/api/gnr8/runtime/preview-assets/site-maver-scripts/sv-maver-scripts/pages/js/lazyload.js'), true)
+  assert.equal(policy.html.includes('/api/gnr8/runtime/preview-assets/site-maver-scripts/sv-maver-scripts/js/contact-form.js?x=1'), true)
+  assert.equal(policy.html.includes('https://cdn.jsdelivr.net/npm/swiper@11/swiper-bundle.min.js'), true)
+  assert.equal(policy.html.includes('https://maps.googleapis.com/maps/api/js?key=demo&amp;callback=initMap'), false)
+  assert.equal(policy.html.includes('https://maps.googleapis.com/maps/api/js?key=demo&callback=initMap'), true)
+  assert.equal(policy.html.includes('type="application/gnr8-disabled-script"'), true)
+  assert.equal(evidence.totalScriptsFound, 8)
+  assert.equal(evidence.scriptsPreserved, 5)
+  assert.equal(evidence.scriptsBlocked, 3)
+  assert.equal(evidence.scriptsRewrittenToControlledPreviewAssetUrls, 3)
+  assert.equal(evidence.scriptsExternalPreserved, 2)
+  assert.equal(evidence.scriptsBlockedByReason.tracking_or_analytics_script_blocked, 1)
+  assert.equal(evidence.scriptsBlockedByReason.duplicate_dom_injection_blocked, 1)
+  assert.equal(evidence.scriptsBlockedByReason.hostile_top_navigation_blocked, 1)
+  assert.equal(evidence.galleryCandidateScriptsDetected, true)
+  assert.equal(evidence.mapCandidateScriptsDetected, true)
+  assert.equal(evidence.formCandidateScriptsDetected, true)
+  assert.equal(evidence.lazyloadCandidateScriptsDetected, true)
+})
+
 test('raw template preview prefers persisted fileMap match for relative stylesheet refs', () => {
   const html = '<!doctype html><html><head><link rel="stylesheet" href="assets/user-style.css"></head><body></body></html>'
   const rewritten = __unifiedRenderPreviewTestUtils.rewriteRawTemplateAssetReferences({
@@ -980,7 +1028,10 @@ test('raw template preview preserves Viroidoc-like CSS cascade order and layout 
     assert.equal(preview.html.includes(':root{--hero-gap:12px;--hero-bg:#fff}'), true)
     assert.equal(preview.html.includes('.home .hero h1,.hero .btn'), true)
     assert.equal(preview.html.includes('.video iframe{display:block;width:100%;aspect-ratio:16/9}'), true)
-    assert.equal(preview.html.includes('type="application/gnr8-disabled-script"'), true)
+    assert.equal(preview.html.includes('document.body.classList.add("script-ran")'), true)
+    assert.equal(preview.html.includes('type="application/gnr8-disabled-script"'), false)
+    assert.equal(preview.rawTemplatePreviewEvidence?.rawPreviewScriptPolicyEvidence?.totalScriptsFound, 1)
+    assert.equal(preview.rawTemplatePreviewEvidence?.rawPreviewScriptPolicyEvidence?.scriptsPreserved, 1)
     assert.equal(preview.html.includes('/api/gnr8/runtime/preview-assets/site-viroidoc-css/sv-viroidoc-css/assets/user-style.css?ver=1#main'), true)
     assert.equal(preview.html.includes('@import url("/api/gnr8/runtime/preview-assets/site-viroidoc-css/sv-viroidoc-css/assets/generated.css?x=1") screen;'), true)
     assert.equal(preview.html.includes('as="font" href="/api/gnr8/runtime/preview-assets/site-viroidoc-css/sv-viroidoc-css/fonts/dongle.woff2"'), true)
@@ -1010,7 +1061,7 @@ test('raw template preview preserves Viroidoc-like CSS cascade order and layout 
   }
 })
 
-test('raw template preview neutralizes Viroidoc-like scripts and keeps repeated navigation bounded', async () => {
+test('raw template preview blocks Viroidoc-like duplicate injection while keeping safe scripts bounded', async () => {
   const provenance = fixtureViroidocLikeMultiPageAssemblyProvenance()
   const rawHtmlByFilePath: Record<string, string> = {
     'pages/root/index.html': [
@@ -1102,10 +1153,10 @@ test('raw template preview neutralizes Viroidoc-like scripts and keeps repeated 
 
   try {
     const sequence = [
-      ['/news', 'NEWS_LISTING', '<section id="home-intro">HOME_INTRO</section>', 2],
-      ['/', 'HOME_INTRO', 'NEWS_LISTING', 1],
-      ['/news', 'NEWS_LISTING', '<section id="home-intro">HOME_INTRO</section>', 2],
-      ['/', 'HOME_INTRO', 'NEWS_LISTING', 1],
+      ['/news', 'NEWS_LISTING', '<section id="home-intro">HOME_INTRO</section>', 1],
+      ['/', 'HOME_INTRO', 'NEWS_LISTING', 0],
+      ['/news', 'NEWS_LISTING', '<section id="home-intro">HOME_INTRO</section>', 1],
+      ['/', 'HOME_INTRO', 'NEWS_LISTING', 0],
     ] as const
     const htmlByRoute: Record<string, string[]> = { '/': [], '/news': [] }
 
@@ -1124,9 +1175,14 @@ test('raw template preview neutralizes Viroidoc-like scripts and keeps repeated 
       assert.equal(preview.html.includes(absentMarker), false)
       assert.equal(countOccurrences(preview.html, '<section id="home-intro">HOME_INTRO</section>'), routePath === '/' ? 1 : 0)
       assert.equal(countOccurrences(preview.html, '<section id="news-listing">NEWS_LISTING</section>'), routePath === '/news' ? 1 : 0)
-      assert.equal(/<script\b(?![^>]*\btype=["']application\/gnr8-disabled-script["'])/i.test(preview.html), false)
       assert.equal(preview.rawTemplatePreviewEvidence?.disabledScriptCount, disabledScriptCount)
+      assert.equal(preview.rawTemplatePreviewEvidence?.rawPreviewScriptPolicyEvidence?.scriptsBlocked, disabledScriptCount)
+      assert.equal((preview.rawTemplatePreviewEvidence?.rawPreviewScriptPolicyEvidence?.scriptsPreserved ?? 0) > 0, true)
       assert.equal(preview.previewRuntimeSummary.previewDiagnostics.includes('RAW_PREVIEW_SCRIPTS_DISABLED'), true)
+      assert.equal(preview.previewRuntimeSummary.previewDiagnostics.includes('RAW_PREVIEW_SCRIPT_POLICY_APPLIED'), true)
+      if (routePath === '/news') {
+        assert.equal(preview.html.includes('data-gnr8-script-policy-reason="duplicate_dom_injection_blocked"'), true)
+      }
       assert.equal(preview.rawTemplatePreviewEvidence?.dbClientAcquisitionCount, 1)
       assert.equal((preview.rawTemplatePreviewEvidence?.dbReadCount ?? 99) <= 4, true)
     }
@@ -1147,6 +1203,147 @@ test('raw template preview neutralizes Viroidoc-like scripts and keeps repeated 
     listContentSlots: 0,
     listContentOverrides: 0,
   })
+})
+
+test('Transporti-Maver-like raw preview preserves gallery map form and lazyload scripts through file-map rewrite', async () => {
+  const provenance = {
+    multiPageDiscovery: {
+      summary: {
+        enabled: true,
+        discoveredPageCount: 1,
+        skippedLinkCount: 0,
+        routeCandidateCount: 1,
+        manifestRef: 'importProvenanceSummary.multiPageDiscovery.manifest',
+        diagnostics: [],
+        htmlAcquisition: {
+          enabled: true,
+          fetchedPageCount: 1,
+          failedPageCount: 0,
+          skippedPageCount: 0,
+          manifestRef: 'importProvenanceSummary.multiPageDiscovery.acquisition',
+          diagnostics: [],
+        },
+        rawArtifactAssembly: {
+          enabled: true,
+          assembledPageCount: 1,
+          excludedPageCount: 0,
+          routeMapRef: 'importProvenanceSummary.multiPageDiscovery.rawArtifactAssembly.routeMap',
+          diagnostics: [],
+        },
+      },
+      manifest: { routeCandidates: ['/'] },
+      acquisition: {
+        summary: { fetchedPageCount: 1, failedPageCount: 0, skippedPageCount: 0 },
+        pages: [],
+      },
+      rawArtifactAssembly: {
+        kind: 'multi_page_raw_artifact_assembly_manifest_v1',
+        enabled: true,
+        seedUrl: 'https://maver.si/',
+        normalizedSeedUrl: 'https://maver.si/',
+        assembledPageCount: 1,
+        excludedPageCount: 0,
+        failedPageCount: 0,
+        routeMap: [
+          {
+            routePath: '/',
+            sourceUrl: 'https://maver.si/',
+            finalUrl: 'https://www.maver.si/',
+            rawFilePath: 'index.html',
+            bodySha256: 'sha-root',
+            byteSize: 100,
+            status: 'assembled',
+          },
+        ],
+        htmlPathMap: { '/': 'index.html' },
+        excludedPages: [],
+        failedPages: [],
+        manifestPath: null,
+        diagnostics: [],
+        generatedAt: '2026-06-10T00:00:00.000Z',
+      },
+    },
+  } as unknown as RuntimeImportProvenanceSummary
+  const rootHtml = [
+    '<!doctype html><html><head><link rel="stylesheet" href="/assets/site.css"></head><body>',
+    '<img class="logo" src="/assets/logo.svg">',
+    '<div class="gallery"><img data-src="/uploads/truck-1.jpg"><img data-src="/uploads/truck-2.jpg"></div>',
+    '<form id="contact-form"><input name="email"></form><div id="map"></div>',
+    '<script src="/assets/gallery-slider.js?ver=7#main"></script>',
+    '<script src="js/lazyload.js"></script>',
+    '<script src="https://www.maver.si/wp-content/themes/maver/contact-form.js"></script>',
+    '<script src="https://maps.googleapis.com/maps/api/js?key=demo&callback=initMap"></script>',
+    '<script>window.gtag && gtag("event","preview")</script>',
+    '</body></html>',
+  ].join('')
+  const fileMap: Record<string, { mediaType: string; sizeBytes: number; sha256: string }> = {
+    'index.html': { mediaType: 'text/html', sizeBytes: rootHtml.length, sha256: 'sha-html' },
+    'assets/site.css': { mediaType: 'text/css', sizeBytes: 20, sha256: 'sha-css' },
+    'assets/logo.svg': { mediaType: 'image/svg+xml', sizeBytes: 1, sha256: 'sha-logo' },
+    'assets/gallery-slider.js': { mediaType: 'text/javascript', sizeBytes: 1, sha256: 'sha-gallery-js' },
+    'js/lazyload.js': { mediaType: 'text/javascript', sizeBytes: 1, sha256: 'sha-lazy-js' },
+    'wp-content/themes/maver/contact-form.js': { mediaType: 'text/javascript', sizeBytes: 1, sha256: 'sha-form-js' },
+    'uploads/truck-1.jpg': { mediaType: 'image/jpeg', sizeBytes: 1, sha256: 'sha-truck-1' },
+    'uploads/truck-2.jpg': { mediaType: 'image/jpeg', sizeBytes: 1, sha256: 'sha-truck-2' },
+  }
+  const restore = setUnifiedRenderPreviewDependenciesForTest({
+    getPoolStatus: () => ({ totalCount: 1, idleCount: 1, waitingCount: 0 }),
+    getSiteVersion: async () =>
+      ({
+        id: 'sv-maver-scripts',
+        siteId: 'site-maver-scripts',
+        rendererCompatibilityVersion: 'gnr8-renderer-v1',
+        pages: [],
+        importProvenanceSummary: provenance,
+      }) as any,
+    getRawImportedSiteArtifact: async () =>
+      ({
+        id: 'artifact-maver-scripts',
+        artifactType: 'raw_imported_site',
+        siteId: 'site-maver-scripts',
+        siteVersionId: 'sv-maver-scripts',
+        entryHtmlPath: 'index.html',
+        assetBasePath: '/',
+        fileMap,
+        metadata: { assetSummary: { persistedAssetCount: Object.keys(fileMap).length, externalFallbackAssetCount: 0 } },
+      }) as any,
+    getRawTemplateSiteArtifact: async () => null,
+    getRawTemplateSiteAsset: async (input) => {
+      if (input.filePath === 'index.html') return { bytes: Buffer.from(rootHtml), sizeBytes: rootHtml.length, mediaType: 'text/html' } as any
+      if (input.filePath === 'assets/site.css') return { bytes: Buffer.from('.gallery{display:flex}'), sizeBytes: 22, mediaType: 'text/css' } as any
+      return null
+    },
+    listContentSlots: async () => [],
+    listContentOverrides: async () => [],
+  })
+
+  try {
+    const preview = await renderSiteVersionPreview({
+      siteVersionId: 'sv-maver-scripts',
+      path: '/',
+      mode: 'raw_template_preview',
+      requestCorrelationKey: 'req-maver-scripts',
+    })
+    const scriptEvidence = preview.rawTemplatePreviewEvidence?.rawPreviewScriptPolicyEvidence
+
+    assert.equal(preview.html.includes('/api/gnr8/runtime/preview-assets/site-maver-scripts/sv-maver-scripts/assets/gallery-slider.js?ver=7#main'), true)
+    assert.equal(preview.html.includes('/api/gnr8/runtime/preview-assets/site-maver-scripts/sv-maver-scripts/js/lazyload.js'), true)
+    assert.equal(preview.html.includes('/api/gnr8/runtime/preview-assets/site-maver-scripts/sv-maver-scripts/wp-content/themes/maver/contact-form.js'), true)
+    assert.equal(preview.html.includes('https://maps.googleapis.com/maps/api/js?key=demo&callback=initMap'), true)
+    assert.equal(preview.html.includes('data-gnr8-script-policy-reason="tracking_or_analytics_script_blocked"'), true)
+    assert.equal(scriptEvidence?.totalScriptsFound, 5)
+    assert.equal(scriptEvidence?.scriptsPreserved, 4)
+    assert.equal(scriptEvidence?.scriptsBlocked, 1)
+    assert.equal(scriptEvidence?.scriptsRewrittenToControlledPreviewAssetUrls, 3)
+    assert.equal(scriptEvidence?.scriptsExternalPreserved, 1)
+    assert.equal(scriptEvidence?.galleryCandidateScriptsDetected, true)
+    assert.equal(scriptEvidence?.mapCandidateScriptsDetected, true)
+    assert.equal(scriptEvidence?.formCandidateScriptsDetected, true)
+    assert.equal(scriptEvidence?.lazyloadCandidateScriptsDetected, true)
+    assert.equal((preview.rawTemplatePreviewEvidence?.dbReadCount ?? 99) <= 4, true)
+  } finally {
+    restore()
+  }
 })
 
 test('raw template preview resolves root and child CSS/font URLs through the same file-map-aware base logic', () => {
@@ -1311,7 +1508,7 @@ test('raw template asset rewriting tolerates malformed percent URLs in HTML attr
   assert.equal(evidence.cssUrlReferencesMissing, 1)
 })
 
-test('Viroidoc-like raw root and news previews preserve Dongle and persisted CSS assets while scripts stay disabled', async () => {
+test('Viroidoc-like raw root and news previews preserve Dongle, CSS assets, and safe scripts while blocking duplicate injection', async () => {
   const provenance = fixtureViroidocLikeMultiPageAssemblyProvenance()
   const rootHtml = [
     '<!doctype html><html><head>',
@@ -1410,7 +1607,9 @@ test('Viroidoc-like raw root and news previews preserve Dongle and persisted CSS
     assert.equal(rootPreview.html.includes('/api/gnr8/runtime/preview-assets/site-viroidoc-dongle/sv-viroidoc-dongle/assets/site.css'), true)
     assert.equal(rootPreview.html.includes('/api/gnr8/runtime/preview-assets/site-viroidoc-dongle/sv-viroidoc-dongle/uploads/root-hero.png?size=large#hero'), true)
     assert.equal(rootPreview.html.includes('/api/gnr8/runtime/preview-assets/site-viroidoc-dongle/sv-viroidoc-dongle/uploads/lazy-root.webp'), true)
-    assert.equal(/<script\b(?![^>]*\btype=["']application\/gnr8-disabled-script["'])/i.test(rootPreview.html), false)
+    assert.equal(rootPreview.html.includes('document.body.append("SHOULD_NOT_RUN")'), true)
+    assert.equal(rootPreview.rawTemplatePreviewEvidence?.rawPreviewScriptPolicyEvidence?.scriptsPreserved, 1)
+    assert.equal(rootPreview.rawTemplatePreviewEvidence?.rawPreviewScriptPolicyEvidence?.scriptsBlocked, 0)
     const rootAssetEvidence = rootPreview.rawTemplatePreviewEvidence?.rawPreviewAssetRewriteEvidence
     const rootGraphEvidence = rootPreview.rawTemplatePreviewEvidence?.rawPreviewAssetGraphEvidence
     assert.equal(rootAssetEvidence?.fontFamilyDongleDetected, true)
@@ -1435,7 +1634,8 @@ test('Viroidoc-like raw root and news previews preserve Dongle and persisted CSS
     assert.equal(newsPreview.html.includes('VIROIDOC_NEWS'), true)
     assert.equal(newsPreview.html.includes('<main><h1>VIROIDOC_ROOT'), false)
     assert.equal(newsPreview.rawTemplatePreviewEvidence?.rawPreviewAssetRewriteEvidence?.fontFamilyDongleDetected, true)
-    assert.equal(/<script\b(?![^>]*\btype=["']application\/gnr8-disabled-script["'])/i.test(newsPreview.html), false)
+    assert.equal(newsPreview.html.includes('data-gnr8-script-policy-reason="duplicate_dom_injection_blocked"'), true)
+    assert.equal(newsPreview.rawTemplatePreviewEvidence?.rawPreviewScriptPolicyEvidence?.scriptsBlocked, 1)
   } finally {
     restore()
   }
@@ -1541,7 +1741,9 @@ test('raw template preview fixes Viroidoc-like returned HTML fidelity for fonts,
     assert.equal(preview.html.includes('/api/gnr8/runtime/preview-assets/site-viroidoc-fidelity/sv-viroidoc-fidelity/uploads/CZAAaxJ6/691x0_347x0/ViroiDoc_ULvisitUPVMay2026_photoN__msi___jpg.webp'), true)
     assert.equal(preview.html.includes('/api/gnr8/runtime/preview-assets/site-viroidoc-fidelity/sv-viroidoc-fidelity/uploads/mUAMT3Iv/691x0_347x0/ViroiDocpartnerIBMCP_May2026__msi___jpg.webp'), true)
     assert.equal(preview.html.includes('/api/gnr8/runtime/preview-assets/site-viroidoc-fidelity/sv-viroidoc-fidelity/uploads/no-candidate/missing.jpg'), false)
-    assert.equal(/<script\b(?![^>]*\btype=["']application\/gnr8-disabled-script["'])/i.test(preview.html), false)
+    assert.equal(preview.html.includes('document.body.insertAdjacentHTML("afterbegin","SHOULD_NOT_RUN")'), true)
+    assert.equal(preview.rawTemplatePreviewEvidence?.rawPreviewScriptPolicyEvidence?.scriptsPreserved, 1)
+    assert.equal(preview.rawTemplatePreviewEvidence?.rawPreviewScriptPolicyEvidence?.scriptsBlocked, 0)
     assert.equal(countOccurrences(preview.html, 'VIROIDOC_ROOT'), 1)
     assert.equal(preview.html.includes('NEWS_LISTING'), false)
     assert.equal(rewrite?.fontFamilyDongleDetected, true)
@@ -1640,7 +1842,8 @@ test('Viroidoc-like raw root preview renders despite malformed asset URLs and ma
     assert.equal(preview.html.includes('/api/gnr8/runtime/preview-assets/site-viroidoc-raw-uri/sv-viroidoc-raw-uri/uploads/root%ZZ.png'), true)
     assert.equal(preview.html.includes('/uploads/root-small%2.png 1x'), true)
     assert.equal(preview.html.includes('/api/gnr8/runtime/preview-assets/site-viroidoc-raw-uri/sv-viroidoc-raw-uri/uploads/root-large%C5.png?cache=1 2x'), true)
-    assert.equal(/<script\b(?![^>]*\btype=["']application\/gnr8-disabled-script["'])/i.test(preview.html), false)
+    assert.equal(preview.html.includes('document.body.append("SHOULD_NOT_RUN")'), true)
+    assert.equal(preview.rawTemplatePreviewEvidence?.rawPreviewScriptPolicyEvidence?.scriptsPreserved, 1)
     assert.equal((evidence?.malformedUriDecodeFallbackCount ?? 0) >= 6, true)
     assert.equal(preview.previewRuntimeSummary.previewDiagnostics.includes('RAW_PREVIEW_URI_DECODE_WARNING'), true)
     assert.equal(preview.previewRuntimeSummary.previewDiagnostics.includes('RAW_PREVIEW_URI_DECODE_FALLBACK_USED'), true)

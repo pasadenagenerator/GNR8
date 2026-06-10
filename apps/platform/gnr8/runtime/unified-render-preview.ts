@@ -396,6 +396,7 @@ export const RAW_TEMPLATE_PREVIEW_EVIDENCE_DIAGNOSTIC = {
   PREVIEW_LINK_REWRITE_COMPLETED: 'PREVIEW_LINK_REWRITE_COMPLETED',
   PREVIEW_LINKS_REWRITTEN_COUNT: 'PREVIEW_LINKS_REWRITTEN_COUNT',
   RAW_PREVIEW_SCRIPTS_DISABLED: 'RAW_PREVIEW_SCRIPTS_DISABLED',
+  RAW_PREVIEW_SCRIPT_POLICY_APPLIED: 'RAW_PREVIEW_SCRIPT_POLICY_APPLIED',
   RAW_PREVIEW_URI_DECODE_WARNING: RAW_PREVIEW_URI_DECODE_DIAGNOSTIC.RAW_PREVIEW_URI_DECODE_WARNING,
   RAW_PREVIEW_URI_DECODE_FALLBACK_USED: RAW_PREVIEW_URI_DECODE_DIAGNOSTIC.RAW_PREVIEW_URI_DECODE_FALLBACK_USED,
 } as const
@@ -456,6 +457,7 @@ type MultiPageLinkRewriteResult = {
 
 type RawPreviewAssetRewriteEvidence = NonNullable<RawTemplatePreviewEvidence['rawPreviewAssetRewriteEvidence']>
 type RawPreviewAssetGraphEvidence = NonNullable<RawTemplatePreviewEvidence['rawPreviewAssetGraphEvidence']>
+type RawPreviewScriptPolicyEvidence = NonNullable<RawTemplatePreviewEvidence['rawPreviewScriptPolicyEvidence']>
 type RawPreviewAssetGraphFoundRef = RawPreviewAssetGraphEvidence['stylesheetRefsFound'][number]
 type RawPreviewAssetGraphMissingRef = RawPreviewAssetGraphEvidence['stylesheetRefsMissing'][number]
 type RawPreviewCssCascadeEntry = RawPreviewAssetGraphEvidence['cssCascadeOrderBefore'][number]
@@ -1627,16 +1629,157 @@ function restoreDongleStylesheetFromRawCssEvidence(input: {
   return { html, restored: true }
 }
 
-function neutralizeRawPreviewScripts(html: string): { html: string; disabledScriptCount: number } {
-  let disabledScriptCount = 0
-  const neutralized = String(html ?? '').replace(/<script\b([^>]*)>([\s\S]*?)<\/script>/gi, (full, attributes: string, body: string) => {
-    if (/\btype\s*=\s*(['"])application\/gnr8-disabled-script\1/i.test(full)) return full
-    disabledScriptCount += 1
-    return `<script type="application/gnr8-disabled-script" data-gnr8-disabled-preview-script="raw" data-gnr8-original-script-attrs="${escapeHtmlAttribute(
-      String(attributes ?? '').trim(),
-    )}">${body}</script>`
+function defaultRawPreviewScriptPolicyEvidence(): RawPreviewScriptPolicyEvidence {
+  return {
+    totalScriptsFound: 0,
+    scriptsPreserved: 0,
+    scriptsBlocked: 0,
+    scriptsRewrittenToControlledPreviewAssetUrls: 0,
+    scriptsExternalPreserved: 0,
+    scriptsBlockedByReason: {},
+    topBlockedRefs: [],
+    galleryCandidateScriptsDetected: false,
+    mapCandidateScriptsDetected: false,
+    formCandidateScriptsDetected: false,
+    lazyloadCandidateScriptsDetected: false,
+  }
+}
+
+function isPreviewAssetScriptUrl(value: string): boolean {
+  return /^\/api\/gnr8\/runtime\/preview-assets\/[^/?#]+\/[^/?#]+\/.+/i.test(String(value ?? '').trim())
+}
+
+function scriptRefForEvidence(input: { src: string | null; body: string; index: number }): string {
+  if (input.src) return input.src.slice(0, 160)
+  const compact = input.body.replace(/\s+/g, ' ').trim()
+  return `inline:${input.index}:${compact.slice(0, 100)}`
+}
+
+function noteScriptCandidateSignals(evidence: RawPreviewScriptPolicyEvidence, ref: string, body: string): void {
+  const value = `${ref}\n${body}`.toLowerCase()
+  if (/\b(?:swiper|slick|carousel|fancybox|glightbox|gallery|slider|splide|owl\.carousel|magnific)\b/i.test(value)) {
+    evidence.galleryCandidateScriptsDetected = true
+  }
+  if (/\b(?:google\.maps|maps\.googleapis|leaflet|mapbox|openlayers|ol\.js|initmap)\b/i.test(value)) {
+    evidence.mapCandidateScriptsDetected = true
+  }
+  if (/\b(?:contact[-_]?form|wpcf7|recaptcha|grecaptcha|jquery\.validate|ajaxform|formdata|submit)\b/i.test(value)) {
+    evidence.formCandidateScriptsDetected = true
+  }
+  if (/\b(?:lazyload|lazysizes|lozad|data-src|data-lazy-src|intersectionobserver)\b/i.test(value)) {
+    evidence.lazyloadCandidateScriptsDetected = true
+  }
+}
+
+function trackingScriptReason(value: string): string | null {
+  const normalized = String(value ?? '').toLowerCase()
+  if (
+    /(?:\bgoogle-analytics\b|\bgoogletagmanager\b|\bgtag\/js\b|\bgtag\s*\(|\bdataLayer\s*\.\s*push|\banalytics\.js\b|\bga\.js\b|\bdoubleclick\b|\bgooglesyndication\b|\bfacebook\.net\b|\bconnect\.facebook\b|\bfbq\s*\(|\bhotjar\b|\bclarity\.ms\b|\bsegment\.com\b|\bsegment\.io\b|\bmixpanel\b|\bamplitude\b|\bmatomo\b|\bplausible\b|\bfullstory\b|\bintercom\b|\bhubspot\b|\bhs-scripts\b|\bcookiebot\b)/i.test(
+      normalized,
+    )
+  ) {
+    return 'tracking_or_analytics_script_blocked'
+  }
+  return null
+}
+
+function inlineRawPreviewScriptBlockReason(body: string): string | null {
+  const source = String(body ?? '')
+  const compact = source.replace(/\s+/g, ' ')
+  if (trackingScriptReason(compact)) return 'tracking_or_analytics_script_blocked'
+  if (/\bnavigator\.sendBeacon\s*\(/i.test(source)) return 'beacon_call_blocked'
+  if (/\b(?:window\.)?(?:top|parent)\.location(?:\b|\.|=)/i.test(source)) return 'hostile_top_navigation_blocked'
+  if (/\b(?:location\.href|location\.replace|location\.assign|window\.location)\s*(?:=|\()/i.test(source) && /https?:\/\//i.test(source)) {
+    return 'redirect_script_blocked'
+  }
+  if (/\bdocument\.(?:documentElement|body)\.innerHTML\s*=/i.test(source)) return 'route_level_html_replacement_blocked'
+  if (/\bdocument\.body\.(?:outerHTML|replaceChildren)\s*(?:=|\()/i.test(source)) return 'route_level_html_replacement_blocked'
+  if (/\bdocument\.(?:open|write|writeln)\s*\(/i.test(source) && /<\s*(?:html|body|main|section|header|footer)\b/i.test(source)) {
+    return 'document_write_html_replacement_blocked'
+  }
+  if (/\b(?:document\.body|document\.querySelector\(["']body["']\))\.insertAdjacentHTML\s*\(/i.test(source)) {
+    if (
+      /<\s*(?:html|body|main|section|header|footer|nav)\b/i.test(source) ||
+      /\b(?:HOME_INTRO|VIROIDOC_ROOT|ROOT_MARKER|NEWS_LISTING|PROJECT_MARKER|PEOPLE_MARKER|BLOG_MARKER)\b/i.test(source)
+    ) {
+      return 'duplicate_dom_injection_blocked'
+    }
+  }
+  if (/\bfetch\s*\(\s*(?:["']\/["']|location\.href|window\.location\.href|document\.location)/i.test(source) && /\binnerHTML\s*=/i.test(source)) {
+    return 'route_level_html_replacement_blocked'
+  }
+  return null
+}
+
+function externalRawPreviewScriptBlockReason(src: string): string | null {
+  return trackingScriptReason(src)
+}
+
+function appendBlockedScriptReason(evidence: RawPreviewScriptPolicyEvidence, reason: string, ref: string): void {
+  evidence.scriptsBlocked += 1
+  evidence.scriptsBlockedByReason = {
+    ...evidence.scriptsBlockedByReason,
+    [reason]: (evidence.scriptsBlockedByReason[reason] ?? 0) + 1,
+  }
+  if (!evidence.topBlockedRefs.includes(ref) && evidence.topBlockedRefs.length < 10) {
+    evidence.topBlockedRefs = [...evidence.topBlockedRefs, ref]
+  }
+}
+
+function applyRawPreviewScriptPolicy(html: string): { html: string; disabledScriptCount: number; rawPreviewScriptPolicyEvidence: RawPreviewScriptPolicyEvidence } {
+  const evidence = defaultRawPreviewScriptPolicyEvidence()
+  let scriptIndex = 0
+  const rewritten = String(html ?? '').replace(/<script\b([^>]*)>([\s\S]*?)<\/script>/gi, (full, attributes: string, body: string) => {
+    scriptIndex += 1
+    evidence.totalScriptsFound += 1
+    if (/\btype\s*=\s*(['"])application\/gnr8-disabled-script\1/i.test(full)) {
+      appendBlockedScriptReason(evidence, 'already_disabled_preview_script', scriptRefForEvidence({ src: null, body: String(body ?? ''), index: scriptIndex }))
+      return full
+    }
+
+    const attrs = parseHtmlTagAttributes(String(attributes ?? ''))
+    const type = String(attrs.type ?? '').trim().toLowerCase()
+    const src = attrs.src ? String(attrs.src).trim() : null
+    const ref = scriptRefForEvidence({ src, body: String(body ?? ''), index: scriptIndex })
+    noteScriptCandidateSignals(evidence, ref, String(body ?? ''))
+
+    const nonExecutableType =
+      type &&
+      !['text/javascript', 'application/javascript', 'module', 'application/ecmascript', 'text/ecmascript'].includes(type) &&
+      !/javascript|ecmascript/i.test(type)
+    if (nonExecutableType) {
+      evidence.scriptsPreserved += 1
+      return full
+    }
+
+    const reason = src ? externalRawPreviewScriptBlockReason(src) : inlineRawPreviewScriptBlockReason(String(body ?? ''))
+    if (reason) {
+      appendBlockedScriptReason(evidence, reason, ref)
+      return `<script type="application/gnr8-disabled-script" data-gnr8-disabled-preview-script="raw" data-gnr8-script-policy-reason="${escapeHtmlAttribute(
+        reason,
+      )}" data-gnr8-original-script-attrs="${escapeHtmlAttribute(String(attributes ?? '').trim())}">${body}</script>`
+    }
+
+    evidence.scriptsPreserved += 1
+    if (src) {
+      if (isPreviewAssetScriptUrl(src)) {
+        evidence.scriptsRewrittenToControlledPreviewAssetUrls += 1
+      } else if (/^(?:https?:)?\/\//i.test(src)) {
+        evidence.scriptsExternalPreserved += 1
+      }
+    }
+    return full
   })
-  return { html: neutralized, disabledScriptCount }
+  return {
+    html: rewritten,
+    disabledScriptCount: evidence.scriptsBlocked,
+    rawPreviewScriptPolicyEvidence: evidence,
+  }
+}
+
+function neutralizeRawPreviewScripts(html: string): { html: string; disabledScriptCount: number } {
+  const policy = applyRawPreviewScriptPolicy(html)
+  return { html: policy.html, disabledScriptCount: policy.disabledScriptCount }
 }
 
 async function inspectRawPreviewStylesheetAssets(input: {
@@ -2035,8 +2178,8 @@ async function renderRawTemplateSiteVersionPreview(input: {
       reasonCode: 'raw_css_declares_dongle_without_font_source',
     })
   }
-  const scriptNeutralization = neutralizeRawPreviewScripts(html)
-  html = scriptNeutralization.html
+  const scriptPolicy = applyRawPreviewScriptPolicy(html)
+  html = scriptPolicy.html
   const rawPreviewAssetGraphEvidence = buildRawPreviewAssetGraphEvidence({
     routePath: selectedRoutePath,
     rawFilePath: selectedHtmlPath,
@@ -2053,16 +2196,24 @@ async function renderRawTemplateSiteVersionPreview(input: {
     rewrittenAssetCount: assetRewrite.rewrittenAssetCount,
     rawPreviewAssetRewriteEvidence,
     rawPreviewAssetGraphEvidence,
-    disabledScriptCount: scriptNeutralization.disabledScriptCount,
+    rawPreviewScriptPolicyEvidence: scriptPolicy.rawPreviewScriptPolicyEvidence,
+    disabledScriptCount: scriptPolicy.disabledScriptCount,
     dbReadCount: input.context.queryCount,
     dbClientAcquisitionCount: input.context.dbClient ? 1 : 0,
   }
+  console.info(`[preview-runtime] ${RAW_TEMPLATE_PREVIEW_EVIDENCE_DIAGNOSTIC.RAW_PREVIEW_SCRIPT_POLICY_APPLIED}`, {
+    siteId: artifact.siteId,
+    siteVersionId: artifact.siteVersionId,
+    selectedRoutePath,
+    selectedRawFilePath: selectedHtmlPath,
+    rawPreviewScriptPolicyEvidence: scriptPolicy.rawPreviewScriptPolicyEvidence,
+  })
   console.info(`[preview-runtime] ${RAW_TEMPLATE_PREVIEW_EVIDENCE_DIAGNOSTIC.RAW_PREVIEW_SCRIPTS_DISABLED}`, {
     siteId: artifact.siteId,
     siteVersionId: artifact.siteVersionId,
     selectedRoutePath,
     selectedRawFilePath: selectedHtmlPath,
-    rawPreviewDisabledScriptCount: scriptNeutralization.disabledScriptCount,
+    rawPreviewDisabledScriptCount: scriptPolicy.disabledScriptCount,
   })
   console.info(`[preview-runtime] ${RAW_TEMPLATE_PREVIEW_EVIDENCE_DIAGNOSTIC.PREVIEW_LINK_REWRITE_COMPLETED}`, {
     siteId: artifact.siteId,
@@ -2108,6 +2259,7 @@ async function renderRawTemplateSiteVersionPreview(input: {
       RAW_TEMPLATE_PREVIEW_EVIDENCE_DIAGNOSTIC.PREVIEW_LINK_REWRITE_STARTED,
       RAW_TEMPLATE_PREVIEW_EVIDENCE_DIAGNOSTIC.PREVIEW_LINK_REWRITE_COMPLETED,
       RAW_TEMPLATE_PREVIEW_EVIDENCE_DIAGNOSTIC.PREVIEW_LINKS_REWRITTEN_COUNT,
+      RAW_TEMPLATE_PREVIEW_EVIDENCE_DIAGNOSTIC.RAW_PREVIEW_SCRIPT_POLICY_APPLIED,
       RAW_TEMPLATE_PREVIEW_EVIDENCE_DIAGNOSTIC.RAW_PREVIEW_SCRIPTS_DISABLED,
       ...linkRewrite.diagnostics,
       ...multiPagePreviewValidation.diagnostics,
@@ -2984,6 +3136,7 @@ export const __unifiedRenderPreviewTestUtils = {
   rewriteRawTemplateAssetReferences,
   rewriteRawTemplateAssetReferencesWithCounts,
   rewriteRawTemplateMultiPageLinks,
+  applyRawPreviewScriptPolicy,
   neutralizeRawPreviewScripts,
   annotateTransformedPreviewHtml,
   selectPreviewOverridesByVersion,

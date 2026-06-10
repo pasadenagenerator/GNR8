@@ -22,6 +22,13 @@ export type PreviewRouteRawTemplateTraceEvidence = {
     dongleEvidence?: { detected?: boolean } | null
     fontFamilyDongleDetected?: boolean
   } | null
+  rawPreviewScriptPolicyEvidence?: {
+    totalScriptsFound?: number
+    scriptsPreserved?: number
+    scriptsBlocked?: number
+    scriptsRewrittenToControlledPreviewAssetUrls?: number
+    scriptsExternalPreserved?: number
+  } | null
 }
 
 export function resolveRawTemplatePreviewTraceEvidence(input: {
@@ -56,6 +63,11 @@ export function rawTemplatePreviewTraceHeaders(input: {
     'x-gnr8-raw-assets-missing': String(evidence?.rawPreviewAssetRewriteEvidence?.assetReferencesMissing ?? 0),
     'x-gnr8-raw-font-dongle-detected': evidence?.rawPreviewAssetRewriteEvidence?.fontFamilyDongleDetected ? 'true' : 'false',
     'x-gnr8-raw-disabled-scripts-count': String(evidence?.disabledScriptCount ?? 0),
+    'x-gnr8-raw-scripts-found': String(evidence?.rawPreviewScriptPolicyEvidence?.totalScriptsFound ?? 0),
+    'x-gnr8-raw-scripts-preserved': String(evidence?.rawPreviewScriptPolicyEvidence?.scriptsPreserved ?? 0),
+    'x-gnr8-raw-scripts-blocked': String(evidence?.rawPreviewScriptPolicyEvidence?.scriptsBlocked ?? evidence?.disabledScriptCount ?? 0),
+    'x-gnr8-raw-scripts-local-rewritten': String(evidence?.rawPreviewScriptPolicyEvidence?.scriptsRewrittenToControlledPreviewAssetUrls ?? 0),
+    'x-gnr8-raw-scripts-external-preserved': String(evidence?.rawPreviewScriptPolicyEvidence?.scriptsExternalPreserved ?? 0),
     'x-gnr8-raw-stylesheets-found': String(
       evidence?.rawPreviewAssetGraphEvidence?.stylesheetRefsFound?.length ??
       evidence?.rawPreviewAssetRewriteEvidence?.stylesheetsInspected ??

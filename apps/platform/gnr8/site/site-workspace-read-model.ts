@@ -2102,8 +2102,13 @@ function parsePreviewRuntimeSummary(value: unknown): PreviewRuntimeSummary | nul
   const rawAssetGraphEvidence = rawTemplateEvidence && isRecord(rawTemplateEvidence.rawPreviewAssetGraphEvidence)
     ? rawTemplateEvidence.rawPreviewAssetGraphEvidence
     : null
+  const rawScriptPolicyEvidence = rawTemplateEvidence && isRecord(rawTemplateEvidence.rawPreviewScriptPolicyEvidence)
+    ? rawTemplateEvidence.rawPreviewScriptPolicyEvidence
+    : null
   const numberFromRawAssetEvidence = (key: string): number =>
     Number.isFinite(Number(rawAssetEvidence?.[key])) ? Number(rawAssetEvidence?.[key]) : 0
+  const numberFromRawScriptPolicyEvidence = (key: string): number =>
+    Number.isFinite(Number(rawScriptPolicyEvidence?.[key])) ? Number(rawScriptPolicyEvidence?.[key]) : 0
   const parseAssetReferenceEvidenceItem = (entry: Record<string, unknown>): ParsedRawPreviewAssetReferenceEvidence => ({
     originalReference: normalizeText(entry.originalReference),
     normalizedReference: toTextOrNull(entry.normalizedReference),
@@ -2271,6 +2276,30 @@ function parsePreviewRuntimeSummary(value: unknown): PreviewRuntimeSummary | nul
             }
             : {}),
           ...(parsedRawAssetGraphEvidence ? { rawPreviewAssetGraphEvidence: parsedRawAssetGraphEvidence } : {}),
+          ...(rawScriptPolicyEvidence
+            ? {
+                rawPreviewScriptPolicyEvidence: {
+                  totalScriptsFound: numberFromRawScriptPolicyEvidence('totalScriptsFound'),
+                  scriptsPreserved: numberFromRawScriptPolicyEvidence('scriptsPreserved'),
+                  scriptsBlocked: numberFromRawScriptPolicyEvidence('scriptsBlocked'),
+                  scriptsRewrittenToControlledPreviewAssetUrls: numberFromRawScriptPolicyEvidence('scriptsRewrittenToControlledPreviewAssetUrls'),
+                  scriptsExternalPreserved: numberFromRawScriptPolicyEvidence('scriptsExternalPreserved'),
+                  scriptsBlockedByReason:
+                    isRecord(rawScriptPolicyEvidence.scriptsBlockedByReason)
+                      ? Object.fromEntries(
+                          Object.entries(rawScriptPolicyEvidence.scriptsBlockedByReason)
+                            .map(([key, count]) => [normalizeText(key), Number.isFinite(Number(count)) ? Number(count) : 0])
+                            .filter(([key, count]) => Boolean(key) && Number(count) > 0),
+                        )
+                      : {},
+                  topBlockedRefs: textArray(rawScriptPolicyEvidence.topBlockedRefs).slice(0, 10),
+                  galleryCandidateScriptsDetected: Boolean(rawScriptPolicyEvidence.galleryCandidateScriptsDetected),
+                  mapCandidateScriptsDetected: Boolean(rawScriptPolicyEvidence.mapCandidateScriptsDetected),
+                  formCandidateScriptsDetected: Boolean(rawScriptPolicyEvidence.formCandidateScriptsDetected),
+                  lazyloadCandidateScriptsDetected: Boolean(rawScriptPolicyEvidence.lazyloadCandidateScriptsDetected),
+                },
+              }
+            : {}),
           disabledScriptCount: Number.isFinite(Number(rawTemplateEvidence.disabledScriptCount))
             ? Number(rawTemplateEvidence.disabledScriptCount)
             : undefined,

@@ -85,7 +85,7 @@ export type PreviewRuntimeSummary = {
         rawFilePath: string;
       }>;
     };
-      rawPreviewAssetGraphEvidence?: {
+    rawPreviewAssetGraphEvidence?: {
         routePath: string;
         rawFilePath: string;
         cssCascadeOrderBefore: Array<{
@@ -193,6 +193,19 @@ export type PreviewRuntimeSummary = {
         missingStylesheetRefs: string[];
         cssOrderChanged: boolean;
       };
+    rawPreviewScriptPolicyEvidence?: {
+      totalScriptsFound: number;
+      scriptsPreserved: number;
+      scriptsBlocked: number;
+      scriptsRewrittenToControlledPreviewAssetUrls: number;
+      scriptsExternalPreserved: number;
+      scriptsBlockedByReason: Record<string, number>;
+      topBlockedRefs: string[];
+      galleryCandidateScriptsDetected: boolean;
+      mapCandidateScriptsDetected: boolean;
+      formCandidateScriptsDetected: boolean;
+      lazyloadCandidateScriptsDetected: boolean;
+    };
     disabledScriptCount?: number;
     dbReadCount?: number;
     dbClientAcquisitionCount?: number;

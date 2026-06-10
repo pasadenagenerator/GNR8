@@ -33,6 +33,13 @@ test('preview route trace headers expose raw-template preview evidence', () => {
           imageRefsMissing: [{ originalReference: '/uploads/missing.png' }, { originalReference: '/uploads/other.png' }],
           dongleEvidence: { detected: true },
         },
+        rawPreviewScriptPolicyEvidence: {
+          totalScriptsFound: 7,
+          scriptsPreserved: 5,
+          scriptsBlocked: 2,
+          scriptsRewrittenToControlledPreviewAssetUrls: 3,
+          scriptsExternalPreserved: 2,
+        },
       },
     },
   })
@@ -49,6 +56,11 @@ test('preview route trace headers expose raw-template preview evidence', () => {
   assert.equal(headers['x-gnr8-raw-assets-missing'], '1')
   assert.equal(headers['x-gnr8-raw-font-dongle-detected'], 'true')
   assert.equal(headers['x-gnr8-raw-disabled-scripts-count'], '4')
+  assert.equal(headers['x-gnr8-raw-scripts-found'], '7')
+  assert.equal(headers['x-gnr8-raw-scripts-preserved'], '5')
+  assert.equal(headers['x-gnr8-raw-scripts-blocked'], '2')
+  assert.equal(headers['x-gnr8-raw-scripts-local-rewritten'], '3')
+  assert.equal(headers['x-gnr8-raw-scripts-external-preserved'], '2')
   assert.equal(headers['x-gnr8-raw-stylesheets-found'], '1')
   assert.equal(headers['x-gnr8-raw-stylesheets-rewritten'], '1')
   assert.equal(headers['x-gnr8-raw-stylesheets-missing'], '1')
@@ -87,6 +99,11 @@ test('preview route trace headers do not expose raw-template evidence for transf
   assert.equal(headers['x-gnr8-preview-disabled-scripts-count'], '0')
   assert.equal(headers['x-gnr8-raw-assets-inspected'], '0')
   assert.equal(headers['x-gnr8-raw-font-dongle-detected'], 'false')
+  assert.equal(headers['x-gnr8-raw-scripts-found'], '0')
+  assert.equal(headers['x-gnr8-raw-scripts-preserved'], '0')
+  assert.equal(headers['x-gnr8-raw-scripts-blocked'], '0')
+  assert.equal(headers['x-gnr8-raw-scripts-local-rewritten'], '0')
+  assert.equal(headers['x-gnr8-raw-scripts-external-preserved'], '0')
   assert.equal(headers['x-gnr8-raw-stylesheets-found'], '0')
   assert.equal(headers['x-gnr8-raw-dongle-detected'], 'false')
 })

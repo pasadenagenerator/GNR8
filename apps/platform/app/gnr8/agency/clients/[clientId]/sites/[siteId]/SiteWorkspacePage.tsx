@@ -681,6 +681,7 @@ function renderPreviewContent(readModel: Awaited<ReturnType<typeof getSiteWorksp
   })
   const rawPreviewAssetEvidence = rawPreviewDiagnostics?.rawPreviewAssetRewriteEvidence ?? null
   const rawPreviewAssetGraphEvidence = rawPreviewDiagnostics?.rawPreviewAssetGraphEvidence ?? null
+  const rawPreviewScriptPolicyEvidence = rawPreviewDiagnostics?.rawPreviewScriptPolicyEvidence ?? null
   const rawPreviewAssetsInspected =
     rawPreviewAssetEvidence?.assetReferencesInspected
     ?? ((rawPreviewAssetEvidence?.cssUrlReferencesFound ?? 0)
@@ -706,6 +707,11 @@ function renderPreviewContent(readModel: Awaited<ReturnType<typeof getSiteWorksp
   const topMissingStylesheetRefs = rawPreviewAssetGraphEvidence?.missingStylesheetRefs?.length
     ? rawPreviewAssetGraphEvidence.missingStylesheetRefs.slice(0, 5)
     : rawPreviewAssetGraphEvidence?.topMissingStylesheetRefs?.slice(0, 5) ?? []
+  const rawPreviewBlockedScriptReasons = rawPreviewScriptPolicyEvidence
+    ? Object.entries(rawPreviewScriptPolicyEvidence.scriptsBlockedByReason)
+        .sort(([leftReason, leftCount], [rightReason, rightCount]) => rightCount - leftCount || leftReason.localeCompare(rightReason))
+        .slice(0, 8)
+    : []
   const latestRawPreviewValidationEvidence = readModel.preview.latestRawPreviewValidationEvidence
 
   return (
@@ -868,6 +874,24 @@ function renderPreviewContent(readModel: Awaited<ReturnType<typeof getSiteWorksp
             <div>assetRefsMissing: {rawPreviewAssetsMissing}</div>
             <div>externalAssetRefsPreserved: {rawPreviewExternalPreserved}</div>
             <div>disabledScripts: {readModel.preview.previewRuntimeSummary?.rawTemplatePreviewEvidence?.disabledScriptCount ?? 0}</div>
+            {rawPreviewScriptPolicyEvidence ? (
+              <>
+                <div>
+                  scripts: found={rawPreviewScriptPolicyEvidence.totalScriptsFound} · preserved={rawPreviewScriptPolicyEvidence.scriptsPreserved} · blocked={rawPreviewScriptPolicyEvidence.scriptsBlocked}
+                </div>
+                <div>
+                  script loading: local rewritten={rawPreviewScriptPolicyEvidence.scriptsRewrittenToControlledPreviewAssetUrls} · external preserved={rawPreviewScriptPolicyEvidence.scriptsExternalPreserved}
+                </div>
+                <div>
+                  script candidates: gallery={rawPreviewScriptPolicyEvidence.galleryCandidateScriptsDetected ? 'yes' : 'no'} · map={rawPreviewScriptPolicyEvidence.mapCandidateScriptsDetected ? 'yes' : 'no'} · form={rawPreviewScriptPolicyEvidence.formCandidateScriptsDetected ? 'yes' : 'no'} · lazyload={rawPreviewScriptPolicyEvidence.lazyloadCandidateScriptsDetected ? 'yes' : 'no'}
+                </div>
+              </>
+            ) : null}
+            {(rawPreviewScriptPolicyEvidence?.scriptsBlocked ?? 0) > 0 ? (
+              <div style={{ border: '1px solid #fcd34d', background: '#fffbeb', color: '#92400e', borderRadius: 6, padding: '6px 8px' }}>
+                Warning: raw preview blocked {rawPreviewScriptPolicyEvidence?.scriptsBlocked ?? 0} script(s); original-site interactivity may be reduced.
+              </div>
+            ) : null}
             <div>detectedFontFamilies: Dongle={rawPreviewDiagnostics.fontFamilyDongleDetected === null ? 'n/a' : rawPreviewDiagnostics.fontFamilyDongleDetected ? 'yes' : 'no'}</div>
             {rawPreviewAssetGraphEvidence ? (
               <div style={{ marginTop: 4 }}>
@@ -941,6 +965,24 @@ function renderPreviewContent(readModel: Awaited<ReturnType<typeof getSiteWorksp
                   <div>fontFilesRewritten: {rawPreviewDiagnostics.rawPreviewAssetRewriteEvidence.fontFilesRewritten}</div>
                   {rawPreviewDiagnostics.rawPreviewAssetRewriteEvidence.rootHeadingDongleEvidence.length > 0 ? (
                     <div>rootHeadingDongleEvidence: {rawPreviewDiagnostics.rawPreviewAssetRewriteEvidence.rootHeadingDongleEvidence.join(' · ')}</div>
+                  ) : null}
+                </div>
+              </details>
+            ) : null}
+            {rawPreviewScriptPolicyEvidence ? (
+              <details style={{ marginTop: 4 }}>
+                <summary style={{ cursor: 'pointer', color: '#0f172a', fontWeight: 700 }}>Script policy evidence</summary>
+                <div style={{ marginTop: 6, display: 'grid', gap: 4 }}>
+                  <div>totalScriptsFound: {rawPreviewScriptPolicyEvidence.totalScriptsFound}</div>
+                  <div>scriptsPreserved: {rawPreviewScriptPolicyEvidence.scriptsPreserved}</div>
+                  <div>scriptsBlocked: {rawPreviewScriptPolicyEvidence.scriptsBlocked}</div>
+                  <div>scriptsRewrittenToControlledPreviewAssetUrls: {rawPreviewScriptPolicyEvidence.scriptsRewrittenToControlledPreviewAssetUrls}</div>
+                  <div>scriptsExternalPreserved: {rawPreviewScriptPolicyEvidence.scriptsExternalPreserved}</div>
+                  {rawPreviewBlockedScriptReasons.length > 0 ? (
+                    <div>blocked script reasons: {rawPreviewBlockedScriptReasons.map(([reason, count]) => `${reason}=${count}`).join(' · ')}</div>
+                  ) : null}
+                  {rawPreviewScriptPolicyEvidence.topBlockedRefs.length > 0 ? (
+                    <div>top blocked script refs: {rawPreviewScriptPolicyEvidence.topBlockedRefs.join(' · ')}</div>
                   ) : null}
                 </div>
               </details>
