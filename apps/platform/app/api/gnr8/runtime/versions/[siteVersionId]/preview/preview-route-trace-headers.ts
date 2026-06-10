@@ -38,6 +38,12 @@ export type PreviewRouteRawTemplateTraceEvidence = {
     duplicateRootBlockRemovedCount?: number
     listingContainerDetected?: boolean
     guardReason?: string[]
+    fingerprints?: string[]
+    runtimeDuplicateGuardInjected?: boolean
+    runtimeDuplicateGuardMode?: string
+    runtimeDuplicateGuardFingerprintCount?: number
+    runtimeDuplicateGuardRemovedCountInitial?: number
+    runtimeDuplicateGuardScriptByteLength?: number
   } | null
   rawPreviewEmbedEvidence?: {
     mapEmbedDetected?: boolean
@@ -45,6 +51,11 @@ export type PreviewRouteRawTemplateTraceEvidence = {
     blockedMapRefs?: string[]
     externalMapProviders?: string[]
   } | null
+  runtimeDuplicateGuardInjected?: boolean
+  runtimeDuplicateGuardMode?: string
+  runtimeDuplicateGuardFingerprintCount?: number
+  runtimeDuplicateGuardRemovedCountInitial?: number
+  runtimeDuplicateGuardScriptByteLength?: number
 }
 
 export function resolveRawTemplatePreviewTraceEvidence(input: {
@@ -108,6 +119,15 @@ export function rawTemplatePreviewTraceHeaders(input: {
     'x-gnr8-raw-duplicate-root-removed': String(evidence?.rawPreviewDuplicateGuardEvidence?.duplicateRootBlockRemovedCount ?? 0),
     'x-gnr8-raw-listing-container-detected': evidence?.rawPreviewDuplicateGuardEvidence?.listingContainerDetected ? 'true' : 'false',
     'x-gnr8-raw-duplicate-guard-reason': evidence?.rawPreviewDuplicateGuardEvidence?.guardReason?.slice(0, 6).join(',') ?? '',
+    'x-gnr8-raw-runtime-duplicate-guard': evidence?.runtimeDuplicateGuardInjected || evidence?.rawPreviewDuplicateGuardEvidence?.runtimeDuplicateGuardInjected
+      ? evidence?.runtimeDuplicateGuardMode ?? evidence?.rawPreviewDuplicateGuardEvidence?.runtimeDuplicateGuardMode ?? 'enabled'
+      : 'false',
+    'x-gnr8-raw-runtime-duplicate-fingerprints': String(
+      evidence?.runtimeDuplicateGuardFingerprintCount ??
+      evidence?.rawPreviewDuplicateGuardEvidence?.runtimeDuplicateGuardFingerprintCount ??
+      evidence?.rawPreviewDuplicateGuardEvidence?.fingerprints?.length ??
+      0,
+    ),
     'x-gnr8-raw-map-embed-detected': evidence?.rawPreviewEmbedEvidence?.mapEmbedDetected ? 'true' : 'false',
     'x-gnr8-raw-map-embed-preserved': evidence?.rawPreviewEmbedEvidence?.mapEmbedPreserved ? 'true' : 'false',
     'x-gnr8-raw-map-providers': evidence?.rawPreviewEmbedEvidence?.externalMapProviders?.slice(0, 8).join(',') ?? '',

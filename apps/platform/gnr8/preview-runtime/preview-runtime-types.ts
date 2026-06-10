@@ -213,6 +213,11 @@ export type PreviewRuntimeSummary = {
       fingerprints: string[];
       listingContainerDetected: boolean;
       guardReason: string[];
+      runtimeDuplicateGuardInjected?: boolean;
+      runtimeDuplicateGuardMode?: string;
+      runtimeDuplicateGuardFingerprintCount?: number;
+      runtimeDuplicateGuardRemovedCountInitial?: number;
+      runtimeDuplicateGuardScriptByteLength?: number;
     };
     rawPreviewEmbedEvidence?: {
       mapEmbedDetected: boolean;
@@ -220,6 +225,11 @@ export type PreviewRuntimeSummary = {
       blockedMapRefs: string[];
       externalMapProviders: string[];
     };
+    runtimeDuplicateGuardInjected?: boolean;
+    runtimeDuplicateGuardMode?: string;
+    runtimeDuplicateGuardFingerprintCount?: number;
+    runtimeDuplicateGuardRemovedCountInitial?: number;
+    runtimeDuplicateGuardScriptByteLength?: number;
     disabledScriptCount?: number;
     dbReadCount?: number;
     dbClientAcquisitionCount?: number;

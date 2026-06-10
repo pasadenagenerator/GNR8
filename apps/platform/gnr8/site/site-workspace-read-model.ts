@@ -2317,6 +2317,17 @@ function parsePreviewRuntimeSummary(value: unknown): PreviewRuntimeSummary | nul
                   fingerprints: textArray(rawDuplicateGuardEvidence.fingerprints).slice(0, 20),
                   listingContainerDetected: Boolean(rawDuplicateGuardEvidence.listingContainerDetected),
                   guardReason: textArray(rawDuplicateGuardEvidence.guardReason).slice(0, 12),
+                  runtimeDuplicateGuardInjected: Boolean(rawDuplicateGuardEvidence.runtimeDuplicateGuardInjected),
+                  runtimeDuplicateGuardMode: normalizeText(rawDuplicateGuardEvidence.runtimeDuplicateGuardMode),
+                  runtimeDuplicateGuardFingerprintCount: Number.isFinite(Number(rawDuplicateGuardEvidence.runtimeDuplicateGuardFingerprintCount))
+                    ? Number(rawDuplicateGuardEvidence.runtimeDuplicateGuardFingerprintCount)
+                    : 0,
+                  runtimeDuplicateGuardRemovedCountInitial: Number.isFinite(Number(rawDuplicateGuardEvidence.runtimeDuplicateGuardRemovedCountInitial))
+                    ? Number(rawDuplicateGuardEvidence.runtimeDuplicateGuardRemovedCountInitial)
+                    : 0,
+                  runtimeDuplicateGuardScriptByteLength: Number.isFinite(Number(rawDuplicateGuardEvidence.runtimeDuplicateGuardScriptByteLength))
+                    ? Number(rawDuplicateGuardEvidence.runtimeDuplicateGuardScriptByteLength)
+                    : 0,
                 },
               }
             : {}),
@@ -2328,6 +2339,33 @@ function parsePreviewRuntimeSummary(value: unknown): PreviewRuntimeSummary | nul
                   blockedMapRefs: textArray(rawEmbedEvidence.blockedMapRefs).slice(0, 12),
                   externalMapProviders: textArray(rawEmbedEvidence.externalMapProviders).slice(0, 12),
                 },
+              }
+            : {}),
+          ...(Object.prototype.hasOwnProperty.call(rawTemplateEvidence, 'runtimeDuplicateGuardInjected')
+            ? { runtimeDuplicateGuardInjected: Boolean(rawTemplateEvidence.runtimeDuplicateGuardInjected) }
+            : {}),
+          ...(Object.prototype.hasOwnProperty.call(rawTemplateEvidence, 'runtimeDuplicateGuardMode')
+            ? { runtimeDuplicateGuardMode: normalizeText(rawTemplateEvidence.runtimeDuplicateGuardMode) }
+            : {}),
+          ...(Object.prototype.hasOwnProperty.call(rawTemplateEvidence, 'runtimeDuplicateGuardFingerprintCount')
+            ? {
+                runtimeDuplicateGuardFingerprintCount: Number.isFinite(Number(rawTemplateEvidence.runtimeDuplicateGuardFingerprintCount))
+                  ? Number(rawTemplateEvidence.runtimeDuplicateGuardFingerprintCount)
+                  : 0,
+              }
+            : {}),
+          ...(Object.prototype.hasOwnProperty.call(rawTemplateEvidence, 'runtimeDuplicateGuardRemovedCountInitial')
+            ? {
+                runtimeDuplicateGuardRemovedCountInitial: Number.isFinite(Number(rawTemplateEvidence.runtimeDuplicateGuardRemovedCountInitial))
+                  ? Number(rawTemplateEvidence.runtimeDuplicateGuardRemovedCountInitial)
+                  : 0,
+              }
+            : {}),
+          ...(Object.prototype.hasOwnProperty.call(rawTemplateEvidence, 'runtimeDuplicateGuardScriptByteLength')
+            ? {
+                runtimeDuplicateGuardScriptByteLength: Number.isFinite(Number(rawTemplateEvidence.runtimeDuplicateGuardScriptByteLength))
+                  ? Number(rawTemplateEvidence.runtimeDuplicateGuardScriptByteLength)
+                  : 0,
               }
             : {}),
           disabledScriptCount: Number.isFinite(Number(rawTemplateEvidence.disabledScriptCount))

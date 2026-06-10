@@ -1717,14 +1717,6 @@ function inlineRawPreviewScriptBlockReason(body: string): string | null {
   if (/\bdocument\.(?:open|write|writeln)\s*\(/i.test(source) && /<\s*(?:html|body|main|section|header|footer)\b/i.test(source)) {
     return 'document_write_html_replacement_blocked'
   }
-  if (/\b(?:document\.body|document\.querySelector\(["']body["']\))\.insertAdjacentHTML\s*\(/i.test(source)) {
-    if (
-      /<\s*(?:html|body|main|section|header|footer|nav)\b/i.test(source) ||
-      /\b(?:HOME_INTRO|VIROIDOC_ROOT|ROOT_MARKER|NEWS_LISTING|PROJECT_MARKER|PEOPLE_MARKER|BLOG_MARKER)\b/i.test(source)
-    ) {
-      return 'duplicate_dom_injection_blocked'
-    }
-  }
   if (/\bfetch\s*\(\s*(?:["']\/["']|location\.href|window\.location\.href|document\.location)/i.test(source) && /\binnerHTML\s*=/i.test(source)) {
     return 'route_level_html_replacement_blocked'
   }
@@ -1855,6 +1847,98 @@ function rawPreviewRootHomeFingerprint(blockHtml: string): string | null {
   return `root-home:${stableRawPreviewFingerprint(base)}`
 }
 
+const RAW_PREVIEW_RUNTIME_DUPLICATE_GUARD_MODE = 'mutation_observer_root_home_duplicate_guard'
+const RAW_PREVIEW_RUNTIME_DUPLICATE_GUARD_FINGERPRINT_RULE_COUNT = 3
+
+function buildRawPreviewRuntimeDuplicateGuardScript(input: {
+  routePath: string
+  staticFingerprints: string[]
+  initialRemovedCount: number
+}): string {
+  const config = JSON.stringify({
+    routePath: normalizePagePath(input.routePath),
+    mode: RAW_PREVIEW_RUNTIME_DUPLICATE_GUARD_MODE,
+    staticFingerprints: input.staticFingerprints.slice(0, 20),
+    fingerprintRuleCount: Math.max(
+      RAW_PREVIEW_RUNTIME_DUPLICATE_GUARD_FINGERPRINT_RULE_COUNT,
+      input.staticFingerprints.length,
+    ),
+    initialRemovedCount: input.initialRemovedCount,
+  }).replace(/</g, '\\u003c')
+  return [
+    '(function(){',
+    '"use strict";',
+    `var config=${config};`,
+    'var evidence=window.__GNR8_RAW_PREVIEW_GUARD__=window.__GNR8_RAW_PREVIEW_GUARD__||{};',
+    'evidence.injected=true;',
+    'evidence.mode=config.mode;',
+    'evidence.routePath=config.routePath;',
+    'evidence.staticFingerprints=config.staticFingerprints;',
+    'evidence.fingerprintCount=config.fingerprintRuleCount;',
+    'evidence.removedCountInitial=config.initialRemovedCount||0;',
+    'evidence.removedCount=evidence.removedCountInitial;',
+    'evidence.removals=evidence.removals||[];',
+    'function textOf(node){return String(node&&node.textContent||"").replace(/\\s+/g," ").trim().toLowerCase();}',
+    'function attrBag(el){return String((el.getAttribute("class")||"")+" "+(el.id||"")+" "+(el.getAttribute("role")||"")+" "+(el.getAttribute("data-section")||"")+" "+(el.getAttribute("data-testid")||"")).toLowerCase();}',
+    'function routeMenuCount(el){var links=el.querySelectorAll?el.querySelectorAll("a[href]"):[];var seen={};for(var i=0;i<links.length;i++){var href=String(links[i].getAttribute("href")||"").toLowerCase();["/project","/people","/news","/blog","/learn"].forEach(function(route){if(href.indexOf(route)!==-1)seen[route]=true;});}return Object.keys(seen).length;}',
+    'function rootHomeFingerprint(el){if(!el||el.nodeType!==1)return null;var tag=String(el.tagName||"").toLowerCase();if(!/^(header|main|section|article|div|nav)$/i.test(tag))return null;var attrs=attrBag(el);var text=textOf(el);var headingNodes=el.querySelectorAll?el.querySelectorAll("h1,h2,h3"):[];var headings=[];for(var i=0;i<headingNodes.length;i++)headings.push(textOf(headingNodes[i]));var headingText=headings.join(" ");var routeMenuDetected=routeMenuCount(el)>=3;var marker=/\\b(?:viroidoc_root|home_intro|root_marker|hero-root|home-page|homepage|front-page|startseite)\\b/i.test(attrs)||/\\badvanced research on viroid pathogenesis\\b/i.test(headingText+" "+text)||(routeMenuDetected&&/\\bviroidoc\\b/i.test(headingText+" "+text));var hero=tag==="header"||/\\b(?:hero|masthead|intro|landing|home|root|welcome)\\b/i.test(attrs)||headingNodes.length>0;if(!marker||!hero)return null;return "root-home-runtime";}',
+    'function listingNode(){return document.querySelector("[class*=\\"news\\" i],[id*=\\"news\\" i],[class*=\\"blog\\" i],[id*=\\"blog\\" i],[class*=\\"listing\\" i],[id*=\\"listing\\" i],[class*=\\"post-list\\" i],[class*=\\"archive\\" i],[class*=\\"articles\\" i],[class*=\\"entries\\" i],article[class*=\\"post\\" i],article[class*=\\"news\\" i],article[class*=\\"entry\\" i]");}',
+    'function inListingContext(el){return !!(el.closest&&el.closest("[class*=\\"news\\" i],[id*=\\"news\\" i],[class*=\\"blog\\" i],[id*=\\"blog\\" i],[class*=\\"listing\\" i],[id*=\\"listing\\" i],[class*=\\"post-list\\" i],[class*=\\"archive\\" i],[class*=\\"articles\\" i],[class*=\\"entries\\" i],article[class*=\\"post\\" i],article[class*=\\"news\\" i],article[class*=\\"entry\\" i]"));}',
+    'function beforeListing(el){var listing=listingNode();return !!(listing&&el.compareDocumentPosition&&(el.compareDocumentPosition(listing)&Node.DOCUMENT_POSITION_FOLLOWING));}',
+    'function shouldRemove(el){if(config.routePath==="/")return false;if(!rootHomeFingerprint(el))return false;return config.routePath!=="/"||inListingContext(el)||beforeListing(el);}',
+    'function removeCandidate(el,reason){if(!el||!el.parentNode||!shouldRemove(el))return false;evidence.removedCount+=1;evidence.removals.push({reason:reason,tag:String(el.tagName||"").toLowerCase(),text:textOf(el).slice(0,160)});el.parentNode.removeChild(el);return true;}',
+    'function inspect(node,reason){if(!node||node.nodeType!==1)return;var el=node;if(removeCandidate(el,reason))return;var found=el.querySelectorAll?el.querySelectorAll("header,main,section,article,div,nav"):[];for(var i=0;i<found.length;i++){removeCandidate(found[i],reason);}}',
+    'function sweep(reason){if(document.body)inspect(document.body,reason);}',
+    'var observer=new MutationObserver(function(records){records.forEach(function(record){record.addedNodes&&record.addedNodes.forEach(function(node){inspect(node,"mutation");});});});',
+    'function start(){if(document.documentElement)observer.observe(document.documentElement,{childList:true,subtree:true});sweep("initial");}',
+    'if(document.readyState==="loading"){document.addEventListener("DOMContentLoaded",function(){sweep("domcontentloaded");},{once:true});}',
+    'start();',
+    '}());',
+  ].join('')
+}
+
+function injectRawPreviewRuntimeDuplicateGuard(input: {
+  html: string
+  routePath: string
+  duplicateGuardEvidence: RawPreviewDuplicateGuardEvidence
+}): {
+  html: string
+  runtimeDuplicateGuardInjected: boolean
+  runtimeDuplicateGuardMode: string
+  runtimeDuplicateGuardFingerprintCount: number
+  runtimeDuplicateGuardRemovedCountInitial: number
+  runtimeDuplicateGuardScriptByteLength: number
+} {
+  const scriptBody = buildRawPreviewRuntimeDuplicateGuardScript({
+    routePath: input.routePath,
+    staticFingerprints: input.duplicateGuardEvidence.fingerprints,
+    initialRemovedCount: input.duplicateGuardEvidence.duplicateRootBlockRemovedCount,
+  })
+  const script = `<script data-gnr8-raw-runtime-duplicate-guard="true">${scriptBody}</script>`
+  const source = String(input.html ?? '')
+  let html: string
+  if (/<head\b[^>]*>/i.test(source)) {
+    html = source.replace(/<head\b[^>]*>/i, (match) => `${match}${script}`)
+  } else if (/<script\b/i.test(source)) {
+    html = source.replace(/<script\b/i, `${script}<script`)
+  } else if (/<body\b[^>]*>/i.test(source)) {
+    html = source.replace(/<body\b[^>]*>/i, (match) => `${match}${script}`)
+  } else {
+    html = `${script}${source}`
+  }
+  return {
+    html,
+    runtimeDuplicateGuardInjected: true,
+    runtimeDuplicateGuardMode: RAW_PREVIEW_RUNTIME_DUPLICATE_GUARD_MODE,
+    runtimeDuplicateGuardFingerprintCount: Math.max(
+      RAW_PREVIEW_RUNTIME_DUPLICATE_GUARD_FINGERPRINT_RULE_COUNT,
+      input.duplicateGuardEvidence.fingerprints.length,
+    ),
+    runtimeDuplicateGuardRemovedCountInitial: input.duplicateGuardEvidence.duplicateRootBlockRemovedCount,
+    runtimeDuplicateGuardScriptByteLength: Buffer.byteLength(scriptBody),
+  }
+}
+
 function rawPreviewListingContainerFirstIndex(html: string): number {
   const source = String(html ?? '')
   const patterns = [
@@ -1880,8 +1964,15 @@ function applyRawPreviewDuplicateInjectionGuard(input: {
   const listingIndex = rawPreviewListingContainerFirstIndex(source)
   const listingContainerDetected = listingIndex >= 0
   const blocks: Array<{ start: number; end: number; html: string; fingerprint: string }> = []
+  const protectedRanges = [...source.matchAll(/<(script|style)\b[\s\S]*?<\/\1>/gi)].map((match) => ({
+    start: match.index ?? 0,
+    end: (match.index ?? 0) + String(match[0] ?? '').length,
+  }))
+  const isInProtectedRange = (index: number): boolean =>
+    protectedRanges.some((range) => index >= range.start && index < range.end)
   const blockPattern = /<(header|main|section|article)\b[^>]*>[\s\S]*?<\/\1>/gi
   for (const match of source.matchAll(blockPattern)) {
+    if (isInProtectedRange(match.index ?? 0)) continue
     const html = String(match[0] ?? '')
     const fingerprint = rawPreviewRootHomeFingerprint(html)
     if (!fingerprint) continue
@@ -2382,6 +2473,12 @@ async function renderRawTemplateSiteVersionPreview(input: {
     routePath: selectedRoutePath,
   })
   html = duplicateGuard.html
+  const runtimeDuplicateGuard = injectRawPreviewRuntimeDuplicateGuard({
+    html,
+    routePath: selectedRoutePath,
+    duplicateGuardEvidence: duplicateGuard.rawPreviewDuplicateGuardEvidence,
+  })
+  html = runtimeDuplicateGuard.html
   const rawPreviewEmbedEvidence = buildRawPreviewEmbedEvidence(html)
   const rawPreviewAssetGraphEvidence = buildRawPreviewAssetGraphEvidence({
     routePath: selectedRoutePath,
@@ -2400,8 +2497,20 @@ async function renderRawTemplateSiteVersionPreview(input: {
     rawPreviewAssetRewriteEvidence,
     rawPreviewAssetGraphEvidence,
     rawPreviewScriptPolicyEvidence: scriptPolicy.rawPreviewScriptPolicyEvidence,
-    rawPreviewDuplicateGuardEvidence: duplicateGuard.rawPreviewDuplicateGuardEvidence,
+    rawPreviewDuplicateGuardEvidence: {
+      ...duplicateGuard.rawPreviewDuplicateGuardEvidence,
+      runtimeDuplicateGuardInjected: runtimeDuplicateGuard.runtimeDuplicateGuardInjected,
+      runtimeDuplicateGuardMode: runtimeDuplicateGuard.runtimeDuplicateGuardMode,
+      runtimeDuplicateGuardFingerprintCount: runtimeDuplicateGuard.runtimeDuplicateGuardFingerprintCount,
+      runtimeDuplicateGuardRemovedCountInitial: runtimeDuplicateGuard.runtimeDuplicateGuardRemovedCountInitial,
+      runtimeDuplicateGuardScriptByteLength: runtimeDuplicateGuard.runtimeDuplicateGuardScriptByteLength,
+    },
     rawPreviewEmbedEvidence,
+    runtimeDuplicateGuardInjected: runtimeDuplicateGuard.runtimeDuplicateGuardInjected,
+    runtimeDuplicateGuardMode: runtimeDuplicateGuard.runtimeDuplicateGuardMode,
+    runtimeDuplicateGuardFingerprintCount: runtimeDuplicateGuard.runtimeDuplicateGuardFingerprintCount,
+    runtimeDuplicateGuardRemovedCountInitial: runtimeDuplicateGuard.runtimeDuplicateGuardRemovedCountInitial,
+    runtimeDuplicateGuardScriptByteLength: runtimeDuplicateGuard.runtimeDuplicateGuardScriptByteLength,
     disabledScriptCount: scriptPolicy.disabledScriptCount,
     dbReadCount: input.context.queryCount,
     dbClientAcquisitionCount: input.context.dbClientAcquisitionCount,
@@ -2430,7 +2539,7 @@ async function renderRawTemplateSiteVersionPreview(input: {
     siteVersionId: artifact.siteVersionId,
     selectedRoutePath,
     selectedRawFilePath: selectedHtmlPath,
-    rawPreviewDuplicateGuardEvidence: duplicateGuard.rawPreviewDuplicateGuardEvidence,
+    rawPreviewDuplicateGuardEvidence: rawTemplatePreviewEvidence.rawPreviewDuplicateGuardEvidence,
   })
   console.info('[preview-runtime] RAW_PREVIEW_EMBED_AUDIT_APPLIED', {
     siteId: artifact.siteId,
@@ -3365,6 +3474,7 @@ export const __unifiedRenderPreviewTestUtils = {
   rewriteRawTemplateMultiPageLinks,
   applyRawPreviewScriptPolicy,
   applyRawPreviewDuplicateInjectionGuard,
+  injectRawPreviewRuntimeDuplicateGuard,
   buildRawPreviewEmbedEvidence,
   neutralizeRawPreviewScripts,
   annotateTransformedPreviewHtml,

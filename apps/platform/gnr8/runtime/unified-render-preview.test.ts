@@ -386,12 +386,12 @@ test('raw preview script policy preserves local and widget scripts while blockin
   assert.equal(policy.html.includes('https://maps.googleapis.com/maps/api/js?key=demo&callback=initMap'), true)
   assert.equal(policy.html.includes('type="application/gnr8-disabled-script"'), true)
   assert.equal(evidence.totalScriptsFound, 8)
-  assert.equal(evidence.scriptsPreserved, 5)
-  assert.equal(evidence.scriptsBlocked, 3)
+  assert.equal(evidence.scriptsPreserved, 6)
+  assert.equal(evidence.scriptsBlocked, 2)
   assert.equal(evidence.scriptsRewrittenToControlledPreviewAssetUrls, 3)
   assert.equal(evidence.scriptsExternalPreserved, 2)
   assert.equal(evidence.scriptsBlockedByReason.tracking_or_analytics_script_blocked, 1)
-  assert.equal(evidence.scriptsBlockedByReason.duplicate_dom_injection_blocked, 1)
+  assert.equal(evidence.scriptsBlockedByReason.duplicate_dom_injection_blocked ?? 0, 0)
   assert.equal(evidence.scriptsBlockedByReason.hostile_top_navigation_blocked, 1)
   assert.equal(evidence.galleryCandidateScriptsDetected, true)
   assert.equal(evidence.mapCandidateScriptsDetected, true)
@@ -466,6 +466,77 @@ test('raw preview duplicate guard preserves child-route hero without root/home f
   assert.equal(guarded.html.includes('NEWS_LISTING one'), true)
   assert.equal(guarded.rawPreviewDuplicateGuardEvidence.duplicateRootBlockDetected, false)
   assert.equal(guarded.rawPreviewDuplicateGuardEvidence.duplicateRootBlockRemovedCount, 0)
+})
+
+test('raw preview runtime duplicate guard is injected before allowed script and targets appended root/home blocks', () => {
+  const html = [
+    '<!doctype html><html><head><title>News</title></head><body>',
+    '<section class="news-listing" id="news"><article>NEWS_LISTING one</article></section>',
+    '<script>document.body.insertAdjacentHTML("afterbegin","<section class=\\"home-page hero viroidoc-root\\"><h1>Viroidoc</h1><p>Advanced Research on Viroid Pathogenesis</p><nav><a href=\\"/project\\">Project</a><a href=\\"/people\\">People</a><a href=\\"/news\\">News</a><a href=\\"/blog\\">Blog</a></nav></section>")</script>',
+    '</body></html>',
+  ].join('')
+  const policy = __unifiedRenderPreviewTestUtils.applyRawPreviewScriptPolicy(html)
+  const duplicateGuard = __unifiedRenderPreviewTestUtils.applyRawPreviewDuplicateInjectionGuard({
+    html: policy.html,
+    routePath: '/news',
+  })
+  const runtimeGuard = __unifiedRenderPreviewTestUtils.injectRawPreviewRuntimeDuplicateGuard({
+    html: duplicateGuard.html,
+    routePath: '/news',
+    duplicateGuardEvidence: duplicateGuard.rawPreviewDuplicateGuardEvidence,
+  })
+
+  assert.equal(policy.rawPreviewScriptPolicyEvidence.scriptsBlocked, 0)
+  assert.equal(policy.rawPreviewScriptPolicyEvidence.scriptsPreserved, 1)
+  assert.equal(runtimeGuard.runtimeDuplicateGuardInjected, true)
+  assert.equal(runtimeGuard.runtimeDuplicateGuardMode, 'mutation_observer_root_home_duplicate_guard')
+  assert.equal(runtimeGuard.runtimeDuplicateGuardFingerprintCount >= 3, true)
+  assert.equal(runtimeGuard.runtimeDuplicateGuardScriptByteLength > 1000, true)
+  assert.equal(runtimeGuard.html.indexOf('data-gnr8-raw-runtime-duplicate-guard="true"') < runtimeGuard.html.indexOf('document.body.insertAdjacentHTML'), true)
+  assert.equal(runtimeGuard.html.includes('MutationObserver'), true)
+  assert.equal(runtimeGuard.html.includes('window.__GNR8_RAW_PREVIEW_GUARD__'), true)
+  assert.equal(runtimeGuard.html.includes('Advanced Research on Viroid Pathogenesis'), true)
+})
+
+test('raw preview runtime duplicate guard preserves root route hero and generic child hero', () => {
+  const rootHtml = [
+    '<!doctype html><html><body>',
+    '<section class="home-page hero viroidoc-root"><h1>Viroidoc</h1><p>Advanced Research on Viroid Pathogenesis</p></section>',
+    '</body></html>',
+  ].join('')
+  const rootGuard = __unifiedRenderPreviewTestUtils.applyRawPreviewDuplicateInjectionGuard({
+    html: rootHtml,
+    routePath: '/',
+  })
+  const rootRuntime = __unifiedRenderPreviewTestUtils.injectRawPreviewRuntimeDuplicateGuard({
+    html: rootGuard.html,
+    routePath: '/',
+    duplicateGuardEvidence: rootGuard.rawPreviewDuplicateGuardEvidence,
+  })
+
+  assert.equal(rootRuntime.html.includes('Advanced Research on Viroid Pathogenesis'), true)
+  assert.equal(rootRuntime.html.includes('"routePath":"/"'), true)
+  assert.equal(rootRuntime.html.includes('if(config.routePath==="/")return false'), true)
+
+  const childHtml = [
+    '<!doctype html><html><body>',
+    '<section class="hero"><h1>Viroidoc News</h1><p>Latest updates from the project.</p></section>',
+    '<section class="news-listing"><article>NEWS_LISTING one</article></section>',
+    '</body></html>',
+  ].join('')
+  const childGuard = __unifiedRenderPreviewTestUtils.applyRawPreviewDuplicateInjectionGuard({
+    html: childHtml,
+    routePath: '/news',
+  })
+  const childRuntime = __unifiedRenderPreviewTestUtils.injectRawPreviewRuntimeDuplicateGuard({
+    html: childGuard.html,
+    routePath: '/news',
+    duplicateGuardEvidence: childGuard.rawPreviewDuplicateGuardEvidence,
+  })
+
+  assert.equal(childRuntime.html.includes('Viroidoc News'), true)
+  assert.equal(childRuntime.html.includes('Latest updates from the project.'), true)
+  assert.equal(childGuard.rawPreviewDuplicateGuardEvidence.duplicateRootBlockRemovedCount, 0)
 })
 
 test('raw preview embed audit preserves Transporti-Maver-like gallery, form, and map refs', () => {
@@ -1255,9 +1326,9 @@ test('raw template preview blocks Viroidoc-like duplicate injection while keepin
 
   try {
     const sequence = [
-      ['/news', 'NEWS_LISTING', '<section id="home-intro">HOME_INTRO</section>', 1],
+      ['/news', 'NEWS_LISTING', '<section id="home-intro">HOME_INTRO</section>', 0],
       ['/', 'HOME_INTRO', 'NEWS_LISTING', 0],
-      ['/news', 'NEWS_LISTING', '<section id="home-intro">HOME_INTRO</section>', 1],
+      ['/news', 'NEWS_LISTING', '<section id="home-intro">HOME_INTRO</section>', 0],
       ['/', 'HOME_INTRO', 'NEWS_LISTING', 0],
     ] as const
     const htmlByRoute: Record<string, string[]> = { '/': [], '/news': [] }
@@ -1282,9 +1353,8 @@ test('raw template preview blocks Viroidoc-like duplicate injection while keepin
       assert.equal((preview.rawTemplatePreviewEvidence?.rawPreviewScriptPolicyEvidence?.scriptsPreserved ?? 0) > 0, true)
       assert.equal(preview.previewRuntimeSummary.previewDiagnostics.includes('RAW_PREVIEW_SCRIPTS_DISABLED'), true)
       assert.equal(preview.previewRuntimeSummary.previewDiagnostics.includes('RAW_PREVIEW_SCRIPT_POLICY_APPLIED'), true)
-      if (routePath === '/news') {
-        assert.equal(preview.html.includes('data-gnr8-script-policy-reason="duplicate_dom_injection_blocked"'), true)
-      }
+      assert.equal(preview.rawTemplatePreviewEvidence?.rawPreviewDuplicateGuardEvidence?.runtimeDuplicateGuardInjected, true)
+      assert.equal(preview.html.includes('data-gnr8-raw-runtime-duplicate-guard="true"'), true)
       assert.equal(preview.rawTemplatePreviewEvidence?.dbClientAcquisitionCount, 1)
       assert.equal(preview.rawTemplatePreviewEvidence?.rawPreviewDbClientAcquisitionCount, 1)
       assert.equal(preview.rawTemplatePreviewEvidence?.rawPreviewDbClientReleaseCount, 1)
@@ -1630,7 +1700,7 @@ test('raw template asset rewriting tolerates malformed percent URLs in HTML attr
   assert.equal(evidence.cssUrlReferencesMissing, 1)
 })
 
-test('Viroidoc-like raw root and news previews preserve Dongle, CSS assets, and safe scripts while blocking duplicate injection', async () => {
+test('Viroidoc-like raw root and news previews preserve Dongle, CSS assets, and install runtime duplicate guard', async () => {
   const provenance = fixtureViroidocLikeMultiPageAssemblyProvenance()
   const rootHtml = [
     '<!doctype html><html><head>',
@@ -1767,8 +1837,10 @@ test('Viroidoc-like raw root and news previews preserve Dongle, CSS assets, and 
     assert.equal(newsPreview.html.includes('VIROIDOC_NEWS'), true)
     assert.equal(newsPreview.html.includes('<main><h1>VIROIDOC_ROOT'), false)
     assert.equal(newsPreview.rawTemplatePreviewEvidence?.rawPreviewAssetRewriteEvidence?.fontFamilyDongleDetected, true)
-    assert.equal(newsPreview.html.includes('data-gnr8-script-policy-reason="duplicate_dom_injection_blocked"'), true)
-    assert.equal(newsPreview.rawTemplatePreviewEvidence?.rawPreviewScriptPolicyEvidence?.scriptsBlocked, 1)
+    assert.equal(newsPreview.html.includes('data-gnr8-script-policy-reason="duplicate_dom_injection_blocked"'), false)
+    assert.equal(newsPreview.rawTemplatePreviewEvidence?.rawPreviewScriptPolicyEvidence?.scriptsBlocked, 0)
+    assert.equal(newsPreview.rawTemplatePreviewEvidence?.rawPreviewDuplicateGuardEvidence?.runtimeDuplicateGuardInjected, true)
+    assert.equal(newsPreview.html.includes('data-gnr8-raw-runtime-duplicate-guard="true"'), true)
     assert.equal(rootPreview.rawTemplatePreviewEvidence?.rawPreviewDbClientAcquisitionCount, 1)
     assert.equal(rootPreview.rawTemplatePreviewEvidence?.rawPreviewDbClientReleaseCount, 1)
     assert.equal(rootPreview.rawTemplatePreviewEvidence?.rawPreviewDbClientLeakSuspected, false)

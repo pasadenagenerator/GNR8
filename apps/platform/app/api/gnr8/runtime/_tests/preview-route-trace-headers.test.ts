@@ -47,8 +47,14 @@ test('preview route trace headers expose raw-template preview evidence', () => {
         rawPreviewDuplicateGuardEvidence: {
           duplicateRootBlockDetected: true,
           duplicateRootBlockRemovedCount: 2,
+          fingerprints: ['root-home:abc12345'],
           listingContainerDetected: true,
           guardReason: ['duplicate_root_home_fingerprint', 'root_block_before_listing_container'],
+          runtimeDuplicateGuardInjected: true,
+          runtimeDuplicateGuardMode: 'mutation_observer_root_home_duplicate_guard',
+          runtimeDuplicateGuardFingerprintCount: 3,
+          runtimeDuplicateGuardRemovedCountInitial: 2,
+          runtimeDuplicateGuardScriptByteLength: 4096,
         },
         rawPreviewEmbedEvidence: {
           mapEmbedDetected: true,
@@ -56,6 +62,11 @@ test('preview route trace headers expose raw-template preview evidence', () => {
           blockedMapRefs: [],
           externalMapProviders: ['google_maps', 'openstreetmap'],
         },
+        runtimeDuplicateGuardInjected: true,
+        runtimeDuplicateGuardMode: 'mutation_observer_root_home_duplicate_guard',
+        runtimeDuplicateGuardFingerprintCount: 3,
+        runtimeDuplicateGuardRemovedCountInitial: 2,
+        runtimeDuplicateGuardScriptByteLength: 4096,
       },
     },
   })
@@ -90,6 +101,8 @@ test('preview route trace headers expose raw-template preview evidence', () => {
   assert.equal(headers['x-gnr8-raw-duplicate-root-removed'], '2')
   assert.equal(headers['x-gnr8-raw-listing-container-detected'], 'true')
   assert.equal(headers['x-gnr8-raw-duplicate-guard-reason'], 'duplicate_root_home_fingerprint,root_block_before_listing_container')
+  assert.equal(headers['x-gnr8-raw-runtime-duplicate-guard'], 'mutation_observer_root_home_duplicate_guard')
+  assert.equal(headers['x-gnr8-raw-runtime-duplicate-fingerprints'], '3')
   assert.equal(headers['x-gnr8-raw-map-embed-detected'], 'true')
   assert.equal(headers['x-gnr8-raw-map-embed-preserved'], 'true')
   assert.equal(headers['x-gnr8-raw-map-providers'], 'google_maps,openstreetmap')
@@ -134,6 +147,8 @@ test('preview route trace headers do not expose raw-template evidence for transf
   assert.equal(headers['x-gnr8-raw-scripts-external-preserved'], '0')
   assert.equal(headers['x-gnr8-raw-stylesheets-found'], '0')
   assert.equal(headers['x-gnr8-raw-dongle-detected'], 'false')
+  assert.equal(headers['x-gnr8-raw-runtime-duplicate-guard'], 'false')
+  assert.equal(headers['x-gnr8-raw-runtime-duplicate-fingerprints'], '0')
 })
 
 test('preview route HTML response uses raw-template trace header helper', async () => {
