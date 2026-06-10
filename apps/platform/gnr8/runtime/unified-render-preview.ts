@@ -458,6 +458,7 @@ type RawPreviewAssetRewriteEvidence = NonNullable<RawTemplatePreviewEvidence['ra
 type RawPreviewAssetGraphEvidence = NonNullable<RawTemplatePreviewEvidence['rawPreviewAssetGraphEvidence']>
 type RawPreviewAssetGraphFoundRef = RawPreviewAssetGraphEvidence['stylesheetRefsFound'][number]
 type RawPreviewAssetGraphMissingRef = RawPreviewAssetGraphEvidence['stylesheetRefsMissing'][number]
+type RawPreviewCssCascadeEntry = RawPreviewAssetGraphEvidence['cssCascadeOrderBefore'][number]
 type RawPreviewAssetReferenceEvidenceItem = NonNullable<RawPreviewAssetRewriteEvidence['assetReferenceEvidence']>[number]
 type RawPreviewMissingAssetReferenceItem = NonNullable<RawPreviewAssetRewriteEvidence['missingAssetReferences']>[number]
 
@@ -567,6 +568,7 @@ function toGraphMissingRef(item: RawPreviewMissingAssetReferenceItem): RawPrevie
 }
 
 function isGraphStylesheetRef(item: { assetKind: string; originalReference: string; sourceType: string }): boolean {
+  if (isFontAssetPath(item.originalReference)) return false
   return item.assetKind === 'stylesheet' || isGoogleFontsStylesheetUrl(item.originalReference) || /\.css(?:[?#].*)?$/i.test(item.originalReference)
 }
 
@@ -596,10 +598,127 @@ function buildPrimaryCssCandidates(stylesheetRefs: RawPreviewAssetGraphFoundRef[
   return [...new Set(scored.map((entry) => entry.value))].slice(0, 8)
 }
 
+function parseHtmlTagAttributes(value: string): Record<string, string> {
+  const attrs: Record<string, string> = {}
+  const source = String(value ?? '')
+  const attrPattern = /([^\s"'=<>`]+)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'=<>`]+)))?/g
+  for (const match of source.matchAll(attrPattern)) {
+    const name = String(match[1] ?? '').trim().toLowerCase()
+    if (!name) continue
+    attrs[name] = decodeBasicHtmlEntities(String(match[2] ?? match[3] ?? match[4] ?? '')).trim()
+  }
+  return attrs
+}
+
+function relTokens(value: string | null | undefined): Set<string> {
+  return new Set(String(value ?? '').toLowerCase().split(/\s+/).filter(Boolean))
+}
+
+function linkTagReferencesStylesheet(tag: string, href: string): boolean {
+  const attrs = parseHtmlTagAttributes(String(tag ?? '').replace(/^<link\b/i, '').replace(/\/?>$/i, ''))
+  const rel = relTokens(attrs.rel)
+  const asValue = String(attrs.as ?? '').trim().toLowerCase()
+  const type = String(attrs.type ?? '').trim().toLowerCase()
+  if (isFontAssetPath(href)) return false
+  if (rel.has('stylesheet')) return true
+  if (rel.has('preload') && asValue === 'style') return true
+  if (isGoogleFontsStylesheetUrl(href)) return true
+  if (type === 'text/css') return true
+  return /\.css(?:[?#].*)?$/i.test(href)
+}
+
+function extractCssImportReferences(css: string): Array<{ reference: string; media: string | null }> {
+  const refs: Array<{ reference: string; media: string | null }> = []
+  const source = String(css ?? '')
+  const urlPattern = /@import\s+url\(\s*(["']?)([^"')\s]+)\1\s*\)([^;]*)(?:;|$)/gi
+  const stringPattern = /@import\s+(["'])([^"']+)\1([^;]*)(?:;|$)/gi
+  for (const match of source.matchAll(urlPattern)) {
+    const reference = String(match[2] ?? '').trim()
+    if (!reference) continue
+    refs.push({ reference, media: String(match[3] ?? '').trim() || null })
+  }
+  for (const match of source.matchAll(stringPattern)) {
+    const reference = String(match[2] ?? '').trim()
+    if (!reference) continue
+    refs.push({ reference, media: String(match[3] ?? '').trim() || null })
+  }
+  return refs
+}
+
+function extractRawPreviewCssCascadeOrder(html: string): RawPreviewCssCascadeEntry[] {
+  const entries: RawPreviewCssCascadeEntry[] = []
+  const source = String(html ?? '')
+  const tagPattern = /<link\b[^>]*>|<style\b([^>]*)>([\s\S]*?)<\/style>/gi
+  let index = 0
+  let styleBlockIndex = 0
+  for (const match of source.matchAll(tagPattern)) {
+    const full = String(match[0] ?? '')
+    if (/^<link\b/i.test(full)) {
+      const attrs = parseHtmlTagAttributes(full.replace(/^<link\b/i, '').replace(/\/?>$/i, ''))
+      const href = attrs.href ?? ''
+      if (!href || !linkTagReferencesStylesheet(full, href)) continue
+      const rel = attrs.rel || null
+      const asValue = attrs.as || null
+      entries.push({
+        index: index++,
+        tagName: 'link',
+        reference: href,
+        rel,
+        as: asValue,
+        media: attrs.media || null,
+        type: attrs.type || null,
+        sourceType: relTokens(rel).has('preload') && String(asValue ?? '').toLowerCase() === 'style' ? 'preload_style' : 'link_stylesheet',
+      })
+      continue
+    }
+
+    styleBlockIndex += 1
+    const attrs = parseHtmlTagAttributes(String(match[1] ?? ''))
+    entries.push({
+      index: index++,
+      tagName: 'style',
+      reference: `inline-style-block:${styleBlockIndex}`,
+      rel: null,
+      as: null,
+      media: attrs.media || null,
+      type: attrs.type || null,
+      sourceType: 'style_block',
+    })
+    for (const importRef of extractCssImportReferences(String(match[2] ?? ''))) {
+      entries.push({
+        index: index++,
+        tagName: '@import',
+        reference: importRef.reference,
+        rel: null,
+        as: null,
+        media: importRef.media,
+        type: null,
+        sourceType: 'style_block_import',
+      })
+    }
+  }
+  return entries
+}
+
+function cssCascadeOrderSignature(entries: RawPreviewCssCascadeEntry[]): string[] {
+  return entries.map((entry) =>
+    [
+      entry.tagName,
+      entry.rel ?? '',
+      entry.as ?? '',
+      entry.media ?? '',
+      entry.type ?? '',
+      entry.sourceType,
+    ].join('|'),
+  )
+}
+
 function buildRawPreviewAssetGraphEvidence(input: {
   routePath: string
   rawFilePath: string
   evidence: RawPreviewAssetRewriteEvidence
+  cssCascadeOrderBefore: RawPreviewCssCascadeEntry[]
+  cssCascadeOrderAfter: RawPreviewCssCascadeEntry[]
 }): RawPreviewAssetGraphEvidence {
   const references = input.evidence.assetReferenceEvidence ?? []
   const missingReferences = input.evidence.missingAssetReferences ?? []
@@ -610,6 +729,9 @@ function buildRawPreviewAssetGraphEvidence(input: {
   const imageRefsMissing = uniqByReference(missingReferences.filter(isGraphImageRef).map(toGraphMissingRef), 20)
   const fontRefsMissing = uniqByReference(missingReferences.filter(isGraphFontRef).map(toGraphMissingRef), 20)
   const stylesheetRefsRewritten = stylesheetRefsFound.filter((ref) => Boolean(ref.servedPreviewUrl))
+  const stylesheetRefsPreservedExternal = stylesheetRefsFound.filter(
+    (ref) => !ref.servedPreviewUrl && (ref.reason === 'external_reference_preserved' || /^(?:https?:)?\/\//i.test(ref.originalReference)),
+  )
   const imageRefsRewritten = imageRefsFound.filter((ref) => Boolean(ref.servedPreviewUrl))
   const fontRefsRewritten = fontRefsFound.filter((ref) => Boolean(ref.servedPreviewUrl))
   const dongleRef =
@@ -620,8 +742,11 @@ function buildRawPreviewAssetGraphEvidence(input: {
   return {
     routePath: input.routePath,
     rawFilePath: input.rawFilePath,
+    cssCascadeOrderBefore: input.cssCascadeOrderBefore,
+    cssCascadeOrderAfter: input.cssCascadeOrderAfter,
     stylesheetRefsFound,
     stylesheetRefsRewritten,
+    stylesheetRefsPreservedExternal,
     stylesheetRefsMissing,
     imageRefsFound,
     imageRefsRewritten,
@@ -637,6 +762,17 @@ function buildRawPreviewAssetGraphEvidence(input: {
     primaryCssCandidates: buildPrimaryCssCandidates(stylesheetRefsFound),
     topMissingStylesheetRefs: stylesheetRefsMissing.map((ref) => ref.originalReference).slice(0, 10),
     topMissingImageRefs: imageRefsMissing.map((ref) => ref.originalReference).slice(0, 10),
+    stylesheetRefsFoundCount: stylesheetRefsFound.length,
+    stylesheetRefsRewrittenCount: stylesheetRefsRewritten.length,
+    stylesheetRefsPreservedExternalCount: stylesheetRefsPreservedExternal.length,
+    stylesheetRefsMissingCount: stylesheetRefsMissing.length,
+    inlineStyleBlockCount: input.cssCascadeOrderAfter.filter((entry) => entry.tagName === 'style').length,
+    mediaStylesheetCount: input.cssCascadeOrderAfter.filter((entry) => Boolean(entry.media)).length,
+    preloadStyleCount: input.cssCascadeOrderAfter.filter((entry) => entry.sourceType === 'preload_style').length,
+    missingStylesheetRefs: stylesheetRefsMissing.map((ref) => ref.originalReference).slice(0, 20),
+    cssOrderChanged:
+      JSON.stringify(cssCascadeOrderSignature(input.cssCascadeOrderBefore)) !==
+      JSON.stringify(cssCascadeOrderSignature(input.cssCascadeOrderAfter)),
   }
 }
 
@@ -917,7 +1053,8 @@ function rewriteRawTemplateAssetReferencesWithCounts(input: {
     entryHtmlPath: input.entryHtmlPath,
   })
   const cssUrlPattern = /url\(\s*(['"]?)([^"')]+)\1\s*\)/gi
-  const cssImportPattern = /@import\s+(?:url\(\s*)?(["']?)([^"')\s;]+)\1\s*\)?/gi
+  const cssImportUrlPattern = /@import\s+url\(\s*(["']?)([^"')\s]+)\1\s*\)([^;]*)(;?)/gi
+  const cssImportStringPattern = /@import\s+(["'])([^"']+)\1([^;]*)(;?)/gi
   const duplicatePreviewPrefixPattern = new RegExp(`^${assetRoot.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}/api/gnr8/runtime/preview-assets/`, 'i')
   const evidence = defaultRawPreviewAssetRewriteEvidence()
   const stylesheetAssetPaths = new Set<string>()
@@ -1230,6 +1367,29 @@ function rewriteRawTemplateAssetReferencesWithCounts(input: {
     }
   }
 
+  const recordStylesheetReferenceEvidence = (resolution: RawPreviewAssetReferenceResolution, sourceType: RawPreviewAssetRewriteSource) => {
+    recordAssetReferenceEvidence(resolution, sourceType)
+    if (resolution.kind === 'stylesheet') {
+      if (isGoogleFontsStylesheetUrl(resolution.originalUrl)) {
+        evidence.fontStylesheetsFound += 1
+        if (resolution.externalPreserved || resolution.rewrittenUrl) evidence.fontStylesheetsPreserved += 1
+        noteDongle(resolution.originalUrl, 'CSS @import references Google Fonts Dongle')
+      }
+      if (resolution.normalizedPath) stylesheetAssetPaths.add(resolution.normalizedPath)
+    }
+    if (resolution.kind === 'font') {
+      evidence.fontFilesFound += 1
+      if (resolution.rewrittenUrl && !resolution.alreadyRewritten) evidence.fontFilesRewritten += 1
+    }
+    if (resolution.missing) {
+      emitCssAssetRewriteSkipped(resolution.originalUrl, input.fileMapPaths ? 'file_map_path_not_found' : 'invalid_path', sourceType)
+    }
+    if (resolution.rewrittenUrl && !resolution.alreadyRewritten) {
+      emitCssAssetRewriteApplied(resolution.originalUrl, resolution.rewrittenUrl, sourceType)
+      rewrittenAssetCount += 1
+    }
+  }
+
   const recordCssReferenceEvidence = (resolution: RawPreviewAssetReferenceResolution, sourceType: RawPreviewAssetRewriteSource) => {
     recordAssetReferenceEvidence(resolution, sourceType)
     evidence.cssUrlReferencesFound += 1
@@ -1254,16 +1414,29 @@ function rewriteRawTemplateAssetReferencesWithCounts(input: {
     }
   }
 
-  const inspectCssImports = (cssValue: string) => {
-    for (const match of String(cssValue ?? '').matchAll(cssImportPattern)) {
-      const importUrl = String(match[2] ?? '').trim()
-      if (!importUrl) continue
-      if (isGoogleFontsStylesheetUrl(importUrl)) {
-        evidence.fontStylesheetsFound += 1
-        evidence.fontStylesheetsPreserved += 1
-        noteDongle(importUrl, 'CSS @import references Google Fonts Dongle')
-      }
+  const rewriteCssImportReference = (rawValue: string, sourceType: RawPreviewAssetRewriteSource): string | null => {
+    const value = String(rawValue ?? '').trim()
+    if (!value) return null
+    const resolution = resolveReference(value, isFontAssetPath(value) ? 'font' : 'stylesheet', sourceType)
+    recordStylesheetReferenceEvidence(resolution, sourceType)
+    return resolution.rewrittenUrl
+  }
+
+  const rewriteCssImportTokens = (cssValue: string, sourceType: RawPreviewAssetRewriteSource): string => {
+    const rewriteUrlImport = (full: string, quote: string, rawValue: string, media: string, semicolon: string) => {
+      const rewritten = rewriteCssImportReference(rawValue, sourceType)
+      if (!rewritten) return full
+      const safeQuote = quote || ''
+      return `@import url(${safeQuote}${rewritten}${safeQuote})${media ?? ''}${semicolon ?? ''}`
     }
+    const rewriteStringImport = (full: string, quote: string, rawValue: string, media: string, semicolon: string) => {
+      const rewritten = rewriteCssImportReference(rawValue, sourceType)
+      if (!rewritten) return full
+      return `@import ${quote}${rewritten}${quote}${media ?? ''}${semicolon ?? ''}`
+    }
+    return String(cssValue ?? '')
+      .replace(cssImportUrlPattern, rewriteUrlImport)
+      .replace(cssImportStringPattern, rewriteStringImport)
   }
 
   const rewriteCssUrlTokens = (cssValue: string, sourceType: RawPreviewAssetRewriteSource): string => {
@@ -1272,8 +1445,8 @@ function rewriteRawTemplateAssetReferencesWithCounts(input: {
       noteDongle(css, 'CSS declares Dongle font family')
       for (const item of cssLikelyAppliesDongleToRootHeading(css)) noteDongle('Dongle', item)
     }
-    inspectCssImports(css)
-    return css.replace(cssUrlPattern, (full, quote: string, rawValue: string) => {
+    const withImports = rewriteCssImportTokens(css, sourceType)
+    return withImports.replace(cssUrlPattern, (full, quote: string, rawValue: string) => {
       const resolution = resolveReference(String(rawValue ?? ''), isFontAssetPath(String(rawValue ?? '')) ? 'font' : isImageAssetPath(String(rawValue ?? '')) ? 'image' : 'other', sourceType)
       recordCssReferenceEvidence(resolution, sourceType)
       if (resolution.isDataUrl) return full
@@ -1290,11 +1463,12 @@ function rewriteRawTemplateAssetReferencesWithCounts(input: {
     return resolution.rewrittenUrl
   }
 
-  const classifyTagAttribute = (tagName: string, attr: string, value: string): RawPreviewAssetReferenceKind => {
+  const classifyTagAttribute = (tagName: string, attr: string, value: string, tag: string): RawPreviewAssetReferenceKind => {
     const normalizedTagName = tagName.toLowerCase()
     const normalizedAttr = attr.toLowerCase()
     if (normalizedTagName === 'link' && normalizedAttr === 'href') {
-      if (isGoogleFontsStylesheetUrl(value) || /\.css(?:[?#].*)?$/i.test(value)) return 'stylesheet'
+      if (isFontAssetPath(value)) return 'font'
+      if (linkTagReferencesStylesheet(tag, value)) return 'stylesheet'
       return 'other'
     }
     if (normalizedTagName === 'source' || normalizedTagName === 'img' || normalizedAttr === 'poster') return 'image'
@@ -1328,7 +1502,7 @@ function rewriteRawTemplateAssetReferencesWithCounts(input: {
             if (normalizedAttr === 'srcset' || normalizedAttr === 'data-srcset' || normalizedAttr === 'data-bgset') {
               return `${attr}=${quote}${rewriteSrcset(value)}${quote}`
             }
-            const kind = classifyTagAttribute(normalizedTagName, normalizedAttr, value)
+            const kind = classifyTagAttribute(normalizedTagName, normalizedAttr, value, full)
             return `${attr}=${quote}${rewriteReference(value, kind, normalizedAttr.startsWith('data-') ? 'lazy_attr' : 'html_attr')}${quote}`
           },
         )
@@ -1720,11 +1894,6 @@ async function renderRawTemplateSiteVersionPreview(input: {
     assetRewrite.rawPreviewAssetRewriteEvidence,
     stylesheetEvidence,
   )
-  const rawPreviewAssetGraphEvidence = buildRawPreviewAssetGraphEvidence({
-    routePath: selectedRoutePath,
-    rawFilePath: selectedHtmlPath,
-    evidence: rawPreviewAssetRewriteEvidence,
-  })
   const requestedPathDecode = safeDecodeURIComponent(input.requestedPath)
   if (requestedPathDecode.warning) {
     rawPreviewAssetRewriteEvidence.malformedUriDecodeFallbackCount = (rawPreviewAssetRewriteEvidence.malformedUriDecodeFallbackCount ?? 0) + 1
@@ -1756,6 +1925,13 @@ async function renderRawTemplateSiteVersionPreview(input: {
   html = linkRewrite.html
   const scriptNeutralization = neutralizeRawPreviewScripts(html)
   html = scriptNeutralization.html
+  const rawPreviewAssetGraphEvidence = buildRawPreviewAssetGraphEvidence({
+    routePath: selectedRoutePath,
+    rawFilePath: selectedHtmlPath,
+    evidence: rawPreviewAssetRewriteEvidence,
+    cssCascadeOrderBefore: extractRawPreviewCssCascadeOrder(rawHtml),
+    cssCascadeOrderAfter: extractRawPreviewCssCascadeOrder(html),
+  })
   const rawTemplatePreviewEvidence: RawTemplatePreviewEvidence = {
     selectedRoutePath,
     selectedRawFilePath: selectedHtmlPath,

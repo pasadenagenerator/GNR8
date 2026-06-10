@@ -693,6 +693,19 @@ function renderPreviewContent(readModel: Awaited<ReturnType<typeof getSiteWorksp
   const rawPreviewExternalPreserved = rawPreviewAssetEvidence?.assetReferencesExternalPreserved
     ?? ((rawPreviewAssetEvidence?.cssUrlReferencesExternalPreserved ?? 0) + (rawPreviewAssetEvidence?.fontStylesheetsPreserved ?? 0))
   const rawPreviewMissingRefs = rawPreviewAssetEvidence?.missingAssetReferences?.slice(0, 10) ?? []
+  const primaryCssOrderPreview = rawPreviewAssetGraphEvidence?.cssCascadeOrderAfter
+    ?.filter((entry) => entry.tagName === 'link' || entry.tagName === 'style' || entry.tagName === '@import')
+    .slice(0, 8)
+    .map((entry) => {
+      const label = entry.reference ?? entry.tagName
+      const media = entry.media ? ` media=${entry.media}` : ''
+      const rel = entry.rel ? ` rel=${entry.rel}` : ''
+      const asValue = entry.as ? ` as=${entry.as}` : ''
+      return `${entry.index}:${entry.tagName}:${label}${rel}${asValue}${media}`
+    }) ?? []
+  const topMissingStylesheetRefs = rawPreviewAssetGraphEvidence?.missingStylesheetRefs?.length
+    ? rawPreviewAssetGraphEvidence.missingStylesheetRefs.slice(0, 5)
+    : rawPreviewAssetGraphEvidence?.topMissingStylesheetRefs?.slice(0, 5) ?? []
   const latestRawPreviewValidationEvidence = readModel.preview.latestRawPreviewValidationEvidence
 
   return (
@@ -863,6 +876,12 @@ function renderPreviewContent(readModel: Awaited<ReturnType<typeof getSiteWorksp
                 <div>
                   stylesheets: found={rawPreviewAssetGraphEvidence.stylesheetRefsFound.length} · rewritten={rawPreviewAssetGraphEvidence.stylesheetRefsRewritten.length} · missing={rawPreviewAssetGraphEvidence.stylesheetRefsMissing.length}
                 </div>
+                <div>CSS cascade changed: {rawPreviewAssetGraphEvidence.cssOrderChanged ? 'yes' : 'no'}</div>
+                <div>inline style blocks: {rawPreviewAssetGraphEvidence.inlineStyleBlockCount}</div>
+                <div>
+                  stylesheet refs: found={rawPreviewAssetGraphEvidence.stylesheetRefsFoundCount} · rewritten={rawPreviewAssetGraphEvidence.stylesheetRefsRewrittenCount} · external={rawPreviewAssetGraphEvidence.stylesheetRefsPreservedExternalCount} · missing={rawPreviewAssetGraphEvidence.stylesheetRefsMissingCount}
+                </div>
+                <div>media stylesheets: {rawPreviewAssetGraphEvidence.mediaStylesheetCount} · preload styles: {rawPreviewAssetGraphEvidence.preloadStyleCount}</div>
                 <div>
                   images: found={rawPreviewAssetGraphEvidence.imageRefsFound.length} · rewritten={rawPreviewAssetGraphEvidence.imageRefsRewritten.length} · missing={rawPreviewAssetGraphEvidence.imageRefsMissing.length}
                 </div>
@@ -877,8 +896,11 @@ function renderPreviewContent(readModel: Awaited<ReturnType<typeof getSiteWorksp
                 {rawPreviewAssetGraphEvidence.primaryCssCandidates.length > 0 ? (
                   <div>primaryCssCandidates: {rawPreviewAssetGraphEvidence.primaryCssCandidates.join(' · ')}</div>
                 ) : null}
-                {rawPreviewAssetGraphEvidence.topMissingStylesheetRefs.length > 0 ? (
-                  <div>topMissingStylesheetRefs: {rawPreviewAssetGraphEvidence.topMissingStylesheetRefs.join(' · ')}</div>
+                {primaryCssOrderPreview.length > 0 ? (
+                  <div>primary CSS order preview: {primaryCssOrderPreview.join(' · ')}</div>
+                ) : null}
+                {topMissingStylesheetRefs.length > 0 ? (
+                  <div>top missing stylesheet refs: {topMissingStylesheetRefs.join(' · ')}</div>
                 ) : null}
                 {rawPreviewAssetGraphEvidence.topMissingImageRefs.length > 0 ? (
                   <div>topMissingImageRefs: {rawPreviewAssetGraphEvidence.topMissingImageRefs.join(' · ')}</div>

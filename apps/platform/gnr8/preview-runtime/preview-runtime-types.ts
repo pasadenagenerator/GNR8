@@ -85,28 +85,55 @@ export type PreviewRuntimeSummary = {
         rawFilePath: string;
       }>;
     };
-    rawPreviewAssetGraphEvidence?: {
-      routePath: string;
-      rawFilePath: string;
-      stylesheetRefsFound: Array<{
-        originalReference: string;
-        matchedFilePath: string | null;
-        servedPreviewUrl: string | null;
-        reason: string;
-        sourceType: string;
-      }>;
-      stylesheetRefsRewritten: Array<{
-        originalReference: string;
-        matchedFilePath: string | null;
-        servedPreviewUrl: string | null;
-        reason: string;
-        sourceType: string;
-      }>;
-      stylesheetRefsMissing: Array<{
-        originalReference: string;
-        resolvedCandidate: string | null;
-        reason: string;
-        sourceType: string;
+      rawPreviewAssetGraphEvidence?: {
+        routePath: string;
+        rawFilePath: string;
+        cssCascadeOrderBefore: Array<{
+          index: number;
+          tagName: string;
+          reference: string | null;
+          rel: string | null;
+          as: string | null;
+          media: string | null;
+          type: string | null;
+          sourceType: string;
+        }>;
+        cssCascadeOrderAfter: Array<{
+          index: number;
+          tagName: string;
+          reference: string | null;
+          rel: string | null;
+          as: string | null;
+          media: string | null;
+          type: string | null;
+          sourceType: string;
+        }>;
+        stylesheetRefsFound: Array<{
+          originalReference: string;
+          matchedFilePath: string | null;
+          servedPreviewUrl: string | null;
+          reason: string;
+          sourceType: string;
+        }>;
+        stylesheetRefsRewritten: Array<{
+          originalReference: string;
+          matchedFilePath: string | null;
+          servedPreviewUrl: string | null;
+          reason: string;
+          sourceType: string;
+        }>;
+        stylesheetRefsPreservedExternal: Array<{
+          originalReference: string;
+          matchedFilePath: string | null;
+          servedPreviewUrl: string | null;
+          reason: string;
+          sourceType: string;
+        }>;
+        stylesheetRefsMissing: Array<{
+          originalReference: string;
+          resolvedCandidate: string | null;
+          reason: string;
+          sourceType: string;
       }>;
       imageRefsFound: Array<{
         originalReference: string;
@@ -152,11 +179,20 @@ export type PreviewRuntimeSummary = {
         detected: boolean;
         source: string | null;
         ref: string | null;
+        };
+        primaryCssCandidates: string[];
+        topMissingStylesheetRefs: string[];
+        topMissingImageRefs: string[];
+        stylesheetRefsFoundCount: number;
+        stylesheetRefsRewrittenCount: number;
+        stylesheetRefsPreservedExternalCount: number;
+        stylesheetRefsMissingCount: number;
+        inlineStyleBlockCount: number;
+        mediaStylesheetCount: number;
+        preloadStyleCount: number;
+        missingStylesheetRefs: string[];
+        cssOrderChanged: boolean;
       };
-      primaryCssCandidates: string[];
-      topMissingStylesheetRefs: string[];
-      topMissingImageRefs: string[];
-    };
     disabledScriptCount?: number;
     dbReadCount?: number;
     dbClientAcquisitionCount?: number;

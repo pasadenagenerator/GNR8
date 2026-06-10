@@ -83,6 +83,26 @@ export type RawTemplatePreviewEvidenceInput = {
   rawPreviewAssetGraphEvidence?: {
     routePath: string
     rawFilePath: string
+    cssCascadeOrderBefore: Array<{
+      index: number
+      tagName: string
+      reference: string | null
+      rel: string | null
+      as: string | null
+      media: string | null
+      type: string | null
+      sourceType: string
+    }>
+    cssCascadeOrderAfter: Array<{
+      index: number
+      tagName: string
+      reference: string | null
+      rel: string | null
+      as: string | null
+      media: string | null
+      type: string | null
+      sourceType: string
+    }>
     stylesheetRefsFound: Array<{
       originalReference: string
       matchedFilePath: string | null
@@ -91,6 +111,13 @@ export type RawTemplatePreviewEvidenceInput = {
       sourceType: string
     }>
     stylesheetRefsRewritten: Array<{
+      originalReference: string
+      matchedFilePath: string | null
+      servedPreviewUrl: string | null
+      reason: string
+      sourceType: string
+    }>
+    stylesheetRefsPreservedExternal: Array<{
       originalReference: string
       matchedFilePath: string | null
       servedPreviewUrl: string | null
@@ -151,6 +178,15 @@ export type RawTemplatePreviewEvidenceInput = {
     primaryCssCandidates: string[]
     topMissingStylesheetRefs: string[]
     topMissingImageRefs: string[]
+    stylesheetRefsFoundCount: number
+    stylesheetRefsRewrittenCount: number
+    stylesheetRefsPreservedExternalCount: number
+    stylesheetRefsMissingCount: number
+    inlineStyleBlockCount: number
+    mediaStylesheetCount: number
+    preloadStyleCount: number
+    missingStylesheetRefs: string[]
+    cssOrderChanged: boolean
   }
 }
 

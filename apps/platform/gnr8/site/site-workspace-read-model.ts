@@ -2155,6 +2155,22 @@ function parsePreviewRuntimeSummary(value: unknown): PreviewRuntimeSummary | nul
           }))
           .filter((entry) => entry.originalReference || entry.reason)
       : []
+  const parseCssCascadeOrder = (value: unknown): ParsedRawPreviewAssetGraphEvidence['cssCascadeOrderBefore'] =>
+    Array.isArray(value)
+      ? value
+          .filter(isRecord)
+          .map((entry, index) => ({
+            index: Number.isFinite(Number(entry.index)) ? Number(entry.index) : index,
+            tagName: normalizeText(entry.tagName),
+            reference: toTextOrNull(entry.reference),
+            rel: toTextOrNull(entry.rel),
+            as: toTextOrNull(entry.as),
+            media: toTextOrNull(entry.media),
+            type: toTextOrNull(entry.type),
+            sourceType: normalizeText(entry.sourceType),
+          }))
+          .filter((entry) => entry.tagName || entry.reference || entry.sourceType)
+      : []
   const parseGraphMissingRefs = (value: unknown): ParsedRawPreviewAssetGraphEvidence['stylesheetRefsMissing'] =>
     Array.isArray(value)
       ? value
@@ -2171,8 +2187,11 @@ function parsePreviewRuntimeSummary(value: unknown): PreviewRuntimeSummary | nul
     ? {
         routePath: normalizeText(rawAssetGraphEvidence.routePath) || normalizeText(rawTemplateEvidence?.selectedRoutePath) || '/',
         rawFilePath: normalizeText(rawAssetGraphEvidence.rawFilePath) || normalizeText(rawTemplateEvidence?.selectedRawFilePath),
+        cssCascadeOrderBefore: parseCssCascadeOrder(rawAssetGraphEvidence.cssCascadeOrderBefore),
+        cssCascadeOrderAfter: parseCssCascadeOrder(rawAssetGraphEvidence.cssCascadeOrderAfter),
         stylesheetRefsFound: parseGraphFoundRefs(rawAssetGraphEvidence.stylesheetRefsFound),
         stylesheetRefsRewritten: parseGraphFoundRefs(rawAssetGraphEvidence.stylesheetRefsRewritten),
+        stylesheetRefsPreservedExternal: parseGraphFoundRefs(rawAssetGraphEvidence.stylesheetRefsPreservedExternal),
         stylesheetRefsMissing: parseGraphMissingRefs(rawAssetGraphEvidence.stylesheetRefsMissing),
         imageRefsFound: parseGraphFoundRefs(rawAssetGraphEvidence.imageRefsFound),
         imageRefsRewritten: parseGraphFoundRefs(rawAssetGraphEvidence.imageRefsRewritten),
@@ -2190,6 +2209,29 @@ function parsePreviewRuntimeSummary(value: unknown): PreviewRuntimeSummary | nul
         primaryCssCandidates: textArray(rawAssetGraphEvidence.primaryCssCandidates),
         topMissingStylesheetRefs: textArray(rawAssetGraphEvidence.topMissingStylesheetRefs),
         topMissingImageRefs: textArray(rawAssetGraphEvidence.topMissingImageRefs),
+        stylesheetRefsFoundCount: Number.isFinite(Number(rawAssetGraphEvidence.stylesheetRefsFoundCount))
+          ? Number(rawAssetGraphEvidence.stylesheetRefsFoundCount)
+          : parseGraphFoundRefs(rawAssetGraphEvidence.stylesheetRefsFound).length,
+        stylesheetRefsRewrittenCount: Number.isFinite(Number(rawAssetGraphEvidence.stylesheetRefsRewrittenCount))
+          ? Number(rawAssetGraphEvidence.stylesheetRefsRewrittenCount)
+          : parseGraphFoundRefs(rawAssetGraphEvidence.stylesheetRefsRewritten).length,
+        stylesheetRefsPreservedExternalCount: Number.isFinite(Number(rawAssetGraphEvidence.stylesheetRefsPreservedExternalCount))
+          ? Number(rawAssetGraphEvidence.stylesheetRefsPreservedExternalCount)
+          : parseGraphFoundRefs(rawAssetGraphEvidence.stylesheetRefsPreservedExternal).length,
+        stylesheetRefsMissingCount: Number.isFinite(Number(rawAssetGraphEvidence.stylesheetRefsMissingCount))
+          ? Number(rawAssetGraphEvidence.stylesheetRefsMissingCount)
+          : parseGraphMissingRefs(rawAssetGraphEvidence.stylesheetRefsMissing).length,
+        inlineStyleBlockCount: Number.isFinite(Number(rawAssetGraphEvidence.inlineStyleBlockCount))
+          ? Number(rawAssetGraphEvidence.inlineStyleBlockCount)
+          : parseCssCascadeOrder(rawAssetGraphEvidence.cssCascadeOrderAfter).filter((entry) => entry.tagName === 'style').length,
+        mediaStylesheetCount: Number.isFinite(Number(rawAssetGraphEvidence.mediaStylesheetCount))
+          ? Number(rawAssetGraphEvidence.mediaStylesheetCount)
+          : parseCssCascadeOrder(rawAssetGraphEvidence.cssCascadeOrderAfter).filter((entry) => Boolean(entry.media)).length,
+        preloadStyleCount: Number.isFinite(Number(rawAssetGraphEvidence.preloadStyleCount))
+          ? Number(rawAssetGraphEvidence.preloadStyleCount)
+          : parseCssCascadeOrder(rawAssetGraphEvidence.cssCascadeOrderAfter).filter((entry) => entry.sourceType === 'preload_style').length,
+        missingStylesheetRefs: textArray(rawAssetGraphEvidence.missingStylesheetRefs),
+        cssOrderChanged: Boolean(rawAssetGraphEvidence.cssOrderChanged),
       }
     : undefined
   const parsedRawTemplateEvidence =

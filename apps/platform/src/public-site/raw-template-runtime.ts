@@ -3,6 +3,8 @@ import { parse } from "parse5";
 import type { DefaultTreeAdapterMap } from "parse5";
 
 const CSS_URL_PATTERN = /url\(\s*(['"]?)([^"')]+)\1\s*\)/gi;
+const CSS_IMPORT_URL_PATTERN = /@import\s+url\(\s*(["']?)([^"')\s]+)\1\s*\)([^;]*)(;?)/gi;
+const CSS_IMPORT_STRING_PATTERN = /@import\s+(["'])([^"']+)\1([^;]*)(;?)/gi;
 const ASSET_ROUTE_PREFIX = "/api/gnr8/runtime/preview-assets";
 const OSMAP_IFRAME_FALLBACK_TYPE = "osm_iframe";
 const OSMAP_LINK_FALLBACK_TYPE = "osm_link_card";
@@ -187,6 +189,7 @@ export function rewriteAssetReferenceToRuntime(input: {
   contextFilePath: string;
   fileMapPaths?: ReadonlySet<string>;
 }): string | null {
+  if (String(input.reference ?? "").trim().startsWith(ASSET_ROUTE_PREFIX)) return String(input.reference ?? "").trim();
   const { pathname, suffix } = splitUrlSuffix(input.reference);
   const assetPath = resolveAssetPathFromReference({
     reference: pathname,
@@ -202,8 +205,37 @@ export function rewriteAssetReferenceToRuntime(input: {
   });
 }
 
+function rewriteCssImportTokens(css: string, context: RewriteContext): string {
+  const rewriteUrlImport = (full: string, quote: string, rawValue: string, media: string, semicolon: string) => {
+    const rewritten = rewriteAssetReferenceToRuntime({
+      reference: String(rawValue ?? ""),
+      siteId: context.siteId,
+      siteVersionId: context.siteVersionId,
+      contextFilePath: context.contextFilePath,
+      fileMapPaths: context.fileMapPaths,
+    });
+    if (!rewritten) return full;
+    const safeQuote = quote || "";
+    return `@import url(${safeQuote}${rewritten}${safeQuote})${media ?? ""}${semicolon ?? ""}`;
+  };
+  const rewriteStringImport = (full: string, quote: string, rawValue: string, media: string, semicolon: string) => {
+    const rewritten = rewriteAssetReferenceToRuntime({
+      reference: String(rawValue ?? ""),
+      siteId: context.siteId,
+      siteVersionId: context.siteVersionId,
+      contextFilePath: context.contextFilePath,
+      fileMapPaths: context.fileMapPaths,
+    });
+    if (!rewritten) return full;
+    return `@import ${quote}${rewritten}${quote}${media ?? ""}${semicolon ?? ""}`;
+  };
+  return String(css ?? "")
+    .replace(CSS_IMPORT_URL_PATTERN, rewriteUrlImport)
+    .replace(CSS_IMPORT_STRING_PATTERN, rewriteStringImport);
+}
+
 function rewriteCssUrlTokens(css: string, context: RewriteContext): string {
-  return String(css ?? "").replace(CSS_URL_PATTERN, (full, quote, rawValue) => {
+  return rewriteCssImportTokens(String(css ?? ""), context).replace(CSS_URL_PATTERN, (full, quote, rawValue) => {
     const rewritten = rewriteAssetReferenceToRuntime({
       reference: String(rawValue ?? ""),
       siteId: context.siteId,

@@ -877,6 +877,139 @@ test('raw template preview serves one Viroidoc-like assembled page per requested
   }
 })
 
+test('raw template preview preserves Viroidoc-like CSS cascade order and layout selectors', async () => {
+  const provenance = fixtureViroidocLikeMultiPageAssemblyProvenance()
+  const rootHtml = [
+    '<!doctype html>',
+    '<html class="no-js viroidoc-root">',
+    '<head>',
+    '<link rel="preconnect" href="https://fonts.googleapis.com">',
+    '<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Dongle:wght@400;700&display=swap">',
+    '<link rel="preload" as="style" href="/assets/preload.css" media="all" onload="this.onload=null;this.rel=\'stylesheet\'">',
+    '<link rel="stylesheet" href="/assets/user-style.css?ver=1#main" media="screen">',
+    '<style id="critical">:root{--hero-gap:12px;--hero-bg:#fff}.home .hero h1,.hero .btn{font-family:"Dongle",sans-serif}.video iframe{display:block;width:100%;aspect-ratio:16/9}@import url("/assets/generated.css?x=1") screen;</style>',
+    '<link rel="stylesheet" href="/assets/print.css" media="print">',
+    '<link rel="preload" as="font" href="/fonts/dongle.woff2" type="font/woff2" crossorigin>',
+    '</head>',
+    '<body class="home viroidoc-template">',
+    '<main><section class="hero"><h1>Viroidoc</h1><a class="btn cta" href="/project">Project</a><div class="video"><iframe src="https://www.youtube.com/embed/demo" title="Demo"></iframe></div></section></main>',
+    '<script>document.body.classList.add("script-ran")</script>',
+    '</body></html>',
+  ].join('')
+  const htmlByFilePath: Record<string, string> = {
+    'pages/root/index.html': rootHtml,
+    'pages/project/index.html': '<!doctype html><html><body><main>Project</main></body></html>',
+    'pages/people/index.html': '<!doctype html><html><body><main>People</main></body></html>',
+    'pages/news/index.html': '<!doctype html><html><body><main>News</main></body></html>',
+  }
+  const fileMap = Object.fromEntries(
+    Object.entries(htmlByFilePath).map(([filePath, html]) => [
+      filePath,
+      { mediaType: 'text/html', sizeBytes: html.length, sha256: `sha-${filePath}` },
+    ]),
+  )
+  Object.assign(fileMap, {
+    'assets/preload.css': { mediaType: 'text/css', sizeBytes: 50, sha256: 'sha-preload' },
+    'assets/user-style.css': { mediaType: 'text/css', sizeBytes: 90, sha256: 'sha-user-style' },
+    'assets/generated.css': { mediaType: 'text/css', sizeBytes: 80, sha256: 'sha-generated' },
+    'assets/print.css': { mediaType: 'text/css', sizeBytes: 40, sha256: 'sha-print' },
+    'fonts/dongle.woff2': { mediaType: 'font/woff2', sizeBytes: 4, sha256: 'sha-font' },
+    'uploads/hero.png': { mediaType: 'image/png', sizeBytes: 4, sha256: 'sha-hero' },
+  })
+
+  const restore = setUnifiedRenderPreviewDependenciesForTest({
+    getPoolStatus: () => ({ totalCount: 1, idleCount: 1, waitingCount: 0 }),
+    getSiteVersion: async () =>
+      ({
+        id: 'sv-viroidoc-css',
+        siteId: 'site-viroidoc-css',
+        rendererCompatibilityVersion: 'gnr8-renderer-v1',
+        pages: [],
+        importProvenanceSummary: provenance,
+      }) as any,
+    getRawImportedSiteArtifact: async () =>
+      ({
+        artifactType: 'raw_imported_site',
+        siteId: 'site-viroidoc-css',
+        siteVersionId: 'sv-viroidoc-css',
+        entryHtmlPath: 'pages/root/index.html',
+        assetBasePath: '/',
+        fileMap,
+        metadata: {
+          assetSummary: { persistedAssetCount: Object.keys(fileMap).length, externalFallbackAssetCount: 0 },
+        },
+      }) as any,
+    getRawTemplateSiteArtifact: async () => null,
+    getRawTemplateSiteAsset: async (input) => {
+      const html = htmlByFilePath[input.filePath]
+      if (html) return { bytes: Buffer.from(html), sizeBytes: html.length, mediaType: 'text/html' } as any
+      if (input.filePath === 'assets/preload.css') {
+        return { bytes: Buffer.from('.preload-ready{display:block}'), sizeBytes: 28, mediaType: 'text/css' } as any
+      }
+      if (input.filePath === 'assets/user-style.css') {
+        return {
+          bytes: Buffer.from('@font-face{font-family:"Dongle";src:url("../fonts/dongle.woff2") format("woff2")}.hero{background:url("../uploads/hero.png")}', 'utf8'),
+          sizeBytes: 121,
+          mediaType: 'text/css',
+        } as any
+      }
+      if (input.filePath === 'assets/generated.css') {
+        return { bytes: Buffer.from('.home .hero{display:grid;gap:var(--hero-gap)}'), sizeBytes: 45, mediaType: 'text/css' } as any
+      }
+      if (input.filePath === 'assets/print.css') {
+        return { bytes: Buffer.from('@media print{.hero{break-inside:avoid}}'), sizeBytes: 38, mediaType: 'text/css' } as any
+      }
+      return null
+    },
+    listContentSlots: async () => [],
+    listContentOverrides: async () => [],
+  })
+
+  try {
+    const preview = await renderSiteVersionPreview({
+      siteVersionId: 'sv-viroidoc-css',
+      path: '/',
+      mode: 'raw_template_preview',
+      requestCorrelationKey: 'req-viroidoc-css',
+    })
+    const graph = preview.rawTemplatePreviewEvidence?.rawPreviewAssetGraphEvidence
+    const rewrite = preview.rawTemplatePreviewEvidence?.rawPreviewAssetRewriteEvidence
+
+    assert.equal(preview.html.includes('<html class="no-js viroidoc-root">'), true)
+    assert.equal(preview.html.includes('<body class="home viroidoc-template">'), true)
+    assert.equal(preview.html.includes(':root{--hero-gap:12px;--hero-bg:#fff}'), true)
+    assert.equal(preview.html.includes('.home .hero h1,.hero .btn'), true)
+    assert.equal(preview.html.includes('.video iframe{display:block;width:100%;aspect-ratio:16/9}'), true)
+    assert.equal(preview.html.includes('type="application/gnr8-disabled-script"'), true)
+    assert.equal(preview.html.includes('/api/gnr8/runtime/preview-assets/site-viroidoc-css/sv-viroidoc-css/assets/user-style.css?ver=1#main'), true)
+    assert.equal(preview.html.includes('@import url("/api/gnr8/runtime/preview-assets/site-viroidoc-css/sv-viroidoc-css/assets/generated.css?x=1") screen;'), true)
+    assert.equal(preview.html.includes('as="font" href="/api/gnr8/runtime/preview-assets/site-viroidoc-css/sv-viroidoc-css/fonts/dongle.woff2"'), true)
+    assert.equal(graph?.cssOrderChanged, false)
+    assert.equal(graph?.inlineStyleBlockCount, 1)
+    assert.equal(graph?.preloadStyleCount, 1)
+    assert.equal(graph?.mediaStylesheetCount, 4)
+    assert.equal(graph?.stylesheetRefsFound.some((ref) => ref.originalReference.includes('fonts.googleapis.com/css2?family=Dongle')), true)
+    assert.equal(graph?.stylesheetRefsRewritten.some((ref) => ref.originalReference === '/assets/generated.css?x=1'), true)
+    assert.equal(graph?.stylesheetRefsPreservedExternal.some((ref) => ref.originalReference.includes('fonts.googleapis.com')), true)
+    assert.equal(graph?.stylesheetRefsFound.some((ref) => /\.woff2(?:[?#].*)?$/i.test(ref.originalReference)), false)
+    assert.equal(graph?.missingStylesheetRefs.length, 0)
+    assert.equal(graph?.cssCascadeOrderBefore.map((entry) => entry.reference).join(' | '), [
+      'https://fonts.googleapis.com/css2?family=Dongle:wght@400;700&display=swap',
+      '/assets/preload.css',
+      '/assets/user-style.css?ver=1#main',
+      'inline-style-block:1',
+      '/assets/generated.css?x=1',
+      '/assets/print.css',
+    ].join(' | '))
+    assert.equal(graph?.cssCascadeOrderAfter.some((entry) => entry.reference?.includes('/api/gnr8/runtime/preview-assets/site-viroidoc-css/sv-viroidoc-css/assets/generated.css?x=1')), true)
+    assert.equal(rewrite?.fontFamilyDongleDetected, true)
+    assert.equal(rewrite?.rootHeadingDongleEvidence.some((entry) => entry.includes('heading selector')), true)
+    assert.equal(rewrite?.rootHeadingDongleEvidence.some((entry) => entry.includes('button selector')), true)
+  } finally {
+    restore()
+  }
+})
+
 test('raw template preview neutralizes Viroidoc-like scripts and keeps repeated navigation bounded', async () => {
   const provenance = fixtureViroidocLikeMultiPageAssemblyProvenance()
   const rawHtmlByFilePath: Record<string, string> = {
@@ -1086,10 +1219,10 @@ test('raw template asset evidence covers CSS URL rewrite cases and Dongle font r
   assert.equal(evidence.cssUrlReferencesRewritten, 4)
   assert.equal(evidence.cssUrlReferencesExternalPreserved, 3)
   assert.equal(evidence.imageReferencesMissing, 1)
-  assert.equal(evidence.assetReferencesInspected, 12)
+  assert.equal(evidence.assetReferencesInspected, 13)
   assert.equal(evidence.assetReferencesRewritten, 6)
   assert.equal(evidence.assetReferencesMissing, 1)
-  assert.equal(evidence.assetReferencesExternalPreserved, 5)
+  assert.equal(evidence.assetReferencesExternalPreserved, 6)
   assert.equal(evidence.missingAssetReferences?.[0]?.originalReference, '/missing/hero.jpg')
   assert.equal(evidence.assetReferenceEvidence?.some((entry) => entry.assetKind === 'font' && entry.matchedFilePath === 'fonts/dongle.woff2'), true)
   assert.equal(evidence.fontStylesheetsFound, 2)
