@@ -458,6 +458,8 @@ type MultiPageLinkRewriteResult = {
 type RawPreviewAssetRewriteEvidence = NonNullable<RawTemplatePreviewEvidence['rawPreviewAssetRewriteEvidence']>
 type RawPreviewAssetGraphEvidence = NonNullable<RawTemplatePreviewEvidence['rawPreviewAssetGraphEvidence']>
 type RawPreviewScriptPolicyEvidence = NonNullable<RawTemplatePreviewEvidence['rawPreviewScriptPolicyEvidence']>
+type RawPreviewDuplicateGuardEvidence = NonNullable<RawTemplatePreviewEvidence['rawPreviewDuplicateGuardEvidence']>
+type RawPreviewEmbedEvidence = NonNullable<RawTemplatePreviewEvidence['rawPreviewEmbedEvidence']>
 type RawPreviewAssetGraphFoundRef = RawPreviewAssetGraphEvidence['stylesheetRefsFound'][number]
 type RawPreviewAssetGraphMissingRef = RawPreviewAssetGraphEvidence['stylesheetRefsMissing'][number]
 type RawPreviewCssCascadeEntry = RawPreviewAssetGraphEvidence['cssCascadeOrderBefore'][number]
@@ -1777,6 +1779,183 @@ function applyRawPreviewScriptPolicy(html: string): { html: string; disabledScri
   }
 }
 
+function stableRawPreviewFingerprint(value: string): string {
+  let hash = 2166136261
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index)
+    hash = Math.imul(hash, 16777619)
+  }
+  return (hash >>> 0).toString(16).padStart(8, '0')
+}
+
+function stripHtmlToNormalizedText(value: string): string {
+  return decodeBasicHtmlEntities(
+    String(value ?? '')
+      .replace(/<script\b[\s\S]*?<\/script>/gi, ' ')
+      .replace(/<style\b[\s\S]*?<\/style>/gi, ' ')
+      .replace(/<[^>]+>/g, ' '),
+  )
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase()
+}
+
+function rawPreviewRootHomeFingerprint(blockHtml: string): string | null {
+  const source = String(blockHtml ?? '')
+  const openTag = source.match(/^<([a-z0-9-]+)\b([^>]*)>/i)
+  const tagName = String(openTag?.[1] ?? '').toLowerCase()
+  const attrs = parseHtmlTagAttributes(openTag?.[2] ?? '')
+  const classId = `${attrs.class ?? ''} ${attrs.id ?? ''} ${attrs.role ?? ''} ${attrs['data-section'] ?? ''} ${attrs['data-testid'] ?? ''}`.toLowerCase()
+  const text = stripHtmlToNormalizedText(source)
+  const headings = [...source.matchAll(/<h[1-3]\b[^>]*>([\s\S]*?)<\/h[1-3]>/gi)]
+    .map((match) => stripHtmlToNormalizedText(String(match[1] ?? '')))
+    .filter(Boolean)
+    .join(' ')
+  const hrefs = [...source.matchAll(/\bhref\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/gi)]
+    .map((match) => decodeBasicHtmlEntities(String(match[1] ?? match[2] ?? match[3] ?? '')).trim().toLowerCase())
+    .filter(Boolean)
+    .slice(0, 12)
+    .join(' ')
+  const routeMenuDetected = ['/project', '/people', '/news', '/blog', '/learn'].filter((href) => hrefs.includes(href)).length >= 3
+  const rootMarkerDetected =
+    /\b(?:viroidoc_root|home_intro|root_marker|hero-root|home-page|homepage|front-page|startseite)\b/i.test(source) ||
+    /\b(?:home|root|front-page|homepage)\b/i.test(classId) ||
+    /\badvanced research on viroid pathogenesis\b/i.test(`${headings} ${text}`) ||
+    (routeMenuDetected && /\bviroidoc\b/i.test(`${headings} ${text}`))
+  const heroStructureDetected =
+    tagName === 'header' ||
+    /\b(?:hero|masthead|intro|landing|home|root|welcome)\b/i.test(classId) ||
+    /<h1\b/i.test(source)
+  if (!rootMarkerDetected || !heroStructureDetected) return null
+  const base = [
+    tagName,
+    classId.replace(/\s+/g, '.').slice(0, 120),
+    headings.slice(0, 240),
+    routeMenuDetected ? hrefs : '',
+    text.slice(0, 360),
+  ].join('|')
+  return `root-home:${stableRawPreviewFingerprint(base)}`
+}
+
+function rawPreviewListingContainerFirstIndex(html: string): number {
+  const source = String(html ?? '')
+  const patterns = [
+    /<(?:main|section|div|ul|ol)\b[^>]*(?:class|id)\s*=\s*(?:"[^"]*\b(?:blog|news|post-list|posts-list|listing|archive|articles|entries|cards|grid)\b[^"]*"|'[^']*\b(?:blog|news|post-list|posts-list|listing|archive|articles|entries|cards|grid)\b[^']*')[^>]*>/i,
+    /<article\b[^>]*(?:class|id)\s*=\s*(?:"[^"]*\b(?:post|news|article|entry)\b[^"]*"|'[^']*\b(?:post|news|article|entry)\b[^']*')[^>]*>/i,
+    /\b(?:NEWS_LISTING|BLOG_LISTING|POST_LISTING|ARTICLE_LISTING)\b/i,
+  ]
+  let first = -1
+  for (const pattern of patterns) {
+    const match = pattern.exec(source)
+    if (!match?.index && match?.index !== 0) continue
+    first = first === -1 ? match.index : Math.min(first, match.index)
+  }
+  return first
+}
+
+function applyRawPreviewDuplicateInjectionGuard(input: {
+  html: string
+  routePath: string
+}): { html: string; rawPreviewDuplicateGuardEvidence: RawPreviewDuplicateGuardEvidence } {
+  const routePath = normalizePagePath(input.routePath)
+  const source = String(input.html ?? '')
+  const listingIndex = rawPreviewListingContainerFirstIndex(source)
+  const listingContainerDetected = listingIndex >= 0
+  const blocks: Array<{ start: number; end: number; html: string; fingerprint: string }> = []
+  const blockPattern = /<(header|main|section|article)\b[^>]*>[\s\S]*?<\/\1>/gi
+  for (const match of source.matchAll(blockPattern)) {
+    const html = String(match[0] ?? '')
+    const fingerprint = rawPreviewRootHomeFingerprint(html)
+    if (!fingerprint) continue
+    blocks.push({
+      start: match.index ?? 0,
+      end: (match.index ?? 0) + html.length,
+      html,
+      fingerprint,
+    })
+  }
+  const fingerprintCounts = new Map<string, number>()
+  for (const block of blocks) {
+    fingerprintCounts.set(block.fingerprint, (fingerprintCounts.get(block.fingerprint) ?? 0) + 1)
+  }
+  const seen = new Map<string, number>()
+  const removals: Array<{ start: number; end: number }> = []
+  const guardReasons = new Set<string>()
+  for (const block of blocks) {
+    const seenCount = seen.get(block.fingerprint) ?? 0
+    seen.set(block.fingerprint, seenCount + 1)
+    const repeatedFingerprint = (fingerprintCounts.get(block.fingerprint) ?? 0) > 1
+    const appearsBeforeListing = listingContainerDetected && block.start < listingIndex
+    const removeForNonRoot = routePath !== '/'
+    const removeForRepeatedFingerprint = repeatedFingerprint && seenCount > 0
+    if (!removeForNonRoot && !appearsBeforeListing && !removeForRepeatedFingerprint) continue
+    if (removeForNonRoot) guardReasons.add('non_root_route')
+    if (appearsBeforeListing) guardReasons.add('root_block_before_listing_container')
+    if (removeForRepeatedFingerprint) guardReasons.add('duplicate_root_home_fingerprint')
+    removals.push({ start: block.start, end: block.end })
+  }
+  let html = source
+  for (const removal of removals.sort((left, right) => right.start - left.start)) {
+    html = `${html.slice(0, removal.start)}${html.slice(removal.end)}`
+  }
+  return {
+    html,
+    rawPreviewDuplicateGuardEvidence: {
+      routePath,
+      duplicateRootBlockDetected: blocks.some((block) => (fingerprintCounts.get(block.fingerprint) ?? 0) > 1) || removals.length > 0,
+      duplicateRootBlockRemovedCount: removals.length,
+      fingerprints: [...new Set(blocks.map((block) => block.fingerprint))].slice(0, 20),
+      listingContainerDetected,
+      guardReason: [...guardReasons].sort((a, b) => a.localeCompare(b)),
+    },
+  }
+}
+
+function mapProviderForReference(value: string): string | null {
+  const normalized = String(value ?? '').toLowerCase()
+  if (!normalized) return null
+  if (/\b(?:maps\.googleapis\.com|google\.com\/maps|google\.[a-z.]+\/maps|google\.maps)\b/.test(normalized)) return 'google_maps'
+  if (/\b(?:openstreetmap\.org|osm\.org|tile\.openstreetmap\.org)\b/.test(normalized)) return 'openstreetmap'
+  if (/\b(?:leaflet|unpkg\.com\/leaflet|cdn\.jsdelivr\.net\/npm\/leaflet)\b/.test(normalized)) return 'leaflet'
+  if (/\b(?:mapbox\.com|api\.mapbox\.com|mapbox-gl)\b/.test(normalized)) return 'mapbox'
+  if (/\b(?:openlayers|ol\.js|cdn\.jsdelivr\.net\/npm\/ol\b)\b/.test(normalized)) return 'openlayers'
+  if (/\b(?:maptiler|here\.com|bing\.com\/maps|waze\.com|yandex\.[a-z.]+\/maps)\b/.test(normalized)) return 'custom_embedded_map'
+  if (/\b(?:map|maps|initmap)\b/.test(normalized)) return 'custom_embedded_map'
+  return null
+}
+
+function collectRawPreviewMapRefs(html: string): Array<{ ref: string; provider: string; disabled: boolean }> {
+  const refs: Array<{ ref: string; provider: string; disabled: boolean }> = []
+  const source = String(html ?? '')
+  for (const match of source.matchAll(/<(iframe|embed|object|script|link)\b([^>]*)>(?:[\s\S]*?<\/\1>)?/gi)) {
+    const tag = String(match[0] ?? '')
+    const attrs = parseHtmlTagAttributes(String(match[2] ?? ''))
+    const attrRefs = [attrs.src, attrs.href, attrs.data].filter(Boolean)
+    const bodyRefs = [...tag.matchAll(/https?:\/\/[^"'<>\s)]+/gi)].map((bodyMatch) => String(bodyMatch[0] ?? ''))
+    for (const ref of [...new Set([...attrRefs, ...bodyRefs])]) {
+      const provider = mapProviderForReference(ref)
+      if (!provider) continue
+      refs.push({
+        ref: ref.slice(0, 180),
+        provider,
+        disabled: /type\s*=\s*(['"])application\/gnr8-disabled-script\1/i.test(tag) || /\bdata-gnr8-disabled-preview-script\b/i.test(tag),
+      })
+    }
+  }
+  return refs
+}
+
+function buildRawPreviewEmbedEvidence(html: string): RawPreviewEmbedEvidence {
+  const refs = collectRawPreviewMapRefs(html)
+  const blockedMapRefs = refs.filter((entry) => entry.disabled).map((entry) => entry.ref)
+  return {
+    mapEmbedDetected: refs.length > 0,
+    mapEmbedPreserved: refs.some((entry) => !entry.disabled),
+    blockedMapRefs: [...new Set(blockedMapRefs)].slice(0, 12),
+    externalMapProviders: [...new Set(refs.map((entry) => entry.provider))].sort((a, b) => a.localeCompare(b)),
+  }
+}
+
 function neutralizeRawPreviewScripts(html: string): { html: string; disabledScriptCount: number } {
   const policy = applyRawPreviewScriptPolicy(html)
   return { html: policy.html, disabledScriptCount: policy.disabledScriptCount }
@@ -2180,6 +2359,12 @@ async function renderRawTemplateSiteVersionPreview(input: {
   }
   const scriptPolicy = applyRawPreviewScriptPolicy(html)
   html = scriptPolicy.html
+  const duplicateGuard = applyRawPreviewDuplicateInjectionGuard({
+    html,
+    routePath: selectedRoutePath,
+  })
+  html = duplicateGuard.html
+  const rawPreviewEmbedEvidence = buildRawPreviewEmbedEvidence(html)
   const rawPreviewAssetGraphEvidence = buildRawPreviewAssetGraphEvidence({
     routePath: selectedRoutePath,
     rawFilePath: selectedHtmlPath,
@@ -2197,6 +2382,8 @@ async function renderRawTemplateSiteVersionPreview(input: {
     rawPreviewAssetRewriteEvidence,
     rawPreviewAssetGraphEvidence,
     rawPreviewScriptPolicyEvidence: scriptPolicy.rawPreviewScriptPolicyEvidence,
+    rawPreviewDuplicateGuardEvidence: duplicateGuard.rawPreviewDuplicateGuardEvidence,
+    rawPreviewEmbedEvidence,
     disabledScriptCount: scriptPolicy.disabledScriptCount,
     dbReadCount: input.context.queryCount,
     dbClientAcquisitionCount: input.context.dbClient ? 1 : 0,
@@ -2214,6 +2401,20 @@ async function renderRawTemplateSiteVersionPreview(input: {
     selectedRoutePath,
     selectedRawFilePath: selectedHtmlPath,
     rawPreviewDisabledScriptCount: scriptPolicy.disabledScriptCount,
+  })
+  console.info('[preview-runtime] RAW_PREVIEW_DUPLICATE_GUARD_APPLIED', {
+    siteId: artifact.siteId,
+    siteVersionId: artifact.siteVersionId,
+    selectedRoutePath,
+    selectedRawFilePath: selectedHtmlPath,
+    rawPreviewDuplicateGuardEvidence: duplicateGuard.rawPreviewDuplicateGuardEvidence,
+  })
+  console.info('[preview-runtime] RAW_PREVIEW_EMBED_AUDIT_APPLIED', {
+    siteId: artifact.siteId,
+    siteVersionId: artifact.siteVersionId,
+    selectedRoutePath,
+    selectedRawFilePath: selectedHtmlPath,
+    rawPreviewEmbedEvidence,
   })
   console.info(`[preview-runtime] ${RAW_TEMPLATE_PREVIEW_EVIDENCE_DIAGNOSTIC.PREVIEW_LINK_REWRITE_COMPLETED}`, {
     siteId: artifact.siteId,
@@ -3137,6 +3338,8 @@ export const __unifiedRenderPreviewTestUtils = {
   rewriteRawTemplateAssetReferencesWithCounts,
   rewriteRawTemplateMultiPageLinks,
   applyRawPreviewScriptPolicy,
+  applyRawPreviewDuplicateInjectionGuard,
+  buildRawPreviewEmbedEvidence,
   neutralizeRawPreviewScripts,
   annotateTransformedPreviewHtml,
   selectPreviewOverridesByVersion,

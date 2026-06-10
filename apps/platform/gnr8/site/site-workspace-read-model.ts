@@ -2105,6 +2105,12 @@ function parsePreviewRuntimeSummary(value: unknown): PreviewRuntimeSummary | nul
   const rawScriptPolicyEvidence = rawTemplateEvidence && isRecord(rawTemplateEvidence.rawPreviewScriptPolicyEvidence)
     ? rawTemplateEvidence.rawPreviewScriptPolicyEvidence
     : null
+  const rawDuplicateGuardEvidence = rawTemplateEvidence && isRecord(rawTemplateEvidence.rawPreviewDuplicateGuardEvidence)
+    ? rawTemplateEvidence.rawPreviewDuplicateGuardEvidence
+    : null
+  const rawEmbedEvidence = rawTemplateEvidence && isRecord(rawTemplateEvidence.rawPreviewEmbedEvidence)
+    ? rawTemplateEvidence.rawPreviewEmbedEvidence
+    : null
   const numberFromRawAssetEvidence = (key: string): number =>
     Number.isFinite(Number(rawAssetEvidence?.[key])) ? Number(rawAssetEvidence?.[key]) : 0
   const numberFromRawScriptPolicyEvidence = (key: string): number =>
@@ -2297,6 +2303,30 @@ function parsePreviewRuntimeSummary(value: unknown): PreviewRuntimeSummary | nul
                   mapCandidateScriptsDetected: Boolean(rawScriptPolicyEvidence.mapCandidateScriptsDetected),
                   formCandidateScriptsDetected: Boolean(rawScriptPolicyEvidence.formCandidateScriptsDetected),
                   lazyloadCandidateScriptsDetected: Boolean(rawScriptPolicyEvidence.lazyloadCandidateScriptsDetected),
+                },
+              }
+            : {}),
+          ...(rawDuplicateGuardEvidence
+            ? {
+                rawPreviewDuplicateGuardEvidence: {
+                  routePath: normalizeText(rawDuplicateGuardEvidence.routePath) || normalizeText(rawTemplateEvidence.selectedRoutePath) || '/',
+                  duplicateRootBlockDetected: Boolean(rawDuplicateGuardEvidence.duplicateRootBlockDetected),
+                  duplicateRootBlockRemovedCount: Number.isFinite(Number(rawDuplicateGuardEvidence.duplicateRootBlockRemovedCount))
+                    ? Number(rawDuplicateGuardEvidence.duplicateRootBlockRemovedCount)
+                    : 0,
+                  fingerprints: textArray(rawDuplicateGuardEvidence.fingerprints).slice(0, 20),
+                  listingContainerDetected: Boolean(rawDuplicateGuardEvidence.listingContainerDetected),
+                  guardReason: textArray(rawDuplicateGuardEvidence.guardReason).slice(0, 12),
+                },
+              }
+            : {}),
+          ...(rawEmbedEvidence
+            ? {
+                rawPreviewEmbedEvidence: {
+                  mapEmbedDetected: Boolean(rawEmbedEvidence.mapEmbedDetected),
+                  mapEmbedPreserved: Boolean(rawEmbedEvidence.mapEmbedPreserved),
+                  blockedMapRefs: textArray(rawEmbedEvidence.blockedMapRefs).slice(0, 12),
+                  externalMapProviders: textArray(rawEmbedEvidence.externalMapProviders).slice(0, 12),
                 },
               }
             : {}),

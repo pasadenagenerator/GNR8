@@ -682,6 +682,8 @@ function renderPreviewContent(readModel: Awaited<ReturnType<typeof getSiteWorksp
   const rawPreviewAssetEvidence = rawPreviewDiagnostics?.rawPreviewAssetRewriteEvidence ?? null
   const rawPreviewAssetGraphEvidence = rawPreviewDiagnostics?.rawPreviewAssetGraphEvidence ?? null
   const rawPreviewScriptPolicyEvidence = rawPreviewDiagnostics?.rawPreviewScriptPolicyEvidence ?? null
+  const rawPreviewDuplicateGuardEvidence = rawPreviewDiagnostics?.rawPreviewDuplicateGuardEvidence ?? null
+  const rawPreviewEmbedEvidence = rawPreviewDiagnostics?.rawPreviewEmbedEvidence ?? null
   const rawPreviewAssetsInspected =
     rawPreviewAssetEvidence?.assetReferencesInspected
     ?? ((rawPreviewAssetEvidence?.cssUrlReferencesFound ?? 0)
@@ -874,6 +876,19 @@ function renderPreviewContent(readModel: Awaited<ReturnType<typeof getSiteWorksp
             <div>assetRefsMissing: {rawPreviewAssetsMissing}</div>
             <div>externalAssetRefsPreserved: {rawPreviewExternalPreserved}</div>
             <div>disabledScripts: {readModel.preview.previewRuntimeSummary?.rawTemplatePreviewEvidence?.disabledScriptCount ?? 0}</div>
+            {rawPreviewDuplicateGuardEvidence ? (
+              <div>
+                duplicateRootGuard: detected={rawPreviewDuplicateGuardEvidence.duplicateRootBlockDetected ? 'yes' : 'no'} · removed={rawPreviewDuplicateGuardEvidence.duplicateRootBlockRemovedCount} · listing={rawPreviewDuplicateGuardEvidence.listingContainerDetected ? 'yes' : 'no'}
+                {rawPreviewDuplicateGuardEvidence.guardReason.length > 0 ? ` · ${rawPreviewDuplicateGuardEvidence.guardReason.join(' · ')}` : ''}
+              </div>
+            ) : null}
+            {rawPreviewEmbedEvidence ? (
+              <div>
+                mapEmbed: detected={rawPreviewEmbedEvidence.mapEmbedDetected ? 'yes' : 'no'} · preserved={rawPreviewEmbedEvidence.mapEmbedPreserved ? 'yes' : 'no'}
+                {rawPreviewEmbedEvidence.externalMapProviders.length > 0 ? ` · providers=${rawPreviewEmbedEvidence.externalMapProviders.join(' · ')}` : ''}
+                {rawPreviewEmbedEvidence.blockedMapRefs.length > 0 ? ` · blockedRefs=${rawPreviewEmbedEvidence.blockedMapRefs.length}` : ''}
+              </div>
+            ) : null}
             {rawPreviewScriptPolicyEvidence ? (
               <>
                 <div>

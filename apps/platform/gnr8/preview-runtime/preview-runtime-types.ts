@@ -206,6 +206,20 @@ export type PreviewRuntimeSummary = {
       formCandidateScriptsDetected: boolean;
       lazyloadCandidateScriptsDetected: boolean;
     };
+    rawPreviewDuplicateGuardEvidence?: {
+      routePath: string;
+      duplicateRootBlockDetected: boolean;
+      duplicateRootBlockRemovedCount: number;
+      fingerprints: string[];
+      listingContainerDetected: boolean;
+      guardReason: string[];
+    };
+    rawPreviewEmbedEvidence?: {
+      mapEmbedDetected: boolean;
+      mapEmbedPreserved: boolean;
+      blockedMapRefs: string[];
+      externalMapProviders: string[];
+    };
     disabledScriptCount?: number;
     dbReadCount?: number;
     dbClientAcquisitionCount?: number;

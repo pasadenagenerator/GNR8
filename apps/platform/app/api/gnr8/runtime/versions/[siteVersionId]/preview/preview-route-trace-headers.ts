@@ -29,6 +29,18 @@ export type PreviewRouteRawTemplateTraceEvidence = {
     scriptsRewrittenToControlledPreviewAssetUrls?: number
     scriptsExternalPreserved?: number
   } | null
+  rawPreviewDuplicateGuardEvidence?: {
+    duplicateRootBlockDetected?: boolean
+    duplicateRootBlockRemovedCount?: number
+    listingContainerDetected?: boolean
+    guardReason?: string[]
+  } | null
+  rawPreviewEmbedEvidence?: {
+    mapEmbedDetected?: boolean
+    mapEmbedPreserved?: boolean
+    blockedMapRefs?: string[]
+    externalMapProviders?: string[]
+  } | null
 }
 
 export function resolveRawTemplatePreviewTraceEvidence(input: {
@@ -84,5 +96,13 @@ export function rawTemplatePreviewTraceHeaders(input: {
       evidence?.rawPreviewAssetGraphEvidence?.dongleEvidence?.detected || evidence?.rawPreviewAssetRewriteEvidence?.fontFamilyDongleDetected
         ? 'true'
         : 'false',
+    'x-gnr8-raw-duplicate-root-detected': evidence?.rawPreviewDuplicateGuardEvidence?.duplicateRootBlockDetected ? 'true' : 'false',
+    'x-gnr8-raw-duplicate-root-removed': String(evidence?.rawPreviewDuplicateGuardEvidence?.duplicateRootBlockRemovedCount ?? 0),
+    'x-gnr8-raw-listing-container-detected': evidence?.rawPreviewDuplicateGuardEvidence?.listingContainerDetected ? 'true' : 'false',
+    'x-gnr8-raw-duplicate-guard-reason': evidence?.rawPreviewDuplicateGuardEvidence?.guardReason?.slice(0, 6).join(',') ?? '',
+    'x-gnr8-raw-map-embed-detected': evidence?.rawPreviewEmbedEvidence?.mapEmbedDetected ? 'true' : 'false',
+    'x-gnr8-raw-map-embed-preserved': evidence?.rawPreviewEmbedEvidence?.mapEmbedPreserved ? 'true' : 'false',
+    'x-gnr8-raw-map-providers': evidence?.rawPreviewEmbedEvidence?.externalMapProviders?.slice(0, 8).join(',') ?? '',
+    'x-gnr8-raw-map-blocked-refs': String(evidence?.rawPreviewEmbedEvidence?.blockedMapRefs?.length ?? 0),
   }
 }

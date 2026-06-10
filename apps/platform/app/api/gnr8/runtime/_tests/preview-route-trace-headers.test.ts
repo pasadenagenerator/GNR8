@@ -40,6 +40,18 @@ test('preview route trace headers expose raw-template preview evidence', () => {
           scriptsRewrittenToControlledPreviewAssetUrls: 3,
           scriptsExternalPreserved: 2,
         },
+        rawPreviewDuplicateGuardEvidence: {
+          duplicateRootBlockDetected: true,
+          duplicateRootBlockRemovedCount: 2,
+          listingContainerDetected: true,
+          guardReason: ['duplicate_root_home_fingerprint', 'root_block_before_listing_container'],
+        },
+        rawPreviewEmbedEvidence: {
+          mapEmbedDetected: true,
+          mapEmbedPreserved: true,
+          blockedMapRefs: [],
+          externalMapProviders: ['google_maps', 'openstreetmap'],
+        },
       },
     },
   })
@@ -66,6 +78,14 @@ test('preview route trace headers expose raw-template preview evidence', () => {
   assert.equal(headers['x-gnr8-raw-stylesheets-missing'], '1')
   assert.equal(headers['x-gnr8-raw-images-missing'], '2')
   assert.equal(headers['x-gnr8-raw-dongle-detected'], 'true')
+  assert.equal(headers['x-gnr8-raw-duplicate-root-detected'], 'true')
+  assert.equal(headers['x-gnr8-raw-duplicate-root-removed'], '2')
+  assert.equal(headers['x-gnr8-raw-listing-container-detected'], 'true')
+  assert.equal(headers['x-gnr8-raw-duplicate-guard-reason'], 'duplicate_root_home_fingerprint,root_block_before_listing_container')
+  assert.equal(headers['x-gnr8-raw-map-embed-detected'], 'true')
+  assert.equal(headers['x-gnr8-raw-map-embed-preserved'], 'true')
+  assert.equal(headers['x-gnr8-raw-map-providers'], 'google_maps,openstreetmap')
+  assert.equal(headers['x-gnr8-raw-map-blocked-refs'], '0')
 })
 
 test('preview route trace headers fall back to top-level raw-template evidence', () => {

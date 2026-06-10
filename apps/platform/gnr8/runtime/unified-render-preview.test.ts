@@ -399,6 +399,108 @@ test('raw preview script policy preserves local and widget scripts while blockin
   assert.equal(evidence.lazyloadCandidateScriptsDetected, true)
 })
 
+test('raw preview duplicate guard removes repeated Viroidoc-like root blocks above news listing', () => {
+  const rootBlock = [
+    '<section class="home-page hero viroidoc-root" data-section="root">',
+    '<h1>Viroidoc</h1>',
+    '<p>Advanced Research on Viroid Pathogenesis</p>',
+    '<nav><a href="/project">Project</a><a href="/people">People</a><a href="/news">News</a><a href="/blog">Blog</a></nav>',
+    '</section>',
+  ].join('')
+  const html = [
+    '<!doctype html><html><body>',
+    rootBlock,
+    rootBlock,
+    '<section class="news-listing" id="news"><article>NEWS_LISTING one</article><article>NEWS_LISTING two</article></section>',
+    '</body></html>',
+  ].join('')
+
+  const guarded = __unifiedRenderPreviewTestUtils.applyRawPreviewDuplicateInjectionGuard({
+    html,
+    routePath: '/news',
+  })
+
+  assert.equal(countOccurrences(guarded.html, 'Advanced Research on Viroid Pathogenesis'), 0)
+  assert.equal(countOccurrences(guarded.html, 'NEWS_LISTING'), 2)
+  assert.equal(guarded.rawPreviewDuplicateGuardEvidence.routePath, '/news')
+  assert.equal(guarded.rawPreviewDuplicateGuardEvidence.duplicateRootBlockDetected, true)
+  assert.equal(guarded.rawPreviewDuplicateGuardEvidence.duplicateRootBlockRemovedCount, 2)
+  assert.equal(guarded.rawPreviewDuplicateGuardEvidence.listingContainerDetected, true)
+  assert.equal(guarded.rawPreviewDuplicateGuardEvidence.fingerprints.length, 1)
+  assert.equal(guarded.rawPreviewDuplicateGuardEvidence.guardReason.includes('non_root_route'), true)
+  assert.equal(guarded.rawPreviewDuplicateGuardEvidence.guardReason.includes('root_block_before_listing_container'), true)
+})
+
+test('raw preview duplicate guard preserves legitimate Viroidoc-like root hero on root route', () => {
+  const html = [
+    '<!doctype html><html><body>',
+    '<section class="home-page hero viroidoc-root"><h1>Viroidoc</h1><p>Advanced Research on Viroid Pathogenesis</p></section>',
+    '</body></html>',
+  ].join('')
+
+  const guarded = __unifiedRenderPreviewTestUtils.applyRawPreviewDuplicateInjectionGuard({
+    html,
+    routePath: '/',
+  })
+
+  assert.equal(guarded.html.includes('Advanced Research on Viroid Pathogenesis'), true)
+  assert.equal(guarded.rawPreviewDuplicateGuardEvidence.duplicateRootBlockDetected, false)
+  assert.equal(guarded.rawPreviewDuplicateGuardEvidence.duplicateRootBlockRemovedCount, 0)
+  assert.equal(guarded.rawPreviewDuplicateGuardEvidence.fingerprints.length, 1)
+})
+
+test('raw preview duplicate guard preserves child-route hero without root/home fingerprint', () => {
+  const html = [
+    '<!doctype html><html><body>',
+    '<section class="hero"><h1>Viroidoc News</h1><p>Latest updates from the project.</p></section>',
+    '<section class="news-listing"><article>NEWS_LISTING one</article></section>',
+    '</body></html>',
+  ].join('')
+
+  const guarded = __unifiedRenderPreviewTestUtils.applyRawPreviewDuplicateInjectionGuard({
+    html,
+    routePath: '/news',
+  })
+
+  assert.equal(guarded.html.includes('Viroidoc News'), true)
+  assert.equal(guarded.html.includes('NEWS_LISTING one'), true)
+  assert.equal(guarded.rawPreviewDuplicateGuardEvidence.duplicateRootBlockDetected, false)
+  assert.equal(guarded.rawPreviewDuplicateGuardEvidence.duplicateRootBlockRemovedCount, 0)
+})
+
+test('raw preview embed audit preserves Transporti-Maver-like gallery, form, and map refs', () => {
+  const html = [
+    '<!doctype html><html><head>',
+    '<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">',
+    '</head><body>',
+    '<iframe src="https://www.google.com/maps/embed?pb=!1m18" title="Transporti Maver map"></iframe>',
+    '<script src="/assets/gallery.js"></script>',
+    '<script src="/assets/contact-form.js"></script>',
+    '<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>',
+    '</body></html>',
+  ].join('')
+  const rewritten = __unifiedRenderPreviewTestUtils.rewriteRawTemplateAssetReferencesWithCounts({
+    html,
+    siteId: 'site-maver-map',
+    siteVersionId: 'sv-maver-map',
+    entryHtmlPath: 'index.html',
+    fileMapPaths: new Set(['assets/gallery.js', 'assets/contact-form.js']),
+  })
+  const policy = __unifiedRenderPreviewTestUtils.applyRawPreviewScriptPolicy(rewritten.html)
+  const embedEvidence = __unifiedRenderPreviewTestUtils.buildRawPreviewEmbedEvidence(policy.html)
+
+  assert.equal(policy.rawPreviewScriptPolicyEvidence.scriptsPreserved, 3)
+  assert.equal(policy.rawPreviewScriptPolicyEvidence.scriptsBlocked, 0)
+  assert.equal(policy.html.includes('/api/gnr8/runtime/preview-assets/site-maver-map/sv-maver-map/assets/gallery.js'), true)
+  assert.equal(policy.html.includes('/api/gnr8/runtime/preview-assets/site-maver-map/sv-maver-map/assets/contact-form.js'), true)
+  assert.equal(policy.html.includes('https://unpkg.com/leaflet@1.9.4/dist/leaflet.js'), true)
+  assert.equal(embedEvidence.mapEmbedDetected, true)
+  assert.equal(embedEvidence.mapEmbedPreserved, true)
+  assert.deepEqual(embedEvidence.blockedMapRefs, [])
+  assert.equal(embedEvidence.externalMapProviders.includes('google_maps'), true)
+  assert.equal(embedEvidence.externalMapProviders.includes('leaflet'), true)
+})
+
 test('raw template preview prefers persisted fileMap match for relative stylesheet refs', () => {
   const html = '<!doctype html><html><head><link rel="stylesheet" href="assets/user-style.css"></head><body></body></html>'
   const rewritten = __unifiedRenderPreviewTestUtils.rewriteRawTemplateAssetReferences({

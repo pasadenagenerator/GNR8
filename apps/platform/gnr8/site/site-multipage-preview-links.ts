@@ -24,6 +24,8 @@ export type MultiPageRawTemplatePreviewDiagnostics = {
   rawPreviewAssetRewriteEvidence?: RawTemplatePreviewEvidenceInput['rawPreviewAssetRewriteEvidence']
   rawPreviewAssetGraphEvidence?: RawTemplatePreviewEvidenceInput['rawPreviewAssetGraphEvidence']
   rawPreviewScriptPolicyEvidence?: RawTemplatePreviewEvidenceInput['rawPreviewScriptPolicyEvidence']
+  rawPreviewDuplicateGuardEvidence?: RawTemplatePreviewEvidenceInput['rawPreviewDuplicateGuardEvidence']
+  rawPreviewEmbedEvidence?: RawTemplatePreviewEvidenceInput['rawPreviewEmbedEvidence']
   evidenceSource: 'persisted_raw_template_preview' | 'route_map_expected_live_preview'
 }
 
@@ -202,6 +204,20 @@ export type RawTemplatePreviewEvidenceInput = {
     formCandidateScriptsDetected: boolean
     lazyloadCandidateScriptsDetected: boolean
   }
+  rawPreviewDuplicateGuardEvidence?: {
+    routePath: string
+    duplicateRootBlockDetected: boolean
+    duplicateRootBlockRemovedCount: number
+    fingerprints: string[]
+    listingContainerDetected: boolean
+    guardReason: string[]
+  }
+  rawPreviewEmbedEvidence?: {
+    mapEmbedDetected: boolean
+    mapEmbedPreserved: boolean
+    blockedMapRefs: string[]
+    externalMapProviders: string[]
+  }
 }
 
 function normalizeRoutePath(value: unknown): string {
@@ -281,6 +297,8 @@ export function buildMultiPageRawTemplatePreviewDiagnostics(input: {
       rawPreviewAssetRewriteEvidence: evidence.rawPreviewAssetRewriteEvidence,
       rawPreviewAssetGraphEvidence: evidence.rawPreviewAssetGraphEvidence,
       rawPreviewScriptPolicyEvidence: evidence.rawPreviewScriptPolicyEvidence,
+      rawPreviewDuplicateGuardEvidence: evidence.rawPreviewDuplicateGuardEvidence,
+      rawPreviewEmbedEvidence: evidence.rawPreviewEmbedEvidence,
       evidenceSource: 'persisted_raw_template_preview',
     }
   }
