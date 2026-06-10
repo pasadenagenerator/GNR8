@@ -7,6 +7,7 @@ type PreviewAssetRouteOverrides = Parameters<typeof createPreviewAssetsRouteHand
 
 function createPreviewAssetsRouteHandlers(overrides: PreviewAssetRouteOverrides = {}) {
   return createPreviewAssetsRouteHandlersBase({
+    acquireRuntimeDbClient: async () => ({ release: () => {} }) as never,
     resolveRawTemplateSiteForDomainAndPath: async ({ host }) =>
       ({
         outcome: "raw_template_miss",
@@ -162,6 +163,105 @@ test("active host-binding raw asset request is allowed without dashboard auth fo
   assert.equal(response.status, 200);
   assert.equal(await response.text(), "body{margin:0}");
   assert.equal(authCalls, 0);
+});
+
+test("preview assets route releases one request-scoped db client per repeated request", async () => {
+  let acquireCount = 0;
+  let releaseCount = 0;
+  const seenDbClients: unknown[] = [];
+  const createClient = () =>
+    ({
+      query: async () => ({ rows: [] }),
+      release: () => {
+        releaseCount += 1;
+      },
+    }) as never;
+  const handlers = createPreviewAssetsRouteHandlers({
+    acquireRuntimeDbClient: async () => {
+      acquireCount += 1;
+      return createClient();
+    },
+    resolveRawTemplateSiteForDomainAndPath: async (input) => {
+      seenDbClients.push(input.dbClient);
+      return {
+        outcome: "raw_template_hit",
+        host: "maver.app.pasadenagenerator.com",
+        siteId: "site_1",
+        siteVersionId: "sv_1",
+        siteResolution: "host_match",
+        matchKind: "host_match",
+        domain: null,
+        bindingId: "host_binding_1",
+        status: "ACTIVE",
+        legacyDomainSiteVersionId: null,
+        activePointerSiteVersionId: "sv_1",
+        activeArtifactId: "runtime_artifact_1",
+        diagnostics: [{ code: "host_match_raw_template_selected" }],
+        normalizedPath: "/",
+        resolvedFilePath: "index.html",
+        html: "<html></html>",
+      } as never;
+    },
+    resolveDomainSiteVersionForHost: async (input) => {
+      seenDbClients.push(input.dbClient);
+      return {
+        outcome: "domain_miss",
+        host: "maver.app.pasadenagenerator.com",
+        reasonCode: "domain_not_found",
+      } as never;
+    },
+    resolveAgencyIdForSiteVersion: async () => "agency_1",
+    requireAgencyActionContext: async () => ({ actorMode: "agency_member", agencyId: "agency_1" } as never),
+    getRawImportedSiteArtifact: async (_siteVersionId, options) => {
+      seenDbClients.push(options?.dbClient);
+      return {
+        id: "artifact_imported_1",
+        artifactType: "raw_imported_site",
+        siteId: "site_1",
+        siteVersionId: "sv_1",
+        entryHtmlPath: "index.html",
+        assetBasePath: ".",
+        fileMap: { "assets/main.css": { path: "assets/main.css", mediaType: "text/css; charset=utf-8", sizeBytes: 16, sha256: "abc" } },
+        metadata: {
+          sourceUrl: "https://maver.si",
+          finalUrl: "https://maver.si",
+          htmlByteLength: 123,
+          diagnostics: { codes: [] },
+          assetSummary: { persistedAssetCount: 1, externalFallbackAssetCount: 0 },
+        },
+        createdAt: "2026-06-05T00:00:00.000Z",
+      } as never;
+    },
+    getRawTemplateSiteArtifact: async (_siteVersionId, options) => {
+      seenDbClients.push(options?.dbClient);
+      return null;
+    },
+    getRawTemplateSiteAsset: async (input) => {
+      seenDbClients.push(input.dbClient);
+      return {
+        mediaType: "text/css; charset=utf-8",
+        sizeBytes: 16,
+        sha256: "abc",
+        bytes: Buffer.from("body{margin:0}", "utf8"),
+      } as never;
+    },
+  });
+
+  for (let index = 0; index < 3; index += 1) {
+    const response = await handlers.GET(
+      new Request("https://maver.app.pasadenagenerator.com/api/gnr8/runtime/preview-assets/site_1/sv_1/assets/main.css", {
+        headers: { host: "maver.app.pasadenagenerator.com" },
+      }),
+      { params: getParams() },
+    );
+
+    assert.equal(response.status, 200);
+    assert.equal(await response.text(), "body{margin:0}");
+  }
+
+  assert.equal(acquireCount, 3);
+  assert.equal(releaseCount, 3);
+  assert.equal(seenDbClients.every(Boolean), true);
 });
 
 test("active host-binding raw asset request is forbidden for wrong site/version", async () => {

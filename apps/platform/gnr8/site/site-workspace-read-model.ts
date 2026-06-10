@@ -2339,6 +2339,18 @@ function parsePreviewRuntimeSummary(value: unknown): PreviewRuntimeSummary | nul
           dbClientAcquisitionCount: Number.isFinite(Number(rawTemplateEvidence.dbClientAcquisitionCount))
             ? Number(rawTemplateEvidence.dbClientAcquisitionCount)
             : undefined,
+          rawPreviewDbClientAcquisitionCount: Number.isFinite(Number(rawTemplateEvidence.rawPreviewDbClientAcquisitionCount))
+            ? Number(rawTemplateEvidence.rawPreviewDbClientAcquisitionCount)
+            : undefined,
+          rawPreviewDbClientReleaseCount: Number.isFinite(Number(rawTemplateEvidence.rawPreviewDbClientReleaseCount))
+            ? Number(rawTemplateEvidence.rawPreviewDbClientReleaseCount)
+            : undefined,
+          rawPreviewDbReadCount: Number.isFinite(Number(rawTemplateEvidence.rawPreviewDbReadCount))
+            ? Number(rawTemplateEvidence.rawPreviewDbReadCount)
+            : undefined,
+          ...(Object.prototype.hasOwnProperty.call(rawTemplateEvidence, 'rawPreviewDbClientLeakSuspected')
+            ? { rawPreviewDbClientLeakSuspected: Boolean(rawTemplateEvidence.rawPreviewDbClientLeakSuspected) }
+            : {}),
         }
       : undefined
 

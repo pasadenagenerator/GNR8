@@ -2991,10 +2991,14 @@ export async function resolveActiveServingArtifactForHostAndPath(input: {
   });
 }
 
-export async function resolveDomainSiteVersionForHost(input: { host?: string | null }): Promise<RuntimeDomainSiteResolution> {
+export async function resolveDomainSiteVersionForHost(input: {
+  host?: string | null;
+  dbClient?: RuntimeStoreDbClient;
+}): Promise<RuntimeDomainSiteResolution> {
   const resolved = await resolveActiveServingArtifactForHostAndPath({
     host: input.host,
     path: "/",
+    dbClient: input.dbClient,
   });
   if (resolved.siteResolution !== "domain_match" || !resolved.domain || !resolved.domainBindingId || !resolved.domainBindingStatus) {
     return {

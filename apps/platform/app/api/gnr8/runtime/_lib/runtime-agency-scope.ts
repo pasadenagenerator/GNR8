@@ -1,6 +1,12 @@
 import 'server-only'
 
+import type { PoolClient } from 'pg'
+
 import { getSuperadminPool } from '@/src/superadmin/db'
+
+type RuntimeAgencyScopeDbOptions = {
+  dbClient?: Pick<PoolClient, 'query'>
+}
 
 function normalizeText(value: unknown): string {
   return String(value ?? '').trim()
@@ -13,13 +19,16 @@ function isUuidLike(value: string): boolean {
   return UUID_V4_TO_V8_LOOSE_REGEX.test(value)
 }
 
-export async function resolveAgencyIdForSiteVersion(siteVersionId: string): Promise<string | null> {
+export async function resolveAgencyIdForSiteVersion(
+  siteVersionId: string,
+  options: RuntimeAgencyScopeDbOptions = {},
+): Promise<string | null> {
   const normalizedSiteVersionId = normalizeText(siteVersionId)
   if (normalizedSiteVersionId.length === 0) return null
   if (!isUuidLike(normalizedSiteVersionId)) return null
 
-  const pool = getSuperadminPool()
-  const result = await pool.query<{ agency_id: string | null }>(
+  const client = options.dbClient ?? getSuperadminPool()
+  const result = await client.query<{ agency_id: string | null }>(
     `
     select s.agency_id::text as agency_id
     from public.gnr8_runtime_site_versions sv
@@ -33,13 +42,16 @@ export async function resolveAgencyIdForSiteVersion(siteVersionId: string): Prom
   return normalizeText(result.rows[0]?.agency_id) || null
 }
 
-export async function resolveAgencyIdForSite(siteId: string): Promise<string | null> {
+export async function resolveAgencyIdForSite(
+  siteId: string,
+  options: RuntimeAgencyScopeDbOptions = {},
+): Promise<string | null> {
   const normalizedSiteId = normalizeText(siteId)
   if (normalizedSiteId.length === 0) return null
   if (!isUuidLike(normalizedSiteId)) return null
 
-  const pool = getSuperadminPool()
-  const result = await pool.query<{ agency_id: string | null }>(
+  const client = options.dbClient ?? getSuperadminPool()
+  const result = await client.query<{ agency_id: string | null }>(
     `
     select s.agency_id::text as agency_id
     from public.sites s

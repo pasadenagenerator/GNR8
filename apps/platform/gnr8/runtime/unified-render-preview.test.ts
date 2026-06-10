@@ -1286,6 +1286,10 @@ test('raw template preview blocks Viroidoc-like duplicate injection while keepin
         assert.equal(preview.html.includes('data-gnr8-script-policy-reason="duplicate_dom_injection_blocked"'), true)
       }
       assert.equal(preview.rawTemplatePreviewEvidence?.dbClientAcquisitionCount, 1)
+      assert.equal(preview.rawTemplatePreviewEvidence?.rawPreviewDbClientAcquisitionCount, 1)
+      assert.equal(preview.rawTemplatePreviewEvidence?.rawPreviewDbClientReleaseCount, 1)
+      assert.equal(preview.rawTemplatePreviewEvidence?.rawPreviewDbClientLeakSuspected, false)
+      assert.equal(preview.rawTemplatePreviewEvidence?.rawPreviewDbReadCount, preview.rawTemplatePreviewEvidence?.dbReadCount)
       assert.equal((preview.rawTemplatePreviewEvidence?.dbReadCount ?? 99) <= 4, true)
     }
 
@@ -1388,7 +1392,18 @@ test('Transporti-Maver-like raw preview preserves gallery map form and lazyload 
     'uploads/truck-1.jpg': { mediaType: 'image/jpeg', sizeBytes: 1, sha256: 'sha-truck-1' },
     'uploads/truck-2.jpg': { mediaType: 'image/jpeg', sizeBytes: 1, sha256: 'sha-truck-2' },
   }
+  let acquireCount = 0
+  let releaseCount = 0
   const restore = setUnifiedRenderPreviewDependenciesForTest({
+    requestScopedDbClientEnabled: true,
+    acquireRuntimeDbClient: async () => {
+      acquireCount += 1
+      return {
+        release: () => {
+          releaseCount += 1
+        },
+      } as any
+    },
     getPoolStatus: () => ({ totalCount: 1, idleCount: 1, waitingCount: 0 }),
     getSiteVersion: async () =>
       ({
@@ -1442,10 +1457,15 @@ test('Transporti-Maver-like raw preview preserves gallery map form and lazyload 
     assert.equal(scriptEvidence?.mapCandidateScriptsDetected, true)
     assert.equal(scriptEvidence?.formCandidateScriptsDetected, true)
     assert.equal(scriptEvidence?.lazyloadCandidateScriptsDetected, true)
+    assert.equal(preview.rawTemplatePreviewEvidence?.rawPreviewDbClientAcquisitionCount, 1)
+    assert.equal(preview.rawTemplatePreviewEvidence?.rawPreviewDbClientReleaseCount, 1)
+    assert.equal(preview.rawTemplatePreviewEvidence?.rawPreviewDbClientLeakSuspected, false)
     assert.equal((preview.rawTemplatePreviewEvidence?.dbReadCount ?? 99) <= 4, true)
   } finally {
     restore()
   }
+  assert.equal(acquireCount, 1)
+  assert.equal(releaseCount, 1)
 })
 
 test('raw template preview resolves root and child CSS/font URLs through the same file-map-aware base logic', () => {
@@ -1658,7 +1678,18 @@ test('Viroidoc-like raw root and news previews preserve Dongle, CSS assets, and 
     'uploads/root-bg.svg': { mediaType: 'image/svg+xml', sizeBytes: 1, sha256: 'sha-bg' },
     'fonts/dongle.woff2': { mediaType: 'font/woff2', sizeBytes: 1, sha256: 'sha-font' },
   }
+  let acquireCount = 0
+  let releaseCount = 0
   const restore = setUnifiedRenderPreviewDependenciesForTest({
+    requestScopedDbClientEnabled: true,
+    acquireRuntimeDbClient: async () => {
+      acquireCount += 1
+      return {
+        release: () => {
+          releaseCount += 1
+        },
+      } as any
+    },
     getPoolStatus: () => ({ totalCount: 1, idleCount: 1, waitingCount: 0 }),
     getSiteVersion: async () =>
       ({
@@ -1738,9 +1769,17 @@ test('Viroidoc-like raw root and news previews preserve Dongle, CSS assets, and 
     assert.equal(newsPreview.rawTemplatePreviewEvidence?.rawPreviewAssetRewriteEvidence?.fontFamilyDongleDetected, true)
     assert.equal(newsPreview.html.includes('data-gnr8-script-policy-reason="duplicate_dom_injection_blocked"'), true)
     assert.equal(newsPreview.rawTemplatePreviewEvidence?.rawPreviewScriptPolicyEvidence?.scriptsBlocked, 1)
+    assert.equal(rootPreview.rawTemplatePreviewEvidence?.rawPreviewDbClientAcquisitionCount, 1)
+    assert.equal(rootPreview.rawTemplatePreviewEvidence?.rawPreviewDbClientReleaseCount, 1)
+    assert.equal(rootPreview.rawTemplatePreviewEvidence?.rawPreviewDbClientLeakSuspected, false)
+    assert.equal(newsPreview.rawTemplatePreviewEvidence?.rawPreviewDbClientAcquisitionCount, 1)
+    assert.equal(newsPreview.rawTemplatePreviewEvidence?.rawPreviewDbClientReleaseCount, 1)
+    assert.equal(newsPreview.rawTemplatePreviewEvidence?.rawPreviewDbClientLeakSuspected, false)
   } finally {
     restore()
   }
+  assert.equal(acquireCount, 2)
+  assert.equal(releaseCount, 2)
 })
 
 test('raw template preview fixes Viroidoc-like returned HTML fidelity for fonts, classes, CSS, and image variants', async () => {

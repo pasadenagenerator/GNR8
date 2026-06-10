@@ -18,6 +18,10 @@ test('preview route trace headers expose raw-template preview evidence', () => {
         disabledScriptCount: 4,
         dbReadCount: 3,
         dbClientAcquisitionCount: 1,
+        rawPreviewDbClientAcquisitionCount: 1,
+        rawPreviewDbClientReleaseCount: 1,
+        rawPreviewDbReadCount: 3,
+        rawPreviewDbClientLeakSuspected: false,
         rawPreviewAssetRewriteEvidence: {
           assetReferencesInspected: 9,
           assetReferencesRewritten: 6,
@@ -63,6 +67,10 @@ test('preview route trace headers expose raw-template preview evidence', () => {
   assert.equal(headers['x-gnr8-preview-disabled-scripts-count'], '4')
   assert.equal(headers['x-gnr8-preview-db-read-count'], '3')
   assert.equal(headers['x-gnr8-preview-db-client-acquisition-count'], '1')
+  assert.equal(headers['x-gnr8-raw-db-client-acquisitions'], '1')
+  assert.equal(headers['x-gnr8-raw-db-client-releases'], '1')
+  assert.equal(headers['x-gnr8-raw-db-reads'], '3')
+  assert.equal(headers['x-gnr8-raw-db-leak-suspected'], 'false')
   assert.equal(headers['x-gnr8-raw-assets-inspected'], '9')
   assert.equal(headers['x-gnr8-raw-assets-rewritten'], '6')
   assert.equal(headers['x-gnr8-raw-assets-missing'], '1')

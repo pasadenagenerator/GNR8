@@ -6,10 +6,12 @@ import {
   getRawTemplateSiteAsset,
   resolveDomainSiteVersionForHost,
   resolveRawTemplateSiteForDomainAndPath,
+  type RuntimeStoreDbClient,
 } from "@/gnr8/runtime/runtime-store";
 import { createRuntimeCorrelationKey, normalizeRuntimeDomain, normalizeRuntimeHost, normalizeRuntimePath } from "@/gnr8/runtime/identity/runtime-identity";
 import { RAW_PREVIEW_URI_DECODE_DIAGNOSTIC, safeDecodeURIComponent } from "@/gnr8/runtime/raw-preview-uri-decoding";
 import { resolveAssetMediaType, rewriteRawTemplateCssForRuntime } from "@/src/public-site/raw-template-runtime";
+import { getSuperadminPool } from "@/src/superadmin/db";
 
 type PreviewAssetGetContext = { params: Promise<{ siteId: string; siteVersionId: string; assetPath?: string[] }> };
 
@@ -22,6 +24,7 @@ type PreviewAssetRouteDependencies = {
   getRawTemplateSiteAsset: typeof getRawTemplateSiteAsset;
   resolveRawTemplateSiteForDomainAndPath: typeof resolveRawTemplateSiteForDomainAndPath;
   parseAgencyActionContextError: typeof parseAgencyActionContextError;
+  acquireRuntimeDbClient: () => Promise<RuntimeStoreDbClient>;
 };
 
 const defaultDependencies: PreviewAssetRouteDependencies = {
@@ -33,6 +36,7 @@ const defaultDependencies: PreviewAssetRouteDependencies = {
   getRawTemplateSiteAsset,
   resolveRawTemplateSiteForDomainAndPath,
   parseAgencyActionContextError,
+  acquireRuntimeDbClient: () => getSuperadminPool().connect(),
 };
 
 function normalizeText(value: unknown): string {
@@ -187,6 +191,7 @@ export function createPreviewAssetsRouteHandlers(overrides: Partial<PreviewAsset
       let requestedPathRaw = "";
       let normalizedPath: string | null = null;
       let correlationKey = "unknown_site:unknown_version:invalid_path";
+      let dbClient: RuntimeStoreDbClient | null = null;
       const emitFallbackInternalDiagnostic = (code: string, reasonCode: string, error: unknown) => {
         console.error(`[preview-runtime] ${code}`, {
           code,
@@ -248,8 +253,9 @@ export function createPreviewAssetsRouteHandlers(overrides: Partial<PreviewAsset
           lookupResult: null,
           reasonCode: "request_received",
         });
+        dbClient = await deps.acquireRuntimeDbClient();
         const debugMode = new URL(req.url).searchParams.get("__debug") === "1";
-        const publicRawTemplateResolution = await deps.resolveRawTemplateSiteForDomainAndPath({ host: requestHost, path: "/" });
+        const publicRawTemplateResolution = await deps.resolveRawTemplateSiteForDomainAndPath({ host: requestHost, path: "/", dbClient });
         const isPublicRawTemplateAssetRequest =
           publicRawTemplateResolution.outcome === "raw_template_hit" &&
           publicRawTemplateResolution.siteId === siteId &&
@@ -259,7 +265,7 @@ export function createPreviewAssetsRouteHandlers(overrides: Partial<PreviewAsset
 
         const publicDomainResolution = isPublicRawTemplateAssetRequest
           ? null
-          : await deps.resolveDomainSiteVersionForHost({ host: requestHost });
+          : await deps.resolveDomainSiteVersionForHost({ host: requestHost, dbClient });
         const isPublicDomainAssetRequest =
           publicDomainResolution?.outcome === "domain_hit" &&
           publicDomainResolution.siteId === siteId &&
@@ -272,7 +278,7 @@ export function createPreviewAssetsRouteHandlers(overrides: Partial<PreviewAsset
         }
 
         if (!isPublicRawTemplateAssetRequest && !isPublicDomainAssetRequest) {
-          const agencyId = await deps.resolveAgencyIdForSiteVersion(siteVersionId);
+          const agencyId = await deps.resolveAgencyIdForSiteVersion(siteVersionId, { dbClient });
           if (!agencyId) {
             return new Response("forbidden", { status: 403, headers: { "content-type": "text/plain; charset=utf-8" } });
           }
@@ -285,7 +291,9 @@ export function createPreviewAssetsRouteHandlers(overrides: Partial<PreviewAsset
         let artifact: Awaited<ReturnType<typeof deps.getRawImportedSiteArtifact>> | Awaited<ReturnType<typeof deps.getRawTemplateSiteArtifact>> | null =
           null;
         try {
-          artifact = (await deps.getRawImportedSiteArtifact(siteVersionId)) ?? (await deps.getRawTemplateSiteArtifact(siteVersionId));
+          artifact =
+            (await deps.getRawImportedSiteArtifact(siteVersionId, { dbClient })) ??
+            (await deps.getRawTemplateSiteArtifact(siteVersionId, { dbClient }));
         } catch (error) {
           emitRouteDiagnostic("PREVIEW_ASSET_ROUTE_DB_LOOKUP_ERROR", {
             artifactId: null,
@@ -362,6 +370,7 @@ export function createPreviewAssetsRouteHandlers(overrides: Partial<PreviewAsset
               siteVersionId,
               artifactId: artifact.id,
               filePath: candidate,
+              dbClient,
             });
           } catch (error) {
             emitRouteDiagnostic("PREVIEW_ASSET_ROUTE_DB_LOOKUP_ERROR", {
@@ -397,6 +406,7 @@ export function createPreviewAssetsRouteHandlers(overrides: Partial<PreviewAsset
                 siteVersionId,
                 artifactId: artifact.id,
                 filePath: fallbackPath,
+                dbClient,
               });
             } catch (error) {
               emitRouteDiagnostic("PREVIEW_ASSET_ROUTE_DB_LOOKUP_ERROR", {
@@ -584,6 +594,10 @@ export function createPreviewAssetsRouteHandlers(overrides: Partial<PreviewAsset
             "x-gnr8-preview-asset-diagnostic": "PREVIEW_ASSET_ROUTE_INTERNAL_ERROR",
           },
         });
+      } finally {
+        if (dbClient) {
+          dbClient.release();
+        }
       }
     },
   };

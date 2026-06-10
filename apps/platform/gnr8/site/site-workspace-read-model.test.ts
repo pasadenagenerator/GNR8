@@ -1724,6 +1724,10 @@ test('preview runtime summary parser accepts raw template preview mode', () => {
       disabledScriptCount: 4,
       dbReadCount: 3,
       dbClientAcquisitionCount: 1,
+      rawPreviewDbClientAcquisitionCount: 1,
+      rawPreviewDbClientReleaseCount: 1,
+      rawPreviewDbReadCount: 3,
+      rawPreviewDbClientLeakSuspected: false,
       rawPreviewAssetRewriteEvidence: {
         stylesheetsInspected: 1,
         cssUrlReferencesFound: 2,
@@ -2055,6 +2059,10 @@ test('preview runtime summary parser accepts raw template preview mode', () => {
     disabledScriptCount: 4,
     dbReadCount: 3,
     dbClientAcquisitionCount: 1,
+    rawPreviewDbClientAcquisitionCount: 1,
+    rawPreviewDbClientReleaseCount: 1,
+    rawPreviewDbReadCount: 3,
+    rawPreviewDbClientLeakSuspected: false,
   })
 })
 

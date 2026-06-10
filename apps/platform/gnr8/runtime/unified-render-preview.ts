@@ -175,6 +175,9 @@ type PreviewReadContext = {
   queryCount: number
   uniqueLookupCount: number
   dbClient: RuntimeStoreDbClient | null
+  dbClientAcquisitionCount: number
+  dbClientReleaseCount: number
+  rawTemplatePreviewEvidenceRefs: RawTemplatePreviewEvidence[]
   siteVersionById: Map<string, Promise<CanonicalSiteVersionSnapshot | null>>
   artifactBindingBySiteVersionId: Map<string, Promise<{ siteId: string; artifactId: string | null } | null>>
   artifactById: Map<string, Promise<Awaited<ReturnType<typeof getArtifactById>>>>
@@ -193,6 +196,9 @@ function createPreviewReadContext(requestCorrelationKey: string): PreviewReadCon
     queryCount: 0,
     uniqueLookupCount: 0,
     dbClient: null,
+    dbClientAcquisitionCount: 0,
+    dbClientReleaseCount: 0,
+    rawTemplatePreviewEvidenceRefs: [],
     siteVersionById: new Map(),
     artifactBindingBySiteVersionId: new Map(),
     artifactById: new Map(),
@@ -201,6 +207,18 @@ function createPreviewReadContext(requestCorrelationKey: string): PreviewReadCon
     rawTemplateAssetByKey: new Map(),
     slotsBySiteVersionId: new Map(),
     overridesBySiteVersionAndStatus: new Map(),
+  }
+}
+
+function updateRawPreviewDbLifecycleEvidence(context: PreviewReadContext): void {
+  const leakSuspected = context.dbClientAcquisitionCount !== context.dbClientReleaseCount
+  for (const evidence of context.rawTemplatePreviewEvidenceRefs) {
+    evidence.dbReadCount = context.queryCount
+    evidence.dbClientAcquisitionCount = context.dbClientAcquisitionCount
+    evidence.rawPreviewDbClientAcquisitionCount = context.dbClientAcquisitionCount
+    evidence.rawPreviewDbClientReleaseCount = context.dbClientReleaseCount
+    evidence.rawPreviewDbReadCount = context.queryCount
+    evidence.rawPreviewDbClientLeakSuspected = leakSuspected
   }
 }
 
@@ -2386,8 +2404,13 @@ async function renderRawTemplateSiteVersionPreview(input: {
     rawPreviewEmbedEvidence,
     disabledScriptCount: scriptPolicy.disabledScriptCount,
     dbReadCount: input.context.queryCount,
-    dbClientAcquisitionCount: input.context.dbClient ? 1 : 0,
+    dbClientAcquisitionCount: input.context.dbClientAcquisitionCount,
+    rawPreviewDbClientAcquisitionCount: input.context.dbClientAcquisitionCount,
+    rawPreviewDbClientReleaseCount: input.context.dbClientReleaseCount,
+    rawPreviewDbReadCount: input.context.queryCount,
+    rawPreviewDbClientLeakSuspected: input.context.dbClientAcquisitionCount !== input.context.dbClientReleaseCount,
   }
+  input.context.rawTemplatePreviewEvidenceRefs.push(rawTemplatePreviewEvidence)
   console.info(`[preview-runtime] ${RAW_TEMPLATE_PREVIEW_EVIDENCE_DIAGNOSTIC.RAW_PREVIEW_SCRIPT_POLICY_APPLIED}`, {
     siteId: artifact.siteId,
     siteVersionId: artifact.siteVersionId,
@@ -3128,6 +3151,7 @@ export async function renderSiteVersionPreview(input: {
   try {
     if (previewReadDependencies.requestScopedDbClientEnabled) {
       context.dbClient = await previewReadDependencies.acquireRuntimeDbClient()
+      context.dbClientAcquisitionCount += 1
     }
     if (mode === 'transformed') {
       console.info(`[gnr8.runtime.preview] ${TRANSFORMED_PREVIEW_DIAGNOSTIC.TRANSFORMED_PREVIEW_DB_READ_STARTED}`, {
@@ -3298,8 +3322,10 @@ export async function renderSiteVersionPreview(input: {
   } finally {
     if (context.dbClient) {
       context.dbClient.release()
+      context.dbClientReleaseCount += 1
       context.dbClient = null
     }
+    updateRawPreviewDbLifecycleEvidence(context)
     const poolAtEnd = previewReadDependencies.getPoolStatus()
     if (mode === 'transformed') {
       console.info(`[gnr8.runtime.preview] ${TRANSFORMED_PREVIEW_DIAGNOSTIC.TRANSFORMED_PREVIEW_DB_READ_COUNT}`, {
