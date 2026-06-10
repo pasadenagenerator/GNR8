@@ -22,6 +22,15 @@ import type {
 } from "@/gnr8/runtime/types";
 
 export type PreviewForensicsLossStage = "import" | "preview_response" | "browser_runtime" | "none" | "unknown";
+export type PreviewForensicsBreakpointStage =
+  | "import_or_raw_artifact"
+  | "preview_rewrite"
+  | "browser_runtime"
+  | "asset_serving"
+  | "external_dependency_blocking"
+  | "db_session_lifecycle"
+  | "none"
+  | "unknown";
 type StageName = "original" | "raw_artifact" | "preview_response" | "browser_dom";
 type DiffName = "import_loss" | "preview_rewrite_runtime_loss" | "browser_script_mutation_loss";
 type ForensicNode = DefaultTreeAdapterMap["node"];
@@ -86,11 +95,46 @@ export type PreviewForensicsReport = {
   routePath: string;
   sourceUrl: string | null;
   rawFilePath: string | null;
+  breakpointSummary: Record<string, PreviewForensicsBreakpointStage | string>;
+  duplicationStage: PreviewForensicsBreakpointStage;
+  fontFailureStage: PreviewForensicsBreakpointStage;
+  imageFailureStage: PreviewForensicsBreakpointStage;
+  mapFailureStage: PreviewForensicsBreakpointStage;
+  scriptFailureStage: PreviewForensicsBreakpointStage;
+  assetServingFailureStage: PreviewForensicsBreakpointStage;
   stageWhereDuplicationAppears: PreviewForensicsLossStage;
   stageWhereFontBreaks: PreviewForensicsLossStage;
   stageWhereImagesBreak: PreviewForensicsLossStage;
   stageWhereMapBreaks: PreviewForensicsLossStage;
+  evidenceHashes: Record<StageName, string | null>;
+  topRelevantDiffs: Array<{
+    name: DiffName;
+    fromStage: StageName;
+    toStage: StageName;
+    missingCounts: Record<string, number>;
+    addedCounts: Record<string, number>;
+    notableRefs: string[];
+    duplicationAppeared: boolean;
+  }>;
+  nextFixRecommendation: string;
   topMissingAssets: string[];
+  fontSourceEvidence: {
+    realFontSourceByStage: Record<StageName, boolean>;
+    dongleRealFontSourceByStage: Record<StageName, boolean>;
+    dongleFamilyDeclaredByStage: Record<StageName, boolean>;
+    dongleMentionedByStage: Record<StageName, boolean>;
+    fontFamilyDeclarationsByStage: Record<StageName, string[]>;
+    rawDongleDeclaredWithoutSource: boolean;
+  };
+  assetServingEvidence: {
+    persistedAssetCount: number | null;
+    unresolvedMissingAssetRefs: Array<{
+      kind: string;
+      url: string;
+      matchKind: "exact" | "basename" | "none" | "external";
+      matchingFilePaths: string[];
+    }>;
+  };
   scriptMutationEvidence: {
     previewScriptCount: number;
     browserScriptCount: number;
@@ -148,6 +192,10 @@ type HtmlInventory = {
   inlineScriptCount: number;
   duplicateRootHomeBlockCount: number;
   dongleDetected: boolean;
+  dongleFamilyDeclared: boolean;
+  fontFamilyDeclarations: string[];
+  realFontSourceRefs: string[];
+  dongleRealFontSourceRefs: string[];
 };
 
 export type PreviewForensicsCaptureResult =
@@ -236,6 +284,12 @@ function cssImportRefs(value: string): string[] {
   return refs.map((match) => normalizeUrlRef(match[2])).filter((entry): entry is string => Boolean(entry));
 }
 
+function fontFamilyDeclarations(value: string): string[] {
+  return [...String(value ?? "").matchAll(/font-family\s*:\s*([^;{}]+)/gi)]
+    .map((match) => match[1].replace(/\s+/g, " ").trim())
+    .filter(Boolean);
+}
+
 function isStylesheetRef(tagName: string, attrs: Record<string, string>, href: string): boolean {
   const rel = splitTokens(attrs.rel).map((item) => item.toLowerCase());
   if (rel.includes("stylesheet")) return true;
@@ -296,6 +350,26 @@ function previewAssetRef(value: string): boolean {
   return value.includes("/api/gnr8/runtime/preview-assets/");
 }
 
+function nonFileBackedRef(value: string): boolean {
+  return /^inline-script:/i.test(value) || /^data:/i.test(value);
+}
+
+function dongleFontSourceRef(value: string): boolean {
+  return /fonts\.googleapis\.com\/css[^"']*family=Dongle|fonts\.googleapis\.com\/css2[^"']*family=Dongle|\bdongle\b/i.test(value);
+}
+
+function fileMapCandidatePaths(value: string): string[] {
+  const withoutFragment = value.split("#", 1)[0] ?? value;
+  const previewAssetMatch = withoutFragment.match(/\/api\/gnr8\/runtime\/preview-assets\/[^/]+\/[^/]+\/(.+)$/);
+  const rawCandidate = previewAssetMatch?.[1] ?? withoutFragment;
+  try {
+    const parsed = new URL(rawCandidate, "https://example.invalid");
+    return [decodeURIComponent(parsed.pathname).replace(/^\/+/, "")].filter(Boolean);
+  } catch {
+    return [decodeURIComponent(rawCandidate.split("?", 1)[0] ?? rawCandidate).replace(/^\/+/, "")].filter(Boolean);
+  }
+}
+
 function rootHomeFingerprintFromElement(node: ForensicElement): string | null {
   const attrs = attrsFor(node);
   const tagName = node.tagName.toLowerCase();
@@ -336,10 +410,14 @@ function collectHtmlInventory(stage: StageName, html: string | null): HtmlInvent
   const inlineStyles: string[] = [];
   const cssOrder: string[] = [];
   const disabledScriptRefs: string[] = [];
+  const fontFamilyRefs: string[] = [];
+  const realFontSourceRefs: string[] = [];
+  const dongleRealFontSourceRefs: string[] = [];
   const allUrls: Array<{ kind: string; value: string }> = [];
   const rootFingerprints: string[] = [];
   let inlineScriptCount = 0;
   let dongleDetected = /\bdongle\b/i.test(source);
+  let dongleFamilyDeclared = /font-family\s*:[^;{}]*\bdongle\b/i.test(source);
 
   walk(doc as ForensicNode, (node) => {
     const tag = node.tagName.toLowerCase();
@@ -349,10 +427,16 @@ function collectHtmlInventory(stage: StageName, html: string | null): HtmlInvent
     const inlineStyle = normalizeText(attrs.style);
     if (inlineStyle) {
       inlineStyles.push(`${tag}:${inlineStyle.replace(/\s+/g, " ")}`);
+      const declarations = fontFamilyDeclarations(inlineStyle);
+      fontFamilyRefs.push(...declarations);
+      if (declarations.some((declaration) => /\bdongle\b/i.test(declaration))) dongleFamilyDeclared = true;
       for (const ref of styleUrls(inlineStyle)) {
         allUrls.push({ kind: isImageRef(ref) ? "image" : isFontFileRef(ref) ? "font" : "style_url", value: ref });
         if (isImageRef(ref)) imageRefs.push(ref);
-        if (isFontFileRef(ref)) fontRefs.push(ref);
+        if (isFontFileRef(ref)) {
+          fontRefs.push(ref);
+          realFontSourceRefs.push(ref);
+        }
       }
     }
     const rootFingerprint = rootHomeFingerprintFromElement(node);
@@ -367,6 +451,8 @@ function collectHtmlInventory(stage: StageName, html: string | null): HtmlInvent
           cssOrder.push(`link:${href}`);
         }
         if (isFontStylesheetRef(href) || isFontFileRef(href) || /\bdongle\b/i.test(href)) fontRefs.push(href);
+        if (isFontStylesheetRef(href) || isFontFileRef(href)) realFontSourceRefs.push(href);
+        if (dongleFontSourceRef(href)) dongleRealFontSourceRefs.push(href);
         const provider = mapProviderForReference(href);
         if (provider) mapRefs.push(`${provider}:${href}`);
       }
@@ -376,10 +462,15 @@ function collectHtmlInventory(stage: StageName, html: string | null): HtmlInvent
       const css = nodeText(node);
       cssOrder.push("style:inline");
       if (/\bdongle\b/i.test(css)) dongleDetected = true;
+      const declarations = fontFamilyDeclarations(css);
+      fontFamilyRefs.push(...declarations);
+      if (declarations.some((declaration) => /\bdongle\b/i.test(declaration))) dongleFamilyDeclared = true;
       for (const ref of [...cssImportRefs(css), ...styleUrls(css)]) {
         allUrls.push({ kind: "style", value: ref });
         if (/\.css(?:[?#].*)?$/i.test(ref) || isFontStylesheetRef(ref)) stylesheetRefs.push(ref);
         if (isFontStylesheetRef(ref) || isFontFileRef(ref) || /\bdongle\b/i.test(ref)) fontRefs.push(ref);
+        if (isFontStylesheetRef(ref) || isFontFileRef(ref)) realFontSourceRefs.push(ref);
+        if (dongleFontSourceRef(ref)) dongleRealFontSourceRefs.push(ref);
         if (isImageRef(ref)) imageRefs.push(ref);
         const provider = mapProviderForReference(ref);
         if (provider) mapRefs.push(`${provider}:${ref}`);
@@ -447,6 +538,10 @@ function collectHtmlInventory(stage: StageName, html: string | null): HtmlInvent
     inlineScriptCount,
     duplicateRootHomeBlockCount: Math.max(0, rootFingerprints.length - new Set(rootFingerprints).size),
     dongleDetected,
+    dongleFamilyDeclared,
+    fontFamilyDeclarations: unique(fontFamilyRefs, 80),
+    realFontSourceRefs: unique(realFontSourceRefs),
+    dongleRealFontSourceRefs: unique(dongleRealFontSourceRefs),
   };
 }
 
@@ -536,6 +631,127 @@ function firstStageFor(diffs: PreviewForensicsStageDiff[], pick: (diff: PreviewF
   return "unknown";
 }
 
+function toBreakpointStage(stage: PreviewForensicsLossStage): PreviewForensicsBreakpointStage {
+  if (stage === "import") return "import_or_raw_artifact";
+  if (stage === "preview_response") return "preview_rewrite";
+  if (stage === "browser_runtime") return "browser_runtime";
+  if (stage === "none") return "none";
+  return "unknown";
+}
+
+function topRelevantDiffs(diffs: PreviewForensicsStageDiff[]): PreviewForensicsReport["topRelevantDiffs"] {
+  return diffs
+    .map((diff) => ({
+      name: diff.name,
+      fromStage: diff.fromStage,
+      toStage: diff.toStage,
+      missingCounts: {
+        stylesheets: diff.missingStylesheets.length,
+        fonts: diff.missingFonts.length,
+        images: diff.missingImages.length,
+        scripts: diff.missingScripts.length,
+        iframes: diff.missingIframes.length,
+        maps: diff.missingMaps.length,
+      },
+      addedCounts: {
+        stylesheets: diff.addedStylesheets.length,
+        fonts: diff.addedFonts.length,
+        images: diff.addedImages.length,
+        scripts: diff.addedScripts.length,
+        iframes: diff.addedIframes.length,
+        maps: diff.addedMaps.length,
+      },
+      notableRefs: unique(
+        [
+          ...diff.missingFonts,
+          ...diff.missingImages,
+          ...diff.missingScripts,
+          ...diff.missingIframes,
+          ...diff.missingMaps,
+          ...diff.blockedOrRewrittenExternalRefs.disabledScriptRefs,
+        ],
+        12,
+      ),
+      duplicationAppeared: diff.duplicatedRootHomeBlocks.appeared,
+    }))
+    .filter(
+      (diff) =>
+        diff.duplicationAppeared ||
+        Object.values(diff.missingCounts).some((count) => count > 0) ||
+        Object.values(diff.addedCounts).some((count) => count > 0),
+    );
+}
+
+function assetServingEvidence(input: {
+  diffs: PreviewForensicsStageDiff[];
+  persistedAssetPaths?: string[];
+}): PreviewForensicsReport["assetServingEvidence"] {
+  const persistedAssetPaths = input.persistedAssetPaths ?? null;
+  const persistedSet = new Set(persistedAssetPaths ?? []);
+  const missingRefs = unique(
+    input.diffs.flatMap((diff) => [
+      ...diff.missingStylesheets.map((url) => `stylesheet\0${url}`),
+      ...diff.missingFonts.map((url) => `font\0${url}`),
+      ...diff.missingImages.map((url) => `image\0${url}`),
+      ...diff.missingScripts.map((url) => `script\0${url}`),
+    ]),
+    60,
+  ).filter((entry) => {
+    const [, url] = entry.split("\0");
+    return !nonFileBackedRef(url);
+  });
+  return {
+    persistedAssetCount: persistedAssetPaths ? persistedAssetPaths.length : null,
+    unresolvedMissingAssetRefs: missingRefs.map((entry) => {
+      const [kind, url] = entry.split("\0");
+      if (externalRef(url) && !previewAssetRef(url)) {
+        return { kind, url, matchKind: "external", matchingFilePaths: [] };
+      }
+      const candidates = fileMapCandidatePaths(url);
+      const exactMatches = persistedAssetPaths ? candidates.filter((candidate) => persistedSet.has(candidate)) : [];
+      if (exactMatches.length > 0) return { kind, url, matchKind: "exact", matchingFilePaths: exactMatches.slice(0, 5) };
+      const basename = basenameForUrl(url);
+      const basenameMatches = persistedAssetPaths
+        ? persistedAssetPaths.filter((filePath) => path.posix.basename(filePath).toLowerCase() === basename).slice(0, 5)
+        : [];
+      if (basenameMatches.length > 0) return { kind, url, matchKind: "basename", matchingFilePaths: basenameMatches };
+      return { kind, url, matchKind: "none", matchingFilePaths: [] };
+    }),
+  };
+}
+
+function assetServingFailureStage(evidence: PreviewForensicsReport["assetServingEvidence"]): PreviewForensicsBreakpointStage {
+  if (evidence.persistedAssetCount === null) return "unknown";
+  return evidence.unresolvedMissingAssetRefs.some((entry) => entry.matchKind === "none") ? "asset_serving" : "none";
+}
+
+function dongleFontFailureStage(input: {
+  original: HtmlInventory;
+  rawArtifact: HtmlInventory;
+  previewResponse: HtmlInventory;
+  browserDom: HtmlInventory;
+  fallback: PreviewForensicsLossStage;
+}): PreviewForensicsBreakpointStage {
+  const declared =
+    input.original.dongleFamilyDeclared ||
+    input.rawArtifact.dongleFamilyDeclared ||
+    input.previewResponse.dongleFamilyDeclared ||
+    input.browserDom.dongleFamilyDeclared;
+  if (!declared) return toBreakpointStage(input.fallback);
+  if (input.original.dongleRealFontSourceRefs.length > 0 && input.rawArtifact.dongleRealFontSourceRefs.length === 0) return "import_or_raw_artifact";
+  if (input.rawArtifact.dongleRealFontSourceRefs.length > 0 && input.previewResponse.dongleRealFontSourceRefs.length === 0) return "preview_rewrite";
+  if (input.previewResponse.dongleRealFontSourceRefs.length > 0 && input.browserDom.dongleRealFontSourceRefs.length === 0) return "browser_runtime";
+  if (
+    input.original.dongleRealFontSourceRefs.length === 0 &&
+    input.rawArtifact.dongleRealFontSourceRefs.length === 0 &&
+    input.previewResponse.dongleRealFontSourceRefs.length === 0 &&
+    input.browserDom.dongleRealFontSourceRefs.length === 0
+  ) {
+    return "none";
+  }
+  return "none";
+}
+
 function artifactFor(stage: StageName, html: string | null, unavailableReason: string | null = null): PreviewForensicsHtmlArtifact {
   return {
     stage,
@@ -556,13 +772,19 @@ function recommendedRootCause(input: {
   font: PreviewForensicsLossStage;
   images: PreviewForensicsLossStage;
   map: PreviewForensicsLossStage;
+  script: PreviewForensicsBreakpointStage;
+  assetServing: PreviewForensicsBreakpointStage;
+  rawDongleDeclaredWithoutSource: boolean;
 }): string {
   if (input.duplication === "browser_runtime") return "Duplication first appears after browser execution; isolate client-side mutation/runtime duplicate guard behavior before changing import or preview HTML.";
   if (input.duplication === "preview_response") return "Duplication appears between raw artifact and raw preview response; inspect raw preview route rewriting and duplicate injection guard output.";
+  if (input.rawDongleDeclaredWithoutSource) return "Dongle is declared as a CSS font-family without a persisted or external font source; add source acquisition evidence before changing preview rewrite behavior.";
   if (input.font === "preview_response") return "Font evidence is lost between raw artifact and raw preview response; inspect raw preview CSS/stylesheet rewrite evidence, especially Dongle and external font refs.";
   if (input.images === "preview_response") return "Image references are lost during raw preview response generation; inspect preview asset URL rewriting and file-map resolution.";
   if (input.map === "preview_response") return "Map iframe/script evidence is lost during raw preview response generation; inspect preview script policy and embed preservation evidence.";
   if (input.map === "browser_runtime") return "Map evidence changes only after browser execution; isolate map runtime scripts and post-load DOM mutation.";
+  if (input.script === "preview_rewrite") return "Script evidence changes during raw preview response generation; inspect deterministic script policy and local script asset rewriting.";
+  if (input.assetServing === "asset_serving") return "Missing asset references do not match persisted file-map paths; inspect persisted asset path normalization before adding fallbacks.";
   if (input.font === "import" || input.images === "import" || input.map === "import") return "Evidence is already missing from the persisted raw artifact; root cause is in original fetch/import persistence.";
   return "No deterministic loss stage detected from the provided artifacts.";
 }
@@ -575,6 +797,7 @@ export function buildPreviewForensicsReport(input: {
   rawArtifactHtml: string | null;
   rawPreviewResponseHtml: string | null;
   browserDomHtml: string | null;
+  persistedAssetPaths?: string[];
   unavailableReasons?: Partial<Record<StageName, string | null>>;
 }): PreviewForensicsReport {
   const original = collectHtmlInventory("original", input.originalFetchedHtml);
@@ -593,6 +816,13 @@ export function buildPreviewForensicsReport(input: {
   );
   const stageWhereImagesBreak = firstStageFor(diffs, (diff) => diff.missingImages.length > 0);
   const stageWhereMapBreaks = firstStageFor(diffs, (diff) => diff.missingMaps.length > 0 || diff.missingIframes.some((ref) => mapProviderForReference(ref)));
+  const stageWhereScriptsBreak = firstStageFor(
+    diffs,
+    (diff) =>
+      diff.missingScripts.length > 0 ||
+      diff.blockedOrRewrittenExternalRefs.disabledScriptRefs.length > 0 ||
+      diff.addedScripts.some((ref) => /gnr8-disabled-script/i.test(ref)),
+  );
   const topMissingAssets = unique(
     diffs.flatMap((diff) => [
       ...diff.missingStylesheets,
@@ -604,16 +834,96 @@ export function buildPreviewForensicsReport(input: {
     ]),
     30,
   );
+  const artifacts = [
+    artifactFor("original", input.originalFetchedHtml, input.unavailableReasons?.original ?? null),
+    artifactFor("raw_artifact", input.rawArtifactHtml, input.unavailableReasons?.raw_artifact ?? null),
+    artifactFor("preview_response", input.rawPreviewResponseHtml, input.unavailableReasons?.preview_response ?? null),
+    artifactFor("browser_dom", input.browserDomHtml, input.unavailableReasons?.browser_dom ?? null),
+  ];
+  const servingEvidence = assetServingEvidence({ diffs, persistedAssetPaths: input.persistedAssetPaths });
+  const duplicationStage = toBreakpointStage(stageWhereDuplicationAppears);
+  const fontFailureStage = dongleFontFailureStage({ original, rawArtifact, previewResponse, browserDom, fallback: stageWhereFontBreaks });
+  const imageFailureStage = toBreakpointStage(stageWhereImagesBreak);
+  const mapFailureStage = toBreakpointStage(stageWhereMapBreaks);
+  const scriptFailureStage = toBreakpointStage(stageWhereScriptsBreak);
+  const assetStage = assetServingFailureStage(servingEvidence);
+  const rawDongleDeclaredWithoutSource = rawArtifact.dongleFamilyDeclared && rawArtifact.dongleRealFontSourceRefs.length === 0;
+  const nextFixRecommendation = recommendedRootCause({
+    duplication: stageWhereDuplicationAppears,
+    font: stageWhereFontBreaks,
+    images: stageWhereImagesBreak,
+    map: stageWhereMapBreaks,
+    script: scriptFailureStage,
+    assetServing: assetStage,
+    rawDongleDeclaredWithoutSource,
+  });
 
   return {
     routePath: normalizePagePath(input.routePath),
     sourceUrl: input.sourceUrl,
     rawFilePath: input.rawFilePath,
+    breakpointSummary: {
+      duplicationStage,
+      fontFailureStage,
+      imageFailureStage,
+      mapFailureStage,
+      scriptFailureStage,
+      assetServingFailureStage: assetStage,
+      primaryRecommendation: nextFixRecommendation,
+    },
+    duplicationStage,
+    fontFailureStage,
+    imageFailureStage,
+    mapFailureStage,
+    scriptFailureStage,
+    assetServingFailureStage: assetStage,
     stageWhereDuplicationAppears,
     stageWhereFontBreaks,
     stageWhereImagesBreak,
     stageWhereMapBreaks,
+    evidenceHashes: {
+      original: artifacts[0].sha256,
+      raw_artifact: artifacts[1].sha256,
+      preview_response: artifacts[2].sha256,
+      browser_dom: artifacts[3].sha256,
+    },
+    topRelevantDiffs: topRelevantDiffs(diffs),
+    nextFixRecommendation,
     topMissingAssets,
+    fontSourceEvidence: {
+      realFontSourceByStage: {
+        original: original.realFontSourceRefs.length > 0,
+        raw_artifact: rawArtifact.realFontSourceRefs.length > 0,
+        preview_response: previewResponse.realFontSourceRefs.length > 0,
+        browser_dom: browserDom.realFontSourceRefs.length > 0,
+      },
+      dongleRealFontSourceByStage: {
+        original: original.dongleRealFontSourceRefs.length > 0,
+        raw_artifact: rawArtifact.dongleRealFontSourceRefs.length > 0,
+        preview_response: previewResponse.dongleRealFontSourceRefs.length > 0,
+        browser_dom: browserDom.dongleRealFontSourceRefs.length > 0,
+      },
+      dongleFamilyDeclaredByStage: {
+        original: original.dongleFamilyDeclared,
+        raw_artifact: rawArtifact.dongleFamilyDeclared,
+        preview_response: previewResponse.dongleFamilyDeclared,
+        browser_dom: browserDom.dongleFamilyDeclared,
+      },
+      dongleMentionedByStage: {
+        original: original.dongleDetected,
+        raw_artifact: rawArtifact.dongleDetected,
+        preview_response: previewResponse.dongleDetected,
+        browser_dom: browserDom.dongleDetected,
+      },
+      fontFamilyDeclarationsByStage: {
+        original: original.fontFamilyDeclarations,
+        raw_artifact: rawArtifact.fontFamilyDeclarations,
+        preview_response: previewResponse.fontFamilyDeclarations,
+        browser_dom: browserDom.fontFamilyDeclarations,
+      },
+      rawDongleDeclaredWithoutSource,
+    },
+    assetServingEvidence: servingEvidence,
     scriptMutationEvidence: {
       previewScriptCount: previewResponse.scriptRefs.length,
       browserScriptCount: browserDom.scriptRefs.length,
@@ -651,19 +961,9 @@ export function buildPreviewForensicsReport(input: {
         browser_runtime: diffs[2].missingMaps,
       },
     },
-    recommendedRootCause: recommendedRootCause({
-      duplication: stageWhereDuplicationAppears,
-      font: stageWhereFontBreaks,
-      images: stageWhereImagesBreak,
-      map: stageWhereMapBreaks,
-    }),
+    recommendedRootCause: nextFixRecommendation,
     diffs,
-    artifacts: [
-      artifactFor("original", input.originalFetchedHtml, input.unavailableReasons?.original ?? null),
-      artifactFor("raw_artifact", input.rawArtifactHtml, input.unavailableReasons?.raw_artifact ?? null),
-      artifactFor("preview_response", input.rawPreviewResponseHtml, input.unavailableReasons?.preview_response ?? null),
-      artifactFor("browser_dom", input.browserDomHtml, input.unavailableReasons?.browser_dom ?? null),
-    ],
+    artifacts,
   };
 }
 
@@ -836,6 +1136,7 @@ export async function buildPreviewForensicsReportForRoute(input: {
     rawArtifactHtml: rawAsset?.bytes.toString("utf8") ?? null,
     rawPreviewResponseHtml: rawPreview.html,
     browserDomHtml: browserCapture.html,
+    persistedAssetPaths: Object.keys(artifact.fileMap ?? {}),
     unavailableReasons: {
       original: originalFetchedHtml ? null : sourceUrl ? "original_fetch_failed" : "source_url_unavailable",
       raw_artifact: rawAsset ? null : "raw_file_not_found",

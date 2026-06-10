@@ -3198,10 +3198,55 @@ test('preview forensics detects duplication only when it appears in browser DOM'
   })
 
   assert.equal(report.stageWhereDuplicationAppears, 'browser_runtime')
+  assert.equal(report.duplicationStage, 'browser_runtime')
   assert.equal(report.diffs[0].duplicatedRootHomeBlocks.appeared, false)
   assert.equal(report.diffs[1].duplicatedRootHomeBlocks.appeared, false)
   assert.equal(report.diffs[2].duplicatedRootHomeBlocks.appeared, true)
   assert.match(report.recommendedRootCause, /browser execution/)
+})
+
+test('preview forensics classifies raw artifact duplication as import_or_raw_artifact', () => {
+  const rootBlock =
+    '<section class="hero home-page"><h1>Viroidoc</h1><p>Advanced research on viroid pathogenesis</p><nav><a href="/project">Project</a><a href="/people">People</a><a href="/news">News</a></nav></section>'
+  const originalHtml = `<!doctype html><html><body><main>${rootBlock}<section class="news-listing"><h2>News</h2></section></main></body></html>`
+  const duplicatedHtml = `<!doctype html><html><body><main>${rootBlock}${rootBlock}<section class="news-listing"><h2>News</h2></section></main></body></html>`
+
+  const report = buildPreviewForensicsReport({
+    routePath: '/news',
+    sourceUrl: 'https://www.viroidoc.eu/news',
+    rawFilePath: 'pages/news/index.html',
+    originalFetchedHtml: originalHtml,
+    rawArtifactHtml: duplicatedHtml,
+    rawPreviewResponseHtml: duplicatedHtml,
+    browserDomHtml: duplicatedHtml,
+  })
+
+  assert.equal(report.duplicationStage, 'import_or_raw_artifact')
+  assert.equal(report.diffs[0].duplicatedRootHomeBlocks.appeared, true)
+  assert.equal(report.diffs[1].duplicatedRootHomeBlocks.appeared, false)
+  assert.equal(report.diffs[2].duplicatedRootHomeBlocks.appeared, false)
+})
+
+test('preview forensics classifies preview response duplication as preview_rewrite', () => {
+  const rootBlock =
+    '<section class="hero home-page"><h1>Viroidoc</h1><p>Advanced research on viroid pathogenesis</p><nav><a href="/project">Project</a><a href="/people">People</a><a href="/news">News</a></nav></section>'
+  const rawHtml = `<!doctype html><html><body><main>${rootBlock}<section class="news-listing"><h2>News</h2></section></main></body></html>`
+  const previewHtml = `<!doctype html><html><body><main>${rootBlock}${rootBlock}<section class="news-listing"><h2>News</h2></section></main></body></html>`
+
+  const report = buildPreviewForensicsReport({
+    routePath: '/news',
+    sourceUrl: 'https://www.viroidoc.eu/news',
+    rawFilePath: 'pages/news/index.html',
+    originalFetchedHtml: rawHtml,
+    rawArtifactHtml: rawHtml,
+    rawPreviewResponseHtml: previewHtml,
+    browserDomHtml: previewHtml,
+  })
+
+  assert.equal(report.duplicationStage, 'preview_rewrite')
+  assert.equal(report.diffs[0].duplicatedRootHomeBlocks.appeared, false)
+  assert.equal(report.diffs[1].duplicatedRootHomeBlocks.appeared, true)
+  assert.equal(report.diffs[2].duplicatedRootHomeBlocks.appeared, false)
 })
 
 test('preview forensics detects CSS and Dongle font loss between raw artifact and preview response', () => {
@@ -3229,13 +3274,42 @@ test('preview forensics detects CSS and Dongle font loss between raw artifact an
   })
 
   assert.equal(report.stageWhereFontBreaks, 'preview_response')
+  assert.equal(report.fontFailureStage, 'preview_rewrite')
   assert.equal(report.cssCascadeEvidence.dongleDetectedByStage.raw_artifact, true)
   assert.equal(report.cssCascadeEvidence.dongleDetectedByStage.preview_response, false)
+  assert.equal(report.fontSourceEvidence.realFontSourceByStage.raw_artifact, true)
+  assert.equal(report.fontSourceEvidence.dongleRealFontSourceByStage.raw_artifact, true)
+  assert.equal(report.fontSourceEvidence.dongleFamilyDeclaredByStage.raw_artifact, true)
   assert.equal(report.cssCascadeEvidence.previewCssOrderChanged, true)
   assert.equal(
     report.diffs[1].missingFonts.includes('https://fonts.googleapis.com/css2?family=Dongle:wght@400;700&display=swap'),
     true,
   )
+})
+
+test('preview forensics distinguishes Dongle font-family declaration from a real font source', () => {
+  const html = [
+    '<!doctype html><html><head>',
+    '<style>h1{font-family:"Dongle", sans-serif}</style>',
+    '</head><body><h1>Transport</h1></body></html>',
+  ].join('')
+
+  const report = buildPreviewForensicsReport({
+    routePath: '/',
+    sourceUrl: 'https://example.test/',
+    rawFilePath: 'index.html',
+    originalFetchedHtml: html,
+    rawArtifactHtml: html,
+    rawPreviewResponseHtml: html,
+    browserDomHtml: html,
+  })
+
+  assert.equal(report.fontFailureStage, 'none')
+  assert.equal(report.fontSourceEvidence.dongleFamilyDeclaredByStage.raw_artifact, true)
+  assert.equal(report.fontSourceEvidence.realFontSourceByStage.raw_artifact, false)
+  assert.equal(report.fontSourceEvidence.dongleRealFontSourceByStage.raw_artifact, false)
+  assert.equal(report.fontSourceEvidence.rawDongleDeclaredWithoutSource, true)
+  assert.match(report.nextFixRecommendation, /without a persisted or external font source/)
 })
 
 test('preview forensics detects map iframe and script loss across raw preview stages', () => {
@@ -3264,9 +3338,69 @@ test('preview forensics detects map iframe and script loss across raw preview st
   })
 
   assert.equal(report.stageWhereMapBreaks, 'preview_response')
+  assert.equal(report.mapFailureStage, 'preview_rewrite')
+  assert.equal(report.scriptFailureStage, 'preview_rewrite')
   assert.equal(report.diffs[1].missingIframes.includes('https://www.google.com/maps/embed?pb=transporti-maver'), true)
   assert.equal(report.diffs[1].missingMaps.some((ref) => ref.includes('google_maps')), true)
   assert.equal(report.scriptMutationEvidence.missingScriptsAfterBrowser.length, 1)
   assert.equal(report.diffs[1].blockedOrRewrittenExternalRefs.disabledScriptRefs.length, 1)
   assert.match(report.recommendedRootCause, /script policy|embed preservation/)
+})
+
+test('preview forensics classifies map iframe loss at import, preview, and browser stages', () => {
+  const mapHtml = '<!doctype html><html><body><iframe src="https://www.google.com/maps/embed?pb=transporti-maver"></iframe></body></html>'
+  const noMapHtml = '<!doctype html><html><body><div id="map"></div></body></html>'
+
+  const importLoss = buildPreviewForensicsReport({
+    routePath: '/contact',
+    sourceUrl: 'https://maver.example/contact',
+    rawFilePath: 'pages/contact/index.html',
+    originalFetchedHtml: mapHtml,
+    rawArtifactHtml: noMapHtml,
+    rawPreviewResponseHtml: noMapHtml,
+    browserDomHtml: noMapHtml,
+  })
+  const previewLoss = buildPreviewForensicsReport({
+    routePath: '/contact',
+    sourceUrl: 'https://maver.example/contact',
+    rawFilePath: 'pages/contact/index.html',
+    originalFetchedHtml: mapHtml,
+    rawArtifactHtml: mapHtml,
+    rawPreviewResponseHtml: noMapHtml,
+    browserDomHtml: noMapHtml,
+  })
+  const browserLoss = buildPreviewForensicsReport({
+    routePath: '/contact',
+    sourceUrl: 'https://maver.example/contact',
+    rawFilePath: 'pages/contact/index.html',
+    originalFetchedHtml: mapHtml,
+    rawArtifactHtml: mapHtml,
+    rawPreviewResponseHtml: mapHtml,
+    browserDomHtml: noMapHtml,
+  })
+
+  assert.equal(importLoss.mapFailureStage, 'import_or_raw_artifact')
+  assert.equal(previewLoss.mapFailureStage, 'preview_rewrite')
+  assert.equal(browserLoss.mapFailureStage, 'browser_runtime')
+})
+
+test('preview forensics surfaces file-map misses for local asset serving evidence', () => {
+  const rawHtml = '<!doctype html><html><head><script src="assets/gallery.js"></script></head><body><img src="uploads/gallery/photo.jpg"></body></html>'
+  const previewHtml = '<!doctype html><html><head></head><body></body></html>'
+
+  const report = buildPreviewForensicsReport({
+    routePath: '/gallery',
+    sourceUrl: 'https://maver.example/gallery',
+    rawFilePath: 'pages/gallery/index.html',
+    originalFetchedHtml: rawHtml,
+    rawArtifactHtml: rawHtml,
+    rawPreviewResponseHtml: previewHtml,
+    browserDomHtml: previewHtml,
+    persistedAssetPaths: ['assets/contact-form.js', 'uploads/gallery/other.jpg'],
+  })
+
+  assert.equal(report.assetServingFailureStage, 'asset_serving')
+  assert.equal(report.assetServingEvidence.persistedAssetCount, 2)
+  assert.ok(report.assetServingEvidence.unresolvedMissingAssetRefs.some((entry) => entry.url === 'assets/gallery.js' && entry.matchKind === 'none'))
+  assert.ok(report.assetServingEvidence.unresolvedMissingAssetRefs.some((entry) => entry.url === 'uploads/gallery/photo.jpg' && entry.matchKind === 'none'))
 })
