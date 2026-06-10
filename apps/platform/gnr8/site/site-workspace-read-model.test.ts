@@ -1998,6 +1998,90 @@ test('preview runtime summary parser accepts raw template preview mode', () => {
   })
 })
 
+test('preview runtime summary parser normalizes raw asset reference nullable fields', () => {
+  const parsed = __siteWorkspaceReadModelTestUtils.parsePreviewRuntimeSummary({
+    previewMode: 'raw_template_preview',
+    rendererContractAvailable: false,
+    finalSiteModelAvailable: false,
+    familyRenderUsed: false,
+    familyRenderFamilyId: null,
+    familyRenderMode: 'page_fallback',
+    familyRenderFallbackToPage: true,
+    familyRenderDiagnosticsCount: 0,
+    familyRenderDiagnostics: [],
+    renderedWithFallback: false,
+    matchedPageId: null,
+    contentResolutionApplied: false,
+    resolvedContentCount: 0,
+    unresolvedContentCount: 0,
+    contentResolutionDegraded: false,
+    contentResolutionDiagnostics: [],
+    rawTemplatePreviewEvidence: {
+      selectedRoutePath: '/',
+      selectedRawFilePath: 'pages/root/index.html',
+      htmlByteLengthBeforeRewrite: 128,
+      htmlByteLengthAfterRewrite: 128,
+      rewrittenLinkCount: 0,
+      rawPreviewAssetRewriteEvidence: {
+        stylesheetsInspected: 0,
+        cssUrlReferencesFound: 0,
+        cssUrlReferencesRewritten: 0,
+        cssUrlReferencesExternalPreserved: 0,
+        cssUrlReferencesMissing: 1,
+        imageReferencesFound: 0,
+        imageReferencesRewritten: 0,
+        imageReferencesMissing: 1,
+        fontStylesheetsFound: 0,
+        fontStylesheetsPreserved: 0,
+        fontFilesFound: 0,
+        fontFilesRewritten: 0,
+        fontFamilyDongleDetected: false,
+        rootHeadingDongleEvidence: [],
+        assetReferenceEvidence: [
+          {
+            originalReference: '/missing/hero.jpg',
+            normalizedReference: undefined,
+            resolvedCandidate: undefined,
+            matchedFilePath: undefined,
+            servedPreviewUrl: undefined,
+            reason: 'file_map_path_not_found',
+            assetKind: 'image',
+            sourceType: 'html_attr',
+            routePath: '/',
+            rawFilePath: 'pages/root/index.html',
+          },
+        ],
+        missingAssetReferences: [
+          {
+            originalReference: '/missing/hero.jpg',
+            normalizedReference: undefined,
+            resolvedCandidate: undefined,
+            matchedFilePath: undefined,
+            servedPreviewUrl: undefined,
+            reason: 'file_map_path_not_found',
+            assetKind: 'image',
+            sourceType: 'html_attr',
+            routePath: '/',
+            rawFilePath: 'pages/root/index.html',
+          },
+        ],
+      },
+    },
+    previewDiagnostics: ['RAW_TEMPLATE_PREVIEW_SELECTED'],
+  })
+
+  const evidence = parsed?.rawTemplatePreviewEvidence?.rawPreviewAssetRewriteEvidence
+  const assetReference = evidence?.assetReferenceEvidence?.[0] as Record<string, unknown> | undefined
+  const missingReference = evidence?.missingAssetReferences?.[0] as Record<string, unknown> | undefined
+
+  assert.ok(assetReference)
+  assert.ok(missingReference)
+  for (const field of ['normalizedReference', 'resolvedCandidate', 'matchedFilePath', 'servedPreviewUrl']) {
+    assert.equal(assetReference[field], null)
+    assert.equal(missingReference[field], null)
+  }
+})
+
 test('preview runtime summary parser safely handles legacy rows with no family fields', () => {
   const parsed = __siteWorkspaceReadModelTestUtils.parsePreviewRuntimeSummary({
     previewMode: 'react_preview',

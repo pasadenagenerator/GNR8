@@ -56,7 +56,7 @@ type ParsedRawTemplatePreviewEvidence = NonNullable<PreviewRuntimeSummary['rawTe
 type ParsedRawPreviewAssetRewriteEvidence = NonNullable<ParsedRawTemplatePreviewEvidence['rawPreviewAssetRewriteEvidence']>
 type ParsedRawPreviewAssetGraphEvidence = NonNullable<ParsedRawTemplatePreviewEvidence['rawPreviewAssetGraphEvidence']>
 type ParsedRawPreviewAssetReferenceEvidence = NonNullable<ParsedRawPreviewAssetRewriteEvidence['assetReferenceEvidence']>[number]
-type ParsedRawPreviewMissingAssetReference = NonNullable<ParsedRawPreviewAssetRewriteEvidence['missingAssetReferences']>[number]
+type ParsedRawPreviewMissingAssetReference = ParsedRawPreviewAssetReferenceEvidence
 
 export type SiteWorkspaceRawPreviewValidationEvidence = {
   capturedAt: string | null
@@ -2104,10 +2104,12 @@ function parsePreviewRuntimeSummary(value: unknown): PreviewRuntimeSummary | nul
     : null
   const numberFromRawAssetEvidence = (key: string): number =>
     Number.isFinite(Number(rawAssetEvidence?.[key])) ? Number(rawAssetEvidence?.[key]) : 0
-  const parseAssetReferenceBase = (entry: Record<string, unknown>): ParsedRawPreviewMissingAssetReference => ({
+  const parseAssetReferenceEvidenceItem = (entry: Record<string, unknown>): ParsedRawPreviewAssetReferenceEvidence => ({
     originalReference: normalizeText(entry.originalReference),
     normalizedReference: toTextOrNull(entry.normalizedReference),
     resolvedCandidate: toTextOrNull(entry.resolvedCandidate),
+    matchedFilePath: toTextOrNull(entry.matchedFilePath),
+    servedPreviewUrl: toTextOrNull(entry.servedPreviewUrl),
     reason: normalizeText(entry.reason),
     assetKind: normalizeText(entry.assetKind),
     sourceType: normalizeText(entry.sourceType),
@@ -2118,28 +2120,14 @@ function parsePreviewRuntimeSummary(value: unknown): PreviewRuntimeSummary | nul
     Array.isArray(value)
       ? value
           .filter(isRecord)
-          .map((entry) => ({
-            ...parseAssetReferenceBase(entry),
-            matchedFilePath: toTextOrNull(entry.matchedFilePath),
-            servedPreviewUrl: toTextOrNull(entry.servedPreviewUrl),
-          }))
+          .map(parseAssetReferenceEvidenceItem)
           .filter((entry) => entry.originalReference || entry.reason)
       : []
   const parseMissingAssetReferences = (value: unknown): ParsedRawPreviewMissingAssetReference[] =>
     Array.isArray(value)
       ? value
           .filter(isRecord)
-          .map((entry) => {
-            const base = parseAssetReferenceBase(entry)
-            if ('matchedFilePath' in entry || 'servedPreviewUrl' in entry) {
-              return {
-                ...base,
-                matchedFilePath: toTextOrNull(entry.matchedFilePath),
-                servedPreviewUrl: toTextOrNull(entry.servedPreviewUrl),
-              }
-            }
-            return base
-          })
+          .map(parseAssetReferenceEvidenceItem)
           .filter((entry) => entry.originalReference || entry.reason)
       : []
   const parseGraphFoundRefs = (value: unknown): ParsedRawPreviewAssetGraphEvidence['stylesheetRefsFound'] =>
