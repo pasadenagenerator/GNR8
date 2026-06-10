@@ -456,14 +456,17 @@ type MultiPageLinkRewriteResult = {
 
 type RawPreviewAssetRewriteEvidence = NonNullable<RawTemplatePreviewEvidence['rawPreviewAssetRewriteEvidence']>
 
-type RawPreviewAssetRewriteSource = 'html_attr' | 'srcset' | 'lazy_attr' | 'inline_style' | 'style_block' | 'stylesheet'
+type RawPreviewAssetRewriteSource = 'html_attr' | 'srcset' | 'lazy_attr' | 'inline_style' | 'style_block' | 'stylesheet' | 'script_detected'
 
-type RawPreviewAssetReferenceKind = 'css' | 'image' | 'font' | 'stylesheet' | 'other'
+type RawPreviewAssetReferenceKind = 'css' | 'font' | 'image' | 'svg' | 'iframe' | 'external' | 'data' | 'unsupported' | 'unknown' | 'stylesheet' | 'other'
 
 type RawPreviewAssetReferenceResolution = {
   originalUrl: string
+  normalizedReference: string | null
+  resolvedCandidate: string | null
   rewrittenUrl: string | null
   normalizedPath: string | null
+  reason: string
   externalPreserved: boolean
   missing: boolean
   alreadyRewritten: boolean
@@ -488,6 +491,12 @@ function defaultRawPreviewAssetRewriteEvidence(): RawPreviewAssetRewriteEvidence
     fontFamilyDongleDetected: false,
     rootHeadingDongleEvidence: [],
     malformedUriDecodeFallbackCount: 0,
+    assetReferencesInspected: 0,
+    assetReferencesRewritten: 0,
+    assetReferencesMissing: 0,
+    assetReferencesExternalPreserved: 0,
+    assetReferenceEvidence: [],
+    missingAssetReferences: [],
   }
 }
 
@@ -511,6 +520,12 @@ function mergeRawPreviewAssetRewriteEvidence(
     fontFamilyDongleDetected: left.fontFamilyDongleDetected || right.fontFamilyDongleDetected,
     rootHeadingDongleEvidence: [...new Set([...left.rootHeadingDongleEvidence, ...right.rootHeadingDongleEvidence])].slice(0, 12),
     malformedUriDecodeFallbackCount: (left.malformedUriDecodeFallbackCount ?? 0) + (right.malformedUriDecodeFallbackCount ?? 0),
+    assetReferencesInspected: (left.assetReferencesInspected ?? 0) + (right.assetReferencesInspected ?? 0),
+    assetReferencesRewritten: (left.assetReferencesRewritten ?? 0) + (right.assetReferencesRewritten ?? 0),
+    assetReferencesMissing: (left.assetReferencesMissing ?? 0) + (right.assetReferencesMissing ?? 0),
+    assetReferencesExternalPreserved: (left.assetReferencesExternalPreserved ?? 0) + (right.assetReferencesExternalPreserved ?? 0),
+    assetReferenceEvidence: [...(left.assetReferenceEvidence ?? []), ...(right.assetReferenceEvidence ?? [])],
+    missingAssetReferences: [...(left.missingAssetReferences ?? []), ...(right.missingAssetReferences ?? [])],
   }
 }
 
@@ -768,6 +783,7 @@ function rewriteRawTemplateAssetReferences(input: {
   siteId: string
   siteVersionId: string
   entryHtmlPath: string
+  routePath?: string
   fileMapPaths?: ReadonlySet<string>
 }): string {
   return rewriteRawTemplateAssetReferencesWithCounts(input).html
@@ -778,6 +794,7 @@ function rewriteRawTemplateAssetReferencesWithCounts(input: {
   siteId: string
   siteVersionId: string
   entryHtmlPath: string
+  routePath?: string
   fileMapPaths?: ReadonlySet<string>
 }): { html: string; rewrittenAssetCount: number; rawPreviewAssetRewriteEvidence: RawPreviewAssetRewriteEvidence; stylesheetAssetPaths: string[] } {
   const assetRoot = `/api/gnr8/runtime/preview-assets/${encodeURIComponent(input.siteId)}/${encodeURIComponent(input.siteVersionId)}`
@@ -793,6 +810,7 @@ function rewriteRawTemplateAssetReferencesWithCounts(input: {
   const duplicatePreviewPrefixPattern = new RegExp(`^${assetRoot.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}/api/gnr8/runtime/preview-assets/`, 'i')
   const evidence = defaultRawPreviewAssetRewriteEvidence()
   const stylesheetAssetPaths = new Set<string>()
+  const routePathForEvidence = normalizePagePath(input.routePath ?? '/')
   let rewrittenAssetCount = 0
 
   const noteDecodeResult = (rawValue: string, sourceType: RawPreviewAssetRewriteSource | 'route_path' | 'script_detected') => {
@@ -839,14 +857,31 @@ function rewriteRawTemplateAssetReferencesWithCounts(input: {
     })
   }
 
+  const addResizedImageFallbackCandidates = (candidate: string): string[] => {
+    const normalized = normalizeTemplateAssetPath(candidate)
+    if (!normalized) return []
+    const ext = path.posix.extname(normalized)
+    if (!ext || !isImageAssetPath(normalized)) return []
+    const dir = path.posix.dirname(normalized)
+    const basename = path.posix.basename(normalized, ext)
+    const fallbackBasenames = [
+      basename.replace(/-\d{2,5}x\d{2,5}(?:_\d{2,5}x\d{2,5})?$/i, ''),
+      basename.replace(/-scaled$/i, ''),
+    ].filter((value) => value && value !== basename)
+    return fallbackBasenames
+      .map((name) => normalizeTemplateAssetPath(path.posix.join(dir === '.' ? '' : dir, `${name}${ext}`)))
+      .filter((value): value is string => Boolean(value))
+  }
+
   const findFileMapCandidate = (candidates: Array<string | null>): string | null => {
     const normalizedCandidates = candidates.filter((candidate): candidate is string => Boolean(candidate))
     if (normalizedCandidates.length === 0) return null
     if (!input.fileMapPaths) return normalizedCandidates[0] ?? null
-    for (const candidate of normalizedCandidates) {
+    const expandedCandidates = [...new Set(normalizedCandidates.flatMap((candidate) => [candidate, ...addResizedImageFallbackCandidates(candidate)]))]
+    for (const candidate of expandedCandidates) {
       if (input.fileMapPaths.has(candidate)) return candidate
     }
-    for (const candidate of normalizedCandidates) {
+    for (const candidate of expandedCandidates) {
       const suffix = `/${candidate}`
       const match = [...input.fileMapPaths].find((filePath) => filePath.endsWith(suffix))
       if (match) return match
@@ -859,6 +894,7 @@ function rewriteRawTemplateAssetReferencesWithCounts(input: {
     const candidates: Array<string | null> = []
     let parsed: URL | null = null
     const decodedPathname = noteDecodeResult(pathname, sourceType).value
+    const pathnameVariants = [...new Set([pathname, decodedPathname].filter(Boolean))]
     const parserPathname = decodedPathname
     parsed = /^\/\//.test(parserPathname)
       ? parseUrlWithSafeEscapes(`https:${parserPathname}`)
@@ -866,19 +902,26 @@ function rewriteRawTemplateAssetReferencesWithCounts(input: {
         ? parseUrlWithSafeEscapes(parserPathname)
         : null
     if (parsed) {
-      const hostPath = normalizeTemplateAssetPath(`${parsed.hostname}${parsed.pathname}`)
+      const hostnames = new Set([parsed.hostname])
+      if (parsed.hostname.startsWith('www.')) hostnames.add(parsed.hostname.slice(4))
+      else hostnames.add(`www.${parsed.hostname}`)
+      for (const host of hostnames) {
+        candidates.push(normalizeTemplateAssetPath(`${host}${parsed.pathname}`))
+      }
       const pathOnly = normalizeTemplateAssetPath(parsed.pathname)
-      candidates.push(hostPath, pathOnly)
+      candidates.push(pathOnly)
       if (pathOnly) {
         candidates.push(normalizeTemplateAssetPath(path.posix.join('/', baseDir, pathOnly)))
       }
       return [...new Set(candidates.filter((candidate): candidate is string => Boolean(candidate)))]
     }
-    if (parserPathname.startsWith('/')) {
-      candidates.push(normalizeTemplateAssetPath(parserPathname))
-    } else {
-      candidates.push(normalizeTemplateAssetPath(path.posix.join('/', baseDir, parserPathname)))
-      candidates.push(normalizeTemplateAssetPath(parserPathname))
+    for (const variant of pathnameVariants) {
+      if (variant.startsWith('/')) {
+        candidates.push(normalizeTemplateAssetPath(variant))
+      } else {
+        candidates.push(normalizeTemplateAssetPath(path.posix.join('/', baseDir, variant)))
+        candidates.push(normalizeTemplateAssetPath(variant))
+      }
     }
     return [...new Set(candidates.filter((candidate): candidate is string => Boolean(candidate)))]
   }
@@ -895,24 +938,68 @@ function rewriteRawTemplateAssetReferencesWithCounts(input: {
         ? isFontAssetPath(ref)
           ? 'font'
           : isImageAssetPath(ref)
-            ? 'image'
+            ? /\.svg(?:[?#].*)?$/i.test(ref)
+              ? 'svg'
+              : 'image'
             : 'other'
         : kindHint
+    const candidatePaths = ref ? candidatePathsForReference(ref, sourceType) : []
+    const resolvedCandidate = candidatePaths[0] ?? null
+    const normalizedReference = splitPreviewAssetUrlSuffix(ref).pathname || null
     if (!ref) {
-      return { originalUrl: ref, rewrittenUrl: null, normalizedPath: null, externalPreserved: false, missing: true, alreadyRewritten: false, isDataUrl: false, kind }
+      return {
+        originalUrl: ref,
+        normalizedReference,
+        resolvedCandidate,
+        rewrittenUrl: null,
+        normalizedPath: null,
+        reason: 'empty_reference',
+        externalPreserved: false,
+        missing: true,
+        alreadyRewritten: false,
+        isDataUrl: false,
+        kind: 'unknown',
+      }
     }
     if (ref.startsWith('#') || lower.startsWith('mailto:') || lower.startsWith('tel:') || lower.startsWith('javascript:')) {
-      return { originalUrl: ref, rewrittenUrl: null, normalizedPath: null, externalPreserved: true, missing: false, alreadyRewritten: false, isDataUrl: false, kind }
+      return {
+        originalUrl: ref,
+        normalizedReference,
+        resolvedCandidate,
+        rewrittenUrl: null,
+        normalizedPath: null,
+        reason: 'unsupported_or_fragment_reference_preserved',
+        externalPreserved: true,
+        missing: false,
+        alreadyRewritten: false,
+        isDataUrl: false,
+        kind: 'unsupported',
+      }
     }
     if (lower.startsWith('data:')) {
-      return { originalUrl: ref, rewrittenUrl: null, normalizedPath: null, externalPreserved: true, missing: false, alreadyRewritten: false, isDataUrl: true, kind }
+      return {
+        originalUrl: ref,
+        normalizedReference,
+        resolvedCandidate,
+        rewrittenUrl: null,
+        normalizedPath: null,
+        reason: 'data_url_preserved',
+        externalPreserved: true,
+        missing: false,
+        alreadyRewritten: false,
+        isDataUrl: true,
+        kind: 'data',
+      }
     }
     if (lower.startsWith('/api/gnr8/runtime/preview-assets/')) {
       const deduped = ref.replace(duplicatePreviewPrefixPattern, `${assetRoot}/`)
       return {
         originalUrl: ref,
+        normalizedReference,
+        resolvedCandidate,
         rewrittenUrl: deduped,
         normalizedPath: null,
+        reason: deduped === ref ? 'already_preview_asset_url' : 'deduplicated_preview_asset_url',
         externalPreserved: false,
         missing: false,
         alreadyRewritten: true,
@@ -922,23 +1009,29 @@ function rewriteRawTemplateAssetReferencesWithCounts(input: {
     }
     const isRemote = lower.startsWith('http://') || lower.startsWith('https://') || lower.startsWith('//')
     const { suffix } = splitPreviewAssetUrlSuffix(ref)
-    const normalized = findFileMapCandidate(candidatePathsForReference(ref, sourceType))
+    const normalized = findFileMapCandidate(candidatePaths)
     if (!normalized) {
       return {
         originalUrl: ref,
+        normalizedReference,
+        resolvedCandidate,
         rewrittenUrl: null,
         normalizedPath: null,
+        reason: isRemote ? 'external_reference_preserved' : input.fileMapPaths ? 'file_map_path_not_found' : 'invalid_path',
         externalPreserved: isRemote,
         missing: !isRemote,
         alreadyRewritten: false,
         isDataUrl: false,
-        kind,
+        kind: isRemote && kind !== 'stylesheet' ? 'external' : kind,
       }
     }
     return {
       originalUrl: ref,
+      normalizedReference,
+      resolvedCandidate,
       rewrittenUrl: `${assetRoot}/${normalized}${suffix}`,
       normalizedPath: normalized,
+      reason: normalized === resolvedCandidate ? 'matched_persisted_file' : 'matched_persisted_file_variant',
       externalPreserved: false,
       missing: false,
       alreadyRewritten: false,
@@ -947,8 +1040,60 @@ function rewriteRawTemplateAssetReferencesWithCounts(input: {
     }
   }
 
+  const recordAssetReferenceEvidence = (resolution: RawPreviewAssetReferenceResolution, sourceType: RawPreviewAssetRewriteSource) => {
+    evidence.assetReferencesInspected = (evidence.assetReferencesInspected ?? 0) + 1
+    if (resolution.rewrittenUrl && !resolution.alreadyRewritten) {
+      evidence.assetReferencesRewritten = (evidence.assetReferencesRewritten ?? 0) + 1
+    }
+    if (resolution.missing) {
+      evidence.assetReferencesMissing = (evidence.assetReferencesMissing ?? 0) + 1
+    }
+    if (resolution.externalPreserved) {
+      evidence.assetReferencesExternalPreserved = (evidence.assetReferencesExternalPreserved ?? 0) + 1
+    }
+    const item = {
+      originalReference: resolution.originalUrl,
+      normalizedReference: resolution.normalizedReference,
+      resolvedCandidate: resolution.resolvedCandidate,
+      matchedFilePath: resolution.normalizedPath,
+      servedPreviewUrl: resolution.rewrittenUrl,
+      reason: resolution.reason,
+      assetKind: resolution.kind,
+      sourceType,
+      routePath: routePathForEvidence,
+      rawFilePath: input.entryHtmlPath,
+    }
+    evidence.assetReferenceEvidence = [...(evidence.assetReferenceEvidence ?? []), item]
+    if (resolution.missing) {
+      evidence.missingAssetReferences = [
+        ...(evidence.missingAssetReferences ?? []),
+        {
+          originalReference: item.originalReference,
+          normalizedReference: item.normalizedReference,
+          resolvedCandidate: item.resolvedCandidate,
+          reason: item.reason,
+          assetKind: item.assetKind,
+          sourceType: item.sourceType,
+          routePath: item.routePath,
+          rawFilePath: item.rawFilePath,
+        },
+      ]
+    }
+  }
+
+  const recordScriptDependentMediaReference = (rawRef: string) => {
+    const resolution = resolveReference(rawRef, isImageAssetPath(rawRef) ? 'image' : 'unknown', 'script_detected')
+    const warningResolution: RawPreviewAssetReferenceResolution = {
+      ...resolution,
+      rewrittenUrl: null,
+      reason: resolution.normalizedPath ? 'script_dependent_media_reference_matched_but_not_rewritten' : 'script_dependent_media_reference_unmatched',
+    }
+    recordAssetReferenceEvidence(warningResolution, 'script_detected')
+  }
+
   const recordHtmlReferenceEvidence = (resolution: RawPreviewAssetReferenceResolution, sourceType: RawPreviewAssetRewriteSource) => {
-    if (resolution.kind === 'image') {
+    recordAssetReferenceEvidence(resolution, sourceType)
+    if (resolution.kind === 'image' || resolution.kind === 'svg') {
       evidence.imageReferencesFound += 1
       if (resolution.rewrittenUrl && !resolution.alreadyRewritten) evidence.imageReferencesRewritten += 1
       if (resolution.missing) evidence.imageReferencesMissing += 1
@@ -975,12 +1120,13 @@ function rewriteRawTemplateAssetReferencesWithCounts(input: {
   }
 
   const recordCssReferenceEvidence = (resolution: RawPreviewAssetReferenceResolution, sourceType: RawPreviewAssetRewriteSource) => {
+    recordAssetReferenceEvidence(resolution, sourceType)
     evidence.cssUrlReferencesFound += 1
-    if (resolution.kind === 'image') evidence.imageReferencesFound += 1
+    if (resolution.kind === 'image' || resolution.kind === 'svg') evidence.imageReferencesFound += 1
     if (resolution.kind === 'font') evidence.fontFilesFound += 1
     if (resolution.rewrittenUrl && !resolution.alreadyRewritten) {
       evidence.cssUrlReferencesRewritten += 1
-      if (resolution.kind === 'image') evidence.imageReferencesRewritten += 1
+      if (resolution.kind === 'image' || resolution.kind === 'svg') evidence.imageReferencesRewritten += 1
       if (resolution.kind === 'font') evidence.fontFilesRewritten += 1
       emitCssAssetRewriteApplied(resolution.originalUrl, resolution.rewrittenUrl, sourceType)
       rewrittenAssetCount += 1
@@ -992,7 +1138,7 @@ function rewriteRawTemplateAssetReferencesWithCounts(input: {
     }
     if (resolution.missing) {
       evidence.cssUrlReferencesMissing += 1
-      if (resolution.kind === 'image') evidence.imageReferencesMissing += 1
+      if (resolution.kind === 'image' || resolution.kind === 'svg') evidence.imageReferencesMissing += 1
       emitCssAssetRewriteSkipped(resolution.originalUrl, input.fileMapPaths ? 'file_map_path_not_found' : 'invalid_path', sourceType)
     }
   }
@@ -1018,8 +1164,8 @@ function rewriteRawTemplateAssetReferencesWithCounts(input: {
     inspectCssImports(css)
     return css.replace(cssUrlPattern, (full, quote: string, rawValue: string) => {
       const resolution = resolveReference(String(rawValue ?? ''), isFontAssetPath(String(rawValue ?? '')) ? 'font' : isImageAssetPath(String(rawValue ?? '')) ? 'image' : 'other', sourceType)
-      if (resolution.isDataUrl) return full
       recordCssReferenceEvidence(resolution, sourceType)
+      if (resolution.isDataUrl) return full
       if (!resolution.rewrittenUrl) return full
       const safeQuote = quote || ''
       return `url(${safeQuote}${resolution.rewrittenUrl}${safeQuote})`
@@ -1090,7 +1236,12 @@ function rewriteRawTemplateAssetReferencesWithCounts(input: {
       return `<style${attrs}>${rewritten}</style>`
     })
     .replace(/<script\b[^>]*>([\s\S]*?)<\/script>/gi, (full, scriptBody: string) => {
-      if (/\/uploads\/[^"'\s<)]+/i.test(String(scriptBody ?? ''))) {
+      const body = String(scriptBody ?? '')
+      const scriptRefs = [...body.matchAll(/(?:"|')((?:https?:)?\/\/[^"']+\.(?:avif|bmp|gif|ico|jpe?g|png|svg|webp)(?:[?#][^"']*)?|\/(?:uploads|assets)\/[^"'\s<)]+\.(?:avif|bmp|gif|ico|jpe?g|png|svg|webp)(?:[?#][^"'\s<)]*)?)(?:"|')/gi)]
+        .map((match) => String(match[1] ?? '').trim())
+        .filter(Boolean)
+      for (const ref of [...new Set(scriptRefs)]) recordScriptDependentMediaReference(ref)
+      if (/\/uploads\/[^"'\s<)]+/i.test(body)) {
         emitCssAssetRewriteSkipped('/uploads/*', 'script_generated_css_detected', 'script_detected')
       }
       return full
@@ -1120,6 +1271,7 @@ async function inspectRawPreviewStylesheetAssets(input: {
   artifactId?: string | null
   siteVersionId: string
   siteId: string
+  routePath?: string
   fileMapPaths: ReadonlySet<string>
   context: PreviewReadContext
 }): Promise<RawPreviewAssetRewriteEvidence> {
@@ -1144,6 +1296,7 @@ async function inspectRawPreviewStylesheetAssets(input: {
       siteId: input.siteId,
       siteVersionId: input.siteVersionId,
       entryHtmlPath: stylesheetPath,
+      routePath: input.routePath,
       fileMapPaths: input.fileMapPaths,
     })
     evidence = mergeRawPreviewAssetRewriteEvidence(evidence, inspected.rawPreviewAssetRewriteEvidence)
@@ -1440,6 +1593,7 @@ async function renderRawTemplateSiteVersionPreview(input: {
     siteId: artifact.siteId,
     siteVersionId: artifact.siteVersionId,
     entryHtmlPath: selectedHtmlPath,
+    routePath: selectedRoutePath,
     fileMapPaths: new Set(Object.keys(artifact.fileMap ?? {})),
   })
   const stylesheetEvidence = await inspectRawPreviewStylesheetAssets({
@@ -1447,6 +1601,7 @@ async function renderRawTemplateSiteVersionPreview(input: {
     artifactId: artifact.id,
     siteVersionId: artifact.siteVersionId,
     siteId: artifact.siteId,
+    routePath: selectedRoutePath,
     fileMapPaths: new Set(Object.keys(artifact.fileMap ?? {})),
     context: input.context,
   })

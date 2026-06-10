@@ -1082,16 +1082,62 @@ test('raw template asset evidence covers CSS URL rewrite cases and Dongle font r
   assert.equal(result.html.includes('/api/gnr8/runtime/preview-assets/site-css-unit/sv-css-unit/fonts/dongle.woff2'), true)
   assert.equal(result.html.includes('url(data:image/png;base64,abc)'), true)
   assert.equal(result.html.includes('https://cdn.example.test/keep.png'), true)
-  assert.equal(evidence.cssUrlReferencesFound, 6)
+  assert.equal(evidence.cssUrlReferencesFound, 7)
   assert.equal(evidence.cssUrlReferencesRewritten, 4)
-  assert.equal(evidence.cssUrlReferencesExternalPreserved, 2)
+  assert.equal(evidence.cssUrlReferencesExternalPreserved, 3)
   assert.equal(evidence.imageReferencesMissing, 1)
+  assert.equal(evidence.assetReferencesInspected, 12)
+  assert.equal(evidence.assetReferencesRewritten, 6)
+  assert.equal(evidence.assetReferencesMissing, 1)
+  assert.equal(evidence.assetReferencesExternalPreserved, 5)
+  assert.equal(evidence.missingAssetReferences?.[0]?.originalReference, '/missing/hero.jpg')
+  assert.equal(evidence.assetReferenceEvidence?.some((entry) => entry.assetKind === 'font' && entry.matchedFilePath === 'fonts/dongle.woff2'), true)
   assert.equal(evidence.fontStylesheetsFound, 2)
   assert.equal(evidence.fontStylesheetsPreserved, 2)
   assert.equal(evidence.fontFilesFound, 1)
   assert.equal(evidence.fontFilesRewritten, 1)
   assert.equal(evidence.fontFamilyDongleDetected, true)
   assert.equal(evidence.rootHeadingDongleEvidence.some((entry) => entry.includes('heading selector')), true)
+})
+
+test('raw template asset audit rewrites host-equivalent, resized, lazy, poster, and script-dependent media references', () => {
+  const result = __unifiedRenderPreviewTestUtils.rewriteRawTemplateAssetReferencesWithCounts({
+    html: [
+      '<!doctype html><html><head>',
+      '<link rel="icon" href="//viroidoc.eu/uploads/favicon.ico">',
+      '</head><body>',
+      '<img src="https://viroidoc.eu/uploads/hero-640x360.jpg?ver=2" srcset="https://www.viroidoc.eu/uploads/card.png 1x, /uploads/card@2x.png#sharp 2x" data-lazy-src="../uploads/lazy%20image.webp">',
+      '<video poster="/uploads/video-poster.jpg"></video>',
+      '<iframe src="https://www.youtube.com/embed/abc123?poster=https://i.ytimg.com/vi/abc123/hqdefault.jpg"></iframe>',
+      '<script>window.hero="/uploads/script-hero.jpg"; window.remote="https://www.viroidoc.eu/uploads/script-remote.jpg";</script>',
+      '</body></html>',
+    ].join(''),
+    siteId: 'site-asset-audit',
+    siteVersionId: 'sv-asset-audit',
+    entryHtmlPath: 'pages/news/index.html',
+    routePath: '/news',
+    fileMapPaths: new Set([
+      'www.viroidoc.eu/uploads/favicon.ico',
+      'www.viroidoc.eu/uploads/hero.jpg',
+      'uploads/card.png',
+      'uploads/card@2x.png',
+      'pages/uploads/lazy image.webp',
+      'uploads/video-poster.jpg',
+      'uploads/script-hero.jpg',
+      'www.viroidoc.eu/uploads/script-remote.jpg',
+    ]),
+  })
+
+  const evidence = result.rawPreviewAssetRewriteEvidence
+  assert.equal(result.html.includes('/api/gnr8/runtime/preview-assets/site-asset-audit/sv-asset-audit/www.viroidoc.eu/uploads/favicon.ico'), true)
+  assert.equal(result.html.includes('/api/gnr8/runtime/preview-assets/site-asset-audit/sv-asset-audit/www.viroidoc.eu/uploads/hero.jpg?ver=2'), true)
+  assert.equal(result.html.includes('/api/gnr8/runtime/preview-assets/site-asset-audit/sv-asset-audit/pages/uploads/lazy image.webp'), true)
+  assert.equal(result.html.includes('/api/gnr8/runtime/preview-assets/site-asset-audit/sv-asset-audit/uploads/video-poster.jpg'), true)
+  assert.equal(result.html.includes('/api/gnr8/runtime/preview-assets/site-asset-audit/sv-asset-audit/uploads/script-hero.jpg'), false)
+  assert.equal(evidence.assetReferenceEvidence?.some((entry) => entry.routePath === '/news' && entry.rawFilePath === 'pages/news/index.html'), true)
+  assert.equal(evidence.assetReferenceEvidence?.some((entry) => entry.reason === 'matched_persisted_file_variant' && entry.matchedFilePath === 'www.viroidoc.eu/uploads/hero.jpg'), true)
+  assert.equal(evidence.assetReferenceEvidence?.some((entry) => entry.sourceType === 'script_detected' && entry.reason === 'script_dependent_media_reference_matched_but_not_rewritten'), true)
+  assert.equal(evidence.assetReferencesRewritten, 6)
 })
 
 test('raw template asset rewriting tolerates malformed percent URLs in HTML attributes, srcset, links, and CSS', () => {

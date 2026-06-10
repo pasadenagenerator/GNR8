@@ -48,6 +48,34 @@ function normalizeTemplatePath(value: string): string {
   return segments.join("/");
 }
 
+function safeDecodePath(value: string): string {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
+}
+
+function isImageAssetPath(value: string): boolean {
+  return /\.(?:avif|bmp|gif|ico|jpe?g|png|svg|webp)(?:[?#].*)?$/i.test(String(value ?? ""));
+}
+
+function resizedImageFallbackCandidates(candidate: string): string[] {
+  const normalized = normalizeTemplatePath(candidate);
+  if (!normalized || !isImageAssetPath(normalized)) return [];
+  const ext = path.posix.extname(normalized);
+  if (!ext) return [];
+  const dir = path.posix.dirname(normalized);
+  const basename = path.posix.basename(normalized, ext);
+  const fallbackBasenames = [
+    basename.replace(/-\d{2,5}x\d{2,5}(?:_\d{2,5}x\d{2,5})?$/i, ""),
+    basename.replace(/-scaled$/i, ""),
+  ].filter((value) => value && value !== basename);
+  return fallbackBasenames
+    .map((name) => normalizeTemplatePath(path.posix.join(dir === "." ? "" : dir, `${name}${ext}`)))
+    .filter(Boolean);
+}
+
 function splitUrlSuffix(value: string): { pathname: string; suffix: string } {
   const trimmed = String(value ?? "").trim();
   if (!trimmed) return { pathname: "", suffix: "" };
@@ -103,6 +131,7 @@ function resolveAssetPathFromReference(input: { reference: string; contextFilePa
   const normalizedContextPath = normalizeTemplatePath(input.contextFilePath) || "index.html";
   const contextDir = path.posix.dirname(normalizedContextPath);
   const { pathname } = splitPreviewUrlSuffix(reference);
+  const pathnameVariants = [...new Set([pathname, safeDecodePath(pathname)].filter(Boolean))];
   const candidates: Array<string | null> = [];
   let parsed: URL | null = null;
   try {
@@ -113,22 +142,33 @@ function resolveAssetPathFromReference(input: { reference: string; contextFilePa
 
   if (parsed) {
     const pathOnly = normalizeTemplatePath(parsed.pathname);
-    candidates.push(normalizeTemplatePath(`${parsed.hostname}${parsed.pathname}`), pathOnly);
+    const hostnames = new Set([parsed.hostname]);
+    if (parsed.hostname.startsWith("www.")) hostnames.add(parsed.hostname.slice(4));
+    else hostnames.add(`www.${parsed.hostname}`);
+    for (const host of hostnames) {
+      candidates.push(normalizeTemplatePath(`${host}${parsed.pathname}`));
+    }
+    candidates.push(pathOnly);
     if (pathOnly) candidates.push(normalizeTemplatePath(path.posix.join("/", contextDir === "." ? "" : contextDir, pathOnly)));
-  } else if (pathname.startsWith("/")) {
-    candidates.push(normalizeTemplatePath(pathname));
   } else {
-    candidates.push(normalizeTemplatePath(path.posix.join("/", contextDir === "." ? "" : contextDir, pathname)));
-    candidates.push(normalizeTemplatePath(pathname));
+    for (const variant of pathnameVariants) {
+      if (variant.startsWith("/")) {
+        candidates.push(normalizeTemplatePath(variant));
+      } else {
+        candidates.push(normalizeTemplatePath(path.posix.join("/", contextDir === "." ? "" : contextDir, variant)));
+        candidates.push(normalizeTemplatePath(variant));
+      }
+    }
   }
 
   const normalizedCandidates = [...new Set(candidates.filter((candidate): candidate is string => Boolean(candidate)))];
   if (normalizedCandidates.length === 0) return null;
   if (!input.fileMapPaths) return normalizedCandidates[0] ?? null;
-  for (const candidate of normalizedCandidates) {
+  const expandedCandidates = [...new Set(normalizedCandidates.flatMap((candidate) => [candidate, ...resizedImageFallbackCandidates(candidate)]))];
+  for (const candidate of expandedCandidates) {
     if (input.fileMapPaths.has(candidate)) return candidate;
   }
-  for (const candidate of normalizedCandidates) {
+  for (const candidate of expandedCandidates) {
     const suffix = `/${candidate}`;
     const match = [...input.fileMapPaths].find((filePath) => filePath.endsWith(suffix));
     if (match) return match;

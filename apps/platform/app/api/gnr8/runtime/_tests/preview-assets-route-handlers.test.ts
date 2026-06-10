@@ -492,6 +492,94 @@ test("preview assets route resolves persisted css file when asset path contains 
   assert.equal(response.headers.get("x-gnr8-preview-asset-path"), "assets/user-style.css");
 });
 
+test("preview assets route rewrites css font urls to font asset urls served with font MIME", async () => {
+  const handlers = createPreviewAssetsRouteHandlers({
+    resolveDomainSiteVersionForHost: async () =>
+      ({
+        outcome: "domain_hit",
+        host: "beauty-clinic.pasadenagenerator.com",
+        siteId: "site_1",
+        siteVersionId: "sv_1",
+        domain: "beauty-clinic.pasadenagenerator.com",
+        status: "active",
+        bindingId: "binding_1",
+      }) as never,
+    resolveAgencyIdForSiteVersion: async () => "agency_1",
+    requireAgencyActionContext: async () => ({ actorMode: "agency_member", agencyId: "agency_1" } as never),
+    getRawImportedSiteArtifact: async () =>
+      ({
+        id: "artifact_imported_1",
+        artifactType: "raw_imported_site",
+        siteId: "site_1",
+        siteVersionId: "sv_1",
+        entryHtmlPath: "index.html",
+        assetBasePath: ".",
+        fileMap: {
+          "assets/site.css": { path: "assets/site.css", mediaType: "text/css; charset=utf-8", sizeBytes: 64, sha256: "css" },
+          "fonts/dongle.woff2": { path: "fonts/dongle.woff2", mediaType: "application/octet-stream", sizeBytes: 4, sha256: "font" },
+        },
+        metadata: {
+          sourceUrl: "https://example.com",
+          finalUrl: "https://www.example.com",
+          htmlByteLength: 123,
+          diagnostics: { codes: [] },
+          assetSummary: { persistedAssetCount: 2, externalFallbackAssetCount: 0 },
+        },
+        createdAt: "2026-05-06T00:00:00.000Z",
+      }) as never,
+    getRawTemplateSiteArtifact: async () => null,
+    getRawTemplateSiteAsset: async ({ filePath }) => {
+      if (filePath === "assets/site.css") {
+        return {
+          mediaType: "text/css; charset=utf-8",
+          sizeBytes: 64,
+          sha256: "css",
+          bytes: Buffer.from('@font-face{font-family:Dongle;src:url("../fonts/dongle.woff2") format("woff2")}', "utf8"),
+        } as never;
+      }
+      if (filePath === "fonts/dongle.woff2") {
+        return { mediaType: "application/octet-stream", sizeBytes: 4, sha256: "font", bytes: Buffer.from([0, 1, 2, 3]) } as never;
+      }
+      return null;
+    },
+  });
+
+  const cssResponse = await handlers.GET(
+    new Request("https://beauty-clinic.pasadenagenerator.com/api/gnr8/runtime/preview-assets/site_1/sv_1/assets/site.css", {
+      headers: { host: "beauty-clinic.pasadenagenerator.com" },
+    }),
+    {
+      params: Promise.resolve({
+        siteId: "site_1",
+        siteVersionId: "sv_1",
+        assetPath: ["assets", "site.css"],
+      }),
+    },
+  );
+  const css = await cssResponse.text();
+
+  assert.equal(cssResponse.status, 200);
+  assert.equal(cssResponse.headers.get("content-type"), "text/css; charset=utf-8");
+  assert.equal(css.includes("/api/gnr8/runtime/preview-assets/site_1/sv_1/fonts/dongle.woff2"), true);
+
+  const fontResponse = await handlers.GET(
+    new Request("https://beauty-clinic.pasadenagenerator.com/api/gnr8/runtime/preview-assets/site_1/sv_1/fonts/dongle.woff2", {
+      headers: { host: "beauty-clinic.pasadenagenerator.com" },
+    }),
+    {
+      params: Promise.resolve({
+        siteId: "site_1",
+        siteVersionId: "sv_1",
+        assetPath: ["fonts", "dongle.woff2"],
+      }),
+    },
+  );
+
+  assert.equal(fontResponse.status, 200);
+  assert.equal(fontResponse.headers.get("content-type"), "font/woff2");
+  assert.equal(fontResponse.headers.get("x-gnr8-preview-asset-path"), "fonts/dongle.woff2");
+});
+
 test("preview assets route prefers raw imported-site artifact over raw template artifact when both exist", async () => {
   const handlers = createPreviewAssetsRouteHandlers({
     resolveDomainSiteVersionForHost: async () =>

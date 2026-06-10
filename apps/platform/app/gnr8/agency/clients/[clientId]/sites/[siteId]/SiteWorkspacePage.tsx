@@ -679,6 +679,19 @@ function renderPreviewContent(readModel: Awaited<ReturnType<typeof getSiteWorksp
     routes: readModel.multiPageImport.routes,
     rawTemplatePreviewEvidence: readModel.preview.previewRuntimeSummary?.rawTemplatePreviewEvidence ?? null,
   })
+  const rawPreviewAssetEvidence = rawPreviewDiagnostics?.rawPreviewAssetRewriteEvidence ?? null
+  const rawPreviewAssetsInspected =
+    rawPreviewAssetEvidence?.assetReferencesInspected
+    ?? ((rawPreviewAssetEvidence?.cssUrlReferencesFound ?? 0)
+      + (rawPreviewAssetEvidence?.imageReferencesFound ?? 0)
+      + (rawPreviewAssetEvidence?.fontStylesheetsFound ?? 0))
+  const rawPreviewAssetsRewritten = rawPreviewAssetEvidence?.assetReferencesRewritten
+    ?? ((rawPreviewAssetEvidence?.cssUrlReferencesRewritten ?? 0) + (rawPreviewDiagnostics?.rawPreviewAssetRewriteEvidence?.imageReferencesRewritten ?? 0))
+  const rawPreviewAssetsMissing = rawPreviewAssetEvidence?.assetReferencesMissing
+    ?? ((rawPreviewAssetEvidence?.cssUrlReferencesMissing ?? 0) + (rawPreviewAssetEvidence?.imageReferencesMissing ?? 0))
+  const rawPreviewExternalPreserved = rawPreviewAssetEvidence?.assetReferencesExternalPreserved
+    ?? ((rawPreviewAssetEvidence?.cssUrlReferencesExternalPreserved ?? 0) + (rawPreviewAssetEvidence?.fontStylesheetsPreserved ?? 0))
+  const rawPreviewMissingRefs = rawPreviewAssetEvidence?.missingAssetReferences?.slice(0, 10) ?? []
   const latestRawPreviewValidationEvidence = readModel.preview.latestRawPreviewValidationEvidence
 
   return (
@@ -828,20 +841,40 @@ function renderPreviewContent(readModel: Awaited<ReturnType<typeof getSiteWorksp
       </div>
       {rawPreviewDiagnostics ? (
         <div style={{ margin: '8px 0 0', border: '1px solid #e2e8f0', borderRadius: 8, padding: 10, background: '#f8fafc' }}>
-          <div style={{ margin: 0, color: '#0f172a', fontSize: 12, fontWeight: 700 }}>Preview Diagnostics</div>
+          <div style={{ margin: 0, color: '#0f172a', fontSize: 12, fontWeight: 700 }}>Raw Preview Asset Fidelity</div>
           <div style={{ marginTop: 6, display: 'grid', gap: 4, color: '#334155', fontSize: 12 }}>
             <div>evidence source: {rawPreviewDiagnostics.evidenceSource}</div>
-            <div>selectedRoutePath: {rawPreviewDiagnostics.selectedRoutePath ?? 'n/a'}</div>
-            <div>selectedRawFilePath: {rawPreviewDiagnostics.selectedRawFilePath ?? 'n/a'}</div>
+            <div>routePath: {rawPreviewDiagnostics.selectedRoutePath ?? 'n/a'}</div>
+            <div>rawFilePath: {rawPreviewDiagnostics.selectedRawFilePath ?? 'n/a'}</div>
             <div>htmlByteLengthBeforeRewrite: {rawPreviewDiagnostics.htmlByteLengthBeforeRewrite ?? 'n/a'}</div>
             <div>htmlByteLengthAfterRewrite: {rawPreviewDiagnostics.htmlByteLengthAfterRewrite ?? 'n/a'}</div>
             <div>rewrittenLinkCount: {rawPreviewDiagnostics.rewrittenLinkCount ?? 'n/a'}</div>
-            <div>missingAssetReferenceCount: {rawPreviewDiagnostics.missingAssetReferenceCount ?? 'n/a'}</div>
-            <div>Dongle detected: {rawPreviewDiagnostics.fontFamilyDongleDetected === null ? 'n/a' : rawPreviewDiagnostics.fontFamilyDongleDetected ? 'yes' : 'no'}</div>
+            <div>assetRefsInspected: {rawPreviewAssetsInspected}</div>
+            <div>assetRefsRewritten: {rawPreviewAssetsRewritten}</div>
+            <div>assetRefsMissing: {rawPreviewAssetsMissing}</div>
+            <div>externalAssetRefsPreserved: {rawPreviewExternalPreserved}</div>
+            <div>disabledScripts: {readModel.preview.previewRuntimeSummary?.rawTemplatePreviewEvidence?.disabledScriptCount ?? 0}</div>
+            <div>detectedFontFamilies: Dongle={rawPreviewDiagnostics.fontFamilyDongleDetected === null ? 'n/a' : rawPreviewDiagnostics.fontFamilyDongleDetected ? 'yes' : 'no'}</div>
+            {rawPreviewMissingRefs.length > 0 ? (
+              <div style={{ marginTop: 4 }}>
+                <div style={{ fontWeight: 700, color: '#0f172a' }}>top missing asset refs</div>
+                <ol style={{ margin: '4px 0 0', paddingLeft: 18 }}>
+                  {rawPreviewMissingRefs.map((ref, index) => (
+                    <li key={`${ref.originalReference}:${ref.routePath}:${index}`}>
+                      {ref.originalReference} · {ref.reason} · {ref.assetKind} · {ref.routePath} · {ref.rawFilePath}
+                    </li>
+                  ))}
+                </ol>
+              </div>
+            ) : null}
             {rawPreviewDiagnostics.rawPreviewAssetRewriteEvidence ? (
               <details style={{ marginTop: 4 }}>
                 <summary style={{ cursor: 'pointer', color: '#0f172a', fontWeight: 700 }}>Asset rewrite evidence</summary>
                 <div style={{ marginTop: 6, display: 'grid', gap: 4 }}>
+                  <div>assetReferencesInspected: {rawPreviewDiagnostics.rawPreviewAssetRewriteEvidence.assetReferencesInspected ?? 0}</div>
+                  <div>assetReferencesRewritten: {rawPreviewDiagnostics.rawPreviewAssetRewriteEvidence.assetReferencesRewritten ?? 0}</div>
+                  <div>assetReferencesMissing: {rawPreviewDiagnostics.rawPreviewAssetRewriteEvidence.assetReferencesMissing ?? 0}</div>
+                  <div>assetReferencesExternalPreserved: {rawPreviewDiagnostics.rawPreviewAssetRewriteEvidence.assetReferencesExternalPreserved ?? 0}</div>
                   <div>stylesheetsInspected: {rawPreviewDiagnostics.rawPreviewAssetRewriteEvidence.stylesheetsInspected}</div>
                   <div>cssUrlReferencesFound: {rawPreviewDiagnostics.rawPreviewAssetRewriteEvidence.cssUrlReferencesFound}</div>
                   <div>cssUrlReferencesRewritten: {rawPreviewDiagnostics.rawPreviewAssetRewriteEvidence.cssUrlReferencesRewritten}</div>

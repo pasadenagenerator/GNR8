@@ -58,6 +58,32 @@ export type PreviewRuntimeSummary = {
       fontFamilyDongleDetected: boolean;
       rootHeadingDongleEvidence: string[];
       malformedUriDecodeFallbackCount?: number;
+      assetReferencesInspected?: number;
+      assetReferencesRewritten?: number;
+      assetReferencesMissing?: number;
+      assetReferencesExternalPreserved?: number;
+      assetReferenceEvidence?: Array<{
+        originalReference: string;
+        normalizedReference: string | null;
+        resolvedCandidate: string | null;
+        matchedFilePath: string | null;
+        servedPreviewUrl: string | null;
+        reason: string;
+        assetKind: string;
+        sourceType: string;
+        routePath: string;
+        rawFilePath: string;
+      }>;
+      missingAssetReferences?: Array<{
+        originalReference: string;
+        normalizedReference: string | null;
+        resolvedCandidate: string | null;
+        reason: string;
+        assetKind: string;
+        sourceType: string;
+        routePath: string;
+        rawFilePath: string;
+      }>;
     };
     disabledScriptCount?: number;
     dbReadCount?: number;

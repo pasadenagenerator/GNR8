@@ -6,6 +6,12 @@ export type PreviewRouteRawTemplateTraceEvidence = {
   disabledScriptCount?: number
   dbReadCount?: number
   dbClientAcquisitionCount?: number
+  rawPreviewAssetRewriteEvidence?: {
+    assetReferencesInspected?: number
+    assetReferencesRewritten?: number
+    assetReferencesMissing?: number
+    fontFamilyDongleDetected?: boolean
+  } | null
 }
 
 export function resolveRawTemplatePreviewTraceEvidence(input: {
@@ -35,5 +41,10 @@ export function rawTemplatePreviewTraceHeaders(input: {
     'x-gnr8-preview-disabled-scripts-count': String(evidence?.disabledScriptCount ?? 0),
     'x-gnr8-preview-db-read-count': String(evidence?.dbReadCount ?? 0),
     'x-gnr8-preview-db-client-acquisition-count': String(evidence?.dbClientAcquisitionCount ?? 0),
+    'x-gnr8-raw-assets-inspected': String(evidence?.rawPreviewAssetRewriteEvidence?.assetReferencesInspected ?? 0),
+    'x-gnr8-raw-assets-rewritten': String(evidence?.rawPreviewAssetRewriteEvidence?.assetReferencesRewritten ?? evidence?.rewrittenAssetCount ?? 0),
+    'x-gnr8-raw-assets-missing': String(evidence?.rawPreviewAssetRewriteEvidence?.assetReferencesMissing ?? 0),
+    'x-gnr8-raw-font-dongle-detected': evidence?.rawPreviewAssetRewriteEvidence?.fontFamilyDongleDetected ? 'true' : 'false',
+    'x-gnr8-raw-disabled-scripts-count': String(evidence?.disabledScriptCount ?? 0),
   }
 }
