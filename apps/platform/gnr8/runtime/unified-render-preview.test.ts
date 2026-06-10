@@ -640,7 +640,7 @@ test('raw template multipage link rewrite remains disabled outside controlled ro
 test('raw template preview route-map serving resolves /about to assembled child HTML and rewrites child assets', async () => {
   const requestedAssets: string[] = []
   let listContentSlotsCount = 0
-  const overrideStatusLookups: string[] = []
+  const overrideStatusLookups: Array<string | undefined> = []
   const restore = setUnifiedRenderPreviewDependenciesForTest({
     getPoolStatus: () => ({ totalCount: 1, idleCount: 1, waitingCount: 0 }),
     getSiteVersion: async () =>
@@ -1436,6 +1436,125 @@ test('Viroidoc-like raw root and news previews preserve Dongle and persisted CSS
     assert.equal(newsPreview.html.includes('<main><h1>VIROIDOC_ROOT'), false)
     assert.equal(newsPreview.rawTemplatePreviewEvidence?.rawPreviewAssetRewriteEvidence?.fontFamilyDongleDetected, true)
     assert.equal(/<script\b(?![^>]*\btype=["']application\/gnr8-disabled-script["'])/i.test(newsPreview.html), false)
+  } finally {
+    restore()
+  }
+})
+
+test('raw template preview fixes Viroidoc-like returned HTML fidelity for fonts, classes, CSS, and image variants', async () => {
+  const provenance = fixtureViroidocLikeMultiPageAssemblyProvenance()
+  const rootHtml = [
+    '<!doctype html>',
+    '<html lang="en" class="no-js viroidoc-root" data-rhash="fixture">',
+    '<head>',
+    '<link rel="stylesheet" href="assets/user-style.css?1780043367">',
+    '<style>.home-page .hero-title,.home-page .cta{font-family:"Dongle",sans-serif}.hero{background-image:url("/uploads/CZAAaxJ6/ViroiDoc_ULvisitUPVMay2026_photoN__msi___jpg.jpg")}.missing{background:url("/uploads/no-candidate/missing.jpg")}</style>',
+    '</head>',
+    '<body id="p5000" class="home-page viroidoc-template" data-req="lazyload,quicklink">',
+    '<nav><a href="/news">News</a><a href="/project">Project</a></nav>',
+    '<main><section class="hero"><h1 class="hero-title">VIROIDOC_ROOT</h1><a class="button cta" href="/project">Project</a><img src="/uploads/mUAMT3Iv/ViroiDocpartnerIBMCP_May2026__msi___jpg.jpg"></section></main>',
+    '<script>document.body.insertAdjacentHTML("afterbegin","SHOULD_NOT_RUN")</script>',
+    '</body></html>',
+  ].join('')
+  const newsHtml = '<!doctype html><html><body><main><section id="news-listing">NEWS_LISTING</section></main></body></html>'
+  const css = '.home-page .hero{display:grid}.css-bg{background:url("../uploads/yS0Gq45Y/JudithsViroiDocsecondmentinArgentina_April2026__msi___jpg.jpg")}'
+  const htmlByFilePath: Record<string, string> = {
+    'index.html': rootHtml,
+    'pages/root/index.html': rootHtml,
+    'pages/project/index.html': '<!doctype html><html><body><main>PROJECT</main></body></html>',
+    'pages/people/index.html': '<!doctype html><html><body><main>PEOPLE</main></body></html>',
+    'pages/news/index.html': newsHtml,
+  }
+  const fileMap: Record<string, { mediaType: string; sizeBytes: number; sha256: string }> = {
+    ...Object.fromEntries(
+      Object.entries(htmlByFilePath).map(([filePath, html]) => [
+        filePath,
+        { mediaType: 'text/html', sizeBytes: html.length, sha256: `sha-${filePath}` },
+      ]),
+    ),
+    'assets/user-style.css': { mediaType: 'text/css', sizeBytes: css.length, sha256: 'sha-css' },
+    'uploads/CZAAaxJ6/691x0_347x0/ViroiDoc_ULvisitUPVMay2026_photoN__msi___jpg.webp': {
+      mediaType: 'image/webp',
+      sizeBytes: 1,
+      sha256: 'sha-hero',
+    },
+    'uploads/mUAMT3Iv/691x0_347x0/ViroiDocpartnerIBMCP_May2026__msi___jpg.webp': {
+      mediaType: 'image/webp',
+      sizeBytes: 1,
+      sha256: 'sha-img',
+    },
+    'uploads/yS0Gq45Y/691x0_347x0/JudithsViroiDocsecondmentinArgentina_April2026__msi___jpg.webp': {
+      mediaType: 'image/webp',
+      sizeBytes: 1,
+      sha256: 'sha-css-img',
+    },
+  }
+  const restore = setUnifiedRenderPreviewDependenciesForTest({
+    getPoolStatus: () => ({ totalCount: 1, idleCount: 1, waitingCount: 0 }),
+    getSiteVersion: async () =>
+      ({
+        id: 'sv-viroidoc-fidelity',
+        siteId: 'site-viroidoc-fidelity',
+        rendererCompatibilityVersion: 'gnr8-renderer-v1',
+        pages: [],
+        importProvenanceSummary: provenance,
+      }) as any,
+    getRawImportedSiteArtifact: async () =>
+      ({
+        id: 'artifact-viroidoc-fidelity',
+        artifactType: 'raw_imported_site',
+        siteId: 'site-viroidoc-fidelity',
+        siteVersionId: 'sv-viroidoc-fidelity',
+        entryHtmlPath: 'index.html',
+        assetBasePath: '.',
+        fileMap,
+        metadata: { assetSummary: { persistedAssetCount: Object.keys(fileMap).length, externalFallbackAssetCount: 0 } },
+      }) as any,
+    getRawTemplateSiteArtifact: async () => null,
+    getRawTemplateSiteAsset: async (input) => {
+      const html = htmlByFilePath[input.filePath]
+      if (html) return { bytes: Buffer.from(html), sizeBytes: html.length, mediaType: 'text/html' } as any
+      if (input.filePath === 'assets/user-style.css') return { bytes: Buffer.from(css), sizeBytes: css.length, mediaType: 'text/css' } as any
+      return null
+    },
+    listContentSlots: async () => [],
+    listContentOverrides: async () => [],
+  })
+
+  try {
+    const preview = await renderSiteVersionPreview({
+      siteVersionId: 'sv-viroidoc-fidelity',
+      path: '/',
+      mode: 'raw_template_preview',
+      requestCorrelationKey: 'req-viroidoc-fidelity-root',
+    })
+    const rewrite = preview.rawTemplatePreviewEvidence?.rawPreviewAssetRewriteEvidence
+    const graph = preview.rawTemplatePreviewEvidence?.rawPreviewAssetGraphEvidence
+
+    assert.equal(preview.source, 'raw_template_site')
+    assert.equal(preview.html.includes('<html lang="en" class="no-js viroidoc-root" data-rhash="fixture">'), true)
+    assert.equal(preview.html.includes('<body id="p5000" class="home-page viroidoc-template" data-req="lazyload,quicklink">'), true)
+    assert.equal(preview.html.includes('/api/gnr8/runtime/preview-assets/site-viroidoc-fidelity/sv-viroidoc-fidelity/assets/user-style.css?1780043367'), true)
+    assert.equal(preview.html.includes('data-gnr8-restored-font="Dongle"'), true)
+    assert.equal(preview.html.includes('https://fonts.googleapis.com/css2?family=Dongle:wght@300;400;700&display=swap'), true)
+    assert.equal(preview.html.includes('.home-page .hero-title,.home-page .cta{font-family:"Dongle",sans-serif}'), true)
+    assert.equal(preview.html.includes('/api/gnr8/runtime/preview-assets/site-viroidoc-fidelity/sv-viroidoc-fidelity/uploads/CZAAaxJ6/691x0_347x0/ViroiDoc_ULvisitUPVMay2026_photoN__msi___jpg.webp'), true)
+    assert.equal(preview.html.includes('/api/gnr8/runtime/preview-assets/site-viroidoc-fidelity/sv-viroidoc-fidelity/uploads/mUAMT3Iv/691x0_347x0/ViroiDocpartnerIBMCP_May2026__msi___jpg.webp'), true)
+    assert.equal(preview.html.includes('/api/gnr8/runtime/preview-assets/site-viroidoc-fidelity/sv-viroidoc-fidelity/uploads/no-candidate/missing.jpg'), false)
+    assert.equal(/<script\b(?![^>]*\btype=["']application\/gnr8-disabled-script["'])/i.test(preview.html), false)
+    assert.equal(countOccurrences(preview.html, 'VIROIDOC_ROOT'), 1)
+    assert.equal(preview.html.includes('NEWS_LISTING'), false)
+    assert.equal(rewrite?.fontFamilyDongleDetected, true)
+    assert.equal(rewrite?.fontStylesheetsPreserved, 1)
+    assert.equal(rewrite?.imageReferencesMissing, 1)
+    assert.equal(rewrite?.missingAssetReferences?.length, 1)
+    assert.equal(rewrite?.missingAssetReferences?.[0]?.originalReference, '/uploads/no-candidate/missing.jpg')
+    assert.equal(rewrite?.assetReferenceEvidence?.some((entry) => entry.originalReference.includes('CZAAaxJ6') && entry.reason === 'matched_persisted_file_variant'), true)
+    assert.equal(rewrite?.assetReferenceEvidence?.some((entry) => entry.originalReference.includes('mUAMT3Iv') && entry.reason === 'matched_persisted_file_variant'), true)
+    assert.equal(rewrite?.assetReferenceEvidence?.some((entry) => entry.originalReference.includes('yS0Gq45Y') && entry.reason === 'matched_persisted_file_variant'), true)
+    assert.equal(graph?.stylesheetRefsRewritten.some((entry) => entry.originalReference === 'assets/user-style.css?1780043367'), true)
+    assert.equal(graph?.imageRefsRewritten.some((entry) => entry.matchedFilePath?.includes('691x0_347x0')), true)
+    assert.equal(graph?.dongleEvidence.detected, true)
   } finally {
     restore()
   }

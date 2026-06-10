@@ -606,6 +606,12 @@ test("preview assets route serves Viroidoc-like primary CSS and rewrites CSS ima
           "assets/site.css": { path: "assets/site.css", mediaType: "text/css; charset=utf-8", sizeBytes: 96, sha256: "css" },
           "assets/generated.css": { path: "assets/generated.css", mediaType: "text/css; charset=utf-8", sizeBytes: 32, sha256: "generated" },
           "uploads/root-bg.svg": { path: "uploads/root-bg.svg", mediaType: "image/svg+xml", sizeBytes: 4, sha256: "bg" },
+          "uploads/CZAAaxJ6/691x0_347x0/ViroiDoc_ULvisitUPVMay2026_photoN__msi___jpg.webp": {
+            path: "uploads/CZAAaxJ6/691x0_347x0/ViroiDoc_ULvisitUPVMay2026_photoN__msi___jpg.webp",
+            mediaType: "image/webp",
+            sizeBytes: 4,
+            sha256: "variant",
+          },
         },
         metadata: {
           sourceUrl: "https://www.viroidoc.eu/",
@@ -623,7 +629,7 @@ test("preview assets route serves Viroidoc-like primary CSS and rewrites CSS ima
           mediaType: "text/css; charset=utf-8",
           sizeBytes: 96,
           sha256: "css",
-          bytes: Buffer.from('@import url("./generated.css?x=1") screen;h1,button{font-family:"Dongle",sans-serif}.hero{background:url("../uploads/root-bg.svg?cache=1")}', "utf8"),
+          bytes: Buffer.from('@import url("./generated.css?x=1") screen;h1,button{font-family:"Dongle",sans-serif}.hero{background:url("../uploads/root-bg.svg?cache=1")}.news{background:url("../uploads/CZAAaxJ6/ViroiDoc_ULvisitUPVMay2026_photoN__msi___jpg.jpg")}', "utf8"),
         } as never;
       }
       if (filePath === "assets/generated.css") {
@@ -660,6 +666,10 @@ test("preview assets route serves Viroidoc-like primary CSS and rewrites CSS ima
   assert.equal(response.headers.get("x-gnr8-preview-asset-path"), "assets/site.css");
   assert.equal(css.includes('/api/gnr8/runtime/preview-assets/site_1/sv_1/uploads/root-bg.svg?cache=1'), true);
   assert.equal(css.includes('/api/gnr8/runtime/preview-assets/site_1/sv_1/assets/generated.css?x=1'), true);
+  assert.equal(
+    css.includes('/api/gnr8/runtime/preview-assets/site_1/sv_1/uploads/CZAAaxJ6/691x0_347x0/ViroiDoc_ULvisitUPVMay2026_photoN__msi___jpg.webp'),
+    true,
+  );
 });
 
 test("preview assets route prefers raw imported-site artifact over raw template artifact when both exist", async () => {
@@ -1191,6 +1201,76 @@ test("preview assets route falls back uploads variant path to original upload pa
   } finally {
     console.info = originalInfo;
   }
+});
+
+test("preview assets route falls back Viroidoc original upload image refs to persisted resized webp siblings", async () => {
+  const handlers = createPreviewAssetsRouteHandlers({
+    resolveDomainSiteVersionForHost: async () =>
+      ({
+        outcome: "domain_hit",
+        host: "viroidoc.app.pasadenagenerator.com",
+        siteId: "site_1",
+        siteVersionId: "sv_1",
+        domain: "viroidoc.app.pasadenagenerator.com",
+        status: "active",
+        bindingId: "binding_1",
+      }) as never,
+    resolveAgencyIdForSiteVersion: async () => "agency_1",
+    requireAgencyActionContext: async () => ({ actorMode: "agency_member", agencyId: "agency_1" } as never),
+    getRawImportedSiteArtifact: async () =>
+      ({
+        id: "artifact_imported_1",
+        artifactType: "raw_imported_site",
+        siteId: "site_1",
+        siteVersionId: "sv_1",
+        entryHtmlPath: "index.html",
+        assetBasePath: ".",
+        fileMap: {
+          "uploads/CZAAaxJ6/691x0_347x0/ViroiDoc_ULvisitUPVMay2026_photoN__msi___jpg.webp": {
+            path: "uploads/CZAAaxJ6/691x0_347x0/ViroiDoc_ULvisitUPVMay2026_photoN__msi___jpg.webp",
+            mediaType: "image/webp",
+            sizeBytes: 4,
+            sha256: "webp",
+          },
+        },
+        metadata: {
+          sourceUrl: "https://www.viroidoc.eu/",
+          finalUrl: "https://www.viroidoc.eu/",
+          htmlByteLength: 123,
+          diagnostics: { codes: [] },
+          assetSummary: { persistedAssetCount: 1, externalFallbackAssetCount: 0 },
+        },
+        createdAt: "2026-06-10T00:00:00.000Z",
+      }) as never,
+    getRawTemplateSiteArtifact: async () => null,
+    getRawTemplateSiteAsset: async ({ filePath }) =>
+      filePath === "uploads/CZAAaxJ6/691x0_347x0/ViroiDoc_ULvisitUPVMay2026_photoN__msi___jpg.webp"
+        ? ({
+            mediaType: "image/webp",
+            sizeBytes: 4,
+            sha256: "webp",
+            bytes: Buffer.from("RIFF", "utf8"),
+          } as never)
+        : null,
+  });
+
+  const response = await handlers.GET(
+    new Request(
+      "https://viroidoc.app.pasadenagenerator.com/api/gnr8/runtime/preview-assets/site_1/sv_1/uploads/CZAAaxJ6/ViroiDoc_ULvisitUPVMay2026_photoN__msi___jpg.jpg",
+      { headers: { host: "viroidoc.app.pasadenagenerator.com" } },
+    ),
+    {
+      params: Promise.resolve({
+        siteId: "site_1",
+        siteVersionId: "sv_1",
+        assetPath: ["uploads", "CZAAaxJ6", "ViroiDoc_ULvisitUPVMay2026_photoN__msi___jpg.jpg"],
+      }),
+    },
+  );
+
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get("content-type"), "image/webp");
+  assert.equal(response.headers.get("x-gnr8-preview-asset-path"), "uploads/CZAAaxJ6/691x0_347x0/ViroiDoc_ULvisitUPVMay2026_photoN__msi___jpg.webp");
 });
 
 test("preview assets route logs variant not found when uploads variant and original are missing", async () => {

@@ -810,6 +810,43 @@ function isImageAssetPath(value: string): boolean {
   return /\.(?:apng|avif|bmp|gif|ico|jpe?g|png|svg|tiff?|webp)(?:[?#].*)?$/i.test(String(value ?? ''))
 }
 
+function canonicalRawPreviewImageStem(value: string): string {
+  const decoded = safeDecodeURIComponent(String(value ?? '').replaceAll('+', ' ')).value
+  const withoutExtension = decoded.replace(/\.(?:apng|avif|bmp|gif|ico|jpe?g|png|svg|tiff?|webp)$/i, '')
+  return withoutExtension
+    .replace(/__msi___(?:jpe?g|png|webp|gif|svg)$/i, '')
+    .replace(/[-_\s]+/g, '')
+    .toLowerCase()
+}
+
+function findUploadSiblingImageVariant(input: {
+  candidate: string
+  fileMapPaths: ReadonlySet<string>
+}): string | null {
+  const normalized = normalizeTemplateAssetPath(input.candidate)
+  if (!normalized || !isImageAssetPath(normalized) || !normalized.startsWith('uploads/')) return null
+  const parts = normalized.split('/')
+  if (parts.length < 3) return null
+  const uploadFolder = `${parts[0]}/${parts[1]}/`
+  const requestedStem = canonicalRawPreviewImageStem(path.posix.basename(normalized))
+  if (!requestedStem) return null
+  const matches = [...input.fileMapPaths]
+    .filter((filePath) => filePath.startsWith(uploadFolder) && isImageAssetPath(filePath))
+    .map((filePath) => ({
+      filePath,
+      stem: canonicalRawPreviewImageStem(path.posix.basename(filePath)),
+      depth: filePath.split('/').length,
+      webp: /\.webp(?:[?#].*)?$/i.test(filePath),
+    }))
+    .filter((entry) => entry.stem === requestedStem)
+    .sort((left, right) => {
+      if (left.depth !== right.depth) return right.depth - left.depth
+      if (left.webp !== right.webp) return left.webp ? -1 : 1
+      return left.filePath.localeCompare(right.filePath)
+    })
+  return matches[0]?.filePath ?? null
+}
+
 function cssLikelyAppliesDongleToRootHeading(css: string): string[] {
   const evidence: string[] = []
   const source = String(css ?? '')
@@ -1132,6 +1169,10 @@ function rewriteRawTemplateAssetReferencesWithCounts(input: {
     for (const candidate of expandedCandidates) {
       const suffix = `/${candidate}`
       const match = [...input.fileMapPaths].find((filePath) => filePath.endsWith(suffix))
+      if (match) return match
+    }
+    for (const candidate of expandedCandidates) {
+      const match = findUploadSiblingImageVariant({ candidate, fileMapPaths: input.fileMapPaths })
       if (match) return match
     }
     return null
@@ -1539,6 +1580,53 @@ function rewriteRawTemplateAssetReferencesWithCounts(input: {
   }
 }
 
+function rawPreviewHasUsableDongleFontSource(html: string): boolean {
+  const source = String(html ?? '')
+  return (
+    /fonts\.googleapis\.com\/css[^"'<>\s]*family=[^"'<>\s]*Dongle/i.test(source) ||
+    /@font-face\s*\{[^{}]*font-family\s*:\s*["']?Dongle["']?/i.test(source)
+  )
+}
+
+function restoreDongleStylesheetFromRawCssEvidence(input: {
+  html: string
+  evidence: RawPreviewAssetRewriteEvidence
+}): { html: string; restored: boolean } {
+  if (!input.evidence.fontFamilyDongleDetected) return { html: input.html, restored: false }
+  if (rawPreviewHasUsableDongleFontSource(input.html)) return { html: input.html, restored: false }
+  const link =
+    '<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Dongle:wght@300;400;700&display=swap" data-gnr8-restored-font="Dongle">'
+  const html = /<\/head>/i.test(input.html)
+    ? input.html.replace(/<\/head>/i, `${link}</head>`)
+    : `${link}${input.html}`
+  input.evidence.fontStylesheetsFound += 1
+  input.evidence.fontStylesheetsPreserved += 1
+  input.evidence.rootHeadingDongleEvidence = [
+    ...new Set([
+      ...input.evidence.rootHeadingDongleEvidence,
+      'Restored Google Fonts Dongle stylesheet because raw CSS declares Dongle without a font source',
+    ]),
+  ].slice(0, 12)
+  input.evidence.assetReferencesInspected = (input.evidence.assetReferencesInspected ?? 0) + 1
+  input.evidence.assetReferencesExternalPreserved = (input.evidence.assetReferencesExternalPreserved ?? 0) + 1
+  input.evidence.assetReferenceEvidence = [
+    ...(input.evidence.assetReferenceEvidence ?? []),
+    {
+      originalReference: 'https://fonts.googleapis.com/css2?family=Dongle:wght@300;400;700&display=swap',
+      normalizedReference: 'https://fonts.googleapis.com/css2?family=Dongle:wght@300;400;700&display=swap',
+      resolvedCandidate: null,
+      matchedFilePath: null,
+      servedPreviewUrl: null,
+      reason: 'restored_external_font_stylesheet_from_raw_css_evidence',
+      assetKind: 'stylesheet',
+      sourceType: 'stylesheet',
+      routePath: '/',
+      rawFilePath: '',
+    },
+  ]
+  return { html, restored: true }
+}
+
 function neutralizeRawPreviewScripts(html: string): { html: string; disabledScriptCount: number } {
   let disabledScriptCount = 0
   const neutralized = String(html ?? '').replace(/<script\b([^>]*)>([\s\S]*?)<\/script>/gi, (full, attributes: string, body: string) => {
@@ -1894,6 +1982,10 @@ async function renderRawTemplateSiteVersionPreview(input: {
     assetRewrite.rawPreviewAssetRewriteEvidence,
     stylesheetEvidence,
   )
+  for (const item of rawPreviewAssetRewriteEvidence.assetReferenceEvidence ?? []) {
+    item.routePath = item.routePath || selectedRoutePath
+    item.rawFilePath = item.rawFilePath || selectedHtmlPath
+  }
   const requestedPathDecode = safeDecodeURIComponent(input.requestedPath)
   if (requestedPathDecode.warning) {
     rawPreviewAssetRewriteEvidence.malformedUriDecodeFallbackCount = (rawPreviewAssetRewriteEvidence.malformedUriDecodeFallbackCount ?? 0) + 1
@@ -1923,6 +2015,26 @@ async function renderRawTemplateSiteVersionPreview(input: {
     routeMapResolution,
   })
   html = linkRewrite.html
+  const dongleFontRestoration = restoreDongleStylesheetFromRawCssEvidence({
+    html,
+    evidence: rawPreviewAssetRewriteEvidence,
+  })
+  html = dongleFontRestoration.html
+  if (dongleFontRestoration.restored) {
+    const restoredEntries = rawPreviewAssetRewriteEvidence.assetReferenceEvidence ?? []
+    const last = restoredEntries[restoredEntries.length - 1]
+    if (last?.reason === 'restored_external_font_stylesheet_from_raw_css_evidence') {
+      last.routePath = selectedRoutePath
+      last.rawFilePath = selectedHtmlPath
+    }
+    console.info('[preview-runtime] RAW_PREVIEW_DONGLE_FONT_STYLESHEET_RESTORED', {
+      siteId: artifact.siteId,
+      siteVersionId: artifact.siteVersionId,
+      selectedRoutePath,
+      selectedRawFilePath: selectedHtmlPath,
+      reasonCode: 'raw_css_declares_dongle_without_font_source',
+    })
+  }
   const scriptNeutralization = neutralizeRawPreviewScripts(html)
   html = scriptNeutralization.html
   const rawPreviewAssetGraphEvidence = buildRawPreviewAssetGraphEvidence({

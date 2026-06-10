@@ -78,6 +78,18 @@ function isUploadVariantSegment(segment: string): boolean {
   return /^\d+x\d+(?:_\d+x\d+)*$/i.test(segment);
 }
 
+function isImageAssetPath(value: string): boolean {
+  return /\.(?:avif|bmp|gif|ico|jpe?g|png|svg|webp)(?:[?#].*)?$/i.test(String(value ?? ""));
+}
+
+function canonicalImageStem(value: string): string {
+  return safeDecodeURIComponent(String(value ?? "").replaceAll("+", " ")).value
+    .replace(/\.(?:avif|bmp|gif|ico|jpe?g|png|svg|webp)$/i, "")
+    .replace(/__msi___(?:jpe?g|png|webp|gif|svg)$/i, "")
+    .replace(/[-_\s]+/g, "")
+    .toLowerCase();
+}
+
 function resolveUploadVariantFallbackPath(path: string): string | null {
   if (!path.startsWith("uploads/")) return null;
   const parts = path.split("/");
@@ -86,6 +98,34 @@ function resolveUploadVariantFallbackPath(path: string): string | null {
   const withoutVariant = parts.filter((_, index) => index !== variantIndex).join("/");
   if (!withoutVariant.startsWith("uploads/")) return null;
   return withoutVariant;
+}
+
+function resolveUploadSiblingVariantFallbackPath(input: {
+  path: string;
+  fileMapPaths: Iterable<string>;
+}): string | null {
+  const normalizedPath = normalizeAssetPath(input.path.split("/"));
+  if (!normalizedPath || !normalizedPath.startsWith("uploads/") || !isImageAssetPath(normalizedPath)) return null;
+  const parts = normalizedPath.split("/");
+  if (parts.length < 3) return null;
+  const uploadFolder = `${parts[0]}/${parts[1]}/`;
+  const requestedStem = canonicalImageStem(parts[parts.length - 1] ?? "");
+  if (!requestedStem) return null;
+  const matches = [...input.fileMapPaths]
+    .filter((filePath) => filePath.startsWith(uploadFolder) && isImageAssetPath(filePath))
+    .map((filePath) => ({
+      filePath,
+      stem: canonicalImageStem(filePath.split("/").pop() ?? ""),
+      depth: filePath.split("/").length,
+      webp: /\.webp(?:[?#].*)?$/i.test(filePath),
+    }))
+    .filter((entry) => entry.stem === requestedStem)
+    .sort((left, right) => {
+      if (left.depth !== right.depth) return right.depth - left.depth;
+      if (left.webp !== right.webp) return left.webp ? -1 : 1;
+      return left.filePath.localeCompare(right.filePath);
+    });
+  return matches[0]?.filePath ?? null;
 }
 
 function resolveRequestHost(headers: Headers): string {
@@ -344,7 +384,12 @@ export function createPreviewAssetsRouteHandlers(overrides: Partial<PreviewAsset
           break;
         }
         if (!asset) {
-          const fallbackPath = resolveUploadVariantFallbackPath(normalizedPath);
+          const fallbackPath =
+            resolveUploadVariantFallbackPath(normalizedPath) ??
+            resolveUploadSiblingVariantFallbackPath({
+              path: normalizedPath,
+              fileMapPaths: Object.keys(artifact.fileMap ?? {}),
+            });
           if (fallbackPath) {
             let fallbackAsset: Awaited<ReturnType<typeof deps.getRawTemplateSiteAsset>> | null = null;
             try {

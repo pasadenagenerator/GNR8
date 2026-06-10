@@ -62,6 +62,14 @@ function isImageAssetPath(value: string): boolean {
   return /\.(?:avif|bmp|gif|ico|jpe?g|png|svg|webp)(?:[?#].*)?$/i.test(String(value ?? ""));
 }
 
+function canonicalImageStem(value: string): string {
+  return safeDecodePath(String(value ?? "").replaceAll("+", " "))
+    .replace(/\.(?:avif|bmp|gif|ico|jpe?g|png|svg|webp)$/i, "")
+    .replace(/__msi___(?:jpe?g|png|webp|gif|svg)$/i, "")
+    .replace(/[-_\s]+/g, "")
+    .toLowerCase();
+}
+
 function resizedImageFallbackCandidates(candidate: string): string[] {
   const normalized = normalizeTemplatePath(candidate);
   if (!normalized || !isImageAssetPath(normalized)) return [];
@@ -76,6 +84,31 @@ function resizedImageFallbackCandidates(candidate: string): string[] {
   return fallbackBasenames
     .map((name) => normalizeTemplatePath(path.posix.join(dir === "." ? "" : dir, `${name}${ext}`)))
     .filter(Boolean);
+}
+
+function findUploadSiblingImageVariant(input: { candidate: string; fileMapPaths: ReadonlySet<string> }): string | null {
+  const normalized = normalizeTemplatePath(input.candidate);
+  if (!normalized || !isImageAssetPath(normalized) || !normalized.startsWith("uploads/")) return null;
+  const parts = normalized.split("/");
+  if (parts.length < 3) return null;
+  const uploadFolder = `${parts[0]}/${parts[1]}/`;
+  const requestedStem = canonicalImageStem(path.posix.basename(normalized));
+  if (!requestedStem) return null;
+  const matches = [...input.fileMapPaths]
+    .filter((filePath) => filePath.startsWith(uploadFolder) && isImageAssetPath(filePath))
+    .map((filePath) => ({
+      filePath,
+      stem: canonicalImageStem(path.posix.basename(filePath)),
+      depth: filePath.split("/").length,
+      webp: /\.webp(?:[?#].*)?$/i.test(filePath),
+    }))
+    .filter((entry) => entry.stem === requestedStem)
+    .sort((left, right) => {
+      if (left.depth !== right.depth) return right.depth - left.depth;
+      if (left.webp !== right.webp) return left.webp ? -1 : 1;
+      return left.filePath.localeCompare(right.filePath);
+    });
+  return matches[0]?.filePath ?? null;
 }
 
 function splitUrlSuffix(value: string): { pathname: string; suffix: string } {
@@ -173,6 +206,10 @@ function resolveAssetPathFromReference(input: { reference: string; contextFilePa
   for (const candidate of expandedCandidates) {
     const suffix = `/${candidate}`;
     const match = [...input.fileMapPaths].find((filePath) => filePath.endsWith(suffix));
+    if (match) return match;
+  }
+  for (const candidate of expandedCandidates) {
+    const match = findUploadSiblingImageVariant({ candidate, fileMapPaths: input.fileMapPaths });
     if (match) return match;
   }
   return null;
