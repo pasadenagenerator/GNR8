@@ -1,4 +1,5 @@
 import { normalizePagePath } from "@/gnr8/runtime/deterministic";
+import { safeDecodeURIComponent } from "@/gnr8/runtime/raw-preview-uri-decoding";
 import type {
   MultiPageRawArtifactAssemblyRouteEntry,
   RawTemplateSiteFileMeta,
@@ -70,11 +71,7 @@ function stripUrlSuffix(value: string): string {
 }
 
 function safeDecodePath(value: string): string {
-  try {
-    return decodeURIComponent(value);
-  } catch {
-    return value;
-  }
+  return safeDecodeURIComponent(value).value;
 }
 
 export function normalizeRawTemplateRouteMapPath(value: string): string {

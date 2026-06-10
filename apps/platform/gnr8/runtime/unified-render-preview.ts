@@ -10,6 +10,10 @@ import {
   type RawTemplateRouteMapResolution,
 } from '@/gnr8/runtime/raw-template-route-map-resolver'
 import {
+  RAW_PREVIEW_URI_DECODE_DIAGNOSTIC,
+  safeDecodeURIComponent,
+} from '@/gnr8/runtime/raw-preview-uri-decoding'
+import {
   getArtifactById,
   listContentOverrides,
   listContentSlots,
@@ -355,6 +359,19 @@ function normalizeTemplateAssetPath(value: string): string | null {
   return segments.join('/')
 }
 
+function parseUrlWithSafeEscapes(value: string): URL | null {
+  const raw = String(value ?? '')
+  try {
+    return new URL(raw)
+  } catch {
+    try {
+      return new URL(raw.replace(/%(?![0-9a-fA-F]{2})/g, '%25'))
+    } catch {
+      return null
+    }
+  }
+}
+
 export const MULTIPAGE_LINK_REWRITE_DIAGNOSTIC = {
   MULTIPAGE_LINK_REWRITE_STARTED: 'MULTIPAGE_LINK_REWRITE_STARTED',
   MULTIPAGE_LINK_REWRITTEN: 'MULTIPAGE_LINK_REWRITTEN',
@@ -379,6 +396,8 @@ export const RAW_TEMPLATE_PREVIEW_EVIDENCE_DIAGNOSTIC = {
   PREVIEW_LINK_REWRITE_COMPLETED: 'PREVIEW_LINK_REWRITE_COMPLETED',
   PREVIEW_LINKS_REWRITTEN_COUNT: 'PREVIEW_LINKS_REWRITTEN_COUNT',
   RAW_PREVIEW_SCRIPTS_DISABLED: 'RAW_PREVIEW_SCRIPTS_DISABLED',
+  RAW_PREVIEW_URI_DECODE_WARNING: RAW_PREVIEW_URI_DECODE_DIAGNOSTIC.RAW_PREVIEW_URI_DECODE_WARNING,
+  RAW_PREVIEW_URI_DECODE_FALLBACK_USED: RAW_PREVIEW_URI_DECODE_DIAGNOSTIC.RAW_PREVIEW_URI_DECODE_FALLBACK_USED,
 } as const
 
 export const TRANSFORMED_PREVIEW_DIAGNOSTIC = {
@@ -468,6 +487,7 @@ function defaultRawPreviewAssetRewriteEvidence(): RawPreviewAssetRewriteEvidence
     fontFilesRewritten: 0,
     fontFamilyDongleDetected: false,
     rootHeadingDongleEvidence: [],
+    malformedUriDecodeFallbackCount: 0,
   }
 }
 
@@ -490,6 +510,7 @@ function mergeRawPreviewAssetRewriteEvidence(
     fontFilesRewritten: left.fontFilesRewritten + right.fontFilesRewritten,
     fontFamilyDongleDetected: left.fontFamilyDongleDetected || right.fontFamilyDongleDetected,
     rootHeadingDongleEvidence: [...new Set([...left.rootHeadingDongleEvidence, ...right.rootHeadingDongleEvidence])].slice(0, 12),
+    malformedUriDecodeFallbackCount: (left.malformedUriDecodeFallbackCount ?? 0) + (right.malformedUriDecodeFallbackCount ?? 0),
   }
 }
 
@@ -515,7 +536,7 @@ function isGoogleFontsStylesheetUrl(value: string): boolean {
 }
 
 function containsDongleFontSignal(value: string): boolean {
-  const decoded = decodeURIComponent(String(value ?? '').replaceAll('+', ' '))
+  const decoded = safeDecodeURIComponent(String(value ?? '').replaceAll('+', ' ')).value
   return /\bdongle\b/i.test(decoded)
 }
 
@@ -774,6 +795,22 @@ function rewriteRawTemplateAssetReferencesWithCounts(input: {
   const stylesheetAssetPaths = new Set<string>()
   let rewrittenAssetCount = 0
 
+  const noteDecodeResult = (rawValue: string, sourceType: RawPreviewAssetRewriteSource | 'route_path' | 'script_detected') => {
+    const result = safeDecodeURIComponent(rawValue)
+    if (result.warning) {
+      evidence.malformedUriDecodeFallbackCount = (evidence.malformedUriDecodeFallbackCount ?? 0) + 1
+      console.warn(`[preview-runtime] ${RAW_TEMPLATE_PREVIEW_EVIDENCE_DIAGNOSTIC.RAW_PREVIEW_URI_DECODE_WARNING}`, {
+        siteId: input.siteId,
+        siteVersionId: input.siteVersionId,
+        sourceType,
+        value: rawValue,
+        reasonCode: RAW_TEMPLATE_PREVIEW_EVIDENCE_DIAGNOSTIC.RAW_PREVIEW_URI_DECODE_FALLBACK_USED,
+        correlationKey,
+      })
+    }
+    return result
+  }
+
   const noteDongle = (value: string, source: string) => {
     if (!containsDongleFontSignal(value)) return
     evidence.fontFamilyDongleDetected = true
@@ -817,15 +854,17 @@ function rewriteRawTemplateAssetReferencesWithCounts(input: {
     return null
   }
 
-  const candidatePathsForReference = (ref: string): string[] => {
+  const candidatePathsForReference = (ref: string, sourceType: RawPreviewAssetRewriteSource): string[] => {
     const { pathname } = splitPreviewAssetUrlSuffix(ref)
     const candidates: Array<string | null> = []
     let parsed: URL | null = null
-    try {
-      parsed = /^\/\//.test(pathname) ? new URL(`https:${pathname}`) : /^[a-z][a-z0-9+.-]*:/i.test(pathname) ? new URL(pathname) : null
-    } catch {
-      parsed = null
-    }
+    const decodedPathname = noteDecodeResult(pathname, sourceType).value
+    const parserPathname = decodedPathname
+    parsed = /^\/\//.test(parserPathname)
+      ? parseUrlWithSafeEscapes(`https:${parserPathname}`)
+      : /^[a-z][a-z0-9+.-]*:/i.test(parserPathname)
+        ? parseUrlWithSafeEscapes(parserPathname)
+        : null
     if (parsed) {
       const hostPath = normalizeTemplateAssetPath(`${parsed.hostname}${parsed.pathname}`)
       const pathOnly = normalizeTemplateAssetPath(parsed.pathname)
@@ -835,16 +874,20 @@ function rewriteRawTemplateAssetReferencesWithCounts(input: {
       }
       return [...new Set(candidates.filter((candidate): candidate is string => Boolean(candidate)))]
     }
-    if (pathname.startsWith('/')) {
-      candidates.push(normalizeTemplateAssetPath(pathname))
+    if (parserPathname.startsWith('/')) {
+      candidates.push(normalizeTemplateAssetPath(parserPathname))
     } else {
-      candidates.push(normalizeTemplateAssetPath(path.posix.join('/', baseDir, pathname)))
-      candidates.push(normalizeTemplateAssetPath(pathname))
+      candidates.push(normalizeTemplateAssetPath(path.posix.join('/', baseDir, parserPathname)))
+      candidates.push(normalizeTemplateAssetPath(parserPathname))
     }
     return [...new Set(candidates.filter((candidate): candidate is string => Boolean(candidate)))]
   }
 
-  const resolveReference = (rawRef: string, kindHint: RawPreviewAssetReferenceKind): RawPreviewAssetReferenceResolution => {
+  const resolveReference = (
+    rawRef: string,
+    kindHint: RawPreviewAssetReferenceKind,
+    sourceType: RawPreviewAssetRewriteSource,
+  ): RawPreviewAssetReferenceResolution => {
     const ref = String(rawRef ?? '').trim()
     const lower = ref.toLowerCase()
     const kind: RawPreviewAssetReferenceKind =
@@ -879,7 +922,7 @@ function rewriteRawTemplateAssetReferencesWithCounts(input: {
     }
     const isRemote = lower.startsWith('http://') || lower.startsWith('https://') || lower.startsWith('//')
     const { suffix } = splitPreviewAssetUrlSuffix(ref)
-    const normalized = findFileMapCandidate(candidatePathsForReference(ref))
+    const normalized = findFileMapCandidate(candidatePathsForReference(ref, sourceType))
     if (!normalized) {
       return {
         originalUrl: ref,
@@ -974,7 +1017,7 @@ function rewriteRawTemplateAssetReferencesWithCounts(input: {
     }
     inspectCssImports(css)
     return css.replace(cssUrlPattern, (full, quote: string, rawValue: string) => {
-      const resolution = resolveReference(String(rawValue ?? ''), isFontAssetPath(String(rawValue ?? '')) ? 'font' : isImageAssetPath(String(rawValue ?? '')) ? 'image' : 'other')
+      const resolution = resolveReference(String(rawValue ?? ''), isFontAssetPath(String(rawValue ?? '')) ? 'font' : isImageAssetPath(String(rawValue ?? '')) ? 'image' : 'other', sourceType)
       if (resolution.isDataUrl) return full
       recordCssReferenceEvidence(resolution, sourceType)
       if (!resolution.rewrittenUrl) return full
@@ -984,7 +1027,7 @@ function rewriteRawTemplateAssetReferencesWithCounts(input: {
   }
 
   const rewriteReference = (rawRef: string, kindHint: RawPreviewAssetReferenceKind, sourceType: RawPreviewAssetRewriteSource): string => {
-    const resolution = resolveReference(rawRef, kindHint)
+    const resolution = resolveReference(rawRef, kindHint, sourceType)
     recordHtmlReferenceEvidence(resolution, sourceType)
     if (!resolution.rewrittenUrl) return String(rawRef ?? '').trim()
     return resolution.rewrittenUrl
@@ -1235,6 +1278,12 @@ function buildRawTemplatePreviewRuntimeSummary(input: {
       PREVIEW_RUNTIME_DIAGNOSTIC.RAW_TEMPLATE_PREVIEW_SELECTED,
       PREVIEW_RUNTIME_DIAGNOSTIC.RAW_TEMPLATE_PREVIEW_RENDERED,
       ...(input.routeMapDiagnostics ?? []),
+      ...((input.rawTemplatePreviewEvidence?.rawPreviewAssetRewriteEvidence?.malformedUriDecodeFallbackCount ?? 0) > 0
+        ? [
+            RAW_TEMPLATE_PREVIEW_EVIDENCE_DIAGNOSTIC.RAW_PREVIEW_URI_DECODE_WARNING,
+            RAW_TEMPLATE_PREVIEW_EVIDENCE_DIAGNOSTIC.RAW_PREVIEW_URI_DECODE_FALLBACK_USED,
+          ]
+        : []),
     ]),
     rawTemplatePreviewEvidence: input.rawTemplatePreviewEvidence,
   }
@@ -1405,6 +1454,18 @@ async function renderRawTemplateSiteVersionPreview(input: {
     assetRewrite.rawPreviewAssetRewriteEvidence,
     stylesheetEvidence,
   )
+  const requestedPathDecode = safeDecodeURIComponent(input.requestedPath)
+  if (requestedPathDecode.warning) {
+    rawPreviewAssetRewriteEvidence.malformedUriDecodeFallbackCount = (rawPreviewAssetRewriteEvidence.malformedUriDecodeFallbackCount ?? 0) + 1
+    console.warn(`[preview-runtime] ${RAW_TEMPLATE_PREVIEW_EVIDENCE_DIAGNOSTIC.RAW_PREVIEW_URI_DECODE_WARNING}`, {
+      siteId: artifact.siteId,
+      siteVersionId: artifact.siteVersionId,
+      selectedRoutePath,
+      selectedRawFilePath: selectedHtmlPath,
+      requestedPath: input.requestedPath,
+      reasonCode: RAW_TEMPLATE_PREVIEW_EVIDENCE_DIAGNOSTIC.RAW_PREVIEW_URI_DECODE_FALLBACK_USED,
+    })
+  }
   let html = assetRewrite.html
   console.info(`[preview-runtime] ${RAW_TEMPLATE_PREVIEW_EVIDENCE_DIAGNOSTIC.PREVIEW_LINK_REWRITE_STARTED}`, {
     siteId: artifact.siteId,

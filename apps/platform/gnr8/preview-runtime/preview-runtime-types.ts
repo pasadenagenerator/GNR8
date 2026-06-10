@@ -57,6 +57,7 @@ export type PreviewRuntimeSummary = {
       fontFilesRewritten: number;
       fontFamilyDongleDetected: boolean;
       rootHeadingDongleEvidence: string[];
+      malformedUriDecodeFallbackCount?: number;
     };
     disabledScriptCount?: number;
     dbReadCount?: number;

@@ -8,6 +8,7 @@ import {
   resolveRawTemplateSiteForDomainAndPath,
 } from "@/gnr8/runtime/runtime-store";
 import { createRuntimeCorrelationKey, normalizeRuntimeDomain, normalizeRuntimeHost, normalizeRuntimePath } from "@/gnr8/runtime/identity/runtime-identity";
+import { RAW_PREVIEW_URI_DECODE_DIAGNOSTIC, safeDecodeURIComponent } from "@/gnr8/runtime/raw-preview-uri-decoding";
 import { resolveAssetMediaType, rewriteRawTemplateCssForRuntime } from "@/src/public-site/raw-template-runtime";
 
 type PreviewAssetGetContext = { params: Promise<{ siteId: string; siteVersionId: string; assetPath?: string[] }> };
@@ -43,11 +44,7 @@ function normalizeAssetPath(parts: string[] | undefined): string | null {
     .map((segment) => {
       const raw = normalizeText(segment);
       if (!raw) return "";
-      try {
-        return decodeURIComponent(raw);
-      } catch {
-        return raw;
-      }
+      return safeDecodeURIComponent(raw).value;
     })
     .filter(Boolean)
     .join("/");
@@ -171,6 +168,20 @@ export function createPreviewAssetsRouteHandlers(overrides: Partial<PreviewAsset
         const assetPath = params.assetPath;
         requestedUrl = req.url;
         requestedPathRaw = (assetPath ?? []).join("/");
+        for (const segment of assetPath ?? []) {
+          const decodeResult = safeDecodeURIComponent(normalizeText(segment));
+          if (decodeResult.warning) {
+            console.warn(`[preview-runtime] ${RAW_PREVIEW_URI_DECODE_DIAGNOSTIC.RAW_PREVIEW_URI_DECODE_WARNING}`, {
+              code: RAW_PREVIEW_URI_DECODE_DIAGNOSTIC.RAW_PREVIEW_URI_DECODE_WARNING,
+              requestedUrl,
+              siteId,
+              siteVersionId,
+              requestedPath: requestedPathRaw,
+              segment: normalizeText(segment),
+              reasonCode: RAW_PREVIEW_URI_DECODE_DIAGNOSTIC.RAW_PREVIEW_URI_DECODE_FALLBACK_USED,
+            });
+          }
+        }
         normalizedPath = normalizeAssetPath(assetPath);
         correlationKey = buildCorrelationKey({ siteId, siteVersionId, normalizedRequestedPath: normalizedPath });
         const requestHost = resolveRequestHost(req.headers);

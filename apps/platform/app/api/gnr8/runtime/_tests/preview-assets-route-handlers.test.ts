@@ -1226,6 +1226,79 @@ test("preview assets route decodes percent-encoded path segments and resolves pe
   assert.equal(response.headers.get("x-gnr8-preview-asset-path"), "uploads/VmPFXCum/236x0_247x0/logo mark.png");
 });
 
+test("preview assets route handles malformed percent path segments without throwing", async () => {
+  const warnings: unknown[][] = [];
+  const originalWarn = console.warn;
+  console.warn = (...args: unknown[]) => {
+    warnings.push(args);
+  };
+  try {
+    const handlers = createPreviewAssetsRouteHandlers({
+      resolveDomainSiteVersionForHost: async () =>
+        ({
+          outcome: "domain_hit",
+          host: "beauty-clinic.pasadenagenerator.com",
+          siteId: "site_1",
+          siteVersionId: "sv_1",
+          domain: "beauty-clinic.pasadenagenerator.com",
+          status: "active",
+          bindingId: "binding_1",
+        }) as never,
+      resolveAgencyIdForSiteVersion: async () => "agency_1",
+      requireAgencyActionContext: async () => ({ actorMode: "agency_member", agencyId: "agency_1" } as never),
+      getRawImportedSiteArtifact: async () =>
+        ({
+          id: "artifact_imported_1",
+          artifactType: "raw_imported_site",
+          siteId: "site_1",
+          siteVersionId: "sv_1",
+          entryHtmlPath: "index.html",
+          assetBasePath: ".",
+          fileMap: {
+            "uploads/bad%ZZ.png": { mediaType: "image/png", sizeBytes: 4, sha256: "abc" },
+          },
+          metadata: {
+            sourceUrl: "https://example.com",
+            finalUrl: "https://www.example.com",
+            htmlByteLength: 123,
+            diagnostics: { codes: [] },
+            assetSummary: { persistedAssetCount: 1, externalFallbackAssetCount: 0 },
+          },
+          createdAt: "2026-05-06T00:00:00.000Z",
+        }) as never,
+      getRawTemplateSiteArtifact: async () => null,
+      getRawTemplateSiteAsset: async ({ filePath }) =>
+        filePath === "uploads/bad%ZZ.png"
+          ? ({
+              mediaType: "image/png",
+              sizeBytes: 4,
+              sha256: "abc",
+              bytes: Buffer.from([137, 80, 78, 71]),
+            } as never)
+          : null,
+    });
+
+    const response = await handlers.GET(
+      new Request("https://beauty-clinic.pasadenagenerator.com/api/gnr8/runtime/preview-assets/site_1/sv_1/uploads/bad%ZZ.png", {
+        headers: { host: "beauty-clinic.pasadenagenerator.com" },
+      }),
+      {
+        params: Promise.resolve({
+          siteId: "site_1",
+          siteVersionId: "sv_1",
+          assetPath: ["uploads", "bad%ZZ.png"],
+        }),
+      },
+    );
+
+    assert.equal(response.status, 200);
+    assert.equal(response.headers.get("x-gnr8-preview-asset-path"), "uploads/bad%ZZ.png");
+    assert.equal(warnings.some((entry) => String(entry[0]).includes("RAW_PREVIEW_URI_DECODE_WARNING")), true);
+  } finally {
+    console.warn = originalWarn;
+  }
+});
+
 test("preview assets route returns explicit artifact mismatch diagnostic for site mismatch", async () => {
   const handlers = createPreviewAssetsRouteHandlers({
     resolveDomainSiteVersionForHost: async () =>

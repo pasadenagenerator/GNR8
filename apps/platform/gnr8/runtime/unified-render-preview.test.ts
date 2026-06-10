@@ -1094,6 +1094,44 @@ test('raw template asset evidence covers CSS URL rewrite cases and Dongle font r
   assert.equal(evidence.rootHeadingDongleEvidence.some((entry) => entry.includes('heading selector')), true)
 })
 
+test('raw template asset rewriting tolerates malformed percent URLs in HTML attributes, srcset, links, and CSS', () => {
+  const result = __unifiedRenderPreviewTestUtils.rewriteRawTemplateAssetReferencesWithCounts({
+    html: [
+      '<!doctype html><html><head>',
+      '<link rel="stylesheet" href="assets/site%ZZ.css?cache=1">',
+      '<style>',
+      '.hero{background:url("/uploads/bg%sk.png?x=1#top")}',
+      '.missing{background:url("../uploads/missing%.png")}',
+      '</style>',
+      '</head><body>',
+      '<img src="/uploads/hero%C5.png" srcset="/uploads/thumb%2.png 1x, /uploads/thumb%C5.png?cache=1#hero 2x">',
+      '</body></html>',
+    ].join(''),
+    siteId: 'site-malformed-uri',
+    siteVersionId: 'sv-malformed-uri',
+    entryHtmlPath: 'pages/root/index.html',
+    fileMapPaths: new Set([
+      'assets/site%ZZ.css',
+      'uploads/bg%sk.png',
+      'uploads/hero%C5.png',
+      'uploads/thumb%C5.png',
+    ]),
+  })
+
+  const evidence = result.rawPreviewAssetRewriteEvidence
+  assert.equal(result.html.includes('URI malformed'), false)
+  assert.equal(result.html.includes('/api/gnr8/runtime/preview-assets/site-malformed-uri/sv-malformed-uri/assets/site%ZZ.css?cache=1'), true)
+  assert.equal(result.html.includes('/api/gnr8/runtime/preview-assets/site-malformed-uri/sv-malformed-uri/uploads/bg%sk.png?x=1#top'), true)
+  assert.equal(result.html.includes('/api/gnr8/runtime/preview-assets/site-malformed-uri/sv-malformed-uri/uploads/hero%C5.png'), true)
+  assert.equal(result.html.includes('/uploads/thumb%2.png 1x'), true)
+  assert.equal(result.html.includes('/api/gnr8/runtime/preview-assets/site-malformed-uri/sv-malformed-uri/uploads/thumb%C5.png?cache=1#hero 2x'), true)
+  assert.equal(result.html.includes('../uploads/missing%.png'), true)
+  assert.equal(evidence.malformedUriDecodeFallbackCount! >= 6, true)
+  assert.equal(evidence.cssUrlReferencesFound, 2)
+  assert.equal(evidence.cssUrlReferencesRewritten, 1)
+  assert.equal(evidence.cssUrlReferencesMissing, 1)
+})
+
 test('Viroidoc-like raw root and news previews preserve Dongle and persisted CSS assets while scripts stay disabled', async () => {
   const provenance = fixtureViroidocLikeMultiPageAssemblyProvenance()
   const rootHtml = [
@@ -1203,6 +1241,95 @@ test('Viroidoc-like raw root and news previews preserve Dongle and persisted CSS
     assert.equal(newsPreview.html.includes('<main><h1>VIROIDOC_ROOT'), false)
     assert.equal(newsPreview.rawTemplatePreviewEvidence?.rawPreviewAssetRewriteEvidence?.fontFamilyDongleDetected, true)
     assert.equal(/<script\b(?![^>]*\btype=["']application\/gnr8-disabled-script["'])/i.test(newsPreview.html), false)
+  } finally {
+    restore()
+  }
+})
+
+test('Viroidoc-like raw root preview renders despite malformed asset URLs and malformed route query', async () => {
+  const provenance = fixtureViroidocLikeMultiPageAssemblyProvenance()
+  const rootHtml = [
+    '<!doctype html><html><head>',
+    '<link rel="stylesheet" href="assets/site%C5.css?cache=1">',
+    '<style>.inline{background:url("../uploads/inline%sk.png?version=1#hash")}</style>',
+    '</head><body>',
+    '<main><h1>VIROIDOC_ROOT_RAW_URI</h1></main>',
+    '<img src="/uploads/root%ZZ.png" srcset="/uploads/root-small%2.png 1x, /uploads/root-large%C5.png?cache=1 2x">',
+    '<script>document.body.append("SHOULD_NOT_RUN")</script>',
+    '</body></html>',
+  ].join('')
+  const css = '.css-bg{background:url("../uploads/css-bg%.png?cache=1")}'
+  const htmlByFilePath: Record<string, string> = {
+    'pages/root/index.html': rootHtml,
+    'pages/project/index.html': '<!doctype html><html><body><main>Project</main></body></html>',
+    'pages/people/index.html': '<!doctype html><html><body><main>People</main></body></html>',
+    'pages/news/index.html': '<!doctype html><html><body><main>News</main></body></html>',
+  }
+  const fileMap: Record<string, { mediaType: string; sizeBytes: number; sha256: string }> = {
+    ...Object.fromEntries(
+      Object.entries(htmlByFilePath).map(([filePath, html]) => [
+        filePath,
+        { mediaType: 'text/html', sizeBytes: html.length, sha256: `sha-${filePath}` },
+      ]),
+    ),
+    'assets/site%C5.css': { mediaType: 'text/css', sizeBytes: css.length, sha256: 'sha-css' },
+    'uploads/inline%sk.png': { mediaType: 'image/png', sizeBytes: 1, sha256: 'sha-inline' },
+    'uploads/root%ZZ.png': { mediaType: 'image/png', sizeBytes: 1, sha256: 'sha-root' },
+    'uploads/root-large%C5.png': { mediaType: 'image/png', sizeBytes: 1, sha256: 'sha-large' },
+    'uploads/css-bg%.png': { mediaType: 'image/png', sizeBytes: 1, sha256: 'sha-css-bg' },
+  }
+  const restore = setUnifiedRenderPreviewDependenciesForTest({
+    getPoolStatus: () => ({ totalCount: 1, idleCount: 1, waitingCount: 0 }),
+    getSiteVersion: async () =>
+      ({
+        id: 'sv-viroidoc-raw-uri',
+        siteId: 'site-viroidoc-raw-uri',
+        rendererCompatibilityVersion: 'gnr8-renderer-v1',
+        pages: [],
+        importProvenanceSummary: provenance,
+      }) as any,
+    getRawImportedSiteArtifact: async () =>
+      ({
+        id: 'artifact-viroidoc-raw-uri',
+        artifactType: 'raw_imported_site',
+        siteId: 'site-viroidoc-raw-uri',
+        siteVersionId: 'sv-viroidoc-raw-uri',
+        entryHtmlPath: 'pages/root/index.html',
+        assetBasePath: '/',
+        fileMap,
+        metadata: { assetSummary: { persistedAssetCount: Object.keys(fileMap).length, externalFallbackAssetCount: 0 } },
+      }) as any,
+    getRawTemplateSiteArtifact: async () => null,
+    getRawTemplateSiteAsset: async (input) => {
+      const html = htmlByFilePath[input.filePath]
+      if (html) return { bytes: Buffer.from(html), sizeBytes: html.length, mediaType: 'text/html' } as any
+      if (input.filePath === 'assets/site%C5.css') return { bytes: Buffer.from(css), sizeBytes: css.length, mediaType: 'text/css' } as any
+      return null
+    },
+    listContentSlots: async () => [],
+    listContentOverrides: async () => [],
+  })
+
+  try {
+    const preview = await renderSiteVersionPreview({
+      siteVersionId: 'sv-viroidoc-raw-uri',
+      path: '/?bad=%',
+      mode: 'raw_template_preview',
+      requestCorrelationKey: 'req-viroidoc-raw-uri-root',
+    })
+    const evidence = preview.rawTemplatePreviewEvidence?.rawPreviewAssetRewriteEvidence
+
+    assert.equal(preview.source, 'raw_template_site')
+    assert.equal(preview.path, '/')
+    assert.equal(preview.html.includes('VIROIDOC_ROOT_RAW_URI'), true)
+    assert.equal(preview.html.includes('URI malformed'), false)
+    assert.equal(preview.html.includes('/api/gnr8/runtime/preview-assets/site-viroidoc-raw-uri/sv-viroidoc-raw-uri/uploads/root%ZZ.png'), true)
+    assert.equal(preview.html.includes('/uploads/root-small%2.png 1x'), true)
+    assert.equal(preview.html.includes('/api/gnr8/runtime/preview-assets/site-viroidoc-raw-uri/sv-viroidoc-raw-uri/uploads/root-large%C5.png?cache=1 2x'), true)
+    assert.equal(/<script\b(?![^>]*\btype=["']application\/gnr8-disabled-script["'])/i.test(preview.html), false)
+    assert.equal((evidence?.malformedUriDecodeFallbackCount ?? 0) >= 6, true)
+    assert.equal(preview.previewRuntimeSummary.previewDiagnostics.includes('RAW_PREVIEW_URI_DECODE_WARNING'), true)
+    assert.equal(preview.previewRuntimeSummary.previewDiagnostics.includes('RAW_PREVIEW_URI_DECODE_FALLBACK_USED'), true)
   } finally {
     restore()
   }
