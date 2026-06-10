@@ -8,6 +8,7 @@ import {
   renderSiteVersionPreview,
   setUnifiedRenderPreviewDependenciesForTest,
 } from '@/gnr8/runtime/unified-render-preview'
+import { buildPreviewForensicsReport } from '@/gnr8/runtime/preview-forensics'
 import type { SemanticImportResult } from '@/gnr8/import-semantic/semantic-import-engine'
 import type { RuntimeImportProvenanceSummary } from '@/gnr8/runtime/types'
 
@@ -3178,4 +3179,94 @@ test('transformed preview blocks under high pool waiting count with deterministi
   } finally {
     restore()
   }
+})
+
+test('preview forensics detects duplication only when it appears in browser DOM', () => {
+  const rootBlock =
+    '<section class="hero home-page"><h1>Viroidoc</h1><p>Advanced research on viroid pathogenesis</p><nav><a href="/project">Project</a><a href="/people">People</a><a href="/news">News</a></nav></section>'
+  const previewHtml = `<!doctype html><html><body><main>${rootBlock}<section class="news-listing"><h2>News</h2></section></main></body></html>`
+  const browserHtml = `<!doctype html><html><body><main>${rootBlock}${rootBlock}<section class="news-listing"><h2>News</h2></section></main></body></html>`
+
+  const report = buildPreviewForensicsReport({
+    routePath: '/news',
+    sourceUrl: 'https://www.viroidoc.eu/news',
+    rawFilePath: 'pages/news/index.html',
+    originalFetchedHtml: previewHtml,
+    rawArtifactHtml: previewHtml,
+    rawPreviewResponseHtml: previewHtml,
+    browserDomHtml: browserHtml,
+  })
+
+  assert.equal(report.stageWhereDuplicationAppears, 'browser_runtime')
+  assert.equal(report.diffs[0].duplicatedRootHomeBlocks.appeared, false)
+  assert.equal(report.diffs[1].duplicatedRootHomeBlocks.appeared, false)
+  assert.equal(report.diffs[2].duplicatedRootHomeBlocks.appeared, true)
+  assert.match(report.recommendedRootCause, /browser execution/)
+})
+
+test('preview forensics detects CSS and Dongle font loss between raw artifact and preview response', () => {
+  const rawHtml = [
+    '<!doctype html><html><head>',
+    '<link rel="stylesheet" href="/assets/site.css">',
+    '<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Dongle:wght@400;700&display=swap">',
+    '<style>h1{font-family:"Dongle", sans-serif}</style>',
+    '</head><body><h1>Transport</h1></body></html>',
+  ].join('')
+  const previewHtml = [
+    '<!doctype html><html><head>',
+    '<link rel="stylesheet" href="/api/gnr8/runtime/preview-assets/site/version/assets/site.css">',
+    '</head><body><h1>Transport</h1></body></html>',
+  ].join('')
+
+  const report = buildPreviewForensicsReport({
+    routePath: '/',
+    sourceUrl: 'https://example.test/',
+    rawFilePath: 'index.html',
+    originalFetchedHtml: rawHtml,
+    rawArtifactHtml: rawHtml,
+    rawPreviewResponseHtml: previewHtml,
+    browserDomHtml: previewHtml,
+  })
+
+  assert.equal(report.stageWhereFontBreaks, 'preview_response')
+  assert.equal(report.cssCascadeEvidence.dongleDetectedByStage.raw_artifact, true)
+  assert.equal(report.cssCascadeEvidence.dongleDetectedByStage.preview_response, false)
+  assert.equal(report.cssCascadeEvidence.previewCssOrderChanged, true)
+  assert.equal(
+    report.diffs[1].missingFonts.includes('https://fonts.googleapis.com/css2?family=Dongle:wght@400;700&display=swap'),
+    true,
+  )
+})
+
+test('preview forensics detects map iframe and script loss across raw preview stages', () => {
+  const originalAndRaw = [
+    '<!doctype html><html><head>',
+    '<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>',
+    '</head><body>',
+    '<iframe src="https://www.google.com/maps/embed?pb=transporti-maver"></iframe>',
+    '</body></html>',
+  ].join('')
+  const previewHtml = [
+    '<!doctype html><html><head>',
+    '<script type="application/gnr8-disabled-script" data-gnr8-disabled-preview-script="raw" data-gnr8-script-policy-reason="map_blocked" data-gnr8-original-script-attrs="src=&quot;https://unpkg.com/leaflet/dist/leaflet.js&quot;"></script>',
+    '</head><body><div id="map"></div></body></html>',
+  ].join('')
+  const browserHtml = '<!doctype html><html><head></head><body><div id="map"></div></body></html>'
+
+  const report = buildPreviewForensicsReport({
+    routePath: '/contact',
+    sourceUrl: 'https://maver.example/contact',
+    rawFilePath: 'pages/contact/index.html',
+    originalFetchedHtml: originalAndRaw,
+    rawArtifactHtml: originalAndRaw,
+    rawPreviewResponseHtml: previewHtml,
+    browserDomHtml: browserHtml,
+  })
+
+  assert.equal(report.stageWhereMapBreaks, 'preview_response')
+  assert.equal(report.diffs[1].missingIframes.includes('https://www.google.com/maps/embed?pb=transporti-maver'), true)
+  assert.equal(report.diffs[1].missingMaps.some((ref) => ref.includes('google_maps')), true)
+  assert.equal(report.scriptMutationEvidence.missingScriptsAfterBrowser.length, 1)
+  assert.equal(report.diffs[1].blockedOrRewrittenExternalRefs.disabledScriptRefs.length, 1)
+  assert.match(report.recommendedRootCause, /script policy|embed preservation/)
 })
