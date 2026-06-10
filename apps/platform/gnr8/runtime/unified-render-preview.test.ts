@@ -1187,7 +1187,8 @@ test('Viroidoc-like raw root and news previews preserve Dongle and persisted CSS
     '</head><body>',
     '<nav><a href="/news">News</a></nav>',
     '<main><h1>VIROIDOC_ROOT</h1><button>Read more</button></main>',
-    '<img src="/uploads/root-hero.png" data-src="/uploads/lazy-root.webp">',
+    '<img src="/uploads/root-hero.png?size=large#hero" data-src="/uploads/lazy-root.webp">',
+    '<iframe src="https://www.youtube.com/embed/abc123?si=runtime"></iframe>',
     '<script>document.body.append("SHOULD_NOT_RUN")</script>',
     '</body></html>',
   ].join('')
@@ -1203,6 +1204,7 @@ test('Viroidoc-like raw root and news previews preserve Dongle and persisted CSS
   const css = [
     'h1,button{font-family:"Dongle",sans-serif}',
     '.hero{background-image:url("../uploads/root-bg.svg?cache=1")}',
+    '.missing-media{background-image:url("../uploads/missing-bg.png")}',
     '@font-face{font-family:"Dongle";src:url("../fonts/dongle.woff2") format("woff2")}',
   ].join('')
   const htmlByFilePath: Record<string, string> = {
@@ -1273,13 +1275,27 @@ test('Viroidoc-like raw root and news previews preserve Dongle and persisted CSS
     assert.equal(rootPreview.source, 'raw_template_site')
     assert.equal(rootPreview.html.includes('https://fonts.googleapis.com/css2?family=Dongle'), true)
     assert.equal(rootPreview.html.includes('/api/gnr8/runtime/preview-assets/site-viroidoc-dongle/sv-viroidoc-dongle/assets/site.css'), true)
-    assert.equal(rootPreview.html.includes('/api/gnr8/runtime/preview-assets/site-viroidoc-dongle/sv-viroidoc-dongle/uploads/root-hero.png'), true)
+    assert.equal(rootPreview.html.includes('/api/gnr8/runtime/preview-assets/site-viroidoc-dongle/sv-viroidoc-dongle/uploads/root-hero.png?size=large#hero'), true)
     assert.equal(rootPreview.html.includes('/api/gnr8/runtime/preview-assets/site-viroidoc-dongle/sv-viroidoc-dongle/uploads/lazy-root.webp'), true)
     assert.equal(/<script\b(?![^>]*\btype=["']application\/gnr8-disabled-script["'])/i.test(rootPreview.html), false)
-    assert.equal(rootPreview.rawTemplatePreviewEvidence?.rawPreviewAssetRewriteEvidence?.fontFamilyDongleDetected, true)
-    assert.equal(rootPreview.rawTemplatePreviewEvidence?.rawPreviewAssetRewriteEvidence?.fontStylesheetsPreserved, 1)
-    assert.equal(rootPreview.rawTemplatePreviewEvidence?.rawPreviewAssetRewriteEvidence?.fontFilesRewritten, 1)
-    assert.equal(rootPreview.rawTemplatePreviewEvidence?.rawPreviewAssetRewriteEvidence?.imageReferencesRewritten, 3)
+    const rootAssetEvidence = rootPreview.rawTemplatePreviewEvidence?.rawPreviewAssetRewriteEvidence
+    const rootGraphEvidence = rootPreview.rawTemplatePreviewEvidence?.rawPreviewAssetGraphEvidence
+    assert.equal(rootAssetEvidence?.fontFamilyDongleDetected, true)
+    assert.equal(rootAssetEvidence?.fontStylesheetsPreserved, 1)
+    assert.equal(rootAssetEvidence?.fontFilesRewritten, 1)
+    assert.equal(rootAssetEvidence?.cssUrlReferencesRewritten, 2)
+    assert.equal(rootAssetEvidence?.cssUrlReferencesMissing, 1)
+    assert.equal(rootAssetEvidence?.imageReferencesRewritten, 3)
+    assert.equal(rootAssetEvidence?.missingAssetReferences?.some((entry) => entry.originalReference === '../uploads/missing-bg.png'), true)
+    assert.equal(rootAssetEvidence?.assetReferenceEvidence?.some((entry) => entry.originalReference.includes('youtube.com/embed') && entry.assetKind === 'external'), true)
+    assert.equal(rootGraphEvidence?.routePath, '/')
+    assert.equal(rootGraphEvidence?.rawFilePath, 'pages/root/index.html')
+    assert.equal(rootGraphEvidence?.stylesheetRefsFound.some((entry) => entry.originalReference === 'assets/site.css'), true)
+    assert.equal(rootGraphEvidence?.stylesheetRefsRewritten.some((entry) => entry.servedPreviewUrl?.includes('/assets/site.css')), true)
+    assert.equal(rootGraphEvidence?.primaryCssCandidates.includes('assets/site.css'), true)
+    assert.equal(rootGraphEvidence?.dongleEvidence.detected, true)
+    assert.equal(rootGraphEvidence?.imageRefsRewritten.some((entry) => entry.servedPreviewUrl?.includes('/uploads/root-bg.svg?cache=1')), true)
+    assert.equal(rootGraphEvidence?.topMissingImageRefs.includes('../uploads/missing-bg.png'), true)
     assert.equal(rootPreview.previewRuntimeSummary.contentResolutionApplied, false)
 
     assert.equal(newsPreview.path, '/news')

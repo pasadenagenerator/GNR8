@@ -22,7 +22,16 @@ test('preview route trace headers expose raw-template preview evidence', () => {
           assetReferencesInspected: 9,
           assetReferencesRewritten: 6,
           assetReferencesMissing: 1,
+          imageReferencesMissing: 2,
+          stylesheetsInspected: 3,
           fontFamilyDongleDetected: true,
+        },
+        rawPreviewAssetGraphEvidence: {
+          stylesheetRefsFound: [{ originalReference: 'assets/site.css' }],
+          stylesheetRefsRewritten: [{ originalReference: 'assets/site.css' }],
+          stylesheetRefsMissing: [{ originalReference: 'assets/missing.css' }],
+          imageRefsMissing: [{ originalReference: '/uploads/missing.png' }, { originalReference: '/uploads/other.png' }],
+          dongleEvidence: { detected: true },
         },
       },
     },
@@ -40,6 +49,11 @@ test('preview route trace headers expose raw-template preview evidence', () => {
   assert.equal(headers['x-gnr8-raw-assets-missing'], '1')
   assert.equal(headers['x-gnr8-raw-font-dongle-detected'], 'true')
   assert.equal(headers['x-gnr8-raw-disabled-scripts-count'], '4')
+  assert.equal(headers['x-gnr8-raw-stylesheets-found'], '1')
+  assert.equal(headers['x-gnr8-raw-stylesheets-rewritten'], '1')
+  assert.equal(headers['x-gnr8-raw-stylesheets-missing'], '1')
+  assert.equal(headers['x-gnr8-raw-images-missing'], '2')
+  assert.equal(headers['x-gnr8-raw-dongle-detected'], 'true')
 })
 
 test('preview route trace headers fall back to top-level raw-template evidence', () => {
@@ -73,6 +87,8 @@ test('preview route trace headers do not expose raw-template evidence for transf
   assert.equal(headers['x-gnr8-preview-disabled-scripts-count'], '0')
   assert.equal(headers['x-gnr8-raw-assets-inspected'], '0')
   assert.equal(headers['x-gnr8-raw-font-dongle-detected'], 'false')
+  assert.equal(headers['x-gnr8-raw-stylesheets-found'], '0')
+  assert.equal(headers['x-gnr8-raw-dongle-detected'], 'false')
 })
 
 test('preview route HTML response uses raw-template trace header helper', async () => {

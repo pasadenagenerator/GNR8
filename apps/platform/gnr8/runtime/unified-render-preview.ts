@@ -455,6 +455,11 @@ type MultiPageLinkRewriteResult = {
 }
 
 type RawPreviewAssetRewriteEvidence = NonNullable<RawTemplatePreviewEvidence['rawPreviewAssetRewriteEvidence']>
+type RawPreviewAssetGraphEvidence = NonNullable<RawTemplatePreviewEvidence['rawPreviewAssetGraphEvidence']>
+type RawPreviewAssetGraphFoundRef = RawPreviewAssetGraphEvidence['stylesheetRefsFound'][number]
+type RawPreviewAssetGraphMissingRef = RawPreviewAssetGraphEvidence['stylesheetRefsMissing'][number]
+type RawPreviewAssetReferenceEvidenceItem = NonNullable<RawPreviewAssetRewriteEvidence['assetReferenceEvidence']>[number]
+type RawPreviewMissingAssetReferenceItem = NonNullable<RawPreviewAssetRewriteEvidence['missingAssetReferences']>[number]
 
 type RawPreviewAssetRewriteSource = 'html_attr' | 'srcset' | 'lazy_attr' | 'inline_style' | 'style_block' | 'stylesheet' | 'script_detected'
 
@@ -526,6 +531,112 @@ function mergeRawPreviewAssetRewriteEvidence(
     assetReferencesExternalPreserved: (left.assetReferencesExternalPreserved ?? 0) + (right.assetReferencesExternalPreserved ?? 0),
     assetReferenceEvidence: [...(left.assetReferenceEvidence ?? []), ...(right.assetReferenceEvidence ?? [])],
     missingAssetReferences: [...(left.missingAssetReferences ?? []), ...(right.missingAssetReferences ?? [])],
+  }
+}
+
+function uniqByReference<T extends { originalReference: string; sourceType: string; reason: string }>(items: T[], limit = 40): T[] {
+  const seen = new Set<string>()
+  const out: T[] = []
+  for (const item of items) {
+    const key = `${item.originalReference}\n${item.sourceType}\n${item.reason}`
+    if (seen.has(key)) continue
+    seen.add(key)
+    out.push(item)
+    if (out.length >= limit) break
+  }
+  return out
+}
+
+function toGraphFoundRef(item: RawPreviewAssetReferenceEvidenceItem): RawPreviewAssetGraphFoundRef {
+  return {
+    originalReference: item.originalReference,
+    matchedFilePath: item.matchedFilePath,
+    servedPreviewUrl: item.servedPreviewUrl,
+    reason: item.reason,
+    sourceType: item.sourceType,
+  }
+}
+
+function toGraphMissingRef(item: RawPreviewMissingAssetReferenceItem): RawPreviewAssetGraphMissingRef {
+  return {
+    originalReference: item.originalReference,
+    resolvedCandidate: item.resolvedCandidate,
+    reason: item.reason,
+    sourceType: item.sourceType,
+  }
+}
+
+function isGraphStylesheetRef(item: { assetKind: string; originalReference: string; sourceType: string }): boolean {
+  return item.assetKind === 'stylesheet' || isGoogleFontsStylesheetUrl(item.originalReference) || /\.css(?:[?#].*)?$/i.test(item.originalReference)
+}
+
+function isGraphImageRef(item: { assetKind: string }): boolean {
+  return item.assetKind === 'image' || item.assetKind === 'svg'
+}
+
+function isGraphFontRef(item: { assetKind: string; originalReference: string }): boolean {
+  return item.assetKind === 'font' || isGoogleFontsStylesheetUrl(item.originalReference) || containsDongleFontSignal(item.originalReference)
+}
+
+function buildPrimaryCssCandidates(stylesheetRefs: RawPreviewAssetGraphFoundRef[]): string[] {
+  const scored = stylesheetRefs
+    .map((ref) => {
+      const value = ref.matchedFilePath ?? ref.originalReference
+      const lower = value.toLowerCase()
+      let score = 0
+      if (/\.css(?:[?#].*)?$/i.test(value)) score += 4
+      if (/(?:^|\/)(?:site|main|style|styles|user-style|stylesheet|theme|app|bundle)(?:[-_.][a-z0-9]+)?\.css(?:[?#].*)?$/i.test(value)) score += 6
+      if (lower.includes('font') || lower.includes('googleapis')) score -= 3
+      if (ref.servedPreviewUrl) score += 2
+      if (ref.reason.includes('matched_persisted_file')) score += 2
+      return { value, score }
+    })
+    .filter((entry) => entry.value && !isGoogleFontsStylesheetUrl(entry.value))
+    .sort((left, right) => right.score - left.score || left.value.localeCompare(right.value))
+  return [...new Set(scored.map((entry) => entry.value))].slice(0, 8)
+}
+
+function buildRawPreviewAssetGraphEvidence(input: {
+  routePath: string
+  rawFilePath: string
+  evidence: RawPreviewAssetRewriteEvidence
+}): RawPreviewAssetGraphEvidence {
+  const references = input.evidence.assetReferenceEvidence ?? []
+  const missingReferences = input.evidence.missingAssetReferences ?? []
+  const stylesheetRefsFound = uniqByReference(references.filter(isGraphStylesheetRef).map(toGraphFoundRef))
+  const imageRefsFound = uniqByReference(references.filter(isGraphImageRef).map(toGraphFoundRef))
+  const fontRefsFound = uniqByReference(references.filter(isGraphFontRef).map(toGraphFoundRef))
+  const stylesheetRefsMissing = uniqByReference(missingReferences.filter(isGraphStylesheetRef).map(toGraphMissingRef), 20)
+  const imageRefsMissing = uniqByReference(missingReferences.filter(isGraphImageRef).map(toGraphMissingRef), 20)
+  const fontRefsMissing = uniqByReference(missingReferences.filter(isGraphFontRef).map(toGraphMissingRef), 20)
+  const stylesheetRefsRewritten = stylesheetRefsFound.filter((ref) => Boolean(ref.servedPreviewUrl))
+  const imageRefsRewritten = imageRefsFound.filter((ref) => Boolean(ref.servedPreviewUrl))
+  const fontRefsRewritten = fontRefsFound.filter((ref) => Boolean(ref.servedPreviewUrl))
+  const dongleRef =
+    references.find((entry) => containsDongleFontSignal(entry.originalReference) || containsDongleFontSignal(entry.matchedFilePath ?? '')) ??
+    null
+  const dongleSource = input.evidence.rootHeadingDongleEvidence[0] ?? (dongleRef ? dongleRef.sourceType : null)
+
+  return {
+    routePath: input.routePath,
+    rawFilePath: input.rawFilePath,
+    stylesheetRefsFound,
+    stylesheetRefsRewritten,
+    stylesheetRefsMissing,
+    imageRefsFound,
+    imageRefsRewritten,
+    imageRefsMissing,
+    fontRefsFound,
+    fontRefsRewritten,
+    fontRefsMissing,
+    dongleEvidence: {
+      detected: input.evidence.fontFamilyDongleDetected,
+      source: dongleSource,
+      ref: dongleRef?.originalReference ?? input.evidence.rootHeadingDongleEvidence[0] ?? null,
+    },
+    primaryCssCandidates: buildPrimaryCssCandidates(stylesheetRefsFound),
+    topMissingStylesheetRefs: stylesheetRefsMissing.map((ref) => ref.originalReference).slice(0, 10),
+    topMissingImageRefs: imageRefsMissing.map((ref) => ref.originalReference).slice(0, 10),
   }
 }
 
@@ -1609,6 +1720,11 @@ async function renderRawTemplateSiteVersionPreview(input: {
     assetRewrite.rawPreviewAssetRewriteEvidence,
     stylesheetEvidence,
   )
+  const rawPreviewAssetGraphEvidence = buildRawPreviewAssetGraphEvidence({
+    routePath: selectedRoutePath,
+    rawFilePath: selectedHtmlPath,
+    evidence: rawPreviewAssetRewriteEvidence,
+  })
   const requestedPathDecode = safeDecodeURIComponent(input.requestedPath)
   if (requestedPathDecode.warning) {
     rawPreviewAssetRewriteEvidence.malformedUriDecodeFallbackCount = (rawPreviewAssetRewriteEvidence.malformedUriDecodeFallbackCount ?? 0) + 1
@@ -1648,6 +1764,7 @@ async function renderRawTemplateSiteVersionPreview(input: {
     rewrittenLinkCount: linkRewrite.counts.rewritten,
     rewrittenAssetCount: assetRewrite.rewrittenAssetCount,
     rawPreviewAssetRewriteEvidence,
+    rawPreviewAssetGraphEvidence,
     disabledScriptCount: scriptNeutralization.disabledScriptCount,
     dbReadCount: input.context.queryCount,
     dbClientAcquisitionCount: input.context.dbClient ? 1 : 0,

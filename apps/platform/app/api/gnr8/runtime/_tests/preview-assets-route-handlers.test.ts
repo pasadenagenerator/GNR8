@@ -580,6 +580,78 @@ test("preview assets route rewrites css font urls to font asset urls served with
   assert.equal(fontResponse.headers.get("x-gnr8-preview-asset-path"), "fonts/dongle.woff2");
 });
 
+test("preview assets route serves Viroidoc-like primary CSS and rewrites CSS image urls", async () => {
+  const handlers = createPreviewAssetsRouteHandlers({
+    resolveDomainSiteVersionForHost: async () =>
+      ({
+        outcome: "domain_hit",
+        host: "viroidoc.app.pasadenagenerator.com",
+        siteId: "site_1",
+        siteVersionId: "sv_1",
+        domain: "viroidoc.app.pasadenagenerator.com",
+        status: "active",
+        bindingId: "binding_1",
+      }) as never,
+    resolveAgencyIdForSiteVersion: async () => "agency_1",
+    requireAgencyActionContext: async () => ({ actorMode: "agency_member", agencyId: "agency_1" } as never),
+    getRawImportedSiteArtifact: async () =>
+      ({
+        id: "artifact_imported_1",
+        artifactType: "raw_imported_site",
+        siteId: "site_1",
+        siteVersionId: "sv_1",
+        entryHtmlPath: "pages/root/index.html",
+        assetBasePath: ".",
+        fileMap: {
+          "assets/site.css": { path: "assets/site.css", mediaType: "text/css; charset=utf-8", sizeBytes: 96, sha256: "css" },
+          "uploads/root-bg.svg": { path: "uploads/root-bg.svg", mediaType: "image/svg+xml", sizeBytes: 4, sha256: "bg" },
+        },
+        metadata: {
+          sourceUrl: "https://www.viroidoc.eu/",
+          finalUrl: "https://www.viroidoc.eu/",
+          htmlByteLength: 123,
+          diagnostics: { codes: [] },
+          assetSummary: { persistedAssetCount: 2, externalFallbackAssetCount: 0 },
+        },
+        createdAt: "2026-06-10T00:00:00.000Z",
+      }) as never,
+    getRawTemplateSiteArtifact: async () => null,
+    getRawTemplateSiteAsset: async ({ filePath }) => {
+      if (filePath === "assets/site.css") {
+        return {
+          mediaType: "text/css; charset=utf-8",
+          sizeBytes: 96,
+          sha256: "css",
+          bytes: Buffer.from('h1,button{font-family:"Dongle",sans-serif}.hero{background:url("../uploads/root-bg.svg?cache=1")}', "utf8"),
+        } as never;
+      }
+      if (filePath === "uploads/root-bg.svg") {
+        return { mediaType: "image/svg+xml", sizeBytes: 4, sha256: "bg", bytes: Buffer.from("<svg></svg>", "utf8") } as never;
+      }
+      return null;
+    },
+  });
+
+  const response = await handlers.GET(
+    new Request("https://viroidoc.app.pasadenagenerator.com/api/gnr8/runtime/preview-assets/site_1/sv_1/assets/site.css", {
+      headers: { host: "viroidoc.app.pasadenagenerator.com" },
+    }),
+    {
+      params: Promise.resolve({
+        siteId: "site_1",
+        siteVersionId: "sv_1",
+        assetPath: ["assets", "site.css"],
+      }),
+    },
+  );
+  const css = await response.text();
+
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get("content-type"), "text/css; charset=utf-8");
+  assert.equal(response.headers.get("x-gnr8-preview-asset-path"), "assets/site.css");
+  assert.equal(css.includes('/api/gnr8/runtime/preview-assets/site_1/sv_1/uploads/root-bg.svg?cache=1'), true);
+});
+
 test("preview assets route prefers raw imported-site artifact over raw template artifact when both exist", async () => {
   const handlers = createPreviewAssetsRouteHandlers({
     resolveDomainSiteVersionForHost: async () =>

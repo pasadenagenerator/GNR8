@@ -680,6 +680,7 @@ function renderPreviewContent(readModel: Awaited<ReturnType<typeof getSiteWorksp
     rawTemplatePreviewEvidence: readModel.preview.previewRuntimeSummary?.rawTemplatePreviewEvidence ?? null,
   })
   const rawPreviewAssetEvidence = rawPreviewDiagnostics?.rawPreviewAssetRewriteEvidence ?? null
+  const rawPreviewAssetGraphEvidence = rawPreviewDiagnostics?.rawPreviewAssetGraphEvidence ?? null
   const rawPreviewAssetsInspected =
     rawPreviewAssetEvidence?.assetReferencesInspected
     ?? ((rawPreviewAssetEvidence?.cssUrlReferencesFound ?? 0)
@@ -855,6 +856,35 @@ function renderPreviewContent(readModel: Awaited<ReturnType<typeof getSiteWorksp
             <div>externalAssetRefsPreserved: {rawPreviewExternalPreserved}</div>
             <div>disabledScripts: {readModel.preview.previewRuntimeSummary?.rawTemplatePreviewEvidence?.disabledScriptCount ?? 0}</div>
             <div>detectedFontFamilies: Dongle={rawPreviewDiagnostics.fontFamilyDongleDetected === null ? 'n/a' : rawPreviewDiagnostics.fontFamilyDongleDetected ? 'yes' : 'no'}</div>
+            {rawPreviewAssetGraphEvidence ? (
+              <div style={{ marginTop: 4 }}>
+                <div>graphRoutePath: {rawPreviewAssetGraphEvidence.routePath}</div>
+                <div>graphRawFilePath: {rawPreviewAssetGraphEvidence.rawFilePath}</div>
+                <div>
+                  stylesheets: found={rawPreviewAssetGraphEvidence.stylesheetRefsFound.length} · rewritten={rawPreviewAssetGraphEvidence.stylesheetRefsRewritten.length} · missing={rawPreviewAssetGraphEvidence.stylesheetRefsMissing.length}
+                </div>
+                <div>
+                  images: found={rawPreviewAssetGraphEvidence.imageRefsFound.length} · rewritten={rawPreviewAssetGraphEvidence.imageRefsRewritten.length} · missing={rawPreviewAssetGraphEvidence.imageRefsMissing.length}
+                </div>
+                <div>
+                  fonts: found={rawPreviewAssetGraphEvidence.fontRefsFound.length} · rewritten={rawPreviewAssetGraphEvidence.fontRefsRewritten.length} · missing={rawPreviewAssetGraphEvidence.fontRefsMissing.length}
+                </div>
+                <div>
+                  dongleEvidence: {rawPreviewAssetGraphEvidence.dongleEvidence.detected ? 'detected' : 'not detected'}
+                  {rawPreviewAssetGraphEvidence.dongleEvidence.source ? ` · ${rawPreviewAssetGraphEvidence.dongleEvidence.source}` : ''}
+                  {rawPreviewAssetGraphEvidence.dongleEvidence.ref ? ` · ${rawPreviewAssetGraphEvidence.dongleEvidence.ref}` : ''}
+                </div>
+                {rawPreviewAssetGraphEvidence.primaryCssCandidates.length > 0 ? (
+                  <div>primaryCssCandidates: {rawPreviewAssetGraphEvidence.primaryCssCandidates.join(' · ')}</div>
+                ) : null}
+                {rawPreviewAssetGraphEvidence.topMissingStylesheetRefs.length > 0 ? (
+                  <div>topMissingStylesheetRefs: {rawPreviewAssetGraphEvidence.topMissingStylesheetRefs.join(' · ')}</div>
+                ) : null}
+                {rawPreviewAssetGraphEvidence.topMissingImageRefs.length > 0 ? (
+                  <div>topMissingImageRefs: {rawPreviewAssetGraphEvidence.topMissingImageRefs.join(' · ')}</div>
+                ) : null}
+              </div>
+            ) : null}
             {rawPreviewMissingRefs.length > 0 ? (
               <div style={{ marginTop: 4 }}>
                 <div style={{ fontWeight: 700, color: '#0f172a' }}>top missing asset refs</div>

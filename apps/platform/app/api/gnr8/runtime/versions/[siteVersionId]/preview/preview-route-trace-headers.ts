@@ -10,6 +10,16 @@ export type PreviewRouteRawTemplateTraceEvidence = {
     assetReferencesInspected?: number
     assetReferencesRewritten?: number
     assetReferencesMissing?: number
+    imageReferencesMissing?: number
+    stylesheetsInspected?: number
+    fontFamilyDongleDetected?: boolean
+  } | null
+  rawPreviewAssetGraphEvidence?: {
+    stylesheetRefsFound?: unknown[]
+    stylesheetRefsRewritten?: unknown[]
+    stylesheetRefsMissing?: unknown[]
+    imageRefsMissing?: unknown[]
+    dongleEvidence?: { detected?: boolean } | null
     fontFamilyDongleDetected?: boolean
   } | null
 }
@@ -46,5 +56,21 @@ export function rawTemplatePreviewTraceHeaders(input: {
     'x-gnr8-raw-assets-missing': String(evidence?.rawPreviewAssetRewriteEvidence?.assetReferencesMissing ?? 0),
     'x-gnr8-raw-font-dongle-detected': evidence?.rawPreviewAssetRewriteEvidence?.fontFamilyDongleDetected ? 'true' : 'false',
     'x-gnr8-raw-disabled-scripts-count': String(evidence?.disabledScriptCount ?? 0),
+    'x-gnr8-raw-stylesheets-found': String(
+      evidence?.rawPreviewAssetGraphEvidence?.stylesheetRefsFound?.length ??
+      evidence?.rawPreviewAssetRewriteEvidence?.stylesheetsInspected ??
+      0,
+    ),
+    'x-gnr8-raw-stylesheets-rewritten': String(evidence?.rawPreviewAssetGraphEvidence?.stylesheetRefsRewritten?.length ?? 0),
+    'x-gnr8-raw-stylesheets-missing': String(evidence?.rawPreviewAssetGraphEvidence?.stylesheetRefsMissing?.length ?? 0),
+    'x-gnr8-raw-images-missing': String(
+      evidence?.rawPreviewAssetGraphEvidence?.imageRefsMissing?.length ??
+      evidence?.rawPreviewAssetRewriteEvidence?.imageReferencesMissing ??
+      0,
+    ),
+    'x-gnr8-raw-dongle-detected':
+      evidence?.rawPreviewAssetGraphEvidence?.dongleEvidence?.detected || evidence?.rawPreviewAssetRewriteEvidence?.fontFamilyDongleDetected
+        ? 'true'
+        : 'false',
   }
 }

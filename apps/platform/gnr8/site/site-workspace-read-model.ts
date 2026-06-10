@@ -54,6 +54,7 @@ type RuntimeArtifactRow = {
 
 type ParsedRawTemplatePreviewEvidence = NonNullable<PreviewRuntimeSummary['rawTemplatePreviewEvidence']>
 type ParsedRawPreviewAssetRewriteEvidence = NonNullable<ParsedRawTemplatePreviewEvidence['rawPreviewAssetRewriteEvidence']>
+type ParsedRawPreviewAssetGraphEvidence = NonNullable<ParsedRawTemplatePreviewEvidence['rawPreviewAssetGraphEvidence']>
 type ParsedRawPreviewAssetReferenceEvidence = NonNullable<ParsedRawPreviewAssetRewriteEvidence['assetReferenceEvidence']>[number]
 type ParsedRawPreviewMissingAssetReference = NonNullable<ParsedRawPreviewAssetRewriteEvidence['missingAssetReferences']>[number]
 
@@ -2098,6 +2099,9 @@ function parsePreviewRuntimeSummary(value: unknown): PreviewRuntimeSummary | nul
   const rawAssetEvidence = rawTemplateEvidence && isRecord(rawTemplateEvidence.rawPreviewAssetRewriteEvidence)
     ? rawTemplateEvidence.rawPreviewAssetRewriteEvidence
     : null
+  const rawAssetGraphEvidence = rawTemplateEvidence && isRecord(rawTemplateEvidence.rawPreviewAssetGraphEvidence)
+    ? rawTemplateEvidence.rawPreviewAssetGraphEvidence
+    : null
   const numberFromRawAssetEvidence = (key: string): number =>
     Number.isFinite(Number(rawAssetEvidence?.[key])) ? Number(rawAssetEvidence?.[key]) : 0
   const parseAssetReferenceBase = (entry: Record<string, unknown>): ParsedRawPreviewMissingAssetReference => ({
@@ -2138,6 +2142,56 @@ function parsePreviewRuntimeSummary(value: unknown): PreviewRuntimeSummary | nul
           })
           .filter((entry) => entry.originalReference || entry.reason)
       : []
+  const parseGraphFoundRefs = (value: unknown): ParsedRawPreviewAssetGraphEvidence['stylesheetRefsFound'] =>
+    Array.isArray(value)
+      ? value
+          .filter(isRecord)
+          .map((entry) => ({
+            originalReference: normalizeText(entry.originalReference),
+            matchedFilePath: toTextOrNull(entry.matchedFilePath),
+            servedPreviewUrl: toTextOrNull(entry.servedPreviewUrl),
+            reason: normalizeText(entry.reason),
+            sourceType: normalizeText(entry.sourceType),
+          }))
+          .filter((entry) => entry.originalReference || entry.reason)
+      : []
+  const parseGraphMissingRefs = (value: unknown): ParsedRawPreviewAssetGraphEvidence['stylesheetRefsMissing'] =>
+    Array.isArray(value)
+      ? value
+          .filter(isRecord)
+          .map((entry) => ({
+            originalReference: normalizeText(entry.originalReference),
+            resolvedCandidate: toTextOrNull(entry.resolvedCandidate),
+            reason: normalizeText(entry.reason),
+            sourceType: normalizeText(entry.sourceType),
+          }))
+          .filter((entry) => entry.originalReference || entry.reason)
+      : []
+  const parsedRawAssetGraphEvidence = rawAssetGraphEvidence
+    ? {
+        routePath: normalizeText(rawAssetGraphEvidence.routePath) || normalizeText(rawTemplateEvidence?.selectedRoutePath) || '/',
+        rawFilePath: normalizeText(rawAssetGraphEvidence.rawFilePath) || normalizeText(rawTemplateEvidence?.selectedRawFilePath),
+        stylesheetRefsFound: parseGraphFoundRefs(rawAssetGraphEvidence.stylesheetRefsFound),
+        stylesheetRefsRewritten: parseGraphFoundRefs(rawAssetGraphEvidence.stylesheetRefsRewritten),
+        stylesheetRefsMissing: parseGraphMissingRefs(rawAssetGraphEvidence.stylesheetRefsMissing),
+        imageRefsFound: parseGraphFoundRefs(rawAssetGraphEvidence.imageRefsFound),
+        imageRefsRewritten: parseGraphFoundRefs(rawAssetGraphEvidence.imageRefsRewritten),
+        imageRefsMissing: parseGraphMissingRefs(rawAssetGraphEvidence.imageRefsMissing),
+        fontRefsFound: parseGraphFoundRefs(rawAssetGraphEvidence.fontRefsFound),
+        fontRefsRewritten: parseGraphFoundRefs(rawAssetGraphEvidence.fontRefsRewritten),
+        fontRefsMissing: parseGraphMissingRefs(rawAssetGraphEvidence.fontRefsMissing),
+        dongleEvidence: isRecord(rawAssetGraphEvidence.dongleEvidence)
+          ? {
+              detected: Boolean(rawAssetGraphEvidence.dongleEvidence.detected),
+              source: toTextOrNull(rawAssetGraphEvidence.dongleEvidence.source),
+              ref: toTextOrNull(rawAssetGraphEvidence.dongleEvidence.ref),
+            }
+          : { detected: false, source: null, ref: null },
+        primaryCssCandidates: textArray(rawAssetGraphEvidence.primaryCssCandidates),
+        topMissingStylesheetRefs: textArray(rawAssetGraphEvidence.topMissingStylesheetRefs),
+        topMissingImageRefs: textArray(rawAssetGraphEvidence.topMissingImageRefs),
+      }
+    : undefined
   const parsedRawTemplateEvidence =
     rawTemplateEvidence &&
     normalizeText(rawTemplateEvidence.selectedRoutePath) &&
@@ -2186,6 +2240,7 @@ function parsePreviewRuntimeSummary(value: unknown): PreviewRuntimeSummary | nul
               },
             }
             : {}),
+          ...(parsedRawAssetGraphEvidence ? { rawPreviewAssetGraphEvidence: parsedRawAssetGraphEvidence } : {}),
           disabledScriptCount: Number.isFinite(Number(rawTemplateEvidence.disabledScriptCount))
             ? Number(rawTemplateEvidence.disabledScriptCount)
             : undefined,

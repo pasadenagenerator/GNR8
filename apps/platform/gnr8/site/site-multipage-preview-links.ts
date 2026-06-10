@@ -22,6 +22,7 @@ export type MultiPageRawTemplatePreviewDiagnostics = {
   missingAssetReferenceCount: number | null
   fontFamilyDongleDetected: boolean | null
   rawPreviewAssetRewriteEvidence?: RawTemplatePreviewEvidenceInput['rawPreviewAssetRewriteEvidence']
+  rawPreviewAssetGraphEvidence?: RawTemplatePreviewEvidenceInput['rawPreviewAssetGraphEvidence']
   evidenceSource: 'persisted_raw_template_preview' | 'route_map_expected_live_preview'
 }
 
@@ -78,6 +79,78 @@ export type RawTemplatePreviewEvidenceInput = {
       routePath: string
       rawFilePath: string
     }>
+  }
+  rawPreviewAssetGraphEvidence?: {
+    routePath: string
+    rawFilePath: string
+    stylesheetRefsFound: Array<{
+      originalReference: string
+      matchedFilePath: string | null
+      servedPreviewUrl: string | null
+      reason: string
+      sourceType: string
+    }>
+    stylesheetRefsRewritten: Array<{
+      originalReference: string
+      matchedFilePath: string | null
+      servedPreviewUrl: string | null
+      reason: string
+      sourceType: string
+    }>
+    stylesheetRefsMissing: Array<{
+      originalReference: string
+      resolvedCandidate: string | null
+      reason: string
+      sourceType: string
+    }>
+    imageRefsFound: Array<{
+      originalReference: string
+      matchedFilePath: string | null
+      servedPreviewUrl: string | null
+      reason: string
+      sourceType: string
+    }>
+    imageRefsRewritten: Array<{
+      originalReference: string
+      matchedFilePath: string | null
+      servedPreviewUrl: string | null
+      reason: string
+      sourceType: string
+    }>
+    imageRefsMissing: Array<{
+      originalReference: string
+      resolvedCandidate: string | null
+      reason: string
+      sourceType: string
+    }>
+    fontRefsFound: Array<{
+      originalReference: string
+      matchedFilePath: string | null
+      servedPreviewUrl: string | null
+      reason: string
+      sourceType: string
+    }>
+    fontRefsRewritten: Array<{
+      originalReference: string
+      matchedFilePath: string | null
+      servedPreviewUrl: string | null
+      reason: string
+      sourceType: string
+    }>
+    fontRefsMissing: Array<{
+      originalReference: string
+      resolvedCandidate: string | null
+      reason: string
+      sourceType: string
+    }>
+    dongleEvidence: {
+      detected: boolean
+      source: string | null
+      ref: string | null
+    }
+    primaryCssCandidates: string[]
+    topMissingStylesheetRefs: string[]
+    topMissingImageRefs: string[]
   }
 }
 
@@ -156,6 +229,7 @@ export function buildMultiPageRawTemplatePreviewDiagnostics(input: {
         : null,
       fontFamilyDongleDetected: evidence.rawPreviewAssetRewriteEvidence?.fontFamilyDongleDetected ?? null,
       rawPreviewAssetRewriteEvidence: evidence.rawPreviewAssetRewriteEvidence,
+      rawPreviewAssetGraphEvidence: evidence.rawPreviewAssetGraphEvidence,
       evidenceSource: 'persisted_raw_template_preview',
     }
   }
