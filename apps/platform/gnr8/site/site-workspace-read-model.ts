@@ -52,6 +52,11 @@ type RuntimeArtifactRow = {
   manifest: unknown
 }
 
+type ParsedRawTemplatePreviewEvidence = NonNullable<PreviewRuntimeSummary['rawTemplatePreviewEvidence']>
+type ParsedRawPreviewAssetRewriteEvidence = NonNullable<ParsedRawTemplatePreviewEvidence['rawPreviewAssetRewriteEvidence']>
+type ParsedRawPreviewAssetReferenceEvidence = NonNullable<ParsedRawPreviewAssetRewriteEvidence['assetReferenceEvidence']>[number]
+type ParsedRawPreviewMissingAssetReference = NonNullable<ParsedRawPreviewAssetRewriteEvidence['missingAssetReferences']>[number]
+
 export type SiteWorkspaceRawPreviewValidationEvidence = {
   capturedAt: string | null
   siteVersionId: string | null
@@ -2095,24 +2100,42 @@ function parsePreviewRuntimeSummary(value: unknown): PreviewRuntimeSummary | nul
     : null
   const numberFromRawAssetEvidence = (key: string): number =>
     Number.isFinite(Number(rawAssetEvidence?.[key])) ? Number(rawAssetEvidence?.[key]) : 0
-  const parseAssetReferenceEvidence = (value: unknown, missingOnly = false) =>
+  const parseAssetReferenceBase = (entry: Record<string, unknown>): ParsedRawPreviewMissingAssetReference => ({
+    originalReference: normalizeText(entry.originalReference),
+    normalizedReference: toTextOrNull(entry.normalizedReference),
+    resolvedCandidate: toTextOrNull(entry.resolvedCandidate),
+    reason: normalizeText(entry.reason),
+    assetKind: normalizeText(entry.assetKind),
+    sourceType: normalizeText(entry.sourceType),
+    routePath: normalizeText(entry.routePath),
+    rawFilePath: normalizeText(entry.rawFilePath),
+  })
+  const parseAssetReferenceEvidence = (value: unknown): ParsedRawPreviewAssetReferenceEvidence[] =>
     Array.isArray(value)
       ? value
           .filter(isRecord)
           .map((entry) => ({
-            originalReference: normalizeText(entry.originalReference),
-            normalizedReference: toTextOrNull(entry.normalizedReference),
-            resolvedCandidate: toTextOrNull(entry.resolvedCandidate),
-            ...(missingOnly ? {} : {
-              matchedFilePath: toTextOrNull(entry.matchedFilePath),
-              servedPreviewUrl: toTextOrNull(entry.servedPreviewUrl),
-            }),
-            reason: normalizeText(entry.reason),
-            assetKind: normalizeText(entry.assetKind),
-            sourceType: normalizeText(entry.sourceType),
-            routePath: normalizeText(entry.routePath),
-            rawFilePath: normalizeText(entry.rawFilePath),
+            ...parseAssetReferenceBase(entry),
+            matchedFilePath: toTextOrNull(entry.matchedFilePath),
+            servedPreviewUrl: toTextOrNull(entry.servedPreviewUrl),
           }))
+          .filter((entry) => entry.originalReference || entry.reason)
+      : []
+  const parseMissingAssetReferences = (value: unknown): ParsedRawPreviewMissingAssetReference[] =>
+    Array.isArray(value)
+      ? value
+          .filter(isRecord)
+          .map((entry) => {
+            const base = parseAssetReferenceBase(entry)
+            if ('matchedFilePath' in entry || 'servedPreviewUrl' in entry) {
+              return {
+                ...base,
+                matchedFilePath: toTextOrNull(entry.matchedFilePath),
+                servedPreviewUrl: toTextOrNull(entry.servedPreviewUrl),
+              }
+            }
+            return base
+          })
           .filter((entry) => entry.originalReference || entry.reason)
       : []
   const parsedRawTemplateEvidence =
@@ -2159,7 +2182,7 @@ function parsePreviewRuntimeSummary(value: unknown): PreviewRuntimeSummary | nul
                 assetReferencesMissing: numberFromRawAssetEvidence('assetReferencesMissing'),
                 assetReferencesExternalPreserved: numberFromRawAssetEvidence('assetReferencesExternalPreserved'),
                 assetReferenceEvidence: parseAssetReferenceEvidence(rawAssetEvidence.assetReferenceEvidence),
-                missingAssetReferences: parseAssetReferenceEvidence(rawAssetEvidence.missingAssetReferences, true),
+                missingAssetReferences: parseMissingAssetReferences(rawAssetEvidence.missingAssetReferences),
               },
             }
             : {}),
