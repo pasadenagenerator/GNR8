@@ -14,6 +14,7 @@ type RewriteContext = {
   siteId: string;
   siteVersionId: string;
   contextFilePath: string;
+  fileMapPaths?: ReadonlySet<string>;
 };
 
 type RuntimeDebugContext = {
@@ -67,15 +68,28 @@ function splitUrlSuffix(value: string): { pathname: string; suffix: string } {
   };
 }
 
-function resolveAssetPathFromReference(input: { reference: string; contextFilePath: string }): string | null {
+function splitPreviewUrlSuffix(value: string): { pathname: string; suffix: string } {
+  const trimmed = String(value ?? "").trim();
+  const queryStart = trimmed.indexOf("?");
+  const hashStart = trimmed.indexOf("#");
+  const cutoff =
+    queryStart < 0
+      ? hashStart < 0
+        ? -1
+        : hashStart
+      : hashStart < 0
+        ? queryStart
+        : Math.min(queryStart, hashStart);
+  if (cutoff < 0) return { pathname: trimmed, suffix: "" };
+  return { pathname: trimmed.slice(0, cutoff), suffix: trimmed.slice(cutoff) };
+}
+
+function resolveAssetPathFromReference(input: { reference: string; contextFilePath: string; fileMapPaths?: ReadonlySet<string> }): string | null {
   const reference = String(input.reference ?? "").trim().replaceAll("\\", "/");
   if (!reference) return null;
 
   const lower = reference.toLowerCase();
   if (
-    lower.startsWith("http://") ||
-    lower.startsWith("https://") ||
-    lower.startsWith("//") ||
     lower.startsWith("data:") ||
     lower.startsWith("mailto:") ||
     lower.startsWith("javascript:") ||
@@ -88,29 +102,37 @@ function resolveAssetPathFromReference(input: { reference: string; contextFilePa
 
   const normalizedContextPath = normalizeTemplatePath(input.contextFilePath) || "index.html";
   const contextDir = path.posix.dirname(normalizedContextPath);
-
-  const isAssetsPath = (candidate: string): boolean => {
-    const segments = normalizeTemplatePath(candidate).split("/").filter(Boolean);
-    const index = segments.indexOf("assets");
-    return index >= 0 && index < segments.length - 1;
-  };
-
-  if (reference.startsWith("/assets/")) {
-    const normalizedAbsolute = normalizeTemplatePath(reference);
-    return isAssetsPath(normalizedAbsolute) ? normalizedAbsolute : null;
+  const { pathname } = splitPreviewUrlSuffix(reference);
+  const candidates: Array<string | null> = [];
+  let parsed: URL | null = null;
+  try {
+    parsed = /^\/\//.test(pathname) ? new URL(`https:${pathname}`) : /^[a-z][a-z0-9+.-]*:/i.test(pathname) ? new URL(pathname) : null;
+  } catch {
+    parsed = null;
   }
 
-  if (reference.startsWith("assets/")) {
-    const normalizedDirect = normalizeTemplatePath(reference);
-    return isAssetsPath(normalizedDirect) ? normalizedDirect : null;
+  if (parsed) {
+    const pathOnly = normalizeTemplatePath(parsed.pathname);
+    candidates.push(normalizeTemplatePath(`${parsed.hostname}${parsed.pathname}`), pathOnly);
+    if (pathOnly) candidates.push(normalizeTemplatePath(path.posix.join("/", contextDir === "." ? "" : contextDir, pathOnly)));
+  } else if (pathname.startsWith("/")) {
+    candidates.push(normalizeTemplatePath(pathname));
+  } else {
+    candidates.push(normalizeTemplatePath(path.posix.join("/", contextDir === "." ? "" : contextDir, pathname)));
+    candidates.push(normalizeTemplatePath(pathname));
   }
 
-  if (reference.startsWith("./") || reference.startsWith("../")) {
-    const resolved = path.posix.normalize(path.posix.join(contextDir, reference));
-    const normalizedResolved = normalizeTemplatePath(resolved);
-    return isAssetsPath(normalizedResolved) ? normalizedResolved : null;
+  const normalizedCandidates = [...new Set(candidates.filter((candidate): candidate is string => Boolean(candidate)))];
+  if (normalizedCandidates.length === 0) return null;
+  if (!input.fileMapPaths) return normalizedCandidates[0] ?? null;
+  for (const candidate of normalizedCandidates) {
+    if (input.fileMapPaths.has(candidate)) return candidate;
   }
-
+  for (const candidate of normalizedCandidates) {
+    const suffix = `/${candidate}`;
+    const match = [...input.fileMapPaths].find((filePath) => filePath.endsWith(suffix));
+    if (match) return match;
+  }
   return null;
 }
 
@@ -123,11 +145,13 @@ export function rewriteAssetReferenceToRuntime(input: {
   siteId: string;
   siteVersionId: string;
   contextFilePath: string;
+  fileMapPaths?: ReadonlySet<string>;
 }): string | null {
   const { pathname, suffix } = splitUrlSuffix(input.reference);
   const assetPath = resolveAssetPathFromReference({
     reference: pathname,
     contextFilePath: input.contextFilePath,
+    fileMapPaths: input.fileMapPaths,
   });
   if (!assetPath) return null;
   return buildPreviewAssetUrl({
@@ -145,6 +169,7 @@ function rewriteCssUrlTokens(css: string, context: RewriteContext): string {
       siteId: context.siteId,
       siteVersionId: context.siteVersionId,
       contextFilePath: context.contextFilePath,
+      fileMapPaths: context.fileMapPaths,
     });
     if (!rewritten) return full;
     const safeQuote = quote || "";
@@ -160,6 +185,7 @@ function rewriteTagAttributes(html: string, context: RewriteContext): string {
       siteId: context.siteId,
       siteVersionId: context.siteVersionId,
       contextFilePath: context.contextFilePath,
+      fileMapPaths: context.fileMapPaths,
     });
     if (!rewritten) return full;
     return `${prefix}${quote}${rewritten}${closingQuote}`;
@@ -480,11 +506,13 @@ export function rewriteRawTemplateCssForRuntime(input: {
   siteId: string;
   siteVersionId: string;
   assetFilePath: string;
+  fileMapPaths?: ReadonlySet<string>;
 }): string {
   return rewriteCssUrlTokens(String(input.css ?? ""), {
     siteId: input.siteId,
     siteVersionId: input.siteVersionId,
     contextFilePath: input.assetFilePath,
+    fileMapPaths: input.fileMapPaths,
   });
 }
 

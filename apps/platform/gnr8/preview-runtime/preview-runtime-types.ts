@@ -42,6 +42,22 @@ export type PreviewRuntimeSummary = {
     htmlByteLengthAfterRewrite: number;
     rewrittenLinkCount: number;
     rewrittenAssetCount?: number;
+    rawPreviewAssetRewriteEvidence?: {
+      stylesheetsInspected: number;
+      cssUrlReferencesFound: number;
+      cssUrlReferencesRewritten: number;
+      cssUrlReferencesExternalPreserved: number;
+      cssUrlReferencesMissing: number;
+      imageReferencesFound: number;
+      imageReferencesRewritten: number;
+      imageReferencesMissing: number;
+      fontStylesheetsFound: number;
+      fontStylesheetsPreserved: number;
+      fontFilesFound: number;
+      fontFilesRewritten: number;
+      fontFamilyDongleDetected: boolean;
+      rootHeadingDongleEvidence: string[];
+    };
     disabledScriptCount?: number;
     dbReadCount?: number;
     dbClientAcquisitionCount?: number;

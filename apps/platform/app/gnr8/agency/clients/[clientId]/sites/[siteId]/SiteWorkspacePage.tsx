@@ -836,6 +836,30 @@ function renderPreviewContent(readModel: Awaited<ReturnType<typeof getSiteWorksp
             <div>htmlByteLengthBeforeRewrite: {rawPreviewDiagnostics.htmlByteLengthBeforeRewrite ?? 'n/a'}</div>
             <div>htmlByteLengthAfterRewrite: {rawPreviewDiagnostics.htmlByteLengthAfterRewrite ?? 'n/a'}</div>
             <div>rewrittenLinkCount: {rawPreviewDiagnostics.rewrittenLinkCount ?? 'n/a'}</div>
+            <div>missingAssetReferenceCount: {rawPreviewDiagnostics.missingAssetReferenceCount ?? 'n/a'}</div>
+            <div>Dongle detected: {rawPreviewDiagnostics.fontFamilyDongleDetected === null ? 'n/a' : rawPreviewDiagnostics.fontFamilyDongleDetected ? 'yes' : 'no'}</div>
+            {rawPreviewDiagnostics.rawPreviewAssetRewriteEvidence ? (
+              <details style={{ marginTop: 4 }}>
+                <summary style={{ cursor: 'pointer', color: '#0f172a', fontWeight: 700 }}>Asset rewrite evidence</summary>
+                <div style={{ marginTop: 6, display: 'grid', gap: 4 }}>
+                  <div>stylesheetsInspected: {rawPreviewDiagnostics.rawPreviewAssetRewriteEvidence.stylesheetsInspected}</div>
+                  <div>cssUrlReferencesFound: {rawPreviewDiagnostics.rawPreviewAssetRewriteEvidence.cssUrlReferencesFound}</div>
+                  <div>cssUrlReferencesRewritten: {rawPreviewDiagnostics.rawPreviewAssetRewriteEvidence.cssUrlReferencesRewritten}</div>
+                  <div>cssUrlReferencesExternalPreserved: {rawPreviewDiagnostics.rawPreviewAssetRewriteEvidence.cssUrlReferencesExternalPreserved}</div>
+                  <div>cssUrlReferencesMissing: {rawPreviewDiagnostics.rawPreviewAssetRewriteEvidence.cssUrlReferencesMissing}</div>
+                  <div>imageReferencesFound: {rawPreviewDiagnostics.rawPreviewAssetRewriteEvidence.imageReferencesFound}</div>
+                  <div>imageReferencesRewritten: {rawPreviewDiagnostics.rawPreviewAssetRewriteEvidence.imageReferencesRewritten}</div>
+                  <div>imageReferencesMissing: {rawPreviewDiagnostics.rawPreviewAssetRewriteEvidence.imageReferencesMissing}</div>
+                  <div>fontStylesheetsFound: {rawPreviewDiagnostics.rawPreviewAssetRewriteEvidence.fontStylesheetsFound}</div>
+                  <div>fontStylesheetsPreserved: {rawPreviewDiagnostics.rawPreviewAssetRewriteEvidence.fontStylesheetsPreserved}</div>
+                  <div>fontFilesFound: {rawPreviewDiagnostics.rawPreviewAssetRewriteEvidence.fontFilesFound}</div>
+                  <div>fontFilesRewritten: {rawPreviewDiagnostics.rawPreviewAssetRewriteEvidence.fontFilesRewritten}</div>
+                  {rawPreviewDiagnostics.rawPreviewAssetRewriteEvidence.rootHeadingDongleEvidence.length > 0 ? (
+                    <div>rootHeadingDongleEvidence: {rawPreviewDiagnostics.rawPreviewAssetRewriteEvidence.rootHeadingDongleEvidence.join(' · ')}</div>
+                  ) : null}
+                </div>
+              </details>
+            ) : null}
             {rawPreviewDiagnostics.links.length > 0 ? (
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 4 }}>
                 {rawPreviewDiagnostics.links.map((link) => (

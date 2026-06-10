@@ -435,6 +435,111 @@ type MultiPageLinkRewriteResult = {
   missingRouteSamples: string[]
 }
 
+type RawPreviewAssetRewriteEvidence = NonNullable<RawTemplatePreviewEvidence['rawPreviewAssetRewriteEvidence']>
+
+type RawPreviewAssetRewriteSource = 'html_attr' | 'srcset' | 'lazy_attr' | 'inline_style' | 'style_block' | 'stylesheet'
+
+type RawPreviewAssetReferenceKind = 'css' | 'image' | 'font' | 'stylesheet' | 'other'
+
+type RawPreviewAssetReferenceResolution = {
+  originalUrl: string
+  rewrittenUrl: string | null
+  normalizedPath: string | null
+  externalPreserved: boolean
+  missing: boolean
+  alreadyRewritten: boolean
+  isDataUrl: boolean
+  kind: RawPreviewAssetReferenceKind
+}
+
+function defaultRawPreviewAssetRewriteEvidence(): RawPreviewAssetRewriteEvidence {
+  return {
+    stylesheetsInspected: 0,
+    cssUrlReferencesFound: 0,
+    cssUrlReferencesRewritten: 0,
+    cssUrlReferencesExternalPreserved: 0,
+    cssUrlReferencesMissing: 0,
+    imageReferencesFound: 0,
+    imageReferencesRewritten: 0,
+    imageReferencesMissing: 0,
+    fontStylesheetsFound: 0,
+    fontStylesheetsPreserved: 0,
+    fontFilesFound: 0,
+    fontFilesRewritten: 0,
+    fontFamilyDongleDetected: false,
+    rootHeadingDongleEvidence: [],
+  }
+}
+
+function mergeRawPreviewAssetRewriteEvidence(
+  left: RawPreviewAssetRewriteEvidence,
+  right: RawPreviewAssetRewriteEvidence,
+): RawPreviewAssetRewriteEvidence {
+  return {
+    stylesheetsInspected: left.stylesheetsInspected + right.stylesheetsInspected,
+    cssUrlReferencesFound: left.cssUrlReferencesFound + right.cssUrlReferencesFound,
+    cssUrlReferencesRewritten: left.cssUrlReferencesRewritten + right.cssUrlReferencesRewritten,
+    cssUrlReferencesExternalPreserved: left.cssUrlReferencesExternalPreserved + right.cssUrlReferencesExternalPreserved,
+    cssUrlReferencesMissing: left.cssUrlReferencesMissing + right.cssUrlReferencesMissing,
+    imageReferencesFound: left.imageReferencesFound + right.imageReferencesFound,
+    imageReferencesRewritten: left.imageReferencesRewritten + right.imageReferencesRewritten,
+    imageReferencesMissing: left.imageReferencesMissing + right.imageReferencesMissing,
+    fontStylesheetsFound: left.fontStylesheetsFound + right.fontStylesheetsFound,
+    fontStylesheetsPreserved: left.fontStylesheetsPreserved + right.fontStylesheetsPreserved,
+    fontFilesFound: left.fontFilesFound + right.fontFilesFound,
+    fontFilesRewritten: left.fontFilesRewritten + right.fontFilesRewritten,
+    fontFamilyDongleDetected: left.fontFamilyDongleDetected || right.fontFamilyDongleDetected,
+    rootHeadingDongleEvidence: [...new Set([...left.rootHeadingDongleEvidence, ...right.rootHeadingDongleEvidence])].slice(0, 12),
+  }
+}
+
+function splitPreviewAssetUrlSuffix(value: string): { pathname: string; suffix: string } {
+  const trimmed = String(value ?? '').trim()
+  const queryStart = trimmed.indexOf('?')
+  const hashStart = trimmed.indexOf('#')
+  const cutoff =
+    queryStart < 0
+      ? hashStart < 0
+        ? -1
+        : hashStart
+      : hashStart < 0
+        ? queryStart
+        : Math.min(queryStart, hashStart)
+  if (cutoff < 0) return { pathname: trimmed, suffix: '' }
+  return { pathname: trimmed.slice(0, cutoff), suffix: trimmed.slice(cutoff) }
+}
+
+function isGoogleFontsStylesheetUrl(value: string): boolean {
+  const normalized = String(value ?? '').trim().toLowerCase()
+  return normalized.includes('fonts.googleapis.com/css') || normalized.includes('fonts.googleapis.com/icon')
+}
+
+function containsDongleFontSignal(value: string): boolean {
+  const decoded = decodeURIComponent(String(value ?? '').replaceAll('+', ' '))
+  return /\bdongle\b/i.test(decoded)
+}
+
+function isFontAssetPath(value: string): boolean {
+  return /\.(?:woff2?|ttf|otf|eot)(?:[?#].*)?$/i.test(String(value ?? ''))
+}
+
+function isImageAssetPath(value: string): boolean {
+  return /\.(?:apng|avif|bmp|gif|ico|jpe?g|png|svg|tiff?|webp)(?:[?#].*)?$/i.test(String(value ?? ''))
+}
+
+function cssLikelyAppliesDongleToRootHeading(css: string): string[] {
+  const evidence: string[] = []
+  const source = String(css ?? '')
+  const rulePattern = /([^{}]+)\{([^{}]*font-family\s*:[^{}]*dongle[^{}]*)\}/gi
+  for (const match of source.matchAll(rulePattern)) {
+    const selector = String(match[1] ?? '').trim().replace(/\s+/g, ' ')
+    if (!selector) continue
+    if (/\bh[1-6]\b/i.test(selector)) evidence.push(`heading selector ${selector}`)
+    if (/\bbutton\b|\.btn\b|\.button\b|\[role=["']?button/i.test(selector)) evidence.push(`button selector ${selector}`)
+  }
+  return evidence.slice(0, 8)
+}
+
 function defaultMultiPageLinkRewriteCounts(): MultiPageLinkRewriteCounts {
   return {
     rewritten: 0,
@@ -653,7 +758,7 @@ function rewriteRawTemplateAssetReferencesWithCounts(input: {
   siteVersionId: string
   entryHtmlPath: string
   fileMapPaths?: ReadonlySet<string>
-}): { html: string; rewrittenAssetCount: number } {
+}): { html: string; rewrittenAssetCount: number; rawPreviewAssetRewriteEvidence: RawPreviewAssetRewriteEvidence; stylesheetAssetPaths: string[] } {
   const assetRoot = `/api/gnr8/runtime/preview-assets/${encodeURIComponent(input.siteId)}/${encodeURIComponent(input.siteVersionId)}`
   const entryDir = path.posix.dirname(input.entryHtmlPath)
   const baseDir = entryDir === '.' ? '' : entryDir
@@ -663,10 +768,19 @@ function rewriteRawTemplateAssetReferencesWithCounts(input: {
     entryHtmlPath: input.entryHtmlPath,
   })
   const cssUrlPattern = /url\(\s*(['"]?)([^"')]+)\1\s*\)/gi
+  const cssImportPattern = /@import\s+(?:url\(\s*)?(["']?)([^"')\s;]+)\1\s*\)?/gi
   const duplicatePreviewPrefixPattern = new RegExp(`^${assetRoot.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}/api/gnr8/runtime/preview-assets/`, 'i')
+  const evidence = defaultRawPreviewAssetRewriteEvidence()
+  const stylesheetAssetPaths = new Set<string>()
   let rewrittenAssetCount = 0
 
-  const emitCssAssetRewriteApplied = (originalUrl: string, rewrittenUrl: string, sourceType: 'inline_style' | 'style_block' | 'stylesheet' | 'script_detected') => {
+  const noteDongle = (value: string, source: string) => {
+    if (!containsDongleFontSignal(value)) return
+    evidence.fontFamilyDongleDetected = true
+    if (source) evidence.rootHeadingDongleEvidence = [...new Set([...evidence.rootHeadingDongleEvidence, source])].slice(0, 12)
+  }
+
+  const emitCssAssetRewriteApplied = (originalUrl: string, rewrittenUrl: string, sourceType: RawPreviewAssetRewriteSource | 'script_detected') => {
     console.info('[preview-runtime] PREVIEW_CSS_ASSET_REWRITE_APPLIED', {
       originalUrl,
       rewrittenUrl,
@@ -677,7 +791,7 @@ function rewriteRawTemplateAssetReferencesWithCounts(input: {
     })
   }
 
-  const emitCssAssetRewriteSkipped = (originalUrl: string, reasonCode: string, sourceType: 'inline_style' | 'style_block' | 'stylesheet' | 'script_detected') => {
+  const emitCssAssetRewriteSkipped = (originalUrl: string, reasonCode: string, sourceType: RawPreviewAssetRewriteSource | 'script_detected') => {
     console.info('[preview-runtime] PREVIEW_CSS_ASSET_REWRITE_SKIPPED', {
       originalUrl,
       reasonCode,
@@ -688,90 +802,206 @@ function rewriteRawTemplateAssetReferencesWithCounts(input: {
     })
   }
 
-  const rewriteCssUrlTokens = (cssValue: string, sourceType: 'inline_style' | 'style_block' | 'stylesheet' | 'script_detected'): string =>
-    String(cssValue ?? '').replace(cssUrlPattern, (full, quote: string, rawValue: string) => {
-      const originalUrl = String(rawValue ?? '').trim()
-      if (!originalUrl) return full
-      const lower = originalUrl.toLowerCase()
-      if (
-        originalUrl.startsWith('#') ||
-        lower.startsWith('http://') ||
-        lower.startsWith('https://') ||
-        lower.startsWith('//') ||
-        lower.startsWith('data:') ||
-        lower.startsWith('mailto:') ||
-        lower.startsWith('tel:')
-      ) {
-        return full
-      }
-      if (lower.startsWith('/api/gnr8/runtime/preview-assets/')) {
-        emitCssAssetRewriteSkipped(originalUrl, 'already_rewritten', sourceType)
-        return full
-      }
-      const [pathname, suffix = ''] = originalUrl.split(/(?=[?#])/)
-      const normalizedCandidates = originalUrl.startsWith('/')
-        ? [normalizeTemplateAssetPath(pathname)].filter((candidate): candidate is string => Boolean(candidate))
-        : [
-            normalizeTemplateAssetPath(path.posix.join('/', baseDir, pathname)),
-            normalizeTemplateAssetPath(pathname),
-          ].filter((candidate): candidate is string => Boolean(candidate))
-      const existingCandidate =
-        input.fileMapPaths && normalizedCandidates.length > 0
-          ? normalizedCandidates.find((candidate) => input.fileMapPaths!.has(candidate)) ?? null
-          : null
-      const normalized = existingCandidate ?? (input.fileMapPaths ? null : normalizedCandidates[0] ?? null)
-      if (!normalized) {
-        emitCssAssetRewriteSkipped(originalUrl, input.fileMapPaths ? 'file_map_path_not_found' : 'invalid_path', sourceType)
-        return full
-      }
-      const rewrittenUrl = `${assetRoot}/${normalized}${suffix}`
-      emitCssAssetRewriteApplied(originalUrl, rewrittenUrl, sourceType)
-      rewrittenAssetCount += 1
-      const safeQuote = quote || ''
-      return `url(${safeQuote}${rewrittenUrl}${safeQuote})`
-    })
+  const findFileMapCandidate = (candidates: Array<string | null>): string | null => {
+    const normalizedCandidates = candidates.filter((candidate): candidate is string => Boolean(candidate))
+    if (normalizedCandidates.length === 0) return null
+    if (!input.fileMapPaths) return normalizedCandidates[0] ?? null
+    for (const candidate of normalizedCandidates) {
+      if (input.fileMapPaths.has(candidate)) return candidate
+    }
+    for (const candidate of normalizedCandidates) {
+      const suffix = `/${candidate}`
+      const match = [...input.fileMapPaths].find((filePath) => filePath.endsWith(suffix))
+      if (match) return match
+    }
+    return null
+  }
 
-  const rewriteReference = (rawRef: string): string => {
-    const ref = String(rawRef ?? '').trim()
-    if (!ref) return ref
-    const lower = ref.toLowerCase()
-    if (
-      ref.startsWith('#') ||
-      lower.startsWith('http://') ||
-      lower.startsWith('https://') ||
-      lower.startsWith('//') ||
-      lower.startsWith('data:') ||
-      lower.startsWith('mailto:') ||
-      lower.startsWith('tel:')
-    ) {
-      return ref
+  const candidatePathsForReference = (ref: string): string[] => {
+    const { pathname } = splitPreviewAssetUrlSuffix(ref)
+    const candidates: Array<string | null> = []
+    let parsed: URL | null = null
+    try {
+      parsed = /^\/\//.test(pathname) ? new URL(`https:${pathname}`) : /^[a-z][a-z0-9+.-]*:/i.test(pathname) ? new URL(pathname) : null
+    } catch {
+      parsed = null
     }
-    if (ref.startsWith('/')) {
-      if (ref.toLowerCase().startsWith('/api/gnr8/runtime/preview-assets/')) {
-        const deduped = ref.replace(duplicatePreviewPrefixPattern, `${assetRoot}/`)
-        return deduped
+    if (parsed) {
+      const hostPath = normalizeTemplateAssetPath(`${parsed.hostname}${parsed.pathname}`)
+      const pathOnly = normalizeTemplateAssetPath(parsed.pathname)
+      candidates.push(hostPath, pathOnly)
+      if (pathOnly) {
+        candidates.push(normalizeTemplateAssetPath(path.posix.join('/', baseDir, pathOnly)))
       }
-      const [pathname, suffix = ''] = ref.split(/(?=[?#])/)
-      const normalized = normalizeTemplateAssetPath(pathname)
-      if (!normalized) return ref
-      const rewritten = `${assetRoot}/${normalized}${suffix}`
-      if (rewritten !== ref) rewrittenAssetCount += 1
-      return rewritten
+      return [...new Set(candidates.filter((candidate): candidate is string => Boolean(candidate)))]
     }
-    const [pathname, queryHash = ''] = ref.split(/(?=[?#])/)
-    const joined = path.posix.join('/', baseDir, pathname)
-    const normalizedJoined = normalizeTemplateAssetPath(joined)
-    const normalizedRootLike = normalizeTemplateAssetPath(pathname)
-    const normalizedCandidates = [normalizedJoined, normalizedRootLike].filter((candidate): candidate is string => Boolean(candidate))
-    const existingCandidate =
-      input.fileMapPaths && normalizedCandidates.length > 0
-        ? normalizedCandidates.find((candidate) => input.fileMapPaths!.has(candidate)) ?? null
-        : null
-    const normalized = existingCandidate ?? normalizedJoined ?? normalizedRootLike
-    if (!normalized) return ref
-    const rewritten = `${assetRoot}/${normalized}${queryHash}`
-    if (rewritten !== ref) rewrittenAssetCount += 1
-    return rewritten
+    if (pathname.startsWith('/')) {
+      candidates.push(normalizeTemplateAssetPath(pathname))
+    } else {
+      candidates.push(normalizeTemplateAssetPath(path.posix.join('/', baseDir, pathname)))
+      candidates.push(normalizeTemplateAssetPath(pathname))
+    }
+    return [...new Set(candidates.filter((candidate): candidate is string => Boolean(candidate)))]
+  }
+
+  const resolveReference = (rawRef: string, kindHint: RawPreviewAssetReferenceKind): RawPreviewAssetReferenceResolution => {
+    const ref = String(rawRef ?? '').trim()
+    const lower = ref.toLowerCase()
+    const kind: RawPreviewAssetReferenceKind =
+      kindHint === 'other'
+        ? isFontAssetPath(ref)
+          ? 'font'
+          : isImageAssetPath(ref)
+            ? 'image'
+            : 'other'
+        : kindHint
+    if (!ref) {
+      return { originalUrl: ref, rewrittenUrl: null, normalizedPath: null, externalPreserved: false, missing: true, alreadyRewritten: false, isDataUrl: false, kind }
+    }
+    if (ref.startsWith('#') || lower.startsWith('mailto:') || lower.startsWith('tel:') || lower.startsWith('javascript:')) {
+      return { originalUrl: ref, rewrittenUrl: null, normalizedPath: null, externalPreserved: true, missing: false, alreadyRewritten: false, isDataUrl: false, kind }
+    }
+    if (lower.startsWith('data:')) {
+      return { originalUrl: ref, rewrittenUrl: null, normalizedPath: null, externalPreserved: true, missing: false, alreadyRewritten: false, isDataUrl: true, kind }
+    }
+    if (lower.startsWith('/api/gnr8/runtime/preview-assets/')) {
+      const deduped = ref.replace(duplicatePreviewPrefixPattern, `${assetRoot}/`)
+      return {
+        originalUrl: ref,
+        rewrittenUrl: deduped,
+        normalizedPath: null,
+        externalPreserved: false,
+        missing: false,
+        alreadyRewritten: true,
+        isDataUrl: false,
+        kind,
+      }
+    }
+    const isRemote = lower.startsWith('http://') || lower.startsWith('https://') || lower.startsWith('//')
+    const { suffix } = splitPreviewAssetUrlSuffix(ref)
+    const normalized = findFileMapCandidate(candidatePathsForReference(ref))
+    if (!normalized) {
+      return {
+        originalUrl: ref,
+        rewrittenUrl: null,
+        normalizedPath: null,
+        externalPreserved: isRemote,
+        missing: !isRemote,
+        alreadyRewritten: false,
+        isDataUrl: false,
+        kind,
+      }
+    }
+    return {
+      originalUrl: ref,
+      rewrittenUrl: `${assetRoot}/${normalized}${suffix}`,
+      normalizedPath: normalized,
+      externalPreserved: false,
+      missing: false,
+      alreadyRewritten: false,
+      isDataUrl: false,
+      kind,
+    }
+  }
+
+  const recordHtmlReferenceEvidence = (resolution: RawPreviewAssetReferenceResolution, sourceType: RawPreviewAssetRewriteSource) => {
+    if (resolution.kind === 'image') {
+      evidence.imageReferencesFound += 1
+      if (resolution.rewrittenUrl && !resolution.alreadyRewritten) evidence.imageReferencesRewritten += 1
+      if (resolution.missing) evidence.imageReferencesMissing += 1
+    }
+    if (resolution.kind === 'font') {
+      evidence.fontFilesFound += 1
+      if (resolution.rewrittenUrl && !resolution.alreadyRewritten) evidence.fontFilesRewritten += 1
+    }
+    if (resolution.kind === 'stylesheet') {
+      evidence.stylesheetsInspected += 1
+      if (isGoogleFontsStylesheetUrl(resolution.originalUrl)) {
+        evidence.fontStylesheetsFound += 1
+        if (resolution.externalPreserved || resolution.rewrittenUrl) evidence.fontStylesheetsPreserved += 1
+        noteDongle(resolution.originalUrl, 'Google Fonts stylesheet link references Dongle')
+      }
+      if (resolution.normalizedPath) stylesheetAssetPaths.add(resolution.normalizedPath)
+    }
+    if (resolution.missing) {
+      emitCssAssetRewriteSkipped(resolution.originalUrl, input.fileMapPaths ? 'file_map_path_not_found' : 'invalid_path', sourceType)
+    }
+    if (resolution.rewrittenUrl && !resolution.alreadyRewritten) {
+      rewrittenAssetCount += 1
+    }
+  }
+
+  const recordCssReferenceEvidence = (resolution: RawPreviewAssetReferenceResolution, sourceType: RawPreviewAssetRewriteSource) => {
+    evidence.cssUrlReferencesFound += 1
+    if (resolution.kind === 'image') evidence.imageReferencesFound += 1
+    if (resolution.kind === 'font') evidence.fontFilesFound += 1
+    if (resolution.rewrittenUrl && !resolution.alreadyRewritten) {
+      evidence.cssUrlReferencesRewritten += 1
+      if (resolution.kind === 'image') evidence.imageReferencesRewritten += 1
+      if (resolution.kind === 'font') evidence.fontFilesRewritten += 1
+      emitCssAssetRewriteApplied(resolution.originalUrl, resolution.rewrittenUrl, sourceType)
+      rewrittenAssetCount += 1
+      return
+    }
+    if (resolution.externalPreserved) {
+      evidence.cssUrlReferencesExternalPreserved += 1
+      return
+    }
+    if (resolution.missing) {
+      evidence.cssUrlReferencesMissing += 1
+      if (resolution.kind === 'image') evidence.imageReferencesMissing += 1
+      emitCssAssetRewriteSkipped(resolution.originalUrl, input.fileMapPaths ? 'file_map_path_not_found' : 'invalid_path', sourceType)
+    }
+  }
+
+  const inspectCssImports = (cssValue: string) => {
+    for (const match of String(cssValue ?? '').matchAll(cssImportPattern)) {
+      const importUrl = String(match[2] ?? '').trim()
+      if (!importUrl) continue
+      if (isGoogleFontsStylesheetUrl(importUrl)) {
+        evidence.fontStylesheetsFound += 1
+        evidence.fontStylesheetsPreserved += 1
+        noteDongle(importUrl, 'CSS @import references Google Fonts Dongle')
+      }
+    }
+  }
+
+  const rewriteCssUrlTokens = (cssValue: string, sourceType: RawPreviewAssetRewriteSource): string => {
+    const css = String(cssValue ?? '')
+    if (containsDongleFontSignal(css)) {
+      noteDongle(css, 'CSS declares Dongle font family')
+      for (const item of cssLikelyAppliesDongleToRootHeading(css)) noteDongle('Dongle', item)
+    }
+    inspectCssImports(css)
+    return css.replace(cssUrlPattern, (full, quote: string, rawValue: string) => {
+      const resolution = resolveReference(String(rawValue ?? ''), isFontAssetPath(String(rawValue ?? '')) ? 'font' : isImageAssetPath(String(rawValue ?? '')) ? 'image' : 'other')
+      if (resolution.isDataUrl) return full
+      recordCssReferenceEvidence(resolution, sourceType)
+      if (!resolution.rewrittenUrl) return full
+      const safeQuote = quote || ''
+      return `url(${safeQuote}${resolution.rewrittenUrl}${safeQuote})`
+    })
+  }
+
+  const rewriteReference = (rawRef: string, kindHint: RawPreviewAssetReferenceKind, sourceType: RawPreviewAssetRewriteSource): string => {
+    const resolution = resolveReference(rawRef, kindHint)
+    recordHtmlReferenceEvidence(resolution, sourceType)
+    if (!resolution.rewrittenUrl) return String(rawRef ?? '').trim()
+    return resolution.rewrittenUrl
+  }
+
+  const classifyTagAttribute = (tagName: string, attr: string, value: string): RawPreviewAssetReferenceKind => {
+    const normalizedTagName = tagName.toLowerCase()
+    const normalizedAttr = attr.toLowerCase()
+    if (normalizedTagName === 'link' && normalizedAttr === 'href') {
+      if (isGoogleFontsStylesheetUrl(value) || /\.css(?:[?#].*)?$/i.test(value)) return 'stylesheet'
+      return 'other'
+    }
+    if (normalizedTagName === 'source' || normalizedTagName === 'img' || normalizedAttr === 'poster') return 'image'
+    if (/^(?:data-src|data-lazy-src|data-original|data-background|data-bg)$/i.test(normalizedAttr)) {
+      return isImageAssetPath(value) ? 'image' : 'other'
+    }
+    return isImageAssetPath(value) ? 'image' : isFontAssetPath(value) ? 'font' : 'other'
   }
 
   const rewriteSrcset = (srcset: string): string =>
@@ -781,7 +1011,7 @@ function rewriteRawTemplateAssetReferencesWithCounts(input: {
         const trimmed = entry.trim()
         if (!trimmed) return trimmed
         const [url, descriptor] = trimmed.split(/\s+/, 2)
-        const rewritten = rewriteReference(url)
+        const rewritten = rewriteReference(url, 'image', 'srcset')
         return descriptor ? `${rewritten} ${descriptor}` : rewritten
       })
       .join(', ')
@@ -789,13 +1019,19 @@ function rewriteRawTemplateAssetReferencesWithCounts(input: {
   const html = input.html
     .replace(/<([a-zA-Z][^\s/>]*)(\s[^>]*)?>/g, (full: string, tagName: string) => {
       const normalizedTagName = String(tagName ?? '').toLowerCase()
-      return full.replace(
-        /\b(href|src|poster)\s*=\s*(["'])(.*?)\2/gi,
-        (attrFull: string, attr: string, quote: string, value: string) => {
-          if (normalizedTagName === 'a' && String(attr).toLowerCase() === 'href') return attrFull
-          return `${attr}=${quote}${rewriteReference(value)}${quote}`
-        },
-      )
+      return full
+        .replace(
+          /\b(href|src|poster|data-src|data-srcset|data-lazy-src|data-original|data-background|data-bg|data-bgset)\s*=\s*(["'])(.*?)\2/gi,
+          (attrFull: string, attr: string, quote: string, value: string) => {
+            const normalizedAttr = String(attr ?? '').toLowerCase()
+            if (normalizedTagName === 'a' && normalizedAttr === 'href') return attrFull
+            if (normalizedAttr === 'srcset' || normalizedAttr === 'data-srcset' || normalizedAttr === 'data-bgset') {
+              return `${attr}=${quote}${rewriteSrcset(value)}${quote}`
+            }
+            const kind = classifyTagAttribute(normalizedTagName, normalizedAttr, value)
+            return `${attr}=${quote}${rewriteReference(value, kind, normalizedAttr.startsWith('data-') ? 'lazy_attr' : 'html_attr')}${quote}`
+          },
+        )
     })
     .replace(
       /\bsrcset\s*=\s*(["'])(.*?)\1/gi,
@@ -806,6 +1042,7 @@ function rewriteRawTemplateAssetReferencesWithCounts(input: {
       return `style=${quote}${rewritten}${quote}`
     })
     .replace(/<style\b([^>]*)>([\s\S]*?)<\/style>/gi, (_full, attrs: string, css: string) => {
+      evidence.stylesheetsInspected += 1
       const rewritten = rewriteCssUrlTokens(css, 'style_block')
       return `<style${attrs}>${rewritten}</style>`
     })
@@ -815,7 +1052,12 @@ function rewriteRawTemplateAssetReferencesWithCounts(input: {
       }
       return full
     })
-  return { html, rewrittenAssetCount }
+  return {
+    html,
+    rewrittenAssetCount,
+    rawPreviewAssetRewriteEvidence: evidence,
+    stylesheetAssetPaths: [...stylesheetAssetPaths].sort((a, b) => a.localeCompare(b)),
+  }
 }
 
 function neutralizeRawPreviewScripts(html: string): { html: string; disabledScriptCount: number } {
@@ -828,6 +1070,42 @@ function neutralizeRawPreviewScripts(html: string): { html: string; disabledScri
     )}">${body}</script>`
   })
   return { html: neutralized, disabledScriptCount }
+}
+
+async function inspectRawPreviewStylesheetAssets(input: {
+  stylesheetAssetPaths: string[]
+  artifactId?: string | null
+  siteVersionId: string
+  siteId: string
+  fileMapPaths: ReadonlySet<string>
+  context: PreviewReadContext
+}): Promise<RawPreviewAssetRewriteEvidence> {
+  let evidence = defaultRawPreviewAssetRewriteEvidence()
+  for (const stylesheetPath of input.stylesheetAssetPaths) {
+    const asset = await cacheLookup({
+      context: input.context,
+      cache: input.context.rawTemplateAssetByKey,
+      key: `${input.siteVersionId}:${stylesheetPath}`,
+      loader: () =>
+        previewReadDependencies.getRawTemplateSiteAsset({
+          siteVersionId: input.siteVersionId,
+          artifactId: input.artifactId ?? undefined,
+          filePath: stylesheetPath,
+          dbClient: input.context.dbClient ?? undefined,
+        }),
+    })
+    if (!asset) continue
+    const css = asset.bytes.toString('utf8')
+    const inspected = rewriteRawTemplateAssetReferencesWithCounts({
+      html: `<style>${css}</style>`,
+      siteId: input.siteId,
+      siteVersionId: input.siteVersionId,
+      entryHtmlPath: stylesheetPath,
+      fileMapPaths: input.fileMapPaths,
+    })
+    evidence = mergeRawPreviewAssetRewriteEvidence(evidence, inspected.rawPreviewAssetRewriteEvidence)
+  }
+  return evidence
 }
 
 function resolveRenderedCapturePreviewTruth(importSummary: unknown): RenderedCapturePreviewTruth {
@@ -1115,6 +1393,18 @@ async function renderRawTemplateSiteVersionPreview(input: {
     entryHtmlPath: selectedHtmlPath,
     fileMapPaths: new Set(Object.keys(artifact.fileMap ?? {})),
   })
+  const stylesheetEvidence = await inspectRawPreviewStylesheetAssets({
+    stylesheetAssetPaths: assetRewrite.stylesheetAssetPaths,
+    artifactId: artifact.id,
+    siteVersionId: artifact.siteVersionId,
+    siteId: artifact.siteId,
+    fileMapPaths: new Set(Object.keys(artifact.fileMap ?? {})),
+    context: input.context,
+  })
+  const rawPreviewAssetRewriteEvidence = mergeRawPreviewAssetRewriteEvidence(
+    assetRewrite.rawPreviewAssetRewriteEvidence,
+    stylesheetEvidence,
+  )
   let html = assetRewrite.html
   console.info(`[preview-runtime] ${RAW_TEMPLATE_PREVIEW_EVIDENCE_DIAGNOSTIC.PREVIEW_LINK_REWRITE_STARTED}`, {
     siteId: artifact.siteId,
@@ -1141,6 +1431,7 @@ async function renderRawTemplateSiteVersionPreview(input: {
     htmlByteLengthAfterRewrite: Buffer.byteLength(html),
     rewrittenLinkCount: linkRewrite.counts.rewritten,
     rewrittenAssetCount: assetRewrite.rewrittenAssetCount,
+    rawPreviewAssetRewriteEvidence,
     disabledScriptCount: scriptNeutralization.disabledScriptCount,
     dbReadCount: input.context.queryCount,
     dbClientAcquisitionCount: input.context.dbClient ? 1 : 0,

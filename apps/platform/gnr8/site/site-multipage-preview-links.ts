@@ -19,6 +19,9 @@ export type MultiPageRawTemplatePreviewDiagnostics = {
   htmlByteLengthBeforeRewrite: number | null
   htmlByteLengthAfterRewrite: number | null
   rewrittenLinkCount: number | null
+  missingAssetReferenceCount: number | null
+  fontFamilyDongleDetected: boolean | null
+  rawPreviewAssetRewriteEvidence?: RawTemplatePreviewEvidenceInput['rawPreviewAssetRewriteEvidence']
   evidenceSource: 'persisted_raw_template_preview' | 'route_map_expected_live_preview'
 }
 
@@ -33,6 +36,22 @@ export type RawTemplatePreviewEvidenceInput = {
   htmlByteLengthBeforeRewrite: number
   htmlByteLengthAfterRewrite: number
   rewrittenLinkCount: number
+  rawPreviewAssetRewriteEvidence?: {
+    stylesheetsInspected: number
+    cssUrlReferencesFound: number
+    cssUrlReferencesRewritten: number
+    cssUrlReferencesExternalPreserved: number
+    cssUrlReferencesMissing: number
+    imageReferencesFound: number
+    imageReferencesRewritten: number
+    imageReferencesMissing: number
+    fontStylesheetsFound: number
+    fontStylesheetsPreserved: number
+    fontFilesFound: number
+    fontFilesRewritten: number
+    fontFamilyDongleDetected: boolean
+    rootHeadingDongleEvidence: string[]
+  }
 }
 
 function normalizeRoutePath(value: unknown): string {
@@ -105,6 +124,11 @@ export function buildMultiPageRawTemplatePreviewDiagnostics(input: {
       htmlByteLengthBeforeRewrite: finiteNumberOrNull(evidence.htmlByteLengthBeforeRewrite),
       htmlByteLengthAfterRewrite: finiteNumberOrNull(evidence.htmlByteLengthAfterRewrite),
       rewrittenLinkCount: finiteNumberOrNull(evidence.rewrittenLinkCount),
+      missingAssetReferenceCount: evidence.rawPreviewAssetRewriteEvidence
+        ? evidence.rawPreviewAssetRewriteEvidence.cssUrlReferencesMissing + evidence.rawPreviewAssetRewriteEvidence.imageReferencesMissing
+        : null,
+      fontFamilyDongleDetected: evidence.rawPreviewAssetRewriteEvidence?.fontFamilyDongleDetected ?? null,
+      rawPreviewAssetRewriteEvidence: evidence.rawPreviewAssetRewriteEvidence,
       evidenceSource: 'persisted_raw_template_preview',
     }
   }
@@ -127,6 +151,8 @@ export function buildMultiPageRawTemplatePreviewDiagnostics(input: {
     htmlByteLengthBeforeRewrite: null,
     htmlByteLengthAfterRewrite: null,
     rewrittenLinkCount: null,
+    missingAssetReferenceCount: null,
+    fontFamilyDongleDetected: null,
     evidenceSource: 'route_map_expected_live_preview',
   }
 }

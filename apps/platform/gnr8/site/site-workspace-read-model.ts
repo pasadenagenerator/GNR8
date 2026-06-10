@@ -2090,6 +2090,11 @@ function parsePreviewRuntimeSummary(value: unknown): PreviewRuntimeSummary | nul
   const familyRenderUsed = familyRenderMode === 'family_primary' || familyRenderMode === 'hybrid_family_page'
   const familyRenderFallbackToPage = familyRenderMode === 'page_fallback' ? true : Boolean(value.familyRenderFallbackToPage)
   const rawTemplateEvidence = isRecord(value.rawTemplatePreviewEvidence) ? value.rawTemplatePreviewEvidence : null
+  const rawAssetEvidence = rawTemplateEvidence && isRecord(rawTemplateEvidence.rawPreviewAssetRewriteEvidence)
+    ? rawTemplateEvidence.rawPreviewAssetRewriteEvidence
+    : null
+  const numberFromRawAssetEvidence = (key: string): number =>
+    Number.isFinite(Number(rawAssetEvidence?.[key])) ? Number(rawAssetEvidence?.[key]) : 0
   const parsedRawTemplateEvidence =
     rawTemplateEvidence &&
     normalizeText(rawTemplateEvidence.selectedRoutePath) &&
@@ -2109,6 +2114,28 @@ function parsePreviewRuntimeSummary(value: unknown): PreviewRuntimeSummary | nul
           rewrittenAssetCount: Number.isFinite(Number(rawTemplateEvidence.rewrittenAssetCount))
             ? Number(rawTemplateEvidence.rewrittenAssetCount)
             : undefined,
+          ...(rawAssetEvidence
+            ? {
+              rawPreviewAssetRewriteEvidence: {
+                stylesheetsInspected: numberFromRawAssetEvidence('stylesheetsInspected'),
+                cssUrlReferencesFound: numberFromRawAssetEvidence('cssUrlReferencesFound'),
+                cssUrlReferencesRewritten: numberFromRawAssetEvidence('cssUrlReferencesRewritten'),
+                cssUrlReferencesExternalPreserved: numberFromRawAssetEvidence('cssUrlReferencesExternalPreserved'),
+                cssUrlReferencesMissing: numberFromRawAssetEvidence('cssUrlReferencesMissing'),
+                imageReferencesFound: numberFromRawAssetEvidence('imageReferencesFound'),
+                imageReferencesRewritten: numberFromRawAssetEvidence('imageReferencesRewritten'),
+                imageReferencesMissing: numberFromRawAssetEvidence('imageReferencesMissing'),
+                fontStylesheetsFound: numberFromRawAssetEvidence('fontStylesheetsFound'),
+                fontStylesheetsPreserved: numberFromRawAssetEvidence('fontStylesheetsPreserved'),
+                fontFilesFound: numberFromRawAssetEvidence('fontFilesFound'),
+                fontFilesRewritten: numberFromRawAssetEvidence('fontFilesRewritten'),
+                fontFamilyDongleDetected: Boolean(rawAssetEvidence.fontFamilyDongleDetected),
+                rootHeadingDongleEvidence: Array.isArray(rawAssetEvidence.rootHeadingDongleEvidence)
+                  ? rawAssetEvidence.rootHeadingDongleEvidence.map((entry) => normalizeText(entry)).filter(Boolean)
+                  : [],
+              },
+            }
+            : {}),
           disabledScriptCount: Number.isFinite(Number(rawTemplateEvidence.disabledScriptCount))
             ? Number(rawTemplateEvidence.disabledScriptCount)
             : undefined,

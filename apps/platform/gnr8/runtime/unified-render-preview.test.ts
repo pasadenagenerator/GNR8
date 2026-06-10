@@ -711,7 +711,7 @@ test('raw template preview route-map serving resolves /about to assembled child 
       requestCorrelationKey: 'req-route-about',
     })
 
-    assert.deepEqual(requestedAssets, ['pages/about/index.html'])
+    assert.deepEqual(requestedAssets, ['pages/about/index.html', 'pages/about/assets/about.css'])
     assert.equal(listContentSlotsCount, 0)
     assert.deepEqual(overrideStatusLookups, [])
     assert.equal(preview.path, '/about')
@@ -995,7 +995,7 @@ test('raw template preview neutralizes Viroidoc-like scripts and keeps repeated 
       assert.equal(preview.rawTemplatePreviewEvidence?.disabledScriptCount, disabledScriptCount)
       assert.equal(preview.previewRuntimeSummary.previewDiagnostics.includes('RAW_PREVIEW_SCRIPTS_DISABLED'), true)
       assert.equal(preview.rawTemplatePreviewEvidence?.dbClientAcquisitionCount, 1)
-      assert.equal((preview.rawTemplatePreviewEvidence?.dbReadCount ?? 99) <= 3, true)
+      assert.equal((preview.rawTemplatePreviewEvidence?.dbReadCount ?? 99) <= 4, true)
     }
 
     assert.equal(htmlByRoute['/news'][0], htmlByRoute['/news'][1])
@@ -1010,7 +1010,7 @@ test('raw template preview neutralizes Viroidoc-like scripts and keeps repeated 
     getSiteVersion: 4,
     getRawImportedSiteArtifact: 4,
     getRawTemplateSiteArtifact: 0,
-    getRawTemplateSiteAsset: 4,
+    getRawTemplateSiteAsset: 8,
     listContentSlots: 0,
     listContentOverrides: 0,
   })
@@ -1043,6 +1043,169 @@ test('raw template preview resolves root and child CSS/font URLs through the sam
   assert.equal(child.html.includes('/pages/news/assets/site.css'), false)
   assert.equal(root.rewrittenAssetCount, 2)
   assert.equal(child.rewrittenAssetCount, 2)
+})
+
+test('raw template asset evidence covers CSS URL rewrite cases and Dongle font references', () => {
+  const result = __unifiedRenderPreviewTestUtils.rewriteRawTemplateAssetReferencesWithCounts({
+    html: [
+      '<!doctype html><html><head>',
+      '<link rel="preconnect" href="https://fonts.gstatic.com">',
+      '<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Dongle:wght@400;700&display=swap">',
+      '<style>',
+      '@import url("https://fonts.googleapis.com/css2?family=Dongle&display=swap");',
+      'h1,.button{font-family:"Dongle",sans-serif}',
+      '.root{background:url(/assets/root.svg)}',
+      '.nested{background:url(../img/nested.jpg?ver=1)}',
+      '.remote-persisted{background:url(https://www.viroidoc.eu/assets/remote.svg?cache=1)}',
+      '.remote-external{background:url(https://cdn.example.test/keep.png)}',
+      '.data{background:url(data:image/png;base64,abc)}',
+      '@font-face{font-family:"Dongle";src:url(/fonts/dongle.woff2)}',
+      '</style></head>',
+      '<body><picture><source srcset="/assets/root.svg 1x"><img src="/missing/hero.jpg" data-src="/assets/lazy.webp"></picture></body></html>',
+    ].join(''),
+    siteId: 'site-css-unit',
+    siteVersionId: 'sv-css-unit',
+    entryHtmlPath: 'pages/news/index.html',
+    fileMapPaths: new Set([
+      'assets/root.svg',
+      'assets/remote.svg',
+      'assets/lazy.webp',
+      'pages/img/nested.jpg',
+      'fonts/dongle.woff2',
+    ]),
+  })
+
+  const evidence = result.rawPreviewAssetRewriteEvidence
+  assert.equal(result.html.includes('/api/gnr8/runtime/preview-assets/site-css-unit/sv-css-unit/assets/root.svg'), true)
+  assert.equal(result.html.includes('/api/gnr8/runtime/preview-assets/site-css-unit/sv-css-unit/pages/img/nested.jpg?ver=1'), true)
+  assert.equal(result.html.includes('/api/gnr8/runtime/preview-assets/site-css-unit/sv-css-unit/assets/remote.svg?cache=1'), true)
+  assert.equal(result.html.includes('/api/gnr8/runtime/preview-assets/site-css-unit/sv-css-unit/fonts/dongle.woff2'), true)
+  assert.equal(result.html.includes('url(data:image/png;base64,abc)'), true)
+  assert.equal(result.html.includes('https://cdn.example.test/keep.png'), true)
+  assert.equal(evidence.cssUrlReferencesFound, 6)
+  assert.equal(evidence.cssUrlReferencesRewritten, 4)
+  assert.equal(evidence.cssUrlReferencesExternalPreserved, 2)
+  assert.equal(evidence.imageReferencesMissing, 1)
+  assert.equal(evidence.fontStylesheetsFound, 2)
+  assert.equal(evidence.fontStylesheetsPreserved, 2)
+  assert.equal(evidence.fontFilesFound, 1)
+  assert.equal(evidence.fontFilesRewritten, 1)
+  assert.equal(evidence.fontFamilyDongleDetected, true)
+  assert.equal(evidence.rootHeadingDongleEvidence.some((entry) => entry.includes('heading selector')), true)
+})
+
+test('Viroidoc-like raw root and news previews preserve Dongle and persisted CSS assets while scripts stay disabled', async () => {
+  const provenance = fixtureViroidocLikeMultiPageAssemblyProvenance()
+  const rootHtml = [
+    '<!doctype html><html><head>',
+    '<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Dongle:wght@400;700&display=swap">',
+    '<link rel="stylesheet" href="assets/site.css">',
+    '</head><body>',
+    '<nav><a href="/news">News</a></nav>',
+    '<main><h1>VIROIDOC_ROOT</h1><button>Read more</button></main>',
+    '<img src="/uploads/root-hero.png" data-src="/uploads/lazy-root.webp">',
+    '<script>document.body.append("SHOULD_NOT_RUN")</script>',
+    '</body></html>',
+  ].join('')
+  const newsHtml = [
+    '<!doctype html><html><head>',
+    '<link rel="stylesheet" href="assets/site.css">',
+    '</head><body>',
+    '<nav><a href="/">Home</a></nav>',
+    '<main><h1>VIROIDOC_NEWS</h1><section id="news-listing">NEWS_LISTING</section></main>',
+    '<script>document.body.insertAdjacentHTML("afterbegin","VIROIDOC_ROOT")</script>',
+    '</body></html>',
+  ].join('')
+  const css = [
+    'h1,button{font-family:"Dongle",sans-serif}',
+    '.hero{background-image:url("../uploads/root-bg.svg?cache=1")}',
+    '@font-face{font-family:"Dongle";src:url("../fonts/dongle.woff2") format("woff2")}',
+  ].join('')
+  const htmlByFilePath: Record<string, string> = {
+    'pages/root/index.html': rootHtml,
+    'pages/project/index.html': '<!doctype html><html><body><main>Project</main></body></html>',
+    'pages/people/index.html': '<!doctype html><html><body><main>People</main></body></html>',
+    'pages/news/index.html': newsHtml,
+  }
+  const fileMap: Record<string, { mediaType: string; sizeBytes: number; sha256: string }> = {
+    ...Object.fromEntries(
+      Object.entries(htmlByFilePath).map(([filePath, html]) => [
+        filePath,
+        { mediaType: 'text/html', sizeBytes: html.length, sha256: `sha-${filePath}` },
+      ]),
+    ),
+    'assets/site.css': { mediaType: 'text/css', sizeBytes: css.length, sha256: 'sha-css' },
+    'uploads/root-hero.png': { mediaType: 'image/png', sizeBytes: 1, sha256: 'sha-hero' },
+    'uploads/lazy-root.webp': { mediaType: 'image/webp', sizeBytes: 1, sha256: 'sha-lazy' },
+    'uploads/root-bg.svg': { mediaType: 'image/svg+xml', sizeBytes: 1, sha256: 'sha-bg' },
+    'fonts/dongle.woff2': { mediaType: 'font/woff2', sizeBytes: 1, sha256: 'sha-font' },
+  }
+  const restore = setUnifiedRenderPreviewDependenciesForTest({
+    getPoolStatus: () => ({ totalCount: 1, idleCount: 1, waitingCount: 0 }),
+    getSiteVersion: async () =>
+      ({
+        id: 'sv-viroidoc-dongle',
+        siteId: 'site-viroidoc-dongle',
+        rendererCompatibilityVersion: 'gnr8-renderer-v1',
+        pages: [],
+        importProvenanceSummary: provenance,
+      }) as any,
+    getRawImportedSiteArtifact: async () =>
+      ({
+        id: 'artifact-viroidoc-dongle',
+        artifactType: 'raw_imported_site',
+        siteId: 'site-viroidoc-dongle',
+        siteVersionId: 'sv-viroidoc-dongle',
+        entryHtmlPath: 'pages/root/index.html',
+        assetBasePath: '/',
+        fileMap,
+        metadata: { assetSummary: { persistedAssetCount: Object.keys(fileMap).length, externalFallbackAssetCount: 0 } },
+      }) as any,
+    getRawTemplateSiteArtifact: async () => null,
+    getRawTemplateSiteAsset: async (input) => {
+      const html = htmlByFilePath[input.filePath]
+      if (html) return { bytes: Buffer.from(html), sizeBytes: html.length, mediaType: 'text/html' } as any
+      if (input.filePath === 'assets/site.css') return { bytes: Buffer.from(css), sizeBytes: css.length, mediaType: 'text/css' } as any
+      return null
+    },
+    listContentSlots: async () => [],
+    listContentOverrides: async () => [],
+  })
+
+  try {
+    const rootPreview = await renderSiteVersionPreview({
+      siteVersionId: 'sv-viroidoc-dongle',
+      path: '/',
+      mode: 'raw_template_preview',
+      requestCorrelationKey: 'req-viroidoc-dongle-root',
+    })
+    const newsPreview = await renderSiteVersionPreview({
+      siteVersionId: 'sv-viroidoc-dongle',
+      path: '/news',
+      mode: 'raw_template_preview',
+      requestCorrelationKey: 'req-viroidoc-dongle-news',
+    })
+
+    assert.equal(rootPreview.source, 'raw_template_site')
+    assert.equal(rootPreview.html.includes('https://fonts.googleapis.com/css2?family=Dongle'), true)
+    assert.equal(rootPreview.html.includes('/api/gnr8/runtime/preview-assets/site-viroidoc-dongle/sv-viroidoc-dongle/assets/site.css'), true)
+    assert.equal(rootPreview.html.includes('/api/gnr8/runtime/preview-assets/site-viroidoc-dongle/sv-viroidoc-dongle/uploads/root-hero.png'), true)
+    assert.equal(rootPreview.html.includes('/api/gnr8/runtime/preview-assets/site-viroidoc-dongle/sv-viroidoc-dongle/uploads/lazy-root.webp'), true)
+    assert.equal(/<script\b(?![^>]*\btype=["']application\/gnr8-disabled-script["'])/i.test(rootPreview.html), false)
+    assert.equal(rootPreview.rawTemplatePreviewEvidence?.rawPreviewAssetRewriteEvidence?.fontFamilyDongleDetected, true)
+    assert.equal(rootPreview.rawTemplatePreviewEvidence?.rawPreviewAssetRewriteEvidence?.fontStylesheetsPreserved, 1)
+    assert.equal(rootPreview.rawTemplatePreviewEvidence?.rawPreviewAssetRewriteEvidence?.fontFilesRewritten, 1)
+    assert.equal(rootPreview.rawTemplatePreviewEvidence?.rawPreviewAssetRewriteEvidence?.imageReferencesRewritten, 3)
+    assert.equal(rootPreview.previewRuntimeSummary.contentResolutionApplied, false)
+
+    assert.equal(newsPreview.path, '/news')
+    assert.equal(newsPreview.html.includes('VIROIDOC_NEWS'), true)
+    assert.equal(newsPreview.html.includes('<main><h1>VIROIDOC_ROOT'), false)
+    assert.equal(newsPreview.rawTemplatePreviewEvidence?.rawPreviewAssetRewriteEvidence?.fontFamilyDongleDetected, true)
+    assert.equal(/<script\b(?![^>]*\btype=["']application\/gnr8-disabled-script["'])/i.test(newsPreview.html), false)
+  } finally {
+    restore()
+  }
 })
 
 test('raw template preview rewrites latest Viroidoc-style menu anchors without multiplying root content', async () => {

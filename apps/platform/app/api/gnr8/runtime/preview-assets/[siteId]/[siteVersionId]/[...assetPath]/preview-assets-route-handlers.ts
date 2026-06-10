@@ -469,6 +469,10 @@ export function createPreviewAssetsRouteHandlers(overrides: Partial<PreviewAsset
                 siteId,
                 siteVersionId,
                 assetFilePath: effectivePath,
+                fileMapPaths:
+                  Object.keys(artifact.fileMap ?? {}).length > 0
+                    ? new Set(Object.keys(artifact.fileMap ?? {}))
+                    : undefined,
               })
             : binaryBody;
         } catch (error) {
