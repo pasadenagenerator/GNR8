@@ -233,6 +233,7 @@ export type PreviewRuntimeSummary = {
     disabledScriptCount?: number;
     dbReadCount?: number;
     dbClientAcquisitionCount?: number;
+    dbClientReusePath?: string;
     rawPreviewDbClientAcquisitionCount?: number;
     rawPreviewDbClientReleaseCount?: number;
     rawPreviewDbReadCount?: number;

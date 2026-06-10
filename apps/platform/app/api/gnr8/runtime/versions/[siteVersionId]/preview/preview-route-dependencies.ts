@@ -3,6 +3,8 @@ import { requireAgencyActionContext } from "@/app/api/gnr8/agency/_lib/agency-ac
 import { resolveAgencyIdForSiteVersion } from "@/app/api/gnr8/runtime/_lib/runtime-agency-scope";
 import { injectRuntimeDebugPanel } from "@/src/public-site/raw-template-runtime";
 import { canShowContentDebug } from "@/src/public-site/content-debug-access";
+import { getSuperadminPool } from "@/src/superadmin/db";
+import type { RuntimeStoreDbClient } from "@/gnr8/runtime/runtime-store";
 
 export type PreviewRouteDependencies = {
   canShowContentDebug: typeof canShowContentDebug;
@@ -10,6 +12,7 @@ export type PreviewRouteDependencies = {
   requireAgencyActionContext: typeof requireAgencyActionContext;
   renderSiteVersionPreview: typeof renderSiteVersionPreview;
   injectRuntimeDebugPanel: typeof injectRuntimeDebugPanel;
+  acquireRuntimeDbClient: () => Promise<RuntimeStoreDbClient>;
 };
 
 export const previewRouteDependencies: PreviewRouteDependencies = {
@@ -18,6 +21,7 @@ export const previewRouteDependencies: PreviewRouteDependencies = {
   requireAgencyActionContext,
   renderSiteVersionPreview,
   injectRuntimeDebugPanel,
+  acquireRuntimeDbClient: () => getSuperadminPool().connect(),
 };
 
 export function setPreviewRouteDependenciesForTest(overrides: Partial<PreviewRouteDependencies>): () => void {

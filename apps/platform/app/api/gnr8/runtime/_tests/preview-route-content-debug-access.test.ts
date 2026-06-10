@@ -38,6 +38,13 @@ function extractParseSettingFunctionFromInjectedShim(injectedShim: string): (dat
   return new Function(`${functionSource}; return parseSetting;`)() as (dataSettings: string, key: string) => number | null;
 }
 
+function createNoopDbClient(onRelease: () => void = () => {}) {
+  return {
+    query: async () => ({ rows: [] }),
+    release: onRelease,
+  } as never;
+}
+
 function mockPreviewDeps(canShowContentDebug: boolean): () => void {
   return setPreviewRouteDependenciesForTest({
     resolveAgencyIdForSiteVersion: async () => "agency_1",
@@ -116,7 +123,11 @@ test("preview route: __debug=content granted renders debug panel", async () => {
 });
 
 test("preview route: __debug=multipage_validation returns operator JSON payload", async () => {
+  let releaseCount = 0;
   const restoreDeps = setPreviewRouteDependenciesForTest({
+    acquireRuntimeDbClient: async () => createNoopDbClient(() => {
+      releaseCount += 1;
+    }),
     resolveAgencyIdForSiteVersion: async () => "agency_1",
     requireAgencyActionContext: async () => ({ agencyId: "agency_1" }) as never,
     renderSiteVersionPreview: async () =>
@@ -194,9 +205,113 @@ test("preview route: __debug=multipage_validation returns operator JSON payload"
     assert.equal(payload.multiPagePreviewValidation.status, "ready_with_warnings");
     assert.equal(payload.multiPagePreviewValidation.summary.missingPreviewRoutes, 1);
     assert.deepEqual(payload.multiPagePreviewValidation.links[0].sampleMissingRoutes, ["/missing"]);
+    assert.equal(response.headers.get("x-gnr8-raw-db-client-acquisitions"), "1");
+    assert.equal(response.headers.get("x-gnr8-raw-db-client-releases"), "1");
+    assert.equal(response.headers.get("x-gnr8-raw-db-leak-suspected"), "false");
+    assert.equal(releaseCount, 1);
   } finally {
     restoreDeps();
   }
+});
+
+test("preview route: repeated raw preview requests reuse and release one db client per request", async () => {
+  let acquireCount = 0;
+  let releaseCount = 0;
+  const agencyDbClients: unknown[] = [];
+  const renderDbClients: unknown[] = [];
+  const restoreDeps = setPreviewRouteDependenciesForTest({
+    acquireRuntimeDbClient: async () => {
+      acquireCount += 1;
+      return createNoopDbClient(() => {
+        releaseCount += 1;
+      });
+    },
+    resolveAgencyIdForSiteVersion: async (_siteVersionId, options) => {
+      agencyDbClients.push(options?.dbClient);
+      return "agency_1";
+    },
+    requireAgencyActionContext: async () => ({ agencyId: "agency_1" }) as never,
+    renderSiteVersionPreview: async (input) => {
+      renderDbClients.push(input.dbClient);
+      const pathValue = String(input.path ?? "/");
+      return {
+        html: `<!doctype html><html><body><h1>${pathValue}</h1></body></html>`,
+        siteId: "site_preview_1",
+        siteVersionId: "sv_preview_1",
+        path: pathValue,
+        source: "raw_template_site",
+        previewMode: "raw_template_preview",
+        previewRuntimeSummary: {
+          rendererContractAvailable: false,
+          finalSiteModelAvailable: false,
+          renderedWithFallback: false,
+          matchedPageId: null,
+          contentResolutionApplied: false,
+          resolvedContentCount: 0,
+          unresolvedContentCount: 0,
+          contentResolutionDegraded: false,
+          contentResolutionDiagnostics: [],
+          previewDiagnostics: [],
+          familyRenderUsed: false,
+          familyRenderMode: null,
+          familyRenderFamilyId: null,
+          familyRenderFallbackToPage: false,
+          familyRenderDiagnosticsCount: 0,
+          rawTemplatePreviewEvidence: {
+            selectedRoutePath: pathValue,
+            selectedRawFilePath: pathValue === "/" ? "index.html" : "pages/news/index.html",
+            rewrittenLinkCount: 0,
+            dbReadCount: Number(input.initialDbReadCount ?? 0) + 3,
+            dbClientAcquisitionCount: 1,
+            rawPreviewDbClientAcquisitionCount: 1,
+            rawPreviewDbClientReleaseCount: 0,
+            rawPreviewDbReadCount: Number(input.initialDbReadCount ?? 0) + 3,
+            rawPreviewDbClientLeakSuspected: true,
+            dbClientReusePath: input.dbClientReusePath,
+          },
+        },
+        rawTemplatePreviewEvidence: {
+          selectedRoutePath: pathValue,
+          selectedRawFilePath: pathValue === "/" ? "index.html" : "pages/news/index.html",
+          rewrittenLinkCount: 0,
+          dbReadCount: Number(input.initialDbReadCount ?? 0) + 3,
+          dbClientAcquisitionCount: 1,
+          rawPreviewDbClientAcquisitionCount: 1,
+          rawPreviewDbClientReleaseCount: 0,
+          rawPreviewDbReadCount: Number(input.initialDbReadCount ?? 0) + 3,
+          rawPreviewDbClientLeakSuspected: true,
+          dbClientReusePath: input.dbClientReusePath,
+        },
+        renderedCaptureUsed: false,
+        domSize: 10,
+        fallbackUsed: false,
+      } as never;
+    },
+    canShowContentDebug: async () => false,
+  });
+  try {
+    const paths = ["/news", "/", "/news", "/"];
+    for (const pathValue of paths) {
+      const response = await GET(
+        new Request(`https://app.pasadenagenerator.com/api/gnr8/runtime/versions/sv_preview_1/preview?mode=raw_template_preview&path=${encodeURIComponent(pathValue)}`),
+        { params: Promise.resolve({ siteVersionId: "sv_preview_1" }) },
+      );
+      assert.equal(response.status, 200);
+      assert.equal(response.headers.get("x-gnr8-raw-db-client-acquisitions"), "1");
+      assert.equal(response.headers.get("x-gnr8-raw-db-client-releases"), "1");
+      assert.equal(response.headers.get("x-gnr8-raw-db-leak-suspected"), "false");
+      assert.equal(response.headers.get("x-gnr8-raw-db-client-reuse-path"), "raw_preview_route_request_client");
+    }
+  } finally {
+    restoreDeps();
+  }
+
+  assert.equal(acquireCount, 4);
+  assert.equal(releaseCount, 4);
+  assert.equal(acquireCount, releaseCount);
+  assert.equal(agencyDbClients.every(Boolean), true);
+  assert.equal(renderDbClients.every(Boolean), true);
+  assert.equal(new Set(renderDbClients).size, 4);
 });
 
 test("preview route: transformed final output normalizes double-prefixed preview-assets URLs only", async () => {

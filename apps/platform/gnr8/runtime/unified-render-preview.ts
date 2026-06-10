@@ -175,8 +175,10 @@ type PreviewReadContext = {
   queryCount: number
   uniqueLookupCount: number
   dbClient: RuntimeStoreDbClient | null
+  dbClientOwnedByRenderer: boolean
   dbClientAcquisitionCount: number
   dbClientReleaseCount: number
+  dbClientReusePath: string
   rawTemplatePreviewEvidenceRefs: RawTemplatePreviewEvidence[]
   siteVersionById: Map<string, Promise<CanonicalSiteVersionSnapshot | null>>
   artifactBindingBySiteVersionId: Map<string, Promise<{ siteId: string; artifactId: string | null } | null>>
@@ -196,8 +198,10 @@ function createPreviewReadContext(requestCorrelationKey: string): PreviewReadCon
     queryCount: 0,
     uniqueLookupCount: 0,
     dbClient: null,
+    dbClientOwnedByRenderer: false,
     dbClientAcquisitionCount: 0,
     dbClientReleaseCount: 0,
+    dbClientReusePath: 'none',
     rawTemplatePreviewEvidenceRefs: [],
     siteVersionById: new Map(),
     artifactBindingBySiteVersionId: new Map(),
@@ -219,6 +223,7 @@ function updateRawPreviewDbLifecycleEvidence(context: PreviewReadContext): void 
     evidence.rawPreviewDbClientReleaseCount = context.dbClientReleaseCount
     evidence.rawPreviewDbReadCount = context.queryCount
     evidence.rawPreviewDbClientLeakSuspected = leakSuspected
+    evidence.dbClientReusePath = context.dbClientReusePath
   }
 }
 
@@ -2514,6 +2519,7 @@ async function renderRawTemplateSiteVersionPreview(input: {
     disabledScriptCount: scriptPolicy.disabledScriptCount,
     dbReadCount: input.context.queryCount,
     dbClientAcquisitionCount: input.context.dbClientAcquisitionCount,
+    dbClientReusePath: input.context.dbClientReusePath,
     rawPreviewDbClientAcquisitionCount: input.context.dbClientAcquisitionCount,
     rawPreviewDbClientReleaseCount: input.context.dbClientReleaseCount,
     rawPreviewDbReadCount: input.context.queryCount,
@@ -3220,6 +3226,11 @@ export async function renderSiteVersionPreview(input: {
   path?: string
   mode?: unknown
   requestCorrelationKey?: string
+  dbClient?: RuntimeStoreDbClient
+  initialDbReadCount?: number
+  dbClientAcquisitionCount?: number
+  dbClientReleaseCount?: number
+  dbClientReusePath?: string
 }) {
   const requestCorrelationKey =
     String(input.requestCorrelationKey ?? '').trim() ||
@@ -3230,6 +3241,18 @@ export async function renderSiteVersionPreview(input: {
       mode: String(input.mode ?? 'none'),
     })
   const context = createPreviewReadContext(requestCorrelationKey)
+  if (input.initialDbReadCount !== undefined) {
+    context.queryCount = Math.max(0, Number(input.initialDbReadCount) || 0)
+  }
+  if (input.dbClientAcquisitionCount !== undefined) {
+    context.dbClientAcquisitionCount = Math.max(0, Number(input.dbClientAcquisitionCount) || 0)
+  }
+  if (input.dbClientReleaseCount !== undefined) {
+    context.dbClientReleaseCount = Math.max(0, Number(input.dbClientReleaseCount) || 0)
+  }
+  if (input.dbClientReusePath) {
+    context.dbClientReusePath = input.dbClientReusePath
+  }
   const requestedPath = normalizePagePath(input.path ?? '/')
   const mode: SiteVersionPreviewMode = normalizeSiteVersionPreviewMode(input.mode)
   const poolAtStart = previewReadDependencies.getPoolStatus()
@@ -3258,9 +3281,20 @@ export async function renderSiteVersionPreview(input: {
   }
 
   try {
-    if (previewReadDependencies.requestScopedDbClientEnabled) {
+    if (input.dbClient) {
+      context.dbClient = input.dbClient
+      context.dbClientOwnedByRenderer = false
+      if (context.dbClientAcquisitionCount === 0) {
+        context.dbClientAcquisitionCount = 1
+      }
+      if (context.dbClientReusePath === 'none') {
+        context.dbClientReusePath = 'caller_supplied'
+      }
+    } else if (previewReadDependencies.requestScopedDbClientEnabled) {
       context.dbClient = await previewReadDependencies.acquireRuntimeDbClient()
       context.dbClientAcquisitionCount += 1
+      context.dbClientOwnedByRenderer = true
+      context.dbClientReusePath = 'renderer_request_scoped_client'
     }
     if (mode === 'transformed') {
       console.info(`[gnr8.runtime.preview] ${TRANSFORMED_PREVIEW_DIAGNOSTIC.TRANSFORMED_PREVIEW_DB_READ_STARTED}`, {
@@ -3429,10 +3463,11 @@ export async function renderSiteVersionPreview(input: {
     throw error
   }
   } finally {
-    if (context.dbClient) {
+    if (context.dbClient && context.dbClientOwnedByRenderer) {
       context.dbClient.release()
       context.dbClientReleaseCount += 1
       context.dbClient = null
+      context.dbClientOwnedByRenderer = false
     }
     updateRawPreviewDbLifecycleEvidence(context)
     const poolAtEnd = previewReadDependencies.getPoolStatus()

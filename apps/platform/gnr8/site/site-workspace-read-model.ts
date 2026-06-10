@@ -2377,6 +2377,9 @@ function parsePreviewRuntimeSummary(value: unknown): PreviewRuntimeSummary | nul
           dbClientAcquisitionCount: Number.isFinite(Number(rawTemplateEvidence.dbClientAcquisitionCount))
             ? Number(rawTemplateEvidence.dbClientAcquisitionCount)
             : undefined,
+          dbClientReusePath: typeof rawTemplateEvidence.dbClientReusePath === 'string'
+            ? rawTemplateEvidence.dbClientReusePath
+            : undefined,
           rawPreviewDbClientAcquisitionCount: Number.isFinite(Number(rawTemplateEvidence.rawPreviewDbClientAcquisitionCount))
             ? Number(rawTemplateEvidence.rawPreviewDbClientAcquisitionCount)
             : undefined,

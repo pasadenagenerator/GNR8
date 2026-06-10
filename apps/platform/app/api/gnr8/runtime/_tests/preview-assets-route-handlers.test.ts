@@ -36,6 +36,12 @@ function getParams() {
   });
 }
 
+function assertRawDbLifecycleHeaders(response: Response, expectedAcquisitions = "1") {
+  assert.equal(response.headers.get("x-gnr8-raw-db-client-acquisitions"), expectedAcquisitions);
+  assert.equal(response.headers.get("x-gnr8-raw-db-client-releases"), expectedAcquisitions);
+  assert.equal(response.headers.get("x-gnr8-raw-db-leak-suspected"), "false");
+}
+
 test("custom-domain asset request is allowed without dashboard auth when host matches active domain binding", async () => {
   let authCalls = 0;
   const handlers = createPreviewAssetsRouteHandlers({
@@ -257,11 +263,67 @@ test("preview assets route releases one request-scoped db client per repeated re
 
     assert.equal(response.status, 200);
     assert.equal(await response.text(), "body{margin:0}");
+    assertRawDbLifecycleHeaders(response);
   }
 
   assert.equal(acquireCount, 3);
   assert.equal(releaseCount, 3);
+  assert.equal(acquireCount, releaseCount);
   assert.equal(seenDbClients.every(Boolean), true);
+});
+
+test("preview assets route releases request-scoped db client when a lookup throws", async () => {
+  let acquireCount = 0;
+  let releaseCount = 0;
+  const handlers = createPreviewAssetsRouteHandlers({
+    acquireRuntimeDbClient: async () => {
+      acquireCount += 1;
+      return {
+        query: async () => ({ rows: [] }),
+        release: () => {
+          releaseCount += 1;
+        },
+      } as never;
+    },
+    resolveRawTemplateSiteForDomainAndPath: async () =>
+      ({
+        outcome: "raw_template_miss",
+        host: "app.pasadenagenerator.com",
+        normalizedPath: "/",
+        siteId: null,
+        siteVersionId: null,
+        domain: null,
+        bindingId: null,
+        status: null,
+        legacyDomainSiteVersionId: null,
+        activePointerSiteVersionId: null,
+        activeArtifactId: null,
+        diagnostics: [],
+        reasonCode: "domain_not_found",
+      }) as never,
+    resolveDomainSiteVersionForHost: async () =>
+      ({
+        outcome: "domain_miss",
+        host: "app.pasadenagenerator.com",
+        reasonCode: "domain_not_found",
+      }) as never,
+    resolveAgencyIdForSiteVersion: async () => "agency_1",
+    requireAgencyActionContext: async () => ({ actorMode: "agency_member", agencyId: "agency_1" } as never),
+    getRawImportedSiteArtifact: async () => {
+      throw new Error("db lookup failed");
+    },
+  });
+
+  const response = await handlers.GET(new Request("https://app.pasadenagenerator.com/api/gnr8/runtime/preview-assets/site_1/sv_1/assets/main.css"), {
+    params: getParams(),
+  });
+
+  assert.equal(response.status, 500);
+  assert.equal(response.headers.get("x-gnr8-preview-asset-diagnostic"), "PREVIEW_ASSET_ROUTE_DB_LOOKUP_ERROR");
+  assertRawDbLifecycleHeaders(response);
+  assert.equal(acquireCount, 1);
+  assert.equal(releaseCount, 1);
+  assert.equal(acquireCount, releaseCount);
 });
 
 test("active host-binding raw asset request is forbidden for wrong site/version", async () => {

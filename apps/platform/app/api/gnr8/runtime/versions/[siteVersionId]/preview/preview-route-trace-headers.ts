@@ -6,6 +6,7 @@ export type PreviewRouteRawTemplateTraceEvidence = {
   disabledScriptCount?: number
   dbReadCount?: number
   dbClientAcquisitionCount?: number
+  dbClientReusePath?: string
   rawPreviewDbClientAcquisitionCount?: number
   rawPreviewDbClientReleaseCount?: number
   rawPreviewDbReadCount?: number
@@ -89,6 +90,7 @@ export function rawTemplatePreviewTraceHeaders(input: {
     'x-gnr8-raw-db-client-releases': String(evidence?.rawPreviewDbClientReleaseCount ?? 0),
     'x-gnr8-raw-db-reads': String(evidence?.rawPreviewDbReadCount ?? evidence?.dbReadCount ?? 0),
     'x-gnr8-raw-db-leak-suspected': evidence?.rawPreviewDbClientLeakSuspected ? 'true' : 'false',
+    'x-gnr8-raw-db-client-reuse-path': evidence?.dbClientReusePath ?? '',
     'x-gnr8-raw-assets-inspected': String(evidence?.rawPreviewAssetRewriteEvidence?.assetReferencesInspected ?? 0),
     'x-gnr8-raw-assets-rewritten': String(evidence?.rawPreviewAssetRewriteEvidence?.assetReferencesRewritten ?? evidence?.rewrittenAssetCount ?? 0),
     'x-gnr8-raw-assets-missing': String(evidence?.rawPreviewAssetRewriteEvidence?.assetReferencesMissing ?? 0),

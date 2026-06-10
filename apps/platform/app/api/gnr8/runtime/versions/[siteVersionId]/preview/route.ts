@@ -807,22 +807,35 @@ correlationKey:correlationKey
 
 
 export async function GET(req: Request, ctx: { params: Promise<{ siteVersionId: string }> }) {
+  let rawDbClient: Awaited<ReturnType<typeof previewRouteDependencies.acquireRuntimeDbClient>> | null = null;
+  let rawDbClientAcquisitionCount = 0;
+  let rawDbClientReleaseCount = 0;
+  let rawDbReadCount = 0;
+  let isRawTemplatePreviewRequest = false;
+  let response: Response | null = null;
   try {
     const { siteVersionId } = await ctx.params;
-    const agencyId = await previewRouteDependencies.resolveAgencyIdForSiteVersion(siteVersionId);
+    const url = new URL(req.url);
+    const path = url.searchParams.get("path") ?? "/";
+    const mode = url.searchParams.get("mode") ?? undefined;
+    isRawTemplatePreviewRequest = mode === "raw_template_preview";
+    if (isRawTemplatePreviewRequest) {
+      rawDbClient = await previewRouteDependencies.acquireRuntimeDbClient();
+      rawDbClientAcquisitionCount += 1;
+    }
+    const rawDbOptions = rawDbClient ? { dbClient: rawDbClient } : undefined;
+    if (rawDbOptions) rawDbReadCount += 1;
+    const agencyId = await previewRouteDependencies.resolveAgencyIdForSiteVersion(siteVersionId, rawDbOptions);
     if (!agencyId) {
-      return new Response(JSON.stringify({ error: "Unable to resolve agency scope for site version." }), {
+      return (response = new Response(JSON.stringify({ error: "Unable to resolve agency scope for site version." }), {
         status: 403,
         headers: { "content-type": "application/json; charset=utf-8" },
-      });
+      }));
     }
     await previewRouteDependencies.requireAgencyActionContext({
       action: "view_dashboard",
       requestedAgencyId: agencyId,
     });
-    const url = new URL(req.url);
-    const path = url.searchParams.get("path") ?? "/";
-    const mode = url.searchParams.get("mode") ?? undefined;
     const requestCorrelationKey = createRuntimePreviewIdentity({
       agencyId,
       clientId: "unknown_client",
@@ -851,6 +864,11 @@ export async function GET(req: Request, ctx: { params: Promise<{ siteVersionId: 
       path,
       mode,
       requestCorrelationKey,
+      dbClient: rawDbClient ?? undefined,
+      initialDbReadCount: rawDbReadCount,
+      dbClientAcquisitionCount: rawDbClientAcquisitionCount,
+      dbClientReleaseCount: rawDbClient ? rawDbClientAcquisitionCount : rawDbClientReleaseCount,
+      dbClientReusePath: rawDbClient ? "raw_preview_route_request_client" : undefined,
     });
     const previewIdentity = createRuntimePreviewIdentity({
       agencyId,
@@ -870,7 +888,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ siteVersionId: 
       correlationKey: previewIdentity.correlationKey,
     });
     if (multipageValidationRequested) {
-      return new Response(
+      return (response = new Response(
         JSON.stringify({
           ok: true,
           siteId: preview.siteId,
@@ -889,7 +907,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ siteVersionId: 
             "cache-control": "no-store",
           },
         },
-      );
+      ));
     }
     const htmlWithOptionalDebug = contentDebugMode
       ? previewRouteDependencies.injectRuntimeDebugPanel({
@@ -975,7 +993,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ siteVersionId: 
       rawTemplatePreviewEvidence: preview.rawTemplatePreviewEvidence ?? null,
     });
 
-    return new Response(html, {
+    return (response = new Response(html, {
       status: 200,
       headers: {
         "content-type": "text/html; charset=utf-8",
@@ -1007,7 +1025,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ siteVersionId: 
         "x-gnr8-dom-size": String(preview.domSize),
         "x-gnr8-fallback-used": preview.fallbackUsed ? "true" : "false",
       },
-    });
+    }));
   } catch (error) {
     const mapped = parseAgencyActionContextError(error);
     if (mapped.status >= 400 && mapped.status < 500) {
@@ -1015,10 +1033,10 @@ export async function GET(req: Request, ctx: { params: Promise<{ siteVersionId: 
         statusTitle: "Preview Access Denied",
         message: mapped.message,
       });
-      return new Response(html, {
+      return (response = new Response(html, {
         status: mapped.status,
         headers: { "content-type": "text/html; charset=utf-8" },
-      });
+      }));
     }
     if (error instanceof SiteVersionPreviewUnavailableError) {
       const html = toPreviewFallbackHtml({
@@ -1034,10 +1052,10 @@ export async function GET(req: Request, ctx: { params: Promise<{ siteVersionId: 
           "Use the Site Workspace debug preview when available for structural inspection.",
         ],
       });
-      return new Response(html, {
+      return (response = new Response(html, {
         status: 409,
         headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" },
-      });
+      }));
     }
     if (error instanceof PreviewDbBackpressureError) {
       const html = toPreviewFallbackHtml({
@@ -1049,10 +1067,10 @@ export async function GET(req: Request, ctx: { params: Promise<{ siteVersionId: 
           `pool_waiting_count=${error.poolWaitingCount}`,
         ],
       });
-      return new Response(html, {
+      return (response = new Response(html, {
         status: 503,
         headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" },
-      });
+      }));
     }
     const message = error instanceof Error ? error.message : "Internal server error";
     const html = toPreviewFallbackHtml({
@@ -1060,10 +1078,24 @@ export async function GET(req: Request, ctx: { params: Promise<{ siteVersionId: 
       message: "An unexpected error occurred while resolving preview output.",
       details: [message],
     });
-    return new Response(html, {
+    return (response = new Response(html, {
       status: 404,
       headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" },
-    });
+    }));
+  } finally {
+    if (rawDbClient) {
+      rawDbClient.release();
+      rawDbClientReleaseCount += 1;
+      rawDbClient = null;
+    }
+    if (isRawTemplatePreviewRequest && response) {
+      const renderedDbReadCount = response.headers.get("x-gnr8-raw-db-reads") ?? String(rawDbReadCount);
+      response.headers.set("x-gnr8-raw-db-client-acquisitions", String(rawDbClientAcquisitionCount));
+      response.headers.set("x-gnr8-raw-db-client-releases", String(rawDbClientReleaseCount));
+      response.headers.set("x-gnr8-raw-db-reads", renderedDbReadCount);
+      response.headers.set("x-gnr8-raw-db-leak-suspected", rawDbClientAcquisitionCount === rawDbClientReleaseCount ? "false" : "true");
+      response.headers.set("x-gnr8-raw-db-client-reuse-path", rawDbClientAcquisitionCount > 0 ? "raw_preview_route_request_client" : "");
+    }
   }
 }
 

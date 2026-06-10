@@ -192,6 +192,13 @@ export function createPreviewAssetsRouteHandlers(overrides: Partial<PreviewAsset
       let normalizedPath: string | null = null;
       let correlationKey = "unknown_site:unknown_version:invalid_path";
       let dbClient: RuntimeStoreDbClient | null = null;
+      let response: Response | null = null;
+      let dbClientAcquisitionCount = 0;
+      let dbClientReleaseCount = 0;
+      let dbReadCount = 0;
+      const recordDbRead = () => {
+        dbReadCount += 1;
+      };
       const emitFallbackInternalDiagnostic = (code: string, reasonCode: string, error: unknown) => {
         console.error(`[preview-runtime] ${code}`, {
           code,
@@ -254,7 +261,9 @@ export function createPreviewAssetsRouteHandlers(overrides: Partial<PreviewAsset
           reasonCode: "request_received",
         });
         dbClient = await deps.acquireRuntimeDbClient();
+        dbClientAcquisitionCount += 1;
         const debugMode = new URL(req.url).searchParams.get("__debug") === "1";
+        recordDbRead();
         const publicRawTemplateResolution = await deps.resolveRawTemplateSiteForDomainAndPath({ host: requestHost, path: "/", dbClient });
         const isPublicRawTemplateAssetRequest =
           publicRawTemplateResolution.outcome === "raw_template_hit" &&
@@ -265,7 +274,7 @@ export function createPreviewAssetsRouteHandlers(overrides: Partial<PreviewAsset
 
         const publicDomainResolution = isPublicRawTemplateAssetRequest
           ? null
-          : await deps.resolveDomainSiteVersionForHost({ host: requestHost, dbClient });
+          : (recordDbRead(), await deps.resolveDomainSiteVersionForHost({ host: requestHost, dbClient }));
         const isPublicDomainAssetRequest =
           publicDomainResolution?.outcome === "domain_hit" &&
           publicDomainResolution.siteId === siteId &&
@@ -274,13 +283,14 @@ export function createPreviewAssetsRouteHandlers(overrides: Partial<PreviewAsset
           publicDomainResolution?.outcome === "domain_hit" && !isPublicDomainAssetRequest;
 
         if (mismatchedPublicRawTemplateAssetRequest || mismatchedPublicDomainAssetRequest) {
-          return new Response("forbidden", { status: 403, headers: { "content-type": "text/plain; charset=utf-8" } });
+          return (response = new Response("forbidden", { status: 403, headers: { "content-type": "text/plain; charset=utf-8" } }));
         }
 
         if (!isPublicRawTemplateAssetRequest && !isPublicDomainAssetRequest) {
+          recordDbRead();
           const agencyId = await deps.resolveAgencyIdForSiteVersion(siteVersionId, { dbClient });
           if (!agencyId) {
-            return new Response("forbidden", { status: 403, headers: { "content-type": "text/plain; charset=utf-8" } });
+            return (response = new Response("forbidden", { status: 403, headers: { "content-type": "text/plain; charset=utf-8" } }));
           }
           await deps.requireAgencyActionContext({
             action: "view_dashboard",
@@ -291,6 +301,7 @@ export function createPreviewAssetsRouteHandlers(overrides: Partial<PreviewAsset
         let artifact: Awaited<ReturnType<typeof deps.getRawImportedSiteArtifact>> | Awaited<ReturnType<typeof deps.getRawTemplateSiteArtifact>> | null =
           null;
         try {
+          recordDbRead();
           artifact =
             (await deps.getRawImportedSiteArtifact(siteVersionId, { dbClient })) ??
             (await deps.getRawTemplateSiteArtifact(siteVersionId, { dbClient }));
@@ -301,13 +312,13 @@ export function createPreviewAssetsRouteHandlers(overrides: Partial<PreviewAsset
             reasonCode: "artifact_lookup_failed",
           });
           emitFallbackInternalDiagnostic("PREVIEW_ASSET_ROUTE_DB_LOOKUP_ERROR", "artifact_lookup_failed", error);
-          return new Response("Internal server error", {
+          return (response = new Response("Internal server error", {
             status: 500,
             headers: {
               "content-type": "text/plain; charset=utf-8",
               "x-gnr8-preview-asset-diagnostic": "PREVIEW_ASSET_ROUTE_DB_LOOKUP_ERROR",
             },
-          });
+          }));
         }
         if (!artifact) {
           emitRouteDiagnostic("PREVIEW_ASSET_ROUTE_ARTIFACT_MISMATCH", {
@@ -315,7 +326,7 @@ export function createPreviewAssetsRouteHandlers(overrides: Partial<PreviewAsset
             lookupResult: "artifact_not_found",
             reasonCode: "artifact_not_found",
           });
-          return new Response("not found", { status: 404, headers: { "content-type": "text/plain; charset=utf-8" } });
+          return (response = new Response("not found", { status: 404, headers: { "content-type": "text/plain; charset=utf-8" } }));
         }
         if (artifact.siteId !== siteId) {
           emitRouteDiagnostic("PREVIEW_ASSET_ROUTE_ARTIFACT_MISMATCH", {
@@ -323,13 +334,13 @@ export function createPreviewAssetsRouteHandlers(overrides: Partial<PreviewAsset
             lookupResult: "artifact_site_mismatch",
             reasonCode: "artifact_site_mismatch",
           });
-          return new Response("not found", {
+          return (response = new Response("not found", {
             status: 404,
             headers: {
               "content-type": "text/plain; charset=utf-8",
               "x-gnr8-preview-asset-diagnostic": "PREVIEW_ASSET_ROUTE_ARTIFACT_MISMATCH",
             },
-          });
+          }));
         }
         emitRouteDiagnostic("PREVIEW_ASSET_ROUTE_ARTIFACT_RESOLVED", {
           artifactId: artifact.id,
@@ -342,7 +353,7 @@ export function createPreviewAssetsRouteHandlers(overrides: Partial<PreviewAsset
             lookupResult: "invalid_asset_path",
             reasonCode: "invalid_asset_path",
           });
-          return new Response("not found", {
+          return (response = new Response("not found", {
             status: 404,
             headers: {
               "content-type": "text/plain; charset=utf-8",
@@ -353,7 +364,7 @@ export function createPreviewAssetsRouteHandlers(overrides: Partial<PreviewAsset
                 routeDiagnostic: "PREVIEW_ASSET_ROUTE_PATH_MISMATCH",
               }),
             },
-          });
+          }));
         }
         const lookupCandidates = resolveLookupCandidates(normalizedPath);
         emitRouteDiagnostic("PREVIEW_ASSET_ROUTE_LOOKUP_STARTED", {
@@ -366,6 +377,7 @@ export function createPreviewAssetsRouteHandlers(overrides: Partial<PreviewAsset
         for (const candidate of lookupCandidates) {
           let maybeAsset: Awaited<ReturnType<typeof deps.getRawTemplateSiteAsset>> | null = null;
           try {
+            recordDbRead();
             maybeAsset = await deps.getRawTemplateSiteAsset({
               siteVersionId,
               artifactId: artifact.id,
@@ -379,13 +391,13 @@ export function createPreviewAssetsRouteHandlers(overrides: Partial<PreviewAsset
               reasonCode: "asset_lookup_failed",
             });
             emitFallbackInternalDiagnostic("PREVIEW_ASSET_ROUTE_DB_LOOKUP_ERROR", "asset_lookup_failed", error);
-            return new Response("Internal server error", {
+            return (response = new Response("Internal server error", {
               status: 500,
               headers: {
                 "content-type": "text/plain; charset=utf-8",
                 "x-gnr8-preview-asset-diagnostic": "PREVIEW_ASSET_ROUTE_DB_LOOKUP_ERROR",
               },
-            });
+            }));
           }
           if (!maybeAsset) continue;
           resolvedPath = candidate;
@@ -402,6 +414,7 @@ export function createPreviewAssetsRouteHandlers(overrides: Partial<PreviewAsset
           if (fallbackPath) {
             let fallbackAsset: Awaited<ReturnType<typeof deps.getRawTemplateSiteAsset>> | null = null;
             try {
+              recordDbRead();
               fallbackAsset = await deps.getRawTemplateSiteAsset({
                 siteVersionId,
                 artifactId: artifact.id,
@@ -415,13 +428,13 @@ export function createPreviewAssetsRouteHandlers(overrides: Partial<PreviewAsset
                 reasonCode: "asset_lookup_failed",
               });
               emitFallbackInternalDiagnostic("PREVIEW_ASSET_ROUTE_DB_LOOKUP_ERROR", "asset_lookup_failed", error);
-              return new Response("Internal server error", {
+              return (response = new Response("Internal server error", {
                 status: 500,
                 headers: {
                   "content-type": "text/plain; charset=utf-8",
                   "x-gnr8-preview-asset-diagnostic": "PREVIEW_ASSET_ROUTE_DB_LOOKUP_ERROR",
                 },
-              });
+              }));
             }
             if (fallbackAsset) {
               console.info("[preview-runtime] CONTENT_ASSET_VARIANT_FALLBACK_USED", {
@@ -464,7 +477,7 @@ export function createPreviewAssetsRouteHandlers(overrides: Partial<PreviewAsset
               candidates: [...fileMapCandidates],
               artifactType: artifact.artifactType,
             });
-          return new Response("not found", {
+          return (response = new Response("not found", {
             status: 404,
             headers: {
               "content-type": "text/plain; charset=utf-8",
@@ -476,7 +489,7 @@ export function createPreviewAssetsRouteHandlers(overrides: Partial<PreviewAsset
               }),
               ...(optionalReasonCode ? { "x-gnr8-preview-asset-reason-code": optionalReasonCode } : {}),
             },
-          });
+          }));
         }
           emitRouteDiagnostic("PREVIEW_ASSET_ROUTE_FILE_NOT_FOUND", {
             artifactId: artifact.id,
@@ -490,7 +503,7 @@ export function createPreviewAssetsRouteHandlers(overrides: Partial<PreviewAsset
             candidates: lookupCandidates,
             reason: "asset_not_found",
           });
-          return new Response("not found", {
+          return (response = new Response("not found", {
             status: 404,
             headers: {
               "content-type": "text/plain; charset=utf-8",
@@ -502,7 +515,7 @@ export function createPreviewAssetsRouteHandlers(overrides: Partial<PreviewAsset
               }),
               ...(optionalReasonCode ? { "x-gnr8-preview-asset-reason-code": optionalReasonCode } : {}),
             },
-          });
+          }));
         }
 
         emitRouteDiagnostic("PREVIEW_ASSET_ROUTE_FILE_FOUND", {
@@ -548,13 +561,13 @@ export function createPreviewAssetsRouteHandlers(overrides: Partial<PreviewAsset
             reasonCode: "asset_bytes_read_failed",
           });
           emitFallbackInternalDiagnostic("PREVIEW_ASSET_ROUTE_FILE_READ_ERROR", "asset_bytes_read_failed", error);
-          return new Response("Internal server error", {
+          return (response = new Response("Internal server error", {
             status: 500,
             headers: {
               "content-type": "text/plain; charset=utf-8",
               "x-gnr8-preview-asset-diagnostic": "PREVIEW_ASSET_ROUTE_FILE_READ_ERROR",
             },
-          });
+          }));
         }
         const contentType = resolveAssetMediaType({ filePath: effectivePath, mediaType: asset.mediaType });
 
@@ -574,29 +587,38 @@ export function createPreviewAssetsRouteHandlers(overrides: Partial<PreviewAsset
                 : "dashboard_auth";
         }
 
-        return new Response(responseBody, {
+        return (response = new Response(responseBody, {
           status: 200,
           headers,
-        });
+        }));
       } catch (error) {
         const mapped = deps.parseAgencyActionContextError(error);
         if (mapped.status >= 400 && mapped.status < 500) {
-          return new Response(mapped.message, {
+          return (response = new Response(mapped.message, {
             status: mapped.status,
             headers: { "content-type": "text/plain; charset=utf-8" },
-          });
+          }));
         }
         emitFallbackInternalDiagnostic("PREVIEW_ASSET_ROUTE_INTERNAL_ERROR", "unhandled_exception", error);
-        return new Response("Internal server error", {
+        return (response = new Response("Internal server error", {
           status: 500,
           headers: {
             "content-type": "text/plain; charset=utf-8",
             "x-gnr8-preview-asset-diagnostic": "PREVIEW_ASSET_ROUTE_INTERNAL_ERROR",
           },
-        });
+        }));
       } finally {
         if (dbClient) {
           dbClient.release();
+          dbClientReleaseCount += 1;
+          dbClient = null;
+        }
+        if (response) {
+          response.headers.set("x-gnr8-raw-db-client-acquisitions", String(dbClientAcquisitionCount));
+          response.headers.set("x-gnr8-raw-db-client-releases", String(dbClientReleaseCount));
+          response.headers.set("x-gnr8-raw-db-reads", String(dbReadCount));
+          response.headers.set("x-gnr8-raw-db-leak-suspected", dbClientAcquisitionCount === dbClientReleaseCount ? "false" : "true");
+          response.headers.set("x-gnr8-raw-db-client-reuse-path", dbClientAcquisitionCount > 0 ? "preview_assets_route_request_client" : "");
         }
       }
     },

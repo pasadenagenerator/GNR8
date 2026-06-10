@@ -1358,7 +1358,12 @@ test('raw template preview blocks Viroidoc-like duplicate injection while keepin
       assert.equal(preview.rawTemplatePreviewEvidence?.dbClientAcquisitionCount, 1)
       assert.equal(preview.rawTemplatePreviewEvidence?.rawPreviewDbClientAcquisitionCount, 1)
       assert.equal(preview.rawTemplatePreviewEvidence?.rawPreviewDbClientReleaseCount, 1)
+      assert.equal(
+        preview.rawTemplatePreviewEvidence?.rawPreviewDbClientAcquisitionCount,
+        preview.rawTemplatePreviewEvidence?.rawPreviewDbClientReleaseCount,
+      )
       assert.equal(preview.rawTemplatePreviewEvidence?.rawPreviewDbClientLeakSuspected, false)
+      assert.equal(preview.rawTemplatePreviewEvidence?.dbClientReusePath, 'renderer_request_scoped_client')
       assert.equal(preview.rawTemplatePreviewEvidence?.rawPreviewDbReadCount, preview.rawTemplatePreviewEvidence?.dbReadCount)
       assert.equal((preview.rawTemplatePreviewEvidence?.dbReadCount ?? 99) <= 4, true)
     }
@@ -1529,7 +1534,12 @@ test('Transporti-Maver-like raw preview preserves gallery map form and lazyload 
     assert.equal(scriptEvidence?.lazyloadCandidateScriptsDetected, true)
     assert.equal(preview.rawTemplatePreviewEvidence?.rawPreviewDbClientAcquisitionCount, 1)
     assert.equal(preview.rawTemplatePreviewEvidence?.rawPreviewDbClientReleaseCount, 1)
+    assert.equal(
+      preview.rawTemplatePreviewEvidence?.rawPreviewDbClientAcquisitionCount,
+      preview.rawTemplatePreviewEvidence?.rawPreviewDbClientReleaseCount,
+    )
     assert.equal(preview.rawTemplatePreviewEvidence?.rawPreviewDbClientLeakSuspected, false)
+    assert.equal(preview.rawTemplatePreviewEvidence?.dbClientReusePath, 'renderer_request_scoped_client')
     assert.equal((preview.rawTemplatePreviewEvidence?.dbReadCount ?? 99) <= 4, true)
   } finally {
     restore()
