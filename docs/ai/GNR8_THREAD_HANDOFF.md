@@ -2,18 +2,17 @@
 
 This is the first file every new ChatGPT/Codex thread should read.
 
-## Current Active Track: Phase 7E — Transformed Preview Quality / Raw-to-Transformed Bridge
+## Current Active Track: Phase 7F — Importer Architecture Split / Evidence-to-Reconstruction Boundary
 
 Website OS branch status:
 - Closed/frozen/paused.
 - Do not continue Website OS runtime expansion unless explicitly requested.
 
 Latest completed milestone:
-- Phase 7D — Multi-Page Raw Preview Correctness + Observability.
+- Phase 7F-1 — Importer Architecture Split.
 - Status: COMPLETE.
-- Complete through 7D-9.
-- No runtime behavior changes introduced.
-- No import logic changes introduced.
+- Architecture boundary and minimal type scaffolding only.
+- No preview renderer rewrite, import-limit change, script-policy change, Servo integration, or AI generation introduced.
 
 Production smoke-test:
 - completed successfully.
@@ -52,6 +51,16 @@ Phase 7D production Viroidoc verification:
 - raw multi-page preview links are separated from transformed preview
 - transformed preview remains semantic/fallback and is not the source of truth for route-level inspection
 
+Phase 7F-1 architecture boundary:
+- Evidence Capture captures source-site evidence as a browser/user sees it.
+- Original Mirror provides a read-only, non-semantic, non-AI preview/archive labeled `Original Mirror Preview`.
+- AI Reconstruction produces GNR8-native editable output labeled `GNR8 Reconstruction Preview`.
+- ViroiDoc blog/news duplication is not solved by raw preview patching.
+- Mono/Maver map behavior likely requires evidence capture plus widget reconstruction.
+- Dongle showed source-reference preservation risk.
+- DB lifecycle issue was fixed before this phase.
+- Raw preview remains useful for route-level inspection and mirror behavior, but is not the long-term reconstruction foundation.
+
 Dedicated progress doc:
 - `docs/ai/MIGRATION_RUNTIME_PROGRESS.md`
 
@@ -83,6 +92,7 @@ Current completed chain:
 - Multi-Page Import MVP
 - Discovery Expansion
 - Multi-Page Raw Preview Correctness + Observability
+- Importer Architecture Split
 
 Latest completed migration capabilities:
 - `MigrationBatchExecutor`
@@ -177,6 +187,7 @@ Latest completed migration capabilities:
 - raw preview link rewrite verification
 - root route assembly as `root_entry` from `index.html`
 - raw/transformed preview boundary clarification
+- importer architecture split into Evidence Capture, Original Mirror, and AI Reconstruction
 
 Completed migration-first chain:
 - Import
@@ -198,6 +209,7 @@ Completed migration-first chain:
 - Multi-Page Import MVP
 - Discovery Expansion
 - Multi-Page Raw Preview Correctness + Observability
+- Importer Architecture Split
 
 Phase 6 completion notes:
 - Phase 6 is COMPLETE.
@@ -264,12 +276,22 @@ Phase 7D completion notes:
 - No runtime behavior was changed.
 - No import logic was changed.
 
+Phase 7F-1 completion notes:
+- Phase 7F-1 is COMPLETE as an architecture-boundary/documentation pass.
+- Canonical architecture doc: `docs/architecture/IMPORTER_ARCHITECTURE_SPLIT.md`.
+- Type scaffolding: `apps/platform/gnr8/architecture/importer-architecture-split-contract.ts`.
+- Required terminology: Evidence Capture, Capture Provider, Original Mirror Preview, GNR8 Reconstruction Preview, Known Fidelity Limitation, Reconstruction Candidate.
+- No ViroiDoc fix, Maver/Mono map fix, Servo integration, AI generation, preview renderer rewrite, import-limit change, or script-policy change was included.
+
 Current critical path:
-- Phase 7E — Transformed Preview Quality / Raw-to-Transformed Bridge
+- Phase 7F-2 — Evidence Capture Artifact Contract
+- Phase 7F-3 — Original Mirror Status / Known Limitations UI
+- Phase 7F-4 — Reconstruction Input Contract
+- Phase 7F-5 — First AI Reconstruction Spike from Evidence
 - Billing
 
 Next recommended milestone:
-- Phase 7E — Transformed Preview Quality / Raw-to-Transformed Bridge.
+- Phase 7F-2 — Evidence Capture Artifact Contract.
 
 Explicit exclusions still in force:
 - no Website OS runtime expansion
@@ -309,7 +331,7 @@ Dedicated pause note:
 - Future continuation point: Execution Artifact Runtime family.
 - Execution Artifact Runtime family is not currently part of the migration-critical path.
 Next migration platform milestone:
-- Phase 7E — Transformed Preview Quality / Raw-to-Transformed Bridge.
+- Phase 7F-2 — Evidence Capture Artifact Contract.
 - Phase 5A completed Command Center integration for migration batches; execution remains operator-driven and queue/worker orchestration does not exist yet.
 - Phase 6A completed read-only hosting operations observability for Command Center; hosting overview/detail are operational and production smoke-tested.
 - Phase 6B completed Hosting Operations workflow review.
@@ -1212,21 +1234,28 @@ Hard boundaries remain:
 
 ## F) Current Active Implementation Phase
 
-Active phase: Phase 7E — Transformed Preview Quality / Raw-to-Transformed Bridge.
+Active phase: Phase 7F — Importer Architecture Split / Evidence-to-Reconstruction Boundary.
 
 Practical next phase:
-1. Improve transformed preview quality.
-2. Bridge raw multi-page route truth into transformed preview semantics.
-3. Preserve raw preview as the source of truth for route-level inspection until transformed parity is explicitly proven.
-4. Keep raw multi-page preview links separated from transformed preview.
+1. 7F-2: define the Evidence Capture Artifact Contract.
+2. 7F-3: add Original Mirror status and Known Fidelity Limitation UI.
+3. 7F-4: define the Reconstruction Input Contract.
+4. 7F-5: run the first bounded AI Reconstruction spike from evidence.
 5. Preserve operator workflow and observability.
 
-Phase 7E boundary:
-- Raw route-level inspection remains anchored to raw preview evidence.
-- Transformed preview remains semantic/fallback until parity is explicitly proven.
+Phase 7F-1 boundary now recorded:
+- Evidence Capture captures source-site evidence as a browser/user sees it.
+- Original Mirror provides a read-only, non-semantic, non-AI preview/archive labeled `Original Mirror Preview`.
+- AI Reconstruction produces GNR8-native editable output labeled `GNR8 Reconstruction Preview`.
+- Raw preview remains useful for route-level inspection and mirror behavior, but is not the long-term reconstruction foundation.
+- ViroiDoc blog/news duplication is not solved by raw preview patching.
+- Mono/Maver map behavior likely requires evidence capture plus widget reconstruction.
+- Dongle showed source-reference preservation risk.
+- DB lifecycle issue was fixed before this phase.
 - No public activation changes.
 - No CMS changes.
 - No commerce work.
+- No preview renderer rewrite, script-policy change, import-limit change, Servo integration, or AI generation was included in 7F-1.
 
 ## G) How Next Thread Should Behave
 

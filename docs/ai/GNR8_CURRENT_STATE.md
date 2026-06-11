@@ -1,7 +1,7 @@
 # GNR8 CURRENT STATE SNAPSHOT
 
 ## Snapshot Date
-2026-06-09
+2026-06-11
 
 ## Migration Platform MVP Buildout
 
@@ -32,6 +32,8 @@ Phase 7C has no architectural blockers.
 Discovery expansion is operational.
 Phase 7D — Multi-Page Raw Preview Correctness + Observability is COMPLETE through 7D-9.
 Phase 7D has no runtime behavior changes outstanding.
+Phase 7F-1 — Importer Architecture Split is COMPLETE as an architecture-boundary/documentation pass.
+Importer architecture now separates Evidence Capture, Original Mirror, and AI Reconstruction.
 Phase 6A — Hosting Operations MVP is complete.
 Phase 6B — Hosting Operations Workflow Review is complete.
 Phase 6C-A — Readiness & Domain Operations MVP is complete.
@@ -116,6 +118,7 @@ Completed capabilities:
 - Raw Multi-Page Route Inspection
 - Raw Preview Route Coverage Verification
 - Raw/Transformed Preview Boundary Clarification
+- Importer Architecture Split
 
 Current migration runtime capabilities:
 - durable jobs
@@ -188,6 +191,14 @@ Current migration runtime capabilities:
 - raw preview link rewrite verification
 - root route assembly as `root_entry` from `index.html`
 - raw multi-page preview links separated from transformed preview
+- importer architecture split into Evidence Capture, Original Mirror, and AI Reconstruction
+- importer architecture terminology:
+  - Evidence Capture
+  - Capture Provider
+  - Original Mirror Preview
+  - GNR8 Reconstruction Preview
+  - Known Fidelity Limitation
+  - Reconstruction Candidate
 
 Hosting Operations now exposes:
 - Hosting Overview
@@ -275,7 +286,7 @@ Explicitly not yet implemented:
 - dynamic content extraction
 
 Next active phase:
-- PHASE 7E — TRANSFORMED PREVIEW QUALITY / RAW-TO-TRANSFORMED BRIDGE.
+- PHASE 7F — IMPORTER ARCHITECTURE SPLIT / EVIDENCE-TO-RECONSTRUCTION BOUNDARY.
 
 ## Phase 7D Multi-Page Raw Preview Correctness + Observability
 
@@ -303,6 +314,44 @@ Boundary:
 - No public activation changes.
 - No CMS changes.
 - No commerce work.
+
+## Phase 7F-1 Importer Architecture Split
+
+Status:
+- COMPLETE as architecture boundary and minimal type scaffolding.
+
+Canonical architecture doc:
+- `docs/architecture/IMPORTER_ARCHITECTURE_SPLIT.md`
+
+Type scaffolding:
+- `apps/platform/gnr8/architecture/importer-architecture-split-contract.ts`
+
+Layer split:
+- Evidence Capture Layer captures source-site evidence as a browser/user sees it.
+- Original Mirror Layer provides a read-only, non-semantic, non-AI mirror/archive preview labeled `Original Mirror Preview`.
+- AI Reconstruction Layer creates GNR8-native editable output from evidence and is labeled `GNR8 Reconstruction Preview`.
+
+Explicit unresolved cases:
+- ViroiDoc blog/news duplication is not solved by raw preview patching.
+- Mono/Maver map behavior likely requires evidence capture plus widget reconstruction.
+- Dongle showed source-reference preservation risk in importer/mirror behavior.
+- DB lifecycle issue was fixed before this phase.
+- Raw preview remains useful for route inspection and mirror behavior, but should not be the long-term reconstruction foundation.
+
+Not included:
+- no ViroiDoc fix
+- no Maver/Mono map fix
+- no Servo
+- no AI generation
+- no preview renderer rewrite
+- no import-limit changes
+- no script-policy changes
+
+Next recommended importer phases:
+- 7F-2: Evidence Capture Artifact Contract
+- 7F-3: Original Mirror Status / Known Limitations UI
+- 7F-4: Reconstruction Input Contract
+- 7F-5: First AI Reconstruction Spike from Evidence
 
 ## Production Validation
 
@@ -365,7 +414,10 @@ Execution boundary:
 - unattended orchestration does not exist yet
 
 Remaining critical path:
-- Phase 7E — Transformed Preview Quality / Raw-to-Transformed Bridge
+- Phase 7F-2 — Evidence Capture Artifact Contract
+- Phase 7F-3 — Original Mirror Status / Known Limitations UI
+- Phase 7F-4 — Reconstruction Input Contract
+- Phase 7F-5 — First AI Reconstruction Spike from Evidence
 - Billing
 
 Current Hosting Operations status:
@@ -375,14 +427,16 @@ Current Hosting Operations status:
 - Phase 7B is complete.
 - Phase 7C is complete.
 - Phase 7D is complete through 7D-9.
+- Phase 7F-1 is complete as architecture boundary and type scaffolding.
 
 Next recommended milestone:
-- Phase 7E — Transformed Preview Quality / Raw-to-Transformed Bridge
+- Phase 7F-2 — Evidence Capture Artifact Contract
 
-Phase 7E recommended focus:
-- Improve transformed preview quality.
-- Bridge raw multi-page route truth into transformed preview semantics.
-- Preserve raw preview as the source of truth for route-level inspection until transformed parity is explicitly proven.
+Phase 7F recommended focus:
+- Define the Evidence Capture Artifact Contract.
+- Add Original Mirror status and Known Fidelity Limitation UI.
+- Define the Reconstruction Input Contract.
+- Keep Original Mirror Preview separate from GNR8 Reconstruction Preview.
 
 ## Bootstrap Runtime State (2026-06-03)
 
@@ -446,7 +500,8 @@ Current migration platform continuation:
 - Phase 7B — Multi-Page Import MVP is complete.
 - Phase 7C — Discovery Expansion is complete.
 - Phase 7D — Multi-Page Raw Preview Correctness + Observability is complete through 7D-9.
-- Phase 7E — Transformed Preview Quality / Raw-to-Transformed Bridge is the next recommended phase.
+- Phase 7F-1 — Importer Architecture Split is complete.
+- Phase 7F-2 — Evidence Capture Artifact Contract is the next recommended phase.
 - Website OS runtime expansion remains paused.
 - Execution Artifact Runtime family remains outside the migration-critical path.
 
@@ -524,7 +579,8 @@ Current migration platform continuation:
 - Phase 7B — Multi-Page Import MVP is complete.
 - Phase 7C — Discovery Expansion is complete.
 - Phase 7D — Multi-Page Raw Preview Correctness + Observability is complete through 7D-9.
-- Phase 7E — Transformed Preview Quality / Raw-to-Transformed Bridge is the next recommended phase.
+- Phase 7F-1 — Importer Architecture Split is complete.
+- Phase 7F-2 — Evidence Capture Artifact Contract is the next recommended phase.
 - Website OS runtime expansion remains paused.
 
 ## Execution Candidate Runtime Family v1 Milestone (2026-06-03)

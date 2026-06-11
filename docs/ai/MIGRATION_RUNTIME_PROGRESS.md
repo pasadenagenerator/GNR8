@@ -45,11 +45,15 @@ Phase 7D is COMPLETE through 7D-9.
 Phase 7D introduced no runtime behavior changes.
 Phase 7D introduced no import logic changes.
 
+Phase 7F-1 defines the Importer Architecture Split between Evidence Capture, Original Mirror, and AI Reconstruction.
+
+Phase 7F-1 is COMPLETE as an architecture-boundary/documentation pass.
+
 Website OS runtime expansion remains paused.
 
 ## Critical Path
 
-Import -> CMS -> Renderer -> Durable Jobs -> Durable Batches -> Batch Execution -> Batch Execution Observability -> Command Center -> Hosting Operations -> Hosting Hardening -> Multi-Page Import MVP -> Discovery Expansion -> Multi-Page Raw Preview Correctness + Observability -> Phase 7E Transformed Preview Quality / Raw-to-Transformed Bridge -> Billing
+Import -> CMS -> Renderer -> Durable Jobs -> Durable Batches -> Batch Execution -> Batch Execution Observability -> Command Center -> Hosting Operations -> Hosting Hardening -> Multi-Page Import MVP -> Discovery Expansion -> Multi-Page Raw Preview Correctness + Observability -> Phase 7F Importer Architecture Split -> Billing
 
 ## Completed Reality Checks
 
@@ -618,7 +622,7 @@ Status:
 - Discovery expansion operational.
 
 Next active phase:
-- PHASE 7E — TRANSFORMED PREVIEW QUALITY / RAW-TO-TRANSFORMED BRIDGE.
+- PHASE 7F — IMPORTER ARCHITECTURE SPLIT / EVIDENCE-TO-RECONSTRUCTION BOUNDARY.
 
 ### Phase 7D — Multi-Page Raw Preview Correctness + Observability
 
@@ -660,7 +664,49 @@ Status:
 - Phase 7D COMPLETE through 7D-9.
 
 Next recommended phase:
-- Phase 7E — Transformed Preview Quality / Raw-to-Transformed Bridge.
+- Phase 7F-1 — Importer Architecture Split.
+
+### Phase 7F — Importer Architecture Split
+
+#### Phase 7F-1 — Evidence Capture vs Original Mirror vs AI Reconstruction
+
+Status:
+- COMPLETE.
+
+Architecture doc:
+- `docs/architecture/IMPORTER_ARCHITECTURE_SPLIT.md`
+
+Type scaffolding:
+- `apps/platform/gnr8/architecture/importer-architecture-split-contract.ts`
+
+Defined layers:
+- Evidence Capture Layer: captures source-site browser evidence and produces evidence artifacts only.
+- Original Mirror Layer: read-only, non-semantic, non-AI source mirror labeled `Original Mirror Preview`.
+- AI Reconstruction Layer: GNR8-native editable reconstruction from evidence labeled `GNR8 Reconstruction Preview`.
+
+Required terminology:
+- Evidence Capture
+- Capture Provider
+- Original Mirror Preview
+- GNR8 Reconstruction Preview
+- Known Fidelity Limitation
+- Reconstruction Candidate
+
+Recorded unresolved cases:
+- ViroiDoc blog/news duplication is not solved by raw preview patching.
+- Mono/Maver map rendering likely requires evidence capture plus widget reconstruction.
+- Dongle showed source-reference preservation risk.
+- DB lifecycle issue was fixed before this phase.
+- Raw preview should not be the long-term reconstruction foundation.
+
+Boundaries preserved:
+- no ViroiDoc fix
+- no Maver/Mono map fix
+- no Servo
+- no AI generation
+- no preview renderer rewrite
+- no import-limit changes
+- no script-policy changes
 
 ## Current State
 
@@ -677,6 +723,7 @@ Completed:
 - Phase 7B
 - Phase 7C
 - Phase 7D
+- Phase 7F-1
 
 Hosting Operations MVP complete.
 Hosting Hardening complete.
@@ -684,12 +731,16 @@ Phase 6 complete.
 Phase 7B complete.
 Phase 7C complete.
 Phase 7D complete through 7D-9.
+Phase 7F-1 complete as architecture boundary and type scaffolding.
 
 ## Current Remaining Work
 
 ### Near-term
 
-- Phase 7E — Transformed Preview Quality / Raw-to-Transformed Bridge
+- Phase 7F-2 — Evidence Capture Artifact Contract
+- Phase 7F-3 — Original Mirror Status / Known Limitations UI
+- Phase 7F-4 — Reconstruction Input Contract
+- Phase 7F-5 — First AI Reconstruction Spike from Evidence
 - Billing Reality Check
 
 ### Optional Runtime UX
