@@ -34,6 +34,11 @@ Phase 7D — Multi-Page Raw Preview Correctness + Observability is COMPLETE thro
 Phase 7D has no runtime behavior changes outstanding.
 Phase 7F-1 — Importer Architecture Split is COMPLETE as an architecture-boundary/documentation pass.
 Importer architecture now separates Evidence Capture, Original Mirror, and AI Reconstruction.
+Phase 7F-2.5 — Evidence Capture Inventory Audit is COMPLETE as an architecture-only audit.
+Evidence Capture coverage against `importer-architecture-split-contract.ts` is: Supported Now 16/66 fields (24.2%), Partial 33/66 fields (50.0%), Missing 17/66 fields (25.8%).
+Current capture foundation includes raw HTML, rendered DOM, viewport/full-page screenshots, computed style samples, direct asset fetch manifests, acquisition evidence, diagnostics, worker job state, worker health, and multi-page route discovery evidence.
+Current high-value gaps are rendered layout geometry, browser network inventory, script/runtime observation, full media/widget evidence, and normalized `KnownFidelityLimitation[]`.
+Architecture recommendation from the audit: an intermediate Capture Expansion phase is required before treating Phase 7F-3 as full reconstruction-grade Evidence Capture persistence. A narrower Phase 7F-3 can persist only the current evidence set if explicitly scoped that way.
 Phase 6A — Hosting Operations MVP is complete.
 Phase 6B — Hosting Operations Workflow Review is complete.
 Phase 6C-A — Readiness & Domain Operations MVP is complete.
@@ -192,6 +197,8 @@ Current migration runtime capabilities:
 - root route assembly as `root_entry` from `index.html`
 - raw multi-page preview links separated from transformed preview
 - importer architecture split into Evidence Capture, Original Mirror, and AI Reconstruction
+- evidence capture inventory audit baseline documented
+- current evidence coverage measured as 16 supported, 33 partial, and 17 missing contract fields
 - importer architecture terminology:
   - Evidence Capture
   - Capture Provider

@@ -9,10 +9,15 @@ Website OS branch status:
 - Do not continue Website OS runtime expansion unless explicitly requested.
 
 Latest completed milestone:
-- Phase 7F-1 — Importer Architecture Split.
+- Phase 7F-2.5 — Evidence Capture Inventory Audit.
 - Status: COMPLETE.
-- Architecture boundary and minimal type scaffolding only.
-- No preview renderer rewrite, import-limit change, script-policy change, Servo integration, or AI generation introduced.
+- Architecture audit and documentation only.
+- No importer behavior, preview behavior, reconstruction behavior, worker behavior, Playwright behavior, persistence behavior, route discovery, rendering, or database schema was changed.
+- Audit doc: `docs/architecture/EVIDENCE_CAPTURE_INVENTORY_AUDIT.md`.
+- Evidence Capture coverage against `apps/platform/gnr8/architecture/importer-architecture-split-contract.ts`: Supported Now 16/66 fields (24.2%), Partial 33/66 fields (50.0%), Missing 17/66 fields (25.8%).
+- Current foundation: raw HTML, rendered DOM, viewport/full-page screenshots, computed style samples, direct asset fetch manifests, acquisition evidence, diagnostics, worker job state, worker health, and multi-page route discovery evidence.
+- Highest-value gaps: rendered layout geometry, browser network inventory, script/runtime observation, media/widget evidence, and normalized fidelity limitations.
+- Recommendation: an intermediate Capture Expansion phase is required before treating Phase 7F-3 as full reconstruction-grade Evidence Capture persistence. A narrower Phase 7F-3 can persist only the current evidence set if explicitly scoped.
 
 Production smoke-test:
 - completed successfully.
@@ -61,6 +66,13 @@ Phase 7F-1 architecture boundary:
 - DB lifecycle issue was fixed before this phase.
 - Raw preview remains useful for route-level inspection and mirror behavior, but is not the long-term reconstruction foundation.
 
+Phase 7F-2.5 evidence capture inventory:
+- The full `EvidenceCaptureArtifact` object is not emitted today.
+- Chrome/Playwright rendered capture and worker orchestration exist.
+- Rendered DOM, screenshots, computed style samples, raw HTML, direct asset acquisition, diagnostics, and route evidence exist.
+- Full browser network, rendered layout geometry, script runtime observation, full media/widget inventory, and normalized `KnownFidelityLimitation[]` do not yet exist.
+- Do not assume Phase 7F-3 has enough coverage for reconstruction-grade persistence unless a Capture Expansion phase has filled those gaps.
+
 Dedicated progress doc:
 - `docs/ai/MIGRATION_RUNTIME_PROGRESS.md`
 
@@ -93,6 +105,7 @@ Current completed chain:
 - Discovery Expansion
 - Multi-Page Raw Preview Correctness + Observability
 - Importer Architecture Split
+- Evidence Capture Inventory Audit
 
 Latest completed migration capabilities:
 - `MigrationBatchExecutor`
@@ -188,6 +201,7 @@ Latest completed migration capabilities:
 - root route assembly as `root_entry` from `index.html`
 - raw/transformed preview boundary clarification
 - importer architecture split into Evidence Capture, Original Mirror, and AI Reconstruction
+- evidence capture inventory audit baseline and coverage matrix
 
 Completed migration-first chain:
 - Import
