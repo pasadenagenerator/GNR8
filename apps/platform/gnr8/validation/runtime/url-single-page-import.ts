@@ -2,7 +2,7 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 
-import { parse, serialize } from "parse5";
+import { parse, parseFragment, serialize } from "parse5";
 
 import type { RenderedCaptureExecutor, RenderedCaptureResult } from "../../import-rendered-capture";
 import type { SemanticImportCaptureMode, SemanticImportResult } from "../../import-semantic/semantic-import-engine";
@@ -47,6 +47,7 @@ export type UrlImportDiagnosticCode =
   | "SITE_IMPORT_HTML_EMPTY"
   | "SITE_IMPORT_HTML_RECEIVED"
   | "SITE_IMPORT_ASSET_DISCOVERY_STARTED"
+  | "RAW_IMPORT_SOURCE_REFERENCE_PRESERVED"
   | "SITE_IMPORT_INTAKE_COMPLETED"
   | "SITE_IMPORT_INTAKE_FAILED"
   | "IMPORT_RUN_ID_CREATED"
@@ -1055,6 +1056,242 @@ function selectPrimarySiteStylesheetRef(headStylesheetRefs: ParsedAssetRef[]): P
     return (a.resolvedUrl ?? "").localeCompare(b.resolvedUrl ?? "");
   });
   return ranked[0] ?? null;
+}
+
+type SourceReferencePreservationCandidate = {
+  key: string;
+  tag: "link" | "script" | "style";
+  ref: string;
+  html: string;
+  reasonCode: string;
+};
+
+const PRESERVABLE_WIDGET_REFERENCE_PATTERN =
+  /\b(?:leaflet|openstreetmap|osm|mapbox|openlayers|google(?:apis)?\.com\/maps|maps\.google|mono[_-]?(?:map|osmap)|osmap|map-container|yaccessibility|accessibility|a11y|userway|accessibe|pojo-a11y|enable[_-]?accessibility|oneclick|widget|loader|bootstrap)\b/i;
+const FONT_SOURCE_REFERENCE_PATTERN = /\b(?:fonts\.googleapis\.com|fonts\.gstatic\.com|use\.typekit\.net|p\.typekit\.net|fast\.fonts\.net|cloud\.typography\.com)\b/i;
+const ANALYTICS_OR_TRACKING_REFERENCE_PATTERN =
+  /\b(?:google-analytics|googletagmanager|gtag\/js|analytics\.js|ga\.js|doubleclick|googlesyndication|adservice|facebook\.net|connect\.facebook|hotjar|clarity\.ms|segment\.(?:com|io)|mixpanel|amplitude|matomo|plausible|fullstory|intercom|hubspot|hs-scripts|cookiebot)\b/i;
+
+function isHttpLikeReference(rawRef: string): boolean {
+  return /^https?:\/\//i.test(rawRef.trim()) || /^\/\//.test(rawRef.trim());
+}
+
+function canonicalSourceReferenceKey(input: { tag: string; rawRef: string; baseUrl: URL }): string | null {
+  const rawRef = input.rawRef.trim();
+  if (!rawRef) return null;
+  try {
+    const resolved = new URL(rawRef, input.baseUrl);
+    if (resolved.protocol !== "http:" && resolved.protocol !== "https:") return null;
+    resolved.hash = "";
+    return `${input.tag}:${resolved.toString()}`;
+  } catch {
+    return `${input.tag}:${rawRef}`;
+  }
+}
+
+function relTokenSet(value: string | null): Set<string> {
+  return new Set(
+    String(value ?? "")
+      .toLowerCase()
+      .split(/\s+/)
+      .filter(Boolean),
+  );
+}
+
+function escapeHtmlAttributeValue(value: string): string {
+  return value.replaceAll("&", "&amp;").replaceAll('"', "&quot;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
+}
+
+function serializeAttributes(attrs: Array<{ name?: string; value?: string }>): string {
+  return attrs
+    .filter((attr) => String(attr.name ?? "").trim().length > 0)
+    .map((attr) => ` ${String(attr.name)}="${escapeHtmlAttributeValue(String(attr.value ?? ""))}"`)
+    .join("");
+}
+
+function nodeTextContentForPreservation(node: unknown): string {
+  if (!node || typeof node !== "object") return "";
+  if (typeof (node as { value?: unknown }).value === "string") return String((node as { value?: unknown }).value);
+  const childNodes = (node as { childNodes?: unknown[] }).childNodes;
+  if (!Array.isArray(childNodes)) return "";
+  return childNodes.map(nodeTextContentForPreservation).join("");
+}
+
+function cssImportReferenceCandidates(cssText: string): string[] {
+  const out = new Set<string>();
+  for (const match of String(cssText ?? "").matchAll(/@import\s+(?:url\(\s*)?(["']?)([^"')\s;]+)\1\s*\)?/gi)) {
+    const ref = String(match[2] ?? "").trim();
+    if (ref) out.add(ref);
+  }
+  return [...out];
+}
+
+function sourceReferencePreservationReason(input: {
+  tag: "link" | "script";
+  rawRef: string;
+  rel: string | null;
+  typeAttr: string | null;
+}): string | null {
+  const rawRef = input.rawRef.trim();
+  if (!rawRef) return null;
+  if (ANALYTICS_OR_TRACKING_REFERENCE_PATTERN.test(rawRef)) return null;
+
+  const relTokens = relTokenSet(input.rel);
+  const typeAttr = String(input.typeAttr ?? "").trim().toLowerCase();
+  const stylesheetLike =
+    input.tag === "link" &&
+    (relTokens.has("stylesheet") || typeAttr === "text/css" || typeAttr.startsWith("text/css;") || relTokens.has("preload"));
+
+  if (stylesheetLike && FONT_SOURCE_REFERENCE_PATTERN.test(rawRef)) return "external_font_source_preserved";
+  if (stylesheetLike && PRESERVABLE_WIDGET_REFERENCE_PATTERN.test(rawRef)) return "external_widget_stylesheet_preserved";
+  if (stylesheetLike && isHttpLikeReference(rawRef)) return "external_stylesheet_preserved";
+  if (input.tag === "script" && PRESERVABLE_WIDGET_REFERENCE_PATTERN.test(rawRef)) return "widget_script_preserved";
+
+  return null;
+}
+
+function collectSourceReferenceKeys(input: { html: string; baseUrl: URL }): Set<string> {
+  const keys = new Set<string>();
+  const document = parse(input.html || "");
+  walkDom(document, (node) => {
+    if (!isElement(node)) return;
+    const tag = node.tagName.toLowerCase();
+    if (tag !== "link" && tag !== "script") return;
+    const rawRef = tag === "link" ? getAttr(node, "href") : getAttr(node, "src");
+    if (!rawRef) return;
+    const key = canonicalSourceReferenceKey({ tag, rawRef, baseUrl: input.baseUrl });
+    if (key) keys.add(key);
+  });
+  return keys;
+}
+
+function collectPreservableSourceReferences(input: { sourceHtml: string; selectedHtml: string; baseUrl: URL }): SourceReferencePreservationCandidate[] {
+  const selectedKeys = collectSourceReferenceKeys({ html: input.selectedHtml, baseUrl: input.baseUrl });
+  const sourceDocument = parse(input.sourceHtml || "");
+  const candidates: SourceReferencePreservationCandidate[] = [];
+
+  walkDom(sourceDocument, (node) => {
+    if (!isElement(node)) return;
+    const tag = node.tagName.toLowerCase();
+    if (tag === "link") {
+      const rawRef = getAttr(node, "href");
+      if (!rawRef) return;
+      const reasonCode = sourceReferencePreservationReason({
+        tag,
+        rawRef,
+        rel: getAttr(node, "rel"),
+        typeAttr: getAttr(node, "type"),
+      });
+      if (!reasonCode) return;
+      const key = canonicalSourceReferenceKey({ tag, rawRef, baseUrl: input.baseUrl });
+      if (!key || selectedKeys.has(key)) return;
+      const attrs = (node as { attrs?: Array<{ name?: string; value?: string }> }).attrs ?? [];
+      candidates.push({
+        key,
+        tag,
+        ref: rawRef.trim(),
+        html: `<link${serializeAttributes(attrs)}>`,
+        reasonCode,
+      });
+      selectedKeys.add(key);
+      return;
+    }
+
+    if (tag === "script") {
+      const rawRef = getAttr(node, "src");
+      if (!rawRef) return;
+      const reasonCode = sourceReferencePreservationReason({
+        tag,
+        rawRef,
+        rel: null,
+        typeAttr: getAttr(node, "type"),
+      });
+      if (!reasonCode) return;
+      const key = canonicalSourceReferenceKey({ tag, rawRef, baseUrl: input.baseUrl });
+      if (!key || selectedKeys.has(key)) return;
+      const attrs = (node as { attrs?: Array<{ name?: string; value?: string }> }).attrs ?? [];
+      candidates.push({
+        key,
+        tag,
+        ref: rawRef.trim(),
+        html: `<script${serializeAttributes(attrs)}></script>`,
+        reasonCode,
+      });
+      selectedKeys.add(key);
+      return;
+    }
+
+    if (tag === "style") {
+      const cssText = nodeTextContentForPreservation(node);
+      const externalImports = cssImportReferenceCandidates(cssText).filter(
+        (ref) => !ANALYTICS_OR_TRACKING_REFERENCE_PATTERN.test(ref) && (FONT_SOURCE_REFERENCE_PATTERN.test(ref) || PRESERVABLE_WIDGET_REFERENCE_PATTERN.test(ref)),
+      );
+      if (externalImports.length === 0) return;
+      const key = `style:${sha256Hex(cssText)}`;
+      if (selectedKeys.has(key)) return;
+      const attrs = (node as { attrs?: Array<{ name?: string; value?: string }> }).attrs ?? [];
+      candidates.push({
+        key,
+        tag,
+        ref: externalImports.sort((a, b) => a.localeCompare(b)).join(","),
+        html: `<style${serializeAttributes(attrs)}>${cssText}</style>`,
+        reasonCode: "external_style_import_preserved",
+      });
+      selectedKeys.add(key);
+    }
+  });
+
+  return candidates;
+}
+
+function appendHtmlSnippetsToHead(input: { html: string; snippets: string[] }): string {
+  if (input.snippets.length === 0) return input.html;
+  const document = parse(input.html || "");
+  const head = findFirstNodeByTag(document, "head");
+  if (!head || typeof head !== "object") return input.html;
+  const target = head as { childNodes?: unknown[] };
+  if (!Array.isArray(target.childNodes)) target.childNodes = [];
+  for (const snippet of input.snippets) {
+    const fragment = parseFragment(snippet) as unknown as { childNodes?: unknown[] };
+    if (!Array.isArray(fragment.childNodes)) continue;
+    for (const child of fragment.childNodes) target.childNodes.push(child);
+  }
+  return serialize(document as never);
+}
+
+function preserveSourceReferencesInSelectedHtml(input: {
+  sourceHtml: string;
+  selectedHtml: string;
+  baseUrl: URL;
+  diagnostics: UrlImportDiagnostic[];
+}): string {
+  if (!input.sourceHtml.trim() || !input.selectedHtml.trim()) return input.selectedHtml;
+  const candidates = collectPreservableSourceReferences({
+    sourceHtml: input.sourceHtml,
+    selectedHtml: input.selectedHtml,
+    baseUrl: input.baseUrl,
+  });
+  if (candidates.length === 0) return input.selectedHtml;
+  for (const candidate of candidates) {
+    input.diagnostics.push(
+      createDiagnostic({
+        severity: "info",
+        code: "RAW_IMPORT_SOURCE_REFERENCE_PRESERVED",
+        message: "Preserved source reference in imported raw artifact.",
+        targetUrl: candidate.ref,
+        details: {
+          tag: candidate.tag,
+          ref: candidate.ref,
+          reasonCode: candidate.reasonCode,
+          rule: "preserve_source_reference_when_selected_import_source_omits_it_v1",
+        },
+      }),
+    );
+  }
+  return appendHtmlSnippetsToHead({
+    html: input.selectedHtml,
+    snippets: candidates.map((candidate) => candidate.html),
+  });
 }
 
 function srcsetDescriptorRank(descriptor: string): { rank: number; value: number } {
@@ -3706,7 +3943,12 @@ export async function importPublicSinglePageUrlToSnapshot(input: {
     }),
   );
 
-  let rewrittenHtml = sourceSelection.selectedHtml;
+  let rewrittenHtml = preserveSourceReferencesInSelectedHtml({
+    sourceHtml: entryHtml,
+    selectedHtml: sourceSelection.selectedHtml,
+    baseUrl: normalizedUrl,
+    diagnostics,
+  });
   const imageAssetDiscoveryEntries = new Map<string, HtmlImageAssetDiscoveryEntry>();
   const runtimeSiteId = typeof input.siteId === "string" && input.siteId.trim() ? input.siteId.trim() : null;
   const runtimeSiteVersionId = typeof input.siteVersionId === "string" && input.siteVersionId.trim() ? input.siteVersionId.trim() : null;

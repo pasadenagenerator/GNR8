@@ -34,6 +34,80 @@ test("import artifact reality audit detects missing Google Font source when CSS 
   assert.match(audit.importLossStageRecommendation, /font_source/);
 });
 
+test("import artifact reality audit reports preserved Google Font source as complete Dongle evidence", () => {
+  const html = `<!doctype html><html><head>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Dongle:wght@400;700&display=swap">
+    <style>h1{font-family:"Dongle",sans-serif}</style>
+  </head><body><h1>ViroiDoc</h1></body></html>`;
+
+  const audit = report(html, html);
+
+  assert.deepEqual(audit.missingFontSourcesInArtifact, []);
+  assert.equal(audit.dongleEvidence.artifactHasDongleDeclaration, true);
+  assert.deepEqual(audit.dongleEvidence.artifactDongleFontSources, [
+    "https://fonts.googleapis.com/css2?family=Dongle:wght@400;700&display=swap",
+  ]);
+  assert.equal(audit.dongleEvidence.artifactKeepsDongleDeclarationWithoutSource, false);
+});
+
+test("import artifact reality audit detects preserved external stylesheet and Leaflet/widget refs", () => {
+  const html = `<!doctype html><html><head>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+    <link rel="stylesheet" href="https://widgets.example.test/theme.css">
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://cdn.example.test/yAccessibility/load.js"></script>
+  </head><body><div id="map" class="map-container"></div></body></html>`;
+
+  const audit = report(html, html);
+
+  assert.deepEqual(audit.missingStylesheetsInArtifact, []);
+  assert.deepEqual(audit.missingScriptsInArtifact, []);
+  assert.equal(audit.mapEvidence.sourceMapRefs.some((sample) => sample.ref.includes("leaflet.css")), true);
+  assert.equal(audit.mapEvidence.artifactMapRefs.some((sample) => sample.ref.includes("leaflet.js")), true);
+  assert.equal(audit.accessibilityWidgetEvidence.yAccessibilityPresentInArtifact, true);
+  assert.equal(audit.accessibilityWidgetEvidence.yAccessibilityMissingInArtifact, false);
+});
+
+test("import artifact reality audit treats root and child routes consistently when source refs match artifacts", () => {
+  const rootHtml = `<!doctype html><html><head>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Dongle:wght@400;700&display=swap">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  </head><body><h1 style="font-family:Dongle">Root</h1></body></html>`;
+  const childHtml = rootHtml.replace(">Root<", ">News<");
+
+  const rootAudit = report(rootHtml, rootHtml);
+  const childAudit = buildImportArtifactRealityAuditReport({
+    routePath: "/news",
+    sourceUrl: "https://example.com/news",
+    rawFilePath: "pages/news/index.html",
+    sourceHtml: childHtml,
+    rawArtifactHtml: childHtml,
+  });
+
+  assert.deepEqual(rootAudit.missingFontSourcesInArtifact, childAudit.missingFontSourcesInArtifact);
+  assert.deepEqual(rootAudit.missingStylesheetsInArtifact, childAudit.missingStylesheetsInArtifact);
+  assert.deepEqual(rootAudit.missingScriptsInArtifact, childAudit.missingScriptsInArtifact);
+  assert.equal(rootAudit.dongleEvidence.artifactKeepsDongleDeclarationWithoutSource, false);
+  assert.equal(childAudit.dongleEvidence.artifactKeepsDongleDeclarationWithoutSource, false);
+});
+
+test("import artifact reality audit does not classify analytics as map/style loss when non-analytics stylesheet remains", () => {
+  const source = `<!doctype html><html><head>
+    <link rel="stylesheet" href="https://cdn.example.test/theme.css">
+    <script src="https://www.googletagmanager.com/gtag/js?id=G-TRACK"></script>
+  </head><body><main>Stable</main></body></html>`;
+  const artifact = `<!doctype html><html><head>
+    <link rel="stylesheet" href="https://cdn.example.test/theme.css">
+  </head><body><main>Stable</main></body></html>`;
+
+  const audit = report(source, artifact);
+
+  assert.deepEqual(audit.missingStylesheetsInArtifact, []);
+  assert.equal(audit.missingScriptsInArtifact.includes("https://www.googletagmanager.com/gtag/js?id=G-TRACK"), true);
+  assert.deepEqual(audit.missingMapRefsInArtifact, []);
+});
+
 test("import artifact reality audit detects missing map iframe and script", () => {
   const source = `<!doctype html><html><head>
     <script src="https://maps.googleapis.com/maps/api/js?key=abc"></script>

@@ -58,6 +58,95 @@ function makeHtmlResponse(html: string): Response {
   });
 }
 
+function renderedDomWorkerClient(renderedHtml: string): RenderedCaptureWorkerClient {
+  return {
+    async execute(request) {
+      return {
+        kind: "rendered_capture_worker_response_v1",
+        contractVersion: "1.0.0",
+        requestId: request.requestId,
+        status: "available",
+        environment: {
+          runtimeKind: "nodejs",
+          environmentSupported: true,
+          browserPackageAvailable: true,
+          browserBinaryAvailable: true,
+          supportDecision: "supported",
+        },
+        artifacts: [
+          {
+            artifactType: "rendered_dom_html",
+            captureType: null,
+            storage: "inline",
+            uri: `data:text/html;base64,${Buffer.from(renderedHtml, "utf8").toString("base64")}`,
+            mediaType: "text/html",
+            sha256: "rendered-source-ref-preservation",
+            byteLength: Buffer.byteLength(renderedHtml),
+          },
+        ],
+        computedStyleSamples: [],
+        diagnostics: [],
+        qualitySummary: {
+          renderedDomQuality: "strong",
+          domLength: renderedHtml.length,
+          meaningfulNodeCount: 18,
+          screenshotCount: 0,
+          computedStyleSampleCount: 0,
+        },
+        failure: null,
+        timings: {
+          queueLatencyMs: null,
+          executionMs: 5,
+          totalMs: 5,
+        },
+      };
+    },
+  };
+}
+
+test("url import preserves source font stylesheet and widget refs when rendered DOM omits them", async () => {
+  const tmpRoot = await fs.promises.mkdtemp(path.join(os.tmpdir(), "gnr8-source-ref-preservation-"));
+  const sourceHtml = [
+    "<!doctype html><html><head>",
+    '<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Dongle:wght@400;700&display=swap">',
+    '<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">',
+    '<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>',
+    '<script src="https://cdn.example.test/yAccessibility/load.js" defer></script>',
+    '<script src="https://www.googletagmanager.com/gtag/js?id=G-TRACK"></script>',
+    "</head><body><main><h1>ViroiDoc</h1><section>Rendered source refs can be missing from browser DOM.</section></main></body></html>",
+  ].join("");
+  const renderedHtml = [
+    "<!doctype html><html><head>",
+    '<style>h1{font-family:"Dongle",sans-serif}</style>',
+    "</head><body><main><h1>ViroiDoc</h1><section>Rendered source refs can be missing from browser DOM.</section></main></body></html>",
+  ].join("");
+
+  const snapshot = await importPublicSinglePageUrlToSnapshot({
+    sourceUrl: "https://www.viroidoc.eu/",
+    snapshotRootDirAbs: tmpRoot,
+    renderedCaptureWorkerClient: renderedDomWorkerClient(renderedHtml),
+    fetchImpl: async (url) => {
+      if (String(url) === "https://www.viroidoc.eu/") return makeHtmlResponse(sourceHtml);
+      return new Response("not fetched", { status: 404, headers: { "content-type": "text/plain" } });
+    },
+  });
+
+  const writtenHtml = await fs.promises.readFile(snapshot.entryHtmlPathAbs, "utf8");
+  assert.equal(snapshot.sourceMode, "rendered_dom");
+  assert.equal(writtenHtml.includes("https://fonts.googleapis.com/css2?family=Dongle"), true);
+  assert.equal(writtenHtml.includes("https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"), true);
+  assert.equal(writtenHtml.includes("https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"), true);
+  assert.equal(writtenHtml.includes("https://cdn.example.test/yAccessibility/load.js"), true);
+  assert.equal(writtenHtml.includes("https://www.googletagmanager.com/gtag/js"), false);
+  assert.equal(snapshot.importDiagnostics.issues.some((issue) => issue.code === "RAW_IMPORT_SOURCE_REFERENCE_PRESERVED"), true);
+  assert.equal(
+    snapshot.fetchManifest.some(
+      (entry) => entry.rawRef.includes("leaflet.js") && entry.fetchStatus === "fetch_failed" && entry.localPath !== null,
+    ),
+    true,
+  );
+});
+
 test("url import retries transient worker-unavailable response and completes with rendered DOM", async () => {
   const tmpRoot = await fs.promises.mkdtemp(path.join(os.tmpdir(), "gnr8-url-import-reliability-"));
   const entryHtml = "<!doctype html><html><body><main><h1>Raw entry</h1><p>raw fallback text</p></main></body></html>";
