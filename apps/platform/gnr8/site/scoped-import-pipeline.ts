@@ -75,6 +75,7 @@ import { buildFamilyHandoffModel, summarizeTemplateFamilies, type FamilyHandoffM
 import { runSemanticImportEngine, type SemanticImportResult } from '@/gnr8/import-semantic/semantic-import-engine'
 import { inferContentSlotsFromSemanticImport } from '@/gnr8/runtime/content-binding'
 import { validateLatestRawMultiPagePreviewEvidence } from '@/gnr8/runtime/multipage-preview-validation'
+import { attachEvidenceCaptureBaselineArtifact } from '@/gnr8/architecture/evidence-capture-baseline-artifact'
 
 const SECTION_INTENT_BY_SEMANTIC_TYPE: Record<string, string> = {
   header: 'header_nav',
@@ -3689,6 +3690,52 @@ export async function runScopedImportPipeline(input: {
         },
       },
     })
+    const rawImportFileMap = Object.fromEntries(
+      persistedFileRows.map((row) => [
+        row.path,
+        {
+          path: row.path,
+          mediaType: row.mediaType,
+          sizeBytes: row.sizeBytes,
+          sha256: row.sha256,
+        },
+      ]),
+    )
+    importProvenanceSummary = attachEvidenceCaptureBaselineArtifact({
+      siteVersionId: migrated.siteVersionId,
+      sourceUrl: input.sourceUrl,
+      finalUrl: input.snapshot.importIntake?.evidence?.finalUrl ?? null,
+      routePath: '/',
+      importProvenanceSummary,
+      rawImportArtifact: {
+        artifactId: rawImportArtifact.artifactId,
+        entryHtmlPath: importInput.entryHtmlPath,
+        fileMap: rawImportFileMap,
+        metadata: {
+          sourceUrl: input.snapshot.sourceUrl,
+          finalUrl: input.snapshot.importIntake?.evidence?.finalUrl ?? null,
+          htmlByteLength,
+          diagnostics: {
+            codes: [
+              'RAW_IMPORT_ARTIFACT_PERSIST_STARTED',
+              'RAW_IMPORT_ASSET_PERSIST_STARTED',
+              'RAW_IMPORT_ASSET_PERSIST_COMPLETED',
+              'RAW_IMPORT_ARTIFACT_PERSIST_COMPLETED',
+              ...(unresolvedExternalAssets.length > 0 ? ['RAW_IMPORT_ASSET_EXTERNAL_FALLBACK_USED'] : []),
+              ...(rawAssemblySummary?.enabled ? rawAssemblySummary.diagnostics : []),
+            ],
+          },
+          assetSummary: {
+            persistedAssetCount: persistedFileRows.length,
+            externalFallbackAssetCount: unresolvedExternalAssets.length,
+          },
+        },
+      },
+    })
+    await deps.setSiteVersionImportProvenanceSummary({
+      siteVersionId: migrated.siteVersionId,
+      importProvenanceSummary,
+    })
     console.info('[scoped-import] RAW_IMPORT_ASSET_PERSIST_COMPLETED', {
       siteId: migrated.siteId,
       siteVersionId: migrated.siteVersionId,
@@ -3709,17 +3756,7 @@ export async function runScopedImportPipeline(input: {
               siteVersionId: migrated.siteVersionId,
               artifactId: rawImportArtifact.artifactId,
               entryHtmlPath: importInput.entryHtmlPath,
-              fileMap: Object.fromEntries(
-                persistedFileRows.map((row) => [
-                  row.path,
-                  {
-                    path: row.path,
-                    mediaType: row.mediaType,
-                    sizeBytes: row.sizeBytes,
-                    sha256: row.sha256,
-                  },
-                ]),
-              ),
+              fileMap: rawImportFileMap,
               rawFileBytesByPath: Object.fromEntries(persistedFileRows.map((row) => [row.path, row.bytes])),
               importProvenanceSummary,
               capturedAt,

@@ -5,6 +5,7 @@ import { pathToFileURL } from 'node:url'
 import type { RuntimeImportProvenanceSummary } from '@/gnr8/runtime/types'
 import type { RenderedCaptureDiagnostic, RenderedCaptureResult } from '@/gnr8/import-rendered-capture/rendered-capture-contract'
 import { resolveRenderedCaptureWorkerClientConfigFromEnv } from '@/gnr8/import-rendered-capture-worker/worker-config'
+import { attachEvidenceCaptureBaselineArtifact } from '@/gnr8/architecture/evidence-capture-baseline-artifact'
 import { getSuperadminPool } from '@/src/superadmin/db'
 
 type RuntimeVersionRow = {
@@ -306,7 +307,7 @@ function withPatchedProvenanceSummary(input: {
   const executionIdentity = existing?.executionIdentity
   const captureEvidence = existing?.captureEvidence
 
-  return {
+  const nextSummary: RuntimeImportProvenanceSummary = {
     kind: 'runtime_import_provenance_summary_v1',
     executionIdentity: executionIdentity
       ? {
@@ -373,6 +374,28 @@ function withPatchedProvenanceSummary(input: {
     siteTree: existing?.siteTree ?? null,
     templateFamilies: existing?.templateFamilies ?? null,
   }
+
+  return attachEvidenceCaptureBaselineArtifact({
+    siteVersionId: existing?.evidenceCaptureBaselineArtifact?.siteVersionId ?? null,
+    sourceUrl: existing?.evidenceCaptureBaselineArtifact?.sourceUrl ?? '',
+    finalUrl: existing?.evidenceCaptureBaselineArtifact?.finalUrl ?? null,
+    routePath: existing?.evidenceCaptureBaselineArtifact?.routePath ?? '/',
+    importProvenanceSummary: nextSummary,
+    rawImportArtifact: existing?.evidenceCaptureBaselineArtifact
+      ? {
+          artifactId: existing.evidenceCaptureBaselineArtifact.persistedRefs.rawImportArtifactId,
+          entryHtmlPath: existing.evidenceCaptureBaselineArtifact.evidence.route.rawFilePath,
+          metadata: {
+            sourceUrl: existing.evidenceCaptureBaselineArtifact.sourceUrl,
+            finalUrl: existing.evidenceCaptureBaselineArtifact.finalUrl,
+            assetSummary: {
+              persistedAssetCount: existing.evidenceCaptureBaselineArtifact.summaries.assetInventory.persistedAssetCount ?? undefined,
+              externalFallbackAssetCount: existing.evidenceCaptureBaselineArtifact.summaries.assetInventory.externalFallbackAssetCount ?? undefined,
+            },
+          },
+        }
+      : null,
+  })
 }
 
 async function getRuntimeVersionByIdDefault(input: {

@@ -10,6 +10,13 @@ import {
   isEvidenceCaptureReconstructionReady,
   summarizeEvidenceCaptureArtifact,
 } from "./importer-architecture-split-contract";
+import {
+  EVIDENCE_CAPTURE_BASELINE_ARTIFACT_KIND,
+  attachEvidenceCaptureBaselineArtifact,
+  buildEvidenceCaptureBaselineArtifact,
+  getLatestEvidenceCaptureBaselineArtifactForSiteVersion,
+} from "./evidence-capture-baseline-artifact";
+import type { RuntimeImportProvenanceSummary } from "../runtime/types";
 
 function ref(id: string, mediaType = "application/json"): EvidenceArtifactRef {
   return {
@@ -259,4 +266,187 @@ test("failed and blocked runtime assets are represented as evidence, not silentl
   assert.equal(summary.counts.assetClassifications, 3);
   assert.equal(limitations.some((limitation) => limitation.type === "failed_resource"), true);
   assert.equal(limitations.some((limitation) => limitation.type === "blocked_resource"), true);
+});
+
+function baselineProvenance(overrides: Partial<RuntimeImportProvenanceSummary> = {}): RuntimeImportProvenanceSummary {
+  return {
+    kind: "runtime_import_provenance_summary_v1",
+    executionIdentity: {
+      snapshotId: "snapshot-1",
+      snapshotRunId: "capture-run-1",
+      snapshotStableRootDirAbs: "/tmp/snapshot-stable",
+      snapshotRunRootDirAbs: "/tmp/snapshot-run",
+      requestId: "request-1",
+    },
+    captureMode: "raw_html_only",
+    sourceMode: "raw_html_fallback",
+    importFidelityStatus: "capture_failed",
+    renderedCaptureStatus: "failed",
+    renderedDomQuality: "unusable",
+    screenshotCount: 0,
+    computedStyleSampleCount: 0,
+    renderedCapture: {
+      used: false,
+      status: "failed",
+      quality: "unusable",
+      domLength: 0,
+      nodeCount: 0,
+      styleSampleCount: 0,
+      styleCoverage: 0,
+      screenshots: { viewport: false, fullPage: false },
+      execution: {
+        runtimeKind: "nodejs",
+        environmentSupported: true,
+        browserPackageAvailable: true,
+        browserBinaryAvailable: false,
+        environmentStatus: "supported",
+        failureCategory: "environment",
+        failureCode: "CAPTURE_WORKER_UNAVAILABLE",
+        browserLaunch: "failed",
+        navigation: "not_attempted",
+        dom: "empty_or_failed",
+        screenshot: "none",
+        styleSampling: "not_attempted",
+      },
+    },
+    importDiagnosticCodes: ["CAPTURE_WORKER_UNAVAILABLE", "RENDERED_CAPTURE_FAILED_FALLBACK_USED"],
+    captureEvidence: {
+      selectedSourceHtmlPath: "/tmp/snapshot-run/index.html",
+      responseHtmlPath: "/tmp/snapshot-run/response.html",
+      entryHtmlPath: "/tmp/snapshot-run/index.html",
+      renderedCaptureManifestPath: null,
+      acquisitionEvidencePath: "/tmp/snapshot-run/acquisition-evidence.json",
+      renderedDomPath: null,
+      computedStylesPath: null,
+      renderedViewportScreenshotPath: null,
+      renderedFullpageScreenshotPath: null,
+      screenshotPaths: [],
+    },
+    captureJob: null,
+    workerHealth: null,
+    styleSignals: null,
+    semanticImport: null,
+    multipageImport: null,
+    multiPageDiscovery: {
+      summary: {
+        enabled: true,
+        discoveredPageCount: 2,
+        skippedLinkCount: 1,
+        routeCandidateCount: 3,
+        manifestRef: "importProvenanceSummary.multiPageDiscovery.manifest",
+        diagnostics: ["MULTIPAGE_DISCOVERY_LIMITED"],
+      },
+      manifest: null,
+    },
+    siteTree: null,
+    templateFamilies: null,
+    ...overrides,
+  } as RuntimeImportProvenanceSummary;
+}
+
+test("baseline evidence artifact is built from existing capture evidence only", () => {
+  const artifact = buildEvidenceCaptureBaselineArtifact({
+    siteVersionId: "11111111-1111-4111-8111-111111111111",
+    sourceUrl: "https://example.com/",
+    finalUrl: "https://example.com/",
+    routePath: "/",
+    importProvenanceSummary: baselineProvenance(),
+    rawImportArtifact: {
+      artifactId: "raw-artifact-1",
+      entryHtmlPath: "index.html",
+      fileMap: {
+        "index.html": {
+          path: "index.html",
+          mediaType: "text/html",
+          sizeBytes: 2048,
+          sha256: "raw-html-sha",
+        },
+      },
+      metadata: {
+        sourceUrl: "https://example.com/",
+        finalUrl: "https://example.com/",
+        htmlByteLength: 2048,
+        diagnostics: { codes: ["RAW_IMPORT_ARTIFACT_PERSIST_COMPLETED"] },
+        assetSummary: { persistedAssetCount: 1, externalFallbackAssetCount: 2 },
+      },
+    },
+  });
+
+  assert.equal(artifact.kind, EVIDENCE_CAPTURE_BASELINE_ARTIFACT_KIND);
+  assert.equal(artifact.architectureVersion, "7F-2");
+  assert.equal(artifact.artifactStatus, "baseline_partial");
+  assert.equal(artifact.reconstructionGrade, false);
+  assert.equal(artifact.captureRunId, "capture-run-1");
+  assert.equal(artifact.sourceUrl, "https://example.com/");
+  assert.equal(artifact.finalUrl, "https://example.com/");
+  assert.equal(artifact.routePath, "/");
+  assert.equal(artifact.captureProvider, "chrome_playwright");
+  assert.equal(artifact.captureStatus, "partial");
+  assert.equal(artifact.coverageStatus, "baseline_partial_not_reconstruction_grade");
+  assert.equal(artifact.persistedRefs.rawHtmlRef?.sha256, "raw-html-sha");
+  assert.equal(artifact.persistedRefs.rawImportArtifactId, "raw-artifact-1");
+  assert.equal(artifact.summaries.assetInventory.persistedAssetCount, 1);
+  assert.equal(artifact.summaries.assetInventory.externalFallbackAssetCount, 2);
+  assert.equal(artifact.summaries.routeDiscovery.enabled, true);
+  assert.equal(artifact.summaries.routeDiscovery.routeCandidateCount, 3);
+});
+
+test("baseline coverage metadata and limitations are persisted without fabricated unsupported fields", () => {
+  const artifact = buildEvidenceCaptureBaselineArtifact({
+    sourceUrl: "https://example.com/",
+    importProvenanceSummary: baselineProvenance(),
+  });
+
+  assert.deepEqual(artifact.coverage, {
+    supportedNowCount: 16,
+    partialCount: 33,
+    missingCount: 17,
+    supportedNowPercent: 24.2,
+    partialPercent: 50.0,
+    missingPercent: 25.8,
+    coverageSource: "phase_7f_2_5_inventory_audit",
+  });
+  assert.ok(artifact.fieldAvailability.supportedNow.includes("sourceUrl"));
+  assert.ok(artifact.fieldAvailability.partial.includes("assetInventorySummary"));
+  assert.ok(artifact.fieldAvailability.missingUnavailable.includes("layoutBoxExtraction"));
+  assert.equal(artifact.evidence.layout.layoutBoxRefs.length, 0);
+  assert.equal(artifact.evidence.scriptRuntime.domMutationSummary, null);
+  assert.equal(artifact.evidence.computedStyle.fontSourcesLoaded.length, 0);
+  assert.ok(artifact.limitations.includes("rendered_capture_unavailable"));
+  assert.ok(artifact.limitations.includes("raw_html_fallback_used"));
+  assert.ok(artifact.limitations.includes("missing_computed_styles"));
+  assert.ok(artifact.limitations.includes("missing_layout_boxes"));
+  assert.ok(artifact.limitations.includes("missing_mutation_evidence"));
+  assert.ok(artifact.limitations.includes("missing_widget_runtime_evidence"));
+  assert.ok(artifact.limitations.includes("missing_font_source_evidence"));
+  assert.ok(artifact.limitations.includes("partial_asset_inventory"));
+  assert.ok(artifact.limitations.includes("partial_network_evidence"));
+});
+
+test("latest baseline artifact can be read back from a site version provenance summary", () => {
+  const summary = attachEvidenceCaptureBaselineArtifact({
+    siteVersionId: "11111111-1111-4111-8111-111111111111",
+    sourceUrl: "https://example.com/",
+    importProvenanceSummary: baselineProvenance(),
+  });
+
+  const readBack = getLatestEvidenceCaptureBaselineArtifactForSiteVersion({
+    siteVersion: { importProvenanceSummary: summary },
+  });
+
+  assert.equal(readBack?.kind, "evidence_capture_baseline");
+  assert.equal(readBack?.siteVersionId, "11111111-1111-4111-8111-111111111111");
+  assert.equal(readBack?.coverage.coverageSource, "phase_7f_2_5_inventory_audit");
+});
+
+test("baseline artifact remains capture evidence and does not require mirror or reconstruction behavior", () => {
+  const artifact = buildEvidenceCaptureBaselineArtifact({
+    sourceUrl: "https://example.com/",
+    importProvenanceSummary: baselineProvenance(),
+  });
+
+  assert.equal(artifact.evidence.kind, "evidence_capture_artifact_v1");
+  assert.equal("originalMirrorArtifactId" in artifact, false);
+  assert.equal("reconstructionCandidateId" in artifact, false);
+  assert.equal(artifact.reconstructionGrade, false);
 });

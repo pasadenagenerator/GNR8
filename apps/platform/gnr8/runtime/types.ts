@@ -15,6 +15,7 @@ import type {
 import type { SiteTree, SiteTreeSummary } from "@/gnr8/site-tree";
 import type { FamilyHandoffModel, TemplateFamiliesSummary } from "@/gnr8/family-mode";
 import type { SemanticImportCaptureMode, SemanticImportResult } from "@/gnr8/import-semantic/semantic-import-engine";
+import type { EvidenceCaptureBaselineArtifactRecord } from "@/gnr8/architecture/evidence-capture-baseline-artifact";
 
 export const RENDERER_COMPATIBILITY_VERSION = "gnr8-renderer-v1" as const;
 
@@ -361,6 +362,7 @@ export type RuntimeImportProvenanceSummary = {
     summary: TemplateFamiliesSummary;
     families: FamilyHandoffModel | null;
   } | null;
+  evidenceCaptureBaselineArtifact?: EvidenceCaptureBaselineArtifactRecord | null;
 };
 
 export type StyleTokenRecord = Record<string, string>;
