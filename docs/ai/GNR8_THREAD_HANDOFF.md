@@ -300,8 +300,9 @@ Phase 7F-1 completion notes:
 Current critical path:
 - Phase 7F-2 — Evidence Capture Artifact Contract
 - Phase 7F-3 — Original Mirror Status / Known Limitations UI
-- Phase 7F-4 — Reconstruction Input Contract
-- Phase 7F-5 — First AI Reconstruction Spike from Evidence
+- Phase 7F-4 — Original Mirror Known Limitations Surface
+- Phase 7F-5 — Reconstruction Input Contract
+- Phase 7F-6 — First AI Reconstruction Spike from Evidence
 - Billing
 
 Next recommended milestone:
@@ -1270,6 +1271,21 @@ Phase 7F-1 boundary now recorded:
 - No CMS changes.
 - No commerce work.
 - No preview renderer rewrite, script-policy change, import-limit change, Servo integration, or AI generation was included in 7F-1.
+
+Phase 7F-4 Original Mirror Known Limitations Surface is complete:
+- read-model projection: `apps/platform/gnr8/site/evidence-capture-baseline-read-model.ts`
+- workspace threading: `apps/platform/gnr8/site/site-workspace-read-model.ts`
+- operator UI: Site Workspace overview section titled `Original Mirror Fidelity`
+- documentation: `docs/architecture/ORIGINAL_MIRROR_LIMITATIONS_SURFACE.md`
+- projection source: persisted `evidence_capture_baseline` only
+- surfaced summary: capture status, coverage status, supported/partial/missing evidence counts and percentages
+- surfaced badge: `HIGH` at supported >= 70 percent, `MEDIUM` at supported >= 40 percent, `LOW` below 40 percent
+- readiness states: `READY`, `PARTIAL`, `NOT_READY`
+- readiness boundary: `NOT_READY` when artifact is missing, rendered capture is missing, or blocker limitations are present
+- limitation categories: Capture, Styles, Layout, Runtime, Assets, Maps / Widgets
+- route-level fidelity support: displayed only when route-specific known fidelity limitations already exist in the persisted artifact
+- behavior boundary: no capture/importer/provider/Playwright/preview/reconstruction/route-discovery/asset/script/persistence/public-rendering changes
+- recommended next milestone: Phase 7F-5 Reconstruction Input Contract / bounded reconstruction readiness handoff, still without changing Original Mirror behavior
 
 ## G) How Next Thread Should Behave
 

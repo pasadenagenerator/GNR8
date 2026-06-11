@@ -6,6 +6,7 @@ import {
   assertSiteWorkspaceScope,
   resolveSelectedRuntimeVersionIdForWorkspace,
 } from '@/gnr8/site/site-workspace-read-model'
+import { buildEvidenceCaptureBaselineArtifact } from '@/gnr8/architecture/evidence-capture-baseline-artifact'
 
 const AGENCY_ID = '00000000-0000-4000-8000-000000000011'
 const CLIENT_ID = '00000000-0000-4000-8000-000000000101'
@@ -2193,6 +2194,109 @@ test('preview runtime summary parser safely handles legacy rows with no family f
   assert.equal(parsed?.familyRenderFallbackToPage, false)
   assert.equal(parsed?.familyRenderDiagnosticsCount, 0)
   assert.deepEqual(parsed?.familyRenderDiagnostics, [])
+})
+
+test('original mirror fidelity projection summarizes evidence capture baseline only', () => {
+  const baseline = buildEvidenceCaptureBaselineArtifact({
+    siteVersionId: 'site-version-baseline',
+    sourceUrl: 'https://example.com/',
+    importProvenanceSummary: runtimeSummaryFixture({
+      requestId: 'baseline-fidelity',
+      sourceMode: 'raw_html_fallback',
+      renderedCaptureStatus: 'failed',
+      renderedDomQuality: 'unusable',
+      nodeCount: 0,
+      screenshotCount: 0,
+      failureCode: 'DOM_EMPTY_AFTER_RENDER',
+    }) as any,
+  })
+
+  const projection = __siteWorkspaceReadModelTestUtils.buildOriginalMirrorFidelityProjection(baseline)
+
+  assert.equal(projection.artifactAvailable, true)
+  assert.equal(projection.summary.captureStatus, 'partial')
+  assert.equal(projection.summary.coverageStatus, 'baseline_partial_not_reconstruction_grade')
+  assert.equal(projection.summary.supportedEvidenceCount, 16)
+  assert.equal(projection.summary.partialEvidenceCount, 33)
+  assert.equal(projection.summary.missingEvidenceCount, 17)
+  assert.equal(projection.summary.supportedPercentage, 24.2)
+  assert.equal(projection.summary.partialPercentage, 50)
+  assert.equal(projection.summary.missingPercentage, 25.8)
+  assert.equal(projection.badge, 'LOW')
+  assert.equal(projection.reconstructionReadiness, 'NOT_READY')
+  assert.ok(projection.limitationsByCategory.some((group) => group.category === 'Capture'))
+  assert.ok(projection.limitationsByCategory.some((group) => group.category === 'Styles'))
+  assert.ok(projection.limitationsByCategory.some((group) => group.category === 'Layout'))
+  assert.ok(projection.limitationsByCategory.some((group) => group.category === 'Runtime'))
+  assert.ok(projection.limitationsByCategory.some((group) => group.category === 'Assets'))
+  assert.ok(projection.limitationsByCategory.some((group) => group.category === 'Maps / Widgets'))
+})
+
+test('original mirror fidelity projection exposes route-level baseline limitations when present', () => {
+  const baseline = buildEvidenceCaptureBaselineArtifact({
+    siteVersionId: 'site-version-route-baseline',
+    sourceUrl: 'https://example.com/news',
+    routePath: '/news',
+    importProvenanceSummary: runtimeSummaryFixture({
+      requestId: 'baseline-route-fidelity',
+      sourceMode: 'rendered_dom',
+      renderedCaptureStatus: 'available',
+      renderedDomQuality: 'strong',
+      nodeCount: 40,
+      screenshotCount: 1,
+    }) as any,
+  })
+  baseline.evidence.route.knownFidelityLimitations = [
+    {
+      type: 'post_render_dom_mutation',
+      affectedLayer: 'ai_reconstruction',
+      severity: 'warning',
+      explanation: 'Runtime mutation evidence unavailable for this route.',
+      evidenceRefIds: [],
+      recommendedNextLayer: 'ai_reconstruction',
+    },
+  ]
+
+  const projection = __siteWorkspaceReadModelTestUtils.buildOriginalMirrorFidelityProjection(baseline)
+
+  assert.equal(projection.routeLimitations.length, 1)
+  assert.equal(projection.routeLimitations[0]?.routePath, '/news')
+  assert.equal(projection.routeLimitations[0]?.limitations[0]?.id, 'post_render_dom_mutation')
+  assert.equal(projection.routeLimitations[0]?.limitations[0]?.title, 'Runtime mutation evidence unavailable')
+})
+
+test('original mirror fidelity projection is not ready when baseline artifact is missing', () => {
+  const projection = __siteWorkspaceReadModelTestUtils.buildOriginalMirrorFidelityProjection(null)
+
+  assert.equal(projection.artifactAvailable, false)
+  assert.equal(projection.summary.captureStatus, 'missing')
+  assert.equal(projection.summary.coverageStatus, 'missing')
+  assert.equal(projection.badge, 'LOW')
+  assert.equal(projection.reconstructionReadiness, 'NOT_READY')
+  assert.deepEqual(projection.diagnostics, ['EVIDENCE_CAPTURE_BASELINE_MISSING'])
+})
+
+test('original mirror baseline extraction reads persisted provenance artifact', () => {
+  const baseline = buildEvidenceCaptureBaselineArtifact({
+    siteVersionId: 'site-version-extract-baseline',
+    sourceUrl: 'https://example.com/',
+    importProvenanceSummary: runtimeSummaryFixture({
+      requestId: 'baseline-extract',
+      sourceMode: 'rendered_dom',
+      renderedCaptureStatus: 'available',
+      renderedDomQuality: 'strong',
+      nodeCount: 40,
+      screenshotCount: 1,
+    }) as any,
+  })
+
+  const extracted = __siteWorkspaceReadModelTestUtils.getEvidenceCaptureBaselineArtifactFromImportProvenanceSummary({
+    kind: 'runtime_import_provenance_summary_v1',
+    evidenceCaptureBaselineArtifact: baseline,
+  })
+
+  assert.equal(extracted?.kind, 'evidence_capture_baseline')
+  assert.equal(extracted?.siteVersionId, 'site-version-extract-baseline')
 })
 
 test('worker bootstrap/render persistence synthesizes runtime row visible to read-model arbitration', () => {

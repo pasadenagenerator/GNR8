@@ -423,8 +423,9 @@ Execution boundary:
 Remaining critical path:
 - Phase 7F-2 — Evidence Capture Artifact Contract
 - Phase 7F-3 — Original Mirror Status / Known Limitations UI
-- Phase 7F-4 — Reconstruction Input Contract
-- Phase 7F-5 — First AI Reconstruction Spike from Evidence
+- Phase 7F-4 — Original Mirror Known Limitations Surface
+- Phase 7F-5 — Reconstruction Input Contract
+- Phase 7F-6 — First AI Reconstruction Spike from Evidence
 - Billing
 
 Current Hosting Operations status:
@@ -4663,6 +4664,13 @@ Required production env flag:
 - `GNR8_ADMIN_PROVIDER_HANDOFF_READINESS_SEED_ENABLED=1`
 
 ## Execution Boundaries (Current)
+
+- Phase 7F-4 Original Mirror Known Limitations Surface is implemented as diagnostics/read-model/UI/docs only.
+- `evidence_capture_baseline` now drives an operator-visible Original Mirror Fidelity projection with capture status, coverage status, evidence counts/percentages, deterministic `HIGH`/`MEDIUM`/`LOW` badge, readiness state, grouped known limitations, and route-level limitations when persisted route evidence exists.
+- Readiness states are `READY`, `PARTIAL`, and `NOT_READY`; `NOT_READY` applies when the baseline artifact is missing, rendered capture is missing, or any blocker limitation is present.
+- Limitation categories surfaced: Capture, Styles, Layout, Runtime, Assets, Maps / Widgets.
+- Architecture note: `docs/architecture/ORIGINAL_MIRROR_LIMITATIONS_SURFACE.md`.
+- Boundary unchanged: no capture changes, no preview rendering changes, no importer changes, no reconstruction logic, no persistence schema changes, no asset/script policy changes.
 
 - NO provider execution.
 - NO sandbox execution.

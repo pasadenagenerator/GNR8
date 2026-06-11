@@ -147,6 +147,8 @@ function renderOverviewContent(props: {
 
       {renderMultiPageImportOperatorContent(readModel)}
 
+      {renderOriginalMirrorFidelity(readModel)}
+
       <section style={sectionCardStyle()}>
         <h3 style={{ margin: 0, fontSize: 15, color: '#0f172a' }}>Pipeline Summary</h3>
         <div style={{ marginTop: 10, display: 'grid', gap: 6, fontSize: 13, color: '#334155' }}>
@@ -294,6 +296,96 @@ function renderMetric(label: string, value: string | number): ReactNode {
       <div style={{ color: '#64748b', fontSize: 11, fontWeight: 700, textTransform: 'uppercase' }}>{label}</div>
       <div style={{ color: '#0f172a', fontSize: 18, fontWeight: 800, marginTop: 4 }}>{value}</div>
     </div>
+  )
+}
+
+function badgeStyle(value: 'HIGH' | 'MEDIUM' | 'LOW'): CSSProperties {
+  const colors =
+    value === 'HIGH'
+      ? { border: '#bbf7d0', background: '#f0fdf4', text: '#166534' }
+      : value === 'MEDIUM'
+        ? { border: '#fde68a', background: '#fffbeb', text: '#92400e' }
+        : { border: '#fecaca', background: '#fff5f5', text: '#991b1b' }
+  return {
+    display: 'inline-flex',
+    alignItems: 'center',
+    width: 'fit-content',
+    border: `1px solid ${colors.border}`,
+    borderRadius: 8,
+    background: colors.background,
+    color: colors.text,
+    padding: '3px 7px',
+    fontSize: 11,
+    fontWeight: 800,
+    letterSpacing: 0,
+  }
+}
+
+function renderOriginalMirrorFidelity(readModel: Awaited<ReturnType<typeof getSiteWorkspaceReadModelForPage>>): ReactNode {
+  if (!readModel) return null
+  const fidelity = readModel.originalMirrorFidelity
+  const coverage = fidelity.summary
+
+  return (
+    <section style={sectionCardStyle()}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
+        <h3 style={{ margin: 0, fontSize: 15, color: '#0f172a' }}>Original Mirror Fidelity</h3>
+        <span style={badgeStyle(fidelity.badge)}>{fidelity.badge}</span>
+      </div>
+      <div style={{ marginTop: 10, display: 'grid', gap: 10 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 8 }}>
+          <div style={compactMetricStyle()}>
+            <div style={{ color: '#64748b', fontSize: 11, fontWeight: 700, textTransform: 'uppercase' }}>Capture Status</div>
+            <div style={{ color: '#0f172a', fontSize: 14, fontWeight: 800, marginTop: 4 }}>{coverage.captureStatus}</div>
+          </div>
+          <div style={compactMetricStyle()}>
+            <div style={{ color: '#64748b', fontSize: 11, fontWeight: 700, textTransform: 'uppercase' }}>Coverage Status</div>
+            <div style={{ color: '#0f172a', fontSize: 14, fontWeight: 800, marginTop: 4 }}>{coverage.coverageStatus}</div>
+          </div>
+          <div style={compactMetricStyle()}>
+            <div style={{ color: '#64748b', fontSize: 11, fontWeight: 700, textTransform: 'uppercase' }}>Reconstruction Readiness</div>
+            <div style={{ color: '#0f172a', fontSize: 14, fontWeight: 800, marginTop: 4 }}>{fidelity.reconstructionReadiness}</div>
+          </div>
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 8 }}>
+          {renderMetric('Supported', `${coverage.supportedEvidenceCount} (${coverage.supportedPercentage}%)`)}
+          {renderMetric('Partial', `${coverage.partialEvidenceCount} (${coverage.partialPercentage}%)`)}
+          {renderMetric('Missing', `${coverage.missingEvidenceCount} (${coverage.missingPercentage}%)`)}
+        </div>
+
+        <div style={{ display: 'grid', gap: 8 }}>
+          <div style={{ fontSize: 12, fontWeight: 800, color: '#0f172a' }}>Known Limitations</div>
+          {fidelity.limitationsByCategory.length > 0 ? (
+            fidelity.limitationsByCategory.map((group) => (
+              <div key={group.category} style={{ border: '1px solid #e2e8f0', borderRadius: 8, background: '#f8fafc', padding: '8px 10px' }}>
+                <div style={{ fontSize: 12, fontWeight: 800, color: '#0f172a' }}>{group.category}</div>
+                <ul style={{ margin: '6px 0 0', paddingLeft: 18, color: '#334155', fontSize: 12 }}>
+                  {group.limitations.map((limitation) => (
+                    <li key={limitation.id}>
+                      <strong>{limitation.title}</strong> ({limitation.severity}): {limitation.description}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ))
+          ) : (
+            <div style={{ color: '#64748b', fontSize: 12 }}>No known limitations were present in the Evidence Capture Baseline.</div>
+          )}
+        </div>
+
+        {fidelity.routeLimitations.length > 0 ? (
+          <div style={{ display: 'grid', gap: 6 }}>
+            <div style={{ fontSize: 12, fontWeight: 800, color: '#0f172a' }}>Route-Level Limitations</div>
+            {fidelity.routeLimitations.map((route) => (
+              <div key={route.routePath} style={{ fontSize: 12, color: '#334155' }}>
+                <strong style={{ color: '#0f172a' }}>{route.routePath}</strong>: {route.limitations.map((limitation) => limitation.title).join(' · ')}
+              </div>
+            ))}
+          </div>
+        ) : null}
+      </div>
+    </section>
   )
 }
 

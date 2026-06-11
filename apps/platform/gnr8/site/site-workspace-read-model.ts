@@ -10,6 +10,11 @@ import {
   buildMultiPageImportOperatorSummary,
   type MultiPageImportOperatorSummary,
 } from '@/gnr8/multipage-import/operator-summary-read-model'
+import {
+  buildOriginalMirrorFidelityProjection,
+  getEvidenceCaptureBaselineArtifactFromImportProvenanceSummary,
+  type OriginalMirrorFidelityProjection,
+} from '@/gnr8/site/evidence-capture-baseline-read-model'
 import { getSupabaseServerClientReadOnly } from '@/src/auth/supabase-server-read-only'
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
@@ -283,6 +288,7 @@ export type SiteWorkspaceReadModel = {
     }
   }
   multiPageImport: MultiPageImportOperatorSummary
+  originalMirrorFidelity: OriginalMirrorFidelityProjection
   actions: {
     currentStatus: 'idle' | 'running' | 'completed' | 'failed'
     lastAction: {
@@ -3025,6 +3031,9 @@ export async function getSiteWorkspaceReadModelForPage(input: {
     previewValidation: latestImportPreviewValidationPayload,
     previewDiagnostics: resolvedPreview.previewRuntimeSummary?.previewDiagnostics ?? resolvedPreviewDiagnostics,
   })
+  const originalMirrorFidelity = buildOriginalMirrorFidelityProjection(
+    getEvidenceCaptureBaselineArtifactFromImportProvenanceSummary(latestImportRuntimeRow?.import_provenance_summary ?? null),
+  )
   const diagnosticsSummary = Array.from(
     new Set([
       ...structureRows.flatMap((row) => row.keyDiagnostics),
@@ -3134,6 +3143,7 @@ export async function getSiteWorkspaceReadModelForPage(input: {
       }),
     },
     multiPageImport: multiPageImportOperatorSummary,
+    originalMirrorFidelity,
     actions: {
       currentStatus: normalizedSiteActions.find((action) => action.status === 'running')?.status ?? (lastAction?.status ?? 'idle'),
       lastAction: {
@@ -3267,4 +3277,6 @@ export const __siteWorkspaceReadModelTestUtils = {
   buildRuntimeVersionVisibility,
   parseRawPreviewValidationEvidence,
   resolveLatestRawPreviewValidationEvidence,
+  buildOriginalMirrorFidelityProjection,
+  getEvidenceCaptureBaselineArtifactFromImportProvenanceSummary,
 }
