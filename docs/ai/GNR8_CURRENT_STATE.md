@@ -1,7 +1,7 @@
 # GNR8 CURRENT STATE SNAPSHOT
 
 ## Snapshot Date
-2026-06-11
+2026-06-12
 
 ## Migration Platform MVP Buildout
 
@@ -39,6 +39,11 @@ Evidence Capture coverage against `importer-architecture-split-contract.ts` is: 
 Current capture foundation includes raw HTML, rendered DOM, viewport/full-page screenshots, computed style samples, direct asset fetch manifests, acquisition evidence, diagnostics, worker job state, worker health, and multi-page route discovery evidence.
 Current high-value gaps are rendered layout geometry, browser network inventory, script/runtime observation, full media/widget evidence, and normalized `KnownFidelityLimitation[]`.
 Architecture recommendation from the audit: an intermediate Capture Expansion phase is required before treating Phase 7F-3 as full reconstruction-grade Evidence Capture persistence. A narrower Phase 7F-3 can persist only the current evidence set if explicitly scoped that way.
+Phase 7F-5 — Reconstruction Input Contract is COMPLETE as a contract-only architecture pass.
+Reconstruction readiness levels are now deterministic: `NOT_READY`, `MINIMUM_READY`, `RECOMMENDED`, and `HIGH_CONFIDENCE`.
+The reconstruction input boundary is documented in `docs/architecture/RECONSTRUCTION_INPUT_CONTRACT.md` and implemented as pure contracts/helpers in `apps/platform/gnr8/architecture/reconstruction-input-contract.ts`.
+Current Reconstruction Readiness remains `NOT_READY`.
+Phase 7F-6 should focus Capture Expansion first on the missing minimum handoff fields: full evidence artifact status, source URL, route identity, rendered DOM ref, rendered HTML hash, render status, route capture status, and normalized blocker fidelity limitations.
 Phase 6A — Hosting Operations MVP is complete.
 Phase 6B — Hosting Operations Workflow Review is complete.
 Phase 6C-A — Readiness & Domain Operations MVP is complete.
@@ -199,6 +204,9 @@ Current migration runtime capabilities:
 - importer architecture split into Evidence Capture, Original Mirror, and AI Reconstruction
 - evidence capture inventory audit baseline documented
 - current evidence coverage measured as 16 supported, 33 partial, and 17 missing contract fields
+- reconstruction input contract boundary documented
+- deterministic reconstruction readiness model defined
+- current reconstruction readiness remains NOT_READY
 - importer architecture terminology:
   - Evidence Capture
   - Capture Provider
@@ -206,6 +214,8 @@ Current migration runtime capabilities:
   - GNR8 Reconstruction Preview
   - Known Fidelity Limitation
   - Reconstruction Candidate
+  - Reconstruction Input Artifact
+  - Reconstruction Candidate Artifact
 
 Hosting Operations now exposes:
 - Hosting Overview

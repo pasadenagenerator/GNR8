@@ -9,15 +9,20 @@ Website OS branch status:
 - Do not continue Website OS runtime expansion unless explicitly requested.
 
 Latest completed milestone:
-- Phase 7F-2.5 — Evidence Capture Inventory Audit.
+- Phase 7F-5 — Reconstruction Input Contract.
 - Status: COMPLETE.
-- Architecture audit and documentation only.
+- Contract-only architecture pass.
 - No importer behavior, preview behavior, reconstruction behavior, worker behavior, Playwright behavior, persistence behavior, route discovery, rendering, or database schema was changed.
 - Audit doc: `docs/architecture/EVIDENCE_CAPTURE_INVENTORY_AUDIT.md`.
+- Reconstruction input contract doc: `docs/architecture/RECONSTRUCTION_INPUT_CONTRACT.md`.
+- Reconstruction input contract code: `apps/platform/gnr8/architecture/reconstruction-input-contract.ts`.
 - Evidence Capture coverage against `apps/platform/gnr8/architecture/importer-architecture-split-contract.ts`: Supported Now 16/66 fields (24.2%), Partial 33/66 fields (50.0%), Missing 17/66 fields (25.8%).
 - Current foundation: raw HTML, rendered DOM, viewport/full-page screenshots, computed style samples, direct asset fetch manifests, acquisition evidence, diagnostics, worker job state, worker health, and multi-page route discovery evidence.
 - Highest-value gaps: rendered layout geometry, browser network inventory, script/runtime observation, media/widget evidence, and normalized fidelity limitations.
-- Recommendation: an intermediate Capture Expansion phase is required before treating Phase 7F-3 as full reconstruction-grade Evidence Capture persistence. A narrower Phase 7F-3 can persist only the current evidence set if explicitly scoped.
+- Readiness levels are now deterministic: `NOT_READY`, `MINIMUM_READY`, `RECOMMENDED`, and `HIGH_CONFIDENCE`.
+- Current Reconstruction Readiness: `NOT_READY`.
+- Required minimum handoff evidence: evidence artifact status, source URL, route identity, rendered DOM ref, rendered HTML hash, render status, route capture status, and no blocker fidelity limitation.
+- Recommendation: Phase 7F-6 should be Capture Expansion Planning focused first on the missing minimum handoff fields, then on layout geometry, browser network inventory, runtime observation, media/widget inventory, font source evidence, and normalized limitations.
 
 Production smoke-test:
 - completed successfully.
@@ -72,6 +77,14 @@ Phase 7F-2.5 evidence capture inventory:
 - Rendered DOM, screenshots, computed style samples, raw HTML, direct asset acquisition, diagnostics, and route evidence exist.
 - Full browser network, rendered layout geometry, script runtime observation, full media/widget inventory, and normalized `KnownFidelityLimitation[]` do not yet exist.
 - Do not assume Phase 7F-3 has enough coverage for reconstruction-grade persistence unless a Capture Expansion phase has filled those gaps.
+
+Phase 7F-5 reconstruction input contract:
+- `ReconstructionInputArtifact` defines the maximum allowed evidence input into future reconstruction.
+- `ReconstructionCandidateArtifact` defines a future output contract only; no generation exists.
+- Unsupported evidence must never shape reconstruction: contract metadata, provider/run metadata, response headers, inline script signatures, route priority, and raw file paths.
+- Explicit blockers are capture unavailable, capture failed, missing source URL, missing route identity, missing rendered DOM, render failed, and blocker fidelity limitation.
+- Confidence inputs are defined but not calculated: DOM, asset, font, layout, widget, media, network, runtime, visual reference, and fidelity limitation completeness.
+- Next recommended phase: Phase 7F-6 — Capture Expansion Planning.
 
 Dedicated progress doc:
 - `docs/ai/MIGRATION_RUNTIME_PROGRESS.md`
@@ -202,6 +215,7 @@ Latest completed migration capabilities:
 - raw/transformed preview boundary clarification
 - importer architecture split into Evidence Capture, Original Mirror, and AI Reconstruction
 - evidence capture inventory audit baseline and coverage matrix
+- reconstruction input contract, readiness model, blocker model, and future candidate contract
 
 Completed migration-first chain:
 - Import

@@ -16,6 +16,15 @@ import {
   buildEvidenceCaptureBaselineArtifact,
   getLatestEvidenceCaptureBaselineArtifactForSiteVersion,
 } from "./evidence-capture-baseline-artifact";
+import {
+  RECONSTRUCTION_CONFIDENCE_INPUTS,
+  RECONSTRUCTION_INPUT_CONTRACT_VERSION,
+  classifyReconstructionBlockers,
+  evaluateReconstructionReadiness,
+  getEvidenceFieldsByClassification,
+  validateEvidenceFieldClassificationMatrix,
+  validateReconstructionInputArtifact,
+} from "./reconstruction-input-contract";
 import type { RuntimeImportProvenanceSummary } from "../runtime/types";
 
 function ref(id: string, mediaType = "application/json"): EvidenceArtifactRef {
@@ -266,6 +275,153 @@ test("failed and blocked runtime assets are represented as evidence, not silentl
   assert.equal(summary.counts.assetClassifications, 3);
   assert.equal(limitations.some((limitation) => limitation.type === "failed_resource"), true);
   assert.equal(limitations.some((limitation) => limitation.type === "blocked_resource"), true);
+});
+
+test("reconstruction input readiness is classified deterministically from evidence", () => {
+  const artifact = completeArtifact();
+
+  const assessment = evaluateReconstructionReadiness(artifact);
+
+  assert.equal(assessment.level, "RECOMMENDED");
+  assert.deepEqual(assessment.blockers, []);
+  assert.equal(assessment.minimumEvidence.hasSourceUrl, true);
+  assert.equal(assessment.minimumEvidence.hasRouteIdentity, true);
+  assert.equal(assessment.minimumEvidence.hasRenderedDom, true);
+  assert.equal(assessment.optionalEvidence.hasScreenshots, true);
+  assert.equal(assessment.optionalEvidence.hasComputedStyles, true);
+  assert.equal(assessment.optionalEvidence.hasLayoutEvidence, true);
+  assert.equal(assessment.optionalEvidence.hasNetworkEvidence, true);
+  assert.equal(assessment.optionalEvidence.hasMediaEvidence, true);
+});
+
+test("reconstruction blockers are explicit when required evidence is missing", () => {
+  const artifact = completeArtifact();
+  artifact.source.sourceUrl = "";
+  artifact.route.sourceUrl = "";
+  artifact.source.routePath = "";
+  artifact.route.discoveredRoutePath = "";
+  artifact.rendered.renderedDomRef = null;
+  artifact.rendered.renderedHtmlHash = null;
+
+  const blockers = classifyReconstructionBlockers(artifact);
+  const assessment = evaluateReconstructionReadiness(artifact);
+
+  assert.equal(assessment.level, "NOT_READY");
+  assert.equal(blockers.some((blocker) => blocker.id === "missing_source_url"), true);
+  assert.equal(blockers.some((blocker) => blocker.id === "missing_route_identity"), true);
+  assert.equal(blockers.some((blocker) => blocker.id === "missing_rendered_dom"), true);
+  assert.equal(blockers.every((blocker) => blocker.severity === "blocker"), true);
+});
+
+test("reconstruction input evidence classification matrix covers every audited field", () => {
+  const matrixValidation = validateEvidenceFieldClassificationMatrix();
+
+  assert.equal(matrixValidation.valid, true);
+  assert.deepEqual(matrixValidation.missingFields, []);
+  assert.deepEqual(matrixValidation.duplicateFields, []);
+  assert.ok(getEvidenceFieldsByClassification("REQUIRED").includes("source.sourceUrl"));
+  assert.ok(getEvidenceFieldsByClassification("REQUIRED").includes("rendered.renderedDomRef"));
+  assert.ok(getEvidenceFieldsByClassification("OPTIONAL").includes("layout.layoutBoxRefs"));
+  assert.ok(getEvidenceFieldsByClassification("UNSUPPORTED").includes("route.rawFilePath"));
+  assert.ok(RECONSTRUCTION_CONFIDENCE_INPUTS.some((input) => input.kind === "layout_completeness"));
+});
+
+test("reconstruction input contract validation rejects consumable fields in unsupported list", () => {
+  const artifact = completeArtifact();
+  const readiness = evaluateReconstructionReadiness(artifact);
+  const unsupportedEvidenceFields = getEvidenceFieldsByClassification("UNSUPPORTED");
+
+  const validInput = validateReconstructionInputArtifact({
+    kind: "reconstruction_input_artifact_v1",
+    contractVersion: RECONSTRUCTION_INPUT_CONTRACT_VERSION,
+    source: {
+      sourceUrl: artifact.source.sourceUrl,
+      finalUrl: artifact.source.finalUrl,
+      routePath: artifact.source.routePath,
+      canonicalUrl: artifact.source.canonicalUrl,
+      capturedAt: artifact.source.capturedAt,
+      route: {
+        discoveredRoutePath: artifact.route.discoveredRoutePath,
+        sourceUrl: artifact.route.sourceUrl,
+        finalUrl: artifact.route.finalUrl,
+        navigationSource: artifact.route.navigationSource,
+        captureStatus: artifact.route.captureStatus,
+      },
+    },
+    requiredEvidence: {
+      status: artifact.status,
+      renderedDomRef: artifact.rendered.renderedDomRef,
+      renderedHtmlHash: artifact.rendered.renderedHtmlHash,
+      renderStatus: artifact.rendered.renderStatus,
+      routeCaptureStatus: artifact.route.captureStatus,
+    },
+    optionalEvidence: {
+      rawHtmlRef: artifact.rawInputs.rawHtmlRef,
+      screenshots: artifact.rendered.screenshotRefs,
+      fullPageScreenshotRef: artifact.rendered.fullPageScreenshotRef,
+      computedStyle: artifact.computedStyle,
+      layout: artifact.layout,
+      network: artifact.network,
+      scriptRuntime: artifact.scriptRuntime,
+      media: artifact.media,
+      widgets: artifact.widgets,
+      fidelityLimitations: artifact.fidelityLimitations,
+    },
+    readiness,
+    confidenceInputs: [...RECONSTRUCTION_CONFIDENCE_INPUTS],
+    unsupportedEvidenceFields,
+  });
+
+  const invalidInput = validateReconstructionInputArtifact({
+    kind: "reconstruction_input_artifact_v1",
+    contractVersion: RECONSTRUCTION_INPUT_CONTRACT_VERSION,
+    source: {
+      sourceUrl: artifact.source.sourceUrl,
+      finalUrl: artifact.source.finalUrl,
+      routePath: artifact.source.routePath,
+      canonicalUrl: artifact.source.canonicalUrl,
+      capturedAt: artifact.source.capturedAt,
+      route: {
+        discoveredRoutePath: artifact.route.discoveredRoutePath,
+        sourceUrl: artifact.route.sourceUrl,
+        finalUrl: artifact.route.finalUrl,
+        navigationSource: artifact.route.navigationSource,
+        captureStatus: artifact.route.captureStatus,
+      },
+    },
+    requiredEvidence: {
+      status: artifact.status,
+      renderedDomRef: artifact.rendered.renderedDomRef,
+      renderedHtmlHash: artifact.rendered.renderedHtmlHash,
+      renderStatus: artifact.rendered.renderStatus,
+      routeCaptureStatus: artifact.route.captureStatus,
+    },
+    optionalEvidence: {
+      rawHtmlRef: artifact.rawInputs.rawHtmlRef,
+      screenshots: artifact.rendered.screenshotRefs,
+      fullPageScreenshotRef: artifact.rendered.fullPageScreenshotRef,
+      computedStyle: artifact.computedStyle,
+      layout: artifact.layout,
+      network: artifact.network,
+      scriptRuntime: artifact.scriptRuntime,
+      media: artifact.media,
+      widgets: artifact.widgets,
+      fidelityLimitations: artifact.fidelityLimitations,
+    },
+    readiness,
+    confidenceInputs: [...RECONSTRUCTION_CONFIDENCE_INPUTS],
+    unsupportedEvidenceFields: [...unsupportedEvidenceFields, "layout.layoutBoxRefs"],
+  });
+
+  assert.equal(validInput.valid, true);
+  assert.deepEqual(validInput.errors, []);
+  assert.equal(invalidInput.valid, false);
+  assert.equal(
+    invalidInput.errors.includes(
+      "Unsupported evidence field list includes a consumable field: layout.layoutBoxRefs.",
+    ),
+    true,
+  );
 });
 
 function baselineProvenance(overrides: Partial<RuntimeImportProvenanceSummary> = {}): RuntimeImportProvenanceSummary {
