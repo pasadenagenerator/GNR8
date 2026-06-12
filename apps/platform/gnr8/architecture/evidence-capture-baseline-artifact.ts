@@ -10,6 +10,12 @@ import {
   classifyCaptureLimitation,
   createEmptyEvidenceCaptureArtifact,
 } from "./importer-architecture-split-contract";
+import {
+  buildRenderedHtmlHash,
+  extractLoadedFontInventory,
+  extractWidgetInventory,
+  normalizeCapturedRouteIdentity,
+} from "./evidence-capture-expansion";
 
 export const EVIDENCE_CAPTURE_BASELINE_ARTIFACT_KIND = "evidence_capture_baseline" as const;
 export const EVIDENCE_CAPTURE_BASELINE_COVERAGE_SOURCE = "phase_7f_2_5_inventory_audit" as const;
@@ -41,6 +47,7 @@ export type EvidenceCaptureBaselineArtifactRecord = {
   sourceUrl: string;
   finalUrl: string | null;
   routePath: string;
+  routeIdentity?: string;
   captureProvider: CaptureProvider;
   captureStatus: EvidenceCaptureStatus;
   coverageStatus: "baseline_partial_not_reconstruction_grade";
@@ -244,6 +251,8 @@ export function buildEvidenceCaptureBaselineArtifact(input: {
   captureRunId?: string | null;
   capturedAt?: string | null;
   captureProvider?: CaptureProvider;
+  renderedHtml?: string | null;
+  computedStyleSamples?: unknown[] | null;
   importProvenanceSummary: RuntimeImportProvenanceSummary;
   rawImportArtifact?: {
     artifactId?: string | null;
@@ -266,7 +275,12 @@ export function buildEvidenceCaptureBaselineArtifact(input: {
     "unknown_capture_run";
   const sourceUrl = optionalText(input.sourceUrl) ?? optionalText(input.rawImportArtifact?.metadata?.sourceUrl) ?? "";
   const finalUrl = optionalText(input.finalUrl) ?? optionalText(input.rawImportArtifact?.metadata?.finalUrl);
-  const routePath = optionalText(input.routePath) ?? "/";
+  const routeIdentity = normalizeCapturedRouteIdentity({
+    sourceUrl,
+    finalUrl,
+    routePath: input.routePath,
+  });
+  const routePath = routeIdentity.routePath;
   const capturedAt = optionalText(input.capturedAt) ?? new Date(0).toISOString();
   const viewport: EvidenceViewport = { width: 1440, height: 900, deviceScaleFactor: null, isMobile: false };
   const artifact = createEmptyEvidenceCaptureArtifact({
@@ -278,6 +292,14 @@ export function buildEvidenceCaptureBaselineArtifact(input: {
     captureProvider: input.captureProvider ?? "chrome_playwright",
     viewport,
   });
+  artifact.source.sourceUrl = routeIdentity.sourceUrl || sourceUrl;
+  artifact.source.finalUrl = routeIdentity.finalUrl;
+  artifact.source.routePath = routeIdentity.routePath;
+  artifact.source.routeIdentity = routeIdentity.routeIdentity;
+  artifact.route.sourceUrl = routeIdentity.sourceUrl || sourceUrl;
+  artifact.route.finalUrl = routeIdentity.finalUrl;
+  artifact.route.discoveredRoutePath = routeIdentity.routePath;
+  artifact.route.routeIdentity = routeIdentity.routeIdentity;
 
   const rawImportEntryPath = optionalText(input.rawImportArtifact?.entryHtmlPath);
   const rawImportEntryMeta = rawImportEntryPath ? input.rawImportArtifact?.fileMap?.[rawImportEntryPath] ?? null : null;
@@ -315,6 +337,9 @@ export function buildEvidenceCaptureBaselineArtifact(input: {
       ? summary.renderedCapture.status
       : "failed";
   artifact.rendered.renderedDomRef = renderedDomRef;
+  if (text(input.renderedHtml)) {
+    artifact.rendered.renderedHtmlHash = buildRenderedHtmlHash(String(input.renderedHtml));
+  }
   artifact.rendered.domNodeCount = numberOrNull(summary.renderedCapture.nodeCount);
   artifact.rendered.renderFailureReason = summary.renderedCapture.execution.failureCode;
   artifact.computedStyle.computedStyleSampleRefs = computedStyleRef ? [computedStyleRef] : [];
@@ -326,6 +351,114 @@ export function buildEvidenceCaptureBaselineArtifact(input: {
   });
   artifact.network.assetClassifications = [];
   artifact.route.rawFilePath = optionalText(input.rawImportArtifact?.entryHtmlPath);
+
+  const fontInventory = extractLoadedFontInventory({
+    renderedHtml: input.renderedHtml,
+    computedStyleSamples: input.computedStyleSamples,
+  });
+  artifact.computedStyle.fontsDetected = fontInventory.map((font, index) => ({
+    family: font.family,
+    source: font.source === "computed_style" ? "computed_style" : "css",
+    providerClassification: font.providerClassification,
+    weight: null,
+    style: null,
+    evidenceRefIds: [`font_inventory_${index + 1}`],
+  }));
+  artifact.computedStyle.fontSourcesLoaded = fontInventory
+    .filter((font) => font.source !== "computed_style")
+    .map((font, index) => ({
+      family: font.family === "unknown" ? null : font.family,
+      url: font.source,
+      format: font.source.match(/\.(woff2?|ttf|otf|eot)(?:[?#].*)?$/i)?.[1]?.toLowerCase() ?? null,
+      loaded: true,
+      providerClassification: font.providerClassification,
+      evidenceRefIds: [`font_source_${index + 1}`],
+    }));
+
+  const widgetInventory = extractWidgetInventory({ renderedHtml: input.renderedHtml });
+  artifact.widgets.inventory = widgetInventory;
+  artifact.widgets.maps = widgetInventory
+    .filter((widget) => widget.type === "map")
+    .map((widget) => ({
+      provider:
+        widget.classification === "google_maps" ||
+        widget.classification === "openstreetmap" ||
+        widget.classification === "leaflet" ||
+        widget.classification === "mapbox"
+          ? widget.classification
+          : "mono_osmap",
+      selectorHint: widget.selectorHint,
+      iframeSrc: widget.source,
+      scriptRefs: widget.source && widget.selectorHint === "script" ? [widget.source] : [],
+      evidenceRefIds: widget.evidenceRefIds,
+    }));
+  artifact.widgets.galleriesSlidersLightboxes = widgetInventory
+    .filter((widget) => widget.type === "gallery")
+    .map((widget) => ({
+      id: widget.id,
+      selectorHint: widget.selectorHint,
+      providerHint: widget.classification,
+      source: widget.source,
+      classification: widget.classification,
+      confidence: widget.confidence,
+      evidenceRefIds: widget.evidenceRefIds,
+    }));
+  artifact.widgets.forms = widgetInventory
+    .filter((widget) => widget.type === "form")
+    .map((widget) => ({
+      id: widget.id,
+      selectorHint: widget.selectorHint,
+      providerHint: widget.classification,
+      source: widget.source,
+      classification: widget.classification,
+      confidence: widget.confidence,
+      action: widget.source === "form" ? null : widget.source,
+      method: null,
+      fieldCount: 0,
+      evidenceRefIds: widget.evidenceRefIds,
+    }));
+  artifact.widgets.accessibilityWidgets = widgetInventory
+    .filter((widget) => widget.type === "accessibility_overlay")
+    .map((widget) => ({
+      id: widget.id,
+      selectorHint: widget.selectorHint,
+      providerHint: widget.classification,
+      source: widget.source,
+      classification: widget.classification,
+      confidence: widget.confidence,
+      evidenceRefIds: widget.evidenceRefIds,
+    }));
+  artifact.widgets.cookieBanners = widgetInventory
+    .filter((widget) => widget.type === "cookie_banner")
+    .map((widget) => ({
+      id: widget.id,
+      selectorHint: widget.selectorHint,
+      providerHint: widget.classification,
+      source: widget.source,
+      classification: widget.classification,
+      confidence: widget.confidence,
+      evidenceRefIds: widget.evidenceRefIds,
+    }));
+  artifact.widgets.chatSupportWidgets = widgetInventory
+    .filter((widget) => widget.type === "chat_widget")
+    .map((widget) => ({
+      id: widget.id,
+      selectorHint: widget.selectorHint,
+      providerHint: widget.classification,
+      source: widget.source,
+      classification: widget.classification,
+      confidence: widget.confidence,
+      evidenceRefIds: widget.evidenceRefIds,
+    }));
+  artifact.media.videoMediaRefs = widgetInventory
+    .filter((widget) => widget.type === "embedded_video")
+    .map((widget) => ({
+      id: widget.id,
+      src: widget.source,
+      poster: null,
+      providerHint: widget.classification,
+      evidenceRefIds: widget.evidenceRefIds,
+    }));
 
   const { labels, fidelityLimitations } = buildBaselineLimitations(summary);
   artifact.fidelityLimitations = fidelityLimitations;
@@ -341,6 +474,7 @@ export function buildEvidenceCaptureBaselineArtifact(input: {
     sourceUrl,
     finalUrl,
     routePath,
+    routeIdentity: routeIdentity.routeIdentity,
     captureProvider: artifact.source.captureProvider,
     captureStatus: artifact.status,
     coverageStatus: "baseline_partial_not_reconstruction_grade",
@@ -403,6 +537,8 @@ export function attachEvidenceCaptureBaselineArtifact(input: {
   routePath?: string | null;
   captureRunId?: string | null;
   capturedAt?: string | null;
+  renderedHtml?: string | null;
+  computedStyleSamples?: unknown[] | null;
   importProvenanceSummary: RuntimeImportProvenanceSummary;
   rawImportArtifact?: Parameters<typeof buildEvidenceCaptureBaselineArtifact>[0]["rawImportArtifact"];
 }): RuntimeImportProvenanceSummary {

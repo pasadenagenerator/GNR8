@@ -277,6 +277,7 @@ function persistRenderedCaptureRunEvidence(snapshot: UrlSinglePageImportSnapshot
   screenshotPath: string | null
   metadataPath: string
   domSize: number
+  renderedDomHtml: string
   screenshotCount: number
   persisted: boolean
 } {
@@ -342,6 +343,7 @@ function persistRenderedCaptureRunEvidence(snapshot: UrlSinglePageImportSnapshot
     screenshotPath: primaryScreenshotSource ? screenshotPath : null,
     metadataPath,
     domSize,
+    renderedDomHtml,
     screenshotCount,
     persisted,
   }
@@ -3706,6 +3708,8 @@ export async function runScopedImportPipeline(input: {
       sourceUrl: input.sourceUrl,
       finalUrl: input.snapshot.importIntake?.evidence?.finalUrl ?? null,
       routePath: '/',
+      renderedHtml: persistedCaptureEvidence.renderedDomHtml,
+      computedStyleSamples: renderedStyleSamples,
       importProvenanceSummary,
       rawImportArtifact: {
         artifactId: rawImportArtifact.artifactId,

@@ -83,10 +83,18 @@ export type EvidenceViewport = {
   isMobile: boolean;
 };
 
+export type FontProviderClassification =
+  | "google_fonts"
+  | "local"
+  | "adobe_fonts"
+  | "custom_cdn"
+  | "unknown";
+
 export type SourceIdentityEvidence = {
   sourceUrl: string;
   finalUrl: string | null;
   routePath: string;
+  routeIdentity?: string;
   canonicalUrl: string | null;
   captureProvider: CaptureProvider;
   capturedAt: string;
@@ -135,6 +143,7 @@ export type DesignTokenCandidate = {
 export type FontDetectedEvidence = {
   family: string;
   source: "css" | "computed_style" | "browser" | "unknown";
+  providerClassification?: FontProviderClassification;
   weight: string | null;
   style: string | null;
   evidenceRefIds: string[];
@@ -145,6 +154,7 @@ export type FontSourceEvidence = {
   url: string;
   format: string | null;
   loaded: boolean;
+  providerClassification?: FontProviderClassification;
   evidenceRefIds: string[];
 };
 
@@ -390,6 +400,9 @@ export type WidgetEvidenceItem = {
   id: string;
   selectorHint: string | null;
   providerHint: string | null;
+  source?: string | null;
+  classification?: string;
+  confidence?: number;
   evidenceRefIds: string[];
 };
 
@@ -399,7 +412,43 @@ export type FormWidgetEvidence = WidgetEvidenceItem & {
   fieldCount: number;
 };
 
+export type WidgetInventoryType =
+  | "map"
+  | "gallery"
+  | "form"
+  | "accessibility_overlay"
+  | "cookie_banner"
+  | "chat_widget"
+  | "embedded_video"
+  | "unknown";
+
+export type WidgetInventoryClassification =
+  | "google_maps"
+  | "openstreetmap"
+  | "mapbox"
+  | "leaflet"
+  | "gallery"
+  | "native_form"
+  | "accessibility_overlay"
+  | "cookie_banner"
+  | "chat_widget"
+  | "youtube"
+  | "vimeo"
+  | "html5_video"
+  | "unknown";
+
+export type WidgetInventoryEvidence = {
+  id: string;
+  type: WidgetInventoryType;
+  source: string | null;
+  selectorHint: string | null;
+  classification: WidgetInventoryClassification;
+  confidence: number;
+  evidenceRefIds: string[];
+};
+
 export type WidgetEvidence = {
+  inventory: WidgetInventoryEvidence[];
   maps: MapWidgetEvidence[];
   galleriesSlidersLightboxes: WidgetEvidenceItem[];
   forms: FormWidgetEvidence[];
@@ -410,6 +459,7 @@ export type WidgetEvidence = {
 
 export type RouteCaptureEvidence = {
   discoveredRoutePath: string;
+  routeIdentity?: string;
   sourceUrl: string;
   finalUrl: string | null;
   routePriority: number;
@@ -561,6 +611,7 @@ export function createEmptyEvidenceCaptureArtifact(input: {
       sourceUrl,
       finalUrl,
       routePath,
+      routeIdentity: routePath,
       canonicalUrl: normalizeText(input.canonicalUrl) || null,
       captureProvider: input.captureProvider ?? "chrome_playwright",
       capturedAt: normalizeText(input.capturedAt),
@@ -622,6 +673,7 @@ export function createEmptyEvidenceCaptureArtifact(input: {
       videoMediaRefs: [],
     },
     widgets: {
+      inventory: [],
       maps: [],
       galleriesSlidersLightboxes: [],
       forms: [],
@@ -631,6 +683,7 @@ export function createEmptyEvidenceCaptureArtifact(input: {
     },
     route: {
       discoveredRoutePath: routePath,
+      routeIdentity: routePath,
       sourceUrl,
       finalUrl,
       routePriority: 0,
@@ -776,7 +829,15 @@ export function isEvidenceCaptureReconstructionReady(artifact: EvidenceCaptureAr
     return false;
   }
   if (!artifact.rendered.renderedDomRef || !hasText(artifact.rendered.renderedHtmlHash)) return false;
-  if (!hasText(artifact.source.sourceUrl) || !hasText(artifact.source.routePath)) return false;
+  if (!hasText(artifact.source.sourceUrl)) return false;
+  if (
+    !hasText(artifact.source.routeIdentity) &&
+    !hasText(artifact.route.routeIdentity) &&
+    !hasText(artifact.source.routePath) &&
+    !hasText(artifact.route.discoveredRoutePath)
+  ) {
+    return false;
+  }
 
   return classifyEvidenceCaptureLimitations(artifact).every(
     (limitation) => limitation.severity !== "blocker",
