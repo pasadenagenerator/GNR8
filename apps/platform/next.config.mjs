@@ -1,5 +1,9 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  typescript: {
+    tsconfigPath: './tsconfig.build.json',
+  },
+
   // NUJNO za monorepo + ESM workspace pakete
   transpilePackages: ['@gnr8/core', '@gnr8/data'],
 
@@ -55,6 +59,14 @@ const nextConfig = {
   // These routes do not execute validation fixtures, tests, build cache artifacts, or browser binaries.
   outputFileTracingExcludes: {
     '*': [
+      './.next/cache/**',
+      './.next/cache/**/*',
+      './.next/cache*/**',
+      './coverage/**',
+      './tsconfig.tsbuildinfo',
+      './**/*.test.ts',
+      './**/*.test.tsx',
+      './**/_tests/**',
       '../worker/**',
       '../../worker/**',
       'apps/worker/**',

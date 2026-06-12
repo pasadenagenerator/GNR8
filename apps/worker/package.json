@@ -8,7 +8,8 @@
   },
   "scripts": {
     "typecheck": "pnpm exec tsc --noEmit",
-    "build": "pnpm exec next build",
+    "clean": "find .next -maxdepth 1 -name 'cache*' -exec rm -rf {} + 2>/dev/null || true",
+    "build": "pnpm run clean && pnpm exec next build",
     "test": "NODE_OPTIONS='--conditions=react-server' pnpm exec tsx --test gnr8/template-intake/inngest/*.test.ts gnr8/inngest/*.test.ts gnr8/site/inngest/*.test.ts gnr8/domain/inngest/*.test.ts"
   },
   "dependencies": {
